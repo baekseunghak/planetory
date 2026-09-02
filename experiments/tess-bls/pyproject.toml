@@ -1,0 +1,25 @@
+[project]
+name = "semi-auto-bls-poc"
+version = "0.1.0"
+description = "Interactive, user-guided BLS transit search proof of concept"
+requires-python = ">=3.11"
+dependencies = [
+  "astropy>=6.0,<8",
+  "matplotlib>=3.8,<4",
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "scipy>=1.12,<2",
+  "streamlit>=1.62,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<10",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
