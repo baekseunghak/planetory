@@ -1,0 +1,13 @@
+_backup/
+_migration_backup/
+
+# PoC 실행 산출물 — 원본 데이터와 중간 결과는 커밋하지 않는다 (컨벤션 §1)
+fits_cache/
+lake/
+sample_raw/
+venv/
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
