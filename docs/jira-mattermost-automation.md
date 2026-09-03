@@ -179,22 +179,24 @@ Jira Automation의 `Create variable` 작업으로 생성합니다.
 
 ### eventTitle
 
-콜론 다음의 빈 줄을 건너뛰고 첫 번째 내용 줄을 가져옵니다.
+Jira 화면에서는 댓글 머리말과 이벤트 제목이 줄바꿈되어 보이지만,
+`comment.body.text`에서는 콜론 바로 뒤에 이어질 수 있습니다. 콜론 다음의
+첫 번째 내용 줄을 가져옵니다.
 
 ```text
-{{comment.body.text.match("(?m)on branch .+?:\\r?\\n(?:\\r?\\n)*([^\\r\\n]+)")}}
+{{comment.body.text.match("(?m)on branch .+?:([^\\r\\n]+)").trim()}}
 ```
 
 커밋 분기에서는 같은 값을 읽기 쉽게 `commitMessage`라는 이름으로 만들어도 됩니다.
 
 ```text
-{{comment.body.text.match("(?m)on branch .+?:\\r?\\n(?:\\r?\\n)*([^\\r\\n]+)")}}
+{{comment.body.text.match("(?m)on branch .+?:([^\\r\\n]+)").trim()}}
 ```
 
 MR 분기에서는 `mrTitle`이라는 이름을 사용합니다.
 
 ```text
-{{comment.body.text.match("(?m)on branch .+?:\\r?\\n(?:\\r?\\n)*([^\\r\\n]+)")}}
+{{comment.body.text.match("(?m)on branch .+?:([^\\r\\n]+)").trim()}}
 ```
 
 `Done`과 그 아래 설명은 GitLab/Jira 상태에 따라 달라질 수 있으므로 Draft 0.1에서는 추출하지 않습니다.
