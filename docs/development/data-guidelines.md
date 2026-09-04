@@ -1,15 +1,63 @@
 # 데이터 관리 및 재현성
 
+> 데이터 저장 위치와 계층 경계의 정본은 [시스템 아키텍처](./system-architecture.md)입니다. 이 문서는 디렉터리, 파티션, 보존 및 재현성 규칙을 상세화합니다.
+
 ## 데이터 관리
 
 - 원본 데이터는 불변으로 취급하며 직접 수정하지 않습니다.
-- 원본, 정제, 결과 데이터의 위치와 보존 정책은 저장 위치가 확정된 뒤 기록합니다.
+- 목표 저장 위치와 계층은 시스템 아키텍처를 따르며, 실제 프로비저닝 경로와 보존 정책은 확정 후 기록합니다.
 - 원본 데이터와 대용량 결과 파일은 Git 저장소에 추가하지 않습니다.
 - 저장소에는 테스트에 필요한 최소 크기의 익명화된 샘플만 포함할 수 있습니다.
 - 샘플 데이터도 사용 권한과 민감정보 포함 여부를 확인합니다.
 - 스키마에는 필드명, 타입, nullable 여부, 의미와 예시를 기록합니다.
 - 스키마 변경 시 하위 호환성과 기존 데이터 재처리 필요 여부를 MR에 작성합니다.
 - 생성 가능한 데이터와 결과물에는 생성 명령 또는 파이프라인을 함께 제공합니다.
+
+## 데이터 레이크 디렉터리와 파티션
+
+```text
+/lake
+├─ raw/
+│  ├─ tess/release=<release>/sector=<sector>/
+│  │  ├─ bundle-00001.seq
+│  │  └─ manifest.parquet
+│  └─ external/source=<tic|tce|toi|archive|exofop>/snapshot_date=<date>/
+├─ bronze/tess/sector=<sector>/part-*.parquet
+└─ silver/pipeline_version=<version>/run_id=<run>/
+   ├─ sector_cleaned/
+   ├─ target_combined/
+   ├─ periodogram/
+   ├─ candidates/
+   ├─ ai_input/
+   ├─ ai_result/
+   └─ internal/
+      ├─ residual/
+      └─ removal_qa/
+```
+
+Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. OCI의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다.
+
+약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum과 묶음 위치를 기록합니다. 원본을 삭제하거나 컬럼을 제거하지 않습니다.
+
+## EC2 Gold 릴리스
+
+```text
+/gold
+├─ releases/<bundle_id>/
+│  ├─ stars.parquet
+│  ├─ candidates.parquet
+│  ├─ ai_results.parquet
+│  ├─ external_status.parquet
+│  ├─ lightcurve-ui/
+│  ├─ periodogram-ui/
+│  └─ manifest.json
+└─ current -> releases/<bundle_id>
+```
+
+- 전송 중인 디렉터리는 공개하지 않습니다.
+- 경로, 파이프라인 버전, 파일 목록과 checksum을 전송 전후에 검증합니다.
+- 모든 검증이 통과한 경우에만 `current`를 새 릴리스로 원자적으로 전환합니다.
+- 검증에 실패하면 기존 `current`와 릴리스를 유지합니다.
 
 ## 재현성
 
@@ -22,9 +70,9 @@
 
 ## 결정 대기 사항
 
-- 원본·정제·결과 데이터 저장 위치
-- 디렉터리와 파티션 규칙
-- 데이터 보존 기간
+- OCI Gold 후보의 실제 staging 경로
+- EC2 Gold 저장 경로와 릴리스 보존 수
+- Raw·Silver 등 계층별 데이터 보존 기간
 - 개인정보 및 민감정보 처리 정책
 - 데이터 접근 권한
 

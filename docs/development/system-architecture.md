@@ -124,50 +124,9 @@ OCI는 동일 리전에 배치된 4개 독립 계정의 노드를 하나의 클�
 
 용량 추정치는 HDFS 고용량안의 계획값이며 실제 원천 크기와 Parquet 압축률을 측정해 다시 계산한다. 20.8TB HDFS는 신·구 Silver 동시 보관과 재처리 여유를 포함한다.
 
-### HDFS 경로
+디렉터리·파티션, FITS 묶음 저장과 EC2 Gold 파일 구조는 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다. 외부 원천별 수집부터 PublicationBundle 배포까지의 상세 순서는 [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)을 따른다.
 
-```text
-/lake
-├─ raw/
-│  ├─ tess/release=<release>/sector=<sector>/
-│  │  ├─ bundle-00001.seq
-│  │  └─ manifest.parquet
-│  └─ external/source=<tic|tce|toi|archive|exofop>/snapshot_date=<date>/
-├─ bronze/tess/sector=<sector>/part-*.parquet
-└─ silver/pipeline_version=<version>/run_id=<run>/
-   ├─ sector_cleaned/
-   ├─ target_combined/
-   ├─ periodogram/
-   ├─ candidates/
-   ├─ ai_input/
-   ├─ ai_result/
-   └─ internal/
-      ├─ residual/
-      └─ removal_qa/
-```
-
-Gold 후보는 PublicationBundle이라는 논리 계층이다. OCI 내 실제 staging 경로는 아직 정하지 않았으므로 AI가 `/lake/gold` 같은 경로를 임의로 만들지 않는다.
-
-약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않는다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum, 묶음 위치를 기록한다. 원본을 삭제하거나 컬럼을 제거하지 않는다.
-
-배치 순서:
-
-1. Airflow가 TIC·Sector·원천 릴리스·파이프라인 버전을 고정한다.
-2. 네 노드가 다운로드 대상을 나눠 각자의 임시 영역에 저장한다.
-3. 크기와 checksum을 검증한 원본만 Raw HDFS에 RF3로 기록한다.
-4. Spark가 Raw를 Bronze Parquet으로 변환한다.
-5. Sector별 품질 필터, 정규화, 연속 구간 디트렌딩을 수행한다.
-6. TIC 기준으로 Sector를 결합해 Silver 정제곡선을 만든다.
-7. 원본 periodogram과 BLS 후보를 생성한다.
-8. 통과 신호를 제거하고 residual BLS를 반복한다.
-9. 제거 품질과 원본 곡선을 재검증한 뒤 후보를 병합한다.
-10. TCE·TOI·NASA Archive·ExoFOP 상태를 연결한다.
-11. AI 입력과 추론 결과를 생성한다.
-12. 화면용 곡선·주기도·후보표를 PublicationBundle로 검증한다.
-13. EC2의 새 release 디렉터리로 전송한다.
-14. 모든 checksum이 일치할 때만 `current`를 새 릴리스로 전환한다.
-
-외부 원천은 TESS/MAST FITS, TIC, TCE, TOI, NASA Exoplanet Archive, ExoFOP이다.
+Gold 후보는 `PublicationBundle`이라는 논리 계층이며 OCI의 실제 staging 경로는 아직 미정이다. 배치는 원천·파이프라인 버전을 고정하고 단계별 재처리가 가능해야 하며, 검증된 결과만 EC2에 전달한다.
 
 ## 7. Gold 공개 규칙
 
@@ -181,20 +140,7 @@ OCI Gold 후보 → 검증 → EC2 임시 release → 재검증 → current 원�
 - 실패한 TIC와 단계만 재처리한다.
 - EC2 API는 `current`가 가리키는 Gold만 읽는다.
 
-```text
-/gold
-├─ releases/<bundle_id>/
-│  ├─ stars.parquet
-│  ├─ candidates.parquet
-│  ├─ ai_results.parquet
-│  ├─ external_status.parquet
-│  ├─ lightcurve-ui/
-│  ├─ periodogram-ui/
-│  └─ manifest.json
-└─ current -> releases/<bundle_id>
-```
-
-PublicationBundle 검증은 경로, 파이프라인 버전, 파일 목록과 checksum을 확인한다. 압축 전송 후 EC2에서 다시 검증하며 실패 시 기존 `current`를 유지한다.
+Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다.
 
 ## 8. 관측·보안·호환성
 
@@ -204,8 +150,7 @@ PublicationBundle 검증은 경로, 파이프라인 버전, 파일 목록과 che
 - EC2-B 장애 시 관측성도 중단되는 구조는 현재 비용 제약상 허용한다.
 - PostgreSQL, HDFS, YARN, Spark 관리 포트를 인터넷에 공개하지 않는다.
 - AWS–OCI 전송과 메트릭 수집은 인증·암호화된 경로만 사용한다.
-- EC2 x86_64와 OCI ARM64용 이미지를 `linux/amd64`, `linux/arm64`로 빌드한다.
-- ARM64 호환성은 CI 빌드뿐 아니라 실제 OCI 실행으로 검증한다.
+- EC2 x86_64와 OCI ARM64를 모두 지원한다. 이미지 빌드와 실제 실행 검증 기준은 [CI/CD 결정 대기 사항](../operations/cicd.md)을 따른다.
 
 ## 9. 미확정 사항
 
