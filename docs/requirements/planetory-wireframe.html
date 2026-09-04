@@ -1,4 +1,4 @@
-<title>Planetory 와이어프레임 v0.3</title>
+<title>Planetory 와이어프레임 v0.3.1</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -198,12 +198,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.3 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v0.3.1 · 팀 검토용</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v0.8(v1.0 준비판)을 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
+      <p>요구사항 명세서 v0.9(MR !5 리뷰 반영판)를 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.8 · 상태표 v0.10</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.9 · 상태표 v0.11</b></dd>
       <dt>작성일</dt><dd><b>2026-09-04</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>P0 10 프레임 · 22 상태</b></dd>
@@ -435,7 +435,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="axis"><span>회차 1 · BTJD 1325–1352</span><span>‖ 2년 공백 ‖</span><span>회차 4 · 5</span></div>
         </div>
         <div class="box">
-          <div class="chart-h"><span class="co">3</span>반복 주기 그래프 <span class="muted" style="font-weight:400">곡선 단계 2 · 배치 저장본</span><span class="r"><span class="on">전체</span><span>확대</span></span></div>
+          <div class="chart-h"><span class="co">3</span>반복 주기 그래프 <span class="muted" style="font-weight:400">곡선 단계 2 · 서버 계산 완료 (캐시)</span><span class="r"><span class="on">전체</span><span>확대</span><span class="pill soft" style="border-radius:999px">계산 중이면 진행 표시</span></span></div>
           <svg class="pg" viewBox="0 0 580 130" style="width:100%;height:130px"></svg>
           <div class="axis"><span>0.5일</span><span class="row" style="gap:6px"><span class="co dim">4</span>13.5일부터 음영 = 관측 기간의 절반 넘음 (이번 회차로는 찾기 어려움)</span><span>40일</span></div>
         </div>
@@ -480,6 +480,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">1</span><span class="nid">EXP-12 · AT-72</span><span>5단계 표시줄. 봉우리 → 주기 맞추기 → 구간 → 판단 → 제출. 이전 단계 변경 시 이후 초기화</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">EXP-03 · NFR-10</span><span>회차 경계·다년 공백 접어 표시, 실제 시각 병기</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>곡선 단계 2부터의 잔차 곡선·반복 주기 그래프는 EC2가 원본 곡선과 통과 모델로 온라인 계산. 대기·계산 중·완료·실패 상태 표시, 같은 조합은 캐시에서 즉시</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">EXP-04 · 결정 23</span><span>관측기간/2 넘는 구간 음영. 그 구간의 후보는 이번 회차에 찾을 수 없음 → 재개 대기 사유</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">EXP-06 · EXP-08 · DEC-19</span><span>드래그로 시작·끝 → 중심 시각 자동. 선택 폭 = 지속시간 기본값, 최대 폭 지속시간 3배(기본안)</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">EXP-02 · POL-04</span><span>확인된 행성 보유 여부만. 상세는 일치 뒤</span><span class="tag p0">P0</span></li>
@@ -652,7 +653,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">5</span><span class="nid">COM-04 · COM-05</span><span>분석 기록 블록은 수정 불가. 제목·메모만 수정</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">COM-08 · 결정 30 · AT-81</span><span>동의/비동의 하나만, 본인 글에도 가능. 수를 누르면 반응한 회원 닉네임 목록 공개</span><span class="tag p0">P0</span></li>
       <li><span class="co">7</span><span class="nid">COM-07</span><span>원글은 카드, 답글은 한 줄 요약으로 기록 첨부. 같은 별·본인 기록만</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">COM-13 · COM-16</span><span>신고 → 운영 숨김(P0). 차단 시 자동 언팔로우 (AT-80)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">COM-13 · DEC-33</span><span>신고 → 운영 숨김(P0). 회원 차단 기능은 v1 범위 밖</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -802,7 +803,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
           <div class="box" style="padding:14px 16px;display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center">
             <div class="avatar" style="width:56px;height:56px"></div>
-            <div><div class="row"><span class="co">1</span><b style="font-size:16px">별빛사냥꾼</b><span class="btn sm pri">팔로우 <span class="tag p1" style="font-size:9px;background:var(--paper);color:var(--ink);border-color:var(--paper)">P1</span></span><span class="btn sm ghost">차단</span></div><div class="muted small" style="margin-top:4px">가입 2026-08-22 · 팔로잉 3 · 팔로워 21 · 발견한 별 34 · 찾은 신호 19</div></div>
+            <div><div class="row"><span class="co">1</span><b style="font-size:16px">별빛사냥꾼</b><span class="btn sm pri">팔로우 <span class="tag p1" style="font-size:9px;background:var(--paper);color:var(--ink);border-color:var(--paper)">P1</span></span><span class="btn sm ghost">신고</span></div><div class="muted small" style="margin-top:4px">가입 2026-08-22 · 팔로잉 3 · 팔로워 21 · 발견한 별 34 · 찾은 신호 19</div></div>
           </div>
           <div class="box dash" style="padding:14px 16px;text-align:center"><span class="co">2</span> <b class="small">별 목록은 비공개입니다</b><div class="muted small">이 회원이 마이페이지에서 비공개로 설정했습니다 (DEC-34)</div></div>
           <div class="box"><div class="box-h"><span class="co">3</span>게시글 24 <span class="sub">항상 공개</span></div>
@@ -827,7 +828,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">COM-16 · COM-13 · AT-78·80</span><span>회원 팔로우·차단. 차단하면 자동 언팔로우</span><span class="tag p1">P1</span></li>
+      <li><span class="co">1</span><span class="nid">COM-16 · COM-13 · AT-78</span><span>회원 팔로우(P1)와 신고. 차단 기능 없음(DEC-33)</span><span class="tag p1">P1</span></li>
       <li><span class="co">2</span><span class="nid">DEC-34 · MY-04 · AT-84</span><span>내 별 목록 비공개 상태의 타인 뷰</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">DEC-34</span><span>게시글·반응·판단 분포는 항상 공개</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">HOME-06 · OPS-07 · 결정 12</span><span>튜토리얼 5개. 5번은 후보표가 빈 별. 실제 TIC은 DEC-01(데이터 범위) 확정 후</span><span class="tag p0">P0</span></li>
@@ -836,7 +837,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.8과 상태표 v0.10을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
+  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.9와 상태표 v0.11을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
 </div>
 
 <script>
