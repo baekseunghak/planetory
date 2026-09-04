@@ -1,6 +1,6 @@
 # Git·Jira 협업 컨벤션
 
-> 버전: Draft 0.6  
+> 버전: Draft 0.7<br>
 > 대상: 6인 빅데이터 분산 처리 프로젝트  
 > Jira 프로젝트 키: `S15P21C206`
 
@@ -322,6 +322,24 @@ docs(docs): add data dictionary [S15P21C206-35]
 [Week 02] KPT 및 주간 보고서
 ```
 
+### MR 설명의 Jira 키와 자동 연결
+
+GitLab MR 설명에 Jira 키를 평문으로 작성하면 해당 Jira 작업에 MR 연결 댓글이 생성될 수 있습니다. 불필요한 연결과 알림을 막기 위해 다음 규칙을 적용합니다.
+
+- 일반 MR에서는 해당 MR이 실제로 처리하는 대표 Jira Task 하나만 평문으로 작성합니다.
+- 선행·상위·관련·참고 작업의 Jira 키는 `S15P21C206-28`처럼 키마다 백틱으로 감쌉니다.
+- Jira 키 예외 문서 MR에 대표 Task가 없으면 `대표 Jira: 없음`으로 작성하고, 언급할 Jira 키는 모두 참고 Jira로 기록합니다.
+- 참고 Jira는 전체 Jira URL을 함께 적지 않습니다. 링크 주소의 평문 키도 자동 연결 대상으로 인식될 수 있습니다.
+- `Closes`, `Fixes`, `Resolves`에는 해당 MR이 실제로 완료하는 대표 Jira Task만 작성합니다.
+- 릴리스 MR처럼 여러 Jira 작업에 의도적으로 연결해야 하는 경우에만 연결할 키를 평문으로 작성합니다.
+
+```text
+대표 Jira: S15P21C206-35
+참고 Jira: `S15P21C206-26`, `S15P21C206-28`, `S15P21C206-29`
+
+Closes S15P21C206-35
+```
+
 변경 유형에 맞는 GitLab MR 템플릿을 사용합니다.
 
 - [일반 기능 및 수정](../.gitlab/merge_request_templates/Default.md)
@@ -526,6 +544,11 @@ git push origin docs/week-02-report
 - Squash 옵션은 `Allow`로 시작하고 운영 방식이 안정되면 `Encourage`를 검토합니다. `Require`는 사용하지 않습니다.
 
 ## 15. 변경 이력
+
+### Draft 0.7 — 2026-09-04
+
+- MR 설명에서는 대표 Jira Task만 평문으로 작성하고 참고 Jira 키는 백틱으로 구분하도록 규칙을 추가했습니다.
+- 문서 MR 템플릿에서 대표 Jira와 참고 Jira 입력란을 분리했습니다.
 
 ### Draft 0.6 — 2026-08-25
 
