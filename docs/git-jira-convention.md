@@ -6,8 +6,9 @@
 
 이 문서는 Jira와 GitLab을 이용한 작업 관리, 브랜치, 커밋, Merge Request(MR), 릴리스 및 보고서 규칙을 정의합니다. Jira는 작업 관리의 단일 기준이며 GitLab Issues는 사용하지 않습니다.
 
-데이터와 개발 규칙은 다음 문서에서 관리합니다.
+시스템 설계와 데이터·개발 규칙은 다음 문서에서 관리합니다.
 
+- [시스템 아키텍처](development/system-architecture.md)
 - [데이터 관리 및 재현성](development/data-guidelines.md)
 - [Hadoop·Spark 개발 규칙](development/spark-hadoop-guidelines.md)
 - [CI/CD 결정 대기 사항](operations/cicd.md)

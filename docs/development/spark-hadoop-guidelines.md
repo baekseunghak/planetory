@@ -1,5 +1,7 @@
 # Hadoop·Spark 개발 규칙
 
+> Hadoop·Spark의 역할과 데이터 계층 경계는 [시스템 아키텍처](./system-architecture.md)를 따릅니다. 이 문서는 배치 실행 순서와 구현·검증 규칙을 상세화합니다.
+
 - 대규모 데이터에 무분별하게 `collect()` 또는 전체 로컬 변환을 사용하지 않습니다.
 - 파티션 수, `repartition`, `coalesce` 변경에는 데이터 규모와 변경 근거를 남깁니다.
 - 불필요한 shuffle, wide transformation과 반복 연산을 리뷰합니다.
@@ -9,6 +11,25 @@
 - 로그에 자격 증명, 개인정보 또는 불필요한 원본 레코드를 출력하지 않습니다.
 - 출력 형식, 스키마, 파티션 기준 및 저장 모드를 명시합니다.
 - 성능 개선 MR은 가능한 한 동일한 데이터와 EC2 사양에서 변경 전후를 비교합니다.
+
+## 배치 처리 순서
+
+외부 원천은 TESS/MAST FITS, TIC, TCE, TOI, NASA Exoplanet Archive와 ExoFOP입니다.
+
+1. Airflow가 TIC·Sector·원천 릴리스·파이프라인 버전을 고정합니다.
+2. 네 노드가 다운로드 대상을 나눠 각자의 임시 영역에 저장합니다.
+3. 크기와 checksum을 검증한 원본만 Raw HDFS에 RF3로 기록합니다.
+4. Spark가 Raw를 Bronze Parquet으로 변환합니다.
+5. Sector별 품질 필터, 정규화와 연속 구간 디트렌딩을 수행합니다.
+6. TIC 기준으로 Sector를 결합해 Silver 정제곡선을 만듭니다.
+7. 원본 periodogram과 BLS 후보를 생성합니다.
+8. 통과 신호를 제거하고 residual BLS를 반복합니다.
+9. 제거 품질과 원본 곡선을 재검증한 뒤 후보를 병합합니다.
+10. TCE·TOI·NASA Archive·ExoFOP 상태를 연결합니다.
+11. AI 입력과 추론 결과를 생성합니다.
+12. 화면용 곡선·주기도·후보표를 PublicationBundle로 검증합니다.
+13. EC2의 새 release 디렉터리로 전송합니다.
+14. 모든 checksum이 일치할 때만 `current`를 새 릴리스로 전환합니다.
 
 ## 작업 유형별 검증 자료
 
