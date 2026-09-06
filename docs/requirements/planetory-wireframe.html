@@ -1,0 +1,939 @@
+<title>Planetory 와이어프레임 v0.3.1</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#eef0f5;--surface:#ffffff;--ink:#1d2438;--muted:#6b7285;
+  --line:#c6cadb;--line-soft:#e2e5ee;--fill:#f5f6fa;
+  --acc:#0f7f8a;--acc-soft:#dff2f4;--acc-ink:#0b5f68;--acc-text:#ffffff;
+  --warn:#b45309;--warn-soft:#fdf0dc;
+  --sky:#000000;--sky-star:#eef0f5;--sky-dim:#8b93a8;--sky-line:#2a3144;--orbit:#8a8f9a;
+  --c0:#cfd6e6;--c1:#9fd6ff;--c2:#b9a6ff;--c3:#ff9fc8;--c4:#ffd27a;--apri:#f1cfa3;
+  --qred:#ff4d4f;--qblue:#3b82f6;
+  --shadow:0 8px 28px rgba(29,36,56,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#12161f;--surface:#1a1f2b;--ink:#e7e9f1;--muted:#8d93a6;
+    --line:#3b4256;--line-soft:#2a3040;--fill:#202634;
+    --acc:#5fc6cf;--acc-soft:#173a3f;--acc-ink:#8ad9df;--acc-text:#0b0e17;
+    --warn:#f0b054;--warn-soft:#3a2a12;
+    --sky:#000000;--sky-star:#e7e9f1;--sky-dim:#6b7388;--sky-line:#2a3144;--orbit:#6f7480;
+    --shadow:0 8px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12161f;--surface:#1a1f2b;--ink:#e7e9f1;--muted:#8d93a6;
+  --line:#3b4256;--line-soft:#2a3040;--fill:#202634;
+  --acc:#5fc6cf;--acc-soft:#173a3f;--acc-ink:#8ad9df;--acc-text:#0b0e17;
+  --warn:#f0b054;--warn-soft:#3a2a12;
+  --sky:#000000;--sky-star:#e7e9f1;--sky-dim:#6b7388;--sky-line:#2a3144;--orbit:#6f7480;
+  --shadow:0 8px 28px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+a{color:var(--acc-ink)}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
+.page{max-width:1280px;margin:0 auto;padding:40px 40px 96px}
+.head{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:22px;border-bottom:1.5px solid var(--ink)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.head h1{font-size:30px;font-weight:700;line-height:1.2}
+.head p{margin:10px 0 0;color:var(--muted);max-width:64ch}
+.meta{display:grid;grid-template-columns:auto auto;gap:4px 14px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.meta b{color:var(--ink);font-weight:500}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:14px 0 0;color:var(--muted);font-size:12.5px}
+.legend .item{display:inline-flex;align-items:center;gap:7px}
+.toc{position:sticky;top:0;z-index:5;background:var(--paper);padding:12px 0;margin:8px 0 28px;border-bottom:1px solid var(--line-soft);display:flex;flex-wrap:wrap;gap:6px}
+.toc a{text-decoration:none;color:var(--ink);font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.toc a .mono{color:var(--muted);font-size:11px}
+.toc a:hover,.toc a:focus-visible{border-color:var(--ink);outline:none}
+.toc a.p1{border-style:dashed}
+.tag{display:inline-flex;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:3px;line-height:1.4;white-space:nowrap}
+.tag.p0{background:var(--ink);color:var(--paper)}
+.tag.p1{border:1.5px dashed var(--ink);color:var(--ink)}
+.tag.dec{border:1.5px dashed var(--warn);color:var(--warn);background:var(--warn-soft)}
+.tag.new{background:var(--acc);color:var(--acc-text)}
+.co{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--acc);color:var(--acc-text);font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;flex:none;vertical-align:middle;line-height:1}
+.co.dim{background:var(--acc-soft);color:var(--acc-ink)}
+.section-title{display:flex;align-items:baseline;gap:12px;margin:44px 0 14px}
+.section-title h2{font-size:18px;font-weight:600}
+.section-title span{color:var(--muted);font-size:12.5px}
+.flow{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:22px 24px;overflow-x:auto;box-shadow:var(--shadow)}
+.flow-row{display:flex;align-items:center;gap:10px;min-width:1100px}
+.flow-row + .flow-row{margin-top:14px}
+.fnode{border:1.5px solid var(--ink);border-radius:4px;padding:8px 12px;background:var(--surface);font-size:13px;font-weight:500;white-space:nowrap}
+.fnode small{display:block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);font-weight:400;margin-top:2px}
+.fnode.hub{background:var(--ink);color:var(--paper)}
+.fnode.hub small{color:var(--line)}
+.fnode.p1{border-style:dashed}
+.fnode.sys{border-color:var(--acc);background:var(--acc-soft)}
+.farrow{color:var(--muted);font-size:16px;flex:none}
+.fbranch{display:flex;flex-direction:column;gap:6px}
+.fnote{color:var(--muted);font-size:12px;margin-left:8px;align-self:flex-start;max-width:36ch}
+.frame{margin-top:52px;scroll-margin-top:72px}
+.flabel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.fid{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;background:var(--ink);color:var(--paper);padding:3px 8px;border-radius:3px}
+.fname{font-size:17px;font-weight:600}
+.fids{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted)}
+.fdesc{color:var(--muted);font-size:12.5px;flex-basis:100%}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.wf{width:1200px;background:var(--surface);border:1.5px solid var(--ink);border-radius:6px;box-shadow:var(--shadow);overflow:hidden;color:var(--ink)}
+.wf.half{width:590px}
+.pair{display:grid;grid-template-columns:590px 590px;gap:20px;width:1200px}
+.quad{display:grid;grid-template-columns:590px 590px;gap:20px;width:1200px}
+.triple{display:grid;grid-template-columns:386px 386px 386px;gap:21px;width:1200px}
+.gnb{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1.5px solid var(--ink);background:var(--surface)}
+.gnb .logo{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em}
+.gnb .logo i{width:18px;height:18px;border:1.5px solid var(--ink);border-radius:50%;display:inline-block;position:relative}
+.gnb .logo i::after{content:"";position:absolute;left:3px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.gnb .menu{display:flex;gap:4px;margin-left:12px}
+.gnb .menu span{padding:5px 10px;border-radius:4px;font-size:13px;color:var(--muted)}
+.gnb .menu span.on{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px 0 var(--ink)}
+.gnb .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.crumb{font-size:12.5px;color:var(--muted)}
+.crumb b{color:var(--ink);font-weight:500}
+.ico{width:30px;height:30px;border:1.5px solid var(--ink);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;position:relative;background:var(--surface)}
+.ico.badge::after{content:"";position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--qred);border:1.5px solid var(--surface)}
+.ico.sq{border-radius:6px}
+.avatar{width:30px;height:30px;border-radius:50%;background:repeating-linear-gradient(135deg,var(--line) 0 2px,transparent 2px 6px);border:1.5px solid var(--ink)}
+.box{border:1.5px solid var(--ink);border-radius:4px;background:var(--surface)}
+.box.soft{border:1px solid var(--line)}
+.box.dash{border-style:dashed}
+.box.sys{border-color:var(--acc)}
+.box-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px}
+.box-h .sub{color:var(--muted);font-weight:400;font-size:12px}
+.box-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.box-b{padding:12px}
+.ph{border:1.5px dashed var(--line);border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 10px,var(--line-soft) 10px 11px);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;padding:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 12px;border:1.5px solid var(--ink);border-radius:4px;font-size:13px;font-weight:500;white-space:nowrap;background:var(--surface);color:var(--ink);line-height:1.2}
+.btn.pri{background:var(--ink);color:var(--paper)}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn.ghost{border-color:var(--line);color:var(--muted)}
+.btn.dis{border-style:dashed;color:var(--muted);background:var(--fill)}
+.btn.full{width:100%}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.field .in{border:1.5px solid var(--ink);border-radius:4px;padding:8px 10px;font-family:"IBM Plex Mono",monospace;font-size:13px;display:flex;justify-content:space-between;align-items:center;background:var(--surface)}
+.field .in.empty{border-color:var(--line);color:var(--muted)}
+.field .in u{text-decoration:none;color:var(--muted);font-size:11px;font-family:"IBM Plex Sans KR",sans-serif}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;border:1.5px solid var(--ink);font-size:11.5px;font-weight:500;line-height:1.5;white-space:nowrap}
+.pill.fill{background:var(--ink);color:var(--paper)}
+.pill.dash{border-style:dashed}
+.pill.soft{border-color:var(--line);color:var(--muted)}
+.pill.acc{border-color:var(--acc);color:var(--acc-ink);background:var(--acc-soft)}
+.pill.warn{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.pill i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-family:"IBM Plex Mono",monospace;font-size:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font-weight:500;color:var(--muted);border-bottom:1px solid var(--line);padding:6px 8px;font-size:11.5px}
+.tbl td{border-bottom:1px solid var(--line-soft);padding:7px 8px;vertical-align:middle}
+.tbl .mono{font-size:12px}
+.list-item{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+.list-item:last-child{border-bottom:0}
+.list-item .t{font-weight:500}
+.list-item .m{color:var(--muted);font-size:12px;margin-top:2px}
+.textline{height:9px;border-radius:3px;background:var(--line-soft)}
+.textline.w60{width:60%}.textline.w80{width:80%}.textline.w40{width:40%}
+.sky{background:var(--sky);position:relative}
+.sky svg{display:block;max-width:100%}
+.tip{position:absolute;background:var(--surface);border:1.5px solid var(--ink);border-radius:4px;padding:8px 10px;font-size:12px;box-shadow:var(--shadow);width:200px}
+.tip b{display:block;font-family:"IBM Plex Mono",monospace;font-weight:600}
+.tip .row{margin-top:6px}
+.panel{position:absolute;background:var(--surface);border:1.5px solid var(--ink);border-radius:4px;box-shadow:var(--shadow)}
+.toolbar{position:absolute;right:14px;bottom:16px;display:flex;flex-direction:column;gap:6px}
+.toolbar .ico{width:28px;height:28px;font-size:11px}
+.sky-legend{display:grid;grid-template-columns:auto auto;gap:4px 10px;font-size:11.5px;align-items:center}
+.sky-legend svg{width:26px;height:22px}
+.chart-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:600}
+.chart-h .r{margin-left:auto;display:flex;gap:4px}
+.chart-h .r span{padding:2px 8px;border:1px solid var(--line);border-radius:3px;font-size:11px;font-weight:400;color:var(--muted)}
+.chart-h .r span.on{border-color:var(--ink);color:var(--ink);font-weight:500}
+.axis{display:flex;justify-content:space-between;padding:2px 12px 6px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted)}
+.stages{display:flex;align-items:center;gap:0;padding:10px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
+.stages .sg{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1.5px solid var(--line);border-radius:4px;color:var(--muted);background:var(--surface)}
+.stages .sg .n{width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:inline-flex;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace;font-size:11px}
+.stages .sg.done{border-color:var(--acc);color:var(--acc-ink)}
+.stages .sg.done .n{background:var(--acc);border-color:var(--acc);color:var(--acc-text)}
+.stages .sg.on{border-color:var(--ink);color:var(--ink);font-weight:600;background:var(--fill)}
+.stages .sg.on .n{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.stages .ar{color:var(--muted);padding:0 8px}
+.actionbar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1.5px solid var(--ink);background:var(--fill)}
+.slider{height:6px;border-radius:3px;background:var(--line-soft);position:relative;margin:10px 4px}
+.slider::after{content:"";position:absolute;left:46%;top:-5px;width:16px;height:16px;border-radius:50%;background:var(--ink)}
+.check{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 0}
+.check i{width:14px;height:14px;border:1.5px solid var(--ink);border-radius:3px;display:inline-block;flex:none}
+.check i.on{background:var(--ink)}
+.toggle{width:30px;height:16px;border-radius:999px;border:1.5px solid var(--ink);position:relative;display:inline-block;flex:none}
+.toggle::after{content:"";position:absolute;top:1px;left:1px;width:10px;height:10px;border-radius:50%;background:var(--ink)}
+.toggle.on{background:var(--ink)}
+.toggle.on::after{left:15px;background:var(--paper)}
+.notes{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 28px;max-width:1200px}
+.notes li{display:grid;grid-template-columns:18px 104px 1fr auto;gap:10px;align-items:start;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+.notes .nid{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--acc-ink);padding-top:1px}
+.notes .tag{margin-top:1px}
+.assume{margin-top:10px;font-size:12.5px;color:var(--muted);max-width:1200px;display:flex;gap:8px;align-items:flex-start}
+.assume b{color:var(--warn);font-weight:600;flex:none}
+.tokens{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px;max-width:1200px}
+.tok{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:12.5px}
+.tok b{display:block;margin-bottom:6px}
+.fixed{border:1.5px solid var(--ink);border-radius:4px;background:var(--fill);padding:10px 12px;font-size:12.5px}
+.fixed .lk{float:right;font-size:11px;color:var(--muted)}
+.bar{display:flex;height:10px;border-radius:2px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%}
+.bar .l{background:var(--ink)}.bar .u{background:var(--line)}.bar .s{background:var(--line-soft)}
+.qcard{border:1.5px solid var(--ink);border-radius:4px;padding:8px 10px;display:flex;gap:10px;align-items:flex-start;font-size:12px;background:var(--surface)}
+.qm{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;color:#fff;flex:none}
+.qm.red{background:var(--qred)}.qm.blue{background:var(--qblue)}
+.stat{border:1px solid var(--line);border-radius:4px;padding:10px 12px;background:var(--surface)}
+.stat .v{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;line-height:1.1}
+.stat .k{color:var(--muted);font-size:11.5px;margin-top:4px}
+.foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;max-width:70ch}
+</style>
+
+<div class="page">
+  <header class="head">
+    <div>
+      <div class="eyebrow">Wireframe · v0.3.1 · 팀 검토용</div>
+      <h1>Planetory 화면 와이어프레임</h1>
+      <p>요구사항 명세서 v0.9(MR !5 리뷰 반영판)를 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
+    </div>
+    <dl class="meta">
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.9 · 상태표 v0.11</b></dd>
+      <dt>작성일</dt><dd><b>2026-09-04</b></dd>
+      <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
+      <dt>화면 수</dt><dd><b>P0 10 프레임 · 22 상태</b></dd>
+    </dl>
+  </header>
+  <div class="legend">
+    <span class="item"><span class="tag p0">P0</span> 핵심 흐름</span>
+    <span class="item"><span class="tag p1">P1</span> 이후 구현</span>
+    <span class="item"><span class="tag new">v0.8</span> 이번 판에서 바뀐 화면</span>
+    <span class="item"><span class="tag dec">DEC</span> 미결 항목</span>
+    <span class="item"><span class="co">1</span> 콜아웃 ↔ SRS ID</span>
+    <span class="item"><span class="ph" style="padding:2px 10px;font-size:11px">플레이스홀더</span> 데이터·그래픽 자리</span>
+  </div>
+
+  <nav class="toc" aria-label="화면 목차">
+    <a href="#s01"><span class="mono">01</span>로그인 · 첫 방문 안내</a>
+    <a href="#s02"><span class="mono">02</span>홈 별 지도</a>
+    <a href="#s03"><span class="mono">03</span>분석 (단계형)</a>
+    <a href="#s04"><span class="mono">04</span>결과 카드 4종</a>
+    <a href="#s05"><span class="mono">05</span>별 결과 페이지</a>
+    <a href="#s06"><span class="mono">06</span>커뮤니티 피드 · 스레드</a>
+    <a href="#s07"><span class="mono">07</span>통계</a>
+    <a href="#s08"><span class="mono">08</span>마이페이지</a>
+    <a href="#s09"><span class="mono">09</span>퀘스트 · 알림</a>
+    <a href="#s10"><span class="mono">10</span>타인 프로필 · 운영</a>
+  </nav>
+
+  <div class="section-title"><h2>화면 흐름</h2><span>SRS 3.2. 기본 반복: 봉우리 선택 → 구간 → 판단 → 제출 → 다음 곡선 단계. 완료는 시스템이 판정한다(SUB-11).</span></div>
+  <div class="flow">
+    <div class="flow-row">
+      <div class="fnode">로그인<small>SC-01 · ACC-01~03</small></div><span class="farrow">→</span>
+      <div class="fnode">첫 방문 안내<small>SC-01 · HOME-09 · 1회</small></div><span class="farrow">→</span>
+      <div class="fnode hub">홈 별 지도<small>SC-02 · HOME-01~08 · 발견한 별만</small></div><span class="farrow">→</span>
+      <div class="fnode">분석<small>SC-03 · EXP-12 단계형</small></div><span class="farrow">→</span>
+      <div class="fbranch">
+        <div class="fnode">일치 → AI 점수 · 판단 분포<small>SC-04a · RES-01·11 · COM-14</small></div>
+        <div class="fnode">일치하는 신호 없음 → 상세 보기 / 다시<small>SC-04b · RES-09</small></div>
+        <div class="fnode">더 없음 의견 · 판단이 달라요<small>SC-04c · SUB-11 (2)</small></div>
+        <div class="fnode sys">시스템 자동 완료 3갈래<small>SC-04d · SUB-11 (1)(3)(4)</small></div>
+      </div>
+      <span class="farrow">→</span>
+      <div class="fbranch">
+        <div class="fnode">다음 곡선 단계로<small>EXP-09 · 같은 화면</small></div>
+        <div class="fnode">별 결과 페이지<small>SC-05 · RES-10</small></div>
+        <div class="fnode">등급 → 새 별 발견<small>GRD-08 · DEC-23 · 홈</small></div>
+      </div>
+      <div class="fnote">완료된 별에 새 회차로 찾을 수 있는 신호가 생기면 완료 표시를 거두고 진행 중으로 되돌린다(DEC-27).</div>
+    </div>
+    <div class="flow-row">
+      <span class="muted small" style="width:92px">GNB 상시</span>
+      <div class="fnode">커뮤니티 피드 → 별 스레드<small>SC-06 · COM-01·15·16</small></div>
+      <div class="fnode">통계<small>SC-07 · STA-01~04</small></div>
+      <div class="fnode">마이페이지<small>SC-08 · MY-01~04 · 옛 내 진행 흡수</small></div>
+      <div class="fnode">퀘스트 패널 (홈 안)<small>SC-09 · HOME-07 · 챌린지·튜토리얼</small></div>
+      <div class="fnode p1">알림<small>SC-09 · NTF-01</small></div>
+      <div class="fnode">운영 설정<small>SC-10 · OPS-07·08</small></div>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>별 표식 규칙 (DEC-07 종결 · HOME-05)</h2><span>별 색은 그 별에서 찾은 행성 수만 뜻한다. 유형·등급은 색에 넣지 않고 패널의 문자로만. 아직 못 찾은 별은 화면에 없다.</span></div>
+  <div class="tokens">
+    <div class="tok"><b>찾은 행성 수 → 별 색</b><div class="sky-legend" style="grid-template-columns:repeat(6,auto)"><svg data-m="p0"></svg><span>0</span><svg data-m="p1"></svg><span>1</span><svg data-m="p2"></svg><span>2</span><svg data-m="p3"></svg><span>3</span><svg data-m="p4"></svg><span>4+</span><svg data-m="p0 done"></svg><span>행성 없이 완료</span></div><div class="muted small" style="margin-top:6px">행성 수 = 확인된 행성 + 회원이 "행성 같음"으로 판단한 신호(결정 22). 행성 아님·모르겠음은 세지 않음. 행성 없이 완료한 별은 살구색</div></div>
+    <div class="tok"><b>궤도 · 퀘스트 마커</b><div class="sky-legend" style="grid-template-columns:auto auto auto auto auto auto"><svg data-m="p2 orbit"></svg><span>행성 궤도 (회색 실선)</span><svg data-m="p0 chal"></svg><span>주간 챌린지 !</span><svg data-m="p0 tut"></svg><span>튜토리얼 번호</span></div><div class="muted small" style="margin-top:6px">궤도는 행성 수만큼, 광채 없음. 마커는 퀘스트 패널 카드와 같은 색(빨강·파랑)</div></div>
+    <div class="tok"><b>축소 시 성운 군집 (DEC-32 종결)</b><div class="sky-legend" style="grid-template-columns:auto 1fr"><svg data-m="nebula"></svg><span>배율 0.8 미만에서 화면 46px 안의 별을 묶음. 색은 구성 별의 비율. 호버 시 "별 6 · 행성 4 · 완료 2"</span></div><div class="muted small" style="margin-top:6px">군집은 배율 단계별로 미리 계산(NFR-20a)</div></div>
+  </div>
+
+  <!-- ===== SC-01 ===== -->
+  <section class="frame" id="s01">
+    <div class="flabel"><span class="fid">SC-01</span><span class="fname">로그인 · 첫 방문 안내</span><span class="fids">ACC-01 · ACC-02 · ACC-03 · HOME-09 · POL-26</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">두 OAuth만. 첫 로그인 뒤 홈에 튜토리얼 1번 별을 여는 동안 말풍선 안내 5단계를 한 번 보여준다(HOME-09, P0). 두 번째 방문부터는 표시하지 않고 마이페이지 설정에서 다시 켤 수 있다.</span></div>
+    <div class="scroll"><div class="pair">
+      <div class="wf half">
+        <div class="sky" style="height:420px;display:flex;align-items:center;justify-content:center">
+          <svg class="bg-sky" data-seed="7" data-n="60" width="590" height="420" style="position:absolute;inset:0" aria-hidden="true"></svg>
+          <div class="box" style="width:340px;padding:26px 28px;position:relative">
+            <div class="row" style="justify-content:center;gap:8px;margin-bottom:16px"><span class="ico">✶</span><b style="font-size:17px">Planetory</b></div>
+            <p class="muted small" style="text-align:center;margin:0 0 20px">TESS 관측 곡선에서 반복 신호를 찾고<br>행성인지 스스로 판단하는 탐사</p>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <span class="btn pri full"><span class="co">1</span> SSAFY 계정으로 로그인</span>
+              <span class="btn full"><span class="co">2</span> Google 계정으로 로그인</span>
+            </div>
+            <p class="muted small" style="text-align:center;margin:16px 0 0"><span class="co dim">3</span> 첫 로그인: 닉네임 설정 → 튜토리얼 별 5개가 있는 홈으로</p>
+          </div>
+        </div>
+      </div>
+      <div class="wf half">
+        <div class="sky" style="height:420px">
+          <svg class="bg-sky" data-seed="21" data-n="40" width="590" height="420" style="position:absolute;inset:0" aria-hidden="true"></svg>
+          <svg class="mini-map" data-seed="3" width="590" height="420" style="position:absolute;inset:0" aria-hidden="true"></svg>
+          <div class="tip" style="left:230px;top:96px;width:230px;border-color:var(--qblue)">
+            <span class="row"><span class="co">4</span><b style="display:inline">1 / 5 · 별을 골라요</b></span>
+            <span class="muted small">파란 번호가 붙은 별이 튜토리얼입니다. 1번 별을 눌러 시작해 보세요.</span>
+            <span class="row" style="justify-content:space-between"><span class="muted small">다음: 봉우리 → 구간 → 판단 → 제출</span><span class="btn sm">건너뛰기</span></span>
+          </div>
+          <div class="panel" style="left:14px;bottom:14px;padding:8px 12px;font-size:12px;width:300px">
+            <div class="row"><span class="co dim">5</span><b class="small">튜토리얼 5개 (HOME-06)</b></div>
+            <div class="muted small">1 뚜렷한 확인된 행성 · 2 얕은 확인된 행성 · 3 행성 아님 · 4 깊은 행성 아님(서로 가리는 쌍성) · 5 신호가 없는 별(자동 완료 체험)</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">ACC-01</span><span>SSAFY OAuth. 같은 고유 ID 재로그인은 동일 회원</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">ACC-02</span><span>Google OAuth. 다른 제공자의 같은 이메일은 병합하지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">POL-26 · AT-57</span><span>신규 회원 홈에는 튜토리얼 5개와 챌린지 별만 중앙에 보임. 그 외 별은 화면에 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">HOME-09 · AT-86</span><span>첫 방문 말풍선 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출). 1회만, 건너뛰기 가능, 설정에서 다시 켬</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">5</span><span class="nid">HOME-06 · 결정 12</span><span>튜토리얼 5번은 후보표가 빈 별. 진입 즉시 자동 완료 흐름을 체험</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-02 ===== -->
+  <section class="frame" id="s02">
+    <div class="flabel"><span class="fid">SC-02</span><span class="fname">홈 별 지도</span><span class="fids">HOME-01 · HOME-02 · HOME-05 · HOME-07 · HOME-08 · GRD-08 · NFR-20</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">검은 연속 캔버스. 튜토리얼·챌린지 별이 중앙, 새로 발견한 별은 발견 순서대로 부모 별 바깥에 회원별 자리로 놓인다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 옆에 상세 패널이 뜨고, 빈 하늘을 누르면 닫힌다. 퀘스트 패널은 기본 접힘.</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb">
+        <span class="logo"><i></i>Planetory</span>
+        <span class="crumb"><b>홈</b></span>
+        <span class="menu" style="margin-left:auto"><span class="on">별 지도</span><span>커뮤니티</span><span>통계</span><span>마이페이지</span></span>
+        <span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span>
+      </div>
+      <div class="sky" style="height:620px">
+        <svg id="mainSky" width="1200" height="620" aria-label="별 지도"></svg>
+        <!-- 별 상세 패널 (선택한 별 옆) -->
+        <div class="panel" style="left:690px;top:150px;width:272px">
+          <div class="box-h"><span class="co">2</span>TIC 231663901 <span class="r"><span class="pill acc">진행 중</span></span></div>
+          <div class="box-b">
+            <dl class="kv"><dt>관측 회차</dt><dd>1 · 4 · 5</dd><dt>밝기 등급</dt><dd>9.8</dd><dt>발견 경로</dt><dd>튜토리얼 1</dd></dl>
+            <div class="row" style="margin-top:10px"><span class="co">3</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2</span><span class="pill soft">확인된 행성 · S</span><span class="pill soft">곡선 단계 2</span></div>
+            <div class="muted small" style="margin-top:6px">확인된 행성이 있는지는 분석 화면에서 알려줍니다</div>
+            <div class="row" style="margin-top:10px"><span class="btn pri sm">분석 계속</span><span class="btn sm">결과</span><span class="btn sm">스레드</span></div>
+          </div>
+        </div>
+        <!-- 궤도 툴팁 -->
+        <div class="tip" style="left:520px;top:330px;width:150px;padding:5px 8px">
+          <span class="row" style="margin:0"><span class="co dim">4</span><span class="mono small">주기 3.21일 · 행성 같음</span></span>
+        </div>
+        <!-- 퀘스트 패널 접힘 -->
+        <div class="panel" style="right:16px;top:16px;width:250px;padding:8px 12px">
+          <div class="row" style="justify-content:space-between"><span class="row"><span class="co">5</span><b class="small">퀘스트</b><span class="pill soft" style="font-size:10.5px">챌린지 1 · 튜토리얼 5</span></span><span class="muted small">펼치기 ▾</span></div>
+        </div>
+        <!-- 범례 -->
+        <div class="panel" style="left:16px;bottom:16px;padding:8px 12px">
+          <div class="sky-legend" style="grid-template-columns:auto auto auto auto">
+            <span class="co" style="grid-column:1/5;justify-self:start">6</span>
+            <svg data-m="p0"></svg><span>행성 0</span>
+            <svg data-m="p1"></svg><span>행성 1</span>
+            <svg data-m="p2"></svg><span>행성 2</span>
+            <svg data-m="p3"></svg><span>행성 3</span>
+            <svg data-m="p4"></svg><span>행성 4+</span>
+            <svg data-m="p0 done"></svg><span>행성 없이 완료</span>
+          </div>
+        </div>
+        <!-- 툴바 -->
+        <div class="toolbar"><span class="ico sq">+</span><span class="ico sq">−</span><span class="ico sq" title="전체 보기">⤢</span></div>
+        <div class="tip" style="left:16px;top:16px;width:290px;border-style:dashed">
+          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대. 튜토리얼·챌린지가 중앙, 새 별은 부모 별 바깥 세대별 반지름(115 + 130g px)에 불규칙 간격으로. 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
+        </div>
+      </div>
+    </div></div>
+    <div class="scroll" style="margin-top:20px"><div class="pair">
+      <div class="wf half">
+        <div class="sky" style="height:360px">
+          <svg id="nebulaSky" width="590" height="360" aria-label="축소한 별 지도"></svg>
+          <div class="tip" style="left:300px;top:110px;width:170px;padding:6px 9px">
+            <span class="row" style="margin:0"><span class="co">7</span><b style="display:inline;font-family:inherit">성운 · 별 6</b></span>
+            <span class="muted small">행성 4 · 완료 2 · 진행 중 3 · 미탐사 1</span>
+          </div>
+          <div class="panel" style="left:12px;top:12px;padding:6px 10px;font-size:12px"><b>배율 0.55</b> <span class="muted">· 46px 안의 별을 성운으로</span></div>
+        </div>
+      </div>
+      <div class="wf half">
+        <div class="gnb" style="padding:10px 16px"><span class="logo"><i></i></span><span class="crumb"><b>별 지도</b> · 목록 뷰</span><span class="right"><span class="pill warn" style="font-size:10.5px">WebGL 미지원</span></span></div>
+        <div style="padding:12px 16px">
+          <div class="row" style="margin-bottom:8px"><span class="co">8</span><b class="small">발견한 별 12</b><span class="pill soft">진행 중 3</span><span class="pill soft">완료 4</span><span class="pill soft">미탐사 5</span></div>
+          <div class="box">
+            <div class="list-item"><svg data-m="p2 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 231663901</span><span class="pill soft">행성 2 · 진행 중</span><span class="qm blue" style="width:16px;height:16px;font-size:9px">1</span></div><div class="m">튜토리얼 1 · 곡선 단계 2</div></div><span class="btn sm">분석</span></div>
+            <div class="list-item"><svg data-m="p0 chal" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 149603524</span><span class="pill soft">행성 0 · 미탐사</span><span class="qm red" style="width:16px;height:16px;font-size:9px">!</span></div><div class="m">주간 챌린지 36주차</div></div><span class="btn sm pri">분석</span></div>
+            <div class="list-item"><svg data-m="p0 done" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 261089844</span><span class="pill soft">행성 없이 완료</span></div><div class="m">튜토리얼 5 · 신호 없는 별</div></div><span class="btn sm">결과</span></div>
+          </div>
+          <div class="muted small" style="margin-top:8px">폭 1024px 미만은 "데스크톱에서 이용해 주세요" 안내만 (NFR-17)</div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(세대·각도·지터·깊이), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">HOME-08</span><span>별 옆 상세 패널. 확대하면 화면 가장자리에 도킹. 빈 하늘 클릭으로 닫힘. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 색과 문자로, 유형·등급·곡선 단계는 문자로만. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>궤도에 마우스를 올리면 주기와 내 판단. 궤도는 확인된 행성 + "행성 같음" 판단 신호만</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">HOME-07</span><span>퀘스트 패널 기본 접힘. 펼친 상태는 SC-09</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">HOME-05 · NFR-08</span><span>범례. 색만으로 전달하지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">7</span><span class="nid">DEC-32 · NFR-20a</span><span>축소 시 성운 군집, 호버로 구성 표시. 군집은 배율 단계별 사전 계산</span><span class="tag p0">P0</span></li>
+      <li><span class="co">8</span><span class="nid">NFR-18 · NFR-17</span><span>WebGL 미지원 환경은 목록 뷰로 대체. 폭 1024px 미만은 안내만(모바일 P2)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">GRD-08 · DEC-23</span><span>등급 확정 시 A1·S2·SS3·SSS4개의 못 찾은 별을 무작위로 발견, 부모 별 바깥에 나타남 (AT-58)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">NFR-20 · DEC-16</span><span>그리기 예산 별 400·궤도 60·성운 80. 상한 시나리오 별 100,000개에서 p95 16.7ms (AT-71)</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-03 ===== -->
+  <section class="frame" id="s03">
+    <div class="flabel"><span class="fid">SC-03</span><span class="fname">분석 (단계형)</span><span class="fids">EXP-01 ~ EXP-13 · SUB-01 · SUB-02 · SUB-11</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">상단에 단계 표시줄, 위쪽에 원본 곡선과 반복 주기 그래프를 나란히, 아래에 접힌 곡선(넓게)과 판단 패널. 이전 단계를 바꾸면 이후 단계가 초기화된다(EXP-12). 하단 액션 바에 [이전]·[더 없음 의견]·[제출]. 곡선 단계가 바뀌어도 같은 화면.</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb">
+        <span class="logo"><i></i>Planetory</span>
+        <span class="crumb">홈 › <b>TIC 231663901</b> › 분석</span>
+        <span class="right">
+          <span class="row" style="gap:6px"><span class="co">8</span><span class="pill fill">곡선 단계 2</span><span class="pill soft">원본 · 1 · <b>2</b></span></span>
+          <span class="btn sm">스레드</span><span class="ico badge">🔔</span><span class="avatar"></span>
+        </span>
+      </div>
+      <div class="stages">
+        <span class="co" style="margin-right:8px">1</span>
+        <span class="sg done"><span class="n">1</span>봉우리 선택 <span class="mono small">3.21일</span></span><span class="ar">›</span>
+        <span class="sg done"><span class="n">2</span>주기 맞추기 <span class="mono small">3.2098일</span></span><span class="ar">›</span>
+        <span class="sg on"><span class="n">3</span>구간 고르기</span><span class="ar">›</span>
+        <span class="sg"><span class="n">4</span>판단</span><span class="ar">›</span>
+        <span class="sg"><span class="n">5</span>제출</span>
+        <span class="muted small" style="margin-left:auto">이전 단계를 바꾸면 이후 단계는 다시 합니다</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 14px 0">
+        <div class="box">
+          <div class="chart-h"><span class="co">2</span>원본 곡선 <span class="muted" style="font-weight:400">회차 1 · 4 · 5, 공백 접음</span><span class="r"><span class="on">전체</span><span>확대</span></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr">
+            <svg class="lc" data-w="190" data-h="130" data-seed="3" viewBox="0 0 190 130" style="width:100%;height:130px;border-right:1px dashed var(--line)"></svg>
+            <svg class="lc" data-w="190" data-h="130" data-seed="5" viewBox="0 0 190 130" style="width:100%;height:130px;border-right:1px dashed var(--line)"></svg>
+            <svg class="lc" data-w="190" data-h="130" data-seed="8" viewBox="0 0 190 130" style="width:100%;height:130px"></svg>
+          </div>
+          <div class="axis"><span>회차 1 · BTJD 1325–1352</span><span>‖ 2년 공백 ‖</span><span>회차 4 · 5</span></div>
+        </div>
+        <div class="box">
+          <div class="chart-h"><span class="co">3</span>반복 주기 그래프 <span class="muted" style="font-weight:400">곡선 단계 2 · 서버 계산 완료 (캐시)</span><span class="r"><span class="on">전체</span><span>확대</span><span class="pill soft" style="border-radius:999px">계산 중이면 진행 표시</span></span></div>
+          <svg class="pg" viewBox="0 0 580 130" style="width:100%;height:130px"></svg>
+          <div class="axis"><span>0.5일</span><span class="row" style="gap:6px"><span class="co dim">4</span>13.5일부터 음영 = 관측 기간의 절반 넘음 (이번 회차로는 찾기 어려움)</span><span>40일</span></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:12px;padding:12px 14px 14px">
+        <div class="box">
+          <div class="chart-h"><span class="co">5</span>접힌 곡선 <span class="muted" style="font-weight:400">두 주기 반복 · 휠 확대 · 더블클릭 복귀</span><span class="r"><span class="mono" style="border-color:var(--acc);color:var(--acc-ink)">주기 3.2098일</span></span></div>
+          <div class="slider"></div>
+          <div class="axis" style="padding-top:0"><span>3.19</span><span>주기 미세 조정</span><span>3.23</span></div>
+          <svg class="fold2" viewBox="0 0 860 190" style="width:100%;height:190px"></svg>
+          <div class="axis"><span>−P</span><span>드래그로 시작·끝 → 핸들로 수정. 중심 시각은 자동</span><span>+P</span></div>
+          <div class="box-b" style="border-top:1px solid var(--line-soft);padding:8px 12px"><span class="mono small">선택 · 주기 3.2098일 · 중심 1326.842 BTJD · 지속 2.6시간 · 깊이 0.31 ppt</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="box">
+            <div class="box-h"><span class="co">6</span>별 정보</div>
+            <div class="box-b"><dl class="kv"><dt>온도</dt><dd>5,420 K</dd><dt>반지름</dt><dd>0.91 R☉</dd><dt>데이터 판</dt><dd>bundle_v3</dd></dl>
+              <div class="row" style="margin-top:8px"><span class="pill acc">확인된 행성이 있는 별</span></div><div class="muted small">개수와 상세는 일치한 뒤 공개</div></div>
+          </div>
+          <div class="box">
+            <div class="box-h"><span class="co">7</span>④ 판단 <span class="sub">단계 3 뒤 열림</span></div>
+            <div class="box-b" style="display:flex;flex-direction:column;gap:8px;opacity:.55">
+              <div class="row" style="gap:6px"><span class="btn sm">행성 같음</span><span class="btn sm">아님</span><span class="btn sm">모르겠음</span></div>
+              <div class="muted small">근거 (선택)</div>
+              <div class="check"><i></i>홀수·짝수 밝기 같음</div>
+              <div class="check"><i></i>반대편 가려짐 없음</div>
+              <div class="check"><i></i>바닥 평평한 모양</div>
+              <div class="check"><i></i>별 위치 흔들림 없음</div>
+              <div class="check"><i></i>불량 구간 아님</div>
+              <div class="field"><div class="in empty" style="font-family:inherit;font-size:12px">메모 (선택)</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <span class="btn sm ghost">← 이전 단계</span>
+        <span class="muted small">이 별에서 찾은 신호 1 · 곡선 단계 2</span>
+        <span style="margin-left:auto" class="row"><span class="co">9</span><span class="btn sm">더 없음 의견</span><span class="btn pri dis">제출 (판단 뒤 활성)</span></span>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">EXP-12 · AT-72</span><span>5단계 표시줄. 봉우리 → 주기 맞추기 → 구간 → 판단 → 제출. 이전 단계 변경 시 이후 초기화</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">EXP-03 · NFR-10</span><span>회차 경계·다년 공백 접어 표시, 실제 시각 병기</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>곡선 단계 2부터의 잔차 곡선·반복 주기 그래프는 EC2가 원본 곡선과 통과 모델로 온라인 계산. 대기·계산 중·완료·실패 상태 표시, 같은 조합은 캐시에서 즉시</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">4</span><span class="nid">EXP-04 · 결정 23</span><span>관측기간/2 넘는 구간 음영. 그 구간의 후보는 이번 회차에 찾을 수 없음 → 재개 대기 사유</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">EXP-06 · EXP-08 · DEC-19</span><span>드래그로 시작·끝 → 중심 시각 자동. 선택 폭 = 지속시간 기본값, 최대 폭 지속시간 3배(기본안)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">EXP-02 · POL-04</span><span>확인된 행성 보유 여부만. 상세는 일치 뒤</span><span class="tag p0">P0</span></li>
+      <li><span class="co">7</span><span class="nid">EXP-11 · POL-13</span><span>판단 3값 + 근거 체크 5종(선택) + 메모. 구간 단계 뒤에 활성</span><span class="tag p0">P0</span></li>
+      <li><span class="co">8</span><span class="nid">EXP-09 · POL-07</span><span>곡선 단계. 일치하면 다음 단계(잔차)로, 이전 단계 복귀 가능</span><span class="tag p0">P0</span></li>
+      <li><span class="co">9</span><span class="nid">SUB-11 · POL-29</span><span>더 없음 의견은 찾을 수 있는 신호가 남은 별에서만 의미. 결과는 SC-04c. 자동 완료는 시스템이 함</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">SUB-01 · SUB-02</span><span>제출 항목: 주기·구간·중심 시각·지속시간·판단·근거·메모·곡선 단계. 서버 검증</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-04 ===== -->
+  <section class="frame" id="s04">
+    <div class="flabel"><span class="fid">SC-04</span><span class="fname">결과 카드 4종</span><span class="fids">RES-01 · RES-09 · RES-11 · COM-14 · SUB-11 · GRD-02·03 · DEC-25·27·28</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">분석 화면 위에 열리는 카드. a 일치(AI 점수 구간 + 다른 사람들의 판단), b 일치하는 신호 없음, c 더 없음 의견에 대한 "판단이 달라요", d 시스템 자동 완료 3갈래. 화면에 정답·오답이라는 말은 쓰지 않는다.</span></div>
+    <div class="scroll"><div class="quad">
+      <div class="wf half">
+        <div class="box-h" style="border-bottom:1.5px solid var(--ink)"><span class="co">1</span>a · 기록과 일치 <span class="r"><span class="pill fill">matched</span></span></div>
+        <div class="box-b" style="display:flex;flex-direction:column;gap:10px">
+          <h3 style="font-size:16px">기록된 신호와 일치합니다 · 확인된 행성</h3>
+          <div class="kv small box soft" style="padding:8px 10px"><dt>행성</dt><dd>TOI-1234.01 · 확인됨</dd><dt>주기</dt><dd>3.2101일 (내 값 3.2098)</dd><dt>중심 시각</dt><dd>1326.840 BTJD</dd><dt>내 판단</dt><dd>행성 같음 → 기록과 같음</dd></div>
+          <div class="row"><span class="co">2</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2 · 확인된 행성 유형 S</span><span class="pill acc">새 별 2개 발견</span></div>
+          <div class="box soft" style="padding:8px 10px">
+            <div class="row" style="justify-content:space-between"><span class="row"><span class="co">3</span><b class="small">AI 판정</b></span><span class="pill dash">승인 구간 · 78점 · v1.2</span></div>
+            <div class="row" style="justify-content:space-between;margin-top:8px"><span class="row"><span class="co">4</span><b class="small">다른 사람들의 판단</b></span><span class="muted small">인정된 제출 13건</span></div>
+            <div class="bar" style="margin-top:4px"><i class="l" style="width:62%"></i><i class="u" style="width:23%"></i><i class="s" style="width:15%"></i></div>
+            <div class="row small" style="justify-content:space-between;margin-top:3px"><span>행성 같음 8</span><span>아님 3</span><span>모르겠음 2</span></div>
+          </div>
+          <div class="row" style="gap:6px"><span class="btn pri">다음 곡선 단계로</span><span class="btn sm">결과 보기</span><span class="btn sm ghost">스레드에 올리기</span></div>
+        </div>
+      </div>
+      <div class="wf half">
+        <div class="box-h" style="border-bottom:1.5px solid var(--ink)"><span class="co">5</span>b · 일치하는 신호 없음 <span class="r"><span class="pill">not_matched</span></span></div>
+        <div class="box-b" style="display:flex;flex-direction:column;gap:10px">
+          <h3 style="font-size:16px">기록된 신호 중 일치하는 것이 없습니다</h3>
+          <div class="muted small">행성이 없다거나 새 후보라고 단정하지 않습니다. 이 제출은 히스토리에 남았습니다.</div>
+          <div class="row" style="gap:6px"><span class="btn sm">상세 보기</span><span class="btn sm pri">다시 풀기</span></div>
+          <div class="box dash" style="padding:10px">
+            <div class="row" style="margin-bottom:6px"><span class="co">6</span><b class="small">상세 보기 뒤</b><span class="muted small">answer_viewed 기록</span></div>
+            <div class="mono small">남은 신호 중 가장 뚜렷한 하나 · 주기 6.4201일 · 중심 1327.10 · 4.1시간 · 깊이 1.2 ppt</div>
+            <div class="muted small" style="margin-top:6px">기록에 라벨이 있으면 행성 여부·AI 판정도 함께. 열람 뒤 다시 풀어 맞춰도 인정은 같음(POL-28)</div>
+          </div>
+        </div>
+      </div>
+      <div class="wf half">
+        <div class="box-h" style="border-bottom:1.5px solid var(--ink)"><span class="co">7</span>c · 더 없음 의견 → 판단이 달라요 <span class="r"><span class="pill">none_wrong</span></span></div>
+        <div class="box-b" style="display:flex;flex-direction:column;gap:10px">
+          <h3 style="font-size:16px">아직 찾을 수 있는 신호가 남아 있어요</h3>
+          <div class="muted small">개수는 알려주지 않습니다. 인정·완료 없음. 주기를 찾지 않은 판단은 인정되지 않습니다(POL-29).</div>
+          <div class="row" style="gap:6px"><span class="btn sm">상세 보기</span><span class="btn sm pri">다시 풀기</span></div>
+          <div class="muted small">상세 보기 → b와 같은 방식으로 가장 뚜렷한 신호 하나 공개</div>
+        </div>
+      </div>
+      <div class="wf half" style="border-color:var(--acc)">
+        <div class="box-h" style="border-bottom:1.5px solid var(--acc)"><span class="co">8</span>d · 시스템 확인 · 자동 완료 <span class="r"><span class="pill acc">SUB-11</span></span></div>
+        <div class="box-b" style="display:flex;flex-direction:column;gap:8px">
+          <div class="box sys" style="padding:8px 10px"><b class="small">(1) 신호가 없는 별에 진입</b><div class="muted small">"이 별에는 기준을 넘는 신호가 없습니다" → 즉시 완료 · <span class="pill" style="font-size:10.5px"><i style="background:var(--apri)"></i>행성 아님 유형 A</span> · 별당 1회 (AT-68)</div></div>
+          <div class="box sys" style="padding:8px 10px"><b class="small">(3) 찾을 수 있는 마지막 신호를 맞춤</b><div class="muted small">a 카드에 "이 별의 신호를 모두 찾았습니다" 안내가 붙고 완료. 추가 인정 없음 (AT-56)</div></div>
+          <div class="box sys" style="padding:8px 10px"><b class="small">(4) 찾을 수 없는 신호만 남음</b><div class="muted small">"현재 데이터로 찾을 수 있는 신호는 모두 찾았습니다" → 인정 없이 완료, 재개 대기. 새 회차로 찾을 수 있게 되면 진행 중으로 되돌리고 알림 (AT-69, DEC-27)</div></div>
+          <div class="row" style="gap:6px"><span class="btn sm pri">결과 보기</span><span class="btn sm">홈으로</span></div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">RES-01 · RES-02</span><span>일치 결과·기록값·내 값·내 판단과 기록의 일치 여부. 확인된 행성 상세는 일치 뒤 공개(POL-05)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">GRD-02 · GRD-08 · DEC-23</span><span>유형별 개수·등급 반영과 새로 발견한 별 수(S 등급 → 2개)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">RES-05 · RES-11 · AI-04</span><span>AI 점수와 구간(기각/보류/승인). 기록과 달라도 둘 다 표시. 인정에는 쓰이지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">COM-14 · AT-75·82</span><span>다른 사람들의 판단 = 인정된 제출 기준, 회원당 최신 판단 1건. 일치하지 않은 제출에는 표시 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">RES-07 · RES-09</span><span>일치하는 신호 없음. 상세 보기 / 다시 풀기</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">RES-09 · POL-28</span><span>상세 보기 = 남은 신호 중 가장 뚜렷한 하나. 열람 뒤 재제출도 같은 인정</span><span class="tag p0">P0</span></li>
+      <li><span class="co">7</span><span class="nid">SUB-11 (2) · DEC-25</span><span>더 없음 의견인데 찾을 수 있는 신호가 남았을 때. 인정 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">8</span><span class="nid">SUB-11 (1)(3)(4) · DEC-28 · GRD-03</span><span>완료는 시스템이 판정. 빈 별만 행성 아님 유형 A 인정, 나머지는 인정 없이 완료</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-05 ===== -->
+  <section class="frame" id="s05">
+    <div class="flabel"><span class="fid">SC-05</span><span class="fname">별 결과 페이지</span><span class="fids">RES-10 · RES-11 · HIS-04 · COM-14 · COM-15 · GRD-08</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">별 하나의 분석 결과를 모아 보는 페이지. 결과 카드 [결과 보기], 별 상세 패널 [결과], 마이페이지 목록 [결과]에서 같은 페이지로 온다.</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb">홈 › <b>TIC 231663901</b> › 결과</span><span class="menu" style="margin-left:auto"><span>별 지도</span><span>커뮤니티</span><span>통계</span><span>마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;padding:18px 20px">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="box" style="padding:14px 16px;display:grid;grid-template-columns:56px 1fr auto;gap:14px;align-items:center">
+            <svg data-m="p2 orbit" style="width:56px;height:56px"></svg>
+            <div><div class="row"><span class="co">1</span><b class="mono" style="font-size:17px">TIC 231663901</b><span class="pill acc">완료</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2</span></div>
+              <div class="muted small" style="margin-top:4px">확인된 행성 유형 S(2개) · 곡선 단계 3까지 · 회차 1·4·5 · 튜토리얼 1로 발견</div></div>
+            <div class="row"><span class="btn sm">다시 보기</span><span class="btn sm">스레드</span></div>
+          </div>
+          <div class="box">
+            <div class="box-h"><span class="co">2</span>찾은 신호 <span class="sub">기록된 신호 목록 중 내가 맞춘 것 · 순서대로</span></div>
+            <table class="tbl">
+              <tr><th>#</th><th>주기</th><th>내 판단</th><th>기록</th><th>AI</th><th>다른 사람들의 판단</th><th></th></tr>
+              <tr><td class="mono">1</td><td class="mono">6.4201일</td><td>행성 같음</td><td><span class="pill acc" style="font-size:10.5px">확인된 행성</span></td><td class="mono small">승인 91</td><td><div class="bar" style="width:120px"><i class="l" style="width:80%"></i><i class="u" style="width:12%"></i><i class="s" style="width:8%"></i></div></td><td><span class="btn sm ghost">상세</span></td></tr>
+              <tr><td class="mono">2</td><td class="mono">3.2098일</td><td>행성 같음</td><td><span class="pill acc" style="font-size:10.5px">확인된 행성</span></td><td class="mono small">승인 78</td><td><div class="bar" style="width:120px"><i class="l" style="width:62%"></i><i class="u" style="width:23%"></i><i class="s" style="width:15%"></i></div></td><td><span class="btn sm ghost">상세</span></td></tr>
+              <tr><td class="mono">3</td><td class="mono">1.605일</td><td>아님</td><td><span class="pill" style="font-size:10.5px"><i style="background:var(--apri)"></i>행성 아님</span></td><td class="mono small">기각 12</td><td><div class="bar" style="width:120px"><i class="l" style="width:10%"></i><i class="u" style="width:75%"></i><i class="s" style="width:15%"></i></div></td><td><span class="btn sm ghost">상세</span></td></tr>
+            </table>
+          </div>
+          <div class="box">
+            <div class="box-h"><span class="co">3</span>제출 기록 <span class="sub">성공·실패 전부 · 변경 없음</span></div>
+            <table class="tbl">
+              <tr><th>시각</th><th>곡선 단계</th><th>제출</th><th>결과</th><th></th></tr>
+              <tr><td class="mono">09-04 14:02</td><td class="mono">3</td><td class="mono">시스템</td><td><span class="pill acc" style="font-size:10.5px">모두 찾음 · 완료</span></td><td class="muted small">자동</td></tr>
+              <tr><td class="mono">09-04 13:58</td><td class="mono">3</td><td class="mono">1.605일 · 아님</td><td><span class="pill fill" style="font-size:10.5px">일치</span></td><td class="muted small">게시됨</td></tr>
+              <tr><td class="mono">09-04 13:40</td><td class="mono">2</td><td class="mono">1.10일 · 모르겠음</td><td><span class="pill soft" style="font-size:10.5px">일치하는 신호 없음</span></td><td class="muted small">상세 열람</td></tr>
+              <tr><td class="mono">09-04 13:31</td><td class="mono">2</td><td class="mono">3.2098일 · 행성 같음</td><td><span class="pill fill" style="font-size:10.5px">일치</span></td><td><span class="btn sm"><span class="co" style="width:14px;height:14px;font-size:9px">4</span> 스레드에 올리기</span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="box"><div class="box-h"><span class="co">5</span>이 별로 발견한 별</div>
+            <div class="box-b row"><svg data-m="p0" style="width:40px;height:40px"></svg><svg data-m="p1" style="width:40px;height:40px"></svg><span class="muted small">S 등급 → 2개 (DEC-23)</span></div></div>
+          <div class="box"><div class="box-h"><span class="co">6</span>스레드 미리보기 <span class="sub">최근 3</span><span class="r"><span class="btn sm">스레드 열기</span></span></div>
+            <div class="list-item"><div style="flex:1"><div class="small"><b>별빛사냥꾼</b> · 6.42일 신호, 홀수·짝수가 같아서 행성으로 봤습니다</div><div class="m">답글 7 · 동의 5 · 비동의 1</div></div></div>
+            <div class="list-item"><div style="flex:1"><div class="small"><b>seojin</b> · 3.21일은 반대편 가려짐이 없네요</div><div class="m">답글 2 · 동의 3 · 비동의 0</div></div></div>
+            <div class="list-item"><div style="flex:1"><div class="textline w80"></div><div class="textline w40" style="margin-top:6px"></div></div></div></div>
+          <div class="box soft"><div class="box-h" style="font-size:12.5px">다음 할 일</div><div class="box-b small">새로 발견한 별 2개가 홈에 있습니다. 챌린지 별 TIC 149603524도 기다리고 있어요.<div class="row" style="margin-top:8px"><span class="btn sm pri">홈으로</span></div></div></div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">RES-10</span><span>진행 단계·행성 수·유형별 등급·곡선 단계·발견 경로 요약</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">RES-10 · RES-11 · COM-14</span><span>내가 맞춘 신호마다 내 판단·기록·AI 구간·다른 사람들의 판단 막대</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">HIS-04 · HIS-06 · NFR-12</span><span>제출 기록은 성공·실패·시스템 자동 완료까지 전부, 수정·삭제 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">HIS-04 · GRD-04</span><span>게시하지 않은 신호는 [스레드에 올리기]. 아직 확인 안 된 신호는 게시 시점에 인정</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">GRD-08 · StarUnlock</span><span>이 별의 등급으로 발견한 별 목록</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">COM-15</span><span>별 스레드 미리보기 → [스레드 열기]로 SC-06 스레드</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-06 ===== -->
+  <section class="frame" id="s06">
+    <div class="flabel"><span class="fid">SC-06</span><span class="fname">커뮤니티 피드 · 별 스레드</span><span class="fids">COM-01 · COM-04 ~ COM-08 · COM-13 · COM-14 · COM-15 · COM-16</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">메뉴에서 들어가면 전체 피드(별이 정해지지 않은 상태). 별 칩이나 별 상세 패널의 [스레드]로 별 스레드에 들어간다. 원글 = Post, 답글 = Comment 1단계. 반응은 동의/비동의이고 누가 눌렀는지 공개된다. 팔로우 탭은 P1.</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb"><b>커뮤니티</b></span><span class="menu" style="margin-left:auto"><span>별 지도</span><span class="on">커뮤니티</span><span>통계</span><span>마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
+      <div style="display:grid;grid-template-columns:440px 1fr;gap:16px;padding:16px 20px 20px">
+        <div class="box">
+          <div style="display:flex;border-bottom:1px solid var(--line);padding:0 12px;font-size:13px"><span style="padding:10px 12px;box-shadow:inset 0 -2px 0 var(--ink);font-weight:600"><span class="co" style="margin-right:6px">1</span>전체</span><span style="padding:10px 12px;color:var(--muted)">팔로우 <span class="tag p1" style="font-size:9px">P1</span></span><span style="margin-left:auto;padding:8px 0"><span class="btn sm pri">새 글</span></span></div>
+          <div class="list-item" style="background:var(--fill)"><div class="avatar" style="width:26px;height:26px"></div><div style="flex:1"><div class="row"><span class="small"><b>별빛사냥꾼</b> <span class="muted">2시간 전</span></span><span class="pill soft mono" style="font-size:10.5px"><span class="co" style="width:13px;height:13px;font-size:9px;margin-right:3px">2</span>TIC 231663901 · 행성 2</span></div><div class="t small" style="margin-top:3px">6.42일 신호, 홀수·짝수가 같아서 행성으로 봤습니다</div><div class="m">답글 7 · 동의 5 · 비동의 1</div></div></div>
+          <div class="list-item"><div class="avatar" style="width:26px;height:26px"></div><div style="flex:1"><div class="row"><span class="small"><b>seojin</b> <span class="muted">어제</span></span><span class="pill soft mono" style="font-size:10.5px">TIC 149603524 · 행성 0</span><span class="qm red" style="width:14px;height:14px;font-size:8px">!</span></div><div class="t small" style="margin-top:3px">챌린지 별 3.9일 봉우리, 바닥이 V 모양이라 고민입니다</div><div class="m">답글 3 · 동의 2 · 비동의 2</div></div></div>
+          <div class="list-item"><div class="avatar" style="width:26px;height:26px"></div><div style="flex:1"><div class="row"><span class="small"><b>jm.kang</b> <span class="muted">2일 전</span></span><span class="pill soft" style="font-size:10.5px">별 없음 · 자유</span></div><div class="t small" style="margin-top:3px">반복 주기 그래프 읽는 법 정리</div><div class="m">답글 9 · 동의 12 · 비동의 0</div></div></div>
+          <div class="list-item"><div class="avatar" style="width:26px;height:26px"></div><div style="flex:1"><div class="textline w80"></div><div class="textline w40" style="margin-top:6px"></div></div></div>
+        </div>
+        <div class="box">
+          <div class="box-h"><span class="btn sm ghost">← 전체 피드</span><span class="co">3</span><b class="mono">TIC 231663901</b> 스레드 <span class="sub">원글 24 · 참여 11명</span><span class="r"><span class="btn sm">팔로우 <span class="tag p1" style="font-size:9px">P1</span></span><span class="btn sm">이 별 분석하기</span></span></div>
+          <div class="box-b" style="border-bottom:1px solid var(--line);padding:8px 12px">
+            <div class="row"><span class="co">4</span><span class="small">다른 사람들의 판단</span><span class="pill soft" style="font-size:10.5px">3.21일 · 행성 같음 8 · 아님 3 · 모르겠음 2 (인정된 제출 13건)</span><span class="pill soft" style="font-size:10.5px">6.42일 · 확인된 행성</span></div>
+          </div>
+          <div class="box-b" style="padding:14px 16px">
+            <div class="row" style="justify-content:space-between"><h3 style="font-size:16px">6.42일 신호, 홀수·짝수가 같아서 행성으로 봤습니다</h3><span class="row"><span class="btn sm ghost">수정</span><span class="btn sm ghost">신고</span></span></div>
+            <div class="muted small" style="margin:4px 0 10px">별빛사냥꾼 · 2026-09-03 10:12</div>
+            <div class="fixed"><span class="lk"><span class="co" style="width:14px;height:14px;font-size:9px">5</span> 🔒 분석 기록</span><div class="mono small">주기 6.4201일 · 중심 1327.10 · 4.1시간 · 곡선 단계 1</div><div class="row" style="margin-top:6px"><span class="pill soft">판단 · 행성 같음</span><span class="pill soft">근거 · 홀수·짝수 같음 · 반대편 가려짐 없음</span></div><div class="ph" style="height:64px;margin-top:8px">접힌 곡선 스냅샷 (재현 파라미터로 렌더)</div></div>
+            <p style="margin:10px 0" class="small">자유 메모: 곡선 단계 2에서 두 번째 신호도 보이는데 3.2일 근처입니다.</p>
+            <div class="row" style="gap:8px;position:relative"><span class="co">6</span><span class="btn sm pri">동의 5</span><span class="btn sm">비동의 1</span><span class="muted small">반응은 인정·판정에 쓰이지 않음 · 내 글에도 가능</span>
+              <div class="tip" style="position:static;width:auto;padding:5px 8px;font-size:11.5px"><b style="display:inline;font-family:inherit">동의</b> seojin · jm.kang · 나 · 탐사자A · 탐사자B &nbsp;|&nbsp; <b style="display:inline;font-family:inherit">비동의</b> 탐사자C</div></div>
+            <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+              <div class="row" style="margin-bottom:8px"><b class="small">답글 7</b></div>
+              <div class="list-item" style="padding:8px 0"><div class="avatar" style="width:24px;height:24px"></div><div style="flex:1"><div class="small"><b>seojin</b> <span class="muted">1시간 전</span></div><div class="small">저도 같은 판단입니다. 제 기록 첨부합니다.</div><div class="row" style="margin-top:4px"><span class="co">7</span><span class="pill soft mono" style="font-size:10.5px">📎 6.4198일 · 행성 같음 · 곡선 단계 1</span></div></div><span class="row"><span class="btn sm ghost">동의 2</span><span class="btn sm ghost">비동의 0</span></span></div>
+              <div class="row" style="margin-top:8px"><div class="field" style="flex:1"><div class="in empty" style="font-family:inherit">답글</div></div><span class="btn sm">기록 첨부</span><span class="btn sm pri">등록</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">COM-01 · COM-15 · COM-16</span><span>메뉴 진입은 전체 피드. 팔로우 탭 = 팔로우한 회원 원글 + 별 스레드 새 글(P1)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">COM-15</span><span>별 칩(TIC · 행성 수) → 별 스레드. 자유 글은 별 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">COM-01 · COM-11 · NFR-06</span><span>별 스레드는 한 명 이상 발견한 별만. [이 별 분석하기]는 그 별을 발견한 회원만 활성 (AT-34)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">COM-14 · 결정 25·29</span><span>스레드 헤더의 판단 분포. 인정된 제출 기준, 회원당 최신 판단 1건</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">COM-04 · COM-05</span><span>분석 기록 블록은 수정 불가. 제목·메모만 수정</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">COM-08 · 결정 30 · AT-81</span><span>동의/비동의 하나만, 본인 글에도 가능. 수를 누르면 반응한 회원 닉네임 목록 공개</span><span class="tag p0">P0</span></li>
+      <li><span class="co">7</span><span class="nid">COM-07</span><span>원글은 카드, 답글은 한 줄 요약으로 기록 첨부. 같은 별·본인 기록만</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">COM-13 · DEC-33</span><span>신고 → 운영 숨김(P0). 회원 차단 기능은 v1 범위 밖</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-07 ===== -->
+  <section class="frame" id="s07">
+    <div class="flabel"><span class="fid">SC-07</span><span class="fname">통계</span><span class="fids">STA-01 ~ STA-04 · DAT-13 · DEC-31</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">내 통계 / 전체 / 비교 3탭. 순위·백분위는 두지 않는다. 전체와 비교 기준은 어제자 StatsSnapshot(일 1회 집계).</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb"><b>통계</b></span><span class="menu" style="margin-left:auto"><span>별 지도</span><span>커뮤니티</span><span class="on">통계</span><span>마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
+      <div style="display:flex;border-bottom:1px solid var(--line);padding:0 20px;font-size:13px"><span style="padding:10px 12px;box-shadow:inset 0 -2px 0 var(--ink);font-weight:600"><span class="co" style="margin-right:6px">1</span>내 통계</span><span style="padding:10px 12px;color:var(--muted)">전체</span><span style="padding:10px 12px;color:var(--muted)">비교</span><span class="muted small" style="margin-left:auto;padding:10px 0">전체·비교는 2026-09-03 집계 기준</span></div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
+          <div class="stat"><div class="v">12</div><div class="k">발견한 별</div></div>
+          <div class="stat"><div class="v">4</div><div class="k">완료한 별</div></div>
+          <div class="stat"><div class="v">7</div><div class="k">찾은 신호</div></div>
+          <div class="stat"><div class="v">4 · 2 · 1</div><div class="k">확인된 · 아직 확인 안 된 · 행성 아님</div></div>
+          <div class="stat"><div class="v">86%</div><div class="k">기록과 일치한 비율 (라벨 있는 신호)</div></div>
+          <div class="stat"><div class="v">2.4</div><div class="k">별당 제출 수</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+          <div class="box"><div class="box-h"><span class="co">2</span>내 판단 분포</div><div class="box-b"><div class="bar"><i class="l" style="width:57%"></i><i class="u" style="width:29%"></i><i class="s" style="width:14%"></i></div><div class="row small" style="justify-content:space-between;margin-top:4px"><span>행성 같음 4</span><span>아님 2</span><span>모르겠음 1</span></div><div class="muted small" style="margin-top:8px">AI 구간별: 승인 구간에서 행성 같음 3/3 · 기각 구간에서 아님 2/2</div></div></div>
+          <div class="box"><div class="box-h"><span class="co">3</span>주간 제출</div><div class="box-b"><svg class="bars" viewBox="0 0 300 90" style="width:100%;height:90px"></svg><div class="axis" style="padding:2px 0 0"><span>7주 전</span><span>이번 주</span></div></div></div>
+          <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="row" style="justify-content:space-between"><span>별 위치 흔들림 없음</span><span class="mono">1회 · 일치 1</span></div><div class="muted small" style="margin-top:6px">근거는 선택 항목. 인정에는 쓰이지 않음</div></div></div>
+        </div>
+        <div class="box soft" style="padding:10px 12px" >
+          <div class="row"><span class="co">5</span><b class="small">비교 탭 (미리보기)</b><span class="muted small">내 값 ↔ 최근 90일 활동 회원 중앙값. 순위는 없음</span></div>
+          <table class="tbl" style="margin-top:6px"><tr><th>항목</th><th>나</th><th>중앙값</th></tr><tr><td>별당 제출 수</td><td class="mono">2.4</td><td class="mono">2.9</td></tr><tr><td>기록과 일치한 비율</td><td class="mono">86%</td><td class="mono">71%</td></tr><tr><td>첫 제출에 일치</td><td class="mono">58%</td><td class="mono">52%</td></tr></table>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">STA-01 · AT-76</span><span>내 통계. 발견·완료·신호 유형·일치율·별당 제출. 순위·백분위 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">STA-01 · AI-04</span><span>내 판단 분포와 AI 구간별 판단</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">STA-01</span><span>최근 8주 주간 제출 막대</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">STA-01 · POL-13</span><span>근거 체크 사용 횟수와 일치 수</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">STA-02 · STA-03 · DAT-13 · DEC-31 · AT-77</span><span>전체·비교는 일 1회 StatsSnapshot. 중앙값은 90일 내 제출 1건 이상 회원</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-08 ===== -->
+  <section class="frame" id="s08">
+    <div class="flabel"><span class="fid">SC-08</span><span class="fname">마이페이지</span><span class="fids">MY-01 ~ MY-04 · ACC-05 · HIS-04 · HOME-09 · DEC-34</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">옛 "내 진행" 화면을 흡수. 프로필 요약(닉네임 인라인 변경, 팔로잉·팔로워), 내 별 목록(최근 활동순), 분석 히스토리, 설정(알림·첫 방문 안내·내 별 목록 공개·계정).</span></div>
+    <div class="scroll"><div class="wf">
+      <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb"><b>마이페이지</b></span><span class="menu" style="margin-left:auto"><span>별 지도</span><span>커뮤니티</span><span>통계</span><span class="on">마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+        <div class="box" style="padding:14px 16px;display:grid;grid-template-columns:56px 1fr auto;gap:14px;align-items:center">
+          <div class="avatar" style="width:56px;height:56px"></div>
+          <div><div class="row"><span class="co">1</span><b style="font-size:16px">jm.kang</b><span class="btn sm ghost">✎ 닉네임 변경</span><span class="muted small">가입 2026-08-20 · 팔로잉 4 · 팔로워 9 <span class="tag p1" style="font-size:9px">P1</span></span></div>
+            <div class="row" style="margin-top:6px"><span class="pill soft">발견한 별 12</span><span class="pill soft">완료 4</span><span class="pill soft">찾은 신호 7</span><span class="pill soft">등급 A 2 · S 1 · SS 0 · SSS 0</span></div></div>
+          <div class="row"><span class="btn sm">통계</span><span class="btn sm">설정</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 380px;gap:14px">
+          <div class="box">
+            <div class="box-h"><span class="co">2</span>내 별 <span class="sub">제출 이력이 있는 별 · 최근 활동순</span><span class="r"><span class="pill">전체</span><span class="pill soft">진행 중</span><span class="pill soft">완료</span><span class="pill soft">미게시 있음</span></span></div>
+            <div class="list-item" style="background:var(--fill)"><svg data-m="p1 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 149603524</span><span class="pill acc">다시 열림</span><span class="pill soft">행성 1 · 진행 중</span></div><div class="m"><span class="co" style="width:14px;height:14px;font-size:9px">3</span> 새 회차 반영으로 찾을 수 있는 신호가 생겼습니다 · 1시간 전</div></div><div class="row"><span class="btn sm pri">다시 분석</span><span class="btn sm">결과</span></div></div>
+            <div class="list-item"><svg data-m="p2 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 231663901</span><span class="pill soft">행성 2 · 완료</span><span class="pill soft">확인된 행성 S</span></div><div class="m">곡선 단계 3 · 미게시 신호 1건 · 09-04</div></div><div class="row"><span class="btn sm">결과</span><span class="btn sm">스레드</span></div></div>
+            <div class="list-item"><svg data-m="p0 done" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 261089844</span><span class="pill soft">행성 없이 완료</span><span class="pill soft">행성 아님 A</span></div><div class="m">튜토리얼 5 · 신호가 없는 별 · 자동 완료</div></div><div class="row"><span class="btn sm">결과</span></div></div>
+            <div class="list-item"><svg data-m="p0" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 52368076</span><span class="pill soft">행성 0 · 진행 중</span></div><div class="m">튜토리얼 2 · 곡선 단계 1 · 일치하는 신호 없음 2회</div></div><div class="row"><span class="btn sm pri">분석 계속</span></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="box">
+              <div class="box-h"><span class="co">4</span>분석 히스토리 <span class="sub">본인만 · 변경 없음</span><span class="r"><span class="pill soft" style="font-size:10.5px">TIC ▾</span><span class="pill soft" style="font-size:10.5px">기간 ▾</span></span></div>
+              <table class="tbl">
+                <tr><th>별 · 단계</th><th>제출</th><th>결과</th><th></th></tr>
+                <tr><td class="mono">231663901 · 2</td><td class="mono">3.2098 · 행성</td><td><span class="pill fill" style="font-size:10.5px">일치</span></td><td><span class="btn sm">스레드에 올리기</span></td></tr>
+                <tr><td class="mono">231663901 · 1</td><td class="mono">6.4201 · 행성</td><td><span class="pill acc" style="font-size:10.5px">확인된 행성</span></td><td class="muted small">게시됨</td></tr>
+                <tr><td class="mono">52368076 · 1</td><td class="mono">1.10 · 모름</td><td><span class="pill soft" style="font-size:10.5px">일치 없음</span></td><td class="muted small">열람</td></tr>
+              </table>
+            </div>
+            <div class="box">
+              <div class="box-h"><span class="co">5</span>설정</div>
+              <div class="box-b" style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+                <div class="row" style="justify-content:space-between"><span>내 별 목록 공개</span><span class="row"><span class="muted small">비공개면 다른 회원에게 목록 숨김. 게시글·판단 분포는 그대로</span><span class="toggle on"></span></span></div>
+                <div class="row" style="justify-content:space-between"><span>알림 · 등급</span><span class="toggle on"></span></div>
+                <div class="row" style="justify-content:space-between"><span>알림 · 다시 열린 별</span><span class="toggle on"></span></div>
+                <div class="row" style="justify-content:space-between"><span>알림 · 새 챌린지</span><span class="toggle on"></span></div>
+                <div class="row" style="justify-content:space-between"><span>알림 · 팔로우한 별 새 글 <span class="tag p1" style="font-size:9px">P1</span></span><span class="toggle"></span></div>
+                <div class="row" style="justify-content:space-between"><span>첫 방문 안내 다시 보기</span><span class="btn sm ghost">켜기</span></div>
+                <div class="row" style="justify-content:space-between;border-top:1px solid var(--line-soft);padding-top:8px"><span class="btn sm ghost">로그아웃</span><span class="muted small">회원 탈퇴 <span class="tag dec">DEC-11</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">MY-01 · ACC-05 · AT-85</span><span>닉네임 상시 변경(중복·금칙어 검사만), 기존 글·반응에 즉시 반영. 팔로잉·팔로워 수는 P1</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">MY-02 · HOME-03</span><span>내 별 목록. 진행 단계·행성 수·등급·곡선 단계·미게시 수. [결과]·[분석 계속]·[스레드]</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">DEC-27 · AT-83</span><span>다시 열린 별은 목록 상단, "다시 열림" 표시와 [다시 분석]. 완료 표시는 거두고 기존 인정은 유지</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">MY-03 · HIS-04</span><span>히스토리 조회·필터. 미게시 신호에 [스레드에 올리기]</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">MY-04 · DEC-34 · HOME-09 · AT-84</span><span>내 별 목록 공개(기본 공개), 알림 종류, 첫 방문 안내 다시 보기, 계정·탈퇴</span><span class="tag p1">P1</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-09 ===== -->
+  <section class="frame" id="s09">
+    <div class="flabel"><span class="fid">SC-09</span><span class="fname">퀘스트 패널 · 알림</span><span class="fids">HOME-07 · CHL-01 ~ 03 · POL-24 · NTF-01 · DEC-27</span><span class="tag p0">P0</span><span class="tag p1">P1</span>
+      <span class="fdesc">챌린지 페이지는 따로 두지 않는다. 홈의 퀘스트 패널을 펼치면 챌린지 카드(빨간 !)와 튜토리얼 카드(파란 번호), 다시 열린 별 카드가 보인다. 알림은 P1.</span></div>
+    <div class="scroll"><div class="pair">
+      <div class="wf half">
+        <div class="sky" style="height:440px">
+          <svg class="bg-sky" data-seed="5" data-n="40" width="590" height="440" style="position:absolute;inset:0" aria-hidden="true"></svg>
+          <div class="panel" style="right:14px;top:14px;width:300px">
+            <div class="box-h"><span class="co">1</span>퀘스트 <span class="sub">36주차</span><span class="r"><span class="muted small">접기 ▴</span></span></div>
+            <div class="box-b" style="display:flex;flex-direction:column;gap:8px">
+              <div class="qcard"><span class="qm red">!</span><div style="flex:1"><b>주간 챌린지 · TIC 149603524</b><div class="muted small">아직 확인 안 된 신호 · AI 승인 구간 · 09-06까지 · 참여 27명</div><div style="margin-top:6px;height:6px;border:1px solid var(--ink);border-radius:999px;overflow:hidden"><div style="width:0%;height:100%;background:var(--ink)"></div></div><div class="row" style="justify-content:space-between;margin-top:4px"><span class="small">신호 1개 이상 맞추기 · 0 / 1</span><span class="btn sm pri">별로 이동</span></div></div></div>
+              <div class="qcard" style="border-color:var(--acc)"><span class="qm" style="background:var(--acc)">↺</span><div style="flex:1"><b>다시 열린 별 · TIC 149603524</b><div class="muted small"><span class="co" style="width:14px;height:14px;font-size:9px">2</span> 새 회차로 찾을 수 있는 신호가 생겼습니다</div><div class="row" style="margin-top:6px"><span class="btn sm">다시 분석</span></div></div></div>
+              <div class="qcard"><span class="qm blue">1</span><div style="flex:1"><b>튜토리얼 1 · 뚜렷한 확인된 행성</b><div class="muted small">완료 · 행성 2</div></div><span class="pill acc" style="font-size:10.5px">✓</span></div>
+              <div class="qcard"><span class="qm blue">2</span><div style="flex:1"><b>튜토리얼 2 · 얕은 확인된 행성</b><div class="muted small">진행 중 · 곡선 단계 1</div></div><span class="btn sm">계속</span></div>
+              <div class="qcard" style="opacity:.75"><span class="qm blue">3</span><div style="flex:1"><b>튜토리얼 3 · 행성 아님</b><div class="muted small">미탐사</div></div></div>
+              <div class="muted small" style="text-align:center">4 · 5 ▾</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf half" style="border-style:dashed">
+        <div class="gnb" style="padding:10px 16px"><span class="logo"><i></i></span><span class="menu"><span class="on">별 지도</span><span>커뮤니티</span><span>통계</span><span>마이페이지</span></span><span class="right"><span class="ico badge" style="border-width:2px">🔔</span><span class="avatar"></span></span></div>
+        <div class="sky" style="height:388px">
+          <svg class="bg-sky" data-seed="11" data-n="40" width="590" height="388" style="position:absolute;inset:0" aria-hidden="true"></svg>
+          <div class="box" style="position:absolute;right:16px;top:12px;width:350px">
+            <div class="box-h"><span class="co">3</span>알림 <span class="sub">읽지 않음 3</span><span class="r"><span class="muted small">모두 읽음</span></span></div>
+            <div class="list-item" style="background:var(--fill)"><span class="qm" style="background:var(--acc)">↺</span><div style="flex:1"><div class="small"><b>다시 열린 별</b> · TIC 149603524에 새로 찾을 수 있는 신호가 생겼습니다</div><div class="row" style="margin-top:4px"><span class="btn sm">다시 분석</span><span class="m">1시간 전</span></div></div></div>
+            <div class="list-item" style="background:var(--fill)"><span class="qm red">!</span><div style="flex:1"><div class="small"><b>새 챌린지 시작</b> · 36주차 · TIC 149603524</div><div class="m">어제</div></div></div>
+            <div class="list-item" style="background:var(--fill)"><svg data-m="p1" style="width:28px;height:28px"></svg><div style="flex:1"><div class="small"><b>기록이 바뀜</b> · 내가 맞춘 3.21일 신호가 확인된 행성으로 갱신</div><div class="m">GRD-06 · 어제</div></div></div>
+            <div class="list-item"><span class="ico" style="width:28px;height:28px;font-size:11px">💬</span><div style="flex:1"><div class="small"><b>내 글에 답글</b> · seojin</div><div class="m">읽음</div></div></div>
+            <div class="list-item"><span class="ico" style="width:28px;height:28px;font-size:11px">★</span><div style="flex:1"><div class="small"><b>팔로우한 별 새 글</b> · TIC 231663901 <span class="tag p1" style="font-size:9px">P1</span></div><div class="m">읽음</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">HOME-07 · CHL-01 · POL-24</span><span>퀘스트 패널 펼침. 챌린지 카드(빨간 !)는 아직 확인 안 된 신호 + AI 승인 구간 별, 기간 중 모두에게 발견 상태</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">DEC-27 · AT-83</span><span>다시 열린 별 카드. 새로 찾을 수 있는 신호를 찾도록 장려</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">NTF-01 · COM-16</span><span>알림: 재개 별([다시 분석] 포함), 새 챌린지, 기록 갱신, 답글, 팔로우한 별 새 글. 설정에서 종류별로 끔</span><span class="tag p1">P1</span></li>
+      <li><span class="co dim">·</span><span class="nid">CHL-01 · DEC-10</span><span>성공 조건·소급 반영은 DEC-10. 종료 후에도 별은 닫히지 않음</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== SC-10 ===== -->
+  <section class="frame" id="s10">
+    <div class="flabel"><span class="fid">SC-10</span><span class="fname">타인 프로필 · 운영 설정</span><span class="fids">DEC-34 · COM-16 · OPS-07 · OPS-08 · HOME-06 · DEC-23</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+      <span class="fdesc">다른 회원의 프로필은 게시글·판단 분포는 항상 보이고, 내 별 목록은 그 회원의 공개 설정에 따른다. 운영 설정은 튜토리얼 5개(5번은 빈 별)·챌린지 대상·발견 규칙.</span></div>
+    <div class="scroll"><div class="pair">
+      <div class="wf half">
+        <div class="gnb" style="padding:10px 16px"><span class="logo"><i></i></span><span class="crumb">커뮤니티 › <b>별빛사냥꾼</b></span><span class="right"><span class="avatar"></span></span></div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="box" style="padding:14px 16px;display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center">
+            <div class="avatar" style="width:56px;height:56px"></div>
+            <div><div class="row"><span class="co">1</span><b style="font-size:16px">별빛사냥꾼</b><span class="btn sm pri">팔로우 <span class="tag p1" style="font-size:9px;background:var(--paper);color:var(--ink);border-color:var(--paper)">P1</span></span><span class="btn sm ghost">신고</span></div><div class="muted small" style="margin-top:4px">가입 2026-08-22 · 팔로잉 3 · 팔로워 21 · 발견한 별 34 · 찾은 신호 19</div></div>
+          </div>
+          <div class="box dash" style="padding:14px 16px;text-align:center"><span class="co">2</span> <b class="small">별 목록은 비공개입니다</b><div class="muted small">이 회원이 마이페이지에서 비공개로 설정했습니다 (DEC-34)</div></div>
+          <div class="box"><div class="box-h"><span class="co">3</span>게시글 24 <span class="sub">항상 공개</span></div>
+            <div class="list-item"><div style="flex:1"><div class="row"><span class="pill soft mono" style="font-size:10.5px">TIC 231663901</span><span class="t small">6.42일 신호, 홀수·짝수가 같아서…</span></div><div class="m">답글 7 · 동의 5 · 비동의 1</div></div></div>
+            <div class="list-item"><div style="flex:1"><div class="textline w80"></div><div class="textline w40" style="margin-top:6px"></div></div></div></div>
+        </div>
+      </div>
+      <div class="wf half" style="border-style:dashed">
+        <div class="gnb" style="padding:10px 16px"><span class="logo"><i></i></span><span class="crumb"><b>운영</b> › 대상·발견 설정</span><span class="right"><span class="pill soft">운영자</span></span></div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="box"><div class="box-h"><span class="co">4</span>튜토리얼 별 5개 <span class="sub">이력 기록 · DEC-01 확정 후 TIC 교체</span></div>
+            <table class="tbl"><tr><th>#</th><th>TIC (프로토타입)</th><th>의도</th><th>기록</th></tr>
+              <tr><td>1</td><td class="mono">231663901</td><td>뚜렷한 확인된 행성</td><td class="mono">KP · 깊이 &gt; 8000 ppm</td></tr>
+              <tr><td>2</td><td class="mono">52368076</td><td>얕은 확인된 행성</td><td class="mono">CP · 깊이 &lt; 1500</td></tr>
+              <tr><td>3</td><td class="mono">219338557</td><td>행성 아님</td><td class="mono">FP</td></tr>
+              <tr><td>4</td><td class="mono">300871545</td><td>깊은 행성 아님 (서로 가리는 쌍성)</td><td class="mono">FP · &gt; 20000</td></tr>
+              <tr><td>5</td><td class="mono">261089844</td><td>신호가 없는 별 · 자동 완료 체험</td><td class="mono">후보표 비어 있음</td></tr>
+            </table></div>
+          <div class="box"><div class="box-h"><span class="co">5</span>챌린지 대상 · 36주차 <span class="sub">아직 확인 안 된 신호 + AI 승인 구간 검증</span></div><div class="box-b row"><span class="pill soft mono">149603524</span><span class="btn sm ghost">+ 추가</span><span class="muted small">회차 시작 시 알림 발송 (NTF-01)</span></div></div>
+          <div class="box"><div class="box-h"><span class="co">6</span>발견 규칙 <span class="pill acc" style="font-size:10.5px">DEC-23 종결</span></div><div class="box-b kv"><dt>등급별 발견 수</dt><dd>A 1 · S 2 · SS 3 · SSS 4</dd><dt>대상</dt><dd>아직 못 찾은 별 전체에서 무작위</dd><dt>자리</dt><dd>서버가 계산 · 부모 별 바깥 세대 반지름 + 지터</dd></div></div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><span class="co">1</span><span class="nid">COM-16 · COM-13 · AT-78</span><span>회원 팔로우(P1)와 신고. 차단 기능 없음(DEC-33)</span><span class="tag p1">P1</span></li>
+      <li><span class="co">2</span><span class="nid">DEC-34 · MY-04 · AT-84</span><span>내 별 목록 비공개 상태의 타인 뷰</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">DEC-34</span><span>게시글·반응·판단 분포는 항상 공개</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">HOME-06 · OPS-07 · 결정 12</span><span>튜토리얼 5개. 5번은 후보표가 빈 별. 실제 TIC은 DEC-01(데이터 범위) 확정 후</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">OPS-07 · CHL-01 · NTF-01</span><span>회차별 챌린지 대상 등록과 조건 검증. 시작 알림</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">OPS-08 · GRD-08 · DEC-23 · NFR-20c</span><span>발견 수는 종결값. 반경·확률 가중은 없음(무작위). 자리는 서버 계산</span><span class="tag p0">P0</span></li>
+    </ol>
+  </section>
+
+  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.9와 상태표 v0.11을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
+</div>
+
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg';
+  function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  function rng(seed){var s=seed>>>0||1;return function(){s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+  var css=getComputedStyle(document.documentElement);
+  function v(n){return css.getPropertyValue(n).trim();}
+  var INK=v('--ink'),MUTED=v('--muted'),LINE=v('--line'),ACC=v('--acc'),ACCT=v('--acc-text')||'#fff',STAR=v('--sky-star'),DIM=v('--sky-dim'),ORB=v('--orbit');
+  var PC=[v('--c0'),v('--c1'),v('--c2'),v('--c3'),v('--c4')],APRI=v('--apri'),QR=v('--qred'),QB=v('--qblue');
+  var P=3.2104,T0=1326.842,DUR=2.6/24,DEPTH=0.006;
+  function flux(t,r){var f=1+(r()-0.5)*0.0016;var ph=((t-T0)/P+0.5)%1;if(ph<0)ph+=1;ph-=0.5;var dt=Math.abs(ph*P);if(dt<DUR/2){f-=DEPTH*(1-Math.pow(dt/(DUR/2),4));}return f;}
+  function drawLC(svg){
+    var w=+svg.dataset.w,h=+svg.dataset.h,r=rng(+svg.dataset.seed||3);
+    var t0=1325+(+svg.dataset.seed||3)*3,t1=t0+27,n=220,pad=6,ymin=0.9925,ymax=1.0025;
+    for(var i=0;i<=3;i++){var y=pad+(h-2*pad)*i/3;svg.appendChild(el('line',{x1:0,x2:w,y1:y,y2:y,stroke:LINE,'stroke-width':.6,'stroke-dasharray':'2 4'}));}
+    var g=el('g',{fill:INK});
+    for(var k=0;k<n;k++){var t=t0+(t1-t0)*k/n;var f=flux(t,r);var x=(t-t0)/(t1-t0)*w,y=pad+(ymax-f)/(ymax-ymin)*(h-2*pad);g.appendChild(el('circle',{cx:x.toFixed(1),cy:y.toFixed(1),r:1.1,opacity:.85}));}
+    svg.appendChild(g);
+    for(var m=0;m<9;m++){var tc=T0+m*P+((+svg.dataset.seed||3)-3)*3;if(tc<t0||tc>t1)continue;var xc=(tc-t0)/(t1-t0)*w;svg.appendChild(el('line',{x1:xc,x2:xc,y1:h-4,y2:h,stroke:ACC,'stroke-width':1.5}));}
+    svg.appendChild(el('rect',{x:0,y:0,width:w*0.05,height:h,fill:LINE,opacity:.35}));
+  }
+  function drawPG(svg){
+    var w=580,h=130,pad=6,r=rng(5),lo=Math.log(0.5),hi=Math.log(40);
+    function px(p){return (Math.log(p)-lo)/(hi-lo)*w;}
+    svg.appendChild(el('rect',{x:px(13.5),y:0,width:w-px(13.5),height:h,fill:LINE,opacity:.35}));
+    for(var i=0;i<=3;i++){var y=pad+(h-2*pad)*i/3;svg.appendChild(el('line',{x1:0,x2:w,y1:y,y2:y,stroke:LINE,'stroke-width':.6,'stroke-dasharray':'2 4'}));}
+    var peaks=[[6.42,.93],[P,.71],[1.605,.40],[P*3,.25],[1.18,.2],[22.4,.35]];
+    var g=el('g',{stroke:INK,'stroke-width':1});
+    for(var k=0;k<560;k++){var p=Math.exp(lo+(hi-lo)*k/560);var pw=0.05+r()*0.08;for(var j=0;j<peaks.length;j++){var d=Math.abs(Math.log(p)-Math.log(peaks[j][0]));pw+=peaks[j][1]*Math.exp(-d*d/0.00012);}
+      var x=px(p);g.appendChild(el('line',{x1:x.toFixed(1),x2:x.toFixed(1),y1:h-pad,y2:(h-pad-pw*(h-2*pad)).toFixed(1)}));}
+    svg.appendChild(g);
+    [[6.42,'찾음',false],[P,'선택',true],[1.605,'',false]].forEach(function(L){var x=px(L[0]);svg.appendChild(el('circle',{cx:x,cy:12,r:L[2]?6:4.5,fill:L[2]?ACC:'none',stroke:ACC,'stroke-width':1.5}));if(L[1]){var t=el('text',{x:x+9,y:15,'font-size':9.5,fill:L[2]?ACC:MUTED,'font-family':'IBM Plex Sans KR','font-weight':L[2]?600:400});t.textContent=L[1];svg.appendChild(t);}});
+    var tt=el('text',{x:px(13.5)+6,y:h-12,'font-size':9.5,fill:MUTED,'font-family':'IBM Plex Sans KR'});tt.textContent='관측 기간/2 넘음 · 봉우리 표시 안 함';svg.appendChild(tt);
+    svg.appendChild(el('line',{x1:px(22.4),x2:px(22.4),y1:h-pad,y2:h-pad-0.35*(h-2*pad),stroke:MUTED,'stroke-width':1,'stroke-dasharray':'3 3'}));
+  }
+  function drawFold2(svg){
+    var w=860,h=190,pad=6,r=rng(9),ymin=0.9925,ymax=1.0025;
+    for(var k=0;k<800;k++){var t=1325+27*r();var f=flux(t,r);var ph=((t-T0)/P+0.5)%1;if(ph<0)ph+=1;ph-=0.5;
+      [0,1].forEach(function(rep){var x=((ph+0.5)+rep)/2*w,y=pad+(ymax-f)/(ymax-ymin)*(h-2*pad);svg.appendChild(el('circle',{cx:x.toFixed(1),cy:y.toFixed(1),r:1.3,fill:INK,opacity:.7}));});}
+    svg.appendChild(el('line',{x1:w/2,x2:w/2,y1:0,y2:h,stroke:LINE,'stroke-width':.6,'stroke-dasharray':'2 4'}));
+    var x0=w*0.225,x1=w*0.275;svg.appendChild(el('rect',{x:x0,y:2,width:x1-x0,height:h-4,fill:ACC,opacity:.15}));
+    [x0,x1].forEach(function(x){svg.appendChild(el('line',{x1:x,x2:x,y1:2,y2:h-2,stroke:ACC,'stroke-width':2}));svg.appendChild(el('rect',{x:x-4,y:h/2-8,width:8,height:16,rx:2,fill:ACC}));});
+    var t=el('text',{x:x1+8,y:16,'font-size':10,fill:ACC,'font-family':'IBM Plex Sans KR','font-weight':600});t.textContent='시작·끝 드래그 → 중심 시각 자동';svg.appendChild(t);
+  }
+  function mark(svg,cx,cy,types,s){
+    s=s||1;var g=el('g',{});
+    var n=/p4/.test(types)?4:/p3/.test(types)?3:/p2/.test(types)?2:/p1/.test(types)?1:0;
+    var col=PC[n];if(types.indexOf('done')>=0&&n===0)col=APRI;
+    if(types.indexOf('nebula')>=0){var grad=el('radialGradient',{id:'nb'+Math.round(cx*7+cy)});grad.appendChild(el('stop',{offset:'0',"stop-color":PC[2],'stop-opacity':.7}));grad.appendChild(el('stop',{offset:'1',"stop-color":PC[1],'stop-opacity':0}));svg.appendChild(grad);g.appendChild(el('circle',{cx:cx,cy:cy,r:10*s,fill:'url(#'+grad.id+')'}));svg.appendChild(g);return;}
+    if(types.indexOf('orbit')>=0){for(var i=1;i<=Math.max(1,n);i++)g.appendChild(el('circle',{cx:cx,cy:cy,r:(6+i*3.2)*s,fill:'none',stroke:ORB,'stroke-width':0.9,opacity:.8}));for(var j=1;j<=Math.max(1,n);j++){var a=j*2.1;g.appendChild(el('circle',{cx:cx+Math.cos(a)*(6+j*3.2)*s,cy:cy+Math.sin(a)*(6+j*3.2)*s,r:1.4*s,fill:STAR}));}}
+    g.appendChild(el('circle',{cx:cx,cy:cy,r:5.5*s,fill:col,opacity:.25}));
+    g.appendChild(el('circle',{cx:cx,cy:cy,r:3.2*s,fill:col}));
+    if(types.indexOf('chal')>=0){g.appendChild(el('circle',{cx:cx+7*s,cy:cy-8*s,r:5*s,fill:QR}));var t2=el('text',{x:cx+7*s,y:cy-5.4*s,'text-anchor':'middle','font-size':7.5*s,fill:'#fff','font-family':'IBM Plex Mono','font-weight':700});t2.textContent='!';g.appendChild(t2);}
+    if(types.indexOf('tut')>=0){g.appendChild(el('circle',{cx:cx+7*s,cy:cy-8*s,r:5*s,fill:QB}));var t3=el('text',{x:cx+7*s,y:cy-5.4*s,'text-anchor':'middle','font-size':7*s,fill:'#fff','font-family':'IBM Plex Mono','font-weight':700});t3.textContent=(types.match(/tut(\d)/)||[0,'1'])[1];g.appendChild(t3);}
+    svg.appendChild(g);
+  }
+  function drawMainSky(svg){
+    var W=1200,H=620,cx=600,cy=310,r=rng(42);
+    for(var k=0;k<90;k++){svg.appendChild(el('circle',{cx:(r()*W).toFixed(1),cy:(r()*H).toFixed(1),r:(0.5+r()*1.1).toFixed(1),fill:STAR,opacity:(0.15+r()*0.35).toFixed(2)}));}
+    // 세대 반지름 안내(연함)
+    [115,245,375].forEach(function(R,i){svg.appendChild(el('ellipse',{cx:cx,cy:cy,rx:R*1.28,ry:R*0.86,fill:'none',stroke:'#1d2438',"stroke-width":.7,'stroke-dasharray':'2 7'}));var t=el('text',{x:cx+R*1.28+4,y:cy+3,'font-size':9,fill:DIM,'font-family':'IBM Plex Mono'});t.textContent='g'+i;svg.appendChild(t);});
+    // 중심: 튜토리얼 5 + 챌린지 1
+    var core=[['p2 orbit tut1',560,286],['p0 tut2',655,258],['p0 tut3',602,362],['p0 tut4',520,350],['p0 done tut5',644,330],['p0 chal',598,244]];
+    core.forEach(function(s){mark(svg,s[1],s[2],s[0],1.3);});
+    // 1세대: 튜토리얼1에서 발견 2개
+    var g1=[[560,286,'p1 orbit',420,210],[560,286,'p0',462,395]];
+    g1.forEach(function(s){svg.appendChild(el('line',{x1:s[0],x2:s[3],y1:s[1],y2:s[4],stroke:'#2a3144','stroke-width':.8,'stroke-dasharray':'2 4'}));mark(svg,s[3],s[4],s[2],1.3);});
+    // 2세대
+    var g2=[[420,210,'p0',300,150],[420,210,'p3 orbit',330,285]];
+    g2.forEach(function(s){svg.appendChild(el('line',{x1:s[0],x2:s[3],y1:s[1],y2:s[4],stroke:'#2a3144','stroke-width':.8,'stroke-dasharray':'2 4'}));mark(svg,s[3],s[4],s[2],1.3);});
+    var lab=el('text',{x:16,y:H-100,'font-size':10.5,fill:DIM,'font-family':'IBM Plex Sans KR'});lab.textContent='점선: 발견 경로(부모 별). 실제 화면에는 그리지 않음';svg.appendChild(lab);
+  }
+  function drawNebula(svg){
+    var W=590,H=360,r=rng(77);
+    for(var k=0;k<60;k++){svg.appendChild(el('circle',{cx:(r()*W).toFixed(1),cy:(r()*H).toFixed(1),r:(0.4+r()*0.9).toFixed(1),fill:STAR,opacity:(0.1+r()*0.3).toFixed(2)}));}
+    var cl=[[295,180,22,PC[2]],[250,150,14,PC[1]],[340,215,12,PC[3]],[215,205,9,APRI],[372,160,8,PC[0]],[300,250,7,PC[1]]];
+    cl.forEach(function(c,i){var g=el('radialGradient',{id:'nz'+i});g.appendChild(el('stop',{offset:'0','stop-color':c[3],'stop-opacity':.75}));g.appendChild(el('stop',{offset:'0.6','stop-color':c[3],'stop-opacity':.25}));g.appendChild(el('stop',{offset:'1','stop-color':c[3],'stop-opacity':0}));svg.appendChild(g);svg.appendChild(el('circle',{cx:c[0],cy:c[1],r:c[2]*1.8,fill:'url(#nz'+i+')'}));for(var j=0;j<4;j++){svg.appendChild(el('circle',{cx:c[0]+(r()-0.5)*c[2],cy:c[1]+(r()-0.5)*c[2],r:1.1,fill:STAR,opacity:.9}));}});
+    svg.appendChild(el('circle',{cx:295,cy:180,r:23,fill:'none',stroke:STAR,'stroke-width':.8,'stroke-dasharray':'2 3',opacity:.6}));
+  }
+  function drawMiniMap(svg){
+    var cx=295,cy=250,pts=[['p0 tut1',cx-40,cy-24],['p0 tut2',cx+55,cy-52],['p0 tut3',cx+2,cy+52],['p0 tut4',cx-80,cy+40],['p0 tut5',cx+44,cy+20],['p0 chal',cx-2,cy-66]];
+    pts.forEach(function(s){mark(svg,s[1],s[2],s[0],1.3);});
+    svg.appendChild(el('circle',{cx:cx-40,cy:cy-24,r:16,fill:'none',stroke:QB,'stroke-width':1.5,'stroke-dasharray':'4 3'}));
+  }
+  function drawBgSky(svg){var W=+svg.getAttribute('width'),H=+svg.getAttribute('height'),n=+svg.dataset.n||50,r=rng(+svg.dataset.seed||1);for(var k=0;k<n;k++){svg.appendChild(el('circle',{cx:(r()*W).toFixed(1),cy:(r()*H).toFixed(1),r:(0.5+r()*1.3).toFixed(1),fill:STAR,opacity:(0.2+r()*0.45).toFixed(2)}));}}
+  function drawBars(svg){var vals=[1,3,2,4,0,5,6,3],w=300,h=90,bw=26,gap=(w-8*bw)/9;for(var i=0;i<8;i++){var x=gap+i*(bw+gap),bh=vals[i]/6*(h-18);svg.appendChild(el('rect',{x:x,y:h-4-bh,width:bw,height:bh,fill:i===7?INK:LINE,rx:1}));var t=el('text',{x:x+bw/2,y:h-6-bh,'text-anchor':'middle','font-size':9,fill:MUTED,'font-family':'IBM Plex Mono'});t.textContent=vals[i];svg.appendChild(t);}svg.appendChild(el('line',{x1:0,x2:w,y1:h-4,y2:h-4,stroke:LINE,'stroke-width':.8}));}
+  document.querySelectorAll('svg.lc').forEach(drawLC);
+  document.querySelectorAll('svg.pg').forEach(drawPG);
+  document.querySelectorAll('svg.fold2').forEach(drawFold2);
+  document.querySelectorAll('svg.bg-sky').forEach(drawBgSky);
+  document.querySelectorAll('svg.bars').forEach(drawBars);
+  document.querySelectorAll('svg.mini-map').forEach(drawMiniMap);
+  var ms=document.getElementById('mainSky');if(ms)drawMainSky(ms);
+  var nb=document.getElementById('nebulaSky');if(nb)drawNebula(nb);
+  document.querySelectorAll('svg[data-m]').forEach(function(s){var big=s.style.width;var W=big?40:26,H=big?40:22;if(big&&parseInt(big)>40){W=H=parseInt(big);}s.setAttribute('viewBox','0 0 '+W+' '+H);s.appendChild(el('rect',{x:0,y:0,width:W,height:H,rx:3,fill:v('--sky')}));mark(s,W/2,H/2+1,s.dataset.m,big?(W/40):0.72);});
+})();
+</script>
