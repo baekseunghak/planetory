@@ -1,4 +1,4 @@
-<title>Planetory 와이어프레임 v0.3.1</title>
+<title>Planetory 와이어프레임 v0.4</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -198,12 +198,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.3.1 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v0.4 · 팀 검토용</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v0.9(MR !5 리뷰 반영판)를 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
+      <p>요구사항 명세서 v0.10(튜토리얼 순차 열림·챌린지 노출 반영판)을 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.9 · 상태표 v0.11</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.10 · 상태표 v0.11</b></dd>
       <dt>작성일</dt><dd><b>2026-09-04</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>P0 10 프레임 · 22 상태</b></dd>
@@ -299,8 +299,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
             <span class="row" style="justify-content:space-between"><span class="muted small">다음: 봉우리 → 구간 → 판단 → 제출</span><span class="btn sm">건너뛰기</span></span>
           </div>
           <div class="panel" style="left:14px;bottom:14px;padding:8px 12px;font-size:12px;width:300px">
-            <div class="row"><span class="co dim">5</span><b class="small">튜토리얼 5개 (HOME-06)</b></div>
-            <div class="muted small">1 뚜렷한 확인된 행성 · 2 얕은 확인된 행성 · 3 행성 아님 · 4 깊은 행성 아님(서로 가리는 쌍성) · 5 신호가 없는 별(자동 완료 체험)</div>
+            <div class="row"><span class="co dim">5</span><b class="small">튜토리얼 순차 열림 (HOME-06)</b></div>
+            <div class="muted small">처음엔 1번만 보임. 1 뚜렷한 확인된 행성 → 2 얕은 확인된 행성 → 3 행성 아님 → 4 깊은 행성 아님(쌍성) → 5 신호가 없는 별. 완료할 때마다 다음이 열리고, 5번까지 마치면 챌린지 별이 열림</div>
           </div>
         </div>
       </div>
@@ -308,9 +308,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">ACC-01</span><span>SSAFY OAuth. 같은 고유 ID 재로그인은 동일 회원</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">ACC-02</span><span>Google OAuth. 다른 제공자의 같은 이메일은 병합하지 않음</span><span class="tag p0">P0</span></li>
-      <li><span class="co">3</span><span class="nid">POL-26 · AT-57</span><span>신규 회원 홈에는 튜토리얼 5개와 챌린지 별만 중앙에 보임. 그 외 별은 화면에 없음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">POL-26 · HOME-02 · AT-57</span><span>신규 회원 홈에는 튜토리얼 1번 별만 보임. 완료할 때마다 다음 순번이 바깥에 나타나고, 5번 완료 후 챌린지 별이 나타남</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">HOME-09 · AT-86</span><span>첫 방문 말풍선 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출). 1회만, 건너뛰기 가능, 설정에서 다시 켬</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">5</span><span class="nid">HOME-06 · 결정 12</span><span>튜토리얼 5번은 후보표가 빈 별. 진입 즉시 자동 완료 흐름을 체험</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">5</span><span class="nid">HOME-06 · SUB-12</span><span>튜토리얼 5번은 후보표가 빈 별(자동 완료 체험). 같은 튜토리얼에서 불일치 제출 3회면 [건너뛰기] 제공(서버 설정, 성과 없음)</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -760,12 +760,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="panel" style="right:14px;top:14px;width:300px">
             <div class="box-h"><span class="co">1</span>퀘스트 <span class="sub">36주차</span><span class="r"><span class="muted small">접기 ▴</span></span></div>
             <div class="box-b" style="display:flex;flex-direction:column;gap:8px">
-              <div class="qcard"><span class="qm red">!</span><div style="flex:1"><b>주간 챌린지 · TIC 149603524</b><div class="muted small">아직 확인 안 된 신호 · AI 승인 구간 · 09-06까지 · 참여 27명</div><div style="margin-top:6px;height:6px;border:1px solid var(--ink);border-radius:999px;overflow:hidden"><div style="width:0%;height:100%;background:var(--ink)"></div></div><div class="row" style="justify-content:space-between;margin-top:4px"><span class="small">신호 1개 이상 맞추기 · 0 / 1</span><span class="btn sm pri">별로 이동</span></div></div></div>
+              <div class="qcard" style="opacity:.6;border-style:dashed"><span class="qm red">!</span><div style="flex:1"><b>주간 챌린지 · TIC 149603524</b><div class="muted small">아직 확인 안 된 신호 · AI 승인 구간 · 09-06까지 · 스레드 참여 27명</div><div class="muted small" style="margin-top:4px">🔒 튜토리얼 5개를 마치면 열립니다</div></div></div>
               <div class="qcard" style="border-color:var(--acc)"><span class="qm" style="background:var(--acc)">↺</span><div style="flex:1"><b>다시 열린 별 · TIC 149603524</b><div class="muted small"><span class="co" style="width:14px;height:14px;font-size:9px">2</span> 새 회차로 찾을 수 있는 신호가 생겼습니다</div><div class="row" style="margin-top:6px"><span class="btn sm">다시 분석</span></div></div></div>
               <div class="qcard"><span class="qm blue">1</span><div style="flex:1"><b>튜토리얼 1 · 뚜렷한 확인된 행성</b><div class="muted small">완료 · 행성 2</div></div><span class="pill acc" style="font-size:10.5px">✓</span></div>
-              <div class="qcard"><span class="qm blue">2</span><div style="flex:1"><b>튜토리얼 2 · 얕은 확인된 행성</b><div class="muted small">진행 중 · 곡선 단계 1</div></div><span class="btn sm">계속</span></div>
-              <div class="qcard" style="opacity:.75"><span class="qm blue">3</span><div style="flex:1"><b>튜토리얼 3 · 행성 아님</b><div class="muted small">미탐사</div></div></div>
-              <div class="muted small" style="text-align:center">4 · 5 ▾</div>
+              <div class="qcard"><span class="qm blue">2</span><div style="flex:1"><b>튜토리얼 2 · 얕은 확인된 행성</b><div class="muted small">진행 중 · 곡선 단계 1 · 일치 없음 3회</div></div><span class="row"><span class="btn sm">계속</span><span class="btn sm ghost">건너뛰기</span></span></div>
+              <div class="qcard" style="opacity:.6;border-style:dashed"><span class="qm blue">3</span><div style="flex:1"><b>튜토리얼 3 · 행성 아님</b><div class="muted small">🔒 2번을 마치면 열립니다</div></div></div>
+              <div class="muted small" style="text-align:center">4 · 5 🔒 ▾</div>
             </div>
           </div>
         </div>
@@ -786,10 +786,10 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">HOME-07 · CHL-01 · POL-24</span><span>퀘스트 패널 펼침. 챌린지 카드(빨간 !)는 아직 확인 안 된 신호 + AI 승인 구간 별, 기간 중 모두에게 발견 상태</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">HOME-07 · CHL-01 · POL-24 · SUB-12</span><span>퀘스트 패널 펼침. 튜토리얼은 순서대로 열리고 잠긴 카드는 조건을 표시. 불일치 3회면 [건너뛰기]. 챌린지 카드는 튜토리얼 5개 완료 후 활성(달성 조건 없음, 스레드 참여 수만)</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">DEC-27 · AT-83</span><span>다시 열린 별 카드. 새로 찾을 수 있는 신호를 찾도록 장려</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">NTF-01 · COM-16</span><span>알림: 재개 별([다시 분석] 포함), 새 챌린지, 기록 갱신, 답글, 팔로우한 별 새 글. 설정에서 종류별로 끔</span><span class="tag p1">P1</span></li>
-      <li><span class="co dim">·</span><span class="nid">CHL-01 · DEC-10</span><span>성공 조건·소급 반영은 DEC-10. 종료 후에도 별은 닫히지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">CHL-01 · DEC-10</span><span>챌린지는 달성 조건·보상 없음(DEC-10 종결). 종료 후에도 별은 닫히지 않음</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -837,7 +837,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.9와 상태표 v0.11을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
+  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.10과 상태표 v0.11을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
 </div>
 
 <script>
@@ -920,7 +920,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     svg.appendChild(el('circle',{cx:295,cy:180,r:23,fill:'none',stroke:STAR,'stroke-width':.8,'stroke-dasharray':'2 3',opacity:.6}));
   }
   function drawMiniMap(svg){
-    var cx=295,cy=250,pts=[['p0 tut1',cx-40,cy-24],['p0 tut2',cx+55,cy-52],['p0 tut3',cx+2,cy+52],['p0 tut4',cx-80,cy+40],['p0 tut5',cx+44,cy+20],['p0 chal',cx-2,cy-66]];
+    var cx=295,cy=250,pts=[['p0 tut1',cx-40,cy-24]];
     pts.forEach(function(s){mark(svg,s[1],s[2],s[0],1.3);});
     svg.appendChild(el('circle',{cx:cx-40,cy:cy-24,r:16,fill:'none',stroke:QB,'stroke-width':1.5,'stroke-dasharray':'4 3'}));
   }
