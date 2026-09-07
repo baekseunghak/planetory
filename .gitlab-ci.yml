@@ -1,0 +1,21 @@
+stages:
+  - validate
+  - build
+  - deploy
+
+include:
+  - local: .gitlab/ci/common.yml
+  - local: .gitlab/ci/apps/frontend.yml
+  - local: .gitlab/ci/apps/backend.yml
+  - local: .gitlab/ci/distributed-system/ingestion.yml
+  - local: .gitlab/ci/distributed-system/spark.yml
+  - local: .gitlab/ci/distributed-system/airflow.yml
+  - local: .gitlab/ci/distributed-system/publisher.yml
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+default:
+  interruptible: true

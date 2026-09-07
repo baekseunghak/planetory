@@ -1,0 +1,36 @@
+build:ingestion:
+  extends: .docker-build
+  variables:
+    DOCKERFILE: distributed-system/ingestion/Dockerfile
+    IMAGE_NAME: ingestion
+    TARGET_PLATFORM: linux/arm64
+    BUILD_ARGS: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/ingestion/requirements.txt]
+      changes: [distributed-system/ingestion/**/*]
+
+.deploy-ingestion:
+  needs: ["build:ingestion"]
+  variables:
+    IMAGE_NAME: ingestion
+    DEPLOY_IMAGE_VARIABLE: INGESTION_IMAGE
+    DEPLOY_SERVICES: ingestion
+    DEPLOY_ACTION: pull
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/ingestion/requirements.txt]
+      changes: [distributed-system/ingestion/**/*]
+      when: manual
+
+deploy:ingestion:oci-a:
+  extends: [.deploy-oci-a, .deploy-ingestion]
+
+deploy:ingestion:oci-b:
+  extends: [.deploy-oci-b, .deploy-ingestion]
+
+deploy:ingestion:oci-c:
+  extends: [.deploy-oci-c, .deploy-ingestion]
+
+deploy:ingestion:oci-d:
+  extends: [.deploy-oci-d, .deploy-ingestion]
