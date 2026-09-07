@@ -1,27 +1,66 @@
-# CI/CD 결정 대기 사항
+# GitLab CI/CD
 
-> EC2와 OCI의 역할, 노드 구성 및 지원 플랫폼은 [시스템 아키텍처](../development/system-architecture.md)를 따릅니다. 이 문서는 빌드·검증·배포 규칙을 상세화합니다.
+> 현재 파일은 배포 경계와 job 뼈대다. 애플리케이션 코드, Runner, Registry와 서버 변수가 준비된 뒤 실제 실행을 검증한다.
 
-CI/CD 규칙은 프로젝트 주제, 기술 스택, EC2 구성과 배포 대상이 확정된 뒤 작성합니다.
+Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서버 역할은 [시스템 아키텍처](../development/system-architecture.md)를 따른다.
 
-확정 전까지 다음 원칙을 적용합니다.
+## 파일 구성
 
-- 실행 및 테스트 결과를 MR에 직접 기록합니다.
-- 비밀번호, AWS 자격 증명과 Webhook URL을 저장소에 추가하지 않습니다.
-- 비밀 값은 GitLab CI/CD Variables 또는 안전한 비밀 관리 수단으로 주입합니다.
-- CI에서 실제 원본 데이터를 사용하지 않습니다.
-- EC2 x86_64와 OCI ARM64용 이미지를 `linux/amd64`, `linux/arm64`로 빌드합니다.
-- ARM64 호환성은 CI 빌드뿐 아니라 실제 OCI 실행으로 검증합니다.
+```text
+.gitlab-ci.yml
+.gitlab/ci/
+├─ common.yml
+├─ apps/
+│  ├─ frontend.yml
+│  └─ backend.yml
+└─ distributed-system/
+   ├─ ingestion.yml
+   ├─ spark.yml
+   ├─ airflow.yml
+   └─ publisher.yml
+```
 
-## 결정할 항목
+최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램의 이미지를 만들거나 재시작하지 않는다.
 
-- 주 언어, 프레임워크와 빌드·패키지 도구
-- GitLab Runner 실행 위치와 executor
-- EC2 개발·스테이징·운영 환경 구성
-- 브랜치별 CI job과 필수 검사
-- 빌드 산출물 저장 위치
-- 자동 배포 범위와 승인 방식
-- 프로세스 관리 및 상태 확인 방법
-- 롤백 방식
-- AWS 접근 권한과 환경별 변수 범위
+## 실행 흐름
+
+| 시점 | 실행 |
+| --- | --- |
+| Merge Request | Compose와 Docker 구성 검사 |
+| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push |
+| 배포 승인 | 선택한 서버에서 해당 이미지만 pull·재시작 |
+
+소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
+
+## 독립 배포
+
+- Frontend·Backend: EC2-A와 EC2-B job을 각각 수동 실행한다.
+- Ingestion·Spark: OCI-A/B/C/D에 이미지를 각각 pull할 수 있다.
+- Airflow·Publisher: 역할에 따라 OCI-A에 배포한다.
+- 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
+- 운영 Compose는 서버의 `.env`에서 다른 서비스의 현재 이미지와 실행 설정을 읽는다.
+
+배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
+
+## 필요한 GitLab 변수
+
+| 구분 | 변수 |
+| --- | --- |
+| 공통 SSH | `DEPLOY_USER`, File 타입 `DEPLOY_SSH_KEY`, File 타입 `DEPLOY_KNOWN_HOSTS` |
+| EC2 | `EC2_A_HOST`, `EC2_A_DEPLOY_PATH`, `EC2_B_HOST`, `EC2_B_DEPLOY_PATH` |
+| OCI | `OCI_A_HOST`~`OCI_D_HOST`, `OCI_A_DEPLOY_PATH`~`OCI_D_DEPLOY_PATH` |
+| ARM 기반 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
+
+변수는 Protected·Masked 범위를 적용한다. 운영 서버에는 Container Registry 읽기 전용 자격 증명을 미리 설정한다.
+
+## 도입 전 확인
+
+- `lab.ssafy.com` Runner가 Docker-in-Docker와 Buildx를 실행할 수 있는지
+- Container Registry 사용 권한
+- 기준 브랜치가 `main`인지 `master`인지
+- Spark·Airflow 기반 이미지의 ARM64 지원
+- 각 서버의 Docker Compose, `.env`, 볼륨 경로와 방화벽
+- 애플리케이션별 health endpoint와 실제 되돌리기 절차
+
+HDFS 삭제, NameNode 초기화, 전체 노드 동시 재시작과 Gold 공개 전환은 일반 애플리케이션 배포 job에 넣지 않는다.
 
