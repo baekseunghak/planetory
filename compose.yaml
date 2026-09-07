@@ -1,0 +1,107 @@
+name: planetory-local
+
+include:
+  - path: experiments/distributed-pipeline/compose.yaml
+
+services:
+  frontend:
+    profiles: ["service"]
+    platform: ${LOCAL_APP_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      target: development
+    volumes:
+      - ./apps/frontend:/workspace
+      - frontend-node-modules:/workspace/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+    networks:
+      - service
+
+  backend:
+    profiles: ["service"]
+    platform: ${LOCAL_APP_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: development
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://service-db:5432/planetory_poc
+      SPRING_DATASOURCE_USERNAME: planetory
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD for local development}
+    volumes:
+      - ./apps/backend:/workspace
+      - backend-gradle-cache:/home/gradle/.gradle
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - service
+    depends_on:
+      service-db:
+        condition: service_healthy
+
+  ingestion:
+    profiles: ["pipeline"]
+    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: distributed-system/ingestion/Dockerfile
+    volumes:
+      - ./distributed-system/ingestion:/app
+    networks:
+      - hadoop
+    depends_on:
+      - namenode
+
+  spark-submit:
+    profiles: ["pipeline"]
+    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: distributed-system/spark/Dockerfile
+      args:
+        SPARK_IMAGE: ${SPARK_IMAGE:-apache/spark:3.5.5-python3}
+    networks:
+      - hadoop
+    depends_on:
+      - resourcemanager
+      - nodemanager-1
+      - nodemanager-2
+
+  airflow:
+    profiles: ["pipeline"]
+    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: distributed-system/airflow/Dockerfile
+      args:
+        AIRFLOW_IMAGE: ${AIRFLOW_IMAGE:-apache/airflow:2.10.5-python3.12}
+    command: ["standalone"]
+    volumes:
+      - ./distributed-system/airflow/dags:/opt/airflow/dags
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - hadoop
+    depends_on:
+      - resourcemanager
+
+  publisher:
+    profiles: ["pipeline"]
+    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    build:
+      context: .
+      dockerfile: distributed-system/publisher/Dockerfile
+    volumes:
+      - ./distributed-system/publisher:/app
+    networks:
+      - hadoop
+      - service
+    depends_on:
+      service-db:
+        condition: service_healthy
+
+volumes:
+  frontend-node-modules:
+  backend-gradle-cache:

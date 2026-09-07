@@ -1,0 +1,30 @@
+name: planetory-service
+
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:-local/planetory-frontend:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:8080"
+    networks:
+      - service
+
+  backend:
+    image: ${BACKEND_IMAGE:-local/planetory-backend:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://not-configured/planetory}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-not-configured}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-not-configured}
+      GOLD_ROOT: /gold
+    volumes:
+      - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    networks:
+      - service
+
+networks:
+  service:
