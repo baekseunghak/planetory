@@ -3,7 +3,7 @@ build:ingestion:
   variables:
     DOCKERFILE: distributed-system/ingestion/Dockerfile
     IMAGE_NAME: ingestion
-    TARGET_PLATFORM: linux/arm64
+    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: ""
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -23,14 +23,17 @@ build:ingestion:
       changes: [distributed-system/ingestion/**/*]
       when: manual
 
-deploy:ingestion:oci-a:
-  extends: [.deploy-oci-a, .deploy-ingestion]
+deploy:ingestion:gcp-node-2:
+  extends: [.deploy-gcp-node-2, .deploy-ingestion]
 
-deploy:ingestion:oci-b:
-  extends: [.deploy-oci-b, .deploy-ingestion]
+deploy:ingestion:gcp-node-3:
+  extends: [.deploy-gcp-node-3, .deploy-ingestion]
 
-deploy:ingestion:oci-c:
-  extends: [.deploy-oci-c, .deploy-ingestion]
+deploy:ingestion:gcp-node-4:
+  extends: [.deploy-gcp-node-4, .deploy-ingestion]
 
-deploy:ingestion:oci-d:
-  extends: [.deploy-oci-d, .deploy-ingestion]
+deploy:ingestion:gcp-node-5:
+  extends: [.deploy-gcp-node-5, .deploy-ingestion]
+
+deploy:ingestion:gcp-node-6:
+  extends: [.deploy-gcp-node-6, .deploy-ingestion]

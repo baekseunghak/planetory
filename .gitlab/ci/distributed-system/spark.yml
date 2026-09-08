@@ -3,7 +3,7 @@ build:spark:
   variables:
     DOCKERFILE: distributed-system/spark/Dockerfile
     IMAGE_NAME: spark-job
-    TARGET_PLATFORM: linux/arm64
+    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: "--build-arg SPARK_IMAGE=$SPARK_BASE_IMAGE"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -23,14 +23,5 @@ build:spark:
       changes: [distributed-system/spark/**/*]
       when: manual
 
-deploy:spark:oci-a:
-  extends: [.deploy-oci-a, .deploy-spark]
-
-deploy:spark:oci-b:
-  extends: [.deploy-oci-b, .deploy-spark]
-
-deploy:spark:oci-c:
-  extends: [.deploy-oci-c, .deploy-spark]
-
-deploy:spark:oci-d:
-  extends: [.deploy-oci-d, .deploy-spark]
+deploy:spark:gcp-node-1:
+  extends: [.deploy-gcp-node-1, .deploy-spark]

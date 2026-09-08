@@ -35,8 +35,8 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 ## 독립 배포
 
 - Frontend·Backend: EC2-A와 EC2-B job을 각각 수동 실행한다.
-- Ingestion·Spark: OCI-A/B/C/D에 이미지를 각각 pull할 수 있다.
-- Airflow·Publisher: 역할에 따라 OCI-A에 배포한다.
+- Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
+- Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다.
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
 - 운영 Compose는 서버의 `.env`에서 다른 서비스의 현재 이미지와 실행 설정을 읽는다.
 
@@ -48,19 +48,26 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 | --- | --- |
 | 공통 SSH | `DEPLOY_USER`, File 타입 `DEPLOY_SSH_KEY`, File 타입 `DEPLOY_KNOWN_HOSTS` |
 | EC2 | `EC2_A_HOST`, `EC2_A_DEPLOY_PATH`, `EC2_B_HOST`, `EC2_B_DEPLOY_PATH` |
-| OCI | `OCI_A_HOST`~`OCI_D_HOST`, `OCI_A_DEPLOY_PATH`~`OCI_D_DEPLOY_PATH` |
-| ARM 기반 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
+| GCP | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`, `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
+| 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
+| Node 1 Airflow | 서버 `.env`의 `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DATABASE_URL`, `AIRFLOW_FERNET_KEY`, `AIRFLOW_WEBSERVER_SECRET_KEY`, `AIRFLOW_DB_PATH`, `AIRFLOW_LOGS_PATH` |
 
 변수는 Protected·Masked 범위를 적용한다. 운영 서버에는 Container Registry 읽기 전용 자격 증명을 미리 설정한다.
 
 ## 도입 전 확인
 
 - `lab.ssafy.com` Runner가 Docker-in-Docker와 Buildx를 실행할 수 있는지
+- 현재 ARM64 Runner가 privileged DinD에서 고정된 `tonistiigi/binfmt` 이미지를 실행해 amd64를 에뮬레이션할 수 있는지
 - Container Registry 사용 권한
 - 기준 브랜치가 `main`인지 `master`인지
-- Spark·Airflow 기반 이미지의 ARM64 지원
+- Spark·Airflow 기반 이미지의 amd64 지원
 - 각 서버의 Docker Compose, `.env`, 볼륨 경로와 방화벽
 - 애플리케이션별 health endpoint와 실제 되돌리기 절차
 
 HDFS 삭제, NameNode 초기화, 전체 노드 동시 재시작과 Gold 공개 전환은 일반 애플리케이션 배포 job에 넣지 않는다.
 
+Hadoop/YARN 데몬은 호스트에서 실행한다. `infra/distributed-system/config/hadoop/`의 공통 파일과 역할에 맞는 `config/yarn/` 파일을 `/etc/hadoop/`에 배포한 뒤 [운영 절차](../../infra/distributed-system/README.md)로 시작한다. 신규 NameNode format과 Standby bootstrap은 한 번만 수동 수행한다. `initializeSharedEdits`는 기존 단일 NameNode를 HA로 전환할 때의 별도 절차다.
+
+GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며 CI에서 실행하지 않는다. CI의 XML·Compose 검사는 VM 생성이나 실제 클러스터 동작을 검증하지 않는다. 설정 파일만 수정해도 validate는 실행되지만 현재 이미지별 deploy 규칙은 애플리케이션 소스 변경을 기준으로 하므로 XML 배포는 운영 절차로 수행한다.
+
+현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.
