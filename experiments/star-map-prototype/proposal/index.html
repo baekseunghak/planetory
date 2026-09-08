@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>Planetory · 실제 하늘에서 이어지는 탐사</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="../shared/data.js" defer></script>
+  <script src="../shared/sectors.js" defer></script><script src="sky-math.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+  <header class="header">
+    <a href="#" class="brand" aria-label="Planetory 탐사 지도"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="10"/><ellipse cx="20" cy="20" rx="19" ry="6" transform="rotate(-35 20 20)"/><path d="M20 3v5m0 24v5M3 20h5m24 0h5"/></svg><span>planetory<span class="brand-dot">.</span></span></a>
+    <nav aria-label="주요 메뉴"><button class="nav-active" id="nav-map">탐사 지도</button></nav>
+    <div class="header-right"><span class="prototype-label">제안안 <span>SKY EXPLORER</span></span><button class="icon-button" id="help-button" aria-label="도움말 열기">?</button><div class="profile"><span class="avatar">S</span><span>서진의 우주</span></div></div>
+  </header>
+
+  <main id="map-page">
+    <div id="map-surface" tabindex="0" role="application" aria-label="실제 하늘 좌표의 탐사 지도. 드래그와 방향키로 시선 회전, 더하기와 빼기로 시야각 조절. Home 키로 선택한 별에 복귀. 별 목록에서 멀리 있는 별로 이동할 수 있습니다.">
+      <canvas id="star-canvas" aria-hidden="true"></canvas>
+      <svg id="map-decoration" aria-hidden="true"></svg>
+      <div id="map-nodes"></div>
+    </div>
+    <div class="map-caption" aria-hidden="true"><span class="tiny-cross">＋</span> ICRS / CELESTIAL SKY <span class="caption-line"></span><span id="map-area">RA 68.4° / DEC −52.0°</span></div>
+    <section class="left-rail" aria-label="나의 탐사 현황">
+      <p class="eyebrow">A SKY FULL OF POSSIBILITIES</p>
+      <h1>별빛을 따라,</h1>
+      <p class="subheading">실제 하늘에서 나만의 탐사를 이어가요.</p>
+      <div class="journey-count"><strong id="star-count">01</strong><span>열린 별</span><div></div><span class="count-note" id="count-note">첫 탐사를 기다리고 있어요</span></div>
+      <section class="quest-card">
+        <button class="quest-heading" id="quest-toggle" aria-expanded="true"><span><span class="blue-square">1</span> 첫 탐사 안내</span><span id="quest-toggle-icon">−</span></button>
+        <div id="quest-content"><div class="quest-progress"><i id="quest-bar"></i></div><p class="quest-step" id="quest-step">01 / 03 · 별 만나기</p><h2 id="quest-title">첫 번째 별을 만나보세요</h2><p id="quest-description">빛의 변화를 살펴보며<br>나만의 탐사를 시작해요.</p><button class="quest-action" id="quest-action">첫 번째 별 보기 <span>↗</span></button></div>
+      </section>
+      <button class="list-toggle" id="list-toggle" aria-expanded="true"><span>내 별 목록</span><span><span id="list-count">1</span> <span id="list-arrow">−</span></span></button>
+      <div id="star-list"></div>
+    </section>
+
+    <aside id="star-detail" class="detail-panel" aria-label="선택한 별 정보" hidden>
+      <div class="panel-top"><span id="detail-category" class="eyebrow">TUTORIAL 01</span><button id="detail-close" class="icon-button" aria-label="별 정보 닫기">×</button></div>
+      <div class="detail-star-art" aria-hidden="true"><span></span><i></i></div>
+      <p class="detail-overline">TESS INPUT CATALOG</p><h2 id="detail-id"></h2>
+      <span class="status-tag" id="detail-status"></span>
+      <div class="detail-rule"></div>
+      <dl><div><dt>관측 회차</dt><dd id="detail-sectors"></dd></div><div><dt>밝기</dt><dd id="detail-mag"></dd></div><div><dt>하늘 좌표 (RA / Dec)</dt><dd id="detail-path"></dd></div><div><dt>내가 찾은 행성</dt><dd>0개</dd></div></dl>
+      <p class="detail-note" id="detail-note"></p>
+      <button id="analysis-start" class="primary-button">분석 시작 <span>↗</span></button>
+      <button id="detail-focus" class="text-button">이 별을 화면 가운데로</button>
+    </aside>
+
+    <section id="welcome-card" class="welcome-card" aria-label="첫 방문 안내">
+      <div><span class="guide-indicator"></span><span class="eyebrow">WELCOME, EXPLORER</span><button id="welcome-close" class="icon-button" aria-label="첫 안내 접기">×</button></div>
+      <h2>오늘, 첫 별을 만나볼까요?</h2><p>번호가 붙은 별이 첫 탐사 대상이에요.<br>별을 고르면 실제 관측 기록을 살펴볼 수 있어요.</p><button id="welcome-select" class="text-button">첫 번째 별 선택 <span>→</span></button>
+    </section>
+    <div id="new-notice" class="new-notice" hidden><span class="new-label">NEW</span><div><strong>새로운 두 별이 기다리고 있어요</strong><span>원하는 별부터 자유롭게 살펴보세요.</span></div><button id="show-new" class="text-button">새 별 보기 ↗</button></div>
+
+    <div class="map-bottom">
+      <div class="map-controls"><button id="zoom-out" aria-label="축소">−</button><span id="zoom-label" title="세로 시야각">시야 55°</span><button id="zoom-in" aria-label="확대">＋</button><span class="control-divider"></span><button id="fit-map" class="fit-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4"/></svg>선택 방향</button></div>
+      <span class="gesture-note">드래그로 둘러보기 <span>·</span> 휠로 시야 조절</span>
+      <button id="layers-button" class="legend-button" aria-expanded="false">▧ 관측 레이어</button><button id="overview-button" class="legend-button">◎ 하늘 전체</button><button id="legend-button" class="legend-button" aria-expanded="false"><span class="legend-dot"></span> 표시 안내 <span>＋</span></button>
+    </div>
+    <aside id="legend" class="legend-panel" hidden><div class="panel-top"><strong>하늘을 읽는 방법</strong><button class="icon-button" id="legend-close" aria-label="범례 닫기">×</button></div><p>번호·이름표가 붙은 별만 선택할 수 있어요.</p><div class="legend-explain"><span>✦ <b>별의 색</b> · 온도에 따른 대략적인 표현</span><span>① <b>안내 / NEW</b> · 나의 탐사 진행 표시</span><span>▧ <b>관측 영역</b> · TESS 카메라·검출기 범위</span><span>· <b>작은 배경 점</b> · 분위기를 위한 장식</span></div><p class="legend-footnote">별 위치는 실제 RA / Dec 좌표입니다.<br>밝기·크기는 가독성을 위해 조절했습니다.</p></aside>
+    <aside class="layers-panel" id="layers-panel" hidden aria-label="관측 레이어 설정"><div class="panel-top"><strong>하늘에 겹쳐 보기</strong><button class="icon-button" id="layers-close" aria-label="레이어 닫기">×</button></div><label class="switch-row">하늘 좌표 격자<input type="checkbox" id="grid-toggle" checked></label><label class="switch-row">TESS 관측 영역<input type="checkbox" id="sector-toggle"></label><div class="sector-settings"><label for="sector-select">관측 회차</label><select id="sector-select"><option value="2">Sector 2</option><option value="3" selected>Sector 3</option><option value="4">Sector 4</option><option value="5">Sector 5</option><option value="8">Sector 8</option><option value="16">Sector 16</option></select><label for="sector-opacity">선명도 <output id="opacity-label">65%</output></label><input id="sector-opacity" type="range" min="15" max="100" value="65"><button id="sector-focus" class="secondary-button">이 관측 영역으로 이동 ↗</button></div><p>하나의 회차에 카메라 4대가 관측한 영역입니다. 작은 칸은 검출기(CCD)이며, 사이에는 관측되지 않는 틈이 있어요.</p></aside>
+    <aside class="sky-overview-card" id="sky-overview-card"><button id="overview-card-button"><span class="eyebrow">YOUR PLACE IN THE SKY <span>↗</span></span><svg id="sky-overview" aria-hidden="true"></svg><span class="overview-caption">전체 하늘 · 펼친 지도 <span>북 ↑</span></span></button><span id="visible-count">화면 안 1 / 열린 별 1</span></aside>
+    <div id="sector-caption" class="sector-caption" hidden></div>
+    <div id="map-tooltip" class="map-tooltip" role="status" hidden></div>
+  </main>
+
+  <main id="analysis-page" hidden>
+    <div class="analysis-container">
+      <button id="analysis-back" class="back-button">← 탐사 지도로</button>
+      <div class="analysis-heading"><div><p class="eyebrow">OBSERVATION / LIGHT CURVE</p><h1 id="analysis-title"></h1><p id="analysis-meta"></p></div><span class="boundary-tag">분석 화면 연결 미리보기</span></div>
+      <div class="analysis-layout"><section class="chart-panel"><div class="chart-heading"><div><p class="eyebrow">ACTUAL TESS OBSERVATIONS</p><h2>빛의 변화 기록</h2></div><span id="chart-sectors"></span></div><div id="chart-container"><svg id="lightcurve" role="img" aria-label="실제 관측 자료의 정규화 밝기 미리보기"></svg></div><p class="chart-caption">실제 관측 자료 · 품질 값 0만 사용 · 회차별 중앙값 정규화 · 미리보기용 축약</p></section>
+      <aside class="handoff-panel"><p class="eyebrow">NEXT, THE ANALYSIS</p><h2>이곳에서 분석이<br>이어집니다.</h2><p>주기를 고르고, 가려지는 구간을 찾아<br>나의 판단을 기록하게 됩니다.</p><ol><li><span>01</span><div>반복되는 주기 찾기<small>주기도의 봉우리 선택</small></div></li><li><span>02</span><div>빛이 줄어든 구간 선택<small>접힌 곡선에서 구간 조절</small></div></li><li><span>03</span><div>판단하고 제출하기<small>결과 확인 후 다음 탐사</small></div></li></ol><div class="handoff-note">현재는 지도와 분석 화면 사이의 연결을 확인하는 시제품입니다. 그래프 조작과 결과 판정은 연결 예정입니다.</div></aside></div>
+      <section class="simulation-panel"><div><span class="simulation-label">시연 전용</span><h2 id="simulation-title">첫 분석 안내가 끝난 상황을 확인해 보세요.</h2><p id="simulation-description">아래 버튼은 실제 분석을 채점하지 않습니다. 안내를 마친 뒤 지도에 새 별이 열리는 흐름을 재현합니다.</p></div><button id="complete-demo" class="primary-button">안내 완료 상황 보기 <span>→</span></button><button id="free-return" class="secondary-button" hidden>탐사 지도로 돌아가기 →</button></section>
+    </div>
+  </main>
+
+  <footer class="footer"><span><i></i>제안안 · 실제 하늘 좌표 <span class="footer-separator">/</span> 별 3개 시연</span><span id="save-status">이 브라우저에 진행 저장</span><button id="demo-button">시연 설정 <span>↗</span></button></footer>
+  <div id="toast" role="status" class="toast" hidden></div>
+  <dialog id="help-dialog"><div class="dialog-heading"><span class="eyebrow">EXPLORER'S GUIDE</span><button data-close="help-dialog" class="icon-button" aria-label="도움말 닫기">×</button></div><h2>나의 우주를 탐사하는 방법</h2><div class="help-row"><span>01</span><div><h3>별을 선택하세요</h3><p>지도에 보이는 별은 내가 열린 별입니다. 별을 누르면 관측 정보와 분석 시작 버튼이 나옵니다.</p></div></div><div class="help-row"><span>02</span><div><h3>하늘 안에서 둘러보세요</h3><p>드래그로 보는 방향을 돌리고, 휠로 시야각을 바꾸세요. 북쪽이 위이고 적경(RA)은 왼쪽으로 증가합니다. 멀리 있는 별은 내 별 목록에서 고르면 그 방향으로 이동합니다. 관측 레이어에서 섹터를 켤 수 있습니다.</p></div></div><div class="help-row"><span>03</span><div><h3>다음 별로 탐사를 이어가세요</h3><p>이 시연에서는 첫 분석 안내 완료 후 두 별이 열립니다. 안내 완료가 그 별의 모든 분석을 끝냈다는 뜻은 아닙니다.</p></div></div><button id="restart-guide" class="primary-button">첫 안내 다시 보기 →</button></dialog>
+  <dialog id="demo-dialog"><div class="dialog-heading"><span class="eyebrow">PROTOTYPE CONTROLS</span><button data-close="demo-dialog" class="icon-button" aria-label="시연 설정 닫기">×</button></div><h2>시연 설정</h2><p>실제 하늘 좌표와 구 안에서 보는 탐사를 별 3개로 살펴보는 제안안입니다.</p><div class="scope-note"><strong>이번 시연에 적용한 범위</strong><ul><li>튜토리얼 5개를 1개로 축소</li><li>안내 완료 후 지정된 두 별 해금</li><li>별의 RA / Dec와 관측 회차는 실제 자료 사용</li><li>섹터 6개는 archival WCS로 계산한 관측 영역</li><li>작은 배경 점은 장식이며 선택 불가</li><li>진행은 이 브라우저에만 저장</li><li>실제 채점·등급·계정·서버 연결은 미구현</li></ul><p>3개 별로 대규모 지도 성능을 검증하지는 않습니다.</p></div><div class="demo-actions"><button id="reset-demo" class="secondary-button">처음 방문으로 초기화</button><button id="unlocked-demo" class="primary-button">두 별이 열린 상태 보기 →</button></div></dialog>
+  <dialog id="unlock-dialog"><div class="dialog-heading"><span class="eyebrow">A NEW CHAPTER</span><button data-close="unlock-dialog" class="icon-button" aria-label="새 별 안내 닫기">×</button></div><div class="unlock-symbol" aria-hidden="true">✧</div><p class="unlock-kicker">첫 분석 안내 완료</p><h2>새로운 방향이 열렸어요.</h2><p>두 별은 하늘의 서로 다른 방향에 있어요.<br>하나를 고르면 그 별을 향해 시선이 이동합니다.</p><div class="unlock-cards" id="unlock-cards"></div><button id="unlock-explore" class="primary-button">전체 하늘에서 위치 보기 →</button><p class="unlock-disclaimer">시연용 해금 결과 · 실제 채점 및 등급 상승 없음</p></dialog>
+<dialog id="sky-dialog"><div class="dialog-heading"><span class="eyebrow">ALL SKY / ICRS</span><button data-close="sky-dialog" class="icon-button" aria-label="전체 하늘 닫기">×</button></div><h2>다음엔 어느 방향으로 갈까요?</h2><p>하늘 전체를 펼친 지도예요. 별 목록을 고르거나 지도를 눌러 그 방향으로 이동하세요.</p><svg id="sky-overview-large" role="img" aria-label="열린 별들의 실제 위치와 현재 시야를 표시한 전체 하늘 지도"></svg><div class="sky-axes"><span>RA 360°</span><span>북 +90° / 남 −90°</span><span>RA 0°</span></div><div id="overview-list"></div><p class="overview-footnote">초록 점선: 현재 화면 범위 · 흰 원: 시선 중심<br>전체 하늘을 한 평면에 펼쳐, 극지방은 늘어나 보입니다.</p></dialog></body>
+</html>

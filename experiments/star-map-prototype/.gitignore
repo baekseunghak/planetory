@@ -1,0 +1,8 @@
+dist/
+sample_raw/
+.venv/
+__pycache__/
+*.pyc
+*.fits
+*.fits.gz
+*.zip
