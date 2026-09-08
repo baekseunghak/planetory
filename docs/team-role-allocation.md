@@ -32,7 +32,7 @@
 
 | 번호 | 담당자 | 담당 도메인 | 핵심 책임 | Jira |
 | ---: | --- | --- | --- | --- |
-| 1 | 김동혁 | 데이터 플랫폼·DevOps | OCI, HDFS, YARN/Spark, Airflow, 데이터 계층, Gold 전달, 온라인 파생 계산 아키텍처 | [S15P21C206-28](https://ssafy.atlassian.net/browse/S15P21C206-28) |
+| 1 | 김동혁 | 데이터 플랫폼·DevOps | GCP, HDFS, YARN/Spark, Airflow, 데이터 계층, Gold 전달, 온라인 파생 계산 아키텍처 | [S15P21C206-28](https://ssafy.atlassian.net/browse/S15P21C206-28) |
 | 2 | 윤성용 | 천문 데이터 처리·AI | Light Curve 전처리, BLS, 내부 잔차, transit model, 외부 데이터, AI | [S15P21C206-29](https://ssafy.atlassian.net/browse/S15P21C206-29) |
 | 3 | 강재민 | 탐사 코어 백엔드 | Gold 조회, 온라인 잔차 계산, 제출·매칭, 히스토리, 성과·등급, 완료·재개·발견 | [S15P21C206-31](https://ssafy.atlassian.net/browse/S15P21C206-31) |
 | 4 | 백승학 | 서비스 백엔드 | 인증·회원, 커뮤니티, 공개 반응, 신고·운영 숨김, 통계, 알림, 운영 | [S15P21C206-30](https://ssafy.atlassian.net/browse/S15P21C206-30) |
@@ -47,12 +47,12 @@
 
 #### 분석 범위
 
-- OCI 4계정 A/B/C/D의 노드 역할과 계정 간 네트워크
-- A 노드의 NameNode·ResourceManager·Airflow와 Worker 병행 자원 범위
+- GCP 6계정 Node 1~6의 역할과 계정 간 네트워크
+- Node 1의 NameNode·ResourceManager·Airflow 제어 역할과 Node 2의 Standby NameNode·Worker 병행 자원 범위
 - HDFS Raw/Bronze/Silver 저장 구조, 복제 계수와 보존 정책
 - YARN/Spark 자원 배분과 Airflow 배치 제어
 - 원천 수집의 checksum, 재시도, 멱등성과 부분 재처리
-- PublicationBundle 검증과 OCI에서 EC2로의 Gold 전달
+- PublicationBundle 검증과 GCP에서 EC2로의 Gold 전달
 - EC2 release 검증, `current` 원자적 전환과 롤백
 - EC2 온라인 파생 계산의 구현 위치, 캐시 저장소, 큐와 동시 실행 상한
 - Gold 원본 전 점·품질 마스크·transit model 추가에 따른 용량 재산정
@@ -62,7 +62,7 @@
 
 #### 기획 산출물
 
-- OCI 노드 역할·자원 배분표
+- GCP 노드 역할·자원 배분표
 - 네트워크 및 서비스 배치도
 - 데이터 계층별 저장·복제·보존 계획
 - 전체 배치 및 Gold 전달 흐름도
@@ -219,7 +219,7 @@
 | GRD-08, OPS-08, DEC-23 | 강재민 | 백승학, 하서진 | 전체 미발견 별 대상의 seed 기반 무작위 발견과 제외 규칙을 정의한다. |
 
 ```text
-김동혁: OCI·HDFS·Spark 실행 및 저장 환경
+김동혁: GCP·HDFS·Spark 실행 및 저장 환경
     ↓
 윤성용: 천문 처리·후보·transit model·AI 산출물
     ↓ PublicationBundle

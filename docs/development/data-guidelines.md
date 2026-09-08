@@ -35,7 +35,7 @@
       └─ removal_qa/
 ```
 
-Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. OCI의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다.
+Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다.
 
 약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum과 묶음 위치를 기록합니다. 원본을 삭제하거나 컬럼을 제거하지 않습니다.
 
@@ -70,7 +70,7 @@ Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. OCI의 실�
 
 ## 결정 대기 사항
 
-- OCI Gold 후보의 실제 staging 경로
+- GCP Gold 후보의 실제 staging 경로
 - EC2 Gold 저장 경로와 릴리스 보존 수
 - Raw·Silver 등 계층별 데이터 보존 기간
 - 개인정보 및 민감정보 처리 정책

@@ -12,13 +12,14 @@ S15P21C206/
 │  ├─ backend/                # EC2 API와 DB 변경
 │  └─ derived-compute/        # EC2 온라인 계산기, 채택할 때만 생성
 ├─ distributed-system/
-│  ├─ ingestion/              # OCI 원천 수집
-│  ├─ spark/                  # OCI Spark 작업
-│  ├─ airflow/                # OCI 작업 순서와 재시도
+│  ├─ ingestion/              # GCP 원천 수집
+│  ├─ spark/                  # GCP Spark 작업
+│  ├─ airflow/                # GCP 작업 순서와 재시도
 │  └─ publisher/              # Gold 검증·포장·전송
 ├─ infra/
 │  ├─ service/                # EC2-A/B 실행 설정
-│  └─ distributed-system/     # OCI-A/B/C/D 실행 설정
+│  ├─ distributed-system/     # GCP Node 1~6 실행 설정
+│  └─ provisioning/gcp/       # VM·디스크·네트워크 생성
 ├─ contracts/
 │  └─ gold/                   # Gold 스키마·예제·호환성 검사
 ├─ libs/
@@ -38,13 +39,13 @@ S15P21C206/
 
 ### `distributed-system/`
 
-OCI에서 데이터를 수집·처리·전달하는 **실행 코드**다. 예를 들어 Spark의 변환 로직은 여기에 둔다. 서버 주소나 디스크 연결 설정은 두지 않는다.
+GCP에서 데이터를 수집·처리·전달하는 **실행 코드**다. 예를 들어 Spark의 변환 로직은 여기에 둔다. 서버 주소나 디스크 연결 설정은 두지 않는다.
 
 ### `infra/`
 
 프로그램을 **어느 서버에서 어떻게 실행할지** 정한다. Docker Compose, 포트, 볼륨, Hadoop/YARN 설정, 노드 역할, 상태 확인과 되돌리기 스크립트가 들어간다.
 
-예를 들어 `distributed-system/spark/sector_pipeline.py`는 데이터 처리 코드이고, `infra/distributed-system/node-c/`는 그 코드를 OCI-C에서 Worker로 실행하는 설정이다.
+예를 들어 `distributed-system/spark/sector_pipeline.py`는 데이터 처리 코드이고, `infra/distributed-system/config/yarn/worker.xml`은 GCP 워커의 실행 자원 설정이다.
 
 ```text
 infra/
@@ -52,20 +53,23 @@ infra/
 │  ├─ compose.yaml
 │  ├─ ec2-a/
 │  └─ ec2-b/
-└─ distributed-system/
-   ├─ compose.yaml
-   ├─ common/
-   ├─ node-a/                 # Master + Worker
-   ├─ node-b/                 # Checkpoint + Worker
-   ├─ node-c/                 # Worker
-   └─ node-d/                 # Worker
+├─ distributed-system/
+│  ├─ compose.control-plane.yaml
+│  ├─ compose.worker.yaml
+│  ├─ validate.py
+│  └─ config/
+│     ├─ hadoop/              # 공통 HDFS 설정과 Worker 목록
+│     └─ yarn/                # worker.xml, standby-worker.xml
+└─ provisioning/gcp/
+   ├─ README.md              # 설치·로그인부터 실행 명령
+   └─ scripts/               # create-node, inspect-node, create-mesh-peering
 ```
 
 실제 IP, 비밀번호와 개인 키는 저장소에 넣지 않는다.
 
 ### `contracts/`
 
-두 시스템이 주고받는 데이터의 **검사 가능한 약속**이다. Gold 필드·자료형·필수 여부, manifest 형식, 작은 정상·오류 예제를 둔다. OCI 생산자와 EC2 소비자가 같은 계약 검사를 사용하면 한쪽 변경이 상대를 깨뜨리는지 배포 전에 알 수 있다.
+두 시스템이 주고받는 데이터의 **검사 가능한 약속**이다. Gold 필드·자료형·필수 여부, manifest 형식, 작은 정상·오류 예제를 둔다. GCP 생산자와 EC2 소비자가 같은 계약 검사를 사용하면 한쪽 변경이 상대를 깨뜨리는지 배포 전에 알 수 있다.
 
 Java와 Python의 내부 객체 전체를 복사하지 않는다. 시스템 경계를 넘는 데이터만 둔다.
 
@@ -89,8 +93,12 @@ Java와 Python의 내부 객체 전체를 복사하지 않는다. 시스템 경�
 
 ## 새 파일 위치 결정법
 
+GCP VM·VPC·디스크 생성은 `infra/provisioning/gcp/scripts/`, 실행 명령은 같은 상위 폴더의 `README.md`에 둔다. Hadoop/YARN 설정과 작업 컨테이너 Compose는 `infra/distributed-system/`에 둔다. 클라우드 자원 생성과 설치된 프로그램 실행을 구분한다. 노드별 빈 디렉터리는 만들지 않으며 Node 2만 필요한 YARN 자원 차이는 `config/yarn/standby-worker.xml`로 표현한다.
+
+상세 구조·용량·제약은 [GCP 분산 인프라](gcp-distributed-infrastructure.md)에서 관리한다.
+
 1. 독립적으로 배포되는 서비스인가? → `apps/`
-2. OCI 데이터 흐름을 실행하는 코드인가? → `distributed-system/`
+2. GCP 데이터 흐름을 실행하는 코드인가? → `distributed-system/`
 3. 서버·컨테이너·네트워크 배치 설정인가? → `infra/`
 4. 시스템 사이 데이터 형식인가? → `contracts/`
 5. 둘 이상이 실제 공유하는 구현인가? → `libs/`
