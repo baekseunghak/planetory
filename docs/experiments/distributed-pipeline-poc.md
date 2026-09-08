@@ -16,7 +16,7 @@ YARN은 Spark 작업에 CPU와 메모리를 배정하는 Hadoop의 자원 관리
 - 실제 MAST 대량 다운로드
 - FITS 전체 파싱, BLS와 AI 정확도 평가
 - Airflow 설치
-- 실제 OCI·EC2 생성과 운영 배포
+- 실제 GCP·EC2 생성과 운영 배포
 - 독립 VM 장애 내성과 운영 처리량 증명
 
 ## 위치
@@ -59,7 +59,7 @@ Spark Standalone 또는 `local[*]` 실행 성공은 YARN 검증으로 인정하�
 | --- | --- | --- |
 | NameNode·ResourceManager | 각 1개 | 각 1개 |
 | DataNode·NodeManager | 각 2개 | 각 4개 |
-| CheckpointNode | 생략 | 노드 B 역할로 추가 |
+| Standby NameNode·JournalNode | 생략 | 실제 GCP 수동 HA 검증에서 추가 |
 | Spark 제출·Publisher | 실행 후 종료 | 동일 |
 | PostgreSQL·모의 수신기·조회 | 각 1개 | 동일 |
 | Raw/Bronze/Silver 복제 수 | 2/2/2 | 3/2/2 |
@@ -89,4 +89,4 @@ Spark Standalone 또는 `local[*]` 실행 성공은 YARN 검증으로 인정하�
 
 ## 결과 기록
 
-커밋, 이미지 내용 식별값, seed, 행 수, 입력·출력 checksum, YARN 작업 ID, Worker 수, CPU·RAM 할당, 처리시간과 실패 주입 결과를 기록한다. 1·2·4 Worker 비교 시 Worker 수와 Worker당 자원을 함께 적고 같은 입력을 반복 실행한다. 로컬 측정값을 OCI 운영 성능으로 단정하지 않는다.
+커밋, 이미지 내용 식별값, seed, 행 수, 입력·출력 checksum, YARN 작업 ID, Worker 수, CPU·RAM 할당, 처리시간과 실패 주입 결과를 기록한다. 1·2·4 Worker 비교 시 Worker 수와 Worker당 자원을 함께 적고 같은 입력을 반복 실행한다. 로컬 측정값을 GCP 운영 성능으로 단정하지 않는다.
