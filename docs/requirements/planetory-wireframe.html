@@ -1,4 +1,4 @@
-<title>Planetory 와이어프레임 v0.4</title>
+<title>Planetory 와이어프레임 v0.5</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -198,13 +198,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.4 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v0.5 · 팀 검토용</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v0.10(튜토리얼 순차 열림·챌린지 노출 반영판)을 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.1의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
+      <p>요구사항 명세서 v0.11의 transit 위상 선택·온라인 잔차·중심 위치 데이터 없음·미매칭 토론·주기 미세 조정 규칙을 화면으로 옮겼습니다. 클릭 프로토타입(2026-09-03~04)에서 확정한 구조를 따릅니다: 검은 연속 캔버스 별 지도, 단계형 분석 화면, 시스템 자동 완료, 별 결과 페이지, 스레드형 커뮤니티, 통계, 마이페이지. 화면 문구는 용어 사전 v0.2의 화면 표기이고, 콜아웃 번호가 프레임 아래 표의 SRS ID와 연결됩니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.10 · 상태표 v0.11</b></dd>
-      <dt>작성일</dt><dd><b>2026-09-04</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.11 · 상태표 v0.12</b></dd>
+      <dt>작성일</dt><dd><b>2026-09-07</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>P0 10 프레임 · 22 상태</b></dd>
     </dl>
@@ -212,7 +212,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   <div class="legend">
     <span class="item"><span class="tag p0">P0</span> 핵심 흐름</span>
     <span class="item"><span class="tag p1">P1</span> 이후 구현</span>
-    <span class="item"><span class="tag new">v0.8</span> 이번 판에서 바뀐 화면</span>
+    <span class="item"><span class="tag new">v0.11</span> 해당 화면의 최근 반영 버전</span>
     <span class="item"><span class="tag dec">DEC</span> 미결 항목</span>
     <span class="item"><span class="co">1</span> 콜아웃 ↔ SRS ID</span>
     <span class="item"><span class="ph" style="padding:2px 10px;font-size:11px">플레이스홀더</span> 데이터·그래픽 자리</span>
@@ -231,7 +231,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <a href="#s10"><span class="mono">10</span>타인 프로필 · 운영</a>
   </nav>
 
-  <div class="section-title"><h2>화면 흐름</h2><span>SRS 3.2. 기본 반복: 봉우리 선택 → 구간 → 판단 → 제출 → 다음 곡선 단계. 완료는 시스템이 판정한다(SUB-11).</span></div>
+  <div class="section-title"><h2>화면 흐름</h2><span>SRS 3.2. 기본 반복: 봉우리 선택·주기 미세 조정 → 접힌 곡선의 구간 → 판단 → 제출 → 온라인 잔차 계산 → 다음 곡선 단계. 완료는 시스템이 판정한다(SUB-11).</span></div>
   <div class="flow">
     <div class="flow-row">
       <div class="fnode">로그인<small>SC-01 · ACC-01~03</small></div><span class="farrow">→</span>
@@ -240,7 +240,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <div class="fnode">분석<small>SC-03 · EXP-12 단계형</small></div><span class="farrow">→</span>
       <div class="fbranch">
         <div class="fnode">일치 → AI 점수 · 판단 분포<small>SC-04a · RES-01·11 · COM-14</small></div>
-        <div class="fnode">일치하는 신호 없음 → 상세 보기 / 다시<small>SC-04b · RES-09</small></div>
+        <div class="fnode">후보표 미일치 → 상세 / 다시 / 토론<small>SC-04b · RES-07·09 · COM-10</small></div>
         <div class="fnode">더 없음 의견 · 판단이 달라요<small>SC-04c · SUB-11 (2)</small></div>
         <div class="fnode sys">시스템 자동 완료 3갈래<small>SC-04d · SUB-11 (1)(3)(4)</small></div>
       </div>
@@ -404,8 +404,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 
   <!-- ===== SC-03 ===== -->
   <section class="frame" id="s03">
-    <div class="flabel"><span class="fid">SC-03</span><span class="fname">분석 (단계형)</span><span class="fids">EXP-01 ~ EXP-13 · SUB-01 · SUB-02 · SUB-11</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
-      <span class="fdesc">상단에 단계 표시줄, 위쪽에 원본 곡선과 반복 주기 그래프를 나란히, 아래에 접힌 곡선(넓게)과 판단 패널. 이전 단계를 바꾸면 이후 단계가 초기화된다(EXP-12). 하단 액션 바에 [이전]·[더 없음 의견]·[제출]. 곡선 단계가 바뀌어도 같은 화면.</span></div>
+    <div class="flabel"><span class="fid">SC-03</span><span class="fname">분석 (단계형)</span><span class="fids">EXP-01 ~ EXP-13 · SUB-01 · SUB-02 · SUB-11</span><span class="tag p0">P0</span><span class="tag new">v0.11</span>
+      <span class="fdesc">상단에 단계 표시줄, 위쪽에 시간 영역 곡선과 반복 주기 그래프를 나란히, 아래에 접힌 곡선(넓게)과 판단 패널. 브라우저가 현재 곡선의 전 점을 선택 주기로 접어 즉시 표시한다. 새 봉우리를 고르면 이후 단계와 가로 확대가 초기화되고, 주기 미세 조정은 이후 단계만 초기화하며 접힌 곡선의 가로 확대 배율은 유지한다(EXP-12·13). 하단 액션 바에 [이전]·[더 없음 의견]·[제출]. 곡선 단계가 바뀌어도 같은 화면.</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb">
         <span class="logo"><i></i>Planetory</span>
@@ -422,17 +422,17 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <span class="sg on"><span class="n">3</span>구간 고르기</span><span class="ar">›</span>
         <span class="sg"><span class="n">4</span>판단</span><span class="ar">›</span>
         <span class="sg"><span class="n">5</span>제출</span>
-        <span class="muted small" style="margin-left:auto">이전 단계를 바꾸면 이후 단계는 다시 합니다</span>
+        <span class="muted small" style="margin-left:auto">새 봉우리: 이후+가로 확대 초기화 · 미세 조정: 이후만 초기화</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 14px 0">
         <div class="box">
-          <div class="chart-h"><span class="co">2</span>원본 곡선 <span class="muted" style="font-weight:400">회차 1 · 4 · 5, 공백 접음</span><span class="r"><span class="on">전체</span><span>확대</span></span></div>
+          <div class="chart-h"><span class="co">2</span>시간 영역 곡선 <span class="muted" style="font-weight:400">회차 1 · 4 · 5, 공백 접음 · 예상 구간 미리보기(읽기 전용)</span><span class="r"><span class="on">전체</span><span>확대</span></span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr">
             <svg class="lc" data-w="190" data-h="130" data-seed="3" viewBox="0 0 190 130" style="width:100%;height:130px;border-right:1px dashed var(--line)"></svg>
             <svg class="lc" data-w="190" data-h="130" data-seed="5" viewBox="0 0 190 130" style="width:100%;height:130px;border-right:1px dashed var(--line)"></svg>
             <svg class="lc" data-w="190" data-h="130" data-seed="8" viewBox="0 0 190 130" style="width:100%;height:130px"></svg>
           </div>
-          <div class="axis"><span>회차 1 · BTJD 1325–1352</span><span>‖ 2년 공백 ‖</span><span>회차 4 · 5</span></div>
+          <div class="axis"><span>회차 1 · BTJD 1325–1352</span><span>접힌 곡선 선택 → 브라우저가 예상 transit 띠 즉시 동기화(수정 불가)</span><span>회차 4 · 5</span></div>
         </div>
         <div class="box">
           <div class="chart-h"><span class="co">3</span>반복 주기 그래프 <span class="muted" style="font-weight:400">곡선 단계 2 · 서버 계산 완료 (캐시)</span><span class="r"><span class="on">전체</span><span>확대</span><span class="pill soft" style="border-radius:999px">계산 중이면 진행 표시</span></span></div>
@@ -442,12 +442,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
       <div style="display:grid;grid-template-columns:1fr 300px;gap:12px;padding:12px 14px 14px">
         <div class="box">
-          <div class="chart-h"><span class="co">5</span>접힌 곡선 <span class="muted" style="font-weight:400">두 주기 반복 · 휠 확대 · 더블클릭 복귀</span><span class="r"><span class="mono" style="border-color:var(--acc);color:var(--acc-ink)">주기 3.2098일</span></span></div>
+          <div class="chart-h"><span class="co">5</span>접힌 곡선 <span class="muted" style="font-weight:400">전 점 브라우저 접기 · 2주기 · 휠 x축 ×1~8 · 더블클릭/0 초기화 · +/- 중앙 확대</span><span class="r"><span class="mono" style="border-color:var(--acc);color:var(--acc-ink)">주기 3.2098일 · 가로 ×4</span></span></div>
           <div class="slider"></div>
-          <div class="axis" style="padding-top:0"><span>3.19</span><span>주기 미세 조정</span><span>3.23</span></div>
+          <div class="axis" style="padding-top:0"><span>3.19</span><span>주기 미세 조정 · 브라우저에서 즉시 다시 접기(BLS 재요청 없음) · 가로 ×4 유지</span><span>3.23</span></div>
           <svg class="fold2" viewBox="0 0 860 190" style="width:100%;height:190px"></svg>
-          <div class="axis"><span>−P</span><span>드래그로 시작·끝 → 핸들로 수정. 중심 시각은 자동</span><span>+P</span></div>
-          <div class="box-b" style="border-top:1px solid var(--line-soft);padding:8px 12px"><span class="mono small">선택 · 주기 3.2098일 · 중심 1326.842 BTJD · 지속 2.6시간 · 깊이 0.31 ppt</span></div>
+          <div class="axis"><span>−P</span><span>접힌 곡선에서 위상 시작·끝 선택 → 핸들 수정. 브라우저가 기준 시각·지속시간 즉시 미리보기</span><span>+P</span></div>
+          <div class="box-b" style="border-top:1px solid var(--line-soft);padding:8px 12px"><span class="mono small">선택 · 주기 3.2098일 · 기준 시각 1326.842 BTJD(미리보기) · 지속 2.6시간(미리보기)</span></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <div class="box">
@@ -463,7 +463,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
               <div class="check"><i></i>홀수·짝수 밝기 같음</div>
               <div class="check"><i></i>반대편 가려짐 없음</div>
               <div class="check"><i></i>바닥 평평한 모양</div>
-              <div class="check"><i></i>별 위치 흔들림 없음</div>
+              <div class="check muted"><i style="background:var(--line-soft)"></i>중심 위치: 데이터 없음 <span class="pill soft">읽기 전용</span></div>
               <div class="check"><i></i>불량 구간 아님</div>
               <div class="field"><div class="in empty" style="font-family:inherit;font-size:12px">메모 (선택)</div></div>
             </div>
@@ -477,23 +477,23 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">EXP-12 · AT-72</span><span>5단계 표시줄. 봉우리 → 주기 맞추기 → 구간 → 판단 → 제출. 이전 단계 변경 시 이후 초기화</span><span class="tag p0">P0</span></li>
-      <li><span class="co">2</span><span class="nid">EXP-03 · NFR-10</span><span>회차 경계·다년 공백 접어 표시, 실제 시각 병기</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">EXP-05·08·12·13 · AT-72·90·91</span><span>5단계 표시줄. 브라우저가 전 점을 선택 주기로 접으며 주기 변경만으로 BLS·잔차 API를 호출하지 않음. 새 봉우리는 이후 값과 가로 확대를 초기화. 미세 조정은 이후 값만 초기화하고 접힌 곡선 x축 확대 배율 유지</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">EXP-03·06·07 · AT-06·95 · NFR-10</span><span>회차 경계·다년 공백 접어 표시. 예상 transit 띠와 epoch·지속시간은 브라우저가 선택 중 즉시 미리보기하고, 제출 시 서버가 위상 원본값으로 최종 계산·검증</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>곡선 단계 2부터의 잔차 곡선·반복 주기 그래프는 EC2가 원본 곡선과 통과 모델로 온라인 계산. 대기·계산 중·완료·실패 상태 표시, 같은 조합은 캐시에서 즉시</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>EC2 온라인 계산: 대기 → 잔차 계산 → 잔차 준비 → 주기도 계산 → 완료/실패. 같은 Bundle·제거 조합·버전은 캐시, 진행 세션은 시작 Bundle 고정</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">EXP-04 · 결정 23</span><span>관측기간/2 넘는 구간 음영. 그 구간의 후보는 이번 회차에 찾을 수 없음 → 재개 대기 사유</span><span class="tag p0">P0</span></li>
-      <li><span class="co">5</span><span class="nid">EXP-06 · EXP-08 · DEC-19</span><span>드래그로 시작·끝 → 중심 시각 자동. 선택 폭 = 지속시간 기본값, 최대 폭 지속시간 3배(기본안)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">EXP-06·07·08·13 · DEC-16·19 · AT-95·96</span><span>접힌 곡선에서 위상 시작·끝 선택. 브라우저와 서버는 Bundle의 같은 접기 기준 시각을 사용. 브라우저가 epoch·지속시간을 즉시 미리보기하고 서버가 제출 시 최종 계산. 포인터 기준 x축 확대·더블클릭 ×1, 키보드 +/-/0 지원, 숫자 직접 입력 없음. 선택 폭 자체가 지속시간</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">EXP-02 · POL-04</span><span>확인된 행성 보유 여부만. 상세는 일치 뒤</span><span class="tag p0">P0</span></li>
-      <li><span class="co">7</span><span class="nid">EXP-11 · POL-13</span><span>판단 3값 + 근거 체크 5종(선택) + 메모. 구간 단계 뒤에 활성</span><span class="tag p0">P0</span></li>
+      <li><span class="co">7</span><span class="nid">EXP-11 · POL-13 · AT-93</span><span>판단 3값 + 선택 가능한 근거 4종 + 중심 위치 데이터 없음(비활성) + 메모. 구간 단계 뒤에 활성</span><span class="tag p0">P0</span></li>
       <li><span class="co">8</span><span class="nid">EXP-09 · POL-07</span><span>곡선 단계. 일치하면 다음 단계(잔차)로, 이전 단계 복귀 가능</span><span class="tag p0">P0</span></li>
       <li><span class="co">9</span><span class="nid">SUB-11 · POL-29</span><span>더 없음 의견은 찾을 수 있는 신호가 남은 별에서만 의미. 결과는 SC-04c. 자동 완료는 시스템이 함</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">SUB-01 · SUB-02</span><span>제출 항목: 주기·구간·중심 시각·지속시간·판단·근거·메모·곡선 단계. 서버 검증</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">SUB-01 · SUB-02</span><span>클라이언트 제출 원본값: Bundle·곡선 단계·주기·위상 구간·판단·유효 근거·메모. 미리보기 epoch·duration은 신뢰 입력이 아니며 서버가 위상 원본값으로 최종 계산·저장</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
   <!-- ===== SC-04 ===== -->
   <section class="frame" id="s04">
-    <div class="flabel"><span class="fid">SC-04</span><span class="fname">결과 카드 4종</span><span class="fids">RES-01 · RES-09 · RES-11 · COM-14 · SUB-11 · GRD-02·03 · DEC-25·27·28</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+    <div class="flabel"><span class="fid">SC-04</span><span class="fname">결과 카드 4종</span><span class="fids">RES-01 · RES-07 · RES-09 · RES-11 · COM-10·14 · SUB-11 · GRD-02·03</span><span class="tag p0">P0</span><span class="tag new">v0.11</span>
       <span class="fdesc">분석 화면 위에 열리는 카드. a 일치(AI 점수 구간 + 다른 사람들의 판단), b 일치하는 신호 없음, c 더 없음 의견에 대한 "판단이 달라요", d 시스템 자동 완료 3갈래. 화면에 정답·오답이라는 말은 쓰지 않는다.</span></div>
     <div class="scroll"><div class="quad">
       <div class="wf half">
@@ -515,8 +515,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div class="box-h" style="border-bottom:1.5px solid var(--ink)"><span class="co">5</span>b · 일치하는 신호 없음 <span class="r"><span class="pill">not_matched</span></span></div>
         <div class="box-b" style="display:flex;flex-direction:column;gap:10px">
           <h3 style="font-size:16px">기록된 신호 중 일치하는 것이 없습니다</h3>
-          <div class="muted small">행성이 없다거나 새 후보라고 단정하지 않습니다. 이 제출은 히스토리에 남았습니다.</div>
-          <div class="row" style="gap:6px"><span class="btn sm">상세 보기</span><span class="btn sm pri">다시 풀기</span></div>
+          <div class="muted small">후보표와 일치하지 않는 신호입니다. 행성이 없다거나 새로운 후보라고 단정하지 않습니다. 이 제출은 히스토리에 남았습니다.</div>
+          <div class="row" style="gap:6px"><span class="btn sm">상세 보기</span><span class="btn sm pri">다시 풀기</span><span class="btn sm">토론하기</span></div>
+          <div class="muted small">토론하기 → 같은 TIC · DISCUSSION · 현재 분석 기록 첨부. 게시 전 Post 없음, 게시해도 후보·성과·곡선 단계 변화 없음</div>
           <div class="box dash" style="padding:10px">
             <div class="row" style="margin-bottom:6px"><span class="co">6</span><b class="small">상세 보기 뒤</b><span class="muted small">answer_viewed 기록</span></div>
             <div class="mono small">남은 신호 중 가장 뚜렷한 하나 · 주기 6.4201일 · 중심 1327.10 · 4.1시간 · 깊이 1.2 ppt</div>
@@ -548,7 +549,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">2</span><span class="nid">GRD-02 · GRD-08 · DEC-23</span><span>유형별 개수·등급 반영과 새로 발견한 별 수(S 등급 → 2개)</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">RES-05 · RES-11 · AI-04</span><span>AI 점수와 구간(기각/보류/승인). 기록과 달라도 둘 다 표시. 인정에는 쓰이지 않음</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">COM-14 · AT-75·82</span><span>다른 사람들의 판단 = 인정된 제출 기준, 회원당 최신 판단 1건. 일치하지 않은 제출에는 표시 없음</span><span class="tag p0">P0</span></li>
-      <li><span class="co">5</span><span class="nid">RES-07 · RES-09</span><span>일치하는 신호 없음. 상세 보기 / 다시 풀기</span><span class="tag p0">P0</span></li>
+      <li><span class="co">5</span><span class="nid">RES-07·09 · COM-10 · AT-37</span><span>후보표 미일치. 상세 보기 / 다시 풀기 / 사용자 선택형 토론하기. 자동 Post·Candidate 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">RES-09 · POL-28</span><span>상세 보기 = 남은 신호 중 가장 뚜렷한 하나. 열람 뒤 재제출도 같은 인정</span><span class="tag p0">P0</span></li>
       <li><span class="co">7</span><span class="nid">SUB-11 (2) · DEC-25</span><span>더 없음 의견인데 찾을 수 있는 신호가 남았을 때. 인정 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co">8</span><span class="nid">SUB-11 (1)(3)(4) · DEC-28 · GRD-03</span><span>완료는 시스템이 판정. 빈 별만 행성 아님 유형 A 인정, 나머지는 인정 없이 완료</span><span class="tag p0">P0</span></li>
@@ -659,7 +660,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 
   <!-- ===== SC-07 ===== -->
   <section class="frame" id="s07">
-    <div class="flabel"><span class="fid">SC-07</span><span class="fname">통계</span><span class="fids">STA-01 ~ STA-04 · DAT-13 · DEC-31</span><span class="tag p0">P0</span><span class="tag new">v0.8</span>
+    <div class="flabel"><span class="fid">SC-07</span><span class="fname">통계</span><span class="fids">STA-01 ~ STA-04 · DAT-13 · DEC-31 · POL-13</span><span class="tag p0">P0</span><span class="tag new">v0.11</span>
       <span class="fdesc">내 통계 / 전체 / 비교 3탭. 순위·백분위는 두지 않는다. 전체와 비교 기준은 어제자 StatsSnapshot(일 1회 집계).</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb"><b>통계</b></span><span class="menu" style="margin-left:auto"><span>별 지도</span><span>커뮤니티</span><span class="on">통계</span><span>마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
@@ -676,7 +677,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
           <div class="box"><div class="box-h"><span class="co">2</span>내 판단 분포</div><div class="box-b"><div class="bar"><i class="l" style="width:57%"></i><i class="u" style="width:29%"></i><i class="s" style="width:14%"></i></div><div class="row small" style="justify-content:space-between;margin-top:4px"><span>행성 같음 4</span><span>아님 2</span><span>모르겠음 1</span></div><div class="muted small" style="margin-top:8px">AI 구간별: 승인 구간에서 행성 같음 3/3 · 기각 구간에서 아님 2/2</div></div></div>
           <div class="box"><div class="box-h"><span class="co">3</span>주간 제출</div><div class="box-b"><svg class="bars" viewBox="0 0 300 90" style="width:100%;height:90px"></svg><div class="axis" style="padding:2px 0 0"><span>7주 전</span><span>이번 주</span></div></div></div>
-          <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="row" style="justify-content:space-between"><span>별 위치 흔들림 없음</span><span class="mono">1회 · 일치 1</span></div><div class="muted small" style="margin-top:6px">근거는 선택 항목. 인정에는 쓰이지 않음</div></div></div>
+          <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="row" style="justify-content:space-between"><span>불량 구간 아님</span><span class="mono">2회 · 일치 1</span></div><div class="muted small" style="margin-top:6px">제출 가능한 유효 근거만 집계. 중심 위치 데이터 없음은 제외</div></div></div>
         </div>
         <div class="box soft" style="padding:10px 12px" >
           <div class="row"><span class="co">5</span><b class="small">비교 탭 (미리보기)</b><span class="muted small">내 값 ↔ 최근 90일 활동 회원 중앙값. 순위는 없음</span></div>
@@ -688,7 +689,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">1</span><span class="nid">STA-01 · AT-76</span><span>내 통계. 발견·완료·신호 유형·일치율·별당 제출. 순위·백분위 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">STA-01 · AI-04</span><span>내 판단 분포와 AI 구간별 판단</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">STA-01</span><span>최근 8주 주간 제출 막대</span><span class="tag p0">P0</span></li>
-      <li><span class="co">4</span><span class="nid">STA-01 · POL-13</span><span>근거 체크 사용 횟수와 일치 수</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">STA-01 · POL-13</span><span>제출 가능한 유효 근거의 사용 횟수와 일치 수. 중심 위치 데이터 없음은 집계 제외</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">STA-02 · STA-03 · DAT-13 · DEC-31 · AT-77</span><span>전체·비교는 일 1회 StatsSnapshot. 중앙값은 90일 내 제출 1건 이상 회원</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
@@ -837,7 +838,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.10과 상태표 v0.11을 따르고, 화면 문구는 용어 사전 v0.1의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
+  <p class="foot">기능 ID·문구·상태 값은 요구사항 명세서 v0.11과 상태표 v0.12를 따르고, 화면 문구는 용어 사전 v0.2의 화면 표기를 씁니다(정답·오답은 화면에 없음). 이의 제기(DEC-15)와 전문가 제보(RPT, P1 운영 화면), 자유 게시판 태그·검색(COM-02·03)은 이 판에서 별도 프레임을 두지 않았습니다. 별·궤도·성운 그래픽은 구분용 기호이며 실제 렌더링은 프로토타입(three.js)을 기준으로 합니다.</p>
 </div>
 
 <script>
@@ -882,7 +883,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     svg.appendChild(el('line',{x1:w/2,x2:w/2,y1:0,y2:h,stroke:LINE,'stroke-width':.6,'stroke-dasharray':'2 4'}));
     var x0=w*0.225,x1=w*0.275;svg.appendChild(el('rect',{x:x0,y:2,width:x1-x0,height:h-4,fill:ACC,opacity:.15}));
     [x0,x1].forEach(function(x){svg.appendChild(el('line',{x1:x,x2:x,y1:2,y2:h-2,stroke:ACC,'stroke-width':2}));svg.appendChild(el('rect',{x:x-4,y:h/2-8,width:8,height:16,rx:2,fill:ACC}));});
-    var t=el('text',{x:x1+8,y:16,'font-size':10,fill:ACC,'font-family':'IBM Plex Sans KR','font-weight':600});t.textContent='시작·끝 드래그 → 중심 시각 자동';svg.appendChild(t);
+    var t=el('text',{x:x1+8,y:16,'font-size':10,fill:ACC,'font-family':'IBM Plex Sans KR','font-weight':600});t.textContent='접힌 곡선 위상 선택 → 기준 시각·지속시간 자동';svg.appendChild(t);
   }
   function mark(svg,cx,cy,types,s){
     s=s||1;var g=el('g',{});
