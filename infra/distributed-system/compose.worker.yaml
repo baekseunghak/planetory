@@ -1,0 +1,22 @@
+name: planetory-distributed-worker
+
+x-cluster-hosts: &cluster-hosts
+  master-1: "10.20.1.10"
+  worker-2: "10.20.2.10"
+  worker-3: "10.20.3.10"
+  worker-4: "10.20.4.10"
+  worker-5: "10.20.5.10"
+  worker-6: "10.20.6.10"
+
+services:
+  ingestion:
+    image: ${INGESTION_IMAGE:-local/planetory-ingestion:not-configured}
+    platform: linux/amd64
+    environment:
+      HADOOP_CONF_DIR: /etc/hadoop
+      YARN_CONF_DIR: /etc/hadoop
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+      - ${STAGING_PATH:-/mnt/data/staging}:/staging
+    extra_hosts: *cluster-hosts
+    network_mode: host

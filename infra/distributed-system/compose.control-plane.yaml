@@ -1,0 +1,117 @@
+name: planetory-distributed-system
+
+x-cluster-hosts: &cluster-hosts
+  master-1: "10.20.1.10"
+  worker-2: "10.20.2.10"
+  worker-3: "10.20.3.10"
+  worker-4: "10.20.4.10"
+  worker-5: "10.20.5.10"
+  worker-6: "10.20.6.10"
+
+services:
+  airflow-db:
+    image: postgres:16-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:?Set AIRFLOW_DB_PASSWORD on GCP Node 1}
+    volumes:
+      - ${AIRFLOW_DB_PATH:-/mnt/data/airflow-postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
+  airflow-init:
+    image: ${AIRFLOW_IMAGE:-local/planetory-airflow:not-configured}
+    platform: linux/amd64
+    profiles: ["setup"]
+    command: ["db", "migrate"]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:?Set a shared Airflow webserver secret}
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+      - ${AIRFLOW_LOGS_PATH:-/mnt/data/airflow-logs}:/opt/airflow/logs
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
+  airflow-scheduler:
+    image: ${AIRFLOW_IMAGE:-local/planetory-airflow:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["scheduler"]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:?Set a shared Airflow webserver secret}
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+      - ${AIRFLOW_LOGS_PATH:-/mnt/data/airflow-logs}:/opt/airflow/logs
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
+  airflow-webserver:
+    image: ${AIRFLOW_IMAGE:-local/planetory-airflow:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["webserver", "--hostname", "127.0.0.1", "--port", "8081"]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:?Set a shared Airflow webserver secret}
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+      - ${AIRFLOW_LOGS_PATH:-/mnt/data/airflow-logs}:/opt/airflow/logs
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
+  spark-submit:
+    image: ${SPARK_JOB_IMAGE:-local/planetory-spark-job:not-configured}
+    platform: linux/amd64
+    profiles: ["jobs"]
+    environment:
+      HADOOP_CONF_DIR: /etc/hadoop
+      YARN_CONF_DIR: /etc/hadoop
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
+  publisher:
+    image: ${PUBLISHER_IMAGE:-local/planetory-publisher:not-configured}
+    platform: linux/amd64
+    profiles: ["jobs"]
+    environment:
+      HADOOP_CONF_DIR: /etc/hadoop
+      YARN_CONF_DIR: /etc/hadoop
+    volumes:
+      - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
+      - ${GOLD_STAGING_PATH:-/mnt/data/gold-staging}:/gold-staging
+    extra_hosts: *cluster-hosts
+    network_mode: host
