@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# OCI ARM64 실행이 확인된 Spark 이미지를 빌드 인자로 전달한다.
+# GCP x86_64에서 실행할 Spark 이미지를 빌드 인자로 전달한다.
 ARG SPARK_IMAGE
 FROM ${SPARK_IMAGE} AS runtime
 

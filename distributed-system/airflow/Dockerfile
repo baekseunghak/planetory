@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# OCI ARM64 실행이 확인된 Airflow 이미지를 빌드 인자로 전달한다.
+# GCP x86_64에서 실행할 Airflow 이미지를 빌드 인자로 전달한다.
 ARG AIRFLOW_IMAGE
 FROM ${AIRFLOW_IMAGE} AS runtime
 

@@ -6,7 +6,7 @@ include:
 services:
   frontend:
     profiles: ["service"]
-    platform: ${LOCAL_APP_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_APP_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
@@ -21,7 +21,7 @@ services:
 
   backend:
     profiles: ["service"]
-    platform: ${LOCAL_APP_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_APP_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
@@ -43,7 +43,7 @@ services:
 
   ingestion:
     profiles: ["pipeline"]
-    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_DATA_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: distributed-system/ingestion/Dockerfile
@@ -56,7 +56,7 @@ services:
 
   spark-submit:
     profiles: ["pipeline"]
-    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_DATA_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: distributed-system/spark/Dockerfile
@@ -71,7 +71,7 @@ services:
 
   airflow:
     profiles: ["pipeline"]
-    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_DATA_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: distributed-system/airflow/Dockerfile
@@ -89,7 +89,7 @@ services:
 
   publisher:
     profiles: ["pipeline"]
-    platform: ${LOCAL_DATA_PLATFORM:-linux/arm64}
+    platform: ${LOCAL_DATA_PLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: distributed-system/publisher/Dockerfile
