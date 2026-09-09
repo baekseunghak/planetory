@@ -65,8 +65,10 @@ Worker 담당자는 자신의 번호 `2~6`을 넣습니다.
 | 구분 | 머신 | 부팅 | 데이터 디스크 | HA 메타데이터 | 외부 IPv4 |
 |---|---|---:|---:|---:|---|
 | Node 1 | `e2-highmem-4` | 30GiB | 200GiB | 기존 데이터 디스크 사용 | Standard 고정 IP |
-| Node 2 | `e2-highmem-4` | 30GiB | 2816GiB | 100GiB `pd-balanced` | Standard 임시 IP |
-| Node 3~6 | `e2-highmem-4` | 30GiB | 3072GiB | 없음 | Standard 임시 IP |
+| Node 2 | `e2-highmem-4` | 30GiB | 2000GiB | 100GiB `pd-balanced` | Standard 임시 IP |
+| Node 3~6 | `e2-highmem-4` | 30GiB | 2000GiB | 없음 | Standard 임시 IP |
+
+Worker의 Boot와 Data는 모두 지역 `pd-standard` 2,048GiB 할당량을 사용한다. 기본값은 `30 + 2,000 = 2,030GiB`이며 18GiB를 남긴다. 합계가 2,048GiB를 넘으면 생성 전에 스크립트가 중단한다. Node 2의 Metadata는 별도 SSD 할당량을 사용하는 `pd-balanced`다.
 
 다른 크기로 생성하려면:
 
@@ -75,6 +77,13 @@ Worker 담당자는 자신의 번호 `2~6`을 넣습니다.
   -MachineType e2-standard-4 -DataDiskSizeGiB 1024 -BootDiskSizeGiB 30 `
   -MetadataDiskSizeGiB 100 `
   -Zone asia-east1-b
+```
+
+Compute Engine API 활성화 확인이 나오면 `y`를 입력합니다.
+
+```text
+API [compute.googleapis.com] not enabled on project [...]. Would you like to enable and retry (this will take a few minutes)?
+(y/N)? y
 ```
 
 ## 4. 생성 결과·IP·SSH 확인
@@ -125,7 +134,7 @@ findmnt -T /var/lib/hadoop-hdfs/journal    # Node 1~3
 
 ## 5. 전체 메시 피어링
 
-6개 노드 생성이 끝나면 프로젝트 ID를 노드 순서대로 입력합니다. 6명 모두 같은 배열을 사용합니다.
+현재 6개 노드 생성이 끝나면 프로젝트 ID를 노드 순서대로 입력합니다. 테스트나 확장 시 스크립트는 중복되지 않은 프로젝트 ID를 2개 이상 받아 입력 개수대로 처리합니다. 모든 참여자가 같은 배열과 순서를 사용합니다.
 
 ```powershell
 $Projects = @(
@@ -144,13 +153,16 @@ $Projects = @(
 .\scripts\create-mesh-peering.ps1 -ProjectId $ProjectId -Projects $Projects
 ```
 
-프로젝트당 피어링 5개가 `ACTIVE`인지 확인합니다.
+프로젝트당 `$Projects.Count - 1`개 피어링이 `ACTIVE`인지 확인합니다.
 
 ```powershell
-gcloud compute networks peerings list `
+$Network = gcloud compute networks describe planetory-vpc `
   --project=$ProjectId `
-  --network=planetory-vpc `
-  --format='table(name,peerNetwork,state,stateDetails)'
+  --format=json | ConvertFrom-Json
+
+$Network.peerings |
+  Select-Object name, state, stateDetails, network |
+  Format-Table -AutoSize
 ```
 
 ## 6. 노드 간 통신 확인

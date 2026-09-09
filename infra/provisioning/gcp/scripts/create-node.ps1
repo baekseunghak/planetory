@@ -26,7 +26,12 @@ $nameNodeRole=switch ($Node) { 1 {'active'} 2 {'standby'} default {'none'} }
 $journalNode=if ($Node -le 3) {'yes'} else {'no'}
 $vm=if ($Node -eq 1) {'master-1'} else {"worker-$Node"}
 if (-not $PSBoundParameters.ContainsKey('DataDiskSizeGiB')) {
- $DataDiskSizeGiB=switch ($Node) { 1 {200} 2 {2816} default {3072} }
+ $DataDiskSizeGiB=if ($Node -eq 1) {200} else {2000}
+}
+$standardDiskQuotaGiB=2048
+$standardDiskTotalGiB=$BootDiskSizeGiB+$DataDiskSizeGiB
+if ($standardDiskTotalGiB -gt $standardDiskQuotaGiB) {
+ throw "Boot and data pd-standard disks total $standardDiskTotalGiB GiB, exceeding the $standardDiskQuotaGiB GiB regional quota."
 }
 Invoke-Gcloud services enable compute.googleapis.com "--project=$ProjectId"
 Invoke-Gcloud compute machine-types describe $MachineType "--project=$ProjectId" "--zone=$Zone" '--format=value(name,guestCpus,memoryMb)'
@@ -37,7 +42,7 @@ Write-Host "$vm : $MachineType / $diskSummary / $Zone"
 Invoke-Gcloud compute networks create $network "--project=$ProjectId" --subnet-mode=custom
 Invoke-Gcloud compute networks subnets create $subnet "--project=$ProjectId" "--network=$network" "--region=$region" "--range=10.20.$Node.0/24"
 $sources=(1..6 | ForEach-Object {"10.20.$_.10/32"}) -join ','
-Invoke-Gcloud compute firewall-rules create planetory-internal "--project=$ProjectId" "--network=$network" --direction=INGRESS "--source-ranges=$sources" --target-tags=planetory-cluster --allow=tcp,udp,icmp
+Invoke-Gcloud compute firewall-rules create planetory-internal "--project=$ProjectId" "--network=$network" --direction=INGRESS "--source-ranges=$sources" --target-tags=planetory-cluster "--allow=tcp,udp,icmp"
 Invoke-Gcloud compute firewall-rules create planetory-admin-ssh "--project=$ProjectId" "--network=$network" --direction=INGRESS "--source-ranges=$AdminCidr" --target-tags=planetory-cluster --allow=tcp:22
 $nic="network=$network,subnet=$subnet,private-network-ip=10.20.$Node.10,network-tier=STANDARD"
 if ($Node -eq 1) {
@@ -64,7 +69,7 @@ mount_disk() {
   local type uuid
   type=$(blkid -p -s TYPE -o value "$device" || true)
   if [ -z "$type" ]; then
-    [ -z "$(wipefs -n --noheadings -o TYPE "$device")" ] || { echo "Unknown signature: $device"; exit 1; }
+    [ -z "$(wipefs --no-act --noheadings --output TYPE "$device")" ] || { echo "Unknown signature: $device"; exit 1; }
     mkfs.ext4 -m 0 "$device"
   elif [ "$type" != ext4 ]; then
     echo "Unexpected filesystem on $device: $type"; exit 1
@@ -133,7 +138,7 @@ try {
   "--labels=service=planetory,role=$role,node=$Node,namenode=$nameNodeRole,journalnode=$journalNode",
   '--boot-disk-type=pd-standard',"--boot-disk-size=${BootDiskSizeGiB}GB",
   "--disk=name=$vm-data,device-name=planetory-data,auto-delete=no",
-  '--image-family=debian-12','--image-project=debian-cloud','--no-service-account','--no-scopes',
+  '--image-family=ubuntu-2404-lts-amd64','--image-project=ubuntu-os-cloud','--no-service-account','--no-scopes',
   "--metadata-from-file=startup-script=$tempFile")
  if ($Node -eq 2) { $instanceArgs+="--disk=name=$vm-metadata,device-name=planetory-metadata,auto-delete=no" }
  Invoke-Gcloud @instanceArgs

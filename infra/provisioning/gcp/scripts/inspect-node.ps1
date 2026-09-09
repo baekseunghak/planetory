@@ -30,6 +30,6 @@ if ($CheckSsh) {
  if ($Node -eq 1) { $check+='; test -d /var/lib/hadoop-hdfs/namenode; test -d /var/lib/hadoop-hdfs/journal; readlink -f /var/lib/hadoop-hdfs/namenode /var/lib/hadoop-hdfs/journal' }
  if ($Node -eq 2) { $check+='; test -f /var/lib/planetory-metadata-ready; mountpoint /mnt/metadata; findmnt /mnt/metadata; df -h /mnt/metadata; test -d /var/lib/hadoop-hdfs/namenode; test -d /var/lib/hadoop-hdfs/journal; readlink -f /var/lib/hadoop-hdfs/namenode /var/lib/hadoop-hdfs/journal' }
  if ($Node -eq 3) { $check+='; test -d /var/lib/hadoop-hdfs/journal; findmnt -T /var/lib/hadoop-hdfs/journal' }
- $check+='; getent hosts master-1 worker-2 worker-3 worker-4 worker-5 worker-6; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS'
+ $check+='; getent hosts master-1 worker-2 worker-3 worker-4 worker-5 worker-6; lsblk --ascii -o NAME,SIZE,FSTYPE,MOUNTPOINTS'
  Invoke-Gcloud compute ssh $vm "--project=$ProjectId" "--zone=$Zone" "--command=$check"
 }

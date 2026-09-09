@@ -4,7 +4,8 @@ param(
  [Parameter(Mandatory)][string[]]$Projects
 )
 $ErrorActionPreference='Stop'
-if ($Projects.Count -ne 6 -or @($Projects | Select-Object -Unique).Count -ne 6) { throw 'Supply six distinct project IDs in node order.' }
+if ($Projects.Count -lt 2) { throw 'Supply at least two project IDs in node order.' }
+if (@($Projects | Select-Object -Unique).Count -ne $Projects.Count) { throw 'Project IDs must be distinct.' }
 foreach ($project in $Projects) {
  if ($project -notmatch '^[a-z][a-z0-9-]{4,28}[a-z0-9]$') { throw "Invalid project ID: $project" }
 }
@@ -29,5 +30,7 @@ for ($i=0;$i -lt $Projects.Count;$i++) {
  }
  Invoke-Gcloud compute networks peerings create $name "--project=$ProjectId" "--network=$network" "--peer-project=$peer" "--peer-network=$network"
 }
-Invoke-Gcloud compute networks peerings list "--project=$ProjectId" "--network=$network" '--format=table(name,peerNetwork,state,stateDetails)'
-Write-Host 'Each member runs this in their project. Expect 5 ACTIVE peerings per project, 30 directional entries total.'
+Invoke-Gcloud compute networks describe $network "--project=$ProjectId" '--format=flattened(peerings[].name,peerings[].network,peerings[].state,peerings[].stateDetails)'
+$peeringsPerProject=$Projects.Count-1
+$directionalEntries=$Projects.Count*$peeringsPerProject
+Write-Host "Each member runs this in their project. Expect $peeringsPerProject ACTIVE peerings per project, $directionalEntries directional entries total."

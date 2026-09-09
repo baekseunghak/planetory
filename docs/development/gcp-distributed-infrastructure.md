@@ -21,32 +21,32 @@ flowchart LR
   U[사용자] <--> API
 ```
 
-위 소프트웨어 역할은 배포 계획이다. 생성 스크립트는 Debian VM 및 마운트까지 준비하며 Hadoop/Spark/Airflow를 설치하지 않는다.
+위 소프트웨어 역할은 배포 계획이다. 생성 스크립트는 Ubuntu Server 24.04 LTS amd64 VM 및 마운트까지 준비하며 Hadoop/Spark/Airflow를 설치하지 않는다.
 
 ## 노드와 디스크
 
 | 번호 | VM | 사설 IP | 역할 계획 | 사양 | pd-standard 디스크 |
 |---|---|---|---|---|---|
 | 1 | master-1 | 10.20.1.10 | Active NameNode, ResourceManager, Airflow, JournalNode | e2-highmem-4 / 4 vCPU / 32GiB | Boot 30GiB + Data 200GiB |
-| 2 | worker-2 | 10.20.2.10 | Standby NameNode, DataNode, NodeManager, Spark, JournalNode | 동일 | Boot 30GiB + HDFS 2816GiB + Metadata 100GiB Balanced |
-| 3 | worker-3 | 10.20.3.10 | DataNode, NodeManager, Spark, JournalNode | 동일 | Boot 30GiB + Data 3072GiB |
+| 2 | worker-2 | 10.20.2.10 | Standby NameNode, DataNode, NodeManager, Spark, JournalNode | 동일 | Boot 30GiB + HDFS 2000GiB + Metadata 100GiB Balanced |
+| 3 | worker-3 | 10.20.3.10 | DataNode, NodeManager, Spark, JournalNode | 동일 | Boot 30GiB + Data 2000GiB |
 | 4 | worker-4 | 10.20.4.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
 | 5 | worker-5 | 10.20.5.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
 | 6 | worker-6 | 10.20.6.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
 
 각 프로젝트 서브넷은 `10.20.<번호>.0/24`, VPC 이름은 공통 `planetory-vpc`다. VM은 x86_64이며 이전 OCI ARM64 전용 이미지 대신 amd64 또는 멀티아키텍처 이미지를 사용해야 한다.
 
-마스터의 200GiB는 Active NameNode 메타데이터·JournalNode edits·로그·Gold 전송 임시 공간용이며 HDFS DataNode 용량에 포함하지 않는다. Node 2의 100GiB Balanced 디스크는 Standby NameNode 메타데이터와 JournalNode edits를 `/mnt/metadata`에 저장한다. 워커 5대의 HDFS 설치 용량은 **14.75TiB**, 워커 VM 합계는 **20 vCPU / 160GiB RAM**이다.
+마스터의 200GiB는 Active NameNode 메타데이터·JournalNode edits·로그·Gold 전송 임시 공간용이며 HDFS DataNode 용량에 포함하지 않는다. Node 2의 100GiB Balanced 디스크는 Standby NameNode 메타데이터와 JournalNode edits를 `/mnt/metadata`에 저장한다. 워커 5대의 HDFS 설치 용량은 **10,000GiB(약 9.77TiB)**, 워커 VM 합계는 **20 vCPU / 160GiB RAM**이다. 각 프로젝트의 지역 `pd-standard` 2,048GiB 할당량에는 Boot 30GiB도 포함되므로 Worker 데이터 디스크는 2,000GiB로 제한하고 18GiB의 할당량 여유를 남긴다.
 
 Node 1~3의 JournalNode가 QJM edit log를 구성한다. ZooKeeper와 ZKFC는 두지 않고 운영자가 `hdfs haadmin`으로 Node 1·2를 수동 전환한다. 장애 전환 전에는 기존 Active VM의 완전 중지를 확인해 이중 Active를 막는다. 자동 fencing은 없으므로 응답 없는 Active를 대상으로 `haadmin -failover`를 실행하지 않는다. 스크립트는 VM·디스크·역할 라벨과 영속 경로까지만 준비하며 신규 클러스터의 NameNode `-format`과 `-bootstrapStandby`는 별도 배포 과정에서 한 번만 수행한다. `-initializeSharedEdits`는 기존 단일 NameNode를 HA로 전환할 때만 사용한다. 구조는 [HDFS HA with QJM](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)을 따른다.
 
 Node 2는 Standby NameNode 6~8GiB, YARN 컨테이너 16GiB/2 vCore, DataNode 2GiB, JournalNode 0.5~1GiB와 OS 여유를 둔다. Node 3은 YARN 24GiB, DataNode 2GiB, JournalNode 0.5~1GiB, OS·Docker 4~5GiB를 기준으로 한다. 실제 파일·블록 수를 측정해 Active와 Standby heap을 같은 값으로 조정한다.
 
-JournalNode 경로는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데이터 디스크, Node 3의 30GiB 부팅 디스크를 사용한다. Spark shuffle이 몰리는 Worker HDFS 데이터 경로와 분리되므로 HDFS 설치 용량 14.75TiB는 줄지 않는다. 이 POC에서는 HA 메타데이터의 외부 백업을 두지 않으며 두 NameNode 디스크의 동시 손실은 복구 불가 위험으로 수용한다.
+JournalNode 경로는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데이터 디스크, Node 3의 30GiB 부팅 디스크를 사용한다. Spark shuffle이 몰리는 Worker HDFS 데이터 경로와 분리되므로 HDFS 설치 용량 약 9.77TiB는 줄지 않는다. 이 POC에서는 HA 메타데이터의 외부 백업을 두지 않으며 두 NameNode 디스크의 동시 손실은 복구 불가 위험으로 수용한다.
 
-기존 데이터 추정치를 재사용하면 Raw RF3 9.09TiB + Bronze RF2 1.04TiB + Silver RF2 1.0~1.4TiB = **11.13~11.53TiB**다. 설치 용량 대비 남는 3.22~3.62TiB에는 파일시스템 오버헤드, 다운로드 임시 파일, shuffle, 로그와 재처리 데이터도 들어간다. 워커 데이터 디스크를 이 용도들이 공유하므로 별도 300GiB shuffle 디스크가 있다고 가정하지 않는다.
+기존 데이터 추정치를 재사용하면 Raw RF3 9.09TiB + Bronze RF2 1.04TiB + Silver RF2 1.0~1.4TiB = **11.13~11.53TiB**다. 이는 현재 설치 용량 약 9.77TiB를 1.36~1.76TiB 초과하므로 6노드 구성으로 전체 범위를 저장할 수 없다. 워커 데이터 디스크를 HDFS·다운로드 임시 파일·shuffle·로그가 공유하며 별도 shuffle 디스크가 있다고 가정하지 않는다.
 
-3TiB Worker 한 대 장애 시 남은 HDFS 설치 용량은 11.75TiB다. 기존 11.13~11.53TiB 추정은 재복제 여유를 제공하지 못하므로 전체 TESS 보관 완료를 보장하는 용량안이 아니다. 초기에는 Sector 범위를 제한하고 HDFS 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 실측 후 중간 산출물 보존을 줄이거나 용량을 늘려야 전체 범위를 처리할 수 있다. 마스터 200GiB에도 대형 Gold의 신·구 버전과 압축 파일을 무제한 모을 수 없다. 번들 단위 스트리밍/순차 전송과 성공한 임시 파일 정리가 필요하다.
+2,000GiB Worker 한 대 장애 시 남은 HDFS 설치 용량은 약 7.81TiB다. 초기에는 Sector 범위를 제한하고 HDFS 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 전체 범위는 실측 후 중간 산출물 보존·복제 정책을 줄이거나, 동일 사양 DataNode를 추가해야 한다. 현재 추정치와 75% 중단선을 함께 만족하려면 Worker 8대 이상이 필요하므로 계정·비용·피어링 수를 별도 결정한다. 마스터 200GiB에도 대형 Gold의 신·구 버전과 압축 파일을 무제한 모을 수 없다. 번들 단위 스트리밍/순차 전송과 성공한 임시 파일 정리가 필요하다.
 
 ## 네트워크
 
@@ -61,7 +61,7 @@ JournalNode 경로는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메
 
 ## 비용 전제
 
-사용자 제공 744시간 추정에서 Node 2는 HDFS 디스크 256GiB 감소와 Balanced 100GiB 추가로 약 $284.46이다. 디스크 항목이 데이터 디스크만 포함했다면 **별도 Boot 30GiB 비용을 추가**해야 한다. 제공된 단가를 그대로 적용하면 마스터 약 $168.85, Node 2 약 $285.68, Node 3~6 각 약 $285.93이고 6대 합계는 약 $1,598.25다. 이는 최신 견적 검증값이 아니므로 실제 결제 화면에서 다시 확인한다.
+사용자 제공 744시간 단가를 그대로 적용한 단순 추정은 마스터 약 $168.85, Node 2 약 $252.40, Node 3~6 각 약 $242.21이고 6대 합계는 약 $1,390.09다. Worker 계산에는 Boot 30GiB와 Data 2,000GiB가 포함되며 Node 2에는 Metadata 100GiB Balanced가 추가된다. 이는 최신 견적 검증값이 아니므로 실제 결제 화면에서 다시 확인한다.
 
 744시간은 31일이다. 30일 연속 실행은 720시간이며 실제 생성/삭제 시각과 월 경계를 기준으로 청구된다. 공인 IPv4의 $0.005/시간 가정은 30일 $3.60, 31일 $3.72다. Standard 송신 무료 200GiB는 VM별 추가 지급이 아니라 공식 가격표의 계정별 월간 합산 조건을 따른다. 다른 송신 사용량을 포함해 계산한다.
 
@@ -85,7 +85,7 @@ VM 생성 코드는 [infra/provisioning/gcp/scripts](../../infra/provisioning/gc
 | --- | --- |
 | 역할·네트워크 | Node 1 제어, Node 2 Standby 겸 Worker, Node 3 JournalNode 겸 Worker, Node 4~6 Worker가 일관된다. 프로젝트당 5개 ACTIVE 피어링과 사설 IP 통신을 실제 확인한다. |
 | HDFS 수동 HA | JournalNode 3개 중 2개가 필요하다. Node 1 장애 후 Node 2 승격으로 HDFS는 복구할 수 있지만 RM·Airflow·Publisher는 Node 1 복구를 기다린다. 존 장애 및 두 NameNode 메타데이터 동시 손실은 보호하지 않는다. 외부 메타데이터 백업은 사용자 결정대로 제외한다. |
-| 자원·용량 | YARN 합계는 14 vCore/112GiB다. Node 2 승격 시에도 추가 Spark 할당 없이 NameNode 여유를 유지한다. 14.75TiB는 HDFS 전용 여유 공간이 아니라 shuffle·수집과 공유하는 설치 용량이므로 디스크별 실제 사용률도 75% 중단선에 반영한다. |
+| 자원·용량 | YARN 합계는 14 vCore/112GiB다. Node 2 승격 시에도 추가 Spark 할당 없이 NameNode 여유를 유지한다. 약 9.77TiB는 예상 저장물보다 작고 shuffle·수집과도 공유하므로 전체 범위가 아닌 제한된 Sector POC만 수행한다. 디스크별 실제 사용률은 75% 중단선에 반영한다. |
 | 실행 전 필수 | Hadoop/JDK·서비스 계정·디스크 권한·마운트 의존 서비스 등록, HDFS 초기화, 모든 Worker의 Python 환경을 준비한다. Compose만 실행해서는 클러스터가 완성되지 않는다. |
 | Spark 배포 | YARN cluster 모드의 Python 의존성은 Worker 설치 또는 archives 배포가 필요하다. Docker 제출 이미지의 패키지가 Executor에 자동 배포되지 않는다. Executor 메모리와 overhead 합계가 Node 2의 16GiB 안에 들어가게 샘플 작업으로 검증한다. |
 | 수집·배치 | Airflow 실제 DAG, Worker 원격 실행, 수집·Spark·Publisher 실행 코드는 후속 구현이다. 다운로드 동시성·임시 파일 상한을 두고 shuffle 집중 시 pd-standard I/O와 처리 시간을 측정한다. |

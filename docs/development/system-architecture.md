@@ -73,8 +73,8 @@ GCP 디스크·네트워크·비용 가정과 검토 결과는 [GCP 분산 인�
 | --- | ---: | --- | --- | --- |
 | AWS EC2 | 2대 | 4 vCPU · 16GB · 320GB | 8 vCPU · 32GB · 640GB | 확정된 가용량 |
 | GCP Node 1 | 1대 | 4 vCPU · 32GiB · Data 200GiB | 동일 | 생성 계획 |
-| GCP Node 2 | 1대 | 4 vCPU · 32GiB · HDFS 2.75TiB · Metadata 100GiB | 동일 | 생성 계획 |
-| GCP Node 3~6 | 4대 | 4 vCPU · 32GiB · HDFS 3TiB | 16 vCPU · 128GiB · HDFS 12TiB | 생성 계획 |
+| GCP Node 2 | 1대 | 4 vCPU · 32GiB · HDFS 2,000GiB · Metadata 100GiB | 동일 | 생성 계획 |
+| GCP Node 3~6 | 4대 | 4 vCPU · 32GiB · HDFS 각 2,000GiB | 16 vCPU · 128GiB · HDFS 8,000GiB | 생성 계획 |
 
 Storage는 설치 용량이다. OS, Docker, DB, 로그와 복제본을 제외한 실제 가용량은 더 작다.
 
@@ -103,7 +103,7 @@ GCP는 `asia-east1-b` 한 존의 6개 프로젝트를 full-mesh VPC Peering으�
 
 Node 1~3은 QJM edit log를 구성한다. ZooKeeper와 ZKFC는 사용하지 않으며 HDFS 전환은 수동이다. 계획된 전환은 기존 Active를 먼저 Standby로 내리고, 장애 전환은 기존 Active VM이 완전히 중지됐음을 확인한 뒤 Standby를 직접 승격한다. 자동 fencing은 없으므로 응답 없는 Active를 대상으로 `haadmin -failover`를 실행하지 않는다. ResourceManager는 Node 1 단일 인스턴스로 두고 장애 시 실행 중인 작업을 실패 처리한 뒤 복구 후 Airflow에서 해당 단계만 재시도한다.
 
-JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데이터 디스크, Node 3의 30GiB 부팅 디스크를 사용한다. HDFS DataNode 설치 용량은 Node 2의 2.75TiB와 Node 3~6의 12TiB를 합한 **14.75TiB**다. 이 POC에서는 HA 메타데이터 외부 백업을 두지 않는다.
+JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데이터 디스크, Node 3의 30GiB 부팅 디스크를 사용한다. HDFS DataNode 설치 용량은 Worker 5대의 2,000GiB를 합한 **10,000GiB(약 9.77TiB)**다. Boot 30GiB도 지역 `pd-standard` 2,048GiB 할당량에 포함된다. 이 POC에서는 HA 메타데이터 외부 백업을 두지 않는다.
 
 ## 5. 데이터 소유권
 
@@ -128,7 +128,7 @@ JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데�
 | Silver | 정제·BLS·잔차·AI 내부 산출물 | 약 0.50~0.70TiB | RF2 약 1.0~1.4TiB |
 | Gold | 서비스용 축약 데이터 | 약 20~25GiB | EC2 EBS 100GiB 권장 |
 
-용량 추정치는 계획값이며 실제 원천 크기와 Parquet 압축률을 측정해 다시 계산한다. 현재 14.75TiB 설치 용량에서 예상 저장물 11.13~11.53TiB는 약 75.5~78.2%를 사용한다. 이는 한 노드 장애 후 재복제 여유를 제공하지 못하므로 전체 TESS 보관 완료를 보장하는 용량안이 아니다. 초기에는 Sector 범위를 제한하고 사용률 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 전체 범위를 처리하려면 실측 후 중간 산출물 보존 범위를 줄이거나 HDFS 용량을 추가한다.
+용량 추정치는 계획값이며 실제 원천 크기와 Parquet 압축률을 측정해 다시 계산한다. 현재 약 9.77TiB 설치 용량은 예상 저장물 11.13~11.53TiB보다 작으므로 전체 TESS 보관이 불가능하다. 초기에는 Sector 범위를 제한하고 사용률 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 전체 범위를 처리하려면 실측 후 중간 산출물 보존·복제 범위를 줄이거나 DataNode를 추가한다. 현재 추정치에서 75% 중단선까지 고려하면 동일 디스크의 Worker 8대 이상이 필요하다.
 
 디렉터리·파티션, FITS 묶음 저장과 EC2 Gold 파일 구조는 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다. 외부 원천별 수집부터 PublicationBundle 배포까지의 상세 순서는 [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)을 따른다.
 

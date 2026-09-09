@@ -37,9 +37,9 @@ Hadoop/JDK 설치, `hdfs`·`yarn` 계정과 권한, 서비스 재시작 등록�
 | 노드 | 역할 | 영속 경로 |
 | --- | --- | --- |
 | 1 | Active NameNode, JournalNode, ResourceManager, Airflow, Spark submit, Publisher | NameNode·JournalNode: 200GiB 데이터 디스크 |
-| 2 | Standby NameNode, JournalNode, DataNode, NodeManager, Ingestion | NameNode·JournalNode: 100GiB 메타데이터 디스크, HDFS: 2.75TiB |
-| 3 | JournalNode, DataNode, NodeManager, Ingestion | JournalNode: 30GiB 부팅 디스크, HDFS: 3TiB |
-| 4~6 | DataNode, NodeManager, Ingestion | HDFS: 각 3TiB |
+| 2 | Standby NameNode, JournalNode, DataNode, NodeManager, Ingestion | NameNode·JournalNode: 100GiB 메타데이터 디스크, HDFS: 2,000GiB |
+| 3 | JournalNode, DataNode, NodeManager, Ingestion | JournalNode: 30GiB 부팅 디스크, HDFS: 2,000GiB |
+| 4~6 | DataNode, NodeManager, Ingestion | HDFS: 각 2,000GiB |
 
 ZooKeeper와 ZKFC는 사용하지 않는다. HDFS는 QJM을 사용하되 전환은 운영자가 수행한다. ResourceManager도 Node 1 단일 인스턴스로 두고 장애 시 Node 1 복구 후 Airflow 실패 단계부터 재시도한다.
 
