@@ -1,4 +1,4 @@
-# Planetory 용어 사전 v0.3 (2026-09-08)
+# Planetory 용어 사전 v0.4 (2026-09-09)
 
 원칙
 1. 화면에는 쉬운 말만 쓴다. 정확한 용어는 툴팁·괄호·문서에만 둔다.
@@ -64,7 +64,11 @@
 | BTJD | (단위 숨김) | Barycentric TESS Julian Date | 결과 |
 | 열린 별 / 잠긴 별 | 발견한 별 / 아직 못 찾은 별 | unlocked / locked | 홈 |
 | 열린 사유 | 발견 경로 | unlock source | 패널 |
-| 등급 A·S·SS·SSS | 유지 | star grade | 전체 |
+| 등급 A·S·SS·SSS | 유지 (툴팁: 이 별에서 인정된 신호 n개) | star grade. 별의 인정된 성과 수 1/2/3/4의 표시 문자, 유형별 등급 없음 `(v0.4)` | 전체 |
+| 성과 1건당 별 열림 | 신호를 찾을 때마다 새 별 발견 | achievement → star unlock. 등급이 아니라 성과 1건마다 `(v0.4)` | 홈·결과 |
+| 채점형 신호 판단 통계 | 이 신호를 찾은 사람 중 기록과 일치 N% · M명 | graded-signal agreement. "정답률" 금지, 첫 매칭 제출 기준 `(v0.4)` | 결과·스레드 |
+| 튜토리얼 건너뛰기 | 다음 튜토리얼로 (상세 보기 끝) | skip after tutorial_skip_after mismatches `(v0.4)` | 튜토리얼 |
+| 이전 데이터 판 기록 | 이전 데이터 판에서 제출됨 · 제출 당시 / 최신 데이터 | history on expired bundle, snapshot toggle `(v0.4)` | 히스토리·결과 |
 | 튜토리얼 / 챌린지 | 유지 | — | 홈 |
 
 
