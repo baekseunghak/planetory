@@ -23,6 +23,7 @@
 | analysis_snapshots | PostgreSQL 유지. `data BYTEA` → `folded_flux`·`folded_err` real[], 위상은 계산 |
 | pipeline_runs 삭제 | 서비스가 읽지 않고 Airflow와 겹침 |
 | 판 갱신 방식 | 새 판이 나오면 진행 중인 세션도 최신 판으로 올린다. 이전 판을 남기지 않으므로 화면과 판정이 항상 같은 판이다(결정 C). status에서 previous·expires_at 제거 |
+| operation_settings 추가 | 명세서 v0.13의 OperationSetting. 규칙 버전을 PK로 두고 설정 값을 JSONB 한 묶음으로. submissions.rule_version이 참조 |
 | 확정한 것 | 판 단위는 별마다, 비닝 10분, 곡선은 섹터 세그먼트, 밝기 오차는 스칼라, 주기 범위 열 추가, 캐시 Redis, 스냅샷 PostgreSQL |
 | 아키텍처 문서 | 불변 규칙 5(곡선 본문은 EC2 Gold 파일)와 데이터 소유권 표 수정 필요 |
 | 용량 | 별당 약 70KB(2섹터·판 2개 보존), 별 20만 개에 약 14GB. 실측 후 조정(미결 11) |
@@ -43,7 +44,7 @@
 
 ## 1. 한눈에 보기
 
-여섯 묶음, 총 32개 테이블 + materialized view 1개.
+여섯 묶음, 총 33개 테이블 + materialized view 1개.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
@@ -52,7 +53,7 @@
 | C 분석·제출 | submissions, analysis_histories, analysis_snapshots | 제출·불변 히스토리·접힌 곡선 스냅샷 |
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
-| F 운영·챌린지·알림·통계 | tutorial_stars, challenge_rounds, notifications, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
+| F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
 
 ## 2. ERD
 
@@ -121,6 +122,7 @@ erDiagram
     posts o|--o{ post_source_links : from_post
     comments o|--o{ post_source_links : from_comment
 
+    operation_settings ||--o{ submissions : judged_by
     stars ||--o{ tutorial_stars : tutorial
     stars ||--o{ challenge_rounds : target
 
@@ -400,6 +402,12 @@ erDiagram
         text scope "global/round"
         jsonb metrics "지표"
     }
+    operation_settings["operation_settings · 운영 설정(버전별)"] {
+        text rule_version PK "규칙 버전"
+        jsonb values "설정 값 묶음"
+        timestamptz applied_at "적용 시각"
+        text note "변경 사유"
+    }
     ai_executions["ai_executions · AI 실행"] {
         bigint id PK "고유 번호"
         text model_version "모델 버전"
@@ -642,6 +650,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 ### F. 운영·챌린지·알림·통계
 
 - **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 기본 3·운영 0)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
+- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(기본 3, 운영 환경 0), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
 - **challenge_rounds** (CHL-01, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, status planned/active/closed. 달성 조건·보상 없음.
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
@@ -666,14 +675,15 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 | # | 항목 | 관련 |
 |---|---|---|
-| 1 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
-| 2 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
-| 3 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
-| 4 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
-| 5 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
-| 6 | Gold 메타데이터(묶음 B) 적재 방식: 배치 직접 INSERT vs API | DAT-06 |
-| 7 | 별 지도 타일 조회 인덱스: (user_id, generation) 또는 공간 인덱스 | NFR-20d |
-| 8 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
-| 9 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |
+| 1 | operation_settings에 넣을 항목 목록과 기본값 확정 | OPS-04·08, DEC-03 |
+| 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
+| 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
+| 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
+| 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
+| 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
+| 7 | Gold 메타데이터(묶음 B) 적재 방식: 배치 직접 INSERT vs API | DAT-06 |
+| 8 | 별 지도 타일 조회 인덱스: (user_id, generation) 또는 공간 인덱스 | NFR-20d |
+| 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
+| 10 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |
 
-| 10 | **갱신 정책.** v1 대상 별 목록을 고정할지, 새로 관측된 별을 계속 추가할지. 27일 주기 갱신은 세그먼트 INSERT와 후보표 재계산으로 처리한다 | DAT-06·15, DEC-27 |
+| 11 | **갱신 정책.** v1 대상 별 목록을 고정할지, 새로 관측된 별을 계속 추가할지. 27일 주기 갱신은 세그먼트 INSERT와 후보표 재계산으로 처리한다 | DAT-06·15, DEC-27 |
