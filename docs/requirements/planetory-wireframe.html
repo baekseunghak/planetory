@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v0.7</title>
+<title>Planetory 와이어프레임 v0.8</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,12 +204,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.7 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v0.8 · 팀 검토용</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v0.13과 상태표 v0.14의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
+      <p>요구사항 명세서 v0.14와 상태표 v0.15의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.13 · 상태표 v0.14</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.14 · 상태표 v0.15</b></dd>
       <dt>작성일</dt><dd><b>2026-09-09</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
@@ -489,7 +489,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">1</span><span class="nid">EXP-05·08·12·13 · AT-72·90·91</span><span>5단계 표시줄. 브라우저가 전 점을 선택 주기로 접으며 주기 변경만으로 BLS·잔차 API를 호출하지 않음. 새 봉우리는 이후 값과 가로 확대를 초기화. 미세 조정은 이후 값만 초기화하고 접힌 곡선 x축 확대 배율 유지</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">EXP-03·06·07 · AT-06·95 · NFR-10</span><span>회차 경계·다년 공백 접어 표시. 예상 transit 띠와 epoch·지속시간은 브라우저가 선택 중 즉시 미리보기하고, 제출 시 서버가 위상 원본값으로 최종 계산·검증</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>EC2 온라인 계산: 대기 → 잔차 계산 → 잔차 준비 → 주기도 계산 → 완료/실패. 같은 Bundle·제거 조합·버전은 캐시, 진행 세션은 시작 Bundle 고정</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">EXP-01 · DAT-11 · AT-117</span><span>분석 도중 그 별의 새 데이터 판이 공개되면 상단에 "새 데이터 판이 공개되었습니다 · [다시 불러오기]" 안내. 곡선 단계·제거 조합은 유지하고 주기·위상 선택만 초기화. 세션을 옛 판에 고정하지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>EC2 온라인 계산(결과는 Redis 캐시): 대기 → 잔차 계산 → 잔차 준비 → 주기도 계산 → 완료/실패. 같은 Bundle·제거 조합·버전은 캐시, 진행 세션은 시작 Bundle 고정</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">EXP-04 · 결정 23</span><span>관측기간/2 넘는 구간 음영. 그 구간의 후보는 이번 회차에 찾을 수 없음 → 재개 대기 사유</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">EXP-06·07·08·13 · DEC-16·19 · AT-95·96</span><span>접힌 곡선에서 위상 시작·끝 선택. 브라우저와 서버는 Bundle의 같은 접기 기준 시각을 사용. 브라우저가 epoch·지속시간을 즉시 미리보기하고 서버가 제출 시 최종 계산. 포인터 기준 x축 확대·더블클릭 ×1, 키보드 +/-/0 지원, 기준 시각·가려진 시간 숫자 직접 입력 없음. 선택 폭 자체가 가려진 시간</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">EXP-02 · POL-04·05</span><span>사전 공개는 확인된 행성 보유 여부만. 상세는 해당 신호 매칭 또는 상세 열람 뒤, 전체 확정 개수는 비공개</span><span class="tag p0">P0</span></li>
@@ -574,7 +575,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">3</span><span class="nid">GRD-03 · SUB-11</span><span>마지막 FP 판단 불일치도 같은 세 상태. 진입만으로 완료·보상하는 예외 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">RES-08 · GRD-04 · COM-14·17~19</span><span>미확정은 공개 검토가 선택이며 미게시 다음 곡선 탐색·완료 가능. 첫 공개 때 공식 스레드 생성, 공개 성공 시 성과</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">RES-07·09 · COM-07·10·20</span><span>미매칭 힌트와 매칭 후 판단 오류 상세를 구분. 일반 토론 첨부 자체는 성과가 아님</span><span class="tag p0">P0</span></li>
-      <li><span class="co">6</span><span class="nid">EXP-10 · SUB-04~06·10 · RES-04·06</span><span>복원 대상: 고정 Bundle·곡선 단계·제거 조합·주기·위상 구간·판단·근거·메모·확대 상태. 기존 기록 불변, 새 요청으로 재제출</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">EXP-10 · SUB-04~06·10 · RES-04·06</span><span>복원 대상: 현재 데이터 판·곡선 단계·제거 조합·주기·위상 구간·판단·근거·메모·확대 상태. 기존 기록 불변, 새 요청으로 재제출</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -876,7 +877,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v0.13·상태표 v0.14·용어 사전 v0.4(2026-09-09)를 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v0.14·상태표 v0.15·용어 사전 v0.4(2026-09-09)를 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
