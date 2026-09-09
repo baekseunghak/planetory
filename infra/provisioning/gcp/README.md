@@ -64,9 +64,9 @@ Worker 담당자는 자신의 번호 `2~6`을 넣습니다.
 
 | 구분 | 머신 | 부팅 | 데이터 디스크 | HA 메타데이터 | 외부 IPv4 |
 |---|---|---:|---:|---:|---|
-| Node 1 | `e2-highmem-4` | 30GiB | 200GiB | 기존 데이터 디스크 사용 | Standard 고정 IP |
-| Node 2 | `e2-highmem-4` | 30GiB | 2000GiB | 100GiB `pd-balanced` | Standard 임시 IP |
-| Node 3~6 | `e2-highmem-4` | 30GiB | 2000GiB | 없음 | Standard 임시 IP |
+| Node 1 | `e2-custom-6-36864` (6 vCPU / 36GiB) | 30GiB | 200GiB | 기존 데이터 디스크 사용 | Standard 고정 IP |
+| Node 2 | `e2-custom-6-36864` (6 vCPU / 36GiB) | 30GiB | 2000GiB | 100GiB `pd-balanced` | Standard 임시 IP |
+| Node 3~6 | `e2-custom-6-36864` (6 vCPU / 36GiB) | 30GiB | 2000GiB | 없음 | Standard 임시 IP |
 
 Worker의 Boot와 Data는 모두 지역 `pd-standard` 2,048GiB 할당량을 사용한다. 기본값은 `30 + 2,000 = 2,030GiB`이며 18GiB를 남긴다. 합계가 2,048GiB를 넘으면 생성 전에 스크립트가 중단한다. Node 2의 Metadata는 별도 SSD 할당량을 사용하는 `pd-balanced`다.
 

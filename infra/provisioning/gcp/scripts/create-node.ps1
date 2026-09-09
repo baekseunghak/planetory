@@ -3,7 +3,7 @@ param(
  [Parameter(Mandatory)][ValidatePattern('^[a-z][a-z0-9-]{4,28}[a-z0-9]$')][string]$ProjectId,
  [Parameter(Mandatory)][ValidateRange(1,6)][int]$Node,
  [Parameter(Mandatory)][string]$AdminCidr,
- [ValidatePattern('^[a-z0-9-]+$')][string]$MachineType='e2-highmem-4',
+ [ValidatePattern('^[a-z0-9-]+$')][string]$MachineType='e2-custom-6-36864',
  [ValidateRange(10,65536)][int]$DataDiskSizeGiB=200,
  [ValidateRange(10,65536)][int]$MetadataDiskSizeGiB=100,
  [ValidateRange(10,65536)][int]$BootDiskSizeGiB=30,
