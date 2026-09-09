@@ -47,9 +47,10 @@ experiments/distributed-pipeline/
 4. Spark가 유효값 정규화, Sector별 요약과 TIC별 Sector 결합 결과를 만든다.
 5. Bronze와 Silver를 Parquet으로 HDFS에 쓴다.
 6. Publisher가 완료된 Silver만 읽고 Gold 파일과 manifest를 만든다.
-7. 파일과 manifest를 모의 EC2 수신기로 실제 전송한다.
-8. 수신기가 checksum을 확인하고 릴리스 정보와 검색용 요약을 PostgreSQL에 기록한다.
-9. 조회 프로그램이 HDFS 연결 없이 Gold 파일과 DB를 읽는다.
+7. 검증한 Bundle과 manifest·checksum을 HDFS에 RF2로 백업한다.
+8. 파일과 manifest를 모의 EC2 수신기로 실제 전송한다.
+9. 수신기가 checksum을 확인하고 릴리스 정보와 검색용 요약을 PostgreSQL에 기록한다.
+10. 조회 프로그램이 HDFS 연결 없이 Gold 파일과 DB를 읽는다.
 
 Spark Standalone 또는 `local[*]` 실행 성공은 YARN 검증으로 인정하지 않는다. Spark 실행 프로세스와 Worker 모두 같은 Python 의존성을 사용해야 한다.
 
@@ -62,9 +63,9 @@ Spark Standalone 또는 `local[*]` 실행 성공은 YARN 검증으로 인정하�
 | Standby NameNode·JournalNode | 생략 | 실제 GCP 수동 HA 검증에서 추가 |
 | Spark 제출·Publisher | 실행 후 종료 | 동일 |
 | PostgreSQL·모의 수신기·조회 | 각 1개 | 동일 |
-| Raw/Bronze/Silver 복제 수 | 2/2/2 | 3/2/2 |
+| Raw/Bronze/Silver/Bundle backup 복제 수 | 2/2/2/2 | 2/2/2/2 |
 
-기본 검사는 연결을 빠르게 확인한다. Raw 복제 수 3과 Worker 장애 검사는 4 Worker 구성에서만 판정한다. 한 PC의 컨테이너는 같은 물리 디스크를 사용하므로 실제 서버 장애 검증을 대신하지 않는다.
+기본 검사는 연결을 빠르게 확인한다. Worker 장애 검사는 4 Worker 구성에서만 판정한다. 한 PC의 컨테이너는 같은 물리 디스크를 사용하므로 실제 서버 장애 검증을 대신하지 않는다.
 
 ## 네트워크 경계
 
@@ -85,8 +86,18 @@ Spark Standalone 또는 `local[*]` 실행 성공은 YARN 검증으로 인정하�
 7. 손상 파일·전송 중단·DB 반영 실패 시 이전 Gold가 계속 조회된다.
 8. 동시에 두 릴리스를 활성화하면 조건을 먼저 만족한 한 요청만 성공한다.
 9. HDFS를 차단해도 이미 공개된 Gold 조회가 성공한다.
-10. 4 Worker 검사에서 Worker 중단, Spark 재시도와 Raw RF3 읽기를 확인한다.
+10. HDFS의 PublicationBundle 백업과 EC2 수신본의 checksum이 같다.
+11. 4 Worker 검사에서 Worker 중단, Spark 재시도와 Raw RF2 읽기를 확인한다.
 
 ## 결과 기록
 
-커밋, 이미지 내용 식별값, seed, 행 수, 입력·출력 checksum, YARN 작업 ID, Worker 수, CPU·RAM 할당, 처리시간과 실패 주입 결과를 기록한다. 1·2·4 Worker 비교 시 Worker 수와 Worker당 자원을 함께 적고 같은 입력을 반복 실행한다. 로컬 측정값을 GCP 운영 성능으로 단정하지 않는다.
+다음 정보를 함께 기록한다.
+
+- 커밋과 이미지 내용 식별값
+- seed와 입력 행 수
+- 입력·출력 checksum
+- YARN 작업 ID
+- Worker 수와 Worker당 CPU·RAM 할당
+- 처리 시간과 실패 주입 결과
+
+1·2·4 Worker 비교는 같은 입력으로 반복 실행한다. 로컬 측정값을 GCP 운영 성능으로 단정하지 않는다.

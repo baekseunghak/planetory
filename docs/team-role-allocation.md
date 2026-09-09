@@ -4,7 +4,11 @@
 >
 > 기준일: 2026-09-09
 >
-> 기준 문서: [Planetory 요구사항 명세서 v0.12](requirements/planetory-requirements-spec.md), [후보·별 상태표 v0.12](requirements/planetory-status-table.md), [시스템 아키텍처](development/system-architecture.md)
+> 기준 문서
+>
+> - [Planetory 요구사항 명세서 v0.12](requirements/planetory-requirements-spec.md)
+> - [후보·별 상태표 v0.12](requirements/planetory-status-table.md)
+> - [시스템 아키텍처](development/system-architecture.md)
 >
 > Jira 상위 Epic: [S15P21C206-26 · 서비스 구체화 및 시스템 설계](https://ssafy.atlassian.net/browse/S15P21C206-26)
 >
@@ -22,7 +26,7 @@
 
 - 잔차 곡선과 잔차 주기도는 배치 저장물이 아니라 EC2의 온라인 파생 계산으로 제공한다.
 - Gold에는 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`, 후보별 transit model과 계산 설정 버전이 포함되어야 한다.
-- 분석 세션은 시작 시점 PublicationBundle에 고정하며 구버전 Bundle과 캐시는 보존기간 동안 함께 유지한다.
+- 신규 분석 세션은 `current`에서 PublicationBundle을 고정한다. EC2는 `current`·`previous`를 기본 보존하고, 진행 중 세션·재시도·보존기간 내 히스토리가 참조하는 이전 Bundle과 캐시는 보호한다.
 - 온라인 계산은 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED` 상태를 구분한다.
 - 김동혁이 온라인 계산 위치·캐시·큐·관측 구조를, 윤성용이 배치와 EC2 계산의 과학적 일치 기준을, 강재민이 요청 상태·캐시 키·API 경계를 분석한다.
 - 외부 라벨이 갱신되어도 v1에서는 기존 성과·등급·발견한 별·통계 스냅샷을 유지하고 재분류 표식만 남긴다.
@@ -55,7 +59,7 @@
 - YARN/Spark 자원 배분과 Airflow 배치 제어
 - 원천 수집의 checksum, 재시도, 멱등성과 부분 재처리
 - PublicationBundle 검증과 GCP에서 EC2로의 Gold 전달
-- EC2 release 검증, `current` 원자적 전환과 롤백
+- EC2 release 검증, `current`·`previous` 전환과 롤백
 - EC2 온라인 파생 계산의 구현 위치, 캐시 저장소, 큐와 동시 실행 상한
 - Gold 필수 입력의 PoC용 최소 계약과 표본 용량 측정
 - 온라인 계산 시간·큐 길이·캐시 적중률·실패율 관측

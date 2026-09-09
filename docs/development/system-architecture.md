@@ -14,9 +14,9 @@ flowchart LR
     W[Node 4~6<br/>DataNode · NodeManager]
     ING --> H[HDFS Raw → Bronze → Silver]
     M -->|Spark on YARN| H
-    H --> P[PublicationBundle 검증]
+    H --> P[PublicationBundle 검증·HDFS 백업]
   end
-  P -->|checksum · 증분 전송| E[EC2 Gold release/current]
+  P -->|checksum · 증분 전송| E[EC2 Gold release/current/previous]
   U[사용자] --> API[EC2-A/B API]
   API <--> DB[PostgreSQL Primary/Standby]
   E --> API
@@ -41,7 +41,7 @@ flowchart LR
 ```text
 온라인: 사용자 → Cloudflare → EC2-A/B → PostgreSQL + EC2 Gold
 배치:   외부 원천 → Airflow → YARN/Spark → HDFS Raw → Bronze → Silver → Gold 후보
-공개:   GCP Gold 후보 → 검증·전송 → EC2 Gold current 전환
+공개:   GCP Gold 후보 → HDFS 백업·검증·전송 → EC2 Gold current/previous 전환
 관측:   EC2-A/B + GCP Node 1~6 → Prometheus → Grafana
 ```
 
@@ -57,7 +57,7 @@ flowchart LR
 | 배치 제어 | Airflow | 대상·버전·순서·실패 단계 재처리 |
 | 자원 관리 | YARN | Spark 실행 자원 배정 |
 | 분산 연산 | Spark | 파싱·정제·결합·BLS·residual·AI 배치 |
-| 분산 저장 | Hadoop HDFS | Raw·Bronze·Silver·Gold 후보 저장 |
+| 분산 저장 | Hadoop HDFS | Raw·Bronze·Silver·공개 Bundle 백업 저장 |
 | 관측 | Prometheus, Grafana | 메트릭 수집 및 시각화 |
 
 EC2-A/B 애플리케이션은 동일하고 무상태로 운영한다. Redis는 공유 세션이나 캐시가 실제로 필요할 때만 추가한다.
@@ -73,9 +73,9 @@ GCP 디스크·네트워크·비용 가정과 검토 결과는 [GCP 분산 인�
 | 환경 | 수량 | 서버 1대당 사양 | 합계 | 상태 |
 | --- | ---: | --- | --- | --- |
 | AWS EC2 | 2대 | 4 vCPU · 16GB · 320GB | 8 vCPU · 32GB · 640GB | 확정된 가용량 |
-| GCP Node 1 | 1대 | 6 vCPU · 36GiB · Data 200GiB | 동일 | 생성 계획 |
-| GCP Node 2 | 1대 | 6 vCPU · 36GiB · HDFS 2,000GiB · Metadata 100GiB | 동일 | 생성 계획 |
-| GCP Node 3~6 | 4대 | 6 vCPU · 36GiB · HDFS 각 2,000GiB | 24 vCPU · 144GiB · HDFS 8,000GiB | 생성 계획 |
+| GCP Node 1 | 1대 | 6 vCPU · 36GiB · 제어 데이터 200GiB | 동일 | 생성 계획 |
+| GCP Node 2 | 1대 | 6 vCPU · 36GiB · HDFS 데이터 2,000GiB · 메타데이터 100GiB | 동일 | 생성 계획 |
+| GCP Node 3~6 | 4대 | 6 vCPU · 36GiB · HDFS 데이터 각 2,000GiB | 24 vCPU · 144GiB · HDFS 데이터 8,000GiB | 생성 계획 |
 
 Storage는 설치 용량이다. OS, Docker, DB, 로그와 복제본을 제외한 실제 가용량은 더 작다.
 
@@ -102,9 +102,24 @@ GCP는 `asia-east1-b` 한 존의 6개 프로젝트를 full-mesh VPC Peering으�
 | 3 | JournalNode, DataNode, NodeManager | 24GiB / 3 vCore |
 | 4~6 | DataNode, NodeManager | 24GiB / 3 vCore |
 
-Node 1~3은 QJM edit log를 구성한다. ZooKeeper와 ZKFC는 사용하지 않으며 HDFS 전환은 수동이다. 계획된 전환은 기존 Active를 먼저 Standby로 내리고, 장애 전환은 기존 Active VM이 완전히 중지됐음을 확인한 뒤 Standby를 직접 승격한다. 자동 fencing은 없으므로 응답 없는 Active를 대상으로 `haadmin -failover`를 실행하지 않는다. ResourceManager는 Node 1 단일 인스턴스로 두고 장애 시 실행 중인 작업을 실패 처리한 뒤 복구 후 Airflow에서 해당 단계만 재시도한다.
+Node 1~3은 QJM edit log를 구성한다. HDFS 장애 전환은 수동이다.
 
-JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데이터 디스크, Node 3의 30GiB 부팅 디스크를 사용한다. HDFS DataNode 설치 용량은 Worker 5대의 2,000GiB를 합한 **10,000GiB(약 9.77TiB)**다. Boot 30GiB도 지역 `pd-standard` 2,048GiB 할당량에 포함된다. 이 POC에서는 HA 메타데이터 외부 백업을 두지 않는다.
+- 계획된 전환: 기존 Active를 먼저 Standby로 내린다.
+- 장애 전환: 기존 Active VM의 완전 중지를 확인한 뒤 Node 2를 승격한다.
+- 금지: 자동 fencing이 없으므로 응답 없는 Active에 `haadmin -failover`를 실행하지 않는다.
+- 제외: ZooKeeper와 ZKFC는 사용하지 않는다.
+
+ResourceManager는 Node 1 단일 인스턴스다. 장애가 발생하면 실행 중인 작업을 실패 처리하고, Node 1 복구 후 Airflow에서 해당 단계만 재시도한다.
+
+JournalNode 저장 위치는 다음과 같다.
+
+- Node 1: 200GiB 제어 데이터 디스크
+- Node 2: 100GiB 메타데이터 디스크
+- Node 3: 30GiB 부팅 디스크
+
+HDFS DataNode 설치 용량은 Worker 5대의 2,000GiB를 합한 **10,000GiB(약 9.77TiB)**다. 부팅 디스크 30GiB도 지역 `pd-standard` 2,048GiB 할당량에 포함된다.
+
+> 이 PoC에서는 HA 메타데이터를 외부에 백업하지 않는다.
 
 ## 5. 데이터 소유권
 
@@ -114,6 +129,7 @@ JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데�
 | Sector Parquet | GCP HDFS Bronze | 금지 |
 | 정제곡선·BLS·residual·AI 내부 결과 | GCP HDFS Silver | 금지 |
 | 공개 전 축약 데이터 | GCP PublicationBundle staging | 금지 |
+| 공개한 PublicationBundle 백업 | GCP HDFS PublicationBundle backup | 금지 |
 | 검증된 곡선·주기도·후보·AI 결과 | EC2 Gold | 허용 |
 | 회원·제출·이력·커뮤니티·성과 | PostgreSQL | 허용 |
 | Gold 릴리스·검색·정렬 메타데이터 | PostgreSQL | 허용 |
@@ -124,30 +140,61 @@ JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데�
 
 | 계층 | 내용 | 논리 용량 추정 | 저장 용량 추정 |
 | --- | --- | ---: | ---: |
-| Raw | 원본 FITS·외부 원응답 | 약 3.031TiB | RF3 약 9.09TiB |
+| Raw | 원본 FITS·외부 원응답 | 약 3.031TiB | RF2 약 6.06TiB |
 | Bronze | 파싱된 관측 Parquet | 약 0.52TiB | RF2 약 1.04TiB |
 | Silver | 정제·BLS·잔차·AI 내부 산출물 | 약 0.50~0.70TiB | RF2 약 1.0~1.4TiB |
+| PublicationBundle backup | EC2에 공개한 번들과 manifest·checksum | PoC 후 산정 | RF2, 위 합계와 별도 |
 | Gold | 서비스 공개·온라인 계산 입력 | PoC 후 산정 | EC2 저장량 PoC 후 결정 |
 
-용량 추정치는 계획값이며 실제 원천 크기와 Parquet 압축률을 측정해 다시 계산한다. 현재 약 9.77TiB 설치 용량은 예상 저장물 11.13~11.53TiB보다 작으므로 전체 TESS 보관이 불가능하다. 초기에는 Sector 범위를 제한하고 사용률 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 전체 범위를 처리하려면 실측 후 중간 산출물 보존·복제 범위를 줄이거나 DataNode를 추가한다. 현재 추정치에서 75% 중단선까지 고려하면 동일 디스크의 Worker 8대 이상이 필요하다.
+Raw·Bronze·Silver의 RF2 저장량은 약 **8.10~8.50TiB**다. 설치 용량의 약 **83~87%**를 차지한다.
 
-디렉터리·파티션, FITS 묶음 저장과 EC2 Gold 파일 구조는 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다. 외부 원천별 수집부터 PublicationBundle 배포까지의 상세 순서는 [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)을 따른다.
+이 추정에는 다음 항목이 빠져 있다.
 
-Gold 후보는 `PublicationBundle`이라는 논리 계층이다. 배치는 원천·파이프라인 버전을 고정하고 단계별 재처리가 가능해야 하며, 검증된 결과만 EC2에 전달한다. v0.12가 요구하는 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·원본 주기도·후보별 통과 모델·계산 버전은 포함하되, 파일 스키마와 용량은 미니 파이프라인 PoC 결과를 보고 별도 Task에서 확정한다.
+- PublicationBundle 백업
+- 다운로드 임시 파일
+- Spark shuffle
+- 로그
+
+따라서 초기에는 Sector 범위를 제한한다.
+
+- 운영 목표: HDFS 사용률 70% 이하
+- 신규 수집 중단선: HDFS 사용률 75%
+- Worker 장애 시: 단일 복제본이 된 블록을 즉시 재복제할 여유 확보
+
+전체 범위는 실측 후 보존 범위를 조정하거나 DataNode를 추가해야 한다.
+
+상세 기준은 다음 문서를 따른다.
+
+- 디렉터리·파티션, FITS 묶음과 EC2 Gold: [데이터 관리 및 재현성](./data-guidelines.md)
+- 외부 원천 수집부터 PublicationBundle 배포: [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)
+
+Gold 후보는 `PublicationBundle`이라는 논리 계층이다. 검증된 결과만 EC2에 전달한다.
+
+배치는 다음 정보를 제공해야 한다.
+
+- 고정된 원천·파이프라인 버전
+- 원본 정제곡선의 모든 점과 품질 마스크
+- `fold_reference_time_btjd`
+- 원본 주기도
+- 후보별 통과 모델과 계산 버전
+- 단계별 재처리에 필요한 식별자
+
+파일 스키마와 용량은 미니 파이프라인 PoC 후 별도 Task에서 확정한다.
 
 ## 7. Gold 공개 규칙
 
 ```text
-GCP PublicationBundle → 검증 → EC2 임시 release → 재검증 → current 원자적 전환 → API 공개
+GCP PublicationBundle → HDFS 백업 → EC2 임시 release → 재검증 → previous 갱신 → current 원자적 전환 → API 공개
 ```
 
 - 전송 중인 디렉터리를 공개하지 않는다.
 - 검증 실패 시 `current`를 바꾸지 않는다.
 - 기존 릴리스를 덮어쓰지 않는다.
 - 실패한 TIC와 단계만 재처리한다.
-- EC2 API는 `current`가 가리키는 Gold만 읽는다.
-- 분석 시작 시 `publication_bundle_id`를 고정하며 진행 중 세션에 새 릴리스를 섞지 않는다.
-- 구버전 Bundle과 해당 캐시는 정해진 보존기간 동안 함께 유지한다. 보존기간은 DEC-35의 미정 항목이다.
+- 신규 분석 세션은 `current`를 한 번 조회해 `publication_bundle_id`를 고정한다.
+- 진행 중 세션·재시도·온라인 계산은 `current`가 아니라 고정된 `releases/<publication_bundle_id>`를 읽는다.
+- 새 릴리스 공개 시 직전 릴리스를 `previous`로 유지하고, 더 오래된 릴리스와 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않을 때 삭제한다. 참조 중이면 보존기간이 끝날 때까지 보호한다.
+- 공개한 PublicationBundle은 HDFS에 RF2로 백업하며 EC2 온라인 조회에는 사용하지 않는다.
 
 Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다.
 
@@ -161,7 +208,8 @@ Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관
 - PostgreSQL, HDFS, YARN, Spark 관리 포트를 인터넷에 공개하지 않는다.
 - GCP–AWS 전송과 메트릭 수집은 인증·암호화된 경로만 사용한다.
 - EC2와 GCP는 x86_64(`linux/amd64`) 이미지를 사용한다. 이미지 빌드와 실제 실행 검증 기준은 [CI/CD](../operations/cicd.md)를 따른다.
-- 30일 POC의 Hadoop 내부 통신은 방화벽에 등록된 6개 사설 IP만 신뢰하는 경계로 제한한다. Kerberos와 HDFS wire encryption은 이번 범위에 넣지 않으므로 피어링에 다른 VM을 추가할 때 보안 결정을 다시 검토한다.
+- 30일 PoC의 Hadoop 내부 통신은 방화벽에 등록된 6개 사설 IP만 신뢰하는 경계로 제한한다.
+- Kerberos와 HDFS wire encryption은 이번 범위에서 제외한다. 피어링에 다른 VM을 추가할 때 보안 결정을 다시 검토한다.
 
 ## 9. 미확정 사항
 
@@ -170,8 +218,8 @@ AI가 임의로 확정하지 말고 구현 티켓 또는 사용자 결정을 요
 - Cloudflare Free 기반 요청 분산과 장애 감지 방식
 - Redis 도입 여부와 위치
 - PostgreSQL 자동 승격 및 복구 절차
-- PublicationBundle 내부 파일 스키마·용량과 구버전 Bundle·캐시 보존기간
-- EC2 Gold 저장 경로와 릴리스 보존 수
+- PublicationBundle 내부 파일 스키마·용량
+- 진행 중 세션·재시도·히스토리가 참조하는 이전 Bundle·캐시의 보존기간
 - GCP–AWS Gold 전송 프로토콜과 방화벽 규칙
 - 서비스 DB·Gold의 백업/복구 목표와 로그 보존 기간(HDFS HA 메타데이터 외부 백업은 제외 확정)
 

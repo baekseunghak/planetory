@@ -18,7 +18,7 @@
 
 1. Airflow가 TIC·Sector·원천 릴리스·파이프라인 버전을 고정합니다.
 2. GCP Worker 2~6의 다섯 노드가 다운로드 대상을 나눠 각자의 임시 영역에 저장합니다.
-3. 크기와 checksum을 검증한 원본만 Raw HDFS에 RF3로 기록합니다.
+3. 크기와 checksum을 검증한 원본만 Raw HDFS에 RF2로 기록합니다.
 4. Spark가 Raw를 Bronze Parquet으로 변환합니다.
 5. Sector별 품질 필터, 정규화와 연속 구간 디트렌딩을 수행합니다.
 6. TIC 기준으로 Sector를 결합해 Silver 정제곡선을 만듭니다.
@@ -28,8 +28,11 @@
 10. TCE·TOI·NASA Archive·ExoFOP 상태를 연결합니다.
 11. AI 입력과 추론 결과를 생성합니다.
 12. 화면용 곡선·주기도·후보표를 PublicationBundle로 검증합니다.
-13. EC2의 새 release 디렉터리로 전송합니다.
-14. 모든 checksum이 일치할 때만 `current`를 새 릴리스로 전환합니다.
+13. 검증된 PublicationBundle과 manifest·checksum을 HDFS에 RF2로 백업합니다.
+14. EC2의 새 release 디렉터리로 전송합니다.
+15. 모든 checksum이 일치할 때 `previous`가 기존 `current`를 가리키게 갱신하고 `current`를 새 릴리스로 원자적으로 전환합니다.
+
+공개 실패 시 기존 `current`와 `previous`를 유지합니다. EC2의 더 오래된 릴리스와 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않을 때 삭제하며, HDFS PublicationBundle 백업은 EC2 온라인 조회에 사용하지 않습니다.
 
 ## 작업 유형별 검증 자료
 

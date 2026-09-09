@@ -27,7 +27,7 @@
 - **manifest**: 묶음에 포함된 파일·버전·크기·무결성 값을 적은 목록 파일이다.
 - **checksum**: 전송 전후 파일이 같은지 확인하는 무결성 값이다.
 - **p95**: 요청 100개 중 느린 쪽 다섯 개를 제외한 최대 응답시간이다.
-- **RF3**: HDFS가 같은 데이터를 서로 다른 노드에 세 벌 저장한다는 뜻이다.
+- **RF2**: HDFS가 같은 데이터를 서로 다른 노드에 두 벌 저장한다는 뜻이다.
 
 ## 이번 설계의 결론
 
@@ -35,6 +35,7 @@
 - EC2 서비스 코드는 `apps/`, GCP 처리 코드는 `distributed-system/`, 서버 배치 설정은 `infra/`에 둔다.
 - 첫 PoC는 `experiments/distributed-pipeline/`에서 합성 데이터로 실행한다.
 - GCP는 Raw·Bronze·Silver를 만들고 검증된 Gold만 EC2로 보낸다. EC2 서비스는 HDFS를 실시간 조회하지 않는다.
+- 공개한 PublicationBundle은 HDFS에 RF2로 백업한다.
 - 서비스 앱과 분산 시스템은 서로 독립적으로 검사·배포한다.
 - 구현이 생기기 전에는 빈 디렉터리나 빈 CI 파일을 미리 만들지 않는다.
 
@@ -42,7 +43,15 @@
 
 저장소의 [요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md)를 정본으로 사용한다. DAT-05·DAT-11·DAT-14는 사용자용 단계별 잔차 곡선·주기도를 Bundle에 저장하지 않고 EC2에서 온라인 계산하는 것으로 정합화됐다.
 
-PublicationBundle에는 `fold_reference_time_btjd`를 포함하고 분석 세션은 시작 시점 Bundle에 고정한다. 구버전 Bundle과 캐시는 보존기간 동안 함께 유지하지만, Gold 전체 파일 스키마·용량·보존기간은 팀 합의가 필요하므로 미니 파이프라인 PoC 후 별도 Task에서 확정한다.
+PublicationBundle과 EC2 릴리스는 다음 규칙을 따른다.
+
+- PublicationBundle에 `fold_reference_time_btjd`를 포함한다.
+- 신규 분석 세션은 `current`를 선택하고 `publication_bundle_id`를 고정한다.
+- 진행 중 세션은 고정된 `publication_bundle_id`를 조회한다.
+- EC2는 `current`와 `previous`를 기본 보존한다.
+- 세션·재시도·보존기간 내 히스토리가 참조하지 않는 이전 릴리스와 캐시는 삭제한다.
+
+Gold 전체 파일 스키마·용량과 참조 중인 이전 Bundle의 보존기간은 미니 파이프라인 PoC 후 별도 Task에서 확정한다.
 
 ## 후속 작업 순서
 
@@ -50,7 +59,7 @@ PublicationBundle에는 `fold_reference_time_btjd`를 포함하고 분석 세션
 | --- | --- | --- |
 | 1 | 최소 manifest와 합성 데이터로 Docker 분산 파이프라인 PoC | YARN 작업 ID, HDFS 결과, 모의 DB 조회 |
 | 2 | PoC 결과로 Gold 입력·출력 계약 확정 | 담당자 합의, 예제 데이터와 스키마 검사 통과 |
-| 3 | Gold 전송·검증·전환 PoC | 실패 시 이전 릴리스 유지 |
+| 3 | HDFS Bundle 백업과 Gold 전송·검증·전환 PoC | 실패 시 이전 릴리스 유지, 백업 checksum 일치 |
 | 4 | 배치와 온라인 계산의 수치 일치 검증 | 운영 amd64의 배치·온라인 결과 비교; ARM64는 지원 필요 시 추가 |
 | 5 | 온라인 계산 API·대기열·캐시 PoC | 중복 요청·실패·부하 측정 |
 | 6 | Gold 용량과 GCP 처리시간 측정 | 표본 기반 용량·시간 보고서 |
