@@ -56,6 +56,12 @@
 
 ## 2. ERD
 
+전체 그림은 아래 두 파일로도 볼 수 있다. 관계만 보려면 개요, 열까지 보려면 전체를 연다.
+
+- [관계 개요](../images/database-erd-overview.svg)
+- [전체 (열 포함)](../images/database-erd.svg)
+
+
 관계선은 FK 방향이다. 속성은 핵심만 적었고 전체 열은 3장에 있다. 우선순위: P1 = user_settings·follows·notifications·stats_snapshots, 나머지는 P0. (ER 다이어그램의 classDef 색 지정은 mermaid 11.4까지 파싱 오류를 내므로 넣지 않았다.)
 
 ```mermaid
