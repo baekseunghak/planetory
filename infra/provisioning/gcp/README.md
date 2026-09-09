@@ -48,6 +48,15 @@ Node 3: JournalNode + Worker
 Node 4~6: Worker
 ```
 
+| 담당자 | 담당 노드 | 역할 |
+|---|---:|---|
+| 김동혁 | Node 1 | Master |
+| 백지웅 | Node 2 | Standby NameNode + Worker |
+| 강재민 | Node 3 | JournalNode + Worker |
+| 윤성용 | Node 4 | Worker |
+| 백승학 | Node 5 | Worker |
+| 하서진 | Node 6 | Worker |
+
 ## 3. 노드 생성
 
 마스터 담당자:
