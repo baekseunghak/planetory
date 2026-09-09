@@ -24,6 +24,7 @@ def main():
         "qjournal://master-1:8485;worker-2:8485;worker-3:8485/planetory"
     )
     assert hdfs["dfs.datanode.data.dir"] == "file:///mnt/data/hdfs"
+    assert hdfs["dfs.replication"] == "2"
     assert (hadoop / "workers").read_text().splitlines() == [f"worker-{i}" for i in range(2, 7)]
     profiles = {}
     for role, memory, cores in [("worker", "24576", "3"), ("standby-worker", "16384", "2")]:
@@ -41,10 +42,18 @@ def main():
         compose = (BASE / name).read_text(encoding="utf-8")
         for i in range(1, 7):
             host = "master-1" if i == 1 else f"worker-{i}"
-            assert f'{host}: "10.20.{i}.10"' in compose
+            project = f"GCP_NODE_{i}_PROJECT"
+            assert f'"{host}=10.20.{i}.10"' in compose
+            assert (
+                f'"{host}.${{GCP_ZONE:-asia-east1-b}}.c.'
+                f'${{{project}:?Set {project}}}.internal=10.20.{i}.10"'
+            ) in compose
+            assert (
+                f'"{host}.c.${{{project}:?Set {project}}}.internal=10.20.{i}.10"'
+            ) in compose
         assert "HADOOP_CONF_DIR: /etc/hadoop" in compose
         assert "YARN_CONF_DIR: /etc/hadoop" in compose
-    print("PASS: 4 XML files, 5 workers, role limits and Compose host mappings")
+    print("PASS: XML, RF2, 5 workers, role limits and short/FQDN host mappings")
 
 
 if __name__ == "__main__":

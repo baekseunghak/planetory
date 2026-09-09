@@ -26,7 +26,7 @@ Write-Host "SSH preview: gcloud compute ssh $vm --project=$ProjectId --zone=$Zon
 Write-Host "Startup logs: gcloud compute instances get-serial-port-output $vm --project=$ProjectId --zone=$Zone"
 if ($CheckSsh) {
  # gcloud may create/register an SSH key when this option is enabled.
- $check='set -eu; hostname; test -f /var/lib/planetory-data-ready; mountpoint /mnt/data; findmnt /mnt/data; df -h / /mnt/data'
+ $check='set -eu; hostname; hostname --fqdn; test -f /var/lib/planetory-data-ready; mountpoint /mnt/data; findmnt /mnt/data; df -h / /mnt/data'
  if ($Node -eq 1) { $check+='; test -d /var/lib/hadoop-hdfs/namenode; test -d /var/lib/hadoop-hdfs/journal; readlink -f /var/lib/hadoop-hdfs/namenode /var/lib/hadoop-hdfs/journal' }
  if ($Node -eq 2) { $check+='; test -f /var/lib/planetory-metadata-ready; mountpoint /mnt/metadata; findmnt /mnt/metadata; df -h /mnt/metadata; test -d /var/lib/hadoop-hdfs/namenode; test -d /var/lib/hadoop-hdfs/journal; readlink -f /var/lib/hadoop-hdfs/namenode /var/lib/hadoop-hdfs/journal' }
  if ($Node -eq 3) { $check+='; test -d /var/lib/hadoop-hdfs/journal; findmnt -T /var/lib/hadoop-hdfs/journal' }

@@ -116,15 +116,16 @@ case '__NODE__' in
     mkdir -p /var/lib/hadoop-hdfs/journal
     ;;
 esac
-if ! grep -q '^# planetory-cluster$' /etc/hosts; then
+if ! grep -q '^# BEGIN planetory-cluster$' /etc/hosts; then
   cat >> /etc/hosts <<'HOSTS'
-# planetory-cluster
+# BEGIN planetory-cluster
 10.20.1.10 master-1
 10.20.2.10 worker-2
 10.20.3.10 worker-3
 10.20.4.10 worker-4
 10.20.5.10 worker-5
 10.20.6.10 worker-6
+# END planetory-cluster
 HOSTS
 fi
 echo PLANETORY_DATA_READY

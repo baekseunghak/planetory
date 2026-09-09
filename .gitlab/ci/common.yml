@@ -7,6 +7,12 @@ validate:compose:
     AIRFLOW_FERNET_KEY: ci-validation-only
     AIRFLOW_WEBSERVER_SECRET_KEY: ci-validation-only
     AIRFLOW_DATABASE_URL: postgresql+psycopg2://airflow:ci-validation-only@127.0.0.1:5432/airflow
+    GCP_NODE_1_PROJECT: ci-node-1-project
+    GCP_NODE_2_PROJECT: ci-node-2-project
+    GCP_NODE_3_PROJECT: ci-node-3-project
+    GCP_NODE_4_PROJECT: ci-node-4-project
+    GCP_NODE_5_PROJECT: ci-node-5-project
+    GCP_NODE_6_PROJECT: ci-node-6-project
   script:
     - docker compose -f compose.yaml config -q
     - docker compose -f infra/distributed-system/compose.control-plane.yaml config -q

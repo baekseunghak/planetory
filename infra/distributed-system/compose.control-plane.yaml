@@ -1,12 +1,24 @@
 name: planetory-distributed-system
 
 x-cluster-hosts: &cluster-hosts
-  master-1: "10.20.1.10"
-  worker-2: "10.20.2.10"
-  worker-3: "10.20.3.10"
-  worker-4: "10.20.4.10"
-  worker-5: "10.20.5.10"
-  worker-6: "10.20.6.10"
+  - "master-1=10.20.1.10"
+  - "master-1.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_1_PROJECT:?Set GCP_NODE_1_PROJECT}.internal=10.20.1.10"
+  - "master-1.c.${GCP_NODE_1_PROJECT:?Set GCP_NODE_1_PROJECT}.internal=10.20.1.10"
+  - "worker-2=10.20.2.10"
+  - "worker-2.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_2_PROJECT:?Set GCP_NODE_2_PROJECT}.internal=10.20.2.10"
+  - "worker-2.c.${GCP_NODE_2_PROJECT:?Set GCP_NODE_2_PROJECT}.internal=10.20.2.10"
+  - "worker-3=10.20.3.10"
+  - "worker-3.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_3_PROJECT:?Set GCP_NODE_3_PROJECT}.internal=10.20.3.10"
+  - "worker-3.c.${GCP_NODE_3_PROJECT:?Set GCP_NODE_3_PROJECT}.internal=10.20.3.10"
+  - "worker-4=10.20.4.10"
+  - "worker-4.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_4_PROJECT:?Set GCP_NODE_4_PROJECT}.internal=10.20.4.10"
+  - "worker-4.c.${GCP_NODE_4_PROJECT:?Set GCP_NODE_4_PROJECT}.internal=10.20.4.10"
+  - "worker-5=10.20.5.10"
+  - "worker-5.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_5_PROJECT:?Set GCP_NODE_5_PROJECT}.internal=10.20.5.10"
+  - "worker-5.c.${GCP_NODE_5_PROJECT:?Set GCP_NODE_5_PROJECT}.internal=10.20.5.10"
+  - "worker-6=10.20.6.10"
+  - "worker-6.${GCP_ZONE:-asia-east1-b}.c.${GCP_NODE_6_PROJECT:?Set GCP_NODE_6_PROJECT}.internal=10.20.6.10"
+  - "worker-6.c.${GCP_NODE_6_PROJECT:?Set GCP_NODE_6_PROJECT}.internal=10.20.6.10"
 
 services:
   airflow-db:
