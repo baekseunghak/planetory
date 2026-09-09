@@ -1,20 +1,20 @@
 # S15P21C206-29 천문 데이터 처리·AI 기획 초안
 
-작성일: 2026-09-06 / 담당: 윤성용 / 상태: 팀 리뷰 전 초안
+작성일: 2026-09-06 / 최신 명세 대조: 2026-09-09 / 담당: 윤성용 / 상태: Draft MR 리뷰 중
 
-초안 기준 커밋: `8c9d93db737eab373758541c3b64998dcb4a8dce` (이후 로컬 보완은 미커밋)
+초안 기준 커밋: `8c9d93db737eab373758541c3b64998dcb4a8dce`, 보완 커밋: `41173768d8fb9b14a0ce3c7a2e201bdf8967cd4d`
 
-이 문서는 기존 PoC의 구현 사실과 서비스 요구사항의 차이를 정리한다. 제안한 스키마·작업 분할·검증 기준은 팀 승인 전이다. 2026-09-07 Jira 29번의 실제 설명·완료 조건·댓글·첨부 없음과 대조했으며 상세 결과는 `tess-pipeline-review-checklist.md`에 기록했다. 문서 작성만으로 29번이 완료되는 것은 아니다.
+이 문서는 기존 PoC의 구현 사실과 서비스 요구사항의 차이를 정리한다. 제안한 스키마·작업 분할·검증 기준은 팀 승인 전이다. 2026-09-07 Jira 29번의 실제 설명·완료 조건·댓글·첨부 없음과 대조했으며 상세 결과는 [리뷰 체크리스트](tess-pipeline-review-checklist.md)에 기록했다. 담당 범위와 앞으로의 실행 순서는 [윤성용 천문 데이터 처리·AI 역할 명세](tess-processing-ai-role-spec.md)에서 한눈에 볼 수 있다. 문서 작성만으로 29번이 완료되는 것은 아니다.
 
-기준: [역할 분배](../team-role-allocation.md), [SRS v0.9](../requirements/planetory-requirements-spec.md), [데이터 규칙](data-guidelines.md), [Spark 규칙](spark-hadoop-guidelines.md). 상태표의 이전 규칙 대신 SRS v0.9의 변경 규칙을 우선한다.
+기준: 로컬 `develop` 커밋 `352290f5`의 [요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md), [역할 분배](../team-role-allocation.md), 상태표 v0.13, 용어 사전 v0.3, 와이어프레임 v0.6, [데이터 규칙](data-guidelines.md), [Spark 규칙](spark-hadoop-guidelines.md). 서로 다르면 요구사항 명세서 v0.12를 현재 작업 기준으로 사용한다. 명세서 자체 상태는 `팀 검토용 초안`이므로 TBD 수치는 팀 승인 전 확정으로 취급하지 않는다.
 
-> **2026-09-07 사용자 전달 팀 합의:** 배치에서 후보 신호를 자동 제거하고 잔차 BLS를 반복해 다음 Candidate를 생성하지 않는다. 배치는 원본 정제곡선의 BLS에서 후보표·모델·AI 결과를 만든다. 사용자가 후보를 매칭해 제거 조합을 바꿀 때만 EC2가 원본 정제곡선에서 잔차곡선과 잔차 주기도를 요청 시 계산해 제공하며, 그 계산으로 Candidate를 추가하거나 AI를 재실행하지 않는다. 이 합의는 현재 SRS 처리 흐름·DAT-05~07과 Jira 29 완료 조건의 `반복 제거` 문구보다 최신이므로 요구사항 문서와 Jira 문구의 정합성 갱신이 필요하다.
+> **기준 변경 기록:** 2026-09-07에는 배치 자동 반복 제거를 하지 않는다는 구두 전달을 기준으로 초안을 보완했다. 2026-09-09 사용자는 팀이 갱신한 요구사항 명세서 v0.12를 따르도록 요청했다. 따라서 현행 기획은 DAT-05~07의 **Silver 내부 반복 BLS**와 DAT-14의 **사용자 선택 EC2 온라인 잔차 계산**을 서로 다른 목적으로 모두 적용한다. 이전 단일 패스안은 현행 기준이 아니다.
 
 ## 1. 담당 역할과 목표
 
 기존 실험을 처음부터 다시 만드는 것이 아니라, 재사용 가능한 계산 커널을 검증하고 자동 후보 처리와 서비스 산출물로 확장한다.
 
-- 윤성용: 전처리, 원본 BLS 후보 탐색·검증·병합, 통과 모델, 외부 참조, AI 입력·추론, 배치 모델과 온라인 잔차 계산의 일치 기준.
+- 윤성용: 전처리, 원본·Silver 내부 반복 BLS, 후보 검증·병합, 통과 모델, 외부 참조, AI 입력·추론, Gold 과학 계약과 Silver–EC2 계산 일치 기준.
 - 김동혁: 수집·저장·Spark/Airflow 실행 환경, 공개 묶음 전달·전환·복구, 온라인 계산 인프라.
 - 강재민: 후보 조회·사용자 제출 매칭·성과 API, 온라인 잔차 요청·캐시·상태. 윤성용은 계산 의미와 검증 자료 제공.
 - 백지웅: 분석 그래프와 상호작용. 데이터 전달은 백엔드 API를 거치며 축·단위·축약 조건은 함께 합의.
@@ -57,7 +57,7 @@
 | DAT-02 전처리 | 기본 처리 있음 | Sector 경계·추가 마스크·예상 최대 duration 대비 평활 창 검증, 행별 사유 보존 |
 | DAT-03 화면 자산 | 곡선·주기도 계산 가능 | 단위·공백·버전·화면 축약 출력 계약 및 파일화 |
 | DAT-04 BLS | 격자와 일부 특징 있음 | 후보별 SDE 정의, SNR·관측 통과 수·Sector 일관성·마스크 편중 평가 통합 |
-| DAT-05~07 배치 반복 문구 | PoC는 사람 승인 뒤 잔차 BLS 반복 가능 | 최신 팀 합의는 배치 반복 Candidate 생성을 하지 않음. 원본 BLS 상위 피크를 품질·고조파 기준으로 후보화하고, 사용자 제거 조합의 잔차·주기도만 EC2에서 계산. SRS/Jira 정합성 수정 필요 |
+| DAT-05~07 내부 반복 BLS | PoC는 사람 승인 뒤 잔차 BLS 반복 가능 | 원본 BLS 후보를 모델링·제거하고 Silver 내부 잔차에서 후속 BLS를 반복하도록 자동화. 제거 QA, 종료 사유, 원본 재검증과 discoverable 근거 필요 |
 | 온라인 잔차 모델 검증 | 합성 모델 테스트, UI 마지막 후보 취소 | 후보 모델 적용 후 관측점 보존·겹친 신호·경계 왜곡·순서 독립성을 Silver–EC2 일치 검증에서 확인 |
 | 원본 재검증 | 원본에서 깊이 공동 적합 | 후보 승인용 원본 재검증과 원본 주기도의 discoverable 판단·근거 별도 구현 |
 | DAT-08 병합 | 피크 인접 병합만 있음 | 고유 후보 ID, 주기·위상·지속시간·실제 구간 기반 별칭·중복 관리 |
@@ -78,25 +78,29 @@
   → FITS 검증 / Bronze 변환
   → Sector별 품질 마스크·정규화·연속 구간 detrending
   → TIC별 정제곡선 결합
-  → 원본 주기도 / 여러 피크 품질 평가
-  → 원본 재검증 / 후보·고조파·별칭 병합 / transit model / discoverable 기록
+  → 원본 주기도 / 최강 피크 품질 평가 / transit model
+  → 품질 통과 모델 제거 / Silver 내부 잔차 BLS 반복 / 제거 QA·종료 사유
+  → 각 단계 후보의 원본 재검증 / 후보·고조파·별칭 병합 / discoverable 기록
   → 외부 참조·상태 연결 / AI 입력·배치 추론
-  → 후보표·원본 전 점·마스크·모델·버전 검증
+  → 후보표·원본 전 점·마스크·fold 기준 시각·모델·버전 검증
   → PublicationBundle → 인프라 검증·전송·공개
 
 사용자 후보 매칭 후 별도 온라인 경로:
 Gold 원본 정제곡선 + 사용자가 제거한 후보 모델 집합
-  → EC2 잔차곡선 계산 → 같은 설정의 잔차 주기도 계산 → 화면 제공·cache
-  → Candidate 추가·AI 재추론 없음
+  → QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY
+  → PERIODOGRAM_CALCULATING → COMPLETED/FAILED → 화면 제공·cache
 ```
 
 - 재처리 단위 제안: 원천 검증·전처리는 TIC/Sector/제품, 후보 탐색 이후는 TIC/입력 스냅샷/계산 버전. 경로와 실행 인자는 동혁님과 합의한다.
 - 입력 손상은 해당 입력 실패로 기록한다. 불완전한 Sector로 진행할지 TIC 전체를 보류할지는 결정 필요.
 - 유효 관측점 부족은 처리 실패·탐색 불가 사유로 기록한다. 단순히 '행성 후보 0개'와 합치지 않는다.
+- 정상 처리 후 후보표가 빈 무신호 결과는 실패와 구분해 기록하되, v0.12의 탐색 완료 정책에 따라 공개·발견·튜토리얼 대상에서는 제외할 수 있도록 서비스에 명시적인 상태를 전달한다.
 - transit model이 유효하지 않거나 EC2 잔차 일치 검증에 실패하면 해당 bundle을 공개하지 않는다.
 - AI 실패는 점수 0이 아니라 실패 상태로 남긴다. P0 전체 후보 추론 요건을 충족하지 못한 번들의 공개 처리는 팀 합의가 필요하다.
 - 동일 입력·설정의 재실행은 중복 후보와 이벤트를 만들지 않게 한다. 새 번들의 공개 실패 시 기존 공개본을 유지한다.
-- 배치 단계별 잔차·주기도는 생성하지 않는다. 사용자별 제거 조합의 잔차·주기도도 Gold에 사전 생성하지 않고 EC2가 요청 시 계산한다.
+- 배치 잔차·주기도는 후보 탐색과 제거 QA를 위해 Silver 내부에서 계산한다. 사용자 제공용 단계별 잔차·주기도는 Gold에 넣지 않고 EC2가 세션에 고정된 Bundle과 제거 조합으로 요청 시 다시 계산한다.
+- Silver의 단계별 잔차곡선·주기도 배열은 반복 계산 중에만 사용하고 지속 저장하지 않는다. 제거 QA·종료 근거는 후보·모델·설정 버전에 연결한 요약 지표와 사유로 남긴다.
+- 사용자는 현재 곡선의 전체 유효 관측점을 브라우저에서 선택 주기로 접고, 접힌 곡선에서만 `phase_start`·`phase_end`를 정한다. `epoch`와 `duration`은 `fold_reference_time_btjd`를 기준으로 브라우저가 미리보기하고 서버가 같은 공식으로 다시 계산한다. 시간 영역 곡선 선택, epoch·duration 숫자 직접 입력, `selection_space`는 사용하지 않는다.
 
 ## 5. 입출력 계약 초안
 
@@ -106,9 +110,9 @@ Gold 원본 정제곡선 + 사용자가 제거한 후보 모델 집합
 |---|---|---|
 | 입력 manifest | `tic_id:string` 식별자 (`259377017`), `sector:int` (`3`), `product_id:string`, `source_uri:string`, `retrieved_at:UTC timestamp`, `sha256:string`, `cadence_seconds:float` | 데이터·인프라 |
 | 정제곡선 | `point_id:int64`, `time_days:float64`, `normalized_flux:float64?`, `sector:int`, `original_quality:int64`, `valid:bool`, `exclusion_reasons:list<string>` | 배치·온라인 계산 |
-| 곡선 메타 | `time_system:string`, `time_reference_offset_days:float64`, `flux_unit:string`, `preprocessing_version:string`, `input_snapshot_id:string` | 백엔드·프론트·AI |
+| 곡선 메타 | `time_system:string`, `time_reference_offset_days:float64`, `fold_reference_time_btjd:float64`, `flux_unit:string`, `preprocessing_version:string`, `input_snapshot_id:string` | 백엔드·프론트·AI |
 | 주기도 | `period_days:float64[]`, `power:float64[]`, `periodogram_config_version:string`, `curve_ref:string` | 백엔드·프론트 |
-| 후보 | `candidate_id:string` 안정 ID, `tic_id:string`, `period_days/t0_days/duration_days/depth:float64`, `source_peak_rank:int`, `snr/sde:float64?`, `observed_transit_count:int`, `discoverable:bool`, `qa_status:string`, `qa_reasons:list<string>` | 백엔드·AI |
+| 후보 | `candidate_id:string` 안정 ID, `tic_id:string`, `period_days/t0_days/duration_days/depth:float64`, `removal_step:int`, `source_curve_stage:string`, `source_peak_rank:int`, `snr/sde:float64?`, `observed_transit_count:int`, `discoverable:bool`, `qa_status:string`, `qa_reasons:list<string>`, `transit_model_ref:string` | 백엔드·AI. Gold Candidate에는 사용자용 잔차 경로나 단계별 잔차 참조를 두지 않음 |
 | 모델 | `candidate_id:string`, `shape:string` (PoC는 box), `parameters:object`, `residual_model_version:string`, `baseline:float64`의 저장 범위 결정 | 배치·EC2 |
 | 외부 참조 | `candidate_id:string`, `source:string`, `external_id:string`, `raw_disposition:string?`, `retrieved_at:UTC timestamp`, `snapshot_id:string`, `match_status:string` | 백엔드 |
 | AI 결과 | `candidate_id:string`, `score:float64?`, `execution_status:string`, `decision_band:string?`, `model_version/checkpoint_hash/input_version/threshold_version:string`, `curve_ref:string` | 백엔드 |
@@ -122,6 +126,7 @@ Gold 원본 정제곡선 + 사용자가 제거한 후보 모델 집합
 - `P1` 같은 화면 순위 ID는 재실행·번들 간 영구 식별자로 쓰지 않는다. 신규 Sector에서 후보 동일성을 유지하는 규칙은 재민님과 합의한다.
 - PoC의 baseline은 모든 승인 후보 공동 적합 결과다. 온라인의 임의 제거 부분집합에 baseline을 어떻게 적용할지 합의하고 빈 제거 집합은 원본과 일치하는지 검증한다.
 - 화면 축약·AI 입력·계산 전 점은 서로 다른 산출물이다. 축약 시 좁은 감광이 유실되는지 검증한다.
+- `fold_reference_time_btjd`는 각 LightCurve에서 DAT-02 필터 후 time·flux가 유한한 원본 정제곡선 시각의 중앙값으로 한 번 계산해 float64로 저장한다. 브라우저·서버·Silver 잔차·EC2 잔차가 같은 값을 상속하고 다시 산정하지 않는다.
 
 ### 5.1 원천 데이터 구조 — TESS SPOC LC 1차 정리
 
@@ -350,7 +355,7 @@ TOI-270 세 Sector의 cadence는 약 2분이고 기존 2일 창은 1,441점이�
 
 1. 5.4절처럼 Sector·제품 경계를 먼저 분리하고 각 Sector 내부의 연속 구간별로 trend를 계산한다.
 2. Savitzky–Golay 2차 필터를 기존 비교 기준으로 유지한다. 1·2·4일 창은 초기 비교 후보일 뿐 최종 선택값이 아니다.
-3. 창 길이는 탐색할 최대 감광 지속시간보다 충분히 길어야 한다. 현재 PoC의 BLS 지속시간 범위는 0.5~8시간이며, 후보 창과 최대 지속시간의 비율을 실행 설정에 기록한다. 필요한 최소 비율은 주입 실험 후 결정한다.
+3. DAT-02에 따라 창 길이는 예상 최대 감광 지속시간의 3배 이상이어야 한다. 현재 PoC의 BLS 지속시간 범위는 0.5~8시간이며 후보 창과 최대 지속시간의 비율을 실행 설정에 기록한다. 3배보다 큰 실제 창과 최대 감광 지속시간은 주입 실험으로 정한다.
 4. 구간이 창보다 짧을 때 중앙값으로 조용히 대체하지 않는다. `detrend_method=segment_median`, 사용 창, 구간 길이와 fallback 사유를 기록한다. 너무 짧아 검증할 수 없는 구간은 보류하는 대안도 비교한다.
 5. trend가 NaN·Inf·0 이하이면 해당 구간을 성공 결과로 내보내지 않고 실패 사유를 기록한다. 나눗셈 결과도 유한값인지 확인한다.
 6. 디트렌딩과 이상치 처리를 별도 단계로 기록한다. 상방 clipping은 우주선·플레어성 밝아짐의 영향을 줄이는 비교 기준으로 유지하고, 감광을 지울 수 있는 하방 clipping은 자동으로 추가하지 않는다.
@@ -403,7 +408,7 @@ TOI-270 세 Sector의 cadence는 약 2분이고 기존 2일 창은 1,441점이�
 - **1차 탐색 곡선:** transit 위치를 모르는 상태에서 2일·4일 Savitzky–Golay와 이상치에 덜 민감한 대안을 비교한다. 동일 BLS 설정으로 주입 주기 회수율과 오검출을 평가한다. 새 라이브러리 도입은 대안의 효과가 확인된 뒤 검토한다.
 - **후보 정밀화 곡선:** 1차 BLS가 제시한 주기·중심·지속시간 주변을 trend 계산에서 임시 제외하고, 주변 비감광 점으로 trend를 다시 계산한 뒤 원본 정규화 flux에 적용한다. 이 곡선으로 깊이·지속시간을 다시 측정한다.
 - **마스크 오차 검증:** 정답 위치를 그대로 사용하는 실험만으로 평가하지 않는다. 후보 중심과 지속시간을 의도적으로 어긋나게 하고, 부분 마스킹·겹친 후보·구간 경계·관측점 부족에서 결과가 어떻게 실패하는지 기록한다.
-- **정밀화 제한:** 후보마다 결과가 유리해지도록 무제한 재적합하지 않는다. 정밀화 횟수·허용 범위·사용한 모델 버전을 고정하고, 원본 정제곡선에서 최종 재검증한다. 정밀화 뒤 잔차 BLS로 새 Candidate를 생성하지 않는다.
+- **정밀화 제한:** 후보마다 결과가 유리해지도록 무제한 재적합하지 않는다. 정밀화 횟수·허용 범위·사용한 모델 버전을 고정하고 원본 정제곡선에서 최종 재검증한다. 승인된 transit model은 Silver 내부 반복 BLS의 제거 입력으로 사용하되, 제거 QA가 실패하면 이후 반복 후보를 공개하지 않고 직전 정상 단계로 복구한다.
 
 이 안은 감광 위치를 미리 알아야 하는 마스킹을 최초 탐색에 사용할 수 없다는 점을 반영한다. 최초 탐색의 신호 보존과 후보가 생긴 뒤 파라미터 편향을 줄이는 문제를 별도로 검증한다.
 
@@ -411,9 +416,9 @@ TOI-270 세 Sector의 cadence는 약 2분이고 기존 2일 창은 1,441점이�
 
 #### 현재 결정 상태
 
-- **확인:** 기존 2일 창의 계산 방식, Sector 4 짧은 구간의 중앙값 fallback, 2일 기준 상방 제외 2점.
+- **확인:** 기존 2일 창의 계산 방식, Sector 4 짧은 구간의 중앙값 fallback, 2일 기준 상방 제외 2점, DAT-02의 `예상 최대 감광 길이 × 3 이상` 하한.
 - **제안:** Sector별 연속 구간 처리, Savitzky–Golay를 첫 비교 기준으로 유지, fallback·수치 검증·설정 기록, 주입 신호 기반 평가.
-- **TBD:** 최종 디트렌딩 방법, 창 길이, 최대 감광 지속시간과 창의 최소 비율, 짧은 구간 처리, 상방 clipping 임계값, 통과 수치.
+- **TBD:** 최종 디트렌딩 방법, 3배 하한을 만족하는 실제 창 길이와 예상 최대 감광 지속시간, 짧은 구간 처리, 상방 clipping 임계값, 통과 수치.
 
 ### 5.6 BLS 후보 생성·품질 기준 설계 v0.1
 
@@ -497,25 +502,29 @@ TESS SPOC의 7.1σ TCE 기준은 외부 비교값으로 조사하되 Planetory S
 - 배율 1로 다른 후보와 직접 일치하면 그 후보를 우선한다. 대표 주기는 단순 최고 power가 아니라 원본 재검증·관측 횟수·Sector 일관성을 함께 비교한다.
 - 비슷한 깊이의 주극소·부극소가 있는 식쌍성은 실제 공전주기의 1/2가 더 강할 수 있다. 기존 CM Draconis 설명과 합성 테스트가 이 사례를 보여주므로 자동으로 행성 주기로 해석하지 않는다.
 
-#### 단일 패스 BLS와 처리 종료 — 팀 합의 반영
+#### Silver 내부 반복 BLS와 처리 종료 — v0.12 기준
 
-배치는 원본 정제곡선에서 periodogram을 한 번 계산하고, 저장할 상위 raw peak들을 같은 원본에서 품질 평가·고조파 병합·원본 재검증한다. 후보 모델을 제거한 잔차에서 BLS를 다시 실행해 새 Candidate를 만드는 자동 반복은 하지 않는다. AI 결과도 원본 BLS 후보를 추가하거나 제거하지 않는다.
+배치는 원본 정제곡선의 BLS를 `iteration=0`으로 시작한다. 각 반복에서 최강 독립 피크의 품질을 평가하고, 통과하면 transit model을 적합해 현재 곡선에서 나눈다. 제거 전후 power 감소, 모델 경계 돌출, 다른 후보 훼손, 겹친 transit 왜곡과 NaN/Inf 발생을 검사한 뒤 정상 잔차에서 다음 BLS를 실행한다. 각 단계 후보는 최종 공개 전에 원본 정제곡선에서 다시 검증하고 고조파·중복 후보를 하나의 고유 candidate ID로 병합한다.
 
-배치 BLS 결과 상태는 다음처럼 구분하는 안을 제안한다.
+반복 종료 사유는 실행마다 명시적으로 기록한다.
 
-- `completed_with_candidates`: 원본 피크 중 품질·원본 재검증을 통과한 고유 후보가 있음
-- `completed_no_quality_candidate`: 계산은 성공했으나 품질을 통과한 고유 후보가 없음
-- `insufficient_observations`: 유효 관측점·baseline·관측 transit 수가 탐색에 부족
-- `numerical_failure`: periodogram·특징·모델 계산 실패
-- `candidate_validation_failed`: 피크는 있으나 필수 파라미터나 원본 재검증이 실패
+- `no_quality_peak`: 현재 곡선의 최강 독립 피크가 품질 기준을 통과하지 못함
+- `insufficient_observations`: 유효 관측점·baseline·관측 transit 수가 탐색에 부족함
+- `duplicate_or_harmonic_only`: 새 피크가 기존 고유 후보의 중복·고조파뿐임
+- `removal_qa_failed`: 제거가 경계 돌출·다른 후보 훼손·비유한값 등 검증에 실패함
+- `candidate_validation_failed`: 잔차에서 찾았으나 원본 재검증 또는 필수 파라미터 검증에 실패함
+- `numerical_failure`: periodogram·특징·모델 계산 자체가 실패함
+- `max_iterations_reached`: 안전 상한에 도달함. 상한값은 벤치마크 뒤 설정 버전으로 확정
 
-반복 횟수·`max_iterations_reached`·잔차 탐색 종료 사유는 최신 팀 합의에서 사용하지 않는다. 사용자 분석 중 후보 제거는 관측점을 삭제하지 않고 Gold의 후보 모델로 나눈 뒤 EC2가 잔차곡선과 잔차 주기도를 계산해 보여준다. 이 온라인 계산은 새 Candidate·외부 매칭·AI 결과를 만들지 않으며, 모델 수치 유효성과 Silver–EC2 일치는 7.4절에서 검증한다.
+`removal_qa_failed`이면 실패 제거 결과와 그 이후 후보를 공개하지 않고 직전 정상 단계까지의 후보만 유지한다. 품질 미달과 계산 실패를 모두 후보 0개로 합치지 않는다. AI 결과는 BLS 후보의 생성·제거 기준으로 사용하지 않는다.
+
+사용자 분석의 잔차 단계는 이 배치 반복 이력의 재생이 아니다. EC2는 세션에 고정된 Gold Bundle과 사용자가 실제로 매칭한 후보 조합을 받아 원본에서 잔차곡선을 먼저 계산하고, 그 잔차로 주기도를 계산한다. 이 온라인 계산은 Candidate·외부 매칭·AI 결과를 추가하지 않는다.
 
 #### discoverable 제안
 
-후보가 BLS 품질·transit model 검증·원본 재검증을 통과한 뒤, 사용자가 최초로 제공받는 원본 주기도에서 대표/alias 피크를 실제로 찾을 수 있는지를 별도로 기록한다. `discoverable=true`는 다음 최소 근거를 모두 연결하는 안을 제안한다.
+후보가 BLS 품질·transit model 검증·원본 재검증을 통과한 뒤, 원본 또는 EC2와 동일한 모델·설정을 쓴 Silver 내부 잔차 주기도에서 사용자가 해당 단계에 찾을 수 있는지를 별도로 기록한다. `discoverable=true`는 다음 최소 근거를 모두 연결하는 안을 제안한다.
 
-- 원본 정제곡선과 어느 `periodogram_config_version`에서 보이는지
+- 원본 또는 어느 제거 후보 조합의 잔차에서 보이는지와 해당 `periodogram_config_version`
 - 대표 주기 또는 허용 alias 주변의 피크 범위
 - 사용자 제공 품질 마스크 후 실제 감광 관측 수
 - 화면 축약으로 감광·피크가 사라지지 않는지
@@ -525,9 +534,9 @@ SNR이 높다는 이유만으로 discoverable을 자동 참으로 두지 않는�
 
 #### 검증 계획과 결정 대기 사항
 
-단일·다중 행성, 같은 신호의 1/2·2배, 식쌍성, 항성 변동, 무신호, 관측 공백·마스크 편중과 한 Sector만 지지하는 합성/라벨 데이터를 포함한다. period·duration·depth·관측 횟수 구간별 회수율, 원본 periodogram의 고유 후보 정밀도, 고조파 대표값 정확도와 계산 시간을 보고한다.
+단일·다중 행성, 같은 신호의 1/2·2배, 식쌍성, 항성 변동, 무신호, 관측 공백·마스크 편중과 한 Sector만 지지하는 합성/라벨 데이터를 포함한다. period·duration·depth·관측 횟수 구간별 회수율, 반복 단계별 신규 고유 후보 회수율·거짓 후보 수, 고조파 대표값 정확도, 제거 QA 실패율과 계산 시간을 보고한다.
 
-TBD는 period/duration 범위, 격자 방식·밀도, 원본에서 평가할 raw peak 수, SDE 정의, SDE·SNR 임계값, 최소 transit·점 수, Sector 일관성·마스크 편중 기준, 추가 고조파, 대표 후보 선정, 온라인 잔차 모델 검증 수치와 discoverable 기준이다. 각 값은 `bls_config_version`, `residual_model_version`, `candidate_quality_version`으로 결과에 연결한다.
+TBD는 period/duration 범위, 격자 방식·밀도, SDE 정의, SDE·SNR 임계값, 최소 transit·점 수, Sector 일관성·마스크 편중 기준, 추가 고조파, 대표 후보 선정, 반복 안전 상한·종료 임계값, 제거 QA 수치, 온라인 잔차 모델 검증 수치와 discoverable 기준이다. 각 값은 `bls_config_version`, `residual_model_version`, `candidate_quality_version`으로 결과에 연결한다.
 
 ### 5.7 BLS 기준값 벤치마크 실험 설계 v0.1
 
@@ -547,7 +556,7 @@ TBD는 period/duration 범위, 격자 방식·밀도, 원본에서 평가할 raw
 | 단계 | 목적 | 입력과 수행 | 다음 단계로 넘어가는 조건 |
 |---|---|---|---|
 | 0. 재현 확인 | 실행 환경과 측정 코드가 같은지 확인 | 고정된 TOI-270 Sector 3·4·5와 현재 PoC 기본값으로 5.6절 결과·기존 테스트 재현 | 입력 checksum, 코드·의존성·설정 버전, 핵심 수치와 실패 여부 기록 |
-| 1. 작은 기능 확인 | 지표·고조파·실패 분류가 의도대로 계산되는지 확인 | 무잡음 단일 box, 같은 깊이의 주·부극소, 무신호, 두 신호, 공백·마스크 집중 사례를 소수 실행 | 정답 매칭·고조파 분류·단일 패스 결과 상태가 사람이 계산한 기대와 일치 |
+| 1. 작은 기능 확인 | 지표·고조파·실패 분류가 의도대로 계산되는지 확인 | 무잡음 단일 box, 같은 깊이의 주·부극소, 무신호, 두 신호, 공백·마스크 집중 사례를 소수 실행 | 정답 매칭·고조파 분류·반복 종료 상태가 사람이 계산한 기대와 일치 |
 | 2. 조정 세트 | 격자·품질 임계값의 후보를 좁힘 | 아래 합성 주입과 라벨 있는 실제 표본의 조정용 TIC에서 회수율·가짜 후보·비용 비교 | 선택 이유와 탈락한 설정을 함께 기록하고 임시 설정 버전 잠금 |
 | 3. 고정 평가 세트 | 선택한 설정의 일반화 확인 | 조정에 쓰지 않은 TIC·Sector와 난수 seed에서 임시 설정을 변경하지 않고 1회 평가 | 전체·구간별 지표와 실패 사례 공개. 결과를 보고 설정을 바꾸면 새 버전으로 단계 2부터 재실행 |
 
@@ -558,7 +567,7 @@ TBD는 period/duration 범위, 격자 방식·밀도, 원본에서 평가할 raw
 | 묶음 | 반드시 포함할 사례 | 용도와 주의점 |
 |---|---|---|
 | 합성 단일 신호 | period 1·5·20일, duration 0.5·2·8시간, depth 500·1,000·3,000·10,000ppm, 시작·중앙·끝 위상 | 탐색 범위와 강도별 회수 경계를 확인하는 초기 대표점. 최종 범위는 실제 대상 분포 검토 후 확정 |
-| 합성 다중 신호 | 강한 신호와 약한 신호, 비슷한 세기의 두 신호, transit이 일부 겹치는 신호 | 원본 periodogram 상위 피크만으로 각 신호를 얼마나 후보화하는지와 단일 패스 방식의 한계 확인 |
+| 합성 다중 신호 | 강한 신호와 약한 신호, 비슷한 세기의 두 신호, transit이 일부 겹치는 신호 | 반복별 회수 순서, 약한 후속 신호 회수율, 제거 왜곡·중복 후보와 종료 사유 확인 |
 | 고조파·식쌍성 | 단일 신호의 P/2·2P 피크, 깊이가 같은/다른 주극소·부극소 | 대표 주기 선택, alias 보존, 홀짝·secondary 지표가 신호 품질과 분류를 혼동하지 않는지 확인 |
 | 관측 조건 스트레스 | 단일 Sector, Sector별 깊이 차이, 시작·끝 경계, 큰 시간 공백, 예상 transit 일부 또는 대부분 마스킹 | Sector 일관성·마스크 편중을 pass/review/fail로 나눌 근거 확보 |
 | 무신호 대조군 | 같은 cadence·공백·마스크를 유지한 잡음 곡선, transit을 넣지 않은 실제 정제곡선의 안전한 대조 입력 | TIC당 품질 통과 가짜 후보 수 측정. 실제 곡선은 알려지지 않은 신호가 있을 수 있어 순수 음성 정답으로 단정하지 않음 |
@@ -639,7 +648,7 @@ SDE와 SNR 임계값을 각각 따로 고른 뒤 조합하지 않는다. 조정 
 
 #### 온라인 잔차 계산 벤치마크
 
-사용자가 후보를 매칭한 상황을 재현해 Gold 원본 정제곡선에 선택 후보 모델을 적용하고, EC2가 잔차곡선과 잔차 주기도를 계산한다. 이 실험은 잔차에서 새 Candidate를 찾거나 AI를 다시 실행하는 실험이 아니다.
+사용자가 후보를 매칭한 상황을 재현해 Gold 원본 정제곡선에 선택 후보 모델을 적용하고, EC2가 잔차곡선과 잔차 주기도를 계산한다. Silver 내부 반복 탐색 결과와 같은 모델·설정에서 수치가 일치하는지 검증하되, EC2 요청 자체는 새 Candidate를 찾거나 AI를 다시 실행하지 않는다.
 
 - 빈 선택: 제거 후보가 없으면 원본 곡선·원본 주기도와 일치한다.
 - 단일 선택: 선택 후보의 모델만 적용되고 시간·관측점·마스크가 보존된다.
@@ -658,14 +667,14 @@ box 모델과 더 실제적인 transit model은 같은 고정 후보에서 잔�
 |---|---|
 | `benchmark-manifest` | run ID, 입력 snapshot/checksum, TIC 분할, 주입 목록·seed, 코드·의존성, 전처리/BLS/품질/제거 버전 |
 | 후보별 결과 표 | 입력·주입 ID, 원본 peak rank, period·epoch·duration·depth, power·SDE·SNR, transit·Sector·마스크 지표, 매칭 종류, 품질 상태·사유 |
-| TIC별 BLS 결과 표 | raw peak·고유 후보 수, 단일 패스 결과 상태, 처리 시간, 실패 단계 |
+| TIC별 BLS 결과 표 | 반복 수·단계별 peak·신규 고유 후보 수, 종료 사유, 처리 시간, 실패 단계 |
 | 요약 보고서 | 전체·구간별 지표, 설정 비교, 대표 성공·실패 그림, 선택안·TBD·알려진 한계 |
 
 작은 요약 CSV/JSON과 보고서만 MR에 포함할지는 데이터 관리 규칙과 팀 리뷰로 정한다. 어떤 결과도 `bls_config_version`, `candidate_quality_version`, `residual_model_version` 없이 비교하지 않는다.
 
 #### 이 설계로 결정할 것과 결정하지 않는 것
 
-이 벤치마크는 원본 BLS 격자, 품질 게이트, 고조파·중복 처리, 단일 패스 결과 상태와 온라인 잔차 수치 검증의 근거를 만든다. AI가 행성 후보인지 판정하는 임계값, 외부 TOI/TCE의 disposition, 사용자의 정답 판정은 별도 평가 대상이다. BLS가 품질을 통과했다는 사실만으로 행성이라고 확정하지 않는다.
+이 벤치마크는 BLS 격자, 품질 게이트, 반복 제거·종료, 제거 QA, 고조파·중복 처리와 Silver–EC2 잔차 수치 검증의 근거를 만든다. AI가 행성 후보인지 판정하는 임계값, 외부 TOI/TCE의 disposition, 사용자의 정답 판정은 별도 평가 대상이다. BLS가 품질을 통과했다는 사실만으로 행성이라고 확정하지 않는다.
 
 ### 5.8 외부 TCE·TOI·Archive·ExoFOP 연결 설계 v0.1
 
@@ -812,13 +821,13 @@ AI 입력의 단위는 `candidate_id + publication/input snapshot + ai_input_ver
 
 화면 표시용 축약 배열을 AI 입력으로 사용하지 않는다. 모델이 기대하는 201/81 등 고정 길이는 프론트 그래프 점 수가 아니라 AI 전처리 버전의 계약이다. 외부 disposition과 AI 학습 정답은 입력 Feature에 넣지 않아 label 누수를 막는다.
 
-팀 합의에 따라 AI 입력은 배치 자동 잔차 단계가 아니라 `original_cleaned` 곡선에서 후보별로 접어 만든다. 사용자가 후보를 제거해 만든 EC2 잔차는 화면 제공용이며 AI 입력을 다시 생성하거나 재추론하는 trigger가 아니다. 선택 모델이 원래 SPOC TCE 잔차나 다른 전처리를 기대한다면, Planetory 원본 정제곡선 입력과의 차이를 모델 적용성 실험에서 확인하고 임의로 제거 단계를 되살리지 않는다. `curve_stage=original_cleaned`, `preprocessing_version`과 원본 curve hash를 입력에 저장한다.
+AI 입력 곡선 단계는 아직 확정하지 않는다. 후보가 발견된 Silver 반복 단계의 곡선과 원본 재검증 곡선 중 무엇이 선택 모델의 공식 학습 전처리와 맞는지 실행 가능성 실험에서 비교한다. 어느 쪽을 선택하든 `curve_stage`, 제거 후보 조합, `preprocessing_version`, 원본 curve hash와 입력 배열 hash를 저장한다. 사용자가 만든 EC2 온라인 잔차는 화면 탐색용이며 AI 입력을 다시 생성하거나 재추론하는 trigger가 아니다.
 
 #### 입력 스키마 제안
 
 | 묶음 | 필드 예시 | 검증 |
 |---|---|---|
-| 식별·계보 | `candidate_id`, `tic_id`, `input_snapshot_id`, `curve_stage=original_cleaned` | Candidate·원본 곡선·외부/라벨 snapshot이 서로 다른 버전으로 섞이지 않음 |
+| 식별·계보 | `candidate_id`, `tic_id`, `input_snapshot_id`, `curve_stage`, `iteration`, `removed_candidate_ids` | Candidate·곡선 단계·외부/라벨 snapshot이 서로 다른 버전으로 섞이지 않음 |
 | 후보 기하 | `period_days`, `epoch_btjd`, `duration_hours`, `depth`, `snr`, `sde` | 단위·유한값·양수 범위, 사용한 BLS 버전 |
 | 시계열 view | `global_view`, `local_view`, 선택 모델이 요구하는 odd/even·secondary view | 이름·길이·dtype·정규화와 빈 bin mask가 모델 명세와 일치 |
 | 추가 Feature | transit/stellar 수치, centroid·difference image, 각 feature의 source·missing flag | 실제 값과 대체값 구분. 임의 0 채움 금지 |
@@ -878,7 +887,7 @@ AI 입력의 단위는 `candidate_id + publication/input snapshot + ai_input_ver
 | 기존 테스트 | `pytest -q`: 20 passed in 8.60s |
 | 앱 초기 검증 | Streamlit AppTest 초기 실행 예외 없음, 로컬 서버 health 응답 ok |
 
-11.3205일과 2.8308일 피크를 각각 별개의 행성 발견으로 해석하지 않는다. 첫 주기의 약 2배·1/2배에 해당하며, 고조파/별칭 검증이 필요함을 보여준다. 세 행성 복구 성공, 정확도·대규모 처리 성능을 이번 결과로 주장할 수 없다. 최신 팀 합의에서는 자동 잔차 BLS 반복을 수행하지 않는다. 기존 테스트는 합성 모델·기하·프리셋 등을 검증하며 실제 샘플의 전체 과학적 정확성을 증명하지 않는다.
+11.3205일과 2.8308일 피크를 각각 별개의 행성 발견으로 해석하지 않는다. 첫 주기의 약 2배·1/2배에 해당하며, 고조파/별칭 검증이 필요함을 보여준다. 세 행성 복구 성공, 반복 BLS 정확도·대규모 처리 성능을 이번 결과로 주장할 수 없다. 기존 테스트는 합성 모델·기하·프리셋 등을 검증하며 실제 샘플의 전체 과학적 정확성이나 DAT-05~07 자동 반복 처리를 증명하지 않는다.
 
 ### 재현 명령
 
@@ -938,11 +947,11 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 | 단계 | 기존 PoC에서 확인한 사실 | 서비스 설계 제안 | 검증·결정할 것 |
 |---|---|---|---|
 | 입력 확인 | TIC·Sector 확인, 같은 TIC 여부와 Sector 중복 검사 | 제품·시간계·단위·필수 컬럼을 확인하고 누락을 명시적 실패로 기록 | 누락 시 복구 가능 범위, 다른 제품이 중복될 때 선택 정책 |
-| 관측점 선택 | QUALITY=0, 시간·flux dropna | 이 규칙을 비교 기준으로 고정. NaN·Inf 유효성은 품질 비트와 별도 검사하고 원본 행과 제외 사유 보존 | 품질 비트별 허용 범위. 무조건 더 많은 점을 남기는 것을 개선으로 보지 않음 |
+| 관측점 선택 | QUALITY=0, 시간·flux dropna | 이 규칙을 비교 기준으로 고정. NaN·Inf 검사와 Sector 시작·궤도 근점 추가 마스크를 별도 사유로 기록하고 원본 행 대응 보존 | 품질 비트별 허용 범위, Sector 시작·근점 마스크의 실제 폭과 근거. 무조건 더 많은 점을 남기는 것을 개선으로 보지 않음 |
 | 시간·중복 처리 | Sector 내 시간 정렬, 중복 시각 처리는 명시되지 않음 | 시간 정렬 후 중복을 탐지해 기록. 임의 평균이나 삭제 없이 처리 정책 검토 | 같은 시각의 제품·cadence 차이, 대표 관측점 선택 또는 보류 조건 |
 | 정규화 | Sector별 유한한 양수 중앙값으로 나눔 | 우선 비교 기준으로 유지하고 중앙값을 함께 저장 | 비정상 중앙값은 실패 보고. 실제 관측·감광 범위에서 기준이 적절한지 비교 |
 | 구간 분리 | Sector 결합 뒤 시간 공백 0.5일 초과에서 분리 | Sector 경계에서도 반드시 분리하고 Sector 내부 시간 공백을 추가로 구분하는 안 비교 | 공백 기준값, 짧은 구간 처리, 경계 부근 신호 왜곡 |
-| 디트렌딩 | 기본 2일 Savitzky–Golay 창, 짧은 구간은 중앙값. 추정 trend로 flux를 나눔 | 같은 방법에서 구간 분리와 창 길이의 영향을 먼저 비교. trend가 비유한·0 이하인 경우 실패/마스크 기록 | 감광 지속시간별 창 길이 적합성, 짧은 구간 최소 길이·대체 처리 |
+| 디트렌딩 | 기본 2일 Savitzky–Golay 창, 짧은 구간은 중앙값. 추정 trend로 flux를 나눔 | DAT-02의 예상 최대 감광 길이 3배 이상 하한을 지키며 구간 분리와 창 길이를 비교. trend가 비유한·0 이하인 경우 실패/마스크 기록 | 예상 최대 감광 지속시간, 실제 창, 짧은 구간 최소 길이·대체 처리 |
 | 이상치 처리 | 위쪽만 기본 5-sigma clipping | 기존 처리를 비교 기준으로 두고 제거점 위치·개수 기록. 밝기가 낮다는 이유만으로 하방 clipping을 추가하지 않음 | 실제 잡음 감소, 경계 부작용, 임계값과 제외 사유 |
 | 결합·검수 | 정제 배열과 전체 요약 반환 | Sector별 처리가 검증된 곡선을 같은 TIC·시간 기준으로 결합. 부족/실패와 후보 0개를 분리 | 일부 Sector 실패 시 TIC 전체 보류 또는 부분 처리 정책 |
 
@@ -1000,17 +1009,17 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 
 이 설계안 작성만으로 품질 정책이나 최적 전처리 방법을 확정하지 않는다. 29번 완료 판단은 실제 Jira 조건과 교차 리뷰·문서 MR·결과물 등록을 함께 확인한다.
 
-### 7.2 Silver 내부와 Gold 제공 경계 v0.1
+### 7.2 Silver 내부와 Gold 제공 경계 v0.2 — 명세서 v0.12 반영
 
-작성일: 2026-09-07. 상태: **팀 인터페이스 검토 전 제안**. Silver는 배치 계산·진단·재처리용이고 온라인 API가 직접 읽지 않는다. Gold `PublicationBundle`은 사용자가 분석하는 데 필요한 검증된 입력과 결과만 포함하며 EC2가 공개한다.
+작성일: 2026-09-07, v0.12 대조: 2026-09-09. Silver는 배치 계산·진단·재처리용이고 온라인 API가 직접 읽지 않는다. Gold `PublicationBundle`은 명세서 EXP-01·DAT-11의 검증된 입력과 결과만 포함하며 EC2가 공개한다. DAT-05에 따라 단계별 잔차곡선·주기도 배열은 지속 저장하지 않는다. Gold의 물리 파일 형식·경로·용량과 EC2 캐시 보존기간은 DEC-35의 별도 아키텍처 Task에서 정한다.
 
-| 자료 | Silver 내부 | Gold 제공 | 이유 |
+| 자료 | Silver 계산·진단 | Gold 제공 | 이유 |
 |---|---:|---:|---|
 | 원천 행 대응·Sector별 trend·정규화 통계·제외 상세 | O | 요약/필요 마스크만 | 전처리 진단과 재현용. 원천 전체 진단을 온라인에 노출하지 않음 |
-| 원본 정제곡선의 전 관측점·시간·flux·품질 마스크 | O | O | 화면과 EC2 잔차 계산의 canonical 입력 |
+| 원본 정제곡선의 전 관측점·시간·flux·품질 마스크·`fold_reference_time_btjd` | O | O | 화면 접기와 EC2 잔차 계산의 canonical 입력. 별도 200-bin 배열을 분석 원본으로 사용하지 않음 |
 | 원본 정제곡선의 BLS periodogram | O | O | 최초 사용자 탐색 제공 |
-| 배치 단계별 잔차곡선·잔차 periodogram | X | X | 최신 팀 합의로 배치 자동 반복을 하지 않음. 사용자 선택 조합은 EC2가 요청 시 계산 |
-| raw peak·품질 실패 후보·종료 진단 | O | X | 임계값 검증과 운영 진단용 |
+| 배치 단계별 잔차곡선·잔차 periodogram 배열 | 실행 중 O, 지속 저장 X | X | DAT-05~07 후보 탐색·제거 QA용 내부 계산. 단계별 배열은 저장하지 않고 Gold에도 넣지 않음 |
+| raw peak·품질 실패 후보·반복 종료 진단 | O | X | 임계값 검증과 운영 진단용 |
 | 품질·transit model·원본 재검증을 통과한 후보 | O | O | 사용자 매칭 후보표의 기준 |
 | 후보별 transit model 파라미터·모델 버전 | O | O | EC2가 임의 제거 조합을 같은 수식으로 재생성 |
 | transit model 검증 배열·중간 최적화 로그 | O | X | 온라인 잔차 수식 검증용. Gold에는 상태·요약·버전만 |
@@ -1020,16 +1029,16 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 | 후보별 AI 원점수·상태·모델/입력/임계값 버전 | O | O | 제출 후 참고 결과 제공 |
 | bundle manifest·파일 hash·행 수·모든 계약 버전 | O | O | 원자적 공개와 혼합 버전 방지 |
 
-최신 팀 합의에 따라 배치 단계별 잔차 자체를 만들지 않고 Gold에도 넣지 않는다. SRS 처리 흐름·DAT-05~07과 DAT-11의 `단계별 잔차`·자동 반복 문구, 데이터 가이드의 `lightcurve-ui` 축약 예시는 정합성 수정이 필요하다. Gold 곡선은 단순 화면 샘플이 아니라 **원본 정제곡선 전 점과 품질 마스크**여야 하며, 프론트용 축약이 필요하면 canonical 배열과 별도 파생물로 구분한다.
+Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 계산하며 단계별 곡선·주기도 배열을 지속 저장하지 않는다. 제거 QA 요약·종료 사유·후보 반복 단계·모델과 설정 버전은 재현 근거로 남긴다. Gold에는 **원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·원본 주기도·후보표·후보별 통과 모델·AI 결과·외부 상태·계산 설정 버전**을 넣고 사용자용 단계별 잔차·주기도는 넣지 않는다. EC2는 세션에 고정된 Bundle과 사용자가 고른 제거 조합으로 온라인 잔차를 계산한다. 데이터 가이드의 `lightcurve-ui`·`periodogram-ui`는 실제 파일 계약을 확정하기 전 예시이므로, 분석 canonical 전 점과 화면 최적화 파생물을 혼동하지 않는다.
 
 #### Gold 최소 계약 제안
 
 | 객체 | 필수 필드·규칙 |
 |---|---|
 | `LightCurvePoint` | `bundle_id`, `tic_id`, `point_id:int64`, `time_btjd:float64`, `normalized_flux:float64?`, `sector:int`, `quality_raw:int64`, `valid:bool`, `exclusion_reasons:string[]`; `point_id`와 시간 정렬 안정성 보장 |
-| `LightCurveMeta` | 시간계·기준점·flux 의미, 입력 snapshot, Sector·제품 목록, point/valid 수, `preprocessing_version`, 배열 hash |
+| `LightCurveMeta` | 시간계·기준점·flux 의미, 각 LightCurve의 `fold_reference_time_btjd:float64`, 입력 snapshot, Sector·제품 목록, point/valid 수, `preprocessing_version`, 배열 hash |
 | `OriginalPeriodogram` | 같은 길이의 `period_days`·`power`, 목적함수·duration/grid 설정과 `periodogram_config_version`, 입력 curve hash |
-| `Candidate` | 안정 ID, period·epoch(BTJD)·duration(day/hour 중 canonical 하나)·depth, 원본 peak rank, SDE·SNR·transit/Sector 수, QA·원본 검증·discoverable, alias 참조, 각 규칙 버전 |
+| `Candidate` | 안정 ID, period·epoch(BTJD)·duration(day/hour 중 canonical 하나)·depth, 반복 단계(`removal_step`)·경로가 아닌 계산 단계(`source_curve_stage`), peak rank, SDE·SNR·transit/Sector 수, QA·원본 검증·discoverable, alias와 `transit_model_ref`, 각 규칙 버전. 사용자용 잔차 참조는 없음 |
 | `TransitModel` | `candidate_id`, `shape`, `baseline`, shape별 parameters와 단위, 적용 수식, 유효 시간 범위, `residual_model_version`; 알 수 없는 shape/version은 계산 실패 처리 |
 | `ExternalSignalReference` | 5.8절의 연결된 원천 ID·외부값·raw 상태·snapshot·match 상태·규칙 버전 |
 | `AIEvaluation` | 5.9절의 유효 원점수 또는 null, 실행 상태, decision band, model/checkpoint/input/threshold 버전 |
@@ -1045,11 +1054,11 @@ nullable 값은 의미가 명확해야 한다. 예를 들어 AI `score=null`은 
 
 | 변화 | 재사용 가능 범위 | 다시 계산·검증할 범위 | 재개 판단 |
 |---|---|---|---|
-| 새 Sector LC 추가 | 기존 Sector별 파싱·전처리 결과는 입력/설정이 같으면 재사용 | 새 Sector 처리 후 TIC 결합, 원본 periodogram 단일 패스·후보 병합·외부 매칭·AI·bundle | 새 고유 후보 추가 또는 기존 후보 `discoverable false→true`일 때만 재개 이벤트 |
+| 새 Sector LC 추가 | 기존 Sector별 파싱·전처리 결과는 입력/설정이 같으면 재사용 | 새 Sector 처리 후 TIC 결합, 원본 periodogram부터 내부 반복 BLS·후보 병합·외부 매칭·AI·bundle | 새 고유 후보 추가 또는 기존 후보 `discoverable false→true`일 때만 재개 이벤트 |
 | 같은 Sector 제품/Data Release 교체 | checksum이 같은 입력은 재사용 | 바뀐 제품의 원천 검증부터 TIC 하위 전 단계와 새 bundle | 이전/새 후보 차이로 위 조건 평가 |
 | 품질·전처리 설정 변경 | Raw/Bronze와 무관한 외부 snapshot | 영향 TIC의 전처리부터 BLS·AI·bundle | 새 후보/새 discoverable이 있을 때 평가. 설정 변경 자체로 재개하지 않음 |
 | BLS·품질·고조파 규칙 변경 | 정제곡선 재사용 | periodogram/후보 탐색부터 외부 매칭·AI·bundle | 후보 차이와 discoverable 차이로 평가 |
-| transit/residual 모델 변경 | 원본 정제곡선·periodogram·후보·AI 원점수 재사용 가능 | 후보별 모델 검증·Gold 모델·bundle, EC2 cache 폐기와 Silver–EC2 재검증 | 모델 변경만으로 재개하지 않음 |
+| transit/residual 모델 변경 | 원본 정제곡선은 재사용 가능. periodogram·후보·AI 재사용 범위는 모델이 반복 제거와 AI 입력에 미치는 영향에 따라 결정 | 영향 반복 단계부터 제거·후속 BLS·후보·AI·Gold 모델·bundle, Bundle별 cache 격리와 Silver–EC2 재검증 | 모델 변경만으로 재개하지 않음 |
 | AI checkpoint·입력·임계값 변경 | LC·BLS·후보·외부 연결 재사용 | AI 입력/추론 또는 판정부터 bundle | AI 변화만으로 완료 별을 재개하지 않음. 상태 이력 생성 |
 | TIC 별 파라미터 변경 | 광도곡선 전처리는 값 사용 여부에 따라 재사용 | 해당 Feature를 쓰는 BLS/AI 단계와 표시 메타·bundle | 후보/discoverable 변화가 있을 때만 |
 | TCE/TOI/Archive/ExoFOP 갱신 | LC·BLS·모델·기존 AI 원점수 | 외부 정규화·매칭·통합 상태·bundle 검증 | 외부 라벨만으로 재개하지 않음. v1 성과·등급·통계 과거값 유지 |
@@ -1062,6 +1071,8 @@ nullable 값은 의미가 명확해야 한다. 예를 들어 AI `score=null`은 
 ### 7.4 Silver–EC2 잔차·주기도 일치 검증 v0.1
 
 목표는 같은 Gold 입력과 버전에서 Silver 기준 계산과 EC2 온라인 계산이 허용 오차 안에서 같은 잔차와 periodogram을 내는지 확인하는 것이다. 단순히 그래프가 비슷해 보이는지는 통과 근거가 아니다.
+
+EC2 상태는 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED`를 사용한다. 잔차 주기도가 잔차곡선보다 먼저 준비될 수 없으며, `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크로 정한다. 캐시 키는 `(tic_id, publication_bundle_id, 정렬한 제거 후보 ID 목록, residual_model_version, periodogram_config_version)`이다. 진행 중 세션은 시작 시점 Bundle에 고정한다. 새 Bundle은 새 키를 사용하고 구버전 Bundle·cache는 보존기간 종료 시 함께 만료한다.
 
 #### 고정 입력과 비교 사례
 
@@ -1085,7 +1096,7 @@ nullable 값은 의미가 명확해야 한다. 예를 들어 AI `score=null`은 
 2. 같은 후보 ID 집합·정렬·모델 파라미터·baseline·dtype·수식이 사용됐는지 manifest를 비교한다.
 3. valid 점 잔차 flux의 `max_abs_error`, `RMSE`, 상대오차 분포와 비유한값 수를 계산한다.
 4. 같은 period grid에서 power 배열의 최대절대오차·RMSE를 계산하고 상위 피크의 grid index·period·순위가 유지되는지 확인한다.
-5. 같은 요청 재실행과 cache hit가 같은 hash/수치를 반환하는지, bundle 교체 후 이전 cache가 사용되지 않는지 확인한다.
+5. 같은 요청 재실행과 cache hit가 같은 hash/수치를 반환하는지 확인한다. 새 Bundle은 새 cache key를 사용하고 새 세션에서 구버전 cache를 재사용하지 않아야 한다. 진행 중 구버전 세션과 그 cache는 즉시 폐기하지 않고 DEC-35에서 정한 보존기간까지 유지한 뒤 함께 만료한다.
 6. 하나라도 구조 불일치, 새 NaN/Inf, 허용 오차 초과, 의미 있는 상위 피크 변경이 있으면 실패로 기록한다.
 
 flux와 power의 허용 오차는 **TBD**다. 먼저 같은 Python 커널·같은 CPU에서 반복해 직렬화 전후의 수치 바닥을 측정하고, OCI ARM64와 EC2 x86_64 또는 실제 선택 런타임의 차이를 측정한다. 그 분포보다 여유가 있으면서 과학적 후보 순위를 바꾸지 않는 잠정값을 등록한 뒤 별도 fixture에 적용한다. 결과를 본 뒤 각 사례마다 다른 허용치를 임의로 쓰지 않는다.
@@ -1096,18 +1107,18 @@ flux와 power의 허용 오차는 **TBD**다. 먼저 같은 Python 커널·같�
 
 | 안건 | 제안·준비물 | 결정 담당 / 기한 제안 |
 |---|---|---|
-| DEC-01 데이터 범위 | 이번 TOI-270은 재현 샘플일 뿐 서비스 범위 아님. 제품·cadence·Sector·대상 수 확정 | 윤성용·김동혁 / 2026-09-08까지 제안, 팀 확인 필요 |
-| DEC-02/04 AI | 체크포인트·입력·라이선스 실행 가능성부터 확인, 점수 기준은 검증 후 | 윤성용·팀 / 모델 검증안 2026-09-08, 수치 실험 기한 2026-09-11 제안 |
-| DEC-03/05/06 분석 | 원본 단일 패스 BLS 설정·고조파·후보 수와 온라인 잔차 모델 검증. 자동 반복 종료 기준은 사용하지 않음 | 윤성용, 매칭·온라인 잔차는 강재민 / 계획 2026-09-08, 수치 실험 기한 2026-09-09~10 제안 |
+| DEC-01 데이터 범위 | 이번 TOI-270은 재현 샘플일 뿐 서비스 범위 아님. 제품·cadence·Sector·대상 수 확정 | 윤성용·김동혁 / 후속 Task 등록 때 실제 기한 확정 |
+| DEC-02/04 AI | 체크포인트·입력·라이선스 실행 가능성부터 확인, 점수 기준은 검증 후 | 윤성용·팀 / 모델 검증 Task와 실제 기한 확정 필요 |
+| DEC-03/05/06 분석 | BLS 설정·반복 제거·제거 QA·종료·고조파·후보 병합과 Silver–EC2 잔차 모델 검증 | 윤성용, 매칭·온라인 잔차는 강재민 / 벤치마크 Task와 실제 결정일 팀 확인 필요 |
 | DEC-20 외부 대표값 | 자체 BLS값을 기본으로 두고 외부값 덮어쓰기 여부 임의 확정 금지 | 윤성용·강재민 / 외부 구현 착수 전 결정, 날짜 팀 확인 필요 |
-| DEC-35 온라인 계산 | Python 커널 재사용 가능성 비교, baseline·마스크·모델 계약 | 김동혁·윤성용·강재민 / 계약 리뷰 2026-09-08 제안 |
-| 스키마·갱신 | 5·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록 | 윤성용·강재민, 이벤트 소비자 / 2026-09-08 제안 |
+| DEC-35 온라인 계산 | Python 커널 재사용 가능성 비교, baseline·마스크·모델 계약 | 김동혁·윤성용·강재민 / 별도 아키텍처 Task에서 기한 확정 |
+| 스키마·갱신 | 5·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록 | 윤성용·강재민, 이벤트 소비자 / 인터페이스 Task 등록 때 기한 확정 |
 | 그래프 단위 | 시간계·day/hour·ppt/ppm·canonical 전 점과 화면 축약·공백 | 윤성용·강재민·백지웅 / 첫 샘플 전달 전, 날짜 팀 확인 필요 |
 
-문서 정합성 확인 요청:
+문서 적용·인터페이스 확인 요청:
 
-- SRS의 전체 처리 흐름·DAT-05~07에는 배치 잔차 BLS 반복이, DAT-11에는 단계별 잔차가 남아 있다. 최신 팀 합의는 배치 반복을 하지 않고 사용자 선택 때만 EC2가 잔차·주기도를 계산하는 것이므로 SRS와 Jira 29 완료 조건의 문구 갱신을 요청한다.
-- 데이터 관리 문서의 Gold 예시 트리에 전 점·품질 마스크·통과 모델이 빠져 있다. DEC-35와 함께 갱신해야 하며 임의의 staging 경로를 확정하지 않는다.
+- 요구사항 명세서 v0.12의 DAT-05~07 내부 반복 BLS와 DAT-11·14의 Gold/EC2 경계를 현행 기준으로 적용한다. Silver 반복 중간 배열은 저장하지 않으며 종료·제거 QA 수치는 후속 벤치마크에서 정한다.
+- 데이터 관리 문서의 Gold 파일 트리는 예시이며, EXP-01·DAT-11이 요구하는 전 점·품질 마스크·`fold_reference_time_btjd`·통과 모델을 실제 스키마와 용량 산정에 반영할 책임은 김동혁·강재민과 계약한다. 임의의 staging 경로를 확정하지 않는다.
 - DAT-15의 외부 갱신에 `ai_status`가 포함된 문구와 DAT-09의 외부 상태/AI 분리 원칙에 대해, 재추론 없는 외부 라벨 변경 시 갱신 필드 범위를 확인한다.
 
 ## 9. 후속 구현 Task 분할안
@@ -1119,7 +1130,7 @@ flux와 power의 허용 오차는 **TBD**다. 먼저 같은 Python 커널·같�
 | [데이터] FITS 어댑터·전처리·스키마 | 입력/마스크 계약 | UI 밖 로더, Sector 처리, 단위·마스크·버전, 샘플 및 경계 검증 |
 | [분석] BLS 기준 벤치마크 | 전처리 실험 입력·평가 정의 | 전체/사전 선별/coarse-to-fine, 합성·고정 평가 세트, 시간·회수·오검출 보고와 설정 선택 근거 |
 | [분석] BLS 후보·특징 생성 | 전처리 | 공통 설정, 후보별 지표, 원본 주기도, 알려진 신호 검증 |
-| [분석] 원본 후보·고조파·모델 검증 | 후보 생성 | 원본 상위 피크 품질, 고조파·ID·원본 재검증·discoverable, 온라인 잔차용 transit model |
+| [분석] 반복 후보·고조파·모델 검증 | 후보 생성 | 단계별 최강 피크 품질, 제거 QA·종료, 고조파·ID·원본 재검증·discoverable, 온라인 잔차용 transit model |
 | [데이터] 외부 참조·갱신 차이 | 후보 ID 계약 | 후보별 상태·출처·조회일, 충돌·미매칭·새 Sector 차이 검증 |
 | [데이터] 공개 묶음·온라인 계산 계약 | 스키마, 모델 계약 | 전 점·마스크·모델·manifest와 임의 제거 조합 일치 자료 |
 | [ML] 모델 실행 가능성 검증 | 첫날 독립 착수 가능 | 체크포인트·라이선스·입력·실제 추론 검증, 선택 근거 |
@@ -1135,9 +1146,9 @@ flux와 power의 허용 오차는 **TBD**다. 먼저 같은 Python 커널·같�
 - [x] 처리 흐름·입출력·실패·검증·후속 작업안 작성
 - [x] 실제 Jira 29번 완료 조건·댓글·첨부와 대조
 - [ ] 팀원 미병합 작업과 중복 확인
-- [ ] 데이터 범위·모델 실행 계획·스키마·온라인 잔차 계산 경계 합의 및 SRS/Jira 반복 문구 갱신
+- [ ] 데이터 범위·모델 실행 계획·스키마·반복 BLS·Silver–Gold·온라인 잔차 계산 경계 합의
 - [ ] 미결정 수치마다 담당·검증 방법·결정 기한 확정
 - [ ] 교차 리뷰 의견 반영 및 후속 Jira 연결
 - [ ] 문서 MR 승인·병합, 결과물·검증 자료 Jira 등록
 
-리뷰 요청 문안: “기존 BLS PoC를 재현하고 원본 정제곡선의 단일 패스 BLS 배치와 사용자 선택 시 EC2 온라인 잔차 계산을 분리해 설계했습니다. 입력·출력 스키마, 온라인 잔차의 baseline/마스크 계약, 후보 ID와 갱신 경계, 데이터 범위를 우선 검토 부탁드립니다. 미확정 항목은 제안으로 표시했습니다.”
+리뷰 요청 문안: “기존 BLS PoC를 재현하고 요구사항 명세서 v0.12에 맞춰 Silver 내부 반복 BLS와 사용자 선택 시 EC2 온라인 잔차 계산을 분리해 설계했습니다. 반복 제거·종료·원본 재검증, Gold 전 점·마스크·fold 기준 시각·통과 모델, Silver–EC2 일치 계약과 데이터 범위를 우선 검토 부탁드립니다. 미확정 수치는 제안 또는 TBD로 표시했습니다.”
