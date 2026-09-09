@@ -26,16 +26,18 @@
 
 | 항목 | ExoMiner++ | AstroNet-Triage | AstroNet-Vetting |
 |---|---|---|---|
-| 용도 | TESS SPOC TCE의 2분/FFI photometric vetting 또는 planet validation | 행성 가능 신호를 넓게 거르는 triage | TESS TCE vetting |
+| 용도 | TESS SPOC TCE의 2분/FFI photometric vetting 또는 planet validation | PC 또는 활동이 심하지 않은 EB 형태 후보를 junk와 분리하는 1차 triage | TESS TCE vetting |
 | 체크포인트 | 컨테이너에 `single`, `cv_ensemble`, `full_cv_ensemble` 포함 | `astronet/models_final`에 10개 TF checkpoint 포함 | `models_final`에 `model_plain`, `model_dc`, `model_se`, `model_dc_se` 각각 10개 TF checkpoint 포함 |
 | 자산 식별 근거 | DVC `models.tar` md5 `65cb5fcff5a13bdefb29fade74c80f1c`, 3,725,828,096 bytes | 대표 data blob `ad635fcc4482add463d846cbcf1ff7c86e82bc3b` | 대표 `model_dc_se` data blob `feac6bbf7e530917c75211653bb07898cbca7d81` |
 | 실행 기술 | Python 3.11, TensorFlow/Keras 2.13.1, 권장 Podman 이미지 | TensorFlow 1 계열 graph/Estimator API와 TFRecord | TensorFlow 1 계열 graph/Estimator API와 TFRecord |
 | 공식 입력 시작점 | `tic_id,sector_run` CSV에서 SPOC LC와 DV XML을 수집·전처리 | QLP HDF5 LC와 TCE 표를 TFRecord로 변환 | QLP HDF5 LC와 TCE 표를 TFRecord로 변환 |
-| 모델 출력 | binary planet validation 또는 PC/AFP/NTP | `likely planet` 성격의 triage 점수 | planet candidate 가능성 점수 |
+| 모델 출력 | binary planet validation 또는 PC/AFP/NTP | `PC/EB` 대 `junk`의 triage 점수 | planet candidate 가능성 점수 |
 
 AstroNet 코드에서 `tf.logging`, `tf.app`, `tf.placeholder`, `tf.parse_single_example`, `tf.python_io`를 직접 사용한다. 현재 TensorFlow 2 환경으로 단순 설치해 실행할 수 있다고 간주하지 않으며, 구버전 격리 환경이나 호환 코드 포팅이 필요하다.
 
 Triage README는 `local_view` 길이를 81로 설명하지만, 확인한 commit의 `local_global` 설정과 실제 checkpoint·TFRecord 추론 경로는 61을 사용한다. Planetory adapter는 README 숫자를 그대로 구현하지 않고 고정 checkpoint가 요구하는 실제 graph와 공식 예제 shape를 검사해 버전으로 잠가야 한다.
+
+AstroNet의 추론 스크립트는 매 실행마다 모델 graph를 다시 정의한 뒤 `tf.train.latest_checkpoint()`와 `tf.train.Saver().restore()`로 저장된 값을 graph에 복원한다. 이는 TensorFlow 1 계열의 일반적인 추론 방식이며, 새 모델을 학습하는 동작이 아니다. 확인한 `model.ckpt-14000`은 data 파일 24,320,668 bytes, index 4,216 bytes, meta 545,308 bytes로 구성되어 있다. checkpoint에는 실제 convolution·dense 가중치 약 2,026,721개와 과거 학습 과정에서 함께 저장된 Adam optimizer 상태가 포함되어 있지만, `batch_predict.py`는 `PREDICT` mode에서 `model.predictions`만 실행하고 optimizer나 학습 연산을 호출하지 않는다.
 
 ### ExoNet-Pytorch 자산 확인
 
@@ -91,6 +93,8 @@ Planetory의 현재 입력은 SPOC 2분 cadence LC FITS의 `TIME`, `PDCSAP_FLUX`
 | TOI-270 AstroNet 추론 | `global_view` 201개와 `local_view` 61개를 TFRecord로 변환해 같은 `model_1/model.ckpt-14000`에서 exit 0, 점수 **0.258** 출력 |
 | TOI-270 실행 자원 | CPU, wall time 3.52초, 최대 RSS 277,044KiB(약 270.6MiB), swap 0. 모델 로딩 시간이 포함된 단일 후보 실행 |
 | TOI-270 출력 | `prediction_toi270.txt` 1행 생성, SHA-256 `2e84dba5ca020b4cb59e7583f2ad4504035d5a34e1ef912920de233a1af1ab0d` |
+| L 98-59 비교 실행 | TIC 307210830, Sector 2·5·8. BLS period 3.690591840일은 확인된 L 98-59 c의 3.6906764일과 대응하며, 같은 단일 checkpoint 점수는 **0.816** |
+| CM Draconis 비교 실행 | TIC 199574208, Sector 16. BLS period 0.633504862일은 식쌍성 공전주기의 반 주기와 대응하며, 같은 단일 checkpoint 점수는 **0.998** |
 | ExoNet 실행 준비 | 공식 저장소에 checkpoint와 추론 스크립트가 없어 새 학습을 하지 않는 Jira 40 범위에서 추론 시작 불가 |
 
 재현 명령:
@@ -125,7 +129,9 @@ uv run --python 3.11 --project experiments/tess-bls \
   --output=<tfrecord-dir>/test-00000-of-00001
 ```
 
-AstroNet 공식 예제와 Planetory TOI-270 후보 추론이 모두 성공했으므로 checkpoint와 코드가 CPU에서 실행되고 자체 BLS 후보를 기술적으로 연결할 수 있다는 점은 확인됐다. TOI-270 점수 0.258은 공식 스크립트에 적힌 임시 0.4 분기에서는 `junk`에 해당하지만, 이 한 건으로 정확도나 임계값을 판단하지 않는다. 이번 입력은 QLP의 `KSPMagnitude`가 아니라 SPOC `PDCSAP_FLUX`를 Planetory 방식으로 detrending했고 다른 행성 신호도 함께 남아 있다. 단일 checkpoint만 사용했으며 공식 10개 모델 ensemble도 적용하지 않았다. 따라서 점수는 adapter의 실행 확인값이고 행성 여부의 과학적 판정값이 아니다.
+AstroNet 공식 예제와 Planetory 자체 BLS 후보 추론이 모두 성공했으므로 checkpoint와 코드를 CPU에서 실행하고 후보를 기술적으로 연결할 수 있다는 점은 확인됐다. TOI-270 c는 NASA Exoplanet Archive에 확인된 행성으로 등록되어 있으며, BLS period 5.659330303일은 공전주기 약 5.66일과 대응한다. 이 후보의 0.258은 공식 스크립트의 임시 0.4 분기에서 `junk`에 해당한다. 반면 확인된 L 98-59 c 대응 후보는 0.816이었다. 단, 두 건으로 재현율이나 정확도를 계산할 수 없다. 입력은 QLP의 `KSPMagnitude`가 아니라 SPOC `PDCSAP_FLUX`를 Planetory 방식으로 detrending했고 단일 checkpoint만 사용했으며 공식 10개 모델 ensemble도 적용하지 않았다.
+
+특히 이 checkpoint의 양성 라벨은 `PC/EB`이고 음성 라벨은 `junk`다. 공식 README와 `batch_predict.py`는 점수 0.4 이상을 `PC/EB`로 표기하며, “plausible planet candidate”에는 활동이 심하지 않은 eclipsing binary도 포함된다고 명시한다. 따라서 CM Draconis의 0.998은 행성을 식별한 결과나 행성에 대한 false positive가 아니라, 이 1차 triage가 식 현상을 강하게 포착했다는 결과다. AstroNet-Triage 단독으로 PC와 EB를 분리하거나 행성을 확정하는 용도로 사용할 수 없다.
 
 ## 6. 라이선스 확인 결과
 
@@ -141,7 +147,7 @@ AstroNet 공식 예제와 Planetory TOI-270 후보 추론이 모두 성공했으
 
 | 후보 | 제안 상태 | 근거와 다음 조건 |
 |---|---|---|
-| AstroNet-Triage | **기술 연결 성공, 성능 평가 보류** | 공개 checkpoint와 공식 예제 추론에 이어 TOI-270 자체 BLS 후보의 201/61 adapter와 단일 checkpoint 추론까지 성공했다. 알려진 행성 후보의 점수가 0.258이므로 전처리 동등성·ensemble·라벨 평가 전에는 서비스 후보로 채택하지 않는다. |
+| AstroNet-Triage | **1차 후보 선별 연결 성공, 행성 판별 채택 보류** | 공개 checkpoint와 공식 예제 추론에 이어 TOI-270·L 98-59·CM Draconis 후보를 201/61 adapter로 실행했다. checkpoint의 학습 목표가 `PC/EB` 대 `junk`이므로, Planetory의 행성 판별 모델로 단독 채택할 수 없다. 전처리 동등성·ensemble·라벨별 평가와 EB vetting 경로가 필요하다. |
 | AstroNet-Vetting | **AstroNet 2순위 보류** | Triage 실행 환경을 재사용할 수 있지만 여러 평균 모델과 추가 feature가 필요하다. Triage 재현 뒤 실제 이점과 추가 비용을 비교한다. |
 | ExoNet-Pytorch | **2단계 조사, 현재 추론 보류** | PyTorch라 TensorFlow 1보다 현대화 여지는 있지만 공식 checkpoint와 추론 경로가 없다. checkpoint의 공식 제공 위치를 먼저 확인하며, Jira 40에서 새 학습으로 대체하지 않는다. |
 | ExoMiner++ `single` | **3단계 보류** | 최신 TESS 2분 공식 파이프라인과 사전 학습 모델이 있다. 앞선 두 계열을 확인한 뒤 자체 BLS 후보용 입력 adapter, 필수 입력 확보율, 라이선스와 container inference를 검증한다. |
@@ -151,12 +157,13 @@ AstroNet 공식 예제와 Planetory TOI-270 후보 추론이 모두 성공했으
 ## 8. 후속 Task 제안
 
 1. **AstroNet 기준 실행 — 완료**: 재현 가능한 격리 환경에서 Triage checkpoint 1개와 공식 TFRecord를 실행하고 CPU, peak memory와 시간을 기록했다.
-2. **AstroNet SPOC adapter — 1차 완료**: TOI-270 자체 BLS 후보 1건을 checkpoint 기준 201/61 global/local view로 변환해 점수 출력을 확인했다. 후속 평가에서는 QLP 학습 전처리와 SPOC·Planetory 전처리 차이를 대조하고 공식 10개 checkpoint ensemble을 비교한다.
-3. **ExoNet checkpoint 확인**: NASA FDL 저장소와 연결 자료에서 논문에 사용된 사전 학습 checkpoint의 공개 위치·hash·라이선스를 확인한다. 찾지 못하면 사전 학습 모델 후보에서 제외 근거를 확정한다.
-4. **ExoNet 입력 차이 확인**: flux 외 centroid view와 항성 파라미터의 Planetory 확보 가능성을 조사한다. 새 학습은 별도 Jira가 승인된 경우에만 진행한다.
-5. **ExoMiner++ 후순위 검증**: 앞선 후보 결과를 본 뒤 공식 `single` container 추론과 자체 BLS 후보 입력 adapter 필요성을 다시 판단한다.
-6. **라이선스 결정**: 세 모델 계열의 코드·checkpoint·입력 자료에 대한 서버 사용·수정·재배포 조건을 기록한다.
-7. **모델 평가·임계값 결정**: 실행 가능한 후보만 TIC 단위로 분리한 조정/평가 세트에서 정밀도·재현율·PR-AUC와 입력·추론 성공률을 비교한다. `below/review/approved` 임계값은 이 결과로 별도 확정한다.
+2. **AstroNet SPOC adapter — 1차 완료**: TOI-270, L 98-59, CM Draconis 자체 BLS 후보를 checkpoint 기준 201/61 global/local view로 변환해 점수 출력을 확인했다. 후속 평가는 QLP 학습 전처리와 SPOC·Planetory 전처리 차이를 대조하고 공식 10개 checkpoint ensemble을 비교한다.
+3. **Triage 성능 평가 설계**: TIC 단위 분리의 확인 행성 후보(PC), 식쌍성(EB), 기기·변동 잡음(junk) 세트를 만들고 PC/EB 대 junk의 재현율·정밀도·PR-AUC와 입력·추론 성공률을 측정한다. PC와 EB의 구분 평가는 이 checkpoint의 범위 밖이므로 별도 vetting 모델 또는 규칙을 비교한다.
+4. **ExoNet checkpoint 확인**: NASA FDL 저장소와 연결 자료에서 논문에 사용된 사전 학습 checkpoint의 공개 위치·hash·라이선스를 확인한다. 찾지 못하면 사전 학습 모델 후보에서 제외 근거를 확정한다.
+5. **ExoNet 입력 차이 확인**: flux 외 centroid view와 항성 파라미터의 Planetory 확보 가능성을 조사한다. 새 학습은 별도 Jira가 승인된 경우에만 진행한다.
+6. **ExoMiner++ 후순위 검증**: 앞선 후보 결과를 본 뒤 공식 `single` container 추론과 자체 BLS 후보 입력 adapter 필요성을 다시 판단한다.
+7. **라이선스 결정**: 세 모델 계열의 코드·checkpoint·입력 자료에 대한 서버 사용·수정·재배포 조건을 기록한다.
+8. **모델 평가·임계값 결정**: 실행 가능한 후보만 TIC 단위로 분리한 조정/평가 세트에서 정밀도·재현율·PR-AUC와 입력·추론 성공률을 비교한다. `below/review/approved` 임계값은 이 결과로 별도 확정한다.
 
 ## 9. Jira 40 완료 조건 대조
 

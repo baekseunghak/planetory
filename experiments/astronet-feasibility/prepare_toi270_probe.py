@@ -1,4 +1,4 @@
-"""Prepare one Planetory TOI-270 BLS candidate for AstroNet-Triage.
+"""Prepare one Planetory BLS candidate for AstroNet-Triage.
 
 This probe deliberately stops before TensorFlow serialization.  It runs in the
 existing TESS PoC environment and writes the two arrays expected by the
@@ -23,12 +23,11 @@ sys.path.insert(0, str(TESS_BLS_DIR))
 from pipeline import bls_features, clean  # noqa: E402
 
 
-def load_toi270() -> tuple[np.ndarray, np.ndarray, dict, list[int], int]:
-    """Load and clean the three checked-in-location, git-ignored sample FITS."""
-    data_dir = TESS_BLS_DIR / "sample_raw" / "tess" / "toi270"
+def load_light_curve(data_dir: Path) -> tuple[np.ndarray, np.ndarray, dict, list[int], int]:
+    """Load and clean one target's git-ignored SPOC light-curve FITS files."""
     paths = sorted(data_dir.glob("*_lc.fits"))
     if not paths:
-        raise FileNotFoundError(f"TOI-270 FITS files were not found under {data_dir}")
+        raise FileNotFoundError(f"TESS FITS files were not found under {data_dir}")
 
     frames: list[pd.DataFrame] = []
     sectors: list[int] = []
@@ -95,10 +94,16 @@ def median_view(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=TESS_BLS_DIR / "sample_raw" / "tess" / "toi270",
+        help="Directory containing one target's SPOC *_lc.fits files",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    time, flux, clean_stats, sectors, tic_id = load_toi270()
+    time, flux, clean_stats, sectors, tic_id = load_light_curve(args.input_dir)
     candidate = bls_features(time, flux)
     period = candidate["period"]
     duration = candidate["duration_hr"] / 24.0
