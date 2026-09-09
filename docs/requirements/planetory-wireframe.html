@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v0.8</title>
+<title>Planetory 와이어프레임 v1.0</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,12 +204,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.8 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v1.0 · 기준선</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v0.14와 상태표 v0.15의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
+      <p>요구사항 명세서 v1.0과 상태표 v1.0의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.14 · 상태표 v0.15</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.0 · 상태표 v1.0</b></dd>
       <dt>작성일</dt><dd><b>2026-09-09</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
@@ -456,7 +456,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <svg class="fold2" viewBox="0 0 860 190" style="width:100%;height:190px"></svg>
           <div class="axis"><span>−P</span><span>접힌 곡선에서 위상 시작·끝 선택 → 핸들 수정. 브라우저가 기준 시각·가려진 시간 즉시 미리보기</span><span>+P</span></div>
           <div class="box-b" style="border-top:1px solid var(--line-soft);padding:8px 12px"><span class="mono small">선택 · 반복 주기 3.2098일 · <span title="시각 단위: BTJD">기준 시각 1326.842(미리보기)</span> · 가려진 시간 2.6시간(미리보기)</span></div>
-          <div class="box-b" style="border-top:1px solid var(--line-soft)"><b class="small">확인 도구 · 판단 단계에서 사용</b><div class="row" style="margin-top:8px"><span class="btn sm">홀수·짝수 비교</span><span class="btn sm">주기 절반 지점 확대</span><span class="btn sm">가려짐 모양 확인</span><span class="btn sm">품질 구간 보기</span></div><div class="ph" style="height:50px;margin-top:8px">선택한 도구의 비교 곡선·확대 구간·품질 마스크를 표시</div><div class="muted small">근거 체크와 별도로 실제 곡선을 확인하는 도구를 제공합니다. 중심 위치는 데이터 없음입니다.</div></div>
+          <div class="box-b" style="border-top:1px solid var(--line-soft)"><b class="small">확인 도구 · 판단 단계에서 사용</b><div class="row" style="margin-top:8px"><span class="btn sm">홀수·짝수 비교</span><span class="btn sm">주기 절반 지점 확대</span><span class="btn sm">가려짐 모양 확인</span></div><div class="ph" style="height:50px;margin-top:8px">선택한 도구의 비교 곡선·확대 구간을 표시</div><div class="muted small">근거 체크와 별도로 실제 곡선을 확인하는 도구를 제공합니다. 중심 위치는 데이터 없음입니다.</div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <div class="box">
@@ -473,7 +473,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
               <div class="check"><i></i>반대편 가려짐 없음</div>
               <div class="check"><i></i>바닥 평평한 모양</div>
               <div class="check muted"><i style="background:var(--line-soft)"></i>중심 위치: 데이터 없음 <span class="pill soft">읽기 전용</span></div>
-              <div class="check"><i></i>불량 구간 아님</div>
+              
               <div class="field"><div class="in empty" style="font-family:inherit;font-size:12px">메모 (선택)</div></div>
             </div>
           </div>
@@ -490,7 +490,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">2</span><span class="nid">EXP-03·06·07 · AT-06·95 · NFR-10</span><span>회차 경계·다년 공백 접어 표시. 예상 transit 띠와 epoch·지속시간은 브라우저가 선택 중 즉시 미리보기하고, 제출 시 서버가 위상 원본값으로 최종 계산·검증</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">·</span><span class="nid">EXP-01 · DAT-11 · AT-117</span><span>분석 도중 그 별의 새 데이터 판이 공개되면 상단에 "새 데이터 판이 공개되었습니다 · [다시 불러오기]" 안내. 곡선 단계·제거 조합은 유지하고 주기·위상 선택만 초기화. 세션을 옛 판에 고정하지 않음</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>EC2 온라인 계산(결과는 Redis 캐시): 대기 → 잔차 계산 → 잔차 준비 → 주기도 계산 → 완료/실패. 같은 Bundle·제거 조합·버전은 캐시, 진행 세션은 시작 Bundle 고정</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">POL-03 · DAT-14 · AT-80</span><span>EC2 온라인 계산(결과는 Redis 캐시): 대기 → 잔차 계산 → 잔차 준비 → 주기도 계산 → 완료/실패. 같은 Bundle·제거 조합·버전은 캐시, 새 판이 공개되면 재로드하고 옛 판 캐시는 정리</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">EXP-04 · 결정 23</span><span>관측기간/2 넘는 구간 음영. 그 구간의 후보는 이번 회차에 찾을 수 없음 → 재개 대기 사유</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">EXP-06·07·08·13 · DEC-16·19 · AT-95·96</span><span>접힌 곡선에서 위상 시작·끝 선택. 브라우저와 서버는 Bundle의 같은 접기 기준 시각을 사용. 브라우저가 epoch·지속시간을 즉시 미리보기하고 서버가 제출 시 최종 계산. 포인터 기준 x축 확대·더블클릭 ×1, 키보드 +/-/0 지원, 기준 시각·가려진 시간 숫자 직접 입력 없음. 선택 폭 자체가 가려진 시간</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">EXP-02 · POL-04·05</span><span>사전 공개는 확인된 행성 보유 여부만. 상세는 해당 신호 매칭 또는 상세 열람 뒤, 전체 확정 개수는 비공개</span><span class="tag p0">P0</span></li>
@@ -682,7 +682,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
           <div class="box"><div class="box-h"><span class="co">2</span>내 판단 분포</div><div class="box-b"><div class="bar"><i class="l" style="width:57%"></i><i class="u" style="width:29%"></i><i class="s" style="width:14%"></i></div><div class="row small" style="justify-content:space-between;margin-top:4px"><span>행성 같음 4</span><span>아닌 것 같음 2</span><span>모르겠음 1</span></div><div class="muted small" style="margin-top:8px">AI 구간별: 승인 구간에서 행성 같음 3/3 · 기각 구간에서 아닌 것 같음 2/2</div><div class="muted small">내 제출 통계이며 공식 스레드의 공개 분석 참여자 통계와 구분합니다.</div></div></div>
           <div class="box"><div class="box-h"><span class="co">3</span>주간 제출</div><div class="box-b"><svg class="bars" viewBox="0 0 300 90" style="width:100%;height:90px"></svg><div class="axis" style="padding:2px 0 0"><span>7주 전</span><span>이번 주</span></div></div></div>
-          <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="row" style="justify-content:space-between"><span>불량 구간 아님</span><span class="mono">2회 · 일치 1</span></div><div class="muted small" style="margin-top:6px">제출 가능한 유효 근거만 집계. 중심 위치 데이터 없음은 제외</div></div></div>
+          <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="muted small" style="margin-top:6px">제출 가능한 유효 근거만 집계. 중심 위치 데이터 없음은 제외</div></div></div>
         </div>
         <div class="box soft" style="padding:10px 12px" >
           <div class="row"><span class="co">5</span><b class="small">비교 탭 (미리보기)</b><span class="muted small">내 값 ↔ 최근 90일 활동 회원 중앙값. 순위는 없음</span></div>
@@ -716,7 +716,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="box">
             <div class="box-h"><span class="co">2</span>내 별 <span class="sub">제출 이력이 있는 별 · 최근 활동순</span><span class="r"><span class="pill">전체</span><span class="pill soft">진행 중</span><span class="pill soft">완료</span><span class="pill soft">미게시 있음</span></span></div>
             <div class="list-item" style="background:var(--fill)"><svg data-m="p1 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 149603524</span><span class="pill acc">다시 열림</span><span class="pill soft">행성 1 · 진행 중</span></div><div class="m"><span class="co" style="width:14px;height:14px;font-size:9px">3</span> 새 회차 반영으로 찾을 수 있는 신호가 생겼습니다 · 1시간 전</div></div><div class="row"><span class="btn sm pri">다시 분석</span><span class="btn sm">결과</span></div></div>
-            <div class="list-item"><svg data-m="p2 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 231663901</span><span class="pill soft">행성 2 · 완료</span><span class="pill soft">확인된 행성 S</span></div><div class="m">곡선 단계 3 · 미게시 신호 1건 · 09-04</div></div><div class="row"><span class="btn sm">결과</span><span class="btn sm">스레드</span></div></div>
+            <div class="list-item"><svg data-m="p2 orbit" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 231663901</span><span class="pill soft">행성 2 · 완료</span><span class="pill soft">성과 2건 · 등급 S</span></div><div class="m">곡선 단계 3 · 미게시 신호 1건 · 09-04</div></div><div class="row"><span class="btn sm">결과</span><span class="btn sm">스레드</span></div></div>
             <div class="list-item"><svg data-m="p0 done" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">튜토리얼 5 · TIC 미정</span><span class="pill soft">행성 없이 완료</span><span class="pill soft">행성 아님 A</span></div><div class="m">복수 행성 아님 신호 · 탐색 완료, 올바른 판단으로 인정</div></div><div class="row"><span class="btn sm">결과</span></div></div>
             <div class="list-item"><svg data-m="p0" style="width:40px;height:40px"></svg><div style="flex:1"><div class="row"><span class="t mono">TIC 52368076</span><span class="pill soft">행성 0 · 진행 중</span></div><div class="m">튜토리얼 2 · 곡선 단계 1 · 일치하는 신호 없음 2회</div></div><div class="row"><span class="btn sm pri">분석 계속</span></div></div>
           </div>
@@ -877,7 +877,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v0.14·상태표 v0.15·용어 사전 v0.4(2026-09-09)를 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v1.0·상태표 v1.0·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
