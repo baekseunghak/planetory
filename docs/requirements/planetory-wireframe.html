@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v0.6</title>
+<title>Planetory 와이어프레임 v0.7</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,13 +204,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v0.6 · 팀 검토용</div>
+      <div class="eyebrow">Wireframe · v0.7 · 팀 검토용</div>
       <h1>Planetory 화면 와이어프레임</h1>
       <p>요구사항 명세서 v0.12와 상태표 v0.13의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.12 · 상태표 v0.13</b></dd>
-      <dt>작성일</dt><dd><b>2026-09-08</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v0.13 · 상태표 v0.14</b></dd>
+      <dt>작성일</dt><dd><b>2026-09-09</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
     </dl>
@@ -256,7 +256,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div class="fnode">다음 곡선 단계로<small>EXP-09 · 같은 화면</small></div>
         <div class="fnode">별 결과 페이지<small>SC-05 · RES-10</small></div>
         <div class="fnode">공개 검토는 선택<small>SC-11 · 개별 / 모두 게시 / 나중에</small></div>
-        <div class="fnode">인정된 등급 → 새 별 발견<small>GRD-08 · DEC-23 · 홈</small></div>
+        <div class="fnode">성과 1건 인정 → 새 별 1개 발견<small>POL-27 · GRD-08 · DEC-23 · 홈</small></div>
       </div>
       <div class="fnote">완료된 별에 새 회차로 찾을 수 있는 신호가 생기면 완료 표시를 거두고 진행 중으로 되돌린다(DEC-27).</div>
     </div>
@@ -271,7 +271,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </div>
   </div>
 
-  <div class="section-title"><h2>별 표식 규칙 (DEC-07 종결 · HOME-05)</h2><span>별 색은 그 별에서 찾은 행성 수만 뜻한다. 유형·등급은 색에 넣지 않고 패널의 문자로만. 아직 못 찾은 별은 화면에 없다.</span></div>
+  <div class="section-title"><h2>별 표식 규칙 (DEC-07 종결 · HOME-05)</h2><span>별 색은 그 별에서 찾은 행성 수만 뜻한다. 등급 A/S/SS/SSS는 그 별에서 인정된 성과 수(1/2/3/4)를 나타내는 문자이며 색에 넣지 않는다. 아직 못 찾은 별은 화면에 없다.</span></div>
   <div class="tokens">
     <div class="tok"><b>찾은 행성 수 → 별 색</b><div class="sky-legend" style="grid-template-columns:repeat(6,auto)"><svg data-m="p0"></svg><span>0</span><svg data-m="p1"></svg><span>1</span><svg data-m="p2"></svg><span>2</span><svg data-m="p3"></svg><span>3</span><svg data-m="p4"></svg><span>4+</span><svg data-m="p0 done"></svg><span>행성 없이 완료</span></div><div class="muted small" style="margin-top:6px">표시 행성 수 = 매칭한 확인된 행성 + 회원이 "행성 같음"으로 판단한 미확정 신호(HOME-05). 표시 개수는 성과 개수와 구분. 행성 아님·모르겠음은 세지 않음. 행성 없이 완료한 별은 살구색</div></div>
     <div class="tok"><b>궤도 · 퀘스트 마커</b><div class="sky-legend" style="grid-template-columns:auto auto auto auto auto auto"><svg data-m="p2 orbit"></svg><span>행성 궤도 (회색 실선)</span><svg data-m="p0 chal"></svg><span>주간 챌린지 !</span><svg data-m="p0 tut"></svg><span>튜토리얼 번호</span></div><div class="muted small" style="margin-top:6px">궤도는 행성 수만큼, 광채 없음. 마커는 퀘스트 패널 카드와 같은 색(빨강·파랑)</div></div>
@@ -318,7 +318,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">2</span><span class="nid">ACC-02</span><span>Google OAuth. 다른 제공자의 같은 이메일은 병합하지 않음</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">POL-26 · HOME-02 · AT-57</span><span>신규 회원 홈에는 튜토리얼 1번 별만 보임. 완료할 때마다 다음 순번이 바깥에 나타나고, 5번 완료 후 챌린지 별이 나타남</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">HOME-09 · AT-86</span><span>첫 방문 말풍선 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출). 1회만, 건너뛰기 가능, 설정에서 다시 켬</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">5</span><span class="nid">HOME-06 · SUB-12</span><span>튜토리얼 5번은 복수 FP 신호의 잔차 탐색·판단 연습(실제 TIC 미선정, TBD). 같은 튜토리얼에서 불일치 제출 3회면 [건너뛰기] 제공(서버 설정, 성과 없음)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">5</span><span class="nid">HOME-06 · SUB-12</span><span>튜토리얼 5번은 복수 FP 신호의 잔차 탐색·판단 연습. 불일치가 쌓이면 상세 보기를 거쳐 다음 순번으로 넘어갈 수 있음(SUB-12)(실제 TIC 미선정, TBD). 같은 튜토리얼에서 불일치 제출 3회면 [건너뛰기] 제공(서버 설정, 성과 없음)</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -399,13 +399,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(세대·각도·지터·깊이), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">HOME-08</span><span>별 옆 상세 패널. 확대하면 화면 가장자리에 도킹. 빈 하늘 클릭으로 닫힘. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
-      <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 색과 문자로, 유형·등급·곡선 단계는 문자로만. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 색과 문자로, 등급(= 인정된 성과 수)·곡선 단계는 문자로만. 유형별 등급은 없음. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>궤도에 마우스를 올리면 주기와 내 판단. 궤도는 매칭한 확인된 행성 + "행성 같음" 판단 미확정 신호만. 성과 인정과 별도</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">HOME-07</span><span>퀘스트 패널 기본 접힘. 펼친 상태는 SC-09</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">HOME-05 · NFR-08</span><span>범례. 색만으로 전달하지 않음</span><span class="tag p0">P0</span></li>
       <li><span class="co">7</span><span class="nid">DEC-32 · NFR-20a</span><span>축소 시 성운 군집, 호버로 구성 표시. 군집은 배율 단계별 사전 계산</span><span class="tag p0">P0</span></li>
       <li><span class="co">8</span><span class="nid">NFR-18 · NFR-17</span><span>WebGL 미지원 환경은 목록 뷰로 대체. 폭 1024px 미만은 안내만(모바일 P2)</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">GRD-08 · DEC-23</span><span>등급 확정 시 A1·S2·SS3·SSS4개의 못 찾은 별을 무작위로 발견, 부모 별 바깥에 나타남 (AT-58)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">GRD-08 · DEC-23</span><span>고유 신호 성과가 인정될 때마다 못 찾은 별 1개(운영 설정 stars_per_achievement)를 무작위로 발견, 부모 별 바깥에 나타남. 등급 상승·탐색 완료는 발견 조건이 아님 (AT-58)</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">·</span><span class="nid">NFR-20 · DEC-16</span><span>그리기 예산 별 400·궤도 60·성운 80. 상한 시나리오 별 100,000개에서 p95 16.7ms (AT-71)</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
@@ -509,8 +509,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div class="box-h"><span class="co">1</span>확인된 행성 · 판단 일치</div>
         <div class="box-b" style="display:flex;flex-direction:column;gap:10px">
           <h3 style="font-size:16px">신호를 찾았어요. 내 판단도 기록과 같아요.</h3>
-          <dl class="kv"><dt>신호</dt><dd>3.2101일 · 내 값 3.2098일</dd><dt>기록 / 내 판단</dt><dd>확인된 행성 / 행성 같음</dd><dt>성과</dt><dd>올바른 판단으로 인정됨 · 확인된 행성 유형 A</dd><dt>별 탐색</dt><dd>진행 중 · 다음 신호 탐색 가능</dd><dt>AI</dt><dd>승인 구간 78점 · v1.2 · 인정에는 쓰이지 않음</dd></dl>
+          <dl class="kv"><dt>신호</dt><dd>3.2101일 · 내 값 3.2098일</dd><dt>기록 / 내 판단</dt><dd>확인된 행성 / 행성 같음</dd><dt>성과</dt><dd>올바른 판단으로 인정됨 · 이 별 성과 2건(등급 S) · 새 별 1개 발견</dd><dt>별 탐색</dt><dd>진행 중 · 다음 신호 탐색 가능</dd><dt>AI</dt><dd>승인 구간 78점 · v1.2 · 인정에는 쓰이지 않음</dd></dl>
           <div class="row"><span class="btn pri">다음 곡선 단계로</span><span class="btn">결과 보기</span><span class="btn ghost">일반 토론 쓰기</span></div>
+          <div class="box soft" style="padding:8px"><b class="small">이 신호를 찾은 사람 중 기록과 일치 70% · 10명</b><div class="muted small">확인된 행성·행성 아님 신호에는 세 판단 막대 대신 이 한 줄만 둡니다. 모수는 이 신호를 찾은 회원, 회원당 첫 매칭 제출 기준입니다(COM-14 (2)).</div></div>
           <div class="muted small">확인된 행성도 주기만 찾고 판단이 다르면 성과를 인정하지 않습니다. 상세에는 외부 출처·조회일·내 원본값과 정정값을 구분합니다.</div>
         </div>
       </div>
@@ -531,7 +532,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="row"><span class="pill acc">탐색 완료</span><span class="pill">판단 불일치</span><span class="pill warn">성과 미인정</span></div>
           <dl class="kv"><dt>신호</dt><dd>마지막 탐색 가능 신호와 일치</dd><dt>기록 / 내 판단</dt><dd>행성 아님 / 행성 같음</dd><dt>AI</dt><dd>기각 구간 12점 · 인정에는 쓰이지 않음</dd></dl>
           <div class="row"><span class="btn pri">다시 풀기</span><span class="btn">이 신호 상세 보기</span><span class="btn">결과 보기</span></div>
-          <div class="muted small">행성 아님 신호를 직접 매칭하고 아닌 것 같음으로 판단하면 FP 유형 A를 인정합니다. 여러 FP 신호가 있어도 탐색 완료 조건은 모두 매칭하는 것입니다.</div>
+          <div class="muted small">행성 아님 신호를 직접 매칭하고 아닌 것 같음으로 판단하면 성과 1건을 인정하고 새 별 1개를 엽니다. 여러 FP 신호가 있어도 탐색 완료 조건은 모두 매칭하는 것입니다.</div>
         </div>
       </div>
       <div class="wf half">
@@ -568,7 +569,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">RES-01·02·11 · GRD-02·03</span><span>확정 행성·FP 모두 신호 매칭과 올바른 판단이 성과 조건. 매칭·판단·성과·완료는 서로 다른 표시값</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">RES-01·02·11 · GRD-02·03</span><span>확정 행성·FP 모두 신호 매칭과 올바른 판단이 성과 조건이고 인정 즉시 별 1개가 열림. 매칭·판단·성과·완료는 서로 다른 표시값. 채점형은 "기록과 일치 N% · M명" 한 줄, 미확정은 세 판단 막대로 구분(COM-14)</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">SUB-10·11 · RES-09</span><span>마지막 확정 행성 판단 불일치도 완료·불일치·미인정. 다시 풀기는 당시 곡선·입력 복원 후 새 제출</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">GRD-03 · SUB-11</span><span>마지막 FP 판단 불일치도 같은 세 상태. 진입만으로 완료·보상하는 예외 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">RES-08 · GRD-04 · COM-14·17~19</span><span>미확정은 공개 검토가 선택이며 미게시 다음 곡선 탐색·완료 가능. 첫 공개 때 공식 스레드 생성, 공개 성공 시 성과</span><span class="tag p0">P0</span></li>
@@ -587,7 +588,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div class="box" style="padding:14px"><div class="row"><span class="co">1</span><b>TIC 149603524</b><span class="pill acc">탐색 완료</span><span class="pill">찾은 신호 2</span><span class="pill soft">미게시 분석 1건</span></div><div class="muted small" style="margin-top:8px">탐색 가능한 신호를 모두 찾았습니다. 공개 여부와 성과 인정은 별개입니다.</div><div class="row" style="margin-top:10px"><span class="btn pri">미게시 분석 검토</span><span class="btn">분석 다시 보기</span></div></div>
         <div class="box"><div class="box-h"><span class="co">2</span>찾은 신호 <span class="sub">내가 매칭한 신호 · 판단의 일치 여부와 구분</span></div>
           <table class="tbl"><tr><th>신호</th><th>내 판단</th><th>기록 / AI</th><th>성과</th><th>공개</th><th>행동</th></tr>
-            <tr><td>3.9일</td><td>행성 같음</td><td>미확정 / 승인 78</td><td>미확정 A 인정</td><td>공개됨</td><td><span class="btn sm">공식 스레드</span><span class="btn sm">내 공개 분석</span></td></tr>
+            <tr><td>3.9일</td><td>행성 같음</td><td>미확정 / 승인 78</td><td>인정 · 성과 1건</td><td>공개됨</td><td><span class="btn sm">공식 스레드</span><span class="btn sm">내 공개 분석</span></td></tr>
             <tr><td>1.8일</td><td>모르겠음</td><td>미확정 / 보류 52</td><td>미인정</td><td>미게시</td><td><span class="btn sm">공개 검토</span><span class="btn sm">다시 풀기</span></td></tr>
           </table><div class="box-b small">신호 상세: 제출 수치·정정값·곡선·근거·메모·버전, 공개 분석의 판단 분포. 공개되지 않은 다른 회원의 개인 히스토리는 노출하지 않습니다.</div>
         </div>
@@ -595,8 +596,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <table class="tbl"><tr><th>시각 · 곡선</th><th>제출</th><th>신호 결과</th><th>판단 / 성과</th><th>별 상태 · 행동</th></tr>
             <tr><td>09-08 14:02 · 뺀 곡선 1</td><td>1.8일 · 모르겠음</td><td>일치</td><td>미확정 / 미게시·미인정</td><td>이 제출로 탐색 완료 · <span class="btn sm">다시 풀기</span></td></tr>
             <tr><td>09-08 13:58 · 뺀 곡선 1</td><td>1.1일 · 모르겠음</td><td>일치하는 신호 없음</td><td>성과 없음</td><td><span class="btn sm">기록 보기</span><span class="btn sm">일반 토론</span></td></tr>
-            <tr><td>09-08 13:31 · 원본</td><td>3.9일 · 행성 같음</td><td>일치</td><td>공개 후 미확정 인정</td><td><span class="btn sm">내 공개 분석</span></td></tr>
-          </table><div class="box-b small">다시 풀기는 해당 제출 당시 Bundle·곡선과 입력을 복원하며 새 제출·새 히스토리를 생성합니다. 복원 실패 시 재시도를 제공하고 현재 별 완료를 되돌리지 않습니다.</div>
+            <tr><td>09-08 13:31 · 원본</td><td>3.9일 · 행성 같음</td><td>일치</td><td>공개 후 인정 · 성과 1건</td><td><span class="btn sm">내 공개 분석</span></td></tr>
+            <tr><td>09-02 10:14 · 원본 <span class="pill soft" style="font-size:10px">이전 데이터 판</span></td><td>6.4일 · 행성 같음</td><td>일치</td><td>인정 · 성과 1건</td><td><span class="btn sm">제출 당시</span><span class="btn sm">최신 데이터</span></td></tr>
+          </table><div class="box-b small">다시 풀기는 <b>현재 데이터 판</b>에서 제출 당시 곡선 단계·제거 조합·주기·구간·확대 상태를 복원하고 판단·근거·메모는 비웁니다. 제거 조합에 은퇴한 신호가 있으면 현재 진행 단계에서 시작하며 안내합니다. 새 제출·새 히스토리를 만들고 현재 별 완료를 되돌리지 않습니다.</div>
         </div>
         <div class="box"><div class="box-h"><span class="co">4</span>공식 신호 스레드 · 일반 토론</div><div class="box-b row"><span class="btn">3.9일 공식 스레드</span><span class="muted small">1.8일: 아직 공개된 분석 없음 · 첫 공개 때 스레드 생성</span><span class="btn">별 일반 토론 보기</span></div></div>
         <div class="box soft" style="padding:12px"><b class="small">다음 할 일</b><div class="small">미게시 분석은 나중에 공개할 수 있습니다. 공개하지 않아도 이 별의 탐색 완료는 유지됩니다.</div><div class="row" style="margin-top:8px"><span class="btn pri">공개 내용 검토</span><span class="btn">홈으로</span></div></div>
@@ -605,7 +607,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">RES-10 · SUB-11 · GRD-04</span><span>별 요약의 완료·성과·공개 상태 독립. 완료 후 미게시 분석 검토와 오판 재도전 가능</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">RES-06·11 · COM-14·18</span><span>공개된 회원×신호별 최신 제출 1건의 세 판단 통계. 공개 순서가 아닌 제출 시각을 사용</span><span class="tag p0">P0</span></li>
-      <li><span class="co">3</span><span class="nid">HIS-04·06 · EXP-10 · SUB-10</span><span>제출과 공개 분석·일반 토론은 다른 기록. 공개 취소·숨김이 개인 히스토리를 바꾸지 않음</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">HIS-04·06 · EXP-10 · SUB-10</span><span>제출과 공개 분석·일반 토론은 다른 기록. 공개 취소·숨김이 개인 히스토리를 바꾸지 않음. 옛 판 기록은 저장된 절대값을 현재 판에 재환산해 그리고 "이전 데이터 판에서 제출됨"을 표시하며, 매칭 성공 기록에는 "제출 당시 / 최신 데이터" 토글을 둠(HIS-03)</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">COM-17~20</span><span>공식 스레드는 미확정 고유 신호당 하나. 비공개·숨김 대상에는 내용·직접 링크·미리보기를 노출하지 않음</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
@@ -627,7 +629,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <div class="box"><div class="box-h"><span class="co">3</span>공개 분석 <span class="sub">토론 댓글과 별도 · 제출 시각 표시</span></div>
           <div class="box-b"><div class="row"><b>별빛사냥꾼</b><span class="muted small">제출 2026-09-08 13:31 · 공개 14:10</span><span class="pill">행성 같음</span><span class="btn sm">공개 취소</span></div>
             <div class="fixed" style="margin-top:10px"><div class="small">내 반복 주기 3.8998일 · 기준 시각 1327.10 · 가려진 시간 4.1시간 · 어두워진 정도 0.12%</div><div class="small">근거: 홀수·짝수 밝기 같음, 반대편 가려짐 없음 · 뺀 곡선 1 · 데이터 묶음 v3</div><div class="ph" style="height:90px;margin-top:8px">개인 히스토리의 해당 곡선·선택 구간을 재현한 공개 분석</div><p class="small">메모: 홀수·짝수를 비교한 뒤 행성 같음으로 판단했습니다.</p></div>
-            <div class="row" style="margin-top:8px"><span class="btn sm">분석 출처 링크 복사</span><span class="btn sm">신고</span></div><div class="muted small">게시로 동의나 댓글을 자동 생성하지 않습니다. 본인 공개 취소·운영 숨김은 공개 목록과 판단 통계에서 제외하며 개인 히스토리는 남습니다.</div>
+            <div class="row" style="margin-top:8px"><span class="btn sm">분석 출처 링크 복사</span><span class="btn sm dis" aria-disabled="true">신고 (v1 제외)</span></div><div class="muted small">게시로 동의나 댓글을 자동 생성하지 않습니다. 본인 공개 취소·운영 숨김은 공개 목록과 판단 통계에서 제외하며 개인 히스토리는 남습니다.</div>
           </div>
         </div>
         <div class="box"><div class="box-h"><span class="co">4</span>이 신호 토론 <span class="sub">공개 분석과 독립된 댓글</span></div><div class="box-b"><div class="small"><b>seojin</b> · 반대편 가려짐을 어느 범위까지 확인했나요?</div><div class="row" style="margin-top:8px"><div class="field" style="flex:1"><div class="in empty">토론 댓글</div></div><span class="btn sm">출처 링크 추가</span><span class="btn sm pri">등록</span></div></div></div>
@@ -766,7 +768,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
               <div class="qcard" style="opacity:.6;border-style:dashed"><span class="qm red">!</span><div style="flex:1"><b>주간 챌린지 · TIC 149603524</b><div class="muted small">아직 확인 안 된 신호 · AI 승인 구간 · 09-06까지 · 스레드 참여 27명</div><div class="muted small" style="margin-top:4px">🔒 튜토리얼 5개를 마치면 열립니다</div></div></div>
               <div class="qcard" style="border-color:var(--acc)"><span class="qm" style="background:var(--acc)">↺</span><div style="flex:1"><b>다시 열린 별 · TIC 149603524</b><div class="muted small"><span class="co" style="width:14px;height:14px;font-size:9px">2</span> 새 회차로 찾을 수 있는 신호가 생겼습니다</div><div class="row" style="margin-top:6px"><span class="btn sm">다시 분석</span></div></div></div>
               <div class="qcard"><span class="qm blue">1</span><div style="flex:1"><b>튜토리얼 1 · 뚜렷한 확인된 행성</b><div class="muted small">완료 · 행성 2</div></div><span class="pill acc" style="font-size:10.5px">✓</span></div>
-              <div class="qcard"><span class="qm blue">2</span><div style="flex:1"><b>튜토리얼 2 · 얕은 확인된 행성</b><div class="muted small">진행 중 · 곡선 단계 1 · 일치 없음 3회</div></div><span class="row"><span class="btn sm">계속</span><span class="btn sm ghost">건너뛰기</span></span></div>
+              <div class="qcard"><span class="qm blue">2</span><div style="flex:1"><b>튜토리얼 2 · 얕은 확인된 행성</b><div class="muted small">진행 중 · 곡선 단계 1 · 불일치 3회(수치 2 · 판단 1)</div></div><span class="row"><span class="btn sm">계속</span><span class="btn sm ghost">상세 보기 → 다음 튜토리얼로</span></span></div>
               <div class="qcard" style="opacity:.6;border-style:dashed"><span class="qm blue">3</span><div style="flex:1"><b>튜토리얼 3 · 행성 아님</b><div class="muted small">🔒 2번을 마치면 열립니다</div></div></div>
               <div class="muted small" style="text-align:center">4 · 5 🔒 ▾</div>
             </div>
@@ -789,7 +791,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">HOME-07 · CHL-01 · POL-24 · SUB-12</span><span>퀘스트 패널 펼침. 튜토리얼은 순서대로 열리고 잠긴 카드는 조건을 표시. 불일치 3회면 [건너뛰기]. 챌린지 카드는 튜토리얼 5개 완료 후 활성(달성 조건 없음, 스레드 참여 수만)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">HOME-07 · CHL-01 · POL-24 · SUB-12</span><span>퀘스트 패널 펼침. 튜토리얼은 순서대로 열리고 잠긴 카드는 조건을 표시. 수치 불일치와 판단 불일치를 합해 tutorial_skip_after(기본 3, 운영 0=끔)에 도달하면 [상세 보기] 화면 끝에서 [다음 튜토리얼로] 제공(SUB-12). 챌린지 카드는 튜토리얼 5개 완료 후 활성(달성 조건 없음, 스레드 참여 수만)</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">DEC-27 · AT-83</span><span>다시 열린 별 카드. 새로 찾을 수 있는 신호를 찾도록 장려</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">NTF-01 · COM-16</span><span>알림: 재개 별([다시 분석] 포함), 새 챌린지, 기록 갱신, 답글, 팔로우한 별 새 글. 설정에서 종류별로 끔</span><span class="tag p1">P1</span></li>
       <li><span class="co dim">·</span><span class="nid">CHL-01 · DEC-10</span><span>챌린지는 달성 조건·보상 없음(DEC-10 종결). 종료 후에도 별은 닫히지 않음</span><span class="tag p0">P0</span></li>
@@ -826,18 +828,18 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
               <tr><td>5</td><td class="mono">TBD</td><td>복수 행성 아님 신호 · 잔차 탐색</td><td class="mono">실제 TIC 미선정</td></tr>
             </table></div>
           <div class="box"><div class="box-h"><span class="co">5</span>챌린지 대상 · 36주차 <span class="sub">아직 확인 안 된 신호 + AI 승인 구간 검증</span></div><div class="box-b row"><span class="pill soft mono">149603524</span><span class="btn sm ghost">+ 추가</span><span class="muted small">회차 시작 시 알림 발송 (NTF-01)</span></div></div>
-          <div class="box"><div class="box-h">공식 스레드 · 공개 분석 관리 <span class="sub">COM-17·18</span></div><div class="box-b"><div class="small">공식 스레드는 SYSTEM이 생성합니다. 관리자는 사유를 남겨 숨김·복원하며 수동 중복 생성하지 않습니다.</div><div class="row" style="margin-top:8px"><span class="btn sm">스레드 숨김</span><span class="btn sm">스레드 복원</span><span class="btn sm">공개 분석 숨김</span><span class="btn sm">공개 분석 복원</span></div><div class="muted small">숨김 상태는 새 게시로 해제되지 않습니다. 사용자 화면·참조 카드에는 숨긴 자료의 내용·직접 링크를 노출하지 않습니다.</div></div></div>
-          <div class="box"><div class="box-h"><span class="co">6</span>발견 규칙 <span class="pill acc" style="font-size:10.5px">DEC-23 종결</span></div><div class="box-b kv"><dt>등급별 발견 수</dt><dd>A 1 · S 2 · SS 3 · SSS 4</dd><dt>대상</dt><dd>아직 못 찾은 별 전체에서 무작위</dd><dt>자리</dt><dd>서버가 계산 · 부모 별 바깥 세대 반지름 + 지터</dd></div></div>
+          <div class="box dash"><div class="box-h">공식 스레드 · 공개 분석 관리 <span class="sub">COM-17·18 · v1 제외</span></div><div class="box-b"><div class="small">공식 스레드는 SYSTEM이 생성합니다. v1에는 신고·숨김·복원 화면을 두지 않고, 문제 콘텐츠는 운영자가 DB에서 hidden 상태로 바꿉니다(COM-13, OPS-06).</div><div class="row" style="margin-top:8px"><span class="btn sm">스레드 숨김</span><span class="btn sm">스레드 복원</span><span class="btn sm">공개 분석 숨김</span><span class="btn sm">공개 분석 복원</span></div><div class="muted small">숨김 상태는 새 게시로 해제되지 않습니다. 사용자 화면·참조 카드에는 숨긴 자료의 내용·직접 링크를 노출하지 않습니다.</div></div></div>
+          <div class="box"><div class="box-h"><span class="co">6</span>발견 규칙 <span class="pill acc" style="font-size:10.5px">DEC-23 종결</span></div><div class="box-b kv"><dt>성과당 발견 수</dt><dd>stars_per_achievement 기본 1 (등급 무관)</dd><dt>대상</dt><dd>아직 못 찾은 별 전체에서 무작위</dd><dt>자리</dt><dd>서버가 계산 · 부모 별 바깥 세대 반지름 + 지터</dd></div></div>
         </div>
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">COM-16 · COM-13 · AT-78</span><span>회원 팔로우(P1)와 신고. 차단 기능 없음(DEC-33)</span><span class="tag p1">P1</span></li>
+      <li><span class="co">1</span><span class="nid">COM-16 · COM-13 · AT-78</span><span>회원 팔로우(P1). 신고·차단 기능 없음(DEC-33, COM-13 v1 제외)</span><span class="tag p1">P1</span></li>
       <li><span class="co">2</span><span class="nid">DEC-34 · MY-04 · AT-84</span><span>내 별 목록 비공개 상태의 타인 뷰</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">DEC-34</span><span>현재 공개 중인 글·반응·분석 판단 분포만 노출. 공개 취소·운영 숨김 자료는 제외</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">HOME-06 · OPS-07 · 결정 12</span><span>튜토리얼 5개. 5번은 복수 FP 신호의 직접 매칭·판단·잔차 탐색. 실제 TIC은 미선정(TBD), 무신호 별 제외</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">OPS-07 · CHL-01 · NTF-01</span><span>회차별 챌린지 대상 등록과 조건 검증. 시작 알림</span><span class="tag p0">P0</span></li>
-      <li><span class="co">6</span><span class="nid">OPS-08 · GRD-08 · DEC-23 · NFR-20c</span><span>발견 수는 종결값. 반경·확률 가중은 없음(무작위). 자리는 서버 계산</span><span class="tag p0">P0</span></li>
+      <li><span class="co">6</span><span class="nid">OPS-08 · GRD-08 · DEC-23 · NFR-20c</span><span>성과 1건당 발견 수(기본 1)는 운영 설정. 반경·확률 가중은 없음(무작위). 자리는 서버 계산</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
@@ -874,7 +876,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v0.12·상태표 v0.13·용어 사전 v0.3(2026-09-08)을 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v0.13·상태표 v0.14·용어 사전 v0.4(2026-09-09)를 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
