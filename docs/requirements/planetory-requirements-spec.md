@@ -395,6 +395,8 @@ Planetory는 회원 전용 서비스다. 로그인 화면과 OAuth 콜백을 제
 | 엔티티 | 주요 정보 |
 |---|---|
 | User | 제공자 ID, 닉네임, 회원 상태, 생성·탈퇴 시각 |
+| UserSetting `(v0.13)` | 사용자별 내 별 목록 공개 여부, 알림 종류별 켜기/끄기, 첫 방문 안내 표시 여부 (ACC-05, MY-04, HOME-09) |
+| Follow `(v0.13)` | 팔로우한 회원 또는 별, 생성 시각. 대상 종류별로 사용자당 1건 (COM-16, P1) |
 | Star | TIC ID, 항성 정보, 확정 행성 보유 상태(후보표 기준)·수, 공개 상태 |
 | ObservationDataset | Sector·기간·케이던스·시간 기준·원천·버전 |
 | LightCurve | 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·원본 주기도 경로, 관측 공백·단위, 공개 버전. 사용자용 잔차 경로는 두지 않음 `(v0.11)` |
@@ -424,6 +426,8 @@ Planetory는 회원 전용 서비스다. 로그인 화면과 OAuth 콜백을 제
 | ChallengeRound | 회차·기간·target_tic(미확정·AI 승인 조건)·소개 문구·운영 상태. 챌린지 달성·보상 조건은 두지 않음(POL-24) `(v0.12)` |
 | ExpertReport | v1 제외(P1 전문가 제보 착수 시 추가). 원 게시글·포함 댓글/첨부/분석 버전·생성 내용·운영자 확인·수신자·메일 상태·멱등 키·시도/오류·발송 시각 `(v0.13)` |
 | CandidateStatusHistory | 외부 원천·통합 disposition·AI 상태 변경, 규칙 버전과 근거 |
+| Notification `(v0.13)` | 수신자·종류(성과/재개/챌린지/댓글/라벨 갱신/팔로우)·본문 데이터·읽은 시각 (NTF-01, P1) |
+| OperationSetting `(v0.13)` | 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`, `tutorial_skip_after`, 무작위 시드 정책과 규칙 버전·변경 이력 (OPS-04, OPS-08) |
 | PipelineRun | 단계별 실행 상태·입력·코드·설정 버전 |
 | PublicationBundle `(v0.13)` | 함께 공개되는 원본 곡선(전 점·품질 마스크·각 LightCurve의 `fold_reference_time_btjd`)·원본 주기도·후보표·통과 모델·AI·외부 상태 버전. manifest에 곡선 단계 규칙, residual_model_version, periodogram_config_version, 주기 격자 간격·미세 조정 허용 폭 규칙 포함. 상태 staging/current/previous/expired. previous는 진행 중 세션 고정용으로 짧게 보존(기본 7일 또는 그 판을 쓰는 열린 세션이 없어질 때까지) 후 expired. Gold 파일은 내용 해시 참조로 판 간 중복 제거(DEC-35) |
 | AuditEvent | v1 제외(운영 화면 없음). 도입 시 운영자·작업·대상·사유·변경 전후 값 `(v0.13)` |
