@@ -15,7 +15,7 @@
 | 항목 | 변경 |
 |---|---|
 | light_curves 분리 | 삭제하고 `light_curve_segments`(별·섹터 단위 곡선, 불변)와 `periodograms`(판 단위)로 나눔. 곡선이 판마다 복제되지 않는다 |
-| 저장하지 않는 배열 | 시각은 `start_btjd + bin_minutes × i`로 계산, 주기 격자는 전 별 공통이라 manifest 규칙으로 생성. 실제로 저장하는 배열은 `flux`와 `power`뿐 |
+| 저장하지 않는 배열 | 시각은 `start_btjd + (bin_minutes / 1440.0) × i`로 계산(BTJD는 일 단위), 주기 격자는 전 별 공통이라 manifest 규칙으로 생성. 실제로 저장하는 배열은 `flux`와 `power`뿐 |
 | 비닝 | 곡선은 섹터 안에서 **10분 고정 간격**, 주기도 격자는 5,000점. 규칙은 manifest |
 | candidates | `transit_model_ref`(Gold 파일) → `transit_model` JSONB(모델 파라미터). 잔차 계산은 파라미터로 모델을 생성해 나눈다 |
 | publication_bundles | `gold_path` 삭제. manifest는 배열 checksum·계산 버전·주기 격자 규칙만 |
@@ -26,7 +26,7 @@
 | operation_settings 추가 | 명세서 v0.13의 OperationSetting. 규칙 버전을 PK로 두고 설정 값을 JSONB 한 묶음으로. submissions.rule_version이 참조 |
 | 확정한 것 | 판 단위는 별마다, 비닝 10분, 곡선은 섹터 세그먼트, 밝기 오차는 스칼라, 주기 범위 열 추가, 캐시 Redis, 스냅샷 PostgreSQL |
 | 아키텍처 문서 | 불변 규칙 5(곡선 본문은 EC2 Gold 파일)와 데이터 소유권 표 수정 필요 |
-| 용량 | 별당 약 70KB(2섹터·판 2개 보존), 별 20만 개에 약 14GB. 실측 후 조정(미결 11) |
+| 용량 | 별당 약 70KB(2섹터 기준, 전환 중 staging+current 2벌). 별 20만 개에 약 14GB. 이전 판을 남기지 않고 세그먼트는 revision이 같으면 판 사이에 공유한다. 실측 후 조정(미결 11) |
 
 ### v0.1 → v0.2 변경 요약
 
@@ -171,15 +171,16 @@ erDiagram
         bigint tic_id FK "별"
         text bundle_version "판 버전"
         text status "staging/current/archived"
-        jsonb manifest "포함 섹터·checksum·계산 버전·격자 규칙"
+        jsonb manifest "세그먼트 id 집합·checksum·계산 버전·격자 규칙"
         double fold_reference_time_btjd "위상 접기 기준 시각"
         numeric base_days "관측 기간(일)"
         timestamptz published_at "공개 시각"
     }
-    light_curve_segments["light_curve_segments · 섹터별 곡선(불변)"] {
+    light_curve_segments["light_curve_segments · 섹터별 곡선(revision 단위 불변)"] {
         bigint id PK "고유 번호"
         bigint tic_id FK "별"
         smallint sector "섹터"
+        text binning_revision "원천·전처리·비닝 설정 버전"
         double start_btjd "첫 점 시각"
         numeric bin_minutes "비닝 간격(분)"
         integer n_points "점 수"
@@ -258,7 +259,7 @@ erDiagram
         numeric epoch_btjd "서버 파생 epoch"
         numeric duration_hours "서버 파생 지속시간"
         text user_judgment "LIKELY/UNLIKELY/UNSURE"
-        jsonb evidence_checks "근거 4종"
+        jsonb evidence_checks "근거 3종"
         text match_result "판정 결과"
         bigint matched_candidate_id FK "일치 후보"
         text achievement_result "성과 결과"
@@ -312,6 +313,7 @@ erDiagram
         text unlock_reason "tutorial/achievement/challenge"
         bigint trigger_tic_id FK "발견을 일으킨 별"
         bigint trigger_achievement_id FK "원인 성과"
+        smallint seq "한 성과가 연 별 중 순번"
         smallint generation "세대"
         numeric angle_deg "각도"
         numeric radius_jitter "반지름 지터"
@@ -451,7 +453,7 @@ erDiagram
 |---|---|
 | tic_id, bundle_version | |
 | status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 새 판이 current가 되면 이전 판은 곧바로 archived가 되고 그 판의 periodograms 행을 지운다. 이전 판을 남겨 두지 않는다(v0.3 결정 C) |
-| manifest JSONB | **포함 섹터 목록**, 배열 checksum, residual_model_version, periodogram_config_version, **곡선 비닝 규칙(기본 10분)**, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭(결정 9), 곡선 단계 규칙 |
+| manifest JSONB | **참조할 light_curve_segments id 집합**(섹터 목록이 아니라 revision까지 특정한다), 배열 checksum, residual_model_version, periodogram_config_version, **곡선 비닝 규칙(기본 10분)**, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭(결정 9), 곡선 단계 규칙 |
 | fold_reference_time_btjd, base_days | 포함 섹터 전체 기준의 위상 접기 기준 시각과 관측 기간. 섹터가 늘면 판이 바뀌면서 함께 갱신 |
 | published_at | archived 전환 시 그 판의 periodograms 행과 Redis 캐시를 정리한다. 곡선 세그먼트는 판에 묶이지 않으므로 지우지 않는다. 판 행 자체는 제출이 참조하므로 남긴다(수백 바이트) |
 
@@ -461,8 +463,8 @@ erDiagram
 
 | 열 | 비고 |
 |---|---|
-| tic_id, sector | UNIQUE(tic_id, sector). observation_datasets와 같은 단위 |
-| start_btjd DOUBLE PRECISION, bin_minutes, n_points | **시각 배열은 저장하지 않는다.** i번째 점의 시각 = `start_btjd + bin_minutes × i`. 섹터 안에서 균등 격자이므로 계산으로 충분하다 |
+| tic_id, sector, binning_revision | UNIQUE(tic_id, sector, binning_revision). observation_datasets와 같은 섹터 단위이고, 원천·전처리·비닝 설정이 바뀌면 기존 행을 덮어쓰지 않고 새 revision 행을 만든다 |
+| start_btjd DOUBLE PRECISION, bin_minutes, n_points | **시각 배열은 저장하지 않는다.** i번째 점의 시각 = `start_btjd + (bin_minutes / 1440.0) × i` (BTJD는 일 단위이므로 분을 일로 환산한다). `start_btjd`는 첫 bin의 시작 시각이다. 섹터 안에서 균등 격자이므로 계산으로 충분하다 |
 | flux `real[]` | 품질 필터 후 10분 간격으로 비닝한 밝기. 길이 = n_points |
 | flux_scatter | 그 섹터의 점간 산포 하나. 점마다의 오차 배열 대신 대표값 하나만 둔다. 비닝하면 점마다의 오차가 거의 같아지므로 충분하다 |
 | gaps JSONB | 그 섹터 안의 빈 구간 인덱스. 균등 격자를 유지하려고 빈 칸은 NaN으로 채운다 |
@@ -484,7 +486,7 @@ erDiagram
 | 전 점 time·flux·err·quality (v0.2 파일 방식과 같은 내용) | 약 560KB | 약 110GB |
 | 10분 비닝, 네 배열 모두 | 약 130KB | 약 26GB |
 | 시각·주기 격자 제거, flux + err | 약 100KB | 약 20GB |
-| **flux만 + 산포 스칼라, 판 2개 보존** | **약 70KB** | **약 14GB** |
+| **flux만 + 산포 스칼라, 전환 중 2벌** | **약 70KB** | **약 14GB** |
 
 **비닝 근거.** 점을 k개씩 묶으면 점 수는 1/k, 점당 잡음은 1/√k가 되어 통과의 신호 대 잡음비는 그대로 유지된다. 조건은 비닝 간격이 통과 지속시간보다 충분히 작아야 한다는 것뿐이다. 그래서 점 수를 고정하지 않고 간격을 고정한다. 점 수를 5,000으로 고정하면 관측 기간이 길수록 간격이 벌어져(섹터 8개면 63분) 3시간 통과가 세 점으로 뭉개지고 근거 체크의 통과 모양 판단이 불가능해진다. 섹터 단위로 나누면 이 문제 자체가 없어져 섹터 수와 무관하게 10분이 유지된다.
 
@@ -496,7 +498,7 @@ erDiagram
 | tic_id, status active/retired, updated_bundle_id | retired는 매칭 대상 제외, 성과·히스토리 연결 위해 삭제 안 함 |
 | removal_step, period_days, epoch_btjd, duration_hours, depth_ppm, bls_power, quality | 자체 BLS 대표값. 미세 조정 범위(period_min/max/step)는 열이 아니라 manifest 규칙으로 API가 계산(결정 9) |
 | transit_model JSONB | 통과 모델 파라미터(주기·중심 시각·지속시간·깊이·모양·모델 버전). 잔차 계산은 이 파라미터로 모델을 생성해 원본에서 나눈다(DAT-14 입력) |
-| discoverable | 현재 데이터로 찾을 수 있는지(SUB-11 (4)) |
+| discoverable | 현재 데이터로 찾을 수 있는지(SUB-11 (4)). **사용자에게 제공되는 것과 같은 조건**(같은 비닝 간격·모델·주기 격자 설정)으로 계산한 발견 단계 잔차 주기도에서 봉우리가 잡히는지로 판정하며, 비닝 revision이나 격자 규칙이 바뀌면 새 판을 만들 때 다시 계산한다(명세서 v1.0 DAT-07) |
 | is_confirmed | 외부 확정 여부 |
 
 **candidate_aliases** (SUB-04): candidate_id, multiplier(0.5/2/3), alias_period_days.
@@ -525,7 +527,7 @@ erDiagram
 | epoch_btjd, duration_hours | | 서버가 위상값에서 파생해 저장(EXP-06·07). 절대값이라 판이 바뀌어도 의미 유지 |
 | residual_model_version, periodogram_config_version | | 제출 당시 계산 버전 |
 | user_judgment | CHECK LIKELY_PLANET/UNLIKELY_PLANET/UNSURE, candidate에서만 NOT NULL | |
-| evidence_checks JSONB | | P0 4종(oddeven, secondary, ushape, quality) + centroid_data_status=unavailable |
+| evidence_checks JSONB | | P0 3종(oddeven, secondary, ushape) + centroid_data_status=unavailable. 품질 플래그는 배치 전처리에서만 쓰고 화면에 전달하지 않으므로 근거 항목이 아니다(명세서 v1.0 POL-13) |
 | memo | | |
 | match_result | CHECK matched/matched_harmonic/not_matched/duplicate/ambiguous_match/none_wrong/skipped | none_empty·none_complete 삭제(완료는 서버 판정, 제출이 아님) |
 | matched_candidate_id | FK NULL | matched·matched_harmonic·duplicate에서만 |
@@ -587,7 +589,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 | 열 | 비고 |
 |---|---|
-| planet_count | 별 색·궤도 기준 = 맞춘 확인된 행성 + "행성 같음"으로 공개한 미확정. 최신 판단으로 덮어쓰므로 줄어들 수 있음 |
+| planet_count | 별 색·궤도 기준 = 맞춘 확인된 행성 + "행성 같음"으로 판단한 미확정(공개 여부와 무관, HOME-05·결정 22). 최신 판단으로 덮어쓰므로 줄어들 수 있음 |
 | achievement_count | 이 별에서 인정된 성과 수(user_candidate_achievements COUNT 저장). 등급 문자 A/S/SS/SSS = 1/2/3/4 이상은 계산값이며 열로 두지 않음 |
 | fp_success | 실제 FP 신호의 판단 성공 성과가 1건 이상. "행성 없이 완료"(살구색) 표시용 |
 | progress_stage | unexplored / in_progress / completed |
@@ -602,7 +604,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 열 | 비고 |
 |---|---|
 | unlock_reason | tutorial / achievement / challenge. grade·completion 없음 |
-| trigger_tic_id, trigger_achievement_id | 발견 경로. achievement면 trigger_achievement_id NOT NULL, UNIQUE(trigger_achievement_id, seq) |
+| trigger_tic_id, trigger_achievement_id, seq | 발견 경로. achievement면 trigger_achievement_id NOT NULL. seq는 한 성과가 연 별의 순번(0부터, stars_per_achievement가 2 이상일 때 사용)이며 UNIQUE(trigger_achievement_id, seq)로 재처리 중복을 막는다 |
 | generation, angle_deg, radius_jitter, depth_z | 서버가 계산한 화면 자리. 클라이언트는 읽기만 |
 | unlocked_at | |
 
@@ -649,8 +651,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 ### F. 운영·챌린지·알림·통계
 
-- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 기본 3·운영 0)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
-- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(기본 3, 운영 환경 0), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
+- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
+- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
 - **challenge_rounds** (CHL-01, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, status planned/active/closed. 달성 조건·보상 없음.
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
