@@ -1,12 +1,28 @@
-# Planetory 서비스 DB ERD v0.3
+# Planetory 서비스 DB ERD v1.0
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2 2026-09-09)
-- 기준 문서: 요구사항 명세서 v0.13 + 2026-09-09 팀 정합 결정 10건, 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다.**
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09)
+- 기준 문서: 요구사항 명세서 v1.0(상태표·용어 사전·와이어프레임 v1.0), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다.**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. OCI HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
-- 상태: 팀 검토용. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
+- 상태: **백엔드 개발 기준선.** 구조와 제약은 확정이고 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v0.3 → v1.0 (기준선 확정, MR !16 검토 반영)
+
+명세서 v1.0과 함께 백엔드 개발의 기준선으로 삼는다.
+
+| 항목 | 변경 |
+|---|---|
+| 세그먼트 revision | `light_curve_segments`에 `binning_revision` 추가, `UNIQUE(tic_id, sector, binning_revision)`. 재비닝은 덮어쓰기가 아니라 새 revision 행 |
+| Bundle manifest | 포함 섹터 목록 → **참조할 세그먼트 id 집합**. 어느 판이 어떤 revision을 쓰는지 특정된다 |
+| 시각 복원식 | `start_btjd + bin_minutes × i` → `start_btjd + (bin_minutes / 1440.0) × i`. BTJD가 일 단위라 분을 환산해야 한다 |
+| star_unlocks | `seq` 열 추가. `UNIQUE(trigger_achievement_id, seq)`가 참조하던 열이 없었고, `stars_per_achievement`가 2 이상이면 중복 방지가 성립하지 않았다 |
+| planet_count | "행성 같음으로 **공개한** 미확정" → "**판단한** 미확정". 공개 조건은 HOME-05·결정 22에 없다 |
+| evidence_checks | P0 4종 → **3종**(oddeven, secondary, ushape). 품질 플래그는 배치 전처리에서만 쓰고 화면에 전달하지 않는다(명세서 v1.0 POL-13) |
+| discoverable | 사용자에게 제공되는 것과 같은 조건(비닝 간격·모델·격자)으로 판정하고 revision이 바뀌면 재계산한다는 기준을 명시(DAT-07) |
+| 용량 표기 | "판 2개 보존" → "전환 중 staging+current 2벌". 이전 판을 남기지 않고 세그먼트는 revision이 같으면 판 사이에 공유 |
+| tutorial_skip_after | 개발 3 · 운영 0=끔으로 환경 표기 정정 |
 
 ### v0.2 → v0.3 (Gold 본문을 DB 배열로)
 
