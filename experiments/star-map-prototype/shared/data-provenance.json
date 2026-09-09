@@ -1,0 +1,40 @@
+{
+  "source": "MAST TESS SPOC",
+  "inputs": [
+    {
+      "file": "tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
+      "sha256": "edaa0de029f6fde3d045352887ef1a2950bb9b38fc18075066c81d7638feb695"
+    },
+    {
+      "file": "tess2018292075959-s0004-0000000259377017-0124-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018292075959-s0004-0000000259377017-0124-s_lc.fits",
+      "sha256": "09f1e69d89dce001e447fbc509b9453f033b2428d183add334b43b93dbc8c93b"
+    },
+    {
+      "file": "tess2018319095959-s0005-0000000259377017-0125-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018319095959-s0005-0000000259377017-0125-s_lc.fits",
+      "sha256": "739250df0d1ccda4304e01213f1f0f53c24603e3e223ff646157b6721665a9d5"
+    },
+    {
+      "file": "tess2018234235059-s0002-0000000307210830-0121-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file?uri=mast:TESS/product/tess2018234235059-s0002-0000000307210830-0121-s_lc.fits",
+      "sha256": "516d3ee2210ba33214026ac1255d06e112723c6053f5a33872f457b0526ba8d4"
+    },
+    {
+      "file": "tess2018319095959-s0005-0000000307210830-0125-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file?uri=mast:TESS/product/tess2018319095959-s0005-0000000307210830-0125-s_lc.fits",
+      "sha256": "a54fa0f1ec9b4bd860083d9dbef49ccd667f1959e3c210e5c480ee6368e6a0ae"
+    },
+    {
+      "file": "tess2019032160000-s0008-0000000307210830-0136-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file?uri=mast:TESS/product/tess2019032160000-s0008-0000000307210830-0136-s_lc.fits",
+      "sha256": "a17e259065b86204d086c61508267ee4f633f35400e2a9e18f8c3c8b7e49d87b"
+    },
+    {
+      "file": "tess2019253231442-s0016-0000000199574208-0152-s_lc.fits",
+      "url": "https://mast.stsci.edu/api/v0.1/Download/file?uri=mast:TESS/product/tess2019253231442-s0016-0000000199574208-0152-s_lc.fits",
+      "sha256": "dfa18c9a79eafc11f3c81ec723249939c29f79509d00b8d0d24b8773ab39c847"
+    }
+  ]
+}
