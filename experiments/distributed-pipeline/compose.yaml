@@ -1,0 +1,131 @@
+name: planetory-distributed-poc
+
+x-hadoop-environment: &hadoop-environment
+  CORE-SITE.XML_fs.defaultFS: hdfs://namenode:8020
+  HDFS-SITE.XML_dfs.namenode.rpc-address: namenode:8020
+  HDFS-SITE.XML_dfs.replication: "2"
+  MAPRED-SITE.XML_mapreduce.framework.name: yarn
+  YARN-SITE.XML_yarn.resourcemanager.hostname: resourcemanager
+  YARN-SITE.XML_yarn.nodemanager.aux-services: mapreduce_shuffle
+  YARN-SITE.XML_yarn.nodemanager.pmem-check-enabled: "false"
+  YARN-SITE.XML_yarn.nodemanager.vmem-check-enabled: "false"
+
+x-hadoop-service: &hadoop-service
+  image: ${HADOOP_IMAGE:-apache/hadoop:3.4.3}
+  platform: ${TARGET_PLATFORM:-linux/amd64}
+  restart: unless-stopped
+  networks:
+    - hadoop
+
+services:
+  namenode:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: namenode
+    command: ["hdfs", "namenode"]
+    environment:
+      <<: *hadoop-environment
+      ENSURE_NAMENODE_DIR: /data/name
+      HDFS-SITE.XML_dfs.namenode.name.dir: /data/name
+    volumes:
+      - namenode-data:/data/name
+    ports:
+      - "127.0.0.1:9870:9870"
+
+  datanode-1:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: datanode-1
+    command: ["hdfs", "datanode"]
+    environment:
+      <<: *hadoop-environment
+      HDFS-SITE.XML_dfs.datanode.data.dir: /data/data
+    volumes:
+      - datanode-1-data:/data/data
+    depends_on:
+      - namenode
+
+  datanode-2:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: datanode-2
+    command: ["hdfs", "datanode"]
+    environment:
+      <<: *hadoop-environment
+      HDFS-SITE.XML_dfs.datanode.data.dir: /data/data
+    volumes:
+      - datanode-2-data:/data/data
+    depends_on:
+      - namenode
+
+  resourcemanager:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: resourcemanager
+    command: ["yarn", "resourcemanager"]
+    environment:
+      <<: *hadoop-environment
+    ports:
+      - "127.0.0.1:8088:8088"
+    depends_on:
+      - namenode
+
+  nodemanager-1:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: nodemanager-1
+    command: ["yarn", "nodemanager"]
+    environment:
+      <<: *hadoop-environment
+    volumes:
+      - nodemanager-1-local:/data/yarn
+    depends_on:
+      - resourcemanager
+      - datanode-1
+
+  nodemanager-2:
+    <<: *hadoop-service
+    profiles: ["distributed"]
+    hostname: nodemanager-2
+    command: ["yarn", "nodemanager"]
+    environment:
+      <<: *hadoop-environment
+    volumes:
+      - nodemanager-2-local:/data/yarn
+    depends_on:
+      - resourcemanager
+      - datanode-2
+
+  service-db:
+    image: postgres:16-alpine
+    profiles: ["service"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: planetory_poc
+      POSTGRES_USER: planetory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD for the local PoC}
+    volumes:
+      - service-db-data:/var/lib/postgresql/data
+    networks:
+      - service
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planetory -d planetory_poc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  hadoop:
+    internal: true
+  service:
+    internal: true
+
+volumes:
+  namenode-data:
+  datanode-1-data:
+  datanode-2-data:
+  nodemanager-1-local:
+  nodemanager-2-local:
+  service-db-data:

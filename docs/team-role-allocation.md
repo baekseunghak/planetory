@@ -2,9 +2,13 @@
 
 > 상태: 기획 단계
 >
-> 기준일: 2026-09-04
+> 기준일: 2026-09-09
 >
-> 기준 문서: [Planetory 요구사항 명세서 v0.9](requirements/planetory-requirements-spec.md), [후보·별 상태표 v0.11](requirements/planetory-status-table.md), [시스템 아키텍처](development/system-architecture.md)
+> 기준 문서
+>
+> - [Planetory 요구사항 명세서 v0.12](requirements/planetory-requirements-spec.md)
+> - [후보·별 상태표 v0.12](requirements/planetory-status-table.md)
+> - [시스템 아키텍처](development/system-architecture.md)
 >
 > Jira 상위 Epic: [S15P21C206-26 · 서비스 구체화 및 시스템 설계](https://ssafy.atlassian.net/browse/S15P21C206-26)
 >
@@ -16,12 +20,14 @@
 
 각 담당자는 AI 에이전트를 조사, 초안 작성, 반복 작업과 검증 보조에 활용할 수 있다. 도메인 결정, 요구사항 해석, 인터페이스 합의와 최종 검수 책임은 담당자에게 있다.
 
-요구사항 명세서와 상태표·와이어프레임·프로토타입이 다르면 요구사항 명세서 v0.9를 정본으로 사용한다. 상태표 v0.11은 대체된 결정을 표시한 중간판이며, 본문이 동기화되는 v0.12 전까지 상태표의 이전 규칙을 구현 근거로 사용하지 않는다.
+요구사항 명세서와 상태표·와이어프레임·프로토타입이 다르면 요구사항 명세서 v0.12를 정본으로 사용한다.
 
-### v0.9 역할 분배 반영 사항
+### v0.12 역할 분배 반영 사항
 
 - 잔차 곡선과 잔차 주기도는 배치 저장물이 아니라 EC2의 온라인 파생 계산으로 제공한다.
-- Gold에는 원본 정제곡선 전 점·품질 마스크, 후보별 transit model과 계산 설정 버전이 포함되어야 한다.
+- Gold에는 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`, 후보별 transit model과 계산 설정 버전이 포함되어야 한다.
+- 신규 분석 세션은 `current`에서 PublicationBundle을 고정한다. EC2는 `current`·`previous`를 기본 보존하고, 진행 중 세션·재시도·보존기간 내 히스토리가 참조하는 이전 Bundle과 캐시는 보호한다.
+- 온라인 계산은 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED` 상태를 구분한다.
 - 김동혁이 온라인 계산 위치·캐시·큐·관측 구조를, 윤성용이 배치와 EC2 계산의 과학적 일치 기준을, 강재민이 요청 상태·캐시 키·API 경계를 분석한다.
 - 외부 라벨이 갱신되어도 v1에서는 기존 성과·등급·발견한 별·통계 스냅샷을 유지하고 재분류 표식만 남긴다.
 - 동의·비동의 합계와 반응한 회원 닉네임 목록은 모든 회원에게 공개한다.
@@ -32,7 +38,7 @@
 
 | 번호 | 담당자 | 담당 도메인 | 핵심 책임 | Jira |
 | ---: | --- | --- | --- | --- |
-| 1 | 김동혁 | 데이터 플랫폼·DevOps | OCI, HDFS, YARN/Spark, Airflow, 데이터 계층, Gold 전달, 온라인 파생 계산 아키텍처 | [S15P21C206-28](https://ssafy.atlassian.net/browse/S15P21C206-28) |
+| 1 | 김동혁 | 데이터 플랫폼·DevOps | GCP, HDFS, YARN/Spark, Airflow, 데이터 계층, Gold 전달, 온라인 파생 계산 아키텍처 | [S15P21C206-28](https://ssafy.atlassian.net/browse/S15P21C206-28) |
 | 2 | 윤성용 | 천문 데이터 처리·AI | Light Curve 전처리, BLS, 내부 잔차, transit model, 외부 데이터, AI | [S15P21C206-29](https://ssafy.atlassian.net/browse/S15P21C206-29) |
 | 3 | 강재민 | 탐사 코어 백엔드 | Gold 조회, 온라인 잔차 계산, 제출·매칭, 히스토리, 성과·등급, 완료·재개·발견 | [S15P21C206-31](https://ssafy.atlassian.net/browse/S15P21C206-31) |
 | 4 | 백승학 | 서비스 백엔드 | 인증·회원, 커뮤니티, 공개 반응, 신고·운영 숨김, 통계, 알림, 운영 | [S15P21C206-30](https://ssafy.atlassian.net/browse/S15P21C206-30) |
@@ -47,27 +53,27 @@
 
 #### 분석 범위
 
-- OCI 4계정 A/B/C/D의 노드 역할과 계정 간 네트워크
-- A 노드의 NameNode·ResourceManager·Airflow와 Worker 병행 자원 범위
+- GCP 6계정 Node 1~6의 역할과 계정 간 네트워크
+- Node 1의 NameNode·ResourceManager·Airflow 제어 역할과 Node 2의 Standby NameNode·Worker 병행 자원 범위
 - HDFS Raw/Bronze/Silver 저장 구조, 복제 계수와 보존 정책
 - YARN/Spark 자원 배분과 Airflow 배치 제어
 - 원천 수집의 checksum, 재시도, 멱등성과 부분 재처리
-- PublicationBundle 검증과 OCI에서 EC2로의 Gold 전달
-- EC2 release 검증, `current` 원자적 전환과 롤백
+- PublicationBundle 검증과 GCP에서 EC2로의 Gold 전달
+- EC2 release 검증, `current`·`previous` 전환과 롤백
 - EC2 온라인 파생 계산의 구현 위치, 캐시 저장소, 큐와 동시 실행 상한
-- Gold 원본 전 점·품질 마스크·transit model 추가에 따른 용량 재산정
+- Gold 필수 입력의 PoC용 최소 계약과 표본 용량 측정
 - 온라인 계산 시간·큐 길이·캐시 적중률·실패율 관측
 - HDFS·YARN·Spark·Airflow·Gold 버전 관측 지표
 - 30일 운영을 위한 저장 용량과 컴퓨팅 자원 가정
 
 #### 기획 산출물
 
-- OCI 노드 역할·자원 배분표
+- GCP 노드 역할·자원 배분표
 - 네트워크 및 서비스 배치도
 - 데이터 계층별 저장·복제·보존 계획
 - 전체 배치 및 Gold 전달 흐름도
 - 온라인 파생 계산·캐시·큐 아키텍처 결정안
-- 변경된 Gold 스키마와 EC2 용량 재산정
+- Gold 스키마·EC2 용량 후속 결정에 사용할 PoC 측정 결과
 - 실패·재시도·복구·롤백 계획
 - 후속 인프라·저장·배포 Jira Task 제안
 
@@ -84,7 +90,7 @@
 - 고조파 별칭, 후보 병합과 원본 재검증
 - `discoverable` 판정과 사용자 제공 후보 범위
 - 외부 disposition과 자체 AI 결과의 분리
-- Gold에 제공할 원본 정제곡선 전 점·품질 마스크·후보별 transit model·계산 설정 버전
+- Gold에 제공할 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·후보별 transit model·계산 설정 버전
 - 배치 Silver 잔차와 EC2 온라인 재계산 잔차의 허용 오차 및 검증 기준
 - 신규 LC·Sector 유입 시 후보 추가·discoverable 변경과 재개 이벤트 발생 조건
 - TIC·TCE·TOI 변경 시 후보 상태 이력과 성과 유지 범위
@@ -205,12 +211,12 @@
 
 ## 4. 협업 경계
 
-### v0.9 변경 요구사항 책임
+### v0.12 기준 변경 요구사항 책임
 
 | 요구사항 | 주 담당 | 협업 담당 | 책임 |
 | --- | --- | --- | --- |
 | POL-03, DAT-05 | 윤성용 | 김동혁, 강재민 | Silver 내부 잔차와 Gold 제공 자산의 경계를 정의한다. |
-| DAT-14, DEC-35 | 김동혁 | 윤성용, 강재민 | 온라인 계산 위치·Gold 스키마·캐시·큐·관측·검증 아키텍처를 결정한다. |
+| DAT-14, DEC-35 | 김동혁 | 윤성용, 강재민 | 온라인 계산 위치·캐시·큐·관측·검증 구조를 정리하고, Gold 스키마·용량 결정을 위한 PoC 근거를 준비한다. |
 | EXP-09, AT-67·80 | 강재민 | 백지웅 | 온라인 잔차 계산 요청 상태와 사용자 제공 API를 정의한다. |
 | GRD-06, DEC-26 | 강재민 | 윤성용, 백승학 | 외부 라벨 갱신 표식은 남기되 기존 성과·등급·통계는 유지한다. |
 | DAT-15 | 윤성용 | 강재민, 백승학, 하서진 | 후보 추가·discoverable 변경에서 재개 이벤트와 알림·퀘스트 반영 경계를 정의한다. |
@@ -219,7 +225,7 @@
 | GRD-08, OPS-08, DEC-23 | 강재민 | 백승학, 하서진 | 전체 미발견 별 대상의 seed 기반 무작위 발견과 제외 규칙을 정의한다. |
 
 ```text
-김동혁: OCI·HDFS·Spark 실행 및 저장 환경
+김동혁: GCP·HDFS·Spark 실행 및 저장 환경
     ↓
 윤성용: 천문 처리·후보·transit model·AI 산출물
     ↓ PublicationBundle

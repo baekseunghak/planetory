@@ -1,0 +1,132 @@
+validate:compose:
+  stage: validate
+  image: docker:27.5-cli
+  variables:
+    POSTGRES_PASSWORD: ci-validation-only
+    AIRFLOW_DB_PASSWORD: ci-validation-only
+    AIRFLOW_FERNET_KEY: ci-validation-only
+    AIRFLOW_WEBSERVER_SECRET_KEY: ci-validation-only
+    AIRFLOW_DATABASE_URL: postgresql+psycopg2://airflow:ci-validation-only@127.0.0.1:5432/airflow
+    GCP_NODE_1_PROJECT: ci-node-1-project
+    GCP_NODE_2_PROJECT: ci-node-2-project
+    GCP_NODE_3_PROJECT: ci-node-3-project
+    GCP_NODE_4_PROJECT: ci-node-4-project
+    GCP_NODE_5_PROJECT: ci-node-5-project
+    GCP_NODE_6_PROJECT: ci-node-6-project
+  script:
+    - docker compose -f compose.yaml config -q
+    - docker compose -f infra/distributed-system/compose.control-plane.yaml config -q
+    - docker compose -f infra/distributed-system/compose.worker.yaml config -q
+  rules:
+    - changes:
+        - compose.yaml
+        - .dockerignore
+        - apps/**/Dockerfile
+        - distributed-system/**/Dockerfile
+        - experiments/distributed-pipeline/compose.yaml
+        - infra/**/*.yaml
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*.yml
+
+validate:hadoop-config:
+  stage: validate
+  image: python:3.12-alpine
+  script:
+    - python infra/distributed-system/validate.py
+  rules:
+    - changes:
+        - infra/distributed-system/**/*.xml
+        - infra/distributed-system/**/workers
+        - infra/distributed-system/validate.py
+        - infra/distributed-system/*.yaml
+        - .gitlab/ci/common.yml
+
+.docker-build:
+  stage: build
+  image: docker:27.5-cli
+  services:
+    - name: docker:27.5-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+    - docker run --privileged --rm tonistiigi/binfmt:qemu-v10.2.3-68 --install amd64
+    - docker run --rm --platform linux/amd64 alpine:3.20 uname -m | grep -qx x86_64
+    - docker buildx create --use
+  script:
+    - docker buildx build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS --push .
+
+.remote-compose-deploy:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client
+    - install -d -m 700 ~/.ssh
+    - cp "$DEPLOY_SSH_KEY" ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - cp "$DEPLOY_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+  script:
+    - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+    - export FULL_IMAGE="$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && export $DEPLOY_IMAGE_VARIABLE='$FULL_IMAGE' && docker compose -f compose.yaml config -q && docker compose -f compose.yaml pull $DEPLOY_SERVICES && if [ '$DEPLOY_ACTION' = 'up' ]; then docker compose -f compose.yaml up -d --no-deps $DEPLOY_SERVICES && docker compose -f compose.yaml ps $DEPLOY_SERVICES; fi"
+
+.deploy-ec2-a:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $EC2_A_HOST
+    DEPLOY_PATH: $EC2_A_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
+
+.deploy-ec2-b:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $EC2_B_HOST
+    DEPLOY_PATH: $EC2_B_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
+
+.deploy-gcp-node-1:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_1_HOST
+    DEPLOY_PATH: $GCP_NODE_1_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.control-plane.yaml
+
+.deploy-gcp-node-2:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_2_HOST
+    DEPLOY_PATH: $GCP_NODE_2_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.worker.yaml
+
+.deploy-gcp-node-3:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_3_HOST
+    DEPLOY_PATH: $GCP_NODE_3_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.worker.yaml
+
+.deploy-gcp-node-4:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_4_HOST
+    DEPLOY_PATH: $GCP_NODE_4_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.worker.yaml
+
+.deploy-gcp-node-5:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_5_HOST
+    DEPLOY_PATH: $GCP_NODE_5_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.worker.yaml
+
+.deploy-gcp-node-6:
+  extends: .remote-compose-deploy
+  variables:
+    DEPLOY_HOST: $GCP_NODE_6_HOST
+    DEPLOY_PATH: $GCP_NODE_6_DEPLOY_PATH
+    DEPLOY_COMPOSE_SOURCE: infra/distributed-system/compose.worker.yaml

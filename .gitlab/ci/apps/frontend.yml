@@ -1,0 +1,39 @@
+build:frontend:
+  extends: .docker-build
+  variables:
+    DOCKERFILE: apps/frontend/Dockerfile
+    IMAGE_NAME: frontend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/frontend/package-lock.json]
+      changes: [apps/frontend/**/*]
+
+deploy:frontend:ec2-a:
+  extends: .deploy-ec2-a
+  needs: ["build:frontend"]
+  variables:
+    IMAGE_NAME: frontend
+    DEPLOY_IMAGE_VARIABLE: FRONTEND_IMAGE
+    DEPLOY_SERVICES: frontend
+    DEPLOY_ACTION: up
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/frontend/package-lock.json]
+      changes: [apps/frontend/**/*]
+      when: manual
+
+deploy:frontend:ec2-b:
+  extends: .deploy-ec2-b
+  needs: ["build:frontend"]
+  variables:
+    IMAGE_NAME: frontend
+    DEPLOY_IMAGE_VARIABLE: FRONTEND_IMAGE
+    DEPLOY_SERVICES: frontend
+    DEPLOY_ACTION: up
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/frontend/package-lock.json]
+      changes: [apps/frontend/**/*]
+      when: manual
