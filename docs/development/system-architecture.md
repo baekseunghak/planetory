@@ -2,6 +2,7 @@
 
 > Planetory 설계·구현·리뷰 시 사용하는 기준 컨텍스트다.  
 > 상태: 목표 설계이며 실제 배포 완료를 의미하지 않는다. `확정`은 유지할 결정, `가정`은 계산 기준, `후보`는 대안, `미정`은 사용자 결정이 필요한 값이다.
+> 기준 요구사항: [Planetory 요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md)
 
 ```mermaid
 flowchart LR
@@ -72,9 +73,9 @@ GCP 디스크·네트워크·비용 가정과 검토 결과는 [GCP 분산 인�
 | 환경 | 수량 | 서버 1대당 사양 | 합계 | 상태 |
 | --- | ---: | --- | --- | --- |
 | AWS EC2 | 2대 | 4 vCPU · 16GB · 320GB | 8 vCPU · 32GB · 640GB | 확정된 가용량 |
-| GCP Node 1 | 1대 | 4 vCPU · 32GiB · Data 200GiB | 동일 | 생성 계획 |
-| GCP Node 2 | 1대 | 4 vCPU · 32GiB · HDFS 2,000GiB · Metadata 100GiB | 동일 | 생성 계획 |
-| GCP Node 3~6 | 4대 | 4 vCPU · 32GiB · HDFS 각 2,000GiB | 16 vCPU · 128GiB · HDFS 8,000GiB | 생성 계획 |
+| GCP Node 1 | 1대 | 6 vCPU · 36GiB · Data 200GiB | 동일 | 생성 계획 |
+| GCP Node 2 | 1대 | 6 vCPU · 36GiB · HDFS 2,000GiB · Metadata 100GiB | 동일 | 생성 계획 |
+| GCP Node 3~6 | 4대 | 6 vCPU · 36GiB · HDFS 각 2,000GiB | 24 vCPU · 144GiB · HDFS 8,000GiB | 생성 계획 |
 
 Storage는 설치 용량이다. OS, Docker, DB, 로그와 복제본을 제외한 실제 가용량은 더 작다.
 
@@ -126,13 +127,13 @@ JournalNode는 Node 1의 200GiB 데이터 디스크, Node 2의 100GiB 메타데�
 | Raw | 원본 FITS·외부 원응답 | 약 3.031TiB | RF3 약 9.09TiB |
 | Bronze | 파싱된 관측 Parquet | 약 0.52TiB | RF2 약 1.04TiB |
 | Silver | 정제·BLS·잔차·AI 내부 산출물 | 약 0.50~0.70TiB | RF2 약 1.0~1.4TiB |
-| Gold | 서비스용 축약 데이터 | 약 20~25GiB | EC2 EBS 100GiB 권장 |
+| Gold | 서비스 공개·온라인 계산 입력 | PoC 후 산정 | EC2 저장량 PoC 후 결정 |
 
 용량 추정치는 계획값이며 실제 원천 크기와 Parquet 압축률을 측정해 다시 계산한다. 현재 약 9.77TiB 설치 용량은 예상 저장물 11.13~11.53TiB보다 작으므로 전체 TESS 보관이 불가능하다. 초기에는 Sector 범위를 제한하고 사용률 70%를 운영 목표, 75%를 신규 수집 중단선으로 둔다. 전체 범위를 처리하려면 실측 후 중간 산출물 보존·복제 범위를 줄이거나 DataNode를 추가한다. 현재 추정치에서 75% 중단선까지 고려하면 동일 디스크의 Worker 8대 이상이 필요하다.
 
 디렉터리·파티션, FITS 묶음 저장과 EC2 Gold 파일 구조는 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다. 외부 원천별 수집부터 PublicationBundle 배포까지의 상세 순서는 [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)을 따른다.
 
-Gold 후보는 `PublicationBundle`이라는 논리 계층이다. 배치는 원천·파이프라인 버전을 고정하고 단계별 재처리가 가능해야 하며, 검증된 결과만 EC2에 전달한다.
+Gold 후보는 `PublicationBundle`이라는 논리 계층이다. 배치는 원천·파이프라인 버전을 고정하고 단계별 재처리가 가능해야 하며, 검증된 결과만 EC2에 전달한다. v0.12가 요구하는 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·원본 주기도·후보별 통과 모델·계산 버전은 포함하되, 파일 스키마와 용량은 미니 파이프라인 PoC 결과를 보고 별도 Task에서 확정한다.
 
 ## 7. Gold 공개 규칙
 
@@ -145,6 +146,8 @@ GCP PublicationBundle → 검증 → EC2 임시 release → 재검증 → curren
 - 기존 릴리스를 덮어쓰지 않는다.
 - 실패한 TIC와 단계만 재처리한다.
 - EC2 API는 `current`가 가리키는 Gold만 읽는다.
+- 분석 시작 시 `publication_bundle_id`를 고정하며 진행 중 세션에 새 릴리스를 섞지 않는다.
+- 구버전 Bundle과 해당 캐시는 정해진 보존기간 동안 함께 유지한다. 보존기간은 DEC-35의 미정 항목이다.
 
 Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다.
 
@@ -153,6 +156,7 @@ Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관
 - Prometheus는 node exporter, Spring Actuator, JMX exporter를 통해 EC2와 GCP 메트릭을 수집한다.
 - Grafana는 Prometheus를 조회한다.
 - API 오류율·지연, DB 복제 지연, HDFS 사용률, YARN 자원, Spark/Airflow 상태, Gold 버전을 관측한다.
+- 온라인 계산은 `QUEUED`, `RESIDUAL_CALCULATING`, `RESIDUAL_READY`, `PERIODOGRAM_CALCULATING`, `COMPLETED`, `FAILED` 상태별 대기·처리 시간과 실패율을 관측한다.
 - EC2-B 장애 시 관측성도 중단되는 구조는 현재 비용 제약상 허용한다.
 - PostgreSQL, HDFS, YARN, Spark 관리 포트를 인터넷에 공개하지 않는다.
 - GCP–AWS 전송과 메트릭 수집은 인증·암호화된 경로만 사용한다.
@@ -166,6 +170,7 @@ AI가 임의로 확정하지 말고 구현 티켓 또는 사용자 결정을 요
 - Cloudflare Free 기반 요청 분산과 장애 감지 방식
 - Redis 도입 여부와 위치
 - PostgreSQL 자동 승격 및 복구 절차
+- PublicationBundle 내부 파일 스키마·용량과 구버전 Bundle·캐시 보존기간
 - EC2 Gold 저장 경로와 릴리스 보존 수
 - GCP–AWS Gold 전송 프로토콜과 방화벽 규칙
 - 서비스 DB·Gold의 백업/복구 목표와 로그 보존 기간(HDFS HA 메타데이터 외부 백업은 제외 확정)

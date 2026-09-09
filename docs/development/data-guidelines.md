@@ -35,7 +35,7 @@
       └─ removal_qa/
 ```
 
-Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다.
+Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다. v0.12의 최소 입력은 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·원본 주기도·후보별 통과 모델·계산 버전이며, 전체 파일 스키마는 미니 파이프라인 PoC 후 별도 Task에서 확정합니다.
 
 약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum과 묶음 위치를 기록합니다. 원본을 삭제하거나 컬럼을 제거하지 않습니다.
 
@@ -44,13 +44,7 @@ Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실�
 ```text
 /gold
 ├─ releases/<bundle_id>/
-│  ├─ stars.parquet
-│  ├─ candidates.parquet
-│  ├─ ai_results.parquet
-│  ├─ external_status.parquet
-│  ├─ lightcurve-ui/
-│  ├─ periodogram-ui/
-│  └─ manifest.json
+│  └─ <PublicationBundle 파일 구조는 PoC 후 확정>
 └─ current -> releases/<bundle_id>
 ```
 
@@ -58,6 +52,8 @@ Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실�
 - 경로, 파이프라인 버전, 파일 목록과 checksum을 전송 전후에 검증합니다.
 - 모든 검증이 통과한 경우에만 `current`를 새 릴리스로 원자적으로 전환합니다.
 - 검증에 실패하면 기존 `current`와 릴리스를 유지합니다.
+- 분석 세션은 시작할 때 선택한 `bundle_id`를 끝까지 사용합니다.
+- 구버전 Bundle과 해당 캐시는 정해진 보존기간 종료 시 함께 만료합니다. 기간은 아직 미정입니다.
 
 ## 재현성
 

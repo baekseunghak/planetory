@@ -1,6 +1,6 @@
 # GitLab CI/CD
 
-> 현재 파일은 배포 경계와 job 뼈대다. 애플리케이션 코드, Runner, Registry와 서버 변수가 준비된 뒤 실제 실행을 검증한다.
+> 현재 파일은 배포 경계와 job 뼈대다. GitLab 파이프라인 `#184815`에서 정적 검사는 통과했으며 이미지 빌드·Registry push·실제 서버 배포는 별도로 검증한다.
 
 Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서버 역할은 [시스템 아키텍처](../development/system-architecture.md)를 따른다.
 

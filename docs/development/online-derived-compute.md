@@ -2,9 +2,9 @@
 
 ## 책임 경계
 
-요구사항 v0.9의 DAT-05·DAT-14와 DEC-35를 기준으로 한다.
+요구사항 v0.12의 POL-03·EXP-01·EXP-09·DAT-05·DAT-11·DAT-14와 DEC-35를 기준으로 한다.
 
-- GCP 배치: 원본 정제곡선의 모든 점, 품질 마스크, 원본 주기도, 후보별 고정 transit model과 계산 버전을 Gold에 넣는다.
+- GCP 배치: 원본 정제곡선의 모든 점, 품질 마스크, `fold_reference_time_btjd`, 원본 주기도, 후보별 고정 transit model과 계산 버전을 Gold에 넣는다.
 - EC2: 사용자가 제거할 후보를 선택하면 잔차 곡선과 잔차 주기도를 계산한다.
 - HDFS: 내부 잔차, 품질 검증 결과와 AI 입력을 보관한다. EC2가 실시간 조회하지 않는다.
 
@@ -32,14 +32,27 @@ cache_key = (
   periodogram_config_version
 )
 
-status = QUEUED → RUNNING → SUCCEEDED | FAILED
+status = QUEUED
+      → RESIDUAL_CALCULATING
+      → RESIDUAL_READY
+      → PERIODOGRAM_CALCULATING
+      → COMPLETED
+      ↘ FAILED
 ```
 
 - 같은 키의 실행은 하나만 허용하고 나머지 요청은 같은 작업 상태를 본다.
 - 작업을 가져간 Worker에는 만료 시간을 둔다. Worker가 죽으면 만료 후 다른 Worker가 다시 계산한다.
 - 재시도 번호가 오래된 Worker의 늦은 결과가 최신 결과를 덮어쓰지 못하게 한다.
 - 결과에는 계산한 EC2 노드와 checksum을 기록한다. 다른 노드가 로컬 경로를 직접 열지 않고, 필요하면 소유 노드의 내부 API를 호출하거나 다시 계산한다.
-- 새 PublicationBundle이 활성화되면 이전 bundle의 결과를 새 요청에 재사용하지 않는다.
+- 잔차가 준비된 뒤에만 주기도 계산을 시작한다. `RESIDUAL_READY` 결과를 화면에 먼저 노출할지는 벤치마크로 결정한다.
+- 실패 상태에는 실패 단계·원인과 재시도 정보를 기록하고 마지막 정상 곡선을 유지한다.
+
+## 세션과 버전 고정
+
+- 분석 진입 시 인증·공개·별 열림 상태를 다시 검사하고 세션의 `publication_bundle_id`를 고정한다.
+- 모든 계산 요청과 캐시 키는 세션에 고정된 Bundle을 사용한다. 새 Bundle은 새 분석 세션부터 적용한다.
+- 서로 다른 Bundle 또는 계산 버전 사이에는 캐시를 재사용하지 않는다.
+- 진행 중 세션의 구버전 Bundle과 캐시는 삭제하지 않고 보존기간 종료 시 함께 만료한다. 기간은 DEC-35의 미정 항목이다.
 
 ## 초기 자원 제한
 
@@ -75,12 +88,14 @@ Silver 기준 결과와 EC2 결과를 같은 시간 배열, 품질 마스크, �
 
 ```text
 publication_bundle_id, tic_id, schema_version, source_versions
-curve: path, point_count, dtype, time_unit, time_reference, flux_unit, quality_mask
+curve: path, point_count, dtype, time_unit, time_reference, fold_reference_time_btjd, flux_unit, quality_mask
 periodogram: path, grid_definition, periodogram_config_version
 transit_models: candidate_id, period, epoch, duration, depth, shape, model_version
 normalization: baseline_definition, version
 checksums, created_at
 ```
+
+위 목록은 v0.12가 요구하는 최소 입력 후보이며 전체 파일 스키마가 아니다. 전체 스키마는 미니 파이프라인 PoC 결과를 데이터·백엔드·프론트 담당자가 검토한 뒤 별도 Task에서 확정한다.
 
 이전 Gold 20~25GiB 추정은 축약 데이터 기준이므로 사용하지 않는다. 실제 형식과 압축으로 표본을 저장한 뒤 다음 방식으로 계산한다.
 
