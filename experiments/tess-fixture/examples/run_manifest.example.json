@@ -1,13 +1,13 @@
 {
   "schema": "planetory.run-manifest.v1",
-  "run_id": "1ab68fd5-27be-4c6f-ac9c-367971a14871",
-  "created_at": "2026-09-10T02:43:01+00:00",
+  "run_id": "9f955ca5-33eb-4ab3-8811-ded028b23f93",
+  "created_at": "2026-09-10T04:39:09+00:00",
   "task": "S15P21C206-41 inject",
   "command": "python -m tess_fixture inject --target toi270 --write-curves",
   "code": {
-    "git_commit": "8060852518fbfcc4e1fea25614785c24e308d6b4",
-    "git_branch": "feature/S15P21C206-41-tess-fixture",
-    "git_dirty": false
+    "git_commit": "809b938eb2faba8a3536537785a5919a25ed7b68",
+    "git_branch": "develop",
+    "git_dirty": true
   },
   "environment": {
     "python": "3.11.9",
@@ -48,17 +48,19 @@
     },
     {
       "path": "<repo>\\experiments\\tess-fixture\\configs\\injection_grid_v1.json",
-      "size_bytes": 1805,
-      "sha256": "f86ce811186fd836337037caa6b7285b0715c2cc53adcdea15a28ffc24172e26",
+      "size_bytes": 2168,
+      "sha256": "102b63f5237d449035b5c95783de20d65099865efc19e68932755bf641feef65",
       "role": "grid"
     }
   ],
   "config": {
     "name": "injection_grid_v1.json",
-    "version": "1.0.0",
-    "sha256": "f86ce811186fd836337037caa6b7285b0715c2cc53adcdea15a28ffc24172e26",
+    "version": "1.1.0",
+    "sha256": "102b63f5237d449035b5c95783de20d65099865efc19e68932755bf641feef65",
     "parameters": {
       "target": "toi270",
+      "set_id": "injection_grid_v1-1.1.0",
+      "run_dir": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1-1.1.0\\toi270\\run-20260910T043904Z-9f955ca5",
       "noise_seed": 20260910,
       "single_only": false,
       "write_curves": true,
@@ -79,25 +81,25 @@
   },
   "outputs": [
     {
-      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\catalog.csv",
-      "size_bytes": 40882,
-      "sha256": "5cfea9ce4fa690391d1eb19761644cfa08c3b8eb5e2d4bce79e58cdd018aea63",
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1-1.1.0\\toi270\\run-20260910T043904Z-9f955ca5\\catalog.csv",
+      "size_bytes": 44988,
+      "sha256": "f17e7ab3ce50f65032e48858156e161cd14adfbe524efaac2498a55f36d251ea",
       "kind": "catalog",
       "rows": 228
     },
     {
-      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\baseline.npz",
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1-1.1.0\\toi270\\run-20260910T043904Z-9f955ca5\\real\\baseline.npz",
       "size_bytes": 385782,
       "kind": "curves"
     },
     {
-      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\injection_grid_v1-toi270-real-g000-s0.npz",
-      "size_bytes": 121616,
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1-1.1.0\\toi270\\run-20260910T043904Z-9f955ca5\\real\\injection_grid_v1-1.1.0-toi270-real-g000-s0.npz",
+      "size_bytes": 121621,
       "kind": "curves"
     },
     {
-      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\injection_grid_v1-toi270-real-g001-s0.npz",
-      "size_bytes": 121633,
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1-1.1.0\\toi270\\run-20260910T043904Z-9f955ca5\\real\\injection_grid_v1-1.1.0-toi270-real-g001-s0.npz",
+      "size_bytes": 121638,
       "kind": "curves"
     }
   ],

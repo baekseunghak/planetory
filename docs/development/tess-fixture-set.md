@@ -22,7 +22,7 @@
 | `pi_men` | π Mensae | 261136679 | 4·8 | 밝은 별, 얕은 통과 | 매우 밝은 별의 0.027 % 통과. 포화·계통 오차 사례 | c 6.268 d (d·b 는 비통과 RV 행성) |
 | `hd21749` | HD 21749 (TOI-186) | 279741379 | 3·4 | 장주기, 얕은 내행성 | 35.6 d 행성은 두 Sector 에서 통과 1~2회. 단일 통과·최소 transit 수 조건 확인. Sector 5 제품 없음(404) | GJ 143 b 35.613 d / HD 21749 c 7.790 d |
 
-제품 수는 23개(약 44 MB)다. 파일별 SHA-256·PROCVER·크기는 `checksums.json` 에 있다. SPOC 처리 버전(PROCVER)은 제품마다 다르며(`spoc-5.0.11`~`spoc-5.0.96`, 일부는 2023년 재처리본) 같은 별의 Sector 사이에도 다를 수 있으므로, 버전 차이가 결과에 영향을 주는지는 전처리 벤치마크에서 확인한다. 세 기존 PoC 별(TOI-270·L 98-59·CM Dra)의 checksum 은 갭 분석 5.1절에 기록한 값과 같다.
+제품 수는 23개(약 44 MB)다. 파일별 SHA-256·PROCVER·크기는 `checksums.json` 에 있다. `references --target <key>` 로 일부 별만 다시 조회하면 그 별의 행만 교체하고 나머지는 보존하며, Archive 에 행이 없는 별(CM Dra)도 빈 자리표시 행으로 남는다. SPOC 처리 버전(PROCVER)은 제품마다 다르며(`spoc-5.0.11`~`spoc-5.0.96`, 일부는 2023년 재처리본) 같은 별의 Sector 사이에도 다를 수 있으므로, 버전 차이가 결과에 영향을 주는지는 전처리 벤치마크에서 확인한다. 세 기존 PoC 별(TOI-270·L 98-59·CM Dra)의 checksum 은 갭 분석 5.1절에 기록한 값과 같다.
 
 ### 아직 없는 표본 (TBD)
 
@@ -65,13 +65,19 @@ TOI-270 Sector 3·4·5 기준 원본 57,320행 중 44,553행이 남고 robust sc
 |---|---|---|---|
 | `strong_weak` | 3.0 d / 2.0 h / 5,000 ppm | 7.0 d / 2.5 h / 800 ppm | 강한 신호 제거 후 약한 신호 회수 |
 | `similar_strength` | 2.5 d / 1.5 h / 1,500 ppm | 6.5 d / 2.0 h / 1,500 ppm | 비슷한 세기의 회수 순서·중복 후보 |
-| `overlapping_transits` | 4.0 d / 3.0 h / 3,000 ppm | 8.0 d / 3.0 h / 2,000 ppm | P2 = 2P1, 같은 위상으로 일부 통과 겹침. 겹친 점 삭제 없이 모델 곱 |
+| `overlapping_transits` | 4.0 d / 3.0 h / 3,000 ppm, phase 0.5 | 8.0 d / 3.0 h / 2,000 ppm, phase 0.25 | P2 = 2P1 이고 t0 가 같아(`t_min + 2일`) 신호 1의 통과 두 번마다 신호 2의 통과가 정확히 겹침. 겹친 점 삭제 없이 모델 곱 |
 
 두 신호의 box 모델을 곱해 한 곡선에 넣고 `group_id` 를 공유한다. 바탕곡선당 catalog 행은 108 + 6 = 114, TOI-270 실행에서는 두 바탕곡선으로 228행·222개 곡선(group)이다.
+
+격자 파일에는 `version` 과 `changelog` 가 있다. 세트 식별자 `set_id` 는 `<grid_id>-<version>`(현재 `injection_grid_v1-1.1.0`)이며 결과 디렉터리와 `injection_id` 앞에 붙는다. 1.0.0 은 `overlapping_transits` 두 신호에 모두 phase 0.5 를 써서 t0 가 2일 어긋나 실제로는 겹치지 않았고, 1.1.0 에서 두 번째 신호를 0.25 로 고쳤다(`S15P21C206-44`). 겹치는 관측점의 flux 가 두 모델의 곱인지는 회귀 테스트로 고정했다.
 
 ### catalog.csv 열
 
 `injection_id`, `set_id`, `baseline_id`, `signal_index`, `group_id`, `period_days`, `duration_hours`, `depth_ppm`, `phase_fraction`, `phase_label`, `t0_btjd`, `model`, `n_transits_in_window`(관측점이 있는 통과 회차 수), `n_points_in_transit`. `injection_id` 형식은 `<set_id>-<baseline_id>-g<group 3자리>-s<signal_index>` 다. 목록 순서는 period → duration → depth → phase 로 고정이며 재실행하면 같은 내용이 나온다.
+
+### 산출물 경로
+
+`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id 8자리>/` 를 새로 만든다. seed·`--single-only` 같은 옵션을 바꿔 연속 실행해도 이전 실행의 catalog·NPZ 가 남고, 각 실행의 manifest(`config.parameters.run_dir`, `outputs[].path`)는 자기 디렉터리만 가리킨다. `download`·`references`·`inject` 의 manifest 는 모두 `--results` 로 준 루트 아래 `manifests/` 에 저장된다.
 
 ### 아직 없는 세트 (`not_included_yet`)
 
@@ -103,7 +109,7 @@ uv sync --locked
 uv run python -m tess_fixture download          # checksums.json 과 대조, 다르면 실패
 uv run python -m tess_fixture references        # references.csv 갱신 (조회 시각 포함)
 uv run python -m tess_fixture inject --target toi270 --write-curves
-uv run pytest -q                                # 단위 테스트 16개
+uv run pytest -q                                # 단위 테스트 25개 (FITS 표본이 없으면 1개 skip)
 ```
 
 같은 checksum 의 FITS 와 같은 격자 파일이면 `catalog.csv` 는 바이트 단위로 같아야 한다. 곡선 NPZ 는 float32 로 저장하므로 비교는 catalog 와 manifest 의 sha256 으로 한다.
