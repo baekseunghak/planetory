@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { normalizeInterval } from '../observation-math';
 import { allowedWidth } from '../observation-data';
@@ -52,7 +52,7 @@ export function ObservationChart({
 }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const plot = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 600, height: 220 });
+  const [size, setSize] = useState({ width: 600, height: 220, dpr: 1 });
   const [brush, setBrush] = useState<Band | null>(null);
   const gesture = useRef<{
     start: number;
@@ -70,11 +70,34 @@ export function ObservationChart({
 
   useEffect(() => {
     const element = plot.current!;
-    const observer = new ResizeObserver(([entry]) =>
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height }),
-    );
+    const updateSize = (width: number, height: number) => {
+      const dpr = window.devicePixelRatio || 1;
+      setSize((previous) =>
+        previous.width === width && previous.height === height && previous.dpr === dpr
+          ? previous
+          : { width, height, dpr },
+      );
+    };
+    const observer = new ResizeObserver(([entry]) => {
+      updateSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    let resolutionQuery: MediaQueryList;
+    const watchResolution = () => {
+      resolutionQuery?.removeEventListener('change', changeResolution);
+      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      resolutionQuery.addEventListener('change', changeResolution);
+    };
+    const changeResolution = () => {
+      const rect = element.getBoundingClientRect();
+      updateSize(rect.width, rect.height);
+      watchResolution();
+    };
     observer.observe(element);
-    return () => observer.disconnect();
+    watchResolution();
+    return () => {
+      observer.disconnect();
+      resolutionQuery.removeEventListener('change', changeResolution);
+    };
   }, []);
 
   useEffect(() => {
@@ -102,23 +125,29 @@ export function ObservationChart({
     return () => element.removeEventListener('wheel', wheel);
   }, []);
 
-  let minY = Infinity,
-    maxY = -Infinity;
-  for (const value of y) {
-    minY = Math.min(minY, value);
-    maxY = Math.max(maxY, value);
-  }
-  const margin = (maxY - minY || 0.01) * 0.08;
-  minY -= margin;
-  maxY += margin;
+  const [minY, maxY] = useMemo(() => {
+    let min = Infinity,
+      max = -Infinity;
+    for (const value of y) {
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+    const margin = (max - min || 0.01) * 0.08;
+    return [min - margin, max + margin];
+  }, [y]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = canvas.current!;
+    if (size.width <= 0 || size.height <= 0 || x.length !== y.length) return;
     const ctx = element.getContext('2d')!;
-    const dpr = window.devicePixelRatio || 1;
-    element.width = Math.round(size.width * dpr);
-    element.height = Math.round(size.height * dpr);
-    ctx.scale(dpr, dpr);
+    const { dpr } = size;
+    const width = Math.round(size.width * dpr);
+    const height = Math.round(size.height * dpr);
+    // Assigning either dimension clears the bitmap; retain it during period updates.
+    if (element.width !== width) element.width = width;
+    if (element.height !== height) element.height = height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Clear and draw synchronously before paint, keeping the previous complete frame until now.
     ctx.clearRect(0, 0, size.width, size.height);
     ctx.strokeStyle = '#2a3441';
     ctx.lineWidth = 1;

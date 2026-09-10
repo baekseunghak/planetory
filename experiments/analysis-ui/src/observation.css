@@ -381,9 +381,6 @@
   inset: 0;
   pointer-events: none;
 }
-.chart-disabled {
-  opacity: 0.45;
-}
 .chart-disabled .observation-plot {
   cursor: wait;
 }

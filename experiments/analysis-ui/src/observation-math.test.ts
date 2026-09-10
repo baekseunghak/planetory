@@ -8,7 +8,7 @@ import {
   transitWindows,
 } from './observation-math';
 import type { PhaseSelection } from './observation-math';
-import type { FoldRequest, FoldResponse } from './fold.worker';
+import type { FoldResponse, WorkerRequest, WorkerResponse } from './fold.worker';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -156,29 +156,108 @@ describe('phase preview math using a fixed Bundle reference', () => {
 });
 
 describe('fold worker protocol (unit test, not a browser Worker execution)', () => {
-  it('echoes revisions and transfers a float64 buffer on both success and failure', async () => {
+  interface Reply {
+    response: WorkerResponse;
+    transfer?: Transferable[];
+  }
+
+  async function startWorker() {
+    vi.resetModules();
     const worker = {
-      onmessage: null as ((event: MessageEvent<FoldRequest>) => void) | null,
-      postMessage: vi.fn<(message: FoldResponse, transfer: Transferable[]) => void>(),
+      onmessage: null as ((event: MessageEvent<WorkerRequest>) => void) | null,
+      postMessage: vi.fn<(message: WorkerResponse, transfer?: Transferable[]) => void>(),
     };
     vi.stubGlobal('self', worker);
     await import('./fold.worker');
-    worker.onmessage?.({
-      data: { revision: 7, times: [-1, 0, 1], reference: 0, period: 2 },
-    } as MessageEvent<FoldRequest>);
-    const [success, transfer] = worker.postMessage.mock.calls[0];
-    expect(success.revision).toBe(7);
-    expect(success.error).toBeUndefined();
-    expect([...success.phases]).toEqual([0.5, 0, 0.5]);
-    expect(transfer).toEqual([success.phases.buffer]);
-    worker.onmessage?.({
-      data: { revision: 8, times: [0], reference: 0, period: 0 },
-    } as MessageEvent<FoldRequest>);
-    const [failure, failedTransfer] = worker.postMessage.mock.calls[1];
-    expect(failure.revision).toBe(8);
+    return (data: WorkerRequest): Reply => {
+      const index = worker.postMessage.mock.calls.length;
+      worker.onmessage?.({ data } as MessageEvent<WorkerRequest>);
+      expect(worker.postMessage).toHaveBeenCalledTimes(index + 1);
+      const [response, transfer] = worker.postMessage.mock.calls[index];
+      return { response, transfer };
+    };
+  }
+
+  function folded(reply: Reply): FoldResponse {
+    expect(reply.response.type).toBe('folded');
+    if (reply.response.type !== 'folded') throw new Error('Expected a fold response');
+    expect(reply.response.phases).toBeInstanceOf(Float64Array);
+    expect(reply.transfer).toEqual([reply.response.phases.buffer]);
+    return reply.response;
+  }
+
+  it('initializes observations once and folds multiple periods with data IDs, revisions and transferable results', async () => {
+    const send = await startWorker();
+    expect(send({ type: 'init', dataId: 'bundle-a', times: [-1, 0, 1], reference: 0 })).toEqual({
+      response: { type: 'ready', dataId: 'bundle-a' },
+      transfer: undefined,
+    });
+    const first = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 7, period: 2 }));
+    expect(first).toMatchObject({ dataId: 'bundle-a', revision: 7 });
+    expect(first.error).toBeUndefined();
+    expect([...first.phases]).toEqual([0.5, 0, 0.5]);
+    const second = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 8, period: 4 }));
+    expect(second).toMatchObject({ dataId: 'bundle-a', revision: 8 });
+    expect(second.error).toBeUndefined();
+    expect([...second.phases]).toEqual([0.75, 0, 0.25]);
+  });
+
+  it('rejects absent or wrong data and discards the previous cache when replacement initialization fails', async () => {
+    const send = await startWorker();
+    const beforeInit = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 1, period: 2 }));
+    expect(beforeInit.error).toMatch(/초기화/);
+    expect(beforeInit.phases).toHaveLength(0);
+    send({ type: 'init', dataId: 'bundle-a', times: [-1, 0, 1], reference: 0 });
+    const wrongData = folded(send({ type: 'fold', dataId: 'bundle-b', revision: 2, period: 2 }));
+    expect(wrongData).toMatchObject({ dataId: 'bundle-b', revision: 2 });
+    expect(wrongData.error).toMatch(/일치/);
+    expect(wrongData.phases).toHaveLength(0);
+    expect(
+      folded(send({ type: 'fold', dataId: 'bundle-a', revision: 3, period: 2 })).error,
+    ).toBeUndefined();
+
+    expect(
+      send({ type: 'init', dataId: 'bundle-b', times: [0, 1], reference: NaN }).response,
+    ).toMatchObject({
+      type: 'init-error',
+      dataId: 'bundle-b',
+      error: expect.any(String),
+    });
+    const discarded = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 4, period: 2 }));
+    expect(discarded.error).toMatch(/초기화/);
+    expect(discarded.phases).toHaveLength(0);
+    for (const times of [[], [0, Infinity]]) {
+      expect(
+        send({ type: 'init', dataId: 'bundle-b', times, reference: 0 }).response,
+      ).toMatchObject({
+        type: 'init-error',
+        dataId: 'bundle-b',
+        error: expect.any(String),
+      });
+    }
+    expect(
+      send({ type: 'init', dataId: 'bundle-b', times: [10, 11], reference: 10 }).response,
+    ).toEqual({
+      type: 'ready',
+      dataId: 'bundle-b',
+    });
+    const reinitialized = folded(
+      send({ type: 'fold', dataId: 'bundle-b', revision: 5, period: 2 }),
+    );
+    expect(reinitialized.error).toBeUndefined();
+    expect([...reinitialized.phases]).toEqual([0, 0.5]);
+  });
+
+  it('returns a transferable empty error result for an invalid period and recovers without reinitializing', async () => {
+    const send = await startWorker();
+    send({ type: 'init', dataId: 'bundle-a', times: [-1, 0, 1], reference: 0 });
+    const failure = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 13, period: 0 }));
+    expect(failure).toMatchObject({ dataId: 'bundle-a', revision: 13 });
     expect(failure.error).toMatch(/주기/);
-    expect(failure.phases).toBeInstanceOf(Float64Array);
     expect(failure.phases).toHaveLength(0);
-    expect(failedTransfer).toEqual([failure.phases.buffer]);
+    const recovered = folded(send({ type: 'fold', dataId: 'bundle-a', revision: 14, period: 2 }));
+    expect(recovered).toMatchObject({ dataId: 'bundle-a', revision: 14 });
+    expect(recovered.error).toBeUndefined();
+    expect([...recovered.phases]).toEqual([0.5, 0, 0.5]);
   });
 });

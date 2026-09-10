@@ -9,6 +9,48 @@ const targets = [
 const folded = (page: Page) => page.getByRole('group', { name: '접힌 광도곡선', exact: true });
 const peak = (page: Page, rank = 1) =>
   page.getByRole('button', { name: new RegExp(`^봉우리 ${rank} ·`) });
+interface WorkerProbe {
+  failNext: boolean;
+  delayNext: boolean;
+  dropNext: boolean;
+  delayedReady: number;
+  deliveredLate: number;
+  created: number;
+  terminated: number;
+  messages: {
+    workerId: number;
+    type: string;
+    dataId: string;
+    revision?: number;
+    period?: number;
+    hasTimes: boolean;
+  }[];
+  releaseDelayed(): void;
+}
+
+const workerSnapshot = (page: Page) =>
+  page.evaluate(() => {
+    const control = (window as unknown as { observationWorkerControl: WorkerProbe })
+      .observationWorkerControl;
+    return {
+      created: control.created,
+      terminated: control.terminated,
+      delayedReady: control.delayedReady,
+      deliveredLate: control.deliveredLate,
+      messages: control.messages,
+    };
+  });
+const armWorker = (page: Page, action: 'failNext' | 'delayNext' | 'dropNext') =>
+  page.evaluate((key) => {
+    (window as unknown as { observationWorkerControl: WorkerProbe }).observationWorkerControl[key] =
+      true;
+  }, action);
+const releaseDelayedWorker = (page: Page) =>
+  page.evaluate(() => {
+    (
+      window as unknown as { observationWorkerControl: WorkerProbe }
+    ).observationWorkerControl.releaseDelayed();
+  });
 
 async function openObservation(page: Page, target = 'toi270') {
   await page.goto(`/?mode=observations&target=${target}`);
@@ -62,41 +104,97 @@ async function storedRecords(page: Page) {
 async function installControlledWorker(page: Page) {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
-    const control = { failNext: false, delayNext: false, delayedReady: 0, deliveredLate: 0 };
+    const heldReplies: (() => void)[] = [];
+    const control = {
+      failNext: false,
+      delayNext: false,
+      dropNext: false,
+      delayedReady: 0,
+      deliveredLate: 0,
+      created: 0,
+      terminated: 0,
+      messages: [] as {
+        workerId: number;
+        type: string;
+        dataId: string;
+        revision?: number;
+        period?: number;
+        hasTimes: boolean;
+      }[],
+      releaseDelayed: () => heldReplies.splice(0).forEach((deliver) => deliver()),
+    };
     Object.assign(window, { observationWorkerControl: control });
     class ControlledWorker extends EventTarget {
       private native: Worker;
-      private delayed = false;
+      private workerId: number;
+      private responsePolicies = new Map<number, 'hold' | 'drop'>();
       onmessage: ((event: MessageEvent) => void) | null = null;
       onerror: ((event: ErrorEvent) => void) | null = null;
       constructor(url: string | URL, options?: WorkerOptions) {
         super();
+        this.workerId = ++control.created;
         this.native = new NativeWorker(url, options);
         this.native.onmessage = (event) => {
-          if (this.delayed) {
+          const policy =
+            event.data.type === 'folded'
+              ? this.responsePolicies.get(event.data.revision)
+              : undefined;
+          this.responsePolicies.delete(event.data.revision);
+          const deliver = () => {
+            const forwarded = new MessageEvent('message', { data: event.data });
+            this.onmessage?.(forwarded);
+            this.dispatchEvent(forwarded);
+          };
+          if (policy === 'drop') return;
+          if (policy === 'hold') {
             control.delayedReady++;
             // Model an already queued old reply, even after its worker was terminated.
-            setTimeout(() => {
+            heldReplies.push(() => {
               control.deliveredLate++;
-              this.onmessage?.(event);
-            }, 700);
-          } else this.onmessage?.(event);
+              deliver();
+            });
+          } else deliver();
         };
-        this.native.onerror = (event) => this.onerror?.(event);
+        this.native.onerror = (event) => {
+          this.onerror?.(event);
+          this.dispatchEvent(new ErrorEvent('error', { message: event.message }));
+        };
       }
       postMessage(message: unknown) {
-        if (control.failNext) {
+        const request = message as {
+          type: string;
+          dataId: string;
+          revision?: number;
+          period?: number;
+          times?: unknown;
+        };
+        control.messages.push({
+          workerId: this.workerId,
+          type: request.type,
+          dataId: request.dataId,
+          revision: request.revision,
+          period: request.period,
+          hasTimes: Object.hasOwn(request, 'times'),
+        });
+        if (request.type === 'fold' && control.failNext) {
           control.failNext = false;
-          queueMicrotask(() =>
-            this.onerror?.(new ErrorEvent('error', { message: 'Injected worker failure' })),
-          );
+          queueMicrotask(() => {
+            const event = new ErrorEvent('error', { message: 'Injected worker failure' });
+            this.onerror?.(event);
+            this.dispatchEvent(event);
+          });
           return;
         }
-        this.delayed = control.delayNext;
-        control.delayNext = false;
+        if (request.type === 'fold') {
+          if (control.delayNext) this.responsePolicies.set(request.revision!, 'hold');
+          else if (control.dropNext) this.responsePolicies.set(request.revision!, 'drop');
+          control.delayNext = false;
+          control.dropNext = false;
+        }
         this.native.postMessage(message);
       }
       terminate() {
+        control.terminated++;
         this.native.terminate();
       }
     }
@@ -389,17 +487,19 @@ test('a failed Worker keeps the last successful period, interval, judgment and m
   ).toBeEnabled();
   await expect(period).toHaveValue(next);
   await expect(page.getByRole('alert')).toHaveCount(0);
+  const recovered = await workerSnapshot(page);
+  expect(recovered.created).toBe(2);
+  expect(recovered.messages.filter((message) => message.type === 'init')).toHaveLength(2);
+  expect(recovered.terminated).toBeGreaterThanOrEqual(1);
 });
 
-test('a queued stale Worker response cannot overwrite a later peak selection', async ({ page }) => {
+test('only the latest queued peak follows an in-flight fold; superseded responses never commit', async ({
+  page,
+}) => {
   await installControlledWorker(page);
   await openObservation(page);
   await choosePeak(page);
-  await page.evaluate(() => {
-    (
-      window as unknown as { observationWorkerControl: { delayNext: boolean } }
-    ).observationWorkerControl.delayNext = true;
-  });
+  await armWorker(page, 'delayNext');
   await peak(page, 2).click();
   await expect
     .poll(() =>
@@ -411,21 +511,208 @@ test('a queued stale Worker response cannot overwrite a later peak selection', a
     )
     .toBe(1);
   await expect(folded(page)).toHaveAttribute('aria-disabled', 'true');
-  await choosePeak(page, 3);
-  const latestPeriod = await page.getByLabel('주기 (일)', { exact: true }).inputValue();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as { observationWorkerControl: { deliveredLate: number } })
-            .observationWorkerControl.deliveredLate,
-      ),
-    )
-    .toBe(1);
-  await expect(peak(page, 3)).toHaveAttribute('aria-pressed', 'true');
+  await peak(page, 3).click();
+  await peak(page, 4).click();
+  await expect(peak(page, 1)).toHaveAttribute('aria-pressed', 'true');
+  expect(
+    (await workerSnapshot(page)).messages.filter((message) => message.type === 'fold'),
+  ).toHaveLength(2);
+  await releaseDelayedWorker(page);
+  await expect(peak(page, 4)).toHaveAttribute('aria-pressed', 'true');
   await expect(peak(page, 2)).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.getByLabel('주기 (일)', { exact: true })).toHaveValue(latestPeriod);
+  await expect(peak(page, 3)).toHaveAttribute('aria-pressed', 'false');
   await expect(folded(page)).toHaveAttribute('aria-disabled', 'false');
+  const snapshot = await workerSnapshot(page);
+  expect(snapshot.created).toBe(1);
+  expect(snapshot.messages.filter((message) => message.type === 'init')).toHaveLength(1);
+  const folds = snapshot.messages.filter((message) => message.type === 'fold');
+  expect(folds).toHaveLength(3);
+  expect(folds.at(-1)?.period).toBe(
+    Number(await page.getByLabel('주기 (일)', { exact: true }).inputValue()),
+  );
+  expect(snapshot.deliveredLate).toBe(1);
+});
+
+test('sixteen fine changes preserve opaque canvas pixels and backing size while reusing one initialized Worker', async ({
+  page,
+}) => {
+  await installControlledWorker(page);
+  await openObservation(page);
+  await choosePeak(page);
+  await chooseCentralInterval(page);
+  await chooseJudgment(page);
+  await page.getByRole('button', { name: '선택값 검토', exact: true }).click();
+  await page.locator('#fine-period').scrollIntoViewIfNeeded();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await page.evaluate(() => {
+    const plot = document.querySelector('[aria-label="접힌 광도곡선"]')!;
+    const canvas = plot.querySelector('canvas')!;
+    let dimensionMutations = 0;
+    const observer = new MutationObserver((records) => {
+      dimensionMutations += records.length;
+    });
+    observer.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
+    const frames: { opacity: number; busy: boolean; sameCanvas: boolean }[] = [];
+    let raf = 0;
+    const sample = () => {
+      let opacity = 1;
+      for (let element: Element | null = canvas; element; element = element.parentElement)
+        opacity *= Number(getComputedStyle(element).opacity);
+      frames.push({
+        opacity,
+        busy: plot.getAttribute('aria-disabled') === 'true',
+        sameCanvas: plot.querySelector('canvas') === canvas && canvas.isConnected,
+      });
+      raf = requestAnimationFrame(sample);
+    };
+    raf = requestAnimationFrame(sample);
+    Object.assign(window, {
+      observationDrawProbe: {
+        stop: () => {
+          cancelAnimationFrame(raf);
+          dimensionMutations += observer.takeRecords().length;
+          observer.disconnect();
+          return { frames, dimensionMutations };
+        },
+      },
+    });
+  });
+  await armWorker(page, 'delayNext');
+  const slider = page.locator('#fine-period');
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await workerSnapshot(page)).delayedReady).toBe(1);
+  await expect(folded(page)).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('slider', { name: '위상 시작 핸들', exact: true })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: '행성 같음', exact: true })).toBeDisabled();
+  await expect(page.getByRole('textbox', { name: '관찰 메모', exact: true })).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: '브라우저에 임시 저장', exact: true }),
+  ).toBeDisabled();
+  for (let change = 1; change < 16; change++) {
+    await page.keyboard.press('ArrowRight');
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+  }
+  const latestPeriod = Number(await slider.inputValue());
+  expect(
+    (await workerSnapshot(page)).messages.filter((message) => message.type === 'fold'),
+  ).toHaveLength(2);
+  await releaseDelayedWorker(page);
+  await expect(folded(page)).toHaveAttribute('aria-disabled', 'false');
+  await expect(page.getByLabel('주기 (일)', { exact: true })).toHaveValue(String(latestPeriod));
+  await expect(page.getByTestId('phase-selection')).toHaveText('구간을 선택하세요');
+  const probe = await page.evaluate(() =>
+    (
+      window as unknown as {
+        observationDrawProbe: {
+          stop(): {
+            frames: { opacity: number; busy: boolean; sameCanvas: boolean }[];
+            dimensionMutations: number;
+          };
+        };
+      }
+    ).observationDrawProbe.stop(),
+  );
+  expect(probe.frames.length).toBeGreaterThan(0);
+  expect(probe.frames.some((frame) => frame.busy)).toBe(true);
+  expect(probe.frames.every((frame) => frame.opacity === 1 && frame.sameCanvas)).toBe(true);
+  expect(probe.dimensionMutations).toBe(0);
+  const snapshot = await workerSnapshot(page);
+  expect(snapshot.created).toBe(1);
+  expect(snapshot.messages.filter((message) => message.type === 'init')).toHaveLength(1);
+  expect(
+    snapshot.messages
+      .filter((message) => message.type === 'init')
+      .every((message) => message.hasTimes),
+  ).toBe(true);
+  const folds = snapshot.messages.filter((message) => message.type === 'fold');
+  expect(folds).toHaveLength(3);
+  expect(folds.every((message) => !message.hasTimes)).toBe(true);
+  expect(folds.at(-1)?.period).toBe(latestPeriod);
+});
+
+test('an active fold timeout preserves the last result and the next adjustment reinitializes the Worker', async ({
+  page,
+}) => {
+  await installControlledWorker(page);
+  await openObservation(page);
+  await choosePeak(page);
+  await chooseCentralInterval(page);
+  await chooseJudgment(page);
+  await page.clock.install();
+  const period = page.getByLabel('주기 (일)', { exact: true });
+  const previousPeriod = await period.inputValue();
+  const previousSelection = await page.getByTestId('phase-selection').innerText();
+  const next = String(
+    Number(previousPeriod) + Number(await page.locator('#fine-period').getAttribute('step')),
+  );
+  await armWorker(page, 'dropNext');
+  await period.fill(next);
+  await period.press('Enter');
+  await expect
+    .poll(
+      async () =>
+        (await workerSnapshot(page)).messages.filter((message) => message.type === 'fold').length,
+    )
+    .toBe(2);
+  await expect(folded(page)).toHaveAttribute('aria-disabled', 'true');
+  // Advance the specified watchdog deadline; this is not a fold performance threshold.
+  await page.clock.fastForward(15_001);
+  await expect(page.getByRole('alert')).toContainText(
+    '마지막으로 성공한 주기·구간·판단을 유지했어요',
+  );
+  await expect(period).toHaveValue(previousPeriod);
+  await expect(page.getByTestId('phase-selection')).toHaveText(previousSelection);
+  await expect(page.getByRole('radio', { name: '행성 같음', exact: true })).toBeChecked();
+  await expect(folded(page)).toHaveAttribute('aria-disabled', 'false');
+  await period.fill(next);
+  await period.press('Enter');
+  await expect(
+    page.getByRole('button', { name: '이 주기로 구간 고르기', exact: true }),
+  ).toBeEnabled();
+  await expect(period).toHaveValue(next);
+  const snapshot = await workerSnapshot(page);
+  expect(snapshot.created).toBe(2);
+  expect(snapshot.messages.filter((message) => message.type === 'init')).toHaveLength(2);
+});
+
+test('switching observations cancels the old Worker and ignores its queued reply', async ({
+  page,
+}) => {
+  await installControlledWorker(page);
+  await openObservation(page);
+  await choosePeak(page);
+  await armWorker(page, 'delayNext');
+  await peak(page, 2).click();
+  await expect.poll(async () => (await workerSnapshot(page)).delayedReady).toBe(1);
+  await page.getByRole('combobox', { name: '관측 항성', exact: true }).selectOption('cm-dra');
+  await expect(
+    page.getByRole('group', { name: '시간 영역 광도곡선', exact: true }),
+  ).toHaveAttribute('data-point-count', '11558');
+  await choosePeak(page);
+  const currentPeriod = await page.getByLabel('주기 (일)', { exact: true }).inputValue();
+  await releaseDelayedWorker(page);
+  await expect(page.getByRole('combobox', { name: '관측 항성', exact: true })).toHaveValue(
+    'cm-dra',
+  );
+  await expect(folded(page)).toHaveAttribute('data-point-count', '11558');
+  await expect(folded(page)).toHaveAttribute('aria-disabled', 'false');
+  await expect(page.getByLabel('주기 (일)', { exact: true })).toHaveValue(currentPeriod);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const snapshot = await workerSnapshot(page);
+  expect(snapshot.created).toBe(2);
+  expect(snapshot.terminated).toBeGreaterThanOrEqual(1);
+  const initializations = snapshot.messages.filter((message) => message.type === 'init');
+  expect(initializations).toHaveLength(2);
+  expect(new Set(initializations.map((message) => message.dataId)).size).toBe(2);
+  expect(snapshot.deliveredLate).toBe(1);
 });
 
 test('missing observation data shows a recoverable error without inventing an empty star', async ({

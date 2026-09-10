@@ -10,6 +10,7 @@ import {
   type Target,
 } from './observation-data';
 import { deriveTransit, normalizeInterval, transitWindows } from './observation-math';
+import { FoldClient } from './fold-client';
 import './observation.css';
 
 const judgmentOptions = [
@@ -137,8 +138,7 @@ export function ObservationApp() {
   const [records, setRecords] = useState<Saved[]>(loadRecords);
   const [retryOf, setRetryOf] = useState<string | null>(null);
   const [showRecords, setShowRecords] = useState(false);
-  const worker = useRef<Worker | null>(null);
-  const foldTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const foldClient = useRef<FoldClient | null>(null);
   const revision = useRef(0);
   const currentData = useRef<Observation | null>(null);
   const busy = pendingPeriod !== null;
@@ -166,8 +166,8 @@ export function ObservationApp() {
     if (!target) return;
     const controller = new AbortController();
     revision.current++;
-    worker.current?.terminate();
-    if (foldTimeout.current) clearTimeout(foldTimeout.current);
+    foldClient.current?.dispose();
+    foldClient.current = null;
     currentData.current = null;
     setObservation(null);
     setDraft(null);
@@ -185,6 +185,11 @@ export function ObservationApp() {
         if (controller.signal.aborted) return;
         if (data.id !== target.id) throw new Error('관측 목록과 데이터가 일치하지 않습니다.');
         currentData.current = data;
+        foldClient.current = new FoldClient({
+          dataId: data.bundle_id,
+          times: data.time_btjd,
+          reference: data.fold_reference_time_btjd,
+        });
         setObservation(data);
         setTimeView({ zoom: 1, center: (data.time_btjd[0] + data.time_btjd.at(-1)!) / 2 });
         setPeriodView({
@@ -206,89 +211,65 @@ export function ObservationApp() {
     return () => {
       controller.abort();
       revision.current++;
-      worker.current?.terminate();
-      if (foldTimeout.current) clearTimeout(foldTimeout.current);
+      foldClient.current?.dispose();
+      foldClient.current = null;
     };
   }, [targetId, targets, reload]);
 
-  function refold(peak: Peak, period: number, mode: 'new' | 'fine' | 'restore', record?: Saved) {
+  async function refold(
+    peak: Peak,
+    period: number,
+    mode: 'new' | 'fine' | 'restore',
+    record?: Saved,
+  ) {
     const data = currentData.current;
-    if (!data || !Number.isFinite(period) || period < peak.period_min || period > peak.period_max)
+    const client = foldClient.current;
+    if (
+      !data ||
+      !client ||
+      !Number.isFinite(period) ||
+      period < peak.period_min ||
+      period > peak.period_max
+    )
       return;
     const requestRevision = ++revision.current;
-    worker.current?.terminate();
-    if (foldTimeout.current) clearTimeout(foldTimeout.current);
     setPendingPeriod(period);
     setPreviewInterval(null);
     setError('');
     setNotice('');
     const started = performance.now();
-    const failure = () => {
-      if (revision.current !== requestRevision) return;
-      worker.current?.terminate();
-      if (foldTimeout.current) clearTimeout(foldTimeout.current);
+    try {
+      const phases = await client.request(period);
+      if (!phases || revision.current !== requestRevision || currentData.current !== data) return;
+      setDraft((previous) => ({
+        peak,
+        period,
+        phases,
+        interval: record
+          ? { phase_start: record.selection.phase_start, phase_end: record.selection.phase_end }
+          : null,
+        judgment: record?.user_judgment ?? null,
+        memo: record?.memo ?? '',
+        view: record?.view ?? {
+          zoom: mode === 'fine' ? (previous?.view.zoom ?? 1) : 1,
+          center: 0,
+        },
+        stage: record ? 5 : 2,
+      }));
+      if (record) {
+        setTimeView(record.time_view);
+        setPeriodView(record.periodogram_view);
+        setRetryOf(record.id);
+        setShowRecords(false);
+      }
+      setFoldMs(performance.now() - started);
+      setPendingPeriod(null);
+    } catch {
+      if (revision.current !== requestRevision || currentData.current !== data) return;
       setPendingPeriod(null);
       setError(
         '곡선을 접지 못했습니다. 마지막으로 성공한 주기·구간·판단을 유지했어요. 다시 조정해 주세요.',
       );
-    };
-    try {
-      const nextWorker = new Worker(new URL('./fold.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-      worker.current = nextWorker;
-      nextWorker.onerror = (event) => {
-        event.preventDefault();
-        failure();
-      };
-      nextWorker.onmessage = (
-        event: MessageEvent<{ revision: number; phases: Float64Array; error?: string }>,
-      ) => {
-        if (
-          revision.current !== requestRevision ||
-          event.data.revision !== requestRevision ||
-          currentData.current !== data
-        )
-          return;
-        if (event.data.error || event.data.phases.length !== data.time_btjd.length) {
-          failure();
-          return;
-        }
-        nextWorker.terminate();
-        if (foldTimeout.current) clearTimeout(foldTimeout.current);
-        setDraft((previous) => ({
-          peak,
-          period,
-          phases: event.data.phases,
-          interval: record
-            ? { phase_start: record.selection.phase_start, phase_end: record.selection.phase_end }
-            : null,
-          judgment: record?.user_judgment ?? null,
-          memo: record?.memo ?? '',
-          view: record?.view ?? {
-            zoom: mode === 'fine' ? (previous?.view.zoom ?? 1) : 1,
-            center: 0,
-          },
-          stage: record ? 5 : 2,
-        }));
-        if (record) {
-          setTimeView(record.time_view);
-          setPeriodView(record.periodogram_view);
-          setRetryOf(record.id);
-          setShowRecords(false);
-        }
-        setFoldMs(performance.now() - started);
-        setPendingPeriod(null);
-      };
-      foldTimeout.current = setTimeout(failure, 15_000);
-      nextWorker.postMessage({
-        revision: requestRevision,
-        times: data.time_btjd,
-        reference: data.fold_reference_time_btjd,
-        period,
-      });
-    } catch {
-      failure();
     }
   }
 
@@ -820,7 +801,7 @@ export function ObservationApp() {
                         {busy
                           ? '접기 계산 중 · 구간과 판단 입력 잠금'
                           : foldMs !== null
-                            ? `마지막 접기 ${Math.round(foldMs)}ms · Worker 시작/전달 포함`
+                            ? `마지막 접기 ${Math.round(foldMs)}ms · 응답 대기 포함`
                             : '선택한 주기로 전체 관측점을 접습니다.'}
                       </span>
                       <span>가로 ×1~8</span>
