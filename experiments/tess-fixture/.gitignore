@@ -1,0 +1,8 @@
+# 원본 FITS·주입 결과·가상환경은 Git에 넣지 않는다 (docs/development/data-guidelines.md)
+sample_raw/
+results/
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
