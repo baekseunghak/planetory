@@ -1,0 +1,73 @@
+.chart-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 1px;
+  touch-action: none;
+  user-select: none;
+}
+.chart-surface > .plot {
+  cursor: grab;
+}
+.chart-surface[data-dragging="true"] > .plot {
+  cursor: grabbing;
+}
+.chart-surface.is-selecting > .plot {
+  cursor: crosshair;
+}
+.chart-surface > .plot:focus-visible {
+  outline: 1px solid #94e5ec;
+  outline-offset: -2px;
+}
+.chart-surface .range-handle {
+  position: absolute;
+  z-index: 2;
+  width: 14px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #82c7d1;
+  border-radius: 5px;
+  color: #c2f2f2;
+  background: rgba(10, 25, 36, 0.92);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.chart-surface .range-handle-start {
+  transform: translate(-100%, -50%);
+}
+.chart-surface .range-handle-end {
+  transform: translate(0, -50%);
+}
+.chart-surface .range-handle::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+@media (pointer: coarse) {
+  .chart-surface .range-handle::before {
+    inset: -10px;
+  }
+}
+.chart-surface .range-handle.is-selected {
+  border-color: #edbe85;
+  color: #edbe85;
+}
+.chart-surface .range-handle:focus-visible {
+  outline: 2px solid #e5ffff;
+  outline-offset: 2px;
+}
+.chart-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
