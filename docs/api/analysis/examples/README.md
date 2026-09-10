@@ -1,6 +1,8 @@
 # 분석 API 예제 읽는 법
 
-이 디렉터리는 **백엔드 합의 전인 로컬 API 초안의 합성 fixture**다. 요청·응답 모양과 요구사항별 상태 조합을 검토하기 위한 정적 JSON이며 실행 중인 Mock HTTP 서버나 실제 관측 데이터가 아니다. 계약 설명은 [API 초안](../README.md), 화면 의미와 행동은 [상태 모델](../state-model.md)을 함께 읽는다.
+이 디렉터리는 **v0.12 기반 구판 API 초안의 합성 fixture**다. 기존 `analysis-ui` 실험을 재현하기 위해 JSON 형식과 당시 상태 조합을 보존하며 현재 v1.0 계약으로 쓰지 않는다. 실행 중인 Mock HTTP 서버나 실제 관측 데이터가 아니다. 당시 계약 설명은 [API 실험 기록](../README.md), 당시 화면 의미는 [구판 상태 모델](../state-model.md)을 함께 읽는다.
+
+Jira: [S15P21C206-49](https://ssafy.atlassian.net/browse/S15P21C206-49). 현행 동작은 [프론트 상세 명세](../../../development/analysis-frontend-spec.md), 차이와 교체 조건은 [v1.0 전환표](../v1-migration.md)를 따른다. `source_requirements`의 ID와 검증기 PASS는 **당시 기준의 정적 일관성**을 뜻하며, 현재 SRS 수용 테스트 완료 증거가 아니다.
 
 ## 상황별 파일
 

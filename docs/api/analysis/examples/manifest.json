@@ -1,6 +1,9 @@
 {
   "schema_version": "0.1-draft",
   "synthetic": true,
+  "contract_status": "historical-fixture-only",
+  "requirements_baseline": "v0.12@77e4121a3de7bf0b5c615751fb0dac09d974ee1d",
+  "migration_guide": "../v1-migration.md",
   "files": [
     {
       "file": "01-session-and-curve.json",

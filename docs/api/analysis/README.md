@@ -1,16 +1,18 @@
-# 분석 프론트 API·Mock 계약 초안
+# 분석 프론트 API·Mock 계약 — v0.12 실험 기록
 
-> 상태: **Draft 0.1 — 백엔드·데이터 담당 합의 전**, 2026-09-09
+> 상태: **Historical fixture — v0.12 기반 Draft 0.1 보존**, 2026-09-10 정리
 >
-> 기준: [요구사항 v0.12](../../requirements/planetory-requirements-spec.md), [상태표 v0.13](../../requirements/planetory-status-table.md), [와이어프레임 v0.6](../../requirements/planetory-wireframe.html) · 명세 기준 커밋 `77e4121`
+> 당시 기준: [요구사항 v0.12](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/77e4121a3de7bf0b5c615751fb0dac09d974ee1d/docs/requirements/planetory-requirements-spec.md), [상태표 v0.13](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/77e4121a3de7bf0b5c615751fb0dac09d974ee1d/docs/requirements/planetory-status-table.md), [와이어프레임 v0.6](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/77e4121a3de7bf0b5c615751fb0dac09d974ee1d/docs/requirements/planetory-wireframe.html) · `77e4121`
 >
-> Jira: 미연결. 티켓 정리 전 사용자와 합의한 로컬 임시 브랜치에서 작성한다. 여기의 URI·HTTP 상태·필드명·enum·페이지 처리 방식은 제안이며 서버 구현이나 팀의 최종 API 명세가 아니다.
+> Jira: [S15P21C206-49](https://ssafy.atlassian.net/browse/S15P21C206-49). 아래 1~10장은 당시 초안이며, 현재 v1.0 계약으로 확정하거나 일괄 갱신한 내용이 아니다. URI·HTTP 상태·필드명·enum은 백엔드·데이터 담당 합의 전 제안이다.
+
+현재 구현 요구사항은 [분석 프론트엔드 상세 명세](../../development/analysis-frontend-spec.md)를 먼저 읽는다. 이 디렉터리의 JSON과 검증기는 기존 `analysis-ui` 실험을 재현하기 위해 형식을 유지한다. Bundle 고정·품질 근거·재도전 복원·성과 등급·통계는 v1.0과 다르므로 [v1.0 전환표](v1-migration.md)에 따라 교체해야 한다. **이 검증기의 통과는 구판 fixture 내부 일관성만 뜻하며 v1.0 준수나 실제 서버 검증을 뜻하지 않는다.**
 
 ## 1. 목적과 범위
 
 백지웅의 분석 화면에서 필요한 요청·응답을 먼저 맞춰, 백엔드 구현 전에도 정상·실패 화면을 재현한다. 분석 진입 → 곡선·주기·위상 구간 선택 → 제출 → 결과 → 잔차 탐색·재도전 → 미확정 분석 공개까지 다룬다. 실제 BLS·AI·보상 로직, API 서버, 회원 인증 구현은 포함하지 않는다.
 
-- [화면 상태와 행동](state-model.md): 이미 합의한 정책을 프론트 상태 전이로 풀어 쓴다.
+- [화면 상태와 행동](state-model.md): 당시 정책을 프론트 상태 전이로 풀어 쓴 구판 기록이다.
 - [예시 목록](examples/README.md): 요청·응답 JSON과 재현할 상황. 숫자·회원·TIC·신호는 모두 합성 예시다.
 - [예시 검증기](validate-examples.cjs): JSON 구조, 식별자·버전 연결, 위상 환산, 상태 분리, 공개 통계·재전송 관계를 확인한다. 서비스 API 테스트가 아니다.
 
@@ -166,4 +168,4 @@ epoch = reference + (phase_center + k) * period_days
 
 저장소 루트 `Planetory`에서 `node docs/api/analysis/validate-examples.cjs`로 예시를 확인한다. 각 예시는 독립된 합성 상황이며 실행 가능한 Mock HTTP 서버가 아니다. Node 기본 모듈만 사용한다.
 
-로컬 커밋은 계약/상태 모델과 예시/검증을 나눈다. Jira 정리 후 브랜치·미푸시 커밋 메시지에 실제 작업 키를 적용하고 리뷰한다. 원격 푸시·MR 생성은 별도 진행한다.
+당시 계약/상태 모델과 예시/검증을 분리한 두 커밋은 작업 키 S15P21C206-49에 연결해 보존한다. 이번 정리에서 현행 상세 명세와 전환표를 추가했으며, JSON 스키마와 구판 시나리오의 의미는 바꾸지 않았다. 새 서버 계약의 합의와 v1.0 fixture 구현·통합 검증은 후속 작업이다.

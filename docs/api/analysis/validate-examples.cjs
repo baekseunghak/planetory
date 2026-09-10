@@ -1,6 +1,8 @@
 'use strict';
 
-// Static draft checks only: no HTTP server, database, browser or astronomy pipeline.
+// Historical v0.12 fixture checks only. These assertions intentionally preserve
+// the old prototype contract; they do not validate the current v1.0 requirements.
+// No HTTP server, database, browser or astronomy pipeline is exercised.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -328,7 +330,7 @@ function validate(scenarios) {
 }
 
 function checkLinks() {
-  for (const file of ['README.md', 'state-model.md', 'examples/README.md']) {
+  for (const file of ['README.md', 'state-model.md', 'examples/README.md', 'v1-migration.md']) {
     const full = path.join(__dirname, file), md = fs.readFileSync(full, 'utf8');
     for (const match of md.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
       if (/^(https?:|#)/.test(match[1])) continue;
@@ -340,6 +342,9 @@ function checkLinks() {
 try {
   const manifest = read('manifest.json');
   equal(manifest.synthetic, true);
+  equal(manifest.contract_status, 'historical-fixture-only');
+  equal(manifest.requirements_baseline, 'v0.12@77e4121a3de7bf0b5c615751fb0dac09d974ee1d');
+  assert(fs.existsSync(path.resolve(dir, manifest.migration_guide)), 'Missing migration guide');
   unique(manifest.files.map(f => f.file));
   setEqual(fs.readdirSync(dir).filter(f => f.endsWith('.json') && f !== 'manifest.json'), manifest.files.map(f => f.file));
   const scenarios = manifest.files.map(file => {
@@ -365,8 +370,8 @@ try {
     assert(!isDeepStrictEqual(scenarios, damaged), 'Self-test did not mutate ' + name);
     assert.throws(() => validate(damaged), undefined, 'Validator missed ' + name);
   }
-  console.log('PASS: ' + scenarios.length + ' synthetic scenarios / ' + count + ' HTTP examples; document links; ' + mutations.length + ' invalid mutations rejected.');
-  console.log('Scope: static draft consistency only; no API, browser, DB, BLS, AI or performance tests executed.');
+  console.log('PASS (historical v0.12 fixtures): ' + scenarios.length + ' synthetic scenarios / ' + count + ' HTTP examples; document links; ' + mutations.length + ' invalid mutations rejected.');
+  console.log('Scope: historical fixture consistency only, not v1.0 compliance. No API, browser, DB, BLS, AI or performance tests executed.');
 } catch (error) {
   console.error('FAIL: ' + error.message);
   process.exitCode = 1;
