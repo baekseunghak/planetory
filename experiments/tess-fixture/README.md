@@ -34,6 +34,9 @@ UUID 앞 8자리로 다른 실행과 겹칠 가능성을 낮추며, 같은 초 �
 순서는 manifest 의 `created_at`·`run_id`). `set_id` 는 `<grid_id>-<version>`(예 `injection_grid_v1-1.1.0`)이라 격자 버전이 바뀌면 다른 세트다.
 세 명령 모두 `--results` 로 준 루트 아래 `manifests/` 에 실행 manifest 를 남긴다.
 
+이 프로젝트는 설치 가능한 패키지(hatchling)라서 다른 실험 프로젝트가 경로 의존성으로 가져다 쓸 수 있다.
+`experiments/tess-bench` 가 `tess-fixture = { path = "../tess-fixture", editable = true }` 로 사용한다.
+
 ## 산출물 위치
 
 | 경로 | Git | 내용 |

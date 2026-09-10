@@ -1,0 +1,44 @@
+{
+  "settings_id": "preprocess_v1",
+  "version": "1.0.0",
+  "description": "전처리·detrending 벤치마크 설정 목록 (S15P21C206-42). 한 번에 한 요인만 PoC 기준에서 바꾼다. 갭 분석 7.1절 실험 B(품질)·C(구간)·D(창)·E(실패)에 대응.",
+  "defaults": {
+    "quality_bitmask": null,
+    "gap_days": 0.5,
+    "split_sectors": false,
+    "detrend_method": "savgol",
+    "window_days": 2.0,
+    "sigma_upper": 5.0,
+    "min_points": 500,
+    "biweight_stride": 10
+  },
+  "quality_bitmask_note": "null = QUALITY == 0 (PoC). 175 / 7407 은 lightkurve TessQualityFlags 의 DEFAULT_BITMASK / HARD_BITMASK 값이며, 어떤 비트를 뜻하는지는 TESS Science Data Products Description Document 의 QUALITY 비트 표로 실행 전 확인한다.",
+  "settings": [
+    {"setting_id": "poc_baseline", "factor": "baseline",
+     "description": "PoC clean() 기본값. 모든 비교의 기준"},
+
+    {"setting_id": "quality_default_175", "factor": "quality", "quality_bitmask": 175,
+     "description": "공식 기본 비트마스크. QUALITY==0 보다 점을 더 살림"},
+    {"setting_id": "quality_hard_7407", "factor": "quality", "quality_bitmask": 7407,
+     "description": "공식 강한 비트마스크. 기본 마스크보다 더 버림 (QUALITY==0 과의 중간)"},
+
+    {"setting_id": "split_sector_gap0.5", "factor": "segment", "split_sectors": true,
+     "description": "Sector 경계에서 무조건 끊기 + 공백 0.5일"},
+    {"setting_id": "split_sector_gap0.3", "factor": "segment", "split_sectors": true, "gap_days": 0.3,
+     "description": "Sector 경계 끊기 + 공백 기준 0.3일로 강화"},
+
+    {"setting_id": "savgol_0.5d", "factor": "window", "window_days": 0.5,
+     "description": "SG 창 0.5일. 8시간 통과가 깎이는지 확인"},
+    {"setting_id": "savgol_1.0d", "factor": "window", "window_days": 1.0,
+     "description": "SG 창 1일"},
+    {"setting_id": "savgol_3.0d", "factor": "window", "window_days": 3.0,
+     "description": "SG 창 3일. 잡음이 남는지 확인"},
+
+    {"setting_id": "biweight_0.5d", "factor": "method", "detrend_method": "biweight", "window_days": 0.5,
+     "description": "Tukey biweight 위치 추정, 창 0.5일"},
+    {"setting_id": "biweight_1.0d", "factor": "method", "detrend_method": "biweight", "window_days": 1.0,
+     "description": "biweight 창 1일"},
+    {"setting_id": "biweight_2.0d", "factor": "method", "detrend_method": "biweight", "window_days": 2.0,
+     "description": "biweight 창 2일 (PoC 와 같은 창, 방법만 다름)"}
+  ]
+}

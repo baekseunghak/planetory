@@ -1,0 +1,7 @@
+# 벤치마크 결과·가상환경은 Git에 넣지 않는다. 입력 FITS는 ../tess-fixture/sample_raw/ (역시 Git 제외)
+results/
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
