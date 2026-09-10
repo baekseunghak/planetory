@@ -6,11 +6,12 @@
 
 ## 작업 위치와 기준
 
-- 로컬 브랜치: `experiment/analysis-ui-prototype`
-- 분기 기준: `docs/analysis-api-draft`의 `fc68ebd`. 문서 초안 2개 커밋을 공통 기반으로 사용하며 기존 문서 브랜치를 이동시키지 않는다.
-- Jira 미연결 임시 작업이다. 팀 티켓 정리 후 실제 작업 키에 맞춰 브랜치·미푸시 커밋을 정리하고 리뷰한다. 푸시·MR·배포는 수행하지 않는다.
-- 정본: [요구사항 v0.12](../../docs/requirements/planetory-requirements-spec.md), [와이어프레임 v0.6](../../docs/requirements/planetory-wireframe.html)
+- Jira: [S15P21C206-50](https://ssafy.atlassian.net/browse/S15P21C206-50), 브랜치 `experiment/S15P21C206-50-web-analysis-prototype`.
+- 관련 문서 Task: `S15P21C206-49`. 과거 `experiment/analysis-ui-prototype`의 UI 변경 4개 커밋을 새 작업 브랜치에 옮겼으며 원래 브랜치와 커밋은 보존한다.
+- 현재 정본: [요구사항 v1.0](../../docs/requirements/planetory-requirements-spec.md), [와이어프레임](../../docs/requirements/planetory-wireframe.html), [분석 프론트 상세 명세](../../docs/development/analysis-frontend-spec.md).
 - 제안 계약: [분석 API·Mock](../../docs/api/analysis/README.md), [상태 모델](../../docs/api/analysis/state-model.md)
+
+이 실험의 최초 구현 기준은 요구사항 v0.12·와이어프레임 v0.6이었다. 현재 정본을 전부 구현한 것으로 해석하지 않는다. 실제 관측 화면은 운영의 10분 비닝 Bundle 대신 기존 PoC의 전 점을 사용하며, 임시 기록의 같은 Bundle 복원과 합성 결과 Mock은 운영 API의 재도전·최신 데이터 검증을 대신하지 않는다. 계약 차이와 미구현 범위는 API 문서 및 상세 명세를 따른다. 네 투명 패널과 홈 배경을 검토하는 새 시안은 별도 [analysis-lab](../analysis-lab/README.md)에 있다.
 
 최종 서비스의 프론트 디렉터리·공통 디자인·인증 구성을 결정한 것은 아니다. 기존 별 지도 실험과 실행 환경을 공유하지 않는다.
 
@@ -50,7 +51,7 @@ pnpm dev
 & experiments/tess-bls/.venv/Scripts/python.exe experiments/analysis-ui/scripts/verify_observations.py
 ```
 
-입력은 이미 저장된 `archive/TESS_BLS_semi_auto/sample_raw/tess/`의 FITS 7개다. 다른 경로는 `--source-root`로 지정한다. 해당 가상환경이 없으면 [기존 tess-bls 환경](../tess-bls/README.md)을 준비한다. [출처·처리 규칙](scripts/README-observations.md)에 자세한 내용이 있다. 원본 FITS와 생성 JSON은 Git에 포함하지 않는다. 데이터 파일이 없으면 화면에서 생성 안내와 재시도 버튼을 제공한다.
+입력은 로컬 실험에서 사용한 `archive/TESS_BLS_semi_auto/sample_raw/tess/`의 FITS 7개다. **새 checkout에는 이 자료가 없다.** 팀에서 아래 출처 문서의 TIC·Sector에 맞는 FITS를 제공받아 `--source-root`로 지정하거나, 기존 export의 `manifest.json`과 대상별 JSON 세 개(`toi270.json`, `l98-59.json`, `cm-dra.json`)를 `public/observations/`에 준비한다. 해당 가상환경이 없으면 [기존 tess-bls 환경](../tess-bls/README.md)을 준비한다. [출처·처리 규칙](scripts/README-observations.md)에 입력 폴더 구조와 명령이 있다. 원본 FITS와 생성 JSON은 Git에 포함하지 않으며 자동 다운로드하지 않는다. 데이터 파일이 없으면 화면에서 생성 안내와 재시도 버튼을 제공한다.
 
 - [실제 관측 분석](http://127.0.0.1:5174/?mode=observations&target=toi270)
 - [합성 결과 시나리오](http://127.0.0.1:5174/?scenario=last-fp-wrong)

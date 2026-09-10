@@ -12,6 +12,17 @@
 
 ## 실행
 
+새 checkout에는 원본 FITS와 생성 JSON이 없습니다. 기존 export를 제공받았다면 `manifest.json`, `toi270.json`, `l98-59.json`, `cm-dra.json` 네 파일을 `experiments/analysis-ui/public/observations/`에 준비합니다. manifest는 제공받은 JSON과 같은 export의 것이어야 합니다. 실제 FITS 재검증은 원본까지 있을 때만 실행할 수 있습니다.
+
+FITS에서 새로 만들려면 `experiments/tess-bls`에서 `uv sync --locked`로 Python 3.11 이상 환경을 준비합니다. `--source-root`에 지정할 폴더는 `toi270/`(Sector 3·4·5), `l98_59/`(Sector 2·5·8), `cm_dra/`(Sector 16) 하위 폴더와 각각의 `*_lc.fits` 파일을 포함해야 합니다. 폴더별 TIC와 Sector는 위 표와 같아야 합니다. exporter가 파일을 내려받거나 `archive`의 내용을 변경하지 않습니다.
+
+프로젝트 루트에서 명시적인 입력 폴더를 지정하는 예:
+
+```powershell
+& experiments/tess-bls/.venv/Scripts/python.exe experiments/analysis-ui/scripts/export_observations.py --source-root "<저장된 tess 폴더>"
+& experiments/tess-bls/.venv/Scripts/python.exe experiments/analysis-ui/scripts/verify_observations.py --source-root "<저장된 tess 폴더>"
+```
+
 `Planetory` 디렉터리에서, 기존 `experiments/tess-bls` 가상환경을 사용합니다.
 
 ```powershell

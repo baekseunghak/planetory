@@ -14,3 +14,4 @@ public/observations/*.json
 public/observations/*.json.tmp
 scripts/__pycache__/
 scripts/.pytest_cache/
+.pytest_cache/
