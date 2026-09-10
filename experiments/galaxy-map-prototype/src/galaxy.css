@@ -1,0 +1,179 @@
+.galaxy-page {
+  background: #000104;
+  isolation: isolate;
+}
+.galaxy-page canvas[hidden] {
+  display: none;
+}
+.galaxy-page .sky-heading {
+  top: 28px;
+}
+.galaxy-page .sky-heading h1 {
+  font-size: 28px;
+  letter-spacing: -0.8px;
+}
+.galaxy-page .sky-heading > strong {
+  font-size: 21px;
+  color: #bacde7;
+  letter-spacing: -0.5px;
+}
+.galaxy-page .sky-heading > p:not(.eyebrow) {
+  margin-bottom: 13px;
+}
+.galaxy-page .quest-panel {
+  top: 192px;
+  width: 232px;
+  background: #0a101bd6;
+  backdrop-filter: blur(14px);
+  border-color: #314057;
+}
+.galaxy-page .quest-heading {
+  padding: 14px 16px;
+}
+.galaxy-page .star-detail {
+  right: 24px;
+  top: 92px;
+  width: 308px;
+  max-height: calc(100% - 112px);
+  padding: 18px 20px;
+  background: #070d17ed;
+  backdrop-filter: blur(18px);
+  border-color: #35465f;
+  box-shadow: 0 16px 60px #0007;
+}
+.galaxy-page .star-detail h2 {
+  margin: 8px 0 4px;
+  font-size: 26px;
+}
+.galaxy-page .star-detail .modal-head {
+  margin-bottom: 4px;
+}
+.galaxy-page .galaxy-alias {
+  color: #92aacb;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.galaxy-page .star-detail .facts {
+  margin: 12px 0;
+}
+.galaxy-page .star-detail .grade-info {
+  margin: 12px 0;
+}
+.galaxy-page .star-detail .primary {
+  background: #8bbaff !important;
+  border-color: #a5caff !important;
+  color: #061224 !important;
+  font-weight: 650;
+}
+.galaxy-page .star-detail .primary:hover {
+  background: #bad8ff !important;
+}
+.galaxy-page .star-hit.selected .star-name,
+.galaxy-page .star-hit.hovered .star-name {
+  opacity: 1;
+}
+.galaxy-page .star-name {
+  font-size: 11px;
+  font-weight: 500;
+  top: 27px;
+  white-space: nowrap;
+}
+.galaxy-page .star-hit.selected {
+  z-index: 4;
+}
+.galaxy-page .star-hit.selected .star-name {
+  top: -22px;
+  left: 41px;
+  transform: none;
+}
+.galaxy-page .star-hit.selected .quest-marker {
+  left: -13px;
+  top: -17px;
+}
+.galaxy-connector {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.galaxy-connector path {
+  fill: none;
+  stroke: #b0c3db;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.galaxy-orbits {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+.galaxy-orbits ellipse {
+  fill: none;
+  stroke: #b9c5d0;
+  stroke-width: 0.7;
+  opacity: 0.52;
+}
+.galaxy-orbits .orbit-planet {
+  pointer-events: all;
+  cursor: help;
+  filter: drop-shadow(0 0 4px #d3e5ff);
+}
+.galaxy-page .map-tools {
+  bottom: 125px;
+  background: #070d17e0;
+  backdrop-filter: blur(12px);
+}
+.galaxy-page .map-tools button[aria-pressed="true"] {
+  background: #1d3555;
+  color: #b6d5ff;
+}
+.galaxy-instructions {
+  position: absolute;
+  left: 38px;
+  bottom: 94px;
+  color: #8a9db9;
+  font-size: 10px;
+  pointer-events: none;
+}
+.galaxy-page .map-legend {
+  bottom: 24px;
+  background: linear-gradient(90deg, #0008, transparent);
+}
+.galaxy-page .map-list-panel {
+  background: #09121fee;
+  backdrop-filter: blur(18px);
+}
+.galaxy-page .sky-tooltip {
+  background: #111e32ed;
+  backdrop-filter: blur(8px);
+}
+.galaxy-page .map-state {
+  z-index: 15;
+}
+@media (max-width: 1200px) {
+  .galaxy-page .star-hit.selected .star-name { left: -20px; transform: translateX(-100%); }
+  .galaxy-page .quest-panel {
+    width: 210px;
+    left: 24px;
+  }
+  .galaxy-page .sky-heading,
+  .galaxy-page .map-tools,
+  .galaxy-page .map-legend,
+  .galaxy-instructions {
+    left: 24px;
+  }
+  .galaxy-page .star-detail {
+    right: 18px;
+    width: 286px;
+    top: 32px;
+    max-height: calc(100% - 52px);
+  }
+  .galaxy-page .map-legend > div {
+    gap: 10px;
+  }
+  .galaxy-page .map-list-panel {
+    left: 245px;
+    width: 350px;
+  }
+}

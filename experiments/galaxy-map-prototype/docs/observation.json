@@ -1,0 +1,15 @@
+{
+  "observedAt": "2026-09-10T05:06:14.266Z",
+  "scope": "50k overview observation only; not SRS AT-71 acceptance",
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "samples": 100,
+  "p95": 66.59999999999945,
+  "worst": 66.69999999999982,
+  "drawCalls": "2",
+  "rendered": "50000",
+  "viewport": [
+    1680,
+    1050
+  ],
+  "dpr": 1
+}
