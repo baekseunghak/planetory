@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "planetory.run-manifest.v1",
+  "title": "Planetory experiment run manifest",
+  "description": "실험 실행 1회의 입력·설정·코드·환경·명령·산출물 기록. data-guidelines '재현성' 항목을 필드로 고정한다.",
+  "type": "object",
+  "required": ["schema", "run_id", "created_at", "task", "command", "code", "environment", "inputs", "config", "outputs"],
+  "properties": {
+    "schema": {"const": "planetory.run-manifest.v1"},
+    "run_id": {"type": "string", "description": "UUID4"},
+    "created_at": {"type": "string", "format": "date-time", "description": "UTC ISO-8601"},
+    "task": {"type": "string", "description": "Jira 키 또는 작업 이름, 예: S15P21C206-41 inject"},
+    "command": {"type": "string", "description": "재실행 가능한 명령 한 줄"},
+    "code": {
+      "type": "object",
+      "required": ["git_commit"],
+      "properties": {
+        "git_commit": {"type": ["string", "null"]},
+        "git_branch": {"type": ["string", "null"]},
+        "git_dirty": {"type": ["boolean", "null"], "description": "true 면 커밋되지 않은 변경이 있는 상태에서 실행"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["python", "platform", "packages"],
+      "properties": {
+        "python": {"type": "string"},
+        "platform": {"type": "string"},
+        "machine": {"type": "string"},
+        "packages": {"type": "object", "additionalProperties": {"type": ["string", "null"]}}
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "size_bytes": {"type": "integer"},
+          "source_uri": {"type": "string", "description": "원천 URI (MAST 제품 URL 등)"},
+          "tic_id": {"type": "integer"},
+          "sector": {"type": "integer"},
+          "procver": {"type": ["string", "null"], "description": "SPOC 처리 버전"},
+          "role": {"type": "string", "description": "입력이 맡는 역할: raw_product, baseline, grid 등"}
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["name", "version", "sha256"],
+      "properties": {
+        "name": {"type": "string", "description": "설정 파일 이름 또는 설정 식별자"},
+        "version": {"type": "string"},
+        "sha256": {"type": "string"},
+        "parameters": {"type": "object", "description": "명령행 인자 등 설정 파일 밖의 값"}
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string"},
+          "size_bytes": {"type": "integer"},
+          "kind": {"type": "string", "description": "catalog, curves, checksums, references 등"},
+          "rows": {"type": "integer"}
+        }
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

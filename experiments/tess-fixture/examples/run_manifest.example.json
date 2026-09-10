@@ -1,0 +1,105 @@
+{
+  "schema": "planetory.run-manifest.v1",
+  "run_id": "1ab68fd5-27be-4c6f-ac9c-367971a14871",
+  "created_at": "2026-09-10T02:43:01+00:00",
+  "task": "S15P21C206-41 inject",
+  "command": "python -m tess_fixture inject --target toi270 --write-curves",
+  "code": {
+    "git_commit": "8060852518fbfcc4e1fea25614785c24e308d6b4",
+    "git_branch": "feature/S15P21C206-41-tess-fixture",
+    "git_dirty": false
+  },
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "packages": {
+      "numpy": "2.4.6",
+      "astropy": "7.2.2"
+    }
+  },
+  "inputs": [
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\sample_raw\\toi270\\tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
+      "sha256": "edaa0de029f6fde3d045352887ef1a2950bb9b38fc18075066c81d7638feb695",
+      "size_bytes": 1998720,
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
+      "tic_id": 259377017,
+      "sector": 3,
+      "role": "raw_product"
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\sample_raw\\toi270\\tess2018292075959-s0004-0000000259377017-0124-s_lc.fits",
+      "sha256": "09f1e69d89dce001e447fbc509b9453f033b2428d183add334b43b93dbc8c93b",
+      "size_bytes": 1897920,
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018292075959-s0004-0000000259377017-0124-s_lc.fits",
+      "tic_id": 259377017,
+      "sector": 4,
+      "role": "raw_product"
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\sample_raw\\toi270\\tess2018319095959-s0005-0000000259377017-0125-s_lc.fits",
+      "sha256": "739250df0d1ccda4304e01213f1f0f53c24603e3e223ff646157b6721665a9d5",
+      "size_bytes": 1923840,
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018319095959-s0005-0000000259377017-0125-s_lc.fits",
+      "tic_id": 259377017,
+      "sector": 5,
+      "role": "raw_product"
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\configs\\injection_grid_v1.json",
+      "size_bytes": 1805,
+      "sha256": "f86ce811186fd836337037caa6b7285b0715c2cc53adcdea15a28ffc24172e26",
+      "role": "grid"
+    }
+  ],
+  "config": {
+    "name": "injection_grid_v1.json",
+    "version": "1.0.0",
+    "sha256": "f86ce811186fd836337037caa6b7285b0715c2cc53adcdea15a28ffc24172e26",
+    "parameters": {
+      "target": "toi270",
+      "noise_seed": 20260910,
+      "single_only": false,
+      "write_curves": true,
+      "baseline_rule": "QUALITY==0 & finite(TIME,PDCSAP_FLUX), per-sector median normalization, no detrending",
+      "sectors": [
+        3,
+        4,
+        5
+      ],
+      "normalization_median": {
+        "3": 9406.927734375,
+        "4": 9555.7783203125,
+        "5": 9547.08203125
+      },
+      "n_raw": 57320,
+      "n_valid": 44553
+    }
+  },
+  "outputs": [
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\catalog.csv",
+      "size_bytes": 40882,
+      "sha256": "5cfea9ce4fa690391d1eb19761644cfa08c3b8eb5e2d4bce79e58cdd018aea63",
+      "kind": "catalog",
+      "rows": 228
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\baseline.npz",
+      "size_bytes": 385782,
+      "kind": "curves"
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\injection_grid_v1-toi270-real-g000-s0.npz",
+      "size_bytes": 121616,
+      "kind": "curves"
+    },
+    {
+      "path": "<repo>\\experiments\\tess-fixture\\results\\injections\\injection_grid_v1\\toi270\\real\\injection_grid_v1-toi270-real-g001-s0.npz",
+      "size_bytes": 121633,
+      "kind": "curves"
+    }
+  ],
+  "notes": "examples 용 축약본: outputs 225개 중 4개만 남김. 원본은 results/manifests/ (Git 제외)."
+}

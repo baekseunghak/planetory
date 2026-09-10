@@ -1,0 +1,21 @@
+[project]
+name = "tess-fixture"
+version = "0.1.0"
+description = "Fixed TESS SPOC light-curve sample, synthetic transit injection set and run manifest for Planetory experiments"
+requires-python = ">=3.11"
+dependencies = [
+  "astropy>=6.0,<8",
+  "numpy>=1.26,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<10",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
