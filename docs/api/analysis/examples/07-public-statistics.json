@@ -1,0 +1,527 @@
+{
+  "schema_version": "0.1-draft",
+  "scenario_id": "07-public-statistics",
+  "description": "8/4/3인 분포, 최신 비공개·과거 늦은 공개·취소 fallback·운영 복원·동률·0명.",
+  "source_requirements": [
+    "COM-14",
+    "AT-104",
+    "AT-105",
+    "AT-108"
+  ],
+  "setup": {
+    "records": [
+      {
+        "fixture_record_id": "mock-public-1",
+        "user_id": "mock-user-1",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 1,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-2",
+        "user_id": "mock-user-2",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 2,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-3",
+        "user_id": "mock-user-3",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 3,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-4",
+        "user_id": "mock-user-4",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 4,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-5",
+        "user_id": "mock-user-5",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 5,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-6",
+        "user_id": "mock-user-6",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 6,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-7",
+        "user_id": "mock-user-7",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 7,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-8",
+        "user_id": "mock-user-8",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "LIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 8,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-9",
+        "user_id": "mock-user-9",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNLIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 9,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-10",
+        "user_id": "mock-user-10",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNLIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 10,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-11",
+        "user_id": "mock-user-11",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNLIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 11,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-12",
+        "user_id": "mock-user-12",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNLIKELY_PLANET",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 12,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-13",
+        "user_id": "mock-user-13",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNSURE",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 13,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-14",
+        "user_id": "mock-user-14",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNSURE",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 14,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      },
+      {
+        "fixture_record_id": "mock-public-15",
+        "user_id": "mock-user-15",
+        "candidate_id": "mock-stat-signal",
+        "user_judgment": "UNSURE",
+        "submitted_at": "2026-09-09T01:00:00Z",
+        "submission_sequence": 15,
+        "published_at": "2026-09-09T01:10:00Z",
+        "author_public": true,
+        "moderation_hidden": false,
+        "thread_hidden": false
+      }
+    ],
+    "server_events_are_fixture_metadata": true
+  },
+  "exchanges": [
+    {
+      "name": "initial-8-4-3",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      }
+    },
+    {
+      "name": "private-new-no-change",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "APPEND",
+        "record": {
+          "fixture_record_id": "mock-private-new",
+          "user_id": "mock-user-1",
+          "candidate_id": "mock-stat-signal",
+          "user_judgment": "UNLIKELY_PLANET",
+          "submitted_at": "2026-09-09T01:30:00Z",
+          "submission_sequence": 20,
+          "published_at": null,
+          "author_public": false,
+          "moderation_hidden": false,
+          "thread_hidden": false
+        }
+      }
+    },
+    {
+      "name": "old-published-late-no-change",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "APPEND",
+        "record": {
+          "fixture_record_id": "mock-old-late",
+          "user_id": "mock-user-1",
+          "candidate_id": "mock-stat-signal",
+          "user_judgment": "UNLIKELY_PLANET",
+          "submitted_at": "2026-09-09T00:30:00Z",
+          "submission_sequence": 0,
+          "published_at": "2026-09-09T01:40:00Z",
+          "author_public": true,
+          "moderation_hidden": false,
+          "thread_hidden": false
+        }
+      }
+    },
+    {
+      "name": "publish-new-replaces-one-user",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 7,
+            "UNLIKELY_PLANET": 5,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 46.7,
+            "UNLIKELY_PLANET": 33.3,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "PATCH",
+        "id": "mock-private-new",
+        "changes": {
+          "author_public": true,
+          "published_at": "2026-09-09T01:45:00Z"
+        }
+      }
+    },
+    {
+      "name": "withdraw-falls-back",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "PATCH",
+        "id": "mock-private-new",
+        "changes": {
+          "author_public": false
+        }
+      }
+    },
+    {
+      "name": "moderator-hide-independent",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "PATCH",
+        "id": "mock-private-new",
+        "changes": {
+          "moderation_hidden": true
+        }
+      }
+    },
+    {
+      "name": "restore-does-not-republish",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 8,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 3
+          },
+          "percentages": {
+            "LIKELY_PLANET": 53.3,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 20
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "PATCH",
+        "id": "mock-private-new",
+        "changes": {
+          "moderation_hidden": false
+        }
+      }
+    },
+    {
+      "name": "same-time-server-sequence",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 15,
+          "counts": {
+            "LIKELY_PLANET": 7,
+            "UNLIKELY_PLANET": 4,
+            "UNSURE": 4
+          },
+          "percentages": {
+            "LIKELY_PLANET": 46.7,
+            "UNLIKELY_PLANET": 26.7,
+            "UNSURE": 26.7
+          },
+          "empty_message": null
+        }
+      },
+      "server_event": {
+        "type": "APPEND",
+        "record": {
+          "fixture_record_id": "mock-tied-latest",
+          "user_id": "mock-user-2",
+          "candidate_id": "mock-stat-signal",
+          "user_judgment": "UNSURE",
+          "submitted_at": "2026-09-09T01:00:00Z",
+          "submission_sequence": 99,
+          "published_at": "2026-09-09T01:50:00Z",
+          "author_public": true,
+          "moderation_hidden": false,
+          "thread_hidden": false
+        }
+      }
+    },
+    {
+      "name": "zero-participants",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-stat-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "judgment_statistics",
+          "candidate_id": "mock-stat-signal",
+          "basis": "LATEST_ELIGIBLE_PUBLIC_SUBMISSION_PER_USER",
+          "as_of": "2026-09-09T02:00:00Z",
+          "participant_count": 0,
+          "counts": {
+            "LIKELY_PLANET": 0,
+            "UNLIKELY_PLANET": 0,
+            "UNSURE": 0
+          },
+          "percentages": {
+            "LIKELY_PLANET": null,
+            "UNLIKELY_PLANET": null,
+            "UNSURE": null
+          },
+          "empty_message": "아직 공개된 분석이 없습니다"
+        }
+      },
+      "server_event": {
+        "type": "WITHDRAW_ALL"
+      }
+    }
+  ]
+}

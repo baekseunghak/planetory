@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1-draft",
+  "synthetic": true,
+  "files": [
+    {
+      "file": "01-session-and-curve.json",
+      "description": "고정 Bundle의 세션·전 점 곡선·선택 설정. 후보 정답표는 브라우저 응답에 없음.",
+      "exchanges": 2
+    },
+    {
+      "file": "02-result-states.json",
+      "description": "각 교환은 별도 초기 상태: 정상 성과, 마지막 확정/FP 오판, 판단 보류, 미게시 탐색 완료.",
+      "exchanges": 6
+    },
+    {
+      "file": "03-retry-and-idempotency.json",
+      "description": "완료 별의 원본 복원, 올바른 새 제출의 첫 성과, 통신 재전송과 이미 인정된 재도전 구분.",
+      "exchanges": 5
+    },
+    {
+      "file": "04-unmatched-and-details.json",
+      "description": "완료 별 재도전도 복원 단계의 미제거 후보에서 힌트를 고름. 힌트 없음과 복수 후보 모호성을 별도 표시.",
+      "exchanges": 4
+    },
+    {
+      "file": "05-residual-failure.json",
+      "description": "오판도 다음 곡선을 요청할 수 있음. 주기도 실패 시 기존 곡선·매칭 유지, 재시도 완료 후 전환.",
+      "exchanges": 8
+    },
+    {
+      "file": "06-publication-partial-failure.json",
+      "description": "검토 후 선택한 두 신호의 공개 일부 성공. 실패분만 새 요청으로 재시도하고 중복/새 분석 공개에도 성과는 한 번.",
+      "exchanges": 7
+    },
+    {
+      "file": "07-public-statistics.json",
+      "description": "8/4/3인 분포, 최신 비공개·과거 늦은 공개·취소 fallback·운영 복원·동률·0명.",
+      "exchanges": 9
+    },
+    {
+      "file": "08-visibility-and-errors.json",
+      "description": "공개 취소/운영 숨김 독립, 숨긴 스레드 재생성 금지, 타인 기록·만료 Bundle·유효성 오류.",
+      "exchanges": 8
+    },
+    {
+      "file": "09-special-submissions.json",
+      "description": "더 없음 의견과 설정된 튜토리얼 건너뛰기, 탐색 불가능 신호의 재개 대기, 무신호 별 제공 제외.",
+      "exchanges": 4
+    },
+    {
+      "file": "10-harmonic-and-epoch-tie.json",
+      "description": "사용자 6일과 대표 3일을 분리. epoch 동률에서 더 이른 1003, duration은 원본 6일로 계산.",
+      "exchanges": 1
+    }
+  ]
+}

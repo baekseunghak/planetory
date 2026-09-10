@@ -1,0 +1,780 @@
+{
+  "schema_version": "0.1-draft",
+  "scenario_id": "03-retry-and-idempotency",
+  "description": "완료 별의 원본 복원, 올바른 새 제출의 첫 성과, 통신 재전송과 이미 인정된 재도전 구분.",
+  "source_requirements": [
+    "SUB-06",
+    "SUB-09",
+    "SUB-10",
+    "HIS-06",
+    "AT-100"
+  ],
+  "setup": {},
+  "exchanges": [
+    {
+      "name": "req-retry-original",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "request_id": "req-retry-original",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "LIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": null
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-retry-original",
+          "history_id": "hist-req-retry-original",
+          "submitted_at": "2026-09-09T01:00:00Z",
+          "submission_sequence": 1,
+          "original_input": {
+            "request_id": "req-retry-original",
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "LIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": null
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:00:00Z",
+            "recognized_total": 0,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "FP": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-retry-original/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1006,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "matched",
+            "candidate_id": "mock-signal-01",
+            "correction": null
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "LIKELY_PLANET",
+            "evaluation": "DISAGREES"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "FP",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "NOT_RECOGNIZED",
+            "type": "FP",
+            "reason": "JUDGMENT_DISAGREES",
+            "awarded_now": false,
+            "previously_recognized": false
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "restore",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions/sub-req-retry-original/retry-drafts",
+        "body": {
+          "request_id": "req-draft"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "retry_draft",
+          "draft_id": "mock-draft-01",
+          "source_submission_id": "sub-req-retry-original",
+          "input": {
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "LIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": "sub-req-retry-original"
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "creates_submission": false
+        }
+      }
+    },
+    {
+      "name": "req-retry-correct",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "UNLIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": "sub-req-retry-original",
+          "request_id": "req-retry-correct"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-retry-correct",
+          "history_id": "hist-req-retry-correct",
+          "submitted_at": "2026-09-09T01:05:00Z",
+          "submission_sequence": 2,
+          "original_input": {
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "UNLIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": "sub-req-retry-original",
+            "request_id": "req-retry-correct"
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:05:00Z",
+            "recognized_total": 1,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "FP": {
+                "recognized_count": 1,
+                "grade": "A"
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-retry-correct/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1006,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "matched",
+            "candidate_id": "mock-signal-01",
+            "correction": null
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "UNLIKELY_PLANET",
+            "evaluation": "AGREES"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "FP",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "RECOGNIZED",
+            "type": "FP",
+            "reason": "MATCH_AND_CORRECT_JUDGMENT",
+            "awarded_now": true,
+            "previously_recognized": false
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "same-request-replay",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "UNLIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": "sub-req-retry-original",
+          "request_id": "req-retry-correct"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-retry-correct",
+          "history_id": "hist-req-retry-correct",
+          "submitted_at": "2026-09-09T01:05:00Z",
+          "submission_sequence": 2,
+          "original_input": {
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "UNLIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": "sub-req-retry-original",
+            "request_id": "req-retry-correct"
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:05:00Z",
+            "recognized_total": 1,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "FP": {
+                "recognized_count": 1,
+                "grade": "A"
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-retry-correct/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1006,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "matched",
+            "candidate_id": "mock-signal-01",
+            "correction": null
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "UNLIKELY_PLANET",
+            "evaluation": "AGREES"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "FP",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "RECOGNIZED",
+            "type": "FP",
+            "reason": "MATCH_AND_CORRECT_JUDGMENT",
+            "awarded_now": true,
+            "previously_recognized": false
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "req-retry-duplicate",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "UNSURE",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": "sub-req-retry-original",
+          "request_id": "req-retry-duplicate"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-retry-duplicate",
+          "history_id": "hist-req-retry-duplicate",
+          "submitted_at": "2026-09-09T01:06:00Z",
+          "submission_sequence": 3,
+          "original_input": {
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "UNSURE",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": "sub-req-retry-original",
+            "request_id": "req-retry-duplicate"
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:06:00Z",
+            "recognized_total": 1,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "FP": {
+                "recognized_count": 1,
+                "grade": "A"
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-retry-duplicate/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1006,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "duplicate",
+            "candidate_id": "mock-signal-01",
+            "correction": null
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "UNSURE",
+            "evaluation": "UNSURE"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "FP",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "ALREADY_RECOGNIZED",
+            "type": "FP",
+            "reason": "PREVIOUSLY_RECOGNIZED",
+            "awarded_now": false,
+            "previously_recognized": true
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,199 @@
+{
+  "schema_version": "0.1-draft",
+  "scenario_id": "10-harmonic-and-epoch-tie",
+  "description": "사용자 6일과 대표 3일을 분리. epoch 동률에서 더 이른 1003, duration은 원본 6일로 계산.",
+  "source_requirements": [
+    "SUB-04",
+    "SUB-05",
+    "EXP-06",
+    "EXP-07"
+  ],
+  "setup": {
+    "reference_time_btjd": 1006,
+    "observation_bounds_btjd": [
+      1000,
+      1012
+    ]
+  },
+  "exchanges": [
+    {
+      "name": "req-harmonic",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "request_id": "req-harmonic",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 6,
+            "phase_start": 0.49,
+            "phase_end": 0.51
+          },
+          "user_judgment": "LIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": null
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-harmonic",
+          "history_id": "hist-req-harmonic",
+          "submitted_at": "2026-09-09T01:00:00Z",
+          "submission_sequence": 1,
+          "original_input": {
+            "request_id": "req-harmonic",
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 6,
+              "phase_start": 0.49,
+              "phase_end": 0.51
+            },
+            "user_judgment": "LIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": null
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:00:00Z",
+            "recognized_total": 1,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 1,
+                "grade": "A"
+              },
+              "FP": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-harmonic/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1003,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "matched_harmonic",
+            "candidate_id": "mock-signal-01",
+            "correction": {
+              "canonical_period_days": 3,
+              "period_multiplier": 0.5,
+              "reason": "HALF_PERIOD_ALIAS"
+            }
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "LIKELY_PLANET",
+            "evaluation": "AGREES"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "CONFIRMED",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "RECOGNIZED",
+            "type": "CONFIRMED",
+            "reason": "MATCH_AND_CORRECT_JUDGMENT",
+            "awarded_now": true,
+            "previously_recognized": false
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "COMPLETED",
+            "completion_reason": "all_found",
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    }
+  ]
+}
