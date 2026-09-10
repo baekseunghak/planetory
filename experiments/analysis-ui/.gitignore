@@ -8,3 +8,9 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# Generated local TESS observations; regenerate from saved FITS, never commit.
+public/observations/*.json
+public/observations/*.json.tmp
+scripts/__pycache__/
+scripts/.pytest_cache/
