@@ -1,0 +1,39 @@
+build:backend:
+  extends: .docker-build
+  variables:
+    DOCKERFILE: apps/backend/Dockerfile
+    IMAGE_NAME: backend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/backend/gradlew]
+      changes: [apps/backend/**/*]
+
+deploy:backend:ec2-a:
+  extends: .deploy-ec2-a
+  needs: ["build:backend"]
+  variables:
+    IMAGE_NAME: backend
+    DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
+    DEPLOY_SERVICES: backend
+    DEPLOY_ACTION: up
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/backend/gradlew]
+      changes: [apps/backend/**/*]
+      when: manual
+
+deploy:backend:ec2-b:
+  extends: .deploy-ec2-b
+  needs: ["build:backend"]
+  variables:
+    IMAGE_NAME: backend
+    DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
+    DEPLOY_SERVICES: backend
+    DEPLOY_ACTION: up
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [apps/backend/gradlew]
+      changes: [apps/backend/**/*]
+      when: manual

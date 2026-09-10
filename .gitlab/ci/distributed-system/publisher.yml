@@ -1,0 +1,25 @@
+build:publisher:
+  extends: .docker-build
+  variables:
+    DOCKERFILE: distributed-system/publisher/Dockerfile
+    IMAGE_NAME: publisher
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/publisher/requirements.txt]
+      changes: [distributed-system/publisher/**/*]
+
+deploy:publisher:gcp-node-1:
+  extends: .deploy-gcp-node-1
+  needs: ["build:publisher"]
+  variables:
+    IMAGE_NAME: publisher
+    DEPLOY_IMAGE_VARIABLE: PUBLISHER_IMAGE
+    DEPLOY_SERVICES: publisher
+    DEPLOY_ACTION: pull
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/publisher/requirements.txt]
+      changes: [distributed-system/publisher/**/*]
+      when: manual

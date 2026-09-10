@@ -1,0 +1,39 @@
+build:ingestion:
+  extends: .docker-build
+  variables:
+    DOCKERFILE: distributed-system/ingestion/Dockerfile
+    IMAGE_NAME: ingestion
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/ingestion/requirements.txt]
+      changes: [distributed-system/ingestion/**/*]
+
+.deploy-ingestion:
+  needs: ["build:ingestion"]
+  variables:
+    IMAGE_NAME: ingestion
+    DEPLOY_IMAGE_VARIABLE: INGESTION_IMAGE
+    DEPLOY_SERVICES: ingestion
+    DEPLOY_ACTION: pull
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      exists: [distributed-system/ingestion/requirements.txt]
+      changes: [distributed-system/ingestion/**/*]
+      when: manual
+
+deploy:ingestion:gcp-node-2:
+  extends: [.deploy-gcp-node-2, .deploy-ingestion]
+
+deploy:ingestion:gcp-node-3:
+  extends: [.deploy-gcp-node-3, .deploy-ingestion]
+
+deploy:ingestion:gcp-node-4:
+  extends: [.deploy-gcp-node-4, .deploy-ingestion]
+
+deploy:ingestion:gcp-node-5:
+  extends: [.deploy-gcp-node-5, .deploy-ingestion]
+
+deploy:ingestion:gcp-node-6:
+  extends: [.deploy-gcp-node-6, .deploy-ingestion]
