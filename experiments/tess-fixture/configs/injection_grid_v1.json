@@ -1,6 +1,10 @@
 {
   "grid_id": "injection_grid_v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "changelog": {
+    "1.1.0": "overlapping_transits 쌍의 두 번째 신호 phase_fraction 0.5 -> 0.25. 1.0.0 에서는 t0 가 2일 어긋나 통과가 겹치지 않았다.",
+    "1.0.0": "초기 격자"
+  },
   "description": "합성 단일 신호 초기 대표점. 갭 분석 5.7절 '평가 데이터 구성안' 기준. 최종 범위는 실제 대상 분포 검토(DEC-01) 후 확정한다.",
   "model": "box",
   "period_days": [1.0, 5.0, 20.0],
@@ -21,9 +25,9 @@
       {"period_days": 6.5, "duration_hours": 2.0, "depth_ppm": 1500, "phase_fraction": 0.7}]},
     {"pair_id": "overlapping_transits", "signals": [
       {"period_days": 4.0, "duration_hours": 3.0, "depth_ppm": 3000, "phase_fraction": 0.5},
-      {"period_days": 8.0, "duration_hours": 3.0, "depth_ppm": 2000, "phase_fraction": 0.5}]}
+      {"period_days": 8.0, "duration_hours": 3.0, "depth_ppm": 2000, "phase_fraction": 0.25}]}
   ],
-  "multi_signal_note": "두 신호를 같은 바탕곡선에 순서대로 곱해 넣는다(모델 곱). overlapping_transits 는 P2 = 2·P1, 같은 위상이라 일부 통과가 겹친다.",
+  "multi_signal_note": "두 신호를 같은 바탕곡선에 순서대로 곱해 넣는다(모델 곱). overlapping_transits 는 P2 = 2·P1 이고 t0 가 같도록 phase_fraction 을 0.5·0.25 로 두어(t_min + 2일) 신호 1의 통과 두 번마다 한 번씩 신호 2의 통과가 정확히 겹친다.",
   "not_included_yet": [
     "고조파·식쌍성 세트(주극소·부극소 깊이 차이)",
     "관측 조건 스트레스 세트(단일 Sector, Sector별 깊이 차이, 예상 transit 마스킹)",

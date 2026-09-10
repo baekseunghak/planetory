@@ -47,10 +47,40 @@ def fetch_references(targets: tuple[Target, ...], log=print) -> list[dict[str, s
     return rows
 
 
+FIELDNAMES = ["target_key", "role", *COLUMNS, "fetched_at"]
+
+
+def read_references(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def merge_references(existing: list[dict[str, str]], new_rows: list[dict[str, str]],
+                     refreshed_keys: set[str], key_order: list[str]) -> list[dict[str, str]]:
+    """refreshed_keys 에 속한 target 의 기존 행만 새 행으로 교체하고 나머지는 보존한다.
+
+    조회 결과가 없는 target 도 fetch_references 가 빈 자리표시 행을 만들므로 목록에서 사라지지 않는다.
+    결과는 TARGETS 순서(key_order) 로 정렬하고, 목록에 없는 key 는 뒤에 붙인다.
+    """
+    kept = [row for row in existing if row.get("target_key") not in refreshed_keys]
+    merged = kept + [row for row in new_rows if row.get("target_key") in refreshed_keys]
+    rank = {key: i for i, key in enumerate(key_order)}
+    merged.sort(key=lambda r: (rank.get(r.get("target_key", ""), len(rank)), _period_sort_key(r)))
+    return merged
+
+
+def _period_sort_key(row: dict[str, str]) -> float:
+    try:
+        return float(row.get("pl_orbper") or "inf")
+    except ValueError:
+        return float("inf")
+
+
 def write_references(rows: list[dict[str, str]], path: Path) -> None:
-    fieldnames = ["target_key", "role", *COLUMNS, "fetched_at"]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=FIELDNAMES, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)

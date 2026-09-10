@@ -26,6 +26,14 @@ uv run pytest -q
 `checksums.json` 에 병합한다. 이후 실행은 이 파일의 checksum 과 다르면 실패한다. 일부만 받으려면
 `--target toi270 cm_dra` 처럼 key 를 준다.
 
+`references --target cm_dra` 처럼 일부만 갱신하면 `references.csv` 에서 **선택한 target 의 행만 교체**하고 나머지 행은
+보존한다. Archive 에 행이 없는 target(식쌍성 등)도 빈 자리표시 행 1개로 남는다.
+
+`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id>/` 디렉터리를 새로 만든다. 이름의 시각과
+UUID 앞 8자리로 다른 실행과 겹칠 가능성을 낮추며, 같은 초 안에서 끝난 실행들의 순서는 이름 정렬로 보장하지 않는다(정확한
+순서는 manifest 의 `created_at`·`run_id`). `set_id` 는 `<grid_id>-<version>`(예 `injection_grid_v1-1.1.0`)이라 격자 버전이 바뀌면 다른 세트다.
+세 명령 모두 `--results` 로 준 루트 아래 `manifests/` 에 실행 manifest 를 남긴다.
+
 ## 산출물 위치
 
 | 경로 | Git | 내용 |
@@ -36,9 +44,9 @@ uv run pytest -q
 | `schemas/run_manifest.schema.json` | 커밋 | 실행 manifest JSON Schema |
 | `examples/run_manifest.example.json` | 커밋 | 실제 `inject` 실행 manifest 축약본 |
 | `sample_raw/<target>/*.fits` | 제외 | 원본 SPOC LC |
-| `results/injections/<grid>/<target>/catalog.csv` | 제외 | 주입 목록. 재실행하면 같은 내용이 나온다 |
-| `results/injections/<grid>/<target>/<baseline>/*.npz` | 제외 | 바탕곡선과 group 별 주입 flux(float32) |
-| `results/manifests/*.json` | 제외 | 실행별 manifest |
+| `results/injections/<set_id>/<target>/run-*/catalog.csv` | 제외 | 주입 목록. 같은 입력·격자면 실행이 달라도 내용이 같다 |
+| `results/injections/<set_id>/<target>/run-*/<baseline>/*.npz` | 제외 | 바탕곡선과 group 별 주입 flux(float32) |
+| `results/manifests/*.json` | 제외 | 실행별 manifest (`config.parameters.run_dir` 가 산출물 디렉터리를 가리킴) |
 
 ## 주입 규칙 요약
 
@@ -47,7 +55,8 @@ uv run pytest -q
 - 모델: box. `flux *= 1 - depth` (통과 중). 첫 통과 중심 `t0 = t_min + phase_fraction * period`.
 - 잡음 대조 곡선: 같은 시각·공백 구조에 `1 + N(0, robust scatter)` 를 채운 합성 곡선(`--noise-seed`, 기본 20260910).
   실제 곡선은 알려지지 않은 신호가 있을 수 있어 순수 음성 정답은 합성 곡선으로만 정의한다.
-- 다중 신호: 두 신호의 box 모델을 곱해 한 곡선에 넣는다(`group_id` 공유).
+- 다중 신호: 두 신호의 box 모델을 곱해 한 곡선에 넣는다(`group_id` 공유). `overlapping_transits` 쌍은 4일·8일 신호의
+  t0 가 같도록 phase_fraction 0.5·0.25 를 써서 신호 1의 통과 두 번마다 신호 2의 통과가 정확히 겹친다(격자 1.1.0).
 
 ## 파이썬에서 쓰기
 
@@ -59,7 +68,7 @@ from tess_fixture import inject as inj
 root = Path("sample_raw/toi270")
 base = build_baseline([load_sector(p) for p in sorted(root.glob("*.fits"))])
 grid = inj.load_grid(Path("configs/injection_grid_v1.json"))
-rows = inj.build_catalog(grid, base, baseline_id="toi270-real", set_id=grid["grid_id"])
+rows = inj.build_catalog(grid, base, baseline_id="toi270-real", set_id=inj.grid_set_id(grid))   # CLI 와 같은 set_id
 flux = inj.inject_group(base, [rows[0]])        # 주입 곡선 하나
 ```
 

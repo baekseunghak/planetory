@@ -59,11 +59,16 @@ def file_entry(path: Path, **extra) -> dict:
     return entry
 
 
+def new_run_id() -> str:
+    return str(uuid.uuid4())
+
+
 def build_manifest(task: str, command: str, repo_dir: Path, inputs: list[dict], config: dict,
-                   outputs: list[dict], notes: str = "") -> dict:
+                   outputs: list[dict], notes: str = "", run_id: str | None = None) -> dict:
+    """run_id 를 미리 만들어 넘기면 산출물 디렉터리 이름과 manifest 가 같은 id 를 공유한다."""
     return {
         "schema": SCHEMA_ID,
-        "run_id": str(uuid.uuid4()),
+        "run_id": run_id or new_run_id(),
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "task": task,
         "command": command,

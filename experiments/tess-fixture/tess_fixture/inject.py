@@ -68,6 +68,20 @@ def grid_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def grid_set_id(grid: dict) -> str:
+    """결과 디렉터리·injection_id 에 쓰는 세트 식별자. 격자 버전이 바뀌면 다른 세트가 된다."""
+    return f"{grid['grid_id']}-{grid['version']}"
+
+
+def transit_overlap_mask(t: np.ndarray, rows: list["InjectionRow"]) -> np.ndarray:
+    """rows 의 모든 신호가 동시에 통과 중인 관측점."""
+    mask = np.ones(len(t), dtype=bool)
+    for row in rows:
+        signal = Signal(row.period_days, row.duration_hours, row.depth_ppm, row.phase_fraction)
+        mask &= box_model(t, signal, row.t0_btjd) < 1.0
+    return mask
+
+
 def single_signal_grid(grid: dict) -> list[tuple[str, Signal]]:
     """(phase_label, Signal) 목록. 순서는 period → duration → depth → phase 로 고정."""
     out: list[tuple[str, Signal]] = []
