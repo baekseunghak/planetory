@@ -263,6 +263,7 @@ export function App() {
             분석 흐름 미리보기 <span className="preview-divider">/</span> 합성 데이터
           </span>
           <div className="preview-controls">
+            <a href="?mode=observations">실제 관측 분석 ↗</a>
             <label htmlFor="scenario">시나리오</label>
             <select
               id="scenario"
