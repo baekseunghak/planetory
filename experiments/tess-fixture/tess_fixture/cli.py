@@ -7,7 +7,8 @@
     python -m tess_fixture inject --target toi270 [--grid configs/injection_grid_v1.json] [--noise-seed 20260910] [--results results]
 
 모든 쓰기 명령은 `<results>/manifests/` 에 실행 manifest 를 남긴다. inject 산출물은 실행마다
-`<results>/injections/<set_id>/<target>/run-<UTC시각>-<run_id 8자리>/` 아래에 보존되며 이전 실행을 덮어쓰지 않는다.
+`<results>/injections/<set_id>/<target>/run-<UTC시각>-<run_id 8자리>/` 아래에 보존된다. 디렉터리 이름의
+시각과 UUID 접두로 다른 실행과 겹칠 가능성을 낮추며, 같은 초 안의 실행 순서는 이름 정렬로 보장하지 않는다.
 """
 
 from __future__ import annotations
@@ -45,7 +46,11 @@ def manifest_path(results: Path, name: str, run_id: str) -> Path:
 
 def inject_run_dir(results: Path, set_id: str, target_key: str, run_id: str,
                    started_at: datetime | None = None) -> Path:
-    """실행마다 새 디렉터리. 시각을 앞에 두어 정렬하면 실행 순서가 된다."""
+    """실행마다 새 디렉터리. UTC 시각(초)과 UUID 앞 8자리를 이름에 넣어 다른 실행과 겹칠 가능성을 낮춘다.
+
+    이름 정렬은 초 단위까지만 실행 순서를 따르고, 같은 초 안에서 끝난 실행들의 순서는 보장하지 않는다.
+    정확한 순서·식별이 필요하면 manifest 의 created_at 과 run_id 를 쓴다.
+    """
     stamp = (started_at or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     return results / "injections" / set_id / target_key / f"run-{stamp}-{run_id[:8]}"
 

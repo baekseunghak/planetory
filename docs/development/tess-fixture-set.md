@@ -77,7 +77,7 @@ TOI-270 Sector 3·4·5 기준 원본 57,320행 중 44,553행이 남고 robust sc
 
 ### 산출물 경로
 
-`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id 8자리>/` 를 새로 만든다. seed·`--single-only` 같은 옵션을 바꿔 연속 실행해도 이전 실행의 catalog·NPZ 가 남고, 각 실행의 manifest(`config.parameters.run_dir`, `outputs[].path`)는 자기 디렉터리만 가리킨다. `download`·`references`·`inject` 의 manifest 는 모두 `--results` 로 준 루트 아래 `manifests/` 에 저장된다.
+`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id 8자리>/` 를 새로 만든다. 이름의 시각과 UUID 접두로 다른 실행과 겹칠 가능성을 낮춘다. 이름 정렬은 초 단위까지만 실행 순서를 따르고 같은 초 안의 순서는 보장하지 않으므로, 정확한 순서·식별은 manifest 의 `created_at`·`run_id` 로 한다. seed·`--single-only` 같은 옵션을 바꿔 연속 실행해도 이전 실행의 catalog·NPZ 가 남고, 각 실행의 manifest(`config.parameters.run_dir`, `outputs[].path`)는 자기 디렉터리만 가리킨다. `download`·`references`·`inject` 의 manifest 는 모두 `--results` 로 준 루트 아래 `manifests/` 에 저장된다.
 
 ### 아직 없는 세트 (`not_included_yet`)
 

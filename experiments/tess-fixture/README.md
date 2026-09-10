@@ -29,8 +29,9 @@ uv run pytest -q
 `references --target cm_dra` 처럼 일부만 갱신하면 `references.csv` 에서 **선택한 target 의 행만 교체**하고 나머지 행은
 보존한다. Archive 에 행이 없는 target(식쌍성 등)도 빈 자리표시 행 1개로 남는다.
 
-`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id>/` 디렉터리를 새로 만들어 이전 실행을
-덮어쓰지 않는다. `set_id` 는 `<grid_id>-<version>`(예 `injection_grid_v1-1.1.0`)이라 격자 버전이 바뀌면 다른 세트다.
+`inject` 는 실행마다 `results/injections/<set_id>/<target>/run-<UTC시각>-<run_id>/` 디렉터리를 새로 만든다. 이름의 시각과
+UUID 앞 8자리로 다른 실행과 겹칠 가능성을 낮추며, 같은 초 안에서 끝난 실행들의 순서는 이름 정렬로 보장하지 않는다(정확한
+순서는 manifest 의 `created_at`·`run_id`). `set_id` 는 `<grid_id>-<version>`(예 `injection_grid_v1-1.1.0`)이라 격자 버전이 바뀌면 다른 세트다.
 세 명령 모두 `--results` 로 준 루트 아래 `manifests/` 에 실행 manifest 를 남긴다.
 
 ## 산출물 위치
