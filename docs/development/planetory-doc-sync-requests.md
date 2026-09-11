@@ -1,0 +1,26 @@
+# Planetory 원본 문서 정합화 요청
+
+- 작성일: 2026-09-11
+- 상태: 요청 목록 — 원본 문서 미수정, 담당자 반영 대기
+- 작성: 백승학 / 서비스 백엔드
+- 관련 작업: S15P21C206-30
+
+2026-09-11 기준으로 원본 문서에 남은 옛 문구를 모았다. [서비스 백엔드 기능 분석](./planetory-service-backend-feature-analysis.md)과 [서비스 API 명세](../../backend/docs/service-api-spec.md)는 오른쪽 “최신 기준”을 적용한다. **원본 문서는 수정하지 않았고** 각 문서 담당자에게 반영을 요청한다. 반영되면 해당 행을 완료로 표시한다.
+
+| # | 문서·위치 | 현재 문구 | 수정 제안 | 근거 |
+|---|---|---|---|---|
+| R1 | ERD 6장 불변 규칙 5 | “판 자체는 직전 것만 짧게 보존한다” | “판 행은 제출 참조용으로 남기고, 이전 판의 주기도·캐시는 archived 전환 시 정리한다” | ERD publication_bundles.status(이전 판 미보존, 결정 C) |
+| R2 | ERD 6장 불변 규칙 6 | 축약 스냅샷 ≈1.8KB | ≈1.2KB(float32 배열 2개×150개, 메타데이터·행 오버헤드 별도) | ERD analysis_snapshots.folded_flux/folded_err |
+| R3 | system-architecture.md 3장(63행), Gold 릴리스 절(194~196행), 미결 목록(219·222행) | Gold 파일 `releases/<id>`·`previous` 보존, 세션의 Bundle 고정, Redis는 필요 시 추가 | Gold 본문은 PostgreSQL 배열, 이전 판 미보존·판 교체 시 최신 판 재로드, DAT-14 상태·결과 캐시는 Redis. “Redis 도입 여부”·“이전 Bundle 보존기간” 미결 항목 삭제 또는 “Redis 위치·TTL·메모리 상한”으로 교체 | ERD v0.3 결정·결정 C, SRS DAT-14, SB-D07·18. ERD 머리말도 “아키텍처 불변 규칙 5 수정 필요”를 요청 중 |
+| R4 | online-derived-compute.md “세션과 버전 고정”·“캐시 위치”·용량 산정 4번 | 세션에 Bundle 고정, `current`·`previous` 보존, 첫 구현은 PostgreSQL+EC2 로컬 파일 | R3과 같은 기준으로 교체. 캐시 표는 Redis(상태·결과·키별 잠금)로, 용량 산정에서 `previous`·보호 Bundle 항목 제거 | SRS DAT-14, 상태표 v0.15, SB-D18 |
+| R5 | data-guidelines.md “EC2 Gold 릴리스”(64~80행) | `releases/`·`current`·`previous` 심볼릭 링크 전환, 참조 중 이전 릴리스 보존 | 배치가 릴리스 전환 때 PostgreSQL 배열을 적재하고 publication_bundles.status로 current를 전환하는 절차로 교체. 검증 실패 시 기존 current 유지 원칙은 보존 | ERD 머리말(Gold 파일 계층 없음) |
+| R6 | SRS AT-77 | 전체 통계가 “어제자 StatsSnapshot” 기준 | “전체 통계는 10분 갱신 materialized view 기준 시각으로, 비교 탭은 일별 StatsSnapshot의 90일 활동 회원 중앙값으로 표시” | SRS STA-02·DAT-13, F19 |
+| R7 | SRS COM-17 | “관리자 권한 계정은 숨김·복원을 담당”, “MVP는 … 숨김·복원을 제공” | “v1은 운영 화면·API 없이 운영자가 DB에서 hidden 상태를 변경한다(COM-13·OPS-06)” | SRS COM-13·OPS-01·OPS-06, F12·F22 |
+| R8 | SRS CHL-03 | “목표 달성·기간 종료·운영 취소 상태와 완료 성과를 기록”, 마감 제출 반영 | “회차 상태(planned/active/closed)와 기간을 기록한다. 챌린지 전용 달성·성과·보상은 없다” | 삭제된 CHL-02, POL-24, ERD ChallengeRound, F17 |
+
+**정합화가 아니라 요구사항 변경이라 팀 결정이 필요한 항목**
+
+| # | 문서·위치 | 차이 | 처리 |
+|---|---|---|---|
+| D1 | SRS COM-03·09 | SRS는 검색·핫 토픽 P1, 검색 대상 제목·본문·작성자·태그 | SB-D08·10·16·21은 P0, TIC·제목 검색, 공식 스레드 참여자 10명 기준. 팀 합의 후 SRS 개정 |
+| D2 | SRS RPT ↔ ERD expert_reports | RPT는 P1인데 ERD는 expert_reports를 제외 | F20 보류 유지. 범위 합의 후 한쪽 개정 |
