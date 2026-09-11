@@ -1,0 +1,11 @@
+node_modules/
+dist/
+artifacts/
+*.log
+test-results/
+playwright-report/
+.pnpm-store/
+
+# Generated from the existing observation export; do not commit numeric datasets.
+public/observations/*.json
+public/observations/*.json.tmp
