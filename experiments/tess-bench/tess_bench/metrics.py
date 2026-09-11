@@ -39,6 +39,7 @@ class SignalMetrics:
     boundary_ratio: float
     n_segments: int
     n_failed_segments: int
+    edge_masked_fraction: float     # 가장자리 마스크로 제외된 점 비율 (전체 점 기준)
     status: str
 
     def as_row(self) -> dict:
@@ -104,6 +105,7 @@ def signal_metrics(result: PreprocessResult, rows: list[inj.InjectionRow], targe
         oot_scatter_ppm=scatter * 1e6 if np.isfinite(scatter) else float("nan"), boundary_ratio=boundary_ratio,
         n_segments=int(result.segment_edges.shape[1]),
         n_failed_segments=len({f["segment_id"] for f in result.failures if f["segment_id"] >= 0}),
+        edge_masked_fraction=result.n_edge_masked / len(t) if len(t) else float("nan"),
         status=result.status,
     )
 
@@ -127,4 +129,5 @@ def summarize(rows: list[dict]) -> dict:
         "boundary_ratio_median": med("boundary_ratio"),
         # 같은 설정이면 모든 곡선의 구간 분리가 같으므로 신호별 값을 합산하지 않고 곡선당 실패 구간 수(최대값)로 보고한다
         "failed_segments_per_curve": int(max((r["n_failed_segments"] for r in rows), default=0)),
+        "edge_masked_fraction": med("edge_masked_fraction") if rows and "edge_masked_fraction" in rows[0] else 0.0,
     }

@@ -36,6 +36,9 @@ uv run python -m tess_bench preprocess --target toi270
 uv run python -m tess_bench preprocess --target toi451 --no-noise
 uv run python -m tess_bench preprocess --target wasp62 --no-noise
 uv run python -m tess_bench preprocess --target pi_men --no-noise
+
+# 설정 1.1.0 추가분만 (가장자리 마스크 4 + 2단계 3) + 기준 재현. 별당 약 10~12분 (2단계 biweight 가 대부분)
+uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_baseline edge6h_savgol_2.0d edge12h_savgol_2.0d edge6h_biweight_1.0d edge12h_biweight_1.0d two_stage_sg3.0d_sg1.0d two_stage_bw3.0d_bw1.0d two_stage_bw3.0d_bw0.5d
 ```
 
 옵션: `--only <setting_id ...>` 설정 선택, `--limit N` 바탕곡선당 처음 N group 만, `--no-noise` 잡음 바탕곡선 생략,
@@ -48,7 +51,7 @@ uv run python -m tess_bench preprocess --target pi_men --no-noise
 
 | 경로 | Git | 내용 |
 |---|---|---|
-| `configs/preprocess_settings_v1.json` | 커밋 | 설정 11개. PoC 기준에서 한 요인씩 바꿈 |
+| `configs/preprocess_settings_v1.json` | 커밋 | 설정 18개(1.1.0). PoC 기준에서 한 요인씩 바꿈: 품질 마스크 2, 구간 분리 2, SG 창 3, biweight 창 3, 가장자리 마스크 4, 2단계 detrending 3 |
 | `results/bench/preprocess_v1-<ver>/<target>/run-<UTC>-<id>/metrics.csv` | 제외 | 행 = 주입 신호 × 설정 × 바탕곡선 |
 | 같은 폴더 `summary.csv` | 제외 | 행 = 설정 × 바탕곡선. 보실 표 |
 | `results/manifests/preprocess-<target>-<id>.json` | 제외 | 실행 manifest (tess-fixture 스키마) |
@@ -62,6 +65,7 @@ uv run python -m tess_bench preprocess --target pi_men --no-noise
 | `oot_scatter_ppm_median` | 통과 밖 잡음(robust scatter) | 낮을수록 좋지만 깊이 보존과 함께 볼 것 |
 | `boundary_ratio_median` | 구간 경계 ±0.5일 안 \|flux−1\| 중앙값 ÷ 전체 잡음 | 순수 잡음이면 약 0.67(정규분포에서 median\|x\| = 0.674σ). 그보다 눈에 띄게 크면 경계 근처 추세 잔여·왜곡 |
 | `failed_segments_per_curve` | 곡선당 실패·대체 처리된 구간 수 | 짧은 구간 중앙값 대체, 비정상 추세 |
+| `edge_masked_fraction` | 가장자리 마스크로 제외된 점 비율 | `edge*` 설정에서만 0 이 아님. 통과 점 유지율과 함께 봄 |
 | `n_points_after_quality` | 품질 마스크 통과 점 수 | 마스크 3종 비교용 |
 
 깊이는 위상 접기 없이 통과 구간 점 중앙값과 통과 밖 중앙값의 차이다. 같은 group 의 다른 신호가 겹친 점은 그 신호의
@@ -73,3 +77,6 @@ uv run python -m tess_bench preprocess --target pi_men --no-noise
   이 벤치마크의 목적이며, 통과 마스킹 후 재적합하는 방식은 v1 설정에 없다(후속 후보).
 - biweight 는 stride 점마다 추정해 보간한다(기본 10점 = 20분). 창 안의 점은 모두 쓰므로 통과 보존에는 영향이 작다.
 - 품질 비트마스크 175·7407 은 lightkurve 의 DEFAULT/HARD 값이며, 비트 의미는 공식 문서로 확인해 문서에 기록한다.
+- 가장자리 마스크가 12시간 이상이면 구간 경계 ±0.5일 안에 남는 점이 없어 `boundary_ratio` 가 nan 이 된다. 그 설정의 경계 왜곡은
+  이 지표로 평가하지 않는다.
+- 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).

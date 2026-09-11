@@ -41,7 +41,8 @@ TASK = "S15P21C206-42"
 
 SUMMARY_COLUMNS = ("setting_id", "factor", "baseline_id", "n_signals", "depth_ratio_median", "depth_ratio_0.5h",
                    "depth_ratio_2h", "depth_ratio_8h", "in_transit_kept_median", "oot_scatter_ppm_median",
-                   "boundary_ratio_median", "failed_segments_per_curve", "n_points_after_quality", "elapsed_s")
+                   "boundary_ratio_median", "failed_segments_per_curve", "edge_masked_fraction",
+                   "n_points_after_quality", "elapsed_s")
 
 
 def _command_line() -> str:
@@ -56,27 +57,29 @@ def _print_setting_summary(setting: Setting, baseline_id: str, s: dict, elapsed:
     print(f"    [{baseline_id:<14}] 깊이보존 중앙값 {_fmt(s['depth_ratio_median'])} | 0.5h {_fmt(s['depth_ratio_0.5h'])} "
           f"| 2h {_fmt(s['depth_ratio_2h'])} | 8h {_fmt(s['depth_ratio_8h'])} | 통과점 유지 {_fmt(s['in_transit_kept_median'])} "
           f"| 잡음 {_fmt(s['oot_scatter_ppm_median'], 7, 0)} ppm | 경계 {_fmt(s['boundary_ratio_median'])} "
-          f"| 실패구간 {s['failed_segments_per_curve']:>3} | {elapsed:5.1f}s")
+          f"| 실패구간 {s['failed_segments_per_curve']:>3} | 가장자리 제외 {s['edge_masked_fraction']*100:4.1f}% | {elapsed:5.1f}s")
 
 
 def _print_final_table(summary_rows: list[dict]) -> None:
     print("\n=== 설정별 요약 (real 바탕곡선) ===")
-    head = f"{'설정':<22}{'요인':<10}{'깊이보존':>9}{'0.5h':>7}{'2h':>7}{'8h':>7}{'통과유지':>9}{'잡음ppm':>9}{'경계':>7}{'실패':>6}{'점수':>8}"
+    head = (f"{'설정':<26}{'요인':<10}{'깊이보존':>9}{'0.5h':>7}{'2h':>7}{'8h':>7}{'통과유지':>9}{'잡음ppm':>9}{'경계':>7}"
+            f"{'실패':>6}{'제외%':>7}{'점수':>8}")
     print(head)
     print("-" * len(head))
     for r in summary_rows:
         if not r["baseline_id"].endswith("-real"):
             continue
-        print(f"{r['setting_id']:<22}{r['factor']:<10}{_fmt(r['depth_ratio_median'], 9)}{_fmt(r['depth_ratio_0.5h'], 7)}"
+        print(f"{r['setting_id']:<26}{r['factor']:<10}{_fmt(r['depth_ratio_median'], 9)}{_fmt(r['depth_ratio_0.5h'], 7)}"
               f"{_fmt(r['depth_ratio_2h'], 7)}{_fmt(r['depth_ratio_8h'], 7)}{_fmt(r['in_transit_kept_median'], 9)}"
               f"{_fmt(r['oot_scatter_ppm_median'], 9, 0)}{_fmt(r['boundary_ratio_median'], 7)}{r['failed_segments_per_curve']:>6}"
-              f"{r['n_points_after_quality']:>8}")
+              f"{r['edge_masked_fraction']*100:>7.1f}{r['n_points_after_quality']:>8}")
     noise = [r for r in summary_rows if not r["baseline_id"].endswith("-real")]
     if noise:
         print("\n=== 잡음 바탕곡선 (순수 잡음 + 주입) ===")
         for r in noise:
             print(f"{r['setting_id']:<22}깊이보존 {_fmt(r['depth_ratio_median'])}  잡음 {_fmt(r['oot_scatter_ppm_median'], 7, 0)} ppm")
-    print("\n읽는 법: 깊이보존 1.0 = 심은 깊이 그대로. 8h 열이 낮아지면 창이 짧아 긴 통과를 깎은 것. 잡음은 낮을수록 좋지만"
+    print("\n읽는 법: 깊이보존 1.0 = 심은 깊이 그대로. 8h 열이 낮아지면 창이 짧아 긴 통과를 깎은 것. 통과유지가 1.0 아래면"
+          " 마스크·clipping 이 통과 점을 지운 것(가장자리 제외 설정에서 봐야 할 열). 잡음은 낮을수록 좋지만"
           " 깊이보존과 함께 봐야 한다. 경계는 |flux−1| 중앙값/잡음 비율이라 순수 잡음이면 약 0.67(정규분포 기대값)이고,"
           " 그보다 눈에 띄게 크면 구간 경계 근처에 추세 잔여·왜곡이 있다는 뜻.")
 

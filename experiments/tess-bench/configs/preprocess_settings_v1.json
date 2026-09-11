@@ -1,7 +1,11 @@
 {
   "settings_id": "preprocess_v1",
-  "version": "1.0.0",
-  "description": "전처리·detrending 벤치마크 설정 목록 (S15P21C206-42). 한 번에 한 요인만 PoC 기준에서 바꾼다. 갭 분석 7.1절 실험 B(품질)·C(구간)·D(창)·E(실패)에 대응.",
+  "version": "1.1.0",
+  "description": "전처리·detrending 벤치마크 설정 목록 (S15P21C206-42). 한 번에 한 요인만 기준 설정에서 바꾼다. 갭 분석 7.1절 실험 B(품질·추가 마스크)·C(구간)·D(창·2단계)·E(실패)에 대응.",
+  "changelog": {
+    "1.1.0": "edge(가장자리 마스크 6h·12h, PoC 기준과 biweight 1일 기준) 4개, two_stage(3일→1일 SG, 3일→1일·0.5일 biweight) 3개 추가. 1.0.0 의 11개는 변경 없음",
+    "1.0.0": "초기 11개: 기준, 품질 마스크 2, 구간 분리 2, SG 창 3, biweight 창 3"
+  },
   "defaults": {
     "quality_bitmask": null,
     "gap_days": 0.5,
@@ -10,9 +14,14 @@
     "window_days": 2.0,
     "sigma_upper": 5.0,
     "min_points": 500,
-    "biweight_stride": 10
+    "biweight_stride": 10,
+    "edge_mask_hours": 0.0,
+    "stage1_method": null,
+    "stage1_window_days": null
   },
   "quality_bitmask_note": "null = QUALITY == 0 (PoC). 175 / 7407 은 lightkurve TessQualityFlags 의 DEFAULT_BITMASK / HARD_BITMASK 값이며, 어떤 비트를 뜻하는지는 TESS Science Data Products Description Document 의 QUALITY 비트 표로 실행 전 확인한다.",
+  "edge_mask_note": "TESS 는 궤도 근점 통과 직후와 Sector 시작에서 산란광·지향 조정으로 밝기가 흔들린다. 각 연속 구간의 시작·끝 N 시간을 추세 추정과 결과에서 제외해 잡음 감소 대 통과 점 손실을 비교한다.",
+  "two_stage_note": "1단계 긴 창으로 별의 큰 변동을 지우고 2단계 짧은 창으로 잔여를 지운다. 활동성 별에서 긴 창의 잡음 증가와 짧은 창의 깊이 손실을 동시에 피할 수 있는지 확인한다.",
   "settings": [
     {"setting_id": "poc_baseline", "factor": "baseline",
      "description": "PoC clean() 기본값. 모든 비교의 기준"},
@@ -39,6 +48,25 @@
     {"setting_id": "biweight_1.0d", "factor": "method", "detrend_method": "biweight", "window_days": 1.0,
      "description": "biweight 창 1일"},
     {"setting_id": "biweight_2.0d", "factor": "method", "detrend_method": "biweight", "window_days": 2.0,
-     "description": "biweight 창 2일 (PoC 와 같은 창, 방법만 다름)"}
+     "description": "biweight 창 2일 (PoC 와 같은 창, 방법만 다름)"},
+
+    {"setting_id": "edge6h_savgol_2.0d", "factor": "edge", "edge_mask_hours": 6.0,
+     "description": "PoC 기준(SG 2일)에 구간 시작·끝 6시간 제외"},
+    {"setting_id": "edge12h_savgol_2.0d", "factor": "edge", "edge_mask_hours": 12.0,
+     "description": "PoC 기준(SG 2일)에 구간 시작·끝 12시간 제외"},
+    {"setting_id": "edge6h_biweight_1.0d", "factor": "edge", "detrend_method": "biweight", "window_days": 1.0, "edge_mask_hours": 6.0,
+     "description": "1단계 제안값(biweight 1일)에 구간 시작·끝 6시간 제외"},
+    {"setting_id": "edge12h_biweight_1.0d", "factor": "edge", "detrend_method": "biweight", "window_days": 1.0, "edge_mask_hours": 12.0,
+     "description": "1단계 제안값(biweight 1일)에 구간 시작·끝 12시간 제외"},
+
+    {"setting_id": "two_stage_sg3.0d_sg1.0d", "factor": "two_stage", "stage1_method": "savgol", "stage1_window_days": 3.0,
+     "detrend_method": "savgol", "window_days": 1.0,
+     "description": "SG 3일로 큰 변동 제거 후 SG 1일 재적합"},
+    {"setting_id": "two_stage_bw3.0d_bw1.0d", "factor": "two_stage", "stage1_method": "biweight", "stage1_window_days": 3.0,
+     "detrend_method": "biweight", "window_days": 1.0,
+     "description": "biweight 3일 후 biweight 1일. 활동성 별에서 잡음·깊이 보존을 동시에 잡는지"},
+    {"setting_id": "two_stage_bw3.0d_bw0.5d", "factor": "two_stage", "stage1_method": "biweight", "stage1_window_days": 3.0,
+     "detrend_method": "biweight", "window_days": 0.5,
+     "description": "biweight 3일 후 biweight 0.5일. 2단계 창을 더 짧게"}
   ]
 }

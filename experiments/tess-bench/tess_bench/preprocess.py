@@ -7,6 +7,11 @@ PoC `pipeline.clean` 의 단계를 설정으로 분리했다.
 
 PoC 와 같은 값이 기본이다: 공백 0.5일, Savitzky–Golay 2일 창(2차, 홀수·최소 11점), 위쪽 5σ, 최소 500점.
 detrending 결과가 유한하지 않거나 0 이하인 점은 실패 사유와 함께 NaN 으로 남긴다.
+
+설정 1.1.0 추가 요인:
+  edge_mask_hours   구간 시작·끝 N 시간을 추세 추정과 결과에서 제외 (궤도 근점·Sector 시작 산란광 구간 대응)
+  stage1_*          2단계 detrending: 긴 창(1단계)으로 큰 변동을 지운 뒤 짧은 창(2단계)으로 잔여를 지움. trend = trend1 × trend2
+
 """
 
 from __future__ import annotations
@@ -18,7 +23,8 @@ from pathlib import Path
 import numpy as np
 
 SETTING_FIELDS = ("quality_bitmask", "gap_days", "split_sectors", "detrend_method", "window_days",
-                  "sigma_upper", "min_points", "biweight_stride")
+                  "sigma_upper", "min_points", "biweight_stride", "edge_mask_hours",
+                  "stage1_method", "stage1_window_days")
 
 
 @dataclass(frozen=True)
@@ -29,11 +35,18 @@ class Setting:
     quality_bitmask: int | None = None
     gap_days: float = 0.5
     split_sectors: bool = False
-    detrend_method: str = "savgol"          # savgol | biweight | none
-    window_days: float = 2.0
+    detrend_method: str = "savgol"          # savgol | biweight | none  (2단계면 2단계 방법)
+    window_days: float = 2.0                # 단일 단계 창, 2단계면 2단계 창
     sigma_upper: float = 5.0
     min_points: int = 500
     biweight_stride: int = 10
+    edge_mask_hours: float = 0.0            # 구간 시작·끝에서 제외할 시간. 0 이면 제외 없음 (PoC)
+    stage1_method: str | None = None        # 2단계 detrending 의 1단계 방법. None 이면 단일 단계
+    stage1_window_days: float | None = None # 1단계 창
+
+    @property
+    def two_stage(self) -> bool:
+        return self.stage1_window_days is not None
 
     def params(self) -> dict:
         return {k: getattr(self, k) for k in SETTING_FIELDS}
@@ -58,6 +71,10 @@ def load_settings(path: Path, only: list[str] | None = None) -> tuple[dict, list
     for s in settings:
         if s.detrend_method not in ("savgol", "biweight", "none"):
             raise ValueError(f"{s.setting_id}: unknown detrend_method {s.detrend_method}")
+        if s.two_stage and (s.stage1_method or s.detrend_method) not in ("savgol", "biweight"):
+            raise ValueError(f"{s.setting_id}: stage1_method must be savgol or biweight")
+        if s.edge_mask_hours < 0:
+            raise ValueError(f"{s.setting_id}: edge_mask_hours must be >= 0")
     return cfg, settings
 
 
@@ -128,8 +145,8 @@ def biweight_trend(t: np.ndarray, f: np.ndarray, window_days: float, stride: int
 class PreprocessResult:
     time: np.ndarray
     flux_in: np.ndarray            # 입력(정규화·주입 후) flux
-    trend: np.ndarray              # 추정 추세 (실패 점은 NaN)
-    flux_det: np.ndarray           # flux_in / trend, clipping 된 점과 실패 점은 NaN
+    trend: np.ndarray              # 추정 추세 (실패 점·가장자리 제외 점은 NaN)
+    flux_det: np.ndarray           # flux_in / trend, clipping 된 점과 실패·제외 점은 NaN
     kept: np.ndarray               # 최종 사용 점
     segment_id: np.ndarray         # 점별 구간 번호
     segment_edges: np.ndarray      # 구간 시작·끝 시각 (2 x n_seg)
@@ -137,42 +154,74 @@ class PreprocessResult:
     noise_scatter: float           # clipping 전 잔차의 robust scatter
     failures: list[dict] = field(default_factory=list)   # {segment_id, reason, n_points}
     status: str = "ok"             # ok | too_few_points
+    edge_masked: np.ndarray | None = None                 # 가장자리 마스크로 제외된 점
+
+    @property
+    def n_edge_masked(self) -> int:
+        return int(self.edge_masked.sum()) if self.edge_masked is not None else 0
+
+
+def _segment_trend(t_seg: np.ndarray, f_seg: np.ndarray, method: str, window_days: float, cadence: float,
+                   stride: int, k: int, failures: list[dict]) -> np.ndarray:
+    """구간 하나의 추세. 창보다 짧은 구간은 중앙값으로 대체하고 사유를 기록한다."""
+    if method == "none":
+        return np.ones_like(f_seg)
+    if method == "savgol":
+        window = savgol_window_points(window_days, cadence)
+        if len(f_seg) >= window:
+            return savgol_trend(f_seg, window)
+    elif len(f_seg) >= 3:
+        return biweight_trend(t_seg, f_seg, window_days, stride)
+    failures.append({"segment_id": k, "reason": "short_segment_median_fallback", "n_points": int(len(f_seg))})
+    return np.full(len(f_seg), np.median(f_seg))
 
 
 def preprocess(t: np.ndarray, f: np.ndarray, sector: np.ndarray, setting: Setting) -> PreprocessResult:
-    """정규화(및 주입)된 곡선에 설정을 적용한다. 입력은 시간순, 유한값이어야 한다."""
+    """정규화(및 주입)된 곡선에 설정을 적용한다. 입력은 시간순, 유한값이어야 한다.
+
+    단계: 구간 분리 → (가장자리 제외) → [1단계 추세 → 나눔] → 추세 → 나눔 → 위쪽 clipping.
+    가장자리 제외 점은 추세 추정에서도 빼고 결과에서도 NaN 으로 둔다.
+    """
     n = len(t)
     nan = np.full(n, np.nan)
     if n < setting.min_points:
         return PreprocessResult(t, f, nan, nan, np.zeros(n, bool), np.full(n, -1), np.empty((2, 0)),
                                 float("nan"), float("nan"), [{"segment_id": -1, "reason": "too_few_points", "n_points": n}],
-                                status="too_few_points")
+                                status="too_few_points", edge_masked=np.zeros(n, bool))
 
     cadence = float(np.median(np.diff(t))) if n > 1 else float("nan")
     segs = segment_indices(t, sector, setting.gap_days, setting.split_sectors)
     trend = np.full(n, np.nan)
     seg_id = np.full(n, -1)
+    edge_masked = np.zeros(n, dtype=bool)
     failures: list[dict] = []
     edges = np.empty((2, len(segs)))
+    half_edge_days = setting.edge_mask_hours / 24.0
     for k, seg in enumerate(segs):
         seg_id[seg] = k
         edges[:, k] = (t[seg[0]], t[seg[-1]])
-        fs = f[seg]
-        if setting.detrend_method == "none":
-            trend[seg] = 1.0
-        elif setting.detrend_method == "savgol":
-            window = savgol_window_points(setting.window_days, cadence)
-            if len(seg) >= window:
-                trend[seg] = savgol_trend(fs, window)
-            else:
-                trend[seg] = np.median(fs)
-                failures.append({"segment_id": k, "reason": "short_segment_median_fallback", "n_points": int(len(seg))})
+        if half_edge_days > 0:
+            inner = ((t[seg] - t[seg[0]]) >= half_edge_days) & ((t[seg[-1]] - t[seg]) >= half_edge_days)
+            edge_masked[seg[~inner]] = True
+            seg = seg[inner]
+            if len(seg) == 0:
+                failures.append({"segment_id": k, "reason": "segment_fully_edge_masked", "n_points": 0})
+                continue
+        ts, fs = t[seg], f[seg]
+        if setting.two_stage:
+            stage1 = _segment_trend(ts, fs, setting.stage1_method or setting.detrend_method,
+                                    float(setting.stage1_window_days), cadence, setting.biweight_stride, k, failures)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                f1 = fs / stage1
+            ok1 = np.isfinite(f1) & (stage1 > 0)
+            stage2 = np.full(len(seg), np.nan)
+            if ok1.sum() >= 3:
+                stage2[ok1] = _segment_trend(ts[ok1], f1[ok1], setting.detrend_method, setting.window_days,
+                                             cadence, setting.biweight_stride, k, failures)
+            trend[seg] = stage1 * stage2
         else:
-            if len(seg) >= 3:
-                trend[seg] = biweight_trend(t[seg], fs, setting.window_days, setting.biweight_stride)
-            else:
-                trend[seg] = np.median(fs)
-                failures.append({"segment_id": k, "reason": "short_segment_median_fallback", "n_points": int(len(seg))})
+            trend[seg] = _segment_trend(ts, fs, setting.detrend_method, setting.window_days, cadence,
+                                        setting.biweight_stride, k, failures)
         bad = ~np.isfinite(trend[seg]) | (trend[seg] <= 0)
         if bad.any():
             trend[seg[bad]] = np.nan
@@ -183,9 +232,11 @@ def preprocess(t: np.ndarray, f: np.ndarray, sector: np.ndarray, setting: Settin
     valid = np.isfinite(fd)
     if valid.sum() == 0:
         return PreprocessResult(t, f, trend, nan, valid, seg_id, edges, cadence, float("nan"),
-                                failures + [{"segment_id": -1, "reason": "no_valid_points", "n_points": 0}], status="no_valid_points")
+                                failures + [{"segment_id": -1, "reason": "no_valid_points", "n_points": 0}],
+                                status="no_valid_points", edge_masked=edge_masked)
     med = np.median(fd[valid])
     scatter = float(1.4826 * np.median(np.abs(fd[valid] - med)))
     kept = valid & (fd < 1 + setting.sigma_upper * scatter)
     flux_det = np.where(kept, fd, np.nan)
-    return PreprocessResult(t, f, trend, flux_det, kept, seg_id, edges, cadence, scatter, failures)
+    return PreprocessResult(t, f, trend, flux_det, kept, seg_id, edges, cadence, scatter, failures,
+                            edge_masked=edge_masked)
