@@ -17,10 +17,11 @@
 | R6 | SRS AT-77 | 전체 통계가 “어제자 StatsSnapshot” 기준 | “전체 통계는 10분 갱신 materialized view 기준 시각으로, 비교 탭은 일별 StatsSnapshot의 90일 활동 회원 중앙값으로 표시” | SRS STA-02·DAT-13, F19 |
 | R7 | SRS COM-17 | “관리자 권한 계정은 숨김·복원을 담당”, “MVP는 … 숨김·복원을 제공” | “v1은 운영 화면·API 없이 운영자가 DB에서 hidden 상태를 변경한다(COM-13·OPS-06)” | SRS COM-13·OPS-01·OPS-06, F12·F22 |
 | R8 | SRS CHL-03 | “목표 달성·기간 종료·운영 취소 상태와 완료 성과를 기록”, 마감 제출 반영 | “회차 상태(planned/active/closed)와 기간을 기록한다. 챌린지 전용 달성·성과·보상은 없다” | 삭제된 CHL-02, POL-24, ERD ChallengeRound, F17 |
+| R9 | ERD posts 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC)만 있음 | `CREATE EXTENSION pg_trgm`, posts.title·posts.body GIN(gin_trgm_ops) 인덱스 추가. board·tag 필터 인덱스는 측정 후 결정 | SB-D24 검색 범위 확장(SRS COM-03) |
 
 **정합화가 아니라 요구사항 변경이라 팀 결정이 필요한 항목**
 
 | # | 문서·위치 | 차이 | 처리 |
 |---|---|---|---|
-| D1 | SRS COM-03·09 | SRS는 검색·핫 토픽 P1, 검색 대상 제목·본문·작성자·태그 | SB-D08·10·16·21은 P0, TIC·제목 검색, 공식 스레드 참여자 10명 기준. 팀 합의 후 SRS 개정 |
+| D1 | SRS COM-03·09 | SRS는 검색·핫 토픽 P1. 검색 범위는 SB-D24로 COM-03과 일치시켰고 우선순위와 COM-09 핫 토픽 기준만 다름 | SB-D08·10·16은 P0, 공식 스레드 참여자 10명 기준. 팀 합의 후 SRS 개정 |
 | D2 | SRS RPT ↔ ERD expert_reports | RPT는 P1인데 ERD는 expert_reports를 제외 | F20 보류 유지. 범위 합의 후 한쪽 개정 |
