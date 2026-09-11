@@ -57,7 +57,7 @@
 | 같은 `requestId`가 처리 중 | 409 `REQUEST_IN_PROGRESS`. 프론트는 `GET /submissions/by-request/{requestId}`로 확인 후 같은 ID로 재전송 |
 | 응답 유실 | 새 ID를 만들지 말고 위 조회로 복구한다 |
 
-글·댓글의 `Idempotency-Key` 헤더(서비스 API 2.3절)와 통일 여부는 미결 1이다(Q07).
+글·댓글의 `Idempotency-Key` 헤더(서비스 API 2.3절)와 통일 여부는 D-1이다(Q07).
 
 ### 2.3 판 교체와 별 잠김
 
@@ -152,7 +152,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 조건: 기존 모든 별과의 거리 ≥ MIN_SPACING. 만족할 때까지 jitter·Δ를 바꿔 재시도
 ```
 
-초안값은 하서진 PoC(`experiments/galaxy-map-prototype/server/store.ts` `placeStar`)를 따른다(미결 6에서 확정).
+초안값은 하서진 PoC(`experiments/galaxy-map-prototype/server/store.ts` `placeStar`)를 따른다(D-6에서 확정).
 
 | 상수 | 초안값 | 비고 |
 |---|---|---|
@@ -247,7 +247,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 | `bounds` | 군집이 덮는 월드 범위. 클릭하면 이 범위로 확대한다(HOME-01) |
 | `nodeId` | 쿼드트리 노드 키. 배치 시각과 무관하게 같은 별 집합이면 같은 값 |
 
-군집은 별이 새로 열릴 때 그 가지만 갱신하며(NFR-20a), 계산 위치(서버 사전 계산 vs 웹 워커)와 인덱스(ERD 미결 8)는 미결 6이다. 회전·기울기와 무관하게 월드 좌표에서만 계산한다(SRS v1.1 NFR-20a). 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01).
+군집은 별이 새로 열릴 때 그 가지만 갱신하며(NFR-20a), 계산 위치(서버 사전 계산 vs 웹 워커)와 인덱스(ERD 미결 8)는 D-6이다. 회전·기울기와 무관하게 월드 좌표에서만 계산한다(SRS v1.1 NFR-20a). 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01).
 
 **최신성과 무효화(D-7).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
 
@@ -453,7 +453,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 | `binMinutes`는 세그먼트마다 다를 수 있다(20,000점 초과 시 확대) | DAT-11 |
 | `fluxScatter`는 세그먼트당 하나. 점별 오차 배열은 없다 | ERD |
 | 잔차 단계의 `flux`는 같은 격자·같은 `startBtjd`에서 통과 모델을 나눈 값. 원본과 점 수·인덱스가 같다 | DAT-11·14 |
-| 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 미결 2 | ERD 용량표 |
+| 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 D-2 | ERD 용량표 |
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
 
@@ -742,7 +742,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ### 7.2 상태 조회
 
-`GET /api/v1/residual-jobs/{jobId}` — v1은 폴링(미결 3, Q08). `pollAfterSeconds`를 따른다.
+`GET /api/v1/residual-jobs/{jobId}` — v1은 폴링(D-3, Q08). `pollAfterSeconds`를 따른다.
 
 ```json
 {
@@ -759,7 +759,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 - `COMPLETED`면 `resultCurveContext`에 5.2·5.3절로 조회할 문맥을 준다. `curveStep = removedCandidateIds.length`.
 - `FAILED`면 `failure: {"stage": "PERIODOGRAM", "code": "COMPUTE_ERROR", "message": "…", "retryable": true}`. 저장된 제출·매칭·완료·성과는 바뀌지 않고 마지막 정상 곡선을 유지한다(AT-101). 재시도는 7.1절 재호출이며 `attempt`가 오른다.
-- `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크 후 결정(미결 3). v1 프론트는 `COMPLETED`에서만 전환한다.
+- `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크 후 결정(D-3). v1 프론트는 `COMPLETED`에서만 전환한다.
 - Redis 재시작으로 작업이 사라지면 404 `RESOURCE_NOT_FOUND`. 프론트는 7.1절로 다시 요청한다(분석 프론트 8.1 "Redis 결과 없음").
 - 계산 중 새 판이 공개되면 작업은 `FAILED(stage: BUNDLE_ARCHIVED)`로 끝나고 프론트는 최신 판을 다시 불러온다(AT-80).
 
@@ -1017,11 +1017,11 @@ for each user_star_progress(tic_id):
 | Q | 이 문서의 답 |
 |---|---|
 | Q03 위상 폭·공백 허용 | 5.1절 `selectionRules`, 6.2절 5·6단계. 값은 미결 4 |
-| Q04 다중 섹터 기준 시각·전송 형식 | 판 단위 `foldReferenceTimeBtjd` 하나(ERD `publication_bundles`), 5.2절 세그먼트·null 공백. 바이너리는 미결 2 |
+| Q04 다중 섹터 기준 시각·전송 형식 | 판 단위 `foldReferenceTimeBtjd` 하나(ERD `publication_bundles`), 5.2절 세그먼트·null 공백. 바이너리는 D-2 |
 | Q05 초안 보존·재도전 첫 단계 | 서버는 초안을 저장하지 않음(5.1절). 재도전은 6.8절 초안 → "주기 맞추기" 단계 |
 | Q06 후보 노출 경계 | 5.4절 봉우리 투영. `candidateId` 미노출 |
 | Q07 경로·DTO·멱등·판 변경 | 2장, 6.4절, 6.6절. 판 변경 감지는 `BUNDLE_CHANGED`와 5.1절 재조회 |
-| Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. 미결 3 |
+| Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
 | Q09 진행 중 은퇴 후보 | 대체 문맥 규칙 하나로 통일: 제거 조합에서 은퇴 후보만 뺀다. 판 전환(5.1절 `currentCurveContext`), 재도전(6.8절), 히스토리 재현(8.3절 `fallbackReason`) 모두 같은 규칙과 `notice`. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
 | Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
 | Q11 스냅샷 누락·고조파 좌표 | 8.3절 `snapshot: null`, 접기는 원본 주기 |
@@ -1135,7 +1135,7 @@ SRS·ERD v1.1과 충돌하지 않는 구현 세부는 담당자가 결정안을 
 | 날짜 | 변경 |
 |---|---|
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
-| 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), 미결 1 해소(SB-D17) |
+| 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), D-1 해소(SB-D17) |
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
-| 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. 미결 13 해소, 17·18 추가 |
+| 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
