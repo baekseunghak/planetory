@@ -23,7 +23,7 @@
 
 ## 2. 공통 약속
 
-서비스 API 명세 2장(경로 `/api/v1`, JSON camelCase, ID 문자열, ISO 8601 UTC, `items/nextCursor/hasNext` 커서, 오류 본문 `{code, message, fieldErrors[], requestId}`, 세션 인증, 401/403/404/409/503)을 그대로 상속한다. 아래는 탐사 API가 추가하는 약속이다.
+서비스 API 명세 2장(경로 `/api/v1`, JSON camelCase, ID 문자열, ISO 8601 UTC, `items/nextCursor/hasNext` 커서, 오류 본문 `{code, message, fieldErrors[]}`, 세션 인증, 401/403/404/409/503)을 그대로 상속한다. 서비스 API는 일반 글·댓글에 요청 키를 두지 않기로 했으므로(SB-D17), 멱등 관련 코드는 탐사 API가 아래에서 직접 정의한다.
 
 ### 2.1 곡선 문맥 `curveContext`
 
@@ -63,7 +63,10 @@
 
 | 코드 | HTTP | 뜻·프론트 처리 |
 |---|---|---|
+| `IDEMPOTENCY_CONFLICT` | 409 | 같은 `requestId`에 다른 본문. 저장된 결과를 재현하지 않고 거절 |
+| `REQUEST_IN_PROGRESS` | 409 | 같은 `requestId`가 처리 중. `GET /submissions/by-request/{requestId}`로 확인 후 같은 ID로 재전송 |
 | `BUNDLE_CHANGED` | 409 | 요청의 `bundleId`·계산 버전이 현재 판과 다름. 본문에 `currentBundleId`. 프론트는 EXP-01대로 최신 판을 다시 불러오고 곡선 단계·제거 조합은 유지, 주기·위상은 초기화(AT-117) |
+| `GRAPH_TEMPORARILY_UNAVAILABLE` | 503 | 읽기 조회 중 판이 바뀌어 최신 판으로 1회 재시도했는데도 일관된 결과를 못 만듦(8.3절). 서비스 API 7.2절과 같은 코드 |
 | `STAR_LOCKED` | 403 | 그 별이 이 회원에게 열리지 않음. 분석·곡선·제출·잔차 모두 거절(NFR-06, AT-64) |
 | `STAR_NOT_PUBLISHED` | 404 | `stars.service_status != published` 또는 없는 TIC. 존재를 드러내지 않는다 |
 | `STEP_NOT_RESTORABLE` | 409 | 제거 조합에 은퇴 후보가 있어 그 단계를 복원할 수 없음. 본문에 `fallbackCurveStep` |
@@ -794,6 +797,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 `curve`에 202가 아니라 `residual.status`만 넣고 `segments: null`로 준다(히스토리 화면은 작업을 자동 생성하지 않는다).
 
+읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). 서로 다른 판의 배열과 메타데이터를 한 응답에 섞지 않으며, `reproduction.currentBundleId`는 실제로 그래프를 만든 판이다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
+
 ### 8.4 별 결과 페이지 (RES-10, AT-74)
 
 `GET /api/v1/stars/{ticId}/result` — 결과 카드 [결과 보기], 별 패널 [결과], 마이페이지 [결과]. 제출 이력이 없으면 404.
@@ -988,7 +993,7 @@ for each user_star_progress(tic_id) WHERE stage=completed:
 
 | # | 항목 | 담당 | 처리 |
 |---|---|---|---|
-| 1 | 요청 ID 위치(본문 `requestId` vs `Idempotency-Key` 헤더) 통일 | 강재민·백승학·백지웅 | Q07. 이 문서는 본문 |
+| 1 | ~~요청 ID 위치(본문 vs 헤더) 통일~~ 해소: 서비스 API가 글·댓글 요청 키를 두지 않기로 함(SB-D17). 탐사 API만 본문 `requestId`를 쓴다 | 강재민·백지웅 | Q07에서 프론트 확인만 남음 |
 | 2 | 곡선 배열 전송 형식(JSON vs 바이너리) | 강재민·백지웅·윤성용 | Q04. v1 JSON, 용량 실측 후 |
 | 3 | 잔차 상태 전달(폴링 vs SSE), `RESIDUAL_READY` 선노출, 목표 시간 | 강재민·김동혁·백지웅 | Q08, DEC-16·35 |
 | 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03 |
@@ -1047,3 +1052,4 @@ for each user_star_progress(tic_id) WHERE stage=completed:
 | 날짜 | 변경 |
 |---|---|
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
+| 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), 미결 1 해소(SB-D17) |

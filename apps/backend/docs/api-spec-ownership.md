@@ -68,7 +68,7 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 | 잔차 상태 | `QUEUED`, `RESIDUAL_CALCULATING`, `RESIDUAL_READY`, `PERIODOGRAM_CALCULATING`, `COMPLETED`, `FAILED` |
 | 지웅 Mock 대응 | 구판 fixture의 snake_case 필드는 camelCase로 1:1 대응. 대응표는 탐사 명세 부록 |
 
-미결: 글·댓글의 `Idempotency-Key` 헤더(승학 2.3절)와 제출의 본문 `requestId` 중 하나로 통일할지. 지웅 Q07과 함께 결정한다.
+해소(2026-09-11): 서비스 API는 글·댓글에 요청 키를 두지 않기로 했다(SB-D17). 요청 ID는 탐사 API의 본문 `requestId`뿐이다.
 
 ## 4. 서로 넘겨받는 계약
 
@@ -129,7 +129,7 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 
 ## 7. 문서 위치와 병합 방식
 
-- 위치: 저장소 구조 문서에 따라 백엔드 문서는 `apps/backend/docs/`에 둔다. 승학 초안은 현재 `backend/docs/`에 있어 MR !24 리뷰에서 이동을 제안했다.
+- 위치: 저장소 구조 문서에 따라 백엔드 문서는 `apps/backend/docs/`에 둔다. 승학 초안도 MR !24에서 같은 경로로 이동했다.
 - 파일: `apps/backend/docs/service-api-spec.md`(백승학), `apps/backend/docs/exploration-api-spec.md`(강재민), 이 문서를 인덱스로 유지한다. 한 파일로 합치지 않는다.
 - 브랜치: `docs/S15P21C206-36-api-spec`. 승학 MR이 먼저 병합되면 공통 약속은 링크로 참조하고 중복 서술을 지운다.
 
@@ -137,7 +137,7 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 
 | # | 항목 | 담당 | 처리 |
 |---|---|---|---|
-| 1 | 요청 ID 위치(헤더 vs 본문) | 강재민·백승학·백지웅 | 지웅 Q07과 함께 결정 |
+| 1 | ~~요청 ID 위치(헤더 vs 본문)~~ 해소: 탐사 본문 `requestId`만 사용(SB-D17) | 강재민·백지웅 | Q07 프론트 확인 |
 | 2 | 곡선 배열 전송 형식(JSON null 공백 vs 바이너리) | 강재민·백지웅·윤성용 | 지웅 Q04. v1은 JSON 기본안, 용량 실측 후 재검토 |
 | 3 | 잔차 상태 전달(폴링 vs SSE), 부분 준비 선노출 | 강재민·김동혁·백지웅 | 지웅 Q08, DEC-35. v1은 폴링 기본안 |
 | 4 | 위상 폭 최소·최대 | 윤성용·강재민 | DEC-19 |
