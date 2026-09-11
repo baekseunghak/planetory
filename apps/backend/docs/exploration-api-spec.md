@@ -79,6 +79,8 @@
 | `SKIP_NOT_AVAILABLE` | 409 | 튜토리얼 건너뛰기 조건 미충족(SUB-12) |
 | `STAR_ALREADY_COMPLETED` | 409 | 완료된 별에 `no_candidate` 제출(SUB-11 (4)) |
 
+**현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다.
+
 ### 2.4 잔차 상태 열거형
 
 `QUEUED`, `RESIDUAL_CALCULATING`, `RESIDUAL_READY`, `PERIODOGRAM_CALCULATING`, `COMPLETED`, `FAILED`. 이 순서로만 전이하며 `FAILED`는 어느 계산 단계에서든 갈 수 있다(DAT-14).
@@ -247,7 +249,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 
 군집은 별이 새로 열릴 때 그 가지만 갱신하며(NFR-20a), 계산 위치(서버 사전 계산 vs 웹 워커)와 인덱스(ERD 미결 8)는 미결 6이다. 회전·기울기와 무관하게 월드 좌표에서만 계산한다(SRS v1.1 NFR-20a). 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01).
 
-**최신성과 무효화(제안).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
+**최신성과 무효화(D-7).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
 
 `GET /api/v1/me/sky/locate?ticId=123456789` — P1. 검색·필터(HOME-04)로 고른 별이 아직 받지 않은 범위에 있을 때 카메라를 옮기기 위한 조회. 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`.
 
@@ -581,6 +583,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
    - 미확정 → pending_publish (공개 시 서비스 API가 9.2 호출)
    - duplicate → already_recognized
 8. user_star_progress 갱신: planet_count(회원의 후보별 최신 판단으로 다시 계산, HOME-05), current_curve_step = 이 제출의 curveStep, completed 판정(9.3)
+   튜토리얼 1번 별의 첫 제출이면 user_settings.onboarding_done = true (D-8, HOME-09)
 9. 튜토리얼 별이면 completed 시 다음 순번 열림(9.4)
 10. COMMIT 후 응답. 잔차 계산은 시작하지 않는다(EXP-09의 [다음 곡선] 요청이 별도)
 ```
@@ -732,6 +735,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 진행 중 작업 있음 | 202 그 작업의 상태. 같은 키는 하나만 계산(`SETNX`) |
 | 새 작업 | 202 `{"jobId": "rj-78", "status": "QUEUED", "cacheHit": false, "queuePosition": 3, "estimatedSeconds": 40, "pollAfterSeconds": 2}` |
 | 대기열 초과 | 429 `RESIDUAL_QUEUE_FULL`, `retryAfterSeconds` |
+| 같은 회원의 다른 작업이 진행 중 | 429 `RESIDUAL_QUEUE_FULL`, `retryAfterSeconds`, `activeJobId`. 회원당 동시 1개(D-4) |
 | 판 교체 | 409 `BUNDLE_CHANGED` |
 
 잔차 요청에는 `requestId`가 없다. 같은 `target`을 다시 POST하면 진행 중 작업 또는 캐시 결과를 그대로 돌려주므로, **응답 유실 후 복구도 같은 `target`으로 재호출**한다. 별도 복구 조회 API는 두지 않는다. 동일 요청 재전송과 새 요청을 구분할 필요가 없는 이유는 결과가 회원과 무관한 캐시이고 요청 자체가 상태를 만들지 않기 때문이다.
@@ -926,7 +930,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
         AND NOT EXISTS star_unlocks(user_id, tic_id)
         AND tic_id NOT IN tutorial_stars.active AND tic_id != 진행 중 challenge_rounds.target_tic_id      (OPS-08 제외 규칙)
    무작위 n개 선택. 시드 정책은 operation_settings (재현용 seed = hash(userId, achievementId, seq))
-   후보가 n보다 적으면 있는 만큼만 연다 (미결 9)
+   후보가 n보다 적으면 있는 만큼만 열고 반환값 unlockShortfall = n − 실제 수 (D-11). 성과 인정은 그대로
 5. 각 별에 대해 star_unlocks INSERT (unlock_reason=achievement, trigger_tic_id=성과 별, trigger_achievement_id, seq=0..n-1,
    generation=부모 generation+1, angle_deg=무작위(부모 각도 ±60°, 최소 간격 유지), radius_jitter, depth_z)
    ON CONFLICT (trigger_achievement_id, seq) DO NOTHING          -- 재처리 중복 방지 (GRD-08)
@@ -1055,28 +1059,38 @@ for each user_star_progress(tic_id):
 | 윤성용 | `transit_model` 파라미터, `discoverable` 판정, 매칭 허용 오차·N 상한(DEC-03), 봉우리 추출 규칙(5.4절), 잔차 일치 검증 |
 | 하서진 | 자리 상수 R0·최소 간격·군집 계산 위치, 타일 크기·배율 단계, 별 상세 패널 필드 |
 
-## 12. 미결·확인 필요
+## 12. 결정안과 미결
+
+### 12.1 결정안 (리뷰 대상)
+
+SRS·ERD v1.1과 충돌하지 않는 구현 세부는 담당자가 결정안을 적고 리뷰어가 **반대할 때만** 댓글을 단다(역할 분배 문서 5장). 이 MR이 병합되면 아래는 확정이며, 바꾸려면 새 MR로 이 표를 고친다. 정본 변경이 필요한 항목은 없다.
+
+| # | 항목 | 결정안 | 이유 | 반영 절 | 확인 |
+|---|---|---|---|---|---|
+| D-1 | 요청 ID 위치 | 제출만 본문 `requestId`. 헤더 키는 쓰지 않음 | ERD `submissions.request_id`와 일치. 서비스 API도 글·댓글 요청 키를 없앰(SB-D17) | 2.2 | 백지웅 |
+| D-2 | 곡선 전송 형식 | JSON 배열, 결측은 `null` | 별당 약 70KB(ERD 용량표). 바이너리는 용량 실측 후 재검토 | 5.2 | 백지웅·윤성용 |
+| D-3 | 잔차 상태 전달 | 폴링(`pollAfterSeconds`), `COMPLETED`에서만 곡선 전환, `RESIDUAL_READY` 선노출 없음 | DEC-35 초기값. SSE·선노출은 계산 시간 실측 후 | 7.2 | 백지웅·김동혁 |
+| D-4 | 회원별 잔차 요청 상한 | 회원당 진행 중 작업 1개. 초과 시 429 `RESIDUAL_QUEUE_FULL` + `retryAfterSeconds` | 전체 상한 2·대기 20(DEC-35)과 정합 | 7.1 | 김동혁 |
+| D-5 | 판 변경 능동 감지 | 탐사 API 모든 응답에 헤더 `X-Current-Bundle: {bundleId}`. 프론트는 잔차 폴링·곡선 응답에서 비교해 달라지면 5.1절 재조회 | 폴링이 이미 돌고 있어 추가 요청 없음. 쓰기 요청은 계속 `BUNDLE_CHANGED`로 거절 | 2.3 | 백지웅 |
+| D-6 | 군집 계산 위치·자리 상수 | 서버 쿼드트리 사전 계산(PoC 방식). 자리 상수는 4.1절 초안값 채택 | 하서진 PoC 서버 코드가 그대로 동작. NFR-20a가 서버 배치 허용 | 4.1, 9.2 | 하서진 |
+| D-7 | 지도 최신성 | `asOf`(지도 메타·타일·별 상세·퀘스트)와 `skyVersion`(제출·공개·재개 응답) 채택 | 하서진 통합 문서 B.6 요청. 없으면 화면이 매번 전체 재조회 | 4.1, 6.4 | 하서진 |
+| D-8 | 첫 방문 안내 완료 시점 | 둘 다. 튜토리얼 1번 별 첫 제출 성공 시 서버가 `onboarding_done=true`, 사용자가 닫으면 서비스 설정 API로 즉시 true. 별 클릭만으로는 끝내지 않음 | HOME-09 "한 번" 만족, 건너뛴 회원도 재노출 없음 | 4.1, 6.3 | 백승학·백지웅·하서진 |
+| D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
+| D-10 | 완료 별의 `no_candidate` | 저장하지 않고 409 `STAR_ALREADY_COMPLETED` | SUB-11 "다시 제출할 필요는 없다". 저장할 의미 없음 | 6.5 | 백지웅 |
+| D-11 | 미발견 별 부족 | 있는 만큼만 열고 응답 `achievement.unlockShortfall`에 부족 수. 성과는 인정 | OPS-08 제외 규칙 안에서 처리. 다음 정본 개정 때 한 문장 추가 제안 | 9.2 | — |
+| D-12 | 입력·요청 상한 | 메모 2,000 코드포인트(서비스 댓글과 동일), 타일 요청 상자 `tileSize × 64`, `locate`·타일 요청 크기 초과는 400 | 서비스 SB-D14와 통일 | 4.1, 6.1 | 하서진 |
+
+### 12.2 미결 (실측·타 담당 데이터 필요)
 
 | # | 항목 | 담당 | 처리 |
 |---|---|---|---|
-| 1 | ~~요청 ID 위치(본문 vs 헤더) 통일~~ 해소: 서비스 API가 글·댓글 요청 키를 두지 않기로 함(SB-D17). 탐사 API만 본문 `requestId`를 쓴다 | 강재민·백지웅 | Q07에서 프론트 확인만 남음 |
-| 2 | 곡선 배열 전송 형식(JSON vs 바이너리) | 강재민·백지웅·윤성용 | Q04. v1 JSON, 용량 실측 후 |
-| 3 | 잔차 상태 전달(폴링 vs SSE), `RESIDUAL_READY` 선노출, 목표 시간 | 강재민·김동혁·백지웅 | Q08, DEC-16·35 |
-| 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03 |
-| 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차 | 윤성용 | DEC-03, Q06 |
-| 6 | 군집 계산 위치(서버 사전 계산 vs 웹 워커)와 인덱스. 자리 상수는 4.1절 초안값(PoC `placeStar`)을 채택할지 확인 | 강재민·하서진 | ERD 미결 8, DEC-32. PoC는 서버 쿼드트리 |
+| 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03. 계약 형태는 5.1절, 숫자만 채움 |
+| 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만 |
 | 7 | Gold 적재 방식 A/B | 김동혁·강재민 | ERD 미결 7 |
-| 8 | 미발견 별이 `stars_per_achievement`보다 적을 때 | 강재민 | OPS-08 제외 규칙에 "있는 만큼" 추가 제안 |
-| 9 | `no_candidate`를 완료 별에 보냈을 때 409로 거절 | 강재민·백지웅 | SRS SUB-11 "다시 제출할 필요는 없다"의 해석 |
 | 10 | `stars` 표시 열(tmag·teff·radius) | 팀 | ERD 미결 9 |
-| 11 | 메모 길이, 타일당 별 상한 | 강재민·하서진 | 제안값 |
-| 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리 | 강재민·백승학 | 서비스 F01-Q5 |
-| 13 | ~~챌린지 `participantCount` 정의~~ 해소: SRS v1.1 안건 15로 "대상 별 공식 스레드의 유효 공개 분석 참여자 수" 확정 | — | 4.3절 반영 |
-| 17 | 첫 방문 안내 완료 시점(튜토리얼 1번 첫 제출 성공 vs 사용자 닫기, 둘 다). 4.1절 제안대로 갈지 | 강재민·백승학·백지웅·하서진 | HOME-09, 서진 D07 |
-| 18 | 지도 `asOf`·`skyVersion` 무효화 계약 채택 여부(SRS에 없는 구현 편의 제안) | 강재민·하서진 | 4.1절 "최신성" |
-| 14 | 분석 도중 새 판 공개를 능동 감지하는 방법(주기적 5.1절 재조회 vs 응답 헤더 `X-Current-Bundle` vs SSE). 현재는 다음 요청의 `BUNDLE_CHANGED`로만 감지 | 강재민·백지웅 | EXP-01, AT-117, Q07 |
-| 15 | 회원별 동시 잔차 요청 상한과 초과 시 응답(전체 상한과 별도) | 강재민·김동혁 | DEC-35 |
-| 16 | 공개·일괄 공개 응답에 새 별·등급을 포함할지, 프론트가 4.1·9.1절 재조회로 갱신할지 | 강재민·백승학·백지웅 | 서비스 9.1·9.4절과 9.2절 반환값 연결. 재조회로도 해결 가능 |
+| 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리(회원 생성 롤백 여부) | 강재민·백승학 | 서비스 F01-Q5 |
+
+해소된 항목: 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
 
 ## 13. 요구사항·검수 추적
 
@@ -1122,5 +1136,6 @@ for each user_star_progress(tic_id):
 |---|---|
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), 미결 1 해소(SB-D17) |
+| 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. 미결 13 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
