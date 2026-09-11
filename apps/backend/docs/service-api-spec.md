@@ -391,12 +391,12 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 |---|---|
 | bundleId, foldReferenceTimeBtjd | 실제 그래프를 만든 현재 판과 접기 기준 시각(BTJD) |
 | curveContext | curveStep, removedCandidateIds, residualModelVersion, periodogramConfigVersion |
-| residual | status(`QUEUED`/`RESIDUAL_CALCULATING`/`RESIDUAL_READY`/`PERIODOGRAM_CALCULATING`/`COMPLETED`/`FAILED`), jobId. 제거 조합이 없으면 생략 |
+| residual | status(`QUEUED`/`RESIDUAL_CALCULATING`/`RESIDUAL_READY`/`PERIODOGRAM_CALCULATING`/`COMPLETED`/`FAILED`또는 null), jobId. 결과·작업이 모두 없으면 status·jobId=null. 제거 조합이 없으면 생략 |
 | segments[] | segmentId, sector, binningRevision, startBtjd, binMinutes, nPoints, flux[], fluxScatter, gaps |
 
 - 시각 배열은 보내지 않는다. i번째 점 시각은 `startBtjd + binMinutes / 1440 × i`(ERD 규칙)이고 결측은 null이다. JSON NaN/Infinity는 보내지 않는다.
 - 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트마다 둔다. DAT-11의 20,000점 초과 시 넓힌 실제 간격은 `binMinutes`로 표현한다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
-- 첨부·공개 분석의 History 그래프 조회는 작업을 자동 생성하지 않는다. 진행 중이면 `curve.segments:null`과 기존 `curve.residual.jobId`로 폴링한다. 작업이 아예 없으면 가짜 QUEUED/jobId를 만들지 않고 미계산 상태로 안내한다. 사용자 확정: 초기에는 공개 조회자에게 타인의 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 그래프 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본과 잔차는 구분해 표시하고 나머지 공개 내용은 계속 표시한다. 본인 분석용 잔차 요청 API의 기존 권한은 유지한다. 미계산 상태의 정확한 enum·jobId 부재 표현은 탐사 DTO 교차 검토에서 맞춘다. 계산 중은 503이 아니며 503은 의존성 장애·판 일관성 재조회 실패에 사용한다.
+- 첨부·공개 분석의 History 그래프 조회는 작업을 자동 생성하지 않는다. 진행 중이면 `curve.segments:null`과 기존 `curve.residual.jobId`로 폴링한다. 작업이 아예 없으면 가짜 QUEUED/jobId를 만들지 않고 미계산 상태로 안내한다. 사용자 확정: 초기에는 공개 조회자에게 타인의 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 그래프 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본과 잔차는 구분해 표시하고 나머지 공개 내용은 계속 표시한다. 본인 분석용 잔차 요청 API의 기존 권한은 유지한다. 결과와 작업이 모두 없으면 residual의 status·jobId를 모두 null로 반환하고 폴링하지 않는다. null은 작업 생성 전 조회 표현이며 작업 상태 enum은 추가하지 않는다. 실제 작업이 있을 때만 그 상태와 ID를 반환하며, 타인에게 개인 작업 조회 권한을 추가하지 않는다. 계산 중은 503이 아니며 503은 의존성 장애·판 일관성 재조회 실패에 사용한다.
 
 **History 그래프 — 첨부·공개 분석 공통**
 

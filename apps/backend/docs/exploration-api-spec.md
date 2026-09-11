@@ -315,7 +315,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 ```
 
 - 튜토리얼 `status`: `locked`(미발견) / `unlocked`(발견, 제출 없음) / `in_progress` / `completed`. `ticId`는 열린 순번에만 준다(AT-57). 학습 목적 문구는 `intent`를 프론트가 용어 사전으로 바꾼다.
-- 챌린지 회차는 서비스 API `GET /challenges/current`와 같은 원천이며, 여기서는 회원의 발견·진행 상태를 덧붙인다. `description`은 `challenge_rounds.description`(ERD v1.1). `participantCount`는 **대상 별 공식 신호 스레드의 유효 공개 분석 참여자 수**(COM-14 (1)의 N, 회원당 1건, SRS v1.1 안건 15)이며 서비스 F16 집계를 그대로 읽는다. 대상 별에 공식 스레드가 아직 없으면 0이다. `ticId`는 회원에게 열린 경우에만 준다.
+- 챌린지 회차는 서비스 API `GET /challenges/current`와 같은 원천이며, 여기서는 회원의 발견·진행 상태를 덧붙인다. `description`은 `challenge_rounds.description`(ERD v1.1). `participantCount`는 **대상 별 공식 신호 스레드의 유효 공개 분석 참여자 수**(COM-14 (1)의 N, 회원당 1건, SRS v1.1 안건 15)이며 F16과 같은 유효 공개 분석 원천을 사용한다. 대상 별의 모든 공식 신호 스레드에서 회원 ID를 중복 제거한다(COUNT DISTINCT). 한 회원이 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고 하나도 없으면 제외한다. 핫 토픽·판단 분포는 기존 신호별 집계를 유지한다. 대상 별에 공식 스레드가 아직 없으면 0이다. `ticId`는 회원에게 열린 경우에만 준다.
 - `reopened`는 DEC-27 "다시 열린 별" 카드. 새 제출이 생기면 빠진다.
 
 ### 4.4 내 별 목록
@@ -457,7 +457,7 @@ x = radius × cos(angle), y = radius × sin(angle)
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
 
-**잔차가 없을 때:** 202 `CURVE_NOT_READY`와 함께 `segments: null`, `residual: {"status": "QUEUED", "jobId": "rj-78"}`. 캐시가 비어 있으면 이 조회가 작업을 자동 생성하지 않는다. 프론트는 7.1절로 요청한다. `residual.status=FAILED`면 `failure` 객체를 포함한다.
+**잔차가 준비되지 않았을 때:** 202 `CURVE_NOT_READY`, `segments: null`을 반환한다. 결과와 작업이 모두 없으면 `residual: {"status": null, "jobId": null}`로 미계산을 표시하며 폴링하지 않는다. 실제 작업이 있을 때만 해당 상태와 실제 jobId를 반환한다(예: `{"status":"QUEUED","jobId":"rj-78"}`). 조회는 작업을 자동 생성하지 않는다. 본인 탐사 화면에서는 기존 권한 검증을 거쳐 7.1절로 계산을 요청한다. `residual.status=FAILED`면 `failure` 객체를 포함한다.
 
 **실패:** `STAR_LOCKED`, `BUNDLE_CHANGED`, `removed`에 이 회원이 매칭하지 않은·은퇴한 후보가 있으면 400 `VALIDATION_FAILED`.
 
@@ -700,7 +700,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "draft": {"periodDays": 11.802, "phaseStart": 0.9874, "phaseEnd": 0.9974,
             "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4},
             "userJudgment": null, "evidenceChecks": [], "memo": null},
-  "residualForStep": {"status": "QUEUED", "jobId": null},
+  "residualForStep": {"status": null, "jobId": null},
   "retryOfSubmissionId": "sub-7002"
 }
 ```
@@ -708,7 +708,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - 위상은 저장값을 복사하지 않고 현재 판 기준 시각으로 재환산한다(HIS-02, 분석 프론트 6.3): `width = durationHours / (24 × P)`, `center = phase(epochBtjd)`, `phaseStart = (center − width/2) mod 1`, `phaseEnd = phaseStart + width`.
 - 제거 조합에 은퇴 후보가 있으면 `restored.step=false`, `notice: "STEP_NOT_RESTORABLE"`, `curveContext`는 **원 제출의 제거 조합에서 은퇴 후보만 뺀 조합**(`curveStep`은 그 수). 남은 후보는 모두 회원이 매칭한 활성 후보이므로 6.2절 3단계를 항상 통과한다. 판 전환 후 5.1절 `currentCurveContext`와 8.3절 히스토리 재현도 같은 규칙으로 대체하며, 세 경우 모두 `notice`로 "이전 단계 복원 불가"를 알린다(Q09).
 - 대상 신호가 은퇴했으면 409 `CANDIDATE_RETIRED`.
-- 초안의 단계 잔차가 캐시에 없으면 `residualForStep`으로 알려 주고 프론트가 7.1절로 요청한다.
+- 초안의 단계 잔차가 캐시에 없으면 `residualForStep`으로 알려 준다. 결과와 작업이 모두 없으면 위 예시처럼 status·jobId는 null이고, 실제 작업이 있으면 그 상태·ID를 반환한다. 초안 조회는 작업을 생성하지 않으며 본인 탐사 화면에서 7.1절로 요청한다.
 - 실제 재제출은 새 `requestId`와 `retryOfSubmissionId`로 6.1절을 호출한다. 누적 매칭·완료는 되돌리지 않는다.
 - 새 판에서는 저장된 주기가 어떤 봉우리의 `fineTune` 범위에도 들지 않을 수 있다. 그러면 재제출이 6.2절 9단계에서 거절되며, 프론트는 초안을 유지한 채 주기 재선택을 안내한다. 초안 조회 자체는 이를 미리 검사하지 않는다.
 
@@ -840,7 +840,9 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `CURRENT` | 현재 판 곡선(잔차 재현 가능하면 그 단계, 아니면 원본) + `selection`의 현재 위상. `snapshot`은 `null` |
 | `SUBMITTED` | `curve`는 `null`, `snapshot`은 `analysis_snapshots`. 위상 i = `-0.5 + (i + 0.5) / bins`. 매칭 실패 기록은 `snapshot: null`(409가 아니라 200) |
 
-접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 `curve`에 202가 아니라 `residual.status`만 넣고 `segments: null`로 준다(히스토리 화면은 작업을 자동 생성하지 않는다).
+접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 HTTP 200을 유지하고 `curve.segments: null`로 준다. 결과와 작업이 모두 없으면 `curve.residual: {"status":null,"jobId":null}`, 실제 작업이 있으면 해당 상태와 실제 ID를 반환한다. null 상태는 작업 생성 전 조회 표현이며 2장의 작업 상태 전이에 추가하지 않는다. 히스토리 조회는 작업을 자동 생성하지 않는다.
+
+첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본은 잔차로 표시하지 않으며 판단·메모 등 나머지 공개 내용은 유지한다. SUBMITTED 요청은 기존대로 curve:null·snapshot 규칙을 유지하고, 원본 대체는 CURRENT 조회로 구분한다. 개인 잔차 생성·작업 조회 API의 기존 권한을 확대하지 않는다.
 
 읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). 서로 다른 판의 배열과 메타데이터를 한 응답에 섞지 않으며, `reproduction.currentBundleId`는 실제로 그래프를 만든 판이다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
 
