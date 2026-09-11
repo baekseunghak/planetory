@@ -1,0 +1,581 @@
+{
+  "schema_version": "0.1-draft",
+  "scenario_id": "05-residual-failure",
+  "description": "오판도 다음 곡선을 요청할 수 있음. 주기도 실패 시 기존 곡선·매칭 유지, 재시도 완료 후 전환.",
+  "source_requirements": [
+    "EXP-09",
+    "DAT-14",
+    "AT-101"
+  ],
+  "setup": {
+    "current_curve": {
+      "kind": "curve",
+      "curve_context": {
+        "analysis_session_id": "mock-session-01",
+        "tic_id": "mock-tic-001",
+        "publication_bundle_id": "mock-bundle-v1",
+        "curve_id": "mock-curve-0",
+        "curve_step": 0,
+        "removed_candidate_ids": [],
+        "residual_model_version": "mock-residual-v1",
+        "periodogram_config_version": "mock-periodogram-v1",
+        "selection_rules_version": "mock-selection-v1"
+      },
+      "fold_reference_time_btjd": 1006,
+      "observation_bounds_btjd": [
+        1000,
+        1012
+      ],
+      "units": {
+        "time": "BTJD",
+        "flux": "normalized",
+        "period": "day"
+      },
+      "time_btjd": [
+        1000,
+        1001.5,
+        1003,
+        1004.5,
+        1006,
+        1007.5,
+        1009,
+        1010.5,
+        1012
+      ],
+      "normalized_flux": [
+        0.99,
+        1,
+        0.99,
+        1,
+        0.99,
+        1,
+        0.99,
+        1,
+        0.99
+      ],
+      "quality_valid": [
+        true,
+        true,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true
+      ],
+      "sector_segments": [
+        {
+          "sector_id": "mock-sector",
+          "start_btjd": 1000,
+          "end_btjd": 1012
+        }
+      ],
+      "periodogram": {
+        "domain_days": [
+          0.5,
+          40
+        ],
+        "period_days": [
+          0.5,
+          1,
+          1.5,
+          2,
+          2.5,
+          3,
+          4,
+          5,
+          6,
+          10,
+          20,
+          40
+        ],
+        "power": [
+          0.1,
+          0.1,
+          0.25,
+          0.1,
+          0.2,
+          0.9,
+          0.1,
+          0.1,
+          0.4,
+          0.1,
+          0.08,
+          0.05
+        ],
+        "insufficient_transits_after_days": 6
+      }
+    },
+    "progress_before_job": {
+      "stage": "IN_PROGRESS",
+      "completion_reason": null,
+      "matched_candidate_ids": [
+        "mock-signal-01"
+      ],
+      "reopen_pending": false
+    },
+    "note": "작업 응답은 누적 진행·성과를 덮어쓰지 않음. 중간 조회를 생략한 QUEUED→COMPLETED 응답도 가능"
+  },
+  "exchanges": [
+    {
+      "name": "req-residual-source",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "request_id": "req-residual-source",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "LIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": null
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "kind": "submission_result",
+          "submission_id": "sub-req-residual-source",
+          "history_id": "hist-req-residual-source",
+          "submitted_at": "2026-09-09T01:00:00Z",
+          "submission_sequence": 1,
+          "original_input": {
+            "request_id": "req-residual-source",
+            "curve_context": {
+              "analysis_session_id": "mock-session-01",
+              "tic_id": "mock-tic-001",
+              "publication_bundle_id": "mock-bundle-v1",
+              "curve_id": "mock-curve-0",
+              "curve_step": 0,
+              "removed_candidate_ids": [],
+              "residual_model_version": "mock-residual-v1",
+              "periodogram_config_version": "mock-periodogram-v1",
+              "selection_rules_version": "mock-selection-v1"
+            },
+            "submission_kind": "candidate",
+            "selection": {
+              "period_days": 3,
+              "phase_start": 0.98,
+              "phase_end": 1.02
+            },
+            "user_judgment": "LIKELY_PLANET",
+            "evidence_flags": [
+              "ODD_EVEN_SIMILAR",
+              "NO_SECONDARY_ECLIPSE"
+            ],
+            "memo": "합성 예시의 주기와 구간을 확인함",
+            "view_state": {
+              "time_domain_btjd": [
+                1000,
+                1012
+              ],
+              "periodogram_domain_days": [
+                0.5,
+                40
+              ],
+              "folded_x_zoom_ratio": 4,
+              "folded_center_phase": 0
+            },
+            "retry_of_submission_id": null
+          },
+          "centroid_data_status": "unavailable",
+          "achievement_summary_at_submission": {
+            "as_of": "2026-09-09T01:00:00Z",
+            "recognized_total": 0,
+            "by_type": {
+              "CONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "FP": {
+                "recognized_count": 0,
+                "grade": null
+              },
+              "UNCONFIRMED": {
+                "recognized_count": 0,
+                "grade": null
+              }
+            }
+          },
+          "judgment_statistics_ref": {
+            "candidate_id": "mock-signal-01",
+            "basis": "LATEST_SUBMISSION_PER_CREDITED_USER",
+            "path": "/api/analysis/submissions/sub-req-residual-source/judgment-statistics"
+          },
+          "server_derived": {
+            "epoch_btjd": 1006,
+            "duration_days": 0.1200000000000001
+          },
+          "match": {
+            "status": "matched",
+            "candidate_id": "mock-signal-01",
+            "correction": null
+          },
+          "opinion_result": null,
+          "judgment": {
+            "value": "LIKELY_PLANET",
+            "evaluation": "DISAGREES"
+          },
+          "signal": {
+            "candidate_id": "mock-signal-01",
+            "disposition": "FP",
+            "ai": {
+              "execution_status": "NOT_EVALUATED",
+              "score": null,
+              "status": null,
+              "model_version": null
+            }
+          },
+          "achievement": {
+            "status": "NOT_RECOGNIZED",
+            "type": "FP",
+            "reason": "JUDGMENT_DISAGREES",
+            "awarded_now": false,
+            "previously_recognized": false
+          },
+          "publication": {
+            "state": "NOT_ELIGIBLE",
+            "public_analysis_id": null,
+            "official_thread_id": null,
+            "moderation_hidden": false,
+            "thread_hidden": false
+          },
+          "progress": {
+            "stage": "IN_PROGRESS",
+            "completion_reason": null,
+            "matched_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "reopen_pending": false
+          },
+          "detail": {
+            "available": true,
+            "target_kind": "CURRENT_MATCH",
+            "candidate_id": "mock-signal-01"
+          },
+          "available_actions": [
+            "VIEW_RESULT",
+            "RETRY",
+            "NEXT_CURVE",
+            "VIEW_DETAIL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "queued",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/residual-jobs",
+        "body": {
+          "request_id": "req-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ]
+        }
+      },
+      "response": {
+        "status": 202,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "QUEUED",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": null
+        }
+      }
+    },
+    {
+      "name": "RESIDUAL_CALCULATING",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/residual-jobs/mock-job-1"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "RESIDUAL_CALCULATING",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": null
+        }
+      }
+    },
+    {
+      "name": "RESIDUAL_READY",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/residual-jobs/mock-job-1"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "RESIDUAL_READY",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": null
+        }
+      }
+    },
+    {
+      "name": "PERIODOGRAM_CALCULATING",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/residual-jobs/mock-job-1"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "PERIODOGRAM_CALCULATING",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": null
+        }
+      }
+    },
+    {
+      "name": "FAILED",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/residual-jobs/mock-job-1"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-1",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "FAILED",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": {
+            "stage": "PERIODOGRAM_CALCULATING",
+            "code": "CALCULATION_TIMEOUT",
+            "retryable": true
+          }
+        }
+      }
+    },
+    {
+      "name": "retry",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/residual-jobs",
+        "body": {
+          "request_id": "req-job-2",
+          "source_submission_id": "sub-req-residual-source",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ]
+        }
+      },
+      "response": {
+        "status": 202,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-2",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "QUEUED",
+          "cache_hit": false,
+          "result_curve_context": null,
+          "failure": null
+        }
+      }
+    },
+    {
+      "name": "retry-complete",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/residual-jobs/mock-job-2"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "residual_job",
+          "job_id": "mock-job-2",
+          "source_submission_id": "sub-req-residual-source",
+          "source_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "removed_candidate_ids": [
+            "mock-signal-01"
+          ],
+          "status": "COMPLETED",
+          "cache_hit": false,
+          "result_curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-1",
+            "curve_step": 1,
+            "removed_candidate_ids": [
+              "mock-signal-01"
+            ],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "failure": null
+        }
+      }
+    }
+  ]
+}

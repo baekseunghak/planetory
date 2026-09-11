@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+test-results/
+artifacts/
+playwright-report/
+.pnpm-store/
+*.log
+
+# Regenerate from an existing verified export; keep numeric datasets out of Git.
+public/observations/*.json
+public/observations/*.json.tmp

@@ -1,0 +1,186 @@
+/* NASA/SDO solar reference image; source and reuse terms: ../BACKGROUND-SOURCE.md.
+   Import after styles.css. This is scenery, not an image of the selected TIC. */
+
+.lab,
+.lab.lights-up {
+  background: #03080e;
+}
+
+.lab .room {
+  background: transparent;
+}
+
+.lab .room::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  width: clamp(1180px, 105vw, 2000px);
+  aspect-ratio: 1;
+  left: 62%;
+  top: 61%;
+  transform: translate(-50%, -50%);
+  background: url("/images/star-background.jpg") center / contain no-repeat;
+  opacity: 0.7;
+  filter: saturate(0.76);
+  -webkit-mask-image: radial-gradient(
+    circle,
+    #000 47%,
+    #000d 61%,
+    transparent 73%
+  );
+  mask-image: radial-gradient(circle, #000 47%, #000d 61%, transparent 73%);
+  transition: opacity 0.7s;
+}
+
+.lab .room::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      #0308109c 0%,
+      #0308100a 24%,
+      #02070c12 74%,
+      #02070c91 100%
+    ),
+    linear-gradient(90deg, #03081080, #03081008 36%, #0308100d 75%, #03081042);
+  pointer-events: none;
+}
+
+.lab.lights-up .room::before {
+  opacity: 0.85;
+}
+
+.lab .room-light,
+.lab.lights-up .room-light {
+  z-index: 2;
+  background: #e7ab68;
+  opacity: 0.05;
+}
+
+.lab .wall,
+.lab.lights-up .wall {
+  opacity: 0.14;
+}
+
+.lab .floor,
+.lab.lights-up .floor,
+.lab .floor-halo {
+  opacity: 0.16;
+}
+
+.lab .glass-panel {
+  background: linear-gradient(
+    132deg,
+    rgba(25, 47, 60, 0.18),
+    rgba(7, 21, 32, 0.28) 48%,
+    rgba(5, 16, 27, 0.35)
+  );
+  border-color: #a7d0df50;
+  border-top-color: #c6e8ed8c;
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  box-shadow:
+    inset 0 1px 0 #d4f2ff07,
+    0 15px 38px #00000038;
+}
+
+.lab .glass-panel::before {
+  opacity: 0.2;
+}
+
+.lab .panel-header {
+  background: linear-gradient(90deg, #09172438, #0a19201a);
+}
+
+.lab .panel-header h2,
+.lab .panel-meta,
+.lab .observation-stats,
+.lab .judgment-intro,
+.lab .section-label,
+.lab .workspace-heading,
+.lab .stepbar,
+.lab .statusbar {
+  text-shadow: 0 1px 3px #000b;
+}
+
+.lab .panel-note,
+.lab .axis-caption,
+.lab .mini-legend,
+.lab .panel-subtitle,
+.lab .footer-hint,
+.lab .local-note {
+  color: #a6bdc7;
+}
+
+.lab .range-control,
+.lab .period-value {
+  background: #04101b4d;
+}
+
+.lab .judgment-options button {
+  background: #07172245;
+}
+
+.lab .judgment-options button.chosen {
+  background: #346c7952;
+}
+
+.lab textarea {
+  background: #04101b4d;
+}
+
+.lab .console {
+  background: linear-gradient(180deg, #17252d12, #07131c2e);
+  border-top-color: #94b8c51f;
+  box-shadow: none;
+}
+
+.lab .supports {
+  opacity: 0.3;
+}
+
+.lab .projector {
+  opacity: 0.3;
+}
+
+.lab .statusbar {
+  background: transparent;
+}
+
+.background-credit {
+  color: #a7b6bd;
+  font-size: 9px;
+  line-height: 1.5;
+  text-shadow: 0 1px 3px #000c;
+}
+
+.background-credit:hover {
+  color: #f0d4a5;
+}
+
+@media (max-width: 900px) {
+  .lab .room::before {
+    position: fixed;
+    width: max(1100px, 145vw);
+    top: 53svh;
+    left: 70%;
+    opacity: 0.58;
+  }
+
+  .lab.lights-up .room::before {
+    opacity: 0.72;
+  }
+
+  .lab .glass-panel {
+    background: linear-gradient(132deg, #10263540, #07132059);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab .room::before {
+    transition: none;
+  }
+}

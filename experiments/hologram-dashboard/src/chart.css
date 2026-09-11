@@ -1,0 +1,29 @@
+.holo-chart { width: 100%; min-width: 0; color: #bad9df; }
+.holo-chart__toolbar { height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 6px; }
+.holo-chart__legend { display: flex; align-items: center; gap: 7px; color: #91b5bf; font-size: 10px; letter-spacing: .035em; }
+.holo-chart__legend i { display: block; width: 4px; height: 4px; background: #90edf0; box-shadow: 0 0 8px #56cad999; }
+.holo-chart__surface { position: relative; height: 245px; min-width: 0; background: linear-gradient(180deg, #06131e19, #06131e00); }
+.holo-chart--compact .holo-chart__surface { height: 177px; }
+.holo-chart canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+.holo-chart canvas:focus-visible { outline: 1px solid #80e5eb; outline-offset: -2px; border-radius: 3px; }
+.holo-chart__canvas--select { cursor: crosshair; }
+.holo-chart__zoom { display: flex; align-items: center; gap: 3px; }
+.holo-chart__zoom button, .holo-chart__status button { border: 1px solid #90dfe22b; border-radius: 4px; min-width: 25px; height: 23px; padding: 1px 7px; color: #b8e4e8; background: #70cbd20b; font: 11px 'IBM Plex Mono', Consolas, monospace; cursor: pointer; }
+.holo-chart__zoom button:hover:not(:disabled), .holo-chart__status button:hover { border-color: #80e5eb80; background: #70cbd21a; }
+.holo-chart__zoom button:disabled { opacity: .3; cursor: default; }
+.holo-chart__footer { display: flex; align-items: center; justify-content: space-between; min-height: 29px; padding: 0 7px; gap: 9px; color: #9abcc6; font-size: 10px; }
+.holo-chart__hint { color: #63818d; font-size: 9px; white-space: nowrap; }
+.holo-chart__footer button { border: none; background: none; color: #e4ba7a; font: inherit; padding: 3px; cursor: pointer; }
+.holo-chart__peaks { display: flex; gap: 7px; flex-wrap: wrap; padding: 4px 6px 7px; }
+.holo-chart__peaks button { border: 1px solid #8ddfe42c; background: #65cbd309; border-radius: 4px; color: #b9dce2; padding: 5px 9px; font: 10px 'IBM Plex Mono', Consolas, monospace; cursor: pointer; }
+.holo-chart__peaks button span { color: #74a6b2; margin-right: 9px; font-size: 9px; }
+.holo-chart__peaks button small { font-family: inherit; margin-left: 4px; opacity: .6; }
+.holo-chart__peaks button:hover { border-color: #a2eaf37d; }
+.holo-chart__peaks button.is-selected { color: #f5cb89; border-color: #e2b97065; background: #d8a5550f; }
+.holo-chart__peaks button.is-selected span { color: #bc9762; }
+.holo-chart__status { position: absolute; right: 17px; top: 28px; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid #83dfe438; border-radius: 4px; color: #b8e7e8; background: #071421e8; font-size: 10px; pointer-events: none; }
+.holo-chart__status span { width: 5px; height: 5px; border-radius: 50%; background: #72dae3; animation: chart-status-pulse 1s ease-in-out infinite; }
+.holo-chart__status--error { border-color: #dfb17b55; color: #f0c387; max-width: 85%; pointer-events: auto; }
+.holo-chart__readout { position: absolute; bottom: 29px; right: 18px; padding: 4px 6px; background: #061322d9; color: #93bac6; border-radius: 3px; font: 9px Consolas, monospace; pointer-events: none; }
+@keyframes chart-status-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .holo-chart__status span { animation: none; } }
