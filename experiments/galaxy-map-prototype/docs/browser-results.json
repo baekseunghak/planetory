@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-09-10T05:07:50.4566364Z",
+  "command": "npm run test:galaxy",
+  "stats": {
+    "startTime": "2026-09-10T05:05:27.835Z",
+    "duration": 59028.024000000005,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "title": "50,000 unique stars, original cookie isolation and complete detail panel",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5453
+        }
+      ]
+    },
+    {
+      "title": "rotation, pan, zoom, reset and an arbitrary particle selection remain aligned",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 17390
+        }
+      ]
+    },
+    {
+      "title": "search, analysis, results, community and camera restoration",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7801
+        }
+      ]
+    },
+    {
+      "title": "resize, keyboard, WebGL loss and malformed API recovery",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4515
+        }
+      ]
+    },
+    {
+      "title": "report actual 50k overview frame timing without claiming SRS acceptance",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8214
+        }
+      ]
+    },
+    {
+      "title": "wide zoom keeps the pointed star aligned and survives distant pan, rotation and reload",
+      "ok": true,
+      "results": [
+        {
+          "status": "passed",
+          "duration": 9522
+        }
+      ]
+    }
+  ]
+}
