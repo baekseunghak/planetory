@@ -97,6 +97,7 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 | 퀘스트 패널(튜토리얼·챌린지·재개 카드) | P0 | `GET /me/quests` | HOME-06·07·09, DEC-27 |
 | 내 별 목록 | P0 | `GET /me/stars`, `GET /members/{memberId}/stars` | MY-02, DEC-34 |
 | 별 목록 뷰(WebGL 대체) | P0 | `GET /me/stars`와 동일 응답 재사용 | NFR-18 |
+| 공개 별 요약(게시판 열람 자격·분석 진입 가능 여부) | P0 | `GET /stars/{ticId}` | COM-01·11, NFR-06 |
 | 분석 진입·현재 판 | P0 | `GET /stars/{ticId}/analysis-context` | EXP-01·02·10 |
 | 곡선(원본·잔차 공용) | P0 | `GET /stars/{ticId}/curves?curveStep=&removed=` | EXP-03, DAT-11 |
 | 주기도 | P0 | `GET /stars/{ticId}/periodogram?curveStep=&removed=` | EXP-04 |
