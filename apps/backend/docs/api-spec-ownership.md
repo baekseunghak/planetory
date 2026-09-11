@@ -62,7 +62,7 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 | 항목 | 규칙 |
 |---|---|
 | `curveContext` | `bundleId`, `curveStep`, `removedCandidateIds`(정렬), `residualModelVersion`, `periodogramConfigVersion`. 곡선을 단계 번호만으로 식별하지 않음 |
-| 요청 ID | 제출·잔차 요청·상세 보기는 본문 `requestId`(UUID). ERD `submissions.request_id`에 저장 |
+| 요청 ID | 제출만 본문 `requestId`(UUID)를 받아 ERD `submissions.request_id`에 저장. 잔차 요청은 목표 곡선 문맥이 멱등 단위, 상세 보기는 제출 ID에 대해 멱등 |
 | 판 교체 | 요청의 `bundleId`가 현재 판과 다르면 409 `BUNDLE_CHANGED` + `currentBundleId` |
 | 별 잠김 | 회원에게 열리지 않은 별의 분석·제출·곡선 요청은 403 `STAR_LOCKED` |
 | 잔차 상태 | `QUEUED`, `RESIDUAL_CALCULATING`, `RESIDUAL_READY`, `PERIODOGRAM_CALCULATING`, `COMPLETED`, `FAILED` |

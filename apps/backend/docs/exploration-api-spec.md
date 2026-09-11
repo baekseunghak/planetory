@@ -48,7 +48,7 @@
 
 ### 2.2 요청 ID와 멱등
 
-제출·잔차 요청은 본문 `requestId`(UUID v4)를 필수로 받는다. ERD `submissions.request_id UNIQUE`에 저장한다.
+**제출**은 본문 `requestId`(UUID v4)를 필수로 받고 ERD `submissions.request_id UNIQUE`에 저장한다. 이 절의 규칙은 제출 전용이다. 잔차 작업은 `requestId`를 쓰지 않으며 목표 곡선 문맥(캐시 키)이 멱등 단위다(7.1절). 상세 보기는 본문 없이 제출 ID에 대해 멱등이다(6.7절).
 
 | 상황 | 응답 |
 |---|---|
@@ -69,7 +69,7 @@
 | `GRAPH_TEMPORARILY_UNAVAILABLE` | 503 | 읽기 조회 중 판이 바뀌어 최신 판으로 1회 재시도했는데도 일관된 결과를 못 만듦(8.3절). 서비스 API 7.2절과 같은 코드 |
 | `STAR_LOCKED` | 403 | 그 별이 이 회원에게 열리지 않음. 분석·곡선·제출·잔차 모두 거절(NFR-06, AT-64) |
 | `STAR_NOT_PUBLISHED` | 404 | `stars.service_status != published` 또는 없는 TIC. 존재를 드러내지 않는다 |
-| `STEP_NOT_RESTORABLE` | 409 | 제거 조합에 은퇴 후보가 있어 그 단계를 복원할 수 없음. 본문에 `fallbackCurveStep` |
+| `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 서버가 **은퇴 후보만 뺀 조합**을 대체 문맥으로 돌려준다 |
 | `CANDIDATE_RETIRED` | 409 | 재도전 대상 신호가 현재 판에서 은퇴함 |
 | `CURVE_NOT_READY` | 202 | 잔차가 아직 없음. 본문에 `residual` 상태(5.2절) |
 | `RESIDUAL_QUEUE_FULL` | 429 | 대기열 초과. 본문에 `retryAfterSeconds` |
@@ -187,13 +187,13 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
       "stars": [
         {"ticId": "123456789", "x": 1612.4, "y": -233.0, "depthZ": 0.42,
          "planetCount": 2, "colorLevel": 2, "sizeLevel": 2,
-         "progressStage": "in_progress", "fpOnlyComplete": false,
+         "progressStage": "in_progress", "completedWithoutPlanets": false,
          "marker": null, "reopened": false,
          "orbits": [{"candidateId": "c-401", "periodDays": 3.0021, "kind": "confirmed"},
                     {"candidateId": "c-402", "periodDays": 11.8, "kind": "unconfirmed"}]},
         {"ticId": "100000001", "x": 0.0, "y": 0.0, "depthZ": 0.5,
          "planetCount": 1, "colorLevel": 1, "sizeLevel": 1,
-         "progressStage": "completed", "fpOnlyComplete": false,
+         "progressStage": "completed", "completedWithoutPlanets": false,
          "marker": {"type": "tutorial", "seq": 1}, "reopened": false, "orbits": [{"candidateId": "c-9", "periodDays": 2.1, "kind": "confirmed"}]}
       ],
       "clusters": []
@@ -205,8 +205,8 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
 | 필드 | 규칙 |
 |---|---|
 | `planetCount` | HOME-05: 맞춘 확정 행성 + "행성 같음"으로 판단한 미확정. `user_star_progress.planet_count` |
-| `colorLevel` | 0/1/2/3/4(4 이상). `fpOnlyComplete=true`면 살구색 별도 상태 |
-| `fpOnlyComplete` | `progress_stage=completed`이고 `planet_count=0`이고 `fp_success=true` |
+| `colorLevel` | 0/1/2/3/4(4 이상). `completedWithoutPlanets=true`면 살구색 별도 상태 |
+| `completedWithoutPlanets` | `progress_stage=completed`이고 `planet_count=0`. HOME-05 "행성으로 표시할 신호 없이 탐색 완료". FP 성과 여부(`fp_success`)와 무관하며, 미확정 UNSURE 판단·FP 오판으로 완료된 별도 포함한다(지웅 리뷰 7) |
 | `marker` | `{"type":"tutorial","seq":n}` 또는 `{"type":"challenge"}` 또는 null |
 | `reopened` | `reopened_at`이 있고 아직 새 제출이 없음. 퀘스트 "다시 열린 별" 카드와 같은 기준 |
 | `orbits` | 행성으로 그리는 후보만: 확정 행성 + 회원이 LIKELY_PLANET으로 판단한 미확정. FP·UNLIKELY·UNSURE는 없음(HOME-05). 툴팁의 `depthPpm`은 상세 조회에서 받는다 |
@@ -233,7 +233,7 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
              "position": {"generation": 2, "angleDeg": 131.2, "radiusJitter": 0.07, "depthZ": 0.42}},
   "progress": {"stage": "in_progress", "currentCurveStep": 1, "completionReason": null, "reopenPending": false,
                "reopenedAt": null, "completedAt": null},
-  "planets": {"count": 2, "fpOnlyComplete": false,
+  "planets": {"count": 2, "completedWithoutPlanets": false,
               "items": [{"candidateId": "c-401", "kind": "confirmed", "periodDays": 3.0021, "depthPpm": 1450},
                         {"candidateId": "c-402", "kind": "unconfirmed", "periodDays": 11.8, "depthPpm": 380}]},
   "achievement": {"count": 2, "grade": "S", "byType": {"confirmed": 1, "unconfirmed": 1, "fp": 0}},
@@ -279,13 +279,13 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
 
 ### 4.4 내 별 목록
 
-`GET /api/v1/me/stars?sort=recent&stage=&grade=&ticId=&cursor=&size=20`
+`GET /api/v1/me/stars?scope=submitted|discovered&sort=recent&stage=&grade=&ticId=&cursor=&size=20`
 `GET /api/v1/members/{memberId}/stars?...` (타인. `user_settings.star_list_public=false`면 403 `STAR_LIST_PRIVATE`)
 
 ```json
 {
   "items": [
-    {"ticId": "123456789", "progressStage": "in_progress", "planetCount": 2, "fpOnlyComplete": false,
+    {"ticId": "123456789", "progressStage": "in_progress", "planetCount": 2, "completedWithoutPlanets": false,
      "achievementCount": 2, "grade": "S", "currentCurveStep": 1, "reopenPending": false, "reopened": false,
      "unpublishedSignalCount": 1, "lastActivityAt": "2026-09-10T02:30:00Z", "unlockReason": "achievement",
      "marker": null}
@@ -294,10 +294,10 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
 }
 ```
 
-- 대상은 발견한 별 중 제출 이력이 있는 별(MY-02). 옛 "내 진행" 화면(HOME-03)을 이 목록이 대체한다. `sort=recent`는 `lastActivityAt` = 최근 제출·재개 시각 내림차순, 동률 `ticId`.
+- `scope=submitted`(기본)는 발견한 별 중 제출 이력이 있는 별(MY-02). 옛 "내 진행" 화면(HOME-03)을 이 목록이 대체한다. `scope=discovered`는 제출 이력이 없는 발견 별까지 전부 포함하며 본인 조회에서만 허용한다. `sort=recent`는 `lastActivityAt` = 최근 제출·재개·발견 시각 내림차순, 동률 `ticId`.
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
 - 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
-- WebGL 대체 목록 뷰(NFR-18)는 같은 응답에 `sort=recent`를 쓴다.
+- WebGL 대체 목록 뷰(NFR-18)는 `scope=discovered&sort=recent`를 쓴다. 성과로 막 발견해 아직 제출하지 않은 별도 목록에서 골라 분석에 진입할 수 있어야 하기 때문이다(지웅 리뷰 6). 마이페이지는 기본값을 유지한다.
 
 ### 4.5 공개 별 요약
 
@@ -345,9 +345,9 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
   },
   "selectionRules": {
     "version": "sel-1",
-    "phaseWidthMin": 0.0028, "phaseWidthMax": 0.25,
-    "minWindowDays": 0.0139, "maxDurationMultipleOfSuggested": 3,
-    "allowEmptyPhaseSpan": false
+    "minWindowDays": 0.0139, "phaseWidthMax": 0.25,
+    "maxDurationMultipleOfSuggested": 3, "allowEmptyPhaseSpan": false,
+    "fineTune": {"halfWidthCells": 3}
   },
   "progress": {"stage": "in_progress", "currentCurveStep": 1, "matchedCandidateIds": ["c-401"],
                "completionReason": null, "reopenPending": false, "achievementCount": 1, "grade": "A"},
@@ -365,9 +365,9 @@ x = radius × cos(angleDeg), y = radius × sin(angleDeg)
 | 필드 | 규칙 |
 |---|---|
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
-| `selectionRules` | DEC-19 값은 `확인 필요`. `phaseWidthMin`은 케이던스 2배/주기로 서버가 별마다 계산(5.1 최소 허용 창), `allowEmptyPhaseSpan`은 미결 4(Q03). 서버 검증도 같은 값을 쓴다 |
+| `selectionRules` | DEC-19 값은 `확인 필요`. 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `phaseWidthMax`는 위상 비율, `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다 |
 | `progress.currentCurveStep` | 회원의 `user_star_progress.current_curve_step` = **마지막 제출의 곡선 단계**. 제출 트랜잭션에서만 갱신하며 브라우저 저장소로 대체하지 않는다(NFR-19) |
-| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0) |
+| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0). 판 전환으로 그 조합의 후보가 은퇴했으면 은퇴 후보만 뺀 조합으로 대체하고 `notice: "STEP_NOT_RESTORABLE"`을 붙인다(6.8절과 같은 규칙, Q09) |
 | `nextCurveContext` | 이 판에서 회원이 매칭한 활성 후보 전체를 제거한 문맥(`curveStep` = 그 수). 남은 탐색 가능 신호가 없으면 null. [다음 곡선]의 기본 대상 |
 | `residualForCurrentStep`, `residualForNextStep` | 각 문맥의 잔차 캐시 상태. `curveStep=0`이면 `COMPLETED` 고정 |
 | `tutorial.skipAvailable` | SUB-12 조건 충족 여부. `tutorial_skip_after=0`이면 항상 false |
@@ -468,9 +468,10 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `fineTune`은 manifest의 격자 간격·허용 폭 규칙을 그 봉우리 주기에 적용해 계산. 하드코딩 금지 | EXP-05, DAT-11 |
 | `suggestedDurationHours`·`suggestedPhaseCenter`는 BLS 제안 밴드(EXP-06 "제안 밴드로 표시할 수 있으나"). 제출 입력이 아니다 | EXP-06 |
 | `matchedCandidates`는 회원이 이미 매칭한 후보의 주기. 흐린 선 표시용 | EXP-13 |
-| 미세 조정 범위 밖 주기로 제출하면 400 `VALIDATION_FAILED` (`selection.periodDays` "봉우리 허용 범위 밖") | EXP-05 |
+| 목록은 **표시·추천용**이다. 제출 주기가 상위 N개에 속할 필요는 없으며, 어떤 주기 P의 미세 조정 범위는 `selectionRules.fineTune.halfWidthCells`로 주기도 격자에서 `P × r^(−h) ~ P × r^(+h)` (r = 격자 비율, h = halfWidthCells), step은 격자 한 칸 폭이다. 목록의 `fineTune`은 이 규칙을 각 봉우리에 미리 적용한 값 | EXP-05 재선택·미세 조정 구분 |
+| 미세 조정 범위 밖으로 값을 바꾸는 것은 프론트가 막고 새 주기 선택을 안내한다(EXP-05). 서버는 이를 제출 거절 조건으로 쓰지 않는다 | 지웅 리뷰 2 |
 
-봉우리 추출 규칙(N, 최소 간격, 고조파 제외)은 윤성용과 정한다(미결 5). 제출 검증은 봉우리 목록과 무관하게 5.1 매칭 규칙으로만 판정한다.
+봉우리 추출 규칙(N, 최소 간격, 고조파 제외)은 윤성용과 정한다(미결 5). 제출 검증은 봉우리 목록과 무관하게 6.2절 형식 검사와 5.1 매칭 규칙으로만 판정한다.
 
 ## 6. 제출·결과
 
@@ -484,7 +485,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "submissionKind": "candidate",
   "curveContext": {"bundleId": "b-2", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "selection": {"periodDays": 11.802, "phaseStart": 0.98, "phaseEnd": 1.02},
+  "selection": {"periodDays": 11.802, "phaseStart": 0.995, "phaseEnd": 1.005},
   "userJudgment": "LIKELY_PLANET",
   "evidenceChecks": ["oddeven", "ushape"],
   "memo": "홀짝 깊이가 비슷하고 U형",
@@ -513,13 +514,13 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 |---|---|---|
 | 1 | 인증·`published`·별 열림 | 401 / 404 / 403 `STAR_LOCKED` |
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
-| 3 | `curveStep` = 회원 `current_curve_step` 또는 `retryOfSubmissionId`가 가리키는 단계, `removedCandidateIds` ⊆ 회원 매칭 활성 후보 | 400 `curveContext` |
+| 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
 | 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.*` |
-| 5 | 폭 `phaseEnd − phaseStart`가 `selectionRules.phaseWidthMin` 이상 `phaseWidthMax` 이하, duration이 봉우리 제안 duration의 `maxDurationMultipleOfSuggested`배 이하 | 400 `selection.phaseEnd` (DEC-19) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. 제출 주기가 봉우리 목록의 어느 봉우리와 `fineTune` 범위로 연결되면 그 봉우리의 `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용하고, 연결되는 봉우리가 없으면 위상 최대만 적용 | 400 `selection.phaseEnd` (DEC-19, Q03) |
 | 6 | 정수 k가 존재해 epoch가 `observationBounds` 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
-| 9 | `periodDays`가 어떤 봉우리의 `fineTune` 범위 안(5.4절) | 400 `selection.periodDays` |
+| 9 | `periodDays`가 주기도 격자 범위 `[periodMinDays, periodMaxDays]` 안(5.3절). **상위 N개 봉우리에 속할 필요는 없다**(EXP-05의 재선택은 주기도 어느 주기든 가능) | 400 `selection.periodDays` |
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
 
@@ -559,11 +560,11 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "submissionKind": "candidate",
   "curveContext": {"bundleId": "b-2", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "original": {"periodDays": 11.802, "phaseStart": 0.98, "phaseEnd": 1.02, "userJudgment": "LIKELY_PLANET",
+  "original": {"periodDays": 11.802, "phaseStart": 0.995, "phaseEnd": 1.005, "userJudgment": "LIKELY_PLANET",
                "evidenceChecks": ["oddeven", "ushape"], "memo": "홀짝 깊이가 비슷하고 U형",
                "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4}},
   "serverDerived": {"foldReferenceTimeBtjd": 1683.4231, "phaseCenter": 0.0, "epochBtjd": 1683.4231,
-                    "durationHours": 11.33, "centroidDataStatus": "unavailable"},
+                    "durationHours": 2.83, "centroidDataStatus": "unavailable"},
   "match": {"status": "matched_harmonic", "candidateId": "c-402", "harmonicMultiplier": 2,
             "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias"},
   "signal": {
@@ -652,7 +653,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "curveContext": {"bundleId": "b-3", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
   "restored": {"step": true, "notice": null},
-  "draft": {"periodDays": 11.802, "phaseStart": 0.9724, "phaseEnd": 1.0124,
+  "draft": {"periodDays": 11.802, "phaseStart": 0.9874, "phaseEnd": 0.9974,
             "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4},
             "userJudgment": null, "evidenceChecks": [], "memo": null},
   "residualForStep": {"status": "QUEUED", "jobId": null},
@@ -661,7 +662,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 ```
 
 - 위상은 저장값을 복사하지 않고 현재 판 기준 시각으로 재환산한다(HIS-02, 분석 프론트 6.3): `width = durationHours / (24 × P)`, `center = phase(epochBtjd)`, `phaseStart = (center − width/2) mod 1`, `phaseEnd = phaseStart + width`.
-- 제거 조합에 은퇴 후보가 있으면 `restored.step=false`, `notice: "STEP_NOT_RESTORABLE"`, `curveContext`는 회원의 현재 진행 단계(안내 문구는 프론트).
+- 제거 조합에 은퇴 후보가 있으면 `restored.step=false`, `notice: "STEP_NOT_RESTORABLE"`, `curveContext`는 **원 제출의 제거 조합에서 은퇴 후보만 뺀 조합**(`curveStep`은 그 수). 남은 후보는 모두 회원이 매칭한 활성 후보이므로 6.2절 3단계를 항상 통과한다. 판 전환 후 5.1절 `currentCurveContext`와 8.3절 히스토리 재현도 같은 규칙으로 대체하며, 세 경우 모두 `notice`로 "이전 단계 복원 불가"를 알린다(Q09).
 - 대상 신호가 은퇴했으면 409 `CANDIDATE_RETIRED`.
 - 초안의 단계 잔차가 캐시에 없으면 `residualForStep`으로 알려 주고 프론트가 7.1절로 요청한다.
 - 실제 재제출은 새 `requestId`와 `retryOfSubmissionId`로 6.1절을 호출한다. 누적 매칭·완료는 되돌리지 않는다.
@@ -675,7 +676,6 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ```json
 {
-  "requestId": "0a9c…", 
   "target": {"bundleId": "b-2", "removedCandidateIds": ["c-401", "c-402"],
              "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"}
 }
@@ -693,7 +693,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 대기열 초과 | 429 `RESIDUAL_QUEUE_FULL`, `retryAfterSeconds` |
 | 판 교체 | 409 `BUNDLE_CHANGED` |
 
-`requestId`는 같은 회원의 재전송을 같은 작업으로 묶는 용도이며 저장하지 않는다(캐시 키가 멱등 단위).
+잔차 요청에는 `requestId`가 없다. 같은 `target`을 다시 POST하면 진행 중 작업 또는 캐시 결과를 그대로 돌려주므로, **응답 유실 후 복구도 같은 `target`으로 재호출**한다. 별도 복구 조회 API는 두지 않는다. 동일 요청 재전송과 새 요청을 구분할 필요가 없는 이유는 결과가 회원과 무관한 캐시이고 요청 자체가 상태를 만들지 않기 때문이다.
 
 ### 7.2 상태 조회
 
@@ -759,7 +759,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 ```json
 {
   "historyId": "h-501",
-  "submission": { "...6.4절 본문..." },
+  "submission": {"$ref": "6.4절 submissionResult 본문 전체"},
   "versions": {"data": "sec-14-41-54/r1", "preprocess": "pp-3", "pipeline": "pl-7", "rule": "rule-3",
                "residualModel": "rm-1", "periodogramConfig": "pg-1"},
   "snapshotParams": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4,
@@ -783,9 +783,9 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                    "residualReproducible": false, "fallbackReason": "RETIRED_CANDIDATE",
                    "currentFoldReferenceTimeBtjd": 1683.4231},
   "selection": {"userPeriodDays": 11.802, "correctedPeriodDays": 23.604, "harmonicMultiplier": 2,
-                "epochBtjd": 1683.4231, "durationHours": 11.33,
-                "currentPhaseStart": 0.9724, "currentPhaseEnd": 1.0124},
-  "curve": { "...5.2절 세그먼트 DTO. residualReproducible=false면 원본(curveStep 0)..." },
+                "epochBtjd": 1683.4231, "durationHours": 2.83,
+                "currentPhaseStart": 0.9874, "currentPhaseEnd": 0.9974},
+  "curve": {"$ref": "5.2절 세그먼트 DTO. residualReproducible=false면 원본(curveStep 0)"},
   "snapshot": {"bins": 150, "foldedFlux": [1.0, 0.98], "foldedError": [0.001, 0.002]}
 }
 ```
@@ -896,7 +896,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
 
 ### 9.3 내부 계약: 완료·재개 판정
 
-**완료(SUB-11, DEC-28).** 제출 트랜잭션 안에서, 매칭 성공 후:
+**완료(SUB-11, DEC-28).** 아래 판정을 세 시점에 실행한다. (a) 제출 트랜잭션에서 매칭 성공 후, (b) 5.1절 분석 진입 시 회원의 진행 행이 `in_progress`이면(AT-69: 탐색 불가능 신호만 남은 별에 들어왔을 때 성과 없이 완료·재개 대기), (c) 새 판 `current` 전환 후처리에서 `in_progress` 행 전부. 무신호 별은 배치가 적재하지 않으므로 active 후보가 0개인 별은 판정 대상이 아니다(SUB-11 (1)).
 
 ```text
 discoverableUnmatched = 이 판 active 후보 중 discoverable=true AND candidate_id ∉ 회원 매칭 집합
@@ -912,8 +912,9 @@ if discoverableUnmatched = 0:
 **재개(DAT-15, DEC-27).** 새 판이 `current`가 될 때 배치 후처리가 실행한다.
 
 ```text
-for each user_star_progress(tic_id) WHERE stage=completed:
-  if 이 판에 discoverable=true AND 회원 미매칭 후보가 생겼으면:
+for each user_star_progress(tic_id):
+  if stage=in_progress: 위 완료 판정 (c)를 먼저 실행
+  if stage=completed AND 이 판에 discoverable=true AND 회원 미매칭 후보가 생겼으면:
      stage=in_progress, reopen_pending=false, reopened_at=now, completed_at 유지
      → 재개 이벤트 {userId, ticId, bundleId, newDiscoverableCount, reason: new_candidate|became_discoverable}
        → 퀘스트 카드(4.3절), 마이페이지 목록 상단(4.4절 lastActivityAt 갱신), 알림 NTF-01(P1, 서비스 API)
@@ -976,7 +977,7 @@ for each user_star_progress(tic_id) WHERE stage=completed:
 | Q06 후보 노출 경계 | 5.4절 봉우리 투영. `candidateId` 미노출 |
 | Q07 경로·DTO·멱등·판 변경 | 2장, 6.4절, 6.6절. 판 변경 감지는 `BUNDLE_CHANGED`와 5.1절 재조회 |
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. 미결 3 |
-| Q09 진행 중 은퇴 후보 | 6.8절 `STEP_NOT_RESTORABLE`·`fallbackCurveStep`. 진행 중 세션은 5.1절 재조회로 현재 단계를 받음 |
+| Q09 진행 중 은퇴 후보 | 대체 문맥 규칙 하나로 통일: 제거 조합에서 은퇴 후보만 뺀다. 판 전환(5.1절 `currentCurveContext`), 재도전(6.8절), 히스토리 재현(8.3절 `fallbackReason`) 모두 같은 규칙과 `notice`. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
 | Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
 | Q11 스냅샷 누락·고조파 좌표 | 8.3절 `snapshot: null`, 접기는 원본 주기 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
@@ -1008,6 +1009,7 @@ for each user_star_progress(tic_id) WHERE stage=completed:
 | 13 | 챌린지 `participantCount` 정의 | 백승학 | 서비스 F17-Q3 |
 | 14 | 분석 도중 새 판 공개를 능동 감지하는 방법(주기적 5.1절 재조회 vs 응답 헤더 `X-Current-Bundle` vs SSE). 현재는 다음 요청의 `BUNDLE_CHANGED`로만 감지 | 강재민·백지웅 | EXP-01, AT-117, Q07 |
 | 15 | 회원별 동시 잔차 요청 상한과 초과 시 응답(전체 상한과 별도) | 강재민·김동혁 | DEC-35 |
+| 16 | 공개·일괄 공개 응답에 새 별·등급을 포함할지, 프론트가 4.1·9.1절 재조회로 갱신할지 | 강재민·백승학·백지웅 | 서비스 9.1·9.4절과 9.2절 반환값 연결. 재조회로도 해결 가능 |
 
 ## 13. 요구사항·검수 추적
 
@@ -1053,3 +1055,4 @@ for each user_star_progress(tic_id) WHERE stage=completed:
 |---|---|
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), 미결 1 해소(SB-D17) |
+| 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
