@@ -57,7 +57,7 @@
 | 같은 `requestId`가 처리 중 | 409 `REQUEST_IN_PROGRESS`. 프론트는 `GET /submissions/by-request/{requestId}`로 확인 후 같은 ID로 재전송 |
 | 응답 유실 | 새 ID를 만들지 말고 위 조회로 복구한다 |
 
-글·댓글의 `Idempotency-Key` 헤더(서비스 API 2.3절)와 통일 여부는 D-1이다(Q07).
+서비스 API는 글·댓글에 요청 키를 두지 않으므로(SB-D17) 요청 ID는 탐사 API의 본문 `requestId`뿐이다(D-1, Q07).
 
 ### 2.3 판 교체와 별 잠김
 
@@ -759,7 +759,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 - `COMPLETED`면 `resultCurveContext`에 5.2·5.3절로 조회할 문맥을 준다. `curveStep = removedCandidateIds.length`.
 - `FAILED`면 `failure: {"stage": "PERIODOGRAM", "code": "COMPUTE_ERROR", "message": "…", "retryable": true}`. 저장된 제출·매칭·완료·성과는 바뀌지 않고 마지막 정상 곡선을 유지한다(AT-101). 재시도는 7.1절 재호출이며 `attempt`가 오른다.
-- `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크 후 결정(D-3). v1 프론트는 `COMPLETED`에서만 전환한다.
+- v1은 `RESIDUAL_READY`에서 곡선을 먼저 노출하지 않고 `COMPLETED`에서만 전환한다(D-3). 선노출·SSE는 계산 시간 실측 후 재검토한다.
 - Redis 재시작으로 작업이 사라지면 404 `RESOURCE_NOT_FOUND`. 프론트는 7.1절로 다시 요청한다(분석 프론트 8.1 "Redis 결과 없음").
 - 계산 중 새 판이 공개되면 작업은 `FAILED(stage: BUNDLE_ARCHIVED)`로 끝나고 프론트는 최신 판을 다시 불러온다(AT-80).
 
