@@ -18,7 +18,6 @@
 | R7 | SRS COM-17 | “관리자 권한 계정은 숨김·복원을 담당”, “MVP는 … 숨김·복원을 제공” | “v1은 운영 화면·API 없이 운영자가 DB에서 hidden 상태를 변경한다(COM-13·OPS-06)” | SRS COM-13·OPS-01·OPS-06, F12·F22 |
 | R8 | SRS CHL-03 | “목표 달성·기간 종료·운영 취소 상태와 완료 성과를 기록”, 마감 제출 반영 | “회차 상태(planned/active/closed)와 기간을 기록한다. 챌린지 전용 달성·성과·보상은 없다” | 삭제된 CHL-02, POL-24, ERD ChallengeRound, F17 |
 | R9 | ERD posts 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC)만 있음 | `CREATE EXTENSION pg_trgm`, posts.title·posts.body GIN(gin_trgm_ops) 인덱스 추가. board·tag 필터 인덱스는 측정 후 결정 | SB-D24 검색 범위 확장(SRS COM-03) |
-| R10 | ERD 5장 미결·확인 필요 표 | 일반 글·댓글·공개 등록 요청 키의 영속 방식 항목 없음 | “요청 키 영속(회원·작업·키 유일 조합, 본문 해시, 결과 ID) 테이블 또는 열 도입 여부, 보관기간, 키 전달 위치(본문 requestId vs 헤더)” 항목 추가 | NFR-02, ERD submissions.request_id, API 2.3·2.4 |
 
 **정합화가 아니라 요구사항 변경이라 팀 결정이 필요한 항목**
 
