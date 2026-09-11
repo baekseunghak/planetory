@@ -1,11 +1,11 @@
 # Planetory 서비스 백엔드 주요 API 명세
 
 - 작성일: 2026-09-09
-- 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../docs/development/planetory-doc-sync-requests.md) 참조
+- 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
 - 상태: **팀 협의용 초안 — 구현 완료 또는 최종 합의된 API가 아님**
 - 담당: 백승학 / 서비스 백엔드
-- DB 기준: [ERD v1.0](../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
-- 기준: [요구사항 v1.0](../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../docs/development/planetory-service-backend-feature-analysis.md)
+- DB 기준: [ERD v1.0](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
+- 기준: [요구사항 v1.0](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
 - 적용 순서: SRS v1.0 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장).
 
 기능별로 “언제 호출하는지 → 무엇을 보내는지 → 무엇을 받는지 → 실패하면 어떻게 처리하는지”를 설명한다. **기능 정책은 기준 문서를 따르며, 아래 URL·필드명·페이지 방식·상태 코드는 협의용 제안이다.** 확정된 인증 오류 401/403 외의 세부 계약은 프론트·탐사·DB 담당자 검토 후 확정한다. 예시 ID·제목·시각·수치는 가상 데이터다.
@@ -127,7 +127,7 @@ if (response.status === 401) {
 **요청 키 제안(확정 아님):**
 
 - 전달 위치: 제출은 이미 ERD `submissions.request_id UUID UNIQUE`로 본문 필드 방식이다. 프론트가 두 방식을 섞지 않도록 **본문 `requestId` 하나로 통일**하거나, 헤더로 간다면 제출·공개 등록도 같은 헤더를 쓰도록 탐사 명세(강재민)·분석 프론트(백지웅 Q07)와 함께 결정한다.
-- 키 영속: Redis만으로 보장하지 않는다. 회원·작업·키 유일 조합과 본문 해시·결과 ID를 저장하는 테이블(또는 열)은 ERD v1.0 변경이므로 [정합화 요청 R10](../../docs/development/planetory-doc-sync-requests.md)으로 ERD 5장 미결 표에 등록을 요청하고, 결정 전에는 P0 ERD 변경을 요구하지 않는다.
+- 키 영속: Redis만으로 보장하지 않는다. 회원·작업·키 유일 조합과 본문 해시·결과 ID를 저장하는 테이블(또는 열)은 ERD v1.0 변경이므로 [정합화 요청 R10](../../../docs/development/planetory-doc-sync-requests.md)으로 ERD 5장 미결 표에 등록을 요청하고, 결정 전에는 P0 ERD 변경을 요구하지 않는다.
 - UUID 형식·24시간 보관은 제안값이다. 보관기간·충돌 응답은 도입 시 DB 담당자와 정한다.
 
 ```json
@@ -758,3 +758,4 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 2026-09-11 | 리뷰 반영: 적용 순서를 SRS v1.0 → 팀 결정 → 담당자 제안으로 변경. 검색·핫 토픽을 SRS대로 P1(P0 상향 요청)으로 표기하고, 핫 토픽 SB-D16을 DEC-09 안건 5의 대안 제안으로 전환 |
 | 2026-09-11 | 리뷰 반영: 7.2 그래프 계약을 ERD 세그먼트 배열·잔차 상태·reproduction/selection/snapshot 구조로 정리하고 탐사 API 명세 참조로 전환. 스냅샷 부재 409를 snapshot:null로, 필드명을 ERD 단위(fluxScatter·durationHours·userPeriodDays)에 맞춤 |
 | 2026-09-11 | 리뷰 반영: 일반 글·댓글 요청 키를 P0 선택 사항(제안)으로 표기, 전달 위치 통일을 탐사·프론트 합의 항목으로 추가, 키 영속 테이블을 ERD 미결 등록 요청(정합화 요청 R10)으로 이관. UUID·24시간은 제안값 |
+| 2026-09-11 | 저장소 구조 문서에 맞춰 `backend/docs/`에서 `apps/backend/docs/`로 이동하고 상대 링크 갱신 |
