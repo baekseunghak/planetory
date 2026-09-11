@@ -3,7 +3,7 @@
 - 작성일: 2026-09-11
 - Jira: [S15P21C206-36 · API 명세서 작성](https://ssafy.atlassian.net/browse/S15P21C206-36) (상위 Epic `S15P21C206-26`)
 - 작성: 강재민. 백승학과 파트를 나누어 각자 작성한 뒤 이 문서를 인덱스로 합친다.
-- 기준: [요구사항 명세서 v1.0](../../../docs/requirements/planetory-requirements-spec.md), [ERD v1.0](../../../docs/development/database-erd.md), [팀 역할 분배](../../../docs/team-role-allocation.md)
+- 기준: [요구사항 명세서 v1.1](../../../docs/requirements/planetory-requirements-spec.md), [ERD v1.1](../../../docs/development/database-erd.md), [팀 역할 분배](../../../docs/team-role-allocation.md)
 - 관련 초안: 백승학 [서비스 API 명세](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/24) (MR !24, 브랜치 `docs/S15P21C206-30-service-backend-feature-analysis`), 백지웅 [분석 프론트 상세 명세·Mock 계약](https://ssafy.atlassian.net/browse/S15P21C206-49) (브랜치 `docs/S15P21C206-49-docs-analysis-contract`)
 - 상태: 분담 제안. 경로·필드·상태 코드는 팀 검토 전 제안이며, SRS v1.0과 다른 결정은 여기서 확정하지 않고 팀 결정 항목으로 올린다.
 
@@ -92,7 +92,8 @@ API 명세를 두 사람이 나눠 쓰면서 경로·필드·오류 형식이 �
 
 | 기능 | 우선 | 메서드·경로 | 근거 |
 |---|---|---|---|
-| 별 지도 타일 | P0 | `GET /me/sky/tiles?zoom=&x=&y=` | HOME-01·05, NFR-20d, DEC-30·32 |
+| 별 지도 메타·타일 | P0 | `GET /me/sky`, `GET /me/sky/tiles?level=&x=&y=&w=&h=` (월드 경계 상자, 회전 역투영) | HOME-01·05, NFR-20a·d, DEC-30·32 |
+| 검색 별 위치 조회 | P1 | `GET /me/sky/locate?ticId=` | HOME-04, NFR-20d |
 | 별 상세 패널 | P0 | `GET /me/stars/{ticId}` | HOME-08, GRD-07 |
 | 퀘스트 패널(튜토리얼·챌린지·재개 카드) | P0 | `GET /me/quests` | HOME-06·07·09, DEC-27 |
 | 내 별 목록 | P0 | `GET /me/stars`, `GET /members/{memberId}/stars` | MY-02, DEC-34 |
