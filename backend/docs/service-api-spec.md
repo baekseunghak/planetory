@@ -371,31 +371,50 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 ### 7.2 공개 첨부와 출처 카드
 
-**그래프 조회 계약(SB-D18, 사용자 위임에 따른 문서 반영):** 아래 첨부 조회와 `GET /api/v1/public-analyses/{analysisId}`에 `graphMode=CURRENT|SUBMITTED`를 붙인다. 생략은 CURRENT. 별도 무권한 파일 URL 대신 같은 공개 권한 검사를 거쳐 배열을 받는다. 브라우저가 토글할 때 같은 경로를 다른 graphMode로 다시 호출한다. 아래 동작을 구현 기준으로 삼되 배열의 정규화·계산 구현과 팀 교차 검토는 남은 작업이다.
+**그래프 조회 계약(SB-D18, 리뷰 반영):** 첨부 조회와 `GET /api/v1/public-analyses/{analysisId}`의 그래프는 분석 화면 곡선 조회·잔차 결과 곡선과 같은 DTO다. **곡선 형식은 탐사 API 명세(강재민 작성 중)에서 한 번만 정의하고 이 절은 그것을 참조한다.** 그 명세가 병합되기 전까지 아래 구조를 합의 기준으로 두며, 이 절에서 별도 배열 형식을 새로 정하지 않는다. `graphMode=CURRENT|SUBMITTED`(생략 시 CURRENT)와 같은 공개 권한 검사는 유지한다.
 
-| 모드 | 응답 필드 | 원천·의미 |
+**CURRENT — 세그먼트 배열(ERD `light_curve_segments` 기준)**
+
+| 필드 | 의미 |
+|---|---|
+| bundleId, foldReferenceTimeBtjd | 실제 그래프를 만든 현재 판과 접기 기준 시각(BTJD) |
+| curveContext | curveStep, removedCandidateIds, residualModelVersion, periodogramConfigVersion |
+| residual | status(`QUEUED`/`RESIDUAL_CALCULATING`/`RESIDUAL_READY`/`PERIODOGRAM_CALCULATING`/`COMPLETED`/`FAILED`), jobId. 제거 조합이 없으면 생략 |
+| segments[] | segmentId, sector, binningRevision, startBtjd, binMinutes, nPoints, flux[], fluxScatter, gaps |
+
+- 시각 배열은 보내지 않는다. i번째 점 시각은 `startBtjd + binMinutes / 1440 × i`(ERD 규칙)이고 결측은 null이다. JSON NaN/Infinity는 보내지 않는다.
+- 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트마다 둔다. DAT-11의 20,000점 초과 시 넓힌 실제 간격은 `binMinutes`로 표현한다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
+- 제거 조합의 잔차가 Redis에 없거나 계산 중이면 `segments` 대신 `residual.status`·`jobId`만 반환하고, 프론트는 잔차 작업 조회로 넘어간다. 계산 중을 503으로 표현하지 않는다. 503은 DB·Redis 연결 장애 같은 의존성 장애에만 쓴다.
+
+**History 그래프 — 첨부·공개 분석 공통**
+
+| 묶음 | 필드 | 의미 |
 |---|---|---|
-| CURRENT | timeBtjd[], flux[], fluxErrorScalar, periodDays, epochBtjd, durationDays, foldReferenceTimeBtjd | 현재 Bundle 곡선 또는 잔차 배열. 시각·주기·기간은 일 단위, flux는 상대 밝기. flux 오차의 정규화·잔차 처리 방식은 탐사와 합의 |
-| SUBMITTED | bins, phaseStart, phaseEnd, foldedFlux[], foldedError[] | analysis_snapshots. 운영 bins=150, 위상 범위 -0.5~0.5. i번째 위상은 -0.5+(i+0.5)/bins |
+| reproduction | submittedBundleId, currentBundleId, residualReproducible, fallbackReason | 제출 판과 현재 판, 잔차 재현 가능 여부. 은퇴 후보로 불가하면 `RETIRED_CANDIDATE`와 현재 원본 곡선 대체 |
+| selection | userPeriodDays, correctedPeriodDays, harmonicMultiplier, epochBtjd, durationHours | ERD `submitted_period`·`matched_period`·`harmonic_multiplier`·`epoch_btjd`·`duration_hours`. 현재 판 재환산은 **사용자 원본 주기(userPeriodDays)** 기준(분석 프론트 명세 6.3) |
+| snapshot | bins, foldedFlux[], foldedError[] 또는 `null` | analysis_snapshots. 운영 bins=150. i번째 위상은 `-0.5 + (i + 0.5) / bins`로 고정하며 축 범위 필드는 두지 않는다(제출 위상 구간 `phase_start`·`phase_end`와 이름 충돌 방지) |
 
-CURRENT의 timeBtjd/flux는 같은 길이이며 시간순이다. SUBMITTED의 두 배열 길이는 bins와 같다. 결측 구간은 null로 표현하는 안이고 JSON NaN/Infinity는 보내지 않는다. 배열 해상도·정규화는 원본 계산 규칙을 보존하며 서비스 API에서 임의 재비닝하지 않는다.
+매칭 실패 기록처럼 스냅샷이 없으면 409 대신 `snapshot: null`을 반환하고 프론트는 “제출 당시” 토글을 비활성화한다. SUBMITTED 요청에 최신 그래프를 대신 담지 않는다.
 
-응답 예시(형식 설명을 위해 3구간으로 축약한 가상 데이터이며 실제 150구간 응답과 구분):
+형식 예시(가상 데이터, 배열 축약):
 
 ```json
 {
-  "graph": {
-    "mode": "SUBMITTED",
-    "bins": 3,
-    "phaseStart": -0.5,
-    "phaseEnd": 0.5,
-    "foldedFlux": [1.0, 0.98, 1.0],
-    "foldedError": [0.001, 0.002, 0.001]
-  }
+  "bundleId": "b-2",
+  "foldReferenceTimeBtjd": 1683.4231,
+  "curveContext": {"curveStep": 1, "removedCandidateIds": ["c-401"], "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
+  "residual": {"status": "COMPLETED", "jobId": "rj-77"},
+  "segments": [
+    {"segmentId": "seg-1", "sector": 14, "binningRevision": 1, "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 3900,
+     "flux": [1.0001, 0.9998, null, 1.0003], "fluxScatter": 0.0012, "gaps": [[120, 135]]}
+  ],
+  "reproduction": {"submittedBundleId": "b-1", "currentBundleId": "b-2", "residualReproducible": true, "fallbackReason": null},
+  "selection": {"userPeriodDays": 3.21, "correctedPeriodDays": 3.21, "harmonicMultiplier": 1, "epochBtjd": 1684.02, "durationHours": 2.4},
+  "snapshot": {"bins": 3, "foldedFlux": [1.0, 0.98, 1.0], "foldedError": [0.001, 0.002, 0.001]}
 }
 ```
 
-권한이 유효해도 스냅샷이 없는 미매칭 기록의 SUBMITTED 요청은 409 `SNAPSHOT_UNAVAILABLE`이며 CURRENT 전환을 안내한다. SUBMITTED 성공으로 최신 그래프를 대신 반환하지 않는다. 일시 배열 조회 장애는 503이다. 은퇴 후보로 잔차 재현이 불가능하면 CURRENT 원본 곡선과 `residualReproducible:false`, `fallbackReason:RETIRED_CANDIDATE`를 반환하고 대체 사실을 표시한다.
+세그먼트 구조·잔차 상태·단위는 ERD·SRS에 이미 정해진 내용이다. 필드명과 `snapshot: null` 처리만 탐사 명세와 합의한다.
 
 **데이터 판 전환·실패 처리**
 
@@ -424,12 +443,12 @@ CURRENT 검사는 응답 후까지 최신성을 영구 보장하지 않는다. �
 | 유실·장애 | 캐시 미존재·만료는 재계산 대상으로 처리한다. Redis 연결 장애는 캐시 미존재와 구분하고 무제한 우회 계산을 시작하지 않는다. 상태·잠금을 확보할 수 없으면 503으로 안내하며 기존 제출·성과는 유지한다. |
 | 자원 | 결과 TTL·메모리 상한·잠금 유효시간·계산 동시 상한은 실제 결과 크기와 계산 시간 측정 후 설정한다. 로그인 세션의 30분 정책을 계산 캐시에 그대로 적용하지 않는다. 세션 저장소 선택도 별도다. |
 
-**검증 사례:** 같은 제거 집합의 순서 변경 시 같은 키 / Bundle·계산 버전 변경 시 다른 키 / 같은 키 동시 요청의 계산 중복 방지 / 판 전환과 늦은 계산 완료 경합 / 캐시 만료 후 재계산 / Redis 장애 시 제한 없는 계산 금지 / 숨김 후 캐시 접근 차단 / 스냅샷 부재 / 은퇴 후보 원본 대체 / 조회 전체 재시도 상한. 구현 완료 시 실제 테스트로 검증한다.
+**검증 사례:** 같은 제거 집합의 순서 변경 시 같은 키 / Bundle·계산 버전 변경 시 다른 키 / 같은 키 동시 요청의 계산 중복 방지 / 판 전환과 늦은 계산 완료 경합 / 캐시 만료 후 재계산 / Redis 장애 시 제한 없는 계산 금지 / 숨김 후 캐시 접근 차단 / 스냅샷 없음(snapshot: null) / 잔차 미완료 시 residual.status 반환 / 은퇴 후보 원본 대체 / 조회 전체 재시도 상한. 구현 완료 시 실제 테스트로 검증한다.
 
 글은 `GET /api/v1/posts/p-201/history-attachments/h-501`, 댓글은 `GET /api/v1/comments/c-801/history-attachments/h-501`로 조회한다. 각각 post_history_attachments의 (post_id, history_id), comment_history_attachments의 (comment_id, history_id) 유일 쌍에 대응한다. 단일 attachmentId는 사용하지 않는다. 부모와 해당 History의 첨부 관계가 실제로 있어야 하며, 관계가 없으면 404다. 부모·상위 스레드 공개 상태, 소유자·TIC 적합성을 검사한 뒤 제한된 자료를 반환한다. History ID를 아는 것만으로 조회 권한이 생기지 않는다. 성공 200 최소 구조는 아래와 같다. 공개 필드는 9.2 공개 분석 상세와 같으며 메모를 포함한다(SB-D23). 수치 단위·필드명은 탐사와 합의한다.
 
 ```json
-{"parentType":"POST","parentId":"p-201","historyId":"h-501","ticId":"123456789","submittedAt":"2026-09-09T02:30:00Z","judgment":"UNSURE","graph":{"mode":"CURRENT","submittedBundleId":"b-1","currentBundleId":"b-2","isPreviousSubmission":true,"residualReproducible":true,"snapshotAvailable":true}}
+{"parentType":"POST","parentId":"p-201","historyId":"h-501","ticId":"123456789","submittedAt":"2026-09-09T02:30:00Z","judgment":"UNSURE","graph":{"mode":"CURRENT","reproduction":{"submittedBundleId":"b-1","currentBundleId":"b-2","residualReproducible":true,"fallbackReason":null},"selection":{"userPeriodDays":3.21,"correctedPeriodDays":3.21,"harmonicMultiplier":1,"epochBtjd":1684.02,"durationHours":2.4},"snapshot":null}}
 ```
 
 이미지는 저장하지 않는다. 현재 PostgreSQL 곡선 배열과 제출의 절대 epoch·duration·주기로 재현한다. 이전 Bundle 제출 표시와 은퇴 후보로 잔차 재현 불가 시 현재 원본 곡선 대체 안내가 필요하다. 매칭 성공에는 analysis_snapshots의 150구간 folded_flux/folded_err로 당시/최신 토글을 제공하고 불일치에는 축약 스냅샷이 없다. 배열 상세 응답·참조 경로는 탐사와 합의하며 부모 공개 권한을 적용한다.
@@ -732,3 +751,4 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 2026-09-11 | SB-D23 사용자 확정: 타인 프로필 회원 ID·닉네임·별 목록 공개 상태·성과 요약, 비공개 별 목록 403. 공개 분석·History 첨부는 판단·근거·메모·재현 수치·그래프·버전 공개(SRS COM-18·19 기준), 필드별 선택 없음 |
 | 2026-09-11 | SB-D24 리뷰 반영·사용자 확정: 검색을 SRS COM-03 범위로 확장(제목·본문 키워드·작성자·TIC·게시판·태그). SB-D21 대체. `title` 쿼리를 `q`+`searchIn`으로 교체 |
 | 2026-09-11 | 리뷰 반영: 적용 순서를 SRS v1.0 → 팀 결정 → 담당자 제안으로 변경. 검색·핫 토픽을 SRS대로 P1(P0 상향 요청)으로 표기하고, 핫 토픽 SB-D16을 DEC-09 안건 5의 대안 제안으로 전환 |
+| 2026-09-11 | 리뷰 반영: 7.2 그래프 계약을 ERD 세그먼트 배열·잔차 상태·reproduction/selection/snapshot 구조로 정리하고 탐사 API 명세 참조로 전환. 스냅샷 부재 409를 snapshot:null로, 필드명을 ERD 단위(fluxScatter·durationHours·userPeriodDays)에 맞춤 |
