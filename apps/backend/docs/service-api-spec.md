@@ -4,9 +4,9 @@
 - 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
 - 상태: **팀 협의용 초안 — 구현 완료 또는 최종 합의된 API가 아님**
 - 담당: 백승학 / 서비스 백엔드
-- DB 기준: [ERD v1.0](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
-- 기준: [요구사항 v1.0](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
-- 적용 순서: SRS v1.0 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장).
+- DB 기준: [ERD v1.1](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
+- 기준: [요구사항 v1.1](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
+- 적용 순서: SRS v1.1 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장). 탐사 D-7·D-9·D-11은 통합 검토안으로 연결하며 해당 MR의 리뷰 상태를 따른다.
 
 기능별로 “언제 호출하는지 → 무엇을 보내는지 → 무엇을 받는지 → 실패하면 어떻게 처리하는지”를 설명한다. **기능 정책은 기준 문서를 따르며, 아래 URL·필드명·페이지 방식·상태 코드는 협의용 제안이다.** 확정된 인증 오류 401/403 외의 세부 계약은 프론트·탐사·DB 담당자 검토 후 확정한다. 예시 ID·제목·시각·수치는 가상 데이터다.
 
@@ -18,10 +18,11 @@
 |---|---|---|---|---|
 | 내 정보 | P0 | `GET /api/v1/me` | 로그인 여부와 내 프로필 확인 | [회원](#member) |
 | 닉네임 수정 | P0 | `PATCH /api/v1/me/profile` | 내 닉네임 변경 | [회원](#member) |
+| 첫 방문 안내 완료 | P0 | `PATCH /api/v1/me/settings` | onboardingDone=true 저장, 반복 요청 허용 | [회원](#member) |
 | 공개 설정 | P1 | `PATCH /api/v1/me/settings` | 내 별 목록 공개 여부 변경 | [회원](#member) |
 | 타인 프로필 | P0 | `GET /api/v1/members/{memberId}` | 다른 회원의 공개 정보 조회 | [회원](#member) |
-| 내 별 목록 | P0 | `GET /api/v1/me/stars` | 내가 발견한 별과 진행 상태 확인 | [회원](#member) |
-| 타인 별 목록 | P0 | `GET /api/v1/members/{memberId}/stars` | 공개 설정이 허용한 별 목록 조회 | [회원](#member) |
+| 내 별 목록 | P0 | `GET /api/v1/me/stars` | 내가 발견한 별과 진행 상태 확인. 응답 정의는 탐사 명세 4.4절 | [회원](#member) |
+| 타인 별 목록 | P0 | `GET /api/v1/members/{memberId}/stars` | 공개 설정이 허용한 별 목록 조회. 응답 정의는 탐사 명세 4.4절 | [회원](#member) |
 | 로그아웃 | P0 | `POST /api/v1/auth/logout` | 현재 로그인 종료 | [회원](#member) |
 | 피드·검색 | 피드 P0 / 검색 P1(P0 상향 요청) | `GET /api/v1/community/feed` | 일반 글·공식 스레드를 제목·본문·작성자·TIC·게시판·태그로 검색 | [검색](#feed) |
 | 핫 토픽 | P1(P0 상향 요청) | `GET /api/v1/community/hot-topics` | 산식 확정(DEC-09): 유효 참여자(세 판단 합계) 10명 이상 공식 스레드 | [검색](#feed) |
@@ -52,7 +53,7 @@ OAuth 로그인 시작/콜백 주소는 인증 담당자와 제공자 등록 설
 
 - 세션 방식 로그인을 사용한다(SB-D14). 브라우저가 세션 쿠키를 전달하고 서버는 세션에서 회원을 식별한다. 요청 본문에 `authorId`나 운영자 여부를 받지 않는다.
 - 인증 없음·만료는 **401**: 프론트가 재로그인 안내. 인증됐지만 권한 부족은 기본 **403**: 권한 부족 안내.
-- 실제 없는 자원은 **404**. 숨김·비공개 자원의 존재를 감출 때도 404를 사용할지는 합의가 필요하다. 합의 전 공개 응답에서 비공개 내용을 반환하지 않는 규칙은 유지한다.
+- 실제 없는 자원은 **404**. 비노출 자원의 상태 코드는 자원 종류별로 이미 정한 것을 따른다: 삭제·숨김된 일반 글·댓글(부모 비공개 포함)은 존재를 감추는 404(SB-D22), 타인의 비공개 별 목록은 프로필에 공개 상태가 드러나므로 403(SB-D23), 미공개·미발견 별은 탐사 명세의 404 `STAR_NOT_PUBLISHED`·403 `STAR_LOCKED`. 취소·숨김된 공개 분석과 숨김 공식 스레드의 직접 조회 코드만 미정이며, 합의 전에도 공개 응답에서 비공개 내용을 반환하지 않는 규칙은 유지한다.
 - 마지막 유효한 인증 API 요청의 서버 접수 시각부터 30분간 유지하고 다음 유효 인증 요청마다 연장한다. 자동 폴링도 포함한다. 별도 5분 활동 확인·갱신 API는 사용하지 않는다. 만료된 세션은 401이며 갱신으로 되살리지 않는다. 쿠키 이름·저장소·재시작 후 유지 정책은 미정. 인증 구현 시 쿠키 보안 설정·CSRF 방어·로그인 시 세션 ID 교체·로그아웃 무효화를 함께 검토한다.
 - 회원 차단 API는 v1에 없다. 탈퇴 API 제공 시점과 데이터 정책은 보류한다.
 
@@ -138,8 +139,8 @@ if (response.status === 401) {
 |---|---|---|
 | 400 | `VALIDATION_FAILED`, `TIC_MISMATCH` | 잘못된 입력 안내·수정 |
 | 401 | `AUTH_REQUIRED` | 재로그인 안내 |
-| 403 | `FORBIDDEN`, `CONTENT_NOT_ACCESSIBLE` | 권한 부족·접근 불가 안내. 비노출 자원은 404 계약 추후 합의 |
-| 404 | `RESOURCE_NOT_FOUND` | 없는 대상 안내 |
+| 403 | `FORBIDDEN`, `CONTENT_NOT_ACCESSIBLE`, `STAR_LIST_PRIVATE` | 권한 부족·접근 불가 안내. 타인 비공개 별 목록(SB-D23)이 여기에 해당 |
+| 404 | `RESOURCE_NOT_FOUND` | 없는 대상과 삭제·숨김 글·댓글(SB-D22)을 같은 안내로 처리. 취소·숨김 공개 분석의 직접 조회 코드는 미정 |
 | 409 | `NICKNAME_UNAVAILABLE`, `THREAD_HIDDEN` | 충돌 원인에 따라 새로 조회·입력 변경·동일 요청 재시도 |
 | 503 | `DEPENDENCY_UNAVAILABLE` | 원본 자료 조회 등 일시 장애. 입력을 유지하고 재시도 |
 
@@ -159,11 +160,19 @@ if (response.status === 401) {
   "nickname": "별찾는사람",
   "role": "MEMBER",
   "starListVisibility": "PUBLIC",
-  "tutorialCompleted": false
+  "tutorialCompleted": false,
+  "onboardingDone": false,
+  "achievementSummary": {
+    "discoveredStarCount": 57, "completedStarCount": 5,
+    "signalCount": 9, "byType": {"confirmed": 5, "unconfirmed": 3, "fp": 1},
+    "starCountByGrade": {"A": 3, "S": 1, "SS": 1, "SSS": 0}
+  }
 }
 ```
 
 `role`은 화면 표시용이며 실제 운영 권한은 서버가 재검사한다. 튜토리얼 완료는 탐사 도메인의 판정을 사용한다. 이메일·제공자 원본 ID·토큰은 이 응답에 포함하지 않는 최소안이다.
+
+`achievementSummary`는 MY-01 마이페이지 요약이다. 값은 저장 열이 아니라 호출 시 집계한다: 발견 별 수는 `star_unlocks`, 완료 별 수는 `user_star_progress.progress_stage`, 성과 수·유형별 수는 `user_candidate_achievements`(`achievement_type`), 등급 분포는 `user_star_progress.achievement_count`를 1/2/3/4 이상으로 묶어 센다(ERD: 등급 문자는 열로 두지 않음). 원천 조회는 [탐사 API 명세 9.1절](exploration-api-spec.md) `GET /me/achievements`의 `summary`와 같은 내부 함수를 쓰며 서비스가 별도 산식을 두지 않는다. 회원 단위 합계 열·캐시는 추가하지 않는다(P1 `global_stats`·`stats_snapshots`는 전체·비교 통계용이며 개인 요약과 무관). 순위·백분위는 없다(STA-04). 타인 프로필(3.2절)은 이 중 공개 범위(SB-D23)만 같은 원천에서 내려준다.
 
 `PATCH /api/v1/me/profile` 요청:
 
@@ -172,6 +181,14 @@ if (response.status === 401) {
 ```
 
 성공 200은 `{"memberId":"u-101","nickname":"새로운별찾기"}`. 닉네임은 상시 변경 가능하고 기존 글·댓글·반응자 표시에도 최신 값이 반영된다. 중복은 409, 금칙어·형식 오류는 400 제안. SB-D14의 확정 입력 기준을 적용한다. 닉네임 변경 시 세션 재발급 없이 이후 조회에 최신 이름을 반영한다. 이메일 수정·제공자 연결은 포함하지 않는다.
+
+**첫 방문 안내 완료(P0, 36번 통합 검토 중 사용자 승인)**
+
+`PATCH /api/v1/me/settings`에 `{"onboardingDone":true}`를 보내면 200 `{"onboardingDone":true}`. 현재 인증 회원의 user_settings.onboarding_done만 변경한다. 반복 true 요청은 동일 결과이며 false·null은 400 VALIDATION_FAILED, 회원 ID 입력은 받지 않는다. 안내를 닫기 전에 완료로 기록하지 않으며 실패 시 다시 안내될 수 있다.
+
+설정 행이 없으면 기존 ERD 기본값으로 생성하고 이미 있는 별 목록 공개·알림 설정을 덮어쓰지 않는다. GET /me의 onboardingDone은 행이 없으면 false다. 탐사 D-8의 튜토리얼 1번 첫 제출 성공 처리도 같은 단방향 완료 규칙을 사용하며 병렬 실행해도 true가 false로 되돌아가지 않는다. 별 클릭은 완료 처리가 아니다. 이 필드만 P0이며 starListVisibility 등 다른 설정을 P0로 올리지 않는다. SB-D20 주간 챌린지 안내는 계속 브라우저별 기록으로 관리한다.
+
+검증: 최초 true·반복 true·false/null 거부·미인증 401·설정 행 미존재·기존 설정 보존·튜토리얼 제출과 동시 완료·다른 기기 조회에서 완료 유지.
 
 ### 3.2 공개 설정(P1)·타인 프로필·별 목록(P0)
 
@@ -186,19 +203,17 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
  "achievementSummary":{"signalCount":7,"starCountByGrade":{"A":3,"S":1,"SS":0,"SSS":0}}}
 ```
 
-성과 요약은 별 목록 비공개와 무관하게 제공한다(MY-04·DEC-34). 등급은 achievement_count에서 계산한다. 이메일·제공자 정보·로그인/세션 기록·개인 History는 포함하지 않는다. 가입일·팔로우 목록·활동 이력은 초기 제외하고 필요할 때 확장한다.
+성과 요약은 별 목록 비공개와 무관하게 제공한다(MY-04·DEC-34). 3.1절 본인 요약과 같은 내부 함수로 집계하며 등급은 achievement_count에서 계산한다. 이메일·제공자 정보·로그인/세션 기록·개인 History는 포함하지 않는다. 가입일·팔로우 목록·활동 이력은 초기 제외하고 필요할 때 확장한다.
 
-`GET /api/v1/me/stars?size=20` 또는 공개가 허용된 `GET /api/v1/members/u-102/stars?size=20`:
+`GET /api/v1/me/stars`와 `GET /api/v1/members/{memberId}/stars`의 응답·정렬·필터는 **[탐사 API 명세 4.4절](exploration-api-spec.md)이 MY-02 전체 필드로 정의하며, 이 절은 그 정의를 참조한다**([API 명세 파트 분담](api-spec-ownership.md) 2장 결정). 진행 단계·행성 수·등급·곡선 단계·미게시 수·최근 활동 시각이 모두 탐사 데이터이므로 이 문서에서 별도 항목 구조를 두지 않는다. 이전 초안의 `ticId/discoveredAt/isComplete` 최소 항목은 폐기한다.
 
-```json
-{
-  "items": [{"ticId":"123456789","discoveredAt":"2026-09-09T03:00:00Z","isComplete":false}],
-  "nextCursor": null,
-  "hasNext": false
-}
-```
+서비스 쪽에서 유지하는 규칙만 남긴다.
 
-타인 비공개 목록은 403(권한 부족 안내, SB-D23)으로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다. `isComplete`는 탐사 진행 상태이며 공개 여부·성과 유무와 다르다. 최근 활동 정렬·필터·프로필 성과 요약의 상세 계약은 탐사 담당자와 정한다.
+- 타인 비공개 목록은 403 `STAR_LIST_PRIVATE`(권한 부족 안내, SB-D23)로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다.
+- 본인 조회에만 있는 필드(미게시 신호 수 등)를 타인 조회에서 빼는 규칙은 탐사 명세 4.4절·NFR-14를 따른다.
+- 이 목록의 완료 여부는 탐사 진행 상태이며 공개 여부·성과 유무와 다르다.
+
+**성과 요약 매핑:** 서비스 achievementSummary.signalCount는 탐사 9.1 summary.recognizedTotal, starCountByGrade는 gradeDistribution에서 가져온다. discoveredStarCount·completedStarCount·byType은 같은 이름으로 매핑한다. startedStarCount는 현재 서비스 응답에서 제외한다. 이름만 투영하며 산식을 중복 구현하지 않는다.
 
 ### 3.3 로그아웃
 
@@ -350,21 +365,21 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 `GET /api/v1/me/histories?ticId=123456789&size=20`
 
-내가 가진 불변 기록을 선택하는 목록이다. TIC 필수 제안. 탐사 History 조회 기능과 **하나의 계약으로 연결하며 같은 원본 API를 양쪽에서 중복 구현하지 않는다.**
+내가 가진 불변 기록을 선택하는 목록이다. 전체 응답·필터·정렬은 [탐사 명세 8.1절](exploration-api-spec.md#81-히스토리-목록)을 따른다. 첨부 선택 화면은 부모 TIC를 전달하고 서버는 실제 작성·첨부 시 같은 TIC인지 재검증한다. API 전체에 TIC 필수를 별도로 강제하지 않는다. **하나의 계약으로 연결하며 같은 원본 API를 양쪽에서 중복 구현하지 않는다.**
 
 ```json
 {
   "items":[{
-    "historyId":"h-501","ticId":"123456789","signalId":"s-401",
-    "judgment":"UNSURE","submittedAt":"2026-09-09T02:30:00Z",
-    "publication":{"analysisId":null,"isPublic":false,"isModerationHidden":false},
+    "historyId":"h-501","ticId":"123456789","candidateId":"c-401",
+    "userJudgment":"UNSURE","submittedAt":"2026-09-09T02:30:00Z",
+    "publication":{"publicAnalysisId":null,"isPublic":false,"isModerationHidden":false},
     "achievementGranted":false
   }],
   "nextCursor":null,"hasNext":false
 }
 ```
 
-미매칭 기록의 signalId는 null일 수 있다. 일반 글 첨부는 가능 여부를 별도로 검사하며, 공식 공개 분석은 미확정 고유 신호 매칭 자격이 필요하다. `achievementGranted`는 현재 공개 여부와 다르다. 날짜·결과 필터 및 재도전용 원본 조회는 탐사 계약에서 추가 정의한다.
+고유 신호 식별자는 ERD `candidates.id`에 맞춰 `candidateId`로 통일한다(분담 문서 2장 결정, 옛 `signalId` 표기 폐기). 미매칭 기록의 candidateId는 null일 수 있다. 위 예시는 첨부 선택 화면이 쓰는 최소 항목이며, 전체 항목 구조(`submissionKind`·`matchResult`·`curveStep`·`snapshotAvailable`·`relabel` 등)와 날짜·결과 필터·재도전용 원본 조회는 [탐사 API 명세 8.1절](exploration-api-spec.md)이 정의한다. 일반 글 첨부는 가능 여부를 별도로 검사하며, 공식 공개 분석은 미확정 고유 신호 매칭 자격이 필요하다. `achievementGranted`는 현재 공개 여부와 다르다.
 
 ### 7.2 공개 첨부와 출처 카드
 
@@ -376,42 +391,45 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 |---|---|
 | bundleId, foldReferenceTimeBtjd | 실제 그래프를 만든 현재 판과 접기 기준 시각(BTJD) |
 | curveContext | curveStep, removedCandidateIds, residualModelVersion, periodogramConfigVersion |
-| residual | status(`QUEUED`/`RESIDUAL_CALCULATING`/`RESIDUAL_READY`/`PERIODOGRAM_CALCULATING`/`COMPLETED`/`FAILED`), jobId. 제거 조합이 없으면 생략 |
+| residual | status(`QUEUED`/`RESIDUAL_CALCULATING`/`RESIDUAL_READY`/`PERIODOGRAM_CALCULATING`/`COMPLETED`/`FAILED`또는 null), jobId. 결과·작업이 모두 없으면 status·jobId=null. 제거 조합이 없으면 생략 |
 | segments[] | segmentId, sector, binningRevision, startBtjd, binMinutes, nPoints, flux[], fluxScatter, gaps |
 
 - 시각 배열은 보내지 않는다. i번째 점 시각은 `startBtjd + binMinutes / 1440 × i`(ERD 규칙)이고 결측은 null이다. JSON NaN/Infinity는 보내지 않는다.
 - 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트마다 둔다. DAT-11의 20,000점 초과 시 넓힌 실제 간격은 `binMinutes`로 표현한다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
-- 제거 조합의 잔차가 Redis에 없거나 계산 중이면 `segments` 대신 `residual.status`·`jobId`만 반환하고, 프론트는 잔차 작업 조회로 넘어간다. 계산 중을 503으로 표현하지 않는다. 503은 DB·Redis 연결 장애 같은 의존성 장애에만 쓴다.
+- 첨부·공개 분석의 History 그래프 조회는 작업을 자동 생성하지 않는다. 진행 중이면 `curve.segments:null`과 기존 `curve.residual.jobId`로 폴링한다. 작업이 아예 없으면 가짜 QUEUED/jobId를 만들지 않고 미계산 상태로 안내한다. 사용자 확정: 초기에는 공개 조회자에게 타인의 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 그래프 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본과 잔차는 구분해 표시하고 나머지 공개 내용은 계속 표시한다. 본인 분석용 잔차 요청 API의 기존 권한은 유지한다. 결과와 작업이 모두 없으면 residual의 status·jobId를 모두 null로 반환하고 폴링하지 않는다. null은 작업 생성 전 조회 표현이며 작업 상태 enum은 추가하지 않는다. 실제 작업이 있을 때만 그 상태와 ID를 반환하며, 타인에게 개인 작업 조회 권한을 추가하지 않는다. 계산 중은 503이 아니며 503은 의존성 장애·판 일관성 재조회 실패에 사용한다.
 
 **History 그래프 — 첨부·공개 분석 공통**
 
 | 묶음 | 필드 | 의미 |
 |---|---|---|
+| curve | 탐사 5.2절 세그먼트 DTO 또는 null | CURRENT는 동일 판의 곡선, SUBMITTED는 null |
 | reproduction | submittedBundleId, currentBundleId, residualReproducible, fallbackReason | 제출 판과 현재 판, 잔차 재현 가능 여부. 은퇴 후보로 불가하면 `RETIRED_CANDIDATE`와 현재 원본 곡선 대체 |
 | selection | userPeriodDays, correctedPeriodDays, harmonicMultiplier, epochBtjd, durationHours | ERD `submitted_period`·`matched_period`·`harmonic_multiplier`·`epoch_btjd`·`duration_hours`. 현재 판 재환산은 **사용자 원본 주기(userPeriodDays)** 기준(분석 프론트 명세 6.3) |
 | snapshot | bins, foldedFlux[], foldedError[] 또는 `null` | analysis_snapshots. 운영 bins=150. i번째 위상은 `-0.5 + (i + 0.5) / bins`로 고정하며 축 범위 필드는 두지 않는다(제출 위상 구간 `phase_start`·`phase_end`와 이름 충돌 방지) |
 
 매칭 실패 기록처럼 스냅샷이 없으면 409 대신 `snapshot: null`을 반환하고 프론트는 “제출 당시” 토글을 비활성화한다. SUBMITTED 요청에 최신 그래프를 대신 담지 않는다.
 
-형식 예시(가상 데이터, 배열 축약):
+CURRENT 형식 예시. 가상 데이터이며 nPoints·gaps를 보이는 배열 길이에 맞췄다. 응답 외형은 탐사 8.3절을 따르고 CURRENT의 snapshot은 null, SUBMITTED의 curve는 null이다.
 
 ```json
 {
-  "bundleId": "b-2",
+  "historyId": "h-501",
+  "curve": {
+  "ticId": "123456789", "bundleId": "b-2",
   "foldReferenceTimeBtjd": 1683.4231,
-  "curveContext": {"curveStep": 1, "removedCandidateIds": ["c-401"], "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
+  "curveContext": {"bundleId":"b-2", "curveStep": 1, "removedCandidateIds": ["c-401"], "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
   "residual": {"status": "COMPLETED", "jobId": "rj-77"},
   "segments": [
-    {"segmentId": "seg-1", "sector": 14, "binningRevision": 1, "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 3900,
-     "flux": [1.0001, 0.9998, null, 1.0003], "fluxScatter": 0.0012, "gaps": [[120, 135]]}
-  ],
+    {"segmentId": "seg-1", "sector": 14, "binningRevision": 1, "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 4,
+     "flux": [1.0001, 0.9998, null, 1.0003], "fluxScatter": 0.0012, "gaps": [[2, 2]]}
+  ]},
   "reproduction": {"submittedBundleId": "b-1", "currentBundleId": "b-2", "residualReproducible": true, "fallbackReason": null},
   "selection": {"userPeriodDays": 3.21, "correctedPeriodDays": 3.21, "harmonicMultiplier": 1, "epochBtjd": 1684.02, "durationHours": 2.4},
-  "snapshot": {"bins": 3, "foldedFlux": [1.0, 0.98, 1.0], "foldedError": [0.001, 0.002, 0.001]}
+  "snapshot": null
 }
 ```
 
-세그먼트 구조·잔차 상태·단위는 ERD·SRS에 이미 정해진 내용이다. 필드명과 `snapshot: null` 처리만 탐사 명세와 합의한다.
+세그먼트는 탐사 5.2절, graph 외형과 snapshot:null 처리는 8.3절을 참조한다. 호출 경로의 graphMode는 탐사 내부 mode로 매핑한다. 아래 첨부 응답은 graphMode=SUBMITTED이지만 스냅샷이 없는 기록의 예다(curve:null, snapshot:null). graph 외형은 이 전체 객체이며 중첩 객체를 다시 평탄화하지 않는다.
 
 **데이터 판 전환·실패 처리**
 
@@ -445,7 +463,7 @@ CURRENT 검사는 응답 후까지 최신성을 영구 보장하지 않는다. �
 글은 `GET /api/v1/posts/p-201/history-attachments/h-501`, 댓글은 `GET /api/v1/comments/c-801/history-attachments/h-501`로 조회한다. 각각 post_history_attachments의 (post_id, history_id), comment_history_attachments의 (comment_id, history_id) 유일 쌍에 대응한다. 단일 attachmentId는 사용하지 않는다. 부모와 해당 History의 첨부 관계가 실제로 있어야 하며, 관계가 없으면 404다. 부모·상위 스레드 공개 상태, 소유자·TIC 적합성을 검사한 뒤 제한된 자료를 반환한다. History ID를 아는 것만으로 조회 권한이 생기지 않는다. 성공 200 최소 구조는 아래와 같다. 공개 필드는 9.2 공개 분석 상세와 같으며 메모를 포함한다(SB-D23). 수치 단위·필드명은 탐사와 합의한다.
 
 ```json
-{"parentType":"POST","parentId":"p-201","historyId":"h-501","ticId":"123456789","submittedAt":"2026-09-09T02:30:00Z","judgment":"UNSURE","graph":{"mode":"CURRENT","reproduction":{"submittedBundleId":"b-1","currentBundleId":"b-2","residualReproducible":true,"fallbackReason":null},"selection":{"userPeriodDays":3.21,"correctedPeriodDays":3.21,"harmonicMultiplier":1,"epochBtjd":1684.02,"durationHours":2.4},"snapshot":null}}
+{"parentType":"POST","parentId":"p-201","historyId":"h-501","ticId":"123456789","submittedAt":"2026-09-09T02:30:00Z","judgment":"UNSURE","graph":{"historyId":"h-501","curve":null,"reproduction":{"submittedBundleId":"b-1","currentBundleId":"b-2","residualReproducible":true,"fallbackReason":null},"selection":{"userPeriodDays":3.21,"correctedPeriodDays":3.21,"harmonicMultiplier":1,"epochBtjd":1684.02,"durationHours":2.4},"snapshot":null}}
 ```
 
 이미지는 저장하지 않는다. 현재 PostgreSQL 곡선 배열과 제출의 절대 epoch·duration·주기로 재현한다. 이전 Bundle 제출 표시와 은퇴 후보로 잔차 재현 불가 시 현재 원본 곡선 대체 안내가 필요하다. 매칭 성공에는 analysis_snapshots의 150구간 folded_flux/folded_err로 당시/최신 토글을 제공하고 불일치에는 축약 스냅샷이 없다. 배열 상세 응답·참조 경로는 탐사와 합의하며 부모 공개 권한을 적용한다.
@@ -502,13 +520,15 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {
   "analysisId":"pa-601","threadId":"st-301","historyId":"h-501",
   "isPublic":true,"created":true,"achievementGranted":true,"newlyGranted":true,
+  "skyVersion":"u-101:58",
+  "achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0},
   "judgmentSummary":{"participantCount":1,"likelyPlanet":0,"unlikelyPlanet":0,"unsure":1,"asOf":"2026-09-09T03:00:00Z"}
 }
 ```
 
 새 공개 기록 201, 같은 기록 재요청 200 제안. achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
 
-- posts.kind=system_thread, user_id=NULL로 공식 공간을 만든다. threadId는 posts.id, signalId는 candidates.id다. comments.post_id도 일반/공식 posts를 가리킨다. published_analyses.history_id UNIQUE이며 post_id로 공식 스레드를 참조한다.
+- posts.kind=system_thread, user_id=NULL로 공식 공간을 만든다. threadId는 posts.id, candidateId는 candidates.id다. comments.post_id도 일반/공식 posts를 가리킨다. published_analyses.history_id UNIQUE이며 post_id로 공식 스레드를 참조한다.
 - 세 판단 모두 공개·최초 성과 인정 가능. 이미 성과를 받은 duplicate의 새 제출도 공개 가능하나 추가 성과 없음.
 - 신호별 공개·공식 공간·최초 성과·진행 수·별 발견은 아래 SB-D15의 단일 트랜잭션으로 반영한다. 최초 성과 INSERT마다 stars_per_achievement개(기본 1)를 발견하고 trigger_achievement_id+seq로 중복을 막는다. TIC별 성과 수 1/2/3/4 이상을 A/S/SS/SSS로 표시하며 FP도 상한이 없다. 완료·등급 상승 자체는 발견 트리거가 아니다.
 - 일반 Post·댓글·반응은 자동 생성하지 않는다. 미공개·공개 실패가 개인 기록이나 탐색 완료를 되돌리지 않는다.
@@ -527,9 +547,17 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 | 일괄 공개 | 신호별 독립 트랜잭션으로 처리한다. 성공 항목은 커밋하고 실패 항목만 롤백한다. 전체 일괄 요청을 하나의 트랜잭션으로 감싸지 않는다. |
 | 통계 | 공개 판단 분포는 커밋된 유효 공개 기록으로 조회한다. global_stats의 10분 갱신·일별 StatsSnapshot은 공개 트랜잭션에 넣지 않는다. |
 
-**팀 교차 검토·구현 확인:** 관련 쓰기가 같은 PostgreSQL 연결·트랜잭션에 참여하는지, 확정/FP 경로도 공통 잠금·지급 함수를 쓰는지 확인한다. 잠금 순서를 통일하고 유일 충돌은 충돌 무시 후 기존 행 조회 등 트랜잭션을 망가뜨리지 않는 방식으로 처리한다. 잠금 시간 초과·교착 시 신호 단위로 롤백하며 실패 항목으로 안내한다. 미발견 별이 설정 개수보다 적거나 없는 경우의 지급 정책은 별도 협의한다. 이번 결정은 팀 검토나 구현 완료를 의미하지 않는다.
+**팀 교차 검토·구현 확인:** 관련 쓰기가 같은 PostgreSQL 연결·트랜잭션에 참여하는지, 확정/FP 경로도 공통 잠금·지급 함수를 쓰는지 확인한다. 잠금 순서를 통일하고 유일 충돌은 충돌 무시 후 기존 행 조회 등 트랜잭션을 망가뜨리지 않는 방식으로 처리한다. 잠금 시간 초과·교착 시 신호 단위로 롤백하며 실패 항목으로 안내한다. 탐사 D-11 통합 검토안대로 미발견 별이 부족하면 있는 만큼만 열고 성과는 인정하며 achievement.unlockShortfall로 부족 수를 반환한다. 이 결정안의 최종 상태는 탐사 MR 리뷰를 따른다. 이번 결정은 팀 검토나 구현 완료를 의미하지 않는다.
 
 **필수 검증:** 동일 History 동시 공개·응답 유실 재시도 / 다른 회원의 동일 신호 최초 공개 / 같은 회원의 다른 신호 동시 성과(확정/FP와 공개 혼합 포함) / 성과 저장 뒤 별 저장 실패 시 전체 롤백 / 일괄 일부 실패 시 성공분 유지. 성과 수가 실제 성과 행 수와 같고 추가 별 지급이 중복되지 않는지 확인한다.
+
+**공개 후 성과·지도 응답(탐사 D-7·D-9·D-11 통합 검토안)**
+
+개별 공개와 일괄 성공 항목에 탐사 6.4절과 같은 achievement 객체 및 skyVersion을 포함한다. achievement.newlyRecognized는 기존 newlyGranted와 같은 이번 실행의 신규 여부이며 achievementGranted는 현재 보유 여부로 별개다. unlockedStars는 이번 실행에서 새로 열린 별만 담고 star는 현재 TIC 성과 수·등급·유형별 수다. skyVersion은 커밋 이후 회원 지도의 버전이며 새 별이 없어도 현재 버전을 제공한다. 재시도에는 신규 여부 false·unlockedStars 빈 배열로 중복 화면 효과를 막는다.
+
+9.2절 내부 지급 함수의 newlyRecognized·unlockedStars를 그대로 받고, star는 같은 트랜잭션의 현재 진행·성과 집합, skyVersion은 탐사 지도 갱신 계약에서 가져온다. 회원 데이터는 서버에서 결정한다. 예시 unlockedStars는 TIC만 축약했으며 전체 항목은 탐사 반환 DTO를 따른다. 함수 시그니처 자체에 없는 필드를 단순 반환한다고 가정하지 않는다. 실패 항목에는 존재 여부를 확인하지 못한 성과·지도 값을 만들어 넣지 않는다. 공개 ID는 서비스 응답에서 analysisId, 탐사 publication에서는 publicAnalysisId로 명시적으로 매핑한다.
+
+일괄 요청의 항목별 skyVersion은 각 신호 커밋 시점이며 프론트는 전체 처리 후 지도 메타를 다시 조회한다. 서로 다른 항목의 버전·성공 배열을 하나의 고정 스냅샷으로 가정하지 않는다. 잠금 순서는 공통 탐사 함수와 동일하게 정하고, 문서의 업무 처리 순서를 별도 잠금 획득 순서로 구현하지 않는다.
 
 ### 9.2 스레드·공개 목록·상세
 
@@ -537,7 +565,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 ```json
 {
-  "threadId":"st-301","ticId":"123456789","signalId":"s-401",
+  "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
   "title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
   "judgmentSummary":{
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
@@ -584,12 +612,12 @@ TIC 종료 화면에서 신호별 대표 기록(기본 최신 미공개 제출)�
 {"ticId":"123456789","items":[{"historyId":"h-501"},{"historyId":"h-502"}]}
 ```
 
-본문 전체 형식 오류·항목 상한 초과는 처리 전 400. 항목 상한은 미정이다. 같은 신호 복수 선택은 검토 화면에서 한 건으로 제한하고 서버에서도 처리 전 거부하는 안이다. 서로 다른 신호는 항목별로 처리한다.
+본문 전체 형식 오류·항목 상한 초과는 처리 전 400. 항목 상한은 요청당 20개를 **제안**하며 탐사 처리 시간·트랜잭션 제한을 확인한 뒤 팀이 확정한다(14장). 같은 신호 복수 선택은 검토 화면에서 한 건으로 제한하고 서버에서도 처리 전 거부하는 안이다. 서로 다른 신호는 항목별로 처리한다.
 
 ```json
 {
   "results":[
-    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true},
+    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
     {"historyId":"h-502","status":"FAILED","error":{"code":"DEPENDENCY_UNAVAILABLE","message":"분석 자료를 잠시 불러올 수 없습니다."},"retryable":true}
   ]
 }
@@ -624,9 +652,11 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
     "ticId": "123456789",
     "startsOn": "2026-09-07",
     "endsOn": "2026-09-14",
-    "status": "active"
+    "status": "active",
+    "description": "밝기 변화가 얕은 별에서 두 번째 신호를 찾아보세요"
   },
-  "eligible": true
+  "eligible": true,
+  "participantCount": 12
 }
 ```
 
@@ -639,7 +669,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 - 시작일 미접속 회원은 진행 중 다음 홈 진입에서 참여 자격을 확인해 안내한다. 종료·취소되어 진행 대상이 아닌 회차는 새 회차로 안내하지 않는다. GET은 별 발견 상태를 변경하지 않고 탐사·회차 처리 계약에서 별 발견을 멱등 반영한다.
 - 기기 간 읽음 동기화가 필요하면 P1 notifications의 type=challenge, payload의 회차 참조, read_at을 활용하는 방향으로 상세화한다. 별도 회원×회차 확인 테이블을 추가하지 않는다. 알림 중복 생성 방지는 P1 계약에서 정한다.
 
-챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. 회차 참여 수 정의는 미정이다.
+챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
 <a id="later"></a>
 
@@ -685,7 +715,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 제목 / 본문 / 댓글 | 확정: 각각 1~100 / 1~10,000 / 1~2,000 Unicode 코드 포인트. 공백만 입력 거부 | 프론트·서버 같은 계산 검증 |
 | 닉네임 | 확정: NFC·앞뒤 공백 제거 후 2~20자. 한글 완성형·영문·숫자·밑줄만. 내부 공백 불허, 영문 대소문자 무시 중복 | DB 중복 제약 반영·금칙어 관리 담당 |
 | 자료 수 | 확정: 글·댓글 각각 History 최대 3개, 출처 카드 최대 3개. 동일 종류·ID 중복 거부 | 본문 필수, 첨부만 작성 불허 |
-| 일괄 공개 | 요청당 20개, 같은 신호 한 건 | 탐사 처리 시간·트랜잭션 제한 확인 |
+| 일괄 공개 | 제안: 요청당 20개, 같은 신호 한 건(9.4절) | 탐사 처리 시간·트랜잭션 제한 확인 후 팀 확정 |
 | 검색 | P1(P0 상향 요청). SB-D24 제안: 제목·본문 키워드(searchIn)·작성자 현재 닉네임·TIC·게시판·태그 AND, 앞뒤 공백 제거·내부 유지, 최신순·기본 20/최대 100개 | pg_trgm GIN 인덱스 ERD 반영·성능 측정·공식 제목 생성 규칙·팀 교차 검토. 바인딩·와일드카드 이스케이프로 문자 그대로 검색 |
 | 핫 토픽 임계값 | DEC-09 확정(SB-D16): 공식 스레드 N >= 10, 일반 글·댓글 조건 제외 | 구현·팀 교차 검토 |
 | 핫 토픽 기간·정렬 | SB-D16 확정: 기간 제한 없음, 참여자 수→스레드 생성 시각→ID 내림차순 | 조회·동률 검증 |
@@ -753,3 +783,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 2026-09-11 | SB-D17 명확화: 엄격한 중복 방지를 P1로 미룬다는 표현을 삭제. 서버 차원 중복 방지(유일 제약·트랜잭션 잠금)는 P0·P1 어느 단계에서도 도입하지 않는다 |
 | 2026-09-11 | 저장소 구조 문서에 맞춰 `backend/docs/`에서 `apps/backend/docs/`로 이동하고 상대 링크 갱신 |
 | 2026-09-11 | 핫 토픽 산식(DEC-09) 팀 확정 반영: SRS 10.1 안건 5의 기본안(답글+반응 가중)을 폐기하고 SB-D16(공식 스레드 유효 참여자 세 판단 합계 10명 이상, 기간 제한 없음)을 채택. "제안·미결" 표기를 모두 "확정"으로 정리(SRS도 함께 갱신) |
+| 2026-09-11 | 지도 프론트 통합 문서(하서진) 대조 정합: 3.2절 `me/stars`·`members/{id}/stars` 항목 구조를 탐사 명세 4.4절 참조로 교체(분담 문서 결정 반영), `signalId`를 ERD 기준 `candidateId`로 통일, 2.1·2.4절 비노출 자원 코드를 SB-D22·23 확정 사례로 갱신, 일괄 공개 상한을 9.4절·14장 모두 "20개 제안"으로 통일, 7.2절 예시의 `nPoints`·`gaps`를 배열 길이와 일치시킴 |
+| 2026-09-11 | 3.1절 `GET /me`에 MY-01 `achievementSummary` 추가(타인 프로필과의 비대칭 해소). 저장 열 없이 호출 시 집계, 탐사 9.1절 summary와 같은 내부 함수 사용을 명시 |
+
+| 2026-09-11 | 36번 통합 검토: History 필드·그래프 외형·성과 DTO 매핑·챌린지 v1.1 정합화. 메모 공개 유지 및 첫 방문 안내 완료 설정 P0는 사용자 확인. 탐사 D-7/9/11 연결은 리뷰 대상 |
