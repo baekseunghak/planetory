@@ -12,6 +12,15 @@
 >
 > **v1.0 반영 (2026-09-10):** 명세서 v0.13~v1.0과 ERD v1.0이 develop에 병합되어 다음이 확정됐다. Gold 본문은 EC2 파일이 아니라 **PostgreSQL 배열**이다. 원본 정제곡선은 **별·섹터 세그먼트, 섹터 안 10분 고정 비닝, 밝기 오차는 세그먼트당 산포 스칼라**로 저장하고 품질 마스크·시각 배열·주기 격자 배열은 저장하지 않는다. transit model은 파일 참조가 아니라 candidates의 **`transit_model` JSONB 파라미터**다. `discoverable`은 **사용자 제공 조건(비닝 간격·모델·격자)** 으로 계산한 발견 단계 잔차 주기도에서 판정한다(DAT-07). 분석 세션의 Bundle 고정은 폐기되어 새 판이 `current`가 되면 진행 중 세션을 최신 판으로 올리고 이전 판은 `archived`가 된다. 잔차·주기도 캐시는 **Redis**다. Bundle manifest에 주기 격자 간격·미세 조정 허용 폭 규칙을 넣는다(EXP-05). DEC-01에 무신호 별 비율 실측이 추가됐다. 이 문서에서 v0.12 표현이 남은 부분은 이력 설명이며, 확정 규칙은 v1.0을 따른다.
 
+## 상세 문서 라우팅
+
+| 확인할 내용 | 문서 |
+| --- | --- |
+| 원천 FITS 구조, 품질 필터, 정규화, 구간 분리와 디트렌딩 | [원천 데이터와 전처리](preprocessing.md) |
+| BLS 탐색 공간, 평가 데이터와 벤치마크 | [후보 검출](candidate-detection.md) |
+| 외부 카탈로그 연동과 AI 입력·추론 제안 | [외부 원천과 AI](external-sources-and-ai.md) |
+| 재현 결과, 검증 계획, Silver·Gold 계약과 후속 작업 | [검증과 재처리](validation-and-reprocessing.md) |
+
 ## 1. 담당 역할과 목표
 
 기존 실험을 처음부터 다시 만드는 것이 아니라, 재사용 가능한 계산 커널을 검증하고 자동 후보 처리와 서비스 산출물로 확장한다.
@@ -132,12 +141,3 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 - PoC의 baseline은 모든 승인 후보 공동 적합(`joint_refit`) 결과다. v1.0의 잔차 계약은 "Gold의 **고정** `transit_model` 파라미터로 모델을 생성해 나눈다"이므로 온라인에서 재적합하지 않는다. `residual_model_version`의 의미(고정 모델 제거)와 임의 제거 부분집합에서의 baseline 규칙을 먼저 정하고, 빈 제거 집합은 원본과 일치하는지 검증한다.
 - 화면 축약·AI 입력·계산 전 점은 서로 다른 산출물이다. 축약 시 좁은 감광이 유실되는지 검증한다.
 - `fold_reference_time_btjd`는 DAT-02 필터 후 time·flux가 유한한 원본 정제곡선 시각의 중앙값으로 한 번 계산해 float64로 저장한다. 브라우저·서버·Silver 잔차·EC2 잔차가 같은 값을 상속하고 다시 산정하지 않는다. **확인 필요:** 명세서 DAT-11은 "각 LightCurveSegment의" 값이라 쓰고 ERD는 `publication_bundles`에 판 단위 값 하나를 둔다. 또 산정 입력이 비닝 전 관측 시각인지 비닝 후 bin 시각인지 명시가 없다. 정본 위치와 산정 입력을 강재민과 확정한다.
-
-## 상세 문서 라우팅
-
-| 확인할 내용 | 문서 |
-| --- | --- |
-| 원천 FITS 구조, 품질 필터, 정규화, 구간 분리와 디트렌딩 | [원천 데이터와 전처리](preprocessing.md) |
-| BLS 탐색 공간, 평가 데이터와 벤치마크 | [후보 검출](candidate-detection.md) |
-| 외부 카탈로그 연동과 AI 입력·추론 제안 | [외부 원천과 AI](external-sources-and-ai.md) |
-| 재현 결과, 검증 계획, Silver·Gold 계약과 후속 작업 | [검증과 재처리](validation-and-reprocessing.md) |

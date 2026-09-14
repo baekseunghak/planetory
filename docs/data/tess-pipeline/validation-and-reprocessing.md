@@ -65,7 +65,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 
 ### 7.1 전처리 설계안 v0.1 — 담당자 검토용
 
-작성일: 2026-09-07. 상태: **윤성용 검토 전 제안, 팀 미승인**. 5.1~5.3절은 실제 파일·기존 코드 확인 기록이고, 이 절은 서비스 전처리의 선택 기준과 후속 실험을 제안한다. 여기의 방법·수치·일정은 승인된 서비스 정책이 아니다.
+작성일: 2026-09-07. 상태: **윤성용 검토 전 제안, 팀 미승인**. [5.1~5.3절](preprocessing.md)은 실제 파일·기존 코드 확인 기록이고, 이 절은 서비스 전처리의 선택 기준과 후속 실험을 제안한다. 여기의 방법·수치·일정은 승인된 서비스 정책이 아니다.
 
 #### 목표와 범위
 
@@ -116,7 +116,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 
 #### 출력 및 실패 계약 제안
 
-5절의 스키마를 보완하는 최소 필드안이다. Gold 제공 범위는 요구사항 명세서 v1.0 EXP-01·DAT-11과 ERD v1.0 묶음 B를 그대로 적용한다. 아래 객체는 Silver 전처리 산출물이며, Gold로 가는 것은 이를 비닝한 `light_curve_segments`다. 배열 적재 경로·shape별 파라미터·호환 방식은 DEC-35 후속 Task에서 김동혁·강재민과 검토한다. 내부 디버깅용 trend와 품질 마스크는 v1.0의 Gold 자산이 아니다.
+[5절](README.md)의 스키마를 보완하는 최소 필드안이다. Gold 제공 범위는 요구사항 명세서 v1.0 EXP-01·DAT-11과 ERD v1.0 묶음 B를 그대로 적용한다. 아래 객체는 Silver 전처리 산출물이며, Gold로 가는 것은 이를 비닝한 `light_curve_segments`다. 배열 적재 경로·shape별 파라미터·호환 방식은 DEC-35 후속 Task에서 김동혁·강재민과 검토한다. 내부 디버깅용 trend와 품질 마스크는 v1.0의 Gold 자산이 아니다.
 
 | 대상 | 필드·타입·nullable 제안 | 의미 |
 |---|---|---|
@@ -128,7 +128,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 | 실행 메타 | `input_snapshot_id:string`, `preprocessing_version:string`, `run_id:string` — 필수 | 입력 해시 목록·품질 마스크 값·공백 기준·창·clipping 설정·코드/의존성 버전을 참조 |
 | 처리 결과 | `processing_status:string`, `failure_reasons:list<string>` — 필수 | 성공·입력 부족·처리 실패를 구분하는 enum 제안. 후보 탐색 결과와 별개 |
 
-전체 관측점과 마스크를 유지하는 표현을 제안하되 5절의 별도 마스크 표/동일 행 표현 선택은 아직 미결정이다. 원본 FITS는 불변으로 보존한다. 새 산출물이 검증에 실패하면 기존 공개본을 교체하지 않는다.
+전체 관측점과 마스크를 유지하는 표현을 제안하되 [5절](README.md)의 별도 마스크 표/동일 행 표현 선택은 아직 미결정이다. 원본 FITS는 불변으로 보존한다. 새 산출물이 검증에 실패하면 기존 공개본을 교체하지 않는다.
 
 #### 담당·일정·리뷰 요청안
 
@@ -174,8 +174,8 @@ Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 �
 | `periodograms` | 판 단위. `period_min_days`, `period_max_days`, `n_periods`(5,000), `power real[]`. 격자는 manifest의 로그 등간격 규칙으로 계산 | 격자 범위·간격 규칙, 목적함수, `periodogram_config_version` 정의. 탐색용 BLS 격자와 분리 |
 | `candidates` | `id`(판 간 유지), `status`(active/retired), `updated_bundle_id`, `removal_step`, `period_days`, `epoch_btjd`, `duration_hours`, `depth_ppm`, `bls_power`, `transit_model` JSONB, `discoverable`, `is_confirmed`. 단위는 열 이름으로 고정(일·BTJD·시간·ppm) | `transit_model` 필드·shape·`residual_model_version` 정의, 판 사이 후보 동일성 허용 오차, 미세 조정 허용 폭 규칙 |
 | `candidate_aliases` | `multiplier`, `alias_period_days` | 추가 고조파(DEC-05) |
-| `external_signal_references`, `candidate_dispositions`, `candidate_status_history` | 5.8절의 원천·외부값·disposition·조회일, DAT-09 통합 규칙·`rule_version`, 변경 이력 | DEC-20 대표값 정렬 |
-| `ai_executions`, `ai_evaluations` | 5.9절의 `model_version`·`checkpoint`·`status`, 후보별 `score`·`verdict`(rejected/hold/approved)·`threshold_version`. 실패는 score null + 상태 | 모델·임계값(DEC-02·04) |
+| `external_signal_references`, `candidate_dispositions`, `candidate_status_history` | [5.8절](external-sources-and-ai.md)의 원천·외부값·disposition·조회일, DAT-09 통합 규칙·`rule_version`, 변경 이력 | DEC-20 대표값 정렬 |
+| `ai_executions`, `ai_evaluations` | [5.9절](external-sources-and-ai.md)의 `model_version`·`checkpoint`·`status`, 후보별 `score`·`verdict`(rejected/hold/approved)·`threshold_version`. 실패는 score null + 상태 | 모델·임계값(DEC-02·04) |
 | `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각 위치(판 vs 세그먼트)와 산정 입력, 적재 경로(배치 INSERT vs API, ERD 미결 7) |
 
 nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions.status`로 미평가·입력 부족·실패를 구분하고, 세그먼트의 NaN은 빈 bin이며 `gaps`가 그 위치를 설명한다. 단위는 ERD 열 이름에 고정되어 있으므로 period/day와 duration/hour를 수식에서 암묵적으로 섞지 않는다.
@@ -252,7 +252,7 @@ flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문�
 | 무신호 별 비율 | 자체 BLS 채택 신호 0개 별의 비율 실측, DEC-16 시나리오 충족 여부, 높으면 DEC-03 임계값 조정(10.1 안건 12) | 윤성용·김동혁 / DEC-01 작업에 포함 |
 | `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`, 판별 주기도 격자(로그 등간격·5,000점)·`periodogram_config_version`, 미세 조정 허용 폭 산출식 | 윤성용·강재민 / Gold 적재 계약 MR 전 |
 | 후보 동일성 | 새 판 적재 시 기존 `candidates.id`를 유지할 주기·중심 시각 허용 오차(ERD 미결 2) | 윤성용·강재민 / 후보 병합 벤치마크와 함께 |
-| 스키마·갱신 | 5·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록, fold 기준 시각 위치(판 vs 세그먼트) | 윤성용·강재민, 이벤트 소비자 / 인터페이스 Task 등록 때 기한 확정 |
+| 스키마·갱신 | [5절](README.md)·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록, fold 기준 시각 위치(판 vs 세그먼트) | 윤성용·강재민, 이벤트 소비자 / 인터페이스 Task 등록 때 기한 확정 |
 | 그래프 단위 | 시간계·day/hour·ppt/ppm·비닝 세그먼트와 NaN·`gaps`·화면 축약 | 윤성용·강재민·백지웅 / 첫 샘플 전달 전, 날짜 팀 확인 필요 |
 
 문서 적용·인터페이스 확인 요청:

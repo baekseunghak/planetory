@@ -5,12 +5,16 @@
 - 서비스명: Planetory
 - 정본 규칙: 상태표·용어 사전·와이어프레임·프로토타입과 다르면 이 명세서를 우선한다.
 - 화면 설명 원칙: 필수 요소·행동·상태·접근성은 요구사항이며 구체적인 시각 표현은 개발 중 조정할 수 있다.
+- 표기: 셀 끝의 `(vX.Y)`는 그 항목이 마지막으로 바뀐 판이며 판별 내용은 개정 이력에서 확인한다. `TBD`는 팀 결정 대기다.
 
 ## 관련 문서
 
-- [통합 검수 시나리오와 정책 추적](planetory-acceptance-criteria.md)
-- [미결정 사항 등록부](planetory-decision-register.md)
-- [요구사항 개정 이력](planetory-requirements-history.md)
+이 명세서는 1~8장이다. 9장 이후는 아래 문서로 분리했으므로 다른 문서가 `SRS 9장`이나 `10.1 안건 표`처럼 참조하면 여기에서 찾는다.
+
+- [통합 검수 시나리오와 정책 추적](planetory-acceptance-criteria.md) — 9장 통합 검수 시나리오, 11장 정책 추적표, `AT-*`
+- [미결정 사항 등록부](planetory-decision-register.md) — 10장 미결정 사항, 10.1 팀 회의 안건 표, `DEC-*`
+- [요구사항 개정 이력](planetory-requirements-history.md) — 판별 개정 요약
+
 ## 1. 문서 목적과 적용 범위
 
 이 문서는 Planetory 서비스 정책서 v0.6과 이후 확정된 팀 결정을 구현 가능한 기능·데이터·운영·검수 요구사항으로 구체화한다. 사용자 화면과 운영 문서의 공식 서비스명은 Planetory를 사용한다.
