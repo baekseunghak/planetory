@@ -2,7 +2,7 @@
 
 작성일: 2026-09-10 / 담당: 윤성용 / Jira: `S15P21C206-41` / 코드: `experiments/tess-fixture/`
 
-이 문서는 후속 실험(전처리·detrending 벤치마크 `S15P21C206-42`, 비닝·discoverable 실측, BLS 벤치마크, AstroNet-Triage 평가 `S15P21C206-43`)이 같은 입력으로 비교되도록 고정한 표본과 합성 주입 세트, 실행 manifest 형식을 설명한다. 근거는 [TESS 파이프라인 갭 분석](tess-pipeline-gap-analysis.md) 5.1절(원천 구조)·5.7절(평가 데이터 구성안)·7.1절(전처리 비교 실험)이다.
+이 문서는 후속 실험(전처리·detrending 벤치마크 `S15P21C206-42`, 비닝·discoverable 실측, BLS 벤치마크, AstroNet-Triage 평가 `S15P21C206-43`)이 같은 입력으로 비교되도록 고정한 표본과 합성 주입 세트, 실행 manifest 형식을 설명한다. 근거는 [원천 데이터와 전처리](tess-pipeline/preprocessing.md) 5.1절, [후보 검출](tess-pipeline/candidate-detection.md) 5.7절, [검증과 재처리](tess-pipeline/validation-and-reprocessing.md) 7.1절이다.
 
 여기 표본은 **실험용 고정 입력**이다. 서비스 데이터 범위(DEC-01)와 무신호 별 비율 실측은 별도 결정·Task 이며, 이 표본으로 대신하지 않는다.
 

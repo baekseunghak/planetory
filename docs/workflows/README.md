@@ -24,12 +24,12 @@
 | 에픽 만들어줘, 작업을 묶어줘 | Jira Epic | [Jira Epic](jira-epic.md) |
 | 브랜치 만들어줘, 최신 develop에서 분기해줘 | Git 브랜치 | [브랜치](branch.md) |
 | 기능 만들어줘, 버그 고쳐줘, 설정 바꿔줘 | 개발 | [기능·수정 작업](development.md) |
-| 문서 만들어줘, README·명세 수정해줘 | 문서 | [문서 작성·수정](documentation.md) |
+| 문서 찾아줘, 만들거나 수정·이동·삭제해줘 | 문서 | [문서 생명주기](documentation.md) |
 | 왜 바뀌었어, 이전 판단 찾아줘, 변경 이력 남겨줘 | 변경 이력 | [변경 이력 규칙](../changes/README.md) |
 | 커밋 메시지 작성해줘, 커밋해줘 | Git 커밋 | [커밋](commit.md) |
 | MR 내용 작성해줘, MR 생성·병합해줘 | Merge Request | [MR](merge-request.md) |
 | 릴리스·Hotfix 준비해줘 | Release·Hotfix | [Release·Hotfix](release-hotfix.md) |
-| KPT·주간 보고서 작성해줘 | 공동 보고서 | [KPT·주간 보고서](reports.md) |
+| 팀원 KPT 작성해줘 | KPT | [KPT](reports.md) |
 | Jira 알림·Mattermost 자동화 수정해줘 | 자동화 | [Jira-GitLab-Mattermost 자동화](jira-mattermost-automation.md) |
 
 하나의 요청이 여러 단계라면 현재 단계의 가이드부터 읽고 다음 행동이 필요할 때만 다음 가이드를 읽는다. 예를 들어 “기능 구현 후 커밋해줘”는 `기능·수정 작업 → 커밋` 순서다.

@@ -1,10 +1,10 @@
 # 문서 이미지 안내
 
-아키텍처와 ERD 문서가 참조하는 시각 자료를 보관한다.
+문서가 참조하는 시각 자료를 관리한다.
 
 | 파일 | 사용 문서 |
 | --- | --- |
-| `system-architecture-visual.svg` | 시스템 아키텍처 |
+| `system-architecture-visual.svg` | Planetory 시스템 아키텍처 개요 |
 | `database-erd.svg` | 서비스 DB ERD 상세 |
 | `database-erd-overview.svg` | 서비스 DB ERD 개요 |
 

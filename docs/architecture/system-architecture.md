@@ -2,7 +2,9 @@
 
 > Planetory 설계·구현·리뷰 시 사용하는 기준 컨텍스트다.  
 > 상태: 목표 설계이며 실제 배포 완료를 의미하지 않는다. `확정`은 유지할 결정, `가정`은 계산 기준, `후보`는 대안, `미정`은 사용자 결정이 필요한 값이다.
-> 기준 요구사항: [Planetory 요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md)
+> 기준 요구사항: [Planetory 요구사항 명세서](../requirements/planetory-requirements-spec.md)
+
+![Planetory 시스템 아키텍처](../images/system-architecture-visual.svg)
 
 ```mermaid
 flowchart LR

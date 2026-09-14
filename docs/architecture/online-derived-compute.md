@@ -2,7 +2,7 @@
 
 ## 책임 경계
 
-요구사항 v0.12의 POL-03·EXP-01·EXP-09·DAT-05·DAT-11·DAT-14와 DEC-35를 기준으로 한다.
+[요구사항 명세서](../requirements/planetory-requirements-spec.md)의 POL-03·EXP-01·EXP-09·DAT-05·DAT-11·DAT-14와 DEC-35를 기준으로 한다.
 
 - GCP 배치: 원본 정제곡선의 모든 점, 품질 마스크, `fold_reference_time_btjd`, 원본 주기도, 후보별 고정 transit model과 계산 버전을 Gold에 넣는다.
 - EC2: 사용자가 제거할 후보를 선택하면 잔차 곡선과 잔차 주기도를 계산한다.

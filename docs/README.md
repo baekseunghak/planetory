@@ -11,13 +11,22 @@
 | 시스템 경계, AWS·GCP, DB, 온라인 계산, 저장소 구조 | [아키텍처](architecture/README.md) |
 | 프론트엔드·백엔드 구현 명세 | [개발](development/README.md) |
 | 데이터 저장, Hadoop·Spark, TESS 처리, AI 조사 | [데이터](data/README.md) |
-| API 계약, Mock, 예제 | [API](api/README.md) |
+| API 담당 경계, 서비스·탐사 계약, Mock과 예제 | [API](api/README.md) |
 | Docker, CI/CD, 배포 | [운영](operations/README.md) |
 | 담당 범위, 문서 충돌과 동기화 상태 | [프로젝트](project/README.md) |
 | 문서·아키텍처 변경 이력, 판단 근거, 재발 방지 | [변경 이력](changes/README.md) |
 | PoC와 검증 결과 | [실험](experiments/README.md) |
 | 팀원별 KPT | [일일 보고서](daily-report/README.md) |
 | 문서 첨부 이미지 | [이미지](images/README.md) |
+
+## 관리 역할
+
+| 역할 | 정본·진입점 |
+| --- | --- |
+| AI 공통 가드레일 | [AGENTS.md](../AGENTS.md) |
+| 문서 위치와 탐색 순서 | 이 문서와 각 디렉터리 `README.md` |
+| 현재 담당·충돌·반영 대기 | [프로젝트 운영](project/README.md) |
+| 중요한 변경과 판단 근거 | [변경 이력](changes/README.md) |
 
 ## 탐색 규칙
 

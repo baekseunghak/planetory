@@ -2,7 +2,7 @@
 
 > Jira 최초 확인: 2026-09-07 · Jira 재확인: 2026-09-10 · 최신 명세 대조: 2026-09-10 · 대조 기준: `develop@132cdc77`의 요구사항 명세서 v1.0과 ERD v1.0 · 담당: 윤성용 · 상태: Draft MR !10 리뷰 중
 >
-> 이 문서는 Jira의 실제 요구사항과 리뷰 안건을 정리한 메모다. [기획 초안(갭 분석)](tess-pipeline-gap-analysis.md)을 대체하지 않으며, 아래 제안은 팀 확정 사항이 아니다.
+> 이 문서는 Jira의 실제 요구사항과 리뷰 안건을 정리한 메모다. [TESS 파이프라인 분석](../data/tess-pipeline/README.md)을 대체하지 않으며, 아래 제안은 팀 확정 사항이 아니다.
 
 ## 확인한 근거와 제한
 
@@ -57,7 +57,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 ## 명세 기준과 팀 결정 안건
 
-기준은 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](../architecture/database-erd.md), [팀 역할 분배](../project/team-role-allocation.md)다. 상태표·용어 사전·와이어프레임 v1.0보다 명세서 본문을 우선하고, 명세서와 ERD가 다르면 리뷰 질문으로 올린다.
+기준은 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](../architecture/database-erd.md), [팀 역할 분배](team-role-allocation.md)다. 상태표·용어 사전·와이어프레임 v1.0보다 명세서 본문을 우선하고, 명세서와 ERD가 다르면 리뷰 질문으로 올린다.
 
 ### 이미 명세에 기록된 기준
 
@@ -91,7 +91,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 | R1 | 서비스 입력을 어느 TESS 제품·cadence·Sector 범위까지 할 것인가? 무신호 별 비율 실측(DEC-01 v1.0)은 누가 언제 하는가? | 5.1·7.1·8절 | v1 데이터 범위와 범위 밖 처리, 무신호 비율 측정 Task |
 | R2 | 품질 마스크·디트렌딩·BLS 기준은 제안한 벤치마크 뒤 확정하는가? | 5.2~5.7절 | 실험 Task·담당·결정 날짜, 확정 전 기본값의 지위 |
 | R3 | 감광 사전 선별은 강제 제외가 아니라 전체/coarse-to-fine 비교로 검증하는가? | 5.7절 | 비교 경로와 회수율·시간 평가 승인 |
-| R4 | AstroNet-Triage를 "BLS 후보의 잡음성 후보 1차 선별" 용도로 평가를 계속하는가? PC/EB 구분은 Vetting 또는 별도 규칙으로 두는가? GPL-3.0 판단은 누가 하는가? | 5.9절, `tess-ai-model-feasibility.md` | 후속 AI 평가 Task 승인, 라이선스 확인 담당, 서비스 내 AI 역할 |
+| R4 | AstroNet-Triage를 "BLS 후보의 잡음성 후보 1차 선별" 용도로 평가를 계속하는가? PC/EB 구분은 Vetting 또는 별도 규칙으로 두는가? GPL-3.0 판단은 누가 하는가? | 5.9절, [AI 모델 조사](../data/tess-ai-model-feasibility.md) | 후속 AI 평가 Task 승인, 라이선스 확인 담당, 서비스 내 AI 역할 |
 | R5 | v1.0의 Silver 반복 배열 비저장과 Gold DB 배열 적재를 어떤 Spark 실행·적재 경로(배치 INSERT vs API)로 구현할 것인가? | 7.2절 | 확정 정책을 바꾸지 않는 Spark·적재·온라인 구현 계약, 아키텍처 문서 수정 담당 |
 | R6 | DAT-12·15의 재처리·재개 규칙과 비닝 revision 전환을 어떤 이벤트 schema와 멱등 키로 구현할 것인가? | 7.3절 | 요구사항을 구현할 이벤트 schema·담당 서비스 |
 | R7 | DAT-05·14·DEC-35의 Silver–EC2 일치 검증에 사용할 fixture·실행 환경·허용 오차를 어떻게 정할 것인가? | 7.4절 | canonical 구현, fixture, 측정 담당과 결정 날짜 |
@@ -161,4 +161,4 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 - [Git·Jira 컨벤션](../workflows/README.md): Jira가 작업 관리 기준이며 MR 리뷰 중에는 진행 중을 유지한다. 병합·인수 조건·결과물 등록이 모두 끝나야 완료다.
 - 29번 산출물은 Jira 키 없는 일반 문서 예외가 아니다. [Docs MR 템플릿](../../.gitlab/merge_request_templates/Docs.md)을 사용하고 MR 설명에서 대표 Jira만 평문, 참고 Jira는 각각 백틱으로 표시한다.
-- [데이터 관리 및 재현성](data-guidelines.md): 원본은 불변으로 유지하고 원본 데이터·대용량 결과·비밀정보는 Git에 넣지 않는다. 스키마와 재현 근거를 함께 기록한다.
+- [데이터 관리 및 재현성](../data/data-guidelines.md): 원본은 불변으로 유지하고 원본 데이터·대용량 결과·비밀정보는 Git에 넣지 않는다. 스키마와 재현 근거를 함께 기록한다.
