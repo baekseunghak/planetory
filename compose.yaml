@@ -29,7 +29,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://service-db:5432/planetory_poc
       SPRING_DATASOURCE_USERNAME: planetory
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD for local development}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ssafy}
       SPRING_PROFILES_ACTIVE: local
       GRADLE_USER_HOME: /root/.gradle
     volumes:
