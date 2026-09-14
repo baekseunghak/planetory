@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 담당 영역·협업 경계 | [팀 역할 분배](team-role-allocation.md) | 기획 단계 역할 지도 |
 | TESS 처리·AI 담당 범위와 실행 순서 | [TESS 처리·AI 역할 명세](tess-processing-ai-role-spec.md) | 담당자 작업 계획 |
+| TESS 처리·AI 후속 Task와 Epic 구조 | [TESS 처리·AI 후속 Task 계획](tess-processing-ai-task-plan.md) | Epic·티켓 생성 완료, MR 리뷰 대기 |
 | TESS 파이프라인 Jira·MR 검토 | [파이프라인 리뷰 체크리스트](tess-pipeline-review-checklist.md) | 검토 기록 |
 | 분산 PoC 완료·미검증 상태 | [분산 PoC 진행 상태](distributed-poc-status.md) | 현재 검증 상태와 후속 작업 |
 | 문서 충돌·반영 대기 | [문서 정합화 요청](planetory-doc-sync-requests.md) | 현재 상태·차단 항목 |

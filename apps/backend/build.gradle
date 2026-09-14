@@ -1,0 +1,72 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.1.1'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.planetory'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	// 회원·커뮤니티 등 관계형 도메인은 JPA, 배열·JSONB 중심의 탐사 데이터는 JdbcClient를 함께 사용한다.
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testCompileOnly 'org.projectlombok:lombok'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 로컬 개발 편의: bootRun·test 전에 루트 Compose의 service-db를 띄운다(이미 떠 있으면 바로 끝남).
+// CI·컨테이너 안에서는 CI=true 또는 SKIP_LOCAL_DB=true, 수동으로는 -PskipLocalDb로 건너뛴다.
+def skipLocalDb = providers.gradleProperty('skipLocalDb').isPresent()
+		|| providers.environmentVariable('CI').isPresent()
+		|| providers.environmentVariable('SKIP_LOCAL_DB').map { it == 'true' }.getOrElse(false)
+
+def startLocalDb = tasks.register('startLocalDb', Exec) {
+	group = 'application'
+	description = 'Starts the local PostgreSQL container (root compose, service-db).'
+	workingDir = rootProject.file('../..')
+	commandLine 'docker', 'compose', '--profile', 'service', 'up', '-d', '--wait', 'service-db'
+	onlyIf { !skipLocalDb }
+	ignoreExitValue = true
+	doLast {
+		if (executionResult.get().exitValue != 0) {
+			throw new GradleException('로컬 DB를 띄우지 못했습니다. Docker Desktop이 실행 중인지 확인하세요. '
+					+ 'DB를 직접 관리한다면 -PskipLocalDb 로 이 단계를 건너뜁니다.')
+		}
+	}
+}
+
+tasks.named('bootRun') {
+	dependsOn startLocalDb
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	dependsOn startLocalDb
+}
+
+tasks.named('jar') {
+	enabled = false
+}

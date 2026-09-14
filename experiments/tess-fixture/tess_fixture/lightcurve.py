@@ -87,8 +87,18 @@ class Baseline:
         return float(1.4826 * np.median(np.abs(self.flux - med)))
 
 
-def build_baseline(curves: list[SectorCurve]) -> Baseline:
-    """PoC clean() 첫 단계 재현: quality==0, 유한값, Sector 중앙값 정규화, 시간 정렬."""
+def quality_keep_mask(quality: np.ndarray, quality_bitmask: int | None) -> np.ndarray:
+    """quality_bitmask 가 None 이면 PoC 규칙(QUALITY == 0), 정수면 해당 비트가 하나도 켜지지 않은 점만 남긴다."""
+    if quality_bitmask is None:
+        return quality == 0
+    return (quality & int(quality_bitmask)) == 0
+
+
+def build_baseline(curves: list[SectorCurve], quality_bitmask: int | None = None) -> Baseline:
+    """PoC clean() 첫 단계 재현: quality 선택, 유한값, Sector 중앙값 정규화, 시간 정렬.
+
+    quality_bitmask 기본값 None 은 QUALITY == 0 (PoC 와 동일). 전처리 벤치마크에서 공식 비트마스크를 비교할 때만 정수를 준다.
+    """
     if not curves:
         raise ValueError("no sector curves")
     tic_ids = {c.tic_id for c in curves}
@@ -103,7 +113,7 @@ def build_baseline(curves: list[SectorCurve]) -> Baseline:
     n_raw = 0
     for curve in sorted(curves, key=lambda c: c.sector):
         n_raw += len(curve.time)
-        keep = (curve.quality == 0) & np.isfinite(curve.time) & np.isfinite(curve.flux)
+        keep = quality_keep_mask(curve.quality, quality_bitmask) & np.isfinite(curve.time) & np.isfinite(curve.flux)
         t, f = curve.time[keep], curve.flux[keep]
         order = np.argsort(t)
         t, f = t[order], f[order]

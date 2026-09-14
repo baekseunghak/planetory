@@ -1,0 +1,25 @@
+[project]
+name = "tess-bench"
+version = "0.1.0"
+description = "Planetory TESS processing benchmarks on the fixed fixture: preprocessing/detrending (S15P21C206-42), later BLS grid and binning"
+requires-python = ">=3.11"
+dependencies = [
+  "tess-fixture",
+  "numpy>=1.26,<3",
+  "scipy>=1.12,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<10",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+tess-fixture = { path = "../tess-fixture", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

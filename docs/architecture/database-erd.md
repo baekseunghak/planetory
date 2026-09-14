@@ -1,12 +1,17 @@
-# Planetory 서비스 DB ERD v1.1
+# Planetory 서비스 DB ERD v1.2
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11)
-- 기준 문서: 요구사항 명세서 v1.1(상태표 v1.0·용어 사전 v1.0·와이어프레임 v1.1), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14)
+- 기준 문서: 요구사항 명세서 v1.2(상태표 v1.2 변경안·용어 사전 v1.0·와이어프레임 v1.2), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
-- 상태: **백엔드 개발 기준선.** 구조와 제약은 확정이고 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
+- 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.1 → v1.2 (2026-09-14, `S15P21C206-33`)
+
+은하 배치 결과를 직접 보존하는 `world_x`, `world_y`, `layout_version`을 `star_unlocks`에 추가한다. `world_x`·`world_y`는 서비스 월드 좌표 단위의 유한 값이고, `depth_z`는 -1.0 이상 1.0 이하의 단위 없는 정규화 깊이다. 현재 보존할 운영 좌표 데이터가 없으므로 모든 계정은 현행 은하 배치로 초기 좌표를 생성하고 종전 방사형 좌표를 유지·이관하지 않는다. 기존 `generation`·`angle_deg`·`radius_jitter`는 nullable 폐기 예정 열이며 신규 좌표 계산과 API 응답의 근거로 삼지 않는다. [별지도 표현 계약](../development/sky-presentation-contract.md) 1절을 따르며 이 문서 수정만으로 DB에 적용되지 않는다.
+
 
 ### v1.0 → v1.1 (2026-09-11, 팀 결정·정합화)
 
@@ -341,10 +346,13 @@ erDiagram
         bigint trigger_tic_id FK "발견을 일으킨 별"
         bigint trigger_achievement_id FK "원인 성과"
         smallint seq "한 성과가 연 별 중 순번"
-        smallint generation "세대"
-        numeric angle_deg "각도"
-        numeric radius_jitter "반지름 지터"
-        numeric depth_z "깊이"
+        numeric world_x "은하 월드 X"
+        numeric world_y "은하 월드 Y"
+        numeric depth_z "월드 깊이"
+        text layout_version "배치 버전"
+        smallint generation "이전 배치 세대(선택)"
+        numeric angle_deg "이전 배치 각도(선택)"
+        numeric radius_jitter "이전 배치 지터(선택)"
         timestamptz unlocked_at "발견 시각"
     }
     posts["posts · 일반 글 / 공식 신호 스레드"] {
@@ -633,7 +641,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 |---|---|
 | unlock_reason | tutorial / achievement / challenge. grade·completion 없음 |
 | trigger_tic_id, trigger_achievement_id, seq | 발견 경로. achievement면 trigger_achievement_id NOT NULL. seq는 한 성과가 연 별의 순번(0부터, stars_per_achievement가 2 이상일 때 사용)이며 UNIQUE(trigger_achievement_id, seq)로 재처리 중복을 막는다 |
-| generation, angle_deg, radius_jitter, depth_z | 서버가 계산한 화면 자리. 클라이언트는 읽기만 |
+| world_x, world_y, depth_z, layout_version | 서버가 한 번 계산·저장한 은하 월드 좌표와 배치 버전. 모든 열린 별 행은 NOT NULL이고 x/y는 유한 숫자, depth_z는 유한한 -1.0 이상 1.0 이하. 클라이언트는 읽기만 하며 같은 (user_id, tic_id)의 모든 API가 같은 값을 반환한다 |
+| generation, angle_deg, radius_jitter | 이전 방사형 스키마의 nullable 폐기 예정 열. 부모 관계는 trigger_tic_id로 유지하며 신규 은하 좌표 생성·조회·API 응답에 이 열을 사용하지 않는다. 열 제거는 별도 백엔드 스키마 정리 대상 |
 | unlocked_at | |
 
 ### E. 커뮤니티 (결정 4·6)
@@ -712,7 +721,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 7 | Gold 메타데이터(묶음 B) 적재 방식: 배치 직접 INSERT vs API | DAT-06 |
-| 8 | 별 지도 타일 조회 인덱스: (user_id, generation) 또는 월드 좌표 공간 인덱스. 군집 사전 계산 위치(서버 배치 vs 웹 워커)와 함께 지도 프론트·탐사 백엔드가 결정 | NFR-20a·d, 명세서 v1.1 안건 14 |
+| 8 | 별 지도 공식 군집과 타일은 user_id·layout_version으로 격리된 world_x/world_y 서버 쿼드트리를 사전 계산하고 새 별 발견 또는 기존 별의 `planet`·`done`·`new` 분류 변경 시 해당 가지의 군집 구성·집계를 갱신한다. 프론트는 서버 군집을 읽으며 웹 워커가 공식 구성을 다시 계산하지 않는다. 물리 인덱스와 구체 실행 계획은 후속 성능 검증에서 확정하고 generation만으로 은하 타일을 조회하지 않는다 | NFR-20a·d, SRS v1.2 별지도 표현 계약 |
 | 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
 | 10 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |
 

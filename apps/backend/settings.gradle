@@ -1,0 +1,6 @@
+plugins {
+	// JDK 21이 없는 PC·CI에서 Toolchain이 자동으로 내려받도록 한다.
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'backend'
