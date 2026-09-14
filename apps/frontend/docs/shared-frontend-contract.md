@@ -42,8 +42,8 @@
 
 ```tsx
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
-// start() 안의 기본 pages:
-let pages: PageSlots = { analysis: AnalysisPage };
+// start() 안에서 이미 등록된 sky를 유지하고 분석 슬롯을 추가:
+pages.analysis = AnalysisPage;
 ```
 
 분석 컴포넌트 안에서는 다음 공통 코드를 사용한다.
@@ -130,3 +130,9 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 3. 배포 담당: Nginx API upstream, 직접 URL/새로고침, HTTPS 세션 및 쿠키 전달을 실제 배포 환경에서 확인.
 
 위 항목의 검토 요청을 문서로 준비했으며 메시지 발송·팀 승인·실제 연동을 대신 완료한 것으로 기록하지 않는다.
+
+## W05 별지도 데이터 연결
+
+203에서 `SkyDataPage`를 sky 슬롯에 등록했다. 메타·타일은 같은 `api()`/`useSession()`을 사용하며 회원/버전/level 단위 캐시를 갖는다. 204의 은하 렌더러는 `renderScene`으로 연결하고 카메라 행렬을 `viewportBounds`에 전달한다. 세부 API와 캐시·오류 규칙은 [별지도 데이터 어댑터 계약](sky-data-adapter.md)을 따른다.
+
+분석 제출·공개 등록·재개 화면은 기존 API 성공 응답의 `skyVersion`/선택적 `asOf`를 `publishSkyChange(member.memberId, event)`에 전달한다. 지도 재진입은 메타부터 조회한다. 실제 분석/공개 기능을 이 공통 프로젝트에서 대신 구현한 것이 아니다.
