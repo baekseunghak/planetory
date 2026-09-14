@@ -11,6 +11,7 @@
 | 구판 분석 fixture의 v1 전환 | [v1.0 전환 기준](analysis/v1-migration.md) | 작성 당시 교체 지침 |
 | 분석 화면 상태 | [상태 모델](analysis/state-model.md) | v0.12 실험 기록 |
 | JSON 시나리오 | [예제 안내](analysis/examples/README.md) | 합성 fixture |
+| 탐사 C02 계약 예제·검증 스크립트 | [탐사 계약 예제](exploration/README.md) | #133 검토안용 초안 예제, 승인 증거 아님 |
 
 API 정책은 [요구사항](../requirements/README.md), DB 제약은 [아키텍처](../architecture/README.md)가 우선한다. Mock 검증 통과는 실제 서버 구현이나 v1.0 계약 검증을 뜻하지 않는다.
 
