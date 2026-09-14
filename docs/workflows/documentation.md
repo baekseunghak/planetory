@@ -14,6 +14,7 @@
 6. 기존 문서의 책임에 넣을 수 없을 때만 새 문서를 만들고 목적·범위·상태·Jira·상위 정본을 적어 가장 가까운 디렉터리 `README.md`에 등록한다. 새 유형일 때만 문서 인덱스도 수정한다.
 7. 중요한 정본·아키텍처 변경은 [변경 이력 규칙](../changes/README.md)에 따라 해당 날짜의 간략한 기록과 주차 인덱스를 갱신한다.
 8. 코드와 설정이 바뀌지 않았다면 문서 작업의 영향 범위에 이를 명시한다.
+9. 본문은 `~한다`체로 쓰고 셸 예시는 `powershell` 코드펜스를 사용한다.
 
 ## 검색·이동·삭제
 
@@ -24,7 +25,19 @@
 
 ## 검증
 
-- 변경한 상대 링크가 실제 파일 또는 디렉터리를 가리키는지 확인한다.
+- 변경한 상대 링크가 실제 파일 또는 디렉터리를 가리키는지 아래 명령으로 확인한다. 출력이 없으면 0건이다.
+
+```powershell
+git -c core.quotepath=false ls-files '*.md' | ForEach-Object {
+  $d = Split-Path $_ -Parent; if (-not $d) { $d = '.' }
+  Select-String -Path $_ -Pattern '\]\((?!https?:|mailto:)([^)#]+\.(?:md|svg))' -AllMatches |
+    ForEach-Object { $_.Matches } | ForEach-Object {
+      $t = $_.Groups[1].Value
+      if (-not (Test-Path (Join-Path $d $t))) { "BROKEN $($_.Path): $t" }
+    }
+}
+```
+
 - `git diff --check`를 실행한다.
 - 문서 변경만 요청받았다면 애플리케이션 코드와 운영 설정을 변경하지 않는다.
 - 실제 Codex·Claude 로딩을 실행하지 않았다면 정적 라우팅 검증과 구분해 보고한다.

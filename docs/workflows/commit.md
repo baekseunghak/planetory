@@ -17,7 +17,7 @@
 <type>(<area>): <summary> [JIRA-KEY]
 ```
 
-`type`은 `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `chore` 중에서 선택한다.
+`type`은 `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `chore` 중에서 선택한다. `area`는 [브랜치 가이드](branch.md)의 영역 목록을 사용한다.
 
 ```text
 docs(docs): AI 협업 지침과 문서 탐색 체계 정리 [S15P21C206-34]
@@ -29,6 +29,6 @@ Jira 키 예외 문서는 `docs: <summary>`를 사용한다. 특정 Jira Task의
 ## 커밋 전 확인
 
 1. `git status`와 diff에서 변경 범위를 확인한다.
-2. 관련 테스트·정적 검사와 문서 링크 검사를 실행한다.
+2. 관련 테스트·정적 검사와 [문서 생명주기](documentation.md) 검증 절의 링크 검사를 실행한다.
 3. 비밀정보, 개인정보, 원본 데이터와 대용량 파일이 없는지 확인한다.
 4. stage된 파일과 diff를 다시 확인한 뒤 커밋한다.
