@@ -18,5 +18,6 @@
 - 같은 브랜치로 `main`과 `develop` MR을 각각 만들고, 진행 중인 release가 있으면 그 브랜치에도 반영한다.
 - 각 MR은 최소 1명의 승인을 받고 Squash하지 않는다. `main` 병합에는 patch tag를 남긴다.
 - 발생 환경, 재현 방법, 영향 범위, 롤백 방법과 대상 브랜치별 검증 결과를 기록한다.
+- 별도 Hotfix 템플릿은 두지 않고 [Default 템플릿](../../.gitlab/merge_request_templates/Default.md)을 사용한다.
 
 운영 배포, 태그, 병합과 브랜치 삭제는 정확한 대상과 승인 조건을 확인한 뒤 실행한다. MR 형식은 [MR 가이드](merge-request.md)를 따른다.

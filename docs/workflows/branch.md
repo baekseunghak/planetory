@@ -22,7 +22,7 @@
 | `release/*` | `develop` | `main`, 이후 `develop` | 릴리스 안정화 |
 | `hotfix/*` | `main` | `main`, 이후 `develop` | 운영 긴급 수정 |
 
-일반 형식은 `<type>/<JIRA-KEY>-<area>-<short-description>`이다. Jira 키는 대문자, 나머지는 영문 소문자와 하이픈을 사용한다.
+일반 형식은 `<type>/<JIRA-KEY>-<area>-<short-description>`이다. Jira 키는 대문자, 나머지는 영문 소문자와 하이픈을 사용한다. 한글, 공백, 언더바, 팀원 이름과 의미 없는 이름은 사용하지 않는다.
 
 영역은 `ingestion storage processing spark hadoop streaming schema pipeline analytics ml infra monitoring performance data-quality api web test docs`를 시작점으로 사용한다. 겹치는 영역을 새로 만들지 않으며 새 영역은 MR에 이유를 적는다.
 
