@@ -150,12 +150,12 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 미발견 TIC 선택 = 기존 OPS-08·성과 지급 규칙
 새 위치 = 은하 배치 함수(회원, 발견 순번/안정된 시드, 배치 버전, 공간 인덱스)
 INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
-응답 x = world_x, y = world_y, depthZ = depth_z
+응답 x = world_x, y = world_y, depthZ = depth_z (`depthZ`는 단위 없는 정규화 깊이, -1.0 이상 1.0 이하)
 ~~~
 
-좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 기존 데이터는 종전 계산으로 최종 월드 좌표를 복원해 보존하는 이관이 필요하며, 열 변경과 이관 구현은 별도 백엔드 구현/리뷰 대상이다(이 문서는 DDL을 실행하지 않는다). 과거 R0=360·부모 각도 ±1.2rad·간격 76·0세대 고정 자리·depth 0~1은 새 은하 배치의 필수 상수가 아니다.
+좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 현재 보존해야 할 운영 좌표 데이터가 없으므로 종전 방사형 좌표를 유지·이관하지 않는다. 출시 전 개발·테스트 행을 포함한 모든 계정의 열린 별은 같은 은하 배치 함수와 현행 `layout_version`으로 좌표를 생성하며, 한 회원 지도에 방사형 좌표와 은하형 좌표를 섞지 않는다. 기존 `generation`·`angle_deg`·`radius_jitter`는 신규 좌표 계산에 사용하지 않는다. `depthZ`는 천문학적 거리나 x/y 월드 단위가 아닌 단위 없는 정규화 깊이이며 -1.0 이상 1.0 이하의 유한 값이다.
 
-**타일(NFR-20d).** 월드 좌표를 정사각 타일(한 변 `tileSize`)로 나누고 배율 단계마다 쿼드트리 노드를 둔다. 프론트는 뷰포트+20% 여백을 **월드 좌표로 역투영한 경계 상자**를 보내고(회전·기울기 허용, SRS v1.1), 서버는 그 상자에 걸친 노드를 돌려준다. 축소 배율이 0.8 미만인 단계는 별 대신 사전 계산한 군집 노드를 준다(DEC-32, NFR-20a). 이 형식은 PoC의 `/map/manifest`·`/map/tiles`와 같으며 경로·필드명만 이 문서로 통일한다.
+**타일(NFR-20d).** 월드 좌표를 정사각 타일(한 변 `tileSize`)로 나누고 서버가 배율 단계별 공식 쿼드트리 노드와 타일을 사전 계산한다. 프론트는 뷰포트+20% 여백을 **월드 좌표로 역투영한 경계 상자**를 보내고(회전·기울기 허용, SRS v1.2), 서버는 그 상자에 걸친 노드를 돌려준다. 축소 배율이 0.8 미만인 단계는 별 대신 사전 계산한 군집 노드를 준다(DEC-32, NFR-20a). 이 형식은 PoC의 `/map/manifest`·`/map/tiles`와 같으며 경로·필드명만 이 문서로 통일한다.
 
 `GET /api/v1/me/sky` — 홈 진입 시 한 번.
 
@@ -163,13 +163,14 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 {
   "version": "u-101:57",
   "starCount": 57,
-  "bounds": {"minX": -820.0, "maxX": 910.5, "minY": -770.2, "maxY": 805.9},
+  "bounds": {"minX": -820.0, "maxX": 1800.0, "minY": -770.2, "maxY": 805.9},
   "tileSize": 512,
   "zoomLevels": [{"level": 0, "scale": 0.25, "clustered": true}, {"level": 1, "scale": 0.5, "clustered": true},
-                 {"level": 2, "scale": 1.0, "clustered": false}, {"level": 3, "scale": 2.0, "clustered": false}],
+                 {"level": 2, "scale": 1.0, "clustered": false}, {"level": 3, "scale": 2.0, "clustered": false},
+                 {"level": 4, "scale": 4.0, "clustered": false}],
   "centerTicIds": ["100000001"],
   "overview": [{"nodeId": "n-root-0", "x": 40.2, "y": -12.8, "count": 57, "counts": {"planet": 21, "done": 9, "new": 27},
-                "bounds": {"x": -820.0, "y": -770.2, "w": 1730.5, "h": 1576.1}}],
+                "bounds": {"x": -820.0, "y": -770.2, "w": 2620.0, "h": 1576.1}}],
   "firstVisit": false,
   "asOf": "2026-09-11T05:20:00Z"
 }
@@ -193,6 +194,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | `level` | 예 | 배율 단계(0 = 최대 축소). `zoomLevels`의 값 |
 | `x`, `y`, `w`, `h` | 예 | 요청 범위의 월드 좌표 경계 상자. 프론트가 뷰포트+20% 여백을 카메라 역투영해 계산한다. `w`·`h` 상한은 `tileSize × 64` |
 | `version` | 아니오 | 지도 메타의 `version`. 다르면 서버가 현재 값으로 응답하고 `versionChanged: true` |
+
+`zoomLevels`는 level 0부터 연속된 최소 5개 단계를 제공한다. 프론트는 단계 수와 `scale`을 하드코딩하지 않고 지도 메타 응답을 따른다.
 
 ```json
 {
@@ -240,7 +243,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | `bounds` | 군집이 덮는 월드 범위. 클릭하면 이 범위로 확대한다(HOME-01) |
 | `nodeId` | 쿼드트리 노드 키. 배치 시각과 무관하게 같은 별 집합이면 같은 값 |
 
-군집은 별이 새로 열릴 때 그 가지만 갱신하며(NFR-20a), 계산 위치(서버 사전 계산 vs 웹 워커)와 인덱스(ERD 미결 8)는 D-6이다. 회전·기울기와 무관하게 월드 좌표에서만 계산한다(SRS v1.1 NFR-20a). 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01).
+공식 군집의 수와 구성은 D-6에 따라 서버가 월드 좌표와 `layout_version`을 기준으로 배율별 쿼드트리에 사전 계산한다. 별이 새로 열리거나 기존 별의 `planet`·`done`·`new` 분류가 바뀌면 서버가 해당 가지의 군집 구성과 `counts`를 갱신하고, 프론트는 반환된 군집 노드를 그대로 렌더링한다. 웹 워커는 화면 투영·히트 테스트 같은 보조 계산에만 사용할 수 있으며 공식 군집의 수나 구성을 다시 계산하지 않는다. 타일 사전 계산은 공간 분할과 노드 소속을 뜻하며 별별 진행 상태와 `planetCount`를 고정한 스냅샷을 뜻하지 않는다. 공간 인덱스의 물리 구현과 실행 계획 검증은 ERD 항목 8을 따른다. 회전·기울기는 군집 구성에 영향을 주지 않으며 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01, NFR-20a).
 
 **최신성과 무효화(D-7).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
 
@@ -262,7 +265,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
   "asOf": "2026-09-11T05:20:00Z",
   "star": {"sectorCount": 3, "sectors": [14, 41, 54], "tmag": 9.8, "teffK": 5600, "radiusRsun": 0.95},
   "unlock": {"reason": "achievement", "triggerTicId": "100000002", "triggerAchievementId": "ach-31", "unlockedAt": "2026-09-09T03:00:00Z",
-             "position": {"x": -472.3, "y": 538.8, "depthZ": 18.0, "layoutVersion": "spiral-v1"}},
+             "position": {"x": 1612.4, "y": -233.0, "depthZ": 0.42, "layoutVersion": "spiral-v1"}},
   "progress": {"stage": "in_progress", "currentCurveStep": 1, "completionReason": null, "reopenPending": false,
                "reopenedAt": null, "completedAt": null},
   "planets": {"count": 2, "completedWithoutPlanets": false,
@@ -276,6 +279,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 
 | 필드 | 규칙 |
 |---|---|
+| `unlock.position` | `x`·`y`·`depthZ`는 같은 회원의 같은 TIC에 대한 `star_unlocks.world_x`·`world_y`·`depth_z`를 그대로 반환한다. 지도 타일·위치 찾기·별 상세·근접 뷰에서 값이 같아야 한다. x/y는 서비스 월드 좌표 단위, `depthZ`는 -1.0 이상 1.0 이하의 단위 없는 정규화 깊이다 |
 | `star.*` | 표시 열은 ERD 미결 9(`확인 필요`). 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03) |
 | `planets.items` | 현재 인증 회원이 요청 TIC에서 수치 매칭한 고유 candidateId 중 HOME-05 표시 조건을 만족하는 목록. 확정 행성은 판단 오답/성과 미인정이어도 포함, 미확정은 6.3절의 회원별 후보 최신 판단이 LIKELY_PLANET일 때만 포함(공개/성과 인정 필수 아님). FP·미확정 UNLIKELY_PLANET/UNSURE·미매칭·타인 발견·전체 후보표는 제외. 같은 candidateId 중복 없음 |
 | `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 기준 시각의 지도 planetCount/orbits·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
@@ -1078,7 +1082,7 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | D-3 | 잔차 상태 전달 | 폴링(`pollAfterSeconds`), `COMPLETED`에서만 곡선 전환, `RESIDUAL_READY` 선노출 없음 | DEC-35 초기값. SSE·선노출은 계산 시간 실측 후 | 7.2 | 백지웅·김동혁 |
 | D-4 | 회원별 잔차 요청 상한 | 회원당 진행 중 작업 1개. 초과 시 429 `RESIDUAL_QUEUE_FULL` + `retryAfterSeconds` | 전체 상한 2·대기 20(DEC-35)과 정합 | 7.1 | 김동혁 |
 | D-5 | 판 변경 능동 감지 | 탐사 API 모든 응답에 헤더 `X-Current-Bundle: {bundleId}`. 프론트는 잔차 폴링·곡선 응답에서 비교해 달라지면 5.1절 재조회 | 폴링이 이미 돌고 있어 추가 요청 없음. 쓰기 요청은 계속 `BUNDLE_CHANGED`로 거절 | 2.3 | 백지웅 |
-| D-6 | 군집 계산 위치·별 자리 | 서버 쿼드트리 사전 계산은 유지. 자리는 SRS v1.2 은하 배치·월드 좌표 저장 계약으로 변경 검토 | 종전 R0/부모 각도/0세대 고정 자리 채택을 대체. 공간 인덱스·타일·LOD는 유지 | 4.1, 9.2, 별지도 표현 계약 1절 | 하서진·강재민 |
+| D-6 | 군집 계산 위치·별 자리 | 서버가 월드 좌표·`layout_version` 기준의 배율별 공식 군집과 타일을 쿼드트리로 사전 계산하고, 새 별 발견 또는 기존 별의 `planet`·`done`·`new` 분류 변경 시 해당 가지의 군집 구성·집계를 갱신한다. 모든 계정의 별 자리는 SRS v1.2 은하 배치·월드 좌표 저장 계약으로 통일한다 | 프론트는 서버 군집을 렌더링하며 웹 워커는 화면 투영·히트 테스트만 보조한다. 종전 R0/부모 각도/0세대 고정 자리와 클라이언트 공식 군집 재계산을 사용하지 않는다 | 4.1, 9.2, 별지도 표현 계약 1절 | 하서진·강재민 |
 | D-7 | 지도 최신성 | `asOf`(지도 메타·타일·별 상세·퀘스트)와 `skyVersion`(제출·공개·재개 응답) 채택 | 하서진 통합 문서 B.6 요청. 없으면 화면이 매번 전체 재조회 | 4.1, 6.4 | 하서진 |
 | D-8 | 첫 방문 안내 완료 시점 | 둘 다. 튜토리얼 1번 별 첫 제출 성공 시 서버가 `onboarding_done=true`, 사용자가 닫으면 서비스 설정 API로 즉시 true. 별 클릭만으로는 끝내지 않음 | HOME-09 초기 안내 완료 뒤 자동 재노출 없음. GIF 사용법 다시 보기는 상태 변경·분석 실행 없음 | 4.1, 6.3 | 백승학·백지웅·하서진 |
 | D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
@@ -1146,7 +1150,7 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), D-1 해소(SB-D17) |
 | 2026-09-13 | 백승학 통합 정합(`724c560`·`826ce1e`) 수용: 챌린지 참여 수 별 단위 COUNT DISTINCT, 미계산 잔차 `status: null`, 타인 공개 그래프 재계산 없음을 D-13~D-15로 결정안 표에 등록. 2.4절에 `null` 의미 추가. 통합 검토 작업 로그 파일은 변경 이력으로 대체하고 제거 |
-| 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. GIF 사용법 다시 보기의 false 재설정 문구를 제거하고 서비스 API의 단방향 완료 규칙과 4.1·D-8 정합화. 4.2에 내 매칭 행성 목록의 범위·개수·단위·빈/실패 상태·3D 표현 구분을 명시(새 API 없음). 구현/이관 및 담당자 승인은 MR 리뷰 대상. |
+| 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. MR 리뷰를 반영해 모든 계정을 은하 배치로 통일하고, 같은 회원·TIC의 API별 좌표와 정규화 `depthZ` 범위를 일치시켰다. 공식 군집은 서버 사전 계산으로 확정하고 API 예시를 LOD 5단계로 수정했다. GIF 사용법 다시 보기의 false 재설정 문구를 제거하고 서비스 API의 단방향 완료 규칙과 4.1·D-8 정합화. 4.2에 내 매칭 행성 목록의 범위·개수·단위·빈/실패 상태·3D 표현 구분을 명시(새 API 없음). 구현 및 담당자 승인은 MR 리뷰 대상. |
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
