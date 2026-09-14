@@ -6,16 +6,26 @@
 --
 -- 역할은 스키마가 아니라 DB 클러스터 전역이므로 재실행과 다중 DB를 고려해 멱등하게 만든다.
 
+-- 역할이 이미 있으면 그대로 쓴다. 없으면 만들되, 만들 권한이 없는 계정(운영)에서는
+-- 무엇을 해야 하는지 알리고 멈춘다. 조용히 넘어가면 권한 분리가 안 된 채로 기동한다.
 DO $$
+DECLARE
+    required_roles TEXT[] := ARRAY['planetory_gold_writer', 'planetory_app'];
+    r TEXT;
 BEGIN
-    -- 배치·운영 적재 역할. Gold 본문과 변경 이력을 쓴다(I08/I09).
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'planetory_gold_writer') THEN
-        CREATE ROLE planetory_gold_writer NOLOGIN;
-    END IF;
-    -- 서비스 애플리케이션 역할. Gold는 읽기만 한다.
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'planetory_app') THEN
-        CREATE ROLE planetory_app NOLOGIN;
-    END IF;
+    FOREACH r IN ARRAY required_roles LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+            BEGIN
+                EXECUTE format('CREATE ROLE %I NOLOGIN', r);
+            EXCEPTION WHEN insufficient_privilege THEN
+                RAISE EXCEPTION
+                    'Gold 역할 %를 만들 수 없습니다. 이 마이그레이션을 실행하는 계정에 CREATEROLE이 없습니다.', r
+                    USING HINT = '운영 DB 프로비저닝에서 다음을 먼저 실행하십시오: '
+                               || 'CREATE ROLE planetory_gold_writer NOLOGIN; '
+                               || 'CREATE ROLE planetory_app NOLOGIN;';
+            END;
+        END IF;
+    END LOOP;
 END $$;
 
 -- 이 마이그레이션이 적용되는 스키마에 한해 권한을 준다.
@@ -56,11 +66,18 @@ BEGIN
                    target_schema);
 END $$;
 
--- 운영 적용 (이 마이그레이션 범위 밖)
+-- 운영 적용 (이 마이그레이션 범위 밖) [S15P21C206-83 · 김동혁]
 --
--- 접속 계정에 역할을 부여하는 것은 배포 설정에서 한 번 수행한다.
---   GRANT planetory_app TO <서비스 접속 계정>;
---   GRANT planetory_gold_writer TO <배치 적재 계정>;
+-- 이 마이그레이션만으로는 앱이 읽기 전용이 되지 않는다. 배포에서 계정을 셋으로
+-- 나눠야 권한 분리가 실제로 성립한다.
 --
--- 소유자 계정은 이 REVOKE의 영향을 받지 않는다. 서비스가 테이블 소유자로 접속하면
--- 읽기 전용이 성립하지 않으므로, 배포에서 서비스 계정을 소유자와 분리해야 한다.
+--   1) 마이그레이션 계정  테이블 소유자. Flyway를 실행한다. CREATEROLE이 필요하다.
+--                        (없으면 위 DO 블록이 안내와 함께 실패한다)
+--   2) 서비스 접속 계정   소유자가 아니어야 한다. GRANT planetory_app TO <계정>;
+--   3) 배치 적재 계정     GRANT planetory_gold_writer TO <계정>;
+--
+-- 소유자는 GRANT/REVOKE의 영향을 받지 않는다. 서비스가 테이블 소유자로 접속하면
+-- 이 REVOKE가 무력화되므로 2)를 1)과 반드시 분리한다.
+--
+-- 개발 환경은 단일 `planetory` 계정(소유자 겸 슈퍼유저)을 쓰므로 로컬에서는 읽기
+-- 전용이 성립하지 않는다. 권한 집행은 GoldRolePermissionTest가 별도 계정으로 검증한다.
