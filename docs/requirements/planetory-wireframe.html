@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v1.0</title>
+<title>Planetory 와이어프레임 v1.1</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,13 +204,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v1.0 · 기준선</div>
+      <div class="eyebrow">Wireframe · v1.1 · 기준선</div>
       <h1>Planetory 화면 와이어프레임</h1>
       <p>요구사항 명세서 v1.0과 상태표 v1.0의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.0 · 상태표 v1.0</b></dd>
-      <dt>작성일</dt><dd><b>2026-09-09</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.1 · 상태표 v1.0</b></dd>
+      <dt>작성일</dt><dd><b>2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
     </dl>
@@ -368,7 +368,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <!-- 툴바 -->
         <div class="toolbar"><span class="ico sq">+</span><span class="ico sq">−</span><span class="ico sq" title="전체 보기">⤢</span></div>
         <div class="tip" style="left:16px;top:16px;width:290px;border-style:dashed">
-          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대. 튜토리얼·챌린지가 중앙, 새 별은 부모 별 바깥 세대별 반지름(115 + 130g px)에 불규칙 간격으로. 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
+          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대 · 드래그 회전·기울기 허용(v1.1, 자리·군집은 월드 좌표 고정). 튜토리얼·챌린지가 중앙, 새 별은 부모 별 바깥 세대별 반지름(115 + 130g px)에 불규칙 간격으로. 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
         </div>
       </div>
     </div></div>
@@ -877,7 +877,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v1.0·상태표 v1.0·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v1.1(2026-09-11)·상태표 v1.0·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>

@@ -1,12 +1,23 @@
-# Planetory 서비스 DB ERD v1.0
+# Planetory 서비스 DB ERD v1.1
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09)
-- 기준 문서: 요구사항 명세서 v1.0(상태표·용어 사전·와이어프레임 v1.0), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다.**
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11)
+- 기준 문서: 요구사항 명세서 v1.1(상태표 v1.0·용어 사전 v1.0·와이어프레임 v1.1), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. OCI HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
 - 상태: **백엔드 개발 기준선.** 구조와 제약은 확정이고 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.0 → v1.1 (2026-09-11, 팀 결정·정합화)
+
+| 항목 | 변경 |
+|---|---|
+| `challenge_rounds.description` | 열 추가. 명세서 6장 ChallengeRound의 "소개 문구"와 HOME-07·CHL-01의 "한 줄 설명"이 v1.0 ERD에 빠져 있었다 |
+| `users` 닉네임 유일성 | 영문 대소문자를 무시한 중복 검사를 위해 `UNIQUE (lower(nickname))` 함수 인덱스. 서비스 API SB-D14 |
+| `posts` 검색 인덱스 | `pg_trgm` 확장과 `title`·`body`의 GIN(gin_trgm_ops) 인덱스 추가. COM-03 P0 상향(명세서 v1.1 안건 13)에 따른 제목·본문 부분 일치 검색용. 정합화 요청 R9 |
+| 4장 결정 5 | "판 자체는 직전 것만 짧게 보존" → 이전 판은 보존하지 않고 판 행만 제출 참조용으로 남긴다는 v0.3 결정 C와 일치하도록 정정. 정합화 요청 R1 |
+| 4장 결정 6 | 축약 스냅샷 용량 ≈1.8KB → ≈1.2KB(float32 150개 배열 2개). 정합화 요청 R2 |
+| 별 지도 좌표 | `star_unlocks`의 자리(generation·angle_deg·radius_jitter·depth_z)는 카메라 회전·기울기와 무관한 월드 좌표라는 점을 명시(명세서 v1.1 HOME-01, NFR-20a·d). 열 변경 없음 |
 
 ### v0.3 → v1.0 (기준선 확정, MR !16 검토 반영)
 
@@ -404,6 +415,7 @@ erDiagram
         date starts_on "시작일"
         date ends_on "종료일"
         bigint target_tic_id FK "대상 별"
+        text description "한 줄 설명"
         text status "planned/active/closed"
     }
     notifications["notifications · 알림"] {
@@ -449,7 +461,7 @@ erDiagram
 
 ### A. 회원
 
-**users** (ACC-01·02·05, DEC-11): provider·provider_user_id UNIQUE, nickname UNIQUE(상시 변경, 게시글에 복사 저장 안 함), role member/operator(운영 화면은 없지만 DB 직접 조작 권한 구분용), status active/withdrawn.
+**users** (ACC-01·02·05, DEC-11): provider·provider_user_id UNIQUE, nickname UNIQUE + `UNIQUE (lower(nickname))` 함수 인덱스(영문 대소문자 무시 중복 검사, 서비스 API SB-D14. 상시 변경, 게시글에 복사 저장 안 함), role member/operator(운영 화면은 없지만 DB 직접 조작 권한 구분용), status active/withdrawn.
 
 **user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB `{"achievement":true,"reopen":true,"challenge":true,"follow":false}`, onboarding_done.
 
@@ -638,7 +650,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | title, body | | system_thread는 신호 요약을 시스템이 채움 |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
-| 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC) | |
+| 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
 
 **comments**: post_id(일반 글 또는 공식 스레드의 토론 영역), user_id, body, status visible/hidden/deleted, created_at, updated_at. parent_id 없음(1단계).
 
@@ -669,7 +681,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 - **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
 - **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
-- **challenge_rounds** (CHL-01, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, status planned/active/closed. 달성 조건·보상 없음.
+- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
@@ -681,8 +693,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 2. **후보는 교체·유지한다.** candidates.id는 별에 고정된 신호 식별자다. 판이 바뀌면 값 갱신·추가·retired로 처리하고 옛 값은 candidate_status_history에 남긴다. 공식 스레드(UNIQUE candidate_id)·성과(UNIQUE user×candidate)·재현(removed_candidate_ids)이 모두 이 전제 위에 있다.
 3. **별 열림의 원인은 성과 행이다.** user_candidate_achievements INSERT → star_unlocks(trigger_achievement_id). 등급 상승·완료는 트리거가 아니다. 등급 문자는 achievement_count에서 계산한다.
 4. **판이 바뀌면 세션도 따라 올린다(v0.3 결정 C).** 후보표는 판마다 이력을 남기지 않고 값을 갱신한다. 그래서 이전 판 화면을 보여주면 판정만 최신 표로 이뤄져 어긋난다. 이전 판을 남기지 않고 진행 중인 회원에게 갱신을 알리는 쪽을 택했다. 화면과 판정이 항상 같은 판이고, previous 보존과 판별 후보 이력이 둘 다 필요 없어진다. 대가는 분석 도중 한 번 다시 불러오는 것인데, 그 별에 새 섹터가 들어오는 27일에 한 번, 야간 배치 시점에만 생긴다.
-5. **제출은 절대값을 저장한다.** 위상 구간이 입력이지만 epoch·duration·기준 시각·계산 버전을 함께 저장해, 판이 바뀐 뒤에도 현재 번들 위에 재환산해 그릴 수 있다. 판 자체는 직전 것만 짧게 보존한다.
-6. **히스토리는 제출과 1:1, 불변. 스냅샷은 매칭 성공에만.** 축약 스냅샷(≈1.8KB)은 "제출 당시" 토글용이며 원본 재현은 파라미터로 한다.
+5. **제출은 절대값을 저장한다.** 위상 구간이 입력이지만 epoch·duration·기준 시각·계산 버전을 함께 저장해, 판이 바뀐 뒤에도 현재 번들 위에 재환산해 그릴 수 있다. 이전 판은 보존하지 않는다. 판 행은 제출이 참조하므로 남기고, 이전 판의 주기도 행과 캐시는 archived 전환 시 정리한다(결정 C, v1.1 정정).
+6. **히스토리는 제출과 1:1, 불변. 스냅샷은 매칭 성공에만.** 축약 스냅샷(float32 150개 배열 2개, 본문 ≈1.2KB, 메타데이터·행 오버헤드 별도)은 "제출 당시" 토글용이며 원본 재현은 파라미터로 한다.
 7. **공식 스레드는 SYSTEM이 쓴 원글이다.** posts.kind로 구분해 댓글·숨김·피드 로직을 재사용하고, 공개 분석만 별도 테이블로 두어 "히스토리당 하나·취소·숨김·통계 대상" 제약을 표현한다. 반응은 일반 글에만.
 8. **판단 분포는 쿼리다.** 미확정은 published_analyses + submissions, 채점형은 submissions만. 전체 통계만 materialized view.
 9. **닉네임은 복사하지 않는다.** 게시글·반응·답글은 user_id만.
@@ -700,7 +712,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 7 | Gold 메타데이터(묶음 B) 적재 방식: 배치 직접 INSERT vs API | DAT-06 |
-| 8 | 별 지도 타일 조회 인덱스: (user_id, generation) 또는 공간 인덱스 | NFR-20d |
+| 8 | 별 지도 타일 조회 인덱스: (user_id, generation) 또는 월드 좌표 공간 인덱스. 군집 사전 계산 위치(서버 배치 vs 웹 워커)와 함께 지도 프론트·탐사 백엔드가 결정 | NFR-20a·d, 명세서 v1.1 안건 14 |
 | 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
 | 10 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |
 
