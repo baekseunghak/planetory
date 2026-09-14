@@ -97,6 +97,12 @@ export function ServiceLayout() {
             </NavLink>
           ))}
         </nav>
+        <button
+          className="auth-text-action"
+          onClick={() => void session.logout()}
+        >
+          로그아웃
+        </button>
       </dialog>
       <main id="main-content" className="page" tabIndex={-1}>
         <Outlet />

@@ -18,6 +18,8 @@ function unavailableApi(_req: IncomingMessage, res: ServerResponse) {
 export default defineConfig(async ({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const fixture = command === "serve" && !isPreview && mode === "fixture";
+  const authFixture = command === "serve" && !isPreview && mode === "auth";
+  const testing = fixture || authFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
   return {
     plugins: [
@@ -25,7 +27,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       ...(fixture
         ? [(await import("./dev/fixture-plugin.ts")).fixturePlugin()]
         : []),
-      ...(!fixture && !target
+      ...(authFixture
+        ? [(await import("./dev/auth-fixture-plugin.ts")).authFixturePlugin()]
+        : []),
+      ...(!testing && !target
         ? [
             {
               name: "unconfigured-api",
@@ -43,13 +48,28 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "import.meta.env.VITE_FIXTURE": JSON.stringify(
         fixture ? "true" : "false",
       ),
-      ...(fixture
+      ...(testing
         ? { "import.meta.env.VITE_API_BASE": JSON.stringify("/api") }
+        : {}),
+      ...(authFixture
+        ? Object.fromEntries(
+            Object.entries({
+              VITE_OAUTH_SSAFY_URL: "/api/dev-auth-202/ssafy",
+              VITE_OAUTH_GOOGLE_URL: "/api/dev-auth-202/google",
+              VITE_CSRF_HEADER: "X-Fixture-202-CSRF",
+              VITE_CSRF_COOKIE: "auth-fixture-202-csrf",
+              VITE_NICKNAME_REQUIRED_CODE: "FIXTURE_NICKNAME_REQUIRED_202",
+              VITE_INITIAL_NICKNAME_PATH: "/v1/me/profile",
+            }).map(([key, value]) => [
+              `import.meta.env.${key}`,
+              JSON.stringify(value),
+            ]),
+          )
         : {}),
     },
     server: {
       proxy:
-        !fixture && target
+        !testing && target
           ? { "/api": { target, changeOrigin: true } }
           : undefined,
     },

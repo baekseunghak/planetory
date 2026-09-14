@@ -61,3 +61,7 @@ docker build -f apps/frontend/Dockerfile -t planetory-frontend:201 .
 Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.html을 제공하고 `/api/`는 같은 서비스 네트워크의 `backend:8080`으로 전달한다. `/api/` 오류를 HTML 성공 응답으로 바꾸지 않는다. API 목적지가 다르면 배포 담당자가 프록시 설정을 조정한다. TLS·OAuth 등록 URL·실제 세션 쿠키 속성은 인증/배포 담당 인수 대상이다.
 
 `VITE_*`는 빌드 시 결정된다. Docker 빌드 인자로 API 기본 경로, **합의된** CSRF 헤더/쿠키 이름, 요청 식별 응답 헤더 이름을 전달할 수 있다. 토큰 값은 넣지 않는다. 현재 CSRF 이름·발급 방식은 미확정이며 설정 없이 쓰기 요청을 실행하면 `CSRF_NOT_CONFIGURED`로 전송 전에 중단한다.
+
+## W04 로그인 화면 검증
+
+`npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.
