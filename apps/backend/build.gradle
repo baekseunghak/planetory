@@ -32,6 +32,12 @@ dependencies {
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	// DB 역할·권한 테스트 전용. 역할은 스키마가 아니라 클러스터 전역이라 공용 개발 DB를
+	// 오염시키므로 일회용 컨테이너에서 검증한다. 그 밖의 테스트는 기존 스키마 격리를 쓴다.
+	// Boot 4.1.1의 의존성 관리에 Testcontainers가 없어 BOM을 직접 들여온다.
+	testImplementation platform('org.testcontainers:testcontainers-bom:1.21.3')
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
 	testCompileOnly 'org.projectlombok:lombok'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
