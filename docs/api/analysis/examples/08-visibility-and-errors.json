@@ -1,0 +1,245 @@
+{
+  "schema_version": "0.1-draft",
+  "scenario_id": "08-visibility-and-errors",
+  "description": "공개 취소/운영 숨김 독립, 숨긴 스레드 재생성 금지, 타인 기록·만료 Bundle·유효성 오류.",
+  "source_requirements": [
+    "COM-12",
+    "COM-17",
+    "NFR-13",
+    "NFR-14",
+    "SUB-02"
+  ],
+  "setup": {
+    "cases_are_independent": true,
+    "hidden_thread_exists": true,
+    "previous_achievement": true
+  },
+  "exchanges": [
+    {
+      "name": "withdraw-under-moderation",
+      "request": {
+        "method": "PUT",
+        "path": "/api/community/public-analyses/mock-hidden-public/visibility",
+        "body": {
+          "request_id": "req-withdraw",
+          "author_public": false
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "kind": "public_analysis_visibility",
+          "public_analysis_id": "mock-hidden-public",
+          "author_public": false,
+          "moderation_hidden": true,
+          "thread_hidden": false,
+          "effective_public": false,
+          "achievement_retained": true
+        }
+      }
+    },
+    {
+      "name": "hidden-parent-blocks-publish",
+      "request": {
+        "method": "POST",
+        "path": "/api/community/analysis-publications",
+        "body": {
+          "request_id": "req-hidden-publish",
+          "review_id": "mock-hidden-review",
+          "history_ids": [
+            "mock-hidden-history"
+          ]
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "kind": "error",
+          "code": "THREAD_UNAVAILABLE",
+          "retryable": false,
+          "message": "합성 오류 예시: THREAD_UNAVAILABLE"
+        }
+      }
+    },
+    {
+      "name": "hidden-statistics",
+      "request": {
+        "method": "GET",
+        "path": "/api/community/signals/mock-hidden-signal/judgment-statistics"
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "kind": "error",
+          "code": "RESOURCE_UNAVAILABLE",
+          "retryable": false,
+          "message": "합성 오류 예시: RESOURCE_UNAVAILABLE"
+        }
+      }
+    },
+    {
+      "name": "other-private-history",
+      "request": {
+        "method": "GET",
+        "path": "/api/analysis/histories/mock-other-private-history"
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "kind": "error",
+          "code": "RESOURCE_UNAVAILABLE",
+          "retryable": false,
+          "message": "합성 오류 예시: RESOURCE_UNAVAILABLE"
+        }
+      }
+    },
+    {
+      "name": "expired-bundle-retry",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions/mock-expired-submission/retry-drafts",
+        "body": {
+          "request_id": "req-expired-retry"
+        }
+      },
+      "response": {
+        "status": 410,
+        "body": {
+          "kind": "error",
+          "code": "BUNDLE_EXPIRED",
+          "retryable": false,
+          "message": "합성 오류 예시: BUNDLE_EXPIRED"
+        }
+      }
+    },
+    {
+      "name": "invalid-phase-width",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "request_id": "req-invalid-phase",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.2,
+            "phase_end": 1.2
+          },
+          "user_judgment": "LIKELY_PLANET",
+          "evidence_flags": [
+            "ODD_EVEN_SIMILAR",
+            "NO_SECONDARY_ECLIPSE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": null
+        }
+      },
+      "response": {
+        "status": 422,
+        "body": {
+          "kind": "error",
+          "code": "INVALID_SELECTION",
+          "retryable": false,
+          "message": "합성 오류 예시: INVALID_SELECTION"
+        }
+      }
+    },
+    {
+      "name": "unsupported-centroid",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/submissions",
+        "body": {
+          "request_id": "req-centroid",
+          "curve_context": {
+            "analysis_session_id": "mock-session-01",
+            "tic_id": "mock-tic-001",
+            "publication_bundle_id": "mock-bundle-v1",
+            "curve_id": "mock-curve-0",
+            "curve_step": 0,
+            "removed_candidate_ids": [],
+            "residual_model_version": "mock-residual-v1",
+            "periodogram_config_version": "mock-periodogram-v1",
+            "selection_rules_version": "mock-selection-v1"
+          },
+          "submission_kind": "candidate",
+          "selection": {
+            "period_days": 3,
+            "phase_start": 0.98,
+            "phase_end": 1.02
+          },
+          "user_judgment": "LIKELY_PLANET",
+          "evidence_flags": [
+            "CENTROID_STABLE"
+          ],
+          "memo": "합성 예시의 주기와 구간을 확인함",
+          "view_state": {
+            "time_domain_btjd": [
+              1000,
+              1012
+            ],
+            "periodogram_domain_days": [
+              0.5,
+              40
+            ],
+            "folded_x_zoom_ratio": 4,
+            "folded_center_phase": 0
+          },
+          "retry_of_submission_id": null
+        }
+      },
+      "response": {
+        "status": 422,
+        "body": {
+          "kind": "error",
+          "code": "UNSUPPORTED_EVIDENCE",
+          "retryable": false,
+          "message": "합성 오류 예시: UNSUPPORTED_EVIDENCE"
+        }
+      }
+    },
+    {
+      "name": "locked-star",
+      "request": {
+        "method": "POST",
+        "path": "/api/analysis/sessions",
+        "body": {
+          "request_id": "req-locked-star",
+          "tic_id": "mock-locked-star"
+        }
+      },
+      "response": {
+        "status": 403,
+        "body": {
+          "kind": "error",
+          "code": "STAR_NOT_UNLOCKED",
+          "retryable": false,
+          "message": "합성 오류 예시: STAR_NOT_UNLOCKED"
+        }
+      }
+    }
+  ]
+}
