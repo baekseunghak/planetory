@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v1.1</title>
+<title>Planetory 와이어프레임 v1.2</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,12 +204,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v1.1 · 기준선</div>
+      <div class="eyebrow">Wireframe · v1.2 · 변경 검토안</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v1.0과 상태표 v1.0의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
+      <p>요구사항 명세서 v1.2 변경안과 상태표 v1.0의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.1 · 상태표 v1.0</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.2 · 상태표 v1.0</b></dd>
       <dt>작성일</dt><dd><b>2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
@@ -325,7 +325,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   <!-- ===== SC-02 ===== -->
   <section class="frame" id="s02">
     <div class="flabel"><span class="fid">SC-02</span><span class="fname">홈 별 지도</span><span class="fids">HOME-01 · HOME-02 · HOME-05 · HOME-07 · HOME-08 · GRD-08 · NFR-20</span><span class="tag p0">P0</span><span class="tag new">v0.13</span>
-      <span class="fdesc">검은 연속 캔버스. 튜토리얼·챌린지 별이 중앙, 새로 발견한 별은 발견 순서대로 부모 별 바깥에 회원별 자리로 놓인다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 옆에 상세 패널이 뜨고, 빈 하늘을 누르면 닫힌다. 퀘스트 패널은 기본 접힘.</span></div>
+      <span class="fdesc">검은 연속 캔버스. 중앙부·나선 팔·제한된 분산으로 은하 형태를 유지한다. 새 별의 자리는 서버가 계산·저장하며 기존 별은 움직이지 않는다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 옆에 상세 패널이 뜨고, 빈 하늘을 누르면 닫힌다. 퀘스트 패널은 기본 접힘.</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb">
         <span class="logo"><i></i>Planetory</span>
@@ -368,7 +368,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         <!-- 툴바 -->
         <div class="toolbar"><span class="ico sq">+</span><span class="ico sq">−</span><span class="ico sq" title="전체 보기">⤢</span></div>
         <div class="tip" style="left:16px;top:16px;width:290px;border-style:dashed">
-          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대 · 드래그 회전·기울기 허용(v1.1, 자리·군집은 월드 좌표 고정). 튜토리얼·챌린지가 중앙, 새 별은 부모 별 바깥 세대별 반지름(115 + 130g px)에 불규칙 간격으로. 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
+          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대 · 드래그 회전·기울기 허용(v1.1, 자리·군집은 월드 좌표 고정). 새 별은 은하 배치 함수가 정한 위치에 추가하고 부모 별 바깥 배치를 강제하지 않음(v1.2). 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
         </div>
       </div>
     </div></div>
@@ -405,7 +405,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">6</span><span class="nid">HOME-05 · NFR-08</span><span>범례. 색만으로 전달하지 않음</span><span class="tag p0">P0</span></li>
       <li><span class="co">7</span><span class="nid">DEC-32 · NFR-20a</span><span>축소 시 성운 군집, 호버로 구성 표시. 군집은 배율 단계별 사전 계산</span><span class="tag p0">P0</span></li>
       <li><span class="co">8</span><span class="nid">NFR-18 · NFR-17</span><span>WebGL 미지원 환경은 목록 뷰로 대체. 폭 1024px 미만은 안내만(모바일 P2)</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">·</span><span class="nid">GRD-08 · DEC-23</span><span>고유 신호 성과가 인정될 때마다 못 찾은 별 1개(운영 설정 stars_per_achievement)를 무작위로 발견, 부모 별 바깥에 나타남. 등급 상승·탐색 완료는 발견 조건이 아님 (AT-58)</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">·</span><span class="nid">GRD-08 · DEC-23</span><span>고유 신호 성과가 인정될 때마다 못 찾은 별 1개(운영 설정 stars_per_achievement)를 무작위로 발견, 서버가 계산한 은하 위치에 나타남. 등급 상승·탐색 완료는 발견 조건이 아님 (AT-58)</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">·</span><span class="nid">NFR-20 · DEC-16</span><span>그리기 예산 별 400·궤도 60·성운 80. 상한 시나리오 별 100,000개에서 p95 16.7ms (AT-71)</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
@@ -830,7 +830,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
             </table></div>
           <div class="box"><div class="box-h"><span class="co">5</span>챌린지 대상 · 36주차 <span class="sub">아직 확인 안 된 신호 + AI 승인 구간 검증</span></div><div class="box-b row"><span class="pill soft mono">149603524</span><span class="btn sm ghost">+ 추가</span><span class="muted small">회차 시작 시 알림 발송 (NTF-01)</span></div></div>
           <div class="box dash"><div class="box-h">공식 스레드 · 공개 분석 관리 <span class="sub">COM-17·18 · v1 제외</span></div><div class="box-b"><div class="small">공식 스레드는 SYSTEM이 생성합니다. v1에는 신고·숨김·복원 화면을 두지 않고, 문제 콘텐츠는 운영자가 DB에서 hidden 상태로 바꿉니다(COM-13, OPS-06).</div><div class="row" style="margin-top:8px"><span class="btn sm">스레드 숨김</span><span class="btn sm">스레드 복원</span><span class="btn sm">공개 분석 숨김</span><span class="btn sm">공개 분석 복원</span></div><div class="muted small">숨김 상태는 새 게시로 해제되지 않습니다. 사용자 화면·참조 카드에는 숨긴 자료의 내용·직접 링크를 노출하지 않습니다.</div></div></div>
-          <div class="box"><div class="box-h"><span class="co">6</span>발견 규칙 <span class="pill acc" style="font-size:10.5px">DEC-23 종결</span></div><div class="box-b kv"><dt>성과당 발견 수</dt><dd>stars_per_achievement 기본 1 (등급 무관)</dd><dt>대상</dt><dd>아직 못 찾은 별 전체에서 무작위</dd><dt>자리</dt><dd>서버가 계산 · 부모 별 바깥 세대 반지름 + 지터</dd></div></div>
+          <div class="box"><div class="box-h"><span class="co">6</span>발견 규칙 <span class="pill acc" style="font-size:10.5px">DEC-23 종결</span></div><div class="box-b kv"><dt>성과당 발견 수</dt><dd>stars_per_achievement 기본 1 (등급 무관)</dd><dt>대상</dt><dd>아직 못 찾은 별 전체에서 무작위</dd><dt>자리</dt><dd>서버가 계산 · 중앙부/나선 팔/제한된 분산 · 기존 자리 고정</dd></div></div>
         </div>
       </div>
     </div></div>
@@ -937,20 +937,17 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     svg.appendChild(g);
   }
   function drawMainSky(svg){
-    var W=1200,H=620,cx=600,cy=310,r=rng(42);
-    for(var k=0;k<90;k++){svg.appendChild(el('circle',{cx:(r()*W).toFixed(1),cy:(r()*H).toFixed(1),r:(0.5+r()*1.1).toFixed(1),fill:STAR,opacity:(0.15+r()*0.35).toFixed(2)}));}
-    // 세대 반지름 안내(연함)
-    [115,245,375].forEach(function(R,i){svg.appendChild(el('ellipse',{cx:cx,cy:cy,rx:R*1.28,ry:R*0.86,fill:'none',stroke:'#1d2438',"stroke-width":.7,'stroke-dasharray':'2 7'}));var t=el('text',{x:cx+R*1.28+4,y:cy+3,'font-size':9,fill:DIM,'font-family':'IBM Plex Mono'});t.textContent='g'+i;svg.appendChild(t);});
-    // 중심: 튜토리얼 5 + 챌린지 1
-    var core=[['p2 orbit tut1',560,286],['p0 tut2',655,258],['p0 tut3',602,362],['p0 tut4',520,350],['p0 done tut5',644,330],['p0 chal',598,244]];
-    core.forEach(function(s){mark(svg,s[1],s[2],s[0],1.3);});
-    // 1세대: 튜토리얼1에서 발견 2개
-    var g1=[[560,286,'p1 orbit',420,210],[560,286,'p0',462,395]];
-    g1.forEach(function(s){svg.appendChild(el('line',{x1:s[0],x2:s[3],y1:s[1],y2:s[4],stroke:'#2a3144','stroke-width':.8,'stroke-dasharray':'2 4'}));mark(svg,s[3],s[4],s[2],1.3);});
-    // 2세대
-    var g2=[[420,210,'p0',300,150],[420,210,'p3 orbit',330,285]];
-    g2.forEach(function(s){svg.appendChild(el('line',{x1:s[0],x2:s[3],y1:s[1],y2:s[4],stroke:'#2a3144','stroke-width':.8,'stroke-dasharray':'2 4'}));mark(svg,s[3],s[4],s[2],1.3);});
-    var lab=el('text',{x:16,y:H-100,'font-size':10.5,fill:DIM,'font-family':'IBM Plex Sans KR'});lab.textContent='점선: 발견 경로(부모 별). 실제 화면에는 그리지 않음';svg.appendChild(lab);
+    var W=1200,H=620,cx=600,cy=300,r=rng(42);
+    // 발견한 별 100개인 회원의 정적인 와이어프레임 예시. 운영 배치 함수가 아니다.
+    for(var k=0;k<100;k++){
+      var rad=35+Math.sqrt((k+1)/100)*450;
+      var angle=(k%4)*Math.PI/2+rad/450*4.8+(r()-.5)*.20;
+      var x=cx+Math.cos(angle)*rad, y=cy+Math.sin(angle)*rad*.52;
+      var type=k===0?'p2 orbit tut1':k<5?'p0 tut'+(k+1):k===5?'p0 chal':k%13===0?'p1 orbit':'p0';
+      mark(svg,x,y,type,k<6?1.3:.85);
+    }
+    var lab=el('text',{x:16,y:H-35,'font-size':10.5,fill:DIM,'font-family':'IBM Plex Sans KR'});
+    lab.textContent='발견한 별 100개 예시 · 은하 배치 · 기존 위치 고정 · 발견 원인은 별도 기록';svg.appendChild(lab);
   }
   function drawNebula(svg){
     var W=590,H=360,r=rng(77);

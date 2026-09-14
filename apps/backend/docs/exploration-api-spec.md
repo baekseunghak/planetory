@@ -1,10 +1,11 @@
 # Planetory 탐사 코어 API 명세
 
 - 작성일: 2026-09-11
-- 상태: **팀 협의용 초안 Draft 0.2** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.1과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
+- 상태: **팀 협의용 초안 Draft 0.3** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.2 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.1](../../../docs/requirements/planetory-requirements-spec.md)(MR `S15P21C206-53`), [ERD v1.1](../../../docs/development/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 타일·군집·자리 계산의 참조 구현), [온라인 파생 계산](../../../docs/development/online-derived-compute.md), [시스템 아키텍처](../../../docs/development/system-architecture.md)
+- 기준: [요구사항 명세서 v1.2](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, 이번 변경안 `S15P21C206-33`), [ERD v1.2](../../../docs/development/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 타일·군집 구조의 참조 구현), [온라인 파생 계산](../../../docs/development/online-derived-compute.md), [시스템 아키텍처](../../../docs/development/system-architecture.md)
+- 이번 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
 - 분담·공통 약속: [API 명세 파트 분담](api-spec-ownership.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
 - 프론트 요구: 백지웅 분석 프론트 상세 명세 Draft 0.2의 협의 항목 Q03~Q12에 대한 답을 각 절에 `Qnn`으로 표기한다.
 
@@ -143,24 +144,16 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 
 ### 4.1 지도 메타와 타일
 
-**자리 좌표(DEC-30, HOME-02).** 별 자리는 회원별 방사형 트리이며 카메라 회전·기울기와 무관한 **월드 좌표**다(SRS v1.1 HOME-01). `star_unlocks`의 `generation`, `angle_deg`, `radius_jitter`, `depth_z`에서 서버가 한 번 계산해 저장하고 이후 바꾸지 않는다(NFR-20c). 클라이언트는 `x`, `y`, `depthZ`를 읽기만 한다.
+**자리 좌표(DEC-30, HOME-02, v1.2 변경안).** 서버는 중앙부·나선 팔·제한된 분산으로 회원별 은하 형태가 나타나도록 새 별의 월드 좌표를 계산한다. 부모 별 바깥·부모 각도 근처·다음 세대 반지름 조건을 적용하지 않는다. 알고리즘 계약은 [별지도 표현 계약 1절](../../../docs/development/sky-presentation-contract.md)을 따른다.
 
-```text
-radius = R0 × generation + jitter                   // 부모 바깥 다음 세대 반지름
-angle  = parent.angle + Δ                          // 부모 각도 근처, |Δ| ≤ ANGLE_SPREAD
-x = radius × cos(angle), y = radius × sin(angle)
-조건: 기존 모든 별과의 거리 ≥ MIN_SPACING. 만족할 때까지 jitter·Δ를 바꿔 재시도
-```
+~~~text
+미발견 TIC 선택 = 기존 OPS-08·성과 지급 규칙
+새 위치 = 은하 배치 함수(회원, 발견 순번/안정된 시드, 배치 버전, 공간 인덱스)
+INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
+응답 x = world_x, y = world_y, depthZ = depth_z
+~~~
 
-초안값은 하서진 PoC(`experiments/galaxy-map-prototype/server/store.ts` `placeStar`)를 따른다(D-6에서 확정).
-
-| 상수 | 초안값 | 비고 |
-|---|---|---|
-| `R0` | 360 (월드 단위/세대) | 와이어프레임의 "115 + 130g px"는 참고 배치 |
-| `ANGLE_SPREAD` | ±1.2 rad | 부모 각도 기준 |
-| `MIN_SPACING` | 76 | 재시도 상한 1,000회 |
-| 0세대 | 튜토리얼 1~5 고정 좌표 `(0,0)(140,-90)(-140,-90)(-145,95)(145,95)`, 챌린지 `(-230,80)` | 중앙 원 안. 회차가 바뀌어도 자리는 유지 |
-| `depth_z` | 0~1 무작위 | 시차·겹침 해소용. 회전 시 두께로 보임 |
+좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 기존 데이터는 종전 계산으로 최종 월드 좌표를 복원해 보존하는 이관이 필요하며, 열 변경과 이관 구현은 별도 백엔드 구현/리뷰 대상이다(이 문서는 DDL을 실행하지 않는다). 과거 R0=360·부모 각도 ±1.2rad·간격 76·0세대 고정 자리·depth 0~1은 새 은하 배치의 필수 상수가 아니다.
 
 **타일(NFR-20d).** 월드 좌표를 정사각 타일(한 변 `tileSize`)로 나누고 배율 단계마다 쿼드트리 노드를 둔다. 프론트는 뷰포트+20% 여백을 **월드 좌표로 역투영한 경계 상자**를 보내고(회전·기울기 허용, SRS v1.1), 서버는 그 상자에 걸친 노드를 돌려준다. 축소 배율이 0.8 미만인 단계는 별 대신 사전 계산한 군집 노드를 준다(DEC-32, NFR-20a). 이 형식은 PoC의 `/map/manifest`·`/map/tiles`와 같으며 경로·필드명만 이 문서로 통일한다.
 
@@ -269,7 +262,7 @@ x = radius × cos(angle), y = radius × sin(angle)
   "asOf": "2026-09-11T05:20:00Z",
   "star": {"sectorCount": 3, "sectors": [14, 41, 54], "tmag": 9.8, "teffK": 5600, "radiusRsun": 0.95},
   "unlock": {"reason": "achievement", "triggerTicId": "100000002", "triggerAchievementId": "ach-31", "unlockedAt": "2026-09-09T03:00:00Z",
-             "position": {"generation": 2, "angleDeg": 131.2, "radiusJitter": 0.07, "depthZ": 0.42}},
+             "position": {"x": -472.3, "y": 538.8, "depthZ": 18.0, "layoutVersion": "spiral-v1"}},
   "progress": {"stage": "in_progress", "currentCurveStep": 1, "completionReason": null, "reopenPending": false,
                "reopenedAt": null, "completedAt": null},
   "planets": {"count": 2, "completedWithoutPlanets": false,
@@ -934,7 +927,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
    무작위 n개 선택. 시드 정책은 operation_settings (재현용 seed = hash(userId, achievementId, seq))
    후보가 n보다 적으면 있는 만큼만 열고 반환값 unlockShortfall = n − 실제 수 (D-11). 성과 인정은 그대로
 5. 각 별에 대해 star_unlocks INSERT (unlock_reason=achievement, trigger_tic_id=성과 별, trigger_achievement_id, seq=0..n-1,
-   generation=부모 generation+1, angle_deg=무작위(부모 각도 ±60°, 최소 간격 유지), radius_jitter, depth_z)
+   world_x, world_y, depth_z, layout_version=4.1절 은하 배치 함수 결과)
    ON CONFLICT (trigger_achievement_id, seq) DO NOTHING          -- 재처리 중복 방지 (GRD-08)
 6. 반환
 ```
@@ -972,7 +965,7 @@ for each user_star_progress(tic_id):
 
 | 사건 | 처리 |
 |---|---|
-| 회원 생성 | `tutorial_stars.seq=1` 별을 `unlock_reason=tutorial`, generation 0으로 연다. 실패하면 회원 생성도 롤백(서비스 F01-Q5 제안). 튜토리얼 5개·회차 대상 TIC은 운영자가 DB에서 설정한다(OPS-07) |
+| 회원 생성 | `tutorial_stars.seq=1` 별을 `unlock_reason=tutorial`로 열고 4.1절 은하 배치 좌표를 저장한다. 실패하면 회원 생성도 롤백(서비스 F01-Q5 제안). 튜토리얼 5개·회차 대상 TIC은 운영자가 DB에서 설정한다(OPS-07) |
 | 튜토리얼 n 완료(`all_found`·`undiscoverable_only`·`skipped`) | seq n+1을 연다. 5 완료면 진행 중 회차의 `target_tic_id`를 `unlock_reason=challenge`로 연다. `ON CONFLICT (user_id, tic_id) DO NOTHING` |
 | 새 회차 `active` 전환 | 튜토리얼 5개 완료 회원 전원에게 그 회차 별을 연다(배치, 멱등). 회차가 끝나도 닫지 않는다(AT-61) |
 | 회차 진행 중 5번 완료 | 그 시점에 연다(서비스 F17-Q2) |
@@ -1059,13 +1052,13 @@ for each user_star_progress(tic_id):
 |---|---|
 | 김동혁 | Redis 키·TTL·메모리 상한, 동시 계산 상한·큐, 계산 사이드카 호출 경로, Gold 적재 안(10장), archived 판 캐시 정리 |
 | 윤성용 | `transit_model` 파라미터, `discoverable` 판정, 매칭 허용 오차·N 상한(DEC-03), 봉우리 추출 규칙(5.4절), 잔차 일치 검증 |
-| 하서진 | 자리 상수 R0·최소 간격·군집 계산 위치, 타일 크기·배율 단계, 별 상세 패널 필드 |
+| 하서진 | 은하 배치 시각 기준·서버 저장 좌표, 군집/타일/배율 연결, 별 상세 패널 필드 |
 
 ## 12. 결정안과 미결
 
 ### 12.1 결정안 (리뷰 대상)
 
-SRS·ERD v1.1과 충돌하지 않는 구현 세부는 담당자가 결정안을 적고 리뷰어가 **반대할 때만** 댓글을 단다(역할 분배 문서 5장). 이 MR이 병합되면 아래는 확정이며, 바꾸려면 새 MR로 이 표를 고친다. 정본 변경이 필요한 항목은 없다.
+SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결정안을 적고 리뷰어가 **반대할 때만** 댓글을 단다(역할 분배 문서 5장). 이 MR이 병합되면 아래는 확정이며, 바꾸려면 새 MR로 이 표를 고친다. 정본 변경이 필요한 항목은 없다.
 
 | # | 항목 | 결정안 | 이유 | 반영 절 | 확인 |
 |---|---|---|---|---|---|
@@ -1074,7 +1067,7 @@ SRS·ERD v1.1과 충돌하지 않는 구현 세부는 담당자가 결정안을 
 | D-3 | 잔차 상태 전달 | 폴링(`pollAfterSeconds`), `COMPLETED`에서만 곡선 전환, `RESIDUAL_READY` 선노출 없음 | DEC-35 초기값. SSE·선노출은 계산 시간 실측 후 | 7.2 | 백지웅·김동혁 |
 | D-4 | 회원별 잔차 요청 상한 | 회원당 진행 중 작업 1개. 초과 시 429 `RESIDUAL_QUEUE_FULL` + `retryAfterSeconds` | 전체 상한 2·대기 20(DEC-35)과 정합 | 7.1 | 김동혁 |
 | D-5 | 판 변경 능동 감지 | 탐사 API 모든 응답에 헤더 `X-Current-Bundle: {bundleId}`. 프론트는 잔차 폴링·곡선 응답에서 비교해 달라지면 5.1절 재조회 | 폴링이 이미 돌고 있어 추가 요청 없음. 쓰기 요청은 계속 `BUNDLE_CHANGED`로 거절 | 2.3 | 백지웅 |
-| D-6 | 군집 계산 위치·자리 상수 | 서버 쿼드트리 사전 계산(PoC 방식). 자리 상수는 4.1절 초안값 채택 | 하서진 PoC 서버 코드가 그대로 동작. NFR-20a가 서버 배치 허용 | 4.1, 9.2 | 하서진 |
+| D-6 | 군집 계산 위치·별 자리 | 서버 쿼드트리 사전 계산은 유지. 자리는 SRS v1.2 은하 배치·월드 좌표 저장 계약으로 변경 검토 | 종전 R0/부모 각도/0세대 고정 자리 채택을 대체. 공간 인덱스·타일·LOD는 유지 | 4.1, 9.2, 별지도 표현 계약 1절 | 하서진·강재민 |
 | D-7 | 지도 최신성 | `asOf`(지도 메타·타일·별 상세·퀘스트)와 `skyVersion`(제출·공개·재개 응답) 채택 | 하서진 통합 문서 B.6 요청. 없으면 화면이 매번 전체 재조회 | 4.1, 6.4 | 하서진 |
 | D-8 | 첫 방문 안내 완료 시점 | 둘 다. 튜토리얼 1번 별 첫 제출 성공 시 서버가 `onboarding_done=true`, 사용자가 닫으면 서비스 설정 API로 즉시 true. 별 클릭만으로는 끝내지 않음 | HOME-09 "한 번" 만족, 건너뛴 회원도 재노출 없음 | 4.1, 6.3 | 백승학·백지웅·하서진 |
 | D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
@@ -1142,6 +1135,7 @@ SRS·ERD v1.1과 충돌하지 않는 구현 세부는 담당자가 결정안을 
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), D-1 해소(SB-D17) |
 | 2026-09-13 | 백승학 통합 정합(`724c560`·`826ce1e`) 수용: 챌린지 참여 수 별 단위 COUNT DISTINCT, 미계산 잔차 `status: null`, 타인 공개 그래프 재계산 없음을 D-13~D-15로 결정안 표에 등록. 2.4절에 `null` 의미 추가. 통합 검토 작업 로그 파일은 변경 이력으로 대체하고 제거 |
+| 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. 구현/이관 및 담당자 승인은 MR 리뷰 대상. |
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
