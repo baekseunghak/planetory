@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
@@ -47,14 +48,19 @@ class PlanetoryApplicationTests {
     @Test
     void databaseAndMigrationAreReadyAndNotAppliedTwice() {
         assertEquals(1, jdbc.queryForObject("SELECT 1", Integer.class));
-        assertEquals(33, jdbc.queryForObject("SELECT count(*) FROM information_schema.tables "
-                + "WHERE table_schema = ? AND table_type = 'BASE TABLE' AND table_name <> 'flyway_schema_history'",
-                Integer.class, SCHEMA));
-        assertEquals("1", flyway.info().current().getVersion().toString());
+        // 테이블 수를 고정하지 않는다. 마이그레이션이 늘어도 이 테스트는 "모두 적용됐고 다시 적용되지 않는다"만 본다.
+        for (String table : List.of("users", "posts", "comments", "submissions", "operation_settings")) {
+            assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM information_schema.tables "
+                    + "WHERE table_schema = ? AND table_name = ?", Integer.class, SCHEMA, table), table);
+        }
+        // applied()에는 테스트 스키마 생성 표식(version null)도 들어오므로 버전이 있는 것만 센다.
+        long applied = java.util.Arrays.stream(flyway.info().applied()).filter(m -> m.getVersion() != null).count();
+        assertTrue(applied >= 1);
+        assertEquals(0, flyway.info().pending().length);
         assertEquals(0, flyway.migrate().migrationsExecuted);
         assertEquals(0, flyway.migrate().migrationsExecuted);
-        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success",
-                Integer.class));
+        assertEquals(applied, jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version IS NOT NULL", Long.class));
     }
 
     @Test

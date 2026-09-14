@@ -2,12 +2,12 @@ package com.planetory.backend.global.error;
 
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 전역 예외 변환. 도메인 예외는 {@link BusinessException}을 상속해 {@link ErrorCode}만 지정하면 여기서 처리된다.
@@ -40,18 +40,27 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.VALIDATION_FAILED));
     }
 
-    // 매핑되지 않은 경로 → 404
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException e) {
-        return ResponseEntity.status(ErrorCode.RESOURCE_NOT_FOUND.getStatus())
-                .body(ErrorResponse.of(ErrorCode.RESOURCE_NOT_FOUND));
-    }
-
     // 그 외 → 500. 원인은 로그에만 남긴다.
+    // 단, Spring MVC 표준 예외(없는 경로 404, 메서드 405, 미디어 타입 415, 파라미터 누락 400 등)는
+    // 자체 상태 코드를 유지한다. 이 분기가 없으면 전부 500이 된다.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
+        if (e instanceof org.springframework.web.ErrorResponse springMvc) {
+            HttpStatus status = HttpStatus.valueOf(springMvc.getStatusCode().value());
+            if (status.is4xxClientError()) {
+                return ResponseEntity.status(status).body(fromStatus(status));
+            }
+        }
         log.error("Unhandled exception", e);
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_ERROR));
+    }
+
+    private static ErrorResponse fromStatus(HttpStatus status) {
+        return switch (status) {
+            case BAD_REQUEST -> ErrorResponse.of(ErrorCode.VALIDATION_FAILED);
+            case NOT_FOUND -> ErrorResponse.of(ErrorCode.RESOURCE_NOT_FOUND);
+            default -> new ErrorResponse(status.name(), "허용되지 않는 요청 형식입니다.", List.of());
+        };
     }
 }

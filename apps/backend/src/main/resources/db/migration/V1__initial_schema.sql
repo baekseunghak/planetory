@@ -351,7 +351,8 @@ CREATE TABLE stats_snapshots (
     snapshot_date DATE NOT NULL,
     scope TEXT NOT NULL CHECK (scope IN ('global', 'round')),
     metrics JSONB NOT NULL,
-    round_id BIGINT
+    round_id BIGINT,
+    CHECK ((scope = 'round') = (round_id IS NOT NULL))
 );
 
 CREATE TABLE operation_settings (
@@ -448,6 +449,7 @@ CREATE UNIQUE INDEX uq_posts_system_candidate ON posts (candidate_id) WHERE kind
 CREATE INDEX ix_submissions_user_tic_created ON submissions (user_id, tic_id, created_at DESC);
 CREATE INDEX ix_submissions_candidate_user_created ON submissions (matched_candidate_id, user_id, created_at);
 CREATE INDEX ix_posts_tic_kind_created ON posts (tic_id, kind, created_at DESC);
+CREATE INDEX ix_comments_post_created ON comments (post_id, created_at);
 CREATE INDEX ix_posts_user_created ON posts (user_id, created_at DESC);
 CREATE INDEX ix_posts_title_trgm ON posts USING GIN (title public.gin_trgm_ops);
 CREATE INDEX ix_posts_body_trgm ON posts USING GIN (body public.gin_trgm_ops);

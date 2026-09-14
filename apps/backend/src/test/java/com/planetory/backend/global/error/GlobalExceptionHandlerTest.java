@@ -51,6 +51,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("Spring MVC 표준 예외는 원래 상태 코드를 유지한다 — 405·415·404")
+    void springMvcExceptionsKeepTheirStatus() throws Exception {
+        mockMvc.perform(post("/probe/not-found"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+        mockMvc.perform(post("/probe/validate").contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
+        mockMvc.perform(get("/probe/missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
     @DisplayName("예상하지 못한 예외는 500 INTERNAL_ERROR로 감추고 원문을 노출하지 않는다")
     void unexpectedExceptionIsMasked() throws Exception {
         mockMvc.perform(get("/probe/boom"))
