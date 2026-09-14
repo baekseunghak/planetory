@@ -1,0 +1,336 @@
+.chart-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.interaction-mode {
+  display: flex;
+  gap: 1px;
+  border: 1px solid #9cdae13b;
+  background: #08131d59;
+}
+.interaction-mode button {
+  font-size: 9px;
+  padding: 4px 7px;
+  color: #a4bdc9;
+  white-space: nowrap;
+  border-radius: 0;
+}
+.interaction-mode button[aria-pressed="true"] {
+  background: #75bcc52e;
+  color: #d0f5f3;
+}
+.interaction-mode button:not(:disabled):hover {
+  background: #8dccd637;
+  color: white;
+}
+.interaction-mode button:disabled {
+  opacity: 0.45;
+}
+.zoom-readout {
+  font: 9px var(--mono);
+  color: #bcdae2;
+  min-width: 30px;
+  text-align: center;
+}
+.zoom-readout > span {
+  color: #819ba8;
+  font-size: 8px;
+}
+.chart-surface.chart-surface-phase[data-drag-mode="pan"] > .plot {
+  cursor: grabbing;
+}
+.chart-reset {
+  width: 24px;
+  height: 25px;
+  font-size: 19px;
+  color: #a1c0cd;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+.chart-reset:hover:not(:disabled) {
+  color: #e0f7f8;
+  background: #8dccd617;
+}
+.chart-reset:disabled {
+  opacity: 0.4;
+}
+.graph-gesture-hint {
+  display: block;
+  padding: 7px 17px 0;
+  font-size: 8px;
+  color: #a1b9c8;
+  letter-spacing: 0.015em;
+}
+.analysis-controls {
+  flex-shrink: 0;
+}
+.fine-period-control {
+  margin: 10px 17px 0;
+  padding: 0 1px;
+}
+.fine-period-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  color: #c4dce2;
+}
+.fine-period-label span {
+  font-size: 8px;
+  color: #9cb6c3;
+}
+.fine-period-slider {
+  display: block;
+  width: 100%;
+  height: 16px;
+  margin: 8px 0 4px;
+  cursor: ew-resize;
+}
+.fine-period-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #87ccdf35, #8bdee7aa, #87ccdf35);
+  height: 3px;
+}
+.fine-period-slider::-webkit-slider-thumb {
+  width: 9px !important;
+  height: 13px !important;
+  border-color: #b1eced !important;
+  background: #619baf !important;
+  margin-top: -5px !important;
+  box-shadow: 0 0 9px #8bd5e957;
+}
+.fine-period-slider::-moz-range-thumb {
+  width: 9px;
+  height: 13px;
+  border-color: #b1eced;
+  background: #619baf;
+}
+.fine-period-scale {
+  display: flex;
+  justify-content: space-between;
+  color: #92b3c6;
+  font: 8px var(--mono);
+}
+.selection-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 11px 17px 13px;
+  padding-top: 9px;
+  border-top: 1px solid #bdced825;
+  min-height: 28px;
+}
+.selection-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.selection-summary-title {
+  font-size: 9px;
+  color: #c9d7da;
+  white-space: nowrap;
+}
+.selection-summary-value {
+  font: 8px var(--mono);
+  color: #cab994;
+  white-space: nowrap;
+}
+.selection-confirm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 9px;
+  color: #eed1a2;
+  white-space: nowrap;
+}
+.selection-confirm:disabled {
+  opacity: 0.4;
+}
+.selection-confirm.confirmed {
+  color: #b0dad0;
+}
+.expanded-phase-tools {
+  padding: 0 8px 20px;
+}
+.modal-wide .fold-toolbar {
+  padding: 16px 24px 0;
+}
+.modal-wide .graph-gesture-hint {
+  padding-left: 24px;
+}
+.modal-wide .expanded-chart {
+  height: min(42svh, 390px);
+}
+.modal-wide .analysis-controls {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.modal-wide .period-control {
+  margin-top: 4px;
+}
+.modal-wide .selection-summary {
+  margin-bottom: 0;
+}
+.phase-chart {
+  margin-top: 1px;
+}
+.plot-shell {
+  height: 100%;
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .panel-phase {
+    height: 68.5%;
+  }
+  .panel-period {
+    top: 75%;
+    height: 24%;
+  }
+  .panel-phase .fold-toolbar {
+    padding-top: 5px;
+  }
+  .panel-phase .chart-reset {
+    height: 20px;
+  }
+  .panel-phase .period-control {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  .panel-phase .fine-period-control {
+    margin-top: 5px;
+  }
+  .panel-phase .selection-summary {
+    min-height: 22px;
+    margin-top: 5px;
+    margin-bottom: 7px;
+    padding-top: 5px;
+  }
+}
+@media (min-width: 901px) {
+  .panel-phase .fold-toolbar {
+    flex-shrink: 0;
+  }
+  .panel-phase .phase-chart {
+    min-height: 64px;
+  }
+}
+@media (max-height: 820px) and (min-width: 901px) {
+  .fine-period-control {
+    margin-top: 7px;
+  }
+  .fine-period-slider {
+    margin-top: 4px;
+    margin-bottom: 1px;
+    height: 13px;
+  }
+  .fine-period-label {
+    font-size: 8px;
+  }
+  .fine-period-label span {
+    font-size: 7px;
+  }
+  .fine-period-scale {
+    font-size: 7px;
+  }
+  .selection-summary {
+    margin-top: 7px;
+    margin-bottom: 9px;
+    padding-top: 6px;
+  }
+  .selection-summary-title,
+  .selection-confirm {
+    font-size: 8px;
+  }
+  .selection-summary-value {
+    font-size: 7px;
+  }
+  .graph-gesture-hint {
+    font-size: 7px;
+    padding-top: 4px;
+  }
+  .interaction-mode button {
+    font-size: 8px;
+    padding: 3px 5px;
+  }
+  .zoom-readout {
+    font-size: 8px;
+    min-width: 27px;
+  }
+  .chart-actions {
+    gap: 3px;
+  }
+  .fold-toolbar .mini-legend {
+    font-size: 7px;
+  }
+  .panel-phase .phase-chart {
+    min-height: 60px;
+  }
+}
+@media (max-width: 580px) {
+  .fold-toolbar {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .chart-actions {
+    gap: 3px;
+  }
+  .mini-legend {
+    font-size: 7px;
+    gap: 4px;
+  }
+  .mini-legend .median-dot {
+    margin-left: 2px;
+  }
+  .interaction-mode button {
+    font-size: 8px;
+    padding: 4px 5px;
+  }
+  .graph-gesture-hint {
+    font-size: 7px;
+    padding-left: 13px;
+  }
+  .selection-summary {
+    margin-left: 14px;
+    margin-right: 14px;
+    gap: 5px;
+  }
+  .selection-summary-value {
+    font-size: 7px;
+  }
+  .selection-summary-title,
+  .selection-confirm {
+    font-size: 8px;
+  }
+  .selection-summary > div {
+    gap: 5px;
+  }
+  .fine-period-label span {
+    font-size: 7px;
+  }
+  .phase-chart {
+    height: 170px;
+    min-height: 170px;
+  }
+  .panel-phase {
+    min-height: 475px;
+  }
+  .modal-wide .fold-toolbar {
+    padding: 14px 12px 0;
+  }
+  .modal-wide .graph-gesture-hint {
+    padding-left: 12px;
+  }
+  .modal-wide .expanded-chart {
+    padding: 6px;
+    height: 36svh;
+  }
+  .expanded-phase-tools {
+    padding: 0 0 10px;
+  }
+}

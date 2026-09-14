@@ -168,6 +168,15 @@ $Projects = @(
 
 각 팀원이 자신의 프로젝트에서 한 번씩 실행합니다.
 
+`$ProjectId`와 `$Projects`에는 예시가 아닌 실제 프로젝트 ID를 입력합니다. `planetory-vpc` 조회가 실패하면 활성 계정과 해당 프로젝트의 네트워크를 먼저 확인합니다.
+
+```powershell
+gcloud auth list --filter=status:ACTIVE --format="value(account)"
+gcloud compute networks list --project=$ProjectId --format="table(name)"
+```
+
+권한 오류면 해당 계정의 프로젝트 접근 권한을 확인하고, 목록에 `planetory-vpc`가 없으면 노드 생성 진행 상태를 확인합니다. 피어링 스크립트는 누락된 VPC를 자동 생성하지 않습니다. `create-node.ps1`은 기존 리소스가 있으면 실패하므로 무조건 재실행하지 않습니다.
+
 ```powershell
 .\scripts\create-mesh-peering.ps1 -ProjectId $ProjectId -Projects $Projects
 ```
@@ -180,6 +189,21 @@ $Projects = @(
 
 프로젝트당 `$Projects.Count - 1`개 피어링이 `ACTIVE`인지 확인합니다.
 
+### 일부 노드만 준비된 경우
+
+실제 생성 번호를 유지합니다. 예를 들어 1·2·5·6번만 준비됐다면 아래 배열의 프로젝트 ID를 실제 값으로 바꾸고, 모든 참여자가 같은 매핑을 사용합니다.
+
+```powershell
+$Projects = @('actual-master-project', 'actual-worker2-project', 'actual-worker5-project', 'actual-worker6-project')
+.\scripts\create-mesh-peering.ps1 -ProjectId $ProjectId -Projects $Projects -NodeNumbers 1,2,5,6
+```
+
+`-NodeNumbers`를 생략하면 기존처럼 1부터 순서대로 번호를 붙입니다. 스크립트는 변경 전에 자기 VM의 이름·네트워크·내부 IP를 검사합니다. 실제 생성 번호가 다르면 중단합니다. 기존 피어링은 이름이 달라도 연결 대상이 같으면 재사용하며, 같은 이름이 다른 대상에 쓰이면 자동 삭제하지 않고 중단합니다. 나중에 3·4번을 추가할 때 전체 프로젝트 배열과 `-NodeNumbers 1,2,3,4,5,6`으로 각 프로젝트에서 다시 실행합니다. 양쪽 설정이 끝나야 연결 상태를 확인할 수 있습니다.
+
+SSH 문제를 먼저 해결해야 한다면 같은 명령에 `-SkipHosts`를 추가해 피어링만 처리합니다. 기본 실행은 `/etc/hosts`에 노드 별칭을 기록하며 수정 전 `/etc/hosts.planetory-backup-*`를 남깁니다. 구형 `# planetory-cluster` 블록은 자동 삭제하지 않으므로 직접 확인 후 정리해야 합니다. SSH 방화벽, 외부 IP와 sshd 설정을 직접 변경하는 명령은 이 스크립트에 없습니다.
+
+오프라인 회귀 검사: `pwsh -NoProfile -File .\scripts\test-mesh-peering.ps1` (실제 gcloud 호출 없음).
+
 ```powershell
 $Network = gcloud compute networks describe planetory-vpc `
   --project=$ProjectId `
@@ -189,6 +213,41 @@ $Network.peerings |
   Select-Object name, state, stateDetails, network |
   Format-Table -AutoSize
 ```
+
+### 잘못된 피어링 초기화·재연결
+
+`reset-mesh-peering.ps1 -ProjectId $ProjectId`만 실행하면 **조회만 하며 삭제하지 않습니다**. `peer-node-4`가 실제 6번 프로젝트를 가리키면 연결 대상이 틀린 것이 아니라 예전 이름이 남은 것입니다. 이름까지 맞추려면 그 연결만 삭제한 뒤 생성 스크립트를 다시 실행합니다. 이때 해당 연결은 일시 중단됩니다.
+
+```powershell
+# 목록에서 peer-node-4가 실제 6번 프로젝트를 가리키는지 확인한 경우에만
+.\scripts\reset-mesh-peering.ps1 -ProjectId $ProjectId -PeeringNames peer-node-4 -WhatIf
+# 미리보기 확인 후 위 명령의 -WhatIf를 빼고 실행
+.\scripts\create-mesh-peering.ps1 -ProjectId $ProjectId -Projects $Projects -NodeNumbers 1,2,5,6
+```
+
+생성 후 `getent hosts` 출력에 같은 IP가 세 번 나오는 것은 짧은 이름과 FQDN 두 개를 각각 조회하기 때문입니다. 이 출력만으로 `/etc/hosts`에 중복 등록됐다고 판단하지 않습니다. 로컬 피어링의 `ACTIVE`만으로 다른 프로젝트끼리의 전체 메시 통신까지 검증된 것은 아닙니다.
+
+이름만 잘못 붙었고 연결 대상 프로젝트가 맞으면 삭제하지 않아도 됩니다. 생성 스크립트가 대상을 기준으로 재사용합니다. 잘못된 대상이나 이름 충돌이 있을 때만 삭제합니다. 먼저 배치 작업을 중지하고 팀원에게 연결 중단을 알립니다.
+
+```powershell
+# 현재 프로젝트의 연결 이름과 상대 네트워크 조회 (삭제하지 않음)
+.\scripts\reset-mesh-peering.ps1 -ProjectId $ProjectId
+
+# 목록에서 확인한 잘못된 이름만 지정 (아래 이름은 예시)
+$WrongPeerings = @('peer-node-3', 'peer-node-4')
+.\scripts\reset-mesh-peering.ps1 -ProjectId $ProjectId -PeeringNames $WrongPeerings -WhatIf
+
+# 대상 확인 후 실행: 연결마다 확인 질문이 나옴
+.\scripts\reset-mesh-peering.ps1 -ProjectId $ProjectId -PeeringNames $WrongPeerings
+
+# 실제 프로젝트 배열과 노드 번호로 재연결 (1·2·5·6 예시)
+.\scripts\create-mesh-peering.ps1 -ProjectId $ProjectId -Projects $Projects -NodeNumbers 1,2,5,6
+```
+
+- 삭제 범위는 지정 프로젝트의 `planetory-vpc` 안에서 지정한 피어링뿐입니다. 이름이 하나라도 없으면 삭제 전에 중단합니다.
+- 상대 프로젝트의 피어링은 자동 삭제하지 않습니다. 전체 재구성이 필요하면 각 담당자가 자기 프로젝트에서 조회·삭제·재생성합니다. 양쪽 설정 후 `ACTIVE`를 확인합니다.
+- VM·디스크·VPC·방화벽·`/etc/hosts`는 삭제하지 않습니다. 호스트 매핑은 SSH 복구 후 올바른 `-NodeNumbers`로 생성 스크립트를 재실행해 갱신합니다.
+- 중간 실패 시 이미 삭제한 연결은 자동 복구되지 않습니다. 목록을 다시 조회하고 생성 스크립트로 복구합니다. 데이터 디스크는 남지만 분산 작업은 실패할 수 있습니다.
 
 ## 6. 노드 간 통신 확인
 
@@ -205,14 +264,34 @@ Hadoop 시작 후에는 `yarn node -list -all`이 표시한 전체 호스트명�
 
 ## 7. 필요한 관리 명령
 
-공인 IP가 바뀌었을 때 SSH 허용 주소를 갱신합니다.
+### SSH 접속이 갑자기 안 될 때
+
+집·교육장·VPN 변경으로 접속 공인 IP가 달라질 수 있습니다. 아래 명령으로 확인합니다. Worker는 VM 이름을 바꿉니다. 진단 중 API 활성화 질문이 나올 수 있습니다.
 
 ```powershell
-$AdminCidr = "$(Invoke-RestMethod 'https://api.ipify.org')/32"
+gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b --troubleshoot
+gcloud compute firewall-rules describe planetory-admin-ssh --project=$ProjectId --format="yaml(network,sourceRanges,targetTags,allowed,disabled)"
+gcloud compute instances describe master-1 --project=$ProjectId --zone=asia-east1-b --format="yaml(tags.items,networkInterfaces)"
+```
+
+진단의 `Source IP address`가 방화벽 `sourceRanges`에 없으면 허용 주소를 갱신합니다. VM의 네트워크와 대상 태그도 방화벽과 일치해야 합니다. 아래는 기존 허용 목록을 유지하면서 현재 IPv4 하나를 추가합니다.
+
+```powershell
+$FirewallJson = gcloud compute firewall-rules describe planetory-admin-ssh --project=$ProjectId --format=json
+if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 조회 실패: 갱신 중단' }
+$Firewall = ($FirewallJson -join "`n") | ConvertFrom-Json
+$CurrentIp = [System.Net.IPAddress]::Parse((Read-Host '진단에 나온 현재 Source IPv4').Trim())
+if ($CurrentIp.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { throw 'IPv4 주소를 입력하세요' }
+$AdminRanges = (@($Firewall.sourceRanges) + "$CurrentIp/32" | Select-Object -Unique) -join ','
+$AdminRanges  # 기존 주소와 현재 주소가 포함됐는지 확인
 gcloud compute firewall-rules update planetory-admin-ssh `
   --project=$ProjectId `
-  --source-ranges=$AdminCidr
+  --source-ranges=$AdminRanges
+if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 갱신 실패' }
+gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
 ```
+
+`--source-ranges`는 추가 옵션이 아니라 **전체 허용 목록 교체**입니다. 현재 IP만 넣으면 기존 관리 주소가 빠집니다. 필요 없어진 주소는 팀 확인 후 제거하고, 해결 목적으로 `0.0.0.0/0` 전체 개방은 하지 않습니다. 위 갱신은 같은 대상 태그를 가진 VM에도 적용됩니다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수는 없습니다.
 
 현재 생성된 리소스를 확인합니다.
 
@@ -255,6 +334,8 @@ VM 생성은 디스크 마운트와 호스트명 등록까지 수행한다. Hado
 - [VM 생성 옵션](https://docs.cloud.google.com/sdk/gcloud/reference/compute/instances/create)
 - [고정 외부 IP 생성](https://docs.cloud.google.com/sdk/gcloud/reference/compute/addresses/create)
 - [VPC Peering 생성](https://docs.cloud.google.com/sdk/gcloud/reference/compute/networks/peerings/create)
+- [VPC Peering 삭제](https://docs.cloud.google.com/sdk/gcloud/reference/compute/networks/peerings/delete)
+- [방화벽 허용 주소 갱신](https://docs.cloud.google.com/sdk/gcloud/reference/compute/firewall-rules/update)
 - [VPC Peering DNS 제한](https://docs.cloud.google.com/vpc/docs/vpc-peering#dns_support)
 - [Compute Engine 내부 DNS 이름](https://docs.cloud.google.com/compute/docs/internal-dns)
 - [GCP 네트워크 가격](https://cloud.google.com/vpc/network-pricing)
