@@ -155,6 +155,46 @@ class GoldCatalogSchemaTest {
                 "SELECT power FROM periodograms WHERE bundle_id = ?", bundleId));
     }
 
+    /** manifest 최소 스키마: 여덟 항목 중 하나라도 빠지면 판을 만들 수 없다. */
+    @Test
+    void manifest에_필수_항목이_빠지면_판이_거절된다() {
+        long ticId = insertStar();
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundle(ticId, "staging", "{}"),
+                "빈 manifest는 거절되어야 한다");
+
+        for (String key : List.of("segment_ids", "array_checksums", "residual_model_version",
+                "periodogram_config_version", "binning", "period_grid", "fine_tune", "curve_steps")) {
+            String withoutKey = VALID_MANIFEST.replaceFirst("\"" + key + "\"", "\"_" + key + "\"");
+            assertThrows(DataIntegrityViolationException.class,
+                    () -> insertBundle(ticId, "staging", withoutKey),
+                    key + "가 빠진 manifest는 거절되어야 한다");
+        }
+    }
+
+    /** 자료형이 계약과 다르면 거절한다. 값의 범위는 rule_version이 관리하므로 보지 않는다. */
+    @Test
+    void manifest_항목의_자료형이_다르면_거절된다() {
+        long ticId = insertStar();
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundle(ticId, "staging",
+                        VALID_MANIFEST.replace("\"segment_ids\": [1]", "\"segment_ids\": 1")),
+                "segment_ids는 배열이어야 한다");
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundle(ticId, "staging",
+                        VALID_MANIFEST.replace("\"segment_ids\": [1]", "\"segment_ids\": []")),
+                "참조 세그먼트가 없는 판은 조립할 수 없다");
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundle(ticId, "staging",
+                        VALID_MANIFEST.replace("\"residual_model_version\": \"rm-1\"",
+                                "\"residual_model_version\": 1")),
+                "계산 버전은 문자열이어야 한다");
+    }
+
     private Float[] readFloatArray(String sql, Object arg) {
         return jdbc.queryForObject(sql, (rs, rowNum) -> (Float[]) rs.getArray(1).getArray(), arg);
     }
@@ -166,11 +206,29 @@ class GoldCatalogSchemaTest {
         return ticId;
     }
 
+    /** ERD 3장이 요구하는 여덟 항목을 모두 갖춘 최소 manifest. */
+    static final String VALID_MANIFEST = """
+            {
+              "segment_ids": [1],
+              "array_checksums": {"flux": "sha256:0000", "power": "sha256:1111"},
+              "residual_model_version": "rm-1",
+              "periodogram_config_version": "pg-1",
+              "binning": {"minutes": 10},
+              "period_grid": {"min_days": 0.5, "max_days": 40.0, "spacing": "log"},
+              "fine_tune": {"half_width_cells": 3},
+              "curve_steps": {"max": 8}
+            }
+            """;
+
     private long insertBundle(long ticId, String status) {
+        return insertBundle(ticId, status, VALID_MANIFEST);
+    }
+
+    private long insertBundle(long ticId, String status, String manifest) {
         return jdbc.queryForObject("INSERT INTO publication_bundles"
                         + "(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days)"
-                        + " VALUES (?, ?, ?, '{}'::jsonb, 1500.5, 27.4) RETURNING id",
-                Long.class, ticId, "v-" + UUID.randomUUID(), status);
+                        + " VALUES (?, ?, ?, ?::jsonb, 1500.5, 27.4) RETURNING id",
+                Long.class, ticId, "v-" + UUID.randomUUID(), status, manifest);
     }
 
     private void insertSegment(long ticId, short sector, String revision, int points) {
