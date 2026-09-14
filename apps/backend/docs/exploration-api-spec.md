@@ -252,9 +252,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 
 **실패:** 회원의 별이 0개(가입 직후 튜토리얼 1번 열림 전)는 없다. 가입 처리가 튜토리얼 1번을 연다(9.4절). 경계 상자가 유한하지 않거나 상한을 넘으면 400 `VALIDATION_FAILED`, 잘못된 `level`은 400.
 
-### 4.2 별 상세 패널
+### 4.2 선택한 별·내 행성 상세
 
-`GET /api/v1/me/stars/{ticId}` — 별 선택 시. 미발견 별은 `STAR_LOCKED`.
+`GET /api/v1/me/stars/{ticId}` — 별 선택 시 같은 캔버스의 근접 뷰·도킹 패널·행성 목록에서 공유한다. 인증 회원의 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`. 별도의 NASA iframe이나 전체 카탈로그 행성 API로 대체하지 않는다.
 
 ```json
 {
@@ -277,9 +277,20 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | 필드 | 규칙 |
 |---|---|
 | `star.*` | 표시 열은 ERD 미결 9(`확인 필요`). 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03) |
+| `planets.items` | 현재 인증 회원이 요청 TIC에서 수치 매칭한 고유 candidateId 중 HOME-05 표시 조건을 만족하는 목록. 확정 행성은 판단 오답/성과 미인정이어도 포함, 미확정은 6.3절의 회원별 후보 최신 판단이 LIKELY_PLANET일 때만 포함(공개/성과 인정 필수 아님). FP·미확정 UNLIKELY_PLANET/UNSURE·미매칭·타인 발견·전체 후보표는 제외. 같은 candidateId 중복 없음 |
+| `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 기준 시각의 지도 planetCount/orbits·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
+| `planets.items[].candidateId` | 행성 객체·목록·확대 선택의 공통 식별자. 배열 인덱스/표시 순번을 ID로 쓰지 않음 |
+| `planets.items[].kind` | confirmed / unconfirmed. 사용자는 "확인된 행성" / "아직 확인되지 않은 후보"로 읽는다. FP enum은 이 배열에 없음 |
+| `planets.items[].periodDays` | 반복 주기, 일 단위. 매칭 신호의 값이며 사용자 입력값이나 애니메이션 속도를 반환하는 필드가 아님 |
+| `planets.items[].depthPpm` | 어두워진 정도, ppm. 퍼센트로 보일 때 depthPpm / 10000 (1450ppm = 0.145%) |
+| `planets.completedWithoutPlanets` | 진행 완료이며 표시할 내 행성이 0개인 상태. 외계행성이 실제로 없다는 증거가 아님 |
 | `achievement.grade` | `count` 1/2/3/4 이상 → A/S/SS/SSS, 0이면 null. 열이 아니라 계산값(GRD-01) |
 | `actions.analysis` | `start`(제출 없음) / `continue`(진행 중) / `review`(완료). 재개 별은 `continue` |
 | `actions.boardOpen` | 한 명 이상 발견한 별이면 true(COM-01). 스레드 목록은 서비스 API |
+
+**시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·색·크기·궤도 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
+
+0개 응답은 `planets: {"count": 0, "completedWithoutPlanets": false, "items": []}` 형태이며 진행 완료라면 completedWithoutPlanets만 true가 된다. 로딩/실패와 0개를 구분하고 재시도·은하 복귀를 제공한다. 응답 count/items 불일치·중복 ID는 계약 오류로 처리하며 부족한 수만큼 임의 행성을 생성하지 않는다. A 별 요청 뒤 B 별을 선택했을 때 A의 늦은 응답을 무시한다. 4.1절 asOf/skyVersion 최신성 규칙을 그대로 사용한다. 행성 선택은 이미 받은 items에서 처리하며 별도 행성 상세 API를 신설하지 않는다. [별지도 표현 계약 3절](../../../docs/development/sky-presentation-contract.md)과 AT-120~122를 따른다.
 
 ### 4.3 퀘스트 패널
 
@@ -1135,7 +1146,7 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), D-1 해소(SB-D17) |
 | 2026-09-13 | 백승학 통합 정합(`724c560`·`826ce1e`) 수용: 챌린지 참여 수 별 단위 COUNT DISTINCT, 미계산 잔차 `status: null`, 타인 공개 그래프 재계산 없음을 D-13~D-15로 결정안 표에 등록. 2.4절에 `null` 의미 추가. 통합 검토 작업 로그 파일은 변경 이력으로 대체하고 제거 |
-| 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. GIF 사용법 다시 보기의 false 재설정 문구를 제거하고 서비스 API의 단방향 완료 규칙과 4.1·D-8 정합화. 구현/이관 및 담당자 승인은 MR 리뷰 대상. |
+| 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. GIF 사용법 다시 보기의 false 재설정 문구를 제거하고 서비스 API의 단방향 완료 규칙과 4.1·D-8 정합화. 4.2에 내 매칭 행성 목록의 범위·개수·단위·빈/실패 상태·3D 표현 구분을 명시(새 API 없음). 구현/이관 및 담당자 승인은 MR 리뷰 대상. |
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |

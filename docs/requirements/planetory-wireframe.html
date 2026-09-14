@@ -206,11 +206,11 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <div>
       <div class="eyebrow">Wireframe · v1.2 · 변경 검토안</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v1.2 변경안과 상태표 v1.0의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
+      <p>요구사항 명세서 v1.2 변경안과 상태표 v1.2 변경안의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.2 · 상태표 v1.0</b></dd>
-      <dt>작성일</dt><dd><b>2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.2 · 상태표 v1.2 변경안</b></dd>
+      <dt>개정일</dt><dd><b>2026-09-14: 은하 배치·GIF 안내·내 행성 근접 뷰. 2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
     </dl>
@@ -280,7 +280,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 
   <!-- ===== SC-01 ===== -->
   <section class="frame" id="s01">
-    <div class="flabel"><span class="fid">SC-01</span><span class="fname">로그인 · 첫 방문 안내</span><span class="fids">ACC-01 · ACC-02 · ACC-03 · HOME-09 · POL-26</span><span class="tag p0">P0</span><span class="tag new">v0.12</span>
+    <div class="flabel"><span class="fid">SC-01</span><span class="fname">로그인 · 첫 방문 안내</span><span class="fids">ACC-01 · ACC-02 · ACC-03 · HOME-09 · POL-26</span><span class="tag p0">P0</span><span class="tag new">v1.2</span>
       <span class="fdesc">두 OAuth만. 첫 로그인 뒤 홈에 튜토리얼 1번 별을 여는 동안 말풍선 안내 5단계를 한 번 보여준다(HOME-09, P0). 완료 저장 뒤 자동 재노출하지 않는다. 마이페이지 [사용법 다시 보기]는 GIF+설명을 읽는 별도 5단계 안내이며 완료 상태를 변경하지 않는다.</span></div>
     <div class="scroll"><div class="pair">
       <div class="wf half">
@@ -323,16 +323,16 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">ACC-01</span><span>SSAFY OAuth. 같은 고유 ID 재로그인은 동일 회원</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">ACC-02</span><span>Google OAuth. 다른 제공자의 같은 이메일은 병합하지 않음</span><span class="tag p0">P0</span></li>
-      <li><span class="co">3</span><span class="nid">POL-26 · HOME-02 · AT-57</span><span>신규 회원 홈에는 튜토리얼 1번 별만 보임. 완료할 때마다 다음 순번이 바깥에 나타나고, 5번 완료 후 챌린지 별이 나타남</span><span class="tag p0">P0</span></li>
-      <li><span class="co">4</span><span class="nid">HOME-09 · AT-86</span><span>첫 방문 말풍선 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출). 1회만, 건너뛰기 가능, 설정에서 다시 켬</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">POL-26 · HOME-02 · AT-57</span><span>신규 회원 홈에는 튜토리얼 1번 별만 보임. 완료할 때마다 다음 순번이 은하 배치로 나타나고, 5번 완료 후 챌린지 별이 나타남</span><span class="tag p0">P0</span></li>
+      <li><span class="co">4</span><span class="nid">HOME-09 · AT-86</span><span>첫 방문 말풍선 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출). 1번 첫 제출 또는 안내 닫기 성공 시 완료. 마이페이지에서는 GIF+설명 5단계를 읽기만 하며 상태 변경 없음</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">5</span><span class="nid">HOME-06 · SUB-12</span><span>튜토리얼 5번은 복수 FP 신호의 잔차 탐색·판단 연습. 불일치가 쌓이면 상세 보기를 거쳐 다음 순번으로 넘어갈 수 있음(SUB-12)(실제 TIC 미선정, TBD). 같은 튜토리얼에서 불일치 제출 3회면 [건너뛰기] 제공(서버 설정, 성과 없음)</span><span class="tag p0">P0</span></li>
     </ol>
   </section>
 
   <!-- ===== SC-02 ===== -->
   <section class="frame" id="s02">
-    <div class="flabel"><span class="fid">SC-02</span><span class="fname">홈 별 지도</span><span class="fids">HOME-01 · HOME-02 · HOME-05 · HOME-07 · HOME-08 · GRD-08 · NFR-20</span><span class="tag p0">P0</span><span class="tag new">v0.13</span>
-      <span class="fdesc">검은 연속 캔버스. 중앙부·나선 팔·제한된 분산으로 은하 형태를 유지한다. 새 별의 자리는 서버가 계산·저장하며 기존 별은 움직이지 않는다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 옆에 상세 패널이 뜨고, 빈 하늘을 누르면 닫힌다. 퀘스트 패널은 기본 접힘.</span></div>
+    <div class="flabel"><span class="fid">SC-02</span><span class="fname">홈 별 지도</span><span class="fids">HOME-01 · HOME-02 · HOME-05 · HOME-07 · HOME-08 · GRD-08 · NFR-20</span><span class="tag p0">P0</span><span class="tag new">v1.2</span>
+      <span class="fdesc">검은 연속 캔버스. 중앙부·나선 팔·제한된 분산으로 은하 형태를 유지한다. 새 별의 자리는 서버가 계산·저장하며 기존 별은 움직이지 않는다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 같은 캔버스에서 그 별과 내 발견 행성으로 접근하고 상세 패널이 뜬다. 행성을 누르면 확대·개별 정보를 표시하고 은하 복귀 시 이전 카메라를 복원한다. 퀘스트 패널은 기본 접힘.</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb">
         <span class="logo"><i></i>Planetory</span>
@@ -347,14 +347,14 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="box-h"><span class="co">2</span>TIC 231663901 <span class="r"><span class="pill acc">진행 중</span></span></div>
           <div class="box-b">
             <dl class="kv"><dt>관측 회차</dt><dd>1 · 4 · 5</dd><dt>밝기 등급</dt><dd>9.8</dd><dt>발견 경로</dt><dd>튜토리얼 1</dd></dl>
-            <div class="row" style="margin-top:10px"><span class="co">3</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2</span><span class="pill soft">확인된 행성 · S</span><span class="pill soft">곡선 단계 2</span></div>
-            <div class="muted small" style="margin-top:6px">확인된 행성이 있는지는 분석 화면에서 알려줍니다</div>
+            <div class="row" style="margin-top:10px"><span class="co">3</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2</span><span class="pill soft">성과 2건 · S</span><span class="pill soft">곡선 단계 2</span></div>
+            <div class="muted small" style="margin-top:6px">표시 행성은 내 매칭 신호 기준이며 아직 못 찾은 후보 수는 공개하지 않습니다</div>
             <div class="row" style="margin-top:10px"><span class="btn pri sm">분석 계속</span><span class="btn sm">결과</span><span class="btn sm">스레드</span></div>
           </div>
         </div>
         <!-- 궤도 툴팁 -->
-        <div class="tip" style="left:520px;top:330px;width:150px;padding:5px 8px">
-          <span class="row" style="margin:0"><span class="co dim">4</span><span class="mono small">주기 3.21일 · 행성 같음</span></span>
+        <div class="tip" style="left:520px;top:330px;width:235px;padding:5px 8px">
+          <span class="row" style="margin:0"><span class="co dim">4</span><span class="mono small">확인된 행성 · 3.21일 · 1450ppm</span></span>
         </div>
         <!-- 퀘스트 패널 접힘 -->
         <div class="panel" style="right:16px;top:16px;width:250px;padding:8px 12px">
@@ -403,11 +403,23 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
         </div>
       </div>
     </div></div>
+    <div class="scroll"><div class="wf" style="margin-top:18px">
+      <div class="gnb"><b>SC-02 · 선택한 별의 근접 뷰</b><span class="right"><span class="btn sm">별 전체 보기</span><span class="btn sm">은하로 돌아가기</span></span></div>
+      <div class="sky" style="height:360px;display:grid;grid-template-columns:1fr 330px">
+        <svg viewBox="0 0 780 360" role="img" aria-label="내가 찾은 행성 두 개의 근접 뷰 배치 예시" style="width:100%;height:360px">
+          <ellipse cx="360" cy="180" rx="155" ry="58" fill="none" stroke="#555c72"/><ellipse cx="360" cy="180" rx="280" ry="103" fill="none" stroke="#555c72"/>
+          <circle cx="360" cy="180" r="38" fill="#ffe1a6"/><circle cx="494" cy="151" r="17" fill="#9fbae9"/><circle cx="134" cy="241" r="25" fill="#99c8bb"/>
+          <text x="295" y="258" fill="#bdc6df" font-size="15">TIC 123456789</text><text x="495" y="111" fill="#bdc6df" font-size="13">c-401 · 선택하여 확대</text><text x="75" y="295" fill="#bdc6df" font-size="13">c-402 · 미확정 후보</text>
+          <text x="24" y="337" fill="#8894b5" font-size="12">문서용 배치 예시 · 표면과 궤도는 이해를 돕기 위한 시각화입니다</text>
+        </svg>
+        <div style="padding:20px;border-left:1px solid var(--line);background:#fff;color:#1b1d2e"><b>내가 찾은 행성 2개</b><p class="muted small">목록 또는 행성 선택 → 해당 행성 확대</p><div class="row"><span class="pill">c-401</span><span class="pill soft">c-402</span></div><dl class="kv" style="margin-top:20px"><dt>선택한 신호</dt><dd>c-401</dd><dt>종류</dt><dd>확인된 행성</dd><dt>반복 주기</dt><dd>3.0021일</dd><dt>어두워진 정도</dt><dd>1450ppm (0.145%)</dd></dl><p class="muted small">내 발견 신호만 · 성과 인정 수와 별도<br>0개: 아직 표시할 내 행성이 없어요<br>불러오기 실패: 다시 시도 / 은하로 돌아가기</p></div>
+      </div>
+    </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(세대·각도·지터·깊이), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
-      <li><span class="co">2</span><span class="nid">HOME-08</span><span>별 옆 상세 패널. 확대하면 화면 가장자리에 도킹. 빈 하늘 클릭으로 닫힘. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(world_x·world_y·depth_z·layout_version), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">HOME-08</span><span>같은 캔버스에서 선택 별 근접 뷰·내 행성 공전·행성 선택 확대. 상세 패널은 가장자리에 도킹. 빈 하늘 클릭 또는 [은하로 돌아가기]는 이전 지도 카메라 복원. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 색과 문자로, 등급(= 인정된 성과 수)·곡선 단계는 문자로만. 유형별 등급은 없음. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
-      <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>궤도에 마우스를 올리면 주기와 내 판단. 궤도는 매칭한 확인된 행성 + "행성 같음" 판단 미확정 신호만. 성과 인정과 별도</span><span class="tag p0">P0</span></li>
+      <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>행성에 마우스를 올리면 종류·주기·감광 깊이. 클릭/목록 선택으로 확대와 개별 정보를 표시. 궤도는 매칭한 확인된 행성 + "행성 같음" 판단 미확정 신호만. 성과 인정과 별도</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">HOME-07</span><span>퀘스트 패널 기본 접힘. 펼친 상태는 SC-09</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">HOME-05 · NFR-08</span><span>범례. 색만으로 전달하지 않음</span><span class="tag p0">P0</span></li>
       <li><span class="co">7</span><span class="nid">DEC-32 · NFR-20a</span><span>축소 시 성운 군집, 호버로 구성 표시. 군집은 배율 단계별 사전 계산</span><span class="tag p0">P0</span></li>
@@ -708,8 +720,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 
   <!-- ===== SC-08 ===== -->
   <section class="frame" id="s08">
-    <div class="flabel"><span class="fid">SC-08</span><span class="fname">마이페이지</span><span class="fids">MY-01 ~ MY-04 · ACC-05 · HIS-04 · HOME-09 · DEC-34</span><span class="tag p0">P0</span><span class="tag new">v0.12</span>
-      <span class="fdesc">옛 "내 진행" 화면을 흡수. 프로필 요약(닉네임 인라인 변경, 팔로잉·팔로워), 내 별 목록(최근 활동순), 분석 히스토리, 설정(알림·첫 방문 안내·내 별 목록 공개·계정).</span></div>
+    <div class="flabel"><span class="fid">SC-08</span><span class="fname">마이페이지</span><span class="fids">MY-01 ~ MY-04 · ACC-05 · HIS-04 · HOME-09 · DEC-34</span><span class="tag p0">P0</span><span class="tag new">v1.2</span>
+      <span class="fdesc">옛 "내 진행" 화면을 흡수. 프로필 요약(닉네임 인라인 변경, 팔로잉·팔로워), 내 별 목록(최근 활동순), 분석 히스토리, 설정(알림·사용법 다시 보기·내 별 목록 공개·계정).</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb"><span class="logo"><i></i>Planetory</span><span class="crumb"><b>마이페이지</b></span><span class="menu" style="margin-left:auto"><span>별 지도</span><span>커뮤니티</span><span>통계</span><span class="on">마이페이지</span></span><span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span></div>
       <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
@@ -884,7 +896,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v1.1(2026-09-11)·상태표 v1.0·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v1.2 변경안(2026-09-14)·상태표 v1.2 변경안·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.2 반영: 은하 배치·GIF 안내·내 행성 공전/확대/정보. 기존 v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
