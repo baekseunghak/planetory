@@ -1,0 +1,178 @@
+# 백엔드 개발 환경 안내
+
+대상 Task: S15P21C206-48. 작업 브랜치: `S15P21C206-48-be-initial-settings`.
+범위는 프로젝트·DB 연결·Flyway·Swagger와 로컬 검증까지다. Task 정의에 있던 GitLab CI 빌드·테스트 연결은 기본 세팅을 먼저 병합하기 위해 후속 Task로 분리했다(Jira에 기록). EC2 배포, 인증·도메인 API 구현도 후속 작업이다.
+
+## 1. 설치 버전
+
+| 항목 | 고정 버전 / 기준 |
+|---|---|
+| Java | Toolchain 21. 검증 PC: Temurin 21.0.11+10 |
+| Spring Boot | 4.1.1 |
+| Gradle | Wrapper 9.7.1, 배포 ZIP SHA-256 검증 포함 |
+| PostgreSQL | Docker 이미지 `postgres:18.6-alpine` |
+| Flyway | Boot 4.1.1 의존성 관리 사용. 검증 해석 버전 12.4.0 |
+| PostgreSQL JDBC | Boot 의존성 관리 사용. 검증 해석 버전 42.7.13 |
+| Swagger | `springdoc-openapi-starter-webmvc-ui:3.1.1` |
+| Docker Compose | `include`를 지원하는 v2.20.0 이상. 검증 PC: v5.3.1 |
+
+Gradle을 별도로 설치하지 않는다. JDK 21도 미리 설치할 필요가 없다. `settings.gradle`의 foojay toolchain resolver가 JDK 21이 없으면 자동으로 내려받아 컴파일·테스트에 사용한다. 시스템 기본 Java가 다른 버전이어도 Wrapper 실행에는 Java 17 이상이면 충분하다. IDE에서는 Project SDK·Gradle JVM을 21로 지정한다. JPA는 아직 추가하지 않았으며 JDBC로 연결을 확인한다. 스키마는 Flyway만 변경한다.
+
+공식 기준: [Boot 4.1.1](https://spring.io/blog/2026/08/20/spring-boot-4-1-1-available-now/), [Boot 요구 환경](https://docs.spring.io/spring-boot/system-requirements.html), [springdoc](https://springdoc.org/), [PostgreSQL 버전](https://www.postgresql.org/support/versioning/).
+
+## 2. DB 실행 — 저장소 루트
+
+1. Docker Desktop에서 Linux 엔진이 실행 중인지 확인한다.
+2. `.env.example`을 `.env`로 복사한다. 기존 `.env`가 있으면 덮어쓰지 않는다.
+3. `POSTGRES_PASSWORD`를 본인의 로컬 개발용 값으로 변경한다. 값은 저장소에 커밋하지 않는다.
+4. 다음 명령으로 DB만 실행한다. Hadoop·Spark·프론트엔드는 함께 실행되지 않는다.
+
+```sh
+docker compose --profile service up -d --wait service-db
+docker compose ps service-db
+docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT version();"
+```
+
+| 항목 | 값 |
+|---|---|
+| DB 이름 / 사용자 | `planetory_poc` / `planetory` — 기존 Compose 이름 유지 |
+| PC에서 접속 | `localhost:5432` (`.env.example`의 POSTGRES_PORT) |
+| 컨테이너끼리 접속 | `service-db:5432` |
+| 데이터 볼륨 | 루트 Compose 기준 `planetory-local_service-db-pg18-data` |
+| 볼륨 마운트 | `/var/lib/postgresql` — PostgreSQL 18 이미지 레이아웃 |
+
+PC에 다른 PostgreSQL이 있거나 5432가 거부되면 `.env`의 `POSTGRES_PORT`를 바꾸고(예: 15432) DB를 다시 실행한다. 이 경우 3장의 터미널 실행에서 `DATABASE_URL`도 같은 포트로 지정한다. 컨테이너 내부 포트와 backend의 Compose 연결 URL은 바꾸지 않는다.
+
+DB 정의는 루트 Compose가 포함하는 `experiments/distributed-pipeline/compose.yaml`에 있다. 기존 파일을 재사용했으며 PostgreSQL 16 볼륨을 18에 연결하지 않는다. service 네트워크는 호스트 IDE의 DB 연결과 backend 의존성 다운로드를 위해 일반 bridge로 설정하고 공개 포트는 `127.0.0.1`에만 바인딩한다. Hadoop 네트워크는 내부 전용을 유지한다.
+
+DB를 잠시 멈출 때는 `docker compose stop service-db`를 사용한다. `down -v`는 데이터를 삭제하므로 일상적인 종료 명령으로 사용하지 않는다. 초기화된 볼륨에서는 `.env`의 비밀번호를 바꾸는 것만으로 DB 비밀번호가 변경되지 않는다.
+
+## 3. 로컬 빌드·실행 — apps/backend
+
+Spring과 Gradle은 루트 `.env`를 자동으로 읽지 않는다. 앱은 배포 Compose와 같은 `DATABASE_URL`·`DATABASE_USER`·`DATABASE_PASSWORD`를 읽으므로, 터미널 실행에서는 `.env`의 `POSTGRES_PASSWORD`·`POSTGRES_PORT`를 아래처럼 매핑한다. 예시는 주석이나 따옴표가 없는 `KEY=value` 형식 기준이다. 비밀번호를 출력하지 않는다.
+
+**테스트도 실행 중인 DB를 사용한다.** `clean build`를 실행하기 전에 2장의 DB가 떠 있고 환경변수가 설정되어 있어야 한다.
+
+### Windows PowerShell
+
+```powershell
+cd apps/backend
+foreach ($line in Get-Content -LiteralPath ../../.env) {
+    if ($line -match '^(POSTGRES_PASSWORD|POSTGRES_PORT)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+    }
+}
+$env:DATABASE_PASSWORD = $env:POSTGRES_PASSWORD
+$env:DATABASE_URL = "jdbc:postgresql://localhost:$($env:POSTGRES_PORT)/planetory_poc"
+.\gradlew.bat --version
+.\gradlew.bat clean build
+.\gradlew.bat bootRun --args='--spring.profiles.active=local'
+```
+
+### macOS / Linux (sh 호환 셸)
+
+```sh
+cd apps/backend
+set -a
+. ../../.env
+set +a
+export DATABASE_PASSWORD="$POSTGRES_PASSWORD"
+export DATABASE_URL="jdbc:postgresql://localhost:${POSTGRES_PORT:-5432}/planetory_poc"
+./gradlew --version
+./gradlew clean build
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+`Ctrl+C`로 서버를 종료한다. Windows에서 build/libs의 JAR를 직접 실행 중이면 파일 잠금 때문에 `clean`이 실패하므로 서버를 먼저 종료한다. IDE에서는 Project SDK와 Gradle JVM을 21로 지정하고 실행 구성에 `DATABASE_PASSWORD`(포트를 바꿨다면 `DATABASE_URL`도)와 `local` 프로필을 설정한다. 예제 API와 Swagger는 local에서 켜며 기본 실행에서는 끈다.
+
+DB와 backend를 모두 Docker로 실행하려면 루트에서 다음 명령을 쓴다. 호스트에서 실행 중인 8080 서버는 먼저 종료한다. 이번 검증은 DB 컨테이너 + 호스트 JDK 실행이며 backend 이미지 빌드·실행은 별도로 검증해야 한다.
+
+```sh
+docker compose --profile service up -d --build backend
+```
+
+### 환경변수
+
+| 변수 | 역할 / 기본값 |
+|---|---|
+| `DATABASE_PASSWORD` | 앱이 읽는 DB 비밀번호. 필수, 소스에 기본값 없음 |
+| `DATABASE_URL` | 앱이 읽는 JDBC URL. 기본 `jdbc:postgresql://localhost:5432/planetory_poc` |
+| `DATABASE_USER` | 앱이 읽는 DB 사용자. 기본 `planetory` |
+| `POSTGRES_PASSWORD` / `POSTGRES_PORT` | 루트 `.env`·Compose용. 터미널 실행 시 위 `DATABASE_*`로 매핑 |
+| `SPRING_DATASOURCE_*` | 로컬 Compose `backend`가 사용하는 Spring 표준 연결 설정. `DATABASE_*`보다 우선 |
+| `SPRING_PROFILES_ACTIVE` | `local`이면 Swagger·예제 API 제공 |
+| `SWAGGER_ENABLED` | local 외 환경에서 문서 노출을 명시적으로 제어, 기본 false |
+
+## 4. Flyway 최초 스키마
+
+파일: `src/main/resources/db/migration/V1__initial_schema.sql`.
+기준: [ERD v1.1](../../../docs/development/database-erd.md) 그림과 3장 본문. 그림에 생략된 memo·계산 버전·time_system·round_id·수정 시각 등도 본문에 따라 포함했다.
+
+- 33개 테이블, 57개 FK, 닉네임 대소문자 무시 유일 인덱스, 별당 current 판·신호당 공식 스레드 부분 유일 인덱스, pg_trgm 검색 인덱스를 만든다.
+- PK는 ERD의 BIGINT IDENTITY를 `GENERATED BY DEFAULT AS IDENTITY`로 구현했다. 별 TIC·1:1 FK PK·튜토리얼 순번·규칙 버전은 별도 생성하지 않는다.
+- ERD가 명시한 선택 값은 nullable로 두고 기본적인 식별자·필수 본문·상태는 NOT NULL로 작성했다. 숫자는 명시된 numeric을 사용하며 임의의 정밀도 상한을 정하지 않았다. 이 null/default 해석은 초기 SQL 리뷰 대상이다.
+- CHECK는 상태값, 공식 스레드 작성자·별 게시판 조건, 첨부 대상 XOR, 제출 위상·판단·매칭 후보 조건, 배열 길이 등을 검증한다. 소유자·동일 TIC처럼 여러 행을 비교하는 업무 검증은 API 구현 시 추가한다.
+- `pg_trgm`은 public 스키마에 설치한다. 테스트 스키마와 개발 스키마에서 같은 확장을 사용하며, 테스트가 확장을 삭제하지 않는다.
+- 사용자·별·운영 설정값을 자동으로 넣지 않는다. P1 테이블 생성이 P1 API 구현을 의미하지 않는다.
+- FK 삭제 전파는 지정하지 않았다(NO ACTION). 탈퇴 처리 정책을 임의로 확정하지 않는다.
+
+앱 시작 시 Flyway가 자동 실행되고 이력은 `flyway_schema_history`에 저장된다. `baseline-on-migrate=false`, `clean-disabled=true`, Spring SQL 자동 초기화는 꺼져 있다. 기존 비어 있지 않은 DB를 임의 baseline/clean/repair로 통과시키지 않는다.
+
+```sh
+docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT version, description, installed_on, success FROM flyway_schema_history ORDER BY installed_rank;"
+```
+
+### 마이그레이션 규칙
+
+- 새 변경은 `V2__설명.sql`, `V3__설명.sql`처럼 버전 번호와 두 개의 밑줄로 추가한다. 설명은 영문 snake_case로 쓴다.
+- **develop에 병합된 파일은 수정하지 않는다.** V1 포함. 내용을 고치려면 다음 번호의 새 파일로 ALTER한다. 병합된 파일이 바뀌면 이미 적용한 DB에서 checksum 불일치로 기동이 실패한다.
+- 버전 번호는 **develop 병합 순서**로 확정한다. 브랜치에서 잡은 번호가 먼저 병합된 다른 MR과 겹치면 rebase 후 번호를 올린다. `out-of-order`는 켜지 않는다.
+- 변경 SQL은 먼저 독립 검증 환경(테스트 스키마 또는 새 로컬 DB)에 적용하고 앱 재시작·이력·제약을 확인한다.
+- 로컬 DB에서 checksum 오류가 나면(병합 전 브랜치 파일을 고친 경우 등) 데이터를 버려도 되는 로컬 볼륨은 `docker compose --profile service down -v service-db` 후 다시 올린다. 공유·운영 DB에서는 `repair`를 임의로 실행하지 않는다.
+
+### 후속으로 분리한 항목
+
+| 항목 | 남은 작업 |
+|---|---|
+| global_stats | 집계 산식·열·유일 인덱스 확정 후 materialized view 및 갱신 Job 작성 |
+| candidates.quality | 자료형·의미 확정 후 열 추가 |
+| ai_executions.status | TEXT 열은 유지. 허용값 확정 후 CHECK 추가 |
+| 운영 seed·튜토리얼 TIC | ERD·탐사 담당자가 값 확정 후 별도 입력 |
+| DB 역할·불변성 | 애플리케이션/마이그레이션/배치 역할 분리 및 History 수정·삭제 제한. 현재 로컬은 Compose 개발 계정이 스키마를 소유하며 운영 권한 구성이 아님 |
+| 첨부·공개 분석 | 소유자·TIC·게시글 종류 검증, 불변 필드 보호의 서비스/트리거 책임 확정 |
+
+### 초기 스키마 담당·적용 순서 (합의 내용)
+
+- V1은 ERD v1.1을 기준으로 이 Task에서 작성했고, **ERD 담당자가 작성한 스키마를 먼저 병합한 뒤 부족한 부분을 보완**하기로 했다.
+- ERD 담당자의 열·null/default 해석 검토는 병합 후 진행한다. 불일치가 발견되면 **V1을 고치지 않고 V2부터 ALTER로 반영**한다.
+- 이후 도메인 테이블 변경 SQL은 해당 기능 담당자가 자기 MR에 마이그레이션을 포함하고, ERD 담당자가 리뷰한다. ERD 문서와 SQL이 어긋나면 ERD 문서를 먼저 갱신한다.
+- `pg_trgm` 확장 생성은 DB 계정에 CREATE 권한이 필요하다. 운영 DB 계정 권한 분리는 인프라 담당자와 후속 Task에서 정한다.
+
+## 5. Swagger와 상태 확인
+
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
+- OpenAPI JSON: http://localhost:8080/v3/api-docs
+- 예제: `GET /api/v1/hello` → 200, `{"message":"Planetory 백엔드가 실행 중입니다."}`
+- 상태: `GET /actuator/health` → DB 연결을 포함한 상태. 정상은 200·UP, 장애는 503. 상세 접속 정보는 노출하지 않는다.
+
+Swagger에서 `GET /api/v1/hello`를 펼치고 **Try it out → Execute**를 누른다. 예제는 데이터를 수정하지 않는다. 공개용 오류·인증 계약은 도메인 구현 Task에서 적용한다.
+
+## 6. 검증 결과 (2026-09-14)
+
+| 확인 | 결과 |
+|---|---|
+| JDK 21 / Wrapper 9.7.1 컴파일 | 통과 |
+| PostgreSQL 실제 버전 | 18.6, 컨테이너 healthy |
+| 전체 빌드·통합 테스트 | `clean build` 통과, 테스트 3개 실패 0 |
+| 독립 테스트 스키마 | 실행마다 UUID 스키마 생성, 종료 시 해당 스키마만 정리 |
+| Flyway | 테스트에서 V1 적용 후 migrate 두 번 모두 신규 적용 0건 |
+| 실제 개발 DB | 33개 테이블 생성·V1 성공 이력 1건 |
+| 서버 재시작 | 기존 v1 유지, `No migration necessary` 확인 |
+| Swagger UI | 실제 Try it out·Execute 호출로 200 및 기대 응답 확인 |
+| Docker `backend` 이미지 빌드·실행 | 미검증 (DB 컨테이너 + 호스트 JDK 실행만 검증) |
+| GitLab CI·EC2 배포 | 후속 Task, 미검증 |
+| 팀원 재현 | MR 리뷰 시 리뷰어가 이 문서만으로 3장까지 재현해 확인 |
+
+테스트는 H2가 아니라 실행 중인 PostgreSQL을 사용한다. 설정된 DB에 테스트 스키마 생성·삭제 권한이 필요하며, 운영 DB에는 연결하지 않는다. 실패해 스키마가 남으면 `backend_test_...` 이름을 확인해 정리한다. 자동 테스트는 자기 실행에서 생성한 이름만 삭제한다.
+
+JUnit 결과는 `build/test-results/test/`, HTML 결과는 `build/reports/tests/test/index.html`에 생성된다. 빌드 결과·비밀번호·로컬 환경 파일은 Git에서 제외한다.

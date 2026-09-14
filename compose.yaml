@@ -30,9 +30,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://service-db:5432/planetory_poc
       SPRING_DATASOURCE_USERNAME: planetory
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD for local development}
+      SPRING_PROFILES_ACTIVE: local
+      GRADLE_USER_HOME: /root/.gradle
     volumes:
       - ./apps/backend:/workspace
-      - backend-gradle-cache:/home/gradle/.gradle
+      - backend-gradle-cache:/root/.gradle
     ports:
       - "127.0.0.1:8080:8080"
     networks:
