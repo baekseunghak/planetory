@@ -1,7 +1,99 @@
 # Backend
 
-Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 기반 백엔드다.
+Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 18.6 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. 회원·탐사·커뮤니티 기능과 인증은 아직 구현하지 않았다. Gold 배열·메타데이터도 ERD에 따라 PostgreSQL 테이블로 정의한다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. 회원·탐사·커뮤니티 기능과 인증은 아직 구현하지 않았다.
 
-실행 명령·환경변수·마이그레이션 규칙·검증 결과는 [개발 환경 안내](docs/development-setup.md)를 참고한다. 저장소 루트의 기존 Compose에서 `service-db`를 실행한 뒤 이 폴더에서 Wrapper로 빌드한다.
+이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
+
+## 빠른 시작
+
+준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
+
+```sh
+cd apps/backend
+./gradlew bootRun          # Windows: .\gradlew.bat bootRun
+```
+
+이 명령 하나로 다음이 순서대로 일어난다.
+
+1. 루트 Compose의 PostgreSQL 컨테이너(`service-db`)를 띄운다. 이미 떠 있으면 바로 넘어간다.
+2. `local` 프로필로 서버를 띄운다. 프로필을 지정하지 않으면 `local`이 기본이다.
+3. 첫 기동이면 Flyway가 스키마를 만든다(`Successfully applied 1 migration`). 이후에는 `No migration necessary`.
+
+뜨고 나면 확인:
+
+| 확인 | 주소 | 기대 결과 |
+|---|---|---|
+| Swagger UI | http://localhost:8080/swagger-ui/index.html | API 목록 화면 |
+| 예제 API | Swagger에서 `GET /api/v1/hello` → Try it out → Execute | 200, `{"message":"Planetory 백엔드가 실행 중입니다."}` |
+| 상태 | http://localhost:8080/actuator/health | `{"status":"UP"}` |
+
+빌드·테스트도 같은 방식이다. 테스트 전에 DB를 자동으로 띄운다.
+
+```sh
+./gradlew clean build      # Windows: .\gradlew.bat clean build
+```
+
+### IDE에서 실행
+
+`PlanetoryApplication`의 main을 그냥 실행하면 된다. 프로필·환경변수 설정은 필요 없다.
+
+단, IDE의 main 실행은 Gradle을 거치지 않아 **DB를 자동으로 띄우지 않는다.** 처음 한 번 `./gradlew bootRun`(또는 아래 DB 명령)으로 DB를 올려 두면 이후에는 IDE 실행만으로 된다. DB 컨테이너는 PC를 재부팅해도 Docker Desktop과 함께 다시 뜬다.
+
+- **VS Code**: Extension Pack for Java 설치 후 `PlanetoryApplication.java`에서 Run. 빨간줄이 보이면 명령 팔레트 → `Java: Clean Java Language Server Workspace`.
+- **IntelliJ**: `apps/backend`를 Gradle 프로젝트로 열고 Gradle JVM·SDK를 21로 지정한다. Settings → Build → Compiler → Annotation Processors → **Enable annotation processing**을 켠다(Lombok).
+
+### 로컬 기본값
+
+팀 전체가 같은 값을 쓴다. 바꿀 필요가 없다.
+
+| 항목 | 값 |
+|---|---|
+| DB 접속 | `localhost:15432` / DB `planetory_poc` / 사용자 `planetory` / 비밀번호 `ssafy` |
+| 서버 | `localhost:8080` |
+
+- 로컬 개발 전용 값이다. DB 포트는 `127.0.0.1`에만 열린다. 배포 이미지는 `prod` 프로필로 뜨며 이 기본값을 쓰지 않는다.
+- 15432를 쓰는 이유: PC에 PostgreSQL을 직접 설치한 경우의 5432와 겹치지 않게 하려고.
+- DBeaver·DataGrip 같은 DB 클라이언트로도 위 값으로 접속할 수 있다.
+
+### DB만 따로 다루기 — 저장소 루트
+
+```sh
+docker compose --profile service up -d --wait service-db   # 띄우기
+docker compose --profile service stop service-db           # 멈추기(데이터 유지)
+```
+
+`docker compose up`만 하면 아무것도 뜨지 않는다. 모든 서비스에 프로필이 걸려 있다.
+
+DB를 직접 관리해서 Gradle의 자동 기동을 끄고 싶으면 `-PskipLocalDb`를 붙인다.
+
+## 자주 막히는 곳
+
+| 증상 | 원인 | 해결 |
+|---|---|---|
+| `로컬 DB를 띄우지 못했습니다` | Docker Desktop이 꺼져 있음 | Docker Desktop 실행 후 다시 시도 |
+| IDE 실행 시 `Connection refused` | IDE main 실행은 DB를 띄우지 않음 | `./gradlew bootRun`을 한 번 실행하거나 DB 띄우기 명령 실행 |
+| `SQL State: 28P01` password authentication failed | 예전에 다른 비밀번호로 DB를 띄운 적이 있음. 비밀번호는 볼륨을 처음 만들 때 고정된다. 루트 `.env`에 옛 `POSTGRES_PASSWORD`가 남아 있어도 같은 증상 | `.env`의 `POSTGRES_*` 줄을 지우고 아래 "로컬 DB 초기화" |
+| `Connection refused` (Gradle 실행) | 포트 불일치 | `docker compose ps service-db`에서 `127.0.0.1:15432->5432` 확인. 다르면 루트 `.env`의 `POSTGRES_PORT` 줄을 지운다 |
+| `Validate failed: Migration checksum mismatch` | 적용된 뒤에 마이그레이션 파일이 바뀜(병합 전 브랜치에서 수정한 경우) | 아래 "로컬 DB 초기화" |
+| `Port 8080 was already in use` | 다른 터미널·IDE·컨테이너에서 서버가 이미 실행 중 | 기존 서버를 종료한다 |
+| Swagger가 404 | `SPRING_PROFILES_ACTIVE`가 다른 값으로 설정돼 있음 | 로그에 `profile: "local"`이 보이는지 확인하고 IDE 실행 구성·환경변수에서 프로필 설정을 지운다 |
+| IDE에서 `import ... cannot be resolved` 빨간줄 | IDE가 Gradle 의존성을 아직 못 읽음 | VS Code: 명령 팔레트 → `Java: Clean Java Language Server Workspace`. IntelliJ: Gradle 새로고침 |
+| Lombok 메서드(`getXxx`)를 못 찾음 | 어노테이션 처리 꺼짐 | IntelliJ Annotation Processors 설정. 터미널 빌드는 영향 없음 |
+| Windows에서 `clean` 실패 | 실행 중인 서버가 build 폴더를 잡고 있음 | 서버 종료 후 다시 실행 |
+
+### 로컬 DB 초기화
+
+로컬 데이터를 모두 지운다. 공유·운영 DB에서는 쓰지 않는다.
+
+```sh
+# 저장소 루트
+docker compose --profile service down -v service-db
+docker compose --profile service up -d --wait service-db
+```
+
+## 더 보기
+
+- [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
+- [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/api-spec-ownership.md)

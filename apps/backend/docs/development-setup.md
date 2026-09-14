@@ -24,9 +24,8 @@ Gradle을 별도로 설치하지 않는다. JDK 21도 미리 설치할 필요가
 ## 2. DB 실행 — 저장소 루트
 
 1. Docker Desktop에서 Linux 엔진이 실행 중인지 확인한다.
-2. `.env.example`을 `.env`로 복사한다. 기존 `.env`가 있으면 덮어쓰지 않는다.
-3. `POSTGRES_PASSWORD`를 본인의 로컬 개발용 값으로 변경한다. 값은 저장소에 커밋하지 않는다.
-4. 다음 명령으로 DB만 실행한다. Hadoop·Spark·프론트엔드는 함께 실행되지 않는다.
+2. 로컬 개발 공용 기본값(포트 15432, 비밀번호 `ssafy`)을 쓰므로 `.env`는 만들지 않아도 된다. 값을 바꿀 때만 `.env.example`을 `.env`로 복사해 수정한다.
+3. 다음 명령으로 DB만 실행한다. Hadoop·Spark·프론트엔드는 함께 실행되지 않는다.
 
 ```sh
 docker compose --profile service up -d --wait service-db
@@ -37,12 +36,13 @@ docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT 
 | 항목 | 값 |
 |---|---|
 | DB 이름 / 사용자 | `planetory_poc` / `planetory` — 기존 Compose 이름 유지 |
-| PC에서 접속 | `localhost:5432` (`.env.example`의 POSTGRES_PORT) |
+| PC에서 접속 | `localhost:15432` (Compose 기본값, `.env`의 `POSTGRES_PORT`로 변경 가능) |
+| 비밀번호 | `ssafy` — 로컬 개발 공용 기본값. 포트는 127.0.0.1에만 바인딩 |
 | 컨테이너끼리 접속 | `service-db:5432` |
 | 데이터 볼륨 | 루트 Compose 기준 `planetory-local_service-db-pg18-data` |
 | 볼륨 마운트 | `/var/lib/postgresql` — PostgreSQL 18 이미지 레이아웃 |
 
-PC에 다른 PostgreSQL이 있거나 5432가 거부되면 `.env`의 `POSTGRES_PORT`를 바꾸고(예: 15432) DB를 다시 실행한다. 이 경우 3장의 터미널 실행에서 `DATABASE_URL`도 같은 포트로 지정한다. 컨테이너 내부 포트와 backend의 Compose 연결 URL은 바꾸지 않는다.
+기본 포트를 15432로 둔 이유는 PC에 직접 설치한 PostgreSQL(5432)과의 충돌을 피하기 위해서다. 포트나 비밀번호를 바꿨다면 앱에도 `DATABASE_URL`·`DATABASE_PASSWORD`로 같은 값을 넘긴다. 컨테이너 내부 포트와 backend의 Compose 연결 URL은 바꾸지 않는다.
 
 DB 정의는 루트 Compose가 포함하는 `experiments/distributed-pipeline/compose.yaml`에 있다. 기존 파일을 재사용했으며 PostgreSQL 16 볼륨을 18에 연결하지 않는다. service 네트워크는 호스트 IDE의 DB 연결과 backend 의존성 다운로드를 위해 일반 bridge로 설정하고 공개 포트는 `127.0.0.1`에만 바인딩한다. Hadoop 네트워크는 내부 전용을 유지한다.
 
@@ -50,41 +50,20 @@ DB를 잠시 멈출 때는 `docker compose stop service-db`를 사용한다. `do
 
 ## 3. 로컬 빌드·실행 — apps/backend
 
-Spring과 Gradle은 루트 `.env`를 자동으로 읽지 않는다. 앱은 배포 Compose와 같은 `DATABASE_URL`·`DATABASE_USER`·`DATABASE_PASSWORD`를 읽으므로, 터미널 실행에서는 `.env`의 `POSTGRES_PASSWORD`·`POSTGRES_PORT`를 아래처럼 매핑한다. 예시는 주석이나 따옴표가 없는 `KEY=value` 형식 기준이다. 비밀번호를 출력하지 않는다.
+프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있어 환경변수 없이 실행된다. 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
 
-**테스트도 실행 중인 DB를 사용한다.** `clean build`를 실행하기 전에 2장의 DB가 떠 있고 환경변수가 설정되어 있어야 한다.
-
-### Windows PowerShell
-
-```powershell
-cd apps/backend
-foreach ($line in Get-Content -LiteralPath ../../.env) {
-    if ($line -match '^(POSTGRES_PASSWORD|POSTGRES_PORT)=(.*)$') {
-        [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-    }
-}
-$env:DATABASE_PASSWORD = $env:POSTGRES_PASSWORD
-$env:DATABASE_URL = "jdbc:postgresql://localhost:$($env:POSTGRES_PORT)/planetory_poc"
-.\gradlew.bat --version
-.\gradlew.bat clean build
-.\gradlew.bat bootRun --args='--spring.profiles.active=local'
-```
-
-### macOS / Linux (sh 호환 셸)
+`bootRun`과 `test`는 먼저 `startLocalDb` 태스크로 루트 Compose의 `service-db`를 띄운다(`docker compose --profile service up -d --wait service-db`). 이미 떠 있으면 바로 끝난다. `CI=true`·`SKIP_LOCAL_DB=true` 환경이거나 `-PskipLocalDb`를 주면 건너뛴다. 로컬 Compose의 `backend` 컨테이너는 `SKIP_LOCAL_DB=true`로 실행한다.
 
 ```sh
 cd apps/backend
-set -a
-. ../../.env
-set +a
-export DATABASE_PASSWORD="$POSTGRES_PASSWORD"
-export DATABASE_URL="jdbc:postgresql://localhost:${POSTGRES_PORT:-5432}/planetory_poc"
 ./gradlew --version
 ./gradlew clean build
-./gradlew bootRun --args='--spring.profiles.active=local'
+./gradlew bootRun
 ```
 
-`Ctrl+C`로 서버를 종료한다. Windows에서 build/libs의 JAR를 직접 실행 중이면 파일 잠금 때문에 `clean`이 실패하므로 서버를 먼저 종료한다. IDE에서는 Project SDK와 Gradle JVM을 21로 지정하고 실행 구성에 `DATABASE_PASSWORD`(포트를 바꿨다면 `DATABASE_URL`도)와 `local` 프로필을 설정한다. 예제 API와 Swagger는 local에서 켜며 기본 실행에서는 끈다.
+Windows PowerShell에서는 `./gradlew` 대신 `.\gradlew.bat`을 쓴다.
+
+`Ctrl+C`로 서버를 종료한다. Windows에서 build/libs의 JAR를 직접 실행 중이면 파일 잠금 때문에 `clean`이 실패하므로 서버를 먼저 종료한다. IDE에서는 Project SDK와 Gradle JVM을 21로 지정한다. IDE의 main 실행은 Gradle을 거치지 않으므로 DB를 자동으로 띄우지 않는다. 예제 API와 Swagger는 local에서만 켠다.
 
 DB와 backend를 모두 Docker로 실행하려면 루트에서 다음 명령을 쓴다. 호스트에서 실행 중인 8080 서버는 먼저 종료한다. 이번 검증은 DB 컨테이너 + 호스트 JDK 실행이며 backend 이미지 빌드·실행은 별도로 검증해야 한다.
 
@@ -96,12 +75,13 @@ docker compose --profile service up -d --build backend
 
 | 변수 | 역할 / 기본값 |
 |---|---|
-| `DATABASE_PASSWORD` | 앱이 읽는 DB 비밀번호. 필수, 소스에 기본값 없음 |
-| `DATABASE_URL` | 앱이 읽는 JDBC URL. 기본 `jdbc:postgresql://localhost:5432/planetory_poc` |
+| `DATABASE_PASSWORD` | 앱이 읽는 DB 비밀번호. `local` 프로필 기본 `ssafy`, `prod` 등 그 외 프로필은 기본값 없음(필수) |
+| `DATABASE_URL` | 앱이 읽는 JDBC URL. `local` 프로필 기본 `jdbc:postgresql://localhost:15432/planetory_poc` |
 | `DATABASE_USER` | 앱이 읽는 DB 사용자. 기본 `planetory` |
-| `POSTGRES_PASSWORD` / `POSTGRES_PORT` | 루트 `.env`·Compose용. 터미널 실행 시 위 `DATABASE_*`로 매핑 |
+| `POSTGRES_PASSWORD` / `POSTGRES_PORT` | 루트 Compose `service-db`용. 기본 `ssafy` / `15432`. 바꾸면 앱의 `DATABASE_*`도 맞춘다 |
 | `SPRING_DATASOURCE_*` | 로컬 Compose `backend`가 사용하는 Spring 표준 연결 설정. `DATABASE_*`보다 우선 |
-| `SPRING_PROFILES_ACTIVE` | `local`이면 Swagger·예제 API 제공, Hibernate SQL 로그 출력 |
+| `SPRING_PROFILES_ACTIVE` | 미지정 시 `local`(로컬 DB 기본값·Swagger·예제 API·SQL 로그). 배포 이미지는 `prod` |
+| `SKIP_LOCAL_DB` / `CI` | `true`면 Gradle의 로컬 DB 자동 기동을 건너뜀 |
 | `SWAGGER_ENABLED` | local 외 환경에서 문서 노출을 명시적으로 제어, 기본 false |
 
 ## 4. Flyway 최초 스키마
