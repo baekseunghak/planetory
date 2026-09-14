@@ -1,0 +1,77 @@
+{
+  "fixtureVersion": "c02-v0.1",
+  "contractStatus": "review-only",
+  "synthetic": true,
+  "retired": {
+    "at": ["AT-100", "AT-115"],
+    "decision": "C02-R1",
+    "approval": "pending",
+    "submittedRemoved": ["A", "B"],
+    "currentProgressRemoved": ["A", "C"],
+    "retiredIds": ["B"],
+    "originalFlux": [1, 0.99, 0.98],
+    "modelA": [1, 0.99, 1],
+    "modelC": [1, 1, 0.98],
+    "existingApiReturn": {"removed": ["A"], "flux": [1, 1, 0.98], "notice": "STEP_NOT_RESTORABLE"},
+    "srsRetry": {"removed": ["A", "C"], "flux": [1, 1, 1], "notice": "STEP_NOT_RESTORABLE"},
+    "srsHistory": {"removed": [], "flux": [1, 0.99, 0.98], "fallbackReason": "RETIRED_CANDIDATE"}
+  },
+  "fold": {
+    "at": ["AT-118", "AT-95"],
+    "decision": "C02-R2",
+    "storageApproval": "pending",
+    "periodDays": 4,
+    "oldReferenceBtjd": 100,
+    "oldPhaseStart": 0.2,
+    "oldPhaseEnd": 0.3,
+    "epochBtjd": 101,
+    "durationHours": 9.6,
+    "currentReferenceBtjd": 101,
+    "expectedPhaseStart": 0.95,
+    "expectedPhaseEnd": 1.05,
+    "rawSegmentTimes": [[100, 102], [110, 112, 114]],
+    "wholeMedian": 110,
+    "meanOfSegmentMedians": 106.5
+  },
+  "selection": {
+    "at": ["AT-09", "AT-118"],
+    "decision": "C02-R3",
+    "approval": "pending",
+    "periodGridDays": [1, 10],
+    "outsideRecommended": {"periodDays": 4, "recommendedRangesDays": [[2, 3], [6, 7]], "passesPeriodRangeCheck": true, "matchResult": "not asserted"},
+    "outsideGrid": {"periodDays": 11, "passesPeriodRangeCheck": false},
+    "overlap": {"periodDays": 4, "phaseWidth": 0.1, "durationHours": 9.6, "syntheticMultiplier": 3, "suggestedDurationsHours": [2, 4], "candidateCapsHours": [6, 12], "withinEachCap": [false, true], "selectedPolicy": null}
+  },
+  "publicGraph": {
+    "at": ["AT-115", "AT-64"],
+    "source": "D-14/D-15; service API 7.2",
+    "viewer": "other-member",
+    "validPublicParent": true,
+    "cacheAvailable": false,
+    "jobAvailable": false,
+    "expected": {"jobsCreated": 0, "mayRequestRecompute": false, "mayReadOwnersPrivateJob": false, "residualStatus": null, "residualJobId": null},
+    "fallbacks": [
+      {"mode": "CURRENT", "originalAvailable": true, "display": "original"},
+      {"mode": "SUBMITTED", "snapshotAvailable": true, "curve": null, "display": "snapshot"},
+      {"mode": "CURRENT", "originalAvailable": false, "snapshotAvailable": false, "display": "graph-unavailable", "publicTextVisible": true}
+    ]
+  },
+  "participants": {
+    "at": ["AT-87"],
+    "source": "D-13",
+    "threads": [["u1", "u2"], ["u2", "u3"]],
+    "expectedStarCount": 3,
+    "afterFirstThreadHidden": [["u2", "u3"]],
+    "expectedAfterHidden": 2
+  },
+  "browserTools": {
+    "at": ["AT-73"],
+    "source": "EXP-11/D-15",
+    "approval": "existing-contract",
+    "calculationOwner": "browser",
+    "inputs": ["timeBtjd", "flux", "userPeriodDays", "phaseStart", "phaseEnd"],
+    "outputs": ["oddEven", "secondaryEclipse", "shape"],
+    "networkRequests": 0,
+    "serverPersistenceWrites": 0
+  }
+}

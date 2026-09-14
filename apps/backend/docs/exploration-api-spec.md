@@ -9,6 +9,8 @@
 - 분담·공통 약속: [API 명세 파트 분담](api-spec-ownership.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
 - 프론트 요구: 백지웅 분석 프론트 상세 명세 Draft 0.2의 협의 항목 Q03~Q12에 대한 답을 각 절에 `Qnn`으로 표기한다.
 
+- C02 후속 검토: [#133 계약 대조·검토안](exploration-contract-review.md). 은퇴 대체·기준 시각 저장 범위·duration 중첩 규칙은 담당자 합의 대기이며, 이 문서의 기존 제안을 확정 정책으로 사용하지 않는다. [현행 초안 JSON 예제](../../../docs/api/exploration/README.md)는 정적 계약 검사용이다.
+
 기능별로 "언제 호출하는지 → 무엇을 보내는지 → 무엇을 받는지 → 실패하면 어떻게 처리하는지"를 쓴다. 예시의 ID·수치·시각은 모두 가상이다.
 
 ## 1. 범위
@@ -107,6 +109,8 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 ```
 
 `T`는 판의 `foldReferenceTimeBtjd`다. 브라우저 값은 미리보기이고 서버가 제출 시 같은 식으로 다시 계산한 값만 저장한다.
+
+**C02-R2 검토 대기:** 위 표현은 기존 API의 Bundle 공통값 제안이다. SRS DAT-11·PublicationBundle의 세그먼트별 저장과 충돌하며, 저장·산정 범위는 [D06 공동 검토안](exploration-contract-review.md) 승인 후 SRS·ERD·API를 함께 정정한다. 공식의 수학적 일치만으로 저장 위치가 합의된 것은 아니다.
 
 ## 3. API 목록
 
@@ -423,6 +427,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 
 미제출 초안(주기·위상·판단·표시 범위)은 서버가 저장하지 않는다. EXP-10의 복원은 브라우저 임시 저장이며, 복원할 때 이 API로 판·단계가 같은지 확인한다(Q05).
 
+**C02-R1 검토 대기:** 은퇴 시 위 `currentCurveContext`의 활성 부분 집합 대체는 기존 API 제안이다. 재도전 SUB-10의 현재 진행 대체 및 History HIS-03의 원본 대체와 같다고 해석하지 않는다. 세 경로의 제거 집합·배열·안내는 [공통 은퇴 사례](exploration-contract-review.md)로 비교 후 확정한다.
+
 **실패:** `STAR_LOCKED`, `STAR_NOT_PUBLISHED`. `current` 판이 없으면 503 `DEPENDENCY_UNAVAILABLE`(배치 미공개 별은 published가 아니어야 하므로 정상 운영에서는 없다).
 
 ### 5.2 곡선 (세그먼트 DTO)
@@ -573,6 +579,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
 
+**C02-R3 검토 대기:** 5단계의 추천 연결 duration 상한은 아직 정책 제안이다. 겹치는 fineTune 범위의 BLS duration 선택, 추천 N 변경 영향과 추천 밖 상한을 [D20 공동 검토안](exploration-contract-review.md)에서 결정한다. 배열의 첫 봉우리를 임의 선택하거나 예시 배수·위상 폭을 운영 확정값으로 사용하지 않는다.
+
 ### 6.3 처리 순서 (한 트랜잭션, NFR-01)
 
 ```text
@@ -714,11 +722,11 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 ```
 
 - 위상은 저장값을 복사하지 않고 현재 판 기준 시각으로 재환산한다(HIS-02, 분석 프론트 6.3): `width = durationHours / (24 × P)`, `center = phase(epochBtjd)`, `phaseStart = (center − width/2) mod 1`, `phaseEnd = phaseStart + width`.
-- 제거 조합에 은퇴 후보가 있으면 `restored.step=false`, `notice: "STEP_NOT_RESTORABLE"`, `curveContext`는 **원 제출의 제거 조합에서 은퇴 후보만 뺀 조합**(`curveStep`은 그 수). 남은 후보는 모두 회원이 매칭한 활성 후보이므로 6.2절 3단계를 항상 통과한다. 판 전환 후 5.1절 `currentCurveContext`와 8.3절 히스토리 재현도 같은 규칙으로 대체하며, 세 경우 모두 `notice`로 "이전 단계 복원 불가"를 알린다(Q09).
+- **C02-R1 미결:** 기존 API는 제거 조합에서 은퇴 후보만 뺀 조합으로 `curveContext`를 만들고 `restored.step=false`, `restored.notice=STEP_NOT_RESTORABLE`을 제안했다. SRS SUB-10은 그 별의 현재 진행 단계로 대체하도록 요구하므로 결과가 다를 수 있다. 5.1·6.8·8.3을 일괄 대체한다는 종전 설명은 확정 계약으로 쓰지 않는다. History의 HIS-03·8.3 원본 대체와 재도전/분석 복귀를 [공통 은퇴 사례](exploration-contract-review.md)로 구분하며, 담당자 합의 전 어느 안도 새 정본으로 확정하지 않는다.
 - 대상 신호가 은퇴했으면 409 `CANDIDATE_RETIRED`.
 - 초안의 단계 잔차가 캐시에 없으면 `residualForStep`으로 알려 준다. 결과와 작업이 모두 없으면 위 예시처럼 status·jobId는 null이고, 실제 작업이 있으면 그 상태·ID를 반환한다. 초안 조회는 작업을 생성하지 않으며 본인 탐사 화면에서 7.1절로 요청한다.
 - 실제 재제출은 새 `requestId`와 `retryOfSubmissionId`로 6.1절을 호출한다. 누적 매칭·완료는 되돌리지 않는다.
-- 새 판에서는 저장된 주기가 어떤 봉우리의 `fineTune` 범위에도 들지 않을 수 있다. 그러면 재제출이 6.2절 9단계에서 거절되며, 프론트는 초안을 유지한 채 주기 재선택을 안내한다. 초안 조회 자체는 이를 미리 검사하지 않는다.
+- 새 판에서 저장된 주기가 추천 봉우리의 `fineTune` 범위 밖이어도 전체 주기도 격자 `[periodMinDays, periodMaxDays]` 안이면 그 이유만으로 재제출을 거절하지 않는다(5.4절, 6.2절 9단계). 전체 격자 밖이면 400 `VALIDATION_FAILED`와 `fieldErrors[].field=selection.periodDays`로 거절하고 프론트는 초안을 유지한 채 주기 재선택을 안내한다. 초안 조회 자체는 이를 미리 검사하지 않는다. duration·위상 등 나머지 검증은 여전히 적용하며, 추천 중첩 시 duration 상한 선택은 [C02-R3](exploration-contract-review.md)의 D20 공동 결정 대상이다.
 
 ## 7. 온라인 잔차 작업
 
@@ -1154,3 +1162,4 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
+| 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 은퇴 경로·기준 시각 저장 범위·추천 중첩 duration 정책은 공동 검토안과 정적 JSON 예제로 분리해 승인 대기로 표시 |

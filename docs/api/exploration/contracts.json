@@ -1,0 +1,898 @@
+{
+  "fixtureVersion": "c02-v0.1",
+  "contractStatus": "draft-static-only",
+  "synthetic": true,
+  "requirementsVersion": "SRS v1.2 change proposal @ develop 321f10b",
+  "apiVersion": "Draft 0.3 + C02 wording corrections",
+  "sourceReuse": [
+    "apps/backend/docs/exploration-api-spec.md sections 4.4, 5.2, 6.1, 6.4",
+    "docs/api/analysis/examples: historical scenarios only, no v0.12 DTO reuse"
+  ],
+  "cases": [
+    {
+      "id": "normal-harmonic",
+      "at": [
+        "AT-11",
+        "AT-95"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stars/123456789/submissions",
+        "body": {
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "selection": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005
+          },
+          "userJudgment": "LIKELY_PLANET",
+          "evidenceChecks": [
+            "oddeven",
+            "ushape"
+          ],
+          "memo": "홀짝 깊이가 비슷하고 U형",
+          "viewState": {
+            "periodogramViewport": {
+              "minDays": 8.0,
+              "maxDays": 16.0
+            },
+            "foldedXZoomRatio": 4
+          },
+          "retryOfSubmissionId": null
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "submissionId": "sub-7001",
+          "historyId": "h-501",
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "ticId": "123456789",
+          "bundleId": "b-2",
+          "ruleVersion": "rule-3",
+          "submittedAt": "2026-09-10T02:30:00Z",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "original": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005,
+            "userJudgment": "LIKELY_PLANET",
+            "evidenceChecks": [
+              "oddeven",
+              "ushape"
+            ],
+            "memo": "홀짝 깊이가 비슷하고 U형",
+            "viewState": {
+              "periodogramViewport": {
+                "minDays": 8.0,
+                "maxDays": 16.0
+              },
+              "foldedXZoomRatio": 4
+            }
+          },
+          "serverDerived": {
+            "foldReferenceTimeBtjd": 1683.4231,
+            "phaseCenter": 0.0,
+            "epochBtjd": 1683.4231,
+            "durationHours": 2.83248,
+            "centroidDataStatus": "unavailable"
+          },
+          "match": {
+            "status": "matched_harmonic",
+            "candidateId": "c-402",
+            "harmonicMultiplier": 2,
+            "correctedPeriodDays": 23.604,
+            "correctionReason": "P/2 alias"
+          },
+          "signal": {
+            "candidateId": "c-402",
+            "disposition": "UNCONFIRMED",
+            "answerClass": "analysis",
+            "planetTruth": null,
+            "bls": {
+              "periodDays": 23.604,
+              "epochBtjd": 1695.11,
+              "durationHours": 3.4,
+              "depthPpm": 380,
+              "sde": 9.1,
+              "snr": 7.8
+            },
+            "ai": {
+              "status": "completed",
+              "score": 0.71,
+              "verdict": "hold",
+              "modelVersion": "astronet-triage-1"
+            },
+            "external": [
+              {
+                "source": "TOI",
+                "externalId": "TOI-1234.02",
+                "disposition": "PC",
+                "fetchedOn": "2026-09-01"
+              }
+            ],
+            "relabel": null
+          },
+          "judgment": {
+            "value": "LIKELY_PLANET",
+            "evaluation": "UNSCORED"
+          },
+          "skyVersion": "u-101:58",
+          "achievement": {
+            "result": "pending_publish",
+            "newlyRecognized": false,
+            "unlockedStars": [],
+            "star": {
+              "count": 1,
+              "grade": "A",
+              "byType": {
+                "confirmed": 1,
+                "unconfirmed": 0,
+                "fp": 0
+              }
+            }
+          },
+          "progress": {
+            "stage": "in_progress",
+            "completionReason": null,
+            "reopenPending": false,
+            "currentCurveStep": 1,
+            "matchedCandidateIds": [
+              "c-401",
+              "c-402"
+            ],
+            "remainingDiscoverableCount": 1
+          },
+          "publication": {
+            "state": "UNPUBLISHED",
+            "publicAnalysisId": null
+          },
+          "judgmentStatistics": {
+            "kind": "public_analyses",
+            "candidateId": "c-402",
+            "participantCount": 15,
+            "likelyPlanet": 8,
+            "unlikelyPlanet": 4,
+            "unsure": 3,
+            "percentages": {
+              "likelyPlanet": 53.3,
+              "unlikelyPlanet": 26.7,
+              "unsure": 20.0
+            },
+            "asOf": "2026-09-10T02:30:00Z"
+          },
+          "detail": {
+            "available": true,
+            "targetKind": "CURRENT_MATCH",
+            "answerViewed": false
+          },
+          "tutorial": {
+            "seq": null,
+            "skipAvailable": false
+          },
+          "nextActions": [
+            "NEXT_CURVE",
+            "PUBLISH_ANALYSIS",
+            "LATER",
+            "VIEW_RESULT"
+          ]
+        }
+      },
+      "sourceSection": "6.1/6.4",
+      "setup": "Synthetic matching result; not a matching algorithm test."
+    },
+    {
+      "id": "same-request-replay",
+      "at": [
+        "AT-12"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stars/123456789/submissions",
+        "body": {
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "selection": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005
+          },
+          "userJudgment": "LIKELY_PLANET",
+          "evidenceChecks": [
+            "oddeven",
+            "ushape"
+          ],
+          "memo": "홀짝 깊이가 비슷하고 U형",
+          "viewState": {
+            "periodogramViewport": {
+              "minDays": 8.0,
+              "maxDays": 16.0
+            },
+            "foldedXZoomRatio": 4
+          },
+          "retryOfSubmissionId": null
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "submissionId": "sub-7001",
+          "historyId": "h-501",
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "ticId": "123456789",
+          "bundleId": "b-2",
+          "ruleVersion": "rule-3",
+          "submittedAt": "2026-09-10T02:30:00Z",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "original": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005,
+            "userJudgment": "LIKELY_PLANET",
+            "evidenceChecks": [
+              "oddeven",
+              "ushape"
+            ],
+            "memo": "홀짝 깊이가 비슷하고 U형",
+            "viewState": {
+              "periodogramViewport": {
+                "minDays": 8.0,
+                "maxDays": 16.0
+              },
+              "foldedXZoomRatio": 4
+            }
+          },
+          "serverDerived": {
+            "foldReferenceTimeBtjd": 1683.4231,
+            "phaseCenter": 0.0,
+            "epochBtjd": 1683.4231,
+            "durationHours": 2.83248,
+            "centroidDataStatus": "unavailable"
+          },
+          "match": {
+            "status": "matched_harmonic",
+            "candidateId": "c-402",
+            "harmonicMultiplier": 2,
+            "correctedPeriodDays": 23.604,
+            "correctionReason": "P/2 alias"
+          },
+          "signal": {
+            "candidateId": "c-402",
+            "disposition": "UNCONFIRMED",
+            "answerClass": "analysis",
+            "planetTruth": null,
+            "bls": {
+              "periodDays": 23.604,
+              "epochBtjd": 1695.11,
+              "durationHours": 3.4,
+              "depthPpm": 380,
+              "sde": 9.1,
+              "snr": 7.8
+            },
+            "ai": {
+              "status": "completed",
+              "score": 0.71,
+              "verdict": "hold",
+              "modelVersion": "astronet-triage-1"
+            },
+            "external": [
+              {
+                "source": "TOI",
+                "externalId": "TOI-1234.02",
+                "disposition": "PC",
+                "fetchedOn": "2026-09-01"
+              }
+            ],
+            "relabel": null
+          },
+          "judgment": {
+            "value": "LIKELY_PLANET",
+            "evaluation": "UNSCORED"
+          },
+          "skyVersion": "u-101:58",
+          "achievement": {
+            "result": "pending_publish",
+            "newlyRecognized": false,
+            "unlockedStars": [],
+            "star": {
+              "count": 1,
+              "grade": "A",
+              "byType": {
+                "confirmed": 1,
+                "unconfirmed": 0,
+                "fp": 0
+              }
+            }
+          },
+          "progress": {
+            "stage": "in_progress",
+            "completionReason": null,
+            "reopenPending": false,
+            "currentCurveStep": 1,
+            "matchedCandidateIds": [
+              "c-401",
+              "c-402"
+            ],
+            "remainingDiscoverableCount": 1
+          },
+          "publication": {
+            "state": "UNPUBLISHED",
+            "publicAnalysisId": null
+          },
+          "judgmentStatistics": {
+            "kind": "public_analyses",
+            "candidateId": "c-402",
+            "participantCount": 15,
+            "likelyPlanet": 8,
+            "unlikelyPlanet": 4,
+            "unsure": 3,
+            "percentages": {
+              "likelyPlanet": 53.3,
+              "unlikelyPlanet": 26.7,
+              "unsure": 20.0
+            },
+            "asOf": "2026-09-10T02:30:00Z"
+          },
+          "detail": {
+            "available": true,
+            "targetKind": "CURRENT_MATCH",
+            "answerViewed": false
+          },
+          "tutorial": {
+            "seq": null,
+            "skipAvailable": false
+          },
+          "nextActions": [
+            "NEXT_CURVE",
+            "PUBLISH_ANALYSIS",
+            "LATER",
+            "VIEW_RESULT"
+          ]
+        }
+      },
+      "sourceSection": "2.2",
+      "setup": "The normal request has committed; no new writes or rewards.",
+      "effects": {
+        "newSubmissions": 0,
+        "newHistories": 0,
+        "newAchievements": 0
+      }
+    },
+    {
+      "id": "invalid-period",
+      "at": [
+        "AT-09"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stars/123456789/submissions",
+        "body": {
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "selection": {
+            "periodDays": 0,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005
+          },
+          "userJudgment": "LIKELY_PLANET",
+          "evidenceChecks": [
+            "oddeven",
+            "ushape"
+          ],
+          "memo": "홀짝 깊이가 비슷하고 U형",
+          "viewState": {
+            "periodogramViewport": {
+              "minDays": 8.0,
+              "maxDays": 16.0
+            },
+            "foldedXZoomRatio": 4
+          },
+          "retryOfSubmissionId": null
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "code": "VALIDATION_FAILED",
+          "message": "VALIDATION_FAILED",
+          "fieldErrors": [
+            {
+              "field": "selection.periodDays",
+              "message": "Invalid input"
+            }
+          ]
+        }
+      },
+      "sourceSection": "6.2"
+    },
+    {
+      "id": "idempotency-conflict",
+      "at": [
+        "AT-12"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stars/123456789/submissions",
+        "body": {
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "selection": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005
+          },
+          "userJudgment": "LIKELY_PLANET",
+          "evidenceChecks": [
+            "oddeven",
+            "ushape"
+          ],
+          "memo": "Different payload",
+          "viewState": {
+            "periodogramViewport": {
+              "minDays": 8.0,
+              "maxDays": 16.0
+            },
+            "foldedXZoomRatio": 4
+          },
+          "retryOfSubmissionId": null
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "IDEMPOTENCY_CONFLICT",
+          "message": "IDEMPOTENCY_CONFLICT",
+          "fieldErrors": []
+        }
+      },
+      "sourceSection": "2.2",
+      "setup": "Original UUID is already committed with normal-harmonic payload."
+    },
+    {
+      "id": "request-in-progress",
+      "at": [
+        "AT-12"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/submissions/by-request/6f0b3a1e-548a-4a52-897a-135729468abc"
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "REQUEST_IN_PROGRESS",
+          "message": "REQUEST_IN_PROGRESS",
+          "fieldErrors": []
+        }
+      },
+      "sourceSection": "6.6"
+    },
+    {
+      "id": "bundle-changed",
+      "at": [
+        "AT-117"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/stars/123456789/submissions",
+        "body": {
+          "requestId": "6f0b3a1e-548a-4a52-897a-135729468abc",
+          "submissionKind": "candidate",
+          "curveContext": {
+            "bundleId": "b-2",
+            "curveStep": 1,
+            "removedCandidateIds": [
+              "c-401"
+            ],
+            "residualModelVersion": "rm-1",
+            "periodogramConfigVersion": "pg-1"
+          },
+          "selection": {
+            "periodDays": 11.802,
+            "phaseStart": 0.995,
+            "phaseEnd": 1.005
+          },
+          "userJudgment": "LIKELY_PLANET",
+          "evidenceChecks": [
+            "oddeven",
+            "ushape"
+          ],
+          "memo": "홀짝 깊이가 비슷하고 U형",
+          "viewState": {
+            "periodogramViewport": {
+              "minDays": 8.0,
+              "maxDays": 16.0
+            },
+            "foldedXZoomRatio": 4
+          },
+          "retryOfSubmissionId": null
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "BUNDLE_CHANGED",
+          "message": "BUNDLE_CHANGED",
+          "fieldErrors": [],
+          "currentBundleId": "b-3"
+        }
+      },
+      "sourceSection": "2.3",
+      "setup": "New request, b-3 current; UUID has not been accepted previously."
+    },
+    {
+      "id": "curve-not-computed",
+      "at": [
+        "AT-08",
+        "AT-101"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/stars/123456789/curves?bundleId=b-2&curveStep=1&removed=c-401"
+      },
+      "response": {
+        "status": 202,
+        "body": {
+          "code": "CURVE_NOT_READY",
+          "segments": null,
+          "residual": {
+            "status": null,
+            "jobId": null
+          }
+        }
+      },
+      "sourceSection": "5.2/D-14",
+      "effects": {
+        "jobsCreated": 0
+      }
+    },
+    {
+      "id": "history-retired-original",
+      "at": [
+        "AT-115"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/histories/h-501/graph?mode=CURRENT"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "historyId": "h-501",
+          "reproduction": {
+            "submittedBundleId": "b-2",
+            "currentBundleId": "b-3",
+            "isPreviousSubmission": true,
+            "residualReproducible": false,
+            "fallbackReason": "RETIRED_CANDIDATE",
+            "currentFoldReferenceTimeBtjd": 101
+          },
+          "selection": {
+            "userPeriodDays": 4,
+            "correctedPeriodDays": null,
+            "harmonicMultiplier": null,
+            "epochBtjd": 101,
+            "durationHours": 9.6,
+            "currentPhaseStart": 0.95,
+            "currentPhaseEnd": 1.05
+          },
+          "curve": {
+            "ticId": "123456789",
+            "bundleId": "b-3",
+            "foldReferenceTimeBtjd": 101,
+            "curveContext": {
+              "bundleId": "b-3",
+              "curveStep": 0,
+              "removedCandidateIds": [],
+              "residualModelVersion": "rm-1",
+              "periodogramConfigVersion": "pg-1"
+            },
+            "fluxUnit": "normalized",
+            "segments": [
+              {
+                "segmentId": "seg-synthetic",
+                "sector": 14,
+                "binningRevision": 1,
+                "startBtjd": 101,
+                "binMinutes": 10,
+                "nPoints": 3,
+                "flux": [
+                  1,
+                  0.99,
+                  0.98
+                ],
+                "fluxScatter": 0.001,
+                "gaps": []
+              }
+            ]
+          },
+          "snapshot": null
+        }
+      },
+      "sourceSection": "8.3/HIS-03",
+      "decisionStatus": "existing-HIS-03-example; C02-R1 cross-route agreement pending",
+      "effects": {
+        "jobsCreated": 0
+      }
+    },
+    {
+      "id": "retry-target-retired",
+      "at": [
+        "AT-100"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/submissions/sub-7002/retry-draft"
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "CANDIDATE_RETIRED",
+          "message": "CANDIDATE_RETIRED",
+          "fieldErrors": []
+        }
+      },
+      "sourceSection": "6.8"
+    },
+    {
+      "id": "discovered-unsubmitted",
+      "at": [
+        "AT-42",
+        "AT-58"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/me/stars?scope=discovered&sort=recent"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "items": [
+            {
+              "ticId": "100000099",
+              "progressStage": "unexplored",
+              "planetCount": 0,
+              "completedWithoutPlanets": false,
+              "achievementCount": 0,
+              "grade": null,
+              "currentCurveStep": 0,
+              "reopenPending": false,
+              "reopened": false,
+              "unpublishedSignalCount": 0,
+              "lastActivityAt": "2026-09-14T03:00:00Z",
+              "unlockReason": "achievement",
+              "marker": null
+            }
+          ],
+          "nextCursor": null,
+          "hasNext": false
+        }
+      },
+      "sourceSection": "4.4",
+      "setup": "Owned unlocked star, no submissions. unexplored follows ERD; zero-achievement grade=null is a draft consumer representation requiring review."
+    },
+    {
+      "id": "public-current-without-residual",
+      "at": [
+        "AT-64",
+        "AT-115"
+      ],
+      "source": "service-api-spec.md",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/public-analyses/pa-601?graphMode=CURRENT"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "analysisId": "pa-601",
+          "threadId": "st-301",
+          "ticId": "123456789",
+          "judgment": "UNSURE",
+          "memo": "공개 분석 본문은 유지",
+          "graph": {
+            "historyId": "h-501",
+            "curve": {
+              "ticId": "123456789",
+              "bundleId": "b-3",
+              "foldReferenceTimeBtjd": 101,
+              "curveContext": {
+                "bundleId": "b-3",
+                "curveStep": 0,
+                "removedCandidateIds": [],
+                "residualModelVersion": "rm-1",
+                "periodogramConfigVersion": "pg-1"
+              },
+              "segments": [
+                {
+                  "segmentId": "seg-synthetic",
+                  "sector": 14,
+                  "binningRevision": 1,
+                  "startBtjd": 101,
+                  "binMinutes": 10,
+                  "nPoints": 3,
+                  "flux": [1, 0.99, 0.98],
+                  "fluxScatter": 0.001,
+                  "gaps": []
+                }
+              ]
+            },
+            "reproduction": {
+              "submittedBundleId": "b-2",
+              "currentBundleId": "b-3",
+              "residualReproducible": false,
+              "fallbackReason": "RETIRED_CANDIDATE"
+            },
+            "selection": {
+              "userPeriodDays": 4,
+              "correctedPeriodDays": null,
+              "harmonicMultiplier": null,
+              "epochBtjd": 101,
+              "durationHours": 9.6
+            },
+            "snapshot": null
+          }
+        }
+      },
+      "sourceSection": "service 7.2/9.2; exploration 8.3/D-15",
+      "setup": "Another member reads an authorized public analysis; the retired residual is not cached.",
+      "effects": {
+        "jobsCreated": 0,
+        "recomputeOffered": false,
+        "privateJobAccessGranted": false,
+        "publicTextVisible": true
+      }
+    },
+    {
+      "id": "onboarding-done",
+      "at": [
+        "AT-89"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/me/settings",
+        "body": {
+          "onboardingDone": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "onboardingDone": true
+        }
+      },
+      "sourceSection": "service 3.1",
+      "effects": {
+        "onboardingDone": true
+      }
+    },
+    {
+      "id": "onboarding-reject-false",
+      "at": [
+        "AT-89"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/me/settings",
+        "body": {
+          "onboardingDone": false
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "code": "VALIDATION_FAILED",
+          "message": "VALIDATION_FAILED",
+          "fieldErrors": [
+            {
+              "field": "onboardingDone",
+              "message": "Invalid input"
+            }
+          ]
+        }
+      },
+      "sourceSection": "service 3.1",
+      "effects": {
+        "onboardingDone": true
+      }
+    },
+    {
+      "id": "onboarding-reject-null",
+      "at": [
+        "AT-89"
+      ],
+      "source": "exploration-api-spec.md",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/me/settings",
+        "body": {
+          "onboardingDone": null
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "code": "VALIDATION_FAILED",
+          "message": "VALIDATION_FAILED",
+          "fieldErrors": [
+            {
+              "field": "onboardingDone",
+              "message": "Invalid input"
+            }
+          ]
+        }
+      },
+      "sourceSection": "service 3.1",
+      "effects": {
+        "onboardingDone": true
+      }
+    }
+  ]
+}
