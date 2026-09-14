@@ -1,25 +1,31 @@
 {
-  "fixtureVersion": "c02-v0.1",
+  "fixtureVersion": "c02-v0.2",
   "contractStatus": "review-only",
   "synthetic": true,
   "retired": {
     "at": ["AT-100", "AT-115"],
     "decision": "C02-R1",
-    "approval": "pending",
+    "approval": "user-approved-2026-09-14",
     "submittedRemoved": ["A", "B"],
     "currentProgressRemoved": ["A", "C"],
     "retiredIds": ["B"],
     "originalFlux": [1, 0.99, 0.98],
     "modelA": [1, 0.99, 1],
     "modelC": [1, 1, 0.98],
-    "existingApiReturn": {"removed": ["A"], "flux": [1, 1, 0.98], "notice": "STEP_NOT_RESTORABLE"},
-    "srsRetry": {"removed": ["A", "C"], "flux": [1, 1, 1], "notice": "STEP_NOT_RESTORABLE"},
-    "srsHistory": {"removed": [], "flux": [1, 0.99, 0.98], "fallbackReason": "RETIRED_CANDIDATE"}
+    "analysisReturn": {"removed": ["A", "C"], "flux": [1, 1, 1], "notice": "STEP_NOT_RESTORABLE"},
+    "retryDraft": {"removed": ["A", "C"], "flux": [1, 1, 1], "restoredStep": false, "notice": "STEP_NOT_RESTORABLE"},
+    "historyCurrent": {"removed": [], "flux": [1, 0.99, 0.98], "fallbackReason": "RETIRED_CANDIDATE"},
+    "historySubmitted": {"curve": null, "snapshotPolicy": "stored-if-present"}
   },
   "fold": {
     "at": ["AT-118", "AT-95"],
     "decision": "C02-R2",
-    "storageApproval": "pending",
+    "storageApproval": "user-approved-2026-09-14",
+    "selectedPolicy": "bundle-common",
+    "segmentStoresReference": false,
+    "duplicatePolicy": "remove-before-median",
+    "evenMedianRule": "mean-of-middle-two",
+    "emptyValidObservations": "publication-fails",
     "periodDays": 4,
     "oldReferenceBtjd": 100,
     "oldPhaseStart": 0.2,
@@ -36,11 +42,26 @@
   "selection": {
     "at": ["AT-09", "AT-118"],
     "decision": "C02-R3",
-    "approval": "pending",
+    "approval": "user-approved-2026-09-14",
+    "selectedPolicy": "explicit-source-peak",
+    "noSourcePeakPolicy": "bundle-phase-width-max-only",
+    "inferPeakFromPeriod": false,
     "periodGridDays": [1, 10],
     "outsideRecommended": {"periodDays": 4, "recommendedRangesDays": [[2, 3], [6, 7]], "passesPeriodRangeCheck": true, "matchResult": "not asserted"},
     "outsideGrid": {"periodDays": 11, "passesPeriodRangeCheck": false},
-    "overlap": {"periodDays": 4, "phaseWidth": 0.1, "durationHours": 9.6, "syntheticMultiplier": 3, "suggestedDurationsHours": [2, 4], "candidateCapsHours": [6, 12], "withinEachCap": [false, true], "selectedPolicy": null}
+    "overlap": {
+      "periodDays": 4,
+      "phaseWidth": 0.1,
+      "durationHours": 9.6,
+      "syntheticMultiplier": 3,
+      "peaks": [
+        {"gridIndex": 400, "fineTuneDays": [3.95, 4.05], "suggestedDurationHours": 2, "capHours": 6},
+        {"gridIndex": 402, "fineTuneDays": [3.97, 4.07], "suggestedDurationHours": 4, "capHours": 12}
+      ],
+      "sourcePeakGridIndex": 402,
+      "expectedCapHours": 12,
+      "expectedAccepted": true
+    }
   },
   "publicGraph": {
     "at": ["AT-115", "AT-64"],

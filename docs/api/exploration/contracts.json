@@ -1,5 +1,5 @@
 {
-  "fixtureVersion": "c02-v0.1",
+  "fixtureVersion": "c02-v0.2",
   "contractStatus": "draft-static-only",
   "synthetic": true,
   "requirementsVersion": "SRS v1.2 change proposal @ develop 321f10b",
@@ -33,6 +33,7 @@
           },
           "selection": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005
           },
@@ -74,6 +75,7 @@
           },
           "original": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005,
             "userJudgment": "LIKELY_PLANET",
@@ -95,6 +97,8 @@
             "phaseCenter": 0.0,
             "epochBtjd": 1683.4231,
             "durationHours": 2.83248,
+            "sourcePeakSuggestedDurationHours": 3.1,
+            "durationLimitHours": 9.3,
             "centroidDataStatus": "unavailable"
           },
           "match": {
@@ -224,6 +228,7 @@
           },
           "selection": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005
           },
@@ -265,6 +270,7 @@
           },
           "original": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005,
             "userJudgment": "LIKELY_PLANET",
@@ -286,6 +292,8 @@
             "phaseCenter": 0.0,
             "epochBtjd": 1683.4231,
             "durationHours": 2.83248,
+            "sourcePeakSuggestedDurationHours": 3.1,
+            "durationLimitHours": 9.3,
             "centroidDataStatus": "unavailable"
           },
           "match": {
@@ -420,6 +428,7 @@
           },
           "selection": {
             "periodDays": 0,
+            "sourcePeakGridIndex": null,
             "phaseStart": 0.995,
             "phaseEnd": 1.005
           },
@@ -477,6 +486,7 @@
           },
           "selection": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005
           },
@@ -550,6 +560,7 @@
           },
           "selection": {
             "periodDays": 11.802,
+            "sourcePeakGridIndex": 3311,
             "phaseStart": 0.995,
             "phaseEnd": 1.005
           },

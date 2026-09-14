@@ -30,6 +30,9 @@ assert.equal(normal.request.body.requestId, normal.response.body.requestId);
 for (const [key, val] of Object.entries(normal.request.body.selection)) near(val, normal.response.body.original[key]);
 const s = normal.request.body.selection;
 near(normal.response.body.serverDerived.durationHours, (s.phaseEnd - s.phaseStart) * s.periodDays * 24);
+assert.equal(s.sourcePeakGridIndex,3311);
+near(normal.response.body.serverDerived.durationLimitHours,normal.response.body.serverDerived.sourcePeakSuggestedDurationHours*3);
+assert.ok(normal.response.body.serverDerived.durationHours<=normal.response.body.serverDerived.durationLimitHours);
 assert.deepEqual(byId['same-request-replay'].response.body, normal.response.body);
 assert.equal(byId['same-request-replay'].response.status, 200);
 assert.equal(byId['idempotency-conflict'].request.body.requestId, normal.request.body.requestId);
@@ -40,6 +43,7 @@ for (const [id, status, code] of [
   ['retry-target-retired',409,'CANDIDATE_RETIRED'], ['curve-not-computed',202,'CURVE_NOT_READY']
 ]) { assert.equal(byId[id].response.status,status); assert.equal(byId[id].response.body.code,code); }
 assert.equal(byId['invalid-period'].response.body.fieldErrors[0].field, 'selection.periodDays');
+assert.equal(byId['invalid-period'].request.body.selection.sourcePeakGridIndex,null);
 assert.notEqual(byId['bundle-changed'].response.body.currentBundleId, byId['bundle-changed'].request.body.curveContext.bundleId);
 const missing = byId['curve-not-computed'];
 assert.deepEqual(missing.response.body.residual, {status:null,jobId:null});
@@ -69,6 +73,12 @@ for (const id of ['onboarding-reject-false','onboarding-reject-null']) {
   assert.equal(byId[id].effects.onboardingDone, true);
 }
 const f = decisions.fold;
+assert.equal(f.storageApproval,'user-approved-2026-09-14');
+assert.equal(f.selectedPolicy,'bundle-common');
+assert.equal(f.segmentStoresReference,false);
+assert.equal(f.duplicatePolicy,'remove-before-median');
+assert.equal(f.evenMedianRule,'mean-of-middle-two');
+assert.equal(f.emptyValidObservations,'publication-fails');
 near(f.epochBtjd, f.oldReferenceBtjd + mod1((f.oldPhaseStart+f.oldPhaseEnd)/2)*f.periodDays);
 near(f.durationHours, (f.oldPhaseEnd-f.oldPhaseStart)*f.periodDays*24);
 const width=f.durationHours/(24*f.periodDays);
@@ -78,21 +88,35 @@ near(history.selection.currentPhaseStart,start); near(history.selection.currentP
 const median = xs => { const a=[...xs].sort((a,b)=>a-b); const m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; };
 near(median(f.rawSegmentTimes.flat()), f.wholeMedian);
 near(f.rawSegmentTimes.map(median).reduce((a,b)=>a+b)/f.rawSegmentTimes.length, f.meanOfSegmentMedians);
+assert.notEqual(f.wholeMedian,f.meanOfSegmentMedians);
 const r=decisions.retired;
-assert.equal(r.approval,'pending');
-assert.deepEqual(r.submittedRemoved.filter(id=>!r.retiredIds.includes(id)),r.existingApiReturn.removed);
-assert.deepEqual(r.srsRetry.removed,r.currentProgressRemoved);
-r.originalFlux.forEach((v,i)=>{near(v/r.modelA[i],r.existingApiReturn.flux[i]);near(v/r.modelA[i]/r.modelC[i],r.srsRetry.flux[i]);});
-assert.deepEqual(r.srsHistory.flux,r.originalFlux);
+assert.equal(r.approval,'user-approved-2026-09-14');
+assert.deepEqual(r.analysisReturn.removed,r.currentProgressRemoved);
+assert.deepEqual(r.retryDraft.removed,r.currentProgressRemoved);
+r.originalFlux.forEach((v,i)=>{near(v/r.modelA[i]/r.modelC[i],r.analysisReturn.flux[i]);near(v/r.modelA[i]/r.modelC[i],r.retryDraft.flux[i]);});
+assert.equal(r.retryDraft.restoredStep,false);
+assert.deepEqual(r.historyCurrent.flux,r.originalFlux);
+assert.deepEqual(r.historyCurrent.removed,[]);
+assert.equal(r.historySubmitted.curve,null);
 const sel=decisions.selection;
+assert.equal(sel.approval,'user-approved-2026-09-14');
+assert.equal(sel.selectedPolicy,'explicit-source-peak');
+assert.equal(sel.noSourcePeakPolicy,'bundle-phase-width-max-only');
+assert.equal(sel.inferPeakFromPeriod,false);
 const inGrid=p=>p>=sel.periodGridDays[0]&&p<=sel.periodGridDays[1];
 assert.equal(inGrid(sel.outsideRecommended.periodDays),sel.outsideRecommended.passesPeriodRangeCheck);
 assert.ok(sel.outsideRecommended.recommendedRangesDays.every(([lo,hi])=>sel.outsideRecommended.periodDays<lo||sel.outsideRecommended.periodDays>hi));
 assert.equal(inGrid(sel.outsideGrid.periodDays),sel.outsideGrid.passesPeriodRangeCheck);
 const o=sel.overlap;
 near(o.durationHours,o.periodDays*o.phaseWidth*24);
-o.suggestedDurationsHours.forEach((v,i)=>{near(v*o.syntheticMultiplier,o.candidateCapsHours[i]);assert.equal(o.durationHours<=o.candidateCapsHours[i],o.withinEachCap[i]);});
-assert.equal(o.selectedPolicy,null);
+for (const peak of o.peaks) {
+  assert.ok(o.periodDays>=peak.fineTuneDays[0]&&o.periodDays<=peak.fineTuneDays[1]);
+  near(peak.suggestedDurationHours*o.syntheticMultiplier,peak.capHours);
+}
+const sourcePeak=o.peaks.find(p=>p.gridIndex===o.sourcePeakGridIndex);
+assert.ok(sourcePeak);
+near(sourcePeak.capHours,o.expectedCapHours);
+assert.equal(o.durationHours<=sourcePeak.capHours,o.expectedAccepted);
 const pub=decisions.publicGraph.expected;
 assert.deepEqual(pub,{jobsCreated:0,mayRequestRecompute:false,mayReadOwnersPrivateJob:false,residualStatus:null,residualJobId:null});
 const p=decisions.participants;
@@ -102,4 +126,4 @@ const browser = decisions.browserTools;
 assert.equal(browser.calculationOwner, 'browser');
 assert.equal(browser.networkRequests, 0);
 assert.equal(browser.serverPersistenceWrites, 0);
-console.log(`PASS: ${suite.cases.length} HTTP examples and 6 review scenarios; static checks only, approvals pending.`);
+console.log(`PASS: ${suite.cases.length} HTTP examples and 6 review scenarios; C02-R1/R2/R3 decisions recorded, cross-review pending.`);

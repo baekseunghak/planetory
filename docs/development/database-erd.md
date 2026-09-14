@@ -283,6 +283,9 @@ erDiagram
         smallint curve_step "곡선 단계"
         bigint_array removed_candidate_ids "뺀 후보(정렬)"
         numeric submitted_period "제출 주기"
+        int source_peak_grid_index "선택 봉우리 · 직접 선택은 NULL"
+        numeric source_peak_suggested_duration_hours "검증에 쓴 제안값"
+        numeric duration_limit_hours "적용한 선택 폭 상한"
         numeric matched_period "정정 대표 주기"
         numeric harmonic_multiplier "배율"
         numeric phase_start "위상 시작"
@@ -490,7 +493,7 @@ erDiagram
 | tic_id, bundle_version | |
 | status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 새 판이 current가 되면 이전 판은 곧바로 archived가 되고 그 판의 periodograms 행을 지운다. 이전 판을 남겨 두지 않는다(v0.3 결정 C) |
 | manifest JSONB | **참조할 light_curve_segments id 집합**(섹터 목록이 아니라 revision까지 특정한다), 배열 checksum, residual_model_version, periodogram_config_version, **곡선 비닝 규칙(기본 10분)**, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭(결정 9), 곡선 단계 규칙 |
-| fold_reference_time_btjd, base_days | 포함 섹터 전체 기준의 위상 접기 기준 시각과 관측 기간. 섹터가 늘면 판이 바뀌면서 함께 갱신 |
+| fold_reference_time_btjd, base_days | Bundle 공통 위상 접기 기준 시각과 관측 기간. 기준 시각은 포함된 모든 세그먼트에서 품질 필터를 통과하고 중복을 제거한 유한 원본 관측 시각 전체의 중앙값이며, 짝수 표본은 가운데 두 값의 평균을 쓴다. 유효 입력이 없으면 공개를 실패시킨다. `publication_bundles`에 한 번 저장하고 `light_curve_segments`에는 저장하지 않으며, 섹터가 늘면 새 판에서 다시 산정한다 |
 | published_at | archived 전환 시 그 판의 periodograms 행과 Redis 캐시를 정리한다. 곡선 세그먼트는 판에 묶이지 않으므로 지우지 않는다. 판 행 자체는 제출이 참조하므로 남긴다(수백 바이트) |
 
 **light_curve_segments** (EXP-01·03·06, DAT-11, v0.3)
@@ -558,6 +561,7 @@ erDiagram
 | submission_kind | CHECK candidate/no_candidate/skipped | skipped = 튜토리얼 건너뛰기(SUB-12) |
 | curve_step, removed_candidate_ids BIGINT[] | | 정렬 배열. 잔차 캐시 키·재현 입력 |
 | submitted_period, matched_period, harmonic_multiplier, correction_reason | | 원본값 보존(SUB-05) |
+| source_peak_grid_index, source_peak_suggested_duration_hours, duration_limit_hours | | 봉우리 선택이면 같은 곡선 문맥의 grid index와 서버가 검증에 적용한 제안 duration·3배 상한을 저장한다. 주기도 직접 선택은 모두 NULL이며 서버가 period로 봉우리를 추정하지 않는다(C02-R3) |
 | phase_start, phase_end | CHECK 0≤start<1, start<end<start+1 | 접힌 곡선 위상 구간이 원본 입력(POL-08). selection_space 없음 |
 | fold_reference_time_btjd DOUBLE | | 제출 당시 번들의 기준 시각. 현재 판에서 재현할 때 `phase = ((epoch − 현재 기준시각)/period) mod 1`로 재환산 |
 | epoch_btjd, duration_hours | | 서버가 위상값에서 파생해 저장(EXP-06·07). 절대값이라 판이 바뀌어도 의미 유지 |

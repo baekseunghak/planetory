@@ -110,7 +110,7 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 
 `T`는 판의 `foldReferenceTimeBtjd`다. 브라우저 값은 미리보기이고 서버가 제출 시 같은 식으로 다시 계산한 값만 저장한다.
 
-**C02-R2 검토 대기:** 위 표현은 기존 API의 Bundle 공통값 제안이다. SRS DAT-11·PublicationBundle의 세그먼트별 저장과 충돌하며, 저장·산정 범위는 [D06 공동 검토안](exploration-contract-review.md) 승인 후 SRS·ERD·API를 함께 정정한다. 공식의 수학적 일치만으로 저장 위치가 합의된 것은 아니다.
+**C02-R2 결정:** `foldReferenceTimeBtjd`는 세그먼트별 값이 아니라 Bundle 공통값이다. 포함된 모든 세그먼트에서 DAT-02 품질 필터를 통과하고 중복을 제거한 뒤 time·flux가 유한한 원본 관측 시각 전체를 정렬해 중앙값을 구한다. 짝수 표본은 가운데 두 값의 평균을 사용하고 유효 입력이 없으면 Bundle 공개를 실패시킨다. 이 값을 `publication_bundles`에 float64로 한 번 저장하며 세그먼트와 온라인 잔차는 별도 기준을 만들지 않고 그대로 상속한다. 히스토리 재현은 저장된 절대 epoch·duration을 현재 Bundle 공통값으로 다시 위상 변환한다.
 
 ## 3. API 목록
 
@@ -418,16 +418,16 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | 필드 | 규칙 |
 |---|---|
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
-| `selectionRules` | DEC-19 값은 `확인 필요`. 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `phaseWidthMax`는 위상 비율, `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다 |
+| `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다 |
 | `progress.currentCurveStep` | 회원의 `user_star_progress.current_curve_step` = **마지막 제출의 곡선 단계**. 제출 트랜잭션에서만 갱신하며 브라우저 저장소로 대체하지 않는다(NFR-19) |
-| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0). 판 전환으로 그 조합의 후보가 은퇴했으면 은퇴 후보만 뺀 조합으로 대체하고 `notice: "STEP_NOT_RESTORABLE"`을 붙인다(6.8절과 같은 규칙, Q09) |
+| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0). 판 전환으로 저장된 조합에 은퇴 후보가 생기면 **현재 판에서 회원이 매칭한 활성 후보 전체를 제거한 현재 진행 문맥**으로 대체하고 `notice: "STEP_NOT_RESTORABLE"`을 붙인다. 예: 옛 `{A,B}`, B 은퇴, 현재 진행 `{A,C}`이면 `{A,C}`, step 2다(C02-R1, Q09) |
 | `nextCurveContext` | 이 판에서 회원이 매칭한 활성 후보 전체를 제거한 문맥(`curveStep` = 그 수). 남은 탐색 가능 신호가 없으면 null. [다음 곡선]의 기본 대상 |
 | `residualForCurrentStep`, `residualForNextStep` | 각 문맥의 잔차 캐시 상태. `curveStep=0`이면 `COMPLETED` 고정 |
 | `tutorial.skipAvailable` | SUB-12 조건 충족 여부. `tutorial_skip_after=0`이면 항상 false |
 
 미제출 초안(주기·위상·판단·표시 범위)은 서버가 저장하지 않는다. EXP-10의 복원은 브라우저 임시 저장이며, 복원할 때 이 API로 판·단계가 같은지 확인한다(Q05).
 
-**C02-R1 검토 대기:** 은퇴 시 위 `currentCurveContext`의 활성 부분 집합 대체는 기존 API 제안이다. 재도전 SUB-10의 현재 진행 대체 및 History HIS-03의 원본 대체와 같다고 해석하지 않는다. 세 경로의 제거 집합·배열·안내는 [공통 은퇴 사례](exploration-contract-review.md)로 비교 후 확정한다.
+**C02-R1 결정(2026-09-14):** 분석 복귀와 다시 풀기는 최신 현재 진행 문맥을 사용한다. History CURRENT는 HIS-03대로 최신 원본 곡선으로 대체하고, History SUBMITTED는 당시 snapshot을 유지한다. 세 경로의 기대 배열은 [공통 은퇴 사례](exploration-contract-review.md)에 고정했다.
 
 **실패:** `STAR_LOCKED`, `STAR_NOT_PUBLISHED`. `current` 판이 없으면 503 `DEPENDENCY_UNAVAILABLE`(배치 미공개 별은 published가 아니어야 하므로 정상 운영에서는 없다).
 
@@ -520,13 +520,14 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 규칙 | 근거 |
 |---|---|
 | `peaks`는 주기도 상위 N개 봉우리(N은 운영 설정, 기본 10). 후보든 아니든 구분하지 않으며 `candidateId`를 넣지 않는다 | POL-05, EXP-13 "상위 봉우리에 번호" |
+| `gridIndex`는 같은 `curveContext`·`peakRuleVersion` 안에서 사용자가 고른 봉우리의 식별값이다. `rank`는 정렬 결과이므로 제출 식별값으로 쓰지 않는다 | C02-R3 |
 | `fineTune`은 manifest의 격자 간격·허용 폭 규칙을 그 봉우리 주기에 적용해 계산. 하드코딩 금지 | EXP-05, DAT-11 |
 | `suggestedDurationHours`·`suggestedPhaseCenter`는 BLS 제안 밴드(EXP-06 "제안 밴드로 표시할 수 있으나"). 제출 입력이 아니다 | EXP-06 |
 | `matchedCandidates`는 회원이 이미 매칭한 후보의 주기. 흐린 선 표시용 | EXP-13 |
 | 목록은 **표시·추천용**이다. 제출 주기가 상위 N개에 속할 필요는 없으며, 어떤 주기 P의 미세 조정 범위는 `selectionRules.fineTune.halfWidthCells`로 주기도 격자에서 `P × r^(−h) ~ P × r^(+h)` (r = 격자 비율, h = halfWidthCells), step은 격자 한 칸 폭이다. 목록의 `fineTune`은 이 규칙을 각 봉우리에 미리 적용한 값 | EXP-05 재선택·미세 조정 구분 |
-| 미세 조정 범위 밖으로 값을 바꾸는 것은 프론트가 막고 새 주기 선택을 안내한다(EXP-05). 서버는 이를 제출 거절 조건으로 쓰지 않는다 | 지웅 리뷰 2 |
+| 선택 봉우리의 미세 조정 범위 밖으로 값을 바꾸는 것은 프론트가 막고 새 주기 선택을 안내한다. 서버도 `sourcePeakGridIndex`가 있으면 같은 범위를 검증한다. 주기도의 다른 위치를 새로 고른 경우 source를 null로 바꾸며, 전체 주기 격자 안이면 봉우리 범위 밖이라는 이유만으로 거절하지 않는다 | EXP-05, C02-R3 |
 
-봉우리 추출 규칙(N, 최소 간격, 고조파 제외)은 윤성용과 정한다(미결 5). 제출 검증은 봉우리 목록과 무관하게 6.2절 형식 검사와 5.1 매칭 규칙으로만 판정한다.
+봉우리 추출 규칙(N, 최소 간격, 고조파 제외)은 윤성용과 정한다(미결 5). 봉우리를 선택해 시작한 제출은 `sourcePeakGridIndex`로 그 선택을 전달하고, 서버는 해당 봉우리의 추천 duration을 6.2절 상한에 사용한다. 주기도의 다른 위치를 직접 선택한 제출은 이 값을 null로 보낸다.
 
 ## 6. 제출·결과
 
@@ -540,7 +541,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "submissionKind": "candidate",
   "curveContext": {"bundleId": "b-2", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "selection": {"periodDays": 11.802, "phaseStart": 0.995, "phaseEnd": 1.005},
+  "selection": {"periodDays": 11.802, "sourcePeakGridIndex": 3311, "phaseStart": 0.995, "phaseEnd": 1.005},
   "userJudgment": "LIKELY_PLANET",
   "evidenceChecks": ["oddeven", "ushape"],
   "memo": "홀짝 깊이가 비슷하고 U형",
@@ -554,7 +555,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `requestId` | 예 | 2.2절 |
 | `submissionKind` | 예 | `candidate` / `no_candidate` / `skipped` |
 | `curveContext` | 예 | 2.1절. 현재 판·현재 단계와 대조 |
-| `selection` | candidate만 | 원본 입력. `epoch`·`duration`·정정 주기·성과를 보내도 무시한다(SUB-01) |
+| `selection` | candidate만 | 원본 입력. `sourcePeakGridIndex`는 사용자가 선택한 봉우리의 `gridIndex`이며 주기도의 다른 위치를 직접 선택했으면 null이다. `epoch`·`duration`·정정 주기·성과를 보내도 무시한다(SUB-01) |
 | `userJudgment` | candidate만 | `LIKELY_PLANET` / `UNLIKELY_PLANET` / `UNSURE` |
 | `evidenceChecks` | 아니오 | `oddeven`, `secondary`, `ushape` 중 0~3개. 그 외 값(중심 위치 포함)은 400(POL-13, AT-93) |
 | `memo` | 아니오 | 0~2,000 코드포인트 `확인 필요` |
@@ -571,7 +572,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
 | 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
 | 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.*` |
-| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. 제출 주기가 봉우리 목록의 어느 봉우리와 `fineTune` 범위로 연결되면 그 봉우리의 `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용하고, 연결되는 봉우리가 없으면 위상 최대만 적용 | 400 `selection.phaseEnd` (DEC-19, Q03) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 주기만 보고 가까운 봉우리를 역추정하지 않는다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
 | 6 | 정수 k가 존재해 epoch가 `observationBounds` 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
@@ -579,7 +580,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
 
-**C02-R3 검토 대기:** 5단계의 추천 연결 duration 상한은 아직 정책 제안이다. 겹치는 fineTune 범위의 BLS duration 선택, 추천 N 변경 영향과 추천 밖 상한을 [D20 공동 검토안](exploration-contract-review.md)에서 결정한다. 배열의 첫 봉우리를 임의 선택하거나 예시 배수·위상 폭을 운영 확정값으로 사용하지 않는다.
+**C02-R3 결정:** 추천 duration 3배 상한은 정답 판정 범위가 아니라 선택 폭 제한이다. 서로 다른 봉우리의 `fineTune` 범위가 겹쳐도 `sourcePeakGridIndex`가 가리키는 사용자 선택 봉우리의 `suggestedDurationHours`만 사용한다. source가 null인 직접 주기 선택은 Bundle 공통 `phaseWidthMax`만 적용한다. 추천 배열 순서나 가장 가까운 봉우리로 source를 추정하지 않는다. 3배 값은 DEC-19의 현재 기본안이며 운영값은 `selectionRules.version`으로 버전 관리한다.
 
 ### 6.3 처리 순서 (한 트랜잭션, NFR-01)
 
@@ -618,11 +619,12 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "submissionKind": "candidate",
   "curveContext": {"bundleId": "b-2", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "original": {"periodDays": 11.802, "phaseStart": 0.995, "phaseEnd": 1.005, "userJudgment": "LIKELY_PLANET",
+  "original": {"periodDays": 11.802, "sourcePeakGridIndex": 3311, "phaseStart": 0.995, "phaseEnd": 1.005, "userJudgment": "LIKELY_PLANET",
                "evidenceChecks": ["oddeven", "ushape"], "memo": "홀짝 깊이가 비슷하고 U형",
                "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4}},
   "serverDerived": {"foldReferenceTimeBtjd": 1683.4231, "phaseCenter": 0.0, "epochBtjd": 1683.4231,
-                    "durationHours": 2.83, "centroidDataStatus": "unavailable"},
+                    "durationHours": 2.83, "sourcePeakSuggestedDurationHours": 3.1, "durationLimitHours": 9.3,
+                    "centroidDataStatus": "unavailable"},
   "match": {"status": "matched_harmonic", "candidateId": "c-402", "harmonicMultiplier": 2,
             "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias"},
   "signal": {
@@ -722,11 +724,11 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 ```
 
 - 위상은 저장값을 복사하지 않고 현재 판 기준 시각으로 재환산한다(HIS-02, 분석 프론트 6.3): `width = durationHours / (24 × P)`, `center = phase(epochBtjd)`, `phaseStart = (center − width/2) mod 1`, `phaseEnd = phaseStart + width`.
-- **C02-R1 미결:** 기존 API는 제거 조합에서 은퇴 후보만 뺀 조합으로 `curveContext`를 만들고 `restored.step=false`, `restored.notice=STEP_NOT_RESTORABLE`을 제안했다. SRS SUB-10은 그 별의 현재 진행 단계로 대체하도록 요구하므로 결과가 다를 수 있다. 5.1·6.8·8.3을 일괄 대체한다는 종전 설명은 확정 계약으로 쓰지 않는다. History의 HIS-03·8.3 원본 대체와 재도전/분석 복귀를 [공통 은퇴 사례](exploration-contract-review.md)로 구분하며, 담당자 합의 전 어느 안도 새 정본으로 확정하지 않는다.
+- **C02-R1 결정:** 원 제출의 제거 조합에 은퇴 후보가 있으면 `curveContext`를 **그 별의 현재 진행 문맥**으로 대체하고 `restored.step=false`, `restored.notice=STEP_NOT_RESTORABLE`을 반환한다. 예: 옛 `{A,B}`, B 은퇴, 현재 진행 `{A,C}`이면 `{A,C}`, step 2다. 조회는 진행·원 제출을 변경하지 않는다. History CURRENT는 별도 HIS-03 규칙에 따라 최신 원본 곡선으로 대체하며, 5.1·6.8과 같은 잔차 조합을 반환하지 않는다.
 - 대상 신호가 은퇴했으면 409 `CANDIDATE_RETIRED`.
 - 초안의 단계 잔차가 캐시에 없으면 `residualForStep`으로 알려 준다. 결과와 작업이 모두 없으면 위 예시처럼 status·jobId는 null이고, 실제 작업이 있으면 그 상태·ID를 반환한다. 초안 조회는 작업을 생성하지 않으며 본인 탐사 화면에서 7.1절로 요청한다.
 - 실제 재제출은 새 `requestId`와 `retryOfSubmissionId`로 6.1절을 호출한다. 누적 매칭·완료는 되돌리지 않는다.
-- 새 판에서 저장된 주기가 추천 봉우리의 `fineTune` 범위 밖이어도 전체 주기도 격자 `[periodMinDays, periodMaxDays]` 안이면 그 이유만으로 재제출을 거절하지 않는다(5.4절, 6.2절 9단계). 전체 격자 밖이면 400 `VALIDATION_FAILED`와 `fieldErrors[].field=selection.periodDays`로 거절하고 프론트는 초안을 유지한 채 주기 재선택을 안내한다. 초안 조회 자체는 이를 미리 검사하지 않는다. duration·위상 등 나머지 검증은 여전히 적용하며, 추천 중첩 시 duration 상한 선택은 [C02-R3](exploration-contract-review.md)의 D20 공동 결정 대상이다.
+- 새 판에서 저장된 주기가 추천 봉우리의 `fineTune` 범위 밖이어도 전체 주기도 격자 `[periodMinDays, periodMaxDays]` 안이면 그 이유만으로 재제출을 거절하지 않는다(5.4절, 6.2절 9단계). 전체 격자 밖이면 400 `VALIDATION_FAILED`와 `fieldErrors[].field=selection.periodDays`로 거절하고 프론트는 초안을 유지한 채 주기 재선택을 안내한다. 다시 풀기에서는 옛 봉우리 식별값을 복원하지 않고 `sourcePeakGridIndex=null`로 시작한다. 사용자가 현재 판의 봉우리를 다시 선택하면 그 값을 새로 기록한다.
 
 ## 7. 온라인 잔차 작업
 
@@ -906,7 +908,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ```text
 historyId, ticId, candidateId, submittedAt, userJudgment, evidenceChecks, memo,
-original.periodDays, original.phaseStart, original.phaseEnd,
+original.periodDays, original.sourcePeakGridIndex, original.phaseStart, original.phaseEnd,
 serverDerived.epochBtjd, serverDerived.durationHours, match.status, match.correctedPeriodDays, match.harmonicMultiplier,
 curveContext, versions, graph(8.3절, mode 양쪽), relabel
 ```
