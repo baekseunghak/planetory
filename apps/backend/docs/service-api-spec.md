@@ -1,12 +1,12 @@
 # Planetory 서비스 백엔드 주요 API 명세
 
 - 작성일: 2026-09-09
-- 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
+- 갱신일: 2026-09-14 — HOME-09 사용법 다시 보기 정합화(`S15P21C206-33`, 리뷰 대상). 기존 2026-09-11 변경: SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
 - 상태: **팀 협의용 초안 — 구현 완료 또는 최종 합의된 API가 아님**
 - 담당: 백승학 / 서비스 백엔드
-- DB 기준: [ERD v1.1](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
-- 기준: [요구사항 v1.1](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
-- 적용 순서: SRS v1.1 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장). 탐사 D-7·D-9·D-11은 통합 검토안으로 연결하며 해당 MR의 리뷰 상태를 따른다.
+- DB 기준: [ERD v1.2 변경안](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
+- 기준: [요구사항 v1.2 변경안](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
+- 적용 순서: 승인된 SRS 기준선 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장). 탐사 D-7·D-9·D-11은 통합 검토안으로 연결하며 해당 MR의 리뷰 상태를 따른다.
 
 기능별로 “언제 호출하는지 → 무엇을 보내는지 → 무엇을 받는지 → 실패하면 어떻게 처리하는지”를 설명한다. **기능 정책은 기준 문서를 따르며, 아래 URL·필드명·페이지 방식·상태 코드는 협의용 제안이다.** 확정된 인증 오류 401/403 외의 세부 계약은 프론트·탐사·DB 담당자 검토 후 확정한다. 예시 ID·제목·시각·수치는 가상 데이터다.
 
@@ -187,6 +187,8 @@ if (response.status === 401) {
 `PATCH /api/v1/me/settings`에 `{"onboardingDone":true}`를 보내면 200 `{"onboardingDone":true}`. 현재 인증 회원의 user_settings.onboarding_done만 변경한다. 반복 true 요청은 동일 결과이며 false·null은 400 VALIDATION_FAILED, 회원 ID 입력은 받지 않는다. 안내를 닫기 전에 완료로 기록하지 않으며 실패 시 다시 안내될 수 있다.
 
 설정 행이 없으면 기존 ERD 기본값으로 생성하고 이미 있는 별 목록 공개·알림 설정을 덮어쓰지 않는다. GET /me의 onboardingDone은 행이 없으면 false다. 탐사 D-8의 튜토리얼 1번 첫 제출 성공 처리도 같은 단방향 완료 규칙을 사용하며 병렬 실행해도 true가 false로 되돌아가지 않는다. 별 클릭은 완료 처리가 아니다. 이 필드만 P0이며 starListVisibility 등 다른 설정을 P0로 올리지 않는다. SB-D20 주간 챌린지 안내는 계속 브라우저별 기록으로 관리한다.
+
+**사용법 다시 보기(HOME-09 v1.2 변경안).** 마이페이지에서 GIF+설명 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출)를 읽는 화면이다. 다시 보기의 열기·이전·다음·닫기는 이 PATCH를 호출하지 않으며 onboardingDone을 false로 재설정하지 않는다. 분석·제출·성과·발견도 발생하지 않고 tutorialCompleted와 별 진행은 유지된다. 최초 안내 완료 API의 true 전용 규칙은 변경하지 않는다. [별지도 표현 계약 2절](../../../docs/development/sky-presentation-contract.md)을 따른다.
 
 검증: 최초 true·반복 true·false/null 거부·미인증 401·설정 행 미존재·기존 설정 보존·튜토리얼 제출과 동시 완료·다른 기기 조회에서 완료 유지.
 
@@ -787,3 +789,5 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 2026-09-11 | 3.1절 `GET /me`에 MY-01 `achievementSummary` 추가(타인 프로필과의 비대칭 해소). 저장 열 없이 호출 시 집계, 탐사 9.1절 summary와 같은 내부 함수 사용을 명시 |
 
 | 2026-09-11 | 36번 통합 검토: History 필드·그래프 외형·성과 DTO 매핑·챌린지 v1.1 정합화. 메모 공개 유지 및 첫 방문 안내 완료 설정 P0는 사용자 확인. 탐사 D-7/9/11 연결은 리뷰 대상 |
+
+| 2026-09-14 | `S15P21C206-33` 지도 담당 결정 반영안: HOME-09 사용법 다시 보기를 GIF+설명 5단계 읽기로 정의. 기존 onboardingDone=true 전용·false/null 400·반복 true 멱등 규칙 유지. 탐사 API 4.1과 충돌하던 재설정 문구 정합화(교차 리뷰 대상) |

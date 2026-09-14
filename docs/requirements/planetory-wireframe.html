@@ -281,7 +281,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   <!-- ===== SC-01 ===== -->
   <section class="frame" id="s01">
     <div class="flabel"><span class="fid">SC-01</span><span class="fname">로그인 · 첫 방문 안내</span><span class="fids">ACC-01 · ACC-02 · ACC-03 · HOME-09 · POL-26</span><span class="tag p0">P0</span><span class="tag new">v0.12</span>
-      <span class="fdesc">두 OAuth만. 첫 로그인 뒤 홈에 튜토리얼 1번 별을 여는 동안 말풍선 안내 5단계를 한 번 보여준다(HOME-09, P0). 두 번째 방문부터는 표시하지 않고 마이페이지 설정에서 다시 켤 수 있다.</span></div>
+      <span class="fdesc">두 OAuth만. 첫 로그인 뒤 홈에 튜토리얼 1번 별을 여는 동안 말풍선 안내 5단계를 한 번 보여준다(HOME-09, P0). 완료 저장 뒤 자동 재노출하지 않는다. 마이페이지 [사용법 다시 보기]는 GIF+설명을 읽는 별도 5단계 안내이며 완료 상태를 변경하지 않는다.</span></div>
     <div class="scroll"><div class="pair">
       <div class="wf half">
         <div class="sky" style="height:420px;display:flex;align-items:center;justify-content:center">
@@ -312,6 +312,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           </div>
         </div>
       </div>
+    </div></div>
+    <div class="box" style="margin:18px"><div class="box-h">사용법 다시 보기 · 별도 읽기 화면 <span class="tag p0">HOME-09 · AT-119</span></div><div class="box-b">
+      <div class="row" style="justify-content:space-between"><b>2 / 5 · 반복 주기를 골라요</b><span class="btn sm ghost">닫기</span></div>
+      <div class="box dash" style="padding:22px;text-align:center;margin:12px 0">GIF 자리 · 실제 분석 UI의 봉우리 선택과 접힌 곡선 변화<br><span class="muted small">문서용 자리 표시이며 GIF는 후속 제작</span></div>
+      <p class="small">주기도에서 봉우리를 고르면 해당 주기로 접힌 곡선을 확인할 수 있어요. 밝기가 반복해서 줄어드는지 살펴보세요.</p>
+      <div class="row" style="justify-content:space-between"><span class="btn sm">이전</span><span class="muted small">별 선택 → 봉우리 → 구간 → 판단 → 제출</span><span class="btn sm">다음</span></div>
+      <p class="muted small">마이페이지에서 열기 · 실제 분석/제출 없음 · onboardingDone 변경 없음 · GIF 실패/모션 줄이기 시 텍스트 유지</p>
     </div></div>
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">ACC-01</span><span>SSAFY OAuth. 같은 고유 ID 재로그인은 동일 회원</span><span class="tag p0">P0</span></li>
@@ -738,7 +745,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
                 <div class="row" style="justify-content:space-between"><span>알림 · 다시 열린 별</span><span class="toggle on"></span></div>
                 <div class="row" style="justify-content:space-between"><span>알림 · 새 챌린지</span><span class="toggle on"></span></div>
                 <div class="row" style="justify-content:space-between"><span>알림 · 팔로우한 별 새 글 <span class="tag p1" style="font-size:9px">P1</span></span><span class="toggle"></span></div>
-                <div class="row" style="justify-content:space-between"><span>첫 방문 안내 다시 보기</span><span class="btn sm ghost">켜기</span></div>
+                <div class="row" style="justify-content:space-between"><span>사용법 다시 보기 <span class="tag p0">P0</span></span><span class="btn sm ghost">안내 열기</span></div>
                 <div class="row" style="justify-content:space-between;border-top:1px solid var(--line-soft);padding-top:8px"><span class="btn sm ghost">로그아웃</span><span class="muted small">회원 탈퇴 <span class="tag dec">DEC-11</span></span></div>
               </div>
             </div>
@@ -751,7 +758,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">2</span><span class="nid">MY-02 · HOME-03</span><span>내 별 목록. 진행 단계·행성 수·등급·곡선 단계·미게시 수. [결과]·[분석 계속]·[스레드]</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">DEC-27 · AT-83</span><span>다시 열린 별은 목록 상단, "다시 열림" 표시와 [다시 분석]. 완료 표시는 거두고 기존 인정은 유지</span><span class="tag p0">P0</span></li>
       <li><span class="co">4</span><span class="nid">MY-03 · HIS-04</span><span>히스토리 조회·필터. 미확정 미게시 신호에 [공개 분석 검토], 같은 별 자료의 일반 토론 첨부와 별개</span><span class="tag p0">P0</span></li>
-      <li><span class="co">5</span><span class="nid">MY-04 · DEC-34 · HOME-09 · AT-84</span><span>내 별 목록 공개(기본 공개), 알림 종류, 첫 방문 안내 다시 보기, 계정·탈퇴</span><span class="tag p1">P1</span></li>
+      <li><span class="co">5</span><span class="nid">MY-04 · DEC-34 · HOME-09 · AT-84</span><span>내 별 목록 공개(기본 공개), 알림 종류, 계정·탈퇴. [사용법 다시 보기]만 HOME-09의 P0: GIF 5단계 읽기, 상태 변경·실제 제출 없음</span><span class="tag p1">P1</span></li>
     </ol>
   </section>
 
