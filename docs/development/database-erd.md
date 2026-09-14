@@ -197,6 +197,7 @@ erDiagram
         numeric end_btjd "끝(BTJD)"
         text cadence "촬영 간격"
         text source_version "원천 버전"
+        text time_system "시각 체계"
     }
     publication_bundles["publication_bundles · 공개 데이터 판"] {
         bigint id PK "고유 번호"
@@ -256,6 +257,8 @@ erDiagram
         text disposition "원천 판정"
         numeric period_days "주기"
         date fetched_on "조회일"
+        bigint tic_id FK "별"
+        numeric epoch_btjd "원천 epoch(BTJD·NULL 가능)"
     }
     candidate_dispositions["candidate_dispositions · 통합 분류"] {
         bigint candidate_id PK, FK "후보"
@@ -264,6 +267,7 @@ erDiagram
         text planet_truth "planet/not_planet/null"
         text rule_version "규칙 버전"
         timestamptz applied_at "적용 시각"
+        jsonb source_refs "판정 근거 참조"
     }
     ai_evaluations["ai_evaluations · AI 평가"] {
         bigint id PK "고유 번호"
@@ -272,6 +276,7 @@ erDiagram
         numeric score "점수"
         text verdict "rejected/hold/approved"
         text threshold_version "임계값 버전"
+        jsonb raw_output "모델 원본 출력(NULL 가능)"
     }
     submissions["submissions · 제출"] {
         bigint id PK "고유 번호 · 동률 순서"
@@ -452,6 +457,8 @@ erDiagram
         text checkpoint "체크포인트"
         text status "상태"
         timestamptz started_at "시작"
+        text error "실패 사유(NULL 가능)"
+        bigint duration_ms "소요 시간(ms·NULL 가능)"
     }
     candidate_status_history["candidate_status_history · 후보 변경 이력"] {
         bigint id PK "고유 번호"
@@ -461,6 +468,8 @@ erDiagram
         text old_value "이전"
         text new_value "이후"
         timestamptz changed_at "변경 시각"
+        text rule_version "규칙 버전"
+        text reason "사유(NULL 가능)"
     }
 
 ```
