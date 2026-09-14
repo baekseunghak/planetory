@@ -72,7 +72,7 @@
 | `GRAPH_TEMPORARILY_UNAVAILABLE` | 503 | 읽기 조회 중 판이 바뀌어 최신 판으로 1회 재시도했는데도 일관된 결과를 못 만듦(8.3절). 서비스 API 7.2절과 같은 코드 |
 | `STAR_LOCKED` | 403 | 그 별이 이 회원에게 열리지 않음. 분석·곡선·제출·잔차 모두 거절(NFR-06, AT-64) |
 | `STAR_NOT_PUBLISHED` | 404 | `stars.service_status != published` 또는 없는 TIC. 존재를 드러내지 않는다 |
-| `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 서버가 **은퇴 후보만 뺀 조합**을 대체 문맥으로 돌려준다 |
+| `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 분석 복귀와 다시 풀기는 그 별의 최신 현재 진행 문맥을 돌려준다. History CURRENT는 별도 규칙에 따라 최신 원본을 사용한다 |
 | `CANDIDATE_RETIRED` | 409 | 재도전 대상 신호가 현재 판에서 은퇴함 |
 | `CURVE_NOT_READY` | 202 | 잔차가 아직 없음. 본문에 `residual` 상태(5.2절) |
 | `RESIDUAL_QUEUE_FULL` | 429 | 대기열 초과. 본문에 `retryAfterSeconds` |
@@ -1042,7 +1042,7 @@ for each user_star_progress(tic_id):
 | Q06 후보 노출 경계 | 5.4절 봉우리 투영. `candidateId` 미노출 |
 | Q07 경로·DTO·멱등·판 변경 | 2장, 6.4절, 6.6절. 판 변경 감지는 `BUNDLE_CHANGED`와 5.1절 재조회 |
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
-| Q09 진행 중 은퇴 후보 | 대체 문맥 규칙 하나로 통일: 제거 조합에서 은퇴 후보만 뺀다. 판 전환(5.1절 `currentCurveContext`), 재도전(6.8절), 히스토리 재현(8.3절 `fallbackReason`) 모두 같은 규칙과 `notice`. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
+| Q09 진행 중 은퇴 후보 | 판 전환의 분석 복귀(5.1절)와 다시 풀기(6.8절)는 최신 현재 진행 문맥을 사용한다. 히스토리 CURRENT(8.3절)는 최신 원본, SUBMITTED는 당시 snapshot을 사용한다. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
 | Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
 | Q11 스냅샷 누락·고조파 좌표 | 8.3절 `snapshot: null`, 접기는 원본 주기 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
