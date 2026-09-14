@@ -1,6 +1,6 @@
 # 천문 데이터 처리·AI 후속 Task 계획
 
-작성일: 2026-09-10, 팀 결정 반영: 2026-09-14 / 담당: 윤성용 / Jira: `S15P21C206-46` / 기준: 요구사항 명세서 v1.1, ERD v1.1, [역할 명세](tess-processing-ai-role-spec.md), [갭 분석](../data/tess-pipeline/README.md) 5.7·9절, [Git·Jira 컨벤션](../workflows/README.md) 4절 / 상태: Epic·티켓 생성 완료, 대응표(9절) 반영, MR 리뷰 대기
+작성일: 2026-09-10, 팀 결정 반영: 2026-09-14 / 담당: 윤성용 / Jira: `S15P21C206-46` / 기준: 요구사항 명세서 v1.1, ERD v1.1, [역할 명세](tess-processing-ai-role-spec.md), [갭 분석](../data/tess-pipeline/candidate-detection.md) 5.7절·[검증과 재처리](../data/tess-pipeline/validation-and-reprocessing.md) 9절, [Jira Task·Bug](../workflows/jira-task.md) / 상태: Epic·티켓 생성 완료, 대응표(9절) 반영, MR 리뷰 대기
 
 이 문서는 `S15P21C206-29` 기획에서 나온 천문 데이터 처리·AI 역할의 후속 Task 를 실험·구현 두 층으로 나누고, 착수 순서·선행 관계를 정리한다. 2026-09-10 에는 Epic 묶음과 티켓 범위를 팀 결정 입력으로 제안했고, 2026-09-14 에 팀이 Epic `S15P21C206-56` 아래 티켓 25개와 발표 Epic `S15P21C206-224` 아래 3개를 생성했다. 3·4·8절에 결정 결과를, 9절에 원본 17행과 생성된 티켓의 대응표를 기록한다. 역할 명세서 8절과 갭 분석 9절의 후속 Task 요약과 다르면 이 문서를 따르고, 이 문서와 Jira 티켓 설명이 다르면 Jira 티켓을 따른다.
 
@@ -152,7 +152,7 @@ F 의 EC2 비교 대상은 "검증용 최소 구현" 이 아니라 **88 의 실�
 
 ## 7. Task 명세 작성 규칙
 
-[Git·Jira 컨벤션](../workflows/README.md) 4절의 Task 템플릿을 그대로 쓰고, 이 역할의 Task 에는 두 항목을 더한다.
+[Jira Task·Bug](../workflows/jira-task.md)의 `Task 작성` 템플릿을 그대로 쓰고, 이 역할의 Task 에는 두 항목을 더한다.
 
 ```markdown
 ## 목적

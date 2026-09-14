@@ -2,7 +2,7 @@
 
 Jira `S15P21C206-42` (전처리·detrending). 이후 BLS 격자(A)·비닝 실측(D) 벤치마크도 이 프로젝트에 하위 명령으로 붙인다.
 입력은 [tess-fixture](../tess-fixture/README.md) 의 고정 표본과 합성 주입 세트다. 실험 계획과 결과 읽는 법은
-[docs/development/tess-preprocess-benchmark.md](../../docs/data/tess-preprocess-benchmark.md) 에 있다.
+[docs/data/tess-preprocess-benchmark.md](../../docs/data/tess-preprocess-benchmark.md) 에 있다.
 
 이 코드는 **값을 정하는 실험 코드**다. 검증된 규칙은 구현 Task 에서 별도 커널로 옮긴다.
 

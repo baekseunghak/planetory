@@ -2,7 +2,7 @@
 
 작성일: 2026-09-10, 1.1.0 결과 반영 2026-09-14 / 담당: 윤성용 / Jira: `S15P21C206-42` / 코드: `experiments/tess-bench/` / 상태: 설정 1.0.0·1.1.0 실행 완료, 결과·제안 기록 완료, 팀 리뷰 전
 
-이 문서는 BLS 전 전처리 설정(품질 마스크, 구간 분리, detrending 방법·창, 실패 처리)을 고정 fixture 에서 비교해 서비스 기본값을 제안하는 실험의 계획과 결과를 기록한다. 근거는 [갭 분석](tess-pipeline/README.md) 5.2~5.5절(기존 코드 확인)·7.1절(비교 실험 계획), 입력은 [고정 fixture](tess-fixture-set.md) 다. BLS 설정은 바꾸지 않으며(후속 A Task), 여기 제안값은 팀 리뷰 전 제안이다.
+이 문서는 BLS 전 전처리 설정(품질 마스크, 구간 분리, detrending 방법·창, 실패 처리)을 고정 fixture 에서 비교해 서비스 기본값을 제안하는 실험의 계획과 결과를 기록한다. 근거는 [원천 데이터와 전처리](tess-pipeline/preprocessing.md) 5.2~5.5절(기존 코드 확인)·[검증과 재처리](tess-pipeline/validation-and-reprocessing.md) 7.1절(비교 실험 계획), 입력은 [고정 fixture](tess-fixture-set.md) 다. BLS 설정은 바꾸지 않으며(후속 A Task), 여기 제안값은 팀 리뷰 전 제안이다.
 
 ## 1. 질문
 
