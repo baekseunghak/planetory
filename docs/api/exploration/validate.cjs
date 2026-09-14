@@ -126,4 +126,4 @@ const browser = decisions.browserTools;
 assert.equal(browser.calculationOwner, 'browser');
 assert.equal(browser.networkRequests, 0);
 assert.equal(browser.serverPersistenceWrites, 0);
-console.log(`PASS: ${suite.cases.length} HTTP examples and 6 review scenarios; C02-R1/R2/R3 decisions recorded, cross-review pending.`);
+console.log(`PASS: ${suite.cases.length} HTTP examples and 6 review scenarios; C02-R1/R2/R3 decisions confirmed, MR !32 review pending.`);
