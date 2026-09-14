@@ -192,6 +192,7 @@ def cmd_preprocess(args: argparse.Namespace) -> int:
         outputs=[mf.file_entry(metrics_path, kind="metrics", rows=len(metric_rows)),
                  mf.file_entry(summary_path, kind="summary", rows=len(summary_rows))],
         notes=f"total {time.time() - started:.1f}s",
+        packages=("numpy", "scipy", "astropy"),      # savgol_filter 가 SciPy 라 버전을 함께 남긴다
     )
     mpath = mf.write_manifest(manifest, args.results / "manifests" / f"preprocess-{target.key}-{run_id[:8]}.json")
     print(f"\nmetrics:  {metrics_path}\nsummary:  {summary_path}\nmanifest: {mpath}\n총 소요 {time.time() - started:.1f}s")

@@ -48,13 +48,30 @@ def test_overlapping_pair_metrics_exclude_shared_points():
         assert abs(m.depth_ratio - 1.0) < 0.05, (r.injection_id, m.depth_ratio)
 
 
+def _summary_rows(pairs):
+    return [{"depth_ratio": d, "duration_hours": h, "in_transit_kept": 1.0, "oot_scatter_ppm": 300.0,
+             "boundary_ratio": 1.0, "n_failed_segments": 0} for d, h in pairs]
+
+
 def test_summarize_groups_by_duration():
-    rows = [{"depth_ratio": d, "duration_hours": h, "in_transit_kept": 1.0, "oot_scatter_ppm": 300.0,
-             "boundary_ratio": 1.0, "n_failed_segments": 0}
-            for d, h in ((0.9, 0.5), (0.8, 2.0), (0.4, 8.0), (0.5, 8.0))]
-    s = mt.summarize(rows)
+    s = mt.summarize(_summary_rows(((0.9, 0.5), (0.8, 2.0), (0.4, 8.0), (0.5, 8.0))))
     assert s["n_signals"] == 4 and s["failed_segments_per_curve"] == 0
     assert s["depth_ratio_0.5h"] == 0.9 and s["depth_ratio_2h"] == 0.8 and s["depth_ratio_8h"] == pytest.approx(0.45)
+    assert s["depth_ratio_median"] == pytest.approx(0.65)
+
+
+def test_summarize_missing_duration_is_nan_not_overall_median():
+    # 8h 신호가 없는 부분 실행(--limit 등)에서 8h 요약이 전체 중앙값으로 대체되면 안 된다
+    s = mt.summarize(_summary_rows(((0.9, 0.5), (0.7, 0.5), (0.8, 2.0))))
+    assert s["depth_ratio_0.5h"] == pytest.approx(0.8) and s["depth_ratio_2h"] == 0.8
+    assert np.isnan(s["depth_ratio_8h"])
+    assert s["depth_ratio_median"] == pytest.approx(0.8)      # 전체 요약은 그대로 계산된다
+
+
+def test_summarize_single_duration_only():
+    s = mt.summarize(_summary_rows(((0.3, 8.0), (0.5, 8.0))))
+    assert s["depth_ratio_8h"] == pytest.approx(0.4)
+    assert np.isnan(s["depth_ratio_0.5h"]) and np.isnan(s["depth_ratio_2h"])
 
 
 SAMPLE_READY = all((FIXTURE / "sample_raw" / "toi270" / f).is_file() for f in (
@@ -76,3 +93,5 @@ def test_cli_smoke_run_writes_metrics_summary_manifest(tmp_path):
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["config"]["parameters"]["settings"] == ["poc_baseline", "savgol_0.5d"]
     assert all(Path(o["path"]).is_file() for o in data["outputs"])
+    pkgs = data["environment"]["packages"]
+    assert pkgs.get("scipy") and pkgs.get("numpy") and pkgs.get("astropy")     # bench manifest 는 SciPy 버전도 남긴다

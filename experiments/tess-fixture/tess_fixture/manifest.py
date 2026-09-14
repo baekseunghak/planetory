@@ -64,8 +64,12 @@ def new_run_id() -> str:
 
 
 def build_manifest(task: str, command: str, repo_dir: Path, inputs: list[dict], config: dict,
-                   outputs: list[dict], notes: str = "", run_id: str | None = None) -> dict:
-    """run_id 를 미리 만들어 넘기면 산출물 디렉터리 이름과 manifest 가 같은 id 를 공유한다."""
+                   outputs: list[dict], notes: str = "", run_id: str | None = None,
+                   packages: tuple[str, ...] = ("numpy", "astropy")) -> dict:
+    """run_id 를 미리 만들어 넘기면 산출물 디렉터리 이름과 manifest 가 같은 id 를 공유한다.
+
+    packages 는 environment.packages 에 버전을 기록할 모듈 이름. 호출하는 도구가 실제로 쓰는 계산 라이브러리를 넘긴다.
+    """
     return {
         "schema": SCHEMA_ID,
         "run_id": run_id or new_run_id(),
@@ -73,7 +77,7 @@ def build_manifest(task: str, command: str, repo_dir: Path, inputs: list[dict], 
         "task": task,
         "command": command,
         "code": code_info(repo_dir),
-        "environment": environment_info(),
+        "environment": environment_info(packages),
         "inputs": inputs,
         "config": config,
         "outputs": outputs,

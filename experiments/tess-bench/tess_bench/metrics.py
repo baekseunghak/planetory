@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 """주입 신호 하나에 대한 전처리 품질 지표.
 
-- depth_ratio      : 전처리 후 잰 깊이 / 심은 깊이 (1 이면 보존, 작으면 깎임)
-- in_transit_kept  : 통과 구간 점 중 전처리 후 남은 비율
+- depth_ratio      : 전처리 후 잰 겉보기 깊이 / 심은 깊이 (1 이면 보존, 작으면 깎임)
+- in_transit_kept  : 통과 구간 점 중 전처리 후 남은 비율. 분모는 품질·유한값 필터를 통과한 바탕곡선의 통과 구간 점 수이며
+                     원본 FITS 의 전체 cadence 가 아니다
 - oot_scatter_ppm  : 통과 밖 구간의 robust scatter (잡음)
-- boundary_ratio   : 구간 경계 ±0.5일 안 통과 밖 점의 |flux−1| 중앙값 / 전체 통과 밖 scatter (1 근처면 경계 왜곡 없음)
+- boundary_ratio   : 구간 경계 ±0.5일 안 통과 밖 점의 |flux−1| 중앙값 / 전체 통과 밖 scatter
+                     (순수 잡음이면 약 0.67. 눈에 띄게 크면 경계 왜곡)
 깊이는 위상 접기 없이 통과 구간 점의 중앙값과 통과 밖 중앙값 차이로 잰다. 같은 group 의 다른 신호가 겹친 점은
 그 신호의 알고 있는 모델로 나눠 target 신호만 남긴 뒤 잰다(주입 파라미터를 아는 평가용 계산이며 탐색 코드가 아님).
+
+depth_ratio 는 "전처리 후 겉보기 깊이 비율" 이다. real 바탕곡선에는 실제 별의 잔여 변동·계통 오차가 남아 있고, 추세는
+심은 신호와 바탕곡선을 함께 본 뒤 추정되므로, 이 비율은 detrending 손실과 바탕곡선 잔여·공동 추세 영향을 완전히
+분리하지 못한다. 1 을 넘는 값이 나올 수 있으며 그 불확실성(신호별 오차 범위)은 이 모듈에서 측정하지 않는다.
 """
 
 from __future__ import annotations
@@ -113,7 +119,9 @@ def signal_metrics(result: PreprocessResult, rows: list[inj.InjectionRow], targe
 def summarize(rows: list[dict]) -> dict:
     """설정 하나(바탕곡선 하나)의 SignalMetrics 목록을 요약한다."""
     def med(key, subset=None):
-        vals = np.array([r[key] for r in (subset or rows)], dtype=float)
+        # subset=None 은 전체, 빈 목록은 "해당 부류 신호가 없음" 이므로 전체로 대체하지 않고 NaN 을 낸다
+        source = rows if subset is None else subset
+        vals = np.array([r[key] for r in source], dtype=float)
         vals = vals[np.isfinite(vals)]
         return float(np.median(vals)) if len(vals) else float("nan")
 

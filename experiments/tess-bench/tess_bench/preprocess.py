@@ -103,7 +103,12 @@ def savgol_trend(f: np.ndarray, window_pts: int) -> np.ndarray:
 
 
 def biweight_location(x: np.ndarray, c: float = 6.0, iters: int = 3) -> float:
-    """Tukey biweight 위치 추정. 튀는 점(통과 구간 포함)의 영향을 줄인 강건한 중심값."""
+    """Tukey biweight 위치 추정. 튀는 점(통과 구간 포함)의 영향을 줄인 강건한 중심값.
+
+    이 벤치마크의 고정 구현이다: 초기값 중앙값, 척도는 MAD(정규화 상수 없음), 절단 c=6, 고정 3회 반복,
+    MAD 가 0 이거나 가중치 합이 0 이면 현재 중심값을 그대로 반환. astropy.stats.biweight_location 이나 wotan 의
+    구현과 초기값·반복 종료·척도 정의가 다를 수 있으며 동일하다고 가정하지 않는다.
+    """
     x = x[np.isfinite(x)]
     if len(x) == 0:
         return float("nan")
@@ -122,7 +127,11 @@ def biweight_location(x: np.ndarray, c: float = 6.0, iters: int = 3) -> float:
 
 
 def biweight_trend(t: np.ndarray, f: np.ndarray, window_days: float, stride: int = 10) -> np.ndarray:
-    """이동 창 biweight 추세. 계산 비용을 위해 stride 점마다 추정하고 선형 보간한다 (창 안의 점은 모두 사용)."""
+    """이동 창 biweight 추세. 계산 비용을 위해 stride 점마다 추정하고 선형 보간한다 (창 안의 점은 모두 사용).
+
+    창은 평가점 시각 ±window_days/2 를 searchsorted 로 잡는다. 구간 시작·끝에서는 창이 한쪽만 채워진 채(패딩·반사 없음)
+    계산하며, 평가점은 0, stride, 2·stride, … 와 마지막 점이다. 평가점 사이는 np.interp 선형 보간이다.
+    """
     n = len(t)
     if n == 0:
         return f.copy()
