@@ -11,3 +11,8 @@ lake/
 experiments/**/results/
 experiments/**/*.fits
 experiments/**/*.parquet
+
+# Local IDE settings
+.vscode/
+
+.claude/
