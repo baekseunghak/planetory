@@ -31,6 +31,7 @@
 | 릴리스·Hotfix 준비해줘 | Release·Hotfix | [Release·Hotfix](release-hotfix.md) |
 | 팀원 KPT 작성해줘, 주간 보고서 써줘, 주차 공동 브랜치 만들어줘 | KPT·주간 보고서 | [KPT·주간 보고서](reports.md) |
 | Jira 알림·Mattermost 자동화 수정해줘 | 자동화 | [Jira-GitLab-Mattermost 자동화](jira-mattermost-automation.md) |
+| 자주 쓰는 명령 알려줘, 이 절차 또 해줘 | 반복 절차 | [반복 절차 모음](routines.md) |
 
 하나의 요청이 여러 단계라면 현재 단계의 가이드부터 읽고 다음 행동이 필요할 때만 다음 가이드를 읽는다. 예를 들어 “기능 구현 후 커밋해줘”는 `기능·수정 작업 → 커밋` 순서다.
 
