@@ -1,4 +1,4 @@
-package com.planetory.backend;
+package com.planetory.backend.global.dev;
 
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.context.annotation.Profile;

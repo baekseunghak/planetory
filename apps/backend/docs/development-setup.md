@@ -14,9 +14,10 @@
 | Flyway | Boot 4.1.1 의존성 관리 사용. 검증 해석 버전 12.4.0 |
 | PostgreSQL JDBC | Boot 의존성 관리 사용. 검증 해석 버전 42.7.13 |
 | Swagger | `springdoc-openapi-starter-webmvc-ui:3.1.1` |
+| JPA / Lombok | Boot 의존성 관리 사용(Hibernate 7). Lombok은 엔티티·설정 클래스에 한정 |
 | Docker Compose | `include`를 지원하는 v2.20.0 이상. 검증 PC: v5.3.1 |
 
-Gradle을 별도로 설치하지 않는다. JDK 21도 미리 설치할 필요가 없다. `settings.gradle`의 foojay toolchain resolver가 JDK 21이 없으면 자동으로 내려받아 컴파일·테스트에 사용한다. 시스템 기본 Java가 다른 버전이어도 Wrapper 실행에는 Java 17 이상이면 충분하다. IDE에서는 Project SDK·Gradle JVM을 21로 지정한다. JPA는 아직 추가하지 않았으며 JDBC로 연결을 확인한다. 스키마는 Flyway만 변경한다.
+Gradle을 별도로 설치하지 않는다. JDK 21도 미리 설치할 필요가 없다. `settings.gradle`의 foojay toolchain resolver가 JDK 21이 없으면 자동으로 내려받아 컴파일·테스트에 사용한다. 시스템 기본 Java가 다른 버전이어도 Wrapper 실행에는 Java 17 이상이면 충분하다. IDE에서는 Project SDK·Gradle JVM을 21로 지정한다. 데이터 접근은 JPA와 JdbcClient를 함께 쓴다(7장). 스키마는 Flyway만 변경하며 `spring.jpa.hibernate.ddl-auto=validate`라 엔티티와 스키마가 어긋나면 기동에 실패한다.
 
 공식 기준: [Boot 4.1.1](https://spring.io/blog/2026/08/20/spring-boot-4-1-1-available-now/), [Boot 요구 환경](https://docs.spring.io/spring-boot/system-requirements.html), [springdoc](https://springdoc.org/), [PostgreSQL 버전](https://www.postgresql.org/support/versioning/).
 
@@ -100,7 +101,7 @@ docker compose --profile service up -d --build backend
 | `DATABASE_USER` | 앱이 읽는 DB 사용자. 기본 `planetory` |
 | `POSTGRES_PASSWORD` / `POSTGRES_PORT` | 루트 `.env`·Compose용. 터미널 실행 시 위 `DATABASE_*`로 매핑 |
 | `SPRING_DATASOURCE_*` | 로컬 Compose `backend`가 사용하는 Spring 표준 연결 설정. `DATABASE_*`보다 우선 |
-| `SPRING_PROFILES_ACTIVE` | `local`이면 Swagger·예제 API 제공 |
+| `SPRING_PROFILES_ACTIVE` | `local`이면 Swagger·예제 API 제공, Hibernate SQL 로그 출력 |
 | `SWAGGER_ENABLED` | local 외 환경에서 문서 노출을 명시적으로 제어, 기본 false |
 
 ## 4. Flyway 최초 스키마
@@ -163,7 +164,7 @@ Swagger에서 `GET /api/v1/hello`를 펼치고 **Try it out → Execute**를 누
 |---|---|
 | JDK 21 / Wrapper 9.7.1 컴파일 | 통과 |
 | PostgreSQL 실제 버전 | 18.6, 컨테이너 healthy |
-| 전체 빌드·통합 테스트 | `clean build` 통과, 테스트 3개 실패 0 |
+| 전체 빌드·테스트 | `clean build` 통과, 테스트 6개 실패 0 (통합 3 + 웹 계층 3) |
 | 독립 테스트 스키마 | 실행마다 UUID 스키마 생성, 종료 시 해당 스키마만 정리 |
 | Flyway | 테스트에서 V1 적용 후 migrate 두 번 모두 신규 적용 0건 |
 | 실제 개발 DB | 33개 테이블 생성·V1 성공 이력 1건 |
@@ -173,6 +174,53 @@ Swagger에서 `GET /api/v1/hello`를 펼치고 **Try it out → Execute**를 누
 | GitLab CI·EC2 배포 | 후속 Task, 미검증 |
 | 팀원 재현 | MR 리뷰 시 리뷰어가 이 문서만으로 3장까지 재현해 확인 |
 
-테스트는 H2가 아니라 실행 중인 PostgreSQL을 사용한다. 설정된 DB에 테스트 스키마 생성·삭제 권한이 필요하며, 운영 DB에는 연결하지 않는다. 실패해 스키마가 남으면 `backend_test_...` 이름을 확인해 정리한다. 자동 테스트는 자기 실행에서 생성한 이름만 삭제한다.
+`@SpringBootTest` 통합 테스트는 H2가 아니라 실행 중인 PostgreSQL을 사용한다. `@WebMvcTest`는 DB 없이 실행된다. 설정된 DB에 테스트 스키마 생성·삭제 권한이 필요하며, 운영 DB에는 연결하지 않는다. 실패해 스키마가 남으면 `backend_test_...` 이름을 확인해 정리한다. 자동 테스트는 자기 실행에서 생성한 이름만 삭제한다.
 
 JUnit 결과는 `build/test-results/test/`, HTML 결과는 `build/reports/tests/test/index.html`에 생성된다. 빌드 결과·비밀번호·로컬 환경 파일은 Git에서 제외한다.
+
+## 7. 코드 구조와 작성 규칙
+
+패키지 루트는 `com.planetory.backend`다. 이전 SSAFY 프로젝트(JobUp)의 도메인 수직 분할 구조를 따르되, 인증·오류 형식은 이 프로젝트의 API 명세에 맞췄다.
+
+```
+global/config     OpenApiConfig(Swagger 제목·세션 쿠키 스킴), ClockConfiguration
+global/error      ErrorCode, ErrorResponse, BusinessException, GlobalExceptionHandler
+global/entity     BaseTimeEntity(created_at 공통 부모)
+global/dev        HelloController — local 프로필 전용 예제 API
+domain/<도메인>/  controller · dto(request/response) · entity · repository · service · exception
+```
+
+### 도메인 패키지
+
+- 담당 영역([API 명세 파트 분담](api-spec-ownership.md))별로 `domain/member`, `domain/post`, `domain/comment`, `domain/exploration`처럼 나눈다. 다른 도메인의 repository를 직접 주입하지 않고 service를 통해 호출한다.
+- 요청·응답 DTO는 Java `record`로 쓴다. Lombok은 엔티티(`@Getter`, `@NoArgsConstructor(access = PROTECTED)`)와 `@RequiredArgsConstructor`·`@Slf4j`에 한정하고 `@Data`·`@Setter`는 쓰지 않는다.
+- 컨트롤러 경로는 `/api/v1`로 시작하며 `@Operation(summary)`를 붙여 Swagger에 설명이 나오게 한다.
+
+### 데이터 접근 — JPA와 JdbcClient 병행
+
+| 대상 | 방식 | 이유 |
+|---|---|---|
+| 회원·설정·게시글·댓글·반응·알림 등 관계형 테이블 | JPA (`JpaRepository`) | CRUD·연관 탐색·부분 수정이 대부분. `validate`가 스키마 불일치를 기동 시점에 잡는다 |
+| `light_curve_segments.flux`, `periodograms.power`, `manifest` 등 배열·JSONB 중심 탐사 테이블 | `JdbcClient` | 배열 슬라이싱·집계는 결국 PostgreSQL SQL이 필요하다. 탐사 담당자가 테이블별로 정한다 |
+
+- 둘은 같은 DataSource와 `@Transactional`을 공유한다. 한 서비스 메서드 안에서 섞어 써도 트랜잭션은 하나다.
+- 엔티티는 `created_at`을 `BaseTimeEntity`에서 상속한다. 값은 DB DEFAULT가 채우므로 애플리케이션에서 넣지 않는다. `updated_at`은 서비스가 갱신 시점을 정하므로 엔티티가 직접 둔다.
+- `open-in-view=false`다. 지연 로딩은 `@Transactional` 서비스 안에서 끝내고, 응답 DTO 변환도 그 안에서 한다.
+- CHECK 제약·부분 유일 인덱스는 `validate`가 검사하지 않는다. 마이그레이션에서 바꿨다면 엔티티와 테스트를 같이 확인한다.
+
+### 오류 처리
+
+- 형식은 [서비스 API 명세 2.4절](service-api-spec.md)의 `code`·`message`·`fieldErrors`다.
+- 도메인 예외는 `BusinessException`을 상속하고 `ErrorCode`만 지정한다. 새 코드는 `ErrorCode`에 추가한다. `GlobalExceptionHandler`에 도메인별 메서드를 추가하지 않는다.
+- `@Valid` 실패는 자동으로 400 `VALIDATION_FAILED` + `fieldErrors`가 된다. 예상 못 한 예외는 500 `INTERNAL_ERROR`로 감추고 원인은 서버 로그에만 남긴다.
+
+### 테스트
+
+| 종류 | 도구 | DB |
+|---|---|---|
+| 컨트롤러 | `@WebMvcTest(controllers = …)` + `@MockitoBean` 서비스 | 불필요 |
+| 서비스 | 순수 JUnit + Mockito, 시간은 `Clock.fixed` 주입 | 불필요 |
+| 리포지토리 | `@DataJpaTest` 또는 `@JdbcTest` + 실제 PostgreSQL | 필요 |
+| 기동·마이그레이션 | `PlanetoryApplicationTests` (UUID 스키마 격리) | 필요 |
+
+`GlobalExceptionHandlerTest`가 컨트롤러 테스트 템플릿이다. 공통 픽스처는 `src/test/java/.../support`, 도메인 픽스처는 `domain/<도메인>/support`에 둔다.
