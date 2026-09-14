@@ -17,7 +17,18 @@
 <type>(<area>): <summary> [JIRA-KEY]
 ```
 
-`type`은 `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `chore` 중에서 선택한다. `area`는 [브랜치 가이드](branch.md)의 영역 목록을 사용한다.
+| `type` | 용도 |
+| --- | --- |
+| `feat` | 기능 추가 |
+| `fix` | 오류 수정 |
+| `docs` | 문서 추가·수정 |
+| `test` | 테스트 코드와 검증 자료 추가 |
+| `refactor` | 동작 변경 없는 구조 개선 |
+| `perf` | 성능 개선 |
+| `build` | 빌드·의존성 변경 |
+| `chore` | 환경, 도구, 저장소 설정 변경 |
+
+`area`는 [브랜치 가이드](branch.md)의 영역 목록을 사용한다.
 
 ```text
 docs(docs): AI 협업 지침과 문서 탐색 체계 정리 [S15P21C206-34]

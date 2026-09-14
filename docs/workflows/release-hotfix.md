@@ -9,8 +9,8 @@
 - 릴리스 후보 범위가 정해진 뒤 최신 `develop`에서 `release/vX.Y.Z`를 만든다.
 - 새 기능은 추가하지 않는다. 통합 테스트, 차단 결함 수정, 버전과 릴리스 문서만 변경한다.
 - EC2 스테이징에서 실제와 유사한 데이터 규모로 검증하고 결과와 포함 Jira를 MR에 기록한다.
-- `release → main` 병합, tag 생성, 같은 release를 `develop`에 병합한 뒤 브랜치를 삭제한다.
-- 두 MR은 Squash하지 않으며 `main` 대상은 최소 2명, `develop` 대상은 최소 1명의 승인을 받는다.
+- `release → main` 병합, tag 생성, 같은 release를 `develop`에 병합하고, 두 MR과 배포 검증이 끝난 뒤 브랜치를 삭제한다.
+- 두 MR은 Squash하지 않으며 `main` 대상은 최소 2명, `develop` 대상은 최소 1명의 승인을 받는다. `main` 대상 MR은 [Release 템플릿](../../.gitlab/merge_request_templates/Release.md)의 완료 조건을 모두 확인한다.
 
 ## Hotfix
 

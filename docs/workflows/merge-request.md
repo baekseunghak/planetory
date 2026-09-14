@@ -13,7 +13,7 @@
 
 일반 MR 제목은 `[JIRA-KEY] 작업 요약`이다. Jira 키 예외 문서는 `[Docs] 작업 요약`, 공동 보고서는 `[Week NN] KPT 및 주간 보고서`, 릴리스 MR은 `[Release vX.Y.Z] 요약`을 사용한다.
 
-- 대표 Jira Task 하나만 평문으로 작성한다.
+- 대표 Jira Task 하나만 평문으로 작성한다. Jira 키 예외 문서 MR에 대표 Task가 없으면 `대표 Jira: 없음`으로 적고 언급할 키는 모두 참고 Jira로 둔다.
 - 참고 Jira 키는 `` `S15P21C206-28` ``처럼 백틱으로 감싸 자동 연결을 막는다.
 - `Closes`, `Fixes`, `Resolves`에는 이 MR이 실제 완료하는 대표 Task만 적는다.
 - 참고 Jira에 전체 Jira URL을 함께 적지 않는다. 링크 주소 안의 평문 키도 자동 연결 대상으로 인식될 수 있다.

@@ -55,4 +55,4 @@ Jira 범위 확인
 - `main`, `develop`, `release/*`는 Protected Branch로 지정하고 직접 push를 금지한다.
 - `main` 병합 권한은 Maintainer로 제한한다.
 - CI가 안정화되면 `Pipelines must succeed`, 리뷰 정책에는 `All threads must be resolved`를 적용한다.
-- Squash는 `Allow`로 시작하며 Release와 Hotfix에는 사용하지 않는다.
+- Squash는 `Allow`로 시작하고 운영이 안정되면 `Encourage`를 검토한다. `Require`는 사용하지 않으며 Release와 Hotfix는 Squash하지 않는다.
