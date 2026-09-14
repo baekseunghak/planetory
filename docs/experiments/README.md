@@ -5,4 +5,4 @@
 - [분산 PoC·CI/CD 문서 안내](distributed-poc-cicd-plan.md)
 - [분산 파이프라인 Docker PoC](distributed-pipeline-poc.md)
 
-확정된 개발·운영 규칙은 각각 `docs/development/`, `docs/operations/`에서 관리한다.
+확정된 규칙과 기준선은 [문서 지도](../README.md)에서 아키텍처·개발·데이터·운영 유형을 선택해 확인한다.

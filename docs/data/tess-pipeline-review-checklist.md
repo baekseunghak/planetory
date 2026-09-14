@@ -57,7 +57,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 ## 명세 기준과 팀 결정 안건
 
-기준은 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](database-erd.md), [팀 역할 분배](../team-role-allocation.md)다. 상태표·용어 사전·와이어프레임 v1.0보다 명세서 본문을 우선하고, 명세서와 ERD가 다르면 리뷰 질문으로 올린다.
+기준은 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](../architecture/database-erd.md), [팀 역할 분배](../project/team-role-allocation.md)다. 상태표·용어 사전·와이어프레임 v1.0보다 명세서 본문을 우선하고, 명세서와 ERD가 다르면 리뷰 질문으로 올린다.
 
 ### 이미 명세에 기록된 기준
 
@@ -159,6 +159,6 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 ## 협업 규칙 적용
 
-- [Git·Jira 컨벤션](../git-jira-convention.md): Jira가 작업 관리 기준이며 MR 리뷰 중에는 진행 중을 유지한다. 병합·인수 조건·결과물 등록이 모두 끝나야 완료다.
+- [Git·Jira 컨벤션](../workflows/README.md): Jira가 작업 관리 기준이며 MR 리뷰 중에는 진행 중을 유지한다. 병합·인수 조건·결과물 등록이 모두 끝나야 완료다.
 - 29번 산출물은 Jira 키 없는 일반 문서 예외가 아니다. [Docs MR 템플릿](../../.gitlab/merge_request_templates/Docs.md)을 사용하고 MR 설명에서 대표 Jira만 평문, 참고 Jira는 각각 백틱으로 표시한다.
 - [데이터 관리 및 재현성](data-guidelines.md): 원본은 불변으로 유지하고 원본 데이터·대용량 결과·비밀정보는 Git에 넣지 않는다. 스키마와 재현 근거를 함께 기록한다.

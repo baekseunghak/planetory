@@ -3,9 +3,9 @@
 작성일: 2026-09-09 · v1.0 반영 수정: 2026-09-10  
 담당: 윤성용  
 연결 Jira: S15P21C206-29 (기획), S15P21C206-40 (AI 실행 가능성 조사, 완료)  
-상태: `develop@132cdc77`의 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md)과 [서비스 DB ERD v1.0](database-erd.md) 기반 작업 안내서, 팀 리뷰 전
+상태: `develop@132cdc77`의 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md)과 [서비스 DB ERD v1.0](../architecture/database-erd.md) 기반 작업 안내서, 팀 리뷰 전
 
-이 문서는 팀 요구사항을 바꾸지 않는다. 요구사항 명세서 v1.0과 [팀 역할 분배](../team-role-allocation.md)에서 윤성용에게 배정된 일을 실제 작업 순서로 풀어 쓴다. 상세한 근거·스키마·실험안은 [TESS 파이프라인 갭 분석](tess-pipeline-gap-analysis.md), Jira 완료 조건과 리뷰 질문은 [TESS 파이프라인 리뷰 체크리스트](tess-pipeline-review-checklist.md), AI 모델 조사 결과는 [TESS 후보 판별 모델 실행 가능성 조사](tess-ai-model-feasibility.md)에서 관리한다.
+이 문서는 팀 요구사항을 바꾸지 않는다. 요구사항 명세서 v1.0과 [팀 역할 분배](../project/team-role-allocation.md)에서 윤성용에게 배정된 일을 실제 작업 순서로 풀어 쓴다. 상세한 근거·스키마·실험안은 [TESS 파이프라인 갭 분석](tess-pipeline-gap-analysis.md), Jira 완료 조건과 리뷰 질문은 [TESS 파이프라인 리뷰 체크리스트](tess-pipeline-review-checklist.md), AI 모델 조사 결과는 [TESS 후보 판별 모델 실행 가능성 조사](tess-ai-model-feasibility.md)에서 관리한다.
 
 명세서 v1.0은 "구조와 규칙은 확정, 임계값·대상 데이터 등 수치는 DEC 항목에서 실측 후 채운다"는 기준선이다. 이 문서도 같은 구분을 따른다.
 

@@ -80,7 +80,7 @@ python scripts/build_exports.py
 - [명세안 상세](docs/spec-design.md)
 - [제안안 상세](docs/proposal-design.md)
 - [프로젝트 요구사항](../../docs/requirements/planetory-requirements-spec.md)
-- [프론트 역할 배분](../../docs/team-role-allocation.md)
+- [프론트 역할 배분](../../docs/project/team-role-allocation.md)
 
 ## 팀 리뷰에서 결정할 것
 

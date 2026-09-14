@@ -6,7 +6,7 @@
 
 이 문서는 기존 PoC의 구현 사실과 서비스 요구사항의 차이를 정리한다. 제안한 스키마·작업 분할·검증 기준은 팀 승인 전이다. 2026-09-07 Jira 29번의 실제 설명·완료 조건·댓글·첨부 없음과 대조했으며 상세 결과는 [리뷰 체크리스트](tess-pipeline-review-checklist.md)에 기록했다. 담당 범위와 앞으로의 실행 순서는 [윤성용 천문 데이터 처리·AI 역할 명세](tess-processing-ai-role-spec.md)에서 한눈에 볼 수 있다. 문서 작성만으로 29번이 완료되는 것은 아니다.
 
-기준: `develop` 커밋 `132cdc77`의 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](database-erd.md), [역할 분배](../team-role-allocation.md), 상태표·용어 사전·와이어프레임 v1.0, [데이터 규칙](data-guidelines.md), [Spark 규칙](spark-hadoop-guidelines.md). 서로 다르면 요구사항 명세서 v1.0을 현재 작업 기준으로 사용한다. v1.0은 "구조와 규칙은 확정, 임계값·대상 데이터 등 수치는 DEC 항목에서 실측 후 채운다"는 기준선이므로 TBD 수치는 팀 승인 전 확정으로 취급하지 않는다.
+기준: `develop` 커밋 `132cdc77`의 [요구사항 명세서 v1.0](../requirements/planetory-requirements-spec.md), [서비스 DB ERD v1.0](../architecture/database-erd.md), [역할 분배](../project/team-role-allocation.md), 상태표·용어 사전·와이어프레임 v1.0, [데이터 규칙](data-guidelines.md), [Spark 규칙](spark-hadoop-guidelines.md). 서로 다르면 요구사항 명세서 v1.0을 현재 작업 기준으로 사용한다. v1.0은 "구조와 규칙은 확정, 임계값·대상 데이터 등 수치는 DEC 항목에서 실측 후 채운다"는 기준선이므로 TBD 수치는 팀 승인 전 확정으로 취급하지 않는다.
 
 > **기준 변경 기록:** 2026-09-07에는 배치 자동 반복 제거를 하지 않는다는 구두 전달을 기준으로 초안을 보완했다. 2026-09-09부터 팀이 갱신한 요구사항 명세서 v0.12를 기준으로 전환했다. 따라서 현행 기획은 DAT-05~07의 **Silver 내부 반복 BLS**와 DAT-14의 **사용자 선택 EC2 온라인 잔차 계산**을 서로 다른 목적으로 모두 적용한다. 이전 단일 패스안은 현행 기준이 아니다.
 >

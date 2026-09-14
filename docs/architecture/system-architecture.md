@@ -165,8 +165,8 @@ Raw·Bronze·Silver의 RF2 저장량은 약 **8.10~8.50TiB**다. 설치 용량�
 
 상세 기준은 다음 문서를 따른다.
 
-- 디렉터리·파티션, FITS 묶음과 EC2 Gold: [데이터 관리 및 재현성](./data-guidelines.md)
-- 외부 원천 수집부터 PublicationBundle 배포: [Hadoop·Spark 개발 규칙](./spark-hadoop-guidelines.md)
+- 디렉터리·파티션, FITS 묶음과 EC2 Gold: [데이터 관리 및 재현성](../data/data-guidelines.md)
+- 외부 원천 수집부터 PublicationBundle 배포: [Hadoop·Spark 개발 규칙](../data/spark-hadoop-guidelines.md)
 
 Gold 후보는 `PublicationBundle`이라는 논리 계층이다. 검증된 결과만 EC2에 전달한다.
 
@@ -196,7 +196,7 @@ GCP PublicationBundle → HDFS 백업 → EC2 임시 release → 재검증 → p
 - 새 릴리스 공개 시 직전 릴리스를 `previous`로 유지하고, 더 오래된 릴리스와 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않을 때 삭제한다. 참조 중이면 보존기간이 끝날 때까지 보호한다.
 - 공개한 PublicationBundle은 HDFS에 RF2로 백업하며 EC2 온라인 조회에는 사용하지 않는다.
 
-Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관리 및 재현성](./data-guidelines.md)을 따른다.
+Gold 릴리스의 파일 구조와 전송 전후 검증 기준은 [데이터 관리 및 재현성](../data/data-guidelines.md)을 따른다.
 
 ## 8. 관측·보안·호환성
 

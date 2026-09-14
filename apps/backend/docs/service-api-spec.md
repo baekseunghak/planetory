@@ -1,10 +1,10 @@
 # Planetory 서비스 백엔드 주요 API 명세
 
 - 작성일: 2026-09-09
-- 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
+- 갱신일: 2026-09-11 — SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/project/planetory-doc-sync-requests.md) 참조
 - 상태: **팀 협의용 초안 — 구현 완료 또는 최종 합의된 API가 아님**
 - 담당: 백승학 / 서비스 백엔드
-- DB 기준: [ERD v1.0](../../../docs/development/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
+- DB 기준: [ERD v1.0](../../../docs/architecture/database-erd.md). PostgreSQL 및 확정 물리 관계를 따른다.
 - 기준: [요구사항 v1.0](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
 - 적용 순서: SRS v1.0 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장).
 

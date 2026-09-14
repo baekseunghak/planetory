@@ -2,7 +2,7 @@
 
 Jira `S15P21C206-41`. 후속 전처리·BLS·비닝·AI 실험이 같은 입력으로 비교되도록 고정 SPOC 2분 광도곡선 표본과
 합성 감광 주입 세트를 만들고, 모든 실행을 manifest 로 남기는 도구다. 표본 선정 근거·격자·스키마 설명은
-[docs/development/tess-fixture-set.md](../../docs/development/tess-fixture-set.md) 에 있다.
+[TESS fixture 문서](../../docs/data/tess-fixture-set.md)에 있다.
 
 원본 FITS(`sample_raw/`)와 주입 결과(`results/`)는 Git 에 넣지 않는다. Git 에 남는 것은 코드, 설정, `checksums.json`,
 `references.csv`, `examples/` 다.

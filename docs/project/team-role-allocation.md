@@ -6,9 +6,9 @@
 >
 > 기준 문서
 >
-> - [Planetory 요구사항 명세서 v0.12](requirements/planetory-requirements-spec.md)
-> - [후보·별 상태표 v0.12](requirements/planetory-status-table.md)
-> - [시스템 아키텍처](development/system-architecture.md)
+> - [Planetory 요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md)
+> - [후보·별 상태표 v0.12](../requirements/planetory-status-table.md)
+> - [시스템 아키텍처](../architecture/system-architecture.md)
 >
 > Jira 상위 Epic: [S15P21C206-26 · 서비스 구체화 및 시스템 설계](https://ssafy.atlassian.net/browse/S15P21C206-26)
 >

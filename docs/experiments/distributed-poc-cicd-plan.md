@@ -8,14 +8,14 @@
 
 | 궁금한 내용 | 문서 |
 | --- | --- |
-| 코드를 어느 디렉터리에 둘지 | [저장소 구조](../development/repository-structure.md) |
+| 코드를 어느 디렉터리에 둘지 | [저장소 구조](../architecture/repository-structure.md) |
 | Docker PoC에서 무엇을 검증할지 | [분산 파이프라인 PoC](distributed-pipeline-poc.md) |
-| 잔차 곡선·주기도를 EC2에서 계산하는 방법 | [온라인 파생 계산](../development/online-derived-compute.md) |
+| 잔차 곡선·주기도를 EC2에서 계산하는 방법 | [온라인 파생 계산](../architecture/online-derived-compute.md) |
 | 서비스와 분산 시스템의 독립 CI/CD | [CI/CD 운영안](../operations/cicd.md) |
 | Dockerfile과 Compose 배치 기준 | [Docker 구성](../operations/docker.md) |
-| GCP·EC2 역할과 서버 자원 | [시스템 아키텍처](../development/system-architecture.md) |
-| Raw·Bronze·Silver·Gold 규칙 | [데이터 규칙](../development/data-guidelines.md) |
-| Airflow·Spark·YARN 처리 규칙 | [Spark/Hadoop 지침](../development/spark-hadoop-guidelines.md) |
+| GCP·EC2 역할과 서버 자원 | [시스템 아키텍처](../architecture/system-architecture.md) |
+| Raw·Bronze·Silver·Gold 규칙 | [데이터 규칙](../data/data-guidelines.md) |
+| Airflow·Spark·YARN 처리 규칙 | [Spark/Hadoop 지침](../data/spark-hadoop-guidelines.md) |
 
 같은 설명을 여러 문서에 복사하지 않는다. 위 정본이 바뀌면 해당 문서만 수정한다.
 
