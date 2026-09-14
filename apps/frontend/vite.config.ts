@@ -1,0 +1,61 @@
+import { defineConfig, loadEnv } from "vite";
+import react from "@vitejs/plugin-react";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+function unavailableApi(_req: IncomingMessage, res: ServerResponse) {
+  res.writeHead(503, {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+  });
+  res.end(
+    JSON.stringify({
+      code: "DEPENDENCY_UNAVAILABLE",
+      message: "서버 연결이 아직 준비되지 않았습니다.",
+    }),
+  );
+}
+
+export default defineConfig(async ({ command, mode, isPreview }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const fixture = command === "serve" && !isPreview && mode === "fixture";
+  const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
+  return {
+    plugins: [
+      react(),
+      ...(fixture
+        ? [(await import("./dev/fixture-plugin.ts")).fixturePlugin()]
+        : []),
+      ...(!fixture && !target
+        ? [
+            {
+              name: "unconfigured-api",
+              configureServer(server: import("vite").ViteDevServer) {
+                server.middlewares.use("/api", unavailableApi);
+              },
+              configurePreviewServer(server: import("vite").PreviewServer) {
+                server.middlewares.use("/api", unavailableApi);
+              },
+            },
+          ]
+        : []),
+    ],
+    define: {
+      "import.meta.env.VITE_FIXTURE": JSON.stringify(
+        fixture ? "true" : "false",
+      ),
+      ...(fixture
+        ? { "import.meta.env.VITE_API_BASE": JSON.stringify("/api") }
+        : {}),
+    },
+    server: {
+      proxy:
+        !fixture && target
+          ? { "/api": { target, changeOrigin: true } }
+          : undefined,
+    },
+    preview: {
+      proxy: target ? { "/api": { target, changeOrigin: true } } : undefined,
+    },
+    build: { target: ["chrome110", "edge110", "firefox115", "safari16.4"] },
+  };
+});

@@ -1,0 +1,39 @@
+{
+  "name": "@planetory/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:fixture": "vite --mode fixture --host 127.0.0.1 --port 58267 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build && node scripts/check-production.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 58263 --strictPort",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "test:browser": "playwright test --project=chromium",
+    "test:browser:desktop": "playwright test --project=chrome --project=msedge --project=firefox",
+    "test:production": "playwright test --config=playwright.production.config.ts",
+    "check": "npm run build && npm test && npm run test:browser && npm run test:production",
+    "format": "prettier --write src dev tests scripts docs *.ts *.json *.html *.md",
+    "format:check": "prettier --check src dev tests scripts docs *.ts *.json *.html *.md"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}
