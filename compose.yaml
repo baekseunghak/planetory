@@ -31,6 +31,7 @@ services:
       SPRING_DATASOURCE_USERNAME: planetory
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ssafy}
       SPRING_PROFILES_ACTIVE: local
+      SKIP_LOCAL_DB: "true"
       GRADLE_USER_HOME: /root/.gradle
     volumes:
       - ./apps/backend:/workspace
