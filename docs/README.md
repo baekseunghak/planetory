@@ -13,6 +13,7 @@
 | 데이터 저장, Hadoop·Spark, TESS 처리, AI 조사 | [데이터](data/README.md) |
 | API 담당 경계, 서비스·탐사 계약, Mock과 예제 | [API](api/README.md) |
 | Docker, CI/CD, 배포 | [운영](operations/README.md) |
+| GCP 서버 접속·상태·네트워크·방화벽·비용 점검 | [운영](operations/README.md) |
 | 담당 범위, 문서 충돌과 동기화 상태 | [프로젝트](project/README.md) |
 | 문서·아키텍처 변경 이력, 판단 근거, 재발 방지 | [변경 이력](changes/README.md) |
 | PoC와 검증 결과 | [실험](experiments/README.md) |

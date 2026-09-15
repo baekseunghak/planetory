@@ -18,3 +18,4 @@ experiments/**/*.parquet
 .vscode/
 
 .claude/
+.codex/

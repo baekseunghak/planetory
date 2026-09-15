@@ -14,3 +14,5 @@
 | 2026-09-14 | 라우팅 테스트 반영 — 조회 진입점 분리와 개발 가이드 보강 | S15P21C206-34 | 라우팅 테스트, 조회 요청, 문서 지도, development.md, 변경 유형별 정본, 기존 구현 확인 | 검증 완료 | [2026-09-14](2026-09-14.md) |
 | 2026-09-14 | develop 병합 — 탐사 API 계약 정합화(#133) 반영 | S15P21C206-34, 133 | develop 병합, DEC-19, 탐사 계약 예제, exploration, validate.cjs, C02 | 검증 완료 | [2026-09-14](2026-09-14.md) |
 | 2026-09-15 | `libs/astro-kernel` 신설 — 고정 transit 모델·잔차 제거 공용 함수 | S15P21C206-121, 113, 88 | astro-kernel, transit_model, 잔차, residual, box 모델, 순서 불변, invalid_time, numerical_failure, underflow, D14-1, D06, libs | 구현 완료 (계약 v0 초안) | [2026-09-15](2026-09-15.md) |
+| 2026-09-15 | GCP 노드 운영 런북 분리와 Tailscale SSH 접속 유의사항 명시 | S15P21C206-71 | GCP 노드 운영, Tailscale, MagicDNS, SSH, node-1, planetory-admin, CodexSandboxOffline, known_hosts | 검증 완료 | [2026-09-15](2026-09-15.md) |
+| 2026-09-15 | 작업 중 지식 기록과 문서 분할·배치 규칙 보강 | S15P21C206-71 | 문서화, 지식 기록, 비민감 정보, 문서 분할, docs 배치, README 진입 링크 | 검증 완료 | [2026-09-15](2026-09-15.md) |
