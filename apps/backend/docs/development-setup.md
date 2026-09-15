@@ -97,9 +97,13 @@ docker compose --profile service up -d --build backend
 - 사용자·별·운영 설정값을 자동으로 넣지 않는다. P1 테이블 생성이 P1 API 구현을 의미하지 않는다.
 - FK 삭제 전파는 지정하지 않았다(NO ACTION). 탈퇴 처리 정책을 임의로 확정하지 않는다.
 
-### V2 별 자리 좌표 (ERD v1.2)
+### V2 ERD v1.2 반영
 
-파일: `V2__add_star_unlock_world_coordinates.sql`. `star_unlocks`에 `world_x`·`world_y`·`layout_version`을 NOT NULL로 추가하고, x/y 유한 값·`depth_z` -1~1·빈 배치 버전 금지 CHECK를 건다. 폐기 예정인 `generation`·`angle_deg`·`radius_jitter`는 nullable로 바꾼다.
+파일: `V2__apply_erd_v1_2_star_coordinates_and_peak_source.sql`. V1 이후 ERD에서 바뀐 열 두 묶음을 반영한다.
+
+**submissions 선택 봉우리(C02-R3):** `source_peak_grid_index`·`source_peak_suggested_duration_hours`·`duration_limit_hours`를 nullable로 추가한다. 셋은 모두 NULL(직접 주기 선택·candidate 외 제출)이거나 candidate 제출에서 모두 채워져야 하며, grid index는 0 이상, 두 시간 값은 양의 유한 값이다. 상한 배율 3배는 규칙 값이므로 DB에서 고정 비교하지 않는다.
+
+**star_unlocks 별 자리 좌표:** `star_unlocks`에 `world_x`·`world_y`·`layout_version`을 NOT NULL로 추가하고, x/y 유한 값·`depth_z` -1~1·빈 배치 버전 금지 CHECK를 건다. 폐기 예정인 `generation`·`angle_deg`·`radius_jitter`는 nullable로 바꾼다.
 보존할 운영 좌표가 없으므로 이관 SQL은 없다. `star_unlocks` 행이 이미 있는 개발 DB에서는 V2가 실패하므로 해당 행을 초기화한 뒤 적용한다. 타일 조회용 공간 인덱스는 성능 검증 후 별도 마이그레이션으로 추가한다.
 
 앱 시작 시 Flyway가 자동 실행되고 이력은 `flyway_schema_history`에 저장된다. `baseline-on-migrate=false`, `clean-disabled=true`, Spring SQL 자동 초기화는 꺼져 있다. 기존 비어 있지 않은 DB를 임의 baseline/clean/repair로 통과시키지 않는다.
