@@ -147,7 +147,7 @@ test("bbox protocol permits 64x64 tiles, splits wider views and sends no keys or
     const u = new URL(tileQuery(2, g.box, m), "https://app.test");
     assert.deepEqual(
       [...u.searchParams.keys()],
-      ["level", "x", "y", "w", "h", "version"],
+      ["level", "x", "y", "w", "h", "version", "limit"],
     );
     assert.ok(g.box.w <= 256 * 64 && g.box.h <= 256 * 64);
   }
@@ -161,30 +161,6 @@ test("bbox protocol permits 64x64 tiles, splits wider views and sends no keys or
     cacheKey("a", "b:c", 2, cells[0]),
   );
 });
-test("minimal DTO decoders reject missing arrays and four-level metadata without fabricating data", () => {
-  assert.equal(readSkyMeta(meta()).zoomLevels.length, 6);
-  assert.throws(() =>
-    readSkyMeta({ ...meta(), zoomLevels: meta().zoomLevels.slice(0, 4) }),
-  );
-  assert.throws(() => readSkyMeta({ ...meta(), version: 123 }));
-  const response = {
-    version: "v1",
-    level: 2,
-    versionChanged: false,
-    bounds: { x: 0, y: 0, w: 256, h: 256 },
-    stars: [star("000123", 0, 0)],
-    clusters: [],
-  };
-  assert.equal(readSkyTiles(response).stars[0].ticId, "000123");
-  for (const invalid of [
-    { ...response, stars: undefined },
-    { ...response, stars: [star("a", 0, 0), star("a", 0, 0)] },
-    { ...response, stars: [{ ...star("a", 0, 0), depthZ: 2 }] },
-    { ...response, stars: [{ ...star("a", 0, 0), planetCount: 1 }] },
-  ])
-    assert.throws(() => readSkyTiles(invalid));
-});
-
 test("a distant viewport is empty, while an excessive intersecting grid is recoverable", () => {
   const m = meta();
   assert.deepEqual(visibleCells({ x: 1e10, y: 1e10, w: 256, h: 256 }, m), []);

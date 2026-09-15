@@ -1,5 +1,6 @@
 import {
   readBox,
+  DEPTH_SCALE,
   SkyContractError,
   type Box,
   type SkyMeta,
@@ -156,15 +157,25 @@ export function requestGroups(
   }
   return merged;
 }
-export function tileQuery(level: number, box: Box, meta: SkyMeta) {
+export function tileQuery(
+  level: number,
+  box: Box,
+  meta: SkyMeta,
+  limit = 1000,
+  cursor: string | null = null,
+) {
   readBox(box);
   if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 2000 ||
+    cursor === "" ||
     !meta.zoomLevels.some((z) => z.level === level) ||
     box.w > meta.tileSize * 64 ||
     box.h > meta.tileSize * 64
   )
     throw new SkyContractError("요청 배율 또는 범위가 상한을 벗어났습니다.");
-  return `/v1/me/sky/tiles?${new URLSearchParams({ level: String(level), x: String(box.x), y: String(box.y), w: String(box.w), h: String(box.h), version: meta.version })}`;
+  return `/v1/me/sky/tiles?${new URLSearchParams({ level: String(level), x: String(box.x), y: String(box.y), w: String(box.w), h: String(box.h), version: meta.version, limit: String(limit), ...(cursor !== null ? { cursor } : {}) })}`;
 }
 export function levelForScale(meta: SkyMeta, scale: number) {
   return meta.zoomLevels.reduce(
@@ -206,4 +217,69 @@ export function orthographicMatrix(
     (-st * (sr * c.x + cr * c.y)) / clipDepth,
     1,
   ];
+}
+
+// Matrix input z remains normalized depthZ. This matrix alone restores the 256 world units.
+export type GalaxyCamera = {
+  x: number;
+  y: number;
+  zoom: number;
+  yaw: number;
+  tilt: number;
+  roll: number;
+};
+export function galaxyMatrix(
+  c: GalaxyCamera,
+  width: number,
+  height: number,
+): Matrix {
+  if (
+    !Object.values(c).every(Number.isFinite) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    c.zoom < 0.001 ||
+    c.zoom > 10000 ||
+    Math.abs(c.tilt) > 1.42
+  )
+    throw new SkyContractError("은하 카메라 범위를 확인해 주세요.");
+  const cy = Math.cos(c.yaw),
+    sy = Math.sin(c.yaw),
+    ct = Math.cos(c.tilt),
+    st = Math.sin(c.tilt),
+    cr = Math.cos(c.roll),
+    sr = Math.sin(c.roll);
+  const scale = Math.min(width / 3100, height / 2020) * c.zoom,
+    sx = (2 * scale) / width,
+    syClip = (-2 * scale) / height;
+  return [
+    sx * (cr * cy - sr * ct * sy),
+    syClip * (sr * cy + cr * ct * sy),
+    0,
+    0,
+    sx * (-cr * sy - sr * ct * cy),
+    syClip * (-sr * sy + cr * ct * cy),
+    0,
+    0,
+    sx * sr * st * DEPTH_SCALE,
+    -syClip * cr * st * DEPTH_SCALE,
+    1,
+    0,
+    -sx * c.x,
+    0.08 - syClip * c.y,
+    0,
+    1,
+  ];
+}
+export function visibleStarCount(
+  stars: readonly { x: number; y: number; depthZ: number }[],
+  matrix: Matrix,
+) {
+  return stars.reduce((n, s) => {
+    const p = transform(matrix, { x: s.x, y: s.y, z: s.depthZ });
+    return (
+      n + Number(Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1 && Math.abs(p.z) <= 1)
+    );
+  }, 0);
 }

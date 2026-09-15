@@ -84,6 +84,9 @@ test("production sky consumes metadata without bundling the inspector or fake ba
   await page.route("**/api/v1/me/sky", (route) =>
     route.fulfill({
       json: {
+        representation: "individual-stars",
+        layoutVersion: "personal-spiral-v1",
+        presentationVersion: "personal-galaxy-v1",
         version: "prod:1",
         starCount: 1,
         bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
@@ -91,19 +94,8 @@ test("production sky consumes metadata without bundling the inspector or fake ba
         zoomLevels: [0.25, 0.5, 1, 2, 4].map((scale, level) => ({
           level,
           scale,
-          clustered: scale < 0.8,
         })),
         centerTicIds: ["001"],
-        overview: [
-          {
-            nodeId: "root",
-            x: 0,
-            y: 0,
-            count: 1,
-            counts: { planet: 0, done: 0, new: 1 },
-            bounds: { x: 0, y: 0, w: 512, h: 512 },
-          },
-        ],
         firstVisit: false,
       },
     }),
