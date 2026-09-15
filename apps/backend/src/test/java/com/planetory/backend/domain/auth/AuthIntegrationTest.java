@@ -7,6 +7,7 @@ import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.planetory.backend.domain.exploration.service.GalaxyLayout;
 import com.planetory.backend.domain.member.service.MemberService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.security.MemberPrincipal;
@@ -51,6 +52,7 @@ class AuthIntegrationTest {
     private static final String SCHEMA = "backend_test_" + UUID.randomUUID().toString().replace("-", "");
     private static final TestIdentityProvider IDP = new TestIdentityProvider();
     private static final MutableClock TIME = new MutableClock();
+    private static final TestGalaxyLayout LAYOUT = new TestGalaxyLayout();
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
@@ -62,6 +64,7 @@ class AuthIntegrationTest {
     @TestConfiguration(proxyBeanMethods = false)
     static class Config {
         @Bean @Primary Clock authTestClock() { return TIME; }
+        @Bean @Primary GalaxyLayout testGalaxyLayout() { return LAYOUT; }
         @Bean ClientRegistrationRepository testClients() {
             return new InMemoryClientRegistrationRepository(client("google", true), client("ssafy", false));
         }
@@ -96,6 +99,7 @@ class AuthIntegrationTest {
             jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (?, ?, 'deep_confirmed', true)", i, i);
         }
         TIME.now = Instant.parse("2026-09-15T01:00:00Z");
+        LAYOUT.fail = false;
     }
 
     @AfterAll
@@ -123,6 +127,20 @@ class AuthIntegrationTest {
         assertEquals(2, count("user_settings"));
         assertEquals(2, count("star_unlocks"));
         assertEquals(2, count("user_star_progress"));
+        // 첫 별은 튜토리얼 1번이며 좌표·배치 버전은 배치 함수 결과를 그대로 저장한다.
+        var unlocks = jdbc.queryForList("""
+                SELECT user_id, tic_id, unlock_reason, world_x::float8 AS x, world_y::float8 AS y,
+                       depth_z::float8 AS z, layout_version, generation FROM star_unlocks""");
+        for (var row : unlocks) {
+            var expected = LAYOUT.place((Long) row.get("user_id"), (Long) row.get("tic_id"));
+            assertEquals(1L, row.get("tic_id"));
+            assertEquals("tutorial", row.get("unlock_reason"));
+            assertEquals(expected.worldX(), (Double) row.get("x"));
+            assertEquals(expected.worldY(), (Double) row.get("y"));
+            assertEquals(expected.depthZ(), (Double) row.get("z"));
+            assertEquals(TestGalaxyLayout.VERSION, row.get("layout_version"));
+            assertNull(row.get("generation"));
+        }
         assertTrue(jdbc.queryForObject("SELECT bool_and(nickname ~ '^별_[a-f0-9]{16}$') FROM users", Boolean.class));
         assertTrue(Collections.list(google.getAttributeNames()).stream().noneMatch(name -> name.contains("AUTHORIZED_CLIENT")));
     }
@@ -246,6 +264,27 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void signupRollsBackIfGalaxyLayoutFails() {
+        LAYOUT.fail = true;
+        assertThrows(RuntimeException.class, () -> members.login("google", "layout-failure"));
+        assertEquals(0, count("users"));
+        assertEquals(0, count("star_unlocks"));
+    }
+
+    @Test
+    void starUnlockRejectsNonFiniteCoordinatesAndOutOfRangeDepth() {
+        long userId = members.login("google", "constraints").getId();
+        for (String values : List.of("'NaN', 0, 0", "'Infinity', 0, 0", "0, '-Infinity', 0", "0, 0, 1.01")) {
+            assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update(
+                    "INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, world_x, world_y, depth_z, layout_version, unlocked_at) "
+                            + "VALUES (?, 2, 'tutorial', " + values + ", 'v', now())", userId));
+        }
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update(
+                "INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, world_x, world_y, depth_z, layout_version, unlocked_at) "
+                        + "VALUES (?, 2, 'tutorial', 0, 0, 0, ' ', now())", userId));
+    }
+
+    @Test
     void concurrentFirstLoginsCreateOneAccount() throws Exception {
         var start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(6)) {
@@ -292,6 +331,16 @@ class AuthIntegrationTest {
         }
         return params;
     }
+    /** 원점이 아닌 결정적 좌표를 돌려 저장 값이 배치 함수에서 왔는지 구분한다. */
+    static class TestGalaxyLayout implements GalaxyLayout {
+        static final String VERSION = "test-layout-1";
+        volatile boolean fail;
+        @Override public StarPosition place(long userId, long ticId) {
+            if (fail) throw new IllegalStateException("layout unavailable");
+            return new StarPosition(userId * 10.5, ticId * -2.25, 0.5, VERSION);
+        }
+    }
+
     static class MutableClock extends Clock {
         volatile Instant now = Instant.parse("2026-09-15T01:00:00Z");
         void advance(Duration duration) { now = now.plus(duration); }
