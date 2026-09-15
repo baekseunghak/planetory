@@ -38,6 +38,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       ...(galaxyFixture
         ? [
             (
+              await import("./dev/legacy-galaxy/fixture.ts")
+            ).legacyGalaxyFixturePlugin(),
+            (
               await import("./dev/galaxy-fixture-plugin.ts")
             ).galaxyFixturePlugin(),
           ]

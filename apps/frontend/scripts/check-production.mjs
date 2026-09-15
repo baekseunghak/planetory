@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "군집 비교 실험",
+  "comparison-snapshot-204",
+  "/dev/galaxy-comparison",
   "galaxy-fixture-204",
   "dev-galaxy-204",
   "204 렌더 검증 도구",

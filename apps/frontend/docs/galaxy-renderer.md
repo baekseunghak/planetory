@@ -1,80 +1,55 @@
-# 204 은하 렌더러와 다음 티켓 연결
+# 204 개별 별 은하 렌더러
 
-204는 203의 HTTP 메타·가시 타일 자료를 WebGL 2로 표시하는 계층이다. 서버의 좌표·공식 군집·개인 행성 목록을 소비한다. 브라우저에서 전체 별의 자리를 만들거나 군집을 재집계하지 않는다.
+2026-09-15. 사용자 승인된 [표현 계약 v1.3 / MR !41](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/41)과 `7f67c5683f79e541da556ef4e6aed966ff317c11`의 개인 시제품 참조를 적용한다. 문서 팀 승인·병합 및 실제 API 인수는 대기 중이다.
 
-## 실행과 기능 플래그
+## 실행
 
-```powershell
-npm ci
-npm run dev:galaxy
-```
+- `npm run dev:galaxy` → 기본58272. 기존 서버와 구분한 이번 확인 주소는 `http://127.0.0.1:58275/sky?reference=1`이다.
+- `204 렌더 검증 도구`에서1/10/100/1000/2501개 계정, 원본 카메라, 회전·기울기·LOD, 고정 별 선택, 실패/복구를 확인한다. `reference=1`은 개발 전용 화면 크기 비교 모드다.
+- 실제 모드는 `VITE_SKY_RENDERER_ENABLED=true`와 기존 `API_PROXY_TARGET`/인증을 사용한다. API가 없으면 오류이며 합성 은하를 만들지 않는다.
+- `npm run build:renderer`는 렌더 플래그를 켠 운영 빌드다. 플래그는 빌드 시점 값이고 기본값은 false다. Docker는 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 활성화한다. Node22/로컬 Nginx는 [통합 검증](local-validation-201-204.md)을 통과했으며 실제 배포는 별도 인수다.
+- 실제 클릭·드래그·휠·키보드·마커는205, 상세 HTTP/정보/행성 확대/복귀 UI는206이다. 개발 도구의 고정 선택 버튼을 해당 기능 완료로 세지 않는다.
 
-http://127.0.0.1:58272/sky 의 `204 렌더 검증 도구`에서 배율, 고정 선택 별, 응답 교체를 확인한다. 이 모드의 회원·1/10/100/1000개 별·API는 개발용 가상 응답이다. 지도 클릭·드래그·휠은 205에서 연결한다.
+## 데이터와 카메라
 
-실제 HTTP 서버 연결은 `.env.local`에 기존 `API_PROXY_TARGET`와 `VITE_SKY_RENDERER_ENABLED=true`를 설정한 뒤 `npm run dev`를 실행한다. 이때 인증·메타·타일이 없으면 오류를 표시하며 가짜 은하로 대체하지 않는다. 플래그 기본값은 false다. 205 조작과 연결하기 전에도 독립 장면을 검증할 수 있도록 분리했다.
+203의9/15 개별 별 보완을 의존 변경으로 포함했다. `SkyDataPage → SkyDataStore → GalaxyScene → GalaxyRenderer`로 연결한다. 203 선행 브랜치와 같은 데이터 계약을 사용한다. [203 어댑터](sky-data-adapter.md)와 [203 인수 기록](ticket-203-readiness.md)을 따른다.
 
-`npm run build:renderer`는 플래그를 켠 운영 dist를 만든다. `npm run build`는 환경 설정을 따른다. VITE 설정은 빌드 때 결정되며 실행 중 서버 변수만 바꿔서는 이미 생성한 dist가 바뀌지 않는다. 현재 Dockerfile에 새 플래그 빌드 인자는 추가하지 않았다. Docker/배포 통합은 별도 확인 대상이다.
+1. 메타 `representation=individual-stars`, `layoutVersion=personal-spiral-v1`, `presentationVersion=personal-galaxy-v1`을 검증한다.
+2. 캔버스 크기를 읽고203의 `galaxyMatrix`로 투영한다. API z는 정규화된 채 버퍼에 저장하고 행렬에서 **256을 한 번만** 곱한다.
+3. 같은 행렬의 역투영으로 각 변20% 여백과 전체 깊이를 포함한 bbox를 요청한다. `version/level/bbox/limit/cursor` 범위를 유지한 페이지를 모두 표시한다. 페이지 크기는 표시 개수 상한이 아니다.
+4. `renderPlan`은 적재 자료 중 화면과 발광 여백에 걸친 별만 인스턴스로 넘긴다. 좌표와 순번을 변경하지 않는다. 전체 계정 목록을 프레임마다 조회·순회하지 않는다.
+5. 초기 카메라는 참조의 `{x:0,y:0,zoom:1,yaw:0.12,tilt:1,roll:-0.28}`다. `fitAll`은 메타 저장 경계와 전체 깊이를 여백 안에 담는 보수적인 전체 보기다. 회전한 월드 AABB와 실제 점 분포는 달라 여백이 더 생길 수 있다. 새 발견 때 카메라를 자동 초기화하지 않는다.
 
-개발 응답 플러그인은 Vite의 **serve + galaxy 모드 + preview 아님**일 때만 로드한다. 브라우저 검사 도구도 DEV 조건에서만 불러온다. 운영 번들 검사는 개발 회원·시나리오·검사 UI의 식별 문자열이 없는지 확인한다.
+원본 비교는1440×836 캔버스, DPR1, 캡처와 같은 x/y/zoom에서 한다. 기본/전체 보기와 캡처 당시 카메라를 혼동하지 않는다. 배율0.001~10000, 기울기±1.42다.
 
-## 데이터가 화면에 도달하는 순서
+## 표현과 GPU
 
-1. `SkyDataPage`와 `SkyDataStore`가 회원별 메타·overview 또는 요청 bbox의 타일을 읽는다. 전체 발견 수는 메타의 `starCount`다.
-2. `GalaxyScene`이 카메라 행렬을 만들고 같은 행렬의 역투영 bbox를 203에 전달한다. 화면 여백과 깊이 -1~1을 포함한다.
-3. `renderPlan`이 현재 자료에서 보이는 별·공식 군집을 고른다. 서버 `x/y/depthZ`와 군집 bounds는 바꾸지 않는다. 성운의 화면상 반경만 투영 bounds에서 얻는다.
-4. `GalaxyRenderer.setScene`이 인스턴스·통합 궤도 버퍼를 갱신한다. `draw`는 해당 버퍼를 그리며 전체 별 목록을 다시 순회하지 않는다.
+- `model.starStyle`은 저장 x/y와 `layoutOrdinal`만 읽어 참조 색·크기를 계산한다. 좌표 생성 함수는 운영 코드에 없다. 행성 수·진행·완료·등급·배열 순서로 색칠하지 않는다.
+- 금빛 중심, 푸른/보라 팔, 작은 코어와 약한 발광을 사용한다. 원본 코어 `exp(-d*22)+exp(-d*4.5)*.22`, 본체 .88, 발광 .048/8배를 이식했다. 점 스프라이트를 WebGL2 인스턴스 사각형으로 옮겨 GPU/픽셀 중심에 따른 미세 차이는 허용한다.
+- 전체 지도 궤도·행성은 모든 배율에서0개다. 군집/성운 버퍼와 별400/궤도별60/성운80 상한을 삭제했다. 낮은 LOD 군집으로 되돌리는 분기도 없다.
+- 별 본체와 발광은 같은 별 버퍼를2회 그린다. 상세 궤도는 LINES1회, 행성은 인스턴싱1회다. GPU 버퍼는 quad/별/궤도/행성 총4개를 재사용한다.
+- 자료·카메라·선택 변경 때만 패킹한다. 바뀐 구간을 한 번의 `bufferSubData`로 합치고 용량 부족 때 같은 객체 저장 공간만 늘린다. 정지 프레임은 재패킹/전송하지 않는다.
+- `RendererMetrics`는 실제 호출 횟수, 그리는 별/행성 수, 버퍼/할당/전송량/패킹/시간을 보고한다. 이 수치나2501개 성공은10만 별 성능 합격이 아니다.
 
-기존 PoC의 가우시안 별 광원, 셰이더/버퍼 분리, 카메라 투영 방식을 참고했다. 전체 합성 별 배열을 두 번 그리던 방식과 장식 별 생성은 가져오지 않았다. 참고 원본은 기존 `GalaxyRenderer` 보관본 및 W02 PoC이며, 이 브랜치에는 필요한 표시 계층만 재구성했다.
-
-## 공식 군집과 렌더 예산
-
-- 연속 5단계 이상인 서버 `zoomLevels`를 사용한다. 개발 검사는 0~5의 6단계다.
-- 별 본체 최대 400개, 궤도를 표시하는 별 최대 60개, 성운 최대 80개다. 행성 총개수를 60개로 자르는 뜻이 아니다.
-- 예산 초과 시 노드를 임의로 버리지 않고 더 낮은 서버 LOD를 요청한다. 전환 중 초과 자료는 그리지 않는다. 0단계마저 넘으면 자료 확인 안내를 표시한다.
-- 별 본체와 성운은 각각 인스턴싱 1회, 합계 최대 2회다. 회색 궤도는 통합 LINES 1회, 행성은 인스턴싱 1회로 별도 계측한다. 전체 draw call을 2회라고 주장하지 않는다.
-- GPU 버퍼 객체는 5개를 재사용한다. 용량 부족 시 같은 객체의 저장 공간만 늘리고 변경 범위를 `bufferSubData`로 반영한다. 카메라/타일/선택 변경 때 CPU 자료를 패킹하며, 가만히 있는 프레임은 이를 반복하지 않는다.
-- 공식 `count/counts` 비율로 성운 색을 혼합한다. 서버 nodeId/count/bounds를 유지하며 웹 워커는 사용하지 않는다.
-
-`RendererMetrics`는 실제 draw 호출 지점에서 본체/궤도/행성 호출 수, 가시 노드 수, GPU 버퍼 수, 공간 할당·전송량·프레임 수를 기록한다. 이는 204의 지역 렌더 예산 검사다. 10만 별 FPS·프레임 시간·메모리의 출시 인수는 215에서 실제 데이터와 대상 장비로 수행한다.
-
-## 표시 규칙과 내 행성
-
-별은 행성 수 0/1/2/3/4개 이상 색·크기 단계를 사용한다. `completedWithoutPlanets=true`는 살구색이며 단순 stage/성과 유무로 대신 판단하지 않는다. 문자 범례와 회색 궤도 설명을 제공한다.
-
-`readOwnedSystem`은 `GET /api/v1/me/stars/{ticId}`의 `unlock.position`과 `planets.count/items/completedWithoutPlanets`를 읽는다. 중복 candidateId, count 불일치, 허용되지 않은 kind, 정규화 범위를 벗어난 깊이, 잘못된 수치는 계약 오류다. null과 0을 구분하고 목록을 조용히 자르거나 행성을 보충하지 않는다.
-
-서버는 해당 회원이 찾은 확정 행성 및 최신 판단이 LIKELY_PLANET인 미확정 후보만 보내야 한다. 클라이언트는 이 목록을 그대로 소비하며 외부 카탈로그·FP·타인의 후보를 조회하지 않는다. 현재 DTO만으로 원래 서버 후보의 최신 판단/소유권까지 재검증할 수는 없으므로 실제 C06 응답 검토가 필요하다.
-
-지도에서는 타일의 `orbits`를 통합 표시한다. 선택한 별 하나에만 전체 `planets.items`의 상세 공전을 적용한다. 타일과 상세의 좌표/행성 수가 다르면 오류로 처리한다. 행성 외형·간격·속도는 서비스 연출이며 화면에 이를 안내한다. 주기·깊이는 실제 데이터로 보존하지만, 공전 속도를 실제 시간 축척으로 사용하지 않는다.
-
-## 205 / 206에서 사용할 인터페이스
-
-`GalaxyScene`은 `SkySceneProps`와 `onReady(control)`을 받는다. unmount 시 `onReady(null)`을 호출한다.
+## 선택 별과 다음 티켓 연결
 
 ```ts
 type SceneControl = {
   getCamera(): GalaxyCamera | null;
-  setCamera(
-    patch: Partial<GalaxyCamera>,
-    options?: {
-      overview?: boolean;
-      level?: number;
-    },
-  ): void;
+  setCamera(patch: Partial<GalaxyCamera>, options?: { level?: number }): void;
+  fitAll(): void;
   setSystem(system: OwnedSystem | null): void;
 };
 ```
 
-- 205: 팬·휠·회전 입력에서 `setCamera`를 호출한다. 일반 조작은 level 생략 시 서버 scale 기준 LOD를 선택한다. 군집 확대는 bounds로 목표 카메라를 계산한다. 전체 보기는 보관한 전체 카메라와 overview=true를 전달한다.
-- 히트 테스트·DOM 마커는 `cameraMatrix`, `screenPoint`, `renderPlan`의 **같은 행렬과 가시 후보**를 사용한다. 별도 좌표계나 전체 별 매 프레임 순회를 만들지 않는다. 64px 인덱스, 마커 풀링, 클릭과 접근성의 구현 책임은 205다.
-- 선택 ID는 기존 `store.select(ticId)`로 전달한다. 206은 상세 HTTP 성공 후 `readOwnedSystem` 결과를 `setSystem`에 넘긴다. 상세 자료는 현재 선택 별이 가시 타일에 적재되었을 때만 표시한다.
-- 206은 별 선택 전 `getCamera()` 값을 보관하여 확대·행성 선택·은하 복귀에 사용한다. 현재 제공한 인터페이스는 렌더 연결점이며 206의 실제 정보 패널/행성 선택/분석 이동까지 구현한 것이 아니다.
-- 버전 또는 선택 ID가 바뀌면 오래된 상세는 폐기한다. 206의 요청 취소/늦은 응답 무시 후 새 목록을 다시 넘긴다. 회원 변경은 Scene을 재생성한다.
+- 205는 같은 `cameraMatrix`/`screenPoint`/가시 후보로 입력·히트 테스트를 연결한다. x/y는 회전된 화면 평면상의 월드 팬 값이다. API 저장 x/y를 그대로 팬에 넣지 말고 같은 투영에서 중심을 계산한다. level 생략 시 메타 scale에서 고른다. 옛 `overview/scale/rotation` 입력은 삭제했고 `zoom/yaw`를 사용한다.
+- `store.select(ticId)`는 ID를 유지한다. 206은 `readOwnedSystem(raw,meta,ticId,loadedStar)` 후 `setSystem`에 전달한다. 권한·최신 판단은 서버 책임이다.
+- 같은 version/presentationVersion/선택 ID가 아니면 상세를 즉시 그리지 않는다. 타일과 상세 위치·순번·개수 불일치도 오류다. HTTP 취소/새 상세 재조회는206에서 연결한다.
+- 유효한 선택 별 하나의 `planets.items` 전부를 candidateId 순서로 그린다. 4개 상한·외부 카탈로그 보충이 없다. 0개이면 별만 남는다.
+- 행성 표면·공전은 연출이며 수치/ID는 보존한다. `periodDays=null`을0으로 바꾸지 않는다. 206 확대 대상과 정보는 같은 candidateId로 연결한다.
+- 선택 전 카메라를 보관해 `setCamera`로 복구한다. 이번 개발 버튼은 인터페이스 검증이며206 화면 전체를 대신하지 않는다.
+- 숨긴 탭은 RAF를 멈추고 복귀 첫 프레임 시간 차를 초기화한다. 모션 줄이기는 공전을 멈춘다. context loss는 안내 뒤 자원을 다시 만들고 장면을 복원한다. WebGL 미지원 목록 대체는207이다.
 
-페이지가 숨겨지면 RAF를 멈추고 복귀 때 시간 간격을 초기화한다. 모션 줄이기는 상세 공전을 멈춘다. context loss는 안내 후 GPU 자원을 재생성하고 현 자료를 다시 그린다. WebGL 미지원 대체 목록은 207에서 연결하며 지금은 오류와 복구 버튼을 제공한다.
+## 이전 비교 보존
 
-## 가상 응답의 한계
-
-`dev/galaxy-fixture-plugin.ts`에서만 고정 나선 좌표와 군집을 생성한다. 렌더러 코드에는 좌표 생성기가 없다. 이 플러그인의 격자 사전 집계는 시나리오 공급용이며, 운영 서버 쿼드트리의 새 별 분기 갱신·저장 트랜잭션·DB layout_version 이행을 검증한 구현이 아니다.
-
-공식 메타 DTO에 없는 layoutVersion 필드를 필수로 추가하지 않았다. 운영 DB와 지도/타일/locate/상세의 같은 위치, 계정·기기·재접속 후 위치 보존은 C05/C06 연동 때 함께 검증한다.
+`/dev/galaxy-comparison`은 [과거 판단 기록](galaxy-comparison.md)이다. 당시 모델·좌표·군집 렌더러를 `dev/legacy-galaxy`로 격리했고 현재 `src`에서 import하지 않는다. 옛 API도 `/api/dev-legacy-galaxy-204/...`로 격리했다. 이 코드의 군집/상한은 현행 계약이 아니다. serve+galaxy에만 제공하고 운영 번들/엔드포인트 검사로 제외한다.

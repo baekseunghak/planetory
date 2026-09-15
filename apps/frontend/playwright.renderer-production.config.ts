@@ -6,13 +6,13 @@ export default defineConfig({
   reporter: "list",
   outputDir: "test-results/renderer-production",
   use: {
-    baseURL: "http://127.0.0.1:58274",
+    baseURL: "http://127.0.0.1:58276",
     browserName: "chromium",
     viewport: { width: 1440, height: 900 },
   },
   webServer: {
-    command: "npm run build:renderer && npm run preview -- --port 58274",
-    url: "http://127.0.0.1:58274",
+    command: "npm run build:renderer && npm run preview -- --port 58276",
+    url: "http://127.0.0.1:58276",
     reuseExistingServer: false,
     env: { API_PROXY_TARGET: "" },
   },

@@ -72,3 +72,12 @@
     inset: 20% 6% auto;
   }
 }
+
+.galaxy-visible-count {
+  position: absolute;
+  right: 20px;
+  top: 18px;
+  font-size: 12px;
+  color: #a8b2c1;
+  pointer-events: none;
+}

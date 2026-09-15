@@ -1,116 +1,57 @@
 import {
   SkyContractError,
-  type Cluster,
+  readPersonalDetailProjection,
   type SkyMeta,
   type Star,
+  type PersonalDetailProjection,
 } from "../sky-data/contracts.ts";
 import {
-  orthographicMatrix,
+  galaxyMatrix,
   transform,
   type Matrix,
+  type GalaxyCamera,
 } from "../sky-data/geometry.ts";
-
-export const RENDER_BUDGET = {
-  stars: 400,
-  orbitStars: 60,
-  clusters: 80,
-} as const;
-export const STAR_COLORS = [
-  "#d9dcff",
-  "#b7a6ff",
-  "#8fbfff",
-  "#9be7d6",
-  "#f6c9ea",
-] as const;
-export const COMPLETE_COLOR = "#f1cfa3";
+export type { GalaxyCamera } from "../sky-data/geometry.ts";
+export const INITIAL_CAMERA: GalaxyCamera = {
+  x: 0,
+  y: 0,
+  zoom: 1,
+  yaw: 0.12,
+  tilt: 1,
+  roll: -0.28,
+};
 export const ORBIT_COLOR = "#8d96a6";
 export const rgb = (hex: string) =>
   [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-export function starStyle(s: Star) {
-  const level = Math.min(4, s.planetCount);
-  if (s.colorLevel !== level || s.sizeLevel !== level)
-    throw new SkyContractError(
-      "행성 수와 별의 색/크기 단계가 일치하지 않습니다.",
-    );
+// personal-galaxy-v1: appearance only. Stored positions are never regenerated here.
+export function starStyle(s: Pick<Star, "x" | "y" | "layoutOrdinal">) {
+  const ordinal = s.layoutOrdinal;
+  if (!Number.isInteger(ordinal) || ordinal < 0 || ordinal > 2147483647)
+    throw new SkyContractError("안정된 별 순번이 필요합니다.");
+  let seed = Math.imul(ordinal + 71, 2654435761) >>> 0;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const draws = ordinal % 10 < 2 || ordinal % 7 === 0 ? 6 : 7;
+  for (let i = 0; i < draws; i++) random();
+  const baseSize = ordinal < 6 ? 6.5 : 3.2 + Math.pow(random(), 4) * 5.5;
+  const warmth = Math.max(0, Math.min(1, 1 - Math.hypot(s.x, s.y) / 420));
+  const variation = ((ordinal * 17) % 101) / 100;
+  const cold =
+    variation < 0.13
+      ? [0.89, 0.72, 1]
+      : [0.48 + variation * 0.24, 0.66 + variation * 0.15, 1];
+  const warm = [1, 0.72, 0.44];
   return {
-    color: s.completedWithoutPlanets ? COMPLETE_COLOR : STAR_COLORS[level],
-    radius: 2.4 + level * 0.85,
+    rgb: cold.map((c, i) => c * (1 - warmth) + warm[i] * warmth),
+    baseSize,
   };
 }
-export function clusterColor(c: Cluster) {
-  const colors = [
-    rgb(STAR_COLORS[1]),
-    rgb(COMPLETE_COLOR),
-    rgb(STAR_COLORS[0]),
-  ];
-  return colors[0].map(
-    (_, i) =>
-      (colors[0][i] * c.counts.planet +
-        colors[1][i] * c.counts.done +
-        colors[2][i] * c.counts.new) /
-      c.count,
-  );
-}
-export type GalaxyCamera = {
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-  tilt: number;
-  roll: number;
-};
-export function initialCamera(
-  meta: SkyMeta,
-  width: number,
-  height: number,
-): GalaxyCamera {
-  const b = meta.bounds;
-  return {
-    x: (b.minX + b.maxX) / 2,
-    y: (b.minY + b.maxY) / 2,
-    scale:
-      Math.min(
-        width / Math.max(400, b.maxX - b.minX),
-        height / Math.max(400, b.maxY - b.minY),
-      ) * 0.72,
-    rotation: 0.12,
-    tilt: 0.78,
-    roll: -0.28,
-  };
-}
-export function cameraMatrix(
-  c: GalaxyCamera,
-  width: number,
-  height: number,
-): Matrix {
-  if (
-    ![...Object.values(c), width, height].every(Number.isFinite) ||
-    c.scale <= 0 ||
-    width <= 0 ||
-    height <= 0 ||
-    Math.abs(c.tilt) > 1.42
-  )
-    throw new SkyContractError("카메라 크기/배율/기울기가 유효하지 않습니다.");
-  // Normalized depth is expanded only in this projection, never in the source DTO.
-  const m = [
-    ...orthographicMatrix(
-      c,
-      width,
-      height,
-      160,
-      Math.max(1e6, Math.abs(c.x) + Math.abs(c.y)) * 4,
-    ),
-  ];
-  const cr = Math.cos(c.roll),
-    sr = Math.sin(c.roll);
-  for (let col = 0; col < 4; col++) {
-    const x = m[col * 4],
-      y = m[col * 4 + 1];
-    m[col * 4] = cr * x + (sr * y * height) / width;
-    m[col * 4 + 1] = (-sr * x * width) / height + cr * y;
-  }
-  return m;
-}
+export const cameraMatrix = galaxyMatrix;
 export function screenPoint(
   matrix: Matrix,
   width: number,
@@ -126,140 +67,80 @@ export function screenPoint(
     depth: p.z,
   };
 }
-export type VisibleCluster = { node: Cluster; rx: number; ry: number };
-export type RenderPlan = {
-  stars: Star[];
-  clusters: VisibleCluster[];
-  orbitStars: Star[];
-  overflow: string | null;
-};
+// Whole-view framing uses stored bounds, including the entire normalized-depth slab.
+export function initialCamera(
+  meta: SkyMeta,
+  width: number,
+  height: number,
+): GalaxyCamera {
+  const base = { ...INITIAL_CAMERA };
+  if (meta.starCount === 0) return base;
+  const m = cameraMatrix(base, 3100, 2020),
+    b = meta.bounds;
+  const points = [];
+  for (const x of [b.minX, b.maxX])
+    for (const y of [b.minY, b.maxY])
+      for (const z of [-1, 1]) {
+        const p = screenPoint(m, 3100, 2020, x, y, z);
+        points.push({ x: p.x - 1550, y: p.y - 2020 * 0.46 });
+      }
+  const minX = Math.min(...points.map((p) => p.x)),
+    maxX = Math.max(...points.map((p) => p.x));
+  const minY = Math.min(...points.map((p) => p.y)),
+    maxY = Math.max(...points.map((p) => p.y));
+  const scale = Math.min(width / 3100, height / 2020);
+  return {
+    ...base,
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    zoom: Math.max(
+      0.001,
+      Math.min(
+        1.5,
+        (width * 0.8) / (Math.max(1, maxX - minX) * scale),
+        (height * 0.8) / (Math.max(1, maxY - minY) * scale),
+      ),
+    ),
+  };
+}
+export type RenderPlan = { stars: Star[] };
 export function renderPlan(
   stars: readonly Star[],
-  clusters: readonly Cluster[],
   matrix: Matrix,
   width: number,
   height: number,
 ): RenderPlan {
-  // Runs only when camera/received nodes change. draw() never traverses this input.
-  const visibleStars = stars.filter((s) => {
-    const p = screenPoint(matrix, width, height, s.x, s.y, s.depthZ);
-    return (
-      Math.abs(p.depth) <= 1 &&
-      p.x >= -48 &&
-      p.x <= width + 48 &&
-      p.y >= -48 &&
-      p.y <= height + 48
-    );
-  });
-  visibleStars.forEach(starStyle);
-  const visibleClusters: VisibleCluster[] = [];
-  for (const c of clusters) {
-    const center = screenPoint(matrix, width, height, c.x, c.y);
-    let rx = 0,
-      ry = 0;
-    for (const x of [c.bounds.x, c.bounds.x + c.bounds.w])
-      for (const y of [c.bounds.y, c.bounds.y + c.bounds.h])
-        for (const z of [-1, 1]) {
-          const p = screenPoint(matrix, width, height, x, y, z);
-          rx = Math.max(rx, Math.abs(p.x - center.x));
-          ry = Math.max(ry, Math.abs(p.y - center.y));
-        }
-    rx = Math.max(14, rx);
-    ry = Math.max(14, ry);
-    if (
-      center.x + rx >= 0 &&
-      center.x - rx <= width &&
-      center.y + ry >= 0 &&
-      center.y - ry <= height
-    )
-      visibleClusters.push({ node: c, rx, ry });
-  }
-  const orbitStars = visibleStars.filter((s) => s.planetCount > 0);
-  const overflow =
-    visibleStars.length > RENDER_BUDGET.stars
-      ? "별 400개"
-      : orbitStars.length > RENDER_BUDGET.orbitStars
-        ? "궤도 표시 별 60개"
-        : visibleClusters.length > RENDER_BUDGET.clusters
-          ? "성운 80개"
-          : null;
+  // Culling only at data/camera changes. No star-count cap and no per-frame input scan.
   return {
-    stars: visibleStars,
-    clusters: visibleClusters,
-    orbitStars,
-    overflow,
+    stars: stars.filter((s) => {
+      const p = screenPoint(matrix, width, height, s.x, s.y, s.depthZ);
+      return (
+        Math.abs(p.depth) <= 1 &&
+        p.x >= -80 &&
+        p.x <= width + 80 &&
+        p.y >= -80 &&
+        p.y <= height + 80
+      );
+    }),
   };
 }
-
-export type OwnedPlanet = {
-  candidateId: string;
-  kind: "confirmed" | "unconfirmed";
-  periodDays: number | null;
-  depthPpm: number | null;
-};
-export type OwnedSystem = {
-  ticId: string;
-  position: { x: number; y: number; depthZ: number };
-  completedWithoutPlanets: boolean;
+export type OwnedPlanet = PersonalDetailProjection["planets"]["items"][number];
+export type OwnedSystem = Omit<PersonalDetailProjection, "planets"> & {
   items: OwnedPlanet[];
 };
-export function readOwnedSystem(value: unknown): OwnedSystem {
-  if (!value || typeof value !== "object")
-    throw new SkyContractError("별 상세 객체가 필요합니다.");
-  const v = value as Record<string, any>,
-    p = v.unlock?.position,
-    planets = v.planets;
-  if (
-    typeof v.ticId !== "string" ||
-    !v.ticId ||
-    !p ||
-    ![p.x, p.y, p.depthZ].every(
-      (n) => typeof n === "number" && Number.isFinite(n),
-    ) ||
-    Math.abs(p.depthZ) > 1 ||
-    !planets ||
-    !Array.isArray(planets.items) ||
-    planets.count !== planets.items.length ||
-    typeof planets.completedWithoutPlanets !== "boolean"
-  )
-    throw new SkyContractError("별 상세 좌표/행성 수가 유효하지 않습니다.");
-  const ids = new Set<string>();
-  const items: OwnedPlanet[] = planets.items.map((item: any) => {
-    if (
-      !item ||
-      typeof item.candidateId !== "string" ||
-      !item.candidateId ||
-      ids.has(item.candidateId) ||
-      !["confirmed", "unconfirmed"].includes(item.kind)
-    )
-      throw new SkyContractError("내 행성 식별자/종류/중복을 확인해 주세요.");
-    ids.add(item.candidateId);
-    for (const key of ["periodDays", "depthPpm"])
-      if (
-        item[key] !== null &&
-        (typeof item[key] !== "number" ||
-          !Number.isFinite(item[key]) ||
-          item[key] < 0 ||
-          (key === "periodDays" && item[key] === 0))
-      )
-        throw new SkyContractError("행성 수치가 유효하지 않습니다.");
-    return {
-      candidateId: item.candidateId,
-      kind: item.kind,
-      periodDays: item.periodDays,
-      depthPpm: item.depthPpm,
-    };
-  });
-  if (planets.completedWithoutPlanets && items.length)
-    throw new SkyContractError(
-      "행성 없는 완료 상태와 목록이 일치하지 않습니다.",
-    );
-  return {
-    ticId: v.ticId,
-    position: { x: p.x, y: p.y, depthZ: p.depthZ },
-    completedWithoutPlanets: planets.completedWithoutPlanets,
-    items,
-  };
+export function readOwnedSystem(
+  value: unknown,
+  meta: SkyMeta,
+  expectedTicId: string,
+  loadedStar?: Star,
+): OwnedSystem {
+  const { planets, ...detail } = readPersonalDetailProjection(
+    value,
+    meta,
+    expectedTicId,
+    loadedStar,
+  );
+  return { ...detail, items: planets.items };
 }
 export function stablePhase(id: string) {
   let hash = 2166136261;

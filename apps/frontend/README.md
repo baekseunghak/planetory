@@ -68,19 +68,25 @@ Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.ht
 
 ## W05 별지도 데이터 로딩
 
-`npm run dev:sky-data` → http://127.0.0.1:58270/sky. 메타 overview, 보이는 영역의 타일, 회전/기울기 역투영, 부분 실패·새 버전·선택 유지용 개발 검사 화면이다. 128개의 격자 fixture이며 최종 은하 디자인은 204에서 연결한다. 일반 실행과 운영 빌드에는 이 검사 화면/가상 API가 없다.
+메타와 개별 별 cursor 페이지, 회전/기울기 역투영, 부분 실패·새 버전·선택 유지용 개발 화면이다. 2501개 합성 참조 별이며 화면 디자인은204에서 연결한다. npm run dev:sky-data로 실행한다.
 
-- [203 완료 조건 대조·실제 연동 대기](docs/ticket-203-readiness.md)
-- [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
-- `npm run test:sky-data`: Chromium의 HTTP/화면 검사 6개. `npm run check`에도 포함한다.
+- [203 인수 기록](docs/ticket-203-readiness.md)
+- [렌더러/이벤트 연결](docs/sky-data-adapter.md)
+- npm run test:sky-data: Chromium8개.
 
-## W06-1 은하 렌더링
+## W06-1 개별 별 은하
 
-`npm run dev:galaxy` → http://127.0.0.1:58272/sky. 203의 메타·타일을 소비하는 WebGL2 렌더러를 가상 HTTP 응답으로 확인한다. `204 렌더 검증 도구`에서 LOD와 선택 별의 내 행성을 확인한다. 일반 지도 조작은 205, 상세 화면은 206에서 연결한다.
+2026-09-15 사용자 승인된 MR !41 7f67c568의 v1.3을 로컬 적용했다. 군집/성운과 고정 개수 상한을 제거하고 원본 개인 시제품의 좌표·색·크기·카메라를 사용한다. 운영 코드가 별 위치를 생성하지 않는다.
 
-실제 서버 모드는 `VITE_SKY_RENDERER_ENABLED=true`와 기존 API/인증 설정을 사용한다. 기본 플래그는 false다. `npm run build:renderer`는 활성화한 운영 빌드를 만든다. 개발 도구와 가짜 API는 운영에서 제외한다.
+이번 확인 주소는 http://127.0.0.1:58275/sky?reference=1 이다. npm run dev:galaxy의 기본 포트는58272다. 가상 자료로1/10/100/1000/2501개를 확인하며 클릭·드래그 등 실제 조작은205, 상세 화면은206에서 연결한다.
 
-- [렌더 구조·205/206 연결·실행 설정](docs/galaxy-renderer.md)
-- [204 항목별 인수와 대기 사항](docs/ticket-204-readiness.md)
-- `npm run test:galaxy`: 렌더 검사9개. `npm run check`에 포함한다.
-- `npm run test:renderer-production`: 활성화한 운영 dist 검사. 기존 dist를 다시 빌드한다.
+- [렌더 구조·205/206 연결](docs/galaxy-renderer.md)
+- [204 항목별 인수/대기](docs/ticket-204-readiness.md)
+- [기존 군집 비교 보관본](docs/galaxy-comparison.md)
+- npm run test:galaxy: 현행 렌더11개와 보관 비교4개.
+- npm run test:renderer-production: 활성화 dist2개,58276 포트.
+
+실제 서버는 VITE_SKY_RENDERER_ENABLED=true와 기존 인증/API 설정을 사용한다. 기본 플래그는false, npm run build:renderer는 활성화 빌드다. 개발 도구/가상 API는 운영에 포함하지 않는다. 문서 팀 승인·실제 API·리뷰/병합은 대기 중이다. 기존 Draft MR !40에서 검토한다.
+
+- [201~204 Firefox·Node22·로컬 Nginx 검증](docs/local-validation-201-204.md)
+- Docker 활성화: 저장소 루트에서 `docker build -f apps/frontend/Dockerfile --build-arg VITE_SKY_RENDERER_ENABLED=true -t planetory-frontend:204 .`

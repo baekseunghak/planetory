@@ -1,7 +1,5 @@
 import type { Matrix } from "../sky-data/geometry.ts";
-import type { Star } from "../sky-data/contracts.ts";
 import {
-  clusterColor,
   ORBIT_COLOR,
   rgb,
   stablePhase,
@@ -21,22 +19,33 @@ out vec2 uv; out vec3 tint; out float seed; out float mode; out float density;
 const bodyVertex =
   common +
   `
-layout(location=2) in vec2 radius;
+layout(location=2) in float baseSize;
 layout(location=3) in vec3 color;
-layout(location=4) in float identity;
-layout(location=5) in float kind;
-layout(location=6) in float count;
-void main(){ vec4 p=matrix*vec4(center,1.); p.xy+=corner*radius*vec2(2.,-2.)/viewport*p.w;
-gl_Position=p; uv=corner; tint=color; seed=identity; mode=kind; density=count; }`;
+layout(location=4) in float selected;
+uniform float zoom; uniform float dpr; uniform float glow;
+out float strength;
+void main(){
+  bool selectedStar=selected>.5;
+  float radius=selected>1.5?96.:selectedStar?24.:baseSize*1.35;
+  float fit=selectedStar?1.:max(.55,min(viewport.x/1680.,viewport.y/974.));
+  float sizeScale=zoom<1.?pow(zoom,.78):pow(zoom,.36);
+  float desired=radius*fit*dpr*sizeScale*(glow>.5?8.:1.);
+  float diameter=clamp(desired,1.25,160.)/dpr;
+  vec4 p=matrix*vec4(center,1.);
+  p.xy+=corner*diameter*vec2(1.,-1.)/viewport;
+  gl_Position=p; uv=corner; tint=color; seed=0.;mode=selected;density=1.;
+  strength=(glow>.5?(selectedStar?.14:.048):(selectedStar?1.:.88))*min(1.,desired*desired/1.5625);
+}`;
 const bodyFragment = `#version 300 es
 precision highp float;
-in vec2 uv; in vec3 tint; in float seed; in float mode; in float density; out vec4 outputColor;
-float noise(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7))+seed)*43758.5453);}
-void main(){float d=dot(uv,uv); if(d>1.)discard;
-float a=exp(-d*28.)*.95+exp(-d*5.)*.18;
-if(mode>.5){float cloud=.58+.26*sin(uv.x*11.+seed)*cos(uv.y*8.-seed)+.16*noise(floor(uv*80.));
-a=exp(-d*3.8)*cloud*(.28+min(.38,log(1.+density)*.055))*(1.-smoothstep(.65,1.,d));}
-outputColor=vec4(tint,a); }`;
+in vec2 uv; in vec3 tint; in float strength; in float mode; uniform float glow; out vec4 outputColor;
+void main(){float d=dot(uv,uv);if(d>1.)discard;
+if(mode>1.5 && glow<.5){
+vec3 n=vec3(uv,sqrt(1.-d));
+float surface=.86+.08*sin(uv.x*41.)*sin(uv.y*53.)+.06*cos((uv.x+uv.y)*73.);
+float light=.48+.52*max(0.,dot(n,normalize(vec3(-.5,-.2,1.))));
+outputColor=vec4(tint*surface*light,1.-smoothstep(.94,1.,d));return;}
+float a=exp(-d*22.)+exp(-d*4.5)*.22;outputColor=vec4(tint,a*strength);}`;
 const orbitVertex = `#version 300 es
 precision highp float; layout(location=0) in vec3 center; layout(location=1) in vec2 offset;
 uniform mat4 matrix; uniform vec2 viewport;
@@ -61,7 +70,6 @@ outputColor=vec4(tint*light,1.-smoothstep(.87,1.,d));}`;
 
 export type RendererMetrics = {
   stars: number;
-  clusters: number;
   orbitStars: number;
   planets: number;
   detailedSystems: number;
@@ -128,18 +136,17 @@ class ReusableBuffer {
       gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
       this.data.fill(NaN);
     }
-    let first = -1;
+    let first = -1,
+      last = -1;
     for (let i = 0; i < values.length; i++) {
       const value = Math.fround(values[i]);
       if (this.data[i] !== value) {
         this.data[i] = value;
         if (first < 0) first = i;
-      } else if (first >= 0) {
-        this.upload(first, i);
-        first = -1;
+        last = i;
       }
     }
-    if (first >= 0) this.upload(first, values.length);
+    if (first >= 0) this.upload(first, last + 1);
     this.length = values.length;
   }
   private upload(start: number, end: number) {
@@ -163,26 +170,27 @@ type Pipeline = {
   viewport: WebGLUniformLocation | null;
   time: WebGLUniformLocation | null;
   color: WebGLUniformLocation | null;
+  zoom: WebGLUniformLocation | null;
+  dpr: WebGLUniformLocation | null;
+  glow: WebGLUniformLocation | null;
 };
 export class GalaxyRenderer {
   private gl: WebGL2RenderingContext;
   private quadBuffer: WebGLBuffer;
   private bodies: ReusableBuffer;
-  private clouds: ReusableBuffer;
   private rings: ReusableBuffer;
   private planets: ReusableBuffer;
   private bodyPipeline: Pipeline;
-  private cloudPipeline: Pipeline;
   private ringPipeline: Pipeline;
   private planetPipeline: Pipeline;
   private matrix = new Float32Array(16);
   private width = 1;
   private height = 1;
   private time = 0;
+  private zoom = 1;
   private disposed = false;
   private stats = {
     stars: 0,
-    clusters: 0,
     orbitStars: 0,
     planets: 0,
     detailedSystems: 0,
@@ -205,30 +213,19 @@ export class GalaxyRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
     this.bodies = new ReusableBuffer(gl);
-    this.clouds = new ReusableBuffer(gl);
     this.rings = new ReusableBuffer(gl);
     this.planets = new ReusableBuffer(gl);
     const bodyProgram = program(gl, bodyVertex, bodyFragment);
-    const bodyLayout = [
-      [1, 3, 0],
-      [2, 2, 3],
-      [3, 3, 5],
-      [4, 1, 8],
-      [5, 1, 9],
-      [6, 1, 10],
-    ];
     this.bodyPipeline = this.pipeline(
       bodyProgram,
       this.bodies,
-      11,
-      bodyLayout,
-      true,
-    );
-    this.cloudPipeline = this.pipeline(
-      bodyProgram,
-      this.clouds,
-      11,
-      bodyLayout,
+      8,
+      [
+        [1, 3, 0],
+        [2, 1, 3],
+        [3, 3, 4],
+        [4, 1, 7],
+      ],
       true,
     );
     this.ringPipeline = this.pipeline(
@@ -291,9 +288,13 @@ export class GalaxyRenderer {
       viewport: gl.getUniformLocation(p, "viewport"),
       time: gl.getUniformLocation(p, "time"),
       color: gl.getUniformLocation(p, "color"),
+      zoom: gl.getUniformLocation(p, "zoom"),
+      dpr: gl.getUniformLocation(p, "dpr"),
+      glow: gl.getUniformLocation(p, "glow"),
     };
   }
-  setCamera(matrix: Matrix, width: number, height: number) {
+  setCamera(matrix: Matrix, width: number, height: number, zoom = 1) {
+    this.zoom = zoom;
     this.matrix.set(matrix);
     this.width = width;
     this.height = height;
@@ -303,45 +304,24 @@ export class GalaxyRenderer {
     selected: string | null,
     system: OwnedSystem | null = null,
   ) {
-    if (plan.overflow)
-      throw new Error(
-        `렌더 예산 초과: ${plan.overflow}. 서버 군집 단계가 필요합니다.`,
-      );
     if (system && system.ticId !== selected)
       throw new Error("선택한 별과 행성 목록이 다릅니다.");
     const body: number[] = [],
-      cloud: number[] = [],
       rings: number[] = [],
       planets: number[] = [];
     const starIds = new Set<string>();
-    const addStar = (s: Star) => {
-      const style = starStyle(s);
+    for (const star of plan.stars) {
+      const style = starStyle(star);
       body.push(
-        s.x,
-        s.y,
-        s.depthZ,
-        style.radius * 4,
-        style.radius * 4,
-        ...rgb(style.color),
-        stablePhase(s.ticId),
-        0,
-        1,
+        star.x,
+        star.y,
+        star.depthZ,
+        style.baseSize,
+        ...style.rgb,
+        star.ticId === system?.ticId ? 2 : star.ticId === selected ? 1 : 0,
       );
-      starIds.add(s.ticId);
-    };
-    for (const s of plan.stars) addStar(s);
-    for (const { node: c, rx, ry } of plan.clusters)
-      cloud.push(
-        c.x,
-        c.y,
-        0,
-        rx,
-        ry,
-        ...clusterColor(c),
-        stablePhase(c.nodeId),
-        1,
-        c.count,
-      );
+      starIds.add(star.ticId);
+    }
     let orbitStars = 0;
     const addOrbits = (
       position: { x: number; y: number; depthZ: number },
@@ -380,13 +360,11 @@ export class GalaxyRenderer {
           radius,
           phase,
           detailed ? 0.12 + 0.18 / (i + 1) : 0,
-          detailed ? 4.5 : 2,
+          detailed ? 8 + Math.sin(phase) * 1.5 : 2,
           ...color,
         );
       });
     };
-    for (const s of plan.orbitStars)
-      if (s.ticId !== system?.ticId) addOrbits(s, s.orbits, false);
     if (system) {
       const existing = plan.stars.find((s) => s.ticId === system.ticId);
       if (
@@ -394,6 +372,7 @@ export class GalaxyRenderer {
         (existing.x !== system.position.x ||
           existing.y !== system.position.y ||
           existing.depthZ !== system.position.depthZ ||
+          existing.layoutOrdinal !== system.position.layoutOrdinal ||
           existing.planetCount !== system.items.length)
       )
         throw new Error(
@@ -404,17 +383,14 @@ export class GalaxyRenderer {
       addOrbits(system.position, system.items, true);
     }
     this.bodies.update(body);
-    this.clouds.update(cloud);
     this.rings.update(rings);
     this.planets.update(planets);
     Object.assign(this.stats, {
       stars: plan.stars.length,
-      clusters: plan.clusters.length,
       orbitStars,
       planets: planets.length / 10,
       detailedSystems: system ? 1 : 0,
-      packedNodes:
-        this.stats.packedNodes + plan.stars.length + plan.clusters.length,
+      packedNodes: this.stats.packedNodes + plan.stars.length,
     });
   }
   private bind(p: Pipeline) {
@@ -442,15 +418,15 @@ export class GalaxyRenderer {
       ringCalls = 0,
       planetCalls = 0;
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    if (this.clouds.length) {
-      this.bind(this.cloudPipeline);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.clouds.length / 11);
-      bodyCalls++;
-    }
     if (this.bodies.length) {
       this.bind(this.bodyPipeline);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.bodies.length / 11);
-      bodyCalls++;
+      gl.uniform1f(this.bodyPipeline.zoom, this.zoom);
+      gl.uniform1f(this.bodyPipeline.dpr, dpr);
+      for (const glow of [1, 0]) {
+        gl.uniform1f(this.bodyPipeline.glow, glow);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.bodies.length / 8);
+        bodyCalls++;
+      }
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.rings.length) {
@@ -475,10 +451,10 @@ export class GalaxyRenderer {
     this.stats.frameCount++;
   }
   metrics(): RendererMetrics {
-    const buffers = [this.bodies, this.clouds, this.rings, this.planets];
+    const buffers = [this.bodies, this.rings, this.planets];
     return {
       ...this.stats,
-      gpuBuffers: 5,
+      gpuBuffers: 4,
       bufferAllocations: 1 + buffers.reduce((n, b) => n + b.allocations, 0),
       uploadBytes:
         quad.byteLength + buffers.reduce((n, b) => n + b.uploadBytes, 0),
@@ -488,11 +464,9 @@ export class GalaxyRenderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    for (const b of [this.bodies, this.clouds, this.rings, this.planets])
-      b.dispose();
+    for (const b of [this.bodies, this.rings, this.planets]) b.dispose();
     const pipelines = [
       this.bodyPipeline,
-      this.cloudPipeline,
       this.ringPipeline,
       this.planetPipeline,
     ];

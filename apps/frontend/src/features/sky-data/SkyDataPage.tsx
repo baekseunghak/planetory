@@ -15,10 +15,6 @@ export function SkyDataPage({
     const params = new URLSearchParams(location.search);
     store?.select(params.get("star") || params.get("focus"));
   }, [store, location.search]);
-  useEffect(() => {
-    if (store && data.meta && !data.view)
-      void store.setView({ level: 0, box: null, overview: true });
-  }, [store, data.meta, data.view]);
   return (
     <section aria-labelledby="sky-title">
       <p className="eyebrow">MY UNIVERSE</p>
@@ -60,8 +56,7 @@ export function SkyDataPage({
         data.meta &&
         data.meta.starCount > 0 &&
         data.view &&
-        !data.stars.length &&
-        !data.clusters.length && <p>현재 범위에는 표시할 별이 없습니다.</p>}
+        !data.stars.length && <p>현재 범위에는 표시할 별이 없습니다.</p>}
       {data.selectedTicId && data.selectionStatus === "not-loaded" && (
         <p role="status">
           선택한 TIC {data.selectedTicId}의 개별 자료가 현재 범위에 적재되지

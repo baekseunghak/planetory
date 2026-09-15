@@ -22,11 +22,13 @@ export function useSkyData() {
       next.dispose();
     };
   }, [member?.memberId]);
+  const activeStore =
+    member && store?.memberId === member.memberId ? store : null;
   return {
-    store,
+    store: activeStore,
     data: useSyncExternalStore(
-      store?.subscribe || noSubscribe,
-      store?.getSnapshot || getEmpty,
+      activeStore?.subscribe || noSubscribe,
+      activeStore?.getSnapshot || getEmpty,
     ),
   };
 }

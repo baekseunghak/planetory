@@ -1,180 +1,170 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Star, Cluster } from "../../src/features/sky-data/contracts.ts";
-import {
-  inverse,
-  transform,
-  viewportBounds,
-} from "../../src/features/sky-data/geometry.ts";
+import { readFileSync } from "node:fs";
 import {
   cameraMatrix,
-  clusterColor,
-  COMPLETE_COLOR,
-  readOwnedSystem,
+  INITIAL_CAMERA,
+  initialCamera,
   renderPlan,
-  rgb,
+  screenPoint,
   starStyle,
+  readOwnedSystem,
 } from "../../src/features/sky-renderer/model.ts";
-const star = (i = 0, n = 0): Star => ({
-  ticId: String(i),
-  x: 0,
-  y: 0,
-  depthZ: 0,
-  planetCount: n,
-  colorLevel: Math.min(4, n),
-  sizeLevel: Math.min(4, n),
-  progressStage: "in_progress",
-  completedWithoutPlanets: false,
-  marker: null,
-  reopened: false,
-  orbits: Array.from({ length: n }, (_, j) => ({
-    candidateId: `${i}-${j}`,
-    periodDays: j + 1,
-    kind: "confirmed",
-  })),
-});
-const camera = { x: 0, y: 0, scale: 1, rotation: 0.3, tilt: 0.8, roll: -0.28 };
-test("HOME-05 colors/sizes depend on planet count; apricot requires explicit completedWithoutPlanets", () => {
-  const s = star(),
-    colors = new Set(),
-    sizes = [];
-  for (let n = 0; n <= 5; n++) {
-    const style = starStyle(star(n, n));
-    colors.add(style.color);
-    sizes.push(style.radius);
+import { exampleStar, appearance } from "../../dev/sky-reference/reference.mjs";
+import { meta } from "./sky-support.ts";
+import type { Star } from "../../src/features/sky-data/contracts.ts";
+const vectors = JSON.parse(
+  readFileSync(
+    new URL("../../dev/sky-reference/vectors.json", import.meta.url),
+    "utf8",
+  ),
+);
+test("AT-125: 12 independent golden vectors reproduce appearance and CPU/shader matrix projection", () => {
+  for (const v of vectors.vectors) {
+    const style = starStyle(v),
+      p = screenPoint(
+        cameraMatrix(vectors.camera, 1440, 836),
+        1440,
+        836,
+        v.x,
+        v.y,
+        v.depthZ,
+      );
+    assert(Math.abs(style.baseSize - v.baseSize) <= 1e-9);
+    style.rgb.forEach((x, i) => assert(Math.abs(x - v.rgb[i]) <= 1e-9));
+    assert(Math.abs(p.x - v.screen.x) <= 0.00001);
+    assert(Math.abs(p.y - v.screen.y) <= 0.00001);
   }
-  assert.equal(colors.size, 5);
-  assert.equal(sizes[4], sizes[5]);
-  for (let i = 1; i < 5; i++) assert(sizes[i] > sizes[i - 1]);
-  assert.equal(
-    starStyle({
-      ...s,
-      progressStage: "completed",
-      completedWithoutPlanets: true,
-    }).color,
-    COMPLETE_COLOR,
-  );
-  assert.notEqual(starStyle(s).color, COMPLETE_COLOR);
-  assert.throws(() => starStyle({ ...s, colorLevel: 4 }));
 });
-test("cluster color uses authoritative ratios without changing node or counts", () => {
-  const c: Cluster = {
-    nodeId: "n",
-    x: 1,
-    y: 2,
-    count: 10,
-    counts: { planet: 0, done: 10, new: 0 },
-    bounds: { x: 0, y: 0, w: 512, h: 512 },
-  };
-  const before = structuredClone(c);
-  assert.deepEqual(clusterColor(c), rgb(COMPLETE_COLOR));
-  assert.deepEqual(c, before);
-});
-test("camera rotation/tilt/resize preserve stored coordinates and inverse viewport contains visible full-depth points", () => {
-  const source = Array.from({ length: 81 }, (_, i) => ({
-    ...star(i),
-    x: ((i % 9) - 4) * 35,
-    y: (Math.floor(i / 9) - 4) * 35,
-    depthZ: (i % 3) - 1,
-  }));
-  const before = structuredClone(source);
-  for (const width of [1024, 1440, 1920])
-    for (const tilt of [-1.2, 0, 1.2]) {
-      const matrix = cameraMatrix({ ...camera, tilt }, width, 900),
-        inv = inverse(matrix),
-        bounds = viewportBounds(matrix)!;
-      for (const s of source) {
-        const p = transform(matrix, { x: s.x, y: s.y, z: s.depthZ }),
-          back = transform(inv, p);
-        assert(Math.abs(back.x - s.x) < 1e-7);
-        assert(Math.abs(back.y - s.y) < 1e-7);
-        if (Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1) {
-          assert(s.x >= bounds.x && s.x <= bounds.x + bounds.w);
-          assert(s.y >= bounds.y && s.y <= bounds.y + bounds.h);
-        }
-      }
-      renderPlan(source, [], matrix, width, 900);
-    }
-  assert.deepEqual(source, before);
-});
-test("render budgets fail explicitly without truncating or inventing official clusters", () => {
-  const matrix = cameraMatrix(camera, 1440, 900);
-  assert.equal(
-    renderPlan(
-      Array.from({ length: 401 }, (_, i) => star(i)),
-      [],
-      matrix,
-      1440,
-      900,
-    ).overflow,
-    "별 400개",
-  );
-  assert.equal(
-    renderPlan(
-      Array.from({ length: 61 }, (_, i) => star(i, 1)),
-      [],
-      matrix,
-      1440,
-      900,
-    ).overflow,
-    "궤도 표시 별 60개",
-  );
-  const nodes = Array.from({ length: 81 }, (_, i): Cluster => ({
-    nodeId: String(i),
-    x: 0,
-    y: 0,
-    count: 10,
-    counts: { planet: 2, done: 3, new: 5 },
-    bounds: { x: -30, y: -30, w: 60, h: 60 },
-  }));
-  const plan = renderPlan([], nodes, matrix, 1440, 900);
-  assert.equal(plan.overflow, "성운 80개");
-  assert.equal(plan.clusters.length, 81);
-  assert.strictEqual(plan.clusters[0].node, nodes[0]);
-  const outside = { ...star(9), x: 1e5 };
-  assert.equal(renderPlan([outside], [], matrix, 1440, 900).stars.length, 0);
-});
-const detail = () => ({
-  ticId: "001",
-  unlock: { position: { x: 12, y: -20, depthZ: 0.42 } },
-  planets: {
-    count: 5,
+test("all 1000 original appearances are invariant to status, page order and an added discovery", () => {
+  const stars: Star[] = Array.from({ length: 1000 }, (_, i) => exampleStar(i));
+  const before = new Map(stars.map((s) => [s.ticId, starStyle(s)]));
+  const reversed: Star[] = [...stars].reverse().map((s) => ({
+    ...s,
+    planetCount: 5,
     completedWithoutPlanets: false,
-    items: Array.from({ length: 5 }, (_, i) => ({
-      candidateId: `p${i}`,
-      kind: i % 2 ? "unconfirmed" : "confirmed",
-      periodDays: i ? i : null,
-      depthPpm: i ? 100 : 0,
-    })),
-  },
+    progressStage: "completed" as const,
+  }));
+  reversed.push(exampleStar(1000));
+  for (const s of reversed.slice(0, 1000)) {
+    assert.deepEqual(starStyle(s), before.get(s.ticId));
+    assert.deepEqual(starStyle(s), appearance(s));
+  }
+  const changed = {
+    ...stars[0],
+    planetCount: 0,
+    completedWithoutPlanets: true,
+    progressStage: "completed" as const,
+  };
+  assert.deepEqual(starStyle(changed), before.get(changed.ticId));
 });
-test("personal-system boundary preserves all five owned items, stable IDs and null vs zero", () => {
-  const d = detail(),
-    read = readOwnedSystem(d);
-  assert.equal(read.items.length, 5);
-  assert.equal(read.items[0].periodDays, null);
-  assert.equal(read.items[0].depthPpm, 0);
-  assert.equal(read.position.depthZ, 0.42);
-  assert.deepEqual(readOwnedSystem(d), read);
-  const empty = detail();
-  empty.planets.count = 0;
-  empty.planets.items = [];
-  assert.equal(readOwnedSystem(empty).items.length, 0);
+test("render plan never caps individual stars at 400 or attaches overview orbit/cluster data", () => {
+  const stars = Array.from({ length: 2501 }, (_, i) => exampleStar(i));
+  const plan = renderPlan(
+    stars,
+    cameraMatrix(INITIAL_CAMERA, 1440, 836),
+    1440,
+    836,
+  );
+  assert.equal(plan.stars.length, 2501);
+  assert.deepEqual(Object.keys(plan), ["stars"]);
+  const far = { ...stars[0], x: 1e6 };
+  assert.equal(
+    renderPlan([far], cameraMatrix(INITIAL_CAMERA, 1440, 836), 1440, 836).stars
+      .length,
+    0,
+  );
 });
-test("invalid private planet payloads are errors, not silently deduplicated or filled", () => {
-  const duplicate = detail();
-  duplicate.planets.items[1].candidateId = "p0";
-  assert.throws(() => readOwnedSystem(duplicate));
-  const count = detail();
-  count.planets.count = 4;
-  assert.throws(() => readOwnedSystem(count));
-  const fp = detail();
-  fp.planets.items[0].kind = "fp";
-  assert.throws(() => readOwnedSystem(fp));
-  const depth = detail();
-  depth.unlock.position.depthZ = 18;
-  assert.throws(() => readOwnedSystem(depth));
-  const absent = detail();
-  delete (absent.planets.items[0] as any).depthPpm;
-  assert.throws(() => readOwnedSystem(absent));
+test("whole-view uses stored bounds at 1/10/100/1000 and never rewrites positions", () => {
+  for (const n of [1, 10, 100, 1000]) {
+    const stars = Array.from({ length: n }, (_, i) => exampleStar(i)),
+      before = structuredClone(stars);
+    const m = {
+      ...meta(),
+      starCount: n,
+      bounds: {
+        minX: Math.min(...stars.map((s) => s.x)),
+        maxX: Math.max(...stars.map((s) => s.x)),
+        minY: Math.min(...stars.map((s) => s.y)),
+        maxY: Math.max(...stars.map((s) => s.y)),
+      },
+    };
+    const matrix = cameraMatrix(initialCamera(m, 1440, 836), 1440, 836);
+    assert.equal(renderPlan(stars, matrix, 1440, 836).stars.length, n);
+    for (const s of stars) {
+      const p = screenPoint(matrix, 1440, 836, s.x, s.y, s.depthZ);
+      assert(p.x >= 0 && p.x <= 1440 && p.y >= 0 && p.y <= 836);
+    }
+    assert.deepEqual(stars, before);
+  }
+});
+const detail = (count: number) => {
+  const s = { ...exampleStar(0), planetCount: count },
+    m = meta();
+  const value = {
+    ticId: s.ticId,
+    version: m.version,
+    presentationVersion: m.presentationVersion,
+    unlock: {
+      position: {
+        x: s.x,
+        y: s.y,
+        depthZ: s.depthZ,
+        layoutOrdinal: s.layoutOrdinal,
+        layoutVersion: m.layoutVersion,
+      },
+    },
+    planets: {
+      count,
+      items: Array.from({ length: count }, (_, i) => ({
+        candidateId: "p" + i,
+        kind: "confirmed",
+        periodDays: i ? i : null,
+        depthPpm: i ? 300 : 0,
+      })),
+    },
+  };
+  return { s, m, value };
+};
+test("0/1/2/5 selected owned planets preserve IDs, full arrays and null versus zero", () => {
+  for (const n of [0, 1, 2, 5]) {
+    const { s, m, value } = detail(n),
+      out = readOwnedSystem(value, m, s.ticId, s);
+    assert.equal(out.items.length, n);
+    assert.equal(out.version, m.version);
+    if (n) {
+      assert.equal(out.items[0].periodDays, null);
+      assert.equal(out.items[0].depthPpm, 0);
+    }
+  }
+});
+test("selected detail rejects mismatched version, positions, count, duplicate or forbidden planets", () => {
+  const cases = [
+    (v: any) => (v.version = "stale"),
+    (v: any) => (v.unlock.position.depthZ = 0.5),
+    (v: any) => (v.planets.count = 4),
+    (v: any) => (v.planets.items[1].candidateId = "p0"),
+    (v: any) => (v.planets.items[0].kind = "fp"),
+    (v: any) => (v.unlock.position.layoutOrdinal = 100),
+  ];
+  for (const change of cases) {
+    const { s, m, value } = detail(5);
+    change(value);
+    assert.throws(() => readOwnedSystem(value, m, s.ticId, s));
+  }
+});
+test("camera validates finite zoom and tilt boundaries", () => {
+  for (const patch of [
+    { zoom: 0 },
+    { zoom: 10001 },
+    { tilt: 1.43 },
+    { x: NaN },
+  ])
+    assert.throws(() =>
+      cameraMatrix({ ...INITIAL_CAMERA, ...patch }, 1440, 836),
+    );
+  for (const zoom of [0.001, 10000])
+    assert.doesNotThrow(() =>
+      cameraMatrix({ ...INITIAL_CAMERA, zoom }, 1440, 836),
+    );
 });

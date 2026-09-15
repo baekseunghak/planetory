@@ -1,112 +1,43 @@
 import type { Plugin } from "vite";
-import type {
-  Box,
-  Cluster,
-  SkyMeta,
-  Star,
+import { randomUUID } from "node:crypto";
+import {
+  LAYOUT_VERSION,
+  PRESENTATION_VERSION,
+  compareTic,
+  type Box,
+  type SkyMeta,
+  type Star,
 } from "../src/features/sky-data/contracts.ts";
-import { intersects } from "../src/features/sky-data/geometry.ts";
+import { exampleStar } from "./sky-reference/reference.mjs";
 
-// Development HTTP provider only. This is not C05's approved placement implementation.
+// Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
 export function galaxyFixturePlugin(): Plugin {
   let revision = 1,
-    count = 1000,
-    failed = false,
-    empty = false;
-  const layoutVersion = "galaxy-fixture-204-layout";
-  const makeStar = (i: number): Star => {
-    const radius = i === 0 ? 0 : 40 + Math.sqrt(i / 1024) * 1450;
-    const angle =
-      ((i % 4) * Math.PI) / 2 + radius * 0.0057 + Math.sin(i * 12.9898) * 0.14;
-    const planetCount =
-      i % 10 === 0
-        ? 5
-        : i % 10 === 1
-          ? 2
-          : i % 10 === 2
-            ? 1
-            : i % 10 === 3
-              ? 3
-              : i % 10 === 4
-                ? 4
-                : 0;
-    const complete = planetCount === 0 && i % 3 === 0;
-    return {
-      ticId: i === 0 ? "259377017" : String(910000000 + i),
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
-      depthZ: Math.sin(i * 7.23) * 0.32,
-      planetCount,
-      colorLevel: Math.min(4, planetCount),
-      sizeLevel: Math.min(4, planetCount),
-      progressStage: complete
-        ? "completed"
-        : planetCount
-          ? "in_progress"
-          : "unexplored",
-      completedWithoutPlanets: complete,
-      marker: i === 0 ? { type: "tutorial", seq: 1 } : null,
-      reopened: false,
-      orbits: Array.from({ length: planetCount }, (_, j) => ({
-        candidateId: `galaxy-fixture-204-c-${i}-${j}`,
-        kind: j % 2 ? "unconfirmed" : "confirmed",
-        periodDays: 2 + j * 3.25,
-      })),
-    };
-  };
-  let stars = Array.from({ length: count }, (_, i) => makeStar(i));
-  const scales = [0.125, 0.35, 0.7, 1.4, 2.8, 5.6];
-  const levels = scales.map((scale, level) => ({
-    level,
-    scale,
-    clustered: level < 3,
-  }));
-  let cache: Map<number, Cluster[]> = new Map();
-  function precompute() {
-    cache = new Map();
-    for (let level = 0; level < 3; level++) {
-      const span = [512, 256, 128][level],
-        groups = new Map<string, Star[]>();
-      for (const star of stars) {
-        const key = `${Math.floor(star.x / span)}:${Math.floor(star.y / span)}`;
-        const group = groups.get(key) || [];
-        group.push(star);
-        groups.set(key, group);
-      }
-      const nodes = [...groups].map(([key, items]): Cluster => {
-        const [x, y] = key.split(":").map(Number),
-          counts = { planet: 0, done: 0, new: 0 };
-        for (const s of items)
-          counts[
-            s.planetCount
-              ? "planet"
-              : s.completedWithoutPlanets
-                ? "done"
-                : "new"
-          ]++;
-        return {
-          nodeId: `galaxy-fixture-204-n-${level}-${key}`,
-          x: items.reduce((n, s) => n + s.x, 0) / items.length,
-          y: items.reduce((n, s) => n + s.y, 0) / items.length,
-          count: items.length,
-          counts,
-          bounds: { x: x * span, y: y * span, w: span, h: span },
-        };
-      });
-      cache.set(level, nodes);
-    }
-  }
-  precompute();
-  const version = () => `galaxy-fixture-204:${revision}`;
+    failed = false;
+  const makeStar = (i: number): Star => ({
+    ...exampleStar(i),
+    planetCount: i === 0 ? 5 : i === 7 ? 2 : 0,
+  });
+  let stars: Star[] = Array.from({ length: 1000 }, (_, i) => makeStar(i));
+  const cursors = new Map<string, { scope: string; offset: number }>();
+  const version = () => "galaxy-fixture-204:" + revision;
+  const levels = [0.25, 1, 4].map((scale, level) => ({ scale, level }));
   const meta = (): SkyMeta => ({
+    representation: "individual-stars",
+    layoutVersion: LAYOUT_VERSION,
+    presentationVersion: PRESENTATION_VERSION,
     version: version(),
-    starCount: empty ? 0 : stars.length,
-    bounds: { minX: -1536, maxX: 1536, minY: -1536, maxY: 1536 },
-    tileSize: 256,
+    starCount: stars.length,
+    bounds: {
+      minX: stars.length ? Math.min(...stars.map((s) => s.x)) : 0,
+      maxX: stars.length ? Math.max(...stars.map((s) => s.x)) : 0,
+      minY: stars.length ? Math.min(...stars.map((s) => s.y)) : 0,
+      maxY: stars.length ? Math.max(...stars.map((s) => s.y)) : 0,
+    },
+    tileSize: 512,
     zoomLevels: levels,
-    centerTicIds: empty ? [] : [stars[0].ticId],
-    overview: empty ? [] : cache.get(0)!,
-    firstVisit: count === 1,
+    centerTicIds: stars.length ? [stars[0].ticId] : [],
+    firstVisit: stars.length === 1,
     asOf: new Date().toISOString(),
   });
   return {
@@ -122,47 +53,51 @@ export function galaxyFixturePlugin(): Plugin {
           });
           res.end(JSON.stringify(value));
         };
+        const bad = () =>
+          reply(400, {
+            code: "VALIDATION_FAILED",
+            message: "level·bbox·version·limit·cursor를 확인해 주세요.",
+          });
         if (
           req.method === "POST" &&
           url.pathname.startsWith("/dev-galaxy-204/")
         ) {
           const action = url.pathname.split("/").at(-1);
           if (action === "reset") {
-            const n = Number(url.searchParams.get("count"));
-            if (![1, 10, 100, 1000].includes(n))
-              return reply(400, {
-                code: "BAD_FIXTURE",
-                message: "지원하지 않는 검증 계정",
-              });
-            count = n;
+            const count = Number(url.searchParams.get("count") ?? 1000);
+            if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
             stars = Array.from({ length: count }, (_, i) => makeStar(i));
             failed = false;
-            empty = false;
             revision++;
-            precompute();
+            cursors.clear();
           } else if (action === "change") {
             stars.push(makeStar(stars.length));
             revision++;
-            precompute();
+            cursors.clear();
           } else if (action === "status") {
-            const s = stars[0];
-            s.planetCount = 0;
-            s.colorLevel = 0;
-            s.sizeLevel = 0;
-            s.progressStage = "completed";
-            s.completedWithoutPlanets = true;
-            s.orbits = [];
+            if (stars[0])
+              stars[0] = {
+                ...stars[0],
+                planetCount: 0,
+                progressStage: "completed",
+                completedWithoutPlanets: true,
+              };
             revision++;
-            precompute();
+            cursors.clear();
+          } else if (action === "empty") {
+            stars = [];
+            revision++;
+            cursors.clear();
           } else if (action === "fail") {
             failed = true;
             revision++;
+            cursors.clear();
           } else if (action === "recover") failed = false;
-          else if (action === "empty") {
-            empty = true;
-            revision++;
-          } else
-            return reply(404, { code: "NOT_FOUND", message: "검증 기능 없음" });
+          else
+            return reply(404, {
+              code: "NOT_FOUND",
+              message: "검증 시나리오가 없습니다.",
+            });
           return reply(200, {
             skyVersion: version(),
             asOf: new Date().toISOString(),
@@ -170,98 +105,150 @@ export function galaxyFixturePlugin(): Plugin {
         }
         if (req.method !== "GET")
           return reply(405, {
-            code: "READ_ONLY",
-            message: "읽기 전용 개발 응답",
+            code: "READ_ONLY_FIXTURE",
+            message: "개발용 읽기 응답입니다.",
           });
         if (url.pathname === "/v1/me")
           return reply(200, {
             memberId: "galaxy-fixture-204-member",
             nickname: "은하확인",
             onboardingDone: true,
-            tutorialCompleted: count > 1,
+            tutorialCompleted: stars.length > 1,
           });
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
         if (url.pathname === "/v1/me/sky/tiles") {
-          const level = Number(url.searchParams.get("level")),
-            b: Box = {
-              x: Number(url.searchParams.get("x")),
-              y: Number(url.searchParams.get("y")),
-              w: Number(url.searchParams.get("w")),
-              h: Number(url.searchParams.get("h")),
-            };
+          const q = url.searchParams,
+            required = ["level", "x", "y", "w", "h", "version"];
+          const level = Number(q.get("level")),
+            limit = q.has("limit") ? Number(q.get("limit")) : 1000;
+          const box: Box = {
+            x: Number(q.get("x")),
+            y: Number(q.get("y")),
+            w: Number(q.get("w")),
+            h: Number(q.get("h")),
+          };
           if (
+            [...q.keys()].some(
+              (k) =>
+                ![...required, "limit", "cursor"].includes(k) ||
+                q.getAll(k).length !== 1,
+            ) ||
+            required.some((k) => !q.get(k)) ||
             !levels[level] ||
-            !Object.values(b).every(Number.isFinite) ||
-            b.w <= 0 ||
-            b.h <= 0 ||
-            b.w > 16384 ||
-            b.h > 16384
+            !Number.isInteger(limit) ||
+            limit < 1 ||
+            limit > 2000 ||
+            !Object.values(box).every(Number.isFinite) ||
+            box.w <= 0 ||
+            box.h <= 0 ||
+            box.w > 512 * 64 ||
+            box.h > 512 * 64
           )
-            return reply(400, {
-              code: "VALIDATION_FAILED",
-              message: "타일 경계 확인",
+            return bad();
+          if (q.get("version") !== version())
+            return reply(200, {
+              representation: "individual-stars",
+              version: version(),
+              level,
+              versionChanged: true,
+              stars: [],
+              nextCursor: null,
+              asOf: new Date().toISOString(),
             });
-          if (failed && b.x >= 0)
+          const scope = JSON.stringify([
+            "galaxy-fixture-204-member",
+            version(),
+            level,
+            box,
+            limit,
+          ]);
+          const continuation = q.has("cursor")
+            ? cursors.get(q.get("cursor")!)
+            : undefined;
+          if (
+            q.has("cursor") &&
+            (!continuation || continuation.scope !== scope)
+          )
+            return bad();
+          const offset = continuation?.offset || 0;
+          if (failed && (offset > 0 || box.x >= 0))
             return reply(503, {
               code: "DEPENDENCY_UNAVAILABLE",
-              message: "검증용 일부 영역 실패",
+              message: "개발용 중간 페이지 실패입니다.",
             });
-          const x = Math.floor(b.x / 256) * 256,
-            y = Math.floor(b.y / 256) * 256,
-            bounds = {
-              x,
-              y,
-              w: Math.ceil((b.x + b.w) / 256) * 256 - x,
-              h: Math.ceil((b.y + b.h) / 256) * 256 - y,
-            };
+          const x = Math.floor(box.x / 512) * 512,
+            y = Math.floor(box.y / 512) * 512;
+          const bounds = {
+            x,
+            y,
+            w: Math.ceil((box.x + box.w) / 512) * 512 - x,
+            h: Math.ceil((box.y + box.h) / 512) * 512 - y,
+          };
+          const items = stars
+            .filter(
+              (s) =>
+                s.x >= bounds.x &&
+                s.x < bounds.x + bounds.w &&
+                s.y >= bounds.y &&
+                s.y < bounds.y + bounds.h,
+            )
+            .sort((a, b) => compareTic(a.ticId, b.ticId));
+          const page = items.slice(offset, offset + limit);
+          let nextCursor: string | null = null;
+          if (offset + page.length < items.length) {
+            nextCursor = randomUUID();
+            cursors.set(nextCursor, { scope, offset: offset + page.length });
+          }
           return reply(200, {
+            representation: "individual-stars",
             version: version(),
-            versionChanged: url.searchParams.get("version") !== version(),
             level,
+            versionChanged: false,
             bounds,
-            stars:
-              empty || level < 3
-                ? []
-                : stars.filter(
-                    (s) =>
-                      s.x >= bounds.x &&
-                      s.x < bounds.x + bounds.w &&
-                      s.y >= bounds.y &&
-                      s.y < bounds.y + bounds.h,
-                  ),
-            clusters:
-              empty || level >= 3
-                ? []
-                : cache.get(level)!.filter((c) => intersects(c.bounds, bounds)),
+            rangeStarCount: items.length,
+            stars: page,
+            nextCursor,
             asOf: new Date().toISOString(),
           });
         }
         const match = url.pathname.match(/^\/v1\/me\/stars\/([^/]+)$/);
         if (match) {
-          const s = stars.find((s) => s.ticId === decodeURIComponent(match[1]));
-          if (!s || empty)
+          const star = stars.find(
+            (s) => s.ticId === decodeURIComponent(match[1]),
+          );
+          if (!star)
             return reply(403, {
               code: "STAR_LOCKED",
               message: "열리지 않은 별입니다.",
             });
           return reply(200, {
-            ticId: s.ticId,
+            ticId: star.ticId,
+            version: version(),
+            presentationVersion: PRESENTATION_VERSION,
             unlock: {
-              position: { x: s.x, y: s.y, depthZ: s.depthZ, layoutVersion },
+              position: {
+                x: star.x,
+                y: star.y,
+                depthZ: star.depthZ,
+                layoutOrdinal: star.layoutOrdinal,
+                layoutVersion: LAYOUT_VERSION,
+              },
             },
             planets: {
-              count: s.planetCount,
-              completedWithoutPlanets: s.completedWithoutPlanets,
-              items: s.orbits.map((o, i) => ({
-                ...o,
-                depthPpm: i === 0 ? null : 300 + i * 100,
+              count: star.planetCount,
+              completedWithoutPlanets: star.completedWithoutPlanets,
+              items: Array.from({ length: star.planetCount }, (_, i) => ({
+                candidateId: "fixture-204-p-" + i,
+                kind: i % 2 ? "unconfirmed" : "confirmed",
+                periodDays: i ? 2 + i * 3.25 : null,
+                depthPpm: i ? 300 + i * 100 : 0,
               })),
             },
           });
         }
         return reply(404, {
           code: "NOT_FOUND",
-          message: "204 검증 범위 밖의 API입니다.",
+          message: "204 범위 밖의 개발 응답입니다.",
         });
       });
     },

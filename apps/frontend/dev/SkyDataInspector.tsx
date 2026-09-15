@@ -5,6 +5,7 @@ import {
 } from "../src/features/sky-data/SkyDataPage";
 import {
   orthographicMatrix,
+  visibleStarCount,
   transform,
   viewportBounds,
 } from "../src/features/sky-data/geometry";
@@ -42,7 +43,7 @@ function Inspector({ data, store }: SkySceneProps) {
         { ...camera, scale: camera.overview ? initialScale : zoom.scale },
         dimensions.w,
         dimensions.h,
-        160,
+        256,
         Math.max(
           10000,
           Math.abs(meta.bounds.minX),
@@ -57,7 +58,6 @@ function Inspector({ data, store }: SkySceneProps) {
     void store.setView({
       level: zoom.level,
       box: viewportBounds(matrix),
-      overview: camera.overview,
     });
   }, [store, matrix, camera.overview, zoom.level]);
   const point = (x: number, y: number, z = 0) => {
@@ -71,12 +71,8 @@ function Inspector({ data, store }: SkySceneProps) {
     const response = await fetch(`/api/dev-sky-203/${kind}`, {
       method: "POST",
     });
-    if (kind === "change")
+    if (kind === "change" || kind === "fail")
       publishSkyChange(store.memberId, await response.json());
-    else if (kind === "fail") {
-      setCamera((c) => ({ ...c, x: c.x + 700, level: 2, overview: false }));
-      await store.refresh();
-    }
   }
   return (
     <div className="sky-inspector">
@@ -100,7 +96,7 @@ function Inspector({ data, store }: SkySceneProps) {
           >
             {meta.zoomLevels.map((z) => (
               <option key={z.level} value={z.level}>
-                {z.level} · {z.scale}배 · {z.clustered ? "군집" : "별"}
+                {z.level} · {z.scale}배 · 개별 별
               </option>
             ))}
           </select>
@@ -146,25 +142,9 @@ function Inspector({ data, store }: SkySceneProps) {
       <div ref={area} className="sky-data-area">
         <svg
           role="img"
-          aria-label="수신한 별과 공식 군집"
+          aria-label="수신한 개별 별"
           viewBox={`0 0 ${dimensions.w} ${dimensions.h}`}
         >
-          {data.clusters.map((c) => {
-            const p = point(c.x, c.y);
-            return (
-              <g key={c.nodeId}>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={Math.min(35, 8 + Math.sqrt(c.count))}
-                  fill="#a29fce66"
-                />
-                <text x={p.x} y={p.y + 4} textAnchor="middle" fill="white">
-                  {c.count}
-                </text>
-              </g>
-            );
-          })}
           {data.stars.map((s) => {
             const p = point(s.x, s.y, s.depthZ);
             return (
@@ -182,7 +162,8 @@ function Inspector({ data, store }: SkySceneProps) {
         </svg>
       </div>
       <p data-testid="sky-loaded">
-        현재 적재: 별 {data.stars.length}개 · 서버 군집 {data.clusters.length}개
+        현재 적재: 별 {data.loadedCount}개 · 가시{" "}
+        {visibleStarCount(data.stars, matrix)}개
       </p>
       <p data-testid="sky-camera">
         카메라 {camera.x},{camera.y} · 회전 {camera.rotation.toFixed(2)} ·
@@ -218,6 +199,12 @@ function Inspector({ data, store }: SkySceneProps) {
         <button onClick={() => void scenario("fail")}>일부 영역 실패</button>
         <button onClick={() => void scenario("recover")}>서버 응답 복구</button>
       </details>
+      {data.pageProgress.map((range, i) => (
+        <p key={i} data-testid="sky-page-progress">
+          페이지 {range.pages} · 범위 {range.loaded}/
+          {range.expected ?? "확인 중"}개
+        </p>
+      ))}
     </div>
   );
 }
