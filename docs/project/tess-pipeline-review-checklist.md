@@ -75,7 +75,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 ### 확정으로 취급하면 안 되는 내용
 
 - BLS 품질·종료·제거 QA 임계값, 고조파 처리, `transit_model` 필드·shape·잔차 모델 규약, 비닝 간격(10분은 실측 전 기본값), 주기 격자 규칙·미세 조정 허용 폭 산출식, discoverable 봉우리 판정 기준, 판 사이 후보 동일성 허용 오차, 대표 주기 정렬, AI 입력 곡선 단계·모델·승인 임계값은 근거와 합의 여부를 확인하기 전까지 제안/TBD로 표시한다. Silver 단계별 배열 비저장, 세그먼트·비닝 구조, Redis 캐시, 현재 판 재로드는 TBD가 아니다.
-- EC2 계산 위치(Java 내장/Python 사이드카), 동시 실행 상한, 계산 시간 목표, Gold 배열 적재 경로(배치 INSERT vs API)와 용량 실측은 DEC-35의 별도 아키텍처 결정 범위다. 29번에서 과학적 계약과 검증 기준을 제안하되 단독 확정하지 않는다.
+- 계산 위치는 Backend 전달형 Python Worker, Gold 배열 적재는 Publisher의 PostgreSQL 직접 INSERT와 단일 트랜잭션 전환으로 확정했다. 동시 실행 상한, 계산 시간 목표, 용량과 수치 허용 오차는 DEC-35 후속 실측 범위다.
 - `RESIDUAL_READY`에서 잔차곡선을 먼저 화면에 노출할지는 벤치마크로 남긴 TBD다. 캐시 저장소(Redis)와 이전 판 보존(폐기)은 v0.14에서 종결됐으므로 더 이상 TBD가 아니다.
 - 명세서 DAT-11(각 LightCurveSegment의 `fold_reference_time_btjd`)과 ERD(`publication_bundles` 판 단위 값 하나)가 다르다. 산정 입력이 비닝 전 관측 시각인지 비닝 후 bin 시각인지도 명시가 없다. 어느 쪽도 임의로 채택하지 않고 리뷰 질문(R9)으로 올린다.
 - AstroNet-Triage 점수 0.258·0.816·0.998은 PC/EB 대 junk 1차 triage 점수이며 서비스 임계값이나 행성 확률이 아니다.
@@ -102,7 +102,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 | 리뷰 담당자 | 구체적으로 확인할 질문 | 남겨야 할 결과 |
 | --- | --- | --- |
-| 김동혁 | ① Raw manifest에 source URI·checksum·TIC·Sector·제품 버전을 보존할 수 있는가? ② 단계별 residual·periodogram 배열을 저장하지 않고 반복 계산하며 removal QA 요약·종료 사유만 남기는 Spark 흐름이 가능한가? ③ ERD가 확정한 Gold DB 배열(`light_curve_segments`·`periodograms`·`candidates`·manifest)을 GCP 배치가 EC2 PostgreSQL에 어떤 경로로 적재하는가(배치 INSERT vs API)? 아키텍처 문서의 불변 규칙 5(Gold 파일)와 온라인 계산 문서(PostgreSQL+파일 캐시)를 ERD(DB 배열·Redis)에 맞춰 수정할 계획은? ④ 새 Sector는 기존 세그먼트 행을 재사용하고 TIC 결합 이후 반복 BLS·discoverable을 다시 계산할 수 있는가? ⑤ Spark와 AI worker 사이 전달 단위는 후보/TIC 중 무엇인가? ⑥ Worker(Node 2~6)에 BLS 커널의 Python 의존성을 어떻게 배포하는가(동일 설치 vs `--archives`)? | 저장·분산 실행·재처리 계약, Silver 비저장 실행 방식, Gold 적재 경로와 용량 실측 Task, 문서 정합화 담당 |
+| 김동혁 | ① Raw manifest에 source URI·checksum·TIC·Sector·제품 버전을 보존할 수 있는가? ② 단계별 residual·periodogram 배열을 저장하지 않고 반복 계산하며 removal QA 요약·종료 사유만 남기는 Spark 흐름이 가능한가? ③ Publisher의 PostgreSQL 직접 적재·단일 트랜잭션 전환과 커밋 후 `bundleId` 알림을 어떤 접속·인증·재시도 설정으로 운영할 것인가? ④ 새 Sector는 기존 세그먼트 행을 재사용하고 TIC 결합 이후 반복 BLS·discoverable을 다시 계산할 수 있는가? ⑤ Spark와 AI worker 사이 전달 단위는 후보/TIC 중 무엇인가? ⑥ Worker(Node 2~6)에 BLS 커널의 Python 의존성을 어떻게 배포하는가(동일 설치 vs `--archives`)? | 저장·분산 실행·재처리 계약, Silver 비저장 실행 방식, Gold 적재·알림 운영값과 용량 실측 Task |
 | 강재민 | ① `candidates.id`는 판이 바뀌어도 유지된다. 새 판 적재 시 같은 신호로 판단할 주기·중심 시각 허용 오차(ERD 미결 2)는 누가 정하는가? ② direct/harmonic/ambiguous 매칭 근거를 API가 보존할 수 있는가? ③ EC2가 `transit_model` JSONB 파라미터로 고정 모델을 생성해 나누는 입력 schema로 충분한가? 필드·shape·`residual_model_version` 정의를 함께 확정할 수 있는가? ④ Redis 캐시 키 격리, 판 `archived` 시 캐시 정리, 진행 중 세션의 최신 판 재로드를 구현할 수 있는가? ⑤ 후보 추가·discoverable 변경(비닝 revision 재계산 포함)의 재개 이벤트를 중복 없이 소비할 수 있는가? ⑥ 외부 라벨 변경 때 `ai_status` 중 무엇만 재계산할 것인가? ⑦ `fold_reference_time_btjd`의 정본은 명세서(세그먼트별)와 ERD(판별) 중 어느 쪽이며 비닝 전/후 어느 시각으로 산정하는가? ⑧ 판별 주기도 격자 규칙(로그 등간격·5,000점)과 미세 조정 허용 폭을 manifest에 어떤 형식으로 넣고 API가 어떻게 풀어 주는가? | Candidate/`transit_model`/API 계약, 격자 규칙, Redis 캐시·재개 이벤트, Silver–EC2 검증 구현과 DAT-15 해석 |
 | 백지웅 | ① 시간은 BTJD, period는 day, duration은 hour 또는 canonical 단위 하나로 전달하면 되는가? ② 비닝 세그먼트(`start_btjd`·`bin_minutes`·`flux`·NaN·`gaps`)를 받아 브라우저가 시각을 복원하고 위상 접기를 하는 계약으로 충분한가? 화면 축약 배열은 별도로 필요한가? ③ 빈 bin·관측 공백·Sector 경계를 어떤 형태로 표시할 것인가(품질 마스크는 전달되지 않음)? ④ 잔차/주기도 요청의 6단계 상태와 판 교체 재로드를 화면에 어떻게 보여줄 것인가? ⑤ 10분 비닝에서 1시간 통과(약 6점)의 위상 구간 선택과 근거 체크 3종(홀짝·2차 식·V/U형)이 가능한가? | 그래프 입력·단위 계약, 세그먼트·공백 표현, 온라인 계산 상태 UI 요구, 비닝 해상도 화면 검토 |
 

@@ -116,7 +116,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 
 #### 출력 및 실패 계약 제안
 
-[5절](README.md)의 스키마를 보완하는 최소 필드안이다. Gold 제공 범위는 요구사항 명세서 v1.0 EXP-01·DAT-11과 ERD v1.0 묶음 B를 그대로 적용한다. 아래 객체는 Silver 전처리 산출물이며, Gold로 가는 것은 이를 비닝한 `light_curve_segments`다. 배열 적재 경로·shape별 파라미터·호환 방식은 DEC-35 후속 Task에서 김동혁·강재민과 검토한다. 내부 디버깅용 trend와 품질 마스크는 v1.0의 Gold 자산이 아니다.
+[5절](README.md)의 스키마를 보완하는 최소 필드안이다. Gold 제공 범위는 요구사항 명세서 v1.0 EXP-01·DAT-11과 ERD v1.0 묶음 B를 그대로 적용한다. 아래 객체는 Silver 전처리 산출물이며, Gold로 가는 것은 이를 비닝한 `light_curve_segments`다. 배열은 Publisher가 PostgreSQL에 직접 적재하며 shape별 파라미터·호환 방식은 후속 계약에서 김동혁·강재민과 검토한다. 내부 디버깅용 trend와 품질 마스크는 v1.0의 Gold 자산이 아니다.
 
 | 대상 | 필드·타입·nullable 제안 | 의미 |
 |---|---|---|
@@ -176,7 +176,7 @@ Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 �
 | `candidate_aliases` | `multiplier`, `alias_period_days` | 추가 고조파(DEC-05) |
 | `external_signal_references`, `candidate_dispositions`, `candidate_status_history` | [5.8절](external-sources-and-ai.md)의 원천·외부값·disposition·조회일, DAT-09 통합 규칙·`rule_version`, 변경 이력 | DEC-20 대표값 정렬 |
 | `ai_executions`, `ai_evaluations` | [5.9절](external-sources-and-ai.md)의 `model_version`·`checkpoint`·`status`, 후보별 `score`·`verdict`(rejected/hold/approved)·`threshold_version`. 실패는 score null + 상태 | 모델·임계값(DEC-02·04) |
-| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각 위치(판 vs 세그먼트)와 산정 입력, 적재 경로(배치 INSERT vs API, ERD 미결 7) |
+| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각 위치(판 vs 세그먼트)와 산정 입력. Publisher가 직접 적재하고 같은 트랜잭션에서 current 전환 |
 
 nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions.status`로 미평가·입력 부족·실패를 구분하고, 세그먼트의 NaN은 빈 bin이며 `gaps`가 그 위치를 설명한다. 단위는 ERD 열 이름에 고정되어 있으므로 period/day와 duration/hour를 수식에서 암묵적으로 섞지 않는다.
 
@@ -235,7 +235,7 @@ EC2 상태는 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRA
 5. 같은 요청 재실행과 Redis cache hit가 같은 hash/수치를 반환하는지 확인한다. 새 판은 새 cache key를 사용하고 다른 판·계산 버전 사이에 cache를 재사용하지 않아야 한다. 판이 `archived`가 되면 그 판의 cache가 정리되고, Redis가 비면 같은 결과를 다시 계산하는지 확인한다.
 6. 하나라도 구조 불일치, 새 NaN/Inf, 허용 오차 초과, 의미 있는 상위 피크 변경이 있으면 실패로 기록한다.
 
-flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문서는 잔차 float64 유효점 `rtol=1e-8`, `atol=1e-10`을 시작값으로 두고 과학 담당 검토 후 확정하도록 했다. 먼저 같은 Python 커널·같은 CPU에서 반복해 `real[]`(float32) 저장·조회 전후의 수치 바닥을 측정하고, GCP amd64 배치와 EC2 x86_64 또는 실제 선택 런타임(Java 내장/Python 사이드카)의 차이를 측정한다. 그 분포보다 여유가 있으면서 과학적 후보 순위를 바꾸지 않는 잠정값을 등록한 뒤 별도 fixture에 적용한다. 결과를 본 뒤 각 사례마다 다른 허용치를 임의로 쓰지 않는다.
+flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문서는 잔차 float64 유효점 `rtol=1e-8`, `atol=1e-10`을 시작값으로 두고 과학 담당 검토 후 확정하도록 했다. 먼저 같은 Python 커널·같은 CPU에서 반복해 `real[]`(float32) 저장·조회 전후의 수치 바닥을 측정하고, GCP amd64 배치와 EC2 x86_64 Python Worker의 차이를 측정한다. 그 분포보다 여유가 있으면서 과학적 후보 순위를 바꾸지 않는 잠정값을 등록한 뒤 별도 fixture에 적용한다. 결과를 본 뒤 각 사례마다 다른 허용치를 임의로 쓰지 않는다.
 
 검증 보고서는 bundle/config/model hash, 실행 환경·dtype, 사례별 배열 크기, 오차 지표, 상위 피크 비교, cache 결과와 pass/fail 사유를 포함한다. canonical Silver 결과 생성과 과학적 수식은 윤성용, Gold 직렬화·전송은 김동혁, EC2 계산·cache와 API 상태는 강재민이 함께 검토하는 안을 제안한다.
 
@@ -247,7 +247,7 @@ flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문�
 | DEC-02/04 AI | 체크포인트·입력·라이선스 실행 가능성부터 확인, 점수 기준은 검증 후 | 윤성용·팀 / 모델 검증 Task와 실제 기한 확정 필요 |
 | DEC-03/05/06 분석 | BLS 설정·반복 제거·제거 QA·종료·고조파·후보 병합과 Silver–EC2 잔차 모델 검증 | 윤성용, 매칭·온라인 잔차는 강재민 / 벤치마크 Task와 실제 결정일 팀 확인 필요 |
 | DEC-20 외부 대표값 | 자체 BLS값을 기본으로 두고 외부값 덮어쓰기 여부 임의 확정 금지 | 윤성용·강재민 / 외부 구현 착수 전 결정, 날짜 팀 확인 필요 |
-| DEC-35 온라인 계산 | 캐시는 Redis로 종결. 남은 것은 계산 위치(Java/Python 사이드카)·동시 상한·시간 목표·배열 적재 경로·허용 오차. Python 커널 재사용 시 `joint_refit`이 아닌 고정 모델 제거 규약 | 김동혁·윤성용·강재민 / 별도 아키텍처 Task에서 기한 확정 |
+| DEC-35 온라인 계산 | Python Worker·Redis·Publisher 직접 적재는 종결. 남은 것은 동시 상한·시간 목표·용량·허용 오차. `joint_refit`이 아닌 `libs/astro-kernel`의 고정 모델 제거 규약 사용 | 김동혁·윤성용·강재민 / 후속 실측 Task에서 기한 확정 |
 | 비닝 간격·discoverable 해상도 | 대상 별의 가장 짧은 통과 지속시간 실측, 10분 bin에서 위상 구간 선택·근거 체크·봉우리 판정 가능성(ERD 미결 10, DAT-07) | 윤성용, 화면은 백지웅 / DEC-01 데이터 범위 결정과 같은 Task |
 | 무신호 별 비율 | 자체 BLS 채택 신호 0개 별의 비율 실측, DEC-16 시나리오 충족 여부, 높으면 DEC-03 임계값 조정(10.1 안건 12) | 윤성용·김동혁 / DEC-01 작업에 포함 |
 | `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`, 판별 주기도 격자(로그 등간격·5,000점)·`periodogram_config_version`, 미세 조정 허용 폭 산출식 | 윤성용·강재민 / Gold 적재 계약 MR 전 |
@@ -258,7 +258,7 @@ flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문�
 문서 적용·인터페이스 확인 요청:
 
 - 요구사항 명세서 v1.0의 DAT-05~07 내부 반복 BLS·제공 해상도 discoverable, DAT-10·11의 세그먼트·비닝·`transit_model` 파라미터, DAT-14의 Redis 캐시·현재 판 재로드는 확정 요구사항으로 적용하며 다시 합의하지 않는다. Silver 반복 중간 배열은 저장하지 않으며, 명세서가 수치를 정하지 않은 종료·제거 QA·비닝 간격·격자 규칙만 후속 벤치마크에서 정한다.
-- ERD v1.0은 Gold 본문을 PostgreSQL 배열로 확정했다. 아키텍처 문서의 불변 규칙 5(곡선 본문은 EC2 Gold 파일)·데이터 소유권 표와 온라인 계산 문서(PostgreSQL+파일 캐시 전제)는 ERD에 맞춰 수정이 필요하며, 이는 김동혁 담당이다. 데이터 관리 문서의 Gold 파일 트리는 더 이상 계약이 아니다.
+- ERD v1.0의 PostgreSQL Gold 배열 결정과 2026-09-15의 Publisher 직접 적재·Python Worker 결정을 아키텍처·온라인 계산·데이터 관리 문서에 반영했다.
 - 명세서 DAT-11(세그먼트별 `fold_reference_time_btjd`)과 ERD(`publication_bundles` 판 단위 값)의 불일치, 산정 입력(비닝 전/후 시각)을 강재민과 확정한다.
 - DAT-15의 외부 갱신에 `ai_status`가 포함된 문구와 DAT-09의 외부 상태/AI 분리 원칙에 대해, 재추론 없는 외부 라벨 변경 시 갱신 필드 범위를 확인한다.
 
