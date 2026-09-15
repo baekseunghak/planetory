@@ -64,6 +64,26 @@ class PlanetoryApplicationTests {
     }
 
     @Test
+    void erdV12ColumnsAndConstraintsExist() {
+        // 제출 행은 판·규칙 등 FK가 많아 동작 검증은 제출 API 테스트에서 한다. 여기서는 V4 적용 결과만 본다.
+        String columns = "SELECT table_name || '.' || column_name || ':' || data_type || ':' || is_nullable "
+                + "FROM information_schema.columns WHERE table_schema = ? AND column_name IN "
+                + "('world_x', 'world_y', 'layout_version', 'generation', 'source_peak_grid_index', "
+                + "'source_peak_suggested_duration_hours', 'duration_limit_hours') ORDER BY 1";
+        assertEquals(List.of(
+                "star_unlocks.generation:smallint:YES",
+                "star_unlocks.layout_version:text:NO",
+                "star_unlocks.world_x:numeric:NO",
+                "star_unlocks.world_y:numeric:NO",
+                "submissions.duration_limit_hours:numeric:YES",
+                "submissions.source_peak_grid_index:integer:YES",
+                "submissions.source_peak_suggested_duration_hours:numeric:YES"),
+                jdbc.queryForList(columns, String.class, SCHEMA));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace "
+                + "WHERE n.nspname = ? AND c.conname = 'ck_submissions_source_peak_all_or_none'", Integer.class, SCHEMA));
+    }
+
+    @Test
     @Transactional
     void nicknameIsUniqueRegardlessOfCase() {
         jdbc.update("INSERT INTO users(provider, provider_user_id, nickname) VALUES ('test', '1', 'Explorer')");

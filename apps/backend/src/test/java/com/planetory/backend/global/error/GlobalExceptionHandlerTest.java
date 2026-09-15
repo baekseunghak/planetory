@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 도메인 컨트롤러 테스트는 같은 방식으로 controllers를 지정하고 서비스는 {@code @MockitoBean}으로 대체한다.
  */
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeController.class)
+@AutoConfigureMockMvc(addFilters = false) // MVC 오류 변환만 검증. 인증 필터는 AuthIntegrationTest에서 검증한다.
 @Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.ProbeController.class})
 class GlobalExceptionHandlerTest {
 
