@@ -73,3 +73,14 @@ Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.ht
 - [203 완료 조건 대조·실제 연동 대기](docs/ticket-203-readiness.md)
 - [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
 - `npm run test:sky-data`: Chromium의 HTTP/화면 검사 6개. `npm run check`에도 포함한다.
+
+## W06-1 은하 렌더링
+
+`npm run dev:galaxy` → http://127.0.0.1:58272/sky. 203의 메타·타일을 소비하는 WebGL2 렌더러를 가상 HTTP 응답으로 확인한다. `204 렌더 검증 도구`에서 LOD와 선택 별의 내 행성을 확인한다. 일반 지도 조작은 205, 상세 화면은 206에서 연결한다.
+
+실제 서버 모드는 `VITE_SKY_RENDERER_ENABLED=true`와 기존 API/인증 설정을 사용한다. 기본 플래그는 false다. `npm run build:renderer`는 활성화한 운영 빌드를 만든다. 개발 도구와 가짜 API는 운영에서 제외한다.
+
+- [렌더 구조·205/206 연결·실행 설정](docs/galaxy-renderer.md)
+- [204 항목별 인수와 대기 사항](docs/ticket-204-readiness.md)
+- `npm run test:galaxy`: 렌더 검사9개. `npm run check`에 포함한다.
+- `npm run test:renderer-production`: 활성화한 운영 dist 검사. 기존 dist를 다시 빌드한다.

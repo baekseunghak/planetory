@@ -1,0 +1,31 @@
+.galaxy-inspector-controls {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.galaxy-inspector-controls summary,
+.galaxy-measure summary {
+  min-height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.galaxy-inspector-controls div {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.galaxy-inspector-controls button {
+  padding: 6px 12px;
+}
+.galaxy-measure {
+  font-size: 12px;
+  margin-top: 16px;
+}
+.galaxy-measure output {
+  display: block;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  color: #cbd5e1;
+  margin: 8px 0;
+}
