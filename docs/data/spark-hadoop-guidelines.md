@@ -29,10 +29,10 @@
 11. AI 입력과 추론 결과를 생성합니다.
 12. 화면용 곡선·주기도·후보표를 PublicationBundle로 검증합니다.
 13. 검증된 PublicationBundle과 manifest·checksum을 HDFS에 RF2로 백업합니다.
-14. EC2의 새 release 디렉터리로 전송합니다.
-15. 모든 checksum이 일치할 때 `previous`가 기존 `current`를 가리키게 갱신하고 `current`를 새 릴리스로 원자적으로 전환합니다.
+14. Publisher가 `planetory_gold_writer`로 PostgreSQL Primary에 직접 적재합니다.
+15. Gold 적재와 `staging → current → archived` 전환을 한 트랜잭션으로 커밋하고, 성공 뒤 Backend에 `bundleId`를 알립니다.
 
-공개 실패 시 기존 `current`와 `previous`를 유지합니다. EC2의 더 오래된 릴리스와 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않을 때 삭제하며, HDFS PublicationBundle 백업은 EC2 온라인 조회에 사용하지 않습니다.
+공개 실패 시 트랜잭션을 롤백해 기존 `current`를 유지합니다. Backend 알림은 멱등 재시도하며 archived 판의 Redis 캐시를 정리합니다. HDFS PublicationBundle 백업은 온라인 조회에 사용하지 않습니다.
 
 ## 작업 유형별 검증 자료
 
