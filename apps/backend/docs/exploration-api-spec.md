@@ -153,14 +153,14 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 
 ~~~text
 미발견 TIC 선택 = 기존 OPS-08·성과 지급 규칙
-새 위치 = 은하 배치 함수(회원, 발견 순번/안정된 시드, 배치 버전, 공간 인덱스)
-INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
+새 위치 = personal-spiral-v1(layoutOrdinal), 회원 잠금 내 안정 순번 배정
+INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal, layout_version)
 응답 x = world_x, y = world_y, depthZ = depth_z (`depthZ`는 단위 없는 정규화 깊이, -1.0 이상 1.0 이하)
 ~~~
 
-좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 현재 보존해야 할 운영 좌표 데이터가 없으므로 종전 방사형 좌표를 유지·이관하지 않는다. 출시 전 개발·테스트 행을 포함한 모든 계정의 열린 별은 같은 은하 배치 함수와 현행 `layout_version`으로 좌표를 생성하며, 한 회원 지도에 방사형 좌표와 은하형 좌표를 섞지 않는다. 기존 `generation`·`angle_deg`·`radius_jitter`는 신규 좌표 계산에 사용하지 않는다. `depthZ`는 천문학적 거리나 x/y 월드 단위가 아닌 단위 없는 정규화 깊이이며 -1.0 이상 1.0 이하의 유한 값이다.
+좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 현재 보존해야 할 운영 좌표 데이터가 없으므로 종전 방사형 좌표를 유지·이관하지 않는다. 출시 전 개발·테스트 행을 포함한 모든 계정의 열린 별은 같은 은하 배치 함수와 현행 `layout_version`으로 좌표를 생성하며, 한 회원 지도에 방사형 좌표와 은하형 좌표를 섞지 않는다. 기존 `generation`·`angle_deg`·`radius_jitter`는 신규 좌표 계산에 사용하지 않는다. `depthZ`는 -1.0~1.0의 단위 없는 정규화 깊이이며 프론트의 월드 z는 depthZ×256이다. 배치/연출 재현 자료의 검증 벡터를 사용하고 신규 입력 layoutOrdinal은 지도·locate·상세에서 같아야 한다.
 
-**타일(NFR-20d, v1.3 변경안).** 월드 좌표의 정사각 타일(한 변 tileSize)과 공간 인덱스를 유지한다. 모든 배율에서 개별 별을 반환하고 군집 노드로 바꾸지 않는다. 프론트는 뷰포트+20%를 월드 좌표로 역투영한 bbox를 보낸다. 큰 bbox는 상한 이내의 여러 요청으로 나누고 밀집 범위는 cursor로 나누어 받는다. 기존 PoC/구 API의 군집 구조와 직접 호환되지 않는다.
+**타일(NFR-20d, v1.3 변경안).** 월드 좌표의 정사각 타일(한 변 tileSize)과 공간 인덱스를 유지한다. 모든 배율에서 개별 별을 반환하고 군집 노드로 바꾸지 않는다. 프론트는 각 변에 20% 여백(폭/높이 1.4배)을 둔 뷰포트를 월드 좌표로 역투영한 bbox를 보낸다. 큰 bbox는 상한 이내의 여러 요청으로 나누고 밀집 범위는 cursor로 나누어 받는다. 기존 PoC/구 API의 군집 구조와 직접 호환되지 않는다.
 
 `GET /api/v1/me/sky` — 홈 진입 및 지도 버전 무효화 시 조회.
 
@@ -169,19 +169,49 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
   "representation": "individual-stars",
   "version": "u-101:57",
   "starCount": 57,
-  "bounds": {"minX": -820.0, "maxX": 1800.0, "minY": -770.2, "maxY": 805.9},
+  "bounds": {
+    "minX": -820,
+    "maxX": 1800,
+    "minY": -1600,
+    "maxY": 805.9
+  },
   "tileSize": 512,
-  "zoomLevels": [{"level": 0, "scale": 0.25}, {"level": 1, "scale": 0.5},
-                 {"level": 2, "scale": 1.0}, {"level": 3, "scale": 2.0}, {"level": 4, "scale": 4.0}],
-  "centerTicIds": ["100000001"],
+  "zoomLevels": [
+    {
+      "level": 0,
+      "scale": 0.25
+    },
+    {
+      "level": 1,
+      "scale": 0.5
+    },
+    {
+      "level": 2,
+      "scale": 1
+    },
+    {
+      "level": 3,
+      "scale": 2
+    },
+    {
+      "level": 4,
+      "scale": 4
+    }
+  ],
+  "centerTicIds": [
+    "100000001"
+  ],
   "firstVisit": false,
-  "asOf": "2026-09-15T05:20:00Z"
+  "asOf": "2026-09-15T05:20:00Z",
+  "layoutVersion": "personal-spiral-v1",
+  "presentationVersion": "personal-galaxy-v1"
 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
 | `representation` | v1.3 응답 구분값 individual-stars. 구 응답의 누락 값이나 clusters를 빈 지도 정상 응답으로 처리하지 않는다 |
+| `layoutVersion` / `presentationVersion` | 메타의 필수 값 personal-spiral-v1 / personal-galaxy-v1. 호환되지 않는 값/누락은 계약 오류로 안내한다. 모든 타일의 순번/좌표가 이 배치 버전에 속한다 |
 | `version` | 회원의 발견/상태 갱신 버전. 동일 시각의 여러 변경도 구분하는 단조 증가 개정값. 프론트는 문자열 동등 비교만 한다 |
 | `starCount` | 회원의 전체 발견 수. 현재 적재 수·가시 수·범위 수와 다르다 |
 | `bounds` | 전체 발견 별의 월드 경계. 카메라 전체 보기의 범위이며 자체에 별 데이터가 없다 |
@@ -193,12 +223,12 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 
 **첫 방문 안내(HOME-09).** 서버가 갖는 상태는 `onboarding_done` 하나다. 말풍선 단계(별 선택 → 봉우리 → 구간 → 판단 → 제출)의 진행은 브라우저 세션 상태이며 서버에 저장하지 않는다. 완료로 저장하는 시점은 **튜토리얼 1번 별의 첫 제출이 성공했을 때**(6.3절 트랜잭션에서 서버가 `onboarding_done=true`) 또는 사용자가 안내를 닫았을 때(서비스 API의 설정 변경)이며, 별을 클릭한 것만으로 끝내지 않는다. 마이페이지 [사용법 다시 보기]는 GIF+텍스트 5단계를 읽는 별도 화면이다. `onboarding_done`을 변경하지 않고 설정 PATCH·분석 세션 생성·제출·성과 지급·별 발견을 호출하지 않는다. 서비스 API 3.1절의 true만 허용하는 완료 규칙을 유지한다. `tutorialCompleted`(튜토리얼 5개 완료)와는 다른 값이다.
 
-`GET /api/v1/me/sky/tiles?level=2&x=1100&y=-600&w=1400&h=900&version=u-101:57&limit=1000`
+`GET /api/v1/me/sky/tiles?level=2&x=600&y=-1000&w=350&h=450&version=u-101:57&limit=1000`
 
 | 쿼리 | 필수 | 뜻 |
 |---|---|---|
 | `level` | 예 | 배율 단계(0 = 최대 축소). `zoomLevels`의 값 |
-| `x`, `y`, `w`, `h` | 예 | 요청 범위의 월드 좌표 경계 상자. 프론트가 뷰포트+20% 여백을 카메라 역투영해 계산한다. `w`·`h` 상한은 `tileSize × 64` |
+| `x`, `y`, `w`, `h` | 예 | 요청 범위의 월드 좌표 경계 상자. 프론트가 각 변 20% 여백과 깊이 [-1,1] 전체를 z=depthZ×256으로 환산한 공통 카메라로 역투영한다. `w`·`h` 상한은 `tileSize × 64` |
 | `version` | 예 | 지도 메타의 version. 다르면 아래 버전 변경 응답으로 재시작을 요구한다 |
 | `limit` | 아니오 | 한 페이지 별 수. 기본 1000, 1~2000 정수. 전송 분할 상한이며 화면 별 수·성능 인수 예산이 아니다 |
 | `cursor` | 아니오 | 첫 페이지는 생략. 다음은 nextCursor를 그대로 사용하며 회원·version·level·bbox·limit를 바꾸지 않는다 |
@@ -208,15 +238,30 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 ```json
 {
   "representation": "individual-stars",
-  "version": "u-101:57", "level": 2, "versionChanged": false,
-  "bounds": {"x": 1024.0, "y": -1024.0, "w": 1536.0, "h": 1536.0},
+  "version": "u-101:57",
+  "level": 2,
+  "versionChanged": false,
+  "bounds": {
+    "x": 512,
+    "y": -1024,
+    "w": 512,
+    "h": 512
+  },
   "rangeStarCount": 1,
-  "stars": [{"ticId": "123456789", "x": 1612.4, "y": -233.0, "depthZ": 0.42,
-    "planetCount": 2, "colorLevel": 2, "sizeLevel": 2,
-    "progressStage": "in_progress", "completedWithoutPlanets": false,
-    "marker": null, "reopened": false,
-    "orbits": [{"candidateId": "c-401", "periodDays": 3.0021, "kind": "confirmed"},
-               {"candidateId": "c-402", "periodDays": 11.8, "kind": "unconfirmed"}]}],
+  "stars": [
+    {
+      "ticId": "123456789",
+      "x": 704.172009167,
+      "y": -935.042108582,
+      "depthZ": -0.05916475342,
+      "planetCount": 2,
+      "progressStage": "in_progress",
+      "completedWithoutPlanets": false,
+      "marker": null,
+      "reopened": false,
+      "layoutOrdinal": 7
+    }
+  ],
   "nextCursor": null,
   "asOf": "2026-09-15T05:20:00Z"
 }
@@ -227,19 +272,26 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | 필드 | 규칙 |
 |---|---|
 | `planetCount` | HOME-05: 맞춘 확정 행성 + "행성 같음"으로 판단한 미확정. `user_star_progress.planet_count` |
-| `colorLevel` | 0/1/2/3/4(4 이상). `completedWithoutPlanets=true`면 살구색 별도 상태 |
+| `layoutOrdinal` | 저장한 회원별 안정 순번 0~2147483647. 전송 배열 순서나 현재 별 수가 아니다. personal-galaxy-v1 색·기준 크기의 시드 입력이며 새로고침/페이지 순서로 바뀌지 않는다 |
 | `completedWithoutPlanets` | `progress_stage=completed`이고 `planet_count=0`. HOME-05 "행성으로 표시할 신호 없이 탐색 완료". FP 성과 여부(`fp_success`)와 무관하며, 미확정 UNSURE 판단·FP 오판으로 완료된 별도 포함한다(지웅 리뷰 7) |
 | `marker` | `{"type":"tutorial","seq":n}` 또는 `{"type":"challenge"}` 또는 null |
 | `reopened` | `reopened_at`이 있고 아직 새 제출이 없음. 퀘스트 "다시 열린 별" 카드와 같은 기준 |
-| `orbits` | 행성으로 그리는 후보만: 확정 행성 + 회원이 LIKELY_PLANET으로 판단한 미확정. FP·UNLIKELY·UNSURE는 없음(HOME-05). 툴팁의 `depthPpm`은 상세 조회에서 받는다 |
+| 삭제 필드 | 지도 타일의 colorLevel·sizeLevel·orbits는 v1.3 최종 표현안에서 제거한다. 전체 지도는 행성/궤도를 그리지 않고 내 행성은 선택 상세의 planets.items에서만 받는다. 클라이언트는 이 구 필드를 요구하거나 기본값으로 상태 색을 복원하지 않는다 |
 
 **페이지·동시 변경 규칙.** stars는 ticId의 숫자값 오름차순으로 안정 정렬하고 불투명 cursor를 사용한다. cursor는 인증 회원·version·level·원 요청 bbox·limit에 묶는다. 같은 버전에서 반복 요청은 같은 집합을 반환한다. 잘못된/다른 범위 cursor는 400 VALIDATION_FAILED이며 다른 회원 자료를 노출하지 않는다. 클라이언트는 cursor를 만들거나 해석하지 않는다. 정상 페이지에 clusters/nodeId/counts 필드는 없다.
 
 요청 version이 현재 회원 버전과 달라지면 기존 cursor를 새 데이터에 적용하지 않고 다음과 같이 응답한다. 이 stars 빈 배열은 빈 지도나 범위 적재 완료를 뜻하지 않는다. 프론트는 이전 cursor를 폐기하고 메타를 재조회한 뒤 현재 가시 범위를 첫 페이지부터 요청한다. 변경 전 정상 화면은 갱신 중 표시와 함께 유지할 수 있지만 서로 다른 버전의 데이터를 합치지는 않는다.
 
 ```json
-{"representation":"individual-stars","version":"u-101:58","level":2,"versionChanged":true,
- "stars":[],"nextCursor":null,"asOf":"2026-09-15T05:21:00Z"}
+{
+  "representation": "individual-stars",
+  "version": "u-101:58",
+  "level": 2,
+  "versionChanged": true,
+  "stars": [],
+  "nextCursor": null,
+  "asOf": "2026-09-15T05:21:00Z"
+}
 ```
 
 서버는 회원 version 확인과 페이지/범위 집계 읽기를 같은 일관된 DB 스냅샷에서 수행한다. 응답 전에 version이 바뀌어 기존 페이지를 현재 버전인 것처럼 내보내지 않는다. 이전 스냅샷을 cursor 수명 동안 보존할 의무는 없고 버전 변경 시 재시작한다. 새 별/표시 상태 변경 시 영향받은 타일 캐시·인덱스와 회원 version을 갱신한다. 공간 인덱스의 물리 구현·실행 계획은 ERD 항목 8에서 검증한다. 서버/웹 워커 어디에서도 여러 별을 대표 노드로 합쳐 응답·표시하지 않는다. 회전·기울기는 저장 좌표에 영향을 주지 않고 미발견 별은 모든 단계에서 제외한다.
@@ -251,7 +303,22 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 `GET /api/v1/me/sky/locate?ticId=123456789` — P1. 검색·필터(HOME-04)로 고른 별이 아직 받지 않은 범위에 있을 때 카메라를 옮기기 위한 조회. 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`.
 
 ```json
-{"ticId": "123456789", "x": 1612.4, "y": -233.0, "depthZ": 0.42, "level": 2, "bounds": {"x": 1536.0, "y": -512.0, "w": 512.0, "h": 512.0}}
+{
+  "ticId": "123456789",
+  "x": 704.172009167,
+  "y": -935.042108582,
+  "depthZ": -0.05916475342,
+  "level": 2,
+  "bounds": {
+    "x": 512,
+    "y": -1024,
+    "w": 512,
+    "h": 512
+  },
+  "layoutOrdinal": 7,
+  "layoutVersion": "personal-spiral-v1",
+  "version": "u-101:57"
+}
 ```
 
 **실패:** 회원의 별이 0개(가입 직후 튜토리얼 1번 열림 전)는 없다. 가입 처리가 튜토리얼 1번을 연다(9.4절). 경계 상자가 유한하지 않거나 상한을 넘으면 400 `VALIDATION_FAILED`, 잘못된 `level`은 400.
@@ -263,28 +330,86 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 ```json
 {
   "ticId": "123456789",
-  "asOf": "2026-09-11T05:20:00Z",
-  "star": {"sectorCount": 3, "sectors": [14, 41, 54], "tmag": 9.8, "teffK": 5600, "radiusRsun": 0.95},
-  "unlock": {"reason": "achievement", "triggerTicId": "100000002", "triggerAchievementId": "ach-31", "unlockedAt": "2026-09-09T03:00:00Z",
-             "position": {"x": 1612.4, "y": -233.0, "depthZ": 0.42, "layoutVersion": "spiral-v1"}},
-  "progress": {"stage": "in_progress", "currentCurveStep": 1, "completionReason": null, "reopenPending": false,
-               "reopenedAt": null, "completedAt": null},
-  "planets": {"count": 2, "completedWithoutPlanets": false,
-              "items": [{"candidateId": "c-401", "kind": "confirmed", "periodDays": 3.0021, "depthPpm": 1450},
-                        {"candidateId": "c-402", "kind": "unconfirmed", "periodDays": 11.8, "depthPpm": 380}]},
-  "achievement": {"count": 2, "grade": "S", "byType": {"confirmed": 1, "unconfirmed": 1, "fp": 0}},
+  "asOf": "2026-09-15T05:20:00Z",
+  "star": {
+    "sectorCount": 3,
+    "sectors": [
+      14,
+      41,
+      54
+    ],
+    "tmag": 9.8,
+    "teffK": 5600,
+    "radiusRsun": 0.95
+  },
+  "unlock": {
+    "reason": "achievement",
+    "triggerTicId": "100000002",
+    "triggerAchievementId": "ach-31",
+    "unlockedAt": "2026-09-09T03:00:00Z",
+    "position": {
+      "x": 704.172009167,
+      "y": -935.042108582,
+      "depthZ": -0.05916475342,
+      "layoutVersion": "personal-spiral-v1",
+      "layoutOrdinal": 7
+    }
+  },
+  "progress": {
+    "stage": "in_progress",
+    "currentCurveStep": 1,
+    "completionReason": null,
+    "reopenPending": false,
+    "reopenedAt": null,
+    "completedAt": null
+  },
+  "planets": {
+    "count": 2,
+    "completedWithoutPlanets": false,
+    "items": [
+      {
+        "candidateId": "c-401",
+        "kind": "confirmed",
+        "periodDays": 3.0021,
+        "depthPpm": 1450
+      },
+      {
+        "candidateId": "c-402",
+        "kind": "unconfirmed",
+        "periodDays": 11.8,
+        "depthPpm": 380
+      }
+    ]
+  },
+  "achievement": {
+    "count": 2,
+    "grade": "S",
+    "byType": {
+      "confirmed": 1,
+      "unconfirmed": 1,
+      "fp": 0
+    }
+  },
   "marker": null,
-  "actions": {"analysis": "continue", "resultAvailable": true, "boardOpen": true, "threadCount": 1}
+  "actions": {
+    "analysis": "continue",
+    "resultAvailable": true,
+    "boardOpen": true,
+    "threadCount": 1
+  },
+  "version": "u-101:57",
+  "presentationVersion": "personal-galaxy-v1"
 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
-| `unlock.position` | `x`·`y`·`depthZ`는 같은 회원의 같은 TIC에 대한 `star_unlocks.world_x`·`world_y`·`depth_z`를 그대로 반환한다. 지도 타일·위치 찾기·별 상세·근접 뷰에서 값이 같아야 한다. x/y는 서비스 월드 좌표 단위, `depthZ`는 -1.0 이상 1.0 이하의 단위 없는 정규화 깊이다 |
+| `unlock.position` | `x`·`y`·`depthZ`·`layoutOrdinal`·`layoutVersion`은 같은 회원/TIC의 저장 값을 반환하는 필수 필드다. 지도 타일·위치 찾기·별 상세·근접 뷰에서 값이 같아야 한다. x/y는 서비스 월드 좌표 단위, depthZ는 -1.0~1.0 정규화 깊이(렌더 월드 z=depthZ×256), layoutOrdinal은 회원별 안정 정수 0~2147483647이며 배열 인덱스가 아니다 |
+| `version` / `presentationVersion` | 필수 문자열. version은 해당 본인 상세를 읽은 회원별 지도 버전이며 메타·타일과 같은 의미의 불투명 값이다. presentationVersion은 personal-galaxy-v1이다. 상세·진행·개인 행성은 한 DB 스냅샷에서 읽는다 |
 | `star.*` | 표시 열은 ERD 미결 9(`확인 필요`). 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03) |
 | `planets.items` | 현재 인증 회원이 요청 TIC에서 수치 매칭한 고유 candidateId 중 HOME-05 표시 조건을 만족하는 목록. 확정 행성은 판단 오답/성과 미인정이어도 포함, 미확정은 6.3절의 회원별 후보 최신 판단이 LIKELY_PLANET일 때만 포함(공개/성과 인정 필수 아님). FP·미확정 UNLIKELY_PLANET/UNSURE·미매칭·타인 발견·전체 후보표는 제외. 같은 candidateId 중복 없음 |
-| `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 기준 시각의 지도 planetCount/orbits·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
-| `planets.items[].candidateId` | 행성 객체·목록·확대 선택의 공통 식별자. 배열 인덱스/표시 순번을 ID로 쓰지 않음 |
+| `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 version의 지도 planetCount·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
+| `planets.items[].candidateId` | 행성 객체·목록·확대 선택의 공통 문자열 식별자. items는 이 문자열의 오름차순으로 안정 정렬한다. 배열 인덱스/표시 순번을 ID로 쓰지 않음 |
 | `planets.items[].kind` | confirmed / unconfirmed. 사용자는 "확인된 행성" / "아직 확인되지 않은 후보"로 읽는다. FP enum은 이 배열에 없음 |
 | `planets.items[].periodDays` | 반복 주기, 일 단위. 매칭 신호의 값이며 사용자 입력값이나 애니메이션 속도를 반환하는 필드가 아님 |
 | `planets.items[].depthPpm` | 어두워진 정도, ppm. 퍼센트로 보일 때 depthPpm / 10000 (1450ppm = 0.145%) |
@@ -293,9 +418,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | `actions.analysis` | `start`(제출 없음) / `continue`(진행 중) / `review`(완료). 재개 별은 `continue` |
 | `actions.boardOpen` | 한 명 이상 발견한 별이면 true(COM-01). 스레드 목록은 서비스 API |
 
-**시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·색·크기·궤도 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
+**시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
-0개 응답은 `planets: {"count": 0, "completedWithoutPlanets": false, "items": []}` 형태이며 진행 완료라면 completedWithoutPlanets만 true가 된다. 로딩/실패와 0개를 구분하고 재시도·은하 복귀를 제공한다. 응답 count/items 불일치·중복 ID는 계약 오류로 처리하며 부족한 수만큼 임의 행성을 생성하지 않는다. A 별 요청 뒤 B 별을 선택했을 때 A의 늦은 응답을 무시한다. 4.1절 asOf/skyVersion 최신성 규칙을 그대로 사용한다. 행성 선택은 이미 받은 items에서 처리하며 별도 행성 상세 API를 신설하지 않는다. [별지도 표현 계약 3절](../../../docs/development/sky-presentation-contract.md)과 AT-120~122를 따른다.
+0개 응답은 `planets: {"count": 0, "completedWithoutPlanets": false, "items": []}` 형태이며 진행 완료라면 completedWithoutPlanets만 true가 된다. 로딩/실패와 0개를 구분하고 재시도·은하 복귀를 제공한다. 응답 count/items 불일치·중복 ID는 계약 오류로 처리하며 부족한 수만큼 임의 행성을 생성하지 않는다. A 별 요청 뒤 B 별을 선택했을 때 A의 늦은 응답을 무시한다. 상세는 필수 version/presentationVersion을 반환한다. 지도와 version이 다르면 이전 상세를 그대로 합치지 않고 메타/타일/상세를 최신 버전으로 재조회한다. asOf만으로 같음을 판단하지 않는다. 행성 선택은 이미 받은 items에서 처리하며 별도 행성 상세 API를 신설하지 않는다. [별지도 표현 계약 3절](../../../docs/development/sky-presentation-contract.md)과 AT-120~122를 따른다.
 
 ### 4.3 퀘스트 패널
 
@@ -948,8 +1073,9 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
         AND tic_id NOT IN tutorial_stars.active AND tic_id != 진행 중 challenge_rounds.target_tic_id      (OPS-08 제외 규칙)
    무작위 n개 선택. 시드 정책은 operation_settings (재현용 seed = hash(userId, achievementId, seq))
    후보가 n보다 적으면 있는 만큼만 열고 반환값 unlockShortfall = n − 실제 수 (D-11). 성과 인정은 그대로
-5. 각 별에 대해 star_unlocks INSERT (unlock_reason=achievement, trigger_tic_id=성과 별, trigger_achievement_id, seq=0..n-1,
-   world_x, world_y, depth_z, layout_version=4.1절 은하 배치 함수 결과)
+5. 회원 잠금 안에서 실제 새 별마다 안정 layout_ordinal을 배정한다. 4.1절 personal-spiral-v1을 호출한다.
+   star_unlocks INSERT (unlock_reason=achievement, trigger_tic_id=성과 별, trigger_achievement_id, seq=0..n-1,
+   layout_ordinal, world_x, world_y, depth_z, layout_version=4.1절 은하 배치 함수 결과)
    ON CONFLICT (trigger_achievement_id, seq) DO NOTHING          -- 재처리 중복 방지 (GRD-08)
 6. 반환
 ```
@@ -984,6 +1110,8 @@ for each user_star_progress(tic_id):
 ```
 
 ### 9.4 내부 계약: 튜토리얼·챌린지 발견 (HOME-02·06, CHL-01)
+
+모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다.
 
 | 사건 | 처리 |
 |---|---|
@@ -1054,7 +1182,7 @@ for each user_star_progress(tic_id):
 | `GET /map/tiles?zoom&x&y&w&h&keys` | `GET /me/sky/tiles?level&x&y&w&h&version&limit&cursor` | keys는 제거한다. version 필수, limit/cursor는 페이지 규칙에 따라 사용 |
 | `GET /map/galaxy` 전체 배열 | 없음 | NFR-20d 위반이라 폐기(서진 D04) |
 | `MapNode.counts {planet, done, new}` | 제거 | 군집 구성을 반환·표시하지 않는다. 개별 별 상태와 전체/범위/현재 적재 수는 별도 값 |
-| `GalaxyStar.warmth`, `size` | `colorLevel`, `sizeLevel` | 행성 수 기준(HOME-05). 연출용 색은 폐기 |
+| `GalaxyStar.warmth`, `size` | 저장 x/y·layoutOrdinal → 프론트 appearance | 연출은 personal-galaxy-v1로 유지한다. 순번/저장 좌표로 안정 계산하고 행성 수는 별도 정보 값이다 |
 | `StarNode.status unexplored/in_progress/complete` | `progressStage unexplored/in_progress/completed` | ERD enum |
 | `StarNode.typeCounts` | `achievement.byType` | 인정된 성과만 |
 | `StarDetail.parentId`, `source` | `unlock.triggerTicId`, `unlock.reason` | |
@@ -1163,3 +1291,7 @@ for each user_star_progress(tic_id):
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
 | 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 사용자 결정에 따라 은퇴 경로는 분석 복귀·재도전 `{A,C}`와 History CURRENT 원본으로, 기준 시각은 Bundle 공통값으로, duration 상한은 사용자가 고른 봉우리의 추천값 3배로 확정하고 SRS·ERD·API·정적 JSON 예제를 함께 갱신 |
+
+### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
+
+개인 시제품 기준·연출 색/크기·선택 시에만 내 행성 표시를 반영한다. 원본 캡처·배치/투영 벡터·합성 HTTP 사례는 [별지도 기준 자료](../../../docs/development/sky-reference/README.md)를 따른다. 메타 layoutVersion/presentationVersion, 타일·locate·상세 layoutOrdinal, 상세 version을 필수로 연결하고 구 colorLevel/sizeLevel/orbits는 타일에서 제거한다. 필드 이름만 치환하는 구 어댑터로는 호환되지 않는다. provider/consumer가 같은 fixture를 검토한 후 실제 서버·DB·브라우저 인수를 별도 수행한다.

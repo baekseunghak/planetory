@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | API 담당 경계·공통 약속 | [백엔드 API 문서](../../apps/backend/docs/README.md) | 담당 영역 인덱스·분담 제안 |
 | 서비스 백엔드 주요 API | [서비스 API 명세](../../apps/backend/docs/service-api-spec.md) | 팀 협의용 초안 |
-| 별 지도·탐사 코어 API | [탐사 코어 API 명세](../../apps/backend/docs/exploration-api-spec.md) | 팀 협의용 초안 Draft 0.4, 개별 별 페이지 계약 교차 리뷰 대기 |
+| 별 지도·탐사 코어 API | [탐사 코어 API 명세](../../apps/backend/docs/exploration-api-spec.md) | 팀 협의용 초안 Draft 0.4, 개별 별 페이지·layoutOrdinal·표현 버전·선택 행성 계약 교차 리뷰 대기 |
 | 분석 API·Mock | [분석 API 기록](analysis/README.md) | v0.12 실험 기록 |
 | 구판 분석 fixture의 v1 전환 | [v1.0 전환 기준](analysis/v1-migration.md) | 작성 당시 교체 지침 |
 | 분석 화면 상태 | [상태 모델](analysis/state-model.md) | v0.12 실험 기록 |
@@ -16,3 +16,5 @@
 API 정책은 [요구사항](../requirements/README.md), DB 제약은 [아키텍처](../architecture/README.md)가 우선한다. Mock 검증 통과는 실제 서버 구현이나 v1.0 계약 검증을 뜻하지 않는다.
 
 새 API를 확정할 때는 명세, 소비자·생산자 구현과 계약 검증을 같은 변경에서 갱신한다.
+
+별지도 제공자/소비자는 [개인 시제품 기준·합성 계약 예제](../development/sky-reference/README.md)를 함께 검토한다. 타일과 선택 상세의 데이터 범위를 구분한다.

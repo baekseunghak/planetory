@@ -210,7 +210,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </div>
     <dl class="meta">
       <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.3 · 상태표 v1.3 변경안</b></dd>
-      <dt>개정일</dt><dd><b>2026-09-14: 은하 배치·GIF 안내·내 행성 근접 뷰. 2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
+      <dt>개정일</dt><dd><b>2026-09-15: 개인 시제품 시각 기준·연출 색/크기·선택 시에만 행성 표시. 2026-09-14: 은하 배치·GIF 안내·내 행성 근접 뷰. 2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
     </dl>
@@ -271,10 +271,10 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </div>
   </div>
 
-  <div class="section-title"><h2>별 표식 규칙 (DEC-07 종결 · HOME-05)</h2><span>별 색은 그 별에서 찾은 행성 수만 뜻한다. 등급 A/S/SS/SSS는 그 별에서 인정된 성과 수(1/2/3/4)를 나타내는 문자이며 색에 넣지 않는다. 아직 못 찾은 별은 화면에 없다.</span></div>
+  <div class="section-title"><h2>별 표식 규칙 (DEC-07 · HOME-05 v1.3)</h2><span>별 색·크기는 은하 연출이다. 행성 수·탐색 상태·인정된 성과 수·등급은 호버/포커스·상세·목록의 문자로 전달한다. 아직 못 찾은 별은 화면에 없다.</span></div>
   <div class="tokens">
-    <div class="tok"><b>찾은 행성 수 → 별 색</b><div class="sky-legend" style="grid-template-columns:repeat(6,auto)"><svg data-m="p0"></svg><span>0</span><svg data-m="p1"></svg><span>1</span><svg data-m="p2"></svg><span>2</span><svg data-m="p3"></svg><span>3</span><svg data-m="p4"></svg><span>4+</span><svg data-m="p0 done"></svg><span>행성 없이 완료</span></div><div class="muted small" style="margin-top:6px">표시 행성 수 = 매칭한 확인된 행성 + 회원이 "행성 같음"으로 판단한 미확정 신호(HOME-05). 표시 개수는 성과 개수와 구분. 행성 아님·모르겠음은 세지 않음. 행성 없이 완료한 별은 살구색</div></div>
-    <div class="tok"><b>궤도 · 퀘스트 마커</b><div class="sky-legend" style="grid-template-columns:auto auto auto auto auto auto"><svg data-m="p2 orbit"></svg><span>행성 궤도 (회색 실선)</span><svg data-m="p0 chal"></svg><span>주간 챌린지 !</span><svg data-m="p0 tut"></svg><span>튜토리얼 번호</span></div><div class="muted small" style="margin-top:6px">궤도는 행성 수만큼, 광채 없음. 마커는 퀘스트 패널 카드와 같은 색(빨강·파랑)</div></div>
+    <div class="tok"><b>별 색·크기 = 은하 연출</b><p>금빛 중앙부·푸른/보라 나선 팔. 행성 수·완료·성과·등급으로 색과 크기를 바꾸지 않는다. 수와 상태는 호버/포커스·상세·목록 문자로 확인한다.</p></div>
+    <div class="tok"><b>궤도 · 퀘스트 마커</b><div class="sky-legend" style="grid-template-columns:auto auto auto auto auto auto"><svg data-m="p2 orbit detail"></svg><span>행성 궤도 (회색 실선)</span><svg data-m="p0 chal"></svg><span>주간 챌린지 !</span><svg data-m="p0 tut"></svg><span>튜토리얼 번호</span></div><div class="muted small" style="margin-top:6px">전체 지도는 모든 배율에서 궤도 0개. 선택 별 근접 뷰에서만 내 행성 수만큼 회색 궤도. 별의 작은 발광은 연출. 마커는 퀘스트 패널 카드와 같은 색(빨강·파랑)</div></div>
     <div class="tok"><b>축소 시 개별 별 유지 (DEC-32 v1.3 변경안)</b><div class="sky-legend" style="grid-template-columns:auto 1fr"><svg data-m="p2"></svg><span>먼 별도 독립된 작은 점으로 표시. 은하 팔과 별을 성운 덩어리로 합치지 않음.</span></div><div class="muted small" style="margin-top:6px">표현 상세도·가시 타일 페이지·공간 인덱스 유지</div></div>
   </div>
 
@@ -332,53 +332,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   <!-- ===== SC-02 ===== -->
   <section class="frame" id="s02">
     <div class="flabel"><span class="fid">SC-02</span><span class="fname">홈 별 지도</span><span class="fids">HOME-01 · HOME-02 · HOME-05 · HOME-07 · HOME-08 · GRD-08 · NFR-20</span><span class="tag p0">P0</span><span class="tag new">v1.2</span>
-      <span class="fdesc">검은 연속 캔버스. 중앙부·나선 팔·제한된 분산으로 은하 형태를 유지한다. 새 별의 자리는 서버가 계산·저장하며 기존 별은 움직이지 않는다. 별 색은 찾은 행성 수, 궤도는 행성 수만큼. 별을 누르면 같은 캔버스에서 그 별과 내 발견 행성으로 접근하고 상세 패널이 뜬다. 행성을 누르면 확대·개별 정보를 표시하고 은하 복귀 시 이전 카메라를 복원한다. 퀘스트 패널은 기본 접힘.</span></div>
-    <div class="scroll"><div class="wf">
-      <div class="gnb">
-        <span class="logo"><i></i>Planetory</span>
-        <span class="crumb"><b>홈</b></span>
-        <span class="menu" style="margin-left:auto"><span class="on">별 지도</span><span>커뮤니티</span><span>통계</span><span>마이페이지</span></span>
-        <span class="right"><span class="ico badge">🔔</span><span class="avatar"></span></span>
-      </div>
-      <div class="sky" style="height:620px">
-        <svg id="mainSky" width="1200" height="620" aria-label="별 지도"></svg>
-        <!-- 별 상세 패널 (선택한 별 옆) -->
-        <div class="panel" style="left:690px;top:150px;width:272px">
-          <div class="box-h"><span class="co">2</span>TIC 231663901 <span class="r"><span class="pill acc">진행 중</span></span></div>
-          <div class="box-b">
-            <dl class="kv"><dt>관측 회차</dt><dd>1 · 4 · 5</dd><dt>밝기 등급</dt><dd>9.8</dd><dt>발견 경로</dt><dd>튜토리얼 1</dd></dl>
-            <div class="row" style="margin-top:10px"><span class="co">3</span><span class="pill"><i style="background:var(--c2)"></i>찾은 행성 2</span><span class="pill soft">성과 2건 · S</span><span class="pill soft">곡선 단계 2</span></div>
-            <div class="muted small" style="margin-top:6px">표시 행성은 내 매칭 신호 기준이며 아직 못 찾은 후보 수는 공개하지 않습니다</div>
-            <div class="row" style="margin-top:10px"><span class="btn pri sm">분석 계속</span><span class="btn sm">결과</span><span class="btn sm">스레드</span></div>
-          </div>
-        </div>
-        <!-- 궤도 툴팁 -->
-        <div class="tip" style="left:520px;top:330px;width:235px;padding:5px 8px">
-          <span class="row" style="margin:0"><span class="co dim">4</span><span class="mono small">확인된 행성 · 3.21일 · 1450ppm</span></span>
-        </div>
-        <!-- 퀘스트 패널 접힘 -->
-        <div class="panel" style="right:16px;top:16px;width:250px;padding:8px 12px">
-          <div class="row" style="justify-content:space-between"><span class="row"><span class="co">5</span><b class="small">퀘스트</b><span class="pill soft" style="font-size:10.5px">챌린지 1 · 튜토리얼 5</span></span><span class="muted small">펼치기 ▾</span></div>
-        </div>
-        <!-- 범례 -->
-        <div class="panel" style="left:16px;bottom:16px;padding:8px 12px">
-          <div class="sky-legend" style="grid-template-columns:auto auto auto auto">
-            <span class="co" style="grid-column:1/5;justify-self:start">6</span>
-            <svg data-m="p0"></svg><span>행성 0</span>
-            <svg data-m="p1"></svg><span>행성 1</span>
-            <svg data-m="p2"></svg><span>행성 2</span>
-            <svg data-m="p3"></svg><span>행성 3</span>
-            <svg data-m="p4"></svg><span>행성 4+</span>
-            <svg data-m="p0 done"></svg><span>행성 없이 완료</span>
-          </div>
-        </div>
-        <!-- 툴바 -->
-        <div class="toolbar"><span class="ico sq">+</span><span class="ico sq">−</span><span class="ico sq" title="전체 보기">⤢</span></div>
-        <div class="tip" style="left:16px;top:16px;width:290px;border-style:dashed">
-          <span class="row" style="margin:0"><span class="co">1</span><span class="muted small">드래그 이동 · 휠 확대 · 드래그 회전·기울기 허용(v1.1, 자리·타일은 월드 좌표 고정). 새 별은 은하 배치 함수가 정한 위치에 추가하고 부모 별 바깥 배치를 강제하지 않음(v1.2). 키보드: 탭·엔터·방향키·+/− (NFR-08)</span></span>
-        </div>
-      </div>
-    </div></div>
+      <span class="fdesc">검은 연속 캔버스. 중앙부·나선 팔·제한된 분산으로 은하 형태를 유지한다. 새 별의 자리는 서버가 계산·저장하며 기존 별은 움직이지 않는다. 별 색과 크기는 연출이며 상태는 문자로 전달한다. 전체 지도는 모든 배율에서 궤도 0개. 별을 누르면 같은 캔버스에서 그 별과 내 발견 행성으로 접근하고 상세 패널이 뜬다. 행성을 누르면 확대·개별 정보를 표시하고 은하 복귀 시 이전 카메라를 복원한다. 퀘스트 패널은 기본 접힘.</span></div>
+    <div class="scroll"><div class="wf"><img src="../images/sky-reference-20260915/01-galaxy.png" alt="개인 은하 원본 시각 기준: 검은 배경과 금빛 중앙부·푸른 팔, 접힌 메뉴" style="display:block;width:100%;height:auto"></div></div>
     <div class="scroll" style="margin-top:20px"><div class="pair">
       <div class="wf half">
         <div class="sky" style="height:360px">
@@ -387,7 +342,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
             <span class="row" style="margin:0"><span class="co">7</span><b style="display:inline;font-family:inherit">개별 별 유지</b></span>
             <span class="muted small">축소해도 별을 합치지 않습니다</span>
           </div>
-          <div class="panel" style="left:12px;top:12px;padding:6px 10px;font-size:12px"><b>배율 0.55</b> <span class="muted">· 각 별의 위치를 작은 점으로</span></div>
+          <div class="panel" style="left:12px;top:12px;padding:6px 10px;font-size:12px"><b>드래그 회전 예시</b> <span class="muted">· 각 별의 위치를 작은 점으로</span></div>
         </div>
       </div>
       <div class="wf half">
@@ -416,9 +371,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(world_x·world_y·depth_z·layout_version), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(world_x·world_y·depth_z·layout_ordinal·layout_version), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">HOME-08</span><span>같은 캔버스에서 선택 별 근접 뷰·내 행성 공전·행성 선택 확대. 상세 패널은 가장자리에 도킹. 빈 하늘 클릭 또는 [은하로 돌아가기]는 이전 지도 카메라 복원. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
-      <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 색과 문자로, 등급(= 인정된 성과 수)·곡선 단계는 문자로만. 유형별 등급은 없음. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
+      <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 문자로, 등급(= 인정된 성과 수)·곡선 단계는 문자로만. 유형별 등급은 없음. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>행성에 마우스를 올리면 종류·주기·감광 깊이. 클릭/목록 선택으로 확대와 개별 정보를 표시. 궤도는 매칭한 확인된 행성 + "행성 같음" 판단 미확정 신호만. 성과 인정과 별도</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">HOME-07</span><span>퀘스트 패널 기본 접힘. 펼친 상태는 SC-09</span><span class="tag p0">P0</span></li>
       <li><span class="co">6</span><span class="nid">HOME-05 · NFR-08</span><span>범례. 색만으로 전달하지 않음</span><span class="tag p0">P0</span></li>
@@ -896,7 +851,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v1.3 변경안(2026-09-15)·상태표 v1.3 변경안·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.3 변경안: 개별 별 유지·군집 제거·페이지 로딩. v1.2 반영: 은하 배치·GIF 안내·내 행성 공전/확대/정보. 기존 v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v1.3 변경안(2026-09-15)·상태표 v1.3 변경안·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.3 변경안: 원본 캡처 기준·연출 색/크기·전체 지도 궤도 0개·개별 별 페이지 로딩. v1.2 반영: 은하 배치·GIF 안내·내 행성 공전/확대/정보. 기존 v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
@@ -946,9 +901,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   function mark(svg,cx,cy,types,s){
     s=s||1;var g=el('g',{});
     var n=/p4/.test(types)?4:/p3/.test(types)?3:/p2/.test(types)?2:/p1/.test(types)?1:0;
-    var col=PC[n];if(types.indexOf('done')>=0&&n===0)col=APRI;
+    var col='#a9bdff'; // 개수·완료와 무관한 연출 예시
 
-    if(types.indexOf('orbit')>=0){for(var i=1;i<=Math.max(1,n);i++)g.appendChild(el('circle',{cx:cx,cy:cy,r:(6+i*3.2)*s,fill:'none',stroke:ORB,'stroke-width':0.9,opacity:.8}));for(var j=1;j<=Math.max(1,n);j++){var a=j*2.1;g.appendChild(el('circle',{cx:cx+Math.cos(a)*(6+j*3.2)*s,cy:cy+Math.sin(a)*(6+j*3.2)*s,r:1.4*s,fill:STAR}));}}
+    if(types.indexOf('detail')>=0&&types.indexOf('orbit')>=0){for(var i=1;i<=Math.max(1,n);i++)g.appendChild(el('circle',{cx:cx,cy:cy,r:(6+i*3.2)*s,fill:'none',stroke:ORB,'stroke-width':0.9,opacity:.8}));for(var j=1;j<=Math.max(1,n);j++){var a=j*2.1;g.appendChild(el('circle',{cx:cx+Math.cos(a)*(6+j*3.2)*s,cy:cy+Math.sin(a)*(6+j*3.2)*s,r:1.4*s,fill:STAR}));}}
     g.appendChild(el('circle',{cx:cx,cy:cy,r:5.5*s,fill:col,opacity:.25}));
     g.appendChild(el('circle',{cx:cx,cy:cy,r:3.2*s,fill:col}));
     if(types.indexOf('chal')>=0){g.appendChild(el('circle',{cx:cx+7*s,cy:cy-8*s,r:5*s,fill:QR}));var t2=el('text',{x:cx+7*s,y:cy-5.4*s,'text-anchor':'middle','font-size':7.5*s,fill:'#fff','font-family':'IBM Plex Mono','font-weight':700});t2.textContent='!';g.appendChild(t2);}
@@ -956,21 +911,10 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     svg.appendChild(g);
   }
   function drawMainSky(svg){
-    var W=1200,H=620,cx=600,cy=300,r=rng(42);
-    // 발견한 별 100개인 회원의 정적인 와이어프레임 예시. 운영 배치 함수가 아니다.
-    for(var k=0;k<100;k++){
-      var rad=35+Math.sqrt((k+1)/100)*450;
-      var angle=(k%4)*Math.PI/2+rad/450*4.8+(r()-.5)*.20;
-      var x=cx+Math.cos(angle)*rad, y=cy+Math.sin(angle)*rad*.52;
-      var type=k===0?'p2 orbit tut1':k<5?'p0 tut'+(k+1):k===5?'p0 chal':k%13===0?'p1 orbit':'p0';
-      mark(svg,x,y,type,k<6?1.3:.85);
-    }
-    var lab=el('text',{x:16,y:H-35,'font-size':10.5,fill:DIM,'font-family':'IBM Plex Sans KR'});
-    lab.textContent='발견한 별 100개 예시 · 은하 배치 · 기존 위치 고정 · 발견 원인은 별도 기록';svg.appendChild(lab);
+    svg.appendChild(el('image',{href:'../images/sky-reference-20260915/01-galaxy.png',x:0,y:0,width:1200,height:620,preserveAspectRatio:'xMidYMid meet'}));
   }
   function drawIndividualOverview(svg){
-    var r=rng(77);
-    for(var k=0;k<100;k++){var rad=14+Math.sqrt(r())*165,ang=k%3*Math.PI*2/3+rad*.026+(r()-.5)*.22;svg.appendChild(el('circle',{cx:(295+Math.cos(ang)*rad).toFixed(1),cy:(180+Math.sin(ang)*rad*.62).toFixed(1),r:1.4,fill:PC[k%5],opacity:.9}));}
+    svg.appendChild(el('image',{href:'../images/sky-reference-20260915/02-rotated.png',x:0,y:0,width:590,height:360,preserveAspectRatio:'xMidYMid meet'}));
   }
   function drawMiniMap(svg){
     var cx=295,cy=250,pts=[['p0 tut1',cx-40,cy-24]];

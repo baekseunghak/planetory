@@ -11,7 +11,7 @@
 
 ### v1.2 → v1.3 (2026-09-15, 교차 리뷰 대상)
 
-군집 응답/공식 군집 사전 계산 의무를 제거하고 개별 별 타일·cursor 조회를 위한 회원별 월드 공간 인덱스와 일관된 version 읽기 규칙으로 변경한다. 5장 항목 8과 탐사 API 4.1절을 따른다. 이번 개정으로 좌표를 재생성하거나 DB 열·운영 데이터를 변경하지 않는다.
+군집 응답/공식 군집 사전 계산 의무를 제거하고 개별 별 타일·cursor 조회를 위한 회원별 월드 공간 인덱스와 일관된 version 읽기 규칙으로 변경한다. 개인 시제품 배치/연출의 안정 입력인 layout_ordinal과 UNIQUE(user_id,layout_ordinal)을 추가하는 설계다. 5장 항목 8과 탐사 API 4.1절을 따른다. 이번 문서 개정 자체로 실제 좌표·DB 열·운영 데이터를 변경하지 않는다. 스키마 적용은 C04-2의 후속 마이그레이션, 배치와 초기 준비는 C05-1, 발견 호출은 C07/C11이 맡는다.
 
 ### v1.1 → v1.2 (2026-09-14, `S15P21C206-33`)
 
@@ -356,8 +356,9 @@ erDiagram
         smallint seq "한 성과가 연 별 중 순번"
         numeric world_x "은하 월드 X"
         numeric world_y "은하 월드 Y"
-        numeric depth_z "월드 깊이"
+        numeric depth_z "정규화 깊이 -1~1"
         text layout_version "배치 버전"
+        integer layout_ordinal "회원별 안정 순번 UNIQUE user_id와 조합"
         smallint generation "이전 배치 세대(선택)"
         numeric angle_deg "이전 배치 각도(선택)"
         numeric radius_jitter "이전 배치 지터(선택)"
@@ -634,9 +635,9 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 | 열 | 비고 |
 |---|---|
-| planet_count | 별 색·궤도 기준 = 맞춘 확인된 행성 + "행성 같음"으로 판단한 미확정(공개 여부와 무관, HOME-05·결정 22). 최신 판단으로 덮어쓰므로 줄어들 수 있음 |
+| planet_count | 선택 근접 뷰의 내 행성 수 = 맞춘 확인된 행성 + "행성 같음"으로 판단한 미확정(공개 여부와 무관, HOME-05·결정 22). 최신 판단으로 덮어쓰므로 줄어들 수 있음 |
 | achievement_count | 이 별에서 인정된 성과 수(user_candidate_achievements COUNT 저장). 등급 문자 A/S/SS/SSS = 1/2/3/4 이상은 계산값이며 열로 두지 않음 |
-| fp_success | 실제 FP 신호의 판단 성공 성과가 1건 이상. "행성 없이 완료"(살구색) 표시용 |
+| fp_success | 실제 FP 신호의 판단 성공 성과가 1건 이상인 이력 값. 완료/행성 0 판정이나 지도 색 계산에 사용하지 않는다. completedWithoutPlanets는 progress_stage=completed AND planet_count=0에서 파생한다 |
 | progress_stage | unexplored / in_progress / completed |
 | current_curve_step | |
 | completion_reason | all_found / undiscoverable_only / skipped / NULL. empty_star 없음 |
@@ -651,6 +652,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | unlock_reason | tutorial / achievement / challenge. grade·completion 없음 |
 | trigger_tic_id, trigger_achievement_id, seq | 발견 경로. achievement면 trigger_achievement_id NOT NULL. seq는 한 성과가 연 별의 순번(0부터, stars_per_achievement가 2 이상일 때 사용)이며 UNIQUE(trigger_achievement_id, seq)로 재처리 중복을 막는다 |
 | world_x, world_y, depth_z, layout_version | 서버가 한 번 계산·저장한 은하 월드 좌표와 배치 버전. 모든 열린 별 행은 NOT NULL이고 x/y는 유한 숫자, depth_z는 유한한 -1.0 이상 1.0 이하. 클라이언트는 읽기만 하며 같은 (user_id, tic_id)의 모든 API가 같은 값을 반환한다 |
+| layout_ordinal | NOT NULL 정수 0~2147483647, UNIQUE(user_id,layout_ordinal). 발견 종류와 무관한 회원별 안정 순번. 다음 순번은 회원 잠금/원자적 카운터 또는 인덱스 끝값으로 배정한다. 좌표와 함께 확정·롤백하며 재처리 시 증가시키지 않는다. personal-spiral-v1 참조 배치와 연출 시드 입력이며 현재 별 수나 부모 세대가 아니다 |
 | generation, angle_deg, radius_jitter | 이전 방사형 스키마의 nullable 폐기 예정 열. 부모 관계는 trigger_tic_id로 유지하며 신규 은하 좌표 생성·조회·API 응답에 이 열을 사용하지 않는다. 열 제거는 별도 백엔드 스키마 정리 대상 |
 | unlocked_at | |
 
