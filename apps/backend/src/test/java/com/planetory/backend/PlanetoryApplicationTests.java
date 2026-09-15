@@ -65,7 +65,7 @@ class PlanetoryApplicationTests {
 
     @Test
     void erdV12ColumnsAndConstraintsExist() {
-        // 제출 행은 판·규칙 등 FK가 많아 동작 검증은 제출 API 테스트에서 한다. 여기서는 V2 적용 결과만 본다.
+        // 제출 행은 판·규칙 등 FK가 많아 동작 검증은 제출 API 테스트에서 한다. 여기서는 V4 적용 결과만 본다.
         String columns = "SELECT table_name || '.' || column_name || ':' || data_type || ':' || is_nullable "
                 + "FROM information_schema.columns WHERE table_schema = ? AND column_name IN "
                 + "('world_x', 'world_y', 'layout_version', 'generation', 'source_peak_grid_index', "
