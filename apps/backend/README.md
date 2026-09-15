@@ -96,4 +96,5 @@ docker compose --profile service up -d --wait service-db
 ## 더 보기
 
 - [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
-- [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/api-spec-ownership.md)
+- [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
+- [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점

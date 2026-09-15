@@ -4,9 +4,9 @@
 - 상태: **팀 협의용 초안 Draft 0.3** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.2 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.2](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, 이번 변경안 `S15P21C206-33`), [ERD v1.2](../../../docs/development/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 타일·군집 구조의 참조 구현), [온라인 파생 계산](../../../docs/development/online-derived-compute.md), [시스템 아키텍처](../../../docs/development/system-architecture.md)
+- 기준: [요구사항 명세서 v1.2](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, 이번 변경안 `S15P21C206-33`), [ERD v1.2](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 타일·군집 구조의 참조 구현), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
 - 이번 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
-- 분담·공통 약속: [API 명세 파트 분담](api-spec-ownership.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
+- 분담·공통 약속: [API 명세 파트 분담](README.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
 - 프론트 요구: 백지웅 분석 프론트 상세 명세 Draft 0.2의 협의 항목 Q03~Q12에 대한 답을 각 절에 `Qnn`으로 표기한다.
 
 - C02 결정 반영: [#133 계약 대조·검토 기록](exploration-contract-review.md). 은퇴 후보 처리, Bundle 공통 기준 시각, 사용자가 고른 봉우리 기준 duration 3배 선택 폭을 2026-09-14 확정해 이 문서와 [JSON 검증 예제](../../../docs/api/exploration/README.md)에 함께 반영했다. MR !32에서는 결정의 재승인이 아니라 문서·예제 사이의 누락과 충돌을 검토한다.

@@ -1,0 +1,128 @@
+[
+  {
+    "case": "unsupported_shape",
+    "expected_code": "unsupported_shape",
+    "model": {
+      "shape": "trapezoid",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "missing_parameter",
+    "expected_code": "missing_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06
+      }
+    }
+  },
+  {
+    "case": "unknown_parameter",
+    "expected_code": "unknown_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0,
+        "snr": 12.0
+      }
+    }
+  },
+  {
+    "case": "nonnumeric_period",
+    "expected_code": "invalid_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": "3.36",
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "duration_not_shorter_than_period",
+    "expected_code": "invalid_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 0.05,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "depth_makes_model_nonpositive",
+    "expected_code": "invalid_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1000000.0
+      }
+    }
+  },
+  {
+    "case": "zero_depth",
+    "expected_code": "invalid_parameter",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 0.0
+      }
+    }
+  },
+  {
+    "case": "baseline_not_unity",
+    "expected_code": "unsupported_baseline",
+    "model": {
+      "candidate_id": "example-b",
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "baseline": {
+        "kind": "joint_refit"
+      },
+      "residual_model_version": "box-divide-v0"
+    }
+  },
+  {
+    "case": "unknown_version",
+    "expected_code": "unsupported_version",
+    "model": {
+      "candidate_id": "example-b",
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "baseline": {
+        "kind": "unity"
+      },
+      "residual_model_version": "box-divide-v9"
+    }
+  }
+]
