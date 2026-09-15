@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | API 담당 경계·공통 약속 | [백엔드 API 문서](../../apps/backend/docs/README.md) | 담당 영역 인덱스·분담 제안 |
 | 서비스 백엔드 주요 API | [서비스 API 명세](../../apps/backend/docs/service-api-spec.md) | 팀 협의용 초안 |
-| 별 지도·탐사 코어 API | [탐사 코어 API 명세](../../apps/backend/docs/exploration-api-spec.md) | 팀 협의용 초안 Draft 0.2 |
+| 별 지도·탐사 코어 API | [탐사 코어 API 명세](../../apps/backend/docs/exploration-api-spec.md) | 팀 협의용 초안 Draft 0.4, 개별 별 페이지 계약 교차 리뷰 대기 |
 | 분석 API·Mock | [분석 API 기록](analysis/README.md) | v0.12 실험 기록 |
 | 구판 분석 fixture의 v1 전환 | [v1.0 전환 기준](analysis/v1-migration.md) | 작성 당시 교체 지침 |
 | 분석 화면 상태 | [상태 모델](analysis/state-model.md) | v0.12 실험 기록 |

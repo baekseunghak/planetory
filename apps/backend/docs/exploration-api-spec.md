@@ -1,11 +1,12 @@
 # Planetory 탐사 코어 API 명세
 
 - 작성일: 2026-09-11
-- 상태: **팀 협의용 초안 Draft 0.3** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.2 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
+- 상태: **팀 협의용 초안 Draft 0.4** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.3 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.2](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, 이번 변경안 `S15P21C206-33`), [ERD v1.2](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 타일·군집 구조의 참조 구현), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
-- 이번 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
+- 기준: [요구사항 명세서 v1.3](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.3](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
+- v1.3 개정: 2026-09-15. 개별 별 타일·cursor 응답 변경안은 [변경 검토 기록](../../../docs/development/sky-individual-stars-review.md)을 따른다. 관련 제공자/소비자 리뷰 후 적용하며 런타임 구현 완료가 아니다.
+- 이전 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
 - 분담·공통 약속: [API 명세 파트 분담](README.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
 - 프론트 요구: 백지웅 분석 프론트 상세 명세 Draft 0.2의 협의 항목 Q03~Q12에 대한 답을 각 절에 `Qnn`으로 표기한다.
 
@@ -159,71 +160,69 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 
 좌표는 저장 후 바꾸지 않는다. 회전·기울기·배율은 프론트 투영이며 서버 좌표와 분리한다. 튜토리얼·챌린지도 열린 별만 배치하고 종류·순서는 marker/퀘스트로 알린다. 현재 보존해야 할 운영 좌표 데이터가 없으므로 종전 방사형 좌표를 유지·이관하지 않는다. 출시 전 개발·테스트 행을 포함한 모든 계정의 열린 별은 같은 은하 배치 함수와 현행 `layout_version`으로 좌표를 생성하며, 한 회원 지도에 방사형 좌표와 은하형 좌표를 섞지 않는다. 기존 `generation`·`angle_deg`·`radius_jitter`는 신규 좌표 계산에 사용하지 않는다. `depthZ`는 천문학적 거리나 x/y 월드 단위가 아닌 단위 없는 정규화 깊이이며 -1.0 이상 1.0 이하의 유한 값이다.
 
-**타일(NFR-20d).** 월드 좌표를 정사각 타일(한 변 `tileSize`)로 나누고 서버가 배율 단계별 공식 쿼드트리 노드와 타일을 사전 계산한다. 프론트는 뷰포트+20% 여백을 **월드 좌표로 역투영한 경계 상자**를 보내고(회전·기울기 허용, SRS v1.2), 서버는 그 상자에 걸친 노드를 돌려준다. 축소 배율이 0.8 미만인 단계는 별 대신 사전 계산한 군집 노드를 준다(DEC-32, NFR-20a). 이 형식은 PoC의 `/map/manifest`·`/map/tiles`와 같으며 경로·필드명만 이 문서로 통일한다.
+**타일(NFR-20d, v1.3 변경안).** 월드 좌표의 정사각 타일(한 변 tileSize)과 공간 인덱스를 유지한다. 모든 배율에서 개별 별을 반환하고 군집 노드로 바꾸지 않는다. 프론트는 뷰포트+20%를 월드 좌표로 역투영한 bbox를 보낸다. 큰 bbox는 상한 이내의 여러 요청으로 나누고 밀집 범위는 cursor로 나누어 받는다. 기존 PoC/구 API의 군집 구조와 직접 호환되지 않는다.
 
-`GET /api/v1/me/sky` — 홈 진입 시 한 번.
+`GET /api/v1/me/sky` — 홈 진입 및 지도 버전 무효화 시 조회.
 
 ```json
 {
+  "representation": "individual-stars",
   "version": "u-101:57",
   "starCount": 57,
   "bounds": {"minX": -820.0, "maxX": 1800.0, "minY": -770.2, "maxY": 805.9},
   "tileSize": 512,
-  "zoomLevels": [{"level": 0, "scale": 0.25, "clustered": true}, {"level": 1, "scale": 0.5, "clustered": true},
-                 {"level": 2, "scale": 1.0, "clustered": false}, {"level": 3, "scale": 2.0, "clustered": false},
-                 {"level": 4, "scale": 4.0, "clustered": false}],
+  "zoomLevels": [{"level": 0, "scale": 0.25}, {"level": 1, "scale": 0.5},
+                 {"level": 2, "scale": 1.0}, {"level": 3, "scale": 2.0}, {"level": 4, "scale": 4.0}],
   "centerTicIds": ["100000001"],
-  "overview": [{"nodeId": "n-root-0", "x": 40.2, "y": -12.8, "count": 57, "counts": {"planet": 21, "done": 9, "new": 27},
-                "bounds": {"x": -820.0, "y": -770.2, "w": 2620.0, "h": 1576.1}}],
   "firstVisit": false,
-  "asOf": "2026-09-11T05:20:00Z"
+  "asOf": "2026-09-15T05:20:00Z"
 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
-| `version` | 회원의 발견 별 수·최근 갱신 시각에서 만든 값(PoC `revision`). 새 별이 열리거나 진행 상태가 바뀌면 달라진다. 타일 응답 캐시 키이자 무효화 신호(아래 "최신성") |
-| `overview` | 최대 축소 배율의 군집 노드. 첫 화면을 타일 요청 없이 그리기 위한 것 |
-| `firstVisit` | `user_settings.onboarding_done`의 반대값(HOME-09). 아래 "첫 방문 안내" 참조 |
-| `asOf` | 이 응답을 만든 서버 시각. 4.2·4.3 응답에도 같은 필드가 있어 여러 응답의 기준 시점을 비교할 수 있다(제안) |
+| `representation` | v1.3 응답 구분값 individual-stars. 구 응답의 누락 값이나 clusters를 빈 지도 정상 응답으로 처리하지 않는다 |
+| `version` | 회원의 발견/상태 갱신 버전. 동일 시각의 여러 변경도 구분하는 단조 증가 개정값. 프론트는 문자열 동등 비교만 한다 |
+| `starCount` | 회원의 전체 발견 수. 현재 적재 수·가시 수·범위 수와 다르다 |
+| `bounds` | 전체 발견 별의 월드 경계. 카메라 전체 보기의 범위이며 자체에 별 데이터가 없다 |
+| `zoomLevels` | level 0부터 연속된 1개 이상의 단계, scale은 양수 오름차순. 예시의 5개는 의무 단계 수가 아니다. 모든 단계는 개별 별이며 clustered 필드는 제거한다. 프론트 연속 줌/표현 상세도와 연결하되 별을 합치지 않는다 |
+| `firstVisit` | user_settings.onboarding_done의 반대값 |
+| `asOf` | 응답을 만든 서버 UTC 시각. 데이터 동일성은 version으로 검증하며 시각만으로 버전을 추정하지 않는다 |
 
-히트 테스트·호버용 공간 인덱스(NFR-20b)와 렌더 객체 재사용(NFR-20e)은 클라이언트 구현이며 서버는 노드 단위 데이터만 준다.
+구 overview 군집 배열은 제거한다. 메타 뒤에 초기 카메라 범위의 타일을 요청한다. 첫 표시를 위해 메타에 전체 별을 포함하지 않는다. 히트 테스트·호버 인덱스와 GPU 일괄 그리기는 클라이언트 구현이다.
 
 **첫 방문 안내(HOME-09).** 서버가 갖는 상태는 `onboarding_done` 하나다. 말풍선 단계(별 선택 → 봉우리 → 구간 → 판단 → 제출)의 진행은 브라우저 세션 상태이며 서버에 저장하지 않는다. 완료로 저장하는 시점은 **튜토리얼 1번 별의 첫 제출이 성공했을 때**(6.3절 트랜잭션에서 서버가 `onboarding_done=true`) 또는 사용자가 안내를 닫았을 때(서비스 API의 설정 변경)이며, 별을 클릭한 것만으로 끝내지 않는다. 마이페이지 [사용법 다시 보기]는 GIF+텍스트 5단계를 읽는 별도 화면이다. `onboarding_done`을 변경하지 않고 설정 PATCH·분석 세션 생성·제출·성과 지급·별 발견을 호출하지 않는다. 서비스 API 3.1절의 true만 허용하는 완료 규칙을 유지한다. `tutorialCompleted`(튜토리얼 5개 완료)와는 다른 값이다.
 
-`GET /api/v1/me/sky/tiles?level=2&x=1100&y=-600&w=1400&h=900&version=u-101:57`
+`GET /api/v1/me/sky/tiles?level=2&x=1100&y=-600&w=1400&h=900&version=u-101:57&limit=1000`
 
 | 쿼리 | 필수 | 뜻 |
 |---|---|---|
 | `level` | 예 | 배율 단계(0 = 최대 축소). `zoomLevels`의 값 |
 | `x`, `y`, `w`, `h` | 예 | 요청 범위의 월드 좌표 경계 상자. 프론트가 뷰포트+20% 여백을 카메라 역투영해 계산한다. `w`·`h` 상한은 `tileSize × 64` |
-| `version` | 아니오 | 지도 메타의 `version`. 다르면 서버가 현재 값으로 응답하고 `versionChanged: true` |
+| `version` | 예 | 지도 메타의 version. 다르면 아래 버전 변경 응답으로 재시작을 요구한다 |
+| `limit` | 아니오 | 한 페이지 별 수. 기본 1000, 1~2000 정수. 전송 분할 상한이며 화면 별 수·성능 인수 예산이 아니다 |
+| `cursor` | 아니오 | 첫 페이지는 생략. 다음은 nextCursor를 그대로 사용하며 회원·version·level·bbox·limit를 바꾸지 않는다 |
 
-`zoomLevels`는 level 0부터 연속된 최소 5개 단계를 제공한다. 프론트는 단계 수와 `scale`을 하드코딩하지 않고 지도 메타 응답을 따른다.
+단계 수와 scale을 하드코딩하지 않는다. 모든 level은 같은 회원의 실제 개별 별을 제공하며 배율이 낮아도 생략·군집화하지 않는다.
 
 ```json
 {
-  "version": "u-101:57",
-  "level": 2,
-  "versionChanged": false,
+  "representation": "individual-stars",
+  "version": "u-101:57", "level": 2, "versionChanged": false,
   "bounds": {"x": 1024.0, "y": -1024.0, "w": 1536.0, "h": 1536.0},
-  "stars": [
-    {"ticId": "123456789", "x": 1612.4, "y": -233.0, "depthZ": 0.42,
-     "planetCount": 2, "colorLevel": 2, "sizeLevel": 2,
-     "progressStage": "in_progress", "completedWithoutPlanets": false,
-     "marker": null, "reopened": false,
-     "orbits": [{"candidateId": "c-401", "periodDays": 3.0021, "kind": "confirmed"},
-                {"candidateId": "c-402", "periodDays": 11.8, "kind": "unconfirmed"}]},
-    {"ticId": "100000001", "x": 0.0, "y": 0.0, "depthZ": 0.5,
-     "planetCount": 1, "colorLevel": 1, "sizeLevel": 1,
-     "progressStage": "completed", "completedWithoutPlanets": false,
-     "marker": {"type": "tutorial", "seq": 1}, "reopened": false, "orbits": [{"candidateId": "c-9", "periodDays": 2.1, "kind": "confirmed"}]}
-  ],
-  "clusters": []
+  "rangeStarCount": 1,
+  "stars": [{"ticId": "123456789", "x": 1612.4, "y": -233.0, "depthZ": 0.42,
+    "planetCount": 2, "colorLevel": 2, "sizeLevel": 2,
+    "progressStage": "in_progress", "completedWithoutPlanets": false,
+    "marker": null, "reopened": false,
+    "orbits": [{"candidateId": "c-401", "periodDays": 3.0021, "kind": "confirmed"},
+               {"candidateId": "c-402", "periodDays": 11.8, "kind": "unconfirmed"}]}],
+  "nextCursor": null,
+  "asOf": "2026-09-15T05:20:00Z"
 }
 ```
 
-`bounds`는 서버가 요청 상자를 타일 격자에 맞춰 넓힌 실제 응답 범위다. 같은 별이 두 요청에 겹쳐 오면 `ticId`로 중복 제거한다.
+`bounds`는 요청 bbox를 타일 격자에 맞춰 넓힌 실제 응답 범위다. 왼쪽/아래 경계는 포함하고 오른쪽/위 경계는 제외한다. 응답의 모든 별 좌표는 이 범위 안이다. 같은 요청의 모든 페이지에서 bounds와 rangeStarCount는 같다. 겹친 bbox/타일 응답은 회원+version+ticId로 중복 제거한다. rangeStarCount는 해당 범위 전체 발견 수이며 stars.length는 이번 페이지 수다. nextCursor=null일 때만 해당 범위가 끝난다.
 
 | 필드 | 규칙 |
 |---|---|
@@ -234,20 +233,18 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_version)
 | `reopened` | `reopened_at`이 있고 아직 새 제출이 없음. 퀘스트 "다시 열린 별" 카드와 같은 기준 |
 | `orbits` | 행성으로 그리는 후보만: 확정 행성 + 회원이 LIKELY_PLANET으로 판단한 미확정. FP·UNLIKELY·UNSURE는 없음(HOME-05). 툴팁의 `depthPpm`은 상세 조회에서 받는다 |
 
-군집 타일(`clustered=true` 단계):
+**페이지·동시 변경 규칙.** stars는 ticId의 숫자값 오름차순으로 안정 정렬하고 불투명 cursor를 사용한다. cursor는 인증 회원·version·level·원 요청 bbox·limit에 묶는다. 같은 버전에서 반복 요청은 같은 집합을 반환한다. 잘못된/다른 범위 cursor는 400 VALIDATION_FAILED이며 다른 회원 자료를 노출하지 않는다. 클라이언트는 cursor를 만들거나 해석하지 않는다. 정상 페이지에 clusters/nodeId/counts 필드는 없다.
+
+요청 version이 현재 회원 버전과 달라지면 기존 cursor를 새 데이터에 적용하지 않고 다음과 같이 응답한다. 이 stars 빈 배열은 빈 지도나 범위 적재 완료를 뜻하지 않는다. 프론트는 이전 cursor를 폐기하고 메타를 재조회한 뒤 현재 가시 범위를 첫 페이지부터 요청한다. 변경 전 정상 화면은 갱신 중 표시와 함께 유지할 수 있지만 서로 다른 버전의 데이터를 합치지는 않는다.
 
 ```json
-{"clusters": [{"nodeId": "n-2-13-7", "x": 402.0, "y": -88.5, "count": 23, "counts": {"planet": 9, "done": 6, "new": 8},
-               "bounds": {"x": 256.0, "y": -256.0, "w": 256.0, "h": 256.0}}], "stars": []}
+{"representation":"individual-stars","version":"u-101:58","level":2,"versionChanged":true,
+ "stars":[],"nextCursor":null,"asOf":"2026-09-15T05:21:00Z"}
 ```
 
-| 필드 | 규칙 |
-|---|---|
-| `counts` | 서로 배타적인 세 값이며 합이 `count`다. `planet` = 표시 행성 1개 이상, `done` = 행성 없이 탐색 완료(살구색), `new` = 나머지(미탐사·진행 중). HOME-01 툴팁 "행성 있음/완료/미탐사". 이름은 PoC 쿼드트리와 같다 |
-| `bounds` | 군집이 덮는 월드 범위. 클릭하면 이 범위로 확대한다(HOME-01) |
-| `nodeId` | 쿼드트리 노드 키. 배치 시각과 무관하게 같은 별 집합이면 같은 값 |
+서버는 회원 version 확인과 페이지/범위 집계 읽기를 같은 일관된 DB 스냅샷에서 수행한다. 응답 전에 version이 바뀌어 기존 페이지를 현재 버전인 것처럼 내보내지 않는다. 이전 스냅샷을 cursor 수명 동안 보존할 의무는 없고 버전 변경 시 재시작한다. 새 별/표시 상태 변경 시 영향받은 타일 캐시·인덱스와 회원 version을 갱신한다. 공간 인덱스의 물리 구현·실행 계획은 ERD 항목 8에서 검증한다. 서버/웹 워커 어디에서도 여러 별을 대표 노드로 합쳐 응답·표시하지 않는다. 회전·기울기는 저장 좌표에 영향을 주지 않고 미발견 별은 모든 단계에서 제외한다.
 
-공식 군집의 수와 구성은 D-6에 따라 서버가 월드 좌표와 `layout_version`을 기준으로 배율별 쿼드트리에 사전 계산한다. 별이 새로 열리거나 기존 별의 `planet`·`done`·`new` 분류가 바뀌면 서버가 해당 가지의 군집 구성과 `counts`를 갱신하고, 프론트는 반환된 군집 노드를 그대로 렌더링한다. 웹 워커는 화면 투영·히트 테스트 같은 보조 계산에만 사용할 수 있으며 공식 군집의 수나 구성을 다시 계산하지 않는다. 타일 사전 계산은 공간 분할과 노드 소속을 뜻하며 별별 진행 상태와 `planetCount`를 고정한 스냅샷을 뜻하지 않는다. 공간 인덱스의 물리 구현과 실행 계획 검증은 ERD 항목 8을 따른다. 회전·기울기는 군집 구성에 영향을 주지 않으며 미발견 별은 어떤 단계에도 나오지 않는다(HOME-01, NFR-20a).
+프론트는 페이지 수신 중 로딩/부분 실패와 재시도를 제공한다. 페이지가 남았는데 완성된 은하 또는 별 없음으로 표시하지 않는다. 동일 범위의 최종 중복 제거 수가 rangeStarCount와 다르면 계약 오류로 처리한다. 로그아웃·회원 전환은 요청 취소와 회원 캐시 제거, 카메라/버전 변경은 늦은 이전 응답 폐기를 수행한다. 전송 범위/limit 상한을 화면 별 수 제한으로 사용하지 않는다.
 
 **최신성과 무효화(D-7).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
 
@@ -1053,10 +1050,10 @@ for each user_star_progress(tic_id):
 
 | PoC·현재 프론트 | 이 문서 | 비고 |
 |---|---|---|
-| `GET /map/manifest` → `bounds, count, revision, overview, tileSize` | `GET /me/sky` → `bounds, starCount, version, overview, tileSize` | 같은 구조 |
-| `GET /map/tiles?zoom&x&y&w&h&keys` | `GET /me/sky/tiles?level&x&y&w&h` | `keys`는 두지 않고 경계 상자만 |
+| GET /map/manifest, /map/tiles | GET /api/v1/me/sky, /api/v1/me/sky/tiles | v1.3 개별 별 표현은 군집 PoC와 응답 구조가 다르다. representation 확인·overview/clusters 제거·cursor 완료 처리·version 격리를 포함한 어댑터 변경과 fixture 교체가 필요하다 |
+| `GET /map/tiles?zoom&x&y&w&h&keys` | `GET /me/sky/tiles?level&x&y&w&h&version&limit&cursor` | keys는 제거한다. version 필수, limit/cursor는 페이지 규칙에 따라 사용 |
 | `GET /map/galaxy` 전체 배열 | 없음 | NFR-20d 위반이라 폐기(서진 D04) |
-| `MapNode.counts {planet, done, new}` | `clusters[].counts` 동일 | 이름·의미 채택 |
+| `MapNode.counts {planet, done, new}` | 제거 | 군집 구성을 반환·표시하지 않는다. 개별 별 상태와 전체/범위/현재 적재 수는 별도 값 |
 | `GalaxyStar.warmth`, `size` | `colorLevel`, `sizeLevel` | 행성 수 기준(HOME-05). 연출용 색은 폐기 |
 | `StarNode.status unexplored/in_progress/complete` | `progressStage unexplored/in_progress/completed` | ERD enum |
 | `StarNode.typeCounts` | `achievement.byType` | 인정된 성과만 |
@@ -1077,13 +1074,13 @@ for each user_star_progress(tic_id):
 |---|---|
 | 김동혁 | Redis 키·TTL·메모리 상한, 동시 계산 상한·큐, 계산 사이드카 호출 경로, Gold 적재 안(10장), archived 판 캐시 정리 |
 | 윤성용 | `transit_model` 파라미터, `discoverable` 판정, 매칭 허용 오차·N 상한(DEC-03), 봉우리 추출 규칙(5.4절), 잔차 일치 검증 |
-| 하서진 | 은하 배치 시각 기준·서버 저장 좌표, 군집/타일/배율 연결, 별 상세 패널 필드 |
+| 하서진 | 은하 배치 시각 기준·서버 저장 좌표, 개별 별/타일/배율 연결, 별 상세 패널 필드 |
 
 ## 12. 결정안과 미결
 
 ### 12.1 결정안 (리뷰 대상)
 
-SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결정안을 적고 리뷰어가 **반대할 때만** 댓글을 단다(역할 분배 문서 5장). 이 MR이 병합되면 아래는 확정이며, 바꾸려면 새 MR로 이 표를 고친다. 정본 변경이 필요한 항목은 없다.
+기존 결정 이력을 유지하며 이번 D-6 및 D-12의 별지도 변경은 SRS·ERD v1.3 변경안과 함께 교차 리뷰한다. 이번 개별 별 표현은 정본 변경을 포함한다. 문서 MR 병합이 실제 API 구현·인수 완료를 뜻하지 않는다. 지도와 무관한 기존 결정은 변경하지 않는다.
 
 | # | 항목 | 결정안 | 이유 | 반영 절 | 확인 |
 |---|---|---|---|---|---|
@@ -1092,13 +1089,13 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | D-3 | 잔차 상태 전달 | 폴링(`pollAfterSeconds`), `COMPLETED`에서만 곡선 전환, `RESIDUAL_READY` 선노출 없음 | DEC-35 초기값. SSE·선노출은 계산 시간 실측 후 | 7.2 | 백지웅·김동혁 |
 | D-4 | 회원별 잔차 요청 상한 | 회원당 진행 중 작업 1개. 초과 시 429 `RESIDUAL_QUEUE_FULL` + `retryAfterSeconds` | 전체 상한 2·대기 20(DEC-35)과 정합 | 7.1 | 김동혁 |
 | D-5 | 판 변경 능동 감지 | 탐사 API 모든 응답에 헤더 `X-Current-Bundle: {bundleId}`. 프론트는 잔차 폴링·곡선 응답에서 비교해 달라지면 5.1절 재조회 | 폴링이 이미 돌고 있어 추가 요청 없음. 쓰기 요청은 계속 `BUNDLE_CHANGED`로 거절 | 2.3 | 백지웅 |
-| D-6 | 군집 계산 위치·별 자리 | 서버가 월드 좌표·`layout_version` 기준의 배율별 공식 군집과 타일을 쿼드트리로 사전 계산하고, 새 별 발견 또는 기존 별의 `planet`·`done`·`new` 분류 변경 시 해당 가지의 군집 구성·집계를 갱신한다. 모든 계정의 별 자리는 SRS v1.2 은하 배치·월드 좌표 저장 계약으로 통일한다 | 프론트는 서버 군집을 렌더링하며 웹 워커는 화면 투영·히트 테스트만 보조한다. 종전 R0/부모 각도/0세대 고정 자리와 클라이언트 공식 군집 재계산을 사용하지 않는다 | 4.1, 9.2, 별지도 표현 계약 1절 | 하서진·강재민 |
+| D-6 | 별지도 표현·공간 조회 | **v1.3 변경안:** 서버 저장 은하 좌표·회원별 공간 인덱스/타일 캐시는 유지하고 공식 군집 사전 계산·응답은 제거한다. 모든 level은 개별 별 페이지다. 새 발견/상태 변경 시 영향 범위와 회원 version 갱신, 웹 워커는 투영·히트 테스트 보조 | 제공자/소비자 교차 리뷰 후 적용 | 4.1, 9.2, ERD 항목 8 | 하서진·강재민 |
 | D-7 | 지도 최신성 | `asOf`(지도 메타·타일·별 상세·퀘스트)와 `skyVersion`(제출·공개·재개 응답) 채택 | 하서진 통합 문서 B.6 요청. 없으면 화면이 매번 전체 재조회 | 4.1, 6.4 | 하서진 |
 | D-8 | 첫 방문 안내 완료 시점 | 둘 다. 튜토리얼 1번 별 첫 제출 성공 시 서버가 `onboarding_done=true`, 사용자가 닫으면 서비스 설정 API로 즉시 true. 별 클릭만으로는 끝내지 않음 | HOME-09 초기 안내 완료 뒤 자동 재노출 없음. GIF 사용법 다시 보기는 상태 변경·분석 실행 없음 | 4.1, 6.3 | 백승학·백지웅·하서진 |
 | D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
 | D-10 | 완료 별의 `no_candidate` | 저장하지 않고 409 `STAR_ALREADY_COMPLETED` | SUB-11 "다시 제출할 필요는 없다". 저장할 의미 없음 | 6.5 | 백지웅 |
 | D-11 | 미발견 별 부족 | 있는 만큼만 열고 응답 `achievement.unlockShortfall`에 부족 수. 성과는 인정 | OPS-08 제외 규칙 안에서 처리. 다음 정본 개정 때 한 문장 추가 제안 | 9.2 | — |
-| D-12 | 입력·요청 상한 | 메모 2,000 코드포인트(서비스 댓글과 동일), 타일 요청 상자 `tileSize × 64`, `locate`·타일 요청 크기 초과는 400 | 서비스 SB-D14와 통일 | 4.1, 6.1 | 하서진 |
+| D-12 | 입력·요청 상한 | 메모 2,000 코드포인트(서비스 댓글과 동일), 타일 요청 상자 `tileSize × 64`, 타일 페이지 limit 기본 1000·최대 2000, 잘못된 cursor 및 `locate`·타일 요청 크기 초과는 400 | 서비스 SB-D14와 통일 | 4.1, 6.1 | 하서진 |
 | D-13 | 챌린지 참여 수 집계 단위 | 대상 별의 **모든** 공식 신호 스레드에서 유효 공개 분석을 가진 회원 ID를 별 단위로 중복 제거(COUNT DISTINCT). 여러 신호에 참여해도 1명, 스레드별 N을 합산하지 않음. 공개 취소·숨김 후 다른 유효 공개가 남으면 포함 | SRS v1.1 안건 15 "회원당 1"의 구체화. 핫 토픽·판단 분포의 신호별 집계는 그대로 | 4.3 | 백승학·하서진 |
 | D-14 | 미계산 잔차의 표현 | 캐시 결과도 진행 중 작업도 없으면 `residual: {"status": null, "jobId": null}`. 조회(곡선·초안·히스토리 그래프)는 작업을 만들지 않으며 `null`은 2.4절 상태 열거형에 추가하지 않는다 | 가짜 `QUEUED`·`jobId`로 폴링을 유도하지 않음 | 2.4, 5.2, 6.8, 8.3 | 백지웅 |
 | D-15 | 타인 공개 그래프의 잔차 | 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청을 제공하지 않는다. 캐시된 잔차가 없으면 원본 곡선 또는 제출 스냅샷만 표시하고 둘 다 없으면 "그래프 제공 불가" 안내. 본인 분석의 잔차 요청 권한은 그대로 | 타인 요청으로 계산 자원을 쓰지 않음. 공개 내용(판단·메모)은 계속 표시 | 8.3, 8.5 | 백승학·백지웅 |
@@ -1160,6 +1157,7 @@ SRS·ERD v1.2 변경안과 충돌하지 않는 구현 세부는 담당자가 결
 | 2026-09-11 | Draft 0.1. SRS·ERD v1.0 기준 탐사 코어 API 초안. 별 지도 타일·세그먼트 곡선 DTO·제출 처리 순서·잔차 작업·히스토리 그래프·성과 지급 내부 계약 작성. 지웅 Q03~Q12 매핑 |
 | 2026-09-11 | 서비스 API MR !24 반영 정합: 오류 본문에서 `requestId` 제거, `IDEMPOTENCY_CONFLICT`·`REQUEST_IN_PROGRESS`·`GRAPH_TEMPORARILY_UNAVAILABLE`을 2.3절에 직접 정의, 8.3절에 판 교체 시 1회 재조회 규칙 추가(SB-D18), D-1 해소(SB-D17) |
 | 2026-09-13 | 백승학 통합 정합(`724c560`·`826ce1e`) 수용: 챌린지 참여 수 별 단위 COUNT DISTINCT, 미계산 잔차 `status: null`, 타인 공개 그래프 재계산 없음을 D-13~D-15로 결정안 표에 등록. 2.4절에 `null` 의미 추가. 통합 검토 작업 로그 파일은 변경 이력으로 대체하고 제거 |
+| 2026-09-15 | Draft 0.4 / SRS v1.3 변경안. 군집 overview/clusters/clustered 제거, representation 및 개별 별 cursor·rangeStarCount·version 일관성/부분 실패 명시. 모든 level에서 개별 별 제공. 4.1·D-6·D-12·PoC 대응표 정합화. 교차 리뷰 후 적용 |
 | 2026-09-14 | Draft 0.3 / SRS v1.2 변경안. 은하형 배치·최종 월드 좌표 저장으로 4.1·9.2·D-6 정합화. MR 리뷰를 반영해 모든 계정을 은하 배치로 통일하고, 같은 회원·TIC의 API별 좌표와 정규화 `depthZ` 범위를 일치시켰다. 공식 군집은 서버 사전 계산으로 확정하고 API 예시를 LOD 5단계로 수정했다. GIF 사용법 다시 보기의 false 재설정 문구를 제거하고 서비스 API의 단방향 완료 규칙과 4.1·D-8 정합화. 4.2에 내 매칭 행성 목록의 범위·개수·단위·빈/실패 상태·3D 표현 구분을 명시(새 API 없음). 구현 및 담당자 승인은 MR 리뷰 대상. |
 | 2026-09-11 | 12장을 "결정안(D-1~D-12, 리뷰 대상)"과 "미결(실측·타 담당 대기)"로 재편. 결정안: 본문 `requestId`, JSON 곡선, 폴링·선노출 없음, 회원별 잔차 1개, `X-Current-Bundle` 헤더, 서버 쿼드트리·자리 상수, `asOf`·`skyVersion`, 첫 방문 안내 완료 시점, 공개 응답에 성과·새 별 포함, 완료 별 `no_candidate` 409, 별 부족 시 `unlockShortfall`, 입력·요청 상한. 본문 2.3·6.3·7.1·9.2절에 대응 문장 추가 |
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
