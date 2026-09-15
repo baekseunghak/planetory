@@ -19,9 +19,10 @@ flowchart LR
     L --> P[검증된 PublicationBundle / HDFS 백업]
     P --> M
   end
-  M -->|Standard 공인 IP / SSH 전송| E[EC2 새 release → 검증 → current/previous 전환]
-  E --> API[EC2 API / 온라인 계산]
-  API <--> DB[서비스 DB / 캐시]
+  M -->|검증 후 gold writer 접속| DB[PostgreSQL Gold 적재 → current 트랜잭션 전환]
+  M -->|커밋 후 bundleId 알림| API[EC2 API / 온라인 계산]
+  API <--> DB
+  API <--> R[Redis 계산 상태·결과·잠금]
   U[사용자] <--> API
 ```
 

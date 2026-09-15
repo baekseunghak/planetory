@@ -100,7 +100,7 @@ SRS 엔티티 기준. Candidate(자체 BLS 대표값) + ExternalSignalReference(
 | discoverable | true / false | DAT 07 원본 재검증 (사용자 제공과 같은 비닝 해상도로 판정) | 현재 공개 묶음의 순차 탐색 기준에서 사용자가 찾을 수 있는가. false면 사용자용 주기도에 봉우리를 만들지 않고 자동 완료 판단에서 제외(결정 23) |
 | 버전 | 전처리·BLS·모델·규칙·카탈로그 스냅샷 | NFR 03 | 변경 시 CandidateStatusHistory |
 
-사용자용 잔차 곡선·잔차 주기도는 Gold의 후보 저장 필드가 아니다. EC2가 현재 판의 비닝된 곡선과 공개된 통과 모델로 계산하고, `(tic_id, publication_bundle_id, 정렬한 removed_candidate_ids, residual_model_version, periodogram_config_version)` 키로 캐시한다. 활성 분석 세션은 진입 시 선택한 공개 묶음에 고정하며 새 공개 묶음은 새 세션부터 사용한다. 구버전 공개 묶음과 그 키의 캐시는 보존기간 종료 시 함께 만료한다.
+사용자용 잔차 곡선·잔차 주기도는 Gold의 후보 저장 필드가 아니다. Backend가 현재 판의 비닝된 곡선과 공개된 통과 모델을 Python Worker에 전달해 계산하고, `(tic_id, publication_bundle_id, 정렬한 removed_candidate_ids, residual_model_version, periodogram_config_version)` 키로 Redis에 캐시한다. 활성 분석은 특정 판에 고정하지 않으며 새 공개 묶음을 감지하면 최신 판으로 다시 불러온다. archived 판의 캐시는 정리하고 Worker의 늦은 결과는 current 재검증 후 버린다.
 
 ---
 
@@ -377,7 +377,7 @@ skipped → 튜토리얼 건너뛰기 기록. 공식 공개 분석·성과 없�
 
 | SRS | 현행 규칙·검수 연결 |
 |---|---|
-| POL 03·07 · EXP 01·03·04·09 · DAT 05·11·14 · AT 08·67·80 | 잔차 후 주기도 온라인 계산, Bundle·제거 조합·계산 버전별 캐시, 활성 세션 구버전 고정 |
+| POL 03·07 · EXP 01·03·04·09 · DAT 05·11·14 · AT 08·67·80 | 잔차 후 주기도 온라인 계산, Bundle·제거 조합·계산 버전별 Redis 캐시, 판 변경 시 최신 판 재로드 |
 | POL 08 · EXP 03·06·07 · SUB 01·02 · HIS 02 · AT 06·59·95 · DEC 19 | 접힌 곡선 phase_start·phase_end만 선택, 브라우저 미리보기·서버 최종 파생, 시간 영역 띠 읽기 전용 |
 | EXP 01·05·08·10·12·13 · AT 90~92·96 | 비닝된 곡선 전 구간 브라우저 접기, 재선택·미세 조정 구분, x축 배율·포인터·키보드·실패 복구 규칙 유지 |
 | POL 13 · EXP 11 · SUB 01 · HIS 02 · RES 06 · AT 93 | 중심 위치 데이터 없음·비활성, 근거·성과·통계 제외 |

@@ -8,7 +8,7 @@
 
 - 실험 범위와 합격 조건: [분산 파이프라인 Docker PoC](../experiments/distributed-pipeline-poc.md)
 - 현행 기술 기준: [아키텍처](../architecture/README.md), [데이터](../data/README.md), [운영](../operations/README.md)
-- Gold·Redis·Bundle 전환 충돌: [문서 정합화 요청 R3~R5](planetory-doc-sync-requests.md). 이 항목이 해결되기 전에는 과거 `current/previous` 설명을 구현 기준으로 사용하지 않는다.
+- Gold·Redis·Bundle 전환 기준: [문서 정합화 요청 R3~R5](planetory-doc-sync-requests.md) 반영 완료. PostgreSQL 직접 적재·current 트랜잭션 전환·Redis 캐시·최신 판 재로드를 구현 기준으로 사용한다.
 - 상태: 인프라·CI/CD 뼈대와 정적 검사는 완료했으며 PoC·실제 이미지·배포·롤백 검증은 미완료다.
 
 ## 후속 작업 순서
@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | 1 | 최소 manifest와 합성 데이터로 Docker 분산 파이프라인 PoC | YARN 작업 ID, HDFS 결과, 모의 DB 조회 |
 | 2 | PoC 결과로 Gold 입력·출력 계약 확정 | 담당자 합의, 예제 데이터와 스키마 검사 통과 |
-| 3 | HDFS Bundle 백업과 Gold 전송·검증·전환 PoC | 실패 시 이전 릴리스 유지, 백업 checksum 일치 |
+| 3 | HDFS Bundle 백업과 PostgreSQL Gold 적재·검증·전환 PoC | 실패 시 기존 current 유지, 백업 checksum 일치, 커밋 후 알림 재시도 |
 | 4 | 배치와 온라인 계산의 수치 일치 검증 | 운영 amd64의 배치·온라인 결과 비교; ARM64는 지원 필요 시 추가 |
 | 5 | 온라인 계산 API·대기열·캐시 PoC | 중복 요청·실패·부하 측정 |
 | 6 | Gold 용량과 GCP 처리시간 측정 | 표본 기반 용량·시간 보고서 |
