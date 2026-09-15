@@ -3,7 +3,7 @@
 
 제품 파일명은 `tess<sector timestamp>-s<sector>-<TIC 16자리>-<pipeline id>-s_lc.fits` 형식이다.
 Sector별 timestamp·pipeline id는 MAST 제품명에서 확인한 값만 등록하며, 등록되지 않은 Sector의
-파일명은 만들지 않는다. 표본 선정 근거는 docs/development/tess-fixture-set.md 에 있다.
+파일명은 만들지 않는다. 표본 선정 근거는 docs/data/tess-fixture-set.md 에 있다.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 - 날짜: 2026-09-14
 - 대표 Task: S15P21C206-33
-- 근거: [요구사항 명세서](../requirements/planetory-requirements-spec.md), [탐사 API](../../apps/backend/docs/exploration-api-spec.md), [서비스 API](../../apps/backend/docs/service-api-spec.md), [ERD](database-erd.md).
+- 근거: [요구사항 명세서](../requirements/planetory-requirements-spec.md), [탐사 API](../../apps/backend/docs/exploration-api-spec.md), [서비스 API](../../apps/backend/docs/service-api-spec.md), [ERD](../architecture/database-erd.md).
 - 상태: 지도 담당 하서진의 사용자 결정 반영안. API/저장 계약은 관련 담당자 교차 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없으며, 이 문서는 서비스 코드·운영 DB 변경이나 성능 검증 완료를 뜻하지 않는다.
 
 ## 1. 은하 형태를 유지하는 새 별 배치
