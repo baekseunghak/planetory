@@ -104,7 +104,25 @@ docker compose --profile service up -d --build backend
 **submissions 선택 봉우리(C02-R3):** `source_peak_grid_index`·`source_peak_suggested_duration_hours`·`duration_limit_hours`를 nullable로 추가한다. 셋은 모두 NULL(직접 주기 선택·candidate 외 제출)이거나 candidate 제출에서 모두 채워져야 하며, grid index는 0 이상, 두 시간 값은 양의 유한 값이다. 상한 배율 3배는 규칙 값이므로 DB에서 고정 비교하지 않는다.
 
 **star_unlocks 별 자리 좌표:** `star_unlocks`에 `world_x`·`world_y`·`layout_version`을 NOT NULL로 추가하고, x/y 유한 값·`depth_z` -1~1·빈 배치 버전 금지 CHECK를 건다. 폐기 예정인 `generation`·`angle_deg`·`radius_jitter`는 nullable로 바꾼다.
-보존할 운영 좌표가 없으므로 이관 SQL은 없다. `star_unlocks` 행이 이미 있는 개발 DB에서는 V4가 실패하므로 해당 행을 초기화한 뒤 적용한다. 타일 조회용 공간 인덱스는 성능 검증 후 별도 마이그레이션으로 추가한다.
+보존할 운영 좌표가 없으므로 이관 SQL은 없다. `star_unlocks` 행이 이미 있는 DB에서는 V4가 실패한다. 타일 조회용 공간 인덱스는 성능 검증 후 별도 마이그레이션으로 추가한다.
+
+**V4 적용·검증용 DB 준비**
+
+- 검증은 새 전용 DB에서 한다. 기존 개발 DB의 데이터를 지우지 않아도 된다. 역할(V2)은 클러스터 전역이라 같은 컨테이너의 다른 DB와 공유되며 V2가 기존 역할을 그대로 재사용한다.
+
+  ```sh
+  docker compose exec -T service-db createdb -U planetory planetory_v4_check
+  ```
+
+  ```powershell
+  $env:DATABASE_URL = 'jdbc:postgresql://localhost:15432/planetory_v4_check'
+  .\gradlew.bat bootRun
+  ```
+
+  Gradle 테스트는 실행마다 격리 스키마를 새로 만들므로 별도 DB 준비가 필요 없다.
+- **`star_unlocks` 행만 삭제하지 않는다.** `MemberService.login()`은 이미 있는 회원에게 가입 초기화(첫 별·진행 상태 생성)를 다시 실행하지 않는다. 회원을 남기고 별 지급 기록만 지우면 첫 별이 없는 회원이 남는다.
+- 기존 개발 DB를 꼭 V4로 올려야 하면, 데이터를 버려도 되는 로컬 볼륨은 아래 마이그레이션 규칙의 볼륨 초기화로 전체를 새로 만든다. 부분 정리가 필요하면 회원 단위로 `users`와 연결된 `user_settings`·`user_star_progress`·`star_unlocks` 및 성과·제출·게시글 등 참조 데이터를 함께 정리해, 회원이 없거나 회원·설정·첫 별·진행 상태가 모두 있는 상태만 남긴다.
+- 공유·운영 DB의 행 삭제나 초기화는 담당자 합의 없이 하지 않는다.
 
 앱 시작 시 Flyway가 자동 실행되고 이력은 `flyway_schema_history`에 저장된다. `baseline-on-migrate=false`, `clean-disabled=true`, Spring SQL 자동 초기화는 꺼져 있다. 기존 비어 있지 않은 DB를 임의 baseline/clean/repair로 통과시키지 않는다.
 
