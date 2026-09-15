@@ -7,26 +7,7 @@
 
 ## 1. Tailscale SSH 접속
 
-`node-*`는 Tailscale MagicDNS 이름이다. 접속하는 장비가 같은 tailnet의 승인된 멤버로 등록되어 있고 대상 노드의 `tailscaled`가 실행 중일 때만 사용할 수 있다.
-
-| 노드 | SSH 명령 | 접속 후 호스트명 |
-| --- | --- | --- |
-| Node 1 | `ssh SSAFY@node-1` | `master-1` |
-| Node 2 | `ssh planetory-admin@node-2` | `worker-2` |
-| Node 3 | `ssh planetory-admin@node-3` | `worker-3` |
-| Node 4 | `ssh planetory-admin@node-4` | `worker-4` |
-| Node 5 | `ssh planetory-admin@node-5` | `worker-5` |
-| Node 6 | `ssh planetory-admin@node-6` | `worker-6` |
-
-서버 점검과 자동화에서도 표의 사용자명을 명시한다. `ssh node-1`처럼 사용자명을 생략하거나 로컬·격리 실행 계정 이름을 원격 사용자로 추정하지 않는다. 특히 Codex 격리 환경이 `CodexSandboxOffline` 같은 별도 홈과 빈 `known_hosts`를 사용하면 접속을 반복하거나 `StrictHostKeyChecking=no`로 우회하지 않는다. 실제 `SSAFY` 사용자 SSH 환경이 필요한 이유와 조회 범위를 알리고 승인을 받은 뒤 실행한다. 개인 키의 내용을 읽거나 복사하지 않는다.
-
-접속 전후에 다음을 확인한다.
-
-```powershell
-tailscale status
-ssh SSAFY@node-1 hostname -s
-ssh planetory-admin@node-2 hostname -s
-```
+팀원 등록, 서버별 SSH 계정과 접근 제한은 [Tailscale 팀 서버 접근 가이드](tailscale-team-access.md)를 따른다. 서버 점검과 자동화에서도 가이드의 사용자명을 명시하고 로컬·격리 실행 계정 이름을 원격 사용자로 추정하지 않는다.
 
 `node-*` 접속은 관리용 Tailscale 경로이며 `10.20.x.10`을 사용하는 GCP VPC Peering 실환경 검증을 대신하지 않는다.
 
