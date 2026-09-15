@@ -97,6 +97,11 @@ docker compose --profile service up -d --build backend
 - 사용자·별·운영 설정값을 자동으로 넣지 않는다. P1 테이블 생성이 P1 API 구현을 의미하지 않는다.
 - FK 삭제 전파는 지정하지 않았다(NO ACTION). 탈퇴 처리 정책을 임의로 확정하지 않는다.
 
+### V2 별 자리 좌표 (ERD v1.2)
+
+파일: `V2__add_star_unlock_world_coordinates.sql`. `star_unlocks`에 `world_x`·`world_y`·`layout_version`을 NOT NULL로 추가하고, x/y 유한 값·`depth_z` -1~1·빈 배치 버전 금지 CHECK를 건다. 폐기 예정인 `generation`·`angle_deg`·`radius_jitter`는 nullable로 바꾼다.
+보존할 운영 좌표가 없으므로 이관 SQL은 없다. `star_unlocks` 행이 이미 있는 개발 DB에서는 V2가 실패하므로 해당 행을 초기화한 뒤 적용한다. 타일 조회용 공간 인덱스는 성능 검증 후 별도 마이그레이션으로 추가한다.
+
 앱 시작 시 Flyway가 자동 실행되고 이력은 `flyway_schema_history`에 저장된다. `baseline-on-migrate=false`, `clean-disabled=true`, Spring SQL 자동 초기화는 꺼져 있다. 기존 비어 있지 않은 DB를 임의 baseline/clean/repair로 통과시키지 않는다.
 
 ```sh

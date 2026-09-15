@@ -93,6 +93,10 @@ scope는 인가 요청에 보내지 않는다. 개인정보 동의는 개발자�
 초기 데이터가 없으면 콜백은 `503 DEPENDENCY_UNAVAILABLE`이고 회원 생성도 롤백된다.
 테스트는 격리된 스키마에 가상의 튜토리얼 별을 넣고 종료 후 그 스키마만 삭제한다.
 
+첫 별의 자리는 이후 발견 별과 같은 `GalaxyLayout.place(userId, ticId)` 결과를 `world_x`·`world_y`·`depth_z`·`layout_version`으로 저장한다(탐사 API 4.1·9.4절).
+**임시:** 은하 배치 함수는 `S15P21C206-139`에서 구현한다. 그 전까지 `BootstrapGalaxyLayout`이 원점과 `layout_version=bootstrap-0`을 저장한다.
+139의 구현이 병합되면 이 클래스를 삭제하고, `bootstrap-0` 행이 있는 개발 DB는 초기화한다. 배치에 실패하면 회원 생성도 롤백된다.
+
 닉네임은 `별_`와 16자리 임의 16진수로 자동 생성한다. 기존 V1의 `lower(nickname)` 유일 인덱스를 사용한다.
 닉네임 중복 제약이 이미 있으므로 V1 수정이나 중복 마이그레이션은 추가하지 않았다.
 동시 최초 로그인은 제공자 ID 유일 제약으로 한 회원만 생성한다.
@@ -166,7 +170,7 @@ global/security                SecurityConfig, 세션 필터, principal, 오류 
 
 `AuthIntegrationTest`는 로컬 테스트 OAuth 서버와 실제 PostgreSQL 격리 스키마로 검증한다.
 Google과 같은 OIDC code 교환·RSA 서명 검증, SSAFY용 표준 OAuth2 UserInfo 경로,
-state·nonce·audience·issuer·만료·서명 오류, 동시 가입, 초기화 롤백,
+state·nonce·audience·issuer·만료·서명 오류, 동시 가입, 초기화·배치 실패 롤백, 첫 별 좌표·배치 버전 저장과 좌표 CHECK 제약,
 30분 만료·활동 연장, 현재 역할·상태 반영, CSRF·세션 ID 교체·기기별 로그아웃을 포함한다.
 실제 Google·SSAFY 앱 등록/동의 화면과 프록시·HTTPS 쿠키 검증은 자격 증명 설정 후 별도로 수행한다.
 
