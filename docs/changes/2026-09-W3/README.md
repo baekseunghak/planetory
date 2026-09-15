@@ -13,3 +13,4 @@
 | 2026-09-14 | Git·Jira 컨벤션 세부 규칙 6건 추가 복원 | S15P21C206-34 | Squash Require, 영역 소급, experiment 삭제, 커밋 type 표, 배포 검증, 대표 Jira 없음, 분할 누락 | 정정 | [2026-09-14](2026-09-14.md) |
 | 2026-09-14 | 라우팅 테스트 반영 — 조회 진입점 분리와 개발 가이드 보강 | S15P21C206-34 | 라우팅 테스트, 조회 요청, 문서 지도, development.md, 변경 유형별 정본, 기존 구현 확인 | 검증 완료 | [2026-09-14](2026-09-14.md) |
 | 2026-09-14 | develop 병합 — 탐사 API 계약 정합화(#133) 반영 | S15P21C206-34, 133 | develop 병합, DEC-19, 탐사 계약 예제, exploration, validate.cjs, C02 | 검증 완료 | [2026-09-14](2026-09-14.md) |
+| 2026-09-15 | `libs/astro-kernel` 신설 — 고정 transit 모델·잔차 제거 공용 함수 | S15P21C206-121, 113, 88 | astro-kernel, transit_model, 잔차, residual, box 모델, 순서 불변, invalid_time, numerical_failure, underflow, D14-1, D06, libs | 구현 완료 (계약 v0 초안) | [2026-09-15](2026-09-15.md) |
