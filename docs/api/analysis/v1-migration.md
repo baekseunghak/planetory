@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-10
 - 작업: [S15P21C206-49](https://ssafy.atlassian.net/browse/S15P21C206-49)
-- 현재 기준: `origin/develop`의 `a8775c9`, [요구사항 v1.0](../../requirements/planetory-requirements-spec.md), [분석 프론트엔드 상세 명세 Draft 0.2](../../development/analysis-frontend-spec.md)
+- 작성 당시 기준: `origin/develop`의 `a8775c9`, [요구사항 v1.0](../../requirements/planetory-requirements-spec.md), [분석 프론트엔드 상세 명세 Draft 0.2](../../development/analysis-frontend-spec.md)
 - 상태: 현행 요구사항과 구판 fixture의 차이를 정리한 전환 지침. 실제 API 경로·DTO·오류 코드 합의나 서버 구현 완료를 뜻하지 않는다.
 
 ## 1. 이 디렉터리의 적용 범위

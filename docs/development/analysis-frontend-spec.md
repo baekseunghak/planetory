@@ -14,9 +14,9 @@
 | [상태표 v1.0](../requirements/planetory-status-table.md) | 상태 의미와 전이. 아래에 기록한 구판 잔재는 그대로 이식하지 않는다. |
 | [용어 사전 v1.0](../requirements/planetory-glossary.md) | 사용자에게 보이는 문구와 내부 용어 구분 |
 | [와이어프레임 v1.0](../requirements/planetory-wireframe.html) | SC-03·04·05의 필수 요소, SC-06·11과의 연결. 위치·크기는 참고안이다. |
-| [서비스 DB ERD v1.0](database-erd.md) | 데이터의 소유권·단위·불변 기록·관계. DB 열을 그대로 프론트 DTO로 쓰는 것은 아니다. |
-| [팀 역할 분담](../team-role-allocation.md) | 백지웅 담당 범위와 담당자 사이의 인터페이스. 구판 동작 설명보다 SRS v1.0을 우선한다. |
-| [저장소 구조](repository-structure.md) | 운영 프론트는 `apps/frontend`, 독립 실험은 `experiments` |
+| [서비스 DB ERD v1.0](../architecture/database-erd.md) | 데이터의 소유권·단위·불변 기록·관계. DB 열을 그대로 프론트 DTO로 쓰는 것은 아니다. |
+| [팀 역할 분담](../project/team-role-allocation.md) | 백지웅 담당 범위와 담당자 사이의 인터페이스. 구판 동작 설명보다 SRS v1.0을 우선한다. |
+| [저장소 구조](../architecture/repository-structure.md) | 운영 프론트는 `apps/frontend`, 독립 실험은 `experiments` |
 
 이 문서의 **기준 요구사항**은 정본을 구체화한 내용이다. **설계 제안**은 검토 가능한 기본안이며 새로운 팀 정책으로 확정한 것이 아니다. **협의 항목 Qxx**는 구현 전에 결정할 사람과 완료 조건을 12장에 둔다. 기존 API·목업은 `experiment/analysis-ui-prototype`의 `c159c68`을 읽어 참고했다. 해당 실험은 현재 develop에 병합되지 않았으며 v0.12의 정책·DTO를 그대로 적용하지 않는다. 보존된 [API 실험 기록](../api/analysis/README.md)과 [v1.0 전환표](../api/analysis/v1-migration.md)를 함께 읽는다.
 

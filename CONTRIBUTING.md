@@ -1,12 +1,14 @@
 # 프로젝트 협업 안내
 
-이 저장소의 상세 협업 규칙은 다음 문서에서 관리합니다.
+작업 전에는 다음 진입 문서를 먼저 확인합니다.
 
-- [Git·Jira 협업 컨벤션](docs/git-jira-convention.md)
-- [팀 역할 분배 및 기획 책임](docs/team-role-allocation.md)
-- [데이터 관리 및 재현성](docs/development/data-guidelines.md)
-- [Hadoop·Spark 개발 규칙](docs/development/spark-hadoop-guidelines.md)
-- [CI/CD 결정 대기 사항](docs/operations/cicd.md)
-- [Jira-GitLab-Mattermost 자동화](docs/jira-mattermost-automation.md)
+- AI 도구: [공통 AI 협업 지침](AGENTS.md)
+- 목적별 정본: [프로젝트 문서 인덱스](docs/README.md)
+- Jira·Git·개발·문서 절차: [상황별 워크플로](docs/workflows/README.md)
 
-작업을 시작하기 전에 Git·Jira 협업 컨벤션을 먼저 확인합니다.
+기본 작업 순서는 Jira 범위 확인 → 관련 문서 참조 → 현재 코드 분석 → 최소 범위 구현 → 검증 → 관련 문서 갱신 → 필요한 변경 이력 기록 → MR 준비입니다.
+
+세부 문서를 이 파일에서 중복 나열하지 않습니다. 작업 목적에 맞는 디렉터리와 정본은 [문서 지도](docs/README.md)에서 선택합니다.
+
+- 현재 담당·충돌·반영 대기: [프로젝트 운영](docs/project/README.md)
+- 중요한 변경과 판단 근거: [변경 이력](docs/changes/README.md)

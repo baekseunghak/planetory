@@ -1,6 +1,6 @@
 # GCP 6계정 클러스터 생성·확인·피어링
 
-각 팀원이 Windows PowerShell에서 자신의 GCP 프로젝트에 노드 1대를 생성하고, 전체 6개 프로젝트를 메시 피어링하는 절차입니다. 인프라 구성은 [GCP 인프라 구조](../../../docs/development/gcp-distributed-infrastructure.md)를 참고합니다.
+각 팀원이 Windows PowerShell에서 자신의 GCP 프로젝트에 노드 1대를 생성하고, 전체 6개 프로젝트를 메시 피어링하는 절차입니다. 인프라 구성은 [GCP 인프라 구조](../../../docs/architecture/gcp-distributed-infrastructure.md)를 참고합니다.
 
 ## 1. Google Cloud CLI 설치와 로그인
 
