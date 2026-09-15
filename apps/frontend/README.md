@@ -68,11 +68,11 @@ Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.ht
 
 ## W05 별지도 데이터 로딩
 
-메타와 개별 별 cursor 페이지, 회전/기울기 역투영, 부분 실패·새 버전·선택 유지용 개발 화면이다. 2501개 합성 참조 별이며 화면 디자인은204에서 연결한다. npm run dev:sky-data로 실행한다.
+`npm run dev:sky-data` → http://127.0.0.1:58270/sky. MR !41의 v1.3 개별 별 페이지·원본 카메라 투영·부분 실패·새 버전·선택 유지용 개발 검사 화면이다. 2,501개를 여러 페이지로 받는 fixture이며 최종 은하 디자인은 204에서 연결한다. 일반 실행과 운영 빌드에는 이 검사 화면/가상 API가 없다.
 
-- [203 인수 기록](docs/ticket-203-readiness.md)
-- [렌더러/이벤트 연결](docs/sky-data-adapter.md)
-- npm run test:sky-data: Chromium8개.
+- [203 완료 조건 대조·실제 연동 대기](docs/ticket-203-readiness.md)
+- [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
+- `npm run test:sky-data`: Chromium의 HTTP/화면 검사 8개. `npm run check`에도 포함한다.
 
 ## W06-1 개별 별 은하
 
