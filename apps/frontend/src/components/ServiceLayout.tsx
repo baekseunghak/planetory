@@ -1,14 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "../auth/SessionProvider";
+import { ApiError, http } from "../api";
 
 export function ServiceLayout() {
   const session = useSession();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<Error | null>(null);
+  const logoutPending = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const previous = useRef<HTMLElement | null>(null);
   const location = useLocation();
+  async function logout() {
+    if (logoutPending.current) return;
+    logoutPending.current = true;
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await http.request("/v1/auth/logout", { method: "POST" });
+      // clear() only follows a confirmed backend result; it also cancels reads.
+      session.clear();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) session.clear();
+      else
+        setLogoutError(
+          error instanceof Error ? error : new Error("로그아웃 요청 실패"),
+        );
+    } finally {
+      logoutPending.current = false;
+      setLoggingOut(false);
+    }
+  }
   useEffect(() => {
     setOpen(false);
   }, [location.pathname, location.search]);
@@ -46,7 +70,30 @@ export function ServiceLayout() {
         <Link className="member-link" to="/me">
           {session.member?.nickname}
         </Link>
+        <button
+          type="button"
+          className="logout-button"
+          disabled={loggingOut}
+          aria-busy={loggingOut}
+          onClick={() => void logout()}
+        >
+          {loggingOut ? "로그아웃 중…" : "로그아웃"}
+        </button>
       </header>
+      {logoutError && (
+        <div className="logout-feedback" role="alert">
+          <p>
+            {logoutError instanceof ApiError && logoutError.outcomeUnknown
+              ? "로그아웃 결과를 확인하지 못했습니다. 로그인 상태를 확인해 주세요."
+              : "로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요."}
+          </p>
+          {logoutError instanceof ApiError && logoutError.outcomeUnknown && (
+            <button type="button" onClick={() => void session.refresh()}>
+              로그인 상태 확인
+            </button>
+          )}
+        </div>
+      )}
       <dialog
         ref={dialog}
         className="navigation"

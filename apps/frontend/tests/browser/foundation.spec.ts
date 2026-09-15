@@ -18,14 +18,18 @@ test("authenticated cookie, shared identity and TIC/History return context survi
       path: "/",
     },
   ]);
-  const cookies: string[] = [];
-  await page.route("**/api/v1/me", async (route) => {
-    cookies.push(route.request().headers().cookie ?? "");
-    await route.fulfill({ json: member });
+  const cookieReceipts: string[] = [];
+  // No route interception: use the serve-only fixture's real HTTP response.
+  // Firefox BiDi's intercepted request headers can omit browser-added Cookie.
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/v1/me")
+      cookieReceipts.push(
+        response.headers()["x-fixture-session-received"] ?? "missing",
+      );
   });
   await page.goto("/sky?focus=259377017");
   await expect(
-    page.getByRole("link", { name: "검증회원", exact: true }),
+    page.getByRole("link", { name: "연결 확인 계정", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "TIC 259377017 분석으로 이동" }).click();
   await expect(page.getByText("TIC 259377017", { exact: true })).toBeVisible();
@@ -41,10 +45,8 @@ test("authenticated cookie, shared identity and TIC/History return context survi
   await page.getByRole("link", { name: "분석으로 돌아가기" }).click();
   await page.getByRole("link", { name: "별지도로 돌아가기" }).click();
   await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
-  expect(cookies.length).toBeGreaterThan(0);
-  expect(
-    cookies.every((cookie) => cookie.includes("test-session=fixture-only")),
-  ).toBeTruthy();
+  expect(cookieReceipts.length).toBeGreaterThan(0);
+  expect(cookieReceipts.every((received) => received === "true")).toBeTruthy();
 });
 test("401 protects direct routes, preserves destination and clears identity after expiry", async ({
   page,

@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-15T07:26:41.300Z",
+  "backend": "MR !42 / 1cf1cca",
+  "note": "Actual backend, local test identity provider, local HTTP Nginx; not deployed TLS or actual external OAuth",
+  "results": [
+    {
+      "name": "Nginx direct SPA URL receives real /me 401 and preserves login destination",
+      "passed": true
+    },
+    {
+      "name": "SPA /login stays frontend while callback prefix goes to backend",
+      "passed": true
+    },
+    {
+      "name": "Nginx proxies actual OAuth start and callback; /me is authenticated",
+      "passed": true
+    },
+    {
+      "name": "Production direct route and reload retain identity and TIC/history context",
+      "passed": true
+    },
+    {
+      "name": "API 404 remains JSON 404 and missing asset remains 404",
+      "passed": true
+    },
+    {
+      "name": "Nginx preserves CSRF header, logout 204 and resulting protected route",
+      "passed": true
+    }
+  ]
+}

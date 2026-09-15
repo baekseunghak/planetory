@@ -19,6 +19,14 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const fixture = command === "serve" && !isPreview && mode === "fixture";
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
+  const proxy = target
+    ? Object.fromEntries(
+        ["/api", "/oauth2", "/login/oauth2"].map((path) => [
+          path,
+          { target, changeOrigin: false },
+        ]),
+      )
+    : undefined;
   return {
     plugins: [
       react(),
@@ -48,13 +56,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : {}),
     },
     server: {
-      proxy:
-        !fixture && target
-          ? { "/api": { target, changeOrigin: true } }
-          : undefined,
+      proxy: !fixture ? proxy : undefined,
     },
     preview: {
-      proxy: target ? { "/api": { target, changeOrigin: true } } : undefined,
+      proxy,
     },
     build: { target: ["chrome110", "edge110", "firefox115", "safari16.4"] },
   };
