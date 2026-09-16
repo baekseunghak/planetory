@@ -512,7 +512,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
   "star": {"sectorCount": 3, "sectors": [14, 41, 54], "tmag": 9.8},
   "hasConfirmedCandidate": true,
   "bundle": {
-    "bundleId": "b-2", "bundleVersion": 7, "publishedAt": "2026-09-09T20:00:00Z",
+    "bundleId": "b-2", "bundleVersion": "v7", "publishedAt": "2026-09-09T20:00:00Z",
     "foldReferenceTimeBtjd": 1683.4231, "baseDays": 81.4,
     "observationBounds": [1683.35, 2570.12],
     "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1", "binningRevision": 1,
@@ -539,6 +539,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 필드 | 규칙 |
 |---|---|
+| `bundle.bundleId` | DB `publication_bundles.id`를 `b-<id>` 문자열로 표현한다. 요청·응답·`X-Current-Bundle`에서 같은 값을 쓴다 |
+| `bundle.bundleVersion` | DB `bundle_version`과 같은 문자열이다. 숫자로 암묵 변환하지 않는다 |
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
 | `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다 |
 | `progress.currentCurveStep` | 회원의 `user_star_progress.current_curve_step` = **마지막 제출의 곡선 단계**. 제출 트랜잭션에서만 갱신하며 브라우저 저장소로 대체하지 않는다(NFR-19) |
