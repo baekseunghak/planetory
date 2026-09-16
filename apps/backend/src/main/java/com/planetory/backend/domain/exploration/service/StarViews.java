@@ -52,6 +52,40 @@ public final class StarViews {
     }
 
     /**
+     * `GET /me/stars`, `GET /members/{memberId}/stars` — 내 별 목록 (탐사 API 4.4).
+     *
+     * <p>{@code hasNext}는 {@code nextCursor != null}과 같은 뜻이다. 프론트가 둘 중 편한 쪽을
+     * 쓰도록 둘 다 준다.
+     */
+    public record StarList(List<StarListItem> items, String nextCursor, boolean hasNext) {
+    }
+
+    /**
+     * 목록 한 줄.
+     *
+     * @param lastActivityAt          최근 제출·재개·발견 중 가장 늦은 시각. 정렬 키다
+     * @param unpublishedSignalCount  매칭했지만 공개하지 않은 신호 수. <b>본인 조회에만 있고
+     *                                타인 조회는 null이다</b>(NFR-14). 0과 "볼 수 없음"은 다르다
+     * @param reopened                재개된 뒤 아직 새 제출이 없는 상태. 지도 타일과 같은 뜻이다
+     */
+    public record StarListItem(
+            String ticId,
+            String progressStage,
+            int planetCount,
+            boolean completedWithoutPlanets,
+            int achievementCount,
+            String grade,
+            Integer currentCurveStep,
+            boolean reopenPending,
+            boolean reopened,
+            Integer unpublishedSignalCount,
+            java.time.OffsetDateTime lastActivityAt,
+            String unlockReason,
+            SkyViews.Marker marker) {
+    }
+
+
+    /**
      * 공개 요약의 별 정보.
      *
      * <p>온도·반지름을 넣지 않는다. 감추는 것이 아니라 이 응답을 쓰는 화면에 놓을 자리가 없어서다.

@@ -98,6 +98,106 @@ public class StarService {
                 stars.countDiscoveredMembers(ticId));
     }
 
+    /** 목록 기본 크기와 상한. 상한은 한 요청이 목록을 통째로 끌어오지 못하게 막는다. */
+    public static final int DEFAULT_LIST_SIZE = 20;
+    public static final int MAX_LIST_SIZE = 100;
+
+    private static final String SCOPE_SUBMITTED = "submitted";
+    private static final String SCOPE_DISCOVERED = "discovered";
+    private static final String SORT_RECENT = "recent";
+
+    /**
+     * 내 별 목록 (탐사 API 4.4).
+     *
+     * <p>{@code submitted}는 제출 이력이 있는 별(MY-02), {@code discovered}는 발견한 별 전부다.
+     * {@code discovered}는 <b>본인 조회에서만</b> 허용한다. 타인의 미제출 발견까지 보이면 그
+     * 사람의 진행 상태가 드러난다.
+     *
+     * <p>타인 조회에서 {@code unpublishedSignalCount}를 지운다(NFR-14). 0으로 바꾸지 않고 null로
+     * 둔다. "공개 안 한 신호가 없다"와 "볼 수 없다"는 다른 뜻이다.
+     *
+     * @throws BusinessException 타인이 목록을 비공개했으면 {@code STAR_LIST_PRIVATE},
+     *                           scope·sort·size가 계약 밖이면 {@code VALIDATION_FAILED}
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public StarViews.StarList list(long viewerId, long targetId, String requestedScope,
+                                   String requestedSort, Integer requestedSize, String cursor) {
+        boolean self = viewerId == targetId;
+        String scope = validateScope(requestedScope, self);
+        String sort = validateSort(requestedSort);
+        int size = validateSize(requestedSize);
+
+        if (!self && !stars.isStarListPublic(targetId)) {
+            throw new BusinessException(ErrorCode.STAR_LIST_PRIVATE);
+        }
+
+        StarListCursor request = new StarListCursor(viewerId, targetId, scope, sort, size, 0, 0);
+        StarListCursor position = cursor == null ? null
+                : StarListCursor.decode(cursor, request)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED));
+
+        // 한 건 더 읽어 다음 페이지 유무를 판단한다.
+        List<StarViews.StarListItem> page = stars.findStarList(targetId, scope,
+                position == null ? null
+                        : java.time.Instant.ofEpochMilli(position.afterActivityEpochMilli())
+                                .atOffset(java.time.ZoneOffset.UTC),
+                position == null ? null : position.afterTicId(),
+                size + 1);
+
+        boolean hasNext = page.size() > size;
+        List<StarViews.StarListItem> visible = hasNext ? page.subList(0, size) : page;
+        List<StarViews.StarListItem> items = self ? visible : visible.stream()
+                .map(StarService::withoutOwnerOnlyFields)
+                .toList();
+
+        String nextCursor = null;
+        if (hasNext) {
+            StarViews.StarListItem last = visible.get(visible.size() - 1);
+            nextCursor = new StarListCursor(viewerId, targetId, scope, sort, size,
+                    last.lastActivityAt().toInstant().toEpochMilli(),
+                    Long.parseLong(last.ticId())).encode();
+        }
+        return new StarViews.StarList(items, nextCursor, hasNext);
+    }
+
+    /** 타인에게는 미게시 수를 주지 않는다. 0이 아니라 없음이다(NFR-14). */
+    private static StarViews.StarListItem withoutOwnerOnlyFields(StarViews.StarListItem item) {
+        return new StarViews.StarListItem(item.ticId(), item.progressStage(), item.planetCount(),
+                item.completedWithoutPlanets(), item.achievementCount(), item.grade(),
+                item.currentCurveStep(), item.reopenPending(), item.reopened(), null,
+                item.lastActivityAt(), item.unlockReason(), item.marker());
+    }
+
+    private static String validateScope(String requested, boolean self) {
+        String scope = requested == null ? SCOPE_SUBMITTED : requested;
+        if (!SCOPE_SUBMITTED.equals(scope) && !SCOPE_DISCOVERED.equals(scope)) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        if (SCOPE_DISCOVERED.equals(scope) && !self) {
+            // 타인의 미제출 발견까지 보이면 그 사람의 진행 상태가 드러난다.
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return scope;
+    }
+
+    private static String validateSort(String requested) {
+        String sort = requested == null ? SORT_RECENT : requested;
+        if (!SORT_RECENT.equals(sort)) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return sort;
+    }
+
+    private static int validateSize(Integer requested) {
+        if (requested == null) {
+            return DEFAULT_LIST_SIZE;
+        }
+        if (requested < 1 || requested > MAX_LIST_SIZE) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return requested;
+    }
+
     /**
      * 성과 수에서 만드는 표시 등급. 열이 아니다(GRD-01).
      *

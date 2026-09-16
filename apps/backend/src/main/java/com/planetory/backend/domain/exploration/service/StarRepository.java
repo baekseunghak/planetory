@@ -250,6 +250,122 @@ public class StarRepository {
                 .filter(marker -> marker != null);
     }
 
+    /**
+     * 별 목록 한 페이지 (탐사 API 4.4).
+     *
+     * <p>{@code lastActivityAt}은 최근 제출·재개·발견 중 가장 늦은 시각이다. 셋 중 발견 시각은
+     * 항상 있으므로 이 값은 NULL이 되지 않는다. 내림차순이고 동률은 {@code ticId}로 가른다.
+     *
+     * <p>이어읽기 조건이 두 열을 함께 본다. 시각만 비교하면 같은 시각의 별들이 통째로 밀리거나
+     * 빠진다. 행 값 비교 {@code (a, b) < (x, y)}로 정렬과 같은 순서를 쓴다.
+     *
+     * <p>{@code submitted}는 제출 이력이 있는 별만, {@code discovered}는 발견한 별 전부다.
+     * 성과로 막 발견해 아직 제출하지 않은 별도 분석에 들어갈 수 있어야 한다(지웅 리뷰 6).
+     *
+     * <p>{@code unpublishedSignalCount}는 호출자가 본인 조회일 때만 채운다. 여기서는 항상
+     * 계산해 두고 서비스가 타인 조회에서 지운다. 질의를 둘로 나누면 정렬이 갈릴 수 있다.
+     *
+     * @param afterActivity 이어읽기 기준 시각. 첫 페이지는 null
+     * @param limit         한 건 더 요청해 다음 페이지 유무를 판단한다
+     */
+    public List<StarViews.StarListItem> findStarList(long targetId, String scope,
+                                                     java.time.OffsetDateTime afterActivity,
+                                                     Long afterTicId, int limit) {
+        return jdbc.sql("""
+                        WITH base AS (
+                            SELECT u.tic_id,
+                                   u.unlock_reason,
+                                   GREATEST(
+                                       u.unlocked_at,
+                                       COALESCE(p.reopened_at, u.unlocked_at),
+                                       COALESCE((SELECT max(s.created_at) FROM submissions s
+                                                  WHERE s.user_id = u.user_id AND s.tic_id = u.tic_id),
+                                                u.unlocked_at)
+                                   ) AS last_activity_at,
+                                   COALESCE(p.progress_stage, 'unexplored') AS progress_stage,
+                                   COALESCE(p.planet_count, 0) AS planet_count,
+                                   p.current_curve_step,
+                                   COALESCE(p.reopen_pending, false) AS reopen_pending,
+                                   (p.reopened_at IS NOT NULL AND NOT EXISTS (
+                                        SELECT 1 FROM submissions s
+                                         WHERE s.user_id = u.user_id AND s.tic_id = u.tic_id
+                                           AND s.created_at > p.reopened_at)) AS reopened,
+                                   t.seq AS tutorial_seq,
+                                   EXISTS(SELECT 1 FROM submissions s
+                                           WHERE s.user_id = u.user_id AND s.tic_id = u.tic_id) AS submitted,
+                                   (SELECT count(*) FROM user_candidate_achievements a
+                                      JOIN candidates c ON c.id = a.candidate_id
+                                     WHERE a.user_id = u.user_id AND c.tic_id = u.tic_id)
+                                       AS achievement_count,
+                                   (SELECT count(DISTINCT s.matched_candidate_id)
+                                      FROM submissions s
+                                     WHERE s.user_id = u.user_id AND s.tic_id = u.tic_id
+                                       AND s.matched_candidate_id IS NOT NULL
+                                       AND NOT EXISTS (
+                                           SELECT 1 FROM published_analyses pa
+                                            WHERE pa.user_id = s.user_id
+                                              AND pa.candidate_id = s.matched_candidate_id
+                                              AND pa.unpublished_at IS NULL
+                                              AND pa.hidden_at IS NULL))
+                                       AS unpublished_signal_count
+                              FROM star_unlocks u
+                         LEFT JOIN user_star_progress p
+                                ON p.user_id = u.user_id AND p.tic_id = u.tic_id
+                         LEFT JOIN tutorial_stars t
+                                ON t.tic_id = u.tic_id AND u.unlock_reason = 'tutorial'
+                             WHERE u.user_id = :targetId
+                        )
+                        SELECT * FROM base
+                         WHERE (:scope = 'discovered' OR submitted)
+                           AND (CAST(:afterActivity AS TIMESTAMPTZ) IS NULL
+                                OR (last_activity_at, -tic_id) < (:afterActivity, -CAST(:afterTicId AS BIGINT)))
+                         ORDER BY last_activity_at DESC, tic_id
+                         LIMIT :limit
+                        """)
+                .param("targetId", targetId)
+                .param("scope", scope)
+                .param("afterActivity", afterActivity)
+                .param("afterTicId", afterTicId)
+                .param("limit", limit)
+                .query((rs, rowNum) -> {
+                    int achievementCount = rs.getInt("achievement_count");
+                    String stage = rs.getString("progress_stage");
+                    int planetCount = rs.getInt("planet_count");
+                    return new StarViews.StarListItem(
+                            String.valueOf(rs.getLong("tic_id")),
+                            stage,
+                            planetCount,
+                            "completed".equals(stage) && planetCount == 0,
+                            achievementCount,
+                            StarService.grade(achievementCount),
+                            (Integer) rs.getObject("current_curve_step"),
+                            rs.getBoolean("reopen_pending"),
+                            rs.getBoolean("reopened"),
+                            rs.getInt("unpublished_signal_count"),
+                            rs.getObject("last_activity_at", java.time.OffsetDateTime.class),
+                            rs.getString("unlock_reason"),
+                            markerOf(rs));
+                })
+                .list();
+    }
+
+    /** 이 회원이 별 목록을 공개했는지. 설정 행이 없으면 기본값 공개다. */
+    public boolean isStarListPublic(long targetId) {
+        return jdbc.sql("SELECT COALESCE((SELECT star_list_public FROM user_settings"
+                        + " WHERE user_id = ?), true)")
+                .param(targetId)
+                .query(Boolean.class).single();
+    }
+
+    private static SkyViews.Marker markerOf(java.sql.ResultSet rs) throws java.sql.SQLException {
+        String reason = rs.getString("unlock_reason");
+        if ("tutorial".equals(reason)) {
+            int seq = rs.getInt("tutorial_seq");
+            return rs.wasNull() ? null : new SkyViews.Marker("tutorial", seq);
+        }
+        return "challenge".equals(reason) ? new SkyViews.Marker("challenge", null) : null;
+    }
+
     private static Double nullableDouble(java.sql.ResultSet rs, String column)
             throws java.sql.SQLException {
         double value = rs.getDouble(column);
