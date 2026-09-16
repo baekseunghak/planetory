@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useAnalysisData } from "./useAnalysisData";
 import { TimeCurveChart } from "./TimeCurveChart";
 import { contextKey } from "./analysis-data";
+import { PeriodogramPanel } from "./PeriodogramPanel";
 
 const isObservation = (ticId?: string) =>
   import.meta.env.DEV &&
@@ -105,6 +106,12 @@ function AnalysisData({ ticId }: { ticId: string }) {
             segments={curve.segments}
             fluxUnit={curve.fluxUnit}
           />
+          <PeriodogramPanel
+            key={`periodogram-${contextKey(curve.context)}`}
+            context={context}
+            curve={curve}
+            reloadAnalysis={retry}
+          />
           <table>
             <caption>관측 세그먼트</caption>
             <thead>
@@ -148,6 +155,13 @@ export function AnalysisPage() {
           <Link to="/analysis/307210830?returnTo=%2Fsky">L 98-59</Link>
           {" · "}
           <Link to="/analysis/199574208?returnTo=%2Fsky">CM Draconis</Link>
+        </nav>
+      )}
+      {import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true" && (
+        <nav className="fixture-links" aria-label="주기도 개발 샘플">
+          <Link to="/analysis/259377024?returnTo=%2Fsky">주기도 정상 샘플</Link>
+          <Link to="/analysis/259377027?returnTo=%2Fsky">빈 봉우리 샘플</Link>
+          <Link to="/analysis/259377028?returnTo=%2Fsky">주기도 오류 샘플</Link>
         </nav>
       )}
       {import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true" && (
