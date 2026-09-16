@@ -24,3 +24,4 @@
 | 2026-09-16 | 마이 프로필 P0 구현 — 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 | S15P21C206-157 | 닉네임 변경, NICKNAME_CONFLICT, lower(nickname), NFC 정규화, SB-D14, 온보딩, onboarding_done, ON CONFLICT, 타인 프로필, SB-D23, 탈퇴 404, 성과 요약 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Gold 게시 계약과 Publisher·Backend·Frontend 합성 fixture 정합화 | S15P21C206-68 | Gold 계약, PublicationBundle, current, archived, Redis, payload, fixture, field unit, checksum | 검증 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-16 | publication_bundles 멱등 키 유일 제약 | S15P21C206-230 | publication_bundles, bundle_version, 멱등 키, UNIQUE, pg_advisory_xact_lock, V8, Publisher 재시도, ERD v1.6 | 구현 완료 | [2026-09-16](2026-09-16.md) |
