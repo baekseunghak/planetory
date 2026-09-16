@@ -131,9 +131,11 @@ class AuthIntegrationTest {
         // 첫 별은 튜토리얼 1번이며 좌표·배치 버전은 배치 함수 결과를 그대로 저장한다.
         var unlocks = jdbc.queryForList("""
                 SELECT user_id, tic_id, unlock_reason, world_x::float8 AS x, world_y::float8 AS y,
-                       depth_z::float8 AS z, layout_version, generation FROM star_unlocks""");
+                       depth_z::float8 AS z, layout_version, layout_ordinal, generation FROM star_unlocks""");
         for (var row : unlocks) {
-            var expected = LAYOUT.place((Long) row.get("user_id"), (Long) row.get("tic_id"));
+            // 배치 입력은 회원별 발견 순번이다. 가입 첫 별이라 0이어야 한다.
+            assertEquals(0, row.get("layout_ordinal"));
+            var expected = LAYOUT.place((Integer) row.get("layout_ordinal"));
             assertEquals(1L, row.get("tic_id"));
             assertEquals("tutorial", row.get("unlock_reason"));
             assertEquals(expected.worldX(), (Double) row.get("x"));
@@ -451,9 +453,9 @@ class AuthIntegrationTest {
     static class TestGalaxyLayout implements GalaxyLayout {
         static final String VERSION = "test-layout-1";
         volatile boolean fail;
-        @Override public StarPosition place(long userId, long ticId) {
+        @Override public StarPosition place(int layoutOrdinal) {
             if (fail) throw new IllegalStateException("layout unavailable");
-            return new StarPosition(userId * 10.5, ticId * -2.25, 0.5, VERSION);
+            return new StarPosition(layoutOrdinal * 10.5 + 1, layoutOrdinal * -2.25 - 1, 0.5, VERSION);
         }
     }
 
