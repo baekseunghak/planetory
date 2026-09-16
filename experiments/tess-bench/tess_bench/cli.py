@@ -2,10 +2,12 @@
 """벤치마크 명령행.
 
     python -m tess_bench preprocess --target toi270 [--only savgol_0.5d biweight_1.0d] [--limit 20]
+    python -m tess_bench bls --target toi270 --stage tuning [--only poc_linear20k ...] [--limit 20]
+    python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<UTC>-<id>
 
 실행 중 설정마다 진행 상황과 요약 수치를 터미널에 출력하고, 끝나면 설정별 요약표를 다시 보여준다.
-산출물은 results/bench/<settings_id>-<version>/<target>/run-<UTC>-<id>/ 에 metrics.csv, summary.csv 로 남고
-실행 manifest 는 results/manifests/ 에 남는다 (tess_fixture 의 스키마).
+산출물은 results/bench/<settings_id>-<version>/<target>/run-<UTC>-<id>/ 에 남고(preprocess: metrics.csv·summary.csv,
+bls: peaks.csv·matches.csv·summary.csv, bls-gates: gates.csv) 실행 manifest 는 results/manifests/ 에 남는다 (tess_fixture 의 스키마).
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ from tess_fixture import manifest as mf
 from tess_fixture.lightcurve import Baseline, build_baseline, load_sector, synthetic_noise_baseline
 from tess_fixture.targets import iter_products, select_targets
 
+from . import bls as bl
+from . import bls_match as bm
 from . import metrics as mt
 from .preprocess import Setting, load_settings, preprocess
 
@@ -36,8 +40,10 @@ DEFAULT_RAW = FIXTURE_DIR / "sample_raw"
 DEFAULT_GRID = FIXTURE_DIR / "configs" / "injection_grid_v1.json"
 FIXTURE_CHECKSUMS = FIXTURE_DIR / "checksums.json"
 DEFAULT_SETTINGS = PKG_DIR / "configs" / "preprocess_settings_v1.json"
+DEFAULT_BLS_SETTINGS = PKG_DIR / "configs" / "bls_settings_v1.json"
 DEFAULT_RESULTS = PKG_DIR / "results"
 TASK = "S15P21C206-42"
+BLS_TASK = "S15P21C206-110"
 
 SUMMARY_COLUMNS = ("setting_id", "factor", "baseline_id", "n_signals", "depth_ratio_median", "depth_ratio_0.5h",
                    "depth_ratio_2h", "depth_ratio_8h", "in_transit_kept_median", "oot_scatter_ppm_median",
@@ -199,10 +205,256 @@ def cmd_preprocess(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- BLS 격자 벤치마크 (110)
+
+BLS_SUMMARY_COLUMNS = ("setting_id", "factor", "baseline_id", "stage", "n_signals", "direct_recovery", "alias_inclusive_recovery",
+                       "alias_recovery", "wrong_rate", "missed_rate", "matched_rank1_fraction", "period_rel_err_median_abs",
+                       "epoch_err_hours_median", "duration_ratio_median", "depth_ratio_median",
+                       "direct_period_<2d", "direct_period_2-10d", "direct_period_>=10d",
+                       "direct_duration_<1h", "direct_duration_1-4h", "direct_duration_>=4h",
+                       "direct_depth_<=1000ppm", "direct_depth_<=3000ppm", "direct_depth_>3000ppm",
+                       "n_periods", "bls_s_per_curve_median", "elapsed_s")
+
+
+def _load_fixture_inputs(target, raw: Path) -> tuple[list, list[dict]]:
+    expected = dl.load_expected_checksums(FIXTURE_CHECKSUMS)
+    curves, inputs = [], []
+    for _, sector, filename, url in iter_products((target,)):
+        path = raw / target.key / filename
+        if not path.is_file():
+            sys.exit(f"missing {path}; run `python -m tess_fixture download --target {target.key}` in tess-fixture first")
+        digest = dl.sha256_of(path)
+        if expected.get(filename) and expected[filename] != digest:
+            sys.exit(f"checksum mismatch for {filename}")
+        curves.append(load_sector(path))
+        inputs.append({"path": str(path), "sha256": digest, "size_bytes": path.stat().st_size, "source_uri": url,
+                       "tic_id": target.tic_id, "sector": sector, "role": "raw_product"})
+    return curves, inputs
+
+
+def _print_bls_final_table(summary_rows: list[dict]) -> None:
+    print("\n=== 설정별 요약 (realclean·real 바탕곡선, 게이트 없음 = 상위 5개 피크 안에 있는가) ===")
+    head = f"{'설정':<20}{'요인':<15}{'직접':>7}{'alias포함':>10}{'틀림':>7}{'rank1':>7}{'|ΔP/P|':>9}{'epoch h':>9}{'D비':>6}{'깊이비':>7}{'<=1000ppm':>10}{'>=10d':>7}{'격자점':>8}{'s/곡선':>8}"
+    print(head); print("-" * len(head))
+    for r in summary_rows:
+        if "noise" in r["baseline_id"]:
+            continue
+        print(f"{r['setting_id']:<20}{r['factor']:<15}{_fmt(r['direct_recovery'],7)}{_fmt(r['alias_inclusive_recovery'],10)}{_fmt(r['wrong_rate'],7)}"
+              f"{_fmt(r['matched_rank1_fraction'],7)}{_fmt(r['period_rel_err_median_abs'],9,5)}{_fmt(r['epoch_err_hours_median'],9)}"
+              f"{_fmt(r['duration_ratio_median'],6)}{_fmt(r['depth_ratio_median'],7)}{_fmt(r.get('direct_depth_<=1000ppm', float('nan')),10)}"
+              f"{_fmt(r.get('direct_period_>=10d', float('nan')),7)}{r['n_periods']:>8}{_fmt(r['bls_s_per_curve_median'],8,1)}")
+    noise = [r for r in summary_rows if "noise" in r["baseline_id"]]
+    if noise:
+        print("\n=== 잡음 바탕곡선 (백색 잡음 + 주입) ===")
+        for r in noise:
+            print(f"{r['setting_id']:<20}직접 {_fmt(r['direct_recovery'])}  alias포함 {_fmt(r['alias_inclusive_recovery'])}  s/곡선 {_fmt(r['bls_s_per_curve_median'],6,1)}")
+    print("\n읽는 법: 직접 = 상위 5 피크 중 하나가 SRS 5.1 누적 오차 규칙(|ΔP|×N ≤ D/2)과 통과 창 중첩 ≥ 0.5 를 만족한 주입 비율."
+          " alias포함 은 P/2·2P 로 잡힌 것까지. rank1 은 매칭 피크가 1위였던 비율. |ΔP/P|·epoch·D비·깊이비는 매칭된 신호의 중앙값."
+          " 이 표에는 품질 게이트가 없다. 게이트별 회수율·가짜 후보 수는 `bls-gates` 로 같은 run 에서 계산한다.")
+
+
+def cmd_bls(args: argparse.Namespace) -> int:
+    started = time.time()
+    target = select_targets([args.target])[0]
+    cfg, settings = bl.load_bls_settings(args.settings, args.only)
+    stage_cfg = cfg["stages"][args.stage]
+    _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
+    pre = pre_settings[0]
+    grid = inj.load_grid(args.grid)
+    curves, inputs = _load_fixture_inputs(target, args.raw)
+    strict = build_baseline(curves)
+    set_id = inj.grid_set_id(grid)
+    if target.key not in stage_cfg["targets"]:
+        print(f"주의: {target.key} 는 stage '{args.stage}' 의 별 목록 {stage_cfg['targets']} 에 없다. 결과에 stage 를 그대로 기록하되 해석 때 구분할 것.")
+
+    # 바탕곡선: realclean(Archive 확인 행성을 121 astro-kernel 로 제거) 이 기본. 실제 행성이 상위 피크를 차지하면
+    # 주입 회수율을 잴 수 없기 때문. 원본 real 은 --include-raw-real 로 추가(실제 신호와의 상호작용 관찰용).
+    from dataclasses import replace as dc_replace
+    from astro_kernel import remove_transit_models
+    from tess_fixture import references as refs
+    ref_rows = refs.read_references(FIXTURE_DIR / "references.csv")
+    known_models, known_skipped = bl.known_signal_models(ref_rows, target.key)
+    if known_models:
+        cleaned = remove_transit_models(strict.time, strict.flux, known_models).flux_residual
+        realclean = dc_replace(strict, flux=cleaned, source_files=tuple(f"{f} (known signals removed)" for f in strict.source_files))
+        print(f"realclean: Archive 확인 행성 {len(known_models)}개 제거 {[m['candidate_id'] for m in known_models]}"
+              + (f", 제외 {known_skipped}" if known_skipped else ""))
+    else:
+        realclean = strict
+        print(f"realclean: 제거할 Archive 확인 행성 없음(식쌍성 등). real 과 동일" + (f", 제외 {known_skipped}" if known_skipped else ""))
+    baselines: dict[str, Baseline] = {"realclean": realclean}
+    if args.include_raw_real:
+        baselines["real"] = strict
+    if not args.no_noise:
+        baselines[f"noise{args.noise_seed}"] = synthetic_noise_baseline(strict, seed=args.noise_seed)
+    groups: dict[str, dict[str, list[inj.InjectionRow]]] = {}
+    for bkey, baseline in baselines.items():
+        rows = inj.build_catalog(grid, baseline, baseline_id=f"{target.key}-{bkey}", set_id=set_id, include_multi=stage_cfg["include_multi"])
+        rows = [r for r in rows if r.signal_index > 0 or r.phase_label in stage_cfg["phase_labels"] or r.group_id != r.injection_id]
+        by_group: dict[str, list[inj.InjectionRow]] = {}
+        for r in rows:
+            by_group.setdefault(r.group_id, []).append(r)
+        if args.limit:
+            by_group = dict(list(by_group.items())[:args.limit])
+        by_group["none"] = []                       # 주입 없는 순수 곡선: 잡음이면 가짜 후보 측정, real 이면 unknown_review
+        groups[bkey] = by_group
+
+    run_id = mf.new_run_id()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = args.results / "bench" / f"{cfg['settings_id']}-{cfg['version']}" / target.key / f"run-{stamp}-{run_id[:8]}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    n_groups = sum(len(g) for g in groups.values())
+    print(f"target={target.key} stage={args.stage} sectors={list(strict.sectors)} points(QUALITY==0)={strict.n_valid:,} "
+          f"baseline={strict.time.max()-strict.time.min():.1f}d preprocess={pre.setting_id} settings={len(settings)} groups={n_groups} run={run_dir.name}")
+
+    # 전처리는 설정과 무관하므로 그룹마다 한 번만
+    print("전처리 중...", end="", flush=True)
+    t_pre = time.time()
+    prepared: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
+    for bkey, by_group in groups.items():
+        baseline = baselines[bkey]
+        for gid, members in by_group.items():
+            flux = inj.inject_group(baseline, members) if members else baseline.flux.copy()
+            res = preprocess(baseline.time, flux, baseline.sector_of_point, pre)
+            kept = res.kept & np.isfinite(res.flux_det)
+            prepared[(bkey, gid)] = (res.time[kept], res.flux_det[kept])
+    print(f" {time.time()-t_pre:.1f}s ({len(prepared)} curves)")
+
+    peak_rows: list[dict] = []
+    match_rows: list[dict] = []
+    summary_rows: list[dict] = []
+    for i, setting in enumerate(settings, 1):
+        print(f"\n[{i}/{len(settings)}] {setting.setting_id:<20} ({setting.factor}) {setting.description}")
+        t_setting = time.time()
+        for bkey, by_group in groups.items():
+            baseline = baselines[bkey]
+            bid = f"{target.key}-{bkey}"
+            per_matches: list[dict] = []
+            elapsed_list: list[float] = []
+            n_periods = 0
+            t0 = time.time()
+            for g_i, (gid, members) in enumerate(by_group.items(), 1):
+                t_c, f_c = prepared[(bkey, gid)]
+                try:
+                    run = bl.run_bls(t_c, f_c, setting, baseline_time=baseline.time)
+                except ValueError as exc:
+                    peak_rows.append({"setting_id": setting.setting_id, "baseline_id": bid, "group_id": gid, "stage": args.stage,
+                                      "is_pure_noise": str(bkey.startswith("noise") and not members).lower(), "n_points": int(t_c.size),
+                                      "status": f"failed:{exc}", "rank": 0, **{k: "" for k in bl.PEAK_COLUMNS if k != "rank"},
+                                      "n_periods": 0, "elapsed_s": ""})
+                    for r in members:
+                        match_rows.append({"setting_id": setting.setting_id, "baseline_id": bid, "stage": args.stage, "match": "missed",
+                                           **{k: "" for k in bm.MATCH_COLUMNS if k not in ("match",)}, "injection_id": r.injection_id,
+                                           "group_id": gid, "period_days": r.period_days, "duration_hours": r.duration_hours,
+                                           "depth_ppm": r.depth_ppm, "phase_label": r.phase_label, "n_transits_in_window": r.n_transits_in_window})
+                    continue
+                elapsed_list.append(run.elapsed_s); n_periods = run.n_periods
+                for p in run.peaks:
+                    peak_rows.append({"setting_id": setting.setting_id, "baseline_id": bid, "group_id": gid, "stage": args.stage,
+                                      "is_pure_noise": str(bkey.startswith("noise") and not members).lower(), "n_points": int(t_c.size),
+                                      "status": "ok", **p.as_row(), "n_periods": run.n_periods, "elapsed_s": round(run.elapsed_s, 3)})
+                for r in members:
+                    m = bm.match_injection(t_c, r, run.peaks, window_overlap_min=cfg["matching"]["window_overlap_min"])
+                    row = {"setting_id": setting.setting_id, "baseline_id": bid, "stage": args.stage, **m.as_row(),
+                           "period_days": r.period_days, "duration_hours": r.duration_hours, "depth_ppm": r.depth_ppm,
+                           "phase_label": r.phase_label, "n_transits_in_window": r.n_transits_in_window}
+                    match_rows.append(row); per_matches.append(row)
+                if g_i % 10 == 0 or g_i == len(by_group):
+                    print(f"\r    [{bkey:<14}] {g_i:>4}/{len(by_group)} curves  {time.time()-t0:6.1f}s", end="", flush=True)
+            print()
+            s = bm.summarize_matches(per_matches)
+            s.update({"setting_id": setting.setting_id, "factor": setting.factor, "baseline_id": bid, "stage": args.stage,
+                      "n_periods": n_periods, "bls_s_per_curve_median": float(np.median(elapsed_list)) if elapsed_list else float("nan"),
+                      "elapsed_s": round(time.time() - t0, 2)})
+            summary_rows.append(s)
+            print(f"    [{bkey:<14}] 직접 {_fmt(s.get('direct_recovery', float('nan')))} alias포함 {_fmt(s.get('alias_inclusive_recovery', float('nan')))} "
+                  f"틀림 {_fmt(s.get('wrong_rate', float('nan')))} | |ΔP/P| {_fmt(s.get('period_rel_err_median_abs', float('nan')), 8, 5)} "
+                  f"epoch {_fmt(s.get('epoch_err_hours_median', float('nan')), 5)}h | 격자 {n_periods:,}점 {_fmt(s['bls_s_per_curve_median'], 5, 1)}s/곡선")
+        print(f"    설정 소요 {time.time() - t_setting:5.1f}s")
+
+    peak_cols = ["setting_id", "baseline_id", "group_id", "stage", "is_pure_noise", "n_points", "status", *bl.PEAK_COLUMNS, "n_periods", "elapsed_s"]
+    match_cols = ["setting_id", "baseline_id", "stage", *bm.MATCH_COLUMNS, "period_days", "duration_hours", "depth_ppm", "phase_label", "n_transits_in_window"]
+    peaks_path, matches_path, summary_path = run_dir / "peaks.csv", run_dir / "matches.csv", run_dir / "summary.csv"
+    for path, cols, rows in ((peaks_path, peak_cols, peak_rows), (matches_path, match_cols, match_rows), (summary_path, list(BLS_SUMMARY_COLUMNS), summary_rows)):
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
+            w.writeheader(); w.writerows(rows)
+    _print_bls_final_table(summary_rows)
+
+    manifest = mf.build_manifest(
+        task=f"{BLS_TASK} bls", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
+        inputs=inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"),
+                         mf.file_entry(args.preprocess_settings, role="preprocess_settings")],
+        config={"name": args.settings.name, "version": cfg["version"], "sha256": mf.file_entry(args.settings)["sha256"],
+                "parameters": {"target": target.key, "stage": args.stage, "stage_config": stage_cfg, "settings": [s.setting_id for s in settings],
+                               "setting_params": {s.setting_id: s.params() for s in settings}, "preprocess_setting": pre.params(),
+                               "grid_set_id": set_id, "noise_seed": None if args.no_noise else args.noise_seed, "limit": args.limit,
+                               "baselines": list(baselines), "known_signals_removed": known_models, "known_signals_skipped": known_skipped,
+                               "matching": cfg["matching"], "sde_definition": cfg["sde_definition"], "run_dir": str(run_dir),
+                               "n_points_quality0": strict.n_valid, "baseline_days": float(strict.time.max() - strict.time.min())}},
+        outputs=[mf.file_entry(peaks_path, kind="peaks", rows=len(peak_rows)), mf.file_entry(matches_path, kind="matches", rows=len(match_rows)),
+                 mf.file_entry(summary_path, kind="summary", rows=len(summary_rows))],
+        notes=f"total {time.time() - started:.1f}s", packages=("numpy", "scipy", "astropy"),
+    )
+    mpath = mf.write_manifest(manifest, args.results / "manifests" / f"bls-{target.key}-{run_id[:8]}.json")
+    print(f"\npeaks:    {peaks_path}\nmatches:  {matches_path}\nsummary:  {summary_path}\nmanifest: {mpath}\n총 소요 {time.time() - started:.1f}s")
+    return 0
+
+
+def cmd_bls_gates(args: argparse.Namespace) -> int:
+    cfg = bl.load_bls_settings(args.settings)[0]
+    g = cfg["gates"]
+    with (args.run_dir / "peaks.csv").open(encoding="utf-8", newline="") as fh:
+        peaks = [r for r in csv.DictReader(fh) if r["status"] == "ok"]
+    with (args.run_dir / "matches.csv").open(encoding="utf-8", newline="") as fh:
+        matches = [r for r in csv.DictReader(fh) if "noise" not in r["baseline_id"] or args.include_noise_signals]
+    table = bm.gate_table(peaks, matches, snr_thresholds=g["snr_thresholds"], sde_thresholds=g["sde_thresholds"], min_transits=g["min_transits"])
+    out = args.run_dir / "gates.csv"
+    with out.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(table[0].keys())); w.writeheader(); w.writerows(table)
+    settings = sorted({r["setting_id"] for r in table})
+    shown = [r for r in table if r["min_transits"] == ""]
+    print(f"run={args.run_dir.name} settings={len(settings)} gates={len({r['gate'] for r in table})} (아래는 통과 횟수 조건 없는 게이트만, 전체는 gates.csv)")
+    print(f"{'gate':<22}" + "".join(f"{s[:18]:>20}" for s in settings))
+    print(f"{'':<22}" + "".join(f"{'회수 | 가짜/잡음곡선':>20}" for _ in settings))
+    for gate in dict.fromkeys(r["gate"] for r in shown):
+        cells = []
+        for s in settings:
+            r = next(x for x in shown if x["gate"] == gate and x["setting_id"] == s)
+            cells.append(f"{_fmt(r['gated_recovery'],5)} | {_fmt(r['false_peaks_per_noise_curve'],5,1)}".rjust(20))
+        print(f"{gate:<22}" + "".join(cells))
+    print("\n읽는 법: 회수 = 매칭된 피크가 게이트를 통과한 주입 비율(realclean·real 바탕곡선). 가짜/잡음곡선 = 순수 잡음 곡선 하나에서 게이트를 통과한"
+          " 상위 피크 수(최대 5). 가짜가 0 에 가까우면서 회수가 높은 게이트가 후보. 허용 목표는 TBD 라 여기서 정하지 않는다.")
+    print(f"gates: {out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m tess_bench", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("bls", help="BLS 탐색 격자·목적함수 비교 (S15P21C206-110)")
+    p.add_argument("--target", required=True, help="fixture target key (예 toi270)")
+    p.add_argument("--stage", choices=["tuning", "evaluation"], default="tuning", help="주입 부분집합·별 목록 (설정 파일 stages)")
+    p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
+    p.add_argument("--preprocess-settings", type=Path, default=DEFAULT_SETTINGS)
+    p.add_argument("--only", nargs="*", help="실행할 setting_id 만 고르기")
+    p.add_argument("--grid", type=Path, default=DEFAULT_GRID)
+    p.add_argument("--raw", type=Path, default=DEFAULT_RAW)
+    p.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
+    p.add_argument("--noise-seed", type=int, default=20260910)
+    p.add_argument("--no-noise", action="store_true", help="잡음 바탕곡선 생략")
+    p.add_argument("--include-raw-real", action="store_true", help="알려진 행성을 제거하지 않은 원본 real 바탕곡선도 추가 실행")
+    p.add_argument("--limit", type=int, default=0, help="바탕곡선당 처음 N group 만 (빠른 확인용)")
+    p.set_defaults(func=cmd_bls)
+
+    p = sub.add_parser("bls-gates", help="저장된 bls 실행에 품질 게이트 조합을 적용 (재실행 없음)")
+    p.add_argument("--run-dir", type=Path, required=True)
+    p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
+    p.add_argument("--include-noise-signals", action="store_true", help="잡음 바탕곡선의 주입 신호도 회수율에 포함")
+    p.set_defaults(func=cmd_bls_gates)
+
     p = sub.add_parser("preprocess", help="전처리·detrending 설정 비교 (S15P21C206-42)")
     p.add_argument("--target", required=True, help="fixture target key (예 toi270)")
     p.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS)
