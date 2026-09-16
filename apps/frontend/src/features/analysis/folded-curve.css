@@ -1,0 +1,60 @@
+.fold-panel {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.fold-panel button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.fold-figure {
+  position: relative;
+  margin: 16px 0 0 95px;
+}
+.fold-plot {
+  height: 280px;
+  width: 100%;
+  touch-action: pan-y pinch-zoom;
+}
+.fold-plot canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fold-plot:focus-visible {
+  outline: 2px solid #accdfa;
+  outline-offset: 4px;
+}
+.fold-y-axis {
+  position: absolute;
+  width: 86px;
+  height: 280px;
+  right: calc(100% + 9px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.fold-x-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-block: 8px;
+}
+.fold-inspector {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .fold-figure {
+    margin-left: 66px;
+  }
+  .fold-y-axis {
+    width: 58px;
+    font-size: 10px;
+  }
+  .fold-panel .periodogram-toolbar {
+    gap: 8px;
+  }
+}

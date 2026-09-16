@@ -1,6 +1,8 @@
 import { useCallback, useId, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { PeriodogramChart } from "./PeriodogramChart";
+import type { AnalysisContext, CurveData } from "./analysis-data";
+import { FoldedCurvePanel } from "./FoldedCurvePanel";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -153,9 +155,13 @@ function PeriodTune({
 
 export function PeriodSelectionWorkspace({
   data,
+  context,
+  curve,
   onPeriodChange,
 }: {
   data: ReadyPeriodogram;
+  context: AnalysisContext;
+  curve: CurveData;
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
   const [change, setChange] = useState<PeriodSelectionChange | null>(null);
@@ -219,11 +225,8 @@ export function PeriodSelectionWorkspace({
             onTune={tune}
           />
         ) : null}
-        <p>
-          현재는 주기 선택까지 사용할 수 있습니다. 접힌 곡선은 아직 연결되지
-          않았습니다.
-        </p>
       </section>
+      <FoldedCurvePanel context={context} curve={curve} change={change} />
     </>
   );
 }

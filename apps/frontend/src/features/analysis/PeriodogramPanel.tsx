@@ -99,6 +99,8 @@ export function PeriodogramPanel({
       {ready ? (
         <PeriodSelectionWorkspace
           data={ready}
+          context={context}
+          curve={curve}
           onPeriodChange={onPeriodChange}
         />
       ) : state.kind !== "loading" ? (
