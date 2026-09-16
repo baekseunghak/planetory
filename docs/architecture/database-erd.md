@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.3
+# Planetory 서비스 DB ERD v1.4
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,16 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.3 → v1.4 (2026-09-16, `S15P21C206-135`)
+
+v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현한다. 열 정의·범위·배정 규칙은 v1.3(`S15P21C206-227`)을 그대로 따르고 여기서 바꾸지 않는다. 기존 행이 있는 DB에도 적용되도록 nullable로 넣고 회원별 발견 순서대로 채운 뒤 `NOT NULL`로 승격한다. 순번이 없던 행에 처음 부여하는 것이며 이미 있는 순번을 재배치하지 않는다.
+
+**미결 5 중 `analysis_histories` 부분을 결정으로 확정한다.** 불변 강제는 트리거가 아니라 **앱 역할의 UPDATE·DELETE 권한 회수**로 처리한다. 트리거는 쓰기마다 비용이 붙고 비활성화로 우회되지만 권한은 DB가 원천 차단한다. `analysis_snapshots`도 같게 처리한다. `published_analyses`는 서비스 백엔드(S08) 소유라 미결로 남긴다. 첨부 검증(미결 6)은 불변 강제가 아니라 값 일치 검사라 이 결정의 범위가 아니다.
+
+`submissions`에 정합 CHECK 3종을 더한다. 위상 선택이 없는 제출에는 서버 파생값도 없어야 하고, 성과 결과는 매칭 결과와 함께 성립하며, 고조파 정정 기록은 실제로 정정했을 때만 남긴다. `challenge_rounds`는 `status='active'` 부분 유일 인덱스로 진행 회차를 하나로 묶는다.
+
+다이어그램에만 빠져 있던 열 7개(`submissions`의 `correction_reason`·계산 버전 2종·`memo`·`rule_version`, `user_candidate_achievements.relabel_disposition`, `user_star_progress.reopened_at`)를 본문 기준으로 채웠다.
 
 ### v1.2 → v1.3 (2026-09-15, 교차 리뷰 대상)
 
@@ -298,6 +308,7 @@ erDiagram
         numeric duration_limit_hours "적용한 선택 폭 상한"
         numeric matched_period "정정 대표 주기"
         numeric harmonic_multiplier "배율"
+        text correction_reason "정정 사유"
         numeric phase_start "위상 시작"
         numeric phase_end "위상 끝"
         double fold_reference_time_btjd "그때 기준 시각"
@@ -311,6 +322,10 @@ erDiagram
         bigint retry_of_submission_id FK "재도전 원 제출"
         boolean answer_viewed "상세 열람"
         timestamptz created_at "접수 시각"
+        text residual_model_version "그때 잔차 계산 버전"
+        text periodogram_config_version "그때 주기도 계산 버전"
+        text memo "회원 메모"
+        text rule_version FK "판정에 쓴 운영 규칙 버전"
     }
     analysis_histories["analysis_histories · 분석 히스토리(불변)"] {
         bigint id PK "고유 번호"
@@ -337,6 +352,7 @@ erDiagram
         bigint recognized_analysis_id FK "근거 공개 분석(미확정)"
         timestamptz recognized_at "인정 시각"
         timestamptz relabeled_at "라벨 갱신 표식"
+        text relabel_disposition "갱신된 외부 판정"
     }
     user_star_progress["user_star_progress · 회원 별 진행"] {
         bigint id PK "고유 번호"
@@ -350,6 +366,7 @@ erDiagram
         text completion_reason "all_found/undiscoverable_only/skipped"
         boolean reopen_pending "재개 대기"
         timestamptz completed_at "완료 시각"
+        timestamptz reopened_at "재개 시각"
     }
     star_unlocks["star_unlocks · 별 발견·자리"] {
         bigint id PK "고유 번호"
@@ -739,7 +756,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
-| 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
+| 5 | published_analyses 불변을 트리거로 강제할지. analysis_histories·analysis_snapshots는 v1.3에서 앱 역할 권한 회수로 확정 | HIS-06, S08 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |
 | 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
