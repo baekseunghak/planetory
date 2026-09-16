@@ -111,6 +111,31 @@ class GoldCatalogSchemaTest {
         assertDoesNotThrow(() -> insertBundle(ticId, "archived"));
     }
 
+    /**
+     * Publisher 멱등 키 [S15P21C206-230]. 같은 키가 두 행이면 "같은 키의 판을
+     * 확인한다"는 조회가 여러 건을 돌려줘 어느 bundleId를 반환할지가 정해지지 않는다.
+     */
+    @Test
+    void 같은_TIC에_같은_판_버전은_두_번_들어가지_않는다() {
+        long ticId = insertStar();
+        insertBundleAtVersion(ticId, "v2", "current");
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundleAtVersion(ticId, "v2", "staging"),
+                "status가 달라도 같은 키면 거절된다");
+        assertThrows(DataIntegrityViolationException.class,
+                () -> insertBundleAtVersion(ticId, "v2", "archived"));
+
+        // 판 버전이 다르면 한 TIC에 여러 행이 남는다. 과거 제출이 그 행들을 참조한다.
+        assertDoesNotThrow(() -> insertBundleAtVersion(ticId, "v3", "archived"));
+        assertDoesNotThrow(() -> insertBundleAtVersion(ticId, "v4", "archived"));
+        assertEquals(3, jdbc.queryForObject(
+                "SELECT count(*) FROM publication_bundles WHERE tic_id = ?", Integer.class, ticId));
+
+        // 다른 별은 같은 버전 문자열을 써도 서로 무관하다.
+        assertDoesNotThrow(() -> insertBundleAtVersion(insertStar(), "v2", "current"));
+    }
+
     /** 완료 조건 (3): 세그먼트 revision 중복은 거절되고 다른 revision은 공존한다. */
     @Test
     void 세그먼트는_같은_revision이_중복되지_않고_다른_revision은_공존한다() {
@@ -222,6 +247,14 @@ class GoldCatalogSchemaTest {
 
     private long insertBundle(long ticId, String status) {
         return insertBundle(ticId, status, VALID_MANIFEST);
+    }
+
+    /** 판 버전을 직접 정해 멱등 키 중복을 만든다. 기본 헬퍼는 매번 다른 버전을 쓴다. */
+    private long insertBundleAtVersion(long ticId, String bundleVersion, String status) {
+        return jdbc.queryForObject("INSERT INTO publication_bundles"
+                        + "(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days)"
+                        + " VALUES (?, ?, ?, ?::jsonb, 1500.5, 27.4) RETURNING id",
+                Long.class, ticId, bundleVersion, status, VALID_MANIFEST);
     }
 
     private long insertBundle(long ticId, String status, String manifest) {

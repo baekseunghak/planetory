@@ -196,7 +196,7 @@ nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions
 | transit/residual 모델 변경 | 원본 정제곡선은 재사용 가능. periodogram·후보·AI 재사용 범위는 모델이 반복 제거와 AI 입력에 미치는 영향에 따라 결정 | 영향 반복 단계부터 제거·후속 BLS·후보·AI·Gold 모델·bundle, Bundle별 cache 격리와 Silver–EC2 재검증 | 모델 변경만으로 재개하지 않음 |
 | AI checkpoint·입력·임계값 변경 | LC·BLS·후보·외부 연결 재사용 | AI 입력/추론 또는 판정부터 bundle | AI 변화만으로 완료 별을 재개하지 않음. 상태 이력 생성 |
 | TIC 별 파라미터 변경 | 광도곡선 전처리는 값 사용 여부에 따라 재사용 | 해당 Feature를 쓰는 BLS/AI 단계와 표시 메타·bundle | 후보/discoverable 변화가 있을 때만 |
-| TCE/TOI/Archive/ExoFOP 갱신 | LC·BLS·모델·기존 AI 원점수 | 외부 정규화·매칭·통합 상태·bundle 검증 | 외부 라벨만으로 재개하지 않음. v1 성과·등급·통계 과거값 유지 |
+| TCE/TOI/Archive/ExoFOP 갱신 | LC·BLS·모델·기존 AI 원점수 | 외부 정규화·매칭·통합 상태·bundle 검증. 새 외부 snapshot id를 입력으로 새 `bundle_version`·PublicationBundle 생성 | 외부 라벨만으로 재개하지 않음. v1 성과·등급·통계 과거값 유지 |
 | Gold 전송·검증 실패 | 성공한 Silver와 기존 EC2 current | 실패 전달/검증 단계만 재시도 | 공개 전이므로 재개 이벤트 없음 |
 
 각 실행은 `run_id`, 원인(`trigger_type`), 영향 TIC·Sector, 시작 단계, 입력/설정 버전, 재사용한 산출물, 성공·실패 단계와 이전/새 bundle을 기록한다. 같은 trigger ID와 결과 차이를 다시 처리해 후보·재개 알림을 중복 생성하지 않는다.

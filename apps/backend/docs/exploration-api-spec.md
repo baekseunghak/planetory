@@ -1,10 +1,10 @@
 # Planetory 탐사 코어 API 명세
 
 - 작성일: 2026-09-11
-- 상태: **팀 협의용 초안 Draft 0.4** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.3 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
+- 상태: **팀 협의용 초안 Draft 0.4** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.3.1 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.3](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.3](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
+- 기준: [요구사항 명세서 v1.3.1](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.6](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
 - v1.3 개정: 2026-09-15. 개별 별 타일·cursor 응답 변경안은 [변경 검토 기록](../../../docs/development/sky-individual-stars-review.md)을 따른다. 관련 제공자/소비자 리뷰 후 적용하며 런타임 구현 완료가 아니다.
 - 이전 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
 - 분담·공통 약속: [API 명세 파트 분담](README.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
@@ -683,8 +683,10 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `userJudgment` | candidate만 | `LIKELY_PLANET` / `UNLIKELY_PLANET` / `UNSURE` |
 | `evidenceChecks` | 아니오 | `oddeven`, `secondary`, `ushape` 중 0~3개. 그 외 값(중심 위치 포함)은 400(POL-13, AT-93) |
 | `memo` | 아니오 | 0~2,000 코드포인트 `확인 필요` |
-| `viewState` | 아니오 | 재현용. 서버 매칭 입력이 아니며 범위만 검증(HIS-02) |
+| `viewState` | 아니오 | 재현용. 서버 매칭 입력이 아니며 범위만 검증(HIS-02). `foldedXZoomRatio`를 제공하면 유한한 수이며 `1 ≤ 값 ≤ 32`여야 한다. 기존 1~8 값도 유효하다(SRS v1.3.1 변경안) |
 | `retryOfSubmissionId` | 아니오 | [다시 풀기]에서 온 제출. 본인 제출·같은 TIC만 |
+
+**접기 표시 상태 변경안(2026-09-16, 사용자 채택·교차 리뷰 대기):** [SRS EXP-13](../../../docs/requirements/planetory-requirements-spec.md#43-분석-화면)에 따라 배율 허용 상한을 32로 늘린다. 미세 조정 중 화면 중심 위상은 프론트 내부 상태이며 이 요청·히스토리 응답에 새 필드를 추가하지 않는다. 기존 `analysis_histories.snapshot_params` JSONB에 배율을 저장하므로 이 변경으로 테이블·열·마이그레이션을 추가하지 않는다. 백엔드 담당자는 DTO·범위 검증의 8배 제한 유무와 32배 저장·조회, 기존 1~8배 기록 호환을 확인하고 제한이 있으면 수정한다. 문서 반영은 실제 API 검증 완료를 의미하지 않는다. 확대 배율은 BLS·잔차·매칭·epoch·duration 계산 입력을 변경하지 않는다.
 
 ### 6.2 검증 (SUB-02, Q03)
 
