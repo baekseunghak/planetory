@@ -1,7 +1,8 @@
 import {
   useEffect,
   useId,
-  useLayoutEffect,
+  lazy,
+  Suspense,
   useMemo,
   useRef,
   useState,
@@ -11,14 +12,21 @@ import type { FoldData } from "./fold-data";
 import type { FoldResult } from "./fold-client";
 import {
   clampFoldView,
-  drawFoldedCurve,
   foldFluxDomain,
   fullFoldView,
   MAX_FOLD_ZOOM,
   zoomFoldView,
   type FoldView,
 } from "./folded-curve";
+import { FoldCanvasSurface, UnavailableGpuSurface } from "./FoldCanvasSurface";
 import "./folded-curve.css";
+const DevGpuSurface = import.meta.env.DEV
+  ? lazy(() =>
+      import("../../../dev/FoldGpuSurface").catch(() => ({
+        default: UnavailableGpuSurface,
+      })),
+    )
+  : null;
 
 const number = new Intl.NumberFormat("ko-KR", { maximumSignificantDigits: 12 });
 const tick = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 4 });
@@ -43,9 +51,18 @@ export function FoldedCurveChart({
     setInspected(null);
   }
   const domain = useMemo(() => foldFluxDomain(data.points), [data]);
-  const canvas = useRef<HTMLCanvasElement>(null),
-    plot = useRef<HTMLDivElement>(null);
+  const plot = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 600, height: 280, dpr: 1 });
+  const [rendererMode, setRendererMode] = useState(() =>
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).get("foldRenderer") === "webgl"
+      ? "webgl"
+      : "canvas",
+  );
+  const [rendererStatus, setRendererStatus] = useState<
+    "canvas" | "loading" | "webgl" | "fallback"
+  >(rendererMode === "webgl" ? "loading" : "canvas");
+  const surface = { data, result, domain, view, size };
   const hintId = useId();
   const low = view.center - 1 / view.zoom,
     high = view.center + 1 / view.zoom;
@@ -117,26 +134,6 @@ export function FoldedCurveChart({
       element.removeEventListener("wheel", wheel);
     };
   }, [setView]);
-  useLayoutEffect(() => {
-    const element = canvas.current!;
-    if (size.width <= 0 || size.height <= 0) return;
-    const ctx = element.getContext("2d");
-    if (!ctx) return;
-    const width = Math.round(size.width * size.dpr),
-      height = Math.round(size.height * size.dpr);
-    if (element.width !== width) element.width = width;
-    if (element.height !== height) element.height = height;
-    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
-    drawFoldedCurve(
-      ctx,
-      data.points,
-      result.phases,
-      domain,
-      view,
-      size.width,
-      size.height,
-    );
-  }, [data, result, domain, view.zoom, view.center, size]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.altKey || event.metaKey) return;
     if (
@@ -213,6 +210,36 @@ export function FoldedCurveChart({
         그래프 주기 {number.format(result.periodDays)}일 · 유효 관측점{" "}
         {number.format(data.points.length)}개 · 밝기 ({fluxUnit})
       </p>
+      {import.meta.env.DEV && (
+        <div className="fold-renderer-controls">
+          <label>
+            개발용 접기 렌더러{" "}
+            <select
+              name="fold-renderer"
+              autoComplete="off"
+              value={rendererMode}
+              onChange={(event) => {
+                const mode = event.target.value;
+                if (mode === rendererMode) return;
+                setRendererMode(mode);
+                setRendererStatus(mode === "webgl" ? "loading" : "canvas");
+              }}
+            >
+              <option value="canvas">Canvas (기본)</option>
+              <option value="webgl">WebGL (검증용)</option>
+            </select>
+          </label>
+          <p role="status" data-testid="fold-renderer-status">
+            {rendererStatus === "loading"
+              ? "GPU 표시를 준비하고 있습니다…"
+              : rendererStatus === "fallback"
+                ? "GPU 표시를 사용할 수 없어 Canvas로 전환했습니다."
+                : rendererStatus === "webgl"
+                  ? "WebGL로 표시하고 있습니다."
+                  : "Canvas로 표시하고 있습니다."}
+          </p>
+        </div>
+      )}
       <figure className="fold-figure">
         <div className="fold-y-axis" aria-hidden="true">
           {[1, 0.5, 0].map((r) => (
@@ -263,7 +290,17 @@ export function FoldedCurveChart({
           }}
           onPointerLeave={() => setInspected(null)}
         >
-          <canvas ref={canvas} aria-hidden="true" />
+          {import.meta.env.DEV && rendererMode === "webgl" && DevGpuSurface ? (
+            <Suspense fallback={<FoldCanvasSurface {...surface} />}>
+              <DevGpuSurface
+                key={data.dataId}
+                {...surface}
+                onStatus={setRendererStatus}
+              />
+            </Suspense>
+          ) : (
+            <FoldCanvasSurface {...surface} />
+          )}
         </div>
         <div className="fold-x-axis" aria-hidden="true">
           {[0, 0.25, 0.5, 0.75, 1].map((r) => (

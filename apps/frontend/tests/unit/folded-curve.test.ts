@@ -6,6 +6,7 @@ import {
   foldFluxDomain,
   fullFoldView,
   zoomFoldView,
+  rasterFoldPoints,
 } from "../../src/features/analysis/folded-curve";
 import type { FoldPoint } from "../../src/features/analysis/fold-data";
 const points: FoldPoint[] = [0, 1, 2].map((i) => ({
@@ -102,4 +103,68 @@ test("constant and empty flux domains remain finite without inventing zero obser
   assert.deepEqual(foldFluxDomain([]), [0, 1]);
   const domain = foldFluxDomain([points[0], points[0]]);
   assert.ok(domain[0] < 1 && domain[1] > 1);
+});
+
+for (const dpr of [1, 2])
+  test(`dense raster preserves every point on two cycles at DPR ${dpr}`, () => {
+    const dense = Array.from({ length: 2501 }, (_, i) => ({
+      ...points[0],
+      index: i,
+    }));
+    const phases = Float64Array.from(dense, (_, i) => i / dense.length);
+    const original = phases.slice();
+    const width = 12000 * dpr,
+      height = 40 * dpr;
+    const image = {
+      width,
+      height,
+      data: new Uint8ClampedArray(width * height * 4),
+    };
+    const domain = foldFluxDomain(dense);
+    rasterFoldPoints(dense, phases, domain, fullFoldView, image, dpr);
+    let shown = 0;
+    for (const phase of phases)
+      for (let repeat = -1; repeat <= 1; repeat++) {
+        const p = phase + repeat;
+        if (p < -0.5 || p >= 1.5) continue;
+        const x = Math.floor(((p + 0.5) / 2) * width),
+          y = Math.floor(height / 2);
+        const offset = (y * width + x) * 4;
+        assert.deepEqual(
+          Array.from(image.data.slice(offset, offset + 3)),
+          [166, 232, 206],
+        );
+        assert.ok(image.data[offset + 3] > 0);
+        shown++;
+      }
+    assert.equal(shown, dense.length * 2);
+    assert.deepEqual(phases, original);
+    assert.equal(image.data[3], 0); // No connecting fill outside the point band.
+    rasterFoldPoints([], new Float64Array(), domain, fullFoldView, image, dpr);
+    assert.ok(image.data.every((v) => v === 0)); // Reused buffer cannot leave old observations.
+  });
+
+test("raster clips points outside the zoom window and never joins separated observations", () => {
+  const image = { width: 100, height: 100, data: new Uint8ClampedArray(40000) };
+  const domain: [number, number] = [0.8, 1.2];
+  rasterFoldPoints(
+    points.slice(0, 2),
+    new Float64Array([0, 0.5]),
+    domain,
+    { zoom: 32, center: 0 },
+    image,
+    1,
+  );
+  assert.ok(image.data[(50 * 100 + 50) * 4 + 3] > 0);
+  assert.equal(image.data[(50 * 100 + 20) * 4 + 3], 0);
+  const single = image.data.slice();
+  rasterFoldPoints(
+    points.slice(0, 1),
+    new Float64Array([0]),
+    domain,
+    { zoom: 32, center: 0 },
+    image,
+    1,
+  );
+  assert.deepEqual(image.data, single);
 });

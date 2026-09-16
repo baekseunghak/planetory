@@ -224,7 +224,7 @@ test("pending fold keeps its last successful graph and can be cancelled/retried"
     window.Worker = class extends NativeWorker {
       override postMessage(message: unknown) {
         if ((message as { type?: string }).type === "fold")
-          setTimeout(() => super.postMessage(message), 500);
+          setTimeout(() => super.postMessage(message), 2000);
         else super.postMessage(message);
       }
     };
@@ -259,7 +259,7 @@ test("pending fold keeps its last successful graph and can be cancelled/retried"
     .getByRole("button", { name: "접기 다시 계산", exact: true })
     .click();
   await expect(page.getByTestId("fold-status")).toHaveText(
-    "선택한 주기로 곡선을 접었습니다.",
+    "주기를 조정하면 그래프를 갱신합니다. 그래프에는 마지막 계산 완료 결과를 표시합니다.",
   );
   await expect(page.getByTestId("fold-result")).not.toHaveAttribute(
     "data-period",
@@ -372,7 +372,7 @@ for (const operation of ["fine-tune", "reselect"] as const)
       await selected.getAttribute("data-revision"),
     );
     await expect(panel).toHaveAttribute("data-fold-ready", "false");
-    await expect(status).toContainText("접고 있습니다");
+    await expect(status).toContainText("마지막 계산 완료 결과");
     await expect(result).toHaveAttribute("data-period", original!);
     // View-only actions remain available; failure restores the pre-edit snapshot.
     await plot.focus();
@@ -450,3 +450,147 @@ test("watchdog restores a stalled refold and permits explicit retry", async ({
     "true",
   );
 });
+
+test("repeated slider updates keep feedback unchanged without a late cancel flash", async ({
+  page,
+}) => {
+  await page.goto("/analysis/259377024");
+  await page
+    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+    .click();
+  const panel = page.getByTestId("fold-panel");
+  await expect(panel).toHaveAttribute("data-fold-ready", "true");
+  const baseline = await page.getByTestId("fold-status").textContent();
+  await page.evaluate(() => {
+    const feedback = document.querySelector(".fold-feedback")!;
+    const samples: { text: string | null; cancelVisible: boolean }[] = [];
+    Object.assign(window, { feedbackSamples: samples });
+    new MutationObserver(() => {
+      const button = feedback.querySelector("button")!;
+      samples.push({
+        text: feedback.querySelector("p")!.textContent,
+        cancelVisible: getComputedStyle(button).visibility !== "hidden",
+      });
+    }).observe(feedback, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+  });
+  const slider = page.getByRole("slider", { name: "반복 주기 미세 조정" });
+  for (let i = 0; i < 8; i++) {
+    await slider.press(i % 2 ? "ArrowLeft" : "ArrowRight");
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+  }
+  await page.clock.install();
+  await page.clock.runFor(1500);
+  await expect(page.getByTestId("fold-status")).toHaveText(baseline!);
+  await expect(
+    page.getByRole("button", { name: "접기 취소", exact: true }),
+  ).toHaveCount(0);
+  const samples = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          feedbackSamples: { text: string | null; cancelVisible: boolean }[];
+        }
+      ).feedbackSamples,
+  );
+  expect(
+    samples.every(
+      (sample) => sample.text === baseline && !sample.cancelVisible,
+    ),
+  ).toBe(true);
+});
+
+test("one prolonged pending interval exposes cancel despite new inputs and resets on retry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = window.Worker;
+    let folds = 0;
+    window.Worker = class extends Native {
+      override postMessage(message: unknown) {
+        if ((message as { type: string }).type === "fold" && ++folds > 1)
+          return;
+        super.postMessage(message);
+      }
+    };
+  });
+  await page.goto("/analysis/259377024");
+  await page
+    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+    .click();
+  const panel = page.getByTestId("fold-panel");
+  await expect(panel).toHaveAttribute("data-fold-ready", "true");
+  const baseline = await page.getByTestId("fold-status").textContent();
+  const cancel = page.getByRole("button", { name: "접기 취소", exact: true });
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await expect(panel).toHaveAttribute("data-fold-ready", "false");
+  await page.clock.runFor(400);
+  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await page.clock.runFor(400);
+  await expect(page.getByTestId("fold-status")).toHaveText(baseline!);
+  await expect(cancel).toHaveCount(0);
+  await page.clock.runFor(300);
+  await expect(cancel).toBeEnabled();
+  await cancel.click();
+  await expect(page.getByTestId("fold-status")).toContainText("취소");
+  await expect(panel).toHaveAttribute("data-fold-ready", "true");
+  await page
+    .getByRole("button", { name: "접기 다시 계산", exact: true })
+    .click();
+  await expect(panel).toHaveAttribute("data-fold-ready", "false");
+  await page.clock.runFor(400);
+  await expect(cancel).toHaveCount(0);
+  await page.clock.runFor(700);
+  await expect(cancel).toBeEnabled();
+});
+
+for (const width of [1024, 1440])
+  test(`pending and success preserve graph position at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(() => {
+      const NativeWorker = window.Worker;
+      window.Worker = class extends NativeWorker {
+        override postMessage(message: unknown) {
+          if ((message as { type: string }).type === "fold")
+            setTimeout(() => super.postMessage(message), 300);
+          else super.postMessage(message);
+        }
+      };
+    });
+    await page.goto("/analysis/259377024");
+    await page
+      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+      .click();
+    const panel = page.getByTestId("fold-panel");
+    const plot = page.getByRole("group", {
+      name: "접힌 곡선 그래프",
+      exact: true,
+    });
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+    const position = () =>
+      plot.evaluate(
+        (el) =>
+          el.getBoundingClientRect().top -
+          el.closest(".fold-panel")!.getBoundingClientRect().top,
+      );
+    const before = await position();
+    await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    await expect(panel).toHaveAttribute("data-fold-ready", "false");
+    expect(await position()).toBe(before);
+    await expect(
+      page.getByRole("button", { name: "접기 취소", exact: true }),
+    ).toHaveCount(0);
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+    expect(await position()).toBe(before);
+    await expect(
+      page.getByRole("button", { name: "접기 취소", exact: true }),
+    ).toHaveCount(0);
+  });

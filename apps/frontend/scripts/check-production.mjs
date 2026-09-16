@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "개발용 접기 렌더러",
+  "foldRenderer",
+  "GPU 표시를 사용할 수 없어",
+  "WebGL shader linking failed",
   "pg-synthetic-183-v1",
   "peaks-synthetic-183-v1",
   "prototype-observation-10m-mean-v1",

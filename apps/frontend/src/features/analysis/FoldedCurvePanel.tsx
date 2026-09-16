@@ -1,7 +1,57 @@
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import type { CurveData } from "./analysis-data";
 import type { useFoldSession } from "./use-fold-session";
 import { FoldedCurveChart } from "./FoldedCurveChart";
+
+// Presentation delay only; the session locks follow-up actions immediately.
+const PROGRESS_NOTICE_DELAY_MS = 1000;
+const FOLD_GUIDANCE =
+  "주기를 조정하면 그래프를 갱신합니다. 그래프에는 마지막 계산 완료 결과를 표시합니다.";
+
+function FoldFeedback({
+  pending,
+  retry,
+  message,
+  onAction,
+}: {
+  pending: boolean;
+  retry: boolean;
+  message: string;
+  onAction: () => void;
+}) {
+  const [delayed, setDelayed] = useState(false);
+  useEffect(() => {
+    if (!pending) {
+      setDelayed(false);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setDelayed(true),
+      PROGRESS_NOTICE_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [pending]);
+  // New periods during one pending interval must not restart this timer.
+  const showProgress = pending && delayed;
+  const showAction = showProgress || retry;
+  return (
+    <div className="fold-feedback">
+      <p role="status" data-testid="fold-status">
+        {showProgress
+          ? "선택한 주기로 곡선을 접고 있습니다… 계산이 끝나면 구간 선택·판단·제출을 진행할 수 있습니다."
+          : message}
+      </p>
+      <button
+        type="button"
+        className={showAction ? undefined : "fold-action-idle"}
+        disabled={!showAction}
+        onClick={onAction}
+      >
+        {retry ? "접기 다시 계산" : "접기 취소"}
+      </button>
+    </div>
+  );
+}
 
 export function FoldedCurvePanel({
   curve,
@@ -22,15 +72,13 @@ export function FoldedCurvePanel({
     ? input.error
     : !input.data?.points.length
       ? "접을 유효 관측 데이터가 없습니다. 신호가 없다는 뜻은 아닙니다."
-      : status === "pending"
-        ? "선택한 주기로 곡선을 접고 있습니다… 마지막 성공 그래프가 있으면 그대로 표시합니다. 계산 중에는 구간 선택·판단·제출을 진행할 수 없습니다."
-        : status === "error"
-          ? `접기에 실패했습니다. ${state.message}${restored} 다시 계산하면 실패한 주기를 재시도합니다.`
-          : status === "cancelled"
-            ? `접기를 취소했습니다.${restored} 다시 계산하면 취소한 주기를 재시도합니다.`
-            : !state.change
-              ? "주기를 선택하면 현재 곡선을 접어 표시합니다."
-              : "선택한 주기로 곡선을 접었습니다.";
+      : status === "error"
+        ? `접기에 실패했습니다. ${state.message}${restored} 다시 계산하면 실패한 주기를 재시도합니다.`
+        : status === "cancelled"
+          ? `접기를 취소했습니다.${restored} 다시 계산하면 취소한 주기를 재시도합니다.`
+          : !state.change
+            ? "주기를 선택하면 현재 곡선을 접어 표시합니다."
+            : FOLD_GUIDANCE;
   return (
     <section
       className="fold-panel"
@@ -39,19 +87,12 @@ export function FoldedCurvePanel({
       data-fold-ready={ready}
     >
       <h3 id={headingId}>주기로 접은 밝기 변화</h3>
-      <p role="status" data-testid="fold-status">
-        {message}
-      </p>
-      {status === "pending" && (
-        <button type="button" onClick={cancel}>
-          접기 취소
-        </button>
-      )}
-      {(status === "error" || status === "cancelled") && (
-        <button type="button" onClick={onRetry}>
-          접기 다시 계산
-        </button>
-      )}
+      <FoldFeedback
+        pending={status === "pending"}
+        retry={status === "error" || status === "cancelled"}
+        message={message}
+        onAction={status === "pending" ? cancel : onRetry}
+      />
       {success &&
       input.data &&
       curve.kind === "ready" &&

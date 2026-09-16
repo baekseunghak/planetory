@@ -45,6 +45,12 @@ export function drawFoldedCurve(
   view: FoldView,
   width: number,
   height: number,
+  raster?: {
+    surface: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    image: ImageData;
+    dpr: number;
+  },
 ) {
   const low = view.center - 1 / view.zoom,
     high = view.center + 1 / view.zoom;
@@ -61,7 +67,25 @@ export function drawFoldedCurve(
     ctx.lineTo(width, (height * i) / 4);
     ctx.stroke();
   }
+  // This switches rendering methods, never caps or samples observations.
+  let visibleDots = 0;
+  if (raster) {
+    for (const phase of phases) {
+      for (let repeat = -1; repeat <= 1; repeat++) {
+        if (phase + repeat >= low && phase + repeat < high) visibleDots++;
+      }
+      if (visibleDots > 50_000) break;
+    }
+  }
+  if (raster && visibleDots > 50_000) {
+    rasterFoldPoints(points, phases, domain, view, raster.image, raster.dpr);
+    raster.ctx.putImageData(raster.image, 0, 0);
+    ctx.drawImage(raster.surface, 0, 0, width, height);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = "#a6e8ce";
+  const radius = points.length > 2000 ? 1.2 : 3;
   for (let i = 0; i < points.length; i++) {
     const y =
       height -
@@ -69,16 +93,58 @@ export function drawFoldedCurve(
     for (let repeat = -1; repeat <= 1; repeat++) {
       const phase = phases[i] + repeat;
       if (phase < low || phase >= high) continue;
+      const x = ((phase - low) / (high - low)) * width;
       ctx.beginPath();
-      ctx.arc(
-        ((phase - low) / (high - low)) * width,
-        y,
-        points.length > 2000 ? 1.2 : 3,
-        0,
-        2 * Math.PI,
-      );
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
       ctx.fill();
     }
   }
   ctx.restore();
+}
+
+/** All visible observations contribute a circle; no sampling, binning or data rewrite. */
+export function rasterFoldPoints(
+  points: readonly FoldPoint[],
+  phases: Float64Array,
+  domain: [number, number],
+  view: FoldView,
+  image: Pick<ImageData, "width" | "height" | "data">,
+  dpr: number,
+) {
+  const { width, height, data } = image;
+  data.fill(0);
+  const low = view.center - 1 / view.zoom,
+    high = view.center + 1 / view.zoom;
+  const radius = 1.2 * dpr,
+    reach = radius + 0.5;
+  for (let i = 0; i < points.length; i++) {
+    const cy =
+      height -
+      ((points[i].flux - domain[0]) / (domain[1] - domain[0])) * height;
+    const y0 = Math.max(0, Math.floor(cy - reach)),
+      y1 = Math.min(height - 1, Math.ceil(cy + reach));
+    for (let repeat = -1; repeat <= 1; repeat++) {
+      const phase = phases[i] + repeat;
+      if (phase < low || phase >= high) continue;
+      const cx = ((phase - low) / (high - low)) * width;
+      const x0 = Math.max(0, Math.floor(cx - reach)),
+        x1 = Math.min(width - 1, Math.ceil(cx + reach));
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const offset = (y * width + x) * 4;
+          if (data[offset + 3] === 255) continue;
+          const dx = x + 0.5 - cx,
+            dy = y + 0.5 - cy;
+          const coverage = Math.min(
+            1,
+            Math.max(0, reach - Math.sqrt(dx * dx + dy * dy)),
+          );
+          if (!coverage) continue;
+          data[offset] = 166;
+          data[offset + 1] = 232;
+          data[offset + 2] = 206;
+          data[offset + 3] += (255 - data[offset + 3]) * coverage;
+        }
+    }
+  }
 }

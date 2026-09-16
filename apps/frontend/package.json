@@ -19,6 +19,9 @@
     "test:browser": "playwright test --project=chromium",
     "test:browser:desktop": "playwright test --project=chrome --project=msedge --project=firefox",
     "test:production": "playwright test --config=playwright.production.config.ts",
+    "test:performance": "npm run build && playwright test --config=playwright.performance.config.ts",
+    "test:gpu": "playwright test --config=playwright.gpu.config.ts",
+    "test:gpu:app": "playwright test --config=playwright.gpu-app.config.ts",
     "check": "npm run build && npm test && npm run test:browser && npm run test:production",
     "format": "prettier --write src dev tests scripts docs *.ts *.json *.html *.md",
     "format:check": "prettier --check src dev tests scripts docs *.ts *.json *.html *.md"
