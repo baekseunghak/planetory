@@ -101,10 +101,7 @@ class GoldCatalogRepositoryTest {
         assertEquals(3, bundle.manifest().fineTune().get("half_width_cells").asInt());
     }
 
-    /**
-     * 판 변경 검증과 제출 당시 판 재현에 필요하므로 archived 판도 id로는 읽혀야 한다.
-     * 진행 중 분석이 구판을 계속 쓰기 위한 것이 아니다(D-16·D-17).
-     */
+    /** 진행 중 분석은 current를 쓰지만, 과거 제출이 참조하는 archived 판은 id로 읽혀야 한다. */
     @Test
     void 교체된_판도_id로_읽힌다() {
         Bundle archived = repository.findBundle(previousBundleId).orElseThrow();

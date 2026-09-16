@@ -41,7 +41,7 @@ public class GoldCatalogRepository {
         this.jdbc = jdbc;
     }
 
-    /** 지금 공개 중인 판. 분석 진입은 이 값을 한 번 읽어 {@code bundleId}를 끝까지 고정한다. */
+    /** 지금 공개 중인 판. 분석 진입과 후속 요청은 이 값을 요청의 {@code bundleId}와 대조한다. */
     public Optional<Bundle> findCurrentBundle(long ticId) {
         return jdbc.sql("""
                         SELECT id, tic_id, bundle_version, status, manifest,
@@ -55,12 +55,8 @@ public class GoldCatalogRepository {
     }
 
     /**
-     * 판을 id로 읽는다. 교체돼 {@code archived}가 된 판도 보존 기간 안이면 그대로 반환한다.
-     *
-     * <p>세션이 구판을 계속 쓰기 위한 조회가 아니다. 진행 중 분석은 판 변경을 감지하면 최신 판으로
-     * 다시 불러오며 archived 판의 계산 결과를 채택하지 않는다(D-16·D-17, 2026-09-15). 이 메서드는
-     * 요청이 들고 온 {@code bundleId}가 현재 판과 같은지 검증하거나(`BUNDLE_CHANGED`),
-     * 제출 당시 판을 기록·재현할 때 쓴다.
+     * 과거 제출 재현용 조회. 진행 중 세션·재시도는 {@link #findCurrentBundle(long)}을 쓴다.
+     * 판이 교체돼 {@code archived}가 돼도 제출 참조용 Bundle 행은 id로 조회한다.
      */
     public Optional<Bundle> findBundle(long bundleId) {
         return jdbc.sql("""
