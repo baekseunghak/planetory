@@ -25,3 +25,4 @@
 | 2026-09-16 | Gold 게시 계약과 Publisher·Backend·Frontend 합성 fixture 정합화 | S15P21C206-68 | Gold 계약, PublicationBundle, current, archived, Redis, payload, fixture, field unit, checksum | 검증 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | publication_bundles 멱등 키 유일 제약 | S15P21C206-230 | publication_bundles, bundle_version, 멱등 키, UNIQUE, pg_advisory_xact_lock, V8, Publisher 재시도, ERD v1.6 | 구현 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
