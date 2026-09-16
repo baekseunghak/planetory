@@ -8,6 +8,7 @@ import com.planetory.backend.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.domain.exploration.service.SkyViews.Bounds;
@@ -47,6 +48,13 @@ public class SkyService {
     private final JdbcClient jdbc;
     private final Clock clock;
 
+    /**
+     * 메타는 경계·별 수·버전·중심 별을 한 스냅샷에서 읽는다 [S15P21C206-137].
+     *
+     * <p>네 값을 따로 읽으면 그 사이에 들어온 발견이 일부에만 반영돼, 프론트가 받은 경계 밖에
+     * 별이 있거나 별 수와 실제가 어긋난 상태로 화면을 그린다.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SkyMeta meta(long memberId, boolean firstVisit) {
         Bounds bounds = stars.findBounds(memberId)
                 // 가입 처리가 튜토리얼 1번을 열므로 별 0개는 없다(9.4절). 그래도 응답은 성립해야 한다.
@@ -65,7 +73,13 @@ public class SkyService {
      *
      * <p>요청 version이 현재와 다르면 별을 주지 않고 재시작을 요구한다. 이때의 빈 배열은
      * 빈 지도나 적재 완료가 아니다.
+     *
+     * <p>버전·페이지·범위 수를 <b>한 스냅샷</b>에서 읽는다 [S15P21C206-137]. 기본 격리 수준은
+     * 문장마다 스냅샷을 새로 떠서, 읽는 도중 발견이 들어오면 {@code rangeStarCount}가 실제로
+     * 받게 될 페이지 합과 달라진다. 프론트는 그 수로 적재 완료를 판단하므로 영원히 기다리거나
+     * 덜 받은 채로 끝난다. REPEATABLE READ는 첫 문장의 스냅샷을 트랜잭션 끝까지 유지한다.
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SkyTile tiles(long memberId, int level, double x, double y, double w, double h,
                          String requestedVersion, Integer requestedLimit, String cursor) {
         validateLevel(level);
