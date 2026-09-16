@@ -418,6 +418,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `achievement.grade` | `count` 1/2/3/4 이상 → A/S/SS/SSS, 0이면 null. 열이 아니라 계산값(GRD-01) |
 | `actions.analysis` | `start`(제출 없음) / `continue`(진행 중) / `review`(완료). 재개 별은 `continue` |
 | `actions.boardOpen` | 한 명 이상 발견한 별이면 true(COM-01). 스레드 목록은 서비스 API |
+| `actions.resultAvailable` | 그 회원의 제출 이력이 하나라도 있으면 true. 결과 페이지는 제출 이력이 있는 별마다 열린다(RES-10) |
+| `actions.threadCount` | 이 별의 공식 신호 스레드 수. 숨김·삭제는 세지 않는다 |
+| `star.sectorCount` / `star.sectors` | 관측 회차를 중복 없이 오름차순으로 준다. 같은 회차가 여러 `source_version`으로 들어올 수 있어 `sectorCount`는 행 수가 아니라 서로 다른 회차의 수다 |
 
 **시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
@@ -474,6 +477,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
 - 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
 - WebGL 대체 목록 뷰(NFR-18)는 `scope=discovered&sort=recent`를 쓴다. 성과로 막 발견해 아직 제출하지 않은 별도 목록에서 골라 분석에 진입할 수 있어야 하기 때문이다(지웅 리뷰 6). 마이페이지는 기본값을 유지한다.
+- `size`는 기본 20, 상한 100이다. 상한 밖이거나 계약 밖 `scope`·`sort`는 400 `VALIDATION_FAILED`다. 타인 조회에 `scope=discovered`를 쓰면 같은 400으로 거절한다. 미제출 발견까지 보이면 그 회원의 진행 상태가 드러나기 때문이다.
+- `cursor`는 불투명 값이며 **요청 회원·대상 회원·`scope`·`sort`·`size`**에 묶는다. 하나라도 다르면 400이다. 요청 회원까지 묶는 이유는 같은 대상이라도 보는 사람에 따라 응답이 다르기 때문이다(`unpublishedSignalCount`). 위치는 `lastActivityAt`과 `ticId`를 함께 담는다. 시각만 담으면 같은 시각의 별들이 페이지 경계에서 통째로 밀리거나 빠진다.
+- `unpublishedSignalCount`는 회원이 이 별에서 매칭한 고유 신호 중 유효한 공개가 없는 수다. 타인 조회에서는 0이 아니라 **필드를 뺀다**. "공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다.
 
 ### 4.5 공개 별 요약
 
@@ -493,6 +499,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 필드 | 규칙 |
 |---|---|
+| `currentBundleId` | 현재 판. `published` 별에는 판이 있어야 하지만 없으면 `null`을 준다. 게시판 헤더는 판 없이도 떠야 하고, 분석 진입(5.1)이 그 자리에서 503으로 막는다 |
 | `boardOpen` | `star_unlocks`에 그 TIC 행이 하나 이상. false면 서비스 API가 목록·검색·직접 URL에서 게시판을 숨긴다(AT-65) |
 | `unlockedForMe`, `analysisAvailable` | 요청 회원의 발견 여부. 둘은 같은 값이지만 의미를 분리해 둔다. false면 [이 별 분석하기]를 비활성으로 표시하고 서버도 5.1절에서 거절한다(AT-64) |
 | `star` | `sectorCount`·`sectors`·`tmag`만 준다. 이 응답은 게시판 헤더·[이 별 분석하기] 버튼·출처 카드가 쓰는 요약이라 온도·반지름을 놓을 자리가 없다. **감추는 것이 아니다** — 셋 다 TESS 카탈로그 공개 값이고 본인 상세(4.2)는 모두 준다. 소비 화면이 필요로 하면 그때 넓힌다(D-18) |
