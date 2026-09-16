@@ -166,6 +166,80 @@ class ExplorationDomainSchemaTest {
         assertThrows(DataIntegrityViolationException.class, () -> insertUnlock(ticId, -1));
     }
 
+    /**
+     * 순번 제약의 존재 이유는 동시 배정이다. 두 발견이 동시에 "최대값+1"을 읽으면 같은 순번을
+     * 계산하는데, 그대로 저장되면 두 별이 같은 자리에 놓인다. 하나만 성공해야 한다.
+     */
+    @Test
+    void 동시에_순번을_배정하면_하나만_성공한다() throws Exception {
+        int threads = 8;
+        List<Long> ticIds = java.util.stream.IntStream.range(0, threads)
+                .mapToObj(i -> insertStar()).toList();
+
+        var ready = new java.util.concurrent.CountDownLatch(threads);
+        var go = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        try {
+            List<java.util.concurrent.Future<Boolean>> results = ticIds.stream()
+                    .map(tic -> pool.submit(() -> {
+                        ready.countDown();
+                        go.await();
+                        try {
+                            // 실제 발견 경로와 같은 계산식(InitialExplorationService)
+                            // unlock_reason은 tutorial을 쓴다. achievement는 trigger_achievement_id·seq를
+                            // 함께 요구해(V1 CHECK) 순번 경합과 무관한 이유로 실패한다.
+                            jdbc.update("INSERT INTO star_unlocks(user_id, tic_id, unlock_reason,"
+                                            + " depth_z, unlocked_at, world_x, world_y, layout_version,"
+                                            + " layout_ordinal)"
+                                            + " VALUES (?, ?, 'tutorial', 0.0, now(), 1.0, 2.0,"
+                                            + " 'personal-spiral-v1',"
+                                            + " COALESCE((SELECT MAX(layout_ordinal) + 1 FROM star_unlocks"
+                                            + "  WHERE user_id = ?), 0))",
+                                    userId, tic, userId);
+                            return true;
+                        } catch (DataIntegrityViolationException expected) {
+                            return false;   // 같은 순번을 잡은 쪽은 거절된다
+                        }
+                    }))
+                    .toList();
+
+            ready.await();
+            go.countDown();
+
+            long succeeded = 0;
+            for (var r : results) {
+                if (r.get()) {
+                    succeeded++;
+                }
+            }
+
+            Integer distinct = jdbc.queryForObject(
+                    "SELECT count(DISTINCT layout_ordinal) FROM star_unlocks WHERE user_id = ?",
+                    Integer.class, userId);
+            Integer rows = jdbc.queryForObject(
+                    "SELECT count(*) FROM star_unlocks WHERE user_id = ?", Integer.class, userId);
+
+            assertEquals(rows, distinct, "같은 순번을 가진 행이 있으면 두 별이 겹친다");
+            assertEquals(succeeded, rows.longValue(), "성공한 수만큼만 저장돼야 한다");
+            assertTrue(succeeded >= 1, "적어도 하나는 성공해야 한다");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /** 제약을 지키지 못하면 발견 자체가 실패하고 행이 남지 않아야 한다. */
+    @Test
+    void 순번이_충돌하면_그_발견은_저장되지_않는다() {
+        long otherTic = insertStar();
+        insertUnlock(ticId, 0);
+
+        assertThrows(DataIntegrityViolationException.class, () -> insertUnlock(otherTic, 0));
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT count(*) FROM star_unlocks WHERE user_id = ? AND tic_id = ?",
+                Integer.class, userId, otherTic), "실패한 발견은 행을 남기지 않는다");
+    }
+
     // ---------- challenge_rounds ----------
 
     /** 퀘스트 패널과 챌린지 별 발견이 진행 회차 하나를 전제한다(HOME-02·07). */

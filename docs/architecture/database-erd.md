@@ -1,12 +1,22 @@
-# Planetory 서비스 DB ERD v1.2
+# Planetory 서비스 DB ERD v1.3
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-16)
 - 기준 문서: 요구사항 명세서 v1.2(상태표 v1.2 변경안·용어 사전 v1.0·와이어프레임 v1.2), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표).
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.2 → v1.3 (2026-09-16, `S15P21C206-135`)
+
+`star_unlocks`에 `layout_ordinal`을 추가한다. 회원별 발견 순번이며 튜토리얼·성과·챌린지가 하나를 공유한다. 기존 `seq`는 한 성과가 연 별들의 순번이라 다른 개념이고 튜토리얼 발견에는 없다. `UNIQUE(user_id, layout_ordinal)`로 동시 배정 시 두 별이 같은 자리에 놓이는 것을 막는다.
+
+**미결 5 중 `analysis_histories` 부분을 결정으로 확정한다.** 불변 강제는 트리거가 아니라 **앱 역할의 UPDATE·DELETE 권한 회수**로 처리한다. 트리거는 쓰기마다 비용이 붙고 비활성화로 우회되지만 권한은 DB가 원천 차단한다. `analysis_snapshots`도 같게 처리한다. `published_analyses`는 서비스 백엔드(S08) 소유라 미결로 남긴다. 첨부 검증(미결 6)은 불변 강제가 아니라 값 일치 검사라 이 결정의 범위가 아니다.
+
+`submissions`에 정합 CHECK 3종을 더한다. 위상 선택이 없는 제출에는 서버 파생값도 없어야 하고, 성과 결과는 매칭 결과와 함께 성립하며, 고조파 정정 기록은 실제로 정정했을 때만 남긴다. `challenge_rounds`는 `status='active'` 부분 유일 인덱스로 진행 회차를 하나로 묶는다.
+
+다이어그램에만 빠져 있던 열 7개(`submissions`의 `correction_reason`·계산 버전 2종·`memo`·`rule_version`, `user_candidate_achievements.relabel_disposition`, `user_star_progress.reopened_at`)를 본문 기준으로 채웠다.
 
 ### v1.1 → v1.2 (2026-09-14, `S15P21C206-33`)
 
@@ -293,6 +303,7 @@ erDiagram
         numeric duration_limit_hours "적용한 선택 폭 상한"
         numeric matched_period "정정 대표 주기"
         numeric harmonic_multiplier "배율"
+        text correction_reason "정정 사유"
         numeric phase_start "위상 시작"
         numeric phase_end "위상 끝"
         double fold_reference_time_btjd "그때 기준 시각"
@@ -306,6 +317,10 @@ erDiagram
         bigint retry_of_submission_id FK "재도전 원 제출"
         boolean answer_viewed "상세 열람"
         timestamptz created_at "접수 시각"
+        text residual_model_version "그때 잔차 계산 버전"
+        text periodogram_config_version "그때 주기도 계산 버전"
+        text memo "회원 메모"
+        text rule_version FK "판정에 쓴 운영 규칙 버전"
     }
     analysis_histories["analysis_histories · 분석 히스토리(불변)"] {
         bigint id PK "고유 번호"
@@ -332,6 +347,7 @@ erDiagram
         bigint recognized_analysis_id FK "근거 공개 분석(미확정)"
         timestamptz recognized_at "인정 시각"
         timestamptz relabeled_at "라벨 갱신 표식"
+        text relabel_disposition "갱신된 외부 판정"
     }
     user_star_progress["user_star_progress · 회원 별 진행"] {
         bigint id PK "고유 번호"
@@ -345,6 +361,7 @@ erDiagram
         text completion_reason "all_found/undiscoverable_only/skipped"
         boolean reopen_pending "재개 대기"
         timestamptz completed_at "완료 시각"
+        timestamptz reopened_at "재개 시각"
     }
     star_unlocks["star_unlocks · 별 발견·자리"] {
         bigint id PK "고유 번호"
@@ -358,6 +375,7 @@ erDiagram
         numeric world_y "은하 월드 Y"
         numeric depth_z "월드 깊이"
         text layout_version "배치 버전"
+        int layout_ordinal UK "회원별 발견 순번(0부터)"
         smallint generation "이전 배치 세대(선택)"
         numeric angle_deg "이전 배치 각도(선택)"
         numeric radius_jitter "이전 배치 지터(선택)"
@@ -655,6 +673,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | unlock_reason | tutorial / achievement / challenge. grade·completion 없음 |
 | trigger_tic_id, trigger_achievement_id, seq | 발견 경로. achievement면 trigger_achievement_id NOT NULL. seq는 한 성과가 연 별의 순번(0부터, stars_per_achievement가 2 이상일 때 사용)이며 UNIQUE(trigger_achievement_id, seq)로 재처리 중복을 막는다 |
 | world_x, world_y, depth_z, layout_version | 서버가 한 번 계산·저장한 은하 월드 좌표와 배치 버전. 모든 열린 별 행은 NOT NULL이고 x/y는 유한 숫자, depth_z는 유한한 -1.0 이상 1.0 이하. 클라이언트는 읽기만 하며 같은 (user_id, tic_id)의 모든 API가 같은 값을 반환한다 |
+| layout_ordinal | 회원별 발견 순번(0부터). 튜토리얼·성과·챌린지가 하나를 공유하며 배치 함수의 입력이다. `UNIQUE(user_id, layout_ordinal)`가 동시 배정 충돌을 막는다. `seq`(한 성과 안의 순번)와 다른 값이다 |
 | generation, angle_deg, radius_jitter | 이전 방사형 스키마의 nullable 폐기 예정 열. 부모 관계는 trigger_tic_id로 유지하며 신규 은하 좌표 생성·조회·API 응답에 이 열을 사용하지 않는다. 열 제거는 별도 백엔드 스키마 정리 대상 |
 | unlocked_at | |
 
@@ -732,7 +751,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
-| 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
+| 5 | published_analyses 불변을 트리거로 강제할지. analysis_histories·analysis_snapshots는 v1.3에서 앱 역할 권한 회수로 확정 | HIS-06, S08 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도 공식 군집과 타일은 user_id·layout_version으로 격리된 world_x/world_y 서버 쿼드트리를 사전 계산하고 새 별 발견 또는 기존 별의 `planet`·`done`·`new` 분류 변경 시 해당 가지의 군집 구성·집계를 갱신한다. 프론트는 서버 군집을 읽으며 웹 워커가 공식 구성을 다시 계산하지 않는다. 물리 인덱스와 구체 실행 계획은 후속 성능 검증에서 확정하고 generation만으로 은하 타일을 조회하지 않는다 | NFR-20a·d, SRS v1.2 별지도 표현 계약 |
 | 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
