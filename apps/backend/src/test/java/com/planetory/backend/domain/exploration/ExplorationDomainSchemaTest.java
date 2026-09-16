@@ -1,5 +1,7 @@
 package com.planetory.backend.domain.exploration;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -238,6 +241,53 @@ class ExplorationDomainSchemaTest {
         assertEquals(0, jdbc.queryForObject(
                 "SELECT count(*) FROM star_unlocks WHERE user_id = ? AND tic_id = ?",
                 Integer.class, userId, otherTic), "실패한 발견은 행을 남기지 않는다");
+    }
+
+    /**
+     * 임시 배치(bootstrap-0)로 저장된 행이 남은 DB는 V7이 막는다 [S15P21C206-136].
+     *
+     * <p>임시 구현은 모든 별을 원점에 뒀다. 그 행이 실제 배치와 섞이면 메타는
+     * personal-spiral-v1을 알리는데 그 별만 계약을 따르지 않아 응답이 거짓이 된다.
+     * 검증 대상은 실제로 배포되는 SQL 파일이며, 사본을 두지 않는다.
+     */
+    @Test
+    void 임시_배치로_저장된_행이_있으면_마이그레이션이_안내와_함께_멈춘다() {
+        String guard = readMigration("V7__reject_bootstrap_layout_rows.sql");
+
+        assertDoesNotThrow(() -> jdbc.execute(guard), "정상 배치만 있으면 통과한다");
+
+        long otherTic = insertStar();
+        jdbc.update("INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, depth_z, unlocked_at,"
+                        + " world_x, world_y, layout_version, layout_ordinal)"
+                        + " VALUES (?, ?, 'tutorial', 0.0, now(), 0.0, 0.0, 'bootstrap-0', 0)",
+                userId, otherTic);
+
+        Exception failure = assertThrows(Exception.class, () -> jdbc.execute(guard));
+        String message = causeChain(failure);
+        assertTrue(message.contains("1건"), () -> "몇 건인지 알려야 한다: " + message);
+        assertTrue(message.contains("TRUNCATE users CASCADE"),
+                () -> "무엇을 하라는지 알려야 한다: " + message);
+
+        jdbc.update("DELETE FROM star_unlocks WHERE layout_version = 'bootstrap-0'");
+        assertDoesNotThrow(() -> jdbc.execute(guard), "행을 치우면 다시 통과한다");
+    }
+
+    private static String readMigration(String fileName) {
+        var resource = new ClassPathResource("db/migration/" + fileName);
+        try (var in = resource.getInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException(fileName + "을 읽지 못했다", e);
+        }
+    }
+
+    /** 원인 메시지는 래핑 아래에 있다. 안내를 확인하려면 사슬 전체를 본다. */
+    private static String causeChain(Throwable failure) {
+        var sb = new StringBuilder();
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            sb.append(t.getMessage()).append('\n');
+        }
+        return sb.toString();
     }
 
     // ---------- challenge_rounds ----------
