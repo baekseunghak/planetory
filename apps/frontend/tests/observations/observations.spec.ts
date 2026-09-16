@@ -30,6 +30,15 @@ test("three exported stars load via real HTTP, preserve gaps, switch routes and 
     expect(response.status()).toBe(200);
     expect(response.headers()["x-current-bundle"]).toBe(expected.bundleId);
     expect(await response.json()).toEqual(file.curve);
+    // Unverified prototype BLS must not be substituted for these rebinned curves.
+    for (const resource of ["periodogram", "candidate-peaks"]) {
+      const missing = await request.get(
+        `/api/v1/stars/${target.ticId}/${resource}?bundleId=${expected.bundleId}&curveStep=0`,
+      );
+      expect(missing.status()).toBe(503);
+      expect(missing.headers()["x-current-bundle"]).toBe(expected.bundleId);
+      expect((await missing.json()).code).toBe("DEPENDENCY_UNAVAILABLE");
+    }
     await expect(
       page.getByRole("region", { name: "분석 데이터 요약" }),
     ).toContainText(expected.bundleId);

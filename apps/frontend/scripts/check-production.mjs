@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "pg-synthetic-183-v1",
+  "peaks-synthetic-183-v1",
   "prototype-observation-10m-mean-v1",
   "프로토타입 관측 데이터입니다",
   "sourceSha256",
