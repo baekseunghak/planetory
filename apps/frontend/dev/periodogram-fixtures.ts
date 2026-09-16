@@ -15,6 +15,48 @@ export const PERIODOGRAM_FIXTURE_TICS = {
   pending: "259377029",
 } as const;
 export const PERIODOGRAM_FIXTURE_BUNDLE = "9007199254741093";
+const grid = {
+  periodMinDays: 0.5,
+  periodMaxDays: 40,
+  nPeriods: 5000,
+  gridRule: "log" as const,
+};
+const peakIndices = [3600, 2500, 1600];
+const gridPeriod = (index: number) =>
+  grid.periodMinDays *
+  (grid.periodMaxDays / grid.periodMinDays) ** (index / (grid.nPeriods - 1));
+
+// Deterministic, compact source for a folding demonstration, not an astrophysical fit.
+export const FOLD_SAMPLE = {
+  startBtjd: 1683.35,
+  baseDays: 120,
+  binMinutes: 10,
+  nPoints: 17281,
+  referenceBtjd: 1743.35,
+  periodDays: gridPeriod(peakIndices[0]),
+  durationHours: 2,
+  depth: 0.008,
+  noiseAmplitude: 0.0002,
+} as const;
+function sampleFlux(index: number): number {
+  const elapsed =
+    FOLD_SAMPLE.startBtjd +
+    (index * FOLD_SAMPLE.binMinutes) / 1440 -
+    FOLD_SAMPLE.referenceBtjd;
+  const cycle = Math.round(elapsed / FOLD_SAMPLE.periodDays);
+  const distanceDays = Math.abs(elapsed - cycle * FOLD_SAMPLE.periodDays);
+  const halfDuration = FOLD_SAMPLE.durationHours / 48;
+  const transit = Math.max(
+    0,
+    Math.min(1, (halfDuration - distanceDays) / (halfDuration * 0.3)),
+  );
+  // Reproducible irregular noise, independent of the injected transit period.
+  let hash = Math.imul(index + 1, 0x45d9f3b);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+  const noise =
+    (((hash >>> 0) / 0xffffffff) * 2 - 1) * FOLD_SAMPLE.noiseAmplitude;
+  return 1 - FOLD_SAMPLE.depth * transit + noise;
+}
 export function periodContextFixture(
   ticId: string = PERIODOGRAM_FIXTURE_TICS.normal,
 ) {
@@ -22,7 +64,7 @@ export function periodContextFixture(
   const current = result.currentCurveContext;
   current.bundleId = PERIODOGRAM_FIXTURE_BUNDLE;
   current.residualModelVersion = "rm-fixture-183";
-  current.periodogramConfigVersion = "pg-synthetic-183-v1";
+  current.periodogramConfigVersion = "pg-synthetic-184-v2";
   if (ticId === PERIODOGRAM_FIXTURE_TICS.pending) {
     current.curveStep = 1;
     current.removedCandidateIds = ["9007199254741094"];
@@ -32,9 +74,12 @@ export function periodContextFixture(
     bundleId: current.bundleId,
     residualModelVersion: current.residualModelVersion,
     periodogramConfigVersion: current.periodogramConfigVersion,
-    baseDays: 7,
-    observationBounds: [1683.35, 1690.35],
-    foldReferenceTimeBtjd: 1686.85,
+    baseDays: FOLD_SAMPLE.baseDays,
+    observationBounds: [
+      FOLD_SAMPLE.startBtjd,
+      FOLD_SAMPLE.startBtjd + FOLD_SAMPLE.baseDays,
+    ],
+    foldReferenceTimeBtjd: FOLD_SAMPLE.referenceBtjd,
   });
   result.selectionRules.version = "selection-synthetic-183-v1";
   result.progress.currentCurveStep = current.curveStep;
@@ -52,23 +97,19 @@ export function periodCurveFixture(
   result.segments = [
     {
       ...result.segments[0],
-      nPoints: 1009,
-      flux: Array.from(
-        { length: 1009 },
-        (_, index) => 1 + 0.001 * Math.sin(index / 20),
+      binningRevision: 2,
+      startBtjd: FOLD_SAMPLE.startBtjd,
+      binMinutes: FOLD_SAMPLE.binMinutes,
+      nPoints: FOLD_SAMPLE.nPoints,
+      flux: Array.from({ length: FOLD_SAMPLE.nPoints }, (_, index) =>
+        sampleFlux(index),
       ),
+      fluxScatter: FOLD_SAMPLE.noiseAmplitude / Math.sqrt(3),
       gaps: [],
     },
   ];
   return result;
 }
-const grid = {
-  periodMinDays: 0.5,
-  periodMaxDays: 40,
-  nPeriods: 5000,
-  gridRule: "log" as const,
-};
-const peakIndices = [3600, 2500, 1600];
 const amplitudes = [0.8, 0.5, 0.3];
 export function periodogramFixture(
   ticId: string = PERIODOGRAM_FIXTURE_TICS.normal,
@@ -77,7 +118,7 @@ export function periodogramFixture(
     curveContext: periodContextFixture(ticId).currentCurveContext,
     residual: { status: "COMPLETED", jobId: null },
     ...grid,
-    baselineHalfDays: 3.5,
+    baselineHalfDays: FOLD_SAMPLE.baseDays / 2,
     power: Array.from(
       { length: grid.nPeriods },
       (_, index) =>
@@ -101,10 +142,7 @@ export function candidatePeaksFixture(
   return {
     curveContext: data.curveContext,
     peaks: peakIndices.map((gridIndex, index) => {
-      const periodDays =
-        grid.periodMinDays *
-        (grid.periodMaxDays / grid.periodMinDays) **
-          (gridIndex / (grid.nPeriods - 1));
+      const periodDays = gridPeriod(gridIndex);
       return {
         rank: index + 1,
         gridIndex,
@@ -116,7 +154,7 @@ export function candidatePeaksFixture(
           periodStepDays: periodDays * (ratio - 1),
         },
         suggestedDurationHours: 2,
-        suggestedPhaseCenter: 0.375,
+        suggestedPhaseCenter: index === 0 ? 0 : 0.375,
       };
     }),
     matchedCandidates: [{ candidateId: "9007199254741094", periodDays: 3.25 }],

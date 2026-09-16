@@ -14,6 +14,7 @@ import {
   drawFoldedCurve,
   foldFluxDomain,
   fullFoldView,
+  MAX_FOLD_ZOOM,
   zoomFoldView,
 } from "./folded-curve";
 import "./folded-curve.css";
@@ -34,13 +35,10 @@ export function FoldedCurveChart({
 }) {
   const [viewport, setViewport] = useState({ result, view: fullFoldView });
   const [inspected, setInspected] = useState<number | null>(null);
-  // Adjust before committing the new result so a frame never uses the previous pan.
+  // Reset a new selection before paint; fine tuning preserves the current phase view.
   let view = viewport.view;
   if (viewport.result !== result) {
-    view = {
-      zoom: operation === "reselect" ? 1 : viewport.view.zoom,
-      center: 0.5,
-    };
+    view = operation === "reselect" ? fullFoldView : viewport.view;
     setViewport({ result, view });
     setInspected(null);
   }
@@ -184,7 +182,11 @@ export function FoldedCurveChart({
         role="group"
         aria-label="접힌 곡선 조작"
       >
-        <button type="button" onClick={() => zoom(2)} disabled={view.zoom >= 8}>
+        <button
+          type="button"
+          onClick={() => zoom(2)}
+          disabled={view.zoom >= MAX_FOLD_ZOOM}
+        >
           접힌 곡선 확대
         </button>
         <button
@@ -278,7 +280,9 @@ export function FoldedCurveChart({
       </figure>
       <p id={hintId}>
         휠은 포인터 기준 가로 확대, +/−는 중앙 기준 확대·축소, 0·더블클릭은 전체
-        보기입니다. ←/→로 보기 이동, ↑/↓로 원본 순서의 관측값을 확인합니다.
+        보기입니다. 최대 {MAX_FOLD_ZOOM}배까지 확대하며 미세 조정 중에는 배율과
+        보는 위치를 유지합니다. ←/→로 보기 이동, ↑/↓로 원본 순서의 관측값을
+        확인합니다.
       </p>
       <p className="fold-inspector" role="status">
         {point

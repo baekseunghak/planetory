@@ -179,6 +179,16 @@ export function AnalysisPage() {
             : "개발용 합성 응답입니다. 실제 관측 데이터가 아닙니다."}
         </p>
       )}
+      {import.meta.env.DEV &&
+        import.meta.env.VITE_FIXTURE === "true" &&
+        ticId === "259377024" && (
+          <p className="fixture-note">
+            접기 확인용 합성 샘플: 120일 동안 1위 봉우리 주기로 밝기가 반복해서
+            떨어집니다. 1위 봉우리를 선택하면 하락 구간이 겹치고, 미세 조정
+            슬라이더를 끝으로 옮기면 퍼집니다. 주기도는 BLS 계산 결과가 아닌
+            조작 확인용 예제입니다.
+          </p>
+        )}
       {ticId ? (
         <AnalysisData key={ticId} ticId={ticId} />
       ) : (

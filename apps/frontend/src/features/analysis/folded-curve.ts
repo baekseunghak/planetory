@@ -1,9 +1,10 @@
 import type { FoldPoint } from "./fold-data";
 
 export type FoldView = { zoom: number; center: number };
+export const MAX_FOLD_ZOOM = 32;
 export const fullFoldView: FoldView = { zoom: 1, center: 0.5 };
 export function clampFoldView(view: FoldView): FoldView {
-  const zoom = Math.max(1, Math.min(8, view.zoom));
+  const zoom = Math.max(1, Math.min(MAX_FOLD_ZOOM, view.zoom));
   const half = 1 / zoom;
   return {
     zoom,

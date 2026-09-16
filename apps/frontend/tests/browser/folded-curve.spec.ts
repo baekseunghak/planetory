@@ -1,54 +1,69 @@
 import { expect, test } from "@playwright/test";
 import { candidatePeaksFixture } from "../../dev/periodogram-fixtures";
 
-test("period selection folds all points, preserves Canvas and fine-tune zoom, and sends no new API calls", async ({
-  page,
-}) => {
-  const calls: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes("/api/")) calls.push(request.url());
+for (const scenario of [
+  { zoom: 4, key: "ArrowRight", moves: 1 },
+  { zoom: 32, key: "ArrowLeft", moves: 41 },
+  { zoom: 32, key: "ArrowRight", moves: 41 },
+])
+  test(`fine tune preserves Canvas and x${scenario.zoom} phase view after ${scenario.key}, with no API calls`, async ({
+    page,
+  }) => {
+    const calls: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/")) calls.push(request.url());
+    });
+    await page.goto("/analysis/259377024");
+    await expect(page.getByTestId("fold-status")).toContainText("주기를 선택");
+    await page
+      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+      .click();
+    const peak = candidatePeaksFixture().peaks[0];
+    const result = page.getByTestId("fold-result"),
+      plot = page.getByRole("group", { name: "접힌 곡선 그래프", exact: true });
+    await expect(result).toHaveAttribute(
+      "data-period",
+      String(peak.periodDays),
+    );
+    await expect(plot).toHaveAttribute("data-point-count", "17281");
+    const loaded = calls.slice();
+    await plot.locator("canvas").evaluate((canvas) => {
+      canvas.dataset.retained = "yes";
+    });
+    const yMin = await plot.getAttribute("data-y-min"),
+      yMax = await plot.getAttribute("data-y-max");
+    await plot.focus();
+    for (let i = 0; i < Math.log2(scenario.zoom); i++) await plot.press("+");
+    for (let i = 0; i < scenario.moves; i++) await plot.press(scenario.key);
+    await expect(page.getByTestId("fold-zoom")).toHaveText(`×${scenario.zoom}`);
+    const viewStart = await plot.getAttribute("data-view-start");
+    const viewEnd = await plot.getAttribute("data-view-end");
+    await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    await expect(result).toHaveAttribute(
+      "data-period",
+      String(peak.periodDays + peak.fineTune.periodStepDays),
+    );
+    await expect(page.getByTestId("fold-zoom")).toHaveText(`×${scenario.zoom}`);
+    await expect(plot).toHaveAttribute("data-view-start", viewStart!);
+    await expect(plot).toHaveAttribute("data-view-end", viewEnd!);
+    await expect(plot.locator("canvas")).toHaveAttribute(
+      "data-retained",
+      "yes",
+    );
+    await expect(plot).toHaveAttribute("data-y-min", yMin!);
+    await expect(plot).toHaveAttribute("data-y-max", yMax!);
+    await page
+      .getByRole("button", { name: "2위 봉우리 선택", exact: true })
+      .click();
+    await expect(result).toHaveAttribute(
+      "data-period",
+      String(candidatePeaksFixture().peaks[1].periodDays),
+    );
+    await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
+    await expect(plot).toHaveAttribute("data-view-start", "-0.5");
+    await expect(plot).toHaveAttribute("data-view-end", "1.5");
+    expect(calls).toEqual(loaded);
   });
-  await page.goto("/analysis/259377024");
-  await expect(page.getByTestId("fold-status")).toContainText("주기를 선택");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
-  const peak = candidatePeaksFixture().peaks[0];
-  const result = page.getByTestId("fold-result"),
-    plot = page.getByRole("group", { name: "접힌 곡선 그래프", exact: true });
-  await expect(result).toHaveAttribute("data-period", String(peak.periodDays));
-  await expect(plot).toHaveAttribute("data-point-count", "1009");
-  const loaded = calls.slice();
-  await plot.locator("canvas").evaluate((canvas) => {
-    canvas.dataset.retained = "yes";
-  });
-  const yMin = await plot.getAttribute("data-y-min"),
-    yMax = await plot.getAttribute("data-y-max");
-  await plot.focus();
-  await plot.press("+");
-  await plot.press("+");
-  await plot.press("ArrowRight");
-  await expect(page.getByTestId("fold-zoom")).toHaveText("×4");
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
-  await expect(result).toHaveAttribute(
-    "data-period",
-    String(peak.periodDays + peak.fineTune.periodStepDays),
-  );
-  await expect(page.getByTestId("fold-zoom")).toHaveText("×4");
-  await expect(plot).toHaveAttribute("data-view-start", "0.25");
-  await expect(plot.locator("canvas")).toHaveAttribute("data-retained", "yes");
-  await expect(plot).toHaveAttribute("data-y-min", yMin!);
-  await expect(plot).toHaveAttribute("data-y-max", yMax!);
-  await page
-    .getByRole("button", { name: "2위 봉우리 선택", exact: true })
-    .click();
-  await expect(result).toHaveAttribute(
-    "data-period",
-    String(candidatePeaksFixture().peaks[1].periodDays),
-  );
-  await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
-  expect(calls).toEqual(loaded);
-});
 
 test("pointer zoom preserves its phase, keyboard and double click restore full view, numeric alternative is available", async ({
   page,
@@ -74,10 +89,20 @@ test("pointer zoom preserves its phase, keyboard and double click restore full v
     high = Number(await plot.getAttribute("data-view-end"));
   expect(low + ratio * (high - low)).toBeCloseTo(-0.5 + ratio * 2, 10);
   await plot.focus();
-  await plot.press("+");
-  await plot.press("+");
-  await plot.press("+");
-  await expect(page.getByTestId("fold-zoom")).toHaveText("×8");
+  for (const level of [4, 8, 16, 32, 32]) {
+    await plot.press("+");
+    await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
+  }
+  await expect(
+    page.getByRole("button", { name: "접힌 곡선 확대", exact: true }),
+  ).toBeDisabled();
+  for (const level of [16, 8, 4, 2, 1, 1]) {
+    await plot.press("-");
+    await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
+  }
+  await expect(
+    page.getByRole("button", { name: "접힌 곡선 축소", exact: true }),
+  ).toBeDisabled();
   await plot.press("ArrowDown");
   await expect(page.locator(".fold-inspector")).toContainText("BTJD");
   await plot.press("0");
@@ -86,6 +111,81 @@ test("pointer zoom preserves its phase, keyboard and double click restore full v
   await plot.dblclick();
   await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
 });
+
+for (const control of ["wheel", "button"] as const)
+  test(`${control} reaches x32 and reverses every step at the minimum desktop width`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 844 });
+    await page.goto("/analysis/259377024");
+    await page
+      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+      .click();
+    const plot = page.getByRole("group", {
+      name: "접힌 곡선 그래프",
+      exact: true,
+    });
+    const toolbar = page.getByRole("group", {
+      name: "접힌 곡선 조작",
+      exact: true,
+    });
+    await expect(plot).toBeVisible();
+    const rect = (await plot.boundingBox())!;
+    const clientX = Math.round(rect.x + rect.width * 0.3);
+    const ratio = (clientX - rect.x) / rect.width;
+    const anchor = -0.5 + ratio * 2;
+    for (const level of [2, 4, 8, 16, 32]) {
+      if (control === "wheel")
+        await plot.dispatchEvent("wheel", { deltaY: -100, clientX });
+      else
+        await toolbar
+          .getByRole("button", { name: "접힌 곡선 확대", exact: true })
+          .click();
+      await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
+      if (control === "wheel") {
+        const low = Number(await plot.getAttribute("data-view-start"));
+        const high = Number(await plot.getAttribute("data-view-end"));
+        expect(low + ratio * (high - low)).toBeCloseTo(anchor, 10);
+      }
+    }
+    await expect(
+      toolbar.getByRole("button", { name: "접힌 곡선 확대", exact: true }),
+    ).toBeDisabled();
+    if (control === "wheel") {
+      await plot.dispatchEvent("wheel", { deltaY: -100, clientX });
+      await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
+      await plot.dispatchEvent("wheel", {
+        deltaY: 100,
+        clientX,
+        ctrlKey: true,
+      });
+      await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
+    }
+    expect(
+      await toolbar.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    for (const level of [16, 8, 4, 2, 1]) {
+      if (control === "wheel")
+        await plot.dispatchEvent("wheel", { deltaY: 100, clientX });
+      else
+        await toolbar
+          .getByRole("button", { name: "접힌 곡선 축소", exact: true })
+          .click();
+      await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
+    }
+    await expect(plot).toHaveAttribute("data-view-start", "-0.5");
+    await expect(plot).toHaveAttribute("data-view-end", "1.5");
+    for (let i = 0; i < 5; i++)
+      await toolbar
+        .getByRole("button", { name: "접힌 곡선 확대", exact: true })
+        .click();
+    if (control === "wheel") await plot.dblclick();
+    else
+      await toolbar
+        .getByRole("button", { name: "접힌 곡선 전체 보기", exact: true })
+        .click();
+    await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
+  });
 
 test("direct periods fold without enabling deferred fine tuning at the minimum supported width", async ({
   page,
