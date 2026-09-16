@@ -27,12 +27,6 @@ import com.planetory.backend.domain.exploration.service.SkyViews.ZoomLevel;
 @RequiredArgsConstructor
 public class SkyService {
 
-    /** 정사각 타일 한 변. 응답 범위를 이 격자에 맞춰 넓힌다. */
-    public static final int TILE_SIZE = 512;
-
-    /** 경계 상자 상한. 한 요청이 지도를 통째로 끌어오지 못하게 막는다(탐사 API 4.1). */
-    public static final int MAX_BOX = TILE_SIZE * 64;
-
     public static final int DEFAULT_LIMIT = 1000;
     public static final int MAX_LIMIT = 2000;
 
@@ -47,6 +41,17 @@ public class SkyService {
     private final SkyRepository stars;
     private final JdbcClient jdbc;
     private final Clock clock;
+    private final SkyProperties properties;
+
+    /** 정사각 타일 한 변. 응답 범위를 이 격자에 맞춘다. 메타로 프론트에 알린다. */
+    public int tileSize() {
+        return properties.tileSize();
+    }
+
+    /** 경계 상자 상한. 한 요청이 지도를 통째로 끌어오지 못하게 막는다. */
+    public int maxBox() {
+        return properties.maxBox();
+    }
 
     /**
      * 메타는 경계·별 수·버전·중심 별을 한 스냅샷에서 읽는다 [S15P21C206-137].
@@ -61,7 +66,7 @@ public class SkyService {
                 .orElseGet(() -> new Bounds(0, 0, 0, 0));
         return new SkyMeta(SkyViews.REPRESENTATION, version(memberId),
                 PersonalSpiralGalaxyLayout.LAYOUT_VERSION, PRESENTATION_VERSION,
-                stars.countStars(memberId), bounds, TILE_SIZE, ZOOM_LEVELS,
+                stars.countStars(memberId), bounds, tileSize(), ZOOM_LEVELS,
                 stars.findCenterTicIds(memberId), firstVisit, now());
     }
 
@@ -154,11 +159,12 @@ public class SkyService {
      * 요청 상자를 타일 격자에 맞춰 넓힌다. 왼쪽·아래 경계는 포함하고 오른쪽·위는 제외하므로
      * 같은 격자의 이웃 요청이 같은 별을 두 번 주지 않는다.
      */
-    static TileBounds snapToTiles(double x, double y, double w, double h) {
-        double minX = Math.floor(x / TILE_SIZE) * TILE_SIZE;
-        double minY = Math.floor(y / TILE_SIZE) * TILE_SIZE;
-        double maxX = Math.ceil((x + w) / TILE_SIZE) * TILE_SIZE;
-        double maxY = Math.ceil((y + h) / TILE_SIZE) * TILE_SIZE;
+    TileBounds snapToTiles(double x, double y, double w, double h) {
+        int tile = tileSize();
+        double minX = Math.floor(x / tile) * tile;
+        double minY = Math.floor(y / tile) * tile;
+        double maxX = Math.ceil((x + w) / tile) * tile;
+        double maxY = Math.ceil((y + h) / tile) * tile;
         return new TileBounds(minX, minY, maxX - minX, maxY - minY);
     }
 
@@ -171,7 +177,7 @@ public class SkyService {
     private void validateBox(double x, double y, double w, double h) {
         boolean finite = Double.isFinite(x) && Double.isFinite(y)
                 && Double.isFinite(w) && Double.isFinite(h);
-        if (!finite || w <= 0 || h <= 0 || w > MAX_BOX || h > MAX_BOX) {
+        if (!finite || w <= 0 || h <= 0 || w > maxBox() || h > maxBox()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
     }

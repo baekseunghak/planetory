@@ -18,6 +18,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
 import com.planetory.backend.domain.exploration.service.SkyService;
+import com.planetory.backend.domain.exploration.service.SkyViews;
 import com.planetory.backend.domain.exploration.service.SkyViews.Bounds;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyMeta;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyTile;
@@ -141,13 +142,72 @@ class SkyTilePerformanceTest {
         System.out.println("\n=== 끝 ===\n");
     }
 
+    /**
+     * 시작 배율을 정하려면 "상자를 줄이면 별이 얼마나 주는가"를 알아야 한다 [S15P21C206-137].
+     *
+     * <p>나선팔 코어가 조밀해서 단순 비례가 아니다. 중심과 코어 바깥을 함께 잰다.
+     * 프론트(W05·215)가 첫 카메라를 어디에 얼마나 좁게 둘지 정하는 근거다.
+     */
+    @Test
+    void 상자_크기별_별_수와_적재_시간을_잰다() {
+        long memberId = seedMember(100_000);
+        SkyMeta meta = sky.meta(memberId, false);
+        double cx = (meta.bounds().minX() + meta.bounds().maxX()) / 2;
+        double cy = (meta.bounds().minY() + meta.bounds().maxY()) / 2;
+        double offX = cx + (meta.bounds().maxX() - cx) * 0.55;
+        double offY = cy + (meta.bounds().maxY() - cy) * 0.55;
+
+        System.out.println("\n=== 상자 크기별 비용 · 별 100,000개 [S15P21C206-137] ===");
+        for (double[] origin : new double[][]{{cx, cy}, {offX, offY}}) {
+            System.out.printf("%n--- %s ---%n", origin[0] == cx ? "중심" : "코어 바깥");
+            for (int side : new int[]{512, 1024, 2048, 4096, 8192, 16384, 32768}) {
+                Viewport v = box(String.valueOf(side),
+                        origin[0] - side / 2.0, origin[1] - side / 2.0, side, side);
+                Pages pages = drainAllPages(memberId, meta.version(), v);
+                System.out.printf("  %,6d각 | 별 %,7d개 | %,3d페이지 | %,10d바이트 | 적재 %6.0fms%n",
+                        side, pages.stars(), pages.pages(), pages.bytes(), ms(pages.elapsedNanos()));
+            }
+        }
+        System.out.println("\n=== 끝 ===\n");
+    }
+
+    /**
+     * 타일 한 변을 줄이면 코어에서 몇 개까지 내려가는지 [S15P21C206-137].
+     *
+     * <p>{@code TILE_SIZE}는 응답 범위의 최소 단위다. 512면 코어에서 아무리 좁게 요청해도
+     * 512각을 받는다. 스냅을 거치지 않고 저장소에 직접 물어 "타일을 더 잘게 했을 때"를 잰다.
+     *
+     * <p>밀도가 균일하면 넓이에 비례해 줄겠지만 나선팔 코어는 봉우리라 그렇지 않다.
+     */
+    @Test
+    void 타일_한_변을_줄이면_별_수가_얼마나_주는지_잰다() {
+        long memberId = seedMember(100_000);
+        SkyMeta meta = sky.meta(memberId, false);
+        double cx = (meta.bounds().minX() + meta.bounds().maxX()) / 2;
+        double cy = (meta.bounds().minY() + meta.bounds().maxY()) / 2;
+
+        System.out.println("\n=== 타일 한 변별 코어 별 수 · 별 100,000개 [S15P21C206-137] ===");
+        System.out.println("  (넓이 비례라면 한 변이 절반일 때 별도 1/4이 된다)");
+        long previous = -1;
+        for (int side : new int[]{512, 256, 128, 64, 32, 16}) {
+            var bounds = new SkyViews.TileBounds(cx - side / 2.0, cy - side / 2.0, side, side);
+            long count = starsRepository.countInRange(memberId, bounds);
+            String ratio = previous < 0 ? "-" : String.format("이전의 %.0f%%", 100.0 * count / previous);
+            System.out.printf("  %,5d각 | 별 %,7d개 | 추정 %,9d바이트 | %,3d페이지 | %s%n",
+                    side, count, count * 221, (count + SkyService.MAX_LIMIT - 1) / SkyService.MAX_LIMIT,
+                    ratio);
+            previous = count;
+        }
+        System.out.println("\n=== 끝 ===\n");
+    }
+
     /** 카메라 장면 네 가지(215번 기준). 실제 경계에서 만들어 시드 크기에 따라 함께 움직인다. */
     private List<Viewport> viewports(Bounds bounds) {
         double width = Math.max(bounds.maxX() - bounds.minX(), 1);
         double height = Math.max(bounds.maxY() - bounds.minY(), 1);
         double centerX = (bounds.minX() + bounds.maxX()) / 2;
         double centerY = (bounds.minY() + bounds.maxY()) / 2;
-        double max = SkyService.MAX_BOX;
+        double max = sky.maxBox();
 
         return List.of(
                 // 최대 축소: 허용 상한. 지도가 이보다 넓으면 한 요청으로 못 덮는다.
@@ -208,13 +268,13 @@ class SkyTilePerformanceTest {
         System.out.printf(
                 "  %-10s 범위 %,10d개 | 전체 p95 %6.1fms"
                         + " = 페이지 %6.1f + 범위수 %6.1f + 나머지 %6.1f"
-                        + " | 전체 %,3d페이지 %,9d바이트%n",
+                        + " | 전체 %,3d페이지 %,9d바이트 적재 %6.0fms%n",
                 v.name(), first.rangeStarCount(),
                 ms(elapsed[(int) (ROUNDS * 0.95)]),
                 ms(pageOnly[(int) (ROUNDS * 0.95)]), ms(countOnly[(int) (ROUNDS * 0.95)]),
                 ms(elapsed[(int) (ROUNDS * 0.95)] - pageOnly[(int) (ROUNDS * 0.95)]
                         - countOnly[(int) (ROUNDS * 0.95)]),
-                pages.pages(), pages.bytes());
+                pages.pages(), pages.bytes(), ms(pages.elapsedNanos()));
     }
 
     /** 가시 범위를 끝까지 받아 전송량을 잰다. 프론트는 이걸 다 받아야 화면이 완성된다. */
@@ -223,6 +283,7 @@ class SkyTilePerformanceTest {
         long stars = 0;
         long bytes = 0;
         String cursor = null;
+        long started = System.nanoTime();
         do {
             SkyTile tile = sky.tiles(memberId, 2, v.x(), v.y(), v.w(), v.h(),
                     version, SkyService.MAX_LIMIT, cursor);
@@ -232,7 +293,7 @@ class SkyTilePerformanceTest {
             bytes += serializedBytes(tile);
             cursor = tile.nextCursor();
         } while (cursor != null);
-        return new Pages(pages, stars, bytes);
+        return new Pages(pages, stars, bytes, System.nanoTime() - started);
     }
 
     private long serializedBytes(SkyTile tile) {
@@ -358,6 +419,6 @@ class SkyTilePerformanceTest {
     private record Viewport(String name, double x, double y, double w, double h) {
     }
 
-    private record Pages(int pages, long stars, long bytes) {
+    private record Pages(int pages, long stars, long bytes, long elapsedNanos) {
     }
 }

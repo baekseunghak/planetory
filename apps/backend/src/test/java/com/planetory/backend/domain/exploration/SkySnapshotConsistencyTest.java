@@ -58,8 +58,8 @@ class SkySnapshotConsistencyTest {
     @Autowired JdbcTemplate jdbc;
 
     /** 허용 상한과 같은 상자. 한 페이지로 다 받아 페이지 합과 범위 수를 바로 비교한다. */
-    private static final double BOX = SkyService.MAX_BOX;
-    private static final double ORIGIN = -BOX / 2;
+    private double box;
+    private double origin;
 
     private static final int SEEDED = 50;
     private static final int READS = 400;
@@ -69,6 +69,8 @@ class SkySnapshotConsistencyTest {
 
     @BeforeEach
     void seedOneAccount() {
+        box = sky.maxBox();
+        origin = -box / 2;
         String unique = UUID.randomUUID().toString();
         memberId = jdbc.queryForObject("INSERT INTO users(provider, provider_user_id, nickname)"
                 + " VALUES ('test', ?, ?) RETURNING id", Long.class, unique, "n-" + unique);
@@ -107,7 +109,7 @@ class SkySnapshotConsistencyTest {
             for (int i = 0; i < READS; i++) {
                 // 실제 프론트와 같은 순서: 현재 버전을 받고 그 버전으로 범위를 요청한다.
                 String version = sky.version(memberId);
-                SkyTile tile = sky.tiles(memberId, 2, ORIGIN, ORIGIN, BOX, BOX,
+                SkyTile tile = sky.tiles(memberId, 2, origin, origin, box, box,
                         version, SkyService.MAX_LIMIT, null);
 
                 if (tile.versionChanged()) {
@@ -137,7 +139,7 @@ class SkySnapshotConsistencyTest {
         assertTrue(meta.bounds().minX() <= meta.bounds().maxX());
         assertTrue(meta.bounds().minY() <= meta.bounds().maxY());
 
-        SkyTile whole = sky.tiles(memberId, 2, ORIGIN, ORIGIN, BOX, BOX,
+        SkyTile whole = sky.tiles(memberId, 2, origin, origin, box, box,
                 meta.version(), SkyService.MAX_LIMIT, null);
         assertFalse(whole.versionChanged());
         assertEquals(meta.starCount(), whole.rangeStarCount(),
