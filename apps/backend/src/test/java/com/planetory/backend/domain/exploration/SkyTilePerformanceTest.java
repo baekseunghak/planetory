@@ -59,6 +59,7 @@ class SkyTilePerformanceTest {
     @Autowired SkyService sky;
     @Autowired GalaxyLayout layout;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.planetory.backend.domain.exploration.service.SkyRepository starsRepository;
 
     private static final ObjectMapper JSON = new ObjectMapper()
             .findAndRegisterModules();
@@ -73,6 +74,50 @@ class SkyTilePerformanceTest {
     private static final int BATCH = 2_000;
     private static final int WARMUP = 5;
     private static final int ROUNDS = 50;
+
+    /**
+     * 인덱스 후보. 이름과 정의만 두고 판단은 측정에 맡긴다.
+     *
+     * <p>{@code world_x}·{@code world_y}가 NUMERIC이라 double 파라미터와 비교하면 열 쪽이
+     * 캐스팅돼 일반 B-tree를 못 쓴다. 그래서 식 인덱스도 후보에 넣는다.
+     */
+    private static final List<String[]> INDEX_CANDIDATES = List.of(
+            new String[]{"없음", null},
+            new String[]{"(user_id, tic_id)",
+                    "CREATE INDEX ix_probe ON star_unlocks (user_id, tic_id)"},
+            new String[]{"(user_id, world_x, world_y)",
+                    "CREATE INDEX ix_probe ON star_unlocks (user_id, world_x, world_y)"},
+            new String[]{"(user_id, float8 식)",
+                    "CREATE INDEX ix_probe ON star_unlocks"
+                            + " (user_id, ((world_x)::float8), ((world_y)::float8))"},
+            new String[]{"(user_id, float8 식, tic_id)",
+                    "CREATE INDEX ix_probe ON star_unlocks"
+                            + " (user_id, ((world_x)::float8), ((world_y)::float8), tic_id)"});
+
+    /** 10만 시드에서 인덱스 후보별 비용을 비교한다. 추측으로 고르지 않는다. */
+    @Test
+    void 인덱스_후보별_조회_비용을_비교한다() {
+        long memberId = seedMember(100_000);
+        SkyMeta meta = sky.meta(memberId, false);
+        List<Viewport> scenes = viewports(meta.bounds());
+
+        System.out.println("\n=== 인덱스 후보 비교 · 별 100,000개 [S15P21C206-137] ===");
+        for (String[] candidate : INDEX_CANDIDATES) {
+            jdbc.execute("DROP INDEX IF EXISTS ix_probe");
+            if (candidate[1] != null) {
+                jdbc.execute(candidate[1]);
+            }
+            jdbc.execute("ANALYZE star_unlocks");
+
+            System.out.printf("%n--- %s ---%n", candidate[0]);
+            for (Viewport scene : scenes) {
+                measure(memberId, meta.version(), scene);
+            }
+            explainPage(memberId, scenes.get(0));
+        }
+        jdbc.execute("DROP INDEX IF EXISTS ix_probe");
+        System.out.println("\n=== 끝 ===\n");
+    }
 
     @Test
     void 시드_단계별_타일_조회_비용을_기록한다() {
@@ -139,15 +184,36 @@ class SkyTilePerformanceTest {
         }
         java.util.Arrays.sort(elapsed);
 
+        // 전체 호출의 어느 부분이 비용인지 나눠 잰다. 페이지 질의와 범위 수 집계는
+        // 인덱스가 듣는 방식이 달라서 합쳐 재면 판단을 못 한다.
+        var bounds = first.bounds();   // 응답이 이미 격자에 맞춘 범위를 담고 있다
+        long[] pageOnly = new long[ROUNDS];
+        long[] countOnly = new long[ROUNDS];
+        for (int i = 0; i < ROUNDS; i++) {
+            long t0 = System.nanoTime();
+            starsRepository.findStarsInRange(memberId, bounds, null, SkyService.MAX_LIMIT + 1);
+            long t1 = System.nanoTime();
+            starsRepository.countInRange(memberId, bounds);
+            long t2 = System.nanoTime();
+            pageOnly[i] = t1 - t0;
+            countOnly[i] = t2 - t1;
+        }
+        java.util.Arrays.sort(pageOnly);
+        java.util.Arrays.sort(countOnly);
+
         Pages pages = drainAllPages(memberId, version, v);
         assertEquals(first.rangeStarCount(), pages.stars(),
                 "전체 페이지를 모은 수가 범위 수와 같아야 한다");
 
         System.out.printf(
-                "  %-10s 범위 %,10d개 | 첫 페이지 p50 %6.1fms p95 %6.1fms 최악 %6.1fms"
+                "  %-10s 범위 %,10d개 | 전체 p95 %6.1fms"
+                        + " = 페이지 %6.1f + 범위수 %6.1f + 나머지 %6.1f"
                         + " | 전체 %,3d페이지 %,9d바이트%n",
                 v.name(), first.rangeStarCount(),
-                ms(elapsed[ROUNDS / 2]), ms(elapsed[(int) (ROUNDS * 0.95)]), ms(elapsed[ROUNDS - 1]),
+                ms(elapsed[(int) (ROUNDS * 0.95)]),
+                ms(pageOnly[(int) (ROUNDS * 0.95)]), ms(countOnly[(int) (ROUNDS * 0.95)]),
+                ms(elapsed[(int) (ROUNDS * 0.95)] - pageOnly[(int) (ROUNDS * 0.95)]
+                        - countOnly[(int) (ROUNDS * 0.95)]),
                 pages.pages(), pages.bytes());
     }
 
