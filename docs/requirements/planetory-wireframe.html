@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Planetory 와이어프레임 v1.3</title>
+<title>Planetory 와이어프레임 v1.3.1</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -204,13 +204,13 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 <div class="page">
   <header class="head">
     <div>
-      <div class="eyebrow">Wireframe · v1.3 · 변경 검토안</div>
+      <div class="eyebrow">Wireframe · v1.3.1 · 변경 검토안</div>
       <h1>Planetory 화면 와이어프레임</h1>
-      <p>요구사항 명세서 v1.3 변경안과 상태표 v1.3 변경안의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v0.3, 콜아웃은 SRS ID를 따릅니다.</p>
+      <p>요구사항 명세서 v1.3.1 변경안과 상태표 v1.3.1 변경안의 필수 화면 요소·행동을 확인하는 참고 배치입니다. 신호 매칭, 내 판단, 성과 인정, 별 탐색 완료, 분석 공개를 각각 표시합니다. 미확정 신호는 첫 공개 분석 때 시스템이 공식 스레드를 만들고 공개 분석과 토론을 따로 모읍니다. 위치·크기·카드 배치는 구현 디자인에서 조정할 수 있으며 명세가 정본입니다. 화면 문구는 용어 사전 v1.0.1, 콜아웃은 SRS ID를 따릅니다.</p>
     </div>
     <dl class="meta">
-      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.3 · 상태표 v1.3 변경안</b></dd>
-      <dt>개정일</dt><dd><b>2026-09-15: 개인 시제품 시각 기준·연출 색/크기·선택 시에만 행성 표시. 2026-09-14: 은하 배치·GIF 안내·내 행성 근접 뷰. 2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
+      <dt>기준 문서</dt><dd><b>요구사항 명세서 v1.3.1 · 상태표 v1.3.1 변경안</b></dd>
+      <dt>개정일</dt><dd><b>2026-09-16: 미세 조정 위치 유지·최대 32배 확대 변경안. 2026-09-15: 개인 시제품 시각 기준·연출 색/크기·선택 시에만 행성 표시. 2026-09-14: 은하 배치·GIF 안내·내 행성 근접 뷰. 2026-09-09 (v1.1 2026-09-11: 별 지도 회전·기울기, 챌린지 참여 수 정의, 검색·핫 토픽 P0)</b></dd>
       <dt>지원 기기</dt><dd><b>데스크톱 1024px 이상만 P0 (NFR-17)</b></dd>
       <dt>화면 수</dt><dd><b>11 프레임 · P0/P1과 대표 상태 구분</b></dd>
     </dl>
@@ -387,7 +387,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
   <!-- ===== SC-03 ===== -->
   <section class="frame" id="s03">
     <div class="flabel"><span class="fid">SC-03</span><span class="fname">분석 (단계형)</span><span class="fids">EXP-01 ~ EXP-13 · SUB-01 · SUB-02 · SUB-11</span><span class="tag p0">P0</span><span class="tag new">v0.12</span>
-      <span class="fdesc">참고 배치. 필수 요소는 단계 안내, 시간 영역 곡선, 반복 주기 그래프, 접힌 곡선, 별 정보, 확인 도구, 판단 입력과 제출값 요약이다. 브라우저가 현재 곡선의 전 점을 선택 주기로 접어 즉시 표시한다. 새 봉우리를 고르면 이후 단계와 가로 확대가 초기화되고, 주기 미세 조정은 이후 단계만 초기화하며 접힌 곡선의 가로 확대 배율은 유지한다(EXP-12·13). 하단 액션 바에 [이전]·[더 없음 의견]·[제출]. 곡선 단계가 바뀌어도 같은 화면.</span></div>
+      <span class="fdesc">참고 배치. 필수 요소는 단계 안내, 시간 영역 곡선, 반복 주기 그래프, 접힌 곡선, 별 정보, 확인 도구, 판단 입력과 제출값 요약이다. 브라우저가 현재 곡선의 전 점을 선택 주기로 접어 즉시 표시한다. 새 봉우리를 고르면 이후 단계와 가로 확대가 초기화되고, 주기 미세 조정은 이후 단계만 초기화하며 접힌 곡선의 가로 확대 배율과 화면 중심 위상을 유지한다(EXP-12·13). 하단 액션 바에 [이전]·[더 없음 의견]·[제출]. 곡선 단계가 바뀌어도 같은 화면.</span></div>
     <div class="scroll"><div class="wf">
       <div class="gnb">
         <span class="logo"><i></i>Planetory</span>
@@ -424,9 +424,9 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
       <div style="display:grid;grid-template-columns:1fr 300px;gap:12px;padding:12px 14px 14px">
         <div class="box">
-          <div class="chart-h"><span class="co">5</span>주기로 겹친 곡선 <span class="muted" style="font-weight:400">전 점 브라우저 접기 · 2주기 · 휠 x축 ×1~8 · 더블클릭/0 초기화 · +/- 중앙 확대</span><span class="r"><span class="mono" style="border-color:var(--acc);color:var(--acc-ink)">주기 3.2098일 · 가로 ×4</span></span></div>
+          <div class="chart-h"><span class="co">5</span>주기로 겹친 곡선 <span class="muted" style="font-weight:400">전 점 브라우저 접기 · 2주기 · 휠 x축 ×1~32 · 더블클릭/0 초기화 · +/- 중앙 확대</span><span class="r"><span class="mono" style="border-color:var(--acc);color:var(--acc-ink)">주기 3.2098일 · 가로 ×4</span></span></div>
           <div class="slider"></div>
-          <div class="axis" style="padding-top:0"><span>3.19</span><span>주기 미세 조정 · 브라우저에서 즉시 다시 접기(BLS 재요청 없음) · 가로 ×4 유지</span><span>3.23</span></div>
+          <div class="axis" style="padding-top:0"><span>3.19</span><span>주기 미세 조정 · 브라우저에서 즉시 다시 접기(BLS 재요청 없음) · 가로 ×4·화면 위치 유지</span><span>3.23</span></div>
           <svg class="fold2" viewBox="0 0 860 190" style="width:100%;height:190px"></svg>
           <div class="axis"><span>−P</span><span>접힌 곡선에서 위상 시작·끝 선택 → 핸들 수정. 브라우저가 기준 시각·가려진 시간 즉시 미리보기</span><span>+P</span></div>
           <div class="box-b" style="border-top:1px solid var(--line-soft);padding:8px 12px"><span class="mono small">선택 · 반복 주기 3.2098일 · <span title="시각 단위: BTJD">기준 시각 1326.842(미리보기)</span> · 가려진 시간 2.6시간(미리보기)</span></div>
@@ -460,7 +460,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <ol class="notes">
-      <li><span class="co">1</span><span class="nid">EXP-05·08·12·13 · AT-72·90·91</span><span>5단계 표시줄. 브라우저가 전 점을 선택 주기로 접으며 주기 변경만으로 BLS·잔차 API를 호출하지 않음. 새 봉우리는 이후 값과 가로 확대를 초기화. 미세 조정은 이후 값만 초기화하고 접힌 곡선 x축 확대 배율 유지</span><span class="tag p0">P0</span></li>
+      <li><span class="co">1</span><span class="nid">EXP-05·08·12·13 · AT-72·90·91</span><span>5단계 표시줄. 브라우저가 전 점을 선택 주기로 접으며 주기 변경만으로 BLS·잔차 API를 호출하지 않음. 새 봉우리는 이후 값과 가로 확대를 초기화. 미세 조정은 이후 값만 초기화하고 접힌 곡선 x축 확대 배율·화면 중심 위상 유지</span><span class="tag p0">P0</span></li>
       <li><span class="co">2</span><span class="nid">EXP-03·06·07 · AT-06·95 · NFR-10</span><span>회차 경계·다년 공백 접어 표시. 예상 transit 띠와 epoch·지속시간은 브라우저가 선택 중 즉시 미리보기하고, 제출 시 서버가 위상 원본값으로 최종 계산·검증</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">EXP-04 · AT-73</span><span>범위 = 그 별 후보 최대 주기 × 1.15 (최소 40일). 봉우리는 찾을 수 있는(discoverable) 후보만</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">·</span><span class="nid">EXP-01 · DAT-11 · AT-117</span><span>분석 도중 그 별의 새 데이터 판이 공개되면 상단에 "새 데이터 판이 공개되었습니다 · [다시 불러오기]" 안내. 곡선 단계·제거 조합은 유지하고 주기·위상 선택만 초기화. 세션을 옛 판에 고정하지 않음</span><span class="tag p0">P0</span></li>
@@ -851,7 +851,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
     </ol>
   </section>
 
-  <p class="foot">요구사항 명세서 v1.3 변경안(2026-09-15)·상태표 v1.3 변경안·용어 사전 v1.0(2026-09-09)을 기준으로 합니다. v1.3 변경안: 원본 캡처 기준·연출 색/크기·전체 지도 궤도 0개·개별 별 페이지 로딩. v1.2 반영: 은하 배치·GIF 안내·내 행성 공전/확대/정보. 기존 v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
+  <p class="foot">요구사항 명세서 v1.3.1 변경안(2026-09-16)·상태표 v1.3.1 변경안·용어 사전 v1.0.1(2026-09-16)을 기준으로 합니다. v1.3.1 변경안: 미세 조정 중 배율·화면 중심 위상 유지, 1·2·4·8·16·32배 확대. 사용자 채택·교차 리뷰 대기이며 동작 구현 완료를 뜻하지 않습니다. v1.3 변경안: 원본 캡처 기준·연출 색/크기·전체 지도 궤도 0개·개별 별 페이지 로딩. v1.2 반영: 은하 배치·GIF 안내·내 행성 공전/확대/정보. 기존 v1.1 반영: SC-02 회전·기울기 허용(월드 좌표 고정), 퀘스트 패널 챌린지 참여 수 = 대상 별 공식 스레드의 공개 분석 참여자, 검색·핫 토픽 P0. 이 문서는 필수 요소와 대표 상태를 확인하는 참고 배치이며 위치·크기·카드 배치를 고정하지 않습니다. 무신호 별 제공과 진입 보상 예외는 없습니다. 실제 튜토리얼 5번 TIC은 미선정(TBD)입니다. 예시 수치·곡선·회원은 시연용입니다. 이의 제기와 P1 전문가 제보 상세는 별도 범위입니다.</p>
 </div>
 
 <script>
