@@ -16,3 +16,9 @@
 | 2026-09-15 | 개별 별 은하 표현·페이지 조회 변경안 | S15P21C206-227 | 군집 제거, 개별 별, cursor, rangeStarCount, AT-123, AT-124 | 제안 | [2026-09-15](2026-09-15.md) |
 
 | 2026-09-15 | 개인 시제품 외형·연출 색/크기·선택 궤도·공통 fixture | S15P21C206-227 | personal-spiral-v1, layoutOrdinal, AT-125 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-15.md) |
+| 2026-09-15 | `libs/astro-kernel` 신설 — 고정 transit 모델·잔차 제거 공용 함수 | S15P21C206-121, 113, 88 | astro-kernel, transit_model, 잔차, residual, box 모델, 순서 불변, invalid_time, numerical_failure, underflow, D14-1, D06, libs | 구현 완료 (계약 v0 초안) | [2026-09-15](2026-09-15.md) |
+| 2026-09-15 | Gold PostgreSQL 직접 적재·원자적 전환·Python Worker 책임 경계 확정 | S15P21C206-134, 88 | Gold writer, PostgreSQL, current, bundleId 알림, Redis, Python Worker, astro-kernel, 문서 정합화 | 결정 반영 완료 | [2026-09-15](2026-09-15.md) |
+| 2026-09-15 | GCP 노드 운영 런북 분리와 Tailscale SSH 접속 유의사항 명시 | S15P21C206-71 | GCP 노드 운영, Tailscale, MagicDNS, SSH, node-1, planetory-admin, CodexSandboxOffline, known_hosts | 검증 완료 | [2026-09-15](2026-09-15.md) |
+| 2026-09-15 | 작업 중 지식 기록과 문서 분할·배치 규칙 보강 | S15P21C206-71 | 문서화, 지식 기록, 비민감 정보, 문서 분할, docs 배치, README 진입 링크 | 검증 완료 | [2026-09-15](2026-09-15.md) |
+| 2026-09-16 | Tailscale 팀 등록과 서버 접근 범위 문서화 | S15P21C206-71 | Tailscale, tailnet 초대, 장비 승인, tag:hadoop, MagicDNS, SSH, EC2, GCP | 검증 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-16 | 마이 프로필 P0 구현 — 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 | S15P21C206-157 | 닉네임 변경, NICKNAME_CONFLICT, lower(nickname), NFC 정규화, SB-D14, 온보딩, onboarding_done, ON CONFLICT, 타인 프로필, SB-D23, 탈퇴 404, 성과 요약 | 구현 완료 | [2026-09-16](2026-09-16.md) |

@@ -4,11 +4,12 @@
 
 [요구사항 명세서](../requirements/planetory-requirements-spec.md)의 POL-03·EXP-01·EXP-09·DAT-05·DAT-11·DAT-14와 DEC-35를 기준으로 한다.
 
-- GCP 배치: 원본 정제곡선의 모든 점, 품질 마스크, `fold_reference_time_btjd`, 원본 주기도, 후보별 고정 transit model과 계산 버전을 Gold에 넣는다.
-- EC2: 사용자가 제거할 후보를 선택하면 잔차 곡선과 잔차 주기도를 계산한다.
+- GCP Publisher: 품질 필터·비닝이 끝난 곡선 세그먼트, `fold_reference_time_btjd`, 원본 주기도, 후보별 고정 transit model과 계산 버전을 PostgreSQL Gold에 넣는다.
+- Backend: PostgreSQL에서 현재 Bundle의 곡선 배열·후보 모델·버전을 읽고 Worker 요청을 만들며, 상태·중복 방지·Redis·판 변경 검증을 맡는다.
+- Python Worker: Backend가 전달한 값만으로 잔차 곡선과 잔차 주기도를 계산한다. PostgreSQL·Redis를 직접 조회하지 않는다.
 - HDFS: 내부 잔차, 품질 검증 결과, AI 입력과 공개한 PublicationBundle 백업을 RF2로 보관한다. EC2가 실시간 조회하지 않는다.
 
-Gold의 UI 축약 곡선은 화면 표시용이며 온라인 계산 입력으로 사용하지 않는다.
+온라인 계산에는 `light_curve_segments.flux` 전체를 사용합니다. 제출 스냅샷이나 화면 표시용 150/200-bin 축약 배열은 계산 입력으로 사용하지 않습니다.
 
 ## 계산 프로그램 선택
 
@@ -17,7 +18,7 @@ Gold의 UI 축약 곡선은 화면 표시용이며 온라인 계산 입력으로
 | Spring Boot 내부 Java | 배포와 호출 경로가 단순함 | 기존 Python 수치 코드 재작성·검증 필요 |
 | Python 계산 컨테이너 | 기존 `experiments/tess-bls` 코드 재사용 가능 | 내부 API와 컨테이너 하나 추가 |
 
-첫 구현은 **Python 계산 컨테이너**를 권고한다. 검증된 계산 함수를 최소한으로 옮길 수 있기 때문이다. 운영 결과로 통신 비용이 실제 병목임이 확인될 때만 Java 이식을 검토한다.
+첫 구현은 **별도 Python Worker**로 확정한다. 잔차 제거는 공유 패키지 `libs/astro-kernel`의 `remove_transit_models`를 사용하고, Backend가 곡선 배열과 고정 모델을 전달한다. 운영 결과로 통신 비용이 실제 병목임이 확인될 때만 Java 이식을 다시 검토한다.
 
 기존 `residual_after_candidates`, `bls_periodogram`을 후보로 사용하되, `joint_refit`가 후보 모델을 다시 맞추는 현재 동작은 “Gold의 고정 모델을 제거한다”는 계약과 다를 수 있다. 담당자 합의 전에는 그대로 운영 계약으로 채택하지 않는다.
 
@@ -43,16 +44,16 @@ status = QUEUED
 - 같은 키의 실행은 하나만 허용하고 나머지 요청은 같은 작업 상태를 본다.
 - 작업을 가져간 Worker에는 만료 시간을 둔다. Worker가 죽으면 만료 후 다른 Worker가 다시 계산한다.
 - 재시도 번호가 오래된 Worker의 늦은 결과가 최신 결과를 덮어쓰지 못하게 한다.
-- 결과에는 계산한 EC2 노드와 checksum을 기록한다. 다른 노드가 로컬 경로를 직접 열지 않고, 필요하면 소유 노드의 내부 API를 호출하거나 다시 계산한다.
+- Worker 응답을 저장하기 전에 Backend가 요청의 `publication_bundle_id`가 아직 `current`인지 다시 확인한다. 판이 바뀌었으면 결과를 버리고 최신 판 재로드를 요구한다.
 - 잔차가 준비된 뒤에만 주기도 계산을 시작한다. `RESIDUAL_READY` 결과를 화면에 먼저 노출할지는 벤치마크로 결정한다.
 - 실패 상태에는 실패 단계·원인과 재시도 정보를 기록하고 마지막 정상 곡선을 유지한다.
 
-## 세션과 버전 고정
+## 판 변경과 버전 격리
 
-- 신규 분석 진입 시 인증·공개·별 열림 상태를 다시 검사하고 `current`에서 선택한 `publication_bundle_id`를 고정한다.
-- 모든 계산 요청과 캐시 키는 세션에 고정된 Bundle을 사용한다. 새 Bundle은 새 분석 세션부터 적용한다.
+- 분석 진입과 계산 요청마다 인증·공개·별 열림 상태와 PostgreSQL의 `current`를 확인한다.
+- 화면이 가진 `publication_bundle_id`가 현재 판과 다르면 쓰기와 계산 결과 채택을 거절하고 최신 판으로 다시 불러온다.
 - 서로 다른 Bundle 또는 계산 버전 사이에는 캐시를 재사용하지 않는다.
-- EC2는 `current`와 직전 `previous`를 기본 보존한다. 더 오래된 Bundle과 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않으면 삭제하고, 참조 중이면 보존기간 종료 시 함께 만료한다. 기간은 DEC-35의 미정 항목이다.
+- 판이 `archived`가 되면 그 판의 Redis 계산 상태·결과·잠금을 정리한다. 판 행은 과거 제출 참조를 위해 PostgreSQL에 남긴다.
 
 ## 초기 자원 제한
 
@@ -64,15 +65,15 @@ status = QUEUED
 
 | 저장소 | 저장할 내용 | 판단 |
 | --- | --- | --- |
-| PostgreSQL | 작업 상태, 키, 결과 경로, 오류 | 필요 |
-| EC2 로컬 파일 | 큰 잔차 곡선·주기도 결과 | 첫 구현 권고 |
-| Redis | 짧은 상태·자주 읽는 작은 결과 | 필요가 측정될 때 추가 |
+| PostgreSQL | 현재 Gold 배열·후보 모델·버전, 판 상태 | 정본 |
+| Redis | 계산 상태·결과·키별 잠금·오류 | 확정 |
+| Worker 로컬 디스크 | 영속 결과 | 사용하지 않음 |
 
-첫 구현은 PostgreSQL과 EC2 로컬 파일만 사용한다. Redis는 상태 조회 부하나 노드 간 조정 문제가 실제로 확인될 때 추가한다. 캐시는 Gold 릴리스와 다른 경로에 두며 용량 상한과 만료 정책을 둔다.
+Backend만 PostgreSQL과 Redis에 접근한다. Worker 결과는 Backend가 Redis에 저장하며 Redis가 비면 다시 계산한다. TTL과 메모리 상한은 부하 시험으로 정한다.
 
 ## 수치 검증
 
-Silver 기준 결과와 EC2 결과를 같은 시간 배열, 품질 마스크, 후보 집합, 모델 버전과 주기 격자에서 비교한다.
+Silver 기준 결과와 Worker 결과를 같은 비닝 세그먼트 시각·flux, 후보 집합, 모델 버전과 주기 격자에서 비교한다.
 
 - 제거 후보 없음, 후보 1개·여러 개, 겹친 transit
 - Sector 사이 공백, NaN, 0에 가까운 모델
@@ -84,26 +85,25 @@ Silver 기준 결과와 EC2 결과를 같은 시간 배열, 품질 마스크, �
 
 ## Gold 계약과 용량 측정
 
-최소 계약 후보는 다음과 같다. 자료형·필수 여부·시간 기준은 계약 MR에서 확정한다.
+Backend가 PostgreSQL에서 조립해 Worker에 보내는 최소 계약은 다음과 같다. DB 열과 manifest의 정본은 [서비스 DB ERD](database-erd.md)다.
 
 ```text
-publication_bundle_id, tic_id, schema_version, source_versions
-curve: path, point_count, dtype, time_unit, time_reference, fold_reference_time_btjd, flux_unit, quality_mask
-periodogram: path, grid_definition, periodogram_config_version
-transit_models: candidate_id, period, epoch, duration, depth, shape, model_version
-normalization: baseline_definition, version
-checksums, created_at
+publication_bundle_id, tic_id
+curve_segments: segment_id, start_btjd, bin_minutes, n_points, flux
+fold_reference_time_btjd
+removed_candidates: candidate_id, transit_model
+residual_model_version, periodogram_config_version, period_grid
 ```
 
-위 목록은 v0.12가 요구하는 최소 입력 후보이며 전체 파일 스키마가 아니다. 전체 스키마는 미니 파이프라인 PoC 결과를 데이터·백엔드·프론트 담당자가 검토한 뒤 별도 Task에서 확정한다.
+Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
 
 이전 Gold 20~25GiB 추정은 축약 데이터 기준이므로 사용하지 않는다. 실제 형식과 압축으로 표본을 저장한 뒤 다음 방식으로 계산한다.
 
 1. cadence, Sector 수, TIC별 점 수와 후보 수별로 표본을 뽑는다.
-2. 곡선, 품질, 주기도, 모델과 manifest의 실제 byte를 각각 측정한다.
+2. 곡선 배열, 주기도, 모델과 manifest의 실제 byte를 각각 측정한다.
 3. `전체 용량 = 각 그룹의 TIC 수 × 그룹당 평균 byte`를 모두 더한다.
-4. EC2마다 OS·이미지·DB·로그, `current`·`previous` Gold, 참조 중이라 보호되는 이전 Bundle, 전송 중 파일, 캐시와 여유 공간을 더한다.
-5. 한 EC2의 예상 점유가 설치 용량의 85%를 넘으면 공개 범위·보존 수·형식 또는 저장소를 다시 결정한다. 계산용 곡선을 임의로 축약하지 않는다.
+4. PostgreSQL Primary·Standby의 Gold 배열·인덱스·WAL·여유 공간과 Redis 결과·TTL·메모리 상한을 각각 더한다.
+5. 예상 점유가 각 저장소 용량의 85%를 넘으면 공개 범위·보존 수·비닝 또는 저장소를 다시 결정한다. 계산용 곡선을 화면 스냅샷 크기로 임의 축약하지 않는다.
 
 ## 관측 항목
 

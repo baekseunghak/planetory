@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-15",
+  "backend": "MR !42 / 1cf1cca",
+  "frontend": "201 worktree (uncommitted authentication adapter)",
+  "origin": "http://localhost:8080",
+  "provider": "actual SSAFY",
+  "checks": {
+    "separatePostgresAndBackendRunning": true,
+    "preLoginMeStatus": 401,
+    "privateConfigExcludedFromGitAndDockerBuild": true,
+    "actualProviderConsentPageReached": true,
+    "consentCompleted": true,
+    "authenticatedMeVerified": true,
+    "meStatusSequence": [401, 200, 200, 200, 200],
+    "providerMemberCount": 1,
+    "defaultSettingsCount": 1,
+    "initialUnlockCount": 1,
+    "memberVisibleInCommonLayout": true,
+    "identityPreservedAfterReload": true,
+    "logoutButtonVisible": true,
+    "realSessionCsrfGetStatus": 200,
+    "logoutButtonPostStatus": 204,
+    "reloadAfterLogoutMeStatus": 401,
+    "reLoginMeStatus": 200,
+    "logoutBrowserRegressionTestsPassed": 3
+  },
+  "status": "real SSAFY login succeeded through Nginx and unmodified MR42 backend",
+  "limitations": [
+    "Dedicated local DB with synthetic tutorial TIC 1 through 5",
+    "Direct browser navigation to API JSON was blocked by Chrome; authenticated GET verified through frontend identity and server HTTP 200 instead",
+    "Real Google login, deployment HTTPS, Safari, backend fieldErrors and correlation IDs not newly verified",
+    "No app credentials, cookies, authorization codes or personal provider IDs stored in this report"
+  ]
+}

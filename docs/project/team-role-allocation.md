@@ -6,8 +6,8 @@
 >
 > 기준 문서
 >
-> - [Planetory 요구사항 명세서 v0.12](../requirements/planetory-requirements-spec.md)
-> - [후보·별 상태표 v0.12](../requirements/planetory-status-table.md)
+> - [Planetory 요구사항 명세서 v1.2](../requirements/planetory-requirements-spec.md)
+> - [후보·별 상태표 v1.2](../requirements/planetory-status-table.md)
 > - [시스템 아키텍처](../architecture/system-architecture.md)
 >
 > Jira 상위 Epic: [S15P21C206-26 · 서비스 구체화 및 시스템 설계](https://ssafy.atlassian.net/browse/S15P21C206-26)
@@ -20,15 +20,15 @@
 
 각 담당자는 AI 에이전트를 조사, 초안 작성, 반복 작업과 검증 보조에 활용할 수 있다. 도메인 결정, 요구사항 해석, 인터페이스 합의와 최종 검수 책임은 담당자에게 있다.
 
-요구사항 명세서와 상태표·와이어프레임·프로토타입이 다르면 요구사항 명세서 v0.12를 정본으로 사용한다.
+요구사항 명세서와 상태표·와이어프레임·프로토타입이 다르면 요구사항 명세서 v1.2를 정본으로 사용한다.
 
 ### v0.12 역할 분배 반영 사항
 
 - 잔차 곡선과 잔차 주기도는 배치 저장물이 아니라 EC2의 온라인 파생 계산으로 제공한다.
-- Gold에는 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`, 후보별 transit model과 계산 설정 버전이 포함되어야 한다.
-- 신규 분석 세션은 `current`에서 PublicationBundle을 고정한다. EC2는 `current`·`previous`를 기본 보존하고, 진행 중 세션·재시도·보존기간 내 히스토리가 참조하는 이전 Bundle과 캐시는 보호한다.
+- Gold에는 품질 필터·비닝이 끝난 곡선 세그먼트, `fold_reference_time_btjd`, 후보별 transit model과 계산 설정 버전이 포함되어야 한다.
+- Publisher가 Gold를 PostgreSQL에 직접 적재하고 판 전환까지 한 트랜잭션으로 처리한다. 진행 중 분석은 판 변경 시 최신 `current`로 다시 불러온다.
 - 온라인 계산은 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED` 상태를 구분한다.
-- 김동혁이 온라인 계산 위치·캐시·큐·관측 구조를, 윤성용이 배치와 EC2 계산의 과학적 일치 기준을, 강재민이 요청 상태·캐시 키·API 경계를 분석한다.
+- 온라인 계산은 별도 Python Worker와 `libs/astro-kernel`을 사용한다. Backend가 현재 판 배열·모델을 전달하고 Redis 상태·결과·잠금과 판 변경 검증을 맡는다.
 - 외부 라벨이 갱신되어도 v1에서는 기존 성과·등급·발견한 별·통계 스냅샷을 유지하고 재분류 표식만 남긴다.
 - 동의·비동의 합계와 반응한 회원 닉네임 목록은 모든 회원에게 공개한다.
 - 회원 차단은 v1 범위 밖이다. 신고·운영 숨김만 다루며 UserBlock과 차단 UI를 기획 범위에 넣지 않는다.
@@ -59,8 +59,8 @@
 - YARN/Spark 자원 배분과 Airflow 배치 제어
 - 원천 수집의 checksum, 재시도, 멱등성과 부분 재처리
 - PublicationBundle 검증과 GCP에서 EC2로의 Gold 전달
-- EC2 release 검증, `current`·`previous` 전환과 롤백
-- EC2 온라인 파생 계산의 구현 위치, 캐시 저장소, 큐와 동시 실행 상한
+- Publisher의 PostgreSQL Gold 적재, `staging → current → archived` 트랜잭션과 롤백, 커밋 후 알림
+- Python Worker 호출, Redis 캐시, 큐와 동시 실행 상한
 - Gold 필수 입력의 PoC용 최소 계약과 표본 용량 측정
 - 온라인 계산 시간·큐 길이·캐시 적중률·실패율 관측
 - HDFS·YARN·Spark·Airflow·Gold 버전 관측 지표
@@ -90,7 +90,7 @@
 - 고조파 별칭, 후보 병합과 원본 재검증
 - `discoverable` 판정과 사용자 제공 후보 범위
 - 외부 disposition과 자체 AI 결과의 분리
-- Gold에 제공할 원본 정제곡선 전 점·품질 마스크·`fold_reference_time_btjd`·후보별 transit model·계산 설정 버전
+- Gold에 제공할 품질 필터·비닝 완료 곡선 세그먼트·`fold_reference_time_btjd`·후보별 transit model·계산 설정 버전
 - 배치 Silver 잔차와 EC2 온라인 재계산 잔차의 허용 오차 및 검증 기준
 - 신규 LC·Sector 유입 시 후보 추가·discoverable 변경과 재개 이벤트 발생 조건
 - TIC·TCE·TOI 변경 시 후보 상태 이력과 성과 유지 범위
@@ -216,7 +216,7 @@
 | 요구사항 | 주 담당 | 협업 담당 | 책임 |
 | --- | --- | --- | --- |
 | POL-03, DAT-05 | 윤성용 | 김동혁, 강재민 | Silver 내부 잔차와 Gold 제공 자산의 경계를 정의한다. |
-| DAT-14, DEC-35 | 김동혁 | 윤성용, 강재민 | 온라인 계산 위치·캐시·큐·관측·검증 구조를 정리하고, Gold 스키마·용량 결정을 위한 PoC 근거를 준비한다. |
+| DAT-14, DEC-35 | 김동혁 | 윤성용, 강재민 | Python Worker 호출·Redis 큐·관측·검증 구조와 Publisher의 PostgreSQL 적재·전환·알림을 구현하고, 용량 PoC 근거를 준비한다. |
 | EXP-09, AT-67·80 | 강재민 | 백지웅 | 온라인 잔차 계산 요청 상태와 사용자 제공 API를 정의한다. |
 | GRD-06, DEC-26 | 강재민 | 윤성용, 백승학 | 외부 라벨 갱신 표식은 남기되 기존 성과·등급·통계는 유지한다. |
 | DAT-15 | 윤성용 | 강재민, 백승학, 하서진 | 후보 추가·discoverable 변경에서 재개 이벤트와 알림·퀘스트 반영 경계를 정의한다. |
@@ -237,8 +237,8 @@
 | 제공 담당 | 소비 담당 | 합의할 인터페이스 |
 | --- | --- | --- |
 | 김동혁 | 윤성용 | Raw/Bronze/Silver 경로, 파티션, Spark 실행 인자, 재처리 단위 |
-| 김동혁 | 강재민 | Gold manifest, checksum, bundle 버전, release 전환, 온라인 계산 위치·캐시·큐 구조 |
-| 윤성용 | 강재민 | Candidate, CandidateAlias, 원본 전 점·품질 마스크, transit model, 계산 설정 버전 |
+| 김동혁 | 강재민 | Gold manifest, checksum, bundle 버전, PostgreSQL 전환·커밋 후 알림, Worker 호출·Redis 캐시·큐 구조 |
+| 윤성용 | 강재민 | Candidate, CandidateAlias, 비닝 곡선 세그먼트, transit model, 계산 설정 버전 |
 | 윤성용 | 백지웅 | 화면용 곡선 다운샘플, 그래프 단위, 단계 식별 정보 |
 | 강재민 | 백지웅 | 분석 단계, 제출, 결과, 오답, 잔차 비동기 API |
 | 강재민 | 백승학 | 분석글 게시에 따른 성과, 외부 라벨 갱신 표식, 판단 분포와 재개 알림 이벤트 |

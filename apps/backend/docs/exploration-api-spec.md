@@ -143,7 +143,7 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 | 내부: 성과 지급·별 열림 | P0 | 서비스 계층 함수 | GRD-02~04·08, NFR-01 | 9.2 |
 | 내부: 완료·재개 | P0 | 제출 트랜잭션·배치 후처리 | SUB-11, DAT-15, DEC-27 | 9.3 |
 | 내부: 튜토리얼·챌린지 발견 | P0 | 서비스 계층 함수 | HOME-02·06, CHL-01 | 9.4 |
-| 내부: Gold 적재 | P0 | 후보만 기록 | DAT-11, ERD 미결 7 | 10 |
+| 내부: Gold 전환 후처리 | P0 | HTTP 적재 API 없음. Publisher 커밋 후 `bundleId` 알림 소비 | DAT-11·15, DEC-35 | 10 |
 
 ## 4. 별 지도·별 상세·퀘스트·내 별 목록
 
@@ -1132,14 +1132,14 @@ for each user_star_progress(tic_id):
 
 ## 10. 배치·Gold 적재 경계
 
-서비스 API는 Gold 메타데이터를 읽기만 한다. 적재 방식은 ERD 미결 7이며 두 후보만 기록한다.
+Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 읽기만 한다.
 
-| 안 | 내용 | 비고 |
-|---|---|---|
-| A. 배치 직접 INSERT | Publisher가 PostgreSQL Primary에 `light_curve_segments`(신규 revision만) → `periodograms` → `candidates` 갱신·`retired` → `publication_bundles` staging → current 전환을 한 트랜잭션으로 수행 | 서비스 무관. DB 권한 분리 필요 |
-| B. 내부 적재 API | `POST /internal/gold/bundles` (인증: 서비스 간 토큰) | 서비스가 검증·전환 로직을 갖고 Redis 정리·재개 후처리를 같은 곳에서 실행 |
+1. `planetory_gold_writer`로 `light_curve_segments`(신규 revision만), `periodograms`, `candidates`, `publication_bundles` staging을 적재한다.
+2. 같은 트랜잭션에서 기존 `current`를 `archived`, 새 판을 `current`로 바꾸고 archived 판의 주기도를 정리한다.
+3. 커밋 뒤 Publisher가 Backend에 전환된 `bundleId`를 알린다. 알림은 멱등 재시도하며 실패해도 DB 커밋을 되돌리지 않는다.
+4. Backend는 알림을 계기로 (1) 이전 판 Redis 캐시 삭제, (2) 9.3 재개 판정, (3) 9.5 라벨 표식을 실행한다.
 
-어느 안이든 current 전환 직후 (1) 이전 판 캐시 삭제, (2) 9.3 재개 판정, (3) 9.5 라벨 표식을 실행해야 한다. 김동혁과 결정한다.
+알림은 전환 감지 지연을 줄이는 신호일 뿐 정본이 아니다. 탐사 API는 요청마다 PostgreSQL의 `current`를 기준으로 판 변경을 검증한다.
 
 ## 11. 다른 담당과의 계약
 
@@ -1200,7 +1200,7 @@ for each user_star_progress(tic_id):
 
 | 담당 | 항목 |
 |---|---|
-| 김동혁 | Redis 키·TTL·메모리 상한, 동시 계산 상한·큐, 계산 사이드카 호출 경로, Gold 적재 안(10장), archived 판 캐시 정리 |
+| 김동혁 | Redis 키·TTL·메모리 상한, 동시 계산 상한·큐, Python Worker 호출 경로, Publisher DB 접속·커밋 후 알림, archived 판 캐시 정리 |
 | 윤성용 | `transit_model` 파라미터, `discoverable` 판정, 매칭 허용 오차·N 상한(DEC-03), 봉우리 추출 규칙(5.4절), 잔차 일치 검증 |
 | 하서진 | 은하 배치 시각 기준·서버 저장 좌표, 개별 별/타일/배율 연결, 별 상세 패널 필드 |
 
@@ -1227,6 +1227,8 @@ for each user_star_progress(tic_id):
 | D-13 | 챌린지 참여 수 집계 단위 | 대상 별의 **모든** 공식 신호 스레드에서 유효 공개 분석을 가진 회원 ID를 별 단위로 중복 제거(COUNT DISTINCT). 여러 신호에 참여해도 1명, 스레드별 N을 합산하지 않음. 공개 취소·숨김 후 다른 유효 공개가 남으면 포함 | SRS v1.1 안건 15 "회원당 1"의 구체화. 핫 토픽·판단 분포의 신호별 집계는 그대로 | 4.3 | 백승학·하서진 |
 | D-14 | 미계산 잔차의 표현 | 캐시 결과도 진행 중 작업도 없으면 `residual: {"status": null, "jobId": null}`. 조회(곡선·초안·히스토리 그래프)는 작업을 만들지 않으며 `null`은 2.4절 상태 열거형에 추가하지 않는다 | 가짜 `QUEUED`·`jobId`로 폴링을 유도하지 않음 | 2.4, 5.2, 6.8, 8.3 | 백지웅 |
 | D-15 | 타인 공개 그래프의 잔차 | 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청을 제공하지 않는다. 캐시된 잔차가 없으면 원본 곡선 또는 제출 스냅샷만 표시하고 둘 다 없으면 "그래프 제공 불가" 안내. 본인 분석의 잔차 요청 권한은 그대로 | 타인 요청으로 계산 자원을 쓰지 않음. 공개 내용(판단·메모)은 계속 표시 | 8.3, 8.5 | 백승학·백지웅 |
+| D-16 | Gold 적재·전환 경계 | Publisher가 Gold를 PostgreSQL에 직접 적재하고 한 트랜잭션으로 current를 전환한다. 커밋 후 Backend에는 `bundleId`만 알려 후처리한다 | 대용량 배열을 HTTP로 우회하지 않고 DB 원자성과 앱 읽기 전용 권한을 유지 | 10 | 김동혁·강재민 |
+| D-17 | 온라인 계산 호출 경계 | Backend가 현재 판의 DB 배열·후보 모델을 Python Worker에 전달한다. Worker는 DB를 직접 읽지 않고 `astro-kernel`로 계산하며, Backend는 응답 채택 전 current를 재검증한다 | 판 교체 경합을 Backend 한 곳에서 막고 Worker를 순수 계산으로 유지 | 7, 10 | 김동혁·윤성용 |
 
 ### 12.2 미결 (실측·타 담당 데이터 필요)
 
@@ -1234,7 +1236,6 @@ for each user_star_progress(tic_id):
 |---|---|---|---|
 | 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03. 계약 형태는 5.1절, 숫자만 채움 |
 | 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만 |
-| 7 | Gold 적재 방식 A/B | 김동혁·강재민 | ERD 미결 7 |
 | 10 | `stars` 표시 열(tmag·teff·radius) | 팀 | ERD 미결 9 |
 | 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리(회원 생성 롤백 여부) | 강재민·백승학 | 서비스 F01-Q5 |
 

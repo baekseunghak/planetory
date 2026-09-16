@@ -202,6 +202,7 @@ erDiagram
         numeric end_btjd "끝(BTJD)"
         text cadence "촬영 간격"
         text source_version "원천 버전"
+        text time_system "시각 체계"
     }
     publication_bundles["publication_bundles · 공개 데이터 판"] {
         bigint id PK "고유 번호"
@@ -261,6 +262,8 @@ erDiagram
         text disposition "원천 판정"
         numeric period_days "주기"
         date fetched_on "조회일"
+        bigint tic_id FK "별"
+        numeric epoch_btjd "원천 epoch(BTJD·NULL 가능)"
     }
     candidate_dispositions["candidate_dispositions · 통합 분류"] {
         bigint candidate_id PK, FK "후보"
@@ -269,6 +272,7 @@ erDiagram
         text planet_truth "planet/not_planet/null"
         text rule_version "규칙 버전"
         timestamptz applied_at "적용 시각"
+        jsonb source_refs "판정 근거 참조"
     }
     ai_evaluations["ai_evaluations · AI 평가"] {
         bigint id PK "고유 번호"
@@ -277,6 +281,7 @@ erDiagram
         numeric score "점수"
         text verdict "rejected/hold/approved"
         text threshold_version "임계값 버전"
+        jsonb raw_output "모델 원본 출력(NULL 가능)"
     }
     submissions["submissions · 제출"] {
         bigint id PK "고유 번호 · 동률 순서"
@@ -461,6 +466,8 @@ erDiagram
         text checkpoint "체크포인트"
         text status "상태"
         timestamptz started_at "시작"
+        text error "실패 사유(NULL 가능)"
+        bigint duration_ms "소요 시간(ms·NULL 가능)"
     }
     candidate_status_history["candidate_status_history · 후보 변경 이력"] {
         bigint id PK "고유 번호"
@@ -470,6 +477,8 @@ erDiagram
         text old_value "이전"
         text new_value "이후"
         timestamptz changed_at "변경 시각"
+        text rule_version "규칙 버전"
+        text reason "사유(NULL 가능)"
     }
 
 ```
@@ -720,6 +729,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 9. **닉네임은 복사하지 않는다.** 게시글·반응·답글은 user_id만.
 10. **열거형은 TEXT + CHECK.** 다형 참조(follows.target, post_source_links.target, notifications.payload)는 FK 없이 서비스 계층 검증.
 11. **운영 화면은 v1에 없다.** hidden 상태값만 두고 DB 직접 조작으로 처리한다.
+12. **Gold 적재는 Publisher가 DB에 직접 쓴다(2026-09-15).** `planetory_gold_writer`가 곡선·주기도·후보·manifest 적재와 `staging → current → archived` 전환을 한 트랜잭션으로 수행한다. Backend는 Gold를 읽고 커밋 후 `bundleId` 알림에 따른 캐시·재개·라벨 후처리만 맡는다.
 
 ## 5. 미결·확인 필요
 
@@ -731,7 +741,6 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
 | 5 | analysis_histories·published_analyses 불변을 트리거로 강제할지 | HIS-06 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
-| 7 | Gold 메타데이터(묶음 B) 적재 방식: 배치 직접 INSERT vs API | DAT-06 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |
 | 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
 | 10 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |

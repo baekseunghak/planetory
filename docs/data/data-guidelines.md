@@ -42,13 +42,13 @@ Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실�
 
 PublicationBundle은 최소한 다음 입력을 포함합니다.
 
-- 원본 정제곡선의 모든 점과 품질 마스크
+- 품질 필터와 비닝이 끝난 별·섹터 곡선 세그먼트
 - `fold_reference_time_btjd`
 - 원본 주기도
 - 후보별 통과 모델
 - 계산 버전
 
-전체 파일 스키마는 미니 파이프라인 PoC 후 별도 Task에서 확정합니다.
+온라인 Gold의 열·제약은 [서비스 DB ERD](../architecture/database-erd.md), manifest 최소 형태는 DB 마이그레이션을 정본으로 사용합니다.
 
 EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2로 보관합니다.
 
@@ -61,23 +61,26 @@ EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2
 
 약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum과 묶음 위치를 기록합니다. 원본을 삭제하거나 컬럼을 제거하지 않습니다.
 
-## EC2 Gold 릴리스
+## PostgreSQL Gold 공개
 
 ```text
-/gold
-├─ releases/<bundle_id>/
-│  └─ <PublicationBundle 파일 구조는 PoC 후 확정>
-├─ current -> releases/<현재 bundle_id>
-└─ previous -> releases/<직전 bundle_id>
+Publisher 검증 → planetory_gold_writer로 PostgreSQL Primary 접속
+→ BEGIN
+→ 신규 곡선 revision·주기도·후보·manifest 적재
+→ 기존 current를 archived, 새 staging 판을 current로 전환
+→ archived 판 주기도 정리
+→ COMMIT
+→ Backend에 bundleId 알림
 ```
 
-- 전송 중인 디렉터리는 공개하지 않습니다.
-- 경로, 파이프라인 버전, 파일 목록과 checksum을 전송 전후에 검증합니다.
-- 모든 검증이 통과하면 `previous`를 기존 `current`로 갱신한 뒤 `current`만 새 릴리스로 원자적으로 전환합니다.
-- 검증에 실패하면 기존 `current`, `previous`와 릴리스를 유지합니다.
-- 신규 분석 세션은 `current`를 한 번 조회하고 선택한 `publication_bundle_id`를 끝까지 사용합니다.
-- 진행 중 세션·재시도·온라인 계산은 `current`가 아니라 `releases/<publication_bundle_id>`를 조회합니다.
-- `current`와 `previous`보다 오래된 릴리스와 해당 캐시는 진행 중 세션·재시도·보존기간 내 히스토리가 참조하지 않으면 삭제합니다. 참조 중인 릴리스는 보존기간이 끝날 때까지 삭제하지 않습니다.
+- 적재와 판 전환은 한 PostgreSQL 트랜잭션입니다. 실패하면 전체를 롤백하고 기존 `current`를 유지합니다.
+- 서비스의 `planetory_app` 역할은 Gold 테이블을 읽기만 하며, 적재 API를 제공하지 않습니다.
+- 바뀌지 않은 곡선 세그먼트는 별·섹터·revision으로 재사용하고 manifest의 `segment_ids`가 이번 판의 입력을 특정합니다.
+- 판 행은 과거 제출의 참조를 위해 남기지만 이전 판의 주기도와 Redis 계산 캐시는 재생성 가능한 데이터로 정리합니다.
+- Publisher는 커밋 뒤 전환된 `bundleId`만 Backend에 알립니다. 같은 알림을 다시 받아도 결과가 달라지지 않아야 합니다.
+- 알림 실패는 DB 커밋을 되돌리는 사유가 아닙니다. Publisher가 재시도하고, Backend는 요청마다 PostgreSQL의 `current`를 확인해 누락된 알림에 의존하지 않습니다.
+- Backend는 알림을 계기로 Redis 캐시 정리, 완료 별 재개 판정, 외부 라벨 갱신 표식을 실행합니다.
+- 진행 중 분석은 판 변경을 감지하면 최신 판으로 다시 불러오며 archived 판 계산 결과를 채택하지 않습니다.
 
 ## 재현성
 
@@ -90,9 +93,9 @@ EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2
 
 ## 결정 대기 사항
 
-- GCP Gold 후보의 실제 staging 경로
-- 진행 중 세션·재시도·히스토리가 참조하는 이전 Bundle·캐시의 보존기간
+- GCP Gold 후보의 실제 staging 경로와 HDFS 백업 형식
+- PostgreSQL Gold 배열의 실측 용량과 archived 판 행 보존 운영값
 - Raw·Silver 등 계층별 데이터 보존 기간
 - 개인정보 및 민감정보 처리 정책
-- 데이터 접근 권한
+- 운영 환경의 Publisher DB 접속 경로와 커밋 후 알림 인증 방식
 
