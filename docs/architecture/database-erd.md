@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.4
+# Planetory 서비스 DB ERD v1.5
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,14 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.4 → v1.5 (2026-09-16, `S15P21C206-136`)
+
+회원별 지도 개정값을 보관하는 `member_sky_revisions`를 추가한다. 탐사 API 4.1의 `version`은 “동일 시각의 여러 변경도 구분하는 단조 증가 개정값”이라 시각에서 파생할 수 없다. 같은 순간에 일어난 두 발견이 같은 `version`을 내면 프론트가 변경을 놓친다. 응답의 `skyVersion`은 `u-<회원번호>:<개정값>` 문자열이며 프론트는 문자열로만 비교한다.
+
+행이 없는 회원은 개정값 0으로 읽는다. 첫 증가가 1을 만드므로 없는 행을 1로 읽으면 첫 변경이 값을 움직이지 않아 감지되지 않는다.
+
+**배치 버전 `personal-spiral-v1`을 구현으로 확정한다.** v1.2가 정한 좌표 열에 실제 값을 채우는 배치 함수가 프론트 참조 구현과 비트 단위로 일치한다. 자리표시 배치 `bootstrap-0`으로 저장된 행은 좌표가 모두 원점이라 실제 배치와 섞일 수 없으며, 남아 있으면 마이그레이션이 안내와 함께 멈춘다. 지우지 않는 이유는 발견 행을 지우면 그 회원의 별이 0개가 되는데 튜토리얼 1번은 가입 처리에서만 열려 다시 생기지 않기 때문이다.
 
 ### v1.3 → v1.4 (2026-09-16, `S15P21C206-135`)
 
@@ -121,6 +129,7 @@ erDiagram
     users ||--o{ user_candidate_achievements : earns
     users ||--o{ user_star_progress : tracks
     users ||--o{ star_unlocks : discovers
+    users ||--o| member_sky_revisions : versions
     users o|--o{ posts : writes
     users ||--o{ comments : writes
     users ||--o{ post_reactions : reacts
@@ -385,6 +394,11 @@ erDiagram
         numeric angle_deg "이전 배치 각도(선택)"
         numeric radius_jitter "이전 배치 지터(선택)"
         timestamptz unlocked_at "발견 시각"
+    }
+    member_sky_revisions["member_sky_revisions · 회원 지도 개정값"] {
+        bigint user_id PK "회원"
+        bigint revision "단조 증가 개정값"
+        timestamptz updated_at "마지막 증가 시각"
     }
     posts["posts · 일반 글 / 공식 신호 스레드"] {
         bigint id PK "고유 번호"
@@ -681,6 +695,18 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | layout_ordinal | NOT NULL 정수 0~2147483647, UNIQUE(user_id,layout_ordinal). 발견 종류와 무관한 회원별 안정 순번. 다음 순번은 회원 잠금/원자적 카운터 또는 인덱스 끝값으로 배정한다. 좌표와 함께 확정·롤백하며 재처리 시 증가시키지 않는다. personal-spiral-v1 참조 배치와 연출 시드 입력이며 현재 별 수나 부모 세대가 아니다 |
 | generation, angle_deg, radius_jitter | 이전 방사형 스키마의 nullable 폐기 예정 열. 부모 관계는 trigger_tic_id로 유지하며 신규 은하 좌표 생성·조회·API 응답에 이 열을 사용하지 않는다. 열 제거는 별도 백엔드 스키마 정리 대상 |
 | unlocked_at | |
+
+**member_sky_revisions** (HOME-01, 탐사 API 4.1) — PK user_id
+
+회원 지도의 단조 증가 개정값. 발견·상태 변경 트랜잭션 안에서 같이 올려 발견과 버전이 어긋나지 않게 한다.
+
+| 열 | 제약 | 비고 |
+|---|---|---|
+| user_id | PK, FK users(id) | 회원당 한 행 |
+| revision | NOT NULL, DEFAULT 1, CHECK > 0 | 단조 증가. 시각에서 파생하지 않으므로 같은 순간의 두 변경도 구분된다 |
+| updated_at | NOT NULL | 마지막 증가 시각. 버전 비교에 쓰지 않는 관찰용 값 |
+
+행이 없는 회원의 개정값은 **0**으로 읽는다. 첫 증가가 1을 만들기 때문에 없는 행을 1로 읽으면 첫 변경이 감지되지 않는다. API 응답의 `skyVersion`은 `u-<user_id>:<revision>` 문자열이고 프론트는 문자열로만 비교한다. 앱 역할은 SELECT·INSERT·UPDATE만 가지며 DELETE·TRUNCATE는 회수한다.
 
 ### E. 커뮤니티 (결정 4·6)
 
