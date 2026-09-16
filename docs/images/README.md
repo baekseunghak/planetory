@@ -4,6 +4,7 @@
 
 | 파일 | 사용 문서 |
 | --- | --- |
+| `sky-reference-20260915/` | [개인 시제품 기준 화면 4장·카메라 기록](../development/sky-reference/README.md) |
 | `system-architecture-visual.svg` | Planetory 시스템 아키텍처 개요 |
 | `database-erd.svg` | 서비스 DB ERD 상세 |
 | `database-erd-overview.svg` | 서비스 DB ERD 개요 |

@@ -1,0 +1,1146 @@
+{
+  "synthetic": true,
+  "layoutVersion": "personal-spiral-v1",
+  "presentationVersion": "personal-galaxy-v1",
+  "accountCounts": [
+    1,
+    10,
+    100,
+    1000
+  ],
+  "generator": "exampleAccount(count) in reference.mjs",
+  "cases": [
+    {
+      "name": "first-page",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/me/sky/tiles",
+        "query": {
+          "level": 0,
+          "x": -1600,
+          "y": -1600,
+          "w": 3200,
+          "h": 3200,
+          "version": "fixture-a:1",
+          "limit": 6
+        }
+      },
+      "meta": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "layoutVersion": "personal-spiral-v1",
+        "presentationVersion": "personal-galaxy-v1",
+        "starCount": 10,
+        "bounds": {
+          "minX": -1600,
+          "maxX": 1600,
+          "minY": -1600,
+          "maxY": 1600
+        },
+        "tileSize": 512,
+        "zoomLevels": [
+          {
+            "level": 0,
+            "scale": 0.25
+          },
+          {
+            "level": 1,
+            "scale": 1
+          },
+          {
+            "level": 2,
+            "scale": 4
+          }
+        ],
+        "centerTicIds": [
+          "900000001"
+        ],
+        "firstVisit": false,
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "status": 200,
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "level": 0,
+        "versionChanged": false,
+        "bounds": {
+          "x": -2048,
+          "y": -2048,
+          "w": 4096,
+          "h": 4096
+        },
+        "rangeStarCount": 10,
+        "stars": [
+          {
+            "ticId": "900000001",
+            "x": 760,
+            "y": 430,
+            "depthZ": 0.0703125,
+            "layoutOrdinal": 0,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 1
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000002",
+            "x": -380,
+            "y": -255,
+            "depthZ": 0.05859375,
+            "layoutOrdinal": 1,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 2
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000003",
+            "x": 135,
+            "y": 350,
+            "depthZ": -0.046875,
+            "layoutOrdinal": 2,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 3
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000004",
+            "x": -650,
+            "y": 315,
+            "depthZ": 0.09765625,
+            "layoutOrdinal": 3,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 4
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000005",
+            "x": 400,
+            "y": -360,
+            "depthZ": 0.0859375,
+            "layoutOrdinal": 4,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 5
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000006",
+            "x": -200,
+            "y": -540,
+            "depthZ": 0.03125,
+            "layoutOrdinal": 5,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "challenge"
+            },
+            "reopened": false
+          }
+        ],
+        "nextCursor": "fixture-cursor-2",
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "loaded": 6,
+        "rangeComplete": false,
+        "overviewOrbitCount": 0
+      }
+    },
+    {
+      "name": "last-page",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/me/sky/tiles",
+        "query": {
+          "level": 0,
+          "x": -1600,
+          "y": -1600,
+          "w": 3200,
+          "h": 3200,
+          "version": "fixture-a:1",
+          "limit": 6,
+          "cursor": "fixture-cursor-2"
+        }
+      },
+      "status": 200,
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "level": 0,
+        "versionChanged": false,
+        "bounds": {
+          "x": -2048,
+          "y": -2048,
+          "w": 4096,
+          "h": 4096
+        },
+        "rangeStarCount": 10,
+        "stars": [
+          {
+            "ticId": "900000007",
+            "x": -39.79366246776565,
+            "y": -111.8574774549434,
+            "depthZ": 0.06694384137799932,
+            "layoutOrdinal": 6,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": null,
+            "reopened": false
+          },
+          {
+            "ticId": "900000008",
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "planetCount": 2,
+            "progressStage": "in_progress",
+            "completedWithoutPlanets": false,
+            "marker": null,
+            "reopened": false
+          },
+          {
+            "ticId": "900000009",
+            "x": -427.3148272678536,
+            "y": -703.8747601994629,
+            "depthZ": 0.20267395897241017,
+            "layoutOrdinal": 8,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": null,
+            "reopened": false
+          },
+          {
+            "ticId": "900000010",
+            "x": 1032.8998631295367,
+            "y": 635.7692969665193,
+            "depthZ": -0.08289770882811932,
+            "layoutOrdinal": 9,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": null,
+            "reopened": false
+          }
+        ],
+        "nextCursor": null,
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "loadedTotal": 10,
+        "rangeComplete": true
+      }
+    },
+    {
+      "name": "overlapping-replay",
+      "setup": "first-page+last-page then replay first-page",
+      "status": 200,
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "level": 0,
+        "versionChanged": false,
+        "bounds": {
+          "x": -2048,
+          "y": -2048,
+          "w": 4096,
+          "h": 4096
+        },
+        "rangeStarCount": 10,
+        "stars": [
+          {
+            "ticId": "900000001",
+            "x": 760,
+            "y": 430,
+            "depthZ": 0.0703125,
+            "layoutOrdinal": 0,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 1
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000002",
+            "x": -380,
+            "y": -255,
+            "depthZ": 0.05859375,
+            "layoutOrdinal": 1,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 2
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000003",
+            "x": 135,
+            "y": 350,
+            "depthZ": -0.046875,
+            "layoutOrdinal": 2,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 3
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000004",
+            "x": -650,
+            "y": 315,
+            "depthZ": 0.09765625,
+            "layoutOrdinal": 3,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 4
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000005",
+            "x": 400,
+            "y": -360,
+            "depthZ": 0.0859375,
+            "layoutOrdinal": 4,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "tutorial",
+              "seq": 5
+            },
+            "reopened": false
+          },
+          {
+            "ticId": "900000006",
+            "x": -200,
+            "y": -540,
+            "depthZ": 0.03125,
+            "layoutOrdinal": 5,
+            "planetCount": 0,
+            "progressStage": "unexplored",
+            "completedWithoutPlanets": false,
+            "marker": {
+              "type": "challenge"
+            },
+            "reopened": false
+          }
+        ],
+        "nextCursor": "fixture-cursor-2",
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "uniqueTotal": 10
+      }
+    },
+    {
+      "name": "empty-range",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/me/sky/tiles",
+        "query": {
+          "level": 0,
+          "x": 4000,
+          "y": 4000,
+          "w": 50,
+          "h": 50,
+          "version": "fixture-a:1",
+          "limit": 6
+        }
+      },
+      "status": 200,
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "level": 0,
+        "versionChanged": false,
+        "bounds": {
+          "x": 3584,
+          "y": 3584,
+          "w": 512,
+          "h": 512
+        },
+        "rangeStarCount": 0,
+        "stars": [],
+        "nextCursor": null,
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "rangeComplete": true,
+        "wholeAccountEmpty": false
+      }
+    },
+    {
+      "name": "version-changed",
+      "status": 200,
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:2",
+        "level": 0,
+        "versionChanged": true,
+        "stars": [],
+        "nextCursor": null,
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "discardCursor": true,
+        "reloadMeta": true,
+        "wholeAccountEmpty": false
+      }
+    },
+    {
+      "name": "invalid-cursor",
+      "status": 400,
+      "response": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 범위를 확인해 주세요.",
+        "fieldErrors": [
+          {
+            "field": "cursor",
+            "reason": "요청 범위와 일치하지 않는 커서"
+          }
+        ]
+      },
+      "expect": {
+        "keepValidScene": true,
+        "automaticRetry": false
+      }
+    },
+    {
+      "name": "page-failed",
+      "setup": "first-page visible",
+      "status": 503,
+      "response": {
+        "code": "DEPENDENCY_UNAVAILABLE",
+        "message": "잠시 후 다시 시도해 주세요.",
+        "fieldErrors": []
+      },
+      "expect": {
+        "keepValidScene": true,
+        "rangeComplete": false,
+        "showRetry": true
+      }
+    },
+    {
+      "name": "new-discovery",
+      "setup": "first 10 reference slots exist",
+      "newStar": {
+        "ticId": "900000011",
+        "x": -93.76166931161892,
+        "y": -205.77669607984802,
+        "depthZ": -0.2235397012028367,
+        "layoutOrdinal": 10
+      },
+      "expect": {
+        "oldPositionsUnchanged": true,
+        "oldAppearanceUnchanged": true,
+        "newVersionRequired": true
+      }
+    },
+    {
+      "name": "selected-planets-0",
+      "setup": "independent selected star state; update tile planetCount/progress to match this detail before comparing",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "completed",
+          "currentCurveStep": 1,
+          "completionReason": "all_found",
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": "2026-09-15T05:20:00Z"
+        },
+        "planets": {
+          "count": 0,
+          "completedWithoutPlanets": true,
+          "items": []
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 0,
+            "unconfirmed": 0,
+            "fp": 1
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "review",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "overviewOrbitCount": 0,
+        "selectedPlanetCount": 0,
+        "selectedOrbitCount": 0,
+        "achievementCount": 1
+      }
+    },
+    {
+      "name": "selected-planets-1",
+      "setup": "independent selected star state; update tile planetCount/progress to match this detail before comparing",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 1,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "overviewOrbitCount": 0,
+        "selectedPlanetCount": 1,
+        "selectedOrbitCount": 1,
+        "achievementCount": 1
+      }
+    },
+    {
+      "name": "selected-planets-2",
+      "setup": "independent selected star state; update tile planetCount/progress to match this detail before comparing",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 2,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            },
+            {
+              "candidateId": "fixture-c-1",
+              "kind": "unconfirmed",
+              "periodDays": null,
+              "depthPpm": null
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "overviewOrbitCount": 0,
+        "selectedPlanetCount": 2,
+        "selectedOrbitCount": 2,
+        "achievementCount": 1
+      }
+    },
+    {
+      "name": "selected-planets-5",
+      "setup": "independent selected star state; update tile planetCount/progress to match this detail before comparing",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 5,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            },
+            {
+              "candidateId": "fixture-c-1",
+              "kind": "unconfirmed",
+              "periodDays": null,
+              "depthPpm": null
+            },
+            {
+              "candidateId": "fixture-c-2",
+              "kind": "confirmed",
+              "periodDays": 7,
+              "depthPpm": 1200
+            },
+            {
+              "candidateId": "fixture-c-3",
+              "kind": "unconfirmed",
+              "periodDays": 9,
+              "depthPpm": 1300
+            },
+            {
+              "candidateId": "fixture-c-4",
+              "kind": "confirmed",
+              "periodDays": 11,
+              "depthPpm": 1400
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "overviewOrbitCount": 0,
+        "selectedPlanetCount": 5,
+        "selectedOrbitCount": 5,
+        "achievementCount": 1
+      }
+    },
+    {
+      "name": "matching-rules",
+      "input": [
+        {
+          "id": "c1",
+          "kind": "confirmed",
+          "matchedByMe": true,
+          "judgment": "UNLIKELY_PLANET"
+        },
+        {
+          "id": "c2",
+          "kind": "unconfirmed",
+          "matchedByMe": true,
+          "judgment": "LIKELY_PLANET"
+        },
+        {
+          "id": "c3",
+          "kind": "fp",
+          "matchedByMe": true,
+          "judgment": "UNLIKELY_PLANET"
+        },
+        {
+          "id": "c4",
+          "kind": "unconfirmed",
+          "matchedByMe": true,
+          "judgment": "UNSURE"
+        },
+        {
+          "id": "c5",
+          "kind": "confirmed",
+          "matchedByMe": false,
+          "judgment": "LIKELY_PLANET"
+        }
+      ],
+      "expect": {
+        "candidateIds": [
+          "c1",
+          "c2"
+        ]
+      }
+    },
+    {
+      "name": "state-and-order-change",
+      "input": {
+        "ticId": "900000008",
+        "layoutOrdinal": 7,
+        "before": {
+          "planetCount": 0,
+          "progressStage": "unexplored"
+        },
+        "after": {
+          "planetCount": 5,
+          "progressStage": "completed"
+        },
+        "order": "reverse visible tile order"
+      },
+      "expect": {
+        "appearanceUnchanged": true
+      }
+    },
+    {
+      "name": "logout-or-other-member",
+      "setup": "fixture-a pages and selected detail loaded; change to fixture-b",
+      "expect": {
+        "discardMemberCaches": true,
+        "discardLateResponses": true,
+        "doNotReuseOtherMemberDetail": true
+      }
+    },
+    {
+      "name": "mismatched-detail-version",
+      "setup": "current tile version fixture-a:2",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 2,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            },
+            {
+              "candidateId": "fixture-c-1",
+              "kind": "unconfirmed",
+              "periodDays": null,
+              "depthPpm": null
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "reloadMetaTilesAndDetail": true,
+        "doNotCombineVersions": true
+      }
+    },
+    {
+      "name": "count-mismatch",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 3,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            },
+            {
+              "candidateId": "fixture-c-1",
+              "kind": "unconfirmed",
+              "periodDays": null,
+              "depthPpm": null
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "contractError": true,
+        "noInventedPlanet": true
+      }
+    },
+    {
+      "name": "duplicate-candidate",
+      "status": 200,
+      "response": {
+        "ticId": "900000008",
+        "version": "fixture-a:1",
+        "presentationVersion": "personal-galaxy-v1",
+        "asOf": "2026-09-15T05:20:00Z",
+        "star": {
+          "sectorCount": 1,
+          "sectors": [
+            1
+          ],
+          "tmag": null,
+          "teffK": null,
+          "radiusRsun": null
+        },
+        "unlock": {
+          "reason": "achievement",
+          "triggerTicId": "900000001",
+          "triggerAchievementId": "fixture-ach-7",
+          "unlockedAt": "2026-09-15T05:20:00Z",
+          "position": {
+            "x": 704.1720091672842,
+            "y": -935.0421085821844,
+            "depthZ": -0.05916475342035397,
+            "layoutOrdinal": 7,
+            "layoutVersion": "personal-spiral-v1"
+          }
+        },
+        "progress": {
+          "stage": "in_progress",
+          "currentCurveStep": 1,
+          "completionReason": null,
+          "reopenPending": false,
+          "reopenedAt": null,
+          "completedAt": null
+        },
+        "planets": {
+          "count": 2,
+          "completedWithoutPlanets": false,
+          "items": [
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            },
+            {
+              "candidateId": "fixture-c-0",
+              "kind": "confirmed",
+              "periodDays": 3,
+              "depthPpm": 1000
+            }
+          ]
+        },
+        "achievement": {
+          "count": 1,
+          "grade": "A",
+          "byType": {
+            "confirmed": 1,
+            "unconfirmed": 0,
+            "fp": 0
+          }
+        },
+        "marker": null,
+        "actions": {
+          "analysis": "continue",
+          "resultAvailable": true,
+          "boardOpen": true,
+          "threadCount": 1
+        }
+      },
+      "expect": {
+        "contractError": true
+      }
+    },
+    {
+      "name": "unknown-presentation-version",
+      "response": {
+        "representation": "individual-stars",
+        "version": "fixture-a:1",
+        "layoutVersion": "personal-spiral-v1",
+        "presentationVersion": "unsupported",
+        "starCount": 10,
+        "bounds": {
+          "minX": -1600,
+          "maxX": 1600,
+          "minY": -1600,
+          "maxY": 1600
+        },
+        "tileSize": 512,
+        "zoomLevels": [
+          {
+            "level": 0,
+            "scale": 0.25
+          },
+          {
+            "level": 1,
+            "scale": 1
+          },
+          {
+            "level": 2,
+            "scale": 4
+          }
+        ],
+        "centerTicIds": [
+          "900000001"
+        ],
+        "firstVisit": false,
+        "asOf": "2026-09-15T05:20:00Z"
+      },
+      "expect": {
+        "contractError": true,
+        "wholeAccountEmpty": false
+      }
+    }
+  ]
+}
