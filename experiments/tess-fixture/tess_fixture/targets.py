@@ -12,13 +12,23 @@ from dataclasses import dataclass, field
 
 MAST_DOWNLOAD_BASE = "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/"
 
-# Sector -> (파일명 timestamp 접두, SPOC pipeline id). 기존 PoC 다운로더와 MAST HEAD 확인(2026-09-10) 기준.
+# Sector -> (파일명 timestamp 접두, SPOC pipeline id).
+# 2·3·4·5·8·16 은 기존 PoC 다운로더와 MAST HEAD 확인(2026-09-10), 1·6·7·9~13 은 MAST 공식 bulk download 스크립트
+# `tesscurl_sector_<N>_lc.sh` 의 파일명에서 확인(2026-09-16, S15P21C206-108). 1년차 남반구 1~13 이 모두 있다.
 SECTOR_PRODUCT_PREFIX: dict[int, tuple[str, str]] = {
+    1: ("tess2018206045859", "0120"),
     2: ("tess2018234235059", "0121"),
     3: ("tess2018263035959", "0123"),
     4: ("tess2018292075959", "0124"),
     5: ("tess2018319095959", "0125"),
+    6: ("tess2018349182500", "0126"),
+    7: ("tess2019006130736", "0131"),
     8: ("tess2019032160000", "0136"),
+    9: ("tess2019058134432", "0139"),
+    10: ("tess2019085135100", "0140"),
+    11: ("tess2019112060037", "0143"),
+    12: ("tess2019140104343", "0144"),
+    13: ("tess2019169103026", "0146"),
     16: ("tess2019253231442", "0152"),
 }
 
