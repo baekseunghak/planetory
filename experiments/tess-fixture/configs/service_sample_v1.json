@@ -1,0 +1,325 @@
+{
+  "schema": "planetory.service-sample.v1",
+  "sample_id": "service_sample_v1",
+  "version": "1.0.0",
+  "description": "서비스 범위 산정용 대표 표본 (Jira S15P21C206-108, D02-1). fixture 9별과 겹치지 않는다. Sector 3 SPOC 2분 LC 45개: 무작위 40 + 확인 행성 보유 5.",
+  "product": {
+    "mission": "TESS",
+    "pipeline": "SPOC",
+    "cadence_seconds": 120,
+    "file_type": "s_lc.fits",
+    "download_base": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/"
+  },
+  "sectors": {
+    "3": {
+      "prefix": "tess2018263035959",
+      "pipeline_id": "0123",
+      "population_lc_files": 15993,
+      "population_source": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_3_lc.sh",
+      "population_fetched_at": "2026-09-16T01:01:06Z"
+    }
+  },
+  "selection": {
+    "random": {
+      "rule": "Sector 3 LC 파일 목록(15,993 TIC)에서 fixture 9별과 Archive 확인 통과 행성 보유 별을 제외하지 않은 모집단에서 random.Random(seed).sample 40개. 뽑힌 뒤 fixture·행성 보유 별과 겹치는지 검사(0개 겹침)",
+      "seed": 20260916,
+      "n": 40
+    },
+    "planet_host": {
+      "rule": "NASA Exoplanet Archive pscomppars tran_flag=1 인 별 3,620개 중 Sector 3 목록에 있고 fixture 가 아닌 42개에서 random.Random(seed).sample 5개",
+      "seed": 20260916,
+      "n": 5,
+      "archive_adql": "select tic_id, hostname, pl_name, pl_orbper, disc_facility from pscomppars where tran_flag=1 and tic_id is not null",
+      "archive_fetched_at": "2026-09-16T01:02:36+00:00",
+      "sector3_planet_hosts_excluding_fixture": [
+        12862099,
+        25155310,
+        29781292,
+        37749396,
+        38846515,
+        55650590,
+        55652896,
+        63898957,
+        70513361,
+        92226327,
+        100990000,
+        120896927,
+        122612091,
+        122617317,
+        150030205,
+        150151262,
+        153065527,
+        158623531,
+        159951311,
+        164767175,
+        166739520,
+        166836920,
+        167342439,
+        179582003,
+        200723869,
+        207141131,
+        220479565,
+        260004324,
+        260708537,
+        262530407,
+        268766053,
+        271971130,
+        300038935,
+        309792357,
+        349095149,
+        350618622,
+        382626661,
+        388104525,
+        391903064,
+        404518509,
+        425997655,
+        439456714
+      ]
+    },
+    "excluded_tic_ids": [
+      259377017,
+      307210830,
+      199574208,
+      100100827,
+      149603524,
+      150428135,
+      257605131,
+      261136679,
+      279741379
+    ],
+    "excluded_reason": "tess-fixture 표본(실험용 고정 입력)과 구분",
+    "not_a_service_scope": "이 표본은 처리 시간·용량 외삽과 무신호 비율 예비 측정용이며 서비스 데이터 범위(DEC-01) 결정이 아니다"
+  },
+  "members": [
+    {
+      "tic_id": 25399578,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 35703725,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 43399407,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 55650107,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 97469879,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 98612038,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 100102268,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 115349676,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 150319639,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 152983471,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 166711424,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 167042054,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 167342936,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 176984144,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 177077527,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 180872082,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 206384792,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 206466299,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 219220460,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 219237079,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 219411132,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 220473814,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 220596971,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 231070602,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 237356343,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 238198440,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 257482804,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 257500724,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 259443543,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 260541079,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 260606533,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 268637577,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 279743211,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 294754816,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 309756187,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 336875715,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 354671857,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 358253008,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 388816797,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 404971384,
+      "sector": 3,
+      "group": "random"
+    },
+    {
+      "tic_id": 29781292,
+      "sector": 3,
+      "group": "planet_host",
+      "note": "HD 28109: HD 28109 c, HD 28109 b, HD 28109 d"
+    },
+    {
+      "tic_id": 55652896,
+      "sector": 3,
+      "group": "planet_host",
+      "note": "TOI-216: TOI-216.02, TOI-216.01"
+    },
+    {
+      "tic_id": 100990000,
+      "sector": 3,
+      "group": "planet_host",
+      "note": "HD 22946: HD 22946 d, TOI-411 c, TOI-411 b"
+    },
+    {
+      "tic_id": 200723869,
+      "sector": 3,
+      "group": "planet_host",
+      "note": "TOI-257: TOI-257 b"
+    },
+    {
+      "tic_id": 439456714,
+      "sector": 3,
+      "group": "planet_host",
+      "note": "TOI-277: TOI-277 b"
+    }
+  ]
+}
