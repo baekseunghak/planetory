@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.6
+# Planetory 서비스 DB ERD v1.7
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,12 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.6 → v1.7 (2026-09-16, `S15P21C206-69`)
+
+Publisher 멱등 키 `(tic_id, bundle_version)`의 DB 유일 제약은 `S15P21C206-86`에서 추가한다. `bundle_version`은 곡선 원천·외부 참조 snapshot, 세그먼트 자연 키, 계산 버전으로 결정하며 DB 생성 id는 동일성 비교에서 제외한다.
+
+`UNIQUE(tic_id) WHERE status='current'`는 문장마다 즉시 검사되므로 같은 트랜잭션에서 기존 `current`를 먼저 `archived`로 바꾸고 신규 `staging`을 `current`로 올린다. 이 판은 계약만 명시하며 migration이나 운영 DB를 변경하지 않는다.
 
 ### v1.5 → v1.6 (2026-09-16, `S15P21C206-230`)
 
@@ -544,8 +550,8 @@ erDiagram
 
 | 열 | 비고 |
 |---|---|
-| tic_id, bundle_version | Publisher 재시도 키. `UNIQUE(tic_id, bundle_version)`으로 강제한다(`S15P21C206-230`). DB가 만드는 `id`는 성공 결과 식별자일 뿐 요청 키가 아니다 |
-| status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 새 판이 current가 되면 이전 판은 곧바로 archived가 되고 그 판의 periodograms 행을 지운다. 이전 판을 남겨 두지 않는다(v0.3 결정 C) |
+| tic_id, bundle_version | Publisher 멱등 키. `UNIQUE(tic_id, bundle_version)`가 필요하며 현재 migration에는 없으므로 `S15P21C206-86`에서 추가·검증한다. |
+| status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 즉시 검사되는 부분 유일 인덱스이므로 기존 current를 먼저 archived로 전환한 뒤 신규 staging을 current로 올린다. 그 판의 periodograms 행은 지우고 제출 FK가 참조하는 Bundle 행은 남긴다(v0.3 결정 C) |
 | manifest JSONB | **참조할 light_curve_segments id 집합**(섹터 목록이 아니라 revision까지 특정한다), 배열 checksum, residual_model_version, periodogram_config_version, **곡선 비닝 규칙(기본 10분)**, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭(결정 9), 곡선 단계 규칙 |
 | fold_reference_time_btjd, base_days | Bundle 공통 위상 접기 기준 시각과 관측 기간. 기준 시각은 포함된 모든 세그먼트에서 품질 필터를 통과하고 중복을 제거한 유한 원본 관측 시각 전체의 중앙값이며, 짝수 표본은 가운데 두 값의 평균을 쓴다. 유효 입력이 없으면 공개를 실패시킨다. `publication_bundles`에 한 번 저장하고 `light_curve_segments`에는 저장하지 않으며, 섹터가 늘면 새 판에서 다시 산정한다 |
 | published_at | archived 전환 시 그 판의 periodograms 행과 Redis 캐시를 정리한다. 곡선 세그먼트는 판에 묶이지 않으므로 지우지 않는다. 판 행 자체는 제출이 참조하므로 남긴다(수백 바이트) |
@@ -780,7 +786,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 9. **닉네임은 복사하지 않는다.** 게시글·반응·답글은 user_id만.
 10. **열거형은 TEXT + CHECK.** 다형 참조(follows.target, post_source_links.target, notifications.payload)는 FK 없이 서비스 계층 검증.
 11. **운영 화면은 v1에 없다.** hidden 상태값만 두고 DB 직접 조작으로 처리한다.
-12. **Gold 적재는 Publisher가 DB에 직접 쓴다(2026-09-15).** `planetory_gold_writer`가 곡선·주기도·후보·manifest 적재와 `staging → current → archived` 전환을 한 트랜잭션으로 수행한다. Backend는 Gold를 읽고 커밋 후 `bundleId` 알림에 따른 캐시·재개·라벨 후처리만 맡는다.
+12. **Gold 적재는 Publisher가 DB에 직접 쓴다(2026-09-15).** `planetory_gold_writer`가 곡선·주기도·후보·manifest 적재와 판 전환을 한 트랜잭션으로 수행한다. 기존 `current`를 `archived`로 바꾼 뒤 신규 `staging`을 `current`로 올린다. Backend는 Gold를 읽고 커밋 후 `bundleId` 알림에 따른 캐시·재개·라벨 후처리만 맡는다. `(tic_id, bundle_version)` 유일 제약과 `pg_advisory_xact_lock(tic_id)`이 동시 재시도를 직렬화하며, DB 생성 id는 payload 동일성 비교에서 제외한다(`S15P21C206-69`, migration은 `S15P21C206-86`).
 
 ## 5. 미결·확인 필요
 
