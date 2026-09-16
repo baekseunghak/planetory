@@ -1,6 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "prototype-observation-10m-mean-v1",
+  "프로토타입 관측 데이터입니다",
+  "sourceSha256",
+  "rm-fixture-182",
+  "개발용 합성 응답입니다",
   "foundation-fixture-member-201",
   "fixture-history-201",
   "연결 확인 계정",

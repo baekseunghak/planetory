@@ -17,7 +17,11 @@ function unavailableApi(_req: IncomingMessage, res: ServerResponse) {
 
 export default defineConfig(async ({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const fixture = command === "serve" && !isPreview && mode === "fixture";
+  const fixture =
+    command === "serve" &&
+    !isPreview &&
+    ["fixture", "observations"].includes(mode);
+  const observations = fixture && mode === "observations";
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
   const proxy = target
     ? Object.fromEntries(
@@ -31,7 +35,11 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
     plugins: [
       react(),
       ...(fixture
-        ? [(await import("./dev/fixture-plugin.ts")).fixturePlugin()]
+        ? [
+            (await import("./dev/fixture-plugin.ts")).fixturePlugin(
+              observations,
+            ),
+          ]
         : []),
       ...(!fixture && !target
         ? [
@@ -48,6 +56,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : []),
     ],
     define: {
+      "import.meta.env.VITE_OBSERVATIONS": JSON.stringify(
+        observations ? "true" : "false",
+      ),
       "import.meta.env.VITE_FIXTURE": JSON.stringify(
         fixture ? "true" : "false",
       ),
