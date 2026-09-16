@@ -158,20 +158,30 @@ def load_expected_checksums(path: Path) -> dict[str, str]:
     return {row["filename"]: row["sha256"] for row in payload.get("files", [])}
 
 
-def write_checksums(records: list[dict[str, object]], path: Path) -> None:
-    """받은 파일의 checksum 목록. 기존 파일이 있으면 filename 기준으로 병합한다. 이 파일은 Git에 커밋한다."""
+def write_checksums(records: list[dict[str, object]], path: Path) -> bool:
+    """받은 파일의 checksum 목록. 기존 파일이 있으면 filename 기준으로 병합한다. 이 파일은 Git에 커밋한다.
+
+    파일 목록·해시가 기존과 같으면 파일을 다시 쓰지 않고 `updated_at` 도 유지한다(False 반환).
+    그래야 같은 입력을 다시 받아도 추적 파일에 diff 가 생기지 않는다. 내용이 바뀌었을 때만 새로 쓴다(True 반환).
+    """
     merged: dict[str, dict[str, object]] = {}
+    existing: dict | None = None
     if path.is_file():
-        for row in json.loads(path.read_text(encoding="utf-8")).get("files", []):
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        for row in existing.get("files", []):
             merged[row["filename"]] = row
     keep = ("filename", "source_uri", "target_key", "target_name", "role", "tic_id", "sector",
             "size_bytes", "sha256", "procver", "data_rel", "camera", "ccd")
     for row in records:
         merged[row["filename"]] = {k: row.get(k) for k in keep}
+    files = [merged[k] for k in sorted(merged)]
+    if existing is not None and existing.get("files") == files:
+        return False
     payload = {
         "schema": "planetory.fixture-checksums.v1",
         "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "files": [merged[k] for k in sorted(merged)],
+        "files": files,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True

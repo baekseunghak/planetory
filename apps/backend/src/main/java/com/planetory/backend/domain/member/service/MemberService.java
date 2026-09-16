@@ -7,6 +7,8 @@ import com.planetory.backend.domain.member.repository.MemberRepository;
 import com.planetory.backend.domain.member.repository.MemberSettingsRepository;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
+import java.text.Normalizer;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -58,5 +61,34 @@ public class MemberService {
 
     public MemberSettings settings(long memberId) {
         return settings.findById(memberId).orElseGet(() -> new MemberSettings(memberId));
+    }
+
+    public Member publicProfile(long memberId) {
+        return members.findById(memberId).filter(member -> "active".equals(member.getStatus()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    public Member changeNickname(long memberId, String input) {
+        if (input == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        String nickname = Normalizer.normalize(input.strip(), Normalizer.Form.NFC);
+        if (!nickname.matches("[가-힣A-Za-z0-9_]{2,20}")
+                || Set.of("system", "admin", "관리자", "운영자").contains(nickname.toLowerCase(Locale.ROOT))) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        try {
+            return new TransactionTemplate(transactionManager).execute(status -> {
+                var member = requireActive(memberId);
+                member.changeNickname(nickname);
+                return members.saveAndFlush(member);
+            });
+        } catch (DataIntegrityViolationException collision) {
+            throw new BusinessException(ErrorCode.NICKNAME_CONFLICT);
+        }
+    }
+
+    @Transactional
+    public void completeOnboarding(long memberId) {
+        requireActive(memberId);
+        settings.completeOnboarding(memberId);
     }
 }
