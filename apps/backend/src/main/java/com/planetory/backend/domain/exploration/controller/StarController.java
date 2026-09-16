@@ -1,6 +1,7 @@
 package com.planetory.backend.domain.exploration.controller;
 
 import com.planetory.backend.domain.exploration.service.StarService;
+import com.planetory.backend.domain.exploration.service.StarViews.PublicStarSummary;
 import com.planetory.backend.domain.exploration.service.StarViews.StarDetail;
 import com.planetory.backend.global.security.MemberPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,5 +24,14 @@ public class StarController {
     public StarDetail detail(@AuthenticationPrincipal MemberPrincipal principal,
                              @PathVariable long ticId) {
         return stars.detail(principal.memberId(), ticId);
+    }
+
+    @Operation(summary = "공개 별 요약",
+            description = "게시판 헤더·출처 카드가 쓴다. 발견하지 않은 회원도 호출할 수 있다."
+                    + " 미공개이거나 아무도 발견하지 않은 별은 404 STAR_NOT_PUBLISHED.")
+    @GetMapping("/api/v1/stars/{ticId}")
+    public PublicStarSummary publicSummary(@AuthenticationPrincipal MemberPrincipal principal,
+                                           @PathVariable long ticId) {
+        return stars.publicSummary(principal.memberId(), ticId);
     }
 }

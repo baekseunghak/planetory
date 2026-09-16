@@ -31,6 +31,36 @@ public final class StarViews {
     }
 
     /**
+     * `GET /stars/{ticId}` — 공개 별 요약 (탐사 API 4.5).
+     *
+     * <p>발견하지 않은 회원도 부를 수 있다. 별 게시판 헤더·[이 별 분석하기] 버튼·출처 카드가 쓴다.
+     *
+     * @param unlockedForMe      요청 회원의 발견 여부
+     * @param analysisAvailable  {@code unlockedForMe}와 같은 값이다. 뜻이 달라 필드를 나눠 둔다.
+     *                           false면 프론트가 [이 별 분석하기]를 비활성으로 보인다
+     * @param currentBundleId    현재 판. published 별은 판이 있어야 하지만, 없더라도 헤더는 떠야
+     *                           하므로 null을 준다. 분석 진입(5.1)이 503으로 막는다
+     */
+    public record PublicStarSummary(
+            String ticId,
+            PublicStarInfo star,
+            boolean boardOpen,
+            boolean unlockedForMe,
+            boolean analysisAvailable,
+            String currentBundleId,
+            int discoveredMemberCount) {
+    }
+
+    /**
+     * 공개 요약의 별 정보.
+     *
+     * <p>온도·반지름을 넣지 않는다. 감추는 것이 아니라 이 응답을 쓰는 화면에 놓을 자리가 없어서다.
+     * 셋 다 TESS 카탈로그 공개 값이고 본인 상세({@link StarInfo})는 모두 준다(D-18).
+     */
+    public record PublicStarInfo(int sectorCount, List<Integer> sectors, Double tmag) {
+    }
+
+    /**
      * 별 자체의 관측·물리 정보.
      *
      * <p>본인 상세는 세 물리값을 모두 준다(D-18). 카탈로그에 없으면 필드를 빼지 않고 null을

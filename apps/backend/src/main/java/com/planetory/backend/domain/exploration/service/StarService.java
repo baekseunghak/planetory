@@ -12,6 +12,7 @@ import com.planetory.backend.domain.exploration.service.StarViews.Achievement;
 import com.planetory.backend.domain.exploration.service.StarViews.Actions;
 import com.planetory.backend.domain.exploration.service.StarViews.Planets;
 import com.planetory.backend.domain.exploration.service.StarViews.Progress;
+import com.planetory.backend.domain.exploration.service.StarViews.PublicStarSummary;
 import com.planetory.backend.domain.exploration.service.StarViews.StarDetail;
 import com.planetory.backend.domain.exploration.service.StarViews.StarInfo;
 import com.planetory.backend.domain.exploration.service.StarViews.Unlock;
@@ -67,6 +68,34 @@ public class StarService {
         return new StarDetail(String.valueOf(ticId), OffsetDateTime.now(clock), star, unlock,
                 progress, planets, achievement, stars.findMarker(memberId, ticId).orElse(null),
                 actions, sky.version(memberId), SkyService.PRESENTATION_VERSION);
+    }
+
+    /**
+     * 공개 별 요약 (탐사 API 4.5).
+     *
+     * <p>발견하지 않은 회원도 부를 수 있다. 별 게시판 헤더·[이 별 분석하기] 버튼·출처 카드가 쓴다.
+     *
+     * <p>미공개 별과 아무도 발견하지 않은 별은 <b>같은 404</b>로 덮는다. 둘을 구분해 응답하면
+     * 없는 TIC과 있는 TIC을 가려낼 수 있게 된다(4.5절).
+     *
+     * <p>후보 수·확정 보유 여부·타인의 진행 상태는 넣지 않는다.
+     *
+     * @throws BusinessException 미공개이거나 아무도 발견하지 않았으면 {@code STAR_NOT_PUBLISHED}
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PublicStarSummary publicSummary(long memberId, long ticId) {
+        StarViews.PublicStarInfo star = stars.findPublishedStar(ticId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STAR_NOT_PUBLISHED));
+        if (!stars.isBoardOpen(ticId)) {
+            throw new BusinessException(ErrorCode.STAR_NOT_PUBLISHED);
+        }
+
+        // 뜻이 다른 두 값이지만 지금 판정 기준은 같다. 나중에 갈릴 수 있어 필드를 나눠 둔다.
+        boolean unlockedForMe = stars.hasUnlocked(memberId, ticId);
+
+        return new PublicStarSummary(String.valueOf(ticId), star, true, unlockedForMe,
+                unlockedForMe, stars.findCurrentBundleId(ticId).orElse(null),
+                stars.countDiscoveredMembers(ticId));
     }
 
     /**

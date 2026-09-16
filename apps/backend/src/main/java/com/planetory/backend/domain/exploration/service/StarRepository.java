@@ -26,6 +26,48 @@ public class StarRepository {
 
     private final JdbcClient jdbc;
 
+    /**
+     * 공개 요약용 별 정보. {@code published}가 아니면 빈 값이다.
+     *
+     * <p>미공개 별과 없는 TIC을 구분하지 않는다. 호출자가 둘 다 같은 404로 덮는다(4.5절).
+     */
+    public Optional<StarViews.PublicStarInfo> findPublishedStar(long ticId) {
+        return jdbc.sql("""
+                        SELECT s.tmag::float8 AS tmag,
+                               COALESCE((SELECT array_agg(DISTINCT o.sector::int ORDER BY o.sector::int)
+                                           FROM observation_datasets o
+                                          WHERE o.tic_id = s.tic_id), '{}') AS sectors
+                          FROM stars s
+                         WHERE s.tic_id = :ticId AND s.service_status = 'published'
+                        """)
+                .param("ticId", ticId)
+                .query((rs, rowNum) -> {
+                    Integer[] sectors = (Integer[]) rs.getArray("sectors").getArray();
+                    return new StarViews.PublicStarInfo(sectors.length, List.of(sectors),
+                            nullableDouble(rs, "tmag"));
+                })
+                .optional();
+    }
+
+    /** 이 별을 발견한 회원 수. 표시용이며 진행 상태나 후보 수는 함께 주지 않는다. */
+    public int countDiscoveredMembers(long ticId) {
+        return jdbc.sql("SELECT count(DISTINCT user_id) FROM star_unlocks WHERE tic_id = ?")
+                .param(ticId)
+                .query(Integer.class).single();
+    }
+
+    /**
+     * 현재 판. published 별에는 있어야 하지만 없을 수도 있어 빈 값을 허용한다.
+     *
+     * <p>{@code uq_publication_bundles_current}가 한 TIC에 current를 하나로 묶는다.
+     */
+    public Optional<String> findCurrentBundleId(long ticId) {
+        return jdbc.sql("SELECT id FROM publication_bundles WHERE tic_id = ? AND status = 'current'")
+                .param(ticId)
+                .query(Long.class).optional()
+                .map(id -> "b-" + id);
+    }
+
     /** 이 회원이 그 별을 열었는지. 미발견이면 상세를 주지 않는다. */
     public boolean hasUnlocked(long memberId, long ticId) {
         return jdbc.sql("SELECT EXISTS(SELECT 1 FROM star_unlocks WHERE user_id = ? AND tic_id = ?)")

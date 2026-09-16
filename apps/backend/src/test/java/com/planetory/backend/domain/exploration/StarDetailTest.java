@@ -314,6 +314,92 @@ class StarDetailTest {
                 "확정 보유 여부·후보 수가 응답에 섞이면 안 된다");
     }
 
+    // ---------- 공개 별 요약 (4.5) ----------
+
+    /** 발견하지 않아도 부를 수 있다. 다만 분석은 잠겨 있다. */
+    @Test
+    void 공개_요약은_발견하지_않은_회원도_볼_수_있다() {
+        var summary = stars.publicSummary(otherMemberId, ticId);
+
+        assertEquals(String.valueOf(ticId), summary.ticId());
+        assertTrue(summary.boardOpen());
+        assertFalse(summary.unlockedForMe(), "이 회원은 아직 발견하지 않았다");
+        assertFalse(summary.analysisAvailable());
+        assertEquals(1, summary.discoveredMemberCount());
+        assertEquals("b-" + bundleId, summary.currentBundleId());
+    }
+
+    /** 발견한 회원에게는 분석이 열린다. */
+    @Test
+    void 발견한_회원에게는_분석이_열린다() {
+        var summary = stars.publicSummary(memberId, ticId);
+
+        assertTrue(summary.unlockedForMe());
+        assertTrue(summary.analysisAvailable());
+    }
+
+    /** 온도·반지름을 넣지 않는다. 감추는 게 아니라 이 화면에 자리가 없어서다(D-18). */
+    @Test
+    void 공개_요약은_밝기만_담는다() {
+        var star = stars.publicSummary(otherMemberId, ticId).star();
+
+        assertEquals(9.8, star.tmag());
+        assertEquals(3, star.getClass().getRecordComponents().length,
+                "온도·반지름이 섞이면 본인 상세와 구분이 사라진다");
+    }
+
+    /** 미공개 별과 없는 TIC을 같은 응답으로 덮는다. 구분되면 존재가 드러난다. */
+    @Test
+    void 미공개_별과_없는_TIC은_같은_404다() {
+        long hidden = insertStar(10.0, null, null);
+        jdbc.update("UPDATE stars SET service_status = 'hidden' WHERE tic_id = ?", hidden);
+        unlock(memberId, hidden, 2);
+
+        var forHidden = assertThrows(BusinessException.class,
+                () -> stars.publicSummary(memberId, hidden));
+        var forMissing = assertThrows(BusinessException.class,
+                () -> stars.publicSummary(memberId, 999_999_999L));
+
+        assertEquals(ErrorCode.STAR_NOT_PUBLISHED, forHidden.getErrorCode());
+        assertEquals(forHidden.getErrorCode(), forMissing.getErrorCode(),
+                "둘을 구분하면 있는 TIC과 없는 TIC을 가려낼 수 있게 된다");
+    }
+
+    /** 아무도 발견하지 않은 별은 게시판이 없으므로 같은 404다(AT-65). */
+    @Test
+    void 아무도_발견하지_않은_별도_404다() {
+        long undiscovered = insertStar(10.0, null, null);
+
+        var thrown = assertThrows(BusinessException.class,
+                () -> stars.publicSummary(memberId, undiscovered));
+
+        assertEquals(ErrorCode.STAR_NOT_PUBLISHED, thrown.getErrorCode());
+    }
+
+    /** 발견 회원 수는 사람 수로 센다. */
+    @Test
+    void 발견_회원_수는_사람_수다() {
+        unlock(otherMemberId, ticId, 0);
+
+        assertEquals(2, stars.publicSummary(memberId, ticId).discoveredMemberCount());
+    }
+
+    /** 후보 수·확정 보유 여부·타인 진행 상태는 어떤 경우에도 새지 않는다. */
+    @Test
+    void 공개_요약에_후보나_진행_정보가_섞이지_않는다() {
+        long candidate = insertCandidate(true, 3.0, 1000, null);
+        submit(memberId, candidate, "LIKELY_PLANET");
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, planet_count, progress_stage)"
+                + " VALUES (?, ?, 1, 'in_progress')", memberId, ticId);
+
+        var summary = stars.publicSummary(otherMemberId, ticId);
+
+        assertEquals(7, summary.getClass().getRecordComponents().length,
+                "필드가 늘면 무엇이 새는지 확인해야 한다");
+        assertEquals(1, summary.discoveredMemberCount());
+    }
+
+
     // ---------- 픽스처 ----------
 
     private long insertMember() {
