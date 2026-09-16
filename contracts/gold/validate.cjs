@@ -2,10 +2,12 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { isDeepStrictEqual } = require('node:util');
 
 const read = name => JSON.parse(fs.readFileSync(path.join(__dirname, 'examples', name), 'utf8'));
 const valid = read('publication-bundle.valid.json');
 const invalidCases = read('publication-bundle.invalid.json');
+const publicationLoad = read('publication-load-scenarios.json');
 const clone = value => structuredClone(value);
 const sha256 = value => `sha256:${crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')}`;
 
@@ -163,6 +165,167 @@ function mutate(fixture, testCase) {
   else parent[last] = testCase.value;
 }
 
+const requiredCalculationVersions = [
+  'preprocessing',
+  'bls_config',
+  'residual_model',
+  'periodogram_config',
+  'candidate_quality',
+  'ai_model',
+  'ai_threshold',
+  'external_matching'
+];
+
+function normalizeSemanticPayload(payload) {
+  const value = clone(payload);
+  value.input_snapshot_ids.sort();
+  value.segments.sort((left, right) =>
+    [left.tic_id, left.sector, left.binning_revision]
+      .join(':')
+      .localeCompare([right.tic_id, right.sector, right.binning_revision].join(':')));
+  return value;
+}
+
+function expectedBundleVersion(payload) {
+  const lines = [
+    ...payload.input_snapshot_ids.map(id => `input_snapshot:${id}`),
+    ...payload.segments.map(segment =>
+      `segment:${segment.tic_id}:${segment.sector}:${segment.binning_revision}`),
+    ...Object.entries(payload.calculation_versions)
+      .map(([name, version]) => `version:${name}:${version}`)
+  ].sort();
+  return `pv1-${crypto.createHash('sha256').update(`${lines.join('\n')}\n`, 'utf8').digest('hex')}`;
+}
+
+function resolvePayload(contract, name) {
+  const payload = contract.payloads[name];
+  assert.ok(payload, `unknown payload reference: ${name}`);
+  return payload;
+}
+
+function emptyResult(scenario, code, retryable, bundleId = null) {
+  return {
+    code,
+    retryable,
+    bundleId,
+    currentBundleId: scenario.before.currentBundleId,
+    archivedBundleIds: [],
+    persistedStagingBundleIds: [],
+    notificationBundleId: null
+  };
+}
+
+function simulatePublication(contract, scenario) {
+  const request = resolvePayload(contract, scenario.requestPayload);
+  const existing = scenario.before.existingBundle;
+  if (existing) {
+    const stored = resolvePayload(contract, existing.payload);
+    assert.equal(stored.tic_id, request.tic_id, `${scenario.id} existing bundle must use the request TIC`);
+    assert.equal(stored.bundle_version, request.bundle_version,
+      `${scenario.id} existing bundle must use the request version`);
+    if (!isDeepStrictEqual(
+      normalizeSemanticPayload(stored.semantic_payload),
+      normalizeSemanticPayload(request.semantic_payload)
+    )) return emptyResult(scenario, 'IDEMPOTENCY_CONFLICT', false);
+
+    if (existing.status === 'archived') {
+      return emptyResult(scenario, 'BUNDLE_SUPERSEDED', false, existing.id);
+    }
+    assert.equal(existing.status, 'current', `${scenario.id} existing status must be current or archived`);
+    return {
+      ...emptyResult(scenario, 'ALREADY_PUBLISHED', false, existing.id),
+      currentBundleId: existing.id,
+      notificationBundleId: existing.id
+    };
+  }
+
+  if (scenario.failure?.category === 'validation') {
+    return emptyResult(scenario, 'PUBLISH_REJECTED', false);
+  }
+  if (scenario.failure?.category === 'transient') {
+    return emptyResult(scenario, 'PUBLISH_ROLLED_BACK', true);
+  }
+
+  return {
+    code: 'PUBLISHED',
+    retryable: false,
+    bundleId: scenario.before.nextGeneratedBundleId,
+    currentBundleId: scenario.before.nextGeneratedBundleId,
+    archivedBundleIds: [scenario.before.currentBundleId],
+    persistedStagingBundleIds: [],
+    notificationBundleId: scenario.before.nextGeneratedBundleId
+  };
+}
+
+function validatePublicationLoad(contract) {
+  assert.equal(contract.contractVersion, '1.1');
+  assert.equal(contract.fixtureKind, 'synthetic-contract-only');
+  assert.deepEqual(contract.idempotency.keyFields, ['tic_id', 'bundle_version']);
+  assert.equal(contract.idempotency.databaseInvariant, 'unique-tic-id-bundle-version');
+  assert.equal(contract.idempotency.bundleVersionScheme, 'pv1-sha256-sorted-lf-utf8');
+  assert.deepEqual(contract.idempotency.bundleVersionInputs,
+    ['input_snapshot_ids', 'segment_natural_keys', 'calculation_versions']);
+  assert.deepEqual(contract.idempotency.inputSnapshotKinds,
+    ['light-curve-source', 'external-reference']);
+  assert.deepEqual(contract.idempotency.bundleVersionExcludes, ['execution_time', 'run_id']);
+  assert.deepEqual(contract.idempotency.calculationVersionCoverage, {
+    bls_config: ['iterative-bls', 'removal-order', 'termination-rule'],
+    candidate_quality: [
+      'candidate-merge',
+      'harmonic-alias',
+      'original-curve-revalidation',
+      'discoverable-rule'
+    ]
+  });
+  assert.deepEqual(contract.idempotency.payloadEqualityFields, [
+    'input_snapshot_ids',
+    'segments',
+    'periodogram_power_checksum',
+    'candidates_checksum',
+    'ai_results_checksum',
+    'external_statuses_checksum',
+    'calculation_versions',
+    'fold_reference_time_btjd',
+    'base_days'
+  ]);
+  assert.deepEqual(contract.idempotency.payloadEqualityExcludes, [
+    'publication_bundles.id',
+    'light_curve_segments.id',
+    'periodograms.bundle_id',
+    'manifest.segment_ids'
+  ]);
+  assert.equal(contract.idempotency.arrayOrder, 'input_snapshot_ids-and-segments-sorted-before-compare');
+  assert.equal(contract.idempotency.floatRule, 'exact-float64-after-json-17-significant-digits');
+  assert.equal(contract.idempotency.serialization, 'pg_advisory_xact_lock(tic_id)');
+  assert.equal(contract.idempotency.databaseId, 'generated-result-only');
+  assert.equal(contract.transaction.owner, 'publisher');
+  assert.equal(contract.transaction.retryOwner, 'airflow');
+  assert.deepEqual(contract.transaction.stages,
+    ['load', 'validate', 'switch-current', 'cleanup-archived-periodogram']);
+  assert.deepEqual(contract.transaction.switchCurrentOrder,
+    ['archive-current', 'promote-staging']);
+  assert.equal(contract.transaction.commitAfter, 'cleanup-archived-periodogram');
+  assert.equal(contract.transaction.committedStagingAllowed, false);
+  assert.equal(contract.transaction.sameKeyConcurrency, 'wait-for-lock-then-observe-commit-or-rollback');
+
+  for (const payload of Object.values(contract.payloads)) {
+    assert.equal(payload.bundle_version, expectedBundleVersion(payload.semantic_payload));
+    assert.ok(payload.semantic_payload.base_days > 0);
+    assert.ok(Number.isFinite(payload.semantic_payload.fold_reference_time_btjd));
+    assert.deepEqual(Object.keys(payload.semantic_payload.calculation_versions).sort(),
+      [...requiredCalculationVersions].sort());
+    for (const segment of payload.semantic_payload.segments) {
+      assert.equal(segment.tic_id, payload.tic_id);
+    }
+  }
+
+  assert.equal(new Set(contract.scenarios.map(scenario => scenario.id)).size, contract.scenarios.length);
+  for (const scenario of contract.scenarios) {
+    resolvePayload(contract, scenario.requestPayload);
+    assert.deepEqual(simulatePublication(contract, scenario), scenario.expected, scenario.id);
+  }
+}
+
 validate(valid);
 assert.equal(new Set(invalidCases.map(testCase => testCase.id)).size, invalidCases.length);
 
@@ -176,4 +339,6 @@ for (const testCase of invalidCases) {
   );
 }
 
-console.log(`PASS: 1 synthetic Gold fixture and ${invalidCases.length} invalid contract cases`);
+validatePublicationLoad(publicationLoad);
+
+console.log(`PASS: 1 synthetic Gold fixture, ${invalidCases.length} invalid contract cases, and ${publicationLoad.scenarios.length} publication load scenarios`);

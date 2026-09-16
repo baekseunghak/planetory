@@ -82,6 +82,18 @@ Publisher 검증 → planetory_gold_writer로 PostgreSQL Primary 접속
 - Backend는 알림을 계기로 Redis 캐시 정리, 완료 별 재개 판정, 외부 라벨 갱신 표식을 실행합니다.
 - 진행 중 분석은 판 변경을 감지하면 최신 판으로 다시 불러오며 archived 판 계산 결과를 채택하지 않습니다.
 
+### Publisher 멱등 적재·실패 책임
+
+- 적재 재시도 키는 `(tic_id, bundle_version)`이며 DB `UNIQUE` 제약으로 강제합니다. `bundle_version`은 곡선 원천과 외부 참조를 모두 포함한 정렬 입력 snapshot id·세그먼트 자연 키 `(tic_id, sector, binning_revision)`·계산 버전 집합을 UTF-8 LF 행으로 직렬화한 SHA-256(`pv1-<hex>`)입니다. 실행 시각·run id는 넣지 않으며 외부 snapshot이나 계산 코드가 바뀌면 새 판을 만듭니다.
+- Publisher는 같은 TIC의 게시를 `pg_advisory_xact_lock(tic_id)`으로 직렬화합니다. 동일성은 입력 snapshot, 자연 키별 배열 checksum, 주기도·후보·AI·외부 상태 checksum, 계산 버전, `fold_reference_time_btjd`, `base_days`로 비교합니다. snapshot과 세그먼트는 정렬하고 JSON float64는 유효숫자 17자리 보존 뒤 정확 비교합니다. DB 생성 id와 manifest의 `segment_ids`는 비교하지 않습니다.
+- 같은 키·같은 의미 payload의 current 판은 `ALREADY_PUBLISHED`, 다른 payload는 `IDEMPOTENCY_CONFLICT`입니다. 같은 판이 이미 archived면 `BUNDLE_SUPERSEDED`로 종료하고 현재 판을 되돌리지 않습니다.
+- 적재, 검증, 기존 `current`의 archived 전환, 신규 판의 current 전환과 archived 주기도 정리는 Publisher가 연 하나의 트랜잭션에서 실행합니다. `current` 부분 유일 인덱스가 문장마다 즉시 검사되므로 반드시 기존 판을 먼저 `archived`로 바꾼 뒤 신규 판을 `current`로 올립니다. 구현 Task가 staging 적재와 current 전환으로 나뉘어도 staging 적재 단계가 독립적으로 commit하지 않습니다.
+- 검증 오류는 재시도하지 않는 `PUBLISH_REJECTED`, 일시 장애로 rollback하면 재시도 가능한 `PUBLISH_ROLLED_BACK`입니다. rollback에서는 실패한 staging 판이 commit되지 않고 기존 `current`를 유지하며 Airflow가 같은 키로 전체 명령을 재시도합니다.
+- 결과 코드는 `PUBLISHED`, `ALREADY_PUBLISHED`, `BUNDLE_SUPERSEDED`, `IDEMPOTENCY_CONFLICT`, `PUBLISH_REJECTED`, `PUBLISH_ROLLED_BACK`입니다. current인 앞의 두 경우만 `bundleId`를 알릴 수 있으며 나머지는 Backend 알림을 보내지 않습니다. 이 결과는 Publisher 내부 계약이며 Gold 적재 HTTP API를 뜻하지 않습니다.
+- 구체적인 DB 유일 제약·적재·동시 실행 검증은 `S15P21C206-86`, current 전환·잠금·실패 주입 검증은 `S15P21C206-87`이 담당합니다. fixture의 checksum 문자열은 계약 분기용 합성값이며 운영 배열 바이트·JSON canonicalization과 Python·Java 동일성은 `S15P21C206-117`이 확정합니다.
+
+정상 게시, 동일 재시도, 같은 키의 다른 payload, 일시 실패, 검증 실패와 교체된 판 재시도 예시는 [Gold 게시 계약 fixture](../../contracts/gold/README.md)에서 공동 검토합니다.
+
 ## 재현성
 
 - 입력 및 출력 경로를 코드에 하드코딩하지 않고 설정이나 실행 인자로 전달합니다.

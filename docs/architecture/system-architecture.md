@@ -196,7 +196,10 @@ GCP PublicationBundle → HDFS 백업·검증 → PostgreSQL staging 적재
 ```
 
 - Publisher는 `planetory_gold_writer`로 PostgreSQL Primary에 직접 적재한다. 서비스 런타임 역할은 Gold를 읽기만 한다.
-- 곡선 세그먼트·주기도·후보·manifest 적재와 `staging → current → archived` 전환은 하나의 PostgreSQL 트랜잭션으로 처리한다.
+- 곡선 세그먼트·주기도·후보·manifest 적재와 판 전환은 하나의 PostgreSQL 트랜잭션으로 처리한다. `current` 부분 유일 인덱스의 즉시 검사를 피하도록 기존 `current`를 먼저 `archived`로 바꾼 뒤 신규 `staging`을 `current`로 올린다.
+- staging 적재와 current 전환은 구현 Task가 나뉘어도 Publisher가 연 같은 트랜잭션 안의 단계다. staging 단계는 독립적으로 commit하지 않으며 Publisher가 실패 시 전체 rollback하고 Airflow가 같은 `(tic_id, bundle_version)`으로 전체 게시를 재시도한다.
+- `(tic_id, bundle_version)`에는 DB 유일 제약을 두고 같은 TIC 게시를 `pg_advisory_xact_lock(tic_id)`으로 직렬화한다. 버전은 곡선 원천과 외부 참조를 모두 포함한 입력 snapshot·세그먼트 자연 키·계산 버전의 결정적 SHA-256이며 실행 시각·run id를 포함하지 않는다.
+- 재시도 동일성은 자연 키·배열/결과 checksum·계산 버전·Bundle 수치 메타데이터로 비교하고 DB 생성 id와 manifest의 `segment_ids`는 제외한다. archived 판의 늦은 재시도는 현재 판을 되돌리지 않는다.
 - 검증이나 적재가 실패하면 트랜잭션을 롤백해 기존 `current`를 유지한다. 기존 판 행은 과거 제출 참조를 위해 남기되, archived 판의 주기도는 정리한다.
 - 커밋 뒤 Publisher는 전환된 `bundleId`만 Backend에 알린다. 알림은 멱등 재시도할 수 있어야 하며, 실패해도 DB 전환을 되돌리지 않는다.
 - 알림은 후처리를 빠르게 시작하기 위한 신호다. 요청 처리 시 Backend가 조회한 DB의 `current`가 최종 정본이다.

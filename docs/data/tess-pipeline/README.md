@@ -130,7 +130,7 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 | `transit_model` JSONB | `shape:string` (PoC는 box), shape별 `parameters:object`(주기·중심 시각·지속시간·깊이 단위 포함), `baseline` 처리 규칙, `residual_model_version:string`. 필드 정의는 윤성용 제안, 강재민과 확정 | 배치·EC2 |
 | 외부 참조 | `candidate_id:string`, `source:string`, `external_id:string`, `raw_disposition:string?`, `retrieved_at:UTC timestamp`, `snapshot_id:string`, `match_status:string` | 백엔드 |
 | AI 결과 | `candidate_id:string`, `score:float64?`, `execution_status:string`, `decision_band:string?`, `model_version/checkpoint_hash/input_version/threshold_version:string`, `curve_ref:string` | 백엔드 |
-| 공개 manifest (ERD `publication_bundles.manifest`) | 참조할 `light_curve_segments` id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 곡선 비닝 규칙, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭, 곡선 단계 규칙, 입력·파이프라인 버전, 검증 결과. 판 열에 `fold_reference_time_btjd`, `base_days`, `status`(staging/current/archived) | 인프라·백엔드 |
+| 공개 manifest (ERD `publication_bundles.manifest`) | 참조할 `light_curve_segments` id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 곡선 비닝 규칙, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭, 곡선 단계 규칙, 곡선 원천·외부 참조 snapshot과 파이프라인 버전, 검증 결과. 판 열에 `fold_reference_time_btjd`, `base_days`, `status`(staging/current/archived) | 인프라·백엔드 |
 
 필수 결정:
 
