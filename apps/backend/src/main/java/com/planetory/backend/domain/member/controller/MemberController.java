@@ -49,7 +49,8 @@ public class MemberController {
         return new ProfileResponse("u-" + member.getId(), member.getNickname());
     }
 
-    @PatchMapping("/api/v1/me/settings")
+    // 단방향 완료 기록이라 양방향 설정인 /me/settings와 경로를 분리한다. P1 공개 설정이 /me/settings를 쓴다.
+    @PatchMapping("/api/v1/me/onboarding")
     public OnboardingResponse completeOnboarding(@AuthenticationPrincipal MemberPrincipal principal,
                                                  @RequestBody OnboardingRequest request) {
         if (request == null || !Boolean.TRUE.equals(request.onboardingDone())) {

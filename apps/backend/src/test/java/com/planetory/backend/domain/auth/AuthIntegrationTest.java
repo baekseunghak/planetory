@@ -205,18 +205,18 @@ class AuthIntegrationTest {
         var session = login("google", "onboarding");
         long id = memberId(session);
         jdbc.update("UPDATE user_settings SET star_list_public = false, notification_prefs = '{\"achievement\":false}'::jsonb WHERE user_id = ?", id);
-        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+        mvc.perform(patch("/api/v1/me/onboarding").session(session).with(csrf())
                         .contentType("application/json").content("{\"onboardingDone\":true}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.onboardingDone").value(true));
-        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+        mvc.perform(patch("/api/v1/me/onboarding").session(session).with(csrf())
                         .contentType("application/json").content("{\"onboardingDone\":true}"))
                 .andExpect(status().isOk());
         for (String value : List.of("false", "null")) {
-            mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+            mvc.perform(patch("/api/v1/me/onboarding").session(session).with(csrf())
                             .contentType("application/json").content("{\"onboardingDone\":" + value + "}"))
                     .andExpect(status().isBadRequest());
         }
-        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+        mvc.perform(patch("/api/v1/me/onboarding").session(session).with(csrf())
                         .contentType("application/json").content("null"))
                 .andExpect(status().isBadRequest());
         assertTrue(jdbc.queryForObject("SELECT onboarding_done FROM user_settings WHERE user_id = ?", Boolean.class, id));
@@ -225,7 +225,7 @@ class AuthIntegrationTest {
         mvc.perform(get("/api/v1/me").session(login("google", "onboarding")))
                 .andExpect(jsonPath("$.onboardingDone").value(true));
         jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
-        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+        mvc.perform(patch("/api/v1/me/onboarding").session(session).with(csrf())
                         .contentType("application/json").content("{\"onboardingDone\":true}"))
                 .andExpect(status().isOk());
         assertEquals(1, count("user_settings"));
