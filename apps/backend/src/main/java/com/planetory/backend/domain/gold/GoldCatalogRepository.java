@@ -55,8 +55,8 @@ public class GoldCatalogRepository {
     }
 
     /**
-     * 진행 중 세션·재시도가 쓰는 조회. {@code current}가 아니라 그 세션이 고정한 판을 읽는다.
-     * 판이 교체돼 {@code archived}가 됐어도 보존 기간 안이면 그대로 반환한다.
+     * 과거 제출 재현용 조회. 진행 중 세션·재시도는 {@link #findCurrentBundle(long)}을 쓴다.
+     * 판이 교체돼 {@code archived}가 돼도 제출 참조용 Bundle 행은 id로 조회한다.
      */
     public Optional<Bundle> findBundle(long bundleId) {
         return jdbc.sql("""

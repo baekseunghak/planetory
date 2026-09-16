@@ -1,7 +1,7 @@
 # Gold 게시 계약
 
 > Jira: `S15P21C206-68`<br>
-> 상태: 합성 fixture 검증 완료, 담당자 교차 리뷰 대기<br>
+> 상태: 합성 fixture·Gold DB 테스트 검증 완료, 담당자 교차 리뷰 요청<br>
 > 범위: GCP Publisher가 PostgreSQL에 적재한 Gold를 Backend와 Frontend가 같은 필드와 단위로 해석하는 계약
 
 이 디렉터리는 실제 TESS 관측값이나 Gold 파일 형식을 보관하지 않는다. Gold의 서비스 정본은 PostgreSQL 배열과 메타데이터이며, fixture는 직렬화·필드 매핑·판 전환 규칙만 검사하는 작은 합성 데이터다. 과학적 정확도와 운영 성능은 각각 담당 데이터·인프라 Task에서 실측한다.
@@ -14,7 +14,20 @@
 - Publisher는 `planetory_gold_writer`로 PostgreSQL에 직접 적재하고, Backend는 Gold를 읽기만 한다.
 - Publisher의 DB 행, Backend 읽기 모델, Frontend API 응답은 같은 데이터의 서로 다른 표현이다. 하나의 JSON이 세 구성요소 사이를 그대로 이동한다고 해석하지 않는다.
 
-## 2. 게시 내용과 제외 내용
+## 2. 충돌표
+
+| 충돌 지점 | 기존 설명 | 확정 계약 | 검증·책임 |
+| --- | --- | --- | --- |
+| Gold 저장 위치 | `releases/<id>` 파일과 `current`·`previous` 링크 | 서비스 정본은 PostgreSQL 배열과 manifest다. Publisher가 직접 적재한다 | 정상 fixture의 Publisher DB 행과 Gold 스키마 테스트 |
+| 판 보존 | 직전 판 파일을 `previous`로 보존 | 상태는 `staging/current/archived`만 사용한다. Bundle 행은 과거 제출 참조용으로 남기고 archived 주기도·캐시는 정리한다 | 오류 fixture의 `previous` 거절, repository의 archived id 조회 |
+| 진행 중 분석 | 세션 시작 시 Bundle을 고정 | 요청과 Worker 응답 채택 전에 DB current를 다시 확인하고, 변경되면 Frontend가 최신 판을 다시 조회한다 | `BUNDLE_CHANGED`, `X-Current-Bundle`, current 매핑 검사 |
+| 품질 정보 | 품질 마스크를 Gold와 화면 계약에 포함 | 품질 마스크와 trend는 배치·Silver 내부에서만 사용한다. Gold는 필터 적용 후 `flux`의 `null`과 `gaps`만 게시한다 | quality mask 비게시 검사 |
+| 온라인 계산 결과 | PostgreSQL 또는 로컬 파일에 저장, Redis는 선택 | Redis에 상태·결과·잠금을 두고 archived 판 키를 정리한다. 과거 제출용 DB 보존과 계산물 정리를 분리한다 | 정상 fixture의 Redis 제거 목록, 역할 권한 테스트 |
+| 구성요소 간 payload | 한 JSON을 Publisher·Backend·Frontend가 그대로 전달 | 같은 TIC·Bundle을 DB snake_case, Backend 읽기 모델, API camelCase로 매핑하며 식별자와 단위를 보존한다 | 정상 fixture의 계층 간 필드·단위 비교 |
+
+기존 문서별 반영 위치와 완료 상태는 [원본 문서 정합화 요청 R3~R5](../../docs/project/planetory-doc-sync-requests.md)를 따른다.
+
+## 3. 게시 내용과 제외 내용
 
 Gold는 다음을 게시한다.
 
@@ -30,7 +43,7 @@ Gold는 다음을 게시한다.
 - 품질 마스크와 trend: 배치·Silver 내부 진단 정보다. Gold에는 품질 필터 적용 후 `flux`의 `null`과 `gaps`만 게시한다.
 - 사용자용 단계별 잔차 곡선·주기도: Backend와 Python Worker가 current Gold에서 계산하고 Redis에 캐시한다.
 
-## 3. 필드와 단위
+## 4. 필드와 단위
 
 | 의미 | Publisher DB | Backend·API | 타입·단위 | 규칙 |
 | --- | --- | --- | --- | --- |
@@ -57,7 +70,7 @@ Gold는 다음을 게시한다.
 
 `transit_model`의 세부 shape와 수치 경계는 `S15P21C206-113`이 소유한다. 이 fixture는 현재 box 모델 예시가 비어 있지 않은 JSON 객체인지와 manifest 버전 연결만 검사하며, 과학 계약 확정 증거로 사용하지 않는다.
 
-## 4. 판 전환 시나리오
+## 5. 판 전환 시나리오
 
 [정상 fixture](examples/publication-bundle.valid.json)는 동일한 TIC에서 Bundle 100이 current인 상태에 Bundle 101을 게시하는 사례다.
 
@@ -70,7 +83,7 @@ Gold는 다음을 게시한다.
 
 `previous` 상태나 파일 심볼릭 링크는 계약에 없다. 진행 중 분석을 특정 Bundle에 고정하지 않는다.
 
-## 5. 합성 fixture
+## 6. 합성 fixture
 
 - [정상 예제](examples/publication-bundle.valid.json): Publisher DB 행, Backend 읽기 모델과 Frontend 응답이 같은 TIC·Bundle·세그먼트·주기도를 해석하는 사례다.
 - [오류 예제](examples/publication-bundle.invalid.json): 정상 예제에 적용할 최소 변형과 예상 오류 코드다.
@@ -85,7 +98,25 @@ node contracts/gold/validate.cjs
 
 검증기는 JSON 파싱, 필수 manifest, 필드·단위, 배열 길이, checksum, quality mask 비게시, 판 전환과 Publisher→Backend→Frontend 매핑을 검사한다. 실제 PostgreSQL, Publisher, Backend와 Frontend를 실행하지 않으므로 통합 검증 완료를 뜻하지 않는다.
 
-## 6. 미확정·후속 검증
+Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 명령으로 검증한다.
+
+```powershell
+.\gradlew.bat test --tests 'com.planetory.backend.domain.gold.*' --no-build-cache
+```
+
+2026-09-16 기준 PostgreSQL 컨테이너에서 20건이 통과했다. 이 결과는 Gold DB 계약 검증이며 Publisher·Frontend를 함께 실행한 종단 간 검증은 아니다.
+
+## 7. 교차 리뷰 기록
+
+| 역할 | 담당자 | 검토 항목 | 상태 |
+| --- | --- | --- | --- |
+| 데이터 | 윤성용 | quality mask 비게시, 10분 비닝, `transit_model`·계산 버전 경계 | Jira 검토 요청 |
+| Backend | 강재민 | Gold 조회 모델, current 재검증, archived 주기도·Redis 정리 | Jira 검토 요청 |
+| Frontend | 백지웅 | `bundleId`·필드·단위 해석, `BUNDLE_CHANGED`·헤더 변경 시 재조회 | Jira 검토 요청 |
+
+승인·수정 의견은 [Jira S15P21C206-68](https://ssafy.atlassian.net/browse/S15P21C206-68)에 남긴다. 요청 기록만으로 승인을 대신하지 않는다.
+
+## 8. 미확정·후속 검증
 
 | 항목 | 현재 상태 | 담당·종결 조건 |
 | --- | --- | --- |
