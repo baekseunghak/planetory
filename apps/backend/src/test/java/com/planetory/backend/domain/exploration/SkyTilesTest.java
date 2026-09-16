@@ -15,8 +15,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
+import com.planetory.backend.domain.exploration.service.InitialExplorationService;
 import com.planetory.backend.domain.exploration.service.SkyService;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyStar;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyTile;
@@ -51,6 +53,8 @@ class SkyTilesTest {
     @Autowired SkyService sky;
     @Autowired GalaxyLayout layout;
     @Autowired JdbcTemplate jdbc;
+    @Autowired InitialExplorationService exploration;
+    @Autowired TransactionTemplate transactions;
 
     private long memberId;
     private long otherMemberId;
@@ -269,6 +273,30 @@ class SkyTilesTest {
         assertTrue(meta.firstVisit());
         assertEquals(List.of("900000001"), meta.centerTicIds());
         assertTrue(meta.bounds().minX() <= meta.bounds().maxX());
+    }
+
+    /**
+     * 발견이 일어나면 지도 버전이 움직여야 한다(D-7). 버전이 그대로면 프론트가 새 별을
+     * 받으러 오지 않는다.
+     */
+    @Test
+    void 가입_시_첫_별_발견이_지도_버전을_올린다() {
+        long ticId = 800_000_001L;
+        jdbc.update("INSERT INTO stars(tic_id, confirmed_count, service_status)"
+                + " VALUES (?, 0, 'published') ON CONFLICT DO NOTHING", ticId);
+        jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active)"
+                + " VALUES (1, ?, 'deep_confirmed', true) ON CONFLICT (seq) DO NOTHING", ticId);
+
+        String unique = UUID.randomUUID().toString();
+        long newMemberId = jdbc.queryForObject("INSERT INTO users(provider, provider_user_id, nickname)"
+                + " VALUES ('test', ?, ?) RETURNING id", Long.class, unique, "n-" + unique);
+
+        String before = sky.version(newMemberId);
+        transactions.executeWithoutResult(status -> exploration.initialize(newMemberId));
+        String after = sky.version(newMemberId);
+
+        assertNotEquals(before, after, "별이 열렸는데 버전이 그대로면 갱신을 알릴 수 없다");
+        assertEquals(1, sky.meta(newMemberId, false).starCount());
     }
 
     /** 버전은 단조 증가해 같은 시각의 여러 변경도 구분한다. */

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class InitialExplorationService {
     private final JdbcClient jdbc;
     private final GalaxyLayout layout;
+    private final SkyService sky;
 
     // 회원·설정 생성과 같은 트랜잭션. 튜토리얼 seed가 없거나 배치에 실패하면 불완전한 회원을 남기지 않는다.
     @Transactional(propagation = Propagation.MANDATORY)
@@ -34,6 +35,8 @@ public class InitialExplorationService {
                 INSERT INTO user_star_progress(user_id, tic_id) VALUES (?, ?)
                 ON CONFLICT (user_id, tic_id) DO NOTHING
                 """).params(memberId, ticId).update();
+        // 별이 열렸으므로 지도 버전을 올린다. 같은 트랜잭션이라 발견과 버전이 어긋나지 않는다(D-7).
+        sky.bumpVersion(memberId);
     }
 
     /**
