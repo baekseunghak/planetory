@@ -63,10 +63,56 @@
   margin: 0 0 0 90px;
 }
 .periodogram-plot {
+  position: relative;
   height: 280px;
   touch-action: pan-y pinch-zoom;
   cursor: grab;
   user-select: none;
+}
+.periodogram-picking {
+  cursor: crosshair;
+}
+.periodogram-selected-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid #accdfa;
+  pointer-events: none;
+}
+.period-selection {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.period-selection-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block: 16px;
+}
+.period-selection-form input {
+  width: 250px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: #121925;
+  color: inherit;
+  font: inherit;
+}
+.period-selection-controls input[type="range"] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+}
+.period-selection-form input:focus-visible,
+.period-selection-controls input:focus-visible {
+  outline: 2px solid #accdfa;
+  outline-offset: 3px;
+}
+.period-selection-error {
+  min-height: 24px;
+  color: #ffb5b5;
 }
 .periodogram-plot:active {
   cursor: grabbing;

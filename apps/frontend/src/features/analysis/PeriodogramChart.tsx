@@ -10,6 +10,7 @@ import {
 import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
 import type { PeriodogramLoad } from "./load-periodogram";
 import type { CandidatePeaks } from "./periodogram-data";
+import type { PeriodChoice } from "./period-selection";
 import {
   buildPeriodPlot,
   clampPeriodView,
@@ -17,6 +18,7 @@ import {
   FULL_PERIOD_VIEW,
   indexAtFraction,
   periodAtFraction,
+  periodFraction,
   periodViewBounds,
   zoomPeriodView,
   type PeriodPlot,
@@ -97,8 +99,12 @@ const PlotCanvas = memo(function PlotCanvas({
 
 export function PeriodogramChart({
   data,
+  onSelect,
+  selectedPeriod,
 }: {
   data: Extract<PeriodogramLoad, { kind: "ready" }>;
+  onSelect: (choice: PeriodChoice) => void;
+  selectedPeriod: number | null;
 }) {
   const { periodogram, candidates } = data;
   const model = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
@@ -109,11 +115,19 @@ export function PeriodogramChart({
   const [view, setView] = useState<PeriodView>(FULL_PERIOD_VIEW);
   const [inspection, setInspection] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [picking, setPicking] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
+  const periodInput = useRef<HTMLInputElement>(null);
+  const periodId = useId(),
+    periodHintId = useId(),
+    periodErrorId = useId();
   const plot = useRef<HTMLDivElement>(null),
     indexInput = useRef<HTMLInputElement>(null);
   const gesture = useRef<{
     pointerId: number;
     x: number;
+    y: number;
+    moved: boolean;
     width: number;
     view: PeriodView;
   } | null>(null);
@@ -125,6 +139,15 @@ export function PeriodogramChart({
     { low, high } = periodViewBounds(current);
   const currentRef = useRef(current);
   currentRef.current = current;
+  const choose = (choice: PeriodChoice) => {
+    try {
+      onSelect(choice);
+      setPicking(false);
+      setSelectionError("");
+    } catch (error) {
+      setSelectionError((error as Error).message);
+    }
+  };
   const zoom = (factor: number) =>
     setView((old) => zoomPeriodView(old, factor));
   const reset = () => {
@@ -169,6 +192,8 @@ export function PeriodogramChart({
     if (gesture.current) {
       const initial = gesture.current;
       if (initial.pointerId !== event.pointerId) return;
+      if (Math.hypot(event.clientX - initial.x, event.clientY - initial.y) > 5)
+        initial.moved = true;
       setView(
         clampPeriodView({
           ...initial.view,
@@ -205,11 +230,22 @@ export function PeriodogramChart({
         "ArrowRight",
         "ArrowUp",
         "ArrowDown",
+        "Enter",
+        "Escape",
       ].includes(event.key)
     )
       return;
     event.preventDefault();
-    if (event.key === "+" || event.key === "=") zoom(2);
+    if (event.key === "Escape") setPicking(false);
+    else if (event.key === "Enter")
+      choose({
+        kind: "direct",
+        periodDays:
+          inspection === null
+            ? periodAtFraction(periodogram, current.center)
+            : model.periods[inspection],
+      });
+    else if (event.key === "+" || event.key === "=") zoom(2);
     else if (event.key === "-") zoom(0.5);
     else if (event.key === "0" || event.key === "Home") reset();
     else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
@@ -299,6 +335,13 @@ export function PeriodogramChart({
         <button type="button" onClick={reset}>
           전체 보기
         </button>
+        <button
+          type="button"
+          aria-pressed={picking}
+          onClick={() => setPicking((value) => !value)}
+        >
+          그래프에서 주기 고르기
+        </button>
         <span
           data-testid="periodogram-zoom"
           aria-live="polite"
@@ -316,7 +359,7 @@ export function PeriodogramChart({
           )}
         </div>
         <div
-          className="periodogram-plot"
+          className={`periodogram-plot${picking ? " periodogram-picking" : ""}`}
           ref={plot}
           tabIndex={0}
           role="group"
@@ -333,12 +376,38 @@ export function PeriodogramChart({
             gesture.current = {
               pointerId: event.pointerId,
               x: event.clientX,
+              y: event.clientY,
+              moved: false,
               width: event.currentTarget.getBoundingClientRect().width,
               view: currentRef.current,
             };
           }}
           onPointerMove={move}
-          onPointerUp={endGesture}
+          onPointerUp={(event) => {
+            const initial = gesture.current;
+            if (
+              picking &&
+              initial?.pointerId === event.pointerId &&
+              !initial.moved
+            ) {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const x = (event.clientX - bounds.left) / bounds.width;
+              if (
+                x >= 0 &&
+                x <= 1 &&
+                event.clientY >= bounds.top &&
+                event.clientY <= bounds.bottom
+              )
+                choose({
+                  kind: "direct",
+                  periodDays: periodAtFraction(
+                    periodogram,
+                    low + x * (high - low),
+                  ),
+                });
+            }
+            endGesture(event);
+          }}
           onPointerCancel={endGesture}
           onLostPointerCapture={() => {
             gesture.current = null;
@@ -352,6 +421,17 @@ export function PeriodogramChart({
             zoom={current.zoom}
             center={current.center}
           />
+          {selectedPeriod !== null &&
+          periodFraction(periodogram, selectedPeriod) >= low &&
+          periodFraction(periodogram, selectedPeriod) <= high ? (
+            <span
+              className="periodogram-selected-line"
+              aria-hidden="true"
+              style={{
+                left: `${((periodFraction(periodogram, selectedPeriod) - low) / (high - low)) * 100}%`,
+              }}
+            />
+          ) : null}
         </div>
         <div className="periodogram-x-axis" aria-hidden="true">
           {[low, (low + high) / 2, high].map((fraction, index) => (
@@ -366,14 +446,19 @@ export function PeriodogramChart({
         </figcaption>
       </figure>
       <p className="periodogram-legend">
-        실선: power · 번호: 추천 봉우리 순위 · 회색 점선: 이미 매칭한 주기 ·
-        음영: {format.format(periodogram.baselineHalfDays)}일 초과, 가려짐이 2번
-        미만일 수 있어 다음 관측 회차가 필요할 수 있음
+        실선: power · 번호: 추천 봉우리 순위 · 세로 실선: 선택 주기 · 회색 점선:
+        이미 매칭한 주기 · 음영: {format.format(periodogram.baselineHalfDays)}일
+        초과, 가려짐이 2번 미만일 수 있어 다음 관측 회차가 필요할 수 있음
       </p>
       <p id={hintId}>
         그래프에 포커스한 뒤 휠·+/−: 확대·축소 · 드래그·←/→: 이동 · ↑/↓: 격자 값
-        확인 · 0/Home 또는 더블클릭: 전체 보기. 같은 조작을 위 버튼으로 할 수
-        있습니다.
+        확인 · Enter: 조회 중인 주기 선택(조회 전에는 화면 중앙) · 0/Home 또는
+        더블클릭: 전체 보기. 같은 조작을 위 버튼으로 할 수 있습니다.
+      </p>
+      <p role="status">
+        {picking
+          ? "그래프를 한 번 눌러 새 주기를 선택하세요. 드래그는 이동만 합니다. Esc 또는 선택 버튼으로 취소할 수 있습니다."
+          : "확대·이동·값 조회는 선택 주기를 바꾸지 않습니다."}
       </p>
       <form className="periodogram-inspector" onSubmit={inspectInput}>
         <label htmlFor={indexId}>조회할 격자 번호</label>
@@ -401,6 +486,62 @@ export function PeriodogramChart({
         {inspection === null
           ? "그래프의 점을 가리키거나 격자 번호로 주기와 power를 확인하세요."
           : `격자 ${inspection} · 주기 ${format.format(model.periods[inspection])}일 · power ${format.format(periodogram.power[inspection])}`}
+      </p>
+      <button
+        type="button"
+        disabled={inspection === null}
+        onClick={() => {
+          if (inspection !== null)
+            choose({ kind: "direct", periodDays: model.periods[inspection] });
+        }}
+      >
+        조회한 주기 선택
+      </button>
+      <form
+        className="period-selection-form"
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          const input = periodInput.current!;
+          const period = input.valueAsNumber;
+          if (
+            !Number.isFinite(period) ||
+            period < periodogram.periodMinDays ||
+            period > periodogram.periodMaxDays
+          ) {
+            setSelectionError(
+              "주기도 전체 범위 안의 유한한 주기를 입력해 주세요.",
+            );
+            input.focus();
+            return;
+          }
+          choose({ kind: "direct", periodDays: period });
+        }}
+      >
+        <label htmlFor={periodId}>새 주기 (일)</label>
+        <input
+          ref={periodInput}
+          id={periodId}
+          name="new-period-days"
+          type="number"
+          inputMode="decimal"
+          autoComplete="off"
+          required
+          min={periodogram.periodMinDays}
+          max={periodogram.periodMaxDays}
+          step="any"
+          aria-invalid={Boolean(selectionError)}
+          aria-describedby={`${periodHintId} ${periodErrorId}`}
+        />
+        <button type="submit">새 주기 선택</button>
+        <span id={periodHintId}>
+          {format.format(periodogram.periodMinDays)}~
+          {format.format(periodogram.periodMaxDays)}일 · 추천 목록 밖의 주기도
+          선택할 수 있습니다.
+        </span>
+      </form>
+      <p id={periodErrorId} role="status" className="period-selection-error">
+        {selectionError}
       </p>
       <span
         className="periodogram-sr-only"
@@ -436,6 +577,15 @@ export function PeriodogramChart({
                   }}
                 >
                   위치 보기
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${peak.rank}위 봉우리 선택`}
+                  onClick={() =>
+                    choose({ kind: "peak", gridIndex: peak.gridIndex })
+                  }
+                >
+                  주기 선택
                 </button>
               </li>
             ))}

@@ -4,7 +4,8 @@ import { ApiError } from "../../api/client";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { loadPeriodogram, type PeriodogramLoad } from "./load-periodogram";
 import { PeriodogramContextChanged } from "./periodogram-data";
-import { PeriodogramChart } from "./PeriodogramChart";
+import { PeriodSelectionWorkspace } from "./PeriodSelection";
+import type { PeriodSelectionChange } from "./period-selection";
 import "./periodogram.css";
 
 type LoadState =
@@ -15,10 +16,12 @@ export function PeriodogramPanel({
   context,
   curve,
   reloadAnalysis,
+  onPeriodChange,
 }: {
   context: AnalysisContext;
   curve: CurveData;
   reloadAnalysis: () => void;
+  onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -82,7 +85,10 @@ export function PeriodogramPanel({
           : message}
       </p>
       {ready ? (
-        <PeriodogramChart data={ready} />
+        <PeriodSelectionWorkspace
+          data={ready}
+          onPeriodChange={onPeriodChange}
+        />
       ) : state.kind !== "loading" ? (
         <button type="button" onClick={needsContext ? reloadAnalysis : retry}>
           {needsContext ? "분석 자료 다시 불러오기" : "주기도 다시 불러오기"}
