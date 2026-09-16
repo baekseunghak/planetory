@@ -41,7 +41,7 @@ public class GoldCatalogRepository {
         this.jdbc = jdbc;
     }
 
-    /** 지금 공개 중인 판. 분석 진입은 이 값을 한 번 읽어 {@code bundleId}를 끝까지 고정한다. */
+    /** 지금 공개 중인 판. 분석 진입과 후속 요청은 이 값을 요청의 {@code bundleId}와 대조한다. */
     public Optional<Bundle> findCurrentBundle(long ticId) {
         return jdbc.sql("""
                         SELECT id, tic_id, bundle_version, status, manifest,
