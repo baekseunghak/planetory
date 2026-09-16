@@ -98,6 +98,7 @@ GCP는 `asia-east1-b` 한 존의 6개 프로젝트를 full-mesh VPC Peering으�
 - Standby는 복제 지연을 허용할 수 있는 조회만 처리한다.
 - 쓰기 직후 조회와 최신성이 필요한 조회는 Primary를 사용한다.
 - Primary 장애 시 Standby 자동 승격은 도입하지 않는다. 수동 승격과 원복은 8장 장애 시나리오를 따른다.
+- Standby의 "지연 허용 조회"는 복제 역할이며 현재 서비스 조회 경로가 아니다. Backend에 읽기·쓰기 분리가 없어 Primary 장애 시 조회도 함께 멈춘다. 도입은 `skyVersion` 계약 유지 방법을 정한 별도 티켓에서 다룬다.
 
 ### GCP
 
@@ -215,7 +216,7 @@ S15P21C206-82(2026-09-16)에서 확정했다. 포트·신뢰 경계 행렬, 상�
 
 - 진입: Cloudflare proxied A 레코드 2개(EC2-A·B) 라운드로빈. 사용자 구간 TLS는 edge에서, edge→origin은 Nginx가 Origin CA로 종료한다(Full strict).
 - 장애 제외·복귀: 두 EC2의 상호 감시가 Cloudflare DNS API로 수행한다. 등록은 자기만, 제거는 상대만, 마지막 1개는 보존한다.
-- Redis 단일 인스턴스는 EC2-B에 둔다. Standby 자동 승격은 도입하지 않는다.
+- Redis 단일 인스턴스는 EC2-B에 둔다. Standby 자동 승격은 도입하지 않으며, Primary 장애는 쓰기·조회 전면 중단으로 둔다(Backend에 읽기·쓰기 분리가 없다).
 - 외부 공개 포트는 443 하나이며 Cloudflare 대역으로 한정한다. 자체 LB 서버와 유료 Load Balancing은 도입하지 않는다.
 - RPO/RTO 분 단위는 97, 계정 분리는 83, Nginx·Cloudflare 세팅은 84, 상호 감시 체커는 93이 맡는다.
 
