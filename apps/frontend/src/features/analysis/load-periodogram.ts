@@ -10,6 +10,7 @@ import {
   decodePeriodogram,
   periodogramPath,
   PeriodogramContextChanged,
+  PeriodogramBundleChanged,
   type CandidatePeaks,
   type Periodogram,
 } from "./periodogram-data.ts";
@@ -74,7 +75,7 @@ export async function loadPeriodogram(
       });
       signal.throwIfAborted();
       if (bundleId && bundleId !== expected.curveContext.bundleId)
-        throw new PeriodogramContextChanged();
+        throw new PeriodogramBundleChanged();
       return { body, status };
     } catch (error) {
       signal.throwIfAborted();
@@ -87,7 +88,7 @@ export async function loadPeriodogram(
           bundleId &&
           bundleId !== expected.curveContext.bundleId)
       )
-        throw new PeriodogramContextChanged();
+        throw new PeriodogramBundleChanged();
       throw error;
     }
   }

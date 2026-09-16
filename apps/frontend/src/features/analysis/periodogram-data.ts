@@ -41,6 +41,9 @@ export class PeriodogramContextChanged extends Error {
     );
   }
 }
+// Only an explicit current-Bundle header or BUNDLE_CHANGED response triggers recovery.
+// A malformed/mismatched body alone must not start an automatic reload loop.
+export class PeriodogramBundleChanged extends PeriodogramContextChanged {}
 function invalid(field: string): never {
   throw new Error(`주기도 응답의 ${field} 항목을 확인해 주세요.`);
 }

@@ -3,7 +3,10 @@ import { api } from "../../api";
 import { ApiError } from "../../api/client";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { loadPeriodogram, type PeriodogramLoad } from "./load-periodogram";
-import { PeriodogramContextChanged } from "./periodogram-data";
+import {
+  PeriodogramBundleChanged,
+  PeriodogramContextChanged,
+} from "./periodogram-data";
 import { PeriodSelectionWorkspace } from "./PeriodSelection";
 import type { PeriodSelectionChange } from "./period-selection";
 import "./periodogram.css";
@@ -17,11 +20,13 @@ export function PeriodogramPanel({
   curve,
   reloadAnalysis,
   onPeriodChange,
+  recoverBundle,
 }: {
   context: AnalysisContext;
   curve: CurveData;
   reloadAnalysis: () => void;
   onPeriodChange?: (change: PeriodSelectionChange) => void;
+  recoverBundle: () => boolean;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -36,10 +41,15 @@ export function PeriodogramPanel({
         if (!controller.signal.aborted) setState({ kind: "loaded", data });
       })
       .catch((error: Error) => {
-        if (!controller.signal.aborted) setState({ kind: "error", error });
+        if (controller.signal.aborted) return;
+        if (error instanceof PeriodogramBundleChanged && recoverBundle()) {
+          setState({ kind: "loading" });
+          return;
+        }
+        setState({ kind: "error", error });
       });
     return () => controller.abort();
-  }, [context, curve, attempt]);
+  }, [context, curve, attempt, recoverBundle]);
   const retry = () => {
     controllerRef.current?.abort();
     setState({ kind: "loading" });
@@ -51,7 +61,9 @@ export function PeriodogramPanel({
     const error = state.error;
     needsContext = error instanceof PeriodogramContextChanged;
     message = needsContext
-      ? "시간 곡선과 주기도의 문맥이 달라 표시를 중단했습니다. 분석 자료를 다시 불러와 주세요."
+      ? error instanceof PeriodogramBundleChanged
+        ? "데이터 판이 계속 바뀌어 주기도 조회를 중단했습니다. 잠시 후 분석 자료를 다시 불러와 주세요."
+        : "시간 곡선과 주기도의 문맥이 달라 표시를 중단했습니다. 분석 자료를 다시 불러와 주세요."
       : error instanceof ApiError && error.status === 403
         ? "이 주기도를 볼 권한이 없습니다. 접근 상태를 확인한 뒤 다시 불러와 주세요."
         : error instanceof ApiError && error.status === 404

@@ -12,8 +12,15 @@ const isObservation = (ticId?: string) =>
   ["259377017", "307210830", "199574208"].includes(ticId ?? "");
 
 function AnalysisData({ ticId }: { ticId: string }) {
-  const { context, curve, loading, error, retry, bundleChanged } =
-    useAnalysisData(ticId);
+  const {
+    context,
+    curve,
+    loading,
+    error,
+    retry,
+    bundleChanged,
+    recoverBundle,
+  } = useAnalysisData(ticId);
   if (error) return <ErrorState error={error} retry={retry} />;
   if (loading || !context || !curve)
     return bundleChanged ? (
@@ -111,6 +118,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
             context={context}
             curve={curve}
             reloadAnalysis={retry}
+            recoverBundle={recoverBundle}
           />
           <table>
             <caption>관측 세그먼트</caption>

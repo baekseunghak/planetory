@@ -6,7 +6,10 @@ import {
   decodeCurve,
 } from "../../src/features/analysis/analysis-data.ts";
 import { loadPeriodogram } from "../../src/features/analysis/load-periodogram.ts";
-import { PeriodogramContextChanged } from "../../src/features/analysis/periodogram-data.ts";
+import {
+  PeriodogramBundleChanged,
+  PeriodogramContextChanged,
+} from "../../src/features/analysis/periodogram-data.ts";
 import {
   periodContextFixture,
   periodCurveFixture,
@@ -119,7 +122,11 @@ test("invalid grid stops before peaks; wrong peak context rejects instead of ret
     const env = setup(tic);
     await assert.rejects(
       loadPeriodogram(env.request, env.expected, env.curve, env.signal),
-      tic === tics.mismatch ? PeriodogramContextChanged : /power.length/,
+      tic === tics.mismatch
+        ? (error: unknown) =>
+            error instanceof PeriodogramContextChanged &&
+            !(error instanceof PeriodogramBundleChanged)
+        : /power.length/,
     );
     assert.equal(env.paths.length, tic === tics.malformed ? 1 : 2);
   }
@@ -145,7 +152,7 @@ test("header or 409 Bundle changes require context+curve reload and do not retry
       );
       await assert.rejects(
         loadPeriodogram(env.request, env.expected, env.curve, env.signal),
-        PeriodogramContextChanged,
+        PeriodogramBundleChanged,
       );
       assert.equal(env.paths.length, phase === "periodogram" ? 1 : 2);
     }

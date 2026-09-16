@@ -11,6 +11,7 @@ export async function loadAnalysis(
   signal: AbortSignal,
   onBundleChanged: () => void,
   previousBundleId?: string,
+  claimBundleRecovery?: () => boolean,
 ) {
   let changed = false;
   const announce = () => {
@@ -80,7 +81,7 @@ export async function loadAnalysis(
       signal.throwIfAborted();
       if (!(error instanceof BundleChanged)) throw error;
       announce();
-      if (attempt === 1)
+      if (attempt === 1 || (claimBundleRecovery && !claimBundleRecovery()))
         throw new Error(
           "데이터 판이 계속 바뀌어 불러오지 못했습니다. 잠시 후 다시 불러와 주세요.",
         );
