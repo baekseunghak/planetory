@@ -2,7 +2,7 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 커뮤니티·탐사 업무 API는 아직 구현하지 않았다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장은 [서비스 API 명세](docs/service-api-spec.md) 3.1~3.2절을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 커뮤니티·탐사 업무 API는 아직 구현하지 않았다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
