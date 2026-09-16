@@ -101,7 +101,10 @@ class GoldCatalogRepositoryTest {
         assertEquals(3, bundle.manifest().fineTune().get("half_width_cells").asInt());
     }
 
-    /** 진행 중 세션은 current가 아니라 고정한 판을 읽는다. 교체된 판도 id로는 읽혀야 한다. */
+    /**
+     * 판 변경 검증과 제출 당시 판 재현에 필요하므로 archived 판도 id로는 읽혀야 한다.
+     * 진행 중 분석이 구판을 계속 쓰기 위한 것이 아니다(D-16·D-17).
+     */
     @Test
     void 교체된_판도_id로_읽힌다() {
         Bundle archived = repository.findBundle(previousBundleId).orElseThrow();
