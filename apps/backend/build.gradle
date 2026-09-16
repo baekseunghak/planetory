@@ -72,10 +72,31 @@ tasks.named('bootRun') {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	// 10만 별 측정은 몇 분이 걸려 매 빌드에 넣지 않는다. perfTest로 따로 돌린다.
+	useJUnitPlatform {
+		excludeTags 'perf'
+	}
 	dependsOn startLocalDb
 	// 실제 자격 증명·개인 프로필을 테스트 컨텍스트에 읽어들이지 않는다.
 	systemProperty 'OAUTH_LOCAL_CONFIG', 'optional:classpath:/oauth-test-no-local.properties'
+}
+
+// 대규모 시드 성능 측정 [S15P21C206-137]. ./gradlew perfTest
+tasks.register('perfTest', Test) {
+	group = 'verification'
+	description = '10만 별 시드에서 타일 조회 비용을 측정한다'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'perf'
+	}
+	dependsOn startLocalDb
+	systemProperty 'OAUTH_LOCAL_CONFIG', 'optional:classpath:/oauth-test-no-local.properties'
+	// 측정이므로 입력이 같아도 매번 다시 잰다.
+	outputs.upToDateWhen { false }
+	testLogging {
+		showStandardStreams = true
+	}
 }
 
 tasks.named('jar') {
