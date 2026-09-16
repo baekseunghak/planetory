@@ -7,6 +7,7 @@
 | 저장·파티션·보존·재현성 | [데이터 관리](data-guidelines.md) | 데이터 상세 규칙 |
 | 수집·Hadoop·Spark 배치 | [Hadoop·Spark 개발 규칙](spark-hadoop-guidelines.md) | 배치 구현·검증 규칙 |
 | 공통 실험 입력 | [TESS fixture 세트](tess-fixture-set.md) | 실험용 고정 입력 계약 |
+| 서비스 TESS 범위 시나리오·대표 표본·초기 예산 | [서비스 범위 초안](tess-service-scope-v1.md) | 초안, I03 결과·김동혁 검토로 승인 전 |
 | 현재 구현과 목표의 차이, 처리 단계별 설계·검증 | [TESS 파이프라인 분석](tess-pipeline/README.md) | 팀 검토용 제안과 상세 문서 지도 |
 | 모델 후보 실행 가능성 | [AI 모델 조사](tess-ai-model-feasibility.md) | 조사·실험 결과 |
 | 전처리·detrending 설정 비교 | [전처리 벤치마크](tess-preprocess-benchmark.md) | 실행 결과·제안, 팀 리뷰 전 |
