@@ -26,3 +26,6 @@
 | 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 
 | 2026-09-16 | SRS v1.3.1 접기 위치 유지·최대 32배 확대 | 없음(요구사항 예외), 참고 #184 | EXP-13, AT-91, AT-96, foldedXZoomRatio, 중심 위상, 32배 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-16.md#접힌-곡선의-위치-유지와-최대-32배-확대-변경안) |
+| 2026-09-16 | publication_bundles 멱등 키 유일 제약 | S15P21C206-230 | publication_bundles, bundle_version, 멱등 키, UNIQUE, pg_advisory_xact_lock, V8, Publisher 재시도, ERD v1.6 | 구현 완료 | [2026-09-16](2026-09-16.md) |
+
+| 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
