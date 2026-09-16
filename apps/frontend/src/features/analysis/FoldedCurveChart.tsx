@@ -16,6 +16,7 @@ import {
   fullFoldView,
   MAX_FOLD_ZOOM,
   zoomFoldView,
+  type FoldView,
 } from "./folded-curve";
 import "./folded-curve.css";
 
@@ -25,21 +26,20 @@ const tick = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 4 });
 export function FoldedCurveChart({
   data,
   result,
-  operation,
+  view,
+  setView,
   fluxUnit,
 }: {
   data: FoldData;
   result: FoldResult;
-  operation: "reselect" | "fine-tune";
+  view: FoldView;
+  setView: (update: (view: FoldView) => FoldView) => void;
   fluxUnit: string;
 }) {
-  const [viewport, setViewport] = useState({ result, view: fullFoldView });
+  const [inspectedResult, setInspectedResult] = useState(result);
   const [inspected, setInspected] = useState<number | null>(null);
-  // Reset a new selection before paint; fine tuning preserves the current phase view.
-  let view = viewport.view;
-  if (viewport.result !== result) {
-    view = operation === "reselect" ? fullFoldView : viewport.view;
-    setViewport({ result, view });
+  if (inspectedResult !== result) {
+    setInspectedResult(result);
     setInspected(null);
   }
   const domain = useMemo(() => foldFluxDomain(data.points), [data]);
@@ -50,21 +50,20 @@ export function FoldedCurveChart({
   const low = view.center - 1 / view.zoom,
     high = view.center + 1 / view.zoom;
   const reset = () => {
-    setViewport({ result, view: fullFoldView });
+    setView(() => fullFoldView);
     setInspected(null);
   };
   const zoom = (factor: number) => {
-    setViewport((v) => ({ ...v, view: zoomFoldView(v.view, factor) }));
+    setView((v) => zoomFoldView(v, factor));
     setInspected(null);
   };
   const pan = (direction: number) => {
-    setViewport((v) => ({
-      ...v,
-      view: clampFoldView({
-        ...v.view,
-        center: v.view.center + (direction * 0.4) / v.view.zoom,
+    setView((v) =>
+      clampFoldView({
+        ...v,
+        center: v.center + (direction * 0.4) / v.zoom,
       }),
-    }));
+    );
     setInspected(null);
   };
   useEffect(() => {
@@ -106,10 +105,7 @@ export function FoldedCurveChart({
         0,
         Math.min(1, (event.clientX - rect.left) / rect.width),
       );
-      setViewport((v) => ({
-        ...v,
-        view: zoomFoldView(v.view, event.deltaY < 0 ? 2 : 0.5, ratio),
-      }));
+      setView((v) => zoomFoldView(v, event.deltaY < 0 ? 2 : 0.5, ratio));
       setInspected(null);
     };
     update();
@@ -120,7 +116,7 @@ export function FoldedCurveChart({
       resolution.removeEventListener("change", change);
       element.removeEventListener("wheel", wheel);
     };
-  }, []);
+  }, [setView]);
   useLayoutEffect(() => {
     const element = canvas.current!;
     if (size.width <= 0 || size.height <= 0) return;

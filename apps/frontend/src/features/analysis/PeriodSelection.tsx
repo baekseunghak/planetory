@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { PeriodogramChart } from "./PeriodogramChart";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { FoldedCurvePanel } from "./FoldedCurvePanel";
+import { useFoldSession } from "./use-fold-session";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -164,36 +165,43 @@ export function PeriodSelectionWorkspace({
   curve: CurveData;
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
-  const [change, setChange] = useState<PeriodSelectionChange | null>(null);
-  const current = useRef<PeriodSelectionChange | null>(null);
-  const [anchorRevision, setAnchorRevision] = useState(0);
-  const select = useCallback(
-    (choice: PeriodChoice) => {
-      const next = periodChange(
-        data,
-        current.current,
-        "reselect",
-        choosePeriod(data, choice),
-      );
-      current.current = next;
-      setChange(next);
-      setAnchorRevision(next.revision);
+  const session = useFoldSession(context, curve);
+  const { state, dispatch } = session;
+  const change = state.change;
+  const revision = useRef(0);
+  const begin = useCallback(
+    (
+      kind: PeriodSelectionChange["kind"],
+      selection: PeriodSelection,
+      resetView?: boolean,
+    ) => {
+      const next = {
+        ...periodChange(data, null, kind, selection),
+        revision: ++revision.current,
+      };
+      dispatch({ type: "begin", change: next, resetView });
       onPeriodChange?.(next);
     },
-    [data, onPeriodChange],
+    [data, dispatch, onPeriodChange],
+  );
+  const select = useCallback(
+    (choice: PeriodChoice) => {
+      begin("reselect", choosePeriod(data, choice));
+    },
+    [data, begin],
   );
   const tune = (period: number) => {
-    const previous = current.current;
+    const previous = change;
     if (!previous || previous.selection.periodDays === period) return;
-    const next = periodChange(
-      data,
-      previous,
-      "fine-tune",
-      fineTunePeriod(previous.selection, period),
+    begin("fine-tune", fineTunePeriod(previous.selection, period));
+  };
+  const retry = () => {
+    if (!state.request) return;
+    begin(
+      state.request.change.kind,
+      state.request.change.selection,
+      state.request.resetView,
     );
-    current.current = next;
-    setChange(next);
-    onPeriodChange?.(next);
   };
   return (
     <>
@@ -220,13 +228,13 @@ export function PeriodSelectionWorkspace({
         </p>
         {change ? (
           <PeriodTune
-            key={anchorRevision}
+            key={state.inputKey}
             selection={change.selection}
             onTune={tune}
           />
         ) : null}
       </section>
-      <FoldedCurvePanel context={context} curve={curve} change={change} />
+      <FoldedCurvePanel curve={curve} session={session} onRetry={retry} />
     </>
   );
 }

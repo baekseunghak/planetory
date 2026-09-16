@@ -244,6 +244,17 @@ test("pending fold keeps its last successful graph and can be cancelled/retried"
   );
   await page.getByRole("button", { name: "접기 취소", exact: true }).click();
   await expect(page.getByTestId("fold-status")).toContainText("취소");
+  await expect(page.getByTestId("selected-period")).toHaveAttribute(
+    "data-period",
+    old!,
+  );
+  await expect(
+    page.getByRole("spinbutton", { name: "미세 조정 주기 (일)", exact: true }),
+  ).toHaveValue(old!);
+  await expect(page.getByTestId("fold-panel")).toHaveAttribute(
+    "data-fold-ready",
+    "true",
+  );
   await page
     .getByRole("button", { name: "접기 다시 계산", exact: true })
     .click();
@@ -278,8 +289,164 @@ test("Worker failure has a clear error and retry action, never a fake empty succ
     .click();
   await expect(page.getByTestId("fold-status")).toContainText("접기에 실패");
   await expect(page.getByTestId("fold-result")).toHaveCount(0);
+  await expect(page.getByTestId("selected-period")).toContainText(
+    "선택해 주세요",
+  );
+  await expect(page.getByTestId("fold-panel")).toHaveAttribute(
+    "data-fold-ready",
+    "false",
+  );
   await page
     .getByRole("button", { name: "접기 다시 계산", exact: true })
     .click();
   await expect(page.getByTestId("fold-result")).toBeVisible();
+});
+
+for (const operation of ["fine-tune", "reselect"] as const)
+  test(`${operation} failure restores period, source, number and view; retry reapplies failed input`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const NativeWorker = window.Worker;
+      let count = 0;
+      window.Worker = class extends NativeWorker {
+        override postMessage(message: unknown) {
+          const job = message as {
+            type: string;
+            dataId: string;
+            revision: number;
+          };
+          if (job.type === "fold" && ++count === 2) {
+            setTimeout(
+              () =>
+                this.dispatchEvent(
+                  new MessageEvent("message", {
+                    data: {
+                      type: "fold-error",
+                      dataId: job.dataId,
+                      revision: job.revision,
+                      error: "test fold failed",
+                    },
+                  }),
+                ),
+              1200,
+            );
+          } else super.postMessage(message);
+        }
+      };
+    });
+    await page.goto("/analysis/259377024");
+    const selected = page.getByTestId("selected-period");
+    const result = page.getByTestId("fold-result");
+    const status = page.getByTestId("fold-status");
+    const panel = page.getByTestId("fold-panel");
+    const plot = page.getByRole("group", {
+      name: "접힌 곡선 그래프",
+      exact: true,
+    });
+    const number = page.getByRole("spinbutton", {
+      name: "미세 조정 주기 (일)",
+      exact: true,
+    });
+    await page
+      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+      .click();
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+    const original = await result.getAttribute("data-period");
+    const sliderValue = await page
+      .getByRole("slider", { name: "반복 주기 미세 조정" })
+      .inputValue();
+    await plot.focus();
+    for (let i = 0; i < 5; i++) await plot.press("+");
+    await plot.press("ArrowLeft");
+    const start = await plot.getAttribute("data-view-start");
+    const end = await plot.getAttribute("data-view-end");
+    if (operation === "fine-tune")
+      await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    else
+      await page
+        .getByRole("button", { name: "2위 봉우리 선택", exact: true })
+        .click();
+    const attempted = await selected.getAttribute("data-period");
+    const attemptRevision = Number(
+      await selected.getAttribute("data-revision"),
+    );
+    await expect(panel).toHaveAttribute("data-fold-ready", "false");
+    await expect(status).toContainText("접고 있습니다");
+    await expect(result).toHaveAttribute("data-period", original!);
+    // View-only actions remain available; failure restores the pre-edit snapshot.
+    await plot.focus();
+    await plot.press("-");
+    await expect(page.getByTestId("fold-zoom")).toHaveText("×16");
+    await expect(status).toContainText("접기에 실패");
+    await expect(status).toContainText("복구했습니다");
+    await expect(selected).toHaveAttribute("data-period", original!);
+    await expect(selected).toHaveAttribute("data-source", "3600");
+    await expect(number).toHaveValue(original!);
+    await expect(
+      page.getByRole("slider", { name: "반복 주기 미세 조정" }),
+    ).toHaveValue(sliderValue);
+    await expect(result).toHaveAttribute("data-period", original!);
+    await expect(plot).toHaveAttribute("data-view-start", start!);
+    await expect(plot).toHaveAttribute("data-view-end", end!);
+    await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+    await page
+      .getByRole("button", { name: "접기 다시 계산", exact: true })
+      .click();
+    await expect(result).toHaveAttribute("data-period", attempted!);
+    await expect(selected).toHaveAttribute("data-period", attempted!);
+    await expect(number).toHaveValue(attempted!);
+    expect(
+      Number(await selected.getAttribute("data-revision")),
+    ).toBeGreaterThan(attemptRevision);
+    await expect(page.getByTestId("fold-zoom")).toHaveText(
+      operation === "reselect" ? "×1" : "×32",
+    );
+    await expect(panel).toHaveAttribute("data-fold-ready", "true");
+  });
+
+test("watchdog restores a stalled refold and permits explicit retry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    let count = 0;
+    window.Worker = class extends NativeWorker {
+      override postMessage(message: unknown) {
+        if ((message as { type: string }).type === "fold" && ++count === 2)
+          return;
+        super.postMessage(message);
+      }
+    };
+  });
+  await page.goto("/analysis/259377024");
+  await page
+    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+    .click();
+  const result = page.getByTestId("fold-result");
+  await expect(result).toBeVisible();
+  const original = await result.getAttribute("data-period");
+  await page.clock.install();
+  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await expect(page.getByTestId("fold-panel")).toHaveAttribute(
+    "data-fold-ready",
+    "false",
+  );
+  await page.clock.runFor(100);
+  await page.clock.fastForward(31_000);
+  await expect(page.getByTestId("fold-status")).toContainText("접기에 실패");
+  await expect(page.getByTestId("selected-period")).toHaveAttribute(
+    "data-period",
+    original!,
+  );
+  await expect(result).toHaveAttribute("data-period", original!);
+  await page
+    .getByRole("button", { name: "접기 다시 계산", exact: true })
+    .click();
+  await expect(result).not.toHaveAttribute("data-period", original!);
+  await expect(page.getByTestId("fold-panel")).toHaveAttribute(
+    "data-fold-ready",
+    "true",
+  );
 });
