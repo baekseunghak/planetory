@@ -4,7 +4,7 @@
 - 상태: **팀 협의용 초안 Draft 0.4** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.3 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.3](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.3](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
+- 기준: [요구사항 명세서 v1.3](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.6](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
 - v1.3 개정: 2026-09-15. 개별 별 타일·cursor 응답 변경안은 [변경 검토 기록](../../../docs/development/sky-individual-stars-review.md)을 따른다. 관련 제공자/소비자 리뷰 후 적용하며 런타임 구현 완료가 아니다.
 - 이전 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
 - 분담·공통 약속: [API 명세 파트 분담](README.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
