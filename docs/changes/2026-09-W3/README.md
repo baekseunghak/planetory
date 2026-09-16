@@ -30,3 +30,4 @@
 | 2026-09-16 | publication_bundles 멱등 키 유일 제약 | S15P21C206-230 | publication_bundles, bundle_version, 멱등 키, UNIQUE, pg_advisory_xact_lock, V8, Publisher 재시도, ERD v1.6 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 
 | 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
+| 2026-09-16 | `stars` 표시 열 확정 | S15P21C206-138 | stars 표시 열, tmag, teffK, radiusRsun, 미결 10, ERD 미결 9, D-18, 공개 별 요약, null 결측 | 결정 | [2026-09-16](2026-09-16.md) |
