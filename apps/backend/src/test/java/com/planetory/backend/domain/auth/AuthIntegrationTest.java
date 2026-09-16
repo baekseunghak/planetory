@@ -42,6 +42,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** 외부 자격 증명 없이 실제 code 교환·OIDC 서명·state/nonce 검증과 DB 가입을 함께 실행한다. */
@@ -143,6 +144,121 @@ class AuthIntegrationTest {
         }
         assertTrue(jdbc.queryForObject("SELECT bool_and(nickname ~ '^별_[a-f0-9]{16}$') FROM users", Boolean.class));
         assertTrue(Collections.list(google.getAttributeNames()).stream().noneMatch(name -> name.contains("AUTHORIZED_CLIENT")));
+    }
+
+    @Test
+    void profileNicknameValidationAndConflictUseCurrentMember() throws Exception {
+        var first = login("google", "profile-first");
+        var second = login("google", "profile-second");
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content("{\"nickname\":\"  관측자_1  \"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("관측자_1"));
+        mvc.perform(get("/api/v1/me").session(first)).andExpect(jsonPath("$.nickname").value("관측자_1"));
+        mvc.perform(patch("/api/v1/me/profile").session(second).with(csrf())
+                        .contentType("application/json").content("{\"nickname\":\"관측자_1\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NICKNAME_CONFLICT"));
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content("{\"nickname\":\"Explorer\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/me/profile").session(second).with(csrf())
+                        .contentType("application/json").content("{\"nickname\":\"explorer\"}"))
+                .andExpect(status().isConflict());
+        for (String nickname : List.of("ADMIN", "가", "내부 공백", "a@b")) {
+            mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                            .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", nickname))))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content("null"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** SB-D14의 "NFC·앞뒤 공백 제거 후 2~20자" 중 정규화 동작과 길이 경계를 직접 확인한다. */
+    @Test
+    void nicknameIsStoredAsNfcAndLengthBoundsFollowSbD14() throws Exception {
+        var first = login("google", "nfc-first");
+        var second = login("google", "nfc-second");
+        // 조합형(NFD) 한글 6코드포인트. 정규화하지 않으면 완성형 정규식에 걸려 400이 된다.
+        String decomposed = "가나다";
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", decomposed))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("가나다"));
+        assertEquals(3, jdbc.queryForObject("SELECT length(nickname) FROM users WHERE id = ?", Integer.class, memberId(first)));
+        // 저장값이 NFC이므로 완성형으로 보낸 다른 회원도 같은 이름으로 본다.
+        mvc.perform(patch("/api/v1/me/profile").session(second).with(csrf())
+                        .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", "가나다"))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NICKNAME_CONFLICT"));
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", "a".repeat(20)))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("a".repeat(20)));
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", "a".repeat(21)))))
+                .andExpect(status().isBadRequest());
+        // 공백 제거 후 20자면 통과한다. 제거 전 길이로 재면 실패한다.
+        mvc.perform(patch("/api/v1/me/profile").session(first).with(csrf())
+                        .contentType("application/json").content(mapper.writeValueAsString(Map.of("nickname", "  " + "b".repeat(20) + "  "))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value("b".repeat(20)));
+    }
+
+    @Test
+    void onboardingOnlyMovesToTrueAndKeepsOtherSettings() throws Exception {
+        var session = login("google", "onboarding");
+        long id = memberId(session);
+        jdbc.update("UPDATE user_settings SET star_list_public = false, notification_prefs = '{\"achievement\":false}'::jsonb WHERE user_id = ?", id);
+        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+                        .contentType("application/json").content("{\"onboardingDone\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.onboardingDone").value(true));
+        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+                        .contentType("application/json").content("{\"onboardingDone\":true}"))
+                .andExpect(status().isOk());
+        for (String value : List.of("false", "null")) {
+            mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+                            .contentType("application/json").content("{\"onboardingDone\":" + value + "}"))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+                        .contentType("application/json").content("null"))
+                .andExpect(status().isBadRequest());
+        assertTrue(jdbc.queryForObject("SELECT onboarding_done FROM user_settings WHERE user_id = ?", Boolean.class, id));
+        assertFalse(jdbc.queryForObject("SELECT star_list_public FROM user_settings WHERE user_id = ?", Boolean.class, id));
+        assertEquals("false", jdbc.queryForObject("SELECT notification_prefs ->> 'achievement' FROM user_settings WHERE user_id = ?", String.class, id));
+        mvc.perform(get("/api/v1/me").session(login("google", "onboarding")))
+                .andExpect(jsonPath("$.onboardingDone").value(true));
+        jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
+        mvc.perform(patch("/api/v1/me/settings").session(session).with(csrf())
+                        .contentType("application/json").content("{\"onboardingDone\":true}"))
+                .andExpect(status().isOk());
+        assertEquals(1, count("user_settings"));
+        jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var requests = List.of(executor.submit(() -> { start.await(); members.completeOnboarding(id); return true; }),
+                    executor.submit(() -> { start.await(); members.completeOnboarding(id); return true; }));
+            start.countDown();
+            for (var request : requests) assertTrue(request.get(10, TimeUnit.SECONDS));
+        }
+        assertEquals(1, count("user_settings"));
+        assertTrue(jdbc.queryForObject("SELECT onboarding_done FROM user_settings WHERE user_id = ?", Boolean.class, id));
+    }
+
+    @Test
+    void publicProfileShowsOnlyPublicSummaryEvenWhenStarListIsPrivate() throws Exception {
+        var viewer = login("google", "viewer");
+        var owner = login("google", "owner");
+        long id = memberId(owner);
+        jdbc.update("UPDATE user_settings SET star_list_public = false WHERE user_id = ?", id);
+        mvc.perform(get("/api/v1/members/u-" + id).session(viewer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.achievementSummary.signalCount").value(0))
+                .andExpect(jsonPath("$.achievementSummary.starCountByGrade.A").value(0))
+                .andExpect(jsonPath("$.achievementSummary.discoveredStarCount").doesNotExist())
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.providerUserId").doesNotExist())
+                .andExpect(jsonPath("$.onboardingDone").doesNotExist());
+        mvc.perform(get("/api/v1/members/u-999999").session(viewer)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/members/u-" + id)).andExpect(status().isUnauthorized());
+        jdbc.update("UPDATE users SET status = 'withdrawn' WHERE id = ?", id);
+        mvc.perform(get("/api/v1/members/u-" + id).session(viewer)).andExpect(status().isNotFound());
     }
 
     @Test
