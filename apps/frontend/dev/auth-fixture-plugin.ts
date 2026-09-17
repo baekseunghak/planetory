@@ -127,7 +127,14 @@ export function authFixturePlugin(): Plugin {
             session.nickname = normalizedNickname(value);
             if (session.loseNicknameReply) {
               session.loseNicknameReply = false;
-              res.destroy(); // Write accepted; intentionally lose this one response.
+              // Start a response before breaking it; a pre-header disconnect can
+              // be retried transparently by the browser's HTTP transport.
+              res.writeHead(200, {
+                "Content-Type": "application/json",
+                "Content-Length": "1024",
+                "Cache-Control": "no-store",
+              });
+              res.write('{"nickname":', () => res.destroy());
               return;
             }
             return reply(200, {
