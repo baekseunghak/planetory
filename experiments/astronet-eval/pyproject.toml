@@ -1,0 +1,30 @@
+[project]
+name = "astronet-eval"
+version = "0.1.0"
+description = "Planetory AstroNet-Triage evaluation set (PC/EB/junk labels, TIC split) and 201/61 input conversion (S15P21C206-43)"
+requires-python = ">=3.11"
+dependencies = [
+  "tess-fixture",
+  "tess-bench",
+  "astro-kernel",
+  "numpy>=1.26,<3",
+  "astropy>=6.0,<8",
+  "scipy>=1.12,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<10",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+tess-fixture = { path = "../tess-fixture", editable = true }
+tess-bench = { path = "../tess-bench", editable = true }
+astro-kernel = { path = "../../libs/astro-kernel", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

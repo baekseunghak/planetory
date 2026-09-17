@@ -9,6 +9,12 @@ export function fixturePlugin(): Plugin {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
         if (req.method === "GET" && req.url?.split("?")[0] === "/v1/me") {
+          // Test-only acknowledgement: prove the browser sent the cookie to
+          // this HTTP server, without reflecting any cookie value to the UI.
+          const hasTestSession = (req.headers.cookie ?? "")
+            .split(";")
+            .some((cookie) => cookie.trim() === "test-session=fixture-only");
+          res.setHeader("X-Fixture-Session-Received", String(hasTestSession));
           res.end(
             JSON.stringify({
               memberId: "foundation-fixture-member-201",

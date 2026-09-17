@@ -2,7 +2,7 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. 회원·탐사·커뮤니티 기능과 인증은 아직 구현하지 않았다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장과 일반 게시글 CRUD는 [서비스 API 명세](docs/service-api-spec.md) 3장·5장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 피드·댓글·첨부·반응 API는 아직 구현하지 않았다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
@@ -96,4 +96,5 @@ docker compose --profile service up -d --wait service-db
 ## 더 보기
 
 - [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
-- [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/api-spec-ownership.md)
+- [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
+- [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점

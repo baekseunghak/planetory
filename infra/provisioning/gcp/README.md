@@ -1,6 +1,6 @@
 # GCP 6계정 클러스터 생성·확인·피어링
 
-각 팀원이 Windows PowerShell에서 자신의 GCP 프로젝트에 노드 1대를 생성하고, 전체 6개 프로젝트를 메시 피어링하는 절차입니다. 인프라 구성은 [GCP 인프라 구조](../../../docs/development/gcp-distributed-infrastructure.md)를 참고합니다.
+각 팀원이 Windows PowerShell에서 자신의 GCP 프로젝트에 노드 1대를 생성하고, 전체 6개 프로젝트를 메시 피어링하는 절차입니다. 인프라 구성은 [GCP 인프라 구조](../../../docs/architecture/gcp-distributed-infrastructure.md)를 참고합니다.
 
 ## 1. Google Cloud CLI 설치와 로그인
 
@@ -249,83 +249,11 @@ $WrongPeerings = @('peer-node-3', 'peer-node-4')
 - VM·디스크·VPC·방화벽·`/etc/hosts`는 삭제하지 않습니다. 호스트 매핑은 SSH 복구 후 올바른 `-NodeNumbers`로 생성 스크립트를 재실행해 갱신합니다.
 - 중간 실패 시 이미 삭제한 연결은 자동 복구되지 않습니다. 목록을 다시 조회하고 생성 스크립트로 복구합니다. 데이터 디스크는 남지만 분산 작업은 실패할 수 있습니다.
 
-## 6. 노드 간 통신 확인
+## 6. 구축 후 검증과 운영
 
-자신의 VM에 SSH로 접속한 뒤 실행합니다.
+노드별 Tailscale SSH 접속, 상태 점검, 사설망·FQDN·TCP·방화벽 검사와 비용 종료 절차는 [GCP 노드 운영 런북](../../../docs/operations/gcp-node-runbook.md)을 따른다.
 
-```bash
-for n in 1 2 3 4 5 6; do
-  ping -c 2 -W 2 "10.20.$n.10"
-done
-getent hosts master-1 worker-2 worker-3 worker-4 worker-5 worker-6
-```
-
-Hadoop 시작 후에는 `yarn node -list -all`이 표시한 전체 호스트명을 다른 VM과 작업 컨테이너에서 `getent hosts <호스트명>`으로 확인합니다. VPC Peering은 상대 프로젝트의 내부 DNS를 공유하지 않으므로 IP ping만으로 YARN 연결을 판정하지 않습니다.
-
-## 7. 필요한 관리 명령
-
-### SSH 접속이 갑자기 안 될 때
-
-집·교육장·VPN 변경으로 접속 공인 IP가 달라질 수 있습니다. 아래 명령으로 확인합니다. Worker는 VM 이름을 바꿉니다. 진단 중 API 활성화 질문이 나올 수 있습니다.
-
-```powershell
-gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b --troubleshoot
-gcloud compute firewall-rules describe planetory-admin-ssh --project=$ProjectId --format="yaml(network,sourceRanges,targetTags,allowed,disabled)"
-gcloud compute instances describe master-1 --project=$ProjectId --zone=asia-east1-b --format="yaml(tags.items,networkInterfaces)"
-```
-
-진단의 `Source IP address`가 방화벽 `sourceRanges`에 없으면 허용 주소를 갱신합니다. VM의 네트워크와 대상 태그도 방화벽과 일치해야 합니다. 아래는 기존 허용 목록을 유지하면서 현재 IPv4 하나를 추가합니다.
-
-```powershell
-$FirewallJson = gcloud compute firewall-rules describe planetory-admin-ssh --project=$ProjectId --format=json
-if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 조회 실패: 갱신 중단' }
-$Firewall = ($FirewallJson -join "`n") | ConvertFrom-Json
-$CurrentIp = [System.Net.IPAddress]::Parse((Read-Host '진단에 나온 현재 Source IPv4').Trim())
-if ($CurrentIp.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { throw 'IPv4 주소를 입력하세요' }
-$AdminRanges = (@($Firewall.sourceRanges) + "$CurrentIp/32" | Select-Object -Unique) -join ','
-$AdminRanges  # 기존 주소와 현재 주소가 포함됐는지 확인
-gcloud compute firewall-rules update planetory-admin-ssh `
-  --project=$ProjectId `
-  --source-ranges=$AdminRanges
-if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 갱신 실패' }
-gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
-```
-
-`--source-ranges`는 추가 옵션이 아니라 **전체 허용 목록 교체**입니다. 현재 IP만 넣으면 기존 관리 주소가 빠집니다. 필요 없어진 주소는 팀 확인 후 제거하고, 해결 목적으로 `0.0.0.0/0` 전체 개방은 하지 않습니다. 위 갱신은 같은 대상 태그를 가진 VM에도 적용됩니다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수는 없습니다.
-
-현재 생성된 리소스를 확인합니다.
-
-```powershell
-gcloud compute instances list --project=$ProjectId
-gcloud compute disks list --project=$ProjectId
-gcloud compute addresses list --project=$ProjectId
-```
-
-생성 스크립트는 기존 동명 리소스가 있으면 중단합니다. VM을 삭제해도 `auto-delete=no` 데이터 디스크와 예약 고정 IP는 남아 과금될 수 있습니다.
-
-## 8. 운영 기한과 비용 확인
-
-2026-09-09 기준, 720시간 공제 전 계획값은 다음과 같습니다.
-
-| 노드 | 계획값 |
-| --- | ---: |
-| Node 1 | $219.36 |
-| Node 2 | $300.24 |
-| Node 3~6 | 각 $290.38 |
-
-크레딧, 세금, 로그와 송신 비용은 포함하지 않았습니다. 각 계정의 Billing에서 다시 확인합니다.
-
-> Node 2의 $300 초과와 추가 비용 여유를 고려해 **27일 안에 결과 이전과 자원 정리**를 완료합니다.
-
-```powershell
-gcloud compute instances list --project=$ProjectId
-gcloud compute disks list --project=$ProjectId
-gcloud compute addresses list --project=$ProjectId
-```
-
-VM만 중지하거나 삭제해도 남아 있는 영속 디스크와 예약 IP는 계속 과금될 수 있습니다.
-
-## 9. 소프트웨어 설치와 운영
+## 7. 소프트웨어 설치와 운영
 
 VM 생성은 디스크 마운트와 호스트명 등록까지 수행한다. Hadoop/YARN 및 Docker 설치 후 [분산 시스템 운영 절차](../../distributed-system/README.md)를 따른다. NameNode 초기화·수동 전환 명령은 그 문서에서 관리한다.
 

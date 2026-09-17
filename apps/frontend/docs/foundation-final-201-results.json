@@ -1,0 +1,79 @@
+{
+  "date": "2026-09-15",
+  "ticket": "S15P21C206-201",
+  "branch": "feature/S15P21C206-201-web-shared-foundation",
+  "baseline": "0333e949f67117beb84d419aad1bee95cbeb265e plus the submitted changes",
+  "comparedDevelop": "d079789740870678177713d333878fa27e2eac3f",
+  "environment": {
+    "os": "Windows",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "stockFirefox": "155.0.1",
+    "playwright": "1.63.0"
+  },
+  "checks": {
+    "build": "passed",
+    "unit": {
+      "passed": 16,
+      "failed": 0
+    },
+    "chromium": {
+      "passed": 9,
+      "failed": 0
+    },
+    "chrome": {
+      "passed": 9,
+      "failed": 0
+    },
+    "edge": {
+      "passed": 9,
+      "failed": 0
+    },
+    "production": {
+      "passed": 2,
+      "failed": 0
+    },
+    "stockFirefoxAfterTestCorrection": {
+      "passed": 9,
+      "failed": 0
+    },
+    "correctedCookieScenarioChromiumChromeEdge": {
+      "passed": 3,
+      "failed": 0
+    },
+    "finalBuild": "passed; same JS and CSS artifacts",
+    "format": "passed",
+    "node22Docker": {
+      "node": "22.23.2",
+      "npm": "10.9.8",
+      "image": "planetory-201-final-build:20260915",
+      "install": "npm ci passed",
+      "build": "passed",
+      "unit": {
+        "passed": 16,
+        "failed": 0
+      },
+      "scope": "Local build target only; deployment HTTPS and current Nginx runtime not rerun in this step"
+    }
+  },
+  "initialFailure": "Stock Firefox intercepted request headers omitted Cookie. 8/9 passed; allHeaders retry also failed. Replaced interception with real dev HTTP server cookie receipt acknowledgement, preserving the required assertion.",
+  "oauthEvidence": [
+    "auth-ssafy-201-results.json",
+    "auth-google-201-results.json",
+    "auth-backend-201-vite-results.json",
+    "auth-backend-201-nginx-results.json"
+  ],
+  "errorEvidence": "auth-error-201-results.json",
+  "agreement": "User reports Jiwoong agrees with common foundation; not a recorded MR approval or actual component integration test.",
+  "pending": [
+    "Actual A component registration and shared session/route integration evidence",
+    "Deployment HTTPS/cookie/OAuth/direct URL verification",
+    "Actual Safari",
+    "Independent code review and develop merge; Jira acceptance"
+  ],
+  "limits": [
+    "Feature input API fieldErrors E2E not tested; MVC serialization and client replay are contract evidence only.",
+    "No new nickname API or server tracing feature is imposed as a prerequisite.",
+    "Real OAuth results retain the different backend commits and dedicated DB scopes in their source reports."
+  ]
+}

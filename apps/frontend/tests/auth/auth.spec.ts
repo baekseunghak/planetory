@@ -10,7 +10,10 @@ async function login(page: Page, provider = "Google") {
 }
 async function logout(page: Page) {
   await page.getByRole("button", { name: "메뉴", exact: true }).click();
-  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "로그아웃", exact: true })
+    .click();
 }
 test("both provider entries, protected deep return, reload, logout/back and new identity", async ({
   page,

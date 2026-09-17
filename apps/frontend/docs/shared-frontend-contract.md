@@ -2,6 +2,8 @@
 
 기준: `develop` 321f10b / SRS v1.2 / 서비스 API 2~3절 / Jira `S15P21C206-201`. 2026-09-14 작성. 아래 **프론트 경로와 파일 구조는 이 구현의 검토안**이다. 백지웅 화면이 실제 연결됐거나 미확정 API가 합의됐다는 의미는 아니다.
 
+2026-09-15 현행: 실제 SSAFY·Google 및 공통 오류 계약 검증을 마쳤다. 서진님은 지웅님이 공통 기반 사용에 이견이 없다고 전달했다. 배포가 지연되어도 코드 공유·리뷰는 진행한다. 실제 A 화면 연결 시험과 배포 인수를 통과한 뜻은 아니다. [현재 상태와 다음 단계](ticket-201-readiness.md), [검증 결과](verification.md)를 따른다.
+
 ## 이번 변경의 범위
 
 기존 시제품의 package 설정·App 인증 조회/라우팅·요청 취소 로직·메뉴 dialog를 바탕으로 공통 부분을 추출했다. `/api/v1/me` 평면 응답과 서버 `ErrorResponse.FieldError(field, reason)`를 적용한다. 기존 코드에 있던 `{field, message}`만 읽는 처리는 가져오지 않았다.
@@ -112,8 +114,8 @@ await api("/v1/posts", { method: "POST", json: input });
 - `ApiError.status`, `code`, `message`, `fieldErrors[{field,reason}]`를 폼에 전달한다. React 텍스트로 표시하며 HTML을 실행하지 않는다.
 - 일반 POST/PATCH를 포함해 공통 클라이언트는 자동 재전송을 하지 않는다. 네트워크 유실·시간 초과·전송 뒤 취소·불명확한 쓰기 응답은 `outcomeUnknown=true`로 전달한다. 폼은 입력을 유지하고 상세/목록 재조회로 저장 여부를 확인한다. 이 작업은 공통 신호를 제공하며 글/댓글 폼 자체의 복구는 W12/W13에서 구현·검증한다.
 - 분석 제출/공개 멱등 키는 해당 API의 기능 담당자가 처리한다. 통신 추적 ID를 멱등 키로 사용하지 않는다.
-- `localRequestId`는 브라우저 내 요청 구분 값이다. 임의 헤더로 서버에 보내지 않는다. 합의한 응답 헤더 이름을 `VITE_REQUEST_ID_HEADER`로 지정하면 서버 값은 별도 `requestId`로 보존한다. 현재 서버 ErrorResponse에는 요청 ID가 없어 서버 상관관계 검증은 미완료다.
-- CSRF 이름·발급 경로는 문서에서도 미확정이다. 예시 헤더를 확정으로 간주하지 않는다. `VITE_CSRF_HEADER`·`VITE_CSRF_COOKIE`를 함께 설정한 경우 읽을 수 있는 CSRF 쿠키 값을 헤더로 전달한다. 세션 쿠키를 JavaScript로 읽는 방식이 아니다. 팀이 토큰을 다른 방식으로 발급하면 `src/api/index.ts`의 공급 함수를 조정한다. 미설정/토큰 없음에서는 쓰기를 전송하지 않는다.
+- `localRequestId`는 브라우저 내 요청 구분 값이다. 임의 헤더로 서버에 보내지 않는다. 합의한 응답 헤더 이름을 `VITE_REQUEST_ID_HEADER`로 지정하면 서버 값은 별도 `requestId`로 보존한다. 현행 상세 오류 계약과 서버 ErrorResponse에는 요청 ID가 없으며 별도 추적 헤더도 확정되지 않았다. 서버 requestId=null을 유지하고, 서버 추적 기능을 201 완료의 필수 선행으로 추가하지 않는다. API 안내 README의 옛 표기와 분석 제출의 멱등 requestId는 구분한다.
+- CSRF는 MR !42의 `GET /api/v1/auth/csrf` 응답 `{headerName: "X-CSRF-TOKEN", token}`을 기본으로 사용한다. 매 쓰기 직전에 발급하고 토큰은 변형하거나 저장하지 않는다. 발급 실패·취소 때 쓰기를 보내지 않는다. `VITE_CSRF_HEADER`·`VITE_CSRF_COOKIE`는 둘 다 비운다. 둘 다 지정한 기존 쿠키 방식은 호환용으로 유지하며 SESSION 쿠키를 읽는 방식이 아니다. 하나만 설정하면 쓰기를 중단한다.
 - `useResource()`는 GET 전용이며 경로가 바뀌거나 unmount되면 이전 요청을 취소하고 늦은 결과를 무시한다. decoder를 컴포넌트 밖에 선언해 불필요한 재요청을 피한다.
 - 진행·성과·발견·History를 localStorage에 저장하지 않는다. BTJD 수치와 UTC 활동 시각은 `src/shared/types.ts`의 별도 타입으로 구분하며 기능별 API decoder에서 단위를 확인한다.
 
@@ -123,10 +125,13 @@ await api("/v1/posts", { method: "POST", json: input });
 
 P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보여준다. 접는 메뉴는 dialog·Tab 순환·Escape 닫기·원래 버튼 포커스 복귀를 유지했다.
 
-## 팀과 최종 확인할 항목
+## 팀원에게 전달할 내용
 
-1. 백지웅: 위 프론트 주소·ID·복귀 문맥으로 실제 A 컴포넌트를 연결할 수 있는지, 개별/일괄 공개 검토와 제출 결과 경로.
-2. 인증 담당: 실제 인증된 GET /me, CSRF 발급·전달·갱신, 요청 식별 응답 헤더. 실제 요청이 확보될 때 계약 테스트와 환경 설정을 확정.
-3. 배포 담당: Nginx API upstream, 직접 URL/새로고침, HTTPS 세션 및 쿠키 전달을 실제 배포 환경에서 확인.
+201에서 준비하는 것은 앱 실행·페이지 이동·현재 회원 조회·HTTP 요청의 공통 코드다. 지웅님에게 이 검증을 위해 새로운 분석 화면을 만들도록 요청하지 않는다.
 
-위 항목의 검토 요청을 문서로 준비했으며 메시지 발송·팀 승인·실제 연동을 대신 완료한 것으로 기록하지 않는다.
+1. 서진은 기존 MR !34와 위 파일별 사용 방법을 제공한다.
+2. 지웅님이 이미 작업 중인 프론트 브랜치/컴포넌트를 공유하면, 위 예제의 AnalysisPage import를 그 실제 경로로 바꾸고 main.tsx의 pages.analysis에 등록한다. 예제의 features/analysis/AnalysisPage 파일은 이 티켓에서 만든 실제 분석 구현이 아니다.
+3. 연결 화면에서 useSession()의 회원, usePageContext()의 TIC/History/원 글/returnTo를 사용한다. API는 src/api의 공통 api()를 사용한다.
+4. 같은 로그인 상태로 별지도 연결 자리 → 분석 화면 → 원래 주소 복귀, 분석 직접 URL·새로고침을 확인한다. 분석 기능 전체 완성은 이 연결 시험의 선행 조건이 아니다.
+
+서진님이 전달한 지웅님의 동의는 공통 사용 방향의 합의로 기록한다. 아직 실제 컴포넌트를 받아 연결 시험을 한 것으로 기록하지 않는다. 새 입력 API나 서버 추적 ID 구현을 공통 기반의 추가 선행으로 요구하지 않는다. 기능 API가 준비되면 해당 폼에서 오류 표시도 대조한다. 배포 주소·HTTPS·Safari의 남은 확인은 [인수 상태](ticket-201-readiness.md)에 남긴다.

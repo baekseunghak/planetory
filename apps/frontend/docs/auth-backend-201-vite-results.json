@@ -1,0 +1,77 @@
+{
+  "date": "2026-09-15T07:24:51.026Z",
+  "frontend": "201 worktree (uncommitted)",
+  "backend": "MR !42 / 1cf1cca",
+  "provider": "local synthetic SSAFY-shaped provider; NOT real SSAFY or Google login",
+  "intercepts": "none",
+  "results": [
+    {
+      "name": "Unauthenticated actual /me returns 401 and route is protected",
+      "passed": true
+    },
+    {
+      "name": "Actual CSRF endpoint returns header/token without frontend fixture",
+      "passed": true
+    },
+    {
+      "name": "MR42 backend exchanges test-provider code and supplies real DB-backed /me",
+      "passed": true
+    },
+    {
+      "name": "Login rotates the anonymous session ID",
+      "passed": true
+    },
+    {
+      "name": "Actual SESSION is HttpOnly, SameSite=Lax, local HTTP only",
+      "passed": true
+    },
+    {
+      "name": "JavaScript cannot read SESSION cookie",
+      "passed": true
+    },
+    {
+      "name": "Reload keeps actual authenticated identity in common layout",
+      "passed": true
+    },
+    {
+      "name": "Actual 403 propagates through common client and keeps auth",
+      "passed": true
+    },
+    {
+      "name": "Backend absence of request ID remains null for 403",
+      "passed": true
+    },
+    {
+      "name": "Actual 404 propagates through common client and keeps auth",
+      "passed": true
+    },
+    {
+      "name": "Backend absence of request ID remains null for 404",
+      "passed": true
+    },
+    {
+      "name": "Actual backend rejects authenticated logout without CSRF",
+      "passed": true
+    },
+    {
+      "name": "Pre-login CSRF cannot end the rotated authenticated session",
+      "passed": true
+    },
+    {
+      "name": "Common client gets fresh CSRF then sends logout exactly once and handles 204",
+      "passed": true
+    },
+    {
+      "name": "Actual post-logout 401 clears common member state",
+      "passed": true
+    },
+    {
+      "name": "Re-login returns the same DB member, not another first-signup identity",
+      "passed": true
+    },
+    {
+      "name": "No uncaught frontend errors",
+      "passed": true
+    }
+  ]
+}
