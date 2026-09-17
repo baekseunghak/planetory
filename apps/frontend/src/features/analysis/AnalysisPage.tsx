@@ -201,7 +201,7 @@ export function AnalysisPage() {
       ) : (
         <p role="alert">분석할 별을 선택해 주세요.</p>
       )}
-      <Link className="text-link" to={returnTo}>
+      <Link className="text-link" to={returnTo} tabIndex={0}>
         이전 화면으로
       </Link>
     </section>

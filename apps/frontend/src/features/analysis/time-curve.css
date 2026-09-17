@@ -97,6 +97,10 @@
   color: #dfbd81;
   pointer-events: none;
 }
+.analysis-time-sector span {
+  background: #0c1119;
+  padding-inline: 4px;
+}
 .analysis-time-gap-key {
   color: #dfbd81;
 }

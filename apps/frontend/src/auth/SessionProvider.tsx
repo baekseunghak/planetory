@@ -9,6 +9,10 @@ import {
 } from "react";
 import { ApiError, http } from "../api";
 import { readMember, type Member } from "./member";
+import {
+  activateDraftOwner,
+  clearSessionDrafts,
+} from "./session-draft-storage";
 
 type SessionState =
   | { status: "loading"; member: null; error: null }
@@ -32,6 +36,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const generation = useRef(0);
   const pending = useRef<AbortController | null>(null);
   const clear = useCallback(() => {
+    clearSessionDrafts();
     ++generation.current;
     pending.current?.abort();
     http.cancelPending();
@@ -49,6 +54,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await http.request<unknown>("/v1/me", { signal: controller.signal }),
       );
       if (id === generation.current && !controller.signal.aborted) {
+        activateDraftOwner(member.memberId);
         setRevision((v) => v + 1);
         setState({ status: "authenticated", member, error: null });
       }

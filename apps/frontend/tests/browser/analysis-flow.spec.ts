@@ -1,12 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // Traverse the actual Tab order; do not bypass unreachable controls with focus().
-async function tabTo(page: Page, target: Locator) {
+async function tabTo(page: Page, target: Locator, backwards = false) {
   await expect(target).toBeVisible();
   for (let i = 0; i < 100; i++) {
     if (await target.evaluate((node) => node === document.activeElement))
       return;
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(backwards ? "Shift+Tab" : "Tab");
   }
   throw new Error(
     `Keyboard could not reach ${(await target.getAttribute("aria-label")) ?? (await target.textContent())}`,
@@ -97,6 +97,7 @@ test("1024px keyboard journey reaches selection, judgment, review and return wit
   await tabTo(
     page,
     page.getByRole("button", { name: "한 간격 늘리기", exact: true }),
+    true,
   );
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(

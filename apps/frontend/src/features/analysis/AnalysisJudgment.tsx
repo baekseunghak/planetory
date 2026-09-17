@@ -7,7 +7,7 @@ import {
   judgments,
   validateJudgment,
   memoCodePoints,
-  PROVISIONAL_MEMO_LIMIT,
+  MEMO_LIMIT,
   type JudgmentDraft,
   type PeriodogramViewport,
 } from "./analysis-judgment";
@@ -216,8 +216,8 @@ export function AnalysisJudgment({
           />
           <p id={`${memoId}-hint`}>
             {memoCodePoints(state.judgment.memo).toLocaleString("ko-KR")} /{" "}
-            {PROVISIONAL_MEMO_LIMIT.toLocaleString("ko-KR")}자. 초안은
-            새로고침하거나 화면을 나가면 사라집니다.
+            {MEMO_LIMIT.toLocaleString("ko-KR")}자. 초안 저장 상태는 위의 분석
+            초안 안내에서 확인할 수 있습니다.
           </p>
           <div id={errorId} role="status">
             {enabled &&

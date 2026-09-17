@@ -275,7 +275,7 @@ export function TimeCurveChart({
                   width: `${percent(right) - percent(left)}%`,
                 }}
               >
-                Sector {segment.source.sector}
+                <span>Sector {segment.source.sector}</span>
               </div>
             );
           })}

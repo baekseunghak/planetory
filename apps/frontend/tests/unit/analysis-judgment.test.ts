@@ -29,9 +29,9 @@ const preview: PhasePreview = {
   selectionRulesVersion: "rules-1",
   pendingChecks: ["phase-coverage", "server-validation"],
 };
-test("provisional memo bound counts Unicode code points without truncating or trimming", () => {
-  const memo = "🌌".repeat(2000);
-  assert.equal(memoCodePoints(memo), 2000);
+test("memo bound counts Unicode code points without truncating or trimming", () => {
+  const memo = "🌌".repeat(200);
+  assert.equal(memoCodePoints(memo), 200);
   assert.deepEqual(
     validateJudgment({ ...emptyJudgment, userJudgment: "UNSURE", memo }),
     [],

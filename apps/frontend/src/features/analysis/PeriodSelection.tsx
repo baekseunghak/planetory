@@ -5,6 +5,7 @@ import type { AnalysisContext, CurveData } from "./analysis-data";
 import { FoldedCurvePanel } from "./FoldedCurvePanel";
 import { useAnalysisFold } from "./AnalysisSession";
 import { AnalysisJudgment, AnalysisSteps } from "./AnalysisJudgment";
+import { AnalysisDraftPersistence } from "./AnalysisDraftPersistence";
 import type { PeriodogramViewport } from "./analysis-judgment";
 import {
   choosePeriod,
@@ -190,6 +191,7 @@ export function PeriodSelectionWorkspace({
       };
       dispatch({ type: "begin", change: next, resetView });
       onPeriodChange?.(next);
+      return next;
     },
     [data, dispatch, onPeriodChange],
   );
@@ -215,6 +217,11 @@ export function PeriodSelectionWorkspace({
   return (
     <>
       <AnalysisSteps />
+      <AnalysisDraftPersistence
+        context={context}
+        data={data}
+        onRestore={(selection) => begin("reselect", selection)}
+      />
       <PeriodogramChart
         data={data}
         onSelect={select}

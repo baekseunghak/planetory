@@ -24,8 +24,8 @@ export const emptyJudgment: JudgmentDraft = {
   evidenceChecks: [],
   memo: "",
 };
-// Provisional UI bound from exploration-api-spec §6.1/D-12; backend agreement pending.
-export const PROVISIONAL_MEMO_LIMIT = 2000;
+// User-selected candidate memo bound; backend enforcement still needs integration.
+export const MEMO_LIMIT = 200;
 export const memoCodePoints = (memo: string) => Array.from(memo).length;
 export type PhasePreview = Extract<PhaseSelectionResult, { kind: "preview" }>;
 export type PeriodogramViewport = { minDays: number; maxDays: number };
@@ -70,11 +70,11 @@ export function validateJudgment(draft: JudgmentDraft): SelectionIssue[] {
       code: "INVALID_EVIDENCE",
       message: "근거는 홀짝 깊이, 2차 식, V·U형 중에서 선택해 주세요.",
     });
-  if (memoCodePoints(draft.memo) > PROVISIONAL_MEMO_LIMIT)
+  if (memoCodePoints(draft.memo) > MEMO_LIMIT)
     issues.push({
       field: "memo",
       code: "MEMO_TOO_LONG",
-      message: "메모를 2,000자 이내로 줄여 주세요.",
+      message: "메모를 200자 이내로 줄여 주세요.",
     });
   return issues;
 }

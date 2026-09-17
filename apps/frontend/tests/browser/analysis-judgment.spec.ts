@@ -20,26 +20,26 @@ async function review(page: Page) {
     .fill("홀짝 깊이를 확인했지만 판단이 어렵다. 🌌");
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
 }
-test("memo limit preserves pasted text, focuses its error, accepts 2000 Unicode code points", async ({
+test("memo limit preserves pasted text, focuses its error, accepts 200 Unicode code points", async ({
   page,
 }) => {
   await select(page);
   await page.getByRole("radio", { name: "모르겠음", exact: true }).check();
   const memo = page.getByLabel("메모 (선택)", { exact: true });
-  const value = "🌌".repeat(2000);
+  const value = "🌌".repeat(200);
   await memo.fill(value + "가");
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
   await expect(memo).toBeFocused();
   await expect(memo).toHaveValue(value + "가");
   await expect(
-    page.getByText("메모를 2,000자 이내로 줄여 주세요.", { exact: true }),
+    page.getByText("메모를 200자 이내로 줄여 주세요.", { exact: true }),
   ).toBeVisible();
   await memo.fill(value);
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
   await expect(page.getByTestId("candidate-review")).toBeVisible();
   await expect(page.locator(".analysis-memo-preview")).toHaveText(value);
 });
-test("cancelled range editing restores review; clear retains writing and reload clears the local draft", async ({
+test("cancelled range editing restores review; clear retains writing and reload awaits explicit draft restoration", async ({
   page,
 }) => {
   await select(page);
