@@ -15,13 +15,21 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.planetory.backend.domain.exploration.controller.AnalysisController;
 import com.planetory.backend.domain.exploration.service.AnalysisService;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.BundleSummary;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurrentCurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.FineTune;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.ProgressSummary;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Residual;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Segment;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.SelectionRules;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.StarSummary;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.TutorialState;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.error.GlobalExceptionHandler;
@@ -43,7 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 곡선·주기도의 HTTP 표현 [S15P21C206-140]. 상태 코드·헤더·JSON 모양만 본다. 조회 규칙은
+ * 분석 진입·곡선·주기도의 HTTP 표현 [S15P21C206-140]. 상태 코드·헤더·JSON 모양만 본다. 조회 규칙은
  * {@link AnalysisDataTest}가 본다.
  *
  * <p>컨트롤러만 띄운다. {@code @WebMvcTest} 슬라이스에는 Spring Security가 올라오지 않아
@@ -71,6 +79,43 @@ class AnalysisControllerTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void 분석_진입은_200과_현재_판_헤더로_나가고_복귀_안내는_있을_때만_싣는다() throws Exception {
+        when(analysis.context(anyLong(), anyLong())).thenReturn(new Answer<>(analysisContext(null), true, "b-2"));
+
+        mockMvc.perform(get("/api/v1/stars/123456789/analysis-context"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(AnalysisController.CURRENT_BUNDLE_HEADER, "b-2"))
+                .andExpect(jsonPath("$.bundle.observationBounds[1]").value(2570.12))
+                .andExpect(jsonPath("$.bundle.binningRevision").value("10m-v1"))
+                .andExpect(jsonPath("$.selectionRules.version").value("rule-3"))
+                .andExpect(jsonPath("$.selectionRules.fineTune.halfWidthCells").value(3))
+                .andExpect(jsonPath("$.currentCurveContext.removedCandidateIds[0]").value("c-401"))
+                .andExpect(jsonPath("$.currentCurveContext.notice").doesNotExist())
+                // 값이 없어도 필드는 남긴다. 빠지면 "없음"과 "모름"을 구분할 수 없다.
+                .andExpect(content().string(containsString("\"completionReason\":null")))
+                .andExpect(content().string(containsString("\"grade\":null")))
+                .andExpect(content().string(containsString("\"nextCurveContext\":null")))
+                .andExpect(content().string(containsString("\"tutorial\":{\"seq\":null,\"skipAvailable\":false}")));
+
+        when(analysis.context(anyLong(), anyLong())).thenReturn(
+                new Answer<>(analysisContext(CurrentCurveContext.STEP_NOT_RESTORABLE), true, "b-2"));
+        mockMvc.perform(get("/api/v1/stars/123456789/analysis-context"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentCurveContext.notice").value("STEP_NOT_RESTORABLE"));
+    }
+
+    private static AnalysisContext analysisContext(String notice) {
+        return new AnalysisContext("123456789", new StarSummary(3, List.of(14, 41, 54), 9.8), true,
+                new BundleSummary("b-2", "v7", null, 1683.4231, new BigDecimal("81.4"),
+                        new double[] {1683.35, 2570.12}, "rm-1", "pg-1", "10m-v1", "one_candidate_per_step"),
+                new SelectionRules("rule-3", 0.0139, 0.25, 3, false, new FineTune(3)),
+                new ProgressSummary("in_progress", 1, List.of("c-401"), null, false, 0, null),
+                new CurrentCurveContext("b-2", 1, List.of("c-401"), "rm-1", "pg-1", notice),
+                new Residual("COMPLETED", null, null), null, null,
+                new TutorialState(null, false), "rule-3");
     }
 
     @Test

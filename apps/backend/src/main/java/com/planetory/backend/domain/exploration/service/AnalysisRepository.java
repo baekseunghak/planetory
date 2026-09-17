@@ -1,6 +1,8 @@
 package com.planetory.backend.domain.exploration.service;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -46,5 +48,52 @@ public class AnalysisRepository {
                 .param("ticId", ticId)
                 .query(Long.class)
                 .list());
+    }
+
+    /**
+     * 마지막 제출이 쓴 제거 조합. 분석 복귀는 이 조합으로 돌아간다(5.1절). 제출이 없으면 비어 있다.
+     *
+     * <p>같은 시각이면 id가 큰 쪽이 최신이다.
+     */
+    public Optional<List<Long>> findLastSubmittedRemoval(long memberId, long ticId) {
+        return jdbc.sql("""
+                        SELECT removed_candidate_ids
+                          FROM submissions
+                         WHERE user_id = :memberId AND tic_id = :ticId
+                         ORDER BY created_at DESC, id DESC
+                         LIMIT 1
+                        """)
+                .param("memberId", memberId)
+                .param("ticId", ticId)
+                .query((rs, rowNum) -> List.of((Long[]) rs.getArray("removed_candidate_ids").getArray()))
+                .optional();
+    }
+
+    /**
+     * 튜토리얼 건너뛰기 판정 재료(SUB-12). 오답은 수치 불일치와 판단 불일치를 합해 센다(ERD 튜토리얼
+     * 건너뛰기 카운트).
+     */
+    public Mismatches countMismatches(long memberId, long ticId) {
+        return jdbc.sql("""
+                        SELECT count(*) AS total,
+                               COALESCE((array_agg(answer_viewed ORDER BY created_at DESC, id DESC))[1], false)
+                                   AS latest_answer_viewed
+                          FROM submissions
+                         WHERE user_id = :memberId AND tic_id = :ticId
+                           AND (match_result IN ('not_matched', 'none_wrong')
+                                OR (match_result IN ('matched', 'matched_harmonic')
+                                    AND achievement_result = 'judgment_mismatch'))
+                        """)
+                .param("memberId", memberId)
+                .param("ticId", ticId)
+                .query((rs, rowNum) -> new Mismatches(rs.getInt("total"), rs.getBoolean("latest_answer_viewed")))
+                .single();
+    }
+
+    /**
+     * @param total              오답 제출 수
+     * @param latestAnswerViewed 가장 최근 오답 제출에서 상세 보기를 거쳤는지. 건너뛰기는 해설을 본 뒤에만 연다
+     */
+    public record Mismatches(int total, boolean latestAnswerViewed) {
     }
 }

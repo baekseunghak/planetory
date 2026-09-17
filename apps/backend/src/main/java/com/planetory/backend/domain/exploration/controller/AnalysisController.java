@@ -12,13 +12,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.planetory.backend.domain.exploration.service.AnalysisService;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
 import com.planetory.backend.global.security.MemberPrincipal;
 
-/** 분석 화면의 곡선·주기도 (탐사 API 5.2·5.3) [S15P21C206-140]. */
+/** 분석 화면의 진입·곡선·주기도 (탐사 API 5.1·5.2·5.3) [S15P21C206-140]. */
 @RestController
 @RequiredArgsConstructor
 public class AnalysisController {
@@ -27,6 +28,16 @@ public class AnalysisController {
     public static final String CURRENT_BUNDLE_HEADER = "X-Current-Bundle";
 
     private final AnalysisService analysis;
+
+    @Operation(summary = "분석 진입",
+            description = "현재 판·선택 규칙·진행과 복귀·다음 곡선 문맥을 준다. 조회는 잔차 작업을 만들지 않는다."
+                    + " 마지막 제출의 제거 조합에 은퇴 후보가 있으면 현재 진행 문맥으로 바꾸고"
+                    + " currentCurveContext.notice=STEP_NOT_RESTORABLE.")
+    @GetMapping("/api/v1/stars/{ticId}/analysis-context")
+    public ResponseEntity<AnalysisContext> context(@AuthenticationPrincipal MemberPrincipal principal,
+                                                   @PathVariable long ticId) {
+        return respond(analysis.context(principal.memberId(), ticId));
+    }
 
     @Operation(summary = "곡선",
             description = "원본(curveStep=0)과 잔차 단계가 같은 세그먼트 형식이다. removed는 c-<id>를 쉼표로"

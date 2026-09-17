@@ -21,7 +21,10 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.planetory.backend.domain.exploration.service.AnalysisService;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurrentCurveContext;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.TutorialState;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
@@ -109,6 +112,191 @@ class AnalysisDataTest {
         match(memberId, smallerId);
         match(memberId, largerId);
         match(memberId, retiredId);
+    }
+
+    // ---------- 분석 진입 (5.1) ----------
+
+    @Test
+    void 분석_진입은_현재_판과_선택_규칙과_진행_문맥을_준다() {
+        OffsetDateTime publishedAt = OffsetDateTime.of(2026, 9, 9, 20, 0, 0, 0, ZoneOffset.UTC);
+        jdbc.update("UPDATE publication_bundles SET published_at = ? WHERE id = ?", publishedAt, currentBundleId);
+        insertObservation(41);
+        insertObservation(14);
+
+        Answer<AnalysisContext> answer = analysis.context(memberId, ticId);
+
+        assertTrue(answer.ready());
+        assertEquals("b-" + currentBundleId, answer.currentBundleId());
+        AnalysisContext context = answer.body();
+        assertEquals(String.valueOf(ticId), context.ticId());
+        assertEquals(2, context.star().sectorCount());
+        assertEquals(List.of(14, 41), context.star().sectors());
+        assertEquals(9.8, context.star().tmag());
+        assertFalse(context.hasConfirmedCandidate());
+
+        var bundle = context.bundle();
+        assertEquals("b-" + currentBundleId, bundle.bundleId());
+        assertTrue(bundle.bundleVersion().startsWith("pv1-"));
+        assertTrue(publishedAt.isEqual(bundle.publishedAt()));
+        assertEquals(1683.4231, bundle.foldReferenceTimeBtjd());
+        assertEquals(0, new BigDecimal("81.4").compareTo(bundle.baseDays()));
+        assertArrayEquals(new double[] {1683.35, 2419.99 + 2 * 10.0 / 1440.0}, bundle.observationBounds(),
+                "끝은 마지막 bin의 끝이다");
+        assertEquals("rm-1", bundle.residualModelVersion());
+        assertEquals("pg-1", bundle.periodogramConfigVersion());
+        assertEquals("10m-v1", bundle.binningRevision());
+        assertEquals("one_candidate_per_step", bundle.curveStepRule());
+
+        var rules = context.selectionRules();
+        assertEquals("rule-0", rules.version());
+        assertEquals(2 * 10.0 / 1440.0, rules.minWindowDays(), "10분 bin 케이던스의 2배");
+        assertEquals(0.25, rules.phaseWidthMax());
+        assertEquals(3.0, rules.maxDurationMultipleOfSuggested());
+        assertFalse(rules.allowEmptyPhaseSpan());
+        assertEquals(3, rules.fineTune().halfWidthCells());
+        assertEquals("rule-0", context.ruleVersion());
+
+        var progress = context.progress();
+        assertEquals("unexplored", progress.stage(), "진행 행이 없으면 시작 전이다");
+        assertEquals(0, progress.currentCurveStep());
+        assertEquals(List.of("c-" + smallerId, "c-" + largerId), progress.matchedCandidateIds(), "은퇴 후보는 빠진다");
+        assertNull(progress.completionReason());
+        assertFalse(progress.reopenPending());
+        assertEquals(0, progress.achievementCount());
+        assertNull(progress.grade());
+
+        // 마지막 제출이 원본 단계였으므로 원본으로 돌아간다.
+        CurrentCurveContext current = context.currentCurveContext();
+        assertEquals(0, current.curveStep());
+        assertEquals(List.of(), current.removedCandidateIds());
+        assertNull(current.notice());
+        assertEquals("COMPLETED", context.residualForCurrentStep().status());
+        assertEquals(2, context.nextCurveContext().curveStep());
+        assertEquals(List.of("c-" + smallerId, "c-" + largerId), context.nextCurveContext().removedCandidateIds());
+        assertEquals("b-" + currentBundleId, context.nextCurveContext().bundleId());
+        assertNull(context.residualForNextStep().status(), "조회는 작업을 만들지 않는다(D-14)");
+        assertNull(context.tutorial().seq());
+        assertFalse(context.tutorial().skipAvailable());
+    }
+
+    @Test
+    void 분석_복귀는_마지막_제출의_제거_조합으로_돌아간다() {
+        submit(memberId, List.of(smallerId), "not_matched", null, "none", false, 10);
+
+        AnalysisContext context = analysis.context(memberId, ticId).body();
+
+        CurrentCurveContext current = context.currentCurveContext();
+        assertEquals(1, current.curveStep());
+        assertEquals(List.of("c-" + smallerId), current.removedCandidateIds());
+        assertEquals("b-" + currentBundleId, current.bundleId(), "옛 판에서 한 제출이어도 현재 판 문맥이다");
+        assertNull(current.notice());
+        assertNull(context.residualForCurrentStep().status());
+        assertEquals(List.of("c-" + smallerId, "c-" + largerId), context.nextCurveContext().removedCandidateIds());
+    }
+
+    /** C02-R1: 옛 조합 {A,B}에서 B가 은퇴하면 {A}만 남기지 않고 현재 진행 {A,C}로 바꾼다. */
+    @Test
+    void 마지막_제출_조합에_은퇴_후보가_있으면_현재_진행_문맥으로_바꾸고_알린다() {
+        submit(memberId, List.of(smallerId, retiredId), "not_matched", null, "none", false, 10);
+
+        CurrentCurveContext current = analysis.context(memberId, ticId).body().currentCurveContext();
+
+        assertEquals(2, current.curveStep());
+        assertEquals(List.of("c-" + smallerId, "c-" + largerId), current.removedCandidateIds());
+        assertEquals(CurrentCurveContext.STEP_NOT_RESTORABLE, current.notice());
+    }
+
+    @Test
+    void 탐색_가능한_신호가_남지_않으면_다음_곡선이_없다() {
+        match(memberId, unmatchedId);
+        long undiscoverable = insertCandidate(null, "active");
+        jdbc.update("UPDATE candidates SET discoverable = false WHERE id = ?", undiscoverable);
+
+        AnalysisContext context = analysis.context(memberId, ticId).body();
+
+        assertNull(context.nextCurveContext(), "탐색할 수 없는 후보는 남은 신호가 아니다");
+        assertNull(context.residualForNextStep());
+    }
+
+    @Test
+    void 확정_후보는_현재_후보표의_활성_후보로만_알린다() {
+        jdbc.update("UPDATE candidates SET is_confirmed = true WHERE id = ?", retiredId);
+        assertFalse(analysis.context(memberId, ticId).body().hasConfirmedCandidate(), "은퇴한 확정 후보는 세지 않는다");
+
+        jdbc.update("UPDATE candidates SET is_confirmed = true WHERE id = ?", unmatchedId);
+        assertTrue(analysis.context(memberId, ticId).body().hasConfirmedCandidate(), "매칭 여부와 무관하다");
+    }
+
+    @Test
+    void 진행과_성과는_이_회원의_이_별_기록에서_온다() {
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, current_curve_step, reopen_pending)"
+                + " VALUES (?, ?, 'in_progress', 1, true)", memberId, ticId);
+        long recognizedBy = jdbc.queryForObject("SELECT id FROM submissions WHERE user_id = ? AND matched_candidate_id = ?",
+                Long.class, memberId, smallerId);
+        jdbc.update("INSERT INTO user_candidate_achievements(user_id, candidate_id, achievement_type,"
+                + " recognized_submission_id, recognized_at) VALUES (?, ?, 'unconfirmed', ?, now())",
+                memberId, smallerId, recognizedBy);
+
+        var progress = analysis.context(memberId, ticId).body().progress();
+
+        assertEquals("in_progress", progress.stage());
+        assertEquals(1, progress.currentCurveStep());
+        assertTrue(progress.reopenPending());
+        assertEquals(1, progress.achievementCount());
+        assertEquals("A", progress.grade());
+    }
+
+    /** SUB-12. 로컬 규칙(rule-0)의 기준은 오답 3회다. */
+    @Test
+    void 튜토리얼_별은_오답이_기준에_닿고_최근_오답의_해설을_봤을_때만_건너뛸_수_있다() {
+        jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (2, ?, 'fp', true)"
+                + " ON CONFLICT (seq) DO UPDATE SET tic_id = EXCLUDED.tic_id, active = true", ticId);
+        assertEquals(new TutorialState(2, false), analysis.context(memberId, ticId).body().tutorial());
+
+        submit(memberId, List.of(), "not_matched", null, "none", true, 10);
+        submit(memberId, List.of(), "not_matched", null, "none", true, 20);
+        assertFalse(analysis.context(memberId, ticId).body().tutorial().skipAvailable(), "오답 2회");
+
+        long latest = submit(memberId, List.of(), "matched", smallerId, "judgment_mismatch", false, 30);
+        assertFalse(analysis.context(memberId, ticId).body().tutorial().skipAvailable(),
+                "판단 불일치도 오답으로 세지만 가장 최근 오답의 해설을 보지 않았다");
+
+        jdbc.update("UPDATE submissions SET answer_viewed = true WHERE id = ?", latest);
+        assertTrue(analysis.context(memberId, ticId).body().tutorial().skipAvailable());
+
+        // 건너뛰기는 그 별을 완료 처리한다. 재개돼 진행 중이어도 한 번 완료했으면 열지 않는다.
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, completed_at)"
+                + " VALUES (?, ?, 'in_progress', now())", memberId, ticId);
+        assertFalse(analysis.context(memberId, ticId).body().tutorial().skipAvailable());
+    }
+
+    /** 9.3절 (b): 탐색할 수 없는 신호만 남은 별에 들어오면 성과 없이 완료하고 재개를 기다린다(AT-69). */
+    @Test
+    void 진입하면_탐색_불가능한_신호만_남은_진행_중인_별을_완료한다() {
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, current_curve_step)"
+                + " VALUES (?, ?, 'in_progress', 2)", memberId, ticId);
+        jdbc.update("UPDATE candidates SET discoverable = false WHERE id = ?", unmatchedId);
+
+        AnalysisContext context = analysis.context(memberId, ticId).body();
+
+        assertEquals("completed", context.progress().stage());
+        assertEquals("undiscoverable_only", context.progress().completionReason());
+        assertTrue(context.progress().reopenPending());
+        assertNull(context.nextCurveContext());
+        assertNotNull(jdbc.queryForObject("SELECT completed_at FROM user_star_progress WHERE user_id = ? AND tic_id = ?",
+                OffsetDateTime.class, memberId, ticId), "판정은 조회가 아니라 진행 행에 반영된다");
+    }
+
+    @Test
+    void 분석_진입도_미공개는_404_미발견은_403_현재_판이_없으면_503이다() {
+        long hidden = insertStar("hidden");
+        unlock(memberId, hidden);
+        long withoutCurrent = insertStar("published");
+        unlock(memberId, withoutCurrent);
+
+        assertCode(ErrorCode.STAR_NOT_PUBLISHED, () -> analysis.context(memberId, hidden));
+        assertCode(ErrorCode.STAR_LOCKED, () -> analysis.context(strangerId, ticId));
+        assertCode(ErrorCode.DEPENDENCY_UNAVAILABLE, () -> analysis.context(memberId, withoutCurrent));
     }
 
     // ---------- 원본 ----------
@@ -389,6 +577,27 @@ class AnalysisDataTest {
                         + " VALUES (COALESCE(?, nextval(pg_get_serial_sequence('candidates', 'id'))), ?, ?, ?, 1,"
                         + " 3.0, 1684.0, 2.0, 900, 10.0, '{}'::jsonb, true, false) RETURNING id",
                 Long.class, id, ticId, status, currentBundleId);
+    }
+
+    private void insertObservation(int sector) {
+        jdbc.update("INSERT INTO observation_datasets(tic_id, sector, start_btjd, end_btjd, cadence, source_version,"
+                + " time_system) VALUES (?, ?, 1683.0, 1710.0, '120s', 'spoc-test', 'BTJD')", ticId, sector);
+    }
+
+    /** 곡선 단계 제출. {@code secondsLater}로 시각을 뒤로 밀어 "마지막 제출"을 정한다. */
+    private long submit(long member, List<Long> removed, String matchResult, Long matchedCandidateId,
+                        String achievementResult, boolean answerViewed, int secondsLater) {
+        return jdbc.queryForObject("INSERT INTO submissions(user_id, tic_id, bundle_id, request_id, submission_kind,"
+                        + " curve_step, removed_candidate_ids, submitted_period, phase_start, phase_end,"
+                        + " fold_reference_time_btjd, user_judgment, evidence_checks, match_result,"
+                        + " matched_candidate_id, achievement_result, answer_viewed, created_at,"
+                        + " residual_model_version, periodogram_config_version, rule_version)"
+                        + " VALUES (?, ?, ?, ?::uuid, 'candidate', ?, ?, 3.0, 0.1, 0.2, 1683.4231,"
+                        + " 'LIKELY_PLANET', '[]'::jsonb, ?, ?, ?, ?, now() + make_interval(secs => ?),"
+                        + " 'rm-1', 'pg-1', 'rule-0') RETURNING id",
+                Long.class, member, ticId, archivedBundleId, UUID.randomUUID().toString(), removed.size(),
+                removed.toArray(new Long[0]), matchResult, matchedCandidateId, achievementResult, answerViewed,
+                secondsLater);
     }
 
     private void match(long member, long candidateId) {

@@ -6,11 +6,75 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * 분석 데이터 조회의 요청·응답 (탐사 API 2.1·5.2·5.3) [S15P21C206-140].
+ * 분석 데이터 조회의 요청·응답 (탐사 API 2.1·5.1·5.2·5.3) [S15P21C206-140].
  */
 public final class AnalysisViews {
 
     private AnalysisViews() {
+    }
+
+    /** 분석 진입 (5.1절). 화면이 판·단계·규칙을 한 번에 맞추는 기준이다. */
+    public record AnalysisContext(String ticId, StarSummary star, boolean hasConfirmedCandidate,
+                                  BundleSummary bundle, SelectionRules selectionRules, ProgressSummary progress,
+                                  CurrentCurveContext currentCurveContext, Residual residualForCurrentStep,
+                                  CurveContext nextCurveContext, Residual residualForNextStep,
+                                  TutorialState tutorial, String ruleVersion) {
+    }
+
+    /** 별 상세(4.2절)와 같은 값이다. */
+    public record StarSummary(int sectorCount, List<Integer> sectors, Double tmag) {
+    }
+
+    /**
+     * 현재 판.
+     *
+     * @param observationBounds {@code [세그먼트 시작의 최솟값, 세그먼트 마지막 bin 끝의 최댓값]}
+     * @param curveStepRule     곡선 단계 규칙. 한 단계가 매칭한 후보 하나를 더 제거한다
+     */
+    public record BundleSummary(String bundleId, String bundleVersion, OffsetDateTime publishedAt,
+                                double foldReferenceTimeBtjd, BigDecimal baseDays, double[] observationBounds,
+                                String residualModelVersion, String periodogramConfigVersion,
+                                String binningRevision, String curveStepRule) {
+    }
+
+    /**
+     * 위상 선택 규칙. {@code version}은 운영 규칙 버전이고, {@code minWindowDays}는 판 세그먼트의
+     * bin 크기, {@code fineTune}은 판 manifest에서 온다.
+     */
+    public record SelectionRules(String version, double minWindowDays, double phaseWidthMax,
+                                 double maxDurationMultipleOfSuggested, boolean allowEmptyPhaseSpan,
+                                 FineTune fineTune) {
+    }
+
+    public record FineTune(int halfWidthCells) {
+    }
+
+    /** 회원의 이 별 진행. 분석을 시작하지 않았으면 {@code unexplored}·0단계다. */
+    public record ProgressSummary(String stage, int currentCurveStep, List<String> matchedCandidateIds,
+                                  String completionReason, boolean reopenPending, int achievementCount,
+                                  String grade) {
+    }
+
+    /**
+     * 분석 복귀 문맥. 곡선 문맥과 같은 모양에 안내를 더한다.
+     *
+     * <p>마지막 제출의 제거 조합에 은퇴 후보가 있으면 현재 진행 문맥으로 바꾸고
+     * {@code notice}를 {@code STEP_NOT_RESTORABLE}로 둔다(C02-R1). 바꾸지 않았으면 필드를 뺀다.
+     */
+    public record CurrentCurveContext(String bundleId, int curveStep, List<String> removedCandidateIds,
+                                      String residualModelVersion, String periodogramConfigVersion,
+                                      @JsonInclude(JsonInclude.Include.NON_NULL) String notice) {
+
+        public static final String STEP_NOT_RESTORABLE = "STEP_NOT_RESTORABLE";
+
+        static CurrentCurveContext of(CurveContext context, String notice) {
+            return new CurrentCurveContext(context.bundleId(), context.curveStep(), context.removedCandidateIds(),
+                    context.residualModelVersion(), context.periodogramConfigVersion(), notice);
+        }
+    }
+
+    /** 튜토리얼 별이면 순번, 아니면 null. */
+    public record TutorialState(Integer seq, boolean skipAvailable) {
     }
 
     /**

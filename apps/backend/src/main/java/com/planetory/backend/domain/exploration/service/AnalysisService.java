@@ -2,37 +2,53 @@ package com.planetory.backend.domain.exploration.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.BundleSummary;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurrentCurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.FineTune;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.ProgressSummary;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Residual;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Segment;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.SelectionRules;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.StarSummary;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.TutorialState;
 import com.planetory.backend.domain.gold.GoldCatalogRepository;
 import com.planetory.backend.domain.gold.GoldCatalogViews;
 import com.planetory.backend.domain.gold.GoldCatalogViews.Bundle;
+import com.planetory.backend.domain.gold.GoldCatalogViews.Candidate;
 import com.planetory.backend.domain.gold.GoldCatalogViews.LightCurveSegment;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.error.ErrorResponse.FieldError;
 
 /**
- * 분석 화면의 곡선·주기도 조회 (탐사 API 5.2·5.3) [S15P21C206-140].
+ * 분석 진입과 곡선·주기도 조회 (탐사 API 5.1·5.2·5.3) [S15P21C206-140].
  *
- * <p>검사 순서는 5.1절과 같다: 공개된 별 → 회원이 연 별 → 현재 판. 그다음 요청 문맥을 현재 판과
- * 대조한다. 판·계산 버전이 다르면 제거 조합을 보기 전에 {@code BUNDLE_CHANGED}로 끝낸다. 어떤 후보를
- * 제거할 수 있는지는 현재 판에서만 뜻이 있다.
+ * <p>검사 순서는 5.1절과 같다: 공개된 별 → 회원이 연 별 → 현재 판. 곡선·주기도는 그다음 요청 문맥을
+ * 현재 판과 대조한다. 판·계산 버전이 다르면 제거 조합을 보기 전에 {@code BUNDLE_CHANGED}로 끝낸다.
+ * 어떤 후보를 제거할 수 있는지는 현재 판에서만 뜻이 있다.
  *
  * <p>현재 판과 배열을 한 스냅샷에서 읽는다. 따로 읽으면 그사이 판이 바뀌어 방금 확인한 판의 주기도
  * 행이 지워진 것처럼 보일 수 있다(판이 archived가 되면 주기도 행을 지운다, ERD).
@@ -43,12 +59,95 @@ public class AnalysisService {
 
     static final String FLUX_UNIT = "normalized";
 
+    /** 한 곡선 단계가 매칭한 후보 하나를 더 제거한다. 단계 수 = 제거 후보 수다(2.1절). */
+    static final String CURVE_STEP_RULE = "one_candidate_per_step";
+
+    /** 분석을 시작하지 않아 진행 행이 없을 때의 단계(DB 기본값과 같다). */
+    private static final String UNEXPLORED = "unexplored";
+    private static final String COMPLETED = "completed";
+
+    private static final double MINUTES_PER_DAY = 1440.0;
     private static final BigDecimal TWO = BigDecimal.valueOf(2);
 
     private final AnalysisRepository analysis;
     private final StarRepository stars;
     private final GoldCatalogRepository gold;
     private final ResidualResultReader residuals;
+    private final TutorialRepository tutorials;
+    private final OperationRuleRepository rules;
+    private final ExplorationCompletionService completion;
+    private final PlatformTransactionManager transactionManager;
+
+    /**
+     * 분석 진입 (5.1절). 진입 시 완료 판정을 반영한 뒤 판·선택 규칙·진행 문맥을 한 스냅샷에서 읽는다.
+     *
+     * <p>완료 판정(9.3절 (b))은 진행 행을 잠그고 바꾸므로 스냅샷 읽기와 트랜잭션을 나눈다. 스냅샷
+     * 격리에서 잠그면 같은 별에 동시에 제출한 트랜잭션과 부딪혀 직렬화 오류가 난다.
+     *
+     * <p>조회는 잔차 작업을 만들지 않는다(D-14). 복귀 문맥은 마지막 제출의 제거 조합이다. 그 조합에
+     * 은퇴 후보가 있으면 이 판에서 매칭한 활성 후보 전체로 바꾸고 알린다(C02-R1).
+     *
+     * @throws BusinessException 미공개 {@code STAR_NOT_PUBLISHED}, 미발견 {@code STAR_LOCKED},
+     *                           현재 판이나 현재 운영 규칙 없음 {@code DEPENDENCY_UNAVAILABLE}
+     */
+    public Answer<AnalysisContext> context(long memberId, long ticId) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            openCurrentBundle(memberId, ticId);
+            completion.evaluateAndApply(memberId, ticId);
+        });
+        TransactionTemplate snapshot = new TransactionTemplate(transactionManager);
+        snapshot.setReadOnly(true);
+        snapshot.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        return snapshot.execute(status -> readContext(memberId, ticId));
+    }
+
+    private Answer<AnalysisContext> readContext(long memberId, long ticId) {
+        Bundle bundle = openCurrentBundle(memberId, ticId);
+        OperationRule rule = rules.findCurrent()
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds());
+        if (segments.isEmpty()) {
+            throw new IllegalStateException(ExplorationIds.bundle(bundle.id())
+                    + "은 현재 판인데 세그먼트가 없습니다. 적재 계약이 어긋났습니다.");
+        }
+        List<Candidate> candidates = gold.findCandidates(ticId);
+        Set<Long> matched = new TreeSet<>(analysis.findMatchedActiveCandidateIds(memberId, ticId));
+
+        List<Long> lastRemoved = analysis.findLastSubmittedRemoval(memberId, ticId).orElse(List.of());
+        // 매칭은 누적되므로 조합에서 빠진 후보는 은퇴한 후보다.
+        boolean restorable = matched.containsAll(lastRemoved);
+        CurveContext current = contextOf(bundle, restorable ? lastRemoved : matched);
+        boolean signalLeft = candidates.stream().anyMatch(c -> c.status() == Candidate.Status.ACTIVE
+                && c.discoverable() && !matched.contains(c.id()));
+        CurveContext next = signalLeft ? contextOf(bundle, matched) : null;
+
+        StarViews.StarInfo star = stars.findStar(ticId).orElseThrow(() -> new IllegalStateException(
+                "공개된 별 " + ticId + "의 stars 행이 없습니다."));
+        StarViews.Progress progress = stars.findProgress(memberId, ticId).orElse(null);
+        int achievementCount = stars.countAchievements(memberId, ticId).count();
+
+        AnalysisContext body = new AnalysisContext(
+                String.valueOf(ticId),
+                new StarSummary(star.sectorCount(), star.sectors(), star.tmag()),
+                candidates.stream().anyMatch(c -> c.status() == Candidate.Status.ACTIVE && c.confirmed()),
+                bundleOf(bundle, segments),
+                selectionRulesOf(rule, bundle, segments),
+                new ProgressSummary(
+                        progress == null ? UNEXPLORED : progress.stage(),
+                        progress == null || progress.currentCurveStep() == null ? 0 : progress.currentCurveStep(),
+                        matched.stream().map(ExplorationIds::candidate).toList(),
+                        progress == null ? null : progress.completionReason(),
+                        progress != null && progress.reopenPending(),
+                        achievementCount,
+                        StarService.grade(achievementCount)),
+                CurrentCurveContext.of(current, restorable ? null : CurrentCurveContext.STEP_NOT_RESTORABLE),
+                residualStateOf(current),
+                next,
+                next == null ? null : residualStateOf(next),
+                tutorialOf(memberId, ticId, rule, progress),
+                rule.ruleVersion());
+        return new Answer<>(body, true, ExplorationIds.bundle(bundle.id()));
+    }
 
     /**
      * 곡선 (5.2절). 원본과 잔차 단계가 같은 형식이다.
@@ -109,22 +208,25 @@ public class AnalysisService {
         return target.answer(periodogramOf(target, original, residualOf(lookup), power), true);
     }
 
-    private Target resolve(long memberId, long ticId, CurveQuery query) {
+    /** 5.1절 검사 순서: 공개된 별 → 회원이 연 별 → 현재 판. */
+    private Bundle openCurrentBundle(long memberId, long ticId) {
         if (!analysis.isPublished(ticId)) {
             throw new BusinessException(ErrorCode.STAR_NOT_PUBLISHED);
         }
         if (!stars.hasUnlocked(memberId, ticId)) {
             throw new BusinessException(ErrorCode.STAR_LOCKED);
         }
-        Bundle bundle = gold.findCurrentBundle(ticId)
+        return gold.findCurrentBundle(ticId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+    }
+
+    private Target resolve(long memberId, long ticId, CurveQuery query) {
+        Bundle bundle = openCurrentBundle(memberId, ticId);
 
         Requested requested = Requested.parse(query);
-        String residualModelVersion = bundle.manifest().residualModelVersion();
-        String periodogramConfigVersion = bundle.manifest().periodogramConfigVersion();
         if (requested.bundleId() != bundle.id()
-                || differs(requested.residualModelVersion(), residualModelVersion)
-                || differs(requested.periodogramConfigVersion(), periodogramConfigVersion)) {
+                || differs(requested.residualModelVersion(), bundle.manifest().residualModelVersion())
+                || differs(requested.periodogramConfigVersion(), bundle.manifest().periodogramConfigVersion())) {
             throw new BusinessException(ErrorCode.BUNDLE_CHANGED,
                     Map.of("currentBundleId", ExplorationIds.bundle(bundle.id())));
         }
@@ -137,11 +239,14 @@ public class AnalysisService {
             // 매칭하지 않은 후보와 은퇴한 후보를 구분하지 않는다. 구분하면 미매칭 후보 ID가 드러난다.
             throw invalid("removed", "이 별에서 매칭한 활성 후보만 제거할 수 있습니다.");
         }
+        return new Target(bundle, contextOf(bundle, requested.removed()));
+    }
 
-        CurveContext context = new CurveContext(ExplorationIds.bundle(bundle.id()), requested.curveStep(),
-                requested.removed().stream().map(ExplorationIds::candidate).toList(),
-                residualModelVersion, periodogramConfigVersion);
-        return new Target(bundle, context);
+    /** 현재 판에서 이 후보들을 제거한 곡선 문맥. 제거 후보는 id 숫자 오름차순이다(2.1절). */
+    private static CurveContext contextOf(Bundle bundle, Collection<Long> removed) {
+        List<String> ids = new TreeSet<>(removed).stream().map(ExplorationIds::candidate).toList();
+        return new CurveContext(ExplorationIds.bundle(bundle.id()), ids.size(), ids,
+                bundle.manifest().residualModelVersion(), bundle.manifest().periodogramConfigVersion());
     }
 
     private static boolean differs(String requested, String current) {
@@ -151,6 +256,73 @@ public class AnalysisService {
     private static BusinessException invalid(String field, String reason) {
         return new BusinessException(ErrorCode.VALIDATION_FAILED, ErrorCode.VALIDATION_FAILED.getDefaultMessage(),
                 List.of(new FieldError(field, reason)));
+    }
+
+    /**
+     * 판 요약. 관측 범위의 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다.
+     *
+     * <p>한 판의 세그먼트는 비닝 규칙이 하나다(manifest {@code binning}). 여럿이면 적재 계약 위반이다.
+     */
+    private static BundleSummary bundleOf(Bundle bundle, List<LightCurveSegment> segments) {
+        double start = segments.stream().mapToDouble(LightCurveSegment::startBtjd).min().orElseThrow();
+        double end = segments.stream()
+                .mapToDouble(s -> s.startBtjd() + s.nPoints() * s.binMinutes().doubleValue() / MINUTES_PER_DAY)
+                .max().orElseThrow();
+        Set<String> revisions = segments.stream().map(LightCurveSegment::binningRevision)
+                .collect(Collectors.toCollection(TreeSet::new));
+        if (revisions.size() != 1) {
+            throw new IllegalStateException(ExplorationIds.bundle(bundle.id()) + "의 세그먼트 비닝 revision이 "
+                    + revisions + "로 하나가 아닙니다. 적재 계약이 어긋났습니다.");
+        }
+        return new BundleSummary(ExplorationIds.bundle(bundle.id()), bundle.bundleVersion(), bundle.publishedAt(),
+                bundle.foldReferenceTimeBtjd(), bundle.baseDays(), new double[] {start, end},
+                bundle.manifest().residualModelVersion(), bundle.manifest().periodogramConfigVersion(),
+                revisions.iterator().next(), CURVE_STEP_RULE);
+    }
+
+    /**
+     * 선택 규칙. 폭 상한과 빈 구간 허용은 운영 규칙, 최소 창과 미세 조정 폭은 판에서 온다.
+     *
+     * <p>최소 창은 제공 곡선 케이던스의 2배다(SRS 5.1). 제공 곡선의 케이던스는 bin 크기다
+     * (제출 매칭 규칙 v0 {@code minWindowDays}, S15P21C206-128).
+     */
+    private static SelectionRules selectionRulesOf(OperationRule rule, Bundle bundle,
+                                                   List<LightCurveSegment> segments) {
+        double minBinMinutes = segments.stream().map(LightCurveSegment::binMinutes)
+                .min(Comparator.naturalOrder()).orElseThrow().doubleValue();
+        JsonNode halfWidth = bundle.manifest().fineTune().get("half_width_cells");
+        if (halfWidth == null || !halfWidth.isIntegralNumber() || !halfWidth.canConvertToInt()
+                || halfWidth.intValue() < 0) {
+            throw new IllegalStateException(ExplorationIds.bundle(bundle.id())
+                    + "의 manifest.fine_tune.half_width_cells가 0 이상 정수가 아닙니다. 적재 계약이 어긋났습니다.");
+        }
+        OperationRule.Selection selection = rule.selection();
+        return new SelectionRules(rule.ruleVersion(), 2 * minBinMinutes / MINUTES_PER_DAY,
+                selection.phaseWidthMax(), selection.maxDurationMultipleOfSuggested(),
+                selection.allowEmptyPhaseSpan(), new FineTune(halfWidth.intValue()));
+    }
+
+    /**
+     * 튜토리얼 순번과 건너뛰기 가능 여부(SUB-12).
+     *
+     * <p>건너뛰기는 그 별을 완료 처리하므로 한 번이라도 완료한 튜토리얼 별은 건너뛸 수 없다. 재개돼도
+     * 튜토리얼 완료는 유지한다(9.3절, {@code TutorialRepository.EVER_COMPLETED}).
+     */
+    private TutorialState tutorialOf(long memberId, long ticId, OperationRule rule, StarViews.Progress progress) {
+        Integer seq = tutorials.findActiveSeq(ticId).orElse(null);
+        boolean everCompleted = progress != null
+                && (COMPLETED.equals(progress.stage()) || progress.completedAt() != null);
+        if (seq == null || !rule.tutorial().skipEnabled() || everCompleted) {
+            return new TutorialState(seq, false);
+        }
+        AnalysisRepository.Mismatches mismatches = analysis.countMismatches(memberId, ticId);
+        return new TutorialState(seq,
+                mismatches.total() >= rule.tutorial().skipAfter() && mismatches.latestAnswerViewed());
+    }
+
+    /** 원본 단계는 계산할 것이 없어 항상 완료다. */
+    private Residual residualStateOf(CurveContext context) {
+        return context.curveStep() == 0 ? Residual.ORIGINAL : residualOf(residuals.lookup(context));
     }
 
     /** 판이 참조하는 세그먼트를 섹터 순으로. 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다. */
