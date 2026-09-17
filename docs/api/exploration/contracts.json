@@ -666,7 +666,7 @@
               {
                 "segmentId": "seg-synthetic",
                 "sector": 14,
-                "binningRevision": 1,
+                "binningRevision": "10m-v1",
                 "startBtjd": 101,
                 "binMinutes": 10,
                 "nPoints": 3,
@@ -783,7 +783,7 @@
                 {
                   "segmentId": "seg-synthetic",
                   "sector": 14,
-                  "binningRevision": 1,
+                  "binningRevision": "10m-v1",
                   "startBtjd": 101,
                   "binMinutes": 10,
                   "nPoints": 3,

@@ -83,7 +83,9 @@
 | `SKIP_NOT_AVAILABLE` | 409 | 튜토리얼 건너뛰기 조건 미충족(SUB-12) |
 | `STAR_ALREADY_COMPLETED` | 409 | 완료된 별에 `no_candidate` 제출(SUB-11 (4)) |
 
-**현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다.
+**현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다. 구현은 5.2·5.3절 응답(200·202)부터 붙였고(`S15P21C206-140`), 나머지 API는 각 구현 때 붙인다.
+
+`BUNDLE_CHANGED` 본문은 공통 오류 본문에 `currentBundleId`를 더한다: `{"code": "BUNDLE_CHANGED", "message": "...", "currentBundleId": "b-3"}`.
 
 ### 2.4 잔차 상태 열거형
 
@@ -528,7 +530,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
     "bundleId": "b-2", "bundleVersion": "v7", "publishedAt": "2026-09-09T20:00:00Z",
     "foldReferenceTimeBtjd": 1683.4231, "baseDays": 81.4,
     "observationBounds": [1683.35, 2570.12],
-    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1", "binningRevision": 1,
+    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1", "binningRevision": "10m-v1",
     "curveStepRule": "one_candidate_per_step"
   },
   "selectionRules": {
@@ -554,6 +556,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 |---|---|
 | `bundle.bundleId` | DB `publication_bundles.id`를 `b-<id>` 문자열로 표현한다. 요청·응답·`X-Current-Bundle`에서 같은 값을 쓴다 |
 | `bundle.bundleVersion` | DB `bundle_version`과 같은 문자열이다. 숫자로 암묵 변환하지 않는다 |
+| `bundle.observationBounds` | `[세그먼트 startBtjd의 최솟값, 세그먼트별 startBtjd + nPoints × binMinutes / 1440의 최댓값]`. 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다(2026-09-17 결정) |
+| `bundle.binningRevision`, `segments[].binningRevision` | DB `binning_revision` 문자열 그대로(예: `"10m-v1"`). 숫자로 바꾸지 않는다([Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같다, 2026-09-17 결정) |
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
 | `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다. `version`은 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열이며 별도 `sel-N`은 두지 않는다. `phaseWidthMax`·`maxDurationMultipleOfSuggested`·`allowEmptyPhaseSpan`은 그 버전의 `values.selection`([운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)), `minWindowDays`는 별 케이던스, `fineTune`은 판 manifest에서 온다 |
 | `progress.currentCurveStep` | 회원의 `user_star_progress.current_curve_step` = **마지막 제출의 곡선 단계**. 제출 트랜잭션에서만 갱신하며 브라우저 저장소로 대체하지 않는다(NFR-19) |
@@ -574,6 +578,15 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 원본(`curveStep=0`, `removed` 없음)과 잔차 단계가 같은 형식이다. 히스토리 그래프(8.3절)·서비스 API의 첨부·공개 분석 그래프도 이 DTO를 쓴다.
 
+| 쿼리 | 규칙 |
+|---|---|
+| `bundleId` | 필수. `b-<id>` |
+| `curveStep` | 필수. 0 이상 정수. 중복을 없앤 제거 후보 수와 같아야 한다 |
+| `removed` | `c-<id>`를 쉼표로 잇거나(`removed=c-401,c-402`) 이름을 반복한다. 서버가 id 숫자 오름차순으로 정렬하고 중복을 없앤다. 원본은 생략한다 |
+| `residualModelVersion`, `periodogramConfigVersion` | 선택. 주면 현재 판 manifest와 대조해 다르면 `BUNDLE_CHANGED`(2.1절) |
+
+검사 순서: 공개된 별 → 회원이 연 별 → 현재 판(없으면 503) → 쿼리 형식(400) → 판·계산 버전 대조(409 `BUNDLE_CHANGED`) → 단계 수·제거 조합(400). 제거 가능 여부는 현재 판에서만 뜻이 있으므로 옛 판 요청은 제거 조합이 틀려도 `BUNDLE_CHANGED`가 먼저다. 제거 조합 오류는 매칭하지 않은 후보와 은퇴한 후보를 같은 사유로 알려 미매칭 후보 ID를 드러내지 않는다.
+
 ```json
 {
   "ticId": "123456789",
@@ -584,12 +597,12 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
   "residual": {"status": "COMPLETED", "jobId": "rj-77", "computedAt": "2026-09-10T02:31:10Z"},
   "fluxUnit": "normalized",
   "segments": [
-    {"segmentId": "seg-1", "sector": 14, "binningRevision": 1,
+    {"segmentId": "seg-1", "sector": 14, "binningRevision": "10m-v1",
      "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 3900,
      "flux": [1.0001, 0.9998, null, 1.0003],
      "fluxScatter": 0.0012,
      "gaps": [[120, 135], [2010, 2044]]},
-    {"segmentId": "seg-2", "sector": 41, "binningRevision": 1,
+    {"segmentId": "seg-2", "sector": 41, "binningRevision": "10m-v1",
      "startBtjd": 2419.99, "binMinutes": 10, "nPoints": 3820,
      "flux": [0.9999, 1.0002], "fluxScatter": 0.0011, "gaps": []}
   ]
@@ -608,9 +621,11 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
 
-**잔차가 준비되지 않았을 때:** 202 `CURVE_NOT_READY`, `segments: null`을 반환한다. 결과와 작업이 모두 없으면 `residual: {"status": null, "jobId": null}`로 미계산을 표시하며 폴링하지 않는다. 실제 작업이 있을 때만 해당 상태와 실제 jobId를 반환한다(예: `{"status":"QUEUED","jobId":"rj-78"}`). 조회는 작업을 자동 생성하지 않는다. 본인 탐사 화면에서는 기존 권한 검증을 거쳐 7.1절로 계산을 요청한다. `residual.status=FAILED`면 `failure` 객체를 포함한다.
+**원본의 잔차 상태:** `curveStep=0`이면 계산할 것이 없으므로 `residual`은 `{"status": "COMPLETED", "jobId": null}`로 고정한다. `computedAt`은 결과가 만들어진 시각이 있을 때만 넣는다.
 
-**실패:** `STAR_LOCKED`, `BUNDLE_CHANGED`, `removed`에 이 회원이 매칭하지 않은·은퇴한 후보가 있으면 400 `VALIDATION_FAILED`.
+**잔차가 준비되지 않았을 때:** 202 `CURVE_NOT_READY`, `segments: null`을 반환한다. 본문은 200과 같은 모양이고 `segments`만 null이다. 결과와 작업이 모두 없으면 `residual: {"status": null, "jobId": null}`로 미계산을 표시하며 폴링하지 않는다. 실제 작업이 있을 때만 해당 상태와 실제 jobId를 반환한다(예: `{"status":"QUEUED","jobId":"rj-78"}`). 조회는 작업을 자동 생성하지 않는다. 본인 탐사 화면에서는 기존 권한 검증을 거쳐 7.1절로 계산을 요청한다. `residual.status=FAILED`면 `failure` 객체를 포함한다. 잔차 결과·작업 상태 읽기는 온라인 잔차 작업(`S15P21C206-147`)이 구현하며, 그전까지 잔차 단계는 항상 미계산(`status: null`)이다.
+
+**실패:** `STAR_NOT_PUBLISHED`, `STAR_LOCKED`, 현재 판 없음 503 `DEPENDENCY_UNAVAILABLE`, `BUNDLE_CHANGED`, 쿼리 형식 오류·단계 수 불일치·`removed`에 이 회원이 매칭하지 않은·은퇴한 후보가 있으면 400 `VALIDATION_FAILED`(`fieldErrors`에 `bundleId`·`curveStep`·`removed`).
 
 ### 5.3 주기도
 
@@ -618,6 +633,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 ```json
 {
+  "bundleId": "b-2",
   "curveContext": {"bundleId": "b-2", "curveStep": 1, "removedCandidateIds": ["c-401"],
                    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
   "residual": {"status": "COMPLETED", "jobId": "rj-77"},
@@ -629,7 +645,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 - i번째 주기 = `periodMinDays × (periodMaxDays / periodMinDays)^(i / (nPeriods − 1))`. 격자 배열은 보내지 않는다(ERD `periodograms`).
 - `periodMaxDays`는 그 별 후보표 최장 주기의 1.15배, 최소 40일(EXP-04, AT-73). `baselineHalfDays`를 넘는 구간은 프론트가 "가려짐 2번 미만" 음영으로 표시한다.
-- 원본(`curveStep=0`)은 `periodograms` 행, 잔차 단계는 Redis 캐시. 없으면 5.2절과 같은 202.
+- `baselineHalfDays` = 판의 `baseDays / 2`. `gridRule`은 manifest `period_grid.spacing`이다. 최상위 `bundleId`는 [Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같게 둔다.
+- 원본(`curveStep=0`)은 `periodograms` 행, 잔차 단계는 잔차 결과이며 격자는 같다. 준비되지 않았으면 5.2절과 같은 202이고, 격자 정보(`periodMinDays`~`baselineHalfDays`)는 그대로 주고 `power`만 null이다.
+- 쿼리·검사 순서·실패·`X-Current-Bundle`은 5.2절과 같다.
 
 ### 5.4 봉우리와 미세 조정 범위 (Q06)
 
@@ -1317,6 +1335,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
 | 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 사용자 결정에 따라 은퇴 경로는 분석 복귀·재도전 `{A,C}`와 History CURRENT 원본으로, 기준 시각은 Bundle 공통값으로, duration 상한은 사용자가 고른 봉우리의 추천값 3배로 확정하고 SRS·ERD·API·정적 JSON 예제를 함께 갱신 |
 | 2026-09-17 | S15P21C206-139 구현 반영. 4.3절에 완료 수·챌린지 자격의 공통 판정, 진행 회차가 없을 때의 빈 챌린지 형태, 조회가 별을 열지 않음, `reopened` 조건·정렬과 `newDiscoverableCount` null(S15P21C206-150 전까지)을 명시. 9.4절에 이미 열린 별은 순번·version을 바꾸지 않음, 튜토리얼 완료 후처리의 호출 위치·다음 순번 미설정 시 503, 회차 전환을 주기 실행 대신 운영자 전용 명령으로 실행함을 명시하고 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md)을 연결. 튜토리얼 완료를 한 번 완료하면 유지(재개돼도 `completed_at`으로 판정)로 정하고 4.3·9.3·11.1절에 반영. 챌린지 빨간 느낌표를 발견 경로 대신 퀘스트 `challenge.ticId` 기준으로 바꾸고 4.1절 `marker`에서 `challenge`를 제거, 대상 별을 이미 발견한 회원은 경로를 새로 기록하지 않음을 9.4절에 추가(서비스 F17-Q2 제안). 12.2 미결 12는 백승학 확인 전이라 유지 |
+| 2026-09-17 | S15P21C206-140 5.2·5.3절 구현 반영. 쿼리 표(필수·`removed` 쉼표/반복·선택 계산 버전)와 검사 순서(형식 400 → 판 변경 409 → 제거 조합 400)를 명시하고, 원본의 `residual` 고정값, 202 본문이 같은 모양에 배열만 null임, 주기도 최상위 `bundleId`·`baselineHalfDays = baseDays / 2`, `BUNDLE_CHANGED` 본문의 `currentBundleId`, `X-Current-Bundle` 적용 범위를 적었다. 사용자 결정으로 `binningRevision`을 문자열(`"10m-v1"`)로 통일하고 5.1절 `observationBounds` 끝을 마지막 bin의 끝으로 정했다. 5.1절 분석 진입은 운영 규칙 읽기(`S15P21C206-151`) 뒤 구현한다 |
 | 2026-09-17 | S15P21C206-149 구현 반영. 9.3절 완료 판정에 활성 후보 수를 추가해 무신호 별과 모든 후보를 찾은 별을 구분하고, `current` 판이 없으면 완료하지 않으며 판 전환 뒤에도 회원의 누적 후보 매칭을 인정한다. 재완료 시 최초 `completed_at`을 보존하며 완료 판정 함수 자체는 성과·별 열림을 만들지 않고 `no_candidate` 제출에서는 호출하지 않는다. |
 | 2026-09-17 | S15P21C206-151 구현 반영. 5.1절 `selectionRules.version`을 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열로 통일하고(별도 `sel-N` 없음, S15P21C206-128 합의) 각 값의 출처(규칙 버전·별 케이던스·판 manifest)를 명시. 12.2 미결 4·5의 값 저장 형식을 운영 규칙 형식 1로 고정하고 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)을 연결. 값 자체는 미결 유지 |
 
