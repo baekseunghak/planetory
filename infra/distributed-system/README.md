@@ -11,11 +11,11 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 
 | 대상 | 기준 | 상태 |
 | --- | --- | --- |
-| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1~6 설치·정지 상태 검증 완료, HDFS 초기화 전 |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | QJM 3개·Active/Standby·DataNode 5개·RF2 런타임 검증 완료 |
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
 | Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
 
-2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. HDFS 데몬 시작·NameNode 초기화·RF2 표본 검증은 아직 수행하지 않았다.
+2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다.
 
 Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
 
@@ -68,10 +68,12 @@ sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc
 
 Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최초 초기화를 포함한다. 설치 구현은 [Hadoop 3.5.0 Cluster Setup](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-common/ClusterSetup.html), [QJM HA](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)와 [Apache 공식 배포본](https://downloads.apache.org/hadoop/common/hadoop-3.5.0/)을 기준으로 하며, 노드 역할과 저장 경로는 이 저장소의 설정을 따른다.
 
-구현 파일은 다음 둘이다.
+구현 파일은 다음 넷이다.
 
 - [install-hdfs-host.sh](scripts/install-hdfs-host.sh): 단일 노드의 사전 검사·설치·권한·systemd unit 생성을 담당한다.
 - [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): tailnet 노드·Linux 계정·호스트명을 검증하고 `tailscale ssh`와 MagicDNS 경유 `scp`로 Linux 스크립트를 호출한다.
+- [initialize-hdfs-ha.ps1](scripts/initialize-hdfs-ha.ps1): 방화벽·QJM·포맷·Standby bootstrap·DataNode·Active 전환·RF2 검증을 한 단계씩 실행하고 각 단계의 상태·포트·로그를 확인한다.
+- [test-initialize-hdfs-ha.ps1](scripts/test-initialize-hdfs-ha.ps1): 초기화 단계와 포맷 보호 장치를 원격 변경 없이 검사한다.
 
 설치 스크립트는 다음 순서와 중단 조건을 지킨다.
 
@@ -95,7 +97,7 @@ Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최�
 
 이 설치 자동화에는 `hdfs namenode -format`, `-bootstrapStandby`, `-initializeSharedEdits`, 데몬 시작, 영속 경로 삭제를 넣지 않는다. 최초 format과 Standby bootstrap은 아래 초기화 절차에서 대상과 빈 클러스터 여부를 다시 확인한 뒤 별도로 수행한다.
 
-네트워크는 `S15P21C206-71`에서 만든 VPC Peering·방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 방화벽, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. HDFS 포트 연결은 데몬을 시작한 뒤 별도 검증한다.
+네트워크는 `S15P21C206-71`에서 만든 VPC Peering·GCP 방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. 호스트 UFW의 역할별 HDFS 규칙과 실제 포트 연결은 초기화 스크립트가 데몬 시작 단계와 분리해 적용·검증한다.
 
 Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1 Docker는 현재 Spark 제출 컨테이너를 사용하는 `S15P21C206-73` 착수 전에 필요하고, Node 2~6 Docker는 수집 컨테이너를 실제 배포할 때 필요하다. 2026-09-17 Jira 조회 기준으로 두 설치 책임을 명시한 별도 Task는 없으므로, 각 작업 착수 전에 기존 Task에 포함할지 별도 Task로 분리할지 확정한다. 확정 전에는 Docker 설치를 72번 완료 증거로 계산하지 않는다.
 
@@ -151,43 +153,35 @@ ZooKeeper와 ZKFC는 사용하지 않는다. HDFS는 QJM을 사용하되 전환�
 
 ## 최초 HDFS HA 초기화
 
-다음 명령은 **빈 신규 클러스터에서 한 번만**, Hadoop 3.5.0·OpenJDK 17 설치, 설정 배치와 디스크 권한 준비 후 `hdfs` 계정으로 실행한다. 설치·설정 자동화에 format을 포함하지 않으며, 기존 NameNode를 다시 포맷하면 HDFS 메타데이터가 사라지므로 실행 직전에 대상과 빈 클러스터 여부를 다시 승인받는다.
+초기화는 [initialize-hdfs-ha.ps1](scripts/initialize-hdfs-ha.ps1)로 한 단계씩 실행한다. 각 단계는 6대 tailnet 대상과 실제 호스트명을 먼저 확인하고, 실패하면 다음 단계를 실행하지 않는다. `FormatActive`는 **빈 신규 클러스터에서 한 번만** 실행하며 기존 NameNode를 다시 포맷하면 메타데이터가 사라지므로 실행 직전에 별도 승인과 `-ApproveFormat`이 필요하다.
 
-1. Node 1~3에서 JournalNode를 시작한다.
+```powershell
+$Init = '.\infra\distributed-system\scripts\initialize-hdfs-ha.ps1'
 
-```bash
-sudo systemctl start hadoop-hdfs-journalnode
+& $Init -Step Preflight
+& $Init -Step NetworkDiagnostics
+& $Init -Step ConfigureFirewall
+& $Init -Step JournalNodes
+& $Init -Step FormatActive -ApproveFormat
+& $Init -Step BootstrapStandby
+& $Init -Step DataNodes
+& $Init -Step Activate
+& $Init -Step ValidateRf2
+& $Init -Step FinalAudit
 ```
 
-2. Node 1에서 Active NameNode를 초기화하고 시작한다.
+`ConfigureFirewall`은 UFW의 기본 incoming deny와 기존 SSH 규칙을 유지하면서 아래 사설 IP·역할 포트만 허용한다.
 
-```bash
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs namenode -format planetory
-sudo systemctl start hadoop-hdfs-namenode
-```
+| 대상 | 허용 출발지 | TCP 포트 |
+| --- | --- | --- |
+| Node 1 | `10.20.1.10`~`10.20.6.10`의 정확한 6개 IP | `8020,8485,9870` |
+| Node 2 | 동일 | `8020,8485,9870,9864,9866,9867` |
+| Node 3 | 동일 | `8485,9864,9866,9867` |
+| Node 4~6 | 동일 | `9864,9866,9867` |
 
-3. Node 2에서 Standby를 bootstrap하고 시작한다.
+2026-09-17 최초 실행에서는 UFW가 22번만 허용해 QJM 8485 연결이 차단됐다. 역할별 규칙을 추가한 뒤 3개 endpoint 연결을 재검증했다. 포맷은 성공했지만 관리자 계정이 `hdfs` 전용 `VERSION` 경로를 검사해 후속 시작이 중단됐으므로, 검사에 `sudo test`를 적용하고 재포맷 없이 시작만 재개하는 `StartFormattedActive` 복구 단계를 추가했다. 이 단계는 포맷 성공과 NameNode 미시작을 확인한 경우에만 사용한다.
 
-```bash
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs namenode -bootstrapStandby
-sudo systemctl start hadoop-hdfs-namenode
-```
-
-4. Node 2~6에서 DataNode를 시작한다.
-
-```bash
-sudo systemctl start hadoop-hdfs-datanode
-```
-
-5. 두 NameNode가 Standby로 시작하므로 Node 1에서 safemode 해제를 기다린 후 최초 Active를 지정한다. 기존 데이터가 있는데 safemode가 끝나지 않으면 원인을 확인하며 강제 해제하지 않는다.
-
-```bash
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfsadmin -fs hdfs://master-1:8020 -safemode wait
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn1
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -getServiceState nn1
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -getServiceState nn2
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfsadmin -report
-```
+현재 HDFS unit은 실행 중이지만 부팅 자동 시작은 활성화하지 않았다. 재부팅 후에는 JournalNode·NameNode·DataNode를 순서대로 시작하고 두 NameNode가 올라온 뒤 기존 Active가 없음을 확인해 수동 전환해야 한다.
 
 ## HDFS 완료 검증
 
@@ -202,6 +196,8 @@ sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfsadmin -repo
 - 업로드 전과 다운로드 후 SHA-256 일치 및 `hdfs dfs -checksum <표본 경로>` 성공
 
 표본은 `/validation/S15P21C206-72/` 아래에 두고 검증 결과와 함께 제거 여부를 결정한다. 자동 장애 전환, Worker 장애와 수동 NameNode 전환은 이 초기화 완료 조건에 포함하지 않는다.
+
+2026-09-17 검증 표본 `/validation/S15P21C206-72/run-20260917T161435/sample.txt`는 SHA-256 `45d305da54016d35f10f62f0c45d50bb5f7769f2fa16d94f32c8d512941b8c50`로 업로드 전·다운로드 후가 일치했다. RF2 블록은 `worker-5`, `worker-6`에 저장됐고 최종 FSCK는 `HEALTHY`, missing·corrupt·under-replicated block은 모두 0이었다.
 
 ## YARN 최초 시작 (`S15P21C206-73`)
 

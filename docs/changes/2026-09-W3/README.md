@@ -40,3 +40,4 @@
 | 2026-09-17 | Hadoop 3.5.0·OpenJDK 17 HDFS 기준과 72·73번 실행 경계 정합화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, QJM, RF2, Spark 3.5.5, Hadoop client 3.3.4 | 설치 기준 확정·구현 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | HDFS 호스트 설치와 tailnet 노드 호출 자동화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, SHA-512, hdfs, systemd, tailnet, canary, WhatIf | 구현·Node 1~6 설치 검증 완료, 초기화 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | GCP 운영 접속을 tailnet 기본 경로로 전환 | S15P21C206-71 | Tailscale SSH, tailnet, MagicDNS, scp, GCP 비상 복구, HDFS 설치 | 구현·실환경 접속 검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | HDFS HA 초기화와 RF2 실환경 검증 | S15P21C206-72 | UFW, QJM, Active, Standby, DataNode 5개, RF2, checksum, fsck | 검증 완료 | [2026-09-17](2026-09-17.md) |
