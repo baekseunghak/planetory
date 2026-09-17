@@ -118,7 +118,6 @@ export function FoldedCurvePanel({
           />
         </PhaseSelectionProvider>
       ) : null}
-      <p>판단·제출은 다음 단계에서 연결합니다.</p>
     </section>
   );
 }

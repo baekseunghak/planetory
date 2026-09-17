@@ -4,6 +4,8 @@ import { PeriodogramChart } from "./PeriodogramChart";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { FoldedCurvePanel } from "./FoldedCurvePanel";
 import { useAnalysisFold } from "./AnalysisSession";
+import { AnalysisJudgment, AnalysisSteps } from "./AnalysisJudgment";
+import type { PeriodogramViewport } from "./analysis-judgment";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -166,6 +168,13 @@ export function PeriodSelectionWorkspace({
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
   const session = useAnalysisFold();
+  const viewport = useRef<PeriodogramViewport>({
+    minDays: data.periodogram.periodMinDays,
+    maxDays: data.periodogram.periodMaxDays,
+  });
+  const trackViewport = useCallback((next: PeriodogramViewport) => {
+    viewport.current = next;
+  }, []);
   const { state, dispatch } = session;
   const change = state.change;
   const revision = useRef(0);
@@ -205,10 +214,12 @@ export function PeriodSelectionWorkspace({
   };
   return (
     <>
+      <AnalysisSteps />
       <PeriodogramChart
         data={data}
         onSelect={select}
         selectedPeriod={change?.selection.periodDays ?? null}
+        onViewportChange={trackViewport}
       />
       <section className="period-selection" aria-label="선택 주기">
         <h3>선택 주기</h3>
@@ -240,6 +251,10 @@ export function PeriodSelectionWorkspace({
         onRetry={retry}
         context={context}
         periodogram={data}
+      />
+      <AnalysisJudgment
+        context={context}
+        getViewport={() => viewport.current}
       />
     </>
   );

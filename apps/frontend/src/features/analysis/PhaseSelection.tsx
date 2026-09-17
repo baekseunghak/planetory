@@ -59,6 +59,8 @@ function useSelectionModel(
       dragging: !finish,
       committed: finish ? range : previous.committed,
       committedPreview: finish ? result : previous.committedPreview,
+      confirmed: finish ? null : previous.confirmed,
+      review: finish ? null : previous.review,
       message: !finish
         ? previous.message
         : result?.kind === "invalid"
@@ -139,7 +141,9 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
         <button
           type="button"
           disabled={!enabled || !state.range}
-          onClick={() => setState(empty)}
+          onClick={() =>
+            setState((previous) => ({ ...empty, judgment: previous.judgment }))
+          }
         >
           구간 지우기
         </button>

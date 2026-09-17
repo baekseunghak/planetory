@@ -11,6 +11,7 @@ import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
 import type { PeriodogramLoad } from "./load-periodogram";
 import type { CandidatePeaks } from "./periodogram-data";
 import type { PeriodChoice } from "./period-selection";
+import type { PeriodogramViewport } from "./analysis-judgment";
 import {
   buildPeriodPlot,
   clampPeriodView,
@@ -101,10 +102,12 @@ export function PeriodogramChart({
   data,
   onSelect,
   selectedPeriod,
+  onViewportChange,
 }: {
   data: Extract<PeriodogramLoad, { kind: "ready" }>;
   onSelect: (choice: PeriodChoice) => void;
   selectedPeriod: number | null;
+  onViewportChange?: (viewport: PeriodogramViewport) => void;
 }) {
   const { periodogram, candidates } = data;
   const model = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
@@ -113,6 +116,13 @@ export function PeriodogramChart({
     [candidates],
   );
   const [view, setView] = useState<PeriodView>(FULL_PERIOD_VIEW);
+  useEffect(() => {
+    const { low, high } = periodViewBounds(view);
+    onViewportChange?.({
+      minDays: periodAtFraction(periodogram, low),
+      maxDays: periodAtFraction(periodogram, high),
+    });
+  }, [view, periodogram, onViewportChange]);
   const [inspection, setInspection] = useState<number | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [picking, setPicking] = useState(false);

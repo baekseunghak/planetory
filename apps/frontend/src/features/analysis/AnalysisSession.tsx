@@ -4,6 +4,12 @@ import type { AnalysisContext, CurveData } from "./analysis-data";
 import type { PhaseRange, PhaseSelectionResult } from "./phase-selection";
 import type { PeriodSelectionChange } from "./period-selection";
 import { useFoldSession } from "./use-fold-session";
+import {
+  emptyJudgment,
+  type JudgmentDraft,
+  type CandidateReview,
+  type PhasePreview,
+} from "./analysis-judgment";
 
 export type PhaseDraft = {
   range: PhaseRange | null;
@@ -13,6 +19,9 @@ export type PhaseDraft = {
   dragging: boolean;
   message: string;
   focus: number;
+  judgment: JudgmentDraft;
+  confirmed: PhasePreview | null;
+  review: CandidateReview | null;
 };
 export const emptyPhaseDraft: PhaseDraft = {
   range: null,
@@ -22,6 +31,9 @@ export const emptyPhaseDraft: PhaseDraft = {
   dragging: false,
   message: "",
   focus: 0,
+  judgment: emptyJudgment,
+  confirmed: null,
+  review: null,
 };
 const FoldContext = createContext<ReturnType<typeof useFoldSession> | null>(
   null,
