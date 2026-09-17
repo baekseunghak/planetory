@@ -1,4 +1,5 @@
 import { ApiError, createApiClient } from "./client";
+import { readCsrfHeaders } from "./csrf";
 
 const env = import.meta.env;
 const header = env.VITE_CSRF_HEADER?.trim();
@@ -22,7 +23,17 @@ export const http = createApiClient({
             );
           return { [header]: decodeURIComponent(token) };
         }
-      : undefined,
+      : async (signal) => {
+          if (header || cookie)
+            throw new ApiError(
+              0,
+              "CSRF_NOT_CONFIGURED",
+              "인증 연결 설정을 확인해 주세요.",
+            );
+          return readCsrfHeaders(
+            await http.request<unknown>("/v1/auth/csrf", { signal }),
+          );
+        },
 });
 export const api = http.request;
 export { ApiError } from "./client";

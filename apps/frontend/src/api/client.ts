@@ -19,7 +19,7 @@ type ClientOptions = {
   baseUrl: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
-  csrfHeaders?: () => HeadersInit;
+  csrfHeaders?: (signal: AbortSignal) => HeadersInit | Promise<HeadersInit>;
   requestIdHeader?: string;
 };
 const record = (value: unknown): Record<string, unknown> =>
@@ -51,20 +51,6 @@ export function createApiClient(config: ClientOptions) {
     const localRequestId = crypto.randomUUID();
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
-    if (writing) {
-      if (!config.csrfHeaders)
-        throw new ApiError(
-          0,
-          "CSRF_NOT_CONFIGURED",
-          "인증 연결이 아직 준비되지 않았습니다.",
-          [],
-          null,
-          localRequestId,
-        );
-      new Headers(config.csrfHeaders()).forEach((value, key) =>
-        headers.set(key, value),
-      );
-    }
     const { json, ...fetchOptions } = options;
     if (json !== undefined && options.body != null)
       throw new Error("json과 body는 함께 보낼 수 없습니다.");
@@ -84,6 +70,23 @@ export function createApiClient(config: ClientOptions) {
     }, config.timeoutMs ?? 15000);
     try {
       controller.signal.throwIfAborted();
+      if (writing) {
+        if (!config.csrfHeaders)
+          throw new ApiError(
+            0,
+            "CSRF_NOT_CONFIGURED",
+            "인증 연결이 아직 준비되지 않았습니다.",
+            [],
+            null,
+            localRequestId,
+          );
+        // Keep acquisition inside the same cancellation/timeout boundary. A
+        // logout/account change while waiting must never dispatch the write.
+        new Headers(await config.csrfHeaders(controller.signal)).forEach(
+          (value, key) => headers.set(key, value),
+        );
+        controller.signal.throwIfAborted();
+      }
       dispatched = true;
       const response = await (config.fetch ?? fetch)(
         config.baseUrl.replace(/\/$/, "") + path,
