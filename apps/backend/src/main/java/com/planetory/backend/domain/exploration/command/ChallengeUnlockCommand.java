@@ -18,7 +18,8 @@ import com.planetory.backend.domain.exploration.service.TutorialProgressService;
  * 주기 실행 대신 전용 명령으로 둔다. 여러 번 실행해도 회원마다 한 번만 열린다. 실행 절차는
  * docs/operations/challenge-round-runbook.md를 따른다.
  *
- * <p>종료 코드: 0 처리 완료, 2 진행 회차 없음, 1 처리 중 오류.
+ * <p>종료 코드: 0 처리 완료, 2 진행 회차 없음, 1 처리 중 오류. 명령 이름이 틀리면 이 빈이 뜨지 않으므로
+ * {@link PlanetoryApplication}이 스프링을 띄우기 전에 64로 끝낸다.
  */
 @Slf4j
 @Component
