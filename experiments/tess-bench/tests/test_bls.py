@@ -190,3 +190,37 @@ def test_gate_table_residual_peaks_on_real_none_curves():
     assert by["snr>=7"]["false_peaks_per_noise_curve"] == 0.5
     assert by["snr>=7&sde>=6"]["residual_peaks_per_real_curve"] == 1.0  # SDE 를 더하면 제거 잔여(SNR 50, SDE 30) 만 남는다
     assert by["snr>=7&sde>=6"]["false_peaks_per_noise_curve"] == 0.5 and by["snr>=7&sde>=6"]["gated_recovery"] == 1.0
+
+
+def _mrow(setting, star, group, P, D, dp, match, in_range="true"):
+    return {"setting_id": setting, "baseline_id": f"{star}-realclean", "group_id": group, "match": match, "matched_rank": 1,
+            "period_rel_err": 0.0, "epoch_cyclic_err_hours": 0.0, "duration_ratio": 1.0, "depth_ratio": 1.0,
+            "period_days": P, "duration_hours": D, "depth_ppm": dp, "in_search_range": in_range}
+
+
+def test_summarize_bins_exclude_out_of_range():
+    rows = [_mrow("s", "a", "g1", 1.0, 2.0, 1000, "direct"), _mrow("s", "a", "g2", 20.0, 2.0, 1000, "missed", in_range="false")]
+    s = bls_match.summarize_matches(rows)
+    assert s["direct_period_<2d"] == 1.0 and "direct_period_>=10d" not in s      # 범위 밖 20일은 구간표에서 제외
+    assert s["direct_recovery"] == 0.5 and s["direct_recovery_in_range"] == 1.0
+
+
+def test_report_tables_separate_pairs_and_check_marginals():
+    rows = []
+    for star in ("a", "b"):
+        for sid in ("poc_linear20k", "linear50k"):
+            rows += [_mrow(sid, star, "s1", 1.0, 0.5, 500, "direct" if sid == "linear50k" else "missed"),
+                     _mrow(sid, star, "s2", 5.0, 2.0, 3000, "direct"),
+                     _mrow(sid, star, "s3", 20.0, 8.0, 10000, "missed", in_range="false"),        # 범위 밖 → 제외
+                     _mrow(sid, star, "pair1", 2.0, 2.0, 3000, "direct"),                          # 쌍(같은 group 두 행)
+                     _mrow(sid, star, "pair1", 7.0, 3.0, 1500, "wrong")]
+    rep = bls_match.report_tables(rows, setting_order=["poc_linear20k", "linear50k"])
+    assert rep["n_rows"] == 16 and rep["stars"] == ["a", "b"] and rep["marginal_ok"]
+    e = {x["setting_id"]: x for x in rep["settings"]}
+    assert e["linear50k"]["all"] == {"n": 8, "direct": 6, "rate": 0.75} and e["linear50k"]["single"] == {"n": 4, "direct": 4, "rate": 1.0}
+    assert e["poc_linear20k"]["single"]["rate"] == 0.5 and e["poc_linear20k"]["per_star"]["a"]["n"] == 4
+    assert rep["bins"]["duration"]["linear50k"][2.0]["n"] == 2                     # 쌍의 D=2.0h 는 단일 구간에 안 섞임
+    assert rep["bins"]["depth"]["linear50k"][3000.0]["n"] == 2
+    assert rep["pairs"]["linear50k"] == {"n": 4, "direct": 2, "rate": 0.5}
+    md = bls_match.report_markdown(rep)
+    assert "| P = 1 d | 0.00 (0/2) | 1.00 (2/2) |" in md and "쌍 주입" in md and "주변합 일치: 예" in md

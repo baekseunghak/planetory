@@ -138,13 +138,92 @@ def summarize_matches(rows: list[dict]) -> dict:
     out.update({"period_rel_err_median_abs": float(np.median(np.abs([r["period_rel_err"] for r in matched]))) if matched else float("nan"),
                 "epoch_err_hours_median": med("epoch_cyclic_err_hours"), "duration_ratio_median": med("duration_ratio"),
                 "depth_ratio_median": med("depth_ratio"), "matched_rank1_fraction": (sum(r["matched_rank"] == 1 for r in matched) / len(matched)) if matched else float("nan")})
+    # 구간별 회수율은 범위 안 신호만 센다(열이 없으면 전체). 범위 밖 20일 주입이 섞이면 짧은 관측의 별에서 희석된다.
+    bin_rows = [r for r in rows if _truthy(r.get("in_search_range", "true"))] if any("in_search_range" in r for r in rows) else rows
     for name, fn, key in (("period", _bin_period, "period_days"), ("duration", _bin_duration, "duration_hours"), ("depth", _bin_depth, "depth_ppm")):
         bins: dict[str, list[str]] = {}
-        for r in rows:
+        for r in bin_rows:
             bins.setdefault(fn(float(r[key])), []).append(r["match"])
         for b, ks in sorted(bins.items()):
             out[f"direct_{name}_{b}"] = ks.count("direct") / len(ks)
     return out
+
+
+# --------------------------------------------------------------------------- 결과 보고서 (저장 CSV → 문서 표)
+
+def _is_pair_row(r: dict, group_sizes: dict) -> bool:
+    return group_sizes.get((r["baseline_id"], r["group_id"]), 1) > 1
+
+
+def report_tables(match_rows: list[dict], *, baseline_filter: str = "realclean", setting_order: list[str] | None = None) -> dict:
+    """문서 5.1절 표를 저장된 matches.csv 행에서 직접 만든다. 별 여러 개의 행을 합쳐 넘기면 합계도 낸다.
+
+    - `in_search_range` 가 true 인 행만 쓴다(열이 없으면 전체, 호출자가 `--baseline-days` 로 채운다).
+    - 구간표(주기·지속시간·깊이)는 **단일 주입만** 센다. 한 곡선에 신호가 둘인 쌍 주입은 조건이 달라 같은 칸에 넣지 않고
+      `pairs` 로 따로 낸다. 세 구간표의 주변합은 같아야 하며 `marginal_ok` 로 확인한다.
+    - 설정표는 단일+쌍 전체(`all`)와 단일만(`single`)을 둘 다 낸다.
+    """
+    rows = [r for r in match_rows if r["baseline_id"].endswith(baseline_filter)]
+    if rows and "in_search_range" in rows[0]:
+        rows = [r for r in rows if _truthy(r["in_search_range"])]
+    group_sizes: dict = {}
+    for r in match_rows:                      # 쌍 판정은 범위 필터 전 행으로 (쌍의 한 신호만 범위 밖일 수 있음)
+        if r["baseline_id"].endswith(baseline_filter) and r["setting_id"] == match_rows[0]["setting_id"]:
+            k = (r["baseline_id"], r["group_id"]); group_sizes[k] = group_sizes.get(k, 0) + 1
+    stars = sorted({r["baseline_id"].rsplit("-", 1)[0] for r in rows})
+    settings = [s for s in (setting_order or sorted({r["setting_id"] for r in rows})) if any(r["setting_id"] == s for r in rows)]
+
+    def frac(rs):
+        d = sum(r["match"] == "direct" for r in rs)
+        return {"n": len(rs), "direct": d, "rate": d / len(rs) if rs else float("nan")}
+
+    setting_table = []
+    for sid in settings:
+        srows = [r for r in rows if r["setting_id"] == sid]
+        single = [r for r in srows if not _is_pair_row(r, group_sizes)]
+        entry = {"setting_id": sid, "all": frac(srows), "single": frac(single), "per_star": {}}
+        for st in stars:
+            st_rows = [r for r in srows if r["baseline_id"] == f"{st}-{baseline_filter}"]
+            entry["per_star"][st] = frac(st_rows) if st_rows else None
+        setting_table.append(entry)
+
+    bins: dict = {}
+    for name, key in (("period", "period_days"), ("duration", "duration_hours"), ("depth", "depth_ppm")):
+        bins[name] = {}
+        for sid in settings:
+            single = [r for r in rows if r["setting_id"] == sid and not _is_pair_row(r, group_sizes)]
+            per_value: dict = {}
+            for r in single:
+                per_value.setdefault(float(r[key]), []).append(r)
+            bins[name][sid] = {v: frac(rs) for v, rs in sorted(per_value.items())}
+    pairs = {sid: frac([r for r in rows if r["setting_id"] == sid and _is_pair_row(r, group_sizes)]) for sid in settings}
+    sums = {name: {sid: sum(x["n"] for x in bins[name][sid].values()) for sid in settings} for name in bins}
+    marginal_ok = all(len({sums[n][sid] for n in sums}) == 1 for sid in settings)
+    return {"settings": setting_table, "bins": bins, "pairs": pairs, "marginal_ok": marginal_ok, "stars": stars, "n_rows": len(rows)}
+
+
+def report_markdown(rep: dict, *, compare: tuple[str, ...] = ("poc_linear20k", "linear50k")) -> str:
+    """report_tables 결과를 문서에 붙일 Markdown 표로."""
+    def cell(f):
+        return "-" if f is None or f["n"] == 0 else f"{f['rate']:.2f} ({f['direct']}/{f['n']})"
+    out = ["**설정별 직접 회수율(범위 안, 상위 5 피크, 게이트 없음). 전체 = 단일+쌍 주입, 단일 = 단일 주입만**", ""]
+    out.append("| setting_id | " + " | ".join(rep["stars"]) + " | 합(전체) | 합(단일) |")
+    out.append("|---|" + "---|" * (len(rep["stars"]) + 2))
+    for e in rep["settings"]:
+        out.append(f"| `{e['setting_id']}` | " + " | ".join(cell(e["per_star"].get(st)) for st in rep["stars"])
+                   + f" | {cell(e['all'])} | {cell(e['single'])} |")
+    labels = {"period": "P = {:g} d", "duration": "D = {:g} h", "depth": "깊이 {:g} ppm"}
+    comp = [c for c in compare if any(e["setting_id"] == c for e in rep["settings"])]
+    out += ["", "**구간별 직접 회수율(범위 안, 단일 주입만, 별 합). 쌍 주입은 마지막 행에 따로**", ""]
+    out.append("| 구간 | " + " | ".join(f"`{c}`" for c in comp) + " |")
+    out.append("|---|" + "---|" * len(comp))
+    for name in ("period", "duration", "depth"):
+        for v in sorted({v for c in comp for v in rep["bins"][name][c]}):
+            out.append(f"| {labels[name].format(v)} | " + " | ".join(cell(rep["bins"][name][c].get(v)) for c in comp) + " |")
+    out.append("| 쌍 주입(두 신호 각각) | " + " | ".join(cell(rep["pairs"][c]) for c in comp) + " |")
+    out.append("")
+    out.append(f"주변합 일치: {'예' if rep['marginal_ok'] else '아니오'} (주기·지속시간·깊이 표의 단일 신호 합이 설정마다 같음). 범위 안 행 수 {rep['n_rows']}.")
+    return "\n".join(out) + "\n"
 
 
 # --------------------------------------------------------------------------- 오프라인 게이트

@@ -74,6 +74,10 @@ uv run python -m tess_bench bls --target l98_59 --stage evaluation --only linear
 
 # 저장된 run 에 게이트 조합 적용 (재실행 없음). 옛 run(in_search_range 열 없음)은 --baseline-days 로 상한을 준다.
 uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id>
+
+# 문서 5.1절 표 생성: 여러 별 run 의 matches.csv 를 합쳐 설정별·구간별 회수율 Markdown 을 만든다 (재실행 없음).
+# 구간표는 단일 주입만 세고 쌍 주입은 따로 낸다. 세 구간표의 주변합이 다르면 종료 코드 1.
+uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id> results/bench/bls_grid_v1-1.0.0/toi451/run-<id> --baseline-days 77.724 52.812
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
@@ -84,6 +88,8 @@ uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/
 20일 주입이 범위 밖이라 어느 격자도 못 찾으므로, 설정 비교와 `bls-gates` 회수율은 범위 안 신호(`direct_recovery_in_range`)로 한다.
 `bls-gates` 의 "잔여" 열은 주입 없는 실제 곡선(realclean `none`)에서 게이트를 통과한 피크 수다. 잡음 곡선만 보면 SNR 게이트가 충분해
 보이지만 자전 변광·제거 잔여·밝은 별의 낮은 산포가 그대로 통과하므로 이 열을 함께 본다.
+
+테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 34 passed, 없음 33 passed / 1 skipped).
 
 ## 산출물
 

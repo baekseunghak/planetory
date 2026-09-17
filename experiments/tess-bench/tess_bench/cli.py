@@ -416,6 +416,45 @@ def cmd_bls(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_matches_in_range(run_dir: Path, settings_all, baseline_days: float | None) -> list[dict]:
+    """matches.csv 를 읽고 in_search_range 열이 없는 옛 run 은 --baseline-days 로 채운다."""
+    with (run_dir / "matches.csv").open(encoding="utf-8", newline="") as fh:
+        matches = list(csv.DictReader(fh))
+    if matches and "in_search_range" not in matches[0]:
+        if baseline_days is None:
+            print(f"주의: {run_dir.name} 의 matches.csv 에 in_search_range 열이 없다. 관측 기간을 주지 않아 전체 신호로 계산한다.")
+        else:
+            by_id = {s.setting_id: s for s in settings_all}
+            for m in matches:
+                s = by_id.get(m["setting_id"])
+                pmax = s.period_max(baseline_days) if s else float("inf")
+                m["in_search_range"] = str(float(m["period_days"]) <= pmax).lower()
+    return matches
+
+
+def cmd_bls_report(args: argparse.Namespace) -> int:
+    """저장된 run 여러 개의 matches.csv 로 문서 5.1절 표(설정별·구간별 회수율)를 만든다. 재실행 없음.
+
+    옛 run(in_search_range 열 없음)은 `--baseline-days` 를 run 순서대로 준다. 결과는 Markdown 표준 출력, `--out` 이면 파일.
+    """
+    cfg, settings_all = bl.load_bls_settings(args.settings)
+    order = [s.setting_id for s in settings_all]
+    rows: list[dict] = []
+    bds = list(args.baseline_days or [])
+    for i, run in enumerate(args.run_dir):
+        rows.extend(_load_matches_in_range(Path(run), settings_all, bds[i] if i < len(bds) else None))
+    rep = bm.report_tables(rows, baseline_filter=args.baseline, setting_order=order)
+    md = bm.report_markdown(rep, compare=tuple(args.compare))
+    if args.out:
+        Path(args.out).write_text(md, encoding="utf-8", newline="\n"); print(f"report: {args.out}")
+    else:
+        print(md)
+    if not rep["marginal_ok"]:
+        print("주의: 구간표 주변합이 설정 사이에서 다르다. 쌍 분리나 범위 필터를 확인할 것.")
+        return 1
+    return 0
+
+
 def cmd_bls_gates(args: argparse.Namespace) -> int:
     cfg, settings_all = bl.load_bls_settings(args.settings)
     g = cfg["gates"]
@@ -484,6 +523,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--include-noise-signals", action="store_true", help="잡음 바탕곡선의 주입 신호도 회수율에 포함")
     p.add_argument("--baseline-days", type=float, default=None, help="in_search_range 열이 없는 옛 run 에 관측 기간을 주어 범위 안 신호를 고른다")
     p.set_defaults(func=cmd_bls_gates)
+
+    p = sub.add_parser("bls-report", help="저장된 bls run 들의 matches.csv 로 문서 5.1절 회수율 표를 생성 (재실행 없음)")
+    p.add_argument("--run-dir", nargs="+", required=True, help="run 디렉터리(여러 별)")
+    p.add_argument("--baseline-days", nargs="*", type=float, default=None, help="옛 run 의 관측 기간(run-dir 순서대로). 새 run 은 생략")
+    p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
+    p.add_argument("--baseline", default="realclean", help="바탕곡선 종류 접미 (realclean|real|noise<seed>)")
+    p.add_argument("--compare", nargs="+", default=["poc_linear20k", "linear50k"], help="구간표에 넣을 설정")
+    p.add_argument("--out", default=None, help="Markdown 저장 경로 (없으면 표준 출력)")
+    p.set_defaults(func=cmd_bls_report)
 
     p = sub.add_parser("preprocess", help="전처리·detrending 설정 비교 (S15P21C206-42)")
     p.add_argument("--target", required=True, help="fixture target key (예 toi270)")
