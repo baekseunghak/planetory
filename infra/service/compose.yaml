@@ -56,6 +56,60 @@ services:
     networks:
       - service
 
+  # SchemaSpy가 만든 정적 ERD를 서빙한다. frontend와 같은 구조로 호스트 포트를 열지
+  # 않고 service 네트워크 안에만 뜬다. Tunnel의 origin은 http://erd:80 이다.
+  erd:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - erd-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 일회성 생성기. profile을 지정했을 때만 돌며 평시 up 대상이 아니다.
+  #   docker compose --profile erd-refresh run --rm erd-generator
+  # DB 비밀번호는 명령줄 인자에 두지 않고 환경변수 -> 런타임 properties 파일로만 넘긴다.
+  erd-generator:
+    image: ${SCHEMASPY_IMAGE:-schemaspy/schemaspy:7.0.2}
+    platform: linux/amd64
+    profiles: ["erd-refresh"]
+    user: root
+    environment:
+      SCHEMASPY_DB: ${POSTGRES_DB:-planetory_poc}
+      SCHEMASPY_USER: ${POSTGRES_USER:-planetory}
+      SCHEMASPY_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        conf=$$(mktemp)
+        chmod 600 "$$conf"
+        {
+          echo "schemaspy.t=pgsql11"
+          echo "schemaspy.host=service-db"
+          echo "schemaspy.port=5432"
+          echo "schemaspy.db=$$SCHEMASPY_DB"
+          echo "schemaspy.u=$$SCHEMASPY_USER"
+          echo "schemaspy.p=$$SCHEMASPY_PASSWORD"
+          echo "schemaspy.s=public"
+          echo "schemaspy.o=/output"
+          echo "schemaspy.imageformat=svg"
+          echo "schemaspy.norows=true"
+        } > "$$conf"
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        /usr/local/bin/schemaspy -configFile "$$conf"
+        rm -f "$$conf"
+        chmod -R a+rX /output
+    volumes:
+      - erd-output:/output
+    depends_on:
+      service-db:
+        condition: service_healthy
+    networks:
+      - service
+
   # 외부 인바운드 개방 없이 Cloudflare edge에서만 트래픽을 받는다. 토큰은 이미지·
   # Git·프로세스 인자에 두지 않고 서버의 .env 파일에서 주입한다.
   cloudflared:
@@ -71,6 +125,10 @@ networks:
   service:
 
 volumes:
+  # SchemaSpy 산출물. 언제든 재생성 가능한 파생물이라 소실돼도 데이터 손실이 아니다.
+  erd-output:
+    name: planetory-erd-output
+
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
     name: planetory-service-db-data

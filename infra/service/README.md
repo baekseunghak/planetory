@@ -39,6 +39,30 @@ COMMIT;
 ```
 
 로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
+## ERD (SchemaSpy)
+
+`erd-generator`가 `service-db`를 읽어 SchemaSpy 정적 HTML을 named volume `planetory-erd-output`에
+쓰고, `erd`(nginx)가 그 볼륨을 그대로 서빙한다. 둘 다 호스트 포트를 열지 않는다. 외부 인바운드는
+여전히 0개이며, Tunnel이 `service` 네트워크 안에서 `http://erd:80`을 origin으로 잡는다.
+
+생성기는 `erd-refresh` profile에 묶여 있어 평시 `docker compose up -d` 대상이 아니다. 스키마가
+바뀌었을 때만 수동으로 돌린다.
+
+```
+docker compose --profile erd-refresh run --rm erd-generator
+```
+
+산출물은 언제든 재생성 가능한 파생물이다. `planetory-erd-output` 볼륨이 지워져도 데이터 손실이
+아니며, 생성기를 다시 돌리면 복구된다. `service-db-data`와 혼동하지 않는다.
+
+DB 비밀번호는 명령줄 인자에 두지 않는다. `.env`의 `POSTGRES_PASSWORD`가 환경변수로 들어가
+컨테이너 안에서 `chmod 600` properties 파일로 쓰였다가 실행 후 삭제된다. `docker inspect`와
+`ps`에 노출되지 않는다.
+
+읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·`planetory_gold_writer`
+역할 분리가 들어오면 SchemaSpy는 읽기 전용 역할로 옮긴다.
+
+행 수는 `schemaspy.norows=true`로 끄고 구조만 낸다. 공개 호스트에 데이터 규모를 싣지 않기 위함이다.
 
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
