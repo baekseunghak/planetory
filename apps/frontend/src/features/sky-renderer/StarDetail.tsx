@@ -212,10 +212,23 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
         ? document.activeElement
         : null;
     store.select(id);
+    navigate(`/sky?${new URLSearchParams({ star: id, view: "list" })}`, {
+      replace: true,
+    });
   };
   const switchView = () => {
     const next = !listOpen;
     setListOpen(next);
+    const params = new URLSearchParams(location.search);
+    params.delete("focus");
+    if (next) params.set("view", "list");
+    else params.delete("view");
+    if (ticId) params.set("star", ticId);
+    else params.delete("star");
+    navigate(
+      { pathname: "/sky", search: params.toString() },
+      { replace: true },
+    );
     setAnnouncement(
       next
         ? "발견한 별 목록으로 전환했습니다."

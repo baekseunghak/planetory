@@ -50,3 +50,4 @@
 | 2026-09-17 | WebGL 대체 발견 목록·키보드 전환 | S15P21C206-207 | discovered cursor, context loss, focus | 독립 검증 완료·실제 통합 대기 | [기록](2026-09-17.md) |
 | 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 퀘스트 API 기반 챌린지 마커 연결 | S15P21C206-205 | challenge, marker, round | 구현·독립 검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 최신 실서버 통합·목록/지도 복귀 | S15P21C206-207 | quests, cursor, WebGL fallback, returnTo | 실제 로컬 검증 완료·최종 인수 대기 | [2026-09-17](2026-09-17.md) |

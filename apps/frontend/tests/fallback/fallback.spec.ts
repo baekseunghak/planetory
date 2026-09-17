@@ -5,6 +5,41 @@ const listHeading = (p: Page) =>
   p.getByRole("heading", { name: "발견한 별 목록" });
 const cam = async (p: Page) =>
   JSON.parse((await p.locator("canvas").getAttribute("data-camera"))!);
+
+test("view switch keeps URL and reload consistent without losing selected TIC", async ({
+  page,
+}) => {
+  await page.goto("/sky?star=900000001&view=list");
+  await expect(panel(page)).toContainText("TIC 900000001");
+  await page.getByRole("button", { name: "3D 지도 보기" }).click();
+  await expect(page).toHaveURL(/\/sky\?star=900000001$/);
+  await page.reload();
+  await expect(page.locator("canvas")).toHaveAttribute(
+    "data-rendered-planets",
+    "5",
+  );
+  await expect(listHeading(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "별 목록으로 선택하기" }).click();
+  await expect(page).toHaveURL(/view=list/);
+  await page.reload();
+  await expect(listHeading(page)).toBeVisible();
+  await expect(panel(page)).toContainText("TIC 900000001");
+});
+
+test("browser Back from analysis restores a star chosen in the list", async ({
+  page,
+}) => {
+  await list(page);
+  await rows(page).nth(1).click();
+  await expect(page).toHaveURL(/star=900000002&view=list/);
+  await panel(page)
+    .getByRole("link", { name: /분석 시작/ })
+    .click();
+  await expect(page).toHaveURL(/\/analysis\/900000002/);
+  await page.goBack();
+  await expect(listHeading(page)).toBeVisible();
+  await expect(panel(page)).toContainText("TIC 900000002");
+});
 async function list(p: Page) {
   await p.goto("/sky");
   await p.getByRole("button", { name: "별 목록으로 선택하기" }).click();

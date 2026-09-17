@@ -111,3 +111,7 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 ## W06-2 은하 지도 조작과 마커
 
 205는 기존 은하에 드래그 회전·팬·휠·키보드·개별 별/내 행성 선택과 가시 DOM 마커 풀을 연결한다. `npm run dev:interaction`은58326의 개발 HTTP fixture, `npm run test:interaction`은 독립 입력 검사다. 운영은 기존 렌더 활성화 플래그와 API 연결을 사용한다. [205 항목별 구현·검증·실제 연동 대기](docs/ticket-205-readiness.md)를 참고한다. 206 상세 화면·207 대체 접근·배포 인수는 별도다.
+
+## 206~207 상세·대체 목록과 최신 실제 연결
+
+[206 상세 인수](docs/ticket-206-readiness.md), [207 대체 목록 인수](docs/ticket-207-readiness.md), [201~207 최신 실서버 검증](docs/latest-integration-201-207-20260917.md)을 참고한다. 현재 develop 854c23c의 퀘스트 API를 연결했으며 201~204는 develop에 병합됐다. 과거의 퀘스트404와 실제 연결 대기는 구버전 서버 검증 이력이다. 최신 기능은 205→206→207 순서로 검토하며 배포·상대 목적지·Safari 인수는 남는다.
