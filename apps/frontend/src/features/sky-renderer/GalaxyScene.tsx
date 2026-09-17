@@ -14,6 +14,10 @@ import {
 } from "./model";
 import { GalaxyRenderer, type RendererMetrics } from "./renderer";
 import "./galaxy.css";
+import {
+  GalaxyInteraction,
+  type InteractionControl,
+} from "./GalaxyInteraction";
 
 export type SceneControl = {
   setCamera(patch: Partial<GalaxyCamera>, options?: { level?: number }): void;
@@ -25,6 +29,7 @@ type Props = SkySceneProps & {
   personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
   onMetrics?: (value: RendererMetrics) => void;
+  onPlanetSelect?: (candidateId: string | null) => void;
 };
 export function GalaxyScene({
   data,
@@ -32,7 +37,9 @@ export function GalaxyScene({
   onReady,
   onMetrics,
   personalSystem,
+  onPlanetSelect,
 }: Props) {
+  const interaction = useRef<InteractionControl | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     renderer = useRef<GalaxyRenderer | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -106,6 +113,7 @@ export function GalaxyScene({
     const tick = (now: number) => {
       if (!alive || !active) return;
       active.draw(last ? (now - last) / 1000 : 0, reduced.matches);
+      interaction.current?.frame(active.planetTargets());
       last = now;
       if (now - lastMetrics > 250) {
         metricsRef.current?.(active.metrics());
@@ -215,9 +223,35 @@ export function GalaxyScene({
         ref={canvas}
         data-rendered-stars={plan.stars.length}
         data-rendered-planets={visibleSystem?.items.length ?? 0}
-        role="img"
+        tabIndex={0}
+        role="listbox"
+        data-camera={JSON.stringify(camera)}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
+      {camera && matrix && (
+        <GalaxyInteraction
+          ref={interaction}
+          canvas={canvas}
+          camera={camera}
+          matrix={matrix}
+          width={dimensions.width}
+          height={dimensions.height}
+          stars={plan.stars}
+          system={visibleSystem}
+          data={data}
+          store={store}
+          onPlanetSelect={onPlanetSelect}
+          enabled={ready && !failure && !data.needsRefresh}
+          changeCamera={(next) => {
+            setForcedLevel(null);
+            setCamera(next);
+          }}
+          fitAll={() => {
+            setForcedLevel(null);
+            setCamera(initialCamera(meta, dimensions.width, dimensions.height));
+          }}
+        />
+      )}
       {failure && (
         <div className="galaxy-error" role="alert">
           <p>{failure}</p>
@@ -237,6 +271,19 @@ export function GalaxyScene({
         </p>
         <p>행성과 궤도는 선택한 별의 근접 화면에서만 나타납니다.</p>
         <p>표면과 궤도는 이해를 돕기 위한 시각화입니다.</p>
+        <p>
+          파란 번호는 진행할 튜토리얼, 빨간 느낌표는 챌린지입니다. 완료한
+          튜토리얼 번호는 사라집니다.
+        </p>
+        <p>
+          드래그: 회전 · Shift+드래그 또는 우클릭 드래그: 이동 · 휠: 확대/축소.
+          이동 모드에서는 드래그로 이동합니다.
+        </p>
+        <p>
+          지도에 Tab으로 들어간 뒤 방향키: 이동 · Shift+방향키: 회전 · +/−: 배율
+          · Home: 전체 보기 · [/]: 화면의 별/행성 탐색 · Enter: 선택 · Escape:
+          해제.
+        </p>
       </details>
       <span className="galaxy-visible-count" data-testid="visible-count">
         적재 {data.loadedCount.toLocaleString()} · 화면{" "}

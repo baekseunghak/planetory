@@ -1,3 +1,5 @@
+import { planetOrbit, planetLabel, type HitTarget } from "./interaction.ts";
+import { screenPoint } from "./model.ts";
 import type { Matrix } from "../sky-data/geometry.ts";
 import { galaxyExposure } from "./exposure.ts";
 import {
@@ -190,6 +192,8 @@ export class GalaxyRenderer {
   private width = 1;
   private height = 1;
   private time = 0;
+  private renderedTime = 0;
+  private system: OwnedSystem | null = null;
   private zoom = 1;
   private starCount = 0;
   private disposed = false;
@@ -316,6 +320,7 @@ export class GalaxyRenderer {
     selected: string | null,
     system: OwnedSystem | null = null,
   ) {
+    this.system = system;
     if (system && system.ticId !== selected)
       throw new Error("선택한 별과 행성 목록이 다릅니다.");
     const body: number[] = [],
@@ -337,17 +342,14 @@ export class GalaxyRenderer {
     let orbitStars = 0;
     const addOrbits = (
       position: { x: number; y: number; depthZ: number },
-      items: { candidateId: string; kind: string }[],
+      items: OwnedSystem["items"],
       detailed: boolean,
     ) => {
       if (!items.length) return;
       orbitStars++;
       items.forEach((item, i) => {
         const radius = detailed
-          ? 35 +
-            ((i + 1) / (items.length + 1)) *
-              Math.min(this.width, this.height) *
-              0.34
+          ? planetOrbit(i, items.length, this.width, this.height).radius
           : 16 + i * 6;
         for (let j = 0; j < 64; j++)
           for (const k of [j, j + 1]) {
@@ -371,7 +373,9 @@ export class GalaxyRenderer {
           position.depthZ,
           radius,
           phase,
-          detailed ? 0.12 + 0.18 / (i + 1) : 0,
+          detailed
+            ? planetOrbit(i, items.length, this.width, this.height).speed
+            : 0,
           detailed ? 8 + Math.sin(phase) * 1.5 : 2,
           ...color,
         );
@@ -426,6 +430,7 @@ export class GalaxyRenderer {
     gl.clearColor(0.001, 0.002, 0.004, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.time += reducedMotion ? 0 : Math.max(0, Math.min(deltaSeconds, 0.05));
+    this.renderedTime = reducedMotion ? 0 : this.time;
     let bodyCalls = 0,
       ringCalls = 0,
       planetCalls = 0;
@@ -465,6 +470,39 @@ export class GalaxyRenderer {
     this.stats.planetDrawCalls = planetCalls;
     this.stats.drawCalls = bodyCalls + ringCalls + planetCalls;
     this.stats.frameCount++;
+  }
+  planetTargets(): HitTarget[] {
+    if (!this.system || this.disposed || this.gl.isContextLost()) return [];
+    const { position, items } = this.system;
+    const center = screenPoint(
+      Array.from(this.matrix),
+      this.width,
+      this.height,
+      position.x,
+      position.y,
+      position.depthZ,
+    );
+    return items.flatMap((p, i) => {
+      const orbit = planetOrbit(i, items.length, this.width, this.height);
+      const angle =
+        stablePhase(p.candidateId) + this.renderedTime * orbit.speed;
+      const x = center.x + Math.cos(angle) * orbit.radius,
+        y = center.y + Math.sin(angle) * orbit.radius * 0.48;
+      return x < 0 || y < 0 || x > this.width || y > this.height
+        ? []
+        : [
+            {
+              id: p.candidateId,
+              kind: "planet" as const,
+              x,
+              y,
+              radius: 10,
+              label: planetLabel(p),
+              planet: p,
+              systemTicId: this.system!.ticId,
+            },
+          ];
+    });
   }
   metrics(): RendererMetrics {
     const buffers = [this.bodies, this.rings, this.planets];

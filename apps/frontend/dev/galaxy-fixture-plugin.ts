@@ -14,6 +14,7 @@ import { exampleStar } from "./sky-reference/reference.mjs";
 export function galaxyFixturePlugin(): Plugin {
   let revision = 1,
     failed = false;
+  const completedTutorials = new Map<number, string>();
   const makeStar = (i: number): Star => ({
     ...exampleStar(i),
     planetCount: i === 0 ? 5 : i === 7 ? 2 : 0,
@@ -68,6 +69,31 @@ export function galaxyFixturePlugin(): Plugin {
             if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
             stars = Array.from({ length: count }, (_, i) => makeStar(i));
             failed = false;
+            completedTutorials.clear();
+            revision++;
+            cursors.clear();
+          } else if (
+            action === "complete-tutorial" ||
+            action === "reopen-tutorial"
+          ) {
+            const seq = Number(url.searchParams.get("seq") ?? 1);
+            if (seq < 1 || seq > 5 || !stars[seq - 1]) return bad();
+            const item = stars[seq - 1];
+            if (action === "complete-tutorial")
+              completedTutorials.set(
+                seq,
+                url.searchParams.get("reason") === "skipped"
+                  ? "skipped"
+                  : "all_found",
+              );
+            stars[seq - 1] = {
+              ...item,
+              progressStage:
+                action === "complete-tutorial" ? "completed" : "in_progress",
+              completedWithoutPlanets:
+                action === "complete-tutorial" && item.planetCount === 0,
+              reopened: action === "reopen-tutorial",
+            };
             revision++;
             cursors.clear();
           } else if (action === "change") {
@@ -114,6 +140,25 @@ export function galaxyFixturePlugin(): Plugin {
             nickname: "은하확인",
             onboardingDone: true,
             tutorialCompleted: stars.length > 1,
+          });
+        if (url.pathname === "/v1/me/quests")
+          return reply(200, {
+            tutorial: {
+              completedCount: completedTutorials.size,
+              items: Array.from({ length: 5 }, (_, i) => ({
+                seq: i + 1,
+                intent: "deep_confirmed",
+                ticId: stars[i]?.ticId ?? null,
+                status: completedTutorials.has(i + 1)
+                  ? "completed"
+                  : stars[i]
+                    ? "unlocked"
+                    : "locked",
+                completionReason: completedTutorials.get(i + 1) ?? null,
+              })),
+            },
+            challenge: { ticId: stars[5]?.ticId ?? null, unlocked: !!stars[5] },
+            reopened: [],
           });
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
         if (url.pathname === "/v1/me/sky/tiles") {
