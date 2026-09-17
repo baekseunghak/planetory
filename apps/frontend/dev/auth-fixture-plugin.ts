@@ -7,7 +7,12 @@ import { nicknameProblem, normalizedNickname } from "../src/auth/flow.ts";
 export function authFixturePlugin(): Plugin {
   const sessions = new Map<
     string,
-    { provider: string; nickname: string | null; csrf: string }
+    {
+      provider: string;
+      nickname: string | null;
+      csrf: string;
+      loseNicknameReply: boolean;
+    }
   >();
   return {
     name: "auth-fixture-202",
@@ -54,6 +59,8 @@ export function authFixturePlugin(): Plugin {
                   ? "구글탐사자"
                   : "싸피탐사자",
             csrf,
+            loseNicknameReply:
+              url.searchParams.get("loseNicknameReply") === "1",
           });
           res.setHeader("Set-Cookie", [
             `auth-fixture-202-session=${id}; HttpOnly; Path=/; SameSite=Lax`,
@@ -92,12 +99,13 @@ export function authFixturePlugin(): Plugin {
         }
         if (req.method === "PATCH" && url.pathname === "/v1/me/profile") {
           let body = "";
-          for await (const chunk of req) {
-            body += chunk;
-            if (body.length > 4096)
-              return error(413, "TOO_LARGE", "요청이 너무 큽니다.");
-          }
           try {
+            req.setEncoding("utf8");
+            for await (const chunk of req) {
+              body += chunk;
+              if (Buffer.byteLength(body, "utf8") > 4096)
+                return error(413, "TOO_LARGE", "요청이 너무 큽니다.");
+            }
             const value: unknown = JSON.parse(body).nickname;
             if (typeof value !== "string")
               return error(400, "INVALID_NICKNAME", "닉네임을 입력해 주세요.");
@@ -117,11 +125,24 @@ export function authFixturePlugin(): Plugin {
                 ],
               });
             session.nickname = normalizedNickname(value);
+            if (session.loseNicknameReply) {
+              session.loseNicknameReply = false;
+              // Start a response before breaking it; a pre-header disconnect can
+              // be retried transparently by the browser's HTTP transport.
+              res.writeHead(200, {
+                "Content-Type": "application/json",
+                "Content-Length": "1024",
+                "Cache-Control": "no-store",
+              });
+              res.write('{"nickname":', () => res.destroy());
+              return;
+            }
             return reply(200, {
               memberId: `auth-fixture-202-${session.provider}`,
               nickname: session.nickname,
             });
           } catch {
+            if (req.destroyed || res.destroyed) return;
             return error(400, "INVALID_BODY", "요청을 읽을 수 없습니다.");
           }
         }
