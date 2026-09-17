@@ -288,7 +288,7 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`, `commentCount`는 `0`이다. 실제 값은 반응 F07·댓글 F08·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·댓글이 없다"는 사실로 읽지 않는다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
+아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`다. 실제 값은 반응 F07·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·첨부·출처가 없다"는 사실로 읽지 않는다. `commentCount`는 visible 댓글 수를 반환한다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
 
 첨부 배열은 작성·수정 모두 비어 있을 때만 받는다. 5.2절의 연결 해제 예제처럼 `historyIds`·`sourceLinks`를 빈 배열로 함께 보내는 요청은 정상 처리하며, 항목이 담긴 요청만 400 `VALIDATION_FAILED`로 거절한다.
 
@@ -349,9 +349,13 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 ## 6. 댓글 — F08
 
+**구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
+
+History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`가 비어 있을 때만 받으며, 응답의 `attachments`와 `sourceLinks`는 항상 빈 배열이다. 항목이 담긴 배열은 400 `VALIDATION_FAILED`다.
+
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
-`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20`
+`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20`, 성공 200. `size`는 기본 20, 최대 100이며 최신순이다.
 
 공식 스레드는 `parentType=SIGNAL_THREAD&parentId=st-301`. 두 부모 필드는 필수다. 성공 200 목록 항목은 `commentId`, `author`, `body`, `attachments`, `sourceLinks`, `createdAt`, `updatedAt`. 기본 정렬은 최신순 제안.
 
@@ -365,7 +369,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 }
 ```
 
-부모·본문 필수, 자료 배열 생략 시 빈 목록. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처만 허용한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
+부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처는 F09·F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
 
 `PATCH /api/v1/comments/c-801`은 본문·자료만 수정하며 부모 이동은 제공하지 않는 안이다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
 
