@@ -11,9 +11,11 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 
 | 대상 | 기준 | 상태 |
 | --- | --- | --- |
-| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1~3 설치·정지 상태 검증 완료, Node 4~6 설치 전 |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1~6 설치·정지 상태 검증 완료, HDFS 초기화 전 |
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
 | Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
+
+2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. HDFS 데몬 시작·NameNode 초기화·RF2 표본 검증은 아직 수행하지 않았다.
 
 Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
 

@@ -201,7 +201,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 - VM·디스크·VPC·피어링 생성 스크립트
 - HDFS·YARN XML 설정
-- HDFS 호스트 설치·systemd unit 생성 스크립트와 오프라인 검사, Node 1~3 설치 검증
+- HDFS 호스트 설치·systemd unit 생성 스크립트와 오프라인 검사, Node 1~6 설치 및 6대 간 30개 방향 사설망·TCP 22·DNS 별칭 검증
 - Node 1과 Worker용 Docker Compose
 - 로컬 XML·Compose·PowerShell 정적 검사
 
@@ -216,8 +216,8 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - [ ] 각 계정의 Trial 적용 여부와 실제 할당량을 확인한다.
 - [ ] 프로젝트마다 피어링 5개가 `ACTIVE`인지 확인한다.
 - [ ] VM과 컨테이너에서 YARN이 광고한 FQDN을 해석할 수 있는지 확인한다.
-- [ ] `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17과 `hdfs` 서비스 계정을 준비한다. (Node 1~3 완료, Node 4~6 대기)
-- [ ] HDFS 디스크 권한과 systemd 마운트 의존성을 설정한다.
+- [x] `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17과 `hdfs` 서비스 계정을 준비한다.
+- [x] HDFS 디스크 권한과 systemd 마운트 의존성을 설정한다.
 - [ ] 신규 HDFS를 한 번만 초기화하고 Standby NameNode를 bootstrap한다.
 - [ ] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
 - [ ] 모든 Worker에 동일한 Python 실행 환경을 준비한다.
