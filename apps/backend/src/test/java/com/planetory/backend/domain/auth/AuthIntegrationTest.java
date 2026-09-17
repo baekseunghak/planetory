@@ -488,6 +488,103 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void commentCrudValidatesParentInputOwnershipAndDeletion() throws Exception {
+        var owner = login("google", "comment-owner");
+        var other = login("google", "comment-other");
+        String postId = mapper.readTree(mvc.perform(post("/api/v1/posts").session(owner).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"title\":\"댓글 부모\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("postId").asText();
+
+        var created = mvc.perform(post("/api/v1/comments").session(owner).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"parentType\":\"POST\",\"parentId\":\"" + postId
+                                + "\",\"body\":\"첫 댓글\",\"historyIds\":[],\"sourceLinks\":[]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.commentId").exists()).andReturn();
+        String commentId = mapper.readTree(created.getResponse().getContentAsString()).get("commentId").asText();
+
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId).session(other))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].commentId").value(commentId))
+                .andExpect(jsonPath("$[0].body").value("첫 댓글"));
+        mvc.perform(get("/api/v1/posts/" + postId).session(other))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.commentCount").value(1));
+        mvc.perform(get("/api/v1/comments").param("parentType", "SIGNAL_THREAD")
+                        .param("parentId", "st-" + postId.substring(2)).session(other))
+                .andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/comments/" + commentId).session(other).with(csrf())
+                        .contentType("application/json").content("{\"body\":\"탈취\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/v1/comments/" + commentId).session(owner).with(csrf())
+                        .contentType("application/json").content("{\"body\":\"수정 댓글\",\"historyIds\":[]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.body").value("수정 댓글"));
+
+        for (String body : List.of(
+                "{\"parentType\":\"POST\",\"parentId\":\"" + postId + "\",\"body\":\"   \"}",
+                "{\"parentType\":\"POST\",\"parentId\":\"" + postId + "\",\"body\":\"본문\",\"historyIds\":[\"h-1\"]}",
+                "{\"parentType\":\"POST\",\"parentId\":\"" + postId + "\",\"body\":\"" + "🌟".repeat(2_001) + "\"}")) {
+            mvc.perform(post("/api/v1/comments").session(owner).with(csrf()).contentType("application/json").content(body))
+                    .andExpect(status().isBadRequest());
+        }
+
+        mvc.perform(delete("/api/v1/posts/" + postId).session(owner).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/comments").session(owner).with(csrf()).contentType("application/json")
+                        .content("{\"parentType\":\"POST\",\"parentId\":\"" + postId + "\",\"body\":\"늦은 댓글\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/v1/comments/" + commentId).session(owner).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/comments/" + commentId).session(owner).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/comments/" + commentId).session(owner).with(csrf())
+                        .contentType("application/json").content("{\"body\":\"늦은 수정\"}"))
+                .andExpect(status().isNotFound());
+
+        // 목록 크기 경계. 서비스가 1~100만 받는다.
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId)
+                        .param("size", "0").session(other)).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId)
+                        .param("size", "101").session(other)).andExpect(status().isBadRequest());
+    }
+
+    /** 공식 스레드(kind=system_thread)는 작성자가 없고 후보를 참조한다. st- 접두사와 SIGNAL_THREAD 분기를 함께 확인한다. */
+    @Test
+    void commentsOnSignalThreadUseThreadPrefixAndRejectPostType() throws Exception {
+        var member = login("google", "thread-commenter");
+        long bundleId = jdbc.queryForObject("INSERT INTO publication_bundles"
+                        + "(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days)"
+                        + " VALUES (1, ?, 'current', ?::jsonb, 1500.5, 27.4) RETURNING id",
+                Long.class, "v-" + UUID.randomUUID(), """
+                        {"segment_ids": [1], "array_checksums": {},
+                         "residual_model_version": "rm-1", "periodogram_config_version": "pg-1",
+                         "binning": {}, "period_grid": {}, "fine_tune": {}, "curve_steps": {}}
+                        """);
+        long candidateId = jdbc.queryForObject("INSERT INTO candidates"
+                        + "(tic_id, status, updated_bundle_id, removal_step, period_days, epoch_btjd,"
+                        + " duration_hours, depth_ppm, bls_power, transit_model, discoverable, is_confirmed)"
+                        + " VALUES (1, 'active', ?, 1, 3.0, 1501.0, 2.8, 900, 12.5, '{}'::jsonb, true, true)"
+                        + " RETURNING id", Long.class, bundleId);
+        long threadId = jdbc.queryForObject("INSERT INTO posts(kind, candidate_id, board, tic_id, title, body, status)"
+                + " VALUES ('system_thread', ?, 'star', 1, '공식 스레드', '자동 생성 본문', 'visible') RETURNING id",
+                Long.class, candidateId);
+
+        var created = mvc.perform(post("/api/v1/comments").session(member).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"parentType\":\"SIGNAL_THREAD\",\"parentId\":\"st-" + threadId
+                                + "\",\"body\":\"스레드 의견\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        String commentId = mapper.readTree(created.getResponse().getContentAsString()).get("commentId").asText();
+        mvc.perform(get("/api/v1/comments").param("parentType", "SIGNAL_THREAD")
+                        .param("parentId", "st-" + threadId).session(member))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].commentId").value(commentId))
+                .andExpect(jsonPath("$[0].body").value("스레드 의견"));
+        // 같은 행을 일반 글로 부르면 부모 종류가 달라 404다.
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST")
+                        .param("parentId", "p-" + threadId).session(member))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/comments").session(member).with(csrf()).contentType("application/json")
+                        .content("{\"parentType\":\"POST\",\"parentId\":\"p-" + threadId
+                                + "\",\"body\":\"본문\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void postConcurrentDifferentFieldsAreBothPreserved() throws Exception {
         long ownerId = memberId(login("google", "post-concurrent"));
         long postId = Long.parseLong(posts.create(ownerId, new PostService.CreateCommand(
