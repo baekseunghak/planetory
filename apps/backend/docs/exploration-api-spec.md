@@ -406,7 +406,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 |---|---|
 | `unlock.position` | `x`·`y`·`depthZ`·`layoutOrdinal`·`layoutVersion`은 같은 회원/TIC의 저장 값을 반환하는 필수 필드다. 지도 타일·위치 찾기·별 상세·근접 뷰에서 값이 같아야 한다. x/y는 서비스 월드 좌표 단위, depthZ는 -1.0~1.0 정규화 깊이(렌더 월드 z=depthZ×256), layoutOrdinal은 회원별 안정 정수 0~2147483647이며 배열 인덱스가 아니다 |
 | `version` / `presentationVersion` | 필수 문자열. version은 해당 본인 상세를 읽은 회원별 지도 버전이며 메타·타일과 같은 의미의 불투명 값이다. presentationVersion은 personal-galaxy-v1이다. 상세·진행·개인 행성은 한 DB 스냅샷에서 읽는다 |
-| `star.*` | 표시 열은 ERD 미결 9(`확인 필요`). 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03) |
+| `star.tmag` / `star.teffK` / `star.radiusRsun` | TESS 등급(무차원), 유효 온도(K), 반지름(태양=1). 본인 상세는 셋을 모두 준다(D-18). 카탈로그에 값이 없으면 필드를 빼지 않고 `null`을 보낸다. 프론트는 `중심 위치: 데이터 없음`과 같은 방식으로 비활성 표시한다(AT-93) |
+| `star.*` 공통 | 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03). 물리값은 TESS 카탈로그 공개 값이며 비공개 대상이 아니다 |
 | `planets.items` | 현재 인증 회원이 요청 TIC에서 수치 매칭한 고유 candidateId 중 HOME-05 표시 조건을 만족하는 목록. 확정 행성은 판단 오답/성과 미인정이어도 포함, 미확정은 6.3절의 회원별 후보 최신 판단이 LIKELY_PLANET일 때만 포함(공개/성과 인정 필수 아님). FP·미확정 UNLIKELY_PLANET/UNSURE·미매칭·타인 발견·전체 후보표는 제외. 같은 candidateId 중복 없음 |
 | `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 version의 지도 planetCount·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
 | `planets.items[].candidateId` | 행성 객체·목록·확대 선택의 공통 문자열 식별자. items는 이 문자열의 오름차순으로 안정 정렬한다. 배열 인덱스/표시 순번을 ID로 쓰지 않음 |
@@ -417,6 +418,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `achievement.grade` | `count` 1/2/3/4 이상 → A/S/SS/SSS, 0이면 null. 열이 아니라 계산값(GRD-01) |
 | `actions.analysis` | `start`(제출 없음) / `continue`(진행 중) / `review`(완료). 재개 별은 `continue` |
 | `actions.boardOpen` | 한 명 이상 발견한 별이면 true(COM-01). 스레드 목록은 서비스 API |
+| `actions.resultAvailable` | 그 회원의 제출 이력이 하나라도 있으면 true. 결과 페이지는 제출 이력이 있는 별마다 열린다(RES-10) |
+| `actions.threadCount` | 이 별의 공식 신호 스레드 수. 숨김·삭제는 세지 않는다 |
+| `star.sectorCount` / `star.sectors` | 관측 회차를 중복 없이 오름차순으로 준다. 같은 회차가 여러 `source_version`으로 들어올 수 있어 `sectorCount`는 행 수가 아니라 서로 다른 회차의 수다 |
 
 **시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
@@ -473,6 +477,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
 - 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
 - WebGL 대체 목록 뷰(NFR-18)는 `scope=discovered&sort=recent`를 쓴다. 성과로 막 발견해 아직 제출하지 않은 별도 목록에서 골라 분석에 진입할 수 있어야 하기 때문이다(지웅 리뷰 6). 마이페이지는 기본값을 유지한다.
+- `size`는 기본 20, 상한 100이다. 상한 밖이거나 계약 밖 `scope`·`sort`는 400 `VALIDATION_FAILED`다. 타인 조회에 `scope=discovered`를 쓰면 같은 400으로 거절한다. 미제출 발견까지 보이면 그 회원의 진행 상태가 드러나기 때문이다.
+- `cursor`는 불투명 값이며 **요청 회원·대상 회원·`scope`·`sort`·`size`**에 묶는다. 하나라도 다르면 400이다. 요청 회원까지 묶는 이유는 같은 대상이라도 보는 사람에 따라 응답이 다르기 때문이다(`unpublishedSignalCount`). 위치는 `lastActivityAt`과 `ticId`를 함께 담는다. 시각만 담으면 같은 시각의 별들이 페이지 경계에서 통째로 밀리거나 빠진다.
+- `unpublishedSignalCount`는 회원이 이 별에서 매칭한 고유 신호 중 유효한 공개가 없는 수다. 타인 조회에서는 0이 아니라 **필드를 뺀다**. "공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다.
 
 ### 4.5 공개 별 요약
 
@@ -492,8 +499,10 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 필드 | 규칙 |
 |---|---|
+| `currentBundleId` | 현재 판. `published` 별에는 판이 있어야 하지만 없으면 `null`을 준다. 게시판 헤더는 판 없이도 떠야 하고, 분석 진입(5.1)이 그 자리에서 503으로 막는다 |
 | `boardOpen` | `star_unlocks`에 그 TIC 행이 하나 이상. false면 서비스 API가 목록·검색·직접 URL에서 게시판을 숨긴다(AT-65) |
 | `unlockedForMe`, `analysisAvailable` | 요청 회원의 발견 여부. 둘은 같은 값이지만 의미를 분리해 둔다. false면 [이 별 분석하기]를 비활성으로 표시하고 서버도 5.1절에서 거절한다(AT-64) |
+| `star` | `sectorCount`·`sectors`·`tmag`만 준다. 이 응답은 게시판 헤더·[이 별 분석하기] 버튼·출처 카드가 쓰는 요약이라 온도·반지름을 놓을 자리가 없다. **감추는 것이 아니다** — 셋 다 TESS 카탈로그 공개 값이고 본인 상세(4.2)는 모두 준다. 소비 화면이 필요로 하면 그때 넓힌다(D-18) |
 | `discoveredMemberCount` | 표시용. 후보 수·확정 보유 여부·타인의 진행 상태는 넣지 않는다 |
 
 `service_status != published`이거나 `boardOpen=false`인 별은 404 `STAR_NOT_PUBLISHED`로 존재를 드러내지 않는다. 게시글에서 분석으로 넘어갈 때의 `return_post_id`는 URL·임시 세션에만 두고 Submission·AnalysisHistory에 저장하지 않으며(NFR-15), 복귀 시 Post의 TIC·공개 상태 재검사는 서비스 API가 한다(EXP-10, AT-50).
@@ -1233,6 +1242,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | D-15 | 타인 공개 그래프의 잔차 | 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청을 제공하지 않는다. 캐시된 잔차가 없으면 원본 곡선 또는 제출 스냅샷만 표시하고 둘 다 없으면 "그래프 제공 불가" 안내. 본인 분석의 잔차 요청 권한은 그대로 | 타인 요청으로 계산 자원을 쓰지 않음. 공개 내용(판단·메모)은 계속 표시 | 8.3, 8.5 | 백승학·백지웅 |
 | D-16 | Gold 적재·전환 경계 | Publisher가 Gold를 PostgreSQL에 직접 적재하고 한 트랜잭션으로 current를 전환한다. 커밋 후 Backend에는 `bundleId`만 알려 후처리한다 | 대용량 배열을 HTTP로 우회하지 않고 DB 원자성과 앱 읽기 전용 권한을 유지 | 10 | 김동혁·강재민 |
 | D-17 | 온라인 계산 호출 경계 | Backend가 현재 판의 DB 배열·후보 모델을 Python Worker에 전달한다. Worker는 DB를 직접 읽지 않고 `astro-kernel`로 계산하며, Backend는 응답 채택 전 current를 재검증한다 | 판 교체 경합을 Backend 한 곳에서 막고 Worker를 순수 계산으로 유지 | 7, 10 | 김동혁·윤성용 |
+| D-18 | `stars` 표시 열 | 본인 상세(4.2)는 `tmag`·`teffK`·`radiusRsun` 셋 다, 공개 요약(4.5)은 `tmag`만. 값이 없으면 필드를 빼지 않고 `null`. 단위는 TESS 등급(무차원)·K·태양 반지름 | 4.5에서 온도·반지름을 뺀 것은 비공개가 아니라 그 화면에 자리가 없기 때문이다. 셋 다 TESS 카탈로그에서 TIC 번호로 조회할 수 있는 공개 값이라 서버에서 빼도 감춰지지 않는다 | 4.2, 4.5 | 강재민 |
 
 ### 12.2 미결 (실측·타 담당 데이터 필요)
 
@@ -1240,10 +1250,9 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 |---|---|---|---|
 | 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03. 계약 형태는 5.1절, 숫자만 채움 |
 | 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만 |
-| 10 | `stars` 표시 열(tmag·teff·radius) | 팀 | ERD 미결 9 |
 | 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리(회원 생성 롤백 여부) | 강재민·백승학 | 서비스 F01-Q5 |
 
-해소된 항목: 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
+해소된 항목: 10(`stars` 표시 열) → D-18, 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
 
 ## 13. 요구사항·검수 추적
 
