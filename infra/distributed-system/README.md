@@ -160,6 +160,7 @@ $Init = '.\infra\distributed-system\scripts\initialize-hdfs-ha.ps1'
 
 & $Init -Step Preflight
 & $Init -Step NetworkDiagnostics
+$AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 & $Init -Step ConfigureFirewall
 & $Init -Step JournalNodes
 & $Init -Step FormatActive -ApproveFormat
@@ -167,7 +168,7 @@ $Init = '.\infra\distributed-system\scripts\initialize-hdfs-ha.ps1'
 & $Init -Step DataNodes
 & $Init -Step Activate
 & $Init -Step ValidateRf2
-& $Init -Step FinalAudit
+& $Init -Step FinalAudit -AuditSinceUtc $AuditSinceUtc
 ```
 
 `ConfigureFirewall`은 UFW의 기본 incoming deny와 기존 SSH 규칙을 유지하면서 아래 사설 IP·역할 포트만 허용한다.
@@ -178,8 +179,11 @@ $Init = '.\infra\distributed-system\scripts\initialize-hdfs-ha.ps1'
 | Node 2 | 동일 | `8020,8485,9870,9864,9866,9867` |
 | Node 3 | 동일 | `8485,9864,9866,9867` |
 | Node 4~6 | 동일 | `9864,9866,9867` |
+| Node 1~3 JournalNode HTTP | NameNode 2대의 `10.20.1.10`, `10.20.2.10` | `8480` |
 
-2026-09-17 최초 실행에서는 UFW가 22번만 허용해 QJM 8485 연결이 차단됐다. 역할별 규칙을 추가한 뒤 3개 endpoint 연결을 재검증했다. 포맷은 성공했지만 관리자 계정이 `hdfs` 전용 `VERSION` 경로를 검사해 후속 시작이 중단됐으므로, 검사에 `sudo test`를 적용하고 재포맷 없이 시작만 재개하는 `StartFormattedActive` 복구 단계를 추가했다. 이 단계는 포맷 성공과 NameNode 미시작을 확인한 경우에만 사용한다.
+2026-09-17 최초 실행에서는 UFW가 22번만 허용해 QJM RPC 8485 연결이 차단됐다. 역할별 규칙을 추가한 뒤 3개 endpoint 연결을 재검증했다. 후속 검토에서는 Standby가 edit log를 읽는 JournalNode HTTP 8480이 빠진 것을 확인해 두 NameNode에서 세 JournalNode로 가는 경로만 추가했다. 포맷은 성공했지만 관리자 계정이 `hdfs` 전용 `VERSION` 경로를 검사해 후속 시작이 중단됐으므로, 검사에 `sudo test`를 적용하고 재포맷 없이 시작만 재개하는 `StartFormattedActive` 복구 단계를 추가했다. 이 단계는 포맷 성공과 NameNode 미시작을 확인한 경우에만 사용한다.
+
+`FinalAudit`은 과거 오류와 수정 뒤 새 오류를 구분하기 위해 UTC 검사 시작 시각을 필수로 받는다. 로그 파일 목록 조회와 읽기는 `hdfs` 권한 안에서 수행하며, 로그 없음·읽기 실패·검색 실패도 감사 실패로 처리한다. 두 NameNode에서 세 JournalNode의 8485/TCP와 8480/HTTP도 함께 검증한다.
 
 현재 HDFS unit은 실행 중이지만 부팅 자동 시작은 활성화하지 않았다. 재부팅 후에는 JournalNode·NameNode·DataNode를 순서대로 시작하고 두 NameNode가 올라온 뒤 기존 Active가 없음을 확인해 수동 전환해야 한다.
 

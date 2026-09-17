@@ -157,7 +157,7 @@ systemctl is-active tailscaled 2>/dev/null || true
 
 `22 ALLOW Anywhere`와 IPv6 동일 규칙은 호스트 방화벽 기준 최소 개방이 아니다. Tailscale 관리 경로, Node 1 내부 관리 경로와 비상 GCP 직접 접속 경로를 확정하고 제한 규칙을 먼저 추가한다. 별도 tailnet SSH 세션에서 새 규칙을 검증하기 전에는 기존 허용 규칙을 삭제하거나 UFW를 재시작하지 않는다.
 
-Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. HDFS 최초 초기화에서는 [단계형 초기화 스크립트](../../infra/distributed-system/scripts/initialize-hdfs-ha.ps1)의 `ConfigureFirewall`이 UFW 기본 incoming deny와 기존 SSH 규칙을 유지하면서 정확한 6개 사설 IP에만 역할별 `8020`, `8485`, `9870`, `9864`, `9866`, `9867`을 허용한다. 적용 전후에는 `NetworkDiagnostics`와 `JournalNodes`로 실제 listener와 QJM 연결을 확인한다.
+Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. HDFS 최초 초기화에서는 [단계형 초기화 스크립트](../../infra/distributed-system/scripts/initialize-hdfs-ha.ps1)의 `ConfigureFirewall`이 UFW 기본 incoming deny와 기존 SSH 규칙을 유지하면서 정확한 6개 사설 IP에만 역할별 `8020`, `8485`, `9870`, `9864`, `9866`, `9867`을 허용한다. JournalNode HTTP `8480`은 Standby의 edit log 읽기에 필요하므로 Node 1~3에서 두 NameNode IP `10.20.1.10`, `10.20.2.10`에만 별도로 허용한다. 적용 전후에는 `NetworkDiagnostics`와 `JournalNodes`로 두 NameNode에서 세 JournalNode의 `8485/TCP`와 `8480/HTTP`를 확인한다.
 
 ## 6. tailnet SSH 장애와 GCP 비상 복구
 

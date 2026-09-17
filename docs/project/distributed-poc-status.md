@@ -9,7 +9,7 @@
 - 실험 범위와 합격 조건: [분산 파이프라인 Docker PoC](../experiments/distributed-pipeline-poc.md)
 - 현행 기술 기준: [아키텍처](../architecture/README.md), [데이터](../data/README.md), [운영](../operations/README.md)
 - Gold·Redis·Bundle 전환 기준: [문서 정합화 요청 R3~R5](planetory-doc-sync-requests.md) 반영 완료. PostgreSQL 직접 적재·current 트랜잭션 전환·Redis 캐시·최신 판 재로드를 구현 기준으로 사용한다.
-- 상태: `S15P21C206-72`의 Hadoop 3.5.0·OpenJDK 17 설치와 HDFS 초기화를 완료했다. QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개, RF2 표본 쓰기·읽기·checksum과 missing·corrupt block 0을 실환경에서 검증했다. 6대 사이의 사설망 route·ping·TCP 22 총 30개 방향과 각 노드의 18개 DNS 별칭도 검증했다. 다음 미완료 런타임 검증은 `S15P21C206-73`의 YARN·Spark 3.5.5 sample application이다. Docker Engine·Compose 설치는 72번 범위가 아니며, Node 1은 73번 착수 전, Node 2~6은 수집 컨테이너 배포 전 필요하지만 2026-09-17 Jira 기준 명시적 소유 Task는 미정이다.
+- 상태: `S15P21C206-72`의 Hadoop 3.5.0·OpenJDK 17 설치와 HDFS 초기화를 완료했다. QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개, RF2 표본 쓰기·읽기·checksum과 missing·corrupt block 0을 실환경에서 검증했다. 두 NameNode에서 세 JournalNode의 RPC `8485`와 edit 조회용 HTTP `8480`을 포함한 필수 HDFS TCP 경로 138개도 통과했으며, `8480`은 두 NameNode IP에만 허용했다. 6대 사이의 사설망 route·ping·TCP 22 총 30개 방향과 각 노드의 18개 DNS 별칭도 검증했다. 다음 미완료 런타임 검증은 `S15P21C206-73`의 YARN·Spark 3.5.5 sample application이다. Docker Engine·Compose 설치는 72번 범위가 아니며, Node 1은 73번 착수 전, Node 2~6은 수집 컨테이너 배포 전 필요하지만 2026-09-17 Jira 기준 명시적 소유 Task는 미정이다.
 
 ## 후속 작업 순서
 

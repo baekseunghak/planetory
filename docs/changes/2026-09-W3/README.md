@@ -50,3 +50,4 @@
 
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
 | 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
