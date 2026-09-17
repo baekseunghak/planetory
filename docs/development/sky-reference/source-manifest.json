@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-15",
+  "source": "Planetory-Galaxy-Flow/apps/frontend (personal prototype, dev:accounts)",
+  "capture": "../../images/sky-reference-20260915/capture.json",
+  "files": [
+    {
+      "path": "dev/accounts-data.ts",
+      "sha256": "f6fc2ca48711a5abc0c45673dccddc83efffdeb7f1a3322f9c530fdae62841e6"
+    },
+    {
+      "path": "src/map/galaxy-renderer.ts",
+      "sha256": "e4624fd53b2a35343feaf964de0f032e2ebfe6842f0781b378fa02b19da9f009"
+    },
+    {
+      "path": "src/map/system-renderer.ts",
+      "sha256": "fd120adea7c5b141e95f3ecbf39c2a69fab2d9d5e731fe2dc8a5e9e49393e464"
+    },
+    {
+      "path": "src/map/personal-system.ts",
+      "sha256": "7f73f90682310249008dd6e3d9b81c1b7d40fba5eb5564e066b7035f882a93bf"
+    },
+    {
+      "path": "shared/galaxy.ts",
+      "sha256": "2079462b930e1c68ecb5d063b879bb668e42164f3a5fe62e37e5cc3a5e384eef"
+    },
+    {
+      "path": "src/pages/SkyPage.tsx",
+      "sha256": "a85e1ee7967125b42abd66682bdd2523ead17d99ce754d531aa929f6ca0dfd5c"
+    },
+    {
+      "path": "src/galaxy.css",
+      "sha256": "278678e85ec07ebdf40c90c329a896279e8ddff55e66fd75b3dc6312d164c9cb"
+    },
+    {
+      "path": "package.json",
+      "sha256": "42dbdfde0f0ea3ac19e543b851b7e053c6fd5c9763c9d8ca808d6772824dbe8d"
+    }
+  ],
+  "runtimeUnmodified": true
+}

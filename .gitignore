@@ -9,6 +9,8 @@ data/
 !docs/data/
 !docs/data/**
 gold/
+!contracts/gold/
+!contracts/gold/**
 lake/
 # 위 세 규칙은 데이터 레이크 디렉터리를 겨냥한다. 같은 이름의 소스 패키지는 제외하지 않는다.
 !**/src/**/data/

@@ -1,0 +1,62 @@
+{
+  "capturedOn": "2026-09-15",
+  "kind": "original-personal-prototype",
+  "account": "1000",
+  "syntheticData": true,
+  "states": [
+    {
+      "camera": {
+        "tilt": 1,
+        "x": 0.8116955263673162,
+        "y": -104.409147077857,
+        "yaw": 0.12,
+        "zoom": 1.0568820479252328
+      },
+      "canvas": [
+        1440,
+        836
+      ],
+      "dpr": 1,
+      "focus": "galaxy",
+      "image": "01-galaxy.png",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    {
+      "camera": {
+        "tilt": 1.1575,
+        "x": 0.8116955263673162,
+        "y": -104.409147077857,
+        "yaw": 0.72,
+        "zoom": 1.0568820479252328
+      },
+      "image": "02-rotated.png"
+    },
+    {
+      "camera": {
+        "tilt": 1.1575,
+        "x": 0.8116955263673162,
+        "y": -104.409147077857,
+        "yaw": 0.72,
+        "zoom": 1.0568820479252328
+      },
+      "focus": "system",
+      "image": "03-star-system.png",
+      "url": "http://127.0.0.1:58251/sky?star=259377017"
+    },
+    {
+      "camera": {
+        "tilt": 1.1575,
+        "x": 0.8116955263673162,
+        "y": -104.409147077857,
+        "yaw": 0.72,
+        "zoom": 1.0568820479252328
+      },
+      "focus": "body",
+      "image": "04-planet.png",
+      "url": "http://127.0.0.1:58251/sky?star=259377017"
+    }
+  ]
+}

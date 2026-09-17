@@ -1,0 +1,7 @@
+# 변환 산출물(NPZ·TFRecord·라벨 실행본)·가상환경·캐시는 Git에 넣지 않는다 (docs/data/data-guidelines.md)
+results/
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
