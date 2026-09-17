@@ -10,7 +10,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -26,9 +25,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>운영자가 실행하는 것과 같이 웹 서버 없는 컨텍스트에 명령 속성을 주고 띄운다. 발견 규칙 자체는
  * {@code TutorialProgressTest}가 검증하고, 여기서는 명령 모드 기동과 종료 코드만 본다.
  */
-// 클래스마다 스키마가 달라 컨텍스트를 다시 쓰지 않는다. 끝나면 닫아 연결 풀을 돌려준다.
-// 열어 두면 캐시된 컨텍스트의 풀이 쌓여 로컬 DB 연결 한도(100)를 넘는다.
-@DirtiesContext
 @ActiveProfiles("local")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = PlanetoryApplication.COMMAND_PROPERTY + "=" + ChallengeUnlockCommand.NAME)

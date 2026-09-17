@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -40,9 +39,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>탐사 API 9.4절과 AT-61·88·89를 따른다. 완료 단계 변경은 제출 저장(S15P21C206-143)의 몫이라
  * 여기서는 진행 행을 직접 완료로 바꾼 뒤 후처리 함수를 부른다. 실행마다 별도 스키마를 쓴다.
  */
-// 클래스마다 스키마가 달라 컨텍스트를 다시 쓰지 않는다. 끝나면 닫아 연결 풀을 돌려준다.
-// 열어 두면 캐시된 컨텍스트의 풀이 쌓여 로컬 DB 연결 한도(100)를 넘는다.
-@DirtiesContext
 @ActiveProfiles("local")
 @SpringBootTest
 class TutorialProgressTest {

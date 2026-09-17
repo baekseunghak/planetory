@@ -79,6 +79,9 @@ tasks.named('test') {
 	dependsOn startLocalDb
 	// 실제 자격 증명·개인 프로필을 테스트 컨텍스트에 읽어들이지 않는다.
 	systemProperty 'OAUTH_LOCAL_CONFIG', 'optional:classpath:/oauth-test-no-local.properties'
+	// 테스트 클래스마다 스키마가 달라 컨텍스트를 다시 쓰지 않는데, 캐시(기본 32개)에 남은 컨텍스트가
+	// 연결 풀(최대 10)을 계속 잡아 로컬 DB 연결 한도(100)를 넘는다. 살아 있는 컨텍스트 수를 줄인다 [S15P21C206-139].
+	systemProperty 'spring.test.context.cache.maxSize', '4'
 }
 
 // 대규모 시드 성능 측정 [S15P21C206-137]. ./gradlew perfTest
