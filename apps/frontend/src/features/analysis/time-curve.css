@@ -43,6 +43,17 @@
   width: 100%;
   height: 100%;
 }
+.analysis-time-plot .analysis-transit-bands {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.analysis-transit-error {
+  position: absolute;
+  bottom: 0;
+  background: #0c1119;
+  pointer-events: none;
+}
 .analysis-time-axis-y {
   position: absolute;
   top: 0;

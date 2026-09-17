@@ -69,14 +69,17 @@ test("wheel zoom, drag pan, resize and reset redraw the same curve", async ({
   await expect(plot).toBeVisible();
   await expect
     .poll(() =>
-      plot
-        .locator("canvas")
-        .evaluate((canvas: HTMLCanvasElement) =>
-          Math.abs(
-            canvas.width -
-              canvas.getBoundingClientRect().width * window.devicePixelRatio,
-          ),
+      plot.locator("canvas").evaluateAll((canvases) =>
+        Math.max(
+          ...canvases.map((element) => {
+            const canvas = element as HTMLCanvasElement;
+            return Math.abs(
+              canvas.width -
+                canvas.getBoundingClientRect().width * window.devicePixelRatio,
+            );
+          }),
         ),
+      ),
     )
     .toBeLessThanOrEqual(1);
   expect(

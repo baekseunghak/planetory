@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { PeriodogramChart } from "./PeriodogramChart";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { FoldedCurvePanel } from "./FoldedCurvePanel";
-import { useFoldSession } from "./use-fold-session";
+import { useAnalysisFold } from "./AnalysisSession";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -165,7 +165,7 @@ export function PeriodSelectionWorkspace({
   curve: CurveData;
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
-  const session = useFoldSession(context, curve);
+  const session = useAnalysisFold();
   const { state, dispatch } = session;
   const change = state.change;
   const revision = useRef(0);

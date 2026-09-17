@@ -4,7 +4,6 @@ import {
   useId,
   useMemo,
   useRef,
-  useState,
   useEffect,
 } from "react";
 import type { ReactNode, PointerEvent, KeyboardEvent } from "react";
@@ -18,43 +17,23 @@ import {
   getSelectionLimits,
   previewPhaseSelection,
   type PhaseRange,
+  type PhaseSelectionResult,
 } from "./phase-selection";
+import {
+  usePhaseDraft,
+  useCurrentPhasePreview,
+  emptyPhaseDraft as empty,
+} from "./AnalysisSession";
 
 const format = new Intl.NumberFormat("ko-KR", { maximumSignificantDigits: 10 });
-type EditorState = {
-  range: PhaseRange | null;
-  committed: PhaseRange | null;
-  dragging: boolean;
-  message: string;
-  focus: number;
-};
-const empty: EditorState = {
-  range: null,
-  committed: null,
-  dragging: false,
-  message: "",
-  focus: 0,
-};
 function useSelectionModel(
   context: AnalysisContext,
   data: ReadyPeriodogram,
   change: PeriodSelectionChange,
   ready: boolean,
 ) {
-  const [identity, setIdentity] = useState(change);
-  const [state, setState] = useState(empty);
+  const { state, setState } = usePhaseDraft();
   const statusId = useId();
-  // Reset only the editor, never remount the chart or its rendering surface.
-  if (identity !== change) {
-    setIdentity(change);
-    setState(empty);
-  } else if (!ready && state.dragging) {
-    setState({
-      ...state,
-      range: state.committed,
-      dragging: false,
-    });
-  }
   const contract = useMemo(() => {
     try {
       return { limits: getSelectionLimits(context, data, change), error: "" };
@@ -62,36 +41,24 @@ function useSelectionModel(
       return { limits: null, error: (error as Error).message };
     }
   }, [context, data, change]);
-  const preview = useMemo(
-    () =>
-      state.range
-        ? previewPhaseSelection(
-            context,
-            data,
-            change,
-            state.range.phaseStart,
-            state.range.phaseEnd,
-          )
-        : null,
-    [context, data, change, state.range],
-  );
+  const preview = state.preview;
   const enabled = ready && contract.limits !== null;
   const apply = (range: PhaseRange, finish: boolean) => {
     if (!enabled) return;
-    const result = finish
-      ? previewPhaseSelection(
-          context,
-          data,
-          change,
-          range.phaseStart,
-          range.phaseEnd,
-        )
-      : null;
+    const result = previewPhaseSelection(
+      context,
+      data,
+      change,
+      range.phaseStart,
+      range.phaseEnd,
+    );
     setState((previous) => ({
       ...previous,
       range,
+      preview: result,
       dragging: !finish,
       committed: finish ? range : previous.committed,
+      committedPreview: finish ? result : previous.committedPreview,
       message: !finish
         ? previous.message
         : result?.kind === "invalid"
@@ -143,6 +110,7 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
   const { state, setState, contract, preview, enabled, apply, statusId } =
     useSelection();
   const hintId = useId();
+  const currentPreview = useCurrentPhasePreview();
   const begin = () => {
     if (!contract.limits) return;
     const { minPhaseWidth, maxPhaseWidth } = contract.limits;
@@ -213,6 +181,37 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
       >
         {contract.error || state.message}
       </p>
+      <div
+        className="phase-time-preview"
+        data-testid="phase-time-preview"
+        data-available={Boolean(currentPreview)}
+      >
+        <h4>선택 구간의 시간 미리보기</h4>
+        <dl>
+          <dt>기준 시각 (BTJD)</dt>
+          <dd
+            data-testid="phase-epoch"
+            data-value={currentPreview?.epochPreviewBtjd}
+          >
+            {currentPreview
+              ? format.format(currentPreview.epochPreviewBtjd)
+              : "—"}
+          </dd>
+          <dt>가려진 시간 (시간)</dt>
+          <dd
+            data-testid="phase-duration"
+            data-value={currentPreview?.durationPreviewHours}
+          >
+            {currentPreview
+              ? format.format(currentPreview.durationPreviewHours)
+              : "—"}
+          </dd>
+        </dl>
+        <p>
+          유효한 구간을 선택하면 시간 곡선에 예상 반복 위치를 표시합니다. 기준
+          시각은 BTJD 일 단위이며, 서버가 검증·저장한 최종값이 아닙니다.
+        </p>
+      </div>
     </section>
   );
 }
@@ -223,6 +222,7 @@ type Drag = {
   anchor: number;
   handle: Handle | null;
   before: PhaseRange | null;
+  beforePreview: PhaseSelectionResult | null;
   change: PeriodSelectionChange;
   low: number;
   high: number;
@@ -277,6 +277,8 @@ export function PhaseSelectionOverlay({
       ...previous,
       range: active.before,
       committed: active.before,
+      preview: active.beforePreview,
+      committedPreview: active.beforePreview,
       dragging: false,
       message: "드래그를 취소하고 이전 선택으로 돌아갔습니다.",
     }));
@@ -299,6 +301,7 @@ export function PhaseSelectionOverlay({
       anchor,
       handle,
       before: state.range,
+      beforePreview: state.preview,
       change,
       low,
       high,
