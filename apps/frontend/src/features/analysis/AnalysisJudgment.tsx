@@ -19,7 +19,7 @@ export function AnalysisSteps() {
   const { state, ready } = usePhaseDraft();
   const current = !session.state.change
     ? 0
-    : !ready
+    : !ready || !state.range
       ? 1
       : !state.confirmed || state.confirmed !== state.preview || state.dragging
         ? 2
