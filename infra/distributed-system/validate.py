@@ -70,6 +70,10 @@ def main():
     orchestrator = (BASE / "scripts/install-hdfs-hosts.ps1").read_text(encoding="utf-8")
     assert "SupportsShouldProcess" in orchestrator
     assert "Install Node 1 alone" in orchestrator
+    assert "Invoke-Tailscale ssh" in orchestrator
+    assert "Invoke-Scp" in orchestrator
+    assert "SSAFY" in orchestrator and "planetory-admin" in orchestrator
+    assert "gcloud" not in orchestrator
     print("PASS: HDFS/YARN config, host mappings and safe HDFS installer contracts")
 
 

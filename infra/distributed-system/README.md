@@ -11,7 +11,7 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 
 | 대상 | 기준 | 상태 |
 | --- | --- | --- |
-| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | `S15P21C206-72` 설치 기준 확정, 실제 설치 전 |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1 설치·정지 상태 검증 완료, Node 2~6 설치 전 |
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
 | Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
 
@@ -69,7 +69,7 @@ Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최�
 구현 파일은 다음 둘이다.
 
 - [install-hdfs-host.sh](scripts/install-hdfs-host.sh): 단일 노드의 사전 검사·설치·권한·systemd unit 생성을 담당한다.
-- [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): 프로젝트·노드 매핑을 검증하고 `gcloud compute scp`·`gcloud compute ssh`로 Linux 스크립트를 호출한다.
+- [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): tailnet 노드·Linux 계정·호스트명을 검증하고 `tailscale ssh`와 MagicDNS 경유 `scp`로 Linux 스크립트를 호출한다.
 
 설치 스크립트는 다음 순서와 중단 조건을 지킨다.
 
@@ -99,29 +99,23 @@ Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. No
 
 #### 설치 실행
 
-저장소 루트에서 프로젝트 ID를 Node 1~6 순서로 지정한다. 실제 값은 저장소에 기록하지 않는다.
+저장소 루트에서 Tailscale 연결을 확인한 뒤 실행한다. Node 1은 `SSAFY@node-1`, Node 2~6은 `planetory-admin@node-*`를 사용하며 스크립트가 실제 호스트명까지 확인한다.
 
 ```powershell
-$Projects = @(
-  '<node-1-project>',
-  '<node-2-project>',
-  '<node-3-project>',
-  '<node-4-project>',
-  '<node-5-project>',
-  '<node-6-project>'
-)
+tailscale status
+tailscale ping node-1
 
-# GCP 노드 매핑만 읽고 원격 변경은 하지 않는다.
-.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects -WhatIf
+# tailnet 도달성과 원격 호스트명만 읽고 원격 변경은 하지 않는다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -WhatIf
 
 # Node 1을 먼저 설치하고 PASS 출력과 서버 상태를 확인한다.
-.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1
 
 # Node 1 검증 후 Node 2~6을 순차 설치한다.
-.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects -NodeNumbers 2,3,4,5,6
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -NodeNumbers 2,3,4,5,6
 ```
 
-`-WhatIf`는 GCP의 VM 이름·상태·사설 IP만 확인하며 Linux 사전 검사를 실행하지 않는다. 실제 실행은 각 호스트에서 OS·hostname·사설 IP·mount·이름 해석·기존 HDFS 프로세스·NameNode format 여부·기존 설정 충돌을 먼저 검사하고 하나라도 다르면 설치 전에 중단한다. `PASS`는 설치 준비 완료를 뜻하며 HDFS 초기화나 72번 런타임 완료 증거가 아니다.
+`-WhatIf`도 `tailscale ping`과 읽기 전용 `hostname -s`를 실행해 선택한 모든 노드가 올바른 tailnet 대상인지 먼저 확인한다. 파일 업로드나 설치 명령은 실행하지 않는다. 실제 실행은 각 호스트에서 OS·hostname·사설 IP·mount·이름 해석·기존 HDFS 프로세스·NameNode format 여부·기존 설정 충돌을 먼저 검사하고 하나라도 다르면 설치 전에 중단한다. `PASS`는 설치 준비 완료를 뜻하며 HDFS 초기화나 72번 런타임 완료 증거가 아니다.
 
 | 경로 | 소유 계정 | 대상 노드 |
 | --- | --- | --- |

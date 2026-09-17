@@ -201,7 +201,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 - VM·디스크·VPC·피어링 생성 스크립트
 - HDFS·YARN XML 설정
-- HDFS 호스트 설치·systemd unit 생성 스크립트와 오프라인 검사
+- HDFS 호스트 설치·systemd unit 생성 스크립트와 오프라인 검사, Node 1 설치 검증
 - Node 1과 Worker용 Docker Compose
 - 로컬 XML·Compose·PowerShell 정적 검사
 

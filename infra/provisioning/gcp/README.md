@@ -108,19 +108,21 @@ API [compute.googleapis.com] not enabled on project [...]. Would you like to ena
 .\scripts\inspect-node.ps1 -ProjectId $ProjectId -Node 2
 ```
 
-SSH 연결과 `/mnt/data` 마운트까지 확인합니다.
+GCP 리소스 조회 뒤 tailnet SSH 연결과 `/mnt/data` 마운트까지 확인합니다.
 
 ```powershell
 .\scripts\inspect-node.ps1 -ProjectId $ProjectId -Node 2 -CheckSsh
 ```
 
-직접 접속하거나 실제 SSH 명령과 키 경로를 확인합니다.
+직접 접속할 때도 `node-*` MagicDNS와 서버별 Linux 계정을 사용합니다.
 
 ```powershell
-gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
-gcloud compute ssh worker-2 --project=$ProjectId --zone=asia-east1-b
-gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b --dry-run
+tailscale ping node-1
+tailscale ssh SSAFY@node-1
+tailscale ssh planetory-admin@node-2
 ```
+
+`gcloud`는 VM·디스크·네트워크 같은 GCP 제어 영역에 계속 사용한다. `gcloud compute ssh`는 노드 최초 생성 후 Tailscale을 설치·등록하거나 tailnet 장애를 복구할 때만 사용하며, 일상 접속과 설치 자동화에는 사용하지 않는다. 상세 장애 절차는 [GCP 노드 운영 런북](../../../docs/operations/gcp-node-runbook.md)을 따른다.
 
 마운트 확인이 실패하면 시작 로그를 확인합니다.
 
@@ -153,7 +155,7 @@ findmnt -T /var/lib/hadoop-hdfs/journal    # Node 1~3
 - 모든 참여자가 같은 배열과 순서를 사용합니다.
 - 부분 테스트는 중복되지 않은 프로젝트 ID 2~6개로 실행할 수 있습니다.
 - 6대를 넘기려면 방화벽과 IP 계획부터 다시 정해야 합니다.
-- 스크립트는 피어링 생성 후 짧은 호스트명과 GCE FQDN을 등록하고 이름 해석을 검사합니다.
+- 스크립트는 피어링 생성 후 tailnet SSH로 짧은 호스트명과 GCE FQDN을 등록하고 이름 해석을 검사합니다.
 
 ```powershell
 $Projects = @(
@@ -168,7 +170,7 @@ $Projects = @(
 
 각 팀원이 자신의 프로젝트에서 한 번씩 실행합니다.
 
-`$ProjectId`와 `$Projects`에는 예시가 아닌 실제 프로젝트 ID를 입력합니다. `planetory-vpc` 조회가 실패하면 활성 계정과 해당 프로젝트의 네트워크를 먼저 확인합니다.
+`$ProjectId`와 `$Projects`에는 예시가 아닌 실제 프로젝트 ID를 입력합니다. `/etc/hosts`까지 갱신하려면 자신의 노드가 tailnet에 등록되어 있어야 합니다. `planetory-vpc` 조회가 실패하면 활성 계정과 해당 프로젝트의 네트워크를 먼저 확인합니다.
 
 ```powershell
 gcloud auth list --filter=status:ACTIVE --format="value(account)"
@@ -200,9 +202,9 @@ $Projects = @('actual-master-project', 'actual-worker2-project', 'actual-worker5
 
 `-NodeNumbers`를 생략하면 기존처럼 1부터 순서대로 번호를 붙입니다. 스크립트는 변경 전에 자기 VM의 이름·네트워크·내부 IP를 검사합니다. 실제 생성 번호가 다르면 중단합니다. 기존 피어링은 이름이 달라도 연결 대상이 같으면 재사용하며, 같은 이름이 다른 대상에 쓰이면 자동 삭제하지 않고 중단합니다. 나중에 3·4번을 추가할 때 전체 프로젝트 배열과 `-NodeNumbers 1,2,3,4,5,6`으로 각 프로젝트에서 다시 실행합니다. 양쪽 설정이 끝나야 연결 상태를 확인할 수 있습니다.
 
-SSH 문제를 먼저 해결해야 한다면 같은 명령에 `-SkipHosts`를 추가해 피어링만 처리합니다. 기본 실행은 `/etc/hosts`에 노드 별칭을 기록하며 수정 전 `/etc/hosts.planetory-backup-*`를 남깁니다. 구형 `# planetory-cluster` 블록은 자동 삭제하지 않으므로 직접 확인 후 정리해야 합니다. SSH 방화벽, 외부 IP와 sshd 설정을 직접 변경하는 명령은 이 스크립트에 없습니다.
+tailnet 등록을 먼저 해결해야 한다면 같은 명령에 `-SkipHosts`를 추가해 피어링만 처리합니다. 기본 실행은 Node 1의 `SSAFY@node-1`, Node 2~6의 `planetory-admin@node-*`를 검증한 뒤 `/etc/hosts`에 노드 별칭을 기록하며 수정 전 `/etc/hosts.planetory-backup-*`를 남깁니다. 구형 `# planetory-cluster` 블록은 자동 삭제하지 않으므로 직접 확인 후 정리해야 합니다. SSH 방화벽, 외부 IP와 sshd 설정을 직접 변경하는 명령은 이 스크립트에 없습니다.
 
-오프라인 회귀 검사: `pwsh -NoProfile -File .\scripts\test-mesh-peering.ps1` (실제 gcloud 호출 없음).
+오프라인 회귀 검사: `pwsh -NoProfile -File .\scripts\test-mesh-peering.ps1` (실제 gcloud·tailnet 호출 없음).
 
 ```powershell
 $Network = gcloud compute networks describe planetory-vpc `

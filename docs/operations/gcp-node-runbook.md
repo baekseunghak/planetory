@@ -9,6 +9,14 @@
 
 팀원 등록, 서버별 SSH 계정과 접근 제한은 [Tailscale 팀 서버 접근 가이드](tailscale-team-access.md)를 따른다. 서버 점검과 자동화에서도 가이드의 사용자명을 명시하고 로컬·격리 실행 계정 이름을 원격 사용자로 추정하지 않는다.
 
+```powershell
+tailscale ping node-1
+tailscale ssh SSAFY@node-1
+tailscale ssh planetory-admin@node-2
+```
+
+일상 로그인·점검·파일 전송은 이 tailnet 경로를 사용한다. `gcloud`는 VM·디스크·네트워크 같은 GCP 제어 영역 조회·변경에 사용하고, `gcloud compute ssh`는 최초 Tailscale 등록 또는 tailnet 장애 복구에만 사용한다.
+
 `node-*` 접속은 관리용 Tailscale 경로이며 `10.20.x.10`을 사용하는 GCP VPC Peering 실환경 검증을 대신하지 않는다.
 
 ## 2. 노드 상태 점검
@@ -147,13 +155,23 @@ systemctl is-active ufw 2>/dev/null || true
 systemctl is-active tailscaled 2>/dev/null || true
 ```
 
-`22 ALLOW Anywhere`와 IPv6 동일 규칙은 호스트 방화벽 기준 최소 개방이 아니다. Tailscale 관리 경로, Node 1 내부 관리 경로와 비상 GCP 직접 접속 경로를 확정하고 제한 규칙을 먼저 추가한다. 별도 SSH 세션에서 새 규칙을 검증하기 전에는 기존 허용 규칙을 삭제하거나 UFW를 재시작하지 않는다.
+`22 ALLOW Anywhere`와 IPv6 동일 규칙은 호스트 방화벽 기준 최소 개방이 아니다. Tailscale 관리 경로, Node 1 내부 관리 경로와 비상 GCP 직접 접속 경로를 확정하고 제한 규칙을 먼저 추가한다. 별도 tailnet SSH 세션에서 새 규칙을 검증하기 전에는 기존 허용 규칙을 삭제하거나 UFW를 재시작하지 않는다.
 
 Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. 서비스 시작 후 `ss -lntp`의 실제 리스너와 필요한 노드 관계를 기준으로 허용 범위를 결정한다.
 
-## 6. SSH 접속 장애
+## 6. tailnet SSH 장애와 GCP 비상 복구
 
-집·교육장·VPN 변경으로 접속 공인 IP가 달라질 수 있다. Worker는 실제 VM 이름으로 바꾼다. 진단 중 API 활성화 질문이 나올 수 있다.
+먼저 클라이언트 연결, MagicDNS, 대상 노드와 SSH 권한을 확인한다.
+
+```powershell
+tailscale status
+tailscale ping node-1
+tailscale ssh SSAFY@node-1 hostname -s
+```
+
+실패하면 Tailscale Admin Console에서 사용자·장비 승인, 대상 노드 `Connected`, ACL의 네트워크 접근과 SSH 규칙을 각각 확인한다. Tailscale SSH는 대상 Linux 계정을 자동 생성하지 않으므로 Node 1은 `SSAFY`, Node 2~6은 `planetory-admin` 계정이 실제로 존재해야 한다.
+
+tailnet으로 복구할 수 없고 서버 안의 `tailscaled` 또는 네트워크를 고쳐야 할 때만 GCP 직접 접속을 비상 경로로 사용한다. Worker는 실제 VM 이름으로 바꾼다. 진단 중 API 활성화 질문이 나올 수 있다.
 
 ```powershell
 gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b --troubleshoot
@@ -178,7 +196,7 @@ if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 갱신 실패' }
 gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
 ```
 
-`--source-ranges`는 전체 허용 목록을 교체한다. 현재 IP만 넣어 기존 관리 주소를 제거하거나 문제 해결을 위해 `0.0.0.0/0`을 열지 않는다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수 없다.
+비상 접속으로 `tailscaled`를 복구한 뒤 `tailscale ping`과 `tailscale ssh`를 다시 통과해야 일상 경로가 복구된 것이다. `--source-ranges`는 전체 허용 목록을 교체한다. 현재 IP만 넣어 기존 관리 주소를 제거하거나 문제 해결을 위해 `0.0.0.0/0`을 열지 않는다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수 없다.
 
 ## 7. 리소스·quota·비용 종료 기준
 
