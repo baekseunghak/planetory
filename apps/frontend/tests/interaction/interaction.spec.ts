@@ -153,7 +153,9 @@ test("keyboard navigation, selection, pan, zoom limits and full view keep focus 
   await expect(canvas).toBeFocused();
   await expect(page.getByTestId("selection-summary")).toHaveText(id!);
   await canvas.press("Home");
-  expect((await camera(page)).zoom).toBeLessThanOrEqual(1.5);
+  await expect
+    .poll(async () => (await camera(page)).zoom)
+    .toBeLessThanOrEqual(1.5);
   await canvas.press("Escape");
   await expect(page.getByTestId("selection-summary")).toHaveCount(0);
   await canvas.press("Tab");
@@ -234,8 +236,15 @@ test("challenge comes only from quests and disappears after its round ends", asy
     const response = await route.fetch();
     const body = await response.json();
     body.challenge = active
-      ? { unlocked: true, ticId: "900000008" }
-      : { unlocked: false, ticId: null };
+      ? { ...body.challenge, unlocked: true, ticId: "900000008" }
+      : {
+          round: null,
+          eligible: false,
+          unlocked: false,
+          ticId: null,
+          progressStage: null,
+          participantCount: null,
+        };
     await route.fulfill({ response, json: body });
   });
   await start(page);

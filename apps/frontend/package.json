@@ -16,7 +16,7 @@
     "test:browser": "playwright test --project=chromium",
     "test:browser:desktop": "playwright test --project=chrome --project=msedge --project=firefox",
     "test:production": "playwright test --config=playwright.production.config.ts",
-    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback",
+    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback && npm run test:quests",
     "format": "prettier --write src dev tests scripts docs *.ts *.json *.html *.md",
     "format:check": "prettier --check src dev tests scripts docs *.ts *.json *.html *.md",
     "dev:auth": "vite --mode auth --host 127.0.0.1 --port 58268 --strictPort",
@@ -33,7 +33,9 @@
     "dev:detail": "vite --mode interaction --host 127.0.0.1 --port 58335 --strictPort",
     "test:detail": "playwright test --config=playwright.detail.config.ts --project=chromium",
     "dev:fallback": "vite --mode interaction --host 127.0.0.1 --port 58338 --strictPort",
-    "test:fallback": "playwright test --config=playwright.fallback.config.ts --project=chromium"
+    "test:fallback": "playwright test --config=playwright.fallback.config.ts --project=chromium",
+    "dev:quests": "vite --mode interaction --host 127.0.0.1 --port 58345 --strictPort",
+    "test:quests": "playwright test --config=playwright.quests.config.ts --project=chromium"
   },
   "dependencies": {
     "react": "19.2.8",

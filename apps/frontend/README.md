@@ -1,5 +1,7 @@
 # Planetory 공용 프론트
 
+2026-09-17: 208 튜토리얼·챌린지·재개 퀘스트를 지도와 대체 목록의 공용 패널로 연결했다. `npm run dev:quests`는 58345의 개발용 합성 응답이다. 실제 API 확인 범위와 남은 제공자 연결은 [208 구현·인수 기록](docs/ticket-208-readiness.md)을 따른다.
+
 2026-09-17: 207 WebGL 대체 발견 목록·키보드 전환을 연결했다. `npm run dev:fallback`으로 58338에서 확인한다. [207 구현·검증과 실제 인수 대기](docs/ticket-207-readiness.md)를 따른다.
 
 2026-09-17: 206 별 상세·내 행성 확대·복귀·공통 경로 이동을 연결했다. `npm run dev:detail`로 확인하며 [206 항목별 인수와 남은 실제 연동](docs/ticket-206-readiness.md)을 따른다.

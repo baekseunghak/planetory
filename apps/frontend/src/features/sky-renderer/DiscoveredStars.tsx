@@ -4,9 +4,7 @@ import type { SkySceneProps } from "../sky-data/SkyDataPage";
 import {
   discoveredPath,
   readDiscoveredPage,
-  readQuestLinks,
   type DiscoveredPage,
-  type QuestLink,
 } from "./discovered";
 
 export function DiscoveredStars({
@@ -19,12 +17,7 @@ export function DiscoveredStars({
     page?: DiscoveredPage;
     error?: Error;
   } | null>(null);
-  const [quests, setQuests] = useState<{
-    items?: QuestLink[];
-    error?: Error;
-  } | null>(null);
-  const [retry, setRetry] = useState(0),
-    [questRetry, setQuestRetry] = useState(0);
+  const [retry, setRetry] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null),
     focusPage = useRef(false);
   const cursor = cursors.at(-1)!;
@@ -36,7 +29,6 @@ export function DiscoveredStars({
     previous.current = scope;
     setCursors([null]);
     setResult(null);
-    setQuests(null);
   }, [scope, data.needsRefresh]);
   useEffect(() => {
     if (!active || data.needsRefresh || !fresh) return;
@@ -68,26 +60,6 @@ export function DiscoveredStars({
       });
     return () => controller.abort();
   }, [active, scope, data.needsRefresh, fresh, cursor, retry]);
-  useEffect(() => {
-    if (!active || data.needsRefresh || !fresh) return;
-    const controller = new AbortController();
-    setQuests(null);
-    void api<unknown>("/v1/me/quests", { signal: controller.signal })
-      .then((value) => {
-        if (!controller.signal.aborted)
-          setQuests({ items: readQuestLinks(value) });
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted)
-          setQuests({
-            error:
-              error instanceof Error
-                ? error
-                : new Error("퀘스트를 불러오지 못했습니다."),
-          });
-      });
-    return () => controller.abort();
-  }, [active, scope, fresh, data.needsRefresh, questRetry]);
   const page = fresh && !data.needsRefresh ? result?.page : null;
   const error = result?.error;
   return (
@@ -102,40 +74,6 @@ export function DiscoveredStars({
       <p>
         아직 분석하지 않은 별도 포함합니다. 최근 활동 순서로 20개씩 보여드려요.
       </p>
-      <details aria-label="탐사 퀘스트" className="fallback-quests">
-        <summary>탐사 퀘스트</summary>
-        {(!quests || data.needsRefresh) && (
-          <p role="status">퀘스트를 불러오고 있습니다.</p>
-        )}
-        {quests?.error && (
-          <div role="alert">
-            <p>
-              퀘스트를 불러오지 못했습니다. 별 목록과 상세는 계속 이용할 수
-              있어요.
-            </p>
-            <button onClick={() => setQuestRetry((n) => n + 1)}>
-              퀘스트 다시 불러오기
-            </button>
-          </div>
-        )}
-        {fresh && !data.needsRefresh && quests?.items && (
-          <ul>
-            {quests.items.map((q) => (
-              <li key={q.key}>
-                {q.ticId ? (
-                  <button onClick={() => select(q.ticId!)}>
-                    {q.label} · {q.status}
-                  </button>
-                ) : (
-                  <span>
-                    {q.label} · {q.status}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </details>
       <div className="discovered-status" role="status" aria-live="polite">
         {data.needsRefresh
           ? "최신 발견 목록을 확인하고 있습니다."

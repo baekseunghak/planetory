@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useSkyData } from "./useSkyData";
 import type { SkyDataStore, SkySnapshot } from "./store";
+import { QuestProvider } from "../quests/QuestProvider";
 export type SkySceneProps = { data: SkySnapshot; store: SkyDataStore };
 export function SkyDataPage({
   renderScene,
@@ -75,7 +76,9 @@ export function SkyDataPage({
       {store &&
         data.meta &&
         (renderScene ? (
-          renderScene({ store, data })
+          <QuestProvider key={store.memberId} store={store} data={data}>
+            {renderScene({ store, data })}
+          </QuestProvider>
         ) : (
           <p>
             지도 데이터를 준비했습니다. 지도 시각화 연결을 준비하고 있습니다.
