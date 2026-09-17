@@ -46,13 +46,17 @@ public class CommentService {
         return new Created(id(comment), comment.getCreatedAt());
     }
 
-    /** 커서는 부모·size에 묶인다. 조건을 바꾸면 이어읽을 수 없고 400이다. */
     /** 글 상세가 쓰는 공개 댓글 수. 세는 규칙을 댓글 도메인 한 곳에 둔다(삭제·숨김 제외, SB-D22). */
     @Transactional(readOnly = true)
     public int countVisible(long postId) {
         return comments.countByPostIdAndStatus(postId, "visible");
     }
 
+    /**
+     * 최신순 한 페이지. 커서는 부모 종류·부모 ID·size에 묶이므로 조건을 바꾸면 이어읽을 수 없고 400이다.
+     *
+     * <p>정렬 키는 {@code createdAt} 내림차순이고 동률은 {@code id}로 가른다.
+     */
     @Transactional(readOnly = true)
     public CommentList list(long parentId, ParentType parentType, int size, String cursor) {
         if (size < 1 || size > MAX_LIST_SIZE) throw new BusinessException(ErrorCode.VALIDATION_FAILED);

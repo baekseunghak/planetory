@@ -551,7 +551,7 @@ class AuthIntegrationTest {
                         .contentType("application/json")
                         .content("{\"title\":\"페이지 부모\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("postId").asText();
-        // 같은 트랜잭션이 아니어도 created_at이 겹칠 수 있다. 동률을 id로 가르는지 함께 본다.
+        // 요청을 따로 보내므로 created_at은 서로 다르다. 동률은 아래 별도 테스트에서 본다.
         var ids = new java.util.ArrayList<String>();
         for (int i = 1; i <= 5; i++) {
             ids.add(mapper.readTree(mvc.perform(post("/api/v1/comments").session(member).with(csrf())
@@ -598,6 +598,51 @@ class AuthIntegrationTest {
         assertEquals(5, all.get("items").size());
         assertFalse(all.get("hasNext").asBoolean());
         assertTrue(all.get("nextCursor").isNull());
+    }
+
+    /**
+     * created_at이 모두 같을 때 id로 갈라 읽는지 본다.
+     *
+     * <p>커서가 시각만 담으면 동률인 댓글이 통째로 밀리거나 빠진다. 요청을 따로 보내면 시각이 서로
+     * 달라져 이 분기를 지나지 않으므로, 저장 뒤 시각을 강제로 같게 만들어 확인한다.
+     */
+    @Test
+    void commentCursorSplitsSameCreatedAtById() throws Exception {
+        var member = login("google", "comment-tie");
+        String postId = mapper.readTree(mvc.perform(post("/api/v1/posts").session(member).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"title\":\"동률 부모\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("postId").asText();
+        var ids = new java.util.ArrayList<String>();
+        for (int i = 1; i <= 5; i++) {
+            ids.add(mapper.readTree(mvc.perform(post("/api/v1/comments").session(member).with(csrf())
+                            .contentType("application/json")
+                            .content("{\"parentType\":\"POST\",\"parentId\":\"" + postId
+                                    + "\",\"body\":\"동률 " + i + "\"}"))
+                    .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString())
+                    .get("commentId").asText());
+        }
+        java.util.Collections.reverse(ids); // id 내림차순 기대
+
+        long rawPost = Long.parseLong(postId.substring(postId.indexOf('-') + 1));
+        // 마이크로초까지 같게 둔다. 커서가 마이크로초를 잃으면 여기서 어긋난다.
+        jdbc.update("UPDATE comments SET created_at = '2026-09-17 03:00:00.123456+00' WHERE post_id = ?", rawPost);
+
+        var seen = new java.util.ArrayList<String>();
+        String cursor = null;
+        for (int page = 0; page < 10; page++) {
+            var request = get("/api/v1/comments").param("parentType", "POST")
+                    .param("parentId", postId).param("size", "2").session(member);
+            if (cursor != null) request = request.param("cursor", cursor);
+            var body = mapper.readTree(mvc.perform(request).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            body.get("items").forEach(item -> seen.add(item.get("commentId").asText()));
+            if (!body.get("hasNext").asBoolean()) break;
+            cursor = body.get("nextCursor").asText();
+        }
+        assertEquals(ids, seen);
+        assertEquals(5, seen.size());
+        assertEquals(seen.size(), new java.util.LinkedHashSet<>(seen).size());
     }
 
     /** 공식 스레드(kind=system_thread)는 작성자가 없고 후보를 참조한다. st- 접두사와 SIGNAL_THREAD 분기를 함께 확인한다. */
