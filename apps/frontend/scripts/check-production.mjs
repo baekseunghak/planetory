@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "sky-fixture-203",
+  "sky-fixture-member-203",
+  "dev-sky-203",
+  "203 개발 검증 화면",
   "auth-fixture-202",
   "dev-auth-202",
   "FIXTURE_NICKNAME_REQUIRED_202",

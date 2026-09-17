@@ -5,13 +5,16 @@ import { App, type PageSlots } from "./app/App";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
+import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 
 // Register feature components here after their individual tickets are implemented.
 async function start() {
-  let pages: PageSlots = {};
+  let pages: PageSlots = { sky: SkyDataPage };
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
+  if (import.meta.env.DEV && import.meta.env.VITE_SKY_DATA_FIXTURE === "true")
+    pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ErrorBoundary>
