@@ -66,7 +66,10 @@ sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc
 
 Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최초 초기화를 포함한다. 설치 구현은 [Hadoop 3.5.0 Cluster Setup](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-common/ClusterSetup.html), [QJM HA](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)와 [Apache 공식 배포본](https://downloads.apache.org/hadoop/common/hadoop-3.5.0/)을 기준으로 하며, 노드 역할과 저장 경로는 이 저장소의 설정을 따른다.
 
-구현 대상은 단일 노드의 설치 책임을 갖는 `scripts/install-hdfs-host.sh`와 기존 `gcloud compute scp`·`gcloud compute ssh` 방식으로 여섯 노드를 호출하는 얇은 `scripts/install-hdfs-hosts.ps1`이다. PowerShell 스크립트는 프로젝트·노드 매핑과 결과 수집만 담당하고 Linux 설치 로직을 복제하지 않는다.
+구현 파일은 다음 둘이다.
+
+- [install-hdfs-host.sh](scripts/install-hdfs-host.sh): 단일 노드의 사전 검사·설치·권한·systemd unit 생성을 담당한다.
+- [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): 프로젝트·노드 매핑을 검증하고 `gcloud compute scp`·`gcloud compute ssh`로 Linux 스크립트를 호출한다.
 
 설치 스크립트는 다음 순서와 중단 조건을 지킨다.
 
@@ -93,6 +96,32 @@ Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최�
 네트워크는 `S15P21C206-71`에서 만든 VPC Peering·방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 방화벽, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. HDFS 포트 연결은 데몬을 시작한 뒤 별도 검증한다.
 
 Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1 Docker는 현재 Spark 제출 컨테이너를 사용하는 `S15P21C206-73` 착수 전에 필요하고, Node 2~6 Docker는 수집 컨테이너를 실제 배포할 때 필요하다. 2026-09-17 Jira 조회 기준으로 두 설치 책임을 명시한 별도 Task는 없으므로, 각 작업 착수 전에 기존 Task에 포함할지 별도 Task로 분리할지 확정한다. 확정 전에는 Docker 설치를 72번 완료 증거로 계산하지 않는다.
+
+#### 설치 실행
+
+저장소 루트에서 프로젝트 ID를 Node 1~6 순서로 지정한다. 실제 값은 저장소에 기록하지 않는다.
+
+```powershell
+$Projects = @(
+  '<node-1-project>',
+  '<node-2-project>',
+  '<node-3-project>',
+  '<node-4-project>',
+  '<node-5-project>',
+  '<node-6-project>'
+)
+
+# GCP 노드 매핑만 읽고 원격 변경은 하지 않는다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects -WhatIf
+
+# Node 1을 먼저 설치하고 PASS 출력과 서버 상태를 확인한다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects
+
+# Node 1 검증 후 Node 2~6을 순차 설치한다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -Projects $Projects -NodeNumbers 2,3,4,5,6
+```
+
+`-WhatIf`는 GCP의 VM 이름·상태·사설 IP만 확인하며 Linux 사전 검사를 실행하지 않는다. 실제 실행은 각 호스트에서 OS·hostname·사설 IP·mount·이름 해석·기존 HDFS 프로세스·NameNode format 여부·기존 설정 충돌을 먼저 검사하고 하나라도 다르면 설치 전에 중단한다. `PASS`는 설치 준비 완료를 뜻하며 HDFS 초기화나 72번 런타임 완료 증거가 아니다.
 
 | 경로 | 소유 계정 | 대상 노드 |
 | --- | --- | --- |
@@ -131,37 +160,37 @@ ZooKeeper와 ZKFC는 사용하지 않는다. HDFS는 QJM을 사용하되 전환�
 1. Node 1~3에서 JournalNode를 시작한다.
 
 ```bash
-hdfs --daemon start journalnode
+sudo systemctl start hadoop-hdfs-journalnode
 ```
 
 2. Node 1에서 Active NameNode를 초기화하고 시작한다.
 
 ```bash
-hdfs namenode -format planetory
-hdfs --daemon start namenode
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs namenode -format planetory
+sudo systemctl start hadoop-hdfs-namenode
 ```
 
 3. Node 2에서 Standby를 bootstrap하고 시작한다.
 
 ```bash
-hdfs namenode -bootstrapStandby
-hdfs --daemon start namenode
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs namenode -bootstrapStandby
+sudo systemctl start hadoop-hdfs-namenode
 ```
 
 4. Node 2~6에서 DataNode를 시작한다.
 
 ```bash
-hdfs --daemon start datanode
+sudo systemctl start hadoop-hdfs-datanode
 ```
 
 5. 두 NameNode가 Standby로 시작하므로 Node 1에서 safemode 해제를 기다린 후 최초 Active를 지정한다. 기존 데이터가 있는데 safemode가 끝나지 않으면 원인을 확인하며 강제 해제하지 않는다.
 
 ```bash
-hdfs dfsadmin -fs hdfs://master-1:8020 -safemode wait
-hdfs haadmin -transitionToActive nn1
-hdfs haadmin -getServiceState nn1
-hdfs haadmin -getServiceState nn2
-hdfs dfsadmin -report
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfsadmin -fs hdfs://master-1:8020 -safemode wait
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn1
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -getServiceState nn1
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -getServiceState nn2
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfsadmin -report
 ```
 
 ## HDFS 완료 검증
@@ -203,15 +232,15 @@ getent hosts <YARN이 표시한 호스트명>
 계획된 전환은 기존 Active를 먼저 Standby로 내린다.
 
 ```bash
-hdfs haadmin -transitionToStandby nn1
-hdfs haadmin -transitionToActive nn2
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToStandby nn1
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
 ```
 
 Node 1 장애 시에는 담당자가 GCP에서 Node 1 VM의 완전 중지를 확인한 뒤에만 Node 2에서 실행한다.
 
 ```bash
-hdfs haadmin -transitionToActive nn2
-hdfs fsck / -blocks
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs fsck / -blocks
 ```
 
 자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
