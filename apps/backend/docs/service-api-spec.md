@@ -355,7 +355,21 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
-`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20`, 성공 200. `size`는 기본 20, 최대 100이며 최신순이다.
+`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20&cursor=`, 성공 200. `size`는 기본 20, 최대 100이며 최신순이다.
+
+응답은 피드 4.1과 같은 목록 구조를 쓴다.
+
+```json
+{"items": [{"commentId":"c-801", "author": {}, "body":"", "attachments":[], "sourceLinks":[],
+            "createdAt":"2026-09-09T03:10:00Z", "updatedAt":"2026-09-09T03:10:00Z"}],
+ "nextCursor": null, "hasNext": false}
+```
+
+`cursor`는 불투명 값이며 `parentType`·`parentId`·`size`에 묶는다. 셋 중 하나라도 다른 요청에 쓰거나
+형식이 깨졌으면 400 `VALIDATION_FAILED`로 거절한다. `hasNext`는 `nextCursor != null`과 같은 뜻이며
+마지막 페이지는 `nextCursor`가 null이다. 정렬 키는 `createdAt` 내림차순·동률은 `commentId` 내림차순이고
+커서도 두 값을 함께 담아 경계에서 중복·누락이 없다. 최신순이므로 페이지를 넘기는 동안 새 댓글이 달리면
+이미 본 페이지의 내용이 밀릴 수 있다. 이어읽기는 커서 기준이라 같은 댓글을 두 번 주지는 않는다.
 
 공식 스레드는 `parentType=SIGNAL_THREAD&parentId=st-301`. 두 부모 필드는 필수다. 성공 200 목록 항목은 `commentId`, `author`, `body`, `attachments`, `sourceLinks`, `createdAt`, `updatedAt`. 기본 정렬은 최신순 제안.
 

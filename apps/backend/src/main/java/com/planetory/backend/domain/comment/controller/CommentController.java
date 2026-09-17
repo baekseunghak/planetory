@@ -40,10 +40,11 @@ public class CommentController {
 
     @Operation(summary = "댓글 목록")
     @GetMapping("/api/v1/comments")
-    public java.util.List<CommentService.Detail> list(@RequestParam String parentType, @RequestParam String parentId,
-                                                       @RequestParam(defaultValue = CommentService.DEFAULT_LIST_SIZE) int size) {
+    public CommentService.CommentList list(@RequestParam String parentType, @RequestParam String parentId,
+                                          @RequestParam(defaultValue = CommentService.DEFAULT_LIST_SIZE) int size,
+                                          @RequestParam(required = false) String cursor) {
         ParentType type = parentType(parentType);
-        return comments.list(parentId(parentId, type), type, size);
+        return comments.list(parentId(parentId, type), type, size, cursor);
     }
 
     @Operation(summary = "댓글 수정")

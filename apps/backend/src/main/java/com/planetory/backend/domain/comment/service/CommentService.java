@@ -34,6 +34,9 @@ public class CommentService {
     public record Detail(String commentId, Author author, String body, List<Object> attachments,
                          List<Object> sourceLinks, Instant createdAt, Instant updatedAt) {}
 
+    /** {@code hasNext}는 {@code nextCursor != null}과 같은 뜻이다. 피드 4.1과 같은 목록 구조를 쓴다. */
+    public record CommentList(List<Detail> items, String nextCursor, boolean hasNext) {}
+
     @Transactional
     public Created create(long memberId, CreateCommand command) {
         var author = members.requireActive(memberId);
@@ -43,6 +46,7 @@ public class CommentService {
         return new Created(id(comment), comment.getCreatedAt());
     }
 
+    /** 커서는 부모·size에 묶인다. 조건을 바꾸면 이어읽을 수 없고 400이다. */
     /** 글 상세가 쓰는 공개 댓글 수. 세는 규칙을 댓글 도메인 한 곳에 둔다(삭제·숨김 제외, SB-D22). */
     @Transactional(readOnly = true)
     public int countVisible(long postId) {
@@ -50,11 +54,29 @@ public class CommentService {
     }
 
     @Transactional(readOnly = true)
-    public List<Detail> list(long parentId, ParentType parentType, int size) {
+    public CommentList list(long parentId, ParentType parentType, int size, String cursor) {
         if (size < 1 || size > MAX_LIST_SIZE) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         parent(parentId, parentType, false);
-        return comments.findVisibleByPostId(parentId, PageRequest.ofSize(size)).stream()
-                .map(CommentService::detailOf).toList();
+        CommentCursor expected = new CommentCursor(parentType.name(), parentId, size, 0, 0);
+        CommentCursor after = null;
+        if (cursor != null && !cursor.isBlank()) {
+            after = CommentCursor.decode(cursor, expected)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED));
+        }
+        // 한 건 더 읽어 다음 페이지가 있는지 본다. 별도 count 질의를 하지 않는다.
+        var limit = PageRequest.ofSize(size + 1);
+        List<Comment> page = after == null
+                ? comments.findVisibleFirstPage(parentId, limit)
+                : comments.findVisibleAfter(parentId, after.afterCreatedAt(), after.afterId(), limit);
+        boolean hasNext = page.size() > size;
+        List<Comment> shown = hasNext ? page.subList(0, size) : page;
+        String next = null;
+        if (hasNext) {
+            Comment last = shown.get(shown.size() - 1);
+            next = CommentCursor.after(parentType.name(), parentId, size,
+                    last.getCreatedAt(), last.getId()).encode();
+        }
+        return new CommentList(shown.stream().map(CommentService::detailOf).toList(), next, hasNext);
     }
 
     @Transactional

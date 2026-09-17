@@ -504,8 +504,8 @@ class AuthIntegrationTest {
         String commentId = mapper.readTree(created.getResponse().getContentAsString()).get("commentId").asText();
 
         mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId).session(other))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].commentId").value(commentId))
-                .andExpect(jsonPath("$[0].body").value("첫 댓글"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].commentId").value(commentId))
+                .andExpect(jsonPath("$.items[0].body").value("첫 댓글"));
         mvc.perform(get("/api/v1/posts/" + postId).session(other))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.commentCount").value(1));
         mvc.perform(get("/api/v1/comments").param("parentType", "SIGNAL_THREAD")
@@ -543,6 +543,63 @@ class AuthIntegrationTest {
                         .param("size", "101").session(other)).andExpect(status().isBadRequest());
     }
 
+    /** 커서 페이지네이션. 경계에서 중복·누락이 없어야 하고 커서는 부모·size에 묶인다. */
+    @Test
+    void commentListPagesByCursorWithoutGapOrDuplicate() throws Exception {
+        var member = login("google", "comment-pager");
+        String postId = mapper.readTree(mvc.perform(post("/api/v1/posts").session(member).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"title\":\"페이지 부모\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("postId").asText();
+        // 같은 트랜잭션이 아니어도 created_at이 겹칠 수 있다. 동률을 id로 가르는지 함께 본다.
+        var ids = new java.util.ArrayList<String>();
+        for (int i = 1; i <= 5; i++) {
+            ids.add(mapper.readTree(mvc.perform(post("/api/v1/comments").session(member).with(csrf())
+                            .contentType("application/json")
+                            .content("{\"parentType\":\"POST\",\"parentId\":\"" + postId
+                                    + "\",\"body\":\"댓글 " + i + "\"}"))
+                    .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString())
+                    .get("commentId").asText());
+        }
+        java.util.Collections.reverse(ids); // 최신순 기대 순서
+
+        var seen = new java.util.ArrayList<String>();
+        String cursor = null;
+        for (int page = 0; page < 10; page++) {
+            var request = get("/api/v1/comments").param("parentType", "POST")
+                    .param("parentId", postId).param("size", "2").session(member);
+            if (cursor != null) request = request.param("cursor", cursor);
+            var body = mapper.readTree(mvc.perform(request).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            body.get("items").forEach(item -> seen.add(item.get("commentId").asText()));
+            assertEquals(body.get("hasNext").asBoolean(), !body.get("nextCursor").isNull());
+            if (!body.get("hasNext").asBoolean()) break;
+            cursor = body.get("nextCursor").asText();
+        }
+        assertEquals(ids, seen);
+        assertEquals(5, seen.size());
+        assertEquals(seen.size(), new java.util.LinkedHashSet<>(seen).size());
+
+        // 커서는 size에 묶인다. 다른 size로 이어읽으면 거절한다.
+        var first = mapper.readTree(mvc.perform(get("/api/v1/comments").param("parentType", "POST")
+                        .param("parentId", postId).param("size", "2").session(member))
+                .andReturn().getResponse().getContentAsString());
+        String pageCursor = first.get("nextCursor").asText();
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId)
+                        .param("size", "3").param("cursor", pageCursor).session(member))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/comments").param("parentType", "POST").param("parentId", postId)
+                        .param("size", "2").param("cursor", "!!!not-base64!!!").session(member))
+                .andExpect(status().isBadRequest());
+        // 마지막 페이지는 커서를 주지 않는다.
+        var all = mapper.readTree(mvc.perform(get("/api/v1/comments").param("parentType", "POST")
+                        .param("parentId", postId).param("size", "20").session(member))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(5, all.get("items").size());
+        assertFalse(all.get("hasNext").asBoolean());
+        assertTrue(all.get("nextCursor").isNull());
+    }
+
     /** 공식 스레드(kind=system_thread)는 작성자가 없고 후보를 참조한다. st- 접두사와 SIGNAL_THREAD 분기를 함께 확인한다. */
     @Test
     void commentsOnSignalThreadUseThreadPrefixAndRejectPostType() throws Exception {
@@ -572,8 +629,8 @@ class AuthIntegrationTest {
         String commentId = mapper.readTree(created.getResponse().getContentAsString()).get("commentId").asText();
         mvc.perform(get("/api/v1/comments").param("parentType", "SIGNAL_THREAD")
                         .param("parentId", "st-" + threadId).session(member))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].commentId").value(commentId))
-                .andExpect(jsonPath("$[0].body").value("스레드 의견"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].commentId").value(commentId))
+                .andExpect(jsonPath("$.items[0].body").value("스레드 의견"));
         // 같은 행을 일반 글로 부르면 부모 종류가 달라 404다.
         mvc.perform(get("/api/v1/comments").param("parentType", "POST")
                         .param("parentId", "p-" + threadId).session(member))
