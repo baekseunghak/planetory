@@ -23,3 +23,4 @@
 | 2026-09-16 | Tailscale 팀 등록과 서버 접근 범위 문서화 | S15P21C206-71 | Tailscale, tailnet 초대, 장비 승인, tag:hadoop, MagicDNS, SSH, EC2, GCP | 검증 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 마이 프로필 P0 구현 — 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 | S15P21C206-157 | 닉네임 변경, NICKNAME_CONFLICT, lower(nickname), NFC 정규화, SB-D14, 온보딩, onboarding_done, ON CONFLICT, 타인 프로필, SB-D23, 탈퇴 404, 성과 요약 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Gold 게시 계약과 Publisher·Backend·Frontend 합성 fixture 정합화 | S15P21C206-68 | Gold 계약, PublicationBundle, current, archived, Redis, payload, fixture, field unit, checksum | 검증 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |
