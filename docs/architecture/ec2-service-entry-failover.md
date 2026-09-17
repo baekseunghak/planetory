@@ -43,7 +43,7 @@ GCP Node 1 Publisher → EC2-A PostgreSQL 5432 (경로 보류, 시스템 아키�
 | 인터넷 → EC2 | 22, 80, 3000, 5432, 6379, 8080, 9090, 헬스 관리 포트 | 개방 없음 |
 | EC2 → Cloudflare API | 443 outbound | 상호 감시 |
 | EC2 내부 | frontend·backend 8080 | `127.0.0.1` 전용. Nginx만 프록시한다 |
-| EC2-B → EC2-A | 5432 | 동일 VPC 사설. WAL streaming |
+| EC2-B → EC2-A | 5432 | 동일 VPC 사설. WAL streaming과 **EC2-B Backend의 앱 질의**. 불변 규칙상 두 Backend가 Primary에 직접 연결하므로 이 링크는 EC2-B 경유 요청 전체의 필수 경로다 |
 | EC2-A → EC2-B | 6379 | 동일 VPC 사설 |
 | EC2-A ⇄ EC2-B | 헬스 전용 관리 포트 `/actuator/health` | 동일 VPC 사설 대역만. **Nginx를 경유하지 않는다**(R2 경로 독립). 포트 번호와 `server.address`·`management.server.port` 설정은 84 |
 | EC2-B → EC2-A | node exporter·Actuator | 동일 VPC 사설. Prometheus |
@@ -69,7 +69,7 @@ GCP Node 1 Publisher → EC2-A PostgreSQL 5432 (경로 보류, 시스템 아키�
 - 자격증명은 `Zone: DNS: Edit`를 해당 zone 하나로 제한한 토큰을 파일로 주입한다. 명령줄 인자로 주지 않는다(84).
 - **R2 두 경로의 독립성이 전제다.** 사설 헬스가 Nginx를 지나면 Nginx 단일 장애로 두 경로가 동시에 실패해 R2가 막으려던 오탐이 그대로 난다. 그래서 사설 헬스는 Nginx를 우회하는 전용 관리 포트로 받는다(3절).
 - `/actuator/health`는 현재 `show-details=never`로 UP/DOWN만 반환한다. R2 판정에는 충분하다(2026-09-16 Backend 확인).
-- **공유 의존성 장애는 양쪽 노드를 동시에 DOWN으로 만든다.** Actuator health 집계에 DB·Redis 지표가 포함되면 Primary(EC2-A)나 Redis(EC2-B) 하나가 죽어도 A·B 두 Backend가 모두 DOWN이 되어 상호 감시가 멈춘다(5절). liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분하는 일은 93이 맡는다.
+- **공유 의존성 장애는 양쪽 노드를 동시에 DOWN으로 만든다.** Actuator health 집계에 DB·Redis 지표가 포함되면 Primary(EC2-A)나 Redis(EC2-B) 하나가 죽어도 A·B 두 Backend가 모두 DOWN이 되어 상호 감시가 멈춘다(5절). liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분하는 일은 93이 맡는다. 구현은 **contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다** — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 93 착수 시 Boot 버전에서 확인한다.
 - 잔여 위험: 사설·공개 경로가 동시에 끊기면서 양쪽 모두 인터넷은 되는 이중 장애. R4가 0개를 막고 다음 주기에 R1로 복귀한다.
 
 ## 5. 장애 시나리오
@@ -80,11 +80,13 @@ GCP Node 1 Publisher → EC2-A PostgreSQL 5432 (경로 보류, 시스템 아키�
 | app 1대 장애 | 상대가 R2~R4로 레코드 제거. 복구 시 R1로 자기 재등록 | 없음. 플래핑 반복 시 체커 정지 후 원인 조사 | 제거까지 초안값 30초 + 반영. 연결 실패는 자동 재시도로 영향 축소 |
 | Primary(EC2-A) 노드 장애 | **없음.** Backend health에 DB 지표가 포함되어 A·B가 모두 DOWN이 되고, R2 제거가 R4(마지막 1개)에서 멈추며 R1도 자기 health 정상을 요구해 재등록이 없다 | Standby 수동 승격. 진행 중 Gold 적재 트랜잭션은 롤백되어 `current`는 이전 판 유지, Publisher가 재시도한다 | **전면 중단 허용**(쓰기·조회 모두). 분 단위 목표는 97 |
 | Redis(EC2-B) 노드 장애 | A가 B 레코드 제거. 진입은 A 단독 | Redis 재시작. 계산 상태·결과·잠금은 복구하지 않고 재계산 | 온라인 계산 전면 중단 허용(app A도 Redis 불가), 조회·쓰기 유지. 관측 동반 중단은 허용([시스템 아키텍처](system-architecture.md) 9장) |
-| A↔B 사설 링크만 단절 | 없음(R2 이중 실패 미충족) | VPC 경로 점검 | 쓰기 유지, 온라인 계산 정지, Standby 지연 증가 |
+| A↔B 사설 링크만 단절 | 없음(R2 이중 실패 미충족). 진입을 1개 레코드로 축소할지는 93 결정 | VPC 경로 점검 | **EC2-A 경유 요청만 유지, EC2-B 경유 요청 전면 실패**(라운드로빈으로 약 절반), 온라인 계산 정지, Standby 지연 증가 |
 
 Standby 승격 조건: Primary 노드가 사설·공개 경로 모두 응답하지 않고 재기동으로 복구되지 않을 때 담당자가 판단한다. 자동 판정은 두지 않는다. 승격 전에 Standby replay 위치를 확인하고, 기존 Primary가 되살아나 이중 쓰기가 되지 않도록 먼저 완전 정지를 확인한다. 판단까지 허용하는 시간은 97이 정한다.
 
 Primary 승격 뒤 EC2-B는 Primary·Redis·관측·유일 진입점을 모두 갖는 단일 집약 상태가 되므로 원복 절차를 반드시 둔다(97·98).
+
+「A↔B 사설 링크만 단절」 행은 이 설계 때문에 나빠진 것이 아니라 **오늘도 같은 결과**다. 불변 규칙("두 Backend가 Primary에 직접 연결")상 링크가 끊기면 EC2-B의 요청은 Primary에 닿지 못한다. 이 행은 R2가 오탐 방지를 위해 의도적으로 발동하지 않는 유일한 행이므로, 빼야 할 노드를 자동으로 빼지 못하는 구간이 존재한다. 기각한 Redis안은 같은 시나리오에서 더 나쁘다 — EC2-A도 EC2-B의 6379에 닿지 못해 쓰기 가능한 노드까지 함께 죽는다.
 
 ### Primary 장애를 전면 중단으로 두는 근거
 
@@ -96,7 +98,11 @@ Standby로 조회를 라우팅하는 방향은 채택하지 않는다. 자동 �
 
 현재 Backend는 서블릿 세션을 각 노드 메모리에 둔다. `spring-session`·Redis 의존성이 없고 `HttpSessionSecurityContextRepository`와 `HttpSessionOAuth2AuthorizedClientRepository`를 쓴다(`S15P21C206-156` 구현, 2026-09-16 확인). 라운드로빈에서는 로그인 후 다른 노드로 간 요청의 세션 유실, OAuth 인가 시작 노드와 콜백 노드 불일치로 인한 로그인 실패, 노드 재시작 시 해당 노드 세션 소실이 발생한다.
 
-이 Task는 "로그인 세션 저장 방식 확정"을 제외 범위로 두므로 결정하지 않고 위험으로만 기록한다. 후보는 Spring Session + Redis(EC2-B, D1)이며 소유자와 시점은 S03·84에서 정한다. 세션 어피니티는 Cloudflare 무료 플랜의 proxied 레코드로 제공되지 않는다.
+이 Task는 "로그인 세션 저장 방식 확정"을 제외 범위로 두므로 여기서 결정하지 않았다. 별도 조사·설계 결과 **저장소는 PostgreSQL Primary(Spring Session JDBC)로 정하고 `S15P21C206-231`·`-232`·`-233`에 배정했다**(2026-09-17). 근거: 모든 인증 요청이 이미 매 요청 Primary를 읽으므로 세션을 Primary에 두면 새 장애 축이 0개이고, 위 5절 시나리오와 D1이 그대로 유지된다.
+
+**Redis(EC2-B) 저장은 기각했다.** NFR-06 때문에 모든 인증 요청이 A(DB)와 B(Redis)를 동시에 요구하게 되어 Redis 장애가 "온라인 계산만 중단"에서 사실상 전면 중단으로 바뀌고, D1의 쓰기축·계산축 분리 근거가 무효화된다. 세션 어피니티는 Cloudflare 무료 플랜의 proxied 레코드로 제공되지 않는다.
+
+조사에서 추가로 확인한 사실 두 개를 함께 기록한다. CSRF 토큰 저장소도 기본값이 세션 기반이라 노드 간에 깨지며, `POST /api/v1/auth/logout`의 CSRF 면제 조건이 세션 부재를 기준으로 삼아 **세션을 모르는 노드로 간 로그아웃이 검사를 건너뛰고 성공을 반환하면서 실제 세션은 다른 노드에 남는다.** 두 항목 모두 위 티켓에서 해소한다.
 
 ## 6. DB 계정 분리
 
@@ -118,6 +124,8 @@ Standby로 조회를 라우팅하는 방향은 채택하지 않는다. 자동 �
 | 93 | 상호 감시 체커(R1~R4, 주기·임계), health gate 연동, liveness·readiness 분리로 공유 의존성 장애와 앱 장애 구분 |
 | 97 | RPO/RTO |
 | 100 | 오사카 노드 알림 전용 관찰 |
-| S03·84 | 로그인 세션의 노드 간 공유 방식(후보: Spring Session + Redis). 소유자·시점 미정 |
+| 231 | 세션 테이블 스키마(V9)와 `planetory_app` 권한. 서비스 런타임 최초의 DELETE 부여이므로 C04 승인이 선행한다 |
+| 232 | 세션 저장소를 Spring Session JDBC로 전환하고 인증 테스트를 쿠키 기반으로 이관 |
+| 233 | 교차 노드 세션·CSRF·쿠키 속성·장애 응답 실증과 배포·승격 운영 계약. 93·97에 인계 |
 
 이 Task에서 실측한 것: 두 EC2 접속·동일 VPC·사설 RTT, tailnet 포트 노출(22만 응답), Tunnel egress와 replica 동작. DNS 라운드로빈 자동 재시도는 공식 문서, Free 플랜의 Full (strict)·Origin CA 발급 가능은 대시보드 화면 근거다(현재 SSL 모드는 Full, strict 전환은 84에서 Origin CA 설치 후). 실제 전환 동작은 84·93 구현 시 실측한다.

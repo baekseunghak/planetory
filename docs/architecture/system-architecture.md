@@ -219,6 +219,7 @@ S15P21C206-82(2026-09-16)에서 확정했다. 포트·신뢰 경계 행렬, 상�
 - Redis 단일 인스턴스는 EC2-B에 둔다. Standby 자동 승격은 도입하지 않으며, Primary 장애는 쓰기·조회 전면 중단으로 둔다(Backend에 읽기·쓰기 분리가 없다).
 - 외부 공개 포트는 443 하나이며 Cloudflare 대역으로 한정한다. 자체 LB 서버와 유료 Load Balancing은 도입하지 않는다.
 - RPO/RTO 분 단위는 97, 계정 분리는 83, Nginx·Cloudflare 세팅은 84, 상호 감시 체커는 93이 맡는다.
+- 로그인 세션은 PostgreSQL Primary에 공유 저장한다(`S15P21C206-231`~`-233`). Redis는 온라인 계산 전용으로 남는다.
 
 ```text
 사용자 → Cloudflare edge → EC2-A:443 / EC2-B:443 → Nginx → app(A/B 동일·무상태)
