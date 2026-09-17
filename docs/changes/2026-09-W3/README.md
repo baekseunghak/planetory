@@ -44,3 +44,4 @@
 
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
 | 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |

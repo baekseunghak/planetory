@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.8
+# Planetory 서비스 DB ERD v1.9
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,16 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.8 → v1.9 (2026-09-17, `S15P21C206-151`)
+
+`operation_settings.values`의 형식 1을 정하고 DB가 저장 순간 검사한다(AT-41). 키 목록·허용 값·입력 절차는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md)이 정본이다. 모든 키를 요구하고 모르는 키를 거절해 오타 난 설정이 조용히 무시되지 않게 한다. 값 자체(허용 오차·임계값)는 이 판이 정하지 않으며 D20·D11이 정한다.
+
+행 목록이 변경 이력이라는 결정을 DB가 지킨다. 적용된 행의 수정·삭제와 테이블 비우기, 지난 시각이나 다른 행과 같은 시각의 삽입을 거절한다. 적용 시각이 오지 않은 예약 행만 지울 수 있다. v1.4는 `analysis_histories`의 불변을 권한 회수로 정했지만, 규칙은 운영자가 소유자 계정으로 넣어 권한으로는 막을 수 없으므로 트리거를 쓴다.
+
+모든 환경에 초기 규칙 `rule-0`을 넣는다. `submissions.rule_version`이 FK라 규칙 행이 없으면 제출을 저장할 수 없다. 값은 제출 매칭 규칙 v0(`S15P21C206-128`)와 탐사 API 기본값이며, `tutorial.skip_after`만 환경별(로컬 3, 배포 0)로 넣는다.
+
+`tutorial_stars.tic_id`·`challenge_rounds.target_tic_id`는 공개된 별만 받고 `challenge_rounds`는 `starts_on ≤ ends_on`만 받는다(OPS-07·08). 대상 열을 넣거나 바꿀 때만 검사하므로 대상 별이 나중에 숨겨져도 회차 종료·튜토리얼 비활성화는 막지 않는다. 열은 그대로다.
 
 ### v1.7 → v1.8 (2026-09-16, `S15P21C206-138`)
 
@@ -773,9 +783,9 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 ### F. 운영·챌린지·알림·통계
 
-- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
-- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
-- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
+- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6). `tic_id`는 공개된 별만(v1.9 트리거).
+- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04). **v1.9:** `values`는 형식 1(`format_version`과 `selection`·`matching`·`peaks`·`discovery`·`tutorial`·`ai`·`bls` 묶음, 예: `tutorial_skip_after` → `tutorial.skip_after`)만 받는다(CHECK `ck_operation_settings_values_valid`). 적용 시각 유일(`uq_operation_settings_applied_at`), 적용된 행 수정·삭제·비우기와 지난 시각 삽입 거절(트리거), 초기 규칙 `rule-0`. 상세는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md).
+- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
@@ -800,7 +810,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 | # | 항목 | 관련 |
 |---|---|---|
-| 1 | operation_settings에 넣을 항목 목록과 기본값 확정 | OPS-04·08, DEC-03 |
+| 1 | operation_settings 기본값 확정. 항목 목록은 v1.9 형식 1로 정했고 `rule-0`은 개발용 v0 값이다. 확정 값은 새 규칙 버전으로 넣는다 | OPS-04·08, DEC-03, D20·D11 |
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
