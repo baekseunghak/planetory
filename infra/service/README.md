@@ -18,6 +18,28 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 현재는 소유자 겸 서비스 계정 하나(`planetory`)로 접속한다. `planetory_app`·`planetory_gold_writer` 역할 분리는 `S15P21C206-238`의 `users` GRANT가 들어온 뒤에 적용한다.
 
+## 최초 가입에 필요한 초기 데이터
+
+빈 DB에서는 **아무도 가입할 수 없다.** 가입 트랜잭션이 튜토리얼 1번 별을 지급하는데, 마이그레이션의 시드가 `operation_settings` 한 건뿐이라 `tutorial_stars`가 비어 있기 때문이다. 이때 콜백은 `503 DEPENDENCY_UNAVAILABLE`이 되고 회원 생성까지 롤백된다(자세한 조건은 [OAuth 설정](../../apps/backend/docs/oauth-setup.md)).
+
+화면에는 이 503이 `/oauth/callback?error=authentication_failed`로 보인다. `apps/frontend/nginx.conf`가 `/login/oauth2/`의 401·403·503을 같은 경로로 모으기 때문이며, 인증 정보 문제로 오인하기 쉽다.
+
+넣는 순서가 정해져 있다. `tutorial_stars.tic_id`는 `stars`를 참조하고(`fk_tutorial_stars_tic_id`), `trg_tutorial_stars_published` 트리거가 `service_status='published'`를 요구한다. 순서를 뒤집으면 거절된다.
+
+```sql
+BEGIN;
+INSERT INTO stars (tic_id, confirmed_count, service_status)
+VALUES (<운영 TIC>, 1, 'published')
+ON CONFLICT (tic_id) DO UPDATE SET service_status = 'published';
+
+INSERT INTO tutorial_stars (seq, tic_id, intent, active)
+VALUES (1, <운영 TIC>, 'deep_confirmed', true)
+ON CONFLICT (seq) DO NOTHING;
+COMMIT;
+```
+
+로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
+
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
 `cloudflared`는 외부 인바운드 포트를 열지 않고 edge에서만 트래픽을 받는다. 서비스 컨테이너는 같은 `service` 네트워크에 있으므로 Tunnel의 public hostname은 `http://frontend:8080`을 origin으로 지정한다.

@@ -93,9 +93,9 @@ scope는 인가 요청에 보내지 않는다. 개인정보 동의는 개발자�
 초기 데이터가 없으면 콜백은 `503 DEPENDENCY_UNAVAILABLE`이고 회원 생성도 롤백된다.
 테스트는 격리된 스키마에 가상의 튜토리얼 별을 넣고 종료 후 그 스키마만 삭제한다.
 
-첫 별의 자리는 이후 발견 별과 같은 `GalaxyLayout.place(userId, ticId)` 결과를 `world_x`·`world_y`·`depth_z`·`layout_version`으로 저장한다(탐사 API 4.1·9.4절).
-**임시:** 은하 배치 함수는 `S15P21C206-139`에서 구현한다. 그 전까지 `BootstrapGalaxyLayout`이 원점과 `layout_version=bootstrap-0`을 저장한다.
-139의 구현이 병합되면 이 클래스를 삭제한다. `bootstrap-0` 좌표가 남은 개발 DB는 별 지급 기록만 지우지 말고 [개발 환경 안내의 V4 DB 준비](development-setup.md#v4-erd-v12-반영)에 따라 새 DB를 쓰거나 회원 관련 데이터까지 함께 정리한다. 기존 회원은 로그인해도 첫 별이 다시 생성되지 않는다. 배치에 실패하면 회원 생성도 롤백된다.
+첫 별의 자리는 이후 발견 별과 같은 `GalaxyLayout.place(layoutOrdinal)` 결과를 `world_x`·`world_y`·`depth_z`·`layout_version`으로 저장한다(탐사 API 4.1·9.4절). `S15P21C206-139`의 `PersonalSpiralGalaxyLayout`이 `layout_version=personal-spiral-v1`로 배치한다. 좌표는 회원·별과 무관하게 순번만으로 정해지며 참조 구현은 `docs/development/sky-reference/reference.mjs`의 `layout()`이다.
+
+임시 구현 `BootstrapGalaxyLayout`은 삭제됐다. `layout_version=bootstrap-0` 행이 남은 개발 DB는 V7 마이그레이션이 기동을 막으므로 회원 관련 데이터까지 함께 정리한다. 기존 회원은 로그인해도 첫 별이 다시 생성되지 않는다. 배치에 실패하면 회원 생성도 롤백된다.
 
 닉네임은 `별_`와 16자리 임의 16진수로 자동 생성한다. 기존 V1의 `lower(nickname)` 유일 인덱스를 사용한다.
 닉네임 중복 제약이 이미 있으므로 V1 수정이나 중복 마이그레이션은 추가하지 않았다.
