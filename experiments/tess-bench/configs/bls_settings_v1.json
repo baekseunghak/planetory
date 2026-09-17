@@ -1,0 +1,58 @@
+{
+  "settings_id": "bls_grid_v1",
+  "version": "1.0.0",
+  "description": "BLS 탐색 격자·목적함수 비교 (S15P21C206-110, D04). 전처리는 42 채택 잠정값 biweight_1.0d 로 고정하고 한 번에 한 요인만 바꾼다. 품질 게이트는 저장한 상위 피크에 오프라인으로 적용한다(bls-gates).",
+  "preprocess_setting_id": "biweight_1.0d",
+  "defaults": {
+    "grid": "linear",
+    "n_periods": 20000,
+    "frequency_factor": 1.0,
+    "minimum_n_transit": 3,
+    "period_min_days": 0.5,
+    "period_max_rule": "baseline/3",
+    "durations_hours": [1.2, 1.92, 2.88, 4.8],
+    "objective": "likelihood",
+    "oversample": 10,
+    "top_k": 5,
+    "peak_separation_rel": 0.02
+  },
+  "settings": [
+    {"setting_id": "poc_linear20k", "factor": "baseline", "description": "PoC bls_features 기본값: 선형 20,000점, 0.5일~기준선/3, duration 0.05·0.08·0.12·0.2일, likelihood"},
+    {"setting_id": "linear5k", "factor": "grid_density", "n_periods": 5000, "description": "선형 5,000점 (계산 1/4)"},
+    {"setting_id": "linear50k", "factor": "grid_density", "n_periods": 50000, "description": "선형 50,000점 (계산 2.5배)"},
+    {"setting_id": "autoperiod_ff1", "factor": "grid_type", "grid": "autoperiod", "frequency_factor": 1.0, "description": "astropy autoperiod 주파수 등간격, frequency_factor 1 (기본), 최소 통과 3회"},
+    {"setting_id": "autoperiod_ff3", "factor": "grid_type", "grid": "autoperiod", "frequency_factor": 3.0, "description": "astropy autoperiod, frequency_factor 3 (격자 1/3 밀도)"},
+    {"setting_id": "pmax_half", "factor": "period_range", "period_max_rule": "baseline/2", "description": "주기 상한 기준선/2 (통과 2회 허용)"},
+    {"setting_id": "dur_log8_0.5-8h", "factor": "duration_grid", "durations_hours": [0.5, 0.74, 1.1, 1.63, 2.42, 3.6, 5.34, 8.0], "description": "duration 0.5~8시간 로그 등간격 8점 (갭 분석 5.6 초기 비교 기준)"},
+    {"setting_id": "dur_log10_0.5-12h", "factor": "duration_grid", "durations_hours": [0.5, 0.71, 1.01, 1.44, 2.05, 2.92, 4.16, 5.92, 8.43, 12.0], "description": "duration 0.5~12시간 로그 등간격 10점 (장주기 긴 통과 포함)"},
+    {"setting_id": "objective_snr", "factor": "objective", "objective": "snr", "description": "astropy objective=snr (깊이/깊이오차 최대화)"}
+  ],
+  "sde_definition": "SDE = (power[peak] - mean(power)) / std(power). 같은 곡선·설정의 주기도 전체(모든 격자 점, 각 점은 duration 중 최대)에서 계산한다. objective=likelihood 면 power 는 로그가능도 차, objective=snr 면 depth/depth_err 다. 두 목적함수의 SDE 는 같은 척도가 아니므로 설정 간 SDE 값을 직접 비교하지 않고 설정 안에서 문턱을 고른다. 주기도 std 가 0 이거나 비유한이면 SDE 는 NaN(퇴화 입력).",
+  "snr_definition": "SNR = astropy depth_snr = depth / depth_err (피크 duration·epoch 의 box 적합). 점 오차 dy 는 정제곡선의 robust scatter(1.4826×MAD) 를 모든 점에 같은 값으로 준다(dy 없이 실행하면 astropy 가 단위 오차를 가정해 SNR 이 무의미해진다). PDCSAP_FLUX_ERR 사용 여부는 갭 분석 5.6절 TBD. PoC bls_features 의 수동 SNR(깊이 / (scatter/sqrt(n_in_transit)))은 별도 열 poc_snr 로 기록하며 SDE 구현 근거로 쓰지 않는다.",
+  "matching": {
+    "direct_rule": "|P_peak - P_inj| × N_inj ≤ D_inj / 2 (SRS 5.1 누적 통과 중심 오차 규칙, N_inj = 관측된 주입 통과 수) 이고 통과 창 중첩 ≥ window_overlap_min. 중첩 = 주입·피크 통과 창 교집합 점 수 / 두 창 집합 중 작은 쪽 점 수",
+    "alias_multipliers": [0.5, 2.0],
+    "window_overlap_min": 0.5,
+    "note": "직접·alias 판정과 무관하게 원시 오차(period_rel_err, epoch_cyclic_err_hours, duration_ratio, depth_ratio, window_overlap)를 상위 피크마다 저장한다. 허용 오차를 바꿔도 재실행 없이 다시 판정할 수 있다."
+  },
+  "stages": {
+    "tuning": {
+      "targets": ["toi270", "toi451", "wasp62", "pi_men"],
+      "phase_labels": ["middle"],
+      "include_multi": true,
+      "history": "네 별은 42 전처리 벤치마크(1.0.0·1.1.0)와 43 smoke 에서 이미 설정 선택에 사용됐다. 조정 세트로만 쓰고 평가 세트라고 주장하지 않는다."
+    },
+    "evaluation": {
+      "targets": ["l98_59", "cm_dra", "wasp18", "toi700", "hd21749"],
+      "phase_labels": ["start", "middle", "end"],
+      "include_multi": true,
+      "history": "42 에서 설정 선택에 쓰지 않았다. 43 에서 라벨·변환에는 포함됐으나 BLS 설정 선택에는 쓰지 않았다. 채택 설정을 바꾸지 않고 1회 평가한다."
+    }
+  },
+  "gates": {
+    "snr_thresholds": [5, 7, 9, 12],
+    "sde_thresholds": [6, 8, 10, 12],
+    "min_transits": [2, 3],
+    "note": "bls-gates 가 peaks.csv 에 적용해 게이트 조합별 회수율과 무신호 곡선당 가짜 후보 수를 만든다. 허용 목표는 팀 리뷰 전 TBD."
+  }
+}

@@ -1,0 +1,95 @@
+package com.planetory.backend.domain.exploration.service;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
+import com.planetory.backend.domain.exploration.service.StarViews.StarList;
+import com.planetory.backend.domain.exploration.service.StarViews.StarListItem;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 별 목록 커서·직렬화 계약 [S15P21C206-138].
+ *
+ * <p>DB 없이 돈다. 두 결함 모두 질의가 아니라 값 변환에서 생기므로 순수 단위로 잡을 수 있다.
+ * !57 리뷰(하서진)에서 나온 두 지적을 재현한다.
+ */
+class StarListContractTest {
+
+    /**
+     * 커서가 시각을 잘라 담으면 같은 시각의 나머지 별이 다음 페이지에서 빠진다.
+     *
+     * <p>운영 발견 시각은 {@code CURRENT_TIMESTAMP}라 PostgreSQL 마이크로초 정밀도다. 커서가
+     * 밀리초로 잘라 담으면 복원한 기준 시각이 실제보다 작아지고, 이어읽기 조건
+     * {@code (시각, -ticId) < (기준, -기준ticId)}에서 같은 시각의 별이 모두 거짓이 된다.
+     *
+     * <p>이전 테스트는 시각을 정각 초로만 넣어 밀리초 아래가 0이었다. 잘라도 손실이 없어 결함이
+     * 보이지 않았다. 여기서는 일부러 마이크로초를 채운다.
+     */
+    @Test
+    void 커서는_마이크로초까지_잃지_않는다() {
+        OffsetDateTime lastActivity = OffsetDateTime.parse("2026-09-10T02:30:00.123456Z");
+        StarListCursor expected = new StarListCursor(1, 1, "discovered", "recent", 4, 0, 0);
+
+        String encoded = StarListCursor.after(1, 1, "discovered", "recent", 4, lastActivity, 42)
+                .encode();
+        StarListCursor decoded = StarListCursor.decode(encoded, expected).orElseThrow();
+
+        assertEquals(lastActivity.toInstant(), decoded.afterActivity().toInstant(),
+                "기준 시각이 잘리면 같은 시각의 나머지 별이 다음 페이지에서 빠진다");
+        assertEquals(42, decoded.afterTicId());
+    }
+
+    /** DB 해상도는 마이크로초다. 나노초 자리는 늘 0이므로 마이크로초면 손실이 없다. */
+    @Test
+    void 마이크로초_경계값도_그대로_돌아온다() {
+        StarListCursor expected = new StarListCursor(1, 1, "submitted", "recent", 20, 0, 0);
+        for (String value : List.of("2026-09-10T02:30:00.000001Z", "2026-09-10T02:30:00.999999Z",
+                "1970-01-01T00:00:00.000001Z", "2026-09-10T02:30:00Z")) {
+            OffsetDateTime at = OffsetDateTime.parse(value);
+            StarListCursor decoded = StarListCursor.decode(
+                    StarListCursor.after(1, 1, "submitted", "recent", 20, at, 7).encode(), expected)
+                    .orElseThrow();
+
+            assertEquals(at.toInstant(), decoded.afterActivity().toInstant(), value);
+        }
+    }
+
+    /**
+     * 타인 조회에서 미게시 수를 뺀다. null로 남기면 필드가 응답에 그대로 나간다(NFR-14).
+     *
+     * <p>명세는 "타인 조회는 필드를 뺀다"다. 운영 직렬화기는 Jackson 3이고 null 포함 규칙을 따로
+     * 두지 않아 기본값(null도 씀)이다. 그래서 레코드에 null을 넣는 것만으로는 빠지지 않는다.
+     */
+    @Test
+    void 타인_응답에는_미게시_수_필드가_없다() {
+        JsonMapper json = JsonMapper.builder().build();
+
+        String forOther = json.writeValueAsString(new StarList(List.of(item(null)), null, false));
+        String forSelf = json.writeValueAsString(new StarList(List.of(item(0)), null, false));
+
+        assertFalse(forOther.contains("unpublishedSignalCount"),
+                "타인 응답에 키가 남으면 명세의 '필드를 뺀다'를 어긴다: " + forOther);
+        assertTrue(forSelf.contains("\"unpublishedSignalCount\":0"),
+                "본인은 0이어도 필드가 있어야 한다. 없음과 0은 다른 뜻이다: " + forSelf);
+    }
+
+    /** 미게시 수 말고 다른 null 필드는 그대로 null로 나가야 한다. 명세 예제가 "marker": null이다. */
+    @Test
+    void 다른_null_필드는_그대로_나간다() {
+        String body = JsonMapper.builder().build()
+                .writeValueAsString(new StarList(List.of(item(null)), null, false));
+
+        assertTrue(body.contains("\"marker\":null"), body);
+        assertTrue(body.contains("\"grade\":null"), body);
+        assertTrue(body.contains("\"nextCursor\":null"), body);
+    }
+
+    private static StarListItem item(Integer unpublishedSignalCount) {
+        return new StarListItem("123456789", "in_progress", 0, false, 0, null, null, false, false,
+                unpublishedSignalCount, OffsetDateTime.parse("2026-09-10T02:30:00.123456Z"),
+                "tutorial", null);
+    }
+}
