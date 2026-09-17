@@ -1,0 +1,69 @@
+{
+  "contract_version": "1.0",
+  "fixture_kind": "synthetic-contract-only",
+  "base_call": "residual-success",
+  "request_cases": [
+    {
+      "id": "unsupported-schema-version",
+      "mutation": {"operation": "set", "path": "request.schema_version", "value": "2.0"},
+      "expected_error": "unsupported_schema_version"
+    },
+    {
+      "id": "flux-length-mismatch",
+      "mutation": {"operation": "set", "path": "request.curve_segments.0.n_points", "value": 7},
+      "expected_error": "flux_length_mismatch"
+    },
+    {
+      "id": "duplicate-candidate-id",
+      "mutation": {"operation": "append-clone-first", "path": "request.removed_candidates"},
+      "expected_error": "duplicate_candidate_id"
+    },
+    {
+      "id": "unsorted-candidate-ids",
+      "mutation": {"operation": "reverse", "path": "request.removed_candidates"},
+      "expected_error": "invalid_removed_candidate_order"
+    },
+    {
+      "id": "missing-operation-payload",
+      "mutation": {"operation": "delete", "path": "request.curve_segments"},
+      "expected_error": "invalid_operation_payload"
+    }
+  ],
+  "error_responses": [
+    {
+      "id": "residual-model-validation-error",
+      "base_call": "residual-success",
+      "response": {
+        "schema_version": "1.0",
+        "operation": "residual",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "removed_candidate_ids": ["c-9", "c-10"],
+        "ok": false,
+        "error": {
+          "stage": "RESIDUAL",
+          "code": "invalid_parameter",
+          "retryable": false,
+          "message": "request validation failed",
+          "field": "removed_candidates[0].transit_model.parameters.depth_ppm",
+          "model_index": 0
+        }
+      }
+    }
+  ],
+  "transport_cases": [
+    {
+      "id": "periodogram-timeout",
+      "operation": "periodogram",
+      "elapsed_seconds": 120,
+      "partial_result_accepted": false,
+      "expected_backend_failure": {
+        "stage": "PERIODOGRAM",
+        "code": "compute_timeout",
+        "retryable": true
+      }
+    }
+  ]
+}

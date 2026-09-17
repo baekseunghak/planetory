@@ -9,6 +9,7 @@ import com.planetory.backend.global.error.ErrorCode;
 import jakarta.servlet.DispatcherType;
 import java.time.Clock;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -24,6 +25,9 @@ import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
+// 웹 서버 없이 뜨는 운영 명령(PlanetoryApplication)에는 HttpSecurity가 없어 기동이 막힌다.
+// 서버로 뜰 때는 항상 서블릿 앱이므로 적용 범위가 줄지 않는다 [S15P21C206-139].
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, MemberService members, AuthSessionService sessions,

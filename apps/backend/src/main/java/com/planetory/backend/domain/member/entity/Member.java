@@ -24,4 +24,6 @@ public class Member extends BaseTimeEntity {
         this.providerUserId = providerUserId;
         this.nickname = nickname;
     }
+
+    public void changeNickname(String nickname) { this.nickname = nickname; }
 }
