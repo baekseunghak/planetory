@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkyDataPage, type SkySceneProps } from "../sky-data/SkyDataPage";
+import { api } from "../../api";
+import { ErrorState } from "../../components/RequestState";
 import { levelForScale, viewportBounds } from "../sky-data/geometry";
 import {
   INITIAL_CAMERA,
   cameraMatrix,
   initialCamera,
   renderPlan,
+  readOwnedSystem,
   type GalaxyCamera,
   type OwnedSystem,
 } from "./model";
@@ -19,10 +22,17 @@ export type SceneControl = {
   setSystem(system: OwnedSystem | null): void;
 };
 type Props = SkySceneProps & {
+  personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
   onMetrics?: (value: RendererMetrics) => void;
 };
-export function GalaxyScene({ data, store, onReady, onMetrics }: Props) {
+export function GalaxyScene({
+  data,
+  store,
+  onReady,
+  onMetrics,
+  personalSystem,
+}: Props) {
   const canvas = useRef<HTMLCanvasElement>(null),
     renderer = useRef<GalaxyRenderer | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -162,17 +172,25 @@ export function GalaxyScene({ data, store, onReady, onMetrics }: Props) {
     [data.stars, matrix, dimensions],
   );
   // Retire stale detail synchronously, before effects/paint after a version or selection change.
+  const requestedSystem =
+    personalSystem === undefined ? system : personalSystem;
   const visibleSystem =
-    system?.version === meta.version &&
-    system.presentationVersion === meta.presentationVersion &&
-    system.ticId === data.selectedTicId &&
-    plan.stars.some((s) => s.ticId === system.ticId)
-      ? system
+    requestedSystem?.version === meta.version &&
+    requestedSystem.presentationVersion === meta.presentationVersion &&
+    requestedSystem.ticId === data.selectedTicId &&
+    plan.stars.some((s) => s.ticId === requestedSystem.ticId)
+      ? requestedSystem
       : null;
   useEffect(() => {
     const r = renderer.current;
     if (!r || !ready || !matrix || !camera) return;
-    r.setCamera(matrix, dimensions.width, dimensions.height, camera.zoom);
+    r.setCamera(
+      matrix,
+      dimensions.width,
+      dimensions.height,
+      camera.zoom,
+      meta.starCount,
+    );
     try {
       r.setScene(plan, data.selectedTicId, visibleSystem);
       setFailure(null);
@@ -189,11 +207,14 @@ export function GalaxyScene({ data, store, onReady, onMetrics }: Props) {
     data.selectedTicId,
     visibleSystem,
     camera,
+    meta.starCount,
   ]);
   return (
     <div className="galaxy-scene">
       <canvas
         ref={canvas}
+        data-rendered-stars={plan.stars.length}
+        data-rendered-planets={visibleSystem?.items.length ?? 0}
         role="img"
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
@@ -224,11 +245,59 @@ export function GalaxyScene({ data, store, onReady, onMetrics }: Props) {
     </div>
   );
 }
+// Only fetch the selected member's system. Detail controls/planet information belong to 206.
+function PersonalGalaxyScene(props: SkySceneProps) {
+  const { data, store } = props;
+  const selected = data.stars.find((star) => star.ticId === data.selectedTicId);
+  const [system, setSystem] = useState<OwnedSystem | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    setSystem(null);
+    setError(null);
+    if (!selected || !data.meta || data.needsRefresh) return;
+    const controller = new AbortController();
+    const meta = data.meta;
+    void api<unknown>(`/v1/me/stars/${encodeURIComponent(selected.ticId)}`, {
+      signal: controller.signal,
+    })
+      .then((value) => {
+        if (!controller.signal.aborted)
+          setSystem(readOwnedSystem(value, meta, selected.ticId, selected));
+      })
+      .catch((reason) => {
+        if (!controller.signal.aborted)
+          setError(
+            reason instanceof Error
+              ? reason
+              : new Error("행성을 불러오지 못했습니다."),
+          );
+      });
+    return () => controller.abort();
+  }, [store, data.meta, selected, data.needsRefresh, retry]);
+  return (
+    <>
+      {error && (
+        <ErrorState
+          error={error}
+          retry={() => {
+            void store.refresh();
+            setRetry((n) => n + 1);
+          }}
+        />
+      )}
+      <GalaxyScene
+        {...props}
+        personalSystem={data.needsRefresh || error ? null : system}
+      />
+    </>
+  );
+}
 export function GalaxyPage() {
   return (
     <SkyDataPage
       renderScene={(props) => (
-        <GalaxyScene key={props.store.memberId} {...props} />
+        <PersonalGalaxyScene key={props.store.memberId} {...props} />
       )}
     />
   );

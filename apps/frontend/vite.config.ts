@@ -23,6 +23,35 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const galaxyFixture = command === "serve" && !isPreview && mode === "galaxy";
   const testing = fixture || authFixture || skyFixture || galaxyFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
+  const proxy = target
+    ? Object.fromEntries(
+        ["/api", "/oauth2", "/login/oauth2"].map((path) => [
+          path,
+          {
+            target,
+            changeOrigin: false,
+            configure(proxy: import("vite").HttpProxy.ProxyServer) {
+              proxy.on("proxyRes", (response, request) => {
+                if (
+                  request.url?.startsWith("/login/oauth2/code/") &&
+                  [401, 403, 503].includes(response.statusCode ?? 0)
+                ) {
+                  response.statusCode = 302;
+                  const cancelled =
+                    new URL(request.url, "http://localhost").searchParams.get(
+                      "error",
+                    ) === "access_denied";
+                  response.headers.location =
+                    "/oauth/callback?error=" +
+                    (cancelled ? "access_denied" : "authentication_failed");
+                  response.headers["cache-control"] = "no-store";
+                }
+              });
+            },
+          },
+        ]),
+      )
+    : undefined;
   return {
     plugins: [
       react(),
@@ -89,13 +118,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : {}),
     },
     server: {
-      proxy:
-        !testing && target
-          ? { "/api": { target, changeOrigin: true } }
-          : undefined,
+      proxy: !testing ? proxy : undefined,
     },
     preview: {
-      proxy: target ? { "/api": { target, changeOrigin: true } } : undefined,
+      proxy,
     },
     build: { target: ["chrome110", "edge110", "firefox115", "safari16.4"] },
   };

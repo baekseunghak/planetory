@@ -44,7 +44,7 @@ type SceneControl = {
 
 - 205는 같은 `cameraMatrix`/`screenPoint`/가시 후보로 입력·히트 테스트를 연결한다. x/y는 회전된 화면 평면상의 월드 팬 값이다. API 저장 x/y를 그대로 팬에 넣지 말고 같은 투영에서 중심을 계산한다. level 생략 시 메타 scale에서 고른다. 옛 `overview/scale/rotation` 입력은 삭제했고 `zoom/yaw`를 사용한다.
 - `store.select(ticId)`는 ID를 유지한다. 206은 `readOwnedSystem(raw,meta,ticId,loadedStar)` 후 `setSystem`에 전달한다. 권한·최신 판단은 서버 책임이다.
-- 같은 version/presentationVersion/선택 ID가 아니면 상세를 즉시 그리지 않는다. 타일과 상세 위치·순번·개수 불일치도 오류다. HTTP 취소/새 상세 재조회는206에서 연결한다.
+- 같은 version/presentationVersion/선택 ID가 아니면 상세를 즉시 그리지 않는다. 타일과 상세 위치·순번·개수 불일치도 오류다. 204 PersonalGalaxyScene이 실제 선택 상세 HTTP 조회·취소·수동 재조회까지 연결한다. 206은 이 선택 수명주기를 재사용해 정보·카메라 전환을 붙이며 중복 요청 주체를 만들지 않는다.
 - 유효한 선택 별 하나의 `planets.items` 전부를 candidateId 순서로 그린다. 4개 상한·외부 카탈로그 보충이 없다. 0개이면 별만 남는다.
 - 행성 표면·공전은 연출이며 수치/ID는 보존한다. `periodDays=null`을0으로 바꾸지 않는다. 206 확대 대상과 정보는 같은 candidateId로 연결한다.
 - 선택 전 카메라를 보관해 `setCamera`로 복구한다. 이번 개발 버튼은 인터페이스 검증이며206 화면 전체를 대신하지 않는다.
@@ -53,3 +53,9 @@ type SceneControl = {
 ## 이전 비교 보존
 
 `/dev/galaxy-comparison`은 [과거 판단 기록](galaxy-comparison.md)이다. 당시 모델·좌표·군집 렌더러를 `dev/legacy-galaxy`로 격리했고 현재 `src`에서 import하지 않는다. 옛 API도 `/api/dev-legacy-galaxy-204/...`로 격리했다. 이 코드의 군집/상한은 현행 계약이 아니다. serve+galaxy에만 제공하고 운영 번들/엔드포인트 검사로 제외한다.
+
+## 2026-09-17 실제 연결 보완
+
+GalaxyPage의 PersonalGalaxyScene이 /v1/me/stars/{ticId}를 조회하고 readOwnedSystem으로 검증한 뒤 personalSystem prop을 전달한다. 순수 GalaxyScene의 SceneControl.setSystem은 개발/후속 통합용으로 유지한다. 어느 방식이든 선택·버전·표현 버전이 맞는 별 하나만 표시한다.
+
+exposure.ts는 많은 별을 멀리서 볼 때의 광량을 낮추고 줌1~6에서 부드럽게1로 회복한다. 1,000개 이하는1을 유지한다. 총수는 meta.starCount를 사용해 페이지 도착마다 밝기가 튀지 않게 한다. 좌표·색·개수는 변하지 않는다. 렌더러 setCamera의 zoom/starCount 인자가 이 정책에 연결된다.

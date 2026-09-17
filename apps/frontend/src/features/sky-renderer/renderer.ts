@@ -1,4 +1,5 @@
 import type { Matrix } from "../sky-data/geometry.ts";
+import { galaxyExposure } from "./exposure.ts";
 import {
   ORBIT_COLOR,
   rgb,
@@ -22,7 +23,7 @@ const bodyVertex =
 layout(location=2) in float baseSize;
 layout(location=3) in vec3 color;
 layout(location=4) in float selected;
-uniform float zoom; uniform float dpr; uniform float glow;
+uniform float zoom; uniform float dpr; uniform float glow; uniform float exposure;
 out float strength;
 void main(){
   bool selectedStar=selected>.5;
@@ -34,7 +35,7 @@ void main(){
   vec4 p=matrix*vec4(center,1.);
   p.xy+=corner*diameter*vec2(1.,-1.)/viewport;
   gl_Position=p; uv=corner; tint=color; seed=0.;mode=selected;density=1.;
-  strength=(glow>.5?(selectedStar?.14:.048):(selectedStar?1.:.88))*min(1.,desired*desired/1.5625);
+  strength=(glow>.5?(selectedStar?.14:.048):(selectedStar?1.:.88))*min(1.,desired*desired/1.5625)*(selectedStar?1.:exposure);
 }`;
 const bodyFragment = `#version 300 es
 precision highp float;
@@ -83,6 +84,7 @@ export type RendererMetrics = {
   frameCount: number;
   packedNodes: number;
   animatedSeconds: number;
+  exposure: number;
 };
 function program(gl: WebGL2RenderingContext, vertex: string, fragment: string) {
   const result = gl.createProgram();
@@ -173,6 +175,7 @@ type Pipeline = {
   zoom: WebGLUniformLocation | null;
   dpr: WebGLUniformLocation | null;
   glow: WebGLUniformLocation | null;
+  exposure: WebGLUniformLocation | null;
 };
 export class GalaxyRenderer {
   private gl: WebGL2RenderingContext;
@@ -188,6 +191,7 @@ export class GalaxyRenderer {
   private height = 1;
   private time = 0;
   private zoom = 1;
+  private starCount = 0;
   private disposed = false;
   private stats = {
     stars: 0,
@@ -291,10 +295,18 @@ export class GalaxyRenderer {
       zoom: gl.getUniformLocation(p, "zoom"),
       dpr: gl.getUniformLocation(p, "dpr"),
       glow: gl.getUniformLocation(p, "glow"),
+      exposure: gl.getUniformLocation(p, "exposure"),
     };
   }
-  setCamera(matrix: Matrix, width: number, height: number, zoom = 1) {
+  setCamera(
+    matrix: Matrix,
+    width: number,
+    height: number,
+    zoom = 1,
+    starCount = 0,
+  ) {
     this.zoom = zoom;
+    this.starCount = starCount;
     this.matrix.set(matrix);
     this.width = width;
     this.height = height;
@@ -422,6 +434,10 @@ export class GalaxyRenderer {
       this.bind(this.bodyPipeline);
       gl.uniform1f(this.bodyPipeline.zoom, this.zoom);
       gl.uniform1f(this.bodyPipeline.dpr, dpr);
+      gl.uniform1f(
+        this.bodyPipeline.exposure,
+        galaxyExposure(this.starCount, this.zoom),
+      );
       for (const glow of [1, 0]) {
         gl.uniform1f(this.bodyPipeline.glow, glow);
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.bodies.length / 8);
@@ -459,6 +475,7 @@ export class GalaxyRenderer {
       uploadBytes:
         quad.byteLength + buffers.reduce((n, b) => n + b.uploadBytes, 0),
       animatedSeconds: this.time,
+      exposure: galaxyExposure(this.starCount, this.zoom),
     };
   }
   dispose() {
