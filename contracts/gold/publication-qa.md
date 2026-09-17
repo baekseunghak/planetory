@@ -29,16 +29,16 @@
 | gaps 정합 | `gaps` 와 flux 의 NULL 연속 구간 목록이 **양방향으로 완전히 같아야** 한다(선언 누락도, 과다 선언도 거절), `0 ≤ start ≤ end < n_points` | QA + round-trip(DB 조회 flux 로 재계산). `gaps=[]` 손상 payload 가 거절됨을 테스트로 확인. ERD 의 "빈 칸 NaN" 문구는 DB 표현이 NULL 이므로 정정 대상(6절) |
 | `transit_model` | 후보마다 계약 1.0 Schema 통과, `candidate_id = c-<candidates.id>` | Schema + astro-kernel 파서. round-trip 확인 |
 | 잔차 기대값 존재 | 빈 제거·단일·복수·순서 반전 조합의 Silver 기준 잔차(bin 중심 평가) 가 참조 파일에 있고 순서 반전이 같은 checksum | `gold-roundtrip` fixture `expected_residuals` |
-| 기준 시각 | `fold_reference_time_btjd` = DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성**만** 통과한 원본 관측 시각 전체의 중앙값(DAT-11). detrending·sigma clipping 결과에 의존하지 않는다. float64 그대로 저장·조회 | `fold_reference_time()` 이 전처리 결과를 받지 않음. 전처리 설정을 바꿔도 값이 같음을 테스트로 확인. round-trip 정확 일치 |
+| 기준 시각 | `fold_reference_time_btjd` = DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성을 통과한 원본 관측 시각에서 **중복 시각을 제거한 뒤** 의 중앙값(DAT-11·ERD). detrending·sigma clipping 결과에 의존하지 않는다. float64 그대로 저장·조회 | `fold_reference_time()` 이 `np.unique` 뒤 중앙값. 전처리 설정을 바꿔도 값이 같음, 중복 시각 합성 사례에서 중복 미제거 값과 다름을 테스트로 확인. round-trip 정확 일치 |
 | 격자 규칙 | `period_min_days = 0.5`, `period_max_days = max(40, 1.15 × 최장 후보 주기)`, `n_periods = 5000`, log 간격 | 탐사 API 5.3절·113 대조표 |
-| 입력 snapshot id | 내용 기반이어야 한다: 원천 FITS 는 `lc:spoc:s<sector>:sha256:<파일 sha256>:procver:<PROCVER>`, 외부 참조는 `archive:<target>:sha256:<행 내용의 record-canonical 해시>`. 파일명·조회 날짜만으로는 원천 내용이 바뀌어도 `bundle_version` 이 유지되므로 금지 | QA `input_snapshot_ids_content_based`. fixture 는 tess-fixture `checksums.json` 의 sha256 과 FITS `PROCVER` 사용 |
-| NUMERIC 열 정밀도 | float64 값을 NUMERIC 열(`period_days`, `epoch_btjd`, `duration_hours`, `depth_ppm`, `bls_power`, `base_days`, `flux_scatter`)에 넣을 때 **최단 왕복 십진 표기(최대 17 유효숫자)** 로 보낸다. psycopg 기본 float→numeric 변환은 15자리로 잘려 왕복이 깨진다 | round-trip `numeric_columns_float64_roundtrip`. 발견 사항이며 ERD 열 타입 변경 제안은 아님 |
+| 입력 snapshot id (내용 기반 **형식** 검사) | 원천 FITS 는 `lc:spoc:s<4자리 sector>:sha256:<64 hex>:procver:<비어 있지 않음>`, 외부 참조는 `archive:<target>:sha256:<64 hex>`. LC 와 Archive 가 각각 하나 이상 있어야 한다. 파일명·조회 날짜만으로는 원천 내용이 바뀌어도 `bundle_version` 이 유지되므로 금지. 이 검사는 형식만 보며 해시가 실제 원천 내용과 맞는지는 증명하지 않는다(원천을 다시 읽어야 알 수 있다) | QA `input_snapshot_ids_content_based_format`(정규식). fixture 는 tess-fixture `checksums.json` 의 sha256 과 FITS `PROCVER` 사용 |
+| NUMERIC 열 정밀도 | float64 값을 NUMERIC 열(`period_days`, `epoch_btjd`, `duration_hours`, `depth_ppm`, `bls_power`, `base_days`, `flux_scatter`)에 넣을 때 **float8 로 바인딩하지 않고 최단 왕복 십진 표기(최대 17 유효숫자)로 바인딩**한다. float8 로 바인딩하면 PostgreSQL 서버의 float8→numeric 변환이 15 유효숫자로 반올림해 왕복이 깨진다(드라이버가 아닌 서버 변환. `1385.1234567890123::float8::numeric = 1385.12345678901`). Python `Decimal(repr(x))`, Java `BigDecimal.valueOf(x)`, Spark JDBC 도 double 바인딩 금지 | round-trip `numeric_columns_float64_roundtrip`. Java 대조(강재민): double 바인딩 1000개 중 915개 변화, BigDecimal 0개. D17 인계. ERD 열 타입 변경 제안은 아님 |
 | 멱등·전환 | `(tic_id, bundle_version)` 유일(V8), current 는 TIC 당 하나(부분 유일 인덱스), 전환은 기존 current → archived 를 먼저 | 69 계약. round-trip 에서 두 제약 거절 확인 |
 | 역할 | 적재는 `planetory_gold_writer`, 서비스 `planetory_app` 은 읽기만 | V2. round-trip 에서 확인 |
 
 Silver–EC2 **수치 일치**(잔차·주기도 값의 허용 오차 비교)는 이 표에 없다. 허용 오차가 아직 등록되지 않았기 때문이며 4절 절차로 D23 이 채운다.
 
-이 표는 `experiments/gold-roundtrip/gold_roundtrip/qa.py` 의 `validate_payload` 가 그대로 구현하며, round-trip 은 QA 를 먼저 돌려 하나라도 실패하면 **DB 에 넣지 않고** `PUBLISH_REJECTED` 로 끝낸다. 손상 payload(`gaps=[]`, `power[0]=NULL`, flux 변조, 후보 값 변조, 내용 기반이 아닌 snapshot id) 가 거절되는 것을 `tests/test_qa.py` 가 확인한다.
+이 표는 `experiments/gold-roundtrip/gold_roundtrip/qa.py` 의 `validate_payload` 가 그대로 구현하며, round-trip 은 QA 를 먼저 돌려 하나라도 실패하면 **DB 에 넣지 않고** `PUBLISH_REJECTED` 로 끝낸다. 적재 뒤 검사(조회값·checksum·gaps·NUMERIC·레코드 재계산)는 **같은 트랜잭션 안에서** 수행하고, 모두 통과한 뒤에만 기존 current → archived, 신규 → current 전환을 하고 **한 번 commit** 한다(69: staging 독립 commit 없음). 검사가 하나라도 실패하면 전부 rollback 되어 staging 행도 남지 않는다. 손상 payload(`gaps=[]`, `power[0]=NULL`, flux 변조, 후보 값 변조, 내용 기반이 아닌 snapshot id) 가 거절되는 것을 `tests/test_qa.py` 가 확인한다.
 
 ## 3. checksum 직렬화 규칙 (제안)
 
@@ -54,9 +54,9 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 6. 결과 `sha256:` + 소문자 hex 64자. manifest 에 `checksum_version` 을 함께 기록한다.
 7. DB 왕복: REAL 은 float32 를 정확히 저장한다. 조회는 바이너리 프로토콜 또는 텍스트일 때 `extra_float_digits ≥ 1`(PostgreSQL 12+ 기본)이어야 한다. Backend 는 조회한 REAL 을 float32 로 받아 같은 바이트로 재계산한다. **조회한 배열에 NaN·±Infinity 가 있으면 checksum 을 비교하기 전에 실패**시킨다 — NULL 의 해시값 `0x7FC00000` 이 NaN 비트와 같아서, NULL 자리에 NaN 이 저장돼도 checksum 만으로는 구별되지 않는다(REAL[] 은 NaN 을 받아들인다. DB CHECK 추가는 Backend 후속).
 8. 배열 길이·참조·격자·gaps 는 checksum 과 별개로 검사한다(2절). `fold_reference_time_btjd` 는 해시 대상이 아니고 의미 payload 의 float64 정확 비교 대상이다(69).
-9. NUMERIC 열의 float64 값은 최단 왕복 십진 표기(17 유효숫자)로 적재한다(2절 표). 그래야 DB → float64 → 레코드 checksum 재계산이 Publisher 계산과 같다.
+9. NUMERIC 열의 float64 값은 float8 로 바인딩하지 않고 최단 왕복 십진 표기(17 유효숫자)로 바인딩한다(2절 표. 서버 float8→numeric 변환이 15자리로 반올림). 그래야 DB → float64 → 레코드 checksum 재계산이 Publisher 계산과 같다.
 
-언어 간 대조 벡터: [`examples/array-checksum-vectors.v0.json`](examples/array-checksum-vectors.v0.json) — NULL 위치, ±0, 0.1, float32 반올림 중간값(tie-to-even 양쪽), 최소 subnormal·최소 normal·최대 유한값, underflow, NaN·Infinity·overflow 거절. Python([`canonical.py`](../../experiments/gold-roundtrip/gold_roundtrip/canonical.py))과 Node([`array-checksum.cjs`](array-checksum.cjs))가 같은 hex·SHA-256 을 재현했고, PostgreSQL 18.6 REAL[] 왕복 뒤 재계산도 일치했다. **Java 경로는 이 저장소에서 실행하지 않았다.** Backend 구현(C04-1)이 같은 벡터로 대조한 뒤 이 규칙을 확정한다.
+언어 간 대조 벡터: [`examples/array-checksum-vectors.v0.json`](examples/array-checksum-vectors.v0.json) — NULL 위치, ±0, 0.1, float32 반올림 중간값(tie-to-even 양쪽), 최소 subnormal·최소 normal·최대 유한값, underflow, NaN·Infinity·overflow 거절. Python([`canonical.py`](../../experiments/gold-roundtrip/gold_roundtrip/canonical.py))과 Node([`array-checksum.cjs`](array-checksum.cjs))가 같은 hex·SHA-256 을 재현했고, PostgreSQL 18.6 REAL[] 왕복 뒤 재계산도 일치했다. **Java(강재민, 2026-09-17)**: `(float)` 캐스트 + `ByteBuffer` LE + `floatToRawIntBits` 로 벡터 15개·거절 6개(overflow 경계 포함) 전부 일치, `GoldCatalogRepository` 의 REAL[] 조회 경로에서 재계산한 sha256 도 일치. 세 언어와 DB 경로가 맞았으므로 팀 승인만 남았다.
 
 ### 3.2 레코드(후보·AI·외부 상태) `record-canonical-v0`
 
@@ -79,7 +79,9 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 | `ai_results` | `id`, `candidate_id`, `execution_id` — 후보는 `candidate_key{period_days, epoch_btjd}` 로 가리킴 | `candidate_key.period_days`, `candidate_key.epoch_btjd`, `model_version` |
 | `external_statuses` | `id`, `candidate_id`, `tic_id` — 후보는 `candidate_key` 또는 null | `source`, `external_id` |
 
-빈 컬렉션도 checksum 이 정의된다(fixture 의 `ai_results` 는 118 전이라 비어 있다). 벡터: [`examples/record-checksum-vectors.v0.json`](examples/record-checksum-vectors.v0.json)(빈 목록, 후보 2건, 입력 순서 반전 = 같은 값, DB id 가 달라도 같은 값, AI 실패 `score=null`, 외부 상태 UTF-8·null 필드). Python·Node([`record-checksum.cjs`](record-checksum.cjs)) 재현, PostgreSQL 행에서 후보·외부 상태를 다시 읽어 재계산 일치. Java 미실행.
+**정렬 규칙**: 정렬 키마다 숫자(float64 비교) < 문자열(**UTF-8 바이트 순**, 언어별 문자열 비교 차이 회피) < null. 정렬 키가 모두 같은 레코드(V1 에 이 키들의 UNIQUE 가 없어 가능)는 **준비된 레코드의 인코딩 바이트를 마지막 비교**로 써 총순서를 만든다. 그래서 Spark 파티션·DB 조회 순서가 달라도 같은 checksum 이 나오고, 같은 입력의 재시도가 `IDEMPOTENCY_CONFLICT` 를 내지 않는다.
+
+빈 컬렉션도 checksum 이 정의된다(fixture 의 `ai_results` 는 118 전이라 비어 있다). 벡터: [`examples/record-checksum-vectors.v0.json`](examples/record-checksum-vectors.v0.json)(빈 목록, 후보 2건, 입력 순서 반전 = 같은 값, DB id 가 달라도 같은 값, **정렬 키 동률 2건·그 입력 반전 = 같은 값**, AI 실패 `score=null`, 외부 상태 UTF-8·null 필드). Python·Node([`record-checksum.cjs`](record-checksum.cjs)) 재현, PostgreSQL 행에서 후보·외부 상태를 다시 읽어 재계산 일치. **Java(강재민)**: 동률 추가 전 벡터 6개의 인코딩·길이·앞 64바이트·sha256 일치. 동률 벡터 4개는 Java 재대조 필요.
 
 ## 4. 허용 오차 사전 등록 절차
 
@@ -94,7 +96,7 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 | 손상 Sector(파일 checksum 불일치·읽기 실패) | 같은 입력 snapshot 으로는 계속 실패 → `PUBLISH_REJECTED`. 원천을 다시 받아 snapshot 이 바뀌면 새 `bundle_version` 으로 새 게시 | Sector 를 제외하고 공개하는 안 | 제외 시 남은 입력만으로 `fold_reference_time_btjd`·`base_days`·후보·주기도·AI 를 **재계산·재검증**해야 하고 manifest 에 `excluded_sectors` 를 기록해야 한다. 남은 유효 관측 하한은 D02-2 | 윤성용·김동혁(I08) |
 | 입력 부족(유효 관측점 하한 미달, 세그먼트 0개) | `PUBLISH_REJECTED` | 없음 | 하한 수치는 D02-2/D07-1 | 윤성용 |
 | AI 실행 실패(일시적: 타임아웃·프로세스 오류) | 게시 트랜잭션을 남기지 않고 `PUBLISH_ROLLED_BACK`, 같은 `bundle_version` 으로 재시도. `ai_model`·`ai_threshold` 버전을 재시도 때문에 올리지 않는다 | 없음(v0) | 재시도 횟수·간격은 Airflow 쪽(89/90 계열) | 김동혁 |
-| AI 실패가 반복되거나 후보 일부만 실패 | Bundle 전체 보류(공개하지 않음). 실패한 후보만 `ai_evaluations.score = NULL` + `ai_executions.status` 실패값으로 남기고 나머지만 공개하는 **부분 공개는 v0 에서 채택하지 않음** | 부분 공개 | 부분 공개 뒤 재추론 성공을 새 판으로 게시하면 입력·계산 버전이 같아 `bundle_version` 이 같은 값이 되어 69 멱등 계약(`ALREADY_PUBLISHED`)과 충돌한다. 실패 표식을 의미 payload 에 넣을지 등은 69 담당과 합의. SRS AI-01~04 의 P0 전체 후보 추론 요건 확인 | 윤성용·김동혁(69)·강재민 |
+| AI 실패가 반복되거나 후보 일부만 실패 | `PUBLISH_REJECTED`(commit 없음, Bundle 전체 비공개). 실패한 후보만 `ai_evaluations.score = NULL` + `ai_executions.status` 실패값으로 남기고 나머지만 공개하는 **부분 공개는 v0 에서 채택하지 않음**. 아무것도 commit 되지 않았으므로 재추론이 성공하면 **같은 `bundle_version` 으로 처음 게시**되어 69 계약을 바꿀 필요가 없다 | 부분 공개 | 부분 공개 뒤 재추론 성공을 새 판으로 게시하면 입력·계산 버전이 같아 `bundle_version` 이 같은 값이 되어 69 멱등 계약(`ALREADY_PUBLISHED`)과 충돌한다. 실패 표식을 의미 payload 에 넣을지 등은 69 담당과 합의. SRS AI-01~04 의 P0 전체 후보 추론 요건 확인 | 윤성용·김동혁(69)·강재민 |
 | 후보 0개(무신호) | 공개하되 서비스 제외 상태 전달 | — | DEC-01 | 기존 결정 |
 | Silver–EC2 잔차 불일치(허용 오차 등록 뒤) | `PUBLISH_REJECTED` | — | 4절 값 등록 전에는 판정 안 함 | D23 |
 
@@ -107,5 +109,5 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 
 ## 7. 검증 상태 (2026-09-17, 1차 리뷰 반영 후)
 
-- 실행함: `experiments/gold-roundtrip` — TOI-270 Sector 3 실제 곡선 payload 를 PostgreSQL 18.6 컨테이너의 격리 스키마에 V1~V8 적용 후 QA(2절) → 적재 → 조회, **59개 검사 통과**(QA 24, 정합 26, 제약 위반 거절 5, 역할 경계 2, 레코드 checksum DB 재계산 2). 손상 payload(`gaps=[]`, `power[0]=NULL`)는 QA 단계에서 `PUBLISH_REJECTED` 로 거절되어 DB 에 들어가지 않음을 테스트로 확인. Python·Node 배열 벡터 15+6, 레코드 벡터 6 일치. **Java(강재민)**: 배열 벡터 14+5 와 `GoldCatalogRepository` REAL[] 조회 경로에서 같은 sha256 확인(2026-09-17, overflow 경계 2건과 레코드 벡터는 미확인). 기준 시각이 전처리 설정과 무관함을 테스트로 확인. pytest 19 passed.
-- 실행하지 않음: Java 레코드 checksum·overflow 경계 벡터 대조, 운영 Publisher(Spark)·Airflow, 실제 Silver 계산과의 수치 비교(D23), 손상 Sector·AI 실패 시나리오의 실제 적재(5절 정책 미결).
+- 실행함: `experiments/gold-roundtrip` — TOI-270 Sector 3 실제 곡선 payload 를 PostgreSQL 18.6 컨테이너의 격리 스키마에 V1~V8 적용 후 QA(2절) → 적재(미commit) → 같은 트랜잭션에서 조회·검사 → 통과 시 전환·단일 commit, **61개 검사 통과**(QA 24, 정합 26, 제약 위반 거절 5, 역할 경계 2, 레코드 checksum DB 재계산 2, 전환·current 유일 2). 손상 payload(`gaps=[]`, `power[0]=NULL`)는 QA 단계에서 `PUBLISH_REJECTED` 로 거절되어 DB 에 들어가지 않음을 테스트로 확인. Python·Node 배열 벡터 15+6, 레코드 벡터 10(동률 4 포함) 일치. **Java(강재민, 2026-09-17)**: 배열 벡터 15+6(overflow 경계 포함)·레코드 벡터 6·`GoldCatalogRepository` REAL[] 경로·140 수정본 `GoldManifest` 로 15키 manifest 읽기 일치. 기준 시각이 전처리 설정과 무관하고 중복 시각을 제거함을 테스트로 확인. pytest 21 passed.
+- 실행하지 않음: Java 의 동률 레코드 벡터 4건 재대조, 운영 Publisher(Spark)·Airflow, 실제 Silver 계산과의 수치 비교(D23), 손상 Sector·AI 실패 시나리오의 실제 적재(5절 정책 미결).

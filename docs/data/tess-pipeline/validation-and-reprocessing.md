@@ -170,7 +170,7 @@ Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 �
 
 | ERD 테이블 | 윤성용이 채워야 하는 과학 필드·규칙 | 남은 결정 |
 |---|---|---|
-| `light_curve_segments` | `tic_id`, `sector`, `binning_revision`(원천·전처리·비닝 설정 버전), `start_btjd`(첫 bin 시작), `bin_minutes`(기본 10, 세그먼트 20,000점 초과 시 확대·실제 간격 기록), `n_points`, `flux real[]`(빈 bin NaN, 균등 격자 유지), `flux_scatter`(세그먼트당 산포 스칼라), `gaps`(빈 구간 인덱스). `UNIQUE(tic_id, sector, binning_revision)`, 행 불변 | 비닝 간격 실측, 산포 정의(MAD 등), bin 대표값(중앙값/평균), 부분 bin 처리 |
+| `light_curve_segments` | `tic_id`, `sector`, `binning_revision`(원천·전처리·비닝 설정 버전), `start_btjd`(첫 bin 시작), `bin_minutes`(기본 10, 세그먼트 20,000점 초과 시 확대·실제 간격 기록), `n_points`, `flux real[]`(빈 bin NULL, 균등 격자 유지), `flux_scatter`(세그먼트당 산포 스칼라), `gaps`(빈 구간 인덱스). `UNIQUE(tic_id, sector, binning_revision)`, 행 불변 | 비닝 간격 실측, 산포 정의(MAD 등), bin 대표값(중앙값/평균), 부분 bin 처리 |
 | `periodograms` | 판 단위. `period_min_days`, `period_max_days`, `n_periods`(5,000), `power real[]`. 격자는 manifest의 로그 등간격 규칙으로 계산 | 격자 범위·간격 규칙, 목적함수, `periodogram_config_version` 정의. 탐색용 BLS 격자와 분리 |
 | `candidates` | `id`(판 간 유지), `status`(active/retired), `updated_bundle_id`, `removal_step`, `period_days`, `epoch_btjd`, `duration_hours`, `depth_ppm`, `bls_power`, `transit_model` JSONB, `discoverable`, `is_confirmed`. 단위는 열 이름으로 고정(일·BTJD·시간·ppm) | `transit_model` 필드·shape·`residual_model_version` 정의, 판 사이 후보 동일성 허용 오차, 미세 조정 허용 폭 규칙 |
 | `candidate_aliases` | `multiplier`, `alias_period_days` | 추가 고조파(DEC-05) |
