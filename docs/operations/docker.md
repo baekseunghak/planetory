@@ -28,10 +28,12 @@ docker-compose -f compose.yaml --profile service --profile distributed --profile
 Compose는 서비스 이름으로 일부만 실행할 수 있다.
 
 ```powershell
-docker-compose -f compose.yaml up service-db
-docker-compose -f compose.yaml up --build frontend
+docker-compose -f compose.yaml --profile service up service-db
+docker-compose -f compose.yaml --profile service up --build frontend
 docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 ```
+
+`service-db`는 루트 `compose.yaml`이 `include`하는 `experiments/distributed-pipeline/compose.yaml`에 정의돼 있고 `frontend`·`backend`와 함께 `service` 프로필에 속한다. 백엔드 로컬 DB 실행 기준은 [백엔드 개발 환경 안내](../../apps/backend/docs/development-setup.md) 2장이다.
 
 현재 Airflow에는 PostgreSQL 드라이버와 DAG 위치만 있고 실제 DAG는 없다. Frontend·Backend·Ingestion·Spark·Publisher도 실행 코드와 manifest가 채워지기 전까지 해당 이미지 빌드를 완료할 수 없다. `docker-compose down -v`는 로컬 볼륨까지 삭제하므로 명시적으로 초기화할 때만 사용한다.
 
@@ -49,9 +51,9 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
   → 해당 이미지만 pull·재시작
 ```
 
-- EC2: `infra/service/compose.yaml`, `linux/amd64`
+- EC2-A: `infra/service/compose.yaml`, `linux/amd64`. 서비스 인스턴스는 이 노드 1개이고 EC2-B는 배포 대상이 아니다
 - GCP Node 1: `infra/distributed-system/compose.control-plane.yaml`, Node 2~6: `infra/distributed-system/compose.worker.yaml`, 모두 `linux/amd64`
-- EC2-A/B와 GCP Node 1~6 배포 job은 따로 실행한다.
+- EC2-A와 GCP Node 1~6 배포 job은 따로 실행한다.
 - Airflow·Spark submit·Publisher는 GCP Node 1에서, 수집 이미지는 Node 2~6에서 관리한다.
 - 서버의 `.env`에 실제 경로와 비밀 값을 보관한다. Registry 읽기 전용 로그인도 서버에서 미리 설정한다.
 - 이전 커밋 SHA 이미지를 다시 배포할 수 있어야 한다. DB migration과 Gold 릴리스 전환은 이미지 되돌리기와 별도 절차다.

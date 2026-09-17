@@ -140,7 +140,7 @@ if (response.ok) {
 
 ## 4. 세션·배포
 
-- 단일 서버의 메모리 HttpSession을 사용한다. 서버 재시작·서버 변경 시 재로그인이 필요하다.
+- 서비스 인스턴스는 1개로 확정됐고 세션은 그 프로세스의 메모리 HttpSession에 둔다. 배포·재시작은 전면 중단이므로 전원 재로그인이 필요하다.
 - 마지막 유효 인증 API 요청 접수 시각부터 정확히 30분이다. 만료 시각과 같아도 401이다.
 - 폴링·입력 오류·권한 부족도 유효 인증 요청이면 연장한다. 정적 경로·개발 hello·CSRF 토큰 조회는 연장하지 않는다.
 - 별도 토큰 갱신·주기적 heartbeat API는 없다. 동시에 여러 기기를 로그인할 수 있다.
@@ -151,7 +151,7 @@ if (response.ok) {
 - 외부 Origin에 대한 CORS 허용은 추가하지 않았다. 별도 출처가 필요하면 허용 Origin·쿠키 정책을 명시적으로 설계한다.
 - `infra/service/compose.yaml`에 제공자 환경변수 전달을 추가했다. 서버 `.env` 또는 보호 변수에 값을 설정한다.
 - Compose의 프로필 선택 변수는 `OAUTH_PROFILES=oauth-google,oauth-ssafy`다. 컨테이너 안에서는 `SPRING_PROFILES_INCLUDE`로 전달된다.
-- 재시작 유지·같은 로그인 출처의 다중 인스턴스가 필요해지면 Spring Session JDBC 등의 공유 저장소를 적용한다. 계산 캐시 Redis와 세션 정책은 별개다.
+- 재시작 유지·같은 로그인 출처의 다중 인스턴스가 필요해지면 Spring Session JDBC 등의 공유 저장소를 적용한다. 그때 `SecurityConfig`의 로그아웃 CSRF 면제 수정이 선행 조건이며 남은 선행 항목은 [EC2 서비스 진입·장애 전환 경계](../../../docs/architecture/ec2-service-entry-failover.md)를 따른다. 계산 캐시 Redis와 세션 정책은 별개다.
 
 ## 5. 코드 위치와 검증
 
