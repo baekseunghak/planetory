@@ -1,5 +1,7 @@
 # Planetory 공용 프론트
 
+2026-09-17: 206 별 상세·내 행성 확대·복귀·공통 경로 이동을 연결했다. `npm run dev:detail`로 확인하며 [206 항목별 인수와 남은 실제 연동](docs/ticket-206-readiness.md)을 따른다.
+
 2026-09-17 통합 갱신: 최신 develop 충돌 정리와 재검증은 [202 MR 통합 기록](docs/merge-readiness-202.md)을 기준으로 합니다. 아래 이전 실행 기록의 미업로드·미통합 표기는 당시 상태입니다.
 
 `S15P21C206-201` / W03. 별지도·서비스 화면과 백지웅 담당 분석 화면이 같은 React 앱, 페이지 이동, 인증 조회, HTTP 클라이언트를 사용하는 출발점이다.
@@ -103,3 +105,7 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 203 통합·병합 순서와 남은 인수: [MR !36 통합 기록](docs/merge-readiness-203.md).
 
 204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
+
+## W06-2 은하 지도 조작과 마커
+
+205는 기존 은하에 드래그 회전·팬·휠·키보드·개별 별/내 행성 선택과 가시 DOM 마커 풀을 연결한다. `npm run dev:interaction`은58326의 개발 HTTP fixture, `npm run test:interaction`은 독립 입력 검사다. 운영은 기존 렌더 활성화 플래그와 API 연결을 사용한다. [205 항목별 구현·검증·실제 연동 대기](docs/ticket-205-readiness.md)를 참고한다. 206 상세 화면·207 대체 접근·배포 인수는 별도다.

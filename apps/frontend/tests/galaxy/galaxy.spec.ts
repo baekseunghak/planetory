@@ -154,7 +154,35 @@ test("status changes preserve actual rendered pixels; new discovery preserves ca
   const camera = (await view(page)).camera,
     coord = (await (await request.get("/api/v1/me/stars/900000001")).json())
       .unlock.position;
-  const before = await page.locator("canvas").screenshot();
+  // Canvas screenshots include the DOM markers above it. Completed badges must
+  // disappear in 205; compare the actual WebGL pixels, whose colors stay fixed.
+  const pixels = () =>
+    page.evaluate(
+      () =>
+        new Promise<string>((resolve) =>
+          requestAnimationFrame(async () => {
+            const canvas = document.querySelector("canvas")!;
+            const gl = canvas.getContext("webgl2")!;
+            const bytes = new Uint8Array(canvas.width * canvas.height * 4);
+            gl.readPixels(
+              0,
+              0,
+              canvas.width,
+              canvas.height,
+              gl.RGBA,
+              gl.UNSIGNED_BYTE,
+              bytes,
+            );
+            resolve(
+              Array.from(
+                new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+                (b) => b.toString(16).padStart(2, "0"),
+              ).join(""),
+            );
+          }),
+        ),
+    );
+  const before = await pixels();
   await page
     .getByRole("button", { name: "행성 없는 완료 응답", exact: true })
     .click();
@@ -166,8 +194,9 @@ test("status changes preserve actual rendered pixels; new discovery preserves ca
           .count,
     )
     .toBe(0);
-  const after = await page.locator("canvas").screenshot();
-  expect(after.equals(before)).toBe(true);
+  await expect.poll(async () => (await stats(page)).stars).toBe(1000);
+  const after = await pixels();
+  expect(after).toBe(before);
   await page.getByRole("button", { name: "새 발견 응답", exact: true }).click();
   await expect(page.getByTestId("sky-total")).toHaveText("1,001");
   expect((await view(page)).camera).toEqual(camera);

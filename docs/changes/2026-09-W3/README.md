@@ -42,4 +42,7 @@
 | 2026-09-17 | 튜토리얼 순차 발견·챌린지 발견·퀘스트 패널, 회차 전환 전용 명령, 튜토리얼 완료 유지·챌린지 느낌표 기준 | S15P21C206-139 | 튜토리얼, 챌린지, 퀘스트, GET /me/quests, tutorialCompleted, completed_at, 재개, challenge-unlock, 회차 전환, 운영 명령, 비웹 기동, StarDiscoveryService, layout_ordinal, 지도 버전, marker, 빨간 느낌표, newDiscoverableCount, 미결 12, F17-Q2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 일반 글·공식 스레드의 1단계 댓글 CRUD | S15P21C206-159 | 댓글, comments, POST, SIGNAL_THREAD, parentType, PATCH, SB-D22, FOR UPDATE, codePointCount | 구현 완료 | [2026-09-17](2026-09-17.md) |
 
+| 2026-09-17 | 은하 지도 조작·개별 선택·마커 접근성 | S15P21C206-205 | 64px 격자, DOM 풀, 회전, 포커스, 완료 번호 숨김 | 프론트 구현·로컬 검증 완료, 실제 인수 대기 | [기록](2026-09-17.md#s15p21c206-205-은하-지도-조작개별-선택마커-접근성) |
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
+
+| 2026-09-17 | 별 상세·개인 행성 확대·카메라 복원·공통 경로 소비 | S15P21C206-206 | C06, planets.items, camera, returnTo, null | 구현 완료·통합 대기 | [기록](2026-09-17.md#s15p21c206-206-별-상세개인-행성-확대화면-왕복-소비) |

@@ -16,7 +16,7 @@ export function SkyDataPage({
     store?.select(params.get("star") || params.get("focus"));
   }, [store, location.search]);
   return (
-    <section aria-labelledby="sky-title">
+    <section className="sky-page" aria-labelledby="sky-title">
       <p className="eyebrow">MY UNIVERSE</p>
       <h1 id="sky-title">별지도</h1>
       {data.meta && (
@@ -48,7 +48,16 @@ export function SkyDataPage({
           </button>
         </div>
       )}
-      {data.pending > 0 && <p role="status">주변 별을 불러오고 있습니다.</p>}
+      <p
+        role="status"
+        aria-hidden={data.pending === 0}
+        style={{
+          minHeight: "1.5em",
+          visibility: data.pending > 0 ? "visible" : "hidden",
+        }}
+      >
+        {data.pending > 0 ? "주변 별을 불러오고 있습니다." : null}
+      </p>
       {data.meta && data.phase === "ready" && data.meta.starCount === 0 && (
         <p>아직 열린 별이 없습니다.</p>
       )}

@@ -1,30 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkyDataPage, type SkySceneProps } from "../sky-data/SkyDataPage";
-import { api } from "../../api";
-import { ErrorState } from "../../components/RequestState";
+import type { Star } from "../sky-data/contracts";
+import { focusCamera } from "./detail";
+import { PersonalGalaxyScene } from "./StarDetail";
 import { levelForScale, viewportBounds } from "../sky-data/geometry";
 import {
   INITIAL_CAMERA,
   cameraMatrix,
   initialCamera,
   renderPlan,
-  readOwnedSystem,
   type GalaxyCamera,
   type OwnedSystem,
 } from "./model";
 import { GalaxyRenderer, type RendererMetrics } from "./renderer";
 import "./galaxy.css";
+import {
+  GalaxyInteraction,
+  type InteractionControl,
+} from "./GalaxyInteraction";
 
 export type SceneControl = {
   setCamera(patch: Partial<GalaxyCamera>, options?: { level?: number }): void;
   getCamera(): GalaxyCamera | null;
   fitAll(): void;
   setSystem(system: OwnedSystem | null): void;
+  focusStar(position: Pick<Star, "x" | "y" | "depthZ">): void;
 };
 type Props = SkySceneProps & {
   personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
   onMetrics?: (value: RendererMetrics) => void;
+  onPlanetSelect?: (candidateId: string | null) => void;
+  onDeselect?: () => void;
+  selectedStar?: Star | null;
+  focusedPlanet?: string | null;
 };
 export function GalaxyScene({
   data,
@@ -32,7 +41,13 @@ export function GalaxyScene({
   onReady,
   onMetrics,
   personalSystem,
+  onPlanetSelect,
+  onDeselect,
+  selectedStar,
+  focusedPlanet = null,
 }: Props) {
+  const cameraAnimation = useRef(0);
+  const interaction = useRef<InteractionControl | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     renderer = useRef<GalaxyRenderer | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -64,6 +79,7 @@ export function GalaxyScene({
   useEffect(() => {
     onReady?.({
       setCamera(patch, options) {
+        cancelAnimationFrame(cameraAnimation.current);
         const c = current.current.camera,
           d = current.current.dimensions;
         if (!c) return;
@@ -79,6 +95,30 @@ export function GalaxyScene({
         setForcedLevel(level ?? null);
       },
       getCamera: () => current.current.camera,
+      focusStar(position) {
+        cancelAnimationFrame(cameraAnimation.current);
+        const start = current.current.camera;
+        if (!start) return;
+        const target = focusCamera(start, position);
+        setForcedLevel(null);
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          setCamera(target);
+          return;
+        }
+        const began = performance.now();
+        const tick = (now: number) => {
+          const t = Math.min(1, (now - began) / 650),
+            ease = 1 - (1 - t) ** 3;
+          setCamera({
+            ...target,
+            x: start.x + (target.x - start.x) * ease,
+            y: start.y + (target.y - start.y) * ease,
+            zoom: start.zoom + (target.zoom - start.zoom) * ease,
+          });
+          if (t < 1) cameraAnimation.current = requestAnimationFrame(tick);
+        };
+        cameraAnimation.current = requestAnimationFrame(tick);
+      },
       fitAll() {
         const { data, dimensions } = current.current;
         setSystem(null);
@@ -91,8 +131,11 @@ export function GalaxyScene({
         setSystem(value);
       },
     });
-    return () => onReady?.(null);
-  }, [onReady]);
+    return () => {
+      cancelAnimationFrame(cameraAnimation.current);
+      onReady?.(null);
+    };
+  }, [onReady, !!camera]);
   useEffect(() => setSystem(null), [meta.version, data.selectedTicId]);
   useEffect(() => {
     const element = canvas.current;
@@ -106,6 +149,7 @@ export function GalaxyScene({
     const tick = (now: number) => {
       if (!alive || !active) return;
       active.draw(last ? (now - last) / 1000 : 0, reduced.matches);
+      interaction.current?.frame(active.planetTargets());
       last = now;
       if (now - lastMetrics > 250) {
         metricsRef.current?.(active.metrics());
@@ -167,9 +211,17 @@ export function GalaxyScene({
   const plan = useMemo(
     () =>
       matrix
-        ? renderPlan(data.stars, matrix, dimensions.width, dimensions.height)
+        ? renderPlan(
+            selectedStar &&
+              !data.stars.some((s) => s.ticId === selectedStar.ticId)
+              ? [...data.stars, selectedStar]
+              : data.stars,
+            matrix,
+            dimensions.width,
+            dimensions.height,
+          )
         : { stars: [] },
-    [data.stars, matrix, dimensions],
+    [data.stars, selectedStar, matrix, dimensions],
   );
   // Retire stale detail synchronously, before effects/paint after a version or selection change.
   const requestedSystem =
@@ -193,6 +245,7 @@ export function GalaxyScene({
     );
     try {
       r.setScene(plan, data.selectedTicId, visibleSystem);
+      r.setPlanetFocus(focusedPlanet);
       setFailure(null);
     } catch (e) {
       r.setScene({ stars: [] }, null);
@@ -208,6 +261,7 @@ export function GalaxyScene({
     visibleSystem,
     camera,
     meta.starCount,
+    focusedPlanet,
   ]);
   return (
     <div className="galaxy-scene">
@@ -215,9 +269,43 @@ export function GalaxyScene({
         ref={canvas}
         data-rendered-stars={plan.stars.length}
         data-rendered-planets={visibleSystem?.items.length ?? 0}
-        role="img"
+        data-focused-planet={focusedPlanet ?? ""}
+        tabIndex={0}
+        role="listbox"
+        data-camera={JSON.stringify(camera)}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
+      {camera && matrix && (
+        <GalaxyInteraction
+          ref={interaction}
+          canvas={canvas}
+          camera={camera}
+          matrix={matrix}
+          width={dimensions.width}
+          height={dimensions.height}
+          stars={plan.stars}
+          system={visibleSystem}
+          data={data}
+          store={store}
+          onPlanetSelect={onPlanetSelect}
+          onDeselect={onDeselect}
+          enabled={ready && !failure && !data.needsRefresh}
+          changeCamera={(next) => {
+            cancelAnimationFrame(cameraAnimation.current);
+            setForcedLevel(null);
+            setCamera(next);
+          }}
+          fitAll={() => {
+            cancelAnimationFrame(cameraAnimation.current);
+            if (onDeselect && data.selectedTicId) {
+              onDeselect();
+              return;
+            }
+            setForcedLevel(null);
+            setCamera(initialCamera(meta, dimensions.width, dimensions.height));
+          }}
+        />
+      )}
       {failure && (
         <div className="galaxy-error" role="alert">
           <p>{failure}</p>
@@ -237,60 +325,25 @@ export function GalaxyScene({
         </p>
         <p>행성과 궤도는 선택한 별의 근접 화면에서만 나타납니다.</p>
         <p>표면과 궤도는 이해를 돕기 위한 시각화입니다.</p>
+        <p>
+          파란 번호는 진행할 튜토리얼, 빨간 느낌표는 챌린지입니다. 완료한
+          튜토리얼 번호는 사라집니다.
+        </p>
+        <p>
+          드래그: 회전 · Shift+드래그 또는 우클릭 드래그: 이동 · 휠: 확대/축소.
+          이동 모드에서는 드래그로 이동합니다.
+        </p>
+        <p>
+          지도에 Tab으로 들어간 뒤 방향키: 이동 · Shift+방향키: 회전 · +/−: 배율
+          · Home: 전체 보기 · [/]: 화면의 별/행성 탐색 · Enter: 선택 · Escape:
+          해제.
+        </p>
       </details>
       <span className="galaxy-visible-count" data-testid="visible-count">
         적재 {data.loadedCount.toLocaleString()} · 화면{" "}
         {plan.stars.length.toLocaleString()}
       </span>
     </div>
-  );
-}
-// Only fetch the selected member's system. Detail controls/planet information belong to 206.
-function PersonalGalaxyScene(props: SkySceneProps) {
-  const { data, store } = props;
-  const selected = data.stars.find((star) => star.ticId === data.selectedTicId);
-  const [system, setSystem] = useState<OwnedSystem | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [retry, setRetry] = useState(0);
-  useEffect(() => {
-    setSystem(null);
-    setError(null);
-    if (!selected || !data.meta || data.needsRefresh) return;
-    const controller = new AbortController();
-    const meta = data.meta;
-    void api<unknown>(`/v1/me/stars/${encodeURIComponent(selected.ticId)}`, {
-      signal: controller.signal,
-    })
-      .then((value) => {
-        if (!controller.signal.aborted)
-          setSystem(readOwnedSystem(value, meta, selected.ticId, selected));
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason
-              : new Error("행성을 불러오지 못했습니다."),
-          );
-      });
-    return () => controller.abort();
-  }, [store, data.meta, selected, data.needsRefresh, retry]);
-  return (
-    <>
-      {error && (
-        <ErrorState
-          error={error}
-          retry={() => {
-            void store.refresh();
-            setRetry((n) => n + 1);
-          }}
-        />
-      )}
-      <GalaxyScene
-        {...props}
-        personalSystem={data.needsRefresh || error ? null : system}
-      />
-    </>
   );
 }
 export function GalaxyPage() {
