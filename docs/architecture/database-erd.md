@@ -683,7 +683,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 |---|---|
 | 키 | `tic:{tic_id}:b{bundle_id}:rm{removed_candidate_ids 정렬}:{residual_model_version}:{periodogram_config_version}` |
 | 값 | 상태(QUEUED / RESIDUAL_CALCULATING / RESIDUAL_READY / PERIODOGRAM_CALCULATING / COMPLETED / FAILED), 잔차 배열, 주기도 배열, 실패 단계 |
-| 중복 계산 방지 | 같은 키를 여러 서버가 동시에 요청하면 `SETNX`로 한 서버만 계산 |
+| 중복 계산 방지 | 같은 키를 동시에 요청하면 `SETNX`로 한 번만 계산 |
 | 만료 | 판이 `archived`가 될 때, 또는 TTL |
 
 ### D. 성과·진행·발견

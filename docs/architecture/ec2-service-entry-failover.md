@@ -127,7 +127,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 `planetory_gold_writer`는 GCP Publisher의 역할이며 **서비스 런타임 역할이 아니다**([시스템 아키텍처](system-architecture.md) 7장, V2 `gold_roles`의 `REVOKE`). 두 역할을 한 계정에 합치면 V2가 회수한 Gold 쓰기 권한이 서비스 런타임에 되돌아온다.
 
-**미해결 사실(83에서 닫는다):** `users` 테이블에 `planetory_app` GRANT가 V1~V8 어디에도 없다. 매 요청 `members.requireActive`가 `users`를 SELECT하므로, 계정을 분리하는 시점에 모든 인증이 42501로 실패한다.
+**미해결 사실(83에서 닫는다):** `users` 테이블에 `planetory_app` GRANT가 V1~V9 어디에도 없다(V9 `operation_rules` 유입 후 재확인). 매 요청 `members.requireActive`가 `users`를 SELECT하므로, 계정을 분리하는 시점에 모든 인증이 42501로 실패한다.
 
 ## 6. 애플리케이션 전제
 
@@ -169,7 +169,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 | 티켓 | 인계 |
 | --- | --- |
-| 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. **`users` 테이블의 `planetory_app` GRANT 누락을 함께 닫는다**(5절) |
+| 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. **`users` 테이블의 `planetory_app` GRANT 누락을 함께 닫는다**(5절, V9까지 미해소) |
 | 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **Redis 컨테이너·persistence·볼륨**을 함께 정한다 — 세션이 Redis로 가므로(D10) 어디까지 재시작 생존을 보장할지가 여기서 결정된다 |
 | 93 | 컨테이너 재기동 정책과 헬스체크 연동. liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분한다. 구현은 contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다 — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 착수 시 Boot 버전에서 확인한다. `/actuator/health`는 현재 `show-details=never`로 UP/DOWN만 반환한다(2026-09-16 Backend 확인) |
 | 100 | 오사카 노드 알림 전용 외부 관찰. 진입·DNS 개입 권한은 주지 않는다 |
