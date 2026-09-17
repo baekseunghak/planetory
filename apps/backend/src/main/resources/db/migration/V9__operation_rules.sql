@@ -14,6 +14,7 @@
 -- 검증 실패. 어느 키가 왜 틀렸는지 메시지로 남긴다. CHECK가 거짓만 돌려주면 제약 이름만 보인다.
 CREATE FUNCTION operation_rules_fail(path TEXT, reason TEXT) RETURNS VOID
     LANGUAGE plpgsql IMMUTABLE
+    SET search_path FROM CURRENT
 AS $$
 BEGIN
     RAISE EXCEPTION 'operation_settings.%: %', path, reason
