@@ -1,14 +1,15 @@
 {
- "fixtureVersion": "gold-roundtrip-v0.1",
+ "fixtureVersion": "gold-roundtrip-v0.2",
  "contractStatus": "contract-example-not-scientific-reference",
  "jira": "S15P21C206-117",
- "generated_at": "2026-09-17T03:29:58+00:00",
  "source": {
   "target_key": "toi270",
   "tic_id": 259377017,
   "sector": 3,
   "product": "tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
   "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
+  "product_sha256": "edaa0de029f6fde3d045352887ef1a2950bb9b38fc18075066c81d7638feb695",
+  "procver": "spoc-5.0.20-20201120",
   "preprocessing": "biweight_1.0d (42 잠정 채택)",
   "n_quality0_points": 12974,
   "n_kept_after_preprocess": 12973,
@@ -24,9 +25,9 @@
  },
  "bundle": {
   "tic_id": 259377017,
-  "bundle_version": "pv1-be36df63cc234b695b7b62b7d2e714d2a21058d6a617604168631864b605e566",
+  "bundle_version": "pv1-9c50cba2992be726de9862cbefea1107209a86a7b85c233baa78f14be75ff72a",
   "status_at_load": "staging",
-  "fold_reference_time_btjd": 1397.0986280113161,
+  "fold_reference_time_btjd": 1397.09793355493,
   "base_days": 20.265593,
   "manifest": {
    "segment_ids": [],
@@ -53,8 +54,8 @@
     "order": "removal_step"
    },
    "input_snapshot_ids": [
-    "archive:2026-09-10:toi270",
-    "lc:spoc:tess2018263035959-s0003-0000000259377017-0123-s_lc.fits"
+    "archive:toi270:sha256:272257e0c895c9551e561cb42b90e73d587eaedf3849d7aa27e6a698471d37ed",
+    "lc:spoc:s0003:sha256:edaa0de029f6fde3d045352887ef1a2950bb9b38fc18075066c81d7638feb695:procver:spoc-5.0.20-20201120"
    ],
    "calculation_versions": {
     "preprocessing": "biweight_1.0d",
@@ -67,14 +68,16 @@
     "external_matching": "archive-2026-09-10"
    },
    "excluded_sectors": [],
+   "record_checksum_version": "record-canonical-v0",
+   "record_checksums": {
+    "candidates": "sha256:5a792917313a78e23d3a32a0163baa7fa80619958bde9dab92be2bdcae2b7da3",
+    "ai_results": "sha256:88420266dfd64d604627234a8a6c75cf6477c6fd5505df0d17c59959ae9ce234",
+    "external_statuses": "sha256:6c8384a2401031b73bd9d229afc6c67531a43539bd470ee8d299283f38b89603"
+   },
    "qa": {
     "status": "passed",
-    "checks": [
-     "transit_model_schema",
-     "residual_expected_present",
-     "array_lengths",
-     "checksums"
-    ]
+    "checker": "gold_roundtrip.qa.validate_payload",
+    "n_checks": 23
    }
   }
  },
@@ -199,9 +202,51 @@
    "is_confirmed": true
   }
  ],
+ "external_statuses": [
+  {
+   "source": "nasa_exoplanet_archive",
+   "external_id": "TOI-270 b",
+   "disposition": "confirmed",
+   "period_days": 3.35992,
+   "epoch_btjd": 1461.0146400001831,
+   "fetched_on": "2026-09-10",
+   "candidate_key": {
+    "period_days": 3.35992,
+    "epoch_btjd": 1461.0146400001831
+   }
+  },
+  {
+   "source": "nasa_exoplanet_archive",
+   "external_id": "TOI-270 c",
+   "disposition": "confirmed",
+   "period_days": 5.66051,
+   "epoch_btjd": 1463.0805600001477,
+   "fetched_on": "2026-09-10",
+   "candidate_key": {
+    "period_days": 5.66051,
+    "epoch_btjd": 1463.0805600001477
+   }
+  },
+  {
+   "source": "nasa_exoplanet_archive",
+   "external_id": "TOI-270 d",
+   "disposition": "confirmed",
+   "period_days": 11.38194,
+   "epoch_btjd": 1469.3382299998775,
+   "fetched_on": "2026-09-10",
+   "candidate_key": {
+    "period_days": 11.38194,
+    "epoch_btjd": 1469.3382299998775
+   }
+  }
+ ],
+ "ai_results": [],
  "checksums": {
   "segment:3:10m-v1:flux": "sha256:a7551269494fecce83768d60e38ae5b11fd802fa13d6296e93e64d824df8b798",
-  "periodogram:power": "sha256:5405a21ebbc2dae207b78ff62edf5bcda8f6650d6ec95b5f9dbf328e9f40b390"
+  "periodogram:power": "sha256:5405a21ebbc2dae207b78ff62edf5bcda8f6650d6ec95b5f9dbf328e9f40b390",
+  "records:candidates": "sha256:5a792917313a78e23d3a32a0163baa7fa80619958bde9dab92be2bdcae2b7da3",
+  "records:ai_results": "sha256:88420266dfd64d604627234a8a6c75cf6477c6fd5505df0d17c59959ae9ce234",
+  "records:external_statuses": "sha256:6c8384a2401031b73bd9d229afc6c67531a43539bd470ee8d299283f38b89603"
  },
  "expected_residuals": {
   "evaluated_at": "bin_center (start_btjd + (i + 0.5) × bin_minutes/1440)",

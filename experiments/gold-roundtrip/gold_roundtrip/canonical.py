@@ -24,6 +24,7 @@ bundle_version 은 69 계약(`contracts/gold/validate.cjs` expectedBundleVersion
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import struct
 from typing import Iterable, Sequence
@@ -41,11 +42,16 @@ class ArrayCanonicalError(ValueError):
         self.index = index
 
 
-def normalize_array(values: Sequence[float | None]) -> list[float | None]:
-    """규칙 1–4 를 적용한 float32 정규화 배열(파이썬 float, NULL 은 None)."""
+def normalize_array(values: Sequence[float | None], *, allow_null: bool = True) -> list[float | None]:
+    """규칙 1–4 를 적용한 float32 정규화 배열(파이썬 float, NULL 은 None).
+
+    allow_null=False 인 배열(periodograms.power)에서 None 이 나오면 `null_not_allowed` 로 거절한다.
+    """
     out: list[float | None] = []
     for i, v in enumerate(values):
         if v is None:
+            if not allow_null:
+                raise ArrayCanonicalError("null_not_allowed", i, "NULL 이 허용되지 않는 배열")
             out.append(None); continue
         if isinstance(v, bool) or not isinstance(v, (int, float, np.integer, np.floating)):
             raise ArrayCanonicalError("non_numeric", i, repr(v))
@@ -97,3 +103,84 @@ def bundle_version(semantic_payload: dict) -> str:
     lines += [f"version:{k}:{v}" for k, v in semantic_payload["calculation_versions"].items()]
     lines.sort()
     return "pv1-" + hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest()
+
+
+# --------------------------------------------------------------------------- 레코드 checksum (후보·AI·외부 상태) v0
+#
+# `record-canonical-v0`: 69 의미 payload 의 candidates_checksum·ai_results_checksum·external_statuses_checksum 용.
+# 텍스트 숫자 표기(1.0 vs 1, 지수 표기)의 언어 차이를 피하려고 JSON 이 아닌 태그 바이트 열로 직렬화한다.
+#   0x00 null | 0x01 bool(1바이트) | 0x02 number(float64 LE 8바이트, 유한만, -0→+0) | 0x03 string(u32 LE 길이 + UTF-8)
+#   0x04 list(u32 LE 개수 + 원소들) | 0x05 object(u32 LE 개수 + (키 string, 값) 을 키의 UTF-8 바이트 오름차순)
+# 정수는 float64 로 넣는다(2^53 이하 정확; tic_id·id 범위 안). NaN·Inf 는 거절.
+# 컬렉션 checksum = "sha256:" + sha256( list 인코딩( 제외 필드를 뺀 레코드들을 정렬 키로 정렬한 것 ) ).
+# DB 가 만든 값(id, updated_bundle_id, transit_model.candidate_id, bundle_id)과 fixture 전용 키(local_key)는 제외한다.
+
+RECORD_CHECKSUM_VERSION = "record-canonical-v0"
+
+RECORD_RULES = {
+    "candidates": {"exclude": ("id", "updated_bundle_id", "local_key", "tic_id"), "exclude_nested": (("transit_model", "candidate_id"),),
+                   "sort_key": ("removal_step", "period_days", "epoch_btjd")},
+    "ai_results": {"exclude": ("id", "candidate_id", "execution_id"), "exclude_nested": (),
+                   "sort_key": ("candidate_key.period_days", "candidate_key.epoch_btjd", "model_version")},
+    "external_statuses": {"exclude": ("id", "candidate_id", "tic_id"), "exclude_nested": (),
+                          "sort_key": ("source", "external_id")},
+}
+
+
+def _enc(value) -> bytes:
+    if value is None:
+        return b"\x00"
+    if isinstance(value, bool):
+        return b"\x01" + (b"\x01" if value else b"\x00")
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        f = float(value)
+        if not math.isfinite(f):
+            raise ArrayCanonicalError("non_finite_input", -1, repr(value))
+        if f == 0.0:
+            f = 0.0
+        return b"\x02" + struct.pack("<d", f)
+    if isinstance(value, str):
+        b = value.encode("utf-8")
+        return b"\x03" + struct.pack("<I", len(b)) + b
+    if isinstance(value, (list, tuple)):
+        return b"\x04" + struct.pack("<I", len(value)) + b"".join(_enc(v) for v in value)
+    if isinstance(value, dict):
+        items = sorted(value.items(), key=lambda kv: kv[0].encode("utf-8"))
+        return b"\x05" + struct.pack("<I", len(items)) + b"".join(_enc(k) + _enc(v) for k, v in items)
+    raise ArrayCanonicalError("non_numeric", -1, f"지원하지 않는 타입 {type(value).__name__}")
+
+
+def canonical_record_bytes(value) -> bytes:
+    return _enc(value)
+
+
+def _get(rec: dict, dotted: str):
+    cur = rec
+    for part in dotted.split("."):
+        cur = cur.get(part) if isinstance(cur, dict) else None
+    return cur
+
+
+def prepare_records(kind: str, records: Iterable[dict]) -> list[dict]:
+    """제외 필드를 빼고 정렬 키로 정렬한 레코드 목록. 정렬은 (값이 None 이면 뒤로) 튜플 비교."""
+    rule = RECORD_RULES[kind]
+    out = []
+    for r in records:
+        c = json.loads(json.dumps(r, allow_nan=False))
+        for k in rule["exclude"]:
+            c.pop(k, None)
+        for path in rule["exclude_nested"]:
+            cur = c
+            for part in path[:-1]:
+                cur = cur.get(part, {}) if isinstance(cur, dict) else {}
+            if isinstance(cur, dict):
+                cur.pop(path[-1], None)
+        out.append(c)
+
+    def key(rec):
+        return tuple((0, v) if isinstance(v, (int, float)) else (1, str(v)) if v is not None else (2, "") for v in (_get(rec, k) for k in rule["sort_key"]))
+    return sorted(out, key=key)
+
+
+def record_checksum(kind: str, records: Iterable[dict]) -> str:
+    return "sha256:" + hashlib.sha256(canonical_record_bytes(prepare_records(kind, records))).hexdigest()

@@ -10,20 +10,23 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 from astropy.timeseries import BoxLeastSquares
 
 from astro_kernel import remove_transit_models, TransitModelError, parse_transit_model
+from tess_fixture import download as dl
 from tess_fixture import references as refs
 from tess_fixture.lightcurve import build_baseline, load_sector
 from tess_fixture.targets import iter_products, select_targets
 from tess_bench import bls as bl
 from tess_bench.preprocess import load_settings, preprocess
 
-from .canonical import CHECKSUM_VERSION, array_checksum, bundle_version, float64_checksum, normalize_array
+from . import qa
+from .canonical import (CHECKSUM_VERSION, RECORD_CHECKSUM_VERSION, array_checksum, bundle_version, canonical_record_bytes,
+                        float64_checksum, normalize_array, record_checksum)
+import hashlib
 
 REPO = Path(__file__).resolve().parents[3]
 FIXTURE_DIR = REPO / "experiments" / "tess-fixture"
@@ -75,6 +78,15 @@ def bin_segment(t: np.ndarray, f: np.ndarray, bin_days: float) -> tuple[float, l
     return start, flux, gaps
 
 
+def fold_reference_time(base) -> float:
+    """DAT-11: DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성만 통과한 **원본 관측 시각 전체**의 중앙값.
+
+    전처리(detrending·clipping) 결과에 의존하지 않는다. build_baseline 이 만든 base.time 이 정확히 그 집합이다.
+    짝수 표본은 가운데 두 값의 평균(np.median).
+    """
+    return float(np.median(base.time))
+
+
 def bin_centers(start: float, n: int, bin_days: float) -> np.ndarray:
     """113 결정: Gold 세그먼트의 모델 평가 시각은 bin 중심. 호출자가 옮긴다."""
     return start + (np.arange(n) + 0.5) * bin_days
@@ -98,8 +110,8 @@ def build(target_key: str = "toi270", sector: int = 3, raw: Path | None = None) 
 
     cfg, settings = load_settings(BENCH_DIR / "configs" / "preprocess_settings_v1.json", ["biweight_1.0d"])
     pre = preprocess(base.time, base.flux, base.sector_of_point, settings[0])
-    t_obs = pre.time[pre.kept & np.isfinite(pre.flux_det)]
-    fold_ref = float(np.median(t_obs))                    # DAT-11: 유효 원본 관측 시각 중앙값(짝수면 가운데 두 값 평균)
+    fold_ref = fold_reference_time(base)                  # 전처리 무관: 품질 필터·유한성만 통과한 원본 시각의 중앙값
+    base_days = float(base.time.max() - base.time.min())
 
     start, flux64, gaps = bin_segment(pre.time, pre.flux_det, BIN_DAYS)
     flux = normalize_array(flux64)                        # NULL 마스크 보존 → 유한성 검사 → float32 → -0 정규화 (canonical.py)
@@ -115,7 +127,7 @@ def build(target_key: str = "toi270", sector: int = 3, raw: Path | None = None) 
     longest = max(m["parameters"]["period_days"] for m in models)
     period_max = max(40.0, round(longest * 1.15, 3))    # 탐사 API 5.3절 규칙
     grid, power = periodogram(centers, f_arr, period_max)
-    power32 = normalize_array(power.tolist())
+    power32 = normalize_array(power.tolist(), allow_null=False)     # 주기도에는 NULL 이 없어야 한다
 
     candidates = []
     for step, m in enumerate(models):
@@ -130,7 +142,23 @@ def build(target_key: str = "toi270", sector: int = 3, raw: Path | None = None) 
 
     segment = {"tic_id": target.tic_id, "sector": sec, "binning_revision": f"{BIN_MINUTES}m-v1", "start_btjd": start,
                "bin_minutes": BIN_MINUTES, "n_points": n_points, "flux": flux, "flux_scatter": round(scatter, 8), "gaps": gaps}
-    input_snapshot_ids = [f"lc:spoc:{filename}", f"archive:{rows[0].get('fetched_at', '')[:10] if rows else 'unknown'}:{target.key}"]
+    # 입력 snapshot id 는 내용 기반: 원천 FITS 는 파일 sha256 + PROCVER, Archive 는 대상 행 내용의 sha256.
+    fits_sha = dl.sha256_of(raw / target.key / filename)
+    target_rows = sorted((r for r in rows if r.get("target_key") == target.key), key=lambda r: r.get("pl_name", ""))
+    archive_sha = hashlib.sha256(canonical_record_bytes(target_rows)).hexdigest()
+    input_snapshot_ids = [f"lc:spoc:s{sec:04d}:sha256:{fits_sha}:procver:{curve.meta.get('PROCVER', '')}",
+                          f"archive:{target.key}:sha256:{archive_sha}"]
+    # 외부 상태(external_signal_references 행). 통과 행성은 후보 자연 키로 연결, 비통과 행은 candidate_key null.
+    by_name = {c["local_key"]: c for c in candidates}
+    external_statuses = []
+    for r in target_rows:
+        c = by_name.get(r.get("pl_name"))
+        external_statuses.append({"source": "nasa_exoplanet_archive", "external_id": r["pl_name"], "disposition": "confirmed",
+                                  "period_days": float(r["pl_orbper"]) if r.get("pl_orbper") else None,
+                                  "epoch_btjd": (float(r["pl_tranmid"]) - bl.BJD_OFFSET) if r.get("pl_tranmid") else None,
+                                  "fetched_on": (r.get("fetched_at") or "")[:10],
+                                  "candidate_key": ({"period_days": c["period_days"], "epoch_btjd": c["epoch_btjd"]} if c else None)})
+    ai_results: list[dict] = []                            # 118 전. 비어 있어도 checksum 은 정의된다
     semantic = {"input_snapshot_ids": sorted(input_snapshot_ids),
                 "segments": [{"tic_id": target.tic_id, "sector": sec, "binning_revision": segment["binning_revision"]}],
                 "calculation_versions": CALCULATION_VERSIONS}
@@ -148,10 +176,13 @@ def build(target_key: str = "toi270", sector: int = 3, raw: Path | None = None) 
         "input_snapshot_ids": semantic["input_snapshot_ids"],
         "calculation_versions": CALCULATION_VERSIONS,
         "excluded_sectors": [],
-        "qa": {"status": "passed", "checks": ["transit_model_schema", "residual_expected_present", "array_lengths", "checksums"]},
+        "record_checksum_version": RECORD_CHECKSUM_VERSION,
+        "record_checksums": {"candidates": record_checksum("candidates", candidates),
+                             "ai_results": record_checksum("ai_results", ai_results),
+                             "external_statuses": record_checksum("external_statuses", external_statuses)},
     }
     checksums = {"segment:{sector}:{binning_revision}:flux".format(**segment): array_checksum(flux),
-                 "periodogram:power": array_checksum(power32)}
+                 "periodogram:power": array_checksum(power32), **{f"records:{k}": v for k, v in manifest["record_checksums"].items()}}
 
     # Silver 기준 결과: 제거 조합별 잔차 (bin 중심 평가). 전체 배열 대신 checksum·표본·통계를 남긴다.
     def residual_case(ids: list[str]):
@@ -174,22 +205,29 @@ def build(target_key: str = "toi270", sector: int = 3, raw: Path | None = None) 
         bad_code = e.code
     expected["invalid_model_zero_depth"] = {"model": bad, "expected_error": bad_code}
 
-    return {
-        "fixtureVersion": "gold-roundtrip-v0.1", "contractStatus": "contract-example-not-scientific-reference", "jira": "S15P21C206-117",
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source": {"target_key": target.key, "tic_id": target.tic_id, "sector": sec, "product": filename, "source_uri": url,
-                   "preprocessing": "biweight_1.0d (42 잠정 채택)", "n_quality0_points": int(base.n_valid), "n_kept_after_preprocess": int(t_obs.size),
-                   "skipped_reference_rows": skipped},
+    payload = {
+        "fixtureVersion": "gold-roundtrip-v0.2", "contractStatus": "contract-example-not-scientific-reference", "jira": "S15P21C206-117",
+        "source": {"target_key": target.key, "tic_id": target.tic_id, "sector": sec, "product": filename, "source_uri": url, "product_sha256": fits_sha,
+                   "procver": curve.meta.get("PROCVER", ""), "preprocessing": "biweight_1.0d (42 잠정 채택)", "n_quality0_points": int(base.n_valid),
+                   "n_kept_after_preprocess": int(np.sum(pre.kept & np.isfinite(pre.flux_det))), "skipped_reference_rows": skipped},
         "star": {"tic_id": target.tic_id, "teff_k": 3506.0, "radius_rsun": 0.38, "tmag": None, "confirmed_count": len(candidates), "service_status": "published"},
         "bundle": {"tic_id": target.tic_id, "bundle_version": bundle_version(semantic), "status_at_load": "staging",
-                   "fold_reference_time_btjd": fold_ref, "base_days": round(float(t_obs.max() - t_obs.min()), 6), "manifest": manifest},
+                   "fold_reference_time_btjd": fold_ref, "base_days": round(base_days, 6), "manifest": manifest},
         "segments": [segment],
         "periodogram": {"period_min_days": PERIOD_MIN_DAYS, "period_max_days": period_max, "n_periods": N_PERIODS, "power": power32,
                         "grid_rule": "period_i = min × (max/min)^(i/(n−1))", "objective": "likelihood", "durations_hours": list(DURATIONS_HOURS)},
         "candidates": candidates,
+        "external_statuses": external_statuses,
+        "ai_results": ai_results,
         "checksums": checksums,
         "expected_residuals": {"evaluated_at": "bin_center (start_btjd + (i + 0.5) × bin_minutes/1440)", "cases": expected},
     }
+    checks = qa.validate_payload(payload)
+    bad_checks = qa.failed(checks)
+    if bad_checks:
+        raise RuntimeError(f"payload 가 자기 QA 를 통과하지 못함: {bad_checks}")
+    manifest["qa"] = {"status": "passed", "checker": "gold_roundtrip.qa.validate_payload", "n_checks": len(checks)}
+    return payload
 
 
 def _f32_shortest(v: float | None) -> str:

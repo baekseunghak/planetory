@@ -182,6 +182,18 @@
       "sha256": "sha256:6048235e823ffe3c303299c2d9ad4cbd9e5ec680a5dc19c9c4eb97538ea6498f"
     },
     {
+      "id": "just_below_overflow_midpoint_rounds_to_max",
+      "note": "2^128 − 2^103 바로 아래 double → FLT_MAX (FF FF 7F 7F). 범위 검사를 |x| > FLT_MAX 로 잘못 구현하면 overflow_midpoint 사례와 함께 걸린다",
+      "input": [
+        3.4028235677973362e+38
+      ],
+      "normalized": [
+        3.4028234663852886e+38
+      ],
+      "hash_input_hex": "ffff7f7f",
+      "sha256": "sha256:6048235e823ffe3c303299c2d9ad4cbd9e5ec680a5dc19c9c4eb97538ea6498f"
+    },
+    {
       "id": "typical_flux_segment",
       "note": "Gold fixture 와 같은 6점 세그먼트",
       "input": [
@@ -235,6 +247,14 @@
       "note": "float64 에서는 유한하지만 float32 범위 초과 → 거절",
       "input_tokens": [
         3.5e+38
+      ],
+      "expected_error": "float32_overflow"
+    },
+    {
+      "id": "float32_overflow_midpoint_rejected",
+      "note": "2^128 − 2^103 = FLT_MAX 와 2^128 의 중간값. tie-to-even 이 2^128(무한) 으로 올려 거절. |x| > FLT_MAX 검사로는 통과시키는 잘못된 구현을 잡는다",
+      "input_tokens": [
+        3.4028235677973366e+38
       ],
       "expected_error": "float32_overflow"
     },

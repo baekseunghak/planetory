@@ -11,7 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .canonical import CHECKSUM_VERSION, NULL_HASH_BYTES, ArrayCanonicalError, array_checksum, canonical_bytes, normalize_array
+from .canonical import (CHECKSUM_VERSION, NULL_HASH_BYTES, RECORD_CHECKSUM_VERSION, RECORD_RULES, ArrayCanonicalError, array_checksum,
+                        canonical_bytes, canonical_record_bytes, normalize_array, prepare_records, record_checksum)
 
 MIN_SUBNORMAL = float(np.float32(2.0 ** -149))        # 1.401298464324817e-45
 MIN_NORMAL = float(np.float32(2.0 ** -126))           # 1.1754943508222875e-38
@@ -31,6 +32,7 @@ CASES = [
     ("below_min_subnormal_underflows_to_zero", [2.0 ** -151], "2^-151 은 float32 로 0 → +0 (오류 아님)"),
     ("min_normal", [MIN_NORMAL], "float32 최소 normal 2^-126 (00 00 80 00)"),
     ("max_finite", [MAX_FINITE], "float32 최대 유한값 (FF FF 7F 7F)"),
+    ("just_below_overflow_midpoint_rounds_to_max", [3.4028235677973362e38], "2^128 − 2^103 바로 아래 double → FLT_MAX (FF FF 7F 7F). 범위 검사를 |x| > FLT_MAX 로 잘못 구현하면 overflow_midpoint 사례와 함께 걸린다"),
     ("typical_flux_segment", [1.0001, 0.9998, None, 0.9989, 1.0002, 1.0003], "Gold fixture 와 같은 6점 세그먼트"),
 ]
 REJECT_CASES = [
@@ -38,6 +40,7 @@ REJECT_CASES = [
     ("positive_infinity_rejected", [float("inf")], "non_finite_input", "+Infinity 거절"),
     ("negative_infinity_rejected", [-float("inf")], "non_finite_input", "-Infinity 거절"),
     ("float32_overflow_rejected", [3.5e38], "float32_overflow", "float64 에서는 유한하지만 float32 범위 초과 → 거절"),
+    ("float32_overflow_midpoint_rejected", [3.4028235677973366e38], "float32_overflow", "2^128 − 2^103 = FLT_MAX 와 2^128 의 중간값. tie-to-even 이 2^128(무한) 으로 올려 거절. |x| > FLT_MAX 검사로는 통과시키는 잘못된 구현을 잡는다"),
     ("non_numeric_rejected", ["1.0"], "non_numeric", "문자열 숫자 거절"),
 ]
 
@@ -76,3 +79,46 @@ def build() -> dict:
 
 def write(path: Path) -> None:
     path.write_text(json.dumps(build(), ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
+
+
+CAND_A = {"id": 401, "updated_bundle_id": 101, "local_key": "a", "tic_id": 1, "status": "active", "removal_step": 0, "period_days": 3.35992, "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294, "depth_ppm": 976.6941, "bls_power": 0.5, "discoverable": True, "is_confirmed": True,
+          "transit_model": {"candidate_id": "c-401", "shape": "box", "parameters": {"period_days": 3.35992, "epoch_btjd": 1461.01464, "duration_hours": 1.294, "depth_ppm": 976.6941},
+                            "baseline": {"kind": "unity"}, "residual_model_version": "box-divide-v0"}}
+CAND_B = {**CAND_A, "id": 402, "local_key": "b", "removal_step": 1, "period_days": 5.66051, "epoch_btjd": 1463.08056, "duration_hours": 1.682, "depth_ppm": 3451.844,
+          "transit_model": {**CAND_A["transit_model"], "candidate_id": "c-402", "parameters": {"period_days": 5.66051, "epoch_btjd": 1463.08056, "duration_hours": 1.682, "depth_ppm": 3451.844}}}
+RECORD_CASES = [
+    ("empty_list", "candidates", [], "빈 컬렉션도 checksum 이 정의된다(list 0개 인코딩)"),
+    ("candidates_two", "candidates", [CAND_A, CAND_B], "DB id(id·updated_bundle_id·transit_model.candidate_id)·fixture 키(local_key)·tic_id 제외, removal_step 순"),
+    ("candidates_two_reversed_input", "candidates", [CAND_B, CAND_A], "입력 순서를 바꿔도 같은 checksum (candidates_two 와 비교)"),
+    ("candidates_two_different_db_ids", "candidates", [{**CAND_A, "id": 9001, "transit_model": {**CAND_A["transit_model"], "candidate_id": "c-9001"}}, {**CAND_B, "id": 9002}],
+     "DB id 가 달라도 같은 checksum (candidates_two 와 비교)"),
+    ("ai_results_null_score", "ai_results", [{"id": 7, "candidate_id": 401, "execution_id": 3, "candidate_key": {"period_days": 3.35992, "epoch_btjd": 1461.01464},
+                                              "model_version": "astronet-triage-1", "threshold_version": "ai-threshold-v0", "status": "failed", "score": None, "verdict": None}],
+     "AI 실패: score·verdict null(0x00), status 문자열. DB id 제외"),
+    ("external_unicode", "external_statuses", [{"id": 1, "candidate_id": None, "tic_id": 1, "source": "nasa_exoplanet_archive", "external_id": "TOI-270 b", "disposition": "confirmed",
+                                                 "period_days": 3.35992, "epoch_btjd": 1461.01464, "fetched_on": "2026-09-10", "candidate_key": None},
+                                                {"id": 2, "candidate_id": None, "tic_id": 1, "source": "nasa_exoplanet_archive", "external_id": "L 98-59 e", "disposition": "confirmed",
+                                                 "period_days": 12.796, "epoch_btjd": None, "fetched_on": "2026-09-10", "candidate_key": None}],
+     "문자열 UTF-8 길이 접두, null 필드, (source, external_id) 정렬"),
+]
+
+
+def build_records() -> dict:
+    cases = []
+    for cid, kind, records, note in RECORD_CASES:
+        prepared = prepare_records(kind, records)
+        b = canonical_record_bytes(prepared)
+        cases.append({"id": cid, "kind": kind, "note": note, "input": records, "prepared": prepared,
+                      "canonical_hex_prefix": b[:64].hex(), "canonical_length": len(b), "sha256": record_checksum(kind, records)})
+    return {"recordChecksumVersion": RECORD_CHECKSUM_VERSION, "jira": "S15P21C206-117", "status": "proposal-v0-not-team-approved",
+            "encoding": {"null": "0x00", "bool": "0x01 + 1 byte", "number": "0x02 + float64 LE (finite only, -0 -> +0, integers as float64)",
+                         "string": "0x03 + u32 LE byte length + UTF-8", "list": "0x04 + u32 LE count + items", "object": "0x05 + u32 LE count + (key string, value) sorted by key UTF-8 bytes",
+                         "collection": "sha256 over list-encoding of prepared records; prepared = exclude fields, then sort by sort_key"},
+            "rules": {k: {"exclude": list(v["exclude"]), "exclude_nested": [".".join(p) for p in v["exclude_nested"]], "sort_key": list(v["sort_key"])} for k, v in RECORD_RULES.items()},
+            "verified_paths": {"python": "gold_roundtrip.canonical", "node": "contracts/gold/record-checksum.cjs", "java": "not executed", "postgresql": "gold-roundtrip recomputes candidates/external_statuses from DB rows"},
+            "cases": cases}
+
+
+def write_records(path: Path) -> None:
+    path.write_text(json.dumps(build_records(), ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8", newline="\n")

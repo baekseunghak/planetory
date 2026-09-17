@@ -1,0 +1,520 @@
+{
+  "recordChecksumVersion": "record-canonical-v0",
+  "jira": "S15P21C206-117",
+  "status": "proposal-v0-not-team-approved",
+  "encoding": {
+    "null": "0x00",
+    "bool": "0x01 + 1 byte",
+    "number": "0x02 + float64 LE (finite only, -0 -> +0, integers as float64)",
+    "string": "0x03 + u32 LE byte length + UTF-8",
+    "list": "0x04 + u32 LE count + items",
+    "object": "0x05 + u32 LE count + (key string, value) sorted by key UTF-8 bytes",
+    "collection": "sha256 over list-encoding of prepared records; prepared = exclude fields, then sort by sort_key"
+  },
+  "rules": {
+    "candidates": {
+      "exclude": [
+        "id",
+        "updated_bundle_id",
+        "local_key",
+        "tic_id"
+      ],
+      "exclude_nested": [
+        "transit_model.candidate_id"
+      ],
+      "sort_key": [
+        "removal_step",
+        "period_days",
+        "epoch_btjd"
+      ]
+    },
+    "ai_results": {
+      "exclude": [
+        "id",
+        "candidate_id",
+        "execution_id"
+      ],
+      "exclude_nested": [],
+      "sort_key": [
+        "candidate_key.period_days",
+        "candidate_key.epoch_btjd",
+        "model_version"
+      ]
+    },
+    "external_statuses": {
+      "exclude": [
+        "id",
+        "candidate_id",
+        "tic_id"
+      ],
+      "exclude_nested": [],
+      "sort_key": [
+        "source",
+        "external_id"
+      ]
+    }
+  },
+  "verified_paths": {
+    "python": "gold_roundtrip.canonical",
+    "node": "contracts/gold/record-checksum.cjs",
+    "java": "not executed",
+    "postgresql": "gold-roundtrip recomputes candidates/external_statuses from DB rows"
+  },
+  "cases": [
+    {
+      "id": "empty_list",
+      "kind": "candidates",
+      "note": "빈 컬렉션도 checksum 이 정의된다(list 0개 인코딩)",
+      "input": [],
+      "prepared": [],
+      "canonical_hex_prefix": "0400000000",
+      "canonical_length": 5,
+      "sha256": "sha256:88420266dfd64d604627234a8a6c75cf6477c6fd5505df0d17c59959ae9ce234"
+    },
+    {
+      "id": "candidates_two",
+      "kind": "candidates",
+      "note": "DB id(id·updated_bundle_id·transit_model.candidate_id)·fixture 키(local_key)·tic_id 제외, removal_step 순",
+      "input": [
+        {
+          "id": 401,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "id": 402,
+          "updated_bundle_id": 101,
+          "local_key": "b",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-402",
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "prepared": [
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "canonical_hex_prefix": "0402000000050a0000000309000000626c735f706f77657202000000000000e03f030900000064657074685f70706d023b014d848d858e40030c000000646973",
+      "canonical_length": 919,
+      "sha256": "sha256:3e1b1c8464811220450737fbc77e6eab1e9813d420ea64a9c8fa7a4c13391b0a"
+    },
+    {
+      "id": "candidates_two_reversed_input",
+      "kind": "candidates",
+      "note": "입력 순서를 바꿔도 같은 checksum (candidates_two 와 비교)",
+      "input": [
+        {
+          "id": 402,
+          "updated_bundle_id": 101,
+          "local_key": "b",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-402",
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "id": 401,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "prepared": [
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "canonical_hex_prefix": "0402000000050a0000000309000000626c735f706f77657202000000000000e03f030900000064657074685f70706d023b014d848d858e40030c000000646973",
+      "canonical_length": 919,
+      "sha256": "sha256:3e1b1c8464811220450737fbc77e6eab1e9813d420ea64a9c8fa7a4c13391b0a"
+    },
+    {
+      "id": "candidates_two_different_db_ids",
+      "kind": "candidates",
+      "note": "DB id 가 달라도 같은 checksum (candidates_two 와 비교)",
+      "input": [
+        {
+          "id": 9001,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-9001",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "id": 9002,
+          "updated_bundle_id": 101,
+          "local_key": "b",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-402",
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "prepared": [
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "status": "active",
+          "removal_step": 1,
+          "period_days": 5.66051,
+          "epoch_btjd": 1463.08056,
+          "duration_hours": 1.682,
+          "depth_ppm": 3451.844,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 5.66051,
+              "epoch_btjd": 1463.08056,
+              "duration_hours": 1.682,
+              "depth_ppm": 3451.844
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "canonical_hex_prefix": "0402000000050a0000000309000000626c735f706f77657202000000000000e03f030900000064657074685f70706d023b014d848d858e40030c000000646973",
+      "canonical_length": 919,
+      "sha256": "sha256:3e1b1c8464811220450737fbc77e6eab1e9813d420ea64a9c8fa7a4c13391b0a"
+    },
+    {
+      "id": "ai_results_null_score",
+      "kind": "ai_results",
+      "note": "AI 실패: score·verdict null(0x00), status 문자열. DB id 제외",
+      "input": [
+        {
+          "id": 7,
+          "candidate_id": 401,
+          "execution_id": 3,
+          "candidate_key": {
+            "period_days": 3.35992,
+            "epoch_btjd": 1461.01464
+          },
+          "model_version": "astronet-triage-1",
+          "threshold_version": "ai-threshold-v0",
+          "status": "failed",
+          "score": null,
+          "verdict": null
+        }
+      ],
+      "prepared": [
+        {
+          "candidate_key": {
+            "period_days": 3.35992,
+            "epoch_btjd": 1461.01464
+          },
+          "model_version": "astronet-triage-1",
+          "threshold_version": "ai-threshold-v0",
+          "status": "failed",
+          "score": null,
+          "verdict": null
+        }
+      ],
+      "canonical_hex_prefix": "04010000000506000000030d00000063616e6469646174655f6b65790502000000030a00000065706f63685f62746a6402dbc4c9fd0ed49640030b0000007065",
+      "canonical_length": 210,
+      "sha256": "sha256:ce769a76484ad7f3c9422c736cbd4d8126b277b98864ba4bd088e030675fc156"
+    },
+    {
+      "id": "external_unicode",
+      "kind": "external_statuses",
+      "note": "문자열 UTF-8 길이 접두, null 필드, (source, external_id) 정렬",
+      "input": [
+        {
+          "id": 1,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        },
+        {
+          "id": 2,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "L 98-59 e",
+          "disposition": "confirmed",
+          "period_days": 12.796,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        }
+      ],
+      "prepared": [
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "L 98-59 e",
+          "disposition": "confirmed",
+          "period_days": 12.796,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        },
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        }
+      ],
+      "canonical_hex_prefix": "04020000000507000000030d00000063616e6469646174655f6b657900030b000000646973706f736974696f6e0309000000636f6e6669726d6564030a000000",
+      "canonical_length": 399,
+      "sha256": "sha256:b5344093136b903043587dfb159d2cea0a2228870e04fbd27df373f4cb11cf88"
+    }
+  ]
+}
