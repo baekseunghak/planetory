@@ -274,7 +274,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `planetCount` | HOME-05: 맞춘 확정 행성 + "행성 같음"으로 판단한 미확정. `user_star_progress.planet_count` |
 | `layoutOrdinal` | 저장한 회원별 안정 순번 0~2147483647. 전송 배열 순서나 현재 별 수가 아니다. personal-galaxy-v1 색·기준 크기의 시드 입력이며 새로고침/페이지 순서로 바뀌지 않는다 |
 | `completedWithoutPlanets` | `progress_stage=completed`이고 `planet_count=0`. HOME-05 "행성으로 표시할 신호 없이 탐색 완료". FP 성과 여부(`fp_success`)와 무관하며, 미확정 UNSURE 판단·FP 오판으로 완료된 별도 포함한다(지웅 리뷰 7) |
-| `marker` | `{"type":"tutorial","seq":n}` 또는 `{"type":"challenge"}` 또는 null |
+| `marker` | `{"type":"tutorial","seq":n}` 또는 null. 챌린지 빨간 느낌표는 싣지 않는다. 느낌표는 발견 경로와 무관하게 진행 회차의 대상 별에 붙고, 회차 전환·종료는 회원 `version`을 바꾸지 않아 타일에 실으면 갱신되지 않는다. 프론트는 퀘스트 `challenge.ticId`(4.3절)로 그린다. 발견 경로는 상세 `unlock.reason`·목록 `unlockReason`이 알린다. 튜토리얼 번호 숨김(HOME-05)은 퀘스트 튜토리얼 칸의 `completed`를 기준으로 한다(재개돼도 유지) |
 | `reopened` | `reopened_at`이 있고 아직 새 제출이 없음. 퀘스트 "다시 열린 별" 카드와 같은 기준 |
 | 삭제 필드 | 지도 타일의 colorLevel·sizeLevel·orbits는 v1.3 최종 표현안에서 제거한다. 전체 지도는 행성/궤도를 그리지 않고 내 행성은 선택 상세의 planets.items에서만 받는다. 클라이언트는 이 구 필드를 요구하거나 기본값으로 상태 색을 복원하지 않는다 |
 
@@ -452,9 +452,13 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 }
 ```
 
-- 튜토리얼 `status`: `locked`(미발견) / `unlocked`(발견, 제출 없음) / `in_progress` / `completed`. `ticId`는 열린 순번에만 준다(AT-57). 학습 목적 문구는 `intent`를 프론트가 용어 사전으로 바꾼다.
+- 튜토리얼 `status`: `locked`(미발견) / `unlocked`(발견, 제출 없음. 진행 단계 `unexplored`) / `in_progress` / `completed`. `ticId`는 열린 순번에만 준다(AT-57). `completionReason`은 `completed` 칸에만 준다. 학습 목적 문구는 `intent`를 프론트가 용어 사전으로 바꾼다.
+- 튜토리얼은 **한 번 완료하면 완료로 남는다.** 진행 단계가 `completed`이거나 `completed_at`이 있으면 완료한 칸이다. 새 판에서 별이 재개돼 진행 단계가 `in_progress`로 돌아가도(9.3절, `completed_at` 유지) 칸은 `completed`로 두고 그 별은 `reopened`에 따로 나온다. 진행 단계만 보면 이미 받은 챌린지 별은 남는데 튜토리얼 완료와 다음 회차 자격이 풀려 서로 어긋난다.
+- `completedCount`는 사용 중인(`active`) 튜토리얼 별 중 완료한 칸의 수다. `GET /me`의 `tutorialCompleted`와 챌린지 `eligible`은 이 값이 5인지로 판정한다(11.1절). 운영 중 튜토리얼 별을 바꾸지 않는다는 전제이며, 바꾸면 이미 끝낸 회원이 미완료로 돌아간다(S15P21C206-139).
 - 챌린지 회차는 서비스 API `GET /challenges/current`와 같은 원천이며, 여기서는 회원의 발견·진행 상태를 덧붙인다. `description`은 `challenge_rounds.description`(ERD v1.1). `participantCount`는 **대상 별 공식 신호 스레드의 유효 공개 분석 참여자 수**(COM-14 (1)의 N, 회원당 1건, SRS v1.1 안건 15)이며 F16과 같은 유효 공개 분석 원천을 사용한다. 대상 별의 모든 공식 신호 스레드에서 회원 ID를 중복 제거한다(COUNT DISTINCT). 한 회원이 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고 하나도 없으면 제외한다. 핫 토픽·판단 분포는 기존 신호별 집계를 유지한다. 대상 별에 공식 스레드가 아직 없으면 0이다. `ticId`는 회원에게 열린 경우에만 준다.
-- `reopened`는 DEC-27 "다시 열린 별" 카드. 새 제출이 생기면 빠진다.
+- `roundId`는 `cr-{challenge_rounds.id}`다. `eligible`은 진행 회차가 있고 튜토리얼 5개를 완료했을 때 true다. `ticId`는 지도 빨간 느낌표(CHL-01)의 원천이다. 대상 별을 다른 경로로 먼저 발견한 회원에게도 같게 주고, 회차가 끝나면 사라진다. 지도·상세의 `marker`에는 챌린지를 싣지 않는다(4.1절). `progressStage`는 대상 별이 열린 경우 그 별의 진행 단계(진행 행이 없으면 `unexplored`)이고 아니면 null이다. 진행 회차가 없으면 필드를 빼지 않고 `{"round": null, "eligible": false, "ticId": null, "unlocked": false, "progressStage": null, "participantCount": null}`을 준다.
+- 이 조회는 발견 상태를 바꾸지 않는다. 자격이 있는데 대상 별이 아직 열리지 않았어도 여기서 열지 않는다. 열기는 9.4절의 튜토리얼 완료 처리와 회차 전환 명령이 맡는다.
+- `reopened`는 DEC-27 "다시 열린 별" 카드. 4.4절 `reopened`와 같은 조건(`reopened_at` 이후 새 제출 없음)이며 최근에 다시 열린 순서다. 새 제출이 생기면 빠진다. `newDiscoverableCount`는 재개 이벤트를 저장하는 곳이 정해질 때까지(S15P21C206-150) `null`이며 0으로 채우지 않는다.
 
 ### 4.4 내 별 목록
 
@@ -1119,19 +1123,20 @@ for each user_star_progress(tic_id):
      stage=in_progress, reopen_pending=false, reopened_at=now, completed_at 유지
      → 재개 이벤트 {userId, ticId, bundleId, newDiscoverableCount, reason: new_candidate|became_discoverable}
        → 퀘스트 카드(4.3절), 마이페이지 목록 상단(4.4절 lastActivityAt 갱신), 알림 NTF-01(P1, 서비스 API)
-기존 성과·등급·발견 별은 바꾸지 않는다.
+기존 성과·등급·발견 별은 바꾸지 않는다. 튜토리얼 별도 같은 규칙으로 재개하지만 튜토리얼 완료·챌린지 자격은 `completed_at`으로 유지된다(4.3절).
 ```
 
 ### 9.4 내부 계약: 튜토리얼·챌린지 발견 (HOME-02·06, CHL-01)
 
-모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다.
+모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다. 이미 열린 별이면 순번·좌표·회원 version을 바꾸지 않는다. 같은 사건을 다시 실행해도 프론트가 바뀌지 않은 지도를 다시 받지 않게 하기 위해서다.
 
 | 사건 | 처리 |
 |---|---|
 | 회원 생성 | `tutorial_stars.seq=1` 별을 `unlock_reason=tutorial`로 열고 4.1절 은하 배치 좌표를 저장한다. 실패하면 회원 생성도 롤백(서비스 F01-Q5 제안). 튜토리얼 5개·회차 대상 TIC은 운영자가 DB에서 설정한다(OPS-07) |
-| 튜토리얼 n 완료(`all_found`·`undiscoverable_only`·`skipped`) | seq n+1을 연다. 5 완료면 진행 중 회차의 `target_tic_id`를 `unlock_reason=challenge`로 연다. `ON CONFLICT (user_id, tic_id) DO NOTHING` |
-| 새 회차 `active` 전환 | 튜토리얼 5개 완료 회원 전원에게 그 회차 별을 연다(배치, 멱등). 회차가 끝나도 닫지 않는다(AT-61) |
+| 튜토리얼 n 완료(`all_found`·`undiscoverable_only`·`skipped`) | seq n+1을 연다. 5 완료면 진행 중 회차의 `target_tic_id`를 `unlock_reason=challenge`로 연다. `ON CONFLICT (user_id, tic_id) DO NOTHING`. 제출 트랜잭션이 완료로 바꾼 뒤 같은 트랜잭션에서 호출한다(6.3절 9단계). 호출 시점에 완료가 아니거나 튜토리얼 별이 아니면 아무것도 하지 않는다. 다음 순번이 설정되지 않았으면 회원 생성과 같이 503 `DEPENDENCY_UNAVAILABLE`로 되돌린다 |
+| 새 회차 `active` 전환 | 튜토리얼 5개 완료 회원 전원에게 그 회차 별을 연다(배치, 멱등). 회차가 끝나도 닫지 않는다(AT-61). 앱은 DB 직접 변경(OPS-07)을 감지하지 않으므로 운영자가 회차를 `active`로 바꾼 뒤 전용 명령(`--planetory.command=challenge-unlock`)을 실행한다. 주기 실행은 두지 않는다. 회원마다 트랜잭션을 나누고, 처리 도중 회차가 `active`에서 벗어나면 남은 회원을 열지 않고 멈춘다. 절차는 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md) |
 | 회차 진행 중 5번 완료 | 그 시점에 연다(서비스 F17-Q2) |
+| 대상 별을 이미 발견한 회원 | 다른 경로(성과 발견 등)로 먼저 연 회원은 새로 기록하지 않는다. 발견 경로는 처음 기록한 `unlock_reason`을 유지하고, 빨간 느낌표는 경로와 무관하게 퀘스트 `challenge.ticId`로 표시한다(4.1·4.3절, 서비스 F17-Q2 제안) |
 
 ### 9.5 외부 라벨 갱신 표식 (GRD-06, DEC-26)
 
@@ -1160,7 +1165,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 
 | 서비스 API 필드 | 탐사 원천 |
 |---|---|
-| `GET /me` `tutorialCompleted` | `tutorial_stars` 5개가 모두 `completed`인지(4.3절 `completedCount = 5`) |
+| `GET /me` `tutorialCompleted` | `tutorial_stars` 5개를 모두 완료했는지. 재개돼도 유지(4.3절 `completedCount = 5`) |
 | `GET /me/stars` 항목 | 4.4절로 대체 |
 | `GET /me/histories` 항목 | 8.1절로 대체. `signalId` → `candidateId` |
 | 첨부·공개 분석 `graph` | 8.3절 응답을 8.5절 투영 범위로 |
@@ -1305,6 +1310,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
 | 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 사용자 결정에 따라 은퇴 경로는 분석 복귀·재도전 `{A,C}`와 History CURRENT 원본으로, 기준 시각은 Bundle 공통값으로, duration 상한은 사용자가 고른 봉우리의 추천값 3배로 확정하고 SRS·ERD·API·정적 JSON 예제를 함께 갱신 |
+| 2026-09-17 | S15P21C206-139 구현 반영. 4.3절에 완료 수·챌린지 자격의 공통 판정, 진행 회차가 없을 때의 빈 챌린지 형태, 조회가 별을 열지 않음, `reopened` 조건·정렬과 `newDiscoverableCount` null(S15P21C206-150 전까지)을 명시. 9.4절에 이미 열린 별은 순번·version을 바꾸지 않음, 튜토리얼 완료 후처리의 호출 위치·다음 순번 미설정 시 503, 회차 전환을 주기 실행 대신 운영자 전용 명령으로 실행함을 명시하고 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md)을 연결. 튜토리얼 완료를 한 번 완료하면 유지(재개돼도 `completed_at`으로 판정)로 정하고 4.3·9.3·11.1절에 반영. 챌린지 빨간 느낌표를 발견 경로 대신 퀘스트 `challenge.ticId` 기준으로 바꾸고 4.1절 `marker`에서 `challenge`를 제거, 대상 별을 이미 발견한 회원은 경로를 새로 기록하지 않음을 9.4절에 추가(서비스 F17-Q2 제안). 12.2 미결 12는 백승학 확인 전이라 유지 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
