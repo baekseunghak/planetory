@@ -1,0 +1,7 @@
+# 가상환경·캐시는 Git에 넣지 않는다
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+dist/

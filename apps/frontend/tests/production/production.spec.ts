@@ -45,21 +45,35 @@ test("the built app retains routes/identity but contains no development page or 
   ).toBeVisible();
 });
 
-test("unconfigured production login buttons cannot call development OAuth", async ({
+test("production login uses agreed backend provider paths and has no development OAuth", async ({
   page,
   request,
 }) => {
-  await page.goto("/login");
-  await expect(
-    page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
-  ).toBeVisible();
-  for (const provider of ["SSAFY", "Google"])
+  const destinations: string[] = [];
+  await page.route("**/oauth2/authorization/*", (route) => {
+    destinations.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ contentType: "text/html", body: "Provider entry" });
+  });
+  for (const [provider, path] of [
+    ["SSAFY", "ssafy"],
+    ["Google", "google"],
+  ]) {
+    await page.goto("/login");
     await expect(
-      page.getByRole("button", {
+      page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", {
         name: `${provider} 계정으로 로그인`,
         exact: true,
-      }),
-    ).toBeDisabled();
+      })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/oauth2/authorization/${path}$`));
+  }
+  expect(destinations).toEqual([
+    "/oauth2/authorization/ssafy",
+    "/oauth2/authorization/google",
+  ]);
   expect(
     (
       await request.get("/api/dev-auth-202/google", { maxRedirects: 0 })

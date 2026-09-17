@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-15",
+  "backend": "MR !42 / d50c75e3a662bd3b9cf61780b0df23f8f6909eb2",
+  "frontend": "Existing 201 production build; no frontend changes in this validation",
+  "provider": "actual Google",
+  "origin": "http://localhost:8080",
+  "database": "Dedicated planetory_201_google PostgreSQL 17; synthetic tutorial TIC 1..5",
+  "checks": {
+    "head": "d50c75e3a662bd3b9cf61780b0df23f8f6909eb2",
+    "provider": "actual Google",
+    "preLoginMe": 401,
+    "initialUserCount": 0,
+    "initialUnlockCount": 0,
+    "appliedMigrations": [1, 2, 3, 4],
+    "stage": "verified",
+    "consentGranted": true,
+    "firstLogin": true,
+    "firstMemberCount": 1,
+    "firstUnlockCount": 1,
+    "reloadPreserved": true,
+    "csrfStatus": 200,
+    "logoutStatus": 204,
+    "afterLogoutMeStatus": 401,
+    "reloginMeStatus": 200,
+    "reloginMemberCount": 1,
+    "reloginUnlockCount": 1,
+    "layoutVersion": "bootstrap-0"
+  },
+  "httpEvidence": [
+    "GET /api/v1/me 401",
+    "GET /login/oauth2/code/google 302",
+    "GET /api/v1/me 200",
+    "GET /api/v1/me 200",
+    "GET /api/v1/auth/csrf 200",
+    "POST /api/v1/auth/logout 204",
+    "GET /api/v1/me 401",
+    "GET /login/oauth2/code/google 302",
+    "GET /api/v1/me 200"
+  ],
+  "limitations": [
+    "Uses BootstrapGalaxyLayout layout_version=bootstrap-0; does not validate real spiral placement (ticket 139).",
+    "Local HTTP and synthetic tutorial data; does not validate deployment HTTPS or production tutorial catalogue.",
+    "Only the Google provider was tested against this exact new commit; previous real SSAFY evidence is against 1cf1cca.",
+    "No credentials, OAuth codes, cookies, provider identifiers, email, name or profile photo included."
+  ],
+  "authorization": "User selected account and explicitly consented to Google profile sharing."
+}

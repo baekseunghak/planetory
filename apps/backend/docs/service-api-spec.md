@@ -1,11 +1,11 @@
 # Planetory 서비스 백엔드 주요 API 명세
 
 - 작성일: 2026-09-09
-- 갱신일: 2026-09-14 — HOME-09 사용법 다시 보기 정합화(`S15P21C206-33`, 리뷰 대상). 기존 2026-09-11 변경: SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/development/planetory-doc-sync-requests.md) 참조
+- 갱신일: 2026-09-14 — HOME-09 사용법 다시 보기 정합화(`S15P21C206-33`, 리뷰 대상). 기존 2026-09-11 변경: SB-D17~24 반영. 원본 문서 옛 문구는 [원본 문서 정합화 요청](../../../docs/project/planetory-doc-sync-requests.md) 참조
 - 상태: **팀 협의용 초안 — 구현 완료 또는 최종 합의된 API가 아님**
 - 담당: 백승학 / 서비스 백엔드
-- DB 기준: [ERD v1.2 변경안](../../../docs/development/database-erd.md). PostgreSQL 및 기존 확정 물리 관계를 따른다. v1.2의 별 자리 저장 열·모든 계정의 초기 은하 좌표 생성 제안은 별지도 표현 계약과 함께 교차 리뷰 대상이다.
-- 기준: [요구사항 v1.2 변경안](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/planetory-service-backend-feature-analysis.md)
+- DB 기준: [ERD v1.2 변경안](../../../docs/architecture/database-erd.md). PostgreSQL 및 기존 확정 물리 관계를 따른다. v1.2의 별 자리 저장 열·모든 계정의 초기 은하 좌표 생성 제안은 별지도 표현 계약과 함께 교차 리뷰 대상이다.
+- 기준: [요구사항 v1.2 변경안](../../../docs/requirements/planetory-requirements-spec.md), [기능별 분석 및 최신 결정](../../../docs/development/service-backend/README.md)
 - 적용 순서: 승인된 SRS 기준선 → 팀 결정 → 담당자 제안(SB-D). SB-D 중 SRS와 다르거나 SRS 미결(DEC)을 채우는 항목은 **제안**이며, 팀 결정 전에는 확정하지 않는다(역할 분배 문서 5장). 탐사 D-7·D-9·D-11은 통합 검토안으로 연결하며 해당 MR의 리뷰 상태를 따른다.
 
 기능별로 “언제 호출하는지 → 무엇을 보내는지 → 무엇을 받는지 → 실패하면 어떻게 처리하는지”를 설명한다. **기능 정책은 기준 문서를 따르며, 아래 URL·필드명·페이지 방식·상태 코드는 협의용 제안이다.** 확정된 인증 오류 401/403 외의 세부 계약은 프론트·탐사·DB 담당자 검토 후 확정한다. 예시 ID·제목·시각·수치는 가상 데이터다.
@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | 내 정보 | P0 | `GET /api/v1/me` | 로그인 여부와 내 프로필 확인 | [회원](#member) |
 | 닉네임 수정 | P0 | `PATCH /api/v1/me/profile` | 내 닉네임 변경 | [회원](#member) |
-| 첫 방문 안내 완료 | P0 | `PATCH /api/v1/me/settings` | onboardingDone=true 저장, 반복 요청 허용 | [회원](#member) |
+| 첫 방문 안내 완료 | P0 | `PATCH /api/v1/me/onboarding` | onboardingDone=true 저장, 반복 요청 허용 | [회원](#member) |
 | 공개 설정 | P1 | `PATCH /api/v1/me/settings` | 내 별 목록 공개 여부 변경 | [회원](#member) |
 | 타인 프로필 | P0 | `GET /api/v1/members/{memberId}` | 다른 회원의 공개 정보 조회 | [회원](#member) |
 | 내 별 목록 | P0 | `GET /api/v1/me/stars` | 내가 발견한 별과 진행 상태 확인. 응답 정의는 탐사 명세 4.4절 | [회원](#member) |
@@ -180,17 +180,21 @@ if (response.status === 401) {
 {"nickname": "새로운별찾기"}
 ```
 
-성공 200은 `{"memberId":"u-101","nickname":"새로운별찾기"}`. 닉네임은 상시 변경 가능하고 기존 글·댓글·반응자 표시에도 최신 값이 반영된다. 중복은 409, 금칙어·형식 오류는 400 제안. SB-D14의 확정 입력 기준을 적용한다. 닉네임 변경 시 세션 재발급 없이 이후 조회에 최신 이름을 반영한다. 이메일 수정·제공자 연결은 포함하지 않는다.
+성공 200은 `{"memberId":"u-101","nickname":"새로운별찾기"}`. 닉네임은 상시 변경 가능하고 기존 글·댓글·반응자 표시에도 최신 값이 반영된다. 중복은 409 `NICKNAME_CONFLICT`, 금칙어·형식 오류는 400 `VALIDATION_FAILED`. SB-D14의 확정 입력 기준을 적용한다. 닉네임 변경 시 세션 재발급 없이 이후 조회에 최신 이름을 반영한다. 이메일 수정·제공자 연결은 포함하지 않는다.
 
 **첫 방문 안내 완료(P0, 36번 통합 검토 중 사용자 승인)**
 
-`PATCH /api/v1/me/settings`에 `{"onboardingDone":true}`를 보내면 200 `{"onboardingDone":true}`. 현재 인증 회원의 user_settings.onboarding_done만 변경한다. 반복 true 요청은 동일 결과이며 false·null은 400 VALIDATION_FAILED, 회원 ID 입력은 받지 않는다. 안내를 닫기 전에 완료로 기록하지 않으며 실패 시 다시 안내될 수 있다.
+`PATCH /api/v1/me/onboarding`에 `{"onboardingDone":true}`를 보내면 200 `{"onboardingDone":true}`. 현재 인증 회원의 user_settings.onboarding_done만 변경한다. 반복 true 요청은 동일 결과이며 false·null은 400 VALIDATION_FAILED, 회원 ID 입력은 받지 않는다. 안내를 닫기 전에 완료로 기록하지 않으며 실패 시 다시 안내될 수 있다.
 
 설정 행이 없으면 기존 ERD 기본값으로 생성하고 이미 있는 별 목록 공개·알림 설정을 덮어쓰지 않는다. GET /me의 onboardingDone은 행이 없으면 false다. 탐사 D-8의 튜토리얼 1번 첫 제출 성공 처리도 같은 단방향 완료 규칙을 사용하며 병렬 실행해도 true가 false로 되돌아가지 않는다. 별 클릭은 완료 처리가 아니다. 이 필드만 P0이며 starListVisibility 등 다른 설정을 P0로 올리지 않는다. SB-D20 주간 챌린지 안내는 계속 브라우저별 기록으로 관리한다.
 
 **사용법 다시 보기(HOME-09 v1.2 변경안).** 마이페이지에서 GIF+설명 5단계(별 선택 → 봉우리 → 구간 → 판단 → 제출)를 읽는 화면이다. 다시 보기의 열기·이전·다음·닫기는 이 PATCH를 호출하지 않으며 onboardingDone을 false로 재설정하지 않는다. 분석·제출·성과·발견도 발생하지 않고 tutorialCompleted와 별 진행은 유지된다. 최초 안내 완료 API의 true 전용 규칙은 변경하지 않는다. [별지도 표현 계약 2절](../../../docs/development/sky-presentation-contract.md)을 따른다.
 
 검증: 최초 true·반복 true·false/null 거부·미인증 401·설정 행 미존재·기존 설정 보존·튜토리얼 제출과 동시 완료·다른 기기 조회에서 완료 유지.
+
+첫 방문 안내 완료는 `PATCH /api/v1/me/onboarding`을 쓴다. 이전 초안의 `PATCH /api/v1/me/settings`는 폐기한다. onboardingDone은 true로만 가는 단방향 사건 기록이라 false를 400으로 거부하는데, 3.2절의 P1 공개 설정은 양방향이므로 같은 경로에 두면 "필드가 없다"와 "값이 틀렸다"를 구분하는 분기가 필요해진다. 경로를 나누면 P1이 `PATCH /api/v1/me/settings`를 예외 없이 쓴다. 요청·응답 본문과 검증 규칙은 바꾸지 않았다.
+
+`S15P21C206-157`에서 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 API를 구현했다. 기존 `GET /me`와 탐사 성과 요약을 재사용한다. 게시글·댓글·반응자의 최신 닉네임 표시와 C10 첫 제출 연동은 해당 후속 구현에서 함께 검증한다.
 
 ### 3.2 공개 설정(P1)·타인 프로필·별 목록(P0)
 
@@ -207,7 +211,7 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 
 성과 요약은 별 목록 비공개와 무관하게 제공한다(MY-04·DEC-34). 3.1절 본인 요약과 같은 내부 함수로 집계하며 등급은 achievement_count에서 계산한다. 이메일·제공자 정보·로그인/세션 기록·개인 History는 포함하지 않는다. 가입일·팔로우 목록·활동 이력은 초기 제외하고 필요할 때 확장한다.
 
-`GET /api/v1/me/stars`와 `GET /api/v1/members/{memberId}/stars`의 응답·정렬·필터는 **[탐사 API 명세 4.4절](exploration-api-spec.md)이 MY-02 전체 필드로 정의하며, 이 절은 그 정의를 참조한다**([API 명세 파트 분담](api-spec-ownership.md) 2장 결정). 진행 단계·행성 수·등급·곡선 단계·미게시 수·최근 활동 시각이 모두 탐사 데이터이므로 이 문서에서 별도 항목 구조를 두지 않는다. 이전 초안의 `ticId/discoveredAt/isComplete` 최소 항목은 폐기한다.
+`GET /api/v1/me/stars`와 `GET /api/v1/members/{memberId}/stars`의 응답·정렬·필터는 **[탐사 API 명세 4.4절](exploration-api-spec.md)이 MY-02 전체 필드로 정의하며, 이 절은 그 정의를 참조한다**([API 명세 파트 분담](README.md) 2장 결정). 진행 단계·행성 수·등급·곡선 단계·미게시 수·최근 활동 시각이 모두 탐사 데이터이므로 이 문서에서 별도 항목 구조를 두지 않는다. 이전 초안의 `ticId/discoveredAt/isComplete` 최소 항목은 폐기한다.
 
 서비스 쪽에서 유지하는 규칙만 남긴다.
 
@@ -281,6 +285,14 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 <a id="posts"></a>
 
 ## 5. 일반 게시글 — F06
+
+**구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
+
+아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`, `commentCount`는 `0`이다. 실제 값은 반응 F07·댓글 F08·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·댓글이 없다"는 사실로 읽지 않는다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
+
+첨부 배열은 작성·수정 모두 비어 있을 때만 받는다. 5.2절의 연결 해제 예제처럼 `historyIds`·`sourceLinks`를 빈 배열로 함께 보내는 요청은 정상 처리하며, 항목이 담긴 요청만 400 `VALIDATION_FAILED`로 거절한다.
+
+작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
 
 ### 5.1 작성
 

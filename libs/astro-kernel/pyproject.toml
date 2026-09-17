@@ -1,0 +1,25 @@
+[project]
+name = "astro-kernel"
+version = "0.1.0"
+description = "Pure-function transit-model and residual kernel shared by the Planetory batch pipeline and the online derived-compute worker"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<10",
+  "jsonschema>=4.18,<5",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["astro_kernel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

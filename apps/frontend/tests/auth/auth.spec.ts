@@ -10,7 +10,10 @@ async function login(page: Page, provider = "Google") {
 }
 async function logout(page: Page) {
   await page.getByRole("button", { name: "메뉴", exact: true }).click();
-  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "로그아웃", exact: true })
+    .click();
 }
 test("both provider entries, protected deep return, reload, logout/back and new identity", async ({
   page,
@@ -102,6 +105,17 @@ test("cancellation and provider failure differ from a failed /me after callback;
   await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
   await expect(page).toHaveURL(/\/me$/);
 });
+async function enterNickname(page: Page, value: string) {
+  const input = page.getByLabel("닉네임", { exact: true });
+  // Stock Firefox BiDi fill/non-ASCII insertion does not update React's tracker.
+  // Finish with real key events; do not inject synthetic events or alter app state.
+  await input.press("ControlOrMeta+A");
+  await input.press("Backspace");
+  await input.pressSequentially(value);
+  await input.press("Space");
+  await input.press("Backspace");
+  await expect(input).toHaveValue(value);
+}
 test("first nickname validation, duplicate reason and successful /me confirmation", async ({
   page,
 }) => {
@@ -114,15 +128,15 @@ test("first nickname validation, duplicate reason and successful /me confirmatio
     if (request.method() === "PATCH") writes++;
   });
   const input = page.getByLabel("닉네임", { exact: true });
-  await input.fill("Admin");
+  await enterNickname(page, "Admin");
   await page.getByRole("button", { name: "이 이름으로 시작하기" }).click();
   await expect(page.getByRole("alert")).toContainText("사용할 수 없는 닉네임");
   expect(writes).toBe(0);
-  await input.fill("이미사용중");
+  await enterNickname(page, "이미사용중");
   await page.getByRole("button", { name: "이 이름으로 시작하기" }).click();
   await expect(page.getByRole("alert")).toContainText("이미 사용 중인 닉네임");
   await expect(input).toHaveValue("이미사용중");
-  await input.fill("  새탐사자  ");
+  await enterNickname(page, "  새탐사자  ");
   await page.getByRole("button", { name: "이 이름으로 시작하기" }).click();
   await expect(
     page.getByRole("link", { name: "새탐사자", exact: true }),
@@ -132,14 +146,12 @@ test("first nickname validation, duplicate reason and successful /me confirmatio
 test("nickname write with lost reply is verified with GET, never automatically submitted twice", async ({
   page,
 }) => {
-  await page.goto("/api/dev-auth-202/ssafy?scenario=first");
+  await page.goto("/api/dev-auth-202/ssafy?scenario=first&loseNicknameReply=1");
   let writes = 0;
-  await page.route("**/api/v1/me/profile", async (route) => {
-    writes++;
-    await route.fetch(); // server accepted the write; browser did not receive the result
-    await route.abort("failed");
+  page.on("request", (request) => {
+    if (request.method() === "PATCH") writes++;
   });
-  await page.getByLabel("닉네임", { exact: true }).fill("응답확인탐사자");
+  await enterNickname(page, "응답확인탐사자");
   await page.getByRole("button", { name: "이 이름으로 시작하기" }).click();
   await expect(
     page.getByRole("button", { name: "저장 여부 확인" }),
@@ -161,7 +173,7 @@ test("nickname write success does not bypass failed member lookup; draft and ret
     sessionStorage.setItem("planetory.oauth.returnTo", "/community?q=first"),
   );
   await page.goto("/api/dev-auth-202/google?scenario=first");
-  await page.getByLabel("닉네임", { exact: true }).fill("저장검증");
+  await enterNickname(page, "저장검증");
   await page.route("**/api/v1/me", (route) =>
     route.fulfill({
       status: 503,
