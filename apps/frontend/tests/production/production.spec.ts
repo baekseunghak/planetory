@@ -62,12 +62,12 @@ test("production login uses agreed backend provider paths and has no development
     await expect(
       page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
     ).toBeVisible();
-    await page
-      .getByRole("button", {
-        name: `${provider} 계정으로 로그인`,
-        exact: true,
-      })
-      .click();
+    const login = page.getByRole("button", {
+      name: `${provider} 계정으로 로그인`,
+      exact: true,
+    });
+    await expect(login).toBeEnabled();
+    await login.click();
     await expect(page).toHaveURL(new RegExp(`/oauth2/authorization/${path}$`));
   }
   expect(destinations).toEqual([
