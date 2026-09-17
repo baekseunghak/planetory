@@ -58,6 +58,33 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
+## BLS 실행 (`bls`, `bls-gates`)
+
+```powershell
+# 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
+uv run python -m tess_bench bls --target toi270 --stage tuning --only poc_linear20k --limit 3 --no-noise
+
+# 조정 단계: 설정 9개 × (realclean + 잡음 1개) — 별당 1–4시간. autoperiod 는 기준선² 로 격자가 커져
+# 4 Sector 이상 별(wasp62·pi_men)에서는 빼는 것을 권한다.
+uv run python -m tess_bench bls --target toi270 --stage tuning
+uv run python -m tess_bench bls --target wasp62 --stage tuning --only poc_linear20k linear5k linear50k autoperiod_ff3 pmax_half dur_log8_0.5-8h dur_log10_0.5-12h objective_snr
+
+# 평가 단계: 채택 후보 2개만, 잡음 seed 3개 (가짜 후보 통계를 늘린다)
+uv run python -m tess_bench bls --target l98_59 --stage evaluation --only linear50k poc_linear20k --noise-seeds 20260910 20260917 20260918
+
+# 저장된 run 에 게이트 조합 적용 (재실행 없음). 옛 run(in_search_range 열 없음)은 --baseline-days 로 상한을 준다.
+uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id>
+```
+
+옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
+바탕곡선 seed 목록(기본 20260910 하나), `--include-raw-real` 알려진 행성을 제거하지 않은 원본 곡선 추가.
+바탕곡선 `realclean` 은 `references.csv` 의 Archive 확인 행성을 `libs/astro-kernel` 로 나눠 제거한 곡선이다.
+
+`matches.csv` 의 `in_search_range` 는 주입 주기가 그 설정의 탐색 상한(`period_max_days`, 기준선/3 등) 안인지다. 관측 기간이 짧은 별은
+20일 주입이 범위 밖이라 어느 격자도 못 찾으므로, 설정 비교와 `bls-gates` 회수율은 범위 안 신호(`direct_recovery_in_range`)로 한다.
+`bls-gates` 의 "잔여" 열은 주입 없는 실제 곡선(realclean `none`)에서 게이트를 통과한 피크 수다. 잡음 곡선만 보면 SNR 게이트가 충분해
+보이지만 자전 변광·제거 잔여·밝은 별의 낮은 산포가 그대로 통과하므로 이 열을 함께 본다.
+
 ## 산출물
 
 | 경로 | Git | 내용 |

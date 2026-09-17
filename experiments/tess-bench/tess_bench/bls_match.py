@@ -105,8 +105,17 @@ def _bin_depth(ppm: float) -> str:
     return "<=1000ppm" if ppm <= 1000 else ("<=3000ppm" if ppm <= 3000 else ">3000ppm")
 
 
+def _truthy(v) -> bool:
+    return str(v).lower() in ("true", "1", "yes")
+
+
 def summarize_matches(rows: list[dict]) -> dict:
-    """설정·바탕곡선 단위의 회수율 요약. rows 는 MatchResult.as_row() + 주입 행 정보(period_days 등)를 합친 dict."""
+    """설정·바탕곡선 단위의 회수율 요약. rows 는 MatchResult.as_row() + 주입 행 정보(period_days 등)를 합친 dict.
+
+    rows 에 `in_search_range`(주입 주기가 그 설정의 탐색 범위 안인가) 가 있으면 범위 안 신호만의 회수율도 낸다.
+    관측 기간이 짧은 별에서는 20일 주입이 상한(기준선/3) 밖이라 어느 격자도 찾을 수 없으므로, 전체 회수율만 보면
+    격자 성능과 범위 한계가 섞인다.
+    """
     n = len(rows)
     if n == 0:
         return {"n_signals": 0}
@@ -115,6 +124,12 @@ def summarize_matches(rows: list[dict]) -> dict:
     alias = kinds.count("alias_half") + kinds.count("alias_double")
     out = {"n_signals": n, "direct_recovery": direct / n, "alias_inclusive_recovery": (direct + alias) / n,
            "alias_recovery": alias / n, "wrong_rate": kinds.count("wrong") / n, "missed_rate": kinds.count("missed") / n}
+    if any("in_search_range" in r for r in rows):
+        inr = [r for r in rows if _truthy(r.get("in_search_range"))]
+        d_in = sum(r["match"] == "direct" for r in inr); a_in = sum(r["match"].startswith("alias") for r in inr)
+        out.update({"n_signals_in_range": len(inr),
+                    "direct_recovery_in_range": d_in / len(inr) if inr else float("nan"),
+                    "alias_inclusive_recovery_in_range": (d_in + a_in) / len(inr) if inr else float("nan")})
     matched = [r for r in rows if r["match"] in ("direct", "alias_half", "alias_double")]
     def med(key):
         vals = np.array([r[key] for r in matched], float)
@@ -137,10 +152,14 @@ def summarize_matches(rows: list[dict]) -> dict:
 def gate_table(peak_rows: list[dict], match_rows: list[dict], *, snr_thresholds, sde_thresholds, min_transits) -> list[dict]:
     """저장된 피크·매칭 행에 게이트 조합을 적용한다.
 
-    peak_rows: peaks.csv 행(setting_id, baseline_id, group_id, is_pure_noise, rank, sde, snr, n_transits ...)
-    match_rows: matches.csv 행(setting_id, baseline_id, matched_rank, match, ...)
-    각 (setting, gate) 마다 (1) 매칭된 피크가 게이트를 통과하는 주입 비율(gated_recovery),
-    (2) 순수 잡음 곡선(is_pure_noise=true)당 게이트 통과 피크 수(false_peaks_per_noise_curve) 를 낸다.
+    peak_rows: peaks.csv 행(setting_id, baseline_id, group_id, rank, sde, snr, n_transits ...)
+    match_rows: matches.csv 행(setting_id, baseline_id, matched_rank, match, ...). 호출자가 범위 안 신호로 걸러 넘긴다.
+    각 (setting, gate) 마다
+    (1) gated_recovery: 매칭된 피크가 게이트를 통과하는 주입 비율,
+    (2) false_peaks_per_noise_curve: 순수 잡음 곡선(baseline 에 noise, group none)당 게이트 통과 피크 수,
+    (3) residual_peaks_per_real_curve: 주입 없는 실제 곡선(realclean/real 의 group none)당 게이트 통과 피크 수.
+        실제 별의 잔여 계통 오차(자전 변광, 제거 행성의 잔여, 밝은 별의 낮은 산포)가 후보로 남는 수다. 미확인 신호일
+        수도 있어 가짜로 단정하지 않지만, 잡음 곡선 지표만 보면 SNR 게이트가 충분해 보이는 착시를 막는다.
     """
     def passes(sde, snr, ntr, g):
         ok = True
@@ -163,8 +182,15 @@ def gate_table(peak_rows: list[dict], match_rows: list[dict], *, snr_thresholds,
     settings = sorted({r["setting_id"] for r in peak_rows})
     out = []
     for sid in settings:
-        noise_curves = {(r["baseline_id"], r["group_id"]) for r in peak_rows if r["setting_id"] == sid and str(r.get("is_pure_noise", "")).lower() == "true"}
+        none_curves = {(r["baseline_id"], r["group_id"]) for r in peak_rows if r["setting_id"] == sid and r["group_id"] == "none"}
+        noise_curves = {c for c in none_curves if "noise" in c[0]}
+        real_curves = none_curves - noise_curves
         m_rows = [r for r in match_rows if r["setting_id"] == sid]
+
+        def count_pass(curves, g):
+            return sum(1 for r in peak_rows if r["setting_id"] == sid and (r["baseline_id"], r["group_id"]) in curves
+                       and passes(float(r["sde"]), float(r["snr"]), int(float(r["n_transits"])), g))
+
         for g in gates:
             recovered = 0
             for m in m_rows:
@@ -172,10 +198,9 @@ def gate_table(peak_rows: list[dict], match_rows: list[dict], *, snr_thresholds,
                     p = peak_index.get((sid, m["baseline_id"], m["group_id"], int(float(m["matched_rank"]))))
                     if p and passes(float(p["sde"]), float(p["snr"]), int(float(p["n_transits"])), g):
                         recovered += 1
-            false_peaks = sum(1 for r in peak_rows if r["setting_id"] == sid and (r["baseline_id"], r["group_id"]) in noise_curves
-                              and passes(float(r["sde"]), float(r["snr"]), int(float(r["n_transits"])), g))
             out.append({"setting_id": sid, **{k: ("" if v is None else v) for k, v in g.items()},
                         "gated_recovery": recovered / len(m_rows) if m_rows else float("nan"),
-                        "n_signals": len(m_rows), "n_noise_curves": len(noise_curves),
-                        "false_peaks_per_noise_curve": false_peaks / len(noise_curves) if noise_curves else float("nan")})
+                        "n_signals": len(m_rows), "n_noise_curves": len(noise_curves), "n_real_curves": len(real_curves),
+                        "false_peaks_per_noise_curve": count_pass(noise_curves, g) / len(noise_curves) if noise_curves else float("nan"),
+                        "residual_peaks_per_real_curve": count_pass(real_curves, g) / len(real_curves) if real_curves else float("nan")})
     return out

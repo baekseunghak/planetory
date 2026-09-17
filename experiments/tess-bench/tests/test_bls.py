@@ -138,6 +138,20 @@ def test_summarize_and_bins():
     assert s["n_signals"] == 4 and s["direct_recovery"] == 0.5 and s["alias_inclusive_recovery"] == 0.75 and s["wrong_rate"] == 0.25
     assert s["direct_period_<2d"] == 1.0 and s["direct_period_>=10d"] == 0.5 and s["direct_depth_<=1000ppm"] == 0.5
     assert s["matched_rank1_fraction"] == 1.0 and bls_match.summarize_matches([]) == {"n_signals": 0}
+    assert "direct_recovery_in_range" not in s                          # 열이 없으면 범위 안 지표를 만들지 않는다
+    for r in rows:
+        r["in_search_range"] = "true" if r["period_days"] < 10 else "false"   # 20일 두 개는 범위 밖
+    s2 = bls_match.summarize_matches(rows)
+    assert s2["n_signals_in_range"] == 2 and s2["direct_recovery_in_range"] == 0.5 and s2["alias_inclusive_recovery_in_range"] == 1.0
+    assert s2["direct_recovery"] == 0.5                                 # 전체 지표는 그대로
+
+
+def test_summarize_in_range_all_out_gives_nan():
+    rows = [{"match": "missed", "matched_rank": "", "period_rel_err": float("nan"), "epoch_cyclic_err_hours": float("nan"),
+             "duration_ratio": float("nan"), "depth_ratio": float("nan"), "period_days": 20.0, "duration_hours": 4.0,
+             "depth_ppm": 1000, "in_search_range": "false"}]
+    s = bls_match.summarize_matches(rows)
+    assert s["n_signals_in_range"] == 0 and s["direct_recovery_in_range"] != s["direct_recovery_in_range"]   # nan
 
 
 def test_gate_table_counts_recovery_and_false_peaks():
@@ -155,3 +169,24 @@ def test_gate_table_counts_recovery_and_false_peaks():
     assert by["snr>=5"]["gated_recovery"] == 0.5 and by["snr>=5"]["false_peaks_per_noise_curve"] == 1.0
     assert by["snr>=5&sde>=6&ntr>=3"]["gated_recovery"] == 0.5 and by["snr>=5&sde>=6&ntr>=3"]["false_peaks_per_noise_curve"] == 1.0
     assert by["sde>=6"]["n_noise_curves"] == 1 and by["sde>=6"]["n_signals"] == 2
+    assert by["none"]["n_real_curves"] == 0 and by["none"]["residual_peaks_per_real_curve"] != by["none"]["residual_peaks_per_real_curve"]
+
+
+def test_gate_table_residual_peaks_on_real_none_curves():
+    """realclean 의 주입 없는 곡선(group none) 에 남은 피크는 '잔여' 로 따로 세고, 잡음 none 곡선과 섞지 않는다."""
+    peaks = [
+        {"setting_id": "s", "baseline_id": "star-realclean", "group_id": "none", "rank": 1, "sde": 30.0, "snr": 50.0, "n_transits": 40},
+        {"setting_id": "s", "baseline_id": "star-realclean", "group_id": "none", "rank": 2, "sde": 3.0, "snr": 17.0, "n_transits": 5},
+        {"setting_id": "s", "baseline_id": "star-realclean", "group_id": "g1", "rank": 1, "sde": 12.0, "snr": 10.0, "n_transits": 8},
+        {"setting_id": "s", "baseline_id": "star-noise1", "group_id": "none", "rank": 1, "sde": 4.0, "snr": 3.0, "n_transits": 2},
+        {"setting_id": "s", "baseline_id": "star-noise2", "group_id": "none", "rank": 1, "sde": 7.5, "snr": 8.0, "n_transits": 3},
+    ]
+    matches = [{"setting_id": "s", "baseline_id": "star-realclean", "group_id": "g1", "match": "direct", "matched_rank": 1}]
+    table = bls_match.gate_table(peaks, matches, snr_thresholds=[7], sde_thresholds=[6], min_transits=[])
+    by = {r["gate"]: r for r in table}
+    assert by["none"]["n_real_curves"] == 1 and by["none"]["n_noise_curves"] == 2
+    assert by["none"]["residual_peaks_per_real_curve"] == 2.0 and by["none"]["false_peaks_per_noise_curve"] == 1.0
+    assert by["snr>=7"]["residual_peaks_per_real_curve"] == 2.0        # SNR 만으로는 자전 변광 피크(SNR 17, SDE 3)가 남는다
+    assert by["snr>=7"]["false_peaks_per_noise_curve"] == 0.5
+    assert by["snr>=7&sde>=6"]["residual_peaks_per_real_curve"] == 1.0  # SDE 를 더하면 제거 잔여(SNR 50, SDE 30) 만 남는다
+    assert by["snr>=7&sde>=6"]["false_peaks_per_noise_curve"] == 0.5 and by["snr>=7&sde>=6"]["gated_recovery"] == 1.0
