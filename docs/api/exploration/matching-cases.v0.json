@@ -1719,7 +1719,7 @@
         "phaseEnd": 0.21,
         "sourcePeakGridIndex": null
       },
-      "notes": "어느 봉우리 fineTune 에도 없는 임의 주기, sourcePeak null. 탐사 API 5.4절대로 제출은 허용되고 매칭만 not_matched. 6.8절의 '추천 밖 재제출 거절' 문구와 충돌 → C02 정정 대상(재제출 fixture 는 정정 뒤).",
+      "notes": "어느 봉우리 fineTune 에도 없는 임의 주기, sourcePeak null. 탐사 API 5.4절대로 제출은 허용되고 매칭만 not_matched. 6.8절 다시 풀기는 sourcePeakGridIndex=null 로 시작하므로 5.4 와 충돌하지 않는다(강재민 확인).",
       "expected": {
         "validation": {
           "ok": true

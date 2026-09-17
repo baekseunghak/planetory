@@ -26,4 +26,10 @@ C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·�
 
 **중첩 우세.** SRS 5.2 (6) 의 "통과 구간 중첩 비교" 는 조건 (3) 으로 넣었다. 다만 v0 정의에서는 주기·epoch 통과가 창 이탈을 D_c 이내로 제한해 점수 1위가 중첩에서 명확히 불리해지는 사례를 구성할 수 없었다(`overlap-recorded-no-inversion`). 111 실측에서 실제 사례가 없으면 (3) 을 제거한다.
 
-**미결(이 fixture 로 확정하지 않은 것).** N 상한(DEC-03), 최소 중첩 통과 수·비율, `dominanceRatio`·`minScoreGap`·`overlapRatioTolerance` 값, alias epoch 순환 주기 해석, epoch 허용 폭의 창 전체/반폭 해석, `phaseWidthMax` 0.25·`allowEmptyPhaseSpan=false`(DEC-19/Q03), 탐사 API 5.4(추천 밖 제출 허용) vs 6.8(추천 밖 재제출 거절) 문구 충돌(C02 정정), 3배 고조파(112 뒤). 전부 `matching-rules.v0.json` 의 `openItems` 와 각 항목 `status` 에 있다.
+**미결(이 fixture 로 확정하지 않은 것).** N 상한(DEC-03), 최소 중첩 통과 수·비율, `dominanceRatio`·`minScoreGap`·`overlapRatioTolerance` 값, alias epoch 순환 주기 해석, epoch 허용 폭의 창 전체/반폭 해석, `phaseWidthMax` 0.25·`allowEmptyPhaseSpan=false`(DEC-19/Q03), 3배 고조파(112 뒤). 탐사 API 5.4 vs 6.8 은 충돌이 아님으로 확인돼 미결에서 뺐다(6.8 다시 풀기는 `sourcePeakGridIndex=null` 로 시작). 전부 `matching-rules.v0.json` 의 `openItems` 와 각 항목 `status` 에 있다.
+
+**버전.** 선택 규칙(최소·최대 폭, 3배 상한, `allowEmptyPhaseSpan`, fineTune)과 매칭 허용치를 한 `rule-N` 으로 묶는다. `submissions.rule_version` 하나로 그 제출의 검증·판정을 재현해야 하기 때문이며, 선택 규칙 값만 바뀌어도 새 `rule-N` 을 만든다. 탐사 API 5.1 의 `selectionRules.version` 은 같은 문자열을 내려준다. 별도 `sel-N` 은 두지 않는다(2026-09-17 강재민 질문 반영, API 표기는 151).
+
+**A04 화면 처리 방침(2026-09-17 백지웅, v0 사용 조건).** (1) 핸들 드래그 중 빈 구간 통과는 허용하고, 선택 구간에 관측점이 없으면 "선택한 구간에 관측점이 없습니다. 구간을 이동하거나 넓혀 주세요." 안내와 함께 제출을 제한한다. 서버가 거절해도 선택 상태를 유지해 바로 수정할 수 있게 한다. (2) 최소 위상 폭 `minWindowDays / periodDays`, 최대 `phaseWidthMax`. 봉우리에서 시작하면 `min(3 × suggestedDurationHours / (24 × periodDays), phaseWidthMax)` 을 상한으로 쓰고, fineTune 이 겹쳐도 주기로 봉우리를 역추정하지 않고 사용자가 고른 `sourcePeakGridIndex` 의 제안 duration 을 쓴다. 0.25 는 시작값이며 화면은 전달받은 설정값을 쓴다. (3) 계산·검증은 반올림 전 값, 미리보기는 "약 2.83시간" 처럼 근삿값 표기, 상세값은 더 많은 자릿수로 확인 가능. `display-rounding-boundary` 는 입력 오류가 아니라 `not_matched` 이므로 제출을 막지 않는다. 실제 프론트 계산·조작 검증은 A04 구현에서 한다.
+
+**C09 후속(강재민, 이 MR 범위 밖).** 정정하지 않은 제출은 저장 시 `harmonic_multiplier`·정정 주기를 NULL 로 둔다(V5 제약, 143). fixture 는 배율 1 우선 규칙을 보여주기 위해 `harmonicMultiplier: 1` 을 유지한다. `harmonic_multiplier`(`P_user × m = P_c`)와 `candidate_aliases.multiplier` 의 방향은 ERD 에 명시한다(142).

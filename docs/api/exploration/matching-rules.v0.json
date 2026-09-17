@@ -1,6 +1,6 @@
 {
   "ruleVersion": "rule-0",
-  "selectionRulesVersion": "sel-0",
+  "ruleVersionScope": "선택 규칙(validation: minWindowDays·phaseWidthMax·maxDurationMultipleOfSuggested·allowEmptyPhaseSpan·fineTune)과 매칭 허용치(matching)를 한 ruleVersion 으로 묶는다. submissions.rule_version 하나로 그 제출의 검증·판정을 재현해야 하기 때문이다(ERD operation_settings: 값 하나만 바뀌어도 새 버전 행). 탐사 API 5.1 analysis-context 의 selectionRules.version 은 같은 rule-N 문자열을 내려준다(API 문서 표기는 S15P21C206-151). 별도 sel-N 버전은 두지 않는다(2026-09-17 강재민 질문 반영).",
   "status": "development-example-not-operational",
   "jira": "S15P21C206-128",
   "description": "사용자 제출(주기·위상 구간)을 배치 BLS 후보와 대조하는 수치 규칙의 v0. SRS 5.1 초기값과 탐사 API 예시값에 출처를 붙인 개발용 예시이며 운영 기본값·확정 인수 기준이 아니다. 확정 v1 은 S15P21C206-111 실측과 강재민(C09)·백지웅(A04) 공동 승인 뒤 rule-1 로 만든다. 숫자 하나만 바뀌어도 새 ruleVersion 행을 만들고(operation_settings, ERD), 코드 상수로 박지 않는다.",
@@ -50,8 +50,8 @@
       "status": "confirmed"
     },
     "periodGrid": {
-      "source": "탐사 API 5.3절 [periodMinDays, periodMaxDays] 안. 추천 top-N 에 속할 필요 없음(5.4절). 6.8절 재제출 문구와의 충돌은 C02 정정 대상",
-      "status": "confirmed-with-open-conflict"
+      "source": "탐사 API 5.3절 [periodMinDays, periodMaxDays] 안. 추천 top-N 에 속할 필요 없음(5.4절). 6.8절 다시 풀기는 sourcePeakGridIndex=null 로 시작하고 6.2 #5 의 fineTune 검사는 sourcePeakGridIndex 가 있을 때만이라 두 절은 충돌하지 않는다(2026-09-17 강재민 확인)",
+      "status": "confirmed"
     }
   },
   "matching": {
@@ -156,7 +156,6 @@
     "고조파 alias 의 epoch 순환 주기 P_mod = min(P_user, P_c) 해석 — 강재민 확인",
     "epoch 허용 폭의 '창 전체 폭/반폭' 해석 — 서버(강재민)·프론트(백지웅) 확인",
     "phaseWidthMax 0.25·allowEmptyPhaseSpan=false — DEC-19/Q03 확정",
-    "탐사 API 5.4(추천 밖 제출 허용) vs 6.8(추천 밖 재제출 거절) 문구 충돌 — C02 정정",
     "3배 고조파 — 112 뒤"
   ]
 }
