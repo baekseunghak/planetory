@@ -79,9 +79,9 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 | `ai_results` | `id`, `candidate_id`, `execution_id` — 후보는 `candidate_key{period_days, epoch_btjd}` 로 가리킴 | `candidate_key.period_days`, `candidate_key.epoch_btjd`, `model_version` |
 | `external_statuses` | `id`, `candidate_id`, `tic_id` — 후보는 `candidate_key` 또는 null | `source`, `external_id` |
 
-**정렬 규칙**: 정렬 키마다 숫자(float64 비교) < 문자열(**UTF-8 바이트 순**, 언어별 문자열 비교 차이 회피) < null. 정렬 키가 모두 같은 레코드(V1 에 이 키들의 UNIQUE 가 없어 가능)는 **준비된 레코드의 인코딩 바이트를 마지막 비교**로 써 총순서를 만든다. 그래서 Spark 파티션·DB 조회 순서가 달라도 같은 checksum 이 나오고, 같은 입력의 재시도가 `IDEMPOTENCY_CONFLICT` 를 내지 않는다.
+**정렬 규칙**: 정렬 키 값은 **숫자·문자열·null 만** 허용한다(bool 은 언어별 분류가 갈려 거절). 키마다 숫자(float64 비교) < 문자열(**UTF-8 바이트 순** — Java 는 `String.compareTo`(UTF-16 순, BMP 밖 문자에서 다름)가 아니라 `Arrays.compareUnsigned` 로 UTF-8 바이트를 비교해야 한다; D17 인계) < null. 정렬 키가 모두 같은 레코드(V1 에 이 키들의 UNIQUE 가 없어 가능)는 **준비된 레코드의 인코딩 바이트를 마지막 비교**로 써 총순서를 만든다. 그래서 Spark 파티션·DB 조회 순서가 달라도 같은 checksum 이 나오고, 같은 입력의 재시도가 `IDEMPOTENCY_CONFLICT` 를 내지 않는다.
 
-빈 컬렉션도 checksum 이 정의된다(fixture 의 `ai_results` 는 118 전이라 비어 있다). 벡터: [`examples/record-checksum-vectors.v0.json`](examples/record-checksum-vectors.v0.json)(빈 목록, 후보 2건, 입력 순서 반전 = 같은 값, DB id 가 달라도 같은 값, **정렬 키 동률 2건·그 입력 반전 = 같은 값**, AI 실패 `score=null`, 외부 상태 UTF-8·null 필드). Python·Node([`record-checksum.cjs`](record-checksum.cjs)) 재현, PostgreSQL 행에서 후보·외부 상태를 다시 읽어 재계산 일치. **Java(강재민)**: 동률 추가 전 벡터 6개의 인코딩·길이·앞 64바이트·sha256 일치. 동률 벡터 4개는 Java 재대조 필요.
+빈 컬렉션도 checksum 이 정의된다(fixture 의 `ai_results` 는 118 전이라 비어 있다). 벡터: [`examples/record-checksum-vectors.v0.json`](examples/record-checksum-vectors.v0.json)(빈 목록, 후보 2건, 입력 순서 반전 = 같은 값, DB id 가 달라도 같은 값, **정렬 키 동률 2건·그 입력 반전 = 같은 값**, AI 실패 `score=null`, 외부 상태 UTF-8·null 필드). Python·Node([`record-checksum.cjs`](record-checksum.cjs)) 재현, PostgreSQL 행에서 후보·외부 상태를 다시 읽어 재계산 일치. **Java(강재민)**: 벡터 10개(동률 4 포함) 전부 인코딩·길이·앞 64바이트·sha256 일치. 세 언어와 DB 경로가 맞았으므로 팀 승인만 남았다.
 
 ## 4. 허용 오차 사전 등록 절차
 
@@ -104,10 +104,11 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 
 - ERD `light_curve_segments.gaps` 설명의 "빈 칸은 NaN 으로 채운다" 는 DB 표현이 REAL[] **NULL** 이므로 "NULL" 로 정정 요청(ERD 소유자). Gold 계약 4절·이 문서는 NULL 이다.
 - ERD `ai_executions.status` 값 목록이 문서에 없다. 5절의 일시 실패/반복 실패 구분을 값으로 적을 때 함께 정한다.
+- DB CHECK(flux NaN·±Inf 거절, power NULL·NaN·±Inf 거절)는 Backend 140 브랜치에 V9 로 추가됨(강재민, MR 전). 병합되면 2절 표의 근거를 V9 로 갱신한다.
 - NUMERIC 열의 float64 적재 표기(2절·3.1절 9항)는 Publisher 구현 규칙으로 D17 에 인계한다. 열 타입을 DOUBLE PRECISION 으로 바꾸는 안은 이 문서가 제안하지 않는다(ERD 소유자 판단).
 - 게시 재시도 예제(`publication-load-scenarios.json`)의 `array_checksums` 는 아직 합성 문자열이다. 3절 규칙이 확정되면 실제 값으로 바꾼다.
 
 ## 7. 검증 상태 (2026-09-17, 1차 리뷰 반영 후)
 
 - 실행함: `experiments/gold-roundtrip` — TOI-270 Sector 3 실제 곡선 payload 를 PostgreSQL 18.6 컨테이너의 격리 스키마에 V1~V8 적용 후 QA(2절) → 적재(미commit) → 같은 트랜잭션에서 조회·검사 → 통과 시 전환·단일 commit, **61개 검사 통과**(QA 24, 정합 26, 제약 위반 거절 5, 역할 경계 2, 레코드 checksum DB 재계산 2, 전환·current 유일 2). 손상 payload(`gaps=[]`, `power[0]=NULL`)는 QA 단계에서 `PUBLISH_REJECTED` 로 거절되어 DB 에 들어가지 않음을 테스트로 확인. Python·Node 배열 벡터 15+6, 레코드 벡터 10(동률 4 포함) 일치. **Java(강재민, 2026-09-17)**: 배열 벡터 15+6(overflow 경계 포함)·레코드 벡터 6·`GoldCatalogRepository` REAL[] 경로·140 수정본 `GoldManifest` 로 15키 manifest 읽기 일치. 기준 시각이 전처리 설정과 무관하고 중복 시각을 제거함을 테스트로 확인. pytest 21 passed.
-- 실행하지 않음: Java 의 동률 레코드 벡터 4건 재대조, 운영 Publisher(Spark)·Airflow, 실제 Silver 계산과의 수치 비교(D23), 손상 Sector·AI 실패 시나리오의 실제 적재(5절 정책 미결).
+- 실행하지 않음: 운영 Publisher(Spark)·Airflow, 실제 Silver 계산과의 수치 비교(D23), 손상 Sector·AI 실패 시나리오의 실제 적재(5절 정책 미결). Java 는 배열 15+6·레코드 10(동률 4 포함)·DB 경로·15키 manifest 모두 대조 완료(강재민).

@@ -40,7 +40,13 @@ function prepare(rule, records) {
     return c;
   });
   // 정렬 키: 숫자 < 문자열(UTF-8 바이트 순, Buffer.compare) < null. 모두 같으면 인코딩 바이트로 마지막 비교(총순서).
-  const keyOf = rec => rule.sort_key.map(k => { const v = get(rec, k); return v === null || v === undefined ? [2, null] : typeof v === 'number' ? [0, v] : [1, Buffer.from(String(v), 'utf8')]; });
+  const keyOf = rec => rule.sort_key.map(k => {
+    const v = get(rec, k);
+    if (v === null || v === undefined) return [2, null];
+    if (typeof v === 'number') return [0, v];
+    if (typeof v === 'string') return [1, Buffer.from(v, 'utf8')];
+    throw new Error(`invalid_sort_key_type ${k}: ${typeof v}`);          // 정렬 키 값은 숫자·문자열·null 만
+  });
   const withKeys = out.map(rec => ({ rec, key: keyOf(rec), bytes: enc(rec) }));
   withKeys.sort((a, b) => {
     for (let i = 0; i < a.key.length; i++) {

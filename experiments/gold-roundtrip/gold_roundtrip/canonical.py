@@ -181,9 +181,19 @@ def prepare_records(kind: str, records: Iterable[dict]) -> list[dict]:
 
     def key(rec):
         # 정렬 키: 숫자 < 문자열(UTF-8 바이트 순) < null. 정렬 키가 모두 같으면 준비된 레코드의 인코딩 바이트로 마지막 비교(총순서).
-        business = tuple((0, float(v), b"") if isinstance(v, (int, float)) else (1, 0.0, str(v).encode("utf-8")) if v is not None else (2, 0.0, b"")
-                         for v in (_get(rec, k) for k in rule["sort_key"]))
-        return (business, _enc(rec))
+        # 정렬 키 값은 숫자·문자열·null 만 허용한다. bool 은 Python(int 취급)·Node(문자열 취급) 분류가 갈리므로 거절한다.
+        parts = []
+        for k in rule["sort_key"]:
+            v = _get(rec, k)
+            if v is None:
+                parts.append((2, 0.0, b""))
+            elif isinstance(v, bool) or not isinstance(v, (int, float, str)):
+                raise ArrayCanonicalError("invalid_sort_key_type", -1, f"{kind}.{k}: {type(v).__name__}")
+            elif isinstance(v, (int, float)):
+                parts.append((0, float(v), b""))
+            else:
+                parts.append((1, 0.0, v.encode("utf-8")))
+        return (tuple(parts), _enc(rec))
     return sorted(out, key=key)
 
 
