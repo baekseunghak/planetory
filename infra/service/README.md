@@ -39,30 +39,66 @@ COMMIT;
 ```
 
 로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
-## ERD (SchemaSpy)
 
-`erd-generator`가 `service-db`를 읽어 SchemaSpy 정적 HTML을 named volume `planetory-erd-output`에
-쓰고, `erd`(nginx)가 그 볼륨을 그대로 서빙한다. 둘 다 호스트 포트를 열지 않는다. 외부 인바운드는
-여전히 0개이며, Tunnel이 `service` 네트워크 안에서 `http://erd:80`을 origin으로 잡는다.
+## ERD
 
-생성기는 `erd-refresh` profile에 묶여 있어 평시 `docker compose up -d` 대상이 아니다. 스키마가
-바뀌었을 때만 수동으로 돌린다.
+ERD를 두 벌 낸다. 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜬다.
+외부 인바운드는 0개로 유지되며 Tunnel이 origin으로 잡는다.
+
+| 호스트 | origin | 도구 | 쓰임 |
+| --- | --- | --- | --- |
+| `erd.planetory.space` | `http://erd:80` | Liam ERD | 캔버스에서 관계 탐색 |
+| `erd-schema.planetory.space` | `http://erd-schema:80` | SchemaSpy | 인덱스·제약·이상징후 상세 |
+
+### 한국어 설명은 DB가 갖는다
+
+설명은 도구가 아니라 `pg_description`에 있다. `COMMENT ON TABLE`·`COMMENT ON COLUMN`을
+한 번 쓰면 두 사이트가 같은 값을 읽는다. 도구를 바꿔도 설명이 따라가므로 ERD 도구에
+설명을 직접 적어 넣지 않는다. 테이블 설명은 `V10__table_comments.sql`에 있다.
+
+SchemaSpy 7.0.2에는 `-lang` 옵션도 번역 번들도 없다. UI 라벨은 영어로 남고 한국어는
+데이터(테이블·컬럼 설명)로만 들어간다. Liam은 이 제약이 없다.
+
+### 생성
+
+생성기는 `erd-refresh` profile에 묶여 평시 `docker compose up -d` 대상이 아니다.
+스키마나 코멘트가 바뀌었을 때만 수동으로 돌린다.
 
 ```
-docker compose --profile erd-refresh run --rm erd-generator
+docker compose --profile erd-refresh run --rm erd-generator         # Liam
+docker compose --profile erd-refresh run --rm erd-schema-generator  # SchemaSpy
 ```
 
-산출물은 언제든 재생성 가능한 파생물이다. `planetory-erd-output` 볼륨이 지워져도 데이터 손실이
-아니며, 생성기를 다시 돌리면 복구된다. `service-db-data`와 혼동하지 않는다.
+`erd-generator`는 `erd-dump`를 먼저 끝내고 시작한다(`service_completed_successfully`).
+`erd-dump`는 서버와 같은 `postgres:18.6-alpine`으로 뜬다. 하위 버전 클라이언트는 상위
+서버를 덤프하지 못하고 거부하므로 이미지 버전을 서버와 따로 올리지 않는다.
 
-DB 비밀번호는 명령줄 인자에 두지 않는다. `.env`의 `POSTGRES_PASSWORD`가 환경변수로 들어가
-컨테이너 안에서 `chmod 600` properties 파일로 쓰였다가 실행 후 삭제된다. `docker inspect`와
-`ps`에 노출되지 않는다.
+### Liam 코멘트 보정
 
-읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·`planetory_gold_writer`
-역할 분리가 들어오면 SchemaSpy는 읽기 전용 역할로 옮긴다.
+Liam v0.7.24의 postgres 파서는 `COMMENT ON TABLE` 일부를 흘린다. 34개 중 9개
+(`users`, `posts`, `comments`, `submissions` 등)가 누락되는 것을 실측했다. 원인은
+SQL 형태가 아니다. 같은 구조의 테이블이 붙기도 하고 빠지기도 한다.
 
-행 수는 `schemaspy.norows=true`로 끄고 구조만 낸다. 공개 호스트에 데이터 규모를 싣지 않기 위함이다.
+그래서 `erd-dump`가 `pg_description`을 `comments.json`으로 따로 뜨고, 빌드 뒤
+`schema.json`에 덮어쓴다. 파서 결과가 아니라 DB가 정본이다. 생성 로그의
+`merged from pg_description: tables=34 columns=264`이 이 단계가 돈 증거다.
+Liam을 올릴 때 이 보정이 불필요해졌는지 확인하고, 그래도 두는 편이 안전하다.
+
+### 산출물
+
+`planetory-erd-output`(Liam)과 `planetory-erd-schema-output`(SchemaSpy)에 있다. 둘 다
+재생성 가능한 파생물이라 지워져도 데이터 손실이 아니다. `service-db-data`와 혼동하지
+않는다. `erd-scratch`·`erd-work`·`erd-npm-cache`는 빌드 중간물이다.
+
+DB 비밀번호는 명령줄 인자에 두지 않는다. 환경변수로 받아 SchemaSpy는 컨테이너 안에서
+`chmod 600` properties 파일로 쓰고 실행 후 지우며, 덤프는 `PGPASSWORD`로 넘긴다.
+`docker inspect`와 `ps`에 노출되지 않는다.
+
+읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·
+`planetory_gold_writer` 역할 분리가 들어오면 ERD 생성기를 읽기 전용 역할로 옮긴다.
+
+행 수는 `schemaspy.norows=true`로 끄고 구조만 낸다. 공개 호스트에 데이터 규모를 싣지
+않기 위함이다.
 
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 

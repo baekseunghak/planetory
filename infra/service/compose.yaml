@@ -56,8 +56,13 @@ services:
     networks:
       - service
 
-  # SchemaSpy가 만든 정적 ERD를 서빙한다. frontend와 같은 구조로 호스트 포트를 열지
-  # 않고 service 네트워크 안에만 뜬다. Tunnel의 origin은 http://erd:80 이다.
+  # ERD 두 벌을 낸다. 둘 다 호스트 포트를 열지 않고 service 네트워크 안에만 뜨며
+  # Tunnel이 origin으로 잡는다. 외부 인바운드는 0개로 유지된다.
+  #   erd.planetory.space        -> http://erd:80         (Liam, 관계 탐색)
+  #   erd-schema.planetory.space -> http://erd-schema:80  (SchemaSpy, 상세 리포트)
+  #
+  # 한국어 설명은 도구가 아니라 DB가 갖는다. pg_description(COMMENT ON)을 양쪽이
+  # 모두 읽으므로 V10__table_comments.sql이 두 사이트에 동시에 반영된다.
   erd:
     image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
     platform: linux/amd64
@@ -67,10 +72,111 @@ services:
     networks:
       - service
 
-  # 일회성 생성기. profile을 지정했을 때만 돌며 평시 up 대상이 아니다.
+  erd-schema:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - erd-schema-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 아래 생성기 3개는 erd-refresh profile에 묶여 평시 up 대상이 아니다.
+  # 스키마가 바뀌었을 때만 수동으로 돌린다.
   #   docker compose --profile erd-refresh run --rm erd-generator
-  # DB 비밀번호는 명령줄 인자에 두지 않고 환경변수 -> 런타임 properties 파일로만 넘긴다.
+  #   docker compose --profile erd-refresh run --rm erd-schema-generator
+  # DB 비밀번호는 명령줄 인자에 두지 않고 환경변수로만 넘긴다.
+
+  # pg_dump는 서버와 같은 18.6 이미지를 쓴다. 하위 버전 클라이언트는 상위 서버를
+  # 덤프하지 못하고 거부한다.
+  erd-dump:
+    image: postgres:18.6-alpine
+    platform: linux/amd64
+    profiles: ["erd-refresh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PGUSER: ${POSTGRES_USER:-planetory}
+      PGDATABASE: ${POSTGRES_DB:-planetory_poc}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        pg_dump -h service-db -p 5432 --schema-only --no-owner --no-privileges -n public \
+          > /scratch/schema.sql
+        # Liam의 postgres 파서는 COMMENT ON TABLE 일부를 흘린다(34개 중 9개 누락 실측,
+        # v0.7.24). 설명의 정본은 pg_description이므로 따로 떠서 생성 뒤에 덮어쓴다.
+        psql -h service-db -p 5432 -tAc "
+          select json_build_object(
+            'tables', coalesce((
+              select json_object_agg(c.relname, obj_description(c.oid,'pg_class'))
+              from pg_class c join pg_namespace n on n.oid = c.relnamespace
+              where c.relkind = 'r' and n.nspname = 'public'
+                and obj_description(c.oid,'pg_class') is not null), '{}'::json),
+            'columns', coalesce((
+              select json_object_agg(t.relname, t.cols) from (
+                select c.relname, json_object_agg(a.attname, d.description) as cols
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+                join pg_description d on d.objoid = c.oid and d.objsubid = a.attnum
+                where c.relkind = 'r' and n.nspname = 'public'
+                group by c.relname) t), '{}'::json))
+        " > /scratch/comments.json
+        echo "dumped $$(wc -l < /scratch/schema.sql) lines, $$(grep -c '^COMMENT ON' /scratch/schema.sql) comments"
+    volumes:
+      - erd-scratch:/scratch
+    depends_on:
+      service-db:
+        condition: service_healthy
+    networks:
+      - service
+
   erd-generator:
+    image: ${ERD_NODE_IMAGE:-node:22-alpine}
+    platform: linux/amd64
+    profiles: ["erd-refresh"]
+    environment:
+      NPM_CONFIG_CACHE: /npm-cache
+      LIAM_CLI_VERSION: ${LIAM_CLI_VERSION:-0.7.24}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        rm -rf /work/build && mkdir -p /work/build
+        cp /scratch/schema.sql /work/build/schema.sql
+        cd /work/build
+        npx --yes @liam-hq/cli@$$LIAM_CLI_VERSION erd build --input schema.sql --format postgres
+        node -e "
+          const fs = require('fs');
+          const p = '/work/build/dist/schema.json';
+          const s = JSON.parse(fs.readFileSync(p, 'utf8'));
+          const c = JSON.parse(fs.readFileSync('/scratch/comments.json', 'utf8'));
+          let nt = 0, nc = 0;
+          for (const [t, cm] of Object.entries(c.tables || {}))
+            if (s.tables[t]) { s.tables[t].comment = cm; nt++; }
+          for (const [t, cols] of Object.entries(c.columns || {}))
+            for (const [col, cm] of Object.entries(cols))
+              if (s.tables[t] && s.tables[t].columns[col]) { s.tables[t].columns[col].comment = cm; nc++; }
+          fs.writeFileSync(p, JSON.stringify(s));
+          console.log('merged from pg_description: tables=' + nt + ' columns=' + nc);
+        "
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp -R /work/build/dist/. /output/
+        chmod -R a+rX /output
+    volumes:
+      - erd-output:/output
+      - erd-scratch:/scratch:ro
+      - erd-work:/work
+      - erd-npm-cache:/npm-cache
+    depends_on:
+      erd-dump:
+        condition: service_completed_successfully
+    networks:
+      - service
+
+  erd-schema-generator:
     image: ${SCHEMASPY_IMAGE:-schemaspy/schemaspy:7.0.2}
     platform: linux/amd64
     profiles: ["erd-refresh"]
@@ -103,7 +209,7 @@ services:
         rm -f "$$conf"
         chmod -R a+rX /output
     volumes:
-      - erd-output:/output
+      - erd-schema-output:/output
     depends_on:
       service-db:
         condition: service_healthy
@@ -125,9 +231,18 @@ networks:
   service:
 
 volumes:
-  # SchemaSpy 산출물. 언제든 재생성 가능한 파생물이라 소실돼도 데이터 손실이 아니다.
+  # ERD 산출물과 빌드 중간물. 언제든 재생성 가능한 파생물이라 소실돼도 데이터
+  # 손실이 아니다. service-db-data와 혼동하지 않는다.
   erd-output:
     name: planetory-erd-output
+  erd-schema-output:
+    name: planetory-erd-schema-output
+  erd-scratch:
+    name: planetory-erd-scratch
+  erd-work:
+    name: planetory-erd-work
+  erd-npm-cache:
+    name: planetory-erd-npm-cache
 
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
