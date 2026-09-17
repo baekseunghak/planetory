@@ -32,6 +32,7 @@ SUPPORTED_RESIDUAL_MODEL_VERSIONS: tuple[str, ...] = ("box-divide-v0",)
 DEFAULT_RESIDUAL_MODEL_VERSION = "box-divide-v0"
 
 _PARAMETER_KEYS: tuple[str, ...] = ("period_days", "epoch_btjd", "duration_hours", "depth_ppm")
+_TOP_LEVEL_KEYS: tuple[str, ...] = ("shape", "parameters", "baseline", "residual_model_version", "candidate_id")
 _PPM_PER_UNIT = 1e6           # depth = depth_ppm / 1e6 (정확히 표현되는 정수로 나눠 500000 ppm → 0.5 가 정확함)
 _HOURS_PER_DAY = 24.0
 _MINUTES_PER_DAY = 1440.0
@@ -100,8 +101,8 @@ def _validate_model_values(shape: Any, period: Any, epoch: Any, duration: Any, d
     if version not in SUPPORTED_RESIDUAL_MODEL_VERSIONS:
         raise TransitModelError("unsupported_version", f"{version!r} (지원: {SUPPORTED_RESIDUAL_MODEL_VERSIONS})",
                                 index=index, field="residual_model_version")
-    if candidate_id is not None and not isinstance(candidate_id, str):
-        raise TransitModelError("invalid_type", "candidate_id 는 문자열이어야 함", index=index, field="candidate_id")
+    if candidate_id is not None and (not isinstance(candidate_id, str) or candidate_id == ""):
+        raise TransitModelError("invalid_type", "candidate_id 는 비어 있지 않은 문자열이어야 함", index=index, field="candidate_id")
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,10 @@ def parse_transit_model(obj: Mapping[str, Any] | TransitModel, *, index: int | N
     shape = obj.get("shape")
     if shape not in SUPPORTED_SHAPES:
         raise TransitModelError("unsupported_shape", f"{shape!r} (지원: {SUPPORTED_SHAPES})", index=index, field="shape")
+    # Schema(additionalProperties=false) 와 같은 수용 범위: 최상위·baseline 의 계약 밖 키는 거절한다.
+    unknown_top = sorted(set(obj) - set(_TOP_LEVEL_KEYS))
+    if unknown_top:
+        raise TransitModelError("unknown_parameter", f"계약에 없는 최상위 키 {unknown_top}", index=index, field=unknown_top[0])
 
     params = obj.get("parameters")
     if not isinstance(params, Mapping):
@@ -208,9 +213,15 @@ def parse_transit_model(obj: Mapping[str, Any] | TransitModel, *, index: int | N
     if not isinstance(baseline, Mapping):
         raise TransitModelError("unsupported_baseline", f"baseline 은 {{'kind': ...}} dict 여야 함: {baseline!r}",
                                 index=index, field="baseline")
+    unknown_baseline = sorted(set(baseline) - {"kind"})
+    if unknown_baseline:
+        raise TransitModelError("unknown_parameter", f"baseline 에 계약에 없는 키 {unknown_baseline}", index=index,
+                                field=f"baseline.{unknown_baseline[0]}")
     baseline_kind = baseline.get("kind")
     version = obj.get("residual_model_version", DEFAULT_RESIDUAL_MODEL_VERSION)
     candidate_id = obj.get("candidate_id")
+    if "candidate_id" in obj and candidate_id is None:            # 키가 있으면 null 도 거절 (Schema: type string)
+        raise TransitModelError("invalid_type", "candidate_id 는 null 일 수 없음 (생략은 가능)", index=index, field="candidate_id")
 
     # 값 규칙은 생성자와 공유한다. index 를 메시지에 넣기 위해 먼저 같은 함수로 검사한다.
     _validate_model_values(shape, params["period_days"], params["epoch_btjd"], params["duration_hours"],

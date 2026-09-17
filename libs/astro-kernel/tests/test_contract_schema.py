@@ -67,3 +67,22 @@ def test_removal_case_models_pass_schema():
     for name in ("removal_case.json", "bin_center_case.json"):
         for m in json.loads((examples / name).read_text(encoding="utf-8"))["models"]:
             VALIDATOR.validate(m)
+
+
+def test_constructor_rejects_empty_candidate_id_like_schema():
+    with pytest.raises(tm.TransitModelError) as info:
+        tm.TransitModel(shape="box", period_days=2, epoch_btjd=1400, duration_hours=1, depth_ppm=1, candidate_id="")
+    assert info.value.code == "invalid_type"
+    ok = tm.TransitModel(shape="box", period_days=2, epoch_btjd=1400, duration_hours=1, depth_ppm=1)   # 생략은 허용
+    assert ok.candidate_id is None and "candidate_id" not in ok.to_dict()
+    VALIDATOR.validate(ok.to_dict())
+
+
+def test_parser_and_schema_agree_on_random_valid_inputs():
+    """정상 예제의 선택 키를 조합해 파서 통과 ⇔ Schema 통과 를 확인한다."""
+    base = {"shape": "box", "parameters": {"period_days": 3.36, "epoch_btjd": 1387.06, "duration_hours": 1.6, "depth_ppm": 1450.0}}
+    variants = [base, {**base, "baseline": {"kind": "unity"}}, {**base, "residual_model_version": "box-divide-v0"},
+                {**base, "candidate_id": "c-1"}, {**base, "candidate_id": "c-1", "baseline": {"kind": "unity"}, "residual_model_version": "box-divide-v0"}]
+    for v in variants:
+        assert not list(VALIDATOR.iter_errors(v))
+        tm.parse_transit_model(v)

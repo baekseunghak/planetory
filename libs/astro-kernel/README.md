@@ -59,7 +59,7 @@ Gold `candidates.transit_model` JSONB 와 같은 dict 다. 단위는 ERD `candid
 | `parameters.depth_ppm` | O | 유한, `0 < depth_ppm < 1,000,000`. 계산은 `depth_ppm / 1e6` |
 | `baseline.kind` | X (기본 `unity`) | `unity` 만 지원. 곡선이 이미 1 로 정규화됐다고 가정하고 재정규화하지 않는다 |
 | `residual_model_version` | X (기본 `box-divide-v0`) | 지원 목록에 있어야 하고, 한 호출 안의 모델은 같은 버전이어야 한다 |
-| `candidate_id` | X | 문자열. 결과의 모델 순서 확인용 |
+| `candidate_id` | X | 비어 있지 않은 문자열. 키를 생략할 수는 있지만 `null`·`""` 은 거절(`invalid_type`). 결과의 모델 순서 확인용 |
 
 `parameters` 에 계약 밖 키가 있으면 실패한다(`unknown_parameter`). 값 타입은 숫자만 받고 문자열·bool 은 거절한다.
 같은 규칙이 `TransitModel(...)` 을 직접 만들 때도 적용된다(생성 시 검증). 불량 값은 객체가 되지 못한다.
@@ -139,9 +139,9 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 
 | code | 언제 |
 |---|---|
-| `invalid_type` | 모델·parameters 가 dict 가 아님, `candidate_id` 가 문자열이 아님, 배열을 숫자로 바꿀 수 없음 |
+| `invalid_type` | 모델·parameters 가 dict 가 아님, `candidate_id` 가 문자열이 아니거나 `null`·빈 문자열, 배열을 숫자로 바꿀 수 없음 |
 | `unsupported_shape` | `shape` 누락 또는 `box` 외 |
-| `missing_parameter` / `unknown_parameter` | 필수 파라미터 누락 / 계약 밖 키 |
+| `missing_parameter` / `unknown_parameter` | 필수 파라미터 누락 / 계약 밖 키(`parameters` 안, `baseline` 안, 최상위 모두. Schema `additionalProperties: false` 와 같은 범위) |
 | `invalid_parameter` | 숫자 아님·비유한·범위 밖(위 표) |
 | `unsupported_baseline` | `baseline.kind` 가 `unity` 외 |
 | `unsupported_version` / `version_mismatch` | 지원하지 않는 버전 / 모델 사이 또는 요청값과 버전이 다름 |
@@ -156,7 +156,7 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 | 파일 | 위치 | 내용 |
 |---|---|---|
 | `transit-model.valid.json` | `contracts/gold/examples/` | 정상 모델 3개(선택 키 생략형 포함) |
-| `transit-model.invalid.json` | `contracts/gold/examples/` | 불량 모델 11개와 기대 `expected_code`, Schema 가 잡는지(`schema_rejects`) |
+| `transit-model.invalid.json` | `contracts/gold/examples/` | 불량 모델 15개와 기대 `expected_code`, Schema 가 잡는지(`schema_rejects`). 파서와 Schema 의 수용 범위가 같음을 이 파일로 검사한다 |
 | `removal_case.json` | `examples/` | 10분 비닝 48점 세그먼트, 겹친 두 통과(5점), 빈 bin 3개. 전체·부분·빈 제거의 기대 잔차 |
 | `bin_center_case.json` | `examples/` | bin 시작 vs bin 중심 평가가 경계 bin 하나에서 갈리는 12점 예제. 호출자 시각 이동 결정(아래)의 검증용 |
 
@@ -183,8 +183,9 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 5. **baseline 은 `unity` 만.** 재정규화는 제거 함수 밖(전처리·Silver 정규화)의 책임이고 `baseline.kind` 확장은 필요할 때 새 버전으로.
 6. **한 호출 안의 버전 혼용 거절**(`version_mismatch`). 문자열 규칙은 `<모델>-<연산>-v<정수>` 로 `box-divide-v0` 하나.
 
-실패 코드 11종의 사용자 문구·재시도 정책은 70 계약이 정했다: 계약 위반 10종은 "데이터 준비 중", `nonpositive_model`·`numerical_failure`
-는 "이 조합으로는 계산할 수 없습니다", 전부 `retryable:false`, 11종 구분은 로그·운영 알림용. Backend `ErrorCode` 매핑은 강재민(137 뒤).
+실패 코드는 아래 표의 **13종**이다. Worker 가 이 코드를 어떻게 외부에 노출하고 재시도하는지는 [70 계약 4절 오류표](../../contracts/derived-compute/README.md)가
+정한다(astro-kernel 코드는 전부 외부 `COMPUTE_ERROR`, `retryable=false`, 원래 code·field·model index 보존). 사용자에게 보이는 문구는 이 문서가
+정하지 않으며 탐사 API·Backend `ErrorCode` 담당(강재민, 137 뒤)이 정본에 명시한다.
 
 ## 관련 문서
 
