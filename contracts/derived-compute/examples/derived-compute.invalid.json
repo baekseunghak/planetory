@@ -40,7 +40,7 @@
         "attempt": 1,
         "publication_bundle_id": "b-101",
         "tic_id": "123456789",
-        "removed_candidate_ids": ["c-401", "c-402"],
+        "removed_candidate_ids": ["c-9", "c-10"],
         "ok": false,
         "error": {
           "stage": "RESIDUAL",

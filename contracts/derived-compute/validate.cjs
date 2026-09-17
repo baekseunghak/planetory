@@ -13,8 +13,16 @@ const fail = code => {
   throw error;
 };
 
-const isSortedUnique = values => values.every((value, index) =>
-  index === 0 || values[index - 1].localeCompare(value) < 0);
+const candidateIdNumber = value => {
+  const match = typeof value === 'string' && /^c-([1-9]\d*)$/.exec(value);
+  if (!match) fail('invalid_candidate_id');
+  return BigInt(match[1]);
+};
+
+const isSortedUnique = values => {
+  const numbers = values.map(candidateIdNumber);
+  return numbers.every((value, index) => index === 0 || numbers[index - 1] < value);
+};
 
 function assertFiniteNumbers(value) {
   if (typeof value === 'number' && !Number.isFinite(value)) fail('non_finite_number');

@@ -40,9 +40,9 @@
         ],
         "removed_candidates": [
           {
-            "candidate_id": "c-401",
+            "candidate_id": "c-9",
             "transit_model": {
-              "candidate_id": "c-401",
+              "candidate_id": "c-9",
               "shape": "box",
               "parameters": {
                 "period_days": 2.0,
@@ -55,9 +55,9 @@
             }
           },
           {
-            "candidate_id": "c-402",
+            "candidate_id": "c-10",
             "transit_model": {
-              "candidate_id": "c-402",
+              "candidate_id": "c-10",
               "shape": "box",
               "parameters": {
                 "period_days": 3.0,
@@ -78,7 +78,7 @@
         "attempt": 1,
         "publication_bundle_id": "b-101",
         "tic_id": "123456789",
-        "removed_candidate_ids": ["c-401", "c-402"],
+        "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
         "result": {
           "residual_model_version": "box-divide-v0",
@@ -107,7 +107,7 @@
         "fold_reference_time_btjd": 1683.4231,
         "residual_model_version": "box-divide-v0",
         "periodogram_config_version": "bls-log-v1",
-        "removed_candidate_ids": ["c-401", "c-402"],
+        "removed_candidate_ids": ["c-9", "c-10"],
         "residual_segments": [
           {
             "segment_id": "seg-1001",
@@ -133,7 +133,7 @@
         "attempt": 1,
         "publication_bundle_id": "b-101",
         "tic_id": "123456789",
-        "removed_candidate_ids": ["c-401", "c-402"],
+        "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
         "result": {
           "periodogram_config_version": "bls-log-v1",
