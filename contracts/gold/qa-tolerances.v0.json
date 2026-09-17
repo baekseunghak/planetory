@@ -1,0 +1,22 @@
+{
+  "version": "qa-tolerances-v0",
+  "jira": "S15P21C206-117",
+  "status": "procedure-fixed-values-pending",
+  "description": "Gold 공개 QA 와 Silver–EC2 수치 비교에 쓰는 허용 오차의 사전 등록표. 규칙: 비교를 실행하기 전에 여기 등록된 값만 쓴다. 값이 null 인 항목은 비교 결과를 '측정 기록'으로만 남기고 통과/실패 판정에 쓰지 않는다. 값을 채우거나 바꾸면 새 version 문자열과 근거·담당·티켓을 함께 적고, 이전 항목은 지우지 않는다.",
+  "procedure": [
+    "1. 비교 대상 수량·비교 방식·단위를 항목으로 등록한다(이 파일).",
+    "2. 값은 실측 티켓(D23 = S15P21C206-131 계열)이 근거 데이터와 함께 채운다. 비교 스크립트가 값을 임의로 정하지 않는다.",
+    "3. 비교 실행 결과에는 사용한 tolerances version 을 기록한다.",
+    "4. 값이 null 인 항목의 불일치는 실패가 아니라 미등록으로 보고하고, 등록 뒤 재판정한다."
+  ],
+  "items": [
+    {"id": "fold_reference_time_btjd", "quantity": "publication_bundles.fold_reference_time_btjd", "comparison": "exact float64 equality", "tolerance": 0, "unit": "day", "status": "confirmed", "source": "69 의미 payload 비교 규칙·DAT-11 float64 round-trip", "verified": "gold-roundtrip check fold_reference_time_btjd_float64_exact"},
+    {"id": "start_btjd", "quantity": "light_curve_segments.start_btjd", "comparison": "exact float64 equality", "tolerance": 0, "unit": "day", "status": "confirmed", "verified": "gold-roundtrip check start_btjd_float64_exact"},
+    {"id": "flux_array", "quantity": "light_curve_segments.flux", "comparison": "float32 bitwise equality after canonicalization (array-f32le-null7fc00000-v0) + checksum", "tolerance": 0, "unit": "relative flux", "status": "proposal-v0", "note": "Publisher 가 적재 전에 float32 로 정규화한 배열을 넣으므로 왕복은 비트 동일이어야 한다. 이는 저장 정합 검사이며 Silver 계산값과의 과학 비교가 아니다", "verified": "gold-roundtrip check flux_float32_values_exact / flux_checksum_recomputed_from_db"},
+    {"id": "power_array", "quantity": "periodograms.power", "comparison": "float32 bitwise equality after canonicalization + checksum", "tolerance": 0, "unit": "dimensionless", "status": "proposal-v0", "verified": "gold-roundtrip check power_float32_values_exact"},
+    {"id": "residual_vs_silver", "quantity": "EC2 Worker 잔차 vs Silver 기준 잔차 (같은 세그먼트·같은 transit_model·bin 중심 평가)", "comparison": "max absolute difference over finite bins", "tolerance": null, "unit": "relative flux", "status": "pending-measurement", "owner": "윤성용", "ticket": "S15P21C206-131 (D23)", "note": "값을 채우기 전까지는 gold-roundtrip fixture 의 residual_checksum_f64 (float64 비트 동일) 만 참조값으로 둔다. 다른 언어·CPU 에서 비트 동일을 요구하지 않는다(astro-kernel README)"},
+    {"id": "periodogram_vs_silver", "quantity": "EC2 Worker 주기도 power vs Silver 기준 power (같은 격자·같은 잔차)", "comparison": "max relative difference; peak period index equality", "tolerance": null, "unit": "dimensionless / grid index", "status": "pending-measurement", "owner": "윤성용", "ticket": "S15P21C206-131 (D23)"},
+    {"id": "binned_flux_vs_silver", "quantity": "Gold 10분 비닝 flux vs Silver 재비닝", "comparison": "max absolute difference over non-NULL bins", "tolerance": null, "unit": "relative flux", "status": "pending-measurement", "owner": "윤성용", "ticket": "S15P21C206-114 (D07-1)"},
+    {"id": "flux_scatter", "quantity": "light_curve_segments.flux_scatter", "comparison": "relative difference", "tolerance": null, "unit": "relative flux", "status": "pending-measurement", "ticket": "S15P21C206-114 (D07-1)"}
+  ]
+}
