@@ -63,6 +63,6 @@ FITS의 TICID, SECTOR, CAMERA, CCD, TESSMAG, TEFF, RADIUS, RA_OBJ, DEC_OBJ와 TI
 ## 기준
 
 - https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/develop/docs/requirements/planetory-requirements-spec.md
-- https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/develop/docs/team-role-allocation.md
+- https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/develop/docs/project/team-role-allocation.md
 
 배포·계정 연결을 하지 않은 로컬 시제품이다.

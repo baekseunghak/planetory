@@ -1,0 +1,36 @@
+[
+  {
+    "id": "flux-length-mismatch",
+    "operation": "set",
+    "path": "publisherRows.light_curve_segments.0.n_points",
+    "value": 5,
+    "expectedError": "FLUX_LENGTH_MISMATCH"
+  },
+  {
+    "id": "invalid-bundle-status",
+    "operation": "set",
+    "path": "publisherRows.publication_bundles.status",
+    "value": "previous",
+    "expectedError": "INVALID_BUNDLE_STATUS"
+  },
+  {
+    "id": "missing-residual-model-version",
+    "operation": "delete",
+    "path": "publisherRows.publication_bundles.manifest.residual_model_version",
+    "expectedError": "MISSING_MANIFEST_FIELD"
+  },
+  {
+    "id": "negative-duration",
+    "operation": "set",
+    "path": "publisherRows.candidates.0.duration_hours",
+    "value": -1,
+    "expectedError": "INVALID_CANDIDATE_DURATION"
+  },
+  {
+    "id": "frontend-uses-archived-bundle",
+    "operation": "set",
+    "path": "frontendResponses.analysisContext.bundle.bundleId",
+    "value": "b-100",
+    "expectedError": "FRONTEND_NOT_CURRENT_BUNDLE"
+  }
+]

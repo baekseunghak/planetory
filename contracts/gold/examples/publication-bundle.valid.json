@@ -1,0 +1,182 @@
+{
+  "contractVersion": "1.0",
+  "fixtureKind": "synthetic-contract-only",
+  "jira": "S15P21C206-68",
+  "scenario": {
+    "ticId": 123456789,
+    "before": {
+      "currentBundleId": 100
+    },
+    "incoming": {
+      "bundleId": 101,
+      "initialStatus": "staging"
+    },
+    "afterCommit": {
+      "currentBundleId": 101,
+      "archivedBundleIds": [100],
+      "deletedPeriodogramBundleIds": [100],
+      "evictedRedisBundleIds": [100],
+      "notification": {
+        "bundleId": 101
+      }
+    }
+  },
+  "publisherRows": {
+    "publication_bundles": {
+      "id": 101,
+      "tic_id": 123456789,
+      "bundle_version": "v2",
+      "status": "current",
+      "manifest": {
+        "segment_ids": [1001],
+        "array_checksums": {
+          "segment:1001:flux": "sha256:1626475f7a5ccd1589bc7bdaa2ed4102d8539cca120909bd39a06edffebb7b9d",
+          "periodogram:101:power": "sha256:1a5a4457d8f7976315ac3c535e2d32f3768f471f731ffe94e03a861c504bf97b"
+        },
+        "residual_model_version": "box-divide-v0",
+        "periodogram_config_version": "bls-log-v1",
+        "binning": {
+          "minutes": 10,
+          "max_points_per_segment": 20000
+        },
+        "period_grid": {
+          "spacing": "log",
+          "min_days": 0.5,
+          "max_days": 40.0,
+          "count": 4
+        },
+        "fine_tune": {
+          "half_width_cells": 3
+        },
+        "curve_steps": {
+          "max": 8
+        }
+      },
+      "fold_reference_time_btjd": 1683.4231,
+      "base_days": 27.4,
+      "published_at": "2026-09-16T00:00:00Z"
+    },
+    "light_curve_segments": [
+      {
+        "id": 1001,
+        "tic_id": 123456789,
+        "sector": 14,
+        "binning_revision": "10m-v1",
+        "start_btjd": 1683.35,
+        "bin_minutes": 10,
+        "n_points": 4,
+        "flux": [1.0001, 0.9998, null, 1.0003],
+        "flux_scatter": 0.0012,
+        "gaps": [[2, 2]]
+      }
+    ],
+    "periodograms": {
+      "bundle_id": 101,
+      "period_min_days": 0.5,
+      "period_max_days": 40.0,
+      "n_periods": 4,
+      "power": [0.1, 0.83, 0.35, 0.12]
+    },
+    "candidates": [
+      {
+        "id": 401,
+        "tic_id": 123456789,
+        "status": "active",
+        "updated_bundle_id": 101,
+        "removal_step": 0,
+        "period_days": 11.802,
+        "epoch_btjd": 1683.91,
+        "duration_hours": 2.4,
+        "depth_ppm": 380,
+        "bls_power": 0.83,
+        "transit_model": {
+          "candidate_id": "c-401",
+          "shape": "box",
+          "parameters": {
+            "period_days": 11.802,
+            "epoch_btjd": 1683.91,
+            "duration_hours": 2.4,
+            "depth_ppm": 380
+          },
+          "baseline": {"kind": "unity"},
+          "residual_model_version": "box-divide-v0"
+        },
+        "discoverable": true,
+        "confirmed": false
+      }
+    ]
+  },
+  "backendReadModel": {
+    "publicationBundle": {
+      "id": 101,
+      "ticId": 123456789,
+      "bundleVersion": "v2",
+      "status": "CURRENT",
+      "foldReferenceTimeBtjd": 1683.4231,
+      "baseDays": 27.4,
+      "residualModelVersion": "box-divide-v0",
+      "periodogramConfigVersion": "bls-log-v1"
+    },
+    "lightCurveSegments": [
+      {
+        "id": 1001,
+        "ticId": 123456789,
+        "sector": 14,
+        "binningRevision": "10m-v1",
+        "startBtjd": 1683.35,
+        "binMinutes": 10,
+        "nPoints": 4,
+        "flux": [1.0001, 0.9998, null, 1.0003],
+        "fluxScatter": 0.0012,
+        "gaps": [[2, 2]]
+      }
+    ],
+    "periodogram": {
+      "bundleId": 101,
+      "periodMinDays": 0.5,
+      "periodMaxDays": 40.0,
+      "nPeriods": 4,
+      "power": [0.1, 0.83, 0.35, 0.12]
+    }
+  },
+  "frontendResponses": {
+    "analysisContext": {
+      "ticId": "123456789",
+      "bundle": {
+        "bundleId": "b-101",
+        "bundleVersion": "v2",
+        "foldReferenceTimeBtjd": 1683.4231,
+        "baseDays": 27.4,
+        "residualModelVersion": "box-divide-v0",
+        "periodogramConfigVersion": "bls-log-v1"
+      }
+    },
+    "curve": {
+      "ticId": "123456789",
+      "bundleId": "b-101",
+      "foldReferenceTimeBtjd": 1683.4231,
+      "fluxUnit": "normalized",
+      "segments": [
+        {
+          "segmentId": "seg-1001",
+          "sector": 14,
+          "binningRevision": "10m-v1",
+          "startBtjd": 1683.35,
+          "binMinutes": 10,
+          "nPoints": 4,
+          "flux": [1.0001, 0.9998, null, 1.0003],
+          "fluxScatter": 0.0012,
+          "gaps": [[2, 2]]
+        }
+      ]
+    },
+    "periodogram": {
+      "bundleId": "b-101",
+      "periodMinDays": 0.5,
+      "periodMaxDays": 40.0,
+      "nPeriods": 4,
+      "gridRule": "log",
+      "power": [0.1, 0.83, 0.35, 0.12]
+    }
+  }
+}

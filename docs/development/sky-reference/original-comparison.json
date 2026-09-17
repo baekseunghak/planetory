@@ -1,0 +1,12 @@
+{
+  "count": 1000,
+  "source": "dev/accounts-data.ts",
+  "sha256": "f6fc2ca48711a5abc0c45673dccddc83efffdeb7f1a3322f9c530fdae62841e6",
+  "maximumError": 0,
+  "checks": [
+    "x",
+    "y",
+    "z restored from depthZ*256",
+    "baseSize"
+  ]
+}

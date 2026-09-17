@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shlex
 import sys
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from . import download as dl
 from . import inject as inj
 from . import manifest as mf
 from . import references as refs
+from . import service_sample as ss
 from .lightcurve import build_baseline, load_sector, synthetic_noise_baseline
 from .targets import TARGETS, iter_products, select_targets
 
@@ -33,7 +35,11 @@ DEFAULT_RESULTS = PKG_DIR / "results"
 CHECKSUMS = PKG_DIR / "checksums.json"
 REFERENCES = PKG_DIR / "references.csv"
 DEFAULT_GRID = PKG_DIR / "configs" / "injection_grid_v1.json"
+DEFAULT_SAMPLE_CONFIG = PKG_DIR / "configs" / "service_sample_v1.json"
+DEFAULT_SAMPLE_RAW = PKG_DIR / "sample_service"
+SAMPLE_CHECKSUMS = PKG_DIR / "service_sample_checksums.json"
 TASK = "S15P21C206-41"
+SAMPLE_TASK = "S15P21C206-108"
 
 
 def _command_line() -> str:
@@ -163,6 +169,31 @@ def cmd_inject(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sample(args: argparse.Namespace) -> int:
+    """서비스 범위용 대표 표본(108) 다운로드. fixture 표본과 다른 디렉터리·checksum 파일을 쓴다."""
+    config = ss.load_sample_config(args.config)
+    records = ss.download_sample(config, args.output, args.checksums)
+    summary = ss.summarize(records)
+    run_id = mf.new_run_id()
+    manifest = mf.build_manifest(
+        task=f"{SAMPLE_TASK} sample", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
+        inputs=[{"path": r["source_uri"], "sha256": r["sha256"], "size_bytes": r["size_bytes"], "source_uri": r["source_uri"],
+                 "tic_id": r["tic_id"], "sector": r["sector"], "procver": r["procver"], "role": r["role"]} for r in records],
+        config={"name": args.config.name, "version": config.version, "sha256": mf.file_entry(args.config)["sha256"],
+                "parameters": {"sample_id": config.sample_id, "n_members": len(config.members), "output": str(args.output),
+                               "selection": config.selection}},
+        outputs=[mf.file_entry(args.checksums, kind="checksums", rows=len(records))]
+                + [{"path": r["path"], "sha256": r["sha256"], "size_bytes": r["size_bytes"], "kind": "raw_product"} for r in records],
+        notes=json.dumps(summary, ensure_ascii=False),
+    )
+    path = mf.write_manifest(manifest, manifest_path(args.results, "sample", run_id))
+    print(f"\nfiles={summary['n_files']} tics={summary['n_tics']} groups={summary['by_group']} cache_hits={summary['cache_hits']}")
+    print(f"size: total {summary['total_bytes']/1e6:.1f} MB, mean {summary['mean_bytes']/1e6:.3f} MB "
+          f"(min {summary['min_bytes']/1e6:.3f}, max {summary['max_bytes']/1e6:.3f}), procver={summary['procver']}")
+    print(f"checksums: {args.checksums}\nmanifest:  {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m tess_fixture", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -193,6 +224,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--single-only", action="store_true", help="다중 신호 쌍 생략")
     p.add_argument("--write-curves", action="store_true", help="주입 곡선 NPZ 저장 (기본은 catalog 만)")
     p.set_defaults(func=cmd_inject)
+
+    p = sub.add_parser("sample", help="서비스 범위용 대표 표본 다운로드·checksum (108, fixture 와 구분)")
+    p.add_argument("--config", type=Path, default=DEFAULT_SAMPLE_CONFIG)
+    p.add_argument("--output", type=Path, default=DEFAULT_SAMPLE_RAW)
+    p.add_argument("--checksums", type=Path, default=SAMPLE_CHECKSUMS)
+    p.add_argument("--results", type=Path, default=DEFAULT_RESULTS, help="manifest 저장 루트")
+    p.set_defaults(func=cmd_sample)
     return parser
 
 

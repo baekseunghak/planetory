@@ -46,6 +46,15 @@ export function ServiceLayout() {
         <Link className="member-link" to="/me">
           {session.member?.nickname}
         </Link>
+        <button
+          type="button"
+          className="logout-button"
+          disabled={session.logoutState.phase === "pending"}
+          aria-busy={session.logoutState.phase === "pending"}
+          onClick={() => void session.logout()}
+        >
+          로그아웃
+        </button>
       </header>
       <dialog
         ref={dialog}

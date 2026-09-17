@@ -85,6 +85,21 @@ small {
   text-decoration: none;
   font-size: 14px;
 }
+.logout-button {
+  color: var(--muted);
+  font-size: 13px;
+}
+.logout-feedback {
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+}
+.logout-feedback p {
+  margin: 0;
+}
 .page {
   max-width: 1280px;
   margin: auto;

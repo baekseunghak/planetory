@@ -1,0 +1,64 @@
+{
+  "set_id": "astronet_eval_set_v1",
+  "version": "1.0.0",
+  "description": "AstroNet-Triage 단일 checkpoint 평가용 PC/EB/junk 세트. 41 fixture 9별 기준 1차 세트. 확장(별 추가)은 108·118 결과 뒤 별도 버전.",
+  "model": {
+    "name": "AstroNet-Triage",
+    "checkpoint": "astronet/models_final/model_1/model.ckpt-14000",
+    "repo_commit": "5675a57dd41dd0321df480453451096dc5a4a6b0",
+    "positive_label": "PC/EB",
+    "negative_label": "junk",
+    "note": "점수는 PC/EB 대 junk 판별이며 행성 확률이 아니다 (40번 조사)."
+  },
+  "labels": {
+    "PC": {
+      "source": "NASA Exoplanet Archive pscomppars (tess-fixture references.csv)",
+      "rule": "tran_flag=1 이고 pl_orbper·pl_tranmid·pl_trandur 가 모두 있는 확인 행성. epoch_btjd = pl_tranmid - 2457000, depth_ppm = pl_trandep(%) × 1e4",
+      "snapshot_field": "references.csv fetched_at"
+    },
+    "EB": {
+      "source": "tess-fixture targets.py reference_periods_days (문헌 궤도 주기)",
+      "rule": "role=eclipsing_binary 인 표본. epoch·duration 은 알려진 주기에서 BLS 로 산출(geometry_source=bls_at_known_period)",
+      "snapshot_field": "targets.py sha256"
+    },
+    "junk": {
+      "source": "tess-fixture synthetic_noise_baseline",
+      "rule": "실제 곡선의 시각·공백 구조에 백색 잡음만 채운 곡선에서 BLS 최강 피크. 신호가 없음을 구성으로 보장",
+      "noise_seeds": [20260910, 20260911, 20260912]
+    },
+    "junk_unverified": {
+      "source": "실제 곡선에서 PC/EB 후보를 astro-kernel 로 제거한 잔차의 BLS 최강 피크",
+      "rule": "미확인 신호일 수 있어 정답 집합(in_truth=false)에서 제외하고 분포만 보고",
+      "in_truth": false
+    }
+  },
+  "split": {
+    "unit": "tic_id",
+    "method": "sha256(str(tic_id)) 첫 바이트 홀짝: 짝수=calibration, 홀수=evaluation",
+    "training_overlap_default": "unknown",
+    "training_overlap_note": "AstroNet-Triage 학습 TCE(QLP) TIC 목록이 공개되지 않아 확인 불가. 118 에서 논문 부록으로 확인되면 갱신"
+  },
+  "preprocess": {
+    "settings_file": "../tess-bench/configs/preprocess_settings_v1.json",
+    "setting_id": "biweight_1.0d",
+    "note": "42 채택 설정. 40번 조사는 PoC clean(SG 2일)을 썼으므로 TOI-270 점수가 달라질 수 있다. 그 차이는 118 관찰 항목"
+  },
+  "views": {
+    "global_bins": 201,
+    "global_bin_width_factor": 1.2,
+    "local_bins": 61,
+    "local_bin_width_factor": 0.16,
+    "local_half_range_durations": 2.0,
+    "dtype": "float32",
+    "normalization": "bin 중앙값 → 빈 bin 선형 보간 → 전체 중앙값 빼기 → |최솟값| 으로 나누기 (40번 prepare 스크립트와 동일, checkpoint 실행 설정 기준)",
+    "min_in_transit_points": 3
+  },
+  "junk_bls": {
+    "period_min_days": 0.5,
+    "period_max_rule": "min(baseline_days/3, 100)",
+    "n_periods": 20000,
+    "grid": "linear",
+    "durations_days": [0.05, 0.08, 0.12, 0.2],
+    "note": "PoC pipeline.bls_features 기본값. 110 벤치마크 전 잠정값"
+  }
+}
