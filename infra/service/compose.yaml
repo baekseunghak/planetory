@@ -148,20 +148,43 @@ services:
         cp /scratch/schema.sql /work/build/schema.sql
         cd /work/build
         npx --yes @liam-hq/cli@$$LIAM_CLI_VERSION erd build --input schema.sql --format postgres
-        node -e "
-          const fs = require('fs');
-          const p = '/work/build/dist/schema.json';
-          const s = JSON.parse(fs.readFileSync(p, 'utf8'));
-          const c = JSON.parse(fs.readFileSync('/scratch/comments.json', 'utf8'));
-          let nt = 0, nc = 0;
-          for (const [t, cm] of Object.entries(c.tables || {}))
-            if (s.tables[t]) { s.tables[t].comment = cm; nt++; }
-          for (const [t, cols] of Object.entries(c.columns || {}))
-            for (const [col, cm] of Object.entries(cols))
-              if (s.tables[t] && s.tables[t].columns[col]) { s.tables[t].columns[col].comment = cm; nc++; }
-          fs.writeFileSync(p, JSON.stringify(s));
-          console.log('merged from pg_description: tables=' + nt + ' columns=' + nc);
-        "
+        cat > /work/postprocess.js <<'JS'
+        const fs = require('fs');
+        const dist = '/work/build/dist';
+
+        // 1) 설명의 정본은 pg_description이다. Liam v0.7.24 파서가 COMMENT ON TABLE을
+        //    일부 흘리므로(34개 중 9개 누락 실측) 여기서 덮어쓴다.
+        const sp = dist + '/schema.json';
+        const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
+        const c = JSON.parse(fs.readFileSync('/scratch/comments.json', 'utf8'));
+        let nt = 0, nc = 0;
+        for (const [t, cm] of Object.entries(c.tables || {}))
+          if (s.tables[t]) { s.tables[t].comment = cm; nt++; }
+        for (const [t, cols] of Object.entries(c.columns || {}))
+          for (const [col, cm] of Object.entries(cols))
+            if (s.tables[t] && s.tables[t].columns[col]) { s.tables[t].columns[col].comment = cm; nc++; }
+
+        // 2) Flyway 내부 테이블은 도메인 ERD가 아니다. 테이블과 이를 가리키는 제약을 뺀다.
+        const DROP = ['flyway_schema_history'];
+        let nd = 0;
+        for (const t of DROP) if (s.tables[t]) { delete s.tables[t]; nd++; }
+        for (const tv of Object.values(s.tables))
+          for (const [k, cst] of Object.entries(tv.constraints || {}))
+            if (cst.targetTableName && DROP.includes(cst.targetTableName)) delete tv.constraints[k];
+        fs.writeFileSync(sp, JSON.stringify(s));
+
+        // 3) 쿼리 없이 들어오면 전체 컬럼 보기로 연다. 모듈 스크립트는 defer라 이 인라인이
+        //    먼저 돈다. 사용자가 명시한 쿼리는 건드리지 않는다.
+        const ip = dist + '/index.html';
+        const MARK = 'liam-default-showmode';
+        let h = fs.readFileSync(ip, 'utf8');
+        if (!h.includes(MARK)) {
+          const tag = '<script data-' + MARK + '>if(!location.search){location.replace(location.pathname+"?showMode=ALL_FIELDS"+location.hash)}</script>';
+          fs.writeFileSync(ip, h.replace('</head>', '    ' + tag + '\n  </head>'));
+        }
+        console.log('postprocess: comments tables=' + nt + ' columns=' + nc + ', dropped=' + nd);
+        JS
+        node /work/postprocess.js
         find /output -mindepth 1 -delete 2>/dev/null || true
         cp -R /work/build/dist/. /output/
         chmod -R a+rX /output
@@ -203,6 +226,8 @@ services:
           echo "schemaspy.o=/output"
           echo "schemaspy.imageformat=svg"
           echo "schemaspy.norows=true"
+          # 기본값(이름에 $$ 포함)을 덮어쓰므로 그 규칙도 같이 유지한다.
+          echo 'schemaspy.tableExclusions=.*[$$].*|flyway_schema_history'
         } > "$$conf"
         find /output -mindepth 1 -delete 2>/dev/null || true
         /usr/local/bin/schemaspy -configFile "$$conf"

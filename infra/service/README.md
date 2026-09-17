@@ -73,6 +73,20 @@ docker compose --profile erd-refresh run --rm erd-schema-generator  # SchemaSpy
 `erd-dump`는 서버와 같은 `postgres:18.6-alpine`으로 뜬다. 하위 버전 클라이언트는 상위
 서버를 덤프하지 못하고 거부하므로 이미지 버전을 서버와 따로 올리지 않는다.
 
+### 후처리
+
+빌드 산출물에 세 가지를 덧댄다. `erd-generator`의 `postprocess.js`가 한다.
+
+`flyway_schema_history`는 Flyway 내부 테이블이라 도메인 ERD가 아니다. 양쪽에서 뺀다.
+Liam은 후처리에서 테이블과 이를 가리키는 제약을 지우고, SchemaSpy는
+`schemaspy.tableExclusions`로 제외한다. 이 옵션은 기본값(이름에 `$`가 든 테이블 제외)을
+덮어쓰므로 그 규칙을 정규식에 같이 넣어 유지한다.
+
+쿼리 없이 `erd.planetory.space`로 들어오면 `?showMode=ALL_FIELDS`로 연다. `index.html`
+`</head>` 앞에 인라인 스크립트를 넣는다. Liam의 앱 번들은 `type="module"`이라 defer로
+동작하므로 이 인라인이 먼저 돈다. 사용자가 쿼리를 직접 붙인 경우에는 건드리지 않는다.
+`data-liam-default-showmode` 표식으로 중복 주입을 막는다.
+
 ### Liam 코멘트 보정
 
 Liam v0.7.24의 postgres 파서는 `COMMENT ON TABLE` 일부를 흘린다. 34개 중 9개
