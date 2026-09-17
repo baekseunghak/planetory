@@ -138,9 +138,7 @@ public class StarService {
 
         // 한 건 더 읽어 다음 페이지 유무를 판단한다.
         List<StarViews.StarListItem> page = stars.findStarList(targetId, scope,
-                position == null ? null
-                        : java.time.Instant.ofEpochMilli(position.afterActivityEpochMilli())
-                                .atOffset(java.time.ZoneOffset.UTC),
+                position == null ? null : position.afterActivity(),
                 position == null ? null : position.afterTicId(),
                 size + 1);
 
@@ -153,9 +151,8 @@ public class StarService {
         String nextCursor = null;
         if (hasNext) {
             StarViews.StarListItem last = visible.get(visible.size() - 1);
-            nextCursor = new StarListCursor(viewerId, targetId, scope, sort, size,
-                    last.lastActivityAt().toInstant().toEpochMilli(),
-                    Long.parseLong(last.ticId())).encode();
+            nextCursor = StarListCursor.after(viewerId, targetId, scope, sort, size,
+                    last.lastActivityAt(), Long.parseLong(last.ticId())).encode();
         }
         return new StarViews.StarList(items, nextCursor, hasNext);
     }

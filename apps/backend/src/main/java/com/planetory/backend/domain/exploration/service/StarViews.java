@@ -65,7 +65,8 @@ public final class StarViews {
      *
      * @param lastActivityAt          최근 제출·재개·발견 중 가장 늦은 시각. 정렬 키다
      * @param unpublishedSignalCount  매칭했지만 공개하지 않은 신호 수. <b>본인 조회에만 있고
-     *                                타인 조회는 null이다</b>(NFR-14). 0과 "볼 수 없음"은 다르다
+     *                                타인 조회는 응답에서 필드 자체를 뺀다</b>(NFR-14). 0과
+     *                                "볼 수 없음"은 다르다
      * @param reopened                재개된 뒤 아직 새 제출이 없는 상태. 지도 타일과 같은 뜻이다
      */
     public record StarListItem(
@@ -78,6 +79,10 @@ public final class StarViews {
             Integer currentCurveStep,
             boolean reopenPending,
             boolean reopened,
+            // null일 때만 필드를 뺀다. 본인은 항상 값이 있고(0 포함) 타인은 null이다.
+            // 전역으로 null을 빼면 명세 예제의 "marker": null까지 사라지므로 이 필드에만 건다.
+            @com.fasterxml.jackson.annotation.JsonInclude(
+                    com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
             Integer unpublishedSignalCount,
             java.time.OffsetDateTime lastActivityAt,
             String unlockReason,

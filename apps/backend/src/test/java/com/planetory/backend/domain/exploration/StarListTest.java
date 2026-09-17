@@ -75,12 +75,16 @@ class StarListTest {
     /**
      * 완료 조건 (5). 모든 별이 같은 시각이면 동률 규칙만으로 정렬된다. 페이지를 다 모았을 때
      * 중복도 누락도 없어야 한다.
+     *
+     * <p>시각에 <b>마이크로초를 채운다</b>. 운영 발견 시각은 {@code CURRENT_TIMESTAMP}라 그 자리까지
+     * 있다. 처음에는 정각 초로만 넣어 밀리초 아래가 0이었고, 커서가 밀리초로 잘라 담아도 손실이
+     * 없어 결함이 가려졌다. 마이크로초가 있으면 첫 4개 뒤 21개가 전부 빠졌다(!57 리뷰).
      */
     @Test
     void 같은_시각의_별들도_커서_경계에서_중복되거나_빠지지_않는다() {
         List<Long> seeded = new ArrayList<>();
         for (int i = 0; i < 25; i++) {
-            seeded.add(unlockAt(memberId, i, "2026-09-10T02:30:00Z"));
+            seeded.add(unlockAt(memberId, i, "2026-09-10T02:30:00.123456Z"));
         }
 
         var collected = drainAll(memberId, "discovered", 4);
@@ -88,6 +92,30 @@ class StarListTest {
         assertEquals(25, collected.size(), "한 건도 빠지면 안 된다");
         assertEquals(25, new HashSet<>(collected).size(), "같은 별이 두 번 나오면 안 된다");
         assertEquals(seeded.stream().sorted().toList(), collected.stream().sorted().toList());
+    }
+
+    /** 정각 초에서도 같다. 마이크로초 경우만 보면 경계값 처리가 바뀌었을 때 놓칠 수 있다. */
+    @Test
+    void 정각_초_시각도_커서_경계에서_빠지지_않는다() {
+        for (int i = 0; i < 9; i++) {
+            unlockAt(memberId, i, "2026-09-10T02:30:00Z");
+        }
+
+        var collected = drainAll(memberId, "discovered", 4);
+
+        assertEquals(9, collected.size());
+        assertEquals(9, new HashSet<>(collected).size());
+    }
+
+    /** 1마이크로초 차이도 순서를 가른다. 커서가 그 차이를 뭉개면 순서가 무너진다. */
+    @Test
+    void 일_마이크로초_차이도_순서와_경계를_지킨다() {
+        long newer = unlockAt(memberId, 0, "2026-09-10T02:30:00.000002Z");
+        long older = unlockAt(memberId, 1, "2026-09-10T02:30:00.000001Z");
+
+        var collected = drainAll(memberId, "discovered", 1);
+
+        assertEquals(List.of(newer, older), collected, "1마이크로초 늦은 쪽이 먼저다");
     }
 
     /** 시각이 섞여 있어도 최근 순이고 동률은 ticId로 갈린다. */

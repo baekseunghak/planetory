@@ -16,15 +16,34 @@ import java.util.Optional;
  * epoch milli 하나만 담으면 같은 시각의 별들이 통째로 밀리거나 빠진다.
  */
 record StarListCursor(long viewerId, long targetId, String scope, String sort, int size,
-                      long afterActivityEpochMilli, long afterTicId) {
+                      long afterActivityEpochMicro, long afterTicId) {
 
     private static final String FIELD_SEPARATOR = "|";
     private static final int FIELD_COUNT = 7;
+    private static final long MICROS_PER_SECOND = 1_000_000L;
+    private static final long NANOS_PER_MICRO = 1_000L;
+
+    /** 마지막으로 준 항목에서 다음 페이지 커서를 만든다. */
+    static StarListCursor after(long viewerId, long targetId, String scope, String sort, int size,
+                                java.time.OffsetDateTime lastActivity, long ticId) {
+        java.time.Instant at = lastActivity.toInstant();
+        long micros = Math.addExact(Math.multiplyExact(at.getEpochSecond(), MICROS_PER_SECOND),
+                at.getNano() / NANOS_PER_MICRO);
+        return new StarListCursor(viewerId, targetId, scope, sort, size, micros, ticId);
+    }
+
+    /** 이어읽기 기준 시각. */
+    java.time.OffsetDateTime afterActivity() {
+        return java.time.Instant.ofEpochSecond(
+                        Math.floorDiv(afterActivityEpochMicro, MICROS_PER_SECOND),
+                        Math.floorMod(afterActivityEpochMicro, MICROS_PER_SECOND) * NANOS_PER_MICRO)
+                .atOffset(java.time.ZoneOffset.UTC);
+    }
 
     String encode() {
         String raw = String.join(FIELD_SEPARATOR,
                 Long.toString(viewerId), Long.toString(targetId), scope, sort,
-                Integer.toString(size), Long.toString(afterActivityEpochMilli),
+                Integer.toString(size), Long.toString(afterActivityEpochMicro),
                 Long.toString(afterTicId));
         return Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
