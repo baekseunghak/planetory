@@ -218,6 +218,23 @@ public class StarRepository {
                 .query(Boolean.class).single();
     }
 
+    /**
+     * 공개됐고 한 명이라도 발견한 별인지 [S15P21C206-158].
+     *
+     * <p>게시판 자격 판정만 한다. 요약 화면용 섹터 집계·발견 회원 수를 끌고 오지 않도록
+     * 존재 확인 하나로 둔다.
+     */
+    public boolean isOpenPublishedStar(long ticId) {
+        return jdbc.sql("""
+                        SELECT EXISTS(
+                            SELECT 1 FROM stars s
+                             WHERE s.tic_id = ? AND s.service_status = 'published'
+                               AND EXISTS (SELECT 1 FROM star_unlocks u WHERE u.tic_id = s.tic_id))
+                        """)
+                .param(ticId)
+                .query(Boolean.class).single();
+    }
+
     /** 이 별의 공식 신호 스레드 수. 숨김·삭제는 세지 않는다. */
     public int countThreads(long ticId) {
         return jdbc.sql("""

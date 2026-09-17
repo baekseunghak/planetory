@@ -84,11 +84,10 @@ public class StarService {
      */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PublicStarSummary publicSummary(long memberId, long ticId) {
+        requireOpenStarBoard(ticId);
+        // 판정을 통과했으면 같은 스냅샷에 공개 별이 있다. Optional을 풀기 위한 방어 코드다.
         StarViews.PublicStarInfo star = stars.findPublishedStar(ticId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STAR_NOT_PUBLISHED));
-        if (!stars.isBoardOpen(ticId)) {
-            throw new BusinessException(ErrorCode.STAR_NOT_PUBLISHED);
-        }
 
         // 뜻이 다른 두 값이지만 지금 판정 기준은 같다. 나중에 갈릴 수 있어 필드를 나눠 둔다.
         boolean unlockedForMe = stars.hasUnlocked(memberId, ticId);
@@ -96,6 +95,26 @@ public class StarService {
         return new PublicStarSummary(String.valueOf(ticId), star, true, unlockedForMe,
                 unlockedForMe, stars.findCurrentBundleId(ticId).orElse(null),
                 stars.countDiscoveredMembers(ticId));
+    }
+
+    /**
+     * 별 게시판이 열린 공개 별인지 판정한다 [S15P21C206-158].
+     *
+     * <p>공개 별 요약과 게시글의 별 연결이 같은 기준을 쓰도록 판정을 여기 한 곳에 둔다.
+     * 요약을 판정 용도로 부르면 섹터 집계·발견 회원 수까지 조회하고, 요약 화면 때문에
+     * 요약을 바꾸면 게시글 검증도 조용히 따라 바뀐다.
+     *
+     * <p>미공개·미발견·없는 TIC을 같은 예외로 덮는 이유는 {@link #publicSummary}와 같다.
+     *
+     * <p>격리 수준을 붙이지 않는다. 존재 확인 하나라 스냅샷이 필요 없고, 호출자 트랜잭션에
+     * 합류하면 어차피 적용되지 않는다.
+     *
+     * @throws BusinessException 미공개이거나 아무도 발견하지 않았으면 {@code STAR_NOT_PUBLISHED}
+     */
+    public void requireOpenStarBoard(long ticId) {
+        if (!stars.isOpenPublishedStar(ticId)) {
+            throw new BusinessException(ErrorCode.STAR_NOT_PUBLISHED);
+        }
     }
 
     /** 목록 기본 크기와 상한. 상한은 한 요청이 목록을 통째로 끌어오지 못하게 막는다. */

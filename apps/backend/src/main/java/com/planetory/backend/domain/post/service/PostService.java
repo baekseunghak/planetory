@@ -41,7 +41,7 @@ public class PostService {
         if (hasItems(command.historyIds()) || hasItems(command.sourceLinks())) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
-        Values values = validate(memberId, command.title(), command.body(), command.purposeTag(), command.ticId());
+        Values values = validate(command.title(), command.body(), command.purposeTag(), command.ticId());
         var post = posts.saveAndFlush(new Post(author, values.board(), values.ticId(), values.tag(),
                 values.title(), values.body()));
         return new Created(id(post), post.getCreatedAt());
@@ -61,7 +61,7 @@ public class PostService {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
         Post post = writable(memberId, postId);
-        Values values = validate(memberId, command.hasTitle() ? command.title() : post.getTitle(),
+        Values values = validate(command.hasTitle() ? command.title() : post.getTitle(),
                 command.hasBody() ? command.body() : post.getBody(),
                 command.hasPurposeTag() ? command.purposeTag() : post.getTag(),
                 command.hasTicId() ? command.ticId() : post.getTicId() == null ? null : String.valueOf(post.getTicId()));
@@ -88,7 +88,7 @@ public class PostService {
         return post;
     }
 
-    private Values validate(long memberId, String titleInput, String bodyInput, String tagInput, String ticInput) {
+    private Values validate(String titleInput, String bodyInput, String tagInput, String ticInput) {
         String title = titleInput == null ? null : titleInput.strip();
         if (title == null || title.isBlank() || hasLineBreak(title) || codePoints(title) > 100) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
@@ -98,8 +98,8 @@ public class PostService {
         }
         if (!TAGS.contains(tagInput)) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         Long ticId = parseTic(ticInput);
-        // 반환값은 쓰지 않는다. 공개 여부와 "한 명 이상 발견" 판정을 탐사 도메인 한 곳에서만 내리려는 호출이다.
-        if (ticId != null) stars.publicSummary(memberId, ticId);
+        // 공개 여부와 "한 명 이상 발견" 판정은 탐사 도메인 한 곳에서만 내린다.
+        if (ticId != null) stars.requireOpenStarBoard(ticId);
         return new Values(ticId == null ? "free" : "star", ticId, tagInput, title, bodyInput);
     }
 
