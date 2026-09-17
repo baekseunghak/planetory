@@ -20,7 +20,8 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const fixture = command === "serve" && !isPreview && mode === "fixture";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
-  const testing = fixture || authFixture || skyFixture;
+  const galaxyFixture = command === "serve" && !isPreview && mode === "galaxy";
+  const testing = fixture || authFixture || skyFixture || galaxyFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
   const proxy = target
     ? Object.fromEntries(
@@ -63,6 +64,16 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       ...(skyFixture
         ? [(await import("./dev/sky-fixture-plugin.ts")).skyFixturePlugin()]
         : []),
+      ...(galaxyFixture
+        ? [
+            (
+              await import("./dev/legacy-galaxy/fixture.ts")
+            ).legacyGalaxyFixturePlugin(),
+            (
+              await import("./dev/galaxy-fixture-plugin.ts")
+            ).galaxyFixturePlugin(),
+          ]
+        : []),
       ...(!testing && !target
         ? [
             {
@@ -78,6 +89,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : []),
     ],
     define: {
+      "import.meta.env.VITE_GALAXY_FIXTURE": JSON.stringify(
+        galaxyFixture ? "true" : "false",
+      ),
       "import.meta.env.VITE_SKY_DATA_FIXTURE": JSON.stringify(
         skyFixture ? "true" : "false",
       ),

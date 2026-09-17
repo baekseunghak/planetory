@@ -1,0 +1,256 @@
+import type { Plugin } from "vite";
+import { randomUUID } from "node:crypto";
+import {
+  LAYOUT_VERSION,
+  PRESENTATION_VERSION,
+  compareTic,
+  type Box,
+  type SkyMeta,
+  type Star,
+} from "../src/features/sky-data/contracts.ts";
+import { exampleStar } from "./sky-reference/reference.mjs";
+
+// Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
+export function galaxyFixturePlugin(): Plugin {
+  let revision = 1,
+    failed = false;
+  const makeStar = (i: number): Star => ({
+    ...exampleStar(i),
+    planetCount: i === 0 ? 5 : i === 7 ? 2 : 0,
+  });
+  let stars: Star[] = Array.from({ length: 1000 }, (_, i) => makeStar(i));
+  const cursors = new Map<string, { scope: string; offset: number }>();
+  const version = () => "galaxy-fixture-204:" + revision;
+  const levels = [0.25, 1, 4].map((scale, level) => ({ scale, level }));
+  const meta = (): SkyMeta => ({
+    representation: "individual-stars",
+    layoutVersion: LAYOUT_VERSION,
+    presentationVersion: PRESENTATION_VERSION,
+    version: version(),
+    starCount: stars.length,
+    bounds: {
+      minX: stars.length ? Math.min(...stars.map((s) => s.x)) : 0,
+      maxX: stars.length ? Math.max(...stars.map((s) => s.x)) : 0,
+      minY: stars.length ? Math.min(...stars.map((s) => s.y)) : 0,
+      maxY: stars.length ? Math.max(...stars.map((s) => s.y)) : 0,
+    },
+    tileSize: 512,
+    zoomLevels: levels,
+    centerTicIds: stars.length ? [stars[0].ticId] : [],
+    firstVisit: stars.length === 1,
+    asOf: new Date().toISOString(),
+  });
+  return {
+    name: "galaxy-fixture-204",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/api", (req, res) => {
+        const url = new URL(req.url || "/", "http://localhost");
+        const reply = (status: number, value: unknown) => {
+          res.writeHead(status, {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          });
+          res.end(JSON.stringify(value));
+        };
+        const bad = () =>
+          reply(400, {
+            code: "VALIDATION_FAILED",
+            message: "level·bbox·version·limit·cursor를 확인해 주세요.",
+          });
+        if (
+          req.method === "POST" &&
+          url.pathname.startsWith("/dev-galaxy-204/")
+        ) {
+          const action = url.pathname.split("/").at(-1);
+          if (action === "reset") {
+            const count = Number(url.searchParams.get("count") ?? 1000);
+            if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
+            stars = Array.from({ length: count }, (_, i) => makeStar(i));
+            failed = false;
+            revision++;
+            cursors.clear();
+          } else if (action === "change") {
+            stars.push(makeStar(stars.length));
+            revision++;
+            cursors.clear();
+          } else if (action === "status") {
+            if (stars[0])
+              stars[0] = {
+                ...stars[0],
+                planetCount: 0,
+                progressStage: "completed",
+                completedWithoutPlanets: true,
+              };
+            revision++;
+            cursors.clear();
+          } else if (action === "empty") {
+            stars = [];
+            revision++;
+            cursors.clear();
+          } else if (action === "fail") {
+            failed = true;
+            revision++;
+            cursors.clear();
+          } else if (action === "recover") failed = false;
+          else
+            return reply(404, {
+              code: "NOT_FOUND",
+              message: "검증 시나리오가 없습니다.",
+            });
+          return reply(200, {
+            skyVersion: version(),
+            asOf: new Date().toISOString(),
+          });
+        }
+        if (req.method !== "GET")
+          return reply(405, {
+            code: "READ_ONLY_FIXTURE",
+            message: "개발용 읽기 응답입니다.",
+          });
+        if (url.pathname === "/v1/me")
+          return reply(200, {
+            memberId: "galaxy-fixture-204-member",
+            nickname: "은하확인",
+            onboardingDone: true,
+            tutorialCompleted: stars.length > 1,
+          });
+        if (url.pathname === "/v1/me/sky") return reply(200, meta());
+        if (url.pathname === "/v1/me/sky/tiles") {
+          const q = url.searchParams,
+            required = ["level", "x", "y", "w", "h", "version"];
+          const level = Number(q.get("level")),
+            limit = q.has("limit") ? Number(q.get("limit")) : 1000;
+          const box: Box = {
+            x: Number(q.get("x")),
+            y: Number(q.get("y")),
+            w: Number(q.get("w")),
+            h: Number(q.get("h")),
+          };
+          if (
+            [...q.keys()].some(
+              (k) =>
+                ![...required, "limit", "cursor"].includes(k) ||
+                q.getAll(k).length !== 1,
+            ) ||
+            required.some((k) => !q.get(k)) ||
+            !levels[level] ||
+            !Number.isInteger(limit) ||
+            limit < 1 ||
+            limit > 2000 ||
+            !Object.values(box).every(Number.isFinite) ||
+            box.w <= 0 ||
+            box.h <= 0 ||
+            box.w > 512 * 64 ||
+            box.h > 512 * 64
+          )
+            return bad();
+          if (q.get("version") !== version())
+            return reply(200, {
+              representation: "individual-stars",
+              version: version(),
+              level,
+              versionChanged: true,
+              stars: [],
+              nextCursor: null,
+              asOf: new Date().toISOString(),
+            });
+          const scope = JSON.stringify([
+            "galaxy-fixture-204-member",
+            version(),
+            level,
+            box,
+            limit,
+          ]);
+          const continuation = q.has("cursor")
+            ? cursors.get(q.get("cursor")!)
+            : undefined;
+          if (
+            q.has("cursor") &&
+            (!continuation || continuation.scope !== scope)
+          )
+            return bad();
+          const offset = continuation?.offset || 0;
+          if (failed && (offset > 0 || box.x >= 0))
+            return reply(503, {
+              code: "DEPENDENCY_UNAVAILABLE",
+              message: "개발용 중간 페이지 실패입니다.",
+            });
+          const x = Math.floor(box.x / 512) * 512,
+            y = Math.floor(box.y / 512) * 512;
+          const bounds = {
+            x,
+            y,
+            w: Math.ceil((box.x + box.w) / 512) * 512 - x,
+            h: Math.ceil((box.y + box.h) / 512) * 512 - y,
+          };
+          const items = stars
+            .filter(
+              (s) =>
+                s.x >= bounds.x &&
+                s.x < bounds.x + bounds.w &&
+                s.y >= bounds.y &&
+                s.y < bounds.y + bounds.h,
+            )
+            .sort((a, b) => compareTic(a.ticId, b.ticId));
+          const page = items.slice(offset, offset + limit);
+          let nextCursor: string | null = null;
+          if (offset + page.length < items.length) {
+            nextCursor = randomUUID();
+            cursors.set(nextCursor, { scope, offset: offset + page.length });
+          }
+          return reply(200, {
+            representation: "individual-stars",
+            version: version(),
+            level,
+            versionChanged: false,
+            bounds,
+            rangeStarCount: items.length,
+            stars: page,
+            nextCursor,
+            asOf: new Date().toISOString(),
+          });
+        }
+        const match = url.pathname.match(/^\/v1\/me\/stars\/([^/]+)$/);
+        if (match) {
+          const star = stars.find(
+            (s) => s.ticId === decodeURIComponent(match[1]),
+          );
+          if (!star)
+            return reply(403, {
+              code: "STAR_LOCKED",
+              message: "열리지 않은 별입니다.",
+            });
+          return reply(200, {
+            ticId: star.ticId,
+            version: version(),
+            presentationVersion: PRESENTATION_VERSION,
+            unlock: {
+              position: {
+                x: star.x,
+                y: star.y,
+                depthZ: star.depthZ,
+                layoutOrdinal: star.layoutOrdinal,
+                layoutVersion: LAYOUT_VERSION,
+              },
+            },
+            planets: {
+              count: star.planetCount,
+              completedWithoutPlanets: star.completedWithoutPlanets,
+              items: Array.from({ length: star.planetCount }, (_, i) => ({
+                candidateId: "fixture-204-p-" + i,
+                kind: i % 2 ? "unconfirmed" : "confirmed",
+                periodDays: i ? 2 + i * 3.25 : null,
+                depthPpm: i ? 300 + i * 100 : 0,
+              })),
+            },
+          });
+        }
+        return reply(404, {
+          code: "NOT_FOUND",
+          message: "204 범위 밖의 개발 응답입니다.",
+        });
+      });
+    },
+  };
+}

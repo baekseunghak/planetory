@@ -83,4 +83,23 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 - [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
 - `npm run test:sky-data`: Chromium의 HTTP/화면 검사 8개. `npm run check`에도 포함한다.
 
+## W06-1 개별 별 은하
+
+2026-09-15 사용자 승인된 MR !41 7f67c568의 v1.3을 로컬 적용했다. 군집/성운과 고정 개수 상한을 제거하고 원본 개인 시제품의 좌표·색·크기·카메라를 사용한다. 운영 코드가 별 위치를 생성하지 않는다.
+
+이번 확인 주소는 http://127.0.0.1:58275/sky?reference=1 이다. npm run dev:galaxy의 기본 포트는58272다. 가상 자료로1/10/100/1000/2501개를 확인하며 클릭·드래그 등 실제 조작은205, 상세 화면은206에서 연결한다.
+
+- [렌더 구조·205/206 연결](docs/galaxy-renderer.md)
+- [204 항목별 인수/대기](docs/ticket-204-readiness.md)
+- [기존 군집 비교 보관본](docs/galaxy-comparison.md)
+- npm run test:galaxy: 현행 렌더11개와 보관 비교4개.
+- npm run test:renderer-production: 활성화 dist2개,58276 포트.
+
+실제 서버는 VITE_SKY_RENDERER_ENABLED=true와 기존 인증/API 설정을 사용한다. 기본 플래그는false, npm run build:renderer는 활성화 빌드다. 개발 도구/가상 API는 운영에 포함하지 않는다. 문서 팀 승인·실제 API·리뷰/병합은 대기 중이다. 기존 Draft MR !40에서 검토한다.
+
+- [201~204 Firefox·Node22·로컬 Nginx 검증](docs/local-validation-201-204.md)
+- Docker 활성화: 저장소 루트에서 `docker build -f apps/frontend/Dockerfile --build-arg VITE_SKY_RENDERER_ENABLED=true -t planetory-frontend:204 .`
+
 203 통합·병합 순서와 남은 인수: [MR !36 통합 기록](docs/merge-readiness-203.md).
+
+204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
