@@ -250,13 +250,13 @@ app → PostgreSQL Primary · Redis(loopback) · Python Worker  (모두 EC2-A)
 
 AI가 임의로 확정하지 말고 구현 티켓 또는 사용자 결정을 요구한다.
 
-- Redis TTL·메모리 상한과 장애 시 재계산 운영값
+- Redis TTL·메모리 상한과 장애 시 재계산 운영값. **세션이 같은 Redis로 들어오면서 eviction 정책이 선택 사항이 아니게 됐다**(84). `allkeys-*`는 세션 키도 지우고 `volatile-*`도 세션이 30분 TTL을 가져 안전하지 않다. 세션·캐시 인스턴스 분리 / `noeviction` / 세션 유실 수용 중 하나를 골라야 한다
+- 세션 Redis의 persistence 보장 범위(84). 앱만 재배포하면 persistence 없이도 세션이 유지되고, Redis 컨테이너 재시작·호스트 재부팅에서만 의미가 있다. 보장하지 않기로 정해도 되지만 그 경우 「Redis 재시작 시 전원 재로그인」이 운영 사실로 남아야 한다
 - PostgreSQL Gold 배열의 실측 용량과 보존 운영값
 - Publisher의 DB 접속 경로(GCP Node 1 → EC2-A 5432의 tailnet 승격 여부, 보류)와 커밋 후 알림 인증·재시도 운영값
 - 단일 connector의 지속 처리량·재연결 동작·무료 플랜 제약(84에서 실측. 실패 시 대안은 proxied A 레코드 1개 + 443). **지금까지 실측한 것은 replica 라우팅이 단일 노드로 간다는 사실뿐이며 처리량은 실측하지 않았다.**
 - 애플리케이션 계층 남용 제한의 위치·기준과 `CF-Connecting-IP` 전달 여부(84). Tunnel 아래서 `getRemoteAddr()`는 컨테이너 IP가 된다
 - EBS 스냅샷 도입 여부와 로그 보존 기간(백업 미도입과 HDFS HA 메타데이터 외부 백업 제외는 확정)
-- 로그인 세션 저장 방식으로 배정했던 `S15P21C206-231`~`-233`의 Jira 상태 전이. 공유 세션 전제가 단일 인스턴스 확정으로 사라져 취소가 결정됐고 전이만 남았다
 
 ## 11. AI 판단 체크리스트
 
