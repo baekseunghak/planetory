@@ -39,6 +39,9 @@
 | 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 제출 매칭 수치 규칙 v0(rule-0)·공통 fixture 31개·참조 구현 | S15P21C206-128 | 제출 매칭, rule-0, 우세/모호, ambiguous_match, 정규화 오차, minScoreGap, dominanceRatio, 고조파 alias, allowEmptyPhaseSpan, phaseWidthMax, DEC-19, Q03, C09, A04 | 제안 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 튜토리얼 순차 발견·챌린지 발견·퀘스트 패널, 회차 전환 전용 명령, 튜토리얼 완료 유지·챌린지 느낌표 기준 | S15P21C206-139 | 튜토리얼, 챌린지, 퀘스트, GET /me/quests, tutorialCompleted, completed_at, 재개, challenge-unlock, 회차 전환, 운영 명령, 비웹 기동, StarDiscoveryService, layout_ordinal, 지도 버전, marker, 빨간 느낌표, newDiscoverableCount, 미결 12, F17-Q2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 글·공식 스레드의 1단계 댓글 CRUD | S15P21C206-159 | 댓글, comments, POST, SIGNAL_THREAD, parentType, PATCH, SB-D22, FOR UPDATE, codePointCount | 구현 완료 | [2026-09-17](2026-09-17.md) |
 
 | 2026-09-17 | 은하 지도 조작·개별 선택·마커 접근성 | S15P21C206-205 | 64px 격자, DOM 풀, 회전, 포커스, 완료 번호 숨김 | 프론트 구현·로컬 검증 완료, 실제 인수 대기 | [기록](2026-09-17.md#s15p21c206-205-은하-지도-조작개별-선택마커-접근성) |
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
+| 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |

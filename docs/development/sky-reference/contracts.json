@@ -156,9 +156,7 @@
             "planetCount": 0,
             "progressStage": "unexplored",
             "completedWithoutPlanets": false,
-            "marker": {
-              "type": "challenge"
-            },
+            "marker": null,
             "reopened": false
           }
         ],
@@ -359,9 +357,7 @@
             "planetCount": 0,
             "progressStage": "unexplored",
             "completedWithoutPlanets": false,
-            "marker": {
-              "type": "challenge"
-            },
+            "marker": null,
             "reopened": false
           }
         ],
