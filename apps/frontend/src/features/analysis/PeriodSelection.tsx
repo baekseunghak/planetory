@@ -234,7 +234,13 @@ export function PeriodSelectionWorkspace({
           />
         ) : null}
       </section>
-      <FoldedCurvePanel curve={curve} session={session} onRetry={retry} />
+      <FoldedCurvePanel
+        curve={curve}
+        session={session}
+        onRetry={retry}
+        context={context}
+        periodogram={data}
+      />
     </>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useId, useState } from "react";
-import type { CurveData } from "./analysis-data";
+import type { AnalysisContext, CurveData } from "./analysis-data";
+import type { ReadyPeriodogram } from "./period-selection";
+import { PhaseSelectionProvider } from "./PhaseSelection";
 import type { useFoldSession } from "./use-fold-session";
 import { FoldedCurveChart } from "./FoldedCurveChart";
 
@@ -57,10 +59,14 @@ export function FoldedCurvePanel({
   curve,
   session,
   onRetry,
+  context,
+  periodogram,
 }: {
   curve: CurveData;
   session: ReturnType<typeof useFoldSession>;
   onRetry: () => void;
+  context: AnalysisContext;
+  periodogram: ReadyPeriodogram;
 }) {
   const { input, state, ready, cancel, setView } = session;
   const { success, status } = state;
@@ -97,15 +103,25 @@ export function FoldedCurvePanel({
       input.data &&
       curve.kind === "ready" &&
       success.result.dataId === input.data.dataId ? (
-        <FoldedCurveChart
-          data={input.data}
-          result={success.result}
-          view={state.view}
-          setView={setView}
-          fluxUnit={curve.fluxUnit}
-        />
+        <PhaseSelectionProvider
+          context={context}
+          data={periodogram}
+          change={success.change}
+          ready={ready}
+        >
+          <FoldedCurveChart
+            data={input.data}
+            result={success.result}
+            view={state.view}
+            setView={setView}
+            fluxUnit={curve.fluxUnit}
+          />
+        </PhaseSelectionProvider>
       ) : null}
-      <p>구간 선택·판단·제출은 아직 연결되지 않았습니다.</p>
+      <p>
+        시간 곡선의 예상 구간·시간 미리보기·판단·제출은 다음 단계에서
+        연결합니다.
+      </p>
     </section>
   );
 }

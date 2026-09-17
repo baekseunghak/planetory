@@ -28,9 +28,75 @@
   margin: 16px 0 0 95px;
 }
 .fold-plot {
+  position: relative;
   height: 280px;
   width: 100%;
   touch-action: pan-y pinch-zoom;
+}
+.phase-selection-layer,
+.phase-band-clip,
+.phase-draw-target {
+  position: absolute;
+  inset: 0;
+}
+.phase-selection-layer {
+  pointer-events: none;
+  user-select: none;
+}
+.phase-band-clip {
+  overflow: hidden;
+}
+.phase-band {
+  position: absolute;
+  height: 100%;
+  box-sizing: border-box;
+  background: #accdfa25;
+  border-inline: 1px solid #accdfa;
+}
+.phase-band[data-invalid="true"] {
+  background: #ffc28a20;
+  border: 1px dashed #ffc28a;
+}
+.phase-draw-target {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+.fold-panel .phase-handle {
+  position: absolute;
+  transform: translateX(-50%);
+  min-width: 44px;
+  padding: 4px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+  color: #e5e9ee;
+  background: #17202c;
+  border: 1px solid #accdfa;
+}
+.phase-handle-0 {
+  top: 0;
+}
+.phase-handle-1 {
+  bottom: 0;
+}
+.fold-panel .phase-handle:hover:not(:disabled) {
+  background: #263a52;
+}
+.phase-handle:focus-visible,
+.phase-draw-target:focus-visible {
+  outline: 2px solid #accdfa;
+  outline-offset: 2px;
+}
+.phase-selection-layer[data-enabled="false"] {
+  opacity: 0.6;
+}
+.phase-selection-status {
+  min-height: 3em;
+  overflow-wrap: anywhere;
+}
+.phase-selection p {
+  font-variant-numeric: tabular-nums;
 }
 .fold-plot canvas {
   display: block;
