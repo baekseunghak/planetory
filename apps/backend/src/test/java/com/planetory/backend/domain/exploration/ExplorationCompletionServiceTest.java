@@ -3,6 +3,12 @@ package com.planetory.backend.domain.exploration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +19,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.domain.exploration.service.ExplorationCompletionPolicy.Decision;
 import com.planetory.backend.domain.exploration.service.ExplorationCompletionService;
@@ -51,6 +60,7 @@ class ExplorationCompletionServiceTest {
 
     @Autowired JdbcTemplate jdbc;
     @Autowired ExplorationCompletionService completion;
+    @Autowired PlatformTransactionManager transactionManager;
 
     private long memberId;
     private long ticId;
@@ -95,8 +105,8 @@ class ExplorationCompletionServiceTest {
     void 마지막_신호의_판단이_틀리거나_보류여도_매칭했으면_완료한다() {
         long wrong = insertCandidate("active", true);
         long unsure = insertCandidate("active", true);
-        insertMatchedSubmission(wrong, "UNLIKELY_PLANET");
-        insertMatchedSubmission(unsure, "UNSURE");
+        insertMatchedSubmission(wrong, "UNLIKELY_PLANET", "matched");
+        insertMatchedSubmission(unsure, "UNSURE", "matched");
 
         assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
         assertProgress("completed", "all_found", false);
@@ -119,7 +129,7 @@ class ExplorationCompletionServiceTest {
     void 은퇴한_미매칭_후보는_완료를_막지_않는다() {
         long active = insertCandidate("active", true);
         insertCandidate("retired", true);
-        insertMatchedSubmission(active, "LIKELY_PLANET");
+        insertMatchedSubmission(active, "LIKELY_PLANET", "matched");
 
         assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
         assertProgress("completed", "all_found", false);
@@ -128,7 +138,7 @@ class ExplorationCompletionServiceTest {
     @Test
     void 이전_판에서_매칭한_후보도_누적_발견으로_인정한다() {
         long candidate = insertCandidate("active", true);
-        insertMatchedSubmission(candidate, "LIKELY_PLANET");
+        insertMatchedSubmission(candidate, "LIKELY_PLANET", "matched");
 
         jdbc.update("UPDATE publication_bundles SET status = 'archived' WHERE id = ?", bundleId);
         jdbc.update("INSERT INTO publication_bundles"
@@ -138,6 +148,26 @@ class ExplorationCompletionServiceTest {
 
         assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
         assertProgress("completed", "all_found", false);
+    }
+
+    @Test
+    void 배음과_중복_매칭도_누적_발견으로_인정한다() {
+        long harmonic = insertCandidate("active", true);
+        long duplicate = insertCandidate("active", true);
+        insertMatchedSubmission(harmonic, "LIKELY_PLANET", "matched_harmonic");
+        insertMatchedSubmission(duplicate, "LIKELY_PLANET", "duplicate");
+
+        assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
+        assertProgress("completed", "all_found", false);
+    }
+
+    @Test
+    void 현재_판이_없으면_활성_후보가_있어도_완료하지_않는다() {
+        insertCandidate("active", true);
+        jdbc.update("UPDATE publication_bundles SET status = 'archived' WHERE id = ?", bundleId);
+
+        assertEquals(Decision.NOT_APPLICABLE, evaluate());
+        assertProgress("in_progress", null, false);
     }
 
     @Test
@@ -157,12 +187,50 @@ class ExplorationCompletionServiceTest {
         jdbc.update("UPDATE user_star_progress SET completed_at = ?, reopened_at = now()"
                 + " WHERE user_id = ? AND tic_id = ?", firstCompletedAt, memberId, ticId);
         long candidate = insertCandidate("active", true);
-        insertMatchedSubmission(candidate, "LIKELY_PLANET");
+        insertMatchedSubmission(candidate, "LIKELY_PLANET", "matched");
 
         assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
+        assertProgress("completed", "all_found", false);
         OffsetDateTime stored = jdbc.queryForObject("SELECT completed_at FROM user_star_progress"
                 + " WHERE user_id = ? AND tic_id = ?", OffsetDateTime.class, memberId, ticId);
         assertEquals(firstCompletedAt.toInstant(), stored.toInstant());
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void 같은_회원과_별을_동시에_판정해도_한_번만_완료한다() throws Exception {
+        long candidate = insertCandidate("active", true);
+        insertMatchedSubmission(candidate, "LIKELY_PLANET", "matched");
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        Callable<Optional<Decision>> task = () -> {
+            if (!start.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("동시 실행 시작 신호를 받지 못했습니다");
+            }
+            return transaction.execute(status -> completion.evaluateAndApply(memberId, ticId));
+        };
+
+        try {
+            Future<Optional<Decision>> first = pool.submit(task);
+            Future<Optional<Decision>> second = pool.submit(task);
+            start.countDown();
+
+            Optional<Decision> firstResult = first.get(10, TimeUnit.SECONDS);
+            Optional<Decision> secondResult = second.get(10, TimeUnit.SECONDS);
+            long completedCalls = java.util.stream.Stream.of(firstResult, secondResult)
+                    .filter(Optional::isPresent)
+                    .count();
+
+            assertEquals(1, completedCalls);
+            assertTrue(firstResult.isEmpty() || secondResult.isEmpty());
+            assertProgress("completed", "all_found", false);
+            assertNotNull(jdbc.queryForObject("SELECT completed_at FROM user_star_progress"
+                    + " WHERE user_id = ? AND tic_id = ?", OffsetDateTime.class, memberId, ticId));
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private Decision evaluate() {
@@ -180,17 +248,23 @@ class ExplorationCompletionServiceTest {
                 Long.class, ticId, status, bundleId, discoverable);
     }
 
-    private void insertMatchedSubmission(long candidateId, String judgment) {
+    private void insertMatchedSubmission(long candidateId, String judgment, String matchResult) {
+        Double matchedPeriod = "matched_harmonic".equals(matchResult) ? 6.0 : null;
+        Double harmonicMultiplier = "matched_harmonic".equals(matchResult) ? 2.0 : null;
+        String achievementResult = "duplicate".equals(matchResult)
+                ? "already_recognized"
+                : "judgment_mismatch";
         jdbc.update("INSERT INTO submissions"
                         + "(user_id, tic_id, bundle_id, request_id, submission_kind, curve_step,"
-                        + " removed_candidate_ids, submitted_period, phase_start, phase_end,"
+                        + " removed_candidate_ids, submitted_period, matched_period, harmonic_multiplier,"
+                        + " phase_start, phase_end,"
                         + " fold_reference_time_btjd, epoch_btjd, duration_hours, user_judgment,"
                         + " evidence_checks, match_result, matched_candidate_id, achievement_result,"
                         + " residual_model_version, periodogram_config_version, rule_version)"
-                        + " VALUES (?, ?, ?, ?::uuid, 'candidate', 1, '{}', 3.0, 0.1, 0.2,"
-                        + " 1500.5, 1501.0, 2.4, ?, '{}'::jsonb, 'matched', ?,"
-                        + " 'judgment_mismatch', 'rm-1', 'pg-1', 'r-1')",
-                memberId, ticId, bundleId, UUID.randomUUID().toString(), judgment, candidateId);
+                        + " VALUES (?, ?, ?, ?::uuid, 'candidate', 1, '{}', 3.0, ?, ?, 0.1, 0.2,"
+                        + " 1500.5, 1501.0, 2.4, ?, '{}'::jsonb, ?, ?, ?, 'rm-1', 'pg-1', 'r-1')",
+                memberId, ticId, bundleId, UUID.randomUUID().toString(), matchedPeriod,
+                harmonicMultiplier, judgment, matchResult, candidateId, achievementResult);
     }
 
     private void assertProgress(String stage, String reason, boolean reopenPending) {

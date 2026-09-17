@@ -24,7 +24,9 @@ public class ExplorationCompletionService {
     /**
      * 진행 중인 별을 판정하고 필요한 경우 완료로 바꾼다.
      *
-     * @return 진행 행이 없거나 이미 완료·미탐사면 빈 값, 그 밖에는 적용한 판정
+     * @return 진행 행이 없거나 이미 완료·미탐사면 빈 값. 현재 판·활성 후보가 없으면
+     *         {@link Decision#NOT_APPLICABLE}, 탐색 가능한 미발견 후보가 남으면
+     *         {@link Decision#KEEP_IN_PROGRESS}, 완료 조건이면 반영한 완료 판정을 반환한다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Decision> evaluateAndApply(long memberId, long ticId) {
