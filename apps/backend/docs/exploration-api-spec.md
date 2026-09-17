@@ -1104,15 +1104,21 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
 **완료(SUB-11, DEC-28).** 아래 판정을 세 시점에 실행한다. (a) 제출 트랜잭션에서 매칭 성공 후, (b) 5.1절 분석 진입 시 회원의 진행 행이 `in_progress`이면(AT-69: 탐색 불가능 신호만 남은 별에 들어왔을 때 성과 없이 완료·재개 대기), (c) 새 판 `current` 전환 후처리에서 `in_progress` 행 전부. 무신호 별은 배치가 적재하지 않으므로 active 후보가 0개인 별은 판정 대상이 아니다(SUB-11 (1)).
 
 ```text
+activeCandidateCount = 이 판 active 후보 수
 discoverableUnmatched = 이 판 active 후보 중 discoverable=true AND candidate_id ∉ 회원 매칭 집합
 undiscoverableUnmatched = 같은 조건에 discoverable=false
-if discoverableUnmatched = 0:
+if activeCandidateCount = 0:
+    판정하지 않음
+else if discoverableUnmatched = 0:
     if undiscoverableUnmatched = 0: stage=completed, completion_reason=all_found
     else: stage=completed, completion_reason=undiscoverable_only, reopen_pending=true
-    completed_at = now
+    completed_at = 최초 완료 시각(없을 때만 now)
 ```
 
-판단·성과·공개와 독립이다(AT-56·97·98). 완료 자체에 성과·별 열림은 없다. `no_candidate` 제출은 완료를 만들지 않는다.
+두 미매칭 수가 모두 0인 경우만으로는 "활성 후보 없음"과 "활성 후보를 모두 찾음"을 구분할 수 없으므로
+`activeCandidateCount`를 함께 본다. 재개 뒤 다시 완료해도 최초 `completed_at`은 유지한다. 판단·성과·공개와
+독립이다(AT-56·97·98). 완료 판정 함수 자체에는 성과·별 열림 부작용이 없다. `no_candidate` 제출에서는 이
+함수를 호출하지 않으며 완료를 만들지 않는다.
 
 **재개(DAT-15, DEC-27).** 새 판이 `current`가 될 때 배치 후처리가 실행한다.
 
@@ -1311,6 +1317,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
 | 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 사용자 결정에 따라 은퇴 경로는 분석 복귀·재도전 `{A,C}`와 History CURRENT 원본으로, 기준 시각은 Bundle 공통값으로, duration 상한은 사용자가 고른 봉우리의 추천값 3배로 확정하고 SRS·ERD·API·정적 JSON 예제를 함께 갱신 |
 | 2026-09-17 | S15P21C206-139 구현 반영. 4.3절에 완료 수·챌린지 자격의 공통 판정, 진행 회차가 없을 때의 빈 챌린지 형태, 조회가 별을 열지 않음, `reopened` 조건·정렬과 `newDiscoverableCount` null(S15P21C206-150 전까지)을 명시. 9.4절에 이미 열린 별은 순번·version을 바꾸지 않음, 튜토리얼 완료 후처리의 호출 위치·다음 순번 미설정 시 503, 회차 전환을 주기 실행 대신 운영자 전용 명령으로 실행함을 명시하고 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md)을 연결. 튜토리얼 완료를 한 번 완료하면 유지(재개돼도 `completed_at`으로 판정)로 정하고 4.3·9.3·11.1절에 반영. 챌린지 빨간 느낌표를 발견 경로 대신 퀘스트 `challenge.ticId` 기준으로 바꾸고 4.1절 `marker`에서 `challenge`를 제거, 대상 별을 이미 발견한 회원은 경로를 새로 기록하지 않음을 9.4절에 추가(서비스 F17-Q2 제안). 12.2 미결 12는 백승학 확인 전이라 유지 |
+| 2026-09-17 | S15P21C206-149 구현 반영. 9.3절 완료 판정에 활성 후보 수를 추가해 무신호 별과 모든 후보를 찾은 별을 구분하고, 판 전환 뒤에도 회원의 누적 후보 매칭을 인정한다. 재완료 시 최초 `completed_at`을 보존하며 완료 판정 함수 자체는 성과·별 열림을 만들지 않고 `no_candidate` 제출에서는 호출하지 않는다. |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
