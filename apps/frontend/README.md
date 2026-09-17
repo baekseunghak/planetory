@@ -73,6 +73,10 @@ npm run test:production
 
 추가로 [Canvas·WebGL 성능 실험](docs/phase-folding-gpu-experiment.md)을 `npm run test:gpu`로 재현할 수 있다. 분리 렌더러는 58265, 실제 개발 화면 비교는 `npm run test:gpu:app`의 58266 포트를 사용한다. 개발 화면의 `개발용 접기 렌더러`에서 WebGL을 선택할 수 있고 실패하면 Canvas로 자동 전환한다. 일반 배포는 Canvas를 유지하며 검증 진행표는 실험 문서에서 관리한다.
 
+### #185 위상 구간 선택·분석 단계·판단·제출 확인 (1단계)
+
+선택 규칙·관측 범위 읽기와 위상 구간 정규화, 기준 시각·가려진 시간 미리보기, 위치별 수치 오류 검사를 추가했다. 선택한 봉우리의 출처와 서버 규칙을 유지하며 정상 미리보기를 제출 허가로 취급하지 않는다. 현재 화면·핸들은 연결하지 않았다. 단계별 계획, 샘플 계산, 검증과 미확정 조건은 [위상 구간 선택 개발 안내](docs/phase-selection.md)를 따른다.
+
 ### 공통 참고 문서
 
 - [공통 코드 사용·화면 연결 계약](docs/shared-frontend-contract.md)
