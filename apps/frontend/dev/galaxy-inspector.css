@@ -1,0 +1,72 @@
+.galaxy-inspector-controls {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.galaxy-inspector-controls summary,
+.galaxy-measure summary {
+  min-height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.galaxy-inspector-controls div {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.galaxy-inspector-controls button {
+  padding: 6px 12px;
+}
+.galaxy-measure {
+  font-size: 12px;
+  margin-top: 16px;
+}
+.galaxy-measure output {
+  display: block;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  color: #cbd5e1;
+  margin: 8px 0;
+}
+
+.galaxy-reference-mode .galaxy-scene {
+  position: fixed;
+  inset: 64px 0 0;
+  border: 0;
+}
+.galaxy-reference-mode .galaxy-scene canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.galaxy-reference-mode .galaxy-inspector-controls {
+  position: fixed;
+  z-index: 5;
+  top: 72px;
+  left: 24px;
+  max-width: 470px;
+  margin: 0;
+}
+.galaxy-reference-mode .galaxy-inspector-controls details[open] {
+  background: #070a0ff5;
+  padding: 12px;
+  max-height: 75vh;
+  overflow: auto;
+}
+.galaxy-reference-mode .galaxy-measure {
+  position: fixed;
+  z-index: 5;
+  right: 24px;
+  bottom: 20px;
+  max-width: 480px;
+}
+.galaxy-reference-mode .galaxy-measure[open] {
+  background: #070a0ff5;
+  padding: 12px;
+}
+.galaxy-dev-error {
+  position: relative;
+  z-index: 6;
+  background: #15111a;
+}

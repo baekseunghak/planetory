@@ -57,7 +57,7 @@ export function project(star, camera, width, height) {
 // Number conversion is confined to synthetic IDs here; production TICs stay strings.
 export const exampleStar = n => ({ticId:String(900000001+n),...layout(n),planetCount:n===7?2:0,
   progressStage:n===7?'in_progress':'unexplored',completedWithoutPlanets:false,
-  marker:n<5?{type:'tutorial',seq:n+1}:n===5?{type:'challenge'}:null,reopened:false});
+  marker:n<5?{type:'tutorial',seq:n+1}:null,reopened:false});
 export function exampleAccount(count) {
   if (![1,10,100,1000,100000].includes(count)) throw Error('unsupported reference count');
   return Array.from({length:count},(_,i)=>exampleStar(i));

@@ -26,5 +26,14 @@
       "kind": "unity"
     },
     "residual_model_version": "box-divide-v0"
+  },
+  {
+    "shape": "box",
+    "parameters": {
+      "period_days": 11.802,
+      "epoch_btjd": 1683.91,
+      "duration_hours": 2.4,
+      "depth_ppm": 380
+    }
   }
 ]

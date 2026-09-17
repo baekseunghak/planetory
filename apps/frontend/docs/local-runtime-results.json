@@ -1,0 +1,28 @@
+[
+  {
+    "browser": "chrome",
+    "version": "153.0.8010.36",
+    "passed": true,
+    "checks": [
+      "sky-direct",
+      "sky-reload-1000-stars",
+      "analysis-deep-reload",
+      "asset-404",
+      "api-503-not-spa",
+      "cookie-roundtrip"
+    ]
+  },
+  {
+    "browser": "firefox",
+    "version": "155.0.1",
+    "passed": true,
+    "checks": [
+      "sky-direct",
+      "sky-reload-1000-stars",
+      "analysis-deep-reload",
+      "asset-404",
+      "api-503-not-spa",
+      "cookie-roundtrip"
+    ]
+  }
+]

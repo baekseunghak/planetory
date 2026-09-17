@@ -89,7 +89,7 @@
 | --- | --- | --- | --- |
 | `unsupported_schema_version`, `unsupported_operation`, `invalid_operation_payload` | 아니오 | `COMPUTE_ERROR`, `retryable=false` | `FAILED` |
 | `flux_length_mismatch`, `duplicate_candidate_id`, `invalid_removed_candidate_order` | 아니오 | `COMPUTE_ERROR`, `retryable=false` | `FAILED` |
-| `astro-kernel`의 `invalid_*`, `unsupported_*`, `version_mismatch`, `shape_mismatch` | 아니오 | `COMPUTE_ERROR`, `retryable=false` | 원래 code·field·model index 보존 |
+| `astro-kernel`의 `invalid_*`, `unsupported_*`, `missing_parameter`, `unknown_parameter`, `version_mismatch`, `shape_mismatch` | 아니오 | `COMPUTE_ERROR`, `retryable=false` | 원래 code·field·model index 보존. 코드 목록(13종)은 [astro-kernel README](../../libs/astro-kernel/README.md) 실패 코드 표가 정본 |
 | `astro-kernel`의 `nonpositive_model`, `numerical_failure` | 아니오 | `COMPUTE_ERROR`, `retryable=false` | 부분 결과 폐기 |
 | `compute_timeout`, `worker_unavailable` | 가능 | `COMPUTE_ERROR`, `retryable=true` | Backend가 만든 실패이며 같은 target 재요청에서 attempt 증가 |
 

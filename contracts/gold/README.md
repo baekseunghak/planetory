@@ -76,16 +76,16 @@ Gold는 다음을 게시한다.
 | 대표 산포 | `flux_scatter` | `fluxScatter` | flux와 같은 무차원 값 | 세그먼트당 하나다 |
 | 공백 | `gaps` | `gaps` | 인덱스 폐구간 배열 | `[start, end]`, `0 ≤ start ≤ end < nPoints`다 |
 | 주기 범위 | `period_min_days`, `period_max_days` | `periodMinDays`, `periodMaxDays` | 일 | `0 < min < max`다 |
-| 주기도 크기 | `n_periods`, `power` | `nPeriods`, `power` | 정수, 무차원 배열 | `nPeriods == power.length`다 |
+| 주기도 크기 | `n_periods`, `power` | `nPeriods`, `power` | 정수, 무차원 배열 | `nPeriods == power.length`다. `power` 에는 `null`·NaN·Infinity 가 없다(격자 전 점에 값이 있어야 한다) |
 | 후보 주기 | `period_days` | `periodDays` | 일 | 유한한 양수다 |
 | 후보 기준 시각 | `epoch_btjd` | `epochBtjd` | BTJD 일 | 유한수다 |
 | 지속시간 | `duration_hours` | `durationHours` | 시간 | 유한한 양수다 |
-| 깊이 | `depth_ppm` | `depthPpm` | ppm | 0 이상이다 |
+| 깊이 | `depth_ppm` | `depthPpm` | ppm | 0 초과 1,000,000 미만이다(`transit_model` 계약과 같다) |
 | 계산 버전 | manifest snake_case | API camelCase | 문자열 | `residual_model_version`, `periodogram_config_version`은 필수다 |
 
 세그먼트와 후보 식별자도 같은 방식으로 DB 숫자 ID를 API의 `seg-<id>`, `c-<id>`에 대응한다. 접두 문자열은 외부 표현이며 DB 열 타입을 바꾸지 않는다.
 
-`transit_model`의 세부 shape와 수치 경계는 `S15P21C206-113`이 소유한다. 이 fixture는 현재 box 모델 예시가 비어 있지 않은 JSON 객체인지와 manifest 버전 연결만 검사하며, 과학 계약 확정 증거로 사용하지 않는다.
+`transit_model` JSONB의 필드·단위·shape·수치 경계는 [`transit-model.schema.json`](transit-model.schema.json)(계약 1.0, `S15P21C206-113` 소유)이 정본이다. 정상·불량 예제는 [`examples/transit-model.valid.json`](examples/transit-model.valid.json)·[`examples/transit-model.invalid.json`](examples/transit-model.invalid.json)이며, 수식·필드 사이 규칙·실패 코드는 [`libs/astro-kernel`](../../libs/astro-kernel/README.md)이 구현하고 같은 예제로 검사한다. 정상 fixture의 후보 `transit_model`은 이 형식을 따른다. `validate.cjs`는 shape 규칙을 중복 구현하지 않고 비어 있지 않은 객체인지와 manifest 버전 연결만 검사한다.
 
 ## 5. 판 전환 시나리오
 
@@ -105,6 +105,8 @@ Gold는 다음을 게시한다.
 - [정상 예제](examples/publication-bundle.valid.json): Publisher DB 행, Backend 읽기 모델과 Frontend 응답이 같은 TIC·Bundle·세그먼트·주기도를 해석하는 사례다.
 - [오류 예제](examples/publication-bundle.invalid.json): 정상 예제에 적용할 최소 변형과 예상 오류 코드다.
 - [게시 재시도 예제](examples/publication-load-scenarios.json): `(tic_id, bundle_version)` 키의 정상 게시·동일 재시도·payload 충돌·일시 실패 rollback·검증 실패·교체된 판의 늦은 재시도를 검사한다. `payloads` 참조는 fixture 중복만 줄인 표기이며 운영 요청 형식은 아니다.
+- [공개 QA·실패 계약 v0](publication-qa.md): 새 판 공개 전 검사 항목, 실패 상태(69 코드만 사용), 배열·레코드 checksum 직렬화 규칙 제안, [허용 오차 등록표](qa-tolerances.v0.json), 미결 공개 정책(손상 Sector·AI 실패). [배열 벡터](examples/array-checksum-vectors.v0.json)·[레코드 벡터](examples/record-checksum-vectors.v0.json)는 Python·Node·Java(강재민)·PostgreSQL 왕복으로 재현했다([`array-checksum.cjs`](array-checksum.cjs), [`record-checksum.cjs`](record-checksum.cjs)). 레코드 동률 벡터 4건도 Java 대조 완료. 실제 곡선 payload 와 round-trip 스크립트는 [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md).
+- [`transit_model` 계약](transit-model.schema.json)과 [정상](examples/transit-model.valid.json)·[불량](examples/transit-model.invalid.json) 예제: 후보 한 건의 고정 통과 모델 JSON. `libs/astro-kernel` 테스트가 Schema·예제·파서의 일치를 검사한다(`uv run pytest -q` in `libs/astro-kernel`).
 
 Publisher 게시 명령의 관찰 가능한 결과와 소유권은 게시 재시도 예제가 정본이다. 이 README와 데이터 관리 문서는 해당 계약의 의미와 구현 인계 범위만 설명한다.
 
@@ -152,9 +154,10 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 
 | 항목 | 현재 상태 | 담당·종결 조건 |
 | --- | --- | --- |
-| `transit_model` 세부 shape·baseline·수치 경계 | 미정 | `S15P21C206-113`의 정상·오류 fixture와 승인 결과를 반영한다 |
-| 운영 checksum canonicalization | 미정 | `S15P21C206-117`에서 Python·PostgreSQL 왕복 시 같은 바이트·값을 검증한다 |
-| Gold PostgreSQL 실제 왕복·공개 QA | 미검증 | `S15P21C206-117`이 독립 PostgreSQL round-trip과 손상 입력을 검증한다 |
+| `transit_model` 세부 shape·baseline·수치 경계 | 확정 (계약 1.0, 2026-09-17) | `S15P21C206-113` [`transit-model.schema.json`](transit-model.schema.json). box·unity·`box-divide-v0`, 통과 경계 `<`, 깊이 0 초과 1,000,000 미만, Gold 세그먼트는 bin 중심 평가(호출자 이동). 변경은 새 `residual_model_version` |
+| 운영 checksum canonicalization | 제안 v0 — 배열 `array-f32le-null7fc00000-v0`, 레코드 `record-canonical-v0` (2026-09-17) | [공개 QA 3절](publication-qa.md). Python·Node·Java(강재민: 배열 15+6, 레코드 6, DB 경로) 일치, PostgreSQL 18.6 REAL[] 왕복·행 재계산 일치. Python·Node·Java 모두 일치, 팀 확정만 남음. 확정 시 게시 재시도 예제의 합성 checksum 을 실제 값으로 교체 |
+| Gold PostgreSQL 실제 왕복 | 검증됨 (로컬 PostgreSQL 18.6, V1~V8, TOI-270 S3 예제 62항목, 모든 검사 뒤 단일 commit·손상 payload 거절 확인, 2026-09-17) | [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md). 운영 Publisher·Java 경로·Silver 수치 비교는 미실행(D17·D23). NUMERIC 열은 float8 바인딩 대신 최단 왕복 표기로 바인딩해야 float64 가 보존됨(서버 float8→numeric 15자리 반올림) |
+| 공개 QA 정책 (손상 Sector·AI 실패) | 미결 — v0 기본값: 부분 공개 없음, 같은 입력 반복 실패는 `PUBLISH_REJECTED`, 일시 실패는 `PUBLISH_ROLLED_BACK` 같은 `bundle_version` 재시도, 기존 current 유지 | [공개 QA 5절](publication-qa.md). 새 결과 코드는 만들지 않음. AI 실패 후 부분 공개·재게시는 `bundle_version` 충돌 때문에 69 담당과 합의 필요 |
 | Redis TTL·메모리·동시 실행 상한 | 실측 대기 | 부하 시험 담당 Task에서 정한다 |
 | 실제 TESS 배열 크기·용량·수치 허용 오차 | 실측 대기 | D17·D23 계열 검증 결과를 반영한다 |
 

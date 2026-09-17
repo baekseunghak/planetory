@@ -31,6 +31,7 @@
 
 | 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
 | 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | transit_model 계약 1.0 확정(Schema·예제 정본화, bin 중심 평가 호출자 이동)과 기준 시각·제공 격자 대조 | S15P21C206-113, 121 | transit_model, transit-model.schema.json, D06, box-divide-v0, bin 중심, fold_reference_time_btjd, periodogram_config_version, astro-kernel, Gold fixture | 확정 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-16 | `stars` 표시 열 확정 | S15P21C206-138 | stars 표시 열, tmag, teffK, radiusRsun, 미결 10, ERD 미결 9, D-18, 공개 별 요약, null 결측 | 결정 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 상세·공개 요약·별 목록 조회 구현 | S15P21C206-138 | 별 상세, planets.items, LIKELY_PLANET, FP 제외, STAR_LOCKED, STAR_NOT_PUBLISHED, STAR_LIST_PRIVATE, lastActivityAt, 커서 경계, unpublishedSignalCount | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |
@@ -41,3 +42,11 @@
 | 2026-09-17 | HDFS 호스트 설치와 tailnet 노드 호출 자동화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, SHA-512, hdfs, systemd, tailnet, canary, WhatIf | 구현·Node 1~6 설치 검증 완료, 초기화 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | GCP 운영 접속을 tailnet 기본 경로로 전환 | S15P21C206-71 | Tailscale SSH, tailnet, MagicDNS, scp, GCP 비상 복구, HDFS 설치 | 구현·실환경 접속 검증 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | HDFS HA 초기화와 RF2 실환경 검증 | S15P21C206-72 | UFW, QJM, Active, Standby, DataNode 5개, RF2, checksum, fsck | 검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 제출 매칭 수치 규칙 v0(rule-0)·공통 fixture 31개·참조 구현 | S15P21C206-128 | 제출 매칭, rule-0, 우세/모호, ambiguous_match, 정규화 오차, minScoreGap, dominanceRatio, 고조파 alias, allowEmptyPhaseSpan, phaseWidthMax, DEC-19, Q03, C09, A04 | 제안 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | Gold 적재 예제 PostgreSQL QA+round-trip 57항목 통과, 배열·레코드 checksum 규칙 v0, 공개 정책 미결 정리(69 코드만 사용) | S15P21C206-117 | Gold round-trip, publication-qa, array checksum, record-canonical, f32le, NULL 7FC00000, qa-tolerances, PUBLISH_REJECTED, PUBLISH_ROLLED_BACK, 손상 Sector, AI 실패, bundle_version 충돌, NUMERIC 정밀도, V1~V8, planetory_gold_writer, D09 | 검증 완료(로컬) · 제안 · 미결 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 튜토리얼 순차 발견·챌린지 발견·퀘스트 패널, 회차 전환 전용 명령, 튜토리얼 완료 유지·챌린지 느낌표 기준 | S15P21C206-139 | 튜토리얼, 챌린지, 퀘스트, GET /me/quests, tutorialCompleted, completed_at, 재개, challenge-unlock, 회차 전환, 운영 명령, 비웹 기동, StarDiscoveryService, layout_ordinal, 지도 버전, marker, 빨간 느낌표, newDiscoverableCount, 미결 12, F17-Q2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 글·공식 스레드의 1단계 댓글 CRUD | S15P21C206-159 | 댓글, comments, POST, SIGNAL_THREAD, parentType, PATCH, SB-D22, FOR UPDATE, codePointCount | 구현 완료 | [2026-09-17](2026-09-17.md) |
+
+| 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
+| 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |

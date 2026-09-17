@@ -1,0 +1,21 @@
+{
+  "browser": "155.0.1",
+  "results": [
+    {
+      "name": "201-real-cookie-and-route-return",
+      "passed": true
+    },
+    {
+      "name": "202-korean-nickname-validation",
+      "passed": true
+    },
+    {
+      "name": "202-accepted-write-lost-reply",
+      "passed": true
+    },
+    {
+      "name": "202-write-success-lookup-failure",
+      "passed": true
+    }
+  ]
+}

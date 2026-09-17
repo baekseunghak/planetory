@@ -1,0 +1,337 @@
+{
+  "checkedAt": "2026-09-17T02:54:30.116Z",
+  "backend": "0b7436f",
+  "integratedFrontend": "507bd30",
+  "environment": "Windows, Java 21, PostgreSQL 17.10, Node 24.18.0, isolated loopback HTTP",
+  "authentication": "Synthetic OAuth provider; real Spring filters/session/CSRF/controller/database. No mocked API responses.",
+  "sourceHashes": {
+    "201-merged": "bd142a58aff2c03f840ec527ea923951c727d6dba55711cb4cdb0052214795e3",
+    "182-integrated": "f6bc41e1083abaa03bf396d2650d02ddb50337226e903106cb5d0789bfdb7e85"
+  },
+  "checks": [
+    {
+      "client": "201-merged",
+      "name": "authenticated member GET",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "client": "201-merged",
+      "name": "nickname blank",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "nickname one character",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "nickname reserved",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "nickname null",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "nickname missing",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "malformed JSON",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "missing JSON body",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "onboarding false",
+      "passed": true,
+      "path": "/api/v1/me/onboarding",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "onboarding null",
+      "passed": true,
+      "path": "/api/v1/me/onboarding",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "unknown API path",
+      "passed": true,
+      "path": "/api/v1/201-verification-missing",
+      "method": "GET",
+      "status": 404,
+      "body": {
+        "code": "RESOURCE_NOT_FOUND",
+        "message": "요청한 대상을 찾을 수 없습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "201-merged",
+      "name": "missing CSRF rejected",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "client": "201-merged",
+      "name": "member and onboarding unchanged after rejections",
+      "passed": true
+    },
+    {
+      "client": "201-merged",
+      "name": "logout 204 parsing",
+      "passed": true,
+      "status": 204
+    },
+    {
+      "client": "201-merged",
+      "name": "401 notifies session clear once",
+      "passed": true,
+      "status": 401
+    },
+    {
+      "client": "182-integrated",
+      "name": "authenticated member GET",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "client": "182-integrated",
+      "name": "nickname blank",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "nickname one character",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "nickname reserved",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "nickname null",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "nickname missing",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "malformed JSON",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "missing JSON body",
+      "passed": true,
+      "path": "/api/v1/me/profile",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "onboarding false",
+      "passed": true,
+      "path": "/api/v1/me/onboarding",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "onboarding null",
+      "passed": true,
+      "path": "/api/v1/me/onboarding",
+      "method": "PATCH",
+      "status": 400,
+      "body": {
+        "code": "VALIDATION_FAILED",
+        "message": "요청 값이 올바르지 않습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "unknown API path",
+      "passed": true,
+      "path": "/api/v1/201-verification-missing",
+      "method": "GET",
+      "status": 404,
+      "body": {
+        "code": "RESOURCE_NOT_FOUND",
+        "message": "요청한 대상을 찾을 수 없습니다."
+      },
+      "attempts": 1
+    },
+    {
+      "client": "182-integrated",
+      "name": "missing CSRF rejected",
+      "passed": true,
+      "status": 403
+    },
+    {
+      "client": "182-integrated",
+      "name": "member and onboarding unchanged after rejections",
+      "passed": true
+    },
+    {
+      "client": "182-integrated",
+      "name": "logout 204 parsing",
+      "passed": true,
+      "status": 204
+    },
+    {
+      "client": "182-integrated",
+      "name": "401 notifies session clear once",
+      "passed": true,
+      "status": 401
+    }
+  ],
+  "limitations": [
+    "Not a new Google/SSAFY provider acceptance test; prior real-provider evidence is separate.",
+    "Current profile/onboarding validation omits fieldErrors. Non-empty fieldErrors remain covered by existing MVC/client/browser contract tests, not a live feature endpoint.",
+    "Node cookie jar is a test transport adapter. Browser cookie policies use separate browser evidence.",
+    "PostgreSQL 18.6 production, HTTPS deployment and actual Safari were not verified here."
+  ]
+}

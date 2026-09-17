@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
+import { LoginPage, LogoutStatus } from "../auth/LoginPage";
 import { useSession } from "../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../components/RequestState";
 import { ServiceLayout } from "../components/ServiceLayout";
@@ -17,6 +18,7 @@ export type PageSlots = Partial<Record<PageKey, ComponentType>>;
 function ProtectedRoutes() {
   const session = useSession();
   const location = useLocation();
+  if (session.logoutState.phase !== "idle") return <LogoutStatus />;
   if (session.status === "loading")
     return (
       <main className="page">
@@ -32,48 +34,16 @@ function ProtectedRoutes() {
         />
       </main>
     );
-  if (session.status === "anonymous")
+  if (session.status === "anonymous" || session.status === "profile-required")
     return (
       <Navigate
         replace
         to={`/login?${new URLSearchParams({ returnTo: safeReturnTo(location.pathname + location.search + location.hash) })}`}
       />
     );
-  return <Outlet key={`${session.member.memberId}:${session.revision}`} />;
-}
-function LoginSlot() {
-  const session = useSession();
-  const location = useLocation();
   if (session.status === "authenticated")
-    return (
-      <Navigate
-        replace
-        to={safeReturnTo(new URLSearchParams(location.search).get("returnTo"))}
-      />
-    );
-  return (
-    <main className="page login">
-      <Link to="/sky" className="brand">
-        PLANETORY
-      </Link>
-      {session.status === "loading" ? (
-        <LoadingState />
-      ) : session.status === "error" ? (
-        <ErrorState
-          error={session.error}
-          retry={() => void session.refresh()}
-        />
-      ) : (
-        <>
-          <h1>로그인이 필요합니다</h1>
-          <p>로그인 연결을 준비하고 있습니다.</p>
-          <button onClick={() => void session.refresh()}>
-            로그인 상태 다시 확인
-          </button>
-        </>
-      )}
-    </main>
-  );
+    return <Outlet key={`${session.member.memberId}:${session.revision}`} />;
+  return null;
 }
 function UnconnectedPage({ pageKey }: { pageKey: PageKey }) {
   const definition = routeDefinitions.find((route) => route.key === pageKey)!;
@@ -115,8 +85,8 @@ export function App({ pages = {} }: { pages?: PageSlots }) {
   return (
     <DesktopGate>
       <Routes>
-        <Route path="/login" element={<LoginSlot />} />
-        <Route path="/oauth/callback" element={<LoginSlot />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/oauth/callback" element={<LoginPage />} />
         <Route element={<ProtectedRoutes />}>
           <Route element={<ServiceLayout />}>
             <Route path="/" element={<Navigate replace to="/sky" />} />
