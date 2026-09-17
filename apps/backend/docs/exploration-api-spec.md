@@ -554,23 +554,26 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 필드 | 규칙 |
 |---|---|
+| `star` | 4.2절 별 상세와 같은 값(`sectors`는 관측 데이터의 섹터)이다 |
 | `bundle.bundleId` | DB `publication_bundles.id`를 `b-<id>` 문자열로 표현한다. 요청·응답·`X-Current-Bundle`에서 같은 값을 쓴다 |
 | `bundle.bundleVersion` | DB `bundle_version`과 같은 문자열이다. 숫자로 암묵 변환하지 않는다 |
 | `bundle.observationBounds` | `[세그먼트 startBtjd의 최솟값, 세그먼트별 startBtjd + nPoints × binMinutes / 1440의 최댓값]`. 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다(2026-09-17 결정) |
-| `bundle.binningRevision`, `segments[].binningRevision` | DB `binning_revision` 문자열 그대로(예: `"10m-v1"`). 숫자로 바꾸지 않는다([Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같다, 2026-09-17 결정) |
+| `bundle.binningRevision`, `segments[].binningRevision` | DB `binning_revision` 문자열 그대로(예: `"10m-v1"`). 숫자로 바꾸지 않는다([Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같다, 2026-09-17 결정). 한 판의 세그먼트는 revision이 하나이며 여럿이면 적재 계약 위반이다 |
+| `bundle.curveStepRule` | `one_candidate_per_step` 고정. 한 단계가 매칭한 후보 하나를 더 제거하며 단계 수 = 제거 후보 수다(2.1절) |
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
-| `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다. `version`은 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열이며 별도 `sel-N`은 두지 않는다. `phaseWidthMax`·`maxDurationMultipleOfSuggested`·`allowEmptyPhaseSpan`은 그 버전의 `values.selection`([운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)), `minWindowDays`는 별 케이던스, `fineTune`은 판 manifest에서 온다 |
+| `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다. `version`은 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열이며 별도 `sel-N`은 두지 않는다. `phaseWidthMax`·`maxDurationMultipleOfSuggested`·`allowEmptyPhaseSpan`은 그 버전의 `values.selection`([운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)), `minWindowDays`는 별 케이던스, `fineTune`은 판 manifest에서 온다. 제공 곡선의 케이던스는 bin 크기이므로 `minWindowDays = 2 × 판 세그먼트 binMinutes의 최솟값 / 1440`이다(제출 매칭 규칙 v0, 10분 bin이면 0.01389) |
 | `progress.currentCurveStep` | 회원의 `user_star_progress.current_curve_step` = **마지막 제출의 곡선 단계**. 제출 트랜잭션에서만 갱신하며 브라우저 저장소로 대체하지 않는다(NFR-19) |
-| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0). 판 전환으로 저장된 조합에 은퇴 후보가 생기면 **현재 판에서 회원이 매칭한 활성 후보 전체를 제거한 현재 진행 문맥**으로 대체하고 `notice: "STEP_NOT_RESTORABLE"`을 붙인다. 예: 옛 `{A,B}`, B 은퇴, 현재 진행 `{A,C}`이면 `{A,C}`, step 2다(C02-R1, Q09) |
-| `nextCurveContext` | 이 판에서 회원이 매칭한 활성 후보 전체를 제거한 문맥(`curveStep` = 그 수). 남은 탐색 가능 신호가 없으면 null. [다음 곡선]의 기본 대상 |
+| `progress` | 진행 행이 없으면 `stage=unexplored`·`currentCurveStep=0`이다. `matchedCandidateIds`는 이 판의 활성 후보 중 회원이 매칭한 것(id 숫자 오름차순), `achievementCount`·`grade`는 4.2절과 같은 계산이다. 진입 시 진행 행이 `in_progress`면 먼저 9.3절 완료 판정 (b)를 반영한 뒤 읽는다 |
+| `currentCurveContext` | 마지막 제출 단계의 문맥. 제출이 없으면 원본(step 0). 판 전환으로 저장된 조합에 은퇴 후보가 생기면 **현재 판에서 회원이 매칭한 활성 후보 전체를 제거한 현재 진행 문맥**으로 대체하고 `notice: "STEP_NOT_RESTORABLE"`을 붙인다. 예: 옛 `{A,B}`, B 은퇴, 현재 진행 `{A,C}`이면 `{A,C}`, step 2다(C02-R1, Q09). `notice`는 `currentCurveContext` 안에 두고 바꾸지 않았으면 필드를 뺀다(2026-09-17 결정). 옛 판에서 한 제출이어도 문맥의 `bundleId`·계산 버전은 현재 판 값이다 |
+| `nextCurveContext` | 이 판에서 회원이 매칭한 활성 후보 전체를 제거한 문맥(`curveStep` = 그 수). 남은 탐색 가능 신호가 없으면 null. [다음 곡선]의 기본 대상. null이면 `residualForNextStep`도 null |
 | `residualForCurrentStep`, `residualForNextStep` | 각 문맥의 잔차 캐시 상태. `curveStep=0`이면 `COMPLETED` 고정 |
-| `tutorial.skipAvailable` | SUB-12 조건 충족 여부. `tutorial_skip_after=0`이면 항상 false |
+| `tutorial.seq`, `tutorial.skipAvailable` | 사용 중인 튜토리얼 별이면 순번, 아니면 null. `skipAvailable`은 SUB-12 조건 충족 여부다: 튜토리얼 별이고, 오답(`not_matched`·`none_wrong`·판단 불일치) 수가 `tutorial_skip_after` 이상이며, 가장 최근 오답에서 상세 보기를 거쳤을 때 true. `tutorial_skip_after=0`이면 항상 false이고, 한 번이라도 완료한 튜토리얼 별(`completed_at` 기록)도 false다(2026-09-17 결정) |
 
 미제출 초안(주기·위상·판단·표시 범위)은 서버가 저장하지 않는다. EXP-10의 복원은 브라우저 임시 저장이며, 복원할 때 이 API로 판·단계가 같은지 확인한다(Q05).
 
 **C02-R1 결정(2026-09-14):** 분석 복귀와 다시 풀기는 최신 현재 진행 문맥을 사용한다. History CURRENT는 HIS-03대로 최신 원본 곡선으로 대체하고, History SUBMITTED는 당시 snapshot을 유지한다. 세 경로의 기대 배열은 [공통 은퇴 사례](exploration-contract-review.md)에 고정했다.
 
-**실패:** `STAR_LOCKED`, `STAR_NOT_PUBLISHED`. `current` 판이 없으면 503 `DEPENDENCY_UNAVAILABLE`(배치 미공개 별은 published가 아니어야 하므로 정상 운영에서는 없다).
+**실패:** `STAR_LOCKED`, `STAR_NOT_PUBLISHED`. `current` 판이나 현재 운영 규칙이 없으면 503 `DEPENDENCY_UNAVAILABLE`(배치 미공개 별은 published가 아니어야 하고 초기 규칙은 마이그레이션이 넣으므로 정상 운영에서는 없다). 응답은 200이며 `X-Current-Bundle`을 싣는다.
 
 ### 5.2 곡선 (세그먼트 DTO)
 
@@ -1338,6 +1341,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-17 | S15P21C206-140 5.2·5.3절 구현 반영. 쿼리 표(필수·`removed` 쉼표/반복·선택 계산 버전)와 검사 순서(형식 400 → 판 변경 409 → 제거 조합 400)를 명시하고, 원본의 `residual` 고정값, 202 본문이 같은 모양에 배열만 null임, 주기도 최상위 `bundleId`·`baselineHalfDays = baseDays / 2`, `BUNDLE_CHANGED` 본문의 `currentBundleId`, `X-Current-Bundle` 적용 범위를 적었다. 사용자 결정으로 `binningRevision`을 문자열(`"10m-v1"`)로 통일하고 5.1절 `observationBounds` 끝을 마지막 bin의 끝으로 정했다. 5.1절 분석 진입은 운영 규칙 읽기(`S15P21C206-151`) 뒤 구현한다 |
 | 2026-09-17 | S15P21C206-149 구현 반영. 9.3절 완료 판정에 활성 후보 수를 추가해 무신호 별과 모든 후보를 찾은 별을 구분하고, `current` 판이 없으면 완료하지 않으며 판 전환 뒤에도 회원의 누적 후보 매칭을 인정한다. 재완료 시 최초 `completed_at`을 보존하며 완료 판정 함수 자체는 성과·별 열림을 만들지 않고 `no_candidate` 제출에서는 호출하지 않는다. |
 | 2026-09-17 | S15P21C206-151 구현 반영. 5.1절 `selectionRules.version`을 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열로 통일하고(별도 `sel-N` 없음, S15P21C206-128 합의) 각 값의 출처(규칙 버전·별 케이던스·판 manifest)를 명시. 12.2 미결 4·5의 값 저장 형식을 운영 규칙 형식 1로 고정하고 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)을 연결. 값 자체는 미결 유지 |
+| 2026-09-17 | S15P21C206-140 5.1절 구현 반영. `star`·`progress`·`bundle.curveStepRule`의 출처, `minWindowDays` 계산(판 세그먼트 bin 크기의 2배), 진입 시 9.3절 완료 판정 (b) 반영, 옛 판 제출의 복귀 문맥은 현재 판 값, `nextCurveContext`가 null이면 `residualForNextStep`도 null, 운영 규칙이 없으면 503을 적었다. 사용자 결정으로 `STEP_NOT_RESTORABLE` 안내를 `currentCurveContext.notice`에 두고, 한 번 완료한 튜토리얼 별은 `skipAvailable=false`로 정했다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
