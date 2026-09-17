@@ -255,7 +255,7 @@ $WrongPeerings = @('peer-node-3', 'peer-node-4')
 
 ## 7. 소프트웨어 설치와 운영
 
-VM 생성은 디스크 마운트와 호스트명 등록까지 수행한다. Hadoop/YARN 및 Docker 설치 후 [분산 시스템 운영 절차](../../distributed-system/README.md)를 따른다. NameNode 초기화·수동 전환 명령은 그 문서에서 관리한다.
+VM 생성은 디스크 마운트와 호스트명 등록까지 수행한다. `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화하고, `S15P21C206-73`에서 YARN과 Spark sample application을 검증한다. Docker 설치와 NameNode 초기화·수동 전환 명령은 [분산 시스템 운영 절차](../../distributed-system/README.md)에서 관리한다.
 
 ## 공식 참고
 

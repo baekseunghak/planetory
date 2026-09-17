@@ -7,6 +7,16 @@
 
 VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. 설계와 남은 검증은 [GCP 인프라 구조](../../docs/architecture/gcp-distributed-infrastructure.md)를 따른다.
 
+## 실행 버전 기준
+
+| 대상 | 기준 | 상태 |
+| --- | --- | --- |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | `S15P21C206-72` 설치 기준 확정, 실제 설치 전 |
+| Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
+| Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
+
+Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
+
 여섯 VM은 하나의 로컬 Docker 네트워크가 아니다. 메시 피어링된 고정 사설 IP와 `master-1`, `worker-2`~`worker-6` 호스트명을 사용한다.
 
 - Hadoop 관리 포트는 외부 IPv4에 공개하지 않는다.
@@ -48,10 +58,18 @@ sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc
 
 다음 서버 초기 설정은 아직 구현하지 않았다.
 
-- Hadoop과 JDK 설치
-- `hdfs`·`yarn` 서비스 계정과 디렉터리 권한
-- systemd 서비스 등록
-- `HADOOP_CONF_DIR=/etc/hadoop` 적용
+`S15P21C206-72` 범위:
+
+- OpenJDK 17과 Hadoop 3.5.0 설치 및 Apache SHA-512 검증
+- `hdfs` 서비스 계정과 HDFS 디렉터리 권한
+- NameNode·JournalNode·DataNode systemd 서비스 등록
+- `JAVA_HOME`과 `HADOOP_CONF_DIR=/etc/hadoop` 적용
+
+`S15P21C206-73` 범위:
+
+- `yarn` 서비스 계정과 YARN 로컬·로그 디렉터리 권한
+- ResourceManager·NodeManager systemd 서비스 등록
+- Worker Python 실행 환경과 Spark sample application 검증
 
 서비스는 실제 디스크 마운트가 성공한 뒤에만 시작해야 한다. `nofail`만으로는 시작 순서를 보장할 수 없으므로 systemd의 `RequiresMountsFor`에 데이터·메타데이터 경로를 지정한다.
 
@@ -87,7 +105,7 @@ ZooKeeper와 ZKFC는 사용하지 않는다. HDFS는 QJM을 사용하되 전환�
 
 ## 최초 HDFS HA 초기화
 
-다음 명령은 **빈 신규 클러스터에서 한 번만**, Hadoop 설치·설정·디스크 권한 준비 후 실행한다. `hdfs` 명령은 hdfs 계정, `yarn` 명령은 yarn 계정에서 실행한다. 기존 NameNode를 다시 포맷하면 HDFS 메타데이터가 사라진다.
+다음 명령은 **빈 신규 클러스터에서 한 번만**, Hadoop 3.5.0·OpenJDK 17 설치, 설정 배치와 디스크 권한 준비 후 `hdfs` 계정으로 실행한다. 설치·설정 자동화에 format을 포함하지 않으며, 기존 NameNode를 다시 포맷하면 HDFS 메타데이터가 사라지므로 실행 직전에 대상과 빈 클러스터 여부를 다시 승인받는다.
 
 1. Node 1~3에서 JournalNode를 시작한다.
 
@@ -109,22 +127,45 @@ hdfs namenode -bootstrapStandby
 hdfs --daemon start namenode
 ```
 
-4. Node 2~6에서 DataNode·NodeManager를 시작한다.
+4. Node 2~6에서 DataNode를 시작한다.
 
 ```bash
 hdfs --daemon start datanode
-yarn --daemon start nodemanager
 ```
 
-5. 두 NameNode가 Standby로 시작하므로 Node 1에서 safemode 해제를 기다린 후 최초 Active를 지정하고 ResourceManager를 시작한다. 기존 데이터가 있는데 safemode가 끝나지 않으면 원인을 확인하며 강제 해제하지 않는다.
+5. 두 NameNode가 Standby로 시작하므로 Node 1에서 safemode 해제를 기다린 후 최초 Active를 지정한다. 기존 데이터가 있는데 safemode가 끝나지 않으면 원인을 확인하며 강제 해제하지 않는다.
 
 ```bash
 hdfs dfsadmin -fs hdfs://master-1:8020 -safemode wait
 hdfs haadmin -transitionToActive nn1
-yarn --daemon start resourcemanager
 hdfs haadmin -getServiceState nn1
 hdfs haadmin -getServiceState nn2
 hdfs dfsadmin -report
+```
+
+## HDFS 완료 검증
+
+`S15P21C206-72`는 다음 결과를 모두 확인해야 완료한다.
+
+- `nn1=active`, `nn2=standby`
+- Node 1~3의 JournalNode 3개 실행
+- Node 2~6의 Live DataNode 5개
+- missing·corrupt block 0
+- 익명 표본 파일의 쓰기·읽기 성공과 복제 계수 2
+- `hdfs fsck <표본 경로> -files -blocks -locations`에서 서로 다른 두 DataNode의 블록 위치 확인
+- 업로드 전과 다운로드 후 SHA-256 일치 및 `hdfs dfs -checksum <표본 경로>` 성공
+
+표본은 `/validation/S15P21C206-72/` 아래에 두고 검증 결과와 함께 제거 여부를 결정한다. 자동 장애 전환, Worker 장애와 수동 NameNode 전환은 이 초기화 완료 조건에 포함하지 않는다.
+
+## YARN 최초 시작 (`S15P21C206-73`)
+
+HDFS 완료 검증 후 별도 작업에서 Node 2~6의 NodeManager와 Node 1의 ResourceManager를 시작한다.
+
+```bash
+# Node 2~6
+yarn --daemon start nodemanager
+# Node 1
+yarn --daemon start resourcemanager
 yarn node -list -all
 ```
 
@@ -202,6 +243,8 @@ Spark는 다음 모드로 제출한다.
 --master yarn --deploy-mode cluster
 ```
 
+현재 기본 이미지 `apache/spark:3.5.5-python3`는 JDK 11.0.26과 `hadoop-client-api/runtime` 3.3.4를 포함한다. Hadoop 3.5.0 단일 HDFS에 대한 Parquet 쓰기·읽기와 checksum은 로컬 일회성 환경에서 통과했지만, 이 결과는 실제 6대 QJM·YARN 실행 증거가 아니다. `S15P21C206-73`에서 같은 이미지로 sample application을 제출해 Application ID, 성공 상태, HDFS 결과와 executor 로그를 확인한다.
+
 Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실행된다. Python 의존성은 다음 중 하나로 준비한다.
 
 - 모든 Worker에 같은 Python 버전과 패키지 설치
@@ -218,4 +261,4 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기, Worker 장애·수동 전환, Spark 제출 및 Gold 공개/롤백은 별도 통합 검증이 필요하다.
+저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`의 런타임 검증이 필요하다. Worker 장애·수동 전환과 Gold 공개·롤백은 각각의 후속 통합 검증으로 남긴다.

@@ -28,7 +28,7 @@ flowchart LR
 
 > 생성 스크립트는 Ubuntu Server 24.04 LTS amd64 VM과 디스크 마운트까지만 준비한다.
 >
-> Hadoop, Spark와 Airflow 설치는 별도 작업이다.
+> `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화하고, `S15P21C206-73`에서 YARN과 Spark 3.5.5 sample application을 검증한다. Spark와 Airflow 컨테이너 설치는 호스트 HDFS 설치와 별도다.
 
 ## 노드와 디스크
 
@@ -215,9 +215,10 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - [ ] 각 계정의 Trial 적용 여부와 실제 할당량을 확인한다.
 - [ ] 프로젝트마다 피어링 5개가 `ACTIVE`인지 확인한다.
 - [ ] VM과 컨테이너에서 YARN이 광고한 FQDN을 해석할 수 있는지 확인한다.
-- [ ] Hadoop·JDK와 `hdfs`·`yarn` 서비스 계정을 준비한다.
-- [ ] 디스크 권한과 systemd 마운트 의존성을 설정한다.
+- [ ] `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17과 `hdfs` 서비스 계정을 준비한다.
+- [ ] HDFS 디스크 권한과 systemd 마운트 의존성을 설정한다.
 - [ ] 신규 HDFS를 한 번만 초기화하고 Standby NameNode를 bootstrap한다.
+- [ ] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
 - [ ] 모든 Worker에 동일한 Python 실행 환경을 준비한다.
 - [ ] Node 2의 Executor 메모리와 overhead가 YARN 16GiB 한도를 넘지 않는지 확인한다.
 - [ ] CI Runner의 SSH 경로와 Prometheus 메트릭 수집 경로를 구성한다.
@@ -227,6 +228,8 @@ Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 �
 CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실제 배포 전에 보완한다.
 
 ### 통합 검증 순서
+
+이 순서는 `S15P21C206-72`의 HDFS RF2 쓰기·읽기·checksum과 `S15P21C206-73`의 YARN·Spark sample application이 통과한 뒤 진행한다.
 
 1. Sector 한 개를 수집한다.
 2. `Raw → Spark on YARN → Silver` 흐름을 실행한다.
@@ -241,8 +244,9 @@ CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실�
 
 ## 참고 자료
 
-- [HDFS HA with QJM](https://hadoop.apache.org/docs/r3.4.1/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)
-- [Spark on YARN](https://spark.apache.org/docs/3.5.8/running-on-yarn.html)
+- [Hadoop 3.5.0과 Java 17](https://hadoop.apache.org/docs/r3.5.0/)
+- [HDFS HA with QJM 3.5.0](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)
+- [Spark 3.5.5 on YARN](https://archive.apache.org/dist/spark/docs/3.5.5/running-on-yarn.html)
 - [VM 생성 옵션](https://docs.cloud.google.com/sdk/gcloud/reference/compute/instances/create)
 - [VPC Peering과 DNS 제한](https://docs.cloud.google.com/vpc/docs/vpc-peering#dns_support)
 - [Compute Engine 내부 DNS 형식](https://docs.cloud.google.com/compute/docs/internal-dns)
@@ -250,4 +254,4 @@ CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실�
 - [디스크 가격](https://cloud.google.com/compute/disks-image-pricing)
 - [네트워크 가격](https://cloud.google.com/vpc/network-pricing)
 
-실제 설치 버전과 비용은 구축 직전에 다시 확인한다.
+Hadoop 3.5.0과 OpenJDK 17은 설치 기준으로 고정한다. Apache 배포 파일의 SHA-512, OS 패키지 제공 상태와 비용은 구축 직전에 다시 확인한다.
