@@ -91,9 +91,12 @@ test("canvas planet hit matches candidate; empty sky deselects and restores, key
   await expect(panel(page)).toHaveCount(0);
   expect(await camera(page)).toEqual(before);
   await page.getByText("별 목록으로 선택하기", { exact: true }).click();
-  await page.getByLabel("적재된 별의 TIC 검색").pressSequentially("900000002");
-  await expect(page.locator(".accessible-stars li button")).toHaveCount(1);
-  const choice = page.locator(".accessible-stars li button");
+  await expect(
+    page.locator('.discovered-rows button[data-tic-id="900000002"]'),
+  ).toHaveCount(1);
+  const choice = page.locator(
+    '.discovered-rows button[data-tic-id="900000002"]',
+  );
   await choice.focus();
   await choice.press("Enter");
   await expect(panel(page)).toContainText("아직 표시할 내 행성이 없어요");
@@ -163,9 +166,12 @@ test("locked, delayed, stale A and failed responses never masquerade as an empty
   await expect(panel(page)).toContainText("불러오고 있습니다");
   await expect(panel(page)).not.toContainText("아직 표시할 내 행성");
   await page.getByText("별 목록으로 선택하기", { exact: true }).click();
-  await page.getByLabel("적재된 별의 TIC 검색").pressSequentially("900000002");
-  await expect(page.locator(".accessible-stars li button")).toHaveCount(1);
-  await page.locator(".accessible-stars li button").click();
+  await expect(
+    page.locator('.discovered-rows button[data-tic-id="900000002"]'),
+  ).toHaveCount(1);
+  await page
+    .locator('.discovered-rows button[data-tic-id="900000002"]')
+    .click();
   await expect(panel(page)).toContainText("아직 표시할 내 행성이 없어요");
   finishA?.();
   await expect(panel(page).getByRole("heading", { level: 2 })).toHaveText(
@@ -243,8 +249,10 @@ test("1024px docking never overlaps canvas and WebGL failure keeps detail, plane
   });
   await page.goto("/sky?star=900000001");
   await expect(panel(page)).toContainText("내 행성 5개");
-  await expect(page.locator(".galaxy-error")).toBeVisible();
-  const c = (await canvas(page).boundingBox())!,
+  await expect(
+    page.getByRole("heading", { name: "발견한 별 목록" }),
+  ).toBeVisible();
+  const c = (await page.locator(".discovered-stars").boundingBox())!,
     p = (await panel(page).boundingBox())!;
   expect(p.x + p.width).toBeLessThanOrEqual(c.x + 1);
   await panel(page)
@@ -280,9 +288,12 @@ test("session expiration removes an in-flight private detail and late data canno
   await page.locator('.galaxy-marker[data-marker="1"]').click();
   await expect(panel(page)).toContainText("불러오고 있습니다");
   await page.getByText("별 목록으로 선택하기", { exact: true }).click();
-  await page.getByLabel("적재된 별의 TIC 검색").pressSequentially("900000002");
-  await expect(page.locator(".accessible-stars li button")).toHaveCount(1);
-  await page.locator(".accessible-stars li button").click();
+  await expect(
+    page.locator('.discovered-rows button[data-tic-id="900000002"]'),
+  ).toHaveCount(1);
+  await page
+    .locator('.discovered-rows button[data-tic-id="900000002"]')
+    .click();
   await expect(
     page.getByRole("heading", { name: "로그인이 필요합니다", exact: true }),
   ).toBeVisible();

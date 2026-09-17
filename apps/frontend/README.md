@@ -1,5 +1,7 @@
 # Planetory 공용 프론트
 
+2026-09-17: 207 WebGL 대체 발견 목록·키보드 전환을 연결했다. `npm run dev:fallback`으로 58338에서 확인한다. [207 구현·검증과 실제 인수 대기](docs/ticket-207-readiness.md)를 따른다.
+
 2026-09-17: 206 별 상세·내 행성 확대·복귀·공통 경로 이동을 연결했다. `npm run dev:detail`로 확인하며 [206 항목별 인수와 남은 실제 연동](docs/ticket-206-readiness.md)을 따른다.
 
 2026-09-17 통합 갱신: 최신 develop 충돌 정리와 재검증은 [202 MR 통합 기록](docs/merge-readiness-202.md)을 기준으로 합니다. 아래 이전 실행 기록의 미업로드·미통합 표기는 당시 상태입니다.

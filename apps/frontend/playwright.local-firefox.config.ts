@@ -5,10 +5,19 @@ import data from "./playwright.sky-data.config";
 import galaxy from "./playwright.galaxy.config";
 import interaction from "./playwright.interaction.config";
 import detail from "./playwright.detail.config";
+import fallback from "./playwright.fallback.config";
 
 // Optional stock Firefox BiDi route for Windows installations where the bundled
 // patched Firefox cannot launch. Reuses the existing feature tests unchanged.
-const suites = { foundation, auth, data, galaxy, interaction, detail };
+const suites = {
+  foundation,
+  auth,
+  data,
+  galaxy,
+  interaction,
+  detail,
+  fallback,
+};
 const suite = process.env.FRONTEND_SUITE ?? "foundation";
 if (!(suite in suites)) throw new Error("Unknown FRONTEND_SUITE: " + suite);
 const base = suites[suite as keyof typeof suites];

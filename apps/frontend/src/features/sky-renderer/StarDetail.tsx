@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { pagePath } from "../../app/paths";
 import type { SkySceneProps } from "../sky-data/SkyDataPage";
@@ -11,7 +11,7 @@ import {
   detailStar,
   type StarDetail,
 } from "./detail";
-import { starLabel } from "./interaction";
+import { DiscoveredStars } from "./DiscoveredStars";
 
 const progressLabel = {
   unexplored: "미탐사",
@@ -37,6 +37,7 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     ticId = data.selectedTicId,
     meta = data.meta!;
   const navigate = useNavigate();
+  const location = useLocation();
   const [result, setResult] = useState<{
     ticId: string;
     version: string;
@@ -45,10 +46,43 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
   } | null>(null);
   const [retry, setRetry] = useState(0),
     [planet, setPlanet] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
-  const [listOpen, setListOpen] = useState(false),
-    [page, setPage] = useState(0),
+  const [listOpen, setListOpen] = useState(
+      () => new URLSearchParams(location.search).get("view") === "list",
+    ),
     [sceneReady, setSceneReady] = useState(false);
+  const [graphics, setGraphics] = useState<{
+    available: boolean;
+    message: string | null;
+  }>({ available: false, message: null });
+  const [announcement, setAnnouncement] = useState("");
+  const listMode = useRef(false);
+  listMode.current = listOpen;
+  const onGraphics = useCallback(
+    (available: boolean, message: string | null) => {
+      setGraphics({ available, message });
+      if (!available && message) {
+        setListOpen(true);
+        setAnnouncement(
+          "3D 지도를 표시할 수 없어 발견한 별 목록으로 전환했습니다. 별 상세와 분석은 계속 이용할 수 있습니다.",
+        );
+        requestAnimationFrame(() => {
+          if (
+            !document
+              .querySelector(".star-detail")
+              ?.contains(document.activeElement)
+          )
+            document
+              .getElementById("discovered-title")
+              ?.focus({ preventScroll: true });
+        });
+      } else if (available && listMode.current) {
+        setAnnouncement(
+          "3D 지도를 다시 사용할 수 있습니다. 원할 때 지도 보기로 돌아갈 수 있습니다.",
+        );
+      }
+    },
+    [],
+  );
   const control = useRef<SceneControl | null>(null),
     savedCamera = useRef<GalaxyCamera | null>(null);
   const previousSelection = useRef<string | null>(null),
@@ -57,7 +91,6 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     launcher = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLElement>(null),
     planetInfoRef = useRef<HTMLDivElement>(null);
-  const listLauncher = useRef<string | null>(null);
   const refreshedVersions = useRef(new Set<string>());
   const current = useRef(data);
   current.current = data;
@@ -135,9 +168,13 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     if (!ticId && previousSelection.current) {
       if (savedCamera.current) control.current?.setCamera(savedCamera.current);
       savedCamera.current = null;
-      const target = launcher.current?.isConnected
-        ? launcher.current
-        : document.querySelector<HTMLCanvasElement>(".galaxy-scene canvas");
+      const target =
+        launcher.current?.isConnected &&
+        !launcher.current.closest("[inert], [hidden]")
+          ? launcher.current
+          : listMode.current
+            ? document.getElementById("discovered-title")
+            : document.querySelector<HTMLCanvasElement>(".galaxy-scene canvas");
       target?.focus({ preventScroll: true });
     }
     if (previousSelection.current !== ticId) {
@@ -147,17 +184,7 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     previousSelection.current = ticId;
   }, [ticId]);
   useEffect(() => {
-    if (ticId || !listLauncher.current) return;
-    const target = document.querySelector<HTMLButtonElement>(
-      `.accessible-stars button[data-tic-id="${CSS.escape(listLauncher.current)}"]`,
-    );
-    if (target) {
-      target.focus({ preventScroll: true });
-      listLauncher.current = null;
-    }
-  }, [ticId, data.stars]);
-  useEffect(() => {
-    if (!detail || !sceneReady) return;
+    if (!detail || (!sceneReady && !listOpen)) return;
     const key = detail.system.ticId;
     if (focused.current !== key) {
       if (!savedCamera.current)
@@ -167,29 +194,67 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
       if (panelRef.current) panelRef.current.scrollTop = 0;
       heading.current?.focus({ preventScroll: true });
     }
-  }, [detail, sceneReady]);
+  }, [detail, sceneReady, listOpen]);
   const close = () => {
     store.select(null);
     // Also retire a deep-link selection so later search changes cannot resurrect it.
-    navigate("/sky", { replace: true });
+    navigate(listOpen ? "/sky?view=list" : "/sky", { replace: true });
   };
   const selectPlanet = useCallback((id: string | null) => setPlanet(id), []);
   const retryDetail = () => {
     refreshedVersions.current.delete(meta.version);
     setRetry((n) => n + 1);
   };
-  const returnTo = `/sky?${new URLSearchParams({ star: ticId ?? "" })}`;
-  const listed = listOpen
-    ? data.stars.filter((s) => s.ticId.includes(filter.trim()))
-    : [];
-  const lastPage = Math.max(0, Math.ceil(listed.length / 50) - 1),
-    activePage = Math.min(page, lastPage);
+  const returnTo = `/sky?${new URLSearchParams({ star: ticId ?? "", ...(listOpen ? { view: "list" } : {}) })}`;
+  const selectFromList = (id: string) => {
+    launcher.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    store.select(id);
+  };
+  const switchView = () => {
+    const next = !listOpen;
+    setListOpen(next);
+    setAnnouncement(
+      next
+        ? "발견한 별 목록으로 전환했습니다."
+        : "3D 지도로 돌아왔습니다. 선택한 별과 지도 위치를 유지합니다.",
+    );
+    requestAnimationFrame(() => {
+      const target = next
+        ? document.getElementById("discovered-title")
+        : document.querySelector<HTMLCanvasElement>(".galaxy-scene canvas");
+      target?.focus({ preventScroll: true });
+    });
+  };
   return (
     <>
-      <div className={`personal-galaxy${ticId ? " has-detail" : ""}`}>
+      <div className="sky-view-switch">
+        <button onClick={switchView} disabled={listOpen && !graphics.available}>
+          {listOpen ? "3D 지도 보기" : "별 목록으로 선택하기"}
+        </button>
+        {graphics.message && (
+          <>
+            <span>그래픽을 사용할 수 없어 목록으로 보여드리고 있어요.</span>
+            <button onClick={() => control.current?.restartGraphics()}>
+              그래픽 다시 시작
+            </button>
+          </>
+        )}
+      </div>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+      <div
+        className={`personal-galaxy${ticId ? " has-detail" : ""}${listOpen ? " shows-list" : ""}`}
+      >
+        <DiscoveredStars {...props} active={listOpen} select={selectFromList} />
         <GalaxyScene
           {...props}
           onReady={onReady}
+          suspended={listOpen}
+          onGraphics={onGraphics}
           personalSystem={detail?.system ?? null}
           selectedStar={detail ? detailStar(detail) : null}
           focusedPlanet={selectedPlanet?.candidateId ?? null}
@@ -209,7 +274,7 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
             }}
           >
             <button className="detail-return" onClick={close}>
-              ← 은하로 돌아가기
+              ← {listOpen ? "별 목록으로 돌아가기" : "은하로 돌아가기"}
             </button>
             <p className="eyebrow">YOUR DISCOVERY</p>
             <h2 ref={heading} tabIndex={-1}>
@@ -376,57 +441,6 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
           </aside>
         )}
       </div>
-      <details
-        className="accessible-stars"
-        onToggle={(e) => setListOpen(e.currentTarget.open)}
-      >
-        <summary>별 목록으로 선택하기</summary>
-        <label>
-          적재된 별의 TIC 검색{" "}
-          <input
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-              setPage(0);
-            }}
-          />
-        </label>
-        <p>
-          현재 적재된 {data.loadedCount}개 별입니다. 지도 표시가 어려워도
-          목록으로 선택할 수 있어요.
-        </p>
-        <ul>
-          {listed.slice(activePage * 50, (activePage + 1) * 50).map((s) => (
-            <li key={s.ticId}>
-              <button
-                data-tic-id={s.ticId}
-                disabled={data.needsRefresh}
-                onClick={() => {
-                  listLauncher.current = s.ticId;
-                  store.select(s.ticId);
-                }}
-              >
-                {starLabel(s)}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <p>
-          {listed.length}개 중 {activePage + 1} / {lastPage + 1}페이지
-        </p>
-        <button
-          disabled={activePage === 0}
-          onClick={() => setPage(activePage - 1)}
-        >
-          이전 별 목록
-        </button>
-        <button
-          disabled={activePage === lastPage}
-          onClick={() => setPage(activePage + 1)}
-        >
-          다음 별 목록
-        </button>
-      </details>
     </>
   );
 }
