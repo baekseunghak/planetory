@@ -22,6 +22,16 @@
 
 기존 `residual_after_candidates`, `bls_periodogram`을 후보로 사용하되, `joint_refit`가 후보 모델을 다시 맞추는 현재 동작은 “Gold의 고정 모델을 제거한다”는 계약과 다를 수 있다. 담당자 합의 전에는 그대로 운영 계약으로 채택하지 않는다.
 
+## 내부 호출 프로토콜
+
+Backend와 Worker는 내부 동기 HTTP/JSON `POST /internal/v1/derived-compute` 하나를 사용한다. `operation=residual|periodogram`으로 단계를 구분하고 Backend가 잔차 성공 뒤에만 주기도를 요청한다. 사용자 요청은 기존 비동기 Job API로 처리하므로 내부 HTTP 연결을 사용자 요청과 직접 묶지 않는다.
+
+- Backend: current Gold 조회, 요청 조립, Redis 상태·결과·잠금, 중복·timeout·재시도 판단, 응답의 Bundle·attempt 재검증
+- Worker: 전달된 배열·고정 모델·버전의 순수 계산, 성공 전체 또는 오류 전체 반환
+- 금지: Worker의 PostgreSQL·Redis 접근, 사용자 인증·캐시 키 판단, Backend callback
+
+필드·단위·식별자·오류와 합성 fixture는 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)이 정본이다. 실제 Worker HTTP 어댑터는 `S15P21C206-88`, Redis 실행 제어는 89, lease·fencing·복구는 90에서 구현한다.
+
 ## 요청과 중복 방지
 
 ```text
@@ -42,6 +52,7 @@ status = QUEUED
 ```
 
 - 같은 키의 실행은 하나만 허용하고 나머지 요청은 같은 작업 상태를 본다.
+- Backend는 같은 `job_id`·`attempt`로 잔차와 주기도를 순서대로 호출한다. 응답 상관 필드가 요청과 다르면 결과를 채택하지 않는다.
 - 작업을 가져간 Worker에는 만료 시간을 둔다. Worker가 죽으면 만료 후 다른 Worker가 다시 계산한다.
 - 재시도 번호가 오래된 Worker의 늦은 결과가 최신 결과를 덮어쓰지 못하게 한다.
 - Worker 응답을 저장하기 전에 Backend가 요청의 `publication_bundle_id`가 아직 `current`인지 다시 확인한다. 판이 바뀌었으면 결과를 버리고 최신 판 재로드를 요구한다.
@@ -57,9 +68,21 @@ status = QUEUED
 
 ## 초기 자원 제한
 
-서비스 전체에서 동시 계산 2개, EC2 한 대당 1개, 작업당 CPU 1개와 메모리 2GiB, 대기 20개로 시작한다. 이는 확정 용량이 아니라 부하 시험 시작값이다. 초과 요청은 재시도 가능 시간을 응답한다.
+| 설정 키 | 실측 전 시작값 | 적용 위치 |
+| --- | --- | --- |
+| `derived_compute.service_concurrency` | 2 | Backend·Redis 전역 실행 |
+| `derived_compute.instance_concurrency` | 1 | Worker 인스턴스 |
+| `derived_compute.cpu_per_job` | 1 | Worker 컨테이너 |
+| `derived_compute.memory_mib_per_job` | 2048 | Worker 컨테이너 |
+| `derived_compute.queue_capacity` | 20 | Backend·Redis 큐 |
+| `derived_compute.member_active_jobs` | 1 | Backend 사용자 제한 |
+| `derived_compute.operation_timeout_seconds` | 120 | residual 또는 periodogram 한 번의 내부 호출 |
+
+이는 확정 용량이나 SLA가 아니라 부하 시험 시작값이다. 구현 티켓은 값을 코드에 고정하지 않고 설정으로 노출한다. 초과 요청은 재시도 가능 시간을 응답하고, timeout은 부분 결과를 채택하지 않은 채 재시도 가능한 실패로 기록한다.
 
 가입자 1,000명은 동시 계산 1,000개를 뜻하지 않는다. 실제 요청률, 캐시 적중 여부, 점 개수와 주기 탐색 범위별로 측정해 제한을 조정한다.
+
+`S15P21C206-104`에서 대표 workload의 대기 시간, 단계별 계산 시간 p95, 실패율, Worker 메모리 최고값과 큐 포화를 측정한다. 측정 결과로 위 시작값과 성능 목표를 재승인하며 Redis TTL·lease·재시도 횟수는 각각 89·90의 책임으로 남긴다.
 
 ## 캐시 위치
 
@@ -96,6 +119,8 @@ residual_model_version, periodogram_config_version, period_grid
 ```
 
 Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
+
+위 목록은 책임 경계 요약이다. wire 형식은 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)의 `schema_version=1.0`, 접두 문자열 식별자, JSON `null`, 정렬 규칙과 두 단계 fixture를 따른다. fixture의 수치는 직렬화 예제이며 `S15P21C206-113`·120의 과학 규칙이나 131의 수치 기준을 대신하지 않는다.
 
 이전 Gold 20~25GiB 추정은 축약 데이터 기준이므로 사용하지 않는다. 실제 형식과 압축으로 표본을 저장한 뒤 다음 방식으로 계산한다.
 

@@ -1,0 +1,147 @@
+{
+  "contract_version": "1.0",
+  "fixture_kind": "synthetic-contract-only",
+  "jira": "S15P21C206-70",
+  "endpoint": "POST /internal/v1/derived-compute",
+  "initial_limits": {
+    "status": "pre-measurement-assumption",
+    "service_concurrency": 2,
+    "instance_concurrency": 1,
+    "cpu_per_job": 1,
+    "memory_mib_per_job": 2048,
+    "queue_capacity": 20,
+    "member_active_jobs": 1,
+    "operation_timeout_seconds": 120,
+    "recalibration_ticket": "S15P21C206-104"
+  },
+  "calls": [
+    {
+      "id": "residual-success",
+      "request": {
+        "schema_version": "1.0",
+        "operation": "residual",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "fold_reference_time_btjd": 1683.4231,
+        "residual_model_version": "box-divide-v0",
+        "periodogram_config_version": "bls-log-v1",
+        "curve_segments": [
+          {
+            "segment_id": "seg-1001",
+            "sector": 14,
+            "binning_revision": "10m-v1",
+            "start_btjd": 1683.35,
+            "bin_minutes": 10,
+            "n_points": 6,
+            "flux": [1.0001, 0.9998, null, 0.9989, 1.0002, 1.0003]
+          }
+        ],
+        "removed_candidates": [
+          {
+            "candidate_id": "c-401",
+            "transit_model": {
+              "candidate_id": "c-401",
+              "shape": "box",
+              "parameters": {
+                "period_days": 2.0,
+                "epoch_btjd": 1683.35,
+                "duration_hours": 2.0,
+                "depth_ppm": 500.0
+              },
+              "baseline": {"kind": "unity"},
+              "residual_model_version": "box-divide-v0"
+            }
+          },
+          {
+            "candidate_id": "c-402",
+            "transit_model": {
+              "candidate_id": "c-402",
+              "shape": "box",
+              "parameters": {
+                "period_days": 3.0,
+                "epoch_btjd": 1683.37,
+                "duration_hours": 1.0,
+                "depth_ppm": 300.0
+              },
+              "baseline": {"kind": "unity"},
+              "residual_model_version": "box-divide-v0"
+            }
+          }
+        ]
+      },
+      "response": {
+        "schema_version": "1.0",
+        "operation": "residual",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "removed_candidate_ids": ["c-401", "c-402"],
+        "ok": true,
+        "result": {
+          "residual_model_version": "box-divide-v0",
+          "residual_segments": [
+            {
+              "segment_id": "seg-1001",
+              "n_points": 6,
+              "flux": [1.0009005703211713, 1.0006003301740898, null, 0.9996996097328448, 1.0010006503701985, 1.0011007304192256]
+            }
+          ],
+          "n_input_points": 6,
+          "n_valid_input": 5,
+          "n_finite_residual": 5
+        }
+      }
+    },
+    {
+      "id": "periodogram-success",
+      "request": {
+        "schema_version": "1.0",
+        "operation": "periodogram",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "fold_reference_time_btjd": 1683.4231,
+        "residual_model_version": "box-divide-v0",
+        "periodogram_config_version": "bls-log-v1",
+        "removed_candidate_ids": ["c-401", "c-402"],
+        "residual_segments": [
+          {
+            "segment_id": "seg-1001",
+            "sector": 14,
+            "binning_revision": "10m-v1",
+            "start_btjd": 1683.35,
+            "bin_minutes": 10,
+            "n_points": 6,
+            "flux": [1.0009005703211713, 1.0006003301740898, null, 0.9996996097328448, 1.0010006503701985, 1.0011007304192256]
+          }
+        ],
+        "period_grid": {
+          "min_days": 0.5,
+          "max_days": 40.0,
+          "count": 3,
+          "spacing": "log"
+        }
+      },
+      "response": {
+        "schema_version": "1.0",
+        "operation": "periodogram",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "removed_candidate_ids": ["c-401", "c-402"],
+        "ok": true,
+        "result": {
+          "periodogram_config_version": "bls-log-v1",
+          "n_periods": 3,
+          "period_days": [0.5, 4.47213595499958, 40.0],
+          "power": [0.12, 0.83, 0.21]
+        }
+      }
+    }
+  ]
+}
