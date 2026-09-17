@@ -31,6 +31,7 @@
 
 | 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
 | 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | transit_model 계약 1.0 확정(Schema·예제 정본화, bin 중심 평가 호출자 이동)과 기준 시각·제공 격자 대조 | S15P21C206-113, 121 | transit_model, transit-model.schema.json, D06, box-divide-v0, bin 중심, fold_reference_time_btjd, periodogram_config_version, astro-kernel, Gold fixture | 확정 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-16 | `stars` 표시 열 확정 | S15P21C206-138 | stars 표시 열, tmag, teffK, radiusRsun, 미결 10, ERD 미결 9, D-18, 공개 별 요약, null 결측 | 결정 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 상세·공개 요약·별 목록 조회 구현 | S15P21C206-138 | 별 상세, planets.items, LIKELY_PLANET, FP 제외, STAR_LOCKED, STAR_NOT_PUBLISHED, STAR_LIST_PRIVATE, lastActivityAt, 커서 경계, unpublishedSignalCount | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |

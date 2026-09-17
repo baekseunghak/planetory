@@ -149,7 +149,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 | 원천 행 대응·Sector별 trend·정규화 통계·품질 마스크·제외 상세 | O | X | 전처리 진단과 재현용. 품질 플래그는 배치에서만 소비하고 화면에 전달하지 않음(POL-13) |
 | 2분 원본 정제곡선(전 관측점) | O | X | 탐색 BLS·AI 입력·discoverable 재계산의 Silver 입력. Gold에는 비닝본만 |
 | 별·섹터 세그먼트로 10분 비닝한 곡선(`flux real[]`, NaN 빈 bin, `gaps`, `flux_scatter` 스칼라, `binning_revision`) | O | O | 화면 접기와 EC2 잔차 계산의 canonical 입력(EXP-01). 판에 묶이지 않고 manifest가 세그먼트 id 집합을 참조. 별도 200-bin 배열을 분석 원본으로 사용하지 않음 |
-| `fold_reference_time_btjd` | O | O | 브라우저·서버·잔차 공통 기준 시각. 위치(판 vs 세그먼트)는 확인 필요 |
+| `fold_reference_time_btjd` | O | O | 브라우저·서버·잔차 공통 기준 시각. 판 공통값으로 확정([README](README.md) 5.1절) |
 | 원본 정제곡선의 BLS periodogram(판 단위, `n_periods` 5,000·`power real[]`) | O | O | 최초 사용자 탐색 제공. 주기 격자 배열은 저장하지 않고 manifest 규칙으로 계산 |
 | 배치 단계별 잔차곡선·잔차 periodogram 배열 | 실행 중 O, 지속 저장 X | X | DAT-05~07 후보 탐색·제거 QA용 내부 계산. 단계별 배열은 저장하지 않고 Gold에도 넣지 않음 |
 | raw peak·품질 실패 후보·반복 종료 진단 | O | X | 임계값 검증과 운영 진단용 |
@@ -176,7 +176,7 @@ Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 �
 | `candidate_aliases` | `multiplier`, `alias_period_days` | 추가 고조파(DEC-05) |
 | `external_signal_references`, `candidate_dispositions`, `candidate_status_history` | [5.8절](external-sources-and-ai.md)의 원천·외부값·disposition·조회일, DAT-09 통합 규칙·`rule_version`, 변경 이력 | DEC-20 대표값 정렬 |
 | `ai_executions`, `ai_evaluations` | [5.9절](external-sources-and-ai.md)의 `model_version`·`checkpoint`·`status`, 후보별 `score`·`verdict`(rejected/hold/approved)·`threshold_version`. 실패는 score null + 상태 | 모델·임계값(DEC-02·04) |
-| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각 위치(판 vs 세그먼트)와 산정 입력. Publisher가 직접 적재하고 같은 트랜잭션에서 current 전환 |
+| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각은 판 공통·원본 관측 시각 중앙값으로 확정(113). Publisher가 직접 적재하고 같은 트랜잭션에서 current 전환 |
 
 nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions.status`로 미평가·입력 부족·실패를 구분하고, 세그먼트의 NaN은 빈 bin이며 `gaps`가 그 위치를 설명한다. 단위는 ERD 열 이름에 고정되어 있으므로 period/day와 duration/hour를 수식에서 암묵적으로 섞지 않는다.
 
@@ -250,7 +250,7 @@ flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문�
 | DEC-35 온라인 계산 | Python Worker·Redis·Publisher 직접 적재는 종결. 남은 것은 동시 상한·시간 목표·용량·허용 오차. `joint_refit`이 아닌 `libs/astro-kernel`의 고정 모델 제거 규약 사용 | 김동혁·윤성용·강재민 / 후속 실측 Task에서 기한 확정 |
 | 비닝 간격·discoverable 해상도 | 대상 별의 가장 짧은 통과 지속시간 실측, 10분 bin에서 위상 구간 선택·근거 체크·봉우리 판정 가능성(ERD 미결 10, DAT-07) | 윤성용, 화면은 백지웅 / DEC-01 데이터 범위 결정과 같은 Task |
 | 무신호 별 비율 | 자체 BLS 채택 신호 0개 별의 비율 실측, DEC-16 시나리오 충족 여부, 높으면 DEC-03 임계값 조정(10.1 안건 12) | 윤성용·김동혁 / DEC-01 작업에 포함 |
-| `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`, 판별 주기도 격자(로그 등간격·5,000점)·`periodogram_config_version`, 미세 조정 허용 폭 산출식 | 윤성용·강재민 / Gold 적재 계약 MR 전 |
+| `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`은 [계약 1.0](../../../contracts/gold/transit-model.schema.json)으로 확정(113). 판별 주기도 격자는 ERD·API와 일치 확인, `periodogram_config_version` 형식 제안 `pg-log5000-v1`. 미세 조정 허용 폭 수치는 111 실측 뒤 | 윤성용 / 완료(수치는 111·128) |
 | 후보 동일성 | 새 판 적재 시 기존 `candidates.id`를 유지할 주기·중심 시각 허용 오차(ERD 미결 2) | 윤성용·강재민 / 후보 병합 벤치마크와 함께 |
 | 스키마·갱신 | [5절](README.md)·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록, fold 기준 시각 위치(판 vs 세그먼트) | 윤성용·강재민, 이벤트 소비자 / 인터페이스 Task 등록 때 기한 확정 |
 | 그래프 단위 | 시간계·day/hour·ppt/ppm·비닝 세그먼트와 NaN·`gaps`·화면 축약 | 윤성용·강재민·백지웅 / 첫 샘플 전달 전, 날짜 팀 확인 필요 |

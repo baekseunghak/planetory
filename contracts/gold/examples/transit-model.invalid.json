@@ -1,0 +1,234 @@
+[
+  {
+    "case": "unsupported_shape",
+    "expected_code": "unsupported_shape",
+    "schema_rejects": true,
+    "model": {
+      "shape": "trapezoid",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "missing_parameter",
+    "expected_code": "missing_parameter",
+    "schema_rejects": true,
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06
+      }
+    }
+  },
+  {
+    "case": "unknown_parameter",
+    "expected_code": "unknown_parameter",
+    "schema_rejects": true,
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0,
+        "snr": 12.0
+      }
+    }
+  },
+  {
+    "case": "nonnumeric_period",
+    "expected_code": "invalid_parameter",
+    "schema_rejects": true,
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": "3.36",
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "duration_not_shorter_than_period",
+    "expected_code": "invalid_parameter",
+    "schema_rejects": false,
+    "note": "필드 사이 규칙(duration_hours/24 < period_days)은 JSON Schema 로 표현하지 않는다. astro-kernel 만 거절한다.",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 0.05,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "depth_makes_model_nonpositive",
+    "expected_code": "invalid_parameter",
+    "schema_rejects": true,
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1000000.0
+      }
+    }
+  },
+  {
+    "case": "zero_depth",
+    "expected_code": "invalid_parameter",
+    "schema_rejects": true,
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 0.0
+      }
+    }
+  },
+  {
+    "case": "baseline_not_unity",
+    "expected_code": "unsupported_baseline",
+    "schema_rejects": true,
+    "model": {
+      "candidate_id": "example-b",
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "baseline": {
+        "kind": "joint_refit"
+      },
+      "residual_model_version": "box-divide-v0"
+    }
+  },
+  {
+    "case": "unknown_version",
+    "expected_code": "unsupported_version",
+    "schema_rejects": true,
+    "model": {
+      "candidate_id": "example-b",
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "baseline": {
+        "kind": "unity"
+      },
+      "residual_model_version": "box-divide-v9"
+    }
+  },
+  {
+    "case": "candidate_id_not_string",
+    "expected_code": "invalid_type",
+    "schema_rejects": true,
+    "model": {
+      "candidate_id": 401,
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      }
+    }
+  },
+  {
+    "case": "legacy_flat_shape",
+    "expected_code": "unsupported_shape",
+    "schema_rejects": true,
+    "note": "68 Gold fixture 초안이 쓰던 평면 형식(type·model_version·최상위 파라미터). 계약 1.0 형식이 아니다.",
+    "model": {
+      "type": "box",
+      "model_version": "box-v1",
+      "period_days": 11.802,
+      "epoch_btjd": 1683.91,
+      "duration_hours": 2.4,
+      "depth_ppm": 380
+    }
+  },
+  {
+    "case": "top_level_extra_field",
+    "expected_code": "unknown_parameter",
+    "schema_rejects": true,
+    "note": "최상위 계약 밖 키. Schema additionalProperties=false 와 같은 범위로 파서도 거절한다(리뷰 반영).",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "snr": 12.0
+    }
+  },
+  {
+    "case": "baseline_extra_field",
+    "expected_code": "unknown_parameter",
+    "schema_rejects": true,
+    "note": "baseline 안의 계약 밖 키.",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "baseline": {
+        "kind": "unity",
+        "offset": 0.0
+      }
+    }
+  },
+  {
+    "case": "empty_candidate_id",
+    "expected_code": "invalid_type",
+    "schema_rejects": true,
+    "note": "Schema minLength 1. 빈 문자열은 식별자가 아니다.",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "candidate_id": ""
+    }
+  },
+  {
+    "case": "null_candidate_id",
+    "expected_code": "invalid_type",
+    "schema_rejects": true,
+    "note": "키를 생략하는 것은 허용, 키가 있으면 null 은 거절(Schema type string).",
+    "model": {
+      "shape": "box",
+      "parameters": {
+        "period_days": 3.36,
+        "epoch_btjd": 1387.06,
+        "duration_hours": 1.6,
+        "depth_ppm": 1450.0
+      },
+      "candidate_id": null
+    }
+  }
+]
