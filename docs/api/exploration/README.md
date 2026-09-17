@@ -9,3 +9,21 @@
 저장소 루트에서 `node docs/api/exploration/validate.cjs`로 검사한다. JSON 파싱, UUID/오류/상태, 원본 요청·응답 일치, duration·위상 환산, 배열 길이, 은퇴 대체 배열, 추천 밖의 격자 포함 여부, 중첩 상한의 차이, 공개 조회의 작업 생성 금지, 참여자 중복 제거를 검사한다. 실제 서버 호출·후보 매칭·DB 동시성·브라우저 계산은 실행하지 않는다.
 
 C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·재도전은 최신 현재 진행, History CURRENT는 원본으로 고정했다. C02-R2 기준 시각은 같은 날 Bundle 공통값으로 결정했으며 모든 유효 원본 관측 시각의 중앙값을 한 번 저장한다. C02-R3은 사용자가 고른 봉우리의 grid index를 제출하고 그 봉우리의 추천 duration 3배를 선택 폭 상한으로 적용한다. 직접 주기 선택은 Bundle 공통 위상 상한만 쓴다. 세 결정은 정본·API·JSON에 같은 버전으로 반영했으며 MR !32에서는 반영 누락과 문서 충돌을 검토한다. 예제의 합성 수치를 운영 설정에 복사하지 않는다.
+
+## 제출 매칭 수치 규칙 v0 (`rule-0`, Jira S15P21C206-128)
+
+사용자 제출(주기·위상 구간)을 배치 BLS 후보와 대조하는 수치 규칙의 **개발용 v0**다. SRS 5.1 초기값과 탐사 API 예시값에 출처를 붙인 것이며 운영 기본값·확정 인수 기준이 아니다. 확정 v1(`rule-1`)은 `S15P21C206-111` 실측과 강재민(C09)·백지웅(A04) 공동 승인 뒤 만든다. 128의 완료는 v0 제공만으로 처리하지 않는다.
+
+| 파일 | 내용 |
+|---|---|
+| [`matching-rules.v0.json`](matching-rules.v0.json) | 규칙 값 한 세트. 항목마다 `source`(SRS·API·결정 출처)와 `status`(`confirmed` / `v0-assumption`)를 표시. 확정 요구사항(네 조건 모두 만족, 배율 1 우선)과 v0 가정(우세/모호 판정, 정규화 오차, 중첩 지표, 수치 정밀도)을 구분 |
+| [`matching-cases.v0.json`](matching-cases.v0.json) | 합성 별 하나(60일, 5일 공백, 10분 bin)와 후보 위에 사례 31개. 정상(직접·P/2·2P·`phaseEnd > 1`·배율 1 우선), 모호(0점 동률, 0 근처 비율만 큰 경우, 점수 차·비율 경계의 직전/정확/직후, 후보 3개, 입력 순서 반전), 거절(최소 창, 위상 폭, duration 3배 상한, 관측점 없는 구간, epoch 범위 밖, 격자 밖), 재현성(추천 밖 제출 허용, 겹친 fineTune, 표시 반올림 경계, 공백 통과 제외). 각 case 의 `expected`는 참조 구현이 계산한 값 |
+| [`matching-v0.cjs`](matching-v0.cjs) | 참조 구현 + 검증기. `node docs/api/exploration/matching-v0.cjs` 로 모든 사례를 재계산해 `expected`와 비교한다. 규칙 값은 JSON 에서 읽고 코드에 박지 않는다. Backend(Java)·Frontend(TS) 구현은 같은 입력으로 같은 `expected`가 나와야 한다 |
+
+**v0 가정 요약.** 조건별 오차를 허용치로 나눈 정규화 오차 `e_period = |P_corr − P_c|·N/(D_c/2)`, `e_epoch = 순환 epoch 차/(D_c/2)`, `e_duration = |log2(D_user/D_c)|`. 점수 `score = max(e_period, e_epoch, e_duration)` 는 "허용치 대비 가장 약한 조건" 이며 정답 확률·곡선 유사도가 아니다. 통과 후보가 둘 이상이면 (1) 점수 차 ≥ `minScoreGap` 0.1, (2) 1위 ≤ `dominanceRatio` 0.5 × 2위, (3) 1위 중첩 비율이 2위보다 0.1 넘게 낮지 않음 — 셋 다 만족해야 1위를 채택하고, 아니면 `ambiguous_match`. 0점 동률·수치 동률(`epsilon` 1e-9)은 모호. 통과 판정은 원래 비율 부등식(duration 0.5–2배, 경계 포함)으로 하고 점수는 순위에만 쓴다. 후보 집계 단위는 후보 id 하나(같은 후보의 여러 배율 해석을 따로 세지 않음). 사용자 창은 사용자가 고른 주기 간격으로 반복하고, alias 의 epoch 순환 주기는 `min(P_user, P_c)` 로 둔다.
+
+**수치·경계.** IEEE-754 float64, 중간 반올림 없음, 부등호 그대로(경계 포함), `epsilon` 은 동률 판정에만. 경계 사례(`gap-exact`, `ratio-exact-boundary`, `duration-2x-boundary`, `duration-0.5x-boundary`)는 epoch·offset·반폭을 2진으로 정확한 값으로 골라 언어 간 차이가 없어야 한다. 표시용 duration 반올림(소수 2자리)은 검증·매칭에 쓰지 않는다(`display-rounding-boundary` 에서 갈린다). 후보 id 정렬은 출력 순서용이며 모호한 후보 중 하나를 고르는 기준이 아니다.
+
+**중첩 우세.** SRS 5.2 (6) 의 "통과 구간 중첩 비교" 는 조건 (3) 으로 넣었다. 다만 v0 정의에서는 주기·epoch 통과가 창 이탈을 D_c 이내로 제한해 점수 1위가 중첩에서 명확히 불리해지는 사례를 구성할 수 없었다(`overlap-recorded-no-inversion`). 111 실측에서 실제 사례가 없으면 (3) 을 제거한다.
+
+**미결(이 fixture 로 확정하지 않은 것).** N 상한(DEC-03), 최소 중첩 통과 수·비율, `dominanceRatio`·`minScoreGap`·`overlapRatioTolerance` 값, alias epoch 순환 주기 해석, epoch 허용 폭의 창 전체/반폭 해석, `phaseWidthMax` 0.25·`allowEmptyPhaseSpan=false`(DEC-19/Q03), 탐사 API 5.4(추천 밖 제출 허용) vs 6.8(추천 밖 재제출 거절) 문구 충돌(C02 정정), 3배 고조파(112 뒤). 전부 `matching-rules.v0.json` 의 `openItems` 와 각 항목 `status` 에 있다.

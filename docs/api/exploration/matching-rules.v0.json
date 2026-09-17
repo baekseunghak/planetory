@@ -1,0 +1,162 @@
+{
+  "ruleVersion": "rule-0",
+  "selectionRulesVersion": "sel-0",
+  "status": "development-example-not-operational",
+  "jira": "S15P21C206-128",
+  "description": "사용자 제출(주기·위상 구간)을 배치 BLS 후보와 대조하는 수치 규칙의 v0. SRS 5.1 초기값과 탐사 API 예시값에 출처를 붙인 개발용 예시이며 운영 기본값·확정 인수 기준이 아니다. 확정 v1 은 S15P21C206-111 실측과 강재민(C09)·백지웅(A04) 공동 승인 뒤 rule-1 로 만든다. 숫자 하나만 바뀌어도 새 ruleVersion 행을 만들고(operation_settings, ERD), 코드 상수로 박지 않는다.",
+  "sourceOfTruth": {
+    "fixedRequirements": "SRS 5.1 네 조건(주기·epoch·지속시간·통과 창 중첩 모두 만족)과 5.2 후보 선택 순서(제거된 후보 제외 → 배율 1 우선 → 0/1/여러 개)는 확정 요구사항이라 여기서 바꾸지 않는다.",
+    "v0Assumptions": "SRS 가 비워 둔 것만 v0 가정으로 채운다: 다중 후보 우세/모호 판정, 정규화 오차 정의, 중첩 지표·허용 차이, 최소 점수 차이, 수치 정밀도·경계 처리."
+  },
+  "units": {
+    "periodDays": "일",
+    "epochBtjd": "BTJD 일 (BJD − 2457000)",
+    "durationHours": "시간",
+    "phase": "무차원 [0,1) 또는 연속 두 주기 표현",
+    "conversion": "duration_days = duration_hours / 24. 모든 비교는 일(day) 단위 float64 로 한 뒤 표시할 때만 시간으로 바꾼다."
+  },
+  "serverDerived": {
+    "phaseCenter": "((phaseStart + phaseEnd) / 2) mod 1",
+    "epoch": "foldReferenceTimeBtjd + (phaseCenter + k) × periodDays. k 는 epoch 가 observationBounds 안이면서 |epoch − foldReferenceTimeBtjd| 가 최소인 정수, 동률이면 더 이른 시각(EXP-06). 그런 k 가 없으면 EPOCH_OUT_OF_RANGE.",
+    "durationDays": "(phaseEnd − phaseStart) × periodDays",
+    "source": "SRS EXP-06·POL-08, 탐사 API 6.2절 6·7행"
+  },
+  "validation": {
+    "order": "탐사 API 6.2절 순서(4→5→6→7→9). 첫 실패에서 멈추고 Submission 을 만들지 않는다.",
+    "minWindowDays": {
+      "value": 0.013888888888888888,
+      "source": "SRS 5.1 최소 허용 창 = 데이터 케이던스 × 2. 값은 Gold 10분 bin 기준(10/1440 × 2). 별마다 analysis-context 의 selectionRules.minWindowDays 로 내려온다",
+      "status": "confirmed-rule-example-value"
+    },
+    "phaseWidthMax": {
+      "value": 0.25,
+      "source": "DEC-19 기본안·탐사 API 5.1 예시",
+      "status": "v0-assumption"
+    },
+    "maxDurationMultipleOfSuggested": {
+      "value": 3,
+      "source": "C02-R3 (2026-09-14 결정)",
+      "status": "confirmed"
+    },
+    "allowEmptyPhaseSpan": {
+      "value": false,
+      "source": "2026-09-16 강재민 합의(false 로 시작), Q03",
+      "status": "v0-assumption",
+      "note": "선택한 위상 구간 [phaseStart, phaseEnd] 에 접힌 관측점이 하나도 없으면 400 selection.phaseEnd. 관측점 존재는 observedWindows 를 cadence 간격으로 표본화해 판정한다"
+    },
+    "fineTuneHalfWidthCells": {
+      "value": 3,
+      "source": "탐사 API 5.4절",
+      "status": "confirmed"
+    },
+    "periodGrid": {
+      "source": "탐사 API 5.3절 [periodMinDays, periodMaxDays] 안. 추천 top-N 에 속할 필요 없음(5.4절). 6.8절 재제출 문구와의 충돌은 C02 정정 대상",
+      "status": "confirmed-with-open-conflict"
+    }
+  },
+  "matching": {
+    "candidateSet": "현재 판(bundle) 의 active·discoverable 후보 중 removedCandidateIds 에 없는 것. 후보 하나는 해석(배율) 을 여러 개 가질 수 있으나 집계 단위는 후보 id 하나다.",
+    "harmonicMultipliers": {
+      "value": [
+        1,
+        2,
+        0.5
+      ],
+      "meaning": "P_corrected = P_user × m. m=2 는 사용자가 절반 주기(P/2 alias)를 고른 것, m=0.5 는 두 배 주기(2P alias). 배율 1 통과가 하나라도 있으면 고조파 통과 후보는 비교 집합에서 제외(SRS 5.2 (4)). 같은 후보에 배율 1 과 고조파가 모두 통과하면 배율 1 해석만 남긴다",
+      "source": "SRS 5.1 (초기 1/2·2배만), 3배는 S15P21C206-112 뒤",
+      "status": "confirmed"
+    },
+    "nTransits": {
+      "definition": "후보 통과 중심 epoch_c + n·P_c 의 창 [중심 ± D_c/2] 이 observedWindows 와 교집합을 갖는 n 의 개수(관측된 통과 수). 후보 행에 nTransitsObserved 가 있으면 그 값을 쓴다",
+      "cap": null,
+      "capStatus": "미결 (DEC-03, N 상한). null 이면 상한 없음",
+      "source": "SRS 5.1 주기 조건의 N"
+    },
+    "conditions": {
+      "period": {
+        "pass": "abs(P_corrected − P_c) × N ≤ D_c / 2 (모두 일 단위)",
+        "normalized": "e_period = abs(P_corrected − P_c) × N / max(D_c/2, minWindowDays/2)",
+        "source": "SRS 5.1"
+      },
+      "epoch": {
+        "pass": "min_k abs(epoch_user − epoch_c − k·P_mod) ≤ D_c / 2, P_mod = min(P_user, P_c)",
+        "normalized": "e_epoch = min_k abs(epoch_user − epoch_c − k·P_mod) / max(D_c/2, minWindowDays/2)",
+        "source": "SRS 5.1",
+        "note": "허용 폭은 후보 지속시간의 반폭(D_c/2). SRS 최소 허용 창(케이던스 2배)은 이 반폭이 그보다 좁아지지 않게 하는 하한이다: 유효 반폭 = max(D_c/2, minWindowDays/2). v0 는 이 해석을 쓰되 '창 전체 폭/반폭' 해석은 미결로 표시한다",
+        "minWindowInterpretation": "half-width = max(D_c/2, minWindowDays/2)",
+        "minWindowInterpretationStatus": "v0-assumption",
+        "modulusNote": "배율 1 이면 P_mod ≈ P_c. 절반 주기 alias(m=2)에서는 사용자가 고른 통과가 후보의 홀수 번째 통과일 수 있어 P_user 로 순환해야 맞는다. SRS 5.1 의 '후보 주기로 환산한 순환 위상 차이' 를 이렇게 읽은 것은 v0 가정이며 강재민 확인 대상.",
+        "modulusStatus": "v0-assumption"
+      },
+      "duration": {
+        "pass": "0.5 ≤ D_user / D_c ≤ 2 (경계 포함, 원래 비율 부등식으로 검사)",
+        "normalized": "e_duration = abs(log2(D_user / D_c)) — 순위 점수 전용. 통과 판정에는 쓰지 않는다",
+        "source": "SRS 5.1"
+      },
+      "overlap": {
+        "pass": "overlapTransits ≥ minOverlapTransits",
+        "definition": "후보 통과 n 중 (a) 후보 창 [epoch_c + n·P_c ± D_c/2] 이 observedWindows 와 교집합을 갖고 (b) 그 교집합이 사용자 창과도 겹치는 n 의 개수. 사용자 창은 [epoch_user + n'·P_user ± D_user/2] 로 사용자가 고른 주기 간격으로 반복한다(정정 주기가 아님). 관측 공백에만 걸린 통과는 세지 않는다",
+        "minOverlapTransits": 1,
+        "minOverlapTransitsStatus": "v0-assumption (SRS: 실측으로 확정)",
+        "overlapRatio": "overlapTransits / N (N = 관측된 통과 수). 우세 판정의 중첩 비교에만 쓰고 점수에 합산하지 않는다",
+        "source": "SRS 5.1",
+        "harmonicNote": "m=2(절반 주기 alias)면 후보 통과마다 사용자 창이 있어 비율 1 에 가깝고, m=0.5(두 배 주기 alias)면 후보 통과 둘 중 하나만 겹쳐 비율 약 0.5 다. 이 비율은 우세 판정 (3) 에만 쓰인다"
+      }
+    },
+    "score": {
+      "definition": "score = max(e_period, e_epoch, e_duration)",
+      "meaning": "허용치 대비 가장 약한 조건의 상대 오차다. 정답 확률이나 실제 곡선 유사도가 아니며, 가중합·추가 가중치를 도입하지 않는다. 통과 후보의 순위를 매기는 데만 쓴다.",
+      "status": "v0-assumption"
+    },
+    "dominance": {
+      "appliesWhen": "통과 후보(집계 단위: 후보 id)가 2개 이상일 때. 점수 오름차순으로 정렬해 1위 s1, 2위 s2, 각 중첩 비율 r1, r2.",
+      "dominant": "아래를 모두 만족하면 1위를 채택, 하나라도 어긋나면 ambiguous_match: (1) s2 − s1 ≥ minScoreGap, (2) s1 ≤ dominanceRatio × s2, (3) r1 ≥ r2 − overlapRatioTolerance",
+      "dominanceRatio": {
+        "value": 0.5,
+        "status": "v0-assumption",
+        "reason": "'두 배 더 가깝다' 는 단순 규칙. 근거 미확정, 111 실측 대상"
+      },
+      "minScoreGap": {
+        "value": 0.1,
+        "status": "v0-assumption",
+        "reason": "후보 구별을 위한 정책값. 0 에 가까운 점수끼리 비율만 큰 경우(예: 0.01 vs 0.05)를 우세로 보지 않기 위함. 계산 오차 epsilon 과 다른 값이며 111 실측 대상"
+      },
+      "overlapRatioTolerance": {
+        "value": 0.1,
+        "status": "v0-assumption",
+        "reason": "점수 1위가 중첩 비율에서 경쟁 후보보다 0.1 넘게 불리하면 모호로 남긴다. v0 정의에서는 주기·epoch 통과가 창 이탈을 제한해 점수 우세와 중첩 우세가 크게 어긋나기 어렵다(사례 파일 참조). 111 실측에서 필요성 재검토"
+      },
+      "ties": "서로 다른 후보가 모두 0점이거나 |s1 − s2| ≤ epsilon 이면 ambiguous_match. 후보 id 정렬은 출력 순서를 결정적으로 만들기 위한 것이며 모호한 후보 중 하나를 고르는 기준이 아니다.",
+      "status": "v0-assumption"
+    },
+    "results": {
+      "none": "not_matched",
+      "oneMultiplier1": "matched",
+      "oneHarmonic": "matched_harmonic",
+      "dominant": "matched 또는 matched_harmonic (채택 후보의 배율에 따라)",
+      "otherwise": "ambiguous_match",
+      "duplicateRule": "일치 후보에 이미 이 회원의 성과가 있으면 duplicate — 성과 판정은 이 fixture 범위 밖"
+    }
+  },
+  "numerics": {
+    "arithmetic": "IEEE-754 float64. 중간값을 반올림하지 않는다. 일(day) 단위로 계산하고 시간(hour) 은 표시용 변환.",
+    "inequalities": "규칙 문장의 부등호 그대로(≤, ≥ 는 경계 포함). 경계 비교에 epsilon 을 더하지 않는다.",
+    "epsilon": {
+      "value": 1e-09,
+      "use": "동률(tie) 판정에만 사용: |s1 − s2| ≤ epsilon 이면 동률. 통과 여부·우세 비율 비교에는 쓰지 않는다"
+    },
+    "phaseNormalization": "phase = (((t − T) / P) mod 1 + 1) mod 1 로 [0, 1) 정규화(EXP-06). phaseEnd > 1 은 정상 입력.",
+    "display": "durationHours 표시는 소수 2자리 반올림. 검증·매칭은 반올림 전 값으로 한다(사례 display-rounding-boundary).",
+    "determinism": "같은 입력이면 언어와 무관하게 같은 판정이어야 한다. 후보 순회 순서는 결과에 영향을 주지 않아야 하며(사례 candidate-order-independent), 출력 목록은 후보 id 의 'c-' 뒤 정수 오름차순으로 정렬한다. id 정렬은 출력 순서용이며 수치 일관성을 보장하는 장치가 아니다."
+  },
+  "openItems": [
+    "N 상한(nTransits.cap) — DEC-03, 111 실측",
+    "최소 중첩 통과 수·비율 — SRS 5.1 실측 항목",
+    "dominanceRatio·minScoreGap·overlapRatioTolerance 값 — 111 실측",
+    "고조파 alias 의 epoch 순환 주기 P_mod = min(P_user, P_c) 해석 — 강재민 확인",
+    "epoch 허용 폭의 '창 전체 폭/반폭' 해석 — 서버(강재민)·프론트(백지웅) 확인",
+    "phaseWidthMax 0.25·allowEmptyPhaseSpan=false — DEC-19/Q03 확정",
+    "탐사 API 5.4(추천 밖 제출 허용) vs 6.8(추천 밖 재제출 거절) 문구 충돌 — C02 정정",
+    "3배 고조파 — 112 뒤"
+  ]
+}
