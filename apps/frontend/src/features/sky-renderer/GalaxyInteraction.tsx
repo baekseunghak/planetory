@@ -16,6 +16,7 @@ import {
   markerLabel,
   panCamera,
   readTutorialMarkers,
+  readChallengeTicId,
   rotateCamera,
   starTargets,
   zoomCamera,
@@ -59,6 +60,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     const [quest, setQuest] = useState<{
       version: string;
       value: TutorialMarkers | null;
+      challengeTicId: string | null;
       error: boolean;
     } | null>(null);
     const retiredBadges = useRef(new Set<string>());
@@ -99,6 +101,10 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       quest?.version === data.meta?.version && !data.needsRefresh
         ? (quest?.value ?? null)
         : null;
+    const challengeTicId =
+      quest?.version === data.meta?.version && !data.needsRefresh
+        ? (quest?.challengeTicId ?? null)
+        : null;
     useEffect(() => {
       const controller = new AbortController();
       const version = data.meta!.version;
@@ -112,11 +118,21 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
             if (item.completed) retiredBadges.current.add(id);
             if (retiredBadges.current.has(id)) item.visible = false;
           }
-          setQuest({ version, value: state, error: false });
+          setQuest({
+            version,
+            value: state,
+            challengeTicId: readChallengeTicId(value),
+            error: false,
+          });
         })
         .catch(() => {
           if (!controller.signal.aborted)
-            setQuest({ version, value: null, error: true });
+            setQuest({
+              version,
+              value: null,
+              challengeTicId: null,
+              error: true,
+            });
         });
       return () => controller.abort();
     }, [store, data.meta?.version, data.needsRefresh, questAttempt]);
@@ -418,7 +434,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       const candidates =
         enabled && !system
           ? index.targets.flatMap((t) => {
-              const label = markerLabel(t.star!, tutorials);
+              const label = markerLabel(t.star!, tutorials, challengeTicId);
               return label ? [{ target: t, label }] : [];
             })
           : [];
@@ -494,7 +510,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         show(planets.current.hit(x, y) ?? index.hit(x, y));
       } else if (active.current?.kind === "star")
         show(index.byId.get(active.current?.id ?? "") ?? null);
-    }, [index, tutorials, enabled, canvas]);
+    }, [index, tutorials, challengeTicId, enabled, canvas]);
     useEffect(() => {
       const host = layer.current;
       return () => {
