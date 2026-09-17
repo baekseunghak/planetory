@@ -48,3 +48,4 @@
 | 2026-09-17 | 별 상세·개인 행성 확대·카메라 복원·공통 경로 소비 | S15P21C206-206 | C06, planets.items, camera, returnTo, null | 구현 완료·통합 대기 | [기록](2026-09-17.md#s15p21c206-206-별-상세개인-행성-확대화면-왕복-소비) |
 
 | 2026-09-17 | WebGL 대체 발견 목록·키보드 전환 | S15P21C206-207 | discovered cursor, context loss, focus | 독립 검증 완료·실제 통합 대기 | [기록](2026-09-17.md) |
+| 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |
