@@ -1,6 +1,6 @@
 # gold-roundtrip: Gold 적재 예제·PostgreSQL round-trip·공개 QA fixture
 
-Jira `S15P21C206-117` (계획 ID D09) / 담당: 윤성용 / 상태: TOI-270 Sector 3 예제로 로컬 PostgreSQL 18.6 QA+왕복 61항목 통과, MR !64 1차 리뷰 반영, 재검토 대기
+Jira `S15P21C206-117` (계획 ID D09) / 담당: 윤성용 / 상태: TOI-270 Sector 3 예제로 로컬 PostgreSQL 18.6 QA+왕복 62항목 통과, MR !64 1차 리뷰 반영, 재검토 대기
 
 실제 TESS 곡선 하나로 Gold 판(세그먼트·주기도·후보·manifest) payload 를 만들고, 저장소의 Flyway SQL(V1~V8)을 그대로 적용한 격리
 스키마에 넣었다가 다시 읽어 **계약대로 보존되는지**를 검사한다. 계약 규칙은 [Gold 공개 QA](../../contracts/gold/publication-qa.md),
@@ -25,7 +25,7 @@ uv sync --python 3.11
 ```powershell
 uv run python -m gold_roundtrip build        # fixtures/gold-toi270-s3.json (약 96 KB) 재생성. 실행 시각을 넣지 않으므로 diff 가 없어야 한다
 uv run python -m gold_roundtrip vectors      # contracts/gold/examples/array-checksum-vectors.v0.json + record-checksum-vectors.v0.json 재생성
-uv run python -m gold_roundtrip roundtrip    # 공개 전 QA → 격리 스키마 gold_rt_<hex> 생성 → V1~V8 → 적재(미commit) → 같은 트랜잭션에서 조회 비교 → 통과 시 전환·단일 commit → 스키마 삭제. results/roundtrip-report.json
+uv run python -m gold_roundtrip roundtrip    # 공개 전 QA → 격리 스키마 gold_rt_<hex> 생성 → V1~V8 → 적재(미commit) → 같은 트랜잭션에서 조회 비교 → 통과 시 전환 → 전환 뒤 검사 → 단일 commit → 스키마 삭제. results/roundtrip-report.json
 uv run pytest -q                             # DB 없으면 round-trip 테스트는 skip
 node ../../contracts/gold/array-checksum.cjs # Node 로 배열 checksum 벡터 재현
 node ../../contracts/gold/record-checksum.cjs # Node 로 레코드 checksum 벡터 재현
@@ -49,11 +49,11 @@ node ../../contracts/gold/record-checksum.cjs # Node 로 레코드 checksum 벡�
 배열 숫자는 float32 값을 유일하게 되살리는 최단 십진 표기다. 파싱한 float64 를 float32 로 반올림하면 같은 비트가 된다(정규화는 멱등).
 숫자는 실제 관측에서 나왔지만 이 파일은 **계약 예제**이며 과학 기준값(D23)·운영 출력이 아니다.
 
-## round-trip 이 검사하는 것 (61항목)
+## round-trip 이 검사하는 것 (62항목)
 
 **0단계 QA(24)**: `qa.validate_payload` — manifest 키, flux 값 규칙·길이·checksum, **gaps ⇔ NULL 구간 양방향 일치**, **power NULL 금지**·길이·checksum, 격자 규칙, transit_model Schema, removal_step 연속, 레코드 checksum 3종, `bundle_version`, 내용 기반 snapshot id, 잔차 기대값 존재·순서 불변. 하나라도 실패하면 DB 에 넣지 않고 `PUBLISH_REJECTED`.
 
-정합(26)+전환(2): 마이그레이션 적용, `bundle_version` 규칙 일치, transit_model Schema(후보 3), staging 적재(미commit)·검사 뒤 current 전환·단일 commit·current 유일, 기준 시각·`start_btjd` float64 정확 일치,
+정합(26)+전환(2)+결정(1): 마이그레이션 적용, `bundle_version` 규칙 일치, transit_model Schema(후보 3), staging 적재(미commit)·검사 뒤 current 전환·current 유일·두 번째 current 거절까지 같은 트랜잭션·그 뒤 단일 commit(`publish_decision` 이 마지막 검사), 기준 시각·`start_btjd` float64 정확 일치,
 `base_days`·격자 범위 NUMERIC 왕복, status, manifest JSONB 왕복, flux·power 길이 = n, NULL 위치, float32 값 비트 동일, DB 조회값으로 checksum 재계산 일치,
 gaps = DB flux 의 NULL 구간(양방향), DB 조회 배열에 NaN·Inf 없음(NULL 해시값이 NaN 비트와 같아 위장 방지), power NULL 없음, 후보 수·`candidate_id`·파라미터 JSONB 보존, **NUMERIC 열 float64 왕복**(최단 표기 Decimal 로 적재), 후보·외부 상태 레코드 checksum 을 DB 행으로 재계산 일치.
 거절: 같은 `(tic_id, bundle_version)` 재삽입(V8), 두 번째 current(부분 유일 인덱스), manifest 키 누락(V3), flux 길이 불일치(V1 CHECK), 주기도 범위 역전.

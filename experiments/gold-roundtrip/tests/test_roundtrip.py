@@ -95,7 +95,8 @@ def test_roundtrip_against_local_postgres():
     result = roundtrip.run(json.loads(PAYLOAD.read_text(encoding="utf-8")))
     assert result["n_failed"] == 0 and result["decision"] == "PUBLISHED", [c for c in result["checks"] if not c["ok"]]
     names = [c["check"] for c in result["checks"]]
-    assert names.index("status_staging_before_transition") < names.index("current_transition_committed_after_checks")   # 검증 뒤 전환
+    assert names[-1] == "publish_decision" and all(c["ok"] for c in result["checks"][:-1])                # commit 은 마지막 한 번, 그 전 검사 전부 통과
+    assert names.index("status_staging_before_transition") < names.index("current_transition_before_commit") < names.index("second_current_rejected_partial_unique_index")
 
 
 @pytest.mark.skipif(not PAYLOAD.exists() or not _db_available(), reason="PostgreSQL 컨테이너 또는 payload 없음")

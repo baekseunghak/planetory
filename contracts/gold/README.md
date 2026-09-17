@@ -156,7 +156,7 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 | --- | --- | --- |
 | `transit_model` 세부 shape·baseline·수치 경계 | 확정 (계약 1.0, 2026-09-17) | `S15P21C206-113` [`transit-model.schema.json`](transit-model.schema.json). box·unity·`box-divide-v0`, 통과 경계 `<`, 깊이 0 초과 1,000,000 미만, Gold 세그먼트는 bin 중심 평가(호출자 이동). 변경은 새 `residual_model_version` |
 | 운영 checksum canonicalization | 제안 v0 — 배열 `array-f32le-null7fc00000-v0`, 레코드 `record-canonical-v0` (2026-09-17) | [공개 QA 3절](publication-qa.md). Python·Node·Java(강재민: 배열 15+6, 레코드 6, DB 경로) 일치, PostgreSQL 18.6 REAL[] 왕복·행 재계산 일치. Python·Node·Java 모두 일치, 팀 확정만 남음. 확정 시 게시 재시도 예제의 합성 checksum 을 실제 값으로 교체 |
-| Gold PostgreSQL 실제 왕복 | 검증됨 (로컬 PostgreSQL 18.6, V1~V8, TOI-270 S3 예제 61항목, 검증 뒤 단일 commit·손상 payload 거절 확인, 2026-09-17) | [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md). 운영 Publisher·Java 경로·Silver 수치 비교는 미실행(D17·D23). NUMERIC 열은 float8 바인딩 대신 최단 왕복 표기로 바인딩해야 float64 가 보존됨(서버 float8→numeric 15자리 반올림) |
+| Gold PostgreSQL 실제 왕복 | 검증됨 (로컬 PostgreSQL 18.6, V1~V8, TOI-270 S3 예제 62항목, 모든 검사 뒤 단일 commit·손상 payload 거절 확인, 2026-09-17) | [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md). 운영 Publisher·Java 경로·Silver 수치 비교는 미실행(D17·D23). NUMERIC 열은 float8 바인딩 대신 최단 왕복 표기로 바인딩해야 float64 가 보존됨(서버 float8→numeric 15자리 반올림) |
 | 공개 QA 정책 (손상 Sector·AI 실패) | 미결 — v0 기본값: 부분 공개 없음, 같은 입력 반복 실패는 `PUBLISH_REJECTED`, 일시 실패는 `PUBLISH_ROLLED_BACK` 같은 `bundle_version` 재시도, 기존 current 유지 | [공개 QA 5절](publication-qa.md). 새 결과 코드는 만들지 않음. AI 실패 후 부분 공개·재게시는 `bundle_version` 충돌 때문에 69 담당과 합의 필요 |
 | Redis TTL·메모리·동시 실행 상한 | 실측 대기 | 부하 시험 담당 Task에서 정한다 |
 | 실제 TESS 배열 크기·용량·수치 허용 오차 | 실측 대기 | D17·D23 계열 검증 결과를 반영한다 |

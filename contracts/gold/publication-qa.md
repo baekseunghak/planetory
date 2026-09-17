@@ -38,7 +38,7 @@
 
 Silver–EC2 **수치 일치**(잔차·주기도 값의 허용 오차 비교)는 이 표에 없다. 허용 오차가 아직 등록되지 않았기 때문이며 4절 절차로 D23 이 채운다.
 
-이 표는 `experiments/gold-roundtrip/gold_roundtrip/qa.py` 의 `validate_payload` 가 그대로 구현하며, round-trip 은 QA 를 먼저 돌려 하나라도 실패하면 **DB 에 넣지 않고** `PUBLISH_REJECTED` 로 끝낸다. 적재 뒤 검사(조회값·checksum·gaps·NUMERIC·레코드 재계산)는 **같은 트랜잭션 안에서** 수행하고, 모두 통과한 뒤에만 기존 current → archived, 신규 → current 전환을 하고 **한 번 commit** 한다(69: staging 독립 commit 없음). 검사가 하나라도 실패하면 전부 rollback 되어 staging 행도 남지 않는다. 손상 payload(`gaps=[]`, `power[0]=NULL`, flux 변조, 후보 값 변조, 내용 기반이 아닌 snapshot id) 가 거절되는 것을 `tests/test_qa.py` 가 확인한다.
+이 표는 `experiments/gold-roundtrip/gold_roundtrip/qa.py` 의 `validate_payload` 가 그대로 구현하며, round-trip 은 QA 를 먼저 돌려 하나라도 실패하면 **DB 에 넣지 않고** `PUBLISH_REJECTED` 로 끝낸다. 적재 뒤 검사(조회값·checksum·gaps·NUMERIC·레코드 재계산)는 **같은 트랜잭션 안에서** 수행하고, 모두 통과한 뒤에만 기존 current → archived, 신규 → current 전환을 한다. 전환 뒤 검사(current 가 정확히 하나, 두 번째 current 거절)도 같은 트랜잭션에서 하고, 그것까지 통과해야 **한 번 commit** 한다(69: staging 독립 commit 없음). 게시 결과를 정하는 검사가 하나라도 실패하면 전부 rollback 되어 staging·전환 모두 남지 않는다. commit 뒤에는 결과를 바꾸는 검사를 두지 않는다. 손상 payload(`gaps=[]`, `power[0]=NULL`, flux 변조, 후보 값 변조, 내용 기반이 아닌 snapshot id) 가 거절되는 것을 `tests/test_qa.py` 가 확인한다.
 
 ## 3. checksum 직렬화 규칙 (제안)
 
@@ -110,5 +110,5 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 
 ## 7. 검증 상태 (2026-09-17, 1차 리뷰 반영 후)
 
-- 실행함: `experiments/gold-roundtrip` — TOI-270 Sector 3 실제 곡선 payload 를 PostgreSQL 18.6 컨테이너의 격리 스키마에 V1~V8 적용 후 QA(2절) → 적재(미commit) → 같은 트랜잭션에서 조회·검사 → 통과 시 전환·단일 commit, **61개 검사 통과**(QA 24, 정합 26, 제약 위반 거절 5, 역할 경계 2, 레코드 checksum DB 재계산 2, 전환·current 유일 2). 손상 payload(`gaps=[]`, `power[0]=NULL`)는 QA 단계에서 `PUBLISH_REJECTED` 로 거절되어 DB 에 들어가지 않음을 테스트로 확인. Python·Node 배열 벡터 15+6, 레코드 벡터 10(동률 4 포함) 일치. **Java(강재민, 2026-09-17)**: 배열 벡터 15+6(overflow 경계 포함)·레코드 벡터 6·`GoldCatalogRepository` REAL[] 경로·140 수정본 `GoldManifest` 로 15키 manifest 읽기 일치. 기준 시각이 전처리 설정과 무관하고 중복 시각을 제거함을 테스트로 확인. pytest 21 passed.
+- 실행함: `experiments/gold-roundtrip` — TOI-270 Sector 3 실제 곡선 payload 를 PostgreSQL 18.6 컨테이너의 격리 스키마에 V1~V8 적용 후 QA(2절) → 적재(미commit) → 같은 트랜잭션에서 조회·검사 → 통과 시 전환 → 전환 뒤 검사(current 유일·두 번째 current 거절)까지 같은 트랜잭션 → 단일 commit, **62개 검사 통과**(QA 24, 정합 26, 제약 위반 거절 5, 역할 경계 2, 레코드 checksum DB 재계산 2, 전환·current 유일 2, 게시 결정 1). 게시 결과를 정하는 검사는 모두 commit 전에 끝난다(테스트로 고정). 손상 payload(`gaps=[]`, `power[0]=NULL`)는 QA 단계에서 `PUBLISH_REJECTED` 로 거절되어 DB 에 들어가지 않음을 테스트로 확인. Python·Node 배열 벡터 15+6, 레코드 벡터 10(동률 4 포함) 일치. **Java(강재민, 2026-09-17)**: 배열 벡터 15+6(overflow 경계 포함)·레코드 벡터 6·`GoldCatalogRepository` REAL[] 경로·140 수정본 `GoldManifest` 로 15키 manifest 읽기 일치. 기준 시각이 전처리 설정과 무관하고 중복 시각을 제거함을 테스트로 확인. pytest 21 passed.
 - 실행하지 않음: 운영 Publisher(Spark)·Airflow, 실제 Silver 계산과의 수치 비교(D23), 손상 Sector·AI 실패 시나리오의 실제 적재(5절 정책 미결). Java 는 배열 15+6·레코드 10(동률 4 포함)·DB 경로·15키 manifest 모두 대조 완료(강재민).

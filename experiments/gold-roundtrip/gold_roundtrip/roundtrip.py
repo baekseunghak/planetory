@@ -245,25 +245,25 @@ def run(payload: dict, *, url: str | None = None, keep_schema: bool = False) -> 
             cur.execute("ROLLBACK TO SAVEPOINT roles2"); cur.execute("RESET ROLE")
             rep.add("planetory_gold_writer_can_write_gold", writer_ok)
 
-            # ---------------- 결정: 모든 검사 통과 → 전환 + 단일 commit, 아니면 rollback ----------------
-            if rep.failed:
-                conn.rollback()
-                rep.add("publish_decision", False, f"PUBLISH_REJECTED - {len(rep.failed)}건 실패, 트랜잭션 rollback(staging 도 남지 않음)")
-            else:
+            # ---------------- 결정: 모든 검사 통과 → 전환 → 전환 뒤 검사까지 같은 트랜잭션 → 단일 commit. 아니면 rollback ----------------
+            if not rep.failed:
                 # 69: 부분 유일 인덱스 때문에 기존 current 를 먼저 archived 로 바꾸고 신규를 current 로 올린다.
                 cur.execute("UPDATE publication_bundles SET status='archived' WHERE tic_id=%s AND status='current'", (bundle["tic_id"],))
                 cur.execute("UPDATE publication_bundles SET status='current', published_at=now() WHERE id=%s", (bundle_id,))
                 cur.execute("SELECT status FROM publication_bundles WHERE id=%s", (bundle_id,))
-                status_after = cur.fetchone()[0]
-                conn.commit()
-                rep.add("current_transition_committed_after_checks", status_after == "current", f"bundle_id={bundle_id}, 단일 commit")
+                rep.add("current_transition_before_commit", cur.fetchone()[0] == "current", f"bundle_id={bundle_id}")
                 cur.execute("SELECT count(*) FROM publication_bundles WHERE tic_id=%s AND status='current'", (bundle["tic_id"],))
-                rep.add("exactly_one_current_after_commit", cur.fetchone()[0] == 1)
-                # current 가 생긴 뒤에만 의미 있는 검사: 같은 TIC 의 두 번째 current 는 부분 유일 인덱스가 거절한다.
+                rep.add("exactly_one_current_before_commit", cur.fetchone()[0] == 1)
+                # current 가 생긴 뒤에만 의미 있는 검사(같은 트랜잭션, savepoint): 같은 TIC 의 두 번째 current 는 부분 유일 인덱스가 거절한다.
                 expect_error("second_current_rejected_partial_unique_index",
                              "INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days) VALUES (%s,%s,'current',%s,%s,%s)",
                              (bundle["tic_id"], bv + "-x", Jsonb(manifest), fold_db, base_db), "uq_publication_bundles_current")
-                conn.commit()
+            if rep.failed:
+                conn.rollback()
+                rep.add("publish_decision", False, f"PUBLISH_REJECTED - {len(rep.failed)}건 실패, 트랜잭션 rollback(staging·전환 모두 남지 않음)")
+            else:
+                conn.commit()                                # 게시 결과를 정하는 모든 검사가 끝난 뒤의 유일한 commit
+                rep.add("publish_decision", True, f"PUBLISHED - bundle_id={bundle_id}, 단일 commit")
     finally:
         conn.rollback()                                   # 중단된 트랜잭션이면 DROP 이 InFailedSqlTransaction 으로 실패하므로 먼저 되돌린다
         if not keep_schema:
