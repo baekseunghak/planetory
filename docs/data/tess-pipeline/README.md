@@ -123,7 +123,7 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 |---|---|---|
 | 입력 manifest | `tic_id:string` 식별자 (`259377017`), `sector:int` (`3`), `product_id:string`, `source_uri:string`, `retrieved_at:UTC timestamp`, `sha256:string`, `cadence_seconds:float` | 데이터·인프라 |
 | Silver 정제곡선 (2분 원본) | `point_id:int64`, `time_days:float64`, `normalized_flux:float64?`, `sector:int`, `original_quality:int64`, `valid:bool`, `exclusion_reasons:list<string>` | 배치 탐색·AI 입력·discoverable 재계산. Gold에는 넣지 않음 |
-| Gold 곡선 세그먼트 (ERD `light_curve_segments`) | `tic_id`, `sector:smallint`, `binning_revision:string`, `start_btjd:float64`, `bin_minutes:numeric`(기본 10, 세그먼트 20,000점 초과 시 확대), `n_points:int`, `flux:real[]`(빈 bin NaN), `flux_scatter:numeric`, `gaps:jsonb`. 시각은 `start_btjd + (bin_minutes/1440) × i` | 백엔드·프론트·EC2 온라인 계산 |
+| Gold 곡선 세그먼트 (ERD `light_curve_segments`) | `tic_id`, `sector:smallint`, `binning_revision:string`, `start_btjd:float64`, `bin_minutes:numeric`(기본 10, 세그먼트 20,000점 초과 시 확대), `n_points:int`, `flux:real[]`(빈 bin NULL), `flux_scatter:numeric`, `gaps:jsonb`. 시각은 `start_btjd + (bin_minutes/1440) × i` | 백엔드·프론트·EC2 온라인 계산 |
 | 곡선 메타 | `time_system:string`, `time_reference_offset_days:float64`, `fold_reference_time_btjd:float64`(판 공통값, 5.1절), `flux_unit:string`, `preprocessing_version:string`, `input_snapshot_id:string` | 백엔드·프론트·AI |
 | 주기도 (ERD `periodograms`, 판 단위) | `period_min_days`, `period_max_days`, `n_periods:int`(5,000), `power:real[]`. 주기 격자 배열은 저장하지 않고 manifest 격자 규칙(로그 등간격)으로 계산 | 백엔드·프론트 |
 | 후보 (ERD `candidates`) | `id` 판 간 유지, `tic_id`, `status`(active/retired), `updated_bundle_id`, `removal_step`, `period_days/epoch_btjd/duration_hours/depth_ppm/bls_power`, `transit_model:jsonb`, `discoverable:bool`, `is_confirmed`. Silver 진단용 `source_curve_stage`, `source_peak_rank`, `snr/sde`, `observed_transit_count`, `qa_status/qa_reasons`는 Gold 열이 아니라 Silver 보존 | 백엔드·AI. 사용자용 잔차 참조 없음. 미세 조정 범위(period_min/max/step)는 열이 아니라 manifest 규칙으로 API가 계산 |
@@ -135,7 +135,7 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 필수 결정:
 
 - FITS 헤더의 시간계·기준 오프셋을 보존하고 t0와 동일 기준을 사용한다. day/hour가 혼재한 현재 반환값은 경계에서 명시적으로 변환한다.
-- v1.0에서 사용자 분석의 '모든 점'은 **비닝된 세그먼트 배열 전체**를 뜻한다(EXP-01). 2분 원본은 Silver 탐색·AI 입력용이고 Gold에 두지 않는다. 제외 관측점은 Gold에서 빈 bin의 NaN과 `gaps` 인덱스로 표현하며, 원본 행 대응과 제외 사유는 Silver에서만 보존한다. 비닝 간격 10분은 ERD 기본값이고 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다(ERD 미결 10).
+- v1.0에서 사용자 분석의 '모든 점'은 **비닝된 세그먼트 배열 전체**를 뜻한다(EXP-01). 2분 원본은 Silver 탐색·AI 입력용이고 Gold에 두지 않는다. 제외 관측점은 Gold에서 빈 bin의 NULL과 `gaps` 인덱스로 표현하며, 원본 행 대응과 제외 사유는 Silver에서만 보존한다. 비닝 간격 10분은 ERD 기본값이고 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다(ERD 미결 10).
 - depth는 정규화 상대 밝기 감소량이며 화면 ppt/ppm 변환과 구분한다. 후보 상태의 미확정과 처리 실패도 별도이다.
 - `P1` 같은 화면 순위 ID는 재실행·번들 간 영구 식별자로 쓰지 않는다. ERD의 `candidates.id`는 판이 바뀌어도 유지되므로 새 판 적재 시 기존 후보와 같은 신호인지 판단하는 주기·중심 시각 허용 오차가 필요하다(ERD 미결 2). 이 기준은 재민님과 합의한다.
 - PoC의 baseline은 모든 승인 후보 공동 적합(`joint_refit`) 결과다. v1.0의 잔차 계약은 "Gold의 **고정** `transit_model` 파라미터로 모델을 생성해 나눈다"이므로 온라인에서 재적합하지 않는다. `residual_model_version`의 의미(고정 모델 제거)와 임의 제거 부분집합에서의 baseline 규칙을 먼저 정하고, 빈 제거 집합은 원본과 일치하는지 검증한다.
