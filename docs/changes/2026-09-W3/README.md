@@ -37,3 +37,4 @@
 | 2026-09-16 | 온라인 파생 계산 HTTP/JSON 경계·초기 제한 계약 | S15P21C206-70 | derived compute, Worker, HTTP JSON, residual, periodogram, timeout, fixture, DEC-35 | 계약 검증 완료·교차 리뷰 대기 | [2026-09-16](2026-09-16.md) |
 | 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 글·공식 스레드의 1단계 댓글 CRUD | S15P21C206-159 | 댓글, comments, POST, SIGNAL_THREAD, parentType, PATCH, SB-D22, FOR UPDATE, codePointCount | 구현 완료 | [2026-09-17](2026-09-17.md) |
