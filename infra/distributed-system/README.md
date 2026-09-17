@@ -56,22 +56,43 @@ sudo install -m 644 infra/distributed-system/config/yarn/worker.xml /etc/hadoop/
 sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc/hadoop/yarn-site.xml
 ```
 
-다음 서버 초기 설정은 아직 구현하지 않았다.
-
-`S15P21C206-72` 범위:
-
-- OpenJDK 17과 Hadoop 3.5.0 설치 및 Apache SHA-512 검증
-- `hdfs` 서비스 계정과 HDFS 디렉터리 권한
-- NameNode·JournalNode·DataNode systemd 서비스 등록
-- `JAVA_HOME`과 `HADOOP_CONF_DIR=/etc/hadoop` 적용
-
 `S15P21C206-73` 범위:
 
 - `yarn` 서비스 계정과 YARN 로컬·로그 디렉터리 권한
 - ResourceManager·NodeManager systemd 서비스 등록
 - Worker Python 실행 환경과 Spark sample application 검증
 
-서비스는 실제 디스크 마운트가 성공한 뒤에만 시작해야 한다. `nofail`만으로는 시작 순서를 보장할 수 없으므로 systemd의 `RequiresMountsFor`에 데이터·메타데이터 경로를 지정한다.
+### HDFS 호스트 설치 명세 (`S15P21C206-72`)
+
+Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최초 초기화를 포함한다. 설치 구현은 [Hadoop 3.5.0 Cluster Setup](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-common/ClusterSetup.html), [QJM HA](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)와 [Apache 공식 배포본](https://downloads.apache.org/hadoop/common/hadoop-3.5.0/)을 기준으로 하며, 노드 역할과 저장 경로는 이 저장소의 설정을 따른다.
+
+구현 대상은 단일 노드의 설치 책임을 갖는 `scripts/install-hdfs-host.sh`와 기존 `gcloud compute scp`·`gcloud compute ssh` 방식으로 여섯 노드를 호출하는 얇은 `scripts/install-hdfs-hosts.ps1`이다. PowerShell 스크립트는 프로젝트·노드 매핑과 결과 수집만 담당하고 Linux 설치 로직을 복제하지 않는다.
+
+설치 스크립트는 다음 순서와 중단 조건을 지킨다.
+
+1. 노드 번호 `1~6`, Ubuntu 24.04 amd64, 예상 호스트명·사설 IP, 역할별 디스크 mount, 전체 호스트명 해석을 검사한다. 기존 HDFS 프로세스, NameNode `VERSION` 파일, 예상과 다른 Hadoop 설치·심볼릭 링크·설정이 있으면 변경 전에 중단한다.
+2. `openjdk-17-jdk-headless`, 다운로드·인증서 도구를 설치하고 실제 `java` 경로와 Java 17을 확인한다. `hadoop` 시스템 그룹과 비밀번호·로그인 셸·SSH 키가 없는 `hdfs` 시스템 계정을 모든 노드에 만든다. 기존 관리자 계정은 SSH와 `sudo` 설치에만 사용한다.
+3. 각 노드가 `hadoop-3.5.0.tar.gz`와 `.sha512`를 Apache 공식 배포 경로에서 내려받는다. 같은 디렉터리에서 `sha512sum -c`가 성공한 뒤에만 임시 경로에 압축을 풀고 실행 파일을 검사한다.
+4. 검증한 배포본을 root 소유의 `/opt/hadoop-3.5.0`에 설치하고 `/opt/hadoop`이 해당 버전을 가리키게 한다. 기존 링크가 다른 대상이거나 일반 파일·디렉터리이면 자동 삭제·교체하지 않는다. 같은 버전과 checksum이 이미 확인되면 다운로드와 압축 해제를 생략한다.
+5. 배포본의 기본 설정을 root 소유 `/etc/hadoop`에 준비한 뒤 저장소의 `config/hadoop/` 파일로 site 설정을 배치한다. `/etc/hadoop/hadoop-env.sh`, `/etc/default/hadoop`, `/etc/profile.d/hadoop.sh`에는 아래 기준을 적용한다.
+
+   | 변수 | 값 |
+   | --- | --- |
+   | `JAVA_HOME` | `/usr/lib/jvm/java-17-openjdk-amd64`를 설치 후 실제 경로와 대조 |
+   | `HADOOP_HOME` | `/opt/hadoop` |
+   | `HADOOP_CONF_DIR` | `/etc/hadoop` |
+   | `HADOOP_LOG_DIR` | `/var/log/hadoop` |
+   | `HADOOP_PID_DIR` | `/run/hadoop-hdfs` |
+
+6. Hadoop 배포본과 `/etc/hadoop`은 `root:root`, 로그·PID와 아래 역할별 데이터 디렉터리만 `hdfs:hadoop`으로 둔다. `/mnt/data`와 `/mnt/metadata` 상위 경로 전체의 소유권은 바꾸지 않는다.
+7. `hadoop-hdfs-namenode.service`, `hadoop-hdfs-journalnode.service`, `hadoop-hdfs-datanode.service`를 역할 노드에 배치한다. 각 unit은 `User=hdfs`, `Group=hadoop`, `/etc/default/hadoop`과 역할별 `RequiresMountsFor`를 사용한다. 설치 단계에서는 unit을 시작하거나 활성화하지 않는다.
+8. 설치 후 Java·Hadoop 버전, 계정의 로그인 불가, 경로별 쓰기 권한, 설정 파일 읽기, HDFS 프로세스 미실행과 NameNode 미포맷 상태를 확인한다. Node 1을 먼저 검증한 뒤 Node 2~6에 같은 설치를 적용한다.
+
+이 설치 자동화에는 `hdfs namenode -format`, `-bootstrapStandby`, `-initializeSharedEdits`, 데몬 시작, 영속 경로 삭제를 넣지 않는다. 최초 format과 Standby bootstrap은 아래 초기화 절차에서 대상과 빈 클러스터 여부를 다시 확인한 뒤 별도로 수행한다.
+
+네트워크는 `S15P21C206-71`에서 만든 VPC Peering·방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 방화벽, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. HDFS 포트 연결은 데몬을 시작한 뒤 별도 검증한다.
+
+Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1 Docker는 현재 Spark 제출 컨테이너를 사용하는 `S15P21C206-73` 착수 전에 필요하고, Node 2~6 Docker는 수집 컨테이너를 실제 배포할 때 필요하다. 2026-09-17 Jira 조회 기준으로 두 설치 책임을 명시한 별도 Task는 없으므로, 각 작업 착수 전에 기존 Task에 포함할지 별도 Task로 분리할지 확정한다. 확정 전에는 Docker 설치를 72번 완료 증거로 계산하지 않는다.
 
 | 경로 | 소유 계정 | 대상 노드 |
 | --- | --- | --- |

@@ -9,7 +9,7 @@
 - 실험 범위와 합격 조건: [분산 파이프라인 Docker PoC](../experiments/distributed-pipeline-poc.md)
 - 현행 기술 기준: [아키텍처](../architecture/README.md), [데이터](../data/README.md), [운영](../operations/README.md)
 - Gold·Redis·Bundle 전환 기준: [문서 정합화 요청 R3~R5](planetory-doc-sync-requests.md) 반영 완료. PostgreSQL 직접 적재·current 트랜잭션 전환·Redis 캐시·최신 판 재로드를 구현 기준으로 사용한다.
-- 상태: 인프라·CI/CD 뼈대와 정적 검사는 완료했다. Hadoop 3.5.0·OpenJDK 17 설치와 HDFS QJM/RF2 초기화는 `S15P21C206-72`, YARN·Spark 3.5.5 sample application은 `S15P21C206-73`의 미완료 런타임 검증이다.
+- 상태: 인프라·CI/CD 뼈대와 정적 검사는 완료했다. Hadoop 3.5.0·OpenJDK 17 설치와 HDFS QJM/RF2 초기화는 `S15P21C206-72`, YARN·Spark 3.5.5 sample application은 `S15P21C206-73`의 미완료 런타임 검증이다. Docker Engine·Compose 설치는 72번 범위가 아니며, Node 1은 73번 착수 전, Node 2~6은 수집 컨테이너 배포 전 필요하지만 2026-09-17 Jira 기준 명시적 소유 Task는 미정이다.
 
 ## 후속 작업 순서
 
