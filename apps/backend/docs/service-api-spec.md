@@ -286,6 +286,14 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 
 ## 5. 일반 게시글 — F06
 
+**구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
+
+아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`다. 실제 값은 반응 F07·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·첨부·출처가 없다"는 사실로 읽지 않는다. `commentCount`는 visible 댓글 수를 반환한다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
+
+첨부 배열은 작성·수정 모두 비어 있을 때만 받는다. 5.2절의 연결 해제 예제처럼 `historyIds`·`sourceLinks`를 빈 배열로 함께 보내는 요청은 정상 처리하며, 항목이 담긴 요청만 400 `VALIDATION_FAILED`로 거절한다.
+
+작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
+
 ### 5.1 작성
 
 작성 화면의 최종 ‘게시’에서 `POST /api/v1/posts`를 호출한다. 화면 진입이나 자동 채움만으로 글을 저장하지 않는다. SB-D17에 따라 등록 중 중복 클릭을 막고 자동 재시도하지 않는다.
@@ -341,9 +349,27 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 ## 6. 댓글 — F08
 
+**구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
+
+History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`가 비어 있을 때만 받으며, 응답의 `attachments`와 `sourceLinks`는 항상 빈 배열이다. 항목이 담긴 배열은 400 `VALIDATION_FAILED`다.
+
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
-`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20`
+`GET /api/v1/comments?parentType=POST&parentId=p-201&size=20&cursor=`, 성공 200. `size`는 기본 20, 최대 100이며 최신순이다.
+
+응답은 피드 4.1과 같은 목록 구조를 쓴다.
+
+```json
+{"items": [{"commentId":"c-801", "author": {}, "body":"", "attachments":[], "sourceLinks":[],
+            "createdAt":"2026-09-09T03:10:00Z", "updatedAt":"2026-09-09T03:10:00Z"}],
+ "nextCursor": null, "hasNext": false}
+```
+
+`cursor`는 불투명 값이며 `parentType`·`parentId`·`size`에 묶는다. 셋 중 하나라도 다른 요청에 쓰거나
+형식이 깨졌으면 400 `VALIDATION_FAILED`로 거절한다. `hasNext`는 `nextCursor != null`과 같은 뜻이며
+마지막 페이지는 `nextCursor`가 null이다. 정렬 키는 `createdAt` 내림차순·동률은 `commentId` 내림차순이고
+커서도 두 값을 함께 담아 경계에서 중복·누락이 없다. 최신순이므로 페이지를 넘기는 동안 새 댓글이 달리면
+이미 본 페이지의 내용이 밀릴 수 있다. 이어읽기는 커서 기준이라 같은 댓글을 두 번 주지는 않는다.
 
 공식 스레드는 `parentType=SIGNAL_THREAD&parentId=st-301`. 두 부모 필드는 필수다. 성공 200 목록 항목은 `commentId`, `author`, `body`, `attachments`, `sourceLinks`, `createdAt`, `updatedAt`. 기본 정렬은 최신순 제안.
 
@@ -357,7 +383,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 }
 ```
 
-부모·본문 필수, 자료 배열 생략 시 빈 목록. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처만 허용한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
+부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처는 F09·F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
 
 `PATCH /api/v1/comments/c-801`은 본문·자료만 수정하며 부모 이동은 제공하지 않는 안이다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
 

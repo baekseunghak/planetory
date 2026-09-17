@@ -27,3 +27,24 @@
 | 2026-09-16 | SRS v1.3.1 접기 위치 유지·최대 32배 확대 | 없음(요구사항 예외), 참고 #184 | EXP-13, AT-91, AT-96, foldedXZoomRatio, 중심 위상, 32배 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-16.md#접힌-곡선의-위치-유지와-최대-32배-확대-변경안) |
 | 2026-09-16 | 개발용 GPU 표시 연결과 자동 Canvas 전환 | S15P21C206-184 | WebGL, Float64, context loss, 개발 모드, 배포 제외, 성능 검증 | 개발용 구현 완료·기본 적용 보류 | [기록](2026-09-16.md#s15p21c206-184-개발용-gpu-표시-연결과-일반-배포-경계) |
 | 2026-09-16 | 연속 미세 조정의 안내·취소 버튼 깜빡임 완화 | S15P21C206-184 | 상태 안내, 표시 지연, 취소, session.ready, 슬라이더 | 구현·로컬 검증 완료 | [기록](2026-09-16.md#s15p21c206-184-연속-미세-조정의-안내-깜빡임-완화) |
+| 2026-09-16 | Publisher 멱등 적재 키와 단일 트랜잭션 rollback 책임 확정 | S15P21C206-69 | Publisher, idempotency, bundle_version, external snapshot, switch order, semantic payload, superseded, rollback, Airflow, fixture, ERD v1.6 | 검증 완료·Data 승인·Backend 재검토 | [2026-09-16](2026-09-16.md) |
+| 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |
+
+| 2026-09-16 | SRS v1.3.1 접기 위치 유지·최대 32배 확대 | 없음(요구사항 예외), 참고 #184 | EXP-13, AT-91, AT-96, foldedXZoomRatio, 중심 위상, 32배 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-16.md#접힌-곡선의-위치-유지와-최대-32배-확대-변경안) |
+| 2026-09-16 | publication_bundles 멱등 키 유일 제약 | S15P21C206-230 | publication_bundles, bundle_version, 멱등 키, UNIQUE, pg_advisory_xact_lock, V8, Publisher 재시도, ERD v1.6 | 구현 완료 | [2026-09-16](2026-09-16.md) |
+
+| 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
+| 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | transit_model 계약 1.0 확정(Schema·예제 정본화, bin 중심 평가 호출자 이동)과 기준 시각·제공 격자 대조 | S15P21C206-113, 121 | transit_model, transit-model.schema.json, D06, box-divide-v0, bin 중심, fold_reference_time_btjd, periodogram_config_version, astro-kernel, Gold fixture | 확정 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-16 | `stars` 표시 열 확정 | S15P21C206-138 | stars 표시 열, tmag, teffK, radiusRsun, 미결 10, ERD 미결 9, D-18, 공개 별 요약, null 결측 | 결정 | [2026-09-16](2026-09-16.md) |
+| 2026-09-16 | 별 상세·공개 요약·별 목록 조회 구현 | S15P21C206-138 | 별 상세, planets.items, LIKELY_PLANET, FP 제외, STAR_LOCKED, STAR_NOT_PUBLISHED, STAR_LIST_PRIVATE, lastActivityAt, 커서 경계, unpublishedSignalCount | 구현 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |
+| 2026-09-16 | 온라인 파생 계산 HTTP/JSON 경계·초기 제한 계약 | S15P21C206-70 | derived compute, Worker, HTTP JSON, residual, periodogram, timeout, fixture, DEC-35 | 계약 검증 완료·교차 리뷰 대기 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 제출 매칭 수치 규칙 v0(rule-0)·공통 fixture 31개·참조 구현 | S15P21C206-128 | 제출 매칭, rule-0, 우세/모호, ambiguous_match, 정규화 오차, minScoreGap, dominanceRatio, 고조파 alias, allowEmptyPhaseSpan, phaseWidthMax, DEC-19, Q03, C09, A04 | 제안 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 튜토리얼 순차 발견·챌린지 발견·퀘스트 패널, 회차 전환 전용 명령, 튜토리얼 완료 유지·챌린지 느낌표 기준 | S15P21C206-139 | 튜토리얼, 챌린지, 퀘스트, GET /me/quests, tutorialCompleted, completed_at, 재개, challenge-unlock, 회차 전환, 운영 명령, 비웹 기동, StarDiscoveryService, layout_ordinal, 지도 버전, marker, 빨간 느낌표, newDiscoverableCount, 미결 12, F17-Q2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 글·공식 스레드의 1단계 댓글 CRUD | S15P21C206-159 | 댓글, comments, POST, SIGNAL_THREAD, parentType, PATCH, SB-D22, FOR UPDATE, codePointCount | 구현 완료 | [2026-09-17](2026-09-17.md) |
+
+| 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
+| 2026-09-17 | 인증·지도 develop과 분석 순차 통합 | S15P21C206-182 | merge, 개발 모드, OAuth, 분석, 회귀 | 단계별 로컬 검증 | [기록](2026-09-17.md) |

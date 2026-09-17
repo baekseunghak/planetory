@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ExplorationSummaryService {
     private final JdbcClient jdbc;
+    private final TutorialRepository tutorials;
 
     public record Summary(long discoveredStarCount, long completedStarCount, long signalCount,
                           Map<String, Long> byType, Map<String, Long> starCountByGrade) {}
@@ -36,11 +37,8 @@ public class ExplorationSummaryService {
                 FROM user_candidate_achievements WHERE user_id = ?
                 """).param(memberId).query((rs, row) -> Map.of("confirmed", rs.getLong("confirmed"),
                         "unconfirmed", rs.getLong("unconfirmed"), "fp", rs.getLong("fp"))).single();
-        boolean tutorialCompleted = jdbc.sql("""
-                SELECT count(*) = 5 FROM tutorial_stars t
-                JOIN user_star_progress p ON p.tic_id = t.tic_id
-                WHERE t.active AND p.user_id = ? AND p.progress_stage = 'completed'
-                """).param(memberId).query(Boolean.class).single();
+        // 퀘스트 패널 완료 수·챌린지 자격과 같은 판정을 쓴다(탐사 API 11.1절).
+        boolean tutorialCompleted = tutorials.isTutorialCompleted(memberId);
         return new Overview(tutorialCompleted, new Summary(discovered, progress.get("completed"),
                 byType.values().stream().mapToLong(Long::longValue).sum(), byType,
                 Map.of("A", progress.get("A"), "S", progress.get("S"), "SS", progress.get("SS"), "SSS", progress.get("SSS"))));

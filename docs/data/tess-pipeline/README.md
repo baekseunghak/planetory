@@ -124,13 +124,13 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 | 입력 manifest | `tic_id:string` 식별자 (`259377017`), `sector:int` (`3`), `product_id:string`, `source_uri:string`, `retrieved_at:UTC timestamp`, `sha256:string`, `cadence_seconds:float` | 데이터·인프라 |
 | Silver 정제곡선 (2분 원본) | `point_id:int64`, `time_days:float64`, `normalized_flux:float64?`, `sector:int`, `original_quality:int64`, `valid:bool`, `exclusion_reasons:list<string>` | 배치 탐색·AI 입력·discoverable 재계산. Gold에는 넣지 않음 |
 | Gold 곡선 세그먼트 (ERD `light_curve_segments`) | `tic_id`, `sector:smallint`, `binning_revision:string`, `start_btjd:float64`, `bin_minutes:numeric`(기본 10, 세그먼트 20,000점 초과 시 확대), `n_points:int`, `flux:real[]`(빈 bin NaN), `flux_scatter:numeric`, `gaps:jsonb`. 시각은 `start_btjd + (bin_minutes/1440) × i` | 백엔드·프론트·EC2 온라인 계산 |
-| 곡선 메타 | `time_system:string`, `time_reference_offset_days:float64`, `fold_reference_time_btjd:float64`(위치는 판 vs 세그먼트 확인 필요), `flux_unit:string`, `preprocessing_version:string`, `input_snapshot_id:string` | 백엔드·프론트·AI |
+| 곡선 메타 | `time_system:string`, `time_reference_offset_days:float64`, `fold_reference_time_btjd:float64`(판 공통값, 5.1절), `flux_unit:string`, `preprocessing_version:string`, `input_snapshot_id:string` | 백엔드·프론트·AI |
 | 주기도 (ERD `periodograms`, 판 단위) | `period_min_days`, `period_max_days`, `n_periods:int`(5,000), `power:real[]`. 주기 격자 배열은 저장하지 않고 manifest 격자 규칙(로그 등간격)으로 계산 | 백엔드·프론트 |
 | 후보 (ERD `candidates`) | `id` 판 간 유지, `tic_id`, `status`(active/retired), `updated_bundle_id`, `removal_step`, `period_days/epoch_btjd/duration_hours/depth_ppm/bls_power`, `transit_model:jsonb`, `discoverable:bool`, `is_confirmed`. Silver 진단용 `source_curve_stage`, `source_peak_rank`, `snr/sde`, `observed_transit_count`, `qa_status/qa_reasons`는 Gold 열이 아니라 Silver 보존 | 백엔드·AI. 사용자용 잔차 참조 없음. 미세 조정 범위(period_min/max/step)는 열이 아니라 manifest 규칙으로 API가 계산 |
-| `transit_model` JSONB | `shape:string` (PoC는 box), shape별 `parameters:object`(주기·중심 시각·지속시간·깊이 단위 포함), `baseline` 처리 규칙, `residual_model_version:string`. 필드 정의는 윤성용 제안, 강재민과 확정 | 배치·EC2 |
+| `transit_model` JSONB | **확정(113, 계약 1.0)**: [`contracts/gold/transit-model.schema.json`](../../../contracts/gold/transit-model.schema.json). `shape=box`, `parameters{period_days, epoch_btjd, duration_hours, depth_ppm}`, `baseline.kind=unity`, `residual_model_version=box-divide-v0`. 수식·실패 코드는 [`libs/astro-kernel`](../../../libs/astro-kernel/README.md) | 배치·EC2 |
 | 외부 참조 | `candidate_id:string`, `source:string`, `external_id:string`, `raw_disposition:string?`, `retrieved_at:UTC timestamp`, `snapshot_id:string`, `match_status:string` | 백엔드 |
 | AI 결과 | `candidate_id:string`, `score:float64?`, `execution_status:string`, `decision_band:string?`, `model_version/checkpoint_hash/input_version/threshold_version:string`, `curve_ref:string` | 백엔드 |
-| 공개 manifest (ERD `publication_bundles.manifest`) | 참조할 `light_curve_segments` id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 곡선 비닝 규칙, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭, 곡선 단계 규칙, 입력·파이프라인 버전, 검증 결과. 판 열에 `fold_reference_time_btjd`, `base_days`, `status`(staging/current/archived) | 인프라·백엔드 |
+| 공개 manifest (ERD `publication_bundles.manifest`) | 참조할 `light_curve_segments` id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 곡선 비닝 규칙, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭, 곡선 단계 규칙, 곡선 원천·외부 참조 snapshot과 파이프라인 버전, 검증 결과. 판 열에 `fold_reference_time_btjd`, `base_days`, `status`(staging/current/archived) | 인프라·백엔드 |
 
 필수 결정:
 
@@ -140,4 +140,18 @@ current 판의 비닝 세그먼트 + 사용자가 제거한 후보의 transit_mo
 - `P1` 같은 화면 순위 ID는 재실행·번들 간 영구 식별자로 쓰지 않는다. ERD의 `candidates.id`는 판이 바뀌어도 유지되므로 새 판 적재 시 기존 후보와 같은 신호인지 판단하는 주기·중심 시각 허용 오차가 필요하다(ERD 미결 2). 이 기준은 재민님과 합의한다.
 - PoC의 baseline은 모든 승인 후보 공동 적합(`joint_refit`) 결과다. v1.0의 잔차 계약은 "Gold의 **고정** `transit_model` 파라미터로 모델을 생성해 나눈다"이므로 온라인에서 재적합하지 않는다. `residual_model_version`의 의미(고정 모델 제거)와 임의 제거 부분집합에서의 baseline 규칙을 먼저 정하고, 빈 제거 집합은 원본과 일치하는지 검증한다.
 - 화면 축약·AI 입력·계산 전 점은 서로 다른 산출물이다. 축약 시 좁은 감광이 유실되는지 검증한다.
-- `fold_reference_time_btjd`는 DAT-02 필터 후 time·flux가 유한한 원본 정제곡선 시각의 중앙값으로 한 번 계산해 float64로 저장한다. 브라우저·서버·Silver 잔차·EC2 잔차가 같은 값을 상속하고 다시 산정하지 않는다. **확인 필요:** 명세서 DAT-11은 "각 LightCurveSegment의" 값이라 쓰고 ERD는 `publication_bundles`에 판 단위 값 하나를 둔다. 또 산정 입력이 비닝 전 관측 시각인지 비닝 후 bin 시각인지 명시가 없다. 정본 위치와 산정 입력을 강재민과 확정한다.
+- `fold_reference_time_btjd`는 DAT-02 필터 후 time·flux가 유한한 원본 정제곡선 시각의 중앙값으로 한 번 계산해 float64로 저장한다. 브라우저·서버·Silver 잔차·EC2 잔차가 같은 값을 상속하고 다시 산정하지 않는다. 위치·산정 입력은 5.1절에서 대조해 해소했다.
+
+### 5.1 113(D06) 결정 기록 — 기준 시각·제공 격자 대조 (2026-09-17)
+
+`transit_model` 계약은 위 표와 [`contracts/gold/transit-model.schema.json`](../../../contracts/gold/transit-model.schema.json)으로 확정했다. Jira 113의 나머지 두 항목은 새로 정하지 않고 세 정본을 필드별로 대조한 결과만 남긴다.
+
+| 항목 | SRS | ERD | 탐사 API | 결과 |
+|---|---|---|---|---|
+| `fold_reference_time_btjd` 위치 | DAT-11 v1.2: Bundle 공통, 세그먼트는 별도 값 없음 | `publication_bundles` 열, `light_curve_segments`에 없음 | C02-R2: Bundle 공통 `foldReferenceTimeBtjd` | **일치.** 121 착수 때의 "SRS 세그먼트별" 충돌은 SRS v1.2에서 이미 해소됨 |
+| 산정 입력 | 모든 세그먼트의 DAT-02 필터 후 중복 제거한 유한 **원본 관측 시각**(비닝 전) 정렬 중앙값, 짝수면 가운데 두 값 평균, 없으면 공개 실패 | 같음 | 같음 | **일치.** 비닝 후 bin 시각이 아니다 |
+| 제공 주기도 격자 | DAT-11·EXP-05: 격자 간격·미세 조정 허용 폭 규칙을 manifest에 | `periodograms` 5,000점, 로그 등간격, `period_min_days`=0.5, `period_max_days`는 별마다 | 5.3절: i번째 주기 `min × (max/min)^(i/(n−1))`, `periodMaxDays` = 최장 후보 주기 × 1.15, 최소 40일 | **일치.** 격자 배열은 저장·전송하지 않고 규칙으로 복원 |
+| 후보별 `period_min/max/step` | EXP-05: 후보마다 서버가 풀어 제공, 프론트 하드코딩 금지 | 열이 아니라 manifest 규칙으로 API가 계산 | 5.4절 봉우리 API `fineTune`, POL-05 때문에 후보표가 아닌 현재 주기도에서 뽑음 | **일치.** 허용 폭 숫자는 111 실측 뒤(`peakRuleVersion`) |
+| `periodogram_config_version` 문자열 | manifest 필수 | manifest·`submissions` 열 | `periodogramConfigVersion` | 형식 미정 → **제안** `pg-log5000-v1`(간격 규칙·점 수·정수 버전). BLS 탐색용 `bls_config_version`(110 제안 `bls_grid_v1/linear50k`)과 별개 |
+
+격자 생성·봉우리 추출 구현은 120, 허용 폭 수치는 111 실측 뒤 128과 함께 정한다. `transit_model`의 bin 중심 평가·호출자 시각 이동 결정은 [astro-kernel README](../../../libs/astro-kernel/README.md) "D06(113) 결정 사항"에 있다.
