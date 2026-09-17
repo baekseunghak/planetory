@@ -132,15 +132,12 @@ public class SkyRepository {
                 rs.getBoolean("reopened"));
     }
 
+    /** 튜토리얼 번호만 싣는다. 챌린지 느낌표는 퀘스트 응답이 원천이다({@link Marker}). */
     private static Marker marker(ResultSet rs) throws SQLException {
-        String reason = rs.getString("unlock_reason");
-        if ("tutorial".equals(reason)) {
-            int seq = rs.getInt("tutorial_seq");
-            return rs.wasNull() ? null : new Marker("tutorial", seq);
+        if (!"tutorial".equals(rs.getString("unlock_reason"))) {
+            return null;
         }
-        if ("challenge".equals(reason)) {
-            return new Marker("challenge", null);
-        }
-        return null;
+        int seq = rs.getInt("tutorial_seq");
+        return rs.wasNull() ? null : new Marker("tutorial", seq);
     }
 }

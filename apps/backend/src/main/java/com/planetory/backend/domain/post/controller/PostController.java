@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.post.controller;
 
+import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.domain.post.service.PostService.CreateCommand;
 import com.planetory.backend.domain.post.service.PostService.Detail;
@@ -18,12 +19,35 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.Instant;
+import java.util.List;
 import tools.jackson.databind.JsonNode;
 
 @RestController
 @RequiredArgsConstructor
 public class PostController {
     private final PostService posts;
+    private final CommentService comments;
+
+    /**
+     * 글 상세 응답. 글 자체는 `PostService`, 댓글 수는 댓글 도메인이 소유하므로 여기서 합친다.
+     * `GET /me`가 회원과 탐사 요약을 합치는 방식과 같다.
+     */
+    public record PostDetailResponse(String postId, String title, String body, String purposeTag, String ticId,
+                                     PostService.Author author, List<Object> attachments,
+                                     List<PostService.SourceLink> sourceLinks,
+                                     PostService.ReactionSummary reactionSummary, int commentCount,
+                                     Instant createdAt, Instant updatedAt) {
+        static PostDetailResponse of(Detail post, int commentCount) {
+            return new PostDetailResponse(post.postId(), post.title(), post.body(), post.purposeTag(), post.ticId(),
+                    post.author(), post.attachments(), post.sourceLinks(), post.reactionSummary(), commentCount,
+                    post.createdAt(), post.updatedAt());
+        }
+    }
+
+    private PostDetailResponse withCommentCount(Detail post) {
+        return PostDetailResponse.of(post, comments.countVisible(parsePostId(post.postId())));
+    }
 
     @Operation(summary = "일반 게시글 작성")
     @PostMapping("/api/v1/posts")
@@ -35,19 +59,21 @@ public class PostController {
 
     @Operation(summary = "일반 게시글 상세")
     @GetMapping("/api/v1/posts/{postId}")
-    public Detail detail(@PathVariable String postId) { return posts.detail(parsePostId(postId)); }
+    public PostDetailResponse detail(@PathVariable String postId) {
+        return withCommentCount(posts.detail(parsePostId(postId)));
+    }
 
     @Operation(summary = "일반 게시글 수정")
     @PatchMapping("/api/v1/posts/{postId}")
-    public Detail patch(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String postId,
-                        @RequestBody JsonNode request) {
+    public PostDetailResponse patch(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String postId,
+                                   @RequestBody JsonNode request) {
         if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         // 명세 5.2의 연결 해제 예제가 빈 배열을 함께 보낸다. 빈 값은 받고 실제 항목이 있을 때만 거절한다.
         rejectItems(request, "historyIds");
         rejectItems(request, "sourceLinks");
-        return posts.patch(principal.memberId(), parsePostId(postId), new PostService.PatchCommand(
+        return withCommentCount(posts.patch(principal.memberId(), parsePostId(postId), new PostService.PatchCommand(
                 text(request, "title"), request.has("title"), text(request, "body"), request.has("body"),
-                text(request, "purposeTag"), request.has("purposeTag"), text(request, "ticId"), request.has("ticId")));
+                text(request, "purposeTag"), request.has("purposeTag"), text(request, "ticId"), request.has("ticId"))));
     }
 
     @Operation(summary = "일반 게시글 삭제")

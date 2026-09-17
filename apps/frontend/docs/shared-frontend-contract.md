@@ -44,8 +44,8 @@
 
 ```tsx
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
-// start() 안의 기본 pages:
-let pages: PageSlots = { analysis: AnalysisPage };
+// start() 안에서 이미 등록된 sky를 유지하고 분석 슬롯을 추가:
+pages.analysis = AnalysisPage;
 ```
 
 분석 컴포넌트 안에서는 다음 공통 코드를 사용한다.
@@ -64,7 +64,7 @@ const { ticId, historyId, postId, returnTo } = usePageContext();
 
 회원 정보는 `{memberId, nickname, onboardingDone, tutorialCompleted}`로 읽는다. `onboardingDone`과 `tutorialCompleted`는 독립이고 프론트에서 서로 유추하지 않는다. 마이페이지 성과 요약 등 추가 DTO는 해당 기능의 decoder에서 API 계약에 맞춰 확장한다.
 
-로그아웃은 **서버 성공 후** `useSession().clear()`를 사용한다. 사용자 요청으로 201 공통 헤더에도 최소 로그아웃 버튼을 연결했으며, W04 통합 시 기존 SessionProvider 로그아웃과 중복 동작을 정리한다. `clear()` 자체는 백엔드 세션을 종료하지 않는다. 401은 공통 클라이언트가 clear를 실행하고 진행 중 요청·화면의 개인 데이터를 제거한다. 403/404는 로그인 상태를 해제하지 않는다. 일반 네트워크 오류는 401로 간주하지 않는다.
+W04에서는 `useSession().logout()`을 사용한다. 공통 Provider가 로그아웃 요청 동안 개인 화면을 제거하고 **서버 성공 후** `clear()`를 호출한다. 응답이 불명확하면 `verifyLogout()`으로 회원 상태를 확인하며 쓰기 요청을 자동 재전송하지 않는다. `clear()` 자체는 백엔드 세션을 종료하지 않는다. 401은 공통 클라이언트가 clear를 실행하고 진행 중 요청·화면의 개인 데이터를 제거한다. 403/404는 로그인 상태를 해제하지 않는다. 일반 네트워크 오류는 401로 간주하지 않는다.
 
 ## 화면 주소와 전달값
 
@@ -85,7 +85,7 @@ const { ticId, historyId, postId, returnTo } = usePageContext();
 | publicAnalysis                     | /public-analyses/:analysisId                                                                       | 백지웅                                                             |
 | statistics                         | /statistics                                                                                        | 백지웅                                                             |
 
-기존 서비스 시제품의 모호한 `:id`는 각 의미의 `:historyId`, `:postId` 등으로 명명했다. URL 형태는 유지하며 새 제출 결과 경로는 검토가 필요하다. 로그인 /login, 콜백 /oauth/callback만 인증 예외다. 현재 login/콜백 컴포넌트는 세션 확인용 자리이며 OAuth 기능 완료가 아니다.
+기존 서비스 시제품의 모호한 `:id`는 각 의미의 `:historyId`, `:postId` 등으로 명명했다. URL 형태는 유지하며 새 제출 결과 경로는 검토가 필요하다. 로그인 /login, 콜백 /oauth/callback만 인증 예외다. W04에서 로그인·콜백 UI를 연결했다. 실제 제공자 로그인 완료 여부와 미확정 계약은 [202 검증 기록](ticket-202-readiness.md)을 따른다.
 
 ```ts
 pagePath(
@@ -135,3 +135,9 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 4. 같은 로그인 상태로 별지도 연결 자리 → 분석 화면 → 원래 주소 복귀, 분석 직접 URL·새로고침을 확인한다. 분석 기능 전체 완성은 이 연결 시험의 선행 조건이 아니다.
 
 서진님이 전달한 지웅님의 동의는 공통 사용 방향의 합의로 기록한다. 아직 실제 컴포넌트를 받아 연결 시험을 한 것으로 기록하지 않는다. 새 입력 API나 서버 추적 ID 구현을 공통 기반의 추가 선행으로 요구하지 않는다. 기능 API가 준비되면 해당 폼에서 오류 표시도 대조한다. 배포 주소·HTTPS·Safari의 남은 확인은 [인수 상태](ticket-201-readiness.md)에 남긴다.
+
+## W05 별지도 데이터 연결
+
+203에서 `SkyDataPage`를 sky 슬롯에 등록했다. 메타·타일은 같은 `api()`/`useSession()`을 사용하며 회원/버전/level 단위 캐시를 갖는다. 204의 은하 렌더러는 `renderScene`으로 연결하고 카메라 행렬을 `viewportBounds`에 전달한다. 세부 API와 캐시·오류 규칙은 [별지도 데이터 어댑터 계약](sky-data-adapter.md)을 따른다.
+
+분석 제출·공개 등록·재개 화면은 기존 API 성공 응답의 `skyVersion`/선택적 `asOf`를 `publishSkyChange(member.memberId, event)`에 전달한다. 지도 재진입은 메타부터 조회한다. 실제 분석/공개 기능을 이 공통 프로젝트에서 대신 구현한 것이 아니다.
