@@ -33,3 +33,4 @@
 | 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | `stars` 표시 열 확정 | S15P21C206-138 | stars 표시 열, tmag, teffK, radiusRsun, 미결 10, ERD 미결 9, D-18, 공개 별 요약, null 결측 | 결정 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 상세·공개 요약·별 목록 조회 구현 | S15P21C206-138 | 별 상세, planets.items, LIKELY_PLANET, FP 제외, STAR_LOCKED, STAR_NOT_PUBLISHED, STAR_LIST_PRIVATE, lastActivityAt, 커서 경계, unpublishedSignalCount | 구현 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | 제출 매칭 수치 규칙 v0(rule-0)·공통 fixture 31개·참조 구현 | S15P21C206-128 | 제출 매칭, rule-0, 우세/모호, ambiguous_match, 정규화 오차, minScoreGap, dominanceRatio, 고조파 alias, allowEmptyPhaseSpan, phaseWidthMax, DEC-19, Q03, C09, A04 | 제안 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
