@@ -23,7 +23,7 @@
 | 6 | 배치와 온라인 계산의 수치 일치 검증 | 운영 amd64의 배치·온라인 결과 비교; ARM64는 지원 필요 시 추가 |
 | 7 | 온라인 계산 API·대기열·캐시 PoC | 중복 요청·실패·부하 측정 |
 | 8 | Gold 용량과 GCP 처리시간 측정 | 표본 기반 용량·시간 보고서 |
-| 9 | GitLab CI 검사 분리 | 변경 경로별 필요한 작업만 실행 |
+| 9 | `S15P21C206-91` GitLab CI 검사 분리·Runner 검증 | YARN XML·스크립트 경로별 job 선택, Linux Runner 성공·실패 Pipeline 증거 |
 | 10 | GCP·EC2 배포 자동화 | 노드별 배포·상태 확인·되돌리기 |
 
 ## 아직 완료되지 않은 것
@@ -32,7 +32,8 @@ CI/CD 뼈대와 노드별 Compose·XML 설정은 작성했다. 로컬 구성 검
 
 - 데이터·백엔드·프론트 담당자의 계약 검토
 - 실제 Sector 입력을 사용한 Spark 메모리·처리시간 상한과 재시도 검증
-- GCP/EC2 실제 자원, GitLab Runner, Registry와 GitLab 버전 확인
+- GCP/EC2 실제 자원, Registry와 GitLab 버전 확인
+- `S15P21C206-91`에서 YARN XML·스크립트의 `validate:hadoop-config` 경로 선택, Linux Runner 실행과 성공·실패 Pipeline 증거 확인. `S15P21C206-73`은 로컬·실환경 검증까지만 완료했으며 CI 통과를 완료 증거로 주장하지 않는다.
 - PoC 코드 작성과 Docker 실행
-- 실제 이미지 빌드·Registry push, 변경 경로별 job 선택 및 서버 배포·롤백 검증
+- 실제 이미지 빌드·Registry push와 서버 배포·롤백 검증
 - Jira 결과 링크와 MR 등록
