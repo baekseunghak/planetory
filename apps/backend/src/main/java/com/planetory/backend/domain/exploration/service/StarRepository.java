@@ -245,7 +245,7 @@ public class StarRepository {
                 .query(Integer.class).single();
     }
 
-    /** 튜토리얼이면 번호를 함께 준다. 챌린지는 번호가 없고 그 밖에는 null이다. */
+    /** 튜토리얼이면 번호를 준다. 그 밖에는 빈 값이다. 챌린지 느낌표는 싣지 않는다({@link SkyViews.Marker}). */
     public Optional<SkyViews.Marker> findMarker(long memberId, long ticId) {
         return jdbc.sql("""
                         SELECT u.unlock_reason, t.seq AS tutorial_seq
@@ -255,14 +255,7 @@ public class StarRepository {
                          WHERE u.user_id = :memberId AND u.tic_id = :ticId
                         """)
                 .param("memberId", memberId).param("ticId", ticId)
-                .query((rs, rowNum) -> {
-                    String reason = rs.getString("unlock_reason");
-                    if ("tutorial".equals(reason)) {
-                        int seq = rs.getInt("tutorial_seq");
-                        return rs.wasNull() ? null : new SkyViews.Marker("tutorial", seq);
-                    }
-                    return "challenge".equals(reason) ? new SkyViews.Marker("challenge", null) : null;
-                })
+                .query((rs, rowNum) -> markerOf(rs))
                 .optional()
                 .filter(marker -> marker != null);
     }
@@ -374,13 +367,13 @@ public class StarRepository {
                 .query(Boolean.class).single();
     }
 
+    /** 튜토리얼 번호만 싣는다. 발견 경로는 {@code unlockReason}이 따로 알린다. */
     private static SkyViews.Marker markerOf(java.sql.ResultSet rs) throws java.sql.SQLException {
-        String reason = rs.getString("unlock_reason");
-        if ("tutorial".equals(reason)) {
-            int seq = rs.getInt("tutorial_seq");
-            return rs.wasNull() ? null : new SkyViews.Marker("tutorial", seq);
+        if (!"tutorial".equals(rs.getString("unlock_reason"))) {
+            return null;
         }
-        return "challenge".equals(reason) ? new SkyViews.Marker("challenge", null) : null;
+        int seq = rs.getInt("tutorial_seq");
+        return rs.wasNull() ? null : new SkyViews.Marker("tutorial", seq);
     }
 
     private static Double nullableDouble(java.sql.ResultSet rs, String column)

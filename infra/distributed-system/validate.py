@@ -53,7 +53,28 @@ def main():
             ) in compose
         assert "HADOOP_CONF_DIR: /etc/hadoop" in compose
         assert "YARN_CONF_DIR: /etc/hadoop" in compose
-    print("PASS: XML, RF2, 5 workers, role limits and short/FQDN host mappings")
+    installer = (BASE / "scripts/install-hdfs-host.sh").read_text(encoding="utf-8")
+    for required in (
+        'HADOOP_VERSION="3.5.0"',
+        "openjdk-17-jdk-headless",
+        "sha512sum --check",
+        "User=hdfs",
+        "RequiresMountsFor=",
+        "roles=(namenode journalnode datanode)",
+        "roles=(journalnode datanode)",
+        "roles=(datanode)",
+    ):
+        assert required in installer, required
+    for forbidden in ("hdfs namenode -format", "-bootstrapStandby", "-initializeSharedEdits"):
+        assert forbidden not in installer, forbidden
+    orchestrator = (BASE / "scripts/install-hdfs-hosts.ps1").read_text(encoding="utf-8")
+    assert "SupportsShouldProcess" in orchestrator
+    assert "Install Node 1 alone" in orchestrator
+    assert "Invoke-Tailscale ssh" in orchestrator
+    assert "Invoke-Scp" in orchestrator
+    assert "SSAFY" in orchestrator and "planetory-admin" in orchestrator
+    assert "gcloud" not in orchestrator
+    print("PASS: HDFS/YARN config, host mappings and safe HDFS installer contracts")
 
 
 if __name__ == "__main__":

@@ -69,11 +69,12 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 HDFS 삭제, NameNode 초기화, 전체 노드 동시 재시작과 Gold 공개 전환은 일반 애플리케이션 배포 job에 넣지 않는다.
 
-Hadoop/YARN 데몬은 호스트에서 실행한다.
+Hadoop/YARN 데몬은 호스트에서 실행한다. 일반 애플리케이션 배포와 분리해 다음 순서로 준비한다.
 
-1. `infra/distributed-system/config/hadoop/`의 공통 파일을 `/etc/hadoop/`에 배포한다.
-2. 노드 역할에 맞는 `config/yarn/` 파일을 배포한다.
-3. [운영 절차](../../infra/distributed-system/README.md)에 따라 서비스를 시작한다.
+1. `S15P21C206-72`에서 OpenJDK 17과 Hadoop 3.5.0을 설치하고 `config/hadoop/`의 공통 파일을 `/etc/hadoop/`에 배포한다.
+2. HDFS systemd 서비스를 배치한 뒤 [운영 절차](../../infra/distributed-system/README.md)에 따라 QJM·NameNode·DataNode를 초기화하고 RF2 표본을 검증한다.
+3. `S15P21C206-73`에서 노드 역할에 맞는 `config/yarn/` 파일과 YARN systemd 서비스를 배포한다.
+4. ResourceManager·NodeManager를 시작하고 Spark 3.5.5 sample application을 실행한다.
 
 신규 NameNode format과 Standby bootstrap은 한 번만 수동 수행한다. `initializeSharedEdits`는 기존 단일 NameNode를 HA로 전환할 때만 사용한다.
 

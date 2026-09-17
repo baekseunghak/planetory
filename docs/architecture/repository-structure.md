@@ -57,6 +57,7 @@ infra/
 │  ├─ compose.control-plane.yaml
 │  ├─ compose.worker.yaml
 │  ├─ validate.py
+│  ├─ scripts/                 # HDFS 호스트 설치와 GCP 호출
 │  └─ config/
 │     ├─ hadoop/              # 공통 HDFS 설정과 Worker 목록
 │     └─ yarn/                # worker.xml, standby-worker.xml

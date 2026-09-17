@@ -134,7 +134,7 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 
 - 윤성용: 전처리 설계 검토, 비교 실험 입력·방법·평가표 작성, 후속 실험 수행과 선택 근거 보고.
 - 김동혁: 원천·정제·마스크 저장 계약과 실행/재처리 단위 검토.
-- 강재민·백지웅: 비닝 세그먼트(`start_btjd`·`bin_minutes`·NaN·`gaps`)·시간·flux 단위가 온라인 계산과 화면에서 일관되게 사용되는지, 10분 비닝에서 짧은 통과의 위상 구간 선택과 근거 체크가 가능한지 검토.
+- 강재민·백지웅: 비닝 세그먼트(`start_btjd`·`bin_minutes`·NULL 빈 bin·`gaps`)·시간·flux 단위가 온라인 계산과 화면에서 일관되게 사용되는지, 10분 비닝에서 짧은 통과의 위상 구간 선택과 근거 체크가 가능한지 검토.
 - 일정 제안: 29번 리뷰 전에 처리 흐름·출력 계약·실험 계획을 검토하고, 구현 착수 전 품질 마스크·평가 입력·잠정 판정 기준을 기록한다. **실제 달력 날짜·후속 Task 담당 확약은 아직 미합의**이며 29번 완료 전 기한 표에 채운다.
 - 리뷰 질문: 이 목표·단계 구분으로 진행할지, 부분 Sector 실패를 어떻게 처리할지, 관측점/마스크 표현을 무엇으로 할지, TBD를 어느 후속 Task에서 언제 결정할지 확인한다.
 
@@ -148,8 +148,8 @@ AI 임계값 결정용 데이터와 최종 평가 데이터를 구분하고 동�
 |---|---:|---:|---|
 | 원천 행 대응·Sector별 trend·정규화 통계·품질 마스크·제외 상세 | O | X | 전처리 진단과 재현용. 품질 플래그는 배치에서만 소비하고 화면에 전달하지 않음(POL-13) |
 | 2분 원본 정제곡선(전 관측점) | O | X | 탐색 BLS·AI 입력·discoverable 재계산의 Silver 입력. Gold에는 비닝본만 |
-| 별·섹터 세그먼트로 10분 비닝한 곡선(`flux real[]`, NaN 빈 bin, `gaps`, `flux_scatter` 스칼라, `binning_revision`) | O | O | 화면 접기와 EC2 잔차 계산의 canonical 입력(EXP-01). 판에 묶이지 않고 manifest가 세그먼트 id 집합을 참조. 별도 200-bin 배열을 분석 원본으로 사용하지 않음 |
-| `fold_reference_time_btjd` | O | O | 브라우저·서버·잔차 공통 기준 시각. 위치(판 vs 세그먼트)는 확인 필요 |
+| 별·섹터 세그먼트로 10분 비닝한 곡선(`flux real[]`, NULL 빈 bin(DB `real[]` NULL, JSON `null`), `gaps`, `flux_scatter` 스칼라, `binning_revision`) | O | O | 화면 접기와 EC2 잔차 계산의 canonical 입력(EXP-01). 판에 묶이지 않고 manifest가 세그먼트 id 집합을 참조. 별도 200-bin 배열을 분석 원본으로 사용하지 않음 |
+| `fold_reference_time_btjd` | O | O | 브라우저·서버·잔차 공통 기준 시각. 판 공통값으로 확정([README](README.md) 5.1절) |
 | 원본 정제곡선의 BLS periodogram(판 단위, `n_periods` 5,000·`power real[]`) | O | O | 최초 사용자 탐색 제공. 주기 격자 배열은 저장하지 않고 manifest 규칙으로 계산 |
 | 배치 단계별 잔차곡선·잔차 periodogram 배열 | 실행 중 O, 지속 저장 X | X | DAT-05~07 후보 탐색·제거 QA용 내부 계산. 단계별 배열은 저장하지 않고 Gold에도 넣지 않음 |
 | raw peak·품질 실패 후보·반복 종료 진단 | O | X | 임계값 검증과 운영 진단용 |
@@ -170,17 +170,19 @@ Silver 내부 잔차는 반복 후보 탐색과 제거 QA를 위해 실행 중 �
 
 | ERD 테이블 | 윤성용이 채워야 하는 과학 필드·규칙 | 남은 결정 |
 |---|---|---|
-| `light_curve_segments` | `tic_id`, `sector`, `binning_revision`(원천·전처리·비닝 설정 버전), `start_btjd`(첫 bin 시작), `bin_minutes`(기본 10, 세그먼트 20,000점 초과 시 확대·실제 간격 기록), `n_points`, `flux real[]`(빈 bin NaN, 균등 격자 유지), `flux_scatter`(세그먼트당 산포 스칼라), `gaps`(빈 구간 인덱스). `UNIQUE(tic_id, sector, binning_revision)`, 행 불변 | 비닝 간격 실측, 산포 정의(MAD 등), bin 대표값(중앙값/평균), 부분 bin 처리 |
+| `light_curve_segments` | `tic_id`, `sector`, `binning_revision`(원천·전처리·비닝 설정 버전), `start_btjd`(첫 bin 시작), `bin_minutes`(기본 10, 세그먼트 20,000점 초과 시 확대·실제 간격 기록), `n_points`, `flux real[]`(빈 bin NULL, 균등 격자 유지), `flux_scatter`(세그먼트당 산포 스칼라), `gaps`(빈 구간 인덱스). `UNIQUE(tic_id, sector, binning_revision)`, 행 불변 | 비닝 간격 실측, 산포 정의(MAD 등), bin 대표값(중앙값/평균), 부분 bin 처리 |
 | `periodograms` | 판 단위. `period_min_days`, `period_max_days`, `n_periods`(5,000), `power real[]`. 격자는 manifest의 로그 등간격 규칙으로 계산 | 격자 범위·간격 규칙, 목적함수, `periodogram_config_version` 정의. 탐색용 BLS 격자와 분리 |
 | `candidates` | `id`(판 간 유지), `status`(active/retired), `updated_bundle_id`, `removal_step`, `period_days`, `epoch_btjd`, `duration_hours`, `depth_ppm`, `bls_power`, `transit_model` JSONB, `discoverable`, `is_confirmed`. 단위는 열 이름으로 고정(일·BTJD·시간·ppm) | `transit_model` 필드·shape·`residual_model_version` 정의, 판 사이 후보 동일성 허용 오차, 미세 조정 허용 폭 규칙 |
 | `candidate_aliases` | `multiplier`, `alias_period_days` | 추가 고조파(DEC-05) |
 | `external_signal_references`, `candidate_dispositions`, `candidate_status_history` | [5.8절](external-sources-and-ai.md)의 원천·외부값·disposition·조회일, DAT-09 통합 규칙·`rule_version`, 변경 이력 | DEC-20 대표값 정렬 |
 | `ai_executions`, `ai_evaluations` | [5.9절](external-sources-and-ai.md)의 `model_version`·`checkpoint`·`status`, 후보별 `score`·`verdict`(rejected/hold/approved)·`threshold_version`. 실패는 score null + 상태 | 모델·임계값(DEC-02·04) |
-| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각 위치(판 vs 세그먼트)와 산정 입력. Publisher가 직접 적재하고 같은 트랜잭션에서 current 전환 |
+| `publication_bundles` | `bundle_version`, `status`(staging/current/archived), `manifest` JSONB(세그먼트 id 집합, 배열 checksum, `residual_model_version`, `periodogram_config_version`, 비닝 규칙, 격자 규칙, 미세 조정 허용 폭, 곡선 단계 규칙), `fold_reference_time_btjd`, `base_days` | fold 기준 시각은 판 공통·원본 관측 시각 중앙값으로 확정(113). Publisher가 직접 적재하고 같은 트랜잭션에서 current 전환 |
 
-nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions.status`로 미평가·입력 부족·실패를 구분하고, 세그먼트의 NaN은 빈 bin이며 `gaps`가 그 위치를 설명한다. 단위는 ERD 열 이름에 고정되어 있으므로 period/day와 duration/hour를 수식에서 암묵적으로 섞지 않는다.
+nullable 값은 의미가 명확해야 한다. AI `score=null`은 `ai_executions.status`로 미평가·입력 부족·실패를 구분하고, 세그먼트의 NULL은 빈 bin이며 `gaps`가 그 위치를 설명한다. 단위는 ERD 열 이름에 고정되어 있으므로 period/day와 duration/hour를 수식에서 암묵적으로 섞지 않는다.
 
 스키마 변경은 ERD와 manifest의 버전을 올리고 소비자 호환성, 기존 판 읽기 가능 여부, 재처리 범위를 MR에 기록한다. 비닝·격자 규칙 변경은 새 `binning_revision`과 새 판으로만 반영하고 기존 세그먼트 행을 덮어쓰지 않는다.
+
+Gold 적재 전 검사 항목·실패 상태·배열 checksum 규칙·허용 오차 등록 절차는 [Gold 공개 QA 계약 v0](../../../contracts/gold/publication-qa.md)(117)로 옮겼다. 손상 Sector·AI 실패의 공개 여부는 그 문서 5절의 미결 항목이다.
 
 ### 7.3 재처리·갱신·재개 조건 v0.1
 
@@ -213,7 +215,7 @@ EC2 상태는 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRA
 
 - 실제 다중 후보 사례 후보: TOI-270 TIC `259377017`, Sector 3·4·5. 현재는 최초 BLS만 확인했으므로 검증용 후보 집합은 원본 periodogram 상위 피크의 품질·고조파 검증 뒤 고정한다.
 - 단일 후보·겹친 후보·깊은 식쌍성·빈 후보 집합을 작은 합성 fixture로 추가한다.
-- 동일한 판의 비닝 세그먼트(`start_btjd`·`bin_minutes`·`flux`·NaN 위치), 정렬한 후보 ID와 `transit_model` 파라미터, `residual_model_version`, `periodogram_config_version`, manifest 격자 규칙을 양쪽에 전달한다.
+- 동일한 판의 비닝 세그먼트(`start_btjd`·`bin_minutes`·`flux`·NULL 위치), 정렬한 후보 ID와 `transit_model` 파라미터, `residual_model_version`, `periodogram_config_version`, manifest 격자 규칙을 양쪽에 전달한다.
 - Silver 기준 결과도 같은 비닝 세그먼트에서 계산한다. 2분 원본에서 계산한 잔차와 비교하지 않는다.
 - PostgreSQL `real[]` 적재·조회를 실제로 거친 뒤 계산해 float32 저장·정렬·NaN 변환 문제까지 포함한다.
 
@@ -250,7 +252,7 @@ flux와 power의 허용 오차는 **TBD**다. 김동혁의 온라인 계산 문�
 | DEC-35 온라인 계산 | Python Worker·Redis·Publisher 직접 적재는 종결. 남은 것은 동시 상한·시간 목표·용량·허용 오차. `joint_refit`이 아닌 `libs/astro-kernel`의 고정 모델 제거 규약 사용 | 김동혁·윤성용·강재민 / 후속 실측 Task에서 기한 확정 |
 | 비닝 간격·discoverable 해상도 | 대상 별의 가장 짧은 통과 지속시간 실측, 10분 bin에서 위상 구간 선택·근거 체크·봉우리 판정 가능성(ERD 미결 10, DAT-07) | 윤성용, 화면은 백지웅 / DEC-01 데이터 범위 결정과 같은 Task |
 | 무신호 별 비율 | 자체 BLS 채택 신호 0개 별의 비율 실측, DEC-16 시나리오 충족 여부, 높으면 DEC-03 임계값 조정(10.1 안건 12) | 윤성용·김동혁 / DEC-01 작업에 포함 |
-| `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`, 판별 주기도 격자(로그 등간격·5,000점)·`periodogram_config_version`, 미세 조정 허용 폭 산출식 | 윤성용·강재민 / Gold 적재 계약 MR 전 |
+| `transit_model` 스키마·격자 규칙 | JSONB 필드·shape·`residual_model_version`은 [계약 1.0](../../../contracts/gold/transit-model.schema.json)으로 확정(113). 판별 주기도 격자는 ERD·API와 일치 확인, `periodogram_config_version` 형식 제안 `pg-log5000-v1`. 미세 조정 허용 폭 수치는 111 실측 뒤 | 윤성용 / 완료(수치는 111·128) |
 | 후보 동일성 | 새 판 적재 시 기존 `candidates.id`를 유지할 주기·중심 시각 허용 오차(ERD 미결 2) | 윤성용·강재민 / 후보 병합 벤치마크와 함께 |
 | 스키마·갱신 | [5절](README.md)·7.2·7.3절 필드·후보 ID·빈 결과/실패·재개 변경 목록, fold 기준 시각 위치(판 vs 세그먼트) | 윤성용·강재민, 이벤트 소비자 / 인터페이스 Task 등록 때 기한 확정 |
 | 그래프 단위 | 시간계·day/hour·ppt/ppm·비닝 세그먼트와 NaN·`gaps`·화면 축약 | 윤성용·강재민·백지웅 / 첫 샘플 전달 전, 날짜 팀 확인 필요 |

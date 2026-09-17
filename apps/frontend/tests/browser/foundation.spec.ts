@@ -171,7 +171,9 @@ test("menu traps keyboard focus and returns it; small screens get the desktop no
   await expect(page.getByRole("button", { name: "메뉴 닫기" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(
-    page.getByRole("link", { name: "설정", exact: true }),
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "로그아웃", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "메뉴 닫기" })).toBeFocused();

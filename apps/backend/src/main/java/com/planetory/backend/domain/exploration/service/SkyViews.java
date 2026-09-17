@@ -80,7 +80,13 @@ public final class SkyViews {
             boolean reopened) {
     }
 
-    /** 튜토리얼이면 번호를 함께 준다. 챌린지는 번호가 없고 그 밖에는 null이다. */
+    /**
+     * 지도 표식. 지금은 튜토리얼 번호({@code type=tutorial})만 있고 그 밖에는 null이다.
+     *
+     * <p>챌린지 빨간 느낌표는 싣지 않는다 [S15P21C206-139]. 느낌표는 발견 경로와 무관하게 진행
+     * 회차의 대상 별에 붙어야 하는데, 회차 전환·종료는 회원 지도 버전을 바꾸지 않아 타일에 실으면
+     * 갱신되지 않는다. 프론트는 퀘스트 응답의 {@code challenge.ticId}로 그린다(탐사 API 4.3).
+     */
     public record Marker(String type, Integer seq) {
     }
 }

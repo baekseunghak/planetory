@@ -33,12 +33,12 @@ tailscale ping node-1
 | `donh-vnic` | CI/CD 컨테이너 , `tag:registry` | 22 port 접근·Tailscale SSH 허용 | `ssh claude@donh-vnic` |
 | `ec2-a` | 프로젝트 서비스 단일 노드, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh ubuntu@ec2-a` |
 | `ec2-b` | 서비스 역할 없음(tailnet 등록만 유지), `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh ubuntu@ec2-b` |
-| `node-1` | GCP master, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh SSAFY@node-1` |
-| `node-2` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh planetory-admin@node-2` |
-| `node-3` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh planetory-admin@node-3` |
-| `node-4` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh planetory-admin@node-4` |
-| `node-5` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh planetory-admin@node-5` |
-| `node-6` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `ssh planetory-admin@node-6` |
+| `node-1` | GCP master, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh SSAFY@node-1` |
+| `node-2` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-2` |
+| `node-3` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-3` |
+| `node-4` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-4` |
+| `node-5` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-5` |
+| `node-6` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-6` |
 
 EC2 계정은 추정하지 않는다. 관리자가 해당 서버에 실제 존재하는 계정을 확인해 별도로 안내한 뒤 사용한다.
 
@@ -46,15 +46,25 @@ EC2 계정은 추정하지 않는다. 관리자가 해당 서버에 실제 존�
 
 ## 3. 접속 확인과 주의사항
 
-접속 전에 서버 이름이 Tailscale 경로로 응답하는지 확인한다.
+GCP 노드의 일상 로그인과 운영 자동화는 `node-*` MagicDNS 이름을 사용하는 tailnet 경로가 기본이다. `gcloud compute ssh`는 최초 Tailscale 설치·등록 또는 tailnet 장애 복구에만 사용하며, 복구 접속 성공을 tailnet 복구 완료로 간주하지 않는다.
+
+접속 전에 서버 이름이 Tailscale 경로로 응답하는지 확인하고 `tailscale ssh`로 접속한다.
 
 ```powershell
 tailscale ping ec2-a
 tailscale ping ec2-b
 tailscale ping node-1
+tailscale ssh SSAFY@node-1 hostname -s
 ```
 
-첫 SSH 접속에서 호스트 키 확인이 나오면 관리자에게 fingerprint를 확인하고 승인한다. `StrictHostKeyChecking=no`로 검증을 우회하거나 개인 키 내용을 공유하지 않는다.
+`tailscale ssh`는 대상의 Tailscale 호스트 키를 확인한다. 파일 전송은 먼저 같은 대상에 `tailscale ssh`가 성공한 뒤 OpenSSH `scp`와 같은 MagicDNS 이름을 사용한다.
+
+```powershell
+tailscale ssh SSAFY@node-1 hostname -s
+scp <로컬-파일> SSAFY@node-1:<원격-경로>
+```
+
+호스트 키 검증을 `StrictHostKeyChecking=no`로 우회하거나 개인 키 내용을 공유하지 않는다.
 
 Tailscale은 관리 접속 경로다. `node-*` 접속 성공을 GCP `10.20.x.10` 사설망, VPC Peering 또는 Hadoop 서비스 통신 검증으로 대신하지 않는다.
 

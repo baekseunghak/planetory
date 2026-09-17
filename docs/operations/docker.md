@@ -62,6 +62,8 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 
 GCP Hadoop/YARN 데몬은 호스트에서 실행한다. 운영 Compose가 DataNode·NodeManager를 생성하지 않는 것은 이 배치 방식에 따른 것이다. 최초 설치와 노드별 XML 복사는 [분산 시스템 운영 절차](../../infra/distributed-system/README.md)를 따른다. 로컬 단일 호스트 Compose와 실제 6대 VM 배포는 서로 다른 실행 환경이다.
 
+호스트 HDFS 기준은 Hadoop 3.5.0과 OpenJDK 17이다. 기본 Spark 제출 이미지 `apache/spark:3.5.5-python3`는 2026-09-17 확인한 `sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1` 기준 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 로컬 Hadoop 3.5.0 HDFS 쓰기·읽기 성공은 부분 검증이며 실제 6대 YARN 조합은 `S15P21C206-73`에서 검증한다.
+
 ## 공통 규칙
 
 - 비밀번호, 토큰, 클라우드 키, 실제 IP와 데이터를 이미지에 넣지 않는다.

@@ -47,7 +47,7 @@
   "payloads": {
     "v2": {
       "tic_id": 123456789,
-      "bundle_version": "pv1-76b6198b86488a12b047034087df674c0ac8bbd0aa6699ce7f46213738102561",
+      "bundle_version": "pv1-03bf1746eae8d6d870589306100e96ea94083a4cab8258a9baff624e4b1b204c",
       "semantic_payload": {
         "input_snapshot_ids": ["snapshot-tess-s14-v1", "snapshot-external-20260915"],
         "segments": [
@@ -65,7 +65,7 @@
         "calculation_versions": {
           "preprocessing": "preprocess-v1",
           "bls_config": "bls-v1",
-          "residual_model": "box-v1",
+          "residual_model": "box-divide-v0",
           "periodogram_config": "bls-log-v1",
           "candidate_quality": "candidate-quality-v1",
           "ai_model": "astronet-v1",
@@ -78,7 +78,7 @@
     },
     "v2-changed-segment": {
       "tic_id": 123456789,
-      "bundle_version": "pv1-76b6198b86488a12b047034087df674c0ac8bbd0aa6699ce7f46213738102561",
+      "bundle_version": "pv1-03bf1746eae8d6d870589306100e96ea94083a4cab8258a9baff624e4b1b204c",
       "semantic_payload": {
         "input_snapshot_ids": ["snapshot-external-20260915", "snapshot-tess-s14-v1"],
         "segments": [
@@ -96,7 +96,7 @@
         "calculation_versions": {
           "preprocessing": "preprocess-v1",
           "bls_config": "bls-v1",
-          "residual_model": "box-v1",
+          "residual_model": "box-divide-v0",
           "periodogram_config": "bls-log-v1",
           "candidate_quality": "candidate-quality-v1",
           "ai_model": "astronet-v1",
