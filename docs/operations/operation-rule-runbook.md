@@ -96,3 +96,34 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 - 이 설정은 V9가 처음 적용될 때만 쓰인다. 이미 적용된 DB에서 값을 바꾸려면 새 버전을 넣는다. 설정은 파일 내용에 들어가지 않으므로 환경이 달라도 Flyway 체크섬은 같다.
 - 마이그레이션 SQL에는 Flyway placeholder 같은 전용 문법을 쓰지 않는다. Gold 적재 왕복 도구(`experiments/gold-roundtrip`)처럼 파일을 Flyway 없이 그대로 실행하는 도구도 적용할 수 있어야 하기 때문이다. 이런 도구로 적용하면 설정이 없으므로 0이 들어간다.
 - 기존 DB에 형식 1에 맞지 않는 규칙 행, 공개되지 않은 대상 별, 기간이 뒤집힌 회차가 있으면 V9는 무엇이 몇 건 틀렸는지 알리고 통째로 되돌아간다. 행을 고친 뒤 다시 기동하면 적용된다. 개발 DB에서 형식 이전 규칙 행을 지울 때는 그 행을 참조하는 제출도 함께 정리한다.
+
+## 7. 백업 복원·데이터 이관
+
+- 스키마와 데이터를 함께 빈 DB에 복원하면 그대로 된다. `pg_dump` 출력은 데이터(`COPY`)를 먼저 넣고 트리거를 나중에 만든다. 이때 복원할 DB에 Flyway를 먼저 돌리지 않는다.
+- 이미 마이그레이션한 DB에 데이터만 넣으면 거절된다. `pg_restore --data-only`나 운영 데이터를 개발 DB로 복사하는 작업이 여기에 해당한다. `COPY`도 행 트리거를 실행하기 때문이다.
+  - `operation_settings`: 원본 행은 적용 시각이 모두 지났다(`trg_operation_settings_keep_history`).
+  - `tutorial_stars`·`challenge_rounds`: 원본에 대상 별이 나중에 숨겨진 행이 있을 수 있다(`trg_tutorial_stars_published`, `trg_challenge_rounds_published`).
+  - 대상 DB에는 V9가 넣은 `rule-0`이 이미 있어, 트리거를 꺼도 원본 `rule-0`과 기본 키가 겹친다.
+- `pg_restore --disable-triggers`는 FK 시스템 트리거까지 끄므로 슈퍼유저만 쓸 수 있다. 테이블 소유자 계정은 아래처럼 이 트리거만 이름으로 끈다. 트리거를 느슨하게 고치지 않는다.
+
+```sql
+-- 1) 끈 동안은 이력 보호와 대상 별 검사가 없으므로 다른 쓰기를 멈춘다.
+ALTER TABLE operation_settings DISABLE TRIGGER trg_operation_settings_keep_history;
+ALTER TABLE tutorial_stars DISABLE TRIGGER trg_tutorial_stars_published;
+ALTER TABLE challenge_rounds DISABLE TRIGGER trg_challenge_rounds_published;
+
+-- 2) V9가 넣은 rule-0을 지운다. 이 행을 참조하는 제출이 없는 새 DB여야 한다.
+DELETE FROM operation_settings WHERE rule_version = 'rule-0';
+
+-- 3) 데이터를 넣는다. 예: pg_restore --data-only
+
+-- 4) 반드시 다시 켜고 확인한다. tgenabled가 모두 O여야 한다.
+ALTER TABLE operation_settings ENABLE TRIGGER trg_operation_settings_keep_history;
+ALTER TABLE tutorial_stars ENABLE TRIGGER trg_tutorial_stars_published;
+ALTER TABLE challenge_rounds ENABLE TRIGGER trg_challenge_rounds_published;
+SELECT tgname, tgenabled FROM pg_trigger
+ WHERE tgname IN ('trg_operation_settings_keep_history', 'trg_tutorial_stars_published', 'trg_challenge_rounds_published');
+```
+
+- `values` 형식 CHECK와 회차 기간 CHECK는 끄지 않는다. V9 이후 DB에서 나온 원본이면 이미 통과한 값이다.
+- 이 절차는 로컬 DB 임시 스키마에서 확인했다. 트리거가 켜진 `COPY` 거절, 소유자 계정의 `DISABLE TRIGGER ALL` 거절, `rule-0` 기본 키 중복, 복원 뒤 보호 재가동까지 봤다. 운영 DB에서는 실행해 보지 않았다.
