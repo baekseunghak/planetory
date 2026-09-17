@@ -4,7 +4,8 @@
     "gold_segments": "bin_center",
     "caller_time_shift_days": "bin_minutes / 2880",
     "two_minute_original": "TIME 열이 이미 노출 중심이라 이동 없음",
-    "residual_model_version": "box-divide-v0"
+    "residual_model_version": "box-divide-v0",
+    "who_shifts": "온라인: Worker 어댑터(88) 만. Backend 는 start_btjd 를 ERD 정의(첫 bin 시작)대로 그대로 보내고 옮기지 않는다(70 계약). 배치(122): Silver 에서 한 번만. 이중 이동은 한 bin 오차."
   },
   "segment": {
     "start_btjd": 1386.9,
