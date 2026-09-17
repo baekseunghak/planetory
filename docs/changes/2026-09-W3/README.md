@@ -31,3 +31,4 @@
 
 | 2026-09-16 | MR !52·!54의 SRS·ERD 참조 충돌 정합화 | 없음, 참고 #184·#230 | SRS v1.3.1, ERD v1.6, develop, MR !52 | 정정 | [기록](2026-09-16.md#mr-52-리뷰-srserd-참조-충돌-정합화) |
 | 2026-09-16 | 개별 별 타일 조회 비용 측정과 스냅샷 일관성 | S15P21C206-137 | 타일 성능, 10만 별, 공간 인덱스, NUMERIC 캐스팅, rangeStarCount, REPEATABLE READ, 타일 캐시, tile-size, max-box, perfTest | 측정 완료 | [2026-09-16](2026-09-16.md) |
+| 2026-09-17 | transit_model 계약 1.0 확정(Schema·예제 정본화, bin 중심 평가 호출자 이동)과 기준 시각·제공 격자 대조 | S15P21C206-113, 121 | transit_model, transit-model.schema.json, D06, box-divide-v0, bin 중심, fold_reference_time_btjd, periodogram_config_version, astro-kernel, Gold fixture | 확정 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |

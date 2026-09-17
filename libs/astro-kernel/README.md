@@ -2,9 +2,9 @@
 
 Jira `S15P21C206-121` (계획 ID D14-1) / 담당: 윤성용
 
-상태: **구현 완료·로컬 회귀 통과** (v0 초안 계약). 121 의 완료 조건 중 "D06 확정 규약·소비자 계약 리뷰 통과" 는 아직 열려 있다.
-D06(`S15P21C206-113`, 해야 할 일)이 규약을 승인하고 88 담당자가 서명·예제를 리뷰하면 완료다. 88·131 의 **실제 구현 완료**는
-121 의 선행 조건이 아니다.
+상태: **구현 완료·회귀 통과**. 모델 JSON 계약은 D06(`S15P21C206-113`)에서 확정해 [`contracts/gold/transit-model.schema.json`](../../contracts/gold/transit-model.schema.json)
+(계약 1.0)이 정본이고, 이 패키지는 그 Schema 가 표현하지 못하는 필드 사이 규칙·수식·실패 코드를 구현한다. 88 담당자(소비자)의 MR 리뷰는
+!43 에서 통과했다. 88·131 의 **실제 구현 완료**는 121 의 선행 조건이 아니다.
 
 Spark 배치의 Silver 반복 탐색(`S15P21C206-122`)과 EC2 온라인 Worker(`S15P21C206-88`, 김동혁)가 **같은 수식**으로
 "후보 신호를 제거한 잔차곡선"을 만들도록, 순수 함수만 모아 둔 패키지다. 파일·DB·네트워크·큐를 다루지 않고 numpy 외
@@ -33,9 +33,12 @@ dependencies = ["astro-kernel"]
 astro-kernel = { path = "../../libs/astro-kernel", editable = true }
 ```
 
-## 입력 계약: `transit_model` JSON (D06 초안)
+## 입력 계약: `transit_model` JSON (D06 확정, 계약 1.0)
 
-Gold `candidates.transit_model` JSONB 와 같은 dict 다. 단위는 ERD `candidates` 열 이름과 같다.
+Gold `candidates.transit_model` JSONB 와 같은 dict 다. 단위는 ERD `candidates` 열 이름과 같다. 필드·타입·단독 필드 범위는
+[`contracts/gold/transit-model.schema.json`](../../contracts/gold/transit-model.schema.json) 이 검사하고, 아래 표의 필드 사이 규칙
+(`duration_hours/24 < period_days`)과 수식은 이 패키지가 검사한다. 다른 언어 구현은 Schema 로 형식을, `contracts/gold/examples/` 의
+정상·불량 예제로 판정을 대조한다.
 
 ```json
 {
@@ -148,32 +151,38 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 | `numerical_failure` | 유효 flux 위치에서 결합 모델 또는 잔차가 NaN·Inf, flux 가 Inf |
 | `invalid_argument` | `segment_times` 인자가 숫자가 아니거나 범위 밖 |
 
-## 계약 예제 (`examples/`)
+## 계약 예제
 
-| 파일 | 내용 |
-|---|---|
-| `transit_model.valid.json` | 정상 모델 2개 |
-| `transit_model.invalid.json` | 불량 모델 9개와 기대 `expected_code` |
-| `removal_case.json` | 10분 비닝 48점 세그먼트, 겹친 두 통과(5점), 빈 bin 3개. 전체·부분·빈 제거의 기대 잔차 |
+| 파일 | 위치 | 내용 |
+|---|---|---|
+| `transit-model.valid.json` | `contracts/gold/examples/` | 정상 모델 3개(선택 키 생략형 포함) |
+| `transit-model.invalid.json` | `contracts/gold/examples/` | 불량 모델 11개와 기대 `expected_code`, Schema 가 잡는지(`schema_rejects`) |
+| `removal_case.json` | `examples/` | 10분 비닝 48점 세그먼트, 겹친 두 통과(5점), 빈 bin 3개. 전체·부분·빈 제거의 기대 잔차 |
+| `bin_center_case.json` | `examples/` | bin 시작 vs bin 중심 평가가 경계 bin 하나에서 갈리는 12점 예제. 호출자 시각 이동 결정(아래)의 검증용 |
 
-`tests/test_examples.py` 가 (1) 코드 출력과 예제의 값·비트 일치, (2) numpy 를 쓰지 않는 순수 파이썬 재계산과 예제의 값 일치를
-검사한다. 기대값은 패키지 출력의 단순 복사가 아니라 두 계산이 일치함을 확인한 값이다. Worker 나 다른 언어 구현은 같은 파일로
-자기 결과를 대조한다. 파라미터 값은 계약 설명용 가상값이며 실제 카탈로그 값이 아니다.
+모델 JSON 예제는 113 계약 정본 옆에 두고 `tests/test_examples.py`·`tests/test_contract_schema.py` 가 거기서 읽는다.
+테스트는 (1) 코드 출력과 예제의 값·비트 일치, (2) numpy 를 쓰지 않는 순수 파이썬 재계산과 예제의 값 일치, (3) Schema 와 파서가 같은
+모델을 받고 같은 모델을 거절하는지를 검사한다. 기대값은 패키지 출력의 단순 복사가 아니라 두 계산이 일치함을 확인한 값이다. Worker 나
+다른 언어 구현은 같은 파일로 자기 결과를 대조한다. 파라미터 값은 계약 설명용 가상값이며 실제 카탈로그 값이 아니다.
 
-## D06(113)에서 확정할 항목
+## D06(113) 결정 사항
 
-이 패키지는 아래를 **v0 초안**으로 두고 구현했다. 어느 것도 팀 승인 사항이 아니며, 113 에서 다르게 결정되면
-`residual_model_version` 을 올려 반영한다.
+2026-09-16 강재민·김동혁과 글로 합의하고 113 MR 로 정본화했다. v0 초안이던 아래 여섯 항목은 그대로 **확정**이며 `box-divide-v0`
+문자열을 유지한다. 바꾸려면 새 `residual_model_version` 을 만든다.
 
-1. 통과 경계 부등호 `<` (PoC 는 `<=`).
-2. `depth_ppm` 하한 `> 0` (깊이 0 후보를 거절).
-3. 모델 평가 시각. ERD 는 `start_btjd` 를 **첫 bin 의 시작 시각**으로 정의하고 `segment_times` 는 그 복원식을 그대로 구현한다(확정
-   사실). 잔차 계산 때 모델을 bin 시작에서 평가할지 bin 중심(`+ bin_minutes/2`)에서 평가할지는 별도 결정이다(미결). 현재는 호출자가
-   넘긴 시각에서 그대로 평가한다.
-4. 비유한 시각 처리. 현재는 `invalid_time` 실패(입력 전제). 대안은 해당 점을 결측으로 보고 잔차 NaN 으로 두는 것인데, 그러면
-   "빈 제거는 flux 보존" 과 충돌하므로 둘 중 하나를 계약으로 택해야 한다.
-5. baseline 재정규화를 제거 함수 밖(호출자)에 둘지, `baseline.kind` 를 확장할지.
-6. `residual_model_version` 문자열 규칙과 한 호출 안의 버전 혼용 허용 여부(현재 거절).
+1. **통과 경계 `<`** (경계에 놓인 점은 통과 밖). PoC 의 `<=` 는 따르지 않는다.
+2. **`depth_ppm` 은 0 초과 1,000,000 미만.** 깊이 0 후보는 모델이 아니라 거절한다. Gold 계약 4절도 같은 범위다.
+3. **모델 평가 시각은 bin 중심.** ERD 의 `start_btjd` 는 첫 bin 의 시작 시각이고 `segment_times` 는 그 복원식 그대로다. 10분 bin 에
+   들어간 원본 점(+1·3·5·7·9분)의 평균 시각이 bin 중심이므로, Gold 세그먼트로 잔차를 만들 때는 **호출자가 `start_btjd + bin_minutes/2880`
+   을 넘긴다**(88 Worker·122 배치). 2분 원본은 `TIME` 이 이미 노출 중심이라 이동하지 않는다. 커널은 넘겨받은 시각에서 그대로 평가하며
+   이동을 내부에서 하지 않는다. bin 시작에서 평가하면 경계 bin 이 깊이 전체만큼 틀리고 제거 후보마다 반복된다. 중심 평가에도
+   "반쯤 가린" 경계 bin 의 잔여는 남으며 111 이 실측한다. 예제는 `examples/bin_center_case.json`.
+4. **비유한 시각은 `invalid_time` 실패.** 결측으로 취급해 잔차 NaN 을 두는 대안은 "빈 제거는 flux 보존" 과 충돌해 택하지 않았다.
+5. **baseline 은 `unity` 만.** 재정규화는 제거 함수 밖(전처리·Silver 정규화)의 책임이고 `baseline.kind` 확장은 필요할 때 새 버전으로.
+6. **한 호출 안의 버전 혼용 거절**(`version_mismatch`). 문자열 규칙은 `<모델>-<연산>-v<정수>` 로 `box-divide-v0` 하나.
+
+실패 코드 11종의 사용자 문구·재시도 정책은 70 계약이 정했다: 계약 위반 10종은 "데이터 준비 중", `nonpositive_model`·`numerical_failure`
+는 "이 조합으로는 계산할 수 없습니다", 전부 `retryable:false`, 11종 구분은 로그·운영 알림용. Backend `ErrorCode` 매핑은 강재민(137 뒤).
 
 ## 관련 문서
 
