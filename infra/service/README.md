@@ -35,4 +35,6 @@ connector는 EC2-A에만 둔다. 같은 Tunnel에 커넥터를 여럿 붙여도 
 
 Backend가 아직 배포되지 않은 단계에서도 frontend는 기동한다. `apps/frontend/nginx.conf`가 backend를 요청 시점에 해석하고, 세션 조회(`/api/v1/me`)가 502·504면 401로 낮춰 SPA가 로그인 화면을 보여준다. 다른 `/api/*`는 502를 그대로 전달한다.
 
+Tunnel → nginx 구간은 평문이므로 nginx의 `$scheme`은 항상 `http`다. Cloudflare가 준 `X-Forwarded-Proto`를 그대로 넘기고 Backend는 `server.forward-headers-strategy=framework`로 이를 반영한다. 둘 중 하나라도 빠지면 Tomcat이 상대 리다이렉트를 `http://planetory.space:8080/...`로 절대화해 OAuth 로그인 복귀가 깨진다.
+
 미완료: Redis runtime, 메모리 상한·eviction 정책, health/readiness, 남용 제어 위치, connector 지속 처리량 실측은 이 변경에 포함되지 않았다.
