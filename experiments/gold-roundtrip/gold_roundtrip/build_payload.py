@@ -79,12 +79,12 @@ def bin_segment(t: np.ndarray, f: np.ndarray, bin_days: float) -> tuple[float, l
 
 
 def fold_reference_time(base) -> float:
-    """DAT-11: DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성만 통과한 **원본 관측 시각 전체**의 중앙값.
+    """DAT-11: DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성을 통과한 원본 관측 시각에서 **중복을 제거한 뒤** 의 중앙값.
 
-    전처리(detrending·clipping) 결과에 의존하지 않는다. build_baseline 이 만든 base.time 이 정확히 그 집합이다.
-    짝수 표본은 가운데 두 값의 평균(np.median).
+    전처리(detrending·clipping) 결과에 의존하지 않는다. build_baseline 이 만든 base.time 이 필터·유한성 집합이고, 여기서
+    같은 시각(여러 Sector 파일이 겹칠 때 생길 수 있음)을 하나로 합친다(np.unique). 짝수 표본은 가운데 두 값의 평균(np.median).
     """
-    return float(np.median(base.time))
+    return float(np.median(np.unique(np.asarray(base.time, dtype=np.float64))))
 
 
 def bin_centers(start: float, n: int, bin_days: float) -> np.ndarray:

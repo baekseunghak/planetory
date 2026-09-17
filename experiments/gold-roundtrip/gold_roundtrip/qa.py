@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -14,6 +15,8 @@ from .canonical import ArrayCanonicalError, array_checksum, bundle_version, norm
 
 REPO = Path(__file__).resolve().parents[3]
 SCHEMA_JSON = json.loads((REPO / "contracts" / "gold" / "transit-model.schema.json").read_text(encoding="utf-8"))
+LC_SNAPSHOT_RE = re.compile(r"^lc:spoc:s\d{4}:sha256:[0-9a-f]{64}:procver:.+$")
+ARCHIVE_SNAPSHOT_RE = re.compile(r"^archive:[a-z0-9_]+:sha256:[0-9a-f]{64}$")
 MANIFEST_REQUIRED = ("segment_ids", "array_checksums", "residual_model_version", "periodogram_config_version", "binning", "period_grid", "fine_tune", "curve_steps")
 N_PERIODS = 5000
 PERIOD_MIN_DAYS = 0.5
@@ -85,7 +88,11 @@ def validate_payload(payload: dict) -> list[dict]:
                 "segments": [{"tic_id": s["tic_id"], "sector": s["sector"], "binning_revision": s["binning_revision"]} for s in seg_list],
                 "calculation_versions": m["calculation_versions"]}
     add("bundle_version_matches_69_rule", bundle_version(semantic) == bundle["bundle_version"])
-    add("input_snapshot_ids_content_based", all(":sha256:" in i for i in m["input_snapshot_ids"]), m["input_snapshot_ids"])
+    # 내용 기반 *형식* 검사: 형식이 계약과 같은지만 본다. 해시가 실제 원천 내용과 맞는지는 원천을 다시 읽어야 알 수 있어 여기서 증명하지 않는다.
+    ids = m["input_snapshot_ids"]
+    add("input_snapshot_ids_content_based_format",
+        len(ids) >= 2 and any(LC_SNAPSHOT_RE.match(i) for i in ids) and any(ARCHIVE_SNAPSHOT_RE.match(i) for i in ids)
+        and all(LC_SNAPSHOT_RE.match(i) or ARCHIVE_SNAPSHOT_RE.match(i) for i in ids), ids)
 
     exp = payload.get("expected_residuals", {}).get("cases", {})
     add("expected_residuals_present", {"remove_none", "remove_first", "remove_first_two", "remove_first_two_reversed", "remove_all"} <= set(exp))

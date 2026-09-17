@@ -9,7 +9,8 @@
     "string": "0x03 + u32 LE byte length + UTF-8",
     "list": "0x04 + u32 LE count + items",
     "object": "0x05 + u32 LE count + (key string, value) sorted by key UTF-8 bytes",
-    "collection": "sha256 over list-encoding of prepared records; prepared = exclude fields, then sort by sort_key"
+    "collection": "sha256 over list-encoding of prepared records; prepared = exclude fields, then sort by sort_key",
+    "sort": "per key: number (float64 compare) < string (UTF-8 byte order) < null; when all keys tie, compare the canonical record bytes (total order)"
   },
   "rules": {
     "candidates": {
@@ -461,6 +462,350 @@
       "canonical_hex_prefix": "04010000000506000000030d00000063616e6469646174655f6b65790502000000030a00000065706f63685f62746a6402dbc4c9fd0ed49640030b0000007065",
       "canonical_length": 210,
       "sha256": "sha256:ce769a76484ad7f3c9422c736cbd4d8126b277b98864ba4bd088e030675fc156"
+    },
+    {
+      "id": "external_tie_same_source_external_id",
+      "kind": "external_statuses",
+      "note": "정렬 키(source, external_id)가 같은 두 행. 인코딩 바이트 tie-breaker 로 순서가 정해진다",
+      "input": [
+        {
+          "id": 1,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        },
+        {
+          "id": 2,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "pc",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-01",
+          "candidate_key": null
+        }
+      ],
+      "prepared": [
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "pc",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-01",
+          "candidate_key": null
+        },
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        }
+      ],
+      "canonical_hex_prefix": "04020000000507000000030d00000063616e6469646174655f6b657900030b000000646973706f736974696f6e03020000007063030a00000065706f63685f62",
+      "canonical_length": 384,
+      "sha256": "sha256:5678fb900706c39fcbd8cd1f2d9ad1c3fd67e506bb032ab5dfd91098dc574c8a"
+    },
+    {
+      "id": "external_tie_reversed_input",
+      "kind": "external_statuses",
+      "note": "위 사례의 입력 순서 반전. 같은 checksum 이어야 한다",
+      "input": [
+        {
+          "id": 2,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "pc",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-01",
+          "candidate_key": null
+        },
+        {
+          "id": 1,
+          "candidate_id": null,
+          "tic_id": 1,
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        }
+      ],
+      "prepared": [
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "pc",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-01",
+          "candidate_key": null
+        },
+        {
+          "source": "nasa_exoplanet_archive",
+          "external_id": "TOI-270 b",
+          "disposition": "confirmed",
+          "period_days": 3.35992,
+          "epoch_btjd": null,
+          "fetched_on": "2026-09-10",
+          "candidate_key": null
+        }
+      ],
+      "canonical_hex_prefix": "04020000000507000000030d00000063616e6469646174655f6b657900030b000000646973706f736974696f6e03020000007063030a00000065706f63685f62",
+      "canonical_length": 384,
+      "sha256": "sha256:5678fb900706c39fcbd8cd1f2d9ad1c3fd67e506bb032ab5dfd91098dc574c8a"
+    },
+    {
+      "id": "candidates_tie_same_business_key",
+      "kind": "candidates",
+      "note": "(removal_step, period_days, epoch_btjd) 가 같고 duration 만 다른 두 후보(V1 에 UNIQUE 없음). tie-breaker 적용",
+      "input": [
+        {
+          "id": 1,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "id": 2,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.5,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "prepared": [
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.5,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "canonical_hex_prefix": "0402000000050a0000000309000000626c735f706f77657202000000000000e03f030900000064657074685f70706d023b014d848d858e40030c000000646973",
+      "canonical_length": 919,
+      "sha256": "sha256:4098ef452df0466f9cbf2361407d6139f74b0e69c7c4ad18c07c0259e40b9b9c"
+    },
+    {
+      "id": "candidates_tie_reversed_input",
+      "kind": "candidates",
+      "note": "위 사례의 입력 순서 반전. 같은 checksum 이어야 한다",
+      "input": [
+        {
+          "id": 2,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.5,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "id": 1,
+          "updated_bundle_id": 101,
+          "local_key": "a",
+          "tic_id": 1,
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "candidate_id": "c-401",
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "prepared": [
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.5,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        },
+        {
+          "status": "active",
+          "removal_step": 0,
+          "period_days": 3.35992,
+          "epoch_btjd": 1461.01464,
+          "duration_hours": 1.294,
+          "depth_ppm": 976.6941,
+          "bls_power": 0.5,
+          "discoverable": true,
+          "is_confirmed": true,
+          "transit_model": {
+            "shape": "box",
+            "parameters": {
+              "period_days": 3.35992,
+              "epoch_btjd": 1461.01464,
+              "duration_hours": 1.294,
+              "depth_ppm": 976.6941
+            },
+            "baseline": {
+              "kind": "unity"
+            },
+            "residual_model_version": "box-divide-v0"
+          }
+        }
+      ],
+      "canonical_hex_prefix": "0402000000050a0000000309000000626c735f706f77657202000000000000e03f030900000064657074685f70706d023b014d848d858e40030c000000646973",
+      "canonical_length": 919,
+      "sha256": "sha256:4098ef452df0466f9cbf2361407d6139f74b0e69c7c4ad18c07c0259e40b9b9c"
     },
     {
       "id": "external_unicode",

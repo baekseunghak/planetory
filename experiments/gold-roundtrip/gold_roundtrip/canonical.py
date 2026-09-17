@@ -113,6 +113,8 @@ def bundle_version(semantic_payload: dict) -> str:
 #   0x04 list(u32 LE 개수 + 원소들) | 0x05 object(u32 LE 개수 + (키 string, 값) 을 키의 UTF-8 바이트 오름차순)
 # 정수는 float64 로 넣는다(2^53 이하 정확; tic_id·id 범위 안). NaN·Inf 는 거절.
 # 컬렉션 checksum = "sha256:" + sha256( list 인코딩( 제외 필드를 뺀 레코드들을 정렬 키로 정렬한 것 ) ).
+# 정렬: 키마다 숫자(float64 비교) < 문자열(UTF-8 바이트 순) < null. 모든 키가 같으면 준비된 레코드의 인코딩 바이트를 마지막 비교로 써
+# 총순서를 만든다(입력 순서·언어별 문자열 비교 차이가 결과에 남지 않는다).
 # DB 가 만든 값(id, updated_bundle_id, transit_model.candidate_id, bundle_id)과 fixture 전용 키(local_key)는 제외한다.
 
 RECORD_CHECKSUM_VERSION = "record-canonical-v0"
@@ -178,7 +180,10 @@ def prepare_records(kind: str, records: Iterable[dict]) -> list[dict]:
         out.append(c)
 
     def key(rec):
-        return tuple((0, v) if isinstance(v, (int, float)) else (1, str(v)) if v is not None else (2, "") for v in (_get(rec, k) for k in rule["sort_key"]))
+        # 정렬 키: 숫자 < 문자열(UTF-8 바이트 순) < null. 정렬 키가 모두 같으면 준비된 레코드의 인코딩 바이트로 마지막 비교(총순서).
+        business = tuple((0, float(v), b"") if isinstance(v, (int, float)) else (1, 0.0, str(v).encode("utf-8")) if v is not None else (2, 0.0, b"")
+                         for v in (_get(rec, k) for k in rule["sort_key"]))
+        return (business, _enc(rec))
     return sorted(out, key=key)
 
 

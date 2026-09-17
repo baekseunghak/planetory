@@ -39,16 +39,18 @@ function prepare(rule, records) {
     }
     return c;
   });
-  const keyOf = rec => rule.sort_key.map(k => { const v = get(rec, k); return v === null || v === undefined ? [2, ''] : typeof v === 'number' ? [0, v] : [1, String(v)]; });
-  out.sort((a, b) => {
-    const ka = keyOf(a), kb = keyOf(b);
-    for (let i = 0; i < ka.length; i++) {
-      if (ka[i][0] !== kb[i][0]) return ka[i][0] - kb[i][0];
-      if (ka[i][1] < kb[i][1]) return -1; if (ka[i][1] > kb[i][1]) return 1;
+  // 정렬 키: 숫자 < 문자열(UTF-8 바이트 순, Buffer.compare) < null. 모두 같으면 인코딩 바이트로 마지막 비교(총순서).
+  const keyOf = rec => rule.sort_key.map(k => { const v = get(rec, k); return v === null || v === undefined ? [2, null] : typeof v === 'number' ? [0, v] : [1, Buffer.from(String(v), 'utf8')]; });
+  const withKeys = out.map(rec => ({ rec, key: keyOf(rec), bytes: enc(rec) }));
+  withKeys.sort((a, b) => {
+    for (let i = 0; i < a.key.length; i++) {
+      if (a.key[i][0] !== b.key[i][0]) return a.key[i][0] - b.key[i][0];
+      if (a.key[i][0] === 0) { if (a.key[i][1] !== b.key[i][1]) return a.key[i][1] < b.key[i][1] ? -1 : 1; }
+      else if (a.key[i][0] === 1) { const c = Buffer.compare(a.key[i][1], b.key[i][1]); if (c !== 0) return c; }
     }
-    return 0;
+    return Buffer.compare(a.bytes, b.bytes);
   });
-  return out;
+  return withKeys.map(w => w.rec);
 }
 
 function recordChecksum(rule, records) {
@@ -70,6 +72,8 @@ function main() {
   const by = Object.fromEntries(v.cases.map(c => [c.id, c]));
   assert.equal(by.candidates_two.sha256, by.candidates_two_reversed_input.sha256);
   assert.equal(by.candidates_two.sha256, by.candidates_two_different_db_ids.sha256);
+  assert.equal(by.external_tie_same_source_external_id.sha256, by.external_tie_reversed_input.sha256);
+  assert.equal(by.candidates_tie_same_business_key.sha256, by.candidates_tie_reversed_input.sha256);
   console.log(`PASS: ${v.cases.length} record checksum vectors reproduce in Node (${v.recordChecksumVersion})`);
 }
 

@@ -64,10 +64,14 @@ def test_candidate_change_breaks_record_checksum_but_db_id_does_not():
     assert "candidates_checksum_matches" not in _failed_names(q)
 
 
-def test_snapshot_ids_must_be_content_based():
-    p = _load(); p["bundle"]["manifest"]["input_snapshot_ids"] = ["lc:spoc:file.fits"]
-    names = _failed_names(p)
-    assert "input_snapshot_ids_content_based" in names and "bundle_version_matches_69_rule" in names
+def test_snapshot_ids_must_match_content_based_format():
+    from gold_roundtrip.canonical import bundle_version
+    for bad in (["lc:spoc:file.fits"], ["x:sha256:", "archive:toi270:sha256:" + "0" * 64], ["lc:spoc:s0003:sha256:" + "0" * 63 + ":procver:x", "archive:toi270:sha256:" + "0" * 64],
+                ["lc:spoc:s0003:sha256:" + "a" * 64 + ":procver:", "archive:toi270:sha256:" + "a" * 64]):
+        p = _load(); m = p["bundle"]["manifest"]; m["input_snapshot_ids"] = bad; seg = p["segments"][0]
+        p["bundle"]["bundle_version"] = bundle_version({"input_snapshot_ids": bad, "segments": [{"tic_id": seg["tic_id"], "sector": seg["sector"], "binning_revision": seg["binning_revision"]}],
+                                                        "calculation_versions": m["calculation_versions"]})      # 해시를 맞춰도 형식 검사가 잡아야 한다
+        assert "input_snapshot_ids_content_based_format" in _failed_names(p), bad
 
 
 def test_record_checksum_rules():
@@ -81,3 +85,15 @@ def test_record_checksum_rules():
     assert c.canonical_record_bytes({"b": 1, "a": 2}) == c.canonical_record_bytes({"a": 2, "b": 1})
     with pytest.raises(c.ArrayCanonicalError):
         c.canonical_record_bytes(float("inf"))
+
+
+def test_record_sort_ties_are_order_independent():
+    base = {"source": "s", "external_id": "e", "disposition": "confirmed", "period_days": 1.0, "epoch_btjd": None, "fetched_on": "2026-09-10", "candidate_key": None}
+    a, b = {**base, "id": 1}, {**base, "id": 2, "disposition": "pc"}
+    assert c.record_checksum("external_statuses", [a, b]) == c.record_checksum("external_statuses", [b, a])
+    ca = {"removal_step": 0, "period_days": 1.0, "epoch_btjd": 2.0, "duration_hours": 1.0}
+    cb = {**ca, "duration_hours": 2.0}
+    assert c.record_checksum("candidates", [ca, cb]) == c.record_checksum("candidates", [cb, ca])
+    # 문자열 키는 UTF-8 바이트 순: 'B'(0x42) < 'a'(0x61) < '가'
+    recs = [{"source": "가", "external_id": "x"}, {"source": "a", "external_id": "x"}, {"source": "B", "external_id": "x"}]
+    assert [r["source"] for r in c.prepare_records("external_statuses", recs)] == ["B", "a", "가"]

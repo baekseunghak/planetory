@@ -64,8 +64,9 @@ def _floats(arr):
 
 
 def num(v):
-    """float64 → NUMERIC 열 파라미터. psycopg 기본 float→numeric 변환은 15 유효숫자로 잘려 왕복이 깨진다.
-    최단 왕복 표기(repr, 최대 17 유효숫자)를 Decimal 로 보내면 DB NUMERIC → float64 가 비트 동일하다(publication-qa 3절 9항)."""
+    """float64 → NUMERIC 열 파라미터. float8 로 바인딩하면 PostgreSQL 서버의 float8→numeric 변환이 15 유효숫자로 반올림해
+    왕복이 깨진다(드라이버 문제가 아님). 최단 왕복 십진 표기(repr, 최대 17 유효숫자)를 Decimal 로 바인딩하면 NUMERIC → float64 가
+    비트 동일하다. Java 는 BigDecimal.valueOf(x), Spark JDBC 도 double 바인딩을 피해야 한다(publication-qa 3.1절 9항)."""
     return None if v is None else Decimal(repr(float(v)))
 
 
@@ -145,18 +146,16 @@ def run(payload: dict, *, url: str | None = None, keep_schema: bool = False) -> 
                 cur.execute("INSERT INTO external_signal_references(candidate_id, source, external_id, disposition, period_days, fetched_on, tic_id, epoch_btjd)"
                             " VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", (cid, e["source"], e["external_id"], e["disposition"], num(e["period_days"]), e["fetched_on"], bundle["tic_id"], num(e["epoch_btjd"])))
 
-            # 5) current 전환 (기존 current 없음 → 바로 전환). 순서 규칙은 69: 기존 current 를 먼저 archived 로.
-            cur.execute("UPDATE publication_bundles SET status='archived' WHERE tic_id=%s AND status='current'", (bundle["tic_id"],))
-            cur.execute("UPDATE publication_bundles SET status='current', published_at=now() WHERE id=%s", (bundle_id,))
-            conn.commit()
-            rep.add("staging_to_current_committed", True, f"bundle_id={bundle_id}")
+            # 5) 적재는 아직 commit 하지 않는다. 69: 적재 → 검증 → archived/current 전환을 **한 트랜잭션**에서, staging 독립 commit 없음.
+            #    아래 읽기·검증은 같은 트랜잭션 안에서 자기 INSERT 를 보며 수행하고, 하나라도 실패하면 전부 rollback 한다.
+            rep.add("staging_loaded_uncommitted", True, f"bundle_id={bundle_id} (검증 뒤 전환·commit)")
 
-            # ---------------- 읽기 (바이너리 프로토콜) ----------------
+            # ---------------- 읽기 (바이너리 프로토콜, 같은 트랜잭션) ----------------
             cur.execute("SELECT fold_reference_time_btjd, base_days, manifest, status FROM publication_bundles WHERE id=%s", (bundle_id,))
             fold_db, base_db, manifest_db, status_db = cur.fetchone()
             rep.add("fold_reference_time_btjd_float64_exact", fold_db == bundle["fold_reference_time_btjd"], repr(fold_db))
             rep.add("base_days_numeric_roundtrip", float(base_db) == float(bundle["base_days"]), str(base_db))
-            rep.add("status_current", status_db == "current")
+            rep.add("status_staging_before_transition", status_db == "staging")
             rep.add("manifest_jsonb_roundtrip", manifest_db == manifest, "8 required keys + checksums")
 
             cur.execute("SELECT flux, n_points, gaps, start_btjd, flux_scatter FROM light_curve_segments WHERE id=%s", (segment_id,))
@@ -217,9 +216,6 @@ def run(payload: dict, *, url: str | None = None, keep_schema: bool = False) -> 
             expect_error("duplicate_tic_bundle_version_rejected_V8",
                          "INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days) VALUES (%s,%s,'staging',%s,%s,%s)",
                          (bundle["tic_id"], bv, Jsonb(manifest), fold_db, base_db), "uq_publication_bundles_tic_bundle_version")
-            expect_error("second_current_rejected_partial_unique_index",
-                         "INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days) VALUES (%s,%s,'current',%s,%s,%s)",
-                         (bundle["tic_id"], bv + "-x", Jsonb(manifest), fold_db, base_db), "uq_publication_bundles_current")
             bad_manifest = {k: v for k, v in manifest.items() if k != "period_grid"}
             expect_error("manifest_missing_key_rejected_V3",
                          "INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days) VALUES (%s,%s,'staging',%s,%s,%s)",
@@ -248,7 +244,26 @@ def run(payload: dict, *, url: str | None = None, keep_schema: bool = False) -> 
                 writer_ok = False
             cur.execute("ROLLBACK TO SAVEPOINT roles2"); cur.execute("RESET ROLE")
             rep.add("planetory_gold_writer_can_write_gold", writer_ok)
-            conn.commit()
+
+            # ---------------- 결정: 모든 검사 통과 → 전환 + 단일 commit, 아니면 rollback ----------------
+            if rep.failed:
+                conn.rollback()
+                rep.add("publish_decision", False, f"PUBLISH_REJECTED - {len(rep.failed)}건 실패, 트랜잭션 rollback(staging 도 남지 않음)")
+            else:
+                # 69: 부분 유일 인덱스 때문에 기존 current 를 먼저 archived 로 바꾸고 신규를 current 로 올린다.
+                cur.execute("UPDATE publication_bundles SET status='archived' WHERE tic_id=%s AND status='current'", (bundle["tic_id"],))
+                cur.execute("UPDATE publication_bundles SET status='current', published_at=now() WHERE id=%s", (bundle_id,))
+                cur.execute("SELECT status FROM publication_bundles WHERE id=%s", (bundle_id,))
+                status_after = cur.fetchone()[0]
+                conn.commit()
+                rep.add("current_transition_committed_after_checks", status_after == "current", f"bundle_id={bundle_id}, 단일 commit")
+                cur.execute("SELECT count(*) FROM publication_bundles WHERE tic_id=%s AND status='current'", (bundle["tic_id"],))
+                rep.add("exactly_one_current_after_commit", cur.fetchone()[0] == 1)
+                # current 가 생긴 뒤에만 의미 있는 검사: 같은 TIC 의 두 번째 current 는 부분 유일 인덱스가 거절한다.
+                expect_error("second_current_rejected_partial_unique_index",
+                             "INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days) VALUES (%s,%s,'current',%s,%s,%s)",
+                             (bundle["tic_id"], bv + "-x", Jsonb(manifest), fold_db, base_db), "uq_publication_bundles_current")
+                conn.commit()
     finally:
         conn.rollback()                                   # 중단된 트랜잭션이면 DROP 이 InFailedSqlTransaction 으로 실패하므로 먼저 되돌린다
         if not keep_schema:

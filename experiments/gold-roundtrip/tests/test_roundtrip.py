@@ -76,7 +76,7 @@ def test_fold_reference_time_ignores_preprocessing():
     curve = load_sector(next(FITS_DIR.glob("*s0003*")))
     base = build_baseline([curve])
     ref = bp.fold_reference_time(base)
-    assert ref == float(np.median(base.time))
+    assert ref == float(np.median(np.unique(base.time)))
     cfg, settings = load_settings(bp.BENCH_DIR / "configs" / "preprocess_settings_v1.json", ["poc_baseline", "biweight_1.0d"])
     kept_medians = set()
     for s in settings:
@@ -94,6 +94,8 @@ def test_roundtrip_against_local_postgres():
     from gold_roundtrip import roundtrip
     result = roundtrip.run(json.loads(PAYLOAD.read_text(encoding="utf-8")))
     assert result["n_failed"] == 0 and result["decision"] == "PUBLISHED", [c for c in result["checks"] if not c["ok"]]
+    names = [c["check"] for c in result["checks"]]
+    assert names.index("status_staging_before_transition") < names.index("current_transition_committed_after_checks")   # 검증 뒤 전환
 
 
 @pytest.mark.skipif(not PAYLOAD.exists() or not _db_available(), reason="PostgreSQL 컨테이너 또는 payload 없음")
@@ -105,3 +107,14 @@ def test_roundtrip_rejects_corrupted_payload_without_loading():
     assert result["decision"] == "PUBLISH_REJECTED" and result["schema"] is None
     failed = {c["check"] for c in result["checks"] if not c["ok"]}
     assert "qa:power_no_null_and_finite" in failed and any(f.endswith("gaps_equal_null_runs_both_directions") for f in failed)
+
+
+def test_fold_reference_time_removes_duplicate_times():
+    """리뷰 차단 사항(3차) 2: 중복 시각 제거 뒤 중앙값. 단일 Sector fixture 에서는 드러나지 않아 합성 사례로 검사한다."""
+    from types import SimpleNamespace
+    from gold_roundtrip import build_payload as bp
+    times = np.array([1.0, 2.0, 2.0, 2.0, 3.0, 10.0])          # 중복 있는 원본: 중앙값 2.0 / 중복 제거 뒤 [1,2,3,10] 중앙값 2.5
+    base = SimpleNamespace(time=times)
+    assert bp.fold_reference_time(base) == 2.5
+    assert float(np.median(times)) == 2.0                            # 중복을 제거하지 않으면 다른 값
+    assert bp.fold_reference_time(SimpleNamespace(time=np.array([4.0, 1.0, 3.0, 2.0]))) == 2.5   # 정렬·짝수 평균
