@@ -36,3 +36,4 @@
 | 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |
 | 2026-09-16 | 온라인 파생 계산 HTTP/JSON 경계·초기 제한 계약 | S15P21C206-70 | derived compute, Worker, HTTP JSON, residual, periodogram, timeout, fixture, DEC-35 | 계약 검증 완료·교차 리뷰 대기 | [2026-09-16](2026-09-16.md) |
 | 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |

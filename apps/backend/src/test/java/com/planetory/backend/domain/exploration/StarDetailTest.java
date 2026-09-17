@@ -1,6 +1,8 @@
 package com.planetory.backend.domain.exploration;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -374,6 +376,46 @@ class StarDetailTest {
                 () -> stars.publicSummary(memberId, undiscovered));
 
         assertEquals(ErrorCode.STAR_NOT_PUBLISHED, thrown.getErrorCode());
+    }
+
+    /**
+     * 게시판 자격 판정과 공개 요약은 같은 기준을 쓴다 [S15P21C206-158].
+     *
+     * <p>판정을 한 곳에 둔 이유가 이것이다. 한 사례라도 다르게 판정하면 게시글은 붙일 수 있는데
+     * 별 게시판 헤더는 404가 나거나, 그 반대가 된다. 공개 요약은 발견하지 않은 회원으로 불러
+     * 게시판 자격이 요청 회원과 무관하다는 것도 함께 본다.
+     */
+    @Test
+    void 게시판_자격_판정과_공개_요약은_같은_기준을_쓴다() {
+        long hidden = insertStar(10.0, null, null);
+        jdbc.update("UPDATE stars SET service_status = 'hidden' WHERE tic_id = ?", hidden);
+        unlock(memberId, hidden, 2);
+        long undiscovered = insertStar(10.0, null, null);
+
+        Map<String, Long> cases = new LinkedHashMap<>();
+        cases.put("열린 공개 별", ticId);
+        cases.put("발견은 됐지만 숨김", hidden);
+        cases.put("공개됐지만 미발견", undiscovered);
+        cases.put("없는 TIC", 999_999_999L);
+
+        for (var c : cases.entrySet()) {
+            boolean board = opens(() -> stars.requireOpenStarBoard(c.getValue()));
+            boolean summary = opens(() -> stars.publicSummary(otherMemberId, c.getValue()));
+            assertEquals(summary, board, c.getKey() + ": 두 경로의 판정이 갈렸다");
+        }
+        assertTrue(opens(() -> stars.requireOpenStarBoard(ticId)), "열린 공개 별은 통과해야 한다");
+        assertFalse(opens(() -> stars.requireOpenStarBoard(hidden)), "숨김 별은 발견됐어도 막혀야 한다");
+    }
+
+    /** 판정을 통과했는지. 게시판 자격이 아닌 이유로 실패하면 삼키지 않고 테스트를 깨뜨린다. */
+    private static boolean opens(Runnable call) {
+        try {
+            call.run();
+            return true;
+        } catch (BusinessException e) {
+            assertEquals(ErrorCode.STAR_NOT_PUBLISHED, e.getErrorCode(), "게시판 자격 외 이유로 실패했다");
+            return false;
+        }
     }
 
     /** 발견 회원 수는 사람 수로 센다. */
