@@ -67,6 +67,10 @@ Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.ht
 
 `VITE_*`는 빌드 시 결정된다. 기본 CSRF 계약은 MR !42의 `GET /api/v1/auth/csrf`이며 쓰기 전에 발급된 토큰을 `X-CSRF-TOKEN`으로 전송한다. `VITE_CSRF_HEADER`/`VITE_CSRF_COOKIE`는 둘 다 비워 둔다. 둘 다 설정한 기존 쿠키 방식은 호환용으로만 유지한다. 요청 추적 응답 헤더는 MR에 없으므로 임의로 설정하지 않는다. 토큰·개인 비밀키는 빌드 인자에 넣지 않는다.
 
+Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`, `VITE_OAUTH_GOOGLE_URL=/oauth2/authorization/google`이다. 인자를 생략한 기본 이미지에서도 두 로그인 버튼을 사용할 수 있다. 특정 제공자를 의도적으로 끄려면 해당 `--build-arg VITE_OAUTH_..._URL=`을 명시한다. 실행 중 컨테이너에 환경 변수를 추가해도 이미 빌드된 프론트 설정은 바뀌지 않는다.
+
+`npm run test:docker-defaults`는 Dockerfile의 build 단계에 있는 `VITE_*` 기본값을 읽어 별도 `dist/docker-defaults`에 빌드한 후 58330 포트에서 기존 운영 브라우저 검사를 실행한다. 호스트 `VITE_*`와 로컬 `.env`를 제외해 잘못된 기본값이 개인 설정으로 가려지지 않게 한다. 이 검사는 Docker 엔진 없이 실행할 수 있으며 실제 Linux 이미지/Nginx·배포 HTTPS 검증을 대체하지 않는다. `npm run check`에도 포함한다. [리뷰 수정 검증](docs/merge-readiness-202.md#docker-oauth-기본값-리뷰-수정).
+
 ## W04 로그인 화면 검증
 
 `npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.

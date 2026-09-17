@@ -37,3 +37,16 @@ Firefox 인증 8개 통과 후 응답 유실 1개를 위 방식으로 재실행�
 최초 닉네임 입력과 서버 자동 생성의 합의, 현재 UI의 실제 두 제공자 신규/재로그인 전체 인수, 배포 HTTPS·Safari 등은 [202 인수 상태](ticket-202-readiness.md)에 남긴다. 이 항목을 삭제하거나 완료로 간주하지 않는다. 코드가 공용 기반에 합쳐지는 것과 해당 인수 종료는 별개다.
 
 후속 인증 회귀: 202 소스의 타입·운영 빌드를 통과했고 Chrome 9개·Edge 9개를 보완한 입력/응답 유실 방식으로 재검증했다.
+
+## Docker OAuth 기본값 리뷰 수정
+
+2026-09-17 MR !35의 P1 지적을 반영한다. 기존 Dockerfile은 두 OAuth ARG를 빈 문자열로 선언했고, `authSettings`의 `??`는 빈 문자열에 기본 경로를 적용하지 않아 기본 이미지의 두 로그인 버튼이 비활성화됐다. 일반 `npm run build`는 이 Docker ARG를 주입하지 않으므로 이전 운영 브라우저 검사에서 놓친 조건이다.
+
+Docker ARG 기본값을 `/oauth2/authorization/ssafy`, `/oauth2/authorization/google`로 수정했다. 명시적 빈 설정으로 제공자를 끄는 정책과 프론트의 URL 검증은 유지한다. 비밀키·백엔드 인증 계약·운영 배포를 변경하지 않는다.
+
+- `npm run test:docker-defaults`: Dockerfile build 단계의 실제 `VITE_*` 기본값으로 빌드하며 개인 `.env`와 호스트 `VITE_*`는 제외한다. 기존 production 스위트와 같은 화면 검사를 재사용하고, 버튼이 활성 상태인지 먼저 단언한다. `npm run check`에 추가해 기본값 회귀를 놓치지 않게 한다.
+- 수정 전 같은 검사에서 SSAFY 로그인 버튼 `Expected enabled / Received disabled`로 실패를 재현했다.
+- 수정 후 타입·운영 빌드·개발 코드 제외, 단위 20개, Docker 기본값 운영 브라우저 3개를 통과했다. 두 제공자의 버튼 활성화와 정확한 OAuth 경로 이동을 확인했다. 제공자 응답은 가로채므로 실제 외부 계정 로그인 재검증으로 세지 않는다.
+- Docker Desktop 시작을 시도했지만 엔진 연결을 확보하지 못했다. 이번 결과는 Windows에서 동일 빌드 인자를 적용한 회귀 검사이며 실제 Linux 이미지 실행, 배포 HTTPS·Safari 검증은 아니다.
+
+같은 수정 커밋을 202 → 203 → 204 → 205 순서로 후속 브랜치에 통합한다. 기존 MR을 갱신하며 실제 승인·develop 병합은 하지 않는다. 202는 Ready, 후속 203·204·205는 Draft를 유지한다. 이 수정만으로 Jira의 남은 인수 조건을 완료 처리하지 않는다.
