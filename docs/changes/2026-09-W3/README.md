@@ -37,6 +37,11 @@
 | 2026-09-17 | BLS 격자·게이트 조정 단계 결과 — 선형 50k·SNR≥7&SDE≥6 제안, 범위 안 회수율·잔여 피크 지표 | S15P21C206-110 | BLS, bls_grid_v1, linear50k, SDE, SNR, 게이트, in_search_range, 잔여 피크, autoperiod, WASP-62 잔여, bls_config_version, D04, DEC-03 | 실험 결과 · 제안 | [2026-09-17](2026-09-17.md) |
 | 2026-09-16 | 온라인 파생 계산 HTTP/JSON 경계·초기 제한 계약 | S15P21C206-70 | derived compute, Worker, HTTP JSON, residual, periodogram, timeout, fixture, DEC-35 | 계약 검증 완료·교차 리뷰 대기 | [2026-09-16](2026-09-16.md) |
 | 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
+
+| 2026-09-17 | Hadoop 3.5.0·OpenJDK 17 HDFS 기준과 72·73번 실행 경계 정합화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, QJM, RF2, Spark 3.5.5, Hadoop client 3.3.4 | 설치 기준 확정·구현 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | HDFS 호스트 설치와 tailnet 노드 호출 자동화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, SHA-512, hdfs, systemd, tailnet, canary, WhatIf | 구현·Node 1~6 설치 검증 완료, 초기화 대기 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | GCP 운영 접속을 tailnet 기본 경로로 전환 | S15P21C206-71 | Tailscale SSH, tailnet, MagicDNS, scp, GCP 비상 복구, HDFS 설치 | 구현·실환경 접속 검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | HDFS HA 초기화와 RF2 실환경 검증 | S15P21C206-72 | UFW, QJM, Active, Standby, DataNode 5개, RF2, checksum, fsck | 검증 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 일반 게시글 CRUD와 별 연결 검증 | S15P21C206-158 | 게시글, posts, CRUD, purposeTag, board star free, PATCH 부분 수정, JsonNode, STAR_NOT_PUBLISHED, SB-D22 삭제, codePointCount, FOR UPDATE join fetch, updated_at 시계 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 제출 매칭 수치 규칙 v0(rule-0)·공통 fixture 31개·참조 구현 | S15P21C206-128 | 제출 매칭, rule-0, 우세/모호, ambiguous_match, 정규화 오차, minScoreGap, dominanceRatio, 고조파 alias, allowEmptyPhaseSpan, phaseWidthMax, DEC-19, Q03, C09, A04 | 제안 · 교차 리뷰 대기 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | Gold 적재 예제 PostgreSQL QA+round-trip 57항목 통과, 배열·레코드 checksum 규칙 v0, 공개 정책 미결 정리(69 코드만 사용) | S15P21C206-117 | Gold round-trip, publication-qa, array checksum, record-canonical, f32le, NULL 7FC00000, qa-tolerances, PUBLISH_REJECTED, PUBLISH_ROLLED_BACK, 손상 Sector, AI 실패, bundle_version 충돌, NUMERIC 정밀도, V1~V8, planetory_gold_writer, D09 | 검증 완료(로컬) · 제안 · 미결 | [2026-09-17](2026-09-17.md) |
@@ -46,3 +51,4 @@
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
 | 2026-09-17 | 완료·재개 대기 공통 판정과 진행 상태 전환 구현 | S15P21C206-149 | 완료 판정, all_found, undiscoverable_only, reopen_pending, active candidate, 누적 매칭, completed_at | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
