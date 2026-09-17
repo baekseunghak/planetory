@@ -13,9 +13,9 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 | --- | --- | --- |
 | HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | QJM 3개·Active/Standby·DataNode 5개·RF2 런타임 검증 완료 |
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
-| Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
+| Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | YARN cluster mode HDFS 읽기·쓰기와 5개 Worker executor 검증 완료 |
 
-2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다.
+2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다. 2026-09-18에는 ResourceManager 1개와 NodeManager 5개, Spark 3.5.5 cluster mode HDFS sample과 Node 2 자원 상한을 검증했다.
 
 Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
 
@@ -33,9 +33,10 @@ config/hadoop/        # 모든 노드: core-site.xml, hdfs-site.xml, workers
 config/yarn/
   worker.xml          # Node 1, 3~6
   standby-worker.xml  # Node 2: NameNode 자원을 남기는 Worker 설정
+  capacity-scheduler.xml # 전체 노드: 단일 root.default queue
 ```
 
-두 YARN 파일은 완전한 설정 파일이다. 노드 역할에 맞는 하나를 `/etc/hadoop/yarn-site.xml`로 복사한다. XML을 자동 병합하지 않는다.
+두 `yarn-site.xml` 프로필은 완전한 설정 파일이다. 노드 역할에 맞는 하나를 `/etc/hadoop/yarn-site.xml`로 복사하고 `capacity-scheduler.xml`도 함께 배치한다. 서버 배포본의 기본 scheduler 파일에 의존하지 않으며 XML을 자동 병합하지 않는다.
 
 | 대상 | 적용 파일 | NodeManager 한도 |
 | --- | --- | --- |
@@ -58,11 +59,7 @@ sudo install -m 644 infra/distributed-system/config/yarn/worker.xml /etc/hadoop/
 sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc/hadoop/yarn-site.xml
 ```
 
-`S15P21C206-73` 범위:
-
-- `yarn` 서비스 계정과 YARN 로컬·로그 디렉터리 권한
-- ResourceManager·NodeManager systemd 서비스 등록
-- Worker Python 실행 환경과 Spark sample application 검증
+`S15P21C206-73`은 `yarn` 서비스 계정, 로컬·로그·PID 디렉터리, 역할별 systemd unit, UFW와 Spark sample까지 [YARN 설치·검증 절차](#yarn-설치검증-s15p21c206-73)로 자동화한다.
 
 ### HDFS 호스트 설치 명세 (`S15P21C206-72`)
 
@@ -99,7 +96,7 @@ Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최�
 
 네트워크는 `S15P21C206-71`에서 만든 VPC Peering·GCP 방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. 호스트 UFW의 역할별 HDFS 규칙과 실제 포트 연결은 초기화 스크립트가 데몬 시작 단계와 분리해 적용·검증한다.
 
-Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1 Docker는 현재 Spark 제출 컨테이너를 사용하는 `S15P21C206-73` 착수 전에 필요하고, Node 2~6 Docker는 수집 컨테이너를 실제 배포할 때 필요하다. 2026-09-17 Jira 조회 기준으로 두 설치 책임을 명시한 별도 Task는 없으므로, 각 작업 착수 전에 기존 Task에 포함할지 별도 Task로 분리할지 확정한다. 확정 전에는 Docker 설치를 72번 완료 증거로 계산하지 않는다.
+Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1은 Spark 제출 책임과 함께 `S15P21C206-73`에서 Ubuntu 저장소의 Docker Engine·Compose를 설치하고 실제 제출까지 검증했다. Node 2~6 Docker는 수집 컨테이너를 실제 배포하는 작업에서 설치한다.
 
 #### 설치 실행
 
@@ -203,25 +200,51 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 
 2026-09-17 검증 표본 `/validation/S15P21C206-72/run-20260917T161435/sample.txt`는 SHA-256 `45d305da54016d35f10f62f0c45d50bb5f7769f2fa16d94f32c8d512941b8c50`로 업로드 전·다운로드 후가 일치했다. RF2 블록은 `worker-5`, `worker-6`에 저장됐고 최종 FSCK는 `HEALTHY`, missing·corrupt·under-replicated block은 모두 0이었다.
 
-## YARN 최초 시작 (`S15P21C206-73`)
+## YARN 설치·검증 (`S15P21C206-73`)
 
-HDFS 완료 검증 후 별도 작업에서 Node 2~6의 NodeManager와 Node 1의 ResourceManager를 시작한다.
+구현 파일은 다음과 같다.
 
-```bash
-# Node 2~6
-yarn --daemon start nodemanager
-# Node 1
-yarn --daemon start resourcemanager
-yarn node -list -all
+- [install-yarn-host.sh](scripts/install-yarn-host.sh): 계정·디렉터리·설정·역할별 unit을 멱등 배치하고 Node 1에만 Ubuntu Docker를 준비한다. 실행 중인 YARN은 자동 덮어쓰지 않는다.
+- [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다.
+- [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다.
+- [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
+- [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
+
+```powershell
+$Install = '.\infra\distributed-system\scripts\install-yarn-hosts.ps1'
+$Init = '.\infra\distributed-system\scripts\initialize-yarn-cluster.ps1'
+
+& $Install -WhatIf
+& $Install -NodeNumbers 1
+& $Install -NodeNumbers 2,3,4,5,6
+& $Init -Step Preflight
+& $Init -Step ConfigureFirewall
+$AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+& $Init -Step Start
+& $Init -Step ValidateNodes
+& .\infra\distributed-system\scripts\run-yarn-sample.ps1
+& $Init -Step FinalAudit -AuditSinceUtc $AuditSinceUtc
 ```
 
-`yarn node -list -all`에 표시된 각 호스트명을 다른 VM과 작업 컨테이너에서 확인한다. 아래 `<YARN이 표시한 호스트명>`은 출력값으로 바꾼다.
+설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. 현재 YARN unit의 부팅 자동 시작도 의도적으로 비활성이다. 재부팅 후에는 HDFS가 정상인지 먼저 확인한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다.
 
-```bash
-getent hosts <YARN이 표시한 호스트명>
-```
+UFW는 Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사설 IP에만 허용한다. Spark cluster mode는 Worker 간 driver `7078`과 block manager `7079~7095`를 사용한다. block manager는 한 Worker에 여러 컨테이너가 배치되면 기본 포트에서 증가하므로 단일 포트만 열면 remote broadcast fetch가 멈춘다.
 
-사설 IP ping만 성공하고 이 검사가 실패하면 Spark 작업을 시작하지 않는다.
+2026-09-18 최종 검증 결과는 다음과 같다.
+
+- `yarn node -list -all`: `worker-2`~`worker-6` 5대 모두 `RUNNING`
+- Application ID: `application_1789675115055_0005`, `Final-State: SUCCEEDED`, 로그 집계 `SUCCEEDED`
+- executor: `worker-2`~`worker-6`에 각 1개, AM은 `worker-4`
+- HDFS: `/validation/S15P21C206-73/run-20260917T202547Z/output`, `_SUCCESS`, part 5개와 각 checksum 확인
+  - `part-00000`: `0000020000000000000000002961d4bae9d6c0032d416af28ebefd1e`
+  - `part-00001`: `000002000000000000000000cf7782859886e29ca2a349b7057b4f1d`
+  - `part-00002`: `0000020000000000000000006df067d00b0725fd60a989741e9dfe4b`
+  - `part-00003`: `000002000000000000000000e66f211f124e44f232bb30f417b8852d`
+  - `part-00004`: `000002000000000000000000f62ef44324cd05d56a2ca64e237624e8`
+- Node 2: YARN `16384MB/2 vCore`, 실행 중 컨테이너 `1024MB/1 vCore`, 호스트 used 약 2.7GiB·available 약 32.5GiB, swap 0, OOM 없음
+- 성공 run 시작 뒤 6개 YARN daemon 로그의 새 `ERROR`·`FATAL` 0건, `nn1=active`, `nn2=standby`, Live DataNode 5개 유지
+
+Worker Python은 모두 `/usr/bin/python3.12`의 Python 3.12.3으로 일치했다. sample은 추가 패키지를 설치하지 않고 Spark가 제공하는 PySpark를 사용한다. 광고 호스트명은 6개 VM과 제출 컨테이너에서 모두 사설 IP로 해석돼야 하며 실패하면 sample을 시작하지 않는다.
 
 ## 수동 전환
 
@@ -289,7 +312,7 @@ Spark는 다음 모드로 제출한다.
 --master yarn --deploy-mode cluster
 ```
 
-현재 기본 이미지 `apache/spark:3.5.5-python3`는 JDK 11.0.26과 `hadoop-client-api/runtime` 3.3.4를 포함한다. Hadoop 3.5.0 단일 HDFS에 대한 Parquet 쓰기·읽기와 checksum은 로컬 일회성 환경에서 통과했지만, 이 결과는 실제 6대 QJM·YARN 실행 증거가 아니다. `S15P21C206-73`에서 같은 이미지로 sample application을 제출해 Application ID, 성공 상태, HDFS 결과와 executor 로그를 확인한다.
+현재 기본 이미지 `apache/spark:3.5.5-python3`는 JDK 11.0.26과 `hadoop-client-api/runtime` 3.3.4를 포함한다. Hadoop 3.5.0 단일 HDFS에 대한 Parquet 쓰기·읽기와 checksum은 로컬 일회성 환경에서 통과했고, `S15P21C206-73`에서 같은 이미지의 실제 6대 QJM·YARN sample application으로 Application ID, 성공 상태, HDFS 결과와 executor 로그까지 확인했다.
 
 Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실행된다. Python 의존성은 다음 중 하나로 준비한다.
 
@@ -307,4 +330,4 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`의 런타임 검증이 필요하다. Worker 장애·수동 전환과 Gold 공개·롤백은 각각의 후속 통합 검증으로 남긴다.
+저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`에서 런타임 검증을 완료했다. Worker 장애·수동 전환과 Gold 공개·롤백은 각각의 후속 통합 검증으로 남긴다.

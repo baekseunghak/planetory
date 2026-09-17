@@ -159,6 +159,19 @@ systemctl is-active tailscaled 2>/dev/null || true
 
 Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. HDFS 최초 초기화에서는 [단계형 초기화 스크립트](../../infra/distributed-system/scripts/initialize-hdfs-ha.ps1)의 `ConfigureFirewall`이 UFW 기본 incoming deny와 기존 SSH 규칙을 유지하면서 정확한 6개 사설 IP에만 역할별 `8020`, `8485`, `9870`, `9864`, `9866`, `9867`을 허용한다. JournalNode HTTP `8480`은 Standby의 edit log 읽기에 필요하므로 Node 1~3에서 두 NameNode IP `10.20.1.10`, `10.20.2.10`에만 별도로 허용한다. 적용 전후에는 `NetworkDiagnostics`와 `JournalNodes`로 두 NameNode에서 세 JournalNode의 `8485/TCP`와 `8480/HTTP`를 확인한다.
 
+YARN은 [단계형 YARN 스크립트](../../infra/distributed-system/scripts/initialize-yarn-cluster.ps1)의 `ConfigureFirewall`을 사용한다. Node 1의 ResourceManager `8030~8033,8088`과 Worker의 NodeManager `8040~8042`는 정확한 6개 사설 IP에서만 허용한다. Spark cluster mode 내부 통신은 Worker 5개 IP 사이에서 driver `7078`과 block manager `7079~7095`만 허용한다. block manager는 같은 Worker에 여러 컨테이너가 배치되면 `7079`부터 포트를 증가시키므로 기본 재시도 범위를 함께 열어야 한다.
+
+YARN 상태는 다음처럼 확인한다. 현재 unit은 실행 중이지만 부팅 자동 시작은 비활성이다.
+
+```bash
+systemctl is-active hadoop-yarn-resourcemanager  # Node 1
+systemctl is-active hadoop-yarn-nodemanager      # Node 2~6
+sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+  HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -list -all
+```
+
+재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다.
+
 ## 6. tailnet SSH 장애와 GCP 비상 복구
 
 먼저 클라이언트 연결, MagicDNS, 대상 노드와 SSH 권한을 확인한다.

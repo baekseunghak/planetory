@@ -28,7 +28,7 @@ flowchart LR
 
 > 생성 스크립트는 Ubuntu Server 24.04 LTS amd64 VM과 디스크 마운트까지만 준비한다.
 >
-> `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화하고, `S15P21C206-73`에서 YARN과 Spark 3.5.5 sample application을 검증한다. Spark와 Airflow 컨테이너 설치는 호스트 HDFS 설치와 별도다.
+> `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화했고, `S15P21C206-73`에서 YARN과 Spark 3.5.5 sample application을 검증했다. Spark와 Airflow 컨테이너 실행은 호스트 Hadoop 서비스와 분리한다.
 
 ## 노드와 디스크
 
@@ -87,6 +87,8 @@ Node 1~3의 JournalNode가 QJM edit log를 구성한다.
 | Node 3~6 | 24GiB / 3 vCore | DataNode 2GiB, Node 3의 JournalNode 0.5~1GiB, OS·Docker 4~5GiB |
 
 실제 파일·블록 수를 측정한 뒤 Active와 Standby NameNode heap을 같은 값으로 조정한다.
+
+2026-09-18 Node 2 실측에서 Standby NameNode RSS는 약 556MiB였다. Spark executor 1개가 배치된 동안 YARN 할당은 1GiB/1 vCore, 호스트 used는 약 2.7GiB, available은 약 32.5GiB, swap은 0이었다. 이 표본에서는 OOM과 NameNode 압박이 없었지만 실제 Sector의 메모리 상한 검증을 대신하지 않는다.
 
 ### 저장 용량과 운영 한계
 
@@ -202,6 +204,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - VM·디스크·VPC·피어링 생성 스크립트
 - HDFS·YARN XML 설정
 - HDFS 호스트 설치·단계형 초기화 스크립트, Node 1~6 설치, 6대 간 사설망·DNS와 QJM·Active/Standby·DataNode 5개·RF2 런타임 검증
+- YARN 호스트 설치·단계형 기동 스크립트, ResourceManager 1개·NodeManager 5개와 Spark 3.5.5 cluster mode HDFS sample 검증
 - Node 1과 Worker용 Docker Compose
 - 로컬 XML·Compose·PowerShell 정적 검사
 
@@ -215,13 +218,13 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 - [ ] 각 계정의 Trial 적용 여부와 실제 할당량을 확인한다.
 - [ ] 프로젝트마다 피어링 5개가 `ACTIVE`인지 확인한다.
-- [ ] VM과 컨테이너에서 YARN이 광고한 FQDN을 해석할 수 있는지 확인한다.
+- [x] VM과 제출 컨테이너에서 YARN이 광고한 Worker 이름을 사설 IP로 해석한다.
 - [x] `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17과 `hdfs` 서비스 계정을 준비한다.
 - [x] HDFS 디스크 권한과 systemd 마운트 의존성을 설정한다.
 - [x] 신규 HDFS를 한 번만 초기화하고 Standby NameNode를 bootstrap한다.
-- [ ] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
-- [ ] 모든 Worker에 동일한 Python 실행 환경을 준비한다.
-- [ ] Node 2의 Executor 메모리와 overhead가 YARN 16GiB 한도를 넘지 않는지 확인한다.
+- [x] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
+- [x] 모든 Worker의 Python 3.12.3 실행 환경을 확인한다.
+- [x] Node 2에서 1GiB executor 표본이 YARN 16GiB 한도 안에서 실행되고 OOM·swap·NameNode 압박이 없음을 확인한다.
 - [ ] CI Runner의 SSH 경로와 Prometheus 메트릭 수집 경로를 구성한다.
 
 Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 대상이다.
