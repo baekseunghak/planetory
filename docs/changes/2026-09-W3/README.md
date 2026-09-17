@@ -38,5 +38,5 @@
 | 2026-09-17 | 온라인 파생 계산 후보 숫자 정렬·재시도·bin 시각 책임 보완 | S15P21C206-70 | derived compute, candidate id, numeric order, attempt, retryable, start_btjd, bin center | 검증 완료·Data 승인·Backend 재검토 대기 | [2026-09-17](2026-09-17.md) |
 
 | 2026-09-17 | Hadoop 3.5.0·OpenJDK 17 HDFS 기준과 72·73번 실행 경계 정합화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, QJM, RF2, Spark 3.5.5, Hadoop client 3.3.4 | 설치 기준 확정·구현 대기 | [2026-09-17](2026-09-17.md) |
-| 2026-09-17 | HDFS 호스트 설치와 tailnet 노드 호출 자동화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, SHA-512, hdfs, systemd, tailnet, canary, WhatIf | 구현·Node 1~2 설치 검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-17 | HDFS 호스트 설치와 tailnet 노드 호출 자동화 | S15P21C206-72 | Hadoop 3.5.0, OpenJDK 17, SHA-512, hdfs, systemd, tailnet, canary, WhatIf | 구현·Node 1~3 설치 검증 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | GCP 운영 접속을 tailnet 기본 경로로 전환 | S15P21C206-71 | Tailscale SSH, tailnet, MagicDNS, scp, GCP 비상 복구, HDFS 설치 | 구현·실환경 접속 검증 완료 | [2026-09-17](2026-09-17.md) |

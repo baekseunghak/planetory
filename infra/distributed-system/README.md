@@ -11,7 +11,7 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 
 | 대상 | 기준 | 상태 |
 | --- | --- | --- |
-| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1~2 설치·정지 상태 검증 완료, Node 3~6 설치 전 |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | Node 1~3 설치·정지 상태 검증 완료, Node 4~6 설치 전 |
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
 | Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | 로컬 HDFS 쓰기·읽기만 부분 검증, 실제 YARN 검증은 `S15P21C206-73` |
 
