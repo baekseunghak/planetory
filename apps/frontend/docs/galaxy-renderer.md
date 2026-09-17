@@ -1,5 +1,7 @@
 # 204 개별 별 은하 렌더러
 
+2026-09-17 보완: 206은 기존 상세 조회 주체를 `StarDetail.tsx`로 확장하고 `SceneControl.focusStar`·동일 canvas 행성 확대·복귀를 연결했다. [206 인수 기록](ticket-206-readiness.md)이 현재 상세 구현 기준이며 아래 미래형 설명은 204 작성 당시 범위다.
+
 2026-09-17 보완: 205의 조작·히트 테스트·마커는 [205 인수 기록](ticket-205-readiness.md)을 따른다. 아래 204 구현 당시 범위와 구분한다.
 
 2026-09-15. 사용자 승인된 [표현 계약 v1.3 / MR !41](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/41)과 `7f67c5683f79e541da556ef4e6aed966ff317c11`의 개인 시제품 참조를 적용한다. 문서 팀 승인·병합 및 실제 API 인수는 대기 중이다.

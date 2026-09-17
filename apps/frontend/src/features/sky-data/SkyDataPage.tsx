@@ -16,7 +16,7 @@ export function SkyDataPage({
     store?.select(params.get("star") || params.get("focus"));
   }, [store, location.search]);
   return (
-    <section aria-labelledby="sky-title">
+    <section className="sky-page" aria-labelledby="sky-title">
       <p className="eyebrow">MY UNIVERSE</p>
       <h1 id="sky-title">별지도</h1>
       {data.meta && (

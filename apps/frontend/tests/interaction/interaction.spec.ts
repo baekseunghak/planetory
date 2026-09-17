@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { project, exampleStar } from "../../dev/sky-reference/reference.mjs";
+import { stablePhase } from "../../src/features/sky-renderer/model";
 const camera = async (p: Page) =>
   JSON.parse((await p.locator("canvas").getAttribute("data-camera"))!);
 async function start(page: Page) {
@@ -30,7 +31,7 @@ test("high zoom keeps anchor hit and pooled DOM; cancelled drag does not resume 
   const canvas = page.locator("canvas"),
     pos = await point(page, 0);
   await page.mouse.move(pos.x, pos.y);
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 15; i++) {
     const before = (await camera(page)).zoom;
     await page.mouse.wheel(0, -500);
     await expect
@@ -41,6 +42,7 @@ test("high zoom keeps anchor hit and pooled DOM; cancelled drag does not resume 
       await page.mouse.move(actual.x, actual.y);
       await expect(page.getByRole("tooltip")).toContainText("900000001");
       await page.mouse.click(actual.x, actual.y);
+      await expect.poll(async () => (await camera(page)).zoom).toBe(4);
     }
   }
   await expect
@@ -50,6 +52,7 @@ test("high zoom keeps anchor hit and pooled DOM; cancelled drag does not resume 
     "900000001",
   );
   await canvas.focus();
+  await canvas.press("Escape");
   await canvas.press("Home");
   await expect(page.locator(".galaxy-marker:not([hidden])")).toHaveCount(6);
   await expect(page.getByTestId("marker-pool")).toHaveAttribute(
@@ -126,7 +129,7 @@ test("GPU projected star hover/click matches TIC after rotation and 1024px resiz
     "900000001",
   );
   await expect(canvas).toHaveAttribute("data-rendered-planets", "5");
-  await page.getByRole("button", { name: "선택 해제", exact: true }).click();
+  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
   const box = (await canvas.boundingBox())!;
   await page.mouse.click(box.x + 20, box.y + 160);
   await expect(page.getByTestId("selection-summary")).toHaveCount(0);
@@ -140,7 +143,10 @@ test("keyboard navigation, selection, pan, zoom limits and full view keep focus 
   await canvas.press("]");
   await expect(page.getByRole("tooltip")).toBeVisible();
   await canvas.press("Enter");
-  await expect(page.getByTestId("selection-summary")).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "별 상세" }),
+  ).toBeVisible();
+  await expect.poll(async () => (await camera(page)).zoom).toBe(4);
   const id = await page.getByTestId("selection-summary").textContent();
   await canvas.press("ArrowRight");
   await canvas.press("+");
@@ -237,10 +243,7 @@ test("selected personal planet tooltip uses the rendered orbit position and matc
     box.height,
   );
   const id = "fixture-204-p-0";
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++)
-    hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
-  const phase = ((hash >>> 0) / 4294967296) * Math.PI * 2;
+  const phase = stablePhase(id);
   const radius = 35 + (1 / 6) * Math.min(box.width, box.height) * 0.34;
   const x = box.x + center.x + Math.cos(phase) * radius,
     y = box.y + center.y + Math.sin(phase) * radius * 0.48;
@@ -261,6 +264,7 @@ test("2501 paginated data preserves selected ID and camera through zoom/page rep
     "2501",
   );
   await page.locator('.galaxy-marker[data-marker="1"]').click();
+  await expect.poll(async () => (await camera(page)).zoom).toBe(4);
   const box = (await page.locator("canvas").boundingBox())!;
   const p = await point(page, 0);
   await page.mouse.move(p.x, p.y);
@@ -269,16 +273,12 @@ test("2501 paginated data preserves selected ID and camera through zoom/page rep
   await expect(page.getByTestId("selection-summary")).toContainText(
     "900000001",
   );
-  await page
-    .getByRole("button", { name: "은하 전체 보기", exact: true })
-    .click();
+  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
   await expect(page.locator("canvas")).toHaveAttribute(
     "data-rendered-stars",
     "2501",
   );
-  await expect(page.getByTestId("selection-summary")).toContainText(
-    "900000001",
-  );
-  expect(box.width).toBeGreaterThan(1000);
+  await expect(page.getByTestId("selection-summary")).toHaveCount(0);
+  expect(box.width).toBeGreaterThan(500);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
