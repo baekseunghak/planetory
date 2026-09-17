@@ -8,6 +8,7 @@ import com.planetory.backend.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.domain.exploration.service.SkyViews.Bounds;
@@ -26,12 +27,6 @@ import com.planetory.backend.domain.exploration.service.SkyViews.ZoomLevel;
 @RequiredArgsConstructor
 public class SkyService {
 
-    /** 정사각 타일 한 변. 응답 범위를 이 격자에 맞춰 넓힌다. */
-    public static final int TILE_SIZE = 512;
-
-    /** 경계 상자 상한. 한 요청이 지도를 통째로 끌어오지 못하게 막는다(탐사 API 4.1). */
-    public static final int MAX_BOX = TILE_SIZE * 64;
-
     public static final int DEFAULT_LIMIT = 1000;
     public static final int MAX_LIMIT = 2000;
 
@@ -46,14 +41,32 @@ public class SkyService {
     private final SkyRepository stars;
     private final JdbcClient jdbc;
     private final Clock clock;
+    private final SkyProperties properties;
 
+    /** 정사각 타일 한 변. 응답 범위를 이 격자에 맞춘다. 메타로 프론트에 알린다. */
+    public int tileSize() {
+        return properties.tileSize();
+    }
+
+    /** 경계 상자 상한. 한 요청이 지도를 통째로 끌어오지 못하게 막는다. */
+    public int maxBox() {
+        return properties.maxBox();
+    }
+
+    /**
+     * 메타는 경계·별 수·버전·중심 별을 한 스냅샷에서 읽는다 [S15P21C206-137].
+     *
+     * <p>네 값을 따로 읽으면 그 사이에 들어온 발견이 일부에만 반영돼, 프론트가 받은 경계 밖에
+     * 별이 있거나 별 수와 실제가 어긋난 상태로 화면을 그린다.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SkyMeta meta(long memberId, boolean firstVisit) {
         Bounds bounds = stars.findBounds(memberId)
                 // 가입 처리가 튜토리얼 1번을 열므로 별 0개는 없다(9.4절). 그래도 응답은 성립해야 한다.
                 .orElseGet(() -> new Bounds(0, 0, 0, 0));
         return new SkyMeta(SkyViews.REPRESENTATION, version(memberId),
                 PersonalSpiralGalaxyLayout.LAYOUT_VERSION, PRESENTATION_VERSION,
-                stars.countStars(memberId), bounds, TILE_SIZE, ZOOM_LEVELS,
+                stars.countStars(memberId), bounds, tileSize(), ZOOM_LEVELS,
                 stars.findCenterTicIds(memberId), firstVisit, now());
     }
 
@@ -65,7 +78,13 @@ public class SkyService {
      *
      * <p>요청 version이 현재와 다르면 별을 주지 않고 재시작을 요구한다. 이때의 빈 배열은
      * 빈 지도나 적재 완료가 아니다.
+     *
+     * <p>버전·페이지·범위 수를 <b>한 스냅샷</b>에서 읽는다 [S15P21C206-137]. 기본 격리 수준은
+     * 문장마다 스냅샷을 새로 떠서, 읽는 도중 발견이 들어오면 {@code rangeStarCount}가 실제로
+     * 받게 될 페이지 합과 달라진다. 프론트는 그 수로 적재 완료를 판단하므로 영원히 기다리거나
+     * 덜 받은 채로 끝난다. REPEATABLE READ는 첫 문장의 스냅샷을 트랜잭션 끝까지 유지한다.
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SkyTile tiles(long memberId, int level, double x, double y, double w, double h,
                          String requestedVersion, Integer requestedLimit, String cursor) {
         validateLevel(level);
@@ -140,11 +159,12 @@ public class SkyService {
      * 요청 상자를 타일 격자에 맞춰 넓힌다. 왼쪽·아래 경계는 포함하고 오른쪽·위는 제외하므로
      * 같은 격자의 이웃 요청이 같은 별을 두 번 주지 않는다.
      */
-    static TileBounds snapToTiles(double x, double y, double w, double h) {
-        double minX = Math.floor(x / TILE_SIZE) * TILE_SIZE;
-        double minY = Math.floor(y / TILE_SIZE) * TILE_SIZE;
-        double maxX = Math.ceil((x + w) / TILE_SIZE) * TILE_SIZE;
-        double maxY = Math.ceil((y + h) / TILE_SIZE) * TILE_SIZE;
+    TileBounds snapToTiles(double x, double y, double w, double h) {
+        int tile = tileSize();
+        double minX = Math.floor(x / tile) * tile;
+        double minY = Math.floor(y / tile) * tile;
+        double maxX = Math.ceil((x + w) / tile) * tile;
+        double maxY = Math.ceil((y + h) / tile) * tile;
         return new TileBounds(minX, minY, maxX - minX, maxY - minY);
     }
 
@@ -157,7 +177,7 @@ public class SkyService {
     private void validateBox(double x, double y, double w, double h) {
         boolean finite = Double.isFinite(x) && Double.isFinite(y)
                 && Double.isFinite(w) && Double.isFinite(h);
-        if (!finite || w <= 0 || h <= 0 || w > MAX_BOX || h > MAX_BOX) {
+        if (!finite || w <= 0 || h <= 0 || w > maxBox() || h > maxBox()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
     }

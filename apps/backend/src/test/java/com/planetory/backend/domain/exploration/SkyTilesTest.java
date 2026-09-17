@@ -226,7 +226,7 @@ class SkyTilesTest {
 
     @Test
     void 경계_상자와_배율_단계를_검증한다() {
-        int overLimit = SkyService.MAX_BOX + 1;
+        int overLimit = sky.maxBox() + 1;
         assertThrows(BusinessException.class,
                 () -> sky.tiles(memberId, 0, 0, 0, overLimit, 100, version, null, null));
         assertThrows(BusinessException.class,
@@ -246,9 +246,9 @@ class SkyTilesTest {
         SkyTile tile = sky.tiles(memberId, 0, -1500, -1500, 3000, 3000, version, 100, null);
 
         // 음수 좌표의 나머지는 -0.0이 나올 수 있어 절댓값으로 본다.
-        assertEquals(0.0, Math.abs(tile.bounds().x() % SkyService.TILE_SIZE));
-        assertEquals(0.0, Math.abs(tile.bounds().y() % SkyService.TILE_SIZE));
-        assertEquals(0.0, Math.abs(tile.bounds().w() % SkyService.TILE_SIZE));
+        assertEquals(0.0, Math.abs(tile.bounds().x() % sky.tileSize()));
+        assertEquals(0.0, Math.abs(tile.bounds().y() % sky.tileSize()));
+        assertEquals(0.0, Math.abs(tile.bounds().w() % sky.tileSize()));
         assertTrue(tile.bounds().x() <= -1500 && tile.bounds().y() <= -1500, "요청 범위를 덮어야 한다");
 
         for (SkyStar star : tile.stars()) {
@@ -268,7 +268,7 @@ class SkyTilesTest {
         assertEquals("personal-spiral-v1", meta.layoutVersion());
         assertEquals("personal-galaxy-v1", meta.presentationVersion());
         assertEquals(10, meta.starCount());
-        assertEquals(SkyService.TILE_SIZE, meta.tileSize());
+        assertEquals(sky.tileSize(), meta.tileSize());
         assertFalse(meta.zoomLevels().isEmpty());
         assertTrue(meta.firstVisit());
         assertEquals(List.of("900000001"), meta.centerTicIds());

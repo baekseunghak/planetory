@@ -9,7 +9,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
 import com.planetory.backend.domain.member.service.MemberService;
+import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.global.error.BusinessException;
+import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
@@ -88,6 +90,7 @@ class AuthIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired MemberService members;
+    @Autowired PostService posts;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
 
@@ -400,6 +403,113 @@ class AuthIntegrationTest {
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update(
                 "INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, world_x, world_y, depth_z, layout_version, unlocked_at) "
                         + "VALUES (?, 2, 'tutorial', 0, 0, 0, ' ', now())", userId));
+    }
+
+    @Test
+    void postCrudValidatesInputOwnershipAndStarBoard() throws Exception {
+        var owner = login("google", "post-owner");
+        var other = login("google", "post-other");
+        long ownerId = memberId(owner);
+        var created = mvc.perform(post("/api/v1/posts").session(owner).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"title\":\"  첫 제목  \",\"body\":\"첫 본문\",\"purposeTag\":\"GENERAL\","
+                                + "\"historyIds\":[],\"sourceLinks\":[]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.postId").exists()).andReturn();
+        String postId = mapper.readTree(created.getResponse().getContentAsString()).get("postId").asText();
+
+        mvc.perform(get("/api/v1/posts/" + postId).session(owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("첫 제목"))
+                .andExpect(jsonPath("$.body").value("첫 본문"))
+                .andExpect(jsonPath("$.reactionSummary.myReaction").value("NONE"));
+        mvc.perform(patch("/api/v1/posts/" + postId).session(owner).with(csrf())
+                        .contentType("application/json").content("{\"title\":\"바뀐 제목\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("바뀐 제목"))
+                .andExpect(jsonPath("$.body").value("첫 본문"));
+        mvc.perform(patch("/api/v1/posts/" + postId).session(other).with(csrf())
+                        .contentType("application/json").content("{\"body\":\"탈취\"}"))
+                .andExpect(status().isForbidden());
+
+        for (String body : List.of(
+                "{\"title\":\"제목\",\"body\":\"본문\",\"purposeTag\":\"UNKNOWN\"}",
+                "{\"title\":\"제목\",\"body\":\"   \",\"purposeTag\":\"GENERAL\"}",
+                "{\"title\":\"제목\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\",\"historyIds\":[\"h-1\"]}")) {
+            mvc.perform(post("/api/v1/posts").session(owner).with(csrf())
+                            .contentType("application/json").content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post("/api/v1/posts").session(owner).with(csrf()).contentType("application/json")
+                        .content("{\"title\":\"제목\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\",\"ticId\":\"3\"}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("STAR_NOT_PUBLISHED"));
+
+        var position = LAYOUT.place(1);
+        jdbc.update("INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, depth_z, unlocked_at,"
+                        + " world_x, world_y, layout_version, layout_ordinal) VALUES (?, 2, 'tutorial', ?, now(), ?, ?, ?, 1)",
+                ownerId, position.depthZ(), position.worldX(), position.worldY(), position.layoutVersion());
+        var starPost = mvc.perform(post("/api/v1/posts").session(other).with(csrf()).contentType("application/json")
+                        .content("{\"title\":\"열린 별 글\",\"body\":\"본문\",\"purposeTag\":\"DISCUSSION\",\"ticId\":\"2\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.createdAt").exists()).andReturn();
+        String starPostId = mapper.readTree(starPost.getResponse().getContentAsString()).get("postId").asText();
+        // 생성 직후 두 시각은 같은 INSERT의 DB 시계에서 나오므로 일치한다. 앱 시계를 섞으면 여기서 어긋난다.
+        var starDetail = mapper.readTree(mvc.perform(get("/api/v1/posts/" + starPostId).session(other))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ticId").value("2"))
+                .andReturn().getResponse().getContentAsString());
+        assertEquals(starDetail.get("createdAt").asText(), starDetail.get("updatedAt").asText());
+        assertEquals("star", jdbc.queryForObject("SELECT board FROM posts WHERE id = ?", String.class,
+                Long.parseLong(starPostId.substring(2))));
+        // 명세 5.2의 연결 해제 예제. 빈 첨부 배열을 함께 보내도 거절하지 않는다.
+        mvc.perform(patch("/api/v1/posts/" + starPostId).session(other).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"ticId\":null,\"historyIds\":[],\"sourceLinks\":[]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ticId").doesNotExist());
+        assertEquals("free", jdbc.queryForObject("SELECT board FROM posts WHERE id = ?", String.class,
+                Long.parseLong(starPostId.substring(2))));
+        // 항목이 실제로 담긴 요청은 F09·F24 구현 전까지 계속 거절한다.
+        mvc.perform(patch("/api/v1/posts/" + starPostId).session(other).with(csrf())
+                        .contentType("application/json").content("{\"historyIds\":[\"h-1\"]}"))
+                .andExpect(status().isBadRequest());
+
+        assertDoesNotThrow(() -> posts.create(ownerId, new PostService.CreateCommand(
+                "🌟".repeat(100), "가".repeat(10_000), "GENERAL", null, List.of(), List.of())));
+        assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(BusinessException.class,
+                () -> posts.create(ownerId, new PostService.CreateCommand(
+                        "🌟".repeat(101), "본문", "GENERAL", null, List.of(), List.of()))).getErrorCode());
+        assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(BusinessException.class,
+                () -> posts.create(ownerId, new PostService.CreateCommand(
+                        "제목", "가".repeat(10_001), "GENERAL", null, List.of(), List.of()))).getErrorCode());
+
+        mvc.perform(delete("/api/v1/posts/" + postId).session(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/posts/" + postId).session(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/posts/" + postId).session(owner)).andExpect(status().isNotFound());
+        mvc.perform(patch("/api/v1/posts/" + postId).session(owner).with(csrf())
+                        .contentType("application/json").content("{\"body\":\"늦은 수정\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void postConcurrentDifferentFieldsAreBothPreserved() throws Exception {
+        long ownerId = memberId(login("google", "post-concurrent"));
+        long postId = Long.parseLong(posts.create(ownerId, new PostService.CreateCommand(
+                "기존 제목", "기존 본문", "GENERAL", null, List.of(), List.of())).postId().substring(2));
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var title = executor.submit(() -> {
+                start.await();
+                return posts.patch(ownerId, postId,
+                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false));
+            });
+            var body = executor.submit(() -> {
+                start.await();
+                return posts.patch(ownerId, postId,
+                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false));
+            });
+            start.countDown();
+            title.get(20, TimeUnit.SECONDS);
+            body.get(20, TimeUnit.SECONDS);
+        }
+        assertEquals("동시 제목", posts.detail(postId).title());
+        assertEquals("동시 본문", posts.detail(postId).body());
     }
 
     @Test
