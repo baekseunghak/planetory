@@ -80,3 +80,51 @@ test("production login uses agreed backend provider paths and has no development
     ).status(),
   ).toBe(503);
 });
+
+test("production sky consumes metadata without bundling the inspector or fake backend", async ({
+  page,
+  request,
+}) => {
+  await page.route("**/api/v1/me", (route) =>
+    route.fulfill({
+      json: {
+        memberId: "prod-sky-test",
+        nickname: "검증",
+        onboardingDone: true,
+        tutorialCompleted: true,
+      },
+    }),
+  );
+  await page.route("**/api/v1/me/sky", (route) =>
+    route.fulfill({
+      json: {
+        representation: "individual-stars",
+        layoutVersion: "personal-spiral-v1",
+        presentationVersion: "personal-galaxy-v1",
+        version: "prod:1",
+        starCount: 1,
+        bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
+        tileSize: 512,
+        zoomLevels: [0.25, 0.5, 1, 2, 4].map((scale, level) => ({
+          level,
+          scale,
+        })),
+        centerTicIds: ["001"],
+        firstVisit: false,
+      },
+    }),
+  );
+  await page.goto("/sky");
+  await expect(page.getByTestId("sky-total")).toHaveText("1");
+  await expect(
+    page.getByText(
+      "지도 데이터를 준비했습니다. 지도 시각화 연결을 준비하고 있습니다.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("배율 단계")).toHaveCount(0);
+  await expect(
+    page.getByText("개발 응답 시나리오", { exact: true }),
+  ).toHaveCount(0);
+  expect((await request.post("/api/dev-sky-203/change")).status()).toBe(503);
+});

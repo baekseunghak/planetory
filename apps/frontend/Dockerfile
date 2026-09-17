@@ -19,6 +19,7 @@ ARG VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy
 ARG VITE_OAUTH_GOOGLE_URL=/oauth2/authorization/google
 ARG VITE_NICKNAME_REQUIRED_CODE=""
 ARG VITE_INITIAL_NICKNAME_PATH=""
+ARG VITE_SKY_RENDERER_ENABLED=false
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime

@@ -1,0 +1,8 @@
+{
+  "name": "planetory-firefox-functional-checks",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "selenium-webdriver": "4.35.0"
+  }
+}

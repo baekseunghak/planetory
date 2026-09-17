@@ -1,0 +1,196 @@
+.galaxy-scene {
+  position: relative;
+  min-width: 0;
+  background: #000103;
+  border: 1px solid #ffffff0c;
+  isolation: isolate;
+}
+.galaxy-scene canvas {
+  display: block;
+  width: 100%;
+  height: clamp(440px, 64vh, 900px);
+}
+.galaxy-legend {
+  position: absolute;
+  left: 22px;
+  bottom: 18px;
+  font-size: 12px;
+  max-width: min(390px, calc(100% - 44px));
+  color: #c7cedb;
+}
+.galaxy-legend summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  letter-spacing: 0.06em;
+}
+.galaxy-legend[open] {
+  padding: 12px 20px;
+  background: #080b13ed;
+}
+.galaxy-legend ul {
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.galaxy-legend li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.galaxy-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+  flex-shrink: 0;
+}
+.galaxy-error {
+  position: absolute;
+  inset: 30% 15% auto;
+  padding: 24px;
+  background: #111722ee;
+}
+.galaxy-budget {
+  position: absolute;
+  right: 18px;
+  top: 12px;
+  max-width: 400px;
+  background: #080b13ed;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .galaxy-scene canvas {
+    height: 56vh;
+    min-height: 360px;
+  }
+  .galaxy-error {
+    inset: 20% 6% auto;
+  }
+}
+
+.galaxy-visible-count {
+  position: absolute;
+  right: 20px;
+  top: 18px;
+  font-size: 12px;
+  color: #a8b2c1;
+  pointer-events: none;
+}
+
+.galaxy-scene canvas {
+  touch-action: none;
+  cursor: grab;
+}
+.galaxy-scene canvas:active {
+  cursor: grabbing;
+}
+.galaxy-scene canvas:focus-visible {
+  outline: 2px solid #a0bbef;
+  outline-offset: -3px;
+}
+.galaxy-input-toolbar {
+  position: absolute;
+  top: 52px;
+  right: 18px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 420px;
+  justify-content: end;
+  z-index: 4;
+}
+.galaxy-input-toolbar button {
+  min-height: 40px;
+  padding: 6px 12px;
+  background: #090e19dc;
+  border: 1px solid #758bae50;
+  color: #e1e9f9;
+  font-size: 12px;
+}
+.galaxy-input-toolbar button[aria-pressed="true"] {
+  border-color: #9dbcef;
+}
+.galaxy-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.galaxy-marker {
+  pointer-events: auto;
+  position: absolute;
+  transform: translate(-50%, -120%);
+  min-width: 30px;
+  min-height: 30px;
+  border: 1px solid #76adff;
+  border-radius: 50%;
+  background: #152947e8;
+  color: #e5f0ff;
+  padding: 2px;
+  font-size: 13px;
+}
+.galaxy-marker[data-marker="!"] {
+  border-color: #ff8686;
+  background: #4a1824eb;
+}
+.galaxy-marker[hidden],
+.galaxy-tooltip[hidden] {
+  display: none;
+}
+.galaxy-tooltip {
+  position: absolute;
+  pointer-events: none;
+  max-width: 280px;
+  background: #0a1021ed;
+  color: #e5ebfa;
+  border-left: 2px solid #8aa8d7;
+  padding: 10px 14px;
+  font-size: 13px;
+  z-index: 5;
+}
+.galaxy-selection {
+  position: absolute;
+  left: 22px;
+  top: 20px;
+  pointer-events: none;
+  color: #d9e8ff;
+  max-width: calc(100% - 300px);
+  font-size: 13px;
+}
+.galaxy-marker-warning {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  max-width: 300px;
+  font-size: 12px;
+  background: #0a1021ed;
+  padding: 8px;
+}
+.galaxy-marker-warning button {
+  font-size: inherit;
+}
+.galaxy-error {
+  z-index: 6;
+}
+.galaxy-legend {
+  z-index: 4;
+}
+.galaxy-legend[open] {
+  max-height: 70%;
+  overflow: auto;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

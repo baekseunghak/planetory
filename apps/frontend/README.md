@@ -4,7 +4,7 @@
 
 `S15P21C206-201` / W03. 별지도·서비스 화면과 백지웅 담당 분석 화면이 같은 React 앱, 페이지 이동, 인증 조회, HTTP 클라이언트를 사용하는 출발점이다.
 
-현재 기능 화면은 연결 자리다. 기존 은하 지도·행성 뷰·분석 기능을 이 작업에서 완성한 것으로 보지 않는다. 기존 시제품의 공통 코드를 바탕으로 추출·보완했으며 운영 소스가 `experiments`를 import하지 않는다.
+로그인(202)과 별지도 데이터 로딩(203)을 공통 기반에 연결했다. 나머지 기능 화면은 연결 자리다. 기존 은하 지도·행성 뷰·분석 기능을 이 작업에서 완성한 것으로 보지 않는다. 기존 시제품의 공통 코드를 바탕으로 추출·보완했으며 운영 소스가 `experiments`를 import하지 않는다.
 
 ## 실행
 
@@ -74,3 +74,36 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 ## W04 로그인 화면 검증
 
 `npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.
+
+## W05 별지도 데이터 로딩
+
+`npm run dev:sky-data` → http://127.0.0.1:58270/sky. MR !41의 v1.3 개별 별 페이지·원본 카메라 투영·부분 실패·새 버전·선택 유지용 개발 검사 화면이다. 2,501개를 여러 페이지로 받는 fixture이며 최종 은하 디자인은 204에서 연결한다. 일반 실행과 운영 빌드에는 이 검사 화면/가상 API가 없다.
+
+- [203 완료 조건 대조·실제 연동 대기](docs/ticket-203-readiness.md)
+- [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
+- `npm run test:sky-data`: Chromium의 HTTP/화면 검사 8개. `npm run check`에도 포함한다.
+
+## W06-1 개별 별 은하
+
+2026-09-15 사용자 승인된 MR !41 7f67c568의 v1.3을 로컬 적용했다. 군집/성운과 고정 개수 상한을 제거하고 원본 개인 시제품의 좌표·색·크기·카메라를 사용한다. 운영 코드가 별 위치를 생성하지 않는다.
+
+이번 확인 주소는 http://127.0.0.1:58275/sky?reference=1 이다. npm run dev:galaxy의 기본 포트는58272다. 가상 자료로1/10/100/1000/2501개를 확인하며 클릭·드래그 등 실제 조작은205, 상세 화면은206에서 연결한다.
+
+- [렌더 구조·205/206 연결](docs/galaxy-renderer.md)
+- [204 항목별 인수/대기](docs/ticket-204-readiness.md)
+- [기존 군집 비교 보관본](docs/galaxy-comparison.md)
+- npm run test:galaxy: 현행 렌더11개와 보관 비교4개.
+- npm run test:renderer-production: 활성화 dist2개,58276 포트.
+
+실제 서버는 VITE_SKY_RENDERER_ENABLED=true와 기존 인증/API 설정을 사용한다. 기본 플래그는false, npm run build:renderer는 활성화 빌드다. 개발 도구/가상 API는 운영에 포함하지 않는다. 문서 팀 승인·실제 API·리뷰/병합은 대기 중이다. 기존 Draft MR !40에서 검토한다.
+
+- [201~204 Firefox·Node22·로컬 Nginx 검증](docs/local-validation-201-204.md)
+- Docker 활성화: 저장소 루트에서 `docker build -f apps/frontend/Dockerfile --build-arg VITE_SKY_RENDERER_ENABLED=true -t planetory-frontend:204 .`
+
+203 통합·병합 순서와 남은 인수: [MR !36 통합 기록](docs/merge-readiness-203.md).
+
+204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
+
+## W06-2 은하 지도 조작과 마커
+
+205는 기존 은하에 드래그 회전·팬·휠·키보드·개별 별/내 행성 선택과 가시 DOM 마커 풀을 연결한다. `npm run dev:interaction`은58326의 개발 HTTP fixture, `npm run test:interaction`은 독립 입력 검사다. 운영은 기존 렌더 활성화 플래그와 API 연결을 사용한다. [205 항목별 구현·검증·실제 연동 대기](docs/ticket-205-readiness.md)를 참고한다. 206 상세 화면·207 대체 접근·배포 인수는 별도다.
