@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://planetory.local/contracts/gold/transit-model.schema.json",
+  "title": "Planetory Gold candidates.transit_model",
+  "description": "Gold `candidates.transit_model` JSONB 한 건. 배치(Silver 반복 탐색)·Publisher·EC2 Python Worker 가 같은 고정 box 모델로 잔차를 만들기 위한 직렬화 계약이다. 계약 버전 1.0 (Jira S15P21C206-113, D06). 단위는 ERD `candidates` 열과 같다: period_days=일, epoch_btjd=BTJD 일(BJD-2457000, 첫 통과 중심), duration_hours=시간, depth_ppm=ppm. 수식·경계 규칙(통과 경계 `<`, 깊이 = depth_ppm/1e6, 모델 곱 순서, bin 중심 평가는 호출자가 시각을 옮김)은 libs/astro-kernel README 가 정본이며, 이 Schema 는 필드·타입·단독 필드 범위만 검사한다. 필드 사이 규칙(duration_hours/24 < period_days)은 Schema 로 표현하지 않고 astro-kernel 이 invalid_parameter 로 거절한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["shape", "parameters"],
+  "properties": {
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "선택. Gold 안에서는 candidates.id 의 외부 표현 `c-<id>`, 계약 예제에서는 임의 문자열. 결과의 모델 순서 확인용이며 계산에 쓰지 않는다."
+    },
+    "shape": {
+      "type": "string",
+      "enum": ["box"],
+      "description": "모델 모양. 계약 1.0 은 box 만 지원한다. 다른 값은 astro-kernel unsupported_shape."
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period_days", "epoch_btjd", "duration_hours", "depth_ppm"],
+      "description": "계약 밖 키가 있으면 astro-kernel unknown_parameter. 값은 JSON number 만 허용하며 문자열·bool 은 invalid_parameter.",
+      "properties": {
+        "period_days": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "주기, 일. 유한한 양수."
+        },
+        "epoch_btjd": {
+          "type": "number",
+          "description": "첫 통과 중심 시각, BTJD 일. 유한수."
+        },
+        "duration_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "통과 지속시간, 시간. 유한한 양수이며 duration_hours/24 < period_days 여야 한다(커널 검사)."
+        },
+        "depth_ppm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1000000,
+          "description": "통과 깊이, ppm. 0 은 거절(깊이 0 후보는 모델이 아니다), 1,000,000 이상은 모델 flux ≤ 0 이라 거절. 계산은 depth_ppm / 1e6."
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "description": "선택. 생략하면 unity. 곡선이 이미 1 로 정규화됐다고 가정하고 재정규화하지 않는다. 다른 kind 는 unsupported_baseline.",
+      "properties": {
+        "kind": {"type": "string", "enum": ["unity"]}
+      }
+    },
+    "residual_model_version": {
+      "type": "string",
+      "enum": ["box-divide-v0"],
+      "description": "선택. 생략하면 box-divide-v0. 한 호출 안의 모델은 같은 버전이어야 하며(version_mismatch) Gold manifest 의 residual_model_version 과 같아야 한다. 목록 밖 값은 unsupported_version."
+    }
+  },
+  "examples": [
+    {
+      "candidate_id": "example-b",
+      "shape": "box",
+      "parameters": {"period_days": 3.36, "epoch_btjd": 1387.06, "duration_hours": 1.6, "depth_ppm": 1450.0},
+      "baseline": {"kind": "unity"},
+      "residual_model_version": "box-divide-v0"
+    }
+  ]
+}
