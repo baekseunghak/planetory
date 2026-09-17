@@ -105,6 +105,7 @@ Gold는 다음을 게시한다.
 - [정상 예제](examples/publication-bundle.valid.json): Publisher DB 행, Backend 읽기 모델과 Frontend 응답이 같은 TIC·Bundle·세그먼트·주기도를 해석하는 사례다.
 - [오류 예제](examples/publication-bundle.invalid.json): 정상 예제에 적용할 최소 변형과 예상 오류 코드다.
 - [게시 재시도 예제](examples/publication-load-scenarios.json): `(tic_id, bundle_version)` 키의 정상 게시·동일 재시도·payload 충돌·일시 실패 rollback·검증 실패·교체된 판의 늦은 재시도를 검사한다. `payloads` 참조는 fixture 중복만 줄인 표기이며 운영 요청 형식은 아니다.
+- [공개 QA·실패 계약 v0](publication-qa.md): 새 판 공개 전 검사 항목, 실패 상태, 배열 checksum 직렬화 규칙 제안, [허용 오차 등록표](qa-tolerances.v0.json), 미결 공개 정책(손상 Sector·AI 실패). [checksum 벡터](examples/array-checksum-vectors.v0.json)는 Python·Node·PostgreSQL 왕복으로 재현했고([`array-checksum.cjs`](array-checksum.cjs)) Java 는 미실행. 실제 곡선 payload 와 round-trip 스크립트는 [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md).
 - [`transit_model` 계약](transit-model.schema.json)과 [정상](examples/transit-model.valid.json)·[불량](examples/transit-model.invalid.json) 예제: 후보 한 건의 고정 통과 모델 JSON. `libs/astro-kernel` 테스트가 Schema·예제·파서의 일치를 검사한다(`uv run pytest -q` in `libs/astro-kernel`).
 
 Publisher 게시 명령의 관찰 가능한 결과와 소유권은 게시 재시도 예제가 정본이다. 이 README와 데이터 관리 문서는 해당 계약의 의미와 구현 인계 범위만 설명한다.
@@ -154,8 +155,9 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 | 항목 | 현재 상태 | 담당·종결 조건 |
 | --- | --- | --- |
 | `transit_model` 세부 shape·baseline·수치 경계 | 확정 (계약 1.0, 2026-09-17) | `S15P21C206-113` [`transit-model.schema.json`](transit-model.schema.json). box·unity·`box-divide-v0`, 통과 경계 `<`, 깊이 0 초과 1,000,000 미만, Gold 세그먼트는 bin 중심 평가(호출자 이동). 변경은 새 `residual_model_version` |
-| 운영 checksum canonicalization | 미정 | `S15P21C206-117`에서 Python·PostgreSQL 왕복 시 같은 바이트·값을 검증한다 |
-| Gold PostgreSQL 실제 왕복·공개 QA | 미검증 | `S15P21C206-117`이 독립 PostgreSQL round-trip과 손상 입력을 검증한다 |
+| 운영 checksum canonicalization | 제안 v0 (`array-f32le-null7fc00000-v0`, 2026-09-17) | [공개 QA 3절](publication-qa.md). Python·Node 벡터 일치, PostgreSQL 18.6 REAL[] 왕복 재계산 일치. **Java(C04-1) 대조 뒤 확정**. 확정 시 게시 재시도 예제의 합성 checksum 을 실제 값으로 교체 |
+| Gold PostgreSQL 실제 왕복 | 검증됨 (로컬 PostgreSQL 18.6, V1~V8, TOI-270 S3 예제 30항목, 2026-09-17) | [`experiments/gold-roundtrip`](../../experiments/gold-roundtrip/README.md). 운영 Publisher·Java 경로·Silver 수치 비교는 미실행(D17·D23) |
+| 공개 QA 정책 (손상 Sector·AI 실패) | 미결 — 합의 전 기본값은 새 판 보류 + 기존 current 유지 | [공개 QA 5절](publication-qa.md). AI 실패 후 재게시는 `bundle_version` 충돌 때문에 69 담당과 합의 필요 |
 | Redis TTL·메모리·동시 실행 상한 | 실측 대기 | 부하 시험 담당 Task에서 정한다 |
 | 실제 TESS 배열 크기·용량·수치 허용 오차 | 실측 대기 | D17·D23 계열 검증 결과를 반영한다 |
 
