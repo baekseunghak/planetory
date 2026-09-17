@@ -64,7 +64,7 @@ const { ticId, historyId, postId, returnTo } = usePageContext();
 
 회원 정보는 `{memberId, nickname, onboardingDone, tutorialCompleted}`로 읽는다. `onboardingDone`과 `tutorialCompleted`는 독립이고 프론트에서 서로 유추하지 않는다. 마이페이지 성과 요약 등 추가 DTO는 해당 기능의 decoder에서 API 계약에 맞춰 확장한다.
 
-로그아웃은 **서버 성공 후** `useSession().clear()`를 사용한다. 사용자 요청으로 201 공통 헤더에도 최소 로그아웃 버튼을 연결했으며, W04 통합 시 기존 SessionProvider 로그아웃과 중복 동작을 정리한다. `clear()` 자체는 백엔드 세션을 종료하지 않는다. 401은 공통 클라이언트가 clear를 실행하고 진행 중 요청·화면의 개인 데이터를 제거한다. 403/404는 로그인 상태를 해제하지 않는다. 일반 네트워크 오류는 401로 간주하지 않는다.
+W04에서는 `useSession().logout()`을 사용한다. 공통 Provider가 로그아웃 요청 동안 개인 화면을 제거하고 **서버 성공 후** `clear()`를 호출한다. 응답이 불명확하면 `verifyLogout()`으로 회원 상태를 확인하며 쓰기 요청을 자동 재전송하지 않는다. `clear()` 자체는 백엔드 세션을 종료하지 않는다. 401은 공통 클라이언트가 clear를 실행하고 진행 중 요청·화면의 개인 데이터를 제거한다. 403/404는 로그인 상태를 해제하지 않는다. 일반 네트워크 오류는 401로 간주하지 않는다.
 
 ## 화면 주소와 전달값
 
@@ -85,7 +85,7 @@ const { ticId, historyId, postId, returnTo } = usePageContext();
 | publicAnalysis                     | /public-analyses/:analysisId                                                                       | 백지웅                                                             |
 | statistics                         | /statistics                                                                                        | 백지웅                                                             |
 
-기존 서비스 시제품의 모호한 `:id`는 각 의미의 `:historyId`, `:postId` 등으로 명명했다. URL 형태는 유지하며 새 제출 결과 경로는 검토가 필요하다. 로그인 /login, 콜백 /oauth/callback만 인증 예외다. 현재 login/콜백 컴포넌트는 세션 확인용 자리이며 OAuth 기능 완료가 아니다.
+기존 서비스 시제품의 모호한 `:id`는 각 의미의 `:historyId`, `:postId` 등으로 명명했다. URL 형태는 유지하며 새 제출 결과 경로는 검토가 필요하다. 로그인 /login, 콜백 /oauth/callback만 인증 예외다. W04에서 로그인·콜백 UI를 연결했다. 실제 제공자 로그인 완료 여부와 미확정 계약은 [202 검증 기록](ticket-202-readiness.md)을 따른다.
 
 ```ts
 pagePath(

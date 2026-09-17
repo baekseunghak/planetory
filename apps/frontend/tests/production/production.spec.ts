@@ -44,3 +44,39 @@ test("the built app retains routes/identity but contains no development page or 
     page.getByRole("heading", { name: "페이지를 찾을 수 없습니다" }),
   ).toBeVisible();
 });
+
+test("production login uses agreed backend provider paths and has no development OAuth", async ({
+  page,
+  request,
+}) => {
+  const destinations: string[] = [];
+  await page.route("**/oauth2/authorization/*", (route) => {
+    destinations.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ contentType: "text/html", body: "Provider entry" });
+  });
+  for (const [provider, path] of [
+    ["SSAFY", "ssafy"],
+    ["Google", "google"],
+  ]) {
+    await page.goto("/login");
+    await expect(
+      page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
+    ).toBeVisible();
+    const login = page.getByRole("button", {
+      name: `${provider} 계정으로 로그인`,
+      exact: true,
+    });
+    await expect(login).toBeEnabled();
+    await login.click();
+    await expect(page).toHaveURL(new RegExp(`/oauth2/authorization/${path}$`));
+  }
+  expect(destinations).toEqual([
+    "/oauth2/authorization/ssafy",
+    "/oauth2/authorization/google",
+  ]);
+  expect(
+    (
+      await request.get("/api/dev-auth-202/google", { maxRedirects: 0 })
+    ).status(),
+  ).toBe(503);
+});

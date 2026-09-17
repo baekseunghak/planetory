@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "auth-fixture-202",
+  "dev-auth-202",
+  "FIXTURE_NICKNAME_REQUIRED_202",
   "foundation-fixture-member-201",
   "fixture-history-201",
   "연결 확인 계정",
