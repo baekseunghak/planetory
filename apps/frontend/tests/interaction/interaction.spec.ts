@@ -190,7 +190,7 @@ test("completion and allowed skip stay hidden after reload/reopen, challenge and
     page.locator('.galaxy-marker[data-marker="1"]:visible'),
   ).toHaveCount(0);
 });
-test("unknown/failed quest state hides tutorial only, retry loads state without changing stars", async ({
+test("unknown/failed quest state hides all badges, retry loads state without changing stars", async ({
   page,
 }) => {
   let fail = true;
@@ -214,10 +214,36 @@ test("unknown/failed quest state hides tutorial only, retry loads state without 
   await expect(
     page.getByRole("button", { name: "번호 다시 확인" }),
   ).toBeVisible();
-  await expect(page.locator(".galaxy-marker:not([hidden])")).toHaveCount(1);
+  await expect(page.locator(".galaxy-marker:not([hidden])")).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "번호 다시 확인" }).click();
   await expect(page.locator(".galaxy-marker:not([hidden])")).toHaveCount(6);
+});
+
+test("challenge comes only from quests and disappears after its round ends", async ({
+  page,
+}) => {
+  let active = true;
+  await page.route("**/api/v1/me/quests", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.challenge = active
+      ? { unlocked: true, ticId: "900000008" }
+      : { unlocked: false, ticId: null };
+    await route.fulfill({ response, json: body });
+  });
+  await start(page);
+  await expect(
+    page.locator('.galaxy-marker[data-marker="!"]:not([hidden])'),
+  ).toHaveAttribute("data-tic-id", "900000008");
+  active = false;
+  await page.reload();
+  await expect(
+    page.locator('.galaxy-marker[data-marker="1"]:not([hidden])'),
+  ).toBeVisible();
+  await expect(
+    page.locator('.galaxy-marker[data-marker="!"]:not([hidden])'),
+  ).toHaveCount(0);
 });
 test("selected personal planet tooltip uses the rendered orbit position and matching candidate ID", async ({
   page,

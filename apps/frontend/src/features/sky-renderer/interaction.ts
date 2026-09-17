@@ -224,8 +224,27 @@ export function readTutorialMarkers(value: unknown): TutorialMarkers {
   }
   return result;
 }
-export function markerLabel(s: Star, tutorials: TutorialMarkers | null) {
-  if (s.marker?.type === "challenge") return "!";
+// The active challenge belongs to /me/quests, not to the star's discovery reason.
+export function readChallengeTicId(value: unknown): string | null {
+  const challenge = (
+    value as { challenge?: { unlocked?: unknown; ticId?: unknown } }
+  )?.challenge;
+  if (
+    !challenge ||
+    typeof challenge.unlocked !== "boolean" ||
+    (challenge.unlocked
+      ? typeof challenge.ticId !== "string" || !/^\d+$/.test(challenge.ticId)
+      : challenge.ticId !== null)
+  )
+    throw new SkyContractError("챌린지 마커 상태를 확인해 주세요.");
+  return challenge.unlocked ? (challenge.ticId as string) : null;
+}
+export function markerLabel(
+  s: Star,
+  tutorials: TutorialMarkers | null,
+  challengeTicId: string | null = null,
+) {
+  if (s.ticId === challengeTicId) return "!";
   const state = tutorials?.get(s.ticId);
   return s.marker?.type === "tutorial" &&
     state?.visible &&
