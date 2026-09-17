@@ -6,6 +6,7 @@ import {
   panCamera,
   planetLabel,
   readTutorialMarkers,
+  readChallengeTicId,
   rotateCamera,
   starTargets,
   zoomCamera,
@@ -127,7 +128,27 @@ test("tutorial completion/skipping hides badge, missing state never guesses, cha
   assert.equal(markerLabel(exampleStar(1), state), null);
   assert.equal(markerLabel(exampleStar(2), state), "3");
   assert.equal(markerLabel(exampleStar(2), null), null);
-  assert.equal(markerLabel(exampleStar(5), null), "!");
+  assert.equal(markerLabel(exampleStar(5), null), null);
+  const challenge = readChallengeTicId({
+    challenge: { unlocked: true, ticId: exampleStar(5).ticId },
+  });
+  assert.equal(markerLabel(exampleStar(5), state, challenge), "!");
+  assert.equal(markerLabel(exampleStar(4), state, challenge), "5");
+  assert.equal(
+    readChallengeTicId({ challenge: { unlocked: false, ticId: null } }),
+    null,
+  );
+  assert.equal(
+    markerLabel({ ...exampleStar(5), marker: { type: "challenge" } }, null),
+    null,
+  );
+  for (const value of [
+    {},
+    { challenge: { unlocked: false, ticId: "123" } },
+    { challenge: { unlocked: true, ticId: null } },
+    { challenge: { unlocked: true, ticId: 123 } },
+  ])
+    assert.throws(() => readChallengeTicId(value));
   assert.throws(() => readTutorialMarkers({ tutorial: { items: [] } }));
 });
 test("planet identity and null measurements are displayed without invented values", () => {
