@@ -1,1 +1,5 @@
 dev/observations/
+# Byte-identical, commit-pinned contract inputs. Update from the document source.
+dev/sky-reference/reference.mjs
+dev/sky-reference/vectors.json
+dev/sky-reference/contracts.json

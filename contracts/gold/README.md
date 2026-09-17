@@ -1,7 +1,7 @@
 # Gold 게시 계약
 
-> Jira: `S15P21C206-68`<br>
-> 상태: 합성 fixture·Gold DB 테스트 검증 완료, 담당자 교차 리뷰 요청<br>
+> Jira: `S15P21C206-68`, `S15P21C206-69`<br>
+> 상태: 필드·단위 및 Publisher 멱등 적재 합성 fixture 검증 완료, Data 승인·Backend 재검토 대기<br>
 > 범위: GCP Publisher가 PostgreSQL에 적재한 Gold를 Backend와 Frontend가 같은 필드와 단위로 해석하는 계약
 
 이 디렉터리는 실제 TESS 관측값이나 Gold 파일 형식을 보관하지 않는다. Gold의 서비스 정본은 PostgreSQL 배열과 메타데이터이며, fixture는 직렬화·필드 매핑·판 전환 규칙만 검사하는 작은 합성 데이터다. 과학적 정확도와 운영 성능은 각각 담당 데이터·인프라 Task에서 실측한다.
@@ -13,6 +13,23 @@
 - Frontend 응답 필드와 단위는 [탐사 API 명세](../../apps/backend/docs/exploration-api-spec.md)의 2.5절·5장을 따른다.
 - Publisher는 `planetory_gold_writer`로 PostgreSQL에 직접 적재하고, Backend는 Gold를 읽기만 한다.
 - Publisher의 DB 행, Backend 읽기 모델, Frontend API 응답은 같은 데이터의 서로 다른 표현이다. 하나의 JSON이 세 구성요소 사이를 그대로 이동한다고 해석하지 않는다.
+
+### I02-2 결정 기록 — Publisher 적재 경계
+
+- 결정일: 2026-09-15
+- 결정·승인: 김동혁
+- 검토: 강재민(Backend), 윤성용(Data). 아래 멱등성 보완안은 2026-09-16 재검토 대기다.
+
+| 기준 | Publisher 직접 INSERT | Backend 내부 적재 API |
+| --- | --- | --- |
+| 인증 | Publisher 전용 DB 자격 증명만 관리 | Publisher용 서비스 인증을 새로 설계해야 함 |
+| 네트워크 | GCP Publisher가 PostgreSQL Primary에 직접 접속 | Publisher→Backend→PostgreSQL 홉과 장애 지점이 추가됨 |
+| 트랜잭션 | 적재·검증·current 전환을 한 DB 트랜잭션으로 묶음 | API timeout과 DB commit 결과를 별도로 조정해야 함 |
+| 재시도 | DB 유일 제약·잠금·의미 payload 비교로 판정 | HTTP 재시도 계약과 서버측 멱등 저장소가 추가로 필요 |
+| 권한 | `planetory_gold_writer`에 Gold 쓰기만 허용 | 서비스 런타임에 Gold 쓰기 권한이 필요해짐 |
+| 운영 | Writer 자격 증명·접속 경로를 Publisher에 한정 | Backend에 배치 적재 부하와 운영 책임이 추가됨 |
+
+직접 INSERT를 유지한다. 그 결과 Publisher가 트랜잭션·rollback·멱등 판정을 소유하고, Backend는 Gold 읽기와 커밋 후 후처리만 담당한다. 실제 DB 권한·접속·migration 구현은 86·87번에서 검증한다.
 
 ## 2. 충돌표
 
@@ -63,12 +80,12 @@ Gold는 다음을 게시한다.
 | 후보 주기 | `period_days` | `periodDays` | 일 | 유한한 양수다 |
 | 후보 기준 시각 | `epoch_btjd` | `epochBtjd` | BTJD 일 | 유한수다 |
 | 지속시간 | `duration_hours` | `durationHours` | 시간 | 유한한 양수다 |
-| 깊이 | `depth_ppm` | `depthPpm` | ppm | 0 이상이다 |
+| 깊이 | `depth_ppm` | `depthPpm` | ppm | 0 초과 1,000,000 미만이다(`transit_model` 계약과 같다) |
 | 계산 버전 | manifest snake_case | API camelCase | 문자열 | `residual_model_version`, `periodogram_config_version`은 필수다 |
 
 세그먼트와 후보 식별자도 같은 방식으로 DB 숫자 ID를 API의 `seg-<id>`, `c-<id>`에 대응한다. 접두 문자열은 외부 표현이며 DB 열 타입을 바꾸지 않는다.
 
-`transit_model`의 세부 shape와 수치 경계는 `S15P21C206-113`이 소유한다. 이 fixture는 현재 box 모델 예시가 비어 있지 않은 JSON 객체인지와 manifest 버전 연결만 검사하며, 과학 계약 확정 증거로 사용하지 않는다.
+`transit_model` JSONB의 필드·단위·shape·수치 경계는 [`transit-model.schema.json`](transit-model.schema.json)(계약 1.0, `S15P21C206-113` 소유)이 정본이다. 정상·불량 예제는 [`examples/transit-model.valid.json`](examples/transit-model.valid.json)·[`examples/transit-model.invalid.json`](examples/transit-model.invalid.json)이며, 수식·필드 사이 규칙·실패 코드는 [`libs/astro-kernel`](../../libs/astro-kernel/README.md)이 구현하고 같은 예제로 검사한다. 정상 fixture의 후보 `transit_model`은 이 형식을 따른다. `validate.cjs`는 shape 규칙을 중복 구현하지 않고 비어 있지 않은 객체인지와 manifest 버전 연결만 검사한다.
 
 ## 5. 판 전환 시나리오
 
@@ -87,6 +104,22 @@ Gold는 다음을 게시한다.
 
 - [정상 예제](examples/publication-bundle.valid.json): Publisher DB 행, Backend 읽기 모델과 Frontend 응답이 같은 TIC·Bundle·세그먼트·주기도를 해석하는 사례다.
 - [오류 예제](examples/publication-bundle.invalid.json): 정상 예제에 적용할 최소 변형과 예상 오류 코드다.
+- [게시 재시도 예제](examples/publication-load-scenarios.json): `(tic_id, bundle_version)` 키의 정상 게시·동일 재시도·payload 충돌·일시 실패 rollback·검증 실패·교체된 판의 늦은 재시도를 검사한다. `payloads` 참조는 fixture 중복만 줄인 표기이며 운영 요청 형식은 아니다.
+- [`transit_model` 계약](transit-model.schema.json)과 [정상](examples/transit-model.valid.json)·[불량](examples/transit-model.invalid.json) 예제: 후보 한 건의 고정 통과 모델 JSON. `libs/astro-kernel` 테스트가 Schema·예제·파서의 일치를 검사한다(`uv run pytest -q` in `libs/astro-kernel`).
+
+Publisher 게시 명령의 관찰 가능한 결과와 소유권은 게시 재시도 예제가 정본이다. 이 README와 데이터 관리 문서는 해당 계약의 의미와 구현 인계 범위만 설명한다.
+
+게시 재시도 예제에서 `publication_bundles.id`는 PostgreSQL이 성공 시 생성하는 결과값이다. 요청 키 `(tic_id, bundle_version)`에는 DB `UNIQUE` 제약을 둔다. 같은 TIC의 게시를 `pg_advisory_xact_lock(tic_id)`으로 직렬화하며 동시 요청은 잠금 뒤 앞선 commit 또는 rollback을 관찰한다.
+
+`bundle_version`은 실행 시각·run id가 아니라 정렬한 입력 snapshot id, 세그먼트 자연 키 `(tic_id, sector, binning_revision)`, 계산 버전 집합의 UTF-8 행을 LF로 연결한 SHA-256(`pv1-<hex>`)이다. 입력 snapshot id에는 곡선 원천과 TCE·TOI·Archive·ExoFOP 외부 참조 snapshot을 모두 넣으므로 외부 snapshot이 바뀌어도 새 `bundle_version`과 PublicationBundle을 만든다. 전처리·BLS·잔차·주기도·후보 품질·AI·외부 매칭 계산이 바뀌면 해당 계산 버전을 올려 새 `bundle_version`을 만든다.
+
+계산 버전 중 `bls_config`는 반복 BLS·후보 제거 순서·종료 규칙을, `candidate_quality`는 후보 병합·고조파/alias·원본 곡선 재검증·`discoverable` 판정 규칙을 포함한다.
+
+동일성은 입력 snapshot, 자연 키별 배열 checksum, 주기도·후보·AI·외부 상태 checksum, 계산 버전, `fold_reference_time_btjd`, `base_days`의 의미 payload로 비교한다. 배열은 snapshot id와 세그먼트 자연 키로 정렬하고 float64는 Producer가 JSON에 유효숫자 17자리로 보존한 뒤 파싱된 값을 정확 비교한다. DB 생성 `publication_bundles.id`, `light_curve_segments.id`, `periodograms.bundle_id`, manifest의 `segment_ids`는 비교에서 제외한다.
+
+같은 키의 의미 payload가 다르면 `IDEMPOTENCY_CONFLICT`, 검증 실패는 재시도하지 않는 `PUBLISH_REJECTED`, 일시 장애 rollback은 재시도 가능한 `PUBLISH_ROLLED_BACK`이다. 이미 archived인 동일 판의 늦은 재시도는 `BUNDLE_SUPERSEDED`를 반환하고 현재 판을 되돌리거나 알림을 보내지 않는다. current인 동일 판만 `ALREADY_PUBLISHED`로 기존 `bundleId`를 반환하고 알림을 재시도할 수 있다.
+
+staging 적재와 current 전환은 각각 `S15P21C206-86`, `S15P21C206-87`의 구현 범위지만 별도 commit 경계가 아니다. 부분 유일 인덱스는 문장마다 즉시 검사되므로 같은 트랜잭션에서 **기존 current를 먼저 archived로 바꾸고 신규 staging을 current로 올리는 순서**를 지켜야 한다. Publisher가 트랜잭션과 rollback을 소유하고 Airflow는 같은 키로 전체 명령을 재시도한다. fixture의 checksum은 분기 설명용 합성 문자열이며 운영 checksum canonicalization을 확정하지 않는다.
 
 배열은 계약 검사를 위해 4점으로 축약했으므로 용량·분포·과학적 정확도의 근거가 아니다. fixture checksum만 축약 배열을 `JSON.stringify`한 UTF-8 바이트의 SHA-256으로 재현한다. 운영 Publisher의 언어 간 checksum 직렬화 규칙을 확정한 것이 아니다.
 
@@ -96,7 +129,7 @@ Gold는 다음을 게시한다.
 node contracts/gold/validate.cjs
 ```
 
-검증기는 JSON 파싱, 필수 manifest, 필드·단위, 배열 길이, checksum, quality mask 비게시, 판 전환과 Publisher→Backend→Frontend 매핑을 검사한다. 실제 PostgreSQL, Publisher, Backend와 Frontend를 실행하지 않으므로 통합 검증 완료를 뜻하지 않는다.
+검증기는 JSON 파싱, 필수 manifest, 필드·단위, 배열 길이, checksum, quality mask 비게시, 판 전환, Publisher→Backend→Frontend 매핑과 게시 재시도 결과를 검사한다. 실제 PostgreSQL, Publisher, Backend와 Frontend를 실행하지 않으므로 통합 검증 완료를 뜻하지 않는다.
 
 Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 명령으로 검증한다.
 
@@ -110,17 +143,17 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 
 | 역할 | 담당자 | 검토 항목 | 상태 |
 | --- | --- | --- | --- |
-| 데이터 | 윤성용 | quality mask 비게시, 10분 비닝, `transit_model`·계산 버전 경계 | Jira 검토 요청 |
-| Backend | 강재민 | Gold 조회 모델, current 재검증, archived 주기도·Redis 정리 | Jira 검토 요청 |
+| 데이터 | 윤성용 | Bundle 버전 결정성, 의미 payload 비교 범위·정렬·float64 규칙 | 승인 (2026-09-16) |
+| Backend | 강재민 | DB 유일 제약·잠금·current/archived 재시도와 실패 결과 | 보완 반영, 재검토 요청 예정 |
 | Frontend | 백지웅 | `bundleId`·필드·단위 해석, `BUNDLE_CHANGED`·헤더 변경 시 재조회 | Jira 검토 요청 |
 
-승인·수정 의견은 [Jira S15P21C206-68](https://ssafy.atlassian.net/browse/S15P21C206-68)에 남긴다. 요청 기록만으로 승인을 대신하지 않는다.
+필드·단위 의견은 [Jira S15P21C206-68](https://ssafy.atlassian.net/browse/S15P21C206-68), Publisher 멱등성 의견은 [Jira S15P21C206-69](https://ssafy.atlassian.net/browse/S15P21C206-69)에 남긴다. 요청 기록만으로 승인을 대신하지 않는다.
 
 ## 8. 미확정·후속 검증
 
 | 항목 | 현재 상태 | 담당·종결 조건 |
 | --- | --- | --- |
-| `transit_model` 세부 shape·baseline·수치 경계 | 미정 | `S15P21C206-113`의 정상·오류 fixture와 승인 결과를 반영한다 |
+| `transit_model` 세부 shape·baseline·수치 경계 | 확정 (계약 1.0, 2026-09-17) | `S15P21C206-113` [`transit-model.schema.json`](transit-model.schema.json). box·unity·`box-divide-v0`, 통과 경계 `<`, 깊이 0 초과 1,000,000 미만, Gold 세그먼트는 bin 중심 평가(호출자 이동). 변경은 새 `residual_model_version` |
 | 운영 checksum canonicalization | 미정 | `S15P21C206-117`에서 Python·PostgreSQL 왕복 시 같은 바이트·값을 검증한다 |
 | Gold PostgreSQL 실제 왕복·공개 QA | 미검증 | `S15P21C206-117`이 독립 PostgreSQL round-trip과 손상 입력을 검증한다 |
 | Redis TTL·메모리·동시 실행 상한 | 실측 대기 | 부하 시험 담당 Task에서 정한다 |

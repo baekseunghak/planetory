@@ -6,3 +6,5 @@ playwright-report/
 *.log
 .env*
 !.env.example
+
+test-results-auth/

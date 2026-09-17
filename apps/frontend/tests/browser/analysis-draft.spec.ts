@@ -185,6 +185,76 @@ for (const reason of ["logout", "expiry", "account-change"] as const)
       await page.evaluate(() => sessionStorage.getItem("unrelated-test-value")),
     ).toBe("keep");
   });
+for (const outcome of ["rejected", "unknown-ended"] as const)
+  test(`${outcome}: logout hides the editor, preserves drafts until session end is confirmed and never retries the write`, async ({
+    page,
+  }) => {
+    await save(page);
+    await expect.poll(() => stored(page)).toHaveLength(1);
+    let writes = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/v1/auth/csrf", (route) =>
+      route.fulfill({
+        json: { headerName: "X-CSRF-TOKEN", token: "test-draft-token" },
+      }),
+    );
+    await page.route("**/api/v1/auth/logout", async (route) => {
+      writes++;
+      await gate;
+      return outcome === "rejected"
+        ? route.fulfill({ status: 403, json: { code: "FORBIDDEN" } })
+        : route.abort("failed");
+    });
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "로그아웃", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "로그아웃하고 있습니다", exact: true }),
+    ).toBeVisible();
+    await expect(memo(page)).toHaveCount(0);
+    await expect.poll(() => stored(page)).toHaveLength(1);
+    release();
+    if (outcome === "rejected") {
+      await expect(
+        page.getByRole("heading", {
+          name: "로그아웃하지 못했습니다",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "서비스로 돌아가기", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "초안 불러오기", exact: true })
+        .click();
+      await expect(memo(page)).toHaveValue("세션 초안 🌌");
+      await expect(page.getByTestId("candidate-review")).toHaveCount(0);
+    } else {
+      await expect(
+        page.getByRole("heading", {
+          name: "로그아웃 여부를 확인해 주세요",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect.poll(() => stored(page)).toHaveLength(1);
+      await page.route("**/api/v1/me", (route) =>
+        route.fulfill({ status: 401, json: { code: "AUTH_REQUIRED" } }),
+      );
+      await page
+        .getByRole("button", { name: "로그인 상태 확인", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "로그인이 필요합니다", exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => stored(page)).toHaveLength(0);
+    }
+    expect(writes).toBe(1);
+  });
+
 test("discard removes the saved draft; malformed JSON never crashes analysis", async ({
   page,
 }) => {

@@ -1,0 +1,215 @@
+{
+  "contractVersion": "1.1",
+  "fixtureKind": "synthetic-contract-only",
+  "jira": "S15P21C206-69",
+  "idempotency": {
+    "keyFields": ["tic_id", "bundle_version"],
+    "databaseInvariant": "unique-tic-id-bundle-version",
+    "bundleVersionScheme": "pv1-sha256-sorted-lf-utf8",
+    "bundleVersionInputs": ["input_snapshot_ids", "segment_natural_keys", "calculation_versions"],
+    "inputSnapshotKinds": ["light-curve-source", "external-reference"],
+    "bundleVersionExcludes": ["execution_time", "run_id"],
+    "calculationVersionCoverage": {
+      "bls_config": ["iterative-bls", "removal-order", "termination-rule"],
+      "candidate_quality": ["candidate-merge", "harmonic-alias", "original-curve-revalidation", "discoverable-rule"]
+    },
+    "payloadEqualityFields": [
+      "input_snapshot_ids",
+      "segments",
+      "periodogram_power_checksum",
+      "candidates_checksum",
+      "ai_results_checksum",
+      "external_statuses_checksum",
+      "calculation_versions",
+      "fold_reference_time_btjd",
+      "base_days"
+    ],
+    "payloadEqualityExcludes": [
+      "publication_bundles.id",
+      "light_curve_segments.id",
+      "periodograms.bundle_id",
+      "manifest.segment_ids"
+    ],
+    "arrayOrder": "input_snapshot_ids-and-segments-sorted-before-compare",
+    "floatRule": "exact-float64-after-json-17-significant-digits",
+    "serialization": "pg_advisory_xact_lock(tic_id)",
+    "databaseId": "generated-result-only"
+  },
+  "transaction": {
+    "owner": "publisher",
+    "retryOwner": "airflow",
+    "stages": ["load", "validate", "switch-current", "cleanup-archived-periodogram"],
+    "switchCurrentOrder": ["archive-current", "promote-staging"],
+    "commitAfter": "cleanup-archived-periodogram",
+    "committedStagingAllowed": false,
+    "sameKeyConcurrency": "wait-for-lock-then-observe-commit-or-rollback"
+  },
+  "payloads": {
+    "v2": {
+      "tic_id": 123456789,
+      "bundle_version": "pv1-03bf1746eae8d6d870589306100e96ea94083a4cab8258a9baff624e4b1b204c",
+      "semantic_payload": {
+        "input_snapshot_ids": ["snapshot-tess-s14-v1", "snapshot-external-20260915"],
+        "segments": [
+          {
+            "tic_id": 123456789,
+            "sector": 14,
+            "binning_revision": "10m-v1",
+            "flux_checksum": "sha256:segment-v2"
+          }
+        ],
+        "periodogram_power_checksum": "sha256:periodogram-v2",
+        "candidates_checksum": "sha256:candidates-v2",
+        "ai_results_checksum": "sha256:ai-v2",
+        "external_statuses_checksum": "sha256:external-v2",
+        "calculation_versions": {
+          "preprocessing": "preprocess-v1",
+          "bls_config": "bls-v1",
+          "residual_model": "box-divide-v0",
+          "periodogram_config": "bls-log-v1",
+          "candidate_quality": "candidate-quality-v1",
+          "ai_model": "astronet-v1",
+          "ai_threshold": "ai-threshold-v1",
+          "external_matching": "external-match-v1"
+        },
+        "fold_reference_time_btjd": 1683.4231,
+        "base_days": 27.4
+      }
+    },
+    "v2-changed-segment": {
+      "tic_id": 123456789,
+      "bundle_version": "pv1-03bf1746eae8d6d870589306100e96ea94083a4cab8258a9baff624e4b1b204c",
+      "semantic_payload": {
+        "input_snapshot_ids": ["snapshot-external-20260915", "snapshot-tess-s14-v1"],
+        "segments": [
+          {
+            "tic_id": 123456789,
+            "sector": 14,
+            "binning_revision": "10m-v1",
+            "flux_checksum": "sha256:changed-segment"
+          }
+        ],
+        "periodogram_power_checksum": "sha256:periodogram-v2",
+        "candidates_checksum": "sha256:candidates-v2",
+        "ai_results_checksum": "sha256:ai-v2",
+        "external_statuses_checksum": "sha256:external-v2",
+        "calculation_versions": {
+          "preprocessing": "preprocess-v1",
+          "bls_config": "bls-v1",
+          "residual_model": "box-divide-v0",
+          "periodogram_config": "bls-log-v1",
+          "candidate_quality": "candidate-quality-v1",
+          "ai_model": "astronet-v1",
+          "ai_threshold": "ai-threshold-v1",
+          "external_matching": "external-match-v1"
+        },
+        "fold_reference_time_btjd": 1683.4231,
+        "base_days": 27.4
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "id": "normal-publication",
+      "before": {"currentBundleId": 100, "existingBundle": null, "nextGeneratedBundleId": 101},
+      "requestPayload": "v2",
+      "failure": null,
+      "expected": {
+        "code": "PUBLISHED",
+        "retryable": false,
+        "bundleId": 101,
+        "currentBundleId": 101,
+        "archivedBundleIds": [100],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": 101
+      }
+    },
+    {
+      "id": "exact-retry-after-commit",
+      "before": {
+        "currentBundleId": 101,
+        "existingBundle": {"id": 101, "status": "current", "payload": "v2"},
+        "nextGeneratedBundleId": 102
+      },
+      "requestPayload": "v2",
+      "failure": null,
+      "expected": {
+        "code": "ALREADY_PUBLISHED",
+        "retryable": false,
+        "bundleId": 101,
+        "currentBundleId": 101,
+        "archivedBundleIds": [],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": 101
+      }
+    },
+    {
+      "id": "same-key-different-payload",
+      "before": {
+        "currentBundleId": 101,
+        "existingBundle": {"id": 101, "status": "current", "payload": "v2"},
+        "nextGeneratedBundleId": 102
+      },
+      "requestPayload": "v2-changed-segment",
+      "failure": null,
+      "expected": {
+        "code": "IDEMPOTENCY_CONFLICT",
+        "retryable": false,
+        "bundleId": null,
+        "currentBundleId": 101,
+        "archivedBundleIds": [],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": null
+      }
+    },
+    {
+      "id": "partial-transient-failure-rolls-back",
+      "before": {"currentBundleId": 100, "existingBundle": null, "nextGeneratedBundleId": 101},
+      "requestPayload": "v2",
+      "failure": {"stage": "after-candidates-before-switch", "category": "transient"},
+      "expected": {
+        "code": "PUBLISH_ROLLED_BACK",
+        "retryable": true,
+        "bundleId": null,
+        "currentBundleId": 100,
+        "archivedBundleIds": [],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": null
+      }
+    },
+    {
+      "id": "validation-failure-is-not-retryable",
+      "before": {"currentBundleId": 100, "existingBundle": null, "nextGeneratedBundleId": 101},
+      "requestPayload": "v2",
+      "failure": {"stage": "validate", "category": "validation"},
+      "expected": {
+        "code": "PUBLISH_REJECTED",
+        "retryable": false,
+        "bundleId": null,
+        "currentBundleId": 100,
+        "archivedBundleIds": [],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": null
+      }
+    },
+    {
+      "id": "late-retry-after-superseded",
+      "before": {
+        "currentBundleId": 102,
+        "existingBundle": {"id": 101, "status": "archived", "payload": "v2"},
+        "nextGeneratedBundleId": 103
+      },
+      "requestPayload": "v2",
+      "failure": null,
+      "expected": {
+        "code": "BUNDLE_SUPERSEDED",
+        "retryable": false,
+        "bundleId": 101,
+        "currentBundleId": 102,
+        "archivedBundleIds": [],
+        "persistedStagingBundleIds": [],
+        "notificationBundleId": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "checkedAt": "2026-09-17T02:56:46.713Z",
+  "backend": "0b7436f",
+  "environment": "Windows / Node24.18.0 / Java21 / PostgreSQL17.10 / local HTTP",
+  "results": {
+    "liveFeatureErrors": 30,
+    "chrome": 18,
+    "edge": 19,
+    "stockFirefox": 19,
+    "nginx": 6,
+    "unit": {
+      "202": 20,
+      "203": 50,
+      "204": 58
+    },
+    "authChromium": 9,
+    "dataChromium": 8,
+    "galaxyExistingChromium": 15,
+    "exposure": {
+      "chromium": 1,
+      "chrome": 1,
+      "edge": 1,
+      "stockFirefox": 1
+    },
+    "rendererProduction": 2
+  },
+  "sharedHashes": {
+    "src/api/client.ts": {
+      "202": "97a2ea82c05d71df18573b02ca82569ce4d6b9860ef696546255cfd1e0755533",
+      "203": "97a2ea82c05d71df18573b02ca82569ce4d6b9860ef696546255cfd1e0755533",
+      "204": "97a2ea82c05d71df18573b02ca82569ce4d6b9860ef696546255cfd1e0755533"
+    },
+    "src/api/index.ts": {
+      "202": "05263ae391d924e6a589270206e6b1ce3cb16ba234a1bc7dc2f1629ae07c20f6",
+      "203": "05263ae391d924e6a589270206e6b1ce3cb16ba234a1bc7dc2f1629ae07c20f6",
+      "204": "05263ae391d924e6a589270206e6b1ce3cb16ba234a1bc7dc2f1629ae07c20f6"
+    },
+    "src/api/csrf.ts": {
+      "202": "5bc82243f17faa26733288435090841136ea62e58df5a3615e7ce64d1718d998",
+      "203": "5bc82243f17faa26733288435090841136ea62e58df5a3615e7ce64d1718d998",
+      "204": "5bc82243f17faa26733288435090841136ea62e58df5a3615e7ce64d1718d998"
+    },
+    "src/auth/settings.ts": {
+      "202": "774fb2fd9326b3dbfac9249612058dcce7c203f137f35bb39b7b70cf3580fabb",
+      "203": "774fb2fd9326b3dbfac9249612058dcce7c203f137f35bb39b7b70cf3580fabb",
+      "204": "774fb2fd9326b3dbfac9249612058dcce7c203f137f35bb39b7b70cf3580fabb"
+    },
+    "nginx.conf": {
+      "202": "88f8a99a2bd69083260f7257e6d2d2fc38a27bc951e171e499e1f4c410f00483",
+      "203": "88f8a99a2bd69083260f7257e6d2d2fc38a27bc951e171e499e1f4c410f00483",
+      "204": "88f8a99a2bd69083260f7257e6d2d2fc38a27bc951e171e499e1f4c410f00483"
+    },
+    "src/features/sky-data/contracts.ts": {
+      "203": "5f2fc3cbc31d5de376e61b45297d3f37b2eea45fdd9de5b2fe08b8c94892b4e8",
+      "204": "5f2fc3cbc31d5de376e61b45297d3f37b2eea45fdd9de5b2fe08b8c94892b4e8"
+    },
+    "src/features/sky-data/geometry.ts": {
+      "203": "2b0b3e9af501a12daee75b639a6e117057ca22487cac8f9d38b0aacd3c4ccc3b",
+      "204": "2b0b3e9af501a12daee75b639a6e117057ca22487cac8f9d38b0aacd3c4ccc3b"
+    },
+    "src/features/sky-data/store.ts": {
+      "203": "958eaf138d92ad6b36a06a496996b142623caa63ad70274b2b1092ecd833f734",
+      "204": "958eaf138d92ad6b36a06a496996b142623caa63ad70274b2b1092ecd833f734"
+    },
+    "src/features/sky-data/SkyDataPage.tsx": {
+      "203": "69e29081ac3c2c3a667225f7f32712a732f2e75dd451a6a278bee330674ea8f3",
+      "204": "69e29081ac3c2c3a667225f7f32712a732f2e75dd451a6a278bee330674ea8f3"
+    }
+  },
+  "limitations": [
+    "Synthetic OAuth provider and test-only database seed; no new actual Google/SSAFY consent test.",
+    "DB revision change represents a successful external mutation; actual analysis submission UI/event integration remains pending.",
+    "PostgreSQL17.10/local HTTP only; deployed HTTPS, PostgreSQL18.6 and actual Safari remain unverified."
+  ],
+  "remoteMutations": false
+}

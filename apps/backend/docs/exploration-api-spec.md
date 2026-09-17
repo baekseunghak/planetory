@@ -4,7 +4,7 @@
 - 상태: **팀 협의용 초안 Draft 0.4** — 구현 완료·최종 합의된 API가 아니다. 경로·필드명·HTTP 상태 코드는 제안이며, SRS v1.3.1 변경안과 다른 결정은 여기서 확정하지 않고 12장 미결 표에 둔다.
 - 담당: 강재민 / 탐사 코어 백엔드
 - Jira: [S15P21C206-36](https://ssafy.atlassian.net/browse/S15P21C206-36) (기획 분석 `S15P21C206-31`, 상위 Epic `S15P21C206-26`)
-- 기준: [요구사항 명세서 v1.3.1](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.3](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
+- 기준: [요구사항 명세서 v1.3.1](../../../docs/requirements/planetory-requirements-spec.md)(v1.1 기준선 `S15P21C206-53`, v1.2 배치 계약 `S15P21C206-33`), [ERD v1.6](../../../docs/architecture/database-erd.md), [지도 프론트 PoC](../../../experiments/galaxy-map-prototype/)(하서진, 과거 v1.2 타일·군집 참고 구현이며 v1.3 응답과 직접 호환되지 않음), [온라인 파생 계산](../../../docs/architecture/online-derived-compute.md), [시스템 아키텍처](../../../docs/architecture/system-architecture.md)
 - v1.3 개정: 2026-09-15. 개별 별 타일·cursor 응답 변경안은 [변경 검토 기록](../../../docs/development/sky-individual-stars-review.md)을 따른다. 관련 제공자/소비자 리뷰 후 적용하며 런타임 구현 완료가 아니다.
 - 이전 개정: 2026-09-14, `S15P21C206-33`. 은하 배치 변경은 [별지도 표현 계약](../../../docs/development/sky-presentation-contract.md)을 기준으로 교차 리뷰한다. 과거 PoC의 방사형 자리 함수는 새 배치의 참조 구현이 아니다.
 - 분담·공통 약속: [API 명세 파트 분담](README.md). 서비스 API(회원·커뮤니티·공개 분석·챌린지 회차)는 백승학의 서비스 API 명세를 따른다.
@@ -274,7 +274,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `planetCount` | HOME-05: 맞춘 확정 행성 + "행성 같음"으로 판단한 미확정. `user_star_progress.planet_count` |
 | `layoutOrdinal` | 저장한 회원별 안정 순번 0~2147483647. 전송 배열 순서나 현재 별 수가 아니다. personal-galaxy-v1 색·기준 크기의 시드 입력이며 새로고침/페이지 순서로 바뀌지 않는다 |
 | `completedWithoutPlanets` | `progress_stage=completed`이고 `planet_count=0`. HOME-05 "행성으로 표시할 신호 없이 탐색 완료". FP 성과 여부(`fp_success`)와 무관하며, 미확정 UNSURE 판단·FP 오판으로 완료된 별도 포함한다(지웅 리뷰 7) |
-| `marker` | `{"type":"tutorial","seq":n}` 또는 `{"type":"challenge"}` 또는 null |
+| `marker` | `{"type":"tutorial","seq":n}` 또는 null. 챌린지 빨간 느낌표는 싣지 않는다. 느낌표는 발견 경로와 무관하게 진행 회차의 대상 별에 붙고, 회차 전환·종료는 회원 `version`을 바꾸지 않아 타일에 실으면 갱신되지 않는다. 프론트는 퀘스트 `challenge.ticId`(4.3절)로 그린다. 발견 경로는 상세 `unlock.reason`·목록 `unlockReason`이 알린다. 튜토리얼 번호 숨김(HOME-05)은 퀘스트 튜토리얼 칸의 `completed`를 기준으로 한다(재개돼도 유지) |
 | `reopened` | `reopened_at`이 있고 아직 새 제출이 없음. 퀘스트 "다시 열린 별" 카드와 같은 기준 |
 | 삭제 필드 | 지도 타일의 colorLevel·sizeLevel·orbits는 v1.3 최종 표현안에서 제거한다. 전체 지도는 행성/궤도를 그리지 않고 내 행성은 선택 상세의 planets.items에서만 받는다. 클라이언트는 이 구 필드를 요구하거나 기본값으로 상태 색을 복원하지 않는다 |
 
@@ -406,7 +406,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 |---|---|
 | `unlock.position` | `x`·`y`·`depthZ`·`layoutOrdinal`·`layoutVersion`은 같은 회원/TIC의 저장 값을 반환하는 필수 필드다. 지도 타일·위치 찾기·별 상세·근접 뷰에서 값이 같아야 한다. x/y는 서비스 월드 좌표 단위, depthZ는 -1.0~1.0 정규화 깊이(렌더 월드 z=depthZ×256), layoutOrdinal은 회원별 안정 정수 0~2147483647이며 배열 인덱스가 아니다 |
 | `version` / `presentationVersion` | 필수 문자열. version은 해당 본인 상세를 읽은 회원별 지도 버전이며 메타·타일과 같은 의미의 불투명 값이다. presentationVersion은 personal-galaxy-v1이다. 상세·진행·개인 행성은 한 DB 스냅샷에서 읽는다 |
-| `star.*` | 표시 열은 ERD 미결 9(`확인 필요`). 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03) |
+| `star.tmag` / `star.teffK` / `star.radiusRsun` | TESS 등급(무차원), 유효 온도(K), 반지름(태양=1). 본인 상세는 셋을 모두 준다(D-18). 카탈로그에 값이 없으면 필드를 빼지 않고 `null`을 보낸다. 프론트는 `중심 위치: 데이터 없음`과 같은 방식으로 비활성 표시한다(AT-93) |
+| `star.*` 공통 | 확정 행성 보유 여부·후보 수는 절대 넣지 않는다(HOME-04, AT-03). 물리값은 TESS 카탈로그 공개 값이며 비공개 대상이 아니다 |
 | `planets.items` | 현재 인증 회원이 요청 TIC에서 수치 매칭한 고유 candidateId 중 HOME-05 표시 조건을 만족하는 목록. 확정 행성은 판단 오답/성과 미인정이어도 포함, 미확정은 6.3절의 회원별 후보 최신 판단이 LIKELY_PLANET일 때만 포함(공개/성과 인정 필수 아님). FP·미확정 UNLIKELY_PLANET/UNSURE·미매칭·타인 발견·전체 후보표는 제외. 같은 candidateId 중복 없음 |
 | `planets.count` | 이 응답은 행성 목록을 페이지/4개 상한으로 자르지 않는다. count=items.length이며 같은 version의 지도 planetCount·user_star_progress.planet_count와 일치. achievement.count나 별의 외부 카탈로그 행성 수를 대신 쓰지 않음 |
 | `planets.items[].candidateId` | 행성 객체·목록·확대 선택의 공통 문자열 식별자. items는 이 문자열의 오름차순으로 안정 정렬한다. 배열 인덱스/표시 순번을 ID로 쓰지 않음 |
@@ -417,6 +418,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `achievement.grade` | `count` 1/2/3/4 이상 → A/S/SS/SSS, 0이면 null. 열이 아니라 계산값(GRD-01) |
 | `actions.analysis` | `start`(제출 없음) / `continue`(진행 중) / `review`(완료). 재개 별은 `continue` |
 | `actions.boardOpen` | 한 명 이상 발견한 별이면 true(COM-01). 스레드 목록은 서비스 API |
+| `actions.resultAvailable` | 그 회원의 제출 이력이 하나라도 있으면 true. 결과 페이지는 제출 이력이 있는 별마다 열린다(RES-10) |
+| `actions.threadCount` | 이 별의 공식 신호 스레드 수. 숨김·삭제는 세지 않는다 |
+| `star.sectorCount` / `star.sectors` | 관측 회차를 중복 없이 오름차순으로 준다. 같은 회차가 여러 `source_version`으로 들어올 수 있어 `sectorCount`는 행 수가 아니라 서로 다른 회차의 수다 |
 
 **시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
@@ -448,9 +452,13 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 }
 ```
 
-- 튜토리얼 `status`: `locked`(미발견) / `unlocked`(발견, 제출 없음) / `in_progress` / `completed`. `ticId`는 열린 순번에만 준다(AT-57). 학습 목적 문구는 `intent`를 프론트가 용어 사전으로 바꾼다.
+- 튜토리얼 `status`: `locked`(미발견) / `unlocked`(발견, 제출 없음. 진행 단계 `unexplored`) / `in_progress` / `completed`. `ticId`는 열린 순번에만 준다(AT-57). `completionReason`은 `completed` 칸에만 준다. 학습 목적 문구는 `intent`를 프론트가 용어 사전으로 바꾼다.
+- 튜토리얼은 **한 번 완료하면 완료로 남는다.** 진행 단계가 `completed`이거나 `completed_at`이 있으면 완료한 칸이다. 새 판에서 별이 재개돼 진행 단계가 `in_progress`로 돌아가도(9.3절, `completed_at` 유지) 칸은 `completed`로 두고 그 별은 `reopened`에 따로 나온다. 진행 단계만 보면 이미 받은 챌린지 별은 남는데 튜토리얼 완료와 다음 회차 자격이 풀려 서로 어긋난다.
+- `completedCount`는 사용 중인(`active`) 튜토리얼 별 중 완료한 칸의 수다. `GET /me`의 `tutorialCompleted`와 챌린지 `eligible`은 이 값이 5인지로 판정한다(11.1절). 운영 중 튜토리얼 별을 바꾸지 않는다는 전제이며, 바꾸면 이미 끝낸 회원이 미완료로 돌아간다(S15P21C206-139).
 - 챌린지 회차는 서비스 API `GET /challenges/current`와 같은 원천이며, 여기서는 회원의 발견·진행 상태를 덧붙인다. `description`은 `challenge_rounds.description`(ERD v1.1). `participantCount`는 **대상 별 공식 신호 스레드의 유효 공개 분석 참여자 수**(COM-14 (1)의 N, 회원당 1건, SRS v1.1 안건 15)이며 F16과 같은 유효 공개 분석 원천을 사용한다. 대상 별의 모든 공식 신호 스레드에서 회원 ID를 중복 제거한다(COUNT DISTINCT). 한 회원이 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고 하나도 없으면 제외한다. 핫 토픽·판단 분포는 기존 신호별 집계를 유지한다. 대상 별에 공식 스레드가 아직 없으면 0이다. `ticId`는 회원에게 열린 경우에만 준다.
-- `reopened`는 DEC-27 "다시 열린 별" 카드. 새 제출이 생기면 빠진다.
+- `roundId`는 `cr-{challenge_rounds.id}`다. `eligible`은 진행 회차가 있고 튜토리얼 5개를 완료했을 때 true다. `ticId`는 지도 빨간 느낌표(CHL-01)의 원천이다. 대상 별을 다른 경로로 먼저 발견한 회원에게도 같게 주고, 회차가 끝나면 사라진다. 지도·상세의 `marker`에는 챌린지를 싣지 않는다(4.1절). `progressStage`는 대상 별이 열린 경우 그 별의 진행 단계(진행 행이 없으면 `unexplored`)이고 아니면 null이다. 진행 회차가 없으면 필드를 빼지 않고 `{"round": null, "eligible": false, "ticId": null, "unlocked": false, "progressStage": null, "participantCount": null}`을 준다.
+- 이 조회는 발견 상태를 바꾸지 않는다. 자격이 있는데 대상 별이 아직 열리지 않았어도 여기서 열지 않는다. 열기는 9.4절의 튜토리얼 완료 처리와 회차 전환 명령이 맡는다.
+- `reopened`는 DEC-27 "다시 열린 별" 카드. 4.4절 `reopened`와 같은 조건(`reopened_at` 이후 새 제출 없음)이며 최근에 다시 열린 순서다. 새 제출이 생기면 빠진다. `newDiscoverableCount`는 재개 이벤트를 저장하는 곳이 정해질 때까지(S15P21C206-150) `null`이며 0으로 채우지 않는다.
 
 ### 4.4 내 별 목록
 
@@ -473,6 +481,9 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
 - 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
 - WebGL 대체 목록 뷰(NFR-18)는 `scope=discovered&sort=recent`를 쓴다. 성과로 막 발견해 아직 제출하지 않은 별도 목록에서 골라 분석에 진입할 수 있어야 하기 때문이다(지웅 리뷰 6). 마이페이지는 기본값을 유지한다.
+- `size`는 기본 20, 상한 100이다. 상한 밖이거나 계약 밖 `scope`·`sort`는 400 `VALIDATION_FAILED`다. 타인 조회에 `scope=discovered`를 쓰면 같은 400으로 거절한다. 미제출 발견까지 보이면 그 회원의 진행 상태가 드러나기 때문이다.
+- `cursor`는 불투명 값이며 **요청 회원·대상 회원·`scope`·`sort`·`size`**에 묶는다. 하나라도 다르면 400이다. 요청 회원까지 묶는 이유는 같은 대상이라도 보는 사람에 따라 응답이 다르기 때문이다(`unpublishedSignalCount`). 위치는 `lastActivityAt`과 `ticId`를 함께 담는다. 시각만 담으면 같은 시각의 별들이 페이지 경계에서 통째로 밀리거나 빠진다.
+- `unpublishedSignalCount`는 회원이 이 별에서 매칭한 고유 신호 중 유효한 공개가 없는 수다. 타인 조회에서는 0이 아니라 **필드를 뺀다**. "공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다.
 
 ### 4.5 공개 별 요약
 
@@ -492,8 +503,10 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 필드 | 규칙 |
 |---|---|
+| `currentBundleId` | 현재 판. `published` 별에는 판이 있어야 하지만 없으면 `null`을 준다. 게시판 헤더는 판 없이도 떠야 하고, 분석 진입(5.1)이 그 자리에서 503으로 막는다 |
 | `boardOpen` | `star_unlocks`에 그 TIC 행이 하나 이상. false면 서비스 API가 목록·검색·직접 URL에서 게시판을 숨긴다(AT-65) |
 | `unlockedForMe`, `analysisAvailable` | 요청 회원의 발견 여부. 둘은 같은 값이지만 의미를 분리해 둔다. false면 [이 별 분석하기]를 비활성으로 표시하고 서버도 5.1절에서 거절한다(AT-64) |
+| `star` | `sectorCount`·`sectors`·`tmag`만 준다. 이 응답은 게시판 헤더·[이 별 분석하기] 버튼·출처 카드가 쓰는 요약이라 온도·반지름을 놓을 자리가 없다. **감추는 것이 아니다** — 셋 다 TESS 카탈로그 공개 값이고 본인 상세(4.2)는 모두 준다. 소비 화면이 필요로 하면 그때 넓힌다(D-18) |
 | `discoveredMemberCount` | 표시용. 후보 수·확정 보유 여부·타인의 진행 상태는 넣지 않는다 |
 
 `service_status != published`이거나 `boardOpen=false`인 별은 404 `STAR_NOT_PUBLISHED`로 존재를 드러내지 않는다. 게시글에서 분석으로 넘어갈 때의 `return_post_id`는 URL·임시 세션에만 두고 Submission·AnalysisHistory에 저장하지 않으며(NFR-15), 복귀 시 Post의 TIC·공개 상태 재검사는 서비스 API가 한다(EXP-10, AT-50).
@@ -1110,19 +1123,20 @@ for each user_star_progress(tic_id):
      stage=in_progress, reopen_pending=false, reopened_at=now, completed_at 유지
      → 재개 이벤트 {userId, ticId, bundleId, newDiscoverableCount, reason: new_candidate|became_discoverable}
        → 퀘스트 카드(4.3절), 마이페이지 목록 상단(4.4절 lastActivityAt 갱신), 알림 NTF-01(P1, 서비스 API)
-기존 성과·등급·발견 별은 바꾸지 않는다.
+기존 성과·등급·발견 별은 바꾸지 않는다. 튜토리얼 별도 같은 규칙으로 재개하지만 튜토리얼 완료·챌린지 자격은 `completed_at`으로 유지된다(4.3절).
 ```
 
 ### 9.4 내부 계약: 튜토리얼·챌린지 발견 (HOME-02·06, CHL-01)
 
-모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다.
+모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다. 이미 열린 별이면 순번·좌표·회원 version을 바꾸지 않는다. 같은 사건을 다시 실행해도 프론트가 바뀌지 않은 지도를 다시 받지 않게 하기 위해서다.
 
 | 사건 | 처리 |
 |---|---|
 | 회원 생성 | `tutorial_stars.seq=1` 별을 `unlock_reason=tutorial`로 열고 4.1절 은하 배치 좌표를 저장한다. 실패하면 회원 생성도 롤백(서비스 F01-Q5 제안). 튜토리얼 5개·회차 대상 TIC은 운영자가 DB에서 설정한다(OPS-07) |
-| 튜토리얼 n 완료(`all_found`·`undiscoverable_only`·`skipped`) | seq n+1을 연다. 5 완료면 진행 중 회차의 `target_tic_id`를 `unlock_reason=challenge`로 연다. `ON CONFLICT (user_id, tic_id) DO NOTHING` |
-| 새 회차 `active` 전환 | 튜토리얼 5개 완료 회원 전원에게 그 회차 별을 연다(배치, 멱등). 회차가 끝나도 닫지 않는다(AT-61) |
+| 튜토리얼 n 완료(`all_found`·`undiscoverable_only`·`skipped`) | seq n+1을 연다. 5 완료면 진행 중 회차의 `target_tic_id`를 `unlock_reason=challenge`로 연다. `ON CONFLICT (user_id, tic_id) DO NOTHING`. 제출 트랜잭션이 완료로 바꾼 뒤 같은 트랜잭션에서 호출한다(6.3절 9단계). 호출 시점에 완료가 아니거나 튜토리얼 별이 아니면 아무것도 하지 않는다. 다음 순번이 설정되지 않았으면 회원 생성과 같이 503 `DEPENDENCY_UNAVAILABLE`로 되돌린다 |
+| 새 회차 `active` 전환 | 튜토리얼 5개 완료 회원 전원에게 그 회차 별을 연다(배치, 멱등). 회차가 끝나도 닫지 않는다(AT-61). 앱은 DB 직접 변경(OPS-07)을 감지하지 않으므로 운영자가 회차를 `active`로 바꾼 뒤 전용 명령(`--planetory.command=challenge-unlock`)을 실행한다. 주기 실행은 두지 않는다. 회원마다 트랜잭션을 나누고, 처리 도중 회차가 `active`에서 벗어나면 남은 회원을 열지 않고 멈춘다. 절차는 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md) |
 | 회차 진행 중 5번 완료 | 그 시점에 연다(서비스 F17-Q2) |
+| 대상 별을 이미 발견한 회원 | 다른 경로(성과 발견 등)로 먼저 연 회원은 새로 기록하지 않는다. 발견 경로는 처음 기록한 `unlock_reason`을 유지하고, 빨간 느낌표는 경로와 무관하게 퀘스트 `challenge.ticId`로 표시한다(4.1·4.3절, 서비스 F17-Q2 제안) |
 
 ### 9.5 외부 라벨 갱신 표식 (GRD-06, DEC-26)
 
@@ -1151,7 +1165,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 
 | 서비스 API 필드 | 탐사 원천 |
 |---|---|
-| `GET /me` `tutorialCompleted` | `tutorial_stars` 5개가 모두 `completed`인지(4.3절 `completedCount = 5`) |
+| `GET /me` `tutorialCompleted` | `tutorial_stars` 5개를 모두 완료했는지. 재개돼도 유지(4.3절 `completedCount = 5`) |
 | `GET /me/stars` 항목 | 4.4절로 대체 |
 | `GET /me/histories` 항목 | 8.1절로 대체. `signalId` → `candidateId` |
 | 첨부·공개 분석 `graph` | 8.3절 응답을 8.5절 투영 범위로 |
@@ -1233,6 +1247,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | D-15 | 타인 공개 그래프의 잔차 | 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청을 제공하지 않는다. 캐시된 잔차가 없으면 원본 곡선 또는 제출 스냅샷만 표시하고 둘 다 없으면 "그래프 제공 불가" 안내. 본인 분석의 잔차 요청 권한은 그대로 | 타인 요청으로 계산 자원을 쓰지 않음. 공개 내용(판단·메모)은 계속 표시 | 8.3, 8.5 | 백승학·백지웅 |
 | D-16 | Gold 적재·전환 경계 | Publisher가 Gold를 PostgreSQL에 직접 적재하고 한 트랜잭션으로 current를 전환한다. 커밋 후 Backend에는 `bundleId`만 알려 후처리한다 | 대용량 배열을 HTTP로 우회하지 않고 DB 원자성과 앱 읽기 전용 권한을 유지 | 10 | 김동혁·강재민 |
 | D-17 | 온라인 계산 호출 경계 | Backend가 현재 판의 DB 배열·후보 모델을 Python Worker에 전달한다. Worker는 DB를 직접 읽지 않고 `astro-kernel`로 계산하며, Backend는 응답 채택 전 current를 재검증한다 | 판 교체 경합을 Backend 한 곳에서 막고 Worker를 순수 계산으로 유지 | 7, 10 | 김동혁·윤성용 |
+| D-18 | `stars` 표시 열 | 본인 상세(4.2)는 `tmag`·`teffK`·`radiusRsun` 셋 다, 공개 요약(4.5)은 `tmag`만. 값이 없으면 필드를 빼지 않고 `null`. 단위는 TESS 등급(무차원)·K·태양 반지름 | 4.5에서 온도·반지름을 뺀 것은 비공개가 아니라 그 화면에 자리가 없기 때문이다. 셋 다 TESS 카탈로그에서 TIC 번호로 조회할 수 있는 공개 값이라 서버에서 빼도 감춰지지 않는다 | 4.2, 4.5 | 강재민 |
 
 ### 12.2 미결 (실측·타 담당 데이터 필요)
 
@@ -1240,10 +1255,9 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 |---|---|---|---|
 | 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03. 계약 형태는 5.1절, 숫자만 채움 |
 | 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만 |
-| 10 | `stars` 표시 열(tmag·teff·radius) | 팀 | ERD 미결 9 |
 | 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리(회원 생성 롤백 여부) | 강재민·백승학 | 서비스 F01-Q5 |
 
-해소된 항목: 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
+해소된 항목: 10(`stars` 표시 열) → D-18, 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
 
 ## 13. 요구사항·검수 추적
 
@@ -1296,6 +1310,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-11 | Draft 0.2. 기준을 SRS·ERD v1.1(`S15P21C206-53`)로 갱신. 하서진 통합 문서·PoC 코드 반영: 타일 요청을 월드 경계 상자(`x,y,w,h`)+`level`로 변경(회전 허용에 따른 역투영), 군집 `counts {planet, done, new}` 채택, 자리 상수 초안값(360/세대·±1.2rad·간격 76·0세대 고정 좌표), 지도 메타 `overview`, `GET /me/sky/locate`(P1), `asOf`·`skyVersion` 최신성 제안, 첫 방문 안내 완료 시점 제안, 챌린지 `description`·`participantCount` 확정, 11.3 지도 프론트 필드 대응표. SRS v1.1 안건 15 해소, 17·18 추가 |
 | 2026-09-11 | 백지웅 리뷰 7건 반영. (1) 제출 단계 검증을 "제거 조합 ⊆ 매칭 활성 후보, curveStep = 조합 크기"로 바꿔 다음 잔차 단계·이전 단계 제출 허용. (2) 상위 N 봉우리 포함을 제출 조건에서 제거, 미세 조정 범위를 격자 ±N칸 규칙으로 임의 주기에 적용. (3) 최소 위상 폭을 시간 `minWindowDays`로 주고 주기로 나눠 검증. (4) `requestId`를 제출 전용으로 한정, 잔차는 목표 문맥 재호출로 복구. (5) 완료 판정을 진입·판 전환에도 실행(AT-69). (6) `GET /me/stars?scope=discovered`로 미제출 발견 별 포함(NFR-18). (7) 살구색 조건을 `completedWithoutPlanets`(완료·행성 0)로 정정. 예시 수치 정합(위상 폭 0.01·2.83시간), 설명용 JSON 블록을 유효 JSON으로, Q09 대체 문맥 규칙 통일 |
 | 2026-09-14 | C02 후속 정합화. 첫 방문 안내를 서버 단방향 완료와 브라우저 다시 보기로 통일하고, 추천 봉우리 밖이지만 전체 격자 안인 재제출을 허용하도록 6.8절 충돌을 수정. 사용자 결정에 따라 은퇴 경로는 분석 복귀·재도전 `{A,C}`와 History CURRENT 원본으로, 기준 시각은 Bundle 공통값으로, duration 상한은 사용자가 고른 봉우리의 추천값 3배로 확정하고 SRS·ERD·API·정적 JSON 예제를 함께 갱신 |
+| 2026-09-17 | S15P21C206-139 구현 반영. 4.3절에 완료 수·챌린지 자격의 공통 판정, 진행 회차가 없을 때의 빈 챌린지 형태, 조회가 별을 열지 않음, `reopened` 조건·정렬과 `newDiscoverableCount` null(S15P21C206-150 전까지)을 명시. 9.4절에 이미 열린 별은 순번·version을 바꾸지 않음, 튜토리얼 완료 후처리의 호출 위치·다음 순번 미설정 시 503, 회차 전환을 주기 실행 대신 운영자 전용 명령으로 실행함을 명시하고 [챌린지 회차 전환 런북](../../../docs/operations/challenge-round-runbook.md)을 연결. 튜토리얼 완료를 한 번 완료하면 유지(재개돼도 `completed_at`으로 판정)로 정하고 4.3·9.3·11.1절에 반영. 챌린지 빨간 느낌표를 발견 경로 대신 퀘스트 `challenge.ticId` 기준으로 바꾸고 4.1절 `marker`에서 `challenge`를 제거, 대상 별을 이미 발견한 회원은 경로를 새로 기록하지 않음을 9.4절에 추가(서비스 F17-Q2 제안). 12.2 미결 12는 백승학 확인 전이라 유지 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

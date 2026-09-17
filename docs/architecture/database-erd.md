@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.4
+# Planetory 서비스 DB ERD v1.8
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,36 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.7 → v1.8 (2026-09-16, `S15P21C206-138`)
+
+미결 9(`stars` 표시 열)를 결정으로 확정한다. 본인 별 상세는 `tmag`·`teff_k`·`radius_rsun` 셋을 모두 제공하고, 타인이 보는 공개 요약은 `tmag`만 준다. 카탈로그에 값이 없으면 필드를 빼지 않고 `null`을 보낸다.
+
+공개 요약에서 온도·반지름을 뺀 것은 비공개 정책이 아니다. 세 값 모두 TESS 카탈로그에서 TIC 번호로 조회할 수 있는 공개 값이라 서버에서 빼도 감춰지지 않는다. 그 응답을 쓰는 게시판 헤더·출처 카드에 놓을 자리가 없어서다. 소비 화면이 필요로 하면 넓힌다.
+
+열은 그대로다. 이 판은 노출 범위만 정하며 마이그레이션을 추가하지 않는다. 상세 규칙은 [탐사 API](../../apps/backend/docs/exploration-api-spec.md) D-18과 4.2·4.5절에 있다.
+
+### v1.6 → v1.7 (2026-09-16, `S15P21C206-69`)
+
+Publisher 멱등 키 `(tic_id, bundle_version)`의 DB 유일 제약은 `S15P21C206-86`에서 추가한다. `bundle_version`은 곡선 원천·외부 참조 snapshot, 세그먼트 자연 키, 계산 버전으로 결정하며 DB 생성 id는 동일성 비교에서 제외한다.
+
+`UNIQUE(tic_id) WHERE status='current'`는 문장마다 즉시 검사되므로 같은 트랜잭션에서 기존 `current`를 먼저 `archived`로 바꾸고 신규 `staging`을 `current`로 올린다. 이 판은 계약만 명시하며 migration이나 운영 DB를 변경하지 않는다.
+
+### v1.5 → v1.6 (2026-09-16, `S15P21C206-230`)
+
+`publication_bundles`에 `UNIQUE (tic_id, bundle_version)`을 둔다. `S15P21C206-69`가 Publisher 적재의 재시도 키를 이 두 열로 확정했지만 제약이 없어 같은 키가 두 번 들어갔다. 그러면 “같은 키의 판을 확인한다”는 조회가 여러 건을 돌려줘 어느 `bundleId`를 반환할지가 정해지지 않는다.
+
+잠금(`pg_advisory_xact_lock(tic_id)`)으로만 막지 않는다. 잠금은 그 코드를 지나는 쪽만 지키는 규약이고 제약은 누가 쓰든 DB가 거절한다.
+
+기존 `uq_publication_bundles_current`와 역할이 다르며 서로 대체하지 않는다. 판 버전이 다른 archived 행이 한 TIC에 여러 개 남는 것은 과거 제출이 참조하므로 계속 허용한다.
+
+### v1.4 → v1.5 (2026-09-16, `S15P21C206-136`)
+
+회원별 지도 개정값을 보관하는 `member_sky_revisions`를 추가한다. 탐사 API 4.1의 `version`은 “동일 시각의 여러 변경도 구분하는 단조 증가 개정값”이라 시각에서 파생할 수 없다. 같은 순간에 일어난 두 발견이 같은 `version`을 내면 프론트가 변경을 놓친다. 응답의 `skyVersion`은 `u-<회원번호>:<개정값>` 문자열이며 프론트는 문자열로만 비교한다.
+
+행이 없는 회원은 개정값 0으로 읽는다. 첫 증가가 1을 만드므로 없는 행을 1로 읽으면 첫 변경이 값을 움직이지 않아 감지되지 않는다.
+
+**배치 버전 `personal-spiral-v1`을 구현으로 확정한다.** v1.2가 정한 좌표 열에 실제 값을 채우는 배치 함수가 프론트 참조 구현과 비트 단위로 일치한다. 자리표시 배치 `bootstrap-0`으로 저장된 행은 좌표가 모두 원점이라 실제 배치와 섞일 수 없으며, 남아 있으면 마이그레이션이 안내와 함께 멈춘다. 지우지 않는 이유는 발견 행을 지우면 그 회원의 별이 0개가 되는데 튜토리얼 1번은 가입 처리에서만 열려 다시 생기지 않기 때문이다.
 
 ### v1.3 → v1.4 (2026-09-16, `S15P21C206-135`)
 
@@ -121,6 +151,7 @@ erDiagram
     users ||--o{ user_candidate_achievements : earns
     users ||--o{ user_star_progress : tracks
     users ||--o{ star_unlocks : discovers
+    users ||--o| member_sky_revisions : versions
     users o|--o{ posts : writes
     users ||--o{ comments : writes
     users ||--o{ post_reactions : reacts
@@ -386,6 +417,11 @@ erDiagram
         numeric radius_jitter "이전 배치 지터(선택)"
         timestamptz unlocked_at "발견 시각"
     }
+    member_sky_revisions["member_sky_revisions · 회원 지도 개정값"] {
+        bigint user_id PK "회원"
+        bigint revision "단조 증가 개정값"
+        timestamptz updated_at "마지막 증가 시각"
+    }
     posts["posts · 일반 글 / 공식 신호 스레드"] {
         bigint id PK "고유 번호"
         text kind "user/system_thread"
@@ -514,7 +550,7 @@ erDiagram
 
 배치가 Gold 릴리스 전환 때 적재하고 서비스 API는 읽기만 한다. 릴리스 교체는 publication_bundles.status를 current로 바꾸는 트랜잭션 하나로 끝낸다.
 
-**stars**: tic_id PK, teff_k·radius_rsun·tmag(표시 항목은 팀 공유 후 확정 `확인 필요`), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published. **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
+**stars**: tic_id PK, teff_k·radius_rsun·tmag(본인 상세는 셋 다, 공개 요약은 tmag만. 값이 없으면 `null`. 탐사 API D-18), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published. **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
 
 **observation_datasets**: tic_id, sector, start_btjd, end_btjd, cadence, time_system, source_version. UNIQUE(tic_id, sector, source_version).
 
@@ -522,8 +558,8 @@ erDiagram
 
 | 열 | 비고 |
 |---|---|
-| tic_id, bundle_version | |
-| status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 새 판이 current가 되면 이전 판은 곧바로 archived가 되고 그 판의 periodograms 행을 지운다. 이전 판을 남겨 두지 않는다(v0.3 결정 C) |
+| tic_id, bundle_version | Publisher 멱등 키. `UNIQUE(tic_id, bundle_version)`가 필요하며 현재 migration에는 없으므로 `S15P21C206-86`에서 추가·검증한다. |
+| status | staging / current / archived. `UNIQUE(tic_id) WHERE status='current'`. 즉시 검사되는 부분 유일 인덱스이므로 기존 current를 먼저 archived로 전환한 뒤 신규 staging을 current로 올린다. 그 판의 periodograms 행은 지우고 제출 FK가 참조하는 Bundle 행은 남긴다(v0.3 결정 C) |
 | manifest JSONB | **참조할 light_curve_segments id 집합**(섹터 목록이 아니라 revision까지 특정한다), 배열 checksum, residual_model_version, periodogram_config_version, **곡선 비닝 규칙(기본 10분)**, 주기 격자 범위·간격 규칙, 미세 조정 허용 폭(결정 9), 곡선 단계 규칙 |
 | fold_reference_time_btjd, base_days | Bundle 공통 위상 접기 기준 시각과 관측 기간. 기준 시각은 포함된 모든 세그먼트에서 품질 필터를 통과하고 중복을 제거한 유한 원본 관측 시각 전체의 중앙값이며, 짝수 표본은 가운데 두 값의 평균을 쓴다. 유효 입력이 없으면 공개를 실패시킨다. `publication_bundles`에 한 번 저장하고 `light_curve_segments`에는 저장하지 않으며, 섹터가 늘면 새 판에서 다시 산정한다 |
 | published_at | archived 전환 시 그 판의 periodograms 행과 Redis 캐시를 정리한다. 곡선 세그먼트는 판에 묶이지 않으므로 지우지 않는다. 판 행 자체는 제출이 참조하므로 남긴다(수백 바이트) |
@@ -682,6 +718,18 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | generation, angle_deg, radius_jitter | 이전 방사형 스키마의 nullable 폐기 예정 열. 부모 관계는 trigger_tic_id로 유지하며 신규 은하 좌표 생성·조회·API 응답에 이 열을 사용하지 않는다. 열 제거는 별도 백엔드 스키마 정리 대상 |
 | unlocked_at | |
 
+**member_sky_revisions** (HOME-01, 탐사 API 4.1) — PK user_id
+
+회원 지도의 단조 증가 개정값. 발견·상태 변경 트랜잭션 안에서 같이 올려 발견과 버전이 어긋나지 않게 한다.
+
+| 열 | 제약 | 비고 |
+|---|---|---|
+| user_id | PK, FK users(id) | 회원당 한 행 |
+| revision | NOT NULL, DEFAULT 1, CHECK > 0 | 단조 증가. 시각에서 파생하지 않으므로 같은 순간의 두 변경도 구분된다 |
+| updated_at | NOT NULL | 마지막 증가 시각. 버전 비교에 쓰지 않는 관찰용 값 |
+
+행이 없는 회원의 개정값은 **0**으로 읽는다. 첫 증가가 1을 만들기 때문에 없는 행을 1로 읽으면 첫 변경이 감지되지 않는다. API 응답의 `skyVersion`은 `u-<user_id>:<revision>` 문자열이고 프론트는 문자열로만 비교한다. 앱 역할은 SELECT·INSERT·UPDATE만 가지며 DELETE·TRUNCATE는 회수한다.
+
 ### E. 커뮤니티 (결정 4·6)
 
 **posts** (COM-01·04·05·15·17, POL-16)
@@ -746,7 +794,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 9. **닉네임은 복사하지 않는다.** 게시글·반응·답글은 user_id만.
 10. **열거형은 TEXT + CHECK.** 다형 참조(follows.target, post_source_links.target, notifications.payload)는 FK 없이 서비스 계층 검증.
 11. **운영 화면은 v1에 없다.** hidden 상태값만 두고 DB 직접 조작으로 처리한다.
-12. **Gold 적재는 Publisher가 DB에 직접 쓴다(2026-09-15).** `planetory_gold_writer`가 곡선·주기도·후보·manifest 적재와 `staging → current → archived` 전환을 한 트랜잭션으로 수행한다. Backend는 Gold를 읽고 커밋 후 `bundleId` 알림에 따른 캐시·재개·라벨 후처리만 맡는다.
+12. **Gold 적재는 Publisher가 DB에 직접 쓴다(2026-09-15).** `planetory_gold_writer`가 곡선·주기도·후보·manifest 적재와 판 전환을 한 트랜잭션으로 수행한다. 기존 `current`를 `archived`로 바꾼 뒤 신규 `staging`을 `current`로 올린다. Backend는 Gold를 읽고 커밋 후 `bundleId` 알림에 따른 캐시·재개·라벨 후처리만 맡는다. `(tic_id, bundle_version)` 유일 제약과 `pg_advisory_xact_lock(tic_id)`이 동시 재시도를 직렬화하며, DB 생성 id는 payload 동일성 비교에서 제외한다(`S15P21C206-69`, migration은 `S15P21C206-86`).
 
 ## 5. 미결·확인 필요
 
@@ -759,7 +807,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 5 | published_analyses 불변을 트리거로 강제할지. analysis_histories·analysis_snapshots는 v1.3에서 앱 역할 권한 회수로 확정 | HIS-06, S08 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |
-| 9 | stars 표시 열(teff·radius·tmag) 확정 | 팀 공유 후 |
+| ~~9~~ | ~~stars 표시 열(teff·radius·tmag) 확정~~ | 해소(v1.8, 탐사 API D-18) |
 | 10 | **비닝 간격 실측.** 기본 10분으로 잡았으나 대상 별의 가장 짧은 통과 지속시간을 실측해 조정한다. 비닝 후 discoverable을 다시 계산해야 사용자가 못 찾는 신호가 완료 판정에 걸리지 않는다 | DEC-01·03, DEC-16 |
 
 | 11 | **갱신 정책.** v1 대상 별 목록을 고정할지, 새로 관측된 별을 계속 추가할지. 27일 주기 갱신은 세그먼트 INSERT와 후보표 재계산으로 처리한다 | DAT-06·15, DEC-27 |

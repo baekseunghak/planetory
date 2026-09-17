@@ -1,8 +1,10 @@
 # Planetory 공용 프론트
 
+2026-09-17 통합 갱신: 최신 develop 충돌 정리와 재검증은 [202 MR 통합 기록](docs/merge-readiness-202.md)을 기준으로 합니다. 아래 이전 실행 기록의 미업로드·미통합 표기는 당시 상태입니다.
+
 `S15P21C206-201` / W03. 별지도·서비스 화면과 백지웅 담당 분석 화면이 같은 React 앱, 페이지 이동, 인증 조회, HTTP 클라이언트를 사용하는 출발점이다.
 
-현재 기능 화면은 연결 자리다. 기존 은하 지도·행성 뷰·분석 기능을 이 작업에서 완성한 것으로 보지 않는다. 기존 시제품의 공통 코드를 바탕으로 추출·보완했으며 운영 소스가 `experiments`를 import하지 않는다.
+로그인(202)과 별지도 데이터 로딩(203)을 공통 기반에 연결했다. 나머지 기능 화면은 연결 자리다. 기존 은하 지도·행성 뷰·분석 기능을 이 작업에서 완성한 것으로 보지 않는다. 기존 시제품의 공통 코드를 바탕으로 추출·보완했으며 운영 소스가 `experiments`를 import하지 않는다.
 
 ## 실행
 
@@ -100,3 +102,42 @@ docker build -f apps/frontend/Dockerfile -t planetory-frontend:201 .
 Nginx는 `/analysis/...`, `/history/...` 직접 진입·새로고침에 index.html을 제공하고 `/api/`, `/oauth2/`, `/login/oauth2/`는 같은 서비스 네트워크의 `backend:8080`으로 전달한다. 프론트 `/login`은 유지하며 API 오류를 HTML 성공 응답으로 바꾸지 않는다. API 목적지가 다르면 배포 담당자가 프록시 설정을 조정한다. TLS·OAuth 등록 URL·실제 세션 쿠키 속성은 인증/배포 담당 인수 대상이다.
 
 `VITE_*`는 빌드 시 결정된다. 기본 CSRF 계약은 MR !42의 `GET /api/v1/auth/csrf`이며 쓰기 전에 발급된 토큰을 `X-CSRF-TOKEN`으로 전송한다. `VITE_CSRF_HEADER`/`VITE_CSRF_COOKIE`는 둘 다 비워 둔다. 둘 다 설정한 기존 쿠키 방식은 호환용으로만 유지한다. 요청 추적 응답 헤더는 MR에 없으므로 임의로 설정하지 않는다. 토큰·개인 비밀키는 빌드 인자에 넣지 않는다.
+
+Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`, `VITE_OAUTH_GOOGLE_URL=/oauth2/authorization/google`이다. 인자를 생략한 기본 이미지에서도 두 로그인 버튼을 사용할 수 있다. 특정 제공자를 의도적으로 끄려면 해당 `--build-arg VITE_OAUTH_..._URL=`을 명시한다. 실행 중 컨테이너에 환경 변수를 추가해도 이미 빌드된 프론트 설정은 바뀌지 않는다.
+
+`npm run test:docker-defaults`는 Dockerfile의 build 단계에 있는 `VITE_*` 기본값을 읽어 별도 `dist/docker-defaults`에 빌드한 후 58330 포트에서 기존 운영 브라우저 검사를 실행한다. 호스트 `VITE_*`와 로컬 `.env`를 제외해 잘못된 기본값이 개인 설정으로 가려지지 않게 한다. 이 검사는 Docker 엔진 없이 실행할 수 있으며 실제 Linux 이미지/Nginx·배포 HTTPS 검증을 대체하지 않는다. `npm run check`에도 포함한다. [리뷰 수정 검증](docs/merge-readiness-202.md#docker-oauth-기본값-리뷰-수정).
+
+## W04 로그인 화면 검증
+
+`npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.
+
+## W05 별지도 데이터 로딩
+
+`npm run dev:sky-data` → http://127.0.0.1:58270/sky. MR !41의 v1.3 개별 별 페이지·원본 카메라 투영·부분 실패·새 버전·선택 유지용 개발 검사 화면이다. 2,501개를 여러 페이지로 받는 fixture이며 최종 은하 디자인은 204에서 연결한다. 일반 실행과 운영 빌드에는 이 검사 화면/가상 API가 없다.
+
+- [203 완료 조건 대조·실제 연동 대기](docs/ticket-203-readiness.md)
+- [렌더러와 skyVersion 이벤트 연결](docs/sky-data-adapter.md)
+- `npm run test:sky-data`: Chromium의 HTTP/화면 검사 8개. `npm run check`에도 포함한다.
+
+## W06-1 개별 별 은하
+
+2026-09-15 사용자 승인된 MR !41 7f67c568의 v1.3을 로컬 적용했다. 군집/성운과 고정 개수 상한을 제거하고 원본 개인 시제품의 좌표·색·크기·카메라를 사용한다. 운영 코드가 별 위치를 생성하지 않는다.
+
+이번 확인 주소는 http://127.0.0.1:58275/sky?reference=1 이다. npm run dev:galaxy의 기본 포트는58272다. 가상 자료로1/10/100/1000/2501개를 확인하며 클릭·드래그 등 실제 조작은205, 상세 화면은206에서 연결한다.
+
+- [렌더 구조·205/206 연결](docs/galaxy-renderer.md)
+- [204 항목별 인수/대기](docs/ticket-204-readiness.md)
+- [기존 군집 비교 보관본](docs/galaxy-comparison.md)
+- npm run test:galaxy: 현행 렌더11개와 보관 비교4개.
+- npm run test:renderer-production: 활성화 dist2개,58276 포트.
+
+실제 서버는 VITE_SKY_RENDERER_ENABLED=true와 기존 인증/API 설정을 사용한다. 기본 플래그는false, npm run build:renderer는 활성화 빌드다. 개발 도구/가상 API는 운영에 포함하지 않는다. 문서 팀 승인·실제 API·리뷰/병합은 대기 중이다. 기존 Draft MR !40에서 검토한다.
+
+- [201~204 Firefox·Node22·로컬 Nginx 검증](docs/local-validation-201-204.md)
+- Docker 활성화: 저장소 루트에서 `docker build -f apps/frontend/Dockerfile --build-arg VITE_SKY_RENDERER_ENABLED=true -t planetory-frontend:204 .`
+
+203 통합·병합 순서와 남은 인수: [MR !36 통합 기록](docs/merge-readiness-203.md).
+
+204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
+
+최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.

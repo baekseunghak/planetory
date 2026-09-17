@@ -1,6 +1,7 @@
-"""examples/ 의 계약 예제가 코드와 일치하는지, 그리고 numpy 없이 독립 계산한 값과도 일치하는지 확인한다.
+"""계약 예제가 코드와 일치하는지, 그리고 numpy 없이 독립 계산한 값과도 일치하는지 확인한다.
 
-소비자(88 Worker, 131 검증)는 같은 파일로 자기 구현을 대조한다.
+모델 JSON 의 정상·불량 예제는 `contracts/gold/examples/transit-model.*.json`(113 정본), 잔차 계산 예제는 이 패키지의
+`examples/`(removal_case·bin_center_case) 에 있다. 소비자(88 Worker, 131 검증)는 같은 파일로 자기 구현을 대조한다.
 """
 import json
 import math
@@ -12,10 +13,12 @@ import pytest
 from astro_kernel import transit_model as tm
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+CONTRACT_EXAMPLES = Path(__file__).resolve().parents[3] / "contracts" / "gold" / "examples"
 
 
 def _load(name):
-    return json.loads((EXAMPLES / name).read_text(encoding="utf-8"))
+    root = CONTRACT_EXAMPLES if name.startswith("transit-model.") else EXAMPLES
+    return json.loads((root / name).read_text(encoding="utf-8"))
 
 
 def _arr(values):
@@ -48,18 +51,21 @@ def _independent_residual(times, flux, models):
 
 
 def test_valid_examples_parse_and_round_trip():
-    models = _load("transit_model.valid.json")
+    models = _load("transit-model.valid.json")
     assert len(models) >= 2
     for obj in models:
         m = tm.parse_transit_model(obj)
-        assert m.to_dict() == obj
+        expected = {**obj}
+        expected.setdefault("baseline", {"kind": "unity"})              # 생략 가능 키는 기본값으로 채워져 나온다
+        expected.setdefault("residual_model_version", "box-divide-v0")
+        assert m.to_dict() == expected
 
 
 def test_invalid_examples_fail_with_documented_code():
-    cases = _load("transit_model.invalid.json")
+    cases = _load("transit-model.invalid.json")
     assert {c["expected_code"] for c in cases} >= {
         "unsupported_shape", "missing_parameter", "unknown_parameter", "invalid_parameter",
-        "unsupported_baseline", "unsupported_version"}
+        "unsupported_baseline", "unsupported_version", "invalid_type"}
     for c in cases:
         with pytest.raises(tm.TransitModelError) as info:
             tm.parse_transit_model(c["model"])
@@ -104,3 +110,27 @@ def test_removal_case_matches_independent_pure_python_computation():
             assert (a is None) == (b is None), (key, i)
             if a is not None:
                 assert a == b, (key, i, a, b)                    # 순수 파이썬 float 와 값 동일
+
+
+def test_bin_center_case_shows_caller_must_shift_gold_segment_times():
+    """113 결정: Gold 세그먼트는 bin 중심(`start_btjd + bin_minutes/2880`)에서 모델을 평가하고, 이동은 호출자가 한다.
+
+    경계 bin 하나가 bin 시작 시각에서는 통과 안, bin 중심에서는 통과 밖이 되는 예제다. 두 결과가 다르므로 Worker(88)가
+    이동을 빠뜨리면 이 예제로 드러난다. 커널은 넘겨받은 시각에서 그대로 평가한다(커널 수정 없음).
+    """
+    case = _load("bin_center_case.json")
+    seg = case["segment"]
+    t_start = tm.segment_times(seg["start_btjd"], seg["bin_minutes"], seg["n_points"])
+    t_center = t_start + seg["bin_minutes"] / 2880.0
+    np.testing.assert_array_equal(t_center, _arr(case["time_bin_center_btjd"]))
+    observed = _arr(case["flux_observed"])
+    for key, times in (("evaluated_at_bin_start", t_start), ("evaluated_at_bin_center", t_center)):
+        exp = case["expected"][key]
+        r = tm.remove_transit_models(times, observed, case["models"])
+        np.testing.assert_array_equal(r.flux_residual, _arr(exp["flux_residual"]), err_msg=key)
+        assert [i for i, v in enumerate(r.model_flux) if v != 1.0] == exp["in_transit_indices"], key
+        indep = _independent_residual(list(times), case["flux_observed"], case["models"])
+        assert all((a is None) == (b is None) and (a is None or a == b) for a, b in zip(indep, exp["flux_residual"])), key
+    a, b = case["expected"]["evaluated_at_bin_start"], case["expected"]["evaluated_at_bin_center"]
+    assert a["in_transit_indices"] != b["in_transit_indices"]          # 이동 여부가 결과를 바꾼다
+    assert case["decision"]["gold_segments"] == "bin_center"
