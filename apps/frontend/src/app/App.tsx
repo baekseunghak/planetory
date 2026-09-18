@@ -1,3 +1,7 @@
+import {
+  HistoryGraphRenderer,
+  type HistoryGraphProps,
+} from "../features/history/HistoryGraph";
 import { useEffect, useState, type ComponentType } from "react";
 import {
   Link,
@@ -81,39 +85,47 @@ function DesktopGate({ children }: { children: React.ReactNode }) {
     children
   );
 }
-export function App({ pages = {} }: { pages?: PageSlots }) {
+export function App({
+  pages = {},
+  historyGraphRenderer = null,
+}: {
+  pages?: PageSlots;
+  historyGraphRenderer?: ComponentType<HistoryGraphProps> | null;
+}) {
   return (
-    <DesktopGate>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/oauth/callback" element={<LoginPage />} />
-        <Route element={<ProtectedRoutes />}>
-          <Route element={<ServiceLayout />}>
-            <Route path="/" element={<Navigate replace to="/sky" />} />
-            {routeDefinitions.map((route) => {
-              const Page = pages[route.key];
-              return (
-                <Route
-                  key={route.key}
-                  path={route.path}
-                  element={
-                    Page ? <Page /> : <UnconnectedPage pageKey={route.key} />
-                  }
-                />
-              );
-            })}
-            <Route
-              path="*"
-              element={
-                <section>
-                  <h1>페이지를 찾을 수 없습니다</h1>
-                  <Link to="/sky">별지도로 돌아가기</Link>
-                </section>
-              }
-            />
+    <HistoryGraphRenderer.Provider value={historyGraphRenderer}>
+      <DesktopGate>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/oauth/callback" element={<LoginPage />} />
+          <Route element={<ProtectedRoutes />}>
+            <Route element={<ServiceLayout />}>
+              <Route path="/" element={<Navigate replace to="/sky" />} />
+              {routeDefinitions.map((route) => {
+                const Page = pages[route.key];
+                return (
+                  <Route
+                    key={route.key}
+                    path={route.path}
+                    element={
+                      Page ? <Page /> : <UnconnectedPage pageKey={route.key} />
+                    }
+                  />
+                );
+              })}
+              <Route
+                path="*"
+                element={
+                  <section>
+                    <h1>페이지를 찾을 수 없습니다</h1>
+                    <Link to="/sky">별지도로 돌아가기</Link>
+                  </section>
+                }
+              />
+            </Route>
           </Route>
-        </Route>
-      </Routes>
-    </DesktopGate>
+        </Routes>
+      </DesktopGate>
+    </HistoryGraphRenderer.Provider>
   );
 }

@@ -83,7 +83,8 @@ class QuestPanelTest {
     @BeforeEach
     void seed() {
         assertEquals(SCHEMA, jdbc.queryForObject("SELECT current_schema()", String.class));
-        jdbc.execute("TRUNCATE users, stars, operation_settings CASCADE");
+        // operation_settings는 비우지 않는다. V9가 넣은 rule-0을 제출이 참조한다.
+        jdbc.execute("TRUNCATE users, stars CASCADE");
         for (int seq = 1; seq <= 5; seq++) {
             insertStar(TUTORIAL[seq]);
             jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (?, ?, ?, true)",
@@ -93,8 +94,6 @@ class QuestPanelTest {
         bundleId = jdbc.queryForObject("INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest,"
                 + " fold_reference_time_btjd, base_days) VALUES (?, 'v-1', 'current', ?::jsonb, 1500.5, 27.4)"
                 + " RETURNING id", Long.class, CHALLENGE, MANIFEST);
-        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
-                + " VALUES ('rule-0', '{}'::jsonb, now(), 'test')");
     }
 
     // ---------- 튜토리얼 ----------

@@ -7,6 +7,18 @@
 
 VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. 설계와 남은 검증은 [GCP 인프라 구조](../../docs/architecture/gcp-distributed-infrastructure.md)를 따른다.
 
+## 실행 버전 기준
+
+| 대상 | 기준 | 상태 |
+| --- | --- | --- |
+| HDFS 호스트 데몬 | Hadoop 3.5.0, OpenJDK 17 | QJM 3개·Active/Standby·DataNode 5개·RF2 런타임 검증 완료 |
+| Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
+| Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | YARN cluster mode HDFS 읽기·쓰기와 5개 Worker executor 검증 완료 |
+
+2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다. 2026-09-18에는 ResourceManager 1개와 NodeManager 5개, Spark 3.5.5 cluster mode HDFS sample과 Node 2 자원 상한을 검증했다.
+
+Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
+
 여섯 VM은 하나의 로컬 Docker 네트워크가 아니다. 메시 피어링된 고정 사설 IP와 `master-1`, `worker-2`~`worker-6` 호스트명을 사용한다.
 
 - Hadoop 관리 포트는 외부 IPv4에 공개하지 않는다.
@@ -21,9 +33,10 @@ config/hadoop/        # 모든 노드: core-site.xml, hdfs-site.xml, workers
 config/yarn/
   worker.xml          # Node 1, 3~6
   standby-worker.xml  # Node 2: NameNode 자원을 남기는 Worker 설정
+  capacity-scheduler.xml # 전체 노드: 단일 root.default queue
 ```
 
-두 YARN 파일은 완전한 설정 파일이다. 노드 역할에 맞는 하나를 `/etc/hadoop/yarn-site.xml`로 복사한다. XML을 자동 병합하지 않는다.
+두 `yarn-site.xml` 프로필은 완전한 설정 파일이다. 노드 역할에 맞는 하나를 `/etc/hadoop/yarn-site.xml`로 복사하고 `capacity-scheduler.xml`도 함께 배치한다. 서버 배포본의 기본 scheduler 파일에 의존하지 않으며 XML을 자동 병합하지 않는다.
 
 | 대상 | 적용 파일 | NodeManager 한도 |
 | --- | --- | --- |
@@ -46,14 +59,64 @@ sudo install -m 644 infra/distributed-system/config/yarn/worker.xml /etc/hadoop/
 sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc/hadoop/yarn-site.xml
 ```
 
-다음 서버 초기 설정은 아직 구현하지 않았다.
+`S15P21C206-73`은 `yarn` 서비스 계정, 로컬·로그·PID 디렉터리, 역할별 systemd unit, UFW와 Spark sample까지 [YARN 설치·검증 절차](#yarn-설치검증-s15p21c206-73)로 자동화한다.
 
-- Hadoop과 JDK 설치
-- `hdfs`·`yarn` 서비스 계정과 디렉터리 권한
-- systemd 서비스 등록
-- `HADOOP_CONF_DIR=/etc/hadoop` 적용
+### HDFS 호스트 설치 명세 (`S15P21C206-72`)
 
-서비스는 실제 디스크 마운트가 성공한 뒤에만 시작해야 한다. `nofail`만으로는 시작 순서를 보장할 수 없으므로 systemd의 `RequiresMountsFor`에 데이터·메타데이터 경로를 지정한다.
+Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최초 초기화를 포함한다. 설치 구현은 [Hadoop 3.5.0 Cluster Setup](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-common/ClusterSetup.html), [QJM HA](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)와 [Apache 공식 배포본](https://downloads.apache.org/hadoop/common/hadoop-3.5.0/)을 기준으로 하며, 노드 역할과 저장 경로는 이 저장소의 설정을 따른다.
+
+구현 파일은 다음 넷이다.
+
+- [install-hdfs-host.sh](scripts/install-hdfs-host.sh): 단일 노드의 사전 검사·설치·권한·systemd unit 생성을 담당한다.
+- [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): tailnet 노드·Linux 계정·호스트명을 검증하고 `tailscale ssh`와 MagicDNS 경유 `scp`로 Linux 스크립트를 호출한다.
+- [initialize-hdfs-ha.ps1](scripts/initialize-hdfs-ha.ps1): 방화벽·QJM·포맷·Standby bootstrap·DataNode·Active 전환·RF2 검증을 한 단계씩 실행하고 각 단계의 상태·포트·로그를 확인한다.
+- [test-initialize-hdfs-ha.ps1](scripts/test-initialize-hdfs-ha.ps1): 초기화 단계와 포맷 보호 장치를 원격 변경 없이 검사한다.
+
+설치 스크립트는 다음 순서와 중단 조건을 지킨다.
+
+1. 노드 번호 `1~6`, Ubuntu 24.04 amd64, 예상 호스트명·사설 IP, 역할별 디스크 mount, 전체 호스트명 해석을 검사한다. 기존 HDFS 프로세스, NameNode `VERSION` 파일, 예상과 다른 Hadoop 설치·심볼릭 링크·설정이 있으면 변경 전에 중단한다.
+2. `openjdk-17-jdk-headless`, 다운로드·인증서 도구를 설치하고 실제 `java` 경로와 Java 17을 확인한다. `hadoop` 시스템 그룹과 비밀번호·로그인 셸·SSH 키가 없는 `hdfs` 시스템 계정을 모든 노드에 만든다. 기존 관리자 계정은 SSH와 `sudo` 설치에만 사용한다.
+3. 각 노드가 `hadoop-3.5.0.tar.gz`와 `.sha512`를 Apache 공식 배포 경로에서 내려받는다. 같은 디렉터리에서 `sha512sum -c`가 성공한 뒤에만 임시 경로에 압축을 풀고 실행 파일을 검사한다.
+4. 검증한 배포본을 root 소유의 `/opt/hadoop-3.5.0`에 설치하고 `/opt/hadoop`이 해당 버전을 가리키게 한다. 기존 링크가 다른 대상이거나 일반 파일·디렉터리이면 자동 삭제·교체하지 않는다. 같은 버전과 checksum이 이미 확인되면 다운로드와 압축 해제를 생략한다.
+5. 배포본의 기본 설정을 root 소유 `/etc/hadoop`에 준비한 뒤 저장소의 `config/hadoop/` 파일로 site 설정을 배치한다. `/etc/hadoop/hadoop-env.sh`, `/etc/default/hadoop`, `/etc/profile.d/hadoop.sh`에는 아래 기준을 적용한다.
+
+   | 변수 | 값 |
+   | --- | --- |
+   | `JAVA_HOME` | `/usr/lib/jvm/java-17-openjdk-amd64`를 설치 후 실제 경로와 대조 |
+   | `HADOOP_HOME` | `/opt/hadoop` |
+   | `HADOOP_CONF_DIR` | `/etc/hadoop` |
+   | `HADOOP_LOG_DIR` | `/var/log/hadoop` |
+   | `HADOOP_PID_DIR` | `/run/hadoop-hdfs` |
+
+6. Hadoop 배포본과 `/etc/hadoop`은 `root:root`, 로그·PID와 아래 역할별 데이터 디렉터리만 `hdfs:hadoop`으로 둔다. `/mnt/data`와 `/mnt/metadata` 상위 경로 전체의 소유권은 바꾸지 않는다.
+7. `hadoop-hdfs-namenode.service`, `hadoop-hdfs-journalnode.service`, `hadoop-hdfs-datanode.service`를 역할 노드에 배치한다. 각 unit은 `User=hdfs`, `Group=hadoop`, `/etc/default/hadoop`과 역할별 `RequiresMountsFor`를 사용한다. 설치 단계에서는 unit을 시작하거나 활성화하지 않는다.
+8. 설치 후 Java·Hadoop 버전, 계정의 로그인 불가, 경로별 쓰기 권한, 설정 파일 읽기, HDFS 프로세스 미실행과 NameNode 미포맷 상태를 확인한다. Node 1을 먼저 검증한 뒤 Node 2~6에 같은 설치를 적용한다.
+
+이 설치 자동화에는 `hdfs namenode -format`, `-bootstrapStandby`, `-initializeSharedEdits`, 데몬 시작, 영속 경로 삭제를 넣지 않는다. 최초 format과 Standby bootstrap은 아래 초기화 절차에서 대상과 빈 클러스터 여부를 다시 확인한 뒤 별도로 수행한다.
+
+네트워크는 `S15P21C206-71`에서 만든 VPC Peering·GCP 방화벽·`/etc/hosts`를 재사용한다. 설치 스크립트는 사설 IP·이름 해석·mount만 검사하며 VPC, 외부 IP, SSH 설정과 호스트 매핑을 만들거나 변경하지 않는다. 호스트 UFW의 역할별 HDFS 규칙과 실제 포트 연결은 초기화 스크립트가 데몬 시작 단계와 분리해 적용·검증한다.
+
+Docker Engine과 Compose 설치는 `S15P21C206-72`에 포함하지 않는다. Node 1은 Spark 제출 책임과 함께 `S15P21C206-73`에서 Ubuntu 저장소의 Docker Engine·Compose를 설치하고 실제 제출까지 검증했다. Node 2~6 Docker는 수집 컨테이너를 실제 배포하는 작업에서 설치한다.
+
+#### 설치 실행
+
+저장소 루트에서 Tailscale 연결을 확인한 뒤 실행한다. Node 1은 `SSAFY@node-1`, Node 2~6은 `planetory-admin@node-*`를 사용하며 스크립트가 실제 호스트명까지 확인한다.
+
+```powershell
+tailscale status
+tailscale ping node-1
+
+# tailnet 도달성과 원격 호스트명만 읽고 원격 변경은 하지 않는다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -WhatIf
+
+# Node 1을 먼저 설치하고 PASS 출력과 서버 상태를 확인한다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1
+
+# Node 1 검증 후 Node 2~6을 순차 설치한다.
+.\infra\distributed-system\scripts\install-hdfs-hosts.ps1 -NodeNumbers 2,3,4,5,6
+```
+
+`-WhatIf`도 `tailscale ping`과 읽기 전용 `hostname -s`를 실행해 선택한 모든 노드가 올바른 tailnet 대상인지 먼저 확인한다. 파일 업로드나 설치 명령은 실행하지 않는다. 실제 실행은 각 호스트에서 OS·hostname·사설 IP·mount·이름 해석·기존 HDFS 프로세스·NameNode format 여부·기존 설정 충돌을 먼저 검사하고 하나라도 다르면 설치 전에 중단한다. `PASS`는 설치 준비 완료를 뜻하며 HDFS 초기화나 72번 런타임 완료 증거가 아니다.
 
 | 경로 | 소유 계정 | 대상 노드 |
 | --- | --- | --- |
@@ -87,69 +150,128 @@ ZooKeeper와 ZKFC는 사용하지 않는다. HDFS는 QJM을 사용하되 전환�
 
 ## 최초 HDFS HA 초기화
 
-다음 명령은 **빈 신규 클러스터에서 한 번만**, Hadoop 설치·설정·디스크 권한 준비 후 실행한다. `hdfs` 명령은 hdfs 계정, `yarn` 명령은 yarn 계정에서 실행한다. 기존 NameNode를 다시 포맷하면 HDFS 메타데이터가 사라진다.
+초기화는 [initialize-hdfs-ha.ps1](scripts/initialize-hdfs-ha.ps1)로 한 단계씩 실행한다. 각 단계는 6대 tailnet 대상과 실제 호스트명을 먼저 확인하고, 실패하면 다음 단계를 실행하지 않는다. `FormatActive`는 **빈 신규 클러스터에서 한 번만** 실행하며 기존 NameNode를 다시 포맷하면 메타데이터가 사라지므로 실행 직전에 별도 승인과 `-ApproveFormat`이 필요하다.
 
-1. Node 1~3에서 JournalNode를 시작한다.
+```powershell
+$Init = '.\infra\distributed-system\scripts\initialize-hdfs-ha.ps1'
 
-```bash
-hdfs --daemon start journalnode
+& $Init -Step Preflight
+& $Init -Step NetworkDiagnostics
+$AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+& $Init -Step ConfigureFirewall
+& $Init -Step JournalNodes
+& $Init -Step FormatActive -ApproveFormat
+& $Init -Step BootstrapStandby
+& $Init -Step DataNodes
+& $Init -Step Activate
+& $Init -Step ValidateRf2
+& $Init -Step FinalAudit -AuditSinceUtc $AuditSinceUtc
 ```
 
-2. Node 1에서 Active NameNode를 초기화하고 시작한다.
+`ConfigureFirewall`은 UFW의 기본 incoming deny와 기존 SSH 규칙을 유지하면서 아래 사설 IP·역할 포트만 허용한다.
 
-```bash
-hdfs namenode -format planetory
-hdfs --daemon start namenode
+| 대상 | 허용 출발지 | TCP 포트 |
+| --- | --- | --- |
+| Node 1 | `10.20.1.10`~`10.20.6.10`의 정확한 6개 IP | `8020,8485,9870` |
+| Node 2 | 동일 | `8020,8485,9870,9864,9866,9867` |
+| Node 3 | 동일 | `8485,9864,9866,9867` |
+| Node 4~6 | 동일 | `9864,9866,9867` |
+| Node 1~3 JournalNode HTTP | NameNode 2대의 `10.20.1.10`, `10.20.2.10` | `8480` |
+
+2026-09-17 최초 실행에서는 UFW가 22번만 허용해 QJM RPC 8485 연결이 차단됐다. 역할별 규칙을 추가한 뒤 3개 endpoint 연결을 재검증했다. 후속 검토에서는 Standby가 edit log를 읽는 JournalNode HTTP 8480이 빠진 것을 확인해 두 NameNode에서 세 JournalNode로 가는 경로만 추가했다. 포맷은 성공했지만 관리자 계정이 `hdfs` 전용 `VERSION` 경로를 검사해 후속 시작이 중단됐으므로, 검사에 `sudo test`를 적용하고 재포맷 없이 시작만 재개하는 `StartFormattedActive` 복구 단계를 추가했다. 이 단계는 포맷 성공과 NameNode 미시작을 확인한 경우에만 사용한다.
+
+`FinalAudit`은 과거 오류와 수정 뒤 새 오류를 구분하기 위해 UTC 검사 시작 시각을 필수로 받는다. 로그 파일 목록 조회와 읽기는 `hdfs` 권한 안에서 수행하며, 로그 없음·읽기 실패·검색 실패도 감사 실패로 처리한다. 두 NameNode에서 세 JournalNode의 8485/TCP와 8480/HTTP도 함께 검증한다.
+
+현재 HDFS unit은 실행 중이지만 부팅 자동 시작은 활성화하지 않았다. 재부팅 후에는 JournalNode·NameNode·DataNode를 순서대로 시작하고 두 NameNode가 올라온 뒤 기존 Active가 없음을 확인해 수동 전환해야 한다.
+
+## HDFS 완료 검증
+
+`S15P21C206-72`는 다음 결과를 모두 확인해야 완료한다.
+
+- `nn1=active`, `nn2=standby`
+- Node 1~3의 JournalNode 3개 실행
+- Node 2~6의 Live DataNode 5개
+- missing·corrupt block 0
+- 익명 표본 파일의 쓰기·읽기 성공과 복제 계수 2
+- `hdfs fsck <표본 경로> -files -blocks -locations`에서 서로 다른 두 DataNode의 블록 위치 확인
+- 업로드 전과 다운로드 후 SHA-256 일치 및 `hdfs dfs -checksum <표본 경로>` 성공
+
+표본은 `/validation/S15P21C206-72/` 아래에 두고 검증 결과와 함께 제거 여부를 결정한다. 자동 장애 전환, Worker 장애와 수동 NameNode 전환은 이 초기화 완료 조건에 포함하지 않는다.
+
+2026-09-17 검증 표본 `/validation/S15P21C206-72/run-20260917T161435/sample.txt`는 SHA-256 `45d305da54016d35f10f62f0c45d50bb5f7769f2fa16d94f32c8d512941b8c50`로 업로드 전·다운로드 후가 일치했다. RF2 블록은 `worker-5`, `worker-6`에 저장됐고 최종 FSCK는 `HEALTHY`, missing·corrupt·under-replicated block은 모두 0이었다.
+
+## YARN 설치·검증 (`S15P21C206-73`)
+
+구현 파일은 다음과 같다.
+
+- [install-yarn-host.sh](scripts/install-yarn-host.sh): 계정·디렉터리·설정·역할별 unit을 멱등 배치하고 Node 1에만 Ubuntu Docker를 준비한다. YARN unit이 active 또는 enabled이면 파일을 쓰기 전에 중단한다.
+- [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다. `scp`는 비대화식·엄격한 host key 검증을 사용하고 실행 뒤 전용 staging 디렉터리를 정리한다.
+- [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다. 원격 명령은 Bash로 실행하고 HDFS는 `nn1`·`nn2` 중 정확히 하나가 Active인지 확인한다.
+- [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
+- [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
+
+```powershell
+$Install = '.\infra\distributed-system\scripts\install-yarn-hosts.ps1'
+$Init = '.\infra\distributed-system\scripts\initialize-yarn-cluster.ps1'
+
+& $Install -WhatIf
+& $Install -NodeNumbers 1
+& $Install -NodeNumbers 2,3,4,5,6
+& $Init -Step Preflight
+& $Init -Step ConfigureFirewall
+$AuditSinceUtc = (@(& tailscale ssh SSAFY@node-1 'date -u +%Y-%m-%dT%H:%M:%SZ') | Select-Object -Last 1).Trim()
+& $Init -Step Start
+& $Init -Step ValidateNodes
+& .\infra\distributed-system\scripts\run-yarn-sample.ps1
+& $Init -Step FinalAudit -AuditSinceUtc $AuditSinceUtc
 ```
 
-3. Node 2에서 Standby를 bootstrap하고 시작한다.
+설치 전에 OpenSSH `known_hosts`에 각 `node-*` host key를 별도 확인해 등록해야 한다. 미등록되거나 변경된 key는 자동 수락하지 않고 설치와 sample 전송을 중단한다.
 
-```bash
-hdfs namenode -bootstrapStandby
-hdfs --daemon start namenode
-```
+설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. 현재 YARN unit의 부팅 자동 시작도 의도적으로 비활성이다. 재부팅 후에는 HDFS가 정상인지 먼저 확인한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다. HDFS unit과의 부팅 순서·health gate는 재기동과 수동 Active 전환을 검증하는 `S15P21C206-74`에서 자동 시작 여부와 함께 확정한다.
 
-4. Node 2~6에서 DataNode·NodeManager를 시작한다.
+`Preflight`는 6개 노드가 NTP 동기화 상태이며 `Etc/UTC` 시간대를 사용하는지 확인한다. 감사 시작 시각은 운영자 PC가 아니라 Node 1에서 가져온다. `FinalAudit`은 이 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
 
-```bash
-hdfs --daemon start datanode
-yarn --daemon start nodemanager
-```
+UFW는 적용 전에 `active`와 기본 `deny (incoming)`을 모두 확인하고, Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사설 IP에만 허용한다. Spark cluster mode는 Worker 간 driver `7078`과 block manager `7079~7095`를 사용한다. block manager는 한 Worker에 여러 컨테이너가 배치되면 기본 포트에서 증가하므로 단일 포트만 열면 remote broadcast fetch가 멈춘다. NodeManager의 `0.0.0.0` bind와 인증 없는 PoC 경계는 GCP VPC 방화벽과 이 UFW 고정 IP 규칙의 조합이며, 둘 중 하나라도 넓어지면 신뢰 경계를 재검토한다.
 
-5. 두 NameNode가 Standby로 시작하므로 Node 1에서 safemode 해제를 기다린 후 최초 Active를 지정하고 ResourceManager를 시작한다. 기존 데이터가 있는데 safemode가 끝나지 않으면 원인을 확인하며 강제 해제하지 않는다.
+`/yarn-logs`는 Raw·Bronze·Silver와 분리된 YARN 운영 로그 집계 경로다. `Start`가 경로가 없을 때만 HDFS 슈퍼유저 소유·`1777`로 만들며 기존 경로의 권한을 다시 덮어쓰지 않는다. 현재 클러스터에는 집계 로그 삭제 서비스를 실행하는 주체가 없으므로 자동 보존 기간을 집행하지 않는다. 별도 운영 작업에서 삭제 주체와 기간을 확정하기 전까지 HDFS 사용량을 점검하고 명시적으로 정리해야 하며, `yarn.log-aggregation.retain-seconds`만 선언해 보존이 적용된 것으로 판단하지 않는다.
 
-```bash
-hdfs dfsadmin -fs hdfs://master-1:8020 -safemode wait
-hdfs haadmin -transitionToActive nn1
-yarn --daemon start resourcemanager
-hdfs haadmin -getServiceState nn1
-hdfs haadmin -getServiceState nn2
-hdfs dfsadmin -report
-yarn node -list -all
-```
+2026-09-18 최종 검증 결과는 다음과 같다.
 
-`yarn node -list -all`에 표시된 각 호스트명을 다른 VM과 작업 컨테이너에서 확인한다. 아래 `<YARN이 표시한 호스트명>`은 출력값으로 바꾼다.
+- `yarn node -list -all`: `worker-2`~`worker-6` 5대 모두 `RUNNING`
+- Application ID: `application_1789675115055_0005`, `Final-State: SUCCEEDED`, 로그 집계 `SUCCEEDED`
+- executor: `worker-2`~`worker-6`에 각 1개, AM은 `worker-4`
+- HDFS: `/validation/S15P21C206-73/run-20260917T202547Z/output`, `_SUCCESS`, part 5개와 각 HDFS 블록 기반 파일 checksum(`hdfs dfs -checksum`, MD5-of-CRC; SHA-256 아님) 확인
+  - `part-00000`: `0000020000000000000000002961d4bae9d6c0032d416af28ebefd1e`
+  - `part-00001`: `000002000000000000000000cf7782859886e29ca2a349b7057b4f1d`
+  - `part-00002`: `0000020000000000000000006df067d00b0725fd60a989741e9dfe4b`
+  - `part-00003`: `000002000000000000000000e66f211f124e44f232bb30f417b8852d`
+  - `part-00004`: `000002000000000000000000f62ef44324cd05d56a2ca64e237624e8`
+- Node 2: YARN `16384MB/2 vCore`, 실행 중 컨테이너 `1024MB/1 vCore`, 호스트 used 약 2.7GiB·available 약 32.5GiB, swap 0, 관리자 권한 커널 저널 기준 OOM 없음
+- 성공 run 시작 뒤 6개 YARN daemon 로그의 새 `ERROR`·`FATAL` 0건, `nn1=active`, `nn2=standby`, Live DataNode 5개 유지
 
-```bash
-getent hosts <YARN이 표시한 호스트명>
-```
+Worker Python 요구 조건은 3.12.x이며, 2026-09-18 검증 당시에는 모두 `/usr/bin/python3.12`의 Python 3.12.3으로 일치했다. sample은 추가 패키지를 설치하지 않고 Spark가 제공하는 PySpark를 사용한다. 광고 호스트명은 6개 VM과 제출 컨테이너에서 모두 사설 IP로 해석돼야 하며 실패하면 sample을 시작하지 않는다.
 
-사설 IP ping만 성공하고 이 검사가 실패하면 Spark 작업을 시작하지 않는다.
+클러스터의 단일 컨테이너 최대치는 24GiB/3 vCore지만 Node 2는 16GiB/2 vCore만 광고하므로 그보다 큰 컨테이너를 받지 않고 Nodes 3~6만 후보가 된다. 이는 의도된 이기종 자원 배치다. 다만 현재 Node 2 unit은 `MemoryMax`나 cgroup 기반 OS 하드캡을 두지 않으므로 2줄 sample 결과를 실제 Sector workload의 메모리 안전성으로 확대하지 않는다.
+
+sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용이다. Bronze·Silver 배치의 HDFS 서비스 사용자 이름과 경로 소유·그룹 권한 규칙은 분산 PoC 3단계인 `S15P21C206-76`에서 확정한다.
+
+`/validation/S15P21C206-73/run-<UTC>`는 실패하더라도 자동 삭제하지 않아 검증 증거와 실패 원인을 보존한다. 확인이 끝난 run은 운영자가 정확한 경로를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-73/run-<UTC>`로 정리한다. unit 중지는 UFW 규칙, `/yarn-logs`, `/validation` 결과를 되돌리지 않는다.
 
 ## 수동 전환
 
 계획된 전환은 기존 Active를 먼저 Standby로 내린다.
 
 ```bash
-hdfs haadmin -transitionToStandby nn1
-hdfs haadmin -transitionToActive nn2
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToStandby nn1
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
 ```
 
 Node 1 장애 시에는 담당자가 GCP에서 Node 1 VM의 완전 중지를 확인한 뒤에만 Node 2에서 실행한다.
 
 ```bash
-hdfs haadmin -transitionToActive nn2
-hdfs fsck / -blocks
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs fsck / -blocks
 ```
 
 자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
@@ -202,6 +324,8 @@ Spark는 다음 모드로 제출한다.
 --master yarn --deploy-mode cluster
 ```
 
+현재 기본 이미지 `apache/spark:3.5.5-python3`는 JDK 11.0.26과 `hadoop-client-api/runtime` 3.3.4를 포함한다. Hadoop 3.5.0 단일 HDFS에 대한 Parquet 쓰기·읽기와 checksum은 로컬 일회성 환경에서 통과했고, `S15P21C206-73`에서 같은 이미지의 실제 6대 QJM·YARN sample application으로 Application ID, 성공 상태, HDFS 결과와 executor 로그까지 확인했다.
+
 Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실행된다. Python 의존성은 다음 중 하나로 준비한다.
 
 - 모든 Worker에 같은 Python 버전과 패키지 설치
@@ -218,4 +342,4 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기, Worker 장애·수동 전환, Spark 제출 및 Gold 공개/롤백은 별도 통합 검증이 필요하다.
+저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`에서 런타임 검증을 완료했다. Worker 장애·수동 전환과 Gold 공개·롤백은 각각의 후속 통합 검증으로 남긴다.

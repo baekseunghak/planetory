@@ -17,7 +17,7 @@ S15P21C206/
 │  ├─ airflow/                # GCP 작업 순서와 재시도
 │  └─ publisher/              # Gold 검증·포장·전송
 ├─ infra/
-│  ├─ service/                # EC2-A/B 실행 설정
+│  ├─ service/                # EC2-A 실행 설정
 │  ├─ distributed-system/     # GCP Node 1~6 실행 설정
 │  └─ provisioning/gcp/       # VM·디스크·네트워크 생성
 ├─ contracts/
@@ -35,7 +35,7 @@ S15P21C206/
 
 ### `apps/`
 
-사용자가 이용하는 서비스 프로그램이다. `frontend`와 `backend`는 각각 별도 이미지로 만들고 EC2-A/B에 배포할 수 있다. 서비스 DB 변경 파일은 DB를 사용하는 `apps/backend/`가 관리한다.
+사용자가 이용하는 서비스 프로그램이다. `frontend`와 `backend`는 각각 별도 이미지로 만들고 EC2-A에 배포한다. 서비스 DB 변경 파일은 DB를 사용하는 `apps/backend/`가 관리한다.
 
 ### `distributed-system/`
 
@@ -57,6 +57,7 @@ infra/
 │  ├─ compose.control-plane.yaml
 │  ├─ compose.worker.yaml
 │  ├─ validate.py
+│  ├─ scripts/                 # HDFS 호스트 설치와 GCP 호출
 │  └─ config/
 │     ├─ hadoop/              # 공통 HDFS 설정과 Worker 목록
 │     └─ yarn/                # worker.xml, standby-worker.xml

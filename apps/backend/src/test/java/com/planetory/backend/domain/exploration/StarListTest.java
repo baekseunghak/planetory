@@ -66,8 +66,7 @@ class StarListTest {
     void seed() {
         memberId = insertMember();
         otherMemberId = insertMember();
-        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
-                + " VALUES ('rule-0', '{}'::jsonb, now(), 'test') ON CONFLICT DO NOTHING");
+        // submissions.rule_version은 V9가 넣은 초기 규칙 rule-0을 쓴다. '{}' 같은 임의 값은 CHECK가 거절한다.
     }
 
     // ---------- 정렬·커서 ----------

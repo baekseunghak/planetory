@@ -1,4 +1,4 @@
-# Offline regression check: gcloud is mocked; no cloud resources are touched.
+# Offline regression check: gcloud, tailscale and scp are mocked; no remote resources are touched.
 $ErrorActionPreference='Stop'
 $meshTestState=@{ Calls=[Collections.Generic.List[string]]::new(); FailDescribe=$false; HostsContent=''; Peerings=@(); Node=1; Project='test-master' }
 function gcloud {
@@ -17,7 +17,20 @@ function gcloud {
  if (($args -join ' ') -like 'compute instances describe*') {
   return (@{networkInterfaces=@(@{network="https://www.googleapis.com/compute/v1/projects/$($meshTestState.Project)/global/networks/planetory-vpc"; networkIP="10.20.$($meshTestState.Node).10"})} | ConvertTo-Json -Depth 5 -Compress)
  }
- if ($args[1] -eq 'scp') { $meshTestState.HostsContent=Get-Content -LiteralPath $args[2] -Raw }
+}
+function tailscale {
+ $meshTestState.Calls.Add("tailscale $($args -join ' ')")
+ $global:LASTEXITCODE=0
+ if ($args[0] -eq 'ping') { return 'pong' }
+ if ($args[0] -eq 'ssh' -and $args[2] -eq 'hostname') {
+  if ($meshTestState.Node -eq 1) { return 'master-1' }
+  return "worker-$($meshTestState.Node)"
+ }
+}
+function scp {
+ $meshTestState.Calls.Add("scp $($args -join ' ')")
+ $meshTestState.HostsContent=Get-Content -LiteralPath $args[0] -Raw
+ $global:LASTEXITCODE=0
 }
 & "$PSScriptRoot/create-mesh-peering.ps1" -ProjectId test-master -Projects test-master,test-worker
 if ($meshTestState.HostsContent -notmatch '10\.20\.1\.10 master-1 master-1\.asia-east1-b\.c\.test-master\.internal' -or
@@ -41,15 +54,15 @@ $meshTestState.Peerings=@(@{name='peer-node-4'; network='https://www.googleapis.
 if (($nameWarnings -join ' ') -notlike "*existing name 'peer-node-4', expected 'peer-node-6'*") { throw 'Mismatched peering name must be explained.' }
 if ($meshTestState.HostsContent -notmatch '10\.20\.5\.10 worker-5' -or $meshTestState.HostsContent -notmatch '10\.20\.6\.10 worker-6' -or $meshTestState.HostsContent -match 'worker-[34]') { throw 'Sparse node numbering was not preserved.' }
 if (@($meshTestState.Calls | Where-Object { $_ -like '*peerings create*--peer-project=test-worker6*' }).Count) { throw 'Existing peer network should be reused regardless of name.' }
-if (-not @($meshTestState.Calls | Where-Object { $_ -like 'compute scp*worker-5:*' }).Count) { throw 'Wrong SSH target for node 5.' }
+if (-not @($meshTestState.Calls | Where-Object { $_ -like 'scp *planetory-admin@node-5:*' }).Count) { throw 'Wrong tailnet target for node 5.' }
 $meshTestState.Calls.Clear()
 $failure=''
 try { & "$PSScriptRoot/create-mesh-peering.ps1" -ProjectId test-worker5 -Projects test-master,test-worker,test-worker5,test-worker6 }
 catch { $failure=$_.Exception.Message }
-if ($failure -notlike '*does not match*' -or @($meshTestState.Calls | Where-Object { $_ -match 'peerings create|compute scp|compute ssh' }).Count) { throw 'Wrong mapping must fail before mutation.' }
+if ($failure -notlike '*does not match*' -or @($meshTestState.Calls | Where-Object { $_ -match 'peerings create|^scp |tailscale ssh' }).Count) { throw 'Wrong mapping must fail before mutation.' }
 $meshTestState.Calls.Clear()
 & "$PSScriptRoot/create-mesh-peering.ps1" -ProjectId test-worker5 -Projects test-master,test-worker,test-worker5,test-worker6 -NodeNumbers 1,2,5,6 -SkipHosts
-if (@($meshTestState.Calls | Where-Object { $_ -match 'compute scp|compute ssh' }).Count) { throw 'SkipHosts must not use SSH.' }
+if (@($meshTestState.Calls | Where-Object { $_ -match '^scp |tailscale (ping|ssh)' }).Count) { throw 'SkipHosts must not use tailnet SSH.' }
 Write-Host 'PASS: aliases, sparse nodes, existing peers, preflight failures and SkipHosts (offline).'
 $meshTestState.Peerings=@(
  @{name='peer-node-3'; network='projects/test-worker3/global/networks/planetory-vpc'},
