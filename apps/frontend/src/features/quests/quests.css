@@ -1,0 +1,134 @@
+.quest-panel {
+  margin: 0 0 16px;
+  border-block: 1px solid #b9d4ee24;
+  font-size: 14px;
+}
+.quest-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.quest-panel details > summary {
+  cursor: pointer;
+  min-height: 46px;
+  padding: 14px 4px;
+  color: #e7effa;
+}
+.quest-panel summary span {
+  margin-left: 10px;
+  color: #98acc5;
+  font-size: 12px;
+}
+.quest-panel details > :not(summary) {
+  margin: 8px 4px 14px;
+}
+.quest-panel details[open] {
+  padding-bottom: 10px;
+}
+.quest-panel .quest-caption,
+.quest-panel small {
+  color: #adbbcf;
+  line-height: 1.6;
+}
+.quest-steps,
+.quest-reopened ul {
+  list-style: none;
+  padding: 0;
+}
+.quest-steps {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.quest-steps button {
+  display: grid;
+  grid-template-columns: 24px 1fr 20px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #ffffff12;
+  padding: 12px 4px;
+}
+.quest-steps button:not(:disabled):hover {
+  background: #a5c9ff0a;
+}
+.quest-steps button:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+.quest-steps strong,
+.quest-steps small {
+  display: block;
+  font-weight: 400;
+}
+.quest-steps small {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.quest-seq {
+  color: #99c9ff;
+  font-variant-numeric: tabular-nums;
+}
+.quest-actions,
+.quest-round-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.quest-round-notice {
+  border-bottom: 1px solid #a0d8ff30;
+  padding: 8px 4px;
+}
+.quest-round-notice p {
+  flex: 1;
+  min-width: 220px;
+}
+.quest-panel button,
+.quest-actions a {
+  min-height: 40px;
+}
+.quest-actions a {
+  display: inline-flex;
+  align-items: center;
+  color: #b9dcff;
+}
+.quest-panel :is(button, summary, a):focus-visible {
+  outline: 2px solid #8fc8ff;
+  outline-offset: 3px;
+}
+.quest-reopened {
+  border-top: 1px solid #ffffff15;
+}
+.quest-reopened ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.quest-reopened button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+}
+.quest-reopened time {
+  color: #adbbcf;
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .quest-sections {
+    gap: 12px;
+  }
+}
+@media (max-width: 700px) {
+  .quest-sections {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

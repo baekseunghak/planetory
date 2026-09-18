@@ -48,6 +48,13 @@ async function start() {
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
   if (import.meta.env.DEV && import.meta.env.VITE_GALAXY_FIXTURE === "true")
     pages.sky = (await import("../dev/GalaxyInspector")).GalaxyInspector;
+  if (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_INTERACTION_FIXTURE === "true"
+  )
+    pages.sky = (
+      await import("./features/sky-renderer/GalaxyScene")
+    ).GalaxyPage;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ErrorBoundary>

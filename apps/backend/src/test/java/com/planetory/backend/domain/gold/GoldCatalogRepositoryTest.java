@@ -56,7 +56,7 @@ class GoldCatalogRepositoryTest {
 
         segmentId = jdbc.queryForObject("INSERT INTO light_curve_segments"
                         + "(tic_id, sector, binning_revision, start_btjd, bin_minutes, n_points, flux, gaps)"
-                        + " VALUES (?, 7, 'bin-10m-v1', 1500.0, 10, 4, ?, '[2]'::jsonb) RETURNING id",
+                        + " VALUES (?, 7, 'bin-10m-v1', 1500.0, 10, 4, ?, '[[1, 1]]'::jsonb) RETURNING id",
                 Long.class, ticId, new Float[] {1.0f, null, 0.98f, 1.0f});
 
         previousBundleId = insertBundle("archived");
@@ -65,7 +65,7 @@ class GoldCatalogRepositoryTest {
         jdbc.update("INSERT INTO periodograms"
                         + "(bundle_id, period_min_days, period_max_days, n_periods, power)"
                         + " VALUES (?, 0.5, 40.0, 3, ?)",
-                currentBundleId, new Float[] {0.1f, null, 0.9f});
+                currentBundleId, new Float[] {0.1f, 0.5f, 0.9f});
 
         jdbc.update("INSERT INTO candidates"
                 + "(tic_id, status, updated_bundle_id, removal_step, period_days, epoch_btjd,"
@@ -80,11 +80,15 @@ class GoldCatalogRepositoryTest {
     }
 
     private long insertBundle(String status) {
+        return insertBundle(status, GoldCatalogSchemaTest.VALID_MANIFEST);
+    }
+
+    private long insertBundle(String status, String manifest) {
         return jdbc.queryForObject("INSERT INTO publication_bundles"
                         + "(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days)"
                         + " VALUES (?, ?, ?, ?::jsonb, 1510.25, 27.4) RETURNING id",
                 Long.class, ticId, "v-" + UUID.randomUUID(), status,
-                GoldCatalogSchemaTest.VALID_MANIFEST.replace("[1]", "[" + segmentId + "]"));
+                manifest.replace("[1]", "[" + segmentId + "]"));
     }
 
     @Test
@@ -99,6 +103,24 @@ class GoldCatalogRepositoryTest {
         assertEquals("pg-1", bundle.manifest().periodogramConfigVersion());
         assertEquals(10, bundle.manifest().binning().get("minutes").asInt());
         assertEquals(3, bundle.manifest().fineTune().get("half_width_cells").asInt());
+    }
+
+    /**
+     * 배치는 필수 여덟 항목 밖의 키({@code checksum_version} 등)를 manifest에 더 넣는다. V3 CHECK도
+     * 허용하므로 조회가 이 판을 거절하면 안 된다 [S15P21C206-140].
+     */
+    @Test
+    void manifest에_필수_항목_밖의_키가_더_있어도_판을_읽는다() {
+        String withExtraKeys = GoldCatalogSchemaTest.VALID_MANIFEST.replaceFirst("\\{", """
+                {"checksum_version": "array-f32le-null7fc00000-v0",
+                 "calculation_versions": {"ai_model": "am-1"},
+                 "excluded_sectors": [],""");
+        long bundleId = insertBundle("staging", withExtraKeys);
+
+        Bundle bundle = repository.findBundle(bundleId).orElseThrow();
+
+        assertEquals(List.of(segmentId), bundle.manifest().segmentIds());
+        assertEquals("rm-1", bundle.manifest().residualModelVersion());
     }
 
     /** 진행 중 분석은 current를 쓰지만, 과거 제출이 참조하는 archived 판은 id로 읽혀야 한다. */
@@ -121,7 +143,7 @@ class GoldCatalogRepositoryTest {
         assertEquals("bin-10m-v1", segment.binningRevision());
         assertEquals(4, segment.nPoints());
         assertArrayEquals(new Float[] {1.0f, null, 0.98f, 1.0f}, segment.flux());
-        assertEquals(2, segment.gaps().get(0).asInt());
+        assertEquals("[[1,1]]", segment.gaps().toString(), "빈 칸 위치를 [start, end] 폐구간으로 준다");
     }
 
     @Test
@@ -130,11 +152,11 @@ class GoldCatalogRepositoryTest {
     }
 
     @Test
-    void 주기도의_결측이_null로_보존된다() {
+    void 주기도를_읽고_교체된_판에는_주기도가_없다() {
         Periodogram periodogram = repository.findPeriodogram(currentBundleId).orElseThrow();
 
         assertEquals(3, periodogram.nPeriods());
-        assertArrayEquals(new Float[] {0.1f, null, 0.9f}, periodogram.power());
+        assertArrayEquals(new Float[] {0.1f, 0.5f, 0.9f}, periodogram.power());
         assertTrue(repository.findPeriodogram(previousBundleId).isEmpty(), "교체된 판의 주기도는 지운다");
     }
 
