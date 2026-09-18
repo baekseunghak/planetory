@@ -58,7 +58,7 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
-## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`)
+## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`, `iterate`)
 
 ```powershell
 # 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
@@ -84,6 +84,14 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 # 게이트(SNR≥7, SNR≥7&SDE≥6) 결과를 비교한다. 결과는 run 폴더의 snr_dy.csv·gates_dy.csv. global 이 저장 snr 과 안 맞으면 종료 코드 1.
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
+
+# 반복 제거 루프 벤치마크 (S15P21C206-111): BLS → 중복·고조파 아닌 최강 피크 → 게이트 → box 모델 제거(astro-kernel)
+# → 제거 QA(power 감소·경계 돌출·다른 후보 훼손·겹친 transit·유한성) → 통과면 잔차로 반복, 실패면 직전 단계로 복구.
+# 곡선마다 종료 사유(설계 5.6절 7종)·단계별 QA 원시 수치·정답 회수 순서를 steps.csv / iterations.csv / matches.csv 에 남긴다.
+uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pairs none --no-noise          # 빠른 확인 (30초)
+uv run python -m tess_bench iterate --target l98_59 --stage evaluation                                    # 쌍 3 + 단일 108 + none, realclean + 잡음 1
+uv run python -m tess_bench iterate --target wasp18 --stage evaluation --include-raw-real --groups none    # 실제 행성 회수·잔여 고조파 시험
+uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pairs --no-noise --tamper-depth-factor 3   # QA 실패·복구 fixture
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
