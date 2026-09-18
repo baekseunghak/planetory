@@ -150,9 +150,12 @@ class GoldCatalogSchemaTest {
                 "SELECT count(*) FROM light_curve_segments WHERE tic_id = ?", Integer.class, ticId));
     }
 
-    /** 완료 조건 (4): 대용량 float32 배열이 유한값·null을 그대로 유지한다. */
+    /**
+     * 완료 조건 (4): 대용량 float32 배열이 값을 그대로 유지한다. 곡선의 빈 bin은 null로 남는다.
+     * 주기도는 격자 전 점에 값이 있어야 하므로 null을 넣지 않는다 [S15P21C206-140].
+     */
     @Test
-    void 곡선과_주기도_배열이_유한값과_null을_유지한다() {
+    void 대용량_곡선과_주기도_배열이_값을_그대로_유지한다() {
         long ticId = insertStar();
         long bundleId = insertBundle(ticId, "current");
 
@@ -162,7 +165,7 @@ class GoldCatalogSchemaTest {
         }
         Float[] power = new Float[5_000];
         for (int i = 0; i < power.length; i++) {
-            power[i] = (i % 613 == 0) ? null : (float) Math.log1p(i);
+            power[i] = (float) Math.log1p(i);
         }
 
         jdbc.update("INSERT INTO light_curve_segments"
@@ -178,6 +181,31 @@ class GoldCatalogSchemaTest {
                 "SELECT flux FROM light_curve_segments WHERE tic_id = ? AND sector = 7", ticId));
         assertArrayEquals(power, readFloatArray(
                 "SELECT power FROM periodograms WHERE bundle_id = ?", bundleId));
+    }
+
+    /**
+     * V10: 곡선은 유한수 또는 NULL(빈 bin), 주기도는 유한수만 담는다. NULL 자리의 NaN은 제안된 배열
+     * checksum에서 NULL과 같은 바이트라 checksum으로 걸리지 않으므로 DB가 막는다 [S15P21C206-140].
+     */
+    @Test
+    void 곡선의_NaN_무한대와_주기도의_NULL_NaN_무한대는_거절된다() {
+        long ticId = insertStar();
+        long bundleId = insertBundle(ticId, "staging");
+
+        for (Float bad : new Float[] {Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY}) {
+            assertThrows(DataIntegrityViolationException.class,
+                    () -> insertFlux(ticId, new Float[] {1.0f, null, bad}),
+                    "flux에 " + bad + "가 들어가면 안 된다");
+        }
+        assertDoesNotThrow(() -> insertFlux(ticId, new Float[] {1.0f, null, 0.98f}),
+                "곡선의 빈 bin은 NULL로 둔다");
+
+        for (Float bad : new Float[] {null, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY}) {
+            assertThrows(DataIntegrityViolationException.class,
+                    () -> insertPower(bundleId, new Float[] {0.1f, bad}),
+                    "power에 " + bad + "가 들어가면 안 된다");
+        }
+        assertDoesNotThrow(() -> insertPower(bundleId, new Float[] {0.1f, 0.9f}));
     }
 
     /** manifest 최소 스키마: 여덟 항목 중 하나라도 빠지면 판을 만들 수 없다. */
@@ -231,11 +259,14 @@ class GoldCatalogSchemaTest {
         return ticId;
     }
 
-    /** ERD 3장이 요구하는 여덟 항목을 모두 갖춘 최소 manifest. */
+    /**
+     * ERD 3장이 요구하는 여덟 항목을 모두 갖춘 최소 manifest. checksum 키는 Gold 게시 계약의
+     * {@code segment:<id>:flux}·{@code periodogram:<bundleId>:power} 표기를 따른다.
+     */
     static final String VALID_MANIFEST = """
             {
               "segment_ids": [1],
-              "array_checksums": {"flux": "sha256:0000", "power": "sha256:1111"},
+              "array_checksums": {"segment:1:flux": "sha256:0000", "periodogram:1:power": "sha256:1111"},
               "residual_model_version": "rm-1",
               "periodogram_config_version": "pg-1",
               "binning": {"minutes": 10},
@@ -271,5 +302,20 @@ class GoldCatalogSchemaTest {
                         + "(tic_id, sector, binning_revision, start_btjd, bin_minutes, n_points, flux, gaps)"
                         + " VALUES (?, ?, ?, 1500.0, 10, ?, ?, '[]'::jsonb)",
                 ticId, sector, revision, points, flux);
+    }
+
+    /** 표본은 모두 1번 자리가 빈 bin이므로 gaps도 그 위치를 가리킨다. */
+    private void insertFlux(long ticId, Float[] flux) {
+        jdbc.update("INSERT INTO light_curve_segments"
+                        + "(tic_id, sector, binning_revision, start_btjd, bin_minutes, n_points, flux, gaps)"
+                        + " VALUES (?, 9, 'bin-10m-v1', 1500.0, 10, ?, ?, '[[1, 1]]'::jsonb)",
+                ticId, flux.length, flux);
+    }
+
+    private void insertPower(long bundleId, Float[] power) {
+        jdbc.update("INSERT INTO periodograms"
+                        + "(bundle_id, period_min_days, period_max_days, n_periods, power)"
+                        + " VALUES (?, 0.5, 40.0, ?, ?)",
+                bundleId, power.length, power);
     }
 }

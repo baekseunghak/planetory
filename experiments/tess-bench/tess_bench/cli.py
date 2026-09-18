@@ -610,7 +610,7 @@ def cmd_bls_snr_dy(args: argparse.Namespace) -> int:
 
     verdicts = bd.reproduction_verdict(out_rows)
     ok = bool(verdicts) and all(v["ok"] for v in verdicts)
-    print("재현 검사 (설정별, global 재계산 vs 저장 snr): 중앙값 ≤ 1e-6, 1e-3 초과 비율 ≤ 10%, 최대 < 0.5 — power() 위상 비닝 근사로 소수 피크만 다를 수 있다")
+    print(f"재현 검사 (설정별, global 재계산 vs 저장 snr): 중앙값 ≤ 1e-6, 1e-3 초과 비율 ≤ {bd.REPRODUCTION_COARSE_FRACTION_MAX:.0%}, 최대 < {bd.REPRODUCTION_ABS_MAX} — power() 위상 비닝 근사로 소수 피크만 다를 수 있다")
     for v in verdicts:
         print(f"  {v['setting_id']:<16} n={v['n']:>5} 중앙값 {v['median']:.2e} 1e-3 초과 {v['fraction_over_1e-3']:.1%} 최대 {v['max']:.2e} → {'일치' if v['ok'] else '불일치'}")
 

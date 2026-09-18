@@ -91,9 +91,28 @@ def test_manifest_mismatches_detects_changed_inputs_and_params():
     assert bls_dy.manifest_mismatches(prm, inputs, ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={"window_days": 1.0, "sigma_upper": 5.0, "extra": 1}, setting_params=cur_setting) == []
     bad = bls_dy.manifest_mismatches(prm, inputs, {**ok_sha, "grid": "changed"}, grid_set_id="injection_grid_v1-1.2.0",
                                      preprocess_params={"window_days": 0.5, "sigma_upper": 5.0}, setting_params={"poc_linear20k": {"n_periods": 50000}})
-    assert bad == ["sha256:grid", "grid_set_id", "preprocess:window_days", "setting:poc_linear20k:n_periods"]
-    assert "manifest_missing:preprocess_settings" in bls_dy.manifest_mismatches(prm, inputs[:2], ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={}, setting_params=cur_setting)
-    assert "setting_missing:poc_linear20k" in bls_dy.manifest_mismatches(prm, inputs, ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={}, setting_params={})
+    assert bad == ["sha256:grid", "grid_set_id", "preprocess:window_days", "setting:poc_linear20k:n_periods", "setting_key_missing:poc_linear20k:durations_hours"]
+    assert "manifest_missing:preprocess_settings" in bls_dy.manifest_mismatches(prm, inputs[:2], ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={"window_days": 1.0, "sigma_upper": 5.0}, setting_params=cur_setting)
+    assert "setting_missing:poc_linear20k" in bls_dy.manifest_mismatches(prm, inputs, ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={"window_days": 1.0, "sigma_upper": 5.0}, setting_params={})
+
+
+def test_manifest_mismatches_flags_deleted_or_renamed_keys_but_allows_known_meta_keys():
+    """3차 리뷰: 기록된 키가 현재 params 에서 사라지면(삭제·이름 변경) 통과시키지 않는다."""
+    prm = {"grid_set_id": "g", "preprocess_setting": {"window_days": 1.0, "sigma_upper": 5.0}, "setting_params": {"s": {"n_periods": 20000, "oversample": 10}}}
+    inputs = [{"role": r, "sha256": r} for r in ("grid", "bls_settings", "preprocess_settings")]
+    sha = {r: r for r in ("grid", "bls_settings", "preprocess_settings")}
+    base = dict(grid_set_id="g", preprocess_params={"window_days": 1.0, "sigma_upper": 5.0}, setting_params={"s": {"n_periods": 20000, "oversample": 10}})
+    assert bls_dy.manifest_mismatches(prm, inputs, sha, **base) == []
+    renamed = bls_dy.manifest_mismatches(prm, inputs, sha, grid_set_id="g", preprocess_params={"window_d": 1.0, "sigma_upper": 5.0}, setting_params=base["setting_params"])
+    assert renamed == ["preprocess_missing:window_days"]
+    dropped = bls_dy.manifest_mismatches(prm, inputs, sha, grid_set_id="g", preprocess_params=base["preprocess_params"], setting_params={"s": {"n_periods": 20000}})
+    assert dropped == ["setting_key_missing:s:oversample"]
+    meta_ok = bls_dy.manifest_mismatches(prm, inputs, sha, grid_set_id="g", preprocess_params=base["preprocess_params"],
+                                         setting_params={"s": {"n_periods": 20000, "oversample": 10, "n_durations": 4, "durations_hours_configured": [1.2]}})
+    assert meta_ok == []                                                                       # 허용된 기록용 메타 키만 새로 있어도 통과
+    unknown_new = bls_dy.manifest_mismatches(prm, inputs, sha, grid_set_id="g", preprocess_params=base["preprocess_params"],
+                                             setting_params={"s": {"n_periods": 20000, "oversample": 10, "brand_new": 1}})
+    assert unknown_new == ["setting_key_added:s:brand_new"]
 
 
 def test_reproduction_verdict_is_per_setting_and_rejects_systematic_drift():
@@ -103,5 +122,12 @@ def test_reproduction_verdict_is_per_setting_and_rejects_systematic_drift():
     v = {r["setting_id"]: r for r in bls_dy.reproduction_verdict(exact + drift)}
     assert v["a"]["ok"] and v["a"]["n"] == 19 and v["a"]["fraction_over_1e-3"] == pytest.approx(1 / 19)
     assert not v["b"]["ok"] and v["b"]["median"] == pytest.approx(0.002)
-    many = [{"setting_id": "c", "snr_stored": 10.0, "snr_global": 10.0 if i % 5 else 10.5} for i in range(20)]   # 20% 가 근사 차 → 실패
+    many = [{"setting_id": "c", "snr_stored": 10.0, "snr_global": 10.0 if i % 3 else 10.5} for i in range(21)]   # 33% 가 근사 차 → 실패 (상한 25%)
     assert not bls_dy.reproduction_verdict(many)[0]["ok"]
+    some = [{"setting_id": "c2", "snr_stored": 10.0, "snr_global": 10.0 if i % 7 else 10.5} for i in range(21)]  # 14% (CM Dra 실측) → 통과
+    assert bls_dy.reproduction_verdict(some)[0]["ok"]
+    # 최대 상대 차 상한 0.2 (실측 최대 0.161): 바로 아래는 통과, 넘으면 실패
+    assert bls_dy.REPRODUCTION_ABS_MAX == 0.2
+    below = [{"setting_id": "d", "snr_stored": 10.0, "snr_global": 10.0} for _ in range(19)] + [{"setting_id": "d", "snr_stored": 10.0, "snr_global": 11.99}]
+    above = [{"setting_id": "e", "snr_stored": 10.0, "snr_global": 10.0} for _ in range(19)] + [{"setting_id": "e", "snr_stored": 10.0, "snr_global": 12.01}]
+    assert bls_dy.reproduction_verdict(below)[0]["ok"] and not bls_dy.reproduction_verdict(above)[0]["ok"]

@@ -146,5 +146,9 @@ export function stablePhase(id: string) {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++)
     hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
+  // Avalanche adjacent candidate IDs so planets do not line up on the same angle.
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
+  hash ^= hash >>> 16;
   return ((hash >>> 0) / 4294967296) * Math.PI * 2;
 }

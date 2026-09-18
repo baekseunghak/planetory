@@ -141,3 +141,17 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 203에서 `SkyDataPage`를 sky 슬롯에 등록했다. 메타·타일은 같은 `api()`/`useSession()`을 사용하며 회원/버전/level 단위 캐시를 갖는다. 204의 은하 렌더러는 `renderScene`으로 연결하고 카메라 행렬을 `viewportBounds`에 전달한다. 세부 API와 캐시·오류 규칙은 [별지도 데이터 어댑터 계약](sky-data-adapter.md)을 따른다.
 
 분석 제출·공개 등록·재개 화면은 기존 API 성공 응답의 `skyVersion`/선택적 `asOf`를 `publishSkyChange(member.memberId, event)`에 전달한다. 지도 재진입은 메타부터 조회한다. 실제 분석/공개 기능을 이 공통 프로젝트에서 대신 구현한 것이 아니다.
+
+## W14 공개 History 그래프 연결
+
+App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).
+
+## W09 퀘스트 갱신
+
+208의 `QuestProvider`가 지도와 대체 목록에 같은 퀘스트 상태를 공급한다. A06의 실제 제출 성공 뒤 `publishQuestChange(memberId, { reason: "submission" })`를 호출한다. 허용 건너뛰기 성공은 `reason: "tutorial-skipped"`, A14 안내 닫기는 `reason: "guide-closed"`이며 안내 닫기로 튜토리얼 완료나 성과를 만들지 않는다. 이벤트는 회원별 읽기 갱신 요청이고 상태 저장소가 아니다. 지도에 돌아오면 서버 상태를 새로 조회한다.
+
+지도 데이터도 바뀌는 성공 응답은 기존 `publishSkyChange`를 사용한다. 그 이벤트 역시 퀘스트를 재조회하므로 같은 성공 사건에 두 이벤트를 반드시 함께 보낼 필요는 없다. 자세한 응답 책임·실제 연동 대기는 [208 인수 기록](ticket-208-readiness.md)을 따른다.
+
+## 2026-09-18 리뷰 통합
+
+지도 205~208과 커뮤니티 209 이후의 스택을 208→209로 통합했다. 실행 모드 interaction과 community, 양쪽 운영 경로를 함께 유지한다. 선행 MR이 병합된 뒤 후속 MR을 병합한다. 이 통합은 216의 실제 API·배포 인수를 대체하지 않는다.

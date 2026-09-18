@@ -1,3 +1,5 @@
+import { planetOrbit, planetLabel, type HitTarget } from "./interaction.ts";
+import { screenPoint } from "./model.ts";
 import type { Matrix } from "../sky-data/geometry.ts";
 import { galaxyExposure } from "./exposure.ts";
 import {
@@ -39,35 +41,39 @@ void main(){
 }`;
 const bodyFragment = `#version 300 es
 precision highp float;
-in vec2 uv; in vec3 tint; in float strength; in float mode; uniform float glow; out vec4 outputColor;
+in vec2 uv; in vec3 tint; in float strength; in float mode; uniform float glow; uniform float focusMix; out vec4 outputColor;
 void main(){float d=dot(uv,uv);if(d>1.)discard;
 if(mode>1.5 && glow<.5){
 vec3 n=vec3(uv,sqrt(1.-d));
 float surface=.86+.08*sin(uv.x*41.)*sin(uv.y*53.)+.06*cos((uv.x+uv.y)*73.);
 float light=.48+.52*max(0.,dot(n,normalize(vec3(-.5,-.2,1.))));
-outputColor=vec4(tint*surface*light,1.-smoothstep(.94,1.,d));return;}
-float a=exp(-d*22.)+exp(-d*4.5)*.22;outputColor=vec4(tint,a*strength);}`;
+outputColor=vec4(tint*surface*light,(1.-smoothstep(.94,1.,d))*(1.-focusMix));return;}
+float a=exp(-d*22.)+exp(-d*4.5)*.22;outputColor=vec4(tint,a*strength*(mode>1.5?1.-focusMix:1.));}`;
 const orbitVertex = `#version 300 es
 precision highp float; layout(location=0) in vec3 center; layout(location=1) in vec2 offset;
 uniform mat4 matrix; uniform vec2 viewport;
 void main(){vec4 p=matrix*vec4(center,1.);p.xy+=offset*vec2(2.,-2.)/viewport*p.w;gl_Position=p;}`;
 const orbitFragment = `#version 300 es
-precision highp float; uniform vec3 color; out vec4 outputColor;
-void main(){outputColor=vec4(color,.34);}`;
+precision highp float; uniform vec3 color; uniform float focusMix; out vec4 outputColor;
+void main(){outputColor=vec4(color,.34*(1.-focusMix));}`;
 const planetVertex =
   common +
   `
 layout(location=2) in vec4 orbit;
 layout(location=3) in vec3 color;
-uniform float time;
+uniform float time; uniform float focusPhase; uniform float focusMix;
 void main(){float a=orbit.y+time*orbit.z;vec2 offset=vec2(cos(a),sin(a)*.48)*orbit.x;
-vec4 p=matrix*vec4(center,1.);p.xy+=(offset+corner*orbit.w)*vec2(2.,-2.)/viewport*p.w;
-gl_Position=p;uv=corner;tint=color;seed=0.;mode=0.;density=1.;}`;
+bool focused=abs(orbit.y-focusPhase)<.000001;
+float radius=focused?mix(orbit.w,min(viewport.x,viewport.y)*.22,focusMix):orbit.w;
+if(focused)offset*=1.-focusMix;
+vec4 p=matrix*vec4(center,1.);p.xy+=(offset+corner*radius)*vec2(2.,-2.)/viewport*p.w;
+gl_Position=p;uv=corner;tint=color;seed=orbit.y;mode=focused?1.:0.;density=focused?1.:1.-focusMix;}`;
 const planetFragment = `#version 300 es
-precision highp float; in vec2 uv;in vec3 tint;out vec4 outputColor;
+precision highp float; in vec2 uv;in vec3 tint;in float seed;in float density;out vec4 outputColor;
 void main(){float d=dot(uv,uv);if(d>1.)discard;vec3 normal=vec3(uv,sqrt(1.-d));
 float light=.22+.78*max(0.,dot(normal,normalize(vec3(-.5,-.3,1.))));
-outputColor=vec4(tint*light,1.-smoothstep(.87,1.,d));}`;
+float bands=.85+.10*sin(uv.y*35.+seed*3.+sin(uv.x*8.+seed)*2.)+.05*cos(uv.x*43.+seed);
+outputColor=vec4(tint*light*bands,(1.-smoothstep(.87,1.,d))*density);}`;
 
 export type RendererMetrics = {
   stars: number;
@@ -176,6 +182,8 @@ type Pipeline = {
   dpr: WebGLUniformLocation | null;
   glow: WebGLUniformLocation | null;
   exposure: WebGLUniformLocation | null;
+  focusPhase: WebGLUniformLocation | null;
+  focusMix: WebGLUniformLocation | null;
 };
 export class GalaxyRenderer {
   private gl: WebGL2RenderingContext;
@@ -190,6 +198,10 @@ export class GalaxyRenderer {
   private width = 1;
   private height = 1;
   private time = 0;
+  private renderedTime = 0;
+  private system: OwnedSystem | null = null;
+  private focusedPlanet: string | null = null;
+  private focusMix = 0;
   private zoom = 1;
   private starCount = 0;
   private disposed = false;
@@ -296,6 +308,8 @@ export class GalaxyRenderer {
       dpr: gl.getUniformLocation(p, "dpr"),
       glow: gl.getUniformLocation(p, "glow"),
       exposure: gl.getUniformLocation(p, "exposure"),
+      focusPhase: gl.getUniformLocation(p, "focusPhase"),
+      focusMix: gl.getUniformLocation(p, "focusMix"),
     };
   }
   setCamera(
@@ -316,6 +330,7 @@ export class GalaxyRenderer {
     selected: string | null,
     system: OwnedSystem | null = null,
   ) {
+    this.system = system;
     if (system && system.ticId !== selected)
       throw new Error("선택한 별과 행성 목록이 다릅니다.");
     const body: number[] = [],
@@ -337,17 +352,14 @@ export class GalaxyRenderer {
     let orbitStars = 0;
     const addOrbits = (
       position: { x: number; y: number; depthZ: number },
-      items: { candidateId: string; kind: string }[],
+      items: OwnedSystem["items"],
       detailed: boolean,
     ) => {
       if (!items.length) return;
       orbitStars++;
       items.forEach((item, i) => {
         const radius = detailed
-          ? 35 +
-            ((i + 1) / (items.length + 1)) *
-              Math.min(this.width, this.height) *
-              0.34
+          ? planetOrbit(i, items.length, this.width, this.height).radius
           : 16 + i * 6;
         for (let j = 0; j < 64; j++)
           for (const k of [j, j + 1]) {
@@ -371,7 +383,9 @@ export class GalaxyRenderer {
           position.depthZ,
           radius,
           phase,
-          detailed ? 0.12 + 0.18 / (i + 1) : 0,
+          detailed
+            ? planetOrbit(i, items.length, this.width, this.height).speed
+            : 0,
           detailed ? 8 + Math.sin(phase) * 1.5 : 2,
           ...color,
         );
@@ -405,12 +419,24 @@ export class GalaxyRenderer {
       packedNodes: this.stats.packedNodes + plan.stars.length,
     });
   }
+  setPlanetFocus(id: string | null) {
+    const next = this.system?.items.some((p) => p.candidateId === id)
+      ? id
+      : null;
+    if (this.focusedPlanet !== next) this.focusMix = 0;
+    this.focusedPlanet = next;
+  }
   private bind(p: Pipeline) {
     const gl = this.gl;
     gl.useProgram(p.program);
     gl.bindVertexArray(p.vao);
     gl.uniformMatrix4fv(p.matrix, false, this.matrix);
     gl.uniform2f(p.viewport, this.width, this.height);
+    gl.uniform1f(p.focusMix, this.focusMix);
+    gl.uniform1f(
+      p.focusPhase,
+      this.focusedPlanet ? stablePhase(this.focusedPlanet) : -1,
+    );
   }
   draw(deltaSeconds = 0, reducedMotion = false) {
     if (this.disposed || this.gl.isContextLost()) return;
@@ -426,6 +452,15 @@ export class GalaxyRenderer {
     gl.clearColor(0.001, 0.002, 0.004, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.time += reducedMotion ? 0 : Math.max(0, Math.min(deltaSeconds, 0.05));
+    this.focusMix = this.focusedPlanet
+      ? reducedMotion
+        ? 1
+        : Math.min(
+            1,
+            this.focusMix + Math.max(0, Math.min(deltaSeconds, 0.05)) * 2.5,
+          )
+      : 0;
+    this.renderedTime = reducedMotion ? 0 : this.time;
     let bodyCalls = 0,
       ringCalls = 0,
       planetCalls = 0;
@@ -465,6 +500,42 @@ export class GalaxyRenderer {
     this.stats.planetDrawCalls = planetCalls;
     this.stats.drawCalls = bodyCalls + ringCalls + planetCalls;
     this.stats.frameCount++;
+  }
+  planetTargets(): HitTarget[] {
+    if (!this.system || this.disposed || this.gl.isContextLost()) return [];
+    const { position, items } = this.system;
+    const center = screenPoint(
+      Array.from(this.matrix),
+      this.width,
+      this.height,
+      position.x,
+      position.y,
+      position.depthZ,
+    );
+    return items.flatMap((p, i) => {
+      if (this.focusedPlanet && p.candidateId !== this.focusedPlanet) return [];
+      const orbit = planetOrbit(i, items.length, this.width, this.height);
+      const angle =
+        stablePhase(p.candidateId) + this.renderedTime * orbit.speed;
+      const mix = this.focusedPlanet === p.candidateId ? this.focusMix : 0;
+      const x = center.x + Math.cos(angle) * orbit.radius * (1 - mix),
+        y = center.y + Math.sin(angle) * orbit.radius * 0.48 * (1 - mix);
+      return x < 0 || y < 0 || x > this.width || y > this.height
+        ? []
+        : [
+            {
+              id: p.candidateId,
+              kind: "planet" as const,
+              x,
+              y,
+              radius:
+                10 * (1 - mix) + Math.min(this.width, this.height) * 0.22 * mix,
+              label: planetLabel(p),
+              planet: p,
+              systemTicId: this.system!.ticId,
+            },
+          ];
+    });
   }
   metrics(): RendererMetrics {
     const buffers = [this.bodies, this.rings, this.planets];

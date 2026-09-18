@@ -1,0 +1,68 @@
+.material-picker,
+.material-viewer {
+  margin: 1.5rem 0;
+  border: 1px solid #30405a;
+  border-radius: 8px;
+  padding: 1rem;
+}
+.material-picker legend {
+  padding: 0 0.5rem;
+}
+.material-picker p,
+.material-viewer p {
+  color: #bdcbe0;
+}
+.material-picker ul {
+  list-style: none;
+  padding: 0;
+}
+.material-picker li {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+}
+.material-choices {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+.material-choices label {
+  display: block;
+  margin: 0.8rem 0;
+}
+.material-choices input,
+.material-choices select {
+  width: 100%;
+  padding: 0.7rem;
+  background: #101a2b;
+  color: inherit;
+  border: 1px solid #4b6080;
+  border-radius: 4px;
+}
+.material-viewer dl {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.5rem;
+}
+.material-viewer dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.material-viewer nav {
+  display: flex;
+  gap: 1rem;
+}
+.material-viewer button[aria-pressed="true"] {
+  border-color: #78c7e5;
+  color: #b1eaff;
+}
+.material-empty {
+  padding: 1rem;
+  background: #101a2b;
+}
+.material-viewer h3 {
+  font-size: 1rem;
+}

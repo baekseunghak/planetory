@@ -115,9 +115,11 @@ class AuthIntegrationTest {
     @Test
     void googleAndSsafyLoginUseProviderIdentityAndInitializeOnlyOnce() throws Exception {
         var google = login("google", "same-id");
+        jdbc.update("UPDATE users SET created_at = '2026-09-14 12:34:56+00' WHERE id = ?", memberId(google));
         mvc.perform(get("/api/v1/me").session(google))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("MEMBER"))
                 .andExpect(jsonPath("$.memberId").value("u-" + memberId(google)))
+                .andExpect(jsonPath("$.joinedAt").value("2026-09-14T12:34:56Z"))
                 .andExpect(jsonPath("$.onboardingDone").value(false))
                 .andExpect(jsonPath("$.tutorialCompleted").value(false))
                 .andExpect(jsonPath("$.achievementSummary.discoveredStarCount").value(1))
