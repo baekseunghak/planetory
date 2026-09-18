@@ -103,6 +103,49 @@ DB 비밀번호는 명령줄 인자에 두지 않고 `PGPASSWORD` 환경변수�
 읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·
 `planetory_gold_writer` 역할 분리가 들어오면 ERD 생성기를 읽기 전용 역할로 옮긴다.
 
+## API 문서 (Swagger UI)
+
+`api-docs.planetory.space` -> `http://api-docs:80`. 호스트 포트를 열지 않고 `service`
+네트워크 안에만 뜬다. 외부 인바운드는 0개다.
+
+### 운영 백엔드는 건드리지 않는다
+
+springdoc은 이미 의존성에 있지만 운영에서는 두 겹으로 잠겨 있다.
+
+- `application.properties`의 `springdoc.*.enabled=${SWAGGER_ENABLED:false}` — 기본 꺼짐
+- `SecurityConfig`의 swagger `permitAll`이 `local` 프로필 안에만 있다
+
+배포 백엔드는 `prod`·`oauth-google`로 뜨므로 `/swagger-ui/**`와 `/v3/api-docs/**`는 401이다.
+이 게이트는 팀이 의도해서 건 것이라 풀지 않는다. 대신 같은 이미지를 일회용으로 띄워
+스펙만 받아 오고, 결과는 정적으로 서빙한다. 운영 백엔드의 설정과 보안은 그대로다.
+
+### 생성
+
+```
+docker compose --profile api-docs-refresh run --rm api-docs-generator
+docker compose --profile api-docs-refresh down --remove-orphans
+```
+
+첫 명령이 `api-docs-db`(스크래치) -> `api-docs-app`(local 프로필) 순으로 띄우고
+`/v3/api-docs`를 받아 Swagger UI와 함께 `planetory-api-docs-output`에 쓴다. 둘째 명령이
+일회용 컨테이너를 정리한다. 백엔드 이미지가 바뀌면 다시 돌린다.
+
+`api-docs-db`는 스펙 추출 전용이다. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
+붙이지 않는다. tmpfs라 컨테이너가 사라지면 데이터도 같이 사라지며, Flyway가 매번 V1부터
+새로 깐다.
+
+### 스펙 손질
+
+springdoc이 내는 스펙에는 `servers`가 없다. 그대로 두면 Swagger UI가 페이지 주소
+(`api-docs.planetory.space`)를 API 주소로 읽는다. 생성 시 `API_SERVER_URL`
+(기본 `https://planetory.space`)을 `servers`에 박는다.
+
+Try it out은 문서 호스트에서 운영 API로 나가는 교차 출처 요청이라 CORS와 세션 쿠키가
+걸린다. 이 사이트는 열람용으로 본다.
+
+`/api/v1/hello`는 개발용 엔드포인트인데 스펙에 그대로 올라온다. 공개 문서에서 빼려면
+`HelloController`에 `@Hidden`을 단다.
+
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
 `cloudflared`는 외부 인바운드 포트를 열지 않고 edge에서만 트래픽을 받는다. 서비스 컨테이너는 같은 `service` 네트워크에 있으므로 Tunnel의 public hostname은 `http://frontend:8080`을 origin으로 지정한다.

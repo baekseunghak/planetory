@@ -188,6 +188,151 @@ services:
     networks:
       - service
 
+  # Swagger UI를 정적으로 낸다. 호스트 포트를 열지 않고 service 네트워크 안에만 뜨며
+  # Tunnel이 api-docs.planetory.space -> http://api-docs:80으로 잡는다.
+  #
+  # 운영 백엔드는 건드리지 않는다. springdoc은 SWAGGER_ENABLED=false로 꺼져 있고
+  # SecurityConfig의 swagger permitAll은 local 프로필에서만 걸린다(SecurityConfig.java).
+  # 그 게이트를 푸는 대신, 같은 이미지를 일회용으로 띄워 스펙만 받아 온다.
+  api-docs:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - api-docs-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 아래 3개는 api-docs-refresh profile에 묶여 평시 up 대상이 아니다.
+  #   docker compose --profile api-docs-refresh run --rm api-docs-generator
+  #   docker compose --profile api-docs-refresh down --remove-orphans   (생성 후 정리)
+
+  # 스펙 추출 전용 스크래치 DB. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
+  # 붙이지 않는다. tmpfs라 컨테이너가 사라지면 같이 사라진다.
+  api-docs-db:
+    image: postgres:18.6-alpine
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      POSTGRES_DB: planetory_poc
+      POSTGRES_USER: planetory
+      # 일회용이다. 호스트 포트도 볼륨도 없고 이 네트워크 밖으로 나가지 않는다.
+      POSTGRES_PASSWORD: scratch-only
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planetory -d planetory_poc"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - service
+
+  # 운영과 같은 이미지를 local 프로필로 띄운다. 이 프로필에서만 swagger 경로가
+  # permitAll이고 SWAGGER_ENABLED로 springdoc이 켜진다. OAuth 프로필은 주지 않아
+  # oauth2Login은 구성되지 않는다.
+  api-docs-app:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set in .env}
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SWAGGER_ENABLED: "true"
+      DATABASE_URL: jdbc:postgresql://api-docs-db:5432/planetory_poc
+      DATABASE_USER: planetory
+      DATABASE_PASSWORD: scratch-only
+      GOLD_ROOT: /tmp
+    depends_on:
+      api-docs-db:
+        condition: service_healthy
+    networks:
+      - service
+
+  api-docs-generator:
+    image: ${ERD_NODE_IMAGE:-node:22-alpine}
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      NPM_CONFIG_CACHE: /npm-cache
+      SWAGGER_UI_VERSION: ${SWAGGER_UI_VERSION:-5.32.14}
+      API_SERVER_URL: ${API_SERVER_URL:-https://planetory.space}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        mkdir -p /work
+        echo "api-docs-app 기동 대기..."
+        i=0
+        until wget -q -O /work/openapi.json "http://api-docs-app:8080/v3/api-docs"; do
+          i=$$((i+1))
+          if [ "$$i" -gt 60 ]; then echo "api-docs-app이 5분 안에 응답하지 않았다"; exit 1; fi
+          sleep 5
+        done
+        echo "스펙 수신: $$(wc -c < /work/openapi.json) bytes"
+        cd /work
+        rm -rf ui && mkdir -p ui
+        npm pack swagger-ui-dist@$$SWAGGER_UI_VERSION --pack-destination /work >/dev/null 2>&1
+        tar xzf /work/swagger-ui-dist-*.tgz -C /work/ui --strip-components=1
+        cat > /work/build.js <<'JS'
+        const fs = require('fs');
+        const P = '/work/openapi.json';
+        const spec = JSON.parse(fs.readFileSync(P, 'utf8'));
+
+        // 스펙에는 servers가 없다. 이 페이지 주소(api-docs.planetory.space)가 API 주소로
+        // 잘못 읽히지 않도록 실제 운영 주소를 박는다.
+        spec.servers = [{ url: process.env.API_SERVER_URL, description: '운영' }];
+        fs.writeFileSync(P, JSON.stringify(spec, null, 2));
+
+        const paths = Object.keys(spec.paths || {}).length;
+        const schemas = Object.keys((spec.components || {}).schemas || {}).length;
+
+        fs.writeFileSync('/work/index.html', `<!doctype html>
+        <html lang="ko">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Planetory API</title>
+            <link rel="icon" href="./favicon-32x32.png" sizes="32x32" />
+            <link rel="stylesheet" href="./swagger-ui.css" />
+            <style>body{margin:0}</style>
+          </head>
+          <body>
+            <div id="swagger-ui"></div>
+            <script src="./swagger-ui-bundle.js"></script>
+            <script src="./swagger-ui-standalone-preset.js"></script>
+            <script>
+              window.ui = SwaggerUIBundle({
+                url: './openapi.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                displayRequestDuration: true,
+                docExpansion: 'list',
+                presets: [SwaggerUIBundle.presets.apis],
+              });
+            </script>
+          </body>
+        </html>
+        `);
+        console.log('spec: paths=' + paths + ' schemas=' + schemas);
+        JS
+        node /work/build.js
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp /work/ui/swagger-ui.css /work/ui/swagger-ui-bundle.js \
+           /work/ui/swagger-ui-standalone-preset.js /work/ui/favicon-32x32.png /output/
+        cp /work/openapi.json /work/index.html /output/
+        chmod -R a+rX /output
+        echo "완료"
+    volumes:
+      - api-docs-output:/output
+      - api-docs-work:/work
+      - erd-npm-cache:/npm-cache
+    depends_on:
+      api-docs-app:
+        condition: service_started
+    networks:
+      - service
+
   # 외부 인바운드 개방 없이 Cloudflare edge에서만 트래픽을 받는다. 토큰은 이미지·
   # Git·프로세스 인자에 두지 않고 서버의 .env 파일에서 주입한다.
   cloudflared:
@@ -213,6 +358,10 @@ volumes:
     name: planetory-erd-work
   erd-npm-cache:
     name: planetory-erd-npm-cache
+  api-docs-output:
+    name: planetory-api-docs-output
+  api-docs-work:
+    name: planetory-api-docs-work
 
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
