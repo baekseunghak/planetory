@@ -83,7 +83,8 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 # global(전역 robust scatter, 현재 구현)·flux_err(PDCSAP_FLUX_ERR/중앙값/추세)·local(1일 구간 scatter) 로 재계산해
 # 게이트(SNR≥7, SNR≥7&SDE≥6) 결과를 비교한다. 결과는 run 폴더의 snr_dy.csv·gates_dy.csv.
 # 시작 전에 manifest 의 grid·BLS 설정·전처리 설정 sha256, grid_set_id, 전처리·탐색 파라미터가 현재와 같은지 검사하고 다르면 중단한다.
-# 재현 판정은 설정별(global 재계산 vs 저장 snr: 중앙값 ≤ 1e-6, 1e-3 초과 피크 ≤ 10%, 최대 < 0.5) 이며 하나라도 실패하면 종료 코드 1.
+# 재현 판정은 설정별(global 재계산 vs 저장 snr: 중앙값 ≤ 1e-6, 1e-3 초과 피크 ≤ 25%(실측 4–14%), 최대 < 0.2(실측 최대 0.161)) 이며 하나라도 실패하면 종료 코드 1.
+# 기록된 전처리·탐색 파라미터 키가 현재 코드에서 사라지거나 이름이 바뀐 경우도 불일치다(허용된 기록용 메타 키만 예외).
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
 ```

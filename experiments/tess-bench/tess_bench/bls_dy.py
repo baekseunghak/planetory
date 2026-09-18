@@ -119,6 +119,10 @@ def gate_comparison(peak_rows_by_method: dict[str, list[dict]], match_rows: list
 # --------------------------------------------------------------------------- 과거 run 재현 안전장치 (MR !77 리뷰)
 
 IDENTITY_ROLES = ("grid", "bls_settings", "preprocess_settings")
+# 현재 params() 에만 있는 기록용 메타 키 (2026-09-18 F1 반영으로 추가). manifest 에 없어도 불일치가 아니다. 그 외 키는 양쪽에 모두 있어야 한다.
+SETTING_META_KEYS = ("durations_hours_configured", "n_durations")
+REPRODUCTION_ABS_MAX = 0.2      # 실측: 5별 평가 run + π Men 조정 run 에서 위상 비닝 근사 차 최대 0.161 (CM Dra). 그 위는 설정·곡선이 다른 것으로 본다
+REPRODUCTION_COARSE_FRACTION_MAX = 0.25   # 1e-3 을 넘는 피크 비율 상한. 실측 4–14%(깊은 식쌍성 CM Dra 가 14%). 설정·곡선이 통째로 다르면 ~100%
 
 
 def manifest_mismatches(prm: dict, manifest_inputs: list[dict], current_sha: dict[str, str], *, grid_set_id: str,
@@ -139,7 +143,9 @@ def manifest_mismatches(prm: dict, manifest_inputs: list[dict], current_sha: dic
         out.append("grid_set_id")
     rec_pre = prm.get("preprocess_setting") or {}
     for k, v in rec_pre.items():
-        if k in preprocess_params and preprocess_params[k] != v:
+        if k not in preprocess_params:
+            out.append(f"preprocess_missing:{k}")               # 기록된 키가 현재 설정에서 사라짐(삭제·이름 변경) → 불일치
+        elif preprocess_params[k] != v:
             out.append(f"preprocess:{k}")
     rec_settings = prm.get("setting_params") or {}
     for sid, rec in rec_settings.items():
@@ -147,17 +153,22 @@ def manifest_mismatches(prm: dict, manifest_inputs: list[dict], current_sha: dic
         if cur is None:
             out.append(f"setting_missing:{sid}"); continue
         for k, v in rec.items():
-            if k in cur and cur[k] != v:
+            if k not in cur:
+                out.append(f"setting_key_missing:{sid}:{k}")
+            elif cur[k] != v:
                 out.append(f"setting:{sid}:{k}")
+        for k in cur:                                            # 현재에만 있는 키는 허용된 메타 키만
+            if k not in rec and k not in SETTING_META_KEYS:
+                out.append(f"setting_key_added:{sid}:{k}")
     return out
 
 
-def reproduction_verdict(rows: list[dict], *, median_max: float = 1e-6, coarse_tol: float = 1e-3, coarse_fraction_max: float = 0.10,
-                         abs_max: float = 0.5) -> list[dict]:
+def reproduction_verdict(rows: list[dict], *, median_max: float = 1e-6, coarse_tol: float = 1e-3, coarse_fraction_max: float = REPRODUCTION_COARSE_FRACTION_MAX,
+                         abs_max: float = REPRODUCTION_ABS_MAX) -> list[dict]:
     """global 방식 재계산 SNR 과 저장 snr 의 설정별 재현 판정.
 
     `power()` 의 depth_snr 은 위상 비닝 근사라 소수 피크는 몇 % 다를 수 있다. 그래서 설정마다 (1) 상대 차 중앙값 ≤ 1e-6 (대부분 정확히 같음),
-    (2) 1e-3 을 넘는 피크 비율 ≤ 10 %, (3) 최대 상대 차 < 0.5 를 모두 만족해야 통과. 설정·곡선 전체가 달라진 경우는 (1)·(2) 에 걸린다.
+    (2) 1e-3 을 넘는 피크 비율 ≤ 25 %(실측 4–14%), (3) 최대 상대 차 < 0.2(실측 최대 0.161 에 여유) 를 모두 만족해야 통과. 설정·곡선 전체가 달라진 경우는 (1)·(2) 에 걸린다.
     """
     out = []
     by: dict[str, list[float]] = {}
