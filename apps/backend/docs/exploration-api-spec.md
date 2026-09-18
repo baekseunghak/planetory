@@ -716,7 +716,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `selection` | candidate만 | 원본 입력. `sourcePeakGridIndex`는 사용자가 선택한 봉우리의 `gridIndex`이며 주기도의 다른 위치를 직접 선택했으면 null이다. `epoch`·`duration`·정정 주기·성과를 보내도 무시한다(SUB-01) |
 | `userJudgment` | candidate만 | `LIKELY_PLANET` / `UNLIKELY_PLANET` / `UNSURE` |
 | `evidenceChecks` | 아니오 | `oddeven`, `secondary`, `ushape` 중 0~3개. 그 외 값(중심 위치 포함)은 400(POL-13, AT-93) |
-| `memo` | 아니오 | 0~2,000 코드포인트 `확인 필요` |
+| `memo` | 아니오 | 0~200 유니코드 코드포인트. 2026-09-17 사용자 채택·프론트 적용, 서버 DTO 검증·오류 응답 반영 확인 대기 |
 | `viewState` | 아니오 | 재현용. 서버 매칭 입력이 아니며 범위만 검증(HIS-02). `foldedXZoomRatio`를 제공하면 유한한 수이며 `1 ≤ 값 ≤ 32`여야 한다. 기존 1~8 값도 유효하다(SRS v1.3.1 변경안) |
 | `retryOfSubmissionId` | 아니오 | [다시 풀기]에서 온 제출. 본인 제출·같은 TIC만 |
 
@@ -731,14 +731,18 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 1 | 인증·`published`·별 열림 | 401 / 404 / 403 `STAR_LOCKED` |
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
 | 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
-| 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.*` |
-| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 주기만 보고 가까운 봉우리를 역추정하지 않는다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
-| 6 | 정수 k가 존재해 epoch가 `observationBounds` 안 | 400 `EPOCH_OUT_OF_RANGE` |
+| 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.periodDays`(주기·위상 값이 유한하지 않거나 주기가 0 이하) 또는 `selection.phaseEnd`(위상 범위) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
+| 6 | 정수 k가 존재해 epoch가 `observationBounds`(세그먼트 시작의 최솟값 ~ 마지막 bin 끝의 최댓값) 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
 | 9 | `periodDays`가 주기도 격자 범위 `[periodMinDays, periodMaxDays]` 안(5.3절). **상위 N개 봉우리에 속할 필요는 없다**(EXP-05의 재선택은 주기도 어느 주기든 가능) | 400 `selection.periodDays` |
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
+
+**관측점과 관측 창(2026-09-18 결정):** 점 시각은 곡선 응답과 같은 bin 시작 시각 `startBtjd + (binMinutes / 1440) × i`(5.2절)이고, 결측이 아닌 점이 이어진 구간마다 관측 창 `[첫 점, 마지막 점]`을 만든다. 5단계의 관측점 존재는 창 안의 점을 bin 간격으로 표본화해 판정하고, 5.1절의 관측 통과 수 N과 통과 창 중첩도 이 창과 겹치는 통과만 센다. 프론트는 받은 곡선 점만으로 같은 판정을 재현할 수 있다.
+
+**수치 판정의 기준:** 4~7·9단계와 6.3절 3단계 매칭은 [제출 매칭 수치 규칙 v0](../../../docs/api/exploration/README.md)와 참조 구현 `matching-v0.cjs`의 계산을 그대로 따른다. 백엔드 구현(`SubmissionMatching`)은 공통 표본 31개(`matching-cases.v0.json`)의 검증·서버 산정·판정을 재현한다(S15P21C206-142). 선택 폭·허용 오차·배율은 현재 운영 규칙, 최소 창은 판의 bin 크기에서 온다(5.1절 `selectionRules`).
 
 **C02-R3 결정:** 추천 duration 3배 상한은 정답 판정 범위가 아니라 선택 폭 제한이다. 서로 다른 봉우리의 `fineTune` 범위가 겹쳐도 `sourcePeakGridIndex`가 가리키는 사용자 선택 봉우리의 `suggestedDurationHours`만 사용한다. source가 null인 직접 주기 선택은 Bundle 공통 `phaseWidthMax`만 적용한다. 추천 배열 순서나 가장 가까운 봉우리로 source를 추정하지 않는다. 3배 값은 DEC-19의 현재 기본안이며 운영값은 `selectionRules.version`으로 버전 관리한다.
 
@@ -752,6 +756,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
    - 배율 1 일치 우선 → 없으면 1/2·2배 → 조건 만족 후보 0개 not_matched / 1개 matched·matched_harmonic
    - 여러 개면 정규화 거리·통과 중첩 비교, 우세 없으면 ambiguous_match
    - 일치 후보에 이미 이 회원의 user_candidate_achievements가 있으면 duplicate
+   - 배율 방향: 정정 주기 = 제출 주기 × harmonic_multiplier (P_user × m = P_c). 사용자가 절반 주기를 고르면 m = 2, 두 배 주기를 고르면 m = 0.5
 4. submissions INSERT (원본·정정·파생값·rule_version·bundle_id)
 5. analysis_histories INSERT (snapshot_params, versions). 제출 1건당 정확히 1건이며 사용자 조작 없이 생성(HIS-01)
 6. matched·matched_harmonic·duplicate면 analysis_snapshots INSERT (150 bins, 접힌 곡선 중앙값·오차)
@@ -1268,7 +1273,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
 | D-10 | 완료 별의 `no_candidate` | 저장하지 않고 409 `STAR_ALREADY_COMPLETED` | SUB-11 "다시 제출할 필요는 없다". 저장할 의미 없음 | 6.5 | 백지웅 |
 | D-11 | 미발견 별 부족 | 있는 만큼만 열고 응답 `achievement.unlockShortfall`에 부족 수. 성과는 인정 | OPS-08 제외 규칙 안에서 처리. 다음 정본 개정 때 한 문장 추가 제안 | 9.2 | — |
-| D-12 | 입력·요청 상한 | 메모 2,000 코드포인트(서비스 댓글과 동일), 타일 요청 상자 `tileSize × 64`, 타일 페이지 limit 기본 1000·최대 2000, 잘못된 cursor 및 `locate`·타일 요청 크기 초과는 400 | 서비스 SB-D14와 통일 | 4.1, 6.1 | 하서진 |
+| D-12 | 입력·요청 상한 | 분석 메모 200 코드포인트(2026-09-17 사용자 채택·서버 반영 확인 대기), 타일 요청 상자 `tileSize × 64`, 타일 페이지 limit 기본 1000·최대 2000, 잘못된 cursor 및 `locate`·타일 요청 크기 초과는 400 | 분석 메모는 서비스 댓글의 2,000자와 별도 적용. 타일 상한은 기존 결정 유지 | 4.1, 6.1 | 하서진 |
 | D-13 | 챌린지 참여 수 집계 단위 | 대상 별의 **모든** 공식 신호 스레드에서 유효 공개 분석을 가진 회원 ID를 별 단위로 중복 제거(COUNT DISTINCT). 여러 신호에 참여해도 1명, 스레드별 N을 합산하지 않음. 공개 취소·숨김 후 다른 유효 공개가 남으면 포함 | SRS v1.1 안건 15 "회원당 1"의 구체화. 핫 토픽·판단 분포의 신호별 집계는 그대로 | 4.3 | 백승학·하서진 |
 | D-14 | 미계산 잔차의 표현 | 캐시 결과도 진행 중 작업도 없으면 `residual: {"status": null, "jobId": null}`. 조회(곡선·초안·히스토리 그래프)는 작업을 만들지 않으며 `null`은 2.4절 상태 열거형에 추가하지 않는다 | 가짜 `QUEUED`·`jobId`로 폴링을 유도하지 않음 | 2.4, 5.2, 6.8, 8.3 | 백지웅 |
 | D-15 | 타인 공개 그래프의 잔차 | 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청을 제공하지 않는다. 캐시된 잔차가 없으면 원본 곡선 또는 제출 스냅샷만 표시하고 둘 다 없으면 "그래프 제공 불가" 안내. 본인 분석의 잔차 요청 권한은 그대로 | 타인 요청으로 계산 자원을 쓰지 않음. 공개 내용(판단·메모)은 계속 표시 | 8.3, 8.5 | 백승학·백지웅 |
@@ -1342,6 +1347,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-17 | S15P21C206-149 구현 반영. 9.3절 완료 판정에 활성 후보 수를 추가해 무신호 별과 모든 후보를 찾은 별을 구분하고, `current` 판이 없으면 완료하지 않으며 판 전환 뒤에도 회원의 누적 후보 매칭을 인정한다. 재완료 시 최초 `completed_at`을 보존하며 완료 판정 함수 자체는 성과·별 열림을 만들지 않고 `no_candidate` 제출에서는 호출하지 않는다. |
 | 2026-09-17 | S15P21C206-151 구현 반영. 5.1절 `selectionRules.version`을 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열로 통일하고(별도 `sel-N` 없음, S15P21C206-128 합의) 각 값의 출처(규칙 버전·별 케이던스·판 manifest)를 명시. 12.2 미결 4·5의 값 저장 형식을 운영 규칙 형식 1로 고정하고 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)을 연결. 값 자체는 미결 유지 |
 | 2026-09-17 | S15P21C206-140 5.1절 구현 반영. `star`·`progress`·`bundle.curveStepRule`의 출처, `minWindowDays` 계산(판 세그먼트 bin 크기의 2배), 진입 시 9.3절 완료 판정 (b) 반영, 옛 판 제출의 복귀 문맥은 현재 판 값, `nextCurveContext`가 null이면 `residualForNextStep`도 null, 운영 규칙이 없으면 503을 적었다. 사용자 결정으로 `STEP_NOT_RESTORABLE` 안내를 `currentCurveContext.notice`에 두고, 한 번 완료한 튜토리얼 별은 `skipAvailable=false`로 정했다 |
+| 2026-09-18 | S15P21C206-142 구현 반영. 6.2절 4단계 실패 필드를 `selection.periodDays`·`selection.phaseEnd`로 구체화하고 5단계에 빈 위상 구간 거절, 6단계에 관측 범위 정의를 적었다. 사용자 결정으로 관측점·관측 창을 곡선 점 시각(bin 시작)의 연속 구간으로 정했다. 수치 판정은 제출 매칭 규칙 v0 참조 구현을 따르고 공통 표본으로 대조한다는 점과 6.3절 배율 방향(P_user × m = P_c)을 명시했다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

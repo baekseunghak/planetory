@@ -17,11 +17,31 @@ function unavailableApi(_req: IncomingMessage, res: ServerResponse) {
 
 export default defineConfig(async ({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const fixture = command === "serve" && !isPreview && mode === "fixture";
+  const fixture =
+    command === "serve" &&
+    !isPreview &&
+    ["fixture", "observations"].includes(mode);
+  const observations = fixture && mode === "observations";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
-  const galaxyFixture = command === "serve" && !isPreview && mode === "galaxy";
-  const testing = fixture || authFixture || skyFixture || galaxyFixture;
+  const galaxyFixture = command === "serve" && !isPreview && ["galaxy", "interaction"].includes(mode);
+  const communityFixture =
+    command === "serve" &&
+    !isPreview &&
+    [
+      "community",
+      "posts",
+      "comments",
+      "reactions",
+      "materials",
+      "profiles",
+    ].includes(mode);
+  const profileFixture =
+    command === "serve" && !isPreview && mode === "profiles"
+      ? (await import("./dev/profile-fixture-plugin.ts")).createProfileFixture()
+      : null;
+  const testing =
+    fixture || authFixture || skyFixture || galaxyFixture || communityFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
   const proxy = target
     ? Object.fromEntries(
@@ -55,8 +75,32 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   return {
     plugins: [
       react(),
+      ...(profileFixture ? [profileFixture.plugin] : []),
+      ...(communityFixture
+        ? [
+            (
+              await import("./dev/community-fixture-plugin.ts")
+            ).communityFixturePlugin(
+              [
+                "posts",
+                "comments",
+                "reactions",
+                "materials",
+                "profiles",
+              ].includes(mode),
+              ["comments", "reactions", "materials", "profiles"].includes(mode),
+              ["reactions", "materials", "profiles"].includes(mode),
+              ["materials", "profiles"].includes(mode),
+              profileFixture?.nickname,
+            ),
+          ]
+        : []),
       ...(fixture
-        ? [(await import("./dev/fixture-plugin.ts")).fixturePlugin()]
+        ? [
+            (await import("./dev/fixture-plugin.ts")).fixturePlugin(
+              observations,
+            ),
+          ]
         : []),
       ...(authFixture
         ? [(await import("./dev/auth-fixture-plugin.ts")).authFixturePlugin()]
@@ -89,6 +133,14 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : []),
     ],
     define: {
+      "import.meta.env.VITE_OBSERVATIONS": JSON.stringify(
+        observations ? "true" : "false",
+      ),
+      "import.meta.env.VITE_INTERACTION_FIXTURE": JSON.stringify(
+        command === "serve" && !isPreview && mode === "interaction"
+          ? "true"
+          : "false",
+      ),
       "import.meta.env.VITE_GALAXY_FIXTURE": JSON.stringify(
         galaxyFixture ? "true" : "false",
       ),

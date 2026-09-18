@@ -158,6 +158,7 @@ if (response.status === 401) {
 {
   "memberId": "u-101",
   "nickname": "별찾는사람",
+  "joinedAt": "2026-09-14T12:34:56Z",
   "role": "MEMBER",
   "starListVisibility": "PUBLIC",
   "tutorialCompleted": false,
@@ -170,7 +171,7 @@ if (response.status === 401) {
 }
 ```
 
-`role`은 화면 표시용이며 실제 운영 권한은 서버가 재검사한다. 튜토리얼 완료는 탐사 도메인의 판정을 사용한다. 이메일·제공자 원본 ID·토큰은 이 응답에 포함하지 않는 최소안이다.
+`joinedAt`은 `users.created_at`에 기록된 가입 시각을 ISO-8601 UTC로 반환한다. `role`은 화면 표시용이며 실제 운영 권한은 서버가 재검사한다. 튜토리얼 완료는 탐사 도메인의 판정을 사용한다. 이메일·제공자 원본 ID·토큰은 이 응답에 포함하지 않는 최소안이다.
 
 `achievementSummary`는 MY-01 마이페이지 요약이다. 값은 저장 열이 아니라 호출 시 집계한다: 발견 별 수는 `star_unlocks`, 완료 별 수는 `user_star_progress.progress_stage`, 성과 수·유형별 수는 `user_candidate_achievements`(`achievement_type`), 등급 분포는 `user_star_progress.achievement_count`를 1/2/3/4 이상으로 묶어 센다(ERD: 등급 문자는 열로 두지 않음). 원천 조회는 [탐사 API 명세 9.1절](exploration-api-spec.md) `GET /me/achievements`의 `summary`와 같은 내부 함수를 쓰며 서비스가 별도 산식을 두지 않는다. 회원 단위 합계 열·캐시는 추가하지 않는다(P1 `global_stats`·`stats_snapshots`는 전체·비교 통계용이며 개인 요약과 무관). 순위·백분위는 없다(STA-04). 타인 프로필(3.2절)은 이 중 공개 범위(SB-D23)만 같은 원천에서 내려준다.
 
@@ -194,7 +195,7 @@ if (response.status === 401) {
 
 첫 방문 안내 완료는 `PATCH /api/v1/me/onboarding`을 쓴다. 이전 초안의 `PATCH /api/v1/me/settings`는 폐기한다. onboardingDone은 true로만 가는 단방향 사건 기록이라 false를 400으로 거부하는데, 3.2절의 P1 공개 설정은 양방향이므로 같은 경로에 두면 "필드가 없다"와 "값이 틀렸다"를 구분하는 분기가 필요해진다. 경로를 나누면 P1이 `PATCH /api/v1/me/settings`를 예외 없이 쓴다. 요청·응답 본문과 검증 규칙은 바꾸지 않았다.
 
-`S15P21C206-157`에서 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 API를 구현했다. 기존 `GET /me`와 탐사 성과 요약을 재사용한다. 게시글·댓글·반응자의 최신 닉네임 표시와 C10 첫 제출 연동은 해당 후속 구현에서 함께 검증한다.
+`S15P21C206-157`에서 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 API를 구현했고, `S15P21C206-242`에서 본인 `GET /me`의 가입일을 보완했다. 기존 `GET /me`와 탐사 성과 요약을 재사용한다. 게시글·댓글·반응자의 최신 닉네임 표시와 C10 첫 제출 연동은 해당 후속 구현에서 함께 검증한다.
 
 ### 3.2 공개 설정(P1)·타인 프로필·별 목록(P0)
 
@@ -209,7 +210,7 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
  "achievementSummary":{"signalCount":7,"starCountByGrade":{"A":3,"S":1,"SS":0,"SSS":0}}}
 ```
 
-성과 요약은 별 목록 비공개와 무관하게 제공한다(MY-04·DEC-34). 3.1절 본인 요약과 같은 내부 함수로 집계하며 등급은 achievement_count에서 계산한다. 이메일·제공자 정보·로그인/세션 기록·개인 History는 포함하지 않는다. 가입일·팔로우 목록·활동 이력은 초기 제외하고 필요할 때 확장한다.
+성과 요약은 별 목록 비공개와 무관하게 제공한다(MY-04·DEC-34). 3.1절 본인 요약과 같은 내부 함수로 집계하며 등급은 achievement_count에서 계산한다. 타인 프로필에는 이메일·제공자 정보·로그인/세션 기록·개인 History·가입일·팔로우 목록·활동 이력을 포함하지 않는다.
 
 `GET /api/v1/me/stars`와 `GET /api/v1/members/{memberId}/stars`의 응답·정렬·필터는 **[탐사 API 명세 4.4절](exploration-api-spec.md)이 MY-02 전체 필드로 정의하며, 이 절은 그 정의를 참조한다**([API 명세 파트 분담](README.md) 2장 결정). 진행 단계·행성 수·등급·곡선 단계·미게시 수·최근 활동 시각이 모두 탐사 데이터이므로 이 문서에서 별도 항목 구조를 두지 않는다. 이전 초안의 `ticId/discoveredAt/isComplete` 최소 항목은 폐기한다.
 
@@ -821,3 +822,4 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 2026-09-11 | 36번 통합 검토: History 필드·그래프 외형·성과 DTO 매핑·챌린지 v1.1 정합화. 메모 공개 유지 및 첫 방문 안내 완료 설정 P0는 사용자 확인. 탐사 D-7/9/11 연결은 리뷰 대상 |
 
 | 2026-09-14 | `S15P21C206-33` 지도 담당 결정 반영안: HOME-09 사용법 다시 보기를 GIF+설명 5단계 읽기로 정의. 기존 onboardingDone=true 전용·false/null 400·반복 true 멱등 규칙 유지. 탐사 API 4.1과 충돌하던 재설정 문구 정합화(교차 리뷰 대상) |
+| 2026-09-18 | `S15P21C206-242`: MY-01 P0 누락 보완. 본인 `GET /me`에 `users.created_at` 기반 `joinedAt`을 ISO-8601 UTC로 추가하고 타인 프로필 공개 범위는 유지 |

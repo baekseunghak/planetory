@@ -1,0 +1,162 @@
+.fold-panel {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.fold-panel button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.fold-feedback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px;
+  align-items: start;
+  gap: 12px;
+  min-block-size: 4.5em;
+  margin-block: 16px;
+}
+.fold-feedback p {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.fold-action-idle {
+  visibility: hidden;
+}
+.fold-figure {
+  position: relative;
+  margin: 16px 0 0 95px;
+}
+.fold-plot {
+  position: relative;
+  height: 280px;
+  width: 100%;
+  touch-action: pan-y pinch-zoom;
+}
+.phase-selection-layer,
+.phase-band-clip,
+.phase-draw-target {
+  position: absolute;
+  inset: 0;
+}
+.phase-selection-layer {
+  pointer-events: none;
+  user-select: none;
+}
+.phase-band-clip {
+  overflow: hidden;
+}
+.phase-band {
+  position: absolute;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--band);
+  border-inline: 1px solid var(--accent);
+}
+.phase-band[data-invalid="true"] {
+  background: rgba(238, 238, 238, 0.06);
+  border: 1px dashed var(--fg-3);
+}
+.phase-draw-target {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+.fold-panel .phase-handle {
+  position: absolute;
+  transform: translateX(-50%);
+  min-width: 44px;
+  padding: 4px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+  color: var(--fg-1);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+}
+.phase-handle-0 {
+  top: 0;
+}
+.phase-handle-1 {
+  bottom: 0;
+}
+.fold-panel .phase-handle:hover:not(:disabled) {
+  background: var(--accent-fill);
+}
+.phase-handle:focus-visible,
+.phase-draw-target:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.phase-selection-layer[data-enabled="false"] {
+  opacity: 0.6;
+}
+.phase-selection-status {
+  min-height: 3em;
+  overflow-wrap: anywhere;
+}
+.phase-selection p {
+  font-variant-numeric: tabular-nums;
+}
+.fold-plot canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fold-gpu-surface {
+  width: 100%;
+  height: 100%;
+}
+.fold-renderer-controls select {
+  min-height: 44px;
+  max-width: 100%;
+  font: inherit;
+  color: var(--fg-1);
+  background-color: var(--control-bg);
+  touch-action: manipulation;
+}
+.fold-renderer-controls select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.fold-renderer-controls p {
+  min-height: 1.5em;
+  overflow-wrap: anywhere;
+}
+.fold-plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.fold-y-axis {
+  position: absolute;
+  width: 86px;
+  height: 280px;
+  right: calc(100% + 9px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.fold-x-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-block: 8px;
+}
+.fold-inspector {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .fold-figure {
+    margin-left: 66px;
+  }
+  .fold-y-axis {
+    width: 58px;
+    font-size: 10px;
+  }
+  .fold-panel .periodogram-toolbar {
+    gap: 8px;
+  }
+}
