@@ -2,6 +2,7 @@ import { ApiError } from "../../api/client";
 export type Profile = {
   memberId: string;
   nickname: string;
+  joinedAt?: string;
   starListVisibility: "PUBLIC" | "PRIVATE";
   achievementSummary: {
     signalCount: number;
@@ -26,6 +27,28 @@ const text = (v: unknown) =>
   typeof v === "string" && v.trim() ? v : invalid();
 const count = (v: unknown) =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : invalid();
+const joinedAt = (v: unknown): string => {
+  if (
+    typeof v !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/.test(v)
+  )
+    return invalid();
+  const date = new Date(v);
+  if (
+    !Number.isFinite(date.getTime()) ||
+    date.toISOString().slice(0, 19) !== v.slice(0, 19)
+  )
+    return invalid();
+  return v;
+};
+const joinedDateFormat = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+export const formatJoinedDate = (value: string) =>
+  joinedDateFormat.format(new Date(value));
 export function readProfile(
   value: unknown,
   memberId: string,
@@ -54,6 +77,7 @@ export function readProfile(
     },
   };
   if (own) {
+    result.joinedAt = joinedAt(row.joinedAt);
     const types = object(summary.byType);
     Object.assign(result.achievementSummary, {
       discoveredStarCount: count(summary.discoveredStarCount),

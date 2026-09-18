@@ -26,6 +26,7 @@ export function createProfileFixture() {
           send({
             memberId: "u-209",
             nickname,
+            joinedAt: "2026-09-14T15:30:00Z",
             role: "MEMBER",
             starListVisibility: "PUBLIC",
             tutorialCompleted: true,

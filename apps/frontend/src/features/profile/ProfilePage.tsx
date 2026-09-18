@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useReadModel } from "../community/useReadModel";
-import { readProfile, type Profile } from "./contracts";
+import { formatJoinedDate, readProfile, type Profile } from "./contracts";
 import { NicknameEditor } from "./NicknameEditor";
 import {
   ProfileSection,
@@ -158,8 +158,12 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
       </section>
       {own ? (
         <dl className="profile-meta">
-          <dt>가입일</dt>
-          <dd>서버에서 아직 제공하지 않습니다.</dd>
+          <dt>가입일 (한국 시간)</dt>
+          <dd>
+            <time dateTime={profile.joinedAt}>
+              {formatJoinedDate(profile.joinedAt!)}
+            </time>
+          </dd>
         </dl>
       ) : (
         <p className="profile-meta">

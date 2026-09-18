@@ -59,15 +59,19 @@ test("own summary uses server counts; public whitelist and private stars stay di
   await expect(page.locator(".profile-summary")).toContainText("57");
   await expect(page.locator(".profile-summary")).toContainText("5");
   await expect(page.locator(".profile-summary")).toContainText("9");
-  await expect(
-    page.getByText("서버에서 아직 제공하지 않습니다."),
-  ).toBeVisible();
+  await expect(page.locator(".profile-meta time")).toHaveText(
+    "2026년 9월 15일",
+  );
+  await expect(page.locator(".profile-meta time")).toHaveAttribute(
+    "datetime",
+    "2026-09-14T15:30:00Z",
+  );
   await expect(
     page.getByRole("button", { name: "내 분석 기록", exact: true }),
   ).toBeVisible();
   await page.goto("/members/u-210");
   await expect(page.getByRole("heading", { name: "다른탐사자" })).toBeVisible();
-  await expect(page.getByText("가입일", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/가입일/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "닉네임 변경" })).toHaveCount(
     0,
   );
@@ -84,6 +88,26 @@ test("own summary uses server counts; public whitelist and private stars stay di
   await expect(page).toHaveURL(/\/me$/);
   await page.goto("/members/u-999");
   await expect(page.getByText(/회원을 찾을 수 없습니다/)).toBeVisible();
+});
+test("missing or invalid own joinedAt shows a recoverable contract error, not a fabricated date", async ({
+  page,
+}) => {
+  for (const joinedAt of [undefined, "2026-13-01T00:00:00Z"]) {
+    await page.route("**/api/v1/me", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ json: { ...(await response.json()), joinedAt } });
+    });
+    await page.goto("/me");
+    await expect(page.getByRole("alert")).toContainText(
+      "프로필 정보를 확인할 수 없습니다.",
+    );
+    await expect(page.locator(".profile-meta time")).toHaveCount(0);
+    await page.unroute("**/api/v1/me");
+  }
+  await page.getByRole("button", { name: "다시 불러오기" }).click();
+  await expect(page.locator(".profile-meta time")).toHaveText(
+    "2026년 9월 15일",
+  );
 });
 test("nickname validation, conflict, NFC save and author/header refresh", async ({
   page,

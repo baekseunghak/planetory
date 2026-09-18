@@ -7,6 +7,7 @@ test("built profile uses HTTP identity, includes guide assets, and does not inve
       json: {
         memberId: "prod-profile",
         nickname: "운영검사",
+        joinedAt: "2026-09-14T12:34:56Z",
         role: "MEMBER",
         onboardingDone: true,
         tutorialCompleted: true,
@@ -26,6 +27,9 @@ test("built profile uses HTTP identity, includes guide assets, and does not inve
     page.getByRole("heading", { name: "운영검사", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".profile-summary")).toContainText("83");
+  await expect(page.locator(".profile-meta time")).toHaveText(
+    "2026년 9월 14일",
+  );
   await expect(page.getByTestId("community-fixture-notice")).toHaveCount(0);
   await page.getByRole("button", { name: "사용법 다시 보기" }).click();
   await expect
