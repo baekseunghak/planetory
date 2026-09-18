@@ -109,3 +109,4 @@
 | 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
