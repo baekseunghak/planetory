@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import { resolve } from "node:path";
 import { observationFixtureResponse } from "./observation-fixtures.ts";
+import { periodogramFixtureResponse } from "./periodogram-fixtures.ts";
 import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
@@ -39,7 +40,9 @@ export function fixturePlugin(observations = false): Plugin {
                   url,
                   resolve(server.config.root, "dev/observations"),
                 )
-              : null) ?? analysisFixtureResponse(url);
+              : null) ??
+            periodogramFixtureResponse(url) ??
+            analysisFixtureResponse(url);
           if (analysis) {
             res.statusCode = analysis.status;
             res.setHeader(

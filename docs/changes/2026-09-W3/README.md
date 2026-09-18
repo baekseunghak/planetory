@@ -82,3 +82,5 @@
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
 
 | 2026-09-18 | 분석 응답 파서를 실제 서버 계약에 맞춤 | S15P21C206-182 | 계약 불일치, bundleVersion 문자열, binningRevision, 202 CURVE_NOT_READY, currentCurveContext.notice, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 주기도 대기 응답을 실제 서버 계약에 맞춤 | S15P21C206-183 | 주기도 202, power null, code 없음, decodePendingPeriodogram, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |

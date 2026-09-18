@@ -113,6 +113,8 @@ Chrome 개발자 도구의 Network에서 `analysis-context`와 `curves`를 필�
 
 ## 최신 공통 기반 통합 검증
 
+#183에서는 문맥·곡선 조회와 주기도·봉우리 조회가 판 변경 자동 복구 1회 한도를 공유한다. 주기도에서 새 판을 감지하면 이 문맥 로더부터 다시 읽고 이전 선택을 제거한다. 상세 흐름과 후속 검증은 [주기도 개발 안내](periodogram-data.md)의 4단계를 따른다.
+
 2026-09-16에는 `origin/develop`의 `b353514`를 받고 갱신된 `AGENTS.md`를 다시 확인했다. #201 공통 기반은 develop에 병합되어 있었으며, #182를 이 기준으로 rebase했다. API 클라이언트와 공통 계약 문서의 충돌을 해소하면서 #201의 비동기 CSRF·요청 취소 처리, OAuth 프록시와 fixture 쿠키 확인을 유지했다. #182의 응답 메타데이터 옵션은 분석 로더의 Bundle 변경 감지에 사용한다.
 
 통합 후 `npm run check`, `npm run test:observations`, `npm run format:check -- --end-of-line auto`가 통과했다. 타입 검사·프로덕션 빌드·fixture 제외 검사와 함께 단위 41개, Chromium 20개, 프로덕션 2개, 실관측 브라우저 1개(전체 64개)를 검증했다. 실관측 입력·가공 방식은 [관측 데이터 안내](observation-fixtures.md)를 따른다.

@@ -30,6 +30,37 @@ const json = (body: unknown, bundleId?: string, status = 200) =>
     headers: bundleId ? { "X-Current-Bundle": bundleId } : {},
   });
 
+test("an already consumed shared recovery budget stops a curve race after one pair", async () => {
+  const paths: string[] = [];
+  const before = snapshot(oldId);
+  const client = createApiClient({
+    baseUrl: "/api",
+    fetch: async (input) => {
+      paths.push(String(input));
+      return String(input).endsWith("analysis-context")
+        ? json(before.context)
+        : json(before.curve, newId);
+    },
+  });
+  let claims = 0;
+  await assert.rejects(
+    loadAnalysis(
+      client.request,
+      tic,
+      new AbortController().signal,
+      () => {},
+      undefined,
+      () => {
+        claims++;
+        return false;
+      },
+    ),
+    /계속 바뀌어/,
+  );
+  assert.equal(paths.length, 2);
+  assert.equal(claims, 1);
+});
+
 for (const failure of ["header", "409", "unreadable"] as const)
   test(`recovers a ${failure} Bundle race once and preserves server residual context`, async () => {
     const before = snapshot(oldId, true),

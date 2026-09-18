@@ -4,9 +4,10 @@ import { createHash } from "node:crypto";
 import { OBSERVATION_TARGETS, CONVERSION_VERSION } from "./observation-data.ts";
 
 export async function observationFixtureResponse(url: URL, directory: string) {
-  const match = /^\/v1\/stars\/([^/]+)\/(analysis-context|curves)$/.exec(
-    url.pathname,
-  );
+  const match =
+    /^\/v1\/stars\/([^/]+)\/(analysis-context|curves|periodogram|candidate-peaks)$/.exec(
+      url.pathname,
+    );
   if (
     !match ||
     !OBSERVATION_TARGETS.some((target) => target.ticId === match[1])
@@ -50,6 +51,16 @@ export async function observationFixtureResponse(url: URL, directory: string) {
         body: {
           code: "VALIDATION_FAILED",
           message: "이 관측 예제는 원본 단계만 제공합니다.",
+        },
+        currentBundleId,
+      };
+    if (resource === "periodogram" || resource === "candidate-peaks")
+      return {
+        status: 503,
+        body: {
+          code: "DEPENDENCY_UNAVAILABLE",
+          message:
+            "이 관측 곡선과 일치하는 주기도·봉우리 자료는 아직 연결하지 않았습니다.",
         },
         currentBundleId,
       };

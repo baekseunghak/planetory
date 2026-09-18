@@ -10,6 +10,8 @@ const sentinels = [
   "community-fixture-member-209",
   "209 개발 검증용 데이터",
   "data-camera",
+  "pg-synthetic-183-v1",
+  "peaks-synthetic-183-v1",
   "prototype-observation-10m-mean-v1",
   "프로토타입 관측 데이터입니다",
   "sourceSha256",

@@ -14,6 +14,7 @@ export type AnalysisContext = {
   bundleVersion: string;
   foldReferenceTimeBtjd: Btjd;
   curveContext: CurveContext;
+  periodSelectionRules?: { version: string; halfWidthCells: number };
   notice?: "STEP_NOT_RESTORABLE";
 };
 export type CurveSegment = {
@@ -61,7 +62,7 @@ function array(value: unknown, field: string): unknown[] {
   if (!Array.isArray(value)) invalid(field);
   return value;
 }
-function readCurveContext(value: unknown): CurveContext {
+export function readCurveContext(value: unknown): CurveContext {
   const data = record(value, "curveContext");
   const removed = array(data.removedCandidateIds, "removedCandidateIds")
     .map((id) => text(id, "removedCandidateIds"))
@@ -119,6 +120,21 @@ export function decodeAnalysisContext(
     if (text(bundle[field], field) !== curveContext[field])
       invalid(`bundle/${field}`);
   // Keep only fields consumed here. Candidate answers and other unrelated data are not copied.
+  const rules =
+    data.selectionRules === undefined
+      ? undefined
+      : record(data.selectionRules, "selectionRules");
+  const periodSelectionRules =
+    rules === undefined
+      ? undefined
+      : {
+          version: text(rules.version, "selectionRules.version"),
+          halfWidthCells: integer(
+            record(rules.fineTune, "fineTune").halfWidthCells,
+            "halfWidthCells",
+            1,
+          ),
+        };
   return {
     ticId,
     sectors,
@@ -129,6 +145,7 @@ export function decodeAnalysisContext(
       "foldReferenceTimeBtjd",
     ) as Btjd,
     curveContext,
+    ...(periodSelectionRules ? { periodSelectionRules } : {}),
     ...(record(data.currentCurveContext, "currentCurveContext").notice ===
     "STEP_NOT_RESTORABLE"
       ? ({ notice: "STEP_NOT_RESTORABLE" } as const)
