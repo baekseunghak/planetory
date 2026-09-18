@@ -20,7 +20,7 @@ test("full/detail view supports keyboard, rank inspection and arbitrary grid loo
   await expect(
     panel.getByRole("region", { name: "이미 매칭한 주기 목록" }),
   ).toContainText("3.25일");
-  await expect(panel).toContainText("3.5일 초과");
+  await expect(panel).toContainText("60일 초과");
   expect(await panel.locator("canvas").count()).toBe(2);
   const count = requests.length;
   await plot.focus();

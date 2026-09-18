@@ -33,7 +33,7 @@ test("5000 log periods preserve the full power array, exact endpoints, public pe
   assert.equal(periodAt(data, 4999), 40);
   assert.ok(Math.abs(periodAt(data, 2500) - 0.5 * 80 ** (2500 / 4999)) < 1e-12);
   assert.deepEqual(data.power, periodogramFixture().power);
-  assert.equal(data.baselineHalfDays, 3.5);
+  assert.equal(data.baselineHalfDays, 60);
   assert.equal(peaks.peaks[0].gridIndex, 3600);
   assert.equal(peaks.peaks[0].rank, 1);
   assert.equal(

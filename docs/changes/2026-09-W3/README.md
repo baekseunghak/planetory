@@ -23,6 +23,10 @@
 | 2026-09-16 | Tailscale 팀 등록과 서버 접근 범위 문서화 | S15P21C206-71 | Tailscale, tailnet 초대, 장비 승인, tag:hadoop, MagicDNS, SSH, EC2, GCP | 검증 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 마이 프로필 P0 구현 — 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 | S15P21C206-157 | 닉네임 변경, NICKNAME_CONFLICT, lower(nickname), NFC 정규화, SB-D14, 온보딩, onboarding_done, ON CONFLICT, 타인 프로필, SB-D23, 탈퇴 404, 성과 요약 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Gold 게시 계약과 Publisher·Backend·Frontend 합성 fixture 정합화 | S15P21C206-68 | Gold 계약, PublicationBundle, current, archived, Redis, payload, fixture, field unit, checksum | 검증 완료 | [2026-09-16](2026-09-16.md) |
+
+| 2026-09-16 | SRS v1.3.1 접기 위치 유지·최대 32배 확대 | 없음(요구사항 예외), 참고 #184 | EXP-13, AT-91, AT-96, foldedXZoomRatio, 중심 위상, 32배 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-16.md#접힌-곡선의-위치-유지와-최대-32배-확대-변경안) |
+| 2026-09-16 | 개발용 GPU 표시 연결과 자동 Canvas 전환 | S15P21C206-184 | WebGL, Float64, context loss, 개발 모드, 배포 제외, 성능 검증 | 개발용 구현 완료·기본 적용 보류 | [기록](2026-09-16.md#s15p21c206-184-개발용-gpu-표시-연결과-일반-배포-경계) |
+| 2026-09-16 | 연속 미세 조정의 안내·취소 버튼 깜빡임 완화 | S15P21C206-184 | 상태 안내, 표시 지연, 취소, session.ready, 슬라이더 | 구현·로컬 검증 완료 | [기록](2026-09-16.md#s15p21c206-184-연속-미세-조정의-안내-깜빡임-완화) |
 | 2026-09-16 | EC2 진입·PostgreSQL 장애 전환 경계 확정 — DNS 라운드로빈·상호 감시·포트 행렬 | S15P21C206-82 | Cloudflare, proxied, 라운드로빈, 상호 감시, split-brain, Origin CA, Full strict, 포트 행렬, Redis EC2-B, Standby 수동 승격, 계정 분리, Tunnel replica, Load Balancing | 채택 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Publisher 멱등 적재 키와 단일 트랜잭션 rollback 책임 확정 | S15P21C206-69 | Publisher, idempotency, bundle_version, external snapshot, switch order, semantic payload, superseded, rollback, Airflow, fixture, ERD v1.6 | 검증 완료·Data 승인·Backend 재검토 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |

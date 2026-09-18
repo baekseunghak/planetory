@@ -1,0 +1,96 @@
+.fold-panel {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.fold-panel button {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.fold-feedback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px;
+  align-items: start;
+  gap: 12px;
+  min-block-size: 4.5em;
+  margin-block: 16px;
+}
+.fold-feedback p {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.fold-action-idle {
+  visibility: hidden;
+}
+.fold-figure {
+  position: relative;
+  margin: 16px 0 0 95px;
+}
+.fold-plot {
+  height: 280px;
+  width: 100%;
+  touch-action: pan-y pinch-zoom;
+}
+.fold-plot canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fold-gpu-surface {
+  width: 100%;
+  height: 100%;
+}
+.fold-renderer-controls select {
+  min-height: 44px;
+  max-width: 100%;
+  font: inherit;
+  color: #e5e9ee;
+  background-color: #070a0f;
+  touch-action: manipulation;
+}
+.fold-renderer-controls select:focus-visible {
+  outline: 2px solid #accdfa;
+  outline-offset: 4px;
+}
+.fold-renderer-controls p {
+  min-height: 1.5em;
+  overflow-wrap: anywhere;
+}
+.fold-plot:focus-visible {
+  outline: 2px solid #accdfa;
+  outline-offset: 4px;
+}
+.fold-y-axis {
+  position: absolute;
+  width: 86px;
+  height: 280px;
+  right: calc(100% + 9px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.fold-x-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-block: 8px;
+}
+.fold-inspector {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .fold-figure {
+    margin-left: 66px;
+  }
+  .fold-y-axis {
+    width: 58px;
+    font-size: 10px;
+  }
+  .fold-panel .periodogram-toolbar {
+    gap: 8px;
+  }
+}

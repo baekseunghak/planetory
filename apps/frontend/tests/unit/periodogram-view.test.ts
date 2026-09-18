@@ -86,7 +86,7 @@ test("Canvas draws every visible grid value, observation-limit shading and match
   ) as CanvasRenderingContext2D;
   drawPeriodogram(
     ctx,
-    buildPeriodPlot(grid),
+    buildPeriodPlot({ ...grid, baselineHalfDays: 3.5 }),
     candidates,
     FULL_PERIOD_VIEW,
     800,
