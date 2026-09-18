@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   Link,
   useLocation,
@@ -26,6 +26,7 @@ import {
 import { useReadModel } from "./useReadModel";
 import { usePageScroll } from "./usePageScroll";
 import "./community.css";
+import { PostActions } from "./PostActions";
 
 function DateTime({ value }: { value: string }) {
   return (
@@ -165,6 +166,16 @@ export function CommunityPage() {
             : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}
         </p>
       </header>
+      <div className="post-actions">
+        <Link
+          to={
+            pagePath("postCreate", {}, { ticId, returnTo: current }) +
+            (!ticId && board === "STAR" ? "&board=STAR" : "")
+          }
+        >
+          새 글 쓰기
+        </Link>
+      </div>
       <nav className="community-tabs" aria-label="게시판 종류">
         <Link to="/community" aria-current={!board ? "page" : undefined}>
           전체
@@ -313,6 +324,13 @@ export function PostPage() {
   const [search] = useSearchParams();
   const cursor = search.get("discussionCursor");
   const path = `/v1/posts/${encodeURIComponent(postId)}`;
+  const [denied, setDenied] = useState<{ id: string; error: Error } | null>(
+    null,
+  );
+  const onUnavailable = useCallback(
+    (error: Error) => setDenied({ id: postId, error }),
+    [postId],
+  );
   const load = useCallback(
     async (signal: AbortSignal) => {
       const post = readPost(await api(path, { signal }));
@@ -330,7 +348,15 @@ export function PostPage() {
   return (
     <div className="community-page community-detail">
       <DetailBack />
-      {!state.data ? (
+      <PostActions
+        key={postId}
+        postId={postId}
+        post={denied?.id === postId ? null : (state.data?.post ?? null)}
+        onUnavailable={onUnavailable}
+      />
+      {denied?.id === postId ? (
+        <ErrorState error={denied.error} />
+      ) : !state.data ? (
         <ReadState state={state} />
       ) : (
         <>

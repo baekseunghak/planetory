@@ -6,6 +6,7 @@ import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
+import { PostEditorPage } from "./features/community/PostEditorPage";
 import {
   CommunityPage,
   PostPage,
@@ -35,6 +36,8 @@ async function start() {
     community: CommunityPage,
     starBoard: CommunityPage,
     post: PostPage,
+    postCreate: PostEditorPage,
+    postEdit: PostEditorPage,
     thread: SignalThreadPage,
   };
   if (import.meta.env.VITE_SKY_RENDERER_ENABLED === "true")
