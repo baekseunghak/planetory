@@ -25,6 +25,7 @@ export function Pager({
   };
   const state = (values: string[]) => ({
     ...location.state,
+    communityRestore: undefined,
     communityCursors: { ...location.state?.communityCursors, [name]: values },
   });
   return (

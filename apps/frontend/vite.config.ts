@@ -24,7 +24,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const observations = fixture && mode === "observations";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
-  const galaxyFixture = command === "serve" && !isPreview && ["galaxy", "interaction"].includes(mode);
+  const galaxyFixture =
+    command === "serve" &&
+    !isPreview &&
+    ["galaxy", "interaction"].includes(mode);
   const communityFixture =
     command === "serve" &&
     !isPreview &&
@@ -35,6 +38,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "reactions",
       "materials",
       "profiles",
+      "search",
     ].includes(mode);
   const profileFixture =
     command === "serve" && !isPreview && mode === "profiles"
@@ -80,19 +84,27 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         ? [
             (
               await import("./dev/community-fixture-plugin.ts")
-            ).communityFixturePlugin(
-              [
+            ).communityFixturePlugin({
+              writable: [
                 "posts",
                 "comments",
                 "reactions",
                 "materials",
                 "profiles",
               ].includes(mode),
-              ["comments", "reactions", "materials", "profiles"].includes(mode),
-              ["reactions", "materials", "profiles"].includes(mode),
-              ["materials", "profiles"].includes(mode),
-              profileFixture?.nickname,
-            ),
+              commentWrites: [
+                "comments",
+                "reactions",
+                "materials",
+                "profiles",
+              ].includes(mode),
+              reactionWrites: ["reactions", "materials", "profiles"].includes(
+                mode,
+              ),
+              materialWrites: ["materials", "profiles"].includes(mode),
+              currentNickname: profileFixture?.nickname,
+              searchable: mode === "search",
+            }),
           ]
         : []),
       ...(fixture
