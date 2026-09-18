@@ -270,7 +270,44 @@ export function galaxyFixturePlugin(): Plugin {
             ticId: star.ticId,
             version: version(),
             presentationVersion: PRESENTATION_VERSION,
+            star: {
+              sectorCount: 2,
+              sectors: [14, 41],
+              tmag: 9.8,
+              teffK: null,
+              radiusRsun: null,
+            },
+            progress: {
+              stage: star.progressStage,
+              currentCurveStep: 0,
+              completionReason: null,
+              reopenPending: false,
+              reopenedAt: null,
+              completedAt: null,
+            },
+            achievement: {
+              count: star.planetCount ? 1 : 0,
+              grade: star.planetCount ? "A" : null,
+              byType: {
+                confirmed: star.planetCount ? 1 : 0,
+                unconfirmed: 0,
+                fp: 0,
+              },
+            },
+            actions: {
+              analysis:
+                star.progressStage === "completed"
+                  ? "review"
+                  : star.progressStage === "in_progress"
+                    ? "continue"
+                    : "start",
+              resultAvailable: star.progressStage !== "unexplored",
+              boardOpen: true,
+              threadCount: 1,
+            },
             unlock: {
+              reason: "tutorial",
+              unlockedAt: "2026-09-15T05:20:00Z",
               position: {
                 x: star.x,
                 y: star.y,

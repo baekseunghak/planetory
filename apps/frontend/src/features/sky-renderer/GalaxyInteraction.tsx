@@ -38,6 +38,7 @@ type Props = SkySceneProps & {
   changeCamera(camera: GalaxyCamera): void;
   fitAll(): void;
   onPlanetSelect?: (candidateId: string | null) => void;
+  onDeselect?: () => void;
 };
 // Stars update on data/camera changes; the animation callback visits only the selected system.
 export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
@@ -181,7 +182,8 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       } else {
         setSelectedPlanet(null);
         p.onPlanetSelect?.(null);
-        p.store.select(target?.id ?? null);
+        if (!target && p.onDeselect) p.onDeselect();
+        else p.store.select(target?.id ?? null);
         setSelectionText(target?.label ?? "선택을 해제했습니다.");
       }
       show(target);
@@ -429,12 +431,13 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     useEffect(() => {
       const host = layer.current;
       if (!host) return;
-      const candidates = enabled
-        ? index.targets.flatMap((t) => {
-            const label = markerLabel(t.star!, tutorials, challengeTicId);
-            return label ? [{ target: t, label }] : [];
-          })
-        : [];
+      const candidates =
+        enabled && !system
+          ? index.targets.flatMap((t) => {
+              const label = markerLabel(t.star!, tutorials, challengeTicId);
+              return label ? [{ target: t, label }] : [];
+            })
+          : [];
       const available = new Map(candidates.map((c) => [c.target.id, c]));
       // Keep existing nodes for persistent IDs, then recycle retired slots before allocating.
       for (const button of pool.current) {
