@@ -1,2 +1,3 @@
 # 변경 이력은 append-only 로그이므로 병합 충돌 대신 양쪽 항목을 모두 보존한다.
 docs/changes/**/*.md merge=union
+infra/distributed-system/scripts/*.sh text eol=lf

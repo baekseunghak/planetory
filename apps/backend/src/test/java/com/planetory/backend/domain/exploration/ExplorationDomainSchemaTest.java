@@ -72,8 +72,7 @@ class ExplorationDomainSchemaTest {
                 + " VALUES (?, 'active', ?, 1, 3.0, 1501.0, 2.8, 900, 12.5, '{}'::jsonb, true, true)"
                 + " RETURNING id", Long.class, ticId, bundleId);
 
-        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
-                + " VALUES ('r-1', '{}'::jsonb, now(), 'test') ON CONFLICT DO NOTHING");
+        // submissions.rule_version은 V9가 넣은 초기 규칙 rule-0을 쓴다. '{}' 같은 임의 값은 CHECK가 거절한다.
     }
 
     private static final String MANIFEST = """
@@ -368,7 +367,7 @@ class ExplorationDomainSchemaTest {
                         + " periodogram_config_version, rule_version)"
                         + " VALUES (?, ?, ?, ?::uuid, ?, 1, '{}', ?::numeric, ?::numeric, ?::numeric, ?,"
                         + " ?::numeric, ?::numeric, 1500.5, ?::numeric, ?::numeric, ?, '{}'::jsonb, ?, ?,"
-                        + " ?, 'rm-1', 'pg-1', 'r-1') RETURNING id",
+                        + " ?, 'rm-1', 'pg-1', 'rule-0') RETURNING id",
                 Long.class, userId, ticId, bundleId, UUID.randomUUID().toString(), s.kind,
                 s.submittedPeriod, s.matchedPeriod, s.harmonicMultiplier, s.correctionReason,
                 s.phaseStart, s.phaseEnd, s.epochBtjd, s.durationHours, s.judgment,

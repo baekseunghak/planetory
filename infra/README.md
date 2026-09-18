@@ -2,7 +2,7 @@
 
 프로그램을 어느 서버에서 어떻게 실행할지 정의한다.
 
-- `service/`: EC2-A/B 배포 설정
+- `service/`: EC2-A 배포 설정. 서비스 인스턴스는 EC2-A 1개이며 `service/ec2-b/`와 EC2-B 배포 job은 사용하지 않는다(정리는 `S15P21C206-84`·`S15P21C206-93`)
 - `distributed-system/`: GCP Node 1~6의 Hadoop/YARN 설정과 작업 컨테이너 실행
 - `provisioning/gcp/`: GCP VM·디스크·VPC·피어링 생성 및 확인
 

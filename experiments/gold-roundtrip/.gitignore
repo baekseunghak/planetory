@@ -1,0 +1,7 @@
+# round-trip 보고서·가상환경은 Git 에 넣지 않는다. fixtures/ 의 payload 예제는 넣는다(계약 예제, 재생성 가능).
+results/
+.venv/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.pyc
