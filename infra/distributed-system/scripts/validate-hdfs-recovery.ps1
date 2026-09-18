@@ -23,6 +23,7 @@ $nodes=@(
 )
 $node1=$nodes[0]
 $node2=$nodes[1]
+$node3=$nodes[2]
 $worker=$nodes[$WorkerNode-1]
 $workerVm="worker-$WorkerNode"
 $validationRoot="/validation/S15P21C206-74/run-$RunId"
@@ -189,10 +190,15 @@ echo PLANNED_TO_NN2_OK
  'StopNode1' {
   Assert-RemoteHost $node1
   Assert-RemoteHost $node2
+  Assert-RemoteHost $node3
   Assert-InstanceStatus $Node1ProjectId master-1 RUNNING
   Assert-NoRunningYarnApplications $node1
   $command='set -eu; test "$('+$hdfs+' haadmin -getServiceState nn1)" = active; test "$('+$hdfs+' haadmin -getServiceState nn2)" = standby; '+$hdfs+' dfs -cat "'+$baselinePath+'" >/dev/null; systemctl is-active --quiet hadoop-hdfs-journalnode; systemctl is-active --quiet hadoop-hdfs-namenode; systemctl is-active --quiet hadoop-yarn-resourcemanager; echo NODE1_STOP_PREREQUISITES_OK'
   $null=Invoke-Remote $node1 $command 'Node 1 stop prerequisites'
+  $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; timeout 3 bash -c "</dev/tcp/worker-3/8485"; timeout 3 bash -c "</dev/tcp/worker-3/8480"; echo NODE2_SURVIVING_JOURNAL_QUORUM_OK'
+  $null=Invoke-Remote $node2 $command 'Confirm surviving JournalNode quorum from Node 2'
+  $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; echo NODE3_SURVIVING_JOURNAL_QUORUM_OK'
+  $null=Invoke-Remote $node3 $command 'Confirm surviving JournalNode on Node 3'
   $started=Get-Date
   $null=Invoke-Gcloud compute instances stop master-1 "--project=$Node1ProjectId" --zone=asia-east1-b --quiet
   Wait-InstanceStatus $Node1ProjectId master-1 TERMINATED
@@ -201,7 +207,8 @@ echo PLANNED_TO_NN2_OK
  'PromoteNode2' {
   Assert-InstanceStatus $Node1ProjectId master-1 TERMINATED
   Assert-RemoteHost $node2
-  Assert-RemoteHost $nodes[2]
+  Assert-RemoteHost $node3
+  Assert-InstanceStatus $Node1ProjectId master-1 TERMINATED
   $command=@'
 set -eu
 hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
@@ -258,7 +265,23 @@ echo NODE1_STANDBY_AND_RM_RECOVERED
   Assert-RemoteHost $node2
   $command='set -eu; test "$('+$hdfs+' haadmin -getServiceState nn2)" = active; test "$('+$hdfs+' haadmin -getServiceState nn1)" = standby; '+$hdfs+' haadmin -transitionToStandby nn2; test "$('+$hdfs+' haadmin -getServiceState nn2)" = standby; echo NN2_FAILBACK_STANDBY'
   $null=Invoke-Remote $node2 $command 'Failback: Node 2 to standby'
-  $command='set -eu; start=$(date +%s); '+$hdfs+' haadmin -transitionToActive nn1; test "$('+$hdfs+' haadmin -getServiceState nn1)" = active; test "$('+$hdfs+' haadmin -getServiceState nn2)" = standby; for host in worker-2 worker-3 worker-4 worker-5 worker-6; do '+$hdfs+' dfsadmin -triggerBlockReport "$host:9867"; done; '+$hdfs+' dfs -cat "'+$baselinePath+'" >/dev/null; systemctl is-active --quiet hadoop-yarn-resourcemanager; echo NODE1_FAILBACK_SECONDS=$(($(date +%s)-start)); echo NODE1_FAILBACK_OK'
+  $command=@'
+set -eu
+hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
+start=$(date +%s)
+hdfs_cmd haadmin -transitionToActive nn1
+test "$(hdfs_cmd haadmin -getServiceState nn1)" = active
+test "$(hdfs_cmd haadmin -getServiceState nn2)" = standby
+blocked=""
+for host in worker-2 worker-3 worker-4 worker-5 worker-6; do
+ if ! hdfs_cmd dfsadmin -triggerBlockReport "$host:9867"; then blocked="$blocked $host"; fi
+done
+if test -n "$blocked"; then echo BLOCKED_DATANODE_IPC="$blocked" >&2; exit 1; fi
+hdfs_cmd dfs -cat '__BASELINE_PATH__' >/dev/null
+systemctl is-active --quiet hadoop-yarn-resourcemanager
+echo NODE1_FAILBACK_SECONDS=$(($(date +%s)-start))
+echo NODE1_FAILBACK_OK
+'@.Replace('__BASELINE_PATH__',$baselinePath)
   $null=Invoke-Remote $node1 $command 'Failback: activate Node 1 and validate read'
  }
  'StopWorkerAndObserve' {
@@ -305,7 +328,11 @@ echo WORKER_DOWN_RF2_READ_OK
   $null=Invoke-Gcloud compute instances start $workerVm "--project=$WorkerProjectId" --zone=asia-east1-b --quiet
   Wait-InstanceStatus $WorkerProjectId $workerVm RUNNING
   Wait-RemoteHost $worker
-  $command='set -eu; mountpoint -q /mnt/data; sudo systemctl start hadoop-hdfs-datanode; for attempt in {1..30}; do ss -lnt | grep -q ":9866 " && break; sleep 1; done; ss -lnt | grep -q ":9866 "; sudo systemctl start hadoop-yarn-nodemanager; for attempt in {1..30}; do ss -lnt | grep -q ":8041 " && break; sleep 1; done; ss -lnt | grep -q ":8041 "; echo WORKER_SERVICES_STARTED_IN_ORDER'
+  $journalNodeRecovery=''
+  if ($WorkerNode -eq 3) {
+   $journalNodeRecovery='sudo systemctl start hadoop-hdfs-journalnode; for attempt in {1..30}; do ss -lnt | grep -q ":8485 " && break; sleep 1; done; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; echo WORKER3_JOURNALNODE_STARTED; '
+  }
+  $command='set -eu; mountpoint -q /mnt/data; '+$journalNodeRecovery+'sudo systemctl start hadoop-hdfs-datanode; for attempt in {1..30}; do ss -lnt | grep -q ":9866 " && break; sleep 1; done; ss -lnt | grep -q ":9866 "; sudo systemctl start hadoop-yarn-nodemanager; for attempt in {1..30}; do ss -lnt | grep -q ":8041 " && break; sleep 1; done; ss -lnt | grep -q ":8041 "; echo WORKER_SERVICES_STARTED_IN_ORDER'
   $null=Invoke-Remote $worker $command "Start Worker $WorkerNode DataNode then NodeManager"
   $command=@'
 set -eu
@@ -357,6 +384,10 @@ echo FINAL_SHA256="$actual_sha"
 echo FINAL_HDFS_YARN_RECOVERY_AUDIT_OK
 '@.Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__YARN__',$yarn)
   $null=Invoke-Remote $node1 $command 'Final HDFS/YARN recovery audit'
+  foreach ($node in $nodes[0..2]) {
+   $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; echo FINAL_JOURNALNODE_ACTIVE'
+   $null=Invoke-Remote $node $command "Final JournalNode $($node.Number) service audit"
+  }
   foreach ($node in $nodes[1..5]) {
    $command='set -eu; systemctl is-active --quiet hadoop-hdfs-datanode; systemctl is-active --quiet hadoop-yarn-nodemanager; echo WORKER_SERVICES_ACTIVE'
    $null=Invoke-Remote $node $command "Final Worker $($node.Number) service audit"

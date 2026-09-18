@@ -271,7 +271,7 @@ sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -trans
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
 ```
 
-Node 1 장애 시에는 담당자가 GCP에서 `master-1`의 상태가 `TERMINATED`임을 확인한 뒤에만 Node 2에서 강제 승격한다. 기존 Active가 응답하지 않는 상태의 일반 승격은 대기할 수 있고 자동 fencing이 없으므로, VM 종료 확인 없이 `--forceactive`를 사용하면 안 된다.
+Node 1 장애 시에는 정지 전에 Node 2·3의 JournalNode가 active이고 Node 2에서 잔존 JournalNode의 `8485/TCP`·`8480/HTTP`에 도달할 수 있는지 확인한다. 담당자가 GCP에서 `master-1`의 상태가 `TERMINATED`임을 확인한 뒤에만 Node 2에서 강제 승격하며, 원격 승격 명령 직전에도 종료 상태를 다시 확인한다. 기존 Active가 응답하지 않는 상태의 일반 승격은 대기할 수 있고 자동 fencing이 없으므로, VM 종료 확인 없이 `--forceactive`를 사용하면 안 된다.
 
 ```bash
 gcloud compute instances describe master-1 --project=<NODE1_PROJECT> --zone=asia-east1-b --format='value(status)'
@@ -279,7 +279,7 @@ sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -trans
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs fsck / -blocks
 ```
 
-Node 1 복구 순서는 VM·mount → JournalNode → Standby NameNode → ResourceManager다. 계획된 failback 뒤에는 NameNode가 재시작 전 블록 리포트를 놓쳐 초과 복제를 보류할 수 있으므로 `worker-2`~`worker-6`의 DataNode IPC `9867`에 전체 block report를 요청한 뒤 under·over·missing·corrupt가 모두 0인지 확인한다. Worker 복구 순서는 VM·mount → DataNode → NodeManager이며, 복귀 Worker의 block report와 HDFS 5개·YARN 5개 노드 회복을 확인한다.
+Node 1 복구 순서는 VM·mount → JournalNode → Standby NameNode → ResourceManager다. 계획된 failback 뒤에는 NameNode가 재시작 전 블록 리포트를 놓쳐 초과 복제를 보류할 수 있으므로 `worker-2`~`worker-6`의 DataNode IPC `9867`에 전체 block report를 요청한다. 실패해도 다섯 대를 모두 시도해 `BLOCKED_DATANODE_IPC`에 실패 호스트 전체를 출력한 뒤 중단하며, 모두 성공한 경우에만 under·over·missing·corrupt가 0인지 확인한다. 일반 Worker 복구 순서는 VM·mount → DataNode → NodeManager다. JournalNode를 겸하는 Worker 3은 VM·mount → JournalNode(`8485`, `8480`) → DataNode → NodeManager 순서로 복구하고, FinalAudit은 Node 1~3의 JournalNode와 HDFS 5개·YARN 5개 노드 회복을 함께 확인한다.
 
 ```powershell
 $Recovery = '.\infra\distributed-system\scripts\validate-hdfs-recovery.ps1'
