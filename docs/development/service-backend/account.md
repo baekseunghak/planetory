@@ -66,6 +66,8 @@
 
 **구현 확정(S15P21C206-242):** 본인 프로필 `GET /api/v1/me`는 `users.created_at`을 `joinedAt`으로 제공한다. ISO-8601 UTC 시각이며 타인 프로필 공개 범위는 바꾸지 않는다.
 
+**구현 확정(S15P21C206-181):** `PATCH /api/v1/me/settings`는 `starListVisibility`의 `PUBLIC`/`PRIVATE`만 받고 현재 값을 반환한다. 설정 행이 없으면 생성하며 onboarding·알림 설정은 보존한다. 비공개 전환 뒤 타인 별 목록은 403 `STAR_LIST_PRIVATE`이고, 이미 발급된 cursor도 같은 판정을 다시 거친다. 본인 목록과 타인 프로필의 공개 성과 요약, 공개 게시글·반응·공식 판단 통계의 범위는 바꾸지 않는다.
+
 **결정 질문**
 
 - F03-Q1: SB-D14 확정: NFC·앞뒤 공백 제거 후 2~20자, 한글 완성형·영문·숫자·밑줄, 내부 공백 불허, 영문 대소문자 무시 중복. SYSTEM/ADMIN/관리자/운영자 예약어 제외. 추가 금칙어 목록·담당은 협의한다. lower(nickname) 유일 인덱스 등 DB 반영 필요.
