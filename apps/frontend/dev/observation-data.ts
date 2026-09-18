@@ -144,7 +144,7 @@ export function convertObservation(
       return {
         segmentId: localId(`${bundleId}:${window.sector}`),
         sector: window.sector,
-        binningRevision: 1,
+        binningRevision: "10m-v1",
         startBtjd: window.start_btjd,
         binMinutes,
         nPoints,
@@ -168,7 +168,7 @@ export function convertObservation(
     hasConfirmedCandidate: false,
     bundle: {
       bundleId,
-      bundleVersion: 1,
+      bundleVersion: "v1",
       foldReferenceTimeBtjd: input.fold_reference_time_btjd,
       residualModelVersion: curveContext.residualModelVersion,
       periodogramConfigVersion: curveContext.periodogramConfigVersion,
@@ -184,7 +184,7 @@ export function convertObservation(
     fluxUnit: "normalized",
     segments,
   };
-  decodeCurve(curve, decodeAnalysisContext(context, target.ticId));
+  decodeCurve(curve, decodeAnalysisContext(context, target.ticId), 200);
   assert.equal(
     accounting.reduce(
       (sum, group) => sum + group.counts.reduce((a, b) => a + b, 0),

@@ -176,8 +176,10 @@ export function periodogramFixtureResponse(
   if (resource === "periodogram") {
     if (ticId === PERIODOGRAM_FIXTURE_TICS.pending)
       return reply(202, {
-        code: "CURVE_NOT_READY",
-        segments: null,
+        // 서버는 202에도 같은 주기도 본문을 두고 power만 null로 보낸다.
+        // code·segments 필드는 존재하지 않는다 (AnalysisViews.Periodogram).
+        ...periodogramFixture(ticId),
+        power: null,
         residual: { status: null, jobId: null },
       });
     const data = periodogramFixture(ticId);

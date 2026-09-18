@@ -22,7 +22,7 @@ function setup(
   transform?: (reply: Response, path: string) => Response | Promise<Response>,
 ) {
   const expected = decodeAnalysisContext(periodContextFixture(tic), tic);
-  const curve = decodeCurve(periodCurveFixture(tic), expected);
+  const curve = decodeCurve(periodCurveFixture(tic), expected, 200);
   const paths: string[] = [];
   const client = createApiClient({
     baseUrl: "",

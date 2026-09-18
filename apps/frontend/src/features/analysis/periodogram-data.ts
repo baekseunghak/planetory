@@ -233,12 +233,10 @@ export function decodePendingPeriodogram(
   expected: AnalysisContext,
 ) {
   const data = record(value, "periodogram");
-  // 5.3 inherits the 5.2 pending envelope, including segments:null.
-  if (
-    expected.curveContext.curveStep === 0 ||
-    data.code !== "CURVE_NOT_READY" ||
-    data.segments !== null
-  )
+  // 5.3은 곡선과 달리 같은 주기도 본문을 유지하고 power만 null로 온다.
+  // code·segments 필드는 존재하지 않는다 (AnalysisViews.Periodogram).
+  // 호출부가 HTTP 202일 때만 부르므로 여기서는 본문 모양만 확인한다.
+  if (expected.curveContext.curveStep === 0 || data.power !== null)
     invalid("pending periodogram");
   if (data.curveContext !== undefined)
     context(data.curveContext, expected.curveContext);
