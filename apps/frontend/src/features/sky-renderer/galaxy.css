@@ -353,3 +353,110 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* W08: retain the same canvas/camera while the independent cursor list is active. */
+.personal-galaxy {
+  position: relative;
+}
+.sky-view-switch {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 16px;
+  flex-wrap: wrap;
+}
+.sky-view-switch span {
+  color: #b8c6db;
+  font-size: 13px;
+}
+.shows-list > .galaxy-scene {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.discovered-stars[hidden] {
+  display: none;
+}
+.sky-page:has(.shows-list) > p[role="status"] {
+  display: none; /* List status replaces map-only tile/loading messages. */
+}
+.shows-list.has-detail > .discovered-stars {
+  grid-column: 2;
+  grid-row: 1;
+}
+.discovered-stars {
+  min-width: 0;
+  padding: 24px;
+  background: #080d16;
+  min-height: 480px;
+  max-height: max(480px, calc(100vh - 210px));
+  overflow: auto;
+}
+.discovered-stars h2 {
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.discovered-stars p,
+.discovered-status {
+  color: #b9c6db;
+  font-size: 13px;
+}
+.discovered-stars h2:focus {
+  outline: 2px solid #aacdff;
+  outline-offset: 4px;
+}
+.discovered-stars .discovered-rows {
+  display: block;
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+}
+.discovered-rows li {
+  border-bottom: 1px solid #758cb333;
+}
+.discovered-rows button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr);
+  gap: 8px 20px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 6px;
+}
+.discovered-rows small {
+  grid-column: 1 / -1;
+  color: #b3bfd4;
+}
+.discovered-rows button[aria-pressed="true"] {
+  background: #1d2b44;
+}
+.discovered-stars nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.fallback-quests {
+  border-top: 1px solid #758cb333;
+  margin: 12px 0;
+  padding: 0;
+}
+.fallback-quests ul {
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.fallback-quests span {
+  display: block;
+  padding: 10px;
+  color: #b3bfd4;
+}
+@media (max-width: 1100px) {
+  .has-detail .discovered-rows button {
+    grid-template-columns: 1fr;
+  }
+}

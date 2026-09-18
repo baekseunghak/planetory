@@ -68,6 +68,7 @@ export function galaxyFixturePlugin(): Plugin {
             const count = Number(url.searchParams.get("count") ?? 1000);
             if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
             stars = Array.from({ length: count }, (_, i) => makeStar(i));
+            if (count === 1) stars[0] = { ...stars[0], planetCount: 0 };
             failed = false;
             completedTutorials.clear();
             revision++;
@@ -161,6 +162,49 @@ export function galaxyFixturePlugin(): Plugin {
             reopened: [],
           });
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
+        if (url.pathname === "/v1/me/stars") {
+          const q = url.searchParams;
+          if (
+            q.get("scope") !== "discovered" ||
+            q.get("sort") !== "recent" ||
+            q.get("size") !== "20" ||
+            [...q.keys()].some(
+              (k) => !["scope", "sort", "size", "cursor"].includes(k),
+            )
+          )
+            return bad();
+          const scope = "discovered-list:" + version();
+          const continuation = q.has("cursor")
+            ? cursors.get(q.get("cursor")!)
+            : undefined;
+          if (q.has("cursor") && continuation?.scope !== scope) return bad();
+          const offset = continuation?.offset ?? 0;
+          const items = stars.slice(offset, offset + 20).map((s) => ({
+            ticId: s.ticId,
+            progressStage: s.progressStage,
+            planetCount: s.planetCount,
+            completedWithoutPlanets: s.completedWithoutPlanets,
+            achievementCount: s.planetCount ? 1 : 0,
+            grade: s.planetCount ? "A" : null,
+            currentCurveStep: s.progressStage === "unexplored" ? null : 0,
+            reopenPending: false,
+            reopened: s.reopened,
+            unpublishedSignalCount: 0,
+            lastActivityAt: "2026-09-17T00:00:00Z",
+            unlockReason: "achievement",
+            marker: s.marker,
+          }));
+          let nextCursor: string | null = null;
+          if (offset + items.length < stars.length) {
+            nextCursor = randomUUID();
+            cursors.set(nextCursor, { scope, offset: offset + items.length });
+          }
+          return reply(200, {
+            items,
+            nextCursor,
+            hasNext: nextCursor !== null,
+          });
+        }
         if (url.pathname === "/v1/me/sky/tiles") {
           const q = url.searchParams,
             required = ["level", "x", "y", "w", "h", "version"];

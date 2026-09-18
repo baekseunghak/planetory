@@ -22,6 +22,7 @@ import {
 export type SceneControl = {
   setCamera(patch: Partial<GalaxyCamera>, options?: { level?: number }): void;
   getCamera(): GalaxyCamera | null;
+  restartGraphics(): void;
   fitAll(): void;
   setSystem(system: OwnedSystem | null): void;
   focusStar(position: Pick<Star, "x" | "y" | "depthZ">): void;
@@ -34,6 +35,8 @@ type Props = SkySceneProps & {
   onDeselect?: () => void;
   selectedStar?: Star | null;
   focusedPlanet?: string | null;
+  suspended?: boolean;
+  onGraphics?: (available: boolean, message: string | null) => void;
 };
 export function GalaxyScene({
   data,
@@ -45,6 +48,8 @@ export function GalaxyScene({
   onDeselect,
   selectedStar,
   focusedPlanet = null,
+  suspended = false,
+  onGraphics,
 }: Props) {
   const cameraAnimation = useRef(0);
   const interaction = useRef<InteractionControl | null>(null);
@@ -57,6 +62,8 @@ export function GalaxyScene({
   const [failure, setFailure] = useState<string | null>(null),
     [generation, setGeneration] = useState(0);
   const [ready, setReady] = useState(false);
+  const paused = useRef(suspended);
+  paused.current = suspended;
   const hasCamera = camera !== null;
   const current = useRef({ camera, dimensions, data }),
     metricsRef = useRef(onMetrics);
@@ -79,6 +86,7 @@ export function GalaxyScene({
   }, [meta, camera, dimensions]);
   useEffect(() => {
     onReady?.({
+      restartGraphics: () => setGeneration((n) => n + 1),
       setCamera(patch, options) {
         cancelAnimationFrame(cameraAnimation.current);
         const c = current.current.camera,
@@ -149,6 +157,11 @@ export function GalaxyScene({
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     const tick = (now: number) => {
       if (!alive || !active) return;
+      if (paused.current) {
+        last = 0;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       active.draw(last ? (now - last) / 1000 : 0, reduced.matches);
       interaction.current?.frame(active.planetTargets());
       last = now;
@@ -167,6 +180,7 @@ export function GalaxyScene({
     const lost = (event: Event) => {
       event.preventDefault();
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(cameraAnimation.current);
       setReady(false);
       setFailure(
         "그래픽 연결이 끊겼습니다. 복구되면 현재 지도를 다시 그립니다.",
@@ -198,6 +212,9 @@ export function GalaxyScene({
       renderer.current = null;
     };
   }, [generation]);
+  useEffect(() => {
+    if (ready || failure) onGraphics?.(ready && !failure, failure);
+  }, [ready, failure, onGraphics]);
   const matrix = useMemo(
     () =>
       camera && dimensions.width > 0
@@ -207,8 +224,9 @@ export function GalaxyScene({
   );
   const level = forcedLevel ?? (camera ? levelForScale(meta, camera.zoom) : 0);
   useEffect(() => {
-    if (matrix) void store.setView({ level, box: viewportBounds(matrix) });
-  }, [store, matrix, level]);
+    if (matrix && !suspended)
+      void store.setView({ level, box: viewportBounds(matrix) });
+  }, [store, matrix, level, suspended]);
   const plan = useMemo(
     () =>
       matrix
@@ -265,13 +283,17 @@ export function GalaxyScene({
     focusedPlanet,
   ]);
   return (
-    <div className="galaxy-scene">
+    <div
+      className="galaxy-scene"
+      inert={suspended}
+      aria-hidden={suspended || undefined}
+    >
       <canvas
         ref={canvas}
         data-rendered-stars={plan.stars.length}
         data-rendered-planets={visibleSystem?.items.length ?? 0}
         data-focused-planet={focusedPlanet ?? ""}
-        tabIndex={0}
+        tabIndex={suspended ? -1 : 0}
         role="listbox"
         {...(import.meta.env.DEV ? { "data-camera": JSON.stringify(camera) } : {})}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
@@ -290,7 +312,7 @@ export function GalaxyScene({
           store={store}
           onPlanetSelect={onPlanetSelect}
           onDeselect={onDeselect}
-          enabled={ready && !failure && !data.needsRefresh}
+          enabled={ready && !failure && !data.needsRefresh && !suspended}
           changeCamera={(next) => {
             cancelAnimationFrame(cameraAnimation.current);
             setForcedLevel(null);
