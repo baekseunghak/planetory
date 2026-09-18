@@ -170,9 +170,22 @@ sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
   HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -list -all
 ```
 
-재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다. YARN unit은 아직 disabled 상태이며 HDFS unit과의 자동 부팅 순서·health gate는 `S15P21C206-74`에서 자동 시작 결정과 함께 검증한다.
+재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit을 disabled로 유지하고, 운영자가 기존 Active 부재와 서비스 의존 순서를 확인한 뒤 수동 기동한다.
 
-## 6. tailnet SSH 장애와 GCP 비상 복구
+## 6. HDFS 수동 장애 전환과 재기동
+
+[복구 검증 스크립트](../../infra/distributed-system/scripts/validate-hdfs-recovery.ps1)는 `Preflight`와 `Prepare` 뒤 계획 전환, Node 1 장애, Worker 장애를 서로 분리한다. 변경 단계는 먼저 `-WhatIf`로 대상 프로젝트·VM을 확인하고 실행 중인 YARN 작업이 0개인 유지보수 창에서만 실행한다. 복구 중 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제는 사용하지 않는다.
+
+- 계획 전환: Active를 Standby로 내린 뒤 반대 NameNode를 일반 승격한다.
+- Node 1 장애: 정지 전에 Node 2·3의 JournalNode active와 잔존 `8485`·`8480` 경로를 확인한다. GCP에서 `master-1=TERMINATED`를 확인한 경우만 Node 2에서 `-transitionToActive --forceactive nn2`를 실행하며, 원격 승격 직전에도 종료 상태를 다시 확인한다. 자동 fencing이 없으므로 VM 상태를 확인할 수 없으면 중단한다.
+- Node 1 재기동: mount → JournalNode → Standby NameNode → ResourceManager 순서이며 각 준비 포트를 최종 단정한다. 이후 계획 failback과 Worker 5개의 DataNode IPC `9867` full block report를 수행한다. 실패해도 다섯 대를 모두 시도해 차단된 호스트 전체를 보고한 뒤 중단한다.
+- Worker 재기동: 일반 Worker는 mount → DataNode → NodeManager 순서다. Worker 3은 정지 전에 남을 Node 1·2 JournalNode와 상호 `8485`·`8480` 경로를 확인하고, mount → JournalNode → DataNode → NodeManager 순서로 복구한다. FinalAudit은 JournalNode 3대, Live DataNode 5개, YARN NodeManager 5개, under·missing·corrupt 0과 Prepare에서 기록한 무작위 표본 SHA-256을 확인한다. Worker 3 실제 장애 경로는 아직 실행하지 않았으므로 다음 유지보수 창의 후속 검증으로 남긴다.
+
+ResourceManager·Airflow·Publisher는 Node 1에만 있으므로 Node 2 승격으로 복구되지 않는다. ResourceManager는 Node 1 재기동 순서에 포함한다. Airflow·Publisher가 배포된 환경에서는 컨테이너 상태와 로그를 확인한 뒤 실패한 Airflow 단계부터 재시도하고, Publisher는 같은 bundle의 멱등 적재를 확인한다. 2026-09-18 검증 당시 두 컨테이너는 배포되지 않아 이 부분은 실행 증거가 아니다.
+
+실행 명령, 단계별 안전 조건, 검증 경로 정리 절차와 2026-09-18 실제 소요 시간은 [분산 시스템 수동 전환 절차](../../infra/distributed-system/README.md#수동-전환)에 기록한다.
+
+## 7. tailnet SSH 장애와 GCP 비상 복구
 
 먼저 클라이언트 연결, MagicDNS, 대상 노드와 SSH 권한을 확인한다.
 
@@ -211,7 +224,7 @@ gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
 
 비상 접속으로 `tailscaled`를 복구한 뒤 `tailscale ping`과 `tailscale ssh`를 다시 통과해야 일상 경로가 복구된 것이다. `--source-ranges`는 전체 허용 목록을 교체한다. 현재 IP만 넣어 기존 관리 주소를 제거하거나 문제 해결을 위해 `0.0.0.0/0`을 열지 않는다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수 없다.
 
-## 7. 리소스·quota·비용 종료 기준
+## 8. 리소스·quota·비용 종료 기준
 
 각 프로젝트의 실제 리소스와 할당량을 조회한다.
 

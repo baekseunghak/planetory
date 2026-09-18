@@ -33,6 +33,7 @@ $testState.Calls.Clear()
 $firewallCalls=@($testState.Calls | Where-Object { $_ -match 'ufw allow' })
 if ($firewallCalls.Count -ne 6 -or
     @($firewallCalls | Where-Object { $_ -notmatch '10\.20\.1\.10 10\.20\.2\.10 10\.20\.3\.10 10\.20\.4\.10 10\.20\.5\.10 10\.20\.6\.10' }).Count -or
+    @($firewallCalls | Where-Object { -not $_.Contains('Default: deny \(incoming\)') }).Count -or
     @($firewallCalls | Where-Object { $_ -match 'port 8480' }).Count -ne 3 -or
     @($firewallCalls | Where-Object { $_ -match 'port 8480' -and $_ -notmatch 'for source in 10\.20\.1\.10 10\.20\.2\.10' }).Count -or
     @($testState.Calls | Where-Object { $_ -match 'ufw disable|ufw reset|delete allow|namenode -format' }).Count) {
@@ -105,6 +106,9 @@ if (@($testState.Calls | Where-Object { $_ -match 'systemctl start|namenode -for
     @($testState.Calls | Where-Object { $_ -match 'QJM_HTTP_8480_OK' }).Count -ne 2 -or
     @($testState.Calls | Where-Object { $_ -match 'fsck /validation/S15P21C206-72' }).Count -ne 1) {
  throw 'FinalAudit must be read-only and verify the completed validation path.'
+}
+if (@($testState.Calls | Where-Object { $_ -match "`r" }).Count) {
+ throw 'Remote HDFS commands must normalize Windows CRLF before Bash execution.'
 }
 
 Write-Host 'PASS: staged preflight, firewall, format recovery, RF2 and final-audit contracts (offline).'

@@ -9,6 +9,10 @@ import {
 } from "react";
 import { ApiError, http } from "../api";
 import { readMember, type Member } from "./member";
+import {
+  activateDraftOwner,
+  clearSessionDrafts,
+} from "./session-draft-storage";
 import { authSettings } from "./settings";
 
 type SessionState =
@@ -51,6 +55,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const authenticatedBefore = useRef(false);
   const loggingOut = useRef(false);
   const clear = useCallback((nextNotice?: Notice) => {
+    clearSessionDrafts();
     ++generation.current;
     pending.current?.abort();
     http.cancelPending();
@@ -78,6 +83,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       );
       if (id !== generation.current || controller.signal.aborted)
         return "superseded";
+      activateDraftOwner(member.memberId);
       authenticatedBefore.current = true;
       setNotice(null);
       setRevision((v) => v + 1);

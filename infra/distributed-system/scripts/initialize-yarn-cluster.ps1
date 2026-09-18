@@ -38,6 +38,7 @@ function Invoke-Tailscale {
 
 function Invoke-Remote {
  param([string]$Target,[string]$Command,[string]$Label)
+ $Command=$Command.Replace("`r",'')
  Write-Host "== $Label =="
  $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command))
  $remoteCommand="printf '%s' '$payload' | base64 --decode | bash"
