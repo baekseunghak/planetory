@@ -1,0 +1,149 @@
+package com.planetory.backend.domain.member;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/** 회원·커뮤니티 도메인의 앱 역할 권한 인수 조건 [S15P21C206-238]. */
+@Testcontainers
+class MemberCommunityPermissionTest {
+
+    private static final List<String> WRITABLE =
+            List.of("users", "user_settings", "posts", "comments");
+    private static final List<String> UNUSED = List.of(
+            "follows", "notifications", "post_reactions", "post_source_links",
+            "post_history_attachments", "comment_history_attachments", "stats_snapshots");
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
+            .withDatabaseName("planetory_poc")
+            .withUsername("planetory")
+            .withPassword("ssafy");
+
+    @BeforeAll
+    static void migrateAndCreateLoginUser() throws SQLException {
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
+             Statement st = owner.createStatement()) {
+            st.execute("CREATE USER app_login PASSWORD 'app'");
+            st.execute("GRANT planetory_app TO app_login");
+        }
+    }
+
+    @Test
+    void 앱_역할은_회원과_커뮤니티_테이블에_필요한_권한만_갖는다() throws SQLException {
+        try (Connection owner = asOwner()) {
+            for (String table : WRITABLE) {
+                for (String allowed : List.of("SELECT", "INSERT", "UPDATE")) {
+                    assertTrue(hasPrivilege(owner, table, allowed), table + ": " + allowed);
+                }
+                for (String denied : List.of("DELETE", "TRUNCATE")) {
+                    assertFalse(hasPrivilege(owner, table, denied), table + ": " + denied);
+                }
+            }
+
+            assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
+            for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
+            }
+
+            for (String table : UNUSED) {
+                for (String privilege : List.of("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+                    assertFalse(hasPrivilege(owner, table, privilege), table + ": " + privilege);
+                }
+            }
+        }
+    }
+
+    @Test
+    void 앱_계정은_회원과_커뮤니티_행을_생성하고_갱신하며_users를_잠글_수_있다()
+            throws SQLException {
+        try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
+            app.setAutoCommit(false);
+
+            long userId = returnedId(st, "INSERT INTO users(provider, provider_user_id, nickname) "
+                    + "VALUES ('test', 'permission-user', 'before') RETURNING id");
+            st.execute("INSERT INTO user_settings(user_id) VALUES (" + userId + ")");
+            long postId = returnedId(st, "INSERT INTO posts(kind, user_id, board, tag, title, body, status) "
+                    + "VALUES ('user', " + userId
+                    + ", 'free', 'GENERAL', 'title', 'before', 'visible') RETURNING id");
+            st.execute("INSERT INTO comments(post_id, user_id, body, status) VALUES ("
+                    + postId + ", " + userId + ", 'before', 'visible')");
+
+            assertEquals(1, st.executeUpdate("UPDATE users SET nickname = 'after' WHERE id = " + userId));
+            assertEquals(1, st.executeUpdate(
+                    "UPDATE user_settings SET onboarding_done = true WHERE user_id = " + userId));
+            assertEquals(1, st.executeUpdate("UPDATE posts SET body = 'after' WHERE id = " + postId));
+            assertEquals(1, st.executeUpdate(
+                    "UPDATE comments SET body = 'after' WHERE post_id = " + postId));
+            assertDoesNotThrow(() -> st.executeQuery(
+                    "SELECT id FROM users WHERE id = " + userId + " FOR UPDATE").close());
+
+            app.rollback();
+        }
+    }
+
+    @Test
+    void 앱_계정의_물리_삭제와_공개_분석_쓰기는_권한으로_거절된다() throws SQLException {
+        try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
+            assertPermissionDenied(() -> st.execute("DELETE FROM users WHERE id = -1"));
+            assertPermissionDenied(() -> st.execute(
+                    "INSERT INTO published_analyses(post_id, user_id, candidate_id, history_id, published_at) "
+                            + "VALUES (1, 1, 1, 1, now())"));
+        }
+    }
+
+    private static long returnedId(Statement statement, String sql) throws SQLException {
+        try (ResultSet rs = statement.executeQuery(sql)) {
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
+    private static void assertPermissionDenied(SqlAction action) {
+        SQLException denied = assertThrows(SQLException.class, action::run);
+        assertEquals("42501", denied.getSQLState(), denied.getMessage());
+    }
+
+    private static boolean hasPrivilege(Connection connection, String table, String privilege)
+            throws SQLException {
+        try (var ps = connection.prepareStatement(
+                "SELECT has_table_privilege('planetory_app', ?, ?)")) {
+            ps.setString(1, table);
+            ps.setString(2, privilege);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
+
+    private static Connection asOwner() throws SQLException {
+        return connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    private static Connection connectionAs(String user, String password) throws SQLException {
+        return DriverManager.getConnection(POSTGRES.getJdbcUrl(), user, password);
+    }
+
+    @FunctionalInterface
+    private interface SqlAction {
+        void run() throws SQLException;
+    }
+}

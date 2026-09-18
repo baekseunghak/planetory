@@ -1,4 +1,5 @@
 node_modules/
+dev/observations/
 dist/
 test-results/
 playwright-report/

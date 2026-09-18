@@ -4,7 +4,7 @@ export default defineConfig({
   workers: 1,
   timeout: 30000,
   reporter: "list",
-  outputDir: "test-results",
+  outputDir: "test-results/browser",
   use: {
     baseURL: "http://127.0.0.1:58262",
     viewport: { width: 1440, height: 900 },

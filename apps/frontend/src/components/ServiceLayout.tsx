@@ -31,7 +31,9 @@ export function ServiceLayout() {
       <a className="skip-link" href="#main-content">
         본문으로 이동
       </a>
-      <header className="explorer-header">
+      <header
+        className={`explorer-header${location.pathname.startsWith("/analysis/") ? " analysis-service-header" : ""}`}
+      >
         <Link to="/sky" className="brand" aria-label="Planetory 별지도">
           PLANETORY
         </Link>
@@ -113,7 +115,15 @@ export function ServiceLayout() {
           로그아웃
         </button>
       </dialog>
-      <main id="main-content" className="page" tabIndex={-1}>
+      <main
+        id="main-content"
+        className={
+          location.pathname.startsWith("/analysis/")
+            ? "page analysis-page-container"
+            : "page"
+        }
+        tabIndex={-1}
+      >
         <Outlet />
       </main>
     </>

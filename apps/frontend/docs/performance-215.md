@@ -1,6 +1,6 @@
 # 215 별지도 성능 측정과 개선
 
-2026-09-18. 대표 Jira: S15P21C206-215. `origin/develop` e344c207에서 시작했다. 214 프로필 브랜치를 포함하지 않으며 승인/병합을 기다리지 않는다. [항목별 상태](ticket-215-readiness.md), [표현 계약](../../../docs/development/sky-presentation-contract.md), [렌더 구조](galaxy-renderer.md)를 함께 본다.
+2026-09-18. 대표 Jira: S15P21C206-215. `origin/develop` e344c207에서 시작했고 같은 날 develop 75463e0을 후속 통합했다. 214 프로필은 215의 선행 조건이 아니며, 후속 통합에는 develop에 이미 병합된 분석·프로필 구현이 포함된다. [항목별 상태](ticket-215-readiness.md), [표현 계약](../../../docs/development/sky-presentation-contract.md), [렌더 구조](galaxy-renderer.md)를 함께 본다.
 
 ## 바뀐 구현
 

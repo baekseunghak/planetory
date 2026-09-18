@@ -1,0 +1,927 @@
+/* Figma 02 분석 단계 · 1–5 은하 스타일. 토큰·규약 정본은 docs/design.md.
+   적용 범위는 분석 화면뿐이며 전역 :root와 다른 화면 팔레트는 건드리지 않는다.
+   Chart coordinates remain data driven. */
+body:has(.analysis-screen),
+.analysis-screen {
+  /* 바탕 */
+  --bg: #222831;
+  --fg: #eeeeee;
+  --accent: #ffd369;
+
+  /* 은하 배경 오버레이 */
+  --overlay: rgba(34, 40, 49, 0.75);
+
+  /* 유리 — Figma 원본 그대로 */
+  --panel: rgba(57, 57, 70, 0.2);
+  --panel-blur: 11px;
+  --panel-line: rgba(238, 238, 238, 0.1);
+  --panel-shadow: 0 8px 12px rgba(34, 40, 49, 0.4);
+  --plot-bg: rgba(34, 40, 49, 0.4);
+
+  /* 조작 요소 */
+  --control-bg: rgba(238, 238, 238, 0.05);
+  --control-bg-weak: rgba(238, 238, 238, 0.04);
+  --check-line: rgba(238, 238, 238, 0.33);
+
+  /* 글자 — 세 단계뿐이다 */
+  --fg-1: #eeeeee;
+  --fg-2: rgba(238, 238, 238, 0.8);
+  --fg-3: rgba(238, 238, 238, 0.67);
+
+  /* 선 */
+  --grid: rgba(238, 238, 238, 0.42);
+  --divider: #393e46;
+
+  /* 강조 */
+  --accent-fill: rgba(255, 211, 105, 0.19);
+  --accent-line: rgba(255, 211, 105, 0.5);
+  --accent-sel-fill: rgba(255, 211, 105, 0.15);
+  --accent-sel-line: rgba(255, 211, 105, 0.7);
+  --accent-glow: 0 0 8px rgba(255, 211, 105, 0.25);
+  --band: rgba(255, 211, 105, 0.12);
+
+  /* 크기와 간격 */
+  --radius-panel: 16px;
+  --radius-control: 10px;
+  --radius-plot: 6px;
+  --radius-check: 4px;
+  --panel-pad: 20px 24px;
+  --gap-panel: 12px;
+  --gap-inline: 8px;
+  --gap-check: 10px;
+}
+html:has(.analysis-screen) {
+  background: #222831;
+  color-scheme: dark;
+}
+body:has(.analysis-screen) {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--overlay), var(--overlay)),
+    url("./assets/galaxy-background.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--fg-1);
+  color-scheme: dark;
+}
+.page.analysis-page-container {
+  max-width: none;
+  width: 100%;
+  padding: 24px 32px 40px;
+  margin: 0;
+  box-sizing: border-box;
+}
+.analysis-service-header {
+  position: absolute;
+  top: 15px;
+  left: 145px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  width: auto;
+  z-index: 2;
+}
+.analysis-service-header .brand,
+.analysis-service-header .member-link,
+.analysis-service-header .logout-button {
+  display: none;
+}
+.analysis-service-header > button {
+  color: var(--fg-3);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+}
+.analysis-screen {
+  --line: var(--panel-line);
+  --muted: var(--fg-3);
+  font-family: "Noto Sans KR", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg-1);
+}
+.analysis-screen h1,
+.analysis-screen h2,
+.analysis-screen h3,
+.analysis-screen h4,
+.analysis-screen p {
+  margin: 0;
+}
+.analysis-screen h2,
+.analysis-screen h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--fg-1);
+}
+.analysis-screen a {
+  color: inherit;
+  text-decoration: none;
+}
+.analysis-screen-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 16px;
+}
+.analysis-screen-header h1 {
+  font-size: 18px;
+  font-weight: 500;
+}
+.analysis-screen-header > a:first-child {
+  font-size: 16px;
+  font-weight: 500;
+}
+.analysis-screen-header > a:last-child {
+  justify-self: end;
+  color: var(--fg-2);
+}
+.analysis-screen button {
+  font: inherit;
+  touch-action: manipulation;
+  color: inherit;
+}
+.analysis-screen button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.analysis-screen :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.analysis-screen .analysis-sr-only,
+.analysis-screen .periodogram-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.analysis-screen-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px 32px;
+  align-items: start;
+}
+.analysis-step-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  min-height: 50px;
+}
+.analysis-steps {
+  flex: 0 1 816px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: nowrap;
+  margin: 0;
+}
+.analysis-steps li {
+  flex: 1;
+  min-width: 0;
+}
+.analysis-steps button {
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  color: var(--fg-3);
+  white-space: nowrap;
+  min-height: 44px;
+  border-radius: var(--radius-control);
+}
+.analysis-steps button:disabled {
+  opacity: 0.38;
+}
+.analysis-steps [aria-current="step"] button {
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.analysis-step-row > span {
+  font-size: 12px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+.analysis-screen .analysis-periodogram {
+  display: contents;
+}
+.analysis-screen .analysis-time-curve,
+.analysis-screen .periodogram-card,
+.analysis-screen .fold-panel,
+.analysis-screen .analysis-judgment,
+.analysis-screen .periodogram-unavailable {
+  background: var(--panel);
+  backdrop-filter: blur(var(--panel-blur));
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--panel-shadow);
+  padding: var(--panel-pad);
+  margin: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Figma의 258px은 1440px 기준 행 높이다. 범례가 좁은 폭에서 줄바꿈하면 패널을
+   넘기므로 높이를 고정하지 않고 최소값으로 두고, 같은 행의 두 카드는 서로
+   높이를 맞춘다. 두 범례 모두 흐름 안에 있어야 카드가 따라 커진다. */
+.analysis-screen .analysis-time-curve {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 258px;
+  align-self: stretch;
+  position: relative;
+}
+.analysis-screen .periodogram-card {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 258px;
+  align-self: stretch;
+  position: relative;
+}
+.analysis-screen .fold-panel {
+  grid-column: 1;
+  grid-row: 3;
+  min-height: 448px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.analysis-screen .analysis-judgment {
+  grid-column: 2;
+  grid-row: 3 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.analysis-screen .periodogram-unavailable {
+  display: block;
+  grid-column: 2;
+  grid-row: 2;
+}
+.chart-heading,
+.analysis-time-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 30px;
+  margin-bottom: 18px;
+}
+.chart-actions {
+  display: flex;
+  gap: var(--gap-inline);
+}
+/* 시각 크기는 Figma의 30px을 유지하고 히트 영역만 44px로 넓힌다 (docs/design.md). */
+.analysis-screen .chart-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  position: relative;
+}
+.analysis-screen .chart-icon::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+.analysis-screen .chart-icon:hover:enabled {
+  background: var(--control-bg);
+}
+/* Figma 원본 SVG는 #4B4B4B 고정 스트로크다. <img>로 넣으므로 stroke를
+   토큰으로 바꿀 수 없어 필터로 밝은 글자색에 맞춘다. 아이콘은 장식이며
+   접근 가능한 이름은 버튼 레이블이 제공한다 (docs/design.md). */
+.chart-icon img {
+  width: 18px;
+  height: 18px;
+  filter: invert(1) brightness(1.25);
+}
+.analysis-screen .analysis-time-curve figure,
+.analysis-screen .fold-figure {
+  margin: 0 0 0 48px;
+}
+.analysis-screen .analysis-time-plot,
+.analysis-screen .analysis-time-axis-y {
+  height: 142px;
+}
+.analysis-screen .analysis-time-plot,
+.analysis-screen .periodogram-plot,
+.analysis-screen .fold-plot {
+  background: var(--plot-bg);
+  border-radius: var(--radius-plot);
+}
+.analysis-screen .analysis-time-axis-y,
+.analysis-screen .fold-y-axis {
+  width: 45px;
+  right: calc(100% + 8px);
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-time-axis-x {
+  height: 20px;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--fg-3);
+}
+/* 흐름 안에 두되 음수 여백으로 y축 자리까지 되돌려 카드 폭을 그대로 쓴다.
+   절대 배치로 빼면 줄바꿈해도 카드가 커지지 않아 패널 밖으로 나간다. */
+.analysis-screen .analysis-time-curve figcaption {
+  position: static;
+  margin: 6px 0 0 -48px;
+  width: calc(100% + 48px);
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-time-sector {
+  color: var(--fg-3);
+  font-size: 10px;
+  top: 0;
+}
+.analysis-screen .analysis-time-sector span {
+  background: var(--plot-bg);
+}
+.analysis-screen .analysis-time-break {
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-time-readout,
+.analysis-screen .fold-inspector {
+  position: absolute;
+  top: 50px;
+  left: 80px;
+  right: 30px;
+  min-height: 0;
+  font-size: 11px;
+  background: #2b303af2;
+  border-radius: var(--radius-plot);
+  color: var(--fg-1);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+}
+.analysis-time-curve:focus-within .analysis-time-readout,
+.analysis-time-curve:hover .analysis-time-readout,
+.fold-panel:focus-within .fold-inspector {
+  opacity: 1;
+}
+.analysis-screen .time-gap-details {
+  position: absolute;
+  top: 100%;
+  z-index: 5;
+  background: #2b303a;
+  border-radius: var(--radius-control);
+  font-size: 11px;
+}
+.time-gap-details:not([open]) {
+  display: none;
+}
+.analysis-screen .periodogram-detail {
+  margin: 0 0 0 35px;
+}
+.analysis-screen .periodogram-plot,
+.analysis-screen .periodogram-y-axis {
+  height: 140px;
+}
+.analysis-screen .periodogram-y-axis {
+  width: 32px;
+  font-size: 11px;
+  right: calc(100% + 8px);
+  color: var(--fg-3);
+}
+.analysis-screen .periodogram-x-axis {
+  font-size: 11px;
+  margin-top: 5px;
+  color: var(--fg-3);
+}
+/* .analysis-periodogram p (0,1,1)가 이기므로 여기서 특정성을 올려야 11px이 적용된다. */
+.analysis-screen .chart-caption {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 6px;
+}
+.analysis-screen .periodogram-selected-line {
+  border-color: var(--accent);
+}
+.analysis-screen .peak-target {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+.analysis-screen .peak-target:hover,
+.analysis-screen .peak-target:focus-visible {
+  background: var(--accent-fill);
+}
+.periodogram-tooltip {
+  position: absolute;
+  z-index: 4;
+  bottom: 8px;
+  right: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--panel-line);
+  background: #2b303af2;
+  color: var(--fg-1);
+  font-size: 11px;
+  pointer-events: none;
+  border-radius: var(--radius-control);
+}
+.analysis-screen .fold-plot,
+.analysis-screen .fold-y-axis {
+  height: 238px;
+}
+.analysis-screen .fold-x-axis {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin: 4px 0;
+}
+.analysis-screen .fold-figure figcaption {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.fold-empty {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  flex: 1;
+  min-height: 262px;
+  font-size: 16px;
+  line-height: 28px;
+  color: var(--fg-3);
+}
+.analysis-screen .fold-feedback {
+  order: 10;
+  margin: 6px 0 0;
+  min-block-size: 0;
+  grid-template-columns: 1fr auto;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.analysis-screen .fold-feedback p {
+  font-size: 11px;
+}
+.analysis-screen
+  .fold-feedback:not([data-invalid-input]):has(.fold-action-idle) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.analysis-screen .period-selection {
+  border: 0;
+  margin: 14px 0 0;
+}
+.period-selection-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.period-selection-row > span:last-child {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fg-3);
+}
+.analysis-screen .period-selection-controls > p:first-child,
+.analysis-screen .period-selection-controls > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.analysis-screen .period-selection-controls input[type="range"] {
+  width: 100%;
+  height: 26px;
+  min-height: 26px;
+  margin: 5px 0;
+  accent-color: var(--accent);
+  cursor: ew-resize;
+}
+.analysis-screen .period-selection-controls input:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.fold-stage-hint {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.analysis-screen .fold-renderer-controls {
+  order: 15;
+  margin-top: 8px;
+  font-size: 11px;
+}
+.analysis-screen .fold-renderer-controls:not([open]) {
+  position: absolute;
+  bottom: -28px;
+  right: 0;
+}
+.analysis-screen .phase-keyboard-details {
+  order: 11;
+  font-size: 11px;
+  margin-top: 8px;
+}
+.analysis-screen .phase-keyboard-details:not([open]) {
+  position: absolute;
+  left: 24px;
+  bottom: -28px;
+}
+.analysis-screen .phase-keyboard-details[open] {
+  border-top: 1px solid var(--panel-line);
+  padding-top: 12px;
+}
+.analysis-screen .phase-band {
+  background: var(--band);
+  border: 0;
+}
+.analysis-screen .phase-band[data-invalid="true"] {
+  background: rgba(238, 238, 238, 0.06);
+  border: 1px dashed var(--fg-3);
+}
+.analysis-screen .fold-panel .phase-handle {
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  min-width: 24px;
+  height: 100%;
+  min-height: 24px;
+  padding: 0;
+  background: linear-gradient(
+    to right,
+    transparent 10px,
+    var(--accent-line) 10px,
+    var(--accent-line) 13px,
+    transparent 13px
+  );
+  border: 0;
+  font-size: 0;
+  color: transparent;
+  border-radius: 0;
+}
+.analysis-screen .fold-panel .phase-handle:hover:enabled {
+  background: linear-gradient(
+    to right,
+    var(--accent-fill) 10px,
+    var(--accent) 10px,
+    var(--accent) 13px,
+    var(--accent-fill) 13px
+  );
+}
+.analysis-screen .phase-selection-layer[data-enabled="false"] {
+  opacity: 1;
+}
+.analysis-screen .analysis-judgment > button,
+.analysis-screen .analysis-judgment form > button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--bg);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: var(--radius-control);
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 10px;
+}
+.analysis-screen .analysis-judgment p {
+  font-size: 13px;
+  color: var(--fg-3);
+  line-height: 1.45;
+}
+.analysis-screen .analysis-judgment fieldset {
+  margin: 12px 0;
+  padding: 0;
+  border: 0;
+}
+.analysis-screen .analysis-judgment legend {
+  color: var(--fg-3);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.analysis-screen .judgment-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap-inline);
+}
+.judgment-options legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.analysis-screen .analysis-choice {
+  display: flex;
+  min-height: 28px;
+  margin: 0;
+  gap: var(--gap-check);
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.analysis-screen .judgment-options .analysis-choice {
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 68px;
+  gap: 6px;
+  padding: 6px 2px;
+  border: 1px solid var(--panel-line);
+  background: var(--control-bg-weak);
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+  font-size: 12px;
+}
+.analysis-screen .judgment-options .analysis-choice:has(:checked) {
+  background: var(--accent-sel-fill);
+  border-color: var(--accent-sel-line);
+  box-shadow: var(--accent-glow);
+  color: var(--fg-1);
+}
+.judgment-options input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.judgment-options .analysis-choice:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.judgment-options > div {
+  grid-column: 1 / -1;
+}
+/* filter가 스태킹 컨텍스트를 만들어 카드를 덮는 투명 라디오 위로 올라간다.
+   장식 이미지이므로 포인터 이벤트를 넘겨 입력이 클릭을 받게 한다. */
+.analysis-screen .judgment-options .analysis-choice img {
+  filter: invert(1) brightness(1.25);
+  pointer-events: none;
+}
+.analysis-screen input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-check);
+}
+.analysis-screen .analysis-judgment textarea {
+  background: var(--control-bg);
+  color: var(--fg-1);
+  border: 1px solid var(--check-line);
+  border-radius: var(--radius-control);
+}
+.memo-details {
+  margin: 12px 0;
+}
+.analysis-screen .analysis-judgment dl {
+  grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1fr);
+  gap: 8px 10px;
+  font-size: 12px;
+}
+.analysis-screen .analysis-judgment dt {
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-judgment dd {
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+}
+.analysis-screen .analysis-judgment [data-testid="candidate-review"] > h4 {
+  margin-bottom: 12px;
+}
+.analysis-secondary {
+  grid-column: 1;
+  grid-row: 4;
+  margin-top: 18px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+.analysis-secondary-links {
+  display: flex;
+  gap: 24px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+.analysis-secondary details[open] {
+  background: var(--panel);
+  backdrop-filter: blur(var(--panel-blur));
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  padding: 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius-control);
+  max-width: 100%;
+}
+.analysis-secondary-links:has(details[open]) {
+  flex-wrap: wrap;
+}
+.analysis-secondary-links details[open] {
+  flex-basis: 100%;
+}
+.analysis-screen summary {
+  cursor: pointer;
+  min-height: 24px;
+}
+.analysis-screen .analysis-draft {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-draft > p:first-child {
+  display: none;
+}
+.analysis-fixture-details {
+  position: absolute;
+  top: 982px;
+  right: 32px;
+  font-size: 11px;
+  max-width: 500px;
+  z-index: 5;
+}
+.analysis-fixture-details[open] {
+  background: #2b303a;
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius-control);
+  padding: 16px;
+}
+.analysis-screen .fixture-note {
+  color: var(--fg-3);
+}
+@media (max-width: 1200px) {
+  .page.analysis-page-container {
+    padding: 24px;
+  }
+  .analysis-screen-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+  }
+  .analysis-step-row {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .analysis-step-row > span {
+    padding-bottom: 8px;
+  }
+  .analysis-screen .analysis-time-curve,
+  .analysis-screen .fold-panel,
+  .analysis-screen .periodogram-card,
+  .analysis-screen .analysis-judgment {
+    padding: 16px;
+  }
+}
+
+.analysis-screen .period-selection > input[type="range"] {
+  width: 100%;
+  height: 26px;
+  accent-color: var(--accent);
+  opacity: 0.38;
+}
+.analysis-screen .period-selection-controls input[type="range"] {
+  appearance: none;
+  background: transparent;
+}
+.analysis-screen
+  .period-selection-controls
+  input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--check-line);
+}
+.analysis-screen
+  .period-selection-controls
+  input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: -7px;
+}
+.analysis-screen
+  .period-selection-controls
+  input[type="range"]::-moz-range-track {
+  height: 2px;
+  background: var(--check-line);
+}
+.analysis-screen
+  .period-selection-controls
+  input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.analysis-screen
+  .analysis-judgment
+  [data-testid="candidate-review"]
+  .periodogram-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  margin: 16px 0 0;
+}
+.analysis-screen [data-testid="candidate-review"] button:last-child {
+  background: var(--accent);
+  color: var(--bg);
+  border: 0;
+}
+.analysis-screen [data-testid="candidate-review"] button:first-child {
+  text-align: left;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--fg-2);
+}
+.analysis-screen [data-testid="candidate-review"] dl {
+  margin: 18px 0;
+}
+.analysis-screen [data-testid="candidate-review"] .review-details {
+  font-size: 11px;
+}
+.analysis-screen .analysis-judgment button:hover:enabled {
+  filter: brightness(1.12);
+}
+.analysis-screen .analysis-fixture-details {
+  position: static;
+  max-width: none;
+  text-align: right;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.analysis-screen-header {
+  margin-bottom: 0;
+}
+.analysis-screen .fold-panel .phase-handle {
+  width: 44px;
+  min-width: 44px;
+  background: linear-gradient(
+    to right,
+    transparent 20px,
+    var(--accent-line) 20px,
+    var(--accent-line) 23px,
+    transparent 23px
+  );
+}
+.analysis-screen .fold-panel .phase-handle:hover:enabled {
+  background: linear-gradient(
+    to right,
+    var(--accent-fill) 20px,
+    var(--accent) 20px,
+    var(--accent) 23px,
+    var(--accent-fill) 23px
+  );
+}
+.analysis-screen [hidden] {
+  display: none !important;
+}
+.analysis-screen .analysis-fixture-details,
+.analysis-screen .analysis-step-row > span {
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-time-gap-key {
+  color: var(--fg-3);
+}
+.analysis-screen .analysis-time-sector span,
+.analysis-screen .chart-caption,
+.analysis-screen .fold-y-axis span {
+  background: transparent;
+}
+
+/* 유리는 장식이다. 투명도를 줄인 환경에서는 꺼도 화면이 성립해야 한다. */
+@media (prefers-reduced-transparency: reduce) {
+  body:has(.analysis-screen),
+  .analysis-screen {
+    --panel: #2b303a;
+    --plot-bg: #262b34;
+  }
+  .analysis-screen .analysis-time-curve,
+  .analysis-screen .periodogram-card,
+  .analysis-screen .fold-panel,
+  .analysis-screen .analysis-judgment,
+  .analysis-screen .periodogram-unavailable,
+  .analysis-secondary details[open] {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
