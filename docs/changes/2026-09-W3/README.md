@@ -55,3 +55,4 @@
 | 2026-09-18 | YARN 호스트 준비와 Spark HDFS sample 실환경 검증 | S15P21C206-73 | YARN, CapacityScheduler, systemd, Docker, Spark 3.5.5, HDFS, Node 2, UFW, executor, checksum | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | YARN CI Runner 검증을 기존 CI Task로 후속 인계 | S15P21C206-91 | YARN, GitLab CI, validate:hadoop-config, Linux Runner, Pipeline | 채택·검증 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | YARN MR 재실행 안전성 리뷰 반영 | S15P21C206-73 | YARN, OOM, UFW, HA, Bash, log retention, non-destructive | 구현 완료·서버 재적용 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN 집계 로그 보존·회귀 검사 정정 | S15P21C206-73 | YARN, AggregatedLogDeletionService, journal cursor, cleanup, regression | 구현 완료·서버 재실행 검증 대기 | [2026-09-18](2026-09-18.md) |

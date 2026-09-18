@@ -42,7 +42,7 @@ def main():
         assert props["yarn.nodemanager.pmem-check-enabled"] == "true"
         assert props["yarn.nodemanager.vmem-check-enabled"] == "false"
         assert props["yarn.log-aggregation-enable"] == "true"
-        assert props["yarn.log-aggregation.retain-seconds"] == "604800"
+        assert "yarn.log-aggregation.retain-seconds" not in props
         for key in ("yarn.nodemanager.local-dirs", "yarn.nodemanager.log-dirs"):
             assert props[key].startswith("/mnt/data/yarn/")
         profiles[role] = props
@@ -100,7 +100,12 @@ def main():
         "capacity-scheduler.xml",
     ):
         assert required in yarn_installer, required
-    assert yarn_installer.index('systemctl is-active --quiet "$unit"') < yarn_installer.index(
+    stop_guard = (
+        'systemctl is-active --quiet "$unit" 2>/dev/null && fail '
+        '"Stop $unit before installing or updating managed files."'
+    )
+    assert yarn_installer.count(stop_guard) == 1
+    assert yarn_installer.index(stop_guard) < yarn_installer.index(
         'install -o root -g root -m 0644 "$source_dir/$profile"'
     )
     yarn_orchestrator = (BASE / "scripts/install-yarn-hosts.ps1").read_text(encoding="utf-8")
@@ -110,11 +115,19 @@ def main():
     assert "BatchMode=yes" in yarn_orchestrator and "StrictHostKeyChecking=yes" in yarn_orchestrator
     initializer = (BASE / "scripts/initialize-yarn-cluster.ps1").read_text(encoding="utf-8")
     assert "ValidateNodes" in initializer and "FinalAudit" in initializer
+    assert 'test "$(timedatectl show -p NTPSynchronized --value)" = yes' in initializer
+    assert 'test "$(timedatectl show -p Timezone --value)" = Etc/UTC' in initializer
     assert "planetory-yarn-private" in initializer
     assert "planetory-spark-private" in initializer and "7079:7095" in initializer
     assert "10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10" in initializer
-    assert "Default: deny \\(incoming\\)" in initializer
-    assert "active:standby|standby:active" in initializer
+    ufw_policy_guard = 'sudo ufw status verbose | grep -qE "^Default: deny \\(incoming\\)"'
+    assert initializer.count(ufw_policy_guard) == 1
+    assert initializer.index(ufw_policy_guard) < initializer.index(
+        'sudo ufw allow from "$source"'
+    )
+    initializer_ha_guard = 'case "$nn1_state:$nn2_state" in active:standby|standby:active)'
+    assert initializer.count(initializer_ha_guard) == 2
+    assert initializer.index(initializer_ha_guard) < initializer.index("dfs -mkdir /yarn-logs")
     assert "base64 --decode | bash" in initializer
     assert "hadoop-yarn-*.log.[0-9]*" in initializer
     sample_runner = (BASE / "scripts/run-yarn-sample.ps1").read_text(encoding="utf-8")
@@ -126,8 +139,15 @@ def main():
     assert "application -kill" in sample_runner and "docker rm -f" in sample_runner
     assert "for host in worker-2 worker-3 worker-4 worker-5 worker-6" in sample_runner
     assert "Final-State" in sample_runner and "SUCCEEDED" in sample_runner
-    assert "active:standby|standby:active" in sample_runner
-    assert "sudo -n journalctl -k" in sample_runner and "dmesg" not in sample_runner
+    sample_ha_guard = 'case "$nn1_state:$nn2_state" in\n active:standby|standby:active)'
+    assert sample_runner.count(sample_ha_guard) == 1
+    assert sample_runner.index(sample_ha_guard) < sample_runner.index("dfs -mkdir -p __BASE__/input")
+    assert "sudo -n journalctl -k -n 0 --show-cursor --no-pager" in sample_runner
+    assert sample_runner.count("sudo -n journalctl -k --after-cursor") == 2
+    assert "oomSince" not in sample_runner and "dmesg" not in sample_runner
+    container_cleanup = 'sudo docker rm -f $container >/dev/null 2>&1 || true'
+    assert sample_runner.count(container_cleanup) == 1
+    assert sample_runner.index(container_cleanup) > sample_runner.rindex("} finally {")
     assert "base64 --decode | bash" in sample_runner
     assert "BatchMode=yes" in sample_runner and "StrictHostKeyChecking=yes" in sample_runner
     forbidden_commands = (

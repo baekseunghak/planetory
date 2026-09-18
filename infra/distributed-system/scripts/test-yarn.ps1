@@ -67,6 +67,11 @@ $pythonChecks=@($yarnTestState.Calls | Where-Object { $_.Contains('python3 --ver
 if ($pythonChecks.Count -ne 5 -or @($yarnTestState.Calls | Where-Object { $_.Contains('Python 3.12.3') }).Count) {
  throw 'YARN Preflight must accept every Python 3.12 patch version on the five Workers.'
 }
+$clockChecks=@($yarnTestState.Calls | Where-Object {
+ $_.Contains('test "$(timedatectl show -p NTPSynchronized --value)" = yes') -and
+ $_.Contains('test "$(timedatectl show -p Timezone --value)" = Etc/UTC')
+})
+if ($clockChecks.Count -ne 6) { throw 'YARN Preflight must require synchronized UTC clocks on all six nodes.' }
 
 $yarnTestState.Calls.Clear()
 & $initialize -Step ConfigureFirewall -Confirm:$false

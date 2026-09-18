@@ -63,7 +63,7 @@ switch ($Step) {
  'Preflight' {
   foreach ($node in $nodes) {
    $unit=if ($node.Number -eq 1) {'hadoop-yarn-resourcemanager'} else {'hadoop-yarn-nodemanager'}
-   $command='set -eu; hostname -s; getent passwd yarn; test ! -e /var/lib/hadoop-yarn/.ssh; test -r /etc/hadoop/yarn-site.xml; test -r /etc/hadoop/capacity-scheduler.xml; test -r /etc/default/hadoop-yarn; systemctl show -p LoadState -p ActiveState '+$unit+'; '+$yarn+' version | head -n 1; grep -E "<name>yarn\.(resourcemanager|nodemanager|scheduler|log-aggregation)" /etc/hadoop/yarn-site.xml'
+   $command='set -eu; hostname -s; test "$(timedatectl show -p NTPSynchronized --value)" = yes; test "$(timedatectl show -p Timezone --value)" = Etc/UTC; getent passwd yarn; test ! -e /var/lib/hadoop-yarn/.ssh; test -r /etc/hadoop/yarn-site.xml; test -r /etc/hadoop/capacity-scheduler.xml; test -r /etc/default/hadoop-yarn; systemctl show -p LoadState -p ActiveState '+$unit+'; '+$yarn+' version | head -n 1; grep -E "<name>yarn\.(resourcemanager|nodemanager|scheduler|log-aggregation)" /etc/hadoop/yarn-site.xml'
    if ($node.Number -eq 1) {
     $command+='; docker --version; docker compose version; systemctl is-active docker'
    } else {

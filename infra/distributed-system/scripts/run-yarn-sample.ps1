@@ -46,7 +46,6 @@ if (-not $PSCmdlet.ShouldProcess('Planetory YARN cluster','pull pinned Spark ima
 
 $runStartedUtc=[datetime]::UtcNow
 $runId=$runStartedUtc.ToString('yyyyMMddTHHmmssZ')
-$oomSince=$runStartedUtc.ToString('yyyy-MM-dd HH:mm:ss UTC',[Globalization.CultureInfo]::InvariantCulture)
 $container="planetory-yarn-sample-$runId".ToLowerInvariant()
 $remoteDir="/tmp/planetory-yarn-sample-$runId"
 $remoteSample="$remoteDir/yarn-hdfs-sample.py"
@@ -54,6 +53,12 @@ $base="/validation/S15P21C206-73/run-$runId"
 $input="$base/input/input.txt"
 $output="$base/output"
 $scpArgs=@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',$sampleFile,"${node1}:$remoteSample")
+$cursorOutput=@(Invoke-Remote $node2 "sudo -n journalctl -k -n 0 --show-cursor --no-pager" 'Capture Node 2 kernel journal cursor')
+$oomCursor=$null
+foreach ($line in $cursorOutput) {
+ if ($line -match '^-- cursor: ([A-Za-z0-9=;._-]+)$') { $oomCursor=$Matches[1] }
+}
+if (-not $oomCursor) { throw 'Node 2 kernel journal did not return a usable cursor.' }
 try {
  $null=Invoke-Remote $node1 "install -d -m 700 $remoteDir" 'Prepare Node 1 sample staging'
  Invoke-Scp @scpArgs
@@ -119,7 +124,6 @@ while ([datetime]::UtcNow -lt $deadline) {
 }
 if (-not $applicationId) {
  $logs=@(Invoke-Tailscale ssh $node1 "sudo docker logs $container 2>&1 || true")
- $null=Invoke-Tailscale ssh $node1 "sudo docker rm $container >/dev/null 2>&1 || true"
  throw "Spark submission did not produce an application ID within 60 seconds.`n$($logs -join "`n")"
 }
 Write-Host "APPLICATION_ID=$applicationId"
@@ -150,10 +154,10 @@ echo NODE2_DURING_APPLICATION
 sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -status worker-2:8041
 free -m
 ps -C java -o pid=,rss=,args= | grep -E 'NameNode|DataNode|JournalNode|NodeManager|ApplicationMaster|CoarseGrainedExecutorBackend'
-oom_log=$(sudo -n journalctl -k --since '__OOM_SINCE__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
+oom_log=$(sudo -n journalctl -k --after-cursor '__OOM_CURSOR__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
 if printf '%s\n' "$oom_log" | grep -Ei 'out of memory|oom-kill|killed process'; then exit 1; fi
 echo NODE2_NO_OOM_DURING_SAMPLE
-'@.Replace('__OOM_SINCE__',$oomSince)
+'@.Replace('__OOM_CURSOR__',$oomCursor)
  $null=Invoke-Remote $node2 $node2During 'Node 2 memory during sample'
 
  $deadline=[datetime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -207,14 +211,16 @@ $node2After=@'
 set -eu
 __YARN__ node -status worker-2:8041
 free -m
-oom_log=$(sudo -n journalctl -k --since '__OOM_SINCE__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
+oom_log=$(sudo -n journalctl -k --after-cursor '__OOM_CURSOR__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
 if printf '%s\n' "$oom_log" | grep -Ei 'out of memory|oom-kill|killed process'; then exit 1; fi
 echo NODE2_NO_OOM_AFTER_SAMPLE
-'@.Replace('__YARN__',$yarn).Replace('__OOM_SINCE__',$oomSince)
+'@.Replace('__YARN__',$yarn).Replace('__OOM_CURSOR__',$oomCursor)
 $null=Invoke-Remote $node2 $node2After 'Node 2 limit after sample'
 
 Write-Host "PASS: APPLICATION_ID=$applicationId HDFS_OUTPUT=$output"
 } finally {
+ $containerCleanup=@(& tailscale ssh $node1 "sudo docker rm -f $container >/dev/null 2>&1 || true" 2>&1)
+ if ($LASTEXITCODE -ne 0) { Write-Warning "Sample container cleanup failed: $($containerCleanup -join "`n")" }
  $cleanup=@(& tailscale ssh $node1 "rm -rf -- $remoteDir" 2>&1)
  if ($LASTEXITCODE -ne 0) { Write-Warning "Sample staging cleanup failed: $($cleanup -join "`n")" }
 }
