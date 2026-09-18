@@ -45,7 +45,9 @@
     "dev:reactions": "vite --mode reactions --host 127.0.0.1 --port 58352 --strictPort",
     "test:reactions": "playwright test --config=playwright.reactions.config.ts --project=chromium",
     "dev:materials": "vite --mode materials --host 127.0.0.1 --port 58354 --strictPort",
-    "test:materials": "playwright test --config=playwright.materials.config.ts --project=chromium"
+    "test:materials": "playwright test --config=playwright.materials.config.ts --project=chromium",
+    "dev:performance": "node --import tsx scripts/performance-server.mjs",
+    "measure:performance": "node scripts/measure-performance.mjs"
   },
   "dependencies": {
     "react": "19.2.8",
