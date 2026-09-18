@@ -6,6 +6,12 @@ import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
+import { PostEditorPage } from "./features/community/PostEditorPage";
+import {
+  CommunityPage,
+  PostPage,
+  SignalThreadPage,
+} from "./features/community/CommunityPages";
 
 // Register feature components here after their individual tickets are implemented.
 async function start() {
@@ -25,7 +31,15 @@ async function start() {
     );
     return;
   }
-  let pages: PageSlots = { sky: SkyDataPage };
+  let pages: PageSlots = {
+    sky: SkyDataPage,
+    community: CommunityPage,
+    starBoard: CommunityPage,
+    post: PostPage,
+    postCreate: PostEditorPage,
+    postEdit: PostEditorPage,
+    thread: SignalThreadPage,
+  };
   if (import.meta.env.VITE_SKY_RENDERER_ENABLED === "true")
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
@@ -37,6 +51,13 @@ async function start() {
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
   if (import.meta.env.DEV && import.meta.env.VITE_GALAXY_FIXTURE === "true")
     pages.sky = (await import("../dev/GalaxyInspector")).GalaxyInspector;
+  if (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_INTERACTION_FIXTURE === "true"
+  )
+    pages.sky = (
+      await import("./features/sky-renderer/GalaxyScene")
+    ).GalaxyPage;
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ErrorBoundary>
