@@ -10,14 +10,42 @@ services:
     networks:
       - service
 
+  service-db:
+    image: postgres:18.6-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-planetory_poc}
+      POSTGRES_USER: ${POSTGRES_USER:-planetory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # 서비스 런타임 계정. 소유자와 분리해야 GRANT/REVOKE가 실제로 집행된다(ADR D5).
+      APP_DB_USER: ${DATABASE_USER:-planetory_service}
+      APP_DB_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
+    # 외부 인바운드 0개. 포트를 호스트에 노출하지 않고 service 네트워크 안에서만 붙는다.
+    volumes:
+      - service-db-data:/var/lib/postgresql
+      # 빈 볼륨 첫 초기화 때만 실행된다. 기존 볼륨은 README의 수동 절차를 따른다.
+      - ./service-db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planetory} -d ${POSTGRES_DB:-planetory_poc}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - service
+
   backend:
     image: ${BACKEND_IMAGE:-local/planetory-backend:not-configured}
     platform: linux/amd64
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://not-configured/planetory}
-      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-not-configured}
-      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-not-configured}
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://service-db:5432/planetory_poc}
+      # 런타임은 planetory_app만 가진 계정으로 붙는다. 소유자로 붙으면 REVOKE가 무력화된다.
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-planetory_service}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
+      # Flyway만 소유자로 붙는다. DDL과 GRANT는 소유자여야 실행된다.
+      DATABASE_MIGRATION_USER: ${POSTGRES_USER:-planetory}
+      DATABASE_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_PROFILES_INCLUDE: ${OAUTH_PROFILES:-}
       AUTH_SUCCESS_URL: ${AUTH_SUCCESS_URL:-/api/v1/me}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -31,8 +59,16 @@ services:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      service-db:
+        condition: service_healthy
     networks:
       - service
 
 networks:
   service:
+
+volumes:
+  # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
+  service-db-data:
+    name: planetory-service-db-data
