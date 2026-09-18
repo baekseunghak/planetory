@@ -78,6 +78,7 @@ const analyses = Array.from({ length: 23 }, (_, index) => ({
 export function communityFixturePlugin(
   writable = false,
   commentWrites = false,
+  reactionWrites = false,
 ): Plugin {
   const records = structuredClone(posts);
   const deleted = new Set<string>();
@@ -110,6 +111,19 @@ export function communityFixturePlugin(
         updatedAt: date,
       })),
     );
+  const choices = new Map<string, string>();
+  const voters = Array.from({ length: 23 }, (_, i) => ({
+    memberId: "u-voter-" + i,
+    nickname: "반응 회원 " + (i + 1),
+  }));
+  const reaction = (id: string) => {
+    const mine = choices.get(id) ?? "NONE";
+    return {
+      myReaction: mine,
+      agree: 23 + (mine === "AGREE" ? 1 : 0),
+      disagree: mine === "DISAGREE" ? 1 : 0,
+    };
+  };
   const deletedComments = new Set<string>();
   const parentExists = (type: string | null, id: string | null) =>
     type === "POST"
@@ -127,11 +141,13 @@ export function communityFixturePlugin(
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: commentWrites
-            ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-            : writable
-              ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-              : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: reactionWrites
+            ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+            : commentWrites
+              ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+              : writable
+                ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -158,7 +174,15 @@ export function communityFixturePlugin(
           const context =
             url.pathname +
             "|" +
-            ["board", "ticId", "parentType", "parentId", "judgment"]
+            [
+              "board",
+              "ticId",
+              "parentType",
+              "parentId",
+              "judgment",
+              "reaction",
+              "size",
+            ]
               .map((key) => url.searchParams.get(key) ?? "")
               .join("|");
           const prefix = Buffer.from(context).toString("base64url") + ":";
@@ -436,6 +460,56 @@ export function communityFixturePlugin(
           send({ commentId: row.commentId, createdAt: now }, 201);
           return;
         }
+        const reactionMatch = url.pathname.match(
+          /^\/v1\/posts\/([^/]+)\/(my-reaction|reactions)$/,
+        );
+        if (reactionWrites && reactionMatch) {
+          const id = reactionMatch[1];
+          if (!records.some((row) => row.postId === id)) {
+            missing();
+            return;
+          }
+          if (req.method === "GET" && reactionMatch[2] === "reactions") {
+            const kind = url.searchParams.get("reaction");
+            if (!["AGREE", "DISAGREE"].includes(kind ?? "")) {
+              send(
+                { code: "VALIDATION_FAILED", message: "반응 종류 확인" },
+                400,
+              );
+              return;
+            }
+            paginate([
+              ...(kind === "AGREE" ? voters : []),
+              ...(choices.get(id) === kind ? [author] : []),
+            ]);
+            return;
+          }
+          if (req.method === "PUT" && reactionMatch[2] === "my-reaction") {
+            if (req.headers["x-csrf-token"] !== "community-fixture-209") {
+              send({ code: "CSRF_INVALID", message: "CSRF 확인" }, 403);
+              return;
+            }
+            let input;
+            try {
+              let body = "";
+              for await (const chunk of req) {
+                body += String(chunk);
+                if (body.length > 1000) throw new Error();
+              }
+              input = JSON.parse(body);
+            } catch {
+              send({ code: "VALIDATION_FAILED", message: "입력 확인" }, 400);
+              return;
+            }
+            if (!["AGREE", "DISAGREE", "NONE"].includes(input?.reaction)) {
+              send({ code: "VALIDATION_FAILED", message: "반응 값 확인" }, 400);
+              return;
+            }
+            choices.set(id, input.reaction);
+            send({ postId: id, ...reaction(id) });
+            return;
+          }
+        }
         if (req.method !== "GET") {
           send(
             {
@@ -491,7 +565,12 @@ export function communityFixturePlugin(
         const postId = url.pathname.match(/^\/v1\/posts\/([^/]+)$/)?.[1];
         if (postId) {
           const post = records.find((value) => value.postId === postId);
-          if (post) send(post);
+          if (post)
+            send(
+              reactionWrites
+                ? { ...post, reactionSummary: reaction(postId) }
+                : post,
+            );
           else missing();
           return;
         }

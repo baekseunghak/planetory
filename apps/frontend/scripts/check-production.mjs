@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "212 개발 검증용 반응",
   "211 개발 검증용 댓글",
   "210 개발 검증용 데이터",
   "community-fixture-209",
