@@ -98,7 +98,7 @@ test("HTTP public fixtures have full grid identity and no undisclosed candidate 
       `/api/v1/stars/${tics.normal}/curves?bundleId=${context.curveContext.bundleId}&curveStep=0`,
     )
   ).json();
-  expect(decodeCurve(curve, context).kind).toBe("ready");
+  expect(decodeCurve(curve, context, 200).kind).toBe("ready");
 });
 
 test("HTTP contracts distinguish access denial, invalid queries, missing data and residual pending", async ({

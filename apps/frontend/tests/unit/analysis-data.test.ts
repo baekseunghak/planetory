@@ -19,7 +19,7 @@ const context = () =>
 
 test("analysis preserves large string IDs, full segment arrays, null gaps and scalar scatter", () => {
   const current = context();
-  const curve = decodeCurve(analysisCurveFixture(), current);
+  const curve = decodeCurve(analysisCurveFixture(), current, 200);
   assert.equal(current.curveContext.bundleId, "9007199254740993");
   assert.equal(current.foldReferenceTimeBtjd, 1683.4231);
   assert.equal(curve.kind, "ready");
@@ -91,7 +91,7 @@ test("curve decoder rejects mismatched TIC, Bundle, removal set, version and com
     },
     { ...original, residual: { status: "RESIDUAL_READY", jobId: "job" } },
   ])
-    assert.throws(() => decodeCurve(value, context()));
+    assert.throws(() => decodeCurve(value, context(), 200));
 });
 test("curve decoder rejects truncated arrays, invalid numbers and gaps that contain observed flux", () => {
   const original = analysisCurveFixture(),
@@ -108,10 +108,10 @@ test("curve decoder rejects truncated arrays, invalid numbers and gaps that cont
     { ...segment, gaps: [[0, 1]] },
   ])
     assert.throws(() =>
-      decodeCurve({ ...original, segments: [changed] }, context()),
+      decodeCurve({ ...original, segments: [changed] }, context(), 200),
     );
   assert.throws(() =>
-    decodeCurve({ ...original, segments: [segment, segment] }, context()),
+    decodeCurve({ ...original, segments: [segment, segment] }, context(), 200),
   );
 });
 test("curve identity includes sorted removal IDs and both calculation versions", () => {
@@ -148,24 +148,35 @@ test("curve identity includes sorted removal IDs and both calculation versions",
 test("not-computed residual remains unavailable rather than an empty success or fake queued job", () => {
   const ticId = ANALYSIS_FIXTURE_TICS.notComputed;
   const current = decodeAnalysisContext(analysisContextFixture(ticId), ticId);
+  // 서버는 202에 같은 본문 구조를 두고 segments만 null로 보낸다. code 필드는 없다.
   const body = {
-    code: "CURVE_NOT_READY",
-    segments: null,
+    ticId,
+    bundleId: current.curveContext.bundleId,
+    foldReferenceTimeBtjd: current.foldReferenceTimeBtjd,
+    curveContext: analysisContextFixture(ticId).currentCurveContext,
     residual: { status: null, jobId: null },
+    fluxUnit: "normalized",
+    segments: null,
   };
-  assert.deepEqual(decodeCurve(body, current), {
+  assert.deepEqual(decodeCurve(body, current, 202), {
     kind: "not-ready",
     status: null,
     jobId: null,
   });
-  assert.throws(() => decodeCurve(body, context()));
+  assert.throws(() => decodeCurve(body, context(), 202));
   assert.throws(() =>
     decodeCurve(
       { ...body, residual: { status: "QUEUED", jobId: null } },
       current,
+      202,
     ),
   );
-  assert.throws(() => decodeCurve({ ...body, code: undefined }, current));
+  // 200인데 segments가 null이면 정상 응답이 아니다.
+  assert.throws(() => decodeCurve(body, current, 200));
+  // 202인데 segments가 있으면 대기 상태로 받아들이지 않는다.
+  assert.throws(() =>
+    decodeCurve({ ...body, segments: [] }, current, 202),
+  );
 });
 test("synthetic responses use the real query shape and never provide an answer catalog", () => {
   const response = analysisFixtureResponse(

@@ -84,3 +84,7 @@
 | 2026-09-18 | YARN 집계 로그 보존·회귀 검사 정정 | S15P21C206-73 | YARN, AggregatedLogDeletionService, journal cursor, cleanup, regression | 구현 완료·서버 재실행 검증 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 제출 수치 검증·후보 매칭·고조파 판정 계산(공통 표본 31개 재현) | S15P21C206-142 | SubmissionMatching, 6.2 검증, epoch 산정, 5.1 네 조건, 배율 1 우선, matched_harmonic, ambiguous_match, duplicate, 관측 창, bin 시작 시각, matching-cases.v0, rule-0 | 구현 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
+
+| 2026-09-18 | 분석 응답 파서를 실제 서버 계약에 맞춤 | S15P21C206-182 | 계약 불일치, bundleVersion 문자열, binningRevision, 202 CURVE_NOT_READY, currentCurveContext.notice, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 주기도 대기 응답을 실제 서버 계약에 맞춤 | S15P21C206-183 | 주기도 202, power null, code 없음, decodePendingPeriodogram, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |

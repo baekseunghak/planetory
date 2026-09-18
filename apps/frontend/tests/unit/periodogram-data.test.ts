@@ -203,9 +203,11 @@ test("paths retain large string Bundle IDs and canonical removal set with no imp
   assert.deepEqual(current.curveContext.removedCandidateIds, ["b", "a"]);
 });
 test("pending residual is unavailable, preserves real job identity and never fabricates a queued job", () => {
+  // 서버는 202에도 같은 주기도 본문을 두고 power만 null로 보낸다.
+  // code·segments 필드는 없다 (AnalysisViews.Periodogram).
   const pending = {
-    code: "CURVE_NOT_READY",
-    segments: null,
+    ...periodogramFixture(tics.pending),
+    power: null,
     residual: { status: null, jobId: null },
   };
   assert.deepEqual(decodePendingPeriodogram(pending, context(tics.pending)), {
@@ -247,5 +249,5 @@ test("missing rules are kept absent for legacy observations, but malformed suppl
         tics.normal,
       ),
     );
-  assert.equal(decodeCurve(periodCurveFixture(), context()).kind, "ready");
+  assert.equal(decodeCurve(periodCurveFixture(), context(), 200).kind, "ready");
 });

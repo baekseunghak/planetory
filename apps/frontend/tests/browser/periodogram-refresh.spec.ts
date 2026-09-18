@@ -18,7 +18,7 @@ function snapshot(next: boolean) {
     peaks = candidatePeaksFixture(tic);
   if (next) {
     context.bundle.bundleId = nextId;
-    context.bundle.bundleVersion = 8;
+    context.bundle.bundleVersion = "v8";
     context.currentCurveContext.bundleId = nextId;
     context.currentCurveContext.curveStep = 1;
     context.currentCurveContext.removedCandidateIds = [removed];
