@@ -75,7 +75,10 @@ const analyses = Array.from({ length: 23 }, (_, index) => ({
   contributesToSummary: index < 15,
 }));
 
-export function communityFixturePlugin(): Plugin {
+export function communityFixturePlugin(writable = false): Plugin {
+  const records = structuredClone(posts);
+  const deleted = new Set<string>();
+  let serial = 1000;
   return {
     name: "community-fixture-209",
     apply: "serve",
@@ -88,13 +91,15 @@ export function communityFixturePlugin(): Plugin {
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: writable
+            ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+            : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
     },
     configureServer(server) {
-      server.middlewares.use("/api", (req, res) => {
+      server.middlewares.use("/api", async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
         const url = new URL(req.url ?? "/", "http://localhost");
@@ -149,6 +154,138 @@ export function communityFixturePlugin(): Plugin {
           res.end();
           return;
         }
+        if (
+          writable &&
+          ["POST", "PATCH", "DELETE"].includes(req.method ?? "") &&
+          /^\/v1\/posts(?:\/[^/]+)?$/.test(url.pathname)
+        ) {
+          if (req.headers["x-csrf-token"] !== "community-fixture-209") {
+            send(
+              { code: "CSRF_INVALID", message: "인증 정보를 확인해 주세요." },
+              403,
+            );
+            return;
+          }
+          const id = url.pathname.split("/")[3];
+          const index = records.findIndex((post) => post.postId === id);
+          if (req.method === "DELETE") {
+            if (deleted.has(id)) {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+            if (index < 0) {
+              missing();
+              return;
+            }
+            deleted.add(id);
+            records.splice(index, 1);
+            res.statusCode = 204;
+            res.end();
+            return;
+          }
+          if (req.method === "PATCH" && index < 0) {
+            missing();
+            return;
+          }
+          let input: Record<string, unknown>;
+          try {
+            let body = "";
+            for await (const chunk of req) {
+              body += String(chunk);
+              if (body.length > 100_000) throw new Error();
+            }
+            input = JSON.parse(body);
+            if (!input || Array.isArray(input) || typeof input !== "object")
+              throw new Error();
+          } catch {
+            send(
+              { code: "VALIDATION_FAILED", message: "입력을 확인해 주세요." },
+              400,
+            );
+            return;
+          }
+          const values =
+            req.method === "PATCH" ? { ...records[index], ...input } : input;
+          const fields = [];
+          if (
+            typeof values.title !== "string" ||
+            !values.title.trim() ||
+            Array.from(values.title.trim()).length > 100 ||
+            /[\r\n\u0085\u2028\u2029]/.test(values.title.trim())
+          )
+            fields.push({
+              field: "title",
+              reason: "제목은 1~100자로 입력해 주세요.",
+            });
+          if (
+            typeof values.body !== "string" ||
+            !values.body.trim() ||
+            Array.from(values.body).length > 10_000
+          )
+            fields.push({
+              field: "body",
+              reason: "본문은 1~10,000자로 입력해 주세요.",
+            });
+          if (
+            ![
+              "ANALYSIS",
+              "QUESTION",
+              "DISCUSSION",
+              "INFORMATION",
+              "GENERAL",
+            ].includes(String(values.purposeTag))
+          )
+            fields.push({
+              field: "purposeTag",
+              reason: "글 종류를 선택해 주세요.",
+            });
+          if (fields.length || !Object.keys(input).length) {
+            send(
+              {
+                code: "VALIDATION_FAILED",
+                message: "입력을 확인해 주세요.",
+                fieldErrors: fields,
+              },
+              400,
+            );
+            return;
+          }
+          if (
+            values.ticId !== null &&
+            values.ticId !== undefined &&
+            values.ticId !== "259377017"
+          ) {
+            send(
+              {
+                code: "RESOURCE_NOT_FOUND",
+                message: "공개된 별 게시판을 찾을 수 없습니다.",
+              },
+              404,
+            );
+            return;
+          }
+          const now = new Date().toISOString();
+          const post = {
+            ...posts[0],
+            ...(req.method === "PATCH"
+              ? records[index]
+              : { postId: `p-${++serial}`, commentCount: 0, createdAt: now }),
+            title: (values.title as string).trim(),
+            body: values.body as string,
+            purposeTag: values.purposeTag as string,
+            ticId: (values.ticId as string | null) ?? null,
+            updatedAt: now,
+          };
+          if (req.method === "PATCH") {
+            records[index] = post;
+            send(post);
+          } else {
+            records.unshift(post);
+            send({ postId: post.postId, createdAt: post.createdAt }, 201);
+          }
+          return;
+        }
         if (req.method !== "GET") {
           send(
             {
@@ -161,8 +298,8 @@ export function communityFixturePlugin(): Plugin {
         }
         if (url.pathname === "/v1/me") {
           send({
-            memberId: "community-fixture-member-209",
-            nickname: "209 검증 계정",
+            memberId: writable ? "u-209" : "community-fixture-member-209",
+            nickname: writable ? "210 검증 계정" : "209 검증 계정",
             onboardingDone: true,
             tutorialCompleted: true,
           });
@@ -183,7 +320,7 @@ export function communityFixturePlugin(): Plugin {
               createdAt: date,
               commentCount: thread.threadId === "st-301" ? 2 : 0,
             })),
-            ...posts.map((post) => ({
+            ...records.map((post) => ({
               ...post,
               id: post.postId,
               type: "POST",
@@ -203,7 +340,7 @@ export function communityFixturePlugin(): Plugin {
         }
         const postId = url.pathname.match(/^\/v1\/posts\/([^/]+)$/)?.[1];
         if (postId) {
-          const post = posts.find((value) => value.postId === postId);
+          const post = records.find((value) => value.postId === postId);
           if (post) send(post);
           else missing();
           return;
@@ -237,7 +374,7 @@ export function communityFixturePlugin(): Plugin {
             type = url.searchParams.get("parentType");
           if (
             !(type === "POST"
-              ? posts.some((post) => post.postId === id)
+              ? records.some((post) => post.postId === id)
               : type === "SIGNAL_THREAD" &&
                 threads.some((thread) => thread.threadId === id))
           ) {
