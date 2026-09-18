@@ -323,14 +323,16 @@ public final class SubmissionMatching {
     /**
      * 후보 하나·배율 하나의 평가(SRS 5.1). 오차는 허용치로 나눈 값이라 1 이하가 통과다.
      *
-     * @param nTransits      관측된 후보 통과 수 N(상한 적용 뒤)
-     * @param overlapRatio   N 대비 사용자 창과 겹친 통과 비율. 우세 판정의 중첩 비교에만 쓴다
-     * @param score          {@code max(ePeriod, eEpoch, eDuration)}. 허용치 대비 가장 약한 조건이며 순위에만 쓴다
+     * @param nTransits        주기 조건의 N. 관측된 통과 수에 운영 규칙의 상한({@code n_transits_cap})을 건 값이다
+     * @param observedTransits 관측된 후보 통과 수. 상한을 걸지 않는다
+     * @param overlapRatio     관측된 통과 중 사용자 창과 겹친 비율({@code overlapTransits / observedTransits}).
+     *                         0~1이며 우세 판정의 중첩 비교에만 쓴다
+     * @param score            {@code max(ePeriod, eEpoch, eDuration)}. 허용치 대비 가장 약한 조건이며 순위에만 쓴다
      */
     public record Evaluation(long candidateId, double multiplier, double correctedPeriodDays, int nTransits,
-                             double ePeriod, double eEpoch, double eDuration, double durationRatio,
-                             boolean durationPass, int overlapTransits, double overlapRatio, boolean pass,
-                             double score) {
+                             int observedTransits, double ePeriod, double eEpoch, double eDuration,
+                             double durationRatio, boolean durationPass, int overlapTransits, double overlapRatio,
+                             boolean pass, double score) {
     }
 
     /** 통과 후보가 둘 이상일 때 1·2위 비교. */
@@ -440,7 +442,9 @@ public final class SubmissionMatching {
         double halfWidth = Math.max(candidateDuration / 2, rules.minWindowDays() / 2);
 
         List<Double> transits = candidateTransits(observation, candidate, candidateDuration);
-        int n = rules.nTransitsCap() == null ? transits.size() : Math.min(transits.size(), rules.nTransitsCap());
+        int observed = transits.size();
+        // 상한은 주기 누적 오차의 N에만 건다(SRS 5.1 주기 조건, DEC-03). 중첩은 관측된 통과 전체로 센다.
+        int n = rules.nTransitsCap() == null ? observed : Math.min(observed, rules.nTransitsCap());
         double ePeriod = Math.abs(corrected - candidatePeriod) * n / halfWidth;
 
         // 절반 주기 alias에서는 사용자가 고른 통과가 후보의 홀수 번째일 수 있어 짧은 주기로 순환한다.
@@ -468,8 +472,8 @@ public final class SubmissionMatching {
         }
         boolean overlapPass = overlapTransits >= rules.minOverlapTransits();
         boolean pass = ePeriod <= 1 && eEpoch <= 1 && durationPass && overlapPass;
-        return new Evaluation(candidate.id(), multiplier, corrected, n, ePeriod, eEpoch, eDuration, ratio,
-                durationPass, overlapTransits, n == 0 ? 0 : (double) overlapTransits / n, pass,
+        return new Evaluation(candidate.id(), multiplier, corrected, n, observed, ePeriod, eEpoch, eDuration, ratio,
+                durationPass, overlapTransits, observed == 0 ? 0 : (double) overlapTransits / observed, pass,
                 Math.max(ePeriod, Math.max(eEpoch, eDuration)));
     }
 

@@ -7,6 +7,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import com.planetory.backend.domain.exploration.service.SubmissionMatching;
+import com.planetory.backend.domain.exploration.service.SubmissionMatching.Evaluation;
 import com.planetory.backend.domain.exploration.service.SubmissionMatching.Match;
 import com.planetory.backend.domain.exploration.service.SubmissionMatching.MatchStatus;
 import com.planetory.backend.domain.exploration.service.SubmissionMatching.Observation;
@@ -133,6 +134,33 @@ class SubmissionMatchingTest {
         var compared = SubmissionMatching.candidatesToCompare(List.of(kept, retired, undiscoverable, removed), Set.of(4L));
 
         assertEquals(List.of(new SubmissionMatching.Candidate(1, 5, 2001, 2.4)), compared);
+    }
+
+    // ---------- 관측 통과 수 상한 ----------
+
+    /**
+     * 상한({@code n_transits_cap})은 주기 누적 오차의 N에만 건다. 중첩 비율의 분모는 상한 전 관측 통과 수라
+     * 0~1을 벗어나지 않는다. 상한을 분모에 쓰면 이 사례에서 11이 되어 우세 판정의 중첩 비교가 틀어진다.
+     */
+    @Test
+    void 통과_수_상한은_주기_오차에만_걸고_중첩_비율은_관측된_통과_전체로_센다() {
+        Rules capped = new Rules(20 / 1440.0, 0.25, 3, false, List.of(1.0, 2.0, 0.5), 1, 0.5, 2, 1, 0.5, 0.1, 0.1);
+        Selection selection = new Selection(5.001, 0.19, 0.21, null);
+        Validation validation = SubmissionMatching.validate(OBSERVATION, capped, selection, "LIKELY_PLANET", List.of(),
+                Map.of());
+        assertTrue(validation.ok(), () -> String.valueOf(validation.rejection()));
+
+        Match match = SubmissionMatching.match(OBSERVATION, capped, selection, validation.derived(),
+                List.of(new SubmissionMatching.Candidate(401, 5, 2001, 2.4)), List.of());
+
+        Evaluation direct = match.evaluations().stream().filter(e -> e.multiplier() == 1).findFirst().orElseThrow();
+        assertEquals(11, direct.observedTransits(), "2016년 통과는 공백이라 관측 통과는 11회다");
+        assertEquals(1, direct.nTransits(), "주기 조건의 N은 상한 1이다");
+        double halfWidth = Math.max(2.4 / 24 / 2, 20 / 1440.0 / 2);
+        assertEquals(Math.abs(5.001 - 5) * 1 / halfWidth, direct.ePeriod(), 1e-12, "누적 오차는 상한을 건 N으로 잰다");
+        assertEquals(11, direct.overlapTransits());
+        assertEquals(1.0, direct.overlapRatio(), "중첩 비율 = 겹친 통과 / 관측 통과");
+        assertTrue(match.evaluations().stream().allMatch(e -> e.overlapRatio() >= 0 && e.overlapRatio() <= 1));
     }
 
     // ---------- duplicate ----------
