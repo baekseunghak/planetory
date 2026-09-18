@@ -2,6 +2,7 @@ package com.planetory.backend.domain.gold;
 
 import java.util.List;
 import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -12,9 +13,14 @@ import com.fasterxml.jackson.databind.JsonNode;
  * 과학 계약(D06·D20)이 확정한 뒤 {@code operation_settings}의 rule_version이 관리하므로
  * 여기서는 규칙을 해석하지 않고 그대로 전달한다.
  *
+ * <p>여덟 항목 밖의 키는 무시한다. V3 CHECK는 필수 항목만 강제하고 추가 키를 허용하며, 배치는
+ * {@code checksum_version} 같은 항목을 더 넣는다 [S15P21C206-117]. 모르는 키에서 실패하면 계약대로
+ * 적재한 판을 읽지 못한다 [S15P21C206-140].
+ *
  * <p>키는 snake_case다. manifest는 배치가 쓰고 백엔드가 읽는 DB 내부 데이터이며 API로 그대로
  * 나가지 않는다.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record GoldManifest(
         /** 이 판이 참조하는 light_curve_segments id 집합. 섹터가 아니라 revision까지 특정한다. */
         @JsonProperty("segment_ids") List<Long> segmentIds,

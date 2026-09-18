@@ -20,6 +20,16 @@ function Invoke-Gcloud {
  if ($LASTEXITCODE -ne 0) { throw "gcloud failed: $($args -join ' ')" }
  $output
 }
+function Invoke-Tailscale {
+ $output=& tailscale @args
+ if ($LASTEXITCODE -ne 0) { throw "tailscale failed: $($args -join ' ')" }
+ $output
+}
+function Invoke-Scp {
+ $output=& scp @args
+ if ($LASTEXITCODE -ne 0) { throw "scp failed: $($args -join ' ')" }
+ $output
+}
 $network='planetory-vpc'
 if (-not (Get-Command gcloud -ErrorAction SilentlyContinue)) { throw 'Install Google Cloud CLI first.' }
 try {
@@ -30,9 +40,18 @@ try {
 $local=($json -join "`n") | ConvertFrom-Json
 $node=$NodeNumbers[[array]::IndexOf($Projects,$ProjectId)]
 $vm=if ($node -eq 1) {'master-1'} else {"worker-$node"}
+$tailHost="node-$node"
+$tailUser=if ($node -eq 1) {'SSAFY'} else {'planetory-admin'}
+$sshTarget="$tailUser@$tailHost"
 $vmJson=Invoke-Gcloud compute instances describe $vm "--project=$ProjectId" "--zone=$Zone" --format=json
 $instance=($vmJson -join "`n") | ConvertFrom-Json
 if (-not @($instance.networkInterfaces | Where-Object { $_.network -like "*/projects/$ProjectId/global/networks/$network" -and $_.networkIP -eq "10.20.$node.10" }).Count) { throw "VM $vm does not match $network / 10.20.$node.10. Check Projects and NodeNumbers before peering. No changes were made." }
+if (-not $SkipHosts) {
+ if (-not (Get-Command tailscale -ErrorAction SilentlyContinue) -or -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and an OpenSSH client with scp before updating hosts.' }
+ $null=Invoke-Tailscale ping --timeout=5s $tailHost
+ $hostname=@(Invoke-Tailscale ssh $sshTarget hostname -s) | Select-Object -Last 1
+ if (-not $hostname -or $hostname.Trim() -ne $vm) { throw "Tailnet target $sshTarget must resolve to $vm. No peering or VM changes were made." }
+}
 # Check all name conflicts before creating any peering.
 for ($i=0;$i -lt $Projects.Count;$i++) {
  $peer=$Projects[$i]
@@ -72,11 +91,11 @@ $hostLines+='# END planetory-cluster'
 $tempFile=[IO.Path]::GetTempFileName()
 try {
  [IO.File]::WriteAllText($tempFile,($hostLines -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
- Invoke-Gcloud compute scp $tempFile "${vm}:/tmp/planetory-cluster-hosts" "--project=$ProjectId" "--zone=$Zone"
+ Invoke-Scp $tempFile "${sshTarget}:/tmp/planetory-cluster-hosts"
  $replaceHosts="if sudo grep -q '^# planetory-cluster$' /etc/hosts; then echo 'Legacy hosts block found; inspect and migrate it manually before retrying.' >&2; exit 1; fi; sudo cp -p /etc/hosts /etc/hosts.planetory-backup-"+'$(date +%s%N)'+" && sudo sed -i '/^# BEGIN planetory-cluster$/,/^# END planetory-cluster$/d' /etc/hosts && sudo sh -c 'cat /tmp/planetory-cluster-hosts >> /etc/hosts' && rm /tmp/planetory-cluster-hosts"
- Invoke-Gcloud compute ssh $vm "--project=$ProjectId" "--zone=$Zone" "--command=$replaceHosts"
+ Invoke-Tailscale ssh $sshTarget $replaceHosts
  Write-Host 'Checking three aliases per node (short name + two FQDNs); repeated IP rows are expected.'
- Invoke-Gcloud compute ssh $vm "--project=$ProjectId" "--zone=$Zone" "--command=getent hosts $($hostNames -join ' ')"
+ Invoke-Tailscale ssh $sshTarget "getent hosts $($hostNames -join ' ')"
 } finally {
  Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
 }

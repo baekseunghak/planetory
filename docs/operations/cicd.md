@@ -34,7 +34,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 ## 독립 배포
 
-- Frontend·Backend: EC2-A와 EC2-B job을 각각 수동 실행한다.
+- Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. 파일에 남아 있는 EC2-B job은 배포 대상이 아니며 제거는 `S15P21C206-84`·`S15P21C206-93`에서 처리한다.
 - Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
 - Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다.
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
@@ -42,12 +42,14 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
 
+서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A `redis-session`에 있으므로 그 컨테이너를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
+
 ## 필요한 GitLab 변수
 
 | 구분 | 변수 |
 | --- | --- |
 | 공통 SSH | `DEPLOY_USER`, File 타입 `DEPLOY_SSH_KEY`, File 타입 `DEPLOY_KNOWN_HOSTS` |
-| EC2 | `EC2_A_HOST`, `EC2_A_DEPLOY_PATH`, `EC2_B_HOST`, `EC2_B_DEPLOY_PATH` |
+| EC2 | `EC2_A_HOST`, `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
 | GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`, `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
 | 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
@@ -67,15 +69,18 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 HDFS 삭제, NameNode 초기화, 전체 노드 동시 재시작과 Gold 공개 전환은 일반 애플리케이션 배포 job에 넣지 않는다.
 
-Hadoop/YARN 데몬은 호스트에서 실행한다.
+Hadoop/YARN 데몬은 호스트에서 실행한다. 일반 애플리케이션 배포와 분리해 다음 순서로 준비한다.
 
-1. `infra/distributed-system/config/hadoop/`의 공통 파일을 `/etc/hadoop/`에 배포한다.
-2. 노드 역할에 맞는 `config/yarn/` 파일을 배포한다.
-3. [운영 절차](../../infra/distributed-system/README.md)에 따라 서비스를 시작한다.
+1. `S15P21C206-72`에서 OpenJDK 17과 Hadoop 3.5.0을 설치하고 `config/hadoop/`의 공통 파일을 `/etc/hadoop/`에 배포한다.
+2. HDFS systemd 서비스를 배치한 뒤 [운영 절차](../../infra/distributed-system/README.md)에 따라 QJM·NameNode·DataNode를 초기화하고 RF2 표본을 검증한다.
+3. `S15P21C206-73`에서 노드 역할에 맞는 `config/yarn/` 파일과 YARN systemd 서비스를 배포한다.
+4. ResourceManager·NodeManager를 시작하고 Spark 3.5.5 sample application을 실행한다.
 
 신규 NameNode format과 Standby bootstrap은 한 번만 수동 수행한다. `initializeSharedEdits`는 기존 단일 NameNode를 HA로 전환할 때만 사용한다.
 
 GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며 CI에서 실행하지 않는다.
+
+`S15P21C206-73`은 YARN XML·`scripts/*yarn*`·`validate.py` 변경의 로컬 검사와 실환경 검증까지만 완료했다. 정확한 Linux Runner 경로 선택과 성공·실패 Pipeline 증거는 기존 [S15P21C206-91](https://ssafy.atlassian.net/browse/S15P21C206-91)에서 확인하며, 73번 완료 상태는 현재 커밋의 CI 통과를 포함하지 않는다.
 
 - CI의 XML·Compose 검사는 VM 생성이나 실제 클러스터 동작을 검증하지 않는다.
 - 설정 파일만 수정해도 validate는 실행된다.

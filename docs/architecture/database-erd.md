@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.8
+# Planetory 서비스 DB ERD v1.10
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,24 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.9 → v1.10 (2026-09-17, `S15P21C206-140`)
+
+`light_curve_segments.gaps` 설명의 "빈 칸은 NaN으로 채운다"를 바로잡는다. 빈 칸은 `flux`의 NULL이다. 저장은 처음부터 `real[]`의 NULL이었고 [Gold 게시 계약](../../contracts/gold/README.md) 4절도 `flux`를 유한수 또는 `null`로 정한다. 문구대로 NaN을 넣으면 `S15P21C206-117`이 제안한 배열 checksum에서 NULL과 같은 바이트가 되어 checksum 검증으로도 걸러지지 않는다.
+
+`periodograms.power`에는 NULL을 두지 않는다. 주기도는 격자 전 점에 값이 있어야 하며 빈 칸은 곡선에만 있다(`S15P21C206-117` 공개 QA 계약).
+
+두 규칙을 마이그레이션 V10의 CHECK로 적재 단계에서 막는다. `ck_light_curve_segments_flux_finite_or_null`은 `flux`의 NaN·±Infinity를, `ck_periodograms_power_all_finite`는 `power`의 NULL·NaN·±Infinity를 거절한다. Publisher 정규화만으로는 부족하다. 정규화를 거치지 않는 경로(수동 적재·복구 스크립트)가 하나만 생겨도 조용히 들어가기 때문이다(v1.6과 같은 이유). 열은 그대로이며 Backend 조회도 같은 값을 한 번 더 거절한다.
+
+### v1.8 → v1.9 (2026-09-17, `S15P21C206-151`)
+
+`operation_settings.values`의 형식 1을 정하고 DB가 저장 순간 검사한다(AT-41). 키 목록·허용 값·입력 절차는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md)이 정본이다. 모든 키를 요구하고 모르는 키를 거절해 오타 난 설정이 조용히 무시되지 않게 한다. 값 자체(허용 오차·임계값)는 이 판이 정하지 않으며 D20·D11이 정한다.
+
+행 목록이 변경 이력이라는 결정을 DB가 지킨다. 적용된 행의 수정·삭제와 테이블 비우기, 지난 시각이나 다른 행과 같은 시각의 삽입을 거절한다. 적용 시각이 오지 않은 예약 행만 지울 수 있다. v1.4는 `analysis_histories`의 불변을 권한 회수로 정했지만, 규칙은 운영자가 소유자 계정으로 넣어 권한으로는 막을 수 없으므로 트리거를 쓴다.
+
+모든 환경에 초기 규칙 `rule-0`을 넣는다. `submissions.rule_version`이 FK라 규칙 행이 없으면 제출을 저장할 수 없다. 값은 제출 매칭 규칙 v0(`S15P21C206-128`)와 탐사 API 기본값이며, `tutorial.skip_after`만 환경별(로컬 3, 배포 0)로 넣는다.
+
+`tutorial_stars.tic_id`·`challenge_rounds.target_tic_id`는 공개된 별만 받고 `challenge_rounds`는 `starts_on ≤ ends_on`만 받는다(OPS-07·08). 대상 열을 넣거나 바꿀 때만 검사하므로 대상 별이 나중에 숨겨져도 회차 종료·튜토리얼 비활성화는 막지 않는다. 열은 그대로다.
 
 ### v1.7 → v1.8 (2026-09-16, `S15P21C206-138`)
 
@@ -572,9 +590,9 @@ erDiagram
 |---|---|
 | tic_id, sector, binning_revision | UNIQUE(tic_id, sector, binning_revision). observation_datasets와 같은 섹터 단위이고, 원천·전처리·비닝 설정이 바뀌면 기존 행을 덮어쓰지 않고 새 revision 행을 만든다 |
 | start_btjd DOUBLE PRECISION, bin_minutes, n_points | **시각 배열은 저장하지 않는다.** i번째 점의 시각 = `start_btjd + (bin_minutes / 1440.0) × i` (BTJD는 일 단위이므로 분을 일로 환산한다). `start_btjd`는 첫 bin의 시작 시각이다. 섹터 안에서 균등 격자이므로 계산으로 충분하다 |
-| flux `real[]` | 품질 필터 후 10분 간격으로 비닝한 밝기. 길이 = n_points |
+| flux `real[]` | 품질 필터 후 10분 간격으로 비닝한 밝기. 길이 = n_points. 원소는 유한수 또는 NULL(빈 bin)이며 CHECK가 NaN·±Infinity를 거절한다(V10) |
 | flux_scatter | 그 섹터의 점간 산포 하나. 점마다의 오차 배열 대신 대표값 하나만 둔다. 비닝하면 점마다의 오차가 거의 같아지므로 충분하다 |
-| gaps JSONB | 그 섹터 안의 빈 구간 인덱스. 균등 격자를 유지하려고 빈 칸은 NaN으로 채운다 |
+| gaps JSONB | 그 섹터 안의 빈 구간 인덱스. `[start, end]` 폐구간 배열이다. 균등 격자를 유지하려고 빈 칸은 `flux`에 NULL로 두며 NaN을 쓰지 않는다 |
 
 섹터 사이의 긴 공백(길게는 수년)은 행을 나눠서 표현한다. 전체 기간에 균등 격자를 걸면 대부분이 빈 칸이 되므로 섹터 단위가 맞다.
 
@@ -584,7 +602,7 @@ erDiagram
 |---|---|
 | bundle_id | PK 겸 FK. 후보 탐색 결과가 바뀌면 주기도도 바뀌므로 판에 묶는다. **current 판 것만 유지**하므로 별당 한 행이다 |
 | period_min_days, period_max_days | 주기 축 범위. 시작은 0.5일로 공통이고 끝은 그 별 후보표의 최장 주기를 덮는 값(최소 40일)이라 별마다 다르다(EXP-04) |
-| n_periods, power `real[]` | 화면 표시용 5,000점. **주기 격자 배열은 저장하지 않는다.** 위 두 값과 manifest의 간격 규칙(로그 등간격)으로 i번째 주기를 계산한다. 봉우리의 정확한 주기는 candidates에 있다 |
+| n_periods, power `real[]` | 화면 표시용 5,000점. **주기 격자 배열은 저장하지 않는다.** 위 두 값과 manifest의 간격 규칙(로그 등간격)으로 i번째 주기를 계산한다. 봉우리의 정확한 주기는 candidates에 있다. power 원소는 격자 전 점에 값이 있는 유한수이며 CHECK가 NULL·NaN·±Infinity를 거절한다(V10) |
 
 **저장하는 배열과 저장하지 않는 배열.** 시각은 시작 시각과 간격에서, 주기 격자는 범위 두 값과 간격 규칙에서 계산되므로 저장하지 않는다. 배열은 PostgreSQL이 TOAST 영역에 열 단위로 압축 저장하므로, 메타데이터만 읽는 조회는 배열을 건드리지 않는다.
 
@@ -673,7 +691,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 |---|---|
 | 키 | `tic:{tic_id}:b{bundle_id}:rm{removed_candidate_ids 정렬}:{residual_model_version}:{periodogram_config_version}` |
 | 값 | 상태(QUEUED / RESIDUAL_CALCULATING / RESIDUAL_READY / PERIODOGRAM_CALCULATING / COMPLETED / FAILED), 잔차 배열, 주기도 배열, 실패 단계 |
-| 중복 계산 방지 | 같은 키를 여러 서버가 동시에 요청하면 `SETNX`로 한 서버만 계산 |
+| 중복 계산 방지 | 같은 키를 동시에 요청하면 `SETNX`로 한 번만 계산 |
 | 만료 | 판이 `archived`가 될 때, 또는 TTL |
 
 ### D. 성과·진행·발견
@@ -773,9 +791,9 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 ### F. 운영·챌린지·알림·통계
 
-- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6).
-- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04).
-- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
+- **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6). `tic_id`는 공개된 별만(v1.9 트리거).
+- **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04). **v1.9:** `values`는 형식 1(`format_version`과 `selection`·`matching`·`peaks`·`discovery`·`tutorial`·`ai`·`bls` 묶음, 예: `tutorial_skip_after` → `tutorial.skip_after`)만 받는다(CHECK `ck_operation_settings_values_valid`). 적용 시각 유일(`uq_operation_settings_applied_at`), 적용된 행 수정·삭제·비우기와 지난 시각 삽입 거절(트리거), 초기 규칙 `rule-0`. 상세는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md).
+- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
@@ -783,7 +801,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 ## 4. 설계 결정과 근거
 
-1. **Gold 본문은 DB 배열이다(v0.3).** 곡선·주기도는 배치가 만든 뒤 읽기만 하는 데이터라 파일이 가장 단순하지만, 팀이 운영 편의(SQL로 바로 확인, 별 단위 부분 갱신, Standby 복제로 A·B 자동 동기화, 덤프 하나로 백업)를 택했다. 대가는 조회가 Spring·JDBC를 타면서 붙는 수 ms, CDN 캐시 불가, DB 용량 증가다. 조회 API는 어차피 Spring 엔드포인트이므로 인증·오류 형식은 그대로 유지된다. 저장은 두 원칙으로 줄인다. 규칙에서 계산되는 배열(시각, 주기 격자)은 저장하지 않고, 한 번 확정되면 안 바뀌는 곡선은 판이 아니라 별·섹터에 묶어 판 사이에 복제하지 않는다.
+1. **Gold 본문은 DB 배열이다(v0.3).** 곡선·주기도는 배치가 만든 뒤 읽기만 하는 데이터라 파일이 가장 단순하지만, 팀이 운영 편의(SQL로 바로 확인, 별 단위 부분 갱신)를 택했다. 처음 근거에 있던 "Standby 복제로 자동 동기화"와 "덤프 하나로 백업"은 2026-09-17 단일 노드 확정(D6·D7)으로 성립하지 않으나, 나머지 근거로 결정은 유지한다. 대가는 조회가 Spring·JDBC를 타면서 붙는 수 ms, CDN 캐시 불가, DB 용량 증가다. 조회 API는 어차피 Spring 엔드포인트이므로 인증·오류 형식은 그대로 유지된다. 저장은 두 원칙으로 줄인다. 규칙에서 계산되는 배열(시각, 주기 격자)은 저장하지 않고, 한 번 확정되면 안 바뀌는 곡선은 판이 아니라 별·섹터에 묶어 판 사이에 복제하지 않는다.
 2. **후보는 교체·유지한다.** candidates.id는 별에 고정된 신호 식별자다. 판이 바뀌면 값 갱신·추가·retired로 처리하고 옛 값은 candidate_status_history에 남긴다. 공식 스레드(UNIQUE candidate_id)·성과(UNIQUE user×candidate)·재현(removed_candidate_ids)이 모두 이 전제 위에 있다.
 3. **별 열림의 원인은 성과 행이다.** user_candidate_achievements INSERT → star_unlocks(trigger_achievement_id). 등급 상승·완료는 트리거가 아니다. 등급 문자는 achievement_count에서 계산한다.
 4. **판이 바뀌면 세션도 따라 올린다(v0.3 결정 C).** 후보표는 판마다 이력을 남기지 않고 값을 갱신한다. 그래서 이전 판 화면을 보여주면 판정만 최신 표로 이뤄져 어긋난다. 이전 판을 남기지 않고 진행 중인 회원에게 갱신을 알리는 쪽을 택했다. 화면과 판정이 항상 같은 판이고, previous 보존과 판별 후보 이력이 둘 다 필요 없어진다. 대가는 분석 도중 한 번 다시 불러오는 것인데, 그 별에 새 섹터가 들어오는 27일에 한 번, 야간 배치 시점에만 생긴다.
@@ -800,7 +818,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 | # | 항목 | 관련 |
 |---|---|---|
-| 1 | operation_settings에 넣을 항목 목록과 기본값 확정 | OPS-04·08, DEC-03 |
+| 1 | operation_settings 기본값 확정. 항목 목록은 v1.9 형식 1로 정했고 `rule-0`은 개발용 v0 값이다. 확정 값은 새 규칙 버전으로 넣는다 | OPS-04·08, DEC-03, D20·D11 |
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |

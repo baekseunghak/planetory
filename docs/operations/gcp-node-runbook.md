@@ -9,6 +9,14 @@
 
 팀원 등록, 서버별 SSH 계정과 접근 제한은 [Tailscale 팀 서버 접근 가이드](tailscale-team-access.md)를 따른다. 서버 점검과 자동화에서도 가이드의 사용자명을 명시하고 로컬·격리 실행 계정 이름을 원격 사용자로 추정하지 않는다.
 
+```powershell
+tailscale ping node-1
+tailscale ssh SSAFY@node-1
+tailscale ssh planetory-admin@node-2
+```
+
+일상 로그인·점검·파일 전송은 이 tailnet 경로를 사용한다. `gcloud`는 VM·디스크·네트워크 같은 GCP 제어 영역 조회·변경에 사용하고, `gcloud compute ssh`는 최초 Tailscale 등록 또는 tailnet 장애 복구에만 사용한다.
+
 `node-*` 접속은 관리용 Tailscale 경로이며 `10.20.x.10`을 사용하는 GCP VPC Peering 실환경 검증을 대신하지 않는다.
 
 ## 2. 노드 상태 점검
@@ -147,13 +155,36 @@ systemctl is-active ufw 2>/dev/null || true
 systemctl is-active tailscaled 2>/dev/null || true
 ```
 
-`22 ALLOW Anywhere`와 IPv6 동일 규칙은 호스트 방화벽 기준 최소 개방이 아니다. Tailscale 관리 경로, Node 1 내부 관리 경로와 비상 GCP 직접 접속 경로를 확정하고 제한 규칙을 먼저 추가한다. 별도 SSH 세션에서 새 규칙을 검증하기 전에는 기존 허용 규칙을 삭제하거나 UFW를 재시작하지 않는다.
+`22 ALLOW Anywhere`와 IPv6 동일 규칙은 호스트 방화벽 기준 최소 개방이 아니다. Tailscale 관리 경로, Node 1 내부 관리 경로와 비상 GCP 직접 접속 경로를 확정하고 제한 규칙을 먼저 추가한다. 별도 tailnet SSH 세션에서 새 규칙을 검증하기 전에는 기존 허용 규칙을 삭제하거나 UFW를 재시작하지 않는다.
 
-Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. 서비스 시작 후 `ss -lntp`의 실제 리스너와 필요한 노드 관계를 기준으로 허용 범위를 결정한다.
+Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 열지 않는다. HDFS 최초 초기화에서는 [단계형 초기화 스크립트](../../infra/distributed-system/scripts/initialize-hdfs-ha.ps1)의 `ConfigureFirewall`이 UFW 기본 incoming deny와 기존 SSH 규칙을 유지하면서 정확한 6개 사설 IP에만 역할별 `8020`, `8485`, `9870`, `9864`, `9866`, `9867`을 허용한다. JournalNode HTTP `8480`은 Standby의 edit log 읽기에 필요하므로 Node 1~3에서 두 NameNode IP `10.20.1.10`, `10.20.2.10`에만 별도로 허용한다. 적용 전후에는 `NetworkDiagnostics`와 `JournalNodes`로 두 NameNode에서 세 JournalNode의 `8485/TCP`와 `8480/HTTP`를 확인한다.
 
-## 6. SSH 접속 장애
+YARN은 [단계형 YARN 스크립트](../../infra/distributed-system/scripts/initialize-yarn-cluster.ps1)의 `ConfigureFirewall`을 사용한다. 이 단계는 UFW가 active이고 기본 incoming 정책이 deny인지 먼저 확인하며, 전제가 다르면 어떤 허용 규칙도 추가하지 않는다. Node 1의 ResourceManager `8030~8033,8088`과 Worker의 NodeManager `8040~8042`는 정확한 6개 사설 IP에서만 허용한다. Spark cluster mode 내부 통신은 Worker 5개 IP 사이에서 driver `7078`과 block manager `7079~7095`만 허용한다. block manager는 같은 Worker에 여러 컨테이너가 배치되면 `7079`부터 포트를 증가시키므로 기본 재시도 범위를 함께 열어야 한다. NodeManager가 모든 인터페이스에 bind하는 현재 PoC의 접근 경계는 GCP VPC 방화벽과 이 UFW 규칙의 조합이다.
 
-집·교육장·VPN 변경으로 접속 공인 IP가 달라질 수 있다. Worker는 실제 VM 이름으로 바꾼다. 진단 중 API 활성화 질문이 나올 수 있다.
+YARN 상태는 다음처럼 확인한다. 현재 unit은 실행 중이지만 부팅 자동 시작은 비활성이다.
+
+```bash
+systemctl is-active hadoop-yarn-resourcemanager  # Node 1
+systemctl is-active hadoop-yarn-nodemanager      # Node 2~6
+sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+  HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -list -all
+```
+
+재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다. YARN unit은 아직 disabled 상태이며 HDFS unit과의 자동 부팅 순서·health gate는 `S15P21C206-74`에서 자동 시작 결정과 함께 검증한다.
+
+## 6. tailnet SSH 장애와 GCP 비상 복구
+
+먼저 클라이언트 연결, MagicDNS, 대상 노드와 SSH 권한을 확인한다.
+
+```powershell
+tailscale status
+tailscale ping node-1
+tailscale ssh SSAFY@node-1 hostname -s
+```
+
+실패하면 Tailscale Admin Console에서 사용자·장비 승인, 대상 노드 `Connected`, ACL의 네트워크 접근과 SSH 규칙을 각각 확인한다. Tailscale SSH는 대상 Linux 계정을 자동 생성하지 않으므로 Node 1은 `SSAFY`, Node 2~6은 `planetory-admin` 계정이 실제로 존재해야 한다.
+
+tailnet으로 복구할 수 없고 서버 안의 `tailscaled` 또는 네트워크를 고쳐야 할 때만 GCP 직접 접속을 비상 경로로 사용한다. Worker는 실제 VM 이름으로 바꾼다. 진단 중 API 활성화 질문이 나올 수 있다.
 
 ```powershell
 gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b --troubleshoot
@@ -178,7 +209,7 @@ if ($LASTEXITCODE -ne 0) { throw 'SSH 방화벽 갱신 실패' }
 gcloud compute ssh master-1 --project=$ProjectId --zone=asia-east1-b
 ```
 
-`--source-ranges`는 전체 허용 목록을 교체한다. 현재 IP만 넣어 기존 관리 주소를 제거하거나 문제 해결을 위해 `0.0.0.0/0`을 열지 않는다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수 없다.
+비상 접속으로 `tailscaled`를 복구한 뒤 `tailscale ping`과 `tailscale ssh`를 다시 통과해야 일상 경로가 복구된 것이다. `--source-ranges`는 전체 허용 목록을 교체한다. 현재 IP만 넣어 기존 관리 주소를 제거하거나 문제 해결을 위해 `0.0.0.0/0`을 열지 않는다. 피어링 재생성으로 SSH 허용 IP 불일치를 해결할 수 없다.
 
 ## 7. 리소스·quota·비용 종료 기준
 
@@ -197,3 +228,71 @@ gcloud compute project-info describe --project=$ProjectId
 예산 알림은 과금을 자동 중단하지 않는다. 티켓에는 각 계정의 Trial·크레딧 적용 여부, 현재 비용과 확인 시각, 예산 임계값, 알림 수신자, VM 중단일과 최종 자원 정리일을 기록한다.
 
 VM만 중지하거나 삭제해도 `auto-delete=no` 영속 디스크와 예약 고정 IP는 계속 과금될 수 있다. 종료할 때 인스턴스, 디스크, 주소를 각각 확인하며 실제 삭제는 대상과 결과 이전 여부를 확인하고 승인받은 뒤 수행한다.
+
+### 2026-09-17 실측 결과 (`S15P21C206-228`)
+
+6개 프로젝트 모두에서 소유자 IAM과 결제 계정 IAM(`roles/billing.admin` 5개, `planetory-0003`은 확인 시점에 `roles/billing.costsManager`였고 이후 `billing.admin`으로 확보됨)을 받아 위 명령과 콘솔 결제 화면을 직접 조회한 결과다. 위 계획값은 이 절 앞부분의 사전 추정이며, 실측과의 차이는 이 표로 대체한다.
+
+인스턴스는 6대 모두 `asia-east1-b`, `e2-custom-6-36864`, `RUNNING`이다. 디스크·quota·예약 IP는 다음과 같다.
+
+| 노드 | 프로젝트 | 생성일 | 디스크(GB) | 리전 `DISKS_TOTAL_GB` | 예약 고정 IP |
+| --- | --- | --- | --- | --- | --- |
+| master-1 | planetory-0001 | 2026-09-09 | 30 + 200 pd-standard | 230 / 2048 (11%) | `planetory-master-ip` 1개 사용 중 |
+| worker-2 | planetory-0002 | 2026-09-09 | 30 + 2000 pd-standard + 100 pd-balanced(metadata) | 2030 / 2048 (**99%**) | 없음 |
+| worker-3 | planetory-0003 | 2026-09-10 | 30 + 2000 pd-standard | 2030 / 2048 (**99%**) | 없음 |
+| worker-4 | planetory-0004-508301 | 2026-09-10 | 30 + 2000 pd-standard | 2030 / 4096 (50%) | 없음 |
+| worker-5 | planetory-0005 | 2026-09-09 | 30 + 2000 pd-standard | 2030 / 4096 (50%) | 없음 |
+| worker-6 | planetory-0006 | 2026-09-09 | 30 + 2000 pd-standard | 2030 / 2048 (**99%**) | 없음 |
+
+`planetory-0002`·`0003`·`0006`은 리전 디스크 quota가 99%로 새 디스크를 붙일 여유가 거의 없다. 미사용 디스크와 미사용 예약 IP는 없었다. VM 내부 `/`, `/mnt/data`(, `/mnt/metadata`) 사용률은 6개 노드 모두 1-15%로 2절 운영 기준(70%) 대비 여유가 크다.
+
+위 표의 "예약 고정 IP"는 별도로 예약해 둔 static 주소만 센 것이며, **6대 모두 퍼블릭 IP 자체는 갖고 있다.** master-1은 예약 static(`planetory-master-ip`), worker-2부터 worker-6까지는 인스턴스에 자동 할당된 임시(ephemeral) 외부 IP다. 6개 프로젝트 모두 Cloud Router·Cloud NAT가 없어 이 외부 IP가 각 VM의 유일한 인터넷 아웃바운드 경로다. **NAT를 먼저 구성하지 않고 이 외부 IP를 해제하면 1절의 Tailscale SSH(코디네이션 서버로 나가는 아웃바운드가 끊김)와 6절의 `gcloud compute ssh` 비상 경로가 모두 끊긴다.** SKU 실측상 임시 외부 IP 자체의 과금은 0에 가까워(worker-6에서 `External IP Charge on a Standard VM` 159.82시간 ₩0) 비용 정리 목적으로 뗄 실익도 없다.
+
+각 결제 계정의 크레딧은 다음과 같다(확인 시각 2026-09-17 21:30 KST 전후, 콘솔 반영은 최대 24시간 지연될 수 있어 실제 잔액은 표시값보다 낮을 수 있다).
+
+| 프로젝트 | 크레딧 잔액 | 총액 | 남은 비율 | 만료일 |
+| --- | --- | --- | --- | --- |
+| planetory-0001 | ₩311,669 | ₩435,523 | 72% | 2026-11-24 |
+| planetory-0002 | ₩320,461 | ₩414,984 | 77% | 2026-12-08 |
+| planetory-0003 | ₩336,315 | ₩414,984 | 81% | 2026-12-08 |
+| planetory-0004-508301 | ₩336,326 | ₩414,984 | 81% | 2026-12-08 |
+| planetory-0005 | ₩335,682 | ₩414,984 | 81% | 2026-11-24 |
+| planetory-0006 | ₩326,049 | ₩414,984 | 79% | 2026-12-08 |
+
+만료일은 모두 2026-11-24 이후로 목표 기한(2026-10-09)보다 뒤이므로, 이 기한에서는 만료가 아니라 소진 속도가 제약이다.
+
+**정정(2026-09-18):** 위 2026-09-17 판정의 하루 사용액은 `정가` 월 합계를 대략적인 가동일수로 나눈 값이라 워커 사이에 실제로 없는 차이(₩11,587-13,819)가 생겼다. 결제 보고서를 날짜별로 그룹화(`그룹화 기준(날짜)`, `청구 기간별 기간`을 원하는 구간으로 지정)해 최근 안정 구간(2026년 9월 12일부터 16일까지)의 일별 실측값으로 다시 계산했다.
+
+- `planetory-0001`: 최근 3일(9월 15일부터 17일까지) 서비스별 내역에 `Kubernetes Engine`·`Cloud Monitoring`이 **₩0**으로 확인되어 완전히 해제됐다(Kubernetes Engine API도 `disabled` 상태). 2026년 9월 1일부터 8일까지는 이 VM 생성(9-10) 이전의 별도 GKE 사용으로 하루 ₩8,340-8,800이 나갔으나 이는 이미 소진되어 현재 잔액에 반영된 매몰 비용이다. 현재 안정 하루 사용액은 ₩10,035다. 워커 기준(₩13,321/일)과의 차이(₩3,285/일)는 pd-standard 1,800GB(2030GB-230GB) 차이의 이론가(₩3,240/일)와 1.4% 오차로 일치해, 디스크를 줄여 둔 효과로 설명된다.
+- `planetory-0003`·`0004-508301`·`0005`·`0006`: 최근 5일 하루 사용액이 ₩13,274-13,374로 사실상 동일하다(같은 인스턴스·같은 디스크 구성이므로 요율은 같고, 잔액 차이는 아래처럼 생성·가동 개시 시각 차이로 설명된다).
+- `planetory-0002`: 하루 ₩13,735-13,827로 나머지 워커보다 ₩450-500/일 높다. metadata용 pd-balanced 100GB의 이론가(₩450-500/일)와 일치해, 추가 디스크 때문이다.
+
+2026-09-18 확인 시각 기준 잔액과 위 실측 요율로, 2026-10-09까지 21일을 다시 계산했다.
+
+| 프로젝트 | 하루 사용액(실측) | 잔액(09-18) | 21일 필요액 | 잔액 대비 여유 | 소진 예상일 |
+| --- | --- | --- | --- | --- | --- |
+| planetory-0001 | ₩10,035 | ₩303,888 | ₩210,735 | ₩93,153 (31%) | 10-18경 |
+| planetory-0003 | ₩13,321 | ₩325,051 | ₩279,741 | ₩45,310 (16%) | 10-12경 |
+| planetory-0004-508301 | ₩13,323 | ₩325,022 | ₩279,783 | ₩45,239 (16%) | 10-12경 |
+| planetory-0005 | ₩13,321 | ₩325,317 | ₩279,741 | ₩45,576 (16%) | 10-12경 |
+| planetory-0006 | ₩13,322 | ₩315,134 | ₩279,762 | ₩35,372 (13%) | 10-11경 |
+| planetory-0002 | ₩13,790 | ₩309,516 | ₩289,590 | **₩19,926 (7%)** | **10-10경** |
+
+`planetory-0002`가 여전히 가장 위험하며 소진 예상이 목표 기한 바로 다음 날이다. `planetory-0003`·`0004-508301`·`0005`의 잔액이 09-18 기준 서로 300원 이내로 거의 같은 이유는, 0005가 생성일(9/10)이 하루 빠르지만 당일 첫 가동이 예상보다 늦게 시작돼(첫날 실측 ₩2,788로 정상 가동일의 약 5시간 분량) 하루 일찍 생성된 효과가 상쇄됐기 때문이다. `planetory-0006`이 이 셋보다 잔액이 약 ₩10,000(하루치) 적은 것은 정상 가동 개시가 하루 더 빨랐던 것과 일치한다.
+
+하루 사용액의 약 28%는 사용률 1-15%인 pd-standard 디스크 비용이지만, GCP 영속 디스크는 축소가 불가능하고 위 quota 한계로 교체용 신규 디스크를 붙일 여유도 없어 이번 점검에서는 디스크 축소를 실행하지 않았다.
+
+각 결제 계정에는 `EXCLUDE_ALL_CREDITS` 예산 알림을 6개 계정 각 1개, 실제 크레딧 총액·기한 10-09로 통일했다. 처음에는 `planetory-0002`부터 `planetory-0006`까지를 크레딧 총액을 모르는 상태에서 보수값 ₩380,000으로, `planetory-0001`은 매월 리셋되는 중복 예산과 함께 만들어 기준이 갈렸으나, 6개 계정 크레딧 총액을 모두 확인한 뒤 아래처럼 정리했다.
+
+| 프로젝트 | 예산 이름 | 금액(=크레딧 총액) | 기간 | 임계값 |
+| --- | --- | --- | --- | --- |
+| planetory-0001 | `planetory-0001 크레딧 누적 감시` | ₩435,523 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+| planetory-0002 | `planetory-0002 크레딧 소진 감시` | ₩414,984 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+| planetory-0003 | `planetory-0003 크레딧 소진 감시` | ₩414,984 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+| planetory-0004-508301 | `planetory-0004-508301 크레딧 소진 감시` | ₩414,984 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+| planetory-0005 | `planetory-0005 크레딧 소진 감시` | ₩414,984 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+| planetory-0006 | `planetory-0006 크레딧 소진 감시` | ₩414,984 | 2026-08-25 - 2026-10-09 | 50 / 80 / 100% |
+
+`planetory-0001`의 매월 리셋 중복 예산(`크레딧 소진 감시`)은 누적 소진을 추적하지 못해 삭제했다. 80% 임계값은 하루 사용액 기준 2026년 10월 7-8일경 도달해 기한 전 조기 경보로 작동한다.
+
+미확정 사항: `planetory-0005`·`0006`이 다른 워커보다 하루 사용액이 낮게 나온 원인(추정 오차인지 실제 차이인지), `planetory-0001` Kubernetes Engine·Cloud Monitoring 사용 목적, VM 생성 후 27일 기준(9월 9-10일 생성분 10월 6-7일)과 이번 목표 기한(10-09) 중 자원 정리 기준으로 어느 쪽을 따를지, 6개 프로젝트 모두 Cloud NAT가 없어 외부 IP가 유일한 아웃바운드 경로인 상태를 그대로 유지할지 NAT를 별도로 구성할지.

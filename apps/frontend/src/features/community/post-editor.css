@@ -1,0 +1,106 @@
+.post-editor {
+  max-width: 880px;
+}
+.post-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.post-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+.post-editor input,
+.post-editor textarea,
+.post-editor select {
+  color: #e5e9ee;
+  background: #111c2e;
+  border: 1px solid #536078;
+  border-radius: 4px;
+  padding: 12px;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.post-editor textarea {
+  resize: vertical;
+  min-height: 220px;
+  line-height: 1.8;
+}
+.post-editor small {
+  color: var(--muted);
+}
+.post-editor [aria-invalid="true"] {
+  border-color: #eea8a1;
+}
+.post-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-block: 24px;
+}
+.post-recovery {
+  border-top: 1px solid var(--line);
+  padding-block: 20px;
+}
+.post-recovery li {
+  padding: 8px;
+  overflow-wrap: anywhere;
+}
+.post-editor .post-ack {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 24px;
+}
+.post-ack input {
+  width: 20px;
+  height: 20px;
+}
+.post-dialog {
+  color: #e5e9ee;
+  background: #101b2d;
+  border: 1px solid #62738d;
+  border-radius: 8px;
+  max-width: 600px;
+  max-height: 80vh;
+  padding: 28px;
+}
+.post-dialog::backdrop {
+  background: #000a;
+}
+
+.comment-editor {
+  margin-block: 1.5rem 2rem;
+  padding-block: 1.5rem;
+  border-block: 1px solid #ffffff20;
+}
+.comment-editor textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 7rem;
+  padding: 1rem;
+  color: inherit;
+  background: #0c1420;
+  border: 1px solid #ffffff40;
+  border-radius: 0.4rem;
+  font: inherit;
+  resize: vertical;
+}
+.comment-editor p {
+  line-height: 1.7;
+}
+.comment-editor label {
+  display: block;
+  margin-bottom: 0.5rem;
+}

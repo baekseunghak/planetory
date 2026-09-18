@@ -130,6 +130,16 @@ docker compose --profile service up -d --build backend
 docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT version, description, installed_on, success FROM flyway_schema_history ORDER BY installed_rank;"
 ```
 
+### V9 운영 규칙 검증·초기 규칙
+
+파일: `V9__operation_rules.sql` (S15P21C206-151). 형식·절차 정본은 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)이다.
+
+- `operation_settings.values`를 형식 1로 검사하는 CHECK, 적용 시각 유일 인덱스, 이력 보호 트리거를 만든다. `tutorial_stars`·`challenge_rounds`는 공개된 별만 대상으로 받고 회차 기간이 뒤집히면 거절한다.
+- 모든 환경에 초기 규칙 `rule-0`을 넣는다. `tutorial.skip_after`는 마이그레이션 연결의 세션 설정 `planetory.tutorial_skip_after`에서 오며, `local` 프로필은 `spring.flyway.init-sqls`로 3을 주고 설정이 없으면(배포, Flyway를 직접 구성하는 테스트) 0이다.
+- **마이그레이션 SQL에 Flyway placeholder(`${...}`) 같은 전용 문법을 쓰지 않는다.** `experiments/gold-roundtrip`이 파일을 Flyway 없이 그대로 실행한다. `OperationRulesTest`가 모든 마이그레이션을 같은 방식으로 실행해 확인한다.
+- 테스트 데이터는 `operation_settings`에 행을 넣지 말고 V9가 넣은 `rule-0`을 참조한다. `'{}'` 같은 값은 CHECK가 거절하고, 적용된 행은 지우거나 비울 수 없으므로 `TRUNCATE`에 이 테이블을 넣지 않는다. 규칙 행이 필요한 테스트는 되돌리는 트랜잭션 안에서 넣는다(`OperationRulesTest`).
+- 기존 개발 DB에 형식 이전 규칙 행·공개되지 않은 대상 별·기간이 뒤집힌 회차가 있으면 V9가 건수를 알리고 되돌아간다. 행을 고치거나, 데이터를 버려도 되는 로컬 볼륨이면 아래 규칙의 볼륨 초기화로 새로 만든다.
+
 ### 마이그레이션 규칙
 
 - 새 변경은 `V2__설명.sql`, `V3__설명.sql`처럼 버전 번호와 두 개의 밑줄로 추가한다. 설명은 영문 snake_case로 쓴다.
@@ -145,7 +155,7 @@ docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT 
 | global_stats | 집계 산식·열·유일 인덱스 확정 후 materialized view 및 갱신 Job 작성 |
 | candidates.quality | 자료형·의미 확정 후 열 추가 |
 | ai_executions.status | TEXT 열은 유지. 허용값 확정 후 CHECK 추가 |
-| 운영 seed·튜토리얼 TIC | ERD·탐사 담당자가 값 확정 후 별도 입력. `submissions.rule_version`이 `operation_settings`를 FK로 참조하므로 **탐사 제출 API를 붙이기 전에 seed 마이그레이션(또는 환경별 seed)이 먼저 적용되어야 한다** |
+| 운영 규칙 값·튜토리얼 TIC | 초기 규칙 `rule-0`은 V9가 넣는다(아래 V9 절). 값 확정(D20·D11)은 새 규칙 버전으로, 튜토리얼 TIC(DEC-01)은 운영자가 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md) 절차로 넣는다 |
 | `rule_version` FK 범위 | `candidate_dispositions`·`candidate_status_history`의 `rule_version`은 ERD가 관계선을 그리지 않아 FK 없이 TEXT로 뒀다. 같은 의미라면 FK를 추가할지 ERD 담당자가 결정 |
 | DB 역할·불변성 | 애플리케이션/마이그레이션/배치 역할 분리 및 History 수정·삭제 제한. 현재 로컬은 Compose 개발 계정이 스키마를 소유하며 운영 권한 구성이 아님 |
 | 첨부·공개 분석 | 소유자·TIC·게시글 종류 검증, 불변 필드 보호의 서비스/트리거 책임 확정 |

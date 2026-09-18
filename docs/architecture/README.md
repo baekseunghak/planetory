@@ -8,6 +8,7 @@
 | PostgreSQL 테이블·관계·제약 | [서비스 DB ERD](database-erd.md) | 백엔드 데이터 모델 기준선 |
 | GCP 노드·디스크·네트워크 | [GCP 분산 인프라](gcp-distributed-infrastructure.md) | 인프라 상세·PoC 계획 |
 | EC2 잔차·주기도 계산 | [온라인 파생 계산](online-derived-compute.md) | 계산 경계 상세 |
+| EC2 진입·장애 전환 | [EC2 서비스 진입·장애 전환 경계](ec2-service-entry-failover.md) | 진입·포트·신뢰 경계·장애 시나리오·데이터 손실 경계 상세, 채택 |
 | 디렉터리와 배포 단위 | [저장소 구조](repository-structure.md) | 저장소 배치 정본 |
 
 ## 자주 쓰는 약어
