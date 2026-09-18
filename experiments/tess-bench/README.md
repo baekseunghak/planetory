@@ -58,7 +58,7 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
-## BLS 실행 (`bls`, `bls-gates`)
+## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`)
 
 ```powershell
 # 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
@@ -78,6 +78,12 @@ uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/
 # 문서 5.1절 표 생성: 여러 별 run 의 matches.csv 를 합쳐 설정별·구간별 회수율 Markdown 을 만든다 (재실행 없음).
 # 구간표는 단일 주입만 세고 쌍 주입은 따로 낸다. 세 구간표의 주변합이 다르면 종료 코드 1.
 uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id> results/bench/bls_grid_v1-1.0.0/toi451/run-<id> --baseline-days 77.724 52.812
+
+# SNR 점 오차(dy) 방식 비교 (재탐색 없음): manifest 로 같은 곡선을 다시 만들고 저장된 상위 피크에서 SNR 만
+# global(전역 robust scatter, 현재 구현)·flux_err(PDCSAP_FLUX_ERR/중앙값/추세)·local(1일 구간 scatter) 로 재계산해
+# 게이트(SNR≥7, SNR≥7&SDE≥6) 결과를 비교한다. 결과는 run 폴더의 snr_dy.csv·gates_dy.csv. global 이 저장 snr 과 안 맞으면 종료 코드 1.
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
@@ -89,7 +95,7 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 `bls-gates` 의 "잔여" 열은 주입 없는 실제 곡선(realclean `none`)에서 게이트를 통과한 피크 수다. 잡음 곡선만 보면 SNR 게이트가 충분해
 보이지만 자전 변광·제거 잔여·밝은 별의 낮은 산포가 그대로 통과하므로 이 열을 함께 본다.
 
-테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 34 passed, 없음 33 passed / 1 skipped).
+테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 40 passed, 없음 39 passed / 1 skipped).
 
 ## 산출물
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import dataclass, field
 import shlex
 import sys
 import time
@@ -29,6 +30,7 @@ from tess_fixture.lightcurve import Baseline, build_baseline, load_sector, synth
 from tess_fixture.targets import iter_products, select_targets
 
 from . import bls as bl
+from . import bls_dy as bd
 from . import bls_match as bm
 from . import metrics as mt
 from .preprocess import Setting, load_settings, preprocess
@@ -258,19 +260,41 @@ def _print_bls_final_table(summary_rows: list[dict]) -> None:
           " 이 표에는 품질 게이트가 없다. 게이트별 회수율·가짜 후보 수·실제 곡선 잔여 피크 수는 `bls-gates` 로 같은 run 에서 계산한다.")
 
 
-def cmd_bls(args: argparse.Namespace) -> int:
-    started = time.time()
-    target = select_targets([args.target])[0]
-    cfg, settings = bl.load_bls_settings(args.settings, args.only)
-    stage_cfg = cfg["stages"][args.stage]
-    _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
-    pre = pre_settings[0]
-    grid = inj.load_grid(args.grid)
-    curves, inputs = _load_fixture_inputs(target, args.raw)
+@dataclass
+class BlsInputs:
+    """`bls` 와 `bls-snr-dy` 가 공유하는 입력: 바탕곡선·주입 그룹·전처리 곡선."""
+    target: object
+    stage: str
+    stage_cfg: dict
+    pre: Setting
+    set_id: str
+    curves: list
+    inputs: list[dict]
+    strict: Baseline
+    baselines: dict[str, Baseline]
+    known_models: list[dict]
+    known_skipped: list[dict]
+    noise_seeds: list[int]
+    groups: dict[str, dict[str, list]]
+    prepared: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = field(default_factory=dict)
+    errors: dict[tuple[str, str], np.ndarray | None] = field(default_factory=dict)   # flux_err 방식용 점 오차(정제곡선 단위), 없으면 None
+
+    @property
+    def n_groups(self) -> int:
+        return sum(len(g) for g in self.groups.values())
+
+
+def build_bls_inputs(target_key: str, stage: str, cfg: dict, pre: Setting, grid_path: Path, raw: Path, *,
+                     noise_seeds: list[int], include_raw_real: bool = False, limit: int = 0, log=print) -> BlsInputs:
+    """바탕곡선(realclean·잡음·선택 real)과 주입 그룹을 만든다. 전처리는 `preprocess_groups` 에서."""
+    target = select_targets([target_key])[0]
+    stage_cfg = cfg["stages"][stage]
+    grid = inj.load_grid(grid_path)
+    curves, inputs = _load_fixture_inputs(target, raw)
     strict = build_baseline(curves)
     set_id = inj.grid_set_id(grid)
     if target.key not in stage_cfg["targets"]:
-        print(f"주의: {target.key} 는 stage '{args.stage}' 의 별 목록 {stage_cfg['targets']} 에 없다. 결과에 stage 를 그대로 기록하되 해석 때 구분할 것.")
+        log(f"주의: {target.key} 는 stage '{stage}' 의 별 목록 {stage_cfg['targets']} 에 없다. 결과에 stage 를 그대로 기록하되 해석 때 구분할 것.")
 
     # 바탕곡선: realclean(Archive 확인 행성을 121 astro-kernel 로 제거) 이 기본. 실제 행성이 상위 피크를 차지하면
     # 주입 회수율을 잴 수 없기 때문. 원본 real 은 --include-raw-real 로 추가(실제 신호와의 상호작용 관찰용).
@@ -282,16 +306,16 @@ def cmd_bls(args: argparse.Namespace) -> int:
     if known_models:
         cleaned = remove_transit_models(strict.time, strict.flux, known_models).flux_residual
         realclean = dc_replace(strict, flux=cleaned, source_files=tuple(f"{f} (known signals removed)" for f in strict.source_files))
-        print(f"realclean: Archive 확인 행성 {len(known_models)}개 제거 {[m['candidate_id'] for m in known_models]}"
-              + (f", 제외 {known_skipped}" if known_skipped else ""))
+        log(f"realclean: Archive 확인 행성 {len(known_models)}개 제거 {[m['candidate_id'] for m in known_models]}"
+            + (f", 제외 {known_skipped}" if known_skipped else ""))
     else:
         realclean = strict
-        print(f"realclean: 제거할 Archive 확인 행성 없음(식쌍성 등). real 과 동일" + (f", 제외 {known_skipped}" if known_skipped else ""))
+        log(f"realclean: 제거할 Archive 확인 행성 없음(식쌍성 등). real 과 동일" + (f", 제외 {known_skipped}" if known_skipped else ""))
     baselines: dict[str, Baseline] = {"realclean": realclean}
-    if args.include_raw_real:
+    if include_raw_real:
         baselines["real"] = strict
-    noise_seeds = [] if args.no_noise else list(dict.fromkeys(args.noise_seeds))
-    for seed in noise_seeds:
+    seeds = list(dict.fromkeys(noise_seeds))
+    for seed in seeds:
         baselines[f"noise{seed}"] = synthetic_noise_baseline(strict, seed=seed)
     groups: dict[str, dict[str, list[inj.InjectionRow]]] = {}
     for bkey, baseline in baselines.items():
@@ -300,30 +324,55 @@ def cmd_bls(args: argparse.Namespace) -> int:
         by_group: dict[str, list[inj.InjectionRow]] = {}
         for r in rows:
             by_group.setdefault(r.group_id, []).append(r)
-        if args.limit:
-            by_group = dict(list(by_group.items())[:args.limit])
+        if limit:
+            by_group = dict(list(by_group.items())[:limit])
         by_group["none"] = []                       # 주입 없는 순수 곡선: 잡음이면 가짜 후보 측정, real 이면 unknown_review
         groups[bkey] = by_group
+    return BlsInputs(target=target, stage=stage, stage_cfg=stage_cfg, pre=pre, set_id=set_id, curves=curves, inputs=inputs, strict=strict,
+                     baselines=baselines, known_models=known_models, known_skipped=known_skipped, noise_seeds=seeds, groups=groups)
+
+
+def preprocess_groups(bi: BlsInputs, *, with_errors: bool = False) -> None:
+    """전처리는 설정과 무관하므로 그룹마다 한 번만. with_errors 면 PDCSAP_FLUX_ERR 를 같은 추세로 나눈 점 오차도 남긴다."""
+    err_norm = bd.baseline_flux_err(bi.curves, bi.strict) if with_errors else None
+    noise_sigma = bi.strict.robust_scatter
+    for bkey, by_group in bi.groups.items():
+        baseline = bi.baselines[bkey]
+        for gid, members in by_group.items():
+            flux = inj.inject_group(baseline, members) if members else baseline.flux.copy()
+            res = preprocess(baseline.time, flux, baseline.sector_of_point, bi.pre)
+            kept = res.kept & np.isfinite(res.flux_det)
+            bi.prepared[(bkey, gid)] = (res.time[kept], res.flux_det[kept])
+            if with_errors:
+                if bkey.startswith("noise"):
+                    bi.errors[(bkey, gid)] = np.full(int(kept.sum()), noise_sigma)      # 합성 곡선: 생성 σ 가 참값
+                else:
+                    with np.errstate(invalid="ignore", divide="ignore"):
+                        bi.errors[(bkey, gid)] = (err_norm / res.trend)[kept]
+
+
+def cmd_bls(args: argparse.Namespace) -> int:
+    started = time.time()
+    cfg, settings = bl.load_bls_settings(args.settings, args.only)
+    _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
+    pre = pre_settings[0]
+    bi = build_bls_inputs(args.target, args.stage, cfg, pre, args.grid, args.raw, noise_seeds=[] if args.no_noise else args.noise_seeds,
+                          include_raw_real=args.include_raw_real, limit=args.limit)
+    target, strict, baselines, groups, noise_seeds, set_id, known_models, known_skipped, inputs = (
+        bi.target, bi.strict, bi.baselines, bi.groups, bi.noise_seeds, bi.set_id, bi.known_models, bi.known_skipped, bi.inputs)
+    stage_cfg = bi.stage_cfg
 
     run_id = mf.new_run_id()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = args.results / "bench" / f"{cfg['settings_id']}-{cfg['version']}" / target.key / f"run-{stamp}-{run_id[:8]}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    n_groups = sum(len(g) for g in groups.values())
     print(f"target={target.key} stage={args.stage} sectors={list(strict.sectors)} points(QUALITY==0)={strict.n_valid:,} "
-          f"baseline={strict.time.max()-strict.time.min():.1f}d preprocess={pre.setting_id} settings={len(settings)} groups={n_groups} run={run_dir.name}")
+          f"baseline={strict.time.max()-strict.time.min():.1f}d preprocess={pre.setting_id} settings={len(settings)} groups={bi.n_groups} run={run_dir.name}")
 
-    # 전처리는 설정과 무관하므로 그룹마다 한 번만
     print("전처리 중...", end="", flush=True)
     t_pre = time.time()
-    prepared: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
-    for bkey, by_group in groups.items():
-        baseline = baselines[bkey]
-        for gid, members in by_group.items():
-            flux = inj.inject_group(baseline, members) if members else baseline.flux.copy()
-            res = preprocess(baseline.time, flux, baseline.sector_of_point, pre)
-            kept = res.kept & np.isfinite(res.flux_det)
-            prepared[(bkey, gid)] = (res.time[kept], res.flux_det[kept])
+    preprocess_groups(bi)
+    prepared = bi.prepared
     print(f" {time.time()-t_pre:.1f}s ({len(prepared)} curves)")
 
     peak_rows: list[dict] = []
@@ -497,6 +546,103 @@ def cmd_bls_gates(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_manifest(run_dir: Path, results: Path) -> dict:
+    """run 폴더 이름(run-<UTC>-<id8>)과 별 폴더로 manifest 를 찾는다."""
+    target_key, id8 = run_dir.parent.name, run_dir.name.rsplit("-", 1)[-1]
+    path = results / "manifests" / f"bls-{target_key}-{id8}.json"
+    if not path.is_file():
+        sys.exit(f"manifest not found: {path}")
+    import json
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def cmd_bls_snr_dy(args: argparse.Namespace) -> int:
+    """저장된 run 의 상위 피크 SNR 을 점 오차 방식 3개(global·flux_err·local)로 다시 계산하고 게이트 결과를 비교한다.
+
+    재탐색은 하지 않는다. manifest 의 별·단계·seed·전처리 설정으로 같은 곡선을 다시 만들고(결정적), 피크 파라미터에서
+    astropy `compute_stats` 로 depth/depth_err 를 낸다. global 은 저장된 snr 과 같아야 하며(재현 검사) 다르면 종료 코드 1.
+    """
+    started = time.time()
+    run_dir: Path = args.run_dir
+    man = _run_manifest(run_dir, args.results)
+    prm = man["config"]["parameters"]
+    cfg, settings_all = bl.load_bls_settings(args.settings)
+    _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
+    seeds = prm.get("noise_seeds", [prm["noise_seed"]] if prm.get("noise_seed") is not None else [])   # 조정 run(09-16) manifest 는 단수 키
+    bi = build_bls_inputs(prm["target"], prm["stage"], cfg, pre_settings[0], args.grid, args.raw, noise_seeds=seeds,
+                          include_raw_real="real" in prm.get("baselines", []), limit=int(prm.get("limit") or 0))
+    print(f"run={run_dir.name} target={prm['target']} stage={prm['stage']} groups={bi.n_groups} window={args.window_days}d 전처리 중...", end="", flush=True)
+    t0 = time.time()
+    preprocess_groups(bi, with_errors=True)
+    print(f" {time.time()-t0:.1f}s")
+
+    with (run_dir / "peaks.csv").open(encoding="utf-8", newline="") as fh:
+        peaks = [r for r in csv.DictReader(fh) if r["status"] == "ok"]
+    if args.only:
+        peaks = [r for r in peaks if r["setting_id"] in args.only]
+    by_curve: dict[tuple[str, str, str], list[dict]] = {}
+    for r in peaks:
+        by_curve.setdefault((r["setting_id"], r["baseline_id"], r["group_id"]), []).append(r)
+    target_key = bi.target.key
+    out_rows: list[dict] = []
+    for (sid, bid, gid), rows in by_curve.items():
+        bkey = bid[len(target_key) + 1:]
+        t_c, f_c = bi.prepared[(bkey, gid)]
+        dys = bd.dy_arrays(t_c, f_c, bi.errors.get((bkey, gid)), window_days=args.window_days, min_points=args.min_points)
+        snrs = {m: bd.recompute_snr(t_c, f_c, dys[m], rows) for m in bd.METHODS}
+        for i, r in enumerate(rows):
+            out_rows.append({"setting_id": sid, "baseline_id": bid, "group_id": gid, "rank": int(r["rank"]), "period_days": float(r["period_days"]),
+                             "sde": float(r["sde"]), "snr_stored": float(r["snr"]),
+                             **{f"snr_{m}": snrs[m][i] for m in bd.METHODS},
+                             **{f"dy_{m}_median": float(np.median(dys[m])) for m in bd.METHODS}})
+    snr_path = run_dir / "snr_dy.csv"
+    with snr_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(out_rows[0].keys())); w.writeheader(); w.writerows(out_rows)
+
+    stored = np.array([r["snr_stored"] for r in out_rows]); glob = np.array([r["snr_global"] for r in out_rows])
+    rel = np.abs(glob - stored) / np.maximum(np.abs(stored), 1e-12) if out_rows else np.array([np.nan])
+    med, mx = float(np.median(rel)), float(np.max(rel))
+    ok = bool(np.isfinite(med) and med < 1e-3)          # power() 의 위상 비닝 근사 때문에 일부 피크는 몇 % 다를 수 있다(bls_dy.recompute_snr)
+    print(f"재현 검사: global 방식 SNR vs 저장 snr 상대 차 중앙값 {med:.2e}, 최대 {mx:.2e} → {'일치' if ok else '불일치(중앙값 1e-3 초과)'}")
+
+    matches = _load_matches_in_range(run_dir, settings_all, args.baseline_days)
+    matches = [m for m in matches if "noise" not in m["baseline_id"]]
+    if matches and "in_search_range" in matches[0]:
+        matches = [m for m in matches if bm._truthy(m["in_search_range"])]
+    snr_by = {(r["setting_id"], r["baseline_id"], r["group_id"], r["rank"]): r for r in out_rows}
+    peaks_by_method = {}
+    for m in bd.METHODS:
+        rows = []
+        for r in peaks:
+            k = (r["setting_id"], r["baseline_id"], r["group_id"], int(r["rank"]))
+            rows.append({**r, "snr": snr_by[k][f"snr_{m}"]})
+        peaks_by_method[m] = rows
+    table = bd.gate_comparison(peaks_by_method, matches, snr_min=args.snr_min, sde_min=args.sde_min)
+    gates_path = run_dir / "gates_dy.csv"
+    with gates_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(table[0].keys())); w.writeheader(); w.writerows(table)
+
+    settings = sorted({r["setting_id"] for r in table})
+    print(f"\n=== 게이트 비교 (회수 | 잡음 가짜/곡선 | 실제 잔여/곡선; 범위 안 신호 {table[0]['n_signals']}, 잡음곡선 {table[0]['n_noise_curves']}, 실제곡선 {table[0]['n_real_curves']}) ===")
+    for sid in settings:
+        print(f"[{sid}]")
+        print(f"{'gate':<22}" + "".join(f"{m:>26}" for m in bd.METHODS))
+        for gate in dict.fromkeys(r["gate"] for r in table if r["setting_id"] == sid):
+            cells = []
+            for m in bd.METHODS:
+                r = next(x for x in table if x["method"] == m and x["setting_id"] == sid and x["gate"] == gate)
+                cells.append(f"{_fmt(r['gated_recovery'],5)} | {_fmt(r['false_peaks_per_noise_curve'],4,1)} | {_fmt(r['residual_peaks_per_real_curve'],4,1)}".rjust(26))
+            print(f"{gate:<22}" + "".join(cells))
+    # 실제 none 곡선(잔여) 피크의 방식별 SNR — 어느 방식이 임의 피크를 낮추는지 직접 본다
+    print("\n=== 실제 `none` 곡선 상위 피크의 SNR (방식별) ===")
+    for r in sorted((x for x in out_rows if x["group_id"] == "none" and "noise" not in x["baseline_id"]), key=lambda x: (x["setting_id"], x["rank"])):
+        print(f"  {r['setting_id']:<14} rank {r['rank']} P={r['period_days']:8.3f} d SDE={r['sde']:5.1f} "
+              + " ".join(f"{m}={r[f'snr_{m}']:7.1f}" for m in bd.METHODS)
+              + "  dy(med) " + " ".join(f"{m}={r[f'dy_{m}_median']:.2e}" for m in bd.METHODS))
+    print(f"\nsnr_dy: {snr_path}\ngates_dy: {gates_path}\n총 소요 {time.time()-started:.1f}s")
+    return 0 if ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m tess_bench", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -523,6 +669,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--include-noise-signals", action="store_true", help="잡음 바탕곡선의 주입 신호도 회수율에 포함")
     p.add_argument("--baseline-days", type=float, default=None, help="in_search_range 열이 없는 옛 run 에 관측 기간을 주어 범위 안 신호를 고른다")
     p.set_defaults(func=cmd_bls_gates)
+
+    p = sub.add_parser("bls-snr-dy", help="저장된 bls run 의 상위 피크 SNR 을 점 오차 방식 3개(global·flux_err·local)로 재계산해 게이트를 비교 (재탐색 없음)")
+    p.add_argument("--run-dir", type=Path, required=True)
+    p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
+    p.add_argument("--preprocess-settings", type=Path, default=DEFAULT_SETTINGS)
+    p.add_argument("--grid", type=Path, default=DEFAULT_GRID)
+    p.add_argument("--raw", type=Path, default=DEFAULT_RAW)
+    p.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
+    p.add_argument("--only", nargs="*", help="setting_id 만 고르기 (조정 run 의 9설정 중 일부)")
+    p.add_argument("--window-days", type=float, default=1.0, help="local 방식 구간 폭(일)")
+    p.add_argument("--min-points", type=int, default=20, help="local 구간 최소 점 수(미달이면 전역값)")
+    p.add_argument("--snr-min", type=float, default=7.0)
+    p.add_argument("--sde-min", type=float, default=6.0)
+    p.add_argument("--baseline-days", type=float, default=None, help="in_search_range 열이 없는 옛 run 의 관측 기간")
+    p.set_defaults(func=cmd_bls_snr_dy)
 
     p = sub.add_parser("bls-report", help="저장된 bls run 들의 matches.csv 로 문서 5.1절 회수율 표를 생성 (재실행 없음)")
     p.add_argument("--run-dir", nargs="+", required=True, help="run 디렉터리(여러 별)")
