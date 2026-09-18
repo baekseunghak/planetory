@@ -64,6 +64,8 @@
 
 **구현 확정(S15P21C206-157):** 타인 프로필 `GET /api/v1/members/{memberId}`는 존재하지 않는 회원과 `status = 'withdrawn'` 회원을 모두 404 `RESOURCE_NOT_FOUND`로 응답한다. 탈퇴 여부가 응답 차이로 드러나지 않게 하려는 것이며, 존재를 숨길 자원의 404 적용 대상 중 이 경로만 확정했다. 첫 방문 안내 완료는 `PATCH /api/v1/me/onboarding`이 `onboardingDone` 하나만 받는다. 단방향 사건 기록이라 false를 400으로 거부하므로, 양방향인 P1 공개 설정과 경로를 분리해 `PATCH /api/v1/me/settings`를 P1이 예외 없이 쓰도록 했다.
 
+**구현 확정(S15P21C206-242):** 본인 프로필 `GET /api/v1/me`는 `users.created_at`을 `joinedAt`으로 제공한다. ISO-8601 UTC 시각이며 타인 프로필 공개 범위는 바꾸지 않는다.
+
 **결정 질문**
 
 - F03-Q1: SB-D14 확정: NFC·앞뒤 공백 제거 후 2~20자, 한글 완성형·영문·숫자·밑줄, 내부 공백 불허, 영문 대소문자 무시 중복. SYSTEM/ADMIN/관리자/운영자 예약어 제외. 추가 금칙어 목록·담당은 협의한다. lower(nickname) 유일 인덱스 등 DB 반영 필요.
