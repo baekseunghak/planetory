@@ -71,3 +71,7 @@
 | 2026-09-17 | 분석 진입(5.1) 구현, 진입 시 완료 판정, JSON 전송 비용 측정 | S15P21C206-140 | analysis-context, selectionRules, minWindowDays, currentCurveContext, STEP_NOT_RESTORABLE, nextCurveContext, skipAvailable, 완료 판정 (b), REPEATABLE READ, 응답 크기, gzip, D-2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 
 | 2026-09-18 | 공개 History 공용 렌더러 소비 경계 | S15P21C206-213 | HistoryGraphRenderer, 부모 권한, CURRENT, SUBMITTED, A08 | 소비 계약 검증·실제 연결 전 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN 호스트 준비와 Spark HDFS sample 실환경 검증 | S15P21C206-73 | YARN, CapacityScheduler, systemd, Docker, Spark 3.5.5, HDFS, Node 2, UFW, executor, checksum | 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN CI Runner 검증을 기존 CI Task로 후속 인계 | S15P21C206-91 | YARN, GitLab CI, validate:hadoop-config, Linux Runner, Pipeline | 채택·검증 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN MR 재실행 안전성 리뷰 반영 | S15P21C206-73 | YARN, OOM, UFW, HA, Bash, log retention, non-destructive | 구현 완료·서버 재적용 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN 집계 로그 보존·회귀 검사 정정 | S15P21C206-73 | YARN, AggregatedLogDeletionService, journal cursor, cleanup, regression | 구현 완료·서버 재실행 검증 대기 | [2026-09-18](2026-09-18.md) |
