@@ -1,3 +1,4 @@
+import { currentChallengeMismatch } from "../quests/contracts";
 import {
   forwardRef,
   useEffect,
@@ -88,12 +89,10 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     const current = useRef({ ...props, mode, index });
     current.current = { ...props, mode, index };
     const tutorials = quest.markers;
-    const staleRound =
-      quest.current &&
-      (quest.current.round?.roundId !==
-        quest.quests?.challenge.round?.roundId ||
-        quest.current.round?.status !== "active" ||
-        quest.current.eligible !== quest.quests?.challenge.eligible);
+    const staleRound = currentChallengeMismatch(
+      quest.current,
+      quest.quests?.challenge,
+    );
     const challengeTicId =
       quest.quests?.challenge.unlocked && !staleRound
         ? quest.quests.challenge.ticId

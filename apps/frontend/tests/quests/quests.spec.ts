@@ -384,3 +384,37 @@ test("late old read cannot undo completed state and foreground return refreshes 
   await expect(tutorial(page).locator("summary")).toContainText("2 / 5");
   expect(await page.locator("canvas").getAttribute("data-camera")).toBe(camera);
 });
+
+test("tab return events and polling do not replace an in-flight quest read", async ({
+  page,
+}) => {
+  let requests = 0,
+    hold = false;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/me/quests", async (route) => {
+    requests++;
+    if (hold) await barrier;
+    await route.fulfill({ json: quests() });
+  });
+  await page.route("**/api/v1/challenges/current", (route) =>
+    route.fulfill({ json: current(false) }),
+  );
+  await page.goto("/sky");
+  await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
+  const initial = requests;
+  hold = true;
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect.poll(() => requests).toBe(initial + 1);
+  await page.waitForTimeout(1100);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(150);
+  expect(requests).toBe(initial + 1);
+  release();
+  await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
+});

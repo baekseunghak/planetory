@@ -74,6 +74,7 @@ const stamp = (v: unknown): string =>
     : fail();
 const day = (v: unknown): string =>
   /^\d{4}-\d{2}-\d{2}$/.test(text(v)) &&
+  Number.isFinite(Date.parse(v as string)) &&
   new Date(v as string).toISOString().slice(0, 10) === v
     ? (v as string)
     : fail();
@@ -228,4 +229,18 @@ export function recordChallengeShown(
   } catch {
     /* Browser storage never controls discovery or access. */
   }
+}
+
+// The panel and map markers must agree, including the normal no-round state.
+export function currentChallengeMismatch(
+  current: CurrentChallenge | undefined,
+  challenge: Quests["challenge"] | undefined,
+): boolean {
+  return !!(
+    current &&
+    challenge &&
+    ((current.round?.roundId ?? null) !== (challenge.round?.roundId ?? null) ||
+      (!!current.round && current.round.status !== "active") ||
+      current.eligible !== challenge.eligible)
+  );
 }

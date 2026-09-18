@@ -4,6 +4,7 @@ import { pagePath } from "../../app/paths";
 import { useQuests } from "./QuestProvider";
 import {
   intentLabels,
+  currentChallengeMismatch,
   needsChallengeNotice,
   recordChallengeShown,
   type CurrentChallenge,
@@ -101,13 +102,7 @@ export function QuestPanel({
     useQuests();
   const challengeRef = useRef<HTMLDetailsElement>(null);
   const challenge = quests?.challenge;
-  const currentMismatch = !!(
-    current &&
-    challenge &&
-    ((current.round?.roundId ?? null) !== (challenge.round?.roundId ?? null) ||
-      (!!current.round && current.round.status !== "active") ||
-      current.eligible !== challenge.eligible)
-  );
+  const currentMismatch = currentChallengeMismatch(current, challenge);
   const returnTo = (ticId: string) =>
     `/sky?${new URLSearchParams({ star: ticId, ...(listMode ? { view: "list" } : {}) })}`;
   return (

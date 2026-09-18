@@ -48,6 +48,7 @@ export function QuestProvider({
     quests: Resource<Quests>;
     current: Resource<CurrentChallenge>;
   } | null>(null);
+  const activeRead = useRef<AbortController | null>(null);
   const retired = useRef(new Set<string>());
   const refresh = useCallback(() => setAttempt((n) => n + 1), []);
   useEffect(() => {
@@ -55,7 +56,7 @@ export function QuestProvider({
     const offSky = subscribeSkyChange(store.memberId, refresh);
     let last = 0;
     const visibleRefresh = () => {
-      if (!document.hidden && Date.now() - last > 1000) {
+      if (!document.hidden && !activeRead.current && Date.now() - last > 1000) {
         last = Date.now();
         refresh();
       }
@@ -76,6 +77,7 @@ export function QuestProvider({
       scope = data.meta;
     setResult(null);
     if (data.needsRefresh) return;
+    activeRead.current = controller;
     const load = async <T,>(
       path: string,
       decode: (value: unknown) => T,
@@ -104,9 +106,16 @@ export function QuestProvider({
           [key]: resource,
         }));
     };
-    void load("/v1/me/quests", readQuests, "quests");
-    void load("/v1/challenges/current", readCurrentChallenge, "current");
-    return () => controller.abort();
+    void Promise.all([
+      load("/v1/me/quests", readQuests, "quests"),
+      load("/v1/challenges/current", readCurrentChallenge, "current"),
+    ]).finally(() => {
+      if (activeRead.current === controller) activeRead.current = null;
+    });
+    return () => {
+      controller.abort();
+      if (activeRead.current === controller) activeRead.current = null;
+    };
   }, [store, data.meta, data.needsRefresh, attempt]);
   const valid =
     result?.scope === data.meta && !data.needsRefresh ? result : null;

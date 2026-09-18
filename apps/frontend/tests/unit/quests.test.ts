@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  currentChallengeMismatch,
   readQuests,
   readCurrentChallenge,
   tutorialMarkers,
@@ -87,4 +88,74 @@ test("quest events are member-scoped, disposed and only invalidate reads", () =>
   off();
   publishQuestChange("a", { reason: "submission" });
   assert.deepEqual(calls, ["guide-closed", "tutorial-skipped"]);
+});
+
+test("invalid dates always produce the quest contract error, never RangeError", () => {
+  for (const date of [
+    "2026-13-01",
+    "2026-00-01",
+    "2026-02-30",
+    "2025-02-29",
+    "2026-01-32",
+    "bad-date",
+  ]) {
+    const c = current();
+    c.round!.startsOn = date;
+    assert.throws(
+      () => readCurrentChallenge(c),
+      (e: unknown) =>
+        e instanceof Error &&
+        !(e instanceof RangeError) &&
+        e.message.includes("탐사 안내 자료"),
+    );
+    const q = quests(5);
+    q.challenge.round!.startsOn = date;
+    assert.throws(
+      () => readQuests(q),
+      (e: unknown) =>
+        e instanceof Error &&
+        !(e instanceof RangeError) &&
+        e.message.includes("탐사 안내 자료"),
+    );
+  }
+  const leap = current();
+  leap.round!.startsOn = "2024-02-29";
+  assert.equal(readCurrentChallenge(leap).round!.startsOn, "2024-02-29");
+});
+test("panel and marker share no-round, missing, active, changed and closed round decisions", () => {
+  const q = quests(5),
+    c = current();
+  assert.equal(currentChallengeMismatch(c, q.challenge), false);
+  assert.equal(currentChallengeMismatch(undefined, q.challenge), false);
+  assert.equal(currentChallengeMismatch(c, undefined), false);
+  const none = { round: null, eligible: false, participantCount: null };
+  assert.equal(
+    currentChallengeMismatch(none, {
+      ...q.challenge,
+      ...none,
+      unlocked: false,
+      ticId: null,
+      progressStage: null,
+    }),
+    false,
+  );
+  assert.equal(currentChallengeMismatch(none, q.challenge), true);
+  assert.equal(
+    currentChallengeMismatch({ ...c, eligible: false }, q.challenge),
+    true,
+  );
+  assert.equal(
+    currentChallengeMismatch(
+      { ...c, round: { ...c.round!, roundId: "other" } },
+      q.challenge,
+    ),
+    true,
+  );
+  assert.equal(
+    currentChallengeMismatch(
+      { ...c, round: { ...c.round!, status: "closed" } },
+      q.challenge,
+    ),
+    true,
+  );
 });
