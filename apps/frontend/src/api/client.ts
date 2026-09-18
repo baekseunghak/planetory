@@ -14,7 +14,11 @@ export class ApiError extends Error {
   }
 }
 
-type RequestOptions = Omit<RequestInit, "credentials"> & { json?: unknown };
+type RequestOptions = Omit<RequestInit, "credentials"> & {
+  json?: unknown;
+  // Capture metadata here; handle it after the request settles.
+  onResponse?: (metadata: { status: number; headers: Headers }) => void;
+};
 type ClientOptions = {
   baseUrl: string;
   fetch?: typeof fetch;
@@ -51,7 +55,7 @@ export function createApiClient(config: ClientOptions) {
     const localRequestId = crypto.randomUUID();
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
-    const { json, ...fetchOptions } = options;
+    const { json, onResponse, ...fetchOptions } = options;
     if (json !== undefined && options.body != null)
       throw new Error("json과 body는 함께 보낼 수 없습니다.");
     if (json !== undefined) headers.set("Content-Type", "application/json");
@@ -101,6 +105,10 @@ export function createApiClient(config: ClientOptions) {
         },
       );
       controller.signal.throwIfAborted();
+      onResponse?.({
+        status: response.status,
+        headers: new Headers(response.headers),
+      });
       serverRequestId = config.requestIdHeader
         ? response.headers.get(config.requestIdHeader)
         : null;

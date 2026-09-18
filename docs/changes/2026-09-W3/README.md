@@ -23,6 +23,16 @@
 | 2026-09-16 | Tailscale 팀 등록과 서버 접근 범위 문서화 | S15P21C206-71 | Tailscale, tailnet 초대, 장비 승인, tag:hadoop, MagicDNS, SSH, EC2, GCP | 검증 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 마이 프로필 P0 구현 — 닉네임 변경·첫 방문 안내 완료·타인 공개 프로필 | S15P21C206-157 | 닉네임 변경, NICKNAME_CONFLICT, lower(nickname), NFC 정규화, SB-D14, 온보딩, onboarding_done, ON CONFLICT, 타인 프로필, SB-D23, 탈퇴 404, 성과 요약 | 구현 완료 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Gold 게시 계약과 Publisher·Backend·Frontend 합성 fixture 정합화 | S15P21C206-68 | Gold 계약, PublicationBundle, current, archived, Redis, payload, fixture, field unit, checksum | 검증 완료 | [2026-09-16](2026-09-16.md) |
+
+| 2026-09-16 | SRS v1.3.1 접기 위치 유지·최대 32배 확대 | 없음(요구사항 예외), 참고 #184 | EXP-13, AT-91, AT-96, foldedXZoomRatio, 중심 위상, 32배 | 사용자 채택·교차 리뷰 대기 | [기록](2026-09-16.md#접힌-곡선의-위치-유지와-최대-32배-확대-변경안) |
+| 2026-09-16 | 개발용 GPU 표시 연결과 자동 Canvas 전환 | S15P21C206-184 | WebGL, Float64, context loss, 개발 모드, 배포 제외, 성능 검증 | 개발용 구현 완료·기본 적용 보류 | [기록](2026-09-16.md#s15p21c206-184-개발용-gpu-표시-연결과-일반-배포-경계) |
+| 2026-09-16 | 연속 미세 조정의 안내·취소 버튼 깜빡임 완화 | S15P21C206-184 | 상태 안내, 표시 지연, 취소, session.ready, 슬라이더 | 구현·로컬 검증 완료 | [기록](2026-09-16.md#s15p21c206-184-연속-미세-조정의-안내-깜빡임-완화) |
+| 2026-09-17 | 위상 핸들 방향키 간격 결정 | S15P21C206-185 | 위상 선택, 핸들, 키보드, 1/1000, Shift, Q03 | 사용자 채택·프론트 구현 | [기록](2026-09-17.md) |
+| 2026-09-17 | 기본 드래그 구간 선택·Shift 이동 복원 | S15P21C206-185 | 모드 버튼 제거, analysis-lab, Shift, 드래그, 선택 유지 | 사용자 채택·프론트 구현 | [기록](2026-09-17.md#s15p21c206-185-기본-드래그-선택shift-이동-복원) |
+| 2026-09-17 | 선택 상태 공유·시간 미리보기 연결 | S15P21C206-185 | AnalysisSession, epoch, duration, 예상 띠, BTJD, 실패 복구 | 구현·로컬 검증 완료 | [기록](2026-09-17.md#s15p21c206-185-선택-상태-공유와-시간-곡선-미리보기-연결) |
+| 2026-09-17 | 구간 수정 후 작성 내용 유지·판단·제출값 확인 | S15P21C206-185 | Q05, 판단, 근거, 메모, 확인 스냅샷, 재확인, 복구 | 사용자 동작 결정·로컬 검증 완료, 메모 상한 임시 | [기록](2026-09-17.md#s15p21c206-185-판단-입력과-제출값-확인-연결) |
+| 2026-09-17 | 분석 전체 흐름 회귀·단계 표시 보완 | S15P21C206-185 | 주기 맞추기, Tab, 키보드, 항성 전환, Chrome, Edge, API 인수 | 로컬 통합 검사 완료·API 인수 대기 | [기록](2026-09-17.md#s15p21c206-185-분석-전체-흐름-회귀와-단계-표시-보완) |
+| 2026-09-17 | 메모 200자·탭 세션 초안 보존 | S15P21C206-185 | sessionStorage, 재접기, 복원, 로그아웃, Firefox, WebKit, axe | 사용자 채택·로컬 검증 완료, 서버 인수 대기 | [기록](2026-09-17.md#s15p21c206-185-메모-200자와-탭-세션-초안-보존) |
 | 2026-09-16 | EC2 진입·PostgreSQL 장애 전환 경계 확정 — DNS 라운드로빈·상호 감시·포트 행렬 | S15P21C206-82 | Cloudflare, proxied, 라운드로빈, 상호 감시, split-brain, Origin CA, Full strict, 포트 행렬, Redis EC2-B, Standby 수동 승격, 계정 분리, Tunnel replica, Load Balancing | 채택 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | Publisher 멱등 적재 키와 단일 트랜잭션 rollback 책임 확정 | S15P21C206-69 | Publisher, idempotency, bundle_version, external snapshot, switch order, semantic payload, superseded, rollback, Airflow, fixture, ERD v1.6 | 검증 완료·Data 승인·Backend 재검토 | [2026-09-16](2026-09-16.md) |
 | 2026-09-16 | 별 자리 계산 함수·지도 메타·타일 조회 구현 | S15P21C206-136 | personal-spiral-v1, layout_ordinal, skyVersion, member_sky_revisions, 개정값, 타일, cursor, snapToTiles, bootstrap-0, V6, V7, 탐사 API 4.1, ERD v1.5 | 구현 완료 | [2026-09-16](2026-09-16.md) |
@@ -56,6 +66,13 @@
 
 | 2026-09-17 | 은하 지도 조작·개별 선택·마커 접근성 | S15P21C206-205 | 64px 격자, DOM 풀, 회전, 포커스, 완료 번호 숨김 | 프론트 구현·로컬 검증 완료, 실제 인수 대기 | [기록](2026-09-17.md#s15p21c206-205-은하-지도-조작개별-선택마커-접근성) |
 | 2026-09-17 | Docker 기본 빌드 OAuth 버튼 비활성화 수정 | S15P21C206-202 | OAuth ARG, 빈 문자열, Docker 기본값, 운영 회귀 | 수정·동일 빌드 인자 검증 완료 | [기록](2026-09-17.md) |
+| 2026-09-17 | 인증·지도 develop과 분석 순차 통합 | S15P21C206-182 | merge, 개발 모드, OAuth, 분석, 회귀 | 단계별 로컬 검증 | [기록](2026-09-17.md) |
+
+| 2026-09-17 | 분석 1–5단계 Figma 적용 | S15P21C206-236 | Figma 02, 단계별 입력, 단일 디자인 브랜치, 32배, 초안, 접근성 | 구현·로컬 검증 완료, 시각 확인·서버 인수 대기 | [기록](2026-09-17.md#s15p21c206-236-분석-15단계-figma-화면-적용) |
+
+| 2026-09-18 | 분석 화면 은하 스타일 적용·기준 노드 정정 | S15P21C206-236 | 은하 스타일, Figma 100:2, 글래스모피즘, 디자인 토큰, 오버레이, 대비 검산, 배경 이미지 | 구현 완료, 시각 확인·서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 분석 단계 병합(4단계)·주기 미세 조정 정밀도 | S15P21C206-236 | 단계 병합, 봉우리 재선택, 미세 조정, FINE_TUNE_DIVISIONS, 128등분, 슬라이더 정밀도 | 구현 완료, 시각 확인·서버 인수 대기 | [기록](2026-09-18.md) |
 
 | 2026-09-17 | 별 상세·개인 행성 확대·카메라 복원·공통 경로 소비 | S15P21C206-206 | C06, planets.items, camera, returnTo, null | 구현 완료·통합 대기 | [기록](2026-09-17.md#s15p21c206-206-별-상세개인-행성-확대화면-왕복-소비) |
 
@@ -66,6 +83,8 @@
 | 2026-09-17 | 튜토리얼·챌린지·재개 공용 패널 | S15P21C206-208 | quests, current round, visible notice, member event, fallback | 프론트 독립 검증 완료·실제 통합 대기 | [기록](2026-09-17.md) |
 | 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
+
+| 2026-09-18 | GCP 6계정 quota·비용·크레딧·예산 알림 실측 기록 | S15P21C206-228 | 무료 크레딧, 크레딧 소진 속도, DISKS_TOTAL_GB 99%, EXCLUDE_ALL_CREDITS, billing.admin, 10-09 기한, 예산 알림 5건 | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-17 | Gold manifest 추가 키 허용·배열 값 CHECK(V10)·ERD gaps NULL 정정(117 리뷰 후속) | S15P21C206-140 | GoldManifest, ignoreUnknown, checksum_version, UnrecognizedPropertyException, V10, CHECK, array_position, NaN, Infinity, 0x7FC00000, gaps, NULL, power NULL, DataAccessException, ERD v1.10 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 분석 곡선·주기도 조회(5.2·5.3) 구현, BUNDLE_CHANGED·X-Current-Bundle, binningRevision 문자열 결정 | S15P21C206-140 | curves, periodogram, BUNDLE_CHANGED, currentBundleId, X-Current-Bundle, CURVE_NOT_READY, 202, removed, ResidualResultReader, binningRevision, observationBounds, JsonAnyGetter, WebMvcTest AuthenticationPrincipal, Jackson 2 JsonNode | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 분석 진입(5.1) 구현, 진입 시 완료 판정, JSON 전송 비용 측정 | S15P21C206-140 | analysis-context, selectionRules, minWindowDays, currentCurveContext, STEP_NOT_RESTORABLE, nextCurveContext, skipAvailable, 완료 판정 (b), REPEATABLE READ, 응답 크기, gzip, D-2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
@@ -81,3 +100,10 @@
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 소비와 미결 조건 정정 | S15P21C206-214 | joinedAt, UTC, Asia/Seoul, 공개 필드 제한 | 프론트 계약 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | P0 프로필과 P1 팔로우 수 완료 범위 분리 | S15P21C206-214·219 | MY-01, COM-16, AT-70, AT-78, 팔로워, 팔로잉, P0, P1 | 담당자 결정·문서 반영·리뷰 전 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 분석 병합 이후 동기화와 P0 재검토 준비 | S15P21C206-214 | develop, 프로필, 403, 404, PRIVATE, 배포 순서, 재검토 | 프론트 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
+
+| 2026-09-18 | 분석 응답 파서를 실제 서버 계약에 맞춤 | S15P21C206-182 | 계약 불일치, bundleVersion 문자열, binningRevision, 202 CURVE_NOT_READY, currentCurveContext.notice, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 주기도 대기 응답을 실제 서버 계약에 맞춤 | S15P21C206-183 | 주기도 202, power null, code 없음, decodePendingPeriodogram, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |

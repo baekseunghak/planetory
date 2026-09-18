@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App, type PageSlots } from "./app/App";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AnalysisPage } from "./features/analysis/AnalysisPage";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
@@ -53,6 +54,8 @@ async function start() {
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
+  // Use the analysis page in both fixture and real-server modes.
+  pages = { ...pages, analysis: AnalysisPage };
   if (import.meta.env.DEV && import.meta.env.VITE_SKY_DATA_FIXTURE === "true")
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
   if (import.meta.env.DEV && import.meta.env.VITE_GALAXY_FIXTURE === "true")

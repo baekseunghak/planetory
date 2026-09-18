@@ -17,7 +17,11 @@ function unavailableApi(_req: IncomingMessage, res: ServerResponse) {
 
 export default defineConfig(async ({ command, mode, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const fixture = command === "serve" && !isPreview && mode === "fixture";
+  const fixture =
+    command === "serve" &&
+    !isPreview &&
+    ["fixture", "observations"].includes(mode);
+  const observations = fixture && mode === "observations";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
   const galaxyFixture = command === "serve" && !isPreview && ["galaxy", "interaction"].includes(mode);
@@ -92,7 +96,11 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
           ]
         : []),
       ...(fixture
-        ? [(await import("./dev/fixture-plugin.ts")).fixturePlugin()]
+        ? [
+            (await import("./dev/fixture-plugin.ts")).fixturePlugin(
+              observations,
+            ),
+          ]
         : []),
       ...(authFixture
         ? [(await import("./dev/auth-fixture-plugin.ts")).authFixturePlugin()]
@@ -125,6 +133,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : []),
     ],
     define: {
+      "import.meta.env.VITE_OBSERVATIONS": JSON.stringify(
+        observations ? "true" : "false",
+      ),
       "import.meta.env.VITE_INTERACTION_FIXTURE": JSON.stringify(
         command === "serve" && !isPreview && mode === "interaction"
           ? "true"

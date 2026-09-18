@@ -89,6 +89,39 @@ test("own summary uses server counts; public whitelist and private stars stay di
   await page.goto("/members/u-999");
   await expect(page.getByText(/회원을 찾을 수 없습니다/)).toBeVisible();
 });
+test("profile permission denial and missing data stay distinct and recover to private visibility", async ({
+  page,
+}) => {
+  let status = 403;
+  await page.route("**/v1/members/u-210", (route) =>
+    status === 200
+      ? route.continue()
+      : route.fulfill({
+          status,
+          json: { code: "PROFILE_UNAVAILABLE", message: "프로필 접근 확인" },
+        }),
+  );
+  await page.goto("/members/u-210");
+  await expect(
+    page.getByRole("heading", { name: "접근 권한이 없습니다", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".profile-summary")).toHaveCount(0);
+  status = 404;
+  await page.getByRole("button", { name: "다시 불러오기" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "자료를 찾을 수 없거나 볼 수 없습니다",
+      exact: true,
+    }),
+  ).toBeVisible();
+  status = 200;
+  await page.getByRole("button", { name: "다시 불러오기" }).click();
+  await expect(page.getByRole("heading", { name: "다른탐사자" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("button", { name: "공개한 별", exact: true }).click();
+  await expect(page.getByText(/이 회원의 별 목록은 비공개/)).toBeVisible();
+});
+
 test("missing or invalid own joinedAt shows a recoverable contract error, not a fabricated date", async ({
   page,
 }) => {
