@@ -57,6 +57,7 @@ export function GalaxyScene({
   const [failure, setFailure] = useState<string | null>(null),
     [generation, setGeneration] = useState(0);
   const [ready, setReady] = useState(false);
+  const hasCamera = camera !== null;
   const current = useRef({ camera, dimensions, data }),
     metricsRef = useRef(onMetrics);
   current.current = { camera, dimensions, data };
@@ -135,7 +136,7 @@ export function GalaxyScene({
       cancelAnimationFrame(cameraAnimation.current);
       onReady?.(null);
     };
-  }, [onReady, !!camera]);
+  }, [onReady, hasCamera]);
   useEffect(() => setSystem(null), [meta.version, data.selectedTicId]);
   useEffect(() => {
     const element = canvas.current;
