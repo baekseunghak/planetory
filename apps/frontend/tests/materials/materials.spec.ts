@@ -173,3 +173,46 @@ test("server rejects other owner/other TIC/4 items and public UI sends no mutati
   await expect(page.getByText(/공용 그래프 화면은 연결 준비 중/)).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+test("lost PATCH reconciles reordered server attachments without resending", async ({
+  page,
+}) => {
+  const id = await seed(page, ["h-501", "h-502"]);
+  let writes = 0;
+  page.on("request", (r) => {
+    if (r.method() === "PATCH") writes++;
+  });
+  await page.addInitScript((postId) => {
+    const original = window.fetch;
+    window.fetch = async (input, init) => {
+      const response = await original(input, init);
+      if (
+        init?.method === "PATCH" &&
+        String(input) === "/api/v1/posts/" + postId
+      ) {
+        await response.clone().text();
+        throw new TypeError("Test response loss after server commit");
+      }
+      return response;
+    };
+  }, id);
+  await page.route("**/api/v1/posts/" + id, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const dto = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...dto, attachments: [...dto.attachments].reverse() },
+    });
+  });
+  await page.goto("/posts/" + id + "/edit");
+  await page
+    .getByRole("button", { name: "기록 h-502 제거", exact: true })
+    .click();
+  await page.getByRole("button", { name: "자료 선택 열기" }).click();
+  await page.getByRole("button", { name: "h-503 첨부", exact: true }).click();
+  await page.getByRole("button", { name: "수정 저장", exact: true }).click();
+  await page.getByRole("button", { name: "저장 여부 다시 확인" }).click();
+  await expect(page.getByRole("status")).toContainText("요청한 변경이 반영");
+  expect(writes).toBe(1);
+});

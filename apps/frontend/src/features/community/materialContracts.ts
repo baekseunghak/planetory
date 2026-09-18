@@ -6,9 +6,23 @@ export const emptyMaterials = (): Required<Materials> => ({
   historyIds: [],
   sourceLinks: [],
 });
+const sameIdentities = (a: string[], b: string[]) => {
+  const left = new Set(a),
+    right = new Set(b);
+  return (
+    a.length === b.length &&
+    left.size === a.length &&
+    right.size === b.length &&
+    a.every((id) => right.has(id))
+  );
+};
+// Attachments are identified by ID (sources also by type), not response order.
 export const sameMaterials = (a: Materials, b: Materials) =>
-  JSON.stringify([a.historyIds ?? [], a.sourceLinks ?? []]) ===
-  JSON.stringify([b.historyIds ?? [], b.sourceLinks ?? []]);
+  sameIdentities(a.historyIds ?? [], b.historyIds ?? []) &&
+  sameIdentities(
+    (a.sourceLinks ?? []).map((s) => JSON.stringify([s.type, s.id])),
+    (b.sourceLinks ?? []).map((s) => JSON.stringify([s.type, s.id])),
+  );
 export function materialError(value: Materials, ticId: string | null) {
   const histories = value.historyIds ?? [],
     sources = value.sourceLinks ?? [];

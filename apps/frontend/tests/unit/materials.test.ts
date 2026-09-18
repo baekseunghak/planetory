@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   materialError,
+  sameMaterials,
   readSource,
   readMaterials,
 } from "../../src/features/community/materialContracts";
@@ -151,4 +152,50 @@ test("A08 renderer receives exact unchanged DTO, mode and readonly boundary", ()
     /shared renderer/,
   );
   assert.equal(called, true);
+});
+
+test("reordered attachments reconcile an uncertain write without hiding changed or duplicate IDs", () => {
+  const original = {
+    title: "a",
+    body: "body",
+    purposeTag: "DISCUSSION",
+    ticId: "123",
+    historyIds: ["h1", "h2"],
+    sourceLinks: [
+      { type: "PUBLIC_ANALYSIS" as const, id: "x" },
+      { type: "SIGNAL_THREAD" as const, id: "y" },
+    ],
+  };
+  const reordered = {
+    ...original,
+    historyIds: ["h2", "h1"],
+    sourceLinks: [...original.sourceLinks].reverse(),
+  };
+  assert.equal(sameMaterials(original, reordered), true);
+  assert.equal(
+    patchIsVisible(reordered, {
+      historyIds: original.historyIds,
+      sourceLinks: original.sourceLinks,
+    }),
+    true,
+  );
+  assert.deepEqual(changedPostFields(original, toDraft(reordered)), {});
+  assert.equal(patchIsVisible(reordered, { historyIds: ["h1", "h3"] }), false);
+  assert.equal(patchIsVisible(reordered, { historyIds: ["h1", "h1"] }), false);
+  assert.equal(
+    patchIsVisible(reordered, {
+      sourceLinks: [
+        { type: "SIGNAL_THREAD", id: "x" },
+        { type: "SIGNAL_THREAD", id: "y" },
+      ],
+    }),
+    false,
+  );
+  assert.equal(patchIsVisible(reordered, { title: "changed" }), false);
+  assert.equal(patchIsVisible(reordered, { historyIds: [] }), false);
+  assert.equal(
+    patchIsVisible({ ...reordered, historyIds: [] }, { historyIds: [] }),
+    true,
+  );
+  assert.deepEqual(original.historyIds, ["h1", "h2"]);
 });

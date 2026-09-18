@@ -149,3 +149,13 @@ App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어�
 ## W16 마이페이지 내부 슬롯
 
 App.profileSections에 stars/history/statistics 컴포넌트를 등록한다. ProfileSlotProps는 memberId, isOwn, starListVisibility다. 본인 History/통계만 허용하고 타인 PRIVATE 별 목록은 하위 컴포넌트를 mount하지 않는다. 하위 화면도 실제 API의403/404와 권한 변경을 처리해야 하며 props는 서버 권한을 대체하지 않는다. 미등록은 연결 준비 안내다. [214 구현·미확정 계약·인수](ticket-214-readiness.md).
+
+## W09 퀘스트 갱신
+
+208의 `QuestProvider`가 지도와 대체 목록에 같은 퀘스트 상태를 공급한다. A06의 실제 제출 성공 뒤 `publishQuestChange(memberId, { reason: "submission" })`를 호출한다. 허용 건너뛰기 성공은 `reason: "tutorial-skipped"`, A14 안내 닫기는 `reason: "guide-closed"`이며 안내 닫기로 튜토리얼 완료나 성과를 만들지 않는다. 이벤트는 회원별 읽기 갱신 요청이고 상태 저장소가 아니다. 지도에 돌아오면 서버 상태를 새로 조회한다.
+
+지도 데이터도 바뀌는 성공 응답은 기존 `publishSkyChange`를 사용한다. 그 이벤트 역시 퀘스트를 재조회하므로 같은 성공 사건에 두 이벤트를 반드시 함께 보낼 필요는 없다. 자세한 응답 책임·실제 연동 대기는 [208 인수 기록](ticket-208-readiness.md)을 따른다.
+
+## 2026-09-18 리뷰 통합
+
+지도 205~208과 커뮤니티 209 이후의 스택을 208→209로 통합했다. 실행 모드 interaction과 community, 양쪽 운영 경로를 함께 유지한다. 선행 MR이 병합된 뒤 후속 MR을 병합한다. 이 통합은 216의 실제 API·배포 인수를 대체하지 않는다.

@@ -454,3 +454,22 @@ test("pending POST disables all mutations and POST failure before dispatch is sa
     page.getByRole("heading", { name: "저장 여부를 먼저 확인해 주세요" }),
   ).toHaveCount(0);
 });
+
+test("delete return respects post ID boundaries and rejects the deleted post or its edit route", async ({
+  page,
+}) => {
+  for (const kind of ["sibling", "self", "edit"] as const) {
+    const id = await seed(page);
+    const target =
+      kind === "sibling"
+        ? "/posts/" + id + "0"
+        : "/posts/" + id + (kind === "edit" ? "/edit" : "?from=detail");
+    await page.goto("/posts/" + id + "?returnTo=" + encodeURIComponent(target));
+    await page.getByRole("button", { name: "글 삭제", exact: true }).click();
+    await page.getByRole("button", { name: "삭제하기", exact: true }).click();
+    const expected = kind === "sibling" ? target : "/community?board=FREE";
+    await expect
+      .poll(() => new URL(page.url()).pathname + new URL(page.url()).search)
+      .toBe(expected);
+  }
+});

@@ -1,8 +1,4 @@
-import {
-  type Materials,
-  sameMaterials,
-  readMaterials,
-} from "./materialContracts";
+import { type Materials, sameMaterials } from "./materialContracts";
 import { ApiError } from "../../api/client";
 import { readPost } from "./contracts";
 
@@ -88,9 +84,15 @@ export function changedPostFields(
   return patch;
 }
 export function patchIsVisible(post: PostValues, sent: Partial<PostValues>) {
-  return Object.entries(sent).every(
-    ([key, value]) =>
-      JSON.stringify(post[key as keyof PostValues]) === JSON.stringify(value),
+  const { historyIds, sourceLinks, ...fields } = sent;
+  return (
+    Object.entries(fields).every(
+      ([key, value]) => post[key as keyof PostValues] === value,
+    ) &&
+    (!Object.hasOwn(sent, "historyIds") ||
+      sameMaterials({ historyIds: post.historyIds }, { historyIds })) &&
+    (!Object.hasOwn(sent, "sourceLinks") ||
+      sameMaterials({ sourceLinks: post.sourceLinks }, { sourceLinks }))
   );
 }
 export function toDraft(post: PostValues): PostDraft {
@@ -111,7 +113,6 @@ export function readEditablePost(value: unknown) {
     );
   return {
     ...post,
-    ...readMaterials(row),
     hasAttachments: row.attachments.length > 0 || row.sourceLinks.length > 0,
   };
 }
