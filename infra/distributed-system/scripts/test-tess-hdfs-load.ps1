@@ -13,13 +13,13 @@ $parseErrors=$null
 if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
 
 $runnerText=Get-Content -LiteralPath $runner -Raw
-foreach ($required in @('Preflight','Build','Upload','Status','Audit','Commit','Commit requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8')) {
+foreach ($required in @('Preflight','Build','Upload','Status','Audit','Commit','RunAll','Wait-HdfsUploaders','foreach ($currentSector in 3..5)','RUN_ALL_COMPLETE sectors=3,4,5','Commit requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8','sudo chmod -R a=rX,u+w "$work"','RELEASE_PERMISSION_INVALID','Under-replicated blocks:[[:space:]]+0','"$fsck"')) {
  if (-not $runnerText.Contains($required)) { throw "Runner contract is missing: $required" }
 }
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit"')) { throw 'Transient HDFS upload units must not start again after boot.' }
 $common=@{RunId='20260918T120000Z';ExpectedSourceListSha256=('a'*64);Sector=3}
-foreach ($step in @('Install','Build','Upload','Commit')) {
+foreach ($step in @('Install','Build','Upload','Commit','RunAll')) {
  & $runner -Step $step @common -WhatIf
 }
 $java=Get-Content -LiteralPath (Join-Path $loader 'TessSequenceFileTool.java') -Raw

@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 param(
  [Parameter(Mandatory)]
- [ValidateSet('Preflight','Install','Build','Upload','Status','Audit','Commit')]
+ [ValidateSet('Preflight','Install','Build','Upload','Status','Audit','Commit','RunAll')]
  [string]$Step,
  [Parameter(Mandatory)][ValidatePattern('^\d{8}T\d{6}Z$')][string]$RunId,
  [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSourceListSha256,
@@ -13,7 +13,7 @@ param(
  [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
 )
 $ErrorActionPreference='Stop'
-$mutatingSteps=@('Install','Build','Upload','Commit')
+$mutatingSteps=@('Install','Build','Upload','Commit','RunAll')
 if ($Step -in $mutatingSteps -and -not $PSCmdlet.ShouldProcess("TESS HDFS release=$ReleaseId sector=$Sector","S15P21C206-76 $Step")) { return }
 if ($Step -eq 'Commit' -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
  throw 'Commit requires all Workers 2..6.'
@@ -44,6 +44,16 @@ function Invoke-Remote {
  if ($exitCode -ne 0) { throw "$Label failed on $Target (exit $exitCode)." }
 }
 
+function Invoke-RemoteCapture {
+ param([string]$Target,[string]$Command,[string]$Label)
+ $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command.Replace("`r",'')))
+ $remote="printf '%s' '$payload' | base64 --decode | bash"
+ $output=@(& tailscale ssh $Target $remote 2>&1)
+ $exitCode=$LASTEXITCODE
+ if ($exitCode -ne 0) { throw "$Label failed on $Target (exit $exitCode):`n$($output -join "`n")" }
+ $output
+}
+
 function Invoke-Scp {
  param([string]$Source,[string]$Destination)
  $output=@(& scp -o BatchMode=yes -o StrictHostKeyChecking=yes $Source $Destination 2>&1)
@@ -55,6 +65,66 @@ function Assert-Host([string]$Alias,[string]$Target,[string]$Expected) {
  $null=Invoke-Tailscale ping --timeout=5s --until-direct=false $Alias
  $actual=@(Invoke-Tailscale ssh $Target hostname -s) | Select-Object -Last 1
  if (-not $actual -or $actual.Trim() -ne $Expected) { throw "$Alias must resolve to $Expected." }
+}
+
+function Test-HdfsPath([string]$Path) {
+ $command=@'
+set -eu
+if sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfs -test -e '__PATH__'; then
+ echo HDFS_PATH_PRESENT
+else
+ echo HDFS_PATH_ABSENT
+fi
+'@.Replace('__PATH__',$Path)
+ @((Invoke-RemoteCapture $node1 $command "Check HDFS path $Path")) -contains 'HDFS_PATH_PRESENT'
+}
+
+function Wait-HdfsUploaders([int]$CurrentSector) {
+ $started=[DateTimeOffset]::UtcNow
+ $deadline=$started.AddHours(3)
+ while ($true) {
+  $pending=@()
+  foreach ($node in $NodeNumbers) {
+   $slot=$node-1
+   $unit="planetory-tess-hdfs-load-$RunId-s$CurrentSector-w$slot.service"
+   $command="sudo systemctl show '$unit' --property=LoadState,ActiveState,SubState,Result,NRestarts,ExecMainStatus --no-pager"
+   $state=@{}
+   foreach ($line in @(Invoke-RemoteCapture "planetory-admin@node-$node" $command "Read Worker $slot uploader state")) {
+    if ($line -match '^([^=]+)=(.*)$') { $state[$Matches[1]]=$Matches[2] }
+   }
+   if ($state.LoadState -ne 'loaded') { throw "Uploader unit is not loaded: $unit" }
+   if ($state.ActiveState -eq 'inactive' -and $state.Result -eq 'success' -and $state.ExecMainStatus -eq '0') { continue }
+   if ($state.ActiveState -eq 'failed' -or ($state.ActiveState -eq 'inactive' -and $state.Result -ne 'success')) {
+    throw "Uploader failed: $unit active=$($state.ActiveState) sub=$($state.SubState) result=$($state.Result) exit=$($state.ExecMainStatus) restarts=$($state.NRestarts)"
+   }
+   $pending += "w$slot=$($state.ActiveState)/$($state.SubState)"
+  }
+  if (-not $pending) {
+   $elapsed=[Math]::Round(([DateTimeOffset]::UtcNow-$started).TotalSeconds,1)
+   Write-Host "UPLOAD_COMPLETE sector=$CurrentSector elapsed_seconds=$elapsed"
+   return
+  }
+  if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "Upload wait timed out after 3 hours: sector=$CurrentSector pending=$($pending -join ',')" }
+  $elapsed=[Math]::Round(([DateTimeOffset]::UtcNow-$started).TotalMinutes,1)
+  Write-Host "UPLOAD_WAIT sector=$CurrentSector elapsed_minutes=$elapsed pending=$($pending -join ',')"
+  Start-Sleep -Seconds 30
+ }
+}
+
+function Invoke-OrchestratedStep([string]$ChildStep,[int]$CurrentSector) {
+ $parameters=@{
+  Step=$ChildStep
+  RunId=$RunId
+  ExpectedSourceListSha256=$ExpectedSourceListSha256
+  Sector=$CurrentSector
+  ReleaseId=$ReleaseId
+  CodeReleaseId=$CodeReleaseId
+  TargetBundleMiB=$TargetBundleMiB
+  NodeNumbers=$NodeNumbers
+  LocalIngestionPath=$LocalIngestionPath
+  Confirm=$false
+ }
+ & $PSCommandPath @parameters
 }
 
 function New-LoaderBundle {
@@ -167,6 +237,7 @@ cleanup() { status=$?; trap - EXIT; rm -f -- "$archive"; test -z "$work" || sudo
 trap cleanup EXIT
 if test -f "$release/READY"; then
  test "$(cat "$release/READY")" = '__CONTENT_SHA__' || { echo RELEASE_ID_CONFLICT >&2; exit 1; }
+ test -x "$release" && test -r "$release/hdfs/tess_hdfs_load.py" || { echo RELEASE_PERMISSION_INVALID >&2; exit 1; }
  echo INSTALL_CACHED content_sha256=__CONTENT_SHA__
  exit 0
 fi
@@ -180,11 +251,12 @@ javac -encoding UTF-8 -cp "$(/opt/hadoop/bin/hadoop classpath)" -d "$work/classe
 PYTHONPATH="$work" python3.12 -m compileall -q "$work/ingestion" "$work/hdfs"
 printf '%s\n' '__CONTENT_SHA__' > "$work/READY"
 sudo chown -R root:root "$work"
-sudo chmod -R go-w "$work"
+sudo chmod -R a=rX,u+w "$work"
 sudo install -d -o root -g root -m 0755 "$(dirname "$release")"
 sudo test ! -e "$release" || { echo RELEASE_RACE_CONFLICT >&2; exit 1; }
 sudo mv "$work" "$release"
 work=''
+test -x "$release" && test -r "$release/hdfs/tess_hdfs_load.py"
 echo INSTALL_OK release="$release" content_sha256=__CONTENT_SHA__
 '@.Replace('__RELEASE__',$codeRelease).Replace('__CODE_RELEASE__',$CodeReleaseId).Replace('__CONTENT_SHA__',$bundle.ContentSha256).Replace('__ARCHIVE_SHA__',$bundle.ArchiveSha256)
     Invoke-Remote $target[1] $command 'Install immutable HDFS loader'
@@ -307,7 +379,8 @@ hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOO
 audit=/tmp/S15P21C206-76-__RUN_ID__-s__SECTOR__.audit.json
 spark_script=/tmp/S15P21C206-76-__RUN_ID__-manifest.py
 ready=/tmp/S15P21C206-76-__RUN_ID__-ready.json
-cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$audit" "$spark_script" "$ready"; exit "$status"; }
+fsck=/tmp/S15P21C206-76-__RUN_ID__-fsck.txt
+cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$audit" "$spark_script" "$ready" "$fsck"; exit "$status"; }
 trap cleanup EXIT
 if hdfs_cmd dfs -test -e '__FINAL__'; then
  hdfs_cmd dfs -cat '__FINAL__/_READY.json' > "$ready"
@@ -361,13 +434,38 @@ hdfs_cmd dfs -put "$ready" '__STAGE__/_READY.json.part'
 hdfs_cmd dfs -mv '__STAGE__/_READY.json.part' '__STAGE__/_READY.json'
 hdfs_cmd dfs -mkdir -p '/lake/raw/tess/release=__DATA_RELEASE__'
 hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'
-hdfs_cmd fsck '__FINAL__' -files -blocks | tee /tmp/S15P21C206-76-__RUN_ID__-fsck.txt
-grep -q 'Status: HEALTHY' /tmp/S15P21C206-76-__RUN_ID__-fsck.txt
-grep -Eq 'Under replicated blocks:[[:space:]]+0' /tmp/S15P21C206-76-__RUN_ID__-fsck.txt
-rm -f -- /tmp/S15P21C206-76-__RUN_ID__-fsck.txt
+hdfs_cmd fsck '__FINAL__' -files -blocks > "$fsck"
+grep -q 'Status: HEALTHY' "$fsck"
+grep -Eq 'Under-replicated blocks:[[:space:]]+0' "$fsck"
+grep -E 'Status: HEALTHY|Under-replicated blocks:|Missing blocks:|Corrupt blocks:' "$fsck"
 echo COMMIT_OK final='__FINAL__' products="$count"
 '@.Replace('__RUN_ID__',$RunId).Replace('__SECTOR__',[string]$Sector).Replace('__DATA_RELEASE__',$ReleaseId).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256).Replace('__RELEASE__',$codeRelease).Replace('__STAGE__',$stage).Replace('__FINAL__',$final).Replace('__FINAL_URI__',$finalUri).Replace('__SLOT_ARGS__',$slotArgs).Replace('__SPARK_IMAGE__','apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1')
   Invoke-Remote $node1 $command 'Build manifest.parquet and atomically commit Raw sector'
+ }
+ 'RunAll' {
+  $runStarted=[DateTimeOffset]::UtcNow
+  foreach ($currentSector in 3..5) {
+   Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector"
+   Invoke-OrchestratedStep 'Preflight' $currentSector
+  }
+  Invoke-OrchestratedStep 'Install' 3
+  foreach ($currentSector in 3..5) {
+   $currentFinal="/lake/raw/tess/release=$ReleaseId/sector=$('{0:D4}' -f $currentSector)"
+   Write-Host "RUN_ALL_SECTOR_START sector=$currentSector"
+   if (Test-HdfsPath $currentFinal) {
+    Invoke-OrchestratedStep 'Commit' $currentSector
+    Write-Host "RUN_ALL_SECTOR_CACHED sector=$currentSector"
+    continue
+   }
+   Invoke-OrchestratedStep 'Build' $currentSector
+   Invoke-OrchestratedStep 'Upload' $currentSector
+   Wait-HdfsUploaders $currentSector
+   Invoke-OrchestratedStep 'Audit' $currentSector
+   Invoke-OrchestratedStep 'Commit' $currentSector
+   Write-Host "RUN_ALL_SECTOR_COMPLETE sector=$currentSector"
+  }
+  $elapsed=[Math]::Round(([DateTimeOffset]::UtcNow-$runStarted).TotalMinutes,1)
+  Write-Host "RUN_ALL_COMPLETE sectors=3,4,5 elapsed_minutes=$elapsed"
  }
 }
 

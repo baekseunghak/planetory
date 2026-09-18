@@ -115,4 +115,6 @@
 | 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
-| 2026-09-18 | TESS HDFS Raw 병렬 bundle·manifest·원본 복원 | S15P21C206-76 | SequenceFile, offset, manifest.parquet, RF2, atomic rename, idempotency | 구현·오프라인 검증 완료, 실환경 검증 전 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS HDFS Raw 병렬 bundle·manifest·원본 복원 | S15P21C206-76 | SequenceFile, offset, manifest.parquet, RF2, atomic rename, idempotency | Sector 3 실환경 검증·멱등 재실행 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | Sector 3 HDFS Raw 완료 조건 재검증 | S15P21C206-76 | byte-identical, COMMIT_CACHED, staging isolation, manifest.parquet, RF2, YARN read | Sector 3 검증 완료·전체 범위 미완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | Sector 3~5 HDFS Raw 자동 연속 적재 | S15P21C206-76 | RunAll, uploader wait, resume, manifest.parquet, RF2, FSCK | 전체 범위 적재·검증 완료 | [2026-09-19](2026-09-19.md) |
