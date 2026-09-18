@@ -50,7 +50,7 @@ test("at least ten separate transits align at the injected period and spread at 
   const context = decodeAnalysisContext(raw, raw.ticId);
   const data = buildFoldData(
     context,
-    decodeCurve(periodCurveFixture(), context),
+    decodeCurve(periodCurveFixture(), context, 200),
   );
   const peak = candidatePeaksFixture().peaks[0];
   const transits = data.points

@@ -17,6 +17,7 @@ function segment(startBtjd: number, binMinutes = 1440): CurveSegment {
   const curve = decodeCurve(
     analysisCurveFixture(),
     decodeAnalysisContext(raw, raw.ticId),
+    200,
   );
   if (curve.kind !== "ready") throw new Error("expected ready");
   return {

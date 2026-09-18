@@ -104,7 +104,7 @@ test("missing selection rules or bounds never invent defaults or block existing 
   ]) {
     const context = decodeAnalysisContext(response, raw.ticId);
     assert.equal(context.selectionContract.kind, "unavailable");
-    assert.equal(decodeCurve(analysisCurveFixture(), context).kind, "ready");
+    assert.equal(decodeCurve(analysisCurveFixture(), context, 200).kind, "ready");
   }
 });
 
