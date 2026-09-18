@@ -61,7 +61,7 @@ services:
   #   erd.planetory.space -> http://erd:80  (Liam)
   #
   # 한국어 설명은 도구가 아니라 DB가 갖는다. 설명의 정본은 pg_description이며
-  # V10__table_comments.sql이 그 값을 심는다.
+  # R__table_comments.sql이 그 값을 심는다(반복 마이그레이션).
   erd:
     image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
     platform: linux/amd64
