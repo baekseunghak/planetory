@@ -177,13 +177,13 @@ sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
 [복구 검증 스크립트](../../infra/distributed-system/scripts/validate-hdfs-recovery.ps1)는 `Preflight`와 `Prepare` 뒤 계획 전환, Node 1 장애, Worker 장애를 서로 분리한다. 변경 단계는 먼저 `-WhatIf`로 대상 프로젝트·VM을 확인하고 실행 중인 YARN 작업이 0개인 유지보수 창에서만 실행한다. 복구 중 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제는 사용하지 않는다.
 
 - 계획 전환: Active를 Standby로 내린 뒤 반대 NameNode를 일반 승격한다.
-- Node 1 장애: GCP에서 `master-1=TERMINATED`를 확인한 경우만 Node 2에서 `-transitionToActive --forceactive nn2`를 실행한다. 자동 fencing이 없으므로 VM 상태를 확인할 수 없으면 중단한다.
-- Node 1 재기동: mount → JournalNode → Standby NameNode → ResourceManager 순서다. 이후 계획 failback과 Worker 5개의 DataNode IPC `9867` full block report를 수행한다.
-- Worker 재기동: mount → DataNode → NodeManager 순서다. 복귀 노드의 full block report 뒤 Live DataNode 5개, YARN NodeManager 5개, under·missing·corrupt 0과 검증 파일 checksum을 확인한다.
+- Node 1 장애: 정지 전에 Node 2·3의 JournalNode active와 잔존 `8485`·`8480` 경로를 확인한다. GCP에서 `master-1=TERMINATED`를 확인한 경우만 Node 2에서 `-transitionToActive --forceactive nn2`를 실행하며, 원격 승격 직전에도 종료 상태를 다시 확인한다. 자동 fencing이 없으므로 VM 상태를 확인할 수 없으면 중단한다.
+- Node 1 재기동: mount → JournalNode → Standby NameNode → ResourceManager 순서이며 각 준비 포트를 최종 단정한다. 이후 계획 failback과 Worker 5개의 DataNode IPC `9867` full block report를 수행한다. 실패해도 다섯 대를 모두 시도해 차단된 호스트 전체를 보고한 뒤 중단한다.
+- Worker 재기동: 일반 Worker는 mount → DataNode → NodeManager 순서다. Worker 3은 정지 전에 남을 Node 1·2 JournalNode와 상호 `8485`·`8480` 경로를 확인하고, mount → JournalNode → DataNode → NodeManager 순서로 복구한다. FinalAudit은 JournalNode 3대, Live DataNode 5개, YARN NodeManager 5개, under·missing·corrupt 0과 Prepare에서 기록한 무작위 표본 SHA-256을 확인한다. Worker 3 실제 장애 경로는 아직 실행하지 않았으므로 다음 유지보수 창의 후속 검증으로 남긴다.
 
 ResourceManager·Airflow·Publisher는 Node 1에만 있으므로 Node 2 승격으로 복구되지 않는다. ResourceManager는 Node 1 재기동 순서에 포함한다. Airflow·Publisher가 배포된 환경에서는 컨테이너 상태와 로그를 확인한 뒤 실패한 Airflow 단계부터 재시도하고, Publisher는 같은 bundle의 멱등 적재를 확인한다. 2026-09-18 검증 당시 두 컨테이너는 배포되지 않아 이 부분은 실행 증거가 아니다.
 
-실행 명령, 단계별 안전 조건과 2026-09-18 실제 소요 시간은 [분산 시스템 수동 전환 절차](../../infra/distributed-system/README.md#수동-전환)에 기록한다.
+실행 명령, 단계별 안전 조건, 검증 경로 정리 절차와 2026-09-18 실제 소요 시간은 [분산 시스템 수동 전환 절차](../../infra/distributed-system/README.md#수동-전환)에 기록한다.
 
 ## 7. tailnet SSH 장애와 GCP 비상 복구
 

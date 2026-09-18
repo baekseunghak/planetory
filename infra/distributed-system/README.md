@@ -262,7 +262,7 @@ sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용�
 
 ## 수동 전환
 
-실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다.
+실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다. `Prepare`는 256MiB 무작위 표본을 만들고 원본 SHA-256을 같은 run의 `baseline-256m.sha256`에 별도로 보존하며, `FinalAudit`은 이 값과 HDFS에서 다시 받은 표본의 SHA-256을 비교한다.
 
 계획된 전환은 기존 Active를 먼저 Standby로 내린 다음 일반 승격을 사용한다.
 
@@ -271,7 +271,7 @@ sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -trans
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
 ```
 
-Node 1 장애 시에는 담당자가 GCP에서 `master-1`의 상태가 `TERMINATED`임을 확인한 뒤에만 Node 2에서 강제 승격한다. 기존 Active가 응답하지 않는 상태의 일반 승격은 대기할 수 있고 자동 fencing이 없으므로, VM 종료 확인 없이 `--forceactive`를 사용하면 안 된다.
+Node 1 장애 시에는 정지 전에 Node 2·3의 JournalNode가 active이고 Node 2에서 잔존 JournalNode의 `8485/TCP`·`8480/HTTP`에 도달할 수 있는지 확인한다. 담당자가 GCP에서 `master-1`의 상태가 `TERMINATED`임을 확인한 뒤에만 Node 2에서 강제 승격하며, 원격 승격 명령 직전에도 종료 상태를 다시 확인한다. 기존 Active가 응답하지 않는 상태의 일반 승격은 대기할 수 있고 자동 fencing이 없으므로, VM 종료 확인 없이 `--forceactive`를 사용하면 안 된다.
 
 ```bash
 gcloud compute instances describe master-1 --project=<NODE1_PROJECT> --zone=asia-east1-b --format='value(status)'
@@ -279,7 +279,7 @@ sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -trans
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs fsck / -blocks
 ```
 
-Node 1 복구 순서는 VM·mount → JournalNode → Standby NameNode → ResourceManager다. 계획된 failback 뒤에는 NameNode가 재시작 전 블록 리포트를 놓쳐 초과 복제를 보류할 수 있으므로 `worker-2`~`worker-6`의 DataNode IPC `9867`에 전체 block report를 요청한 뒤 under·over·missing·corrupt가 모두 0인지 확인한다. Worker 복구 순서는 VM·mount → DataNode → NodeManager이며, 복귀 Worker의 block report와 HDFS 5개·YARN 5개 노드 회복을 확인한다.
+Node 1 복구 순서는 VM·mount → JournalNode → Standby NameNode → ResourceManager이며 각 서비스의 준비 포트를 최종 단정한다. 계획된 failback 뒤에는 NameNode가 재시작 전 블록 리포트를 놓쳐 초과 복제를 보류할 수 있으므로 `worker-2`~`worker-6`의 DataNode IPC `9867`에 전체 block report를 요청한다. 실패해도 다섯 대를 모두 시도해 `BLOCKED_DATANODE_IPC`에 실패 호스트 전체를 출력한 뒤 중단하며, 모두 성공한 경우에만 under·over·missing·corrupt가 0인지 확인한다. 일반 Worker 복구 순서는 VM·mount → DataNode → NodeManager다. JournalNode를 겸하는 Worker 3을 중지하기 전에는 Node 1·2의 JournalNode active와 상호 `8485`·`8480` 경로를 먼저 확인하고, 복구는 VM·mount → JournalNode(`8485`, `8480`) → DataNode → NodeManager 순서로 수행한다. FinalAudit은 Node 1~3의 JournalNode와 HDFS 5개·YARN 5개 노드 회복을 함께 확인한다.
 
 ```powershell
 $Recovery = '.\infra\distributed-system\scripts\validate-hdfs-recovery.ps1'
@@ -297,9 +297,11 @@ $Common = @{
 
 자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 복구 스크립트도 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제를 수행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
 
+`/validation/S15P21C206-74/run-<RunId>`는 실패 원인과 검증 증거를 위해 자동 삭제하지 않는다. 증거 보존이 끝나면 운영자가 정확한 RunId를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-74/run-<RunId>`로 무작위 표본과 기대 SHA-256 파일을 함께 정리한다.
+
 2026-09-18 run `20260917T224900Z`의 실환경 결과는 다음과 같다.
 
-- 256MiB RF2 표본 SHA-256 `a6d72ac7690f53be6ae46ba88506bd97302a093f7108472bd9efc3cefda06484`는 모든 장애 전후 동일했다.
+- 당시 256MiB 표본은 0바이트로 채워져 SHA-256 `a6d72ac7690f53be6ae46ba88506bd97302a093f7108472bd9efc3cefda06484`가 장애 전후 같았지만, 이 값은 로컬에서도 재현되는 상수라 해시만으로 장애 복구를 입증하지 않는다. 당시 실환경 증거는 HDFS 쓰기·읽기, block location, RF2·FSCK와 장애 전후 상태를 함께 본 결과이며, 보완된 스크립트의 무작위 표본·Prepare 해시 전달 경로는 아직 실환경에서 실행하지 않았다.
 - 계획 전환은 Node 2 승격 8초, Node 1 복귀 6초였고 양쪽에서 기존 파일 읽기와 Node 2 신규 쓰기가 성공했다.
 - Node 1 VM 중지는 62초, 종료 확인 뒤 Node 2 강제 승격과 읽기·신규 쓰기는 49초, Node 1 순차 복구는 94초, failback은 6초였다.
 - Worker 4 중단 뒤 HDFS 기본 heartbeat/recheck 조건에서 Dead DataNode 1개와 under-replicated 10개를 740초에 관찰했다. 중단 중 표본 읽기·checksum은 성공했고 재복제가 진행됐다.
