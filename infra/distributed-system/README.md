@@ -15,7 +15,7 @@ VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. �
 | Spark 제출 컨테이너 | `apache/spark:3.5.5-python3` | 기본 이미지 확정 |
 | Spark와 Hadoop 클러스터 통합 | Spark 이미지의 Hadoop client 3.3.4 → Hadoop 3.5.0 | YARN cluster mode HDFS 읽기·쓰기와 5개 Worker executor 검증 완료 |
 
-2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다. 2026-09-18에는 ResourceManager 1개와 NodeManager 5개, Spark 3.5.5 cluster mode HDFS sample과 Node 2 자원 상한을 검증했다.
+2026-09-17 실환경 점검에서 6대의 저장소 설정 파일 일치 여부와 노드 간 사설망 route·ping·TCP 22 총 30개 방향, 각 노드의 18개 DNS 별칭을 검증했다. 이어 QJM 3개, `nn1=active`, `nn2=standby`, Live DataNode 5개와 RF2 표본 쓰기·읽기·checksum을 검증했다. 2026-09-18에는 ResourceManager 1개와 NodeManager 5개, Spark 3.5.5 cluster mode HDFS sample과 Node 2 자원 상한에 더해 Node 1·Worker 4 실제 중지와 수동 복구를 검증했다.
 
 Hadoop 3.5.0 서버는 Java 17을 요구하므로 HDFS와 YARN 호스트 데몬은 OpenJDK 17로 실행한다. Spark 3.5 계열의 Java 17 지원 여부와 별개로 현재 Spark 이미지 자체는 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 호스트 Hadoop의 JDK를 바꿔도 컨테이너 내부 JDK와 JAR는 자동으로 바뀌지 않는다.
 
@@ -65,12 +65,14 @@ sudo install -m 644 infra/distributed-system/config/yarn/standby-worker.xml /etc
 
 Jira `S15P21C206-72`는 서비스 계정·JDK·mount·QJM·RF2와 안전한 최초 초기화를 포함한다. 설치 구현은 [Hadoop 3.5.0 Cluster Setup](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-common/ClusterSetup.html), [QJM HA](https://hadoop.apache.org/docs/r3.5.0/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html)와 [Apache 공식 배포본](https://downloads.apache.org/hadoop/common/hadoop-3.5.0/)을 기준으로 하며, 노드 역할과 저장 경로는 이 저장소의 설정을 따른다.
 
-구현 파일은 다음 넷이다.
+구현 파일은 다음과 같다.
 
 - [install-hdfs-host.sh](scripts/install-hdfs-host.sh): 단일 노드의 사전 검사·설치·권한·systemd unit 생성을 담당한다.
 - [install-hdfs-hosts.ps1](scripts/install-hdfs-hosts.ps1): tailnet 노드·Linux 계정·호스트명을 검증하고 `tailscale ssh`와 MagicDNS 경유 `scp`로 Linux 스크립트를 호출한다.
 - [initialize-hdfs-ha.ps1](scripts/initialize-hdfs-ha.ps1): 방화벽·QJM·포맷·Standby bootstrap·DataNode·Active 전환·RF2 검증을 한 단계씩 실행하고 각 단계의 상태·포트·로그를 확인한다.
 - [test-initialize-hdfs-ha.ps1](scripts/test-initialize-hdfs-ha.ps1): 초기화 단계와 포맷 보호 장치를 원격 변경 없이 검사한다.
+- [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1): 계획 전환, Node 1·Worker 중지, 순차 재기동과 최종 무결성 감사를 단계별로 수행한다.
+- [test-hdfs-recovery.ps1](scripts/test-hdfs-recovery.ps1): `WhatIf`, 정확한 VM 대상, no-format·no-delete와 수동 전환 계약을 원격 변경 없이 검사한다.
 
 설치 스크립트는 다음 순서와 중단 조건을 지킨다.
 
@@ -228,7 +230,7 @@ $AuditSinceUtc = (@(& tailscale ssh SSAFY@node-1 'date -u +%Y-%m-%dT%H:%M:%SZ') 
 
 설치 전에 OpenSSH `known_hosts`에 각 `node-*` host key를 별도 확인해 등록해야 한다. 미등록되거나 변경된 key는 자동 수락하지 않고 설치와 sample 전송을 중단한다.
 
-설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. 현재 YARN unit의 부팅 자동 시작도 의도적으로 비활성이다. 재부팅 후에는 HDFS가 정상인지 먼저 확인한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다. HDFS unit과의 부팅 순서·health gate는 재기동과 수동 Active 전환을 검증하는 `S15P21C206-74`에서 자동 시작 여부와 함께 확정한다.
+설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit의 부팅 자동 시작을 활성화하지 않고 운영자 확인 뒤 수동 복구 순서를 유지한다. 재부팅 후에는 JournalNode·NameNode·DataNode와 HA 상태를 먼저 복구한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다.
 
 `Preflight`는 6개 노드가 NTP 동기화 상태이며 `Etc/UTC` 시간대를 사용하는지 확인한다. 감사 시작 시각은 운영자 PC가 아니라 Node 1에서 가져온다. `FinalAudit`은 이 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
 
@@ -260,21 +262,50 @@ sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용�
 
 ## 수동 전환
 
-계획된 전환은 기존 Active를 먼저 Standby로 내린다.
+실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다.
+
+계획된 전환은 기존 Active를 먼저 Standby로 내린 다음 일반 승격을 사용한다.
 
 ```bash
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToStandby nn1
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
 ```
 
-Node 1 장애 시에는 담당자가 GCP에서 Node 1 VM의 완전 중지를 확인한 뒤에만 Node 2에서 실행한다.
+Node 1 장애 시에는 담당자가 GCP에서 `master-1`의 상태가 `TERMINATED`임을 확인한 뒤에만 Node 2에서 강제 승격한다. 기존 Active가 응답하지 않는 상태의 일반 승격은 대기할 수 있고 자동 fencing이 없으므로, VM 종료 확인 없이 `--forceactive`를 사용하면 안 된다.
 
 ```bash
-sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive nn2
+gcloud compute instances describe master-1 --project=<NODE1_PROJECT> --zone=asia-east1-b --format='value(status)'
+sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs haadmin -transitionToActive --forceactive nn2
 sudo -u hdfs env HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs fsck / -blocks
 ```
 
-자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
+Node 1 복구 순서는 VM·mount → JournalNode → Standby NameNode → ResourceManager다. 계획된 failback 뒤에는 NameNode가 재시작 전 블록 리포트를 놓쳐 초과 복제를 보류할 수 있으므로 `worker-2`~`worker-6`의 DataNode IPC `9867`에 전체 block report를 요청한 뒤 under·over·missing·corrupt가 모두 0인지 확인한다. Worker 복구 순서는 VM·mount → DataNode → NodeManager이며, 복귀 Worker의 block report와 HDFS 5개·YARN 5개 노드 회복을 확인한다.
+
+```powershell
+$Recovery = '.\infra\distributed-system\scripts\validate-hdfs-recovery.ps1'
+$Common = @{
+  RunId = '20260917T224900Z'
+  Node1ProjectId = 'planetory-0001'
+  WorkerNode = 4
+  WorkerProjectId = 'planetory-0004-508301'
+}
+& $Recovery -Step Preflight @Common
+& $Recovery -Step Prepare @Common -WhatIf
+# 승인 후 Prepare → PlannedToNode2 → PlannedToNode1 → StopNode1 → PromoteNode2
+# → StartNode1 → FailbackNode1 → StopWorkerAndObserve → StartWorker → FinalAudit 순서로 실행한다.
+```
+
+자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 복구 스크립트도 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제를 수행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
+
+2026-09-18 run `20260917T224900Z`의 실환경 결과는 다음과 같다.
+
+- 256MiB RF2 표본 SHA-256 `a6d72ac7690f53be6ae46ba88506bd97302a093f7108472bd9efc3cefda06484`는 모든 장애 전후 동일했다.
+- 계획 전환은 Node 2 승격 8초, Node 1 복귀 6초였고 양쪽에서 기존 파일 읽기와 Node 2 신규 쓰기가 성공했다.
+- Node 1 VM 중지는 62초, 종료 확인 뒤 Node 2 강제 승격과 읽기·신규 쓰기는 49초, Node 1 순차 복구는 94초, failback은 6초였다.
+- Worker 4 중단 뒤 HDFS 기본 heartbeat/recheck 조건에서 Dead DataNode 1개와 under-replicated 10개를 740초에 관찰했다. 중단 중 표본 읽기·checksum은 성공했고 재복제가 진행됐다.
+- Worker 4의 DataNode→NodeManager 복구와 HDFS·YARN 5개 노드 회복은 88초였다. 전체 block report 뒤 표본 경로는 under·over·missing·corrupt 0, 평균 복제 2.0, `HEALTHY`였다.
+- 장애 창 로그의 SIGTERM은 의도한 VM 종료였고, NameNode 재기동 직후의 미등록 DataNode report는 전체 block report로 해소했다. 복구 완료 `2026-09-17T23:57:47Z` 이후 HDFS·YARN 6개 노드 로그의 새 오류는 0건이다.
+- ResourceManager·Airflow·Publisher는 Node 1 단일 장애 경계다. ResourceManager는 Node 1 복구 후 정상화했으며 Airflow·Publisher 컨테이너는 당시 배포되지 않아 재기동 검증 대상이 아니었다. 배포 후에는 실패한 Airflow 단계부터 재시도하고 Publisher 멱등성을 별도 확인한다.
 
 외부 HA 메타데이터 백업은 이 30일 PoC 범위에서 두지 않는다. 따라서 두 NameNode 메타데이터 디스크를 함께 잃으면 복구할 수 없다는 위험을 수용한다.
 
@@ -342,4 +373,4 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`를 실행한다. CI는 이 검사와 Compose 구문 검사를 수행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`에서 런타임 검증을 완료했다. Worker 장애·수동 전환과 Gold 공개·롤백은 각각의 후속 통합 검증으로 남긴다.
+저장소 루트에서 `python infra/distributed-system/validate.py`와 `pwsh -File infra/distributed-system/scripts/test-hdfs-recovery.ps1`을 실행한다. CI는 XML·Compose 정적 검사를 수행하며 PowerShell Runner 검증은 `S15P21C206-91` 범위다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`, Worker 장애·수동 NameNode 전환은 `S15P21C206-74`에서 런타임 검증을 완료했다. Gold 공개·롤백은 후속 통합 검증으로 남긴다.
