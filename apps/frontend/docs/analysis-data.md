@@ -50,9 +50,16 @@ React 컴포넌트는 샘플 파일을 import하지 않는다. 일반 서버 모
 | `/analysis/259377019` | 404 `STAR_NOT_PUBLISHED`, 거절 안내                                                   |
 | `/analysis/259377020` | 곡선의 점 수가 배열보다 1 많음, 어댑터 오류                                           |
 | `/analysis/259377021` | 503, 실패 안내·수동 재시도                                                            |
-| `/analysis/259377022` | 202 `CURVE_NOT_READY`, 결과·작업 없음. 빈 곡선으로 처리하거나 작업을 만들지 않음      |
+| `/analysis/259377022` | 202 응답. 본문은 정상 곡선과 같은 구조이고 `segments`만 null이며 결과·작업이 없다. 빈 곡선으로 처리하거나 작업을 만들지 않음 |
 | `/analysis/259377023` | 문맥은 이전 판, 곡선 헤더는 새 판. 한 번 자동 재조회 후에도 같으므로 수동 재시도 안내 |
 
+## 서버 응답 계약에서 주의할 점 (2026-09-18)
+
+리뷰에서 확인된 세 가지다. fixture가 서버와 다른 모양이면 전체 테스트가 통과해도 실제 응답에서 깨지므로 fixture를 서버 형태에 맞춘다.
+
+- `bundle.bundleVersion`과 세그먼트의 `binningRevision`은 **문자열**이다(`AnalysisViews.BundleSummary` · `Segment`). `v7`·`10m-v1`처럼 오므로 숫자로 바꾸거나 접두사를 떼지 않고 원문을 보존한다.
+- 잔차 미계산은 **HTTP 202**로 알린다. 본문에 `code` 필드는 없고 정상 곡선과 같은 구조에 `segments`만 null이다. 상태 코드로 판정하며 200인데 `segments`가 null이거나 202인데 세그먼트가 있으면 정상 응답이 아니다.
+- 복귀 문맥 안내 `STEP_NOT_RESTORABLE`은 최상위가 아니라 **`currentCurveContext.notice`** 에 온다(탐사 API 5.1, 2026-09-17 결정). 바뀌지 않았으면 필드 자체가 빠진다.
 등록하지 않은 TIC는 404다. 주소만 바꿔 어떤 별이든 성공시키지 않는다. 오류 예제는 고정 응답이므로 새로고침·재시도해도 같은 오류를 낸다. 실패→정상 복구는 브라우저 테스트에서 첫 응답만 503으로 가로채고, 재시도는 정상 fixture로 통과시켜 검사한다.
 
 Chrome 개발자 도구의 Network에서 `analysis-context`와 `curves`를 필터링해 요청 순서, Query String Parameters와 Response JSON을 확인한다. React StrictMode의 개발 검사로 취소된 요청이 추가로 보일 수 있다. 이는 샘플의 무작위 변경이나 자동 재시도가 아니다.

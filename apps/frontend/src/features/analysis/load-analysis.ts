@@ -51,7 +51,7 @@ export async function loadAnalysis(
     signal.throwIfAborted();
     if (expectedBundleId && bundleId && bundleId !== expectedBundleId)
       throw new BundleChanged();
-    return { body, bundleId };
+    return { body, bundleId, status };
   }
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -73,7 +73,7 @@ export async function loadAnalysis(
         curvePath(context),
         context.curveContext.bundleId,
       );
-      const curve = decodeCurve(result.body, context);
+      const curve = decodeCurve(result.body, context, result.status);
       signal.throwIfAborted();
       return { context, curve, bundleChanged: changed };
     } catch (error) {

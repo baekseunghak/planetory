@@ -21,6 +21,7 @@ function sample() {
   const curve = decodeCurve(
     analysisCurveFixture(),
     decodeAnalysisContext(context, context.ticId),
+    200,
   );
   if (curve.kind !== "ready") throw new Error("expected ready");
   return curve.segments;

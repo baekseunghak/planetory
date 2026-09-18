@@ -29,14 +29,14 @@ export function analysisContextFixture(
     hasConfirmedCandidate: true,
     bundle: {
       bundleId: ANALYSIS_FIXTURE_BUNDLE,
-      bundleVersion: 7,
+      bundleVersion: "v7",
       publishedAt: "2026-09-14T00:00:00Z",
       foldReferenceTimeBtjd: 1683.4231,
       baseDays: 0.12,
       observationBounds: [1683.35, 2420.0594444444446],
       residualModelVersion: currentCurveContext.residualModelVersion,
       periodogramConfigVersion: currentCurveContext.periodogramConfigVersion,
-      binningRevision: 1,
+      binningRevision: "10m-v1",
       curveStepRule: "one_candidate_per_step",
     },
     selectionRules: {
@@ -85,7 +85,7 @@ export function analysisCurveFixture(
       {
         segmentId: "9007199254740995",
         sector: 14,
-        binningRevision: 1,
+        binningRevision: "10m-v1",
         startBtjd: 1683.35,
         binMinutes: 10,
         nPoints: 8,
@@ -96,7 +96,7 @@ export function analysisCurveFixture(
       {
         segmentId: "9007199254740996",
         sector: 41,
-        binningRevision: 1,
+        binningRevision: "10m-v1",
         startBtjd: 2419.99,
         binMinutes: 20,
         nPoints: 6,
@@ -164,10 +164,16 @@ export function analysisFixtureResponse(
   if (ticId === ANALYSIS_FIXTURE_TICS.notComputed)
     return {
       status: 202,
+      // 서버는 202에도 같은 본문 구조를 두고 segments만 null로 보낸다.
+      // code 필드는 존재하지 않는다 (AnalysisViews.Curve).
       body: {
-        code: "CURVE_NOT_READY",
-        segments: null,
+        ticId,
+        bundleId: ANALYSIS_FIXTURE_BUNDLE,
+        foldReferenceTimeBtjd: context.bundle.foldReferenceTimeBtjd,
+        curveContext: context.currentCurveContext,
         residual: { status: null, jobId: null },
+        fluxUnit: "normalized",
+        segments: null,
       },
     };
   const curve = analysisCurveFixture(ticId);
