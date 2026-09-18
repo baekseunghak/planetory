@@ -1,0 +1,31 @@
+{
+  "schema": "planetory.ingestion-config.v1",
+  "version": "service-v1-sectors-3-5",
+  "product": "SPOC 2-minute Light Curve",
+  "worker_count": 5,
+  "download_concurrency": 4,
+  "disk_stop_fraction": 0.75,
+  "disk_resume_fraction": 0.70,
+  "max_part_bytes": 67108864,
+  "max_retries": 5,
+  "max_consecutive_failures": 10,
+  "retry_initial_seconds": 30,
+  "retry_max_seconds": 900,
+  "sectors": [
+    {
+      "sector": 3,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_3_lc.sh",
+      "expected_count": 15993
+    },
+    {
+      "sector": 4,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_4_lc.sh",
+      "expected_count": 19997
+    },
+    {
+      "sector": 5,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_5_lc.sh",
+      "expected_count": 19996
+    }
+  ]
+}

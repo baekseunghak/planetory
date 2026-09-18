@@ -262,7 +262,7 @@ sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용�
 
 ## 수동 전환
 
-실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다. `Prepare`는 256MiB 무작위 표본을 만들고 원본 SHA-256을 같은 run의 `baseline-256m.sha256`에 별도로 보존하며, `FinalAudit`은 이 값과 HDFS에서 다시 받은 표본의 SHA-256을 비교한다.
+실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다. `Prepare`는 256MiB 무작위 표본을 만들고 원본 SHA-256을 같은 run의 `baseline-256m.sha256`에 별도로 보존하며, `FinalAudit`은 이 값과 HDFS에서 다시 받은 표본의 SHA-256을 비교한다. 두 단계의 로컬 `/tmp` 파일은 RunId를 포함한 정확한 경로만 `rm -f --`로 성공·실패 종료 때 정리한다. cleanup 실패는 출력에 남기고, 본 검증이 이미 실패했다면 그 종료 코드를 유지한다.
 
 계획된 전환은 기존 Active를 먼저 Standby로 내린 다음 일반 승격을 사용한다.
 
@@ -297,7 +297,7 @@ $Common = @{
 
 자동 fencing은 구성하지 않았으므로 응답 없는 Active를 대상으로 `hdfs haadmin -failover`를 실행하지 않는다. 복구 스크립트도 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제를 수행하지 않는다. 기존 단일 NameNode 데이터를 HA로 전환하는 경우에만 공식 절차에 따라 `hdfs namenode -initializeSharedEdits`를 별도로 수행한다.
 
-`/validation/S15P21C206-74/run-<RunId>`는 실패 원인과 검증 증거를 위해 자동 삭제하지 않는다. 증거 보존이 끝나면 운영자가 정확한 RunId를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-74/run-<RunId>`로 무작위 표본과 기대 SHA-256 파일을 함께 정리한다.
+`/validation/S15P21C206-74/run-<RunId>`는 실패 원인과 검증 증거를 위해 자동 삭제하지 않는다. 로컬 `/tmp` cleanup은 이 HDFS 경로를 건드리지 않으며 다른 RunId의 파일도 삭제하지 않는다. 증거 보존이 끝나면 운영자가 정확한 RunId를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-74/run-<RunId>`로 무작위 표본과 기대 SHA-256 파일을 함께 정리한다.
 
 2026-09-18 run `20260917T224900Z`의 실환경 결과는 다음과 같다.
 
@@ -349,6 +349,14 @@ docker compose up -d airflow-db airflow-scheduler airflow-webserver
 
 최초 UI 계정 생성과 scheduler/webserver의 동일한 Fernet·webserver secret key 설정은 서버 초기 설정에 포함한다.
 
+## TESS 원천 수집 (`S15P21C206-75`)
+
+Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-tess-ingestion.ps1)로 SPOC 2분 Light Curve를 수집한다. Tailscale 대상과 실제 호스트명, `/mnt/data` mount, passwordless sudo, 디스크 사용률 75% 미만과 공식 MAST 연결을 `Preflight`에서 먼저 확인한다. 코드는 `/mnt/data/planetory-ingestion/releases/<ReleaseId>`, 실행 데이터는 `/mnt/data/staging/S15P21C206-75/run-<RunId>`에 둔다. release는 결정적 내용 SHA로 식별하고 root 소유·일반 사용자 쓰기 금지로 고정한다.
+
+실행 순서는 `Preflight` → `Install` → `SourceList` → Worker별 `Start -Limit 1`·`Audit -Limit 1` → `InstallSupervisor`다. systemd 감독기는 기존 수동 PID가 있으면 먼저 인계 대기하고, 이후 Sector 3→4→5를 재개·감사한다. 한 Worker에는 supervisor 한 개만 두고 설정의 `download_concurrency`만큼 서로 다른 파일을 동시에 받는다. 현재 운영값은 4다. 프로세스 실패는 30초 후 systemd가 재기동하고, 네트워크 연속 실패는 최대 15분 backoff한다. `Type=notify` unit은 실제 다운로드·감사 진행 heartbeat가 5분간 없으면 watchdog 실패로 프로세스를 종료하고 재기동한다. 디스크 75%에서 멈추고 70% 미만에서 재개한다. 운영자 점검은 `Pause`로 활성 Sector를 자동 판별하고 supervisor를 먼저 정지한 뒤 현재 RunId·worker slot·Sector와 일치하는 기존 downloader만 종료한다. 완료 FITS와 `.part`를 보존하고 pause manifest를 남기며 HDFS 원본이나 다른 RunId를 삭제하지 않는다. 원천 파일을 HDFS로 옮기는 단계는 다운로드 전수 감사 뒤 별도 수행한다.
+
+2026-09-18 데이터 RunId `20260918T080417Z`는 13:21 UTC에 Worker 5대의 Sector 3·4·5 전수 감사를 모두 통과했다. 고정 source list와 실제 FITS는 55,986개로 일치하며 검증 원본 100.94GiB, manifest를 포함한 run 디렉터리 101.13GiB, `.part` 0, 최신 실패 0이다. 누적 event 82,986건은 모두 `VALIDATED`이고 HTTP·기타 재시도와 손상된 완결 JSONL은 0이며 `/mnt/data` 사용률은 각 2%다. 순차 기준 3.12MiB/s에서 제한 동시성 4의 같은 15분 창 10.54MiB/s로 3.38배·237.8% 증가했다. 최종 ReleaseId `20260918T124821Z`, 내용 SHA `14b52924c9a60625dd78f5e10cbf9743399343fd035954de9e2a7c1077f900ee`는 Worker 2의 15분 canary 뒤 3~6에 한 대씩 롤링 적용했다. 별도 hang 검사에서는 worker-2 main PID `74730`을 `SIGSTOP`해 5분 watchdog timeout과 30초 재시작 뒤 PID `75912`, `NRestarts=0→1` 복구를 확인했다. 완료된 unit은 `success/inactive`이고 enabled 상태를 유지한다.
+
 ## Spark 제출
 
 Spark는 다음 모드로 제출한다.
@@ -369,10 +377,10 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 다음 항목은 후속 구현 대상이다.
 
 - Airflow 실제 DAG
-- 원격 수집 실행
+- TIC·TCE·TOI·Archive·ExoFOP 원천별 snapshot 수집
 - Spark 제출 연결
 - Spark History Server
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`와 `pwsh -File infra/distributed-system/scripts/test-hdfs-recovery.ps1`을 실행한다. CI는 XML·Compose 정적 검사를 수행하며 PowerShell Runner 검증은 `S15P21C206-91` 범위다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`, Worker 장애·수동 NameNode 전환은 `S15P21C206-74`에서 런타임 검증을 완료했다. Gold 공개·롤백은 후속 통합 검증으로 남긴다.
+저장소 루트에서 `python infra/distributed-system/validate.py`, `pwsh -File infra/distributed-system/scripts/test-hdfs-recovery.ps1`, `pwsh -File infra/distributed-system/scripts/test-tess-ingestion.ps1`을 실행한다. CI는 XML·Compose 정적 검사를 수행하며 PowerShell Runner 검증은 `S15P21C206-91` 범위다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`, Worker 장애·수동 NameNode 전환은 `S15P21C206-74`에서 런타임 검증을 완료했다. Gold 공개·롤백은 후속 통합 검증으로 남긴다.

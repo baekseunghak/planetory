@@ -109,3 +109,9 @@
 
 | 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |

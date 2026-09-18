@@ -24,6 +24,7 @@
 | 에픽 만들어줘, 작업을 묶어줘 | Jira Epic | [Jira Epic](jira-epic.md) |
 | 브랜치 만들어줘, 최신 develop에서 분기해줘 | Git 브랜치 | [브랜치](branch.md) |
 | 기능 만들어줘, 버그 고쳐줘, 설정 바꿔줘 | 개발 | [기능·수정 작업](development.md) |
+| Hadoop 설치·설정·복구·검증해줘, HDFS·YARN·Spark 작업해줘 | Hadoop 운영 | [Hadoop 운영 작업](hadoop-operations.md) |
 | 문서 찾아줘, 만들거나 수정·이동·삭제해줘 | 문서 | [문서 생명주기](documentation.md) |
 | 왜 바뀌었어, 이전 판단 찾아줘, 변경 이력 남겨줘 | 변경 이력 | [변경 이력 규칙](../changes/README.md) |
 | 커밋 메시지 작성해줘, 커밋해줘 | Git 커밋 | [커밋](commit.md) |
