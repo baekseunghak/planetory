@@ -9,7 +9,7 @@
 - 실험 범위와 합격 조건: [분산 파이프라인 Docker PoC](../experiments/distributed-pipeline-poc.md)
 - 현행 기술 기준: [아키텍처](../architecture/README.md), [데이터](../data/README.md), [운영](../operations/README.md)
 - Gold·Redis·Bundle 전환 기준: [문서 정합화 요청 R3~R5](planetory-doc-sync-requests.md) 반영 완료. PostgreSQL 직접 적재·current 트랜잭션 전환·Redis 캐시·최신 판 재로드를 구현 기준으로 사용한다.
-- 상태: `S15P21C206-72`의 Hadoop 3.5.0·OpenJDK 17 HDFS HA·RF2 검증과 `S15P21C206-73`의 YARN·Spark 3.5.5 sample 검증을 완료했다. ResourceManager 1개와 NodeManager 5개가 실행 중이고, Application `application_1789675115055_0005`는 5개 Worker에 executor를 배치해 HDFS 입력을 읽고 5개 결과와 checksum을 남긴 뒤 `SUCCEEDED`로 끝났다. Node 2의 16GiB/2 vCore 한도에서 executor 1개 실행 중 호스트 used 약 2.7GiB, available 약 32.5GiB, swap 0과 OOM 없음도 확인했다. Node 1 Docker Engine·Compose 설치 책임은 73번에 포함해 실제 제출로 검증했다. 다음 단계는 최소 manifest와 합성 데이터의 분산 파이프라인 PoC이며 Node 2~6 Docker 설치는 수집 컨테이너 배포 작업에 남아 있다.
+- 상태: `S15P21C206-72`의 Hadoop 3.5.0·OpenJDK 17 HDFS HA·RF2 검증과 `S15P21C206-73`의 YARN·Spark 3.5.5 sample 검증을 완료했다. ResourceManager 1개와 NodeManager 5개가 실행 중이고, Application `application_1789675115055_0005`는 5개 Worker에 executor를 배치해 HDFS 입력을 읽고 5개 결과와 checksum을 남긴 뒤 `SUCCEEDED`로 끝났다. Node 2의 16GiB/2 vCore 한도에서 executor 1개 실행 중 호스트 used 약 2.7GiB, available 약 32.5GiB, swap 0과 관리자 권한 커널 저널 기준 OOM 없음도 확인했다. Node 1 Docker Engine·Compose 설치 책임은 73번에 포함해 실제 제출로 검증했다. 다음 단계는 최소 manifest와 합성 데이터의 분산 파이프라인 PoC이며 Node 2~6 Docker 설치는 수집 컨테이너 배포 작업에 남아 있다.
 
 ## 후속 작업 순서
 

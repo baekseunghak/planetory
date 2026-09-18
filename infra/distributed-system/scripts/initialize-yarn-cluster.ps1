@@ -39,7 +39,9 @@ function Invoke-Tailscale {
 function Invoke-Remote {
  param([string]$Target,[string]$Command,[string]$Label)
  Write-Host "== $Label =="
- $output=@(& tailscale ssh $Target $Command 2>&1)
+ $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command))
+ $remoteCommand="printf '%s' '$payload' | base64 --decode | bash"
+ $output=@(& tailscale ssh $Target $remoteCommand 2>&1)
  $exitCode=$LASTEXITCODE
  $output | ForEach-Object { Write-Host $_ }
  if ($exitCode -ne 0) { throw "$Label failed on $Target (exit $exitCode)." }
@@ -73,7 +75,7 @@ switch ($Step) {
  'ConfigureFirewall' {
   foreach ($node in $nodes) {
    $ports=if ($node.Number -eq 1) {'8030,8031,8032,8033,8088'} else {'8040,8041,8042'}
-   $command='set -eu; sudo ufw status | grep -q "Status: active"; for source in 10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10; do sudo ufw allow from "$source" to any port '+$ports+' proto tcp comment planetory-yarn-private; done; sudo ufw status verbose; echo YARN_FIREWALL_OK'
+   $command='set -eu; sudo ufw status verbose | grep -qE "^Status: active$"; sudo ufw status verbose | grep -qE "^Default: deny \(incoming\)"; for source in 10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10; do sudo ufw allow from "$source" to any port '+$ports+' proto tcp comment planetory-yarn-private; done; sudo ufw status verbose; echo YARN_FIREWALL_OK'
    if ($node.Number -ne 1) {
     $command+='; for source in 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10; do sudo ufw allow from "$source" to any port 7078 proto tcp comment planetory-spark-private; sudo ufw allow from "$source" to any port 7079:7095 proto tcp comment planetory-spark-private; done; echo SPARK_FIREWALL_OK'
    }
@@ -81,7 +83,7 @@ switch ($Step) {
   }
  }
  'Start' {
-  $command='set -eu; systemctl is-active --quiet hadoop-hdfs-namenode; test "$('+$hdfs+' haadmin -getServiceState nn1)" = active; '+$hdfs+' dfs -mkdir -p /yarn-logs; '+$hdfs+' dfs -chmod 1777 /yarn-logs; sudo systemctl start hadoop-yarn-resourcemanager; for attempt in {1..30}; do ready=true; for port in 8030 8031 8032 8033 8088; do ss -lnt | grep -q ":$port " || ready=false; done; $ready && break; sleep 1; done; $ready; systemctl is-active --quiet hadoop-yarn-resourcemanager; sudo journalctl -u hadoop-yarn-resourcemanager -n 30 --no-pager; echo RESOURCEMANAGER_OK'
+  $command='set -eu; systemctl is-active --quiet hadoop-hdfs-namenode; nn1_state=$('+$hdfs+' haadmin -getServiceState nn1); nn2_state=$('+$hdfs+' haadmin -getServiceState nn2); case "$nn1_state:$nn2_state" in active:standby|standby:active) ;; *) echo "INVALID_HDFS_HA_STATE=nn1:$nn1_state,nn2:$nn2_state" >&2; exit 1;; esac; if ! '+$hdfs+' dfs -test -d /yarn-logs; then '+$hdfs+' dfs -mkdir /yarn-logs; '+$hdfs+' dfs -chmod 1777 /yarn-logs; fi; sudo systemctl start hadoop-yarn-resourcemanager; for attempt in {1..30}; do ready=true; for port in 8030 8031 8032 8033 8088; do ss -lnt | grep -q ":$port " || ready=false; done; $ready && break; sleep 1; done; $ready; systemctl is-active --quiet hadoop-yarn-resourcemanager; sudo journalctl -u hadoop-yarn-resourcemanager -n 30 --no-pager; echo RESOURCEMANAGER_OK'
   $null=Invoke-Remote $nodes[0].Target $command 'Start ResourceManager on Node 1'
   foreach ($node in $nodes[1..5]) {
    $command='set -eu; systemctl is-active --quiet hadoop-hdfs-datanode; sudo systemctl start hadoop-yarn-nodemanager; for attempt in {1..30}; do ready=true; for port in 8040 8041 8042; do ss -lnt | grep -q ":$port " || ready=false; done; $ready && break; sleep 1; done; $ready; systemctl is-active --quiet hadoop-yarn-nodemanager; sudo journalctl -u hadoop-yarn-nodemanager -n 30 --no-pager; echo NODEMANAGER_OK'
@@ -109,7 +111,7 @@ if systemctl is-failed --quiet __UNIT__; then exit 1; fi
 audit_since='__AUDIT_SINCE__'
 cd /
 set +e
-log_files=$(sudo -u yarn find /var/log/hadoop-yarn -maxdepth 1 -type f -name 'hadoop-yarn-*.log' -print 2>/dev/null)
+log_files=$(sudo -u yarn find /var/log/hadoop-yarn -maxdepth 1 -type f \( -name 'hadoop-yarn-*.log' -o -name 'hadoop-yarn-*.log.[0-9]*' \) -print 2>/dev/null)
 find_rc=$?
 set -e
 if test "$find_rc" -ne 0 -o -z "$log_files"; then echo YARN_LOG_AUDIT_FAILED=list-or-read >&2; exit 1; fi
@@ -124,7 +126,7 @@ echo YARN_LOG_ERRORS=0 SINCE_UTC="$audit_since"
 '@.Replace('__UNIT__',$unit).Replace('__AUDIT_SINCE__',$auditSinceLog)
    $null=Invoke-Remote $node.Target $command "YARN service and log audit Node $($node.Number)"
   }
-  $command='set -eu; '+$yarn+' node -list -all | tee /tmp/S15P21C206-73-final-nodes.txt; grep -Eq "Total Nodes:[[:space:]]*5" /tmp/S15P21C206-73-final-nodes.txt; test "$(awk ''$2 == "RUNNING" { count++ } END { print count + 0 }'' /tmp/S15P21C206-73-final-nodes.txt)" = 5; '+$hdfs+' dfsadmin -report | grep -q "Live datanodes (5)"; test "$('+$hdfs+' haadmin -getServiceState nn1)" = active; test "$('+$hdfs+' haadmin -getServiceState nn2)" = standby; echo FINAL_YARN_HDFS_AUDIT_OK'
+  $command='set -eu; '+$yarn+' node -list -all | tee /tmp/S15P21C206-73-final-nodes.txt; grep -Eq "Total Nodes:[[:space:]]*5" /tmp/S15P21C206-73-final-nodes.txt; test "$(awk ''$2 == "RUNNING" { count++ } END { print count + 0 }'' /tmp/S15P21C206-73-final-nodes.txt)" = 5; '+$hdfs+' dfsadmin -report | grep -q "Live datanodes (5)"; nn1_state=$('+$hdfs+' haadmin -getServiceState nn1); nn2_state=$('+$hdfs+' haadmin -getServiceState nn2); case "$nn1_state:$nn2_state" in active:standby|standby:active) ;; *) echo "INVALID_HDFS_HA_STATE=nn1:$nn1_state,nn2:$nn2_state" >&2; exit 1;; esac; echo FINAL_YARN_HDFS_AUDIT_OK'
   $null=Invoke-Remote $nodes[0].Target $command 'Final cluster audit from Node 1'
   $null=Invoke-Remote $nodes[1].Target ('set -eu; '+$yarn+' node -status worker-2:8041; free -m; ps -C java -o pid=,rss=,args= | grep -E "NameNode|DataNode|JournalNode|NodeManager"') 'Node 2 resource audit'
  }

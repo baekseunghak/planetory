@@ -20,7 +20,9 @@ function Invoke-Tailscale {
 function Invoke-Remote {
  param([string]$Target,[string]$Command,[string]$Label)
  Write-Host "== $Label =="
- $output=@(& tailscale ssh $Target $Command 2>&1)
+ $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command))
+ $remoteCommand="printf '%s' '$payload' | base64 --decode | bash"
+ $output=@(& tailscale ssh $Target $remoteCommand 2>&1)
  $exitCode=$LASTEXITCODE
  $output | ForEach-Object { Write-Host $_ }
  if ($exitCode -ne 0) { throw "$Label failed on $Target (exit $exitCode)." }
@@ -42,22 +44,31 @@ foreach ($target in @(@('node-1',$node1,'master-1'),@('node-2',$node2,'worker-2'
 }
 if (-not $PSCmdlet.ShouldProcess('Planetory YARN cluster','pull pinned Spark image and run HDFS read/write sample')) { return }
 
-$runId=[datetime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+$runStartedUtc=[datetime]::UtcNow
+$runId=$runStartedUtc.ToString('yyyyMMddTHHmmssZ')
+$oomSince=$runStartedUtc.ToString('yyyy-MM-dd HH:mm:ss UTC',[Globalization.CultureInfo]::InvariantCulture)
 $container="planetory-yarn-sample-$runId".ToLowerInvariant()
-$remoteDir='/tmp/planetory-yarn-sample'
+$remoteDir="/tmp/planetory-yarn-sample-$runId"
 $remoteSample="$remoteDir/yarn-hdfs-sample.py"
 $base="/validation/S15P21C206-73/run-$runId"
 $input="$base/input/input.txt"
 $output="$base/output"
-$null=Invoke-Remote $node1 "install -d -m 700 $remoteDir" 'Prepare Node 1 sample staging'
-Invoke-Scp $sampleFile "${node1}:$remoteSample"
+$scpArgs=@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',$sampleFile,"${node1}:$remoteSample")
+try {
+ $null=Invoke-Remote $node1 "install -d -m 700 $remoteDir" 'Prepare Node 1 sample staging'
+ Invoke-Scp @scpArgs
 
 $launch=@'
 set -eu
 hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
 yarn_cmd() { sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn "$@"; }
 systemctl is-active --quiet hadoop-yarn-resourcemanager
-test "$(hdfs_cmd haadmin -getServiceState nn1)" = active
+nn1_state=$(hdfs_cmd haadmin -getServiceState nn1)
+nn2_state=$(hdfs_cmd haadmin -getServiceState nn2)
+case "$nn1_state:$nn2_state" in
+ active:standby|standby:active) ;;
+ *) echo "INVALID_HDFS_HA_STATE=nn1:$nn1_state,nn2:$nn2_state" >&2; exit 1;;
+esac
 test "$(yarn_cmd node -list -all | awk '$2 == "RUNNING" { count++ } END { print count + 0 }')" = 5
 test "$(yarn_cmd application -list -appStates RUNNING | awk '$1 ~ /^application_/ { count++ } END { print count + 0 }')" = 0
 printf 'planetory yarn sample one\nplanetory yarn sample two\n' > /tmp/__RUN_ID__-input.txt
@@ -139,8 +150,10 @@ echo NODE2_DURING_APPLICATION
 sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -status worker-2:8041
 free -m
 ps -C java -o pid=,rss=,args= | grep -E 'NameNode|DataNode|JournalNode|NodeManager|ApplicationMaster|CoarseGrainedExecutorBackend'
-if dmesg --since '-10 minutes' 2>/dev/null | grep -Ei 'out of memory|oom-killer|killed process'; then exit 1; fi
-'@
+oom_log=$(sudo -n journalctl -k --since '__OOM_SINCE__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
+if printf '%s\n' "$oom_log" | grep -Ei 'out of memory|oom-kill|killed process'; then exit 1; fi
+echo NODE2_NO_OOM_DURING_SAMPLE
+'@.Replace('__OOM_SINCE__',$oomSince)
  $null=Invoke-Remote $node2 $node2During 'Node 2 memory during sample'
 
  $deadline=[datetime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -190,6 +203,18 @@ echo YARN_LOG_LOCAL=/tmp/__APP_ID__-yarn.log
 echo SPARK_YARN_HDFS_SAMPLE_OK
 '@.Replace('__APP_ID__',$applicationId).Replace('__INPUT__',$input).Replace('__OUTPUT__',$output)
 $null=Invoke-Remote $node1 $verify 'Verify SUCCEEDED state, HDFS output, checksum and aggregated logs'
-$null=Invoke-Remote $node2 ('set -eu; '+$yarn+' node -status worker-2:8041; free -m; if dmesg --since ''-10 minutes'' 2>/dev/null | grep -Ei ''out of memory|oom-killer|killed process''; then exit 1; fi; echo NODE2_NO_OOM_AFTER_SAMPLE') 'Node 2 limit after sample'
+$node2After=@'
+set -eu
+__YARN__ node -status worker-2:8041
+free -m
+oom_log=$(sudo -n journalctl -k --since '__OOM_SINCE__' --no-pager) || { echo NODE2_OOM_AUDIT_FAILED >&2; exit 1; }
+if printf '%s\n' "$oom_log" | grep -Ei 'out of memory|oom-kill|killed process'; then exit 1; fi
+echo NODE2_NO_OOM_AFTER_SAMPLE
+'@.Replace('__YARN__',$yarn).Replace('__OOM_SINCE__',$oomSince)
+$null=Invoke-Remote $node2 $node2After 'Node 2 limit after sample'
 
 Write-Host "PASS: APPLICATION_ID=$applicationId HDFS_OUTPUT=$output"
+} finally {
+ $cleanup=@(& tailscale ssh $node1 "rm -rf -- $remoteDir" 2>&1)
+ if ($LASTEXITCODE -ne 0) { Write-Warning "Sample staging cleanup failed: $($cleanup -join "`n")" }
+}

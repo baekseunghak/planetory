@@ -3,7 +3,12 @@ $ErrorActionPreference='Stop'
 $yarnTestState=@{Calls=[Collections.Generic.List[string]]::new();BadNode=0}
 
 function tailscale {
- $yarnTestState.Calls.Add("tailscale $($args -join ' ')")
+ $recorded="tailscale $($args -join ' ')"
+ if ($args[0] -eq 'ssh' -and $args.Count -ge 3 -and $args[2] -match "^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$") {
+  $decoded=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[1]))
+  $recorded="tailscale ssh $($args[1]) $decoded"
+ }
+ $yarnTestState.Calls.Add($recorded)
  $global:LASTEXITCODE=0
  if ($args[0] -eq 'ping') { return 'pong' }
  if ($args[0] -eq 'ssh' -and $args[2] -eq 'hostname') {
@@ -31,7 +36,7 @@ if (@($yarnTestState.Calls | Where-Object { $_ -like 'scp *' -or $_ -match '/tmp
 
 $yarnTestState.Calls.Clear()
 & $install -Confirm:$false
-if (@($yarnTestState.Calls | Where-Object { $_ -like 'scp *SSAFY@node-1:/tmp/planetory-yarn-install/*' }).Count -ne 1 -or
+if (@($yarnTestState.Calls | Where-Object { $_ -like 'scp *SSAFY@node-1:/tmp/planetory-yarn-install-*/*' }).Count -ne 1 -or
     @($yarnTestState.Calls | Where-Object { $_ -like 'tailscale ssh SSAFY@node-1 sudo bash*/install-yarn-host.sh --node 1*' }).Count -ne 1) {
  throw 'Node 1 YARN upload or install command is incorrect.'
 }
@@ -68,6 +73,7 @@ $yarnTestState.Calls.Clear()
 $firewall=@($yarnTestState.Calls | Where-Object { $_ -match 'ufw allow' })
 if ($firewall.Count -ne 6 -or
     @($firewall | Where-Object { $_ -notmatch '10\.20\.1\.10 10\.20\.2\.10 10\.20\.3\.10 10\.20\.4\.10 10\.20\.5\.10 10\.20\.6\.10' }).Count -or
+    @($firewall | Where-Object { -not $_.Contains('Default: deny \(incoming\)') }).Count -or
     @($firewall | Where-Object { $_ -match 'ufw disable|ufw reset' }).Count) {
  throw 'YARN firewall must add only role ports for the six fixed private IPs.'
 }

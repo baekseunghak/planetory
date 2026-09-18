@@ -21,6 +21,7 @@ line_count = spark.sparkContext.textFile(sys.argv[1]).count()
 
 def probe(index, rows):
     list(rows)
+    # Keep all five executors observable while the runner records placement.
     time.sleep(15)
     yield f"partition={index},host={socket.gethostname()},input_lines={line_count}"
 

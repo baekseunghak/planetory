@@ -47,14 +47,20 @@ foreach ($node in @($NodeNumbers | Sort-Object)) {
  $nodes+=[pscustomobject]@{Node=$node;SshTarget=$sshTarget;ExpectedHost=$expectedHost}
 }
 
-$remoteDir='/tmp/planetory-yarn-install'
+$remoteDir="/tmp/planetory-yarn-install-$PID"
 foreach ($target in $nodes) {
  $description='install repository-managed YARN files without starting YARN; Node 1 also installs Ubuntu Docker'
  if (-not $PSCmdlet.ShouldProcess("Node $($target.Node) $($target.SshTarget)",$description)) { continue }
- Invoke-Tailscale ssh $target.SshTarget "install -d -m 700 $remoteDir"
- Invoke-Scp @bundle "$($target.SshTarget):$remoteDir/"
- Invoke-Tailscale ssh $target.SshTarget "sudo bash $remoteDir/install-yarn-host.sh --node $($target.Node) --source-dir $remoteDir"
- Write-Host "Node $($target.Node) YARN preparation passed: $($target.ExpectedHost)"
+ try {
+  Invoke-Tailscale ssh $target.SshTarget "install -d -m 700 $remoteDir"
+  $scpArgs=@('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes')+$bundle+"$($target.SshTarget):$remoteDir/"
+  Invoke-Scp @scpArgs
+  Invoke-Tailscale ssh $target.SshTarget "sudo bash $remoteDir/install-yarn-host.sh --node $($target.Node) --source-dir $remoteDir"
+  Write-Host "Node $($target.Node) YARN preparation passed: $($target.ExpectedHost)"
+ } finally {
+  $cleanup=@(& tailscale ssh $target.SshTarget "rm -rf -- $remoteDir" 2>&1)
+  if ($LASTEXITCODE -ne 0) { Write-Warning "YARN install staging cleanup failed: $($cleanup -join "`n")" }
+ }
 }
 
 Write-Host 'Finished. YARN daemons were not enabled or started.'

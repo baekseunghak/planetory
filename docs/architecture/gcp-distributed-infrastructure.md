@@ -86,6 +86,8 @@ Node 1~3의 JournalNode가 QJM edit log를 구성한다.
 | Node 2 | 16GiB / 2 vCore | Standby NameNode 6~8GiB, DataNode 2GiB, JournalNode 0.5~1GiB, OS |
 | Node 3~6 | 24GiB / 3 vCore | DataNode 2GiB, Node 3의 JournalNode 0.5~1GiB, OS·Docker 4~5GiB |
 
+ResourceManager의 단일 컨테이너 최대치는 24GiB/3 vCore다. Node 2는 자신이 광고한 16GiB/2 vCore를 넘는 컨테이너의 배치 후보가 되지 않고 큰 컨테이너는 Nodes 3~6에만 배치되는 의도된 비대칭이다. 현재 NodeManager unit에는 `MemoryMax`와 cgroup 기반 OS 하드캡이 없으므로 실제 Sector workload의 native·off-heap 사용량은 별도 상한 검증 대상이다.
+
 실제 파일·블록 수를 측정한 뒤 Active와 Standby NameNode heap을 같은 값으로 조정한다.
 
 2026-09-18 Node 2 실측에서 Standby NameNode RSS는 약 556MiB였다. Spark executor 1개가 배치된 동안 YARN 할당은 1GiB/1 vCore, 호스트 used는 약 2.7GiB, available은 약 32.5GiB, swap은 0이었다. 이 표본에서는 OOM과 NameNode 압박이 없었지만 실제 Sector의 메모리 상한 검증을 대신하지 않는다.
@@ -140,6 +142,7 @@ Gold는 압축한 변경 번들만 Node 1에서 EC2로 전송한다. EC2가 pull
 - 같은 존 구성은 비용에 유리하지만 존 장애를 견디지 못한다.
 - Peering은 Hadoop 인증이나 전송 암호화를 대신하지 않는다.
 - 30일 PoC에서는 방화벽에 등록된 6개 사설 IP만 내부 신뢰 경계로 사용한다.
+- YARN NodeManager는 모든 인터페이스에 bind하므로 접근 경계는 GCP VPC 방화벽과 각 호스트의 UFW 기본 incoming deny·6개 고정 사설 IP 규칙을 함께 유지한다.
 - Kerberos와 HDFS wire encryption은 이번 범위에서 제외한다. 피어링에 VM을 추가할 때 보안 결정을 다시 검토한다.
 - ResourceManager는 Node 1 단일 인스턴스다. 장애 시 Spark 작업을 실패 처리하고, Node 1 복구 후 Airflow에서 해당 단계만 재시도한다.
 

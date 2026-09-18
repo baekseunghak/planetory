@@ -117,6 +117,9 @@ esac
 for unit in "${hdfs_units[@]}"; do
   systemctl is-active --quiet "$unit" || fail "HDFS prerequisite is not active: $unit"
 done
+unit="hadoop-yarn-${role}.service"
+systemctl is-active --quiet "$unit" 2>/dev/null && fail "Stop $unit before installing or updating managed files."
+systemctl is-enabled --quiet "$unit" 2>/dev/null && fail "Disable $unit before installing or updating managed files."
 if pgrep -f 'org\.apache\.hadoop\.yarn\.server\.(resourcemanager|nodemanager)\.' >/dev/null; then
   fail 'Stop the YARN daemon before installing or updating managed files.'
 fi
@@ -179,7 +182,6 @@ if [[ "$role" == nodemanager ]]; then
     runuser -u yarn -- test -w "$dir" || fail "yarn cannot write to $dir"
   done
 fi
-unit="hadoop-yarn-${role}.service"
 systemctl is-active --quiet "$unit" && fail "$unit started unexpectedly."
 systemctl is-enabled --quiet "$unit" && fail "$unit was enabled unexpectedly."
 

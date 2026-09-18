@@ -204,9 +204,9 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 
 구현 파일은 다음과 같다.
 
-- [install-yarn-host.sh](scripts/install-yarn-host.sh): 계정·디렉터리·설정·역할별 unit을 멱등 배치하고 Node 1에만 Ubuntu Docker를 준비한다. 실행 중인 YARN은 자동 덮어쓰지 않는다.
-- [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다.
-- [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다.
+- [install-yarn-host.sh](scripts/install-yarn-host.sh): 계정·디렉터리·설정·역할별 unit을 멱등 배치하고 Node 1에만 Ubuntu Docker를 준비한다. YARN unit이 active 또는 enabled이면 파일을 쓰기 전에 중단한다.
+- [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다. `scp`는 비대화식·엄격한 host key 검증을 사용하고 실행 뒤 전용 staging 디렉터리를 정리한다.
+- [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다. 원격 명령은 Bash로 실행하고 HDFS는 `nn1`·`nn2` 중 정확히 하나가 Active인지 확인한다.
 - [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
@@ -226,9 +226,15 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 & $Init -Step FinalAudit -AuditSinceUtc $AuditSinceUtc
 ```
 
-설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. 현재 YARN unit의 부팅 자동 시작도 의도적으로 비활성이다. 재부팅 후에는 HDFS가 정상인지 먼저 확인한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다.
+설치 전에 OpenSSH `known_hosts`에 각 `node-*` host key를 별도 확인해 등록해야 한다. 미등록되거나 변경된 key는 자동 수락하지 않고 설치와 sample 전송을 중단한다.
 
-UFW는 Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사설 IP에만 허용한다. Spark cluster mode는 Worker 간 driver `7078`과 block manager `7079~7095`를 사용한다. block manager는 한 Worker에 여러 컨테이너가 배치되면 기본 포트에서 증가하므로 단일 포트만 열면 remote broadcast fetch가 멈춘다.
+설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. 현재 YARN unit의 부팅 자동 시작도 의도적으로 비활성이다. 재부팅 후에는 HDFS가 정상인지 먼저 확인한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다. HDFS unit과의 부팅 순서·health gate는 재기동과 수동 Active 전환을 검증하는 `S15P21C206-74`에서 자동 시작 여부와 함께 확정한다.
+
+`FinalAudit`은 감사 시작 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
+
+UFW는 적용 전에 `active`와 기본 `deny (incoming)`을 모두 확인하고, Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사설 IP에만 허용한다. Spark cluster mode는 Worker 간 driver `7078`과 block manager `7079~7095`를 사용한다. block manager는 한 Worker에 여러 컨테이너가 배치되면 기본 포트에서 증가하므로 단일 포트만 열면 remote broadcast fetch가 멈춘다. NodeManager의 `0.0.0.0` bind와 인증 없는 PoC 경계는 GCP VPC 방화벽과 이 UFW 고정 IP 규칙의 조합이며, 둘 중 하나라도 넓어지면 신뢰 경계를 재검토한다.
+
+`/yarn-logs`는 Raw·Bronze·Silver와 분리된 YARN 운영 로그 집계 경로다. `Start`가 경로가 없을 때만 HDFS 슈퍼유저 소유·`1777`로 만들며 기존 경로의 권한을 다시 덮어쓰지 않는다. 저장소 설정은 집계 로그를 604800초(7일) 보존한다. 이 값은 변경된 XML을 호스트에 다시 설치한 뒤 적용된다.
 
 2026-09-18 최종 검증 결과는 다음과 같다.
 
@@ -241,12 +247,16 @@ UFW는 Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사�
   - `part-00002`: `0000020000000000000000006df067d00b0725fd60a989741e9dfe4b`
   - `part-00003`: `000002000000000000000000e66f211f124e44f232bb30f417b8852d`
   - `part-00004`: `000002000000000000000000f62ef44324cd05d56a2ca64e237624e8`
-- Node 2: YARN `16384MB/2 vCore`, 실행 중 컨테이너 `1024MB/1 vCore`, 호스트 used 약 2.7GiB·available 약 32.5GiB, swap 0, OOM 없음
+- Node 2: YARN `16384MB/2 vCore`, 실행 중 컨테이너 `1024MB/1 vCore`, 호스트 used 약 2.7GiB·available 약 32.5GiB, swap 0, 관리자 권한 커널 저널 기준 OOM 없음
 - 성공 run 시작 뒤 6개 YARN daemon 로그의 새 `ERROR`·`FATAL` 0건, `nn1=active`, `nn2=standby`, Live DataNode 5개 유지
 
 Worker Python 요구 조건은 3.12.x이며, 2026-09-18 검증 당시에는 모두 `/usr/bin/python3.12`의 Python 3.12.3으로 일치했다. sample은 추가 패키지를 설치하지 않고 Spark가 제공하는 PySpark를 사용한다. 광고 호스트명은 6개 VM과 제출 컨테이너에서 모두 사설 IP로 해석돼야 하며 실패하면 sample을 시작하지 않는다.
 
+클러스터의 단일 컨테이너 최대치는 24GiB/3 vCore지만 Node 2는 16GiB/2 vCore만 광고하므로 그보다 큰 컨테이너를 받지 않고 Nodes 3~6만 후보가 된다. 이는 의도된 이기종 자원 배치다. 다만 현재 Node 2 unit은 `MemoryMax`나 cgroup 기반 OS 하드캡을 두지 않으므로 2줄 sample 결과를 실제 Sector workload의 메모리 안전성으로 확대하지 않는다.
+
 sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용이다. Bronze·Silver 배치의 HDFS 서비스 사용자 이름과 경로 소유·그룹 권한 규칙은 분산 PoC 3단계인 `S15P21C206-76`에서 확정한다.
+
+`/validation/S15P21C206-73/run-<UTC>`는 실패하더라도 자동 삭제하지 않아 검증 증거와 실패 원인을 보존한다. 확인이 끝난 run은 운영자가 정확한 경로를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-73/run-<UTC>`로 정리한다. unit 중지는 UFW 규칙, `/yarn-logs`, `/validation` 결과를 되돌리지 않는다.
 
 ## 수동 전환
 

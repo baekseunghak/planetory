@@ -42,6 +42,7 @@ def main():
         assert props["yarn.nodemanager.pmem-check-enabled"] == "true"
         assert props["yarn.nodemanager.vmem-check-enabled"] == "false"
         assert props["yarn.log-aggregation-enable"] == "true"
+        assert props["yarn.log-aggregation.retain-seconds"] == "604800"
         for key in ("yarn.nodemanager.local-dirs", "yarn.nodemanager.log-dirs"):
             assert props[key].startswith("/mnt/data/yarn/")
         profiles[role] = props
@@ -99,17 +100,23 @@ def main():
         "capacity-scheduler.xml",
     ):
         assert required in yarn_installer, required
-    for forbidden in ("ufw disable", "ufw reset", "namenode -format", "hdfs dfs -rm"):
-        assert forbidden not in yarn_installer, forbidden
+    assert yarn_installer.index('systemctl is-active --quiet "$unit"') < yarn_installer.index(
+        'install -o root -g root -m 0644 "$source_dir/$profile"'
+    )
     yarn_orchestrator = (BASE / "scripts/install-yarn-hosts.ps1").read_text(encoding="utf-8")
     assert "SupportsShouldProcess" in yarn_orchestrator
     assert "Install Node 1 alone" in yarn_orchestrator
     assert "Invoke-Tailscale ssh" in yarn_orchestrator
+    assert "BatchMode=yes" in yarn_orchestrator and "StrictHostKeyChecking=yes" in yarn_orchestrator
     initializer = (BASE / "scripts/initialize-yarn-cluster.ps1").read_text(encoding="utf-8")
     assert "ValidateNodes" in initializer and "FinalAudit" in initializer
     assert "planetory-yarn-private" in initializer
     assert "planetory-spark-private" in initializer and "7079:7095" in initializer
     assert "10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10" in initializer
+    assert "Default: deny \\(incoming\\)" in initializer
+    assert "active:standby|standby:active" in initializer
+    assert "base64 --decode | bash" in initializer
+    assert "hadoop-yarn-*.log.[0-9]*" in initializer
     sample_runner = (BASE / "scripts/run-yarn-sample.ps1").read_text(encoding="utf-8")
     assert "--master yarn --deploy-mode cluster" in sample_runner
     assert "spark.executor.instances=5" in sample_runner
@@ -119,6 +126,25 @@ def main():
     assert "application -kill" in sample_runner and "docker rm -f" in sample_runner
     assert "for host in worker-2 worker-3 worker-4 worker-5 worker-6" in sample_runner
     assert "Final-State" in sample_runner and "SUCCEEDED" in sample_runner
+    assert "active:standby|standby:active" in sample_runner
+    assert "sudo -n journalctl -k" in sample_runner and "dmesg" not in sample_runner
+    assert "base64 --decode | bash" in sample_runner
+    assert "BatchMode=yes" in sample_runner and "StrictHostKeyChecking=yes" in sample_runner
+    forbidden_commands = (
+        "ufw disable",
+        "ufw reset",
+        "ufw --force reset",
+        "namenode -format",
+        "dfs -rm",
+        "haadmin -failover",
+        "haadmin -transitionToActive",
+        "haadmin -transitionToStandby",
+        "dfsadmin -safemode",
+        "dfs -expunge",
+    )
+    for script in (yarn_installer, initializer, sample_runner):
+        for forbidden in forbidden_commands:
+            assert forbidden not in script, forbidden
     ast.parse((BASE / "scripts/yarn-hdfs-sample.py").read_text(encoding="utf-8"))
     print("PASS: HDFS/YARN config, host mappings and safe installer/sample contracts")
 
