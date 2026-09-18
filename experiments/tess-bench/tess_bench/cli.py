@@ -658,7 +658,10 @@ def cmd_iterate(args: argparse.Namespace) -> int:
     cfg, settings = bl.load_bls_settings(args.settings, [args.setting])
     setting = settings[0]
     _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
-    icfg = it.IterateConfig(snr_min=args.snr_min, sde_min=args.sde_min, min_transits=args.min_transits, max_candidates=args.max_candidates)
+    icfg = it.IterateConfig(snr_min=args.snr_min, sde_min=args.sde_min, min_transits=args.min_transits, max_candidates=args.max_candidates,
+                            qa_window_offset_rel_depth=args.window_offset_rel_depth, refine_duration_max_hours=args.refine_duration_max_hours,
+                            refine_duration_span=(0.5, 2.0) if args.refine_duration_max_hours > 0 else (0.7, 1.4),
+                            continue_after_qa_fail=args.continue_after_qa_fail)
     bi = build_bls_inputs(args.target, args.stage, cfg, pre_settings[0], args.grid, args.raw, noise_seeds=[] if args.no_noise else args.noise_seeds,
                           include_raw_real=args.include_raw_real, limit=0)
     # 그룹 선택: pairs(쌍 주입) / singles(단일) / none(주입 없음) / all
@@ -678,7 +681,8 @@ def cmd_iterate(args: argparse.Namespace) -> int:
     run_dir = args.results / "bench" / f"bls_iterate_v1-{cfg['version']}" / bi.target.key / f"run-{stamp}-{run_id[:8]}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"target={bi.target.key} stage={args.stage} setting={setting.setting_id} gate=snr>={icfg.snr_min}&sde>={icfg.sde_min}&ntr>={icfg.min_transits} "
-          f"max_candidates={icfg.max_candidates} groups={bi.n_groups} tamper={args.tamper_depth_factor} run={run_dir.name}")
+          f"max_candidates={icfg.max_candidates} groups={bi.n_groups} tamper={args.tamper_depth_factor} "
+          f"opts(rel_depth={icfg.qa_window_offset_rel_depth}, dur_max_h={icfg.refine_duration_max_hours}, continue={icfg.continue_after_qa_fail}) run={run_dir.name}")
     print("전처리 중...", end="", flush=True); t0 = time.time()
     preprocess_groups(bi)
     print(f" {time.time()-t0:.1f}s ({len(bi.prepared)} curves)")
@@ -700,6 +704,7 @@ def cmd_iterate(args: argparse.Namespace) -> int:
                 match_rows.append({**common, **m})
             iter_rows.append({**common, **it.summarize(res, matches),
                               "accepted_periods": ";".join(f"{c.period_days:.5f}" for c in res.accepted),
+                              "blocked_periods": ";".join(f"{s.period_days:.5f}" for s in res.steps if s.status == "qa_failed"),
                               "accepted_original_snr": ";".join(f"{c.original_snr:.1f}" for c in res.accepted),
                               "elapsed_s": round(sum(s.bls_elapsed_s for s in res.steps if np.isfinite(s.bls_elapsed_s)), 2)})
             print(f"\r    [{bkey:<14}] {g_i:>4}/{len(by_group)} curves  {time.time()-t_b:6.1f}s", end="", flush=True)
@@ -731,7 +736,7 @@ def cmd_iterate(args: argparse.Namespace) -> int:
             v = np.array([r[name] for r in acc], float); v = v[np.isfinite(v)]
             return f"{name}: 중앙값 {np.median(v):.3f} 최대 {np.max(v):.3f} (n={v.size})" if v.size else f"{name}: -"
         print("\n=== 제거 QA 원시 수치 (채택+실패 단계) ===")
-        for name in ("power_ratio", "edge_excess", "window_offset_z", "other_depth_log2_max", "overlap_fraction", "overlap_dev"):
+        for name in ("power_ratio", "edge_excess", "window_offset_z", "window_offset_rel", "other_depth_log2_max", "overlap_fraction", "overlap_dev"):
             print("  " + q(name))
         fails = {}
         for r in acc:
@@ -817,6 +822,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-transits", type=int, default=2)
     p.add_argument("--max-candidates", type=int, default=5)
     p.add_argument("--tamper-depth-factor", type=float, default=None, help="실패 사례: 1단계 제거 모델 깊이에 이 배수를 곱해 QA 실패·복구를 시험")
+    p.add_argument("--window-offset-rel-depth", type=float, default=0.0, help="창 안 편향 QA 에 깊이 상대 허용(예 0.1). 0 은 z 만 (5절 실행값)")
+    p.add_argument("--refine-duration-max-hours", type=float, default=0.0, help="재적합 지속시간 상한(예 12). 주면 배수 범위도 0.5–2.0 으로 넓힌다. 0 은 5절 실행값")
+    p.add_argument("--continue-after-qa-fail", action="store_true", help="QA 실패 피크를 제거 불가로 기록·제외하고 계속 탐색 (설계 변경 제안 시험)")
     p.set_defaults(func=cmd_iterate)
 
     p = sub.add_parser("bls-report", help="저장된 bls run 들의 matches.csv 로 문서 5.1절 회수율 표를 생성 (재실행 없음)")

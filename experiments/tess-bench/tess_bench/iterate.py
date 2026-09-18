@@ -47,6 +47,11 @@ class IterateConfig:
     qa_other_depth_log2_max: float = 1.0        # 다른 후보 깊이의 제거 전/후 |log2 비| 상한 (2배 이상 변하면 훼손)
     qa_overlap_dev_max: float = 3.0             # 겹친 점들의 잔차 편차 중앙값 / scatter
     qa_window_offset_z_max: float = 5.0         # 제거 뒤 통과 창 안 잔차 평균의 z 점수 |mean(r−1)| / (scatter/√n). 과대 제거(밝아짐)·과소 제거(어둠 잔존) 모두 잡는다
+    qa_window_offset_rel_depth: float = 0.0     # >0 이면 |창 안 평균 편차| ≤ rel × 제거 깊이 일 때 z 초과여도 통과 (깊은 신호의 정당한 제거 보호). 0 은 z 만 적용(5절 실행값)
+    refine_duration_span: tuple[float, float] = (0.7, 1.4)   # 재적합 지속시간 탐색 배수 (5절 실행값). 확대 안: (0.5, 2.0)
+    refine_duration_max_hours: float = 0.0      # >0 이면 재적합 지속시간 상한을 max(span[1]×D₀, 이 값) 으로 넓힌다 (탐색 격자 4.8 h 상한 보정). 0 은 비활성
+    continue_after_qa_fail: bool = False        # True 면 QA 실패 피크를 '제거 불가' 로 기록·제외하고 계속 탐색 (설계 변경 제안). False 는 5.6 v1.0 대로 종료
+    blocked_mask_factor: float = 1.5            # continue_after_qa_fail: 제거 불가 피크의 통과 창(지속시간 × 이 배수)을 NaN 으로 가려 다음 탐색에서 숨긴다. 나누기 대신 마스킹
 
     def params(self) -> dict:
         return {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items()}
@@ -102,6 +107,8 @@ class StepRecord:
     overlap_fraction: float = float("nan")
     overlap_dev: float = float("nan")
     window_offset_z: float = float("nan")        # 통과 창 안 잔차 평균 z 점수 (양수 = 과대 제거로 밝아짐)
+    window_offset_rel: float = float("nan")      # 통과 창 안 잔차 평균 편차 / 제거 깊이
+    masked_points: int = 0           # continue_after_qa_fail 로 이 단계에서 가린 점 수
     n_valid_input: int = 0
     n_finite_residual: int = 0
     qa_failures: str = ""            # 실패한 QA 항목 이름 (콤마)
@@ -146,8 +153,11 @@ def refine_peak(t: np.ndarray, f: np.ndarray, peak: bl.Peak, setting: bl.BlsSett
         return peak
     bls = BoxLeastSquares(t, f, dy=scatter)
     D0 = peak.duration_hours / 24.0                                   # 탐색 격자 지속시간 주위도 촘촘히 (격자 4점의 양자화 잔여를 줄인다)
-    durations = np.unique(np.concatenate([np.asarray(setting.effective_durations_hours, float) / 24.0, np.linspace(0.7 * D0, 1.4 * D0, 15)]))
-    durations = durations[durations < setting.period_min_days]
+    lo_d, hi_d = cfg.refine_duration_span[0] * D0, cfg.refine_duration_span[1] * D0
+    if cfg.refine_duration_max_hours > 0:
+        hi_d = max(hi_d, cfg.refine_duration_max_hours / 24.0)          # 탐색 격자 상한(4.8 h)보다 긴 통과(8 h)도 제거 모델이 덮게
+    durations = np.unique(np.concatenate([np.asarray(setting.effective_durations_hours, float) / 24.0, np.linspace(lo_d, hi_d, 15)]))
+    durations = durations[(durations > 0) & (durations < setting.period_min_days)]
     res = bls.power(grid, durations, objective=setting.objective, oversample=setting.oversample)
     power = np.asarray(res.power, float)
     if not np.isfinite(power).any():
@@ -167,7 +177,10 @@ def local_max_power(t: np.ndarray, f: np.ndarray, period: float, duration_days: 
     if not (np.isfinite(scatter) and scatter > 0):
         return float("nan")
     grid = np.linspace(period * (1 - cfg.local_grid_rel), period * (1 + cfg.local_grid_rel), cfg.local_grid_n)
-    res = BoxLeastSquares(t, f, dy=scatter).power(grid, [duration_days], objective="likelihood", oversample=10)
+    try:
+        res = BoxLeastSquares(t, f, dy=scatter).power(grid, [duration_days], objective="likelihood", oversample=10)
+    except ValueError:
+        return float("nan")
     p = np.asarray(res.power, float)
     return float(np.nanmax(p)) if np.isfinite(p).any() else float("nan")
 
@@ -178,7 +191,10 @@ def fixed_depth(t: np.ndarray, f: np.ndarray, period: float, duration_days: floa
     scatter = robust_scatter(f)
     if not (np.isfinite(scatter) and scatter > 0):
         return float("nan")
-    st = BoxLeastSquares(t, f, dy=scatter).compute_stats(period, duration_days, epoch)
+    try:
+        st = BoxLeastSquares(t, f, dy=scatter).compute_stats(period, duration_days, epoch)
+    except ValueError:                      # 통과 창 안 점이 하나도 없음(마스킹 등) → astropy 가 빈 배열 예외
+        return float("nan")
     return float(st["depth"][0])
 
 
@@ -187,7 +203,10 @@ def fixed_snr(t: np.ndarray, f: np.ndarray, period: float, duration_days: float,
     scatter = robust_scatter(f)
     if not (np.isfinite(scatter) and scatter > 0):
         return float("nan")
-    st = BoxLeastSquares(t, f, dy=scatter).compute_stats(period, duration_days, epoch)
+    try:
+        st = BoxLeastSquares(t, f, dy=scatter).compute_stats(period, duration_days, epoch)
+    except ValueError:
+        return float("nan")
     d, e = float(st["depth"][0]), float(st["depth"][1])
     return d / e if np.isfinite(e) and e > 0 else float("nan")
 
@@ -215,15 +234,21 @@ def edge_excess(t: np.ndarray, residual: np.ndarray, period: float, epoch: float
 
 def window_offset_z(t: np.ndarray, residual: np.ndarray, period: float, epoch: float, duration_days: float) -> float:
     """제거 뒤 통과 창 안 잔차 평균 (r−1) 을 표준오차(바깥 scatter/√n)로 나눈 z 점수. 올바른 제거면 |z| 가 몇 이내다."""
+    return window_offset(t, residual, period, epoch, duration_days)[1]
+
+
+def window_offset(t: np.ndarray, residual: np.ndarray, period: float, epoch: float, duration_days: float) -> tuple[float, float]:
+    """(창 안 잔차 평균 편차 mean(r−1), 그 z 점수). 둘 다 계산 불가면 (nan, nan)."""
     phase = np.abs(bl._phase_distance(t, period, epoch))
     inside = (phase < 0.5 * duration_days) & np.isfinite(residual)
     oot = (phase >= 2.0 * duration_days) & np.isfinite(residual)
     if inside.sum() < 5 or oot.sum() < 20:
-        return float("nan")
+        return float("nan"), float("nan")
     scatter = robust_scatter(residual[oot])
     if not (scatter > 0):
-        return float("nan")
-    return float(np.mean(residual[inside] - 1.0) / (scatter / np.sqrt(inside.sum())))
+        return float("nan"), float("nan")
+    mean = float(np.mean(residual[inside] - 1.0))
+    return mean, mean / (scatter / np.sqrt(inside.sum()))
 
 
 def overlap_metrics(t: np.ndarray, residual: np.ndarray, removed: Candidate, others: list[tuple[float, float, float]]) -> tuple[float, float]:
@@ -251,6 +276,7 @@ class IterationResult:
     termination: str
     qa_failed_step: int = -1
     residual: np.ndarray | None = None
+    n_blocked: int = 0                # continue_after_qa_fail 로 제외된 피크 수
 
 
 def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: IterateConfig, *,
@@ -264,6 +290,7 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
     t = np.asarray(t, float); f = np.asarray(f, float)
     steps: list[StepRecord] = []
     accepted: list[Candidate] = []
+    blocked: list[Candidate] = []          # continue_after_qa_fail: 제거 불가로 기록된 피크 (중복 판정처럼 제외)
     current = f.copy()
     truth = list(truth or [])
     termination = ""
@@ -285,14 +312,16 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         coarse_period = float("nan")
         for p in run.peaks:
             dup = is_duplicate(p.period_days, p.duration_hours / 24.0, p.n_transits, accepted, cfg.alias_multipliers)
+            blk = is_duplicate(p.period_days, p.duration_hours / 24.0, p.n_transits, blocked, cfg.alias_multipliers) if blocked else -1
             refined = p
-            if dup < 0 and cfg.refine_peak:
+            if dup < 0 and blk < 0 and cfg.refine_peak:
                 refined = refine_peak(t[ok], current[ok], p, setting, run, cfg)      # 미세 조정 뒤 다시 중복 검사 (격자 오차로 빠져나가는 잔여 방지)
                 dup = is_duplicate(refined.period_days, refined.duration_hours / 24.0, refined.n_transits, accepted, cfg.alias_multipliers)
-            if dup >= 0:
-                steps.append(StepRecord(step, "rejected_duplicate", "", rank=p.rank, period_days=refined.period_days, epoch_btjd=refined.epoch_btjd,
+                blk = is_duplicate(refined.period_days, refined.duration_hours / 24.0, refined.n_transits, blocked, cfg.alias_multipliers) if blocked else -1
+            if dup >= 0 or blk >= 0:
+                steps.append(StepRecord(step, "rejected_duplicate" if dup >= 0 else "rejected_blocked", "", rank=p.rank, period_days=refined.period_days, epoch_btjd=refined.epoch_btjd,
                                         duration_hours=refined.duration_hours, depth_ppm=refined.depth * 1e6, sde=p.sde, snr=refined.snr, n_transits=refined.n_transits,
-                                        n_points=int(ok.sum()), duplicate_of_step=dup, period_coarse_days=p.period_days, bls_elapsed_s=run.elapsed_s))
+                                        n_points=int(ok.sum()), duplicate_of_step=dup if dup >= 0 else blk, period_coarse_days=p.period_days, bls_elapsed_s=run.elapsed_s))
                 continue
             chosen, coarse_period = refined, p.period_days; break
         if chosen is None:
@@ -354,18 +383,29 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         ofrac, odev = overlap_metrics(t, residual, cand, others + remaining_truth)
         if np.isfinite(odev) and odev > cfg.qa_overlap_dev_max:
             failures.append("overlap_distortion")
-        wz = window_offset_z(t, residual, cand.period_days, cand.epoch_btjd, D)
+        wmean, wz = window_offset(t, residual, cand.period_days, cand.epoch_btjd, D)
+        wrel = wmean / (model_cand.depth_ppm / 1e6) if np.isfinite(wmean) and model_cand.depth_ppm > 0 else float("nan")
         if np.isfinite(wz) and abs(wz) > cfg.qa_window_offset_z_max:
-            failures.append("window_offset")
+            if not (cfg.qa_window_offset_rel_depth > 0 and np.isfinite(wrel) and abs(wrel) <= cfg.qa_window_offset_rel_depth):
+                failures.append("window_offset")                            # z 초과이고 깊이 상대 허용도 없으면 실패
 
         rec = StepRecord(step, "accepted" if not failures else "qa_failed", "" if not failures else "removal_qa_failed",
                          power_before=power_before, power_after=power_after, power_ratio=power_ratio, edge_excess=ee,
-                         other_depth_log2_max=other_log2, overlap_fraction=ofrac, overlap_dev=odev, window_offset_z=wz,
+                         other_depth_log2_max=other_log2, overlap_fraction=ofrac, overlap_dev=odev, window_offset_z=wz, window_offset_rel=wrel,
                          n_valid_input=rem.n_valid_input, n_finite_residual=rem.n_finite_residual, qa_failures=",".join(failures), **base)
         steps.append(rec)
         if failures:
-            termination = "removal_qa_failed"; qa_failed_step = step
-            break                                                       # 복구: accepted 는 직전 단계까지, current 는 갱신하지 않음
+            if qa_failed_step < 0:
+                qa_failed_step = step
+            if not cfg.continue_after_qa_fail:
+                termination = "removal_qa_failed"
+                break                                                   # 복구: accepted 는 직전 단계까지, current 는 갱신하지 않음
+            blocked.append(cand)                                        # 제거 불가로 기록. 나누기 대신 통과 창을 가려(NaN) 다음 탐색에서 숨긴다
+            hide = in_transit_mask(t, cand.period_days, cand.epoch_btjd, D * cfg.blocked_mask_factor) & np.isfinite(current)
+            current = current.copy(); current[hide] = np.nan
+            rec.masked_points = int(hide.sum())
+            termination = "removal_qa_failed"                           # 뒤에서 다른 사유로 끝나면 덮어쓴다
+            continue
         accepted.append(cand)
         current = residual
 
@@ -377,7 +417,7 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
     if accepted and not all(c.validated_on_original for c in accepted) and termination in ("no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
         termination = "candidate_validation_failed"
     return IterationResult(steps=steps, accepted=accepted, termination=termination, qa_failed_step=qa_failed_step,
-                           residual=current if keep_residual else None)
+                           residual=current if keep_residual else None, n_blocked=len(blocked))
 
 
 # --------------------------------------------------------------------------- 정답 대조 (벤치마크)
@@ -402,5 +442,5 @@ def summarize(result: IterationResult, matches: list[dict]) -> dict:
     false_steps = [c.step for c in result.accepted if c.step not in matched_steps]
     return {"n_injected": len(matches), "n_recovered": len(recovered), "recovery_order": ";".join(str(m["recovered_step"]) for m in matches),
             "n_accepted": len(result.accepted), "n_false_candidates": len(false_steps), "false_candidate_steps": ";".join(map(str, false_steps)),
-            "n_steps": len(result.steps), "termination": result.termination, "qa_failed_step": result.qa_failed_step,
+            "n_steps": len(result.steps), "termination": result.termination, "qa_failed_step": result.qa_failed_step, "n_blocked": result.n_blocked,
             "n_validation_failed": sum(1 for c in result.accepted if c.validated_on_original is False)}

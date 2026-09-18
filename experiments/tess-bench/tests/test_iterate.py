@@ -83,7 +83,7 @@ def test_max_candidates_bounds_the_loop(monkeypatch):
     monkeypatch.setattr(it, "local_max_power", lambda *a, **k: 1.0)
     monkeypatch.setattr(it, "fixed_depth", lambda *a, **k: 1e-3)
     monkeypatch.setattr(it, "fixed_snr", lambda *a, **k: 20.0)
-    monkeypatch.setattr(it, "window_offset_z", lambda *a, **k: 0.0)
+    monkeypatch.setattr(it, "window_offset", lambda *a, **k: (0.0, 0.0))
     monkeypatch.setattr(it, "edge_excess", lambda *a, **k: 0.5)
     res = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=3, refine_peak=False, qa_power_ratio_max=2.0, qa_edge_excess_max=99, qa_overlap_dev_max=99))
     assert res.termination == "max_iterations_reached" and len(res.accepted) == 3
@@ -107,3 +107,39 @@ def test_edge_excess_is_near_unity_for_noise_and_high_for_leftover_edges():
     band = (phase >= 1.0 / 24) & (phase < 2.0 / 24)
     resid[band] -= 5e-3                                                                  # 가장자리 띠에 잔여 파형
     assert it.edge_excess(t, resid, 3.0, 1402.0, 2.0 / 24) > 3.0
+
+
+def test_window_offset_relative_allowance_protects_deep_signal_removal():
+    """깊은 신호(1%)의 제거는 SE 기준 z 는 커도 깊이 대비 편차가 작다. 상대 허용이 있으면 통과, 없으면 실패."""
+    t, f = _curve([(3.0, 1402.0, 8.0, 1e-2)], noise=2e-4)                            # 8 h 긴 통과 — 격자 4.8 h 상한 밖
+    strict = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=2))
+    relaxed = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=2, qa_window_offset_rel_depth=0.1, refine_duration_max_hours=12.0))
+    assert relaxed.accepted and relaxed.accepted[0].period_days == pytest.approx(3.0, rel=2e-3)
+    acc = [s for s in relaxed.steps if s.status == "accepted"][0]
+    assert acc.duration_hours > 6.0 and abs(acc.window_offset_rel) <= 0.1 and acc.qa_failures == ""     # 확대된 지속시간으로 8 h 를 덮었다
+    first_strict = next(s for s in strict.steps if s.status in ("accepted", "qa_failed"))
+    assert first_strict.duration_hours <= 4.8 * 1.4 + 1e-9                                                  # 5절 실행값은 6.7 h 까지만
+
+
+def test_continue_after_qa_fail_blocks_peak_and_keeps_searching():
+    """설계 변경 제안: QA 실패 피크를 제외하고 계속 탐색. 실패 피크(3배 부풀린 모델)는 blocked, 진짜 두 번째 신호는 그 뒤에 채택."""
+    t, f = _curve([(3.0, 1402.0, 2.0, 5e-3), (7.0, 1403.5, 2.5, 1.5e-3)])
+    stop = it.iterate_curve(t, f, SETTING, CFG, tamper_depth_factor=3.0)
+    assert stop.termination == "removal_qa_failed" and stop.accepted == []
+    cont = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=4, continue_after_qa_fail=True), tamper_depth_factor=3.0)
+    assert cont.n_blocked >= 1 and cont.qa_failed_step == 0
+    assert any(c.period_days == pytest.approx(7.0, rel=2e-3) for c in cont.accepted)                     # 막힌 피크 뒤의 신호를 찾는다
+    assert not any(c.period_days == pytest.approx(3.0, rel=2e-3) for c in cont.accepted)                  # 막힌 피크는 채택되지 않는다
+    failed = next(s for s in cont.steps if s.status == "qa_failed")
+    assert failed.masked_points > 0                                                                        # 제거 불가 피크의 통과 창을 가렸다
+    assert cont.termination in ("no_quality_peak", "duplicate_or_harmonic_only", "removal_qa_failed")
+
+
+def test_fixed_depth_and_snr_return_nan_when_transit_window_is_empty():
+    """마스킹으로 통과 창 안 점이 하나도 없으면 예외 대신 NaN (옵션 실험에서 WASP-18 이 죽은 사례)."""
+    t, f = _curve([(3.0, 1402.0, 2.0, 3e-3)])
+    keep = np.abs(bls._phase_distance(t, 3.0, 1402.0)) > 0.2                                      # 통과 창 주변을 전부 제거
+    assert np.isnan(it.fixed_depth(t[keep], f[keep], 3.0, 2.0 / 24, 1402.0))
+    assert np.isnan(it.fixed_snr(t[keep], f[keep], 3.0, 2.0 / 24, 1402.0))
+    res = it.iterate_curve(t[keep], f[keep], SETTING, it.IterateConfig(max_candidates=2, continue_after_qa_fail=True), truth=[(3.0, 1402.0, 2.0 / 24)])
+    assert res.termination in it.TERMINATION_REASONS                                               # 예외 없이 끝난다

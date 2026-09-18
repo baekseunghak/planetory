@@ -95,6 +95,8 @@ uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pair
 uv run python -m tess_bench iterate --target l98_59 --stage evaluation                                    # 쌍 3 + 단일 108 + none, realclean + 잡음 1
 uv run python -m tess_bench iterate --target wasp18 --stage evaluation --include-raw-real --groups none    # 실제 행성 회수·잔여 고조파 시험
 uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pairs --no-noise --tamper-depth-factor 3   # QA 실패·복구 fixture
+# 옵션 실험(문서 5.5절): 창 안 편향 깊이 상대 허용, 재적합 지속시간 확대, QA 실패 피크 마스킹 뒤 계속 탐색
+uv run python -m tess_bench iterate --target cm_dra --stage evaluation --no-noise --continue-after-qa-fail --window-offset-rel-depth 0.1 --refine-duration-max-hours 12
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
