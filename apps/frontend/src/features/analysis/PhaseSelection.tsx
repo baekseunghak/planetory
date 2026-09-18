@@ -1,3 +1,4 @@
+import { useAnalysisStage } from "./analysis-stage";
 import {
   createContext,
   useContext,
@@ -42,7 +43,8 @@ function useSelectionModel(
     }
   }, [context, data, change]);
   const preview = state.preview;
-  const enabled = ready && contract.limits !== null;
+  const { stage } = useAnalysisStage();
+  const enabled = ready && stage === 2 && contract.limits !== null;
   const apply = (range: PhaseRange, finish: boolean) => {
     if (!enabled) return;
     const result = previewPhaseSelection(
@@ -99,6 +101,7 @@ export function PhaseSelectionProvider({
   return (
     <SelectionContext.Provider value={model}>
       {children}
+      {model.contract.error && <p role="alert">{model.contract.error}</p>}
     </SelectionContext.Provider>
   );
 }
@@ -142,7 +145,11 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
           type="button"
           disabled={!enabled || !state.range}
           onClick={() =>
-            setState((previous) => ({ ...empty, judgment: previous.judgment }))
+            setState((previous) => ({
+              ...empty,
+              editingStep: 2,
+              judgment: previous.judgment,
+            }))
           }
         >
           구간 지우기

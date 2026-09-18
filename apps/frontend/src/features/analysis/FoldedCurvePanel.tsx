@@ -1,3 +1,10 @@
+import type { ReactNode } from "react";
+import { usePhaseDraft, emptyPhaseDraft } from "./AnalysisSession";
+import { useAnalysisStage } from "./analysis-stage";
+import resetIcon from "./assets/reset.svg";
+import deleteIcon from "./assets/delete.svg";
+import { fullFoldView } from "./folded-curve";
+import { useSustained } from "./fold-progress";
 import { useEffect, useId, useState } from "react";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import type { ReadyPeriodogram } from "./period-selection";
@@ -5,8 +12,6 @@ import { PhaseSelectionProvider } from "./PhaseSelection";
 import type { useFoldSession } from "./use-fold-session";
 import { FoldedCurveChart } from "./FoldedCurveChart";
 
-// Presentation delay only; the session locks follow-up actions immediately.
-const PROGRESS_NOTICE_DELAY_MS = 1000;
 const FOLD_GUIDANCE =
   "주기를 조정하면 그래프를 갱신합니다. 그래프에는 마지막 계산 완료 결과를 표시합니다.";
 
@@ -15,29 +20,22 @@ function FoldFeedback({
   retry,
   message,
   onAction,
+  invalidInput,
 }: {
+  invalidInput: boolean;
   pending: boolean;
   retry: boolean;
   message: string;
   onAction: () => void;
 }) {
-  const [delayed, setDelayed] = useState(false);
-  useEffect(() => {
-    if (!pending) {
-      setDelayed(false);
-      return;
-    }
-    const timer = window.setTimeout(
-      () => setDelayed(true),
-      PROGRESS_NOTICE_DELAY_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [pending]);
   // New periods during one pending interval must not restart this timer.
-  const showProgress = pending && delayed;
+  const showProgress = useSustained(pending);
   const showAction = showProgress || retry;
   return (
-    <div className="fold-feedback">
+    <div
+      className="fold-feedback"
+      data-invalid-input={invalidInput || undefined}
+    >
       <p role="status" data-testid="fold-status">
         {showProgress
           ? "선택한 주기로 곡선을 접고 있습니다… 계산이 끝나면 구간 선택·판단·제출을 진행할 수 있습니다."
@@ -61,7 +59,9 @@ export function FoldedCurvePanel({
   onRetry,
   context,
   periodogram,
+  children,
 }: {
+  children?: ReactNode;
   curve: CurveData;
   session: ReturnType<typeof useFoldSession>;
   onRetry: () => void;
@@ -69,6 +69,8 @@ export function FoldedCurvePanel({
   periodogram: ReadyPeriodogram;
 }) {
   const { input, state, ready, cancel, setView } = session;
+  const phase = usePhaseDraft();
+  const { stage } = useAnalysisStage();
   const { success, status } = state;
   const headingId = useId();
   const restored = success
@@ -92,8 +94,37 @@ export function FoldedCurvePanel({
       data-testid="fold-panel"
       data-fold-ready={ready}
     >
-      <h3 id={headingId}>주기로 접은 밝기 변화</h3>
+      <div className="chart-heading">
+        <h3 id={headingId}>주기로 겹친 밝기 변화</h3>
+        <div className="chart-actions">
+          <button
+            className="chart-icon"
+            aria-label="접힌 곡선 전체 보기"
+            title="접힌 곡선 전체 보기"
+            disabled={!success}
+            onClick={() => setView(() => fullFoldView)}
+          >
+            <img src={resetIcon} alt="" width="18" height="18" />
+          </button>
+          <button
+            className="chart-icon"
+            aria-label="구간 지우기"
+            title="선택 구간 지우기"
+            disabled={!ready || stage !== 2 || !phase.state.range}
+            onClick={() =>
+              phase.setState((previous) => ({
+                ...emptyPhaseDraft,
+                editingStep: 2,
+                judgment: previous.judgment,
+              }))
+            }
+          >
+            <img src={deleteIcon} alt="" width="18" height="18" />
+          </button>
+        </div>
+      </div>
       <FoldFeedback
+        invalidInput={!!input.error || !input.data?.points.length}
         pending={status === "pending"}
         retry={status === "error" || status === "cancelled"}
         message={message}
@@ -117,7 +148,14 @@ export function FoldedCurvePanel({
             fluxUnit={curve.fluxUnit}
           />
         </PhaseSelectionProvider>
-      ) : null}
+      ) : (
+        <div className="fold-empty">
+          봉우리를 선택하면
+          <br />
+          이곳에 접힌 곡선이 표시됩니다.
+        </div>
+      )}
+      {children}
     </section>
   );
 }

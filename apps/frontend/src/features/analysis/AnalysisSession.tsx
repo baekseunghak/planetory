@@ -12,6 +12,7 @@ import {
 } from "./analysis-judgment";
 
 export type PhaseDraft = {
+  editingStep?: 1 | 2 | 3;
   range: PhaseRange | null;
   committed: PhaseRange | null;
   preview: PhaseSelectionResult | null;
