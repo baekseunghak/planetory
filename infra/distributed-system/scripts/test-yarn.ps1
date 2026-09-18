@@ -96,5 +96,8 @@ $yarnTestState.Calls.Clear()
 if (@($yarnTestState.Calls | Where-Object { $_ -like 'scp *' -or $_ -match 'docker pull|docker run|dfs -put' }).Count) {
  throw 'Sample WhatIf must stop before upload, HDFS write, image pull or container start.'
 }
+if (@($yarnTestState.Calls | Where-Object { $_ -match "`r" }).Count) {
+ throw 'Remote YARN commands must normalize Windows CRLF before Bash execution.'
+}
 
 Write-Host 'PASS: YARN canary, all-node preflight, firewall, staged start and sample WhatIf (offline).'

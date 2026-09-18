@@ -49,6 +49,7 @@ function Invoke-Tailscale {
 
 function Invoke-Remote {
  param([string]$Target,[string]$Command,[string]$Label)
+ $Command=$Command.Replace("`r",'')
  Write-Host "== $Label =="
  $output=@(& tailscale ssh $Target $Command 2>&1)
  $exitCode=$LASTEXITCODE

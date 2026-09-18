@@ -106,5 +106,8 @@ if (@($testState.Calls | Where-Object { $_ -match 'systemctl start|namenode -for
     @($testState.Calls | Where-Object { $_ -match 'fsck /validation/S15P21C206-72' }).Count -ne 1) {
  throw 'FinalAudit must be read-only and verify the completed validation path.'
 }
+if (@($testState.Calls | Where-Object { $_ -match "`r" }).Count) {
+ throw 'Remote HDFS commands must normalize Windows CRLF before Bash execution.'
+}
 
 Write-Host 'PASS: staged preflight, firewall, format recovery, RF2 and final-audit contracts (offline).'
