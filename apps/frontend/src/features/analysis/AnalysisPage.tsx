@@ -5,6 +5,7 @@ import { useAnalysisData } from "./useAnalysisData";
 import { TimeCurveChart } from "./TimeCurveChart";
 import { contextKey } from "./analysis-data";
 import { PeriodogramPanel } from "./PeriodogramPanel";
+import { AnalysisSession } from "./AnalysisSession";
 
 const isObservation = (ticId?: string) =>
   import.meta.env.DEV &&
@@ -108,18 +109,24 @@ function AnalysisData({ ticId }: { ticId: string }) {
             관측 구간 {curve.segments.length}개 · 전체 {total}점 · 유효{" "}
             {total - missing}점 · 결측 {missing}점
           </p>
-          <TimeCurveChart
+          <AnalysisSession
             key={contextKey(curve.context)}
-            segments={curve.segments}
-            fluxUnit={curve.fluxUnit}
-          />
-          <PeriodogramPanel
-            key={`periodogram-${contextKey(curve.context)}`}
             context={context}
             curve={curve}
-            reloadAnalysis={retry}
-            recoverBundle={recoverBundle}
-          />
+          >
+            <TimeCurveChart
+              key={contextKey(curve.context)}
+              segments={curve.segments}
+              fluxUnit={curve.fluxUnit}
+            />
+            <PeriodogramPanel
+              key={`periodogram-${contextKey(curve.context)}`}
+              context={context}
+              curve={curve}
+              reloadAnalysis={retry}
+              recoverBundle={recoverBundle}
+            />
+          </AnalysisSession>
           <table>
             <caption>관측 세그먼트</caption>
             <thead>
@@ -194,7 +201,7 @@ export function AnalysisPage() {
       ) : (
         <p role="alert">분석할 별을 선택해 주세요.</p>
       )}
-      <Link className="text-link" to={returnTo}>
+      <Link className="text-link" to={returnTo} tabIndex={0}>
         이전 화면으로
       </Link>
     </section>

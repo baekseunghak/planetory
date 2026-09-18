@@ -19,6 +19,10 @@ import {
   type FoldView,
 } from "./folded-curve";
 import { FoldCanvasSurface, UnavailableGpuSurface } from "./FoldCanvasSurface";
+import {
+  PhaseSelectionOverlay,
+  PhaseSelectionControls,
+} from "./PhaseSelection";
 import "./folded-curve.css";
 const DevGpuSurface = import.meta.env.DEV
   ? lazy(() =>
@@ -135,6 +139,7 @@ export function FoldedCurveChart({
     };
   }, [setView]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
     if (
       ![
@@ -301,6 +306,7 @@ export function FoldedCurveChart({
           ) : (
             <FoldCanvasSurface {...surface} />
           )}
+          <PhaseSelectionOverlay view={view} setView={setView} />
         </div>
         <div className="fold-x-axis" aria-hidden="true">
           {[0, 0.25, 0.5, 0.75, 1].map((r) => (
@@ -322,6 +328,7 @@ export function FoldedCurveChart({
           ? `관측점 ${inspected! + 1}/${data.points.length} · Sector ${point.sector} · BTJD ${number.format(point.btjd)} · 위상 ${number.format(result.phases[inspected!])} · 밝기 ${number.format(point.flux)}`
           : "관측점에 포인터를 올리거나 그래프에서 ↑/↓를 눌러 수치를 확인하세요."}
       </p>
+      <PhaseSelectionControls view={view} />
     </>
   );
 }

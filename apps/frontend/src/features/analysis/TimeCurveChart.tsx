@@ -17,6 +17,7 @@ import {
 } from "./time-curve";
 import type { TimePoint, TimeView } from "./time-curve";
 import "./time-curve.css";
+import { TransitBands } from "./TransitBands";
 
 // Adapts the experiment's Canvas/DPR, zoom and pointer-capture approach for segment DTOs.
 // No phase selection or scientific recomputation belongs in this time-domain chart.
@@ -260,6 +261,7 @@ export function TimeCurveChart({
           onKeyDown={keyDown}
         >
           <canvas ref={canvas} aria-hidden="true" />
+          <TransitBands curve={curve} low={low} high={high} size={size} />
           {curve.segments.map((segment) => {
             const left = Math.max(low, segment.start),
               right = Math.min(high, segment.end);
@@ -273,7 +275,7 @@ export function TimeCurveChart({
                   width: `${percent(right) - percent(left)}%`,
                 }}
               >
-                Sector {segment.source.sector}
+                <span>Sector {segment.source.sector}</span>
               </div>
             );
           })}
@@ -318,6 +320,7 @@ export function TimeCurveChart({
           실제 관측 시각 (BTJD) ·{" "}
           <span className="analysis-time-gap-key">음영: 관측값 없음</span> · //:
           Sector 경계의 시간 간격 축약
+          {" · "}푸른 띠: 선택 구간의 예상 반복 위치 (읽기 전용)
         </figcaption>
       </figure>
       <p id={hintId} className="analysis-time-help">

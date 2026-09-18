@@ -3,7 +3,10 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { PeriodogramChart } from "./PeriodogramChart";
 import type { AnalysisContext, CurveData } from "./analysis-data";
 import { FoldedCurvePanel } from "./FoldedCurvePanel";
-import { useFoldSession } from "./use-fold-session";
+import { useAnalysisFold } from "./AnalysisSession";
+import { AnalysisJudgment, AnalysisSteps } from "./AnalysisJudgment";
+import { AnalysisDraftPersistence } from "./AnalysisDraftPersistence";
+import type { PeriodogramViewport } from "./analysis-judgment";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -165,7 +168,14 @@ export function PeriodSelectionWorkspace({
   curve: CurveData;
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
-  const session = useFoldSession(context, curve);
+  const session = useAnalysisFold();
+  const viewport = useRef<PeriodogramViewport>({
+    minDays: data.periodogram.periodMinDays,
+    maxDays: data.periodogram.periodMaxDays,
+  });
+  const trackViewport = useCallback((next: PeriodogramViewport) => {
+    viewport.current = next;
+  }, []);
   const { state, dispatch } = session;
   const change = state.change;
   const revision = useRef(0);
@@ -181,6 +191,7 @@ export function PeriodSelectionWorkspace({
       };
       dispatch({ type: "begin", change: next, resetView });
       onPeriodChange?.(next);
+      return next;
     },
     [data, dispatch, onPeriodChange],
   );
@@ -205,10 +216,17 @@ export function PeriodSelectionWorkspace({
   };
   return (
     <>
+      <AnalysisSteps />
+      <AnalysisDraftPersistence
+        context={context}
+        data={data}
+        onRestore={(selection) => begin("reselect", selection)}
+      />
       <PeriodogramChart
         data={data}
         onSelect={select}
         selectedPeriod={change?.selection.periodDays ?? null}
+        onViewportChange={trackViewport}
       />
       <section className="period-selection" aria-label="선택 주기">
         <h3>선택 주기</h3>
@@ -234,7 +252,17 @@ export function PeriodSelectionWorkspace({
           />
         ) : null}
       </section>
-      <FoldedCurvePanel curve={curve} session={session} onRetry={retry} />
+      <FoldedCurvePanel
+        curve={curve}
+        session={session}
+        onRetry={retry}
+        context={context}
+        periodogram={data}
+      />
+      <AnalysisJudgment
+        context={context}
+        getViewport={() => viewport.current}
+      />
     </>
   );
 }

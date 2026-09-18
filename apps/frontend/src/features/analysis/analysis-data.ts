@@ -1,4 +1,8 @@
 import type { Btjd } from "../../shared/types.ts";
+import {
+  readSelectionContract,
+  type SelectionContract,
+} from "./selection-rules.ts";
 
 export type CurveContext = {
   bundleId: string;
@@ -15,6 +19,7 @@ export type AnalysisContext = {
   foldReferenceTimeBtjd: Btjd;
   curveContext: CurveContext;
   periodSelectionRules?: { version: string; halfWidthCells: number };
+  selectionContract: SelectionContract;
   notice?: "STEP_NOT_RESTORABLE";
 };
 export type CurveSegment = {
@@ -145,6 +150,10 @@ export function decodeAnalysisContext(
       "foldReferenceTimeBtjd",
     ) as Btjd,
     curveContext,
+    selectionContract: readSelectionContract(
+      data.selectionRules,
+      bundle.observationBounds,
+    ),
     ...(periodSelectionRules ? { periodSelectionRules } : {}),
     ...(record(data.currentCurveContext, "currentCurveContext").notice ===
     "STEP_NOT_RESTORABLE"
