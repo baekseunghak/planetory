@@ -128,3 +128,7 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 ## 206~207 상세·대체 목록과 최신 실제 연결
 
 [206 상세 인수](docs/ticket-206-readiness.md), [207 대체 목록 인수](docs/ticket-207-readiness.md), [201~207 최신 실서버 검증](docs/latest-integration-201-207-20260917.md)을 참고한다. 현재 develop 854c23c의 퀘스트 API를 연결했으며 201~204는 develop에 병합됐다. 과거의 퀘스트404와 실제 연결 대기는 구버전 서버 검증 이력이다. 최신 기능은 205→206→207 순서로 검토하며 배포·상대 목적지·Safari 인수는 남는다.
+
+## 2026-09-18 MR 리뷰 통합 결과
+
+[205~214 리뷰 수정·통합 검증](docs/mr-review-fixes-20260918.md)을 현재 기준으로 확인한다. 앞선 실행 이력의 독립 스택·오래된 develop 표기는 당시 기록이다. 현재는 205→214 순차 의존이며 기존 API/배포 인수 범위를 유지한다.
