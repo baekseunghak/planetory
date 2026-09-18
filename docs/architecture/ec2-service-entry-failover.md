@@ -12,18 +12,44 @@
 
 | # | 결정 | 상태 |
 | --- | --- | --- |
-| D1 | Redis는 EC2-A loopback에 둔다. 온라인 계산 상태·결과·키별 잠금과 **로그인 세션**을 담는다(D10) | 확정 |
+| D1 | Redis는 EC2-A loopback에 두고 **`redis-session`과 `redis-cache` 두 인스턴스로 분리한다.** `redis-session`은 로그인 세션(D10), `redis-cache`는 온라인 계산 상태·결과·키별 잠금을 담는다. 근거는 1.1절 | 확정 (2026-09-18 리뷰 반영으로 개정) |
 | D2 | 진입은 Cloudflare Tunnel 단일 connector다. 사용자 구간 TLS는 edge에서 종료하고 인터넷 구간 평문은 금지한다. **외부 인바운드 개방은 0개다** | 확정 |
 | D3 | 서비스 앱 인스턴스는 1개다. A 레코드 라운드로빈과 노드 상호 감시를 도입하지 않는다 | 확정 |
 | D4 | **EC2-B는 사용하지 않는다.** 앱·복제·백업·관측 어느 역할도 맡기지 않는다 | 확정 |
 | D5 | 테이블 소유자·마이그레이션 계정·서비스 런타임(`planetory_app`)·Publisher(`planetory_gold_writer`)를 분리한다(83) | 확정 |
 | D6 | **PostgreSQL Standby를 두지 않는다.** 승격 선택지가 없고 EC2-A 장애는 서비스 전면 중단이다 | 확정 |
 | D7 | **백업을 두지 않는다.** 볼륨 상실·논리 오류에서 서비스 도메인 데이터 복구 수단이 없다(PoC 수용) | 확정 |
-| D8 | 배포·재시작은 전면 중단을 동반하지만 **로그인은 유지된다**(세션이 Redis에 있다, D10). 무중단 배포를 목표로 두지 않는다 | 확정 (2026-09-17 리뷰 반영으로 개정) |
+| D8 | 배포·재시작은 전면 중단을 동반하지만 **로그인은 유지된다**(세션이 `redis-session`에 있다, D10). 무중단 배포를 목표로 두지 않는다 | 확정 (2026-09-17 리뷰 반영으로 개정) |
 | D9 | 자체 LB 서버와 Cloudflare 유료 Load Balancing을 도입하지 않는다 | 확정 |
-| D10 | **로그인 세션을 EC2-A Redis에 둔다.** 목적은 인스턴스 간 공유가 아니라 재시작 생존이다. 그 대가로 Redis는 인증 경로의 필수 의존이 되고, Redis 장애 시 인증 요청은 503으로 응답한다 | 확정 (2026-09-17 리뷰 반영, 구현은 237) |
+| D10 | **로그인 세션을 EC2-A `redis-session`에 둔다.** 목적은 인스턴스 간 공유가 아니라 재시작 생존이다. 그 대가로 `redis-session`은 인증 경로의 필수 의존이 되고, 그 장애 시 인증 요청은 503으로 응답한다 | 확정 (2026-09-17 리뷰 반영, 구현은 237) |
 
-### 기각한 후보
+### 1.1 Redis를 두 인스턴스로 나누는 이유
+
+`maxmemory`와 `maxmemory-policy`는 **인스턴스 단위 설정이다.** 키 접두사나 논리 DB(`SELECT 0/1`)로 나눠도 메모리 예산과 eviction은 분리되지 않는다. 한 인스턴스에 같이 두면 **계산 캐시가 차오를 때 eviction이 세션 키를 지운다.** `allkeys-*`는 세션도 후보로 삼고, `volatile-*`도 세션이 30분 TTL(SB-D14)을 가지므로 그대로 후보다. 증상은 로그인한 회원이 이유 없이 튀기는 것이고 재현도 진단도 어렵다.
+
+**분리가 D10의 대가를 일부 되돌린다.** 세션을 Redis로 옮기면서 「Redis 장애 = 인증 전면 중단」을 수용했는데, 두 인스턴스로 나누면 그 범위가 `redis-session` 장애로 좁아진다. **`redis-cache` 장애는 이관 전과 똑같이 온라인 계산만 멈추고 인증·조회·쓰기는 유지된다.** 정책 차이만큼 장애 축도 실제로 갈라진다.
+
+두 인스턴스는 요구 정책 자체가 다르다.
+
+| | `redis-session` | `redis-cache` |
+| --- | --- | --- |
+| 담는 것 | 로그인 세션·CSRF·OAuth 인가 상태 | 잔차·주기도 계산 상태·결과·키별 잠금 |
+| TTL | 30분 idle(SB-D14) | 결과 크기·계산 시간 실측 후 결정(84) |
+| eviction | **`noeviction`** — 지워지면 로그아웃이다 | 캐시 정책 허용 — 지워지면 재계산하면 된다 |
+| persistence | 필요(범위는 84) | 불필요 — 비면 재계산한다 |
+| 장애 영향 | 인증 전면 중단(503) | 온라인 계산만 중단 |
+
+비용도 적다. Redis 인스턴스 하나가 더 늘어날 뿐이고 EC2-A 안에 둔다. **다만 메모리 예산을 둘로 쪼개야 한다.** 한쪽의 여유가 다른 쪽을 돕지 못하므로 각 상한과 합계가 PostgreSQL을 밀어내지 않는지 84에서 함께 확인한다. `noeviction`인 `redis-session`이 상한에 닿으면 새 로그인과 세션 연장이 실패하므로, 세션 크기와 동시 접속 추정이 상한 산정의 입력이다.
+
+### 기각한 후보(Redis 배치)
+
+| 후보 | 기각 사유 |
+| --- | --- |
+| 단일 인스턴스 + 키 접두사 분리 | 접두사는 메모리·eviction을 나누지 못한다. 캐시 증가가 세션을 지운다 |
+| 단일 인스턴스 + 논리 DB 분리(`SELECT 0/1`) | 같은 이유. `maxmemory`·`maxmemory-policy`가 인스턴스 단위다 |
+| 단일 인스턴스 + `noeviction` | 세션은 지켜지지만 캐시가 차면 **계산 쪽 쓰기가 실패한다.** 재계산하면 그만인 데이터 때문에 장애를 만든다 |
+
+### 기각한 후보(구성 전반)
 
 | 후보 | 기각 사유 |
 | --- | --- |
@@ -42,7 +68,7 @@ Tunnel replica를 여러 노드에 두는 방식도 분산 수단이 아니다. 
        → cloudflared(EC2-A)
        → frontend nginx(EC2-A, 정적 서빙 + /api 프록시)
        → backend(EC2-A)
-backend → PostgreSQL(EC2-A) · Redis(EC2-A) · Python Worker(EC2-A)   ← 전부 loopback
+backend → PostgreSQL(EC2-A) · redis-session(EC2-A) · redis-cache(EC2-A) · Python Worker(EC2-A)   ← 전부 loopback
 
 GCP Node 1 Publisher → EC2-A PostgreSQL 5432 (경로 보류, 시스템 아키텍처 10장)
 외부 관찰: 오사카 CI 노드 → 공개 URL → 알림만. DNS 편집·진입 개입 권한 없음(100)
@@ -63,7 +89,7 @@ EC2-B: 사용하지 않는다(D4). 앱·복제·백업·관측 어느 역할도 
 | --- | --- | --- |
 | 인터넷 → EC2-A | 없음 | **개방 0개로 둔다**(84에서 적용·확인). 443을 포함해 인터넷을 향한 인바운드 허용 규칙을 두지 않는다 |
 | EC2-A → Cloudflare edge | 443 outbound | cloudflared 단일 connector. 진입의 유일한 경로 |
-| EC2-A 내부 | frontend nginx ↔ backend, PostgreSQL 5432, Redis 6379, Worker | loopback·컨테이너 네트워크 전용. 호스트 외부로 바인드하지 않는다 |
+| EC2-A 내부 | frontend nginx ↔ backend, PostgreSQL 5432, `redis-session`·`redis-cache` 각각 별도 포트, Worker | loopback·컨테이너 네트워크 전용. 호스트 외부로 바인드하지 않는다. 두 Redis의 실제 포트 번호는 84에서 확정한다 |
 | 관리 SSH | 22 | tailnet 전용 |
 | GCP Node 1 → EC2-A | 5432 | 보류([시스템 아키텍처](system-architecture.md) 10장) |
 | 오사카 CI 노드 → 공개 URL | 443 | 관찰 전용. DNS 편집 권한 없음 |
@@ -83,17 +109,18 @@ EC2-B: 사용하지 않는다(D4). 앱·복제·백업·관측 어느 역할도 
 
 자동 대응은 **컨테이너 재기동뿐이다.** 노드 장애에는 자동 복구가 없다.
 
-아래 표의 「자동 대응」 열은 **목표 동작**이다. 현재 `infra/service/compose.yaml`에는 frontend·backend 두 서비스만 있고, PostgreSQL·Redis·cloudflared의 컨테이너화와 재기동·헬스체크 정책은 84·93에서 확정한다(미실측).
+아래 표의 「자동 대응」 열은 **목표 동작**이다. 현재 `infra/service/compose.yaml`에는 frontend·backend 두 서비스만 있고, PostgreSQL·`redis-session`·`redis-cache`·cloudflared의 컨테이너화와 재기동·헬스체크 정책은 84·93에서 확정한다(미실측).
 
 | 시나리오 | 자동 대응 | 수동 대응 | 허용 중단 |
 | --- | --- | --- | --- |
 | 정상 | 없음 | 없음 | — |
 | 앱 프로세스(backend·frontend) 장애 | 컨테이너 재기동 | 반복되면 재기동을 멈추고 로그로 원인을 조사한다 | 재기동 동안 전면 중단 |
 | cloudflared 장애·터널 단절 | cloudflared 재기동(재연결 동작은 미실측, 84) | 자격증명·egress 점검. 우회 진입 경로는 없다 | 재연결까지 **전면 중단** |
-| Redis 장애 | 컨테이너 재기동 | 계산 상태·결과·잠금은 복구하지 않고 재계산한다. 세션 생존은 persistence 설정에 달렸다(84) | **인증 전면 중단**(D10, 503 응답). 온라인 계산도 중단. 세션 이관 전에는 조회·쓰기가 유지됐으나 이관 후에는 아니다 |
+| `redis-cache` 장애 | 컨테이너 재기동 | 계산 상태·결과·잠금은 복구하지 않고 재계산한다 | 온라인 계산 전면 중단. **인증·조회·쓰기는 유지된다**(D1 분리 덕분) |
+| `redis-session` 장애 | 컨테이너 재기동 | 세션 생존은 persistence 설정에 달렸다(84). 유실되면 전원 재로그인 | **인증 전면 중단**(D10, 503 응답). 온라인 계산도 인증이 필요하므로 함께 멈춘다 |
 | PostgreSQL 장애 | 컨테이너 재기동 | 볼륨이 살아 있으면 재기동으로 복구한다. 진행 중 Gold 적재 트랜잭션은 롤백되어 `current`는 이전 판을 유지하고 Publisher가 재시도한다 | **전면 중단**(조회·쓰기 모두). Standby가 없어 승격 선택지가 없다 |
 | **EC2-A 노드 장애** | **없음** | 인스턴스 복구를 시도한다. Standby·백업·대체 노드가 없으므로 그 외 수단이 없다 | **전면 중단. 자동 복구 없음** |
-| 배포·재시작 | 없음 | 계획된 중단으로 공지한다 | 전면 중단. Redis를 함께 재시작하지 않으면 **로그인은 유지된다**(D8·D10) |
+| 배포·재시작 | 없음 | 계획된 중단으로 공지한다 | 전면 중단. `redis-session`을 함께 재시작하지 않으면 **로그인은 유지된다**(D8·D10) |
 
 DB 장애를 전면 중단으로 두는 근거는 Standby 부재 이전에 Backend 구조에 있다. 읽기·쓰기 분리가 없고 `spring.datasource.url` 하나만 있으며 라우팅 DataSource나 replica 설정이 없다(2026-09-16 Backend 확인). DB가 죽으면 조회도 함께 멈춘다.
 
@@ -113,8 +140,8 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 | 저장소 | 재기동 후 상태 |
 | --- | --- |
 | PostgreSQL | 볼륨이 살아 있으면 데이터 유지. 볼륨을 잃으면 빈 DB |
-| Redis | 비어서 시작한다. 계산 상태·결과는 재계산하고 키별 잠금은 자연 해제된다 |
-| 로그인 세션 | EC2-A Redis에 있다. 앱만 재기동하면 유지되고, Redis가 함께 재기동하면 persistence 설정에 따른다(D10) |
+| `redis-cache` | 비어서 시작한다. 계산 상태·결과는 재계산하고 키별 잠금은 자연 해제된다. persistence를 두지 않는다 |
+| `redis-session`(로그인 세션) | 앱만 재기동하면 유지된다. `redis-session`이 함께 재기동하면 persistence 설정에 따른다(D10, 범위는 84) |
 
 ## 5. DB 계정 분리
 
@@ -135,7 +162,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 앱은 단일 인스턴스다. 조사 결과 `apps/backend/src/main`의 노드 로컬 상태는 로그인 세션 한 곳뿐이고, 인메모리 캐시·`@Scheduled`·`@Async`·로컬 파일·SSE·정적 가변 필드가 0건이며 상호배제는 이미 DB에 있다(`FOR UPDATE`·`ON CONFLICT`·Flyway advisory lock).
 
-그 유일한 노드 로컬 상태인 로그인 세션을 2026-09-17 리뷰 반영으로 EC2-A Redis로 옮긴다(D1·D8·D10). **목적은 인스턴스 간 공유가 아니라 재시작 생존이다.** 인스턴스는 그대로 1개이고 EC2-B도 그대로 미사용이다. 따라서 이 결정은 D3·D4를 바꾸지 않는다. 대신 **애플리케이션 코드 변경이 생긴다**(아래, 구현은 `S15P21C206-237`).
+그 유일한 노드 로컬 상태인 로그인 세션을 2026-09-17 리뷰 반영으로 EC2-A `redis-session`으로 옮긴다(D1·D8·D10). **목적은 인스턴스 간 공유가 아니라 재시작 생존이다.** 인스턴스는 그대로 1개이고 EC2-B도 그대로 미사용이다. 따라서 이 결정은 D3·D4를 바꾸지 않는다. 대신 **애플리케이션 코드 변경이 생긴다**(아래, 구현은 `S15P21C206-237`).
 
 ### 지켜야 할 것
 
@@ -149,9 +176,9 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 1. **`AuthSessionService`의 `synchronized (session)` 2곳.** 지금은 Tomcat이 같은 세션에 같은 `StandardSessionFacade`를 돌려주므로 락이 실제로 걸린다. Spring Session을 적용하면 요청마다 새 `HttpSessionWrapper`가 만들어져 **모니터가 요청마다 달라지고 상호배제가 조용히 사라진다.** 기본 `ON_SAVE` 플러시라 병렬 요청이 각자 사본을 쓰고 마지막 쓰기가 이긴다. `touch()`의 「마지막 접수 시각을 과거로 되돌리지 않는다」가 깨진다. 컴파일도 테스트도 통과하므로 놓치기 쉽다.
 2. **세션 기반 저장소 동반 이동.** `CsrfTokenRepository`·`AuthorizationRequestRepository`·`HttpSessionOAuth2AuthorizedClientRepository`·`HttpSessionSecurityContextRepository`가 모두 세션 기반이라 함께 Redis로 간다. `lastActivity`의 `Instant`도 같다. 직렬화가 실제로 되는지는 단위 테스트가 아니라 **실제 로그인·OAuth 콜백·로그아웃으로** 확인한다.
-3. **Redis 장애 시 인증 응답 정책.** 예외를 500으로 흘리지 않고 503으로 내린다. 401로 보내면 재로그인해도 복구되지 않아 무한 로그인 루프가 된다.
-4. **TTL 분리.** 세션 TTL(30분 idle, SB-D14)과 계산 캐시 TTL을 같은 값으로 묶지 않고 키 네임스페이스도 분리한다.
-5. **persistence 범위.** 앱만 재배포하면 Redis가 살아 있으므로 persistence 없이도 세션이 유지된다. persistence가 필요한 경우는 **Redis 컨테이너 재시작과 호스트 재부팅뿐이다.** 어디까지 보장할지와 설정은 84에서 정한다.
+3. **`redis-session` 장애 시 인증 응답 정책.** 예외를 500으로 흘리지 않고 503으로 내린다. 401로 보내면 재로그인해도 복구되지 않아 무한 로그인 루프가 된다.
+4. **두 Redis 연결 분리.** 세션과 계산 캐시가 다른 인스턴스이므로(D1) Spring Session이 쓰는 연결과 계산 캐시 연결을 따로 구성해야 한다. Boot 기본 설정은 단일 Redis를 가정한다. TTL도 세션 30분 idle(SB-D14)과 계산 캐시 값을 같은 값으로 묶지 않는다.
+5. **persistence 범위.** 앱만 재배포하면 `redis-session`이 살아 있으므로 persistence 없이도 세션이 유지된다. persistence가 필요한 경우는 **`redis-session` 컨테이너 재시작과 호스트 재부팅뿐이다.** 어디까지 보장할지와 설정은 84에서 정한다.
 
 현재 `apps/backend/build.gradle`에 `spring-boot-starter-data-redis`·`spring-session-data-redis`가 없고 `apps/backend/src/main`의 Redis 참조가 0건이다. 설정 스위치가 아니라 앱의 첫 Redis 연동이다.
 
@@ -173,7 +200,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 | --- | --- |
 | 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. GRANT 구문 작성은 238이 맡고 83은 **`planetory_app`으로 42501 없이 동작하는지 검증**한다. 238이 먼저 끝나야 배포할 수 있다 |
 | 238 | `users` GRANT 결손 해소(5절). 필요한 동사 집합을 코드로 확정하고 V5 패턴을 따른다. 소유자 권한으로 도는 테스트는 이 결함을 못 잡으므로 `planetory_app` 역할로 검증한다 |
-| 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **Redis 컨테이너·persistence·볼륨**을 함께 정한다 — 세션이 Redis로 가므로(D10) 어디까지 재시작 생존을 보장할지가 여기서 결정된다 |
+| 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **`redis-session`·`redis-cache` 두 컨테이너**를 올리고 각각의 포트·메모리 상한·eviction·persistence를 정한다(1.1절). `redis-session`은 `noeviction`과 persistence, `redis-cache`는 캐시 eviction과 결과 TTL이다. 두 상한의 합이 PostgreSQL을 OOM으로 밀어내지 않는지 함께 확인한다 |
 | 93 | 컨테이너 재기동 정책과 헬스체크 연동. liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분한다. 구현은 contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다 — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 착수 시 Boot 버전에서 확인한다. `/actuator/health`는 현재 `show-details=never`로 UP/DOWN만 반환한다(2026-09-16 Backend 확인) |
 | 100 | 오사카 노드 알림 전용 외부 관찰. 진입·DNS 개입 권한은 주지 않는다 |
 | 234·235 | 로그아웃 CSRF 면제 조건 수정(6절 1번의 선행 조건)과 prod 유사 `Set-Cookie`·DB 중단 응답 실측. 인스턴스 수와 무관하게 유효하다 |
