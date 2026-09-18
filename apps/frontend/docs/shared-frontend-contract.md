@@ -150,7 +150,9 @@ App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어�
 
 본인 프로필은 [서비스 API 3.1/3.2](../../backend/docs/service-api-spec.md)의 필수 joinedAt(ISO8601 UTC)을 소비한다. 가입일은 Asia/Seoul 기준 날짜로 표시하며 누락·비정상 값은 오류로 처리한다. 타인 프로필에는 가입일을 투영하지 않는다. 가입일 계약은242 / !84에서 확정되었으며 팔로우 수 정책과 별개다.
 
-App.profileSections에 stars/history/statistics 컴포넌트를 등록한다. ProfileSlotProps는 memberId, isOwn, starListVisibility다. 본인 History/통계만 허용하고 타인 PRIVATE 별 목록은 하위 컴포넌트를 mount하지 않는다. 하위 화면도 실제 API의403/404와 권한 변경을 처리해야 하며 props는 서버 권한을 대체하지 않는다. 미등록은 연결 준비 안내다. [214 구현·미확정 계약·인수](ticket-214-readiness.md).
+App.profileSections에 stars/history/statistics 컴포넌트를 등록한다. ProfileSlotProps는 memberId, isOwn, starListVisibility다. 본인 History/통계만 허용하고 타인 PRIVATE 별 목록은 하위 컴포넌트를 mount하지 않는다. 하위 화면도 실제 API의403/404와 권한 변경을 처리해야 하며 props는 서버 권한을 대체하지 않는다. 미등록은 연결 준비 안내다. [214 구현·범위·인수](ticket-214-readiness.md).
+
+팔로워·팔로잉 수 표시는219(P1)의 범위다. P0 프로필은 해당 수치·팔로우 조작을 숨기며 임의0을 표시하지 않는다. P1의 API 계약·구현·인수 완료는214의 완료 선행 조건이 아니다. [MY-01 요구사항](../../../docs/requirements/planetory-requirements-spec.md)과 [214 범위 결정](ticket-214-readiness.md)을 따른다.
 
 ## W09 퀘스트 갱신
 
