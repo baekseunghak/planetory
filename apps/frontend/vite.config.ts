@@ -84,20 +84,27 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         ? [
             (
               await import("./dev/community-fixture-plugin.ts")
-            ).communityFixturePlugin(
-              [
+            ).communityFixturePlugin({
+              writable: [
                 "posts",
                 "comments",
                 "reactions",
                 "materials",
                 "profiles",
               ].includes(mode),
-              ["comments", "reactions", "materials", "profiles"].includes(mode),
-              ["reactions", "materials", "profiles"].includes(mode),
-              ["materials", "profiles"].includes(mode),
-              profileFixture?.nickname,
-              mode === "search",
-            ),
+              commentWrites: [
+                "comments",
+                "reactions",
+                "materials",
+                "profiles",
+              ].includes(mode),
+              reactionWrites: ["reactions", "materials", "profiles"].includes(
+                mode,
+              ),
+              materialWrites: ["materials", "profiles"].includes(mode),
+              currentNickname: profileFixture?.nickname,
+              searchable: mode === "search",
+            }),
           ]
         : []),
       ...(fixture

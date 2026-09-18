@@ -1,6 +1,6 @@
 # 217 커뮤니티 검색·필터와 결과 복귀
 
-S15P21C206-217 / W20-1 / P0 / 하서진 / 2026-09-18. 기준은 최신 원격 develop `6d6c3e9`, [Jira217](https://ssafy.atlassian.net/browse/S15P21C206-217), [서비스 API 4.1](../../backend/docs/service-api-spec.md), [SRS COM-03](../../../docs/requirements/planetory-requirements-spec.md)이다. 기존 W11 목록과 공통 HTTP 클라이언트를 확장했다. 핫 토픽218, 지도 필터223, 분석 화면은 변경하지 않는다.
+S15P21C206-217 / W20-1 / P0 / 하서진 / 2026-09-18. 초기 분기는 develop `6d6c3e9`, 현재 통합 기준은 `cf3307c`다. [Jira217](https://ssafy.atlassian.net/browse/S15P21C206-217), [서비스 API 4.1](../../backend/docs/service-api-spec.md), [SRS COM-03](../../../docs/requirements/planetory-requirements-spec.md)를 따른다. 기존 W11 목록과 공통 HTTP 클라이언트를 확장했다. 핫 토픽218, 지도 필터223, 분석 화면은 변경하지 않는다.
 
 ## 구현과 계약
 
@@ -43,11 +43,30 @@ Firefox 검증은 기존 글쓰기/프로필 검사의 native key 보완을 재�
 
 이번 동기화에서 실행한 자동 테스트는 총287개다. 실제 배포/백엔드 인수나215의10만 별 성능 재측정으로 간주하지 않는다. MR !95를 갱신하며 기존 리뷰 절차를 유지한다.
 
+### MR !95 리뷰 반영 — 2026-09-18
+
+- 검색 TIC에 글쓰기와 같은 양의 signed 64-bit 범위(`1`~`9223372036854775807`)를 적용했다. 숫자 형식을 먼저 검사한 뒤 `BigInt`로 비교하므로 정밀도를 잃지 않는다. 입력 폼·검색 URL·별 게시판 URL 모두 범위 초과를 HTTP 요청 전에 차단한다.
+- `communityFixturePlugin`의 위치 인자6개를 이름이 있는 옵션 객체로 바꿨다. 기본값과 각 개발 모드의 읽기·쓰기·검색 권한, 프로필 닉네임 콜백 및 운영 제외 조건은 유지했다.
+- 목록의 `role="status"` 한 줄과 `aria-busy`는 중복 로딩 알림을 제거하려는 의도적인 변경이다. 상세 페이지의 `ReadState`는 유지한다.
+- 검색 도움말의 대소문자·와일드카드 규칙은 서비스 API4.1과 Jira217에 명시된 계약이다. 해당 문구가 실제 서버 구현 완료를 의미하지는 않는다. 실제 검색 구현은 Jira169(S16, 백승학, 확인 당시 해야 할 일), 제공 후 인수는216-217이다.
+- 공백 규칙은 이번에 임의로 변경하지 않았다. 글 제목의 `stripTitle`은 기존 Java `String.strip()` 구현에 맞춘 함수지만, 검색q의 Unicode 공백 집합은 API4.1의 "앞뒤 공백 제거"만으로 확정할 수 없다. 현재 검색은 JS `trim()`이며 NBSP(U+00A0)·BOM(U+FEFF)·narrow NBSP(U+202F)를 제거하지만 Java `strip()`은 보존한다. 검색에서도 Java 규칙을 쓸지 리뷰에서 확인하고, 확정 후 프론트·서버·경계 검사를 함께 맞춘다. 이 차이를 해결 완료로 처리하지 않는다.
+
+리뷰 수정 후 검증은 총347개 통과했다. 아래 결과는 로컬 fixture/HTTP 응답 대체 검증이며 실제 S16이나 원격 CI 통과로 간주하지 않는다.
+
+- `npm test`: 단위222개. TIC 최댓값·상한+1·잘못된 숫자 형식·폼/주소/별 게시판 경계를 추가했다.
+- `npm run test:search`: 15시나리오 × Chromium·Chrome·Edge·Firefox =60개. 범위 초과 입력과 직접 주소에서 요청0건, 최댓값 요청의 문자열 보존을 포함한다.
+- 설정 구조 변경 회귀: `test:community`14개, `test:posts`15개, `test:comments`7개, `test:reactions`5개, `test:materials`6개, `test:profiles`8개(Chromium, 합계55개).
+- `npm run test:production`: 운영 빌드 HTTP 계약 검사10개.
+- `npm run build`의 타입·운영 빌드·개발 코드 제외 검사, 변경 코드/테스트5개 파일의 Prettier 검사, `git diff --check` 통과.
+
+추가한 브라우저 테스트의 최초 실행에서는 별 게시판 경로를 잘못 적은 테스트를 발견해 중단했다. 실제 경로(`/community/stars/:ticId`)로 고친 후60개 전체를 다시 실행해 통과했으며, 중단 실행은 합계에 포함하지 않는다.
+
 ## 남은 일과 216 인계
 
 기능·확정 계약의 독립 검증과 리뷰 제출이217의 담당 범위다. 리뷰 승인·develop 병합·종료 증거 확인 전까지 Jira는 진행 중으로 둔다. 실제 서버/배포 인수 대기를 미구현 UI와 혼동하지 않는다.
 
 - **216-217 미검증:** 이번에 fetch한 원격 브랜치 및 develop의 backend Java 코드에서 community/feed 또는 searchIn 구현을 찾지 못했다. 실제 S16 제공 후 AND·현재 닉네임·q 경계/와일드카드·공식 스레드 예외·정렬·cursor를 실데이터로 대조한다. fixture 일치가 DB 검색/인덱스 또는 서버 권한 구현의 검증은 아니다.
+- **검색 계약 확인 및216-217 경계 검증:** 서버 담당자와 검색q의 Unicode 공백 집합을 확정한다. NBSP·BOM·narrow NBSP가 앞뒤에 있는 검색어와 해당 문자만 있는 입력을 포함해 실제 서버/프론트 정규화·빈 입력·100자 경계를 대조한다. 제목 규칙을 검색에 자동 적용하지 않는다.
 - **216-217 미검증:** 실제 숨김/삭제/부모 공개 취소 후 검색 결과·상세·하위 자료·탭/목록 복귀의 노출 차단을 확인한다. W11 실제 API와 함께 인수한다.
 - **216-ENV 미검증:** HTTPS 배포, 실제 지원 브라우저 전체(특히 이 Windows 환경에서 실행하지 못한 Safari)의 출시 인수.
 

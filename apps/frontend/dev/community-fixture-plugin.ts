@@ -76,14 +76,23 @@ const analyses = Array.from({ length: 23 }, (_, index) => ({
   contributesToSummary: index < 15,
 }));
 
-export function communityFixturePlugin(
+type CommunityFixtureOptions = {
+  writable?: boolean;
+  commentWrites?: boolean;
+  reactionWrites?: boolean;
+  materialWrites?: boolean;
+  currentNickname?: () => string;
+  searchable?: boolean;
+};
+
+export function communityFixturePlugin({
   writable = false,
   commentWrites = false,
   reactionWrites = false,
   materialWrites = false,
-  currentNickname?: () => string,
+  currentNickname,
   searchable = false,
-): Plugin {
+}: CommunityFixtureOptions = {}): Plugin {
   const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
     const ids = input.historyIds ?? [],
       sources = input.sourceLinks ?? [];

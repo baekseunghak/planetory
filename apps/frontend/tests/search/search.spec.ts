@@ -189,6 +189,46 @@ test("malformed deep link is correctable without silently dropping filters", asy
   await expect(rows(page)).toHaveCount(20);
 });
 
+test("TIC overflow blocks form submission and direct URLs before HTTP; Long max stays exact", async ({
+  page,
+}) => {
+  await page.goto("/community");
+  await expect(rows(page)).toHaveCount(20);
+  const calls: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("community/feed?")) calls.push(r.url());
+  });
+  await page
+    .getByText("상세 조건 · 작성자, TIC, 태그", { exact: true })
+    .click();
+  await enter(page.getByLabel("TIC 번호"), "9223372036854775808");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await expect(page.locator(".community-search-error")).toBeFocused();
+  await expect(page.locator(".community-search-error")).toContainText(
+    "9223372036854775807",
+  );
+  expect(calls).toHaveLength(0);
+  for (const path of [
+    "/community?ticId=9999999999999999999",
+    "/community/stars/9223372036854775808",
+  ]) {
+    await page.goto(path);
+    await expect(page.locator(".community-search-error")).toContainText(
+      "범위의 정수",
+    );
+    await expect(
+      page.getByRole("region", { name: "게시글 목록" }),
+    ).toHaveAttribute("aria-busy", "false");
+    expect(calls).toHaveLength(0);
+  }
+  await page.goto("/community?ticId=9223372036854775807");
+  await expect(page.getByText(/검색 조건에 맞는 글이 없습니다/)).toBeVisible();
+  expect(calls.length).toBeGreaterThan(0);
+  expect(new URL(calls[calls.length - 1]).searchParams.get("ticId")).toBe(
+    "9223372036854775807",
+  );
+});
+
 test("loading, server failure, retry and no result have distinct states", async ({
   page,
 }) => {

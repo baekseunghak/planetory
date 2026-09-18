@@ -50,8 +50,12 @@ export function validateFeedSearch(values: FeedSearch): string | null {
     return "게시판을 다시 선택해 주세요.";
   if (values.tag && !Object.hasOwn(postTags, values.tag))
     return "글 태그를 다시 선택해 주세요.";
-  if (values.ticId.trim() && !/^[1-9]\d{0,18}$/.test(values.ticId.trim()))
-    return "TIC 번호는 숫자만 입력해 주세요.";
+  const ticId = values.ticId.trim();
+  if (
+    ticId &&
+    (!/^[1-9]\d{0,18}$/.test(ticId) || BigInt(ticId) > 9223372036854775807n)
+  )
+    return "TIC 번호는 1~9223372036854775807 범위의 정수로 입력해 주세요.";
   return null;
 }
 // Parameters are sent as literal text. Matching, ordering and access control

@@ -49,6 +49,34 @@ test("malformed direct addresses cannot silently broaden the search", () => {
   ])
     assert.ok(readFeedSearch(new URLSearchParams(query)).error, query);
 });
+test("TIC filters share the positive signed-64-bit range across form, URL and star board", () => {
+  for (const ticId of ["1", "9007199254740993", "9223372036854775807"]) {
+    assert.equal(validateFeedSearch({ ...base, ticId }), null);
+    assert.equal(feedSearchParams({ ...base, ticId }).get("ticId"), ticId);
+    assert.equal(readFeedSearch(new URLSearchParams({ ticId })).error, null);
+    assert.equal(readFeedSearch(new URLSearchParams(), ticId).error, null);
+  }
+  assert.equal(validateFeedSearch({ ...base, ticId: "" }), null);
+  assert.equal(
+    validateFeedSearch({ ...base, ticId: " 9223372036854775807 " }),
+    null,
+  );
+  for (const ticId of [
+    "0",
+    "-1",
+    "01",
+    "1.5",
+    "1e3",
+    "abc",
+    "9223372036854775808",
+    "9999999999999999999",
+    "1".repeat(20),
+  ]) {
+    assert.ok(validateFeedSearch({ ...base, ticId }), ticId);
+    assert.ok(readFeedSearch(new URLSearchParams({ ticId })).error, ticId);
+    assert.ok(readFeedSearch(new URLSearchParams(), ticId).error, ticId);
+  }
+});
 test("star board anchors TIC and board while preserving text filters", () => {
   const result = readFeedSearch(new URLSearchParams("q=빛"), "259377017");
   assert.equal(result.values.ticId, "259377017");
