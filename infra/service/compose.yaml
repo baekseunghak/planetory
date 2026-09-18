@@ -333,6 +333,50 @@ services:
     networks:
       - service
 
+  # 와이어프레임 문서를 그대로 서빙한다. Tunnel이 wireframe.planetory.space ->
+  # http://wireframe:80으로 잡는다. 호스트 포트는 열지 않는다.
+  #
+  # 문서는 저장소의 docs/requirements/planetory-wireframe.html이다. 이 HTML은
+  # ../images/...를 참조하므로 docs/images도 같이 올린다. 루트에 두면 브라우저가
+  # ../images를 /images로 정규화하므로 경로가 맞는다.
+  wireframe:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - wireframe-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 일회성 동기화. wireframe-refresh profile에 묶여 평시 up 대상이 아니다.
+  #   docker compose --profile wireframe-refresh run --rm wireframe-sync
+  # 저장소 체크아웃을 읽어 named volume에 복사한다. 체크아웃이 없으면 이 동기화만
+  # 실패하고, wireframe은 마지막으로 복사된 사본을 계속 서빙한다.
+  wireframe-sync:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    profiles: ["wireframe-refresh"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        test -f /src/requirements/planetory-wireframe.html || {
+          echo "저장소 체크아웃에서 와이어프레임을 찾지 못했다: docs/requirements/planetory-wireframe.html"
+          exit 1
+        }
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp /src/requirements/planetory-wireframe.html /output/index.html
+        mkdir -p /output/images
+        cp -R /src/images/. /output/images/
+        chmod -R a+rX /output
+        echo "동기화 완료: $$(du -sh /output | cut -f1), 이미지 $$(find /output/images -type f | wc -l)개"
+    volumes:
+      - wireframe-output:/output
+      - ../../docs:/src:ro
+    networks:
+      - service
+
   # 외부 인바운드 개방 없이 Cloudflare edge에서만 트래픽을 받는다. 토큰은 이미지·
   # Git·프로세스 인자에 두지 않고 서버의 .env 파일에서 주입한다.
   cloudflared:
@@ -362,6 +406,8 @@ volumes:
     name: planetory-api-docs-output
   api-docs-work:
     name: planetory-api-docs-work
+  wireframe-output:
+    name: planetory-wireframe-output
 
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:

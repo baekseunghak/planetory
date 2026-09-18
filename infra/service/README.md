@@ -146,6 +146,32 @@ Try it out은 문서 호스트에서 운영 API로 나가는 교차 출처 요�
 `/api/v1/hello`는 개발용 엔드포인트인데 스펙에 그대로 올라온다. 공개 문서에서 빼려면
 `HelloController`에 `@Hidden`을 단다.
 
+## 와이어프레임
+
+`wireframe.planetory.space` -> `http://wireframe:80`. 호스트 포트를 열지 않고 `service`
+네트워크 안에만 뜬다. 외부 인바운드는 0개다.
+
+저장소의 `docs/requirements/planetory-wireframe.html`을 그대로 낸다. 이 HTML은
+`../images/sky-reference-20260915/01-galaxy.png`를 참조하므로 `docs/images`도 함께 올린다.
+문서를 루트의 `index.html`로 두면 브라우저가 `../images`를 `/images`로 정규화하므로 경로가
+맞는다.
+
+### 동기화
+
+```
+docker compose --profile wireframe-refresh run --rm wireframe-sync
+```
+
+`wireframe-sync`가 저장소 체크아웃(`../../docs`)을 읽어 `planetory-wireframe-output`
+볼륨에 복사한다. 문서가 바뀌면 다시 돌린다. ERD·API 문서와 달리 생성이 아니라 복사다.
+
+체크아웃이 없으면 이 동기화만 실패하고 `wireframe`은 마지막 사본을 계속 서빙한다. CI
+배포 job은 `compose.yaml`만 scp하므로 저장소가 없는 서버에서는 동기화를 돌릴 수 없다.
+그런 경우 파일을 직접 볼륨에 넣는다.
+
+문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
+곧 서빙되는 판이다.
+
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
 `cloudflared`는 외부 인바운드 포트를 열지 않고 edge에서만 트래픽을 받는다. 서비스 컨테이너는 같은 `service` 네트워크에 있으므로 Tunnel의 public hostname은 `http://frontend:8080`을 origin으로 지정한다.
