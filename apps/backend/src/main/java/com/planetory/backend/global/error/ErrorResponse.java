@@ -17,6 +17,19 @@ public record ErrorResponse(
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<FieldError> fieldErrors,
         @JsonAnyGetter Map<String, Object> details) {
 
+    /** {@code details}가 최상위에 펼쳐지므로 기존 필드와 이름이 겹치면 같은 키가 두 번 나간다. */
+    private static final List<String> RESERVED_KEYS = List.of("code", "message", "fieldErrors");
+
+    public ErrorResponse {
+        details = details == null ? Map.of() : Map.copyOf(details);
+        for (String reserved : RESERVED_KEYS) {
+            if (details.containsKey(reserved)) {
+                throw new IllegalArgumentException(
+                        "details에 " + reserved + "를 넣을 수 없습니다. 오류 응답 최상위 필드와 이름이 겹칩니다.");
+            }
+        }
+    }
+
     public ErrorResponse(String code, String message, List<FieldError> fieldErrors) {
         this(code, message, fieldErrors, Map.of());
     }
