@@ -1,3 +1,4 @@
+import { MaterialCards } from "./MaterialCards";
 import { useCallback, useState } from "react";
 import {
   Link,
@@ -289,6 +290,13 @@ export function PostPage() {
             <p className="community-body community-post-body">
               {state.data.post.body}
             </p>
+            <MaterialCards
+              value={state.data.post}
+              ticId={state.data.post.ticId}
+              parentType="POST"
+              parentId={postId}
+              author={state.data.post.author}
+            />
           </article>
         </>
       )}
@@ -301,6 +309,7 @@ export function PostPage() {
       <Discussion
         key={`comments:${postId}`}
         parent={{ parentType: "POST", parentId: postId }}
+        ticId={state.data?.post.ticId ?? null}
         active={denied?.id !== postId && !!state.data}
         onUnavailable={onUnavailable}
       />
@@ -493,6 +502,7 @@ export function SignalThreadPage() {
       <Discussion
         key={threadId}
         parent={{ parentType: "SIGNAL_THREAD", parentId: threadId }}
+        ticId={state.data?.thread.ticId ?? null}
         active={denied?.id !== threadId && !!state.data}
         onUnavailable={onUnavailable}
       />

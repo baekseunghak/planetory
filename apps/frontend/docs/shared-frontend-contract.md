@@ -142,6 +142,10 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 
 분석 제출·공개 등록·재개 화면은 기존 API 성공 응답의 `skyVersion`/선택적 `asOf`를 `publishSkyChange(member.memberId, event)`에 전달한다. 지도 재진입은 메타부터 조회한다. 실제 분석/공개 기능을 이 공통 프로젝트에서 대신 구현한 것이 아니다.
 
+## W14 공개 History 그래프 연결
+
+App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).
+
 ## W09 퀘스트 갱신
 
 208의 `QuestProvider`가 지도와 대체 목록에 같은 퀘스트 상태를 공급한다. A06의 실제 제출 성공 뒤 `publishQuestChange(memberId, { reason: "submission" })`를 호출한다. 허용 건너뛰기 성공은 `reason: "tutorial-skipped"`, A14 안내 닫기는 `reason: "guide-closed"`이며 안내 닫기로 튜토리얼 완료나 성과를 만들지 않는다. 이벤트는 회원별 읽기 갱신 요청이고 상태 저장소가 아니다. 지도에 돌아오면 서버 상태를 새로 조회한다.

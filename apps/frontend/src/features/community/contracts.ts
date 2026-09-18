@@ -1,3 +1,4 @@
+import { readMaterials } from "./materialContracts";
 import { ApiError } from "../../api/client";
 
 type ObjectValue = Record<string, unknown>;
@@ -163,6 +164,7 @@ export function readPost(value: unknown) {
   const row = object(value);
   return {
     postId: text(row.postId),
+    ...readMaterials(row),
     title: text(row.title),
     body: text(row.body),
     purposeTag: text(row.purposeTag),
@@ -205,6 +207,7 @@ export function readComment(value: unknown) {
   const row = object(value);
   return {
     commentId: text(row.commentId),
+    ...readMaterials(row),
     author: author(row.author),
     body: text(row.body),
     createdAt: utc(row.createdAt),

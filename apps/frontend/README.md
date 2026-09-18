@@ -117,6 +117,8 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 
 204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
 
+- [213 본인 History·공개 출처 첨부](docs/ticket-213-readiness.md) — 자료 선택·부모 권한·A08 소비 어댑터와 인수 조건.
+
 ## W06-2 은하 지도 조작과 마커
 
 205는 기존 은하에 드래그 회전·팬·휠·키보드·개별 별/내 행성 선택과 가시 DOM 마커 풀을 연결한다. `npm run dev:interaction`은58326의 개발 HTTP fixture, `npm run test:interaction`은 독립 입력 검사다. 운영은 기존 렌더 활성화 플래그와 API 연결을 사용한다. [205 항목별 구현·검증·실제 연동 대기](docs/ticket-205-readiness.md)를 참고한다. 206 상세 화면·207 대체 접근·배포 인수는 별도다.

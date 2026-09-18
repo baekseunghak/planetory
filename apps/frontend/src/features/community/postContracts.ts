@@ -1,3 +1,4 @@
+import { type Materials, sameMaterials } from "./materialContracts";
 import { ApiError } from "../../api/client";
 import { readPost } from "./contracts";
 
@@ -9,14 +10,14 @@ export const postTags = {
   GENERAL: "자유 이야기",
 } as const;
 export type PostTag = keyof typeof postTags;
-export type PostDraft = {
+export type PostDraft = Materials & {
   title: string;
   body: string;
   purposeTag: string;
   ticId: string;
   board: "FREE" | "STAR";
 };
-export type PostValues = {
+export type PostValues = Materials & {
   title: string;
   body: string;
   purposeTag: string;
@@ -33,6 +34,8 @@ export const stripTitle = (value: string) =>
 export const codePoints = (value: string) => Array.from(value).length;
 export function postValues(draft: PostDraft): PostValues {
   return {
+    ...(draft.historyIds ? { historyIds: draft.historyIds } : {}),
+    ...(draft.sourceLinks ? { sourceLinks: draft.sourceLinks } : {}),
     title: stripTitle(draft.title),
     body: draft.body,
     purposeTag: draft.purposeTag,
@@ -74,11 +77,22 @@ export function changedPostFields(
   for (const key of ["title", "body", "purposeTag", "ticId"] as const)
     if (original[key] !== values[key])
       Object.assign(patch, { [key]: values[key] });
+  if (!sameMaterials(original, values)) {
+    patch.historyIds = values.historyIds ?? [];
+    patch.sourceLinks = values.sourceLinks ?? [];
+  }
   return patch;
 }
 export function patchIsVisible(post: PostValues, sent: Partial<PostValues>) {
-  return Object.entries(sent).every(
-    ([key, value]) => post[key as keyof PostValues] === value,
+  const { historyIds, sourceLinks, ...fields } = sent;
+  return (
+    Object.entries(fields).every(
+      ([key, value]) => post[key as keyof PostValues] === value,
+    ) &&
+    (!Object.hasOwn(sent, "historyIds") ||
+      sameMaterials({ historyIds: post.historyIds }, { historyIds })) &&
+    (!Object.hasOwn(sent, "sourceLinks") ||
+      sameMaterials({ sourceLinks: post.sourceLinks }, { sourceLinks }))
   );
 }
 export function toDraft(post: PostValues): PostDraft {

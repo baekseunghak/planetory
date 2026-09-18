@@ -8,7 +8,7 @@ export type CommentParent = {
 // W14 supplies selections only at final submit; the empty selection sends no fields.
 export type CommentMaterials = {
   historyIds?: string[];
-  sourceLinks?: { type: "ANALYSIS" | "SIGNAL_THREAD"; id: string }[];
+  sourceLinks?: { type: "PUBLIC_ANALYSIS" | "SIGNAL_THREAD"; id: string }[];
 };
 export function commentError(body: string) {
   return !stripTitle(body) || codePoints(body) > 2000

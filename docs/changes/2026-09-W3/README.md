@@ -69,3 +69,5 @@
 | 2026-09-17 | Gold manifest 추가 키 허용·배열 값 CHECK(V10)·ERD gaps NULL 정정(117 리뷰 후속) | S15P21C206-140 | GoldManifest, ignoreUnknown, checksum_version, UnrecognizedPropertyException, V10, CHECK, array_position, NaN, Infinity, 0x7FC00000, gaps, NULL, power NULL, DataAccessException, ERD v1.10 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 분석 곡선·주기도 조회(5.2·5.3) 구현, BUNDLE_CHANGED·X-Current-Bundle, binningRevision 문자열 결정 | S15P21C206-140 | curves, periodogram, BUNDLE_CHANGED, currentBundleId, X-Current-Bundle, CURVE_NOT_READY, 202, removed, ResidualResultReader, binningRevision, observationBounds, JsonAnyGetter, WebMvcTest AuthenticationPrincipal, Jackson 2 JsonNode | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 분석 진입(5.1) 구현, 진입 시 완료 판정, JSON 전송 비용 측정 | S15P21C206-140 | analysis-context, selectionRules, minWindowDays, currentCurveContext, STEP_NOT_RESTORABLE, nextCurveContext, skipAvailable, 완료 판정 (b), REPEATABLE READ, 응답 크기, gzip, D-2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
+
+| 2026-09-18 | 공개 History 공용 렌더러 소비 경계 | S15P21C206-213 | HistoryGraphRenderer, 부모 권한, CURRENT, SUBMITTED, A08 | 소비 계약 검증·실제 연결 전 | [2026-09-18](2026-09-18.md) |
