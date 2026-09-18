@@ -39,7 +39,21 @@ public final class ExplorationIds {
         if (value == null || !value.startsWith(prefix)) {
             return OptionalLong.empty();
         }
-        String digits = value.substring(prefix.length());
+        return digits(value.substring(prefix.length()));
+    }
+
+    /**
+     * 경로의 TIC. 접두 없는 양의 정수이며 {@code 01}·{@code +1}처럼 같은 별을 다르게 쓴 값은 거절한다.
+     *
+     * <p>경로 변수를 {@code long}으로 받으면 변환 실패가 {@code MethodArgumentTypeMismatchException}이
+     * 되는데, 이 예외는 {@code ErrorResponse}를 구현하지 않아 전역 처리기에서 500이 된다.
+     * 그래서 문자열로 받아 여기서 판별하고 호출자가 없는 별과 같은 응답으로 덮는다.
+     */
+    public static OptionalLong parseTic(String value) {
+        return value == null ? OptionalLong.empty() : digits(value);
+    }
+
+    private static OptionalLong digits(String digits) {
         if (digits.isEmpty() || digits.length() > MAX_DIGITS || digits.charAt(0) == '0') {
             return OptionalLong.empty();
         }

@@ -43,6 +43,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -174,6 +175,27 @@ class AnalysisControllerTest {
     }
 
     /** 추가 필드가 없는 오류는 기존 모양 그대로다. */
+    /**
+     * 숫자가 아닌 TIC.
+     *
+     * <p>경로 변수를 {@code long}으로 받으면 {@code MethodArgumentTypeMismatchException}이 나는데
+     * 이 예외는 {@code ErrorResponse}를 구현하지 않아 전역 처리기에서 500이 된다. 문자열로 받아
+     * 없는 별과 같은 응답으로 덮는지 세 경로 모두 본다.
+     */
+    @Test
+    void 숫자가_아닌_TIC은_없는_별과_같은_404로_덮는다() throws Exception {
+        for (String path : List.of("/api/v1/stars/abc/analysis-context",
+                "/api/v1/stars/abc/curves?bundleId=b-2&curveStep=0",
+                "/api/v1/stars/abc/periodogram?bundleId=b-2&curveStep=0",
+                "/api/v1/stars/01/curves?bundleId=b-2&curveStep=0",
+                "/api/v1/stars/-1/curves?bundleId=b-2&curveStep=0")) {
+            mockMvc.perform(get(path))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("STAR_NOT_PUBLISHED"));
+        }
+        verifyNoInteractions(analysis);
+    }
+
     @Test
     void 추가_필드가_없는_오류는_코드와_메시지만_나간다() throws Exception {
         when(analysis.periodogram(anyLong(), anyLong(), any())).thenThrow(new BusinessException(ErrorCode.STAR_LOCKED));

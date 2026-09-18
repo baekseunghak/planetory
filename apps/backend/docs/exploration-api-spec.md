@@ -72,7 +72,7 @@
 | `BUNDLE_CHANGED` | 409 | 요청의 `bundleId`·계산 버전이 현재 판과 다름. 본문에 `currentBundleId`. 프론트는 EXP-01대로 최신 판을 다시 불러오고 곡선 단계·제거 조합은 유지, 주기·위상은 초기화(AT-117) |
 | `GRAPH_TEMPORARILY_UNAVAILABLE` | 503 | 읽기 조회 중 판이 바뀌어 최신 판으로 1회 재시도했는데도 일관된 결과를 못 만듦(8.3절). 서비스 API 7.2절과 같은 코드 |
 | `STAR_LOCKED` | 403 | 그 별이 이 회원에게 열리지 않음. 분석·곡선·제출·잔차 모두 거절(NFR-06, AT-64) |
-| `STAR_NOT_PUBLISHED` | 404 | `stars.service_status != published` 또는 없는 TIC. 존재를 드러내지 않는다 |
+| `STAR_NOT_PUBLISHED` | 404 | `stars.service_status != published` 또는 없는 TIC. 존재를 드러내지 않는다. 경로의 TIC이 양의 정수가 아닐 때(`abc`·`01`·`-1`)도 같은 응답으로 덮는다 |
 | `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 분석 복귀와 다시 풀기는 그 별의 최신 현재 진행 문맥을 돌려준다. History CURRENT는 별도 규칙에 따라 최신 원본을 사용한다 |
 | `CANDIDATE_RETIRED` | 409 | 재도전 대상 신호가 현재 판에서 은퇴함 |
 | `CURVE_NOT_READY` | 202 | 잔차가 아직 없음. 본문에 `residual` 상태(5.2절) |

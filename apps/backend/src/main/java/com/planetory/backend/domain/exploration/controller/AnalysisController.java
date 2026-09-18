@@ -12,11 +12,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.planetory.backend.domain.exploration.service.AnalysisService;
+import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
+import com.planetory.backend.global.error.BusinessException;
+import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
 
 /** 분석 화면의 진입·곡선·주기도 (탐사 API 5.1·5.2·5.3) [S15P21C206-140]. */
@@ -35,8 +38,8 @@ public class AnalysisController {
                     + " currentCurveContext.notice=STEP_NOT_RESTORABLE.")
     @GetMapping("/api/v1/stars/{ticId}/analysis-context")
     public ResponseEntity<AnalysisContext> context(@AuthenticationPrincipal MemberPrincipal principal,
-                                                   @PathVariable long ticId) {
-        return respond(analysis.context(principal.memberId(), ticId));
+                                                   @PathVariable String ticId) {
+        return respond(analysis.context(principal.memberId(), tic(ticId)));
     }
 
     @Operation(summary = "곡선",
@@ -45,13 +48,13 @@ public class AnalysisController {
                     + " 판·계산 버전이 현재 판과 다르면 409 BUNDLE_CHANGED(currentBundleId).")
     @GetMapping("/api/v1/stars/{ticId}/curves")
     public ResponseEntity<Curve> curves(@AuthenticationPrincipal MemberPrincipal principal,
-                                        @PathVariable long ticId,
+                                        @PathVariable String ticId,
                                         @RequestParam(required = false) String bundleId,
                                         @RequestParam(required = false) String curveStep,
                                         @RequestParam(required = false) List<String> removed,
                                         @RequestParam(required = false) String residualModelVersion,
                                         @RequestParam(required = false) String periodogramConfigVersion) {
-        return respond(analysis.curve(principal.memberId(), ticId,
+        return respond(analysis.curve(principal.memberId(), tic(ticId),
                 new CurveQuery(bundleId, curveStep, removed, residualModelVersion, periodogramConfigVersion)));
     }
 
@@ -59,14 +62,20 @@ public class AnalysisController {
             description = "격자 배열 없이 범위·점 수·간격 규칙과 power만 준다. 요청 규칙과 202·409는 곡선과 같다.")
     @GetMapping("/api/v1/stars/{ticId}/periodogram")
     public ResponseEntity<Periodogram> periodogram(@AuthenticationPrincipal MemberPrincipal principal,
-                                                   @PathVariable long ticId,
+                                                   @PathVariable String ticId,
                                                    @RequestParam(required = false) String bundleId,
                                                    @RequestParam(required = false) String curveStep,
                                                    @RequestParam(required = false) List<String> removed,
                                                    @RequestParam(required = false) String residualModelVersion,
                                                    @RequestParam(required = false) String periodogramConfigVersion) {
-        return respond(analysis.periodogram(principal.memberId(), ticId,
+        return respond(analysis.periodogram(principal.memberId(), tic(ticId),
                 new CurveQuery(bundleId, curveStep, removed, residualModelVersion, periodogramConfigVersion)));
+    }
+
+    /** 숫자가 아닌 TIC은 없는 별과 같은 응답으로 덮는다(ErrorCode의 별 존재 은닉 방침). */
+    private static long tic(String ticId) {
+        return ExplorationIds.parseTic(ticId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STAR_NOT_PUBLISHED));
     }
 
     private static <T> ResponseEntity<T> respond(Answer<T> answer) {
