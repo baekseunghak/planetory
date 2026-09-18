@@ -91,4 +91,15 @@ public class MemberService {
         requireActive(memberId);
         settings.completeOnboarding(memberId);
     }
+
+    @Transactional
+    public boolean changeStarListVisibility(long memberId, String visibility) {
+        boolean starListPublic;
+        if ("PUBLIC".equals(visibility)) starListPublic = true;
+        else if ("PRIVATE".equals(visibility)) starListPublic = false;
+        else throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        requireActive(memberId);
+        settings.changeStarListPublic(memberId, starListPublic);
+        return starListPublic;
+    }
 }
