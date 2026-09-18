@@ -80,6 +80,7 @@ export function communityFixturePlugin(
   commentWrites = false,
   reactionWrites = false,
   materialWrites = false,
+  currentNickname?: () => string,
 ): Plugin {
   const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
     const ids = input.historyIds ?? [],
@@ -193,15 +194,17 @@ export function communityFixturePlugin(
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: materialWrites
-            ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
-            : reactionWrites
-              ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
-              : commentWrites
-                ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-                : writable
-                  ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-                  : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: currentNickname
+            ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
+            : materialWrites
+              ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
+              : reactionWrites
+                ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+                : commentWrites
+                  ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+                  : writable
+                    ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                    : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -213,7 +216,16 @@ export function communityFixturePlugin(
         const url = new URL(req.url ?? "/", "http://localhost");
         const send = (value: unknown, status = 200) => {
           res.statusCode = status;
-          res.end(JSON.stringify(value));
+          res.end(
+            JSON.stringify(value, (_key, item) =>
+              currentNickname &&
+              item &&
+              typeof item === "object" &&
+              item.memberId === "u-209"
+                ? { ...item, nickname: currentNickname() }
+                : item,
+            ),
+          );
         };
         const missing = () =>
           send(

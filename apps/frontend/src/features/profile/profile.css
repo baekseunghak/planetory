@@ -1,0 +1,152 @@
+.profile-page {
+  max-width: 1100px;
+  margin: 3rem auto;
+  padding: 0 2rem 5rem;
+}
+.profile-heading {
+  padding: 2rem 0;
+}
+.profile-heading h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  letter-spacing: -0.04em;
+  margin: 0.6rem 0;
+}
+.profile-heading p,
+.profile-meta,
+.profile-grades p {
+  color: #a8b5c9;
+}
+.profile-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+.profile-tabs {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 1px solid #354255;
+  margin: 2rem 0;
+}
+.profile-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: 1rem 0.2rem;
+  color: #a8b5c9;
+}
+.profile-tabs button[aria-current="page"] {
+  border-bottom-color: #a3d8ef;
+  color: #e2f3ff;
+}
+.profile-summary {
+  display: flex;
+  gap: 5rem;
+  padding: 2rem 0 3rem;
+}
+.profile-summary dt {
+  color: #a8b5c9;
+}
+.profile-summary dd {
+  margin: 1rem 0 0;
+  font-size: 3rem;
+  font-weight: 500;
+}
+.profile-summary small {
+  font-size: 1rem;
+  margin-left: 0.5rem;
+  color: #a8b5c9;
+}
+.profile-grades {
+  border-top: 1px solid #283347;
+  padding: 2rem 0;
+}
+.profile-grades h2 {
+  font-size: 1.2rem;
+}
+.profile-grades dl {
+  display: flex;
+  gap: 5rem;
+  margin-top: 2rem;
+}
+.profile-grades dd {
+  margin: 1rem 0;
+}
+.profile-meta {
+  border-top: 1px solid #283347;
+  padding: 2rem 0;
+  display: flex;
+  gap: 1rem;
+}
+.profile-meta dd {
+  margin: 0;
+}
+.profile-unconnected {
+  padding: 3rem 0;
+  color: #a8b5c9;
+}
+.nickname-editor {
+  max-width: 520px;
+  width: 100%;
+}
+.nickname-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.nickname-editor input {
+  background: #0d1623;
+  color: #eef4ff;
+  border: 1px solid #546986;
+  padding: 0.75rem;
+  border-radius: 4px;
+}
+.nickname-editor p {
+  font-size: 0.9rem;
+}
+.usage-guide {
+  background: #0a101b;
+  color: #eff6ff;
+  border: 1px solid #384960;
+  border-radius: 12px;
+  width: min(900px, 85vw);
+  max-height: 90vh;
+  padding: 1.8rem;
+}
+.usage-guide::backdrop {
+  background: #000b;
+}
+.usage-guide header,
+.usage-guide footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.usage-guide h2 {
+  margin: 0.7rem 0;
+}
+.usage-guide > p {
+  line-height: 1.7;
+}
+.usage-guide .guide-caption {
+  font-size: 0.85rem;
+  color: #a8b5c9;
+}
+.usage-guide img {
+  width: 100%;
+  height: auto;
+  max-height: 38vh;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+.usage-guide footer {
+  margin-top: 1rem;
+}
+.guide-image-error {
+  padding: 3rem;
+  border: 1px dashed #546986;
+}

@@ -155,6 +155,8 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 
 - [213 본인 History·공개 출처 첨부](docs/ticket-213-readiness.md) — 자료 선택·부모 권한·A08 소비 어댑터와 인수 조건.
 
+- [214 프로필·닉네임·사용법 다시 보기](docs/ticket-214-readiness.md) — npm run dev:profiles (58356), 내 가입일 joinedAt 표시 반영·팔로우 수 정책 미확정.
+
 ## W06-2 은하 지도 조작과 마커
 
 205는 기존 은하에 드래그 회전·팬·휠·키보드·개별 별/내 행성 선택과 가시 DOM 마커 풀을 연결한다. `npm run dev:interaction`은58326의 개발 HTTP fixture, `npm run test:interaction`은 독립 입력 검사다. 운영은 기존 렌더 활성화 플래그와 API 연결을 사용한다. [205 항목별 구현·검증·실제 연동 대기](docs/ticket-205-readiness.md)를 참고한다. 206 상세 화면·207 대체 접근·배포 인수는 별도다.
@@ -162,6 +164,10 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 ## 206~207 상세·대체 목록과 최신 실제 연결
 
 [206 상세 인수](docs/ticket-206-readiness.md), [207 대체 목록 인수](docs/ticket-207-readiness.md), [201~207 최신 실서버 검증](docs/latest-integration-201-207-20260917.md)을 참고한다. 현재 develop 854c23c의 퀘스트 API를 연결했으며 201~204는 develop에 병합됐다. 과거의 퀘스트404와 실제 연결 대기는 구버전 서버 검증 이력이다. 최신 기능은 205→206→207 순서로 검토하며 배포·상대 목적지·Safari 인수는 남는다.
+
+## 2026-09-18 MR 리뷰 통합 결과
+
+[205~214 리뷰 수정·통합 검증](docs/mr-review-fixes-20260918.md)을 현재 기준으로 확인한다. 앞선 실행 이력의 독립 스택·오래된 develop 표기는 당시 기록이다. 현재는 205→214 순차 의존이며 기존 API/배포 인수 범위를 유지한다.
 
 최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.
 
