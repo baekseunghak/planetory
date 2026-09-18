@@ -298,7 +298,7 @@ test("list return from analysis keeps view/selection; successful change resets c
   await panel(page)
     .getByRole("link", { name: /분석 시작/ })
     .click();
-  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(listHeading(page)).toBeVisible();
   await expect(panel(page)).toContainText("TIC 900000001");
   await panel(page)

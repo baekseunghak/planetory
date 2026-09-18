@@ -199,9 +199,9 @@ if (response.status === 401) {
 
 ### 3.2 공개 설정(P1)·타인 프로필·별 목록(P0)
 
-**ERD 기준:** 공개 설정 변경은 user_settings의 P1 범위를 따른다. P0에서는 기본 공개를 사용하고 설정 변경 API·화면은 제공하지 않는다. 설정 행이 없을 때 PUBLIC으로 응답하되, 기존 행이 있으면 star_list_public 값을 존중한다. P1의 PUBLIC/PRIVATE는 DB의 true/false에 대응한다.
+**구현 확정(S15P21C206-181):** `GET /api/v1/me`가 현재 `starListVisibility`를 조회한다. 설정 행이 없을 때 PUBLIC으로 응답하며, `PATCH /api/v1/me/settings`는 행이 없어도 생성하고 기존 onboarding·알림 설정을 보존한다. PUBLIC/PRIVATE는 DB의 true/false에 대응한다.
 
-P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 보내면 200으로 변경된 설정을 반환한다. 값은 `PUBLIC`/`PRIVATE`, 기본은 PUBLIC. 이 설정이 공개 게시글·반응·공식 판단 통계를 비공개로 바꾸지는 않는다.
+`PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 보내면 200으로 `{"starListVisibility":"PRIVATE"}`를 반환한다. 값은 대소문자를 구분하는 `PUBLIC`/`PRIVATE`만 허용하며, 누락·그 밖의 값은 400 `VALIDATION_FAILED`다. 같은 값의 반복 요청도 200이다. 이 설정은 공개 게시글·반응·공식 판단 통계를 비공개로 바꾸지 않는다.
 
 `GET /api/v1/members/u-102`의 공개 응답(SB-D23):
 
@@ -216,7 +216,7 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 
 서비스 쪽에서 유지하는 규칙만 남긴다.
 
-- 타인 비공개 목록은 403 `STAR_LIST_PRIVATE`(권한 부족 안내, SB-D23)로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다.
+- 타인 비공개 목록은 403 `STAR_LIST_PRIVATE`(권한 부족 안내, SB-D23)로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다. 이전 공개 목록의 cursor도 조회 전 공개 상태를 다시 확인하므로 우회할 수 없다.
 - 본인 조회에만 있는 필드(미게시 신호 수 등)를 타인 조회에서 빼는 규칙은 탐사 명세 4.4절·NFR-14를 따른다.
 - 이 목록의 완료 여부는 탐사 진행 상태이며 공개 여부·성과 유무와 다르다.
 

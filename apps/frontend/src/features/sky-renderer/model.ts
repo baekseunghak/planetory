@@ -104,12 +104,59 @@ export function initialCamera(
   };
 }
 export type RenderPlan = { stars: Star[] };
+// A conservative bounds check skips per-star projection when the entire loaded set
+// is visible. Immutable store snapshots make the weak cache safe and reclaimable.
+const boundsCache = new WeakMap<
+  readonly Star[],
+  { x: [number, number]; y: [number, number]; z: [number, number] }
+>();
 export function renderPlan(
   stars: readonly Star[],
   matrix: Matrix,
   width: number,
   height: number,
 ): RenderPlan {
+  let bounds = boundsCache.get(stars);
+  if (!bounds && stars.length) {
+    bounds = {
+      x: [Infinity, -Infinity],
+      y: [Infinity, -Infinity],
+      z: [Infinity, -Infinity],
+    };
+    for (const s of stars) {
+      bounds.x[0] = Math.min(bounds.x[0], s.x);
+      bounds.x[1] = Math.max(bounds.x[1], s.x);
+      bounds.y[0] = Math.min(bounds.y[0], s.y);
+      bounds.y[1] = Math.max(bounds.y[1], s.y);
+      bounds.z[0] = Math.min(bounds.z[0], s.depthZ);
+      bounds.z[1] = Math.max(bounds.z[1], s.depthZ);
+    }
+    boundsCache.set(stars, bounds);
+  }
+  // The application uses an affine projection. Perspective matrices use the exact path.
+  if (
+    bounds &&
+    matrix[3] === 0 &&
+    matrix[7] === 0 &&
+    matrix[11] === 0 &&
+    matrix[15] === 1
+  ) {
+    let allVisible = true;
+    for (const x of bounds.x)
+      for (const y of bounds.y)
+        for (const z of bounds.z) {
+          const p = screenPoint(matrix, width, height, x, y, z);
+          if (
+            Math.abs(p.depth) > 1 ||
+            p.x < -80 ||
+            p.x > width + 80 ||
+            p.y < -80 ||
+            p.y > height + 80
+          )
+            allVisible = false;
+        }
+    if (allVisible) return { stars: stars as Star[] };
+  }
   // Culling only at data/camera changes. No star-count cap and no per-frame input scan.
   return {
     stars: stars.filter((s) => {

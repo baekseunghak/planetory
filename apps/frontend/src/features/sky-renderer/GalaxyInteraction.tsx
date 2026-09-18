@@ -17,11 +17,11 @@ import {
   markerLabel,
   panCamera,
   rotateCamera,
-  starTargets,
   zoomCamera,
   type HitTarget,
 } from "./interaction";
 import type { GalaxyCamera, OwnedSystem } from "./model";
+import { ProjectedStarIndex } from "./star-index";
 
 export type InteractionControl = { frame(planets: HitTarget[]): void };
 type Props = SkySceneProps & {
@@ -72,17 +72,15 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       helpId = useId();
     const index = useMemo(
       () =>
-        new HitGrid(
-          starTargets(
-            stars,
-            matrix,
-            width,
-            height,
-            camera.zoom,
-            data.selectedTicId,
-            system,
-            Math.min(devicePixelRatio || 1, 2),
-          ),
+        new ProjectedStarIndex(
+          stars,
+          matrix,
+          width,
+          height,
+          camera.zoom,
+          data.selectedTicId,
+          system,
+          Math.min(devicePixelRatio || 1, 2),
         ),
       [stars, matrix, width, height, camera.zoom, data.selectedTicId, system],
     );
@@ -394,7 +392,14 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       if (!host) return;
       const candidates =
         enabled && !system
-          ? index.targets.flatMap((t) => {
+          ? [
+              ...new Set([
+                ...(tutorials?.keys() ?? []),
+                ...(challengeTicId ? [challengeTicId] : []),
+              ]),
+            ].flatMap((id) => {
+              const t = index.byId.get(id);
+              if (!t) return [];
               const label = markerLabel(t.star!, tutorials, challengeTicId);
               return label ? [{ target: t, label }] : [];
             })

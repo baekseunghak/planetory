@@ -52,6 +52,8 @@
     "test:reactions": "playwright test --config=playwright.reactions.config.ts --project=chromium",
     "dev:materials": "vite --mode materials --host 127.0.0.1 --port 58354 --strictPort",
     "test:materials": "playwright test --config=playwright.materials.config.ts --project=chromium",
+    "dev:performance": "node --import tsx scripts/performance-server.mjs",
+    "measure:performance": "node scripts/measure-performance.mjs",
     "dev:profiles": "vite --mode profiles --host 127.0.0.1 --port 58356 --strictPort",
     "test:profiles": "playwright test --config=playwright.profiles.config.ts --project=chromium",
     "dev:search": "vite --mode search --host 127.0.0.1 --port 58364 --strictPort",

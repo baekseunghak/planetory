@@ -99,6 +99,7 @@
 | 2026-09-18 | 수동 NameNode 전환과 Worker 장애 복구 검증 | S15P21C206-74 | HDFS, QJM, forceactive, RF2, Worker, block report, checksum, no-format | 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 제출 수치 검증·후보 매칭·고조파 판정 계산(공통 표본 31개 재현) | S15P21C206-142 | SubmissionMatching, 6.2 검증, epoch 산정, 5.1 네 조건, 배율 1 우선, matched_harmonic, ambiguous_match, duplicate, 관측 창, bin 시작 시각, matching-cases.v0, rule-0 | 구현 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 실제 서비스의10만 별 데이터/히트/버퍼 비용 개선과 성능 미달 분리 | S15P21C206-215 | WebGL, quadtree, immutable cache, float32, p95, DPR, heap, 100000 | 개선 구현·로컬 기능 검증 완료, 성능 인수 진행 중 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 소비와 미결 조건 정정 | S15P21C206-214 | joinedAt, UTC, Asia/Seoul, 공개 필드 제한 | 프론트 계약 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | P0 프로필과 P1 팔로우 수 완료 범위 분리 | S15P21C206-214·219 | MY-01, COM-16, AT-70, AT-78, 팔로워, 팔로잉, P0, P1 | 담당자 결정·문서 반영·리뷰 전 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 분석 병합 이후 동기화와 P0 재검토 준비 | S15P21C206-214 | develop, 프로필, 403, 404, PRIVATE, 배포 순서, 재검토 | 프론트 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
@@ -108,4 +109,8 @@
 | 2026-09-18 | 주기도 대기 응답을 실제 서버 계약에 맞춤 | S15P21C206-183 | 주기도 202, power null, code 없음, decodePendingPeriodogram, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
 
 | 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |

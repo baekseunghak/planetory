@@ -1,5 +1,5 @@
 import type { Plugin } from "vite";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   LAYOUT_VERSION,
   PRESENTATION_VERSION,
@@ -11,13 +11,27 @@ import {
 import { exampleStar } from "./sky-reference/reference.mjs";
 
 // Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
-export function galaxyFixturePlugin(): Plugin {
+export function galaxyFixturePlugin(performanceFixture = false): Plugin {
   let revision = 1,
     failed = false;
   const completedTutorials = new Map<number, string>();
   const makeStar = (i: number): Star => ({
     ...exampleStar(i),
-    planetCount: i === 0 ? 5 : i === 7 ? 2 : 0,
+    planetCount: performanceFixture
+      ? i === 1
+        ? 1
+        : i === 2
+          ? 32
+          : i >= 3 && i <= 995
+            ? 5
+            : i === 996
+              ? 2
+              : 0
+      : i === 0
+        ? 5
+        : i === 7
+          ? 2
+          : 0,
   });
   let stars: Star[] = Array.from({ length: 1000 }, (_, i) => makeStar(i));
   const cursors = new Map<string, { scope: string; offset: number }>();
@@ -60,13 +74,32 @@ export function galaxyFixturePlugin(): Plugin {
             message: "level·bbox·version·limit·cursor를 확인해 주세요.",
           });
         if (
+          performanceFixture &&
+          req.method === "GET" &&
+          url.pathname === "/dev-galaxy-204/manifest"
+        )
+          return reply(200, {
+            stars: stars.length,
+            planets: stars.reduce((n, s) => n + s.planetCount, 0),
+            sha256: createHash("sha256")
+              .update(JSON.stringify(stars))
+              .digest("hex"),
+            layoutVersion: LAYOUT_VERSION,
+            presentationVersion: PRESENTATION_VERSION,
+          });
+        if (
           req.method === "POST" &&
           url.pathname.startsWith("/dev-galaxy-204/")
         ) {
           const action = url.pathname.split("/").at(-1);
           if (action === "reset") {
             const count = Number(url.searchParams.get("count") ?? 1000);
-            if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
+            if (
+              !(
+                performanceFixture ? [1, 500, 100000] : [1, 10, 100, 1000, 2501]
+              ).includes(count)
+            )
+              return bad();
             stars = Array.from({ length: count }, (_, i) => makeStar(i));
             if (count === 1) stars[0] = { ...stars[0], planetCount: 0 };
             failed = false;
@@ -405,7 +438,9 @@ export function galaxyFixturePlugin(): Plugin {
               count: star.planetCount,
               completedWithoutPlanets: star.completedWithoutPlanets,
               items: Array.from({ length: star.planetCount }, (_, i) => ({
-                candidateId: "fixture-204-p-" + i,
+                candidateId: performanceFixture
+                  ? `performance-215-${star.ticId}-${String(i).padStart(3, "0")}`
+                  : "fixture-204-p-" + i,
                 kind: i % 2 ? "unconfirmed" : "confirmed",
                 periodDays: i ? 2 + i * 3.25 : null,
                 depthPpm: i ? 300 + i * 100 : 0,
