@@ -1,3 +1,4 @@
+import { openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
 test("time chart preserves all points, shows actual times, and supports keyboard zoom and pan without API calls", async ({
   page,
@@ -30,15 +31,14 @@ test("time chart preserves all points, shows actual times, and supports keyboard
   );
   await page.keyboard.press("Home");
   await expect(chart.getByTestId("time-zoom")).toHaveText("×1");
-  await expect(
-    chart.getByRole("button", { name: "축소", exact: true }),
-  ).toBeDisabled();
+  await plot.press("-");
+  await expect(chart.getByTestId("time-zoom")).toHaveText("×1");
   await expect(plot).toHaveAttribute("data-point-count", "11");
   expect(requests.length).toBe(requestCount);
-  await chart
-    .getByText("Sector 경계의 실제 시간 간격", { exact: true })
-    .click();
-  await expect(chart.getByText(/Sector 14 → 41:/)).toContainText("736.59139일");
+  await openData(page);
+  await expect(
+    page.locator(".analysis-secondary").getByText(/Sector 14 → 41:/),
+  ).toContainText("736.59139일");
 });
 test("wheel zoom, drag pan, resize and reset redraw the same curve", async ({
   page,
@@ -63,7 +63,9 @@ test("wheel zoom, drag pan, resize and reset redraw the same curve", async ({
   expect(Number(await plot.getAttribute("data-view-start"))).toBeGreaterThan(
     before,
   );
-  await page.getByRole("button", { name: "전체 보기", exact: true }).click();
+  await page
+    .getByRole("button", { name: "시간 곡선 전체 보기", exact: true })
+    .click();
   await expect(page.getByTestId("time-zoom")).toHaveText("×1");
   await page.setViewportSize({ width: 1024, height: 900 });
   await expect(plot).toBeVisible();

@@ -1,3 +1,4 @@
+import { openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
 
 test("analysis requests its current Bundle then displays all segment metadata and preserved gaps", async ({
@@ -8,15 +9,18 @@ test("analysis requests its current Bundle then displays all segment metadata an
     if (request.url().includes("/api/v1/stars/")) reads.push(request.url());
   });
   await page.goto("/analysis/259377017?returnTo=%2Fsky%3Ffocus%3D259377017");
+  await openData(page);
   await expect(
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toContainText("9007199254740993");
-  await expect(page.getByRole("status")).toHaveText(
+  await openData(page);
+  await expect(page.locator(".analysis-secondary")).toContainText(
     "관측 구간 2개 · 전체 14점 · 유효 11점 · 결측 3점",
   );
   await expect(
     page.getByRole("table", { name: "관측 세그먼트" }).getByRole("row"),
   ).toHaveCount(3);
+  await page.getByText("합성 샘플 · 상세 안내", { exact: true }).click();
   await expect(
     page.getByText("개발용 합성 응답입니다. 실제 관측 데이터가 아닙니다."),
   ).toBeVisible();
@@ -32,8 +36,9 @@ test("analysis requests its current Bundle then displays all segment metadata an
     expect(url.searchParams.has("removed")).toBe(false);
   }
   await page.reload();
-  await expect(page.getByRole("status")).toContainText("유효 11점");
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await openData(page);
+  await expect(page.locator(".analysis-secondary")).toContainText("유효 11점");
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
 });
 test("refused, unavailable and malformed responses do not become successful empty curves", async ({
@@ -52,7 +57,7 @@ test("refused, unavailable and malformed responses do not become successful empt
       page.getByRole("region", { name: "분석 데이터 요약" }),
     ).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: "이전 화면으로", exact: true }),
+      page.getByRole("link", { name: "← 이전 화면", exact: true }),
     ).toBeVisible();
   }
 });
@@ -75,7 +80,8 @@ test("manual retry recovers through the current analysis context", async ({
   await expect(page.getByRole("alert")).toContainText("일시적인 로드 실패");
   fail = false;
   await page.getByRole("button", { name: "다시 불러오기" }).click();
-  await expect(page.getByRole("status")).toContainText("유효 11점");
+  await openData(page);
+  await expect(page.locator(".analysis-secondary")).toContainText("유효 11점");
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 test("an uncomputed residual has no fake chart or background job request", async ({

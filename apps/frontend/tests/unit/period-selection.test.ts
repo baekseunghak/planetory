@@ -14,6 +14,7 @@ import {
 import {
   choosePeriod,
   fineTunePeriod,
+  FINE_TUNE_DIVISIONS,
   periodChange,
   sliderPeriod,
   stepPeriod,
@@ -106,10 +107,15 @@ test("fine tuning keeps original anchor and source and rejects out-of-range valu
   assert.equal(tuned.periodDays, selection.minimum);
 });
 
-test("step and pointer adjustments use server increment, preserve both inclusive endpoints and never escape them", () => {
+test("arrow steps use the fine increment, Page keys the server increment, and both keep the inclusive endpoints", () => {
   const selection = choosePeriod(data, { kind: "peak", gridIndex: 1600 });
+  assert.equal(selection.fineStep, selection.step! / FINE_TUNE_DIVISIONS);
   assert.equal(
     stepPeriod(selection, 1),
+    selection.periodDays + selection.fineStep!,
+  );
+  assert.equal(
+    stepPeriod(selection, 1, true),
     selection.periodDays + selection.step!,
   );
   assert.equal(
@@ -119,12 +125,39 @@ test("step and pointer adjustments use server increment, preserve both inclusive
   assert.equal(sliderPeriod(selection, selection.minimum), selection.minimum);
   assert.equal(sliderPeriod(selection, selection.maximum), selection.maximum);
   let current = selection;
-  for (let i = 0; i < 100; i++)
+  for (let i = 0; i < 1000; i++)
     current = fineTunePeriod(current, stepPeriod(current, 1));
   assert.equal(current.periodDays, selection.maximum);
-  for (let i = 0; i < 100; i++)
+  for (let i = 0; i < 1000; i++)
     current = fineTunePeriod(current, stepPeriod(current, -1));
   assert.equal(current.periodDays, selection.minimum);
+  current = selection;
+  for (let i = 0; i < 100; i++)
+    current = fineTunePeriod(current, stepPeriod(current, 1, true));
+  assert.equal(current.periodDays, selection.maximum);
+});
+
+test("fine tuning resolves below the fourth decimal and leaves the peak period and server cells on the grid", () => {
+  const selection = choosePeriod(data, { kind: "peak", gridIndex: 1600 });
+  assert.ok(
+    selection.fineStep! < 1e-4,
+    `조정 간격 ${selection.fineStep}일은 1e-4일보다 촘촘해야 한다.`,
+  );
+  // 앵커(봉우리 원래 주기)는 스냅 기준이므로 그대로 남는다.
+  assert.equal(
+    sliderPeriod(selection, selection.anchorPeriodDays + selection.fineStep! / 4),
+    selection.anchorPeriodDays,
+  );
+  // 서버 격자 한 칸도 정확히 닿는다.
+  const cell = selection.anchorPeriodDays + selection.step!;
+  assert.ok(Math.abs(sliderPeriod(selection, cell) - cell) < 1e-12);
+  // 인접한 두 미세 단계는 서로 다른 값이다.
+  const a = sliderPeriod(selection, selection.anchorPeriodDays);
+  const b = sliderPeriod(
+    selection,
+    selection.anchorPeriodDays + selection.fineStep!,
+  );
+  assert.ok(b > a);
 });
 
 test("effective range intersects server peak limits with the full grid without rewriting server metadata", () => {

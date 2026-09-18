@@ -32,6 +32,7 @@ function change(
       minimum: 1.5,
       maximum: 2.5,
       step: 0.01,
+      fineStep: 0.01 / 128,
     },
   };
 }

@@ -1,57 +1,46 @@
+import { openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
-
 const panelName = "반복 주기 그래프";
-test("full/detail view supports keyboard, rank inspection and arbitrary grid lookup without new requests", async ({
+test("single chart supports keyboard zoom, pan and peak inspection without requests or selection", async ({
   page,
 }) => {
   const requests: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes("/api/v1/stars/")) requests.push(request.url());
+  page.on("request", (r) => {
+    if (r.url().includes("/api/v1/stars/")) requests.push(r.url());
   });
   await page.goto("/analysis/259377024");
-  const panel = page.getByRole("region", { name: panelName, exact: true });
-  const plot = panel.getByRole("group", { name: "주기도 그래프", exact: true });
+  const panel = page.getByRole("region", { name: panelName, exact: true }),
+    plot = panel.getByRole("group", { name: "주기도 그래프", exact: true });
   await expect(plot).toHaveAttribute("data-point-count", "5000");
+  await expect(panel.locator("canvas")).toHaveCount(1);
   await expect(
-    panel
-      .getByRole("region", { name: "추천 봉우리 목록" })
-      .getByRole("listitem"),
+    panel.getByRole("button", { name: /위 봉우리 선택/ }),
   ).toHaveCount(3);
-  await expect(
-    panel.getByRole("region", { name: "이미 매칭한 주기 목록" }),
-  ).toContainText("3.25일");
-  await expect(panel).toContainText("60일 초과");
-  expect(await panel.locator("canvas").count()).toBe(2);
   const count = requests.length;
-  await plot.focus();
-  await page.keyboard.press("+");
-  await expect(panel.getByTestId("periodogram-zoom")).toHaveText("×2");
-  const low = Number(await plot.getAttribute("data-view-start"));
-  await page.keyboard.press("ArrowRight");
+  await plot.press("+");
+  await expect(page.getByTestId("periodogram-zoom")).toHaveText("×2");
+  const before = Number(await plot.getAttribute("data-view-start"));
+  await plot.press("ArrowRight");
   expect(Number(await plot.getAttribute("data-view-start"))).toBeGreaterThan(
-    low,
+    before,
   );
-  await page.keyboard.press("Home");
-  await page.keyboard.press("ArrowDown");
-  await expect(panel.getByTestId("periodogram-readout")).toContainText(
-    "격자 0 · 주기 0.5일",
+  await plot.press("Home");
+  await plot.press("ArrowDown");
+  await expect(page.getByTestId("periodogram-readout")).toContainText(
+    "주기 0.5일",
   );
-  await panel.getByRole("button", { name: "1위 봉우리 위치 보기" }).click();
-  await expect(panel.getByTestId("periodogram-zoom")).toHaveText("×8");
-  await expect(panel.getByTestId("periodogram-readout")).toContainText(
-    "격자 3600",
-  );
-  await panel.getByLabel("조회할 격자 번호", { exact: true }).fill("1234");
   await panel
-    .getByRole("button", { name: "격자 값 확인", exact: true })
-    .click();
-  await expect(panel.getByTestId("periodogram-readout")).toContainText(
-    "격자 1234",
+    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+    .focus();
+  await expect(page.getByTestId("periodogram-readout")).toContainText("power");
+  await expect(page.getByTestId("selected-period")).not.toHaveAttribute(
+    "data-period",
   );
-  await panel.getByRole("button", { name: "전체 보기", exact: true }).click();
-  await expect(
-    panel.getByRole("button", { name: "축소", exact: true }),
-  ).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("periodogram-readout")).toHaveCount(0);
+  await panel
+    .getByRole("button", { name: "주기도 전체 보기", exact: true })
+    .click();
   await expect(plot).toHaveAttribute("data-view-start", "0");
   expect(requests.length).toBe(count);
 });
@@ -185,7 +174,8 @@ test("refresh unmounts the previous chart and route departure cannot accept a la
   const panel = page.getByRole("region", { name: panelName, exact: true });
   const plot = panel.getByRole("group", { name: "주기도 그래프", exact: true });
   await expect(plot).toBeVisible();
-  await panel.getByRole("button", { name: "확대", exact: true }).click();
+  await plot.press("+");
+  await openData(page);
   await page
     .getByRole("button", { name: "최신 자료 확인", exact: true })
     .click();
@@ -201,10 +191,12 @@ test("refresh unmounts the previous chart and route departure cannot accept a la
       await route.continue().catch(() => {});
     },
   );
+  await openData(page);
   await page
     .getByRole("button", { name: "최신 자료 확인", exact: true })
     .click();
   await expect(panel).toContainText("불러오고 있습니다…");
+  await page.locator(".analysis-fixture-details summary").click();
   await page
     .getByRole("link", { name: "주기도 오류 샘플", exact: true })
     .click();

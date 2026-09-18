@@ -1,18 +1,25 @@
+import {
+  selectPeak,
+  beginRange,
+  tune,
+  showJudgment,
+  rangeStage,
+  openMemo,
+} from "../analysis-ui";
 import { expect, test, type Page } from "@playwright/test";
 
-async function select(page: Page) {
+async function select(page: Page, revealMemo = true) {
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
-    .click();
+  await selectPeak(page, 1);
+  await beginRange(page);
+  if (revealMemo) await showJudgment(page);
+  else
+    await page
+      .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
+      .click();
 }
 async function review(page: Page) {
+  await openMemo(page);
   await page.getByRole("radio", { name: "모르겠음", exact: true }).check();
   await page.getByRole("checkbox", { name: "홀짝 깊이", exact: true }).check();
   await page
@@ -48,6 +55,8 @@ test("cancelled range editing restores review; clear retains writing and reload 
     name: "위상 구간 끝",
     exact: true,
   });
+  await rangeStage(page);
+  const before = await handle.getAttribute("aria-valuenow");
   await handle.scrollIntoViewIfNeeded();
   const box = (await handle.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -56,8 +65,15 @@ test("cancelled range editing restores review; clear retains writing and reload 
   await expect(page.getByTestId("candidate-review")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.mouse.up();
+  await expect(handle).toHaveAttribute("aria-valuenow", before!);
+  await showJudgment(page);
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
   await expect(page.getByTestId("candidate-review")).toBeVisible();
-  await page.getByRole("button", { name: "구간 지우기", exact: true }).click();
+  await rangeStage(page);
+  await page
+    .locator(".chart-actions")
+    .getByRole("button", { name: "구간 지우기", exact: true })
+    .click();
   await expect(page.getByLabel("메모 (선택)", { exact: true })).toHaveValue(
     /🌌/,
   );
@@ -74,12 +90,20 @@ test("gated keyboard flow, required judgment, review and back preserve input wit
   });
   await page.goto("/analysis/259377024");
   await expect(
-    page.getByRole("radio", { name: "행성 같음", exact: true }),
+    page.getByRole("radio", {
+      name: "행성 같음",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "제출값 확인", exact: true }),
+    page.getByRole("button", {
+      name: "제출값 확인",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
-  await select(page);
+  await select(page, false);
   const planet = page.getByRole("radio", { name: "행성 같음", exact: true });
   await expect(planet).toBeFocused();
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
@@ -100,15 +124,21 @@ test("gated keyboard flow, required judgment, review and back preserve input wit
   await expect(summary).toContainText("홀짝 깊이");
   await expect(summary).toContainText("🌌");
   await expect(
-    summary.getByRole("button", { name: "제출", exact: true }),
+    summary.getByRole("button", { name: "제출하기 · 연결 예정", exact: true }),
   ).toBeDisabled();
   await expect(page.locator('[aria-current="step"]')).toContainText(
     "제출값 확인",
   );
-  await page.getByRole("button", { name: "판단 수정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "판단·메모 수정 →", exact: true })
+    .click();
   await expect(planet).toBeFocused();
   await expect(
-    page.getByRole("radio", { name: "모르겠음", exact: true }),
+    page.getByRole("radio", {
+      name: "모르겠음",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeChecked();
   await expect(page.getByLabel("메모 (선택)", { exact: true })).toHaveValue(
     /🌌/,
@@ -132,6 +162,7 @@ test("view changes preserve review; phase edits retain writing but require confi
     name: "위상 구간 끝",
     exact: true,
   });
+  await rangeStage(page);
   await handle.focus();
   await handle.press("ArrowRight");
   await expect(page.getByTestId("candidate-review")).toHaveCount(0);
@@ -139,16 +170,16 @@ test("view changes preserve review; phase edits retain writing but require confi
   await expect(memo).toBeDisabled();
   await expect(memo).toHaveValue(/🌌/);
   await expect(
-    page.getByRole("radio", { name: "모르겠음", exact: true }),
+    page.getByRole("radio", {
+      name: "모르겠음",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeChecked();
-  await page
-    .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
-    .click();
+  await showJudgment(page);
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
   await expect(page.getByTestId("candidate-review")).toBeVisible();
-  await page
-    .getByRole("button", { name: "한 간격 늘리기", exact: true })
-    .click();
+  await tune(page, "ArrowRight");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "true",
@@ -156,10 +187,18 @@ test("view changes preserve review; phase edits retain writing but require confi
   await expect(memo).toHaveValue("");
   await expect(memo).toBeDisabled();
   await expect(
-    page.getByRole("radio", { name: "모르겠음", exact: true }),
+    page.getByRole("radio", {
+      name: "모르겠음",
+      exact: true,
+      includeHidden: true,
+    }),
   ).not.toBeChecked();
   await expect(
-    page.getByRole("checkbox", { name: "홀짝 깊이", exact: true }),
+    page.getByRole("checkbox", {
+      name: "홀짝 깊이",
+      exact: true,
+      includeHidden: true,
+    }),
   ).not.toBeChecked();
 });
 for (const outcome of ["failure", "cancel"] as const)
@@ -200,9 +239,7 @@ for (const outcome of ["failure", "cancel"] as const)
     await review(page);
     const summary = page.getByTestId("candidate-review");
     const before = await summary.locator("dl").textContent();
-    await page
-      .getByRole("button", { name: "한 간격 늘리기", exact: true })
-      .click();
+    await tune(page, "ArrowRight");
     await expect(summary).toHaveCount(0);
     await expect(
       page.getByLabel("메모 (선택)", { exact: true }),
@@ -211,8 +248,19 @@ for (const outcome of ["failure", "cancel"] as const)
       await page
         .getByRole("button", { name: "접기 취소", exact: true })
         .click();
+    await expect(page.getByTestId("fold-panel")).toHaveAttribute(
+      "data-fold-ready",
+      "true",
+    );
+    await rangeStage(page);
+    await showJudgment(page);
+    await page
+      .getByRole("button", { name: "제출값 확인", exact: true })
+      .click();
     await expect(summary.locator("dl")).toHaveText(before!);
-    await page.getByRole("button", { name: "판단 수정", exact: true }).click();
+    await page
+      .getByRole("button", { name: "판단·메모 수정 →", exact: true })
+      .click();
     await expect(page.getByLabel("메모 (선택)", { exact: true })).toHaveValue(
       /🌌/,
     );

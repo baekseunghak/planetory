@@ -132,7 +132,7 @@ for (const dpr of [1, 2])
         const offset = (y * width + x) * 4;
         assert.deepEqual(
           Array.from(image.data.slice(offset, offset + 3)),
-          [166, 232, 206],
+          [238, 238, 238], // 은하 스타일의 관측점 색 (--fg 238,238,238)
         );
         assert.ok(image.data[offset + 3] > 0);
         shown++;

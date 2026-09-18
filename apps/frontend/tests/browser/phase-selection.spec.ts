@@ -1,3 +1,4 @@
+import { selectPeak, beginRange, rangeStage, tune } from "../analysis-ui";
 import { expect, test, type Page } from "@playwright/test";
 
 const plot = (page: Page) =>
@@ -9,15 +10,14 @@ const handle = (page: Page, end = false) =>
   });
 async function open(page: Page) {
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "true",
   );
 }
 async function draw(page: Page, start: number, end: number) {
+  await rangeStage(page);
   await plot(page).scrollIntoViewIfNeeded();
   const box = (await plot(page).boundingBox())!;
   const low = Number(await plot(page).getAttribute("data-view-start"));
@@ -38,9 +38,7 @@ test("keyboard steps follow view width, Shift is ten steps, focus and Canvas are
   page.on("request", (request) => {
     if (request.url().includes("/api/")) calls.push(request.url());
   });
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   await expect(handle(page)).toBeFocused();
   const initial = Number(await handle(page).getAttribute("aria-valuenow"));
   await handle(page).press("ArrowLeft");
@@ -54,9 +52,7 @@ test("keyboard steps follow view width, Shift is ten steps, focus and Canvas are
     12,
   );
   await expect(plot(page)).toHaveAttribute("data-view-start", "-0.5");
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   await plot(page).focus();
   for (let i = 0; i < 5; i++) await plot(page).press("+");
   const start = Number(await handle(page).getAttribute("aria-valuenow"));
@@ -113,8 +109,8 @@ test("either repeated cycle and reverse dragging normalize a boundary crossing w
   expect(Number(await value.getAttribute("data-end"))).toBeCloseTo(last, 2);
   const selected = await value.getAttribute("data-start");
   await page
-    .getByRole("button", { name: "접힌 곡선 확대", exact: true })
-    .click();
+    .getByRole("group", { name: "접힌 곡선 그래프", exact: true })
+    .press("+");
   await expect(value).toHaveAttribute("data-start", selected!);
   await page
     .getByRole("button", { name: "접힌 곡선 전체 보기", exact: true })
@@ -134,9 +130,7 @@ test("invalid widths remain editable, Escape and pointer cancel restore the prev
   await expect(page.getByTestId("phase-selection-status")).toContainText(
     "최소·최대 폭",
   );
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   const previous = await handle(page).getAttribute("aria-valuenow");
   for (const cancellation of ["Escape", "pointercancel"]) {
     await handle(page).scrollIntoViewIfNeeded();
@@ -149,7 +143,10 @@ test("invalid widths remain editable, Escape and pointer cancel restore the prev
     await page.mouse.up();
     await expect(handle(page)).toHaveAttribute("aria-valuenow", previous!);
   }
-  await page.getByRole("button", { name: "구간 지우기", exact: true }).click();
+  await page
+    .locator(".chart-actions")
+    .getByRole("button", { name: "구간 지우기", exact: true })
+    .click();
   await expect(handle(page)).toHaveCount(0);
   await expect(page.getByTestId("phase-selection-value")).toContainText(
     "아직 선택한 구간",
@@ -170,9 +167,7 @@ test("pointer handles resize without losing the grab offset and keep both target
 }) => {
   await page.setViewportSize({ width: 1024, height: 844 });
   await open(page);
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   await plot(page).focus();
   for (let i = 0; i < 5; i++) await plot(page).press("+");
   await handle(page, true).scrollIntoViewIfNeeded();
@@ -207,7 +202,11 @@ test("missing selection rules disable only the selection UI, not the folded curv
   await open(page);
   await expect(plot(page).locator("canvas")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "구간 선택 시작", exact: true }),
+    page.getByRole("button", {
+      name: "구간 선택 시작",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(page.getByTestId("phase-selection-status")).not.toBeEmpty();
 });
@@ -291,9 +290,7 @@ test("Shift pan supports cancellation and clamps the view; Shift on a handle sti
   await page.keyboard.up("Shift");
   await expect(plot(page)).toHaveAttribute("data-view-start", "-0.5");
   await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   await handle(page, true).scrollIntoViewIfNeeded();
   const endBefore = await handle(page, true).getAttribute("aria-valuenow");
   const endBox = (await handle(page, true).boundingBox())!;
@@ -349,9 +346,7 @@ test("refolding locks selection, failure restores it, successful retry clears it
     };
   });
   await open(page);
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await beginRange(page);
   const before = await handle(page).getAttribute("aria-valuenow");
   await plot(page)
     .locator("canvas")
@@ -363,14 +358,18 @@ test("refolding locks selection, failure restores it, successful retry clears it
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x - 10, box.y + box.height / 2);
-  await page
-    .getByRole("button", { name: "한 간격 늘리기", exact: true })
-    .press("Enter");
+  await page.mouse.up();
+  await tune(page);
   await expect(handle(page)).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "구간 선택 시작", exact: true }),
+    page.getByRole("button", {
+      name: "구간 선택 시작",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(page.getByTestId("fold-status")).toContainText("접기에 실패");
+  await rangeStage(page);
   await expect(handle(page)).toBeEnabled();
   await expect(handle(page)).toHaveAttribute("aria-valuenow", before!);
   await page.mouse.up();

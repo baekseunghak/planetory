@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { candidatePeaksFixture } from "../../dev/periodogram-fixtures";
+import { FINE_TUNE_DIVISIONS } from "../../src/features/analysis/period-selection";
 
 const url = "/analysis/259377024?foldRenderer=webgl";
 const plot = (page: Page) =>
@@ -15,6 +16,7 @@ async function open(page: Page) {
     "data-fold-ready",
     "true",
   );
+  await page.locator(".fold-renderer-controls summary").click();
 }
 async function gpu(page: Page) {
   await expect(page.getByTestId("fold-renderer-status")).toHaveText(
@@ -107,10 +109,8 @@ test("GPU integration preserves rapid tuning, view, inspection and releases reso
   // Actual input events, without waiting for each fold to complete.
   for (let i = 0; i < 8; i++)
     await page
-      .getByRole("button", {
-        name: i % 2 ? "한 간격 줄이기" : "한 간격 늘리기",
-      })
-      .click();
+      .getByRole("slider", { name: "반복 주기 미세 조정" })
+      .press(i % 2 ? "ArrowLeft" : "ArrowRight");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "true",
@@ -149,7 +149,7 @@ test("GPU integration preserves rapid tuning, view, inspection and releases reso
   expect((await read()).active).toBe(0);
   await select(page).selectOption("webgl");
   await gpu(page);
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(plot(page)).toHaveCount(0);
   expect((await read()).active).toBe(0);
 });
@@ -219,11 +219,13 @@ for (const failure of ["unavailable", "shader", "lost", "module"] as const)
           .data.some((v) => v !== 0),
       );
     expect(visible).toBe(true);
-    await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    await page
+      .getByRole("slider", { name: "반복 주기 미세 조정" })
+      .press("ArrowRight");
     const peak = candidatePeaksFixture().peaks[0];
     await expect(page.getByTestId("fold-result")).toHaveAttribute(
       "data-period",
-      String(peak.periodDays + peak.fineTune.periodStepDays),
+      String(peak.periodDays + peak.fineTune.periodStepDays / FINE_TUNE_DIVISIONS),
     );
     await expect(plot(page).locator("canvas")).toHaveAttribute(
       "data-renderer",
@@ -255,7 +257,9 @@ test("GPU pending cancellation and retry preserve the last successful view", asy
   await plot(page).press("+");
   await plot(page).press("ArrowLeft");
   const before = await snapshot(page);
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await page
+    .getByRole("slider", { name: "반복 주기 미세 조정" })
+    .press("ArrowRight");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "false",
