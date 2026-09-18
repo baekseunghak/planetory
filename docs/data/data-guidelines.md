@@ -59,7 +59,7 @@ EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2
 
 > 이 백업은 같은 HDFS 클러스터 안의 복사본입니다. EC2 릴리스 삭제·손상은 복구할 수 있지만, HDFS 클러스터 전체 손실과 NameNode 메타데이터 손실은 보호하지 않습니다.
 
-약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum과 묶음 위치를 기록합니다. 원본을 삭제하거나 컬럼을 제거하지 않습니다.
+약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum, 묶음 위치, SequenceFile key와 레코드 시작·끝 offset을 기록합니다. key·offset으로 꺼낸 바이트가 원본 checksum과 일치해야 하며 원본을 삭제하거나 컬럼을 제거하지 않습니다.
 
 ## PostgreSQL Gold 공개
 

@@ -2,6 +2,8 @@
 
 TESS와 외부 카탈로그 원천을 탐색하고 다운로드한 뒤 검증한다. 입력 버전, 파일 크기와 checksum을 확인한 데이터만 후속 HDFS Raw 적재 대상으로 넘긴다. 실제 원천 데이터, 실행 manifest와 자격 증명은 Git에 넣지 않는다.
 
+감사 완료 파일의 SequenceFile bundle·manifest·원본 복원과 HDFS 원자 확정 절차는 [TESS HDFS Raw 적재](hdfs/README.md)를 따른다.
+
 ## TESS SPOC 2분 Light Curve 수집
 
 `S15P21C206-75`의 승인 범위는 Sector 3·4·5, 총 55,986개다. 공식 MAST bulk script에서 실행 시점의 목록을 다시 만들며 목록 전체를 Git에 커밋하지 않는다. 설정은 [service-v1.json](config/service-v1.json)에 둔다.
