@@ -273,6 +273,11 @@ class AuthIntegrationTest {
                         .contentType("application/json").content("{\"starListVisibility\":\"PUBLIC\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PUBLIC"));
         mvc.perform(get("/api/v1/members/" + id + "/stars").session(viewer)).andExpect(status().isOk());
+        jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"));
+        assertFalse(jdbc.queryForObject("SELECT star_list_public FROM user_settings WHERE user_id = ?", Boolean.class, id));
         for (String value : List.of("public", "HIDDEN", "")) {
             mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
                             .contentType("application/json").content("{\"starListVisibility\":\"" + value + "\"}"))
