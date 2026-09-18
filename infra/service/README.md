@@ -35,4 +35,11 @@ GRANT planetory_app TO planetory_service;
 REVOKE CREATE ON SCHEMA public FROM planetory_service;
 ```
 
-Spring Boot 4는 `spring.flyway.user`만으로는 별도 연결을 만들지 않고 datasource를 그대로 쓴다. `application.properties`가 `spring.flyway.url`을 함께 지정하는 이유이며, 이 줄을 지우면 분리한 것처럼 보이지만 실제로는 소유자로 마이그레이션과 런타임이 모두 돈다. 단일 계정 환경에서는 드러나지 않는다.
+`application.properties`는 Flyway에 계정만 지정한다. `spring.flyway.user`가 설정되면 Boot가 런타임 연결 주소를 가져다 별도 연결을 만들므로 `spring.flyway.url`은 두지 않는다. 주소를 설정 문자열로 박아두면 Testcontainers의 `@ServiceConnection`처럼 문자열 없이 연결을 바꾸는 테스트에서 앱과 Flyway가 서로 다른 DB를 보게 된다.
+
+```properties
+spring.flyway.user=${DATABASE_MIGRATION_USER:${spring.datasource.username}}
+spring.flyway.password=${DATABASE_MIGRATION_PASSWORD:${spring.datasource.password}}
+```
+
+대체값이 런타임 연결 설정을 따라가므로, `DATABASE_MIGRATION_*`를 주지 않는 환경(로컬 개발·테스트)은 마이그레이션과 런타임이 같은 계정을 쓰고 동작이 바뀌지 않는다. 계정 분리는 `DATABASE_MIGRATION_*`를 줄 때만 성립한다.
