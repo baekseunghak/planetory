@@ -14,18 +14,17 @@ import {
   judgmentLabels,
   judgments,
   readAnalyses,
-  readComments,
   readFeed,
   readPost,
   readThread,
   type Author,
-  type CommentPage,
-  type CursorPage,
   type Summary,
 } from "./contracts";
 import { useReadModel } from "./useReadModel";
 import { usePageScroll } from "./usePageScroll";
 import "./community.css";
+import { Pager } from "./CommunityPagination";
+import { Discussion } from "./Discussion";
 import { PostActions } from "./PostActions";
 
 function DateTime({ value }: { value: string }) {
@@ -60,61 +59,6 @@ function StarLink({ ticId }: { ticId: string }) {
     <Link className="community-tic" to={pagePath("starBoard", { ticId })}>
       TIC {ticId}
     </Link>
-  );
-}
-function Pager({
-  page,
-  name,
-  label,
-}: {
-  page: CursorPage<unknown>;
-  name: string;
-  label: string;
-}) {
-  const location = useLocation();
-  const search = new URLSearchParams(location.search);
-  const cursor = search.get(name);
-  const raw: unknown = location.state?.communityCursors?.[name];
-  const trail: string[] =
-    Array.isArray(raw) && raw.every((item) => typeof item === "string")
-      ? raw
-      : [];
-  const target = (value: string | null) => {
-    const next = new URLSearchParams(search);
-    if (value) next.set(name, value);
-    else next.delete(name);
-    return location.pathname + (next.size ? `?${next}` : "");
-  };
-  const state = (values: string[]) => ({
-    ...location.state,
-    communityCursors: { ...location.state?.communityCursors, [name]: values },
-  });
-  return (
-    <nav className="community-pagination" aria-label={label}>
-      {cursor && (
-        <Link to={target(null)} state={state([])}>
-          처음 페이지
-        </Link>
-      )}
-      {trail.length > 0 && (
-        <Link
-          to={target(trail[trail.length - 1])}
-          state={state(trail.slice(0, -1))}
-        >
-          이전 페이지
-        </Link>
-      )}
-      {page.hasNext ? (
-        <Link
-          to={target(page.nextCursor)}
-          state={state([...trail, cursor ?? ""])}
-        >
-          다음 페이지 →
-        </Link>
-      ) : (
-        <span>마지막 페이지</span>
-      )}
-    </nav>
   );
 }
 function ReadState({
@@ -284,45 +228,8 @@ function DetailBack() {
     </Link>
   );
 }
-function Discussion({ comments }: { comments: CommentPage }) {
-  return (
-    <section className="community-discussion" aria-label="토론">
-      <h2>토론</h2>
-      {!comments.items.length && (
-        <p className="community-empty">아직 토론이 없습니다.</p>
-      )}
-      <ul className="community-comments">
-        {comments.items.map((item) => (
-          <li key={item.commentId}>
-            <div className="community-row-meta">
-              <AuthorLink author={item.author} />
-              <DateTime value={item.createdAt} />
-              {item.updatedAt !== item.createdAt && <span>수정됨</span>}
-            </div>
-            <p className="community-body">{item.body}</p>
-          </li>
-        ))}
-      </ul>
-      <Pager page={comments} name="discussionCursor" label="토론 페이지" />
-    </section>
-  );
-}
-function commentPath(
-  type: "POST" | "SIGNAL_THREAD",
-  id: string,
-  cursor: string | null,
-) {
-  return endpoint("/v1/comments", {
-    parentType: type,
-    parentId: id,
-    size: "20",
-    cursor,
-  });
-}
 export function PostPage() {
   const { postId = "" } = useParams<"postId">();
-  const [search] = useSearchParams();
-  const cursor = search.get("discussionCursor");
   const path = `/v1/posts/${encodeURIComponent(postId)}`;
   const [denied, setDenied] = useState<{ id: string; error: Error } | null>(
     null,
@@ -335,15 +242,11 @@ export function PostPage() {
     async (signal: AbortSignal) => {
       const post = readPost(await api(path, { signal }));
       assertIdentity(post.postId, postId);
-      const comments = readComments(
-        await api(commentPath("POST", postId, cursor), { signal }),
-        cursor,
-      );
-      return { post, comments };
+      return { post };
     },
-    [path, postId, cursor],
+    [path, postId],
   );
-  const state = useReadModel(`${path}:${cursor}`, load);
+  const state = useReadModel(path, load);
   usePageScroll(!state.loading);
   return (
     <div className="community-page community-detail">
@@ -355,7 +258,10 @@ export function PostPage() {
         onUnavailable={onUnavailable}
       />
       {denied?.id === postId ? (
-        <ErrorState error={denied.error} />
+        <ErrorState
+          retry={() => window.location.reload()}
+          error={denied.error}
+        />
       ) : !state.data ? (
         <ReadState state={state} />
       ) : (
@@ -383,9 +289,14 @@ export function PostPage() {
               {state.data.post.body}
             </p>
           </article>
-          <Discussion comments={state.data.comments} />
         </>
       )}
+      <Discussion
+        key={`comments:${postId}`}
+        parent={{ parentType: "POST", parentId: postId }}
+        active={denied?.id !== postId && !!state.data}
+        onUnavailable={onUnavailable}
+      />
     </div>
   );
 }
@@ -441,35 +352,33 @@ export function SignalThreadPage() {
   const location = useLocation();
   const selected =
     judgments.find((value) => value === search.get("judgment")) ?? null;
-  const cursor = search.get("analysesCursor"),
-    discussionCursor = search.get("discussionCursor");
+  const cursor = search.get("analysesCursor");
   const path = `/v1/signal-threads/${encodeURIComponent(threadId)}`;
+  const [denied, setDenied] = useState<{ id: string; error: Error } | null>(
+    null,
+  );
+  const onUnavailable = useCallback(
+    (error: Error) => setDenied({ id: threadId, error }),
+    [threadId],
+  );
   const load = useCallback(
     async (signal: AbortSignal) => {
       const thread = readThread(await api(path, { signal }));
       assertIdentity(thread.threadId, threadId);
       // A hidden/missing parent never renders child data, including partial successes.
-      const [analyses, comments] = await Promise.all([
-        api(
-          endpoint(`${path}/analyses`, {
-            judgment: selected,
-            cursor,
-            size: "20",
-          }),
-          { signal },
-        ).then((value) => readAnalyses(value, cursor)),
-        api(commentPath("SIGNAL_THREAD", threadId, discussionCursor), {
-          signal,
-        }).then((value) => readComments(value, discussionCursor)),
-      ]);
-      return { thread, analyses, comments };
+      const analyses = await api(
+        endpoint(`${path}/analyses`, {
+          judgment: selected,
+          cursor,
+          size: "20",
+        }),
+        { signal },
+      ).then((value) => readAnalyses(value, cursor));
+      return { thread, analyses };
     },
-    [path, threadId, selected, cursor, discussionCursor],
+    [path, threadId, selected, cursor],
   );
-  const state = useReadModel(
-    `${path}:${selected}:${cursor}:${discussionCursor}`,
-    load,
-  );
+  const state = useReadModel(`${path}:${selected}:${cursor}`, load);
   usePageScroll(!state.loading);
   const filterLink = (value: string | null) => {
     const next = new URLSearchParams(search);
@@ -481,7 +390,12 @@ export function SignalThreadPage() {
   return (
     <div className="community-page community-detail">
       <DetailBack />
-      {!state.data ? (
+      {denied?.id === threadId ? (
+        <ErrorState
+          retry={() => window.location.reload()}
+          error={denied.error}
+        />
+      ) : !state.data ? (
         <ReadState state={state} />
       ) : (
         <>
@@ -567,9 +481,14 @@ export function SignalThreadPage() {
               label="공개 분석 페이지"
             />
           </section>
-          <Discussion comments={state.data.comments} />
         </>
       )}
+      <Discussion
+        key={threadId}
+        parent={{ parentType: "SIGNAL_THREAD", parentId: threadId }}
+        active={denied?.id !== threadId && !!state.data}
+        onUnavailable={onUnavailable}
+      />
     </div>
   );
 }

@@ -201,7 +201,7 @@ function readAnalysis(value: unknown) {
 }
 export const readAnalyses = (value: unknown, cursor?: string | null) =>
   readPage(value, readAnalysis, (item) => item.analysisId, cursor);
-function readComment(value: unknown) {
+export function readComment(value: unknown) {
   const row = object(value);
   return {
     commentId: text(row.commentId),

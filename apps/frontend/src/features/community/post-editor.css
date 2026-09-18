@@ -78,3 +78,29 @@
 .post-dialog::backdrop {
   background: #000a;
 }
+
+.comment-editor {
+  margin-block: 1.5rem 2rem;
+  padding-block: 1.5rem;
+  border-block: 1px solid #ffffff20;
+}
+.comment-editor textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 7rem;
+  padding: 1rem;
+  color: inherit;
+  background: #0c1420;
+  border: 1px solid #ffffff40;
+  border-radius: 0.4rem;
+  font: inherit;
+  resize: vertical;
+}
+.comment-editor p {
+  line-height: 1.7;
+}
+.comment-editor label {
+  display: block;
+  margin-bottom: 0.5rem;
+}

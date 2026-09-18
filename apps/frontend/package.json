@@ -16,7 +16,7 @@
     "test:browser": "playwright test --project=chromium",
     "test:browser:desktop": "playwright test --project=chrome --project=msedge --project=firefox",
     "test:production": "playwright test --config=playwright.production.config.ts",
-    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback && npm run test:quests && npm run test:community && npm run test:posts",
+    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback && npm run test:quests && npm run test:community && npm run test:posts && npm run test:comments",
     "format": "prettier --write src dev tests scripts docs *.ts *.json *.html *.md",
     "format:check": "prettier --check src dev tests scripts docs *.ts *.json *.html *.md",
     "dev:auth": "vite --mode auth --host 127.0.0.1 --port 58268 --strictPort",
@@ -39,7 +39,9 @@
     "dev:community": "vite --mode community --host 127.0.0.1 --port 58346 --strictPort",
     "test:community": "playwright test --config=playwright.community.config.ts --project=chromium",
     "dev:posts": "vite --mode posts --host 127.0.0.1 --port 58348 --strictPort",
-    "test:posts": "playwright test --config=playwright.posts.config.ts --project=chromium"
+    "test:posts": "playwright test --config=playwright.posts.config.ts --project=chromium",
+    "dev:comments": "vite --mode comments --host 127.0.0.1 --port 58350 --strictPort",
+    "test:comments": "playwright test --config=playwright.comments.config.ts --project=chromium"
   },
   "dependencies": {
     "react": "19.2.8",
