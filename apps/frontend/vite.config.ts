@@ -24,7 +24,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const observations = fixture && mode === "observations";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
-  const galaxyFixture = command === "serve" && !isPreview && ["galaxy", "interaction"].includes(mode);
+  const galaxyFixture =
+    command === "serve" &&
+    !isPreview &&
+    ["galaxy", "interaction"].includes(mode);
   const communityFixture =
     command === "serve" &&
     !isPreview &&
@@ -35,6 +38,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "reactions",
       "materials",
       "profiles",
+      "search",
     ].includes(mode);
   const profileFixture =
     command === "serve" && !isPreview && mode === "profiles"
@@ -92,6 +96,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
               ["reactions", "materials", "profiles"].includes(mode),
               ["materials", "profiles"].includes(mode),
               profileFixture?.nickname,
+              mode === "search",
             ),
           ]
         : []),

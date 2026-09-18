@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { searchFixtureFeed } from "./search-fixture.ts";
 
 // Development HTTP samples only. Imported exclusively by Vite serve mode.
 const date = "2026-09-18T01:00:00Z";
@@ -81,6 +82,7 @@ export function communityFixturePlugin(
   reactionWrites = false,
   materialWrites = false,
   currentNickname?: () => string,
+  searchable = false,
 ): Plugin {
   const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
     const ids = input.historyIds ?? [],
@@ -108,6 +110,25 @@ export function communityFixturePlugin(
     );
   };
   const records = structuredClone(posts);
+  if (searchable) {
+    records.push(
+      ...Array.from({ length: 20 }, (_, index) => ({
+        ...structuredClone(posts[index]),
+        postId: `p-${225 + index}`,
+      })),
+    );
+    records[0] = {
+      ...records[0],
+      title: "TOI-270 · 10%_ 감소 + A&B",
+      body: "빛 감소 기록입니다. 두  공백을 유지합니다.",
+      purposeTag: "QUESTION",
+      author: { memberId: "u-orbit-217", nickname: "Orbit" },
+      createdAt: "2026-09-19T01:00:00Z",
+    };
+    records[1].title = "TOI-270 자유 이야기";
+    records[1].purposeTag = "GENERAL";
+  }
+  const unavailable = new Set(searchable ? ["p-223", "p-224", "st-302"] : []);
   const materialPayload = (
     input: Record<string, unknown>,
     previous?: { attachments: unknown[]; sourceLinks: unknown[] },
@@ -194,17 +215,19 @@ export function communityFixturePlugin(
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: currentNickname
-            ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
-            : materialWrites
-              ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
-              : reactionWrites
-                ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
-                : commentWrites
-                  ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-                  : writable
-                    ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-                    : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: searchable
+            ? "217 개발 검증용 검색 · 합성 게시글이며 실제 검색 서버 연결 전입니다"
+            : currentNickname
+              ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
+              : materialWrites
+                ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
+                : reactionWrites
+                  ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+                  : commentWrites
+                    ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+                    : writable
+                      ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                      : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -248,8 +271,10 @@ export function communityFixturePlugin(
               "judgment",
               "reaction",
               "size",
+              ...(searchable ? ["q", "searchIn", "author", "tag"] : []),
             ]
               .map((key) => url.searchParams.get(key) ?? "")
+              .map((value) => encodeURIComponent(value))
               .join("|");
           const prefix = Buffer.from(context).toString("base64url") + ":";
           const offset = cursor?.startsWith(prefix)
@@ -277,6 +302,33 @@ export function communityFixturePlugin(
             hasNext: next < items.length,
           });
         };
+        if (
+          searchable &&
+          req.method === "POST" &&
+          url.pathname.startsWith("/dev-search-217/")
+        ) {
+          if (url.pathname.endsWith("/reset")) {
+            unavailable.clear();
+            ["p-223", "p-224", "st-302"].forEach((id) => unavailable.add(id));
+            records[0].author.nickname = "Orbit";
+          } else if (url.pathname.endsWith("/hide"))
+            unavailable.add(url.searchParams.get("id") ?? "");
+          else if (url.pathname.endsWith("/nickname"))
+            records[0].author.nickname =
+              url.searchParams.get("value") ?? "NewOrbit";
+          send({ ok: true });
+          return;
+        }
+        if (searchable) {
+          const parent =
+            url.pathname.match(
+              /^\/v1\/(?:posts|signal-threads)\/([^/]+)/,
+            )?.[1] ?? url.searchParams.get("parentId");
+          if (parent && unavailable.has(parent)) {
+            missing();
+            return;
+          }
+        }
         if (
           materialWrites &&
           req.method === "GET" &&
@@ -787,6 +839,9 @@ export function communityFixturePlugin(
               type: "SIGNAL_THREAD",
               createdAt: date,
               commentCount: thread.threadId === "st-301" ? 2 : 0,
+              ...(searchable
+                ? { body: "공식 요약: 빛 변화를 확인했습니다." }
+                : {}),
             })),
             ...records.map((post) => ({
               ...post,
@@ -794,6 +849,22 @@ export function communityFixturePlugin(
               type: "POST",
             })),
           ];
+          if (searchable) {
+            const selected = searchFixtureFeed(
+              feed.filter((item) => !unavailable.has(item.id)),
+              url.searchParams,
+            );
+            if (!selected)
+              send(
+                {
+                  code: "VALIDATION_FAILED",
+                  message: "검색 조건을 확인해 주세요.",
+                },
+                400,
+              );
+            else paginate(selected);
+            return;
+          }
           paginate(
             feed.filter(
               (item) =>
