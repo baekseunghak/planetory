@@ -71,9 +71,7 @@ class StarDetailTest {
         ticId = insertStar(9.8, 5600.0, 0.95);
         bundleId = insertBundle(ticId);
         unlock(memberId, ticId, 0);
-        // submissions.rule_version이 operation_settings를 참조한다.
-        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
-                + " VALUES ('rule-0', '{}'::jsonb, now(), 'test') ON CONFLICT DO NOTHING");
+        // submissions.rule_version은 V9가 넣은 초기 규칙 rule-0을 쓴다. '{}' 같은 임의 값은 CHECK가 거절한다.
     }
 
     // ---------- 접근 ----------
