@@ -40,11 +40,15 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex San
 a{color:var(--acc-ink)}
 h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 .page{max-width:1280px;margin:0 auto;padding:40px 40px 96px}
-.head{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:22px;border-bottom:1.5px solid var(--ink)}
+.head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:24px;align-items:end;padding-bottom:22px;border-bottom:1.5px solid var(--ink)}
 .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .head h1{font-size:30px;font-weight:700;line-height:1.2}
 .head p{margin:10px 0 0;color:var(--muted);max-width:64ch}
-.meta{display:grid;grid-template-columns:auto auto;gap:4px 14px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.meta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:12.5px;color:var(--muted);max-width:44ch}
+/* 라벨은 한 줄로 두되 값은 접힌다. 개정일처럼 긴 값에 nowrap이 걸리면 min-content가
+   커져 .head의 1fr(제목) 칸을 밀어내고 페이지가 가로로 넘친다. */
+.meta dt{white-space:nowrap}
+.meta dd{margin:0;overflow-wrap:anywhere}
 .meta b{color:var(--ink);font-weight:500}
 .legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:14px 0 0;color:var(--muted);font-size:12.5px}
 .legend .item{display:inline-flex;align-items:center;gap:7px}
