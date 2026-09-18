@@ -141,3 +141,5 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
 
 최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.
+
+분석 1–5단계의 Figma 적용 범위와 조작·검증은 [분석 디자인 적용 기록](docs/analysis-design.md)을 따른다.
