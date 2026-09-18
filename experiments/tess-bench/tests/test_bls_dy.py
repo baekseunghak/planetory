@@ -80,3 +80,28 @@ def test_gate_comparison_applies_same_gates_per_method():
     assert row[("local", "snr>=7&sde>=6")]["false_peaks_per_noise_curve"] == 0.0          # local 오차가 커져 임의 피크가 게이트를 못 넘는다
     assert row[("global", "snr>=7&sde>=6")]["gated_recovery"] == row[("local", "snr>=7&sde>=6")]["gated_recovery"] == 1.0
     assert {r["gate"] for r in table} == {"none", "snr>=7", "sde>=6", "snr>=7&sde>=6"}
+
+
+def test_manifest_mismatches_detects_changed_inputs_and_params():
+    prm = {"grid_set_id": "injection_grid_v1-1.1.0", "preprocess_setting": {"window_days": 1.0, "sigma_upper": 5.0},
+           "setting_params": {"poc_linear20k": {"n_periods": 20000, "durations_hours": [1.2, 1.92, 2.88, 4.8]}}}
+    inputs = [{"role": "grid", "sha256": "g"}, {"role": "bls_settings", "sha256": "b"}, {"role": "preprocess_settings", "sha256": "p"}, {"role": "raw_product", "sha256": "x"}]
+    ok_sha = {"grid": "g", "bls_settings": "b", "preprocess_settings": "p"}
+    cur_setting = {"poc_linear20k": {"n_periods": 20000, "durations_hours": [1.2, 1.92, 2.88, 4.8], "n_durations": 4}}   # 나중에 추가된 기록 키는 무시
+    assert bls_dy.manifest_mismatches(prm, inputs, ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={"window_days": 1.0, "sigma_upper": 5.0, "extra": 1}, setting_params=cur_setting) == []
+    bad = bls_dy.manifest_mismatches(prm, inputs, {**ok_sha, "grid": "changed"}, grid_set_id="injection_grid_v1-1.2.0",
+                                     preprocess_params={"window_days": 0.5, "sigma_upper": 5.0}, setting_params={"poc_linear20k": {"n_periods": 50000}})
+    assert bad == ["sha256:grid", "grid_set_id", "preprocess:window_days", "setting:poc_linear20k:n_periods"]
+    assert "manifest_missing:preprocess_settings" in bls_dy.manifest_mismatches(prm, inputs[:2], ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={}, setting_params=cur_setting)
+    assert "setting_missing:poc_linear20k" in bls_dy.manifest_mismatches(prm, inputs, ok_sha, grid_set_id="injection_grid_v1-1.1.0", preprocess_params={}, setting_params={})
+
+
+def test_reproduction_verdict_is_per_setting_and_rejects_systematic_drift():
+    exact = [{"setting_id": "a", "snr_stored": 10.0, "snr_global": 10.0} for _ in range(18)]
+    exact += [{"setting_id": "a", "snr_stored": 10.0, "snr_global": 10.9}]                      # 위상 비닝 근사 피크 1개 (1/19 ≈ 5%)
+    drift = [{"setting_id": "b", "snr_stored": 10.0, "snr_global": 10.02} for _ in range(19)]   # 설정 전체가 0.2% 다름 → 중앙값·비율 모두 실패
+    v = {r["setting_id"]: r for r in bls_dy.reproduction_verdict(exact + drift)}
+    assert v["a"]["ok"] and v["a"]["n"] == 19 and v["a"]["fraction_over_1e-3"] == pytest.approx(1 / 19)
+    assert not v["b"]["ok"] and v["b"]["median"] == pytest.approx(0.002)
+    many = [{"setting_id": "c", "snr_stored": 10.0, "snr_global": 10.0 if i % 5 else 10.5} for i in range(20)]   # 20% 가 근사 차 → 실패
+    assert not bls_dy.reproduction_verdict(many)[0]["ok"]
