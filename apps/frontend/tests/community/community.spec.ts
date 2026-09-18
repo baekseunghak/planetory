@@ -350,3 +350,55 @@ test("post text is escaped and 1024px layout avoids horizontal overflow", async 
   await page.setViewportSize({ width: 1000, height: 900 });
   await expect(page.getByRole("heading", { name: /데스크톱/ })).toBeVisible();
 });
+
+test("tab return coalesces visibility and focus, preserves slow reads, and clears private data while hidden", async ({
+  page,
+}) => {
+  let requests = 0,
+    hold = false;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/community/feed?*", async (route) => {
+    requests++;
+    if (hold) await barrier;
+    await route.continue();
+  });
+  await page.goto("/community");
+  await expect(page.locator(".community-feed > li")).toHaveCount(20);
+  const initial = requests;
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator(".community-feed > li")).toHaveCount(0);
+  hold = true;
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect.poll(() => requests).toBe(initial + 1);
+  await page.waitForTimeout(1100);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(150);
+  expect(requests).toBe(initial + 1);
+  release();
+  await expect(page.locator(".community-feed > li")).toHaveCount(20);
+  hold = false;
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect.poll(() => requests).toBe(initial + 2);
+  await expect(page.locator(".community-feed > li")).toHaveCount(20);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(150);
+  expect(requests).toBe(initial + 2);
+});

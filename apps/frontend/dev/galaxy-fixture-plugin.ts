@@ -14,6 +14,7 @@ import { exampleStar } from "./sky-reference/reference.mjs";
 export function galaxyFixturePlugin(): Plugin {
   let revision = 1,
     failed = false;
+  const completedTutorials = new Map<number, string>();
   const makeStar = (i: number): Star => ({
     ...exampleStar(i),
     planetCount: i === 0 ? 5 : i === 7 ? 2 : 0,
@@ -67,7 +68,33 @@ export function galaxyFixturePlugin(): Plugin {
             const count = Number(url.searchParams.get("count") ?? 1000);
             if (![1, 10, 100, 1000, 2501].includes(count)) return bad();
             stars = Array.from({ length: count }, (_, i) => makeStar(i));
+            if (count === 1) stars[0] = { ...stars[0], planetCount: 0 };
             failed = false;
+            completedTutorials.clear();
+            revision++;
+            cursors.clear();
+          } else if (
+            action === "complete-tutorial" ||
+            action === "reopen-tutorial"
+          ) {
+            const seq = Number(url.searchParams.get("seq") ?? 1);
+            if (seq < 1 || seq > 5 || !stars[seq - 1]) return bad();
+            const item = stars[seq - 1];
+            if (action === "complete-tutorial")
+              completedTutorials.set(
+                seq,
+                url.searchParams.get("reason") === "skipped"
+                  ? "skipped"
+                  : "all_found",
+              );
+            stars[seq - 1] = {
+              ...item,
+              progressStage:
+                action === "complete-tutorial" ? "completed" : "in_progress",
+              completedWithoutPlanets:
+                action === "complete-tutorial" && item.planetCount === 0,
+              reopened: action === "reopen-tutorial",
+            };
             revision++;
             cursors.clear();
           } else if (action === "change") {
@@ -115,7 +142,110 @@ export function galaxyFixturePlugin(): Plugin {
             onboardingDone: true,
             tutorialCompleted: stars.length > 1,
           });
+        if (url.pathname === "/v1/me/quests")
+          return reply(200, {
+            asOf: new Date().toISOString(),
+            tutorial: {
+              completedCount: completedTutorials.size,
+              items: Array.from({ length: 5 }, (_, i) => ({
+                seq: i + 1,
+                intent: [
+                  "deep_confirmed",
+                  "shallow_confirmed",
+                  "fp",
+                  "deep_fp",
+                  "multi_fp",
+                ][i],
+                ticId: stars[i]?.ticId ?? null,
+                status: completedTutorials.has(i + 1)
+                  ? "completed"
+                  : stars[i]
+                    ? "unlocked"
+                    : "locked",
+                completionReason: completedTutorials.get(i + 1) ?? null,
+              })),
+            },
+            challenge: {
+              round: stars[5]
+                ? {
+                    roundId: "cr-901",
+                    roundNo: 1,
+                    startsOn: "2026-09-14",
+                    endsOn: "2026-09-21",
+                    description: "얕은 밝기 신호를 찾아보세요",
+                  }
+                : null,
+              eligible: !!stars[5],
+              ticId: stars[5]?.ticId ?? null,
+              unlocked: !!stars[5],
+              progressStage: stars[5]?.progressStage ?? null,
+              participantCount: stars[5] ? 12 : null,
+            },
+            reopened: [],
+          });
+        if (url.pathname === "/v1/challenges/current")
+          return reply(
+            200,
+            stars[5]
+              ? {
+                  round: {
+                    roundId: "cr-901",
+                    roundNo: 1,
+                    ticId: stars[5].ticId,
+                    startsOn: "2026-09-14",
+                    endsOn: "2026-09-21",
+                    status: "active",
+                    description: "얕은 밝기 신호를 찾아보세요",
+                  },
+                  eligible: true,
+                  participantCount: 12,
+                }
+              : { round: null, eligible: false },
+          );
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
+        if (url.pathname === "/v1/me/stars") {
+          const q = url.searchParams;
+          if (
+            q.get("scope") !== "discovered" ||
+            q.get("sort") !== "recent" ||
+            q.get("size") !== "20" ||
+            [...q.keys()].some(
+              (k) => !["scope", "sort", "size", "cursor"].includes(k),
+            )
+          )
+            return bad();
+          const scope = "discovered-list:" + version();
+          const continuation = q.has("cursor")
+            ? cursors.get(q.get("cursor")!)
+            : undefined;
+          if (q.has("cursor") && continuation?.scope !== scope) return bad();
+          const offset = continuation?.offset ?? 0;
+          const items = stars.slice(offset, offset + 20).map((s) => ({
+            ticId: s.ticId,
+            progressStage: s.progressStage,
+            planetCount: s.planetCount,
+            completedWithoutPlanets: s.completedWithoutPlanets,
+            achievementCount: s.planetCount ? 1 : 0,
+            grade: s.planetCount ? "A" : null,
+            currentCurveStep: s.progressStage === "unexplored" ? null : 0,
+            reopenPending: false,
+            reopened: s.reopened,
+            unpublishedSignalCount: 0,
+            lastActivityAt: "2026-09-17T00:00:00Z",
+            unlockReason: "achievement",
+            marker: s.marker,
+          }));
+          let nextCursor: string | null = null;
+          if (offset + items.length < stars.length) {
+            nextCursor = randomUUID();
+            cursors.set(nextCursor, { scope, offset: offset + items.length });
+          }
+          return reply(200, {
+            items,
+            nextCursor,
+            hasNext: nextCursor !== null,
+          });
+        }
         if (url.pathname === "/v1/me/sky/tiles") {
           const q = url.searchParams,
             required = ["level", "x", "y", "w", "h", "version"];
@@ -225,7 +355,44 @@ export function galaxyFixturePlugin(): Plugin {
             ticId: star.ticId,
             version: version(),
             presentationVersion: PRESENTATION_VERSION,
+            star: {
+              sectorCount: 2,
+              sectors: [14, 41],
+              tmag: 9.8,
+              teffK: null,
+              radiusRsun: null,
+            },
+            progress: {
+              stage: star.progressStage,
+              currentCurveStep: 0,
+              completionReason: null,
+              reopenPending: false,
+              reopenedAt: null,
+              completedAt: null,
+            },
+            achievement: {
+              count: star.planetCount ? 1 : 0,
+              grade: star.planetCount ? "A" : null,
+              byType: {
+                confirmed: star.planetCount ? 1 : 0,
+                unconfirmed: 0,
+                fp: 0,
+              },
+            },
+            actions: {
+              analysis:
+                star.progressStage === "completed"
+                  ? "review"
+                  : star.progressStage === "in_progress"
+                    ? "continue"
+                    : "start",
+              resultAvailable: star.progressStage !== "unexplored",
+              boardOpen: true,
+              threadCount: 1,
+            },
             unlock: {
+              reason: "tutorial",
+              unlockedAt: "2026-09-15T05:20:00Z",
               position: {
                 x: star.x,
                 y: star.y,

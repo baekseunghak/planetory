@@ -20,7 +20,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const fixture = command === "serve" && !isPreview && mode === "fixture";
   const authFixture = command === "serve" && !isPreview && mode === "auth";
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
-  const galaxyFixture = command === "serve" && !isPreview && mode === "galaxy";
+  const galaxyFixture = command === "serve" && !isPreview && ["galaxy", "interaction"].includes(mode);
   const communityFixture =
     command === "serve" && !isPreview && ["community", "posts"].includes(mode);
   const testing =
@@ -99,6 +99,11 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         : []),
     ],
     define: {
+      "import.meta.env.VITE_INTERACTION_FIXTURE": JSON.stringify(
+        command === "serve" && !isPreview && mode === "interaction"
+          ? "true"
+          : "false",
+      ),
       "import.meta.env.VITE_GALAXY_FIXTURE": JSON.stringify(
         galaxyFixture ? "true" : "false",
       ),
