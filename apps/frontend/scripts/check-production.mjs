@@ -3,6 +3,9 @@ import { join } from "node:path";
 const sentinels = [
   "212 개발 검증용 반응",
   "213 개발 검증용 첨부",
+  "profile-fixture-214",
+  "탐사자214",
+  "이미사용중",
   "213 합성 첨부 메모",
   "211 개발 검증용 댓글",
   "210 개발 검증용 데이터",

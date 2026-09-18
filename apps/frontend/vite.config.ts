@@ -28,7 +28,18 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const communityFixture =
     command === "serve" &&
     !isPreview &&
-    ["community", "posts", "comments", "reactions", "materials"].includes(mode);
+    [
+      "community",
+      "posts",
+      "comments",
+      "reactions",
+      "materials",
+      "profiles",
+    ].includes(mode);
+  const profileFixture =
+    command === "serve" && !isPreview && mode === "profiles"
+      ? (await import("./dev/profile-fixture-plugin.ts")).createProfileFixture()
+      : null;
   const testing =
     fixture || authFixture || skyFixture || galaxyFixture || communityFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
@@ -64,15 +75,23 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   return {
     plugins: [
       react(),
+      ...(profileFixture ? [profileFixture.plugin] : []),
       ...(communityFixture
         ? [
             (
               await import("./dev/community-fixture-plugin.ts")
             ).communityFixturePlugin(
-              ["posts", "comments", "reactions", "materials"].includes(mode),
-              ["comments", "reactions", "materials"].includes(mode),
-              ["reactions", "materials"].includes(mode),
-              mode === "materials",
+              [
+                "posts",
+                "comments",
+                "reactions",
+                "materials",
+                "profiles",
+              ].includes(mode),
+              ["comments", "reactions", "materials", "profiles"].includes(mode),
+              ["reactions", "materials", "profiles"].includes(mode),
+              ["materials", "profiles"].includes(mode),
+              profileFixture?.nickname,
             ),
           ]
         : []),

@@ -61,7 +61,7 @@ Node 1~3의 JournalNode가 QJM edit log를 구성한다.
 - 자동 장애 전환: 사용하지 않음
 - ZooKeeper·ZKFC: 사용하지 않음
 
-장애 전환 전에는 기존 Active VM이 완전히 중지됐는지 확인한다.
+장애 전환 전에는 기존 Active VM이 완전히 중지됐는지 확인한다. 계획 전환은 기존 Active를 Standby로 내린 뒤 일반 승격하고, 장애 전환은 GCP에서 기존 Active VM의 `TERMINATED`를 확인한 경우만 `--forceactive`를 사용한다.
 
 자동 fencing이 없으므로 응답 없는 Active를 대상으로 `haadmin -failover`를 실행하지 않는다.
 
@@ -208,6 +208,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - HDFS·YARN XML 설정
 - HDFS 호스트 설치·단계형 초기화 스크립트, Node 1~6 설치, 6대 간 사설망·DNS와 QJM·Active/Standby·DataNode 5개·RF2 런타임 검증
 - YARN 호스트 설치·단계형 기동 스크립트, ResourceManager 1개·NodeManager 5개와 Spark 3.5.5 cluster mode HDFS sample 검증
+- 수동 복구 스크립트와 Node 1·Worker 4 실제 중지, Node 2 승격, RF2 읽기·재복제와 순차 재기동 검증
 - Node 1과 Worker용 Docker Compose
 - 로컬 XML·Compose·PowerShell 정적 검사
 
@@ -228,6 +229,8 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - [x] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
 - [x] 모든 Worker의 Python 3.12.3 실행 환경을 확인한다.
 - [x] Node 2에서 1GiB executor 표본이 YARN 16GiB 한도 안에서 실행되고 OOM·swap·NameNode 압박이 없음을 확인한다.
+- [x] Node 1 장애 중 Node 2에서 기존 파일 읽기·신규 쓰기와 Node 1 순차 복구를 확인한다.
+- [x] Worker 4 장애 중 RF2 읽기와 복귀 뒤 under·over·missing·corrupt 0 회복을 확인한다.
 - [ ] CI Runner의 SSH 경로와 Prometheus 메트릭 수집 경로를 구성한다.
 
 Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 대상이다.
@@ -243,9 +246,8 @@ CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실�
 3. PublicationBundle을 HDFS에 백업한다.
 4. EC2로 전송하고 checksum을 검증한 뒤 공개한다.
 5. 실패한 작업을 단계 단위로 재시도한다.
-6. Worker 한 대를 중지하고 HDFS 복제 상태를 확인한다.
-7. Active NameNode를 수동 전환한다.
-8. Gold 검증 실패 시 기존 `current`가 유지되는지 확인한다.
+6. Worker 한 대 중지와 Active NameNode 수동 전환은 `S15P21C206-74`에서 완료했으므로, 실제 Sector workload에서는 동일 runbook의 회귀 여부만 확인한다.
+7. Gold 검증 실패 시 기존 `current`가 유지되는지 확인한다.
 
 > 영속 데이터를 지우는 초기화 작업은 일반 배포에 포함하지 않는다.
 
