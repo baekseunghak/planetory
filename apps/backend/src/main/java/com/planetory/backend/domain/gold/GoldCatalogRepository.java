@@ -140,7 +140,7 @@ public class GoldCatalogRepository {
                 rs.getDouble("start_btjd"),
                 rs.getBigDecimal("bin_minutes"),
                 rs.getInt("n_points"),
-                floatArray(rs, "flux"),
+                floatArray(rs, "flux", true),
                 rs.getBigDecimal("flux_scatter"),
                 readJson(rs.getString("gaps")));
     }
@@ -151,7 +151,7 @@ public class GoldCatalogRepository {
                 rs.getBigDecimal("period_min_days"),
                 rs.getBigDecimal("period_max_days"),
                 rs.getInt("n_periods"),
-                floatArray(rs, "power"));
+                floatArray(rs, "power", false));
     }
 
     private Candidate toCandidate(ResultSet rs, int rowNum) throws SQLException {
@@ -171,10 +171,33 @@ public class GoldCatalogRepository {
                 rs.getBoolean("is_confirmed"));
     }
 
-    /** 결측을 null로 보존한다. {@code getArray().getArray()}는 Float[]를 주므로 그대로 쓴다. */
-    private static Float[] floatArray(ResultSet rs, String column) throws SQLException {
+    /** Gold 배열을 읽는다. {@code getArray().getArray()}는 Float[]를 주므로 그대로 쓴다. */
+    private static Float[] floatArray(ResultSet rs, String column, boolean nullAllowed)
+            throws SQLException {
         java.sql.Array array = rs.getArray(column);
-        return array == null ? null : (Float[]) array.getArray();
+        return array == null ? null
+                : requireContractValues(column, (Float[]) array.getArray(), nullAllowed);
+    }
+
+    /**
+     * 조회한 Gold 배열이 계약 안의 값인지 확인한다 [S15P21C206-117, S15P21C206-140].
+     *
+     * <p>곡선은 유한수 또는 NULL(빈 bin), 주기도는 격자 전 점에 값이 있어야 하므로 유한수만 담는다.
+     * NaN은 제안된 배열 checksum에서 NULL과 같은 바이트({@code 0x7FC00000})라 checksum으로는 가려낼
+     * 수 없다. V10 CHECK가 적재를 막으므로 여기까지 왔다면 계약이 어긋난 것이다.
+     *
+     * @param nullAllowed 곡선의 빈 bin처럼 계약이 NULL을 허용하는 배열인지
+     */
+    static Float[] requireContractValues(String column, Float[] values, boolean nullAllowed) {
+        for (int i = 0; i < values.length; i++) {
+            Float value = values[i];
+            boolean valid = value == null ? nullAllowed : Float.isFinite(value);
+            if (!valid) {
+                throw new IllegalStateException(column + "[" + i + "]가 " + value
+                        + "입니다. 곡선은 유한수 또는 NULL, 주기도는 유한수만 담으므로 계약이 어긋난 적재입니다.");
+            }
+        }
+        return values;
     }
 
     private static <E extends Enum<E>> E enumOf(Class<E> type, String value) {

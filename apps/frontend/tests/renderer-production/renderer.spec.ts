@@ -63,7 +63,7 @@ test("enabled production build consumes individual HTTP pages but excludes fixtu
   });
   await page.goto("/sky");
   await expect(
-    page.getByRole("img", {
+    page.getByRole("listbox", {
       name: "내가 발견한 개별 별로 이루어진 3D 은하 지도",
     }),
   ).toBeVisible();

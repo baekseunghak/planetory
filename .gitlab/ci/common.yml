@@ -37,6 +37,7 @@ validate:hadoop-config:
     - changes:
         - infra/distributed-system/**/*.xml
         - infra/distributed-system/**/workers
+        - infra/distributed-system/scripts/*yarn*
         - infra/distributed-system/validate.py
         - infra/distributed-system/*.yaml
         - .gitlab/ci/common.yml
