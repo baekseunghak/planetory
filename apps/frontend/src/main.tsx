@@ -6,6 +6,11 @@ import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
+import {
+  CommunityPage,
+  PostPage,
+  SignalThreadPage,
+} from "./features/community/CommunityPages";
 
 // Register feature components here after their individual tickets are implemented.
 async function start() {
@@ -25,7 +30,13 @@ async function start() {
     );
     return;
   }
-  let pages: PageSlots = { sky: SkyDataPage };
+  let pages: PageSlots = {
+    sky: SkyDataPage,
+    community: CommunityPage,
+    starBoard: CommunityPage,
+    post: PostPage,
+    thread: SignalThreadPage,
+  };
   if (import.meta.env.VITE_SKY_RENDERER_ENABLED === "true")
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
