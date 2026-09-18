@@ -59,7 +59,7 @@ export function drawFoldedCurve(
   ctx.beginPath();
   ctx.rect(0, 0, width, height);
   ctx.clip();
-  ctx.strokeStyle = "#ffffff18";
+  ctx.strokeStyle = "rgba(238,238,238,0.42)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     ctx.beginPath();
@@ -84,7 +84,7 @@ export function drawFoldedCurve(
     ctx.restore();
     return;
   }
-  ctx.fillStyle = "#a6e8ce";
+  ctx.fillStyle = "rgba(238,238,238,0.8)";
   const radius = points.length > 2000 ? 1.2 : 3;
   for (let i = 0; i < points.length; i++) {
     const y =
@@ -140,9 +140,9 @@ export function rasterFoldPoints(
             Math.max(0, reach - Math.sqrt(dx * dx + dy * dy)),
           );
           if (!coverage) continue;
-          data[offset] = 166;
-          data[offset + 1] = 232;
-          data[offset + 2] = 206;
+          data[offset] = 238;
+          data[offset + 1] = 238;
+          data[offset + 2] = 238;
           data[offset + 3] += (255 - data[offset + 3]) * coverage;
         }
     }

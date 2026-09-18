@@ -1,3 +1,4 @@
+import { useAnalysisStage } from "./analysis-stage";
 import {
   useEffect,
   useId,
@@ -48,6 +49,7 @@ export function FoldedCurveChart({
   setView: (update: (view: FoldView) => FoldView) => void;
   fluxUnit: string;
 }) {
+  const { stage } = useAnalysisStage();
   const [inspectedResult, setInspectedResult] = useState(result);
   const [inspected, setInspected] = useState<number | null>(null);
   if (inspectedResult !== result) {
@@ -175,39 +177,11 @@ export function FoldedCurveChart({
   const point = inspected === null ? null : data.points[inspected];
   return (
     <>
-      <div
-        className="periodogram-toolbar"
-        role="group"
-        aria-label="접힌 곡선 조작"
-      >
-        <button
-          type="button"
-          onClick={() => zoom(2)}
-          disabled={view.zoom >= MAX_FOLD_ZOOM}
-        >
-          접힌 곡선 확대
-        </button>
-        <button
-          type="button"
-          onClick={() => zoom(0.5)}
-          disabled={view.zoom <= 1}
-        >
-          접힌 곡선 축소
-        </button>
-        <button type="button" onClick={() => pan(-1)} disabled={low <= -0.5}>
-          접힌 곡선 왼쪽 이동
-        </button>
-        <button type="button" onClick={() => pan(1)} disabled={high >= 1.5}>
-          접힌 곡선 오른쪽 이동
-        </button>
-        <button type="button" onClick={reset}>
-          접힌 곡선 전체 보기
-        </button>
-        <span role="status" data-testid="fold-zoom">
-          ×{view.zoom}
-        </span>
-      </div>
+      <span className="analysis-sr-only" role="status" data-testid="fold-zoom">
+        ×{view.zoom}
+      </span>
       <p
+        className="analysis-sr-only"
         data-testid="fold-result"
         data-period={result.periodDays}
         data-revision={result.revision}
@@ -216,7 +190,8 @@ export function FoldedCurveChart({
         {number.format(data.points.length)}개 · 밝기 ({fluxUnit})
       </p>
       {import.meta.env.DEV && (
-        <div className="fold-renderer-controls">
+        <details className="fold-renderer-controls">
+          <summary>개발용 렌더러</summary>
           <label>
             개발용 접기 렌더러{" "}
             <select
@@ -243,13 +218,13 @@ export function FoldedCurveChart({
                   ? "WebGL로 표시하고 있습니다."
                   : "Canvas로 표시하고 있습니다."}
           </p>
-        </div>
+        </details>
       )}
       <figure className="fold-figure">
         <div className="fold-y-axis" aria-hidden="true">
           {[1, 0.5, 0].map((r) => (
             <span key={r}>
-              {number.format(domain[0] + r * (domain[1] - domain[0]))}
+              {(domain[0] + r * (domain[1] - domain[0])).toFixed(4)}
             </span>
           ))}
         </div>
@@ -317,7 +292,7 @@ export function FoldedCurveChart({
           반복 위상 · 같은 관측점을 두 주기에 반복 표시합니다.
         </figcaption>
       </figure>
-      <p id={hintId}>
+      <p id={hintId} className="analysis-sr-only">
         휠은 포인터 기준 가로 확대, +/−는 중앙 기준 확대·축소, 0·더블클릭은 전체
         보기입니다. 최대 {MAX_FOLD_ZOOM}배까지 확대하며 미세 조정 중에는 배율과
         보는 위치를 유지합니다. ←/→로 보기 이동, ↑/↓로 원본 순서의 관측값을
@@ -328,7 +303,10 @@ export function FoldedCurveChart({
           ? `관측점 ${inspected! + 1}/${data.points.length} · Sector ${point.sector} · BTJD ${number.format(point.btjd)} · 위상 ${number.format(result.phases[inspected!])} · 밝기 ${number.format(point.flux)}`
           : "관측점에 포인터를 올리거나 그래프에서 ↑/↓를 눌러 수치를 확인하세요."}
       </p>
-      <PhaseSelectionControls view={view} />
+      <details hidden={stage !== 2} className="phase-keyboard-details">
+        <summary>키보드 구간 선택</summary>
+        <PhaseSelectionControls view={view} />
+      </details>
     </>
   );
 }

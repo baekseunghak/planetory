@@ -1,3 +1,4 @@
+import { openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
 import { pagePath } from "../../src/app/paths";
 const member = {
@@ -33,16 +34,19 @@ test("authenticated cookie, shared identity and TIC/History return context survi
     page.getByRole("link", { name: "연결 확인 계정", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "TIC 259377017 분석으로 이동" }).click();
-  await expect(page.getByText("TIC 259377017", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /TIC 259377017/ }),
+  ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "분석", exact: true }),
+    page.getByRole("heading", { name: /TIC 259377017/ }),
   ).toBeVisible();
+  await openData(page);
   await expect(
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toBeVisible();
   const analysisUrl = new URL(page.url());
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
   // History remains a fixture page; analysis no longer links to a fake record.
   await page.goto(
@@ -60,7 +64,7 @@ test("authenticated cookie, shared identity and TIC/History return context survi
     page.getByText("분석 기록 fixture-history-201", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "분석으로 돌아가기" }).click();
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
   expect(cookieReceipts.length).toBeGreaterThan(0);
   expect(cookieReceipts.every((received) => received === "true")).toBeTruthy();

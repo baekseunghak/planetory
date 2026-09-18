@@ -144,7 +144,7 @@ export function drawTimeCurve(
   ctx.beginPath();
   ctx.rect(0, 0, width, height);
   ctx.clip();
-  ctx.strokeStyle = "#ffffff18";
+  ctx.strokeStyle = "rgba(238,238,238,0.42)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     ctx.beginPath();
@@ -156,14 +156,14 @@ export function drawTimeCurve(
     if (i > 0) {
       const start = px(curve.segments[i - 1].end),
         end = px(segment.start);
-      ctx.fillStyle = "#080b10";
+      ctx.fillStyle = "rgba(238,238,238,0.05)";
       ctx.fillRect(start, 0, end - start, height);
     }
-    ctx.fillStyle = "#d8ae6540";
+    ctx.fillStyle = "rgba(238,238,238,0.1)";
     for (const gap of segment.gaps)
       ctx.fillRect(px(gap.start), 0, px(gap.end) - px(gap.start), height);
-    ctx.strokeStyle = "#a6e8ce";
-    ctx.fillStyle = "#a6e8ce";
+    ctx.strokeStyle = "rgba(238,238,238,0.8)";
+    ctx.fillStyle = "rgba(238,238,238,0.8)";
     ctx.lineWidth = 1.25;
     for (const run of segment.runs) {
       ctx.beginPath();

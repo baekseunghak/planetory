@@ -1,3 +1,4 @@
+import { selectPeak, openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
 import type { Request } from "@playwright/test";
 import {
@@ -98,9 +99,11 @@ for (const resource of ["periodogram", "candidate-peaks"] as const) {
       ).toHaveCount(0);
       await expect(page.getByTestId("selected-period")).toHaveCount(0);
       release();
+      await openData(page);
       await expect(
         page.getByRole("region", { name: "분석 데이터 요약" }),
       ).toContainText(nextId);
+      await openData(page);
       await expect(
         page.getByRole("region", { name: "분석 데이터 요약" }),
       ).toContainText("잔차 1단계");
@@ -218,9 +221,7 @@ test("selected period is cleared while refreshing; an aborted old peaks response
   page,
 }) => {
   await page.goto(`/analysis/${tic}`);
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   let latest = false,
     held = false,
     release!: () => void;
@@ -238,22 +239,23 @@ test("selected period is cleared while refreshing; an aborted old peaks response
     }
     await route.fulfill({ json: body }).catch(() => {});
   });
+  await openData(page);
   await page
     .getByRole("button", { name: "최신 자료 확인", exact: true })
     .click();
   await expect.poll(() => held).toBe(true);
   await expect(page.getByTestId("selected-period")).toHaveCount(0);
   latest = true;
+  await openData(page);
   await page
     .getByRole("button", { name: "최신 자료 확인", exact: true })
     .click();
   await expect(page.getByTestId("selected-period")).toContainText(
     "선택해 주세요",
   );
-  await page
-    .getByRole("button", { name: "2위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 2);
   release();
+  await openData(page);
   await expect(
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toContainText(nextId);

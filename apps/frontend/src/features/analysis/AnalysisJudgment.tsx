@@ -1,3 +1,8 @@
+import { stageLabels, useAnalysisStage } from "./analysis-stage";
+import { useSustained } from "./fold-progress";
+import yesIcon from "./assets/yes.svg";
+import noIcon from "./assets/no.svg";
+import unsureIcon from "./assets/unsure.svg";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AnalysisContext } from "./analysis-data";
 import { useAnalysisFold, usePhaseDraft } from "./AnalysisSession";
@@ -15,27 +20,28 @@ import type { SelectionIssue } from "./selection-rules";
 import "./analysis-judgment.css";
 
 export function AnalysisSteps() {
-  const session = useAnalysisFold();
-  const { state, ready } = usePhaseDraft();
-  const current = !session.state.change
-    ? 0
-    : !ready || !state.range
-      ? 1
-      : !state.confirmed || state.confirmed !== state.preview || state.dragging
-        ? 2
-        : state.review
-          ? 4
-          : 3;
+  const fold = useAnalysisFold();
+  const { stage, go, ready, confirmed } = useAnalysisStage();
   return (
     <ol className="analysis-steps" aria-label="분석 단계">
-      {["봉우리 선택", "주기 맞추기", "구간 선택", "판단", "제출값 확인"].map(
-        (label, index) => (
-          <li key={label} aria-current={current === index ? "step" : undefined}>
-            {index + 1}. {label}
-            {current === index ? " (현재)" : ""}
-          </li>
-        ),
-      )}
+      {stageLabels.map((label, index) => (
+        <li key={label} aria-current={stage === index + 1 ? "step" : undefined}>
+          <button
+            type="button"
+            disabled={
+              index === 0
+                ? !fold.state.change
+                : !ready ||
+                  index === 3 ||
+                  (index === 1 && stage < 2) ||
+                  (index === 2 && !confirmed)
+            }
+            onClick={() => go((index + 1) as 1 | 2 | 3)}
+          >
+            {index + 1 < stage ? "✓" : index + 1} {label}
+          </button>
+        </li>
+      ))}
     </ol>
   );
 }
@@ -49,21 +55,34 @@ export function AnalysisJudgment({
 }) {
   const { state, setState, ready } = usePhaseDraft();
   const fold = useAnalysisFold();
+  const { stage, go } = useAnalysisStage();
   const [issues, setIssues] = useState<SelectionIssue[]>([]);
   const headingId = useId(),
     hintId = useId(),
     memoId = useId(),
     errorId = useId();
+  const stageRef = useRef<HTMLHeadingElement>(null);
   const judgmentRef = useRef<HTMLInputElement>(null);
   const memoRef = useRef<HTMLTextAreaElement>(null);
   const reviewRef = useRef<HTMLHeadingElement>(null);
-  const focusAfterRender = useRef<"judgment" | "review" | null>(null);
+  const focusAfterRender = useRef<"judgment" | "review" | "range" | null>(null);
   const preview = state.preview?.kind === "preview" ? state.preview : null;
   const confirmed = !!preview && state.confirmed === preview && !state.dragging;
-  const enabled = ready && confirmed;
+  const enabled = ready && confirmed && stage >= 3;
+  // 미세 조정 한 번의 접기는 10ms 남짓이라 !ready를 그대로 쓰면 슬라이더를 끄는
+  // 동안 버튼이 프레임마다 깜빡인다. 잠금 자체는 go()가 즉시 하므로 잠긴 모습은
+  // 진행 안내가 뜨는 시점과 같게 늦춘다. 실패·취소는 pending이 아니므로 즉시 잠근다.
+  const pending = fold.state.status === "pending";
+  const slowPending = useSustained(pending);
+  const blocked = !ready && (!pending || slowPending);
   const review = enabled ? state.review : null;
   // Move focus only after an explicit next/back action, never on graph updates.
   useEffect(() => {
+    if (focusAfterRender.current === "range" && stage === 2) {
+      stageRef.current?.focus();
+      focusAfterRender.current = null;
+      return;
+    }
     if (!enabled) return;
     if (focusAfterRender.current === "review" && review)
       reviewRef.current?.focus();
@@ -85,15 +104,23 @@ export function AnalysisJudgment({
     if (!ready || !preview || state.dragging) return;
     setIssues([]);
     focusAfterRender.current = "judgment";
-    setState((previous) => ({ ...previous, confirmed: preview, review: null }));
+    setState((previous) => ({
+      ...previous,
+      editingStep: undefined,
+      confirmed: preview,
+      review: null,
+    }));
   };
   const showReview = () => {
     if (!enabled || !preview) return;
     const errors = validateJudgment(state.judgment);
     setIssues(errors);
     if (errors.length) {
-      if (errors[0].field === "memo") memoRef.current?.focus();
-      else judgmentRef.current?.focus();
+      if (errors[0].field === "memo") {
+        const details = memoRef.current?.closest("details");
+        if (details) details.open = true;
+        memoRef.current?.focus();
+      } else judgmentRef.current?.focus();
       return;
     }
     try {
@@ -106,7 +133,11 @@ export function AnalysisJudgment({
         fold.state.view.zoom,
       );
       focusAfterRender.current = "review";
-      setState((previous) => ({ ...previous, review: next }));
+      setState((previous) => ({
+        ...previous,
+        editingStep: undefined,
+        review: next,
+      }));
     } catch (error) {
       setIssues([
         {
@@ -119,8 +150,35 @@ export function AnalysisJudgment({
   };
   return (
     <section className="analysis-judgment" aria-labelledby={headingId}>
-      <h3 id={headingId}>판단과 제출값 확인</h3>
-      <p id={hintId}>
+      <h3 ref={stageRef} tabIndex={-1} id={headingId}>
+        {stageLabels[stage - 1]}
+      </h3>
+      {stage === 1 && (
+        <>
+          <p>
+            주기도의 봉우리를 클릭해 주기를 고르고, 밝기가 낮아지는 부분이
+            겹치도록 아래 슬라이더로 조절하세요. 봉우리는 몇 번이든 다시 고를 수
+            있습니다.
+          </p>
+          {fold.state.change && (
+            <>
+              <p>
+                현재 주기 {fold.state.change.selection.periodDays.toFixed(6)}일
+              </p>
+              <button
+                disabled={blocked}
+                onClick={() => {
+                  focusAfterRender.current = "range";
+                  go(2);
+                }}
+              >
+                이 주기로 구간 선택
+              </button>
+            </>
+          )}
+        </>
+      )}
+      <p id={hintId} className={stage !== 2 ? "analysis-sr-only" : undefined}>
         {!ready
           ? "주기를 선택하고 접기 계산을 마치면 구간을 확정할 수 있습니다."
           : !preview
@@ -131,16 +189,39 @@ export function AnalysisJudgment({
                 ? "구간을 확인한 뒤 확정해 주세요. 작성한 판단·근거·메모는 유지됩니다."
                 : "판단을 하나 선택하세요. 근거와 메모는 선택 사항입니다. 구간을 바꾸면 다시 확인해야 합니다."}
       </p>
-      <button
-        type="button"
-        disabled={!ready || !preview || state.dragging || confirmed}
-        aria-describedby={hintId}
-        onClick={confirm}
-      >
-        구간 확정하고 판단하기
-      </button>
-      {!review && (
+      {stage === 2 && (
+        <>
+          <p>
+            접힌 곡선에서 드래그해 구간을 고르세요. 양 끝 핸들로 범위를 조절할
+            수 있어요.
+          </p>
+          {state.preview?.kind === "invalid" && (
+            <p role="status">{state.message}</p>
+          )}
+          <p>
+            선택 위상{" "}
+            {state.range
+              ? `${state.range.phaseStart.toFixed(4)}–${state.range.phaseEnd.toFixed(4)}`
+              : "—"}
+          </p>
+          <p>
+            기준 시각 {preview?.epochPreviewBtjd.toFixed(6) ?? "—"} BTJD
+            <br />
+            가려진 시간 {preview?.durationPreviewHours.toFixed(4) ?? "—"} 시간
+          </p>
+          <button
+            type="button"
+            disabled={!ready || !preview || state.dragging}
+            aria-describedby={hintId}
+            onClick={confirm}
+          >
+            구간 확정하고 판단하기
+          </button>
+        </>
+      )}
+      {
         <form
+          hidden={stage !== 3 || !!review}
           noValidate
           autoComplete="off"
           onSubmit={(event) => {
@@ -148,7 +229,11 @@ export function AnalysisJudgment({
             showReview();
           }}
         >
-          <fieldset disabled={!enabled} aria-describedby={hintId}>
+          <fieldset
+            className="judgment-options"
+            disabled={!enabled}
+            aria-describedby={hintId}
+          >
             <legend>판단 (필수)</legend>
             {judgments.map(({ value, label }, index) => (
               <label className="analysis-choice" key={value}>
@@ -165,6 +250,12 @@ export function AnalysisJudgment({
                   }
                   aria-describedby={`${errorId}-judgment`}
                   onChange={() => edit({ userJudgment: value })}
+                />
+                <img
+                  src={[yesIcon, noIcon, unsureIcon][index]}
+                  alt=""
+                  width="24"
+                  height="24"
                 />
                 {label}
               </label>
@@ -200,25 +291,28 @@ export function AnalysisJudgment({
             ))}
             <p>중심 위치: 데이터 없음 (근거로 선택할 수 없음)</p>
           </fieldset>
-          <label htmlFor={memoId}>메모 (선택)</label>
-          <textarea
-            id={memoId}
-            ref={memoRef}
-            name="memo"
-            rows={3}
-            disabled={!enabled}
-            value={state.judgment.memo}
-            aria-describedby={`${memoId}-hint ${errorId}`}
-            aria-invalid={
-              issues.some((issue) => issue.field === "memo") || undefined
-            }
-            onChange={(event) => edit({ memo: event.currentTarget.value })}
-          />
-          <p id={`${memoId}-hint`}>
-            {memoCodePoints(state.judgment.memo).toLocaleString("ko-KR")} /{" "}
-            {MEMO_LIMIT.toLocaleString("ko-KR")}자. 초안 저장 상태는 위의 분석
-            초안 안내에서 확인할 수 있습니다.
-          </p>
+          <details className="memo-details">
+            <summary>＋ 메모 추가 · 최대 200자</summary>
+            <label htmlFor={memoId}>메모 (선택)</label>
+            <textarea
+              id={memoId}
+              ref={memoRef}
+              name="memo"
+              rows={3}
+              disabled={!enabled}
+              value={state.judgment.memo}
+              aria-describedby={`${memoId}-hint ${errorId}`}
+              aria-invalid={
+                issues.some((issue) => issue.field === "memo") || undefined
+              }
+              onChange={(event) => edit({ memo: event.currentTarget.value })}
+            />
+            <p id={`${memoId}-hint`}>
+              {memoCodePoints(state.judgment.memo).toLocaleString("ko-KR")} /{" "}
+              {MEMO_LIMIT.toLocaleString("ko-KR")}자. 초안 저장 상태는 위의 분석
+              초안 안내에서 확인할 수 있습니다.
+            </p>
+          </details>
           <div id={errorId} role="status">
             {enabled &&
               issues
@@ -229,37 +323,31 @@ export function AnalysisJudgment({
             제출값 확인
           </button>
         </form>
-      )}
+      }
       {review && (
         <div data-testid="candidate-review">
-          <h4 ref={reviewRef} tabIndex={-1}>
+          <h4 className="analysis-sr-only" ref={reviewRef} tabIndex={-1}>
             제출값 확인
           </h4>
+          <p>주기와 선택 구간, 작성한 판단을 마지막으로 확인하세요.</p>
           <dl>
-            <dt>별</dt>
-            <dd>TIC {review.ticId}</dd>
-            <dt>자료·곡선 단계</dt>
-            <dd>
-              {review.input.curveContext.bundleId} ·{" "}
-              {review.input.curveContext.curveStep}
-            </dd>
-            <dt>선택 주기 (일)</dt>
-            <dd>{review.input.selection.periodDays}</dd>
-            <dt>봉우리 출처</dt>
-            <dd>
-              {review.input.selection.sourcePeakGridIndex === null
-                ? "직접 선택"
-                : `격자 ${review.input.selection.sourcePeakGridIndex}`}
+            <dt>주기</dt>
+            <dd title={String(review.input.selection.periodDays)}>
+              {review.input.selection.periodDays.toFixed(6)}일
             </dd>
             <dt>선택 위상</dt>
             <dd>
-              {review.input.selection.phaseStart} ~{" "}
-              {review.input.selection.phaseEnd}
+              {review.input.selection.phaseStart.toFixed(4)}–
+              {review.input.selection.phaseEnd.toFixed(4)}
             </dd>
-            <dt>기준 시각 미리보기 (BTJD)</dt>
-            <dd>{review.epochPreviewBtjd}</dd>
-            <dt>가려진 시간 미리보기 (시간)</dt>
-            <dd>{review.durationPreviewHours}</dd>
+            <dt>기준 시각</dt>
+            <dd title={String(review.epochPreviewBtjd)}>
+              {review.epochPreviewBtjd.toFixed(6)} BTJD
+            </dd>
+            <dt>가려진 시간</dt>
+            <dd title={String(review.durationPreviewHours)}>
+              {review.durationPreviewHours.toFixed(4)} 시간
+            </dd>
             <dt>판단</dt>
             <dd>
               {
@@ -282,14 +370,17 @@ export function AnalysisJudgment({
               {review.input.memo || "입력 안 함"}
             </dd>
           </dl>
-          <p>
-            아직 제출되지 않았습니다. 기준 시각과 가려진 시간은 미리보기이며,
-            실제 제출 시 서버가 선택 주기·위상으로 다시 계산하고 검증합니다.
-          </p>
-          <p id={`${hintId}-submit`}>
-            현재는 제출 API가 연결되지 않아 제출할 수 없습니다. 관측 공백을
-            포함한 최종 선택 검증도 남아 있습니다.
-          </p>
+          <details className="review-details">
+            <summary>계산·제출 안내</summary>
+            <p>
+              아직 제출되지 않았습니다. 기준 시각과 가려진 시간은 미리보기이며,
+              실제 제출 시 서버가 선택 주기·위상으로 다시 계산하고 검증합니다.
+            </p>
+            <p id={`${hintId}-submit`}>
+              현재는 제출 API가 연결되지 않아 제출할 수 없습니다. 관측 공백을
+              포함한 최종 선택 검증도 남아 있습니다.
+            </p>
+          </details>
           <div className="periodogram-toolbar">
             <button
               type="button"
@@ -298,14 +389,14 @@ export function AnalysisJudgment({
                 setState((previous) => ({ ...previous, review: null }));
               }}
             >
-              판단 수정
+              판단·메모 수정 →
             </button>
             <button
               type="button"
               disabled
               aria-describedby={`${hintId}-submit`}
             >
-              제출
+              제출하기 · 연결 예정
             </button>
           </div>
         </div>

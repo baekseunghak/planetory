@@ -17,7 +17,7 @@
 .analysis-judgment fieldset {
   min-width: 0;
   margin-block: 16px;
-  border: 1px solid #46556b;
+  border: 1px solid var(--panel-line);
 }
 .analysis-choice {
   display: inline-flex;
@@ -35,16 +35,16 @@
   padding: 8px;
   resize: vertical;
   font: inherit;
-  color: #e5e9ee;
-  background: #070a0f;
-  border: 1px solid #65758b;
+  color: var(--fg-1);
+  background: var(--control-bg);
+  border: 1px solid var(--check-line);
 }
 .analysis-judgment button {
   min-height: 44px;
   font: inherit;
 }
 .analysis-judgment :focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 .analysis-judgment :disabled {

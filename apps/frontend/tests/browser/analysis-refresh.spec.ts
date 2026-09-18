@@ -1,3 +1,4 @@
+import { openData } from "../analysis-ui";
 import { test, expect } from "@playwright/test";
 import {
   analysisContextFixture,
@@ -72,6 +73,7 @@ for (const mode of ["header", "409"] as const)
       page.getByRole("group", { name: "시간 곡선 그래프" }),
     ).toHaveCount(0);
     release();
+    await openData(page);
     await expect(
       page.getByRole("region", { name: "분석 데이터 요약" }),
     ).toContainText(newId);
@@ -124,7 +126,9 @@ test("manual current-data check clears old chart and applies server restoration 
   await expect(
     page.getByRole("group", { name: "시간 곡선 그래프" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "확대", exact: true }).click();
+  await page
+    .getByRole("group", { name: "시간 곡선 그래프", exact: true })
+    .press("+");
   await expect(page.getByTestId("time-zoom")).toHaveText("×2");
   const next = nextSnapshot();
   let release!: () => void;
@@ -148,11 +152,13 @@ test("manual current-data check clears old chart and applies server restoration 
   await page.route(`**/api/v1/stars/${tic}/curves?*`, (route) =>
     route.fulfill({ json: next.curve, headers: { "X-Current-Bundle": newId } }),
   );
+  await openData(page);
   await page.getByRole("button", { name: "최신 자료 확인" }).click();
   await expect(
     page.getByRole("group", { name: "시간 곡선 그래프" }),
   ).toHaveCount(0);
   release();
+  await openData(page);
   await expect(
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toContainText(newId);
@@ -194,8 +200,9 @@ test("leaving during a curve request ignores its late result after re-entry", as
   });
   await page.goto(`/analysis/${tic}?returnTo=%2Fsky`);
   await requested;
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await page.getByRole("link", { name: "TIC 259377017 분석으로 이동" }).click();
+  await openData(page);
   await expect(
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toContainText(oldId);

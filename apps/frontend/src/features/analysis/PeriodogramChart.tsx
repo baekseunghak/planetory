@@ -1,3 +1,5 @@
+import { useAnalysisStage } from "./analysis-stage";
+import resetIcon from "./assets/reset.svg";
 import {
   memo,
   useEffect,
@@ -7,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import type { PeriodogramLoad } from "./load-periodogram";
 import type { CandidatePeaks } from "./periodogram-data";
 import type { PeriodChoice } from "./period-selection";
@@ -27,7 +29,6 @@ import {
 } from "./periodogram-view";
 
 const format = new Intl.NumberFormat("ko-KR", { maximumSignificantDigits: 9 });
-const countFormat = new Intl.NumberFormat("ko-KR");
 
 const PlotCanvas = memo(function PlotCanvas({
   model,
@@ -110,125 +111,88 @@ export function PeriodogramChart({
   onViewportChange?: (viewport: PeriodogramViewport) => void;
 }) {
   const { periodogram, candidates } = data;
+  const { stage } = useAnalysisStage();
   const model = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
-  const ranked = useMemo(
-    () => [...candidates.peaks].sort((a, b) => a.rank - b.rank),
-    [candidates],
-  );
   const [view, setView] = useState<PeriodView>(FULL_PERIOD_VIEW);
+  const [inspection, setInspection] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const plot = useRef<HTMLDivElement>(null);
+  const drag = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    width: number;
+    view: PeriodView;
+    moved: boolean;
+  } | null>(null);
+  const current = clampPeriodView(view),
+    { low, high } = periodViewBounds(current);
+  const hintId = useId(),
+    readoutId = useId();
   useEffect(() => {
-    const { low, high } = periodViewBounds(view);
     onViewportChange?.({
       minDays: periodAtFraction(periodogram, low),
       maxDays: periodAtFraction(periodogram, high),
     });
-  }, [view, periodogram, onViewportChange]);
-  const [inspection, setInspection] = useState<number | null>(null);
-  const [announcement, setAnnouncement] = useState("");
-  const [picking, setPicking] = useState(false);
-  const [selectionError, setSelectionError] = useState("");
-  const periodInput = useRef<HTMLInputElement>(null);
-  const periodId = useId(),
-    periodHintId = useId(),
-    periodErrorId = useId();
-  const plot = useRef<HTMLDivElement>(null),
-    indexInput = useRef<HTMLInputElement>(null);
-  const gesture = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    moved: boolean;
-    width: number;
-    view: PeriodView;
-  } | null>(null);
-  const hintId = useId(),
-    summaryId = useId(),
-    indexId = useId(),
-    indexHintId = useId();
-  const current = clampPeriodView(view),
-    { low, high } = periodViewBounds(current);
-  const currentRef = useRef(current);
-  currentRef.current = current;
+  }, [low, high, periodogram, onViewportChange]);
   const choose = (choice: PeriodChoice) => {
+    if (stage !== 1) return;
     try {
       onSelect(choice);
-      setPicking(false);
-      setSelectionError("");
-    } catch (error) {
-      setSelectionError((error as Error).message);
+      setError("");
+    } catch (cause) {
+      setError((cause as Error).message);
     }
   };
-  const zoom = (factor: number) =>
-    setView((old) => zoomPeriodView(old, factor));
   const reset = () => {
     setView(FULL_PERIOD_VIEW);
     setInspection(null);
-    setAnnouncement("주기도 전체 범위를 표시합니다.");
-  };
-  const pan = (direction: number) =>
-    setView((old) =>
-      clampPeriodView({
-        ...old,
-        center: old.center + (direction * 0.2) / old.zoom,
-      }),
-    );
-  const inspect = (index: number, announce = false) => {
-    setInspection(index);
-    if (announce)
-      setAnnouncement(
-        `격자 ${index}, 주기 ${format.format(model.periods[index])}일, power ${format.format(periodogram.power[index])}`,
-      );
   };
   useEffect(() => {
-    const element = plot.current!;
-    const wheel = (event: WheelEvent) => {
-      // Preserve normal page scrolling and browser pinch/zoom unless the plot owns focus.
-      if (document.activeElement !== element || event.ctrlKey || event.metaKey)
-        return;
-      event.preventDefault();
-      const rect = element.getBoundingClientRect();
-      const anchor = Math.max(
-        0,
-        Math.min(1, (event.clientX - rect.left) / rect.width),
-      );
-      setView((old) =>
-        zoomPeriodView(old, event.deltaY < 0 ? 1.25 : 0.8, anchor),
+    const el = plot.current!;
+    const wheel = (e: WheelEvent) => {
+      if (document.activeElement !== el || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      setView((v) =>
+        zoomPeriodView(
+          v,
+          e.deltaY < 0 ? 1.25 : 0.8,
+          Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)),
+        ),
       );
     };
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
   }, []);
-  const move = (event: PointerEvent<HTMLDivElement>) => {
-    if (gesture.current) {
-      const initial = gesture.current;
-      if (initial.pointerId !== event.pointerId) return;
-      if (Math.hypot(event.clientX - initial.x, event.clientY - initial.y) > 5)
+  const move = (e: PointerEvent<HTMLDivElement>) => {
+    const initial = drag.current;
+    if (initial) {
+      if (initial.id !== e.pointerId) return;
+      if (Math.hypot(e.clientX - initial.x, e.clientY - initial.y) > 5)
         initial.moved = true;
-      setView(
-        clampPeriodView({
-          ...initial.view,
-          center:
-            initial.view.center -
-            (event.clientX - initial.x) / initial.width / initial.view.zoom,
-        }),
-      );
-    } else if (event.pointerType === "mouse") {
-      const bounds = event.currentTarget.getBoundingClientRect();
-      inspect(
+      if (initial.moved)
+        setView(
+          clampPeriodView({
+            ...initial.view,
+            center:
+              initial.view.center -
+              (e.clientX - initial.x) / initial.width / initial.view.zoom,
+          }),
+        );
+    } else {
+      const r = e.currentTarget.getBoundingClientRect();
+      setInspection(
         indexAtFraction(
           periodogram,
-          low + ((event.clientX - bounds.left) / bounds.width) * (high - low),
+          low + ((e.clientX - r.left) / r.width) * (high - low),
         ),
       );
     }
   };
-  const endGesture = (event: PointerEvent<HTMLDivElement>) => {
-    if (gesture.current?.pointerId === event.pointerId) gesture.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.ctrlKey || event.altKey || event.metaKey) return;
+  const keyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey)
+      return;
     if (
       ![
         "+",
@@ -242,12 +206,15 @@ export function PeriodogramChart({
         "ArrowDown",
         "Enter",
         "Escape",
-      ].includes(event.key)
+      ].includes(e.key)
     )
       return;
-    event.preventDefault();
-    if (event.key === "Escape") setPicking(false);
-    else if (event.key === "Enter")
+    e.preventDefault();
+    if (e.key === "Escape") {
+      setInspection(null);
+      return;
+    }
+    if (e.key === "Enter") {
       choose({
         kind: "direct",
         periodDays:
@@ -255,172 +222,121 @@ export function PeriodogramChart({
             ? periodAtFraction(periodogram, current.center)
             : model.periods[inspection],
       });
-    else if (event.key === "+" || event.key === "=") zoom(2);
-    else if (event.key === "-") zoom(0.5);
-    else if (event.key === "0" || event.key === "Home") reset();
-    else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
-      pan(event.key === "ArrowLeft" ? -1 : 1);
-    else {
-      const first = Math.ceil(low * (periodogram.nPeriods - 1)),
-        last = Math.floor(high * (periodogram.nPeriods - 1));
-      inspect(
-        Math.max(
-          first,
-          Math.min(
-            last,
-            inspection === null || inspection < first || inspection > last
-              ? first
-              : inspection + (event.key === "ArrowDown" ? 1 : -1),
-          ),
-        ),
-        true,
-      );
+      return;
     }
-  };
-  const inspectInput = (event: FormEvent) => {
-    event.preventDefault();
-    const input = indexInput.current!;
-    if (!input.reportValidity()) return;
-    const index = input.valueAsNumber;
-    inspect(index, true);
-    const center = index / (periodogram.nPeriods - 1);
-    if (center < low || center > high)
-      setView(clampPeriodView({ ...current, center }));
+    if (["0", "Home"].includes(e.key)) {
+      reset();
+      return;
+    }
+    if (["+", "=", "-"].includes(e.key)) {
+      setView((v) => zoomPeriodView(v, e.key === "-" ? 0.5 : 2));
+      return;
+    }
+    if (["ArrowLeft", "ArrowRight"].includes(e.key)) {
+      setView((v) =>
+        clampPeriodView({
+          ...v,
+          center: v.center + (e.key === "ArrowLeft" ? -0.2 : 0.2) / v.zoom,
+        }),
+      );
+      return;
+    }
+    const first = Math.ceil(low * (periodogram.nPeriods - 1)),
+      last = Math.floor(high * (periodogram.nPeriods - 1));
+    setInspection((i) =>
+      Math.max(
+        first,
+        Math.min(
+          last,
+          i === null || i < first || i > last
+            ? first
+            : i + (e.key === "ArrowDown" ? 1 : -1),
+        ),
+      ),
+    );
   };
   return (
-    <>
-      <p id={summaryId}>
-        {countFormat.format(periodogram.nPeriods)}점 · 주기{" "}
-        {format.format(periodogram.periodMinDays)}~
-        {format.format(periodogram.periodMaxDays)}일 · 로그 축 · 세로축: power
-      </p>
-      <figure className="periodogram-overview">
-        <figcaption>
-          전체 주기도 · 테두리: 아래 그래프에 표시 중인 범위
-        </figcaption>
-        <div className="periodogram-overview-plot">
-          <PlotCanvas
-            model={model}
-            candidates={candidates}
-            zoom={1}
-            center={0.5}
-            overview
-          />
-          <div
-            className="periodogram-window"
-            aria-hidden="true"
-            style={{ left: `${low * 100}%`, width: `${(high - low) * 100}%` }}
-          />
-        </div>
-      </figure>
-      <div
-        role="group"
-        aria-label="주기도 조작"
-        className="periodogram-toolbar"
-      >
+    <section className="periodogram-card" aria-label="반복 주기">
+      <div className="chart-heading">
+        <h2>반복 주기</h2>
         <button
-          type="button"
-          onClick={() => zoom(2)}
-          disabled={current.zoom >= 64}
+          className="chart-icon"
+          aria-label="주기도 전체 보기"
+          title="주기도 전체 보기"
+          onClick={reset}
         >
-          확대
+          <img src={resetIcon} alt="" width="18" height="18" />
         </button>
-        <button
-          type="button"
-          onClick={() => zoom(0.5)}
-          disabled={current.zoom <= 1}
-        >
-          축소
-        </button>
-        <button type="button" onClick={() => pan(-1)} disabled={low <= 1e-12}>
-          왼쪽 이동
-        </button>
-        <button
-          type="button"
-          onClick={() => pan(1)}
-          disabled={high >= 1 - 1e-12}
-        >
-          오른쪽 이동
-        </button>
-        <button type="button" onClick={reset}>
-          전체 보기
-        </button>
-        <button
-          type="button"
-          aria-pressed={picking}
-          onClick={() => setPicking((value) => !value)}
-        >
-          그래프에서 주기 고르기
-        </button>
-        <span
-          data-testid="periodogram-zoom"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          ×{format.format(current.zoom)}
-        </span>
       </div>
+      <span className="analysis-sr-only" data-testid="periodogram-zoom">
+        ×{format.format(current.zoom)}
+      </span>
       <figure className="periodogram-detail">
         <div className="periodogram-y-axis" aria-hidden="true">
           {[model.yMax, (model.yMax + model.yMin) / 2, model.yMin].map(
-            (power, index) => (
-              <span key={index}>{format.format(power)}</span>
+            (v, i) => (
+              <span key={i}>{v.toFixed(2)}</span>
             ),
           )}
         </div>
         <div
-          className={`periodogram-plot${picking ? " periodogram-picking" : ""}`}
           ref={plot}
-          tabIndex={0}
+          className="periodogram-plot"
           role="group"
           aria-label="주기도 그래프"
-          aria-describedby={`${summaryId} ${hintId}`}
+          aria-describedby={hintId}
+          tabIndex={0}
           data-point-count={periodogram.nPeriods}
           data-view-start={low}
           data-view-end={high}
-          onPointerDown={(event) => {
-            if (event.button !== 0 || !event.isPrimary) return;
-            if (event.pointerType === "mouse") event.preventDefault();
-            event.currentTarget.focus({ preventScroll: true });
-            event.currentTarget.setPointerCapture(event.pointerId);
-            gesture.current = {
-              pointerId: event.pointerId,
-              x: event.clientX,
-              y: event.clientY,
+          onPointerDown={(e) => {
+            if (
+              e.button !== 0 ||
+              !e.isPrimary ||
+              (e.target as HTMLElement).closest("button")
+            )
+              return;
+            e.preventDefault();
+            e.currentTarget.focus({ preventScroll: true });
+            e.currentTarget.setPointerCapture(e.pointerId);
+            drag.current = {
+              id: e.pointerId,
+              x: e.clientX,
+              y: e.clientY,
+              width: e.currentTarget.getBoundingClientRect().width,
+              view: current,
               moved: false,
-              width: event.currentTarget.getBoundingClientRect().width,
-              view: currentRef.current,
             };
           }}
           onPointerMove={move}
-          onPointerUp={(event) => {
-            const initial = gesture.current;
+          onPointerUp={(e) => {
+            const initial = drag.current;
+            drag.current = null;
+            if (!initial || initial.id !== e.pointerId) return;
+            if (e.currentTarget.hasPointerCapture(e.pointerId))
+              e.currentTarget.releasePointerCapture(e.pointerId);
             if (
-              picking &&
-              initial?.pointerId === event.pointerId &&
-              !initial.moved
-            ) {
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const x = (event.clientX - bounds.left) / bounds.width;
-              if (
-                x >= 0 &&
-                x <= 1 &&
-                event.clientY >= bounds.top &&
-                event.clientY <= bounds.bottom
-              )
-                choose({
-                  kind: "direct",
-                  periodDays: periodAtFraction(
-                    periodogram,
-                    low + x * (high - low),
-                  ),
-                });
-            }
-            endGesture(event);
+              initial.moved ||
+              Math.hypot(e.clientX - initial.x, e.clientY - initial.y) > 5
+            )
+              return;
+            const r = e.currentTarget.getBoundingClientRect(),
+              x = (e.clientX - r.left) / r.width;
+            if (x < 0 || x > 1 || e.clientY < r.top || e.clientY > r.bottom)
+              return;
+            choose({
+              kind: "direct",
+              periodDays: periodAtFraction(periodogram, low + x * (high - low)),
+            });
           }}
-          onPointerCancel={endGesture}
+          onPointerCancel={() => {
+            drag.current = null;
+          }}
           onLostPointerCapture={() => {
-            gesture.current = null;
+            drag.current = null;
+          }}
+          onPointerLeave={() => {
+            if (!drag.current) setInspection(null);
           }}
           onDoubleClick={reset}
           onKeyDown={keyDown}
@@ -432,200 +348,99 @@ export function PeriodogramChart({
             center={current.center}
           />
           {selectedPeriod !== null &&
-          periodFraction(periodogram, selectedPeriod) >= low &&
-          periodFraction(periodogram, selectedPeriod) <= high ? (
-            <span
-              className="periodogram-selected-line"
-              aria-hidden="true"
-              style={{
-                left: `${((periodFraction(periodogram, selectedPeriod) - low) / (high - low)) * 100}%`,
-              }}
-            />
-          ) : null}
+            periodFraction(periodogram, selectedPeriod) >= low &&
+            periodFraction(periodogram, selectedPeriod) <= high && (
+              <span
+                className="periodogram-selected-line"
+                aria-hidden="true"
+                style={{
+                  left:
+                    ((periodFraction(periodogram, selectedPeriod) - low) /
+                      (high - low)) *
+                      100 +
+                    "%",
+                }}
+              />
+            )}
+          {candidates.peaks.map((peak) => {
+            const x =
+              (periodFraction(periodogram, peak.periodDays) - low) /
+              (high - low);
+            if (x < 0 || x > 1) return null;
+            return (
+              <button
+                key={peak.gridIndex}
+                type="button"
+                className="peak-target"
+                aria-label={peak.rank + "위 봉우리 선택"}
+                aria-disabled={stage !== 1}
+                aria-describedby={
+                  inspection === peak.gridIndex ? readoutId : undefined
+                }
+                style={{
+                  left: x * 100 + "%",
+                  top:
+                    Math.max(
+                      0,
+                      Math.min(
+                        76,
+                        (1 -
+                          (peak.power - model.yMin) /
+                            (model.yMax - model.yMin)) *
+                          100,
+                      ),
+                    ) + "%",
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerMove={(e) => {
+                  e.stopPropagation();
+                  setInspection(peak.gridIndex);
+                }}
+                onFocus={() => setInspection(peak.gridIndex)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setInspection(null);
+                  }
+                }}
+                onBlur={() => setInspection(null)}
+                onClick={() =>
+                  choose({ kind: "peak", gridIndex: peak.gridIndex })
+                }
+              >
+                <span className="analysis-sr-only">{peak.rank}</span>
+              </button>
+            );
+          })}
+          {inspection !== null && (
+            <div
+              className="periodogram-tooltip"
+              id={readoutId}
+              role="tooltip"
+              data-testid="periodogram-readout"
+            >
+              주기 {format.format(model.periods[inspection])}일<br />
+              power {format.format(periodogram.power[inspection])}
+            </div>
+          )}
         </div>
         <div className="periodogram-x-axis" aria-hidden="true">
-          {[low, (low + high) / 2, high].map((fraction, index) => (
-            <span key={index}>
-              {format.format(periodAtFraction(periodogram, fraction))}
+          {[low, (low + high) / 2, high].map((v, i) => (
+            <span key={i}>
+              {Number(periodAtFraction(periodogram, v).toPrecision(4))}
             </span>
           ))}
         </div>
-        <figcaption>
-          표시 주기 {format.format(periodAtFraction(periodogram, low))}~
-          {format.format(periodAtFraction(periodogram, high))}일
-        </figcaption>
       </figure>
-      <p className="periodogram-legend">
-        실선: power · 번호: 추천 봉우리 순위 · 세로 실선: 선택 주기 · 회색 점선:
-        이미 매칭한 주기 · 음영: {format.format(periodogram.baselineHalfDays)}일
-        초과, 가려짐이 2번 미만일 수 있어 다음 관측 회차가 필요할 수 있음
+      <p className="chart-caption">
+        주기 (일·로그) · power · {stage === 1 ? "클릭해 선택" : "조회 전용"}
       </p>
-      <p id={hintId}>
-        그래프에 포커스한 뒤 휠·+/−: 확대·축소 · 드래그·←/→: 이동 · ↑/↓: 격자 값
-        확인 · Enter: 조회 중인 주기 선택(조회 전에는 화면 중앙) · 0/Home 또는
-        더블클릭: 전체 보기. 같은 조작을 위 버튼으로 할 수 있습니다.
+      <p id={hintId} className="analysis-sr-only">
+        봉우리에 Tab으로 이동하고 Enter로 선택합니다. 그래프 +/− 확대·축소,
+        드래그·좌우 방향키 이동, 상하 방향키 격자 조회, Enter 직접 선택, 0/Home
+        전체 보기. 음영은 관측 기간 절반 초과, 점선은 매칭 주기입니다.
       </p>
-      <p role="status">
-        {picking
-          ? "그래프를 한 번 눌러 새 주기를 선택하세요. 드래그는 이동만 합니다. Esc 또는 선택 버튼으로 취소할 수 있습니다."
-          : "확대·이동·값 조회는 선택 주기를 바꾸지 않습니다."}
-      </p>
-      <form className="periodogram-inspector" onSubmit={inspectInput}>
-        <label htmlFor={indexId}>조회할 격자 번호</label>
-        <input
-          ref={indexInput}
-          id={indexId}
-          name="periodogram-grid-index"
-          type="number"
-          inputMode="numeric"
-          autoComplete="off"
-          required
-          min={0}
-          max={periodogram.nPeriods - 1}
-          step={1}
-          defaultValue={0}
-          aria-describedby={indexHintId}
-        />
-        <button type="submit">격자 값 확인</button>
-        <span id={indexHintId}>
-          0~{countFormat.format(periodogram.nPeriods - 1)} · 주기 선택값은
-          바뀌지 않습니다.
-        </span>
-      </form>
-      <p className="periodogram-readout" data-testid="periodogram-readout">
-        {inspection === null
-          ? "그래프의 점을 가리키거나 격자 번호로 주기와 power를 확인하세요."
-          : `격자 ${inspection} · 주기 ${format.format(model.periods[inspection])}일 · power ${format.format(periodogram.power[inspection])}`}
-      </p>
-      <button
-        type="button"
-        disabled={inspection === null}
-        onClick={() => {
-          if (inspection !== null)
-            choose({ kind: "direct", periodDays: model.periods[inspection] });
-        }}
-      >
-        조회한 주기 선택
-      </button>
-      <form
-        className="period-selection-form"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          const input = periodInput.current!;
-          const period = input.valueAsNumber;
-          if (
-            !Number.isFinite(period) ||
-            period < periodogram.periodMinDays ||
-            period > periodogram.periodMaxDays
-          ) {
-            setSelectionError(
-              "주기도 전체 범위 안의 유한한 주기를 입력해 주세요.",
-            );
-            input.focus();
-            return;
-          }
-          choose({ kind: "direct", periodDays: period });
-        }}
-      >
-        <label htmlFor={periodId}>새 주기 (일)</label>
-        <input
-          ref={periodInput}
-          id={periodId}
-          name="new-period-days"
-          type="number"
-          inputMode="decimal"
-          autoComplete="off"
-          required
-          min={periodogram.periodMinDays}
-          max={periodogram.periodMaxDays}
-          step="any"
-          aria-invalid={Boolean(selectionError)}
-          aria-describedby={`${periodHintId} ${periodErrorId}`}
-        />
-        <button type="submit">새 주기 선택</button>
-        <span id={periodHintId}>
-          {format.format(periodogram.periodMinDays)}~
-          {format.format(periodogram.periodMaxDays)}일 · 추천 목록 밖의 주기도
-          선택할 수 있습니다.
-        </span>
-      </form>
-      <p id={periodErrorId} role="status" className="period-selection-error">
-        {selectionError}
-      </p>
-      <span
-        className="periodogram-sr-only"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {announcement}
-      </span>
-      <div className="periodogram-lists">
-        <section aria-label="추천 봉우리 목록">
-          <h3>추천 봉우리</h3>
-          <p>번호는 추천 순위입니다. 위치 보기는 그래프만 확대합니다.</p>
-          <ol
-            className={ranked.length > 50 ? "periodogram-long-list" : undefined}
-          >
-            {ranked.map((peak) => (
-              <li key={peak.gridIndex} value={peak.rank}>
-                <span>
-                  {format.format(peak.periodDays)}일 · power{" "}
-                  {format.format(peak.power)}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`${peak.rank}위 봉우리 위치 보기`}
-                  onClick={() => {
-                    setView(
-                      clampPeriodView({
-                        zoom: 8,
-                        center: peak.gridIndex / (periodogram.nPeriods - 1),
-                      }),
-                    );
-                    inspect(peak.gridIndex, true);
-                  }}
-                >
-                  위치 보기
-                </button>
-                <button
-                  type="button"
-                  aria-label={`${peak.rank}위 봉우리 선택`}
-                  onClick={() =>
-                    choose({ kind: "peak", gridIndex: peak.gridIndex })
-                  }
-                >
-                  주기 선택
-                </button>
-              </li>
-            ))}
-          </ol>
-        </section>
-        <section aria-label="이미 매칭한 주기 목록">
-          <h3>이미 매칭한 주기</h3>
-          {candidates.matchedCandidates.length ? (
-            <ul
-              className={
-                candidates.matchedCandidates.length > 50
-                  ? "periodogram-long-list"
-                  : undefined
-              }
-            >
-              {candidates.matchedCandidates.map((item) => (
-                <li key={item.candidateId}>
-                  {format.format(item.periodDays)}일
-                  {item.periodDays < periodogram.periodMinDays ||
-                  item.periodDays > periodogram.periodMaxDays
-                    ? " (그래프 범위 밖)"
-                    : ""}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>표시할 매칭 주기선이 없습니다.</p>
-          )}
-        </section>
-      </div>
-    </>
+      {error && <p role="alert">{error}</p>}
+    </section>
   );
 }

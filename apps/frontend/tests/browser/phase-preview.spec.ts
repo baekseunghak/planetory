@@ -1,13 +1,10 @@
+import { selectPeak, beginRange, tune, openData } from "../analysis-ui";
 import { expect, test, type Page } from "@playwright/test";
 
 async function select(page: Page) {
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
+  await selectPeak(page, 1);
+  await beginRange(page);
   await expect(page.getByTestId("phase-time-preview")).toHaveAttribute(
     "data-available",
     "true",
@@ -92,7 +89,10 @@ test("one preview drives readonly BTJD/hours and time bands during dragging with
     "data-epoch",
     (await page.getByTestId("phase-epoch").getAttribute("data-value"))!,
   );
-  await page.getByRole("button", { name: "구간 지우기", exact: true }).click();
+  await page
+    .locator(".chart-actions")
+    .getByRole("button", { name: "구간 지우기", exact: true })
+    .click();
   await expect(bands).toHaveAttribute("data-band-count", "0");
   await expect(page.getByTestId("phase-time-preview")).toHaveAttribute(
     "data-available",
@@ -138,9 +138,7 @@ for (const recovery of ["failure", "cancel"] as const)
     const bands = page.getByTestId("transit-bands");
     const epoch = await bands.getAttribute("data-epoch"),
       duration = await bands.getAttribute("data-duration");
-    await page
-      .getByRole("button", { name: "한 간격 늘리기", exact: true })
-      .click();
+    await tune(page, "ArrowRight");
     await expect(
       page.getByRole("slider", { name: "위상 구간 끝", exact: true }),
     ).toBeDisabled();
@@ -190,6 +188,7 @@ test("invalid edits, cancelled gestures and a data reload never leave stale time
   await page.keyboard.press("Escape");
   await page.mouse.up();
   await expect(bands).toHaveAttribute("data-epoch", before!);
+  await openData(page);
   await page
     .getByRole("button", { name: "최신 자료 확인", exact: true })
     .click();

@@ -1,17 +1,18 @@
+import {
+  selectPeak,
+  beginRange,
+  tune,
+  showJudgment,
+  logout,
+} from "../analysis-ui";
 import { expect, test, type Page } from "@playwright/test";
 const url = "/analysis/259377024?returnTo=%2Fsky";
 const memo = (page: Page) => page.getByLabel("메모 (선택)", { exact: true });
 async function save(page: Page) {
   await page.goto(url);
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "구간 선택 시작", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
-    .click();
+  await selectPeak(page, 1);
+  await beginRange(page);
+  await showJudgment(page);
   await page.getByRole("radio", { name: "모르겠음", exact: true }).check();
   await page.getByRole("checkbox", { name: "홀짝 깊이", exact: true }).check();
   await memo(page).fill("세션 초안 🌌");
@@ -38,7 +39,7 @@ test("reload and same-tab return restore original inputs only after refolding an
     if (leave === "reload") await page.reload();
     else {
       await page
-        .getByRole("link", { name: "이전 화면으로", exact: true })
+        .getByRole("link", { name: "← 이전 화면", exact: true })
         .click();
       await page.goto(url);
     }
@@ -57,9 +58,7 @@ test("reload and same-tab return restore original inputs only after refolding an
       epoch!,
     );
     await expect(page.getByTestId("candidate-review")).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
-      .click();
+    await showJudgment(page);
     await expect(
       page.getByRole("radio", { name: "모르겠음", exact: true }),
     ).toBeChecked();
@@ -89,9 +88,7 @@ test("reloading during an unfinished refold restores the last successful period 
   const period = await page
     .getByTestId("selected-period")
     .getAttribute("data-period");
-  await page
-    .getByRole("button", { name: "한 간격 늘리기", exact: true })
-    .click();
+  await tune(page, "ArrowRight");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "false",
@@ -160,7 +157,7 @@ for (const reason of ["logout", "expiry", "account-change"] as const)
       await page.route("**/api/v1/auth/logout", (route) =>
         route.fulfill({ status: 204 }),
       );
-      await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+      await logout(page);
       await expect(
         page.getByRole("heading", { name: "로그인이 필요합니다", exact: true }),
       ).toBeVisible();
@@ -209,10 +206,7 @@ for (const outcome of ["rejected", "unknown-ended"] as const)
         ? route.fulfill({ status: 403, json: { code: "FORBIDDEN" } })
         : route.abort("failed");
     });
-    await page
-      .getByRole("banner")
-      .getByRole("button", { name: "로그아웃", exact: true })
-      .click();
+    await logout(page);
     await expect(
       page.getByRole("heading", { name: "로그아웃하고 있습니다", exact: true }),
     ).toBeVisible();

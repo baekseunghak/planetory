@@ -50,12 +50,12 @@
   position: absolute;
   height: 100%;
   box-sizing: border-box;
-  background: #accdfa25;
-  border-inline: 1px solid #accdfa;
+  background: var(--band);
+  border-inline: 1px solid var(--accent);
 }
 .phase-band[data-invalid="true"] {
-  background: #ffc28a20;
-  border: 1px dashed #ffc28a;
+  background: rgba(238, 238, 238, 0.06);
+  border: 1px dashed var(--fg-3);
 }
 .phase-draw-target {
   pointer-events: auto;
@@ -70,9 +70,9 @@
   pointer-events: auto;
   touch-action: none;
   cursor: ew-resize;
-  color: #e5e9ee;
-  background: #17202c;
-  border: 1px solid #accdfa;
+  color: var(--fg-1);
+  background: var(--bg);
+  border: 1px solid var(--accent);
 }
 .phase-handle-0 {
   top: 0;
@@ -81,11 +81,11 @@
   bottom: 0;
 }
 .fold-panel .phase-handle:hover:not(:disabled) {
-  background: #263a52;
+  background: var(--accent-fill);
 }
 .phase-handle:focus-visible,
 .phase-draw-target:focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .phase-selection-layer[data-enabled="false"] {
@@ -111,12 +111,12 @@
   min-height: 44px;
   max-width: 100%;
   font: inherit;
-  color: #e5e9ee;
-  background-color: #070a0f;
+  color: var(--fg-1);
+  background-color: var(--control-bg);
   touch-action: manipulation;
 }
 .fold-renderer-controls select:focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 .fold-renderer-controls p {
@@ -124,7 +124,7 @@
   overflow-wrap: anywhere;
 }
 .fold-plot:focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 .fold-y-axis {

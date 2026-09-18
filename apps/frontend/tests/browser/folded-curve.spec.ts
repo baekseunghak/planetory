@@ -1,5 +1,7 @@
+import { selectPeak, tune } from "../analysis-ui";
 import { expect, test } from "@playwright/test";
 import { candidatePeaksFixture } from "../../dev/periodogram-fixtures";
+import { FINE_TUNE_DIVISIONS } from "../../src/features/analysis/period-selection";
 
 for (const scenario of [
   { zoom: 4, key: "ArrowRight", moves: 1 },
@@ -15,9 +17,7 @@ for (const scenario of [
     });
     await page.goto("/analysis/259377024");
     await expect(page.getByTestId("fold-status")).toContainText("주기를 선택");
-    await page
-      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-      .click();
+    await selectPeak(page, 1);
     const peak = candidatePeaksFixture().peaks[0];
     const result = page.getByTestId("fold-result"),
       plot = page.getByRole("group", { name: "접힌 곡선 그래프", exact: true });
@@ -38,10 +38,10 @@ for (const scenario of [
     await expect(page.getByTestId("fold-zoom")).toHaveText(`×${scenario.zoom}`);
     const viewStart = await plot.getAttribute("data-view-start");
     const viewEnd = await plot.getAttribute("data-view-end");
-    await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    await tune(page, "ArrowRight");
     await expect(result).toHaveAttribute(
       "data-period",
-      String(peak.periodDays + peak.fineTune.periodStepDays),
+      String(peak.periodDays + peak.fineTune.periodStepDays / FINE_TUNE_DIVISIONS),
     );
     await expect(page.getByTestId("fold-zoom")).toHaveText(`×${scenario.zoom}`);
     await expect(plot).toHaveAttribute("data-view-start", viewStart!);
@@ -52,9 +52,7 @@ for (const scenario of [
     );
     await expect(plot).toHaveAttribute("data-y-min", yMin!);
     await expect(plot).toHaveAttribute("data-y-max", yMax!);
-    await page
-      .getByRole("button", { name: "2위 봉우리 선택", exact: true })
-      .click();
+    await selectPeak(page, 2);
     await expect(result).toHaveAttribute(
       "data-period",
       String(candidatePeaksFixture().peaks[1].periodDays),
@@ -65,13 +63,11 @@ for (const scenario of [
     expect(calls).toEqual(loaded);
   });
 
-test("pointer zoom preserves its phase, keyboard and double click restore full view, numeric alternative is available", async ({
+test("pointer zoom preserves its phase, keyboard and double click restore full view, keyboard inspection is available", async ({
   page,
 }) => {
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   const plot = page.getByRole("group", {
     name: "접힌 곡선 그래프",
     exact: true,
@@ -93,16 +89,12 @@ test("pointer zoom preserves its phase, keyboard and double click restore full v
     await plot.press("+");
     await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
   }
-  await expect(
-    page.getByRole("button", { name: "접힌 곡선 확대", exact: true }),
-  ).toBeDisabled();
+  await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
   for (const level of [16, 8, 4, 2, 1, 1]) {
     await plot.press("-");
     await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
   }
-  await expect(
-    page.getByRole("button", { name: "접힌 곡선 축소", exact: true }),
-  ).toBeDisabled();
+  await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
   await plot.press("ArrowDown");
   await expect(page.locator(".fold-inspector")).toContainText("BTJD");
   await plot.press("0");
@@ -112,23 +104,18 @@ test("pointer zoom preserves its phase, keyboard and double click restore full v
   await expect(page.getByTestId("fold-zoom")).toHaveText("×1");
 });
 
-for (const control of ["wheel", "button"] as const)
+for (const control of ["wheel", "keyboard"] as const)
   test(`${control} reaches x32 and reverses every step at the minimum desktop width`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 844 });
     await page.goto("/analysis/259377024");
-    await page
-      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-      .click();
+    await selectPeak(page, 1);
     const plot = page.getByRole("group", {
       name: "접힌 곡선 그래프",
       exact: true,
     });
-    const toolbar = page.getByRole("group", {
-      name: "접힌 곡선 조작",
-      exact: true,
-    });
+    const toolbar = page.locator(".fold-panel");
     await expect(plot).toBeVisible();
     const rect = (await plot.boundingBox())!;
     const clientX = Math.round(rect.x + rect.width * 0.3);
@@ -138,9 +125,9 @@ for (const control of ["wheel", "button"] as const)
       if (control === "wheel")
         await plot.dispatchEvent("wheel", { deltaY: -100, clientX });
       else
-        await toolbar
-          .getByRole("button", { name: "접힌 곡선 확대", exact: true })
-          .click();
+        await page
+          .getByRole("group", { name: "접힌 곡선 그래프", exact: true })
+          .press("+");
       await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
       if (control === "wheel") {
         const low = Number(await plot.getAttribute("data-view-start"));
@@ -148,9 +135,7 @@ for (const control of ["wheel", "button"] as const)
         expect(low + ratio * (high - low)).toBeCloseTo(anchor, 10);
       }
     }
-    await expect(
-      toolbar.getByRole("button", { name: "접힌 곡선 확대", exact: true }),
-    ).toBeDisabled();
+    await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
     if (control === "wheel") {
       await plot.dispatchEvent("wheel", { deltaY: -100, clientX });
       await expect(page.getByTestId("fold-zoom")).toHaveText("×32");
@@ -168,17 +153,17 @@ for (const control of ["wheel", "button"] as const)
       if (control === "wheel")
         await plot.dispatchEvent("wheel", { deltaY: 100, clientX });
       else
-        await toolbar
-          .getByRole("button", { name: "접힌 곡선 축소", exact: true })
-          .click();
+        await page
+          .getByRole("group", { name: "접힌 곡선 그래프", exact: true })
+          .press("-");
       await expect(page.getByTestId("fold-zoom")).toHaveText(`×${level}`);
     }
     await expect(plot).toHaveAttribute("data-view-start", "-0.5");
     await expect(plot).toHaveAttribute("data-view-end", "1.5");
     for (let i = 0; i < 5; i++)
-      await toolbar
-        .getByRole("button", { name: "접힌 곡선 확대", exact: true })
-        .click();
+      await page
+        .getByRole("group", { name: "접힌 곡선 그래프", exact: true })
+        .press("+");
     if (control === "wheel") await plot.dblclick();
     else
       await toolbar
@@ -192,27 +177,26 @@ test("direct periods fold without enabling deferred fine tuning at the minimum s
 }) => {
   await page.setViewportSize({ width: 1024, height: 844 });
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("spinbutton", { name: "새 주기 (일)", exact: true })
-    .fill("1.2345678901234567");
-  await page.getByRole("button", { name: "새 주기 선택", exact: true }).click();
+  const pg = page.getByRole("group", { name: "주기도 그래프", exact: true });
+  await pg.press("ArrowDown");
+  await pg.press("Enter");
   await expect(page.getByTestId("fold-result")).toHaveAttribute(
     "data-period",
-    "1.2345678901234567",
+    "0.5",
   );
   await expect(
     page.getByRole("slider", { name: "반복 주기 미세 조정" }),
   ).toHaveCount(0);
   const panel = page.getByRole("region", {
-    name: "주기로 접은 밝기 변화",
+    name: "주기로 겹친 밝기 변화",
     exact: true,
   });
   expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
     true,
   );
-  await panel
-    .getByRole("button", { name: "접힌 곡선 확대", exact: true })
-    .click();
+  await page
+    .getByRole("group", { name: "접힌 곡선 그래프", exact: true })
+    .press("+");
   await expect(page.getByTestId("fold-zoom")).toHaveText("×2");
 });
 
@@ -230,13 +214,11 @@ test("pending fold keeps its last successful graph and can be cancelled/retried"
     };
   });
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   await expect(page.getByTestId("fold-status")).toContainText("접고 있습니다");
   await expect(page.getByTestId("fold-result")).toBeVisible();
   const old = await page.getByTestId("fold-result").getAttribute("data-period");
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await tune(page, "ArrowRight");
   await expect(page.getByTestId("fold-status")).toContainText("접고 있습니다");
   await expect(page.getByTestId("fold-result")).toHaveAttribute(
     "data-period",
@@ -249,8 +231,8 @@ test("pending fold keeps its last successful graph and can be cancelled/retried"
     old!,
   );
   await expect(
-    page.getByRole("spinbutton", { name: "미세 조정 주기 (일)", exact: true }),
-  ).toHaveValue(old!);
+    page.getByRole("slider", { name: "반복 주기 미세 조정", exact: true }),
+  ).toHaveAttribute("value", old!);
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "true",
@@ -284,9 +266,7 @@ test("Worker failure has a clear error and retry action, never a fake empty succ
     };
   });
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   await expect(page.getByTestId("fold-status")).toContainText("접기에 실패");
   await expect(page.getByTestId("fold-result")).toHaveCount(0);
   await expect(page.getByTestId("selected-period")).toContainText(
@@ -344,13 +324,11 @@ for (const operation of ["fine-tune", "reselect"] as const)
       name: "접힌 곡선 그래프",
       exact: true,
     });
-    const number = page.getByRole("spinbutton", {
-      name: "미세 조정 주기 (일)",
+    const number = page.getByRole("slider", {
+      name: "반복 주기 미세 조정",
       exact: true,
     });
-    await page
-      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-      .click();
+    await selectPeak(page, 1);
     await expect(panel).toHaveAttribute("data-fold-ready", "true");
     const original = await result.getAttribute("data-period");
     const sliderValue = await page
@@ -361,12 +339,8 @@ for (const operation of ["fine-tune", "reselect"] as const)
     await plot.press("ArrowLeft");
     const start = await plot.getAttribute("data-view-start");
     const end = await plot.getAttribute("data-view-end");
-    if (operation === "fine-tune")
-      await page.getByRole("button", { name: "한 간격 늘리기" }).click();
-    else
-      await page
-        .getByRole("button", { name: "2위 봉우리 선택", exact: true })
-        .click();
+    if (operation === "fine-tune") await tune(page, "ArrowRight");
+    else await selectPeak(page, 2);
     const attempted = await selected.getAttribute("data-period");
     const attemptRevision = Number(
       await selected.getAttribute("data-revision"),
@@ -382,7 +356,7 @@ for (const operation of ["fine-tune", "reselect"] as const)
     await expect(status).toContainText("복구했습니다");
     await expect(selected).toHaveAttribute("data-period", original!);
     await expect(selected).toHaveAttribute("data-source", "3600");
-    await expect(number).toHaveValue(original!);
+    await expect(number).toHaveAttribute("value", original!);
     await expect(
       page.getByRole("slider", { name: "반복 주기 미세 조정" }),
     ).toHaveValue(sliderValue);
@@ -396,7 +370,7 @@ for (const operation of ["fine-tune", "reselect"] as const)
       .click();
     await expect(result).toHaveAttribute("data-period", attempted!);
     await expect(selected).toHaveAttribute("data-period", attempted!);
-    await expect(number).toHaveValue(attempted!);
+    await expect(number).toHaveAttribute("value", attempted!);
     expect(
       Number(await selected.getAttribute("data-revision")),
     ).toBeGreaterThan(attemptRevision);
@@ -421,14 +395,12 @@ test("watchdog restores a stalled refold and permits explicit retry", async ({
     };
   });
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   const result = page.getByTestId("fold-result");
   await expect(result).toBeVisible();
   const original = await result.getAttribute("data-period");
   await page.clock.install();
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await tune(page, "ArrowRight");
   await expect(page.getByTestId("fold-panel")).toHaveAttribute(
     "data-fold-ready",
     "false",
@@ -455,9 +427,7 @@ test("repeated slider updates keep feedback unchanged without a late cancel flas
   page,
 }) => {
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   const panel = page.getByTestId("fold-panel");
   await expect(panel).toHaveAttribute("data-fold-ready", "true");
   const baseline = await page.getByTestId("fold-status").textContent();
@@ -519,19 +489,17 @@ test("one prolonged pending interval exposes cancel despite new inputs and reset
     };
   });
   await page.goto("/analysis/259377024");
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click();
+  await selectPeak(page, 1);
   const panel = page.getByTestId("fold-panel");
   await expect(panel).toHaveAttribute("data-fold-ready", "true");
   const baseline = await page.getByTestId("fold-status").textContent();
   const cancel = page.getByRole("button", { name: "접기 취소", exact: true });
   await page.clock.install();
   await page.clock.pauseAt(new Date(Date.now() + 1000));
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await tune(page, "ArrowRight");
   await expect(panel).toHaveAttribute("data-fold-ready", "false");
   await page.clock.runFor(400);
-  await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+  await tune(page, "ArrowRight");
   await page.clock.runFor(400);
   await expect(page.getByTestId("fold-status")).toHaveText(baseline!);
   await expect(cancel).toHaveCount(0);
@@ -566,9 +534,7 @@ for (const width of [1024, 1440])
       };
     });
     await page.goto("/analysis/259377024");
-    await page
-      .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-      .click();
+    await selectPeak(page, 1);
     const panel = page.getByTestId("fold-panel");
     const plot = page.getByRole("group", {
       name: "접힌 곡선 그래프",
@@ -582,7 +548,7 @@ for (const width of [1024, 1440])
           el.closest(".fold-panel")!.getBoundingClientRect().top,
       );
     const before = await position();
-    await page.getByRole("button", { name: "한 간격 늘리기" }).click();
+    await tune(page, "ArrowRight");
     await expect(panel).toHaveAttribute("data-fold-ready", "false");
     expect(await position()).toBe(before);
     await expect(

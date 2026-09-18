@@ -2,6 +2,8 @@
 
 대상은 [S15P21C206-185](https://ssafy.atlassian.net/browse/S15P21C206-185)이다. 2026-09-17 기준 **1~4단계 구현과 5단계 로컬 통합 검사 완료·실제 API 인수 대기** 상태다. 기능 기준은 [분석 프론트 명세 §5~6](../../../docs/development/analysis-frontend-spec.md), [SRS EXP-06·07·12 및 SUB-01·02](../../../docs/requirements/planetory-requirements-spec.md), 입력 계약은 [탐사 API §5.1·5.4·6.2](../../backend/docs/exploration-api-spec.md)를 따른다. 기존 [접기 개발 안내](phase-folding.md)의 최신 결과·실패 복구·32배 보기 계약을 유지한다.
 
+현재 화면 배치와 단계별 입력 경로는 후속 [#236 디자인 적용](analysis-design.md)을 따른다. 아래 내용은 #185 기능 구현 당시 기록이다.
+
 ## 작업 순서와 브랜치
 
 | 단계 | 범위                                                        | 현재 상태                     |

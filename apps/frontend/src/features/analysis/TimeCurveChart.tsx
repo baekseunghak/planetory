@@ -1,3 +1,4 @@
+import resetIcon from "./assets/reset.svg";
 import {
   useEffect,
   useId,
@@ -194,28 +195,18 @@ export function TimeCurveChart({
     <section className="analysis-time-curve" aria-label="시간 곡선">
       <div className="analysis-time-heading">
         <h2>시간에 따른 밝기 변화</h2>
-        <span>밝기 ({fluxUnit})</span>
+        <button
+          className="chart-icon"
+          aria-label="시간 곡선 전체 보기"
+          title="시간 곡선 전체 보기"
+          onClick={reset}
+        >
+          <img src={resetIcon} alt="" width="18" height="18" />
+        </button>
       </div>
-      <div
-        className="analysis-time-toolbar"
-        role="group"
-        aria-label="시간 곡선 조작"
-      >
-        <button onClick={() => zoom(2)} disabled={current.zoom >= 64}>
-          확대
-        </button>
-        <button onClick={() => zoom(0.5)} disabled={current.zoom <= 1}>
-          축소
-        </button>
-        <button onClick={() => pan(-1)} disabled={low <= 1e-12}>
-          왼쪽 이동
-        </button>
-        <button onClick={() => pan(1)} disabled={high >= curve.width - 1e-12}>
-          오른쪽 이동
-        </button>
-        <button onClick={reset}>전체 보기</button>
-        <span data-testid="time-zoom">×{Number(current.zoom.toFixed(2))}</span>
-      </div>
+      <span className="analysis-sr-only" data-testid="time-zoom">
+        ×{Number(current.zoom.toFixed(2))}
+      </span>
       <figure>
         <div className="analysis-time-axis-y" aria-hidden="true">
           {[1, 0.5, 0].map((ratio) => (
@@ -320,10 +311,10 @@ export function TimeCurveChart({
           실제 관측 시각 (BTJD) ·{" "}
           <span className="analysis-time-gap-key">음영: 관측값 없음</span> · //:
           Sector 경계의 시간 간격 축약
-          {" · "}푸른 띠: 선택 구간의 예상 반복 위치 (읽기 전용)
+          {" · "}금색 띠: 선택 구간의 예상 반복 위치 (읽기 전용)
         </figcaption>
       </figure>
-      <p id={hintId} className="analysis-time-help">
+      <p id={hintId} className="analysis-time-help analysis-sr-only">
         휠·+/−: 확대·축소 · 드래그·←/→: 이동 · ↑/↓: 관측점 확인 · 0/Home: 전체
         보기
       </p>
@@ -336,7 +327,7 @@ export function TimeCurveChart({
           ? `Sector ${point.sector} · BTJD ${point.btjd} · 밝기 ${point.flux} ${fluxUnit}`
           : "점에 마우스를 올리거나 그래프에서 ↑/↓ 키로 실제 시각과 밝기를 확인하세요."}
       </div>
-      <details>
+      <details className="time-gap-details">
         <summary>Sector 경계의 실제 시간 간격</summary>
         <ul>
           {curve.segments.slice(1).map((segment, i) => {

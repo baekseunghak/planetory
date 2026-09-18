@@ -89,9 +89,22 @@ export function PeriodogramPanel({
   const ready =
     state.kind === "loaded" && state.data.kind === "ready" ? state.data : null;
   return (
-    <section className="analysis-periodogram" aria-labelledby={headingId}>
-      <h2 id={headingId}>반복 주기 그래프</h2>
-      <p aria-live="polite" aria-atomic="true" className="periodogram-state">
+    <section
+      className={
+        ready
+          ? "analysis-periodogram"
+          : "analysis-periodogram periodogram-unavailable"
+      }
+      aria-labelledby={headingId}
+    >
+      <h2 className="analysis-sr-only" id={headingId}>
+        반복 주기 그래프
+      </h2>
+      <p
+        aria-live="polite"
+        aria-atomic="true"
+        className={ready ? "analysis-sr-only" : "periodogram-state"}
+      >
         {ready
           ? "주기도를 불러왔습니다. 그래프 탐색은 주기 선택값을 변경하지 않습니다."
           : message}

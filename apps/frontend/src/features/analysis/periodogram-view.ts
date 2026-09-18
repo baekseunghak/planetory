@@ -93,14 +93,14 @@ export function drawPeriodogram(
   ctx.rect(0, 0, width, height);
   ctx.clip();
   const boundary = x(periodFraction(grid, grid.baselineHalfDays));
-  ctx.fillStyle = "#dfbd8126";
+  ctx.fillStyle = "rgba(238,238,238,0.06)";
   ctx.fillRect(
     Math.max(0, boundary),
     0,
     Math.max(0, width - Math.max(0, boundary)),
     height,
   );
-  ctx.strokeStyle = "#dfbd81";
+  ctx.strokeStyle = "rgba(238,238,238,0.3)";
   ctx.lineWidth = 1;
   ctx.setLineDash([5, 4]);
   if (boundary >= 0 && boundary <= width) {
@@ -109,7 +109,7 @@ export function drawPeriodogram(
     ctx.lineTo(boundary, height);
     ctx.stroke();
   }
-  ctx.strokeStyle = "#a8b2c1";
+  ctx.strokeStyle = "rgba(255,211,105,0.5)";
   ctx.setLineDash([2, 5]);
   for (const matched of candidates.matchedCandidates) {
     const position = x(periodFraction(grid, matched.periodDays));
@@ -119,7 +119,7 @@ export function drawPeriodogram(
     ctx.stroke();
   }
   ctx.setLineDash([]);
-  ctx.strokeStyle = "#accdfa";
+  ctx.strokeStyle = "rgba(238,238,238,0.8)";
   ctx.lineWidth = overview ? 1 : 1.5;
   ctx.beginPath();
   const first = Math.max(0, Math.floor(low * (grid.nPeriods - 1))),
@@ -138,11 +138,11 @@ export function drawPeriodogram(
       const px = x(peak.gridIndex / (grid.nPeriods - 1));
       if (px < 0 || px > width) continue;
       const py = y(peak.power);
-      ctx.fillStyle = "#accdfa";
+      ctx.fillStyle = "#ffd369";
       ctx.beginPath();
       ctx.arc(px, py, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#e5e9ee";
+      ctx.fillStyle = "#eeeeee";
       ctx.fillText(
         String(peak.rank),
         Math.max(8, Math.min(width - 8, px)),

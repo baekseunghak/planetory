@@ -164,3 +164,5 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 [206 상세 인수](docs/ticket-206-readiness.md), [207 대체 목록 인수](docs/ticket-207-readiness.md), [201~207 최신 실서버 검증](docs/latest-integration-201-207-20260917.md)을 참고한다. 현재 develop 854c23c의 퀘스트 API를 연결했으며 201~204는 develop에 병합됐다. 과거의 퀘스트404와 실제 연결 대기는 구버전 서버 검증 이력이다. 최신 기능은 205→206→207 순서로 검토하며 배포·상대 목적지·Safari 인수는 남는다.
 
 최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.
+
+분석 1–5단계의 Figma 적용 범위와 조작·검증은 [분석 디자인 적용 기록](docs/analysis-design.md)을 따른다.

@@ -22,7 +22,7 @@ precision highp float;
 in vec2 circle;
 uniform float radius;
 out vec4 color;
-void main(){float a=clamp(radius+0.5-length(circle),0.0,1.0);if(a==0.0)discard;color=vec4(vec3(166.,232.,206.)/255.,a);}`;
+void main(){float a=clamp(radius+0.5-length(circle),0.0,1.0);if(a==0.0)discard;color=vec4(vec3(238.,238.,238.)/255.,a);}`;
 const gridVertex = `#version 300 es
 void main(){gl_Position=vec4((gl_VertexID==1||gl_VertexID==3)?1.0:-1.0,gl_VertexID>=2?1.0:-1.0,0.,1.);}`;
 const gridFragment = `#version 300 es
@@ -30,7 +30,7 @@ precision highp float;
 uniform float height;
 uniform float pixelRatio;
 out vec4 color;
-void main(){float p=gl_FragCoord.y/(height/4.);float d=min(fract(p),1.-fract(p))*(height/4.);color=vec4(1.,1.,1.,d<=pixelRatio*0.5?24./255.:0.);}`;
+void main(){float p=gl_FragCoord.y/(height/4.);float d=min(fract(p),1.-fract(p))*(height/4.);color=vec4(vec3(238.)/255.,d<=pixelRatio*0.5?0.42:0.);}`;
 
 /** Display-only renderer. Scientific Float64 arrays are never modified. */
 export class FoldWebglRenderer {
