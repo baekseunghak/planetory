@@ -29,8 +29,8 @@ public class MemberController {
         var member = members.requireActive(principal.memberId());
         var settings = members.settings(member.getId());
         var overview = exploration.overview(member.getId());
-        return new MeResponse("u-" + member.getId(), member.getNickname(), member.getRole().toUpperCase(Locale.ROOT),
-                settings.isStarListPublic() ? "PUBLIC" : "PRIVATE", overview.tutorialCompleted(),
+        return new MeResponse("u-" + member.getId(), member.getNickname(), member.getCreatedAt(),
+                member.getRole().toUpperCase(Locale.ROOT), settings.isStarListPublic() ? "PUBLIC" : "PRIVATE", overview.tutorialCompleted(),
                 settings.isOnboardingDone(), overview.achievementSummary());
     }
 
