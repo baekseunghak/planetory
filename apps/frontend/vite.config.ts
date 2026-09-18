@@ -24,7 +24,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const communityFixture =
     command === "serve" &&
     !isPreview &&
-    ["community", "posts", "comments"].includes(mode);
+    ["community", "posts", "comments", "reactions"].includes(mode);
   const testing =
     fixture || authFixture || skyFixture || galaxyFixture || communityFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
@@ -65,8 +65,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
             (
               await import("./dev/community-fixture-plugin.ts")
             ).communityFixturePlugin(
-              ["posts", "comments"].includes(mode),
-              mode === "comments",
+              ["posts", "comments", "reactions"].includes(mode),
+              ["comments", "reactions"].includes(mode),
+              mode === "reactions",
             ),
           ]
         : []),

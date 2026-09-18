@@ -25,6 +25,7 @@ import { usePageScroll } from "./usePageScroll";
 import "./community.css";
 import { Pager } from "./CommunityPagination";
 import { Discussion } from "./Discussion";
+import { PostReactions } from "./PostReactions";
 import { PostActions } from "./PostActions";
 
 function DateTime({ value }: { value: string }) {
@@ -291,6 +292,12 @@ export function PostPage() {
           </article>
         </>
       )}
+      <PostReactions
+        key={`reactions:${postId}`}
+        postId={postId}
+        active={denied?.id !== postId && !!state.data}
+        onUnavailable={onUnavailable}
+      />
       <Discussion
         key={`comments:${postId}`}
         parent={{ parentType: "POST", parentId: postId }}
