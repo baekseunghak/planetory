@@ -64,6 +64,7 @@ export function GalaxyScene({
   const [ready, setReady] = useState(false);
   const paused = useRef(suspended);
   paused.current = suspended;
+  const hasCamera = camera !== null;
   const current = useRef({ camera, dimensions, data }),
     metricsRef = useRef(onMetrics);
   current.current = { camera, dimensions, data };
@@ -143,7 +144,7 @@ export function GalaxyScene({
       cancelAnimationFrame(cameraAnimation.current);
       onReady?.(null);
     };
-  }, [onReady, !!camera]);
+  }, [onReady, hasCamera]);
   useEffect(() => setSystem(null), [meta.version, data.selectedTicId]);
   useEffect(() => {
     const element = canvas.current;
@@ -294,7 +295,7 @@ export function GalaxyScene({
         data-focused-planet={focusedPlanet ?? ""}
         tabIndex={suspended ? -1 : 0}
         role="listbox"
-        data-camera={JSON.stringify(camera)}
+        {...(import.meta.env.DEV ? { "data-camera": JSON.stringify(camera) } : {})}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
       {camera && matrix && (

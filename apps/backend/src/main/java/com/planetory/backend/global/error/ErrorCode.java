@@ -22,6 +22,8 @@ public enum ErrorCode {
     // 이쪽은 반대로 존재를 드러내지 않는다. 없는 TIC과 미공개 별을 같은 응답으로 덮는다.
     STAR_NOT_PUBLISHED(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다."),
     STAR_LIST_PRIVATE(HttpStatus.FORBIDDEN, "별 목록을 공개하지 않은 회원입니다."),
+    // 요청의 판·계산 버전이 현재 판과 다르다. 본문에 currentBundleId를 싣는다(탐사 API 2.3).
+    BUNDLE_CHANGED(HttpStatus.CONFLICT, "분석 중인 판이 바뀌었습니다. 최신 판을 다시 불러와 주세요."),
     DEPENDENCY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 
