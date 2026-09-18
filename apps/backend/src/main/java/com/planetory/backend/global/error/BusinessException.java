@@ -1,6 +1,7 @@
 package com.planetory.backend.global.error;
 
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
 
 /**
@@ -12,6 +13,8 @@ public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
     private final List<ErrorResponse.FieldError> fieldErrors;
+    /** 명세가 그 코드의 응답 본문에 정한 추가 필드. 응답 최상위에 그대로 나간다. */
+    private final Map<String, Object> details;
 
     public BusinessException(ErrorCode errorCode) {
         this(errorCode, errorCode.getDefaultMessage(), List.of());
@@ -22,8 +25,18 @@ public class BusinessException extends RuntimeException {
     }
 
     public BusinessException(ErrorCode errorCode, String message, List<ErrorResponse.FieldError> fieldErrors) {
+        this(errorCode, message, fieldErrors, Map.of());
+    }
+
+    public BusinessException(ErrorCode errorCode, Map<String, Object> details) {
+        this(errorCode, errorCode.getDefaultMessage(), List.of(), details);
+    }
+
+    public BusinessException(ErrorCode errorCode, String message, List<ErrorResponse.FieldError> fieldErrors,
+                             Map<String, Object> details) {
         super(message);
         this.errorCode = errorCode;
         this.fieldErrors = List.copyOf(fieldErrors);
+        this.details = Map.copyOf(details);
     }
 }

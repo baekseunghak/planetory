@@ -127,7 +127,7 @@ Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후
 1. cadence, Sector 수, TIC별 점 수와 후보 수별로 표본을 뽑는다.
 2. 곡선 배열, 주기도, 모델과 manifest의 실제 byte를 각각 측정한다.
 3. `전체 용량 = 각 그룹의 TIC 수 × 그룹당 평균 byte`를 모두 더한다.
-4. PostgreSQL Primary·Standby의 Gold 배열·인덱스·WAL·여유 공간과 Redis 결과·TTL·메모리 상한을 각각 더한다.
+4. PostgreSQL(EC2-A)의 Gold 배열·인덱스·WAL·여유 공간과 Redis 결과·TTL·메모리 상한을 각각 더한다.
 5. 예상 점유가 각 저장소 용량의 85%를 넘으면 공개 범위·보존 수·비닝 또는 저장소를 다시 결정한다. 계산용 곡선을 화면 스냅샷 크기로 임의 축약하지 않는다.
 
 ## 관측 항목

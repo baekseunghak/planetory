@@ -108,7 +108,7 @@ test("only rendered visible stars enter index and source stars remain unchanged"
   );
   assert.ok(targets.length < stars.length);
   assert.ok(
-    targets.every((t) => t.x >= 0 && t.x <= 1024 && t.y >= 0 && t.y <= 640),
+    targets.every((t) => t.x >= -80 && t.x <= 1104 && t.y >= -80 && t.y <= 720),
   );
   assert.equal(JSON.stringify(stars), before);
 });
@@ -170,4 +170,44 @@ test("planet identity and null measurements are displayed without invented value
     }),
     /100 ppm \(0.01%\)/,
   );
+});
+
+test("partially visible edge markers stay indexed until the padded scene clips them", () => {
+  const star = exampleStar(0),
+    width = 1024,
+    height = 640;
+  const point = screenPoint(
+    cameraMatrix(INITIAL_CAMERA, width, height),
+    width,
+    height,
+    star.x,
+    star.y,
+    star.depthZ,
+  );
+  for (const [x, y, present] of [
+    [-5, 320, true],
+    [1029, 320, true],
+    [512, 652, true],
+    [-90, 320, false],
+    [512, 730, false],
+  ] as const) {
+    const camera = panCamera(
+      INITIAL_CAMERA,
+      x - point.x,
+      y - point.y,
+      width,
+      height,
+    );
+    const targets = starTargets(
+      [star],
+      cameraMatrix(camera, width, height),
+      width,
+      height,
+      camera.zoom,
+      null,
+      null,
+    );
+    assert.equal(targets.length, present ? 1 : 0);
+    if (present) assert.equal(targets[0].id, star.ticId);
+  }
 });
