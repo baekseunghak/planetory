@@ -73,3 +73,9 @@
 | 2026-09-18 | 공개 History 공용 렌더러 소비 경계 | S15P21C206-213 | HistoryGraphRenderer, 부모 권한, CURRENT, SUBMITTED, A08 | 소비 계약 검증·실제 연결 전 | [2026-09-18](2026-09-18.md) |
 
 | 2026-09-18 | 프로필·닉네임·읽기 전용 안내와 A 화면 슬롯 | S15P21C206-214 | profileSections, S04, GIF, AT-119, 가입일, 팔로우 수 | 구현·계약 미결 별도 기록 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN 호스트 준비와 Spark HDFS sample 실환경 검증 | S15P21C206-73 | YARN, CapacityScheduler, systemd, Docker, Spark 3.5.5, HDFS, Node 2, UFW, executor, checksum | 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN CI Runner 검증을 기존 CI Task로 후속 인계 | S15P21C206-91 | YARN, GitLab CI, validate:hadoop-config, Linux Runner, Pipeline | 채택·검증 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN MR 재실행 안전성 리뷰 반영 | S15P21C206-73 | YARN, OOM, UFW, HA, Bash, log retention, non-destructive | 구현 완료·서버 재적용 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | YARN 집계 로그 보존·회귀 검사 정정 | S15P21C206-73 | YARN, AggregatedLogDeletionService, journal cursor, cleanup, regression | 구현 완료·서버 재실행 검증 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 제출 수치 검증·후보 매칭·고조파 판정 계산(공통 표본 31개 재현) | S15P21C206-142 | SubmissionMatching, 6.2 검증, epoch 산정, 5.1 네 조건, 배율 1 우선, matched_harmonic, ambiguous_match, duplicate, 관측 창, bin 시작 시각, matching-cases.v0, rule-0 | 구현 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |

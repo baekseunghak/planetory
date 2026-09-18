@@ -80,6 +80,8 @@ Hadoop/YARN 데몬은 호스트에서 실행한다. 일반 애플리케이션 �
 
 GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며 CI에서 실행하지 않는다.
 
+`S15P21C206-73`은 YARN XML·`scripts/*yarn*`·`validate.py` 변경의 로컬 검사와 실환경 검증까지만 완료했다. 정확한 Linux Runner 경로 선택과 성공·실패 Pipeline 증거는 기존 [S15P21C206-91](https://ssafy.atlassian.net/browse/S15P21C206-91)에서 확인하며, 73번 완료 상태는 현재 커밋의 CI 통과를 포함하지 않는다.
+
 - CI의 XML·Compose 검사는 VM 생성이나 실제 클러스터 동작을 검증하지 않는다.
 - 설정 파일만 수정해도 validate는 실행된다.
 - 현재 deploy 규칙은 애플리케이션 소스 변경을 기준으로 한다.
