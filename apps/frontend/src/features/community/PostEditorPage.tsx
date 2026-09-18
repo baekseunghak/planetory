@@ -1,3 +1,5 @@
+import { MaterialPicker } from "./MaterialPicker";
+import { emptyMaterials, materialError } from "./materialContracts";
 import {
   useCallback,
   useEffect,
@@ -232,7 +234,11 @@ function PostEditor({ postId }: { postId?: string }) {
   const unavailable =
     accessError instanceof ApiError && [403, 404].includes(accessError.status);
   const change = <K extends keyof PostDraft>(key: K, value: PostDraft[K]) => {
-    setDraft((previous) => ({ ...previous, [key]: value }));
+    setDraft((previous) => ({
+      ...previous,
+      [key]: value,
+      ...(["ticId", "board"].includes(key) ? emptyMaterials() : {}),
+    }));
     setErrors({});
     if (!write.uncertain) write.clearError();
     setNotice("");
@@ -240,6 +246,11 @@ function PostEditor({ postId }: { postId?: string }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (write.pending || write.uncertain || checking || accessError) return;
+    const materialIssue = materialError(draft, postValues(draft).ticId);
+    if (materialIssue) {
+      setNotice(materialIssue);
+      return;
+    }
     const invalid = validatePost(draft);
     setErrors(invalid);
     setNotice("");
@@ -339,7 +350,6 @@ function PostEditor({ postId }: { postId?: string }) {
                 <select
                   aria-label="게시판"
                   value={draft.board}
-                  disabled={original?.hasAttachments}
                   onChange={(event) =>
                     change("board", event.target.value as "FREE" | "STAR")
                   }
@@ -373,7 +383,6 @@ function PostEditor({ postId }: { postId?: string }) {
                   id="post-ticId"
                   inputMode="numeric"
                   value={draft.ticId}
-                  disabled={original?.hasAttachments}
                   aria-invalid={!!fieldErrors.ticId}
                   aria-describedby="post-tic-help"
                   onChange={(event) => change("ticId", event.target.value)}
@@ -385,8 +394,8 @@ function PostEditor({ postId }: { postId?: string }) {
             )}
             {original?.hasAttachments && (
               <p>
-                연결된 분석 자료가 있는 글은 여기에서 게시판과 별을 변경할 수
-                없습니다.
+                게시판이나 별을 변경하면 선택한 분석 기록과 출처가 모두
+                해제됩니다.
               </p>
             )}
             <label>
@@ -420,6 +429,13 @@ function PostEditor({ postId }: { postId?: string }) {
                 글은 일반 텍스트로 표시됩니다. {fieldErrors.body}
               </small>
             </label>
+            <MaterialPicker
+              ticId={draft.board === "STAR" ? draft.ticId : null}
+              value={draft}
+              onChange={(materials) =>
+                setDraft((previous) => ({ ...previous, ...materials }))
+              }
+            />
           </fieldset>
           {write.error && <ErrorState error={write.error} />}
           {notice && <p role="status">{notice}</p>}

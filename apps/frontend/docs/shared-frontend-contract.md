@@ -141,3 +141,7 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 203에서 `SkyDataPage`를 sky 슬롯에 등록했다. 메타·타일은 같은 `api()`/`useSession()`을 사용하며 회원/버전/level 단위 캐시를 갖는다. 204의 은하 렌더러는 `renderScene`으로 연결하고 카메라 행렬을 `viewportBounds`에 전달한다. 세부 API와 캐시·오류 규칙은 [별지도 데이터 어댑터 계약](sky-data-adapter.md)을 따른다.
 
 분석 제출·공개 등록·재개 화면은 기존 API 성공 응답의 `skyVersion`/선택적 `asOf`를 `publishSkyChange(member.memberId, event)`에 전달한다. 지도 재진입은 메타부터 조회한다. 실제 분석/공개 기능을 이 공통 프로젝트에서 대신 구현한 것이 아니다.
+
+## W14 공개 History 그래프 연결
+
+App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).

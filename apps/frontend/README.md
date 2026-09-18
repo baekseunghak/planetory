@@ -111,3 +111,5 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 203 통합·병합 순서와 남은 인수: [MR !36 통합 기록](docs/merge-readiness-203.md).
 
 204 통합·병합 순서와 남은 인수: [MR !40 통합 기록](docs/merge-readiness-204.md).
+
+- [213 본인 History·공개 출처 첨부](docs/ticket-213-readiness.md) — 자료 선택·부모 권한·A08 소비 어댑터와 인수 조건.

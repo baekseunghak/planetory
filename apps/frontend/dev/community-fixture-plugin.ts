@@ -32,8 +32,8 @@ const posts = Array.from({ length: 24 }, (_, index) => ({
   purposeTag: "DISCUSSION",
   ticId: index % 3 === 1 ? null : "259377017",
   author,
-  attachments: [],
-  sourceLinks: [],
+  attachments: [] as unknown[],
+  sourceLinks: [] as unknown[],
   reactionSummary: { agree: 0, disagree: 0, myReaction: "NONE" },
   commentCount: index === 0 ? 22 : 0,
   createdAt: date,
@@ -79,8 +79,60 @@ export function communityFixturePlugin(
   writable = false,
   commentWrites = false,
   reactionWrites = false,
+  materialWrites = false,
 ): Plugin {
+  const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
+    const ids = input.historyIds ?? [],
+      sources = input.sourceLinks ?? [];
+    if (
+      !Array.isArray(ids) ||
+      !Array.isArray(sources) ||
+      ids.length > 3 ||
+      sources.length > 3
+    )
+      return false;
+    if ((ids.length || sources.length) && ticId !== "259377017") return false;
+    return (
+      new Set(ids).size === ids.length &&
+      ids.every((id) => /^h-5(0[1-9]|1[0-9]|2[0-4])$/.test(String(id))) &&
+      new Set(sources.map((s) => s.type + ":" + s.id)).size ===
+        sources.length &&
+      sources.every(
+        (s) =>
+          (s.type === "PUBLIC_ANALYSIS" &&
+            analyses.some((a) => a.analysisId === s.id)) ||
+          (s.type === "SIGNAL_THREAD" &&
+            threads.some((t) => t.threadId === s.id)),
+      )
+    );
+  };
   const records = structuredClone(posts);
+  const materialPayload = (
+    input: Record<string, unknown>,
+    previous?: { attachments: unknown[]; sourceLinks: unknown[] },
+  ) => ({
+    attachments:
+      input.historyIds === undefined
+        ? (previous?.attachments ?? [])
+        : (input.historyIds as string[]).map((historyId) => ({
+            historyId,
+            type: "HISTORY",
+          })),
+    sourceLinks:
+      input.sourceLinks === undefined
+        ? (previous?.sourceLinks ?? [])
+        : (input.sourceLinks as object[]).map((s) => ({
+            ...s,
+            available: true,
+          })),
+  });
+  if (materialWrites) {
+    records[0].attachments = [{ historyId: "h-501", type: "HISTORY" }];
+    records[0].sourceLinks = [
+      { type: "PUBLIC_ANALYSIS", id: "pa-601", available: true },
+    ];
+  }
+
   const deleted = new Set<string>();
   let serial = 1000;
   const commentRows = new Map<
@@ -141,13 +193,15 @@ export function communityFixturePlugin(
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: reactionWrites
-            ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
-            : commentWrites
-              ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-              : writable
-                ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-                : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: materialWrites
+            ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
+            : reactionWrites
+              ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+              : commentWrites
+                ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+                : writable
+                  ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                  : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -211,6 +265,155 @@ export function communityFixturePlugin(
             hasNext: next < items.length,
           });
         };
+        if (
+          materialWrites &&
+          req.method === "GET" &&
+          url.pathname === "/v1/me/histories"
+        ) {
+          paginate(
+            url.searchParams.get("ticId") === "259377017"
+              ? Array.from({ length: 24 }, (_, i) => ({
+                  historyId: "h-" + (501 + i),
+                  ticId: "259377017",
+                  userJudgment: "UNSURE",
+                  submittedAt: date,
+                  publication: {
+                    isPublic: false,
+                    publicAnalysisId: null,
+                    isModerationHidden: false,
+                  },
+                  achievementGranted: false,
+                }))
+              : [],
+          );
+          return;
+        }
+        if (
+          materialWrites &&
+          req.method === "GET" &&
+          url.pathname === "/v1/source-cards"
+        ) {
+          const type = url.searchParams.get("type"),
+            id = url.searchParams.get("id");
+          if (
+            url.searchParams.get("ticId") !== "259377017" ||
+            !(
+              (type === "PUBLIC_ANALYSIS" &&
+                analyses.some((a) => a.analysisId === id)) ||
+              (type === "SIGNAL_THREAD" &&
+                threads.some((t) => t.threadId === id))
+            )
+          ) {
+            missing();
+            return;
+          }
+          send({
+            type,
+            id,
+            ticId: "259377017",
+            available: true,
+            author,
+            judgment: "UNSURE",
+            submittedAt: date,
+            judgmentSummary: summary,
+          });
+          return;
+        }
+        const attachment = url.pathname.match(
+          /^\/v1\/(posts|comments)\/([^/]+)\/history-attachments\/([^/]+)$/,
+        );
+        if (materialWrites && req.method === "GET" && attachment) {
+          const [, kind, parentId, historyId] = attachment;
+          const parent =
+            kind === "posts"
+              ? records.find((p) => p.postId === parentId)
+              : [...commentRows.values()]
+                  .flat()
+                  .find((c) => c.commentId === parentId);
+          const commentParent =
+            kind === "comments"
+              ? [...commentRows].find(([, rows]) =>
+                  rows.some((c) => c.commentId === parentId),
+                )?.[0]
+              : null;
+          if (
+            !parent ||
+            !parent.attachments.some(
+              (a) => (a as { historyId: string }).historyId === historyId,
+            ) ||
+            (commentParent &&
+              !parentExists(
+                commentParent.startsWith("p-") ? "POST" : "SIGNAL_THREAD",
+                commentParent,
+              ))
+          ) {
+            missing();
+            return;
+          }
+          const submitted = url.searchParams.get("graphMode") === "SUBMITTED";
+          send({
+            parentType: kind === "posts" ? "POST" : "COMMENT",
+            parentId,
+            historyId,
+            ticId: "259377017",
+            submittedAt: date,
+            judgment: "UNSURE",
+            evidenceChecks: ["ushape"],
+            memo: "213 합성 첨부 메모",
+            graph: {
+              historyId,
+              reproduction: {
+                submittedBundleId: "b-1",
+                currentBundleId: "b-2",
+                residualReproducible: true,
+                fallbackReason: null,
+              },
+              selection: {
+                userPeriodDays: 3.21,
+                correctedPeriodDays: 3.21,
+                harmonicMultiplier: 1,
+                epochBtjd: 1684.02,
+                durationHours: 2.4,
+              },
+              curve: submitted
+                ? null
+                : {
+                    ticId: "259377017",
+                    bundleId: "b-2",
+                    curveContext: {
+                      bundleId: "b-2",
+                      curveStep: 0,
+                      removedCandidateIds: [],
+                      residualModelVersion: "rm-1",
+                      periodogramConfigVersion: "pg-1",
+                    },
+                    foldReferenceTimeBtjd: 1683.35,
+                    segments: [
+                      {
+                        segmentId: "seg-1",
+                        sector: 14,
+                        binningRevision: 1,
+                        startBtjd: 1683.35,
+                        binMinutes: 10,
+                        nPoints: 4,
+                        flux: [1, 0.99, null, 1.01],
+                        fluxScatter: 0.001,
+                        gaps: [[2, 2]],
+                      },
+                    ],
+                  },
+              snapshot:
+                submitted && historyId !== "h-502"
+                  ? {
+                      bins: 150,
+                      foldedFlux: Array(150).fill(1),
+                      foldedError: Array(150).fill(0.001),
+                    }
+                  : null,
+            },
+          });
+          return;
+        }
         if (req.method === "POST" && url.pathname === "/v1/auth/logout") {
           res.statusCode = 204;
           res.end();
@@ -269,6 +472,16 @@ export function communityFixturePlugin(
           }
           const values =
             req.method === "PATCH" ? { ...records[index], ...input } : input;
+          if (materialWrites && !validMaterials(input, values.ticId)) {
+            send(
+              {
+                code: "TIC_MISMATCH",
+                message: "첨부 개수·중복·소유자·별을 확인해 주세요.",
+              },
+              400,
+            );
+            return;
+          }
           const fields = [];
           if (
             typeof values.title !== "string" ||
@@ -338,6 +551,7 @@ export function communityFixturePlugin(
             purposeTag: values.purposeTag as string,
             ticId: (values.ticId as string | null) ?? null,
             updatedAt: now,
+            ...(materialWrites ? materialPayload(values) : {}),
           };
           if (req.method === "PATCH") {
             records[index] = post;
@@ -419,6 +633,21 @@ export function communityFixturePlugin(
             );
             return;
           }
+          const relatedId = entry?.[0] ?? String(input.parentId);
+          const relatedTic =
+            records.find((p) => p.postId === relatedId)?.ticId ??
+            threads.find((t) => t.threadId === relatedId)?.ticId ??
+            null;
+          if (materialWrites && !validMaterials(input, relatedTic)) {
+            send(
+              {
+                code: "TIC_MISMATCH",
+                message: "첨부 개수·중복·소유자·별을 확인해 주세요.",
+              },
+              400,
+            );
+            return;
+          }
           if (req.method === "PATCH") {
             if (
               !item ||
@@ -431,6 +660,8 @@ export function communityFixturePlugin(
               missing();
               return;
             }
+            if (materialWrites)
+              Object.assign(item, materialPayload(input, item));
             item.body = input.body;
             item.updatedAt = new Date().toISOString();
             send(item);
@@ -450,6 +681,7 @@ export function communityFixturePlugin(
             sourceLinks: [],
             createdAt: now,
             updatedAt: now,
+            ...(materialWrites ? materialPayload(input) : {}),
           };
           commentRows.set(parentId, [
             row,

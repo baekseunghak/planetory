@@ -1,3 +1,6 @@
+import { MaterialPicker } from "./MaterialPicker";
+import { MaterialCards } from "./MaterialCards";
+import { sameMaterials, materialError } from "./materialContracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api";
@@ -36,10 +39,12 @@ const empty = (): Edit => ({ kind: "create", body: "", materials: {} });
 
 export function Discussion({
   parent,
+  ticId,
   active,
   onUnavailable,
 }: {
   parent: CommentParent;
+  ticId: string | null;
   active: boolean;
   onUnavailable: (error: Error) => void;
 }) {
@@ -48,6 +53,16 @@ export function Discussion({
   const [search, setSearch] = useSearchParams();
   const cursor = search.get("discussionCursor");
   const [edit, setEdit] = useState<Edit>(empty);
+  const previousTic = useRef(ticId);
+  useEffect(() => {
+    if (active && previousTic.current !== ticId) {
+      previousTic.current = ticId;
+      setEdit((e) => ({
+        ...e,
+        materials: { historyIds: [], sourceLinks: [] },
+      }));
+    }
+  }, [ticId, active]);
   const [localError, setLocalError] = useState("");
   const [notice, setNotice] = useState("");
   const [recovery, setRecovery] = useState<CommentPage | null>(null);
@@ -128,13 +143,18 @@ export function Discussion({
   async function submit() {
     if (write.pending || write.uncertain || !active || !state.data) return;
     if (edit.kind !== "delete") {
-      const error = commentError(edit.body);
+      const error =
+        commentError(edit.body) || materialError(edit.materials, ticId);
       setLocalError(error);
       if (error) {
         textArea.current?.focus();
         return;
       }
-      if (edit.kind === "edit" && edit.body === edit.item?.body) {
+      if (
+        edit.kind === "edit" &&
+        edit.body === edit.item?.body &&
+        sameMaterials(edit.materials, edit.item ?? {})
+      ) {
         reset("변경한 내용이 없습니다.");
         return;
       }
@@ -157,7 +177,16 @@ export function Discussion({
       if (edit.kind === "delete")
         return api(path, { method: "DELETE", signal });
       return decodeWritten(
-        await api(path, { method: "PATCH", json: { body: edit.body }, signal }),
+        await api(path, {
+          method: "PATCH",
+          json: {
+            body: edit.body,
+            ...(!sameMaterials(edit.materials, edit.item ?? {})
+              ? edit.materials
+              : {}),
+          },
+          signal,
+        }),
         (value) => {
           const item = readComment(value);
           assertIdentity(item.commentId, edit.item!.commentId);
@@ -241,6 +270,12 @@ export function Discussion({
                     write.clearError();
                   }}
                 />
+                <MaterialPicker
+                  ticId={ticId}
+                  value={edit.materials}
+                  disabled={!editable || write.pending || write.uncertain}
+                  onChange={(materials) => setEdit({ ...edit, materials })}
+                />
                 <p id="comment-limit">
                   {codePoints(edit.body).toLocaleString()} / 2,000자 · 줄바꿈
                   가능, 일반 텍스트
@@ -290,7 +325,9 @@ export function Discussion({
                     )}
                     {found && (
                       <p role="status">
-                        {found.body === edit.body && edit.kind === "edit"
+                        {found.body === edit.body &&
+                        sameMaterials(found, edit.materials) &&
+                        edit.kind === "edit"
                           ? "현재 댓글은 보낸 내용과 같습니다."
                           : "현재 댓글이 조회됩니다."}{" "}
                         다른 창의 변경이나 아직 처리 중인 요청이 있을 수
@@ -375,7 +412,8 @@ export function Discussion({
                     onClick={() => {
                       if (
                         edit.kind === "delete" ||
-                        edit.body === edit.item?.body ||
+                        (edit.body === edit.item?.body &&
+                          sameMaterials(edit.materials, edit.item ?? {})) ||
                         window.confirm("수정한 내용을 버릴까요?")
                       )
                         reset();
@@ -409,6 +447,13 @@ export function Discussion({
                   {item.updatedAt !== item.createdAt && <span>수정됨</span>}
                 </div>
                 <p className="community-body">{item.body}</p>
+                <MaterialCards
+                  value={item}
+                  ticId={ticId}
+                  parentType="COMMENT"
+                  parentId={item.commentId}
+                  author={item.author}
+                />
                 {member?.memberId === item.author.memberId && (
                   <div className="post-actions">
                     {(["edit", "delete"] as const).map((kind) => (
@@ -426,7 +471,10 @@ export function Discussion({
                             kind,
                             item,
                             body: item.body,
-                            materials: {},
+                            materials: {
+                              historyIds: item.historyIds,
+                              sourceLinks: item.sourceLinks,
+                            },
                           });
                           textArea.current?.focus();
                         }}
