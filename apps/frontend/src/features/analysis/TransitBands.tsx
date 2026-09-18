@@ -42,7 +42,7 @@ export function TransitBands({
     if (element.height !== height) element.height = height;
     ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
     ctx.clearRect(0, 0, size.width, size.height);
-    ctx.fillStyle = "#accdfa33";
+    ctx.fillStyle = "rgba(255,211,105,0.12)";
     for (const band of projection.bands) {
       const x = ((band.xStart - low) / (high - low)) * size.width;
       ctx.fillRect(
