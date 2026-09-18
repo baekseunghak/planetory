@@ -1,0 +1,265 @@
+import type { Plugin } from "vite";
+
+// Development HTTP samples only. Imported exclusively by Vite serve mode.
+const date = "2026-09-18T01:00:00Z";
+const author = { memberId: "u-209", nickname: "관측자" };
+const summary = {
+  participantCount: 15,
+  likelyPlanet: 8,
+  unlikelyPlanet: 4,
+  unsure: 3,
+  percentages: { likelyPlanet: 53.3, unlikelyPlanet: 26.7, unsure: 20 },
+  asOf: date,
+};
+const emptySummary = {
+  participantCount: 0,
+  likelyPlanet: 0,
+  unlikelyPlanet: 0,
+  unsure: 0,
+  percentages: null,
+  asOf: date,
+};
+const system = { type: "SYSTEM", displayName: "SYSTEM" };
+const titles = [
+  "반복되는 밝기 감소를 함께 살펴봐요",
+  "첫 탐사를 마치고 남기는 기록",
+  "관측 회차가 달라지면 무엇이 달라질까요?",
+];
+const posts = Array.from({ length: 24 }, (_, index) => ({
+  postId: `p-${201 + index}`,
+  title: `${titles[index % titles.length]} · ${index + 1}`,
+  body: "빛이 일정한 간격으로 작아지는 구간을 발견했습니다.\n\n같은 신호를 살펴본 분들의 이야기가 궁금합니다. 관측 자료를 비교하면서 생각을 나눠 보고 싶어요.",
+  purposeTag: "DISCUSSION",
+  ticId: index % 3 === 1 ? null : "259377017",
+  author,
+  attachments: [],
+  sourceLinks: [],
+  reactionSummary: { agree: 0, disagree: 0, myReaction: "NONE" },
+  commentCount: index === 0 ? 22 : 0,
+  createdAt: date,
+  updatedAt: date,
+}));
+const threads = [
+  {
+    threadId: "st-301",
+    ticId: "259377017",
+    candidateId: "c-401",
+    title: "TIC 259377017 · 함께 관측한 반복 신호",
+    author: system,
+    judgmentSummary: summary,
+  },
+  {
+    threadId: "st-302",
+    ticId: "259377017",
+    candidateId: "c-402",
+    title: "TIC 259377017 · 새 신호의 첫 이야기",
+    author: system,
+    judgmentSummary: emptySummary,
+  },
+];
+const analyses = Array.from({ length: 23 }, (_, index) => ({
+  analysisId: `pa-${601 + index}`,
+  author: {
+    memberId: `u-${301 + (index % 15)}`,
+    nickname: `탐사자 ${(index % 15) + 1}`,
+  },
+  submittedAt: date,
+  judgment:
+    index < 15
+      ? index < 8
+        ? "LIKELY_PLANET"
+        : index < 12
+          ? "UNLIKELY_PLANET"
+          : "UNSURE"
+      : ["LIKELY_PLANET", "UNLIKELY_PLANET", "UNSURE"][(index - 15) % 3],
+  contributesToSummary: index < 15,
+}));
+
+export function communityFixturePlugin(): Plugin {
+  return {
+    name: "community-fixture-209",
+    apply: "serve",
+    transformIndexHtml() {
+      return [
+        {
+          tag: "div",
+          attrs: {
+            style:
+              "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
+            "data-testid": "community-fixture-notice",
+          },
+          children: "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          injectTo: "body-prepend",
+        },
+      ];
+    },
+    configureServer(server) {
+      server.middlewares.use("/api", (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Cache-Control", "no-store");
+        const url = new URL(req.url ?? "/", "http://localhost");
+        const send = (value: unknown, status = 200) => {
+          res.statusCode = status;
+          res.end(JSON.stringify(value));
+        };
+        const missing = () =>
+          send(
+            {
+              code: "RESOURCE_NOT_FOUND",
+              message: "자료를 찾을 수 없거나 볼 수 없습니다.",
+            },
+            404,
+          );
+        const paginate = (items: unknown[]) => {
+          const cursor = url.searchParams.get("cursor");
+          const context =
+            url.pathname +
+            "|" +
+            ["board", "ticId", "parentType", "parentId", "judgment"]
+              .map((key) => url.searchParams.get(key) ?? "")
+              .join("|");
+          const prefix = Buffer.from(context).toString("base64url") + ":";
+          const offset = cursor?.startsWith(prefix)
+            ? Number(cursor.slice(prefix.length))
+            : 0;
+          if (
+            cursor &&
+            (!cursor.startsWith(prefix) ||
+              !Number.isInteger(offset) ||
+              offset < 0)
+          ) {
+            send(
+              {
+                code: "VALIDATION_FAILED",
+                message: "목록의 처음부터 다시 확인해 주세요.",
+              },
+              400,
+            );
+            return;
+          }
+          const next = offset + 20;
+          send({
+            items: items.slice(offset, next),
+            nextCursor: next < items.length ? prefix + next : null,
+            hasNext: next < items.length,
+          });
+        };
+        if (req.method === "POST" && url.pathname === "/v1/auth/logout") {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+        if (req.method !== "GET") {
+          send(
+            {
+              code: "METHOD_NOT_ALLOWED",
+              message: "조회 전용 검사 서버입니다.",
+            },
+            405,
+          );
+          return;
+        }
+        if (url.pathname === "/v1/me") {
+          send({
+            memberId: "community-fixture-member-209",
+            nickname: "209 검증 계정",
+            onboardingDone: true,
+            tutorialCompleted: true,
+          });
+          return;
+        }
+        if (url.pathname === "/v1/auth/csrf") {
+          send({ headerName: "X-CSRF-TOKEN", token: "community-fixture-209" });
+          return;
+        }
+        if (url.pathname === "/v1/community/feed") {
+          const board = url.searchParams.get("board"),
+            ticId = url.searchParams.get("ticId");
+          const feed = [
+            ...threads.map((thread) => ({
+              ...thread,
+              id: thread.threadId,
+              type: "SIGNAL_THREAD",
+              createdAt: date,
+              commentCount: thread.threadId === "st-301" ? 2 : 0,
+            })),
+            ...posts.map((post) => ({
+              ...post,
+              id: post.postId,
+              type: "POST",
+            })),
+          ];
+          paginate(
+            feed.filter(
+              (item) =>
+                (!ticId || item.ticId === ticId) &&
+                (!board ||
+                  (board === "FREE"
+                    ? item.ticId === null
+                    : item.ticId !== null)),
+            ),
+          );
+          return;
+        }
+        const postId = url.pathname.match(/^\/v1\/posts\/([^/]+)$/)?.[1];
+        if (postId) {
+          const post = posts.find((value) => value.postId === postId);
+          if (post) send(post);
+          else missing();
+          return;
+        }
+        const threadMatch = url.pathname.match(
+          /^\/v1\/signal-threads\/([^/]+)(\/analyses)?$/,
+        );
+        if (threadMatch) {
+          const thread = threads.find(
+            (value) => value.threadId === threadMatch[1],
+          );
+          if (!thread) {
+            missing();
+            return;
+          }
+          if (threadMatch[2])
+            paginate(
+              thread.threadId === "st-302"
+                ? []
+                : analyses.filter(
+                    (item) =>
+                      !url.searchParams.get("judgment") ||
+                      item.judgment === url.searchParams.get("judgment"),
+                  ),
+            );
+          else send(thread);
+          return;
+        }
+        if (url.pathname === "/v1/comments") {
+          const id = url.searchParams.get("parentId"),
+            type = url.searchParams.get("parentType");
+          if (
+            !(type === "POST"
+              ? posts.some((post) => post.postId === id)
+              : type === "SIGNAL_THREAD" &&
+                threads.some((thread) => thread.threadId === id))
+          ) {
+            missing();
+            return;
+          }
+          const count = id === "p-201" ? 22 : id === "st-301" ? 2 : 0;
+          paginate(
+            Array.from({ length: count }, (_, index) => ({
+              commentId: `cm-${id}-${index}`,
+              author,
+              body: `다른 관측 회차의 신호도 비교해 보고 있습니다. 함께 확인해 주셔서 감사합니다. (${index + 1})`,
+              attachments: [],
+              sourceLinks: [],
+              createdAt: date,
+              updatedAt: date,
+            })),
+          );
+          return;
+        }
+        missing();
+      });
+    },
+  };
+}
