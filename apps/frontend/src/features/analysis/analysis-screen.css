@@ -38,6 +38,10 @@ body:has(.analysis-screen),
   --accent-sel-fill: rgba(255, 211, 105, 0.15);
   --accent-sel-line: rgba(255, 211, 105, 0.7);
   --accent-glow: 0 0 8px rgba(255, 211, 105, 0.25);
+
+  /* 오류. 금색은 선택 강조에 쓰므로 오류에 겹쳐 쓰지 않는다.
+     색만으로 알리지 않으며 문구와 포커스 이동이 1차 신호이고 색은 보조다. */
+  --danger: #ffb5b5;
   --band: rgba(255, 211, 105, 0.12);
 
   /* 크기와 간격 */
@@ -906,6 +910,14 @@ body:has(.analysis-screen) {
 .analysis-screen .chart-caption,
 .analysis-screen .fold-y-axis span {
   background: transparent;
+}
+
+/* 오류 문구. 정상 상태와 같은 요소를 쓰는 곳(예상 띠 없음 안내 등)은 제외한다. */
+.analysis-screen [role="alert"],
+.analysis-screen .period-selection-controls > p[role="status"],
+.analysis-screen .analysis-judgment [role="status"],
+.analysis-screen .fold-feedback[data-invalid-input] p {
+  color: var(--danger);
 }
 
 /* 유리는 장식이다. 투명도를 줄인 환경에서는 꺼도 화면이 성립해야 한다. */
