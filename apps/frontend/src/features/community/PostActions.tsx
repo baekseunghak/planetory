@@ -36,11 +36,12 @@ export function PostActions({
     ? pagePath("starBoard", { ticId: post.ticId })
     : "/community?board=FREE";
   const proposed = safeReturnTo(search.get("returnTo"), fallback);
-  const back = new URL(proposed, window.location.origin).pathname.startsWith(
-    `/posts/${encodeURIComponent(postId)}`,
-  )
-    ? fallback
-    : proposed;
+  const returnPath = new URL(proposed, window.location.origin).pathname;
+  const deletedPath = `/posts/${encodeURIComponent(postId)}`;
+  const back =
+    returnPath === deletedPath || returnPath.startsWith(deletedPath + "/")
+      ? fallback
+      : proposed;
   useEffect(() => {
     if (open && post) dialog.current?.showModal();
     else dialog.current?.close();

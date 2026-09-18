@@ -9,6 +9,7 @@ const sentinels = [
   "community-fixture-209",
   "community-fixture-member-209",
   "209 개발 검증용 데이터",
+  "data-camera",
   "군집 비교 실험",
   "comparison-snapshot-204",
   "/dev/galaxy-comparison",
