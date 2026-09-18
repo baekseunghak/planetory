@@ -1,0 +1,41 @@
+.post-reactions {
+  border-block: 1px solid #ffffff20;
+  padding-block: 1.5rem;
+  margin-block: 2rem;
+}
+.post-reactions > p {
+  color: #aeb9ca;
+  font-size: 0.9rem;
+}
+.reaction-controls,
+.reaction-controls > div {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.reaction-controls {
+  gap: 2rem;
+}
+.reaction-controls button[aria-pressed="true"] {
+  background: #1b2f44;
+  border-color: #8bbce7;
+  color: #fff;
+}
+.reaction-count {
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.reaction-dialog {
+  max-height: 75vh;
+  overflow: auto;
+  min-width: min(30rem, 80vw);
+}
+.reaction-dialog li {
+  padding: 0.7rem 0;
+}
+.reaction-dialog nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
