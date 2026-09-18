@@ -91,10 +91,12 @@ export function starTargets(
     const p = screenPoint(matrix, width, height, s.x, s.y, s.depthZ);
     if (
       Math.abs(p.depth) > 1 ||
-      p.x < 0 ||
-      p.y < 0 ||
-      p.x > width ||
-      p.y > height
+      // Match renderPlan's padded viewport: a badge or sprite can still be
+      // visible after its centre leaves the canvas. The scene clips overflow.
+      p.x < -80 ||
+      p.y < -80 ||
+      p.x > width + 80 ||
+      p.y > height + 80
     )
       return [];
     const special = s.ticId === selected;

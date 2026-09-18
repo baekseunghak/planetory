@@ -68,7 +68,8 @@ class ExplorationCompletionServiceTest {
 
     @BeforeEach
     void seed() {
-        jdbc.execute("TRUNCATE users, stars, operation_settings CASCADE");
+        // operation_settings는 비우지 않는다. V9가 넣은 rule-0을 제출이 참조한다.
+        jdbc.execute("TRUNCATE users, stars CASCADE");
 
         String unique = UUID.randomUUID().toString();
         memberId = jdbc.queryForObject("INSERT INTO users(provider, provider_user_id, nickname)"
@@ -80,8 +81,6 @@ class ExplorationCompletionServiceTest {
                         + "(tic_id, bundle_version, status, manifest, fold_reference_time_btjd, base_days)"
                         + " VALUES (?, ?, 'current', ?::jsonb, 1500.5, 27.4) RETURNING id",
                 Long.class, ticId, "v-" + unique, MANIFEST);
-        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
-                + " VALUES ('r-1', '{}'::jsonb, now(), 'test')");
         jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage)"
                 + " VALUES (?, ?, 'in_progress')", memberId, ticId);
     }
@@ -262,7 +261,7 @@ class ExplorationCompletionServiceTest {
                         + " evidence_checks, match_result, matched_candidate_id, achievement_result,"
                         + " residual_model_version, periodogram_config_version, rule_version)"
                         + " VALUES (?, ?, ?, ?::uuid, 'candidate', 1, '{}', 3.0, ?, ?, 0.1, 0.2,"
-                        + " 1500.5, 1501.0, 2.4, ?, '{}'::jsonb, ?, ?, ?, 'rm-1', 'pg-1', 'r-1')",
+                        + " 1500.5, 1501.0, 2.4, ?, '{}'::jsonb, ?, ?, ?, 'rm-1', 'pg-1', 'rule-0')",
                 memberId, ticId, bundleId, UUID.randomUUID().toString(), matchedPeriod,
                 harmonicMultiplier, judgment, matchResult, candidateId, achievementResult);
     }

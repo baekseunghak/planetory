@@ -209,7 +209,7 @@ Gold 적재 전 검사 항목·실패 상태·배열 checksum 규칙·허용 오
 
 목표는 같은 Gold 입력과 버전에서 Silver 기준 계산과 EC2 온라인 계산이 허용 오차 안에서 같은 잔차와 periodogram을 내는지 확인하는 것이다. 단순히 그래프가 비슷해 보이는지는 통과 근거가 아니다.
 
-EC2 상태는 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED`를 사용한다. 잔차 주기도가 잔차곡선보다 먼저 준비될 수 없으며, `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크로 정한다. 캐시 키는 `(tic_id, publication_bundle_id, 정렬한 제거 후보 ID 목록, residual_model_version, periodogram_config_version)`이고 상태와 결과를 Redis에 둔다. 세션은 항상 `current` 판을 쓰며 새 판이 공개되면 최신 판으로 다시 불러온다. 새 판은 새 키를 사용하고, 판이 `archived`가 되면 그 판의 캐시를 정리한다. 같은 키를 여러 서버가 동시에 요청하면 한 서버만 계산하도록 잠근다.
+EC2 상태는 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED`를 사용한다. 잔차 주기도가 잔차곡선보다 먼저 준비될 수 없으며, `RESIDUAL_READY`에서 곡선을 먼저 노출할지는 벤치마크로 정한다. 캐시 키는 `(tic_id, publication_bundle_id, 정렬한 제거 후보 ID 목록, residual_model_version, periodogram_config_version)`이고 상태와 결과를 Redis에 둔다. 세션은 항상 `current` 판을 쓰며 새 판이 공개되면 최신 판으로 다시 불러온다. 새 판은 새 키를 사용하고, 판이 `archived`가 되면 그 판의 캐시를 정리한다. 같은 키를 동시에 요청하면 한 번만 계산하도록 잠근다.
 
 #### 고정 입력과 비교 사례
 

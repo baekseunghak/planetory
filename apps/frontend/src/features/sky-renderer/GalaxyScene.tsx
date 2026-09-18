@@ -272,7 +272,7 @@ export function GalaxyScene({
         data-focused-planet={focusedPlanet ?? ""}
         tabIndex={0}
         role="listbox"
-        data-camera={JSON.stringify(camera)}
+        {...(import.meta.env.DEV ? { "data-camera": JSON.stringify(camera) } : {})}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
       {camera && matrix && (
