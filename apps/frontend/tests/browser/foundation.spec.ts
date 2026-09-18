@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { pagePath } from "../../src/app/paths";
 const member = {
   memberId: "test-member",
   nickname: "검증회원",
@@ -35,15 +36,31 @@ test("authenticated cookie, shared identity and TIC/History return context survi
   await expect(page.getByText("TIC 259377017", { exact: true })).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "분석 화면 연결 자리" }),
+    page.getByRole("heading", { name: "분석", exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "분석 기록 연결 확인" }).click();
+  await expect(
+    page.getByRole("region", { name: "분석 데이터 요약" }),
+  ).toBeVisible();
+  const analysisUrl = new URL(page.url());
+  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
+  // History remains a fixture page; analysis no longer links to a fake record.
+  await page.goto(
+    pagePath(
+      "historyDetail",
+      { historyId: "fixture-history-201" },
+      {
+        ticId: "259377017",
+        returnTo: analysisUrl.pathname + analysisUrl.search,
+      },
+    ),
+  );
   await page.reload();
   await expect(
     page.getByText("분석 기록 fixture-history-201", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "분석으로 돌아가기" }).click();
-  await page.getByRole("link", { name: "별지도로 돌아가기" }).click();
+  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
   await expect(page).toHaveURL(/\/sky\?focus=259377017$/);
   expect(cookieReceipts.length).toBeGreaterThan(0);
   expect(cookieReceipts.every((received) => received === "true")).toBeTruthy();
@@ -70,7 +87,7 @@ test("401 protects direct routes, preserves destination and clears identity afte
     "/analysis/259377017?historyId=h-123",
   );
   await expect(
-    page.getByRole("heading", { name: "분석 화면 연결 자리" }),
+    page.getByRole("heading", { name: "분석", exact: true }),
   ).toHaveCount(0);
   expired = false;
   await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();

@@ -40,7 +40,7 @@
 
 ## 화면을 연결하는 예
 
-기능 컴포넌트를 작성한 후 `src/main.tsx`의 pages에 등록한다. 아래 AnalysisPage import는 **연결 방법 예시**이며 해당 기능 파일은 이번 작업에 없다.
+기능 컴포넌트를 작성한 후 `src/main.tsx`의 pages에 등록한다. #182 통합에서 아래 AnalysisPage를 실제 연결했으며 기존 지도 슬롯과 개발 검증 화면 등록을 함께 유지한다.
 
 ```tsx
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
@@ -117,17 +117,22 @@ await api("/v1/posts", { method: "POST", json: input });
 - `localRequestId`는 브라우저 내 요청 구분 값이다. 임의 헤더로 서버에 보내지 않는다. 합의한 응답 헤더 이름을 `VITE_REQUEST_ID_HEADER`로 지정하면 서버 값은 별도 `requestId`로 보존한다. 현행 상세 오류 계약과 서버 ErrorResponse에는 요청 ID가 없으며 별도 추적 헤더도 확정되지 않았다. 서버 requestId=null을 유지하고, 서버 추적 기능을 201 완료의 필수 선행으로 추가하지 않는다. API 안내 README의 옛 표기와 분석 제출의 멱등 requestId는 구분한다.
 - CSRF는 MR !42의 `GET /api/v1/auth/csrf` 응답 `{headerName: "X-CSRF-TOKEN", token}`을 기본으로 사용한다. 매 쓰기 직전에 발급하고 토큰은 변형하거나 저장하지 않는다. 발급 실패·취소 때 쓰기를 보내지 않는다. `VITE_CSRF_HEADER`·`VITE_CSRF_COOKIE`는 둘 다 비운다. 둘 다 지정한 기존 쿠키 방식은 호환용으로 유지하며 SESSION 쿠키를 읽는 방식이 아니다. 하나만 설정하면 쓰기를 중단한다.
 - `useResource()`는 GET 전용이며 경로가 바뀌거나 unmount되면 이전 요청을 취소하고 늦은 결과를 무시한다. decoder를 컴포넌트 밖에 선언해 불필요한 재요청을 피한다.
+- #182 4단계에서 `api(path, { onResponse: ({ status, headers }) => { /* 메타데이터 보관 */ } })` 선택 옵션을 추가했다. 성공·실패·204 응답의 헤더를 JSON 처리 전에 읽으며 기존 본문 반환·오류·인증·취소 처리는 유지한다. 콜백은 동기적으로 값을 보관하고 판 비교·재시도·오류 처리는 요청이 끝난 뒤 기능 코드에서 한다. 이 옵션은 fetch에 전송하지 않는다. 공통 클라이언트가 자체적으로 Bundle 재조회나 쓰기 재시도를 수행하지 않는다.
 - 진행·성과·발견·History를 localStorage에 저장하지 않는다. BTJD 수치와 UTC 활동 시각은 `src/shared/types.ts`의 별도 타입으로 구분하며 기능별 API decoder에서 단위를 확인한다.
 
 ## 개발 공급과 운영 분리
 
-`dev/fixture-plugin.ts`는 serve + fixture 모드에서만 GET /me를 공급한다. `dev/FixturePages.tsx`는 실제 공통 코드로 이동·오류·인증 공유를 시험하는 소비자다. 실데이터가 없을 때 운영 모드가 fixture로 자동 전환되지 않는다. 운영 라우트에는 /accounts·reset·임의 성과 기능이 없다. 개발 확인 화면은 페이지 구현 완료의 증거가 아니다.
+`observations` 모드는 같은 개발용 인증·라우트를 사용하며 분석 3개 TIC의 읽기만 로컬 관측 export로 공급한다. 파일은 `dev/observations/`에서만 읽고 정적 public 자산이나 운영 번들에 포함하지 않는다. 입력 누락 시 503이며 정상 합성 곡선으로 대체하지 않는다. Vite의 개발 모드 선택 확장은 #201과 병합 시 함께 확인한다. 출처와 명령은 [관측 연결 안내](observation-fixtures.md)를 따른다.
+
+`dev/fixture-plugin.ts`는 serve + fixture 모드에서 GET /me를 공급한다. #182의 분석 읽기용 GET 합성 응답도 같은 미들웨어에서 제공하며, 예제·주소·검증 범위는 [분석 데이터 읽기 안내](analysis-data.md)를 따른다. `dev/FixturePages.tsx`는 실제 공통 코드로 이동·오류·인증 공유를 시험하는 소비자이며 분석 슬롯은 `AnalysisPage`로 연결한다. 실데이터가 없을 때 운영 모드가 fixture로 자동 전환되지 않는다. 운영 라우트에는 /accounts·reset·임의 성과 기능이 없다. 개발 확인 화면은 페이지 구현 완료의 증거가 아니다.
 
 P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보여준다. 접는 메뉴는 dialog·Tab 순환·Escape 닫기·원래 버튼 포커스 복귀를 유지했다.
 
 ## 팀원에게 전달할 내용
 
 201에서 준비하는 것은 앱 실행·페이지 이동·현재 회원 조회·HTTP 요청의 공통 코드다. 지웅님에게 이 검증을 위해 새로운 분석 화면을 만들도록 요청하지 않는다.
+
+아래는 #201 작성 당시의 인계 절차다. #182에서는 분석 컴포넌트를 등록했으며, 2026-09-16 최신 develop의 #201 코드에 응답 메타데이터 옵션과 관측 모드를 통합했다. 공통 비동기 CSRF·취소·OAuth 프록시 처리를 유지한다. Bundle 판단은 [분석 로더](../src/features/analysis/load-analysis.ts)에만 두며 실제 탐사 응답의 헤더 제공·CORS 노출과 분석 API 연동은 남아 있다.
 
 1. 서진은 기존 MR !34와 위 파일별 사용 방법을 제공한다.
 2. 지웅님이 이미 작업 중인 프론트 브랜치/컴포넌트를 공유하면, 위 예제의 AnalysisPage import를 그 실제 경로로 바꾸고 main.tsx의 pages.analysis에 등록한다. 예제의 features/analysis/AnalysisPage 파일은 이 티켓에서 만든 실제 분석 구현이 아니다.

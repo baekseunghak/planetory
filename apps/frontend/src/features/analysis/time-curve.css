@@ -1,0 +1,108 @@
+.analysis-time-curve {
+  margin-block: 32px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0c1119;
+}
+.analysis-time-heading,
+.analysis-time-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.analysis-time-heading {
+  justify-content: space-between;
+}
+.analysis-time-heading span,
+.analysis-time-help,
+.analysis-time-curve figcaption {
+  color: var(--muted);
+  font-size: 13px;
+}
+.analysis-time-toolbar {
+  margin-block: 12px 32px;
+}
+.analysis-time-curve figure {
+  position: relative;
+  margin: 0 0 0 88px;
+}
+.analysis-time-plot {
+  position: relative;
+  height: 280px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+.analysis-time-plot:active {
+  cursor: grabbing;
+}
+.analysis-time-plot canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.analysis-time-axis-y {
+  position: absolute;
+  top: 0;
+  height: 280px;
+  right: calc(100% + 12px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.analysis-time-axis-x {
+  position: relative;
+  height: 34px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-time-axis-x span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.analysis-time-sector {
+  position: absolute;
+  top: 6px;
+  text-align: center;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  color: #c6d5e3;
+}
+.analysis-time-break {
+  position: absolute;
+  top: 46%;
+  transform: translateX(-50%);
+  font-size: 24px;
+  color: #dfbd81;
+  pointer-events: none;
+}
+.analysis-time-gap-key {
+  color: #dfbd81;
+}
+.analysis-time-readout {
+  min-height: 44px;
+  padding: 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.analysis-time-curve details {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.analysis-time-curve summary {
+  cursor: pointer;
+  padding-block: 10px;
+}

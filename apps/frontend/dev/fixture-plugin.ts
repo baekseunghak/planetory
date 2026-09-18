@@ -1,11 +1,17 @@
 import type { Plugin } from "vite";
+import { resolve } from "node:path";
+import { observationFixtureResponse } from "./observation-fixtures.ts";
+import {
+  ANALYSIS_FIXTURE_BUNDLE,
+  analysisFixtureResponse,
+} from "./analysis-fixtures.ts";
 // Serve-only fixture. No account-selection, reset, achievement or OAuth endpoints.
-export function fixturePlugin(): Plugin {
+export function fixturePlugin(observations = false): Plugin {
   return {
     name: "foundation-fixture",
     apply: "serve",
     configureServer(server) {
-      server.middlewares.use("/api", (req, res) => {
+      server.middlewares.use("/api", async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
         if (req.method === "GET" && req.url?.split("?")[0] === "/v1/me") {
@@ -24,6 +30,25 @@ export function fixturePlugin(): Plugin {
             }),
           );
           return;
+        }
+        if (req.method === "GET") {
+          const url = new URL(req.url ?? "/", "http://fixture.invalid");
+          const analysis =
+            (observations
+              ? await observationFixtureResponse(
+                  url,
+                  resolve(server.config.root, "dev/observations"),
+                )
+              : null) ?? analysisFixtureResponse(url);
+          if (analysis) {
+            res.statusCode = analysis.status;
+            res.setHeader(
+              "X-Current-Bundle",
+              analysis.currentBundleId ?? ANALYSIS_FIXTURE_BUNDLE,
+            );
+            res.end(JSON.stringify(analysis.body));
+            return;
+          }
         }
         res.statusCode = req.method === "GET" ? 404 : 405;
         res.end(

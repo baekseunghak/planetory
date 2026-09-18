@@ -7,6 +7,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "data:prepare": "tsx scripts/prepare-observations.ts",
+    "dev:observations": "vite --mode observations --host 127.0.0.1 --port 5182 --strictPort",
+    "test:observations": "playwright test --config=playwright.observations.config.ts",
     "dev": "vite --host 127.0.0.1",
     "dev:fixture": "vite --mode fixture --host 127.0.0.1 --port 58267 --strictPort",
     "typecheck": "tsc --noEmit",

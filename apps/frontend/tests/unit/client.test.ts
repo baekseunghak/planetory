@@ -209,3 +209,41 @@ test("cancelling a dispatched write does not claim that the server rolled back",
       error.outcomeUnknown,
   );
 });
+
+test("optional response metadata preserves body/errors and is not forwarded to fetch", async () => {
+  let status = 200;
+  const seen: number[] = [];
+  const client = createApiClient({
+    baseUrl: "/api",
+    fetch: async (_path, options) => {
+      assert.equal("onResponse" in (options ?? {}), false);
+      return status === 204
+        ? new Response(null, { status })
+        : Response.json(
+            { code: "BUNDLE_CHANGED" },
+            { status, headers: { "X-Current-Bundle": "9007199254740997" } },
+          );
+    },
+  });
+  const options = {
+    onResponse: (response: { status: number; headers: Headers }) => {
+      seen.push(response.status);
+      if (response.status !== 204)
+        assert.equal(
+          response.headers.get("x-current-bundle"),
+          "9007199254740997",
+        );
+    },
+  };
+  assert.deepEqual(await client.request("/v1/test", options), {
+    code: "BUNDLE_CHANGED",
+  });
+  status = 409;
+  await assert.rejects(
+    client.request("/v1/test", options),
+    (error) => error instanceof ApiError && error.code === "BUNDLE_CHANGED",
+  );
+  status = 204;
+  assert.equal(await client.request("/v1/test", options), undefined);
+  assert.deepEqual(seen, [200, 409, 204]);
+});
