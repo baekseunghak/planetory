@@ -20,10 +20,12 @@ fi
 
 APP_DB_USER="${APP_DB_USER:-planetory_service}"
 
-# 비밀번호를 명령줄 인자나 로그에 남기지 않도록 psql 변수로 전달한다.
+# 비밀번호는 psql 안에서 \getenv로 환경변수를 직접 읽는다. -v app_password=... 로 넘기면
+# 초기화가 도는 동안 컨테이너 안에서 ps에 보인다.
 psql -v ON_ERROR_STOP=1 \
      --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
-     -v app_user="$APP_DB_USER" -v app_password="$APP_DB_PASSWORD" <<'EOSQL'
+     -v app_user="$APP_DB_USER" <<'EOSQL'
+\getenv app_password APP_DB_PASSWORD
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'planetory_app') THEN
