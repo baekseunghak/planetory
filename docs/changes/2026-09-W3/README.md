@@ -57,3 +57,5 @@
 | 2026-09-17 | 분석 진입(5.1) 구현, 진입 시 완료 판정, JSON 전송 비용 측정 | S15P21C206-140 | analysis-context, selectionRules, minWindowDays, currentCurveContext, STEP_NOT_RESTORABLE, nextCurveContext, skipAvailable, 완료 판정 (b), REPEATABLE READ, 응답 크기, gzip, D-2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
 
 | 2026-09-18 | 공개 History 공용 렌더러 소비 경계 | S15P21C206-213 | HistoryGraphRenderer, 부모 권한, CURRENT, SUBMITTED, A08 | 소비 계약 검증·실제 연결 전 | [2026-09-18](2026-09-18.md) |
+
+| 2026-09-18 | 프로필·닉네임·읽기 전용 안내와 A 화면 슬롯 | S15P21C206-214 | profileSections, S04, GIF, AT-119, 가입일, 팔로우 수 | 구현·계약 미결 별도 기록 | [2026-09-18](2026-09-18.md) |

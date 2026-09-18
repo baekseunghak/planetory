@@ -145,3 +145,7 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 ## W14 공개 History 그래프 연결
 
 App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).
+
+## W16 마이페이지 내부 슬롯
+
+App.profileSections에 stars/history/statistics 컴포넌트를 등록한다. ProfileSlotProps는 memberId, isOwn, starListVisibility다. 본인 History/통계만 허용하고 타인 PRIVATE 별 목록은 하위 컴포넌트를 mount하지 않는다. 하위 화면도 실제 API의403/404와 권한 변경을 처리해야 하며 props는 서버 권한을 대체하지 않는다. 미등록은 연결 준비 안내다. [214 구현·미확정 계약·인수](ticket-214-readiness.md).

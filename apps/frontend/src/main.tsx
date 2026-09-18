@@ -1,3 +1,7 @@
+import {
+  MyProfilePage,
+  MemberProfilePage,
+} from "./features/profile/ProfilePage";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -33,6 +37,8 @@ async function start() {
   }
   let pages: PageSlots = {
     sky: SkyDataPage,
+    profile: MyProfilePage,
+    member: MemberProfilePage,
     community: CommunityPage,
     starBoard: CommunityPage,
     post: PostPage,
