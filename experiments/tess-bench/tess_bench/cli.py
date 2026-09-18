@@ -568,6 +568,14 @@ def cmd_bls_snr_dy(args: argparse.Namespace) -> int:
     prm = man["config"]["parameters"]
     cfg, settings_all = bl.load_bls_settings(args.settings)
     _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
+    # 과거 run 에 다른 설정이 섞이지 않도록 manifest 와 현재 설정 파일·파라미터가 같은지 먼저 검사한다 (MR !77 리뷰).
+    current_sha = {"grid": mf.file_entry(args.grid)["sha256"], "bls_settings": mf.file_entry(args.settings)["sha256"],
+                   "preprocess_settings": mf.file_entry(args.preprocess_settings)["sha256"]}
+    mismatches = bd.manifest_mismatches(prm, man.get("inputs", []), current_sha, grid_set_id=inj.grid_set_id(inj.load_grid(args.grid)),
+                                        preprocess_params=pre_settings[0].params(), setting_params={s.setting_id: s.params() for s in settings_all})
+    if mismatches:
+        sys.exit(f"manifest 와 현재 설정이 다르다 ({', '.join(mismatches)}). 같은 설정 파일·격자로 실행하거나 run 을 다시 만들 것. 재계산을 중단한다.")
+    print("manifest 동일성: grid·BLS 설정·전처리 설정 sha256, grid_set_id, 전처리·탐색 파라미터 일치")
     seeds = prm.get("noise_seeds", [prm["noise_seed"]] if prm.get("noise_seed") is not None else [])   # 조정 run(09-16) manifest 는 단수 키
     bi = build_bls_inputs(prm["target"], prm["stage"], cfg, pre_settings[0], args.grid, args.raw, noise_seeds=seeds,
                           include_raw_real="real" in prm.get("baselines", []), limit=int(prm.get("limit") or 0))
@@ -599,11 +607,11 @@ def cmd_bls_snr_dy(args: argparse.Namespace) -> int:
     with snr_path.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=list(out_rows[0].keys())); w.writeheader(); w.writerows(out_rows)
 
-    stored = np.array([r["snr_stored"] for r in out_rows]); glob = np.array([r["snr_global"] for r in out_rows])
-    rel = np.abs(glob - stored) / np.maximum(np.abs(stored), 1e-12) if out_rows else np.array([np.nan])
-    med, mx = float(np.median(rel)), float(np.max(rel))
-    ok = bool(np.isfinite(med) and med < 1e-3)          # power() 의 위상 비닝 근사 때문에 일부 피크는 몇 % 다를 수 있다(bls_dy.recompute_snr)
-    print(f"재현 검사: global 방식 SNR vs 저장 snr 상대 차 중앙값 {med:.2e}, 최대 {mx:.2e} → {'일치' if ok else '불일치(중앙값 1e-3 초과)'}")
+    verdicts = bd.reproduction_verdict(out_rows)
+    ok = bool(verdicts) and all(v["ok"] for v in verdicts)
+    print("재현 검사 (설정별, global 재계산 vs 저장 snr): 중앙값 ≤ 1e-6, 1e-3 초과 비율 ≤ 10%, 최대 < 0.5 — power() 위상 비닝 근사로 소수 피크만 다를 수 있다")
+    for v in verdicts:
+        print(f"  {v['setting_id']:<16} n={v['n']:>5} 중앙값 {v['median']:.2e} 1e-3 초과 {v['fraction_over_1e-3']:.1%} 최대 {v['max']:.2e} → {'일치' if v['ok'] else '불일치'}")
 
     matches = _load_matches_in_range(run_dir, settings_all, args.baseline_days)
     matches = [m for m in matches if "noise" not in m["baseline_id"]]
