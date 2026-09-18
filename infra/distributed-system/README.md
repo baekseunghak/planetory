@@ -235,7 +235,7 @@ UFW는 Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사�
 - `yarn node -list -all`: `worker-2`~`worker-6` 5대 모두 `RUNNING`
 - Application ID: `application_1789675115055_0005`, `Final-State: SUCCEEDED`, 로그 집계 `SUCCEEDED`
 - executor: `worker-2`~`worker-6`에 각 1개, AM은 `worker-4`
-- HDFS: `/validation/S15P21C206-73/run-20260917T202547Z/output`, `_SUCCESS`, part 5개와 각 checksum 확인
+- HDFS: `/validation/S15P21C206-73/run-20260917T202547Z/output`, `_SUCCESS`, part 5개와 각 HDFS 블록 기반 파일 checksum(`hdfs dfs -checksum`, MD5-of-CRC; SHA-256 아님) 확인
   - `part-00000`: `0000020000000000000000002961d4bae9d6c0032d416af28ebefd1e`
   - `part-00001`: `000002000000000000000000cf7782859886e29ca2a349b7057b4f1d`
   - `part-00002`: `0000020000000000000000006df067d00b0725fd60a989741e9dfe4b`
@@ -244,7 +244,9 @@ UFW는 Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사�
 - Node 2: YARN `16384MB/2 vCore`, 실행 중 컨테이너 `1024MB/1 vCore`, 호스트 used 약 2.7GiB·available 약 32.5GiB, swap 0, OOM 없음
 - 성공 run 시작 뒤 6개 YARN daemon 로그의 새 `ERROR`·`FATAL` 0건, `nn1=active`, `nn2=standby`, Live DataNode 5개 유지
 
-Worker Python은 모두 `/usr/bin/python3.12`의 Python 3.12.3으로 일치했다. sample은 추가 패키지를 설치하지 않고 Spark가 제공하는 PySpark를 사용한다. 광고 호스트명은 6개 VM과 제출 컨테이너에서 모두 사설 IP로 해석돼야 하며 실패하면 sample을 시작하지 않는다.
+Worker Python 요구 조건은 3.12.x이며, 2026-09-18 검증 당시에는 모두 `/usr/bin/python3.12`의 Python 3.12.3으로 일치했다. sample은 추가 패키지를 설치하지 않고 Spark가 제공하는 PySpark를 사용한다. 광고 호스트명은 6개 VM과 제출 컨테이너에서 모두 사설 IP로 해석돼야 하며 실패하면 sample을 시작하지 않는다.
+
+sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용이다. Bronze·Silver 배치의 HDFS 서비스 사용자 이름과 경로 소유·그룹 권한 규칙은 분산 PoC 3단계인 `S15P21C206-76`에서 확정한다.
 
 ## 수동 전환
 

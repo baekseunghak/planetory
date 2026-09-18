@@ -58,6 +58,10 @@ $yarnTestState.Calls.Clear()
 if (@($yarnTestState.Calls | Where-Object { $_ -match 'systemctl start|ufw allow|docker pull|dfs -put' }).Count) {
  throw 'YARN Preflight must be read-only.'
 }
+$pythonChecks=@($yarnTestState.Calls | Where-Object { $_.Contains('python3 --version | grep -Eq "^Python 3[.]12[.][0-9]+$"') })
+if ($pythonChecks.Count -ne 5 -or @($yarnTestState.Calls | Where-Object { $_.Contains('Python 3.12.3') }).Count) {
+ throw 'YARN Preflight must accept every Python 3.12 patch version on the five Workers.'
+}
 
 $yarnTestState.Calls.Clear()
 & $initialize -Step ConfigureFirewall -Confirm:$false

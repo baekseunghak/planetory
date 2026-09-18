@@ -65,7 +65,7 @@ switch ($Step) {
    if ($node.Number -eq 1) {
     $command+='; docker --version; docker compose version; systemctl is-active docker'
    } else {
-    $command+='; test "$(python3 --version)" = "Python 3.12.3"; readlink -f /usr/bin/python3; stat -c "%n owner=%U group=%G mode=%a" /mnt/data/yarn/local /mnt/data/yarn/logs'
+    $command+='; python3 --version | grep -Eq "^Python 3[.]12[.][0-9]+$"; readlink -f /usr/bin/python3; stat -c "%n owner=%U group=%G mode=%a" /mnt/data/yarn/local /mnt/data/yarn/logs'
    }
    $null=Invoke-Remote $node.Target $command "YARN preflight Node $($node.Number)"
   }
