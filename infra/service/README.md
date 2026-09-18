@@ -42,22 +42,21 @@ COMMIT;
 
 ## ERD
 
-ERD를 두 벌 낸다. 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜬다.
-외부 인바운드는 0개로 유지되며 Tunnel이 origin으로 잡는다.
+Liam ERD 한 벌을 낸다. 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜨며
+Tunnel이 `erd.planetory.space` -> `http://erd:80`으로 잡는다. 외부 인바운드는 0개다.
 
-| 호스트 | origin | 도구 | 쓰임 |
-| --- | --- | --- | --- |
-| `erd.planetory.space` | `http://erd:80` | Liam ERD | 캔버스에서 관계 탐색 |
-| `erd-schema.planetory.space` | `http://erd-schema:80` | SchemaSpy | 인덱스·제약·이상징후 상세 |
+SchemaSpy는 2026-09-18에 내렸다. 정적 SVG 한 장이라 35개 규모에서 관계를 읽기
+어려웠고, UI 라벨을 한국어로 바꿀 수단이 없었다(7.0.2에 `-lang` 옵션도 번역 번들도
+없다). Liam이 같은 정보를 더 낫게 준다.
 
 ### 한국어 설명은 DB가 갖는다
 
 설명은 도구가 아니라 `pg_description`에 있다. `COMMENT ON TABLE`·`COMMENT ON COLUMN`을
-한 번 쓰면 두 사이트가 같은 값을 읽는다. 도구를 바꿔도 설명이 따라가므로 ERD 도구에
-설명을 직접 적어 넣지 않는다. 테이블 설명은 `V10__table_comments.sql`에 있다.
+한 번 쓰면 도구를 바꿔도 설명이 따라가므로 ERD 도구에 직접 적어 넣지 않는다. 테이블
+설명은 `V10__table_comments.sql`에 있다.
 
-SchemaSpy 7.0.2에는 `-lang` 옵션도 번역 번들도 없다. UI 라벨은 영어로 남고 한국어는
-데이터(테이블·컬럼 설명)로만 들어간다. Liam은 이 제약이 없다.
+화면에서는 테이블을 고르면 오른쪽 상세 패널에 테이블 설명과 컬럼별 설명이 나온다.
+캔버스 노드에는 이름과 타입만 그린다. 노드 위에 설명을 얹는 설정은 없다.
 
 ### 생성
 
@@ -65,8 +64,7 @@ SchemaSpy 7.0.2에는 `-lang` 옵션도 번역 번들도 없다. UI 라벨은 �
 스키마나 코멘트가 바뀌었을 때만 수동으로 돌린다.
 
 ```
-docker compose --profile erd-refresh run --rm erd-generator         # Liam
-docker compose --profile erd-refresh run --rm erd-schema-generator  # SchemaSpy
+docker compose --profile erd-refresh run --rm erd-generator
 ```
 
 `erd-generator`는 `erd-dump`를 먼저 끝내고 시작한다(`service_completed_successfully`).
@@ -77,42 +75,33 @@ docker compose --profile erd-refresh run --rm erd-schema-generator  # SchemaSpy
 
 빌드 산출물에 세 가지를 덧댄다. `erd-generator`의 `postprocess.js`가 한다.
 
-`flyway_schema_history`는 Flyway 내부 테이블이라 도메인 ERD가 아니다. 양쪽에서 뺀다.
-Liam은 후처리에서 테이블과 이를 가리키는 제약을 지우고, SchemaSpy는
-`schemaspy.tableExclusions`로 제외한다. 이 옵션은 기본값(이름에 `$`가 든 테이블 제외)을
-덮어쓰므로 그 규칙을 정규식에 같이 넣어 유지한다.
-
-쿼리 없이 `erd.planetory.space`로 들어오면 `?showMode=ALL_FIELDS`로 연다. `index.html`
-`</head>` 앞에 인라인 스크립트를 넣는다. Liam의 앱 번들은 `type="module"`이라 defer로
-동작하므로 이 인라인이 먼저 돈다. 사용자가 쿼리를 직접 붙인 경우에는 건드리지 않는다.
-`data-liam-default-showmode` 표식으로 중복 주입을 막는다.
-
-### Liam 코멘트 보정
-
 Liam v0.7.24의 postgres 파서는 `COMMENT ON TABLE` 일부를 흘린다. 34개 중 9개
-(`users`, `posts`, `comments`, `submissions` 등)가 누락되는 것을 실측했다. 원인은
-SQL 형태가 아니다. 같은 구조의 테이블이 붙기도 하고 빠지기도 한다.
-
-그래서 `erd-dump`가 `pg_description`을 `comments.json`으로 따로 뜨고, 빌드 뒤
-`schema.json`에 덮어쓴다. 파서 결과가 아니라 DB가 정본이다. 생성 로그의
-`merged from pg_description: tables=34 columns=264`이 이 단계가 돈 증거다.
+(`users`, `posts`, `comments`, `submissions` 등)가 누락되는 것을 실측했다. 원인은 SQL
+형태가 아니다. 같은 구조의 테이블이 붙기도 하고 빠지기도 한다. 그래서 `erd-dump`가
+`pg_description`을 `comments.json`으로 따로 뜨고 빌드 뒤 `schema.json`에 덮어쓴다.
+파서 결과가 아니라 DB가 정본이다. 생성 로그의
+`postprocess: comments tables=34 columns=264, dropped=1`이 이 단계가 돈 증거다.
 Liam을 올릴 때 이 보정이 불필요해졌는지 확인하고, 그래도 두는 편이 안전하다.
+
+`flyway_schema_history`는 Flyway 내부 테이블이라 도메인 ERD가 아니다. 테이블과 이를
+가리키는 제약을 지운다.
+
+쿼리 없이 들어오면 `?showMode=ALL_FIELDS`로 연다. `index.html` `</head>` 앞에 인라인
+스크립트를 넣는다. 앱 번들은 `type="module"`이라 defer로 동작하므로 이 인라인이 먼저
+돈다. 사용자가 붙인 쿼리는 건드리지 않고 `data-liam-default-showmode` 표식으로 중복
+주입을 막는다.
 
 ### 산출물
 
-`planetory-erd-output`(Liam)과 `planetory-erd-schema-output`(SchemaSpy)에 있다. 둘 다
-재생성 가능한 파생물이라 지워져도 데이터 손실이 아니다. `service-db-data`와 혼동하지
-않는다. `erd-scratch`·`erd-work`·`erd-npm-cache`는 빌드 중간물이다.
+`planetory-erd-output`에 있다. 재생성 가능한 파생물이라 지워져도 데이터 손실이 아니다.
+`service-db-data`와 혼동하지 않는다. `erd-scratch`·`erd-work`·`erd-npm-cache`는 빌드
+중간물이다.
 
-DB 비밀번호는 명령줄 인자에 두지 않는다. 환경변수로 받아 SchemaSpy는 컨테이너 안에서
-`chmod 600` properties 파일로 쓰고 실행 후 지우며, 덤프는 `PGPASSWORD`로 넘긴다.
+DB 비밀번호는 명령줄 인자에 두지 않고 `PGPASSWORD` 환경변수로만 넘긴다.
 `docker inspect`와 `ps`에 노출되지 않는다.
 
 읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·
 `planetory_gold_writer` 역할 분리가 들어오면 ERD 생성기를 읽기 전용 역할로 옮긴다.
-
-행 수는 `schemaspy.norows=true`로 끄고 구조만 낸다. 공개 호스트에 데이터 규모를 싣지
-않기 위함이다.
 
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
