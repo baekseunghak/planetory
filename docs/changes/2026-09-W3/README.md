@@ -96,6 +96,7 @@
 | 2026-09-18 | YARN CI Runner 검증을 기존 CI Task로 후속 인계 | S15P21C206-91 | YARN, GitLab CI, validate:hadoop-config, Linux Runner, Pipeline | 채택·검증 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | YARN MR 재실행 안전성 리뷰 반영 | S15P21C206-73 | YARN, OOM, UFW, HA, Bash, log retention, non-destructive | 구현 완료·서버 재적용 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | YARN 집계 로그 보존·회귀 검사 정정 | S15P21C206-73 | YARN, AggregatedLogDeletionService, journal cursor, cleanup, regression | 구현 완료·서버 재실행 검증 대기 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 수동 NameNode 전환과 Worker 장애 복구 검증 | S15P21C206-74 | HDFS, QJM, forceactive, RF2, Worker, block report, checksum, no-format | 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 제출 수치 검증·후보 매칭·고조파 판정 계산(공통 표본 31개 재현) | S15P21C206-142 | SubmissionMatching, 6.2 검증, epoch 산정, 5.1 네 조건, 배율 1 우선, matched_harmonic, ambiguous_match, duplicate, 관측 창, bin 시작 시각, matching-cases.v0, rule-0 | 구현 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 실제 서비스의10만 별 데이터/히트/버퍼 비용 개선과 성능 미달 분리 | S15P21C206-215 | WebGL, quadtree, immutable cache, float32, p95, DPR, heap, 100000 | 개선 구현·로컬 기능 검증 완료, 성능 인수 진행 중 | [2026-09-18](2026-09-18.md) |
