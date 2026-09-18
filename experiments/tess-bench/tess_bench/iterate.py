@@ -52,6 +52,8 @@ class IterateConfig:
     refine_duration_max_hours: float = 0.0      # >0 이면 재적합 지속시간 상한을 max(span[1]×D₀, 이 값) 으로 넓힌다 (탐색 격자 4.8 h 상한 보정). 0 은 비활성
     continue_after_qa_fail: bool = False        # True 면 QA 실패 피크를 '제거 불가' 로 기록·제외하고 계속 탐색 (설계 변경 제안). False 는 5.6 v1.0 대로 종료
     blocked_mask_factor: float = 1.5            # continue_after_qa_fail: 제거 불가 피크의 통과 창(지속시간 × 이 배수)을 NaN 으로 가려 다음 탐색에서 숨긴다. 나누기 대신 마스킹
+    max_duration_fraction: float = 0.35         # 재적합·게이트에서 허용하는 지속시간/주기 상한. 주입 격자의 8 h/1 d(0.33)는 허용하고, 하위 고조파 잔여가 주기의 절반 넘는 폭(0.65)으로 맞춰지는 것을 막는다
+    qa_require_measurable: bool = True          # 경계 돌출·창 안 편향을 잴 수 없으면(바깥 구간 없음) QA 실패로 본다
 
     def params(self) -> dict:
         return {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items()}
@@ -156,6 +158,8 @@ def refine_peak(t: np.ndarray, f: np.ndarray, peak: bl.Peak, setting: bl.BlsSett
     lo_d, hi_d = cfg.refine_duration_span[0] * D0, cfg.refine_duration_span[1] * D0
     if cfg.refine_duration_max_hours > 0:
         hi_d = max(hi_d, cfg.refine_duration_max_hours / 24.0)          # 탐색 격자 상한(4.8 h)보다 긴 통과(8 h)도 제거 모델이 덮게
+    hi_d = min(hi_d, cfg.max_duration_fraction * peak.period_days)      # 주기의 일정 비율을 넘는 폭은 transit 이 아니다
+    lo_d = min(lo_d, hi_d)
     durations = np.unique(np.concatenate([np.asarray(setting.effective_durations_hours, float) / 24.0, np.linspace(lo_d, hi_d, 15)]))
     durations = durations[(durations > 0) & (durations < setting.period_min_days)]
     res = bls.power(grid, durations, objective=setting.objective, oversample=setting.oversample)
@@ -216,13 +220,13 @@ def in_transit_mask(t: np.ndarray, period: float, epoch: float, duration_days: f
 
 
 def edge_excess(t: np.ndarray, residual: np.ndarray, period: float, epoch: float, duration_days: float) -> float:
-    """제거 뒤 잔차에서 통과 창 가장자리 띠(D/2 ≤ |φ| < D)의 |r−1| 중앙값을 바깥(|φ| ≥ 2D) robust scatter 로 나눈 값.
+    """제거 뒤 잔차에서 통과 창 가장자리 띠(D/2 ≤ |φ| < D)의 |r−1| 중앙값을 바깥(|φ| ≥ D) robust scatter 로 나눈 값.
 
     box 모델과 실제 파형의 진입·이탈 차이가 남으면 이 띠에 편차가 몰린다. 잡음만 남으면 약 0.67(정규분포 |x| 중앙값).
     """
     phase = np.abs(bl._phase_distance(t, period, epoch))
     edge = (phase >= 0.5 * duration_days) & (phase < duration_days)
-    oot = phase >= 2.0 * duration_days
+    oot = phase >= duration_days                      # 가장자리 띠 밖. 2D 로 잡으면 점유율 높은 신호(8 h/1 d)는 바깥 구간이 없다
     ok = np.isfinite(residual)
     if (edge & ok).sum() < 5 or (oot & ok).sum() < 20:
         return float("nan")
@@ -241,7 +245,7 @@ def window_offset(t: np.ndarray, residual: np.ndarray, period: float, epoch: flo
     """(창 안 잔차 평균 편차 mean(r−1), 그 z 점수). 둘 다 계산 불가면 (nan, nan)."""
     phase = np.abs(bl._phase_distance(t, period, epoch))
     inside = (phase < 0.5 * duration_days) & np.isfinite(residual)
-    oot = (phase >= 2.0 * duration_days) & np.isfinite(residual)
+    oot = (phase >= duration_days) & np.isfinite(residual)
     if inside.sum() < 5 or oot.sum() < 20:
         return float("nan"), float("nan")
     scatter = robust_scatter(residual[oot])
@@ -330,7 +334,8 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         base = dict(rank=chosen.rank, period_days=chosen.period_days, epoch_btjd=chosen.epoch_btjd, duration_hours=chosen.duration_hours,
                     depth_ppm=chosen.depth * 1e6, sde=chosen.sde, snr=chosen.snr, n_transits=chosen.n_transits, n_points=int(ok.sum()), bls_elapsed_s=run.elapsed_s)
         passes = (np.isfinite(chosen.snr) and chosen.snr >= cfg.snr_min and np.isfinite(chosen.sde) and chosen.sde >= cfg.sde_min
-                  and chosen.n_transits >= cfg.min_transits and chosen.depth > 0)
+                  and chosen.n_transits >= cfg.min_transits and chosen.depth > 0
+                  and chosen.duration_hours / 24.0 <= cfg.max_duration_fraction * chosen.period_days)
         if not passes:
             steps.append(StepRecord(step, "rejected_gate", "no_quality_peak", **base)); termination = "no_quality_peak"; break
 
@@ -384,6 +389,8 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         if np.isfinite(odev) and odev > cfg.qa_overlap_dev_max:
             failures.append("overlap_distortion")
         wmean, wz = window_offset(t, residual, cand.period_days, cand.epoch_btjd, D)
+        if cfg.qa_require_measurable and (not np.isfinite(ee) or not np.isfinite(wz)):
+            failures.append("qa_not_measurable")                          # 통과 창 바깥 구간이 없어 경계·편향을 잴 수 없다
         wrel = wmean / (model_cand.depth_ppm / 1e6) if np.isfinite(wmean) and model_cand.depth_ppm > 0 else float("nan")
         if np.isfinite(wz) and abs(wz) > cfg.qa_window_offset_z_max:
             if not (cfg.qa_window_offset_rel_depth > 0 and np.isfinite(wrel) and abs(wrel) <= cfg.qa_window_offset_rel_depth):

@@ -143,3 +143,21 @@ def test_fixed_depth_and_snr_return_nan_when_transit_window_is_empty():
     assert np.isnan(it.fixed_snr(t[keep], f[keep], 3.0, 2.0 / 24, 1402.0))
     res = it.iterate_curve(t[keep], f[keep], SETTING, it.IterateConfig(max_candidates=2, continue_after_qa_fail=True), truth=[(3.0, 1402.0, 2.0 / 24)])
     assert res.termination in it.TERMINATION_REASONS                                               # 예외 없이 끝난다
+
+
+def test_refine_caps_duration_to_fraction_of_period_and_unmeasurable_qa_fails():
+    """L 98-59 분리 실행에서 P/7 잔여가 지속시간 11 h(주기의 65%)로 맞춰져 QA 바깥 구간이 사라지고 통과했다. 상한 20%·측정 불가 실패로 막는다."""
+    t, f = _curve([(0.7, 1400.3, 3.0, 3e-3)], noise=3e-4)
+    peak = bls.Peak(1, 0.7, 1400.3, 3.0, 3e-3, 1e-5, 100.0, 0.0, 10.0, 50.0, 0.0, 30, 500, 0.0)
+    run = bls.BlsRun("t", 3000, 0.5, 9.0, 0.01, 0.0, 1.0, [peak])
+    cfg = it.IterateConfig(refine_duration_max_hours=12.0, refine_duration_span=(0.5, 2.0))
+    refined = it.refine_peak(t, f, peak, SETTING, run, cfg)
+    assert refined.duration_hours <= cfg.max_duration_fraction * 0.7 * 24 + 1e-9                     # 0.35 × 16.8 h = 5.9 h 상한
+    # 바깥 구간이 없는 잔차: 지속시간이 주기의 절반을 넘으면 |φ| ≥ D 구간이 비어 edge·offset 이 NaN
+    assert np.isnan(it.edge_excess(t, f, 0.7, 1400.3, 0.4)) and np.isnan(it.window_offset(t, f, 0.7, 1400.3, 0.4)[1])
+    # 점유율 33%(8 h / 1 d)는 측정 가능해야 한다 (주입 격자에 있는 조합)
+    t1, f1 = _curve([(1.0, 1400.5, 8.0, 3e-3)])
+    assert np.isfinite(it.edge_excess(t1, f1, 1.0, 1400.5, 8.0 / 24)) and np.isfinite(it.window_offset(t1, f1, 1.0, 1400.5, 8.0 / 24)[1])
+    res = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=2, max_duration_fraction=0.9, qa_require_measurable=True))
+    wide = [s for s in res.steps if s.status in ("accepted", "qa_failed") and s.duration_hours / 24 > 0.25 * s.period_days]
+    assert all("qa_not_measurable" in s.qa_failures for s in wide)                                    # 넓은 창은 측정 불가로 실패
