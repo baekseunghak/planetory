@@ -154,7 +154,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 `planetory_gold_writer`는 GCP Publisher의 역할이며 **서비스 런타임 역할이 아니다**([시스템 아키텍처](system-architecture.md) 7장, V2 `gold_roles`의 `REVOKE`). 두 역할을 한 계정에 합치면 V2가 회수한 Gold 쓰기 권한이 서비스 런타임에 되돌아온다.
 
-**미해결 사실(238에서 닫는다):** `users` 테이블에 `planetory_app` GRANT가 V1~V9 어디에도 없다(V9 `operation_rules` 유입 후 재확인). 매 요청 `members.requireActive`가 `users`를 SELECT하므로, 계정을 분리하는 시점에 모든 인증이 42501로 실패한다.
+**해결(238):** V11이 `users`·`user_settings`·`posts`·`comments`에 SELECT·INSERT·UPDATE를, `published_analyses`에 SELECT를 부여한다. 물리 DELETE·TRUNCATE와 `published_analyses` 쓰기는 회수하며, 코드 참조가 없는 7개 테이블에는 접근 경로가 구현될 때 필요한 동사만 추가한다. `planetory_app` 로그인 계정의 실제 쓰기·행 잠금·권한 거절을 Testcontainers로 검증한다.
 
 **GRANT 구문의 소유는 백엔드다.** 역할 모델(D5)은 이 문서가 정하지만, 테이블별로 어느 동사가 필요한지는 데이터 접근 코드를 쓰는 쪽만 안다. `users`만 해도 SELECT 외에 OAuth 최초 가입의 INSERT와 닉네임 변경의 UPDATE가 필요하고, 앞으로 쓰기 경로가 늘면 GRANT도 같이 늘어야 한다. 저장소의 마이그레이션 15커밋이 전부 백엔드에서 나왔고 GRANT 블록을 담은 V2·V5도 백엔드 티켓(134·135)이 작성했다. 83은 계정 생성·접속·볼륨과 **인수 검증**을 맡고, 구문 작성은 238이 맡는다.
 
@@ -198,8 +198,8 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 
 | 티켓 | 인계 |
 | --- | --- |
-| 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. GRANT 구문 작성은 238이 맡고 83은 **`planetory_app`으로 42501 없이 동작하는지 검증**한다. 238이 먼저 끝나야 배포할 수 있다 |
-| 238 | `users` GRANT 결손 해소(5절). 필요한 동사 집합을 코드로 확정하고 V5 패턴을 따른다. 소유자 권한으로 도는 테스트는 이 결함을 못 잡으므로 `planetory_app` 역할로 검증한다 |
+| 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. 238의 V11을 적용한 뒤 **`planetory_app`으로 42501 없이 동작하는지 인수 검증**한다 |
+| 238 | V11로 회원·커뮤니티 GRANT 결손을 해소한다(5절). 필요한 동사 집합을 코드로 확정하고 V5 패턴을 따르며, `planetory_app` 로그인 계정의 실제 DML·행 잠금·권한 거절을 회귀 테스트로 검증한다 |
 | 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **`redis-session`·`redis-cache` 두 컨테이너**를 올리고 각각의 포트·메모리 상한·eviction·persistence를 정한다(1.1절). `redis-session`은 `noeviction`과 persistence, `redis-cache`는 캐시 eviction과 결과 TTL이다. 두 상한의 합이 PostgreSQL을 OOM으로 밀어내지 않는지 함께 확인한다 |
 | 93 | 컨테이너 재기동 정책과 헬스체크 연동. liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분한다. 구현은 contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다 — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 착수 시 Boot 버전에서 확인한다. `/actuator/health`는 현재 `show-details=never`로 UP/DOWN만 반환한다(2026-09-16 Backend 확인) |
 | 100 | 오사카 노드 알림 전용 외부 관찰. 진입·DNS 개입 권한은 주지 않는다 |
