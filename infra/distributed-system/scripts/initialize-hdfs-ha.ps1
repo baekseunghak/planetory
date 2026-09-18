@@ -98,7 +98,7 @@ switch ($Step) {
     3 { '8485,9864,9866,9867' }
     default { '9864,9866,9867' }
    }
-   $command='set -eu; sudo ufw status | grep -q "Status: active"; for source in 10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10; do sudo ufw allow from "$source" to any port '+$ports+' proto tcp comment planetory-hdfs-private; done'
+   $command='set -eu; sudo ufw status verbose | grep -qE "^Status: active$"; sudo ufw status verbose | grep -qE "^Default: deny \(incoming\)"; for source in 10.20.1.10 10.20.2.10 10.20.3.10 10.20.4.10 10.20.5.10 10.20.6.10; do sudo ufw allow from "$source" to any port '+$ports+' proto tcp comment planetory-hdfs-private; done'
    if ($node.Number -le 3) {
     $command+='; for source in 10.20.1.10 10.20.2.10; do sudo ufw allow from "$source" to any port 8480 proto tcp comment planetory-hdfs-private; done'
    }

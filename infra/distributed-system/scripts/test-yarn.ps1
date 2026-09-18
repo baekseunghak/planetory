@@ -28,6 +28,10 @@ function scp {
 $install=Join-Path $PSScriptRoot 'install-yarn-hosts.ps1'
 $initialize=Join-Path $PSScriptRoot 'initialize-yarn-cluster.ps1'
 $sample=Join-Path $PSScriptRoot 'run-yarn-sample.ps1'
+$sampleSource=Get-Content -Raw $sample
+if ($sampleSource -notmatch [regex]::Escape('$Command=$Command.Replace("`r",'''')')) {
+ throw 'Spark sample remote commands must remove CR before Bash execution.'
+}
 
 & $install -WhatIf
 if (@($yarnTestState.Calls | Where-Object { $_ -like 'scp *' -or $_ -match '/tmp/planetory-yarn-install|sudo bash' }).Count) {

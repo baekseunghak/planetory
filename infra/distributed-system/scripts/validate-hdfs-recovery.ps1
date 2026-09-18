@@ -28,6 +28,7 @@ $worker=$nodes[$WorkerNode-1]
 $workerVm="worker-$WorkerNode"
 $validationRoot="/validation/S15P21C206-74/run-$RunId"
 $baselinePath="$validationRoot/baseline-256m.bin"
+$expectedShaPath="$validationRoot/baseline-256m.sha256"
 $hdfs='sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs'
 $yarn='sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn'
 
@@ -141,10 +142,13 @@ test "$(hdfs_cmd haadmin -getServiceState nn1)" = active
 if hdfs_cmd dfs -test -e '__VALIDATION_ROOT__'; then echo VALIDATION_PATH_EXISTS >&2; exit 1; fi
 local_source=/tmp/S15P21C206-74-__RUN_ID__-baseline.bin
 local_copy=/tmp/S15P21C206-74-__RUN_ID__-baseline.copy.bin
-dd if=/dev/zero of="$local_source" bs=1M count=256 status=none
+local_sha=/tmp/S15P21C206-74-__RUN_ID__-baseline.sha256
+dd if=/dev/urandom of="$local_source" bs=1M count=256 status=none
 source_sha=$(sha256sum "$local_source" | cut -d " " -f 1)
+printf '%s\n' "$source_sha" > "$local_sha"
 hdfs_cmd dfs -mkdir -p '__VALIDATION_ROOT__'
 hdfs_cmd dfs -put "$local_source" '__BASELINE_PATH__'
+hdfs_cmd dfs -put "$local_sha" '__EXPECTED_SHA_PATH__'
 test "$(hdfs_cmd dfs -stat %r '__BASELINE_PATH__')" = 2
 hdfs_cmd dfs -checksum '__BASELINE_PATH__'
 hdfs_cmd dfs -get '__BASELINE_PATH__' "$local_copy"
@@ -156,7 +160,7 @@ grep -q "Live_repl=2" /tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt
 echo HDFS_PATH='__BASELINE_PATH__'
 echo SHA256="$source_sha"
 echo RECOVERY_SAMPLE_PREPARED
-'@.Replace('__RUN_ID__',$RunId).Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath)
+'@.Replace('__RUN_ID__',$RunId).Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__EXPECTED_SHA_PATH__',$expectedShaPath)
   $null=Invoke-Remote $node1 $command 'Prepare RF2 recovery sample'
  }
  'PlannedToNode2' {
@@ -252,6 +256,7 @@ test "$(__HDFS__ haadmin -getServiceState nn1)" = standby
 test "$(__HDFS__ haadmin -getServiceState nn2)" = active
 sudo systemctl start hadoop-yarn-resourcemanager
 for attempt in {1..30}; do ss -lnt | grep -q ":8032 " && break; sleep 1; done
+ss -lnt | grep -q ":8032 "
 systemctl is-active --quiet hadoop-yarn-resourcemanager
 containers=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null || true)
 if printf '%s\n' "$containers" | grep -Eq 'airflow|publisher'; then echo CONTROL_PLANE_CONTAINERS_PRESENT; else echo AIRFLOW_PUBLISHER_NOT_DEPLOYED; fi
@@ -289,6 +294,13 @@ echo NODE1_FAILBACK_OK
   Assert-RemoteHost $worker
   Assert-InstanceStatus $WorkerProjectId $workerVm RUNNING
   Assert-NoRunningYarnApplications $node1
+  if ($WorkerNode -eq 3) {
+   Assert-RemoteHost $node2
+   $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; timeout 3 bash -c "</dev/tcp/worker-2/8485"; timeout 3 bash -c "</dev/tcp/worker-2/8480"; echo NODE1_SURVIVING_WORKER3_JOURNAL_QUORUM_OK'
+   $null=Invoke-Remote $node1 $command 'Confirm Node 1 survives Worker 3 JournalNode stop'
+   $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; timeout 3 bash -c "</dev/tcp/master-1/8485"; timeout 3 bash -c "</dev/tcp/master-1/8480"; echo NODE2_SURVIVING_WORKER3_JOURNAL_QUORUM_OK'
+   $null=Invoke-Remote $node2 $command 'Confirm Node 2 survives Worker 3 JournalNode stop'
+  }
   $workerIp="10.20.$WorkerNode.10"
   $command='set -eu; test "$('+$hdfs+' haadmin -getServiceState nn1)" = active; '+$hdfs+' fsck "'+$baselinePath+'" -files -blocks -locations | tee /tmp/S15P21C206-74-worker-target-fsck.txt; grep -q "'+$workerIp+':9866" /tmp/S15P21C206-74-worker-target-fsck.txt; '+$hdfs+' dfs -cat "'+$baselinePath+'" >/dev/null; echo WORKER_TARGET_OWNS_BASELINE_BLOCK'
   $null=Invoke-Remote $node1 $command "Confirm baseline replica on Worker $WorkerNode"
@@ -374,7 +386,8 @@ hdfs_cmd fsck '__VALIDATION_ROOT__' -files -blocks -locations | tee /tmp/S15P21C
 grep -q "Status: HEALTHY" /tmp/S15P21C206-74-final-fsck.txt
 grep -q "Over-replicated blocks:[[:space:]]*0" /tmp/S15P21C206-74-final-fsck.txt
 hdfs_cmd dfs -get -f '__BASELINE_PATH__' /tmp/S15P21C206-74-final-baseline.bin
-expected_sha=$(head -c 268435456 /dev/zero | sha256sum | cut -d " " -f 1)
+expected_sha=$(hdfs_cmd dfs -cat '__EXPECTED_SHA_PATH__' | tr -d '[:space:]')
+printf '%s' "$expected_sha" | grep -Eq '^[0-9a-f]{64}$'
 actual_sha=$(sha256sum /tmp/S15P21C206-74-final-baseline.bin | cut -d " " -f 1)
 test "$expected_sha" = "$actual_sha"
 systemctl is-active --quiet hadoop-yarn-resourcemanager
@@ -382,7 +395,7 @@ __YARN__ node -list -all 2>&1 | tee /tmp/S15P21C206-74-final-yarn.txt
 test "$(awk '$2 == "RUNNING" { count++ } END { print count + 0 }' /tmp/S15P21C206-74-final-yarn.txt)" = 5
 echo FINAL_SHA256="$actual_sha"
 echo FINAL_HDFS_YARN_RECOVERY_AUDIT_OK
-'@.Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__YARN__',$yarn)
+'@.Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__EXPECTED_SHA_PATH__',$expectedShaPath).Replace('__YARN__',$yarn)
   $null=Invoke-Remote $node1 $command 'Final HDFS/YARN recovery audit'
   foreach ($node in $nodes[0..2]) {
    $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; echo FINAL_JOURNALNODE_ACTIVE'

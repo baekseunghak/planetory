@@ -65,6 +65,12 @@ function Get-StepSource {
  $source.Substring($startIndex,$endIndex-$startIndex)
 }
 
+$prepareSource=Get-StepSource Prepare PlannedToNode2
+foreach ($required in ('dd if=/dev/urandom','local_sha=/tmp/S15P21C206-74-__RUN_ID__-baseline.sha256','__EXPECTED_SHA_PATH__')) {
+ if ($prepareSource -notmatch [regex]::Escape($required)) { throw "Prepare must persist the random recovery sample checksum: $required" }
+}
+if ($prepareSource -match [regex]::Escape('/dev/zero')) { throw 'Prepare must not use the reproducible zero-filled recovery sample.' }
+
 $stopNode1Source=Get-StepSource StopNode1 PromoteNode2
 foreach ($required in ('Assert-RemoteHost $node3','timeout 3 bash -c "</dev/tcp/worker-3/8485"','NODE2_SURVIVING_JOURNAL_QUORUM_OK','NODE3_SURVIVING_JOURNAL_QUORUM_OK')) {
  if ($stopNode1Source -notmatch [regex]::Escape($required)) { throw "StopNode1 must verify surviving JournalNode quorum: $required" }
@@ -83,9 +89,22 @@ if ($promoteSource.IndexOf($terminatedGuard) -gt $promoteSource.IndexOf($forceAc
  throw 'PromoteNode2 TERMINATED guard must precede forced activation.'
 }
 
+$startNode1Source=Get-StepSource StartNode1 FailbackNode1
+if ([regex]::Matches($startNode1Source,[regex]::Escape('ss -lnt | grep -q ":8032 "')).Count -lt 2) {
+ throw 'StartNode1 must assert the ResourceManager client port after its readiness loop.'
+}
+
 $failbackSource=Get-StepSource FailbackNode1 StopWorkerAndObserve
 foreach ($required in ('for host in worker-2 worker-3 worker-4 worker-5 worker-6; do','if ! hdfs_cmd dfsadmin -triggerBlockReport','BLOCKED_DATANODE_IPC=')) {
  if ($failbackSource -notmatch [regex]::Escape($required)) { throw "Failback must report every blocked DataNode IPC target: $required" }
+}
+
+$stopWorkerSource=Get-StepSource StopWorkerAndObserve StartWorker
+foreach ($required in ('if ($WorkerNode -eq 3)','Assert-RemoteHost $node2','NODE1_SURVIVING_WORKER3_JOURNAL_QUORUM_OK','NODE2_SURVIVING_WORKER3_JOURNAL_QUORUM_OK')) {
+ if ($stopWorkerSource -notmatch [regex]::Escape($required)) { throw "Worker 3 stop must verify the surviving JournalNode quorum: $required" }
+}
+if ($stopWorkerSource.IndexOf('NODE2_SURVIVING_WORKER3_JOURNAL_QUORUM_OK') -gt $stopWorkerSource.IndexOf('instances stop $workerVm')) {
+ throw 'Worker 3 surviving JournalNodes must be verified before stopping the VM.'
 }
 
 $startWorkerSource=Get-StepSource StartWorker FinalAudit
@@ -97,9 +116,10 @@ if ($startWorkerSource.IndexOf('systemctl start hadoop-hdfs-journalnode') -gt $s
 }
 
 $finalAuditSource=$source.Substring($source.IndexOf("'FinalAudit' {"))
-foreach ($required in ('$nodes[0..2]','FINAL_JOURNALNODE_ACTIVE')) {
- if ($finalAuditSource -notmatch [regex]::Escape($required)) { throw "FinalAudit must verify all three JournalNodes: $required" }
+foreach ($required in ('$nodes[0..2]','FINAL_JOURNALNODE_ACTIVE','dfs -cat ''__EXPECTED_SHA_PATH__''','test "$expected_sha" = "$actual_sha"')) {
+ if ($finalAuditSource -notmatch [regex]::Escape($required)) { throw "FinalAudit recovery contract missing: $required" }
 }
+if ($finalAuditSource -match [regex]::Escape('/dev/zero')) { throw 'FinalAudit must compare with the checksum emitted by Prepare.' }
 foreach ($forbidden in ('namenode -format','-bootstrapStandby','-initializeSharedEdits','dfs -rm','rm -rf','haadmin -failover')) {
  if ($source -match [regex]::Escape($forbidden)) { throw "Recovery script must not contain: $forbidden" }
 }

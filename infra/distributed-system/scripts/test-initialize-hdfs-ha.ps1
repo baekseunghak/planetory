@@ -33,6 +33,7 @@ $testState.Calls.Clear()
 $firewallCalls=@($testState.Calls | Where-Object { $_ -match 'ufw allow' })
 if ($firewallCalls.Count -ne 6 -or
     @($firewallCalls | Where-Object { $_ -notmatch '10\.20\.1\.10 10\.20\.2\.10 10\.20\.3\.10 10\.20\.4\.10 10\.20\.5\.10 10\.20\.6\.10' }).Count -or
+    @($firewallCalls | Where-Object { -not $_.Contains('Default: deny \(incoming\)') }).Count -or
     @($firewallCalls | Where-Object { $_ -match 'port 8480' }).Count -ne 3 -or
     @($firewallCalls | Where-Object { $_ -match 'port 8480' -and $_ -notmatch 'for source in 10\.20\.1\.10 10\.20\.2\.10' }).Count -or
     @($testState.Calls | Where-Object { $_ -match 'ufw disable|ufw reset|delete allow|namenode -format' }).Count) {
