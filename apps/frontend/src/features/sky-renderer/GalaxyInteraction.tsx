@@ -1,3 +1,4 @@
+import { currentChallengeMismatch } from "../quests/contracts";
 import {
   forwardRef,
   useEffect,
@@ -8,20 +9,17 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { api } from "../../api";
+import { useQuests } from "../quests/QuestProvider";
 import type { SkySceneProps } from "../sky-data/SkyDataPage";
 import type { Matrix } from "../sky-data/geometry";
 import {
   HitGrid,
   markerLabel,
   panCamera,
-  readTutorialMarkers,
-  readChallengeTicId,
   rotateCamera,
   starTargets,
   zoomCamera,
   type HitTarget,
-  type TutorialMarkers,
 } from "./interaction";
 import type { GalaxyCamera, OwnedSystem } from "./model";
 
@@ -56,14 +54,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       enabled,
     } = props;
     const [mode, setMode] = useState<"rotate" | "pan">("rotate");
-    const [questAttempt, setQuestAttempt] = useState(0);
-    const [quest, setQuest] = useState<{
-      version: string;
-      value: TutorialMarkers | null;
-      challengeTicId: string | null;
-      error: boolean;
-    } | null>(null);
-    const retiredBadges = useRef(new Set<string>());
+    const quest = useQuests();
     const [selectedPlanet, setSelectedPlanet] = useState<string | null>(null);
     const selectedPlanetRef = useRef(selectedPlanet);
     selectedPlanetRef.current = selectedPlanet;
@@ -97,45 +88,15 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     );
     const current = useRef({ ...props, mode, index });
     current.current = { ...props, mode, index };
-    const tutorials =
-      quest?.version === data.meta?.version && !data.needsRefresh
-        ? (quest?.value ?? null)
-        : null;
+    const tutorials = quest.markers;
+    const staleRound = currentChallengeMismatch(
+      quest.current,
+      quest.quests?.challenge,
+    );
     const challengeTicId =
-      quest?.version === data.meta?.version && !data.needsRefresh
-        ? (quest?.challengeTicId ?? null)
+      quest.quests?.challenge.unlocked && !staleRound
+        ? quest.quests.challenge.ticId
         : null;
-    useEffect(() => {
-      const controller = new AbortController();
-      const version = data.meta!.version;
-      setQuest(null);
-      if (data.needsRefresh) return;
-      void api<unknown>("/v1/me/quests", { signal: controller.signal })
-        .then((value) => {
-          if (controller.signal.aborted) return;
-          const state = readTutorialMarkers(value);
-          for (const [id, item] of state) {
-            if (item.completed) retiredBadges.current.add(id);
-            if (retiredBadges.current.has(id)) item.visible = false;
-          }
-          setQuest({
-            version,
-            value: state,
-            challengeTicId: readChallengeTicId(value),
-            error: false,
-          });
-        })
-        .catch(() => {
-          if (!controller.signal.aborted)
-            setQuest({
-              version,
-              value: null,
-              challengeTicId: null,
-              error: true,
-            });
-        });
-      return () => controller.abort();
-    }, [store, data.meta?.version, data.needsRefresh, questAttempt]);
     useEffect(() => {
       setSelectedPlanet(null);
       props.onPlanetSelect?.(null);
@@ -608,9 +569,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         {quest?.error && (
           <div className="galaxy-marker-warning" role="status">
             튜토리얼 번호를 확인하지 못했습니다.{" "}
-            <button onClick={() => setQuestAttempt((n) => n + 1)}>
-              번호 다시 확인
-            </button>
+            <button onClick={quest.refresh}>번호 다시 확인</button>
           </div>
         )}
       </>

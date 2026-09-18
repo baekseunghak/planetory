@@ -12,6 +12,7 @@ import {
   type StarDetail,
 } from "./detail";
 import { DiscoveredStars } from "./DiscoveredStars";
+import { QuestPanel } from "../quests/QuestPanel";
 
 const progressLabel = {
   unexplored: "미탐사",
@@ -176,6 +177,8 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
             ? document.getElementById("discovered-title")
             : document.querySelector<HTMLCanvasElement>(".galaxy-scene canvas");
       target?.focus({ preventScroll: true });
+      if (target?.closest(".quest-panel"))
+        target.scrollIntoView({ block: "nearest" });
     }
     if (previousSelection.current !== ticId) {
       focused.current = null;
@@ -243,6 +246,25 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
   };
   return (
     <>
+      <QuestPanel
+        listMode={listOpen}
+        select={(id) => {
+          launcher.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+          store.select(id);
+          navigate(
+            `/sky?${new URLSearchParams({ star: id, ...(listOpen ? { view: "list" } : {}) })}`,
+            { replace: true },
+          );
+          requestAnimationFrame(() =>
+            document
+              .querySelector(".personal-galaxy")
+              ?.scrollIntoView({ block: "start" }),
+          );
+        }}
+      />
       <div className="sky-view-switch">
         <button onClick={switchView} disabled={listOpen && !graphics.available}>
           {listOpen ? "3D 지도 보기" : "별 목록으로 선택하기"}

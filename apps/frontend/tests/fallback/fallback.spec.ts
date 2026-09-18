@@ -72,8 +72,8 @@ test("creation failure: new unsubmitted tutorial is listed, locked TICs hidden, 
   await page.goto("/sky");
   await expect(listHeading(page)).toBeVisible();
   await expect(rows(page)).toHaveCount(1);
-  await page.locator(".fallback-quests summary").click();
-  await expect(page.locator(".fallback-quests")).toContainText(
+  await page.locator(".quest-tutorial summary").click();
+  await expect(page.locator(".quest-tutorial")).toContainText(
     "튜토리얼 2 · 잠김",
   );
   await expect(page.locator(".discovered-stars")).not.toContainText(
@@ -161,7 +161,7 @@ test("real context loss/restoration keeps selection and camera; restoration neve
   await expect(canvas).toBeFocused();
   expect(await cam(page)).toEqual(selected);
   await panel(page).getByRole("button", { name: "은하로 돌아가기" }).click();
-  expect(await cam(page)).toEqual(before);
+  await expect.poll(() => cam(page)).toEqual(before);
 });
 test("list is independent of tile failures; quest failure does not remove star access", async ({
   page,
@@ -179,9 +179,9 @@ test("list is independent of tile failures; quest failure does not remove star a
     }),
   );
   await list(page);
-  await page.locator(".fallback-quests summary").click();
-  await expect(page.locator(".fallback-quests")).toContainText(
-    "별 목록과 상세는 계속 이용",
+  await page.locator(".quest-tutorial summary").click();
+  await expect(page.locator(".quest-tutorial")).toContainText(
+    "튜토리얼을 불러오지 못했습니다",
   );
   await rows(page).nth(1).click();
   await expect(panel(page)).toContainText("TIC 900000002");
@@ -256,8 +256,6 @@ test("keyboard map controls and list switches preserve camera, 1024 layout and v
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).focus();
   await page.keyboard.press("Enter");
   await expect(listHeading(page)).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.locator(".fallback-quests summary")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(rows(page).first()).toBeFocused();
   await page.keyboard.press("Enter");

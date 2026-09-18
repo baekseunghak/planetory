@@ -144,11 +144,18 @@ export function galaxyFixturePlugin(): Plugin {
           });
         if (url.pathname === "/v1/me/quests")
           return reply(200, {
+            asOf: new Date().toISOString(),
             tutorial: {
               completedCount: completedTutorials.size,
               items: Array.from({ length: 5 }, (_, i) => ({
                 seq: i + 1,
-                intent: "deep_confirmed",
+                intent: [
+                  "deep_confirmed",
+                  "shallow_confirmed",
+                  "fp",
+                  "deep_fp",
+                  "multi_fp",
+                ][i],
                 ticId: stars[i]?.ticId ?? null,
                 status: completedTutorials.has(i + 1)
                   ? "completed"
@@ -158,9 +165,43 @@ export function galaxyFixturePlugin(): Plugin {
                 completionReason: completedTutorials.get(i + 1) ?? null,
               })),
             },
-            challenge: { ticId: stars[5]?.ticId ?? null, unlocked: !!stars[5] },
+            challenge: {
+              round: stars[5]
+                ? {
+                    roundId: "cr-901",
+                    roundNo: 1,
+                    startsOn: "2026-09-14",
+                    endsOn: "2026-09-21",
+                    description: "얕은 밝기 신호를 찾아보세요",
+                  }
+                : null,
+              eligible: !!stars[5],
+              ticId: stars[5]?.ticId ?? null,
+              unlocked: !!stars[5],
+              progressStage: stars[5]?.progressStage ?? null,
+              participantCount: stars[5] ? 12 : null,
+            },
             reopened: [],
           });
+        if (url.pathname === "/v1/challenges/current")
+          return reply(
+            200,
+            stars[5]
+              ? {
+                  round: {
+                    roundId: "cr-901",
+                    roundNo: 1,
+                    ticId: stars[5].ticId,
+                    startsOn: "2026-09-14",
+                    endsOn: "2026-09-21",
+                    status: "active",
+                    description: "얕은 밝기 신호를 찾아보세요",
+                  },
+                  eligible: true,
+                  participantCount: 12,
+                }
+              : { round: null, eligible: false },
+          );
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
         if (url.pathname === "/v1/me/stars") {
           const q = url.searchParams;
