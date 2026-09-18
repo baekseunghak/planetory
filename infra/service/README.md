@@ -16,4 +16,23 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 마운트 경로 `/var/lib/postgresql`은 postgres:18에서 바뀐 규약이다. 17 이하의 `/var/lib/postgresql/data`로 되돌리면 깨진다.
 
-현재는 소유자 겸 서비스 계정 하나(`planetory`)로 접속한다. `planetory_app`·`planetory_gold_writer` 역할 분리는 `S15P21C206-238`의 `users` GRANT가 들어온 뒤에 적용한다.
+## 계정 분리
+
+접속 계정은 둘이다. 소유자는 GRANT/REVOKE의 영향을 받지 않으므로 나누지 않으면 권한 분리가 성립하지 않는다(`V2__gold_roles.sql` 주석).
+
+| 계정 | 하는 일 | 주입 |
+|---|---|---|
+| `planetory` | 테이블 소유자. Flyway 마이그레이션을 실행한다 | `POSTGRES_USER`·`POSTGRES_PASSWORD` |
+| `planetory_service` | 앱 런타임. `planetory_app` 역할만 가진다 | `DATABASE_USER`·`DATABASE_PASSWORD` |
+
+두 비밀번호는 **서로 다른 값**이어야 한다. 같으면 계정은 나뉘어도 앱 비밀이 유출될 때 소유자 계정까지 열린다.
+
+`service-db-init/10-app-account.sh`가 `planetory_service`를 만들고 역할을 부여한다. postgres 이미지의 initdb 훅은 **빈 데이터 디렉터리를 처음 초기화할 때만** 실행되므로, 이미 데이터가 있는 볼륨에는 소유자로 접속해 아래를 한 번 실행한다.
+
+```sql
+CREATE USER planetory_service PASSWORD '<DATABASE_PASSWORD와 같은 값>';
+GRANT planetory_app TO planetory_service;
+REVOKE CREATE ON SCHEMA public FROM planetory_service;
+```
+
+Spring Boot 4는 `spring.flyway.user`만으로는 별도 연결을 만들지 않고 datasource를 그대로 쓴다. `application.properties`가 `spring.flyway.url`을 함께 지정하는 이유이며, 이 줄을 지우면 분리한 것처럼 보이지만 실제로는 소유자로 마이그레이션과 런타임이 모두 돈다. 단일 계정 환경에서는 드러나지 않는다.
