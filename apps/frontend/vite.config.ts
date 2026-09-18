@@ -22,7 +22,9 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   const skyFixture = command === "serve" && !isPreview && mode === "sky-data";
   const galaxyFixture = command === "serve" && !isPreview && mode === "galaxy";
   const communityFixture =
-    command === "serve" && !isPreview && ["community", "posts"].includes(mode);
+    command === "serve" &&
+    !isPreview &&
+    ["community", "posts", "comments"].includes(mode);
   const testing =
     fixture || authFixture || skyFixture || galaxyFixture || communityFixture;
   const target = process.env.API_PROXY_TARGET ?? env.API_PROXY_TARGET;
@@ -62,7 +64,10 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
         ? [
             (
               await import("./dev/community-fixture-plugin.ts")
-            ).communityFixturePlugin(mode === "posts"),
+            ).communityFixturePlugin(
+              ["posts", "comments"].includes(mode),
+              mode === "comments",
+            ),
           ]
         : []),
       ...(fixture

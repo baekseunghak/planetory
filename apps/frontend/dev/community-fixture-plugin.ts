@@ -75,10 +75,46 @@ const analyses = Array.from({ length: 23 }, (_, index) => ({
   contributesToSummary: index < 15,
 }));
 
-export function communityFixturePlugin(writable = false): Plugin {
+export function communityFixturePlugin(
+  writable = false,
+  commentWrites = false,
+): Plugin {
   const records = structuredClone(posts);
   const deleted = new Set<string>();
   let serial = 1000;
+  const commentRows = new Map<
+    string,
+    {
+      commentId: string;
+      author: typeof author;
+      body: string;
+      attachments: unknown[];
+      sourceLinks: unknown[];
+      createdAt: string;
+      updatedAt: string;
+    }[]
+  >();
+  for (const [id, count] of [
+    ["p-201", 22],
+    ["st-301", 2],
+  ] as const)
+    commentRows.set(
+      id,
+      Array.from({ length: count }, (_, index) => ({
+        commentId: `cm-${id}-${index}`,
+        author,
+        body: `다른 관측 회차의 신호도 비교해 보고 있습니다. 함께 확인해 주셔서 감사합니다. (${index + 1})`,
+        attachments: [],
+        sourceLinks: [],
+        createdAt: date,
+        updatedAt: date,
+      })),
+    );
+  const deletedComments = new Set<string>();
+  const parentExists = (type: string | null, id: string | null) =>
+    type === "POST"
+      ? records.some((row) => row.postId === id)
+      : type === "SIGNAL_THREAD" && threads.some((row) => row.threadId === id);
   return {
     name: "community-fixture-209",
     apply: "serve",
@@ -91,9 +127,11 @@ export function communityFixturePlugin(writable = false): Plugin {
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: writable
-            ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-            : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: commentWrites
+            ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+            : writable
+              ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+              : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -286,6 +324,118 @@ export function communityFixturePlugin(writable = false): Plugin {
           }
           return;
         }
+        if (
+          commentWrites &&
+          ["POST", "PATCH", "DELETE"].includes(req.method ?? "") &&
+          /^\/v1\/comments(?:\/[^/]+)?$/.test(url.pathname)
+        ) {
+          if (req.headers["x-csrf-token"] !== "community-fixture-209") {
+            send(
+              { code: "CSRF_INVALID", message: "인증 정보를 확인해 주세요." },
+              403,
+            );
+            return;
+          }
+          const id = url.pathname.split("/")[3];
+          const entry = [...commentRows].find(([, rows]) =>
+            rows.some((row) => row.commentId === id),
+          );
+          const item = entry?.[1].find((row) => row.commentId === id);
+          if (req.method === "DELETE") {
+            if (!item && !deletedComments.has(id)) {
+              missing();
+              return;
+            }
+            if (entry) {
+              commentRows.set(
+                entry[0],
+                entry[1].filter((row) => row.commentId !== id),
+              );
+              const post = records.find((row) => row.postId === entry[0]);
+              if (post) post.commentCount = commentRows.get(entry[0])!.length;
+            }
+            deletedComments.add(id);
+            res.statusCode = 204;
+            res.end();
+            return;
+          }
+          let input: Record<string, unknown>;
+          try {
+            let body = "";
+            for await (const chunk of req) {
+              body += String(chunk);
+              if (body.length > 100000) throw new Error();
+            }
+            input = JSON.parse(body);
+          } catch {
+            send(
+              { code: "VALIDATION_FAILED", message: "입력을 확인해 주세요." },
+              400,
+            );
+            return;
+          }
+          if (
+            !input ||
+            typeof input.body !== "string" ||
+            !input.body.trim() ||
+            Array.from(input.body).length > 2000
+          ) {
+            send(
+              {
+                code: "VALIDATION_FAILED",
+                message: "댓글을 확인해 주세요.",
+                fieldErrors: [
+                  {
+                    field: "body",
+                    reason: "댓글은 1~2,000자로 입력해 주세요.",
+                  },
+                ],
+              },
+              400,
+            );
+            return;
+          }
+          if (req.method === "PATCH") {
+            if (
+              !item ||
+              !entry ||
+              !parentExists(
+                entry[0].startsWith("p-") ? "POST" : "SIGNAL_THREAD",
+                entry[0],
+              )
+            ) {
+              missing();
+              return;
+            }
+            item.body = input.body;
+            item.updatedAt = new Date().toISOString();
+            send(item);
+            return;
+          }
+          if (!parentExists(String(input.parentType), String(input.parentId))) {
+            missing();
+            return;
+          }
+          const parentId = String(input.parentId),
+            now = new Date().toISOString();
+          const row = {
+            commentId: "c-" + ++serial,
+            author,
+            body: input.body,
+            attachments: [],
+            sourceLinks: [],
+            createdAt: now,
+            updatedAt: now,
+          };
+          commentRows.set(parentId, [
+            row,
+            ...(commentRows.get(parentId) ?? []),
+          ]);
+          const post = records.find((row) => row.postId === parentId);
+          if (post) post.commentCount = commentRows.get(parentId)!.length;
+          send({ commentId: row.commentId, createdAt: now }, 201);
+          return;
+        }
         if (req.method !== "GET") {
           send(
             {
@@ -381,18 +531,7 @@ export function communityFixturePlugin(writable = false): Plugin {
             missing();
             return;
           }
-          const count = id === "p-201" ? 22 : id === "st-301" ? 2 : 0;
-          paginate(
-            Array.from({ length: count }, (_, index) => ({
-              commentId: `cm-${id}-${index}`,
-              author,
-              body: `다른 관측 회차의 신호도 비교해 보고 있습니다. 함께 확인해 주셔서 감사합니다. (${index + 1})`,
-              attachments: [],
-              sourceLinks: [],
-              createdAt: date,
-              updatedAt: date,
-            })),
-          );
+          paginate(commentRows.get(id!) ?? []);
           return;
         }
         missing();
