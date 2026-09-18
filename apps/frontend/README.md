@@ -122,6 +122,8 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 
 ## W04 로그인 화면 검증
 
+별지도 성능 측정은 [215 재현 방법·구조](docs/performance-215.md)와 [215 결과·잔여 조건](docs/ticket-215-readiness.md)을 따른다. `npm run dev:performance`는 별도 production-compiled 서비스 화면과 로컬 HTTP fixture를58360에서 제공한다. 제품 빌드에는 포함되지 않으며214 브랜치가 필요하지 않다.
+
 `npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.
 
 ## W05 별지도 데이터 로딩

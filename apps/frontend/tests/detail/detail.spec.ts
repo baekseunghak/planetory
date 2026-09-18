@@ -124,8 +124,10 @@ test("actions use server flags, routes preserve TIC and return refetches detail/
     .getByRole("link", { name: /분석 시작/ })
     .click();
   await expect(page).toHaveURL(/\/analysis\/900000001\?returnTo=/);
-  await expect(page.getByText("이 화면은 연결 준비 중입니다.")).toBeVisible();
-  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await expect(
+    page.getByRole("heading", { name: "분석 · TIC 900000001", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(panel(page)).toContainText("내 행성 5개");
   for (const key of Object.keys(counts) as (keyof typeof counts)[])
     expect(counts[key]).toBeGreaterThan(before[key]);

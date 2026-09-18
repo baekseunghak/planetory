@@ -133,7 +133,7 @@ class ReusableBuffer {
     if (!buffer) throw new Error("GPU 버퍼 생성 실패");
     this.buffer = buffer;
   }
-  update(values: number[]) {
+  update(values: ArrayLike<number>) {
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     if (values.length > this.data.length) {
@@ -144,17 +144,19 @@ class ReusableBuffer {
       gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
       this.data.fill(NaN);
     }
-    let first = -1,
-      last = -1;
-    for (let i = 0; i < values.length; i++) {
-      const value = Math.fround(values[i]);
-      if (this.data[i] !== value) {
-        this.data[i] = value;
-        if (first < 0) first = i;
-        last = i;
-      }
+    // Values are already float32 for the large star buffer. Find the changed
+    // span at its boundaries, then copy in native code instead of assigning
+    // hundreds of thousands of JS numbers on every culled camera view.
+    const floats =
+      values instanceof Float32Array ? values : Float32Array.from(values);
+    let first = 0,
+      last = floats.length - 1;
+    while (first <= last && this.data[first] === floats[first]) first++;
+    while (last >= first && this.data[last] === floats[last]) last--;
+    if (first <= last) {
+      this.data.set(floats.subarray(first, last + 1), first);
+      this.upload(first, last + 1);
     }
-    if (first >= 0) this.upload(first, last + 1);
     this.length = values.length;
   }
   private upload(start: number, end: number) {
@@ -204,6 +206,15 @@ export class GalaxyRenderer {
   private focusMix = 0;
   private zoom = 1;
   private starCount = 0;
+  private previousScene: {
+    stars: RenderPlan["stars"];
+    selected: string | null;
+    system: OwnedSystem | null;
+    width: number;
+    height: number;
+  } | null = null;
+  private bodyStaging = new Float32Array(0);
+  private styles = new WeakMap<object, ReturnType<typeof starStyle>>();
   private disposed = false;
   private stats = {
     stars: 0,
@@ -333,21 +344,43 @@ export class GalaxyRenderer {
     this.system = system;
     if (system && system.ticId !== selected)
       throw new Error("선택한 별과 행성 목록이 다릅니다.");
-    const body: number[] = [],
+    const previous = this.previousScene;
+    if (
+      previous &&
+      previous.selected === selected &&
+      previous.system === system &&
+      previous.width === this.width &&
+      previous.height === this.height &&
+      (previous.stars === plan.stars ||
+        (previous.stars.length === plan.stars.length &&
+          previous.stars.every((s, i) => s === plan.stars[i])))
+    )
+      return;
+    if (this.bodyStaging.length < plan.stars.length * 8)
+      this.bodyStaging = new Float32Array(
+        2 ** Math.ceil(Math.log2(Math.max(64, plan.stars.length * 8))),
+      );
+    const body = this.bodyStaging.subarray(0, plan.stars.length * 8),
       rings: number[] = [],
       planets: number[] = [];
     const starIds = new Set<string>();
+    let offset = 0;
     for (const star of plan.stars) {
-      const style = starStyle(star);
-      body.push(
-        star.x,
-        star.y,
-        star.depthZ,
-        style.baseSize,
-        ...style.rgb,
-        star.ticId === system?.ticId ? 2 : star.ticId === selected ? 1 : 0,
-      );
-      starIds.add(star.ticId);
+      let style = this.styles.get(star);
+      if (!style) {
+        style = starStyle(star);
+        this.styles.set(star, style);
+      }
+      body[offset++] = star.x;
+      body[offset++] = star.y;
+      body[offset++] = star.depthZ;
+      body[offset++] = style.baseSize;
+      body[offset++] = style.rgb[0];
+      body[offset++] = style.rgb[1];
+      body[offset++] = style.rgb[2];
+      body[offset++] =
+        star.ticId === system?.ticId ? 2 : star.ticId === selected ? 1 : 0;
+      if (system) starIds.add(star.ticId);
     }
     let orbitStars = 0;
     const addOrbits = (
@@ -418,6 +451,13 @@ export class GalaxyRenderer {
       detailedSystems: system ? 1 : 0,
       packedNodes: this.stats.packedNodes + plan.stars.length,
     });
+    this.previousScene = {
+      stars: plan.stars,
+      selected,
+      system,
+      width: this.width,
+      height: this.height,
+    };
   }
   setPlanetFocus(id: string | null) {
     const next = this.system?.items.some((p) => p.candidateId === id)
