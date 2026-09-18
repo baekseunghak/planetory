@@ -1,0 +1,103 @@
+{
+  "date": "2026-09-17",
+  "backend": "854c23c",
+  "runs": [
+    {
+      "browser": "chromium",
+      "passed": true,
+      "checks": [
+        "207 actual newly registered account has one unsubmitted star; WebGL creation failure automatically lists it",
+        "207 real quest locked TIC redaction, keyboard detail, disabled result, analysis route/context and browser return",
+        "207 real ownership rejects an undiscovered TIC",
+        "203/204 actual metadata and paginated tiles render 2501 individual stars; quests returns 200",
+        "205/206 real marker selection, five owned planets, camera approach and exact return",
+        "207 real cursor pages, keyboard detail/focus and map/list camera preservation",
+        "207 real context loss and restore keep actual API access and camera",
+        "201/202 actual CSRF logout removes private view and returns 401; reload preserves stored coordinates",
+        "No uncaught browser errors"
+      ],
+      "errors": [],
+      "limitations": [
+        "Synthetic OAuth identity; real Spring API and isolated seeded PostgreSQL17.10. No intercepted API responses.",
+        "Analysis/result/community destination UI, deployed HTTPS and actual Safari acceptance remain separate.",
+        "New account is created once, then reused by additional browsers."
+      ]
+    },
+    {
+      "browser": "chrome",
+      "passed": true,
+      "checks": [
+        "207 actual newly registered account has one unsubmitted star; WebGL creation failure automatically lists it",
+        "207 real quest locked TIC redaction, keyboard detail, disabled result, analysis route/context and browser return",
+        "207 real ownership rejects an undiscovered TIC",
+        "203/204 actual metadata and paginated tiles render 2501 individual stars; quests returns 200",
+        "205/206 real marker selection, five owned planets, camera approach and exact return",
+        "207 real cursor pages, keyboard detail/focus and map/list camera preservation",
+        "207 real context loss and restore keep actual API access and camera",
+        "201/202 actual CSRF logout removes private view and returns 401; reload preserves stored coordinates",
+        "No uncaught browser errors"
+      ],
+      "errors": [],
+      "limitations": [
+        "Synthetic OAuth identity; real Spring API and isolated seeded PostgreSQL17.10. No intercepted API responses.",
+        "Analysis/result/community destination UI, deployed HTTPS and actual Safari acceptance remain separate.",
+        "New account is created once, then reused by additional browsers."
+      ]
+    },
+    {
+      "browser": "msedge",
+      "passed": true,
+      "checks": [
+        "207 actual newly registered account has one unsubmitted star; WebGL creation failure automatically lists it",
+        "207 real quest locked TIC redaction, keyboard detail, disabled result, analysis route/context and browser return",
+        "207 real ownership rejects an undiscovered TIC",
+        "203/204 actual metadata and paginated tiles render 2501 individual stars; quests returns 200",
+        "205/206 real marker selection, five owned planets, camera approach and exact return",
+        "207 real cursor pages, keyboard detail/focus and map/list camera preservation",
+        "207 real context loss and restore keep actual API access and camera",
+        "201/202 actual CSRF logout removes private view and returns 401; reload preserves stored coordinates",
+        "No uncaught browser errors"
+      ],
+      "errors": [],
+      "limitations": [
+        "Synthetic OAuth identity; real Spring API and isolated seeded PostgreSQL17.10. No intercepted API responses.",
+        "Analysis/result/community destination UI, deployed HTTPS and actual Safari acceptance remain separate.",
+        "New account is created once, then reused by additional browsers."
+      ]
+    },
+    {
+      "browser": "firefox",
+      "passed": true,
+      "checks": [
+        "207 actual newly registered account has one unsubmitted star; WebGL creation failure automatically lists it",
+        "207 real quest locked TIC redaction, keyboard detail, disabled result, analysis route/context and browser return",
+        "207 real ownership rejects an undiscovered TIC",
+        "203/204 actual metadata and paginated tiles render 2501 individual stars; quests returns 200",
+        "205/206 real marker selection, five owned planets, camera approach and exact return",
+        "207 real cursor pages, keyboard detail/focus and map/list camera preservation",
+        "207 real context loss and restore keep actual API access and camera",
+        "201/202 actual CSRF logout removes private view and returns 401; reload preserves stored coordinates",
+        "No uncaught browser errors"
+      ],
+      "errors": [],
+      "limitations": [
+        "Synthetic OAuth identity; real Spring API and isolated seeded PostgreSQL17.10. No intercepted API responses.",
+        "Analysis/result/community destination UI, deployed HTTPS and actual Safari acceptance remain separate.",
+        "New account is created once, then reused by additional browsers."
+      ]
+    }
+  ],
+  "challenge": {
+    "passed": true,
+    "backend": "854c23c",
+    "checks": [
+      "Real quests supplies challenge TIC for a previously tutorial-unlocked star even before eligibility; no tile marker is needed",
+      "Closing the isolated round removes the actual quest and map challenge marker"
+    ],
+    "scope": "Actual API, only a named synthetic round in isolated test database; closed after verification"
+  },
+  "unit": 67,
+  "inputChromium": 9,
+  "fallbackChromiumBeforeLastChange": 10,
+  "fallbackFinalAffected": 5
+}

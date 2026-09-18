@@ -18,6 +18,7 @@ export function useReadModel<T>(
   const clear = useCallback(() => {
     ++sequence.current;
     pending.current?.abort();
+    pending.current = null;
     setState({ key, data: null, error: null, loading: true });
   }, [key]);
   const reload = useCallback(() => {
@@ -25,24 +26,35 @@ export function useReadModel<T>(
     setVersion((v) => v + 1);
   }, [clear]);
   useEffect(() => {
+    let lastResume = -Infinity;
+    const resume = () => {
+      // A browser can emit both events for one return. Keep the current read,
+      // including slow requests, and coalesce a fast completed event pair.
+      if (document.hidden || pending.current || Date.now() - lastResume < 1000)
+        return;
+      lastResume = Date.now();
+      reload();
+    };
+    const hide = () => {
+      lastResume = -Infinity;
+      clear();
+    };
     const visibility = () => {
-      if (document.hidden) clear();
-      else reload();
+      if (document.hidden) hide();
+      else resume();
     };
-    const focus = () => {
-      if (!document.hidden) reload();
-    };
+    const focus = resume;
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted) reload();
+      if (event.persisted) resume();
     };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("focus", focus);
-    window.addEventListener("pagehide", clear);
+    window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", restore);
     return () => {
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("focus", focus);
-      window.removeEventListener("pagehide", clear);
+      window.removeEventListener("pagehide", hide);
       window.removeEventListener("pageshow", restore);
     };
   }, [clear, reload]);
@@ -62,8 +74,12 @@ export function useReadModel<T>(
           controller.abort();
           setState({ key, data: null, error, loading: false });
         }
+      })
+      .finally(() => {
+        if (pending.current === controller) pending.current = null;
       });
     return () => {
+      if (pending.current === controller) pending.current = null;
       ++sequence.current;
       controller.abort();
     };
