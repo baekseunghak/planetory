@@ -167,7 +167,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
                   : context.hasConfirmedCandidate
                     ? "확정 행성 보유"
                     : "확정 행성 정보 없음"}{" "}
-                · 데이터 v{context.bundleVersion}
+                · 데이터 {context.bundleVersion}
               </span>
             </div>
             <TimeCurveChart

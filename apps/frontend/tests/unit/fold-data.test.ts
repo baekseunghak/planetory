@@ -17,7 +17,7 @@ import { createFoldProcessor } from "../../src/features/analysis/fold-worker-cor
 function sample() {
   const raw = analysisContextFixture();
   const context = decodeAnalysisContext(raw, raw.ticId);
-  const curve = decodeCurve(analysisCurveFixture(), context);
+  const curve = decodeCurve(analysisCurveFixture(), context, 200);
   if (curve.kind !== "ready") throw new Error("expected ready");
   return { context, curve };
 }
@@ -111,7 +111,7 @@ test("fold identity distinguishes TIC, reference, Bundle, residual step and segm
       key,
     );
   }
-  curve.segments[0].binningRevision++;
+  curve.segments[0].binningRevision = "10m-v2";
   assert.notEqual(buildFoldData(context, curve).dataId, key);
 });
 

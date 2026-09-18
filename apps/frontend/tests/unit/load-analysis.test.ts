@@ -13,7 +13,7 @@ const oldId = "9007199254740993",
 function snapshot(bundleId: string, residual = false) {
   const context = analysisContextFixture(tic);
   context.bundle.bundleId = bundleId;
-  context.bundle.bundleVersion = bundleId === oldId ? 7 : 8;
+  context.bundle.bundleVersion = bundleId === oldId ? "v7" : "v8";
   context.currentCurveContext.bundleId = bundleId;
   if (residual) {
     context.currentCurveContext.curveStep = 1;
@@ -145,7 +145,7 @@ test("a context/header mismatch reloads before issuing any old curve request", a
     new AbortController().signal,
     () => {},
   );
-  assert.equal(result.context.bundleVersion, 8);
+  assert.equal(result.context.bundleVersion, "v8");
   assert.equal(paths.length, 3);
   assert.ok(paths[1].endsWith("analysis-context"));
 });
@@ -198,7 +198,14 @@ test("headerless valid reads work; a manual refresh notices changed Bundle and r
     fetch: async (input) =>
       json(
         String(input).endsWith("analysis-context")
-          ? { ...next.context, notice: "STEP_NOT_RESTORABLE" }
+          ? {
+              ...next.context,
+              // 서버는 notice를 currentCurveContext 안에 둔다 (탐사 API 5.1).
+              currentCurveContext: {
+                ...next.context.currentCurveContext,
+                notice: "STEP_NOT_RESTORABLE",
+              },
+            }
           : next.curve,
       ),
   });

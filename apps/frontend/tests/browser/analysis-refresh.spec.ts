@@ -11,7 +11,7 @@ const tic = "259377017",
 function nextSnapshot() {
   const context = analysisContextFixture();
   context.bundle.bundleId = newId;
-  context.bundle.bundleVersion = 8;
+  context.bundle.bundleVersion = "v8";
   context.currentCurveContext.bundleId = newId;
   context.currentCurveContext.curveStep = 1;
   context.currentCurveContext.removedCandidateIds = ["9007199254740994"];
@@ -138,7 +138,14 @@ test("manual current-data check clears old chart and applies server restoration 
   await page.route(`**/api/v1/stars/${tic}/analysis-context`, async (route) => {
     await gate;
     await route.fulfill({
-      json: { ...next.context, notice: "STEP_NOT_RESTORABLE" },
+      // 서버는 notice를 currentCurveContext 안에 둔다 (탐사 API 5.1).
+      json: {
+        ...next.context,
+        currentCurveContext: {
+          ...next.context.currentCurveContext,
+          notice: "STEP_NOT_RESTORABLE",
+        },
+      },
       headers: { "X-Current-Bundle": newId },
     });
   });

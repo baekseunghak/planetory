@@ -110,7 +110,8 @@ test("changed observation revision discards the old draft instead of restoring i
   await page.route("**/api/v1/stars/259377024/curves?*", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
-    body.segments[0].binningRevision++;
+    // 이 fixture의 기존 개정값(10m-v2)과 다른 값이어야 변경이 감지된다.
+    body.segments[0].binningRevision = "10m-v3";
     await route.fulfill({ response, json: body });
   });
   await page.reload();

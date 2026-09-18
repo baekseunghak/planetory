@@ -15,7 +15,7 @@ export type AnalysisContext = {
   ticId: string;
   sectors: number[];
   hasConfirmedCandidate: boolean;
-  bundleVersion: number;
+  bundleVersion: string;
   foldReferenceTimeBtjd: Btjd;
   curveContext: CurveContext;
   periodSelectionRules?: { version: string; halfWidthCells: number };
@@ -25,7 +25,7 @@ export type AnalysisContext = {
 export type CurveSegment = {
   segmentId: string;
   sector: number;
-  binningRevision: number;
+  binningRevision: string;
   startBtjd: Btjd;
   binMinutes: number;
   nPoints: number;
@@ -144,7 +144,7 @@ export function decodeAnalysisContext(
     ticId,
     sectors,
     hasConfirmedCandidate: data.hasConfirmedCandidate,
-    bundleVersion: integer(bundle.bundleVersion, "bundleVersion"),
+    bundleVersion: text(bundle.bundleVersion, "bundleVersion"),
     foldReferenceTimeBtjd: number(
       bundle.foldReferenceTimeBtjd,
       "foldReferenceTimeBtjd",
@@ -155,7 +155,10 @@ export function decodeAnalysisContext(
       bundle.observationBounds,
     ),
     ...(periodSelectionRules ? { periodSelectionRules } : {}),
-    ...(data.notice === "STEP_NOT_RESTORABLE" ? { notice: data.notice } : {}),
+    ...(record(data.currentCurveContext, "currentCurveContext").notice ===
+    "STEP_NOT_RESTORABLE"
+      ? ({ notice: "STEP_NOT_RESTORABLE" } as const)
+      : {}),
   };
 }
 export function curvePath(context: AnalysisContext): string {
@@ -194,7 +197,7 @@ function readSegment(value: unknown): CurveSegment {
   return {
     segmentId: text(data.segmentId, "segmentId"),
     sector: integer(data.sector, "sector", 1),
-    binningRevision: integer(data.binningRevision, "binningRevision"),
+    binningRevision: text(data.binningRevision, "binningRevision"),
     startBtjd,
     binMinutes,
     nPoints,
@@ -203,33 +206,39 @@ function readSegment(value: unknown): CurveSegment {
     gaps,
   };
 }
+/**
+ * 곡선 (5.2절). 잔차가 준비되지 않았으면 서버는 HTTP 202에 같은 본문 구조를 두고
+ * segments만 null로 보낸다. 본문에 code 필드는 없으므로 상태 코드로 판정한다.
+ */
 export function decodeCurve(
   value: unknown,
   expected: AnalysisContext,
+  status: number,
 ): CurveData {
   const data = record(value, "curves");
   const residual = record(data.residual, "residual");
-  if (data.code === "CURVE_NOT_READY" && data.segments === null) {
+  if (status === 202) {
+    if (data.segments !== null) invalid("pending curve segments");
     if (expected.curveContext.curveStep === 0) invalid("original curve status");
-    const status =
+    const jobStatus =
       residual.status === null
         ? null
         : text(residual.status, "residual.status");
     const jobId =
       residual.jobId === null ? null : text(residual.jobId, "residual.jobId");
     if (
-      (status === null) !== (jobId === null) ||
-      (status !== null &&
+      (jobStatus === null) !== (jobId === null) ||
+      (jobStatus !== null &&
         ![
           "QUEUED",
           "RESIDUAL_CALCULATING",
           "RESIDUAL_READY",
           "PERIODOGRAM_CALCULATING",
           "FAILED",
-        ].includes(status))
+        ].includes(jobStatus))
     )
       invalid("residual.status/jobId");
-    return { kind: "not-ready", status, jobId };
+    return { kind: "not-ready", status: jobStatus, jobId };
   }
   const context = readCurveContext(data.curveContext);
   if (
