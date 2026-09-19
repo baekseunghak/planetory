@@ -313,3 +313,38 @@ test("the real fixture body passes the parser for every submission kind", async 
   expect(noCandidate.submissionKind).toBe("no_candidate");
   expect(noCandidate.matchStatus).toBe("none_wrong");
 });
+
+test("an eligible tutorial star accepts a skip and completes with that reason", async ({
+  request,
+}) => {
+  const tutorial = PERIODOGRAM_FIXTURE_TICS.tutorial;
+  const csrf = await (await request.get("/api/v1/auth/csrf")).json();
+  const context = await (
+    await request.get(`/api/v1/stars/${tutorial}/analysis-context`)
+  ).json();
+  // 건너뛰기 허용은 서버가 정한다. 프론트는 이 표시가 있을 때만 제안한다.
+  expect(context.tutorial.skipAvailable).toBe(true);
+
+  const id = uuid();
+  const response = await request.post(`/api/v1/stars/${tutorial}/submissions`, {
+    headers: { [csrf.headerName]: csrf.token },
+    data: {
+      requestId: id,
+      submissionKind: "skipped",
+      curveContext: context.currentCurveContext,
+      retryOfSubmissionId: null,
+    },
+    failOnStatusCode: false,
+  });
+  expect(response.status()).toBe(201);
+  const receipt = decodeSubmissionReceipt(
+    await response.json(),
+    { ticId: tutorial, requestId: id },
+    response.status(),
+  );
+  expect(receipt.submissionKind).toBe("skipped");
+  expect(receipt.matchStatus).toBe("skipped");
+  // SUB-12: 건너뛴 별은 completion_reason=skipped로 완료된다.
+  expect(receipt.progress.stage).toBe("completed");
+  expect(receipt.progress.completionReason).toBe("skipped");
+});

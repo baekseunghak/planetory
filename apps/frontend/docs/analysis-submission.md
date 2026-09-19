@@ -76,6 +76,25 @@ ID는 UUID v4이며 본문 `requestId`에 싣는다(2.2절). 서비스 API에는
 
 `no_candidate`는 "더 없음"이지 "모르겠음"이 아니다. `UNSURE` 판단을 담은 `candidate` 제출과 본문·의미가 모두 다르다.
 
+### 섞이지 않게 만드는 방법
+
+[submission-input.ts](../src/features/analysis/submission-input.ts)의 특수 제출 생성기는 **선택·판단·근거를 인자로 받지 않는다.** 만든 뒤 지우는 방식이면 나중에 필드가 하나 늘었을 때 지우는 쪽을 빠뜨린다. 처음부터 받지 않으면 빠뜨릴 것이 없다. 재현용 `viewState`도 넣지 않는다. 보내지 않은 선택을 어디서 보고 있었는지는 이 제출의 의미가 아니다.
+
+일반 제출은 #185가 만든 제출값 확인 스냅샷을 **깊은 복사**해서 보낸다. 본문을 만든 뒤 초안을 건드려도 보낼 내용이 따라 바뀌지 않는다.
+
+세 종류의 본문은 서로 다르므로 지문도 다르다. 같은 별에서 종류를 바꿔 제출하면 보존한 ID를 재사용하지 않고 새 ID가 만들어진다.
+
+### 무엇을 제안할지
+
+`specialSubmissions`가 정한다. 조건의 최종 권한은 서버이고(6.5절의 409) 프론트는 **근거가 있을 때만 제안한다.**
+
+- **건너뛰기**는 조건을 서버만 안다(튜토리얼 여부, 오답 횟수, 상세 보기 경유). 진입 응답의 `tutorial.skipAvailable`이 참일 때만 내놓는다. 근거가 없으면 제안하지 않는다.
+- **더 없음**은 완료한 별에만 막는다. 진행 단계를 모르면 막지 않는다. 잘못 막으면 할 수 있는 일을 못 하게 되지만, 잘못 보내면 409를 받고 끝이다.
+
+이를 위해 [analysis-data.ts](../src/features/analysis/analysis-data.ts)가 `progress.stage`와 `tutorial.skipAvailable`을 읽는다. **필수가 아니다.** 관측 export 문맥에는 이 필드가 없을 수 있어 없으면 각각 `null`·`false`로 둔다. 값이 있는데 아는 단계가 아니면 거절한다.
+
+개발 서버에 튜토리얼 별 `259377030`을 더했다. 정상 샘플과 자료는 같고 건너뛰기만 허용된다. [#183 주기도 안내](periodogram-data.md#직접-확인)의 표에도 한 줄 넣었다.
+
 ## 접수 결과에서 읽는 것
 
 [submission-data.ts](../src/features/analysis/submission-data.ts)는 6.4절 `submissionResult` 중 이 티켓이 넘겨줘야 할 부분만 읽는다. **`signal`·`achievement`·`judgmentStatistics`·`original`은 읽지 않는다.** 결과 해설(A06-2)의 몫이고 후보 정답을 담으므로 이 티켓의 상태로 복사하지 않는다.

@@ -21,6 +21,14 @@ export type AnalysisContext = {
   periodSelectionRules?: { version: string; halfWidthCells: number };
   selectionContract: SelectionContract;
   notice?: "STEP_NOT_RESTORABLE";
+  /**
+   * 특수 제출(#187)이 무엇을 내놓을 수 있는지 판단하는 값. 없으면 null이다.
+   * 관측 export 문맥에는 이 필드가 없을 수 있어 필수로 만들지 않는다.
+   * 서버가 최종 권한이며 조건이 아니면 409로 거절한다.
+   */
+  progressStage: "unexplored" | "in_progress" | "completed" | null;
+  /** 튜토리얼 건너뛰기 허용 여부. 근거가 없으면 제안하지 않는다. */
+  skipAvailable: boolean;
 };
 export type CurveSegment = {
   segmentId: string;
@@ -159,7 +167,19 @@ export function decodeAnalysisContext(
     "STEP_NOT_RESTORABLE"
       ? ({ notice: "STEP_NOT_RESTORABLE" } as const)
       : {}),
+    progressStage: readStage(data.progress),
+    // 근거가 없으면 false다. 건너뛰기를 잘못 제안하면 409를 받는다.
+    skipAvailable:
+      record(data.tutorial ?? {}, "tutorial").skipAvailable === true,
   };
+}
+const stages = ["unexplored", "in_progress", "completed"] as const;
+function readStage(value: unknown): AnalysisContext["progressStage"] {
+  if (value === undefined || value === null) return null;
+  const stage = record(value, "progress").stage;
+  if (stage === undefined || stage === null) return null;
+  const known = stages.find((item) => item === stage);
+  return known ?? invalid("progress.stage");
 }
 export function curvePath(context: AnalysisContext): string {
   const curve = context.curveContext;
