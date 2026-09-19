@@ -851,7 +851,8 @@ body:has(.analysis-screen) {
   border: 0;
 }
 .analysis-screen [data-testid="candidate-review"] button:first-child {
-  text-align: left;
+  /* 아래 제출 버튼과 세로로 쌓이므로 가운데로 맞춘다. */
+  text-align: center;
   border: 0;
   padding: 0;
   background: transparent;
