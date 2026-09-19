@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useModalDialog } from "./use-modal-dialog";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -35,19 +36,11 @@ const matchSummary: Record<MatchStatus, string> = {
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const headingId = useId();
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const opener = useRef<HTMLElement | null>(null);
   const reminderRef = useRef<HTMLButtonElement>(null);
-  // form method="dialog" 제출은 브라우저가 먼저 닫는다. node.open으로 판단하면
-  // 이미 닫힌 뒤라 포커스를 되돌리는 분기가 실행되지 않는다.
-  const wasOpen = useRef(false);
   const focusRef = useRef<HTMLParagraphElement>(null);
   const [closed, setClosed] = useState(false);
   const settled = state.phase === "settled" ? state : null;
-  // idle에서는 대화상자를 그리지 않으므로 ref가 비어 있다. 리스너를 붙이는
-  // 효과가 이 값을 따라야 요소가 생긴 뒤에 다시 실행된다.
-  const mounted = state.phase !== "idle";
-  const open = mounted && !closed;
+  const open = state.phase !== "idle" && !closed;
 
   /**
    * 닫기. 거절은 입력으로 돌아가는 것과 같으므로 상태를 지우지만, 접수와 결과
@@ -63,66 +56,25 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
       submission.dismiss();
     else setClosed(true);
   };
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  // Escape와 브라우저가 스스로 닫는 경우를 네이티브로 받는다. React의 onClose·
-  // onCancel은 이 대화상자에서 발화하지 않아, 브라우저는 닫혔는데 상태는 열린
-  // 것으로 남는 어긋남이 생긴다.
-  useEffect(() => {
-    const node = dialogRef.current;
-    if (!node) return;
-    const cancel = (event: Event) => {
-      event.preventDefault();
-      closeRef.current();
-    };
-    const closed = () => closeRef.current();
-    node.addEventListener("cancel", cancel);
-    node.addEventListener("close", closed);
-    return () => {
-      node.removeEventListener("cancel", cancel);
-      node.removeEventListener("close", closed);
-    };
-  }, [mounted]);
+  const dialogRef = useModalDialog({
+    open,
+    onClose: close,
+    fallbackRef: reminderRef,
+  });
 
   // 새 시도가 시작되면 닫아 둔 것을 다시 연다.
   useEffect(() => {
     if (state.phase === "sending" || state.phase === "checking")
       setClosed(false);
   }, [state.phase]);
-  useEffect(() => {
-    const node = dialogRef.current;
-    if (!node) return;
-    if (open) {
-      if (!node.open) {
-        opener.current =
-          document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
-        node.showModal();
-      }
-    } else if (wasOpen.current) {
-      if (node.open) node.close();
-      // 대화상자를 연 버튼은 제출 뒤 비활성이 되는 일이 많다. 그대로 두면
-      // 포커스가 문서 맨 위로 떨어지므로, 결과를 대신 가리키는 한 줄의
-      // 버튼으로 옮긴다. 그것도 없으면(거절을 닫아 입력으로 돌아간 경우)
-      // 원래 버튼으로 돌아간다.
-      const fallback = opener.current;
-      (
-        reminderRef.current ??
-        (fallback && !fallback.hasAttribute("disabled") ? fallback : null)
-      )?.focus();
-    }
-    wasOpen.current = open;
-  }, [open]);
   // 결과가 정해진 순간에만 옮긴다. 진행 중 갱신으로는 옮기지 않는다.
   useEffect(() => {
     if (settled && open) focusRef.current?.focus();
   }, [settled, open]);
 
-  if (state.phase === "idle") return null;
   return (
     <>
-      {closed && (
+      {closed && state.phase !== "idle" && (
         <p
           className={
             settled?.state === "unresolved"
@@ -148,9 +100,10 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
       <dialog
         ref={dialogRef}
         className="submission-dialog"
+        data-testid="submission-result"
         aria-labelledby={headingId}
       >
-        {!settled ? (
+        {state.phase === "idle" ? null : !settled ? (
           <>
             <h4 id={headingId}>제출하고 있습니다</h4>
             <p role="status">
@@ -222,7 +175,10 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             )}
           </>
         )}
-        <div className="submission-dialog-actions">
+        <div
+          className="submission-dialog-actions"
+          hidden={state.phase === "idle"}
+        >
           <button type="button" onClick={close}>
             {settled &&
             settled.state !== "accepted" &&
@@ -272,6 +228,18 @@ function fieldLabel(field: string): string {
  * 더 없음·건너뛰기. 후보 제출과 달리 선택·판단·근거를 보내지 않으므로
  * 제출값 확인 단계를 거치지 않는다. 되돌릴 수 없으므로 한 번 더 묻는다.
  */
+const confirmText: Record<"no_candidate" | "skipped", string> = {
+  no_candidate:
+    "이 별에 더 이상 후보가 없다고 제출합니다. 선택·판단·근거는 함께 보내지 않으며 되돌릴 수 없습니다.",
+  skipped:
+    "이 별을 건너뜁니다. 선택·판단·근거는 함께 보내지 않으며 되돌릴 수 없습니다.",
+};
+
+/**
+ * 더 없음·건너뛰기. 후보 제출과 달리 선택·판단·근거를 보내지 않으므로
+ * 제출값 확인 단계를 거치지 않는다. 되돌릴 수 없으므로 한 번 더 묻되,
+ * 브라우저의 `confirm`이 아니라 접수 결과와 같은 대화상자로 묻는다.
+ */
 export function SpecialSubmissions({
   context,
   submission,
@@ -280,8 +248,23 @@ export function SpecialSubmissions({
   submission: Submission;
 }) {
   const hintId = useId();
+  const headingId = useId();
   const options = specialSubmissions(context);
   const busy = submission.state.phase !== "idle";
+  const [asking, setAsking] = useState<"no_candidate" | "skipped" | null>(null);
+  const dialogRef = useModalDialog({
+    open: asking !== null,
+    onClose: () => setAsking(null),
+  });
+  const send = () => {
+    if (!asking) return;
+    setAsking(null);
+    submission.submit(
+      asking === "no_candidate"
+        ? noCandidateInput(context.curveContext)
+        : skippedInput(context.curveContext),
+    );
+  };
   return (
     <div className="submission-alternatives">
       <p id={hintId}>
@@ -294,21 +277,7 @@ export function SpecialSubmissions({
             type="button"
             disabled={busy || option.unavailable !== null}
             aria-describedby={hintId}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  option.kind === "no_candidate"
-                    ? "이 별에 더 이상 후보가 없다고 제출할까요? 되돌릴 수 없습니다."
-                    : "이 별을 건너뛸까요? 되돌릴 수 없습니다.",
-                )
-              )
-                return;
-              submission.submit(
-                option.kind === "no_candidate"
-                  ? noCandidateInput(context.curveContext)
-                  : skippedInput(context.curveContext),
-              );
-            }}
+            onClick={() => setAsking(option.kind)}
           >
             {option.label}
           </button>
@@ -317,6 +286,33 @@ export function SpecialSubmissions({
           )}
         </p>
       ))}
+      <dialog
+        ref={dialogRef}
+        className="submission-dialog"
+        data-testid="submission-confirm"
+        aria-labelledby={headingId}
+      >
+        <h4 id={headingId}>
+          {asking === "skipped"
+            ? "이 별을 건너뛸까요?"
+            : "더 이상 없다고 보낼까요?"}
+        </h4>
+        <p>{asking ? confirmText[asking] : null}</p>
+        <div className="submission-dialog-actions" hidden={!asking}>
+          {/* 되돌릴 수 없는 동작이므로 안전한 쪽에 먼저 포커스를 준다. */}
+          <button
+            type="button"
+            className="submission-dialog-cancel"
+            autoFocus
+            onClick={() => setAsking(null)}
+          >
+            취소
+          </button>
+          <button type="button" onClick={send}>
+            보내기
+          </button>
+        </div>
+      </dialog>
     </div>
   );
 }

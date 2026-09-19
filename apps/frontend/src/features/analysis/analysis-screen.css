@@ -1057,3 +1057,17 @@ body:has(.analysis-screen) {
 .analysis-screen .submission-progress {
   margin-top: 10px;
 }
+/* 확인 대화상자는 되돌릴 수 없는 동작을 묻는다. 취소가 기본 선택이므로 강조
+   버튼을 보내기에 남기고 취소는 조용한 테두리로 둔다. */
+.analysis-screen .submission-dialog .submission-dialog-actions {
+  gap: 8px;
+}
+.analysis-screen
+  .submission-dialog
+  .submission-dialog-actions
+  button.submission-dialog-cancel {
+  background: transparent;
+  border-color: var(--panel-line);
+  color: var(--fg-1);
+  font-weight: 400;
+}

@@ -27,7 +27,7 @@ test("the review step submits and shows what was accepted", async ({
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  const receipt = page.locator(".submission-dialog");
+  const receipt = page.getByTestId("submission-result");
   await expect(receipt).toBeVisible();
   await expect(receipt.getByRole("heading")).toHaveText("접수되었습니다");
   // 접수 사실과 식별자만 보여 준다. 결과 풀이는 A06-2의 몫이다.
@@ -61,7 +61,7 @@ test("a lost response asks the user to check instead of submitting again", async
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
   // 조회가 미접수를 알려 같은 번호로 다시 보냈고 이번에 접수됐다.
-  const receipt = page.locator(".submission-dialog");
+  const receipt = page.getByTestId("submission-result");
   await expect(receipt).toBeVisible();
   await expect(receipt).toContainText("다시 확인했고, 이번에 접수되었습니다");
 });
@@ -93,7 +93,7 @@ test("an unresolved submission offers a check that never resubmits", async ({
   await reachReview(page);
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
-  const panel = page.locator(".submission-dialog");
+  const panel = page.getByTestId("submission-result");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading")).toHaveText(
     "접수 여부를 확인해 주세요",
@@ -132,7 +132,7 @@ test("a refused submission explains the field and lets the draft be edited again
   await reachReview(page);
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
-  const failure = page.locator(".submission-dialog");
+  const failure = page.getByTestId("submission-result");
   await expect(failure).toBeVisible();
   // 서버의 필드 경로를 화면의 말로 바꾼다.
   await expect(failure).toContainText("주기: Invalid input");
@@ -180,13 +180,17 @@ test("more-none is confirmed once and sends no judgment with it", async ({
     if (/\/submissions$/.test(request.url()) && request.method() === "POST")
       bodies.push(JSON.parse(request.postData() ?? "{}"));
   });
-  page.once("dialog", (dialog) => dialog.accept());
   await page
     .locator(".submission-alternatives")
     .getByRole("button", { name: "더 이상 없음", exact: true })
     .click();
+  // 브라우저 기본 confirm이 아니라 같은 언어의 대화상자로 묻는다.
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
 
-  await expect(page.locator(".submission-dialog")).toContainText(
+  await expect(page.getByTestId("submission-result")).toContainText(
     "더 이상 없음으로 접수했습니다",
   );
   expect(bodies).toHaveLength(1);
@@ -207,7 +211,7 @@ test("the result opens as a centred dialog that can be closed and reopened", asy
   await reachReview(page);
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
-  const dialog = page.locator(".submission-dialog");
+  const dialog = page.getByTestId("submission-result");
   await expect(dialog).toBeVisible();
   // 모달이어야 배경이 비활성화되고 포커스가 안에 갇힌다.
   expect(
@@ -230,4 +234,51 @@ test("the result opens as a centred dialog that can be closed and reopened", asy
   await reopen.click();
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("접수 번호");
+});
+
+test("an irreversible submission is confirmed in the app, not by the browser", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  // 브라우저 기본 대화상자가 뜨면 이 검사는 여기서 멈춘다.
+  let native = false;
+  page.on("dialog", (dialog) => {
+    native = true;
+    void dialog.dismiss();
+  });
+  const sent: string[] = [];
+  page.on("request", (request) => {
+    if (/[/]submissions$/.test(request.url()) && request.method() === "POST")
+      sent.push(request.url());
+  });
+
+  const opener = page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true });
+  await opener.click();
+  const confirm = page.getByTestId("submission-confirm");
+  await expect(confirm).toBeVisible();
+  expect(native).toBe(false);
+  await expect(confirm).toContainText("되돌릴 수 없습니다");
+  // 되돌릴 수 없는 동작이므로 안전한 쪽에 포커스가 간다.
+  const cancel = confirm.getByRole("button", { name: "취소", exact: true });
+  await expect(cancel).toBeFocused();
+
+  await cancel.click();
+  await expect(confirm).toBeHidden();
+  // 취소는 아무것도 보내지 않고 누른 버튼으로 포커스를 돌려준다.
+  expect(sent).toHaveLength(0);
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  await page.keyboard.press("Escape");
+  await expect(confirm).toBeHidden();
+  expect(sent).toHaveLength(0);
+
+  await opener.click();
+  await confirm.getByRole("button", { name: "보내기", exact: true }).click();
+  await expect(page.getByTestId("submission-result")).toContainText(
+    "접수되었습니다",
+  );
+  expect(sent).toHaveLength(1);
 });
