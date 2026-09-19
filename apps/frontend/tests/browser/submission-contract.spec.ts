@@ -33,7 +33,9 @@ async function setUp(request: APIRequestContext) {
     curveContext: context.currentCurveContext,
     selection: {
       periodDays: 11.7346,
-      sourcePeakGridIndex: 3600,
+      // 직접 고른 주기다. 봉우리를 고르면 #188 조합표가 매칭 결과를 채우는데,
+      // 이 검사가 보는 것은 접수의 뼈대이지 매칭 결과가 아니다.
+      sourcePeakGridIndex: null,
       phaseStart: 0.49,
       phaseEnd: 0.51,
     },
