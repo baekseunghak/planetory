@@ -2,6 +2,37 @@
   max-width: 1120px;
   margin: auto;
 }
+.hot-topic-guide {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.hot-topic-guide summary {
+  cursor: pointer;
+  color: #cedff7;
+}
+.hot-topic-guide p {
+  max-width: 80ch;
+}
+.hot-topic-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px 0 8px;
+}
+.hot-topic-toolbar p,
+.hot-topic-judgments {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.hot-topic-toolbar button {
+  min-height: 44px;
+}
 .community-search {
   padding: 24px 0 16px;
   border-bottom: 1px solid var(--line);
