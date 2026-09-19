@@ -1145,7 +1145,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
 
 등급 상승·완료는 트리거가 아니다(POL-27, GRD-08, 결정 1·2). 확정·FP 경로(제출)와 미확정 경로(공개)가 같은 함수를 쓰므로 여러 신호의 일괄 공개도 순차 개별 인정과 같은 결과가 된다(COM-19, AT-107).
 
-호출자 트랜잭션 안에서만 부른다. 별 저장이 실패하면 호출자 트랜잭션이 통째로 되돌아가 성과만 남는 일이 없다. 성과는 인정되고 별이 모자란 경우는 `unlockShortfall`뿐이다. `ticAchievementCount`·`grade`·`byType`은 4.2절 별 상세와 같은 계산이며 6.4절 `achievement.star`에 그대로 쓴다. 성과 수·등급은 지도 응답에 없으므로 별을 열지 않은 인정은 `skyVersion`을 올리지 않는다.
+호출자 트랜잭션 안에서만 부른다. **호출자는 제출·공개 기록 저장과 진행 행 갱신 전에 같은 트랜잭션에서 회원 행을 먼저 잠근다**([서비스 API 9.1절](service-api-spec.md#91-공개-등록)과 같은 원칙). 회원을 참조하는 행을 먼저 쓰면 외래 키 검사가 회원 행에 KEY SHARE 잠금을 남기고, 같은 회원의 두 트랜잭션이 1단계 `FOR UPDATE`에서 서로를 기다리다 교착한다. 함수 안의 잠금만으로는 호출자 전체의 잠금 순서가 보장되지 않는다. 별 저장이 실패하면 호출자 트랜잭션이 통째로 되돌아가 성과만 남는 일이 없다. 성과는 인정되고 별이 모자란 경우는 `unlockShortfall`뿐이다. `ticAchievementCount`·`grade`·`byType`은 4.2절 별 상세와 같은 계산이며 6.4절 `achievement.star`에 그대로 쓴다. 성과 수·등급은 지도 응답에 없으므로 별을 열지 않은 인정은 `skyVersion`을 올리지 않는다.
 
 ### 9.3 내부 계약: 완료·재개 판정
 
@@ -1370,7 +1370,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-17 | S15P21C206-151 구현 반영. 5.1절 `selectionRules.version`을 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열로 통일하고(별도 `sel-N` 없음, S15P21C206-128 합의) 각 값의 출처(규칙 버전·별 케이던스·판 manifest)를 명시. 12.2 미결 4·5의 값 저장 형식을 운영 규칙 형식 1로 고정하고 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)을 연결. 값 자체는 미결 유지 |
 | 2026-09-17 | S15P21C206-140 5.1절 구현 반영. `star`·`progress`·`bundle.curveStepRule`의 출처, `minWindowDays` 계산(판 세그먼트 bin 크기의 2배), 진입 시 9.3절 완료 판정 (b) 반영, 옛 판 제출의 복귀 문맥은 현재 판 값, `nextCurveContext`가 null이면 `residualForNextStep`도 null, 운영 규칙이 없으면 503을 적었다. 사용자 결정으로 `STEP_NOT_RESTORABLE` 안내를 `currentCurveContext.notice`에 두고, 한 번 완료한 튜토리얼 별은 `skipAvailable=false`로 정했다 |
 | 2026-09-18 | S15P21C206-142 구현 반영. 6.2절 4단계 실패 필드를 `selection.periodDays`·`selection.phaseEnd`로 구체화하고 5단계에 빈 위상 구간 거절, 6단계에 관측 범위 정의를 적었다. 사용자 결정으로 관측점·관측 창을 곡선 점 시각(bin 시작)의 연속 구간으로 정했다. 수치 판정은 제출 매칭 규칙 v0 참조 구현을 따르고 공통 표본으로 대조한다는 점과 6.3절 배율 방향(P_user × m = P_c)을 명시했다 |
-| 2026-09-19 | S15P21C206-144 구현 반영. 9.1절에 요약 범위(회원 전체, `ticId`는 목록에만), `startedStarCount` 정의(4.4절 `scope=submitted` 길이), 정렬·커서·`size` 기본 50·상한 100, 항목 식별자 형식, `relabel.newDisposition` 값을 적었다. 9.2절에 인정 근거 확인과 진행 행 잠금, 시드 정책 `hash-user-achievement-seq-v1`의 계산식, 반환값(`ticId`·`byType`·`unlockShortfall`·`skyVersion`)을 명시했다. 별 저장은 9.4절과 같은 `ON CONFLICT (user_id, tic_id)`로 바꾸고, 같은 성과의 재처리는 2단계에서 막으며 `UNIQUE(trigger_achievement_id, seq)`는 DB 안전망으로 남긴다고 정정했다 |
+| 2026-09-19 | S15P21C206-144 구현 반영. 9.1절에 요약 범위(회원 전체, `ticId`는 목록에만), `startedStarCount` 정의(4.4절 `scope=submitted` 길이), 정렬·커서·`size` 기본 50·상한 100, 항목 식별자 형식, `relabel.newDisposition` 값을 적었다. 9.2절에 인정 근거 확인과 진행 행 잠금, 시드 정책 `hash-user-achievement-seq-v1`의 계산식, 반환값(`ticId`·`byType`·`unlockShortfall`·`skyVersion`)을 명시했다. 별 저장은 9.4절과 같은 `ON CONFLICT (user_id, tic_id)`로 바꾸고, 같은 성과의 재처리는 2단계에서 막으며 `UNIQUE(trigger_achievement_id, seq)`는 DB 안전망으로 남긴다고 정정했다. MR !99 리뷰를 반영해 호출자가 기록 저장 전에 회원 행을 먼저 잠가야 한다는 조건과 그 이유(외래 키 KEY SHARE와 `FOR UPDATE`의 교착)를 적었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
