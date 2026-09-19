@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -24,97 +24,215 @@ const matchSummary: Record<MatchStatus, string> = {
  * 제출 상태를 한 곳에서 알린다. 색만으로 구분하지 않으며 문구와 포커스 이동이
  * 1차 신호다. 결과 해설(A06-2)이 아니라 **접수 사실**만 다룬다.
  */
+/**
+ * 제출 결과를 가운데 대화상자로 보여 준다. 되돌릴 수 없는 동작의 결과이므로
+ * 화면 구석이 아니라 한가운데에서 읽게 한다. 좁은 오른쪽 패널에 접수 번호와
+ * 안내를 욱여넣지 않아도 되고, 결과 해설(A06-2)이 붙을 자리도 여기가 된다.
+ *
+ * 네이티브 `<dialog>`의 `showModal()`을 쓴다. 포커스 가둠·Escape·배경 비활성을
+ * 브라우저가 처리하며 저장소의 다른 대화상자와 같은 방식이다.
+ */
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const headingId = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const reminderRef = useRef<HTMLButtonElement>(null);
+  // form method="dialog" 제출은 브라우저가 먼저 닫는다. node.open으로 판단하면
+  // 이미 닫힌 뒤라 포커스를 되돌리는 분기가 실행되지 않는다.
+  const wasOpen = useRef(false);
   const focusRef = useRef<HTMLParagraphElement>(null);
-  const settled = state.phase === "settled";
+  const [closed, setClosed] = useState(false);
+  const settled = state.phase === "settled" ? state : null;
+  // idle에서는 대화상자를 그리지 않으므로 ref가 비어 있다. 리스너를 붙이는
+  // 효과가 이 값을 따라야 요소가 생긴 뒤에 다시 실행된다.
+  const mounted = state.phase !== "idle";
+  const open = mounted && !closed;
+
+  /**
+   * 닫기. 거절은 입력으로 돌아가는 것과 같으므로 상태를 지우지만, 접수와 결과
+   * 불명은 **지우지 않는다.** 결과 불명에서 상태를 잃으면 요청 번호로 다시
+   * 확인할 길이 사라진다.
+   */
+  const close = () => {
+    if (
+      settled &&
+      settled.state !== "accepted" &&
+      settled.state !== "unresolved"
+    )
+      submission.dismiss();
+    else setClosed(true);
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  // Escape와 브라우저가 스스로 닫는 경우를 네이티브로 받는다. React의 onClose·
+  // onCancel은 이 대화상자에서 발화하지 않아, 브라우저는 닫혔는데 상태는 열린
+  // 것으로 남는 어긋남이 생긴다.
+  useEffect(() => {
+    const node = dialogRef.current;
+    if (!node) return;
+    const cancel = (event: Event) => {
+      event.preventDefault();
+      closeRef.current();
+    };
+    const closed = () => closeRef.current();
+    node.addEventListener("cancel", cancel);
+    node.addEventListener("close", closed);
+    return () => {
+      node.removeEventListener("cancel", cancel);
+      node.removeEventListener("close", closed);
+    };
+  }, [mounted]);
+
+  // 새 시도가 시작되면 닫아 둔 것을 다시 연다.
+  useEffect(() => {
+    if (state.phase === "sending" || state.phase === "checking")
+      setClosed(false);
+  }, [state.phase]);
+  useEffect(() => {
+    const node = dialogRef.current;
+    if (!node) return;
+    if (open) {
+      if (!node.open) {
+        opener.current =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        node.showModal();
+      }
+    } else if (wasOpen.current) {
+      if (node.open) node.close();
+      // 대화상자를 연 버튼은 제출 뒤 비활성이 되는 일이 많다. 그대로 두면
+      // 포커스가 문서 맨 위로 떨어지므로, 결과를 대신 가리키는 한 줄의
+      // 버튼으로 옮긴다. 그것도 없으면(거절을 닫아 입력으로 돌아간 경우)
+      // 원래 버튼으로 돌아간다.
+      const fallback = opener.current;
+      (
+        reminderRef.current ??
+        (fallback && !fallback.hasAttribute("disabled") ? fallback : null)
+      )?.focus();
+    }
+    wasOpen.current = open;
+  }, [open]);
   // 결과가 정해진 순간에만 옮긴다. 진행 중 갱신으로는 옮기지 않는다.
   useEffect(() => {
-    if (settled) focusRef.current?.focus();
-  }, [settled, state]);
+    if (settled && open) focusRef.current?.focus();
+  }, [settled, open]);
 
   if (state.phase === "idle") return null;
-  if (state.phase === "sending" || state.phase === "checking")
-    return (
-      <p className="submission-progress" role="status">
-        {state.phase === "sending"
-          ? "제출하고 있습니다. 창을 닫지 말아 주세요."
-          : "접수 결과를 확인하고 있습니다."}
-      </p>
-    );
-
-  if (state.state === "accepted")
-    return (
-      <section className="submission-receipt" aria-labelledby={headingId}>
-        <h4 id={headingId}>접수되었습니다</h4>
-        <p ref={focusRef} tabIndex={-1} role="status">
-          {acceptedNotice(state.recovered, state.receipt.outcome)}{" "}
-          {matchSummary[state.receipt.matchStatus]}
-        </p>
-        <dl>
-          <dt>접수 번호</dt>
-          <dd>{state.receipt.submissionId}</dd>
-          <dt>기록 번호</dt>
-          <dd>{state.receipt.historyId}</dd>
-          <dt>접수 시각</dt>
-          <dd>
-            <time dateTime={state.receipt.submittedAt}>
-              {new Date(state.receipt.submittedAt).toLocaleString("ko-KR")}
-            </time>
-          </dd>
-        </dl>
-        <p className="submission-note">
-          자세한 결과 풀이와 다음 단계는 아직 연결되지 않았습니다.
-        </p>
-      </section>
-    );
-
-  if (state.state === "unresolved")
-    return (
-      <section className="submission-unresolved" aria-labelledby={headingId}>
-        <h4 id={headingId}>접수 여부를 확인해 주세요</h4>
-        {/* 404를 근거로 "제출되지 않았습니다"라고 단정하지 않는다. */}
-        <p ref={focusRef} tabIndex={-1} role="alert">
-          {state.message}
-        </p>
-        <button type="button" onClick={() => submission.check()}>
-          접수 결과 확인
-        </button>
-      </section>
-    );
-
-  // 남은 것은 거절이다. 어느 쪽이든 접수는 일어나지 않았다.
-  const guide =
-    state.state === "bundle-changed"
-      ? "별의 데이터 판이 바뀌었습니다. 최신 자료를 다시 불러온 뒤 주기와 구간을 다시 골라 주세요."
-      : state.state === "expired"
-        ? "로그인이 만료되었습니다. 다시 로그인한 뒤 제출해 주세요."
-        : state.message;
   return (
-    <section className="submission-failure" aria-labelledby={headingId}>
-      <h4 id={headingId}>제출하지 못했습니다</h4>
-      <p ref={focusRef} tabIndex={-1} role="alert">
-        {guide}
-      </p>
-      {state.state === "rejected" && state.fieldErrors.length > 0 && (
-        <ul>
-          {state.fieldErrors.map((error) => (
-            <li key={error.field}>
-              {fieldLabel(error.field)}: {error.reason}
-            </li>
-          ))}
-        </ul>
-      )}
-      {volatileId && (
-        <p className="submission-note">
-          브라우저 저장소를 쓸 수 없어 이 요청 번호는 새로고침하면 사라집니다.
+    <>
+      {closed && (
+        <p
+          className={
+            settled?.state === "unresolved"
+              ? "submission-reminder submission-reminder-warning"
+              : "submission-reminder"
+          }
+          role="status"
+        >
+          {settled?.state === "accepted"
+            ? `접수 완료 · ${settled.receipt.submissionId}`
+            : settled?.state === "unresolved"
+              ? "접수 여부가 아직 확인되지 않았습니다."
+              : "제출을 처리하고 있습니다."}{" "}
+          <button
+            ref={reminderRef}
+            type="button"
+            onClick={() => setClosed(false)}
+          >
+            접수 결과 보기
+          </button>
         </p>
       )}
-      <button type="button" onClick={submission.dismiss}>
-        입력으로 돌아가기
-      </button>
-    </section>
+      <dialog
+        ref={dialogRef}
+        className="submission-dialog"
+        aria-labelledby={headingId}
+      >
+        {!settled ? (
+          <>
+            <h4 id={headingId}>제출하고 있습니다</h4>
+            <p role="status">
+              {state.phase === "sending"
+                ? "서버에 보내는 중입니다. 응답을 받지 못해도 같은 요청 번호로 결과를 확인하므로 두 번 접수되지 않습니다."
+                : "접수 결과를 확인하고 있습니다."}
+            </p>
+          </>
+        ) : settled.state === "accepted" ? (
+          <>
+            <h4 id={headingId}>접수되었습니다</h4>
+            <p ref={focusRef} tabIndex={-1} role="status">
+              {acceptedNotice(settled.recovered, settled.receipt.outcome)}{" "}
+              {matchSummary[settled.receipt.matchStatus]}
+            </p>
+            <dl>
+              <dt>접수 번호</dt>
+              <dd>{settled.receipt.submissionId}</dd>
+              <dt>기록 번호</dt>
+              <dd>{settled.receipt.historyId}</dd>
+              <dt>접수 시각</dt>
+              <dd>
+                <time dateTime={settled.receipt.submittedAt}>
+                  {new Date(settled.receipt.submittedAt).toLocaleString(
+                    "ko-KR",
+                  )}
+                </time>
+              </dd>
+            </dl>
+            <p className="submission-note">
+              자세한 결과 풀이와 다음 단계는 아직 연결되지 않았습니다.
+            </p>
+          </>
+        ) : settled.state === "unresolved" ? (
+          <>
+            <h4 id={headingId}>접수 여부를 확인해 주세요</h4>
+            {/* 404를 근거로 "제출되지 않았습니다"라고 단정하지 않는다. */}
+            <p ref={focusRef} tabIndex={-1} role="alert">
+              {settled.message}
+            </p>
+            <button type="button" onClick={() => submission.check()}>
+              접수 결과 확인
+            </button>
+          </>
+        ) : (
+          <>
+            <h4 id={headingId}>제출하지 못했습니다</h4>
+            <p ref={focusRef} tabIndex={-1} role="alert">
+              {settled.state === "bundle-changed"
+                ? "별의 데이터 판이 바뀌었습니다. 최신 자료를 다시 불러온 뒤 주기와 구간을 다시 골라 주세요."
+                : settled.state === "expired"
+                  ? "로그인이 만료되었습니다. 다시 로그인한 뒤 제출해 주세요."
+                  : settled.message}
+            </p>
+            {settled.state === "rejected" && settled.fieldErrors.length > 0 && (
+              <ul>
+                {settled.fieldErrors.map((error) => (
+                  <li key={error.field}>
+                    {fieldLabel(error.field)}: {error.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {volatileId && (
+              <p className="submission-note">
+                브라우저 저장소를 쓸 수 없어 이 요청 번호는 새로고침하면
+                사라집니다.
+              </p>
+            )}
+          </>
+        )}
+        <div className="submission-dialog-actions">
+          <button type="button" onClick={close}>
+            {settled &&
+            settled.state !== "accepted" &&
+            settled.state !== "unresolved"
+              ? "입력으로 돌아가기"
+              : "닫기"}
+          </button>
+        </div>
+      </dialog>
+    </>
   );
 }
 

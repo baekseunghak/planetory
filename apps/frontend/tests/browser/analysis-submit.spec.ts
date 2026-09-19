@@ -27,7 +27,7 @@ test("the review step submits and shows what was accepted", async ({
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  const receipt = page.locator(".submission-receipt");
+  const receipt = page.locator(".submission-dialog");
   await expect(receipt).toBeVisible();
   await expect(receipt.getByRole("heading")).toHaveText("접수되었습니다");
   // 접수 사실과 식별자만 보여 준다. 결과 풀이는 A06-2의 몫이다.
@@ -61,7 +61,7 @@ test("a lost response asks the user to check instead of submitting again", async
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
   // 조회가 미접수를 알려 같은 번호로 다시 보냈고 이번에 접수됐다.
-  const receipt = page.locator(".submission-receipt");
+  const receipt = page.locator(".submission-dialog");
   await expect(receipt).toBeVisible();
   await expect(receipt).toContainText("다시 확인했고, 이번에 접수되었습니다");
 });
@@ -93,7 +93,7 @@ test("an unresolved submission offers a check that never resubmits", async ({
   await reachReview(page);
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
-  const panel = page.locator(".submission-unresolved");
+  const panel = page.locator(".submission-dialog");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading")).toHaveText(
     "접수 여부를 확인해 주세요",
@@ -132,7 +132,7 @@ test("a refused submission explains the field and lets the draft be edited again
   await reachReview(page);
   await page.getByRole("button", { name: "제출하기", exact: true }).click();
 
-  const failure = page.locator(".submission-failure");
+  const failure = page.locator(".submission-dialog");
   await expect(failure).toBeVisible();
   // 서버의 필드 경로를 화면의 말로 바꾼다.
   await expect(failure).toContainText("주기: Invalid input");
@@ -144,6 +144,8 @@ test("a refused submission explains the field and lets the draft be edited again
     .getByRole("button", { name: "입력으로 돌아가기", exact: true })
     .click();
   await expect(failure).toBeHidden();
+  // 거절을 닫으면 상태를 지운다. 남길 접수 결과가 없기 때문이다.
+  await expect(page.locator(".submission-reminder")).toHaveCount(0);
 });
 
 test("skipping is offered only where the server allows it", async ({
@@ -184,7 +186,7 @@ test("more-none is confirmed once and sends no judgment with it", async ({
     .getByRole("button", { name: "더 이상 없음", exact: true })
     .click();
 
-  await expect(page.locator(".submission-receipt")).toContainText(
+  await expect(page.locator(".submission-dialog")).toContainText(
     "더 이상 없음으로 접수했습니다",
   );
   expect(bodies).toHaveLength(1);
@@ -196,4 +198,36 @@ test("more-none is confirmed once and sends no judgment with it", async ({
     "submissionKind",
   ]);
   expect(bodies[0].submissionKind).toBe("no_candidate");
+});
+
+test("the result opens as a centred dialog that can be closed and reopened", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.locator(".submission-dialog");
+  await expect(dialog).toBeVisible();
+  // 모달이어야 배경이 비활성화되고 포커스가 안에 갇힌다.
+  expect(
+    await dialog.evaluate((node: HTMLDialogElement) => node.matches(":modal")),
+  ).toBe(true);
+  await expect(dialog.locator('[role="status"]').first()).toBeFocused();
+
+  // Escape로 닫아도 접수 결과를 잃지 않는다.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  const reminder = page.locator(".submission-reminder");
+  await expect(reminder).toContainText("접수 완료");
+  // 대화상자를 연 버튼은 제출 뒤 비활성이라 포커스가 문서 맨 위로 떨어지기 쉽다.
+  const reopen = reminder.getByRole("button", {
+    name: "접수 결과 보기",
+    exact: true,
+  });
+  await expect(reopen).toBeFocused();
+
+  await reopen.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("접수 번호");
 });
