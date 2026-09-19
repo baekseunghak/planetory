@@ -43,11 +43,16 @@ export type PendingSubmission = {
    */
   body: Record<string, unknown> | null;
   /**
-   * `pending` 결과를 아직 모른다. **다른 본문에 이 자리를 내주지 않는다.**
+   * `pending` 결과를 아직 모른다.
    * `accepted` 접수가 확정됐다. 같은 본문을 다시 보낼 때 ID를 재사용하는
    * 용도로만 남는다.
+   * `conflict` 이 ID에 **다른 본문**이 이미 접수돼 있다. 우리 본문은
+   * 접수되지 않았고 이 ID로는 접수될 수 없다. ID는 무엇이 접수됐는지
+   * 조회하는 데 쓴다(2.2절).
+   *
+   * `accepted`가 아닌 두 상태는 **다른 본문에 이 자리를 내주지 않는다.**
    */
-  state: "pending" | "accepted";
+  state: "pending" | "accepted" | "conflict";
   /** 보낸 시각. 되살린 안내에서 언제 것인지 말하는 데 쓴다. */
   sentAt: string | null;
 };
@@ -115,7 +120,9 @@ export function readPendingSubmission(
       };
     if (
       value.schema !== 2 ||
-      (value.state !== "pending" && value.state !== "accepted") ||
+      (value.state !== "pending" &&
+        value.state !== "accepted" &&
+        value.state !== "conflict") ||
       (value.kind !== null && typeof value.kind !== "string") ||
       (value.body !== null && typeof value.body !== "object") ||
       (value.sentAt !== null && typeof value.sentAt !== "string")
@@ -172,8 +179,9 @@ export function reserveRequestId(
       reused: true,
       volatile: false,
     };
-  // 본문이 달라졌는데 앞선 요청의 결과를 모른다. 덮어쓰면 그 ID를 잃는다.
-  if (pending && pending.state === "pending")
+  // 본문이 달라졌는데 앞선 요청이 끝나지 않았다. 덮어쓰면 그 ID를 잃는다.
+  // 2.2절: 새 ID는 사용자가 별도 제출을 고른 경우에만 발급한다.
+  if (pending && pending.state !== "accepted")
     return { status: "blocked", pending };
   const requestId = newRequestId();
   const record: PendingSubmission = {
@@ -199,6 +207,23 @@ export function reserveRequestId(
  * 같은 ID를 써야 서버가 새 행을 만들지 않고 저장된 결과를 재현하기 때문이다
  * (SUB-09). 확정된 기록은 다른 본문의 예약을 막지 않는다.
  */
+/**
+ * 이 ID에 다른 본문이 이미 접수돼 있다고 적는다. ID를 버리지 않는다.
+ * 2.2절: 자동 재전송하지 않고 기존 ID·원본을 보존한 채 조회로 확인한다.
+ */
+export function markSubmissionConflict(
+  key: string,
+  store: Store | null = sessionStore(),
+): void {
+  const pending = readPendingSubmission(key, store);
+  if (!pending) return;
+  try {
+    store?.setItem(key, JSON.stringify({ ...pending, state: "conflict" }));
+  } catch {
+    /* 남기지 못해도 화면이 조회 경로를 내놓는다. */
+  }
+}
+
 export function markSubmissionAccepted(
   key: string,
   store: Store | null = sessionStore(),

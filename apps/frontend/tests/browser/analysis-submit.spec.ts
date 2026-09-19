@@ -518,3 +518,56 @@ test("a changed bundle reloads the data instead of resending the old snapshot", 
   // 다시 부른 것은 조회뿐이다. 제출은 한 번으로 남는다.
   expect(posts).toHaveLength(1);
 });
+
+test("a conflicting id is looked up first and only spent when the user says so", async ({
+  page,
+}) => {
+  const posts: Record<string, unknown>[] = [];
+  let conflict = true;
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(JSON.parse(request.postData() ?? "{}"));
+    if (!conflict) return route.continue();
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "IDEMPOTENCY_CONFLICT",
+        message: "다른 내용이 이미 접수되어 있습니다.",
+        fieldErrors: [],
+      }),
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("무엇이 접수됐는지 먼저 확인해 주세요");
+  // 자동으로 다시 보내지 않는다. 전송은 한 번뿐이다.
+  expect(posts).toHaveLength(1);
+  // 조회가 먼저다. 새 ID는 아직 만들지 않는다.
+  await expect(
+    dialog.getByRole("button", { name: "접수 결과 확인", exact: true }),
+  ).toBeVisible();
+  // 이 ID로는 접수될 수 없으므로 초안이 잠긴다.
+  await expect(
+    page.getByRole("button", { name: "제출하기", exact: true }),
+  ).toBeDisabled();
+
+  // 사용자가 별도 제출을 고른 순간에만 새 ID가 나간다.
+  conflict = false;
+  await dialog
+    .getByRole("button", { name: "별도 제출로 보내기", exact: true })
+    .click();
+  await expect(dialog).toContainText("접수되었습니다");
+  expect(posts).toHaveLength(2);
+  expect(posts[1].requestId).not.toBe(posts[0].requestId);
+  // 본문은 그대로다. 바꾼 것은 요청 번호뿐이다.
+  const strip = (body: Record<string, unknown>) => {
+    const { requestId, ...rest } = body;
+    return rest;
+  };
+  expect(strip(posts[1])).toEqual(strip(posts[0]));
+});

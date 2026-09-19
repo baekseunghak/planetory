@@ -55,7 +55,15 @@ export type SubmissionResult =
       message: string;
       fieldErrors: FieldError[];
     }
-  | { state: "conflict"; message: string }
+  | {
+      /**
+       * 이 ID에 다른 본문이 이미 접수돼 있다. 우리 본문은 접수되지 않았고
+       * 이 ID로는 접수될 수 없다. ID는 무엇이 접수됐는지 조회하는 데 쓴다.
+       */
+      state: "conflict";
+      requestId: string;
+      message: string;
+    }
   | { state: "bundle-changed"; currentBundleId: string | null }
   | {
       /**
@@ -81,7 +89,8 @@ export type SubmitOptions = {
    * 보존한 요청 ID를 버린다. 서버가 본문을 새로 만들라고 한 경우에만 부른다.
    * 결과를 모르는 상태에서는 절대 부르지 않는다.
    */
-  releaseRequestId: () => void;
+  // 요청 ID를 버리는 일은 여기서 하지 않는다. 2.2절이 그것을 사용자의
+  // 선택으로 정했으므로 화면이 그 순간에만 버린다.
   wait?: (ms: number) => Promise<void>;
 };
 
@@ -91,8 +100,7 @@ const sleep = (ms: number) =>
 export async function submitAnalysis(
   options: SubmitOptions,
 ): Promise<SubmissionResult> {
-  const { request, ticId, input, requestId, signal, releaseRequestId } =
-    options;
+  const { request, ticId, input, requestId, signal } = options;
   const wait = options.wait ?? sleep;
   const expected = { ticId, requestId };
   const body = { requestId, ...input };
@@ -127,8 +135,9 @@ export async function submitAnalysis(
           direct = false;
           return "recover";
         case "bundle-changed":
-          // 판이 바뀌었으니 본문을 새로 만들어야 한다. 이 ID는 다시 쓰지 않는다.
-          releaseRequestId();
+          // 새 ID는 **재선택·사용자 확인 뒤**에 만든다(2.2절). 여기서 버리면
+          // 확인 전에 앞선 요청의 ID가 사라진다. 버리는 일은 화면이 [최신
+          // 자료 불러오기]를 받았을 때 한다.
           // 2.3절이 정본으로 적은 본문을 먼저 보고, 없으면 헤더를 쓴다. 제출
           // 응답에는 아직 헤더가 없을 수 있다(D-5).
           return {
@@ -136,14 +145,15 @@ export async function submitAnalysis(
             currentBundleId: failure.currentBundleId ?? currentBundleId,
           };
         case "conflict-body":
-          releaseRequestId();
+          // ID도 본문도 버리지 않는다. 무엇이 접수됐는지 먼저 확인한다.
           return {
             state: "conflict",
+            requestId,
             message:
-              "같은 요청 번호로 다른 내용이 이미 접수되어 있습니다. 내용을 확인하고 다시 제출해 주세요.",
+              "이 요청 번호로 다른 내용이 이미 접수되어 있습니다. 무엇이 접수됐는지 먼저 확인해 주세요.",
           };
         case "context-not-ready":
-          // 미접수이고 같은 ID로 재전송한다. releaseRequestId를 부르지 않는다.
+          // 미접수이고 같은 ID로 재전송한다. ID를 버리지 않는다.
           return {
             state: "context-not-ready",
             code: failure.code,
@@ -151,7 +161,6 @@ export async function submitAnalysis(
             residual: failure.residual,
           };
         case "denied":
-          releaseRequestId();
           return {
             state: "denied",
             code: failure.code,

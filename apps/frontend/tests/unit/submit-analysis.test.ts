@@ -57,7 +57,7 @@ type Call = { path: string; method: string; body?: unknown };
 function harness(steps: Step[]) {
   const calls: Call[] = [];
   const waits: number[] = [];
-  let released = 0;
+
   const request = (async (path: string, options: Record<string, any> = {}) => {
     const step = steps.shift();
     if (!step) throw new Error(`대본에 없는 요청: ${path}`);
@@ -74,7 +74,7 @@ function harness(steps: Step[]) {
   return {
     calls,
     waits,
-    released: () => released,
+
     remaining: () => steps.length,
     run: (signal = new AbortController().signal) =>
       submitAnalysis({
@@ -83,9 +83,6 @@ function harness(steps: Step[]) {
         input,
         requestId: REQUEST_ID,
         signal,
-        releaseRequestId: () => {
-          released += 1;
-        },
         wait: async (ms) => void waits.push(ms),
       }),
     check: (signal = new AbortController().signal) =>
@@ -112,7 +109,7 @@ test("a straight-through submission sends once and is not marked recovered", asy
   assert.equal(stub.calls[0].method, "POST");
   // 예약한 ID가 본문에 실린다.
   assert.deepEqual(stub.calls[0].body, { requestId: REQUEST_ID, ...input });
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("a lost response is confirmed by request id without sending again", async () => {
@@ -130,7 +127,7 @@ test("a lost response is confirmed by request id without sending again", async (
   );
   assert.equal(stub.calls[1].path, `/v1/submissions/by-request/${REQUEST_ID}`);
   // 결과를 확인했을 뿐이므로 보존한 ID를 버리지 않는다.
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("a 404 leads to one resend with the same id, never a new one", async () => {
@@ -146,7 +143,7 @@ test("a 404 leads to one resend with the same id, never a new one", async () => 
   // 같은 요청 ID로 다시 보내야 중복 접수가 생기지 않는다.
   for (const post of posts)
     assert.equal((post.body as { requestId: string }).requestId, REQUEST_ID);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("recovery stops after the send limit and hands the decision to the user", async () => {
@@ -162,7 +159,7 @@ test("recovery stops after the send limit and hands the decision to the user", a
   assert.equal(result.reason, "lost");
   assert.equal(result.requestId, REQUEST_ID);
   // 접수 여부를 모르므로 ID를 버리지 않는다. 버리면 다음 제출이 중복이 된다.
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
   assert.equal(
     stub.calls.filter((call) => call.method === "POST").length,
     MAX_SENDS,
@@ -185,7 +182,7 @@ test("a request in progress is polled until the server settles it", async () => 
     ["POST", "GET", "GET"],
   );
   assert.deepEqual(stub.waits, [RECOVERY_DELAYS_MS[0], RECOVERY_DELAYS_MS[1]]);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("polling is bounded and says the server is still working", async () => {
@@ -200,7 +197,7 @@ test("polling is bounded and says the server is still working", async () => {
   if (result.state !== "unresolved") throw new Error("expected unresolved");
   assert.equal(result.reason, "in-progress");
   assert.equal(stub.waits.length, RECOVERY_DELAYS_MS.length);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("a failed lookup is not read as 'not submitted'", async () => {
@@ -214,7 +211,7 @@ test("a failed lookup is not read as 'not submitted'", async () => {
   // 조회가 실패했을 뿐 접수 여부는 모른다. 재전송하지 않고 ID를 지킨다.
   assert.equal(result.state, "unresolved");
   assert.equal(stub.calls.filter((call) => call.method === "POST").length, 1);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("a changed bundle releases the id and prefers the plate the body names", async () => {
@@ -232,7 +229,8 @@ test("a changed bundle releases the id and prefers the plate the body names", as
   if (result.state !== "bundle-changed") throw new Error("expected changed");
   // 2.3절의 정본은 본문이다. 헤더와 다르면 본문을 쓴다.
   assert.equal(result.currentBundleId, "9007199254748888");
-  assert.equal(body.released(), 1);
+  // 새 ID는 사용자가 [최신 자료 불러오기]를 누른 뒤에 만든다. 사다리는
+  // 여기서 ID를 버리지 않는다(2.2절).
 
   // 제출 응답에 본문 값이 없으면 헤더로 메운다(D-5).
   const header = harness([
@@ -257,19 +255,38 @@ test("a changed bundle releases the id and prefers the plate the body names", as
   );
 });
 
-test("refusals that require a new body release the id exactly once", async () => {
-  for (const [status, code, state] of [
-    [409, "IDEMPOTENCY_CONFLICT", "conflict"],
-    [409, "STAR_ALREADY_COMPLETED", "denied"],
-    [409, "SKIP_NOT_AVAILABLE", "denied"],
-    [403, "STAR_LOCKED", "denied"],
-    [404, "STAR_NOT_PUBLISHED", "denied"],
-  ] as const) {
-    const stub = harness([{ error: refused(status, code) }]);
-    const result = await stub.run();
-    assert.equal(result.state, state, code);
-    assert.equal(stub.released(), 1, `${code} 는 ID를 버려야 한다`);
-  }
+test("no refusal spends the request id inside the ladder", async () => {
+  // 2.2절은 ID 폐기를 사용자의 선택으로 정했다. 사다리는 어떤 거절에서도
+  // 버리지 않고, 화면이 [최신 자료 불러오기]나 [별도 제출로 보내기]를 받은
+  // 순간에만 버린다.
+  await Promise.all(
+    (
+      [
+        [409, "IDEMPOTENCY_CONFLICT", "conflict"],
+        [409, "STAR_ALREADY_COMPLETED", "denied"],
+        [409, "SKIP_NOT_AVAILABLE", "denied"],
+        [403, "STAR_LOCKED", "denied"],
+        [404, "STAR_NOT_PUBLISHED", "denied"],
+        [409, "BUNDLE_CHANGED", "bundle-changed"],
+      ] as const
+    ).map(async ([status, code, state]) => {
+      const stub = harness([{ error: refused(status, code), status }]);
+      const result = await stub.run();
+      assert.equal(result.state, state, code);
+      // 한 번만 보낸다. 거절을 자동으로 다시 두드리지 않는다.
+      assert.equal(stub.calls.length, 1, code);
+    }),
+  );
+});
+
+test("a conflict keeps the id so the accepted body can be looked up", async () => {
+  const stub = harness([
+    { error: refused(409, "IDEMPOTENCY_CONFLICT"), status: 409 },
+  ]);
+  const result = await stub.run();
+  assert.equal(result.state, "conflict");
+  // 이 ID로 무엇이 접수됐는지 조회해야 하므로 결과가 ID를 들고 나온다.
+  assert.equal(result.state === "conflict" && result.requestId, REQUEST_ID);
 });
 
 test("refusals that keep the body keep the id", async () => {
@@ -286,18 +303,16 @@ test("refusals that keep the body keep the id", async () => {
   assert.deepEqual(rejected.fieldErrors, [
     { field: "selection.periodDays", reason: "Invalid input" },
   ]);
-  assert.equal(invalid.released(), 0);
 
   const session = harness([{ error: refused(401, "UNAUTHORIZED") }]);
   assert.equal((await session.run()).state, "expired");
-  assert.equal(session.released(), 0);
 });
 
 test("an accepted body that cannot be read is not turned into a refusal", async () => {
   // 접수는 됐는데 본문을 읽을 수 없다. 거절로 바꾸면 사용자가 다시 제출한다.
   const stub = harness([{ status: 201, body: { submissionId: "sub-1" } }]);
   await assert.rejects(stub.run(), /제출 응답의/);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("a result for another request id is refused rather than accepted", async () => {
@@ -311,7 +326,7 @@ test("a result for another request id is refused rather than accepted", async ()
     },
   ]);
   await assert.rejects(stub.run(), /requestId/);
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("cancelling stops the ladder and keeps the id", async () => {
@@ -319,7 +334,7 @@ test("cancelling stops the ladder and keeps the id", async () => {
   controller.abort();
   const stub = harness([{ error: lost(0, "REQUEST_CANCELLED") }]);
   await assert.rejects(stub.run(controller.signal));
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
 });
 
 test("checking alone never sends and never claims the submission is missing", async () => {
@@ -361,7 +376,7 @@ test("a not-ready residual refuses without spending the request id", async () =>
     "QUEUED",
   );
   // 미접수이고 같은 ID로 재전송한다. 버리면 명세가 말하는 복구가 불가능해진다.
-  assert.equal(stub.released(), 0);
+  // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
   // 한 번만 보낸다. 잔차는 기다리는 것이지 다시 두드릴 일이 아니다.
   assert.equal(stub.calls.length, 1);
 });

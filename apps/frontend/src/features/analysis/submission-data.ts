@@ -304,8 +304,11 @@ export function classifySubmissionError(error: unknown): SubmissionFailure {
   if (error.status === 409) {
     if (error.code === "REQUEST_IN_PROGRESS")
       return { kind: "in-progress", requestId: "keep" };
+    // 2.2절: 자동 재전송하지 않는다. **기존 ID와 원본 본문을 보존하고**
+    // by-request로 무엇이 접수됐는지 먼저 확인한다. 새 ID는 사용자가 별도
+    // 제출을 고른 경우에만 만든다. 조회가 404여도 발급 근거가 아니다.
     if (error.code === "IDEMPOTENCY_CONFLICT")
-      return { kind: "conflict-body", requestId: "renew" };
+      return { kind: "conflict-body", requestId: "keep" };
     if (error.code === "BUNDLE_CHANGED")
       return {
         kind: "bundle-changed",
@@ -324,10 +327,12 @@ export function classifySubmissionError(error: unknown): SubmissionFailure {
         message: error.message,
         residual: readResidual(error.details.residual),
       };
-    // STAR_ALREADY_COMPLETED·SKIP_NOT_AVAILABLE. 조건이 아니므로 다시 보내지 않는다.
+    // STAR_ALREADY_COMPLETED·SKIP_NOT_AVAILABLE. 조건이 아니므로 다시 보내지
+    // 않는다. 다만 **ID는 버리지 않는다.** 앞선 전송이 응답만 잃고 접수됐을
+    // 수 있고(그래서 이 별이 완료됐을 수도 있다), 그때 확인할 길이 ID뿐이다.
     return {
       kind: "denied",
-      requestId: "discard",
+      requestId: "keep",
       code: error.code,
       message: error.message,
     };
@@ -335,7 +340,7 @@ export function classifySubmissionError(error: unknown): SubmissionFailure {
   if (error.status === 403 || error.status === 404)
     return {
       kind: "denied",
-      requestId: "discard",
+      requestId: "keep",
       code: error.code,
       message: error.message,
     };

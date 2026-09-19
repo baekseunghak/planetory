@@ -195,10 +195,36 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                   ` · 작업 번호 ${settled.residual.jobId}`}
               </p>
             )}
+            {/*
+              2.2절: 자동 재전송하지 않는다. 무엇이 접수됐는지 먼저 확인하고,
+              새 ID는 사용자가 별도 제출을 고를 때만 만든다.
+            */}
+            {settled.state === "conflict" && (
+              <>
+                <button type="button" onClick={() => submission.check()}>
+                  접수 결과 확인
+                </button>
+                <button type="button" onClick={() => submission.submitAsNew()}>
+                  별도 제출로 보내기
+                </button>
+              </>
+            )}
+            {/*
+              거절이어도 ID는 살아 있다. 앞선 전송이 응답만 잃고 접수됐을 수
+              있으므로 확인 경로를 남긴다.
+            */}
+            {settled.state === "denied" && (
+              <button type="button" onClick={() => submission.check()}>
+                접수 결과 확인
+              </button>
+            )}
             {settled.state === "bundle-changed" && (
               <button
                 type="button"
                 onClick={() => {
+                  // 새 ID는 여기서부터다. 2.2절이 말하는 「사용자 확인」이
+                  // 이 클릭이며, 그 전에는 앞선 요청의 ID를 지키고 있었다.
+                  submission.discardRequest();
                   recoverBundle?.();
                   submission.dismiss();
                 }}

@@ -215,14 +215,17 @@ test("an unknown outcome keeps the request id whatever the transport said", () =
 test("each refusal decides the request id exactly once", () => {
   const cases: [number, string, string, string][] = [
     [409, "REQUEST_IN_PROGRESS", "in-progress", "keep"],
-    [409, "IDEMPOTENCY_CONFLICT", "conflict-body", "renew"],
+    // 2.2절: 자동 재전송 안 함. 기존 ID·원본을 보존하고 조회로 확인한다.
+    [409, "IDEMPOTENCY_CONFLICT", "conflict-body", "keep"],
     [409, "BUNDLE_CHANGED", "bundle-changed", "renew"],
     // 미접수이고 잔차를 준비한 뒤 같은 ID로 재전송한다. 버리면 복구가 끊긴다.
     [409, "SUBMISSION_CONTEXT_NOT_READY", "context-not-ready", "keep"],
-    [409, "STAR_ALREADY_COMPLETED", "denied", "discard"],
-    [409, "SKIP_NOT_AVAILABLE", "denied", "discard"],
-    [403, "STAR_LOCKED", "denied", "discard"],
-    [404, "STAR_NOT_PUBLISHED", "denied", "discard"],
+    // 거절이어도 ID는 남긴다. 앞선 전송이 응답만 잃고 접수됐을 수 있고
+    // (그래서 이 별이 완료됐을 수도 있다) 확인할 길이 그 ID뿐이다.
+    [409, "STAR_ALREADY_COMPLETED", "denied", "keep"],
+    [409, "SKIP_NOT_AVAILABLE", "denied", "keep"],
+    [403, "STAR_LOCKED", "denied", "keep"],
+    [404, "STAR_NOT_PUBLISHED", "denied", "keep"],
     [401, "UNAUTHORIZED", "expired", "keep"],
     [400, "VALIDATION_FAILED", "rejected", "keep"],
   ];

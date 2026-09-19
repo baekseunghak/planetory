@@ -11,6 +11,7 @@ import {
 } from "./submit-analysis";
 import {
   markSubmissionAccepted,
+  markSubmissionConflict,
   readPendingSubmission,
   releaseRequestId,
   reserveRequestId,
@@ -38,6 +39,8 @@ export function useSubmission(context: AnalysisContext) {
   // 결과를 모르는 채로 화면을 떠나도 ID는 저장소에 남는다. 중단은 화면 갱신만 멈춘다.
   const running = useRef<AbortController | null>(null);
   const last = useRef<{ requestId: string; kind: Kind } | null>(null);
+  /** 마지막으로 보내려 한 본문. [별도 제출로 보내기]가 이것을 다시 쓴다. */
+  const attempted = useRef<SubmissionInput | null>(null);
   const [volatileId, setVolatileId] = useState(false);
   const key = useMemo(
     () => (memberId ? submissionStorageKey(memberId, context.ticId) : null),
@@ -94,8 +97,12 @@ export function useSubmission(context: AnalysisContext) {
       try {
         const result = await work(controller.signal);
         if (controller.signal.aborted) return;
-        // 확정된 기록은 다른 본문의 예약을 막지 않는다. 미확인만 막는다.
-        if (result.state === "accepted" && key) markSubmissionAccepted(key);
+        // 확정된 기록은 다른 본문의 예약을 막지 않는다. 나머지는 막는다.
+        if (key) {
+          if (result.state === "accepted") markSubmissionAccepted(key);
+          // ID는 살아 있고 그 ID로 무엇이 접수됐는지 조회할 수 있다.
+          if (result.state === "conflict") markSubmissionConflict(key);
+        }
         setState({ phase: "settled", kind, ...result });
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -119,6 +126,7 @@ export function useSubmission(context: AnalysisContext) {
   const submit = useCallback(
     (input: SubmissionInput) => {
       if (!key) return;
+      attempted.current = input;
       const reserved = reserveRequestId(key, submissionFingerprint(input), {
         kind: input.submissionKind,
         body: { ...input },
@@ -134,7 +142,9 @@ export function useSubmission(context: AnalysisContext) {
           requestId: pending.requestId,
           reason: "lost",
           message:
-            "결과를 확인하지 못한 제출이 있어 이번 제출을 보내지 않았습니다. 먼저 접수 결과를 확인해 주세요.",
+            pending.state === "conflict"
+              ? "이 요청 번호로 다른 내용이 이미 접수되어 있습니다. 무엇이 접수됐는지 먼저 확인해 주세요."
+              : "결과를 확인하지 못한 제출이 있어 이번 제출을 보내지 않았습니다. 먼저 접수 결과를 확인해 주세요.",
         });
         return;
       }
@@ -150,7 +160,6 @@ export function useSubmission(context: AnalysisContext) {
           input,
           requestId: reserved.requestId,
           signal,
-          releaseRequestId: () => releaseRequestId(key),
         }),
       );
     },
@@ -172,6 +181,27 @@ export function useSubmission(context: AnalysisContext) {
   }, [context.ticId, run]);
 
   /**
+   * 보관한 ID를 버린다. 판이 바뀌어 본문을 새로 만들어야 할 때, **사용자가
+   * 확인한 순간에만** 부른다. 사다리는 더 이상 ID를 버리지 않는다(2.2절).
+   */
+  const discardRequest = useCallback(() => {
+    if (key) releaseRequestId(key);
+  }, [key]);
+
+  /**
+   * 보관한 ID를 버리고 **별도 제출로** 새로 보낸다. 2.2절이 새 ID를 허용하는
+   * 유일한 경우이며, 사용자가 명시적으로 고를 때만 부른다. 조회 404는 근거가
+   * 되지 않는다.
+   */
+  const submitAsNew = useCallback(() => {
+    if (!key) return;
+    const attempt = attempted.current;
+    if (!attempt) return;
+    releaseRequestId(key);
+    return submit(attempt);
+  }, [key]);
+
+  /**
    * **보관한 ID와 본문 그대로** 다시 보낸다. 조회가 404를 준 뒤에만 쓴다.
    *
    * 새 ID를 만들지 않는다. 만들면 앞선 요청이 실제로는 접수돼 있었을 때 같은
@@ -191,7 +221,6 @@ export function useSubmission(context: AnalysisContext) {
         input: body,
         requestId: pending.requestId,
         signal,
-        releaseRequestId: () => releaseRequestId(key),
       }),
     );
   }, [key, context.ticId, run]);
@@ -211,6 +240,8 @@ export function useSubmission(context: AnalysisContext) {
     check,
     dismiss,
     resend,
+    submitAsNew,
+    discardRequest,
     /**
      * 같은 ID로 다시 보낼 수 있는가. 조회가 404였고 보낸 본문을 들고 있을
      * 때만이다. 판 1에서 올라온 기록에는 본문이 없어 다시 보낼 수 없다.
@@ -231,7 +262,9 @@ export function useSubmission(context: AnalysisContext) {
       settled?.state === "unresolved" ||
       // 판이 바뀐 채로 다시 보내면 같은 낡은 스냅샷이 또 나간다. 최신 자료를
       // 불러온 뒤에야 주기와 구간을 다시 고를 수 있다.
-      settled?.state === "bundle-changed",
+      settled?.state === "bundle-changed" ||
+      // 이 ID로는 접수될 수 없다. 조회하거나 별도 제출을 고르는 두 길뿐이다.
+      settled?.state === "conflict",
     /** 결과를 모르는 상태. [접수 결과 확인]을 내놓아야 한다. */
     unresolved: settled?.state === "unresolved" ? settled : null,
     accepted: settled?.state === "accepted" ? settled : null,
