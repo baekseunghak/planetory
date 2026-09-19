@@ -30,12 +30,64 @@ const result = (patch: Record<string, unknown> = {}) => ({
   submissionKind: "candidate",
   curveContext,
   original: { periodDays: 11.802 },
-  serverDerived: { epochBtjd: 1683.4231 },
-  match: { status: "matched_harmonic", candidateId: "c-402" },
-  signal: { candidateId: "c-402", disposition: "UNCONFIRMED" },
+  serverDerived: {
+    foldReferenceTimeBtjd: 1683.4231,
+    phaseCenter: 0,
+    epochBtjd: 1683.4231,
+    durationHours: 2.83248,
+    sourcePeakSuggestedDurationHours: 3.1,
+    durationLimitHours: 9.3,
+    centroidDataStatus: "unavailable",
+  },
+  match: {
+    status: "matched_harmonic",
+    candidateId: "c-402",
+    harmonicMultiplier: 2,
+    correctedPeriodDays: 23.604,
+    correctionReason: "P/2 alias",
+  },
+  signal: {
+    candidateId: "c-402",
+    disposition: "UNCONFIRMED",
+    answerClass: "analysis",
+    planetTruth: null,
+    bls: {
+      periodDays: 23.604,
+      epochBtjd: 1695.11,
+      durationHours: 3.4,
+      depthPpm: 380,
+      sde: 9.1,
+      snr: 7.8,
+    },
+    ai: {
+      status: "completed",
+      score: 0.71,
+      verdict: "hold",
+      modelVersion: "astronet-triage-1",
+    },
+    external: [
+      {
+        source: "TOI",
+        externalId: "TOI-1234.02",
+        disposition: "PC",
+        fetchedOn: "2026-09-01",
+      },
+    ],
+  },
   judgment: { value: "LIKELY_PLANET", evaluation: "UNSCORED" },
   skyVersion: "u-101:58",
-  achievement: { result: "pending_publish", newlyRecognized: true },
+  achievement: {
+    result: "pending_publish",
+    newlyRecognized: true,
+    unlockedStars: [],
+    star: { count: 1, grade: "A" },
+  },
+  publication: { state: "UNPUBLISHED", publicAnalysisId: null },
+  detail: {
+    available: true,
+    targetKind: "CURRENT_MATCH",
+    answerViewed: false,
+  },
   progress: {
     stage: "in_progress",
     completionReason: null,
@@ -44,13 +96,37 @@ const result = (patch: Record<string, unknown> = {}) => ({
     matchedCandidateIds: ["c-401"],
     remainingDiscoverableCount: 1,
   },
-  judgmentStatistics: { participantCount: 15 },
+  judgmentStatistics: {
+    kind: "public_analyses",
+    participantCount: 15,
+    likelyPlanet: 8,
+    unlikelyPlanet: 4,
+    unsure: 3,
+    percentages: { likelyPlanet: 53.3, unlikelyPlanet: 26.7, unsure: 20 },
+    asOf: "2026-09-10T02:30:00Z",
+  },
   nextActions: ["NEXT_CURVE", "PUBLISH_ANALYSIS"],
   ...patch,
 });
 const expected = { ticId: TIC, requestId: REQUEST_ID };
 const decode = (patch?: Record<string, unknown>, status = 201) =>
   decodeSubmissionReceipt(result(patch), expected, status);
+/** 매칭 성공이 아닌 결과. 신호·통계가 없고 배수 정정도 없다(6.4절). */
+const unmatched = (patch: Record<string, unknown>) => ({
+  match: { status: "not_matched", candidateId: null, harmonicMultiplier: null },
+  signal: null,
+  judgmentStatistics: null,
+  serverDerived: null,
+  achievement: {
+    result: "none",
+    newlyRecognized: false,
+    unlockedStars: [],
+    star: { count: 0, grade: null },
+  },
+  publication: { state: "NOT_ELIGIBLE", publicAnalysisId: null },
+  detail: { available: true, targetKind: null, answerViewed: false },
+  ...patch,
+});
 
 test("paths escape their identifiers and keep ids as opaque strings", () => {
   assert.equal(submissionsPath(TIC), `/v1/stars/${TIC}/submissions`);
@@ -68,14 +144,16 @@ test("a receipt keeps only the handover fields and never copies the answer", () 
   assert.equal(receipt.matchStatus, "matched_harmonic");
   assert.equal(receipt.skyVersion, "u-101:58");
   assert.deepEqual(receipt.curveContext, curveContext);
-  // 후보 정답·성과·통계는 결과 해설(A06-2)의 몫이라 가져오지 않는다.
+  // 결과 해설은 #188이 explanation에 모았다. 접수 뼈대와 섞지 않는다.
   for (const field of [
     "signal",
     "achievement",
     "judgmentStatistics",
     "original",
   ])
-    assert.equal(field in receipt, false, `${field}를 복사하면 안 된다`);
+    assert.equal(field in receipt, false, `${field}는 explanation 안에 있다`);
+  assert.equal(receipt.explanation.signal?.disposition, "UNCONFIRMED");
+  assert.equal(receipt.explanation.achievement.result, "pending_publish");
 });
 
 test("created and replayed are told apart by status, not by the body", () => {
@@ -97,36 +175,63 @@ test("a receipt for another star or another request is refused", () => {
 
 test("a match status that cannot belong to the submitted kind is refused", () => {
   assert.equal(
-    decode({
-      submissionKind: "no_candidate",
-      match: { status: "none_wrong" },
-    }).matchStatus,
+    decode(
+      unmatched({
+        submissionKind: "no_candidate",
+        match: {
+          status: "none_wrong",
+          candidateId: null,
+          harmonicMultiplier: null,
+        },
+      }),
+    ).matchStatus,
     "none_wrong",
   );
   // 더 없음 제출에 후보 매칭 결과가 실려 오면 응답을 잘못 읽은 것이다.
   assert.throws(
     () =>
-      decode({ submissionKind: "no_candidate", match: { status: "matched" } }),
+      decode(
+        unmatched({
+          submissionKind: "no_candidate",
+          match: {
+            status: "matched",
+            candidateId: null,
+            harmonicMultiplier: null,
+          },
+        }),
+      ),
     /match.status/,
   );
   assert.throws(
-    () => decode({ submissionKind: "candidate", match: { status: "skipped" } }),
+    () =>
+      decode(
+        unmatched({
+          submissionKind: "candidate",
+          match: {
+            status: "skipped",
+            candidateId: null,
+            harmonicMultiplier: null,
+          },
+        }),
+      ),
     /match.status/,
   );
 });
 
 test("progress enums, the completion pair and the submitted step are checked", () => {
-  const done = decode({
-    submissionKind: "skipped",
-    match: { status: "skipped" },
-    progress: {
-      stage: "completed",
-      completionReason: "skipped",
-      reopenPending: false,
-      currentCurveStep: 1,
-      remainingDiscoverableCount: 0,
-    },
-  });
+  const done = decode(
+    unmatched({
+      submissionKind: "skipped",
+      match: { status: "skipped", candidateId: null, harmonicMultiplier: null },
+      progress: {
+        stage: "completed",
+        completionReason: "skipped",
+        reopenPending: false,
+        currentCurveStep: 1,
+        remainingDiscoverableCount: 0,
+      },
+    }),
+  );
   assert.equal(done.progress.completionReason, "skipped");
   // 완료 사유는 완료한 별에만 있다.
   const pair = (stage: string, completionReason: unknown) => () =>

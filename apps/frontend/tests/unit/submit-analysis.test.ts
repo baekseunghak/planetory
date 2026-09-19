@@ -37,7 +37,23 @@ const receiptBody = (patch: Record<string, unknown> = {}) => ({
   submittedAt: "2026-09-19T02:30:00Z",
   submissionKind: "candidate",
   curveContext,
-  match: { status: "not_matched" },
+  match: { status: "not_matched", candidateId: null, harmonicMultiplier: null },
+  // 미매칭은 신호·통계를 주지 않는다. 성과 판정 자체가 없다.
+  signal: null,
+  judgment: { value: "LIKELY_PLANET", evaluation: "NOT_APPLICABLE" },
+  achievement: {
+    result: "none",
+    newlyRecognized: false,
+    unlockedStars: [],
+    star: { count: 0, grade: null },
+  },
+  publication: { state: "NOT_ELIGIBLE", publicAnalysisId: null },
+  judgmentStatistics: null,
+  detail: {
+    available: true,
+    targetKind: "CURRENT_CURVE_HINT",
+    answerViewed: false,
+  },
   skyVersion: "u-187:1",
   progress: {
     stage: "in_progress",

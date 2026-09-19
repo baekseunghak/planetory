@@ -376,3 +376,100 @@ test("a not-ready residual is refused without storing, and the same id still wor
   expect(accepted.status()).toBe(201);
   expect((await accepted.json()).requestId).toBe(id);
 });
+
+test("every result combination the fixture produces passes the parser", async ({
+  request,
+}) => {
+  const { context, post } = await setUp(request);
+  const send = async (
+    sourcePeakGridIndex: number | null,
+    userJudgment: string,
+    outcome?: string,
+  ) => {
+    const id = uuid();
+    const csrf = await (await request.get("/api/v1/auth/csrf")).json();
+    const response = await request.post(`/api/v1/stars/${TIC}/submissions`, {
+      headers: outcome
+        ? { [csrf.headerName]: csrf.token, "X-Fixture-Outcome": outcome }
+        : { [csrf.headerName]: csrf.token },
+      data: {
+        requestId: id,
+        submissionKind: "candidate",
+        curveContext: context.currentCurveContext,
+        selection: {
+          periodDays: 11.7346,
+          sourcePeakGridIndex,
+          phaseStart: 0.49,
+          phaseEnd: 0.51,
+        },
+        userJudgment,
+        evidenceChecks: [],
+        memo: "",
+        retryOfSubmissionId: null,
+      },
+      failOnStatusCode: false,
+    });
+    expect(response.status()).toBe(201);
+    return decodeSubmissionReceipt(
+      await response.json(),
+      { ticId: TIC, requestId: id },
+      response.status(),
+    );
+  };
+
+  // 확정 + 맞힘: 매칭도 성과도 성공이고 채점이 붙는다.
+  const right = await send(3600, "LIKELY_PLANET");
+  expect(right.matchStatus).toBe("matched");
+  expect(right.explanation.evaluation).toBe("AGREES");
+  expect(right.explanation.achievement.result).toBe("recognized");
+  expect(right.explanation.achievement.unlockedTicIds).toHaveLength(1);
+  expect(right.explanation.statistics?.kind).toBe("graded");
+
+  // 확정 + 오판: 매칭은 성공인데 성과만 미인정이다. 완료 조건의 그 조합이다.
+  const wrong = await send(3600, "UNLIKELY_PLANET");
+  expect(wrong.matchStatus).toBe("matched");
+  expect(wrong.explanation.evaluation).toBe("DISAGREES");
+  expect(wrong.explanation.achievement.result).toBe("judgment_mismatch");
+
+  // 미확정: 채점하지 않고 게시할 수 있으며 공개 분포를 준다. 배수 정정이 있다.
+  const open = await send(2500, "LIKELY_PLANET");
+  expect(open.matchStatus).toBe("matched_harmonic");
+  expect(open.explanation.evaluation).toBe("UNSCORED");
+  expect(open.explanation.publication.state).toBe("UNPUBLISHED");
+  expect(open.explanation.statistics?.kind).toBe("public_analyses");
+  expect(open.explanation.correction?.multiplier).toBe(2);
+  expect(open.explanation.correction?.correctedPeriodDays).toBeCloseTo(
+    11.7346 * 2,
+    6,
+  );
+
+  // FP: AI를 실행하지 못했다. 점수를 0으로 만들지 않는다.
+  const fp = await send(1600, "UNLIKELY_PLANET");
+  expect(fp.explanation.signal?.ai.status).toBe("input_insufficient");
+  expect(fp.explanation.signal?.ai.score).toBeUndefined();
+  // 외부 출처는 원천 표기 그대로다.
+  expect(fp.explanation.signal?.external[0].disposition).toBe("FP");
+
+  // 직접 선택: 미매칭이라 신호·통계가 없고 그 단계의 힌트를 준다.
+  const free = await send(null, "UNSURE");
+  expect(free.matchStatus).toBe("not_matched");
+  expect(free.explanation.signal).toBeNull();
+  expect(free.explanation.statistics).toBeNull();
+  expect(free.explanation.detail.targetKind).toBe("CURRENT_CURVE_HINT");
+
+  // 모호: 서버가 어느 후보도 고르지 않았다. 아무것도 붙이지 않는다.
+  const unsure = await send(3600, "LIKELY_PLANET", "ambiguous");
+  expect(unsure.matchStatus).toBe("ambiguous_match");
+  expect(unsure.explanation.signal).toBeNull();
+  expect(unsure.explanation.achievement.result).toBe("none");
+  expect(unsure.explanation.detail.targetKind).toBeNull();
+
+  // 공개 0명: 비율이 null이며 0%가 아니다.
+  const empty = await send(2500, "UNSURE", "empty-statistics");
+  const statistics = empty.explanation.statistics as {
+    participantCount: number;
+    percentages: unknown;
+  };
+  expect(statistics.participantCount).toBe(0);
+  expect(statistics.percentages).toBeNull();
+});

@@ -1,9 +1,12 @@
 import { ApiError, type FieldError } from "../../api/client.ts";
 import { readCurveContext, type CurveContext } from "./analysis-data.ts";
+import {
+  readResultExplanation,
+  type ResultExplanation,
+} from "./submission-result.ts";
 
-// 탐사 API 6.4절 `submissionResult` 중 #187이 쓰는 부분만 읽는다.
-// `signal`·`achievement`·`judgmentStatistics`는 결과 해설(A06-2)의 몫이고
-// 후보 정답을 담으므로 이 티켓의 상태로 복사하지 않는다.
+// 탐사 API 6.4절 `submissionResult`를 읽는다. 접수 뼈대는 #187이, 결과 해설
+// 부분은 #188이 더했고 해설은 `explanation`에 모여 있다.
 
 export const submissionsPath = (ticId: string) =>
   `/v1/stars/${encodeURIComponent(ticId)}/submissions`;
@@ -92,6 +95,11 @@ export type SubmissionReceipt = {
   /** 처리 후 지도 판. 마지막 값과 다르면 지도를 다시 조회한다(4.1절). */
   skyVersion: string;
   nextActions: NextAction[];
+  /**
+   * 결과 해설(#188). 매칭·채점·성과·공개·AI·통계·상세를 **각각** 담는다.
+   * 한 축의 값으로 다른 축을 추측하지 않는다.
+   */
+  explanation: ResultExplanation;
 };
 
 function invalid(field: string): never {
@@ -213,6 +221,7 @@ export function decodeSubmissionReceipt(
     matchStatus,
     progress,
     skyVersion: text(data.skyVersion, "skyVersion"),
+    explanation: readResultExplanation(data, matchStatus),
     // 모르는 힌트 때문에 접수된 제출을 실패로 만들지 않는다. 버튼 하나가
     // 줄어들 뿐이고, 되살릴 수 없는 접수 결과를 잃는 쪽이 훨씬 비싸다.
     nextActions: knownActions.filter((action) => offered.includes(action)),
