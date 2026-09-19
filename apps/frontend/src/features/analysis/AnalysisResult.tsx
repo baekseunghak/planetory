@@ -107,7 +107,13 @@ function Ai({ signal }: { signal: SubmissionSignal }) {
   );
 }
 
-function Statistics({ value }: { value: JudgmentStatistics }) {
+function Statistics({
+  value,
+  stale,
+}: {
+  value: JudgmentStatistics;
+  stale: boolean;
+}) {
   if (value.kind === "graded")
     return (
       <section className="result-axis">
@@ -117,6 +123,7 @@ function Statistics({ value }: { value: JudgmentStatistics }) {
           이 신호를 처음 찾은 {count.format(value.matchedMemberCount)}명 중{" "}
           {percent.format(value.agreementPercent)}%가 같은 판단이었습니다.
         </p>
+        <StaleNote stale={stale} />
       </section>
     );
   return (
@@ -133,15 +140,37 @@ function Statistics({ value }: { value: JudgmentStatistics }) {
           {percent.format(value.percentages.unsure)}%
         </p>
       )}
+      <StaleNote stale={stale} />
     </section>
   );
 }
 
 /** 접수 결과의 해설. 여섯 축을 독립으로 읽는다. */
+/**
+ * 이 축의 값이 **접수 당시 기준**이라는 표시(D-5 재전송 성공 예외).
+ *
+ * 최신이 필요한 영역은 진행·공개·통계·다음 행동뿐이다. 판정·선택·스냅샷은
+ * 당시 값이 정본이므로 이 표시를 붙이지 않는다.
+ *
+ * 최신 값을 가져오려면 6.6절(145)로 다시 조회해야 하는데 아직 연결 전이다.
+ * 그래서 **당시 결과를 그대로 두고 모른다고 말한다.** 최신인 척하지 않는다.
+ */
+function StaleNote({ stale }: { stale: boolean }) {
+  if (!stale) return null;
+  return (
+    <p className="submission-note" data-testid="stale-axis">
+      접수 당시 기준입니다. 최신 상태는 아직 확인하지 못했습니다.
+    </p>
+  );
+}
+
 export function ResultExplanationView({
   receipt,
+  staleBundle = false,
 }: {
   receipt: SubmissionReceipt;
+  /** 접수 뒤 판이 바뀌었는가. 최신이 필요한 축에만 표시를 붙인다. */
+  staleBundle?: boolean;
 }) {
   const { explanation, progress } = receipt;
   const { signal, evaluation, achievement, publication, statistics } =
@@ -190,6 +219,7 @@ export function ResultExplanationView({
             {count.format(progress.remainingDiscoverableCount)}개
           </p>
         )}
+        <StaleNote stale={staleBundle} />
       </section>
 
       {/* 공개는 할 수 있을 때만 알린다. 게시 화면으로 끌고 가지 않는다(AT-36). */}
@@ -197,6 +227,7 @@ export function ResultExplanationView({
         <section className="result-axis">
           <h5>공개</h5>
           <p>이 분석은 공개할 수 있습니다.</p>
+          <StaleNote stale={staleBundle} />
         </section>
       )}
 
@@ -217,7 +248,7 @@ export function ResultExplanationView({
         </section>
       )}
 
-      {statistics && <Statistics value={statistics} />}
+      {statistics && <Statistics value={statistics} stale={staleBundle} />}
 
       {explanation.serverDerived && (
         <section className="result-axis">
@@ -337,8 +368,11 @@ export function NextActions({
   receipt,
   returnTo,
   from,
+  staleBundle = false,
 }: {
   receipt: SubmissionReceipt;
+  /** 접수 뒤 판이 바뀌었는가. 힌트도 최신이 필요한 영역이다(D-5). */
+  staleBundle?: boolean;
   /** 분석에 들어오기 전 화면. 분석을 끝내고 나갈 때 쓴다. */
   returnTo: string;
   /**
@@ -420,6 +454,7 @@ export function NextActions({
           );
         })}
       </ul>
+      <StaleNote stale={staleBundle} />
     </section>
   );
 }

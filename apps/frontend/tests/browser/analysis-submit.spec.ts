@@ -880,3 +880,38 @@ test("discussing opens a draft for this star, not the board list", async ({
   await expect(page).toHaveURL(new RegExp(`ticId=${NORMAL}`));
   await expect(page).toHaveURL(/purposeTag=DISCUSSION/);
 });
+
+test("a result from an older plate marks only what needs to be fresh", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    return route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "x-current-bundle": "9007199254749999",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  await expect(dialog.getByTestId("stale-bundle")).toBeVisible();
+
+  const axis = (name: string) =>
+    dialog
+      .locator(".result-axis")
+      .filter({ has: page.getByRole("heading", { name, exact: true }) });
+  // 최신이 필요한 영역에만 붙인다. 145가 아직 없으니 모른다고 말한다.
+  for (const name of ["이 별의 탐색", "공개", "다른 사람의 판단"])
+    await expect(axis(name).getByTestId("stale-axis")).toBeVisible();
+  await expect(
+    dialog.getByTestId("next-actions").getByTestId("stale-axis"),
+  ).toBeVisible();
+
+  // 당시 값이 정본인 축은 건드리지 않는다.
+  for (const name of ["매칭", "내 판단", "성과", "서버가 계산한 값"])
+    await expect(axis(name).getByTestId("stale-axis")).toHaveCount(0);
+});

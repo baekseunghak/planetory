@@ -51,6 +51,14 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
   const focusRef = useRef<HTMLParagraphElement>(null);
   const [closed, setClosed] = useState(false);
   const settled = state.phase === "settled" ? state : null;
+  /**
+   * 접수 뒤 판이 바뀌었는가(D-5 재전송 성공 예외). 성공을 취소하지 않고
+   * 최신이 필요한 축(진행·공개·통계·다음 행동)에만 모른다고 표시한다.
+   */
+  const stale = Boolean(
+    settled?.state === "accepted" &&
+    acceptedOnOlderBundle(settled.receipt, settled.currentBundleId),
+  );
   const open = state.phase !== "idle" && !closed;
 
   /**
@@ -134,10 +142,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               다시 제출하지 않는다. 당시 판정·선택·스냅샷은 그대로 두고 이
               결과가 어느 판 기준인지만 알린다.
             */}
-            {acceptedOnOlderBundle(
-              settled.receipt,
-              settled.currentBundleId,
-            ) && (
+            {stale && (
               <p className="submission-note" data-testid="stale-bundle">
                 이 결과는 접수 당시 판 기준입니다. 그 뒤 별의 자료 판이
                 바뀌었으니 분석을 이어가려면 최신 자료를 다시 불러와 주세요.
@@ -157,7 +162,10 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 </time>
               </dd>
             </dl>
-            <ResultExplanationView receipt={settled.receipt} />
+            <ResultExplanationView
+              receipt={settled.receipt}
+              staleBundle={stale}
+            />
             <DetailView
               receipt={settled.receipt}
               detail={submission.detail}
@@ -168,6 +176,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               }
             />
             <NextActions
+              staleBundle={stale}
               receipt={settled.receipt}
               returnTo={returnTo}
               from={currentPath}
