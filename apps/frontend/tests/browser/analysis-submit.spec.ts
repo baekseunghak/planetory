@@ -411,3 +411,62 @@ test("an unresolved submission survives a reload and blocks a different one", as
   expect(posts).toHaveLength(1);
   expect(posts[0].requestId).toBe(sentId);
 });
+
+test("a check that finds nothing offers the same id and body again", async ({
+  page,
+}) => {
+  const posts: Record<string, unknown>[] = [];
+  // 조회는 늘 미접수다. 404를 근거로 단정하지 않으므로 상태는 「모름」이다.
+  await page.route("**/api/v1/submissions/by-request/*", async (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "NOT_FOUND",
+        message: "없습니다.",
+        fieldErrors: [],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(JSON.parse(request.postData() ?? "{}"));
+    // 자동 복구가 쓰는 전송 두 번을 모두 잃는다. 사다리를 소진시켜야
+    // 수동 경로가 드러난다. 그 뒤의 전송은 개발 서버가 받는다.
+    if (posts.length <= 2)
+      return route.continue({
+        headers: { ...request.headers(), "x-fixture-submit": "drop-unsaved" },
+      });
+    return route.continue();
+  });
+
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("접수 여부를 확인해 주세요");
+  const resend = dialog.getByRole("button", {
+    name: "같은 내용으로 다시 보내기",
+    exact: true,
+  });
+  // 조회로 미접수를 확인하기 전에는 내놓지 않는다.
+  await expect(resend).toBeHidden();
+
+  await dialog
+    .getByRole("button", { name: "접수 결과 확인", exact: true })
+    .click();
+  await expect(dialog).toContainText("아직 접수 기록을 찾지 못했습니다");
+  await expect(resend).toBeVisible();
+
+  const before = posts.length;
+  await resend.click();
+  await expect(dialog).toContainText("접수되었습니다");
+
+  // 같은 ID·같은 본문이어야 서버가 중복을 만들지 않는다.
+  expect(posts).toHaveLength(before + 1);
+  const [first, again] = [posts[0], posts[posts.length - 1]];
+  expect(again.requestId).toBe(first.requestId);
+  expect(again).toEqual(first);
+});

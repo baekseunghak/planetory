@@ -41,7 +41,11 @@ export type SubmissionResult =
        */
       state: "unresolved";
       requestId: string;
-      reason: "lost" | "in-progress";
+      /**
+       * `not-found` 조회가 404였다. **미접수로 단정하지 않는다.** 다만 같은
+       * ID·같은 본문으로 다시 보낼 수 있는 유일한 경우라 따로 구분한다.
+       */
+      reason: "lost" | "in-progress" | "not-found";
       message: string;
     }
   | {
@@ -269,7 +273,12 @@ export async function checkSubmission(options: {
     return {
       state: "unresolved",
       requestId,
-      reason: error.code === "REQUEST_IN_PROGRESS" ? "in-progress" : "lost",
+      reason:
+        error.code === "REQUEST_IN_PROGRESS"
+          ? "in-progress"
+          : error.status === 404
+            ? "not-found"
+            : "lost",
       message:
         error.status === 404
           ? // 404를 근거로 "제출되지 않았습니다"라고 단정하지 않는다.

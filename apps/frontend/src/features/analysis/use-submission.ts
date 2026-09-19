@@ -171,6 +171,31 @@ export function useSubmission(context: AnalysisContext) {
     );
   }, [context.ticId, run]);
 
+  /**
+   * **보관한 ID와 본문 그대로** 다시 보낸다. 조회가 404를 준 뒤에만 쓴다.
+   *
+   * 새 ID를 만들지 않는다. 만들면 앞선 요청이 실제로는 접수돼 있었을 때 같은
+   * 일이 두 번 접수된다. 본문도 다시 만들지 않고 저장한 것을 그대로 쓴다.
+   * 한 글자라도 다르면 `IDEMPOTENCY_CONFLICT`가 되어 재전송이 막힌다.
+   */
+  const resend = useCallback(() => {
+    if (!key) return;
+    const pending = readPendingSubmission(key);
+    if (!pending?.body || !pending.kind) return;
+    last.current = { requestId: pending.requestId, kind: pending.kind };
+    const body = pending.body;
+    return run(pending.kind, "sending", (signal) =>
+      submitAnalysis({
+        request: api,
+        ticId: context.ticId,
+        input: body,
+        requestId: pending.requestId,
+        signal,
+        releaseRequestId: () => releaseRequestId(key),
+      }),
+    );
+  }, [key, context.ticId, run]);
+
   /** 입력을 고쳐 다시 제출할 수 있는 상태로 되돌린다. */
   const dismiss = useCallback(() => {
     running.current?.abort();
@@ -185,6 +210,15 @@ export function useSubmission(context: AnalysisContext) {
     submit,
     check,
     dismiss,
+    resend,
+    /**
+     * 같은 ID로 다시 보낼 수 있는가. 조회가 404였고 보낸 본문을 들고 있을
+     * 때만이다. 판 1에서 올라온 기록에는 본문이 없어 다시 보낼 수 없다.
+     */
+    resendable:
+      settled?.state === "unresolved" &&
+      settled.reason === "not-found" &&
+      Boolean(key && readPendingSubmission(key)?.body),
     /**
      * 초안을 잠글지. 보내는 중과 결과 불명에서 잠근다. 결과를 모르는 동안
      * 본문이 바뀌면 복구 재전송이 `IDEMPOTENCY_CONFLICT`가 되어 이미 접수된

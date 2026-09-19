@@ -159,6 +159,16 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             <button type="button" onClick={() => submission.check()}>
               접수 결과 확인
             </button>
+            {/*
+              조회가 404를 줬을 때만 내놓는다. 보관한 ID와 본문을 그대로 다시
+              보내므로, 실제로는 접수돼 있었더라도 서버가 저장된 결과를
+              재현할 뿐 새 기록을 만들지 않는다.
+            */}
+            {submission.resendable && (
+              <button type="button" onClick={() => submission.resend()}>
+                같은 내용으로 다시 보내기
+              </button>
+            )}
           </>
         ) : (
           <>
