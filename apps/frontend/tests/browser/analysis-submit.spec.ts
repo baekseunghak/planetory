@@ -29,7 +29,9 @@ test("the review step submits and shows what was accepted", async ({
 
   const receipt = page.getByTestId("submission-result");
   await expect(receipt).toBeVisible();
-  await expect(receipt.getByRole("heading")).toHaveText("접수되었습니다");
+  await expect(receipt.getByRole("heading").first()).toHaveText(
+    "접수되었습니다",
+  );
   // 접수 사실과 식별자만 보여 준다. 결과 풀이는 A06-2의 몫이다.
   await expect(receipt).toContainText("접수 번호");
   await expect(receipt).toContainText("기록 번호");
@@ -95,7 +97,7 @@ test("an unresolved submission offers a check that never resubmits", async ({
 
   const panel = page.getByTestId("submission-result");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("heading")).toHaveText(
+  await expect(panel.getByRole("heading").first()).toHaveText(
     "접수 여부를 확인해 주세요",
   );
   // 「제출되지 않았습니다」라고 단정하지 않는다.
@@ -602,4 +604,98 @@ test("a replay from an older plate is kept, not cancelled", async ({
   );
   // 다시 보내지도 않는다.
   expect(posts).toHaveLength(1);
+});
+
+async function submitFromPeak(page: Page, peak: string, judgment: string) {
+  await selectPeak(page, Number(peak));
+  await beginRange(page);
+  await showJudgment(page);
+  await page.getByRole("radio", { name: judgment, exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("the result separates matching, scoring and achievement", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  // 확정 신호를 맞혔다. 세 축이 모두 성공이다.
+  const right = await submitFromPeak(page, "1", "행성 같음");
+  await expect(right).toContainText("고른 주기가 신호와 맞았습니다");
+  await expect(right).toContainText("판단이 맞았습니다");
+  await expect(right).toContainText("성과로 인정되었습니다");
+  // 접수 안내가 오류 색이 되지 않는다. 판단 패널의 오류 색 규칙이 덮지 않는다.
+  await expect(right.locator('[role="status"]').first()).toHaveCSS(
+    "color",
+    "rgb(238, 238, 238)",
+  );
+
+  await page.goto(`/analysis/${NORMAL}`);
+  // 같은 신호를 오판했다. 매칭은 그대로 성공이고 성과만 미인정이다.
+  const wrong = await submitFromPeak(page, "1", "아닌 것 같음");
+  await expect(wrong).toContainText("고른 주기가 신호와 맞았습니다");
+  await expect(wrong).toContainText("판단이 달랐습니다");
+  await expect(wrong).toContainText("성과로 인정되지 않았습니다");
+});
+
+test("an unscored signal is not called wrong, and a harmonic keeps both periods", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  // 미확정은 틀렸다고 하지 않는다.
+  await expect(dialog).toContainText("채점하지 않습니다");
+  await expect(dialog).not.toContainText("판단이 달랐습니다");
+  // 내 입력과 정정값을 함께 보여 준다.
+  await expect(dialog).toContainText("내가 고른 주기");
+  await expect(dialog).toContainText("신호의 주기");
+  // 공개할 수 있는 것은 미확정뿐이다.
+  await expect(dialog).toContainText("공개할 수 있습니다");
+});
+
+test("an unrunnable AI says why instead of showing zero", async ({ page }) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "3", "아닌 것 같음");
+  await expect(dialog).toContainText("자료가 부족해 실행하지 못했습니다");
+  await expect(dialog).not.toContainText("0점");
+  // 외부 출처는 원천 표기 그대로 둔다.
+  await expect(dialog).toContainText("TOI-9001.03 · FP");
+});
+
+test("an ambiguous match shows no signal at all", async ({ page }) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const headers = {
+      ...route.request().headers(),
+      "x-fixture-outcome": "ambiguous",
+    };
+    return route.continue({ headers });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  await expect(dialog).toContainText("어느 신호인지 가리지 못했습니다");
+  // 신호·AI·통계·성과를 하나도 붙이지 않는다.
+  await expect(dialog).not.toContainText("AI 판정");
+  await expect(dialog).not.toContainText("다른 사람의 판단");
+  await expect(dialog).not.toContainText("성과");
+});
+
+test("nobody having published is not drawn as zero percent", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const headers = {
+      ...route.request().headers(),
+      "x-fixture-outcome": "empty-statistics",
+    };
+    return route.continue({ headers });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "모르겠음");
+  await expect(dialog).toContainText("아직 공개된 분석이 없습니다");
+  await expect(dialog).not.toContainText("0%");
 });

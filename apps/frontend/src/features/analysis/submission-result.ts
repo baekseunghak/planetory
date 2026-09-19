@@ -124,7 +124,17 @@ export type JudgmentStatistics =
       asOf: string;
     };
 
+/** 내가 낸 값. 복구·재현으로 받은 결과에는 화면의 초안이 없을 수 있다. */
+export type SubmittedSelection = {
+  periodDays: number;
+  phaseStart: number;
+  phaseEnd: number;
+  sourcePeakGridIndex: number | null;
+};
+
 export type ResultExplanation = {
+  /** 특수 제출은 선택이 없으므로 null이다. */
+  submitted: SubmittedSelection | null;
   signal: SubmissionSignal | null;
   correction: HarmonicCorrection | null;
   serverDerived: ServerDerived | null;
@@ -309,6 +319,17 @@ export function readResultExplanation(
     invalid("judgmentStatistics/match.status");
 
   return {
+    submitted: nullable(data.original, (item) => {
+      const row = record(item, "original");
+      return {
+        periodDays: number(row.periodDays, "original.periodDays"),
+        phaseStart: number(row.phaseStart, "original.phaseStart"),
+        phaseEnd: number(row.phaseEnd, "original.phaseEnd"),
+        sourcePeakGridIndex: nullable(row.sourcePeakGridIndex, (value) =>
+          number(value, "original.sourcePeakGridIndex"),
+        ),
+      };
+    }),
     signal,
     correction:
       multiplier === null

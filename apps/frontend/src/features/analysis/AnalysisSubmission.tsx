@@ -2,26 +2,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
+import { ResultExplanationView } from "./AnalysisResult";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
   skippedInput,
   specialSubmissions,
 } from "./submission-input";
-import type { MatchStatus } from "./submission-data";
 import type { useSubmission } from "./use-submission";
 
 type Submission = ReturnType<typeof useSubmission>;
-
-const matchSummary: Record<MatchStatus, string> = {
-  matched: "신호와 일치했습니다.",
-  matched_harmonic: "신호의 배수 주기와 일치했습니다.",
-  not_matched: "일치하는 신호를 찾지 못했습니다.",
-  duplicate: "이미 찾은 신호입니다.",
-  ambiguous_match: "어느 신호인지 가리지 못했습니다.",
-  none_wrong: "더 이상 없음으로 접수했습니다.",
-  skipped: "이 별을 건너뛰었습니다.",
-};
 
 /**
  * 제출 상태를 한 곳에서 알린다. 색만으로 구분하지 않으며 문구와 포커스 이동이
@@ -131,8 +121,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           <>
             <h4 id={headingId}>접수되었습니다</h4>
             <p ref={focusRef} tabIndex={-1} role="status">
-              {acceptedNotice(settled.recovered, settled.receipt.outcome)}{" "}
-              {matchSummary[settled.receipt.matchStatus]}
+              {acceptedNotice(settled.recovered, settled.receipt.outcome)}
             </p>
             {/*
               D-5 재전송 성공 예외. 접수 뒤에 판이 바뀌었어도 성공을 취소하거나
@@ -162,8 +151,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 </time>
               </dd>
             </dl>
+            <ResultExplanationView receipt={settled.receipt} />
             <p className="submission-note">
-              자세한 결과 풀이와 다음 단계는 아직 연결되지 않았습니다.
+              다음 단계로 넘어가는 행동은 아직 연결되지 않았습니다.
             </p>
           </>
         ) : settled.state === "unresolved" ? (

@@ -1076,3 +1076,50 @@ body:has(.analysis-screen) {
   color: var(--fg-1);
   font-weight: 400;
 }
+
+/* 제출 결과 해설 (#188). 여섯 축을 각각 끊어 읽게 한다. 한 덩어리로 붙이면
+   매칭 성공과 성과 미인정이 한 문장처럼 보인다. */
+.analysis-screen .submission-result {
+  margin-top: 16px;
+  border-top: 1px solid var(--panel-line);
+}
+.analysis-screen .result-axis {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--panel-line);
+}
+.analysis-screen .result-axis:last-child {
+  border-bottom: 0;
+}
+.analysis-screen .result-axis h5 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-3);
+}
+.analysis-screen .submission-dialog .result-axis p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-1);
+}
+.analysis-screen .result-axis ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.analysis-screen .submission-dialog .result-pairs {
+  grid-template-columns: minmax(96px, auto) 1fr;
+  margin: 8px 0 0;
+}
+
+/* #236의 오류 색 규칙이 `.analysis-judgment [role="status"]`를 모두 칠한다.
+   대화상자는 그 패널 안에 있으므로 접수 성공 안내까지 오류 색이 된다.
+   여기서 되돌리고, 오류는 `[role="alert"]`로만 표시한다. */
+.analysis-screen .submission-dialog [role="status"],
+.analysis-screen .submission-progress[role="status"],
+.analysis-screen .submission-reminder[role="status"] {
+  color: var(--fg-1);
+}
+.analysis-screen .submission-reminder-warning[role="status"] {
+  color: var(--danger);
+}
