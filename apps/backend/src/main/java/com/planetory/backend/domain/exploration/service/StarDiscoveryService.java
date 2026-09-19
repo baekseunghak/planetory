@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration.service;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -76,13 +77,16 @@ public class StarDiscoveryService {
                 """).params(memberId, ticId).update();
         // 모든 발견 경로가 회원 잠금을 먼저 잡으므로 여기서 충돌하지 않는다. 잠금 없이 넣은 행
         // (운영자 수동 입력 등)과 부딪혀도 트랜잭션을 깨지 않고 새 발견이 아닌 것으로 처리한다.
+        // 좌표는 BigDecimal로 넘긴다. double을 그대로 넘기면 float8→NUMERIC 변환이 유효숫자 15자리로
+        // 반올림해, 저장값이 배치 함수가 계산한 값과 달라진다.
         int inserted = jdbc.sql("""
                 INSERT INTO star_unlocks(user_id, tic_id, unlock_reason,
                     world_x, world_y, depth_z, layout_version, layout_ordinal, unlocked_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (user_id, tic_id) DO NOTHING
-                """).params(memberId, ticId, reason.column, position.worldX(), position.worldY(),
-                        position.depthZ(), position.layoutVersion(), ordinal).update();
+                """).params(memberId, ticId, reason.column,
+                        BigDecimal.valueOf(position.worldX()), BigDecimal.valueOf(position.worldY()),
+                        BigDecimal.valueOf(position.depthZ()), position.layoutVersion(), ordinal).update();
         if (inserted == 0) {
             return Optional.empty();
         }
