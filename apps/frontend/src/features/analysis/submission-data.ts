@@ -289,6 +289,22 @@ function readResidual(value: unknown): ResidualState | null {
   };
 }
 
+/**
+ * 접수 당시 판과 지금 판이 다른가(D-5 재전송 성공 예외).
+ *
+ * **둘 다 알 때만 참이다.** 헤더가 아직 붙지 않은 응답이 있으므로 모르는
+ * 것을 「같다」로도 「다르다」로도 바꾸지 않는다. 다르더라도 성공을 취소하지
+ * 않는다. 결과에 「접수 당시 판 기준」을 표시할 뿐이다.
+ */
+export function acceptedOnOlderBundle(
+  receipt: SubmissionReceipt,
+  currentBundleId: string | null,
+): boolean {
+  return Boolean(
+    currentBundleId && receipt.bundleId && currentBundleId !== receipt.bundleId,
+  );
+}
+
 export function classifySubmissionError(error: unknown): SubmissionFailure {
   if (!(error instanceof ApiError))
     throw error instanceof Error ? error : new Error(String(error));

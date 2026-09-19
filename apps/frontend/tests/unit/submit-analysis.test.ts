@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ApiError } from "../../src/api/client";
+import { acceptedOnOlderBundle } from "../../src/features/analysis/submission-data";
 import {
   checkSubmission,
   MAX_SENDS,
@@ -379,4 +380,42 @@ test("a not-ready residual refuses without spending the request id", async () =>
   // 사다리는 ID를 버리지 않는다. 버리는 일은 사용자의 선택이다(2.2절).
   // 한 번만 보낸다. 잔차는 기다리는 것이지 다시 두드릴 일이 아니다.
   assert.equal(stub.calls.length, 1);
+});
+
+test("a success carries the plate the response says is current", async () => {
+  const fresh = harness([
+    { status: 201, body: receiptBody(), bundle: "9007199254741093" },
+  ]);
+  const accepted = await fresh.run();
+  assert.equal(accepted.state, "accepted");
+  if (accepted.state !== "accepted") throw new Error("expected accepted");
+  // 접수 당시 판과 같다. 알릴 것이 없다.
+  assert.equal(
+    acceptedOnOlderBundle(accepted.receipt, accepted.currentBundleId),
+    false,
+  );
+
+  // D-5: 재전송 200이 돌아오는 사이 판이 바뀌었다.
+  const stale = harness([
+    { status: 200, body: receiptBody(), bundle: "9007199254749999" },
+  ]);
+  const replayed = await stale.run();
+  if (replayed.state !== "accepted") throw new Error("expected accepted");
+  // 성공을 취소하지도, 다시 보내지도 않는다. 표시만 갈린다.
+  assert.equal(replayed.receipt.outcome, "replayed");
+  assert.equal(stale.calls.length, 1);
+  assert.equal(
+    acceptedOnOlderBundle(replayed.receipt, replayed.currentBundleId),
+    true,
+  );
+
+  // 헤더가 아직 없는 응답도 있다(D-5). 모르는 것을 다르다고 하지 않는다.
+  const silent = harness([{ status: 200, body: receiptBody() }]);
+  const quiet = await silent.run();
+  if (quiet.state !== "accepted") throw new Error("expected accepted");
+  assert.equal(quiet.currentBundleId, null);
+  assert.equal(
+    acceptedOnOlderBundle(quiet.receipt, quiet.currentBundleId),
+    false,
+  );
 });

@@ -29,6 +29,15 @@ export type SubmissionResult =
       state: "accepted";
       receipt: SubmissionReceipt;
       /**
+       * 응답 헤더 `X-Current-Bundle`이 알려 준 **지금** 판. 접수 당시 판과
+       * 다르면 D-5 재전송 성공 예외다. 성공을 취소하거나 다시 제출하지 않고
+       * 결과에 「접수 당시 판 기준」을 표시한다.
+       *
+       * 헤더가 없으면 null이다. 모든 API에 붙는 중이라 아직 없는 응답이
+       * 있고(D-5), 없다고 판이 같다고 단정하지 않는다.
+       */
+      currentBundleId: string | null;
+      /**
        * 곧바로 받은 응답이 아니라 복구로 확인한 결과다. 사용자에게 "이미
        * 접수돼 있었습니다"라고 알려야 하는 경우다.
        */
@@ -183,6 +192,7 @@ export async function submitAnalysis(
       state: "accepted",
       receipt: decodeSubmissionReceipt(value, expected, status),
       recovered: !direct,
+      currentBundleId,
     };
   }
 
@@ -193,12 +203,15 @@ export async function submitAnalysis(
     signal.throwIfAborted();
     polls += 1;
     let status = 0;
+    let polledBundleId: string | null = null;
     let value: unknown;
     try {
       value = await request<unknown>(byRequestPath(requestId), {
         signal,
         onResponse: (response) => {
           status = response.status;
+          polledBundleId =
+            response.headers.get("X-Current-Bundle")?.trim() || null;
         },
       });
     } catch (error) {
@@ -217,6 +230,7 @@ export async function submitAnalysis(
       state: "accepted",
       receipt: decodeSubmissionReceipt(value, expected, status),
       recovered: true,
+      currentBundleId: polledBundleId,
     };
   }
 
@@ -263,17 +277,21 @@ export async function checkSubmission(options: {
 }): Promise<SubmissionResult> {
   const { request, ticId, requestId, signal } = options;
   let status = 0;
+  let currentBundleId: string | null = null;
   try {
     const value = await request<unknown>(byRequestPath(requestId), {
       signal,
       onResponse: (response) => {
         status = response.status;
+        currentBundleId =
+          response.headers.get("X-Current-Bundle")?.trim() || null;
       },
     });
     return {
       state: "accepted",
       receipt: decodeSubmissionReceipt(value, { ticId, requestId }, status),
       recovered: true,
+      currentBundleId,
     };
   } catch (error) {
     signal.throwIfAborted();

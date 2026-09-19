@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
+import { acceptedOnOlderBundle } from "./submission-data";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -133,6 +134,20 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               {acceptedNotice(settled.recovered, settled.receipt.outcome)}{" "}
               {matchSummary[settled.receipt.matchStatus]}
             </p>
+            {/*
+              D-5 재전송 성공 예외. 접수 뒤에 판이 바뀌었어도 성공을 취소하거나
+              다시 제출하지 않는다. 당시 판정·선택·스냅샷은 그대로 두고 이
+              결과가 어느 판 기준인지만 알린다.
+            */}
+            {acceptedOnOlderBundle(
+              settled.receipt,
+              settled.currentBundleId,
+            ) && (
+              <p className="submission-note" data-testid="stale-bundle">
+                이 결과는 접수 당시 판 기준입니다. 그 뒤 별의 자료 판이
+                바뀌었으니 분석을 이어가려면 최신 자료를 다시 불러와 주세요.
+              </p>
+            )}
             <dl>
               <dt>접수 번호</dt>
               <dd>{settled.receipt.submissionId}</dd>

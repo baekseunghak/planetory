@@ -571,3 +571,35 @@ test("a conflicting id is looked up first and only spent when the user says so",
   };
   expect(strip(posts[1])).toEqual(strip(posts[0]));
 });
+
+test("a replay from an older plate is kept, not cancelled", async ({
+  page,
+}) => {
+  const posts: string[] = [];
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(request.url());
+    const response = await route.fetch();
+    // 응답이 오는 사이 판이 바뀌었다(D-5 재전송 성공 예외).
+    return route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "x-current-bundle": "9007199254749999",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  // 성공은 성공이다. 취소하지 않는다.
+  await expect(dialog).toContainText("접수되었습니다");
+  await expect(dialog.getByTestId("stale-bundle")).toContainText(
+    "접수 당시 판 기준",
+  );
+  // 다시 보내지도 않는다.
+  expect(posts).toHaveLength(1);
+});
