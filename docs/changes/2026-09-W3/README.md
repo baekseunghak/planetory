@@ -118,3 +118,7 @@
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 대표 표본 최초 BLS 예비 측정과 실패 분리 | S15P21C206-109 | population, random 40, planet_host 5, no_gate_peak, checksum | 구현·합성 검증 완료, 실측 전 | [기록](2026-09-20.md) |
+| 2026-09-20 | 예비 측정 lockfile 정합성 보완 | S15P21C206-109 | uv locked, astro-kernel, jsonschema, 버전 유지 | 검증 완료(로컬) | [기록](2026-09-20.md) |
+| 2026-09-20 | 45 TIC 최초 BLS 예비 실측 기록 | S15P21C206-109 | dac9878f, 34/40, 85%, 비교군 4/5, 47.642초 | 예비 실측 대조 완료·채택 미확정 | [기록](2026-09-20.md) |
+| 2026-09-20 | 비교군 무검출의 탐색 범위·SDE 진단 | S15P21C206-109 | Archive, 6.755일, HD 22946, SDE 5.198, 범위 밖 | 사후 진단 완료·채택 미확정 | [기록](2026-09-20.md) |

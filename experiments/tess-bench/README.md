@@ -93,6 +93,39 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 
 ## 산출물
 
+### 109 서비스 표본 예비 측정
+
+상태: 최초 BLS 예비 실측·산출물 대조 완료, 최종 채택 미확정. 결과는 서비스 범위 문서 5.2절에 기록한다. 범위와 완료 조건은
+[서비스 범위 문서 5.1절](../../docs/data/tess-service-scope-v1.md)을 따른다.
+`tess-fixture sample`로 고정 표본을 받은 뒤 이 디렉터리에서 실행한다.
+
+```powershell
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.population --limit 2
+# 위 실행의 입력 검증·처리 시간을 확인한 뒤 전체 실행
+uv run --locked python -m tess_bench.population
+```
+
+- `--limit`은 설정 순서의 첫 N개를 고르는 시간 확인용이며 무작위 재표집이 아니다. 전체 비율 추정에 쓰지 않는다.
+- 입력 SHA-256·TIC·Sector·PROCVER를 모두 확인한 뒤 새 실행 폴더를 만든다. 다운로드는 하지 않는다.
+- 기존 `biweight_1.0d`와 `poc_linear20k`를 재사용한다. 알려진 행성 제거·주입·반복 제거는 하지 않는다.
+- 최초 BLS 상위 5피크 중 `snr >= 7 & sde >= 6 & n_transits >= 2`를 임시 게이트로 사용한다.
+  SNR·SDE 정의와 탐색 범위는 기존 BLS 설정 그대로이며 110 채택 승인을 뜻하지 않는다.
+- 전처리 실패·대체 처리·유효점 부족과 빈/비유한 BLS 결과는 `failed`로 기록한다. `n_gate_peaks`는 빈칸이고 무검출에 넣지 않는다.
+  예상 밖 예외는 실행을 중단하며 완료 manifest가 없는 폴더는 미완료로 취급한다.
+- `results/population/run-<UTC>-<id>/`에 `stars.csv`, `peaks.csv`, 별별 주기도 NPZ,
+  `summary.json`, `manifest.json`을 저장한다. CSV는 매 별 처리 후 갱신한다. 출력은 Git 제외다.
+- manifest에 표본·그룹·Sector, 전처리·BLS·게이트 값, 구현·설정·lockfile과 입력/출력 checksum,
+  환경·전체 소요 시간을 기록한다. 실행 때 공통 manifest 도구가 Git 상태를 읽는다.
+- 집단별 `no_gate_peak_fraction_valid = no_gate_peak / valid`. `selected`, `valid`, `failed`를 함께 보고한다.
+  실패가 있으면 전체 무작위 40개의 비율로 해석하지 않는다. 비교용 `planet_host` 5개는 random 분모에 합치지 않는다.
+- 이 명령은 주어진 탐색 범위의 최초 상위 피크만 검사한다. `no_gate_peak`는 행성 부재, 최종 채택 후보 0개,
+  D07-2 discoverable=false 중 어느 것도 확정하지 않는다. 통과 피크 수는 고유 행성 수가 아니다.
+
+검증: `uv run --locked python -m pytest tests/test_population.py tests/test_bls.py -q`.
+
+### 기존 벤치마크 산출물
+
 | 경로 | Git | 내용 |
 |---|---|---|
 | `configs/preprocess_settings_v1.json` | 커밋 | 설정 18개(1.1.0). PoC 기준에서 한 요인씩 바꿈: 품질 마스크 2, 구간 분리 2, SG 창 3, biweight 창 3, 가장자리 마스크 4, 2단계 detrending 3 |
