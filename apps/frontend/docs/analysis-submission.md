@@ -231,9 +231,14 @@ Invoke-RestMethod "$base/stars/259377024/submissions" -Method Post -Body $body `
 
 회귀는 [submission-contract.spec.ts](../tests/browser/submission-contract.spec.ts)가 같은 경로를 HTTP로 9건 검사한다.
 
+### 오류 본문의 필드 이름
+
+`fieldErrors[]`는 `{field, reason}`이다. [서비스 API 2장](../../backend/docs/service-api-spec.md)이 정본이고 탐사 API가 그 오류 본문을 그대로 상속하며, 구현된 [`ErrorResponse.FieldError`](../../backend/src/main/java/com/planetory/backend/global/error/ErrorResponse.java)와 같다.
+
+[C02 계약 예제](../../../docs/api/exploration/contracts.json)는 세 곳에서 `message`로 적는다. **이 저장소에서 구현과 어긋나는 곳은 여기뿐이다.** C02 소관이므로 고치지 않고 담당(강재민)에게 전달한다. 함께 전달할 것이 하나 더 있다. [검증기](../../../docs/api/exploration/validate.cjs)가 `fieldErrors`의 배열 여부만 보고 항목의 모양을 보지 않아 **이 오류가 `PASS`로 통과한다.**
+
 ## 미결
 
-- **`fieldErrors` 필드 이름이 문서와 구현에서 다르다.** 명세 6.2절 예제와 `contracts.json`은 `{field, message}`인데, 구현된 [`ErrorResponse.FieldError`](../../backend/src/main/java/com/planetory/backend/global/error/ErrorResponse.java)는 `(field, reason)`이고 공용 클라이언트도 `reason`을 읽는다. **구현을 따른다.** 문서 예제 쪽 수정이 필요하며 전달 항목으로 남긴다.
 - **ID 보존 기간.** 2.2절이 C02/C10 계약에 넘겼고 아직 값이 없다. 현재는 세션 수명(탭 종료까지)으로 두었다.
 - **`retryOfSubmissionId`.** [다시 풀기](6.8절)는 `S15P21C206-192` 범위다. 이 티켓에서는 항상 `null`로 보낸다.
 - **자동 복구의 한도.** 2.2절이 재조회 순서와 ID 보존 기간을 C02/C10 계약에 넘겼고 아직 값이 없다. 현재는 전송 2회(최초 + by-request 404 확인 뒤 1회), 재조회 3회(0.3·0.8·2.0초)로 두고 그 뒤는 사용자의 명시적 [접수 결과 확인]으로 넘긴다. [`loadAnalysis`](../src/features/analysis/load-analysis.ts)의 2회 시도 뒤 수동 재시도와 같은 방식이다. C10 연동 때 실제 처리 시간으로 다시 정한다.
