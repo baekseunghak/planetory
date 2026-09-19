@@ -256,6 +256,7 @@ test("keyboard map controls and list switches preserve camera, 1024 layout and v
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).focus();
   await page.keyboard.press("Enter");
   await expect(listHeading(page)).toBeFocused();
+  await expect(rows(page)).toHaveCount(20);
   await page.keyboard.press("Tab");
   await expect(rows(page).first()).toBeFocused();
   await page.keyboard.press("Enter");
