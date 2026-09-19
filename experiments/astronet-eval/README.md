@@ -8,6 +8,15 @@ AstroNet-Triage 입력 `global_view`(201)·`local_view`(61) NPZ, (3) 실행 mani
 
 ## 실행
 
+118을 다른 PC에서 시작할 때도 아래 `build-set`과 `convert`로 입력을 생성한다. FITS는 공용 fixture를 재사용하지만
+다른 PC의 `results/`는 Git으로 전달되지 않는다. 기존 가상환경을 활성화했다면 먼저 해제하고
+`uv sync --locked --python 3.11`로 이 디렉터리의 환경을 준비한다. 모델 추론용 TensorFlow 1 환경은 별도다.
+
+118의 실행 순서는 입력 생성·변환 → calibration 점수로 하한·상한 결정 및 잠금 → evaluation 검증이다.
+입력 생성은 양쪽 split을 포함해도 되지만 evaluation 점수를 보고 임계값을 조정하지 않는다.
+`build-set`·`convert`는 입력 준비만 수행한다. 118의 조정용 추론은 아래 별도 실행기를 사용한다.
+지표 계산·실험안 잠금·사용자 독립 평가(35/35)는 완료했다. 자동 판정용 채택 보류를 제안하며 라이선스·팀 채택 판단은 남아 있다.
+
 Windows(uv) 에서 세트·변환, WSL TensorFlow 1 환경에서 TFRecord 순서다. 원본 FITS 는 tess-fixture 의 `sample_raw/` 를 그대로 읽는다.
 
 ```powershell
@@ -74,8 +83,73 @@ TOI PC/APC·무라벨 신호는 양성 정답에 넣지 않는다. AstroNet-Tria
 | `convert-*/tfrecord_index.csv` | TFRecord 기록 순서 ↔ candidate_id (같은 TIC 후보가 여럿이라 필요) |
 | `results/manifests/*.json` | tess-fixture 스키마 실행 manifest |
 
+2026-09-19 정정: convert manifest의 NPZ `sha256`은 NPZ 파일 전체의 SHA-256이다.
+이전 구현은 `global_view` 배열 해시를 이 필드에 잘못 기록했다. 배열 해시는 계속 `conversions.csv`에 별도로 남긴다.
+과거 manifest를 새 파일 해시가 검증된 기록으로 취급하지 않는다. 기존 입력 생성 도구의 manifest task는 43이며,
+118에서 재사용할 때도 세트·변환 run ID와 실제 코드 버전으로 연결한다.
+
 ## 한계
 
 - fixture 9별 기준이라 EB 가 CM Dra 1개, PC 18개다. 118 의 지표는 지시적 수준이고, 별 추가는 108(범위·표본)과 함께 별도 세트 버전으로 한다.
 - junk BLS 격자는 PoC 기본값(선형 20,000점)이며 110 벤치마크 전 잠정값이다. junk 라벨의 정당성은 격자가 아니라 "잡음 곡선"이라는 구성에서 나온다.
 - `write_tfrecords.py` 는 TensorFlow 1 이 있는 WSL 환경에서만 실행한다. 이 저장소의 uv 환경에는 TensorFlow 를 넣지 않는다.
+
+## 118 조정용 추론
+
+상태: 실행 도구 구현·합성 입력 검증 완료, 사용자 calibration 20/20 추론 성공.
+[조정 결과와 남은 조건](../../docs/data/tess-astronet-benchmark.md)에 수치·재집계 명령을 기록한다.
+입력은 43의 동일한 201/61 float32 NPZ다.
+공식 `batch_predict.py`는 같은 TIC의 점수를 평균 내고 소수 셋째 자리로 출력하므로 후보별 평가에 사용하지 않는다.
+`scripts/predict_candidates.py`는 공식 `AstroCNNModel/local_global`의 PREDICT 구조와 고정 checkpoint를 사용하되,
+NPZ 배열을 배치 크기 1 placeholder로 직접 전달하고 `candidate_id`별 float32 점수를 Python float의 round-trip 문자열로 보존한다.
+TFRecord 직렬화나 별별 평균은 하지 않는다. 전처리·모델 가중치·분류 목표는 바꾸지 않는다.
+
+- 공식 소스: [고정 commit](https://github.com/yuliang419/Astronet-Triage/tree/5675a57dd41dd0321df480453451096dc5a4a6b0).
+- checkpoint: `astronet/models_final/model_1/model.ckpt-14000` 하나만 사용한다.
+- CPU 환경: Docker `tensorflow/tensorflow:1.15.5-py3`의 아래 digest. 확인된 Python 3.6.9·TensorFlow 1.15.5·NumPy 1.18.5, intra/inter-op 각 2 threads다. 과거 WSL Python 3.7 환경과 구분한다.
+- 소스·checkpoint는 `prepare_model.py`가 Git 명령 없이 고정 commit에서 내려받고 공식 blob SHA-1 및 로컬 SHA-256을 기록한다. 모델·소스·결과는 ignored `results/`에만 둔다.
+- 실행기는 Docker 네트워크를 끄고 프로젝트를 읽기 전용으로 마운트한다. 이번 결과 폴더만 쓰기 허용한다. Docker Desktop은 먼저 실행해 둔다.
+
+```powershell
+cd experiments/astronet-eval
+uv sync --locked --python 3.11
+uv run --locked python scripts/prepare_model.py
+docker pull tensorflow/tensorflow@sha256:181ff142e73ed8efe350f49288c7b0f5681fde66534a76d8de4fc75d4e30d571
+uv run --locked python scripts/run_calibration.py --conversion-manifest results/manifests/convert-4b5a3d6d.json
+```
+
+위 manifest는 2026-09-19 집 PC에서 사용자가 생성한 입력이다. 다른 실행에는 해당 manifest 경로를 넣는다.
+PC를 옮겨 manifest에 적힌 절대 경로가 달라졌다면 `--run-dir <현재 convert 디렉터리>`를 함께 준다.
+55/55 변환 성공, 입력·출력 checksum 일치를 확인했으며 이것은 모델 성능 검증이 아니다.
+
+조정용 20개(정답 PC 8·junk 9, 정답 제외 미확인 3)만 읽어 점수를 계산한다. 평가용 35개는 추론하지 않는다.
+CSV·NPZ 파일과 배열 hash, 후보·TIC·라벨 일치, TIC 분리를 검사하고 오류가 있으면 중단한다.
+`input_incomplete`는 빈 점수와 사유로 보존하며 0으로 대체하지 않는다. 실행 오류는 정상 완료 manifest를 남기지 않는다.
+
+산출물은 `results/predictions/calibration-<UTC>-<id>/run/predictions.csv`와 `manifest.json`이다.
+manifest에는 환경·checkpoint·공식 자산 목록 hash·입력 manifest/CSV hash·실행기 hash·출력 hash·처리 수·시간을 기록한다.
+시간은 컨테이너 안의 검증·모델 준비·추론·CSV 저장을 포함하며 Docker 기동 시간은 제외한다.
+라이선스는 공식 LICENSE와 상속 파일 헤더를 보존한다. 운영 배포 가능 여부는 [기존 조사](../../docs/data/tess-ai-model-feasibility.md#6-라이선스-확인-결과)의 미확정 사항으로 남긴다.
+
+## 118 고정 실험안 독립 평가
+
+사용자가 팀 리뷰 전 실험 수치 선택을 위임하여 `configs/triage_thresholds_v1.json`을 evaluation 전에 고정한다.
+하한 0은 자동 기각을 하지 않는 보수적 가정이고 상한 0.00349776993971318은 조정 세트의 최대 junk와
+바로 위 PC 점수 사이 중간값이다. 선택 근거·한계는 [성능 평가 문서](../../docs/data/tess-astronet-benchmark.md#4-사용자-위임에-따른-고정-실험안)를 따른다.
+실험용 `approved`는 PC/EB triage 통과이며 행성 확정·운영 승인과 다르다.
+
+```powershell
+uv run --locked python scripts/run_calibration.py --split evaluation --conversion-manifest results/manifests/convert-4b5a3d6d.json --threshold-plan configs/triage_thresholds_v1.json
+```
+
+파일명은 기존 진입점 호환을 위해 유지한다. 기본 split은 calibration이다. evaluation에는 threshold plan이 필수이며,
+실행 전 입력 manifest와 모델 자산 hash 결합을 검사한다. 결과에 실험안 사본·hash·버전과 후보별 구간을 기록한다.
+평가 결과를 보고 같은 v1 수치를 바꾸지 않는다. 새 수치가 필요하면 새 버전과 새 미사용 평가 세트로 검증한다.
+
+2026-09-19 사용자 evaluation `183da766` 완료: PC/EB TP 10·FN 1, junk FP 2·TN 16,
+정밀도 83.33%·재현율 90.91%, 전체 review 20/35다. 아래 명령은 저장 결과만 집계한다.
+전체 수치·checksum·보류 제안은 [성능 평가 5·6절](../../docs/data/tess-astronet-benchmark.md#5-독립-평가-결과)에 기록한다.
+
+```powershell
+uv run --locked python -m astronet_eval.metrics --run-dir results/predictions/evaluation-20260919T131808Z-183da766/run
+```

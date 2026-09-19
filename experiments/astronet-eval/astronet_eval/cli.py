@@ -213,7 +213,8 @@ def cmd_convert(args: argparse.Namespace) -> int:
                 "parameters": {"views": v, "preprocess_setting": setting.params(), "noise_seeds": seeds, "run_dir": str(run_dir),
                                "model": cfg["model"]}},
         outputs=[mf.file_entry(conv_path, kind="conversions", rows=len(rows))]
-                + [{"path": r["npz_path"], "sha256": r["global_sha256"], "kind": "npz", "candidate_id": r["candidate_id"]} for r in rows if r["status"] == "ok"],
+                + [mf.file_entry(Path(r["npz_path"]), kind="npz", candidate_id=r["candidate_id"])
+                   for r in rows if r["status"] == "ok"],
         notes=f"ok={n_ok} failed={len(rows)-n_ok} reasons={reasons}; {time.time()-started:.0f}s",
         packages=("numpy", "astropy", "scipy"),
     )

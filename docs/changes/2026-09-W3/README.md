@@ -118,3 +118,8 @@
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 평가 입력 NPZ 파일 checksum 정정 | S15P21C206-118 | astronet-eval, manifest, global_sha256, calibration, evaluation | 합성 입력 검증 완료·실제 평가 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 후보별 AstroNet 조정용 추론 도구 | S15P21C206-118 | candidate_id, TIC 평균, TensorFlow 1.15.5, Docker digest, calibration | 구현·합성 검증 완료·사용자 실행 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 조정 실측과 임계값 미확정 | S15P21C206-118 | bb71f278, AP, PR-AUC, TOI-700 e, FP/FN | 조정 실측 완료·팀 비용 기준 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 사용자 위임 AstroNet 실험 임계값 고정 | S15P21C206-118 | triage_calibration_v1, lower 0, review, evaluation, threshold hash | 실험안 고정·사용자 평가 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 독립 평가와 자동 판정용 채택 보류 제안 | S15P21C206-118 | 183da766, 10/11, FP 2/18, review 20/35, 고정 임계값 | 실측·집계 완료·팀 리뷰 전 | [2026-09-19](2026-09-19.md) |
