@@ -825,3 +825,29 @@ test("a skipped star offers the way out and nothing else", async ({ page }) => {
   await actions.getByRole("link", { name: "별지도로" }).click();
   await expect(page).toHaveURL("/sky");
 });
+
+test("an already-found signal is shown without taking the achievement twice", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "duplicate",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 매칭은 성공이다. 신호도 그대로 붙는다.
+  await expect(dialog).toContainText("이미 찾은 신호입니다");
+  await expect(dialog).toContainText("AI 판정");
+  // 성과만 다시 주지 않는다. 미인정과 같은 말로 적지 않는다.
+  await expect(dialog).toContainText(
+    "이미 인정된 신호라 다시 인정되지 않습니다",
+  );
+  await expect(dialog).not.toContainText("성과로 인정되었습니다");
+  // 별이 새로 열렸다고 말하지 않는다.
+  await expect(dialog).not.toContainText("새로 열린 별");
+});
