@@ -35,7 +35,8 @@ test("the review step submits and shows what was accepted", async ({
   // 접수 사실과 식별자만 보여 준다. 결과 풀이는 A06-2의 몫이다.
   await expect(receipt).toContainText("접수 번호");
   await expect(receipt).toContainText("기록 번호");
-  await expect(receipt).toContainText("아직 연결되지 않았습니다");
+  // 다음 행동은 서버가 준 목록으로 나온다. 자세한 것은 아래 전용 테스트가 본다.
+  await expect(receipt.getByTestId("next-actions")).toBeVisible();
 
   // 접수한 뒤에는 초안을 고칠 수 없다. 고치면 복구 경로가 막힌다.
   await expect(submit).toBeDisabled();
@@ -749,4 +750,78 @@ test("a submission with no detail target says so instead of guessing", async ({
   const dialog = await submitFromPeak(page, "1", "행성 같음");
   // 모호한 매칭에는 상세 대상이 없다. 버튼 자체를 내놓지 않는다.
   await expect(dialog).not.toContainText("상세 보기");
+});
+
+test("the next actions are the server's list and they lead somewhere real", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  const actions = dialog.getByTestId("next-actions");
+  // 미확정 매칭이라 서버가 공개를 권한다. 프론트가 조건을 다시 계산하지 않는다.
+  await expect(
+    actions.getByRole("link", { name: "분석 공개 검토" }),
+  ).toBeVisible();
+  await expect(
+    actions.getByRole("link", { name: "이 별의 결과 보기" }),
+  ).toBeVisible();
+  // 상세 보기는 상세 절이 이미 맡았다. 여기서 또 내지 않는다.
+  await expect(actions).not.toContainText("상세 보기");
+  // 화면 안에서 일어나는 동작은 옮겨 갈 곳이 없다고 그대로 말한다.
+  await expect(actions).toContainText("다음 곡선으로 · 연결 예정");
+
+  // 공개 화면으로 갔다가 분석 화면으로 돌아온다. 게시로 강제 이동이 아니다(AT-36).
+  await actions.getByRole("link", { name: "분석 공개 검토" }).click();
+  await expect(page).toHaveURL(/\/publication\/[^?]+\?returnTo=/);
+  await expect(page.locator(".unconnected")).toContainText("분석 기록");
+  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await expect(page).toHaveURL(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+});
+
+test("an action the server did not offer is not invented", async ({ page }) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  // 확정 신호는 공개 대상이 아니다. 서버가 빼면 화면에도 없다.
+  const confirmed = await submitFromPeak(page, "1", "행성 같음");
+  await expect(confirmed.getByTestId("next-actions")).not.toContainText(
+    "분석 공개 검토",
+  );
+});
+
+test("a match the server could not settle offers only a retry", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "ambiguous",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const ambiguous = await submitFromPeak(page, "1", "행성 같음");
+  const actions = ambiguous.getByTestId("next-actions");
+  // 모호한 매칭의 힌트는 다시 풀기뿐이다(AT-13). 갈 곳을 지어내지 않는다.
+  await expect(actions).toContainText("다시 풀기");
+  await expect(actions.getByRole("link")).toHaveCount(0);
+});
+
+test("a skipped star offers the way out and nothing else", async ({ page }) => {
+  await page.goto(`/analysis/${TUTORIAL}?returnTo=%2Fsky`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "이 별 건너뛰기", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const actions = page
+    .getByTestId("submission-result")
+    .getByTestId("next-actions");
+  // 건너뛴 별에는 이어서 할 일이 없다. 서버가 GO_HOME만 준다.
+  await expect(actions.getByRole("link")).toHaveCount(1);
+  await actions.getByRole("link", { name: "별지도로" }).click();
+  await expect(page).toHaveURL("/sky");
 });

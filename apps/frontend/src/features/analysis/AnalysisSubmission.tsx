@@ -2,7 +2,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
-import { DetailView, ResultExplanationView } from "./AnalysisResult";
+import {
+  DetailView,
+  NextActions,
+  ResultExplanationView,
+} from "./AnalysisResult";
+import { usePageContext } from "../../app/usePageContext";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -40,6 +45,7 @@ function residualNote(status: string | null): string {
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const recoverBundle = useBundleRecovery();
+  const { returnTo, currentPath } = usePageContext();
   const headingId = useId();
   const reminderRef = useRef<HTMLButtonElement>(null);
   const focusRef = useRef<HTMLParagraphElement>(null);
@@ -161,9 +167,11 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 submission.submit(skippedInput(settled.receipt.curveContext))
               }
             />
-            <p className="submission-note">
-              다음 단계로 넘어가는 행동은 아직 연결되지 않았습니다.
-            </p>
+            <NextActions
+              receipt={settled.receipt}
+              returnTo={returnTo}
+              from={currentPath}
+            />
           </>
         ) : settled.state === "unresolved" ? (
           <>

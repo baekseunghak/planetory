@@ -125,7 +125,7 @@ test("an ambiguous match attaches no signal, achievement or statistics", () => {
   assert.equal(value.judgmentStatistics, null);
   assert.equal(value.achievement.result, "none");
   assert.equal(value.detail.targetKind, null);
-  assert.deepEqual(value.nextActions, ["RETRY", "LATER"]);
+  assert.deepEqual(value.nextActions, ["RETRY"]);
 });
 
 test("a period the user picked freely is not matched and gets a hint", () => {

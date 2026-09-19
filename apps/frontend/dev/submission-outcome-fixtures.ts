@@ -122,7 +122,8 @@ export function candidateOutcome(input: OutcomeInput) {
       publication: { state: "NOT_ELIGIBLE", publicAnalysisId: null },
       judgmentStatistics: null,
       detail: { available: false, targetKind: null, answerViewed: false },
-      nextActions: ["RETRY", "LATER"],
+      // 6.4절: 어느 후보도 고르지 않았으므로 힌트는 RETRY뿐이다(AT-13).
+      nextActions: ["RETRY"],
     };
 
   // 직접 고른 주기이거나 대응하는 합성 신호가 없다. 미매칭이다.
@@ -222,6 +223,7 @@ export function candidateOutcome(input: OutcomeInput) {
       "NEXT_CURVE",
       "VIEW_DETAIL",
       ...(disposition === "UNCONFIRMED" ? ["PUBLISH_ANALYSIS"] : []),
+      "VIEW_RESULT",
       "LATER",
     ],
   };

@@ -1,4 +1,6 @@
-import type { SubmissionReceipt } from "./submission-data";
+import { Link } from "react-router-dom";
+import { pagePath } from "../../app/paths";
+import type { NextAction, SubmissionReceipt } from "./submission-data";
 import type {
   DetailView as DetailViewData,
   JudgmentStatistics,
@@ -318,6 +320,97 @@ export function DetailView({
           </button>
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * 다음 행동(6.4절 `nextActions`). **서버 힌트**이므로 조건을 다시 계산하지
+ * 않고 받은 목록만 내놓는다. 실행하면 서버가 다시 검증한다.
+ *
+ * 게시 화면으로 강제로 옮기지 않는다(AT-36). 모두 사용자가 고르는 선택지다.
+ *
+ * 목적지가 아직 없는 화면은 앱의 「연결 준비 중」 규약이 받아 준다. 이 티켓이
+ * 목적지를 지어내지 않고, 각 화면 담당이 채우면 그대로 이어진다.
+ */
+export function NextActions({
+  receipt,
+  returnTo,
+  from,
+}: {
+  receipt: SubmissionReceipt;
+  /** 분석에 들어오기 전 화면. 분석을 끝내고 나갈 때 쓴다. */
+  returnTo: string;
+  /**
+   * 지금 화면. 앞으로 가는 링크에 실어 보내 거기서 「이전 화면으로」가 분석
+   * 화면으로 돌아오게 한다. 돌아와도 결과는 다시 열리지 않는다. 결과가 남는
+   * 경로(`submissionResult`)는 아직 연결 전이라 그 화면 담당이 채워야 한다.
+   */
+  from: string;
+}) {
+  const { ticId, historyId, nextActions } = receipt;
+  const offered = new Set(nextActions);
+
+  const links: Partial<Record<NextAction, { label: string; to: string }>> = {
+    PUBLISH_ANALYSIS: {
+      label: "분석 공개 검토",
+      to: pagePath("publication", { historyId }, { returnTo: from }),
+    },
+    VIEW_RESULT: {
+      label: "이 별의 결과 보기",
+      to: pagePath("starResults", { ticId }, { returnTo: from }),
+    },
+    DISCUSS: {
+      label: "이 별 게시판에서 이야기하기",
+      to: pagePath("starBoard", { ticId }, { returnTo: from }),
+    },
+    LATER: { label: "나중에 하기", to: returnTo },
+    GO_HOME: { label: "별지도로", to: "/sky" },
+  };
+  // 분석 화면 안에서 일어나는 동작이라 옮겨 갈 곳이 없다. 각자 다른 티켓이다.
+  const inScreen: Partial<Record<NextAction, string>> = {
+    RETRY: "다시 풀기",
+    NEXT_CURVE: "다음 곡선으로",
+  };
+  /**
+   * 그리는 순서는 화면이 정한다. 서버의 목록은 순위가 아니라 가능한 행동의
+   * 집합이고(6.4절), 파서도 이미 한 번 정규화한다. 하던 일을 이어가는 쪽을
+   * 먼저, 이 화면을 떠나는 쪽을 마지막에 둔다.
+   *
+   * `VIEW_DETAIL`·`SKIP_TUTORIAL`은 상세 보기 절이 이미 버튼으로 내놓으므로
+   * 여기 없다. 두 번 내면 같은 일에 버튼이 두 개가 된다.
+   */
+  const order = [
+    "RETRY",
+    "NEXT_CURVE",
+    "PUBLISH_ANALYSIS",
+    "VIEW_RESULT",
+    "DISCUSS",
+    "LATER",
+    "GO_HOME",
+  ] as const;
+  const shown = order.filter((action) => offered.has(action));
+  if (shown.length === 0) return null;
+
+  return (
+    <section className="result-axis result-actions" data-testid="next-actions">
+      <h5>다음에 할 수 있는 일</h5>
+      <ul>
+        {shown.map((action) => {
+          const link = links[action];
+          return (
+            <li key={action}>
+              {link ? (
+                <Link to={link.to}>{link.label}</Link>
+              ) : (
+                <span className="submission-note">
+                  {inScreen[action]} · 연결 예정
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
