@@ -2,12 +2,15 @@ package com.planetory.backend.domain.exploration.service;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 신호별 성과 인정·등급·새 별 발견과 성과 조회 [S15P21C206-144].
  *
- * <p>탐사 API 9.1·9.2절과 티켓 완료 조건을 따른다. 제출 저장(S15P21C206-143)과 공개 등록(S08)이 아직
+ * <p>탐사 API 9.1·9.2절과 티켓 완료 조건을 따른다. 제출 저장(S15P21C206-143)과 공개 분석 등록이 아직
  * 없으므로 인정 근거 행은 직접 넣고 호출자 트랜잭션은 {@link TransactionTemplate}이 대신한다.
  * 실행마다 별도 스키마를 쓴다.
  */
@@ -404,6 +407,65 @@ class AchievementServiceTest {
         }
     }
 
+    /**
+     * 실제 호출자는 근거 기록을 같은 트랜잭션에서 저장한 뒤 인정한다(MR !99 리뷰). 회원 행을 먼저 잠그면
+     * 제출 경로(제출 저장 → 확정 인정)와 공개 경로(공개 기록 저장 → 미확정 인정)가 동시에 와도 교착이 없다.
+     */
+    @Test
+    void 호출자가_회원_행을_먼저_잠그고_근거를_저장하면_동시_제출과_공개가_교착_없이_인정된다() throws Exception {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            long someone = insertMember();
+            open(someone, HOME);
+            long confirmed = candidate(HOME);
+            long unconfirmed = candidate(HOME);
+            // 공개할 히스토리의 제출은 앞서 저장돼 있다.
+            long published = submit(someone, unconfirmed);
+
+            List<Supplier<Recognition>> calls = List.of(
+                    () -> inTx(() -> {
+                        lockMember(someone);
+                        long submission = submit(someone, confirmed);
+                        return achievements.recognize(someone, confirmed, CONFIRMED, submission, null);
+                    }),
+                    () -> inTx(() -> {
+                        lockMember(someone);
+                        long analysis = publish(someone, unconfirmed, published);
+                        return achievements.recognize(someone, unconfirmed, UNCONFIRMED, published, analysis);
+                    }));
+            List<Recognition> results = concurrently(calls);
+
+            assertTrue(results.stream().allMatch(Recognition::newlyRecognized), "attempt " + attempt);
+            assertEquals(2, achievementCount(someone, HOME), "attempt " + attempt);
+            assertEquals(3, distinctOrdinals(someone), "attempt " + attempt);
+        }
+    }
+
+    /**
+     * 선잠금이 필요한 이유를 고정한다. 회원을 참조하는 행을 먼저 쓰면 외래 키 검사의 KEY SHARE 잠금이 남는다.
+     * 같은 회원의 두 트랜잭션이 인정 함수의 {@code FOR UPDATE}에서 서로를 기다려 한쪽이 교착(40P01)으로 끝난다.
+     * 회원 잠금 방식을 바꿔 이 교착이 사라지면 이 테스트와 9.2절 설명을 함께 고친다.
+     */
+    @Test
+    void 회원_행을_잠그기_전에_근거를_저장하면_같은_회원의_동시_인정_한쪽이_교착으로_끝난다() throws Exception {
+        long first = candidate(HOME);
+        long second = candidate(HOME);
+        var bothSaved = new CyclicBarrier(2);
+        List<Supplier<Recognition>> calls = List.of(first, second).stream()
+                .<Supplier<Recognition>>map(signal -> () -> inTx(() -> {
+                    long submission = submit(member, signal);
+                    await(bothSaved);
+                    return achievements.recognize(member, signal, CONFIRMED, submission, null);
+                }))
+                .toList();
+
+        List<Outcome<Recognition>> outcomes = outcomes(calls);
+
+        List<Throwable> failures = outcomes.stream().map(Outcome::error).filter(e -> e != null).toList();
+        assertEquals(1, failures.size(), "한쪽만 교착으로 끝나고 다른 쪽은 이어서 인정된다");
+        assertEquals("40P01", sqlState(failures.getFirst()), String.valueOf(failures.getFirst()));
+        assertEquals(1, achievementRows(member), "교착으로 끝난 쪽은 제출까지 통째로 되돌아간다");
+    }
+
     /** 성과 행은 앱이 지울 수 없으므로 근거가 어긋난 호출은 아무것도 남기지 않고 막는다. */
     @Test
     void 인정_근거가_회원과_신호에_맞지_않으면_아무것도_남기지_않고_거절한다() {
@@ -589,8 +651,24 @@ class AchievementServiceTest {
     }
 
     private <T> List<T> concurrently(List<Supplier<T>> calls) throws Exception {
+        List<T> values = new ArrayList<>();
+        for (Outcome<T> outcome : outcomes(calls)) {
+            if (outcome.error() != null) {
+                throw new AssertionError("동시 호출이 실패했다", outcome.error());
+            }
+            values.add(outcome.value());
+        }
+        return values;
+    }
+
+    /** 동시 호출 하나의 결과. 실패했으면 {@code error}가 있다. */
+    private record Outcome<T>(T value, Throwable error) {
+    }
+
+    /** 모든 호출을 한꺼번에 출발시키고 성공·실패를 함께 모은다. */
+    private <T> List<Outcome<T>> outcomes(List<Supplier<T>> calls) throws Exception {
         var start = new CountDownLatch(1);
-        List<T> results = new ArrayList<>();
+        List<Outcome<T>> results = new ArrayList<>();
         try (var executor = Executors.newFixedThreadPool(calls.size())) {
             List<Future<T>> tasks = new ArrayList<>();
             for (Supplier<T> call : calls) {
@@ -601,10 +679,36 @@ class AchievementServiceTest {
             }
             start.countDown();
             for (Future<T> task : tasks) {
-                results.add(task.get(30, TimeUnit.SECONDS));
+                try {
+                    results.add(new Outcome<>(task.get(30, TimeUnit.SECONDS), null));
+                } catch (ExecutionException failed) {
+                    results.add(new Outcome<>(null, failed.getCause()));
+                }
             }
         }
         return results;
+    }
+
+    /** 실제 호출자가 근거 기록을 저장하기 전에 하는 회원 잠금(9.2절). */
+    private void lockMember(long someone) {
+        jdbc.queryForObject("SELECT id FROM users WHERE id = ? FOR UPDATE", Long.class, someone);
+    }
+
+    private static void await(CyclicBarrier barrier) {
+        try {
+            barrier.await(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IllegalStateException("다른 트랜잭션을 기다리지 못했다", e);
+        }
+    }
+
+    private static String sqlState(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql) {
+                return sql.getSQLState();
+            }
+        }
+        return null;
     }
 
     private static void assertValidationFailed(Runnable call, String message) {
