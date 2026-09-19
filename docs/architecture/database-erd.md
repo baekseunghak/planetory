@@ -1,4 +1,4 @@
-# Planetory 서비스 DB ERD v1.10
+# Planetory 서비스 DB ERD v1.11
 
 - 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17)
 - v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
@@ -8,6 +8,10 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.10 → v1.11 (2026-09-19, `S15P21C206-143`)
+
+V12는 submissions에 `request_hash`(정규화 SHA-256), `request_hash_version`(1), `response_snapshot`(최초 성공 JSON 본문)을 추가한다. 재전송은 판정·성과·진행을 반복하지 않고 보존된 본문을 반환한다. 기존 행은 세 열 모두 NULL로 남겨 가짜 backfill을 하지 않으며 해당 POST 재전송은 503이다. 앱의 기존 submissions UPDATE 권한을 재사용한다. 스냅샷 MAD 산식과 실패 경계는 [143 채택 계약](../api/exploration/submission-readiness.md)을 따른다. 아래 Mermaid/열 표가 최신이며 SVG 열 그림은 v1.10까지의 보조 자료다.
 
 ### v1.9 → v1.10 (2026-09-17, `S15P21C206-140`)
 
@@ -348,6 +352,9 @@ erDiagram
         bigint tic_id FK "별"
         bigint bundle_id FK "판정 당시 판"
         uuid request_id UK "멱등 요청 ID"
+        text request_hash "정규화 SHA-256"
+        smallint request_hash_version "정규화 버전 1"
+        jsonb response_snapshot "최초 성공 응답"
         text submission_kind "candidate/no_candidate/skipped"
         smallint curve_step "곡선 단계"
         bigint_array removed_candidate_ids "뺀 후보(정렬)"
@@ -644,6 +651,7 @@ erDiagram
 |---|---|---|
 | user_id, tic_id, bundle_id | FK | bundle_id = 이 제출을 판정한 판. 세션을 그 판에 묶어 두는 것이 아니라 판정 시점 기록이다(v0.3 결정 C) |
 | request_id UUID | UNIQUE | 멱등(SUB-09) |
+| request_hash, request_hash_version, response_snapshot | CHECK 세 열 NULL 또는 64자리 소문자 해시·버전 1·JSON object 응답(저장 중 NULL 허용) | V12. 최초 응답까지 같은 트랜잭션에 저장한다. 신규 처리의 중간 상태는 커밋하지 않는다. legacy NULL 행은 POST 재처리하지 않는다 |
 | submission_kind | CHECK candidate/no_candidate/skipped | skipped = 튜토리얼 건너뛰기(SUB-12) |
 | curve_step, removed_candidate_ids BIGINT[] | | 정렬 배열. 잔차 캐시 키·재현 입력 |
 | submitted_period, matched_period, harmonic_multiplier, correction_reason | | 원본값 보존(SUB-05) |
@@ -670,8 +678,8 @@ erDiagram
 | 열 | 비고 |
 |---|---|
 | submission_id UNIQUE FK, user_id, tic_id | |
-| snapshot_params JSONB | 재도전 복원·재현용(결정 8): 주기도 viewport, folded_x_zoom_ratio, 위상 접기 설정, 판단·근거·메모, centroid_data_status. 번들·단계·제거 조합·절대 시각은 submissions 열에 있으므로 조인 |
-| versions JSONB | 데이터/전처리/파이프라인/규칙/온라인 계산 버전 |
+| snapshot_params JSONB | 143은 응답 original과 같은 camelCase 객체를 저장한다. viewState 아래 periodogramViewport·foldedXZoomRatio와 원본 선택·판단·근거·메모. 번들·단계·제거 조합·절대 시각은 submissions를 조인한다. centroid는 현재 unavailable 고정 |
+| versions JSONB | ruleVersion·bundleVersion·residualModelVersion·periodogramConfigVersion·snapshotVersion. originalMatch는 duplicate 고조파의 최초 정정 정보도 보존한다 |
 | created_at | 애플리케이션 역할에서 UPDATE·DELETE 권한 제거 |
 
 **analysis_snapshots** (HIS-03, 결정 5) — analysis_histories와 1:0..1
@@ -680,7 +688,7 @@ erDiagram
 |---|---|
 | history_id PK FK | 매칭 성공 제출(matched·matched_harmonic·duplicate)에만 생성. 불일치 제출은 없음 |
 | bins SMALLINT DEFAULT 150 | 위상 구간 수. 구간은 위상 -0.5부터 0.5까지 균등하므로 **위상 값은 저장하지 않는다**. i번째 구간의 위상 = `-0.5 + (i + 0.5) / bins` |
-| folded_flux `real[]`, folded_err `real[]` | 구간별 밝기 중앙값과 오차. 각 150개, 합쳐 1.2KB. "제출 당시 / 최신 데이터" 토글용 |
+| folded_flux `real[]`, folded_err `real[]` | 구간별 밝기 중앙값과 MAD 산포(folded-mad-v0). 각 150개. 빈 구간 양쪽 NULL, 단일 점은 산포 NULL. 원본 제출 주기로 계산하며 재전송 때 재계산하지 않는다. "제출 당시 / 최신 데이터" 토글용 |
 | created_at | **PostgreSQL에 둔다(v0.3 결정).** 다시 만들 수 없는 기록이고 작다. 제출 100만 건이어도 1.2GB |
 
 **잔차·주기도 캐시는 Redis에 둔다** (DAT-14, v0.3 결정)

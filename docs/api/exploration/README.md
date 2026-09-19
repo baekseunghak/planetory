@@ -1,5 +1,7 @@
 # 탐사 API C02 계약 예제
 
+143번의 사용자 채택 계산·멱등·실패 경계와 본체/후속 연동 인수 구분은 [제출 구현 계약·인수 조건](submission-readiness.md)을 따른다. 141·147은 담당자 구현을 기다리며 본체 착수를 막지 않는다. `node docs/api/exploration/snapshot-v0.cjs`는 스냅샷 MAD의 합성 경계만 검증한다.
+
 [#133 검토안](../../../apps/backend/docs/exploration-contract-review.md)을 위한 합성 JSON이다. 2026-09-14 원격 `develop` `321f10b`의 SRS v1.2 변경안과 탐사 API Draft 0.3을 기준으로 한 **초안 예제**이며 운영 API 구현·권한 집행·수치 정책 승인 증거가 아니다.
 
 `contracts.json`의 각 case는 독립 초기 상태다. `same-request-replay`와 `idempotency-conflict`만 normal-harmonic의 접수 완료를 전제로 한다. `request`와 `response`만 HTTP 표현이며 setup/effects/at/sourceSection은 검증 메타데이터다. 설명용 축약 UUID는 유효 UUID로, 반올림 duration은 원본 위상에서 계산한 값으로 교정했다. 기존 탐사 명세의 정상 제출·곡선·별 목록 DTO를 재사용했으며 구판 `docs/api/analysis/examples`는 변경하지 않았다.

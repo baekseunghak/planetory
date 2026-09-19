@@ -76,6 +76,7 @@
 | `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 분석 복귀와 다시 풀기는 그 별의 최신 현재 진행 문맥을 돌려준다. History CURRENT는 별도 규칙에 따라 최신 원본을 사용한다 |
 | `CANDIDATE_RETIRED` | 409 | 재도전 대상 신호가 현재 판에서 은퇴함 |
 | `CURVE_NOT_READY` | 202 | 잔차가 아직 없음. 본문에 `residual` 상태(5.2절) |
+| `SUBMISSION_CONTEXT_NOT_READY` | 409 | 새 제출에 필요한 해당 단계 잔차가 미준비. `residual`에 실제 상태·jobId·computedAt을 담는다. 미접수이며 잔차를 명시적으로 준비한 뒤 같은 requestId로 재전송한다 |
 | `RESIDUAL_QUEUE_FULL` | 429 | 대기열 초과. 본문에 `retryAfterSeconds` |
 | `VALIDATION_FAILED` | 400 | 입력 검증 실패. `fieldErrors[]`에 위치·사유 |
 | `EPOCH_OUT_OF_RANGE` | 400 | 위상 중심을 관측 범위 안의 epoch로 환산할 정수 k가 없음(EXP-06) |
@@ -747,6 +748,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 **C02-R3 결정:** 추천 duration 3배 상한은 정답 판정 범위가 아니라 선택 폭 제한이다. 서로 다른 봉우리의 `fineTune` 범위가 겹쳐도 `sourcePeakGridIndex`가 가리키는 사용자 선택 봉우리의 `suggestedDurationHours`만 사용한다. source가 null인 직접 주기 선택은 Bundle 공통 `phaseWidthMax`만 적용한다. 추천 배열 순서나 가장 가까운 봉우리로 source를 추정하지 않는다. 3배 값은 DEC-19의 현재 기본안이며 운영값은 `selectionRules.version`으로 버전 관리한다.
 
 ### 6.3 처리 순서 (한 트랜잭션, NFR-01)
+
+**143 채택 계약(2026-09-19, 사용자 결정):** `foldedError`는 150개 위상 구간별 `1.4826 × MAD` 밝기 산포이며 표준오차/신뢰구간이 아니다. 빈 구간은 flux/error 모두 null, 단일 점은 error만 null이다. 원본 제출 주기와 판의 T를 사용하며 `folded-mad-v0`를 이력에 기록한다. 정규화·응답 보존·세부 계산은 [제출 구현 계약·인수 조건](../../../docs/api/exploration/submission-readiness.md)을 따른다. POST 재전송은 저장한 최초 본문을 재현하고 GET 145의 현재값 필드와 구분한다. 필요한 잔차가 미준비면 409 `SUBMISSION_CONTEXT_NOT_READY`와 residual 상태를 반환하고 저장하지 않는다. 봉우리 생산자 부재·통신/배열 손상은 503 `DEPENDENCY_UNAVAILABLE`이다. 141·147은 담당자 인계 후 실제 연결을 검증하며 143 본체의 선행 완료 조건으로 삼지 않는다.
 
 ```text
 1. request_id로 기존 행 조회 → 있으면 본문 해시 비교 후 재현 또는 IDEMPOTENCY_CONFLICT
