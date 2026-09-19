@@ -4,9 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import com.planetory.backend.domain.gold.GoldCatalogViews.LightCurveSegment;
 
-/** 사용자 채택 folded-mad-v0. 중앙값의 신뢰구간이 아니라 구간 내 밝기 산포다. */
+/** bin 중심 시각 기준. 중앙값의 신뢰구간이 아니라 구간 내 밝기 산포다. */
 public record FoldedSnapshot(int bins, Float[] foldedFlux, Float[] foldedError) {
-    public static final String VERSION = "folded-mad-v0";
+    public static final String VERSION = "folded-mad-v1";
     public static final int BINS = 150;
 
     public static FoldedSnapshot calculate(List<LightCurveSegment> segments, double period, double reference) {
@@ -20,7 +20,7 @@ public record FoldedSnapshot(int bins, Float[] foldedFlux, Float[] foldedError) 
                 Float flux = s.flux()[i];
                 if (flux == null) continue;
                 if (!Float.isFinite(flux)) throw corrupt();
-                double cycle = (s.startBtjd() + (s.binMinutes().doubleValue() / 1440.0) * i - reference) / period;
+                double cycle = (s.startBtjd() + (s.binMinutes().doubleValue() / 1440.0) * (i + 0.5) - reference) / period;
                 if (!Double.isFinite(cycle)) throw corrupt();
                 double phase = cycle % 1;
                 if (phase < 0) phase += 1;
