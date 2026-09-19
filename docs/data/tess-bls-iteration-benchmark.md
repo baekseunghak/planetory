@@ -195,7 +195,7 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 
 실행법은 [tess-bench README](../../experiments/tess-bench/README.md)의 제거 편향 진단 절을 따른다. 사용자가 아래 진단을 실행했으며 12곡선의 기존 QA 지표가 모두 재현됐다. 합성 테스트는 기준 밝기가 600 ppm 높은 정상 제거와 깊이를 3배 과대 제거한 경우를 구분한다. QA 문턱·제거 모델·지속시간 상한은 변경하지 않는다. 새 iterate manifest의 task만 `S15P21C206-111 iterate`로 정정하며 과거 manifest는 수정하지 않는다.
 
-### 5.5.3 바깥 평균 기준 창 안 편향 QA (실험 옵션·반복 실행 대기)
+### 5.5.3 바깥 평균 기준 창 안 편향 QA (실험 옵션·실측 완료, 채택 보류)
 
 진단 출처는 `results/diagnostics/iterate-7cc8dcb2-20260919T085528878912Z/`의 `window_offsets.csv`와 `provenance.json`이다(tess-bench 기준). CSV SHA-256은 `34f4133dc03035ec93f25ad1694057a06398e273dba9fee7b34134ea29818838`이며 provenance와 일치한다. 원본 run은 `7cc8dcb2`, `source_metrics_reproduced=true`다.
 
@@ -225,7 +225,36 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation --no-noise --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --window-offset-reference oot
 ```
 
-`7cc8dcb2`의 조건에 reference 옵션 하나만 추가한다. 결과에서 단일·쌍 회수, 가짜 후보, QA 실패와 실패 항목, 1 d·8 h 표본별 첫 단계 및 원본 재평가를 비교한다. 현재 사용자 반복 실행은 대기 중이며 실제 회수 개선을 주장하지 않는다. 검증은 tess-bench·tess-fixture 96 passed, 2 skipped(TOI-270 FITS 부재)다. 합성 테스트에서 공통 밝기 이동 불변성, 두 평균의 표본 오차, 과대/과소 제거 실패와 잔차 복구, 측정 불가, CLI→manifest 옵션 기록을 확인했다.
+`7cc8dcb2`의 조건에 reference 옵션 하나만 추가한다. 결과에서 단일·쌍 회수, 가짜 후보, QA 실패와 실패 항목, 1 d·8 h 표본별 첫 단계 및 원본 재평가를 비교한다. 사용자 반복 실행 결과는 5.5.4절에 기록한다. 검증은 tess-bench·tess-fixture 96 passed, 2 skipped(TOI-270 FITS 부재)다. 합성 테스트에서 공통 밝기 이동 불변성, 두 평균의 표본 오차, 과대/과소 제거 실패와 잔차 복구, 측정 불가, CLI→manifest 옵션 기록을 확인했다.
+
+### 5.5.4 oot 비교 실행 결과 (2026-09-19)
+
+사용자 실행 `652fe48d`의 manifest는 `results/manifests/iterate-l98_59-652fe48d.json`이다(tess-bench 기준). 실행 커밋 `5ad274e87a9b3a949253e0050abd2e6d9c2e0deb`, `git_dirty=false`, task `S15P21C206-111 iterate`를 확인했다. 원본 `7cc8dcb2`와 manifest 입력 6개가 동일하고 설정 파라미터는 reference 옵션만 추가됐다(run_dir 제외). 입력 6개·출력 3개 SHA-256이 일치한다. 콘솔 총 소요 870.7초(14분 30.7초), manifest 870.5초다.
+
+| 항목 | unity (`7cc8dcb2`) | oot (`652fe48d`) |
+|---|---:|---:|
+| 단일 회수 / 108 | 65 (직접 63·별칭 2) | 71 (직접 69·별칭 2) |
+| 쌍 회수 / 6 | 6 | 6 |
+| 전체 회수 / 114 | 71 (직접 68·별칭 3) | 77 (직접 74·별칭 3) |
+| 가짜 채택 | 1 | 2 |
+| QA 실패 곡선 | 18 | 13 |
+| 1 d·8 h 직접 회수 / 12 | 2 | 8 |
+| 1 d·8 h 첫 단계 window_offset 실패 | 10 | 4 |
+| 원본 재평가 실패 | 0 | 0 |
+
+추가 직접 회수 6개는 g025·g026·g028·g029·g031·g032이며 모두 1 d·8 h 주입이다. g024·g027·g030·g033은 첫 단계 창 안 편향 실패로 남는다(재적합 지속시간 모두 6.72 h). 진단의 고정 후보 산술 비교와 일치한다. g029·g032는 첫 신호를 회수한 뒤 약 3 d 잔여 피크 제거가 power_not_reduced로 실패하여 종료한다. 따라서 첫 단계 실패 감소 6건이 곡선 전체 QA 실패 감소 5건과 같지 않다.
+
+가짜 2개 중 기존 g069의 약 19.998418 d(주입 약 5 d의 4배)는 그대로다. 추가 가짜는 g102에서 약 20 d 정답을 제거한 뒤 1단계의 P=0.605876699 d·D=5.04 h·깊이 62.632 ppm 피크다. SNR=8.259, SDE=11.793, power_ratio=0.447933이며, 기존 unity z=9.189·rel=0.899로 실패했던 동일 후보가 oot z=−1.405·rel=−0.200으로 통과했다. 현재 판정은 OR이므로 상대 편차가 0.1을 넘어도 절대 z가 5 이하면 통과한다. 이는 새 방식에서 추가된 가짜 채택이며, 주입과 매칭되지 않았다는 뜻이다. 기원이나 고조파 관계를 이 수치만으로 단정하지 않는다.
+
+종료는 no_quality_peak 99곡선, removal_qa_failed 13곡선이다. QA 실패 항목은 power_not_reduced 7·window_offset 5·overlap_distortion 1·edge_excess 1(복수 사유 포함 14건)이다. 실패 13곡선의 n_accepted == qa_failed_step을 확인했다. 저장 기록상 채택 수 검증이며 이번 실제 잔차 배열을 새로 검증한 것은 아니다. 콘솔 QA 요약의 최대는 부호 있는 최댓값이므로 음수 방향 큰 실패를 보여주지 않는다. 실제 절댓값 최대는 window_offset_z 117.430, window_offset_rel 0.334636이다.
+
+| 출력 | 행 수 | SHA-256 |
+|---|---:|---|
+| steps.csv | 230 | `0854e59caba83656b6ed3468bf49f8f3088f843d4b91b1dec802763d6144cc47` |
+| iterations.csv | 112 | `293bd887e5ce6ebb0fd4a5823a4b0c6c2a1f16d265ed22efbfe633691bd84f59` |
+| matches.csv | 114 | `5b0abe1ebbaad92db1bf0a1f1407f76f2dbd016a87d612cc6eddeb0b2b699e63` |
+
+파일은 `results/bench/bls_iterate_v1-1.0.0/l98_59/run-20260919T104039Z-652fe48d/`에 보존한다. **회수 개선은 확인했지만 가짜 채택 증가로 oot 기본값 승격·최종 채택은 보류한다.** 잡음을 생략한 단일 별 옵션 실험이므로 잡음 오탐·일반화 검증으로 쓰지 않는다. 다음은 남은 1 d·8 h의 재적합 창/주기 오차와 g102 잔여 후보의 특성을 별도로 진단한다. 이번 결과만을 맞추기 위해 문턱이나 AND/OR 판정을 바꾸지 않는다. 110 확정 설정 반영·다른 별 검증·팀 승인은 남아 있다.
 
 ## 6. 한계·후속
 

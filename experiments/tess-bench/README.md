@@ -167,4 +167,4 @@ uv run --locked python -m tess_bench.iterate_diagnose --manifest results/manifes
 uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation --no-noise --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --window-offset-reference oot
 ```
 
-기본값 `unity`는 기존 기준 1과 비교하고 `oot`는 창 안·바깥 평균 차이와 두 평균의 표본 오차를 쓴다. 제거 모델·재적합·다른 QA는 유지한다. `steps.csv`에 판정 방식과 기존 unity 지표를 함께 남기고 manifest에 옵션을 기록한다. 상세 산식·한계·진단 결과는 [반복 제거 벤치마크 5.5.3](../../docs/data/tess-bls-iteration-benchmark.md)에 있다. 현재 옵션의 실제 반복 실행 결과는 기록 전이다.
+기본값 `unity`는 기존 기준 1과 비교하고 `oot`는 창 안·바깥 평균 차이와 두 평균의 표본 오차를 쓴다. 제거 모델·재적합·다른 QA는 유지한다. `steps.csv`에 판정 방식과 기존 unity 지표를 함께 남기고 manifest에 옵션을 기록한다. 상세 산식·한계·진단 결과는 [반복 제거 벤치마크 5.5.3](../../docs/data/tess-bls-iteration-benchmark.md)에 있다. L 98-59 비교 실행에서 단일 회수 65→71, 가짜 1→2로 기록했으며 기본값 승격은 보류한다(벤치마크 5.5.4절).
