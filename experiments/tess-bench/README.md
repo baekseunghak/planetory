@@ -148,3 +148,23 @@ uv run python -m tess_bench iterate --target cm_dra --stage evaluation --no-nois
 - 가장자리 마스크가 12시간 이상이면 구간 경계 ±0.5일 안에 남는 점이 없어 `boundary_ratio` 가 nan 이 된다. 그 설정의 경계 왜곡은
   이 지표로 평가하지 않는다.
 - 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).
+
+## 제거 편향 진단 (111)
+
+저장된 첫 단계 후보를 고정해 1 d·8 h 단일 주입 12곡선만 복원한다. BLS 재탐색 없이 제거 전후 창 안·바깥 평균과 기존 QA 재현 여부를 기록한다. 실제 실행은 사용자 담당이다.
+
+```powershell
+uv run --locked python -m tess_bench.iterate_diagnose --manifest results/manifests/iterate-l98_59-7cc8dcb2.json
+```
+
+`results/diagnostics/iterate-7cc8dcb2-<UTC>/window_offsets.csv`와 `provenance.json`을 생성한다. 원본 입력·CSV checksum 또는 Archive 모델이 다르면 중단한다. `source metrics reproduced: False`면 결과를 보존하고 원본과의 차이부터 조사한다. 진단은 QA 기준을 변경하지 않으며 결과가 나와도 자동 채택하지 않는다. 현재 111 브랜치의 원본 설정으로 실행하고 110 설정을 합친 뒤에는 같은 입력이라고 가정하지 않는다.
+
+## 바깥 평균 기준 제거 QA 비교 (111, 미채택 옵션)
+
+진단 뒤 비교 실행은 기존 `7cc8dcb2` 조건에 `--window-offset-reference oot`만 추가한다. 실제 실행은 사용자가 수행한다.
+
+```powershell
+uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation --no-noise --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --window-offset-reference oot
+```
+
+기본값 `unity`는 기존 기준 1과 비교하고 `oot`는 창 안·바깥 평균 차이와 두 평균의 표본 오차를 쓴다. 제거 모델·재적합·다른 QA는 유지한다. `steps.csv`에 판정 방식과 기존 unity 지표를 함께 남기고 manifest에 옵션을 기록한다. 상세 산식·한계·진단 결과는 [반복 제거 벤치마크 5.5.3](../../docs/data/tess-bls-iteration-benchmark.md)에 있다. 현재 옵션의 실제 반복 실행 결과는 기록 전이다.

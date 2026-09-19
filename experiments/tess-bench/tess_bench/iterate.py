@@ -48,12 +48,17 @@ class IterateConfig:
     qa_overlap_dev_max: float = 3.0             # 겹친 점들의 잔차 편차 중앙값 / scatter
     qa_window_offset_z_max: float = 5.0         # 제거 뒤 통과 창 안 잔차 평균의 z 점수 |mean(r−1)| / (scatter/√n). 과대 제거(밝아짐)·과소 제거(어둠 잔존) 모두 잡는다
     qa_window_offset_rel_depth: float = 0.0     # >0 이면 |창 안 평균 편차| ≤ rel × 제거 깊이 일 때 z 초과여도 통과 (깊은 신호의 정당한 제거 보호). 0 은 z 만 적용(5절 실행값)
+    qa_window_offset_reference: str = "unity"   # unity: 기존 기준 1, oot: 바깥 평균과 비교하는 실험 옵션
     refine_duration_span: tuple[float, float] = (0.7, 1.4)   # 재적합 지속시간 탐색 배수 (5절 실행값). 확대 안: (0.5, 2.0)
     refine_duration_max_hours: float = 0.0      # >0 이면 재적합 지속시간 상한을 max(span[1]×D₀, 이 값) 으로 넓힌다 (탐색 격자 4.8 h 상한 보정). 0 은 비활성
     continue_after_qa_fail: bool = False        # True 면 QA 실패 피크를 '제거 불가' 로 기록·제외하고 계속 탐색 (설계 변경 제안). False 는 5.6 v1.0 대로 종료
     blocked_mask_factor: float = 1.5            # continue_after_qa_fail: 제거 불가 피크의 통과 창(지속시간 × 이 배수)을 NaN 으로 가려 다음 탐색에서 숨긴다. 나누기 대신 마스킹
     max_duration_fraction: float = 0.35         # 재적합·게이트에서 허용하는 지속시간/주기 상한. 주입 격자의 8 h/1 d(0.33)는 허용하고, 하위 고조파 잔여가 주기의 절반 넘는 폭(0.65)으로 맞춰지는 것을 막는다
     qa_require_measurable: bool = True          # 경계 돌출·창 안 편향을 잴 수 없으면(바깥 구간 없음) QA 실패로 본다
+
+    def __post_init__(self):
+        if self.qa_window_offset_reference not in ("unity", "oot"):
+            raise ValueError("qa_window_offset_reference must be unity or oot")
 
     def params(self) -> dict:
         return {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items()}
@@ -110,6 +115,9 @@ class StepRecord:
     overlap_dev: float = float("nan")
     window_offset_z: float = float("nan")        # 통과 창 안 잔차 평균 z 점수 (양수 = 과대 제거로 밝아짐)
     window_offset_rel: float = float("nan")      # 통과 창 안 잔차 평균 편차 / 제거 깊이
+    window_offset_reference: str = "unity"      # 위 z·rel의 판정 기준; manifest에도 기록
+    window_offset_unity_z: float = float("nan")  # 기준 1 대비 기존 z (oot 모드에서도 비교용 보존)
+    window_offset_unity_rel: float = float("nan")
     masked_points: int = 0           # continue_after_qa_fail 로 이 단계에서 가린 점 수
     n_valid_input: int = 0
     n_finite_residual: int = 0
@@ -241,8 +249,16 @@ def window_offset_z(t: np.ndarray, residual: np.ndarray, period: float, epoch: f
     return window_offset(t, residual, period, epoch, duration_days)[1]
 
 
-def window_offset(t: np.ndarray, residual: np.ndarray, period: float, epoch: float, duration_days: float) -> tuple[float, float]:
-    """(창 안 잔차 평균 편차 mean(r−1), 그 z 점수). 둘 다 계산 불가면 (nan, nan)."""
+def window_offset(t: np.ndarray, residual: np.ndarray, period: float, epoch: float, duration_days: float,
+                  *, reference: str = "unity") -> tuple[float, float]:
+    """(창 안 평균의 기준 대비 편차, z). unity는 기존 mean(r−1), oot는 안−바깥 평균.
+
+    oot의 SE = 바깥 robust scatter × sqrt(1/n_inside + 1/n_outside).
+    공통 잡음·독립 점 근사이며 시간 상관을 보정한 유의확률은 아니다.
+    잘못 제거해 커진 창 안 산포로 실패를 숨기지 않도록 잡음 척도는 바깥에서만 추정한다.
+    """
+    if reference not in ("unity", "oot"):
+        raise ValueError("reference must be unity or oot")
     phase = np.abs(bl._phase_distance(t, period, epoch))
     inside = (phase < 0.5 * duration_days) & np.isfinite(residual)
     oot = (phase >= duration_days) & np.isfinite(residual)
@@ -252,6 +268,9 @@ def window_offset(t: np.ndarray, residual: np.ndarray, period: float, epoch: flo
     if not (scatter > 0):
         return float("nan"), float("nan")
     mean = float(np.mean(residual[inside] - 1.0))
+    if reference == "oot":
+        mean -= float(np.mean(residual[oot] - 1.0))
+        return mean, mean / (scatter * np.sqrt(1 / inside.sum() + 1 / oot.sum()))
     return mean, mean / (scatter / np.sqrt(inside.sum()))
 
 
@@ -388,10 +407,13 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         ofrac, odev = overlap_metrics(t, residual, cand, others + remaining_truth)
         if np.isfinite(odev) and odev > cfg.qa_overlap_dev_max:
             failures.append("overlap_distortion")
-        wmean, wz = window_offset(t, residual, cand.period_days, cand.epoch_btjd, D)
+        unity_mean, unity_z = window_offset(t, residual, cand.period_days, cand.epoch_btjd, D)
+        wmean, wz = (window_offset(t, residual, cand.period_days, cand.epoch_btjd, D, reference="oot")
+                     if cfg.qa_window_offset_reference == "oot" else (unity_mean, unity_z))
         if cfg.qa_require_measurable and (not np.isfinite(ee) or not np.isfinite(wz)):
             failures.append("qa_not_measurable")                          # 통과 창 바깥 구간이 없어 경계·편향을 잴 수 없다
         wrel = wmean / (model_cand.depth_ppm / 1e6) if np.isfinite(wmean) and model_cand.depth_ppm > 0 else float("nan")
+        unity_rel = unity_mean / (model_cand.depth_ppm / 1e6) if np.isfinite(unity_mean) and model_cand.depth_ppm > 0 else float("nan")
         if np.isfinite(wz) and abs(wz) > cfg.qa_window_offset_z_max:
             if not (cfg.qa_window_offset_rel_depth > 0 and np.isfinite(wrel) and abs(wrel) <= cfg.qa_window_offset_rel_depth):
                 failures.append("window_offset")                            # z 초과이고 깊이 상대 허용도 없으면 실패
@@ -399,6 +421,8 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         rec = StepRecord(step, "accepted" if not failures else "qa_failed", "" if not failures else "removal_qa_failed",
                          power_before=power_before, power_after=power_after, power_ratio=power_ratio, edge_excess=ee,
                          other_depth_log2_max=other_log2, overlap_fraction=ofrac, overlap_dev=odev, window_offset_z=wz, window_offset_rel=wrel,
+                         window_offset_reference=cfg.qa_window_offset_reference,
+                         window_offset_unity_z=unity_z, window_offset_unity_rel=unity_rel,
                          n_valid_input=rem.n_valid_input, n_finite_residual=rem.n_finite_residual, qa_failures=",".join(failures), **base)
         steps.append(rec)
         if failures:

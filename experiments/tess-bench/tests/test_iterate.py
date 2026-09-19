@@ -99,6 +99,84 @@ def test_duplicate_rule_uses_cumulative_error_and_harmonics():
     assert it.is_duplicate(4.5, D, 6, acc, (0.5, 1.0, 2.0)) == -1
 
 
+def test_oot_offset_includes_reference_mean_uncertainty_and_ignores_common_shift():
+    # Two equal-size regions with symmetric fluctuations: both mean errors matter.
+    t = np.r_[np.full(20, 0.5), np.full(20, 0.9)]
+    noise = np.tile([-1e-4, 1e-4], 10)
+    f = np.r_[1 + 2e-4 + noise, 1 + noise]
+    mean, z = it.window_offset(t, f, 1, 0.5, 0.2, reference="oot")
+    assert mean == pytest.approx(2e-4)
+    assert z == pytest.approx(2e-4 / (1.4826e-4 * np.sqrt(2 / 20)))
+    shifted = it.window_offset(t, f + 0.003, 1, 0.5, 0.2, reference="oot")
+    assert shifted == pytest.approx((mean, z))
+    # Legacy remains the default, including its original one-mean standard error.
+    assert it.window_offset(t, f, 1, 0.5, 0.2)[1] == pytest.approx(z * np.sqrt(2))
+
+
+def test_oot_cli_records_mode_in_manifest(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from tess_bench import cli
+    args = cli.build_parser().parse_args(['iterate', '--target', 'l98_59', '--stage', 'evaluation',
+        '--no-noise', '--window-offset-reference', 'oot', '--results', str(tmp_path)])
+    bi = SimpleNamespace(target=SimpleNamespace(key='l98_59'), stage='evaluation',
+        groups={'realclean': {'none': []}}, prepared={('realclean', 'none'): (np.array([0., 1.]), np.ones(2))},
+        n_groups=1, inputs=[], baselines={'realclean': None}, known_models=[], noise_seeds=[],
+        strict=SimpleNamespace(time=np.array([0., 1.])), pre=cli.Setting('biweight_1.0d'))
+    monkeypatch.setattr(cli, 'build_bls_inputs', lambda *a, **k: bi)
+    monkeypatch.setattr(cli, 'preprocess_groups', lambda *a, **k: None)
+    def fake_iterate(t, f, setting, cfg, **kw):
+        assert cfg.qa_window_offset_reference == 'oot'
+        return it.IterationResult([it.StepRecord(0, 'terminated', 'no_quality_peak')], [], 'no_quality_peak')
+    monkeypatch.setattr(it, 'iterate_curve', fake_iterate)
+    monkeypatch.setattr(cli.mf, '_git', lambda *a, **k: None)
+    assert cli.cmd_iterate(args) == 0
+    manifest = json.loads(next((tmp_path / 'manifests').glob('*.json')).read_text(encoding='utf-8'))
+    assert manifest['task'] == 'S15P21C206-111 iterate'
+    assert manifest['config']['parameters']['iterate']['qa_window_offset_reference'] == 'oot'
+    assert cli.build_parser().parse_args(['iterate', '--target', 'l98_59']).window_offset_reference == 'unity'
+    with pytest.raises(ValueError):
+        it.IterateConfig(qa_window_offset_reference='unknown')
+
+
+@pytest.mark.parametrize("missing", ["inside", "outside", "flat"])
+def test_oot_offset_does_not_fallback_when_unmeasurable(missing):
+    t, f = _curve([])
+    inside = it.in_transit_mask(t, 1, 1400.5, 8 / 24)
+    if missing == "inside":
+        f[inside] = np.nan
+    elif missing == "outside":
+        f[np.abs(bls._phase_distance(t, 1, 1400.5)) >= 8 / 24] = np.nan
+    else:
+        f[:] = 1
+    assert all(np.isnan(x) for x in it.window_offset(t, f, 1, 1400.5, 8 / 24, reference="oot"))
+
+
+@pytest.mark.parametrize("depth_factor", [1, 0.5, 3])
+def test_oot_loop_accepts_offset_baseline_but_rolls_back_wrong_removal(monkeypatch, depth_factor):
+    t, noise = _curve([], noise=1e-3)
+    inside = it.in_transit_mask(t, 1, 1400.5, 8 / 24)
+    f = (noise + 0.0006) * np.where(inside, 0.997, 1)
+    peak = bls.Peak(1, 1, 1400.5, 8, 0.003, 1e-5, 100, 100, 10, 50, 50, 27, int(inside.sum()), 0)
+    monkeypatch.setattr(bls, "run_bls", lambda *a, **k: bls.BlsRun("t", 3000, 0.5, 9, 0.01, 0, 1, [peak]))
+    # Isolate QA/rollback from the search and power metric, but use real model removal and offset QA.
+    monkeypatch.setattr(it, "local_max_power", lambda *a, **k: 1.0)
+    cfg = it.IterateConfig(max_candidates=1, refine_peak=False, qa_window_offset_reference="oot",
+                           qa_window_offset_rel_depth=0.1, qa_power_ratio_max=2)
+    res = it.iterate_curve(t, f, SETTING, cfg, tamper_depth_factor=depth_factor, keep_residual=True)
+    rec = res.steps[0]
+    assert rec.window_offset_reference == "oot"
+    if depth_factor == 1:
+        assert len(res.accepted) == 1
+        assert abs(rec.window_offset_unity_z) > 5 and abs(rec.window_offset_unity_rel) > 0.1
+        assert abs(rec.window_offset_rel) < 0.1
+    else:
+        assert res.termination == "removal_qa_failed" and not res.accepted
+        assert "window_offset" in rec.qa_failures
+        assert np.sign(rec.window_offset_z) == np.sign(depth_factor - 1)
+        np.testing.assert_array_equal(res.residual, f)
+
+
 def test_edge_excess_is_near_unity_for_noise_and_high_for_leftover_edges():
     t, f = _curve([], noise=1e-3)
     resid = f.copy()

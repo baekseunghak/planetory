@@ -659,6 +659,7 @@ def cmd_iterate(args: argparse.Namespace) -> int:
     setting = settings[0]
     _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
     icfg = it.IterateConfig(snr_min=args.snr_min, sde_min=args.sde_min, min_transits=args.min_transits, max_candidates=args.max_candidates,
+                            qa_window_offset_reference=args.window_offset_reference,
                             qa_window_offset_rel_depth=args.window_offset_rel_depth, refine_duration_max_hours=args.refine_duration_max_hours,
                             refine_duration_span=(0.5, 2.0) if args.refine_duration_max_hours > 0 else (0.7, 1.4),
                             continue_after_qa_fail=args.continue_after_qa_fail)
@@ -682,7 +683,7 @@ def cmd_iterate(args: argparse.Namespace) -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"target={bi.target.key} stage={args.stage} setting={setting.setting_id} gate=snr>={icfg.snr_min}&sde>={icfg.sde_min}&ntr>={icfg.min_transits} "
           f"max_candidates={icfg.max_candidates} groups={bi.n_groups} tamper={args.tamper_depth_factor} "
-          f"opts(rel_depth={icfg.qa_window_offset_rel_depth}, dur_max_h={icfg.refine_duration_max_hours}, continue={icfg.continue_after_qa_fail}) run={run_dir.name}")
+          f"opts(rel_depth={icfg.qa_window_offset_rel_depth}, reference={icfg.qa_window_offset_reference}, dur_max_h={icfg.refine_duration_max_hours}, continue={icfg.continue_after_qa_fail}) run={run_dir.name}")
     print("전처리 중...", end="", flush=True); t0 = time.time()
     preprocess_groups(bi)
     print(f" {time.time()-t0:.1f}s ({len(bi.prepared)} curves)")
@@ -745,7 +746,7 @@ def cmd_iterate(args: argparse.Namespace) -> int:
         print("  QA 실패 항목:", fails or "없음")
 
     manifest = mf.build_manifest(
-        task=f"{BLS_TASK} iterate", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
+        task="S15P21C206-111 iterate", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
         inputs=bi.inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"), mf.file_entry(args.preprocess_settings, role="preprocess_settings")],
         config={"name": args.settings.name, "version": cfg["version"], "sha256": mf.file_entry(args.settings)["sha256"],
                 "parameters": {"target": bi.target.key, "stage": args.stage, "setting": setting.setting_id, "setting_params": setting.params(),
@@ -823,6 +824,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-candidates", type=int, default=5)
     p.add_argument("--tamper-depth-factor", type=float, default=None, help="실패 사례: 1단계 제거 모델 깊이에 이 배수를 곱해 QA 실패·복구를 시험")
     p.add_argument("--window-offset-rel-depth", type=float, default=0.0, help="창 안 편향 QA 에 깊이 상대 허용(예 0.1). 0 은 z 만 (5절 실행값)")
+    p.add_argument("--window-offset-reference", choices=["unity", "oot"], default="unity",
+                   help="창 안 편향 기준: unity=기존 1, oot=바깥 평균·두 평균의 표본 오차 (실험 옵션)")
     p.add_argument("--refine-duration-max-hours", type=float, default=0.0, help="재적합 지속시간 상한(예 12). 주면 배수 범위도 0.5–2.0 으로 넓힌다. 0 은 5절 실행값")
     p.add_argument("--continue-after-qa-fail", action="store_true", help="QA 실패 피크를 제거 불가로 기록·제외하고 계속 탐색 (설계 변경 제안 시험)")
     p.set_defaults(func=cmd_iterate)

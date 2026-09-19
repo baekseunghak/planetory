@@ -181,6 +181,52 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 
 **5.4 제안 갱신**: 지속시간 범위 확대·창 안 편향 깊이 상대 허용은 **채택 제안·미확정**이다. 5.4·5.5의 8 h 실패 0은 가드 적용 전 옵션 실행에서의 관찰이며, 5.5.1의 현재 가드 조합에서는 재현되지 않았다. 우선 1 d·8 h의 `window_offset` 실패 원인을 조사하고 고정 비교 조건에서 재검증한다. 결과를 맞추기 위해 문턱을 즉시 완화하거나 옵션을 기본값으로 승격하지 않는다. 110 확정 설정과 5별 재실행 뒤 팀 리뷰로 확정한다. "QA 실패 뒤 계속" 은 **보류** — 112 의 넓은 고조파 집합(P/3·P/5·P/7·3P·3P/2 포함)과 별 단위 EB 제외가 먼저 있어야 하며, 그 전까지는 5.6 v1.0 대로 `removal_qa_failed` 에서 종료한다. 옵션은 코드에 남겨 112 뒤 재측정한다.
 
+### 5.5.2 창 안 편향 원인 진단 (2026-09-19 실측 완료)
+
+`7cc8dcb2` 저장 결과에서 1 d·8 h 실패에는 양수 편향과 음수 편향이 모두 있다. 예를 들어 g024는 z=17.88·깊이 상대 편차=0.293, g033은 z=−146.01·상대 편차=−0.123이다. 현재 노트북에는 이전 비교 실행 `1f73cf6a`·`451f709c`의 원시 manifest가 없어, 바깥 구간 변경만을 원인으로 확정하지 않는다.
+
+현재 QA는 창 안 잔차 평균을 고정 기준 1과 비교하며, 바깥 구간은 scatter 추정에 사용한다. 바깥 평균이 1인지, 모델 제거가 창 안과 바깥의 차이를 줄였는지는 기존 steps.csv만으로 구분할 수 없다. 기준 밝기 편향·모델 깊이 또는 창 오차를 분리하기 위해 `python -m tess_bench.iterate_diagnose`를 추가한다. 이는 기존 판정을 바꾸는 보정이 아니라 진단이다.
+
+- 원본 manifest의 입력 6개·출력 3개 SHA-256과 Archive 제거 모델을 확인한다.
+- realclean 단일 1 d·8 h 주입 12곡선만 전처리까지 복원하고 저장된 0단계 후보 모델을 적용한다. BLS 탐색·재적합·반복 루프를 실행하지 않는다.
+- 제거 전후 창 안·바깥 점 수와 평균(ppm), 제거 뒤 안−바깥 차이, 기존 QA 세 지표를 CSV로 기록한다.
+- 기존 window_offset_z·window_offset_rel·edge_excess 재현 여부를 검사한다. 불일치하면 비정상 종료하고 해석을 보류한다.
+- 결과는 별도 results/diagnostics 디렉터리에 저장하며 원본 산출물은 보존한다. provenance에는 원본 manifest·출력·현재 계산 코드의 SHA-256을 기록하며 Git 명령을 실행하지 않는다.
+
+실행법은 [tess-bench README](../../experiments/tess-bench/README.md)의 제거 편향 진단 절을 따른다. 사용자가 아래 진단을 실행했으며 12곡선의 기존 QA 지표가 모두 재현됐다. 합성 테스트는 기준 밝기가 600 ppm 높은 정상 제거와 깊이를 3배 과대 제거한 경우를 구분한다. QA 문턱·제거 모델·지속시간 상한은 변경하지 않는다. 새 iterate manifest의 task만 `S15P21C206-111 iterate`로 정정하며 과거 manifest는 수정하지 않는다.
+
+### 5.5.3 바깥 평균 기준 창 안 편향 QA (실험 옵션·반복 실행 대기)
+
+진단 출처는 `results/diagnostics/iterate-7cc8dcb2-20260919T085528878912Z/`의 `window_offsets.csv`와 `provenance.json`이다(tess-bench 기준). CSV SHA-256은 `34f4133dc03035ec93f25ad1694057a06398e273dba9fee7b34134ea29818838`이며 provenance와 일치한다. 원본 run은 `7cc8dcb2`, `source_metrics_reproduced=true`다.
+
+| 표본 | 제거 뒤 창 안 평균(ppm, 기준 1) | 바깥 평균(ppm, 기준 1) | 안−바깥(ppm) | 해석 |
+|---|---:|---:|---:|---|
+| g025 | 168.688 | 160.435 | 8.254 | 기준 밝기 편향과 제거 잔여를 구분할 필요 |
+| g031 | 891.091 | 887.962 | 3.129 | 기준 1 대비 큰 편차가 대부분 공통 밝기 편향 |
+| g033 | −990.460 | 29.312 | −1,019.771 | 바깥과 비교해도 제거 잔여가 남음 |
+
+진단은 전처리의 어느 연산이 공통 편향을 만들었는지나 재적합이 실패한 세부 원인까지 확정하지 않는다. 우선 판정 기준의 공통 밝기 민감도를 분리하여 검증한다.
+
+`--window-offset-reference oot`를 지정하면 창 안 편향만 다음 계산으로 바꾼다. 기본값 `unity`는 기존 실행과 같다.
+
+- 안 구간: `|φ| < D/2`, 바깥 구간: `|φ| ≥ D`. 유한 잔차만 사용한다.
+- `delta = mean(residual_inside − 1) − mean(residual_outside − 1)`.
+- `SE = robust_scatter(residual_outside) × sqrt(1/n_inside + 1/n_outside)`; `z = delta/SE`.
+- 깊이 상대 편차는 `delta / 제거 모델 깊이`다. 기존과 같은 `|z| ≤ 5` 또는 깊이 상대 편차 절댓값 ≤ 0.1 기준으로 비교한다. 0.1은 실행 옵션으로 지정한다.
+- 안 5점·바깥 20점 미만 또는 바깥 scatter 0/비유한이면 측정 불가로 남긴다. 기본 `qa_require_measurable=true`에서 실패한다. 기준 1 방식으로 대체하지 않는다.
+- 두 구간의 공통 잡음·독립 점을 가정한 SE 근사다. 시간 상관·바깥의 다른 신호/추세 오염을 해결한 통계적 유의확률은 아니다. 창 안 산포를 분모에 넣어 잘못 제거한 잔여를 숨기지 않는다.
+- 모델 제거·재적합·지속시간 상한 0.35·게이트·경계 돌출·다른 후보/겹침 QA·실패 시 종료는 그대로다. 이 옵션은 운영 계약 또는 110 holdout 설정 변경이 아니다.
+
+`steps.csv`의 QA 측정 행은 `window_offset_reference`와 실제 판정용 `window_offset_z`·`window_offset_rel`을 저장한다. `window_offset_unity_z`·`window_offset_unity_rel`에는 기준 1 대비 기존 지표를 함께 남긴다. manifest의 `iterate.qa_window_offset_reference`에도 방식을 기록한다. 과거 CSV에는 이 열이 없으며 기준은 unity다.
+
+저장 진단 수치로 **창 안 편향 항목만** 재계산하면 g024·g027·g030·g033은 여전히 실패하며, 12개 중 실패가 10개에서 4개로 줄어든다. 이는 고정된 첫 단계 후보의 산술 비교이고 새 루프의 회수·가짜 후보 결과가 아니다. 후속 단계 경로와 다른 QA는 실제 비교 실행으로 검증한다.
+
+```powershell
+uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation --no-noise --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --window-offset-reference oot
+```
+
+`7cc8dcb2`의 조건에 reference 옵션 하나만 추가한다. 결과에서 단일·쌍 회수, 가짜 후보, QA 실패와 실패 항목, 1 d·8 h 표본별 첫 단계 및 원본 재평가를 비교한다. 현재 사용자 반복 실행은 대기 중이며 실제 회수 개선을 주장하지 않는다. 검증은 tess-bench·tess-fixture 96 passed, 2 skipped(TOI-270 FITS 부재)다. 합성 테스트에서 공통 밝기 이동 불변성, 두 평균의 표본 오차, 과대/과소 제거 실패와 잔차 복구, 측정 불가, CLI→manifest 옵션 기록을 확인했다.
+
 ## 6. 한계·후속
 
 - 중복·고조파 규칙은 임시다. 겹침 쌍(P₂ = 2P₁)처럼 **실제 두 번째 신호가 첫 후보의 정확한 고조파**인 경우 임시 규칙은 그것을 중복으로 버린다. 깊이·통과 부분집합으로 구분하는 정식 규칙은 112 가 정하고, 이 벤치마크는 그 사례를 기록만 한다.
