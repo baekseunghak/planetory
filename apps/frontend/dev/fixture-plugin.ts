@@ -6,6 +6,14 @@ import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
 } from "./analysis-fixtures.ts";
+import {
+  readScenario,
+  SUBMISSION_FIXTURE_CSRF,
+  SUBMISSION_FIXTURE_HEADER,
+  submissionFixtureResponse,
+} from "./submission-fixtures.ts";
+
+const BODY_LIMIT = 100_000;
 // Serve-only fixture. No account-selection, reset, achievement or OAuth endpoints.
 export function fixturePlugin(observations = false): Plugin {
   return {
@@ -32,8 +40,68 @@ export function fixturePlugin(observations = false): Plugin {
           );
           return;
         }
+        const url = new URL(req.url ?? "/", "http://fixture.invalid");
+        if (req.method === "GET" && url.pathname === "/v1/auth/csrf") {
+          // 쓰기 요청마다 새로 받는 토큰. 고정값이며 실제 CSRF 방어가 아니다.
+          res.end(
+            JSON.stringify({
+              headerName: "X-CSRF-TOKEN",
+              token: SUBMISSION_FIXTURE_CSRF,
+            }),
+          );
+          return;
+        }
+        if (
+          url.pathname.startsWith("/v1/submissions/") ||
+          /^\/v1\/stars\/[^/]+\/submissions$/.test(url.pathname)
+        ) {
+          let body: unknown = null;
+          if (req.method !== "GET") {
+            let raw = "";
+            try {
+              for await (const chunk of req) {
+                raw += String(chunk);
+                if (raw.length > BODY_LIMIT) throw new Error("too large");
+              }
+              body = raw ? JSON.parse(raw) : null;
+            } catch {
+              body = null;
+            }
+          }
+          const reply = submissionFixtureResponse({
+            method: req.method ?? "GET",
+            url,
+            csrf: req.headers["x-csrf-token"],
+            scenario: readScenario(req.headers[SUBMISSION_FIXTURE_HEADER]),
+            body,
+            // 진입 응답을 그대로 재사용해 별 접근 거절을 한 곳에서 판정한다.
+            contextFor: (ticId) => {
+              const probe = new URL(
+                `/v1/stars/${ticId}/analysis-context`,
+                "http://fixture.invalid",
+              );
+              return (
+                periodogramFixtureResponse(probe) ??
+                analysisFixtureResponse(probe)
+              );
+            },
+          });
+          if (reply) {
+            // 소켓을 끊어 응답 유실을 재현한다. 상태 코드를 쓰지 않는 것이 요점이다.
+            if (reply.kind === "drop") {
+              res.destroy();
+              return;
+            }
+            res.statusCode = reply.status;
+            res.setHeader(
+              "X-Current-Bundle",
+              reply.currentBundleId ?? ANALYSIS_FIXTURE_BUNDLE,
+            );
+            res.end(JSON.stringify(reply.body));
+            return;
+          }
+        }
         if (req.method === "GET") {
-          const url = new URL(req.url ?? "/", "http://fixture.invalid");
           const analysis =
             (observations
               ? await observationFixtureResponse(

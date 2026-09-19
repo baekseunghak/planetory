@@ -6,30 +6,30 @@
 
 ## 엔드포인트
 
-| 요청 | 용도 |
-| --- | --- |
-| `POST /api/v1/stars/{ticId}/submissions` | 제출값 확인 단계의 [제출]. 본문 `requestId`가 멱등 단위 |
-| `GET /api/v1/submissions/by-request/{requestId}` | 응답 유실 복구. 조회 전용이며 접수를 만들지 않는다 |
+| 요청                                             | 용도                                                    |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| `POST /api/v1/stars/{ticId}/submissions`         | 제출값 확인 단계의 [제출]. 본문 `requestId`가 멱등 단위 |
+| `GET /api/v1/submissions/by-request/{requestId}` | 응답 유실 복구. 조회 전용이며 접수를 만들지 않는다      |
 
 탐사 API의 모든 응답에 `X-Current-Bundle` 헤더가 붙는다(D-5). 쓰기는 이와 별개로 `BUNDLE_CHANGED`로 거절되므로, 제출 경로에서는 헤더를 판 교체 **감지**에만 쓰고 헤더만 보고 재전송하지 않는다.
 
 ## 응답과 처리
 
-| HTTP·코드 | 뜻 | 프론트 처리 | 요청 ID |
-| --- | --- | --- | --- |
-| 201 | 새 접수 | 접수 확정 | 소비 |
-| 200 | 같은 ID·같은 본문 재전송 | 저장된 결과 재현. 새 행·성과 없음(SUB-09) | 소비 |
-| 400 `VALIDATION_FAILED` | 6.2절 검증 실패 | `fieldErrors[]`를 해당 입력 옆에 표시. Submission·History 없음 | 보존 |
-| 400 `EPOCH_OUT_OF_RANGE` | 관측 범위 안 epoch 없음 | 위상 선택으로 되돌린다 | 보존 |
-| 401 | 인증 만료 | 공용 클라이언트의 `onUnauthorized`가 처리 | 보존 |
-| 403 `STAR_LOCKED` | 별이 열리지 않음 | 분석 진입 자체가 무효. 재시도하지 않는다 | 폐기 |
-| 404 `STAR_NOT_PUBLISHED` | 없는 TIC·비공개 | 존재를 드러내지 않는다 | 폐기 |
-| 409 `IDEMPOTENCY_CONFLICT` | 같은 ID·**다른** 본문 | 저장된 결과를 재현하지 않고 거절. 본문이 바뀌었으므로 새 ID로만 다시 보낼 수 있다 | **새 ID** |
-| 409 `REQUEST_IN_PROGRESS` | 같은 ID 처리 중 | by-request로 확인 후 같은 ID로 재전송 | 보존 |
-| 409 `BUNDLE_CHANGED` | 판·계산 버전이 현재와 다름 | EXP-01대로 최신 판 재조회. 곡선 단계·제거 조합 유지, 주기·위상 초기화(AT-117) | **새 ID** |
-| 409 `STAR_ALREADY_COMPLETED` | 완료된 별에 `no_candidate` | 저장되지 않음 | 폐기 |
-| 409 `SKIP_NOT_AVAILABLE` | 건너뛰기 조건 미충족 | 저장되지 않음 | 폐기 |
-| 응답 유실 | 타임아웃·취소·5xx·본문 파손·전송 후 네트워크 끊김 | **결과 불명.** 새 ID를 만들지 않고 by-request로 복구 | 보존 |
+| HTTP·코드                    | 뜻                                                | 프론트 처리                                                                       | 요청 ID   |
+| ---------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- | --------- |
+| 201                          | 새 접수                                           | 접수 확정                                                                         | 소비      |
+| 200                          | 같은 ID·같은 본문 재전송                          | 저장된 결과 재현. 새 행·성과 없음(SUB-09)                                         | 소비      |
+| 400 `VALIDATION_FAILED`      | 6.2절 검증 실패                                   | `fieldErrors[]`를 해당 입력 옆에 표시. Submission·History 없음                    | 보존      |
+| 400 `EPOCH_OUT_OF_RANGE`     | 관측 범위 안 epoch 없음                           | 위상 선택으로 되돌린다                                                            | 보존      |
+| 401                          | 인증 만료                                         | 공용 클라이언트의 `onUnauthorized`가 처리                                         | 보존      |
+| 403 `STAR_LOCKED`            | 별이 열리지 않음                                  | 분석 진입 자체가 무효. 재시도하지 않는다                                          | 폐기      |
+| 404 `STAR_NOT_PUBLISHED`     | 없는 TIC·비공개                                   | 존재를 드러내지 않는다                                                            | 폐기      |
+| 409 `IDEMPOTENCY_CONFLICT`   | 같은 ID·**다른** 본문                             | 저장된 결과를 재현하지 않고 거절. 본문이 바뀌었으므로 새 ID로만 다시 보낼 수 있다 | **새 ID** |
+| 409 `REQUEST_IN_PROGRESS`    | 같은 ID 처리 중                                   | by-request로 확인 후 같은 ID로 재전송                                             | 보존      |
+| 409 `BUNDLE_CHANGED`         | 판·계산 버전이 현재와 다름                        | EXP-01대로 최신 판 재조회. 곡선 단계·제거 조합 유지, 주기·위상 초기화(AT-117)     | **새 ID** |
+| 409 `STAR_ALREADY_COMPLETED` | 완료된 별에 `no_candidate`                        | 저장되지 않음                                                                     | 폐기      |
+| 409 `SKIP_NOT_AVAILABLE`     | 건너뛰기 조건 미충족                              | 저장되지 않음                                                                     | 폐기      |
+| 응답 유실                    | 타임아웃·취소·5xx·본문 파손·전송 후 네트워크 끊김 | **결과 불명.** 새 ID를 만들지 않고 by-request로 복구                              | 보존      |
 
 `by-request` 조회는 200 같은 본문 / 404 미접수 / 409 `REQUEST_IN_PROGRESS`다.
 
@@ -58,13 +58,55 @@ ID는 새로고침을 넘겨야 하므로 `sessionStorage`에 회원·TIC 단위
 
 ## 특수 제출 (6.5절)
 
-| 종류 | 본문 | 비고 |
-| --- | --- | --- |
-| `candidate` | `selection`·`userJudgment`·`evidenceChecks`·`memo`·`viewState` | 기존 `CandidateReview` |
-| `no_candidate` | `selection`·`userJudgment`·`evidenceChecks` **없음** | 이전 후보의 수치·판단·근거를 섞지 않는다(완료 조건). 완료된 별이면 409 |
-| `skipped` | 같이 없음 | 튜토리얼 별의 조건 충족 시에만. 아니면 409 |
+| 종류           | 본문                                                           | 비고                                                                   |
+| -------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `candidate`    | `selection`·`userJudgment`·`evidenceChecks`·`memo`·`viewState` | 기존 `CandidateReview`                                                 |
+| `no_candidate` | `selection`·`userJudgment`·`evidenceChecks` **없음**           | 이전 후보의 수치·판단·근거를 섞지 않는다(완료 조건). 완료된 별이면 409 |
+| `skipped`      | 같이 없음                                                      | 튜토리얼 별의 조건 충족 시에만. 아니면 409                             |
 
 `no_candidate`는 "더 없음"이지 "모르겠음"이 아니다. `UNSURE` 판단을 담은 `candidate` 제출과 본문·의미가 모두 다르다.
+
+## 합성 응답의 원리
+
+[submission-fixtures.ts](../dev/submission-fixtures.ts)는 개발 서버에서만 쓰는 `submission-fixture-187-v1`이다. **서버를 다시 구현한 것이 아니다.** 멱등 저장소와 프론트가 실제로 틀릴 수 있는 검사(요청 ID, 판, 곡선 단계, 종류별 필드, enum, 위상 규칙)만 두고 후보 매칭·성과 판정·격자 대조는 실제 서버(C10)에 맡긴다. 상태는 이 개발 프로세스 안에만 있고 서버를 다시 띄우면 지워진다.
+
+시나리오 대부분은 **진짜 상태에서 나온다.** 저장소가 있으므로 같은 ID·같은 본문 재전송은 저장된 결과를 실제로 재현하고, 다른 본문은 본문 지문이 달라 거절된다. 판 교체·검증 실패도 실제 대조 결과다. 가짜로 만들 수 없는 것은 **응답 유실**과 **처리 중** 둘뿐이라 이 둘만 개발 전용 헤더 `X-Fixture-Submit`으로 받는다. 앱은 이 헤더를 보내지 않으며 테스트와 수동 확인만 사용한다.
+
+| 값             | 재현하는 상황                                                       |
+| -------------- | ------------------------------------------------------------------- |
+| `drop-saved`   | 접수까지 끝난 뒤 소켓을 끊는다. by-request가 200을 준다             |
+| `drop-unsaved` | 접수 전에 끊는다. by-request 404 뒤 같은 ID 재전송이 201이어야 한다 |
+| `in-progress`  | POST와 첫 by-request가 409, 그다음 조회가 200                       |
+
+응답 유실은 상태 코드를 주지 않고 소켓을 끊어 재현한다. 상태 코드가 **없는 것**이 요점이다. 공용 클라이언트가 이때 `outcomeUnknown`을 켜므로 프론트는 이 값을 복구 진입 조건으로 쓴다.
+
+새 TIC을 만들지 않고 [#183 주기도 정상 샘플](periodogram-data.md) `259377024`를 그대로 쓴다. 별 접근 거절(403·404·503)은 분석 진입 응답을 그대로 재사용해 한 곳에서 판정한다.
+
+## 직접 확인
+
+`npm.cmd run dev:fixture`는 58267 포트다. 쓰기에 필요한 토큰은 `GET /api/v1/auth/csrf`가 준다.
+
+```powershell
+$base = 'http://127.0.0.1:58267/api/v1'
+$csrf = Invoke-RestMethod "$base/auth/csrf"
+$context = Invoke-RestMethod "$base/stars/259377024/analysis-context"
+$body = @{
+  requestId = [guid]::NewGuid().ToString()
+  submissionKind = 'candidate'
+  curveContext = $context.currentCurveContext
+  selection = @{ periodDays = 11.7346; sourcePeakGridIndex = 3600; phaseStart = 0.49; phaseEnd = 0.51 }
+  userJudgment = 'LIKELY_PLANET'
+  evidenceChecks = @('oddeven')
+  memo = '합성 확인'
+  retryOfSubmissionId = $null
+} | ConvertTo-Json -Depth 5
+Invoke-RestMethod "$base/stars/259377024/submissions" -Method Post -Body $body `
+  -ContentType 'application/json' -Headers @{ 'X-CSRF-TOKEN' = $csrf.token }
+```
+
+같은 본문을 한 번 더 보내면 201이 아니라 200이 오고 `submissionId`가 같다. 유실·처리 중을 보려면 `-Headers`에 `'X-Fixture-Submit' = 'drop-saved'`를 더한다.
+
+회귀는 [submission-contract.spec.ts](../tests/browser/submission-contract.spec.ts)가 같은 경로를 HTTP로 9건 검사한다.
 
 ## 미결
 
