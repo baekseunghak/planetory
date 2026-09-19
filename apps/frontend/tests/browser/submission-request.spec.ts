@@ -18,9 +18,11 @@ test("a kept request id is cleared by the shared draft cleanup, and nothing else
       paths.map((path) => import(/* @vite-ignore */ path)),
     );
     const key = request.submissionStorageKey("u-209", "259377024");
+    const body = { memo: "확인" };
     const reserved = request.reserveRequestId(
       key,
-      request.submissionFingerprint({ memo: "확인" }),
+      request.submissionFingerprint(body),
+      { kind: "candidate", body },
     );
     const unrelated = "unrelated:key";
     sessionStorage.setItem(unrelated, "keep me");

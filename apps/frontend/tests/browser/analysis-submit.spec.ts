@@ -334,3 +334,80 @@ test("a not-ready residual says why and keeps the same request id for the retry"
   expect(ids).toHaveLength(2);
   expect(ids[0]).toBe(ids[1]);
 });
+
+test("an unresolved submission survives a reload and blocks a different one", async ({
+  page,
+}) => {
+  // 리뷰 재현: 저장은 됐는데 응답을 잃고, 조회도 막힌다.
+  let blockChecks = true;
+  await page.route("**/api/v1/submissions/by-request/*", async (route) =>
+    blockChecks
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "DEPENDENCY_UNAVAILABLE",
+            message: "조회할 수 없습니다.",
+            fieldErrors: [],
+          }),
+        })
+      : route.continue(),
+  );
+  const posts: Record<string, unknown>[] = [];
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(JSON.parse(request.postData() ?? "{}"));
+    // 서버에는 남았지만 응답은 돌아오지 않는다.
+    await route.continue({
+      headers: { ...request.headers(), "x-fixture-submit": "drop-saved" },
+    });
+  });
+
+  await page.goto(`/analysis/${TUTORIAL}`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("접수 여부를 확인해 주세요");
+  const sentId = posts[0].requestId;
+
+  // 새로고침해도 미확인 요청이 사라지면 안 된다.
+  await page.reload();
+  await expect(dialog).toContainText("결과를 확인하지 못한 제출이 있습니다");
+  await expect(
+    dialog.getByRole("button", { name: "접수 결과 확인", exact: true }),
+  ).toBeVisible();
+
+  // 되살린 미확인 요청이 초안을 잠근다. 결과를 모르는 채로 다른 제출을
+  // 보내면 앞선 요청의 ID를 잃고 같은 일을 두 번 접수할 수 있다.
+  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+  const alternatives = page.locator(".submission-alternatives");
+  await expect(
+    alternatives.getByRole("button", { name: "이 별 건너뛰기", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    alternatives.getByRole("button", { name: "더 이상 없음", exact: true }),
+  ).toBeDisabled();
+  expect(posts).toHaveLength(1);
+
+  // 되살린 상태에서도 확인 경로는 남아 있다.
+  await page
+    .locator(".submission-reminder")
+    .getByRole("button", { name: "접수 결과 보기", exact: true })
+    .click();
+
+  // 조회가 풀리면 원래 요청의 접수 결과를 그대로 확인할 수 있다.
+  blockChecks = false;
+  await dialog
+    .getByRole("button", { name: "접수 결과 확인", exact: true })
+    .click();
+  await expect(dialog).toContainText("접수되었습니다");
+  expect(posts).toHaveLength(1);
+  expect(posts[0].requestId).toBe(sentId);
+});

@@ -10,17 +10,21 @@ import {
   type SubmissionResult,
 } from "./submit-analysis";
 import {
+  markSubmissionAccepted,
+  readPendingSubmission,
   releaseRequestId,
   reserveRequestId,
   submissionFingerprint,
   submissionStorageKey,
 } from "./submission-request";
 
+/** 되살린 기록은 무엇을 보냈는지 모를 수 있다(판 1). 그래서 null을 허용한다. */
+type Kind = SubmissionKind | null;
 export type SubmissionState =
   | { phase: "idle" }
-  | { phase: "sending"; kind: SubmissionKind }
-  | { phase: "checking"; kind: SubmissionKind }
-  | ({ phase: "settled"; kind: SubmissionKind } & SubmissionResult);
+  | { phase: "sending"; kind: Kind }
+  | { phase: "checking"; kind: Kind }
+  | ({ phase: "settled"; kind: Kind } & SubmissionResult);
 
 /**
  * 제출 한 번의 수명을 화면에 연결한다. 요청 ID 예약과 복구는
@@ -33,7 +37,7 @@ export function useSubmission(context: AnalysisContext) {
   const [state, setState] = useState<SubmissionState>({ phase: "idle" });
   // 결과를 모르는 채로 화면을 떠나도 ID는 저장소에 남는다. 중단은 화면 갱신만 멈춘다.
   const running = useRef<AbortController | null>(null);
-  const last = useRef<{ requestId: string; kind: SubmissionKind } | null>(null);
+  const last = useRef<{ requestId: string; kind: Kind } | null>(null);
   const [volatileId, setVolatileId] = useState(false);
   const key = useMemo(
     () => (memberId ? submissionStorageKey(memberId, context.ticId) : null),
@@ -45,18 +49,41 @@ export function useSubmission(context: AnalysisContext) {
     },
     [],
   );
-  // 다른 별로 옮기면 이 별의 진행 표시는 의미가 없다.
+  /**
+   * 별이 바뀌거나 화면에 들어올 때 이 회원·이 별의 기록을 되살린다.
+   *
+   * 결과를 모르는 요청은 새로고침으로 사라지면 안 된다. 사라지면 복구
+   * 경로가 없어지고, 사용자는 접수됐는지 모르는 채로 다른 제출을 하게 된다.
+   *
+   * **조회를 자동으로 보내지는 않는다.** 되살리는 것은 상태와 [접수 결과
+   * 확인]까지고, 요청을 보낼지는 사용자가 정한다.
+   */
   useEffect(() => {
     running.current?.abort();
     running.current = null;
-    last.current = null;
-    setState({ phase: "idle" });
     setVolatileId(false);
-  }, [context.ticId, memberId]);
+    const pending = key ? readPendingSubmission(key) : null;
+    if (!pending || pending.state !== "pending") {
+      last.current = null;
+      setState({ phase: "idle" });
+      return;
+    }
+    last.current = { requestId: pending.requestId, kind: pending.kind };
+    setState({
+      phase: "settled",
+      kind: pending.kind,
+      state: "unresolved",
+      requestId: pending.requestId,
+      reason: "lost",
+      // 접수되지 않았다고 단정하지 않는다. 확인해야 알 수 있다.
+      message:
+        "결과를 확인하지 못한 제출이 있습니다. 다시 제출하지 말고 접수 결과를 확인해 주세요.",
+    });
+  }, [context.ticId, memberId, key]);
 
   const run = useCallback(
     async (
-      kind: SubmissionKind,
+      kind: Kind,
       phase: "sending" | "checking",
       work: (signal: AbortSignal) => Promise<SubmissionResult>,
     ) => {
@@ -67,6 +94,8 @@ export function useSubmission(context: AnalysisContext) {
       try {
         const result = await work(controller.signal);
         if (controller.signal.aborted) return;
+        // 확정된 기록은 다른 본문의 예약을 막지 않는다. 미확인만 막는다.
+        if (result.state === "accepted" && key) markSubmissionAccepted(key);
         setState({ phase: "settled", kind, ...result });
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -84,13 +113,31 @@ export function useSubmission(context: AnalysisContext) {
         if (running.current === controller) running.current = null;
       }
     },
-    [],
+    [key],
   );
 
   const submit = useCallback(
     (input: SubmissionInput) => {
       if (!key) return;
-      const reserved = reserveRequestId(key, submissionFingerprint(input));
+      const reserved = reserveRequestId(key, submissionFingerprint(input), {
+        kind: input.submissionKind,
+        body: { ...input },
+      });
+      // 앞선 요청의 결과를 모른다. 보내지 않고 그 요청의 확인으로 돌린다.
+      if (reserved.status === "blocked") {
+        const { pending } = reserved;
+        last.current = { requestId: pending.requestId, kind: pending.kind };
+        setState({
+          phase: "settled",
+          kind: pending.kind,
+          state: "unresolved",
+          requestId: pending.requestId,
+          reason: "lost",
+          message:
+            "결과를 확인하지 못한 제출이 있어 이번 제출을 보내지 않았습니다. 먼저 접수 결과를 확인해 주세요.",
+        });
+        return;
+      }
       last.current = {
         requestId: reserved.requestId,
         kind: input.submissionKind,
