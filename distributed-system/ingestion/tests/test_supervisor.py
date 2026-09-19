@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from ingestion import __main__ as cli
 from ingestion import supervisor
 
 
@@ -163,6 +164,32 @@ class SupervisorTests(unittest.TestCase):
             with self.assertRaises(supervisor.AlreadyRunning):
                 with supervisor.process_lock(lock):
                     pass
+
+    def test_worker_lock_is_shared_across_run_ids(self):
+        old = supervisor.supervisor_lock_path(self.root / "run-old", 1)
+        new = supervisor.supervisor_lock_path(self.root / "run-new", 1)
+        other_worker = supervisor.supervisor_lock_path(self.root / "run-new", 2)
+        self.assertEqual(old, new)
+        self.assertNotEqual(new, other_worker)
+
+    def test_cli_reports_lock_collision_as_failure(self):
+        args = SimpleNamespace(
+            config=Path("config.json"),
+            source_list=Path("source.json"),
+            expected_source_list_sha256="a" * 64,
+            output=self.output,
+            run_root=self.run_root,
+            worker_slot=1,
+            sector=[3],
+        )
+        with mock.patch.object(cli.tess, "load_config", return_value=config()):
+            with mock.patch.object(
+                cli.tess,
+                "load_source_list",
+                return_value={"source_list_sha256": "a" * 64},
+            ):
+                with mock.patch.object(cli.supervisor, "run_supervisor", side_effect=supervisor.AlreadyRunning("held")):
+                    self.assertNotEqual(cli.supervise(args), 0)
 
 
 if __name__ == "__main__":

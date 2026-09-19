@@ -1,16 +1,19 @@
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 param(
  [Parameter(Mandatory)]
- [ValidateSet('Preflight','Install','SourceList','Start','Status','Progress','Pause','Audit','InstallSupervisor','SupervisorStatus','TestSupervisorRestart','TestSupervisorWatchdog')]
+ [ValidateSet('Preflight','Install','SourceList','Start','Status','Progress','Pause','Audit','FinalCoverage','InstallSupervisor','SupervisorStatus','TestSupervisorRestart','TestSupervisorWatchdog')]
  [string]$Step,
  [Parameter(Mandatory)][ValidatePattern('^\d{8}T\d{6}Z$')][string]$RunId,
  [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSourceListSha256,
- [ValidateSet(3,4,5)][int]$Sector=3,
+ [ValidateRange(1,13)][int]$Sector=1,
  [ValidateRange(0,100000)][int]$Limit=0,
  [ValidateRange(1,1440)][int]$RateWindowMinutes=15,
+ [ValidateRange(80,1000)][int]$MinimumFreeGiB=100,
  [string]$ReleaseId='',
- [ValidateCount(1,3)][ValidateSet(3,4,5)][int[]]$Sectors=(3..5),
+ [ValidateCount(1,13)][ValidateRange(1,13)][int[]]$Sectors=@(1,2,6,7,8,9,10,11,12,13),
  [ValidateCount(1,5)][ValidateSet(2,3,4,5,6)][int[]]$NodeNumbers=(2..6),
+ [ValidatePattern('^\d{8}T\d{6}Z$')][string]$ExistingRunId='20260918T080417Z',
+ [ValidatePattern('^[0-9a-f]{64}$')][string]$ExistingSourceListSha256='5781b664ea901bbbeecb4829e34c314e52961d111460b3e5a6ebe58918efc789',
  [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
 )
 $ErrorActionPreference='Stop'
@@ -19,7 +22,7 @@ if ($ReleaseId -notmatch '^\d{8}T\d{6}Z$') { throw 'ReleaseId must use UTC yyyyM
 
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and join the project tailnet first.' }
 $LocalIngestionPath=(Resolve-Path $LocalIngestionPath).Path
-$mutatingSteps=@('Install','SourceList','Start','Pause','Audit','InstallSupervisor','TestSupervisorRestart','TestSupervisorWatchdog')
+$mutatingSteps=@('Install','SourceList','Start','Pause','Audit','FinalCoverage','InstallSupervisor','TestSupervisorRestart','TestSupervisorWatchdog')
 if ($Step -in $mutatingSteps -and -not $PSCmdlet.ShouldProcess("Worker $($NodeNumbers -join ',')","S15P21C206-75 $Step Sector $Sector run $RunId")) { return }
 
 function Invoke-Tailscale {
@@ -133,14 +136,20 @@ mountpoint -q /mnt/data
 sudo -n true
 disk_percent=$(df -P /mnt/data | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
 test "$disk_percent" -lt 75
+free_bytes=$(df -B1 --output=avail /mnt/data | awk 'NR==2 {print $1}')
+required_free_bytes=$((__MINIMUM_FREE_GIB__ * 1024 * 1024 * 1024))
+test "$free_bytes" -ge "$required_free_bytes"
+active_units=$(systemctl list-units --type=service --state=active 'planetory-tess-ingestion-*' --no-legend --no-pager 2>/dev/null | awk 'NF {print $1}')
+test -z "$active_units"
+test "$(pgrep -fc 'python3.12 -u -m ingestion download' || true)" -eq 0
 python3.12 - <<'PY'
 import urllib.request
-response=urllib.request.urlopen('https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_3_lc.sh', timeout=20)
+response=urllib.request.urlopen('https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_1_lc.sh', timeout=20)
 assert response.status == 200
 response.close()
 PY
-echo PREFLIGHT_OK host=$(hostname -s) disk_percent=$disk_percent
-'@.Replace('__NODE__',[string]$node)
+echo PREFLIGHT_OK host=$(hostname -s) disk_percent=$disk_percent free_bytes=$free_bytes
+'@.Replace('__NODE__',[string]$node).Replace('__MINIMUM_FREE_GIB__',[string]$MinimumFreeGiB)
    Invoke-Remote $node $command 'preflight'
   }
  }
@@ -193,7 +202,7 @@ release='__RELEASE__'
 source_list='__SOURCE_LIST__'
 test -f "$release/READY"
 cd "$release"
-python3.12 -m ingestion source-list --config config/service-v1.json --output "$source_list"
+python3.12 -m ingestion source-list --config config/service-v1.json --output "$source_list" --expected-source-list-sha256 '__EXPECTED_SHA__'
 actual=$(PYTHONPATH="$release" python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["source_list_sha256"])' "$source_list")
 test "$actual" = '__EXPECTED_SHA__'
 echo SOURCE_LIST_VERIFIED sha256="$actual"
@@ -258,11 +267,12 @@ exit_file="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.exit"
 events="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.events.jsonl"
 manifest="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.run.json"
 log="$run_root/logs/sector-__SECTOR__-worker-__SLOT__.log"
+sector_dir=$(printf 'sector=%04d' __SECTOR__)
 pid=$(cat "$pid_file" 2>/dev/null || true)
 if test -n "$pid" && kill -0 "$pid" 2>/dev/null; then state=RUNNING; elif test -f "$exit_file"; then state=FINISHED; else state=NOT_STARTED; fi
-events_count=$(wc -l < "$events" 2>/dev/null || echo 0)
-final_count=$(find "$run_root/raw/sector=000__SECTOR__" -maxdepth 1 -type f -name '*.fits' 2>/dev/null | wc -l)
-part_count=$(find "$run_root/raw/sector=000__SECTOR__" -maxdepth 1 -type f -name '*.part' 2>/dev/null | wc -l)
+if test -f "$events"; then events_count=$(wc -l < "$events"); else events_count=0; fi
+final_count=$(find "$run_root/raw/$sector_dir" -maxdepth 1 -type f -name '*.fits' 2>/dev/null | wc -l)
+part_count=$(find "$run_root/raw/$sector_dir" -maxdepth 1 -type f -name '*.part' 2>/dev/null | wc -l)
 disk_percent=$(df -P /mnt/data | awk 'NR==2 {print $5}')
 echo STATUS state="$state" pid="${pid:-none}" exit=$(cat "$exit_file" 2>/dev/null || echo pending) events="$events_count" fits="$final_count" parts="$part_count" disk="$disk_percent"
 if test "$state" = FINISHED && test -f "$manifest"; then cat "$manifest"; fi
@@ -273,7 +283,11 @@ test -f "$log" && tail -n 3 "$log" || true
  }
  'Progress' {
   $metrics=@()
-  $sectorCsv=($Sectors -join ',')
+  $progressSectors=$Sectors
+  if (-not $PSBoundParameters.ContainsKey('Sectors') -and $RunId -eq $ExistingRunId) {
+   $progressSectors=@(3,4,5)
+  }
+  $sectorCsv=($progressSectors -join ',')
   foreach ($node in $NodeNumbers) {
    Assert-RemoteHost $node
    $slot=$node-1
@@ -347,6 +361,11 @@ validated = [
     if filename in selected_filenames
     and event.get('status') == 'VALIDATED'
 ]
+selected_latest = [event for filename, event in latest.items() if filename in selected_filenames]
+failed = sum(1 for event in selected_latest if event.get('status') == 'FAILED')
+http_retries = sum(sum(int(value) for value in event.get('http_retries', {}).values()) for event in validated)
+retry_429 = sum(int(event.get('http_retries', {}).get('429', 0)) for event in validated)
+error_retries = sum(sum(int(value) for value in event.get('error_retries', {}).values()) for event in validated)
 completed_bytes = sum(int(event.get('size_bytes', 0)) for event in validated)
 partial_bytes = 0
 for sector in sectors:
@@ -366,6 +385,10 @@ print(json.dumps({
     'partial_bytes': partial_bytes,
     'recent_bytes': recent_bytes,
     'window_seconds': window_seconds,
+    'failed': failed,
+    'http_retries': http_retries,
+    'retry_429': retry_429,
+    'error_retries': error_retries,
 }, separators=(',', ':')))
 PY
 '@.Replace('__SOURCE_LIST__',$sourceList).Replace('__RUN_ROOT__',$runRoot).Replace('__SLOT__',[string]$slot).Replace('__SECTORS__',$sectorCsv).Replace('__WINDOW_MINUTES__',[string]$RateWindowMinutes).Replace('__EXPECTED_SHA__',$ExpectedSourceListSha256)
@@ -375,20 +398,26 @@ PY
    $metrics += $metric
    $percent=if ($metric.total -gt 0) { 100.0 * $metric.completed / $metric.total } else { 0.0 }
    $rate=[double]$metric.recent_bytes / [double]$metric.window_seconds
-   Write-Output ('WORKER node={0} status={1} sector={2} files={3}/{4} percent={5:N2}% verified={6} partial={7} rate={8}' -f $metric.node,$metric.status,($metric.sector ?? '-'),$metric.completed,$metric.total,$percent,(Format-ByteCount $metric.completed_bytes),(Format-ByteCount $metric.partial_bytes),(Format-ByteRate $rate))
+   $failureRate=if ($metric.total -gt 0) { 100.0 * [double]$metric.failed / [double]$metric.total } else { 0.0 }
+   Write-Output ('WORKER node={0} status={1} sector={2} files={3}/{4} percent={5:N2}% verified={6} partial={7} rate={8} failures={9} failureRate={10:N4}% retry429={11} httpRetries={12} otherRetries={13}' -f $metric.node,$metric.status,($metric.sector ?? '-'),$metric.completed,$metric.total,$percent,(Format-ByteCount $metric.completed_bytes),(Format-ByteCount $metric.partial_bytes),(Format-ByteRate $rate),$metric.failed,$failureRate,$metric.retry_429,$metric.http_retries,$metric.error_retries)
   }
   $total=[double](($metrics | Measure-Object -Property total -Sum).Sum)
   $completed=[double](($metrics | Measure-Object -Property completed -Sum).Sum)
   $completedBytes=[double](($metrics | Measure-Object -Property completed_bytes -Sum).Sum)
   $partialBytes=[double](($metrics | Measure-Object -Property partial_bytes -Sum).Sum)
   $recentBytes=[double](($metrics | Measure-Object -Property recent_bytes -Sum).Sum)
+  $failures=[double](($metrics | Measure-Object -Property failed -Sum).Sum)
+  $retry429=[double](($metrics | Measure-Object -Property retry_429 -Sum).Sum)
+  $httpRetries=[double](($metrics | Measure-Object -Property http_retries -Sum).Sum)
+  $errorRetries=[double](($metrics | Measure-Object -Property error_retries -Sum).Sum)
   $windowSeconds=[double]($RateWindowMinutes * 60)
   $rate=$recentBytes / $windowSeconds
   $percent=if ($total -gt 0) { 100.0 * $completed / $total } else { 0.0 }
+  $failureRate=if ($total -gt 0) { 100.0 * $failures / $total } else { 0.0 }
   $averageSize=if ($completed -gt 0) { $completedBytes / $completed } else { 0.0 }
   $remainingBytes=[Math]::Max(0.0,($total - $completed) * $averageSize)
   $eta=if ($rate -gt 0 -and $averageSize -gt 0) { Format-Eta ($remainingBytes / $rate) } else { 'unknown' }
-  Write-Output ('TOTAL run={0} sectors={1} files={2}/{3} percent={4:N2}% verified={5} partial={6} rate={7} window={8}m eta={9}' -f $RunId,$sectorCsv,$completed,$total,$percent,(Format-ByteCount $completedBytes),(Format-ByteCount $partialBytes),(Format-ByteRate $rate),$RateWindowMinutes,$eta)
+  Write-Output ('TOTAL run={0} sectors={1} files={2}/{3} percent={4:N2}% verified={5} partial={6} rate={7} window={8}m eta={9} failures={10} failureRate={11:N4}% retry429={12} httpRetries={13} otherRetries={14}' -f $RunId,$sectorCsv,$completed,$total,$percent,(Format-ByteCount $completedBytes),(Format-ByteCount $partialBytes),(Format-ByteRate $rate),$RateWindowMinutes,$eta,$failures,$failureRate,$retry429,$httpRetries,$errorRetries)
  }
  'Pause' {
   $sectorExplicit=if ($PSBoundParameters.ContainsKey('Sector')) { 'true' } else { 'false' }
@@ -418,7 +447,7 @@ else:
         print('COMPLETE')
         raise SystemExit(0)
     sector = value.get('sector')
-    print(sector if sector in (3, 4, 5) else '')
+    print(sector if sector in range(1, 14) else '')
 PY
 )
 if test "$detected_sector" = COMPLETE; then
@@ -434,7 +463,7 @@ if test -n "$detected_sector"; then
 else
  sector=$requested_sector
 fi
-case "$sector" in 3|4|5) ;; *) echo "INVALID_PAUSE_SECTOR sector=$sector" >&2; exit 1;; esac
+case "$sector" in [1-9]|1[0-3]) ;; *) echo "INVALID_PAUSE_SECTOR sector=$sector" >&2; exit 1;; esac
 pid_file="$run_root/pids/sector-$sector-worker-$slot.pid"
 sudo systemctl stop "$unit"
 state=$(systemctl is-active "$unit" 2>/dev/null || true)
@@ -560,12 +589,144 @@ PYTHONPATH="$release" python3.12 -m ingestion audit \
    Invoke-Remote $node $command 'audit completed sector'
   }
  }
+ 'FinalCoverage' {
+  $expectedNodes='2,3,4,5,6'
+  $expectedExpansionSectors='1,2,6,7,8,9,10,11,12,13'
+  if (($NodeNumbers -join ',') -ne $expectedNodes) { throw "FinalCoverage requires NodeNumbers $expectedNodes." }
+  if (($Sectors -join ',') -ne $expectedExpansionSectors) { throw "FinalCoverage requires expansion Sectors $expectedExpansionSectors." }
+  $existingRunRoot="/mnt/data/staging/S15P21C206-75/run-$ExistingRunId"
+  $existingSourceList="$existingRunRoot/manifests/tess-service-v1.json"
+  $sectorCsv=$Sectors -join ','
+  $shards=@()
+  foreach ($node in $NodeNumbers) {
+   Assert-RemoteHost $node
+   $slot=$node-1
+   $command=@'
+set -eu
+release='__RELEASE__'
+run_root='__RUN_ROOT__'
+source_list='__SOURCE_LIST__'
+existing_run_root='__EXISTING_RUN_ROOT__'
+existing_source_list='__EXISTING_SOURCE_LIST__'
+coverage="$run_root/manifests/coverage-worker-__SLOT__.json"
+test -f "$release/READY"
+test -f "$source_list"
+test -f "$existing_source_list"
+new_sha=$(PYTHONPATH="$release" python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["source_list_sha256"])' "$source_list")
+old_sha=$(PYTHONPATH="$release" python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["source_list_sha256"])' "$existing_source_list")
+test "$new_sha" = '__EXPECTED_SHA__'
+test "$old_sha" = '__EXISTING_EXPECTED_SHA__'
+cd "$release"
+PYTHONPATH="$release" python3.12 -m ingestion coverage \
+ --worker-slot __SLOT__ --output "$coverage" \
+ --scope '__EXISTING_RUN_ID__' "$existing_source_list" "$existing_run_root" '3,4,5' '__EXISTING_EXPECTED_SHA__' \
+ --scope '__RUN_ID__' "$source_list" "$run_root" '__EXPANSION_SECTORS__' '__EXPECTED_SHA__'
+'@.Replace('__RELEASE__',$release).Replace('__RUN_ROOT__',$runRoot).Replace('__SOURCE_LIST__',$sourceList).Replace('__EXISTING_RUN_ROOT__',$existingRunRoot).Replace('__EXISTING_SOURCE_LIST__',$existingSourceList).Replace('__SLOT__',[string]$slot).Replace('__EXPECTED_SHA__',$ExpectedSourceListSha256).Replace('__EXISTING_EXPECTED_SHA__',$ExistingSourceListSha256).Replace('__EXISTING_RUN_ID__',$ExistingRunId).Replace('__RUN_ID__',$RunId).Replace('__EXPANSION_SECTORS__',$sectorCsv)
+   $json=@(Invoke-RemoteCapture $node $command 'build Worker coverage shard') | Where-Object { $_ -match '^\{' } | Select-Object -Last 1
+   if (-not $json) { throw "worker-$node returned no coverage shard." }
+   $shard=$json | ConvertFrom-Json
+   if ($shard.schema -ne 'planetory.ingestion-coverage-shard.v1' -or -not $shard.passed) {
+    throw "worker-$node coverage shard failed."
+   }
+   if (($shard.covered_sectors -join ',') -ne '1,2,3,4,5,6,7,8,9,10,11,12,13') {
+    throw "worker-$node coverage shard does not cover Sector 1~13."
+   }
+   $shards += $shard
+  }
+
+  $config=Get-Content -Raw (Join-Path $LocalIngestionPath 'config/service-v1.json') | ConvertFrom-Json
+  $expectedBySector=@{}
+  foreach ($row in $config.sectors) { $expectedBySector[[int]$row.sector]=[int64]$row.expected_count }
+  $totals=@{}
+  foreach ($shard in $shards) {
+   foreach ($record in @($shard.sectors)) {
+    $sector=[int]$record.sector
+    if (-not $totals.ContainsKey($sector)) {
+     $totals[$sector]=@{expected=[int64]0;validated=[int64]0;total_bytes=[int64]0;part_count=[int64]0}
+    }
+    $totals[$sector].expected += [int64]$record.expected
+    $totals[$sector].validated += [int64]$record.validated
+    $totals[$sector].total_bytes += [int64]$record.total_bytes
+    $totals[$sector].part_count += [int64]$record.part_count
+   }
+  }
+  $sectorRecords=@()
+  foreach ($sector in (1..13)) {
+   if (-not $totals.ContainsKey($sector)) { throw "FinalCoverage is missing Sector $sector." }
+   $value=$totals[$sector]
+   if ($value.expected -ne $expectedBySector[$sector] -or $value.validated -ne $expectedBySector[$sector] -or $value.part_count -ne 0) {
+    throw "Sector $sector coverage mismatch: expected=$($value.expected) validated=$($value.validated) parts=$($value.part_count) configured=$($expectedBySector[$sector])."
+   }
+   $sectorRecords += [ordered]@{
+    sector=$sector
+    expected=$value.expected
+    validated=$value.validated
+    total_bytes=$value.total_bytes
+    part_count=$value.part_count
+    run_id=if ($sector -in 3,4,5) { $ExistingRunId } else { $RunId }
+   }
+  }
+  $totalExpected=[int64](($sectorRecords | Measure-Object -Property expected -Sum).Sum)
+  $totalValidated=[int64](($sectorRecords | Measure-Object -Property validated -Sum).Sum)
+  $totalBytes=[int64](($sectorRecords | Measure-Object -Property total_bytes -Sum).Sum)
+  if ($totalExpected -ne 247824 -or $totalValidated -ne 247824) {
+   throw "FinalCoverage total mismatch: expected=$totalExpected validated=$totalValidated required=247824."
+  }
+  $coverage=[ordered]@{
+   schema='planetory.ingestion-coverage.v1'
+   generated_at=[DateTime]::UtcNow.ToString('o')
+   scope='TESS SPOC 2-minute Light Curve Sector 1-13 download and local audit'
+   existing_run=[ordered]@{run_id=$ExistingRunId;sectors=@(3,4,5);source_list_sha256=$ExistingSourceListSha256}
+   expansion_run=[ordered]@{run_id=$RunId;sectors=@(1,2,6,7,8,9,10,11,12,13);source_list_sha256=$ExpectedSourceListSha256}
+   expected=$totalExpected
+   validated=$totalValidated
+   total_bytes=$totalBytes
+   part_count=0
+   passed=$true
+   sectors=$sectorRecords
+   workers=@($shards | ForEach-Object {
+    [ordered]@{
+     worker_slot=[int]$_.worker_slot
+     manifest="/mnt/data/staging/S15P21C206-75/run-$RunId/manifests/coverage-worker-$($_.worker_slot).json"
+     manifest_sha256=$_.manifest_sha256
+     expected=[int64]$_.expected
+     validated=[int64]$_.validated
+     total_bytes=[int64]$_.total_bytes
+    }
+   })
+  }
+  $coverageJson=($coverage | ConvertTo-Json -Depth 8) + "`n"
+  $coverageBytes=[Text.UTF8Encoding]::new($false).GetBytes($coverageJson)
+  $coverageSha=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($coverageBytes)).ToLowerInvariant()
+  $coverageBase64=[Convert]::ToBase64String($coverageBytes)
+  foreach ($node in $NodeNumbers) {
+   $command=@'
+set -eu
+target='__RUN_ROOT__/manifests/coverage-sectors-1-13.json'
+checksum="$target.sha256"
+temporary="$target.part"
+checksum_temporary="$checksum.part"
+cleanup() { status=$?; trap - EXIT; rm -f -- "$temporary" "$checksum_temporary"; exit "$status"; }
+trap cleanup EXIT
+printf '%s' '__COVERAGE_BASE64__' | base64 --decode > "$temporary"
+test "$(sha256sum "$temporary" | cut -d ' ' -f 1)" = '__COVERAGE_SHA__'
+printf '%s  %s\n' '__COVERAGE_SHA__' "$(basename "$target")" > "$checksum_temporary"
+mv "$temporary" "$target"
+mv "$checksum_temporary" "$checksum"
+echo COVERAGE_PUBLISHED target="$target" sha256=__COVERAGE_SHA__
+'@.Replace('__RUN_ROOT__',$runRoot).Replace('__COVERAGE_BASE64__',$coverageBase64).Replace('__COVERAGE_SHA__',$coverageSha)
+   Invoke-Remote $node $command 'publish final Sector 1-13 coverage manifest'
+  }
+  Write-Output ('COVERAGE run={0} existing_run={1} files={2}/{3} verified={4} sha256={5}' -f $RunId,$ExistingRunId,$totalValidated,$totalExpected,(Format-ByteCount $totalBytes),$coverageSha)
+ }
  'InstallSupervisor' {
   $sectorArgs=($Sectors | ForEach-Object { "--sector $_" }) -join ' '
+  $globalLockRoot='/mnt/data/staging/S15P21C206-75/locks'
   foreach ($node in $NodeNumbers) {
    Assert-RemoteHost $node
    $slot=$node-1
    $unitName="planetory-tess-ingestion-$RunId-worker-$slot.service"
+   $existingUnitName="planetory-tess-ingestion-$ExistingRunId-worker-$slot.service"
    $unit=@"
 [Unit]
 Description=Planetory TESS ingestion run $RunId worker $slot
@@ -592,7 +753,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=$runRoot
+ReadWritePaths=$runRoot $globalLockRoot
 
 [Install]
 WantedBy=multi-user.target
@@ -604,6 +765,9 @@ release='__RELEASE__'
 run_root='__RUN_ROOT__'
 source_list='__SOURCE_LIST__'
 unit='__UNIT_NAME__'
+existing_unit='__EXISTING_UNIT_NAME__'
+existing_state='__EXISTING_RUN_ROOT__/manifests/supervisor-worker-__SLOT__.json'
+global_lock_root='__GLOBAL_LOCK_ROOT__'
 temporary=/tmp/S15P21C206-75-__RUN_ID__-worker-__SLOT__.service
 cleanup() { status=$?; trap - EXIT; rm -f -- "$temporary"; exit "$status"; }
 trap cleanup EXIT
@@ -611,6 +775,17 @@ test -f "$release/READY"
 test -f "$source_list"
 actual=$(PYTHONPATH="$release" python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["source_list_sha256"])' "$source_list")
 test "$actual" = '__EXPECTED_SHA__'
+sudo install -d -o planetory-admin -g planetory-admin -m 0750 "$global_lock_root"
+if test "$existing_unit" != "$unit" && sudo systemctl cat "$existing_unit" >/dev/null 2>&1; then
+ test -f "$existing_state"
+ old_status=$(python3.12 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("status", ""))' "$existing_state")
+ test "$old_status" = COMPLETE
+ if sudo systemctl is-active --quiet "$existing_unit"; then
+  echo "EXISTING_SUPERVISOR_ACTIVE unit=$existing_unit" >&2
+  exit 1
+ fi
+ sudo systemctl disable "$existing_unit"
+fi
 printf '%s' '__UNIT_BASE64__' | base64 --decode > "$temporary"
 sudo install -o root -g root -m 0644 "$temporary" "/etc/systemd/system/$unit"
 sudo systemctl daemon-reload
@@ -619,7 +794,7 @@ sudo systemctl restart "$unit"
 sudo systemctl is-enabled --quiet "$unit"
 sudo systemctl is-active --quiet "$unit"
 sudo systemctl show "$unit" --property=ActiveState,SubState,MainPID,NRestarts --no-pager
-'@.Replace('__RELEASE__',$release).Replace('__RUN_ROOT__',$runRoot).Replace('__SOURCE_LIST__',$sourceList).Replace('__RUN_ID__',$RunId).Replace('__SLOT__',[string]$slot).Replace('__UNIT_NAME__',$unitName).Replace('__EXPECTED_SHA__',$ExpectedSourceListSha256).Replace('__UNIT_BASE64__',$unitBase64)
+'@.Replace('__RELEASE__',$release).Replace('__RUN_ROOT__',$runRoot).Replace('__SOURCE_LIST__',$sourceList).Replace('__EXISTING_RUN_ROOT__',"/mnt/data/staging/S15P21C206-75/run-$ExistingRunId").Replace('__GLOBAL_LOCK_ROOT__',$globalLockRoot).Replace('__RUN_ID__',$RunId).Replace('__SLOT__',[string]$slot).Replace('__UNIT_NAME__',$unitName).Replace('__EXISTING_UNIT_NAME__',$existingUnitName).Replace('__EXPECTED_SHA__',$ExpectedSourceListSha256).Replace('__UNIT_BASE64__',$unitBase64)
    Invoke-Remote $node $command 'install and start ingestion supervisor'
   }
  }

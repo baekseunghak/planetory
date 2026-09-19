@@ -118,3 +118,4 @@
 | 2026-09-18 | TESS HDFS Raw 병렬 bundle·manifest·원본 복원 | S15P21C206-76 | SequenceFile, offset, manifest.parquet, RF2, atomic rename, idempotency | Sector 3 실환경 검증·멱등 재실행 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | Sector 3 HDFS Raw 완료 조건 재검증 | S15P21C206-76 | byte-identical, COMMIT_CACHED, staging isolation, manifest.parquet, RF2, YARN read | Sector 3 검증 완료·전체 범위 미완료 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | Sector 3~5 HDFS Raw 자동 연속 적재 | S15P21C206-76 | RunAll, uploader wait, resume, manifest.parquet, RF2, FSCK | 전체 범위 적재·검증 완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |

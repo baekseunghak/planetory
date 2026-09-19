@@ -6,7 +6,7 @@ TESS와 외부 카탈로그 원천을 탐색하고 다운로드한 뒤 검증한
 
 ## TESS SPOC 2분 Light Curve 수집
 
-`S15P21C206-75`의 승인 범위는 Sector 3·4·5, 총 55,986개다. 공식 MAST bulk script에서 실행 시점의 목록을 다시 만들며 목록 전체를 Git에 커밋하지 않는다. 설정은 [service-v1.json](config/service-v1.json)에 둔다.
+`S15P21C206-75`의 현재 범위는 Sector 1~13, 총 247,824개다. 2026-09-18에 검증을 완료한 Sector 3·4·5 55,986개는 기존 RunId `20260918T080417Z`에 불변으로 보존하고, 새 RunId는 Sector 1·2·6~13 191,838개만 추가 수집한다. 공식 MAST bulk script에서 실행 시점의 목록을 다시 만들며 목록 전체와 실제 원본은 Git에 커밋하지 않는다. 설정은 [service-v1.json](config/service-v1.json)에 둔다.
 
 ```powershell
 Set-Location distributed-system/ingestion
@@ -15,6 +15,8 @@ python -m ingestion source-list `
 ```
 
 생성 목록에는 bulk script URL·조회 시각·script SHA-256·Sector별 항목 수와 정렬한 전체 목록의 `source_list_sha256`을 기록한다. 파일명·URL에서 Sector와 TIC를 다시 검증하고, MAST URI의 SHA-256을 5로 나눈 안정적인 값으로 Worker 1~5에 배정한다. Python의 실행별 `hash()`는 사용하지 않는다.
+
+Run의 source list가 이미 있으면 다시 내려받아 덮어쓰지 않고 기존 본문 hash를 재검증해 `SOURCE_LIST_CACHED`로 재사용한다. 신규 목록도 `--expected-source-list-sha256`과 일치한 뒤에만 원자적으로 기록한다. 원천 목록이 바뀌면 기존 Run을 변형하지 않고 새 RunId와 승인된 기대 hash를 사용한다.
 
 다운로드는 Worker별 한 프로세스가 설정의 `download_concurrency`만큼 파일을 동시에 처리한다. 현재 운영값은 4이며 허용 범위는 1~4다. 파일마다 독립된 `.part`를 사용하고 이벤트는 메인 스레드가 source list 순서대로 append하므로 파일·manifest 병렬 쓰기는 발생하지 않는다. 최초 실행은 다음 형태다.
 
@@ -54,7 +56,7 @@ python -m ingestion download `
   --checksums-only
 ```
 
-45개 표본의 checksum 대조, 중단 뒤 Range 재개와 재실행 cache hit를 통과한 뒤 Sector 3 전체로 확대한다. Sector 4·5는 Sector 3의 처리량·429·실패율·디스크 증가량을 기록한 뒤 시작한다.
+아래 표본 게이트는 최초 Sector 3·4·5 실행 때 적용한 검증 기록이다. 45개 표본의 checksum 대조, 중단 뒤 Range 재개와 재실행 cache hit를 통과한 뒤 Sector 3 전체로 확대했고, Sector 4·5는 Sector 3의 처리량·429·실패율·디스크 증가량을 확인한 뒤 실행했다.
 
 2026-09-18 실제 MAST 게이트 결과는 다음과 같다.
 
@@ -136,9 +138,34 @@ Python 프로세스를 여러 개 띄우거나 다른 언어로 downloader를 �
 
 최종 RunId `20260918T080417Z`는 2026-09-18 13:21 UTC에 Worker 5대의 Sector 3·4·5 전수 감사를 모두 통과했다. 고정 source list 55,986개와 실제 FITS 55,986개가 일치하고 검증 원본은 100.94GiB, manifest를 포함한 run 디렉터리는 101.13GiB다. `.part`, 최신 실패, HTTP·기타 재시도와 손상된 완결 JSONL은 모두 0이며 각 `/mnt/data` 사용률은 2%다. 최종 release `20260918T124821Z`의 내용 SHA-256은 `14b52924c9a60625dd78f5e10cbf9743399343fd035954de9e2a7c1077f900ee`다.
 
+### Sector 1~13 확장 계약
+
+2026-09-19 공식 MAST bulk script 13개를 다시 생성해 총 247,824개와 `source_list_sha256=8c6c2370682e24351fce1223d6f463da2bd57ae2e1780033d940dd695cfe2c38`을 확인했다. 파일명은 Sector 사이에서도 중복되지 않으며 설정의 Sector별 기대 개수 합과 일치한다.
+
+| 범위 | Run | 파일 수 | Raw 크기 |
+| --- | --- | ---: | ---: |
+| 기존 Sector 3·4·5 | `20260918T080417Z` | 55,986 | 실측 100.94GiB |
+| 추가 Sector 1·2·6~13 | `20260919T005932Z` | 191,838 | 기존 실측 평균 기준 약 346GiB |
+| 최종 Sector 1~13 | 두 Run의 coverage | 247,824 | 약 447GiB |
+
+기존 Run의 source list에 Sector를 추가하거나 파일을 새 Run으로 복사하지 않는다. 신규 source list는 Sector 1~13 전체를 고정하지만 supervisor 실행 대상은 `1 → 2 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13`으로 제한한다. 각 신규 Sector는 Worker별 전수 감사와 complete marker가 성공해야 다음 Sector로 진행한다.
+
+모든 신규 supervisor가 `COMPLETE`가 된 뒤 `FinalCoverage`를 실행한다. 이 단계는 기존 Run의 Sector 3~5와 신규 Run의 나머지 Sector에 대해 다음을 다시 대조한다.
+
+- source list 본문 SHA-256과 Sector별 Worker 배정
+- Sector별 audit·complete manifest의 스키마, source SHA, 기대·검증 개수와 바이트
+- 실제 FITS 파일명 집합, 파일 크기 합, 예상 밖 FITS와 잔여 `.part` 0건
+- Worker 5개 합산 Sector별 기대 개수와 최종 247,824개
+
+Sector complete marker는 바로 앞의 전수 FITS identity·SHA-256 감사를 통과해야만 생성된다. `FinalCoverage`는 447GiB를 다시 해시하지 않고 이 감사 증거와 현재 파일 집합·크기를 연결한다. 최종 manifest와 SHA-256 sidecar는 신규 Run의 `manifests/coverage-sectors-1-13.json[.sha256]`에 5대 모두 같은 내용으로 기록한다. HDFS 경로·적재 결과는 이 manifest에 넣지 않고 `S15P21C206-76`에서 별도로 관리한다.
+
+2026-09-19 expansion 실행은 데이터 RunId `20260919T005932Z`를 유지한다. 최초 ReleaseId `20260919T005933Z`의 canary·실패 주입과 Worker 5대 기동 뒤, 코드 리뷰에서 확인한 손상 FITS 예외·RunId별 잠금·완료 unit 재부팅 경합을 보완한 ReleaseId `20260919T015748Z`, release 내용 SHA-256 `3d22c384455e6d2dd2c2049ea92ffe88b7725d63444bc571eb3770e13f54d298`을 적용했다. worker-2 canary에서 기존 2,964개를 그대로 인식했고 main PID를 `SIGKILL`한 뒤 `134505→134706`, `NRestarts=0→1`로 같은 Run을 재개해 2,984개까지 증가했다. 이후 Worker 3~6을 한 대씩 재시작했다. 5대 모두 새 release의 `enabled/active/running`, Worker 전역 잠금 PID 일치, 이전 완료 unit disabled를 확인했다. 롤링 직후 15분 창은 합계 17,273/191,838개(9.00%), 검증 원본 32.76GiB, 9.63MiB/s이며 현재 실패·429·전체 HTTP 재시도·기타 재시도는 모두 0이다. `.part` 2.91MiB는 전송 중인 파일이며 현재 속도 기준 추가 범위 ETA는 약 9시간 46분이다.
+
+다운로드·Sector별 전수 감사·complete marker 생성은 각 서버의 systemd supervisor가 수행하므로 Codex 세션, 운영자 PC 또는 Tailscale 연결이 끊겨도 계속된다. 5개 supervisor가 `COMPLETE`가 된 뒤의 두 Run 통합 `FinalCoverage`만 전체 Worker에 다시 연결하는 제어 단계다. 연결이 끊기면 수집을 중단하거나 다시 받지 않고, 연결 복구 뒤 같은 읽기 전용 증거 결합 단계를 재실행한다. `FinalCoverage`가 통과하기 전에는 Sector 1~13 최종 완료로 기록하지 않는다.
+
 #### 기존 Progress 명령 재사용 확인
 
-기존 명령은 현재 스크립트에서도 수정 없이 재사용한다.
+기존 명령은 현재 스크립트에서도 인자를 바꾸지 않고 재사용한다.
 
 ```powershell
 $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
@@ -149,7 +176,7 @@ $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
   -RateWindowMinutes 15
 ```
 
-`Progress`는 기본값으로 Sector 3·4·5와 Worker 2~6 전체를 조회하므로 이 명령에는 `Sector`, `Sectors`, `NodeNumbers`, `ReleaseId`를 추가할 필요가 없다. 각 Worker에서 source list checksum을 확인하고 파일별 최신 `VALIDATED` event를 집계한다. 속도는 지정한 창 안에서 cache hit를 제외한 실제 `bytes_transferred`만 사용하며, FITS·event·프로세스를 변경하지 않는 읽기 전용 단계다.
+기본 `Sectors`는 신규 expansion 대상 `1,2,6~13`이지만, `-Sectors`를 생략하고 기존 RunId `20260918T080417Z`를 조회하면 스크립트가 `3,4,5`를 선택한다. 따라서 과거 명령에 `Sectors`, `NodeNumbers`, `ReleaseId`를 추가할 필요가 없다. 그 외 Run의 범위를 바꿀 때만 `-Sectors`를 명시한다. 각 Worker에서 source list checksum을 확인하고 파일별 최신 `VALIDATED` event를 집계한다. 속도는 지정한 창 안에서 cache hit를 제외한 실제 `bytes_transferred`만 사용하며, FITS·event·프로세스를 변경하지 않는 읽기 전용 단계다.
 
 2026-09-18 완료 뒤 같은 명령을 재사용한 출력은 다음과 같다.
 
@@ -176,18 +203,21 @@ PASS: Progress
 $Common = @{
   RunId = 'data-yyyyMMddTHHmmssZ에서 data- 접두사를 뺀 UTC 값'
   ReleaseId = 'code-yyyyMMddTHHmmssZ에서 code- 접두사를 뺀 UTC 값'
-  ExpectedSourceListSha256 = '5781b664ea901bbbeecb4829e34c314e52961d111460b3e5a6ebe58918efc789'
+  ExpectedSourceListSha256 = '8c6c2370682e24351fce1223d6f463da2bd57ae2e1780033d940dd695cfe2c38'
 }
 $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
 
 & $Run -Step Preflight @Common
 & $Run -Step Install @Common
 & $Run -Step SourceList @Common       # 새 데이터 RunId에서 한 번
-& $Run -Step Start @Common -Sector 3 -Limit 1   # 최초 canary
-& $Run -Step Audit @Common -Sector 3 -Limit 1
+& $Run -Step Start @Common -Sector 1 -Limit 1 -NodeNumbers 2   # 최초 canary
+& $Run -Step Audit @Common -Sector 1 -Limit 1 -NodeNumbers 2
 & $Run -Step InstallSupervisor @Common
 & $Run -Step SupervisorStatus @Common
 & $Run -Step Progress @Common -RateWindowMinutes 15
+
+# 5개 supervisor가 모두 COMPLETE인 뒤 실행한다.
+& $Run -Step FinalCoverage @Common
 
 # 운영자 점검을 위한 안전 중지. Sector는 supervisor 상태에서 자동 판별한다.
 & $Run -Step Pause @Common
@@ -196,7 +226,7 @@ $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
 & $Run -Step TestSupervisorWatchdog @Common -NodeNumbers 2
 ```
 
-`Preflight`는 읽기 전용이고 변경 단계는 `-WhatIf`를 지원한다. `InstallSupervisor`는 Worker별 systemd unit을 enable/start한다. unit은 `/mnt/data`와 network-online 뒤 기동하고, 비정상 종료 시 30초 뒤 재시작하며 서버가 다시 부팅되어도 같은 데이터 RunId를 재개한다. 단일 잠금과 기존 PID 인계로 중복 프로세스를 막고, Sector 3→4→5를 각 Worker에서 순서대로 전수 감사한 뒤 진행한다.
+`Preflight`는 읽기 전용이고 변경 단계는 `-WhatIf`를 지원한다. 각 Worker의 `/mnt/data` 사용률 75% 미만, 가용 공간 100GiB 이상, 활성 수집 unit·수동 downloader 0개를 확인해 다른 Run과 중복 실행하지 않는다. `MinimumFreeGiB`는 80~1,000 범위에서 명시할 수 있으나 이번 expansion은 기본 100GiB를 사용한다. `InstallSupervisor`는 Worker별 systemd unit을 enable/start한다. unit은 `/mnt/data`와 network-online 뒤 기동하고, 비정상 종료 시 30초 뒤 재시작하며 서버가 다시 부팅되어도 같은 데이터 RunId를 재개한다. 잠금은 Run 디렉터리가 아니라 Worker 공통 `/mnt/data/staging/S15P21C206-75/locks/supervisor-worker-<slot>.lock`에 둔다. 따라서 서로 다른 RunId도 같은 Worker에서 동시에 실행할 수 없고, 잠금 충돌은 종료 코드 75로 systemd 재시작 대상이 된다. 설치기는 이전 unit의 상태 manifest가 `COMPLETE`이고 unit이 inactive일 때만 해당 unit을 disable하며, 그 외에는 새 unit 설치 전에 실패한다. 기존 PID 인계와 이 Worker 전역 잠금으로 중복 프로세스를 막고, Sector 1→2→6→7→8→9→10→11→12→13을 각 Worker에서 순서대로 전수 감사한 뒤 진행한다.
 
 `Pause`는 supervisor 상태에서 현재 Sector를 자동 판별한다. 운영자가 `-Sector`를 명시했는데 활성 Sector와 다르면 프로세스를 멈추기 전에 거부한다. 이미 `COMPLETE`면 `PAUSE_NOT_REQUIRED`로 종료해 완료 상태를 덮어쓰지 않는다. 정확한 unit을 먼저 정지한 뒤 현재 RunId·worker slot·Sector가 모두 일치하는 기존 downloader만 TERM으로 종료하고 최대 30초를 기다린다. 완료 FITS, `.part`, event와 HDFS 원본은 삭제하지 않으며 FITS·part·event 수, 강제 종료 여부를 `pause-worker-<slot>.json`에 원자적으로 기록하고 상태를 `PAUSED_OPERATOR`로 남긴다.
 
@@ -209,12 +239,13 @@ $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
 - `Retry-After`가 잘못된 값이면 응답을 닫고 지수 backoff로 폴백한다. source list의 항목 수·내용 SHA-256과 정식 MAST endpoint·product URI가 다르면 다운로드와 진행률 집계를 거부한다.
 - 예상 디스크 사용률 75%에서 현재 파일 상태를 보존하고 멈춘다. 사용률이 70% 아래로 내려올 때까지 60초 간격으로 대기한 뒤 재개한다.
 - 이벤트는 append+fsync한다. 강제 종료로 마지막 JSON 줄만 찢어졌으면 다음 시작 때 그 줄만 잘라내며, 중간 줄 손상은 숨기지 않고 감사 실패로 남긴다.
-- 최종 파일 손상은 cache 검증에서 거부하고 다시 받는다. 64MiB를 넘은 비정상 `.part`는 그 파일만 제거하고 처음부터 다시 받는다.
+- 최종 파일 손상은 cache 검증에서 거부하고 다시 받는다. 비 ASCII primary header와 잘못된 숫자도 동일한 무결성 오류로 처리해 손상 final을 교체하고 손상 `.part`는 해당 파일만 제거한다. FITS 문자열 안의 `/`는 주석 구분자로 오인하지 않는다. 64MiB를 넘은 비정상 `.part`도 그 파일만 제거하고 처음부터 다시 받는다.
 - 각 Sector는 전체 FITS·event checksum·내용 기반 snapshot ID·`.part` 부재 감사에 통과해야 완료 marker가 생긴다.
+- 신규 Run이 모두 끝나도 기존 3~5와 합친 `FinalCoverage`가 247,824개, Sector별 기대 개수, 실제 파일명·바이트와 `.part` 0건을 확인하기 전에는 Sector 1~13 수집 완료로 판정하지 않는다.
 
 운영 상태는 `SupervisorStatus`로 확인한다. `ADOPTING`, `RUNNING`, `BACKOFF`, `PAUSED_CAPACITY`, `PAUSED_OPERATOR`, `COMPLETE`를 구분하며 상태 JSON과 Sector별 run/audit/complete manifest는 데이터 RunId 아래에 남는다.
 
-전체 진행률은 읽기 전용 `Progress`로 확인한다. 고정 source list의 전체 항목 대비 최신 `VALIDATED` 이벤트 수를 완료량·퍼센트로 집계하고, 검증 완료 바이트와 미완료 `.part` 바이트를 구분한다. 속도는 `RateWindowMinutes` 동안 cache hit를 제외한 실제 `bytes_transferred`의 평균이며, ETA는 완료 파일 평균 크기와 이 속도로 계산한 추정값이다. 최근 전송이 없거나 완료 표본이 없으면 `eta=unknown`으로 표시한다. 동시 append 중인 마지막 미완성 줄만 제외하고, 그보다 앞선 완결 줄의 JSON 손상은 `INVALID_EVENT_JSON`으로 실패시켜 잘못된 진행률을 숨기지 않는다. 이 단계는 source list·supervisor 상태·event JSONL과 `.part` 크기만 읽으며 FITS 본문·checksum을 다시 읽거나 프로세스에 신호를 보내지 않는다.
+전체 진행률은 읽기 전용 `Progress`로 확인한다. 고정 source list의 전체 항목 대비 최신 `VALIDATED` 이벤트 수를 완료량·퍼센트로 집계하고, 검증 완료 바이트와 미완료 `.part` 바이트를 구분한다. 최신 파일별 event에서 현재 실패 수·실패율, HTTP 429·전체 HTTP 재시도와 기타 재시도도 함께 합산한다. 속도는 `RateWindowMinutes` 동안 cache hit를 제외한 실제 `bytes_transferred`의 평균이며, ETA는 완료 파일 평균 크기와 이 속도로 계산한 추정값이다. 최근 전송이 없거나 완료 표본이 없으면 `eta=unknown`으로 표시한다. 동시 append 중인 마지막 미완성 줄만 제외하고, 그보다 앞선 완결 줄의 JSON 손상은 `INVALID_EVENT_JSON`으로 실패시켜 잘못된 진행률을 숨기지 않는다. 이 단계는 source list·supervisor 상태·event JSONL과 `.part` 크기만 읽으며 FITS 본문·checksum을 다시 읽거나 프로세스에 신호를 보내지 않는다.
 
 2026-09-18 최초 실환경 `Progress` 조회는 source list의 Worker 배정 필드를 `worker_slot`으로 잘못 읽어 `KeyError: 'worker_slot'`로 중단됐다. 실제 계약 필드 `assigned_worker`로 수정했고, 이후 오프라인 검사는 실제 source list 형식의 집계 Python을 직접 실행해 Worker 선택·완료 바이트·`.part` 크기를 확인한다. 이 실패는 조회 스크립트에서만 발생했으며 실행 중인 수집 프로세스와 데이터는 변경하지 않았다.
 
@@ -233,9 +264,12 @@ $Run = '.\infra\distributed-system\scripts\run-tess-ingestion.ps1'
 | 연속 네트워크 실패 | 10개 연속 실패 주입 | 회로차단 exit 3과 supervisor backoff 기록 |
 | 용량 상·하한 | disk usage 주입 | 75% 중단, 70% 미만 재개 통과 |
 | 손상 final·대형 part·찢어진 event tail | 파일 실패 주입 | 해당 파일 교체·part 초기화·마지막 줄 복구 통과 |
+| 비 ASCII FITS final·part, 문자열 내 `/` | 로컬 FITS header 실패 주입 | 무결성 오류 정규화, 손상 part 제거·final 재다운로드, `PROCVER` 보존 통과 |
 | event 중간 완결 줄 손상 | `Progress` fixture에 잘못된 JSON 줄 주입 | `INVALID_EVENT_JSON`으로 조회 실패, 손상 은폐 없음 |
 | source list 본문 변조·비정식 endpoint | hash·URL 실패 주입 | 진행률 집계와 제품 로딩 전 거부 |
-| 중복 감독 실행 | 같은 lock 동시 획득 | 두 번째 실행 거부 |
+| 다른 RunId의 중복 감독 실행 | Worker 공통 lock과 CLI 충돌 실패 주입 | 두 번째 실행 종료 코드 75, systemd 재시작 대상 유지 |
+| 완료 unit 재부팅 경합 | 이전 state `COMPLETE`·inactive 검사 뒤 롤링 설치 | Worker 2~6 이전 unit disabled, 새 unit lock PID 일치 |
+| 두 Run coverage 누락·잔여 part | 기존·신규 Run의 audit/complete와 실제 파일 fixture 결합 | 중복 Sector 거부, 잔여 `.part`가 있으면 최종 coverage 실패 |
 | 서버 재부팅 | unit `enabled`, network/mount dependency 검사 | 부팅 재개 계약 확인; 공유 HDFS/YARN 영향 때문에 실제 VM 재부팅은 미실행 |
 
 ## 검증
@@ -248,7 +282,7 @@ python -m unittest discover -s tests -v
 python -m compileall -q ingestion tests
 ```
 
-현재 30개 Python 검사가 원자적 저장, 제한된 병렬 처리와 복구 루프를 검사한다. 70~75% 구간에서는 계속 실행하고 75% 중단을 실제로 경험한 뒤에만 70% 미만까지 기다리는 hysteresis, 짧은 저수준 event write의 완전 기록, 병렬 실행 중 event 순서, HTTP 오류 응답 정리와 잘못된 backoff 헤더, source endpoint, 감사 전 event tail 복구, watchdog heartbeat와 회로차단 시 현재 batch까지만 처리하는 경계도 회귀 검사한다. 클러스터 스크립트의 오프라인 계약은 `pwsh -File infra/distributed-system/scripts/test-tess-ingestion.ps1`로 검사한다. 실제 VM 전체 재부팅과 디스크를 75%까지 채우는 검사는 공유 HDFS/YARN과 비용에 영향을 주므로 수행하지 않는다.
+현재 39개 Python 검사가 원자적 저장, 제한된 병렬 처리와 복구 루프, Sector 1~13 설정 합계와 두 Run coverage 결합을 검사한다. 70~75% 구간에서는 계속 실행하고 75% 중단을 실제로 경험한 뒤에만 70% 미만까지 기다리는 hysteresis, 짧은 저수준 event write의 완전 기록, 병렬 실행 중 event 순서, HTTP 오류 응답 정리와 잘못된 backoff 헤더, source endpoint, 감사 전 event tail 복구, watchdog heartbeat와 회로차단 시 현재 batch까지만 처리하는 경계도 회귀 검사한다. 비 ASCII·잘못된 숫자 FITS header, 손상 final·part, 따옴표 안 `/`, 서로 다른 RunId의 Worker 잠금 공유와 잠금 충돌 비정상 종료도 회귀 검사한다. 클러스터 스크립트의 오프라인 계약은 Sector 1·13 경계와 expansion 전체 인자를 포함해 `pwsh -File infra/distributed-system/scripts/test-tess-ingestion.ps1`로 검사한다. 실제 VM 전체 재부팅과 디스크를 75%까지 채우는 검사는 공유 HDFS/YARN과 비용에 영향을 주므로 수행하지 않는다.
 
 ### 원천 checksum 조사
 

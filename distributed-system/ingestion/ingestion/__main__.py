@@ -13,8 +13,19 @@ DEFAULT_CONFIG = ROOT / "config" / "service-v1.json"
 
 
 def source_list(args: argparse.Namespace) -> int:
+    if args.output.is_file():
+        value = tess.load_source_list(args.output)
+        if args.expected_source_list_sha256 and value["source_list_sha256"] != args.expected_source_list_sha256:
+            raise ValueError("existing source list checksum does not match --expected-source-list-sha256")
+        print(
+            f"SOURCE_LIST_CACHED products={value['product_count']} "
+            f"sha256={value['source_list_sha256']} output={args.output}"
+        )
+        return 0
     config = tess.load_config(args.config)
     value = tess.build_source_list(config)
+    if args.expected_source_list_sha256 and value["source_list_sha256"] != args.expected_source_list_sha256:
+        raise ValueError("generated source list checksum does not match --expected-source-list-sha256")
     tess.write_json_atomic(value, args.output)
     print(
         f"SOURCE_LIST_OK products={value['product_count']} sha256={value['source_list_sha256']} output={args.output}"
@@ -64,6 +75,23 @@ def audit(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def coverage(args: argparse.Namespace) -> int:
+    scopes = []
+    for run_id, source_list, run_root, sectors, expected_sha256 in args.scope:
+        scopes.append(
+            {
+                "run_id": run_id,
+                "source_list": Path(source_list),
+                "run_root": Path(run_root),
+                "sectors": [int(value) for value in sectors.split(",") if value],
+                "expected_source_list_sha256": expected_sha256,
+            }
+        )
+    summary, exit_code = tess.build_coverage_shard(scopes, args.output, worker_slot=args.worker_slot)
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def supervise(args: argparse.Namespace) -> int:
     config = tess.load_config(args.config)
     source = tess.load_source_list(args.source_list)
@@ -80,7 +108,7 @@ def supervise(args: argparse.Namespace) -> int:
         )
     except supervisor.AlreadyRunning as error:
         print(f"SUPERVISOR_ALREADY_RUNNING {error}")
-        return 0
+        return 75
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     command = sub.add_parser("source-list", help="MAST bulk script에서 고정 원천 목록 생성")
     command.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     command.add_argument("--output", type=Path, required=True)
+    command.add_argument("--expected-source-list-sha256")
     command.set_defaults(func=source_list)
 
     command = sub.add_parser("download", help="원천 목록의 SPOC LC를 재개 가능하게 다운로드·검증")
@@ -116,6 +145,19 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--checksums-only", action="store_true")
     command.add_argument("--limit", type=int, help="선택된 목록의 앞 N개만 감사")
     command.set_defaults(func=audit)
+
+    command = sub.add_parser("coverage", help="여러 Run의 완료 증거와 실제 파일 집합을 Worker별로 통합 감사")
+    command.add_argument("--worker-slot", type=int, required=True)
+    command.add_argument("--output", type=Path, required=True)
+    command.add_argument(
+        "--scope",
+        action="append",
+        nargs=5,
+        required=True,
+        metavar=("RUN_ID", "SOURCE_LIST", "RUN_ROOT", "SECTORS", "SOURCE_SHA256"),
+        help="RunId, source list, run root, 쉼표 구분 Sector, 기대 source-list SHA-256",
+    )
+    command.set_defaults(func=coverage)
 
     command = sub.add_parser("supervise", help="완료될 때까지 Sector를 재개·감사하는 systemd 감독 루프")
     command.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
