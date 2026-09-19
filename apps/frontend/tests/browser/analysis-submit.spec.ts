@@ -769,6 +769,8 @@ test("the next actions are the server's list and they lead somewhere real", asyn
   await expect(actions).not.toContainText("상세 보기");
   // 화면 안에서 일어나는 동작은 옮겨 갈 곳이 없다고 그대로 말한다.
   await expect(actions).toContainText("다음 곡선으로 · 연결 예정");
+  // 6.4절: 매칭 성공에는 별지도로가 붙는다(RES-08).
+  await expect(actions.getByRole("link", { name: "별지도로" })).toBeVisible();
 
   // 공개 화면으로 갔다가 분석 화면으로 돌아온다. 게시로 강제 이동이 아니다(AT-36).
   await actions.getByRole("link", { name: "분석 공개 검토" }).click();
@@ -807,7 +809,7 @@ test("a match the server could not settle offers only a retry", async ({
   await expect(actions.getByRole("link")).toHaveCount(0);
 });
 
-test("a skipped star offers the way out and nothing else", async ({ page }) => {
+test("a skipped star is not offered the map or the board", async ({ page }) => {
   await page.goto(`/analysis/${TUTORIAL}?returnTo=%2Fsky`);
   await page
     .locator(".submission-alternatives")
@@ -820,9 +822,11 @@ test("a skipped star offers the way out and nothing else", async ({ page }) => {
   const actions = page
     .getByTestId("submission-result")
     .getByTestId("next-actions");
-  // 건너뛴 별에는 이어서 할 일이 없다. 서버가 GO_HOME만 준다.
+  // 6.4절: 건너뛴 별에는 GO_HOME·DISCUSS를 추가하지 않는다. 나가는 길
+  // 하나만 남는다.
   await expect(actions.getByRole("link")).toHaveCount(1);
-  await actions.getByRole("link", { name: "별지도로" }).click();
+  await expect(actions).not.toContainText("별지도로");
+  await actions.getByRole("link", { name: "나중에 하기" }).click();
   await expect(page).toHaveURL("/sky");
 });
 
@@ -850,4 +854,29 @@ test("an already-found signal is shown without taking the achievement twice", as
   await expect(dialog).not.toContainText("성과로 인정되었습니다");
   // 별이 새로 열렸다고 말하지 않는다.
   await expect(dialog).not.toContainText("새로 열린 별");
+});
+
+test("discussing opens a draft for this star, not the board list", async ({
+  page,
+}) => {
+  // 미매칭에만 이 힌트가 온다(6.4절). 화면에서 직접 주기를 고르려면 주기도를
+  // 끌어야 하는데 키보드 경로가 없어, 요청의 봉우리 번호만 비워 「직접 선택」과
+  // 같은 모양으로 만든다. 그 뒤의 개발 응답·파서·화면은 모두 실제 경로다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const body = JSON.parse(request.postData() ?? "{}");
+    if (body.selection) body.selection.sourcePeakGridIndex = null;
+    return route.continue({ postData: JSON.stringify(body) });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "모르겠음");
+  await expect(dialog).toContainText("맞는 신호를 찾지 못했습니다");
+  const actions = dialog.getByTestId("next-actions");
+  await expect(actions).not.toContainText("별지도로");
+  await actions.getByRole("link", { name: "이 별 이야기 쓰기" }).click();
+  // 같은 TIC·DISCUSSION을 들고 글쓰기로 간다. 목록으로 보내지 않는다.
+  await expect(page).toHaveURL(/\/posts\/new\?/);
+  await expect(page).toHaveURL(new RegExp(`ticId=${NORMAL}`));
+  await expect(page).toHaveURL(/purposeTag=DISCUSSION/);
 });

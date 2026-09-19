@@ -85,15 +85,19 @@ AI와 외부 출처는 **나란히 두고 어느 쪽도 다른 쪽을 덮어쓰�
 
 [AnalysisResult.tsx](../src/features/analysis/AnalysisResult.tsx)의 `NextActions`가 [라우트 정의](../src/app/paths.ts)로만 목적지를 만든다. 경로를 문자열로 적지 않으므로 담당이 화면을 연결하면 그대로 이어진다.
 
-| 행동               | 문구                        | 가는 곳                        |
-| ------------------ | --------------------------- | ------------------------------ |
-| `PUBLISH_ANALYSIS` | 분석 공개 검토              | `publication` · historyId      |
-| `VIEW_RESULT`      | 이 별의 결과 보기           | `starResults` · ticId          |
-| `DISCUSS`          | 이 별 게시판에서 이야기하기 | `starBoard` · ticId            |
-| `GO_HOME`          | 별지도로                    | `/sky`                         |
-| `LATER`            | 나중에 하기                 | 분석에 들어오기 전 화면        |
-| `NEXT_CURVE`       | 다음 곡선으로 · 연결 예정   | 분석 화면 안(`S15P21C206-189`) |
-| `RETRY`            | 다시 풀기 · 연결 예정       | 분석 화면 안(`S15P21C206-192`) |
+| 행동               | 문구                      | 가는 곳                                        |
+| ------------------ | ------------------------- | ---------------------------------------------- |
+| `PUBLISH_ANALYSIS` | 분석 공개 검토            | `publication` · historyId                      |
+| `VIEW_RESULT`      | 이 별의 결과 보기         | `starResults` · ticId                          |
+| `DISCUSS`          | 이 별 이야기 쓰기         | `postCreate` · ticId · `purposeTag=DISCUSSION` |
+| `GO_HOME`          | 별지도로                  | `/sky`. 매칭 성공에만 온다(RES-08)             |
+| `LATER`            | 나중에 하기               | 분석에 들어오기 전 화면                        |
+| `NEXT_CURVE`       | 다음 곡선으로 · 연결 예정 | 분석 화면 안(`S15P21C206-189`)                 |
+| `RETRY`            | 다시 풀기 · 연결 예정     | 분석 화면 안(`S15P21C206-192`)                 |
+
+**`DISCUSS`는 게시판 목록이 아니라 작성 초안을 연다**(6.4절·COM-10). 같은 TIC과 `DISCUSSION`을 들고 글쓰기 화면으로 간다. `historyId`는 아직 글쓰기 화면이 읽지 않아 첨부까지 잇지 못했다. 커뮤니티 담당(하서진)과 조율이 필요하다.
+
+**`GO_HOME`·`DISCUSS`는 아무 결과에나 오지 않는다.** `GO_HOME`은 `matched`·`matched_harmonic`·`duplicate`에만, `DISCUSS`는 `not_matched`에만 온다. `none_wrong`·`skipped`에는 둘 다 붙이지 않고 `ambiguous_match`는 `RETRY`만이다. 개발용 응답도 그 규칙을 따른다.
 
 아직 화면이 없는 목적지는 앱의 **「연결 준비 중」 규약**([App.tsx](../src/app/App.tsx)의 `UnconnectedPage`)이 받는다. 목적지를 지어내지도, 버튼을 지우지도 않는다.
 

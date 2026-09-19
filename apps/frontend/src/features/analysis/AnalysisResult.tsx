@@ -360,9 +360,18 @@ export function NextActions({
       label: "이 별의 결과 보기",
       to: pagePath("starResults", { ticId }, { returnTo: from }),
     },
+    /**
+     * 6.4절: 같은 TIC·`DISCUSSION`·현재 본인 `historyId`를 가진 **작성
+     * 초안을 연다**(COM-10). 별 게시판 목록으로 보내는 것이 아니다.
+     *
+     * `historyId`는 아직 글쓰기 화면이 읽지 않는다. 첨부까지 이으려면
+     * 커뮤니티 쪽(하서진) 조율이 필요해 미결로 남겼다.
+     */
     DISCUSS: {
-      label: "이 별 게시판에서 이야기하기",
-      to: pagePath("starBoard", { ticId }, { returnTo: from }),
+      label: "이 별 이야기 쓰기",
+      to:
+        pagePath("postCreate", {}, { ticId, historyId, returnTo: from }) +
+        "&purposeTag=DISCUSSION",
     },
     LATER: { label: "나중에 하기", to: returnTo },
     GO_HOME: { label: "별지도로", to: "/sky" },

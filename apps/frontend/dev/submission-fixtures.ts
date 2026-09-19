@@ -353,8 +353,9 @@ function buildResult(
     tutorial: context.tutorial ?? { seq: null, skipAvailable: false },
     nextActions: composed
       ? composed.nextActions
-      : kind === "skipped"
-        ? ["GO_HOME"]
+      : // 6.4절: none_wrong·skipped에는 GO_HOME·DISCUSS를 추가하지 않는다.
+        kind === "skipped"
+        ? ["LATER"]
         : ["NEXT_CURVE", "VIEW_DETAIL", "LATER"],
   };
 }

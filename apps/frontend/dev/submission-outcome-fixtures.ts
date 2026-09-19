@@ -224,6 +224,8 @@ export function candidateOutcome(input: OutcomeInput) {
       "VIEW_DETAIL",
       ...(disposition === "UNCONFIRMED" ? ["PUBLISH_ANALYSIS"] : []),
       "VIEW_RESULT",
+      // 6.4절: matched·matched_harmonic·duplicate에만 준다(RES-08).
+      "GO_HOME",
       "LATER",
     ],
   };
