@@ -113,9 +113,10 @@ test("four stages preserve graph instances, gate editing and retain judgment whe
   await expect(page.getByTestId("candidate-review")).toContainText(
     "디자인 회귀 🌌",
   );
+  // #187이 제출을 연결했다. 아직 보내지 않았으므로 누를 수 있는 상태다.
   await expect(
-    page.getByRole("button", { name: "제출하기 · 연결 예정", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "제출하기", exact: true }),
+  ).toBeEnabled();
   await page.getByRole("button", { name: /✓ 구간 선택/ }).click();
   await page
     .getByRole("slider", { name: "위상 구간 시작", exact: true })

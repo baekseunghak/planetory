@@ -18,7 +18,7 @@ import {
 import type { CandidateReview } from "../../src/features/analysis/analysis-judgment";
 import { submissionFingerprint } from "../../src/features/analysis/submission-request";
 
-const context = (ticId = PERIODOGRAM_FIXTURE_TICS.normal) =>
+const context = (ticId: string = PERIODOGRAM_FIXTURE_TICS.normal) =>
   decodeAnalysisContext(periodContextFixture(ticId), ticId);
 
 const review = (): CandidateReview => ({

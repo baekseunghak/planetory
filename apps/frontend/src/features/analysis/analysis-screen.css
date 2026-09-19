@@ -937,3 +937,55 @@ body:has(.analysis-screen) {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* 제출 접수·복구 (#187). 접수 사실만 알리며 결과 해설은 A06-2가 맡는다. */
+.analysis-screen .submission-alternatives {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-line);
+}
+.analysis-screen .submission-alternatives p {
+  margin: 0 0 8px;
+}
+.analysis-screen .submission-alternatives button {
+  background: transparent;
+  border: 1px solid var(--panel-line);
+  color: var(--fg-1);
+  font-size: 13px;
+  border-radius: var(--radius-control);
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.analysis-screen .submission-receipt,
+.analysis-screen .submission-unresolved,
+.analysis-screen .submission-failure {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: var(--radius-control);
+}
+.analysis-screen .submission-receipt h4,
+.analysis-screen .submission-unresolved h4,
+.analysis-screen .submission-failure h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--fg-1);
+}
+/* 확인이 필요한 상태와 거절은 오류 색을 쓴다. 색은 보조이고 문구가 1차다. */
+.analysis-screen .submission-unresolved [role="alert"],
+.analysis-screen .submission-failure [role="alert"],
+.analysis-screen .submission-failure li {
+  color: var(--danger);
+}
+.analysis-screen .submission-failure ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.analysis-screen .submission-note {
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.analysis-screen .submission-progress {
+  margin-top: 10px;
+}
