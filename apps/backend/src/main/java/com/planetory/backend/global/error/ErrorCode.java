@@ -31,6 +31,7 @@ public enum ErrorCode {
     SKIP_NOT_AVAILABLE(HttpStatus.CONFLICT, "지금은 튜토리얼을 건너뛸 수 없습니다."),
     EPOCH_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "선택한 구간을 관측 범위 안에 배치할 수 없습니다."),
     DEPENDENCY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    GRAPH_TEMPORARILY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "판이 변경되어 그래프를 불러오지 못했습니다. 다시 조회해 주세요."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 
     private final HttpStatus status;
