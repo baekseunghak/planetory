@@ -64,7 +64,9 @@ function harness(steps: Step[]) {
     calls.push({ path, method: options.method ?? "GET", body: options.json });
     options.onResponse?.({
       status: "error" in step ? (step.status ?? 0) : step.status,
-      headers: new Headers(step.bundle ? { "X-Current-Bundle": step.bundle } : {}),
+      headers: new Headers(
+        step.bundle ? { "X-Current-Bundle": step.bundle } : {},
+      ),
     });
     if ("error" in step) throw step.error;
     return step.body;
@@ -125,10 +127,7 @@ test("a lost response is confirmed by request id without sending again", async (
     stub.calls.map((call) => call.method),
     ["POST", "GET"],
   );
-  assert.equal(
-    stub.calls[1].path,
-    `/v1/submissions/by-request/${REQUEST_ID}`,
-  );
+  assert.equal(stub.calls[1].path, `/v1/submissions/by-request/${REQUEST_ID}`);
   // 결과를 확인했을 뿐이므로 보존한 ID를 버리지 않는다.
   assert.equal(stub.released(), 0);
 });

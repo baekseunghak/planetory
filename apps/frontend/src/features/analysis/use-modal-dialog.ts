@@ -61,8 +61,10 @@ export function useModalDialog({
     } else if (wasOpen.current) {
       if (node.open) node.close();
       const back = opener.current;
-      (fallbackRef?.current ??
-        (back && !back.hasAttribute("disabled") ? back : null))?.focus();
+      (
+        fallbackRef?.current ??
+        (back && !back.hasAttribute("disabled") ? back : null)
+      )?.focus();
     }
     wasOpen.current = open;
   }, [open, fallbackRef]);
