@@ -267,3 +267,82 @@ function statistics(disposition: Disposition, empty: boolean) {
     asOf: "2026-09-19T02:30:00Z",
   };
 }
+
+/**
+ * 6.7절 상세 보기. 오답 분기에서 대상 신호를 드러낸다.
+ *
+ * 미확정 후보의 설명에는 **「정답」이라는 표현을 쓰지 않는다.** 아직 확정되지
+ * 않은 것을 확정처럼 말하게 된다.
+ */
+const EXPLANATION: Record<Disposition, string> = {
+  CONFIRMED:
+    "확정된 행성 신호입니다. 통과 깊이가 일정하고 2차 식이 나타나지 않습니다.",
+  UNCONFIRMED:
+    "아직 확정되지 않은 후보입니다. 통과는 반복되지만 깊이가 얕아 추가 관측이 필요합니다.",
+  FP: "식쌍성 신호입니다. 통과가 깊고 홀짝 깊이가 다르며 2차 식이 뚜렷합니다.",
+};
+
+/** 미매칭·더 없음에 주는 힌트. 그 단계에서 가장 power가 높은 후보 하나다. */
+const HINT_PEAK = 3600;
+
+export function detailOutcome(stored: {
+  matchStatus: string;
+  candidateId: string | null;
+  evaluation: string | null;
+}) {
+  // 대상이 없으면 409다. 열람 기록도 바뀌지 않는다.
+  if (
+    stored.matchStatus === "ambiguous_match" ||
+    stored.matchStatus === "skipped"
+  )
+    return null;
+
+  const matched = ["matched", "matched_harmonic", "duplicate"].includes(
+    stored.matchStatus,
+  );
+  const gridIndex = matched
+    ? Number(
+        Object.keys(SIGNALS).find(
+          (key) => SIGNALS[Number(key)].candidateId === stored.candidateId,
+        ),
+      )
+    : HINT_PEAK;
+  const signal = SIGNALS[gridIndex];
+  if (!signal) return null;
+  return {
+    targetKind: matched ? "CURRENT_MATCH" : "CURRENT_CURVE_HINT",
+    signal: {
+      candidateId: signal.candidateId,
+      disposition: signal.disposition,
+      answerClass: signal.disposition === "UNCONFIRMED" ? "analysis" : "graded",
+      planetTruth:
+        signal.disposition === "CONFIRMED"
+          ? "planet"
+          : signal.disposition === "FP"
+            ? "not_planet"
+            : null,
+      bls: {
+        periodDays: 11.7346,
+        epochBtjd: 1743.35,
+        durationHours: 2.4,
+        depthPpm: 8000,
+        sde: 12.5,
+        snr: 18.2,
+      },
+      ai: { ...signal.ai, modelVersion: "astronet-triage-fixture-188" },
+      external: signal.external.map((item) => ({
+        ...item,
+        fetchedOn: "2026-09-01",
+      })),
+      explanation: EXPLANATION[signal.disposition],
+    },
+    // 매칭한 제출에만 일치 여부를 준다(RES-02). 채점하지 않았으면 null이다.
+    userJudgmentAgrees: !matched
+      ? null
+      : stored.evaluation === "AGREES"
+        ? true
+        : stored.evaluation === "DISAGREES"
+          ? false
+          : null,
+  };
+}

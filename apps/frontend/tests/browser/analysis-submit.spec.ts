@@ -699,3 +699,54 @@ test("nobody having published is not drawn as zero percent", async ({
   await expect(dialog).toContainText("아직 공개된 분석이 없습니다");
   await expect(dialog).not.toContainText("0%");
 });
+
+test("the answer is revealed only when the user asks for it", async ({
+  page,
+}) => {
+  const calls: string[] = [];
+  page.on("request", (request) => {
+    if (/detail-view$/.test(request.url())) calls.push(request.url());
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "아닌 것 같음");
+  // 상세 보기는 열람 기록을 남긴다. 화면을 열었다고 대신 부르지 않는다.
+  expect(calls).toHaveLength(0);
+  await expect(dialog).toContainText("상세 보기");
+
+  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await expect(dialog).toContainText("확정된 행성 신호");
+  expect(calls).toHaveLength(1);
+  // 매칭한 제출에는 내 판단과의 일치 여부를 준다(RES-02).
+  await expect(dialog).toContainText("내 판단과 다릅니다");
+});
+
+test("an unconfirmed candidate is never explained as an answer", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "모르겠음");
+  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await expect(dialog).toContainText("아직 확정되지 않은 후보입니다");
+  // 확정되지 않은 것을 확정처럼 말하지 않는다.
+  await expect(dialog).not.toContainText("정답");
+  // 채점하지 않았으므로 일치 여부도 없다.
+  await expect(dialog).not.toContainText("내 판단과");
+});
+
+test("a submission with no detail target says so instead of guessing", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "ambiguous",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 모호한 매칭에는 상세 대상이 없다. 버튼 자체를 내놓지 않는다.
+  await expect(dialog).not.toContainText("상세 보기");
+});

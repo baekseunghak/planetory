@@ -408,3 +408,49 @@ export function readResultExplanation(
     },
   };
 }
+
+/** 6.7절 상세 보기. 오답 분기에서 대상 신호를 드러낸다. */
+export type DetailView = {
+  submissionId: string;
+  /** 이 호출로 열람 기록이 남았다. 건너뛰기 조건에 쓰인다(6.5절). */
+  answerViewed: boolean;
+  targetKind: DetailTarget;
+  signal: SubmissionSignal & { explanation: string };
+  /** 매칭한 제출에만 일치 여부가 있다(RES-02). 채점하지 않았으면 null이다. */
+  userJudgmentAgrees: boolean | null;
+  /** 참이면 화면 끝에 [다음 튜토리얼로]를 둔다. */
+  tutorial: { seq: number | null; skipAvailable: boolean };
+};
+
+export const detailViewPath = (submissionId: string) =>
+  `/v1/submissions/${encodeURIComponent(submissionId)}/detail-view`;
+
+export function decodeDetailView(
+  value: unknown,
+  expected: { submissionId: string },
+): DetailView {
+  const data = record(value, "detail-view");
+  if (text(data.submissionId, "submissionId") !== expected.submissionId)
+    invalid("submissionId");
+  const signal = readSignal(data.signal);
+  const tutorial = record(data.tutorial ?? {}, "tutorial");
+  return {
+    submissionId: expected.submissionId,
+    answerViewed: flag(data.answerViewed, "answerViewed"),
+    targetKind: oneOf(data.targetKind, detailTargets, "targetKind"),
+    signal: {
+      ...signal,
+      explanation: text(
+        record(data.signal, "signal").explanation,
+        "signal.explanation",
+      ),
+    },
+    userJudgmentAgrees: nullable(data.userJudgmentAgrees, (item) =>
+      flag(item, "userJudgmentAgrees"),
+    ),
+    tutorial: {
+      seq: nullable(tutorial.seq, (item) => number(item, "tutorial.seq")),
+      skipAvailable: tutorial.skipAvailable === true,
+    },
+  };
+}

@@ -1,5 +1,6 @@
 import type { SubmissionReceipt } from "./submission-data";
 import type {
+  DetailView as DetailViewData,
   JudgmentStatistics,
   ResultExplanation,
   SubmissionSignal,
@@ -231,5 +232,92 @@ export function ResultExplanationView({
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * 상세 보기(6.7절). **누르면 열람 기록이 남는다.** 그 기록이 튜토리얼
+ * 건너뛰기 조건에 쓰이므로 화면을 열 때 자동으로 부르지 않는다.
+ */
+export function DetailView({
+  receipt,
+  detail,
+  onView,
+  onSkip,
+}: {
+  receipt: SubmissionReceipt;
+  detail:
+    | { phase: "idle" }
+    | { phase: "loading" }
+    | { phase: "shown"; view: DetailViewData }
+    | { phase: "unavailable"; message: string };
+  onView: (submissionId: string) => void;
+  onSkip?: () => void;
+}) {
+  if (!receipt.explanation.detail.available && detail.phase === "idle")
+    return null;
+  if (detail.phase === "idle")
+    return (
+      <section className="result-axis">
+        <h5>상세 보기</h5>
+        <p>
+          {receipt.explanation.detail.targetKind === "CURRENT_CURVE_HINT"
+            ? "이 단계에서 찾을 수 있었던 신호를 볼 수 있습니다."
+            : "이 신호가 무엇이었는지 볼 수 있습니다."}
+        </p>
+        {/* 누르면 열람 기록이 남는다. 대신 눌러 주지 않는다. */}
+        <button type="button" onClick={() => onView(receipt.submissionId)}>
+          상세 보기
+        </button>
+      </section>
+    );
+  if (detail.phase === "loading")
+    return (
+      <section className="result-axis">
+        <h5>상세 보기</h5>
+        <p role="status">상세를 불러오고 있습니다.</p>
+      </section>
+    );
+  if (detail.phase === "unavailable")
+    return (
+      <section className="result-axis">
+        <h5>상세 보기</h5>
+        <p role="alert">{detail.message}</p>
+      </section>
+    );
+
+  const { view } = detail;
+  return (
+    <section className="result-axis">
+      <h5>
+        {view.targetKind === "CURRENT_MATCH"
+          ? "이 신호는"
+          : "이 단계에서 찾을 수 있었던 신호"}
+      </h5>
+      {/* 미확정 후보에는 「정답」이라는 표현을 쓰지 않는다. */}
+      <p>{view.signal.explanation}</p>
+      <dl className="result-pairs">
+        <dt>주기</dt>
+        <dd>{decimal.format(view.signal.bls.periodDays)}일</dd>
+        <dt>가려진 시간</dt>
+        <dd>{decimal.format(view.signal.bls.durationHours)}시간</dd>
+        <dt>깊이</dt>
+        <dd>{count.format(view.signal.bls.depthPpm)} ppm</dd>
+      </dl>
+      {view.userJudgmentAgrees !== null && (
+        <p>
+          {view.userJudgmentAgrees
+            ? "내 판단과 같습니다."
+            : "내 판단과 다릅니다."}
+        </p>
+      )}
+      {view.tutorial.skipAvailable && onSkip && (
+        <p>
+          <button type="button" onClick={onSkip}>
+            다음 튜토리얼로
+          </button>
+        </p>
+      )}
+    </section>
   );
 }

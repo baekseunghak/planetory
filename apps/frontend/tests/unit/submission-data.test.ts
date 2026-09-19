@@ -29,7 +29,12 @@ const result = (patch: Record<string, unknown> = {}) => ({
   submittedAt: "2026-09-19T02:30:00Z",
   submissionKind: "candidate",
   curveContext,
-  original: { periodDays: 11.802 },
+  original: {
+    periodDays: 11.802,
+    sourcePeakGridIndex: 3311,
+    phaseStart: 0.995,
+    phaseEnd: 1.005,
+  },
   serverDerived: {
     foldReferenceTimeBtjd: 1683.4231,
     phaseCenter: 0,

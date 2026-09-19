@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
-import { ResultExplanationView } from "./AnalysisResult";
+import { DetailView, ResultExplanationView } from "./AnalysisResult";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -152,6 +152,15 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               </dd>
             </dl>
             <ResultExplanationView receipt={settled.receipt} />
+            <DetailView
+              receipt={settled.receipt}
+              detail={submission.detail}
+              onView={submission.viewDetail}
+              // 건너뛰기는 #187이 만든 제출 경로를 그대로 쓴다.
+              onSkip={() =>
+                submission.submit(skippedInput(settled.receipt.curveContext))
+              }
+            />
             <p className="submission-note">
               다음 단계로 넘어가는 행동은 아직 연결되지 않았습니다.
             </p>

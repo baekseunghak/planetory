@@ -6,7 +6,10 @@
 // 위상 규칙), and leaves 후보 매칭·성과 판정·격자 대조 to the real server (C10).
 // State lives in this dev process only and resets when the server restarts.
 
-import { candidateOutcome } from "./submission-outcome-fixtures.ts";
+import {
+  candidateOutcome,
+  detailOutcome,
+} from "./submission-outcome-fixtures.ts";
 
 export const SUBMISSION_FIXTURE_CSRF = "analysis-fixture-187";
 // Dev-only trigger for the two cases that cannot arise from real state.
@@ -382,6 +385,49 @@ export function submissionFixtureResponse(options: {
     return stored
       ? json(200, stored.result, storedBundle(stored))
       : fail(404, "SUBMISSION_NOT_FOUND", "접수 기록이 없습니다.");
+  }
+
+  // 6.7절 상세 보기. 본문 없이 보내며 멱등이다. 반복 호출은 같은 대상을 준다.
+  const detail = /^\/v1\/submissions\/([^/]+)\/detail-view$/.exec(url.pathname);
+  if (detail) {
+    if (method !== "POST")
+      return fail(405, "METHOD_NOT_ALLOWED", "지원하지 않는 요청입니다.");
+    if (csrf !== SUBMISSION_FIXTURE_CSRF)
+      return fail(403, "CSRF_TOKEN_INVALID", "인증 정보를 확인해 주세요.");
+    const submissionId = detail[1];
+    const entry = [...accepted.values()].find(
+      (item) => item.result.submissionId === submissionId,
+    );
+    if (!entry)
+      return fail(404, "SUBMISSION_NOT_FOUND", "접수 기록이 없습니다.");
+    const match = record(entry.result.match) ?? {};
+    const judgment = record(entry.result.judgment);
+    const target = detailOutcome({
+      matchStatus: String(match.status),
+      candidateId:
+        typeof match.candidateId === "string" ? match.candidateId : null,
+      evaluation:
+        typeof judgment?.evaluation === "string" ? judgment.evaluation : null,
+    });
+    // 대상이 없으면 열람 기록도 바꾸지 않는다.
+    if (!target)
+      return fail(409, "DETAIL_UNAVAILABLE", "볼 수 있는 상세가 없습니다.");
+    const viewed = record(entry.result.detail);
+    if (viewed) viewed.answerViewed = true;
+    const tutorial = record(entry.result.tutorial);
+    return json(
+      200,
+      {
+        submissionId,
+        answerViewed: true,
+        ...target,
+        // 오답에서 상세를 본 뒤에야 건너뛸 수 있다(6.5절).
+        tutorial: tutorial?.seq
+          ? { seq: tutorial.seq, skipAvailable: true }
+          : { seq: null, skipAvailable: false },
+      },
+      storedBundle(entry),
+    );
   }
 
   const post = /^\/v1\/stars\/([^/]+)\/submissions$/.exec(url.pathname);
