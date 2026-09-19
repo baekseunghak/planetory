@@ -13,7 +13,7 @@ import com.planetory.backend.domain.exploration.service.GalaxyLayout.StarPositio
 /**
  * 회원에게 별을 여는 공통 함수 (탐사 API 9.2·9.4절) [S15P21C206-139].
  *
- * <p>가입·튜토리얼·챌린지, 이후 성과 발견(S15P21C206-144)까지 실제 신규 발견은 모두 이 함수를
+ * <p>가입·튜토리얼·챌린지·성과 발견(S15P21C206-144)까지 실제 신규 발견은 모두 이 함수를
  * 지난다. 순번 배정·좌표 계산·저장·지도 버전 갱신을 경로마다 따로 두면 한 경로만 규칙이 어긋난다.
  */
 @Service
@@ -24,7 +24,7 @@ public class StarDiscoveryService {
     private final GalaxyLayout layout;
     private final SkyService sky;
 
-    /** 별이 열린 이유. {@code star_unlocks.unlock_reason} 값이다. */
+    /** 튜토리얼·챌린지로 별이 열린 이유. {@code star_unlocks.unlock_reason} 값이다. */
     public enum Reason {
         TUTORIAL("tutorial"),
         CHALLENGE("challenge");
@@ -37,6 +37,16 @@ public class StarDiscoveryService {
     }
 
     /**
+     * 성과로 연 별의 발견 경로 (9.2절 5단계).
+     *
+     * @param ticId         성과를 낸 별. {@code star_unlocks.trigger_tic_id}
+     * @param achievementId 원인 성과. {@code star_unlocks.trigger_achievement_id}
+     * @param seq           이 성과가 연 별의 순번(0부터)
+     */
+    public record AchievementTrigger(long ticId, long achievementId, int seq) {
+    }
+
+    /**
      * 새로 연 별.
      *
      * @param skyVersion 발견을 반영한 뒤의 지도 버전. 제출·공개 응답의 {@code skyVersion}에 넣는다.
@@ -45,7 +55,7 @@ public class StarDiscoveryService {
     }
 
     /**
-     * 별 하나를 연다.
+     * 튜토리얼·챌린지로 별 하나를 연다.
      *
      * <p>회원 행을 먼저 잠근다. 같은 회원의 발견·제출이 이 잠금으로 줄을 서므로 순번이 겹치지 않고,
      * "이미 열렸는가"를 본 결과가 저장할 때까지 유지된다. 잠금 순서는 9.2절의
@@ -59,6 +69,20 @@ public class StarDiscoveryService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<DiscoveredStar> discover(long memberId, long ticId, Reason reason) {
+        return open(memberId, ticId, reason.column, null);
+    }
+
+    /**
+     * 성과로 별 하나를 연다. 규칙은 {@link #discover}와 같고 발견 경로를 함께 저장한다.
+     *
+     * @return 새로 열었으면 그 결과, 이미 열려 있었으면 빈 값
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<DiscoveredStar> discoverByAchievement(long memberId, long ticId, AchievementTrigger trigger) {
+        return open(memberId, ticId, "achievement", trigger);
+    }
+
+    private Optional<DiscoveredStar> open(long memberId, long ticId, String reason, AchievementTrigger trigger) {
         jdbc.sql("SELECT id FROM users WHERE id = ? FOR UPDATE").param(memberId).query(Long.class).single();
         boolean unlocked = jdbc.sql("SELECT EXISTS(SELECT 1 FROM star_unlocks WHERE user_id = ? AND tic_id = ?)")
                 .params(memberId, ticId).query(Boolean.class).single();
@@ -80,11 +104,14 @@ public class StarDiscoveryService {
         // 좌표는 BigDecimal로 넘긴다. double을 그대로 넘기면 float8→NUMERIC 변환이 유효숫자 15자리로
         // 반올림해, 저장값이 배치 함수가 계산한 값과 달라진다.
         int inserted = jdbc.sql("""
-                INSERT INTO star_unlocks(user_id, tic_id, unlock_reason,
+                INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, trigger_tic_id, trigger_achievement_id, seq,
                     world_x, world_y, depth_z, layout_version, layout_ordinal, unlocked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (user_id, tic_id) DO NOTHING
-                """).params(memberId, ticId, reason.column,
+                """).params(memberId, ticId, reason,
+                        trigger == null ? null : trigger.ticId(),
+                        trigger == null ? null : trigger.achievementId(),
+                        trigger == null ? null : trigger.seq(),
                         BigDecimal.valueOf(position.worldX()), BigDecimal.valueOf(position.worldY()),
                         BigDecimal.valueOf(position.depthZ()), position.layoutVersion(), ordinal).update();
         if (inserted == 0) {
