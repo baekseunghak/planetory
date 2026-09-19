@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { PERIODOGRAM_FIXTURE_TICS } from "../../dev/periodogram-fixtures.ts";
 import { ANALYSIS_FIXTURE_TICS } from "../../dev/analysis-fixtures.ts";
 import { SUBMISSION_FIXTURE_HEADER } from "../../dev/submission-fixtures.ts";
+import { decodeSubmissionReceipt } from "../../src/features/analysis/submission-data.ts";
 
 // 제출 fixture가 탐사 API 2.2·2.3·6.1~6.6 그대로 답하는지 HTTP로 확인한다.
 // 앱 코드가 아니라 개발 서버의 계약을 검사하므로 브라우저 페이지를 쓰지 않는다.
@@ -248,4 +249,52 @@ test("a locked star and a missing csrf token are refused before any submission i
     failOnStatusCode: false,
   });
   expect(noToken.status()).toBe(403);
+});
+
+test("the real fixture body passes the parser for every submission kind", async ({
+  request,
+}) => {
+  const { candidate, context, post } = await setUp(request);
+  // 손으로 쓴 표본이 아니라 개발 서버가 실제로 보내는 본문을 읽는다.
+  // 지난 계약 불일치가 바로 이 틈에서 나왔다.
+  const id = uuid();
+  const created = await post(candidate(id));
+  const receipt = decodeSubmissionReceipt(
+    await created.json(),
+    {
+      ticId: TIC,
+      requestId: id,
+    },
+    created.status(),
+  );
+  expect(receipt.outcome).toBe("created");
+  expect(receipt.matchStatus).toBe("not_matched");
+  expect(receipt.curveContext).toEqual(context.currentCurveContext);
+  expect(receipt.progress.currentCurveStep).toBe(
+    context.currentCurveContext.curveStep,
+  );
+
+  const replayed = await post(candidate(id));
+  expect(
+    decodeSubmissionReceipt(
+      await replayed.json(),
+      { ticId: TIC, requestId: id },
+      replayed.status(),
+    ).outcome,
+  ).toBe("replayed");
+
+  const none = uuid();
+  const empty = await post({
+    requestId: none,
+    submissionKind: "no_candidate",
+    curveContext: context.currentCurveContext,
+    retryOfSubmissionId: null,
+  });
+  const noCandidate = decodeSubmissionReceipt(
+    await empty.json(),
+    { ticId: TIC, requestId: none },
+    empty.status(),
+  );
+  expect(noCandidate.submissionKind).toBe("no_candidate");
+  expect(noCandidate.matchStatus).toBe("none_wrong");
 });

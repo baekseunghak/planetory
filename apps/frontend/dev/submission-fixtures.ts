@@ -265,7 +265,8 @@ function buildResult(
         : null,
     skyVersion: "u-187:1",
     achievement: {
-      result: "not_recognized",
+      // ERD achievement_result CHECK 그대로. 미매칭이라 성과 판정 자체가 없다.
+      result: "none",
       newlyRecognized: false,
       unlockedStars: [],
       star: { count: 0, grade: null, byType: null },

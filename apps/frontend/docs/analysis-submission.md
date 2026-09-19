@@ -66,6 +66,34 @@ ID는 새로고침을 넘겨야 하므로 `sessionStorage`에 회원·TIC 단위
 
 `no_candidate`는 "더 없음"이지 "모르겠음"이 아니다. `UNSURE` 판단을 담은 `candidate` 제출과 본문·의미가 모두 다르다.
 
+## 접수 결과에서 읽는 것
+
+[submission-data.ts](../src/features/analysis/submission-data.ts)는 6.4절 `submissionResult` 중 이 티켓이 넘겨줘야 할 부분만 읽는다. **`signal`·`achievement`·`judgmentStatistics`·`original`은 읽지 않는다.** 결과 해설(A06-2)의 몫이고 후보 정답을 담으므로 이 티켓의 상태로 복사하지 않는다.
+
+읽는 값은 `submissionId`·`historyId`·`requestId`·`ticId`·`bundleId`·`submittedAt`·`submissionKind`·`curveContext`·`match.status`·`progress`·`skyVersion`·`nextActions`다. 티켓의 산출물인 「요청 상태·접수된 Submission/History 식별자·서버 결과·현재 상태 재조회 신호」에 해당한다.
+
+### 201과 200은 본문으로 구분할 수 없다
+
+재전송 응답은 **접수 당시 값을 그대로** 담는다. 성과가 있었다면 재현 본문에도 `newlyRecognized: true`가 그대로 실려 온다. 본문만 보고 판단하면 새로고침이나 복구 재전송 때마다 축하가 다시 뜨고 집계가 두 번 올라간다.
+
+그래서 `SubmissionReceipt.outcome`은 **본문이 아니라 HTTP 상태 코드**에서 온다. `201`이면 `created`, `200`이면 `replayed`이며 그 외 성공 코드는 계약에 없으므로 거절한다. 한 번만 일어나야 하는 처리는 `created`에서만 한다.
+
+### 대조하는 것
+
+- **`ticId`와 `requestId`가 보낸 값과 같아야 한다.** by-request 복구에서 이걸 대조하지 않으면 다른 요청의 결과를 내 제출로 착각해 실제 중복 제출을 놓친다.
+- `match.status`가 제출 종류에 맞아야 한다. `no_candidate`에 `matched`가 실려 오면 응답을 잘못 읽은 것이다.
+- `progress.currentCurveStep`이 제출한 `curveContext.curveStep`과 같아야 한다(6.3절 8번).
+- 완료 사유는 완료한 별에만 있다.
+- `submittedAt`은 UTC 활동 시각으로만 받는다. 시간대 없는 문자열과 BTJD 숫자는 거절한다.
+
+`nextActions`의 **모르는 값은 버리고 접수 결과는 살린다.** 힌트 하나를 이해하지 못해 버튼이 하나 줄어드는 것보다, 되살릴 수 없는 접수 결과를 잃는 쪽이 훨씬 비싸다. 목록 자체가 없으면 거절한다.
+
+### 실패의 분류
+
+[`classifySubmissionError`](../src/features/analysis/submission-data.ts)가 「응답과 처리」 표의 **마지막 열을 코드로** 옮긴다. 각 실패는 `requestId: "keep" | "renew" | "discard"`를 함께 돌려주며, 요청 ID 규칙이 여러 곳으로 흩어지지 않도록 이 한 곳에서 정한다.
+
+`outcomeUnknown`은 **상태 코드보다 우선한다.** 5xx는 거절처럼 보이지만 쓰기 요청이 나간 뒤라면 저장됐을 수 있다. 현재 판 번호는 `BUNDLE_CHANGED` 본문이 아니라 `X-Current-Bundle` 헤더로 받는다. `ApiError`가 본문의 추가 필드를 싣지 않으며 다른 로더도 같은 방식이다.
+
 ## 합성 응답의 원리
 
 [submission-fixtures.ts](../dev/submission-fixtures.ts)는 개발 서버에서만 쓰는 `submission-fixture-187-v1`이다. **서버를 다시 구현한 것이 아니다.** 멱등 저장소와 프론트가 실제로 틀릴 수 있는 검사(요청 ID, 판, 곡선 단계, 종류별 필드, enum, 위상 규칙)만 두고 후보 매칭·성과 판정·격자 대조는 실제 서버(C10)에 맡긴다. 상태는 이 개발 프로세스 안에만 있고 서버를 다시 띄우면 지워진다.
