@@ -147,7 +147,8 @@ uv run --locked python scripts/run_calibration.py --split evaluation --conversio
 평가 결과를 보고 같은 v1 수치를 바꾸지 않는다. 새 수치가 필요하면 새 버전과 새 미사용 평가 세트로 검증한다.
 
 2026-09-19 사용자 evaluation `183da766` 완료: PC/EB TP 10·FN 1, junk FP 2·TN 16,
-정밀도 83.33%·재현율 90.91%, 전체 review 20/35다. 아래 명령은 저장 결과만 집계한다.
+정밀도 10/12(83.33%)·재현율 10/11(90.91%), 전체 review 20/35(57.14%)다.
+FP 2/18(11.11%)은 합성 백색 잡음에 대한 값이며 실제 계통 오차의 오탐률로 일반화하지 않는다. 아래 명령은 저장 결과만 집계한다.
 전체 수치·checksum·보류 제안은 [성능 평가 5·6절](../../docs/data/tess-astronet-benchmark.md#5-독립-평가-결과)에 기록한다.
 
 ```powershell
