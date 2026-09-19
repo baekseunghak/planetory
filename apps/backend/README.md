@@ -95,6 +95,8 @@ docker compose --profile service up -d --wait service-db
 
 ## 더 보기
 
+제출 처리(143)는 `POST /api/v1/stars/{ticId}/submissions`다. V12가 요청 해시와 최초 응답 보존 열을 추가한다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest'`는 Docker의 일회용 PostgreSQL에서 저장·재전송·롤백·보안 필터를 검증하며 기존 개발 DB를 사용하지 않는다. 봉우리/잔차는 테스트 경계만 대체하고 실제 141·147 연결은 담당자 인계 후 검증한다. [채택 계약과 인수 구분](../../docs/api/exploration/submission-readiness.md).
+
 - [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
 - [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점

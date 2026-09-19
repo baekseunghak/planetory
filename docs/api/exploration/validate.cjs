@@ -20,6 +20,11 @@ for (const c of suite.cases) {
     assert.equal(typeof b.code, 'string');
     assert.equal(typeof b.message, 'string');
     assert.ok(Array.isArray(b.fieldErrors));
+    for (const error of b.fieldErrors) {
+      assert.equal(typeof error.field, 'string');
+      assert.equal(typeof error.reason, 'string');
+      assert.ok(!Object.hasOwn(error, 'message'));
+    }
   }
   if (c.request.method === 'GET') assert.ok(!c.effects || !c.effects.jobsCreated);
 }

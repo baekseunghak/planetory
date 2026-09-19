@@ -456,7 +456,7 @@
           "fieldErrors": [
             {
               "field": "selection.periodDays",
-              "message": "Invalid input"
+              "reason": "Invalid input"
             }
           ]
         }
@@ -864,7 +864,7 @@
           "fieldErrors": [
             {
               "field": "onboardingDone",
-              "message": "Invalid input"
+              "reason": "Invalid input"
             }
           ]
         }
@@ -895,7 +895,7 @@
           "fieldErrors": [
             {
               "field": "onboardingDone",
-              "message": "Invalid input"
+              "reason": "Invalid input"
             }
           ]
         }
