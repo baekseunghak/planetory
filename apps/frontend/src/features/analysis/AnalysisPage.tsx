@@ -157,6 +157,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
           key={contextKey(curve.context)}
           context={context}
           curve={curve}
+          recoverBundle={recoverBundle}
         >
           <div className="analysis-screen-grid">
             <div className="analysis-step-row">

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
+import { useBundleRecovery } from "./AnalysisSession";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
@@ -47,6 +48,7 @@ function residualNote(status: string | null): string {
 
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
+  const recoverBundle = useBundleRecovery();
   const headingId = useId();
   const reminderRef = useRef<HTMLButtonElement>(null);
   const focusRef = useRef<HTMLParagraphElement>(null);
@@ -192,6 +194,17 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 {settled.residual.jobId &&
                   ` · 작업 번호 ${settled.residual.jobId}`}
               </p>
+            )}
+            {settled.state === "bundle-changed" && (
+              <button
+                type="button"
+                onClick={() => {
+                  recoverBundle?.();
+                  submission.dismiss();
+                }}
+              >
+                최신 자료 불러오기
+              </button>
             )}
             {settled.state === "rejected" && settled.fieldErrors.length > 0 && (
               <ul>

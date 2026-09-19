@@ -228,7 +228,10 @@ export function useSubmission(context: AnalysisContext) {
       state.phase === "sending" ||
       state.phase === "checking" ||
       settled?.state === "accepted" ||
-      settled?.state === "unresolved",
+      settled?.state === "unresolved" ||
+      // 판이 바뀐 채로 다시 보내면 같은 낡은 스냅샷이 또 나간다. 최신 자료를
+      // 불러온 뒤에야 주기와 구간을 다시 고를 수 있다.
+      settled?.state === "bundle-changed",
     /** 결과를 모르는 상태. [접수 결과 확인]을 내놓아야 한다. */
     unresolved: settled?.state === "unresolved" ? settled : null,
     accepted: settled?.state === "accepted" ? settled : null,

@@ -39,6 +39,14 @@ export const emptyPhaseDraft: PhaseDraft = {
 const FoldContext = createContext<ReturnType<typeof useFoldSession> | null>(
   null,
 );
+/**
+ * 최신 판을 다시 불러오는 손잡이. 제출이 `BUNDLE_CHANGED`로 거절되면 화면이
+ * 이걸 불러 실제 재조회로 잇는다. 안내만 띄우고 끝내면 사용자는 같은 낡은
+ * 스냅샷을 그대로 다시 보내게 된다.
+ */
+const BundleRecoveryContext = createContext<(() => boolean) | null>(null);
+export const useBundleRecovery = () => useContext(BundleRecoveryContext);
+
 const DraftContext = createContext<{
   state: PhaseDraft;
   setState: Dispatch<SetStateAction<PhaseDraft>>;
@@ -79,22 +87,26 @@ function PhaseDraftProvider({
 export function AnalysisSession({
   context,
   curve,
+  recoverBundle,
   children,
 }: {
   context: AnalysisContext;
   curve: CurveData;
+  recoverBundle: () => boolean;
   children: ReactNode;
 }) {
   const session = useFoldSession(context, curve);
   return (
-    <FoldContext.Provider value={session}>
-      <PhaseDraftProvider
-        ready={session.ready}
-        change={session.state.success?.change ?? null}
-      >
-        {children}
-      </PhaseDraftProvider>
-    </FoldContext.Provider>
+    <BundleRecoveryContext.Provider value={recoverBundle}>
+      <FoldContext.Provider value={session}>
+        <PhaseDraftProvider
+          ready={session.ready}
+          change={session.state.success?.change ?? null}
+        >
+          {children}
+        </PhaseDraftProvider>
+      </FoldContext.Provider>
+    </BundleRecoveryContext.Provider>
   );
 }
 export function useAnalysisFold() {

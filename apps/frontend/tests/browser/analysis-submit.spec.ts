@@ -470,3 +470,51 @@ test("a check that finds nothing offers the same id and body again", async ({
   expect(again.requestId).toBe(first.requestId);
   expect(again).toEqual(first);
 });
+
+test("a changed bundle reloads the data instead of resending the old snapshot", async ({
+  page,
+}) => {
+  const posts: Record<string, unknown>[] = [];
+  let contexts = 0;
+  await page.route("**/api/v1/stars/*/analysis-context*", async (route) => {
+    contexts += 1;
+    return route.continue();
+  });
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(JSON.parse(request.postData() ?? "{}"));
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "BUNDLE_CHANGED",
+        message: "판이 바뀌었습니다.",
+        fieldErrors: [],
+        currentBundleId: "9007199254741099",
+      }),
+    });
+  });
+
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("별의 데이터 판이 바뀌었습니다");
+  const before = contexts;
+
+  // 낡은 스냅샷을 그대로 다시 보낼 수 없어야 한다. 제출은 잠겨 있다.
+  await expect(
+    page.getByRole("button", { name: "제출하기", exact: true }),
+  ).toBeDisabled();
+
+  // 안내로 끝내지 않고 실제 재조회로 잇는다.
+  await dialog
+    .getByRole("button", { name: "최신 자료 불러오기", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => contexts).toBeGreaterThan(before);
+  // 다시 부른 것은 조회뿐이다. 제출은 한 번으로 남는다.
+  expect(posts).toHaveLength(1);
+});
