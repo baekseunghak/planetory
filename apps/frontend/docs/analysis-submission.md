@@ -52,9 +52,19 @@ ID는 UUID v4이며 본문 `requestId`에 싣는다(2.2절). 서비스 API에는
 
 ### 보존 위치
 
-ID는 새로고침을 넘겨야 하므로 `sessionStorage`에 회원·TIC 단위로 저장한다. 키는 `planetory:analysis-draft:` 접두사를 공유해 [로그아웃 시 초안 정리](../src/auth/session-draft-storage.ts)가 함께 지우도록 한다. 공용 파일을 수정하지 않는다.
+[submission-request.ts](../src/features/analysis/submission-request.ts)가 `sessionStorage`에 회원·TIC 단위로 저장한다. 키는 `planetory:analysis-draft:` 접두사를 공유해 [로그아웃 시 초안 정리](../src/auth/session-draft-storage.ts)가 함께 지우도록 한다. 공용 파일을 수정하지 않는다. 접두사가 바뀌면 조용히 깨지는 전제이므로 [submission-request.spec.ts](../tests/browser/submission-request.spec.ts)가 실제 브라우저에서 지워지는지 확인한다.
 
-저장값에는 ID와 함께 **본문 지문**을 둔다. 복구 재전송 전에 지금 만든 본문이 그 지문과 같은지 확인하고, 다르면 보존 ID를 쓰지 않는다.
+저장값에는 ID와 함께 **본문 지문**을 둔다. `reserveRequestId`는 저장된 지문이 지금 본문과 같으면 그 ID를 그대로 쓰고, 다르면 사용자가 본문을 바꾼 것이므로 새로 만든다. **새 ID 생성은 이 한 곳에서만 일어난다.**
+
+지문은 키 순서와 무관하고 `requestId`를 빼고 계산한다. 지금 정하려는 값이 그것이기 때문이다. 유한하지 않은 수는 따로 적는다. `JSON.stringify`가 `NaN`·`Infinity`·`null`을 모두 `null`로 만들어 서로 다른 본문이 같은 지문을 갖게 되면, 다른 본문을 같은 ID로 보내 `IDEMPOTENCY_CONFLICT`가 난다.
+
+개발용 응답에도 같은 계산이 있지만 **일부러 공유하지 않는다.** 한쪽이 틀려도 양쪽이 같이 틀리면 검사가 통과해 버린다. 서버 자리의 계산과 클라이언트의 계산은 따로 두어야 어긋남이 드러난다.
+
+### 저장소를 쓸 수 없을 때
+
+비공개 모드나 차단된 사이트 데이터에서는 `sessionStorage` 접근 자체가 던진다. 이때도 **제출을 막지 않는다.** ID는 이번 시도에서 유효하고 잃는 것은 새로고침 뒤의 복구뿐이므로, `ReservedRequest.volatile`로 알리고 화면이 그 사실을 안내한다.
+
+손상된 기록은 쓰지 않고 지운다. 이 경우 같은 본문에 새 ID가 붙어 중복 접수가 될 수 있지만, 깨진 ID로 **남의 결과를 내 접수로 받아오는 것**보다 낫다.
 
 ## 특수 제출 (6.5절)
 
