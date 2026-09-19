@@ -25,12 +25,18 @@ export type SubmissionScenario =
    * 흡수해 Submission이 하나만 남는지 보는 것이 이 시나리오의 목적이다.
    * 유실 재현용이 아니다.
    */
-  | "reset-connection";
+  | "reset-connection"
+  /**
+   * 이 단계의 잔차가 준비되지 않아 409로 거절한다. **저장하지 않는다.**
+   * 요청 ID를 버리지 않고 같은 ID로 다시 보낼 수 있어야 한다.
+   */
+  | "context-not-ready";
 const scenarios: SubmissionScenario[] = [
   "drop-saved",
   "drop-unsaved",
   "in-progress",
   "reset-connection",
+  "context-not-ready",
 ];
 export const readScenario = (value: unknown): SubmissionScenario | null =>
   scenarios.find((item) => item === value) ?? null;
@@ -385,6 +391,16 @@ function submit(
     held.remaining -= 1;
     return fail(409, "REQUEST_IN_PROGRESS", "같은 요청을 처리하고 있습니다.");
   }
+
+  // 검증 전에 막는다. 잔차가 없으면 결과를 만들 수 없고 저장도 하지 않는다.
+  if (scenario === "context-not-ready")
+    return fail(
+      409,
+      "SUBMISSION_CONTEXT_NOT_READY",
+      "이 단계의 잔차가 준비되지 않았습니다.",
+      [],
+      { residual: { status: "QUEUED", jobId: "job-7701", computedAt: null } },
+    );
 
   const rejected = validate(input, context);
   if (rejected) return rejected;

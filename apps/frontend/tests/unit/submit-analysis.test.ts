@@ -344,3 +344,24 @@ test("checking alone never sends and never claims the submission is missing", as
   if (pending.state !== "unresolved") throw new Error("expected unresolved");
   assert.equal(pending.reason, "in-progress");
 });
+
+test("a not-ready residual refuses without spending the request id", async () => {
+  const stub = harness([
+    {
+      error: refused(409, "SUBMISSION_CONTEXT_NOT_READY", [], {
+        residual: { status: "QUEUED", jobId: "job-7701", computedAt: null },
+      }),
+      status: 409,
+    },
+  ]);
+  const result = await stub.run();
+  assert.equal(result.state, "context-not-ready");
+  assert.equal(
+    result.state === "context-not-ready" && result.residual?.status,
+    "QUEUED",
+  );
+  // 미접수이고 같은 ID로 재전송한다. 버리면 명세가 말하는 복구가 불가능해진다.
+  assert.equal(stub.released(), 0);
+  // 한 번만 보낸다. 잔차는 기다리는 것이지 다시 두드릴 일이 아니다.
+  assert.equal(stub.calls.length, 1);
+});

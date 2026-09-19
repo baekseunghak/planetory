@@ -33,6 +33,18 @@ const matchSummary: Record<MatchStatus, string> = {
  * 네이티브 `<dialog>`의 `showModal()`을 쓴다. 포커스 가둠·Escape·배경 비활성을
  * 브라우저가 처리하며 저장소의 다른 대화상자와 같은 방식이다.
  */
+/**
+ * 잔차 준비 상태를 사람 말로. **모르는 값은 그대로 보여 준다.** 계약이 아직
+ * `S15P21C206-143` 브랜치에만 있어 값이 늘어날 수 있고, 모른다고 숨기면
+ * 사용자가 왜 못 보내는지 알 길이 없다.
+ */
+function residualNote(status: string | null): string {
+  if (status === null) return "계산을 아직 시작하지 않았습니다.";
+  if (status === "QUEUED") return "계산을 기다리는 중입니다.";
+  if (status === "FAILED") return "계산이 실패했습니다.";
+  return `계산 상태 ${status}`;
+}
+
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const headingId = useId();
@@ -150,14 +162,27 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           </>
         ) : (
           <>
-            <h4 id={headingId}>제출하지 못했습니다</h4>
+            <h4 id={headingId}>
+              {settled.state === "context-not-ready"
+                ? "아직 제출할 수 없습니다"
+                : "제출하지 못했습니다"}
+            </h4>
             <p ref={focusRef} tabIndex={-1} role="alert">
-              {settled.state === "bundle-changed"
-                ? "별의 데이터 판이 바뀌었습니다. 최신 자료를 다시 불러온 뒤 주기와 구간을 다시 골라 주세요."
-                : settled.state === "expired"
-                  ? "로그인이 만료되었습니다. 다시 로그인한 뒤 제출해 주세요."
-                  : settled.message}
+              {settled.state === "context-not-ready"
+                ? "이 단계의 계산이 아직 끝나지 않았습니다. 준비되면 같은 내용을 그대로 다시 보낼 수 있습니다."
+                : settled.state === "bundle-changed"
+                  ? "별의 데이터 판이 바뀌었습니다. 최신 자료를 다시 불러온 뒤 주기와 구간을 다시 골라 주세요."
+                  : settled.state === "expired"
+                    ? "로그인이 만료되었습니다. 다시 로그인한 뒤 제출해 주세요."
+                    : settled.message}
             </p>
+            {settled.state === "context-not-ready" && settled.residual && (
+              <p className="submission-note">
+                {residualNote(settled.residual.status)}
+                {settled.residual.jobId &&
+                  ` · 작업 번호 ${settled.residual.jobId}`}
+              </p>
+            )}
             {settled.state === "rejected" && settled.fieldErrors.length > 0 && (
               <ul>
                 {settled.fieldErrors.map((error) => (

@@ -348,3 +348,29 @@ test("an eligible tutorial star accepts a skip and completes with that reason", 
   expect(receipt.progress.stage).toBe("completed");
   expect(receipt.progress.completionReason).toBe("skipped");
 });
+
+test("a not-ready residual is refused without storing, and the same id still works", async ({
+  request,
+}) => {
+  const { candidate, post, byRequest } = await setUp(request);
+  const id = uuid();
+
+  const refused = await post(candidate(id), "context-not-ready");
+  expect(refused.status()).toBe(409);
+  const body = await refused.json();
+  expect(body.code).toBe("SUBMISSION_CONTEXT_NOT_READY");
+  // 상태·작업 번호를 실어 와야 화면이 왜 못 보내는지 말할 수 있다.
+  expect(body.residual).toEqual({
+    status: "QUEUED",
+    jobId: "job-7701",
+    computedAt: null,
+  });
+
+  // 저장하지 않았다. 조회가 200이면 접수된 것이라 「미접수」가 거짓이 된다.
+  expect((await byRequest(id)).status()).toBe(404);
+
+  // 잔차가 준비된 뒤 같은 ID로 다시 보내면 새 접수가 된다.
+  const accepted = await post(candidate(id));
+  expect(accepted.status()).toBe(201);
+  expect((await accepted.json()).requestId).toBe(id);
+});

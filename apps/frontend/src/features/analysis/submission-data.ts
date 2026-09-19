@@ -252,8 +252,42 @@ export type SubmissionFailure = { requestId: "keep" | "renew" | "discard" } & (
       message: string;
       fieldErrors: FieldError[];
     }
+  | {
+      /**
+       * 이 단계의 **잔차가 아직 준비되지 않아** 접수되지 않았다. 잔차를
+       * 준비한 뒤 **같은 요청 ID로 재전송**한다. 서버는 접수를 예약하지도,
+       * 배경에서 대신 제출하지도 않는다.
+       *
+       * 계약은 `S15P21C206-143` 브랜치의 명세 오류표와 제출 구현 계약에만
+       * 있고 아직 develop에 없다. 그래서 `residual.status`를 닫힌 열거형으로
+       * 보지 않고 받은 문자열을 그대로 들고 간다. 모르는 값 하나 때문에
+       * 복구 경로를 끊는 쪽이 훨씬 비싸다.
+       */
+      kind: "context-not-ready";
+      code: string;
+      message: string;
+      residual: ResidualState | null;
+    }
   | { kind: "denied"; code: string; message: string }
 );
+
+/** 잔차 준비 상태. `status`가 null이면 결과도 작업도 없는 미계산이다. */
+export type ResidualState = {
+  status: string | null;
+  jobId: string | null;
+  computedAt: string | null;
+};
+
+function readResidual(value: unknown): ResidualState | null {
+  if (typeof value !== "object" || value === null) return null;
+  const row = value as Record<string, unknown>;
+  const str = (item: unknown) => (typeof item === "string" ? item : null);
+  return {
+    status: str(row.status),
+    jobId: str(row.jobId),
+    computedAt: str(row.computedAt),
+  };
+}
 
 export function classifySubmissionError(error: unknown): SubmissionFailure {
   if (!(error instanceof ApiError))
@@ -280,6 +314,15 @@ export function classifySubmissionError(error: unknown): SubmissionFailure {
           typeof error.details.currentBundleId === "string"
             ? error.details.currentBundleId
             : null,
+      };
+    // 미접수다. 잔차를 준비한 뒤 **같은 ID로** 다시 보내야 하므로 버리지 않는다.
+    if (error.code === "SUBMISSION_CONTEXT_NOT_READY")
+      return {
+        kind: "context-not-ready",
+        requestId: "keep",
+        code: error.code,
+        message: error.message,
+        residual: readResidual(error.details.residual),
       };
     // STAR_ALREADY_COMPLETED·SKIP_NOT_AVAILABLE. 조건이 아니므로 다시 보내지 않는다.
     return {

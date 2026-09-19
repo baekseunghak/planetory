@@ -217,6 +217,8 @@ test("each refusal decides the request id exactly once", () => {
     [409, "REQUEST_IN_PROGRESS", "in-progress", "keep"],
     [409, "IDEMPOTENCY_CONFLICT", "conflict-body", "renew"],
     [409, "BUNDLE_CHANGED", "bundle-changed", "renew"],
+    // 미접수이고 잔차를 준비한 뒤 같은 ID로 재전송한다. 버리면 복구가 끊긴다.
+    [409, "SUBMISSION_CONTEXT_NOT_READY", "context-not-ready", "keep"],
     [409, "STAR_ALREADY_COMPLETED", "denied", "discard"],
     [409, "SKIP_NOT_AVAILABLE", "denied", "discard"],
     [403, "STAR_LOCKED", "denied", "discard"],
@@ -281,4 +283,39 @@ test("a changed bundle reads the current plate from the body, not the header", (
     wrong.kind === "bundle-changed" ? wrong.currentBundleId : "없음",
     null,
   );
+});
+
+test("a not-ready context keeps the id and carries the residual state", () => {
+  const failure = classifySubmissionError(
+    apiError(409, "SUBMISSION_CONTEXT_NOT_READY", false, [], {
+      residual: { status: "QUEUED", jobId: "job-7701", computedAt: null },
+    }),
+  );
+  assert.equal(failure.kind, "context-not-ready");
+  // 이 ID로 다시 보내야 한다. 버리면 명세가 말하는 재전송을 할 수 없다.
+  assert.equal(failure.requestId, "keep");
+  assert.deepEqual(failure.kind === "context-not-ready" && failure.residual, {
+    status: "QUEUED",
+    jobId: "job-7701",
+    computedAt: null,
+  });
+});
+
+test("an unknown residual status is kept instead of being dropped", () => {
+  // 계약이 아직 143 브랜치에만 있다. 모르는 값 하나로 복구를 끊지 않는다.
+  const failure = classifySubmissionError(
+    apiError(409, "SUBMISSION_CONTEXT_NOT_READY", false, [], {
+      residual: { status: "RECOMPUTING", jobId: null, computedAt: null },
+    }),
+  );
+  assert.equal(
+    failure.kind === "context-not-ready" && failure.residual?.status,
+    "RECOMPUTING",
+  );
+  // residual이 아예 없어도 거절로 바뀌지 않는다.
+  const bare = classifySubmissionError(
+    apiError(409, "SUBMISSION_CONTEXT_NOT_READY"),
+  );
+  assert.equal(bare.kind, "context-not-ready");
+  assert.equal(bare.kind === "context-not-ready" && bare.residual, null);
 });

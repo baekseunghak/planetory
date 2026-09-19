@@ -6,6 +6,7 @@ import {
   decodeSubmissionReceipt,
   submissionsPath,
   type SubmissionReceipt,
+  type ResidualState,
 } from "./submission-data.ts";
 
 type Request = ReturnType<typeof createApiClient>["request"];
@@ -52,6 +53,16 @@ export type SubmissionResult =
     }
   | { state: "conflict"; message: string }
   | { state: "bundle-changed"; currentBundleId: string | null }
+  | {
+      /**
+       * 잔차가 준비되지 않아 **접수되지 않았다.** 요청 ID를 그대로 두었으므로
+       * 준비된 뒤 같은 본문을 다시 보내면 그 ID로 접수된다.
+       */
+      state: "context-not-ready";
+      code: string;
+      message: string;
+      residual: ResidualState | null;
+    }
   | { state: "denied"; code: string; message: string }
   | { state: "expired" };
 
@@ -126,6 +137,14 @@ export async function submitAnalysis(
             state: "conflict",
             message:
               "같은 요청 번호로 다른 내용이 이미 접수되어 있습니다. 내용을 확인하고 다시 제출해 주세요.",
+          };
+        case "context-not-ready":
+          // 미접수이고 같은 ID로 재전송한다. releaseRequestId를 부르지 않는다.
+          return {
+            state: "context-not-ready",
+            code: failure.code,
+            message: failure.message,
+            residual: failure.residual,
           };
         case "denied":
           releaseRequestId();

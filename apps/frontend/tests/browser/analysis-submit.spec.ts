@@ -282,3 +282,55 @@ test("an irreversible submission is confirmed in the app, not by the browser", a
   );
   expect(sent).toHaveLength(1);
 });
+
+test("a not-ready residual says why and keeps the same request id for the retry", async ({
+  page,
+}) => {
+  const ids: string[] = [];
+  let ready = false;
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    ids.push(JSON.parse(request.postData() ?? "{}").requestId);
+    // 잔차가 준비되기 전에는 거절하고, 준비된 뒤에는 개발 서버가 받게 둔다.
+    if (ready) return route.continue();
+    return route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "SUBMISSION_CONTEXT_NOT_READY",
+        message: "이 단계의 잔차가 준비되지 않았습니다.",
+        fieldErrors: [],
+        residual: { status: "QUEUED", jobId: "job-7701", computedAt: null },
+      }),
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  // 못 보낸 것이 아니라 아직 못 보내는 것이다. 말이 달라야 한다.
+  await expect(dialog).toContainText("아직 제출할 수 없습니다");
+  await expect(dialog).toContainText(
+    "같은 내용을 그대로 다시 보낼 수 있습니다",
+  );
+  // 왜 못 보내는지 서버가 준 상태 그대로 알린다.
+  await expect(dialog).toContainText("계산을 기다리는 중입니다");
+  await expect(dialog).toContainText("job-7701");
+
+  // 접수가 아니므로 초안이 잠기지 않는다.
+  await expect(
+    page.getByRole("button", { name: "제출하기", exact: true }),
+  ).toBeEnabled();
+
+  ready = true;
+  await dialog
+    .getByRole("button", { name: "입력으로 돌아가기", exact: true })
+    .click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  await expect(dialog).toContainText("접수되었습니다");
+  // 본문이 그대로이므로 같은 요청 ID로 다시 보낸다. 새 ID를 만들면 안 된다.
+  expect(ids).toHaveLength(2);
+  expect(ids[0]).toBe(ids[1]);
+});
