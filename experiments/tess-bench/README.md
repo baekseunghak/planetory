@@ -7,6 +7,24 @@ BLS 실험 계획·규칙·결과는 [docs/data/tess-bls-benchmark.md](../../doc
 
 이 코드는 **값을 정하는 실험 코드**다. 검증된 규칙은 구현 Task 에서 별도 커널로 옮긴다.
 
+## Silver 전처리 커널 회귀 (119)
+
+공용 구현·실패·회귀 계약은 [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119)을 따른다.
+아래 명령은 BLS 없이 42의 4별·주입 격자 1.1.0을 기존 전처리와 새 커널로 각각 처리한다.
+실제 실험은 사용자가 실행한다. 입력·코드·환경·오차 0 기준을 먼저 저장한다.
+
+```powershell
+cd experiments/tess-bench
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.silver_regression
+```
+
+각 별의 `112/112 curves equal; summary=True`와 마지막 `passed=True`를 확인한다.
+산출물은 `results/silver-regression/run-.../`의 plan·비교 CSV·지표 CSV·요약 CSV·manifest다.
+이 도구는 다운로드·Git 명령을 실행하지 않는다. 사용자 실행 `9c908a11`에서 448/448곡선과 4별 요약이 일치했다.
+총 428.510초이며 저장된 입력·출력·plan 해시 44개도 일치한다. 상세 수치·해시는 위 119 계약에 기록한다.
+추가 가장자리 마스크 없이 구현했고 DAT-02 정합화는 MR 리뷰 대기다.
+
 ## 준비
 
 Python 3.11 이상, `uv`. FITS 표본은 tess-fixture 쪽에 받아 둔다.

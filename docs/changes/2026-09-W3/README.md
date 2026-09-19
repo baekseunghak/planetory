@@ -118,3 +118,5 @@
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | Silver 전처리·42 회귀 계약 | S15P21C206-119 | biweight, 원본 행, 제외 사유, 허용 오차 0, DAT-02 | 구현·합성 검증 완료, 실측·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Silver 전처리 4별 실측 회귀 통과 | S15P21C206-119 | 9c908a11, 448/448, 428.510초, 해시 44개 일치 | 실측 검증 완료·MR 리뷰 대기 | [2026-09-20](2026-09-20.md) |
