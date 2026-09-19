@@ -1,5 +1,9 @@
 # TESS 처리 벤치마크
 
+## 114 세그먼트·비닝 실험
+
+`uv run --locked python -m tess_bench.binning --check-inputs`로 9별 입력을 확인하고, `--target l98_59`로 한 별을 실행한다. 인자 없이 전체 9별을 비교한다. 2·5·10·20분 평균/중앙값, 20,000점 상한, 빈 bin, 실제 신호와 전처리 후 합성 주입을 비교한다. 결과는 `results/binning/`에 별도 실행 디렉터리로 보존한다. BLS나 독립 holdout 평가는 아니다. 설계·지표·입력 준비·인수 조건은 [비닝 벤치마크](../../docs/data/tess-binning-benchmark.md)를 따른다.
+
 Jira `S15P21C206-42` (전처리·detrending, `preprocess`) 와 `S15P21C206-110` (BLS 격자·게이트, `bls`·`bls-gates`). 비닝 실측(D) 벤치마크도 이 프로젝트에 하위 명령으로 붙인다.
 BLS 실험 계획·규칙·결과는 [docs/data/tess-bls-benchmark.md](../../docs/data/tess-bls-benchmark.md) 에 있다.
 입력은 [tess-fixture](../tess-fixture/README.md) 의 고정 표본과 합성 주입 세트다. 실험 계획과 결과 읽는 법은

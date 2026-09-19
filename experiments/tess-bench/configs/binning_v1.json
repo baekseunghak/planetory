@@ -1,0 +1,15 @@
+{
+  "version": "binning-benchmark-v1.0.0",
+  "targets": ["toi270", "l98_59", "cm_dra", "wasp18", "wasp62", "toi700", "toi451", "pi_men", "hd21749"],
+  "preprocess_setting": "biweight_1.0d",
+  "bin_minutes": [2, 5, 10, 20],
+  "reducers": ["mean", "median"],
+  "max_points": 20000,
+  "injection": {
+    "period_days": 2.0,
+    "depth_ppm": 1000.0,
+    "duration_hours": [0.5, 0.8, 2.0, 8.0],
+    "epoch_offset_minutes": [0.0, 2.5, 5.0, 7.5]
+  },
+  "note": "114 실험 후보. 주입은 전처리 후 고정된 곡선에 적용해 비닝 영향만 분리한다. 전처리 회수율·BLS·discoverable 판정이 아니다. 채택은 실측 및 화면 리뷰 후 결정한다."
+}
