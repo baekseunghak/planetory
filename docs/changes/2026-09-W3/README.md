@@ -111,3 +111,4 @@
 | 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |
