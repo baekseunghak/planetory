@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
@@ -61,6 +62,14 @@ public class SubmissionService {
             try { return tx.execute(status -> process(memberId, ticId, request, hash)); }
             catch (PessimisticLockingFailureException | DuplicateKeyException e) {
                 if (attempt == 2) throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+                // execute가 롤백을 마친 뒤에만 대기한다. 커밋된 요청의 중복 키는 즉시 재조회한다.
+                if (e instanceof PessimisticLockingFailureException) {
+                    try { Thread.sleep(ThreadLocalRandom.current().nextLong(10, 31) * (attempt + 1)); }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw unavailable();
+                    }
+                }
             }
         }
     }
@@ -191,6 +200,8 @@ public class SubmissionService {
             if (target != null) { actions.add("VIEW_DETAIL"); actions.add("RETRY"); }
             if (selected != null && remaining > 0) actions.add("NEXT_CURVE");
             if (eligible) { actions.add("PUBLISH_ANALYSIS"); actions.add("LATER"); }
+            if (selected != null) actions.add("GO_HOME");
+            if ("not_matched".equals(match.status())) actions.add("DISCUSS");
             actions.add("VIEW_RESULT");
         }
         boolean canSkip = skipAvailable(member, tic, rule, seq, progress);
