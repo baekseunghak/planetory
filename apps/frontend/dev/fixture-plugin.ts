@@ -87,9 +87,24 @@ export function fixturePlugin(observations = false): Plugin {
             },
           });
           if (reply) {
-            // 소켓을 끊어 응답 유실을 재현한다. 상태 코드를 쓰지 않는 것이 요점이다.
             if (reply.kind === "drop") {
-              res.destroy();
+              // 브라우저는 재사용된 연결이 한 바이트도 없이 닫히면 POST를 스스로
+              // 다시 보낸다. 그러면 유실이 아니라 멱등 재현이 되므로, 유실은
+              // 헤더를 보낸 뒤 본문을 끊어 「받긴 했지만 읽을 수 없는」 응답으로
+              // 만든다. 공용 클라이언트가 이때 outcomeUnknown을 켠다.
+              if (reply.reset) {
+                res.destroy();
+                return;
+              }
+              res.writeHead(500, {
+                "Content-Type": "application/json",
+                "Cache-Control": "no-store",
+              });
+              // 헤더와 첫 조각이 소켓에 실제로 나간 뒤에 끊어야 한다. 바로
+              // destroy하면 Node가 버퍼째 버려 바이트 없는 초기화가 된다.
+              res.write('{"code":"SERVER_ERROR"', () =>
+                setTimeout(() => res.destroy(), 20),
+              );
               return;
             }
             res.statusCode = reply.status;

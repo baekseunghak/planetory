@@ -11,24 +11,38 @@ export const SUBMISSION_FIXTURE_CSRF = "analysis-fixture-187";
 // The app never sends it; tests and manual checks set it on the request.
 export const SUBMISSION_FIXTURE_HEADER = "x-fixture-submit";
 export type SubmissionScenario =
-  // 접수까지 끝난 뒤 응답만 끊는다. by-request로 복구하면 200.
+  // 접수까지 끝난 뒤 응답을 잃는다. by-request로 복구하면 200.
   | "drop-saved"
-  // 접수 전에 끊는다. by-request 404 뒤 같은 ID 재전송이 201이어야 한다.
+  // 접수 전에 잃는다. by-request 404 뒤 같은 ID 재전송이 201이어야 한다.
   | "drop-unsaved"
   // 처리 중. POST와 첫 by-request가 409, 그다음 조회가 200.
-  | "in-progress";
+  | "in-progress"
+  /**
+   * 접수한 뒤 **한 바이트도 보내지 않고** 연결을 끊는다.
+   *
+   * 브라우저는 재사용된 연결이 응답 없이 닫히면 POST를 스스로 다시 보낸다.
+   * 앱의 `fetch` 호출은 한 번이지만 서버는 두 번 받는다. 요청 ID가 그 재전송을
+   * 흡수해 Submission이 하나만 남는지 보는 것이 이 시나리오의 목적이다.
+   * 유실 재현용이 아니다.
+   */
+  | "reset-connection";
 const scenarios: SubmissionScenario[] = [
   "drop-saved",
   "drop-unsaved",
   "in-progress",
+  "reset-connection",
 ];
 export const readScenario = (value: unknown): SubmissionScenario | null =>
   scenarios.find((item) => item === value) ?? null;
 
 export type SubmissionFixtureReply =
   | { kind: "json"; status: number; body: unknown; currentBundleId?: string }
-  // 소켓을 끊어 응답 유실을 재현한다. 상태 코드가 없는 것이 요점이다.
-  | { kind: "drop" };
+  /**
+   * 응답을 완성하지 않는다. `reset`이면 아무 바이트도 보내지 않고 끊고,
+   * 아니면 헤더를 보낸 뒤 본문을 끊는다. 뒤쪽이 「응답 유실」이며, 앞쪽은
+   * 브라우저가 스스로 재전송하므로 유실이 되지 않는다.
+   */
+  | { kind: "drop"; reset?: boolean };
 
 type Stored = {
   ticId: string;
@@ -383,6 +397,7 @@ function submit(
     return fail(409, "REQUEST_IN_PROGRESS", "같은 요청을 처리하고 있습니다.");
   }
   accepted.set(requestId, { ticId, fingerprint, result });
+  if (scenario === "reset-connection") return { kind: "drop", reset: true };
   if (scenario === "drop-saved") return { kind: "drop" };
   return json(201, result);
 }

@@ -63,6 +63,21 @@ async function setUp(request: APIRequestContext) {
 }
 const uuid = () => crypto.randomUUID();
 
+// 응답 유실은 헤더까지 보낸 뒤 본문을 끊어 만든다. 아무 바이트도 보내지 않고
+// 끊으면 클라이언트가 POST를 스스로 다시 보내 유실이 되지 않는다.
+async function expectLostResponse(
+  pending: Promise<import("@playwright/test").APIResponse>,
+) {
+  let response: import("@playwright/test").APIResponse;
+  try {
+    response = await pending;
+  } catch {
+    return; // 연결 자체가 끊긴 경우도 결과 불명이다.
+  }
+  expect(response.status()).toBe(500);
+  await expect(response.json()).rejects.toThrow();
+}
+
 test("the same request id replays one submission and rejects a different body", async ({
   request,
 }) => {
@@ -99,7 +114,7 @@ test("a lost response is recovered by request id without creating a second submi
   const id = uuid();
 
   // 접수까지 끝난 뒤 응답만 사라진 경우. 상태 코드조차 없다.
-  await expect(post(candidate(id), "drop-saved")).rejects.toThrow();
+  await expectLostResponse(post(candidate(id), "drop-saved"));
   const recovered = await byRequest(id);
   expect(recovered.status()).toBe(200);
   const stored = await recovered.json();
@@ -117,7 +132,7 @@ test("an unsaved lost response answers 404 and the same id still succeeds", asyn
   const { candidate, post, byRequest } = await setUp(request);
   const id = uuid();
 
-  await expect(post(candidate(id), "drop-unsaved")).rejects.toThrow();
+  await expectLostResponse(post(candidate(id), "drop-unsaved"));
   expect((await byRequest(id)).status()).toBe(404);
   // 404를 미접수로 단정하지 않고 같은 ID로 재전송한다. 새 ID를 만들지 않는다.
   const resent = await post(candidate(id));
