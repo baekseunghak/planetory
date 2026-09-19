@@ -250,7 +250,8 @@ def run(args):
                             signal = (np.abs(phase(t, p, e)) < d / 48) * inj["depth_ppm"] / 1e6
                             injected = f * (1 - signal)
                             other = bin_curve(t, injected, minutes, reducer, cfg["max_points"])
-                            # Paired change isolates binning against the same real background.
+                            # Paired change on the same background. Mean subtraction is linear;
+                            # median subtraction can retain background/reducer interactions.
                             raw_values, bin_values = 1 + injected - f, 1 + other.flux - b.flux
                         raw_depth, raw_n, raw_oot = depth(t, raw_values, p, e, d)
                         bin_depth, bin_n, bin_oot = depth(b.centers, bin_values, p, e, d)
