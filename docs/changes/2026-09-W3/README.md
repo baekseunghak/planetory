@@ -115,3 +115,4 @@
 | 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |

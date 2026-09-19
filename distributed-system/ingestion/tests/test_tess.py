@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from ingestion import __main__ as cli
 from ingestion import tess
 
 
@@ -109,6 +110,13 @@ def product(url: str) -> tess.Product:
 
 
 class SourceListTests(unittest.TestCase):
+    def test_service_config_covers_year_one_sectors(self):
+        path = Path(__file__).parents[1] / "config" / "service-v1.json"
+        config = tess.load_config(path)
+        self.assertEqual([row["sector"] for row in config["sectors"]], list(range(1, 14)))
+        self.assertEqual(sum(row["expected_count"] for row in config["sectors"]), 247_824)
+        self.assertEqual(config["download_concurrency"], 4)
+
     def test_config_rejects_unbounded_download_concurrency(self):
         config = json.loads((Path(__file__).parents[1] / "config" / "service-v1.json").read_text(encoding="utf-8"))
         config["download_concurrency"] = 5
@@ -153,6 +161,32 @@ class SourceListTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 tess.load_source_list(path)
 
+    def test_source_list_command_reuses_immutable_existing_file(self):
+        item = product("https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/" + product("x").filename)
+        source = {
+            "schema": tess.SOURCE_LIST_SCHEMA,
+            "worker_count": 5,
+            "product_count": 1,
+            "source_list_sha256": tess._source_list_hash([item]),
+            "products": [item.__dict__],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "source.json"
+            tess.write_json_atomic(source, path)
+            args = SimpleNamespace(
+                output=path,
+                config=None,
+                expected_source_list_sha256=source["source_list_sha256"],
+            )
+            with mock.patch.object(tess, "build_source_list") as build:
+                self.assertEqual(cli.source_list(args), 0)
+                build.assert_not_called()
+            original = path.read_bytes()
+            args.expected_source_list_sha256 = "0" * 64
+            with self.assertRaisesRegex(ValueError, "existing source list checksum"):
+                cli.source_list(args)
+            self.assertEqual(path.read_bytes(), original)
+
     def test_product_rejects_noncanonical_download_source(self):
         item = product("https://example.test/api/v0.1/Download/file/?uri=mast:TESS/product/" + product("x").filename)
         with self.assertRaisesRegex(ValueError, "unexpected MAST download endpoint"):
@@ -164,6 +198,92 @@ class SourceListTests(unittest.TestCase):
         self.assertEqual(value, f"lc:spoc:s0003:sha256:{digest}:procver:spoc-5")
         self.assertNotEqual(value, tess.input_snapshot_id(3, "b" * 64, "spoc-5"))
         self.assertNotEqual(value, tess.input_snapshot_id(3, digest, "spoc-6"))
+
+    def test_coverage_shard_combines_runs_and_rejects_partial_files(self):
+        def make_product(sector: int, prefix: str, pipeline: str) -> tess.Product:
+            filename = f"{prefix}-s{sector:04d}-0000000000000042-{pipeline}-s_lc.fits"
+            mast_uri = "mast:TESS/product/" + filename
+            return tess.Product(
+                sector=sector,
+                tic_id=42,
+                filename=filename,
+                mast_uri=mast_uri,
+                source_uri=f"https://mast.stsci.edu/api/v0.1/Download/file/?uri={mast_uri}",
+                assigned_worker=1,
+            )
+
+        def write_scope(root: Path, item: tess.Product, run_id: str) -> tuple[Path, str]:
+            source = {
+                "schema": tess.SOURCE_LIST_SCHEMA,
+                "worker_count": 5,
+                "product_count": 1,
+                "source_list_sha256": tess._source_list_hash([item]),
+                "products": [item.__dict__],
+            }
+            source_path = root / "manifests" / "tess-service-v1.json"
+            tess.write_json_atomic(source, source_path)
+            raw = root / "raw" / f"sector={item.sector:04d}" / item.filename
+            raw.parent.mkdir(parents=True)
+            raw.write_bytes(fits_bytes(sector=item.sector))
+            prefix = root / "manifests" / f"sector-{item.sector}-worker-1"
+            audit = {
+                "schema": "planetory.download-audit.v1",
+                "source_list_sha256": source["source_list_sha256"],
+                "worker_slot": 1,
+                "sectors": [item.sector],
+                "expected": 1,
+                "validated": 1,
+                "total_bytes": raw.stat().st_size,
+                "errors": [],
+            }
+            complete = {
+                "schema": "planetory.ingestion-sector-complete.v1",
+                "source_list_sha256": source["source_list_sha256"],
+                "worker_slot": 1,
+                "sector": item.sector,
+                "validated": 1,
+                "total_bytes": raw.stat().st_size,
+            }
+            tess.write_json_atomic(audit, prefix.with_suffix(".audit.json"))
+            tess.write_json_atomic(complete, prefix.with_suffix(".complete.json"))
+            return source_path, source["source_list_sha256"]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_root = root / "old"
+            new_root = root / "new"
+            old_item = make_product(3, "tess2018263035959", "0123")
+            new_item = make_product(1, "tess2018206045859", "0120")
+            old_source, old_sha = write_scope(old_root, old_item, "old")
+            new_source, new_sha = write_scope(new_root, new_item, "new")
+            scopes = [
+                {
+                    "run_id": "old",
+                    "source_list": old_source,
+                    "run_root": old_root,
+                    "sectors": [3],
+                    "expected_source_list_sha256": old_sha,
+                },
+                {
+                    "run_id": "new",
+                    "source_list": new_source,
+                    "run_root": new_root,
+                    "sectors": [1],
+                    "expected_source_list_sha256": new_sha,
+                },
+            ]
+            manifest, code = tess.build_coverage_shard(scopes, root / "coverage.json", worker_slot=1)
+            self.assertEqual(code, 0)
+            self.assertTrue(manifest["passed"])
+            self.assertEqual(manifest["covered_sectors"], [1, 3])
+            self.assertEqual((manifest["expected"], manifest["validated"]), (2, 2))
+
+            partial = new_root / "raw" / "sector=0001" / "orphan.fits.part"
+            partial.write_bytes(b"partial")
+            failed, code = tess.build_coverage_shard(scopes, root / "failed.json", worker_slot=1)
+            self.assertEqual(code, 1)
+            self.assertFalse(failed["passed"])
+            self.assertIn("partial files remain", failed["errors"][0]["error"])
 
 
 class DownloadTests(unittest.TestCase):
@@ -264,6 +384,42 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(record["resumed_from"], 0)
         self.assertEqual(destination.read_bytes(), DownloadHandler.payload)
         self.assertFalse(partial.exists())
+
+    def test_non_ascii_fits_is_rejected_as_integrity_error_and_part_is_removed(self):
+        original = DownloadHandler.payload
+        DownloadHandler.payload = b"\xff" + (b" " * (tess.FITS_BLOCK - 1))
+        try:
+            with Server() as base:
+                item = product(base + "/normal")
+                destination = self.root / item.filename
+                with self.assertRaisesRegex(RuntimeError, "failed to download"):
+                    tess.download_product(item, destination, retries=2, sleep=lambda _: None)
+        finally:
+            DownloadHandler.payload = original
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name(destination.name + ".part").exists())
+
+    def test_non_ascii_cached_final_is_replaced(self):
+        with Server() as base:
+            item = product(base + "/normal")
+            destination = self.root / item.filename
+            destination.write_bytes(b"\xff" + (b" " * (tess.FITS_BLOCK - 1)))
+            record = tess.download_product(item, destination, retries=1, sleep=lambda _: None, log=lambda _: None)
+        self.assertFalse(record["cached"])
+        self.assertEqual(destination.read_bytes(), DownloadHandler.payload)
+
+    def test_quoted_fits_value_preserves_slash(self):
+        item = product("https://example.test/product")
+        destination = self.root / item.filename
+        destination.write_bytes(fits_bytes(procver="spoc/test"))
+        self.assertEqual(tess.validate_fits(destination, item)["PROCVER"], "spoc/test")
+
+    def test_invalid_numeric_fits_header_is_integrity_error(self):
+        item = product("https://example.test/product")
+        destination = self.root / item.filename
+        destination.write_bytes(fits_bytes(tic_id="not-a-number"))
+        with self.assertRaises(tess.IntegrityError):
+            tess.validate_fits(destination, item)
 
     def test_checksum_mismatch_never_reaches_final_path(self):
         with Server() as base:

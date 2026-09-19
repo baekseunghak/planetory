@@ -15,7 +15,7 @@ from . import tess
 
 
 class AlreadyRunning(RuntimeError):
-    """같은 run/worker 감독 프로세스가 이미 잠금을 보유한다."""
+    """같은 Worker의 감독 프로세스가 이미 잠금을 보유한다."""
 
 
 def systemd_notify(message: str) -> bool:
@@ -71,6 +71,10 @@ def process_lock(path: Path) -> Iterator[None]:
         except OSError:
             pass
         handle.close()
+
+
+def supervisor_lock_path(run_root: Path, worker_slot: int) -> Path:
+    return run_root.parent / "locks" / f"supervisor-worker-{worker_slot}.lock"
 
 
 def disk_fraction(path: Path, usage: Callable = shutil.disk_usage) -> float:
@@ -164,7 +168,7 @@ def run_supervisor(
     max_cycles: int | None = None,
 ) -> int:
     state_path = run_root / "manifests" / f"supervisor-worker-{worker_slot}.json"
-    lock_path = run_root / "pids" / f"supervisor-worker-{worker_slot}.lock"
+    lock_path = supervisor_lock_path(run_root, worker_slot)
     stop_fraction = float(config["disk_stop_fraction"])
     resume_fraction = float(config["disk_resume_fraction"])
     retry_initial = int(config["retry_initial_seconds"])

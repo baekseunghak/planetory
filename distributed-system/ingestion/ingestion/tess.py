@@ -24,6 +24,7 @@ CONFIG_SCHEMA = "planetory.ingestion-config.v1"
 SOURCE_LIST_SCHEMA = "planetory.tess-source-list.v1"
 EVENT_SCHEMA = "planetory.download-event.v1"
 RUN_SCHEMA = "planetory.download-run.v1"
+COVERAGE_SHARD_SCHEMA = "planetory.ingestion-coverage-shard.v1"
 USER_AGENT = "ssafy-planetory-ingestion/0.1"
 FITS_BLOCK = 2880
 RETRYABLE_HTTP = {429, 500, 502, 503, 504}
@@ -266,17 +267,35 @@ def primary_header(path: Path) -> dict[str, object]:
             if len(block) != FITS_BLOCK:
                 raise IntegrityError("truncated FITS primary header")
             for offset in range(0, FITS_BLOCK, 80):
-                card = block[offset : offset + 80].decode("ascii", "strict")
+                try:
+                    card = block[offset : offset + 80].decode("ascii", "strict")
+                except UnicodeDecodeError as error:
+                    raise IntegrityError("non-ASCII FITS primary header") from error
                 key = card[:8].strip()
                 if key == "END":
                     return values
                 if card[8:10] != "= ":
                     continue
-                raw = card[10:].split("/", 1)[0].strip()
+                field = card[10:].lstrip()
+                if field.startswith("'"):
+                    end = 1
+                    while end < len(field):
+                        if field[end] != "'":
+                            end += 1
+                            continue
+                        if end + 1 < len(field) and field[end + 1] == "'":
+                            end += 2
+                            continue
+                        break
+                    else:
+                        raise IntegrityError(f"unterminated FITS string value: {key}")
+                    raw = field[: end + 1]
+                else:
+                    raw = field.split("/", 1)[0].strip()
                 if raw in ("T", "F"):
                     values[key] = raw == "T"
                 elif raw.startswith("'"):
-                    values[key] = raw[1:].split("'", 1)[0].strip()
+                    values[key] = raw[1:-1].replace("''", "'").strip()
                 else:
                     try:
                         values[key] = int(raw)
@@ -288,15 +307,20 @@ def validate_fits(path: Path, product: Product) -> dict[str, object]:
     size = path.stat().st_size
     if not path.is_file() or size < FITS_BLOCK or size % FITS_BLOCK:
         raise IntegrityError("file size is not a complete FITS block sequence")
-    header = primary_header(path)
-    if header.get("SIMPLE") is not True:
-        raise IntegrityError("missing FITS SIMPLE header")
-    if int(header.get("TICID", -1)) != product.tic_id:
-        raise IntegrityError(f"unexpected TICID: {header.get('TICID')}")
-    if int(header.get("SECTOR", -1)) != product.sector:
-        raise IntegrityError(f"unexpected SECTOR: {header.get('SECTOR')}")
-    if not str(header.get("PROCVER", "")).strip():
-        raise IntegrityError("missing FITS PROCVER")
+    try:
+        header = primary_header(path)
+        if header.get("SIMPLE") is not True:
+            raise IntegrityError("missing FITS SIMPLE header")
+        if int(header.get("TICID", -1)) != product.tic_id:
+            raise IntegrityError(f"unexpected TICID: {header.get('TICID')}")
+        if int(header.get("SECTOR", -1)) != product.sector:
+            raise IntegrityError(f"unexpected SECTOR: {header.get('SECTOR')}")
+        if not str(header.get("PROCVER", "")).strip():
+            raise IntegrityError("missing FITS PROCVER")
+    except IntegrityError:
+        raise
+    except (TypeError, ValueError) as error:
+        raise IntegrityError(f"invalid FITS primary header: {error}") from error
     return header
 
 
@@ -817,3 +841,141 @@ def audit_download(
         "errors": errors,
     }
     return summary, 1 if errors else 0
+
+
+def build_coverage_shard(
+    scopes: list[dict],
+    output: Path,
+    *,
+    worker_slot: int,
+) -> tuple[dict, int]:
+    """검증 완료 marker와 실제 파일 집합을 연결해 Worker별 다중 Run 범위를 확정한다."""
+    records: list[dict] = []
+    errors: list[dict[str, object]] = []
+    covered_sectors: set[int] = set()
+    total_expected = 0
+    total_validated = 0
+    total_bytes = 0
+
+    for scope in scopes:
+        run_id = str(scope["run_id"])
+        run_root = Path(scope["run_root"])
+        source_path = Path(scope["source_list"])
+        expected_source_sha256 = str(scope["expected_source_list_sha256"])
+        source = load_source_list(source_path)
+        actual_source_sha256 = str(source["source_list_sha256"])
+        if actual_source_sha256 != expected_source_sha256:
+            raise ValueError(
+                f"run {run_id} source list checksum mismatch: "
+                f"{actual_source_sha256} != {expected_source_sha256}"
+            )
+
+        for sector in [int(value) for value in scope["sectors"]]:
+            if sector in covered_sectors:
+                raise ValueError(f"coverage sector is assigned more than once: {sector}")
+            covered_sectors.add(sector)
+            products = select_products(source, worker_slot=worker_slot, sectors={sector})
+            expected_names = {product.filename for product in products}
+            prefix = run_root / "manifests" / f"sector-{sector}-worker-{worker_slot}"
+            audit_path = prefix.with_suffix(".audit.json")
+            complete_path = prefix.with_suffix(".complete.json")
+            sector_errors: list[str] = []
+
+            try:
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                complete = json.loads(complete_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                audit = {}
+                complete = {}
+                sector_errors.append(f"completion evidence is unreadable: {error}")
+
+            if audit:
+                expected_audit = {
+                    "schema": "planetory.download-audit.v1",
+                    "source_list_sha256": actual_source_sha256,
+                    "worker_slot": worker_slot,
+                    "sectors": [sector],
+                    "expected": len(products),
+                    "validated": len(products),
+                    "errors": [],
+                }
+                for key, expected_value in expected_audit.items():
+                    if audit.get(key) != expected_value:
+                        sector_errors.append(
+                            f"audit {key} mismatch: {audit.get(key)!r} != {expected_value!r}"
+                        )
+
+            if complete:
+                expected_complete = {
+                    "schema": "planetory.ingestion-sector-complete.v1",
+                    "source_list_sha256": actual_source_sha256,
+                    "worker_slot": worker_slot,
+                    "sector": sector,
+                    "validated": len(products),
+                }
+                for key, expected_value in expected_complete.items():
+                    if complete.get(key) != expected_value:
+                        sector_errors.append(
+                            f"complete {key} mismatch: {complete.get(key)!r} != {expected_value!r}"
+                        )
+                if audit and int(complete.get("total_bytes", -1)) != int(audit.get("total_bytes", -2)):
+                    sector_errors.append("complete total_bytes does not match audit total_bytes")
+
+            sector_root = run_root / "raw" / f"sector={sector:04d}"
+            if sector_root.is_dir():
+                actual_names = {path.name for path in sector_root.glob("*.fits") if path.is_file()}
+                part_names = sorted(path.name for path in sector_root.glob("*.part") if path.is_file())
+                actual_bytes = sum(path.stat().st_size for path in sector_root.glob("*.fits") if path.is_file())
+            else:
+                actual_names = set()
+                part_names = []
+                actual_bytes = 0
+            missing = sorted(expected_names - actual_names)
+            extra = sorted(actual_names - expected_names)
+            if missing:
+                sector_errors.append(f"missing FITS files: {len(missing)}")
+            if extra:
+                sector_errors.append(f"unexpected FITS files: {len(extra)}")
+            if part_names:
+                sector_errors.append(f"partial files remain: {len(part_names)}")
+            if audit and actual_bytes != int(audit.get("total_bytes", -1)):
+                sector_errors.append(
+                    f"actual bytes mismatch: {actual_bytes} != {audit.get('total_bytes')!r}"
+                )
+
+            validated = int(audit.get("validated", 0)) if audit else 0
+            record = {
+                "sector": sector,
+                "run_id": run_id,
+                "source_list": str(source_path),
+                "source_list_sha256": actual_source_sha256,
+                "audit_manifest": str(audit_path),
+                "complete_manifest": str(complete_path),
+                "expected": len(products),
+                "validated": validated,
+                "total_bytes": actual_bytes,
+                "part_count": len(part_names),
+                "passed": not sector_errors,
+            }
+            records.append(record)
+            total_expected += len(products)
+            total_validated += validated
+            total_bytes += actual_bytes
+            errors.extend({"sector": sector, "error": error} for error in sector_errors)
+
+    manifest = {
+        "schema": COVERAGE_SHARD_SCHEMA,
+        "generated_at": utc_now(),
+        "worker_slot": worker_slot,
+        "covered_sectors": sorted(covered_sectors),
+        "expected": total_expected,
+        "validated": total_validated,
+        "total_bytes": total_bytes,
+        "passed": not errors,
+        "sectors": sorted(records, key=lambda value: int(value["sector"])),
+        "errors": errors,
+    }
+    canonical = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    manifest["manifest_sha256"] = sha256_bytes(canonical)
+    write_json_atomic(manifest, output)
+    return manifest, 0 if manifest["passed"] else 1
