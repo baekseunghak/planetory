@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
+import { hasCelebrated, markCelebrated } from "./celebration";
+import { useSession } from "../../auth/SessionProvider";
 import {
   DetailView,
   NextActions,
@@ -55,6 +57,26 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
    * 접수 뒤 판이 바뀌었는가(D-5 재전송 성공 예외). 성공을 취소하지 않고
    * 최신이 필요한 축(진행·공개·통계·다음 행동)에만 모른다고 표시한다.
    */
+  /**
+   * 이 회원이 이 제출의 성과를 처음 보는가(2.2절). 201인지 200인지로 가르지
+   * 않는다. 최초 201을 잃고 200으로 처음 복구한 결과도 그에게는 처음이다.
+   *
+   * 보여 준 순간에 적는다. 다시 열거나 새로고침하면 축하는 나오지 않고
+   * 사실은 그대로 남는다.
+   */
+  const memberId = useSession().member?.memberId ?? null;
+  const shown =
+    settled?.state === "accepted" ? settled.receipt.submissionId : null;
+  // 제출이 바뀔 때 한 번만 판정한다. 마운트 시점에는 아직 결과가 없고,
+  // 판정을 매번 다시 하면 적어 둔 직후에 축하가 사라진다.
+  const decided = useRef<{ id: string; celebrate: boolean } | null>(null);
+  if (shown && memberId && decided.current?.id !== shown)
+    decided.current = { id: shown, celebrate: !hasCelebrated(memberId, shown) };
+  const celebrate = Boolean(shown && decided.current?.celebrate);
+  useEffect(() => {
+    if (celebrate && memberId && shown) markCelebrated(memberId, shown);
+  }, [celebrate, memberId, shown]);
+
   const stale = Boolean(
     settled?.state === "accepted" &&
     acceptedOnOlderBundle(settled.receipt, settled.currentBundleId),
@@ -165,6 +187,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             <ResultExplanationView
               receipt={settled.receipt}
               staleBundle={stale}
+              celebrate={celebrate}
             />
             <DetailView
               receipt={settled.receipt}

@@ -915,3 +915,37 @@ test("a result from an older plate marks only what needs to be fresh", async ({
   for (const name of ["매칭", "내 판단", "성과", "서버가 계산한 값"])
     await expect(axis(name).getByTestId("stale-axis")).toHaveCount(0);
 });
+
+test("an achievement celebrates once per member, not once per 201", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const first = await submitFromPeak(page, "1", "행성 같음");
+  const achievement = first.getByTestId("achievement");
+  await expect(achievement).toContainText("성과로 인정되었습니다");
+  await expect(achievement).toContainText("축하합니다");
+
+  // 같은 제출을 다시 열면 사실은 그대로, 축하만 사라진다.
+  await page.reload();
+  const again = await submitFromPeak(page, "1", "행성 같음");
+  const repeat = again.getByTestId("achievement");
+  await expect(repeat).toContainText("성과로 인정되었습니다");
+  await expect(repeat).not.toContainText("축하합니다");
+});
+
+test("a replay a member has never seen still celebrates", async ({ page }) => {
+  // 최초 201을 잃고 200으로 처음 복구한 경우다(2.2절). 그 사람에게는 이
+  // 200이 처음 보는 결과이므로 연출이 나와야 한다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    return route.continue({
+      headers: { ...request.headers(), "x-fixture-submit": "drop-saved" },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 복구로 확인한 결과이고 201이 아니다.
+  await expect(dialog).toContainText("이미 접수돼 있던 제출을 확인했습니다");
+  await expect(dialog.getByTestId("achievement")).toContainText("축하합니다");
+});

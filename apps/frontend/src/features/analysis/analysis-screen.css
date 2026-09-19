@@ -1142,3 +1142,9 @@ body:has(.analysis-screen) {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+
+/* 성과 연출. 이 회원이 이 제출을 처음 볼 때만 나온다(2.2절). */
+.analysis-screen .result-celebrate {
+  color: var(--accent);
+  font-weight: 600;
+}

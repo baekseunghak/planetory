@@ -95,7 +95,9 @@ export type Achievement = {
   result: AchievementResult;
   /**
    * 이번에 인정됐는지. **재현 응답에도 접수 당시 값이 그대로 실린다.**
-   * 한 번만 일어나야 하는 처리는 접수 결과의 `outcome`으로 가른다.
+   * 한 번만 보여 줄 연출은 `outcome`이 아니라 **회원·`submissionId`별 표시
+   * 이력**으로 가른다(2.2절). 201만 연출하면 최초 201을 잃고 200으로 처음
+   * 복구한 사용자는 성과를 한 번도 보지 못한다.
    */
   newlyRecognized: boolean;
   /** 이번에 열린 별의 TIC(AT-58). 좌표는 지도가 쓰므로 읽지 않는다. */

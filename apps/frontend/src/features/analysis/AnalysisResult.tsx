@@ -167,10 +167,16 @@ function StaleNote({ stale }: { stale: boolean }) {
 export function ResultExplanationView({
   receipt,
   staleBundle = false,
+  celebrate = false,
 }: {
   receipt: SubmissionReceipt;
   /** 접수 뒤 판이 바뀌었는가. 최신이 필요한 축에만 표시를 붙인다. */
   staleBundle?: boolean;
+  /**
+   * 성과 연출을 보여 줄 차례인가. 이 회원이 이 `submissionId`를 처음 볼
+   * 때만 참이며, 201인지 200인지로 가르지 않는다(2.2절).
+   */
+  celebrate?: boolean;
 }) {
   const { explanation, progress } = receipt;
   const { signal, evaluation, achievement, publication, statistics } =
@@ -192,7 +198,7 @@ export function ResultExplanationView({
 
       {/* 성과 판정 자체가 없으면(`none`) 줄을 만들지 않는다. */}
       {achievement.result !== "none" && (
-        <section className="result-axis">
+        <section className="result-axis" data-testid="achievement">
           <h5>성과</h5>
           <p>{ACHIEVEMENT[achievement.result]}</p>
           {achievement.unlockedTicIds.length > 0 && (
@@ -201,6 +207,11 @@ export function ResultExplanationView({
               TIC {achievement.unlockedTicIds.join(", ")}
             </p>
           )}
+          {/*
+            연출은 이 회원이 이 제출을 처음 볼 때만이다(2.2절). 재현 응답에도
+            당시 값이 그대로 실리므로 사실은 언제나 보여 주고, 축하만 가린다.
+          */}
+          {celebrate && <p className="result-celebrate">축하합니다!</p>}
         </section>
       )}
 
