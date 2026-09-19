@@ -122,3 +122,6 @@
 
 | 2026-09-19 | 분석 제출 접수·복구 구현 | S15P21C206-187 | 제출, requestId, 멱등, 응답 유실, 브라우저 POST 자동 재전송, reset-connection, outcome created/replayed, 특수 제출, no_candidate, skipped, 접수 결과 대화상자, dialog onClose 미발화 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-19.md) |
 | 2026-09-19 | C02 계약 예제의 fieldErrors 불일치 확인과 전달 | S15P21C206-187 | fieldErrors, field/reason, ErrorResponse.FieldError, contracts.json, validate.cjs 검사 누락, 소관 밖 수정 금지 | 확인 완료·미적용(C02 전달) | [기록](2026-09-19.md) |
+| 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
