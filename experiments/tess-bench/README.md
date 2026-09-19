@@ -138,3 +138,20 @@ uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0
 - 가장자리 마스크가 12시간 이상이면 구간 경계 ±0.5일 안에 남는 점이 없어 `boundary_ratio` 가 nan 이 된다. 그 설정의 경계 왜곡은
   이 지표로 평가하지 않는다.
 - 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).
+
+## 110 holdout 실행 (평가 전에 입력·설정 고정)
+
+대상·판정 산식·결과 기록 정본은 [BLS 벤치마크 5.3절](../../docs/data/tess-bls-benchmark.md)이다. 기존 tuning/evaluation은 조정 이력이 있으므로 holdout과 구분한다. 기본 9별에 holdout을 섞지 않는다.
+
+1. 환경은 `uv sync --python 3.11 --locked`로 준비한다. 다른 머신에서는 아래 다운로드와 고정 references.csv를 사용하며 Archive 참고값을 다시 갱신하지 않는다.
+2. 코드·설정·통과 기준·제품 checksum·참고값·lock을 검토하고 **평가 전 커밋**한다. lock은 설정을 바꿔 우회하는 도구가 아니다. Git 명령은 사용자가 실행한다.
+3. 아래 네 명령은 **tess-bench 디렉터리**에서 사용자가 실행한다. `iterate`가 아닌 `bls`다. 각 실행은 realclean + seed 3개, 바탕곡선당 주입 111그룹 + none 1그룹이며 대상당 총 448곡선이다.
+
+```powershell
+uv run --locked python -m tess_bench bls --target holdout_268637577 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_100102268 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_219237079 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_358253008 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+```
+
+각 명령 성공을 확인한 뒤 다음 대상으로 진행한다. 에러 또는 lock mismatch가 발생하면 기준 파일을 재생성하지 말고 원인을 확인한다. 결과 manifest 4개와 peaks/matches/summary CSV를 보존하고, 같은 MR에 별별·합계 검증 결과를 추가한다. Git에는 원본 FITS와 results 디렉터리를 추가하지 않는다. 모의 manifest 테스트는 실제 holdout 평가를 수행하지 않는다.

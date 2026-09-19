@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "setting": "poc_linear20k",
+  "grid_set_id": "injection_grid_v1-1.1.0",
+  "preprocess_setting_id": "biweight_1.0d",
+  "noise_seeds": [
+    20260910,
+    20260917,
+    20260918
+  ],
+  "gate": {
+    "snr_min": 7,
+    "sde_min": 6,
+    "min_transits": null
+  },
+  "direct_recovery_min": 0.45,
+  "gate_loss_max_fraction": [
+    40,
+    303
+  ],
+  "noise_false_peaks_max": 0,
+  "expected_noise_none_curves": 12,
+  "aggregation": "sum numerators and denominators across all four targets; never average star ratios",
+  "direct_denominator": "realclean and in_search_range=true, all injected signals",
+  "direct_numerator": "direct_denominator and match=direct",
+  "gate_loss": "(realclean in-range direct+alias before gate - recovered after gate) / recovered before gate; zero denominator is invalid",
+  "noise_false_peaks": "sum of saved peaks passing SNR>=7 AND SDE>=6 on noise*/none; no additional transit-count filter",
+  "failure_policy": "do not tune on holdout; v2 independent evaluation requires a new unused holdout"
+}

@@ -1,9 +1,9 @@
 # BLS 탐색 격자·품질 게이트 벤치마크
 
-작성일: 2026-09-16 / 담당: 윤성용 / Jira: `S15P21C206-110` (계획 ID D04) / 코드: `experiments/tess-bench/` (`bls`, `bls-gates` 명령, 설정 `configs/bls_settings_v1.json`) / 상태: 조정 단계(4별) 실행·분석 완료(5절), 평가 단계(5별)는 기록 예정, 채택 제안은 팀 리뷰 전
+작성일: 2026-09-16 / 담당: 윤성용 / Jira: `S15P21C206-110` (계획 ID D04) / 코드: `experiments/tess-bench/` (`bls`, `bls-gates` 명령, 설정 `configs/bls_settings_v1.json`) / 상태: 4별 조정·5별 확장 조정 기록 완료, holdout 실행 준비 완료·실측 대기, 채택 미확정
 
 이 문서는 탐색용 BLS 의 주기 격자·지속시간 격자·목적함수와 품질 게이트(SDE·SNR·통과 횟수)를 같은 fixture 에서 비교해 DEC-03 채택 임계값 후보와 `bls_config_version` 을 제안하는 실험의 계획·규칙·결과를 기록한다.
-근거는 [후보 검출 설계](tess-pipeline/candidate-detection.md) 5.6절(격자·게이트 제안)·5.7절(벤치마크 설계), 입력은 [TESS fixture 세트](tess-fixture-set.md) 의 9별과 주입 격자 1.1.0, 전처리는 [전처리 벤치마크](tess-preprocess-benchmark.md) 채택 잠정값 `biweight_1.0d` 다.
+근거는 [후보 검출 설계](tess-pipeline/candidate-detection.md) 5.6절(격자·게이트 제안)·5.7절(벤치마크 설계), 입력은 [TESS fixture 세트](tess-fixture-set.md) 의 9별과 주입 격자 1.1.0, 전처리는 [전처리 벤치마크](tess-preprocess-benchmark.md) 채택값 `biweight_1.0d` 다.
 반복 제거·종료는 `S15P21C206-111`, 고조파 병합·후보 동일성은 `S15P21C206-112`, 운영 커널은 `S15P21C206-120`, 사전 선별 경로(5.7절 A/B/C)는 Jira 제외 범위라 다루지 않는다.
 
 ## 1. 질문
@@ -17,7 +17,7 @@
 | 항목 | 값 |
 |---|---|
 | 곡선 | fixture 9별 **realclean**(Archive 확인 통과 행성을 `libs/astro-kernel` 고정 모델로 나눠 제거한 real 곡선) + 합성 잡음(seed 20260910, `--noise-seeds` 로 여러 개). 실제 행성이 상위 피크를 차지하면 주입 회수율을 잴 수 없어 제거한다. 실제 잡음·계통 오차·식쌍성(Archive 행 없음)은 남는다. 원본 real 은 `--include-raw-real` 로 추가 실행 |
-| 전처리 | `biweight_1.0d` (42 채택 잠정값). 42 확정 시 재실행 |
+| 전처리 | `biweight_1.0d` (D03/42 채택값, [MR !29](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/29) 병합 근거). duration·epoch 책임 이관 승인은 별도로 확인 |
 | 주입 정답 | 격자 1.1.0 catalog (단일 108 + 다중 쌍 3). 외부 참고값(`references.csv`)은 정답으로 쓰지 않는다 |
 | 순수 곡선 | 바탕곡선마다 주입 없는 `none` 그룹 1개. 잡음 곡선의 `none` 은 가짜 후보 측정용, real 의 `none` 은 미확인 신호 가능성 때문에 `unknown_review` |
 
@@ -147,7 +147,7 @@ L 98-59·CM Dra·WASP-18·TOI-700·HD 21749 에 `linear50k`·`poc_linear20k` 두
 | 3 | 219237079 | 3·4·5 | random |
 | 4 | 358253008 | 2·3·4·5 | random |
 
-이 4별의 FITS 는 fixture 절차(`tess-fixture download`, checksum 고정)로 받아 `targets.py` 에 `holdout` 단계로 추가한다. 실행은 확장 조정과 같은 주입 111그룹(1.1.0)·잡음 seed 3개(20260910·20260917·20260918)·전처리 `biweight_1.0d`·설정 `poc_linear20k` 하나다.
+이 4별은 `targets.py`의 `HOLDOUT_TARGETS`에 등록했다. 기본 9별 fixture와 분리하며 명시한 `holdout_<TIC>` key로만 선택한다. 공식 MAST FITS 10개의 SHA-256·PROCVER를 `checksums.json`에 고정했다(모두 `spoc-5.0.20-20201120`). Archive `pscomppars` 참고값은 `references.csv`에 2026-09-18T19:00:51+00:00 조회 결과를 고정했다. 네 TIC 모두 확인 행성 행 0개이며 빈 조회 결과를 남겼다. 이것은 무신호 또는 식쌍성 없음의 증명이 아니다. 실행은 확장 조정과 같은 주입 111그룹(1.1.0)·잡음 seed 3개(20260910·20260917·20260918)·전처리 `biweight_1.0d`·설정 `poc_linear20k` 하나다.
 
 **판정 기준(고정)**. 모두 범위 안 신호 기준, 4별 합으로 판정한다.
 
@@ -158,7 +158,32 @@ L 98-59·CM Dra·WASP-18·TOI-700·HD 21749 에 `linear50k`·`poc_linear20k` 두
 | 잡음 `none` 곡선 가짜 후보 (게이트 v0) | **0** (4별 × 3 seed) | 5.1·5.3절 |
 | 실제 `none` 곡선 잔여 후보 (게이트 v0) | 기록만(비차단). 식쌍성·제거 잔여는 111/112 몫 | 5.3절 |
 
-세 차단 기준을 모두 만족하면 그 결과 MR 에서 DEC-03 승인을 요청해 20k + 게이트 v0 를 확정한다. 하나라도 미달이면 `bls_grid_v1` 을 확정하지 않고 `bls_grid_v2` 로 조정 단계(4별)부터 다시 한다 — holdout 별은 그때도 평가에만 쓴다. holdout 실행 전까지 이 절은 확정이 아니라 **계획·중간 산출물**이다. 주입은 별마다 111그룹(단일 `start`·`middle`·`end` 108 + 쌍 3), 바탕곡선은 realclean 1 + 잡음 3 이다. 아래 수치는 모두 **범위 안 신호** 기준이고 설정표·구간표는 `bls-report`, 게이트표는 `bls-gates` 가 저장 CSV 에서 만든다(재실행 없음).
+세 차단 기준을 모두 만족하면 **이 MR !77**의 결과로 DEC-03 승인을 요청해 20k + 게이트 v0를 재검토한다. 하나라도 미달이면 `bls_grid_v1`을 확정하지 않는다. 결과를 보고 `bls_grid_v2`로 조정하면 현재 4별은 소진된 평가 세트이므로 **새로운 미사용 holdout**을 사전 선정해 v2의 독립 평가에 사용한다. holdout 실행 전까지 이 절은 확정이 아니라 **계획·중간 산출물**이다. 주입은 별마다 111그룹(단일 `start`·`middle`·`end` 108 + 쌍 3), 바탕곡선은 realclean 1 + 잡음 3 이다. 아래 수치는 모두 **범위 안 신호** 기준이고 설정표·구간표는 `bls-report`, 게이트표는 `bls-gates` 가 저장 CSV 에서 만든다(재실행 없음).
+
+#### holdout 실행 전 고정과 판정 산식
+
+실행 지원·입력 고정은 준비 완료이며 **실제 holdout 실행과 결과 기록은 아직 하지 않았다**. 설정은 `bls_settings_v1.json`, 통과 기준은 `holdout_criteria_v1.json`, 입력·계산 코드·의존성·설정의 동결 지문은 `holdout_lock_v1.json`이다(모두 `experiments/tess-bench/configs/`). lock의 텍스트 SHA-256은 Windows LF/CRLF 차이를 정규화한 UTF-8 기준이며, manifest의 파일 SHA-256은 원시 바이트 기준이다. 실제 FITS는 원시 바이트 checksum으로 검사한다.
+
+- 직접 회수율: `realclean`이고 `in_search_range=true`인 행 중 `match=direct`인 건수 / 같은 범위 안 전체 주입 신호 건수. 쌍은 신호별로 센다.
+- 게이트 손실: `(게이트 전 direct+alias 회수 건수 - v0 후 회수 건수) / 게이트 전 direct+alias 회수 건수`. 대상은 동일한 realclean·범위 안 신호이며 alias는 `alias_half`, `alias_double`이다. 현재 저장 매칭의 `matched_rank` 피크에 SNR≥7 AND SDE≥6을 적용한다. 별도 통과 횟수 문턱을 추가하지 않는다.
+- 잡음 오탐: `noise20260910/none`, `noise20260917/none`, `noise20260918/none`의 4별 × 3 seed = 12곡선에서 SNR≥7 AND SDE≥6을 통과한 저장 상위 피크의 총합이 0이어야 한다. 곡선당 평균이 아니다.
+- 네 별의 비율 평균이 아니라 **분자·분모를 합산**한다. 회수율 분모나 게이트 전 회수가 0이면 통과로 처리하지 않는다. 계산 실패·누락 곡선도 0개 오탐으로 간주하지 않고 평가 불완전으로 기록한다.
+- 실행 전에 준비 변경을 커밋하고 검토한 lock을 보존한다. CLI는 holdout에 다른 target/setting/seed, `--limit`, `--no-noise`, 원본 real 추가 및 잠긴 파일 변경을 거절한다. 결과를 본 뒤 lock을 다시 만들어 같은 세트를 새로운 독립 평가로 주장하지 않는다.
+- D03 전처리 채택 근거는 MR !29와 Jira 42다. **duration·epoch 검증 책임의 D03→D04 이관 승인은 전처리 채택과 별개**이며, 검증 결과와 함께 리뷰어의 명시적 승인을 받아야 한다. 현재 문서가 승인 완료를 대신하지 않는다.
+
+실행 명령과 환경 준비는 [tess-bench README](../../experiments/tess-bench/README.md)의 holdout 절을 따른다. 평가는 사용자가 실행하며 결과를 본 뒤 설정을 변경하지 않는다. 오류로 중단되면 오류·기존 run을 보존하고 재실행 필요성을 먼저 검토한다.
+
+| TIC | 회수 분자/분모·게이트 전후·오탐 | 구간별·오차·시간·manifest |
+|---|---|---|
+| 268637577 | 실행 대기 | 실행 대기 |
+| 100102268 | 실행 대기 | 실행 대기 |
+| 219237079 | 실행 대기 | 실행 대기 |
+| 358253008 | 실행 대기 | 실행 대기 |
+| 4별 합계 | 미판정 | 미판정 |
+
+실행 뒤 이 MR에서 각 TIC·합계의 직접 회수 분자/분모, 게이트 전후 회수 건수, 잡음 통과 피크 합, 주기·깊이·지속시간 구간별 회수율을 기록한다. 원시 `period_rel_err`, `epoch_cyclic_err_hours`, `duration_ratio`, `window_overlap`과 wall time, manifest ID·출력 CSV checksum을 연결한다. 상대 오차/비율을 절대 오차로 표기하지 않는다. 분모는 범위 안 신호를 쓰고 정상 실행 누락 여부를 함께 검증한다. 세 차단 기준 통과 전에는 Jira 110 완료·MR 병합 또는 `bls_grid_v1/poc_linear20k`, `gate_v1/snr7_sde6`의 최종 승인을 주장하지 않는다.
+
+아래 표부터는 기존 **5별 확장 조정** 기록이며 위 holdout 결과와 구분한다.
 
 | 별 | Sector | 관측 기간 | 상한(기준선/3) | 범위 안 주입 | realclean 에서 제거한 Archive 행성 | manifest |
 |---|---|---|---|---|---|---|
@@ -230,7 +255,7 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 - **`PDCSAP_FLUX_ERR` 는 쓰지 않는다.** 밝은 별에서 실제 산포보다 2배 작아 SNR 을 2배 부풀리고(HD 21749·π Men), 식쌍성 CM Dra 에서는 1.5배 작다. 오차가 잡음 통계를 대표하지 못한다.
 - 결론: SNR 정의는 **local(구간 robust scatter)** 을 5.6절 후보로 올리되, 게이트 v0 의 SNR 문턱은 바꾸지 않는다. SNR 정의 교체는 SDE 정의 재검토(`S15P21C206-243`)와 함께 v1 에서 다룬다. 결과 파일은 각 run 의 `snr_dy.csv`·`gates_dy.csv`.
 
-**5.2 제안의 수정(확장 조정 뒤)** — DEC-03 **승인 요청은 holdout 실행 결과(후속 MR)에서** 한다. 이 표는 holdout 에 넣을 설정(주기 격자 20k + 게이트 v0)을 고정하는 것이고, 이 문서·MR 은 계획·중간 산출물이다. SDE 정의 재검토는 `S15P21C206-243`(110 이 선행, 120 과는 후속 관계: 120 은 v0 로 착수하고 243 의 v1 은 설정 교체로 반영).
+**5.2 제안의 수정(확장 조정 뒤)** — DEC-03 **승인 요청은 이 MR !77의 holdout 실행 결과를 기록한 뒤** 한다. 이 표는 holdout 에 넣을 설정(주기 격자 20k + 게이트 v0)을 고정하는 것이고, 이 문서·MR 은 계획·중간 산출물이다. SDE 정의 재검토는 `S15P21C206-243`(110 이 선행, 120 과는 후속 관계: 120 은 v0 로 착수하고 243 의 v1 은 설정 교체로 반영).
 
 | 항목 | 5.2 제안 | 평가 뒤 | 근거 |
 |---|---|---|---|

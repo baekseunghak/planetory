@@ -13,6 +13,7 @@ bls: peaks.csv·matches.csv·summary.csv, bls-gates: gates.csv) 실행 manifest 
 from __future__ import annotations
 
 import argparse
+import json
 import csv
 from dataclasses import dataclass, field
 import shlex
@@ -32,6 +33,7 @@ from tess_fixture.targets import iter_products, select_targets
 from . import bls as bl
 from . import bls_dy as bd
 from . import bls_match as bm
+from . import holdout as ho
 from . import metrics as mt
 from .preprocess import Setting, load_settings, preprocess
 
@@ -221,6 +223,7 @@ BLS_SUMMARY_COLUMNS = ("setting_id", "factor", "baseline_id", "stage", "n_signal
 
 def _load_fixture_inputs(target, raw: Path) -> tuple[list, list[dict]]:
     expected = dl.load_expected_checksums(FIXTURE_CHECKSUMS)
+    products = {r["filename"]: r for r in json.loads(FIXTURE_CHECKSUMS.read_text(encoding="utf-8"))["files"]}
     curves, inputs = [], []
     for _, sector, filename, url in iter_products((target,)):
         path = raw / target.key / filename
@@ -231,7 +234,8 @@ def _load_fixture_inputs(target, raw: Path) -> tuple[list, list[dict]]:
             sys.exit(f"checksum mismatch for {filename}")
         curves.append(load_sector(path))
         inputs.append({"path": str(path), "sha256": digest, "size_bytes": path.stat().st_size, "source_uri": url,
-                       "tic_id": target.tic_id, "sector": sector, "role": "raw_product"})
+                       "tic_id": target.tic_id, "sector": sector, "procver": products.get(filename, {}).get("procver"),
+                       "role": "raw_product"})
     return curves, inputs
 
 
@@ -354,6 +358,7 @@ def preprocess_groups(bi: BlsInputs, *, with_errors: bool = False) -> None:
 def cmd_bls(args: argparse.Namespace) -> int:
     started = time.time()
     cfg, settings = bl.load_bls_settings(args.settings, args.only)
+    ho.validate_run(args, cfg, settings)
     _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
     pre = pre_settings[0]
     bi = build_bls_inputs(args.target, args.stage, cfg, pre, args.grid, args.raw, noise_seeds=[] if args.no_noise else args.noise_seeds,
@@ -448,9 +453,14 @@ def cmd_bls(args: argparse.Namespace) -> int:
     manifest = mf.build_manifest(
         task=f"{BLS_TASK} bls", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
         inputs=inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"),
-                         mf.file_entry(args.preprocess_settings, role="preprocess_settings")],
+                         mf.file_entry(args.preprocess_settings, role="preprocess_settings"),
+                         mf.file_entry(FIXTURE_DIR / "references.csv", role="references"),
+                         mf.file_entry(FIXTURE_CHECKSUMS, role="fixture_checksums")]
+               + ([mf.file_entry(ho.CRITERIA, role="holdout_criteria"), mf.file_entry(ho.LOCK, role="holdout_lock")]
+                  if args.stage == "holdout" else []),
         config={"name": args.settings.name, "version": cfg["version"], "sha256": mf.file_entry(args.settings)["sha256"],
-                "parameters": {"target": target.key, "stage": args.stage, "stage_config": stage_cfg, "settings": [s.setting_id for s in settings],
+                "parameters": {"target": target.key, "tic_id": target.tic_id, "sectors": list(target.sectors),
+                               "stage": args.stage, "stage_config": stage_cfg, "settings": [s.setting_id for s in settings],
                                "setting_params": {s.setting_id: s.params() for s in settings}, "preprocess_setting": pre.params(),
                                "grid_set_id": set_id, "noise_seeds": noise_seeds, "limit": args.limit,
                                "baselines": list(baselines), "known_signals_removed": known_models, "known_signals_skipped": known_skipped,
@@ -658,7 +668,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("bls", help="BLS 탐색 격자·목적함수 비교 (S15P21C206-110)")
     p.add_argument("--target", required=True, help="fixture target key (예 toi270)")
-    p.add_argument("--stage", choices=["tuning", "evaluation"], default="tuning", help="주입 부분집합·별 목록 (설정 파일 stages)")
+    p.add_argument("--stage", choices=["tuning", "evaluation", "holdout"], default="tuning", help="주입 부분집합·별 목록 (설정 파일 stages)")
     p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
     p.add_argument("--preprocess-settings", type=Path, default=DEFAULT_SETTINGS)
     p.add_argument("--only", nargs="*", help="실행할 setting_id 만 고르기")
