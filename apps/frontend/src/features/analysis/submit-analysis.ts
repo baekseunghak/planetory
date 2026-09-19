@@ -114,8 +114,12 @@ export async function submitAnalysis(
         case "bundle-changed":
           // 판이 바뀌었으니 본문을 새로 만들어야 한다. 이 ID는 다시 쓰지 않는다.
           releaseRequestId();
-          // 현재 판은 본문이 아니라 헤더에서 온다(D-5).
-          return { state: "bundle-changed", currentBundleId };
+          // 2.3절이 정본으로 적은 본문을 먼저 보고, 없으면 헤더를 쓴다. 제출
+          // 응답에는 아직 헤더가 없을 수 있다(D-5).
+          return {
+            state: "bundle-changed",
+            currentBundleId: failure.currentBundleId ?? currentBundleId,
+          };
         case "conflict-body":
           releaseRequestId();
           return {

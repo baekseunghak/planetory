@@ -64,7 +64,8 @@ const UUID_V4 =
 const JUDGMENTS = ["LIKELY_PLANET", "UNLIKELY_PLANET", "UNSURE"];
 const EVIDENCE = ["oddeven", "secondary", "ushape"];
 const KINDS = ["candidate", "no_candidate", "skipped"];
-const MEMO_MAX = 2000;
+// 6.1절 2026-09-17 채택값. 프론트의 MEMO_LIMIT과 같아야 초과 전송을 잡는다.
+const MEMO_MAX = 200;
 
 // 본문 일치는 서버가 해시로 판정한다(6.3절 1번). 키 순서를 정규화해 비교한다.
 function canonical(value: unknown): string {

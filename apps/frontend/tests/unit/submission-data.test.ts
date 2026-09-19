@@ -183,7 +183,18 @@ const apiError = (
   code: string,
   outcomeUnknown = false,
   fieldErrors: { field: string; reason: string }[] = [],
-) => new ApiError(status, code, code, fieldErrors, null, null, outcomeUnknown);
+  details: Record<string, unknown> = {},
+) =>
+  new ApiError(
+    status,
+    code,
+    code,
+    fieldErrors,
+    null,
+    null,
+    outcomeUnknown,
+    details,
+  );
 
 test("an unknown outcome keeps the request id whatever the transport said", () => {
   // 타임아웃·취소·5xx·본문 파손은 모두 「저장됐는지 모름」이다. 새 ID를 만들면
@@ -243,4 +254,31 @@ test("a lost outcome outranks the status code it arrived with", () => {
 test("errors that are not from the api client are rethrown untouched", () => {
   const boom = new Error("boom");
   assert.throws(() => classifySubmissionError(boom), boom);
+});
+
+test("a changed bundle reads the current plate from the body, not the header", () => {
+  // 2.3절이 본문을 정본으로 적는다. X-Current-Bundle 헤더는 5.2·5.3부터 붙었고
+  // 제출 응답에는 아직 없을 수 있다(D-5).
+  const failure = classifySubmissionError(
+    apiError(409, "BUNDLE_CHANGED", false, [], { currentBundleId: "b-3" }),
+  );
+  assert.equal(failure.kind, "bundle-changed");
+  if (failure.kind !== "bundle-changed") throw new Error("expected changed");
+  assert.equal(failure.currentBundleId, "b-3");
+  assert.equal(failure.requestId, "renew");
+
+  // 본문에 없으면 null이며 호출부가 헤더로 메운다.
+  const bare = classifySubmissionError(apiError(409, "BUNDLE_CHANGED"));
+  assert.equal(
+    bare.kind === "bundle-changed" ? bare.currentBundleId : "없음",
+    null,
+  );
+  // 숫자나 다른 형이 와도 문자열이 아니면 쓰지 않는다.
+  const wrong = classifySubmissionError(
+    apiError(409, "BUNDLE_CHANGED", false, [], { currentBundleId: 3 }),
+  );
+  assert.equal(
+    wrong.kind === "bundle-changed" ? wrong.currentBundleId : "없음",
+    null,
+  );
 });

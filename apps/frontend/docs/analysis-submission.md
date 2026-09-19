@@ -11,7 +11,7 @@
 | `POST /api/v1/stars/{ticId}/submissions`         | 제출값 확인 단계의 [제출]. 본문 `requestId`가 멱등 단위 |
 | `GET /api/v1/submissions/by-request/{requestId}` | 응답 유실 복구. 조회 전용이며 접수를 만들지 않는다      |
 
-탐사 API의 모든 응답에 `X-Current-Bundle` 헤더가 붙는다(D-5). 쓰기는 이와 별개로 `BUNDLE_CHANGED`로 거절되므로, 제출 경로에서는 헤더를 판 교체 **감지**에만 쓰고 헤더만 보고 재전송하지 않는다.
+`X-Current-Bundle` 헤더는 5.2·5.3 응답부터 붙었고 나머지 API는 각 구현 때 붙인다(D-5). 제출 응답에는 아직 없을 수 있으므로 판 교체는 **`BUNDLE_CHANGED` 본문**으로 판정하고 헤더는 보조로만 쓴다.
 
 ## 응답과 처리
 
@@ -121,7 +121,9 @@ ID는 UUID v4이며 본문 `requestId`에 싣는다(2.2절). 서비스 API에는
 
 [`classifySubmissionError`](../src/features/analysis/submission-data.ts)가 「응답과 처리」 표의 **마지막 열을 코드로** 옮긴다. 각 실패는 `requestId: "keep" | "renew" | "discard"`를 함께 돌려주며, 요청 ID 규칙이 여러 곳으로 흩어지지 않도록 이 한 곳에서 정한다.
 
-`outcomeUnknown`은 **상태 코드보다 우선한다.** 5xx는 거절처럼 보이지만 쓰기 요청이 나간 뒤라면 저장됐을 수 있다. 현재 판 번호는 `BUNDLE_CHANGED` 본문이 아니라 `X-Current-Bundle` 헤더로 받는다. `ApiError`가 본문의 추가 필드를 싣지 않으며 다른 로더도 같은 방식이다.
+`outcomeUnknown`은 **상태 코드보다 우선한다.** 5xx는 거절처럼 보이지만 쓰기 요청이 나간 뒤라면 저장됐을 수 있다.
+
+현재 판 번호는 2.3절이 정본으로 적은 **`BUNDLE_CHANGED` 본문의 `currentBundleId`**를 읽는다. `X-Current-Bundle` 헤더는 5.2·5.3 응답부터 붙었고 나머지 API는 각 구현 때 붙이므로(D-5) 제출 응답에는 아직 없을 수 있어 **헤더는 보조**로 쓴다. 이를 위해 공용 클라이언트의 `ApiError`에 오류 본문을 그대로 싣는 `details`를 더했다. 어떤 값이 올지는 각 API가 정하므로 해석하지 않고 보관만 하며 읽는 쪽이 검사한다.
 
 ## 화면 연결
 
@@ -232,7 +234,6 @@ Invoke-RestMethod "$base/stars/259377024/submissions" -Method Post -Body $body `
 ## 미결
 
 - **`fieldErrors` 필드 이름이 문서와 구현에서 다르다.** 명세 6.2절 예제와 `contracts.json`은 `{field, message}`인데, 구현된 [`ErrorResponse.FieldError`](../../backend/src/main/java/com/planetory/backend/global/error/ErrorResponse.java)는 `(field, reason)`이고 공용 클라이언트도 `reason`을 읽는다. **구현을 따른다.** 문서 예제 쪽 수정이 필요하며 전달 항목으로 남긴다.
-- **메모 길이.** 명세 6.1절은 `0~2,000 코드포인트 확인 필요`, 구현은 `MEMO_LIMIT = 200`이다. 서버 검증이 없는 동안에는 늘려도 확인할 방법이 없으므로 **200을 유지**한다. C10 연동 때 실제 상한으로 맞춘다.
 - **ID 보존 기간.** 2.2절이 C02/C10 계약에 넘겼고 아직 값이 없다. 현재는 세션 수명(탭 종료까지)으로 두었다.
 - **`retryOfSubmissionId`.** [다시 풀기](6.8절)는 `S15P21C206-192` 범위다. 이 티켓에서는 항상 `null`로 보낸다.
 - **자동 복구의 한도.** 2.2절이 재조회 순서와 ID 보존 기간을 C02/C10 계약에 넘겼고 아직 값이 없다. 현재는 전송 2회(최초 + by-request 404 확인 뒤 1회), 재조회 3회(0.3·0.8·2.0초)로 두고 그 뒤는 사용자의 명시적 [접수 결과 확인]으로 넘긴다. [`loadAnalysis`](../src/features/analysis/load-analysis.ts)의 2회 시도 뒤 수동 재시도와 같은 방식이다. C10 연동 때 실제 처리 시간으로 다시 정한다.

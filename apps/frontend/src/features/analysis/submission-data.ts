@@ -238,11 +238,12 @@ export type SubmissionFailure = { requestId: "keep" | "renew" | "discard" } & (
   | { kind: "in-progress" }
   | { kind: "conflict-body" }
   /**
-   * 현재 판 번호는 이 오류에서 읽지 않는다. `ApiError`는 본문의 추가 필드를
-   * 싣지 않으므로 호출부가 `X-Current-Bundle` 헤더로 받는다(D-5). 다른 로더도
-   * 같은 방식이다.
+   * 2.3절이 정한 대로 **본문의** `currentBundleId`를 읽는다. `X-Current-Bundle`
+   * 헤더는 5.2·5.3 응답부터 붙었고 나머지 API는 각 구현 때 붙이므로(D-5) 제출
+   * 응답에 없을 수 있다. 본문에도 없으면 null이며, 그때는 분석 진입을 다시
+   * 조회해 현재 판을 확인한다.
    */
-  | { kind: "bundle-changed" }
+  | { kind: "bundle-changed"; currentBundleId: string | null }
   | { kind: "expired" }
   | {
       /** 입력이 거절됐다. 접수는 일어나지 않았다. */
@@ -272,7 +273,14 @@ export function classifySubmissionError(error: unknown): SubmissionFailure {
     if (error.code === "IDEMPOTENCY_CONFLICT")
       return { kind: "conflict-body", requestId: "renew" };
     if (error.code === "BUNDLE_CHANGED")
-      return { kind: "bundle-changed", requestId: "renew" };
+      return {
+        kind: "bundle-changed",
+        requestId: "renew",
+        currentBundleId:
+          typeof error.details.currentBundleId === "string"
+            ? error.details.currentBundleId
+            : null,
+      };
     // STAR_ALREADY_COMPLETED·SKIP_NOT_AVAILABLE. 조건이 아니므로 다시 보내지 않는다.
     return {
       kind: "denied",

@@ -98,7 +98,8 @@ const refused = (
   status: number,
   code: string,
   fieldErrors: { field: string; reason: string }[] = [],
-) => new ApiError(status, code, code, fieldErrors, null, null, false);
+  details: Record<string, unknown> = {},
+) => new ApiError(status, code, code, fieldErrors, null, null, false, details);
 
 test("a straight-through submission sends once and is not marked recovered", async () => {
   const stub = harness([{ status: 201, body: receiptBody(), bundle: BUNDLE }]);
@@ -216,20 +217,44 @@ test("a failed lookup is not read as 'not submitted'", async () => {
   assert.equal(stub.released(), 0);
 });
 
-test("a changed bundle releases the id and reports the current one from the header", async () => {
-  const stub = harness([
+test("a changed bundle releases the id and prefers the plate the body names", async () => {
+  const body = harness([
+    {
+      error: refused(409, "BUNDLE_CHANGED", [], {
+        currentBundleId: "9007199254748888",
+      }),
+      status: 409,
+      bundle: "9007199254749999",
+    },
+  ]);
+  const result = await body.run();
+  assert.equal(result.state, "bundle-changed");
+  if (result.state !== "bundle-changed") throw new Error("expected changed");
+  // 2.3절의 정본은 본문이다. 헤더와 다르면 본문을 쓴다.
+  assert.equal(result.currentBundleId, "9007199254748888");
+  assert.equal(body.released(), 1);
+
+  // 제출 응답에 본문 값이 없으면 헤더로 메운다(D-5).
+  const header = harness([
     {
       error: refused(409, "BUNDLE_CHANGED"),
       status: 409,
       bundle: "9007199254749999",
     },
   ]);
-  const result = await stub.run();
-  assert.equal(result.state, "bundle-changed");
-  if (result.state !== "bundle-changed") throw new Error("expected changed");
-  // 본문이 아니라 헤더에서 읽는다.
-  assert.equal(result.currentBundleId, "9007199254749999");
-  assert.equal(stub.released(), 1);
+  const fallback = await header.run();
+  assert.equal(
+    fallback.state === "bundle-changed" ? fallback.currentBundleId : "없음",
+    "9007199254749999",
+  );
+
+  // 둘 다 없으면 null이다. 분석 진입을 다시 조회해 확인한다.
+  const neither = harness([{ error: refused(409, "BUNDLE_CHANGED") }]);
+  const unknown = await neither.run();
+  assert.equal(
+    unknown.state === "bundle-changed" ? unknown.currentBundleId : "없음",
+    null,
+  );
 });
 
 test("refusals that require a new body release the id exactly once", async () => {
