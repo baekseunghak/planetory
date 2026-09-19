@@ -14,6 +14,8 @@ QA 문턱은 잠정값이며 원시 수치를 모두 저장해 문서에서 분�
 from __future__ import annotations
 
 import time
+import hashlib
+import json
 from dataclasses import asdict, dataclass, field, fields
 
 import numpy as np
@@ -62,6 +64,11 @@ class IterateConfig:
 
     def params(self) -> dict:
         return {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items()}
+
+    def fingerprint(self) -> str:
+        """Canonical parameter hash; source-code identity remains the manifest commit."""
+        return hashlib.sha256(json.dumps(self.params(), sort_keys=True, separators=(",", ":"),
+                                         allow_nan=False).encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -331,6 +338,10 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
         except Exception as exc:                                     # astropy 내부 실패
             steps.append(StepRecord(step, "error", "numerical_failure", n_points=int(ok.sum()), qa_failures=f"{type(exc).__name__}: {exc}"[:80])); termination = "numerical_failure"; break
 
+        if not run.peaks:
+            steps.append(StepRecord(step, "terminated", "no_quality_peak", n_points=int(ok.sum()), bls_elapsed_s=run.elapsed_s))
+            termination = "no_quality_peak"
+            break
         chosen = None
         coarse_period = float("nan")
         for p in run.peaks:

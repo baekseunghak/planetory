@@ -735,7 +735,8 @@ def cmd_iterate(args: argparse.Namespace) -> int:
     if acc:
         def q(name):
             v = np.array([r[name] for r in acc], float); v = v[np.isfinite(v)]
-            return f"{name}: 중앙값 {np.median(v):.3f} 최대 {np.max(v):.3f} (n={v.size})" if v.size else f"{name}: -"
+            return (f"{name}: 중앙값 {np.median(v):.3f} 최소 {np.min(v):.3f} 최대 {np.max(v):.3f} "
+                    f"절댓값최대 {np.max(np.abs(v)):.3f} (n={v.size})") if v.size else f"{name}: -"
         print("\n=== 제거 QA 원시 수치 (채택+실패 단계) ===")
         for name in ("power_ratio", "edge_excess", "window_offset_z", "window_offset_rel", "other_depth_log2_max", "overlap_fraction", "overlap_dev"):
             print("  " + q(name))
@@ -747,10 +748,13 @@ def cmd_iterate(args: argparse.Namespace) -> int:
 
     manifest = mf.build_manifest(
         task="S15P21C206-111 iterate", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
-        inputs=bi.inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"), mf.file_entry(args.preprocess_settings, role="preprocess_settings")],
+        inputs=bi.inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"), mf.file_entry(args.preprocess_settings, role="preprocess_settings"),
+                           mf.file_entry(FIXTURE_DIR / "references.csv", role="references"), mf.file_entry(FIXTURE_CHECKSUMS, role="fixture_checksums")],
         config={"name": args.settings.name, "version": cfg["version"], "sha256": mf.file_entry(args.settings)["sha256"],
                 "parameters": {"target": bi.target.key, "stage": args.stage, "setting": setting.setting_id, "setting_params": setting.params(),
                                "iterate": icfg.params(), "groups": sorted(want), "limit": args.limit, "tamper_depth_factor": args.tamper_depth_factor,
+                               "iterate_config_version": f"bls_iterate_qa_v1/{icfg.fingerprint()[:12]}",
+                               "iterate_config_sha256": icfg.fingerprint(), "grid_set_id": bi.set_id,
                                "noise_seeds": bi.noise_seeds, "baselines": list(bi.baselines), "known_signals_removed": bi.known_models,
                                "preprocess_setting": bi.pre.params(), "termination_reasons": list(it.TERMINATION_REASONS), "run_dir": str(run_dir),
                                "baseline_days": float(bi.strict.time.max() - bi.strict.time.min())}},

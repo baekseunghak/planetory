@@ -168,3 +168,9 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 ```
 
 기본값 `unity`는 기존 기준 1과 비교하고 `oot`는 창 안·바깥 평균 차이와 두 평균의 표본 오차를 쓴다. 제거 모델·재적합·다른 QA는 유지한다. `steps.csv`에 판정 방식과 기존 unity 지표를 함께 남기고 manifest에 옵션을 기록한다. 상세 산식·한계·진단 결과는 [반복 제거 벤치마크 5.5.3](../../docs/data/tess-bls-iteration-benchmark.md)에 있다. L 98-59 비교 실행에서 단일 회수 65→71, 가짜 1→2로 기록했으며 기본값 승격은 보류한다(벤치마크 5.5.4절).
+
+## 111 최종 검증 준비
+
+최종 인계 후보와 110 승인 후 실행 세트는 [반복 제거 벤치마크 7절](../../docs/data/tess-bls-iteration-benchmark.md)에 모은다. 현재 oot는 미채택이고 unity·상대 0.1·duration 최대 12 h를 보수적 리뷰 후보로 둔다. 110 승인값 반영·재대조 전에 이를 최종 확정 실행으로 부르지 않는다.
+
+새 iterate manifest에는 `iterate_config_version=bls_iterate_qa_v1/<설정 SHA-256 앞 12자리>`, 전체 `iterate_config_sha256`, `grid_set_id`와 Archive 참고값·fixture checksum 파일의 해시를 기록한다. 설정 해시와 코드 commit은 별도 식별자다. 콘솔 QA 요약의 최소·절댓값 최대를 함께 확인한다.

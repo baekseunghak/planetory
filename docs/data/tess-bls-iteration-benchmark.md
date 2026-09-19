@@ -4,7 +4,7 @@
 
 이 문서는 Silver 내부 반복 BLS 루프 — 후보를 찾고, 고정 box 모델로 나누고, 잔차에서 다시 찾는 — 가 **언제 멈추고, 제거가 잘못됐는지 어떻게 알고, 잘못됐으면 어디로 되돌리는지** 를 고정 fixture 에서 측정해 종료 사유·제거 QA 문턱·복구 규칙을 D14-2(구현)에 넘기는 실험의 계획·규칙·결과를 기록한다.
 근거는 [후보 검출 설계](tess-pipeline/candidate-detection.md) 5.6절 "Silver 내부 반복 BLS와 처리 종료 — v1.0"(종료 사유 7종)과 요구사항 DAT-05·DAT-06·DAT-08, 입력은 [TESS fixture 세트](tess-fixture-set.md) 와 주입 격자 1.1.0(쌍 3개 포함), BLS 설정·게이트는 [BLS 벤치마크](tess-bls-benchmark.md) 5.3절의 수정 제안(`poc_linear20k`, SNR ≥ 7 & SDE ≥ 6)을 잠정값으로 쓴다.
-고조파 병합의 정식 규칙과 판 사이 후보 동일성은 `S15P21C206-112`, 운영 커널은 `S15P21C206-120`(D14-2) 이 맡는다.
+고조파 병합의 정식 규칙과 판 사이 후보 동일성은 `S15P21C206-112`, 운영 반복 커널은 `S15P21C206-122`(D14-2) 이 맡는다.
 
 ## 1. 질문
 
@@ -262,3 +262,72 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 - box 모델의 진입·이탈 근사 잔여는 경계 돌출 지표로 재지만 모델을 바꾸지 않는다(D06 계약 1.0).
 - 잡음 seed 1개로 돌린다. 가짜 후보 수는 방향만 본다.
 - 문턱 재조정 뒤에는 루프 경로가 바뀌므로 재실행이 필요하다.
+
+## 7. Jira 111 완료 조건과 최종 인계 준비 (2026-09-19)
+
+[Jira 111](https://ssafy.atlassian.net/browse/S15P21C206-111)의 최신 설명을 직접 대조했다. 티켓은 진행 중이며 완료 조건은 아래 세 가지다. 고조파 병합·판 사이 동일성(112), 셋 이상 겹침·격자 v2 스트레스·운영 커널은 제외 범위다. 회수 100%나 1 d·8 h 실패 0은 티켓의 필수 통과 기준이 아니다. 기존 옵션 실험의 기대값과 완료 조건을 구분한다.
+
+| 완료 조건 | 현재 증거 | 남은 일 |
+|---|---|---|
+| 다중 쌍 3개·단일·실패 사례의 종료 사유와 power/경계/훼손/중첩 QA 기록 | 5.1~5.5.4 결과와 원시 manifest/CSV | 같은 최종 후보 프로파일로 전체 검증 세트 재실행·합계 기록 |
+| 실패 후보 미채택·직전 정상 후보 집합 복구 재현 | 실제 실패 단계의 채택 수 대조, 0단계 실패 테스트, 새 1단계 실패의 후보·잔차 배열 완전 일치 테스트 | 최종 실패 fixture 결과도 같은 코드/설정으로 기록 |
+| D04 확정값 재실행·설정 버전·한계 리뷰 승인·D14-2 인계 | QA 설정 해시와 버전 기록 구현, 본 절 인계 초안 | **110 설정 채택 승인 대기**, 승인값 반영 후 재실행, 111 리뷰 승인, 122에 인계 |
+
+### 7.1 최종 검증에 올릴 보수적 후보 (미승인)
+
+oot는 단일 회수 +6과 가짜 +1이 함께 발생해 최종 후보로 승격하지 않는다. `7cc8dcb2`의 unity·깊이 상대 0.1·duration 최대 12 h·실패 즉시 종료 조합을 **리뷰용 후보**로 유지한다. 기본 CLI 값 전체를 승격하는 결정이 아니다. 이 후보의 L 98-59 단일 회수 65/108·가짜 1·QA 실패 18은 알려진 한계이고 다른 별 최종 실측은 대기 중이다. 리뷰어가 이 손실/잔여 수준을 수용하지 않으면 완료하지 않고 수정·재검증한다.
+
+| 구분 | 후보값 |
+|---|---|
+| 전처리 / D04 탐색 | biweight_1.0d / poc_linear20k, SNR≥7 AND SDE≥6 (110 승인 전에는 잠정) |
+| 반복 전용 추가 조건 | 관측 통과 ≥2, 최소 점 100, 최대 후보 5. **통과 ≥2는 110 holdout의 게이트 조건이 아니며 111에서 별도 승인받을 안전 조건** |
+| 재적합 | 주기 ±탐색 격자 2칸, 201점, duration 0.5~2배/최대 탐색 범위 12 h, D/P≤0.35 |
+| QA | power 비≤0.5, edge≤1.5, other log2≤1, overlap≤3, unity z≤5 또는 깊이 상대 절댓값≤0.1 |
+| 실패·중복 | 측정 불가 실패, QA 실패 즉시 중단·직전 잔차 보존, 임시 배수 {0.5,1,2}; 계속 마스킹은 미채택 |
+| 설정 식별 | `bls_iterate_qa_v1/49ccec22320d` |
+| 전체 설정 SHA-256 | `49ccec22320d283d4bf015f98acadab6ff4d2b6cfb27d1fbd3ae66ebf05ece4f` |
+
+설정 해시는 `IterateConfig.params()`의 정렬된 canonical JSON에서 생성하며 계산 코드 버전은 별도로 manifest의 commit으로 식별한다. 새 manifest는 주입 격자 ID와 references.csv·checksums.json 해시도 기록한다. 과거 manifest에는 이 추가 필드가 없으며 원본을 고치지 않는다.
+
+### 7.2 남은 두 현상의 범위와 처리
+
+- 남은 g024·g027·g030·g033은 주입 격자 순서상 모두 start 위상이다. 재적합 D=6.72 h, P≈0.999311/0.999373 d로 정답 1 d보다 짧다. 187.893 d 기준선에서 단순 주기 드리프트 환산은 약 3.11/2.83 h다(관측된 transit 수 기반 매칭 오차와 다른 진단량). **지속시간만 강제로 8 h로 늘려 해결했다고 판단하지 않는다.** 재적합/전처리 영향의 정확한 원인은 미확정이며 현재 QA가 이 제거를 거절한 결과를 보존한다.
+- g102의 새 0.605877 d 후보는 단순 P/2·2P 관계로 설명되지 않는다. 112로 해결 책임을 자동 이관하지 않는다. oot 미채택의 직접 근거로 유지하고, 향후 oot 채택을 재검토한다면 잔차 기원과 약한 피크의 QA 통계부터 별도 검증한다.
+- g069의 약 4P 잔여와 겹침 쌍의 임시 고조파 규칙 한계는 112 검토 사례로 전달하되, 이번 반복 실험의 가짜·회수 수치에서 빼지 않는다.
+
+### 7.3 검증 보강과 실행 전 준비
+
+- 새 합성 테스트는 두 번째 모델이 잘못되면 첫 번째 정상 후보와 그 모델만 제거한 잔차 배열이 원소별 동일하게 보존됨을 확인한다. 원본 입력 배열도 보존한다.
+- 피크가 없는 경우 `no_quality_peak`, 있는 피크가 모두 중복인 경우 `duplicate_or_harmonic_only`를 구분한다. 기존 구현은 빈 피크 목록도 중복 종료로 기록할 수 있어 정정했다.
+- 원본 재평가 실패는 `candidate_validation_failed`와 후보의 검증 실패 플래그로 보존한다. 벤치마크의 accepted 목록은 QA 채택 기록이므로 운영 후보표에서는 validated_on_original=false를 제외해야 한다(122 인계).
+- 종료 7종은 합성 테스트로 확인하며 실제 fixture에서 발생하지 않은 종료 사유를 실측으로 표현하지 않는다.
+- 콘솔 QA 요약에 최소와 절댓값 최대를 추가해 음수 방향 큰 실패가 가려지지 않도록 했다. QA 판정은 바꾸지 않는다.
+- 회귀 100 passed, 2 skipped(당시 TOI-270 입력 부재). 입력 준비 후 생략된 파일 생성·보존 통합 테스트 2개도 별도 실행해 통과했다(합계 102 passed). 공식 MAST에서 평가 4별+TOI-270의 누락 12 FITS를 받아 고정 SHA-256·TIC·Sector를 확인했다. L 98-59 포함 6별 15 FITS 입력 준비 완료다. checksum registry·Archive 참고값은 변경하지 않았다. 새 입력으로 실제 벤치마크는 실행하지 않았다.
+
+### 7.4 110 승인 후 사용자 실행 절차
+
+1. 110의 승인된 설정·승인 링크를 확인하고 사용자가 해당 변경을 111 브랜치에 반영한다. Git 명령은 사용자가 실행한다. 과거 결과를 승인 후 실행으로 소급해서 부르지 않는다.
+2. 병합 뒤 회귀·설정 지문·전처리·110 게이트와 111 추가 조건을 재대조한다. 위 후보값이 바뀌면 새 지문을 먼저 기록한다.
+3. 코드를 커밋하고 작업 트리가 깨끗한 상태에서 아래 검증을 사용자 실행한다. 대상은 기존 fixture이며 110 holdout 4별을 반복 튜닝에 쓰지 않는다. 기존 5별은 이미 본 별이므로 새로운 독립 평가라고 주장하지 않는다.
+4. 아래 명령은 **110 승인과 병합 뒤 설정 재대조가 끝난 후** 사용한다(tess-bench 디렉터리, PowerShell). 정상 종료 코드 여부는 과학적 통과 판정이 아니다.
+
+```powershell
+$reviewArgs = @('--stage', 'evaluation', '--setting', 'poc_linear20k', '--window-offset-reference', 'unity', '--window-offset-rel-depth', '0.1', '--refine-duration-max-hours', '12', '--snr-min', '7', '--sde-min', '6', '--min-transits', '2', '--max-candidates', '5')
+foreach ($target in @('l98_59', 'cm_dra', 'wasp18', 'toi700', 'hd21749')) {
+    uv run --locked python -m tess_bench iterate --target $target @reviewArgs --noise-seeds 20260910
+    if ($LASTEXITCODE -ne 0) { throw "iterate failed: $target" }
+}
+foreach ($target in @('wasp18', 'toi700')) {
+    uv run --locked python -m tess_bench iterate --target $target @reviewArgs --include-raw-real --groups none --no-noise
+    if ($LASTEXITCODE -ne 0) { throw "real fixture failed: $target" }
+}
+uv run --locked python -m tess_bench iterate --target toi270 --stage tuning --setting poc_linear20k --groups pairs --no-noise --tamper-depth-factor 3 --window-offset-reference unity --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --snr-min 7 --sde-min 6 --min-transits 2 --max-candidates 5
+if ($LASTEXITCODE -ne 0) { throw 'tamper fixture failed' }
+```
+
+5. 5별 정상 실행은 1,120곡선(별당 224), 실제 곡선 검증은 4곡선(realclean/real ×2별), tamper는 쌍 3곡선이 있어야 한다. 각 manifest의 동일 커밋·기준 설정 지문·stage·격자·seed·입력/출력 checksum을 확인한다.
+6. 별/곡선 종류별 direct·alias 회수와 분모, 가짜 후보, 종료 사유, QA 분포·측정 불가·복수 실패, 원본 재검증 실패와 wall time을 기록한다. 기존 결과와 비교하되 새로운 임의 허용 숫자를 결과를 보고 만들지 않는다.
+7. tamper 세 사례에서 0단계 QA 실패·미채택을 확인한다. 정상 실행의 QA 실패 단계는 이전 후보 집합 보존과 대조한다. 실제 잔차 배열 검증은 합성 검증과 구분한다.
+8. 같은 결과를 근거로 QA·종료·추가 통과 조건의 채택 여부를 리뷰 요청한다. 승인 기록과 D14-2(122) 인계 항목(설정 지문, 종료 7종, QA 식, 복구, 원본 재평가 필터, 112 한계)이 갖춰진 뒤 111 완료 조건을 체크한다. MR 병합·Jira 완료 전환을 자동 실행하지 않는다.
+
+현재는 110 승인 대기이므로 위 최종 실측·채택 승인은 미완료다. 이는 구현 실패 또는 실험 통과로 대체할 수 없는 완료 조건이다.

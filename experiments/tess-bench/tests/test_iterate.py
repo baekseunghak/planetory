@@ -48,6 +48,47 @@ def test_two_signals_recovered_strong_first_and_weak_second():
     assert np.isfinite(first.other_depth_log2_max) and first.other_depth_log2_max < 1.0          # 약한 신호의 깊이가 훼손되지 않았다
 
 
+def test_second_removal_failure_preserves_first_candidate_and_exact_residual(monkeypatch):
+    """111 완료 조건: 빈 집합뿐 아니라 이전 정상 후보와 잔차 배열까지 보존한다."""
+    t, f = _curve([(3, 1402, 2, 0.005), (7, 1403.5, 2, 0.001)])
+    original = f.copy()
+    first = bls.Peak(1, 3, 1402, 2, 0.005, 1e-5, 100, 100, 10, 50, 50, 9, 100, 0)
+    wrong_second = bls.Peak(1, 7, 1403.5, 2, 0.003, 1e-5, 100, 100, 10, 50, 50, 4, 100, 0)
+    peaks = iter([first, wrong_second])
+    monkeypatch.setattr(bls, 'run_bls', lambda *a, **k: bls.BlsRun('t', 3000, .5, 9, .01, 0, 1, [next(peaks)]))
+    powers = iter([10., 1., 10., 1.])
+    monkeypatch.setattr(it, 'local_max_power', lambda *a, **k: next(powers))
+    result = it.iterate_curve(t, f, SETTING, it.IterateConfig(refine_peak=False), keep_residual=True)
+    assert result.termination == 'removal_qa_failed' and result.qa_failed_step == 1
+    assert len(result.accepted) == 1 and result.accepted[0].period_days == 3
+    assert 'window_offset' in result.steps[-1].qa_failures
+    expected = it.remove_transit_models(t, original, [result.accepted[0].model('expected')]).flux_residual
+    np.testing.assert_array_equal(result.residual, expected)
+    np.testing.assert_array_equal(f, original)
+
+
+@pytest.mark.parametrize('has_peak, expected', [(False, 'no_quality_peak'), (True, 'duplicate_or_harmonic_only')])
+def test_empty_search_and_duplicate_only_are_distinct(monkeypatch, has_peak, expected):
+    t, f = _curve([(3, 1402, 2, .003)])
+    peak = bls.Peak(1, 3, 1402, 2, .003, 1e-5, 100, 100, 10, 50, 50, 9, 100, 0)
+    batches = iter([[peak], [peak] if has_peak else []])
+    monkeypatch.setattr(bls, 'run_bls', lambda *a, **k: bls.BlsRun('t', 3000, .5, 9, .01, 0, 1, next(batches)))
+    powers = iter([10., 1.])
+    monkeypatch.setattr(it, 'local_max_power', lambda *a, **k: next(powers))
+    result = it.iterate_curve(t, f, SETTING, it.IterateConfig(refine_peak=False))
+    assert result.termination == expected and len(result.accepted) == 1
+    assert result.steps[-1].reason == expected
+
+
+def test_original_revalidation_failure_is_recorded(monkeypatch):
+    t, f = _curve([(3, 1402, 2, .003)])
+    monkeypatch.setattr(it, 'fixed_snr', lambda *a, **k: 0.)
+    result = it.iterate_curve(t, f, SETTING, CFG)
+    assert result.termination == 'candidate_validation_failed'
+    assert result.accepted and all(c.validated_on_original is False for c in result.accepted)
+    assert it.summarize(result, [])['n_validation_failed'] == len(result.accepted)
+
+
 def test_tampered_model_fails_qa_and_recovers_to_previous_candidate_set():
     """DAT-06: QA 실패 뒤 후보를 채택하지 않고 직전 정상 집합(여기서는 빈 집합)으로 복구한다."""
     t, f = _curve([(3.0, 1402.0, 2.0, 3e-3)])
@@ -121,7 +162,7 @@ def test_oot_cli_records_mode_in_manifest(tmp_path, monkeypatch):
         '--no-noise', '--window-offset-reference', 'oot', '--results', str(tmp_path)])
     bi = SimpleNamespace(target=SimpleNamespace(key='l98_59'), stage='evaluation',
         groups={'realclean': {'none': []}}, prepared={('realclean', 'none'): (np.array([0., 1.]), np.ones(2))},
-        n_groups=1, inputs=[], baselines={'realclean': None}, known_models=[], noise_seeds=[],
+        n_groups=1, inputs=[], baselines={'realclean': None}, known_models=[], noise_seeds=[], set_id='injection_grid_v1-1.1.0',
         strict=SimpleNamespace(time=np.array([0., 1.])), pre=cli.Setting('biweight_1.0d'))
     monkeypatch.setattr(cli, 'build_bls_inputs', lambda *a, **k: bi)
     monkeypatch.setattr(cli, 'preprocess_groups', lambda *a, **k: None)
@@ -134,6 +175,13 @@ def test_oot_cli_records_mode_in_manifest(tmp_path, monkeypatch):
     manifest = json.loads(next((tmp_path / 'manifests').glob('*.json')).read_text(encoding='utf-8'))
     assert manifest['task'] == 'S15P21C206-111 iterate'
     assert manifest['config']['parameters']['iterate']['qa_window_offset_reference'] == 'oot'
+    params = manifest['config']['parameters']
+    cfg = it.IterateConfig(**params['iterate'])
+    assert params['iterate_config_sha256'] == cfg.fingerprint()
+    assert params['iterate_config_version'] == f'bls_iterate_qa_v1/{cfg.fingerprint()[:12]}'
+    assert params['grid_set_id'] == 'injection_grid_v1-1.1.0'
+    assert {'references', 'fixture_checksums'} <= {x['role'] for x in manifest['inputs']}
+    assert cfg.fingerprint() != it.IterateConfig().fingerprint()
     assert cli.build_parser().parse_args(['iterate', '--target', 'l98_59']).window_offset_reference == 'unity'
     with pytest.raises(ValueError):
         it.IterateConfig(qa_window_offset_reference='unknown')
