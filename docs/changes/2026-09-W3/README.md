@@ -117,3 +117,5 @@
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
+
+| 2026-09-19 | 분석 제출 요청 ID·복구 계약 확정 | S15P21C206-187 | requestId, 멱등, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, by-request, 응답 유실, outcomeUnknown, 초안 잠금, fieldErrors reason, 404 미접수 단정 금지 | 채택·구현 전 | [기록](2026-09-19.md) |
