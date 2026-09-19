@@ -60,6 +60,8 @@ public class StarDiscoveryService {
      * <p>회원 행을 먼저 잠근다. 같은 회원의 발견·제출이 이 잠금으로 줄을 서므로 순번이 겹치지 않고,
      * "이미 열렸는가"를 본 결과가 저장할 때까지 유지된다. 잠금 순서는 9.2절의
      * {@code users → user_star_progress → user_candidate_achievements → star_unlocks}를 따른다.
+     * 호출자가 같은 트랜잭션에서 회원을 참조하는 행을 먼저 쓴다면 그 전에 회원 행을 잠가야 한다. 이유는
+     * {@link AchievementService#recognize}에 적었다.
      *
      * <p>이미 열린 별이면 아무것도 바꾸지 않는다. 순번을 쓰지 않고 지도 버전도 올리지 않는다.
      * 바뀐 것이 없는데 버전을 올리면 프론트가 지도를 다시 받는다. 회차 일괄 발견처럼 같은 사건을

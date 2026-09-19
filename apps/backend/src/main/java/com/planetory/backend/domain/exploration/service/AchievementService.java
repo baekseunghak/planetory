@@ -87,6 +87,12 @@ public class AchievementService {
      * <p>잠금 순서는 {@code users → user_star_progress → user_candidate_achievements → star_unlocks}다.
      * 회원 행을 먼저 잡으므로 같은 회원의 제출·공개·다른 발견 경로가 이 함수 안에서 줄을 선다.
      *
+     * <p><b>호출자는 제출·공개 기록 저장과 진행 행 갱신 전에, 같은 트랜잭션에서 회원 행을 먼저 잠근다</b>
+     * ({@code SELECT … FROM users WHERE id = ? FOR UPDATE}, 서비스 API 9.1절과 같은 원칙). 회원을 참조하는 행을
+     * 먼저 쓰면 외래 키 검사가 회원 행에 KEY SHARE 잠금을 남긴다. 같은 회원의 두 트랜잭션이 그 상태로 이 함수의
+     * {@code FOR UPDATE}에 오면 서로의 KEY SHARE를 기다리다 교착한다. 함수 안의 잠금만으로는 호출자 전체의 잠금
+     * 순서가 보장되지 않는다.
+     *
      * <p>이미 인정된 신호면 아무것도 바꾸지 않고 {@code newlyRecognized=false}를 돌려준다. 응답을 잃고
      * 다시 불러도, 같은 신호를 동시에 공개해도 성과와 별이 늘지 않는다(SUB-06, AT-12).
      *
