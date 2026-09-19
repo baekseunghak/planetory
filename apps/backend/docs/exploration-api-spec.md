@@ -1000,6 +1000,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - `achievementGranted`는 `user_candidate_achievements` 존재 여부이며 현재 공개 여부와 다르다.
 - 타인은 조회할 수 없다(NFR-14). 첨부·공개 분석은 8.5절 투영을 서비스 API가 사용한다.
 
+148 구현의 목록 입력은 공통 목록 규칙대로 `size` 기본 20·최대 100이다. `from`·`to`는 offset을 포함한 ISO 8601 시각(UTC로 정규화, 연도 0001~9999)이며 **from 이상·to 미만**이다. 둘 다 있으면 from < to여야 한다. 빈 선택 필터는 미지정으로 취급한다. 잘못된 ID·결과·시각·size·cursor는 400 `VALIDATION_FAILED`다. 커서는 요청 회원·ticId·candidateId·result·from·to·size와 마지막 제출의 시각/id에 묶는다. 조건 변경 시 커서를 버린다. 다른 회원·TIC·필터의 커서를 이어 쓰지 않는다. 현재 판이 없으면 저장 판은 현재 판이 아니므로 `isPreviousBundle=true`이며 목록 자체는 조회한다.
+
 ### 8.2 히스토리 상세
 
 `GET /api/v1/histories/{historyId}` — 본인만. 6.4절 `submissionResult` 전체에 아래를 더한다.
@@ -1020,6 +1022,12 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 DEC-11(서비스 F04). `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
 
+148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 미확정 미공개 `UNPUBLISHED`, 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
+
+**저장 매핑:** 143의 History `versions.bundleVersion` → `versions.data`, `ruleVersion` → `rule`, `residualModelVersion` → `residualModel`, `periodogramConfigVersion` → `periodogramConfig`로 투영한다. 별도로 보존되지 않은 `preprocess`·`pipeline`은 null이며 현재 처리 버전으로 꾸며 채우지 않는다. `versions.snapshotVersion`을 추가 전달한다. 143의 `snapshot_params.viewState`가 viewport·배율의 원본이고, 최초 응답에도 같은 값이 보존되어 있다. `snapshotParams.foldSettings.referenceTimeBtjd`는 제출 당시 기준 시각이다. 현재 판을 읽지 못해도 개인 상세·목록·공개 내용은 현재 그래프와 별도로 조회한다. 없는/형식이 틀린 History ID는 404 `RESOURCE_NOT_FOUND`, 타인 개인 기록은 403 `FORBIDDEN`이다.
+
+**최초 응답 누락 방어 정책(확정):** 143 병합 직전 develop(`157fb5e`)에는 정상 제출 생성 경로가 없었다. 최초 응답 `response_snapshot`이 없는 비정상·수동 적재 기록은 당시 판단 평가 전체를 복원할 근거가 부족하므로 상세 전체 조회만 503 `DEPENDENCY_UNAVAILABLE`로 실패시키고 목록·공개 투영·그래프는 저장된 열로 계속 조회한다. 현재 후보로 재판정하거나 과거 평가를 추정하지 않는다. 이는 143이 생성한 정상 기록의 조회와 구분하며, 운영 DB의 해당 행 존재 여부를 직접 확인했다는 뜻은 아니다.
+
 ### 8.3 히스토리 그래프 (HIS-03, Q11)
 
 `GET /api/v1/histories/{historyId}/graph?mode=CURRENT|SUBMITTED` — 생략은 `CURRENT`.
@@ -1034,7 +1042,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                 "epochBtjd": 1683.4231, "durationHours": 2.83,
                 "currentPhaseStart": 0.9874, "currentPhaseEnd": 0.9974},
   "curve": {"$ref": "5.2절 세그먼트 DTO. residualReproducible=false면 원본(curveStep 0)"},
-  "snapshot": {"bins": 150, "foldedFlux": [1.0, 0.98], "foldedError": [0.001, 0.002]}
+  "snapshot": {"bins": 150, "foldedFlux": [1.0, 0.98], "foldedError": [0.001, 0.002]},
+  "snapshotVersion": "folded-mad-v1"
 }
 ```
 
@@ -1045,7 +1054,13 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 HTTP 200을 유지하고 `curve.segments: null`로 준다. 결과와 작업이 모두 없으면 `curve.residual: {"status":null,"jobId":null}`, 실제 작업이 있으면 해당 상태와 실제 ID를 반환한다. null 상태는 작업 생성 전 조회 표현이며 2장의 작업 상태 전이에 추가하지 않는다. 히스토리 조회는 작업을 자동 생성하지 않는다.
 
+그래프 최상위에 `snapshotVersion`을 추가한다(상세의 `versions.snapshotVersion`과 같은 저장값, 구기록에 버전이 없으면 null). `folded-mad-v0`·`folded-mad-v1`의 의미와 표시 기준은 [제출 계약](../../../docs/api/exploration/submission-readiness.md#1-채택한-스냅샷-계산)을 따른다. 값이 없다고 최신 버전으로 추정하지 않는다. 버전과 배열은 조회 시 이동·재계산하지 않는다. 특수 제출은 주기·절대 구간·현재 위상이 null이며 selection 객체 자체는 유지한다.
+
 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본은 잔차로 표시하지 않으며 판단·메모 등 나머지 공개 내용은 유지한다. SUBMITTED 요청은 기존대로 curve:null·snapshot 규칙을 유지하고, 원본 대체는 CURRENT 조회로 구분한다. 개인 잔차 생성·작업 조회 API의 기존 권한을 확대하지 않는다.
+
+공개 CURRENT의 캐시 잔차가 미완료·없음이면 `fallbackReason=RESIDUAL_NOT_AVAILABLE`, `residualReproducible=false`와 현재 원본(`curveStep=0`, 제거 집합 빈 목록)을 반환한다. 원본의 residual은 원래 계약대로 `COMPLETED`·jobId null이며 잔차 작업이 완료됐다는 뜻이 아니다. 은퇴 대체는 `RETIRED_CANDIDATE`다. 완료 캐시를 사용할 때도 **공개 응답의 jobId는 null**이다. 개인 CURRENT의 `residualReproducible`은 저장된 제거 조합의 복원 가능성을 뜻하며 계산 준비 여부는 `curve.residual`과 segments로 판단한다.
+
+현재 판이 아예 없거나 동일 판의 필수 배열이 손상된 경우는 503 `DEPENDENCY_UNAVAILABLE`이다. 정상 판 전환 중 current 공백은 86·87번의 원자 전환 계약으로 노출하지 않는다. `SUBMITTED`도 공통 reproduction의 현재 판 메타데이터를 제공하므로 현재 판 부재 시 같은 503이며, 저장 스냅샷을 없애거나 재계산하지 않는다. 이 경우를 정상 snapshot:null·잔차 미계산과 합치지 않는다. mode의 허용값 밖은 400이며 생략만 CURRENT다. 성공 그래프의 `X-Current-Bundle`은 reproduction.currentBundleId와 같다.
 
 읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). 서로 다른 판의 배열과 메타데이터를 한 응답에 섞지 않으며, `reproduction.currentBundleId`는 실제로 그래프를 만든 판이다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
 
@@ -1097,6 +1112,14 @@ original.periodDays, original.sourcePeakGridIndex, original.phaseStart, original
 serverDerived.epochBtjd, serverDerived.durationHours, match.status, match.correctedPeriodDays, match.harmonicMultiplier,
 curveContext, versions, graph(8.3절, mode 양쪽), relabel
 ```
+
+### 8.5.1 서비스 도메인 인계(148 → 160·공개 분석 조회)
+
+`HistoryService.publicContent(historyId, checkAccess)`는 공개 허용 내용과 versions를 반환하며 graph는 null이다. `publicGraph(historyId, mode, checkAccess)`는 공용 8.3절 Graph를 반환한다. 같은 History이면 `content.withGraph(graph)`로 조합할 수 있다. 저장 JSON의 `originalMatch` 등 내부 항목을 versions에 그대로 펼치지 않는다. 개인 조회 DTO와 공개 DTO는 분리하지만 그래프 배열 형식은 같다.
+
+`checkAccess`는 호출자가 전달하는 **읽기 전용 부모 권한 검사**다. 현재 요청 회원, 부모 종류/id와 실제 History 연결, 같은 TIC, 공개·숨김·삭제·취소 상태를 DB에서 검사하고 거절 시 기존 권한 오류를 던진다. 미리 구한 boolean이나 아무 동작 없는 함수로 대체하지 않는다. 148은 그래프 각 시도 시작 및 반환 직전에 새 트랜잭션에서 검사한다. 호출자는 아직 커밋하지 않은 첨부 쓰기를 이 조회에 연결하지 않는다. 현재 판 확인도 읽기 스냅샷 밖에서 수행하여 교체를 감지한다. 판 교체 중 캐시 소실도 판 확인 후 한 번 재조회하며, 안정된 판의 캐시 장애를 단순 미계산으로 숨기지 않는다.
+
+공개 내용과 그래프를 분리해 제공하므로 소비자는 그래프 장애 시에도 이미 권한이 확인된 판단·근거·메모를 유지하고 그래프 오류만 표시할 수 있다. 503을 graph:null인 정상 성공으로 조용히 바꾸지 않는다. 숨김·삭제·취소 후 재요청은 내용·그래프 모두 다시 권한 검사를 통과해야 한다. 148은 공개 HTTP 경로를 열지 않으며, 160이 부모 경로와 첨부 저장을 구현한다. 147 실제 캐시/Worker·160 실제 부모 경로·190/191 렌더러·213 소비 화면의 종단 인수는 각각 연결 후 수행하고 테스트 경계 대체 성공과 구분한다.
 
 ## 9. 성과·등급·별 열림·완료·재개
 
