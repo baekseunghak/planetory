@@ -63,6 +63,19 @@
 
 서비스 API는 글·댓글에 요청 키를 두지 않으므로(SB-D17) 요청 ID는 탐사 API의 본문 `requestId`뿐이다(D-1, Q07).
 
+**제출 복구·ID 수명(143 리뷰 반영):** 아래 표가 제출 클라이언트의 확정 전송 계약이다. 구판 Mock의 제안이나 프론트 명세의 의미 분류보다 우선한다. `keep`은 원본 요청 본문과 ID를 함께 보존함을 뜻하며, `renew`는 사용자가 변경한 입력으로 새 제출을 확정할 때만 발급한다.
+
+| 결과 | requestId 처리 | 다음 행동 |
+| --- | --- | --- |
+| 응답 유실·네트워크 오류, `REQUEST_IN_PROGRESS` | keep | by-request로 복구한다. 미접수 404면 같은 본문·ID로 재전송한다 |
+| `SUBMISSION_CONTEXT_NOT_READY` | keep | 잔차를 명시적으로 준비한 뒤 같은 본문·ID로 재전송한다 |
+| `DEPENDENCY_UNAVAILABLE` | keep | 입력을 보존하고 같은 요청을 재시도한다. 과거 해시·최초 응답이 없는 기록은 반복해도 복구되지 않을 수 있으며 새 ID로 자동 우회하지 않는다 |
+| `BUNDLE_CHANGED` | renew | 5.1절 재조회 후 곡선 단계·제거 조합을 유지하고 주기·위상을 초기화한다. 재선택·사용자 확인 후 새 본문·새 ID로 제출한다 |
+| `IDEMPOTENCY_CONFLICT` | 자동 재전송 안 함 | 기존 ID·원본 요청을 보존하고 본인 by-request 조회로 기존 접수를 확인한다. 원본 복구는 같은 ID, 사용자가 별도 제출을 선택한 경우에만 새 ID를 사용한다. 404도 자동 새 ID 발급 근거가 아니다 |
+| `VALIDATION_FAILED`, `EPOCH_OUT_OF_RANGE` | 수정 전 재전송 안 함, 수정 후 renew | 입력을 보존해 오류 위치를 안내하고 사용자 수정·확인 후 새 제출한다 |
+| 인증·권한·공개 상태 오류, `SKIP_NOT_AVAILABLE`, `STAR_ALREADY_COMPLETED` | 자동 재전송 안 함 | 해당 상태를 안내·재조회한다. 응답을 못 받은 기존 요청이 있다면 먼저 기존 ID로 접수 여부를 복구한다 |
+| 성공 `201`·재전송 `200` | 재전송 불필요 | 모두 접수 성공으로 처리한다. 연출은 HTTP 상태가 아니라 회원·submissionId별 표시 이력으로 중복을 억제한다. 최초 201이 유실된 뒤 200으로 처음 복구한 결과도 표시할 수 있어야 한다 |
+
 ### 2.3 판 교체와 별 잠김
 
 | 코드 | HTTP | 뜻·프론트 처리 |
@@ -87,6 +100,8 @@
 **현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다. 구현은 5.2·5.3절 응답(200·202)부터 붙였고(`S15P21C206-140`), 나머지 API는 각 구현 때 붙인다.
 
 `BUNDLE_CHANGED` 본문은 공통 오류 본문에 `currentBundleId`를 더한다: `{"code": "BUNDLE_CHANGED", "message": "...", "currentBundleId": "b-3"}`.
+
+**D-5 재전송 성공 예외:** POST 재전송 200은 판이 바뀌어도 접수 당시 본문을 그대로 반환한다. `X-Current-Bundle`과 본문 `bundleId`가 다르면 성공을 취소하거나 다시 제출하지 않고 결과에 ‘접수 당시 판 기준’을 표시한다. 최신 진행·공개 상태·통계·후속 행동이 필요한 영역만 6.6절(145)로 재조회하며 당시 판정·선택·스냅샷을 덮어쓰지 않는다. 분석을 계속할 때는 5.1절로 현재 문맥을 갱신한다. GET 미연결·실패 시 당시 결과를 유지하고 최신 영역의 미확인 상태를 표시한다.
 
 ### 2.4 잔차 상태 열거형
 
@@ -717,7 +732,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `selection` | candidate만 | 원본 입력. `sourcePeakGridIndex`는 사용자가 선택한 봉우리의 `gridIndex`이며 주기도의 다른 위치를 직접 선택했으면 null이다. `epoch`·`duration`·정정 주기·성과를 보내도 무시한다(SUB-01) |
 | `userJudgment` | candidate만 | `LIKELY_PLANET` / `UNLIKELY_PLANET` / `UNSURE` |
 | `evidenceChecks` | 아니오 | `oddeven`, `secondary`, `ushape` 중 0~3개. 그 외 값(중심 위치 포함)은 400(POL-13, AT-93) |
-| `memo` | 아니오 | 0~200 유니코드 코드포인트. 2026-09-17 사용자 채택·프론트 적용, 서버 DTO 검증·오류 응답 반영 확인 대기 |
+| `memo` | 아니오 | 0~200 유니코드 코드포인트. 서버 DTO 검증·초과 시 `VALIDATION_FAILED` 반영 완료(143) |
 | `viewState` | 아니오 | 재현용. 서버 매칭 입력이 아니며 범위만 검증(HIS-02). `foldedXZoomRatio`를 제공하면 유한한 수이며 `1 ≤ 값 ≤ 32`여야 한다. 기존 1~8 값도 유효하다(SRS v1.3.1 변경안) |
 | `retryOfSubmissionId` | 아니오 | [다시 풀기]에서 온 제출. 본인 제출·같은 TIC만 |
 
@@ -725,7 +740,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ### 6.2 검증 (SUB-02, Q03)
 
-순서대로 검사하고 첫 실패에서 400을 돌려준다. `fieldErrors[].field`는 아래 이름을 쓴다.
+아래 순서로 검사하고 첫 실패에서 표의 HTTP 상태를 돌려준다. `fieldErrors` 원소는 `{field, reason}`이며 `field`는 아래 이름을 쓴다. 예: `{"field":"selection.periodDays","reason":"유한한 양수여야 합니다."}`. 요청 ID 유지·갱신은 2.2절을 따른다.
 
 | 순서 | 검사 | 실패 코드 |
 |---|---|---|
@@ -749,7 +764,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ### 6.3 처리 순서 (한 트랜잭션, NFR-01)
 
-**143 채택 계약(2026-09-19, 사용자 결정):** `foldedError`는 150개 위상 구간별 `1.4826 × MAD` 밝기 산포이며 표준오차/신뢰구간이 아니다. 빈 구간은 flux/error 모두 null, 단일 점은 error만 null이다. 원본 제출 주기와 판의 T를 사용하며 `folded-mad-v0`를 이력에 기록한다. 정규화·응답 보존·세부 계산은 [제출 구현 계약·인수 조건](../../../docs/api/exploration/submission-readiness.md)을 따른다. POST 재전송은 저장한 최초 본문을 재현하고 GET 145의 현재값 필드와 구분한다. 필요한 잔차가 미준비면 409 `SUBMISSION_CONTEXT_NOT_READY`와 residual 상태를 반환하고 저장하지 않는다. 봉우리 생산자 부재·통신/배열 손상은 503 `DEPENDENCY_UNAVAILABLE`이다. 141·147은 담당자 인계 후 실제 연결을 검증하며 143 본체의 선행 완료 조건으로 삼지 않는다.
+**143 채택 계약(2026-09-19, 사용자 결정):** `foldedError`는 150개 위상 구간별 `1.4826 × MAD` 밝기 산포이며 표준오차/신뢰구간이 아니다. 빈 구간은 flux/error 모두 null, 단일 점은 error만 null이다. 원본 제출 주기와 판의 T를 사용하며 새 제출은 bin 중심 시각 기준 `folded-mad-v1`을 이력에 기록한다. 기존 v0 배열·버전과 최초 응답은 보존하며 소급 재계산하지 않는다. 정규화·응답 보존·세부 계산은 [제출 구현 계약·인수 조건](../../../docs/api/exploration/submission-readiness.md)을 따른다. POST 재전송은 저장한 최초 본문을 재현하고 GET 145의 현재값 필드와 구분한다. 필요한 잔차가 미준비면 409 `SUBMISSION_CONTEXT_NOT_READY`와 residual 상태를 반환하고 저장하지 않는다. 봉우리 생산자 부재·통신/배열 손상은 503 `DEPENDENCY_UNAVAILABLE`이다. 141·147은 담당자 인계 후 실제 연결을 검증하며 143 본체의 선행 완료 조건으로 삼지 않는다.
 
 ```text
 1. request_id로 기존 행 조회 → 있으면 본문 해시 비교 후 재현 또는 IDEMPOTENCY_CONFLICT
@@ -835,6 +850,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `nextActions` | 서버 힌트(RES-03·08). `NEXT_CURVE`(남은 탐색 가능 신호 있음), `VIEW_DETAIL`, `RETRY`, `PUBLISH_ANALYSIS`(미확정 매칭), `LATER`, `VIEW_RESULT`, `GO_HOME`, `DISCUSS`(not_matched), `SKIP_TUTORIAL`. 실행 시 서버가 다시 검증. 게시 화면으로 강제 이동시키지 않는다(AT-36) |
 
 `ambiguous_match`: 어느 후보도 고르지 않고 `signal: null`, 성과·진행 변화 없음, `nextActions`는 `RETRY`(AT-13). 판 교체 후 재전송된 `requestId`는 저장된 결과를 그대로 재현하며 새 판으로 다시 판정하지 않는다.
+
+`GO_HOME`은 `matched`·`matched_harmonic`·`duplicate` 결과에서 제공한다(RES-08). `DISCUSS`는 `not_matched`에서만 제공하며 같은 TIC·DISCUSSION·현재 본인 historyId를 가진 작성 초안을 연다(COM-10). 힌트 자체는 게시·성과를 만들지 않는다. `none_wrong`·`skipped`에는 이 두 힌트를 추가하지 않고 `ambiguous_match`는 기존대로 `RETRY`만 제공한다. 기존 저장 응답에 새 힌트를 소급 추가하지 않는다.
 
 ### 6.5 특수 제출
 

@@ -688,7 +688,7 @@ erDiagram
 |---|---|
 | history_id PK FK | 매칭 성공 제출(matched·matched_harmonic·duplicate)에만 생성. 불일치 제출은 없음 |
 | bins SMALLINT DEFAULT 150 | 위상 구간 수. 구간은 위상 -0.5부터 0.5까지 균등하므로 **위상 값은 저장하지 않는다**. i번째 구간의 위상 = `-0.5 + (i + 0.5) / bins` |
-| folded_flux `real[]`, folded_err `real[]` | 구간별 밝기 중앙값과 MAD 산포(folded-mad-v0). 각 150개. 빈 구간 양쪽 NULL, 단일 점은 산포 NULL. 원본 제출 주기로 계산하며 재전송 때 재계산하지 않는다. "제출 당시 / 최신 데이터" 토글용 |
+| folded_flux `real[]`, folded_err `real[]` | 구간별 밝기 중앙값과 MAD 산포. 새 제출은 bin 중심 기준 folded-mad-v1, 기존 bin 시작 기준 v0는 보존한다(이력 versions.snapshotVersion으로 구분). 각 150개. 빈 구간 양쪽 NULL, 단일 점은 산포 NULL. 원본 제출 주기로 계산하며 재전송 때 재계산하지 않는다. "제출 당시 / 최신 데이터" 토글용 |
 | created_at | **PostgreSQL에 둔다(v0.3 결정).** 다시 만들 수 없는 기록이고 작다. 제출 100만 건이어도 1.2GB |
 
 **잔차·주기도 캐시는 Redis에 둔다** (DAT-14, v0.3 결정)

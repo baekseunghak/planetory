@@ -1,6 +1,6 @@
 # 탐사 API C02 계약 예제
 
-143번의 사용자 채택 계산·멱등·실패 경계와 본체/후속 연동 인수 구분은 [제출 구현 계약·인수 조건](submission-readiness.md)을 따른다. 141·147은 담당자 구현을 기다리며 본체 착수를 막지 않는다. `node docs/api/exploration/snapshot-v0.cjs`는 스냅샷 MAD의 합성 경계만 검증한다.
+143번의 사용자 채택 계산·멱등·실패 경계와 본체/후속 연동 인수 구분은 [제출 구현 계약·인수 조건](submission-readiness.md)을 따른다. 141·147은 담당자 구현을 기다리며 본체 착수를 막지 않는다. `node docs/api/exploration/snapshot-v0.cjs`는 보존된 v0(bin 시작) 계약의 합성 경계만 검증한다. 현재 v1(bin 중심)은 백엔드 `SubmissionTest`로 검증한다.
 
 [#133 검토안](../../../apps/backend/docs/exploration-contract-review.md)을 위한 합성 JSON이다. 2026-09-14 원격 `develop` `321f10b`의 SRS v1.2 변경안과 탐사 API Draft 0.3을 기준으로 한 **초안 예제**이며 운영 API 구현·권한 집행·수치 정책 승인 증거가 아니다.
 
