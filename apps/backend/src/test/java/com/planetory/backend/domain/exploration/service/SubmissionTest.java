@@ -116,8 +116,13 @@ class SubmissionTest {
         assertEquals(1,count("analysis_histories")); assertEquals(1,count("user_candidate_achievements"));
         assertEquals(150,jdbc.queryForObject("SELECT cardinality(folded_flux) FROM analysis_snapshots a JOIN analysis_histories h ON h.id=a.history_id WHERE h.user_id=?",Integer.class,member));
         jdbc.update("UPDATE publication_bundles SET status='archived' WHERE id=?",bundle);
+        long current=jdbc.queryForObject("INSERT INTO publication_bundles(tic_id,bundle_version,status,manifest,fold_reference_time_btjd,base_days)"
+                + " SELECT tic_id,?,'current',manifest,fold_reference_time_btjd,base_days FROM publication_bundles WHERE id=? RETURNING id",
+                Long.class,"test-"+UUID.randomUUID(),bundle);
         var replay=service.submit(member,tic,r);
         assertTrue(replay.replay()); assertEquals(first.body(),replay.body()); assertEquals(1,count("submissions"));
+        assertEquals("b-"+current,replay.currentBundleId());
+        assertEquals("b-"+bundle,replay.body().get("bundleId").asText());
         error(ErrorCode.IDEMPOTENCY_CONFLICT,()->service.submit(member,tic,change(r,"candidate","LIKELY_PLANET",3.0,"changed")));
         error(ErrorCode.IDEMPOTENCY_CONFLICT,()->service.submit(member(),tic,r));
     }
@@ -226,11 +231,72 @@ class SubmissionTest {
     @Test void 스냅샷은_MAD이며_빈구간과_단일점은_오차없음() {
         var s=new LightCurveSegment(1,1,(short)1,"daily",0,BigDecimal.valueOf(1440),4,new Float[]{1f,2f,3f,null},null,null);
         var result=FoldedSnapshot.calculate(List.of(s),1,0);
-        assertEquals(2f,result.foldedFlux()[75]); assertEquals(1.4826f,result.foldedError()[75]);
-        assertNull(result.foldedFlux()[0]);
+        assertEquals(2f,result.foldedFlux()[0]); assertEquals(1.4826f,result.foldedError()[0]);
+        assertNull(result.foldedFlux()[75]);
         var singleton=new LightCurveSegment(2,1,(short)1,"daily",0.5,BigDecimal.ONE,1,new Float[]{4f},null,null);
         var boundary=FoldedSnapshot.calculate(List.of(singleton),1,0);
         assertEquals(4f,boundary.foldedFlux()[0]); assertNull(boundary.foldedError()[0]);
+    }
+    @Test void 중심시각은_세그먼트별간격과_위상순환경계를_반영() {
+        var a=new LightCurveSegment(1,1,(short)1,"a",0,BigDecimal.valueOf(360),1,new Float[]{1f},null,null);
+        var b=new LightCurveSegment(2,1,(short)1,"b",0,BigDecimal.valueOf(720),1,new Float[]{2f},null,null);
+        var c=new LightCurveSegment(3,1,(short)1,"c",0.375,BigDecimal.valueOf(360),1,new Float[]{3f},null,null);
+        var d=new LightCurveSegment(4,1,(short)1,"d",0.875,BigDecimal.valueOf(360),1,new Float[]{4f},null,null);
+        var result=FoldedSnapshot.calculate(List.of(a,b,c,d),1,0);
+        assertEquals("folded-mad-v1",FoldedSnapshot.VERSION);
+        assertEquals(1f,result.foldedFlux()[93]); // 0.125
+        assertEquals(2f,result.foldedFlux()[112]); // 0.25
+        assertEquals(3f,result.foldedFlux()[0]); // +0.5 -> -0.5
+        assertEquals(4f,result.foldedFlux()[75]); // 1 -> 0
+    }
+    @Test void 후속행동은_매칭과_미매칭과_신호없음을_구분() {
+        var unmatched=service.submit(member,tic,change(request(),"candidate","LIKELY_PLANET",5.0,null)).body();
+        assertEquals("not_matched",unmatched.at("/match/status").asText());
+        assertTrue(unmatched.get("nextActions").toString().contains("DISCUSS"));
+        assertFalse(unmatched.get("nextActions").toString().contains("GO_HOME"));
+        var none=service.submit(member,tic,change(request(),"no_candidate",null,null,null)).body();
+        assertFalse(none.get("nextActions").toString().contains("DISCUSS"));
+        var matched=service.submit(member,tic,request()).body();
+        assertTrue(matched.get("nextActions").toString().contains("GO_HOME"));
+        assertFalse(matched.get("nextActions").toString().contains("DISCUSS"));
+        assertTrue(service.submit(member,tic,request()).body().get("nextActions").toString().contains("GO_HOME"));
+    }
+    @Test void v0이력은_재전송시_새계산으로_덮어쓰지않음() {
+        var r=request(); var first=service.submit(member,tic,r);
+        assertEquals("folded-mad-v1",jdbc.queryForObject("SELECT versions->>'snapshotVersion' FROM analysis_histories WHERE user_id=?",String.class,member));
+        // 이전 버전의 저장 기록을 구성한다. 앱 권한이 아닌 테스트 소유자만 수정한다.
+        jdbc.update("UPDATE analysis_histories SET versions=jsonb_set(versions,'{snapshotVersion}','\"folded-mad-v0\"') WHERE user_id=?",member);
+        jdbc.update("UPDATE analysis_snapshots SET folded_flux=array_fill(7::real,ARRAY[150]) WHERE history_id=(SELECT id FROM analysis_histories WHERE user_id=?)",member);
+        var replay=service.submit(member,tic,r);
+        assertTrue(replay.replay()); assertEquals(first.body(),replay.body());
+        assertEquals("folded-mad-v0",jdbc.queryForObject("SELECT versions->>'snapshotVersion' FROM analysis_histories WHERE user_id=?",String.class,member));
+        assertEquals(7f,jdbc.queryForObject("SELECT folded_flux[1] FROM analysis_snapshots WHERE history_id=(SELECT id FROM analysis_histories WHERE user_id=?)",Float.class,member));
+    }
+    @Test void 직렬화실패는_새트랜잭션에서_재시도하고_세번후_중단() {
+        var ids=new java.util.ArrayList<Long>();
+        org.mockito.Mockito.doAnswer(call->{
+            ids.add(jdbc.queryForObject("SELECT txid_current()",Long.class));
+            if(ids.size()==1) throw new org.springframework.dao.PessimisticLockingFailureException("serialization");
+            return call.callRealMethod();
+        }).when(repository).lockMember(member);
+        assertFalse(service.submit(member,tic,request()).replay());
+        assertEquals(2,ids.size()); assertNotEquals(ids.get(0),ids.get(1));
+        org.mockito.Mockito.doThrow(new org.springframework.dao.PessimisticLockingFailureException("serialization"))
+                .when(repository).lockMember(member);
+        org.mockito.Mockito.clearInvocations(repository);
+        error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->service.submit(member,tic,request()));
+        org.mockito.Mockito.verify(repository,org.mockito.Mockito.times(3)).lockMember(member);
+        assertEquals(1,count("submissions"));
+    }
+    @Test void 재시도대기_인터럽트는_복원하고_추가제출하지않음() {
+        org.mockito.Mockito.doThrow(new org.springframework.dao.PessimisticLockingFailureException("serialization"))
+                .when(repository).lockMember(member);
+        try {
+            Thread.currentThread().interrupt();
+            error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->service.submit(member,tic,request()));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally { Thread.interrupted(); }
+        assertEquals(0,count("submissions"));
     }
     @Test void 스냅샷저장_실패는_제출과_이력까지_롤백() {
         org.mockito.Mockito.doThrow(new IllegalStateException("snapshot failure")).when(repository)
