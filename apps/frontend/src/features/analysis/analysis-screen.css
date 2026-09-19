@@ -1015,10 +1015,12 @@ body:has(.analysis-screen) {
   background: transparent;
   border: 1px solid var(--panel-line);
   color: var(--fg-1);
-  font-size: 13px;
+  /* 본문은 13px이지만 버튼 글자는 화면의 다른 주요 버튼과 같은 14px이다.
+     44px 높이에 13px 글자를 넣으면 세로 여백만 크고 글자가 작아 보인다. */
+  font-size: 14px;
   border-radius: var(--radius-control);
   min-height: 44px;
-  padding: 8px 16px;
+  padding: 10px 20px;
 }
 .analysis-screen .submission-dialog-actions {
   display: flex;
@@ -1029,6 +1031,8 @@ body:has(.analysis-screen) {
   /* 판단 화면의 `.analysis-judgment form > button`이 100% 폭을 주고 클래스가
      하나 더 많아 특이도에서 이긴다. 같은 수로 맞춰 뒤에서 덮는다. */
   width: auto;
+  /* 두 글자와 세 글자 버튼의 폭이 달라 보이지 않도록 최소 너비를 맞춘다. */
+  min-width: 96px;
   background: var(--accent);
   border-color: var(--accent);
   color: var(--bg);
