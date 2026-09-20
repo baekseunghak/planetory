@@ -78,6 +78,7 @@ class PlanTest(unittest.TestCase):
             "total_bytes": counts[sector] * 4,
             "part_count": 0,
             "run_id": old_run if sector in (3, 4, 5) else new_run,
+            "source_list_sha256": "a" * 64 if sector in (3, 4, 5) else "b" * 64,
         } for sector in range(1, 14)]
         coverage = {
             "schema": "planetory.ingestion-coverage.v1",

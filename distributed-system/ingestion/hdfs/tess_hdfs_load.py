@@ -294,6 +294,7 @@ def load_coverage_map(path: Path, expected_sha256: str) -> dict:
     for row in value.get("sectors", []):
         sector = int(row.get("sector", -1))
         run_id = str(row.get("run_id", ""))
+        source_sha = str(row.get("source_list_sha256", ""))
         expected = int(row.get("expected", -1))
         validated = int(row.get("validated", -1))
         total_bytes = int(row.get("total_bytes", -1))
@@ -302,6 +303,7 @@ def load_coverage_map(path: Path, expected_sha256: str) -> dict:
             or sector in seen
             or run_id not in run_sources
             or sector not in run_sectors.get(run_id, set())
+            or source_sha != run_sources.get(run_id)
             or expected < 1
             or validated != expected
             or total_bytes < 1
