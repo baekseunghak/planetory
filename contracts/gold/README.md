@@ -87,9 +87,9 @@ Gold는 다음을 게시한다.
 
 `transit_model` JSONB의 필드·단위·shape·수치 경계는 [`transit-model.schema.json`](transit-model.schema.json)(계약 1.0, `S15P21C206-113` 소유)이 정본이다. 정상·불량 예제는 [`examples/transit-model.valid.json`](examples/transit-model.valid.json)·[`examples/transit-model.invalid.json`](examples/transit-model.invalid.json)이며, 수식·필드 사이 규칙·실패 코드는 [`libs/astro-kernel`](../../libs/astro-kernel/README.md)이 구현하고 같은 예제로 검사한다. 정상 fixture의 후보 `transit_model`은 이 형식을 따른다. `validate.cjs`는 shape 규칙을 중복 구현하지 않고 비어 있지 않은 객체인지와 manifest 버전 연결만 검사한다.
 
-### 4.1 114 비닝 운영 채택안 — MR !101 재리뷰 대기
+### 4.1 S15P21C206-114 비닝 운영 채택안
 
-다음은 114의 실측·화면 리뷰와 처리·운영 리뷰를 반영한 **목표 계약 변경안**이다. 승인·운영 구현 완료를 뜻하지 않는다. 근거와 부분 bin 분포는 [114 벤치마크](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 둔다. 123은 승인된 규칙으로 구현하며 실험 코드를 그대로 운영에 복사하지 않는다.
+다음은 114의 실측·화면 리뷰와 처리·운영 리뷰를 반영한 **목표 계약 변경안**이다. 운영 구현 완료를 뜻하지 않는다. 승인 진행 상태는 [정합화 요청](../../docs/project/planetory-doc-sync-requests.md)과 MR !101 활동에서 관리한다. 근거와 부분 bin 분포는 [114 벤치마크](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 둔다. 123은 승인된 규칙으로 구현하며 실험 코드를 그대로 운영에 복사하지 않는다.
 
 | 항목 | 채택안 |
 | --- | --- |

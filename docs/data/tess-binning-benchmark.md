@@ -1,10 +1,10 @@
 # 114 세그먼트·비닝 해상도 실험
 
-담당: 윤성용 / Jira: S15P21C206-114 / 상태: 9별 실측·3차 화면 검토 완료, 운영 채택안 보완·처리 리뷰 재승인 대기.
+담당: 윤성용 / Jira: S15P21C206-114 / 상태: 9별 실측·3차 화면 검토 완료, 운영 채택안·후속 인계 기록. 승인 상태는 MR !101과 정합화 요청에서 관리한다.
 
 ## 목적과 경계
 
-기본 10분 비닝에서 짧은 통과의 깊이·형태와 관측 공백이 얼마나 보존되는지 비교한다. 110 BLS 승인과 독립적인 실험이다. 전처리는 42의 `biweight_1.0d`를 그대로 재사용한다. 앞부분은 원 실행의 **실험 규칙**이며 상한 자동 확대를 포함한다. 아래 운영 채택안은 이를 구분하여 10분 평균·상한 초과 실패를 선택한다. 115 discoverable 판정, 123 운영 구현과 분리하며 MR !101 재승인 전 확정·구현 완료로 해석하지 않는다.
+기본 10분 비닝에서 짧은 통과의 깊이·형태와 관측 공백이 얼마나 보존되는지 비교한다. 110 BLS 승인과 독립적인 실험이다. 전처리는 42의 `biweight_1.0d`를 그대로 재사용한다. 앞부분은 원 실행의 **실험 규칙**이며 상한 자동 확대를 포함한다. 아래 운영 채택안은 이를 구분하여 10분 평균·상한 초과 실패를 선택한다. 115 discoverable 판정, 123 운영 구현과 분리하며 실험 완료를 운영 구현 완료로 해석하지 않는다.
 
 정본: [ERD](../architecture/database-erd.md)의 light_curve_segments, [Gold 계약](../../contracts/gold/README.md), [고정 모델 커널](../../libs/astro-kernel/README.md). 저장 시각은 bin 시작이고 모델 비교는 bin 중심이다. Gold의 빈 bin은 NULL, gaps는 인덱스 폐구간이다. 실험 NPZ의 NaN은 결측 표현일 뿐 게시 가능한 Gold 배열이 아니다.
 
@@ -74,7 +74,7 @@ SVG 선택 조건은 현재 코드에 고정돼 있으며 설정과 자동 연�
 2. 완료: 0.5시간 주입 및 L 98-59 d의 0.84시간 실제 신호, 미측정·전처리 실패 기록.
 3. 완료: 상한·경계·결측 합성 테스트와 실제 상한 확대 미발생을 구분. 시간별 세부 형태·사용자 선택 가능성은 화면 검토에서 확인한다.
 4. 완료: 백지웅의 3차 화면 리뷰까지 반영. 추가 화면 자료 요청 없음.
-5. 운영 채택안·115/123 인계는 아래와 같이 결정하여 재리뷰한다. 김동혁 처리·운영 리뷰 승인과 MR 병합 전 티켓 완료나 운영 채택 상태가 아니다.
+5. 운영 채택안·115/123 인계는 아래와 같이 결정하여 재리뷰한다. 승인 진행 상태는 MR 활동과 정합화 요청에서 관리하며 운영 구현 여부와 구분한다.
 
 ## 2026-09-19 전체 실행 결과
 
@@ -189,7 +189,7 @@ ZIP SHA-256: `144ec32757386fd45229f928dbefc66048da1ff33ed9f524e53568c5107fcf43`.
 
 ## 운영 채택안과 115·123 인계
 
-MR !101 처리 리뷰에 따라 운영 규칙을 선택했다. 규칙 정본 변경안은 [Gold 계약 4.1](../../contracts/gold/README.md#41-114-비닝-운영-채택안--mr-101-재리뷰-대기)이며 김동혁 재리뷰·MR 승인 전이다. ERD의 ‘비닝하면 점별 오차가 같아진다’는 근거 없는 설명도 같은 MR에서 제거했다. 실험 코드·설정·원 결과·checksum은 변경하지 않았고, 실제 실험을 재실행하지 않았다.
+MR !101 처리 리뷰에 따라 운영 규칙을 선택했다. 규칙 정본 변경안은 [Gold 계약 4.1](../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)이다. 승인 진행 상태는 [정합화 요청](../project/planetory-doc-sync-requests.md)과 MR !101에서 관리한다. ERD의 ‘비닝하면 점별 오차가 같아진다’는 근거 없는 설명도 같은 MR에서 제거했다. 실험 코드·설정·원 결과·checksum은 변경하지 않았고, 실제 실험을 재실행하지 않았다.
 
 ### 9별 10분 부분 bin의 관측점 수
 
@@ -210,31 +210,20 @@ MR !101 처리 리뷰에 따라 운영 규칙을 선택했다. 규칙 정본 변
 
 전체 bin 80,225 = 비어 있지 않은 68,910 + 빈 bin 11,315다. 합계 비율은 별별 비율 평균이 아닌 합산 분자/분모다. 1~4점은 3,038/68,910 (4.4086%), 1~2점은 346/68,910 (0.5021%)다. 작은 비율이 개별 bin의 신뢰도를 보장하지는 않는다. ‘관측점 수가 적은 bin’과 ‘통과 경계를 가로지르는 bin’도 같은 개념이 아니다.
 
-재집계는 `tess-bench` Python 환경에서 아래와 같이 원 NPZ를 읽는다(작업 디렉터리 `experiments/tess-bench`). 기존 그림 ZIP에는 원 NPZ가 포함되지 않으므로 이 재집계에는 원 실행 디렉터리가 필요하다.
+재검산용 `experiments/tess-bench/results/review-114-counts-84d4cc93.zip`을 MR에 첨부한다. ZIP SHA-256은 `93e5a9f75bf6dea9926440e471b2706a864ddbacb738e0930965f13af92725c0`이다. 23 Sector의 mean·median **counts만** 포함하며 FITS·flux 배열은 포함하지 않는다. 기존 segments.csv·원 manifest, 추출 manifest, 검산 코드와 README를 함께 담았다.
 
-```python
-import csv, hashlib, json
-from pathlib import Path
-import numpy as np
+원 NPZ 46개 hash 검사는 [추출 스크립트](../../experiments/tess-bench/scripts/package_binning_counts.py)가 수행한다. median 일치, counts 합/n_kept, 0-count/n_empty, 길이/n_points도 실제 assertion으로 검사한다. 추출 manifest의 원 NPZ hash는 추출 시 확인한 연결 근거다. ZIP에 원 NPZ 본문은 없으므로 수신자가 원 NPZ의 전체 hash까지 다시 검사했다고 해석하지 않는다.
 
-p = Path("results/binning/run-20260919T120741Z-84d4cc93")
-m = json.loads((p / "manifest.json").read_text(encoding="utf-8"))
-expected = {Path(x["path"]).name: x["sha256"] for x in m["outputs"]}
-groups = {}
-assert hashlib.sha256((p / "segments.csv").read_bytes()).hexdigest() == expected["segments.csv"]
-with (p / "segments.csv").open(encoding="utf-8", newline="") as stream:
-    for row in csv.DictReader(stream):
-        if float(row["requested_minutes"]) != 10 or row["reducer"] != "mean":
-            continue
-        file = p / row["array_file"]
-        assert hashlib.sha256(file.read_bytes()).hexdigest() == expected[file.name]
-        with np.load(file, allow_pickle=False) as data:
-            counts = data["counts"]
-        histogram = np.array([(counts == k).sum() for k in range(1, 5)] + [(counts >= 5).sum()])
-        groups[row["target"]] = groups.get(row["target"], np.zeros(5, dtype=int)) + histogram
-groups["total"] = sum(groups.values())
-for target, values in groups.items():
-    print(target, values.tolist(), values.sum(), (100 * values / values.sum()).tolist())
+수신자는 ZIP을 풀고 다음 명령으로 첨부 파일의 checksum, 23개 Sector의 mean/median 일치, n_kept·n_empty·n_points, 별별·합계 표를 독립 재계산한다. Python 표준 라이브러리만 필요하다.
+
+```powershell
+python verify.py
+```
+
+원 실행 디렉터리를 가진 경우 `experiments/tess-bench`에서 다음 명령으로 새 ZIP을 만든다. 이미 존재하는 output은 덮어쓰지 않는다.
+
+```powershell
+uv run --locked python scripts/package_binning_counts.py --source results/binning/run-20260919T120741Z-84d4cc93 --output results/review-114-counts-new.zip
 ```
 
 **부분 bin 결정:** 모든 비어 있지 않은 bin을 유지하고 counts는 배치 진단에만 보존한다. 점 수 기각 기준의 이득을 측정하지 않았으므로 임의의 NULL 문턱을 새로 만들지 않는다. 1점 bin도 관측된 flux이며, 이를 정상 5점 bin과 같은 오차로 주장하지 않는다. Gold의 목적은 관측된 평균 곡선·모델 비교이고 점별 오차 추정 계약은 아니다. counts 없이 오차 가중치나 신뢰구간을 복원하는 사용은 허용하지 않는다는 한계를 함께 인계한다. 이 선택은 기존 mean 계산을 바꾸지 않아 원 결과를 재사용할 수 있다.
@@ -243,7 +232,7 @@ for target, values in groups.items():
 
 **상한·revision 결정:** 10분에서 20,000점은 약 138.9일 규모다. 운영에서는 상한 초과를 실패·격리하며 자동 확대하지 않는다. 실험 비교군의 확대 코드는 그대로 둔다. 운영 식별자는 원천 snapshot/checksum·전처리 버전·비닝 규칙 버전·운영 수치 구현 버전으로 구성하고 실험 `bin-exp-v1-*`을 재사용하지 않는다.
 
-| 대상 | 이번 MR 채택 규칙(재승인 대기) | 미확정·후속 검증 | 후속 담당 |
+| 대상 | 운영 채택안 | 미확정·후속 검증 | 후속 담당 |
 | --- | --- | --- | --- |
 | 115 | 기본 10분 mean과 부분 bin 유지·빈 bin NULL을 입력 조건으로 사용 | discoverable 판정 및 실제 데이터 검증. 이번 깊이 실험은 발견 가능 판정이 아님 | 윤성용(115), 김동혁 처리 리뷰 |
 | 123 | Gold 4.1의 격자·중심 평가·robust 산포·상한 실패·운영 revision 구현 | 실제 Silver→Gold 수치 대조, canonical revision 테스트, 빈 입력·산포 0 경계 검증. 수치 허용 오차는 미확정 | 윤성용(123), 김동혁 운영·강재민 계약 리뷰 |
@@ -251,3 +240,9 @@ for target, values in groups.items():
 | 화면 | 3차 정적 리뷰 완료. 공백 표현은 줌 수준별로 다르게 적용 | 실제 화면의 짧은 공백·구간 선택 상호작용 검증 | 백지웅 |
 
 114 종료 판단은 이 규칙·한계를 승인받고 인계를 남기는 것이다. 115·123의 운영 구현을 114에서 완료했다고 주장하지 않으며, 그 구현 전체를 기다리는 것과 114 채택안의 재승인을 기다리는 것을 구분한다.
+
+### 123 구현 시 설명·DB COMMENT 인계
+
+- `apps/backend/src/main/java/com/planetory/backend/domain/gold/GoldCatalogViews.java`의 `fluxScatter` JavaDoc을 세그먼트 전체 robust 산포(점별 오차 아님)로 정정한다.
+- 이미 적용된 `apps/backend/src/main/resources/db/migration/V1__initial_schema.sql`은 수정하지 않는다. 123에서 당시 최신 migration 다음 번호의 새 migration으로 `COMMENT ON COLUMN light_curve_segments.flux_scatter`를 같은 의미로 정정한다. 현재 사용하지 않은 번호를 미리 점유하지 않는다.
+- 새 migration 적용 후 DB column description과 Java/API 의미의 일치를 확인한다. 이 MR에서는 Java·SQL·운영 DB를 변경하지 않았다.
