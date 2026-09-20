@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
-import { useBundleRecovery } from "./AnalysisSession";
+import { useBundleRecovery, useCurveStepSession } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
 import { hasCelebrated, markCelebrated } from "./celebration";
 import { useSession } from "../../auth/SessionProvider";
@@ -47,12 +47,39 @@ function residualNote(status: string | null): string {
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const recoverBundle = useBundleRecovery();
+  const curveStep = useCurveStepSession();
   const { returnTo, currentPath } = usePageContext();
   const headingId = useId();
   const reminderRef = useRef<HTMLButtonElement>(null);
   const focusRef = useRef<HTMLParagraphElement>(null);
   const [closed, setClosed] = useState(false);
   const settled = state.phase === "settled" ? state : null;
+  /**
+   * [다음 곡선 단계로]의 목표. **접수 결과의 매칭 집합**으로 만든다.
+   * 진입 때 받은 `nextCurveContext`는 제출 전 값이라 방금 매칭한 후보가
+   * 빠져 있다. 계산 버전과 판은 접수 결과가 들고 있는 것을 쓴다.
+   */
+  const nextCurve =
+    curveStep && settled?.state === "accepted"
+      ? () => {
+          const { curveContext, progress } = settled.receipt;
+          curveStep.goTo({
+            ...curveContext,
+            curveStep: progress.matchedCandidateIds.length,
+            removedCandidateIds: progress.matchedCandidateIds,
+          });
+          // 결과를 닫고 분석 화면으로 돌아간다. 같은 화면에서 일어난다.
+          setClosed(true);
+        }
+      : undefined;
+  /**
+   * 잔차가 준비되지 않아 거절된 제출(#187)에서 계산을 요청한다. 목표는
+   * **지금 보고 있는 곡선 문맥**이다. 다른 단계를 준비시키는 것이 아니다.
+   */
+  const prepareResidual =
+    curveStep && settled?.state === "context-not-ready"
+      ? () => curveStep.prepare()
+      : undefined;
   /**
    * 접수 뒤 판이 바뀌었는가(D-5 재전송 성공 예외). 성공을 취소하지 않고
    * 최신이 필요한 축(진행·공개·통계·다음 행동)에만 모른다고 표시한다.
@@ -247,6 +274,16 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                     ? "로그인이 만료되었습니다. 다시 로그인한 뒤 제출해 주세요."
                     : settled.message}
             </p>
+            {/*
+              잔차를 준비시키는 길을 연다(#189). 서버가 「접수를 예약하거나
+              배경에서 대신 제출하지 않는다」고 못박았으므로 사용자가 눌러야
+              계산이 시작된다. 준비되면 같은 본문·ID로 다시 보낼 수 있다.
+            */}
+            {settled.state === "context-not-ready" && prepareResidual && (
+              <button type="button" onClick={prepareResidual}>
+                이 단계 계산 준비하기
+              </button>
+            )}
             {settled.state === "context-not-ready" && settled.residual && (
               <p className="submission-note">
                 {residualNote(settled.residual.status)}
@@ -317,6 +354,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           {settled?.state === "accepted" && (
             <NextActions
               receipt={settled.receipt}
+              onNextCurve={nextCurve}
               returnTo={returnTo}
               from={currentPath}
             />

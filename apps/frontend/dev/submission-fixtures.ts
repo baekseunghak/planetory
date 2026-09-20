@@ -238,6 +238,9 @@ function validate(
 }
 
 /** 6.4절 `submissionResult`. 매칭·성과는 합성 고정값이며 계산 결과가 아니다. */
+/** 신호를 실제로 맞힌 결과. 이때만 매칭 집합이 늘어난다. */
+const matchedStatuses = new Set(["matched", "matched_harmonic"]);
+
 function buildResult(
   ticId: string,
   body: Record<string, unknown>,
@@ -343,8 +346,17 @@ function buildResult(
       completionReason: kind === "skipped" ? "skipped" : null,
       reopenPending: false,
       currentCurveStep: record(body.curveContext)?.curveStep ?? 0,
-      matchedCandidateIds:
-        record(context.currentCurveContext)?.removedCandidateIds ?? [],
+      // 이 제출로 매칭한 후보를 진입 때의 집합에 **더한다**. 제거 조합을
+      // 그대로 쓰면 방금 맞힌 신호가 빠져 [다음 곡선]이 갈 곳을 잃는다.
+      matchedCandidateIds: [
+        ...new Set([
+          ...((record(context.progress)?.matchedCandidateIds as
+            string[] | undefined) ?? []),
+          ...(composed && matchedStatuses.has(String(composed.match.status))
+            ? [String(composed.match.candidateId)]
+            : []),
+        ]),
+      ].sort(),
       remainingDiscoverableCount: 1,
     },
     publication: composed

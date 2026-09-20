@@ -75,8 +75,10 @@ export function useCurveStep(context: AnalysisContext) {
   );
 
   const goTo = useCallback(
-    async (target: CurveContext, cameFrom: CurveContext | "back") => {
-      if (sameContext(target, viewing)) return;
+    async (target: CurveContext, cameFrom: CurveContext | "back" | "stay") => {
+      // `stay`는 이동이 아니라 **제자리 계산**이다. 보고 있는 단계의 잔차가
+      // 없어 제출이 거절됐을 때 쓴다. 같은 문맥이어도 그냥 돌아가면 안 된다.
+      if (cameFrom !== "stay" && sameContext(target, viewing)) return;
       running.current?.abort();
       const controller = new AbortController();
       running.current = controller;
@@ -86,10 +88,12 @@ export function useCurveStep(context: AnalysisContext) {
       const current = () => generation.current === mine;
 
       const commit = () => {
-        setViewing(target);
-        setVisited((list) =>
-          cameFrom === "back" ? list.slice(0, -1) : [...list, cameFrom],
-        );
+        if (cameFrom !== "stay") {
+          setViewing(target);
+          setVisited((list) =>
+            cameFrom === "back" ? list.slice(0, -1) : [...list, cameFrom],
+          );
+        }
         setTransition({ phase: "idle" });
       };
 
@@ -171,6 +175,20 @@ export function useCurveStep(context: AnalysisContext) {
       () => (moves.original ? goTo(moves.original, viewing) : undefined),
       [moves.original, goTo, viewing],
     ),
+    /**
+     * 목표를 직접 주고 옮긴다. 제출 결과의 [다음 곡선 단계로]가 쓴다.
+     * 진입 때 받은 `nextCurveContext`는 제출 전 값이라 방금 매칭한 후보가
+     * 빠져 있다. 접수 결과의 매칭 집합으로 만든 목표를 여기로 넘긴다.
+     */
+    goTo: useCallback(
+      (target: CurveContext) => goTo(target, viewing),
+      [goTo, viewing],
+    ),
+    /**
+     * 지금 보고 있는 단계의 잔차를 계산시킨다. 옮기지 않는다.
+     * 제출이 `SUBMISSION_CONTEXT_NOT_READY`로 거절됐을 때 쓴다.
+     */
+    prepare: useCallback(() => goTo(viewing, "stay"), [goTo, viewing]),
     /** 실패·대기열에서 같은 목표로 다시 시도한다. */
     retry: useCallback(() => {
       if (transition.phase === "failed" || transition.phase === "queue-full")

@@ -775,8 +775,10 @@ test("the next actions are the server's list and they lead somewhere real", asyn
   await expect(actions.getByRole("link", { name: "결과 보기" })).toBeVisible();
   // 상세 보기는 상세 절이 이미 맡았다. 여기서 또 내지 않는다.
   await expect(actions).not.toContainText("상세 보기");
-  // 화면 안에서 일어나는 동작은 옮겨 갈 곳이 없다고 그대로 말한다.
-  await expect(actions).toContainText("다음 곡선 단계로 · 연결 예정");
+  // 화면 안에서 일어나는 동작이라 링크가 아니라 버튼이다(#189이 이었다).
+  await expect(
+    actions.getByRole("button", { name: "다음 곡선 단계로", exact: true }),
+  ).toBeEnabled();
   // 6.4절: 매칭 성공에는 별지도로가 붙는다(RES-08).
   await expect(actions.getByRole("link", { name: "별지도로" })).toBeVisible();
 

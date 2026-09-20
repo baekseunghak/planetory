@@ -73,6 +73,12 @@ export type SubmissionProgress = {
   reopenPending: boolean;
   currentCurveStep: number;
   remainingDiscoverableCount: number;
+  /**
+   * 이 판에서 회원이 매칭한 활성 후보(6.4절). **제출 뒤의 값**이므로
+   * 진입 때 받은 `nextCurveContext`보다 최신이다. [다음 곡선 단계로]의
+   * 목표를 여기서 만든다.
+   */
+  matchedCandidateIds: string[];
 };
 export type SubmissionReceipt = {
   /**
@@ -163,6 +169,13 @@ function readProgress(value: unknown): SubmissionProgress {
       data.remainingDiscoverableCount,
       "progress.remainingDiscoverableCount",
     ),
+    // 없으면 빈 배열이다. 매칭한 것이 없다는 뜻이며 오류가 아니다.
+    matchedCandidateIds: (Array.isArray(data.matchedCandidateIds)
+      ? data.matchedCandidateIds
+      : []
+    )
+      .map((id: unknown) => text(id, "progress.matchedCandidateIds"))
+      .sort(),
   };
 }
 

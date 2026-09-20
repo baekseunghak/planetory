@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PERIODOGRAM_FIXTURE_TICS } from "../../dev/periodogram-fixtures.ts";
 import { RESIDUAL_FIXTURE_HEADER } from "../../dev/residual-job-fixtures.ts";
+import { beginRange, selectPeak, showJudgment } from "../analysis-ui";
 
 // 곡선 단계 이동(#189). 계산이 끝나야 곡선이 바뀐다.
 
@@ -97,4 +98,69 @@ test("the two queue refusals do not say the same thing", async ({ page }) => {
   // 내가 이미 돌리고 있는 작업이다. 기다리라고 하면 안 된다(D-4).
   await expect(bar(page)).toContainText("다른 곡선을 이미 계산하고 있습니다");
   await expect(bar(page)).not.toContainText("대기가 가득");
+});
+
+test("the result screen moves the step in place, not by navigating", async ({
+  page,
+}) => {
+  await freshTarget(page);
+  await page.goto(`/analysis/${NORMAL}`);
+  const before = page.url();
+  await selectPeak(page);
+  await beginRange(page);
+  await showJudgment(page);
+  await page.getByRole("radio", { name: "행성 같음", exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  const action = dialog
+    .getByTestId("next-actions")
+    .getByRole("button", { name: "다음 곡선 단계로", exact: true });
+  // 「연결 예정」이 아니라 실제 버튼이다.
+  await expect(action).toBeEnabled();
+  await action.click();
+
+  // 같은 화면에서 일어난다. 주소는 그대로다(SRS 3.2 흐름).
+  await expect(dialog).toBeHidden();
+  expect(page.url()).toBe(before);
+  // 진입 때 매칭해 둔 하나에 방금 맞힌 것이 더해져 단계 2다. 진입 응답의
+  // `nextCurveContext`(단계 1)를 그대로 썼다면 방금 맞힌 신호가 빠진다.
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "곡선 단계 2",
+  );
+});
+
+test("a submission refused for a missing residual can ask for it", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...request.headers(),
+        "x-fixture-submit": "context-not-ready",
+      },
+    });
+  });
+  await freshTarget(page);
+  await page.goto(`/analysis/${NORMAL}`);
+  await selectPeak(page);
+  await beginRange(page);
+  await showJudgment(page);
+  await page.getByRole("radio", { name: "모르겠음", exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("아직 제출할 수 없습니다");
+  // #187은 「준비되면 다시 보낼 수 있다」까지만 말했다. 이제 준비시킬 수 있다.
+  await dialog
+    .getByRole("button", { name: "이 단계 계산 준비하기", exact: true })
+    .click();
+  // 제자리 계산이다. 보고 있는 단계가 바뀌지 않는다.
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "원본 곡선",
+  );
 });
