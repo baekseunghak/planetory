@@ -140,6 +140,14 @@ docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT 
 - 테스트 데이터는 `operation_settings`에 행을 넣지 말고 V9가 넣은 `rule-0`을 참조한다. `'{}'` 같은 값은 CHECK가 거절하고, 적용된 행은 지우거나 비울 수 없으므로 `TRUNCATE`에 이 테이블을 넣지 않는다. 규칙 행이 필요한 테스트는 되돌리는 트랜잭션 안에서 넣는다(`OperationRulesTest`).
 - 기존 개발 DB에 형식 이전 규칙 행·공개되지 않은 대상 별·기간이 뒤집힌 회차가 있으면 V9가 건수를 알리고 되돌아간다. 행을 고치거나, 데이터를 버려도 되는 로컬 볼륨이면 아래 규칙의 볼륨 초기화로 새로 만든다.
 
+### V14 공개 분석 등록 권한
+
+`V14__public_analysis_app_grants.sql`(161)은 기존 `published_analyses`에 SELECT·INSERT와 시퀀스 권한을 부여하고 UPDATE·DELETE·TRUNCATE는 차단한다. 공식 스레드 부분 유일 인덱스와 History별 공개 유일 제약은 V1을 재사용한다. 162의 취소·재공개는 실제 구현 시 필요한 상태 열의 UPDATE 권한을 별도로 추가한다.
+
+V13은 160의 History 첨부 권한에 사용한다. **160을 먼저 병합하고 V13 → V14 순서로 적용한다.** 161 단독 브랜치의 테스트는 새 일회용 DB/격리 스키마에서 수행한다. V13 없이 V14를 적용한 임시 DB를 이후 통합 DB로 재사용하지 않는다. 개발·공유 DB에 V14를 먼저 적용하거나 out-of-order·repair로 순서를 우회하지 않는다. 병합 전 최신 develop의 번호를 다시 확인한다.
+
+단독 검증은 160과의 통합 검증을 대신하지 않는다. 160 병합 후 V13·V14가 모두 있는 상태에서 `PublicAnalysisTest`, `HistoryAttachmentTest`, `MemberCommunityPermissionTest`와 Flyway 재기동 검증을 수행한다.
+
 ### 마이그레이션 규칙
 
 - 새 변경은 `V2__설명.sql`, `V3__설명.sql`처럼 버전 번호와 두 개의 밑줄로 추가한다. 설명은 영문 snake_case로 쓴다.
