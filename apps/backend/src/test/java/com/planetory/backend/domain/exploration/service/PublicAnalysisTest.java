@@ -206,6 +206,29 @@ class PublicAnalysisTest {
         assertEquals(0, count("published_analyses", "user_id", member));
     }
 
+    @Test void 없는History는_404이고_공개와성과를_생성하지않는다() throws Exception {
+        mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
+                        .contentType("application/json").content("{\"historyId\":\"h-999999999999999999\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        assertEquals(0, count("posts", "candidate_id", candidate));
+        assertEquals(0, count("published_analyses", "user_id", member));
+        assertEquals(0, count("user_candidate_achievements", "user_id", member));
+    }
+
+    @Test void 저장된판정근거가없으면_503이고_현재라벨로공개하지않는다() throws Exception {
+        String history = submit(3);
+        jdbc.update("UPDATE submissions SET response_snapshot=NULL WHERE id="
+                + "(SELECT submission_id FROM analysis_histories WHERE id=?)", number(history));
+        mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
+                        .contentType("application/json").content("{\"historyId\":\"" + history + "\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"));
+        assertEquals(0, count("posts", "candidate_id", candidate));
+        assertEquals(0, count("published_analyses", "user_id", member));
+        assertEquals(0, count("user_candidate_achievements", "user_id", member));
+    }
+
     @Test void 같은History_동시공개는_한번만생성() throws Exception {
         String id = submit(3);
         var results = concurrent(() -> publications.publish(member, id), () -> publications.publish(member, id));

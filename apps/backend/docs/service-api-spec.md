@@ -258,7 +258,7 @@ if (response.status === 401) {
 {
   "items": [
     {"type":"POST","id":"p-201","ticId":"123456789","title":"밝기 감소에 관한 질문","author":{"memberId":"u-101","nickname":"별찾는사람"},"commentCount":4,"createdAt":"2026-09-09T03:00:00Z"},
-    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
+    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
   ],
   "nextCursor": null,
   "hasNext": false
@@ -624,7 +624,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 ```json
 {
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
-  "title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
+  "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
   "judgmentSummary":{
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
