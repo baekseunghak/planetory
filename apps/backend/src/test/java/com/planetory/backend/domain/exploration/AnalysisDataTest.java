@@ -36,6 +36,7 @@ import com.planetory.backend.global.error.ErrorCode;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 /**
@@ -89,7 +90,7 @@ class AnalysisDataTest {
 
     @BeforeEach
     void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         memberId = insertMember();
         strangerId = insertMember();
         ticId = insertStar("published");
@@ -459,7 +460,7 @@ class AnalysisDataTest {
     @Test
     void 잔차_결과가_있으면_원본_격자에_잔차_값을_싣는다() {
         OffsetDateTime computedAt = OffsetDateTime.of(2026, 9, 10, 2, 31, 10, 0, ZoneOffset.UTC);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-77", computedAt,
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-77", computedAt,
                 Map.of(sector14, new Float[] {1.0f, 1.0f, null, 1.0f}, sector41, new Float[] {1.0f, 1.0f}),
                 new Float[] {0.2f, 0.3f, 0.1f}));
         CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
@@ -480,7 +481,7 @@ class AnalysisDataTest {
 
     @Test
     void 잔차_결과의_점_수가_원본과_다르면_내주지_않는다() {
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-78", null,
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-78", null,
                 Map.of(sector14, new Float[] {1.0f}, sector41, new Float[] {1.0f, 1.0f}), new Float[] {0.2f}));
         CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
 
