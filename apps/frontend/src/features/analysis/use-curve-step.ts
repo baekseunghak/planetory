@@ -1,0 +1,181 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../../api";
+import type { AnalysisContext, CurveContext } from "./analysis-data";
+import { needsResidual, sameContext, stepMoves } from "./curve-step";
+import {
+  runResidualJob,
+  type ResidualOutcome,
+  type ResidualProgress,
+} from "./residual-job";
+
+export type StepTransition =
+  | { phase: "idle" }
+  /** 계산을 기다리는 중. **곡선은 아직 바꾸지 않는다.** */
+  | {
+      phase: "running";
+      target: CurveContext;
+      progress: ResidualProgress | null;
+    }
+  /** 계산이 실패했다. 보고 있던 곡선은 그대로다. */
+  | { phase: "failed"; target: CurveContext; message: string }
+  /** 대기열이 찼다. `activeJobId`가 있으면 내가 이미 돌리고 있는 작업이다. */
+  | {
+      phase: "queue-full";
+      target: CurveContext;
+      retryAfterSeconds: number;
+      activeJobId: string | null;
+    }
+  /** 판이 바뀌었다. 최신 판을 다시 불러와야 한다. */
+  | { phase: "bundle-changed"; currentBundleId: string | null };
+
+/**
+ * 곡선 단계 이동(7.1·7.2절). 개발 안내 「곡선 단계 전환」을 실행한다.
+ *
+ * **`COMPLETED`에서만 보는 곡선을 바꾼다.** 그 전까지 화면은 마지막 정상
+ * 곡선을 그대로 두고 진행만 알린다. 실패해도 바꾸지 않는다.
+ *
+ * **늦은 응답은 세대 번호로 버린다.** 중단(`AbortSignal`)만으로는 이미
+ * 네트워크를 떠난 응답을 막지 못해 과거 단계의 곡선이 현재와 섞일 수 있다.
+ */
+export function useCurveStep(context: AnalysisContext) {
+  const [viewing, setViewing] = useState<CurveContext>(context.curveContext);
+  const [transition, setTransition] = useState<StepTransition>({
+    phase: "idle",
+  });
+  /** 이번 세션에서 지나온 문맥. 마지막이 [이전 단계]의 대상이다. */
+  const [visited, setVisited] = useState<CurveContext[]>([]);
+  const generation = useRef(0);
+  const running = useRef<AbortController | null>(null);
+
+  // 별이나 판이 바뀌면 이 별의 이동 기록은 뜻이 없다.
+  useEffect(() => {
+    running.current?.abort();
+    running.current = null;
+    generation.current += 1;
+    setViewing(context.curveContext);
+    setVisited([]);
+    setTransition({ phase: "idle" });
+  }, [context.ticId, context.curveContext]);
+
+  useEffect(
+    () => () => {
+      running.current?.abort();
+    },
+    [],
+  );
+
+  const moves = useMemo(
+    () =>
+      stepMoves({
+        viewing,
+        next: context.nextCurveContext,
+        visited,
+      }),
+    [viewing, context.nextCurveContext, visited],
+  );
+
+  const goTo = useCallback(
+    async (target: CurveContext, cameFrom: CurveContext | "back") => {
+      if (sameContext(target, viewing)) return;
+      running.current?.abort();
+      const controller = new AbortController();
+      running.current = controller;
+      const mine = ++generation.current;
+      // 자기 세대가 아닌 결과는 버린다. 늦게 도착한 과거 단계의 응답이
+      // 지금 보고 있는 곡선을 덮어쓰면 안 된다.
+      const current = () => generation.current === mine;
+
+      const commit = () => {
+        setViewing(target);
+        setVisited((list) =>
+          cameFrom === "back" ? list.slice(0, -1) : [...list, cameFrom],
+        );
+        setTransition({ phase: "idle" });
+      };
+
+      const cached =
+        context.nextCurveContext &&
+        sameContext(target, context.nextCurveContext)
+          ? context.nextResidual
+          : sameContext(target, context.curveContext)
+            ? context.currentResidual
+            : null;
+      if (!needsResidual(target, cached)) {
+        commit();
+        return;
+      }
+
+      setTransition({ phase: "running", target, progress: null });
+      let outcome: ResidualOutcome;
+      try {
+        outcome = await runResidualJob({
+          request: api,
+          ticId: context.ticId,
+          target,
+          signal: controller.signal,
+          onProgress: (progress) => {
+            if (current())
+              setTransition({ phase: "running", target, progress });
+          },
+        });
+      } catch (error) {
+        if (controller.signal.aborted || !current()) return;
+        setTransition({
+          phase: "failed",
+          target,
+          message: `${(error as Error).message} 잠시 후 다시 시도해 주세요.`,
+        });
+        return;
+      }
+      if (!current()) return;
+      switch (outcome.state) {
+        case "ready":
+          commit();
+          return;
+        case "failed":
+          setTransition({ phase: "failed", target, message: outcome.message });
+          return;
+        case "queue-full":
+          setTransition({
+            phase: "queue-full",
+            target,
+            retryAfterSeconds: outcome.retryAfterSeconds,
+            activeJobId: outcome.activeJobId,
+          });
+          return;
+        case "bundle-changed":
+          setTransition({
+            phase: "bundle-changed",
+            currentBundleId: outcome.currentBundleId,
+          });
+          return;
+      }
+    },
+    [viewing, context],
+  );
+
+  return {
+    /** 지금 보고 있는 문맥. 계산이 끝나야 바뀐다. */
+    viewing,
+    transition,
+    moves,
+    next: useCallback(
+      () => (moves.next ? goTo(moves.next, viewing) : undefined),
+      [moves.next, goTo, viewing],
+    ),
+    previous: useCallback(
+      () => (moves.previous ? goTo(moves.previous, "back") : undefined),
+      [moves.previous, goTo],
+    ),
+    original: useCallback(
+      () => (moves.original ? goTo(moves.original, viewing) : undefined),
+      [moves.original, goTo, viewing],
+    ),
+    /** 실패·대기열에서 같은 목표로 다시 시도한다. */
+    retry: useCallback(() => {
+      if (transition.phase === "failed" || transition.phase === "queue-full")
+        return goTo(transition.target, viewing);
+    }, [transition, goTo, viewing]),
+    dismiss: useCallback(() => setTransition({ phase: "idle" }), []),
+  };
+}
