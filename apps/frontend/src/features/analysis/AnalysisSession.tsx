@@ -98,15 +98,20 @@ export function AnalysisSession({
   context,
   curve,
   recoverBundle,
+  step,
   children,
 }: {
   context: AnalysisContext;
   curve: CurveData;
   recoverBundle: () => boolean;
+  /**
+   * 단계 이동 상태. **페이지가 만든다.** 여기서 만들면 보고 있는 곡선을
+   * 차트·주기도가 따라갈 수 없다 — 그것들은 이 위에서 그려진다.
+   */
+  step: ReturnType<typeof useCurveStep>;
   children: ReactNode;
 }) {
   const session = useFoldSession(context, curve);
-  const step = useCurveStep(context);
   return (
     <BundleRecoveryContext.Provider value={recoverBundle}>
       <CurveStepContext.Provider value={step}>

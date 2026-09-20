@@ -1,3 +1,4 @@
+import { residualCurveReady } from "./residual-job-fixtures";
 import {
   analysisContextFixture,
   analysisCurveFixture,
@@ -206,17 +207,55 @@ export function periodogramFixtureResponse(
       message: "새 데이터 판을 다시 불러와 주세요.",
       currentBundleId: PERIODOGRAM_FIXTURE_BUNDLE,
     });
-  if (
-    url.searchParams.get("curveStep") !==
-      String(current.currentCurveContext.curveStep) ||
-    (url.searchParams.get("removed") ?? "") !==
-      current.currentCurveContext.removedCandidateIds.join(",")
-  )
+  const askedRemoved = (url.searchParams.get("removed") ?? "")
+    .split(",")
+    .filter(Boolean);
+  const askedStep = Number(url.searchParams.get("curveStep"));
+  // 5.2절: 제거 조합의 수가 곧 단계다.
+  if (!Number.isInteger(askedStep) || askedStep !== askedRemoved.length)
     return reply(400, {
       code: "VALIDATION_FAILED",
       message: "곡선 문맥을 확인해 주세요.",
     });
-  if (resource === "curves") return reply(200, periodCurveFixture(ticId));
+  const entry = current.currentCurveContext;
+  const asked = {
+    ...entry,
+    curveStep: askedStep,
+    removedCandidateIds: askedRemoved,
+  };
+  const sameAsEntry =
+    askedStep === entry.curveStep &&
+    askedRemoved.join(",") === entry.removedCandidateIds.join(",");
+  /*
+    진입 단계가 아닌 조합은 **계산이 끝났을 때만** 곡선·주기도가 있다
+    (5.2절). 원본은 계산이 필요 없다.
+  */
+  const ready =
+    sameAsEntry ||
+    askedRemoved.length === 0 ||
+    residualCurveReady(ticId, PERIODOGRAM_FIXTURE_BUNDLE, askedRemoved);
+  if (!ready && resource === "curves")
+    return reply(202, {
+      ticId,
+      bundleId: PERIODOGRAM_FIXTURE_BUNDLE,
+      foldReferenceTimeBtjd: current.bundle.foldReferenceTimeBtjd,
+      curveContext: asked,
+      residual: { status: null, jobId: null },
+      fluxUnit: "normalized",
+      segments: null,
+    });
+  if (!ready)
+    return reply(409, {
+      code: "RESIDUAL_NOT_READY",
+      message: "이 단계의 계산이 아직 끝나지 않았습니다.",
+    });
+  if (resource === "curves") {
+    const body = periodCurveFixture(ticId);
+    // 합성 곡선은 같은 모양이다. 검사가 보는 것은 **어느 문맥의 곡선을
+    // 내주는가**이지 잔차 계산의 정확도가 아니다.
+    body.curveContext = asked;
+    return reply(200, body);
+  }
   if (ticId === PERIODOGRAM_FIXTURE_TICS.unavailable)
     return reply(503, {
       code: "DEPENDENCY_UNAVAILABLE",
@@ -233,11 +272,15 @@ export function periodogramFixtureResponse(
       });
     const data = periodogramFixture(ticId);
     if (ticId === PERIODOGRAM_FIXTURE_TICS.malformed) data.power.pop();
+    // 주기도도 물어본 단계의 것으로 답한다. 진입 단계를 돌려주면 클라이언트가
+    // 문맥 불일치로 거절해 봉우리를 고를 수 없다.
+    data.curveContext = asked;
     return reply(200, data);
   }
   const data = candidatePeaksFixture(ticId);
   if (ticId === PERIODOGRAM_FIXTURE_TICS.mismatch)
     data.curveContext.periodogramConfigVersion = "other-version";
+  else data.curveContext = asked;
   if (ticId === PERIODOGRAM_FIXTURE_TICS.empty) data.peaks = [];
   return reply(200, data);
 }

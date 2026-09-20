@@ -1,15 +1,20 @@
 import { FoldViewControls } from "./FoldViewControls";
 import { AnalysisSteps } from "./AnalysisJudgment";
-import { stepName } from "./curve-step";
+import { sameContext, stepName } from "./curve-step";
 import { CurveStepBar } from "./CurveStepBar";
 import { useCurveStep } from "./use-curve-step";
+import { useMemo, type ReactNode } from "react";
 import "./analysis-screen.css";
 import { Link } from "react-router-dom";
 import { usePageContext } from "../../app/usePageContext";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useAnalysisData } from "./useAnalysisData";
 import { TimeCurveChart } from "./TimeCurveChart";
-import { contextKey } from "./analysis-data";
+import {
+  contextKey,
+  type AnalysisContext,
+  type CurveData,
+} from "./analysis-data";
 import { PeriodogramPanel } from "./PeriodogramPanel";
 import { AnalysisSession } from "./AnalysisSession";
 
@@ -67,6 +72,50 @@ function AnalysisData({ ticId }: { ticId: string }) {
         <button onClick={retry}>다시 불러오기</button>
       </section>
     );
+  // 여기부터는 문맥·곡선이 확실하다. 단계 이동 상태를 여기서 만들어야
+  // 보고 있는 곡선을 차트·주기도·제출이 함께 따라간다.
+  return (
+    <AnalysisReady
+      ticId={ticId}
+      context={context}
+      entryCurve={curve}
+      retry={retry}
+      recoverBundle={recoverBundle}
+      notice={notice}
+    />
+  );
+}
+
+function AnalysisReady({
+  ticId,
+  context,
+  entryCurve,
+  retry,
+  recoverBundle,
+  notice,
+}: {
+  ticId: string;
+  context: AnalysisContext;
+  entryCurve: Extract<CurveData, { kind: "ready" }>;
+  retry: () => void;
+  recoverBundle: () => boolean;
+  notice: ReactNode;
+}) {
+  const step = useCurveStep(context, entryCurve);
+  // 보고 있는 곡선. 전환이 끝나야 바뀌므로 그 전에는 진입 곡선 그대로다.
+  const curve = step.curve.kind === "ready" ? step.curve : entryCurve;
+  /**
+   * 아래로 내려보내는 문맥은 **보고 있는 단계**의 것이다. 주기도 조회와
+   * 제출이 모두 이 문맥을 쓰므로, 진입 문맥을 그대로 내려보내면 표시만
+   * 바뀌고 실제로 읽고 보내는 곳은 이전 단계가 된다.
+   */
+  const viewed = useMemo(
+    () =>
+      sameContext(step.viewing, context.curveContext)
+        ? context
+        : { ...context, curveContext: step.viewing },
+    [context, step.viewing],
+  );
   const total = curve.segments.reduce(
     (sum, segment) => sum + segment.nPoints,
     0,
@@ -83,11 +132,11 @@ function AnalysisData({ ticId }: { ticId: string }) {
         <h2>분석 데이터</h2>
         <dl>
           <dt>Bundle ID</dt>
-          <dd>{context.curveContext.bundleId}</dd>
+          <dd>{viewed.curveContext.bundleId}</dd>
           <dt>데이터 버전</dt>
           <dd>{context.bundleVersion}</dd>
           <dt>곡선 단계</dt>
-          <dd>{stepName(context.curveContext)}</dd>
+          <dd>{stepName(step.viewing)}</dd>
           <dt>확정 행성 보유 여부</dt>
           <dd>
             {isObservation(ticId)
@@ -154,7 +203,8 @@ function AnalysisData({ ticId }: { ticId: string }) {
       ) : (
         <AnalysisSession
           key={contextKey(curve.context)}
-          context={context}
+          context={viewed}
+          step={step}
           curve={curve}
           recoverBundle={recoverBundle}
         >
@@ -178,7 +228,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
             />
             <PeriodogramPanel
               key={`periodogram-${contextKey(curve.context)}`}
-              context={context}
+              context={viewed}
               curve={curve}
               reloadAnalysis={retry}
               recoverBundle={recoverBundle}

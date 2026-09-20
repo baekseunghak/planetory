@@ -201,3 +201,68 @@ test("a job that vanishes is recovered without the user pressing anything", asyn
   expect(posts).toHaveLength(2);
   expect(posts[1]).toBe(posts[0]);
 });
+
+test("what the bar says is what the charts and the submission use", async ({
+  page,
+}) => {
+  // 표시줄만 바뀌고 차트·주기도·제출이 이전 문맥이면 단계 이동이 아니다.
+  // 문구가 아니라 **실제로 나간 요청**을 본다.
+  const curves: string[] = [];
+  const periodograms: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    const step = url.searchParams.get("curveStep");
+    if (step === null) return;
+    if (url.pathname.endsWith("/curves")) curves.push(step);
+    if (url.pathname.endsWith("/periodogram")) periodograms.push(step);
+  });
+  await freshTarget(page);
+  await page.goto(`/analysis/${NORMAL}`);
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "원본 곡선",
+  );
+  expect(curves.at(-1), "들어올 때는 진입 단계를 읽는다").toBe("0");
+
+  await move(page, "다음 곡선 단계로").click();
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "곡선 단계 1",
+  );
+  // 표시가 바뀌었으면 곡선도 그 단계를 읽었어야 한다.
+  expect(curves.at(-1), "전환 뒤 곡선이 새 단계로 바뀌지 않았다").toBe("1");
+  await expect
+    .poll(() => periodograms.at(-1), {
+      message: "주기도가 이전 단계에 남아 있다",
+    })
+    .toBe("1");
+
+  // 제출도 보고 있는 단계로 나간다.
+  const sent: number[] = [];
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/submissions") || request.method() !== "POST")
+      return;
+    sent.push(JSON.parse(request.postData() ?? "{}").curveContext.curveStep);
+  });
+  await selectPeak(page, 1);
+  await beginRange(page);
+  await showJudgment(page);
+  await page.getByRole("radio", { name: "모르겠음", exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  const result = page.getByTestId("submission-result");
+  await expect(result).toBeVisible();
+  expect(sent, "제출이 이전 단계 문맥으로 나갔다").toEqual([1]);
+  // 옮긴 단계의 문맥이 서버에 받아들여진다. 거절되면 단계를 옮긴 뒤 제출을
+  // 할 수 없다는 뜻이다.
+  await expect(result).toContainText("접수되었습니다");
+
+  // 원본으로 돌아가면 다시 0을 읽는다.
+  await page
+    .getByTestId("submission-result")
+    .getByRole("button", { name: "닫기", exact: true })
+    .click();
+  await move(page, "← 이전 단계").click();
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "원본 곡선",
+  );
+  expect(curves.at(-1)).toBe("0");
+});

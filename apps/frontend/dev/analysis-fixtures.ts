@@ -1,3 +1,4 @@
+import { residualCurveReady } from "./residual-job-fixtures";
 // Synthetic display fixtures, version analysis-read-v1. See docs/analysis-data.md.
 // Deliberately short arrays, NOT a Gold export or a production-resolution sample.
 export const ANALYSIS_FIXTURE_BUNDLE = "9007199254740993";
@@ -194,13 +195,49 @@ export function analysisFixtureResponse(
         currentBundleId: ANALYSIS_FIXTURE_BUNDLE,
       },
     };
-  if (
-    url.searchParams.get("curveStep") !==
-      String(context.currentCurveContext.curveStep) ||
-    (url.searchParams.get("removed") ?? "") !==
-      context.currentCurveContext.removedCandidateIds.join(",")
-  )
+  const askedRemoved = (url.searchParams.get("removed") ?? "")
+    .split(",")
+    .filter(Boolean);
+  const askedStep = Number(url.searchParams.get("curveStep"));
+  // 5.2절: 제거 조합의 수가 곧 단계다.
+  if (!Number.isInteger(askedStep) || askedStep !== askedRemoved.length)
     return error(400, "VALIDATION_FAILED", "곡선 문맥을 확인해 주세요.");
+  const entry = context.currentCurveContext;
+  const sameAsEntry =
+    askedStep === entry.curveStep &&
+    askedRemoved.join(",") === entry.removedCandidateIds.join(",");
+  if (!sameAsEntry) {
+    /*
+      진입 단계가 아닌 곡선이다. **계산이 끝난 조합만 내준다**(5.2절).
+      원본(제거 없음)은 계산이 필요 없다.
+    */
+    const ready =
+      askedRemoved.length === 0 ||
+      residualCurveReady(ticId, ANALYSIS_FIXTURE_BUNDLE, askedRemoved);
+    const asked = {
+      ...entry,
+      curveStep: askedStep,
+      removedCandidateIds: askedRemoved,
+    };
+    if (!ready)
+      return {
+        status: 202,
+        body: {
+          ticId,
+          bundleId: ANALYSIS_FIXTURE_BUNDLE,
+          foldReferenceTimeBtjd: context.bundle.foldReferenceTimeBtjd,
+          curveContext: asked,
+          residual: { status: null, jobId: null },
+          fluxUnit: "normalized",
+          segments: null,
+        },
+      };
+    // 합성 곡선은 같은 모양을 쓴다. 이 검사가 보는 것은 **어느 문맥의
+    // 곡선을 내주는가**이지 잔차 계산의 정확도가 아니다.
+    const other = analysisCurveFixture(ticId);
+    other.curveContext = asked;
+    return { status: 200, body: other };
+  }
   if (ticId === ANALYSIS_FIXTURE_TICS.notComputed)
     return {
       status: 202,

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import type { AnalysisContext, CurveContext } from "./analysis-data";
+import {
+  contextKey,
+  curvePath,
+  decodeCurve,
+  type AnalysisContext,
+  type CurveContext,
+  type CurveData,
+} from "./analysis-data";
 import { needsResidual, sameContext, stepMoves } from "./curve-step";
 import {
   runResidualJob,
@@ -39,8 +46,50 @@ export type StepTransition =
  * **늦은 응답은 세대 번호로 버린다.** 중단(`AbortSignal`)만으로는 이미
  * 네트워크를 떠난 응답을 막지 못해 과거 단계의 곡선이 현재와 섞일 수 있다.
  */
-export function useCurveStep(context: AnalysisContext) {
+/**
+ * 목표 문맥의 곡선을 읽는다. `decodeCurve`가 **응답이 그 목표의 것인지**
+ * 대조하므로 과거 단계의 곡선이 섞이지 않는다. 읽지 못하면 null이다.
+ */
+async function readCurve(
+  context: AnalysisContext,
+  target: CurveContext,
+  signal: AbortSignal,
+): Promise<CurveData | null> {
+  try {
+    let status = 0;
+    const body = await api<unknown>(curvePath(context, target), {
+      signal,
+      onResponse: (response) => void (status = response.status),
+    });
+    const curve = decodeCurve(
+      body,
+      { ...context, curveContext: target },
+      status,
+    );
+    // 계산이 끝난 직후인데 아직 준비되지 않았다면 바꾸지 않는다.
+    return curve.kind === "ready" ? curve : null;
+  } catch {
+    return null;
+  }
+}
+
+export function useCurveStep(context: AnalysisContext, entry: CurveData) {
   const [viewing, setViewing] = useState<CurveContext>(context.curveContext);
+  /**
+   * 지금 보고 있는 곡선. **`viewing`과 함께 바뀐다.** 단계 이름만 바꾸고
+   * 곡선을 그대로 두면 표시와 실제가 달라진다.
+   */
+  const [curve, setCurve] = useState<CurveData>(entry);
+  // 판이 바뀌어 진입 자료를 다시 읽으면 보던 단계도 그 판의 것으로 돌아간다.
+  const entryKey = contextKey(context.curveContext);
+  const lastEntry = useRef(entryKey);
+  useEffect(() => {
+    if (lastEntry.current === entryKey) return;
+    lastEntry.current = entryKey;
+    setViewing(context.curveContext);
+    setCurve(entry);
+    setVisited([]);
+  }, [entryKey, context.curveContext, entry]);
   const [transition, setTransition] = useState<StepTransition>({
     phase: "idle",
   });
@@ -89,8 +138,24 @@ export function useCurveStep(context: AnalysisContext) {
       // 지금 보고 있는 곡선을 덮어쓰면 안 된다.
       const current = () => generation.current === mine;
 
-      const commit = () => {
+      /**
+       * 목표의 곡선을 **손에 넣은 뒤에** 보는 곳을 바꾼다. 이름만 먼저
+       * 바꾸면 표시줄은 다음 단계인데 차트·제출은 이전 문맥이 된다.
+       */
+      const commit = async () => {
         if (cameFrom !== "stay") {
+          const loaded = await readCurve(context, target, controller.signal);
+          if (!current()) return;
+          if (loaded === null) {
+            setTransition({
+              phase: "failed",
+              target,
+              message:
+                "계산은 끝났지만 곡선을 불러오지 못했습니다. 다시 시도해 주세요.",
+            });
+            return;
+          }
+          setCurve(loaded);
           setViewing(target);
           setVisited((list) =>
             cameFrom === "back" ? list.slice(0, -1) : [...list, cameFrom],
@@ -107,7 +172,7 @@ export function useCurveStep(context: AnalysisContext) {
             ? context.currentResidual
             : null;
       if (!needsResidual(target, cached)) {
-        commit();
+        await commit();
         return;
       }
 
@@ -136,7 +201,7 @@ export function useCurveStep(context: AnalysisContext) {
       if (!current()) return;
       switch (outcome.state) {
         case "ready":
-          commit();
+          await commit();
           return;
         case "failed":
           setTransition({ phase: "failed", target, message: outcome.message });
@@ -164,6 +229,7 @@ export function useCurveStep(context: AnalysisContext) {
   return {
     /** 지금 보고 있는 문맥. 계산이 끝나야 바뀐다. */
     viewing,
+    curve,
     transition,
     moves,
     next: useCallback(

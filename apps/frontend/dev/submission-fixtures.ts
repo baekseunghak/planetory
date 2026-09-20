@@ -159,8 +159,16 @@ function validate(
       { currentBundleId: current.bundleId },
     );
   // 3번: 제거 조합과 단계. 마지막 제출 단계와 같을 필요는 없다(EXP-09).
+  //
+  // 고를 수 있는 것은 **내가 매칭한 후보 전부**이지 마지막 제출 단계의
+  // 조합이 아니다(7.1절). 다음 단계로 옮기면 진입 문맥보다 더 많이 제거한
+  // 조합으로 제출하게 되므로, 진입 조합의 부분집합만 받으면 옮긴 뒤에는
+  // 아무것도 낼 수 없다.
   const removed = sent.removedCandidateIds;
-  const allowed = current.removedCandidateIds;
+  const matched = record(context.progress)?.matchedCandidateIds;
+  const allowed = Array.isArray(matched)
+    ? matched
+    : current.removedCandidateIds;
   if (
     !Array.isArray(removed) ||
     !Array.isArray(allowed) ||

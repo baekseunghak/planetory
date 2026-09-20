@@ -264,8 +264,15 @@ function readStage(value: unknown): AnalysisContext["progressStage"] {
   const known = stages.find((item) => item === stage);
   return known ?? invalid("progress.stage");
 }
-export function curvePath(context: AnalysisContext): string {
-  const curve = context.curveContext;
+/**
+ * 곡선 조회 경로. **보고 있는 문맥**을 받는다. 단계를 옮기면 진입 때 받은
+ * 문맥이 아니라 그 목표의 곡선을 읽어야 한다.
+ */
+export function curvePath(
+  context: AnalysisContext,
+  target: CurveContext = context.curveContext,
+): string {
+  const curve = target;
   const query = new URLSearchParams({
     bundleId: curve.bundleId,
     curveStep: String(curve.curveStep),

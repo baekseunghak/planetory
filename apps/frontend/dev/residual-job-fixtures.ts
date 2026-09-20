@@ -70,12 +70,27 @@ const completed = new Set<string>();
 const running = new Map<string, Job>();
 /** 이미 한 번 사라진 목표. 다시 요청하면 정상으로 간다. */
 const lostOnce = new Set<string>();
+/**
+ * 곡선을 내줄 수 있는 제거 조합. 계산이 끝나야 그 단계의 곡선이 생긴다
+ * (5.2절). 곡선 조회에는 모델·설정 버전이 실리지 않으므로 별·판·조합만으로
+ * 찾는다.
+ */
+const computedCurves = new Set<string>();
+const curveKey = (ticId: string, bundleId: string, removed: string[]) =>
+  `${ticId}:${bundleId}:${[...removed].sort().join(",")}`;
+/** 그 조합의 곡선이 준비됐는가. 개발용 곡선 응답이 묻는다. */
+export const residualCurveReady = (
+  ticId: string,
+  bundleId: string,
+  removed: string[],
+): boolean => computedCurves.has(curveKey(ticId, bundleId, removed));
 const byId = new Map<string, Job>();
 let serial = 0;
 
 export function resetResidualFixture(): void {
   completed.clear();
   lostOnce.clear();
+  computedCurves.clear();
   running.clear();
   byId.clear();
   serial = 0;
@@ -215,7 +230,17 @@ export function pollResidualJobFixture(jobId: string): FixtureReply {
   // 클라이언트가 같은 목표를 다시 요청했을 때 캐시가 없다.
   if (failing || status === "COMPLETED") {
     running.delete(job.key);
-    if (!failing) completed.add(job.key);
+    if (!failing) {
+      completed.add(job.key);
+      // 이 조합의 곡선이 이제 존재한다.
+      computedCurves.add(
+        curveKey(
+          job.ticId,
+          job.target.bundleId,
+          job.target.removedCandidateIds,
+        ),
+      );
+    }
   }
   return {
     status: 200,
