@@ -586,9 +586,12 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 **161 구현·후속 인계**
 
+- ID 오류 코드는 입력 위치별로 구분한다. 공개 등록 본문의 잘못된 `historyId` 형식은 400 `VALIDATION_FAILED`, 형식은 유효하나 없는 기록은 404 `RESOURCE_NOT_FOUND`다. 탐사 History 조회 경로의 잘못된 ID는 기존 계약대로 404 `RESOURCE_NOT_FOUND`이며 프론트는 ID만으로 공통 오류 코드를 가정하지 않는다.
+- 기존 공개가 존재하면 성과도 존재한다는 불변식을 전제로 재요청의 `achievementGranted=true`를 반환한다. 공개·성과는 같은 트랜잭션으로 저장하고 162의 취소·재공개·숨김은 성과를 회수하지 않는다. 성과 누락은 데이터 정합성 오류이며 정상적인 미보유(false)로 응답하지 않는다. 성과 회수 기능을 새로 도입한다면 응답 계약과 이 불변식을 함께 재설계한다.
+- 회원 선잠금 규칙은 `AchievementService.recognize`의 Javadoc을 따른다. 호출자는 회원 FK를 쓰기 전에 같은 트랜잭션에서 회원 행을 잠근다. 162에서 쓰기 경로를 추가할 때도 같은 순서를 적용한다.
 - 요청은 문자열 `historyId` 하나만 받는다. 다른 필드·숫자 ID·잘못된 형식은 400이며 작성자·판단·수치를 요청으로 변경할 수 없다. 기존 세션 인증·CSRF 검증을 따른다.
 - `PublicAnalysisService.publish`가 회원 행을 먼저 잠그고 공식 스레드·공개 기록·`AchievementService.recognize`를 같은 트랜잭션으로 확정한다. PostgreSQL 부분 유일 인덱스와 `ON CONFLICT DO NOTHING`으로 첫 스레드 생성 경합을 처리한다.
-- 등록은 그래프를 계산하거나 공개 상세를 조회하지 않는다. 공개 상세의 필드 제한은 탐사 8.5절 투영을 따른다. `judgmentSummary`는 탐사 제출 결과와 같은 최신 유효 공개 제출 쿼리를 사용한다.
+- 등록은 그래프를 계산하거나 공개 상세를 조회하지 않는다. 공개 상세의 필드 제한은 탐사 8.5절 투영을 따른다. `judgmentSummary`는 탐사 제출 결과의 **analysis 분기**와 같은 최신 유효 공개 제출 쿼리를 사용한다. 현재 라벨이 확정/FP로 바뀌어도 공개 등록·재요청의 집계는 `kind=public_analyses`와 `participantCount`·세 판단 건수·`percentages`·`asOf` 형식을 유지한다. 탐사 결과·History의 현재 `judgmentStatistics`는 현재 판정에 따라 `kind=graded`와 `matchedMemberCount`·`agreementPercent`로 달라질 수 있으며 집계 원천도 첫 매칭 기준이다. 164 공식 스레드 상세의 `judgmentSummary`는 공개 집계를 사용하고 탐사 현재 통계로 대체하지 않는다.
 - 응답의 `achievement.unlockedStars`는 144의 `DiscoveredStar` 전체 항목이며 재시도는 빈 배열이다. `achievement.result`는 이번 신규 인정이면 `recognized`, 기존 성과이면 `already_recognized`다.
 - 162는 취소·재공개 API와 공통 접근 정책, 164는 피드·목록·상세, 165는 집계 공통화·소비 경로 완성, 166은 신호별 독립 트랜잭션의 일괄 호출, 167은 출처 카드를 담당한다. 175 알림·177/178 통계 작업을 공개 트랜잭션에 넣지 않는다.
 - V14는 공개 분석 INSERT와 시퀀스 권한만 추가한다. 160의 V13 병합 후 V13 → V14 순서로 검증·병합하며 V13 파일을 161 브랜치에 복사하지 않는다.

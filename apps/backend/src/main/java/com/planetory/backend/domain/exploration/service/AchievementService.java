@@ -138,7 +138,11 @@ public class AchievementService {
                 wanted - unlocked.size(), skyVersion);
     }
 
-    /** 공개 재전송은 현재 성과를 읽기만 한다. 취소·숨김된 공개를 다시 인정하지 않는다. */
+    /**
+     * 공개 재전송은 현재 성과를 읽기만 한다. 취소·숨김된 공개를 다시 인정하지 않는다.
+     * 공개와 성과는 원자적으로 저장되며 공개 취소·숨김도 성과를 회수하지 않는다(서비스 API 9.3절).
+     * 기존 공개의 성과 누락은 정상적인 미보유가 아닌 데이터 불일치이므로 false로 숨기지 않는다.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public Recognition existingRecognition(long memberId, long candidateId) {
         long ticId = achievements.findCandidateTic(candidateId)

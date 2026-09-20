@@ -53,7 +53,7 @@ public class SubmissionService {
 
     public record Answer(JsonNode body, boolean replay, String currentBundleId) {}
 
-    /** 공개 등록 응답과 탐사 결과가 같은 최신 유효 제출 집계를 사용한다. 채점형 통계와는 별개다. */
+    /** 공개 집계는 재분류 후에도 public_analyses다. 탐사 결과의 analysis 분기와만 같은 쿼리다. */
     @Transactional(propagation = Propagation.MANDATORY)
     public Map<String, Object> publicJudgmentSummary(long candidateId) {
         return submissions.statistics(candidateId, new SubmissionRepository.Disposition("pc", "analysis", null));

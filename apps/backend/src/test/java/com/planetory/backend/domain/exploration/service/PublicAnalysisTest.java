@@ -194,6 +194,22 @@ class PublicAnalysisTest {
         assertEquals(candidate, jdbc.queryForObject("SELECT candidate_id FROM published_analyses WHERE history_id=?", Long.class, number(id)));
     }
 
+    @Test void 재분류후에도_공개집계는_탐사채점통계와_구분한다() {
+        String history = submit(3);
+        jdbc.update("UPDATE candidate_dispositions SET disposition='confirmed',answer_class='graded',planet_truth='planet' WHERE candidate_id=?", candidate);
+        var first = publications.publish(member, history);
+        assertEquals("public_analyses", first.judgmentSummary().get("kind"));
+        assertEquals(1L, first.judgmentSummary().get("participantCount"));
+        assertFalse(first.judgmentSummary().containsKey("matchedMemberCount"));
+        var current = (java.util.Map<?, ?>) histories.detail(member, history).submission().judgmentStatistics();
+        assertEquals("graded", current.get("kind"));
+        assertEquals(1L, current.get("matchedMemberCount"));
+        assertFalse(current.containsKey("participantCount"));
+        var replay = publications.publish(member, history);
+        assertEquals("public_analyses", replay.judgmentSummary().get("kind"));
+        assertEquals(1L, replay.judgmentSummary().get("participantCount"));
+    }
+
     @Test void 타인_미매칭_당시채점형_기록은공개불가() {
         String own = submit(3);
         error(ErrorCode.FORBIDDEN, () -> publications.publish(member(), own));
