@@ -139,11 +139,15 @@ manifest에는 환경·checkpoint·공식 자산 목록 hash·입력 manifest/CS
 실험용 `approved`는 PC/EB triage 통과이며 행성 확정·운영 승인과 다르다.
 
 ```powershell
-uv run --locked python scripts/run_calibration.py --split evaluation --conversion-manifest results/manifests/convert-4b5a3d6d.json --threshold-plan configs/triage_thresholds_v1.json
+uv run --locked python scripts/run_calibration.py --split evaluation --conversion-manifest results/manifests/convert-4b5a3d6d.json --threshold-plan configs/triage_thresholds_v1.json --calibration-manifest results/predictions/calibration-20260919T130911Z-bb71f278/run/manifest.json
 ```
 
 파일명은 기존 진입점 호환을 위해 유지한다. 기본 split은 calibration이다. evaluation에는 threshold plan이 필수이며,
-실행 전 입력 manifest와 모델 자산 hash 결합을 검사한다. 결과에 실험안 사본·hash·버전과 후보별 구간을 기록한다.
+실행 전 입력 manifest와 모델 자산 hash 결합을 검사한다. `--calibration-manifest`도 필수다.
+그 파일은 completed/calibration이어야 하며, 같은 디렉터리의 predictions.csv 실제 hash가 고정안과 calibration
+manifest 양쪽의 hash와 일치해야 한다. calibration과 evaluation의 conversion/model 연결도 같아야 한다.
+호스트에서 Docker 시작 전에 검사하고 컨테이너에서 추론 전에 다시 검사한다. 완료 manifest 기록 전 연결 변경도 거부한다.
+새 evaluation manifest에는 `calibration_manifest_sha256`을 기록한다. 결과에 실험안 사본·hash·버전과 후보별 구간을 기록한다.
 평가 결과를 보고 같은 v1 수치를 바꾸지 않는다. 새 수치가 필요하면 새 버전과 새 미사용 평가 세트로 검증한다.
 
 2026-09-19 사용자 evaluation `183da766` 완료: PC/EB TP 10·FN 1, junk FP 2·TN 16,
@@ -153,4 +157,19 @@ FP 2/18(11.11%)은 합성 백색 잡음에 대한 값이며 실제 계통 오차
 
 ```powershell
 uv run --locked python -m astronet_eval.metrics --run-dir results/predictions/evaluation-20260919T131808Z-183da766/run
+```
+
+## !102 재현성 리뷰 보완 (2026-09-20)
+
+calibration 연결 정상·누락·hash·split·status·conversion/model 불일치 테스트를 포함해 `uv run --locked python -m pytest -q`
+57개가 통과했다. 기존 평가 run의 파일은 바꾸지 않았다. 새 검증을 수행한 추론 결과처럼 과거 manifest를 수정하지 않는다.
+새 실행기의 실제 Docker 추론은 이번 보완에서 재실행하지 않았으며, 검증은 테스트와 저장 결과 사후 대조다.
+
+MR 첨부용 `results/review-118-183da766.zip`에는 원본 소형 파일 7개와 사후 검산 `verification.json`만 포함한다.
+FITS·checkpoint·NPZ는 포함하지 않고 ZIP도 커밋하지 않는다. 상세 해시·재집계 절차는
+[벤치마크 8절](../../docs/data/tess-astronet-benchmark.md#8-mr-102-재현성-보완과-리뷰-첨부)을 따른다.
+ZIP 생성 도구는 기존 출력 덮어쓰기를 거부하며 다음처럼 사용한다(같은 이름 파일이 있으면 새 이름을 사용한다).
+
+```powershell
+uv run --locked python scripts/package_review.py --calibration-run results/predictions/calibration-20260919T130911Z-bb71f278/run --evaluation-run results/predictions/evaluation-20260919T131808Z-183da766/run --conversion-manifest results/manifests/convert-4b5a3d6d.json --assets results/runtime/astronet-5675a57dd41dd0321df480453451096dc5a4a6b0/assets.json --output results/review-118-183da766.zip
 ```

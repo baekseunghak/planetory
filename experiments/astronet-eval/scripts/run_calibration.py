@@ -9,6 +9,7 @@ import subprocess
 import uuid
 
 from prepare_model import COMMIT, IMAGE
+from predict_candidates import load_thresholds
 
 
 def main():
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("--run-dir", type=Path, help="Override converted run location after moving PCs")
     parser.add_argument("--split", choices=["calibration", "evaluation"], default="calibration")
     parser.add_argument("--threshold-plan", type=Path)
+    parser.add_argument("--calibration-manifest", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if args.split == "evaluation" and args.threshold_plan is None:
@@ -30,6 +32,11 @@ def main():
     model_relative = Path("results/runtime/astronet-" + COMMIT)
     if not (root / model_relative / "assets.json").is_file():
         parser.error("Run python scripts/prepare_model.py first")
+    calibration_relative = None
+    if args.threshold_plan:
+        load_thresholds(args.threshold_plan, manifest, root / model_relative / "assets.json",
+                        args.calibration_manifest)
+        calibration_relative = args.calibration_manifest.resolve().relative_to(root)
     docker = shutil.which("docker")
     if docker is None and os.name == "nt":
         candidate = Path(os.environ["LOCALAPPDATA"]) / "Programs/DockerDesktop/resources/bin/docker.exe"
@@ -51,6 +58,7 @@ def main():
     command += ["--split", args.split]
     if plan_relative:
         command += ["--threshold-plan", "/work/" + plan_relative.as_posix()]
+        command += ["--calibration-manifest", "/work/" + calibration_relative.as_posix()]
     subprocess.run(command, check=True)
     print("Host results: {}".format(output / "run"))
 

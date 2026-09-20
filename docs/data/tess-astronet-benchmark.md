@@ -208,3 +208,40 @@ Jira는 진행 중으로 유지하며 리뷰·완료 조건 확인 전 종료하
 
 원점수 비노출·구간 문구·실패 표현은 리뷰 권고이며 확정 UI 요구사항이 아니다. 내부 검토 도구 또한 이번 MR에서 구현하지 않는다.
 동혁의 처리·운영 인계 관점 리뷰와 팀 비용·라이선스 판단을 함께 반영한 뒤 병합·Jira 완료 여부를 정한다.
+
+## 8. MR !102 재현성 보완과 리뷰 첨부
+
+2026-09-20: `load_thresholds()`가 calibration manifest의 completed/calibration 상태, 실제 predictions.csv와
+plan·manifest에 기록된 CSV hash의 일치, calibration/evaluation의 conversion manifest·assets hash 일치를 검사한다.
+evaluation 실행에 `--calibration-manifest`가 필수이며 추론 전 검증과 완료 기록 전 재검증을 수행한다.
+새 evaluation manifest에는 `calibration_manifest_sha256`을 기록한다. 고정 임계값·모델·점수는 변경하지 않았다.
+`uv run --locked python -m pytest -q` 57개 통과(정상 연결, manifest/CSV 누락, hash 누락·불일치,
+잘못된 split/status, 다른 conversion/model 연결 포함). 새로운 Docker 추론은 이번 보완에서 실행하지 않았다.
+
+기존 evaluation `183da766`은 이전 실행기의 기록이다. 원본 manifest에 새 필드를 소급 기입하지 않는다.
+`verification.json`은 **저장 결과 사후 검산**이며 당시 추론 전 검증이 수행됐다는 증거가 아니다.
+재현성 검산용 ZIP `review-118-183da766.zip`(16,516 bytes)의 SHA-256은
+`16a1e4786dd5782e74ba8e858bf901101bc44ae5195a401dbe789247f647a601`이다.
+로컬 위치는 `experiments/astronet-eval/results/`이며 사용자가 GitLab MR에 첨부해야 한다. 원격 첨부 완료로 간주하지 않는다.
+
+| ZIP 내부 파일 | SHA-256 |
+|---|---|
+| calibration/predictions.csv | `bf3d9ba24a2b490be96140de9fac89adfdf96a1069f48ce7222bbf7b4a339bfd` |
+| calibration/manifest.json | `99a2c5203fc9cec69bf588baf6da3ff760cd9a14bf23bc4b1f62943a4eba06c1` |
+| evaluation/predictions.csv | `08db768f2b02943f017790013b455200c449cccd2ebb0d1515e86de786d23a36` |
+| evaluation/manifest.json | `7ed71c71673cd1917a9351373746f1fb5dd98c070c8beb1aaa374637e4fac00f` |
+| evaluation/threshold_plan.json | `a65eca2be4c4cadfd3731b3585018cd1bde8e3d8b2e0cad969482663a187e877` |
+| common/convert-manifest.json | `e5955cc1e676f2ffd214221d71fbf15f41137f51f48d7434a4d6e1776de34472` |
+| common/assets.json | `2eed011062fed5e9241144543127c8a5a1a56d57a65b0e08e32709ee821facc0` |
+
+ZIP을 `experiments/astronet-eval/results/review-118-183da766/`에 풀고 astronet-eval에서 실행한다.
+manifest에 남은 옛 절대 경로를 열지 않으므로 다른 PC에서도 이 소형 결과만으로 집계할 수 있다.
+
+```powershell
+uv run --locked python -m astronet_eval.metrics --run-dir results/review-118-183da766/calibration
+uv run --locked python -m astronet_eval.metrics --run-dir results/review-118-183da766/evaluation
+```
+
+실제 압축 해제 파일에 evaluation 재집계 명령을 실행해 TP 10·FP 2·FN 1·TN 16,
+AP 0.9465709728867624, 사다리꼴 PR-AUC 0.9448190034314436을 확인했다.
+이 보완은 최종 모델 역할·FP/FN 비용·라이선스의 팀 결정을 대신하지 않으며 Jira 118을 자동 완료하지 않는다.

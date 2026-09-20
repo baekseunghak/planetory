@@ -76,7 +76,7 @@ def calibration_inputs(run_dir, manifest_path, split_name="calibration"):
     return selected
 
 
-def load_thresholds(path, conversion_manifest, assets_path):
+def load_thresholds(path, conversion_manifest, assets_path, calibration_manifest=None):
     plan = json.loads(path.read_text(encoding="utf-8"))
     if not plan.get("threshold_version") or not (0 <= plan["lower"] < plan["upper"] <= 1):
         raise ValueError("Invalid threshold plan")
@@ -84,6 +84,21 @@ def load_thresholds(path, conversion_manifest, assets_path):
         raise ValueError("Threshold input binding mismatch")
     if plan["assets_sha256"] != digest(assets_path):
         raise ValueError("Threshold model binding mismatch")
+    if calibration_manifest is None or not calibration_manifest.is_file():
+        raise ValueError("Calibration manifest is required")
+    calibration = json.loads(calibration_manifest.read_text(encoding="utf-8"))
+    if calibration.get("status") != "completed" or calibration.get("split") != "calibration":
+        raise ValueError("Expected completed calibration manifest")
+    predictions = calibration_manifest.parent / "predictions.csv"
+    if not predictions.is_file():
+        raise ValueError("Calibration predictions missing")
+    actual = digest(predictions)
+    if (plan.get("calibration_predictions_sha256") != actual or
+            calibration.get("predictions_sha256") != actual):
+        raise ValueError("Calibration predictions hash mismatch")
+    for key in ("conversion_manifest_sha256", "assets_sha256"):
+        if calibration.get(key) != plan[key]:
+            raise ValueError("Calibration binding mismatch: " + key)
     return plan
 
 
@@ -114,12 +129,15 @@ def main():
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--split", choices=["calibration", "evaluation"], default="calibration")
     parser.add_argument("--threshold-plan", type=Path)
+    parser.add_argument("--calibration-manifest", type=Path)
     args = parser.parse_args()
     started = time.perf_counter()
     assets_path = args.model_root / "assets.json"
     if args.split == "evaluation" and args.threshold_plan is None:
         parser.error("Evaluation requires a frozen threshold plan")
-    plan = load_thresholds(args.threshold_plan, args.conversion_manifest, assets_path) if args.threshold_plan else None
+    plan = load_thresholds(args.threshold_plan, args.conversion_manifest, assets_path,
+                           args.calibration_manifest) if args.threshold_plan else None
+    calibration_hash = digest(args.calibration_manifest) if plan else None
     selected = calibration_inputs(args.run_dir, args.conversion_manifest, args.split)
     assets = json.loads(assets_path.read_text(encoding="utf-8"))
     if (assets["repo_commit"], assets["checkpoint"], assets["image"]) != (COMMIT, CHECKPOINT, IMAGE):
@@ -175,6 +193,12 @@ def main():
         "score_meaning": "PC/EB versus junk; not planet probability",
     }
     if plan:
+        # Refuse a completed report if provenance changed during inference.
+        if (load_thresholds(args.threshold_plan, args.conversion_manifest, assets_path,
+                            args.calibration_manifest) != plan or
+                digest(args.calibration_manifest) != calibration_hash):
+            raise ValueError("Calibration provenance changed during inference")
+        report["calibration_manifest_sha256"] = calibration_hash
         report["threshold_version"] = plan["threshold_version"]
         report["threshold_plan_sha256"] = digest(args.threshold_plan)
         report["threshold_plan"] = plan
