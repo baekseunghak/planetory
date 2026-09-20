@@ -275,7 +275,7 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 
 ### 7.1 최종 검증에 올릴 보수적 후보 (미승인)
 
-oot는 단일 회수 +6과 가짜 +1이 함께 발생해 최종 후보로 승격하지 않는다. `7cc8dcb2`의 unity·깊이 상대 0.1·duration 최대 12 h·실패 즉시 종료 조합을 **리뷰용 후보**로 유지한다. 기본 CLI 값 전체를 승격하는 결정이 아니다. 이 후보의 L 98-59 단일 회수 65/108·가짜 1·QA 실패 18은 알려진 한계이고 다른 별 최종 실측은 대기 중이다. 리뷰어가 이 손실/잔여 수준을 수용하지 않으면 완료하지 않고 수정·재검증한다.
+oot는 단일 회수 +6과 가짜 +1이 함께 발생해 최종 후보로 승격하지 않는다. `7cc8dcb2`의 unity·깊이 상대 0.1·duration 최대 12 h·실패 즉시 종료 조합을 **리뷰용 후보**로 유지한다. 기본 CLI 값 전체를 승격하는 결정이 아니다. 이 후보의 L 98-59 단일 회수 65/108·가짜 1·QA 실패 18은 알려진 한계이고 다른 별 재실행 결과는 7.6절에 기록한다. 리뷰어가 이 손실/잔여 수준을 수용하지 않으면 완료하지 않고 수정·재검증한다.
 
 | 구분 | 후보값 |
 |---|---|
@@ -335,8 +335,133 @@ if ($LASTEXITCODE -ne 0) { throw 'tamper fixture failed' }
 ### 7.5 110 병합 후 실행 준비 확인 (2026-09-20)
 
 - 담당자 윤성용은 대화에서 110의 병합 승인을 20k·게이트 채택과 D03→D04 검증 책임 이관까지 포함하는 것으로 판단하고 Jira 110을 직접 완료 처리했다고 알렸다. 근거 MR은 [!77](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/77)이다. 이는 담당자 확인 기록이며 리뷰어의 별도 승인 문구를 새로 인용한 것은 아니다.
-- 사용자가 111 브랜치에 최신 develop을 충돌 없이 병합했다. 반영된 설정은 `biweight_1.0d`, `poc_linear20k`(20,000점, 0.5일~기준선/3, duration 1.2·1.92·2.88·4.8 h)이며 111의 통과 횟수≥2는 7.1절대로 추가 안전 조건이다.
+- 당시 충돌 없이 병합됐다는 사용자 보고를 기준으로 준비했으나, 이후 README 2개의 미해결 충돌을 확인했다. 두 문서의 양쪽 내용을 보존해 해결한 뒤 사용자가 병합 커밋 `2084018`을 완료했다. 반영된 설정은 `biweight_1.0d`, `poc_linear20k`(20,000점, 0.5일~기준선/3, duration 1.2·1.92·2.88·4.8 h)이며 111의 통과 횟수≥2는 7.1절대로 추가 안전 조건이다.
 - CLI와 같은 인수 타입으로 구성한 7.1절 후보 지문은 `49ccec22320d283d4bf015f98acadab6ff4d2b6cfb27d1fbd3ae66ebf05ece4f`로 유지됐다. 6별 입력 파일 존재를 확인했다. 최종 실행 manifest에서 입력 checksum도 확인해야 한다.
 - 병합 후 holdout manifest 테스트 4건은 과거 평가 코드 전체를 고정한 잠금 파일과 현재 코드가 달라 실패했다. 과거 `holdout_lock_v1.json`은 변경하지 않고, 계산을 모의 처리하는 manifest 테스트만 임시 잠금 파일로 격리했다. 실제 잠금 검증과 불일치 시 계산 전 중단 테스트는 유지한다. holdout 재평가는 실행하지 않는다.
 - 검증: tess-bench `uv run --locked python -m pytest -q` 87 passed, astro-kernel 같은 명령 93 passed. 이번 변경은 테스트·문서에 한정하며 실험 계산·QA 문턱·설정·과거 산출물은 변경하지 않았다.
 - 다음 단계: 변경을 커밋한 깨끗한 작업 트리에서 7.4절의 8개 실행을 사용자가 수행한다. 예상 곡선 수는 1,120+4+3=1,127이다. 아직 최종 실측 결과나 111 채택 승인·완료를 주장하지 않는다.
+
+### 7.6 깨끗한 커밋에서 8개 재실행 확인 (2026-09-21 기록)
+
+사용자가 2026-09-20 UTC에 실행한 8개 manifest 모두 코드 `2084018341e14fa249bfb1fd21feb9a2147f9e45`, `git_dirty=false`를 기록한다. 총 1,127곡선이며 입력·출력의 실제 SHA-256을 manifest와 대조해 불일치 0건을 확인했다. 아래 시간은 manifest의 total이며 콘솔 종료 출력과 소폭 다르다.
+
+| 대상·실행 | manifest 파일명 (`results/manifests/`) | 곡선 | 초 |
+|---|---|---:|---:|
+| L 98-59 | iterate-l98_59-9db3fc85.json | 224 | 1771.7 |
+| CM Dra | iterate-cm_dra-711105d5.json | 224 | 311.6 |
+| WASP-18 | iterate-wasp18-eacf2d8b.json | 224 | 797.5 |
+| TOI-700 | iterate-toi700-f2c57bc3.json | 224 | 1825.9 |
+| HD 21749 | iterate-hd21749-27be47c4.json | 224 | 689.3 |
+| WASP-18 원본 포함 | iterate-wasp18-7bb6cb1a.json | 2 | 7.3 |
+| TOI-700 원본 포함 | iterate-toi700-0ae3279b.json | 2 | 16.0 |
+| TOI-270 tamper ×3 | iterate-toi270-ad94eb5d.json | 3 | 12.0 |
+
+각 정상 실행은 realclean 112곡선과 noise20260910 112곡선이다. 아래 회수는 단일·쌍 신호를 합산한 direct+alias이며 직접 회수율 또는 110 holdout 판정값이 아니다. 분모는 각 114개 주입 신호이며 QA 실패는 none을 포함한 112곡선 중 건수다.
+
+| 대상 | realclean 회수 / 가짜 / QA 실패 | noise 회수 / 가짜 / QA 실패 |
+|---|---|---|
+| L 98-59 | 71/114 / 1 / 18 | 79/114 / 2 / 27 |
+| CM Dra | 0/114 / 0 / 112 | 45/114 / 5 / 13 |
+| WASP-18 | 49/114 / 1 / 96 | 68/114 / 3 / 25 |
+| TOI-700 | 67/114 / 0 / 19 | 83/114 / 1 / 27 |
+| HD 21749 | 36/114 / 0 / 8 | 66/114 / 2 / 27 |
+
+- 병합 미완료 상태의 직전 실행 `621f7cf8 / 85e5bfaf / a11236cd / 6ea10349 / 92d0349b / 11bfefd1 / 70963f99 / a9623e48`은 `git_dirty=true`이므로 최종 코드 식별 근거로 쓰지 않는다. 새 결과와 기존 결과의 iterations·steps 및 존재하는 matches CSV를 행 순서와 실행 시간 열을 제외해 대조했으며 값 차이가 없었다. 원본 포함 none 실행 2개에는 주입 정답이 없어 matches 출력이 없다. 과거 manifest는 수정하지 않았다.
+- 전체 QA 실패 377곡선에서 steps의 accepted 건수가 iterations의 n_accepted와 같고, 실패 단계 이후 채택이 없음을 확인했다. 이는 저장 기록의 일관성 검증이며 잔차 배열 자체의 복구 검증은 7.3절 합성 테스트 근거와 구분한다.
+- tamper 3곡선은 모두 첫 단계(step=0) window_offset 실패·채택 0이다. 원본 포함 실행의 real에 표시된 가짜 1은 주입 정답이 없는 상태의 집계이므로 실제 행성 오탐으로 해석하지 않는다.
+- 기존 CM Dra·WASP-18 한계와 L 98-59 단일 65/108·가짜 1은 재현됐다. 실행 정상 종료나 checksum 일치를 과학적 성능 통과 또는 운영 채택 승인으로 해석하지 않는다. 상세 집계와 122 인계는 아래에 완료했으며 QA 조건·알려진 한계 수용에 대한 리뷰가 남아 있다.
+
+#### 7.6.1 곡선 종류별 회수와 종료 상세
+
+| 실행 / baseline / 종류 | 주입 신호 | direct | alias | 미회수 | 가짜 후보 | 종료 사유(곡선 수) |
+|---|---:|---:|---:|---:|---:|---|
+| 9db3fc85 / l98_59-noise20260910 / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 9db3fc85 / l98_59-noise20260910 / single | 108 | 71 | 2 | 35 | 2 | no_quality_peak=82, removal_qa_failed=26 |
+| 9db3fc85 / l98_59-realclean / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-realclean / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| 9db3fc85 / l98_59-realclean / single | 108 | 63 | 2 | 43 | 1 | no_quality_peak=90, removal_qa_failed=18 |
+| 711105d5 / cm_dra-noise20260910 / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 711105d5 / cm_dra-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | 1 | no_quality_peak=1 |
+| 711105d5 / cm_dra-noise20260910 / pair:similar_strength | 2 | 1 | 0 | 1 | 0 | no_quality_peak=1 |
+| 711105d5 / cm_dra-noise20260910 / pair:strong_weak | 2 | 1 | 0 | 1 | 0 | no_quality_peak=1 |
+| 711105d5 / cm_dra-noise20260910 / single | 108 | 41 | 0 | 67 | 4 | no_quality_peak=95, removal_qa_failed=13 |
+| 711105d5 / cm_dra-realclean / none | 0 | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 711105d5 / cm_dra-realclean / pair:overlapping_transits | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+| 711105d5 / cm_dra-realclean / pair:similar_strength | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+| 711105d5 / cm_dra-realclean / pair:strong_weak | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+| 711105d5 / cm_dra-realclean / single | 108 | 0 | 0 | 108 | 0 | removal_qa_failed=108 |
+| eacf2d8b / wasp18-noise20260910 / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| eacf2d8b / wasp18-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | 1 | no_quality_peak=1 |
+| eacf2d8b / wasp18-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| eacf2d8b / wasp18-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| eacf2d8b / wasp18-noise20260910 / single | 108 | 60 | 2 | 46 | 2 | no_quality_peak=83, removal_qa_failed=25 |
+| eacf2d8b / wasp18-realclean / none | 0 | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| eacf2d8b / wasp18-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | removal_qa_failed=1 |
+| eacf2d8b / wasp18-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| eacf2d8b / wasp18-realclean / pair:strong_weak | 2 | 1 | 0 | 1 | 0 | removal_qa_failed=1 |
+| eacf2d8b / wasp18-realclean / single | 108 | 44 | 0 | 64 | 1 | no_quality_peak=16, removal_qa_failed=92 |
+| f2c57bc3 / toi700-noise20260910 / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| f2c57bc3 / toi700-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | removal_qa_failed=1 |
+| f2c57bc3 / toi700-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| f2c57bc3 / toi700-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| f2c57bc3 / toi700-noise20260910 / single | 108 | 77 | 0 | 31 | 1 | no_quality_peak=83, removal_qa_failed=25 |
+| f2c57bc3 / toi700-realclean / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| f2c57bc3 / toi700-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | removal_qa_failed=1 |
+| f2c57bc3 / toi700-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| f2c57bc3 / toi700-realclean / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| f2c57bc3 / toi700-realclean / single | 108 | 61 | 0 | 47 | 0 | no_quality_peak=90, removal_qa_failed=18 |
+| 27be47c4 / hd21749-noise20260910 / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | removal_qa_failed=1 |
+| 27be47c4 / hd21749-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 27be47c4 / hd21749-noise20260910 / single | 108 | 60 | 0 | 48 | 2 | no_quality_peak=83, removal_qa_failed=25 |
+| 27be47c4 / hd21749-realclean / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-realclean / pair:similar_strength | 2 | 1 | 0 | 1 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-realclean / pair:strong_weak | 2 | 1 | 0 | 1 | 0 | no_quality_peak=1 |
+| 27be47c4 / hd21749-realclean / single | 108 | 32 | 0 | 76 | 0 | no_quality_peak=100, removal_qa_failed=8 |
+| 7bb6cb1a / wasp18-real / none | 0 | 0 | 0 | 0 | 1 | removal_qa_failed=1 |
+| 7bb6cb1a / wasp18-realclean / none | 0 | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 0ae3279b / toi700-real / none | 0 | 0 | 0 | 0 | 1 | no_quality_peak=1 |
+| 0ae3279b / toi700-realclean / none | 0 | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| ad94eb5d / toi270-realclean / pair:overlapping_transits | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+| ad94eb5d / toi270-realclean / pair:similar_strength | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+| ad94eb5d / toi270-realclean / pair:strong_weak | 2 | 0 | 0 | 2 | 0 | removal_qa_failed=1 |
+
+#### 7.6.2 QA 분포와 실패 범위
+
+분포는 8개 실행의 accepted·qa_failed 단계 전체를 합산한다. NaN·비유한 지표는 분포에서 제외하며 미산출 수를 별도로 기록한다. other/overlap의 미산출은 비교 대상 부재도 포함하므로 그 자체를 QA 측정 실패로 세지 않는다.
+
+| 지표 | 유한 n | 미산출 n | 최소 | 중앙값 | 최대 | 절댓값 최대 |
+|---|---:|---:|---:|---:|---:|---:|
+| power_ratio | 949 | 0 | 3.3770886E-05 | 0.048995634 | 1.1446085 | 1.1446085 |
+| edge_excess | 949 | 0 | 0.37479214 | 0.69468409 | 53.926128 | 53.926128 |
+| window_offset_z | 949 | 0 | -146.01147 | 0.37482917 | 256.42515 | 256.42515 |
+| window_offset_rel | 949 | 0 | -0.12317057 | 0.010131479 | 1.1792167 | 1.1792167 |
+| other_depth_log2_max | 256 | 693 | 0.0043875291 | 0.24905703 | 4.5231428 | 4.5231428 |
+| overlap_fraction | 949 | 0 | 0 | 0 | 1 | 1 |
+| overlap_dev | 231 | 718 | 0.50971887 | 1.1008634 | 79.568044 | 79.568044 |
+
+실패 항목(한 단계 복수 집계): edge_excess=137, other_candidate_damaged=42, overlap_distortion=77, power_not_reduced=145, window_offset=116.
+복수 항목 실패 단계: 107개. 원본 재검증 실패 후보: 0개.
+
+### 7.7 122 인계와 리뷰 결정 범위
+
+| 인계 항목 | 전달할 규칙·근거 | 책임·남은 결정 |
+|---|---|---|
+| 설정 | 7.1절 전체 설정 SHA-256과 2084018 실행 코드, 110 설정과 반복 전용 추가 조건 구분 | 111 리뷰어가 QA 문턱·통과 횟수≥2·최대 5개 및 실측 한계를 수용한 뒤 122 운영 구현에 반영 |
+| 제거·복구 | QA 성공 때만 후보와 잔차를 채택. 실패 즉시 종료하고 이전 정상 후보·잔차 유지 | 122에서 합성 배열 보존 테스트와 같은 계약 유지. CSV 일치만으로 배열 복구 증명이라고 쓰지 않음 |
+| QA | 7.1절 식과 7.6.2절 분포. qa_not_measurable·non_finite 실패는 이번 실측에서 각각 0건 | 측정 불가를 0 또는 통과로 바꾸지 않음. 비교할 다른 후보·겹침이 없는 경우의 미산출과 구분 |
+| 종료 7종 | no_quality_peak, insufficient_observations, duplicate_or_harmonic_only, removal_qa_failed, candidate_validation_failed, numerical_failure, max_iterations_reached | 122에서 종료 사유 보존. 이번 실측은 no_quality_peak·removal_qa_failed 두 종류이고 나머지는 합성 테스트 근거 |
+| 원본 재평가 | validated_on_original=false 후보는 운영 후보표에서 제외 | 122 필수 필터. 이번 n_validation_failed=0이므로 실패 경로는 합성 검증과 구분 |
+| 고조파·EB | 임시 배수 {0.5,1,2}; CM Dra 실측 회수 0/114와 잔여 별칭 한계 유지 | 112 정식 고조파 규칙과 EB 처리 연계는 후속 범위. 해당 후속 구현 완료를 111 결과 기록의 선행조건으로 두지 않음 |
+| 채택 상태 | unity·상대 0.1·duration 최대 12 h 조합의 리뷰 후보. oot·실패 후 계속 마스킹 미채택 | 결과를 본 뒤 문턱 재조정하지 않았다. 리뷰 수용 전 운영 기본값 승격·111 완료를 선언하지 않음 |
+
+완료 요청 범위는 반복 제거 루프의 종료·QA·복구 검증과 알려진 한계를 명시한 인계다. 모든 별의 신호 회수 성공 또는 독립 holdout 성능 보증이 아니다. 122 구현 완료를 기다리는 대신 이 인계의 수용 여부를 리뷰받는다.
+
+리뷰 첨부: `experiments/tess-bench/results/review-111-2084018.zip` (8개 manifest와 출력 CSV, 상대 경로별 checksums.json; FITS 제외). ZIP SHA-256: `149025f37ac0b541a289e9d2b91e4d32b24ca3908bfb385c4ee399be2f82f9db`. 생성물은 Git에 추가하지 않고 MR에 첨부한다. 압축 해제 후 각 ID 폴더의 CSV를 사용하며 원본 manifest의 절대 경로는 실행 당시 기록으로 보존한다.
