@@ -14,6 +14,12 @@ import {
   SUBMISSION_OUTCOME_HEADER,
   submissionFixtureResponse,
 } from "./submission-fixtures.ts";
+import {
+  pollResidualJobFixture,
+  readResidualScenario,
+  requestResidualJobFixture,
+  RESIDUAL_FIXTURE_HEADER,
+} from "./residual-job-fixtures.ts";
 
 const BODY_LIMIT = 100_000;
 // Serve-only fixture. No account-selection, reset, achievement or OAuth endpoints.
@@ -52,6 +58,43 @@ export function fixturePlugin(observations = false): Plugin {
             }),
           );
           return;
+        }
+        // 7.1·7.2절 잔차 작업. 제출과 달리 요청 ID가 없고 목표 문맥이
+        // 멱등 단위다. 같은 목표를 다시 보내면 같은 작업이나 캐시가 온다.
+        {
+          const job = /^[/]v1[/]residual-jobs[/]([^/]+)$/.exec(url.pathname);
+          const create = /^[/]v1[/]stars[/]([^/]+)[/]residual-jobs$/.exec(
+            url.pathname,
+          );
+          if (job && req.method === "GET") {
+            const reply = pollResidualJobFixture(job[1]);
+            res.statusCode = reply.status;
+            res.end(JSON.stringify(reply.body));
+            return;
+          }
+          if (create && req.method === "POST") {
+            let raw = "";
+            let body: unknown = null;
+            try {
+              for await (const chunk of req) {
+                raw += String(chunk);
+                if (raw.length > BODY_LIMIT) throw new Error("too large");
+              }
+              body = raw ? JSON.parse(raw) : null;
+            } catch {
+              body = null;
+            }
+            const reply = requestResidualJobFixture({
+              ticId: create[1],
+              body,
+              scenario: readResidualScenario(
+                req.headers[RESIDUAL_FIXTURE_HEADER],
+              ),
+            });
+            res.statusCode = reply.status;
+            res.end(JSON.stringify(reply.body));
+            return;
+          }
         }
         if (
           url.pathname.startsWith("/v1/submissions/") ||

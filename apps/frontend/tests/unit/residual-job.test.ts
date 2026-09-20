@@ -1,0 +1,219 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { ApiError } from "../../src/api/client";
+import {
+  MIN_POLL_MS,
+  requestResidualJob,
+  runResidualJob,
+  type ResidualProgress,
+} from "../../src/features/analysis/residual-job";
+
+// 7.1·7.2절. 요청 ID가 없고 목표 문맥이 멱등 단위다.
+
+const TIC = "259377024";
+const target = {
+  bundleId: "9007199254741093",
+  curveStep: 1,
+  removedCandidateIds: ["c-401"],
+  residualModelVersion: "rm-1",
+  periodogramConfigVersion: "pg-1",
+};
+const resultContext = {
+  bundleId: target.bundleId,
+  curveStep: 1,
+  removedCandidateIds: ["c-401"],
+  residualModelVersion: "rm-1",
+  periodogramConfigVersion: "pg-1",
+};
+type Step = { status?: number; body?: unknown } | { error: ApiError };
+function harness(steps: Step[]) {
+  const calls: { path: string; method: string; body?: unknown }[] = [];
+  const waits: number[] = [];
+  const request = (async (path: string, options: Record<string, any> = {}) => {
+    const step = steps.shift();
+    if (!step) throw new Error(`대본에 없는 요청: ${path}`);
+    calls.push({ path, method: options.method ?? "GET", body: options.json });
+    options.onResponse?.({
+      status: "error" in step ? 0 : (step.status ?? 200),
+      headers: new Headers(),
+    });
+    if ("error" in step) throw step.error;
+    return step.body;
+  }) as never;
+  const progress: ResidualProgress[] = [];
+  return {
+    calls,
+    waits,
+    progress,
+    run: (signal = new AbortController().signal) =>
+      runResidualJob({
+        request,
+        ticId: TIC,
+        target,
+        signal,
+        onProgress: (value) => void progress.push(value),
+        wait: async (ms) => void waits.push(ms),
+      }),
+    post: (signal = new AbortController().signal) =>
+      requestResidualJob({ request, ticId: TIC, target, signal }),
+  };
+}
+const refused = (
+  status: number,
+  code: string,
+  details: Record<string, unknown> = {},
+) => new ApiError(status, code, code, [], null, null, false, details);
+const queued = (jobId = "rj-1", pollAfterSeconds = 2) => ({
+  status: 202,
+  body: { jobId, status: "QUEUED", cacheHit: false, pollAfterSeconds },
+});
+
+test("a cached target finishes without any polling", async () => {
+  const stub = harness([
+    {
+      status: 200,
+      body: {
+        jobId: null,
+        status: "COMPLETED",
+        cacheHit: true,
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  const outcome = await stub.run();
+  assert.equal(outcome.state, "ready");
+  assert.equal(outcome.state === "ready" && outcome.cacheHit, true);
+  // 이미 계산돼 있으면 기다릴 것이 없다.
+  assert.equal(stub.calls.length, 1);
+  assert.deepEqual(stub.waits, []);
+  // 요청 ID를 싣지 않는다. 목표 문맥이 멱등 단위다.
+  assert.deepEqual(Object.keys(stub.calls[0].body as object), ["target"]);
+});
+
+test("the whole order is reported and the server sets the pace", async () => {
+  const stub = harness([
+    queued("rj-7", 2),
+    {
+      body: {
+        jobId: "rj-7",
+        status: "RESIDUAL_CALCULATING",
+        pollAfterSeconds: 3,
+      },
+    },
+    { body: { jobId: "rj-7", status: "RESIDUAL_READY", pollAfterSeconds: 1 } },
+    {
+      body: {
+        jobId: "rj-7",
+        status: "PERIODOGRAM_CALCULATING",
+        pollAfterSeconds: 1,
+      },
+    },
+    {
+      body: {
+        jobId: "rj-7",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  const outcome = await stub.run();
+  assert.equal(outcome.state, "ready");
+  // 2.4절 순서를 빠짐없이 알린다. 화면이 이것으로 진행을 그린다.
+  assert.deepEqual(
+    stub.progress.map((item) => item.status),
+    [
+      "QUEUED",
+      "RESIDUAL_CALCULATING",
+      "RESIDUAL_READY",
+      "PERIODOGRAM_CALCULATING",
+      "COMPLETED",
+    ],
+  );
+  // 간격은 서버가 정한다. 우리가 고르지 않는다.
+  assert.deepEqual(stub.waits, [2000, 3000, 1000, 1000]);
+});
+
+test("a server that says zero still does not get hammered", async () => {
+  const stub = harness([
+    queued("rj-8", 0),
+    {
+      body: {
+        jobId: "rj-8",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  await stub.run();
+  assert.deepEqual(stub.waits, [MIN_POLL_MS]);
+});
+
+test("a failure keeps its reason instead of becoming a generic error", async () => {
+  const stub = harness([
+    queued("rj-9", 1),
+    {
+      body: {
+        jobId: "rj-9",
+        status: "FAILED",
+        failure: {
+          code: "RESIDUAL_FAILED",
+          message: "잔차 계산에 실패했습니다.",
+        },
+        resultCurveContext: null,
+      },
+    },
+  ]);
+  const outcome = await stub.run();
+  assert.equal(outcome.state, "failed");
+  assert.equal(outcome.state === "failed" && outcome.code, "RESIDUAL_FAILED");
+  // 실패해도 곡선을 바꾸지 않는다. 바꿀 문맥 자체를 돌려주지 않는다.
+  assert.equal("curveContext" in outcome, false);
+});
+
+test("the two queue refusals are not the same thing", async () => {
+  // 대기열이 찼다. 기다리면 된다.
+  const full = harness([
+    { error: refused(429, "RESIDUAL_QUEUE_FULL", { retryAfterSeconds: 12 }) },
+  ]);
+  const waiting = await full.post();
+  assert.equal(waiting.state, "queue-full");
+  assert.equal(waiting.state === "queue-full" && waiting.retryAfterSeconds, 12);
+  assert.equal(waiting.state === "queue-full" && waiting.activeJobId, null);
+
+  // 내가 이미 돌리고 있는 작업이다. 기다리라고 하면 안 된다(D-4).
+  const mine = harness([
+    {
+      error: refused(429, "RESIDUAL_QUEUE_FULL", {
+        retryAfterSeconds: 5,
+        activeJobId: "rj-other",
+      }),
+    },
+  ]);
+  const active = await mine.post();
+  assert.equal(active.state === "queue-full" && active.activeJobId, "rj-other");
+});
+
+test("a changed plate is not retried here", async () => {
+  const stub = harness([
+    {
+      error: refused(409, "BUNDLE_CHANGED", {
+        currentBundleId: "9007199254749999",
+      }),
+    },
+  ]);
+  const outcome = await stub.run();
+  assert.equal(outcome.state, "bundle-changed");
+  assert.equal(
+    outcome.state === "bundle-changed" && outcome.currentBundleId,
+    "9007199254749999",
+  );
+  // 새 판으로 다시 두드리지 않는다. 최신 판 재조회는 화면의 몫이다.
+  assert.equal(stub.calls.length, 1);
+});
+
+test("an unknown state is refused rather than drawn as progress", async () => {
+  const stub = harness([
+    { status: 202, body: { jobId: "rj-1", status: "THINKING" } },
+  ]);
+  await assert.rejects(() => stub.run(), /status/);
+});
