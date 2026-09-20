@@ -5,6 +5,7 @@ import {
   readPendingSubmission,
   releaseRequestId,
   markSubmissionAccepted,
+  markSubmissionRejected,
   reserveRequestId,
   submissionFingerprint,
   submissionStorageKey,
@@ -261,4 +262,39 @@ test("a damaged record is discarded rather than used to claim someone else's res
     assert.equal(readPendingSubmission(KEY, store), null, raw);
     assert.equal(store.map.has(KEY), false, `${raw} 는 지워져야 한다`);
   }
+});
+
+test("a body the server refused can be corrected and sent again", () => {
+  const store = fakeStore();
+  const first = reserve(store, body());
+
+  // 400이 왔다. 접수되지 않았음이 **확정**이므로 이 자리를 비워 준다.
+  markSubmissionRejected(KEY, store);
+  // ID는 지우지 않는다. 같은 본문을 그대로 다시 내면 같은 ID다.
+  assert.equal(readPendingSubmission(KEY, store)?.requestId, first.requestId);
+  assert.equal(reserve(store, body()).requestId, first.requestId);
+
+  // 고친 본문은 다른 본문이다. 같은 ID로 보내면 IDEMPOTENCY_CONFLICT가 되므로
+  // 새 ID를 받아야 한다. 이것을 막으면 입력을 고쳐 다시 낼 수가 없다.
+  const fixed = reserve(store, body({ userJudgment: "UNSURE" }));
+  assert.notEqual(fixed.requestId, first.requestId);
+  assert.equal(fixed.reused, false);
+  assert.equal(readPendingSubmission(KEY, store)?.state, "pending");
+});
+
+test("a refusal that may still have been accepted keeps blocking", () => {
+  // 결과를 모르는 실패에는 거절 표시를 하지 않는다. 403·404는 앞선 전송이
+  // 응답만 잃고 접수돼 그 별이 완료됐을 수도 있는 경우다.
+  const store = fakeStore();
+  const first = reserve(store, body());
+  const blocked = reserveAt(KEY, store, body({ userJudgment: "UNSURE" }));
+  assert.equal(blocked.status, "blocked");
+  assert.equal(
+    blocked.status === "blocked" && blocked.pending.requestId,
+    first.requestId,
+  );
+  // 접수된 기록에는 거절을 덮어쓰지 않는다.
+  markSubmissionAccepted(KEY, store);
+  markSubmissionRejected(KEY, store);
+  assert.equal(readPendingSubmission(KEY, store)?.state, "accepted");
 });

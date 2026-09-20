@@ -82,6 +82,19 @@ ID는 UUID v4이며 본문 `requestId`에 싣는다(2.2절). 서비스 API에는
 
 잠금을 지나치더라도 **예약이 한 번 더 막는다.** `reserveRequestId`는 저장된 기록이 `pending`이면 다른 본문에 자리를 내주지 않고 `blocked`를 돌려준다.
 
+**막는 기준은 「끝나지 않음」이 아니라 「결과를 모름」이다.** 서버가 응답으로 거절한 제출은 접수되지 않았음이 확정이므로 막지 않는다. 막으면 입력을 고쳐 다시 낼 수가 없다.
+
+| 상태       | 언제                                           | 바꾼 본문을 보내는가                                 |
+| ---------- | ---------------------------------------------- | ---------------------------------------------------- |
+| `pending`  | 아직 답을 못 받았다 · 5xx · 타임아웃 · 403·404 | 아니다. 접수됐을 수도 있다                           |
+| `conflict` | 이 ID에 다른 본문이 이미 접수돼 있다           | 아니다. 무엇이 접수됐는지 먼저 확인한다              |
+| `rejected` | **400 등 응답으로 온 거절**                    | 그렇다. 미접수가 확정이고 고쳐 내는 것이 정상 경로다 |
+| `accepted` | 접수 확정                                      | 그렇다. 의도적인 재제출이다                          |
+
+403·404(`STAR_LOCKED`·`STAR_ALREADY_COMPLETED`)를 `rejected`로 두지 않는 이유는 **앞선 전송이 응답만 잃고 접수돼 그 별이 완료됐을 수도** 있기 때문이다. 같은 4xx라도 입력이 틀렸다는 답과 성격이 다르다.
+
+고친 본문은 **다른 본문이라 새 ID를 받는다.** 같은 ID로 보내면 `IDEMPOTENCY_CONFLICT`가 되어 재전송 자체가 막힌다. 거절된 ID를 지우지는 않으므로 같은 본문을 그대로 다시 내면 같은 ID가 나간다.
+
 ### 보존 위치
 
 [submission-request.ts](../src/features/analysis/submission-request.ts)가 `sessionStorage`에 회원·TIC 단위로 저장한다. 키는 `planetory:analysis-draft:` 접두사를 공유해 [로그아웃 시 초안 정리](../src/auth/session-draft-storage.ts)가 함께 지우도록 한다. 공용 파일을 수정하지 않는다. 접두사가 바뀌면 조용히 깨지는 전제이므로 [submission-request.spec.ts](../tests/browser/submission-request.spec.ts)가 실제 브라우저에서 지워지는지 확인한다.
@@ -94,7 +107,7 @@ ID는 UUID v4이며 본문 `requestId`에 싣는다(2.2절). 서비스 API에는
 | `fingerprint` | 이 ID로 보낸 본문의 지문                                                                                                      |
 | `kind`        | 무엇을 보냈는지. 판 1에서 올라온 기록에는 없다                                                                                |
 | `body`        | **보낸 본문 그대로.** 같은 ID로 정확히 같은 본문을 보내야 `IDEMPOTENCY_CONFLICT`가 되지 않으므로 다시 만들지 않고 들고 있는다 |
-| `state`       | `pending` 결과를 모른다 · `accepted` 접수 확정                                                                                |
+| `state`       | `pending` 결과를 모른다 · `accepted` 접수 확정 · `conflict` 다른 본문이 접수돼 있다 · `rejected` 응답으로 거절됐다            |
 | `sentAt`      | 보낸 시각                                                                                                                     |
 
 **`state`가 없으면 되살릴 수 없다.** 접수에 성공해도 기록은 남기 때문이다(같은 본문 재제출이 200 재현이 되려면 ID가 있어야 한다). 그래서 기록이 있다는 것만으로는 미확인인지 알 수 없고, 상태를 따로 적어야 한다.
