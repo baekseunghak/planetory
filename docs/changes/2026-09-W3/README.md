@@ -114,6 +114,15 @@
 
 | 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
