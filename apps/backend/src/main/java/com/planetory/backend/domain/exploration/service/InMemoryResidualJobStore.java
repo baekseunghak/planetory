@@ -76,6 +76,11 @@ public class InMemoryResidualJobStore implements ResidualJobStore {
     @Override
     public Enqueued enqueue(long memberId, long ticId, CurveContext target, String cacheKey) {
         synchronized (lock) {
+            Result cached = results.get(cacheKey);
+            if (cached != null) {
+                // 호출자가 밖에서 본 뒤 여기 오는 사이에 끝났을 수 있다. 한 자물쇠 안에서 다시 본다.
+                return new Enqueued.Cached(cached);
+            }
             Optional<Job> same = active(cacheKey);
             if (same.isPresent()) {
                 // 같은 계산을 기다리는 사람으로 적는다. 적지 않으면 상태를 조회할 수 없다(7.2절).

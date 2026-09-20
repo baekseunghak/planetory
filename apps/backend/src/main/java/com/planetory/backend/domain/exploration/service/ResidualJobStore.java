@@ -30,7 +30,9 @@ public interface ResidualJobStore {
     /**
      * 작업 한 건.
      *
-     * @param attempt Job 단위 시도 번호(1부터). 주기도만 다시 계산해도 올린다
+     * @param attempt Job 단위 시도 번호(1부터). 주기도만 다시 계산해도 오른다. <b>이 API는 읽기만 한다</b> —
+     *                올리는 함수는 아직 없고, 임대가 끝난 계산을 다시 시작하는 쪽({@code S15P21C206-88})이
+     *                필요해질 때 더한다
      * @param cacheKey 7.1절 캐시 키. 같은 키의 계산은 하나만 돈다
      * @param watchers 이 작업을 기다리는 회원. 같은 목표를 요청한 사람은 같은 작업을 보므로
      *                 만든 회원만으로는 조회를 막을 수 없다. 요청이 목표 검증을 통과한 회원만 들어온다
@@ -72,6 +74,10 @@ public interface ResidualJobStore {
         record Merged(Job job, int queuePosition) implements Enqueued {
         }
 
+        /** 이미 계산돼 있다. 작업을 만들지 않고 캐시로 답한다(7.1절 「캐시 있음」). */
+        record Cached(Result result) implements Enqueued {
+        }
+
         /**
          * 자리가 없다. 429 {@code RESIDUAL_QUEUE_FULL}이다.
          *
@@ -105,7 +111,13 @@ public interface ResidualJobStore {
     /** 대기 순번(0이면 지금 계산 중). 작업이 없으면 빈 값이다. */
     Optional<Integer> queuePosition(String jobId);
 
-    /** 병합·상한·등록을 한 번에 결정한다. */
+    /**
+     * 캐시·병합·상한·등록을 한 번에 결정한다.
+     *
+     * <p><b>캐시 확인도 여기서 한다.</b> 밖에서 먼저 보고 들어오면 그 사이에 다른 회원의 같은 계산이
+     * 끝났을 때 이미 있는 결과를 두고 작업을 하나 더 만든다. 끝난 작업은 병합 대상이 아니라 합쳐지지도
+     * 않는다.
+     */
     Enqueued enqueue(long memberId, long ticId, CurveContext target, String cacheKey);
 
     /** 계산 단계를 옮긴다. 늦게 도착한 옛 시도의 보고는 무시한다. */
