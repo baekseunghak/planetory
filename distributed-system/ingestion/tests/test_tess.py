@@ -115,11 +115,19 @@ class SourceListTests(unittest.TestCase):
         config = tess.load_config(path)
         self.assertEqual([row["sector"] for row in config["sectors"]], list(range(1, 14)))
         self.assertEqual(sum(row["expected_count"] for row in config["sectors"]), 247_824)
-        self.assertEqual(config["download_concurrency"], 4)
+        self.assertEqual(config["download_concurrency"], 16)
+
+    def test_config_accepts_download_concurrency_safety_cap(self):
+        config = json.loads((Path(__file__).parents[1] / "config" / "service-v1.json").read_text(encoding="utf-8"))
+        config["download_concurrency"] = 16
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            self.assertEqual(tess.load_config(path)["download_concurrency"], 16)
 
     def test_config_rejects_unbounded_download_concurrency(self):
         config = json.loads((Path(__file__).parents[1] / "config" / "service-v1.json").read_text(encoding="utf-8"))
-        config["download_concurrency"] = 5
+        config["download_concurrency"] = 17
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text(json.dumps(config), encoding="utf-8")
@@ -522,6 +530,21 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual([row["filename"] for row in rows], [item.filename for item in products])
         self.assertEqual(summary["processed"], 2)
         self.assertEqual(summary["concurrency"], 2)
+
+    def test_run_download_rejects_concurrency_above_safety_cap(self):
+        source = {
+            "source_list_sha256": "a" * 64,
+            "worker_count": 5,
+            "products": [],
+        }
+        with self.assertRaisesRegex(ValueError, "concurrency"):
+            tess.run_download(
+                source,
+                self.root / "raw",
+                self.root / "events.jsonl",
+                worker_slot=1,
+                concurrency=17,
+            )
 
     def test_parallel_circuit_stops_after_current_bounded_batch(self):
         base = "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/"
