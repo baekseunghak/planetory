@@ -273,11 +273,13 @@ def load_coverage_map(path: Path, expected_sha256: str) -> dict:
         run = value.get(key, {})
         run_id = str(run.get("run_id", ""))
         source_sha = str(run.get("source_list_sha256", ""))
-        sectors = {int(sector) for sector in run.get("sectors", [])}
+        sector_list = [int(sector) for sector in run.get("sectors", [])]
+        sectors = set(sector_list)
         if (
             not RUN_ID_RE.fullmatch(run_id)
             or not SHA256_RE.fullmatch(source_sha)
             or not sectors
+            or len(sector_list) != len(sectors)
             or run_id in run_sources
             or declared_sectors.intersection(sectors)
         ):
@@ -339,7 +341,9 @@ def load_coverage_map(path: Path, expected_sha256: str) -> dict:
     }
 
 
-def build_coverage_ready(path: Path, expected_sha256: str, hdfs: str) -> dict:
+def build_coverage_ready(
+    path: Path, expected_sha256: str, hdfs: str, *, reuse_sector_audits: bool = False,
+) -> dict:
     coverage = load_coverage_map(path, expected_sha256)
     sectors = []
     for context in coverage["sectors"]:
@@ -358,6 +362,19 @@ def build_coverage_ready(path: Path, expected_sha256: str, hdfs: str) -> dict:
             "replication": 2,
         }
         validate_ready(ready, plan)
+        if not _hdfs_exists(hdfs, f"{location}/manifest.parquet/_SUCCESS"):
+            raise RuntimeError(f"Sector {sector} has no Parquet success marker")
+        if not reuse_sector_audits:
+            audit = audit_stage(
+                location, f"hdfs://planetory{location}", context["source_list_sha256"],
+                sector, [1, 2, 3, 4, 5], hdfs,
+                run_id=context["run_id"], release_id=context["release_id"],
+            )
+            if (
+                int(audit["product_count"]) != int(context["product_count"])
+                or int(audit["total_bytes"]) != int(context["total_bytes"])
+            ):
+                raise RuntimeError(f"Sector {sector} audit differs from coverage")
         sectors.append({
             **context,
             "location": location,
@@ -572,7 +589,7 @@ def audit_stage(
             continue
         if path.startswith(parquet_prefix):
             name = path[len(parquet_prefix):]
-            if name == "_SUCCESS" or name.startswith("part-"):
+            if name == "_SUCCESS" or re.fullmatch(r"part-[^/]+\.parquet", name):
                 continue
         unexpected.append(path)
     if unexpected:
@@ -707,6 +724,7 @@ def main() -> int:
     coverage_ready.add_argument("--expected-sha", required=True)
     coverage_ready.add_argument("--hdfs", default="/opt/hadoop/bin/hdfs")
     coverage_ready.add_argument("--output", type=Path, required=True)
+    coverage_ready.add_argument("--reuse-sector-audits", action="store_true")
     args = parser.parse_args()
 
     if args.command == "plan":
@@ -743,7 +761,10 @@ def main() -> int:
         print(json.dumps(load_coverage_map(args.coverage_manifest, args.expected_sha), sort_keys=True))
         return 0
     if args.command == "coverage-ready":
-        value = build_coverage_ready(args.coverage_manifest, args.expected_sha, args.hdfs)
+        value = build_coverage_ready(
+            args.coverage_manifest, args.expected_sha, args.hdfs,
+            reuse_sector_audits=args.reuse_sector_audits,
+        )
         atomic_json(args.output, value)
         print(json.dumps(value, sort_keys=True))
         return 0

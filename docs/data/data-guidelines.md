@@ -62,7 +62,7 @@ EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2
 
 > 이 백업은 같은 HDFS 클러스터 안의 복사본입니다. EC2 릴리스 삭제·손상은 복구할 수 있지만, HDFS 클러스터 전체 손실과 NameNode 메타데이터 손실은 보호하지 않습니다.
 
-약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum, 묶음 위치, SequenceFile key와 레코드 시작·끝 offset을 기록합니다. key·offset으로 꺼낸 바이트가 원본 checksum과 일치해야 하며 원본을 삭제하거나 컬럼을 제거하지 않습니다. Sector 디렉터리는 덮어쓰기 없는 HDFS atomic rename으로 확정하고, `coverage=<source-coverage-sha256>/_READY.json`은 검증된 원천 coverage와 Sector 1~13의 불변 `_READY.json`을 연결합니다. 이 coverage marker가 없으면 Sector 일부가 존재해도 전체 1~13 적재 완료로 판단하지 않습니다.
+약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum, 묶음 위치, SequenceFile key와 레코드 시작·끝 offset을 기록합니다. key·offset으로 꺼낸 바이트가 원본 checksum과 일치해야 하며 원본을 삭제하거나 컬럼을 제거하지 않습니다. Sector 디렉터리는 덮어쓰기 없는 HDFS atomic rename으로 확정하고, `coverage=<source-coverage-sha256>/_READY.json`은 검증된 원천 coverage와 Sector 1~13의 불변 `_READY.json`을 연결합니다. Sector는 원천 Run별 `release=` 디렉터리에 나뉠 수 있으므로 소비자는 단일 release를 glob하지 않고 coverage marker의 `sectors[].location`을 입력 경로로 사용합니다. 이 coverage marker가 없으면 Sector 일부가 존재해도 전체 1~13 적재 완료로 판단하지 않습니다.
 
 ## PostgreSQL Gold 공개
 

@@ -194,6 +194,15 @@ class PlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid coverage sector"):
             MODULE.load_coverage_map(path, changed_digest)
 
+    def test_coverage_map_rejects_duplicate_sector_inside_run(self):
+        path, _ = self._coverage_fixture()
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["existing_run"]["sectors"].append(3)
+        path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        with self.assertRaisesRegex(ValueError, "invalid coverage run"):
+            MODULE.load_coverage_map(path, digest)
+
     def test_hdfs_coverage_ready_validates_every_sector_release(self):
         path, digest = self._coverage_fixture()
         coverage = MODULE.load_coverage_map(path, digest)
@@ -214,11 +223,74 @@ class PlanTest(unittest.TestCase):
             }
             return CompletedProcess(arguments, 0, json.dumps(ready, sort_keys=True) + "\n", "")
 
-        with mock.patch.object(MODULE, "_run", side_effect=run):
+        def audit(stage_uri, final_uri, source_sha, sector, worker_slots, hdfs, **lineage):
+            context = contexts[sector]
+            self.assertEqual(stage_uri, final_uri.removeprefix("hdfs://planetory"))
+            self.assertEqual(source_sha, context["source_list_sha256"])
+            self.assertEqual(worker_slots, [1, 2, 3, 4, 5])
+            self.assertEqual(lineage, {"run_id": context["run_id"], "release_id": context["release_id"]})
+            return {
+                "product_count": context["product_count"],
+                "total_bytes": context["total_bytes"],
+                "status": "HEALTHY",
+            }
+
+        with (
+            mock.patch.object(MODULE, "_run", side_effect=run),
+            mock.patch.object(MODULE, "_hdfs_exists", return_value=True),
+            mock.patch.object(MODULE, "audit_stage", side_effect=audit) as audit_mock,
+        ):
             ready = MODULE.build_coverage_ready(path, digest, "hdfs")
         self.assertEqual(ready["schema"], MODULE.HDFS_COVERAGE_SCHEMA)
         self.assertEqual(ready["expected"], 247824)
         self.assertEqual(len(ready["sectors"]), 13)
+        self.assertEqual(audit_mock.call_count, 13)
+
+    def test_hdfs_coverage_ready_rejects_audit_byte_mutation(self):
+        path, digest = self._coverage_fixture()
+        coverage = MODULE.load_coverage_map(path, digest)
+        contexts = {int(row["sector"]): row for row in coverage["sectors"]}
+
+        def run(arguments, check=True):
+            sector = int(arguments[3].split("sector=")[-1].split("/")[0])
+            context = contexts[sector]
+            ready = {
+                "schema": MODULE.READY_SCHEMA, "run_id": context["run_id"],
+                "release_id": context["release_id"], "source_list_sha256": context["source_list_sha256"],
+                "sector": sector, "product_count": context["product_count"], "replication": 2,
+            }
+            return CompletedProcess(arguments, 0, json.dumps(ready), "")
+
+        context = contexts[1]
+        audit = {
+            "product_count": context["product_count"],
+            "total_bytes": context["total_bytes"] + 1,
+            "status": "HEALTHY",
+        }
+        with (
+            mock.patch.object(MODULE, "_run", side_effect=run),
+            mock.patch.object(MODULE, "_hdfs_exists", return_value=True),
+            mock.patch.object(MODULE, "audit_stage", return_value=audit),
+            self.assertRaisesRegex(RuntimeError, "audit differs from coverage"),
+        ):
+            MODULE.build_coverage_ready(path, digest, "hdfs")
+
+    def test_hdfs_coverage_ready_reuse_still_requires_parquet_success(self):
+        path, digest = self._coverage_fixture()
+        context = MODULE.load_coverage_map(path, digest)["sectors"][0]
+        ready = {
+            "schema": MODULE.READY_SCHEMA, "run_id": context["run_id"],
+            "release_id": context["release_id"], "source_list_sha256": context["source_list_sha256"],
+            "sector": context["sector"], "product_count": context["product_count"], "replication": 2,
+        }
+        with (
+            mock.patch.object(MODULE, "_run", return_value=CompletedProcess([], 0, json.dumps(ready), "")),
+            mock.patch.object(MODULE, "_hdfs_exists", return_value=False),
+            mock.patch.object(MODULE, "audit_stage") as audit_stage,
+            self.assertRaisesRegex(RuntimeError, "no Parquet success marker"),
+        ):
+            MODULE.build_coverage_ready(path, digest, "hdfs", reuse_sector_audits=True)
+        audit_stage.assert_not_called()
 
     def test_stage_audit_matches_plan_manifest_checksum_and_rf2(self):
         entry = {
@@ -277,6 +349,11 @@ class PlanTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unexpected HDFS artifact"):
                 MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs")
 
+        listing[-1] = "/stage/manifest.parquet/part-00000/hidden.bin"
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "unexpected HDFS artifact"):
+                MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs")
+
     def test_server_runall_uses_exact_worker_internal_ips(self):
         value = {
             "schema": RUNALL.CONFIG_SCHEMA,
@@ -302,6 +379,45 @@ class PlanTest(unittest.TestCase):
         value["workers"][0]["internal_ip"] = "100.64.0.2"
         with self.assertRaisesRegex(ValueError, "exact five Worker internal IPs"):
             RUNALL.validate_config(value)
+
+        value["workers"] = [
+            {"slot": slot, "internal_ip": f"10.20.{slot + 1}.10"}
+            for slot in range(1, 6)
+        ] + [{"slot": 1, "internal_ip": "10.20.2.10"}]
+        with self.assertRaisesRegex(ValueError, "exact five Worker internal IPs"):
+            RUNALL.validate_config(value)
+
+    def test_server_hdfs_exists_distinguishes_absence_from_command_failure(self):
+        with mock.patch.object(RUNALL, "hdfs", return_value=CompletedProcess([], 1, "", "")):
+            self.assertFalse(RUNALL.hdfs_exists("/missing"))
+        with (
+            mock.patch.object(RUNALL, "hdfs", return_value=CompletedProcess([], 255, "", "namenode unavailable")),
+            self.assertRaisesRegex(RuntimeError, "existence check failed"),
+        ):
+            RUNALL.hdfs_exists("/unknown")
+
+    def test_server_coordinator_skips_capacity_for_cached_sector_and_marks_complete(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 1,
+            "product_count": 1, "total_bytes": 4,
+        }
+        config = {
+            "run_id": context["run_id"], "expected_source_list_sha256": context["source_list_sha256"],
+            "expected_coverage_sha256": "b" * 64, "coverage_manifest": "coverage.json",
+        }
+        with (
+            mock.patch.object(RUNALL.loader, "load_coverage_map", return_value={"sectors": [context]}),
+            mock.patch.object(RUNALL, "hdfs_exists", return_value=True),
+            mock.patch.object(RUNALL, "preflight") as preflight,
+            mock.patch.object(RUNALL, "commit_sector"),
+            mock.patch.object(RUNALL, "commit_coverage") as commit_coverage,
+            mock.patch.object(RUNALL.loader, "atomic_json") as atomic_json,
+        ):
+            RUNALL.coordinator(config)
+        preflight.assert_called_once_with(0)
+        commit_coverage.assert_called_once_with(config, reuse_sector_audits=True)
+        self.assertEqual(atomic_json.call_args.args[0], RUNALL.completion_path(config))
 
     def test_server_runall_accepts_ha_safe_mode_output(self):
         self.assertTrue(RUNALL.safe_mode_is_off(
@@ -350,6 +466,7 @@ class PlanTest(unittest.TestCase):
         context = {
             "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
             "source_list_sha256": "a" * 64, "sector": 7, "product_count": 19_995,
+            "total_bytes": 4,
         }
         config = {"code_release": "/opt/planetory-hdfs-load/releases/test"}
         stage, final, _ = RUNALL.context_paths(context)
@@ -375,7 +492,7 @@ class PlanTest(unittest.TestCase):
         with (
             mock.patch.object(RUNALL.shutil, "chown"),
             mock.patch.object(RUNALL, "hdfs_exists", side_effect=exists),
-            mock.patch.object(RUNALL, "audit", return_value={"product_count": 19_995}),
+            mock.patch.object(RUNALL, "audit", return_value={"product_count": 19_995, "total_bytes": 4}),
             mock.patch.object(RUNALL, "run", return_value=CompletedProcess([], 0, "", "")),
             mock.patch.object(RUNALL, "hdfs", side_effect=hdfs),
             mock.patch.object(
@@ -397,6 +514,24 @@ class PlanTest(unittest.TestCase):
             ("commit", stage, final),
         ]
         self.assertEqual(expected, [event for event in events if event in expected])
+
+    def test_server_runall_rejects_sector_audit_byte_mutation(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 7,
+            "product_count": 19_995, "total_bytes": 1234,
+        }
+        config = {"code_release": "/opt/planetory-hdfs-load/releases/test"}
+        with (
+            mock.patch.object(RUNALL.shutil, "chown"),
+            mock.patch.object(RUNALL, "hdfs_exists", return_value=True),
+            mock.patch.object(RUNALL, "audit", return_value={
+                "product_count": context["product_count"], "total_bytes": context["total_bytes"] + 1,
+            }),
+            mock.patch.object(RUNALL, "hdfs_json"),
+            self.assertRaisesRegex(RuntimeError, "audit differs from coverage"),
+        ):
+            RUNALL.commit_sector(config, context)
 
     def test_server_runall_removes_stale_coverage_part_with_valid_ready(self):
         digest = "c" * 64

@@ -41,9 +41,9 @@ $CodeRelease = '<이번 코드 release id>'
   -ReleaseId $Run -CodeReleaseId $CodeRelease -ExpectedCoverageSha256 $CoverageSha
 ```
 
-`ServerRunAll`은 검증된 FinalCoverage와 loader를 배치한 뒤 Node 1의 enabled systemd unit으로 전체 실행을 넘긴다. 이 시점부터 운영자 PC와 Tailscale 세션이 종료돼도 Node 1이 실패 시 30초 뒤 재시작하며 같은 staging에서 재개한다. Node 1의 Worker 기동·상태 확인은 고정 내부 IP `10.20.2.10`~`10.20.6.10`의 SSH만 사용하고 소스 주소도 `10.20.1.10`으로 고정한다. 전용 키는 Node 1의 `/etc/planetory/tess-hdfs-runall/`에만 두며 Worker는 해당 내부 IP에서 온 키만 허용한다. bundle 데이터와 감사 명령은 기존 `hdfs://planetory` 사설망 경로를 사용한다. Tailscale은 최초 배치와 운영자 상태 조회에만 사용한다.
+`ServerRunAll`은 검증된 FinalCoverage와 loader를 배치한 뒤 Node 1의 enabled systemd unit으로 전체 실행을 넘긴다. 이 시점부터 운영자 PC와 Tailscale 세션이 종료돼도 Node 1이 실패 시 30초 뒤 재시작하며 같은 staging에서 재개한다. 전체 coverage 확정 뒤에는 `/var/lib/planetory-tess-hdfs-runall-<run>/complete`를 원자 생성하고 systemd `ConditionPathExists=!`가 완료 작업의 재부팅 재실행을 막는다. Node 1의 Worker 기동·상태 확인은 고정 내부 IP `10.20.2.10`~`10.20.6.10`의 SSH만 사용하고 소스 주소도 `10.20.1.10`으로 고정한다. 전용 키는 Node 1의 `/etc/planetory/tess-hdfs-runall/`에만 두며 Worker는 해당 내부 IP에서 온 키만 허용한다. bundle 데이터와 감사 명령은 기존 `hdfs://planetory` 사설망 경로를 사용한다. Tailscale은 최초 배치와 운영자 상태 조회에만 사용한다.
 
-서버 조정기는 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만들고 Sector마다 HDFS Preflight를 다시 수행한다. final이 있으면 전수 재감사하고, 미완료 Sector는 `plan → Worker 5대 병렬 upload → uploader 완료 대기 → Commit`으로 처리한다. Worker unit은 실패 시 재시작하고 Node 1 조정기가 재기동되면 active unit은 그대로 감시하며 inactive 미완료 unit만 멱등 재실행한다. `Commit`은 checksum·manifest·RF2·FSCK 전수 감사 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 첫 실패에서는 다음 Sector를 시작하지 않고 staging을 보존하며, 13개가 모두 확정된 뒤에만 전체 HDFS coverage marker를 만든다. 기존 로컬 `RunAll`은 단계별 장애 진단용 수동 fallback으로 유지한다.
+서버 조정기는 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만들고 Sector마다 HDFS Preflight를 다시 수행한다. final이 있으면 용량 예상값 0으로 상태 검사를 수행한 뒤 전수 재감사하고, 미완료 Sector는 `plan → Worker 5대 병렬 upload → uploader 완료 대기 → Commit`으로 처리한다. Worker unit은 실패 시 재시작하고 Node 1 조정기가 재기동되면 active unit은 그대로 감시하며 inactive 미완료 unit만 멱등 재실행한다. `Commit`은 checksum·manifest·RF2·FSCK 전수 감사 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 첫 실패에서는 다음 Sector를 시작하지 않고 staging을 보존하며, 13개가 모두 확정된 뒤에만 전체 HDFS coverage marker를 만든다. 조정기 내부 coverage 확정은 직전 Sector 감사 결과를 재사용하지만, 독립 `CoverageCommit`은 13개 Sector를 다시 전수 감사한다. 기존 로컬 `RunAll`은 단계별 장애 진단용 수동 fallback으로 유지한다.
 
 운영자는 다음 읽기 전용 명령으로 Node 1 조정기 상태를 본다. 이 조회가 끊겨도 서버 unit에는 영향이 없다.
 
@@ -98,7 +98,15 @@ sha256sum /tmp/restored.fits
 & .\infra\distributed-system\scripts\test-tess-hdfs-load.ps1
 ```
 
-현재 Python 계획·감사 검사 15개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename, Node 1의 정확한 Worker 내부 IP와 HA safe-mode 출력 계약, Spark manifest 스크립트의 immutable release 직접 mount를 포함한다. 조정기 marker 검사는 UTF-8 정본 JSON의 `stdin → hdfs dfs -put -`, 쓰기 실패 전파, Sector의 `stale part 제거 → put → marker rename → final rename` 순서와 기존 coverage marker가 있을 때 stale part를 먼저 지우는 순서도 고정한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지, 교차 사용자 임시 파일과 변경 가능한 release를 거부하는지도 검사한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
+현재 Python 계획·감사 검사 21개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, run 내부 Sector·Worker 중복 거부, plan v2 cache 필드, 첫·중간·마지막 복원, 중첩 Parquet를 포함한 알 수 없는 artifact 거부, legacy v1 재감사, 제품 수·원본 바이트의 coverage 일치, 독립 CoverageCommit의 13개 Sector 전수 감사, HDFS 조회 오류 전파와 완료 Sector 용량 검사 제외를 포함한다. 조정기 marker 검사는 UTF-8 정본 JSON의 `stdin → hdfs dfs -put -`, 쓰기 실패 전파, Sector의 `stale part 제거 → put → marker rename → final rename` 순서와 기존 coverage marker가 있을 때 stale part를 먼저 지우는 순서도 고정한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지, 완료 표식과 교차 사용자 임시 파일·변경 가능한 release를 거부하는지도 검사한다.
+
+## 2026-09-21 Sector 1~13 최종 완료
+
+실환경 적재는 2026-09-21 06:33:43 KST에 끝났다. coverage SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`가 Sector 1~13의 247,824개·474,185,704,320바이트(441.62GiB)를 정확히 연결하며, 각 final `_READY.json`과 `manifest.parquet/_SUCCESS`가 존재한다. 전체 HDFS FSCK는 `HEALTHY`, RF2, under-replicated·missing·corrupt 0이고 HA `active:standby`, Live DataNode 5개를 확인했다. 65개 uploader unit은 success, 조정기 exit 0·`NRestarts=0`이며 남은 staging은 빈 상위 디렉터리뿐이다.
+
+이번 후속 방어 코드는 제품 수뿐 아니라 원본 바이트도 coverage와 대조하고, 독립 CoverageCommit 전수 감사, HDFS 조회 오류 전파, 중복 선언·중첩 Parquet 거부와 완료 unit 재기동 방지를 추가했다. 오프라인 변형·회귀 검증은 완료했지만 이 후속 CodeRelease는 완료된 실환경 데이터에 재배치하지 않았으며, 위 실환경 완료 증거는 기존 CodeReleaseId `20260920T172453Z`의 읽기 전용 최종 감사 결과다.
+
+### 2026-09-20~21 실행 경과(위 완료 기록으로 대체됨)
 
 75의 실제 FinalCoverage는 2026-09-20에 247,824개·441.62GiB·`.part` 0, Worker 5대 동일 SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 완료됐다. 저장소의 100GiB 예약 설정은 Node 1~6에 반영했고 Worker 2~6 DataNode의 순차 재시작과 Live DataNode 5대 복귀를 확인했다. 실제 FinalCoverage를 입력으로 한 Sector 1~13 적재와 최종 HDFS coverage 감사는 아직 끝나지 않았으므로 76 완료로 간주하지 않는다.
 

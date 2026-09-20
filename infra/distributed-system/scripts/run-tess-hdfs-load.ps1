@@ -74,10 +74,17 @@ function Assert-Host([string]$Alias,[string]$Target,[string]$Expected) {
 function Test-HdfsPath([string]$Path) {
  $command=@'
 set -eu
-if sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfs -test -e '__PATH__'; then
+set +e
+sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs dfs -test -e '__PATH__'
+status=$?
+set -e
+if test "$status" -eq 0; then
  echo HDFS_PATH_PRESENT
-else
+elif test "$status" -eq 1; then
  echo HDFS_PATH_ABSENT
+else
+ echo "HDFS_PATH_CHECK_FAILED path=__PATH__ exit=$status" >&2
+ exit "$status"
 fi
 '@.Replace('__PATH__',$Path)
  @((Invoke-RemoteCapture $node1 $command "Check HDFS path $Path")) -contains 'HDFS_PATH_PRESENT'
@@ -690,7 +697,7 @@ echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
  'ServerRunAll' {
   $document=Get-CoverageDocument
   $first=@($document.Map.sectors)[0]
-  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) 0
   Invoke-OrchestratedStep 'Install' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
 
   $keyCommand=@'
@@ -741,6 +748,7 @@ Description=Planetory TESS HDFS autonomous RunAll $RunId
 Wants=network-online.target
 After=network-online.target hadoop-hdfs-namenode.service docker.service
 StartLimitIntervalSec=0
+ConditionPathExists=!/var/lib/planetory-tess-hdfs-runall-$RunId/complete
 
 [Service]
 Type=simple
@@ -762,6 +770,8 @@ ProtectHome=true
 ProtectSystem=strict
 RuntimeDirectory=planetory-tess-hdfs-runall-$RunId
 RuntimeDirectoryMode=0755
+StateDirectory=planetory-tess-hdfs-runall-$RunId
+StateDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target
@@ -842,8 +852,11 @@ echo SERVER_RUN_ALL_STARTED unit="$unit" internal_workers=10.20.2.10,10.20.3.10,
    })
   }
   $first=$contexts[0]
+  $firstFinal="/lake/raw/tess/release=$([string]$first.release_id)/sector=$('{0:D4}' -f [int]$first.sector)"
+  $firstCached=Test-HdfsPath $firstFinal
+  $firstBytes=if ($firstCached) { 0 } else { [long]$first.total_bytes }
   Write-Host "RUN_ALL_PREFLIGHT sector=$([int]$first.sector) run=$([string]$first.run_id)"
-  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) $firstBytes
   Invoke-OrchestratedStep 'Install' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
   $firstSector=[int]$first.sector
   foreach ($context in $contexts) {
@@ -852,16 +865,17 @@ echo SERVER_RUN_ALL_STARTED unit="$unit" internal_workers=10.20.2.10,10.20.3.10,
    $currentSourceSha=[string]$context.source_list_sha256
    $currentReleaseId=[string]$context.release_id
    $currentBytes=[long]$context.total_bytes
+   $currentFinal="/lake/raw/tess/release=$currentReleaseId/sector=$('{0:D4}' -f $currentSector)"
+   $currentCached=if ($currentSector -eq [int]$first.sector) { $firstCached } else { Test-HdfsPath $currentFinal }
    if ($currentSector -eq $firstSector) {
     Write-Host "RUN_ALL_PREFLIGHT_REUSED sector=$currentSector"
     $firstSector=-1
    } else {
     Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector run=$currentRunId"
-    Invoke-OrchestratedStep 'Preflight' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+    Invoke-OrchestratedStep 'Preflight' $currentSector $currentRunId $currentSourceSha $currentReleaseId $(if ($currentCached) { 0 } else { $currentBytes })
    }
-   $currentFinal="/lake/raw/tess/release=$currentReleaseId/sector=$('{0:D4}' -f $currentSector)"
    Write-Host "RUN_ALL_SECTOR_START sector=$currentSector"
-   if (Test-HdfsPath $currentFinal) {
+   if ($currentCached) {
     Invoke-OrchestratedStep 'Commit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
     Write-Host "RUN_ALL_SECTOR_CACHED sector=$currentSector"
     continue

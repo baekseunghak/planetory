@@ -6,3 +6,4 @@
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 114 최신 develop 통합·Gold QA 상태 정정 | S15P21C206-114 | 2c1c857, 119 보존, NULL, e8f62ea | 문서·검증 완료, MR 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | HDFS marker 권한 경계 수정·Sector 7 확정 | S15P21C206-76 | stdin, UMask, immutable release, atomic rename, Sector 7 | 구현·Sector 7 검증 완료, 전체 적재 진행 중 | [기록](2026-09-21.md) |
+| 2026-09-21 | Sector 1~13 완료 정정·HDFS 감사 경계 강화 | S15P21C206-76 | coverage, total_bytes, full audit, completion marker, CI | 실환경 완료·방어 코드 오프라인 검증 완료, MR 재리뷰 대기 | [기록](2026-09-21.md) |

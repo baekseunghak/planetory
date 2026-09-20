@@ -63,8 +63,9 @@ def validate_config(value: dict) -> dict:
         raise ValueError("server RunAll bundle size must be 512 MiB through 1 GiB")
     if int(value.get("minimum_worker_free_gib", 0)) < 80:
         raise ValueError("server RunAll worker free-space floor is too small")
-    workers = {int(item.get("slot", 0)): str(item.get("internal_ip", "")) for item in value.get("workers", [])}
-    if workers != WORKER_IPS:
+    worker_rows = value.get("workers", [])
+    workers = {int(item.get("slot", 0)): str(item.get("internal_ip", "")) for item in worker_rows}
+    if len(worker_rows) != 5 or len(workers) != 5 or workers != WORKER_IPS:
         raise ValueError("server RunAll requires the exact five Worker internal IPs")
     coverage = str(value.get("coverage_manifest", ""))
     if not coverage.startswith("/"):
@@ -102,7 +103,10 @@ def hdfs(
 
 
 def hdfs_exists(path: str) -> bool:
-    return hdfs(["dfs", "-test", "-e", path], check=False, echo=False).returncode == 0
+    result = hdfs(["dfs", "-test", "-e", path], check=False, echo=False)
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"HDFS existence check failed: {path}\n{result.stderr.strip()}")
+    return result.returncode == 0
 
 
 def hdfs_json(path: str) -> dict:
@@ -121,6 +125,10 @@ def context_paths(context: dict) -> tuple[str, str, str]:
     stage = f"/lake/raw/tess/.staging/run={run_id}/release={release_id}/sector={sector:04d}"
     final = f"/lake/raw/tess/release={release_id}/sector={sector:04d}"
     return stage, final, f"hdfs://planetory{final}"
+
+
+def completion_path(config: dict) -> Path:
+    return Path(f"/var/lib/planetory-tess-hdfs-runall-{config['run_id']}/complete")
 
 
 def safe_mode_is_off(output: str) -> bool:
@@ -318,6 +326,7 @@ def commit_sector(config: dict, context: dict) -> None:
         audit_path = root / "audit.json"
         if hdfs_exists(final):
             result = audit(config, context, final, audit_path)
+            validate_audit_coverage(result, context)
             ready = hdfs_json(f"{final}/_READY.json")
             loader.validate_ready(ready, {
                 "schema": loader.PLAN_SCHEMA,
@@ -333,9 +342,8 @@ def commit_sector(config: dict, context: dict) -> None:
         if hdfs_exists(f"{stage}/_READY.json.part"):
             hdfs(["dfs", "-rm", "-f", f"{stage}/_READY.json.part"])
         result = audit(config, context, stage, audit_path)
+        validate_audit_coverage(result, context)
         count = int(result["product_count"])
-        if count != int(context["product_count"]):
-            raise RuntimeError("Sector audit count differs from coverage")
         if hdfs_exists(f"{stage}/manifest.parquet"):
             hdfs(["dfs", "-rm", "-r", "-skipTrash", f"{stage}/manifest.parquet"])
         spark_script = Path(config["code_release"]) / "hdfs" / "manifest_to_parquet.py"
@@ -376,7 +384,15 @@ def commit_sector(config: dict, context: dict) -> None:
         print(f"COMMIT_OK final={final} products={count}")
 
 
-def commit_coverage(config: dict) -> None:
+def validate_audit_coverage(audit_result: dict, context: dict) -> None:
+    if (
+        int(audit_result["product_count"]) != int(context["product_count"])
+        or int(audit_result["total_bytes"]) != int(context["total_bytes"])
+    ):
+        raise RuntimeError("Sector audit differs from coverage")
+
+
+def commit_coverage(config: dict, *, reuse_sector_audits: bool = False) -> None:
     digest = str(config["expected_coverage_sha256"])
     stage = f"/lake/raw/tess/.staging/coverage={digest}/run={config['run_id']}"
     final = f"/lake/raw/tess/coverage={digest}"
@@ -384,10 +400,13 @@ def commit_coverage(config: dict) -> None:
         shutil.chown(temporary, user="hdfs", group="hadoop")
         Path(temporary).chmod(0o750)
         ready_path = Path(temporary) / "ready.json"
-        run_loader_as_hdfs(config, [
+        arguments = [
             "coverage-ready", "--coverage-manifest", str(config["coverage_manifest"]),
             "--expected-sha", digest, "--output", str(ready_path),
-        ])
+        ]
+        if reuse_sector_audits:
+            arguments.append("--reuse-sector-audits")
+        run_loader_as_hdfs(config, arguments)
         ready = json.loads(ready_path.read_text(encoding="utf-8"))
         if hdfs_exists(final):
             if hdfs_json(f"{final}/_READY.json") != ready:
@@ -420,16 +439,22 @@ def coordinator(config: dict) -> None:
     if not expansion or any(item["source_list_sha256"] != config["expected_source_list_sha256"] for item in expansion):
         raise RuntimeError("coverage does not match the requested expansion run")
     for context in contexts:
-        preflight(int(context["total_bytes"]))
         _, final, _ = context_paths(context)
+        final_exists = hdfs_exists(final)
+        preflight(0 if final_exists else int(context["total_bytes"]))
         print(f"RUN_ALL_SECTOR_START sector={context['sector']} run={context['run_id']}")
-        if not hdfs_exists(final):
+        if not final_exists:
             prepare_stage(context)
             units = {int(worker["slot"]): start_worker(config, context, worker) for worker in config["workers"]}
             wait_workers(config, context, units)
         commit_sector(config, context)
         print(f"RUN_ALL_SECTOR_COMPLETE sector={context['sector']}")
-    commit_coverage(config)
+    commit_coverage(config, reuse_sector_audits=True)
+    loader.atomic_json(completion_path(config), {
+        "schema": "planetory.tess-hdfs-runall-complete.v1",
+        "run_id": config["run_id"],
+        "coverage_sha256": config["expected_coverage_sha256"],
+    })
     print("RUN_ALL_COMPLETE sectors=" + ",".join(str(item["sector"]) for item in contexts))
 
 

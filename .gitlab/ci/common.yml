@@ -42,6 +42,19 @@ validate:hadoop-config:
         - infra/distributed-system/*.yaml
         - .gitlab/ci/common.yml
 
+validate:tess-hdfs-loader:
+  stage: validate
+  image: python:3.12-alpine
+  variables:
+    PYTHONDONTWRITEBYTECODE: "1"
+  script:
+    - python distributed-system/ingestion/hdfs/test_tess_hdfs_load.py
+  rules:
+    - changes:
+        - distributed-system/ingestion/hdfs/**/*.py
+        - infra/distributed-system/scripts/*tess-hdfs-load.ps1
+        - .gitlab/ci/common.yml
+
 .docker-build:
   stage: build
   image: docker:27.5-cli
