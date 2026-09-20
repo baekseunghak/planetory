@@ -454,9 +454,9 @@ if ($LASTEXITCODE -ne 0) { throw 'tamper fixture failed' }
 
 | 인계 항목 | 전달할 규칙·근거 | 책임·남은 결정 |
 |---|---|---|
-| 설정 | 7.1절 전체 설정 SHA-256과 2084018 실행 코드, 110 설정과 반복 전용 추가 조건 구분 | 111 리뷰어가 QA 문턱·통과 횟수≥2·최대 5개 및 실측 한계를 수용한 뒤 122 운영 구현에 반영 |
+| 설정 | 7.1절 전체 설정 SHA-256과 `c68c1e21` 실행 코드, 110 설정과 반복 전용 추가 조건 구분. 최신 실측 근거는 7.9절 | 111 리뷰어가 QA 문턱·통과 횟수≥2·최대 5개 및 실측 한계를 수용한 뒤 122 운영 구현에 반영 |
 | 제거·복구 | QA 성공 때만 후보와 잔차를 채택. 실패 즉시 종료하고 이전 정상 후보·잔차 유지 | 122에서 합성 배열 보존 테스트와 같은 계약 유지. CSV 일치만으로 배열 복구 증명이라고 쓰지 않음 |
-| QA | 7.1절 식과 7.6.2절 분포. qa_not_measurable·non_finite 실패는 이번 실측에서 각각 0건 | 측정 불가를 0 또는 통과로 바꾸지 않음. 비교할 다른 후보·겹침이 없는 경우의 미산출과 구분 |
+| QA | 7.1절 식·7.8절 수정 규칙·7.9절 최신 실측. 비교 대상이 있는데 제거 전·후 깊이 중 하나라도 유한한 양수가 아니거나 측정 개수가 다르면 `other_depth_not_measurable`로 거절한다. 이번 실측에서 73단계 발생했으며 qa_not_measurable·non_finite 실패는 각각 0건 | 측정 불가를 0 또는 통과로 바꾸지 않음. 비교할 다른 후보·겹침이 없는 경우의 미산출과 구분 |
 | 종료 7종 | no_quality_peak, insufficient_observations, duplicate_or_harmonic_only, removal_qa_failed, candidate_validation_failed, numerical_failure, max_iterations_reached | 122에서 종료 사유 보존. 이번 실측은 no_quality_peak·removal_qa_failed 두 종류이고 나머지는 합성 테스트 근거 |
 | 원본 재평가 | validated_on_original=false 후보는 운영 후보표에서 제외 | 122 필수 필터. 이번 n_validation_failed=0이므로 실패 경로는 합성 검증과 구분 |
 | 고조파·EB | 임시 배수 {0.5,1,2}; CM Dra 실측 회수 0/114와 잔여 별칭 한계 유지 | 112 정식 고조파 규칙과 EB 처리 연계는 후속 범위. 해당 후속 구현 완료를 111 결과 기록의 선행조건으로 두지 않음 |
@@ -464,7 +464,7 @@ if ($LASTEXITCODE -ne 0) { throw 'tamper fixture failed' }
 
 완료 요청 범위는 반복 제거 루프의 종료·QA·복구 검증과 알려진 한계를 명시한 인계다. 모든 별의 신호 회수 성공 또는 독립 holdout 성능 보증이 아니다. 122 구현 완료를 기다리는 대신 이 인계의 수용 여부를 리뷰받는다.
 
-리뷰 첨부: `experiments/tess-bench/results/review-111-2084018.zip` (8개 manifest와 출력 CSV, 상대 경로별 checksums.json; FITS 제외). ZIP SHA-256: `149025f37ac0b541a289e9d2b91e4d32b24ca3908bfb385c4ee399be2f82f9db`. 생성물은 Git에 추가하지 않고 MR에 첨부한다. 압축 해제 후 각 ID 폴더의 CSV를 사용하며 원본 manifest의 절대 경로는 실행 당시 기록으로 보존한다.
+최신 리뷰 첨부는 7.9절의 `experiments/tess-bench/results/review-111-c68c1e2.zip`과 SHA-256을 따른다(8개 manifest와 출력 CSV, 상대 경로별 checksums.json; FITS 제외). 이전 `review-111-2084018.zip`은 수정 전 역사적 자료이며 최신 코드 검증 근거로 사용하지 않는다. 생성물은 Git에 추가하지 않고 MR에 첨부한다. 압축 해제 후 각 ID 폴더의 CSV를 사용하며 원본 manifest의 절대 경로는 실행 당시 기록으로 보존한다.
 
 ### 7.8 MR !117 QA 결함 수정과 재실행 요구 (2026-09-21)
 
