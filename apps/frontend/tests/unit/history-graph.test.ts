@@ -245,6 +245,32 @@ test("nothing to draw says why", () => {
   );
   assert.equal(historySeries(missing).emptyReason, "no-curve");
 
+  // 곡선이 왔는데 접기 기준만 없는 경우는 「아직 계산되지 않았다」가 아니다.
+  const noReference = read(
+    current({
+      reproduction: { ...reproduction, currentFoldReferenceTimeBtjd: null },
+      curve: {
+        ticId: TIC,
+        bundleId: "b-3",
+        // 곡선은 왔다. 없는 것은 접기 기준뿐이다.
+        segments: [
+          {
+            segmentId: "s-1",
+            sector: 14,
+            startBtjd: 1683.4231,
+            binMinutes: 10,
+            nPoints: 2,
+            flux: [1, 0.99],
+          },
+        ],
+        residual: { status: null, jobId: null },
+        curveContext: { bundleId: "b-3" },
+      },
+    }),
+    "CURRENT",
+  );
+  assert.equal(historySeries(noReference).emptyReason, "no-reference");
+
   const unmatched = read(submitted({ snapshot: null }), "SUBMITTED");
   assert.equal(historySeries(unmatched).emptyReason, "no-snapshot");
 });

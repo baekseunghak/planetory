@@ -22,6 +22,7 @@ const PAD = { left: 52, right: 12, top: 12, bottom: 28 };
 const EMPTY: Record<NonNullable<GraphSeries["emptyReason"]>, string> = {
   "no-period": "고른 주기가 없는 제출이라 접을 수 없습니다.",
   "no-curve": "이 단계의 곡선이 아직 계산되지 않았습니다.",
+  "no-reference": "곡선은 왔지만 접기 기준 시각이 없어 그릴 수 없습니다.",
   "no-snapshot": "맞는 신호를 찾지 못한 제출이라 당시 배열이 없습니다.",
 };
 

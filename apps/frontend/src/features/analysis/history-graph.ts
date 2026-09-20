@@ -221,7 +221,7 @@ export type GraphSeries = {
   kind: "points" | "bins";
   points: GraphPoint[];
   /** 왜 그릴 것이 없는지. 빈 그래프를 「값이 0」으로 보이게 두지 않는다. */
-  emptyReason: "no-period" | "no-curve" | "no-snapshot" | null;
+  emptyReason: "no-period" | "no-curve" | "no-reference" | "no-snapshot" | null;
 };
 
 const toCentered = (phase: number) => (phase >= 0.5 ? phase - 1 : phase);
@@ -250,10 +250,14 @@ export function historySeries(view: HistoryGraphView): GraphSeries {
   // 특수 제출에는 고른 주기가 없다. 접을 기준이 없으므로 그리지 않는다.
   if (period === null)
     return { kind: "points", points: [], emptyReason: "no-period" };
-  const reference = view.reproduction.currentFoldReferenceTimeBtjd;
   const segments = dto.curve?.segments;
-  if (!segments || !segments.length || reference === null)
+  if (!segments || !segments.length)
     return { kind: "points", points: [], emptyReason: "no-curve" };
+  // 곡선이 왔는데 접기 기준만 없는 경우와 곡선 자체가 없는 경우는 다르다.
+  // 한 문구로 뭉치면 「아직 계산되지 않았다」가 거짓이 된다.
+  const reference = view.reproduction.currentFoldReferenceTimeBtjd;
+  if (reference === null)
+    return { kind: "points", points: [], emptyReason: "no-reference" };
 
   const times: number[] = [];
   const fluxes: number[] = [];

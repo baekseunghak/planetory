@@ -59,7 +59,10 @@ export function useHistoryDetail(historyId: string) {
           return setDetail({
             phase: "unreadable",
             message:
-              "최초 응답이 없어 상세를 제공할 수 없는 기록입니다. 목록과 그래프는 그대로 볼 수 있습니다.",
+              // 이 화면은 상세가 없으면 그래프도 열지 않는다. `ticId`가
+              // 상세에서만 오므로 조회가 시작조차 되지 않는다. 기다리면
+              // 나올 것처럼 말하지 않는다.
+              "최초 응답이 없어 상세를 제공할 수 없는 기록입니다. 이 화면에서는 그래프도 볼 수 없습니다. 목록에서는 그대로 보입니다.",
           });
         if (
           error instanceof ApiError &&

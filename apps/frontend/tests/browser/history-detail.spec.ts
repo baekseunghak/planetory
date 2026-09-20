@@ -97,6 +97,10 @@ test("a record without its first response says so instead of guessing", async ({
   );
   // 상세가 없으면 그래프도 그리지 않는다. 절반만 보여 주지 않는다.
   await expect(page.locator(".history-curve")).toHaveCount(0);
+  // 그래서 안내도 그렇게 말해야 한다. 기다리면 나올 것처럼 적지 않는다.
+  await expect(page.getByRole("alert")).toContainText(
+    "이 화면에서는 그래프도 볼 수 없습니다",
+  );
 });
 
 test("a record that is not there is not invented", async ({ page }) => {
