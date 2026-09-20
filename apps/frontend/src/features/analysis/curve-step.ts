@@ -70,3 +70,17 @@ export function needsResidual(
 /** 화면에 쓰는 단계 이름. 와이어프레임 SC-03이 「곡선 단계 N」으로 쓴다. */
 export const stepName = (context: CurveContext) =>
   isOriginal(context) ? "원본 곡선" : `곡선 단계 ${context.curveStep}`;
+
+/**
+ * 대기열 거절 뒤 아직 기다려야 하는 초. 서버가 「N초 뒤에」라고 했으면
+ * 그때까지 [다시 시도]를 누를 수 없어야 한다. 말과 버튼이 다르면 사용자가
+ * 곧바로 눌러 대기열을 한 번 더 두드린다.
+ */
+export function remainingSeconds(
+  refusedAt: number,
+  retryAfterSeconds: number,
+  now: number,
+): number {
+  const left = refusedAt + retryAfterSeconds * 1000 - now;
+  return left <= 0 ? 0 : Math.ceil(left / 1000);
+}

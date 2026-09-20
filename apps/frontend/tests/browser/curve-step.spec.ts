@@ -92,9 +92,18 @@ test("the two queue refusals do not say the same thing", async ({ page }) => {
   // 대기열이 찼다. 기다리면 된다.
   await expect(bar(page)).toContainText("계산 대기가 가득 찼습니다");
   await expect(bar(page)).toContainText("12초");
+  // 서버가 기다리라고 한 동안에는 누를 수 없다. 말과 버튼이 다르면 곧바로
+  // 눌러 대기열을 한 번 더 두드린다.
+  const retry = bar(page).getByRole("button", { name: /^다시 시도/ });
+  await expect(retry).toBeDisabled();
+  await expect(retry).toContainText("초");
 
   scenario = "other-job";
-  await move(page, "다시 시도").click();
+  // 대기가 끝나면 열린다. 개발용 응답이 12초를 주므로 시계를 앞당긴다.
+  await page.clock.install();
+  await page.clock.fastForward("00:13");
+  await expect(retry).toBeEnabled();
+  await retry.click();
   // 내가 이미 돌리고 있는 작업이다. 기다리라고 하면 안 된다(D-4).
   await expect(bar(page)).toContainText("다른 곡선을 이미 계산하고 있습니다");
   await expect(bar(page)).not.toContainText("대기가 가득");

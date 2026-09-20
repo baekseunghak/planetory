@@ -1,4 +1,5 @@
-import { stepName } from "./curve-step";
+import { useEffect, useState } from "react";
+import { remainingSeconds, stepName } from "./curve-step";
 import type { AnalysisContext } from "./analysis-data";
 import { useCurveStepSession } from "./AnalysisSession";
 
@@ -26,8 +27,32 @@ const ORDER = [
  * **계산이 끝나기 전에는 곡선이 바뀌지 않는다.** 여기서는 어디까지 왔는지만
  * 알린다. 실패해도 보고 있던 곡선은 그대로다.
  */
+/** 대기열 거절 뒤 남은 초를 센다. 0이면 다시 누를 수 있다. */
+function useWait(refusedAt: number | null, retryAfterSeconds: number) {
+  const [left, setLeft] = useState(() =>
+    refusedAt === null
+      ? 0
+      : remainingSeconds(refusedAt, retryAfterSeconds, Date.now()),
+  );
+  useEffect(() => {
+    if (refusedAt === null) return;
+    const tick = () =>
+      setLeft(remainingSeconds(refusedAt, retryAfterSeconds, Date.now()));
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [refusedAt, retryAfterSeconds]);
+  return refusedAt === null ? 0 : left;
+}
+
 export function CurveStepBar({ context }: { context: AnalysisContext }) {
   const step = useCurveStepSession();
+  const queued =
+    step?.transition.phase === "queue-full" ? step.transition : null;
+  const wait = useWait(
+    queued?.refusedAt ?? null,
+    queued?.retryAfterSeconds ?? 0,
+  );
   if (!step) return null;
   const { viewing, transition, moves } = step;
   const busy = transition.phase === "running";
@@ -110,8 +135,13 @@ export function CurveStepBar({ context }: { context: AnalysisContext }) {
           {transition.activeJobId
             ? "다른 곡선을 이미 계산하고 있습니다. 그것이 끝난 뒤에 다시 시도해 주세요."
             : `계산 대기가 가득 찼습니다. ${transition.retryAfterSeconds}초 뒤에 다시 시도해 주세요.`}{" "}
-          <button type="button" onClick={() => step.retry()}>
-            다시 시도
+          {/* 말과 버튼이 다르면 곧바로 눌러 대기열을 한 번 더 두드린다. */}
+          <button
+            type="button"
+            onClick={() => step.retry()}
+            disabled={wait > 0}
+          >
+            {wait > 0 ? `다시 시도 (${wait}초)` : "다시 시도"}
           </button>
         </p>
       )}

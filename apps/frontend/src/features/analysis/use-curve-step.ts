@@ -24,6 +24,8 @@ export type StepTransition =
       target: CurveContext;
       retryAfterSeconds: number;
       activeJobId: string | null;
+      /** 거절이 온 시각. 화면이 남은 시간을 셀 때 쓴다. */
+      refusedAt: number;
     }
   /** 판이 바뀌었다. 최신 판을 다시 불러와야 한다. */
   | { phase: "bundle-changed"; currentBundleId: string | null };
@@ -145,6 +147,7 @@ export function useCurveStep(context: AnalysisContext) {
             target,
             retryAfterSeconds: outcome.retryAfterSeconds,
             activeJobId: outcome.activeJobId,
+            refusedAt: Date.now(),
           });
           return;
         case "bundle-changed":

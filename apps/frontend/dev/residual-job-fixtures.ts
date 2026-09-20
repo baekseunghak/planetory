@@ -28,7 +28,7 @@ export type ResidualScenario =
   | "fail"
   // 대기열이 찼다. 기다리는 안내다.
   | "queue-full"
-  // 같은 회원의 다른 작업이 진행 중이다(D-4). 그쪽으로 데려가야 한다.
+  // 같은 회원의 다른 작업이 진행 중이다(D-4). 무엇이 막는지 알려야 한다.
   | "other-job"
   // 판이 바뀌었다.
   | "bundle-changed"

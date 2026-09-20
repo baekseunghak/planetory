@@ -43,7 +43,9 @@ export type ResidualOutcome =
   | { state: "failed"; jobId: string; code: string; message: string }
   /**
    * 대기열이 찼다. `activeJobId`가 있으면 **내가 이미 돌리고 있는 작업**이라
-   * 기다리라고 하면 안 되고 그쪽으로 데려가야 한다(회원당 1개, D-4).
+   * 기다리라고만 하면 영문을 모른다(회원당 1개, D-4). 다만 그 작업으로
+   * 데려가지는 않는다 — 목표가 다른 단계일 수 있어 완료돼도 지금 목표가
+   * 준비된 것이 아니다.
    */
   | {
       state: "queue-full";

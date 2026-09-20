@@ -6,6 +6,7 @@ import {
   sameContext,
   stepMoves,
   stepName,
+  remainingSeconds,
 } from "../../src/features/analysis/curve-step";
 
 const at = (removed: string[]) => ({
@@ -71,4 +72,16 @@ test("the original never needs a computation; the rest ask unless cached", () =>
 test("the step is named the way the screen names it", () => {
   assert.equal(stepName(at([])), "원본 곡선");
   assert.equal(stepName(at(["c-1", "c-2"])), "곡선 단계 2");
+});
+
+test("the wait the server asked for is counted down, not guessed", () => {
+  // 서버가 「12초 뒤에」라고 했으면 그때까지는 누를 수 없어야 한다.
+  const refusedAt = 1_000_000;
+  assert.equal(remainingSeconds(refusedAt, 12, refusedAt), 12);
+  assert.equal(remainingSeconds(refusedAt, 12, refusedAt + 3_400), 9);
+  // 지난 뒤에는 0이다. 음수로 내려가지 않는다.
+  assert.equal(remainingSeconds(refusedAt, 12, refusedAt + 12_000), 0);
+  assert.equal(remainingSeconds(refusedAt, 12, refusedAt + 99_000), 0);
+  // 서버가 0을 주면 곧바로 누를 수 있다.
+  assert.equal(remainingSeconds(refusedAt, 0, refusedAt), 0);
 });
