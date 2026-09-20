@@ -2,26 +2,23 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useModalDialog } from "./use-modal-dialog";
 import { useBundleRecovery } from "./AnalysisSession";
 import { acceptedOnOlderBundle } from "./submission-data";
+import { hasCelebrated, markCelebrated } from "./celebration";
+import { useSession } from "../../auth/SessionProvider";
+import {
+  DetailView,
+  NextActions,
+  ResultExplanationView,
+} from "./AnalysisResult";
+import { usePageContext } from "../../app/usePageContext";
 import type { AnalysisContext } from "./analysis-data";
 import {
   noCandidateInput,
   skippedInput,
   specialSubmissions,
 } from "./submission-input";
-import type { MatchStatus } from "./submission-data";
 import type { useSubmission } from "./use-submission";
 
 type Submission = ReturnType<typeof useSubmission>;
-
-const matchSummary: Record<MatchStatus, string> = {
-  matched: "신호와 일치했습니다.",
-  matched_harmonic: "신호의 배수 주기와 일치했습니다.",
-  not_matched: "일치하는 신호를 찾지 못했습니다.",
-  duplicate: "이미 찾은 신호입니다.",
-  ambiguous_match: "어느 신호인지 가리지 못했습니다.",
-  none_wrong: "더 이상 없음으로 접수했습니다.",
-  skipped: "이 별을 건너뛰었습니다.",
-};
 
 /**
  * 제출 상태를 한 곳에서 알린다. 색만으로 구분하지 않으며 문구와 포커스 이동이
@@ -50,11 +47,40 @@ function residualNote(status: string | null): string {
 export function SubmissionStatus({ submission }: { submission: Submission }) {
   const { state, volatileId } = submission;
   const recoverBundle = useBundleRecovery();
+  const { returnTo, currentPath } = usePageContext();
   const headingId = useId();
   const reminderRef = useRef<HTMLButtonElement>(null);
   const focusRef = useRef<HTMLParagraphElement>(null);
   const [closed, setClosed] = useState(false);
   const settled = state.phase === "settled" ? state : null;
+  /**
+   * 접수 뒤 판이 바뀌었는가(D-5 재전송 성공 예외). 성공을 취소하지 않고
+   * 최신이 필요한 축(진행·공개·통계·다음 행동)에만 모른다고 표시한다.
+   */
+  /**
+   * 이 회원이 이 제출의 성과를 처음 보는가(2.2절). 201인지 200인지로 가르지
+   * 않는다. 최초 201을 잃고 200으로 처음 복구한 결과도 그에게는 처음이다.
+   *
+   * 보여 준 순간에 적는다. 다시 열거나 새로고침하면 축하는 나오지 않고
+   * 사실은 그대로 남는다.
+   */
+  const memberId = useSession().member?.memberId ?? null;
+  const shown =
+    settled?.state === "accepted" ? settled.receipt.submissionId : null;
+  // 제출이 바뀔 때 한 번만 판정한다. 마운트 시점에는 아직 결과가 없고,
+  // 판정을 매번 다시 하면 적어 둔 직후에 축하가 사라진다.
+  const decided = useRef<{ id: string; celebrate: boolean } | null>(null);
+  if (shown && memberId && decided.current?.id !== shown)
+    decided.current = { id: shown, celebrate: !hasCelebrated(memberId, shown) };
+  const celebrate = Boolean(shown && decided.current?.celebrate);
+  useEffect(() => {
+    if (celebrate && memberId && shown) markCelebrated(memberId, shown);
+  }, [celebrate, memberId, shown]);
+
+  const stale = Boolean(
+    settled?.state === "accepted" &&
+    acceptedOnOlderBundle(settled.receipt, settled.currentBundleId),
+  );
   const open = state.phase !== "idle" && !closed;
 
   /**
@@ -114,7 +140,13 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
       )}
       <dialog
         ref={dialogRef}
-        className="submission-dialog"
+        className={
+          // 비교표가 좌우로 놓이려면 폭이 필요하다. 결과가 아닐 때는 한 줄
+          // 안내뿐이라 넓히면 오히려 읽기 어렵다.
+          settled?.state === "accepted"
+            ? "submission-dialog submission-dialog-wide"
+            : "submission-dialog"
+        }
         data-testid="submission-result"
         aria-labelledby={headingId}
       >
@@ -131,24 +163,22 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           <>
             <h4 id={headingId}>접수되었습니다</h4>
             <p ref={focusRef} tabIndex={-1} role="status">
-              {acceptedNotice(settled.recovered, settled.receipt.outcome)}{" "}
-              {matchSummary[settled.receipt.matchStatus]}
+              {acceptedNotice(settled.recovered, settled.receipt.outcome)}
             </p>
             {/*
               D-5 재전송 성공 예외. 접수 뒤에 판이 바뀌었어도 성공을 취소하거나
               다시 제출하지 않는다. 당시 판정·선택·스냅샷은 그대로 두고 이
               결과가 어느 판 기준인지만 알린다.
             */}
-            {acceptedOnOlderBundle(
-              settled.receipt,
-              settled.currentBundleId,
-            ) && (
+            {stale && (
               <p className="submission-note" data-testid="stale-bundle">
                 이 결과는 접수 당시 판 기준입니다. 그 뒤 별의 자료 판이
                 바뀌었으니 분석을 이어가려면 최신 자료를 다시 불러와 주세요.
               </p>
             )}
-            <dl>
+            {/* 접수 정보는 맨 위 한 줄이다. 결과를 읽는 데 쓰는 값이 아니라
+                무엇이 접수됐는지 가리키는 값이라 자리를 적게 쓴다. */}
+            <dl className="result-receipt">
               <dt>접수 번호</dt>
               <dd>{settled.receipt.submissionId}</dd>
               <dt>기록 번호</dt>
@@ -162,9 +192,23 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 </time>
               </dd>
             </dl>
-            <p className="submission-note">
-              자세한 결과 풀이와 다음 단계는 아직 연결되지 않았습니다.
-            </p>
+            <ResultExplanationView
+              receipt={settled.receipt}
+              // 미매칭이면 상세를 열어야 신호를 안다. 표의 오른쪽 칸이
+              // 그때 채워진다.
+              detail={submission.detail}
+              staleBundle={stale}
+              celebrate={celebrate}
+            />
+            <DetailView
+              receipt={settled.receipt}
+              detail={submission.detail}
+              onView={submission.viewDetail}
+              // 건너뛰기는 #187이 만든 제출 경로를 그대로 쓴다.
+              onSkip={() =>
+                submission.submit(skippedInput(settled.receipt.curveContext))
+              }
+            />
           </>
         ) : settled.state === "unresolved" ? (
           <>
@@ -268,6 +312,15 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           className="submission-dialog-actions"
           hidden={state.phase === "idle"}
         >
+          {/* 다음 행동은 닫기와 같은 줄이다. 결과를 다 읽고 나서 고르는
+              것이라 본문이 아니라 바닥에 둔다. */}
+          {settled?.state === "accepted" && (
+            <NextActions
+              receipt={settled.receipt}
+              returnTo={returnTo}
+              from={currentPath}
+            />
+          )}
           <button type="button" onClick={close}>
             {settled &&
             settled.state !== "accepted" &&

@@ -33,7 +33,9 @@ async function setUp(request: APIRequestContext) {
     curveContext: context.currentCurveContext,
     selection: {
       periodDays: 11.7346,
-      sourcePeakGridIndex: 3600,
+      // 직접 고른 주기다. 봉우리를 고르면 #188 조합표가 매칭 결과를 채우는데,
+      // 이 검사가 보는 것은 접수의 뼈대이지 매칭 결과가 아니다.
+      sourcePeakGridIndex: null,
       phaseStart: 0.49,
       phaseEnd: 0.51,
     },
@@ -215,8 +217,11 @@ test("no_candidate carries no selection or judgment and cannot smuggle the previ
   expect(accepted.status()).toBe(201);
   const body = await accepted.json();
   expect(body.match.status).toBe("none_wrong");
-  expect(body.original).toBeNull();
-  expect(body.judgment).toBeNull();
+  // 서버는 상자를 보내고 **안쪽만** 비운다. 상자 자체를 null로 보내지 않는다.
+  expect(body.original.periodDays).toBeNull();
+  expect(body.original.userJudgment).toBeNull();
+  expect(body.judgment.value).toBeNull();
+  expect(body.judgment.evaluation).toBe("NOT_APPLICABLE");
 
   // 완료 조건: 더 없음 요청에 이전 후보의 수치·판단·근거를 섞지 않는다.
   const smuggled = await post({
@@ -373,4 +378,220 @@ test("a not-ready residual is refused without storing, and the same id still wor
   const accepted = await post(candidate(id));
   expect(accepted.status()).toBe(201);
   expect((await accepted.json()).requestId).toBe(id);
+});
+
+test("every result combination the fixture produces passes the parser", async ({
+  request,
+}) => {
+  const { context, post } = await setUp(request);
+  const send = async (
+    sourcePeakGridIndex: number | null,
+    userJudgment: string,
+    outcome?: string,
+  ) => {
+    const id = uuid();
+    const csrf = await (await request.get("/api/v1/auth/csrf")).json();
+    const response = await request.post(`/api/v1/stars/${TIC}/submissions`, {
+      headers: outcome
+        ? { [csrf.headerName]: csrf.token, "X-Fixture-Outcome": outcome }
+        : { [csrf.headerName]: csrf.token },
+      data: {
+        requestId: id,
+        submissionKind: "candidate",
+        curveContext: context.currentCurveContext,
+        selection: {
+          periodDays: 11.7346,
+          sourcePeakGridIndex,
+          phaseStart: 0.49,
+          phaseEnd: 0.51,
+        },
+        userJudgment,
+        evidenceChecks: [],
+        memo: "",
+        retryOfSubmissionId: null,
+      },
+      failOnStatusCode: false,
+    });
+    expect(response.status()).toBe(201);
+    return decodeSubmissionReceipt(
+      await response.json(),
+      { ticId: TIC, requestId: id },
+      response.status(),
+    );
+  };
+
+  // 확정 + 맞힘: 매칭도 성과도 성공이고 채점이 붙는다.
+  const right = await send(3600, "LIKELY_PLANET");
+  expect(right.matchStatus).toBe("matched");
+  expect(right.explanation.evaluation).toBe("AGREES");
+  expect(right.explanation.achievement.result).toBe("recognized");
+  expect(right.explanation.achievement.unlockedTicIds).toHaveLength(1);
+  expect(right.explanation.statistics?.kind).toBe("graded");
+
+  // 확정 + 오판: 매칭은 성공인데 성과만 미인정이다. 완료 조건의 그 조합이다.
+  const wrong = await send(3600, "UNLIKELY_PLANET");
+  expect(wrong.matchStatus).toBe("matched");
+  expect(wrong.explanation.evaluation).toBe("DISAGREES");
+  expect(wrong.explanation.achievement.result).toBe("judgment_mismatch");
+
+  // 미확정: 채점하지 않고 게시할 수 있으며 공개 분포를 준다. 배수 정정이 있다.
+  const open = await send(2500, "LIKELY_PLANET");
+  expect(open.matchStatus).toBe("matched_harmonic");
+  expect(open.explanation.evaluation).toBe("UNSCORED");
+  expect(open.explanation.publication.state).toBe("UNPUBLISHED");
+  expect(open.explanation.statistics?.kind).toBe("public_analyses");
+  expect(open.explanation.correction?.multiplier).toBe(2);
+  expect(open.explanation.correction?.correctedPeriodDays).toBeCloseTo(
+    11.7346 * 2,
+    6,
+  );
+
+  // FP: AI를 실행하지 못했다. 점수를 0으로 만들지 않는다.
+  const fp = await send(1600, "UNLIKELY_PLANET");
+  expect(fp.explanation.signal?.ai.status).toBe("input_insufficient");
+  expect(fp.explanation.signal?.ai.score).toBeUndefined();
+  // 외부 출처는 원천 표기 그대로다.
+  expect(fp.explanation.signal?.external[0].disposition).toBe("FP");
+
+  // 직접 선택: 미매칭이라 신호·통계가 없고 그 단계의 힌트를 준다.
+  const free = await send(null, "UNSURE");
+  expect(free.matchStatus).toBe("not_matched");
+  expect(free.explanation.signal).toBeNull();
+  expect(free.explanation.statistics).toBeNull();
+  expect(free.explanation.detail.targetKind).toBe("CURRENT_CURVE_HINT");
+
+  // 모호: 서버가 어느 후보도 고르지 않았다. 아무것도 붙이지 않는다.
+  const unsure = await send(3600, "LIKELY_PLANET", "ambiguous");
+  expect(unsure.matchStatus).toBe("ambiguous_match");
+  expect(unsure.explanation.signal).toBeNull();
+  expect(unsure.explanation.achievement.result).toBe("none");
+  expect(unsure.explanation.detail.targetKind).toBeNull();
+
+  // 공개 0명: 비율이 null이며 0%가 아니다.
+  const empty = await send(2500, "UNSURE", "empty-statistics");
+  const statistics = empty.explanation.statistics as {
+    participantCount: number;
+    percentages: unknown;
+  };
+  expect(statistics.participantCount).toBe(0);
+  expect(statistics.percentages).toBeNull();
+});
+
+test("the empty columns and empty boxes the real server sends survive the parser", async ({
+  request,
+}) => {
+  const { context, headers, post } = await setUp(request);
+  // 손으로 맞춘 표본이 아니라 개발 서버가 실제로 보내는 본문을 읽는다.
+  // 이 셋은 fixture끼리만 맞춰 보면 드러나지 않았던 서버의 모양이다.
+  const send = async (data: Record<string, unknown>, outcome?: string) => {
+    const response = await request.post(`/api/v1/stars/${TIC}/submissions`, {
+      headers: outcome ? { ...headers, "X-Fixture-Outcome": outcome } : headers,
+      data,
+      failOnStatusCode: false,
+    });
+    expect(response.status()).toBe(201);
+    const raw = await response.json();
+    return {
+      raw,
+      receipt: decodeSubmissionReceipt(
+        raw,
+        { ticId: TIC, requestId: data.requestId as string },
+        response.status(),
+      ),
+    };
+  };
+  const selection = {
+    periodDays: 1.5,
+    sourcePeakGridIndex: 2500,
+    phaseStart: 0.49,
+    phaseEnd: 0.51,
+  };
+
+  // Gold 스키마에 열이 아직 없어 서버가 bls.sde/snr에 null을 넣는다(#188 리뷰).
+  const matched = await send({
+    requestId: uuid(),
+    submissionKind: "candidate",
+    curveContext: context.currentCurveContext,
+    selection,
+    userJudgment: "LIKELY_PLANET",
+    evidenceChecks: [],
+    memo: "",
+    retryOfSubmissionId: null,
+  });
+  expect(matched.raw.signal.bls.sde).toBeNull();
+  expect(matched.raw.signal.bls.snr).toBeNull();
+  expect(matched.receipt.explanation.signal?.bls.sde).toBeNull();
+  expect(matched.receipt.explanation.signal?.bls.snr).toBeNull();
+  expect(matched.receipt.explanation.signal?.bls.depthPpm).toBeGreaterThan(0);
+
+  // 이미 찾은 신호를 다시 맞힌 결과다. 상태만 duplicate로 바뀌고 정정값은
+  // 그대로 온다. 이 조합 하나만 파서에 넣어도 리뷰가 짚은 오류가 재현된다.
+  const again = await send(
+    {
+      requestId: uuid(),
+      submissionKind: "candidate",
+      curveContext: context.currentCurveContext,
+      selection,
+      userJudgment: "LIKELY_PLANET",
+      evidenceChecks: [],
+      memo: "",
+      retryOfSubmissionId: null,
+    },
+    "duplicate",
+  );
+  expect(again.receipt.matchStatus).toBe("duplicate");
+  expect(again.raw.match.harmonicMultiplier).toBe(2);
+  expect(again.receipt.explanation.correction?.multiplier).toBe(2);
+  expect(again.receipt.explanation.correction?.correctedPeriodDays).toBeCloseTo(
+    3,
+    6,
+  );
+  expect(again.receipt.explanation.achievement.result).toBe(
+    "already_recognized",
+  );
+
+  // 고른 것이 없는 제출에도 서버는 두 상자를 보내고 안쪽만 비운다.
+  const empty = await send({
+    requestId: uuid(),
+    submissionKind: "no_candidate",
+    curveContext: context.currentCurveContext,
+    retryOfSubmissionId: null,
+  });
+  expect(empty.raw.original).not.toBeNull();
+  expect(empty.raw.original.periodDays).toBeNull();
+  expect(empty.raw.serverDerived).not.toBeNull();
+  expect(empty.raw.serverDerived.epochBtjd).toBeNull();
+  // 접기 기준 시각은 판의 값이라 특수 제출에도 온다.
+  expect(typeof empty.raw.serverDerived.foldReferenceTimeBtjd).toBe("number");
+  expect(empty.receipt.explanation.submitted?.periodDays).toBeNull();
+  expect(empty.receipt.explanation.serverDerived?.durationHours).toBeNull();
+
+  // 건너뛰기도 같은 모양이다. 두 특수 제출을 함께 본다.
+  const tutorial = PERIODOGRAM_FIXTURE_TICS.tutorial;
+  const tutorialContext = await (
+    await request.get(`/api/v1/stars/${tutorial}/analysis-context`)
+  ).json();
+  const skipId = uuid();
+  const skip = await request.post(`/api/v1/stars/${tutorial}/submissions`, {
+    headers,
+    data: {
+      requestId: skipId,
+      submissionKind: "skipped",
+      curveContext: tutorialContext.currentCurveContext,
+      retryOfSubmissionId: null,
+    },
+    failOnStatusCode: false,
+  });
+  expect(skip.status()).toBe(201);
+  const skipped = await skip.json();
+  expect(skipped.original.userJudgment).toBeNull();
+  expect(skipped.serverDerived.phaseCenter).toBeNull();
+  expect(skipped.serverDerived.centroidDataStatus).toBe("unavailable");
+  const skipReceipt = decodeSubmissionReceipt(
+    skipped,
+    { ticId: tutorial, requestId: skipId },
+    skip.status(),
+  );
+  expect(skipReceipt.explanation.submitted?.phaseStart).toBeNull();
+  expect(skipReceipt.explanation.serverDerived?.epochBtjd).toBeNull();
 });

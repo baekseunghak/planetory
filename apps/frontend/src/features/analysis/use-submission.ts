@@ -9,6 +9,12 @@ import {
   submitAnalysis,
   type SubmissionResult,
 } from "./submit-analysis";
+import { ApiError } from "../../api/client";
+import {
+  decodeDetailView,
+  detailViewPath,
+  type DetailView,
+} from "./submission-result";
 import {
   markSubmissionAccepted,
   markSubmissionConflict,
@@ -42,6 +48,8 @@ export function useSubmission(context: AnalysisContext) {
   const last = useRef<{ requestId: string; kind: Kind } | null>(null);
   /** 마지막으로 보내려 한 본문. [별도 제출로 보내기]가 이것을 다시 쓴다. */
   const attempted = useRef<SubmissionInput | null>(null);
+  // 제출과 다른 제어기를 쓴다. 상세를 여는 것이 진행 중인 제출을 끊으면 안 된다.
+  const reading = useRef<AbortController | null>(null);
   const [volatileId, setVolatileId] = useState(false);
   const key = useMemo(
     () => (memberId ? submissionStorageKey(memberId, context.ticId) : null),
@@ -50,6 +58,7 @@ export function useSubmission(context: AnalysisContext) {
   useEffect(
     () => () => {
       running.current?.abort();
+      reading.current?.abort();
     },
     [],
   );
@@ -66,6 +75,7 @@ export function useSubmission(context: AnalysisContext) {
     running.current?.abort();
     running.current = null;
     setVolatileId(false);
+    setDetail({ phase: "idle" });
     const pending = key ? readPendingSubmission(key) : null;
     if (!pending || pending.state !== "pending") {
       last.current = null;
@@ -229,6 +239,46 @@ export function useSubmission(context: AnalysisContext) {
     );
   }, [key, context.ticId, run]);
 
+  /**
+   * 상세 보기. **누르면 열람 기록이 남는다.** 그 기록이 튜토리얼 건너뛰기
+   * 조건에 쓰이므로(6.5절) 사용자가 누르지 않았는데 대신 부르지 않는다.
+   * 미리 불러 두거나 화면을 열 때 자동으로 부르면 안 된다.
+   */
+  const [detail, setDetail] = useState<
+    | { phase: "idle" }
+    | { phase: "loading" }
+    | { phase: "shown"; view: DetailView }
+    | { phase: "unavailable"; message: string }
+  >({ phase: "idle" });
+  const viewDetail = useCallback(async (submissionId: string) => {
+    reading.current?.abort();
+    const controller = new AbortController();
+    reading.current = controller;
+    setDetail({ phase: "loading" });
+    try {
+      const value = await api<unknown>(detailViewPath(submissionId), {
+        method: "POST",
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setDetail({
+        phase: "shown",
+        view: decodeDetailView(value, { submissionId }),
+      });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setDetail({
+        phase: "unavailable",
+        message:
+          error instanceof ApiError && error.code === "DETAIL_UNAVAILABLE"
+            ? "이 제출에는 볼 수 있는 상세가 없습니다."
+            : (error as Error).message,
+      });
+    } finally {
+      if (reading.current === controller) reading.current = null;
+    }
+  }, []);
+
   /** 입력을 고쳐 다시 제출할 수 있는 상태로 되돌린다. */
   const dismiss = useCallback(() => {
     running.current?.abort();
@@ -254,6 +304,8 @@ export function useSubmission(context: AnalysisContext) {
       settled?.state === "unresolved" &&
       settled.reason === "not-found" &&
       Boolean(key && readPendingSubmission(key)?.body),
+    detail,
+    viewDetail,
     /**
      * 초안을 잠글지. 보내는 중과 결과 불명에서 잠근다. 결과를 모르는 동안
      * 본문이 바뀌면 복구 재전송이 `IDEMPOTENCY_CONFLICT`가 되어 이미 접수된

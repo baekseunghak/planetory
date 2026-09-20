@@ -29,11 +29,14 @@ test("the review step submits and shows what was accepted", async ({
 
   const receipt = page.getByTestId("submission-result");
   await expect(receipt).toBeVisible();
-  await expect(receipt.getByRole("heading")).toHaveText("접수되었습니다");
+  await expect(receipt.getByRole("heading").first()).toHaveText(
+    "접수되었습니다",
+  );
   // 접수 사실과 식별자만 보여 준다. 결과 풀이는 A06-2의 몫이다.
   await expect(receipt).toContainText("접수 번호");
   await expect(receipt).toContainText("기록 번호");
-  await expect(receipt).toContainText("아직 연결되지 않았습니다");
+  // 다음 행동은 서버가 준 목록으로 나온다. 자세한 것은 아래 전용 테스트가 본다.
+  await expect(receipt.getByTestId("next-actions")).toBeVisible();
 
   // 접수한 뒤에는 초안을 고칠 수 없다. 고치면 복구 경로가 막힌다.
   await expect(submit).toBeDisabled();
@@ -95,7 +98,7 @@ test("an unresolved submission offers a check that never resubmits", async ({
 
   const panel = page.getByTestId("submission-result");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("heading")).toHaveText(
+  await expect(panel.getByRole("heading").first()).toHaveText(
     "접수 여부를 확인해 주세요",
   );
   // 「제출되지 않았습니다」라고 단정하지 않는다.
@@ -602,6 +605,601 @@ test("a replay from an older plate is kept, not cancelled", async ({
   );
   // 다시 보내지도 않는다.
   expect(posts).toHaveLength(1);
+});
+
+async function submitFromPeak(page: Page, peak: string, judgment: string) {
+  await selectPeak(page, Number(peak));
+  await beginRange(page);
+  await showJudgment(page);
+  await page.getByRole("radio", { name: judgment, exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("the result separates matching, scoring and achievement", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  // 확정 신호를 맞혔다. 세 축이 모두 성공이다.
+  const right = await submitFromPeak(page, "1", "행성 같음");
+  await expect(right).toContainText("고른 주기가 신호와 맞았습니다");
+  await expect(right).toContainText("판단이 맞았습니다");
+  await expect(right).toContainText("성과로 인정되었습니다");
+  // 접수 안내가 오류 색이 되지 않는다. 판단 패널의 오류 색 규칙이 덮지 않는다.
+  await expect(right.locator('[role="status"]').first()).toHaveCSS(
+    "color",
+    "rgb(238, 238, 238)",
+  );
+
+  await page.goto(`/analysis/${NORMAL}`);
+  // 같은 신호를 오판했다. 매칭은 그대로 성공이고 성과만 미인정이다.
+  const wrong = await submitFromPeak(page, "1", "아닌 것 같음");
+  await expect(wrong).toContainText("고른 주기가 신호와 맞았습니다");
+  await expect(wrong).toContainText("판단이 달랐습니다");
+  await expect(wrong).toContainText("성과로 인정되지 않았습니다");
+});
+
+test("an unscored signal is not called wrong, and a harmonic keeps both periods", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  // 미확정은 틀렸다고 하지 않는다.
+  await expect(dialog).toContainText("채점하지 않습니다");
+  await expect(dialog).not.toContainText("판단이 달랐습니다");
+  // 내 입력과 신호의 값을 비교표에 나란히 둔다.
+  const compare = dialog.getByTestId("result-compare");
+  await expect(compare).toContainText("내가 낸 것");
+  await expect(compare).toContainText("기록의 신호");
+  // 두 주기가 모두 있고 배수 관계라고 적는다.
+  const period = compare.locator("tr").filter({ hasText: "주기" }).first();
+  await expect(period).toContainText("4.474096일");
+  await expect(period).toContainText("8.948193일");
+  await expect(compare).toContainText("정정 주기 = 고른 주기 × 2");
+  // 공개할 수 있는 것은 미확정뿐이다.
+  await expect(dialog).toContainText("공개할 수 있습니다");
+});
+
+test("an unrunnable AI says why instead of showing zero", async ({ page }) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "3", "아닌 것 같음");
+  await expect(dialog).toContainText("자료가 부족해 실행하지 못했습니다");
+  await expect(dialog).not.toContainText("0점");
+  // 외부 출처는 원천 표기 그대로 둔다.
+  await expect(dialog).toContainText("TOI-9001.03 · FP");
+});
+
+test("an ambiguous match shows no signal at all", async ({ page }) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const headers = {
+      ...route.request().headers(),
+      "x-fixture-outcome": "ambiguous",
+    };
+    return route.continue({ headers });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  await expect(dialog).toContainText("어느 신호인지 가리지 못했습니다");
+  // 신호·AI·통계·성과를 하나도 붙이지 않는다.
+  await expect(dialog).not.toContainText("AI 판정");
+  await expect(dialog).not.toContainText("다른 사람의 판단");
+  await expect(dialog).not.toContainText("성과");
+});
+
+test("nobody having published is not drawn as zero percent", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const headers = {
+      ...route.request().headers(),
+      "x-fixture-outcome": "empty-statistics",
+    };
+    return route.continue({ headers });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "모르겠음");
+  await expect(dialog).toContainText("아직 공개된 분석이 없습니다");
+  await expect(dialog).not.toContainText("0%");
+});
+
+test("the answer is revealed only when the user asks for it", async ({
+  page,
+}) => {
+  const calls: string[] = [];
+  page.on("request", (request) => {
+    if (/detail-view$/.test(request.url())) calls.push(request.url());
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "아닌 것 같음");
+  // 상세 보기는 열람 기록을 남긴다. 화면을 열었다고 대신 부르지 않는다.
+  expect(calls).toHaveLength(0);
+  await expect(dialog).toContainText("상세 보기");
+
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
+  await expect(dialog).toContainText("확정된 행성 신호");
+  expect(calls).toHaveLength(1);
+  // 매칭한 제출에는 내 판단과의 일치 여부를 준다(RES-02).
+  await expect(dialog).toContainText("내 판단과 다릅니다");
+});
+
+test("an unconfirmed candidate is never explained as an answer", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "모르겠음");
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
+  await expect(dialog).toContainText("아직 확정되지 않은 후보입니다");
+  // 확정되지 않은 것을 확정처럼 말하지 않는다.
+  await expect(dialog).not.toContainText("정답");
+  // 채점하지 않았으므로 일치 여부도 없다.
+  await expect(dialog).not.toContainText("내 판단과");
+});
+
+test("a submission with no detail target says so instead of guessing", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "ambiguous",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 모호한 매칭에는 상세 대상이 없다. 버튼 자체를 내놓지 않는다.
+  await expect(dialog).not.toContainText("상세 보기");
+});
+
+test("the next actions are the server's list and they lead somewhere real", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  const actions = dialog.getByTestId("next-actions");
+  // 미확정 매칭이라 서버가 공개를 권한다. 프론트가 조건을 다시 계산하지 않는다.
+  await expect(
+    actions.getByRole("link", { name: "공개 내용 검토" }),
+  ).toBeVisible();
+  await expect(actions.getByRole("link", { name: "결과 보기" })).toBeVisible();
+  // 상세 보기는 상세 절이 이미 맡았다. 여기서 또 내지 않는다.
+  await expect(actions).not.toContainText("상세 보기");
+  // 화면 안에서 일어나는 동작은 옮겨 갈 곳이 없다고 그대로 말한다.
+  await expect(actions).toContainText("다음 곡선 단계로 · 연결 예정");
+  // 6.4절: 매칭 성공에는 별지도로가 붙는다(RES-08).
+  await expect(actions.getByRole("link", { name: "별지도로" })).toBeVisible();
+
+  // 공개 화면으로 갔다가 분석 화면으로 돌아온다. 게시로 강제 이동이 아니다(AT-36).
+  await actions.getByRole("link", { name: "공개 내용 검토" }).click();
+  await expect(page).toHaveURL(/\/publication\/[^?]+\?returnTo=/);
+  await expect(page.locator(".unconnected")).toContainText("분석 기록");
+  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await expect(page).toHaveURL(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+});
+
+test("an action the server did not offer is not invented", async ({ page }) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  // 확정 신호는 공개 대상이 아니다. 서버가 빼면 화면에도 없다.
+  const confirmed = await submitFromPeak(page, "1", "행성 같음");
+  await expect(confirmed.getByTestId("next-actions")).not.toContainText(
+    "공개 내용 검토",
+  );
+});
+
+test("a match the server could not settle offers only a retry", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "ambiguous",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const ambiguous = await submitFromPeak(page, "1", "행성 같음");
+  const actions = ambiguous.getByTestId("next-actions");
+  // 모호한 매칭의 힌트는 다시 풀기뿐이다(AT-13). 갈 곳을 지어내지 않는다.
+  await expect(actions).toContainText("다시 풀기");
+  await expect(actions.getByRole("link")).toHaveCount(0);
+});
+
+test("a skipped star is not offered the map or the board", async ({ page }) => {
+  await page.goto(`/analysis/${TUTORIAL}?returnTo=%2Fsky`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "이 별 건너뛰기", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const actions = page
+    .getByTestId("submission-result")
+    .getByTestId("next-actions");
+  // 6.4절: 건너뛴 별에는 GO_HOME·DISCUSS를 추가하지 않는다. 나가는 길
+  // 하나만 남는다.
+  await expect(actions.getByRole("link")).toHaveCount(1);
+  await expect(actions).not.toContainText("별지도로");
+  await actions.getByRole("link", { name: "나중에 하기" }).click();
+  await expect(page).toHaveURL("/sky");
+});
+
+test("an already-found signal is shown without taking the achievement twice", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "duplicate",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 매칭은 성공이다. 신호도 그대로 붙는다.
+  await expect(dialog).toContainText("이미 찾은 신호입니다");
+  await expect(dialog).toContainText("AI 판정");
+  // 성과만 다시 주지 않는다. 미인정과 같은 말로 적지 않는다.
+  await expect(dialog).toContainText(
+    "이미 인정된 신호라 다시 인정되지 않습니다",
+  );
+  await expect(dialog).not.toContainText("성과로 인정되었습니다");
+  // 별이 새로 열렸다고 말하지 않는다.
+  await expect(dialog).not.toContainText("새로 열린 별");
+});
+
+test("a duplicate of a harmonic match keeps the correction it came with", async ({
+  page,
+}) => {
+  // 배수로 맞힌 신호를 다시 맞힌 경우다. 서버는 상태만 duplicate로 바꾸고
+  // 후보와 정정값은 그대로 보낸다(SubmissionMatching.markDuplicate).
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "duplicate",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  await expect(dialog).toContainText("이미 찾은 신호입니다");
+  // 정정을 지우면 내가 낸 주기가 틀렸던 것처럼 보인다.
+  await expect(dialog).toContainText("2배가 맞았습니다");
+  const compare = dialog.getByTestId("result-compare");
+  await expect(compare).toContainText("4.474096일");
+  await expect(compare).toContainText("8.948193일");
+  // 성과는 그래도 다시 주지 않는다.
+  await expect(dialog).toContainText(
+    "이미 인정된 신호라 다시 인정되지 않습니다",
+  );
+});
+
+test("values the server does not have are left out, not drawn as zero", async ({
+  page,
+}) => {
+  // 고른 것이 없는 제출에는 원본도 계산값도 안쪽이 비어 온다. 빈 칸을
+  // 0으로 바꾸면 주기 0일·길이 0시간이라는 뜻이 된다(RES-04와 같은 이유).
+  await page.goto(`/analysis/${NORMAL}`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("더 이상 없음으로 접수했습니다");
+  await expect(dialog).not.toContainText("0일");
+  await expect(dialog).not.toContainText("0시간");
+  await expect(dialog).not.toContainText("0 ppm");
+});
+
+test("discussing opens a draft for this star, not the board list", async ({
+  page,
+}) => {
+  // 미매칭에만 이 힌트가 온다(6.4절). 화면에서 직접 주기를 고르려면 주기도를
+  // 끌어야 하는데 키보드 경로가 없어, 요청의 봉우리 번호만 비워 「직접 선택」과
+  // 같은 모양으로 만든다. 그 뒤의 개발 응답·파서·화면은 모두 실제 경로다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const body = JSON.parse(request.postData() ?? "{}");
+    if (body.selection) body.selection.sourcePeakGridIndex = null;
+    return route.continue({ postData: JSON.stringify(body) });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "모르겠음");
+  await expect(dialog).toContainText("맞는 신호를 찾지 못했습니다");
+  const actions = dialog.getByTestId("next-actions");
+  await expect(actions).not.toContainText("별지도로");
+  await actions.getByRole("link", { name: "일반 토론 쓰기" }).click();
+  // 같은 TIC·DISCUSSION을 들고 글쓰기로 간다. 목록으로 보내지 않는다.
+  await expect(page).toHaveURL(/\/posts\/new\?/);
+  await expect(page).toHaveURL(new RegExp(`ticId=${NORMAL}`));
+  await expect(page).toHaveURL(/purposeTag=DISCUSSION/);
+});
+
+test("a result from an older plate marks only what needs to be fresh", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    return route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "x-current-bundle": "9007199254749999",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  await expect(dialog.getByTestId("stale-bundle")).toBeVisible();
+
+  // 최신이 필요한 축을 **한 줄에 모아** 이름으로 말한다. 축마다 같은
+  // 문장을 되풀이하면 무엇이 옛 값인지보다 경고가 많다는 인상만 남는다.
+  const band = dialog.getByTestId("stale-axis");
+  await expect(band).toHaveCount(1);
+  for (const name of [
+    "진행",
+    "공개",
+    "다른 사람의 판단",
+    "다음에 할 수 있는 일",
+  ])
+    await expect(band).toContainText(name);
+
+  // 당시 값이 정본인 축은 이름을 올리지 않는다. 145가 아직 없으니 최신
+  // 상태는 모른다고 말한다.
+  for (const name of ["매칭", "내 판단", "성과"])
+    await expect(band).not.toContainText(name);
+  await expect(band).toContainText("최신 상태는 아직 확인하지 못했습니다");
+});
+
+test("an achievement celebrates once per member, not once per 201", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const first = await submitFromPeak(page, "1", "행성 같음");
+  const achievement = first.getByTestId("achievement");
+  await expect(achievement).toContainText("성과로 인정되었습니다");
+  await expect(achievement).toContainText("축하합니다");
+
+  // 같은 제출을 다시 열면 사실은 그대로, 축하만 사라진다.
+  await page.reload();
+  const again = await submitFromPeak(page, "1", "행성 같음");
+  const repeat = again.getByTestId("achievement");
+  await expect(repeat).toContainText("성과로 인정되었습니다");
+  await expect(repeat).not.toContainText("축하합니다");
+});
+
+test("a replay a member has never seen still celebrates", async ({ page }) => {
+  // 최초 201을 잃고 200으로 처음 복구한 경우다(2.2절). 그 사람에게는 이
+  // 200이 처음 보는 결과이므로 연출이 나와야 한다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    return route.continue({
+      headers: { ...request.headers(), "x-fixture-submit": "drop-saved" },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  // 복구로 확인한 결과이고 201이 아니다.
+  await expect(dialog).toContainText("이미 접수돼 있던 제출을 확인했습니다");
+  await expect(dialog.getByTestId("achievement")).toContainText("축하합니다");
+});
+
+test("the result says what the wireframe says it must say", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+
+  // 성과는 인정 여부만이 아니라 이 별의 누적 건수·등급까지 보여 준다.
+  const achievement = dialog.getByTestId("achievement");
+  await expect(achievement).toContainText("성과로 인정되었습니다");
+  await expect(achievement).toContainText("이 별 성과");
+  await expect(achievement).toContainText("등급");
+
+  // AI는 구간 이름으로 읽고, 성과와 무관하다는 것을 매번 말한다.
+  const ai = dialog.locator(".result-axis").filter({
+    has: page.getByRole("heading", { name: "AI 판정", exact: true }),
+  });
+  await expect(ai).toContainText("승인 구간");
+  await expect(ai).toContainText("인정에는 쓰이지 않습니다");
+
+  // 매칭 뒤 상세는 방금 맞힌 신호가 대상이다. 미매칭 힌트와 이름이 다르다.
+  await expect(
+    dialog.getByRole("button", { name: "이 신호 상세 보기", exact: true }),
+  ).toBeVisible();
+
+  // 집계 시각은 공개 분포에만 붙는다. 채점형 통계에는 명세상 `asOf`가 없다.
+  await page.goto(`/analysis/${NORMAL}`);
+  const open = await submitFromPeak(page, "2", "모르겠음");
+  await expect(
+    open.locator(".result-axis").filter({
+      has: page.getByRole("heading", { name: "다른 사람의 판단", exact: true }),
+    }),
+  ).toContainText("집계 시각");
+});
+
+test("the comparison table puts my values beside the signal's, all of bls", async ({
+  page,
+}) => {
+  // Gold에 열이 생기면 SDE·SNR이 값으로 온다. 그때 표가 그 줄을 만드는지
+  // 본다. fixture가 null만 보내는 동안에는 줄이 없어 확인되지 않는 자리다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.signal.bls.sde = 9.1;
+    body.signal.bls.snr = 7.8;
+    return route.fulfill({ response, json: body });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  const compare = dialog.getByTestId("result-compare");
+  const row = (name: string) =>
+    compare.locator("tbody tr").filter({ hasText: name }).first();
+  await expect(row("SDE")).toContainText("9.1");
+  await expect(row("SNR")).toContainText("7.8");
+  await expect(row("깊이")).toContainText("ppm");
+  // 내가 내지 않은 값은 빈 칸이 아니라 없음 표시다.
+  await expect(row("SDE").locator("td").first()).toContainText("—");
+  // 서버가 내 제출로 계산한 값은 내 쪽 칸에 온다.
+  await expect(row("기준 시각").locator("td").first()).toContainText("BTJD");
+});
+
+test("a submission with nothing chosen draws no comparison at all", async ({
+  page,
+}) => {
+  // 고른 것이 없으면 양쪽 모두 빈다. 빈 표를 두면 값만 없는 것처럼 보인다.
+  await page.goto(`/analysis/${NORMAL}`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("더 이상 없음으로 접수했습니다");
+  await expect(dialog.getByTestId("result-compare")).toHaveCount(0);
+});
+
+test("the next actions share the closing band and drop their label", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  const band = dialog.locator(".submission-dialog-actions");
+  // 바닥 한 줄에 다음 행동과 닫기가 함께 있다. 이름표는 두지 않는다.
+  await expect(band.getByTestId("next-actions")).toBeVisible();
+  await expect(dialog).not.toContainText("다음에 할 수 있는 일");
+  await expect(
+    band.getByRole("button", { name: "닫기", exact: true }),
+  ).toBeVisible();
+
+  // 떠나는 링크는 왼쪽, 닫기는 오른쪽이다. 좌표로 잰다.
+  const link = await band
+    .getByRole("link", { name: "결과 보기", exact: true })
+    .boundingBox();
+  const close = await band
+    .getByRole("button", { name: "닫기", exact: true })
+    .boundingBox();
+  expect(link).not.toBeNull();
+  expect(close).not.toBeNull();
+  expect(link!.x).toBeLessThan(close!.x);
+});
+
+test("the result fits without scrolling, table beside the axes", async ({
+  page,
+}) => {
+  // 이 판을 좌우로 편 까닭이 세로 스크롤을 없애는 것이다. 지표로 잰다.
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+
+  // 비교표는 왼쪽, 축은 그 오른쪽이다. 표 아래로 내려가면 다시 길어진다.
+  const table = await dialog.getByTestId("result-compare").boundingBox();
+  const bands = await dialog.locator(".result-bands").boundingBox();
+  expect(table).not.toBeNull();
+  expect(bands).not.toBeNull();
+  expect(bands!.x).toBeGreaterThan(table!.x + table!.width - 1);
+  // 축은 그 안에서 다시 두 칸이다.
+  const axes = dialog.locator(".result-bands > .result-axis");
+  const first = await axes.first().boundingBox();
+  const second = await axes.nth(1).boundingBox();
+  expect(second!.x).toBeGreaterThan(first!.x);
+
+  // 지원하는 가장 넓은 곳과 가장 좁은 곳 모두에서 넘치지 않는다.
+  for (const [w, h] of [
+    [1440, 1080],
+    [1024, 768],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    const over = await dialog.evaluate(
+      (el) => el.scrollHeight - el.clientHeight,
+    );
+    expect(over, `${w}x${h}에서 세로로 넘친다`).toBe(0);
+    const sideways = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(sideways, `${w}x${h}에서 가로로 넘친다`).toBe(0);
+  }
+});
+
+test("opening the answer does not make the panel grow", async ({ page }) => {
+  // 상세의 수치는 비교표가 이미 들고 있는 값이다. 다시 실으면 같은 숫자가
+  // 두 곳에 놓이고 판만 길어진다.
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
+  await expect(dialog).toContainText("확정된 행성 신호");
+
+  // 깊이는 표에 한 번만 있다.
+  const body = await dialog.innerText();
+  expect(body.match(/8,000 ppm/g) ?? []).toHaveLength(1);
+
+  // 성과가 가장 많은 결과에 상세까지 연 경우다. 여기서 넘치지 않으면 된다.
+  for (const [w, h] of [
+    [1440, 1080],
+    [1024, 768],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    const over = await dialog.evaluate(
+      (el) => el.scrollHeight - el.clientHeight,
+    );
+    expect(over, `${w}x${h}에서 상세를 열면 넘친다`).toBe(0);
+  }
+});
+
+test("an unmatched answer fills the empty column instead of a new block", async ({
+  page,
+}) => {
+  // 직접 고른 주기를 흉내 낸다. 봉우리를 고르면 fixture가 늘 매칭시킨다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const sent = JSON.parse(route.request().postData() ?? "{}");
+    if (sent.selection) sent.selection.sourcePeakGridIndex = null;
+    return route.continue({ postData: JSON.stringify(sent) });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "모르겠음");
+  await expect(dialog).toContainText("맞는 신호를 찾지 못했습니다");
+
+  // 신호를 모르는 동안에는 내 값만 있는 한 칸이다.
+  const heads = dialog.locator(".result-compare thead th");
+  await expect(heads).toHaveText(["항목", "내가 낸 것"]);
+
+  // 누르면 그 단계의 신호가 내 값 옆에 들어온다. 별도 덩어리를 만들지 않는다.
+  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await expect(heads).toHaveText(["항목", "내가 낸 것", "이 단계의 신호"]);
+  await expect(dialog.getByTestId("result-compare")).toContainText("8,000 ppm");
 });
 
 test("a corrected body after a refusal is actually sent, with a new id", async ({

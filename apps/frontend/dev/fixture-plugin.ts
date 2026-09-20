@@ -7,9 +7,11 @@ import {
   analysisFixtureResponse,
 } from "./analysis-fixtures.ts";
 import {
+  readOutcome,
   readScenario,
   SUBMISSION_FIXTURE_CSRF,
   SUBMISSION_FIXTURE_HEADER,
+  SUBMISSION_OUTCOME_HEADER,
   submissionFixtureResponse,
 } from "./submission-fixtures.ts";
 
@@ -73,6 +75,7 @@ export function fixturePlugin(observations = false): Plugin {
             url,
             csrf: req.headers["x-csrf-token"],
             scenario: readScenario(req.headers[SUBMISSION_FIXTURE_HEADER]),
+            outcome: readOutcome(req.headers[SUBMISSION_OUTCOME_HEADER]),
             body,
             // 진입 응답을 그대로 재사용해 별 접근 거절을 한 곳에서 판정한다.
             contextFor: (ticId) => {
