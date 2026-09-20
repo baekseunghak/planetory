@@ -3,7 +3,7 @@
   "version": "service-v1-sectors-1-13",
   "product": "SPOC 2-minute Light Curve",
   "worker_count": 5,
-  "download_concurrency": 4,
+  "download_concurrency": 16,
   "disk_stop_fraction": 0.75,
   "disk_resume_fraction": 0.70,
   "max_part_bytes": 67108864,

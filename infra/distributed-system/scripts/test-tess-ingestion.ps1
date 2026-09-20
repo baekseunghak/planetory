@@ -143,6 +143,28 @@ foreach ($mutation in (
  if (-not $rejected) { throw 'Cluster ingestion guard mutation must be rejected.' }
 }
 
+$finalCoverageBlock=[regex]::Match($source,"(?s)'FinalCoverage' \{(.*?)\r?\n 'InstallSupervisor' \{").Groups[1].Value
+if (-not $finalCoverageBlock) { throw 'FinalCoverage block not found.' }
+foreach ($required in (
+ 'run_id=[string]$record.run_id',
+ 'source_list_sha256=[string]$record.source_list_sha256',
+ '[pscustomobject][ordered]@{',
+ 'run_id=$value.run_id',
+ 'source_list_sha256=$value.source_list_sha256',
+ 'Group-Object -Property run_id',
+ 'existing_run=$existingRunRecord[0]',
+ 'expansion_run=$expansionRunRecord[0]'
+)) {
+ if ($finalCoverageBlock -notmatch [regex]::Escape($required)) { throw "FinalCoverage lineage contract missing: $required" }
+}
+foreach ($forbidden in (
+ 'run_id=if ($sector -in 3,4,5)',
+ 'existing_run=[ordered]@{run_id=$ExistingRunId;sectors=@(3,4,5)',
+ 'expansion_run=[ordered]@{run_id=$RunId;sectors=@(1,2,6,7,8,9,10,11,12,13)'
+)) {
+ if ($finalCoverageBlock -match [regex]::Escape($forbidden)) { throw "FinalCoverage must derive lineage from coverage shards: $forbidden" }
+}
+
 $progressBlock=[regex]::Match($source,"(?s)'Progress' \{(.*?)\r?\n 'Pause' \{").Groups[1].Value
 if (-not $progressBlock) { throw 'Progress block not found.' }
 foreach ($forbidden in ('rm -f','rm -r','unlink(','write_text(','append_event(','systemctl ','kill ')) {

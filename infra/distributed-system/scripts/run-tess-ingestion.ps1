@@ -642,7 +642,19 @@ PYTHONPATH="$release" python3.12 -m ingestion coverage \
    foreach ($record in @($shard.sectors)) {
     $sector=[int]$record.sector
     if (-not $totals.ContainsKey($sector)) {
-     $totals[$sector]=@{expected=[int64]0;validated=[int64]0;total_bytes=[int64]0;part_count=[int64]0}
+     $totals[$sector]=@{
+      expected=[int64]0
+      validated=[int64]0
+      total_bytes=[int64]0
+      part_count=[int64]0
+      run_id=[string]$record.run_id
+      source_list_sha256=[string]$record.source_list_sha256
+     }
+    } elseif (
+     $totals[$sector].run_id -ne [string]$record.run_id -or
+     $totals[$sector].source_list_sha256 -ne [string]$record.source_list_sha256
+    ) {
+     throw "Sector $sector lineage mismatch between Worker coverage shards."
     }
     $totals[$sector].expected += [int64]$record.expected
     $totals[$sector].validated += [int64]$record.validated
@@ -657,14 +669,29 @@ PYTHONPATH="$release" python3.12 -m ingestion coverage \
    if ($value.expected -ne $expectedBySector[$sector] -or $value.validated -ne $expectedBySector[$sector] -or $value.part_count -ne 0) {
     throw "Sector $sector coverage mismatch: expected=$($value.expected) validated=$($value.validated) parts=$($value.part_count) configured=$($expectedBySector[$sector])."
    }
-   $sectorRecords += [ordered]@{
+   $sectorRecords += [pscustomobject][ordered]@{
     sector=$sector
     expected=$value.expected
     validated=$value.validated
     total_bytes=$value.total_bytes
     part_count=$value.part_count
-    run_id=if ($sector -in 3,4,5) { $ExistingRunId } else { $RunId }
+    run_id=$value.run_id
+    source_list_sha256=$value.source_list_sha256
    }
+  }
+  $runRecords=@($sectorRecords | Group-Object -Property run_id | ForEach-Object {
+   $sourceHashes=@($_.Group | Select-Object -ExpandProperty source_list_sha256 -Unique)
+   if ($sourceHashes.Count -ne 1) { throw "Run $($_.Name) has inconsistent source list checksums." }
+   [ordered]@{
+    run_id=[string]$_.Name
+    sectors=@($_.Group | Sort-Object -Property sector | ForEach-Object { [int]$_.sector })
+    source_list_sha256=[string]$sourceHashes[0]
+   }
+  })
+  $existingRunRecord=@($runRecords | Where-Object { $_.run_id -eq $ExistingRunId })
+  $expansionRunRecord=@($runRecords | Where-Object { $_.run_id -eq $RunId })
+  if ($runRecords.Count -ne 2 -or $existingRunRecord.Count -ne 1 -or $expansionRunRecord.Count -ne 1) {
+   throw "FinalCoverage requires exactly the existing and expansion Run lineage from coverage shards."
   }
   $totalExpected=[int64](($sectorRecords | Measure-Object -Property expected -Sum).Sum)
   $totalValidated=[int64](($sectorRecords | Measure-Object -Property validated -Sum).Sum)
@@ -676,8 +703,8 @@ PYTHONPATH="$release" python3.12 -m ingestion coverage \
    schema='planetory.ingestion-coverage.v1'
    generated_at=[DateTime]::UtcNow.ToString('o')
    scope='TESS SPOC 2-minute Light Curve Sector 1-13 download and local audit'
-   existing_run=[ordered]@{run_id=$ExistingRunId;sectors=@(3,4,5);source_list_sha256=$ExistingSourceListSha256}
-   expansion_run=[ordered]@{run_id=$RunId;sectors=@(1,2,6,7,8,9,10,11,12,13);source_list_sha256=$ExpectedSourceListSha256}
+   existing_run=$existingRunRecord[0]
+   expansion_run=$expansionRunRecord[0]
    expected=$totalExpected
    validated=$totalValidated
    total_bytes=$totalBytes

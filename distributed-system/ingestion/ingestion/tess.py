@@ -156,8 +156,8 @@ def load_config(path: Path) -> dict:
     if not 1 <= worker_count <= 5:
         raise ValueError("worker_count must be between 1 and 5")
     concurrency = int(config.get("download_concurrency", 1))
-    if not 1 <= concurrency <= 4:
-        raise ValueError("download_concurrency must be between 1 and 4")
+    if not 1 <= concurrency <= 16:
+        raise ValueError("download_concurrency must be between 1 and 16")
     stop = float(config.get("disk_stop_fraction", 0))
     if not 0.5 <= stop <= 0.75:
         raise ValueError("disk_stop_fraction must be between 0.5 and 0.75")
@@ -661,8 +661,8 @@ def run_download(
     downloader: Callable = download_product,
     progress: Callable[[], None] = lambda: None,
 ) -> tuple[dict, int]:
-    if not 1 <= concurrency <= 4:
-        raise ValueError("concurrency must be between 1 and 4")
+    if not 1 <= concurrency <= 16:
+        raise ValueError("concurrency must be between 1 and 16")
     checksums = checksums or {}
     products = select_products(
         source_list,
