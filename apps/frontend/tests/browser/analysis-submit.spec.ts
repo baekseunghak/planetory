@@ -1114,3 +1114,39 @@ test("the next actions share the closing band and drop their label", async ({
   expect(close).not.toBeNull();
   expect(link!.x).toBeLessThan(close!.x);
 });
+
+test("the result fits without scrolling, table beside the axes", async ({
+  page,
+}) => {
+  // 이 판을 좌우로 편 까닭이 세로 스크롤을 없애는 것이다. 지표로 잰다.
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+
+  // 비교표는 왼쪽, 축은 그 오른쪽이다. 표 아래로 내려가면 다시 길어진다.
+  const table = await dialog.getByTestId("result-compare").boundingBox();
+  const bands = await dialog.locator(".result-bands").boundingBox();
+  expect(table).not.toBeNull();
+  expect(bands).not.toBeNull();
+  expect(bands!.x).toBeGreaterThan(table!.x + table!.width - 1);
+  // 축은 그 안에서 다시 두 칸이다.
+  const axes = dialog.locator(".result-bands > .result-axis");
+  const first = await axes.first().boundingBox();
+  const second = await axes.nth(1).boundingBox();
+  expect(second!.x).toBeGreaterThan(first!.x);
+
+  // 지원하는 가장 넓은 곳과 가장 좁은 곳 모두에서 넘치지 않는다.
+  for (const [w, h] of [
+    [1440, 1080],
+    [1024, 768],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    const over = await dialog.evaluate(
+      (el) => el.scrollHeight - el.clientHeight,
+    );
+    expect(over, `${w}x${h}에서 세로로 넘친다`).toBe(0);
+    const sideways = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(sideways, `${w}x${h}에서 가로로 넘친다`).toBe(0);
+  }
+});

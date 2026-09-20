@@ -978,7 +978,10 @@ body:has(.analysis-screen) {
 /* 결과 대화상자는 비교표를 좌우로 놓으려고 넓게 쓴다. 좁은 화면에서는
    같은 표가 한 칸으로 접히므로 폭만 따라 줄인다. */
 .analysis-screen .submission-dialog-wide {
-  width: min(880px, calc(100vw - 48px));
+  /* 표와 축 두 칸이 같은 행에 들어갈 만큼이다. 이보다 좁히면 축이 표
+     아래로 내려가 다시 세로로 길어진다. 1024px 화면에서는 976px가 되고
+     그때는 축 칸의 긴 줄이 접힌다(넘치지는 않는다). */
+  width: min(1120px, calc(100vw - 48px));
   /* 좌우로 편 만큼 높이도 쓸 수 있다. 여기서 더 조이면 표와 축이 다시
      세로로 길어져 좌우 배치의 뜻이 없어진다. */
   max-height: min(86vh, 860px);
@@ -1090,6 +1093,15 @@ body:has(.analysis-screen) {
 .analysis-screen .submission-result {
   margin-top: 16px;
   border-top: 1px solid var(--panel-line);
+  /* 표를 값이 들어갈 만큼만 두고 남는 폭을 축이 쓴다. 표가 판 끝까지
+     퍼지면 축이 표 아래로 밀려 세로로 길어진다. */
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  column-gap: 24px;
+}
+.analysis-screen .submission-result-plain {
+  /* 표가 없으면 왼쪽 칸도 없다. */
+  grid-template-columns: minmax(0, 1fr);
 }
 .analysis-screen .result-axis {
   padding: 12px 0;
@@ -1175,8 +1187,6 @@ body:has(.analysis-screen) {
 }
 .analysis-screen .result-compare table {
   width: 100%;
-  /* 두 칸을 판 끝까지 벌리지 않는다. 비교할 값끼리 멀어진다. */
-  max-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -1200,7 +1210,7 @@ body:has(.analysis-screen) {
 .analysis-screen .result-compare tbody th {
   font-weight: 400;
   color: var(--fg-3);
-  width: 104px;
+  width: 84px;
 }
 .analysis-screen .result-compare td {
   color: var(--fg-1);
@@ -1217,14 +1227,25 @@ body:has(.analysis-screen) {
    비교표를 보려고 다시 올라가야 한다. */
 .analysis-screen .result-bands {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   column-gap: 24px;
+  align-content: start;
 }
 .analysis-screen .result-bands > .result-axis {
   border-bottom: 0;
   padding: 10px 0;
 }
+/* 상세 보기 안내는 왼쪽, 누르는 것은 오른쪽이다. 아래로 쌓으면 판의
+   오른쪽이 비고 그만큼 세로가 길어진다. */
+.analysis-screen .result-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
 .analysis-screen .result-stale {
+  grid-column: 1 / -1;
   margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--panel-line);

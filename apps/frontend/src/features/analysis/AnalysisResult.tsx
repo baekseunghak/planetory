@@ -208,8 +208,8 @@ const plain = (value: number | null | undefined) =>
  * 신호가 없으면(미매칭·특수 제출) 한 칸만 그린다. **빈 열을 만들어 두고
  * 줄을 그으면 신호가 있는데 값만 없는 것처럼 보인다.**
  */
-function Comparison({ explanation }: { explanation: ResultExplanation }) {
-  const { submitted, serverDerived, signal, correction } = explanation;
+function comparisonRows(explanation: ResultExplanation): Row[] {
+  const { submitted, serverDerived, signal } = explanation;
   const bls = signal?.bls;
   const span =
     submitted?.phaseStart != null && submitted.phaseEnd != null
@@ -243,6 +243,12 @@ function Comparison({ explanation }: { explanation: ResultExplanation }) {
     { label: "SDE", mine: null, theirs: plain(bls?.sde) },
     { label: "SNR", mine: null, theirs: plain(bls?.snr) },
   ].filter((row) => row.mine !== null || row.theirs !== null);
+  return rows;
+}
+
+function Comparison({ explanation }: { explanation: ResultExplanation }) {
+  const { signal, correction } = explanation;
+  const rows = comparisonRows(explanation);
   if (rows.length === 0) return null;
 
   return (
@@ -299,7 +305,15 @@ export function ResultExplanationView({
   const { signal, evaluation, achievement, publication, statistics } =
     explanation;
   return (
-    <div className="submission-result">
+    <div
+      className={
+        // 표가 없으면 왼쪽 칸을 비워 두지 않는다. 빈 칸을 남기면 값이
+        // 빠진 것처럼 보인다.
+        comparisonRows(explanation).length === 0
+          ? "submission-result submission-result-plain"
+          : "submission-result"
+      }
+    >
       <Comparison explanation={explanation} />
       <div className="result-bands">
         <section className="result-axis">
@@ -418,13 +432,17 @@ export function DetailView({
     return null;
   if (detail.phase === "idle")
     return (
-      <section className="result-axis">
-        <h5>상세 보기</h5>
-        <p>
-          {receipt.explanation.detail.targetKind === "CURRENT_CURVE_HINT"
-            ? "이 단계에서 찾을 수 있었던 신호를 볼 수 있습니다."
-            : "이 신호가 무엇이었는지 볼 수 있습니다."}
-        </p>
+      // 안내는 왼쪽, 누르는 것은 오른쪽이다. 아래로 쌓으면 판의 오른쪽이
+      // 비고 그만큼 세로가 길어진다.
+      <section className="result-axis result-detail">
+        <div>
+          <h5>상세 보기</h5>
+          <p>
+            {receipt.explanation.detail.targetKind === "CURRENT_CURVE_HINT"
+              ? "이 단계에서 찾을 수 있었던 신호를 볼 수 있습니다."
+              : "이 신호가 무엇이었는지 볼 수 있습니다."}
+          </p>
+        </div>
         {/*
           누르면 열람 기록이 남는다. 대신 눌러 주지 않는다.
           대상이 다르면 이름도 다르다(와이어프레임 SC-04). 매칭 뒤에는 방금
