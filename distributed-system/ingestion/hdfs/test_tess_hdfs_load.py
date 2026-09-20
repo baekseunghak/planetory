@@ -15,6 +15,11 @@ SPEC = importlib.util.spec_from_file_location("tess_hdfs_load", Path(__file__).w
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 SPEC.loader.exec_module(MODULE)
+sys.modules["tess_hdfs_load"] = MODULE
+RUNALL_SPEC = importlib.util.spec_from_file_location("tess_hdfs_runall", Path(__file__).with_name("tess_hdfs_runall.py"))
+RUNALL = importlib.util.module_from_spec(RUNALL_SPEC)
+assert RUNALL_SPEC.loader
+RUNALL_SPEC.loader.exec_module(RUNALL)
 from ingestion import tess
 
 
@@ -270,6 +275,47 @@ class PlanTest(unittest.TestCase):
         with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
             with self.assertRaisesRegex(RuntimeError, "unexpected HDFS artifact"):
                 MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs")
+
+    def test_server_runall_uses_exact_worker_internal_ips(self):
+        value = {
+            "schema": RUNALL.CONFIG_SCHEMA,
+            "run_id": "20260919T005932Z",
+            "expected_source_list_sha256": "a" * 64,
+            "expected_coverage_sha256": "b" * 64,
+            "code_release_id": "20260920T120000Z",
+            "code_release": "/opt/planetory-hdfs-load/releases/20260920T120000Z",
+            "coverage_manifest": "/etc/planetory/tess-hdfs-runall/coverage.json",
+            "target_bundle_bytes": 512 << 20,
+            "minimum_worker_free_gib": 100,
+            "workers": [
+                {"slot": slot, "internal_ip": f"10.20.{slot + 1}.10"}
+                for slot in range(1, 6)
+            ],
+        }
+        RUNALL.validate_config(value)
+        arguments = RUNALL.ssh_arguments(value["workers"][0], "hostname -s")
+        self.assertIn("-n", arguments)
+        self.assertIn("10.20.1.10", arguments)
+        self.assertEqual(arguments[-2], "planetory-admin@10.20.2.10")
+        self.assertNotIn("tailscale", " ".join(arguments))
+        value["workers"][0]["internal_ip"] = "100.64.0.2"
+        with self.assertRaisesRegex(ValueError, "exact five Worker internal IPs"):
+            RUNALL.validate_config(value)
+
+    def test_server_runall_accepts_ha_safe_mode_output(self):
+        self.assertTrue(RUNALL.safe_mode_is_off(
+            "Safe mode is OFF in master-1/10.20.1.10:8020\n"
+            "Safe mode is OFF in worker-2/10.20.2.10:8020\n"
+        ))
+        self.assertFalse(RUNALL.safe_mode_is_off("Safe mode is OFF\nSafe mode is ON\n"))
+
+    def test_server_runall_mounts_manifest_from_immutable_release(self):
+        source = Path(RUNALL.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'spark_script = Path(config["code_release"]) / "hdfs" / "manifest_to_parquet.py"',
+            source,
+        )
+        self.assertNotIn("shutil.copyfile", source)
 
 
 if __name__ == "__main__":

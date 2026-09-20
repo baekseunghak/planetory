@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 param(
  [Parameter(Mandatory)]
- [ValidateSet('ConfigureCapacity','Preflight','Install','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll')]
+ [ValidateSet('ConfigureCapacity','Preflight','Install','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll','ServerRunAll')]
  [string]$Step,
  [Parameter(Mandatory)][ValidatePattern('^\d{8}T\d{6}Z$')][string]$RunId,
  [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSourceListSha256,
@@ -16,17 +16,17 @@ param(
  [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
 )
 $ErrorActionPreference='Stop'
-$mutatingSteps=@('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll')
+$mutatingSteps=@('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll','ServerRunAll')
 if ($Step -in $mutatingSteps -and -not $PSCmdlet.ShouldProcess("TESS HDFS release=$ReleaseId sector=$Sector","S15P21C206-76 $Step")) { return }
-if ($Step -in @('ConfigureCapacity','Commit','CoverageCommit') -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
+if ($Step -in @('ConfigureCapacity','Commit','CoverageCommit','ServerRunAll') -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
  throw "$Step requires all Workers 2..6."
 }
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and join the project tailnet first.' }
-if ($Step -in @('ConfigureCapacity','Install') -and -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install an OpenSSH client with scp first.' }
+if ($Step -in @('ConfigureCapacity','Install','ServerRunAll') -and -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install an OpenSSH client with scp first.' }
 $LocalIngestionPath=(Resolve-Path $LocalIngestionPath).Path
 $loaderRoot=Join-Path $LocalIngestionPath 'hdfs'
 $hdfsSitePath=(Resolve-Path (Join-Path $PSScriptRoot '../config/hadoop/hdfs-site.xml')).Path
-foreach ($name in @('tess_hdfs_load.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
+foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
  if (-not (Test-Path -LiteralPath (Join-Path $loaderRoot $name) -PathType Leaf)) { throw "Missing HDFS loader file: $name" }
 }
 
@@ -205,7 +205,7 @@ function New-LoaderBundle {
  try {
   $files=@(
    Get-ChildItem -LiteralPath (Join-Path $LocalIngestionPath 'ingestion') -Recurse -File
-   foreach ($name in @('tess_hdfs_load.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
+   foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
     Get-Item -LiteralPath (Join-Path $loaderRoot $name)
    }
   ) | Where-Object { $_.FullName -notmatch '[\\/]__pycache__[\\/]|\.pyc$' } | Sort-Object FullName
@@ -220,7 +220,7 @@ function New-LoaderBundle {
    $hasher.AppendData([byte[]]@(0))
   }
   $contentSha=[Convert]::ToHexString($hasher.GetHashAndReset()).ToLowerInvariant()
-  & tar -czf $archive '--exclude=__pycache__' '--exclude=*.pyc' -C $LocalIngestionPath ingestion hdfs/tess_hdfs_load.py hdfs/TessSequenceFileTool.java hdfs/manifest_to_parquet.py
+  & tar -czf $archive '--exclude=__pycache__' '--exclude=*.pyc' -C $LocalIngestionPath ingestion hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/TessSequenceFileTool.java hdfs/manifest_to_parquet.py
   if ($LASTEXITCODE -ne 0) { throw 'Failed to create HDFS loader bundle.' }
   [pscustomobject]@{
    Path=$archive
@@ -677,6 +677,150 @@ cmp -s "$ready" "$existing"
 echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
 '@.Replace('__RUN_ID__',$RunId).Replace('__COVERAGE_BASE64__',$document.Base64).Replace('__COVERAGE_SHA__',$ExpectedCoverageSha256).Replace('__RELEASE__',$codeRelease).Replace('__COVERAGE_STAGE__',$coverageStage).Replace('__COVERAGE_FINAL__',$coverageFinal)
   Invoke-Remote $node1 $command 'Atomically commit Sector 1-13 HDFS coverage'
+ }
+ 'ServerRunAll' {
+  $document=Get-CoverageDocument
+  $first=@($document.Map.sectors)[0]
+  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  Invoke-OrchestratedStep 'Install' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+
+  $keyCommand=@'
+set -eu
+key=/etc/planetory/tess-hdfs-runall/id_ed25519
+sudo install -d -o root -g root -m 0755 "$(dirname "$key")"
+if ! sudo test -f "$key"; then sudo ssh-keygen -q -t ed25519 -N '' -C planetory-hdfs-runall -f "$key"; fi
+sudo chmod 0600 "$key"
+sudo chmod 0644 "$key.pub"
+sudo cat "$key.pub"
+'@
+  $publicKey=@(Invoke-RemoteCapture $node1 $keyCommand 'Prepare Node 1 internal Worker SSH identity') | Where-Object { $_ -match '^ssh-ed25519 [A-Za-z0-9+/=]+' } | Select-Object -Last 1
+  if (-not $publicKey) { throw 'Node 1 returned no ed25519 public key.' }
+  $publicKeyParts=$publicKey.Trim() -split '\s+'
+  $publicKeyMaterial="$($publicKeyParts[0]) $($publicKeyParts[1])"
+  $authorizedLine="from=`"10.20.1.10`",no-agent-forwarding,no-port-forwarding,no-X11-forwarding,no-user-rc,no-pty $publicKeyMaterial"
+  $authorizedBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($authorizedLine))
+  $knownHostLines=@()
+  foreach ($node in $NodeNumbers) {
+   $worker="planetory-admin@node-$node"
+   $hostKey=@(Invoke-RemoteCapture $worker "sudo head -n 1 /etc/ssh/ssh_host_ed25519_key.pub" "Read Worker $($node-1) SSH host public key") | Where-Object { $_ -match '^ssh-ed25519 [A-Za-z0-9+/=]+' } | Select-Object -Last 1
+   if (-not $hostKey) { throw "Worker $($node-1) returned no ed25519 SSH host public key." }
+   $hostKeyParts=$hostKey.Trim() -split '\s+'
+   $knownHostLines += "10.20.$node.10 $($hostKeyParts[0]) $($hostKeyParts[1])"
+   $authorize=@'
+set -eu
+line=$(printf '%s' '__AUTHORIZED_BASE64__' | base64 --decode)
+directory=/home/planetory-admin/.ssh
+file="$directory/authorized_keys"
+sudo install -d -o planetory-admin -g planetory-admin -m 0700 "$directory"
+sudo touch "$file"
+sudo chown planetory-admin:planetory-admin "$file"
+sudo chmod 0600 "$file"
+if ! sudo grep -Fqx -- "$line" "$file"; then printf '%s\n' "$line" | sudo tee -a "$file" >/dev/null; fi
+echo INTERNAL_SSH_AUTHORIZED source=10.20.1.10
+'@.Replace('__AUTHORIZED_BASE64__',$authorizedBase64)
+   Invoke-Remote $worker $authorize "Authorize Node 1 internal SSH on Worker $($node-1)"
+  }
+
+  $remoteDirectory='/etc/planetory/tess-hdfs-runall'
+  $remoteConfig="$remoteDirectory/$RunId.json"
+  $remoteCoverage="$remoteDirectory/$RunId.coverage.json"
+  $remoteKnownHosts="$remoteDirectory/known_hosts"
+  $unit="planetory-tess-hdfs-runall-$RunId.service"
+  $unitText=@"
+[Unit]
+Description=Planetory TESS HDFS autonomous RunAll $RunId
+Wants=network-online.target
+After=network-online.target hadoop-hdfs-namenode.service docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$codeRelease
+Environment=JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+Environment=HADOOP_CONF_DIR=/etc/hadoop
+Environment=PYTHONPATH=$codeRelease
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=TMPDIR=/run/planetory-tess-hdfs-runall-$RunId
+ExecStart=/usr/bin/python3.12 $codeRelease/hdfs/tess_hdfs_runall.py runall --config $remoteConfig
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=infinity
+UMask=0027
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+RuntimeDirectory=planetory-tess-hdfs-runall-$RunId
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
+"@
+  $unitBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($unitText.Replace("`r",'')))
+  $config=[ordered]@{
+   schema='planetory.tess-hdfs-runall.v1'
+   run_id=$RunId
+   expected_source_list_sha256=$ExpectedSourceListSha256
+   expected_coverage_sha256=$ExpectedCoverageSha256
+   code_release_id=$CodeReleaseId
+   code_release=$codeRelease
+   coverage_manifest=$remoteCoverage
+   target_bundle_bytes=$targetBytes
+   minimum_worker_free_gib=$MinimumWorkerFreeGiB
+   workers=@($NodeNumbers | ForEach-Object { [ordered]@{slot=$_-1;internal_ip="10.20.$_.10"} })
+  }
+  $temporaryConfig=[IO.Path]::GetTempFileName()
+  $temporaryCoverage=[IO.Path]::GetTempFileName()
+  $temporaryKnownHosts=[IO.Path]::GetTempFileName()
+  try {
+   [IO.File]::WriteAllText($temporaryConfig,(ConvertTo-Json $config -Depth 6)+"`n",[Text.UTF8Encoding]::new($false))
+   [IO.File]::WriteAllBytes($temporaryCoverage,[Convert]::FromBase64String($document.Base64))
+   [IO.File]::WriteAllText($temporaryKnownHosts,($knownHostLines -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
+   $configTemp="/tmp/S15P21C206-76-$RunId-runall.json"
+   $coverageTemp="/tmp/S15P21C206-76-$RunId-coverage.json"
+   $knownHostsTemp="/tmp/S15P21C206-76-$RunId-known-hosts"
+   Invoke-Scp $temporaryConfig "$($node1):$configTemp"
+   Invoke-Scp $temporaryCoverage "$($node1):$coverageTemp"
+   Invoke-Scp $temporaryKnownHosts "$($node1):$knownHostsTemp"
+   $install=@'
+set -eu
+directory='__DIRECTORY__'
+config_temp='__CONFIG_TEMP__'
+coverage_temp='__COVERAGE_TEMP__'
+known_hosts_temp='__KNOWN_HOSTS_TEMP__'
+unit='__UNIT__'
+unit_temp="/tmp/$unit"
+cleanup() { status=$?; rm -f -- "$config_temp" "$coverage_temp" "$known_hosts_temp" "$unit_temp"; exit "$status"; }
+trap cleanup EXIT
+test "$(sha256sum "$coverage_temp" | cut -d ' ' -f 1)" = '__COVERAGE_SHA__'
+sudo install -d -o root -g root -m 0755 "$directory"
+sudo install -o root -g root -m 0644 "$config_temp" '__REMOTE_CONFIG__'
+sudo install -o root -g root -m 0644 "$coverage_temp" '__REMOTE_COVERAGE__'
+sudo install -o root -g root -m 0644 "$known_hosts_temp" '__REMOTE_KNOWN_HOSTS__'
+printf '%s' '__UNIT_BASE64__' | base64 --decode > "$unit_temp"
+sudo install -o root -g root -m 0644 "$unit_temp" "/etc/systemd/system/$unit"
+for node in 2 3 4 5 6; do
+ host=$(sudo ssh -n -F /dev/null -b 10.20.1.10 -i /etc/planetory/tess-hdfs-runall/id_ed25519 \
+  -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile='__REMOTE_KNOWN_HOSTS__' "planetory-admin@10.20.$node.10" hostname -s)
+ test "$host" = "worker-$node"
+ echo INTERNAL_SSH_OK target="10.20.$node.10" host="$host"
+done
+sudo systemctl daemon-reload
+sudo systemd-analyze verify "/etc/systemd/system/$unit"
+sudo systemctl enable "$unit" >/dev/null
+sudo systemctl restart "$unit"
+sleep 3
+sudo systemctl show "$unit" --property=LoadState,UnitFileState,ActiveState,SubState,Result,NRestarts,ExecMainStatus --no-pager
+test "$(sudo systemctl show "$unit" --property=LoadState --value)" = loaded
+test "$(sudo systemctl show "$unit" --property=ActiveState --value)" = active
+echo SERVER_RUN_ALL_STARTED unit="$unit" internal_workers=10.20.2.10,10.20.3.10,10.20.4.10,10.20.5.10,10.20.6.10
+'@.Replace('__DIRECTORY__',$remoteDirectory).Replace('__CONFIG_TEMP__',$configTemp).Replace('__COVERAGE_TEMP__',$coverageTemp).Replace('__KNOWN_HOSTS_TEMP__',$knownHostsTemp).Replace('__UNIT__',$unit).Replace('__COVERAGE_SHA__',$ExpectedCoverageSha256).Replace('__REMOTE_CONFIG__',$remoteConfig).Replace('__REMOTE_COVERAGE__',$remoteCoverage).Replace('__REMOTE_KNOWN_HOSTS__',$remoteKnownHosts).Replace('__UNIT_BASE64__',$unitBase64)
+   Invoke-Remote $node1 $install 'Install and start autonomous HDFS RunAll on Node 1'
+  } finally {
+   Remove-Item -LiteralPath $temporaryConfig,$temporaryCoverage,$temporaryKnownHosts -Force -ErrorAction SilentlyContinue
+  }
  }
  'RunAll' {
   $runStarted=[DateTimeOffset]::UtcNow

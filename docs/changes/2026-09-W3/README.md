@@ -119,6 +119,6 @@
 | 2026-09-19 | Sector 3 HDFS Raw 완료 조건 재검증 | S15P21C206-76 | byte-identical, COMMIT_CACHED, staging isolation, manifest.parquet, RF2, YARN read | Sector 3 검증 완료·전체 범위 미완료 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | Sector 3~5 HDFS Raw 자동 연속 적재 | S15P21C206-76 | RunAll, uploader wait, resume, manifest.parquet, RF2, FSCK | 전체 범위 적재·검증 완료 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
-| 2026-09-20 | Sector 1~13 HDFS coverage와 원자 커밋 보강 | S15P21C206-76 | FinalCoverage, Sector 1~13, Rename.NONE, plan v2, restore sample, RF2, reserved, NRestarts | 구현·오프라인 검증 완료·실환경 검증 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Sector 1~13 HDFS coverage·원자 커밋·Node 1 자율 실행 보강 | S15P21C206-76 | FinalCoverage, Sector 1~13, Rename.NONE, plan v2, systemd, internal IP, RF2, reserved | 구현·오프라인 검증 완료·실환경 적재 진행 중 | [2026-09-20](2026-09-20.md) |
 | 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
 | 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |

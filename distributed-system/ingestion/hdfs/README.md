@@ -37,11 +37,20 @@ $SourceSha = '8c6c2370682e24351fce1223d6f463da2bd57ae2e1780033d940dd695cfe2c38'
 $CoverageSha = 'df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94'
 $CodeRelease = '<이번 코드 release id>'
 
-& $Load -Step RunAll -RunId $Run -ExpectedSourceListSha256 $SourceSha `
+& $Load -Step ServerRunAll -RunId $Run -ExpectedSourceListSha256 $SourceSha `
   -ReleaseId $Run -CodeReleaseId $CodeRelease -ExpectedCoverageSha256 $CoverageSha
 ```
 
-`RunAll`은 Worker 2~6에 보존된 FinalCoverage JSON·sidecar가 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만든다. 각 Sector 레코드의 run·source SHA-256·개수·바이트를 해당 run 선언과 다시 대조하며, 현재 HDFS 저장 계약의 `release_id`는 원천 `run_id`와 같다. 첫 Sector는 설치 전에 통과한 Preflight를 재사용하고, 이후 Sector는 적재 직전에 다시 검사한다. 실행 흐름은 `Build → Upload → uploader 완료 대기 → Commit`이며 `Commit`이 checksum·manifest·RF2·FSCK 전수 감사를 수행한 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 단계별 진단용 `Audit`은 유지하지만 `RunAll`에서는 같은 전수 감사를 연속 두 번 수행하지 않는다. 최종 경로가 있으면 `Commit` 재감사 후 건너뛰고, 첫 실패에서는 다음 Sector를 시작하지 않은 채 staging을 보존한다. 13개가 모두 확정된 뒤에만 `CoverageCommit`으로 전체 HDFS coverage marker를 만든다.
+`ServerRunAll`은 검증된 FinalCoverage와 loader를 배치한 뒤 Node 1의 enabled systemd unit으로 전체 실행을 넘긴다. 이 시점부터 운영자 PC와 Tailscale 세션이 종료돼도 Node 1이 실패 시 30초 뒤 재시작하며 같은 staging에서 재개한다. Node 1의 Worker 기동·상태 확인은 고정 내부 IP `10.20.2.10`~`10.20.6.10`의 SSH만 사용하고 소스 주소도 `10.20.1.10`으로 고정한다. 전용 키는 Node 1의 `/etc/planetory/tess-hdfs-runall/`에만 두며 Worker는 해당 내부 IP에서 온 키만 허용한다. bundle 데이터와 감사 명령은 기존 `hdfs://planetory` 사설망 경로를 사용한다. Tailscale은 최초 배치와 운영자 상태 조회에만 사용한다.
+
+서버 조정기는 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만들고 Sector마다 HDFS Preflight를 다시 수행한다. final이 있으면 전수 재감사하고, 미완료 Sector는 `plan → Worker 5대 병렬 upload → uploader 완료 대기 → Commit`으로 처리한다. Worker unit은 실패 시 재시작하고 Node 1 조정기가 재기동되면 active unit은 그대로 감시하며 inactive 미완료 unit만 멱등 재실행한다. `Commit`은 checksum·manifest·RF2·FSCK 전수 감사 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 첫 실패에서는 다음 Sector를 시작하지 않고 staging을 보존하며, 13개가 모두 확정된 뒤에만 전체 HDFS coverage marker를 만든다. 기존 로컬 `RunAll`은 단계별 장애 진단용 수동 fallback으로 유지한다.
+
+운영자는 다음 읽기 전용 명령으로 Node 1 조정기 상태를 본다. 이 조회가 끊겨도 서버 unit에는 영향이 없다.
+
+```powershell
+tailscale ssh SSAFY@node-1 "sudo systemctl status planetory-tess-hdfs-runall-$Run --no-pager"
+tailscale ssh SSAFY@node-1 "sudo journalctl -u planetory-tess-hdfs-runall-$Run -n 80 --no-pager"
+```
 
 FinalCoverage가 없는 과거 Sector 3~5 재검증은 `ExpectedCoverageSha256`을 생략한 기존 명령을 사용할 수 있다. 이 호환 경로는 새 Sector를 추가하거나 전체 1~13 완료를 주장하는 용도가 아니다.
 
@@ -89,13 +98,17 @@ sha256sum /tmp/restored.fits
 & .\infra\distributed-system\scripts\test-tess-hdfs-load.ps1
 ```
 
-현재 Python 계획·감사 검사 8개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename을 포함한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지도 검사한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
+현재 Python 계획·감사 검사 11개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename, Node 1의 정확한 Worker 내부 IP와 HA safe-mode 출력 계약, Spark manifest 스크립트의 immutable release 직접 mount를 포함한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지도 검사한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
 
 75의 실제 FinalCoverage는 2026-09-20에 247,824개·441.62GiB·`.part` 0, Worker 5대 동일 SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 완료됐다. 저장소의 100GiB 예약 설정은 Node 1~6에 반영했고 Worker 2~6 DataNode의 순차 재시작과 Live DataNode 5대 복귀를 확인했다. 실제 FinalCoverage를 입력으로 한 Sector 1~13 적재와 최종 HDFS coverage 감사는 아직 끝나지 않았으므로 76 완료로 간주하지 않는다.
 
 첫 Sector 1~13 `RunAll` 시도는 Worker coverage 5개를 읽은 뒤 로컬 `coverage-map` 실행에서 `ModuleNotFoundError: No module named 'ingestion'`으로 중단됐다. HDFS staging 준비·loader 설치·uploader 시작 전이어서 데이터 영향은 없다. runner가 로컬 검증 호출 동안 `distributed-system`을 `PYTHONPATH` 앞에 추가하고 기존 값을 `finally`에서 복원하도록 수정했으며, 이 경로 설정·복원을 오프라인 계약에 추가했다. 안전한 재실행 시작점은 동일한 `RunAll` 처음이다.
 
 수정 후 CodeReleaseId `20260920T040219Z`로 재실행해 FinalCoverage, Sector 1 Preflight와 6개 노드의 동일 loader content SHA-256을 확인했다. Sector 1은 15,889개·32,398,643,520바이트를 Worker 5대의 63개 bundle로 계획했고, uploader 5개가 모두 시작됐다. 이 기록은 적재 시작 증거이며 Sector 1 확정이나 Sector 1~13 완료 증거가 아니다. `RunAll` 완료, 각 Sector `COMMIT_OK`와 최종 `COVERAGE_COMMIT_OK`는 계속 확인해야 한다.
+
+로컬 제어기 단절 뒤에도 계속 적재하도록 CodeReleaseId `20260920T120026Z`, 내용 SHA-256 `c357018ae7be69966fef07731703f797218780b0f363a9216ac5614e0d93ee84`를 6개 노드에 설치했다. Node 1에서 source `10.20.1.10`을 bind한 내부 SSH로 Worker `10.20.2.10`~`10.20.6.10`의 host key와 실제 hostname을 모두 확인했다. 최종 조정기 unit은 enabled·active/running, 현재 기동 `NRestarts=0`이며 Sector 1 final의 cached 전수 감사를 시작했다. 첫 bootstrap은 root 전용 키를 일반 세션으로 읽으려다 서비스 시작 전에 중단됐고, 다음 bootstrap은 내부 `ssh`가 파이프의 남은 표준입력을 소비해 unit이 disabled/inactive로 남았다. `sudo ssh -n`으로 둘을 닫았다. 첫 service 실행은 HA safe-mode의 실제 두 줄이 각각 endpoint를 덧붙이는 형식을 엄격 비교해 차단됐고, 다음 실행은 `ProtectSystem=strict` 아래 `/tmp` 쓰기 금지로 cached 감사 전에 차단됐다. HA 접두사 검증과 systemd `RuntimeDirectory`를 반영했으며 이 네 실패는 모두 신규 Worker upload 전에 발생해 HDFS staging·final을 변경하지 않았다. Sector 1~13 완료와 최종 coverage marker는 아직 진행 중이다.
+
+Sector 1~6 확정 뒤 Sector 7은 19,995개·70개 bundle·35,818,706,880바이트의 upload와 전수 audit까지 통과했지만, `UMask=0027`인 조정기 임시 디렉터리에 복사한 `manifest_to_parquet.py`를 Spark 컨테이너 사용자가 읽지 못해 Parquet 생성 전에 중단됐다. Sector 7 staging은 그대로 보존했다. 임시 복사를 제거하고 권한이 설치 시 검증된 immutable release 파일을 read-only bind mount하도록 수정했다. CodeReleaseId `20260920T152934Z`, 내용 SHA-256 `5916e7913c65f4e49ecfbed93d821c80146233db4b613b3dbc00bde180bcbc88`를 6개 노드에 설치했고, 같은 Spark image에서 `MANIFEST_SCRIPT_READ_OK 2018` canary를 통과했다. Node 1 조정기는 해당 release로 enabled·active/running, `NRestarts=0`이며 cached Sector 재감사 뒤 보존된 Sector 7 staging을 재개한다. Sector 7 확정과 Sector 8~13, 최종 coverage marker는 아직 완료되지 않았다.
 
 권한을 승인한 같은 날의 실환경 `Preflight`는 HA `active:standby`, Live DataNode 5개, 기본 RF2, HDFS 사용률 0%와 RunId `20260918T080417Z` Sector 3의 Worker 5대 감사 gate를 통과했다. 대상은 15,993개, 원본 31,965,808,320바이트다.
 

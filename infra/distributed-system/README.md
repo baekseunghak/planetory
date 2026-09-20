@@ -372,6 +372,8 @@ Sector 1~13 확대는 기존 RunId를 수정하지 않는다. 2026-09-19 공식 
 
 HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 expansion Run의 Sector 1·2·6~13을 정확히 매핑한다. 각 Sector의 불변 final을 재감사하거나 새 staging을 적재한 뒤 Java `FileContext`의 `Rename.NONE`으로만 확정하며, 13개가 모두 성공한 뒤 source coverage SHA-256을 키로 전체 HDFS coverage marker를 원자 확정한다. systemd 재시작 횟수는 증거로 남기되 0을 성공 조건으로 두지 않고 최종 plan·bundle·manifest·RF2·복원 감사 결과로 판정한다.
 
+전체 적재는 `run-tess-hdfs-load.ps1 -Step ServerRunAll`로 Node 1의 enabled systemd 조정기에 인계한다. 인계 뒤에는 운영자 PC가 꺼져도 실행과 실패 재시작이 계속된다. Node 1은 Worker 2~6을 `10.20.2.10`~`10.20.6.10`으로 직접 기동·감시하며 source bind를 `10.20.1.10`으로 고정하고, HDFS 데이터 경로도 `hdfs://planetory`의 사설망 이름 해석을 사용한다. Tailscale은 최초 배치와 운영자 조회 경로이지 서버 간 실행 경로가 아니다. 세부 재개·감사 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+
 적재 전에는 HDFS safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만과 RF2 예상 사용률 70% 이하, Worker별 원본 디스크 가용 100GiB 이상을 확인한다. 저장소의 `hdfs-site.xml`은 `dfs.datanode.du.reserved=107374182400`(DataNode당 100GiB)을 선언하며 runner도 실제 클러스터 값을 요구한다. 기존 클러스터 설정 반영과 DataNode 재시작은 이번 코드 변경에 포함하지 않았으므로, 통제된 운영 작업으로 적용·검증하기 전에는 Sector 1~13 적재를 시작하지 않는다.
 
 ## Spark 제출
