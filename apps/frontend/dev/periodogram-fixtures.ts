@@ -13,6 +13,8 @@ export const PERIODOGRAM_FIXTURE_TICS = {
   empty: "259377027",
   unavailable: "259377028",
   pending: "259377029",
+  // 튜토리얼 별. 정상 샘플과 자료는 같고 건너뛰기만 허용된다(#187 특수 제출).
+  tutorial: "259377030",
 } as const;
 export const PERIODOGRAM_FIXTURE_BUNDLE = "9007199254741093";
 const grid = {
@@ -69,6 +71,8 @@ export function periodContextFixture(
     current.curveStep = 1;
     current.removedCandidateIds = ["9007199254741094"];
   }
+  if (ticId === PERIODOGRAM_FIXTURE_TICS.tutorial)
+    result.tutorial = { seq: 1, skipAvailable: true };
   result.star = { sectorCount: 1, sectors: [14], tmag: 9.8 };
   Object.assign(result.bundle, {
     bundleId: current.bundleId,

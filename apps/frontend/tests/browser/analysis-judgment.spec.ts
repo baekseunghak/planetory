@@ -123,9 +123,10 @@ test("gated keyboard flow, required judgment, review and back preserve input wit
   await expect(summary).toContainText("모르겠음");
   await expect(summary).toContainText("홀짝 깊이");
   await expect(summary).toContainText("🌌");
+  // #187이 제출을 연결했다. 이 검사는 보내지 않고 확인만 한다.
   await expect(
-    summary.getByRole("button", { name: "제출하기 · 연결 예정", exact: true }),
-  ).toBeDisabled();
+    summary.getByRole("button", { name: "제출하기", exact: true }),
+  ).toBeEnabled();
   await expect(page.locator('[aria-current="step"]')).toContainText(
     "제출값 확인",
   );
