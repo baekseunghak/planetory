@@ -171,9 +171,11 @@ base64 -w 0 "$manifest"
  }
  $temporary=[IO.Path]::GetTempFileName()
  $previousPythonPath=$env:PYTHONPATH
+ $previousBytecode=$env:PYTHONDONTWRITEBYTECODE
  $pythonPackageRoot=$LocalIngestionPath
  try {
   $env:PYTHONPATH=$pythonPackageRoot
+  $env:PYTHONDONTWRITEBYTECODE='1'
   if ($previousPythonPath) { $env:PYTHONPATH="$pythonPackageRoot$([IO.Path]::PathSeparator)$previousPythonPath" }
   [IO.File]::WriteAllBytes($temporary,[Convert]::FromBase64String($coverageBase64))
   $loader=Join-Path $loaderRoot 'tess_hdfs_load.py'
@@ -192,6 +194,7 @@ base64 -w 0 "$manifest"
   [pscustomobject]@{Map=$map;Base64=$coverageBase64}
  } finally {
   $env:PYTHONPATH=$previousPythonPath
+  $env:PYTHONDONTWRITEBYTECODE=$previousBytecode
   Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
  }
 }

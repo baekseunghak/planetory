@@ -28,6 +28,9 @@ if (-not $runnerText.Contains("RUN_ALL_PREFLIGHT_REUSED sector=`$currentSector")
 foreach ($required in @('$pythonPackageRoot=$LocalIngestionPath','$env:PYTHONPATH=$pythonPackageRoot','$env:PYTHONPATH=$previousPythonPath')) {
  if (-not $runnerText.Contains($required)) { throw "Coverage validation must scope and restore its Python package path: $required" }
 }
+foreach ($required in @("`$env:PYTHONDONTWRITEBYTECODE='1'",'$env:PYTHONDONTWRITEBYTECODE=$previousBytecode')) {
+ if (-not $runnerText.Contains($required)) { throw "Coverage validation must not leave Python bytecode artifacts: $required" }
+}
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit"')) { throw 'Transient HDFS upload units must not start again after boot.' }
 if ($runnerText.Contains("hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'")) { throw 'Final Sector commit must use atomic no-overwrite rename.' }
