@@ -65,7 +65,7 @@ Publisher 멱등 키 `(tic_id, bundle_version)`의 DB 유일 제약은 `S15P21C2
 
 v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현한다. 열 정의·범위·배정 규칙은 v1.3(`S15P21C206-227`)을 그대로 따르고 여기서 바꾸지 않는다. 기존 행이 있는 DB에도 적용되도록 nullable로 넣고 회원별 발견 순서대로 채운 뒤 `NOT NULL`로 승격한다. 순번이 없던 행에 처음 부여하는 것이며 이미 있는 순번을 재배치하지 않는다.
 
-**미결 5 중 `analysis_histories` 부분을 결정으로 확정한다.** 불변 강제는 트리거가 아니라 **앱 역할의 UPDATE·DELETE 권한 회수**로 처리한다. 트리거는 쓰기마다 비용이 붙고 비활성화로 우회되지만 권한은 DB가 원천 차단한다. `analysis_snapshots`도 같게 처리한다. `published_analyses`는 서비스 백엔드(S08) 소유라 미결로 남긴다. 첨부 검증(미결 6)은 불변 강제가 아니라 값 일치 검사라 이 결정의 범위가 아니다.
+**미결 5 중 `analysis_histories` 부분을 결정으로 확정한다.** 불변 강제는 트리거가 아니라 **앱 역할의 UPDATE·DELETE 권한 회수**로 처리한다. 트리거는 쓰기마다 비용이 붙고 비활성화로 우회되지만 권한은 DB가 원천 차단한다. `analysis_snapshots`도 같게 처리한다. `published_analyses`는 161에서 앱 역할 INSERT만 허용하고 상태 열의 UPDATE는 162에 남긴다(아래 해당 테이블 설명). 첨부 검증(미결 6)은 불변 강제가 아니라 값 일치 검사라 이 결정의 범위가 아니다.
 
 `submissions`에 정합 CHECK 3종을 더한다. 위상 선택이 없는 제출에는 서버 파생값도 없어야 하고, 성과 결과는 매칭 결과와 함께 성립하며, 고조파 정정 기록은 실제로 정정했을 때만 남긴다. `challenge_rounds`는 `status='active'` 부분 유일 인덱스로 진행 회차를 하나로 묶는다.
 
@@ -778,6 +778,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 **published_analyses** (COM-18·19, GRD-04, COM-14 (1))
 
+161의 등록 경로는 V1의 테이블·유일 제약을 재사용한다. V14에서 앱 역할에 SELECT·INSERT만 허용해 공개의 원본 참조와 최초 시각을 변경하지 못하게 한다. 취소·재공개용 상태 열의 제한된 UPDATE 권한은 162에서 실제 경로와 함께 추가한다. 현재 라벨이 바뀐 과거 기록의 첫 공개 자격은 [서비스 API 9.1절](../../apps/backend/docs/service-api-spec.md#publication)의 제출 당시 기준을 따른다. 테이블·열 변경이 없어 ERD 그림은 바뀌지 않는다.
+
 | 열 | 제약 | 비고 |
 |---|---|---|
 | post_id | FK posts(kind=system_thread) | 소속 공식 스레드 |
@@ -830,7 +832,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
 | 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
-| 5 | published_analyses 불변을 트리거로 강제할지. analysis_histories·analysis_snapshots는 v1.3에서 앱 역할 권한 회수로 확정 | HIS-06, S08 |
+| 5 | published_analyses는 161에서 앱 역할 INSERT만 허용해 원본 참조·최초 시각을 보호한다. 162에서 상태 열의 UPDATE 권한을 추가한다. analysis_histories·analysis_snapshots의 기존 불변 권한은 유지한다 | HIS-06, S08·S09 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |
 | ~~9~~ | ~~stars 표시 열(teff·radius·tmag) 확정~~ | 해소(v1.8, 탐사 API D-18) |

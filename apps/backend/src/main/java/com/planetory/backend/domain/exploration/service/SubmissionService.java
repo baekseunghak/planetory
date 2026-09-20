@@ -17,6 +17,8 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -50,6 +52,12 @@ public class SubmissionService {
     private final PlatformTransactionManager transactions;
 
     public record Answer(JsonNode body, boolean replay, String currentBundleId) {}
+
+    /** 공개 집계는 재분류 후에도 public_analyses다. 탐사 결과의 analysis 분기와만 같은 쿼리다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<String, Object> publicJudgmentSummary(long candidateId) {
+        return submissions.statistics(candidateId, new SubmissionRepository.Disposition("pc", "analysis", null));
+    }
 
     public Answer submit(long memberId, long ticId, SubmissionRequest input) {
         if (input == null) throw invalid("body");

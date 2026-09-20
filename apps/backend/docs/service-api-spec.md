@@ -258,7 +258,7 @@ if (response.status === 401) {
 {
   "items": [
     {"type":"POST","id":"p-201","ticId":"123456789","title":"밝기 감소에 관한 질문","author":{"memberId":"u-101","nickname":"별찾는사람"},"commentCount":4,"createdAt":"2026-09-09T03:00:00Z"},
-    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
+    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
   ],
   "nextCursor": null,
   "hasNext": false
@@ -568,19 +568,33 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
   "analysisId":"pa-601","threadId":"st-301","historyId":"h-501",
   "isPublic":true,"created":true,"achievementGranted":true,"newlyGranted":true,
   "skyVersion":"u-101:58",
-  "achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0},
+  "achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790","position":{"worldX":12.5,"worldY":-7.2,"depthZ":0.3,"layoutVersion":"personal-spiral-v1"}}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0},
   "judgmentSummary":{"participantCount":1,"likelyPlanet":0,"unlikelyPlanet":0,"unsure":1,"asOf":"2026-09-09T03:00:00Z"}
 }
 ```
 
-새 공개 기록 201, 같은 기록 재요청 200 제안. achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
+새 공개 기록은 201, 같은 기록 재요청은 200이다(161 구현). achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
 
 - posts.kind=system_thread, user_id=NULL로 공식 공간을 만든다. threadId는 posts.id, candidateId는 candidates.id다. comments.post_id도 일반/공식 posts를 가리킨다. published_analyses.history_id UNIQUE이며 post_id로 공식 스레드를 참조한다.
 - 세 판단 모두 공개·최초 성과 인정 가능. 이미 성과를 받은 duplicate의 새 제출도 공개 가능하나 추가 성과 없음.
 - 신호별 공개·공식 공간·최초 성과·진행 수·별 발견은 아래 SB-D15의 단일 트랜잭션으로 반영한다. 최초 성과 INSERT마다 stars_per_achievement개(기본 1)를 발견하고 trigger_achievement_id+seq로 중복을 막는다. TIC별 성과 수 1/2/3/4 이상을 A/S/SS/SSS로 표시하며 FP도 상한이 없다. 완료·등급 상승 자체는 발견 트리거가 아니다.
 - 일반 Post·댓글·반응은 자동 생성하지 않는다. 미공개·공개 실패가 개인 기록이나 탐색 완료를 되돌리지 않는다.
-- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환하는 안이다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
-- 다른 사람 History는 접근 거부, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE` 제안. 상위 운영 숨김은 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 전 라벨이 바뀐 옛 기록의 자격은 미정.
+- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환한다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
+- 다른 사람 History는 403 `FORBIDDEN`, 없는 History는 404 `RESOURCE_NOT_FOUND`, 최초 공개 대상 별이 미공개이거나 아직 아무도 발견하지 않았으면 404 `STAR_NOT_PUBLISHED`, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE`이다. 상위 숨김·삭제는 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 자격은 제출 당시 미확정 여부로 판정한다(F07-Q2, 2026-09-20 사용자 확정). 현재 확정/FP로 재분류되거나 후보가 은퇴해도 당시 매칭 신호의 공개·최초 미확정 성과를 허용한다. 새 후보로 자동 이전하지 않으며 기존 성과가 있으면 추가 지급하지 않는다. 당시 판정의 저장 근거가 없으면 현재 라벨로 추측하지 않고 503 `DEPENDENCY_UNAVAILABLE`을 반환한다.
+
+<a id="publication"></a>
+
+**161 구현·후속 인계**
+
+- ID 오류 코드는 입력 위치별로 구분한다. 공개 등록 본문의 잘못된 `historyId` 형식은 400 `VALIDATION_FAILED`, 형식은 유효하나 없는 기록은 404 `RESOURCE_NOT_FOUND`다. 탐사 History 조회 경로의 잘못된 ID는 기존 계약대로 404 `RESOURCE_NOT_FOUND`이며 프론트는 ID만으로 공통 오류 코드를 가정하지 않는다.
+- 기존 공개가 존재하면 성과도 존재한다는 불변식을 전제로 재요청의 `achievementGranted=true`를 반환한다. 공개·성과는 같은 트랜잭션으로 저장하고 162의 취소·재공개·숨김은 성과를 회수하지 않는다. 성과 누락은 데이터 정합성 오류이며 정상적인 미보유(false)로 응답하지 않는다. 성과 회수 기능을 새로 도입한다면 응답 계약과 이 불변식을 함께 재설계한다.
+- 회원 선잠금 규칙은 `AchievementService.recognize`의 Javadoc을 따른다. 호출자는 회원 FK를 쓰기 전에 같은 트랜잭션에서 회원 행을 잠근다. 162에서 쓰기 경로를 추가할 때도 같은 순서를 적용한다.
+- 요청은 문자열 `historyId` 하나만 받는다. 다른 필드·숫자 ID·잘못된 형식은 400이며 작성자·판단·수치를 요청으로 변경할 수 없다. 기존 세션 인증·CSRF 검증을 따른다.
+- `PublicAnalysisService.publish`가 회원 행을 먼저 잠그고 공식 스레드·공개 기록·`AchievementService.recognize`를 같은 트랜잭션으로 확정한다. PostgreSQL 부분 유일 인덱스와 `ON CONFLICT DO NOTHING`으로 첫 스레드 생성 경합을 처리한다.
+- 등록은 그래프를 계산하거나 공개 상세를 조회하지 않는다. 공개 상세의 필드 제한은 탐사 8.5절 투영을 따른다. `judgmentSummary`는 탐사 제출 결과의 **analysis 분기**와 같은 최신 유효 공개 제출 쿼리를 사용한다. 현재 라벨이 확정/FP로 바뀌어도 공개 등록·재요청의 집계는 `kind=public_analyses`와 `participantCount`·세 판단 건수·`percentages`·`asOf` 형식을 유지한다. 탐사 결과·History의 현재 `judgmentStatistics`는 현재 판정에 따라 `kind=graded`와 `matchedMemberCount`·`agreementPercent`로 달라질 수 있으며 집계 원천도 첫 매칭 기준이다. 164 공식 스레드 상세의 `judgmentSummary`는 공개 집계를 사용하고 탐사 현재 통계로 대체하지 않는다.
+- 응답의 `achievement.unlockedStars`는 탐사 6.4절의 `{ticId: string, position}` 형식이다. 재요청은 해당 `analysisId`가 실제 성과 인정 근거인 경우에만 저장된 발견 별을 순번대로 복구한다. 같은 신호의 다른 공개가 만든 별은 포함하지 않는다. `achievement.result`는 이번 신규 인정이면 `recognized`, 기존 성과이면 `already_recognized`다.
+- 162는 취소·재공개 API와 공통 접근 정책, 164는 피드·목록·상세, 165는 집계 공통화·소비 경로 완성, 166은 신호별 독립 트랜잭션의 일괄 호출, 167은 출처 카드를 담당한다. 175 알림·177/178 통계 작업을 공개 트랜잭션에 넣지 않는다.
+- V14는 공개 분석 INSERT와 시퀀스 권한만 추가한다. 160의 V13 병합 후 V13 → V14 순서로 검증·병합하며 V13 파일을 161 브랜치에 복사하지 않는다.
 
 **공개·성과 저장 경계(SB-D15, 사용자 확정)**
 
@@ -600,9 +614,9 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 **공개 후 성과·지도 응답(탐사 D-7·D-9·D-11 통합 검토안)**
 
-개별 공개와 일괄 성공 항목에 탐사 6.4절과 같은 achievement 객체 및 skyVersion을 포함한다. achievement.newlyRecognized는 기존 newlyGranted와 같은 이번 실행의 신규 여부이며 achievementGranted는 현재 보유 여부로 별개다. unlockedStars는 이번 실행에서 새로 열린 별만 담고 star는 현재 TIC 성과 수·등급·유형별 수다. skyVersion은 커밋 이후 회원 지도의 버전이며 새 별이 없어도 현재 버전을 제공한다. 재시도에는 신규 여부 false·unlockedStars 빈 배열로 중복 화면 효과를 막는다.
+개별 공개와 일괄 성공 항목에 탐사 6.4절과 같은 achievement 객체 및 skyVersion을 포함한다. achievement.newlyRecognized는 기존 newlyGranted와 같은 이번 실행의 신규 여부이며 achievementGranted는 현재 보유 여부로 별개다. unlockedStars는 최초 요청에는 새로 열린 별, 재요청에는 해당 공개가 실제로 연 별을 담고 star는 현재 TIC 성과 수·등급·유형별 수다. skyVersion은 응답 트랜잭션에서 읽은 현재 회원 지도 버전이며 새 별이 없어도 제공한다. 지도 버전의 정본은 최상위 skyVersion이고 별 원소에는 skyVersion·layoutOrdinal을 노출하지 않는다. 재요청의 newlyGranted·newlyRecognized는 false를 유지하지만 HTTP 200이나 이 값만으로 이미 표시했다고 간주하지 않는다. 프론트는 회원·analysisId별 표시 이력으로 성과·별 연출의 중복을 막는다(응답 유실 복구 정책, 2026-09-20 사용자 확정). achievementGranted로 성과 보유를 안내하며 복구한 unlockedStars로 미표시 별 연출을 제공한다. 재요청의 unlockShortfall=0은 이번 실행에서 추가 지급을 시도하지 않았다는 뜻이며 최초 지급 당시 부족 수의 복원값이 아니다.
 
-9.2절 내부 지급 함수의 newlyRecognized·unlockedStars를 그대로 받고, star는 같은 트랜잭션의 현재 진행·성과 집합, skyVersion은 탐사 지도 갱신 계약에서 가져온다. 회원 데이터는 서버에서 결정한다. 예시 unlockedStars는 TIC만 축약했으며 전체 항목은 탐사 반환 DTO를 따른다. 함수 시그니처 자체에 없는 필드를 단순 반환한다고 가정하지 않는다. 실패 항목에는 존재 여부를 확인하지 못한 성과·지도 값을 만들어 넣지 않는다. 공개 ID는 서비스 응답에서 analysisId, 탐사 publication에서는 publicAnalysisId로 명시적으로 매핑한다.
+최초 요청은 9.2절 내부 지급 함수의 newlyRecognized를 받고 unlockedStars를 탐사 6.4절 HTTP DTO로 변환한다. 재요청은 user_candidate_achievements.recognized_analysis_id와 star_unlocks.trigger_achievement_id로 저장된 별·좌표를 조회하며 성과·별을 다시 지급하지 않는다. 취소·숨김된 공개도 성과 보존 정책에 따라 복구하되 isPublic=false를 유지한다. star는 같은 트랜잭션의 현재 진행·성과 집합, skyVersion은 탐사 지도 갱신 계약에서 가져온다. 회원 데이터는 서버에서 결정한다. unlockedStars의 전체 항목은 탐사 6.4절 UnlockedStar(String ticId, StarPosition position)를 따른다. 함수 시그니처 자체에 없는 필드를 단순 반환한다고 가정하지 않는다. 실패 항목에는 존재 여부를 확인하지 못한 성과·지도 값을 만들어 넣지 않는다. 공개 ID는 서비스 응답에서 analysisId, 탐사 publication에서는 publicAnalysisId로 명시적으로 매핑한다.
 
 일괄 요청의 항목별 skyVersion은 각 신호 커밋 시점이며 프론트는 전체 처리 후 지도 메타를 다시 조회한다. 서로 다른 항목의 버전·성공 배열을 하나의 고정 스냅샷으로 가정하지 않는다. 잠금 순서는 공통 탐사 함수와 동일하게 정하고, 문서의 업무 처리 순서를 별도 잠금 획득 순서로 구현하지 않는다.
 
@@ -613,7 +627,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 ```json
 {
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
-  "title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
+  "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
   "judgmentSummary":{
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
@@ -664,7 +678,7 @@ TIC 종료 화면에서 신호별 대표 기록(기본 최신 미공개 제출)�
 ```json
 {
   "results":[
-    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
+    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790","position":{"worldX":12.5,"worldY":-7.2,"depthZ":0.3,"layoutVersion":"personal-spiral-v1"}}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
     {"historyId":"h-502","status":"FAILED","error":{"code":"DEPENDENCY_UNAVAILABLE","message":"분석 자료를 잠시 불러올 수 없습니다."},"retryable":true}
   ]
 }
