@@ -5,3 +5,4 @@
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 114 최신 develop 통합·Gold QA 상태 정정 | S15P21C206-114 | 2c1c857, 119 보존, NULL, e8f62ea | 문서·검증 완료, MR 승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | HDFS marker 권한 경계 수정·Sector 7 확정 | S15P21C206-76 | stdin, UMask, immutable release, atomic rename, Sector 7 | 구현·Sector 7 검증 완료, 전체 적재 진행 중 | [기록](2026-09-21.md) |

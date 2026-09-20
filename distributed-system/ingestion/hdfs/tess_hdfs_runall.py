@@ -29,8 +29,12 @@ WORKER_IPS = {slot: f"10.20.{slot + 1}.10" for slot in range(1, 6)}
 SPARK_HOSTS = {"master-1": NODE1_IP, **{f"worker-{slot + 1}": ip for slot, ip in WORKER_IPS.items()}}
 
 
-def run(arguments: list[str], *, check: bool = True, echo: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(arguments, text=True, capture_output=True, check=False)
+def run(
+    arguments: list[str], *, check: bool = True, echo: bool = True, input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        arguments, text=True, encoding="utf-8", capture_output=True, check=False, input=input_text,
+    )
     if echo and result.stdout:
         print(result.stdout, end="")
     if echo and result.stderr:
@@ -87,12 +91,14 @@ def ssh(worker: dict, script: str, *, echo: bool = True) -> subprocess.Completed
     return run(ssh_arguments(worker, f"printf '%s' '{payload}' | base64 --decode | bash"), echo=echo)
 
 
-def hdfs(arguments: list[str], *, check: bool = True, echo: bool = True) -> subprocess.CompletedProcess[str]:
+def hdfs(
+    arguments: list[str], *, check: bool = True, echo: bool = True, input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     return run([
         "/usr/bin/sudo", "-u", "hdfs", "/usr/bin/env",
         f"JAVA_HOME={JAVA_HOME}", f"HADOOP_CONF_DIR={HADOOP_CONF_DIR}",
         HDFS, *arguments,
-    ], check=check, echo=echo)
+    ], check=check, echo=echo, input_text=input_text)
 
 
 def hdfs_exists(path: str) -> bool:
@@ -101,6 +107,11 @@ def hdfs_exists(path: str) -> bool:
 
 def hdfs_json(path: str) -> dict:
     return json.loads(hdfs(["dfs", "-cat", path], echo=False).stdout)
+
+
+def hdfs_put_json(value: dict, remote: str) -> None:
+    payload = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    hdfs(["dfs", "-put", "-", remote], input_text=payload)
 
 
 def context_paths(context: dict) -> tuple[str, str, str]:
@@ -305,7 +316,6 @@ def commit_sector(config: dict, context: dict) -> None:
         shutil.chown(root, user="hdfs", group="hadoop")
         root.chmod(0o750)
         audit_path = root / "audit.json"
-        ready_path = root / "ready.json"
         if hdfs_exists(final):
             result = audit(config, context, final, audit_path)
             ready = hdfs_json(f"{final}/_READY.json")
@@ -352,10 +362,9 @@ def commit_sector(config: dict, context: dict) -> None:
             "release_id": context["release_id"], "source_list_sha256": context["source_list_sha256"],
             "sector": int(context["sector"]), "product_count": count, "replication": 2,
         }
-        loader.atomic_json(ready_path, ready)
         if hdfs_exists(f"{stage}/_READY.json"):
             hdfs(["dfs", "-rm", "-f", f"{stage}/_READY.json"])
-        hdfs(["dfs", "-put", str(ready_path), f"{stage}/_READY.json.part"])
+        hdfs_put_json(ready, f"{stage}/_READY.json.part")
         hdfs(["dfs", "-mv", f"{stage}/_READY.json.part", f"{stage}/_READY.json"])
         hdfs(["dfs", "-mkdir", "-p", f"/lake/raw/tess/release={context['release_id']}"])
         java_commit(config, stage, final)
@@ -390,13 +399,13 @@ def commit_coverage(config: dict) -> None:
         allowed = {stage, f"{stage}/_READY.json", f"{stage}/_READY.json.part"}
         if found - allowed:
             raise RuntimeError(f"unexpected HDFS coverage staging artifacts: {sorted(found - allowed)}")
+        if hdfs_exists(f"{stage}/_READY.json.part"):
+            hdfs(["dfs", "-rm", "-f", f"{stage}/_READY.json.part"])
         if hdfs_exists(f"{stage}/_READY.json"):
             if hdfs_json(f"{stage}/_READY.json") != ready:
                 raise RuntimeError("staged HDFS coverage marker conflicts with validated coverage")
         else:
-            if hdfs_exists(f"{stage}/_READY.json.part"):
-                hdfs(["dfs", "-rm", "-f", f"{stage}/_READY.json.part"])
-            hdfs(["dfs", "-put", str(ready_path), f"{stage}/_READY.json.part"])
+            hdfs_put_json(ready, f"{stage}/_READY.json.part")
             hdfs(["dfs", "-mv", f"{stage}/_READY.json.part", f"{stage}/_READY.json"])
         java_commit(config, stage, final)
         if hdfs_json(f"{final}/_READY.json") != ready:

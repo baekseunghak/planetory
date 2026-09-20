@@ -423,9 +423,18 @@ archive=/tmp/S15P21C206-76-__CODE_RELEASE__.tgz
 work=/tmp/S15P21C206-76-__CODE_RELEASE__-work-$$
 cleanup() { status=$?; trap - EXIT; rm -f -- "$archive"; test -z "$work" || sudo rm -rf -- "$work"; exit "$status"; }
 trap cleanup EXIT
+validate_release_permissions() {
+ for file in hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/manifest_to_parquet.py classes/TessSequenceFileTool.class ingestion/__init__.py ingestion/tess.py; do
+  test -f "$release/$file" || { echo RELEASE_FILE_MISSING="$file" >&2; return 1; }
+ done
+ test -z "$(sudo find "$release" \( ! -user root -o ! -group root \) -print -quit)" || { echo RELEASE_OWNER_INVALID >&2; return 1; }
+ test -z "$(sudo find "$release" -perm /0022 -print -quit)" || { echo RELEASE_MUTABLE >&2; return 1; }
+ test -z "$(sudo find "$release" -type d ! -perm -0005 -print -quit)" || { echo RELEASE_DIRECTORY_NOT_TRAVERSABLE >&2; return 1; }
+ test -z "$(sudo find "$release" -type f ! -perm -0004 -print -quit)" || { echo RELEASE_FILE_NOT_READABLE >&2; return 1; }
+}
 if test -f "$release/READY"; then
  test "$(cat "$release/READY")" = '__CONTENT_SHA__' || { echo RELEASE_ID_CONFLICT >&2; exit 1; }
- test -x "$release" && test -r "$release/hdfs/tess_hdfs_load.py" || { echo RELEASE_PERMISSION_INVALID >&2; exit 1; }
+ validate_release_permissions || { echo RELEASE_PERMISSION_INVALID >&2; exit 1; }
  echo INSTALL_CACHED content_sha256=__CONTENT_SHA__
  exit 0
 fi
@@ -444,7 +453,7 @@ sudo install -d -o root -g root -m 0755 "$(dirname "$release")"
 sudo test ! -e "$release" || { echo RELEASE_RACE_CONFLICT >&2; exit 1; }
 sudo mv "$work" "$release"
 work=''
-test -x "$release" && test -r "$release/hdfs/tess_hdfs_load.py"
+validate_release_permissions || { echo RELEASE_PERMISSION_INVALID >&2; exit 1; }
 echo INSTALL_OK release="$release" content_sha256=__CONTENT_SHA__
 '@.Replace('__RELEASE__',$codeRelease).Replace('__CODE_RELEASE__',$CodeReleaseId).Replace('__CONTENT_SHA__',$bundle.ContentSha256).Replace('__ARCHIVE_SHA__',$bundle.ArchiveSha256)
     Invoke-Remote $target[1] $command 'Install immutable HDFS loader'
@@ -563,22 +572,22 @@ sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/e
  }
  'Commit' {
   $command=@'
-set -eu
+set -euo pipefail
 hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
 audit=/tmp/S15P21C206-76-__RUN_ID__-s__SECTOR__.audit.json
-spark_script=/tmp/S15P21C206-76-__RUN_ID__-manifest.py
 ready=/tmp/S15P21C206-76-__RUN_ID__-ready.json
 fsck=/tmp/S15P21C206-76-__RUN_ID__-fsck.txt
-cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$audit" "$spark_script" "$ready" "$fsck"; exit "$status"; }
+cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$audit" "$audit.part" "$ready" "$fsck"; exit "$status"; }
 trap cleanup EXIT
+sudo rm -f -- "$audit" "$audit.part" "$ready" "$fsck"
 if hdfs_cmd dfs -test -e '__FINAL__'; then
  sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
   python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' audit --stage-uri '__FINAL__' --final-uri '__FINAL_URI__' \
   --source-sha '__SOURCE_SHA__' --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' \
   --sector __SECTOR__ __SLOT_ARGS__ --output "$audit"
- count=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["product_count"])' "$audit")
- hdfs_cmd dfs -cat '__FINAL__/_READY.json' > "$ready"
- PYTHONPATH='__RELEASE__' python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' ready --ready-json "$ready" \
+ count=$(sudo -u hdfs python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["product_count"])' "$audit")
+ hdfs_cmd dfs -cat '__FINAL__/_READY.json' | sudo -u hdfs tee "$ready" >/dev/null
+ sudo -u hdfs env PYTHONPATH='__RELEASE__' python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' ready --ready-json "$ready" \
   --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' --source-sha '__SOURCE_SHA__' \
   --sector __SECTOR__ --product-count "$count" --replication 2
  hdfs_cmd dfs -test -e '__FINAL__/manifest.parquet/_SUCCESS'
@@ -596,20 +605,19 @@ count=$(sudo -u hdfs python3 -c 'import json,sys; print(json.load(open(sys.argv[
 if hdfs_cmd dfs -test -e '__STAGE__/manifest.parquet'; then
  hdfs_cmd dfs -rm -r -skipTrash '__STAGE__/manifest.parquet'
 fi
-cp '__RELEASE__/hdfs/manifest_to_parquet.py' "$spark_script"
 sudo docker pull '__SPARK_IMAGE__'
 sudo docker run --rm --network host \
  --add-host master-1:10.20.1.10 --add-host worker-2:10.20.2.10 --add-host worker-3:10.20.3.10 \
  --add-host worker-4:10.20.4.10 --add-host worker-5:10.20.5.10 --add-host worker-6:10.20.6.10 \
  -e HADOOP_CONF_DIR=/etc/hadoop -e HADOOP_USER_NAME=planetory-admin -v /etc/hadoop:/etc/hadoop:ro \
- -v "$spark_script":/opt/planetory/manifest_to_parquet.py:ro \
+ -v '__RELEASE__/hdfs/manifest_to_parquet.py':/opt/planetory/manifest_to_parquet.py:ro \
  --entrypoint /opt/spark/bin/spark-submit '__SPARK_IMAGE__' --master local[1] \
  /opt/planetory/manifest_to_parquet.py \
  'hdfs://planetory__STAGE__/.control/worker=*/bundle-*.manifest.jsonl' \
  'hdfs://planetory__STAGE__/manifest.parquet' "$count" '__SOURCE_SHA__' __SECTOR__
 hdfs_cmd dfs -test -e '__STAGE__/manifest.parquet/_SUCCESS'
 hdfs_cmd dfs -setrep -w 2 '__STAGE__/manifest.parquet'
-python3 - "$ready" "$count" <<'PY'
+sudo -u hdfs python3 - "$ready" "$count" <<'PY'
 import json,sys
 value={'schema':'planetory.tess-hdfs-release.v1','run_id':'__RUN_ID__','release_id':'__DATA_RELEASE__',
        'source_list_sha256':'__SOURCE_SHA__','sector':__SECTOR__,'product_count':int(sys.argv[2]),'replication':2}
@@ -625,7 +633,7 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop
 classpath='__RELEASE__/classes:'"$(/opt/hadoop/bin/hadoop classpath)"
 sudo -u hdfs env JAVA_HOME="$JAVA_HOME" HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
  java -cp "$classpath" TessSequenceFileTool commit '__STAGE__' '__FINAL__'
-hdfs_cmd dfs -cat '__FINAL__/_READY.json' | cmp -s "$ready" -
+hdfs_cmd dfs -cat '__FINAL__/_READY.json' | sudo -u hdfs cmp -s "$ready" -
 hdfs_cmd fsck '__FINAL__' -files -blocks > "$fsck"
 grep -q 'Status: HEALTHY' "$fsck"
 grep -Eq 'Under-replicated blocks:[[:space:]]+0' "$fsck"
@@ -639,32 +647,33 @@ echo COMMIT_OK final='__FINAL__' products="$count"
   $coverageStage="/lake/raw/tess/.staging/coverage=$ExpectedCoverageSha256/run=$RunId"
   $coverageFinal="/lake/raw/tess/coverage=$ExpectedCoverageSha256"
   $command=@'
-set -eu
+set -euo pipefail
 hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
 source=/tmp/S15P21C206-76-__RUN_ID__-coverage-source.json
 ready=/tmp/S15P21C206-76-__RUN_ID__-coverage-ready.json
 existing=/tmp/S15P21C206-76-__RUN_ID__-coverage-existing.json
-cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$source" "$ready" "$existing"; exit "$status"; }
+cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$source" "$ready" "$ready.part" "$existing"; exit "$status"; }
 trap cleanup EXIT
-printf '%s' '__COVERAGE_BASE64__' | base64 --decode > "$source"
-test "$(sha256sum "$source" | cut -d ' ' -f 1)" = '__COVERAGE_SHA__'
+sudo rm -f -- "$source" "$ready" "$ready.part" "$existing"
+printf '%s' '__COVERAGE_BASE64__' | base64 --decode | sudo -u hdfs tee "$source" >/dev/null
+test "$(sudo -u hdfs sha256sum "$source" | cut -d ' ' -f 1)" = '__COVERAGE_SHA__'
 sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
  python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' coverage-ready --coverage-manifest "$source" \
  --expected-sha '__COVERAGE_SHA__' --output "$ready"
 if hdfs_cmd dfs -test -e '__COVERAGE_FINAL__'; then
- hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' > "$existing"
- cmp -s "$ready" "$existing" || { echo COVERAGE_READY_CONFLICT >&2; exit 1; }
+ hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' | sudo -u hdfs tee "$existing" >/dev/null
+ sudo -u hdfs cmp -s "$ready" "$existing" || { echo COVERAGE_READY_CONFLICT >&2; exit 1; }
  echo COVERAGE_COMMIT_CACHED final='__COVERAGE_FINAL__'
  exit 0
 fi
 hdfs_cmd dfs -mkdir -p '__COVERAGE_STAGE__'
 unexpected=$(hdfs_cmd dfs -find '__COVERAGE_STAGE__' | grep -Ev '^__COVERAGE_STAGE__$|^__COVERAGE_STAGE__/_READY.json(.part)?$' || true)
 test -z "$unexpected" || { echo "COVERAGE_STAGE_UNEXPECTED=$unexpected" >&2; exit 1; }
+if hdfs_cmd dfs -test -e '__COVERAGE_STAGE__/_READY.json.part'; then hdfs_cmd dfs -rm -f '__COVERAGE_STAGE__/_READY.json.part'; fi
 if hdfs_cmd dfs -test -e '__COVERAGE_STAGE__/_READY.json'; then
- hdfs_cmd dfs -cat '__COVERAGE_STAGE__/_READY.json' > "$existing"
- cmp -s "$ready" "$existing" || { echo COVERAGE_STAGE_CONFLICT >&2; exit 1; }
+ hdfs_cmd dfs -cat '__COVERAGE_STAGE__/_READY.json' | sudo -u hdfs tee "$existing" >/dev/null
+ sudo -u hdfs cmp -s "$ready" "$existing" || { echo COVERAGE_STAGE_CONFLICT >&2; exit 1; }
 else
- if hdfs_cmd dfs -test -e '__COVERAGE_STAGE__/_READY.json.part'; then hdfs_cmd dfs -rm -f '__COVERAGE_STAGE__/_READY.json.part'; fi
  hdfs_cmd dfs -put "$ready" '__COVERAGE_STAGE__/_READY.json.part'
  hdfs_cmd dfs -mv '__COVERAGE_STAGE__/_READY.json.part' '__COVERAGE_STAGE__/_READY.json'
 fi
@@ -672,8 +681,8 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop
 classpath='__RELEASE__/classes:'"$(/opt/hadoop/bin/hadoop classpath)"
 sudo -u hdfs env JAVA_HOME="$JAVA_HOME" HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
  java -cp "$classpath" TessSequenceFileTool commit '__COVERAGE_STAGE__' '__COVERAGE_FINAL__'
-hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' > "$existing"
-cmp -s "$ready" "$existing"
+hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' | sudo -u hdfs tee "$existing" >/dev/null
+sudo -u hdfs cmp -s "$ready" "$existing"
 echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
 '@.Replace('__RUN_ID__',$RunId).Replace('__COVERAGE_BASE64__',$document.Base64).Replace('__COVERAGE_SHA__',$ExpectedCoverageSha256).Replace('__RELEASE__',$codeRelease).Replace('__COVERAGE_STAGE__',$coverageStage).Replace('__COVERAGE_FINAL__',$coverageFinal)
   Invoke-Remote $node1 $command 'Atomically commit Sector 1-13 HDFS coverage'

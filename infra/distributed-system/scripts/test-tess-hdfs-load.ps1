@@ -13,7 +13,7 @@ $parseErrors=$null
 if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
 
 $runnerText=Get-Content -LiteralPath $runner -Raw
-foreach ($required in @('ConfigureCapacity','Preflight','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll','ServerRunAll','Wait-HdfsUploaders','Get-CoverageDocument','coverage-map','coverage-ready','ExpectedCoverageSha256','RUN_ALL_COMPLETE sectors=','requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'tess_hdfs_runall.py','runall --config','sudo ssh -n','-b 10.20.1.10','10.20.2.10,10.20.3.10,10.20.4.10,10.20.5.10,10.20.6.10','PYTHONUNBUFFERED=1','RuntimeDirectory=planetory-tess-hdfs-runall-$RunId','export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8','sudo chmod -R a=rX,u+w "$work"','RELEASE_PERMISSION_INVALID','Under-replicated blocks:[[:space:]]+0','dfs.datanode.du.reserved','HDFS config drift outside reserve','DATANODE_RESTARTED','HDFS_CAPACITY_CONFIGURED','"$fsck"')) {
+foreach ($required in @('ConfigureCapacity','Preflight','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll','ServerRunAll','Wait-HdfsUploaders','Get-CoverageDocument','coverage-map','coverage-ready','ExpectedCoverageSha256','RUN_ALL_COMPLETE sectors=','requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'tess_hdfs_runall.py','runall --config','sudo ssh -n','-b 10.20.1.10','10.20.2.10,10.20.3.10,10.20.4.10,10.20.5.10,10.20.6.10','PYTHONUNBUFFERED=1','RuntimeDirectory=planetory-tess-hdfs-runall-$RunId','export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8','sudo chmod -R a=rX,u+w "$work"','validate_release_permissions','RELEASE_OWNER_INVALID','RELEASE_MUTABLE','RELEASE_FILE_NOT_READABLE','RELEASE_DIRECTORY_NOT_TRAVERSABLE','RELEASE_PERMISSION_INVALID','Under-replicated blocks:[[:space:]]+0','dfs.datanode.du.reserved','HDFS config drift outside reserve','DATANODE_RESTARTED','HDFS_CAPACITY_CONFIGURED','"$fsck"')) {
  if (-not $runnerText.Contains($required)) { throw "Runner contract is missing: $required" }
 }
 if ($runnerText.Contains("test `"`$(hdfs_cmd dfsadmin -safemode get)`" = 'Safe mode is OFF'")) {
@@ -34,6 +34,12 @@ foreach ($required in @("`$env:PYTHONDONTWRITEBYTECODE='1'",'$env:PYTHONDONTWRIT
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit" >/dev/null 2>&1 || true')) { throw 'Transient HDFS upload units must not start again after boot.' }
 if ($runnerText.Contains("hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'")) { throw 'Final Sector commit must use atomic no-overwrite rename.' }
+foreach ($forbidden in @('spark_script=/tmp',"cp '__RELEASE__/hdfs/manifest_to_parquet.py'",'| cmp -s "$ready" -','hdfs_cmd dfs -cat ''__COVERAGE_FINAL__/_READY.json'' > "$existing"')) {
+ if ($runnerText.Contains($forbidden)) { throw "Cross-user temporary-file contract regressed: $forbidden" }
+}
+foreach ($required in @("-v '__RELEASE__/hdfs/manifest_to_parquet.py':/opt/planetory/manifest_to_parquet.py:ro",'sudo -u hdfs python3 - "$ready" "$count"','sudo -u hdfs cmp -s "$ready"','base64 --decode | sudo -u hdfs tee "$source"','sudo find "$release" -type d ! -perm -0005','sudo find "$release" -type f ! -perm -0004')) {
+ if (-not $runnerText.Contains($required)) { throw "Cross-user temporary-file contract is missing: $required" }
+}
 $common=@{RunId='20260918T120000Z';ExpectedSourceListSha256=('a'*64);Sector=3}
 foreach ($step in @('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll','ServerRunAll')) {
  & $runner -Step $step @common -WhatIf

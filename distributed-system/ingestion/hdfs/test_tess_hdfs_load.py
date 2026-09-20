@@ -1,5 +1,6 @@
 import importlib.util
 import hashlib
+import inspect
 import json
 import sys
 import tempfile
@@ -316,6 +317,137 @@ class PlanTest(unittest.TestCase):
             source,
         )
         self.assertNotIn("shutil.copyfile", source)
+
+    def test_server_runall_streams_every_ready_marker_as_hdfs_user(self):
+        ready = {"schema": "test", "product_count": 1, "note": "검증"}
+        with mock.patch.object(RUNALL, "hdfs") as hdfs:
+            RUNALL.hdfs_put_json(ready, "/stage/_READY.json.part")
+        payload = json.dumps(ready, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        hdfs.assert_called_once_with(
+            ["dfs", "-put", "-", "/stage/_READY.json.part"],
+            input_text=payload,
+        )
+        self.assertIn("검증", payload)
+        self.assertNotIn("\\u", payload)
+        self.assertIn("hdfs_put_json(ready", inspect.getsource(RUNALL.commit_sector))
+        self.assertIn("hdfs_put_json(ready", inspect.getsource(RUNALL.commit_coverage))
+
+    def test_server_runall_forwards_hdfs_stdin_and_propagates_failure(self):
+        failure = CompletedProcess([RUNALL.HDFS], 1, "", "permission denied")
+        with mock.patch.object(RUNALL.subprocess, "run", return_value=failure) as process:
+            with self.assertRaisesRegex(RuntimeError, "command failed.*dfs -put - /stage/marker"):
+                RUNALL.hdfs(["dfs", "-put", "-", "/stage/marker"], input_text="{}\n", echo=False)
+        process.assert_called_once_with(
+            [
+                "/usr/bin/sudo", "-u", "hdfs", "/usr/bin/env",
+                f"JAVA_HOME={RUNALL.JAVA_HOME}", f"HADOOP_CONF_DIR={RUNALL.HADOOP_CONF_DIR}",
+                RUNALL.HDFS, "dfs", "-put", "-", "/stage/marker",
+            ],
+            text=True, encoding="utf-8", capture_output=True, check=False, input="{}\n",
+        )
+
+    def test_server_runall_commits_sector_ready_marker_in_atomic_order(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 7, "product_count": 19_995,
+        }
+        config = {"code_release": "/opt/planetory-hdfs-load/releases/test"}
+        stage, final, _ = RUNALL.context_paths(context)
+        part = f"{stage}/_READY.json.part"
+        marker = f"{stage}/_READY.json"
+        ready = {
+            "schema": MODULE.READY_SCHEMA, "run_id": context["run_id"],
+            "release_id": context["release_id"],
+            "source_list_sha256": context["source_list_sha256"], "sector": 7,
+            "product_count": 19_995, "replication": 2,
+        }
+        events = []
+
+        def exists(path):
+            return path in {part, marker, f"{stage}/manifest.parquet/_SUCCESS"}
+
+        def hdfs(arguments, **_):
+            event = ("hdfs", *arguments)
+            events.append(event)
+            output = "Status: HEALTHY\nUnder-replicated blocks: 0\n" if arguments[0] == "fsck" else ""
+            return CompletedProcess(arguments, 0, output, "")
+
+        with (
+            mock.patch.object(RUNALL.shutil, "chown"),
+            mock.patch.object(RUNALL, "hdfs_exists", side_effect=exists),
+            mock.patch.object(RUNALL, "audit", return_value={"product_count": 19_995}),
+            mock.patch.object(RUNALL, "run", return_value=CompletedProcess([], 0, "", "")),
+            mock.patch.object(RUNALL, "hdfs", side_effect=hdfs),
+            mock.patch.object(
+                RUNALL, "hdfs_put_json", side_effect=lambda value, path: events.append(("put", path, value)),
+            ),
+            mock.patch.object(
+                RUNALL, "java_commit", side_effect=lambda _, source, destination: events.append(
+                    ("commit", source, destination)
+                ),
+            ),
+            mock.patch.object(RUNALL, "hdfs_json", return_value=ready),
+        ):
+            RUNALL.commit_sector(config, context)
+
+        expected = [
+            ("hdfs", "dfs", "-rm", "-f", part),
+            ("put", part, ready),
+            ("hdfs", "dfs", "-mv", part, marker),
+            ("commit", stage, final),
+        ]
+        self.assertEqual(expected, [event for event in events if event in expected])
+
+    def test_server_runall_removes_stale_coverage_part_with_valid_ready(self):
+        digest = "c" * 64
+        run_id = "20260919T005932Z"
+        stage = f"/lake/raw/tess/.staging/coverage={digest}/run={run_id}"
+        final = f"/lake/raw/tess/coverage={digest}"
+        staged_ready = f"{stage}/_READY.json"
+        staged_part = f"{staged_ready}.part"
+        ready = {"schema": MODULE.HDFS_COVERAGE_SCHEMA, "expected": 1, "sectors": []}
+        calls = []
+        events = []
+
+        def build_ready(_, arguments):
+            output = Path(arguments[arguments.index("--output") + 1])
+            MODULE.atomic_json(output, ready)
+            return CompletedProcess(arguments, 0, "", "")
+
+        def exists(path):
+            return path in {staged_ready, staged_part}
+
+        def hdfs(arguments, **_):
+            calls.append(arguments)
+            if arguments == ["dfs", "-rm", "-f", staged_part]:
+                events.append("remove-part")
+            output = ""
+            if arguments[:2] == ["dfs", "-find"]:
+                output = "\n".join((stage, staged_ready, staged_part)) + "\n"
+            return CompletedProcess(arguments, 0, output, "")
+
+        config = {
+            "run_id": run_id,
+            "expected_coverage_sha256": digest,
+            "coverage_manifest": str(self.root / "coverage.json"),
+            "code_release": "/opt/planetory-hdfs-load/releases/test",
+        }
+        with (
+            mock.patch.object(RUNALL.shutil, "chown"),
+            mock.patch.object(RUNALL, "run_loader_as_hdfs", side_effect=build_ready),
+            mock.patch.object(RUNALL, "hdfs_exists", side_effect=exists),
+            mock.patch.object(RUNALL, "hdfs", side_effect=hdfs),
+            mock.patch.object(RUNALL, "hdfs_json", return_value=ready),
+            mock.patch.object(RUNALL, "hdfs_put_json") as put_json,
+            mock.patch.object(
+                RUNALL, "java_commit", side_effect=lambda *_: events.append("commit"),
+            ) as java_commit,
+        ):
+            RUNALL.commit_coverage(config)
+        self.assertIn(["dfs", "-rm", "-f", staged_part], calls)
+        self.assertEqual(["remove-part", "commit"], events)
+        put_json.assert_not_called()
+        java_commit.assert_called_once_with(config, stage, final)
 
 
 if __name__ == "__main__":
