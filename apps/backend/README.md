@@ -2,7 +2,7 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD는 [서비스 API 명세](docs/service-api-spec.md) 3장·5장·6장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 피드·첨부·반응 API는 아직 구현하지 않았다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회는 [서비스 API 명세](docs/service-api-spec.md) 3장·5~7장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 피드·공개 출처 카드·반응 API는 아직 구현하지 않았다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
@@ -95,7 +95,9 @@ docker compose --profile service up -d --wait service-db
 
 ## 더 보기
 
-히스토리 조회(148)는 개인 목록·상세·CURRENT/SUBMITTED 그래프와 서비스 도메인용 공개 투영을 제공한다. [계약·160 인계](docs/exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회), `./gradlew -PskipLocalDb test --tests '*HistoryTest'`. 일회용 PostgreSQL에서 실제 제출·조회·권한·판 교체를 검증한다. 잔차 공급자만 대체하며 147·160·프론트 실제 연결은 별도 인수다.
+히스토리 조회(148)는 개인 목록·상세·CURRENT/SUBMITTED 그래프와 서비스 도메인용 공개 투영을 제공한다. [계약·160 인계](docs/exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회), `./gradlew -PskipLocalDb test --tests '*HistoryTest'`. 일회용 PostgreSQL에서 실제 제출·조회·권한·판 교체를 검증한다. 160은 이 공개 투영과 Graph를 재사용하며 147 잔차 공급자·프론트 실제 렌더러 연결은 별도 인수다.
+
+History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결한다. `./gradlew -PskipLocalDb test --tests '*HistoryAttachmentTest' --tests '*MemberCommunityPermissionTest'`로 실제 제출부터 첨부·공개 HTTP·권한 철회·V13 앱 역할 권한을 검증한다. 그래프 503 시 같은 부모 경로의 `includeGraph=false`로 공개 내용을 별도 조회한다. 상세 입력·권한·관련 티켓 경계는 [서비스 API 7장](docs/service-api-spec.md#attachments)을 따른다.
 
 제출 처리(143)는 `POST /api/v1/stars/{ticId}/submissions`다. V12가 요청 해시와 최초 응답 보존 열을 추가한다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest'`는 Docker의 일회용 PostgreSQL에서 저장·재전송·롤백·보안 필터를 검증하며 기존 개발 DB를 사용하지 않는다. 봉우리/잔차는 테스트 경계만 대체하고 실제 141·147 연결은 담당자 인계 후 검증한다. [채택 계약과 인수 구분](../../docs/api/exploration/submission-readiness.md).
 

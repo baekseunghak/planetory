@@ -23,7 +23,7 @@ class MemberCommunityPermissionTest {
             List.of("users", "user_settings", "posts", "comments");
     private static final List<String> UNUSED = List.of(
             "follows", "notifications", "post_reactions", "post_source_links",
-            "post_history_attachments", "comment_history_attachments", "stats_snapshots");
+            "stats_snapshots");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -59,6 +59,10 @@ class MemberCommunityPermissionTest {
             }
 
             assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
+            for (String table : List.of("post_history_attachments", "comment_history_attachments")) {
+                for (String allowed : List.of("SELECT", "INSERT", "DELETE")) assertTrue(hasPrivilege(owner, table, allowed));
+                for (String denied : List.of("UPDATE", "TRUNCATE")) assertFalse(hasPrivilege(owner, table, denied));
+            }
             for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
