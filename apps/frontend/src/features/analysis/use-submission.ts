@@ -12,6 +12,7 @@ import {
 import {
   markSubmissionAccepted,
   markSubmissionConflict,
+  markSubmissionRejected,
   readPendingSubmission,
   releaseRequestId,
   reserveRequestId,
@@ -102,6 +103,9 @@ export function useSubmission(context: AnalysisContext) {
           if (result.state === "accepted") markSubmissionAccepted(key);
           // ID는 살아 있고 그 ID로 무엇이 접수됐는지 조회할 수 있다.
           if (result.state === "conflict") markSubmissionConflict(key);
+          // 서버가 응답으로 거절했다. 접수되지 않았음이 확정이라 고친
+          // 본문이 이 자리를 쓸 수 있다. ID는 남겨 같은 본문 재전송에 쓴다.
+          if (result.state === "rejected") markSubmissionRejected(key);
         }
         setState({ phase: "settled", kind, ...result });
       } catch (error) {

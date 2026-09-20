@@ -603,3 +603,56 @@ test("a replay from an older plate is kept, not cancelled", async ({
   // 다시 보내지도 않는다.
   expect(posts).toHaveLength(1);
 });
+
+test("a corrected body after a refusal is actually sent, with a new id", async ({
+  page,
+}) => {
+  // 400은 접수되지 않았음이 확정인 답이다. 고쳐서 다시 낼 수 있어야 하고,
+  // 고친 본문은 다른 본문이라 같은 ID로는 보낼 수 없다.
+  const sent: { requestId: string; judgment: unknown }[] = [];
+  let refuse = true;
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    const body = JSON.parse(request.postData() ?? "{}");
+    sent.push({ requestId: body.requestId, judgment: body.userJudgment });
+    if (!refuse) return route.continue();
+    return route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "VALIDATION_FAILED",
+        message: "입력을 확인해 주세요.",
+        fieldErrors: [
+          { field: "selection.periodDays", reason: "Invalid input" },
+        ],
+      }),
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("주기: Invalid input");
+  expect(sent).toHaveLength(1);
+  await dialog
+    .getByRole("button", { name: "입력으로 돌아가기", exact: true })
+    .click();
+
+  // 고친다. 판단이 달라졌으니 지문도 달라진다.
+  refuse = false;
+  await page
+    .getByRole("button", { name: "판단·메모 수정 →", exact: true })
+    .click();
+  await page.getByRole("radio", { name: "행성 같음", exact: true }).check();
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+
+  // 두 번째 전송이 **실제로 나간다.** 막히면 여기서 1개로 멈춘다.
+  await expect(dialog).toContainText("접수되었습니다");
+  expect(sent).toHaveLength(2);
+  expect(sent[1].judgment).toBe("LIKELY_PLANET");
+  // 다른 본문이므로 다른 ID다. 같은 ID면 IDEMPOTENCY_CONFLICT가 된다.
+  expect(sent[1].requestId).not.toBe(sent[0].requestId);
+});

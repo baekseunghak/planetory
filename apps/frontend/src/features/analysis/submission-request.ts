@@ -49,10 +49,15 @@ export type PendingSubmission = {
    * `conflict` 이 ID에 **다른 본문**이 이미 접수돼 있다. 우리 본문은
    * 접수되지 않았고 이 ID로는 접수될 수 없다. ID는 무엇이 접수됐는지
    * 조회하는 데 쓴다(2.2절).
+   * `rejected` 서버가 **응답으로 거절했다.** 접수되지 않았음이 확정이다.
+   * 입력을 고쳐 다시 내는 것이 이 상태의 정상 경로이고, 고친 본문은 다른
+   * 본문이므로 같은 ID로는 보낼 수 없다(`IDEMPOTENCY_CONFLICT`).
    *
-   * `accepted`가 아닌 두 상태는 **다른 본문에 이 자리를 내주지 않는다.**
+   * **결과를 모르는 상태만 다른 본문에 자리를 내주지 않는다.** `pending`과
+   * `conflict`가 그렇다. 접수됐을 수도 있는 거절(403·404)은 응답을 받고도
+   * 결과를 모르는 경우라 `pending`으로 남는다.
    */
-  state: "pending" | "accepted" | "conflict";
+  state: "pending" | "accepted" | "conflict" | "rejected";
   /** 보낸 시각. 되살린 안내에서 언제 것인지 말하는 데 쓴다. */
   sentAt: string | null;
 };
@@ -122,7 +127,8 @@ export function readPendingSubmission(
       value.schema !== 2 ||
       (value.state !== "pending" &&
         value.state !== "accepted" &&
-        value.state !== "conflict") ||
+        value.state !== "conflict" &&
+        value.state !== "rejected") ||
       (value.kind !== null && typeof value.kind !== "string") ||
       (value.body !== null && typeof value.body !== "object") ||
       (value.sentAt !== null && typeof value.sentAt !== "string")
@@ -179,9 +185,13 @@ export function reserveRequestId(
       reused: true,
       volatile: false,
     };
-  // 본문이 달라졌는데 앞선 요청이 끝나지 않았다. 덮어쓰면 그 ID를 잃는다.
+  // 본문이 달라졌는데 앞선 요청의 **결과를 모른다.** 덮어쓰면 그 ID를 잃는다.
   // 2.2절: 새 ID는 사용자가 별도 제출을 고른 경우에만 발급한다.
-  if (pending && pending.state !== "accepted")
+  //
+  // 끝난 요청은 막지 않는다. 접수된 것(`accepted`)과 서버가 응답으로 거절해
+  // **접수되지 않았음이 확정인 것**(`rejected`)이다. 거절을 막으면 입력을
+  // 고쳐 다시 낼 수가 없다. 고친 본문은 다른 본문이라 새 ID가 필요하다.
+  if (pending && pending.state !== "accepted" && pending.state !== "rejected")
     return { status: "blocked", pending };
   const requestId = newRequestId();
   const record: PendingSubmission = {
@@ -221,6 +231,27 @@ export function markSubmissionConflict(
     store?.setItem(key, JSON.stringify({ ...pending, state: "conflict" }));
   } catch {
     /* 남기지 못해도 화면이 조회 경로를 내놓는다. */
+  }
+}
+
+/**
+ * 서버가 응답으로 거절했다고 적는다. **지우지 않는다.** 같은 본문을 그대로
+ * 다시 내면 같은 ID로 보내 같은 답을 받고, 고쳐서 내면 다른 본문이므로
+ * 새 ID를 받는다. 그 판단은 지문이 한다.
+ *
+ * 결과를 모르는 실패(5xx·타임아웃·403·404)에는 쓰지 않는다. 그때는 접수됐을
+ * 수도 있어 `pending`으로 남아야 한다.
+ */
+export function markSubmissionRejected(
+  key: string,
+  store: Store | null = sessionStore(),
+): void {
+  const pending = readPendingSubmission(key, store);
+  if (!pending || pending.state === "accepted") return;
+  try {
+    store?.setItem(key, JSON.stringify({ ...pending, state: "rejected" }));
+  } catch {
+    /* 남기지 못하면 다음 예약이 막힌다. 화면이 안내로 받아 준다. */
   }
 }
 
