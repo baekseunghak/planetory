@@ -208,9 +208,19 @@ const plain = (value: number | null | undefined) =>
  * 신호가 없으면(미매칭·특수 제출) 한 칸만 그린다. **빈 열을 만들어 두고
  * 줄을 그으면 신호가 있는데 값만 없는 것처럼 보인다.**
  */
-function comparisonRows(explanation: ResultExplanation): Row[] {
-  const { submitted, serverDerived, signal } = explanation;
-  const bls = signal?.bls;
+/**
+ * 오른쪽 칸을 채우는 신호. 매칭에 성공하면 접수 응답이 주고, 실패하면
+ * **상세 보기를 눌렀을 때만** 알 수 있다(6.7절). 그 값은 같은 항목이므로
+ * 따로 줄을 만들지 않고 이 표의 빈 칸을 채운다.
+ */
+type Counterpart = { bls: SubmissionSignal["bls"]; label: string } | null;
+
+function comparisonRows(
+  explanation: ResultExplanation,
+  other: Counterpart,
+): Row[] {
+  const { submitted, serverDerived } = explanation;
+  const bls = other?.bls;
   const span =
     submitted?.phaseStart != null && submitted.phaseEnd != null
       ? `${decimal.format(submitted.phaseStart)} ~ ${decimal.format(submitted.phaseEnd)}`
@@ -246,20 +256,26 @@ function comparisonRows(explanation: ResultExplanation): Row[] {
   return rows;
 }
 
-function Comparison({ explanation }: { explanation: ResultExplanation }) {
-  const { signal, correction } = explanation;
-  const rows = comparisonRows(explanation);
+function Comparison({
+  explanation,
+  other,
+}: {
+  explanation: ResultExplanation;
+  other: Counterpart;
+}) {
+  const { correction } = explanation;
+  const rows = comparisonRows(explanation, other);
   if (rows.length === 0) return null;
 
   return (
     <section className="result-compare" data-testid="result-compare">
       <table>
-        <caption>내가 낸 것과 기록의 신호</caption>
+        <caption>내가 낸 것{other ? ` · ${other.label}` : ""}</caption>
         <thead>
           <tr>
             <th scope="col">항목</th>
             <th scope="col">내가 낸 것</th>
-            {signal && <th scope="col">기록의 신호</th>}
+            {other && <th scope="col">{other.label}</th>}
           </tr>
         </thead>
         <tbody>
@@ -268,7 +284,7 @@ function Comparison({ explanation }: { explanation: ResultExplanation }) {
               <th scope="row">{row.label}</th>
               {/* 없는 값은 빈 칸이 아니라 없음 표시다. 0으로 바꾸지 않는다. */}
               <td>{row.mine ?? <span className="result-none">—</span>}</td>
-              {signal && (
+              {other && (
                 <td>{row.theirs ?? <span className="result-none">—</span>}</td>
               )}
             </tr>
@@ -289,10 +305,16 @@ function Comparison({ explanation }: { explanation: ResultExplanation }) {
 
 export function ResultExplanationView({
   receipt,
+  detail,
   staleBundle = false,
   celebrate = false,
 }: {
   receipt: SubmissionReceipt;
+  /**
+   * 상세 보기의 상태. **미매칭이면 신호를 여기서만 알 수 있다.** 열기
+   * 전에는 표가 한 칸이고, 열면 그 값이 오른쪽 칸을 채운다.
+   */
+  detail: DetailState;
   /** 접수 뒤 판이 바뀌었는가. 최신이 필요한 축에만 표시를 붙인다. */
   staleBundle?: boolean;
   /**
@@ -304,17 +326,24 @@ export function ResultExplanationView({
   const { explanation, progress } = receipt;
   const { signal, evaluation, achievement, publication, statistics } =
     explanation;
+  // 접수 응답이 신호를 줬으면 그것이 정본이다. 상세는 같은 신호를 다시
+  // 말할 뿐이라 수치를 두 번 싣지 않는다.
+  const other: Counterpart = signal
+    ? { bls: signal.bls, label: "기록의 신호" }
+    : detail.phase === "shown"
+      ? { bls: detail.view.signal.bls, label: "이 단계의 신호" }
+      : null;
   return (
     <div
       className={
         // 표가 없으면 왼쪽 칸을 비워 두지 않는다. 빈 칸을 남기면 값이
         // 빠진 것처럼 보인다.
-        comparisonRows(explanation).length === 0
+        comparisonRows(explanation, other).length === 0
           ? "submission-result submission-result-plain"
           : "submission-result"
       }
     >
-      <Comparison explanation={explanation} />
+      <Comparison explanation={explanation} other={other} />
       <div className="result-bands">
         <section className="result-axis">
           <h5>매칭</h5>
@@ -413,6 +442,12 @@ export function ResultExplanationView({
  * 상세 보기(6.7절). **누르면 열람 기록이 남는다.** 그 기록이 튜토리얼
  * 건너뛰기 조건에 쓰이므로 화면을 열 때 자동으로 부르지 않는다.
  */
+export type DetailState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "shown"; view: DetailViewData }
+  | { phase: "unavailable"; message: string };
+
 export function DetailView({
   receipt,
   detail,
@@ -420,11 +455,7 @@ export function DetailView({
   onSkip,
 }: {
   receipt: SubmissionReceipt;
-  detail:
-    | { phase: "idle" }
-    | { phase: "loading" }
-    | { phase: "shown"; view: DetailViewData }
-    | { phase: "unavailable"; message: string };
+  detail: DetailState;
   onView: (submissionId: string) => void;
   onSkip?: () => void;
 }) {
@@ -480,14 +511,8 @@ export function DetailView({
       </h5>
       {/* 미확정 후보에는 「정답」이라는 표현을 쓰지 않는다. */}
       <p>{view.signal.explanation}</p>
-      <dl className="result-pairs">
-        <dt>주기</dt>
-        <dd>{decimal.format(view.signal.bls.periodDays)}일</dd>
-        <dt>가려진 시간</dt>
-        <dd>{decimal.format(view.signal.bls.durationHours)}시간</dd>
-        <dt>깊이</dt>
-        <dd>{count.format(view.signal.bls.depthPpm)} ppm</dd>
-      </dl>
+      {/* 수치는 비교표가 들고 있다. 같은 값을 두 곳에 두면 판만 길어지고,
+          내가 낸 값 옆에 있어야 견줄 수 있다. */}
       {view.userJudgmentAgrees !== null && (
         <p>
           {view.userJudgmentAgrees

@@ -983,8 +983,9 @@ body:has(.analysis-screen) {
      그때는 축 칸의 긴 줄이 접힌다(넘치지는 않는다). */
   width: min(1120px, calc(100vw - 48px));
   /* 좌우로 편 만큼 높이도 쓸 수 있다. 여기서 더 조이면 표와 축이 다시
-     세로로 길어져 좌우 배치의 뜻이 없어진다. */
-  max-height: min(86vh, 860px);
+     세로로 길어져 좌우 배치의 뜻이 없어진다. 768px 높이 화면에서 성과가
+     가장 많은 결과에 상세까지 연 경우가 675px이라 88vh로 둔다. */
+  max-height: min(88vh, 900px);
 }
 .analysis-screen .submission-dialog::backdrop {
   background: rgba(34, 40, 49, 0.72);

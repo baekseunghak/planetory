@@ -194,6 +194,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             </dl>
             <ResultExplanationView
               receipt={settled.receipt}
+              // 미매칭이면 상세를 열어야 신호를 안다. 표의 오른쪽 칸이
+              // 그때 채워진다.
+              detail={submission.detail}
               staleBundle={stale}
               celebrate={celebrate}
             />

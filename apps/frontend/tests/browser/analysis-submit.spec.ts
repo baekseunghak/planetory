@@ -1150,3 +1150,54 @@ test("the result fits without scrolling, table beside the axes", async ({
     expect(sideways, `${w}x${h}에서 가로로 넘친다`).toBe(0);
   }
 });
+
+test("opening the answer does not make the panel grow", async ({ page }) => {
+  // 상세의 수치는 비교표가 이미 들고 있는 값이다. 다시 실으면 같은 숫자가
+  // 두 곳에 놓이고 판만 길어진다.
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
+  await expect(dialog).toContainText("확정된 행성 신호");
+
+  // 깊이는 표에 한 번만 있다.
+  const body = await dialog.innerText();
+  expect(body.match(/8,000 ppm/g) ?? []).toHaveLength(1);
+
+  // 성과가 가장 많은 결과에 상세까지 연 경우다. 여기서 넘치지 않으면 된다.
+  for (const [w, h] of [
+    [1440, 1080],
+    [1024, 768],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    const over = await dialog.evaluate(
+      (el) => el.scrollHeight - el.clientHeight,
+    );
+    expect(over, `${w}x${h}에서 상세를 열면 넘친다`).toBe(0);
+  }
+});
+
+test("an unmatched answer fills the empty column instead of a new block", async ({
+  page,
+}) => {
+  // 직접 고른 주기를 흉내 낸다. 봉우리를 고르면 fixture가 늘 매칭시킨다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const sent = JSON.parse(route.request().postData() ?? "{}");
+    if (sent.selection) sent.selection.sourcePeakGridIndex = null;
+    return route.continue({ postData: JSON.stringify(sent) });
+  });
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "모르겠음");
+  await expect(dialog).toContainText("맞는 신호를 찾지 못했습니다");
+
+  // 신호를 모르는 동안에는 내 값만 있는 한 칸이다.
+  const heads = dialog.locator(".result-compare thead th");
+  await expect(heads).toHaveText(["항목", "내가 낸 것"]);
+
+  // 누르면 그 단계의 신호가 내 값 옆에 들어온다. 별도 덩어리를 만들지 않는다.
+  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await expect(heads).toHaveText(["항목", "내가 낸 것", "이 단계의 신호"]);
+  await expect(dialog.getByTestId("result-compare")).toContainText("8,000 ppm");
+});
