@@ -151,6 +151,12 @@ public class AchievementService {
                 star(memberId, ticId), List.of(), 0, sky.version(memberId));
     }
 
+    /** 공개 응답 유실 복구용이며 성과·별을 추가 지급하지 않는다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<SubmissionViews.UnlockedStar> publicationStars(long memberId, long analysisId) {
+        return achievements.findPublicationStars(memberId, analysisId);
+    }
+
     /**
      * 성과 조회(9.1절). 요약과 목록을 한 스냅샷에서 읽는다.
      *

@@ -3,7 +3,7 @@ package com.planetory.backend.domain.post.service;
 import com.planetory.backend.domain.exploration.service.AchievementService;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.HistoryService;
-import com.planetory.backend.domain.exploration.service.StarDiscoveryService.DiscoveredStar;
+import com.planetory.backend.domain.exploration.service.SubmissionViews.UnlockedStar;
 import com.planetory.backend.domain.exploration.service.StarViews;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.domain.exploration.service.SubmissionService;
@@ -27,7 +27,7 @@ public class PublicAnalysisService {
     private final SubmissionService submissions;
     private final StarService stars;
 
-    public record Achievement(String result, boolean newlyRecognized, List<DiscoveredStar> unlockedStars,
+    public record Achievement(String result, boolean newlyRecognized, List<UnlockedStar> unlockedStars,
                               StarViews.Achievement star, int unlockShortfall) {}
     public record Published(String analysisId, String threadId, String historyId, boolean isPublic,
                             boolean created, boolean achievementGranted, boolean newlyGranted,
@@ -62,6 +62,7 @@ public class PublicAnalysisService {
             var old = existing.get();
             var recognition = achievements.existingRecognition(member, old.candidate());
             return response(old.id(), old.thread(), historyId, old.isPublic(), false, recognition,
+                    achievements.publicationStars(member, old.id()),
                     submissions.publicJudgmentSummary(old.candidate()));
         }
 
@@ -91,15 +92,18 @@ public class PublicAnalysisService {
         var recognition = achievements.recognize(member, basis.candidateId(),
                 AchievementService.AchievementType.UNCONFIRMED, basis.submissionId(), analysis);
         return response(analysis, thread, historyId, true, true, recognition,
+                recognition.unlockedStars().stream()
+                        .map(s -> new UnlockedStar(Long.toString(s.ticId()), s.position())).toList(),
                 submissions.publicJudgmentSummary(basis.candidateId()));
     }
 
     private static Published response(long analysis, long thread, String history, boolean isPublic, boolean created,
-                                      AchievementService.Recognition recognition, Map<String, Object> summary) {
+                                      AchievementService.Recognition recognition, List<UnlockedStar> unlockedStars,
+                                      Map<String, Object> summary) {
         return new Published(ExplorationIds.publicAnalysis(analysis), "st-" + thread, history, isPublic, created,
                 true, recognition.newlyRecognized(), recognition.skyVersion(),
                 new Achievement(recognition.newlyRecognized() ? "recognized" : "already_recognized",
-                        recognition.newlyRecognized(), recognition.unlockedStars(), recognition.star(),
+                        recognition.newlyRecognized(), unlockedStars, recognition.star(),
                         recognition.unlockShortfall()), summary);
     }
 }

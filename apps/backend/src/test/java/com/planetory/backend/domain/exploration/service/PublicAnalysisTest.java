@@ -132,24 +132,46 @@ class PublicAnalysisTest {
         String id = submissions.submit(member, tic, request).body().path("historyId").asText();
         String snapshot = jdbc.queryForObject("SELECT response_snapshot::text FROM submissions WHERE id="
                 + "(SELECT submission_id FROM analysis_histories WHERE id=?)", String.class, number(id));
-        mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
+        var firstResponse = mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
                         .contentType("application/json").content("{\"historyId\":\"" + id + "\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.created").value(true))
                 .andExpect(jsonPath("$.achievementGranted").value(true)).andExpect(jsonPath("$.newlyGranted").value(true))
                 .andExpect(jsonPath("$.achievement.star.byType.unconfirmed").value(1))
-                .andExpect(jsonPath("$.judgmentSummary.participantCount").value(1));
+                .andExpect(jsonPath("$.judgmentSummary.participantCount").value(1))
+                .andExpect(jsonPath("$.achievement.unlockedStars[0].ticId").isString())
+                .andExpect(jsonPath("$.achievement.unlockedStars[0].position.worldX").isNumber())
+                .andExpect(jsonPath("$.achievement.unlockedStars[0].layoutOrdinal").doesNotExist())
+                .andExpect(jsonPath("$.achievement.unlockedStars[0].skyVersion").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        int unlockedCount = count("star_unlocks", "user_id", member);
         var replay = publications.publish(member, id);
         assertFalse(replay.created()); assertFalse(replay.newlyGranted()); assertTrue(replay.achievementGranted());
-        assertTrue(replay.achievement().unlockedStars().isEmpty());
-        mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
+        assertFalse(replay.achievement().unlockedStars().isEmpty());
+        var replayResponse = mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
                         .contentType("application/json").content("{\"historyId\":\"" + id + "\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.newlyGranted").value(false));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.newlyGranted").value(false))
+                .andReturn().getResponse().getContentAsString();
+        var mapper = new tools.jackson.databind.ObjectMapper();
+        assertEquals(mapper.readTree(firstResponse).path("achievement").path("unlockedStars"),
+                mapper.readTree(replayResponse).path("achievement").path("unlockedStars"));
+        assertEquals(unlockedCount, count("star_unlocks", "user_id", member));
         assertEquals(1, count("published_analyses", "history_id", number(id)));
         assertEquals(1, count("user_candidate_achievements", "user_id", member));
         assertEquals(snapshot, jdbc.queryForObject("SELECT response_snapshot::text FROM submissions WHERE id="
                 + "(SELECT submission_id FROM analysis_histories WHERE id=?)", String.class, number(id)));
         assertTrue(histories.list(member, query(null, null)).items().getFirst().publication().isPublic());
         assertEquals(0, count("comments", "post_id", Long.parseLong(replay.threadId().substring(3))));
+    }
+
+    @Test void 미공개별은_404이며_공개성과를_만들지않는다() throws Exception {
+        String history = submit(3);
+        jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic);
+        mvc.perform(post("/api/v1/public-analyses").session(session(member)).with(csrf())
+                        .contentType("application/json").content("{\"historyId\":\"" + history + "\"}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("STAR_NOT_PUBLISHED"));
+        assertEquals(0, count("posts", "candidate_id", candidate));
+        assertEquals(0, count("published_analyses", "user_id", member));
+        assertEquals(0, count("user_candidate_achievements", "user_id", member));
     }
 
     @Test void duplicate_새기록은_새공개지만_추가성과없음() {
@@ -161,6 +183,10 @@ class PublicAnalysisTest {
         assertTrue(result.created()); assertFalse(result.newlyGranted());
         assertEquals(published.threadId(), result.threadId());
         assertNotEquals(published.analysisId(), result.analysisId());
+        assertTrue(result.achievement().unlockedStars().isEmpty());
+        assertTrue(publications.publish(member, next).achievement().unlockedStars().isEmpty());
+        assertEquals(published.achievement().unlockedStars(),
+                publications.publish(member, first).achievement().unlockedStars());
         assertEquals(2, count("published_analyses", "user_id", member));
         assertEquals(1, count("user_candidate_achievements", "user_id", member));
         assertEquals(1L, result.judgmentSummary().get("participantCount"));
@@ -174,6 +200,7 @@ class PublicAnalysisTest {
         var again = publications.publish(member, id);
         assertEquals(first.analysisId(), again.analysisId()); assertFalse(again.isPublic());
         assertFalse(again.created()); assertFalse(again.newlyGranted()); assertTrue(again.achievementGranted());
+        assertEquals(first.achievement().unlockedStars(), again.achievement().unlockedStars());
         assertEquals(0L, again.judgmentSummary().get("participantCount"));
         assertEquals(publishedAt, jdbc.queryForObject("SELECT published_at::text FROM published_analyses WHERE history_id=?", String.class, number(id)));
         jdbc.update("UPDATE posts SET status='hidden' WHERE candidate_id=?", candidate);
