@@ -41,3 +41,9 @@ build/typecheck·운영 제외 검사 통과, 단위80개·첨부20개(Chromium/
 - 첫 그래프 요청이 503이면 같은 부모 경로로 `includeGraph=false`를 조회해 공개 내용과 오류 안내를 함께 표시한다. 이 조회도 권한을 다시 검사하며 401/403/404이면 기존 내용을 제거한다. 개인 History나 작업 API로 보충하지 않는다.
 - 일반 첨부는 161의 공식 공개·성과와 독립적이다. 147의 실제 잔차 공급자와 A08 공용 렌더러·216-213 화면 인수는 남는다. 검증용 fixture 결과를 실제 서비스 연결 완료로 간주하지 않는다.
 - 검증: `npm run build`, `npm test`(225개), `node_modules\.bin\playwright.cmd test --config=playwright.materials.config.ts --project=chrome`(7개) 통과. 첫 503의 공개 내용 조회·null 판단 표시·권한 철회 시 제거를 추가 검사했다. Chromium 전용 실행 파일은 없어 Chrome으로 검증했다.
+
+## 2026-09-20 160 MR 리뷰: 판단 없는 기록 선택
+
+- 선택 목록도 `userJudgment: null`을 정상 값으로 보존한다. `submissionKind=no_candidate`는 “신호 없음으로 제출”, `skipped`는 “건너뛴 기록”, 그 밖의 null은 “판단 없음”으로 표시하며 판단값을 임의로 채우지 않는다. 누락·숫자 등 잘못된 판단 형식은 기존 검증을 유지한다.
+- 서버 목록 계약에 맞춰 개발 fixture에도 `submissionKind`를 명시했다. 정상 기록과 null 판단 기록을 섞어 표시·두 기록 선택·POST의 historyIds·저장 후 첨부를 확인하는 Chrome 회귀 2개를 추가했다.
+- 검증: 수정 전 두 사례 모두 목록 오류를 재현했다. 수정 후 `npm run build`, `npm test` 225개, Chrome 첨부 9개(기존 7+회귀 2)를 통과했다. 브라우저 검증은 합성 HTTP fixture·응답 제어 기반이며 실제 백엔드·DB·공용 그래프 렌더러 통합 검증을 뜻하지 않는다.

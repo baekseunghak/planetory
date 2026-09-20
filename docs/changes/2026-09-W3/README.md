@@ -128,3 +128,4 @@
 | 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 본인 History 첨부·공개 부모 권한·그래프 장애 시 내용 조회 | S15P21C206-160 | historyIds, includeGraph, TIC_MISMATCH, V13, 148, 162, 213 | 구현 완료·백엔드/프론트 단위 검증, 실제 렌더러 인수 별도 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | History 첨부 리뷰 보완·숫자 TIC 강제 변환 거절 명시 | S15P21C206-160 | Swagger, Operation, JsonNode, ticId, VALIDATION_FAILED, 코드 형식 | 검증 완료·31개 회귀 통과 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 판단 없는 History 첨부 선택 복구 | S15P21C206-160 | MaterialPicker, null, no_candidate, skipped, Chrome 9 | fixture 검증 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |

@@ -352,6 +352,7 @@ export function communityFixturePlugin({
               ? Array.from({ length: 24 }, (_, i) => ({
                   historyId: "h-" + (501 + i),
                   ticId: "259377017",
+                  submissionKind: "candidate",
                   userJudgment: "UNSURE",
                   submittedAt: date,
                   publication: {
