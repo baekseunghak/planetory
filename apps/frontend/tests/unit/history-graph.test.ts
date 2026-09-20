@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   historyGraphPath,
+  historySeries,
   readHistoryGraphView,
   snapshotPhase,
   wrapPhaseWindow,
@@ -178,4 +179,87 @@ test("a window across the seam is split, not stretched", () => {
   assert.ok(Math.abs(split[1].to - -0.4) < 1e-9);
   // 고른 것이 없으면 그릴 창도 없다.
   assert.deepEqual(wrapPhaseWindow(null, null), []);
+});
+
+test("both modes land on the same axis", () => {
+  // 당시 배열은 [-0.5, 0.5)이고 현재 곡선을 접으면 [0, 1)이 나온다. 그대로
+  // 두면 같은 위상이 같은 화면에서 다른 자리에 찍힌다.
+  const then = historySeries(read(submitted(), "SUBMITTED"));
+  assert.equal(then.kind, "bins");
+  assert.equal(then.points.length, 150);
+  assert.ok(then.points.every((p) => p.phase >= -0.5 && p.phase < 0.5));
+  assert.equal(then.points[0].error, 0.01);
+
+  const now = historySeries(
+    read(
+      current({
+        curve: {
+          ticId: TIC,
+          bundleId: "b-3",
+          // 기준 시각 + 0, 그리고 반 주기 뒤. 접으면 0과 0.5여야 한다.
+          segments: [
+            {
+              segmentId: "s-1",
+              sector: 14,
+              startBtjd: 1683.4231,
+              binMinutes: 11.802 * 0.5 * 1440,
+              nPoints: 2,
+              flux: [1, 0.99],
+            },
+          ],
+          residual: { status: null, jobId: null },
+          curveContext: { bundleId: "b-3" },
+        },
+      }),
+      "CURRENT",
+    ),
+  );
+  assert.equal(now.kind, "points");
+  assert.equal(now.points.length, 2);
+  assert.ok(Math.abs(now.points[0].phase - 0) < 1e-9);
+  // 0.5는 중앙 기준에서 -0.5로 간다. 한쪽 끝에 몰리지 않는다.
+  assert.ok(Math.abs(now.points[1].phase - -0.5) < 1e-9);
+});
+
+test("nothing to draw says why", () => {
+  // 빈 그래프를 「값이 0」으로 보이게 두지 않는다.
+  const special = read(
+    current({
+      selection: { ...selection, userPeriodDays: null },
+    }),
+    "CURRENT",
+  );
+  assert.equal(historySeries(special).emptyReason, "no-period");
+
+  const missing = read(
+    current({
+      curve: {
+        ticId: TIC,
+        bundleId: "b-3",
+        segments: null,
+        residual: { status: null, jobId: null },
+        curveContext: { bundleId: "b-3" },
+      },
+    }),
+    "CURRENT",
+  );
+  assert.equal(historySeries(missing).emptyReason, "no-curve");
+
+  const unmatched = read(submitted({ snapshot: null }), "SUBMITTED");
+  assert.equal(historySeries(unmatched).emptyReason, "no-snapshot");
+});
+
+test("a bin without a value is skipped, not drawn as zero", () => {
+  const flux = array(1);
+  flux[3] = null as unknown as number;
+  const series = historySeries(
+    read(
+      submitted({
+        snapshot: { bins: 150, foldedFlux: flux, foldedError: array(0.01) },
+      }),
+      "SUBMITTED",
+    ),
+  );
+  assert.equal(series.points.length, 149);
+  assert.ok(!series.points.some((p) => p.flux === 0));
 });
