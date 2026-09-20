@@ -8,6 +8,47 @@ import {
 } from "../../src/features/sky-data/events";
 import { meta, star, parse, tile, deferred } from "./sky-support";
 const view = { level: 2, box: { x: 0, y: 0, w: 512, h: 256 } };
+
+test("camera changes inside a pending tile do not abort the page; completed arrays reuse and clear across versions", async () => {
+  let m = meta(),
+    reads = 0;
+  const waiting = deferred<unknown>();
+  let firstSignal: AbortSignal | undefined;
+  const store = new SkyDataStore(async (path, { signal }) => {
+    if (path === "/v1/me/sky") return m;
+    reads++;
+    if (reads === 1) {
+      firstSignal = signal;
+      return waiting.promise;
+    }
+    const q = parse(path);
+    return tile(m, q.box, q.level, [star("1", 30, 30)]);
+  }, "a");
+  await store.refresh();
+  const initial = { level: 2, box: { x: 10, y: 10, w: 100, h: 100 } };
+  const pending = store.setView(initial);
+  await store.setView({ ...initial, box: { x: 12, y: 12, w: 100, h: 100 } });
+  assert.equal(reads, 1);
+  assert.equal(firstSignal?.aborted, false);
+  waiting.resolve(
+    tile(m, { x: 0, y: 0, w: 256, h: 256 }, 2, [star("1", 30, 30)]),
+  );
+  await pending;
+  const list = store.getSnapshot().stars;
+  await store.setView({ ...initial, box: { x: 15, y: 15, w: 100, h: 100 } });
+  store.select("1");
+  assert.equal(store.getSnapshot().stars, list);
+  await store.setView({ ...initial, level: 3 });
+  assert.equal(store.getSnapshot().stars[0], list[0]);
+  await store.setView(initial);
+  assert.equal(store.getSnapshot().stars, list);
+  m = meta("v2");
+  await store.refresh();
+  assert.notEqual(store.getSnapshot().stars, list);
+  assert.notEqual(store.getSnapshot().stars[0], list[0]);
+  store.dispose();
+  assert.equal(store.getSnapshot().stars.length, 0);
+});
 test("metadata is followed by initial visible pages even at level zero", async () => {
   const paths: string[] = [],
     m = meta();

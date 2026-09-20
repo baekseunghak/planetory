@@ -151,14 +151,24 @@ function AttachmentDetail({
 }) {
   const [mode, setMode] = useState<GraphMode>("CURRENT"),
     [snapshotMissing, setSnapshotMissing] = useState(false);
-  const poll = useRef(0),
-    [lastMeta, setLastMeta] = useState<Record<string, unknown> | null>(null);
+  const poll = useRef(0);
   const path = `/v1/${parentType === "POST" ? "posts" : "comments"}/${encodeURIComponent(parentId)}/history-attachments/${encodeURIComponent(id)}`;
   const load = useCallback(
     async (signal: AbortSignal) => {
-      const row = materialObject(
-        await api(endpoint(path, { graphMode: mode }), { signal }),
-      );
+      let raw: unknown;
+      let graphError: ApiError | null = null;
+      try {
+        raw = await api(endpoint(path, { graphMode: mode }), { signal });
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 503) throw error;
+        // 첫 그래프 조회 실패도 공개 내용을 잃지 않는다. 저장된 응답 대신 현재 부모 권한을 다시 검사한다.
+        raw = await api(
+          endpoint(path, { graphMode: mode, includeGraph: "false" }),
+          { signal },
+        );
+        graphError = error;
+      }
+      const row = materialObject(raw);
       if (
         row.parentType !== parentType ||
         row.parentId !== parentId ||
@@ -167,21 +177,32 @@ function AttachmentDetail({
       )
         return invalidMaterial();
       materialText(row.submittedAt);
-      materialText(row.judgment);
-      return { ...row, graph: readHistoryGraph(row.graph, id, ticId, mode) };
+      if (row.judgment !== null) materialText(row.judgment);
+      return {
+        ...row,
+        graph: graphError ? null : readHistoryGraph(row.graph, id, ticId, mode),
+        graphError,
+      };
     },
     [path, mode, parentType, parentId, id, ticId],
   );
   const state = useReadModel(path + mode, load);
   useEffect(() => {
     if (state.data) {
-      setLastMeta(state.data);
-      if (mode === "SUBMITTED" && state.data.graph.snapshot === null)
+      if (
+        mode === "SUBMITTED" &&
+        state.data.graph &&
+        state.data.graph.snapshot === null
+      )
         setSnapshotMissing(true);
     }
   }, [state.data, mode]);
   useEffect(() => {
-    if (!state.data || !isGraphPending(state.data.graph) || poll.current >= 6)
+    if (
+      !state.data?.graph ||
+      !isGraphPending(state.data.graph) ||
+      poll.current >= 6
+    )
       return;
     const timer = setTimeout(() => {
       poll.current++;
@@ -193,10 +214,9 @@ function AttachmentDetail({
     state.error instanceof ApiError &&
     [401, 403, 404].includes(state.error.status);
   if (denied) return <ErrorState error={state.error!} />;
-  // No retained graph is rendered while loading or failing; metadata survives a graph dependency error only.
-  const row: Record<string, unknown> | null =
-      state.data ?? (state.error ? lastMeta : null),
-    graph = state.data?.graph;
+  const row: Record<string, unknown> | null = state.data,
+    graph = state.data?.graph,
+    error = state.error ?? state.data?.graphError;
   const label = (v: unknown) =>
     typeof v === "string"
       ? (judgmentLabels[v as keyof typeof judgmentLabels] ?? v)
@@ -254,8 +274,8 @@ function AttachmentDetail({
           <dd>{typeof row.memo === "string" ? row.memo : "제공되지 않음"}</dd>
         </dl>
       )}
-      {state.error ? (
-        <ErrorState error={state.error} retry={state.reload} />
+      {error ? (
+        <ErrorState error={error} retry={state.reload} />
       ) : state.loading ? (
         <LoadingState />
       ) : null}

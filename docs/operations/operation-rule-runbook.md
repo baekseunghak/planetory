@@ -33,8 +33,8 @@
 | `matching.min_score_gap` | 우세 판정 최소 점수 차 | 0 이상 | 0.1 |
 | `matching.overlap_ratio_tolerance` | 중첩 비율 허용 차 | 0 이상 1 이하 | 0.1 |
 | `peaks.top_n` | 봉우리 표시 수(탐사 API 5.4) | 1 이상 정수 | 10 |
-| `discovery.stars_per_achievement` | 성과 1건당 발견 수(OPS-08) | 0 이상 정수 | 1 |
-| `discovery.seed_policy` | 무작위 시드 정책(탐사 API 9.2) | `hash-user-achievement-seq-v1` | 같음 |
+| `discovery.stars_per_achievement` | 성과 1건당 발견 수(OPS-08). 못 찾은 별이 모자라면 있는 만큼만 연다 | 0 이상 정수 | 1 |
+| `discovery.seed_policy` | 무작위 시드 정책. 계산식은 [탐사 API 9.2절](../../apps/backend/docs/exploration-api-spec.md#92-내부-계약-성과-지급별-열림) | `hash-user-achievement-seq-v1` | 같음 |
 | `tutorial.skip_after` | 튜토리얼 건너뛰기 기준(SUB-12). 0이면 끈다 | 0 이상 정수 | 환경별(6절) |
 | `ai.lower_threshold`, `ai.upper_threshold` | AI 판정 하한·상한(AI-04) | 둘 다 `null`, 또는 0 ≤ 하한 < 상한 ≤ 1 | `null`, `null` |
 | `bls` | BLS 품질. D13이 값을 정하기 전이라 자리만 둔다 | `null` | `null` |

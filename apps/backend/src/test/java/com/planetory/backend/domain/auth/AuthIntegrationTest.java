@@ -249,6 +249,46 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void starListVisibilityChangesPersistAndOnlyHideOtherMembersList() throws Exception {
+        var owner = login("google", "settings-owner");
+        var viewer = login("google", "settings-viewer");
+        long id = memberId(owner);
+        jdbc.update("UPDATE user_settings SET onboarding_done = true, notification_prefs = '{\"achievement\":false}'::jsonb WHERE user_id = ?", id);
+
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"));
+        mvc.perform(get("/api/v1/me").session(owner))
+                .andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.onboardingDone").value(true));
+        assertEquals("false", jdbc.queryForObject("SELECT notification_prefs ->> 'achievement' FROM user_settings WHERE user_id = ?", String.class, id));
+        mvc.perform(get("/api/v1/members/u-" + id).session(viewer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.achievementSummary").exists());
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("STAR_LIST_PRIVATE"));
+        mvc.perform(get("/api/v1/me/stars").session(owner)).andExpect(status().isOk());
+
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PUBLIC\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PUBLIC"));
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer)).andExpect(status().isOk());
+        jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"));
+        assertFalse(jdbc.queryForObject("SELECT star_list_public FROM user_settings WHERE user_id = ?", Boolean.class, id));
+        for (String value : List.of("public", "HIDDEN", "")) {
+            mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                            .contentType("application/json").content("{\"starListVisibility\":\"" + value + "\"}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void publicProfileShowsOnlyPublicSummaryEvenWhenStarListIsPrivate() throws Exception {
         var viewer = login("google", "viewer");
         var owner = login("google", "owner");
@@ -465,7 +505,7 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.ticId").doesNotExist());
         assertEquals("free", jdbc.queryForObject("SELECT board FROM posts WHERE id = ?", String.class,
                 Long.parseLong(starPostId.substring(2))));
-        // 항목이 실제로 담긴 요청은 F09·F24 구현 전까지 계속 거절한다.
+        // 별 연결을 해제한 자유글에는 History를 붙일 수 없다.
         mvc.perform(patch("/api/v1/posts/" + starPostId).session(other).with(csrf())
                         .contentType("application/json").content("{\"historyIds\":[\"h-1\"]}"))
                 .andExpect(status().isBadRequest());
@@ -698,12 +738,12 @@ class AuthIntegrationTest {
             var title = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false));
+                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false, null));
             });
             var body = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false));
+                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false, null));
             });
             start.countDown();
             title.get(20, TimeUnit.SECONDS);

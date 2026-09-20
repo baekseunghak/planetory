@@ -9,6 +9,12 @@ export class ApiError extends Error {
     public readonly requestId: string | null = null,
     public readonly localRequestId: string | null = null,
     public readonly outcomeUnknown = false,
+    /**
+     * 오류 본문 그대로. 일부 오류는 `code`·`message`·`fieldErrors` 밖에 값을
+     * 더한다(예: 탐사 API `BUNDLE_CHANGED`의 `currentBundleId`). 어떤 값이
+     * 올지는 각 API가 정하므로 해석하지 않고 보관만 하며 읽는 쪽이 검사한다.
+     */
+    public readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
@@ -149,6 +155,7 @@ export function createApiClient(config: ClientOptions) {
           serverRequestId,
           localRequestId,
           writing && response.status >= 500,
+          body,
         );
       }
       return result as T;

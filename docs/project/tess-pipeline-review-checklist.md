@@ -28,7 +28,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 | 1 | 원천별 파일 구조·식별자·조인 관계 | FITS 파일/HDU/필수 컬럼, 시간·flux·품질 단위, TIC·Sector 식별자, TIC/TCE/TOI/Archive/ExoFOP 조인 키·스냅샷·갱신 정책 |
 | 2 | 전처리→Sector 결합→BLS→반복 제거→외부 결합→AI 흐름 | 단계별 입력·출력, 품질 마스크·결측·이상치·정규화·연속 구간 detrending, 모델 나눗셈 규칙, 외부 disposition과 AI 결과 분리, CP/KP/FP/FA/PC/APC/라벨 없음 처리 |
 | 3 | Silver 내부와 Gold 제공 산출물 경계 | 반복 잔차·내부 주기도의 실행 중 사용과 비저장 원칙, 제거 QA 요약, Gold 사용자 제공 자산 구분 |
-| 4 | Gold 원본 점·품질 마스크·transit model·버전 스키마 | v1.0 기준으로는 `light_curve_segments`(비닝 배열·NaN·`gaps`·산포 스칼라·`binning_revision`)·`periodograms`·`candidates.transit_model` JSONB·`publication_bundles.manifest`의 필드·타입·단위·의미, 원본 주기도·후보표·AI 결과, 계산 설정 버전, 호환성·재처리 영향. 품질 마스크는 Gold 자산이 아님(POL-13) |
+| 4 | Gold 원본 점·품질 마스크·transit model·버전 스키마 | v1.0 기준으로는 `light_curve_segments`(비닝 배열·NULL·`gaps`·산포 스칼라·`binning_revision`)·`periodograms`·`candidates.transit_model` JSONB·`publication_bundles.manifest`의 필드·타입·단위·의미, 원본 주기도·후보표·AI 결과, 계산 설정 버전, 호환성·재처리 영향. 품질 마스크는 Gold 자산이 아님(POL-13) |
 | 5 | BLS·고조파·반복 종료·discoverable의 확정값/TBD 분리 | 최소 품질 기준, 고조파·중복 병합·원본 검증, 종료 조건, 각 제안의 근거와 결정 담당자. AI 모델·체크포인트·입력·라이선스·임계값의 미결정 사항 및 실험 계획도 포함 |
 | 6 | 신규 데이터별 재처리·재개 이벤트 조건 | LC/Sector 추가, TIC 변경, TCE/TOI 상태 갱신의 증분/전체 처리 구분과 영향 대상 |
 | 7 | Silver–EC2 잔차 일치 검증 계획 | 샘플 TIC, 같은 입력·제거 후보 집합·모델 버전, 비교할 값과 마스크, 허용 오차 제안·선정 방법, 실패 기준 및 회귀 방식 |
@@ -63,7 +63,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 
 - DAT-05~07에 따라 배치는 Silver 내부에서 반복 잔차 BLS와 제거 QA를 수행하고, 각 후보를 원본 정제곡선에서 다시 검증한다. 단계별 잔차·주기도 배열은 저장하지 않는다.
 - DAT-07 v1.0: `discoverable`은 사용자에게 제공되는 것과 같은 조건(비닝 간격·모델·주기 격자)으로 계산한 발견 단계 잔차 주기도에서 봉우리가 잡히는지로 판정한다. 2분 원본 해상도로 판정하지 않는다. 비닝·격자 규칙이 바뀌면 새 revision으로 원자 전환하고 재계산해 값이 바뀐 후보는 DAT-15 재개 이벤트로 처리한다.
-- DAT-10·11·ERD: Gold 본문은 EC2 PostgreSQL 배열이다. 원본 정제곡선은 별·섹터 세그먼트로 섹터 안 10분 고정 비닝(세그먼트 20,000점 초과 시 간격 확대), 밝기 오차는 세그먼트당 산포 스칼라, 시각·주기 격자·품질 마스크 배열은 저장하지 않는다. 세그먼트는 `binning_revision`으로 식별하는 불변 행이고 판에 묶이지 않는다. transit model은 `candidates.transit_model` JSONB 파라미터다. manifest에 세그먼트 id 집합·checksum·계산 버전·비닝 규칙·주기 격자 간격·미세 조정 허용 폭(EXP-05)을 넣는다.
+- DAT-10·11·ERD: Gold 본문은 EC2 PostgreSQL 배열이다. 원본 정제곡선은 별·섹터 세그먼트로 섹터 안 10분 고정 비닝(세그먼트 20,000점 초과 시 자동 확대 없이 실패·격리), 산포는 세그먼트 전체 유한 비닝 flux의 1.4826 × MAD 스칼라(통과·별 변동 포함, 점별 오차 아님), 시각·주기 격자·품질 마스크 배열은 저장하지 않는다. 세그먼트는 `binning_revision`으로 식별하는 불변 행이고 판에 묶이지 않는다. transit model은 `candidates.transit_model` JSONB 파라미터다. manifest에 세그먼트 id 집합·checksum·계산 버전·비닝 규칙·주기 격자 간격·미세 조정 허용 폭(EXP-05)을 넣는다.
 - EXP-01·DAT-14: 분석 세션은 특정 판에 고정하지 않고 항상 `current`를 쓴다. 새 판이 공개되면 진행 중 회원에게 알리고 최신 판으로 다시 불러온다. 이전 판은 곧바로 `archived`가 되어 그 판의 주기도 행과 캐시를 정리한다. 잔차·주기도 캐시는 서비스 DB 테이블이 아니라 **Redis**에 상태와 결과를 함께 둔다.
 - EXP-09·DAT-14에 따라 EC2는 현재 판의 세그먼트와 사용자가 고른 제거 조합의 `transit_model` 파라미터로 잔차곡선을 먼저 계산하고 그 잔차의 주기도를 계산한다.
 - POL-08·EXP-06~08에 따라 사용자는 접힌 곡선에서만 `phase_start`·`phase_end`를 선택하고, 브라우저와 서버는 Bundle의 같은 `fold_reference_time_btjd`로 epoch·duration을 계산한다. 시간 영역 선택, 숫자 직접 입력, `selection_space`는 사용하지 않는다.
@@ -104,7 +104,7 @@ Jira 29번은 입력·출력, 처리 규칙, 품질 기준 및 후속 작업을 
 | --- | --- | --- |
 | 김동혁 | ① Raw manifest에 source URI·checksum·TIC·Sector·제품 버전을 보존할 수 있는가? ② 단계별 residual·periodogram 배열을 저장하지 않고 반복 계산하며 removal QA 요약·종료 사유만 남기는 Spark 흐름이 가능한가? ③ Publisher의 PostgreSQL 직접 적재·단일 트랜잭션 전환과 커밋 후 `bundleId` 알림을 어떤 접속·인증·재시도 설정으로 운영할 것인가? ④ 새 Sector는 기존 세그먼트 행을 재사용하고 TIC 결합 이후 반복 BLS·discoverable을 다시 계산할 수 있는가? ⑤ Spark와 AI worker 사이 전달 단위는 후보/TIC 중 무엇인가? ⑥ Worker(Node 2~6)에 BLS 커널의 Python 의존성을 어떻게 배포하는가(동일 설치 vs `--archives`)? | 저장·분산 실행·재처리 계약, Silver 비저장 실행 방식, Gold 적재·알림 운영값과 용량 실측 Task |
 | 강재민 | ① `candidates.id`는 판이 바뀌어도 유지된다. 새 판 적재 시 같은 신호로 판단할 주기·중심 시각 허용 오차(ERD 미결 2)는 누가 정하는가? ② direct/harmonic/ambiguous 매칭 근거를 API가 보존할 수 있는가? ③ EC2가 `transit_model` JSONB 파라미터로 고정 모델을 생성해 나누는 입력 schema로 충분한가? 필드·shape·`residual_model_version` 정의를 함께 확정할 수 있는가? ④ Redis 캐시 키 격리, 판 `archived` 시 캐시 정리, 진행 중 세션의 최신 판 재로드를 구현할 수 있는가? ⑤ 후보 추가·discoverable 변경(비닝 revision 재계산 포함)의 재개 이벤트를 중복 없이 소비할 수 있는가? ⑥ 외부 라벨 변경 때 `ai_status` 중 무엇만 재계산할 것인가? ⑦ `fold_reference_time_btjd`의 정본은 명세서(세그먼트별)와 ERD(판별) 중 어느 쪽이며 비닝 전/후 어느 시각으로 산정하는가? ⑧ 판별 주기도 격자 규칙(로그 등간격·5,000점)과 미세 조정 허용 폭을 manifest에 어떤 형식으로 넣고 API가 어떻게 풀어 주는가? | Candidate/`transit_model`/API 계약, 격자 규칙, Redis 캐시·재개 이벤트, Silver–EC2 검증 구현과 DAT-15 해석 |
-| 백지웅 | ① 시간은 BTJD, period는 day, duration은 hour 또는 canonical 단위 하나로 전달하면 되는가? ② 비닝 세그먼트(`start_btjd`·`bin_minutes`·`flux`·NaN·`gaps`)를 받아 브라우저가 시각을 복원하고 위상 접기를 하는 계약으로 충분한가? 화면 축약 배열은 별도로 필요한가? ③ 빈 bin·관측 공백·Sector 경계를 어떤 형태로 표시할 것인가(품질 마스크는 전달되지 않음)? ④ 잔차/주기도 요청의 6단계 상태와 판 교체 재로드를 화면에 어떻게 보여줄 것인가? ⑤ 10분 비닝에서 1시간 통과(약 6점)의 위상 구간 선택과 근거 체크 3종(홀짝·2차 식·V/U형)이 가능한가? | 그래프 입력·단위 계약, 세그먼트·공백 표현, 온라인 계산 상태 UI 요구, 비닝 해상도 화면 검토 |
+| 백지웅 | ① 시간은 BTJD, period는 day, duration은 hour 또는 canonical 단위 하나로 전달하면 되는가? ② 비닝 세그먼트(`start_btjd`·`bin_minutes`·`flux`·NULL·`gaps`)를 받아 브라우저가 시각을 복원하고 위상 접기를 하는 계약으로 충분한가? 화면 축약 배열은 별도로 필요한가? ③ 빈 bin·관측 공백·Sector 경계를 어떤 형태로 표시할 것인가(품질 마스크는 전달되지 않음)? ④ 잔차/주기도 요청의 6단계 상태와 판 교체 재로드를 화면에 어떻게 보여줄 것인가? ⑤ 10분 비닝에서 1시간 통과(약 6점)의 위상 구간 선택과 근거 체크 3종(홀짝·2차 식·V/U형)이 가능한가? | 그래프 입력·단위 계약, 세그먼트·공백 표현, 온라인 계산 상태 UI 요구, 비닝 해상도 화면 검토 |
 
 윤성용은 위 리뷰 전에 다음을 설명한다: 기존 PoC 기본값은 확정값이 아니며, TOI-270은 재현 샘플 한 개다. 전처리·BLS·사전 선별·AI 기준은 조정/고정 평가 세트로 검증하고, 자체 BLS·외부 disposition·AI 점수는 서로 덮어쓰지 않는다.
 

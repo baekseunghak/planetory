@@ -1,4 +1,7 @@
-# astro-kernel: 고정 transit 모델·잔차 제거 공용 커널
+# astro-kernel: 전처리·고정 transit 모델·잔차 제거 공용 커널
+
+Silver 전처리(`S15P21C206-119`)의 계약·검증 방법은 아래 [Silver 전처리](#silver-전처리-119)를 따른다.
+기존 121의 완료 상태와 새 119의 검증·리뷰 상태는 구분한다.
 
 Jira `S15P21C206-121` (계획 ID D14-1) / 담당: 윤성용
 
@@ -192,3 +195,144 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 - [TESS 파이프라인 분석 5절](../../docs/data/tess-pipeline/README.md) `transit_model` JSONB 행, [검증과 재처리 7.2·7.4절](../../docs/data/tess-pipeline/validation-and-reprocessing.md)
 - [서비스 DB ERD](../../docs/architecture/database-erd.md) `light_curve_segments` 시각 복원식, [온라인 파생 계산](../../docs/architecture/online-derived-compute.md), [저장소 구조 `libs/`](../../docs/architecture/repository-structure.md)
 - [후속 Task 계획 9절](../../docs/project/tess-processing-ai-task-plan.md) D14-1 행
+
+## Silver 전처리 (119)
+
+상태: **구현·합성 검증·실제 4별 회귀 완료, MR 리뷰 대기** (2026-09-20).
+Jira `S15P21C206-119`, 담당 윤성용. `silver-biweight-1.0.0`은 **42/D03 기준 공용 전처리 기본 커널**이다.
+위 완료 상태는 이 기본 커널과 회귀 검증에 한정되며 **DAT-02 전체 구현 완료가 아니다**.
+Spark·DB·BLS 연결과 확인된 실제 불량 구간의 추가 마스킹은 이번 MR 범위가 아니다.
+
+### 근거와 리뷰 항목
+
+[42 결과 6절](../../docs/data/tess-preprocess-benchmark.md),
+[MR !29](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/29)의 병합 기록,
+[MR !77](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/77)의 2026-09-18 김동혁 리뷰에서
+언급한 D03 확정 `biweight_1.0d`를 기준으로 구현한다. 110의 BLS 채택이나 D03→D04 duration·epoch 검증 책임
+이관까지 승인됐다고 해석하지 않는다. 기존 문서의 과거 실험 수치는 수정하지 않는다.
+
+2026-09-20 윤성용 요청으로 고정 가장자리 6·12시간 마스크 없이 구현을 진행한다.
+김동혁의 !107 리뷰에서 고정 6·12시간 일괄 제외를 기본 커널에 넣지 않는 방향에 동의했다.
+특정 Sector 시작·궤도 근점의 확인된 불량 구간을 별도 마스킹하는 DAT-02 요구는 유지한다.
+후속 [S15P21C206-245](https://ssafy.atlassian.net/browse/S15P21C206-245)에 적용 계층·추적 계약·검증 조건을 등록했다.
+이번 보완은 문서 범위 정리이며 임의 마스크 로직·설정·기존 수치를 변경하지 않는다. MR 재리뷰는 대기한다.
+[문서 정합화 요청](../../docs/project/planetory-doc-sync-requests.md)에 현재 차이와 승인 상태를 기록한다.
+
+### 함수·입출력 계약
+
+실제 불량 구간 마스킹의 후속 적용 계층은 **FITS 파싱 후 원본 행 식별자를 부여한 Silver 입력 준비 계층**이다.
+245에서 품질/유한값 선택·Sector 중앙값 정규화·추세 계산 전에 근거 있는 구간 마스크를 적용한다.
+행을 외부에서 먼저 삭제하고 `source_row`를 다시 매기는 방식으로 연결하지 않는다.
+생존 배열과 제외 장부에 `product_id`, 원본 `source_row`, `cadenceno`, 원래 `QUALITY`, 원본 시각,
+겹친 모든 제외 사유, 근거 구간 ID·출처/checksum·마스크 버전을 보존해야 한다.
+추가 마스크를 원래 QUALITY에 덮어쓰지 않는다. 현재 `PreparedCurve.excluded`의 사유 기록만으로는
+원래 QUALITY 값까지 보존하는 후속 계약이 완성되지 않으므로 245에서 어댑터/커널 확장과 버전을 검토한다.
+구간 단위·경계 포함·원천 일치·전체 제외·관측 부족 검증도 245가 담당하고 127의 Spark 연결로 인계한다.
+
+```python
+from astro_kernel.fits_adapter import parse_spoc_hdul
+from astro_kernel.preprocessing import preprocess_silver, prepare_silver, detrend_silver
+
+# 호출자가 astropy.io.fits.open(..., memmap=False)로 연 HDUList를 전달한다.
+sector_input, metadata = parse_spoc_hdul(hdul, product_id="source-product.fits")
+prepared, result = preprocess_silver([sector_input])
+if result.status == "ok":
+    time = prepared.time[result.kept]
+    flux = result.flux_det[result.kept]
+```
+
+어댑터도 파일을 열지 않는다. numpy 외 의존성을 추가하지 않으며 호출자가 FITS 열기·손상 파일 읽기 예외 처리,
+checksum 검증·제품/cadence 선택을 담당한다. 어댑터는 HDU·필수 열/헤더, BTJD(TDB, BJDREFI=2457000,
+BJDREFF=0, day), 양수 TIMEDEL, 전자/초 flux 단위를 검사한다. PROCVER·시간 메타데이터를 반환하고
+파일 종료 전에 배열을 복사한다. 미지 단위를 추측해 변환하지 않는다.
+
+`SectorInput`은 같은 TIC의 Sector당 제품 하나다. TIME은 BTJD 일, flux·flux_err는 전자/초,
+QUALITY·CADENCENO는 음이 아닌 정수다. 제품·Sector 중복 및 같은 Sector의 유효 시각 중복은 실패한다.
+중복 제품·시각의 선택은 수집 계층의 책임이며 임의 평균·삭제하지 않는다.
+
+`prepare_silver`는 QUALITY=0·유한 TIME/flux를 선택하고 Sector별 양수 중앙값으로 flux와 오차를 나눈다.
+정렬 뒤에도 `product_id`·0부터 시작하는 `source_row`·`cadenceno`를 보존한다. `excluded`에는 제외된 모든
+원본 행과 중복 가능한 제외 사유를 남긴다. `n_raw`와 Sector별 중앙값도 반환한다. 비유한/음수 오차는 NaN으로
+남기고, 오차가 없다는 이유로 유효 flux를 제외하지 않는다(42와 같은 선택 규칙).
+
+`detrend_silver(time, normalized_flux, sector)`는 정규화 완료 배열을 받고 **재정규화하지 않는다**.
+주입 회귀도 이 경로를 사용한다. 결과는 prepared 배열과 같은 길이·순서의 `trend`, `flux_det`, `kept`,
+`segment_id`, `reasons`와 구간 경계·scatter·구간별 `failures`·`status`·`version`을 제공한다.
+제외된 정제 flux는 NaN이며 보간해 채우지 않는다. 후속 오차는 `prepared.flux_err / result.trend`에 같은
+kept 마스크를 적용한다. 이는 고정 추세에 조건부인 측정 오차이며 추세 추정 불확실성을 포함하지 않는다.
+
+### 버전·경계·실패
+
+버전 `silver-biweight-1.0.0`의 전체 설정은 `preprocessing_config()`로 얻는다.
+QUALITY=0, Sector 중앙값 정규화, Sector 독립 처리, **0.5일 초과** 공백 분리,
+biweight 1일(c=6, MAD, 3회, stride=10과 마지막 점, 선형 보간), 상방 5σ, 최소 500점,
+고정 가장자리 추가 마스크·2단계 추세 없음으로 고정한다. 1일은 최대 8시간의 3배이며 12시간 이상 신호의 보존을 보증하지 않는다.
+
+- Sector가 겹쳐도 서로 추세를 섞지 않는다. 42의 4별은 Sector 간 공백이 0.5일보다 커서 참조 설정의
+  `split_sectors=false`와 같아야 한다. 합성 테스트는 짧은 경계·겹친 Sector도 검증한다.
+- 구간 1~2점은 중앙값 fallback과 사유를 기록한다. 단순히 1일보다 짧다는 이유로 fallback하지 않는다.
+- clipping은 TIC 전체의 `1.4826 × MAD(fd)`와 `fd < 1 + 5 × scatter`다. **scatter=0인 평탄 곡선은
+  기존 엄격 부등호 때문에 전부 제외될 수 있다.** 이를 몰래 바꾸지 않고 관측 부족으로 반환한다.
+- 제외 뒤 500점 미만은 `insufficient_observations`, 일부라도 잘못된 추세·나눗셈은 `numerical_failure`다.
+  진단 배열이 있어도 `status != 'ok'`면 BLS에 전달하지 않는다. 기존 벤치마크의 성공 조건을 강화한 차이다.
+- 입력 오류는 `PreprocessError.code`로 구분한다: `empty_input`, `invalid_identity`, `invalid_array`,
+  `length_mismatch`, `mixed_tic`, `duplicate_product`, `duplicate_time`, `invalid_normalization`,
+  `invalid_input`, `unsorted_time`, `numerical_failure`. FITS에는 `missing_header_or_column`, `missing_header`,
+  `unsupported_time_metadata`, `unsupported_flux_unit`, `invalid_fits_structure`도 있다.
+  오류·관측 부족을 정상 후보 0개로 바꾸지 않는다. Worker 외부 오류 매핑은 후속 연결의 책임이다.
+
+### 회귀 기준과 현재 결과
+
+같은 Python/NumPy 프로세스에서 같은 float64 연산 순서를 사용하므로 정규화·추세·정제값·scatter·마스크·구간·
+요약 지표를 **rtol=0, atol=0, 같은 위치 NaN 허용**으로 비교한다. 깊이 ±0.01·잡음 ±1% 같은 과학적 허용치를
+임의로 만들지 않는다. 다른 CPU·언어와의 수치 비교는 131의 별도 범위다.
+
+`tess_bench.silver_regression`은 TOI-270·TOI-451·WASP-62·π Men의 등록 FITS checksum을 확인하고,
+입력·코드·lock·설정·주입 격자 해시, 환경, 허용 오차를 `plan.json`에 **수치 계산 전에** 저장한다.
+별마다 무주입 1 + 단일 108 + 쌍 3 = 112곡선, 전체 448곡선을 대조한다. 구현별 456개 신호 지표와 4별 요약을
+CSV로 남긴다. 계산 전후 입력 해시를 재검사하며 실패는 비정상 종료·failure.json 또는 passed=false manifest로 남긴다.
+manifest는 PROCVER·단위·wall time·출력 checksum을 포함한다. Git은 호출하지 않고 코드 식별은 파일 SHA-256을 사용한다.
+
+주입 격자는 1.1.0이다. 이는 현재 고정 42 참조 구현과의 회귀이며 옛 실행 환경·반올림된 표를 그대로 재실행했다고
+주장하지 않는다. 원래 환경·격자 차이를 이유 없이 허용 오차로 흡수하지 않는다.
+
+2026-09-20 합성 FITS 종단·전처리 예외·기존 커널·벤치마크 테스트 **133개 통과**.
+실제 4별 회귀도 아래 실행에서 통과했다. 팀 리뷰·병합 전이므로 119 완료로 간주하지 않는다.
+
+```powershell
+cd experiments/tess-bench
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.silver_regression
+```
+
+산출물은 `experiments/tess-bench/results/silver-regression/run-.../`이다.
+원본·생성 CSV는 Git 제외를 유지한다.
+
+### 2026-09-20 실제 4별 회귀 결과
+
+사용자 실행: `run-20260919T162247Z-9c908a11` (UTC 2026-09-19 16:22:47, KST 2026-09-20 01:22:47).
+총 428.510초(약 7분 9초), Python 3.11.4 / NumPy 2.4.6 / Astropy 7.2.2 / SciPy 1.17.1, Windows AMD64.
+4별·11개 Sector의 FITS에서 448/448곡선이 허용 오차 0으로 일치했고, 4별 요약도 모두 일치했다.
+구현별 456개 신호 지표(두 구현 합계 CSV 912행)를 기록했다. 아래 값은 두 구현에서 동일하다.
+
+| 대상 | 일치 곡선 | 신호 수 | 8h 깊이 보존 중앙값 | 통과 밖 scatter 중앙값(ppm) | 통과점 유지 중앙값 |
+|---|---:|---:|---:|---:|---:|
+| TOI-270 | 112/112 | 114 | 0.906296635 | 1342.515533 | 1.0 |
+| TOI-451 | 112/112 | 114 | 0.859073582 | 1292.713861 | 1.0 |
+| WASP-62 | 112/112 | 114 | 0.880908220 | 927.609695 | 1.0 |
+| π Men | 112/112 | 114 | 0.981566209 | 171.634079 | 1.0 |
+
+저장된 입력·출력·plan의 해시 44개를 사후 대조해 불일치 0을 확인했다. 계산 코드는 사후 변경하지 않았다.
+FITS PROCVER는 `spoc-5.0.11-20200915`, `spoc-5.0.19-20201114`, `spoc-5.0.20-20201120`이며
+파일별 값은 manifest에 있다. 참조와의 구현 동등성 검증이지 새 과학적 채택 기준·운영 성능 승인은 아니다.
+
+리뷰 자료는 위 run 디렉터리의 다음 5개 파일이다. Git에는 추가하지 않고 MR에 필요 시 직접 첨부한다.
+문서 요약·코드로 검토할 수 있지만, 원시 수치 전수 대조에는 해당 파일이 필요하다.
+
+| 파일 | SHA-256 |
+|---|---|
+| manifest.json | `a6b48f90ab31ae3c6e31a52c14f7293d745b85123cad16da19bfc2aef4e9f4ad` |
+| plan.json | `561ea84c01c4940da43e7a0bcbc5b1ebd95caa2a7605a4bb79df631707fcfbca` |
+| comparisons.csv | `a4dfee09cc3d466c1e4f4d5f96d9f5fd0fafaa060605d87cbb394de8063380f3` |
+| metrics.csv | `bce61a5139d663d78b6fd1803c415a7fc118bb7bff37fe4df7f68b1f154ef381` |
+| summary.csv | `f3c80bd4f0a891b3a216cb275d4afe7c407b8c07d1104efcac47354efb74fb07` |

@@ -1,6 +1,6 @@
 {
   "schema": "planetory.fixture-checksums.v1",
-  "updated_at": "2026-09-10T02:41:56+00:00",
+  "updated_at": "2026-09-18T19:00:51+00:00",
   "files": [
     {
       "filename": "tess2018234235059-s0002-0000000100100827-0121-s_lc.fits",
@@ -12,6 +12,21 @@
       "sector": 2,
       "size_bytes": 2004480,
       "sha256": "9e83d10406a7ee0274409cd19f39857abbadfbe907e0a1f033d18c00136b0c7b",
+      "procver": "spoc-5.0.11-20200915",
+      "data_rel": 42,
+      "camera": 2,
+      "ccd": 2
+    },
+    {
+      "filename": "tess2018234235059-s0002-0000000100102268-0121-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018234235059-s0002-0000000100102268-0121-s_lc.fits",
+      "target_key": "holdout_100102268",
+      "target_name": "TIC 100102268",
+      "role": "holdout",
+      "tic_id": 100102268,
+      "sector": 2,
+      "size_bytes": 2004480,
+      "sha256": "23fe91d69d640fe755ee1999f1fb68125dc0dbb13f70af6e69f1e157633210ee",
       "procver": "spoc-5.0.11-20200915",
       "data_rel": 42,
       "camera": 2,
@@ -48,6 +63,21 @@
       "ccd": 3
     },
     {
+      "filename": "tess2018234235059-s0002-0000000358253008-0121-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018234235059-s0002-0000000358253008-0121-s_lc.fits",
+      "target_key": "holdout_358253008",
+      "target_name": "TIC 358253008",
+      "role": "holdout",
+      "tic_id": 358253008,
+      "sector": 2,
+      "size_bytes": 2004480,
+      "sha256": "ca0c1c86d585a16f254a267d4d9c00d65fd67b2d1fc2d2215f13c1a9c6b623a9",
+      "procver": "spoc-5.0.11-20200915",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 4
+    },
+    {
       "filename": "tess2018263035959-s0003-0000000100100827-0123-s_lc.fits",
       "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000100100827-0123-s_lc.fits",
       "target_key": "wasp18",
@@ -57,6 +87,21 @@
       "sector": 3,
       "size_bytes": 1998720,
       "sha256": "ac1282526edb41a2dc6a05da9f486f2d44554258be5e056b3012729467a3a15d",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 2,
+      "ccd": 1
+    },
+    {
+      "filename": "tess2018263035959-s0003-0000000100102268-0123-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000100102268-0123-s_lc.fits",
+      "target_key": "holdout_100102268",
+      "target_name": "TIC 100102268",
+      "role": "holdout",
+      "tic_id": 100102268,
+      "sector": 3,
+      "size_bytes": 1998720,
+      "sha256": "325476b37b2f407f9c864b233d16e58f1c6a9e88229e2390bfc240511ce7d799",
       "procver": "spoc-5.0.20-20201120",
       "data_rel": 42,
       "camera": 2,
@@ -93,6 +138,21 @@
       "ccd": 4
     },
     {
+      "filename": "tess2018263035959-s0003-0000000219237079-0123-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000219237079-0123-s_lc.fits",
+      "target_key": "holdout_219237079",
+      "target_name": "TIC 219237079",
+      "role": "holdout",
+      "tic_id": 219237079,
+      "sector": 3,
+      "size_bytes": 1998720,
+      "sha256": "39705caf57996c6a0aca29f256e3b1732bd9208e4eb9494a0a0a13dc552996bf",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 4
+    },
+    {
       "filename": "tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
       "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000259377017-0123-s_lc.fits",
       "target_key": "toi270",
@@ -108,6 +168,21 @@
       "ccd": 4
     },
     {
+      "filename": "tess2018263035959-s0003-0000000268637577-0123-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000268637577-0123-s_lc.fits",
+      "target_key": "holdout_268637577",
+      "target_name": "TIC 268637577",
+      "role": "holdout",
+      "tic_id": 268637577,
+      "sector": 3,
+      "size_bytes": 1998720,
+      "sha256": "971fef63096e30114043ff4d1f5b9645a04f52a1ff311c349761087fdf9e1119",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 1,
+      "ccd": 1
+    },
+    {
       "filename": "tess2018263035959-s0003-0000000279741379-0123-s_lc.fits",
       "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000279741379-0123-s_lc.fits",
       "target_key": "hd21749",
@@ -121,6 +196,21 @@
       "data_rel": 42,
       "camera": 3,
       "ccd": 3
+    },
+    {
+      "filename": "tess2018263035959-s0003-0000000358253008-0123-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018263035959-s0003-0000000358253008-0123-s_lc.fits",
+      "target_key": "holdout_358253008",
+      "target_name": "TIC 358253008",
+      "role": "holdout",
+      "tic_id": 358253008,
+      "sector": 3,
+      "size_bytes": 1998720,
+      "sha256": "d24ca01f71a48f41e894adb635c0733d1f4023efcf7f38c1440714196ab3b152",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 4
     },
     {
       "filename": "tess2018292075959-s0004-0000000149603524-0124-s_lc.fits",
@@ -151,6 +241,21 @@
       "data_rel": 42,
       "camera": 4,
       "ccd": 4
+    },
+    {
+      "filename": "tess2018292075959-s0004-0000000219237079-0124-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018292075959-s0004-0000000219237079-0124-s_lc.fits",
+      "target_key": "holdout_219237079",
+      "target_name": "TIC 219237079",
+      "role": "holdout",
+      "tic_id": 219237079,
+      "sector": 4,
+      "size_bytes": 1897920,
+      "sha256": "be8f363230c3e11294f828c19828aff55993bf76fdd52259d7ce2bbc810eca00",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 3
     },
     {
       "filename": "tess2018292075959-s0004-0000000257605131-0124-s_lc.fits",
@@ -213,6 +318,21 @@
       "ccd": 2
     },
     {
+      "filename": "tess2018292075959-s0004-0000000358253008-0124-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018292075959-s0004-0000000358253008-0124-s_lc.fits",
+      "target_key": "holdout_358253008",
+      "target_name": "TIC 358253008",
+      "role": "holdout",
+      "tic_id": 358253008,
+      "sector": 4,
+      "size_bytes": 1897920,
+      "sha256": "d9d0004f3865c07f4072ee2452df8b01923d7445dba829308923e617509caddf",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 3
+    },
+    {
       "filename": "tess2018319095959-s0005-0000000150428135-0125-s_lc.fits",
       "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018319095959-s0005-0000000150428135-0125-s_lc.fits",
       "target_key": "toi700",
@@ -226,6 +346,21 @@
       "data_rel": 42,
       "camera": 4,
       "ccd": 4
+    },
+    {
+      "filename": "tess2018319095959-s0005-0000000219237079-0125-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018319095959-s0005-0000000219237079-0125-s_lc.fits",
+      "target_key": "holdout_219237079",
+      "target_name": "TIC 219237079",
+      "role": "holdout",
+      "tic_id": 219237079,
+      "sector": 5,
+      "size_bytes": 1923840,
+      "sha256": "2cab6bc8d301a86001d708e96806c6377cfc07aefad2c52bd66913b1642f080f",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 3,
+      "ccd": 3
     },
     {
       "filename": "tess2018319095959-s0005-0000000257605131-0125-s_lc.fits",
@@ -271,6 +406,21 @@
       "data_rel": 42,
       "camera": 4,
       "ccd": 4
+    },
+    {
+      "filename": "tess2018319095959-s0005-0000000358253008-0125-s_lc.fits",
+      "source_uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018319095959-s0005-0000000358253008-0125-s_lc.fits",
+      "target_key": "holdout_358253008",
+      "target_name": "TIC 358253008",
+      "role": "holdout",
+      "tic_id": 358253008,
+      "sector": 5,
+      "size_bytes": 1923840,
+      "sha256": "0d07d5ee9f3144b4efaada5f834b770260909c595986a0b98cd0bfddb82301a2",
+      "procver": "spoc-5.0.20-20201120",
+      "data_rel": 42,
+      "camera": 4,
+      "ccd": 2
     },
     {
       "filename": "tess2019032160000-s0008-0000000149603524-0136-s_lc.fits",

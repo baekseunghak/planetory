@@ -84,8 +84,14 @@ junk 후보의 BLS 격자는 PoC 기본값(선형 20,000점, 0.5일~기준선/3)
 
 - `labels.csv`(라벨·split·기하·출처·snapshot), `conversions.csv`(status·reason·진단값·NPZ 경로), NPZ, `tfrecord_index.csv`(TFRecord 순서 ↔ candidate_id).
 - 118 은 `in_truth=true` 후보만 정답으로 쓰고, `junk_unverified` 와 `input_incomplete` 는 별도 행으로 보고한다. `training_overlap=unknown` 을 결과 해석에 명시한다.
+- 2026-09-19 재현성 정정: 기존 convert manifest의 NPZ `sha256`은 파일 해시가 아니라 `global_view` 배열 해시였다. 118 준비에서 파일 전체 SHA-256과 크기를 기록하도록 수정한다. 배열 해시는 `conversions.csv`에 유지한다. 5절의 과거 실측 수치를 다시 측정한 것은 아니며, 과거 manifest의 NPZ 파일 checksum 검증이 완료됐다고 해석하지 않는다. 새 PC 실행 절차는 [실험 README](../../experiments/astronet-eval/README.md#실행)를 따른다.
 
 ## 7. 한계·후속
+
+118 조정용 실행 도구와 격리 환경은 [실험 README](../../experiments/astronet-eval/README.md#118-조정용-추론)에 기록한다.
+공식 batch 추론의 TIC별 평균 출력을 후보별 지표에 사용하지 않는다. 동일 TIC의 후보를 `candidate_id`로 구분하고,
+calibration 점수만 먼저 계산한 뒤 임계값을 잠근다. 2026-09-19 사용자 독립 평가를 완료했으며
+[성능 평가 5·6절](tess-astronet-benchmark.md#5-독립-평가-결과)에 실측과 자동 판정용 채택 보류 제안을 기록한다.
 
 - EB 1개, PC 18개 규모. 확장은 108 결정과 함께 세트 v2.
 - QLP 학습 전처리와 SPOC·biweight 전처리의 동등성은 검증하지 않았다(118 항목).

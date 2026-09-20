@@ -19,7 +19,10 @@ dependencies = [
 requires-dist = [{ name = "numpy", specifier = ">=1.26,<3" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0,<10" }]
+dev = [
+    { name = "jsonschema", specifier = ">=4.18,<5" },
+    { name = "pytest", specifier = ">=8.0,<10" },
+]
 
 [[package]]
 name = "astronet-eval"
@@ -533,6 +536,7 @@ name = "tess-bench"
 version = "0.1.0"
 source = { editable = "../tess-bench" }
 dependencies = [
+    { name = "astro-kernel" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -542,6 +546,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "astro-kernel", editable = "../../libs/astro-kernel" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "scipy", specifier = ">=1.12,<2" },
     { name = "tess-fixture", editable = "../tess-fixture" },

@@ -15,6 +15,12 @@ export const routeDefinitions = [
   },
   { key: "community", path: "/community", title: "커뮤니티", owner: "하서진" },
   {
+    key: "hotTopics",
+    path: "/community/hot-topics",
+    title: "핫 토픽",
+    owner: "하서진",
+  },
+  {
     key: "starBoard",
     path: "/community/stars/:ticId",
     title: "별 게시판",

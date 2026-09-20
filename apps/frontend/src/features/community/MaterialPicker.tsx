@@ -124,7 +124,9 @@ function Choices({
           return {
             historyId: materialText(r.historyId),
             submittedAt: materialText(r.submittedAt),
-            userJudgment: materialText(r.userJudgment),
+            submissionKind: materialText(r.submissionKind),
+            userJudgment:
+              r.userJudgment === null ? null : materialText(r.userJudgment),
           };
         },
         (v) => v.historyId,
@@ -176,9 +178,15 @@ function Choices({
                 <li key={h.historyId}>
                   <span>
                     {h.historyId} ·{" "}
-                    {judgmentLabels[
-                      h.userJudgment as keyof typeof judgmentLabels
-                    ] ?? h.userJudgment}{" "}
+                    {h.userJudgment === null
+                      ? h.submissionKind === "no_candidate"
+                        ? "신호 없음으로 제출"
+                        : h.submissionKind === "skipped"
+                          ? "건너뛴 기록"
+                          : "판단 없음"
+                      : (judgmentLabels[
+                          h.userJudgment as keyof typeof judgmentLabels
+                        ] ?? h.userJudgment)}{" "}
                     · {new Date(h.submittedAt).toLocaleString("ko-KR")}
                   </span>
                   <button

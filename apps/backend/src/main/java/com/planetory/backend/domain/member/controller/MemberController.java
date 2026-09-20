@@ -38,6 +38,8 @@ public class MemberController {
     public record ProfileResponse(String memberId, String nickname) {}
     public record OnboardingRequest(Boolean onboardingDone) {}
     public record OnboardingResponse(boolean onboardingDone) {}
+    public record SettingsRequest(String starListVisibility) {}
+    public record SettingsResponse(String starListVisibility) {}
     public record PublicAchievementSummary(long signalCount, Map<String, Long> starCountByGrade) {}
     public record PublicProfileResponse(String memberId, String nickname, String starListVisibility,
                                         PublicAchievementSummary achievementSummary) {}
@@ -58,6 +60,14 @@ public class MemberController {
         }
         members.completeOnboarding(principal.memberId());
         return new OnboardingResponse(true);
+    }
+
+    @PatchMapping("/api/v1/me/settings")
+    public SettingsResponse changeSettings(@AuthenticationPrincipal MemberPrincipal principal,
+                                           @RequestBody SettingsRequest request) {
+        boolean starListPublic = members.changeStarListVisibility(principal.memberId(),
+                request == null ? null : request.starListVisibility());
+        return new SettingsResponse(starListPublic ? "PUBLIC" : "PRIVATE");
     }
 
     @GetMapping("/api/v1/members/{memberId}")

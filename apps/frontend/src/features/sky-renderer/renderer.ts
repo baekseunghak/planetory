@@ -11,7 +11,9 @@ import {
   type RenderPlan,
 } from "./model.ts";
 
-const quad = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+// The same two triangles share their middle edge; avoid processing two duplicate
+// vertices per body in both the glow and surface passes.
+const quad = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 const common = `#version 300 es
 precision highp float;
 layout(location=0) in vec2 corner;
@@ -85,6 +87,10 @@ export type RendererMetrics = {
   planetDrawCalls: number;
   drawCalls: number;
   gpuBuffers: number;
+  backgroundBlits: number;
+  backgroundCacheAvailable: boolean;
+  backgroundBytes: number;
+  bodyDrawCallsTotal: number;
   bufferAllocations: number;
   uploadBytes: number;
   frameCount: number;
@@ -133,7 +139,7 @@ class ReusableBuffer {
     if (!buffer) throw new Error("GPU 버퍼 생성 실패");
     this.buffer = buffer;
   }
-  update(values: number[]) {
+  update(values: ArrayLike<number>) {
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     if (values.length > this.data.length) {
@@ -144,17 +150,19 @@ class ReusableBuffer {
       gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
       this.data.fill(NaN);
     }
-    let first = -1,
-      last = -1;
-    for (let i = 0; i < values.length; i++) {
-      const value = Math.fround(values[i]);
-      if (this.data[i] !== value) {
-        this.data[i] = value;
-        if (first < 0) first = i;
-        last = i;
-      }
+    // Values are already float32 for the large star buffer. Find the changed
+    // span at its boundaries, then copy in native code instead of assigning
+    // hundreds of thousands of JS numbers on every culled camera view.
+    const floats =
+      values instanceof Float32Array ? values : Float32Array.from(values);
+    let first = 0,
+      last = floats.length - 1;
+    while (first <= last && this.data[first] === floats[first]) first++;
+    while (last >= first && this.data[last] === floats[last]) last--;
+    if (first <= last) {
+      this.data.set(floats.subarray(first, last + 1), first);
+      this.upload(first, last + 1);
     }
-    if (first >= 0) this.upload(first, last + 1);
     this.length = values.length;
   }
   private upload(start: number, end: number) {
@@ -195,6 +203,13 @@ export class GalaxyRenderer {
   private ringPipeline: Pipeline;
   private planetPipeline: Pipeline;
   private matrix = new Float32Array(16);
+  private background: WebGLFramebuffer | null;
+  private backgroundColor: WebGLRenderbuffer | null;
+  private backgroundWidth = 0;
+  private backgroundHeight = 0;
+  private backgroundReady = false;
+  private backgroundDirty = true;
+  private backgroundFocusMix = -1;
   private width = 1;
   private height = 1;
   private time = 0;
@@ -204,6 +219,16 @@ export class GalaxyRenderer {
   private focusMix = 0;
   private zoom = 1;
   private starCount = 0;
+  private previousScene: {
+    stars: RenderPlan["stars"];
+    selected: string | null;
+    system: OwnedSystem | null;
+    width: number;
+    height: number;
+  } | null = null;
+  private bodyStaging = new Float32Array(0);
+  private packedSources = new WeakMap<readonly object[], Float32Array>();
+  private styles = new WeakMap<object, ReturnType<typeof starStyle>>();
   private disposed = false;
   private stats = {
     stars: 0,
@@ -216,6 +241,8 @@ export class GalaxyRenderer {
     drawCalls: 0,
     frameCount: 0,
     packedNodes: 0,
+    backgroundBlits: 0,
+    bodyDrawCallsTotal: 0,
   };
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", {
@@ -225,6 +252,8 @@ export class GalaxyRenderer {
     });
     if (!gl) throw new Error("WebGL 2를 사용할 수 없습니다.");
     this.gl = gl;
+    this.background = gl.createFramebuffer();
+    this.backgroundColor = gl.createRenderbuffer();
     this.quadBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
@@ -319,6 +348,14 @@ export class GalaxyRenderer {
     zoom = 1,
     starCount = 0,
   ) {
+    if (
+      width !== this.width ||
+      height !== this.height ||
+      zoom !== this.zoom ||
+      starCount !== this.starCount ||
+      matrix.some((value, i) => Math.fround(value) !== this.matrix[i])
+    )
+      this.backgroundDirty = true;
     this.zoom = zoom;
     this.starCount = starCount;
     this.matrix.set(matrix);
@@ -333,22 +370,59 @@ export class GalaxyRenderer {
     this.system = system;
     if (system && system.ticId !== selected)
       throw new Error("선택한 별과 행성 목록이 다릅니다.");
-    const body: number[] = [],
+    const previous = this.previousScene;
+    if (
+      previous &&
+      previous.selected === selected &&
+      previous.system === system &&
+      previous.width === this.width &&
+      previous.height === this.height &&
+      (previous.stars === plan.stars ||
+        (previous.stars.length === plan.stars.length &&
+          previous.stars.every((s, i) => s === plan.stars[i])))
+    )
+      return;
+    if (this.bodyStaging.length < plan.stars.length * 8)
+      this.bodyStaging = new Float32Array(
+        2 ** Math.ceil(Math.log2(Math.max(64, plan.stars.length * 8))),
+      );
+    const body = this.bodyStaging.subarray(0, plan.stars.length * 8),
       rings: number[] = [],
       planets: number[] = [];
-    const starIds = new Set<string>();
-    for (const star of plan.stars) {
-      const style = starStyle(star);
-      body.push(
-        star.x,
-        star.y,
-        star.depthZ,
-        style.baseSize,
-        ...style.rgb,
-        star.ticId === system?.ticId ? 2 : star.ticId === selected ? 1 : 0,
-      );
-      starIds.add(star.ticId);
+    const source = plan.spans?.source ?? plan.stars;
+    let packed = this.packedSources.get(source);
+    if (!packed) {
+      packed = new Float32Array(source.length * 8);
+      let offset = 0;
+      for (const star of source) {
+        let style = this.styles.get(star);
+        if (!style) {
+          style = starStyle(star);
+          this.styles.set(star, style);
+        }
+        packed[offset++] = star.x;
+        packed[offset++] = star.y;
+        packed[offset++] = star.depthZ;
+        packed[offset++] = style.baseSize;
+        packed[offset++] = style.rgb[0];
+        packed[offset++] = style.rgb[1];
+        packed[offset++] = style.rgb[2];
+        packed[offset++] = 0;
+      }
+      this.packedSources.set(source, packed);
     }
+    if (plan.spans) {
+      let offset = 0;
+      for (const [start, end] of plan.spans.ranges) {
+        body.set(packed.subarray(start * 8, end * 8), offset);
+        offset += (end - start) * 8;
+      }
+    } else body.set(packed);
+    const selectedIndex =
+      selected === null
+        ? -1
+        : plan.stars.findIndex((s) => s.ticId === selected);
+    if (selectedIndex >= 0) body[selectedIndex * 8 + 7] = system ? 2 : 1;
     let orbitStars = 0;
     const addOrbits = (
       position: { x: number; y: number; depthZ: number },
@@ -392,7 +466,7 @@ export class GalaxyRenderer {
       });
     };
     if (system) {
-      const existing = plan.stars.find((s) => s.ticId === system.ticId);
+      const existing = plan.stars[selectedIndex];
       if (
         existing &&
         (existing.x !== system.position.x ||
@@ -404,13 +478,14 @@ export class GalaxyRenderer {
         throw new Error(
           "타일과 상세의 좌표/행성 수가 다릅니다. 최신 자료를 확인해 주세요.",
         );
-      if (!starIds.has(system.ticId))
+      if (!existing)
         throw new Error("상세 렌더링에 선택 별의 타일 자료가 필요합니다.");
       addOrbits(system.position, system.items, true);
     }
     this.bodies.update(body);
     this.rings.update(rings);
     this.planets.update(planets);
+    this.backgroundDirty = true;
     Object.assign(this.stats, {
       stars: plan.stars.length,
       orbitStars,
@@ -418,6 +493,13 @@ export class GalaxyRenderer {
       detailedSystems: system ? 1 : 0,
       packedNodes: this.stats.packedNodes + plan.stars.length,
     });
+    this.previousScene = {
+      stars: plan.stars,
+      selected,
+      system,
+      width: this.width,
+      height: this.height,
+    };
   }
   setPlanetFocus(id: string | null) {
     const next = this.system?.items.some((p) => p.candidateId === id)
@@ -449,8 +531,32 @@ export class GalaxyRenderer {
       this.canvas.height = h;
     }
     gl.viewport(0, 0, w, h);
-    gl.clearColor(0.001, 0.002, 0.004, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    if (
+      this.background &&
+      this.backgroundColor &&
+      (w !== this.backgroundWidth || h !== this.backgroundHeight)
+    ) {
+      gl.bindRenderbuffer(gl.RENDERBUFFER, this.backgroundColor);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, w, h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.background);
+      gl.framebufferRenderbuffer(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.RENDERBUFFER,
+        this.backgroundColor,
+      );
+      this.backgroundReady =
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE &&
+        gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_WIDTH) ===
+          w &&
+        gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_HEIGHT) ===
+          h;
+      this.backgroundWidth = w;
+      this.backgroundHeight = h;
+      this.backgroundDirty = true;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    }
     this.time += reducedMotion ? 0 : Math.max(0, Math.min(deltaSeconds, 0.05));
     this.focusMix = this.focusedPlanet
       ? reducedMotion
@@ -461,23 +567,65 @@ export class GalaxyRenderer {
           )
       : 0;
     this.renderedTime = reducedMotion ? 0 : this.time;
+    if (this.focusMix !== this.backgroundFocusMix) this.backgroundDirty = true;
     let bodyCalls = 0,
       ringCalls = 0,
       planetCalls = 0;
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    if (this.bodies.length) {
-      this.bind(this.bodyPipeline);
-      gl.uniform1f(this.bodyPipeline.zoom, this.zoom);
-      gl.uniform1f(this.bodyPipeline.dpr, dpr);
-      gl.uniform1f(
-        this.bodyPipeline.exposure,
-        galaxyExposure(this.starCount, this.zoom),
+    if (!this.backgroundReady || this.backgroundDirty) {
+      gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        this.backgroundReady ? this.background : null,
       );
-      for (const glow of [1, 0]) {
-        gl.uniform1f(this.bodyPipeline.glow, glow);
-        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.bodies.length / 8);
-        bodyCalls++;
+      gl.clearColor(0.001, 0.002, 0.004, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      if (this.bodies.length) {
+        this.bind(this.bodyPipeline);
+        gl.uniform1f(this.bodyPipeline.zoom, this.zoom);
+        gl.uniform1f(this.bodyPipeline.dpr, dpr);
+        gl.uniform1f(
+          this.bodyPipeline.exposure,
+          galaxyExposure(this.starCount, this.zoom),
+        );
+        for (const glow of [1, 0]) {
+          gl.uniform1f(this.bodyPipeline.glow, glow);
+          gl.drawArraysInstanced(
+            gl.TRIANGLE_STRIP,
+            0,
+            4,
+            this.bodies.length / 8,
+          );
+          bodyCalls++;
+        }
       }
+      this.backgroundDirty = false;
+      this.backgroundFocusMix = this.focusMix;
+    }
+    this.stats.backgroundBlits = 0;
+    if (this.backgroundReady) {
+      // Copy pixels at the exact canvas resolution. No resampling, reduced DPR,
+      // changed glow, missing stars or extra scene is used for the cached frame.
+      // Initialize the non-preserved default drawing buffer before binding a
+      // separate read source (including frames after browser compositing).
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.clearColor(0.001, 0.002, 0.004, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.background);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(
+        0,
+        0,
+        w,
+        h,
+        0,
+        0,
+        w,
+        h,
+        gl.COLOR_BUFFER_BIT,
+        gl.NEAREST,
+      );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.stats.backgroundBlits = 1;
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.rings.length) {
@@ -492,10 +640,11 @@ export class GalaxyRenderer {
     if (this.planets.length) {
       this.bind(this.planetPipeline);
       gl.uniform1f(this.planetPipeline.time, reducedMotion ? 0 : this.time);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.planets.length / 10);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.planets.length / 10);
       planetCalls++;
     }
     this.stats.bodyDrawCalls = bodyCalls;
+    this.stats.bodyDrawCallsTotal += bodyCalls;
     this.stats.orbitDrawCalls = ringCalls;
     this.stats.planetDrawCalls = planetCalls;
     this.stats.drawCalls = bodyCalls + ringCalls + planetCalls;
@@ -541,6 +690,10 @@ export class GalaxyRenderer {
     const buffers = [this.bodies, this.rings, this.planets];
     return {
       ...this.stats,
+      backgroundCacheAvailable: this.backgroundReady,
+      backgroundBytes: this.backgroundReady
+        ? this.backgroundWidth * this.backgroundHeight * 4
+        : 0,
       gpuBuffers: 4,
       bufferAllocations: 1 + buffers.reduce((n, b) => n + b.allocations, 0),
       uploadBytes:
@@ -562,5 +715,7 @@ export class GalaxyRenderer {
     for (const p of new Set(pipelines.map((p) => p.program)))
       this.gl.deleteProgram(p);
     this.gl.deleteBuffer(this.quadBuffer);
+    this.gl.deleteFramebuffer(this.background);
+    this.gl.deleteRenderbuffer(this.backgroundColor);
   }
 }

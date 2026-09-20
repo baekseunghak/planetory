@@ -256,6 +256,7 @@ test("keyboard map controls and list switches preserve camera, 1024 layout and v
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).focus();
   await page.keyboard.press("Enter");
   await expect(listHeading(page)).toBeFocused();
+  await expect(rows(page)).toHaveCount(20);
   await page.keyboard.press("Tab");
   await expect(rows(page).first()).toBeFocused();
   await page.keyboard.press("Enter");
@@ -298,7 +299,7 @@ test("list return from analysis keeps view/selection; successful change resets c
   await panel(page)
     .getByRole("link", { name: /분석 시작/ })
     .click();
-  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(listHeading(page)).toBeVisible();
   await expect(panel(page)).toContainText("TIC 900000001");
   await panel(page)
