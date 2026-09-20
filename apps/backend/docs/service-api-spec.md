@@ -289,9 +289,9 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`다. 실제 값은 반응 F07·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·첨부·출처가 없다"는 사실로 읽지 않는다. `commentCount`는 visible 댓글 수를 반환한다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
+**첨부 구현(S15P21C206-160):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. 아직 구현하지 않은 `sourceLinks`는 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`이며 실제 출처·반응이 없다는 사실로 해석하지 않는다.
 
-첨부 배열은 작성·수정 모두 비어 있을 때만 받는다. 5.2절의 연결 해제 예제처럼 `historyIds`·`sourceLinks`를 빈 배열로 함께 보내는 요청은 정상 처리하며, 항목이 담긴 요청만 400 `VALIDATION_FAILED`로 거절한다.
+`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
 
 작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
 
@@ -314,11 +314,13 @@ if (response.status === 401) {
 |---|---|---|
 | title, body | 예 | 제목 1~100자·본문 1~10,000자. 공백만 입력 금지, 일반 텍스트 |
 | purposeTag | 예(제안) | 대표 목적. ERD tag: ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL |
-| ticId | 아니오 | 별 연결. null이면 별 없는 일반 글 |
+| ticId | 아니오 | 문자열 별 ID. null이면 별 없는 일반 글 |
 | historyIds | 아니오 | 같은 TIC의 본인 History. 생략 시 빈 목록 |
 | sourceLinks | 아니오 | 같은 TIC의 공개 분석 또는 공식 스레드. type은 PUBLIC_ANALYSIS/SIGNAL_THREAD |
 
 TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC가 없으면 History·출처 카드 목록은 비어야 한다. 일반 본문 URL과 자료 선택 기능은 구분한다. 최초 발견 여부·소유권·상위 공개 상태를 서버에서 검증한다. 일반 글 작성은 공식 분석 공개·성과·판단 통계를 생성하지 않는다.
+
+160부터 작성 요청도 수정과 같은 문자열 타입 검사를 적용한다. `{"ticId":123456789}`처럼 숫자를 보내면 400 `VALIDATION_FAILED`이며 `{"ticId":"123456789"}`로 보내야 한다. 기존 작성 DTO 바인딩의 숫자→문자열 강제 변환은 더 이상 허용하지 않는다. 생략·null의 별 연결 없음 의미는 유지한다.
 
 성공 201 예시:
 
@@ -335,7 +337,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
   "postId":"p-201","title":"이 밝기 감소 구간을 어떻게 보시나요?",
   "body":"반복 간격이 일정한지 의견을 듣고 싶습니다.","purposeTag":"DISCUSSION","ticId":"123456789",
   "author":{"memberId":"u-101","nickname":"별찾는사람"},
-  "attachments":[{"historyId":"h-501","type":"HISTORY"}],
+  "attachments":[{"historyId":"h-501"}],
   "sourceLinks":[{"type":"PUBLIC_ANALYSIS","id":"pa-601","available":true}],
   "reactionSummary":{"agree":3,"disagree":1,"myReaction":"NONE"},
   "commentCount":4,"createdAt":"2026-09-09T03:00:00Z","updatedAt":"2026-09-09T03:00:00Z"
@@ -343,6 +345,8 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 ```
 
 `PATCH /api/v1/posts/p-201`은 변경 필드만 전달한다. 성공 200으로 변경된 상세와 updatedAt을 반환한다. `{"ticId":null,"historyIds":[],"sourceLinks":[]}`는 별과 자료 연결을 함께 해제하는 예다. 별만 변경하고 부적합 첨부를 남기면 400 `TIC_MISMATCH`. 원본 History의 수치·판단을 수정하지 않는다.
+
+History 배열은 생략하면 유지, 전달하면 전체 교체, `[]`면 전체 해제한다. 자료만 PATCH할 수 있으며 본문은 기존 값을 유지한다. 부모 행 잠금 안에서 최신 저장 상태와 요청 필드를 합쳐 검증·저장한다. 글 TIC 변경 시 삭제되지 않은 댓글의 History도 검사하며, 숨긴 댓글을 포함해 다른 TIC 자료가 남으면 400 `TIC_MISMATCH`로 전체 요청을 롤백한다. 다른 작성자의 댓글 자료를 자동 해제하지 않는다.
 
 `DELETE /api/v1/posts/p-201`, 별도 버전 헤더 없이 호출, 성공 204. 댓글·첨부의 일반 공개 접근도 차단하며 독립 공개 분석·성과를 취소하지 않는다. SB-D22에 따라 삭제 후 작성자도 조회할 수 없고 복원은 제공하지 않는다. 본인 소유권을 확인할 수 있는 반복 DELETE는 204다. 공개된 타인 글 수정/삭제는 403이다. 동시 수정은 공통 저장 순서 규칙을 따른다.
 
@@ -352,7 +356,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 **구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
 
-History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`가 비어 있을 때만 받으며, 응답의 `attachments`와 `sourceLinks`는 항상 빈 배열이다. 항목이 담긴 배열은 400 `VALIDATION_FAILED`다.
+History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`는 F24 구현 전까지 빈 배열만 받으며 응답도 빈 배열이다.
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
@@ -384,9 +388,9 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 }
 ```
 
-부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처는 F09·F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
+부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History를 첨부하며 공개 출처는 F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
 
-`PATCH /api/v1/comments/c-801`은 본문·자료만 수정하며 부모 이동은 제공하지 않는 안이다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
+`PATCH /api/v1/comments/c-801`은 본문·History 자료를 수정하며 부모 이동은 제공하지 않는다. 본문 생략 시 유지하고 자료만 교체·해제할 수 있다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
 
 **예외:** 다른 TIC 자료 400, 타인 수정 403, 없는 부모 404, 숨겨진 부모 접근 거부. 댓글 작성과 부모 숨김이 동시에 발생해도 숨겨진 댓글 내용이 공개돼서는 안 된다. 댓글 1~2,000자·공백만 입력 및 첨부만 작성 금지. 삭제 댓글은 목록·댓글 수에서 제외하고 삭제 자리 표시를 남기지 않는다(SB-D22).
 
@@ -415,6 +419,14 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 고유 신호 식별자는 ERD `candidates.id`에 맞춰 `candidateId`로 통일한다(분담 문서 2장 결정, 옛 `signalId` 표기 폐기). 미매칭 기록의 candidateId는 null일 수 있다. 위 예시는 첨부 선택 화면이 쓰는 최소 항목이며, 전체 항목 구조(`submissionKind`·`matchResult`·`curveStep`·`snapshotAvailable`·`relabel` 등)와 날짜·결과 필터·재도전용 원본 조회는 [탐사 API 명세 8.1절](exploration-api-spec.md)이 정의한다. 일반 글 첨부는 가능 여부를 별도로 검사하며, 공식 공개 분석은 미확정 고유 신호 매칭 자격이 필요하다. `achievementGranted`는 현재 공개 여부와 다르다.
 
 ### 7.2 공개 첨부와 출처 카드
+
+**160 구현 범위:** 일반 글과 일반 글·공식 스레드 댓글의 History 참조 저장·교체·해제 및 부모 경로 공개 조회다. 일반 첨부는 공식 분석 공개(161) 자격과 독립적이며 원본 History·스냅샷·공식 공개·성과·통계를 변경하지 않는다. 출처 카드(167)는 별도 구현이다. 댓글 ID는 기존 `c-`를 유지하며 후보의 `c-`와는 부모 종류·API 경로로 구분한다. 접두사 변경은 호출부 전체 계약 조정 시 함께 처리한다.
+
+공개 첨부 GET은 인증이 필요하다. 실제 첨부 관계, 글·댓글·상위 글의 visible 상태, 작성자와 History 소유자 일치, 동일 TIC를 매 조회와 반환 직전에 DB에서 확인한다. 권한 철회·숨김·삭제·첨부 해제는 작성자에게도 404이며 성공 응답은 `Cache-Control: no-store`다. 162의 후속 공통 정책 구현도 이 검사 경계를 유지한다.
+
+쿼리 `includeGraph`는 기본 true다. 그래프 503 발생 시 같은 부모 경로에 `includeGraph=false`로 요청하면 공개 권한을 다시 확인한 판단·근거·메모 등 공개 투영과 `graph:null`을 반환한다. 프론트는 첫 조회 실패에도 이 경로로 내용을 표시하고 그래프 오류·재조회 안내를 유지한다. 메타데이터 조회도 401/403/404이면 내용을 모두 제거하며 이전 응답으로 보충하지 않는다.
+
+부모 응답 외형은 `parentType`, `parentId`와 탐사 8.5 공개 투영을 사용한다. `userJudgment`만 서비스 필드 `judgment`로 매핑하며 no_candidate 기록은 null일 수 있다. `evidenceChecks`, `memo`, `original`, `serverDerived`, `match`, `curveContext`, `versions`, `relabel`을 포함하고 `graph`는 148의 DTO를 그대로 사용한다. `viewState`, `answerViewed`, 요청 식별자·최초 응답·성과 결과 등 개인 전용 필드는 제외한다.
 
 **그래프 조회 계약(SB-D18, 리뷰 반영):** 첨부 조회와 `GET /api/v1/public-analyses/{analysisId}`의 그래프는 분석 화면 곡선 조회·잔차 결과 곡선과 같은 DTO다. **곡선 형식은 탐사 API 명세(강재민 작성 중)에서 한 번만 정의하고 이 절은 그것을 참조한다.** 그 명세가 병합되기 전까지 아래 구조를 합의 기준으로 두며, 이 절에서 별도 배열 형식을 새로 정하지 않는다. `graphMode=CURRENT|SUBMITTED`(생략 시 CURRENT)와 같은 공개 권한 검사는 유지한다.
 
@@ -451,7 +463,7 @@ CURRENT 형식 예시. 가상 데이터이며 nPoints·gaps를 보이는 배열 
   "ticId": "123456789", "bundleId": "b-2",
   "foldReferenceTimeBtjd": 1683.4231,
   "curveContext": {"bundleId":"b-2", "curveStep": 1, "removedCandidateIds": ["c-401"], "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "residual": {"status": "COMPLETED", "jobId": "rj-77"},
+  "residual": {"status": "COMPLETED", "jobId": null},
   "segments": [
     {"segmentId": "seg-1", "sector": 14, "binningRevision": 1, "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 4,
      "flux": [1.0001, 0.9998, null, 1.0003], "fluxScatter": 0.0012, "gaps": [[2, 2]]}
