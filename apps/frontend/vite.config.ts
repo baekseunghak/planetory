@@ -39,6 +39,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "materials",
       "profiles",
       "search",
+      "hot-topics",
     ].includes(mode);
   const profileFixture =
     command === "serve" && !isPreview && mode === "profiles"
@@ -79,6 +80,13 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   return {
     plugins: [
       react(),
+      ...(communityFixture && mode === "hot-topics"
+        ? [
+            (
+              await import("./dev/hot-topics-fixture-plugin.ts")
+            ).hotTopicsFixturePlugin(),
+          ]
+        : []),
       ...(profileFixture ? [profileFixture.plugin] : []),
       ...(communityFixture
         ? [
@@ -104,6 +112,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
               materialWrites: ["materials", "profiles"].includes(mode),
               currentNickname: profileFixture?.nickname,
               searchable: mode === "search",
+              hotTopics: mode === "hot-topics",
             }),
           ]
         : []),
