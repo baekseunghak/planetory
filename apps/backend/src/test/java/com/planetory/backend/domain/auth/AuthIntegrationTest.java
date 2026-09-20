@@ -265,14 +265,14 @@ class AuthIntegrationTest {
         mvc.perform(get("/api/v1/members/u-" + id).session(viewer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
                 .andExpect(jsonPath("$.achievementSummary").exists());
-        mvc.perform(get("/api/v1/members/" + id + "/stars").session(viewer))
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("STAR_LIST_PRIVATE"));
         mvc.perform(get("/api/v1/me/stars").session(owner)).andExpect(status().isOk());
 
         mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
                         .contentType("application/json").content("{\"starListVisibility\":\"PUBLIC\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PUBLIC"));
-        mvc.perform(get("/api/v1/members/" + id + "/stars").session(viewer)).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer)).andExpect(status().isOk());
         jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
         mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
                         .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
