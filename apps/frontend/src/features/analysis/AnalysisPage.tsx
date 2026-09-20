@@ -1,5 +1,8 @@
 import { FoldViewControls } from "./FoldViewControls";
 import { AnalysisSteps } from "./AnalysisJudgment";
+import { stepName } from "./curve-step";
+import { CurveStepBar } from "./CurveStepBar";
+import { useCurveStep } from "./use-curve-step";
 import "./analysis-screen.css";
 import { Link } from "react-router-dom";
 import { usePageContext } from "../../app/usePageContext";
@@ -84,11 +87,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
           <dt>데이터 버전</dt>
           <dd>{context.bundleVersion}</dd>
           <dt>곡선 단계</dt>
-          <dd>
-            {context.curveContext.curveStep === 0
-              ? "원본"
-              : `잔차 ${context.curveContext.curveStep}단계`}
-          </dd>
+          <dd>{stepName(context.curveContext)}</dd>
           <dt>확정 행성 보유 여부</dt>
           <dd>
             {isObservation(ticId)
@@ -170,6 +169,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
                     : "확정 행성 정보 없음"}{" "}
                 · 데이터 {context.bundleVersion}
               </span>
+              <CurveStepBar context={context} />
             </div>
             <TimeCurveChart
               key={contextKey(curve.context)}

@@ -1275,3 +1275,46 @@ body:has(.analysis-screen) {
 /* 좁은 화면용 접힘 규칙은 두지 않는다. 앱이 1024px 미만에서는 화면 자체를
    내주지 않으므로(`DesktopGate`) 가장 좁은 곳에서도 판은 880px이다. 닿지
    않는 규칙을 두면 지켜지는지 확인할 길이 없다. */
+
+/* 곡선 단계 이동(#189). 계산이 끝나야 곡선이 바뀐다. */
+.analysis-screen .curve-step-bar {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 0;
+}
+.analysis-screen .curve-step-where {
+  color: var(--fg-1);
+  font-size: 13px;
+}
+.analysis-screen .curve-step-moves {
+  display: flex;
+  gap: 8px;
+}
+.analysis-screen .curve-step-moves button {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+.analysis-screen .curve-step-flow {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* 지나온 단계와 지금 단계를 구분한다. 색만으로 가르지 않는다. */
+.analysis-screen .curve-step-flow [data-state="done"]::before {
+  content: "✓ ";
+}
+.analysis-screen .curve-step-flow [data-state="now"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.analysis-screen .curve-step-flow [data-state="now"]::before {
+  content: "▶ ";
+}
