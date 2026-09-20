@@ -166,3 +166,4 @@
 | 2026-09-20 | 본인 History 첨부·공개 부모 권한·그래프 장애 시 내용 조회 | S15P21C206-160 | historyIds, includeGraph, TIC_MISMATCH, V13, 148, 162, 213 | 구현 완료·백엔드/프론트 단위 검증, 실제 렌더러 인수 별도 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | History 첨부 리뷰 보완·숫자 TIC 강제 변환 거절 명시 | S15P21C206-160 | Swagger, Operation, JsonNode, ticId, VALIDATION_FAILED, 코드 형식 | 검증 완료·31개 회귀 통과 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 판단 없는 History 첨부 선택 복구 | S15P21C206-160 | MaterialPicker, null, no_candidate, skipped, Chrome 9 | fixture 검증 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별 가시 영역·속성 재사용과 동일 픽셀 배경 캐시 | S15P21C206-215 | 100000, WebGL, triangle strip, RGBA8, framebuffer, Firefox, p95, DPR | 개선·회귀 검증 완료, 성능 전체 인수 진행 중 | [2026-09-20](2026-09-20.md) |
