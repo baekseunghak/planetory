@@ -138,3 +138,10 @@
 | 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 평가 입력 NPZ 파일 checksum 정정 | S15P21C206-118 | astronet-eval, manifest, global_sha256, calibration, evaluation | 합성 입력 검증 완료·실제 평가 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 후보별 AstroNet 조정용 추론 도구 | S15P21C206-118 | candidate_id, TIC 평균, TensorFlow 1.15.5, Docker digest, calibration | 구현·합성 검증 완료·사용자 실행 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 조정 실측과 임계값 미확정 | S15P21C206-118 | bb71f278, AP, PR-AUC, TOI-700 e, FP/FN | 조정 실측 완료·팀 비용 기준 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 사용자 위임 AstroNet 실험 임계값 고정 | S15P21C206-118 | triage_calibration_v1, lower 0, review, evaluation, threshold hash | 실험안 고정·사용자 평가 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 독립 평가와 자동 판정용 채택 보류 제안 | S15P21C206-118 | 183da766, 10/11, FP 2/18, review 20/35, 고정 임계값 | 실측·집계 완료·팀 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | MR !102 화면·전달 리뷰 문서 보완 | S15P21C206-118 | 분수 병기, 합성 백색 잡음, 상충관계, 내부 검토, in_truth | 문서 보완 완료·처리 리뷰 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | !102 calibration 연결 검증·소형 첨부 준비 | S15P21C206-118 | calibration hash, 57 tests, 183da766, 재집계 | 보완·검산 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
