@@ -95,6 +95,8 @@ sha256sum /tmp/restored.fits
 
 첫 Sector 1~13 `RunAll` 시도는 Worker coverage 5개를 읽은 뒤 로컬 `coverage-map` 실행에서 `ModuleNotFoundError: No module named 'ingestion'`으로 중단됐다. HDFS staging 준비·loader 설치·uploader 시작 전이어서 데이터 영향은 없다. runner가 로컬 검증 호출 동안 `distributed-system`을 `PYTHONPATH` 앞에 추가하고 기존 값을 `finally`에서 복원하도록 수정했으며, 이 경로 설정·복원을 오프라인 계약에 추가했다. 안전한 재실행 시작점은 동일한 `RunAll` 처음이다.
 
+수정 후 CodeReleaseId `20260920T040219Z`로 재실행해 FinalCoverage, Sector 1 Preflight와 6개 노드의 동일 loader content SHA-256을 확인했다. Sector 1은 15,889개·32,398,643,520바이트를 Worker 5대의 63개 bundle로 계획했고, uploader 5개가 모두 시작됐다. 이 기록은 적재 시작 증거이며 Sector 1 확정이나 Sector 1~13 완료 증거가 아니다. `RunAll` 완료, 각 Sector `COMMIT_OK`와 최종 `COVERAGE_COMMIT_OK`는 계속 확인해야 한다.
+
 권한을 승인한 같은 날의 실환경 `Preflight`는 HA `active:standby`, Live DataNode 5개, 기본 RF2, HDFS 사용률 0%와 RunId `20260918T080417Z` Sector 3의 Worker 5대 감사 gate를 통과했다. 대상은 15,993개, 원본 31,965,808,320바이트다.
 
 첫 `Install`은 archive를 Windows 프로세스 인자에 넣어 전달하려다 명령 길이와 출력 처리 제약으로 원격 변경 전에 실패했다. 전송을 기존 OpenSSH `scp`의 비대화식·엄격한 host key 검증과 원격 SHA-256 확인으로 교체했다. 다음 실행은 Node 1 임시 작업 경로에서 Hadoop classpath 조회의 `JAVA_HOME` 누락과 `javac`의 US-ASCII 기본 인코딩 때문에 컴파일 전에 중단됐다. release 최종 경로로 이동하기 전이라 EXIT cleanup이 archive와 임시 작업 경로를 제거했다. 설치 명령에 고정 Java 17·Hadoop 설정 경로와 `javac -encoding UTF-8`을 명시하고 오프라인 회귀 계약에 추가했다.
