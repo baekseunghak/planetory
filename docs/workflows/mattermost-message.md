@@ -32,6 +32,12 @@ MATTERMOST_CHANNEL=
 .\scripts\send-mattermost.ps1 -Channel 'team-data' -Message '수집 검증이 완료되었습니다.'
 ```
 
+`.env`에 채널이 있어도 webhook 기본 채널을 사용하려면 빈 값을 명시한다.
+
+```powershell
+.\scripts\send-mattermost.ps1 -Channel '' -Message '수집 검증이 완료되었습니다.'
+```
+
 네트워크 전송 없이 JSON만 확인한다.
 
 ```powershell

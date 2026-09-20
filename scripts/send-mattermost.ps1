@@ -39,11 +39,11 @@ if ([string]::IsNullOrWhiteSpace($webhookUrl)) {
     $webhookUrl = Get-DotEnvValue -Path $EnvFile -Name 'MATTERMOST_WEBHOOK_URL'
 }
 
-if ([string]::IsNullOrWhiteSpace($Channel)) {
+if (-not $PSBoundParameters.ContainsKey('Channel')) {
     $Channel = $env:MATTERMOST_CHANNEL
-}
-if ([string]::IsNullOrWhiteSpace($Channel)) {
-    $Channel = Get-DotEnvValue -Path $EnvFile -Name 'MATTERMOST_CHANNEL'
+    if ([string]::IsNullOrWhiteSpace($Channel)) {
+        $Channel = Get-DotEnvValue -Path $EnvFile -Name 'MATTERMOST_CHANNEL'
+    }
 }
 
 $payload = [ordered]@{ text = $Message }
