@@ -2,6 +2,8 @@
 
 > Hadoop·Spark의 역할과 데이터 계층 경계는 [시스템 아키텍처](../architecture/system-architecture.md)를 따릅니다. 이 문서는 배치 실행 순서와 구현·검증 규칙을 상세화합니다.
 
+실제 클러스터의 설치·설정·기동·복구·데이터 이동은 [Hadoop 운영 작업 가이드](../workflows/hadoop-operations.md)에 따라 스크립트와 운영 기록을 함께 남깁니다.
+
 - 대규모 데이터에 무분별하게 `collect()` 또는 전체 로컬 변환을 사용하지 않습니다.
 - 파티션 수, `repartition`, `coalesce` 변경에는 데이터 규모와 변경 근거를 남깁니다.
 - 불필요한 shuffle, wide transformation과 반복 연산을 리뷰합니다.

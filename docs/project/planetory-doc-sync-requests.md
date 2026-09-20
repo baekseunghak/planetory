@@ -45,4 +45,4 @@
 
 ### 114 추가 정합화 — 9942ee67 재검토 반영
 
-상태: 추가 보완·재리뷰 대기. 서비스/탐사 API·처리 역할·리뷰 체크리스트의 자동 확대·NaN·점별 오차 설명을 Gold와 맞췄다. ERD v1.11 변경 요약을 추가했고 상태가 포함된 Gold 제목·앵커를 고정 문구로 교체했다. 123은 GoldCatalogViews.java 설명과 새 migration의 DB COMMENT를 함께 정정하며 기존 V1은 보존한다. counts 전용 첨부·검산 절차는 비닝 벤치마크를 따른다. 최신 develop 통합과 통합 후 검증은 사용자 Git 실행 뒤 확인한다.
+상태: 추가 보완·재리뷰 대기. 서비스/탐사 API·처리 역할·리뷰 체크리스트의 자동 확대·NaN·점별 오차 설명을 Gold와 맞췄다. develop의 143 변경(v1.11)을 보존하여 ERD v1.12에 114 변경 요약을 추가했고 상태가 포함된 Gold 제목·앵커를 고정 문구로 교체했다. 123은 GoldCatalogViews.java 설명과 새 migration의 DB COMMENT를 함께 정정하며 기존 V1은 보존한다. counts 전용 첨부·검산 절차는 비닝 벤치마크를 따른다. 사용자가 가져온 develop a653abb와의 문서 충돌을 해소했고 비닝·Gold·탐사 API 검증은 통과했다. stage·diff 검사·병합 커밋·push는 사용자 실행 단계다.

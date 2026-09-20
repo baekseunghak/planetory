@@ -83,6 +83,7 @@ type CommunityFixtureOptions = {
   materialWrites?: boolean;
   currentNickname?: () => string;
   searchable?: boolean;
+  hotTopics?: boolean;
 };
 
 export function communityFixturePlugin({
@@ -92,6 +93,7 @@ export function communityFixturePlugin({
   materialWrites = false,
   currentNickname,
   searchable = false,
+  hotTopics = false,
 }: CommunityFixtureOptions = {}): Plugin {
   const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
     const ids = input.historyIds ?? [],
@@ -224,19 +226,21 @@ export function communityFixturePlugin({
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: searchable
-            ? "217 개발 검증용 검색 · 합성 게시글이며 실제 검색 서버 연결 전입니다"
-            : currentNickname
-              ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
-              : materialWrites
-                ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
-                : reactionWrites
-                  ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
-                  : commentWrites
-                    ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-                    : writable
-                      ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-                      : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: hotTopics
+            ? "218 개발 검증용 핫 토픽 · 합성 응답이며 실제 집계 서버 연결 전입니다"
+            : searchable
+              ? "217 개발 검증용 검색 · 합성 게시글이며 실제 검색 서버 연결 전입니다"
+              : currentNickname
+                ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
+                : materialWrites
+                  ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
+                  : reactionWrites
+                    ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+                    : commentWrites
+                      ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+                      : writable
+                        ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                        : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];

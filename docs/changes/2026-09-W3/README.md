@@ -114,6 +114,15 @@
 
 | 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
@@ -127,3 +136,13 @@
 | 2026-09-20 | 부분 bin 분포와 운영 비닝 채택안 정합화 | S15P21C206-114 | 68910, counts, mean, robust MAD, 상한 실패, 운영 revision, 3차 화면 리뷰 | 제안·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
 
 | 2026-09-20 | 114 소비자 명세·ERD 버전·counts 검산 자료 보완 | S15P21C206-114 | v1.11, 46 NPZ, counts ZIP, V1 보존, 123 인계 | 보완 완료·통합 검증 전 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 핫 토픽 목록·선정 기준·상세 복귀 | S15P21C206-218 | S18, COM-09, 유효 참여자10명, 기간 제한 없음, cursor | 프론트 구현·계약 검증 완료, 실제 집계 인수 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 조회·그래프 재현·공개 부모 API 연결 경계 구현 | S15P21C206-148 | CURRENT, SUBMITTED, snapshotVersion, current 부재, 권한 재확인, 160, 구기록 | 본체 구현·격리 DB 검증 완료, 구기록 정책 확인 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 최초 응답 누락 상세 503 방어 정책 확정 | S15P21C206-148 | response_snapshot, 157fb5e, 정상 제출 경로, 리뷰어 검증 | 채택·문서 반영 완료, 앞선 구기록 보류 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰 반영 후 전체 백엔드 364건 회귀 검증 | S15P21C206-148 | ca013ba, Docker Desktop, History 25, gradlew test | 검증 완료, 앞선 DB 회귀 실행 대기 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+
+| 2026-09-20 | 114 develop 통합 문서 충돌 해소 | S15P21C206-114 | a653abb, ERD v1.12, 143 보존, History | 통합 파일 검증 완료·병합 커밋 전 | [2026-09-20](2026-09-20.md) |

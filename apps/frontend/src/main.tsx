@@ -12,6 +12,7 @@ import { AnalysisPage } from "./features/analysis/AnalysisPage";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
+import { HotTopicsPage } from "./features/community/HotTopicsPage";
 import {
   CommunityPage,
   PostPage,
@@ -41,6 +42,7 @@ async function start() {
     profile: MyProfilePage,
     member: MemberProfilePage,
     community: CommunityPage,
+    hotTopics: HotTopicsPage,
     starBoard: CommunityPage,
     post: PostPage,
     postCreate: PostEditorPage,
