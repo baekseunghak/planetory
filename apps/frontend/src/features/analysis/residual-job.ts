@@ -51,7 +51,13 @@ export type ResidualOutcome =
       activeJobId: string | null;
     }
   /** 판이 바뀌었다. 최신 판을 다시 불러와야 한다. */
-  | { state: "bundle-changed"; currentBundleId: string | null };
+  | { state: "bundle-changed"; currentBundleId: string | null }
+  /**
+   * 작업이 사라졌다(Redis 재시작 등). **실패가 아니라 상태를 잃은 것**이라
+   * 7.1절로 다시 요청한다(명세 7.2·분석 프론트 8.1 「Redis 결과 없음」).
+   * `runResidualJob`이 안에서 처리하므로 밖으로 나오지 않는다.
+   */
+  | { state: "lost" };
 
 const record = (value: unknown, at: string): Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -178,6 +184,10 @@ export async function pollResidualJob(options: {
     return { state: "running", progress: readProgress(data, "본문") };
   } catch (error) {
     signal.throwIfAborted();
+    // 조회의 404는 **그 작업이 없어졌다**는 뜻뿐이다. 요청(7.1)의 404는
+    // 별이 없다는 뜻이라 같이 다루지 않는다.
+    if (error instanceof ApiError && error.status === 404)
+      return { state: "lost" };
     const known = refused(error);
     if (known) return known;
     throw error;
@@ -207,7 +217,22 @@ export async function runResidualJob(options: {
   const { request, ticId, target, signal, onProgress } = options;
   const wait = options.wait ?? sleep;
   let outcome = await requestResidualJob({ request, ticId, target, signal });
-  while (outcome.state === "running") {
+  // 작업이 사라졌을 때 **한 번만** 다시 요청한다. 계속 사라지면 그때는
+  // 사용자에게 알린다. 요청 ID가 없어 같은 목표 재호출이 곧 복구다(7.1).
+  let restarted = false;
+  while (outcome.state === "running" || outcome.state === "lost") {
+    if (outcome.state === "lost") {
+      if (restarted)
+        return {
+          state: "failed",
+          jobId: "",
+          code: "RESOURCE_NOT_FOUND",
+          message: "계산 작업이 사라져 다시 요청했지만 또 사라졌습니다.",
+        };
+      restarted = true;
+      outcome = await requestResidualJob({ request, ticId, target, signal });
+      continue;
+    }
     onProgress?.(outcome.progress);
     await wait(Math.max(outcome.progress.pollAfterSeconds * 1000, MIN_POLL_MS));
     signal.throwIfAborted();

@@ -106,3 +106,41 @@ test("a failure carries its reason and no result context", async ({
   // 실패에는 바꿀 문맥이 없다.
   expect(body.resultCurveContext).toBeNull();
 });
+
+test("a vanished job answers 404 with the code the server actually uses", async ({
+  request,
+}) => {
+  // Redis 재시작을 흉내 낸다. 계약은 404 `RESOURCE_NOT_FOUND`이고 프론트는
+  // 같은 목표로 7.1절을 다시 부른다(명세 7.2 · 분석 프론트 8.1).
+  const removed = unique();
+  const created = await post(request, removed, "lose-job");
+  expect(created.status()).toBe(202);
+  const { jobId } = await created.json();
+
+  // 계산이 시작된 뒤 사라진다.
+  const first = await request.get(`/api/v1/residual-jobs/${jobId}`, {
+    failOnStatusCode: false,
+  });
+  expect(first.status()).toBe(200);
+  const gone = await request.get(`/api/v1/residual-jobs/${jobId}`, {
+    failOnStatusCode: false,
+  });
+  expect(gone.status()).toBe(404);
+  // 전역 오류 코드와 같은 값이어야 분기 기준이 어긋나지 않는다.
+  expect((await gone.json()).code).toBe("RESOURCE_NOT_FOUND");
+
+  // 같은 목표를 다시 요청하면 새 작업이 생기고 이번에는 끝까지 간다.
+  const again = await post(request, removed, "lose-job");
+  expect(again.status()).toBe(202);
+  const retryId = (await again.json()).jobId;
+  expect(retryId).not.toBe(jobId);
+  let status = "";
+  for (let i = 0; i < 8 && status !== "COMPLETED"; i += 1) {
+    const poll = await request.get(`/api/v1/residual-jobs/${retryId}`, {
+      failOnStatusCode: false,
+    });
+    expect(poll.status(), "다시 요청한 작업이 또 사라지면 안 된다").toBe(200);
+    status = (await poll.json()).status;
+  }
+  expect(status).toBe("COMPLETED");
+});

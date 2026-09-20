@@ -164,3 +164,31 @@ test("a submission refused for a missing residual can ask for it", async ({
     "원본 곡선",
   );
 });
+
+test("a job that vanishes is recovered without the user pressing anything", async ({
+  page,
+}) => {
+  // Redis 재시작으로 작업이 사라진 경우다(7.2절). 실패로 보여 주고 사용자가
+  // [다시 시도]를 누르게 하지 않는다. 같은 목표로 다시 요청하면 그만이다.
+  const posts: string[] = [];
+  await page.route("**/api/v1/stars/*/residual-jobs", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    posts.push(request.postData() ?? "");
+    return route.continue({
+      headers: { ...request.headers(), [RESIDUAL_FIXTURE_HEADER]: "lose-job" },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await move(page, "다음 곡선 단계로").click();
+
+  // 사라져도 전환은 끝까지 간다.
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "곡선 단계 1",
+  );
+  await expect(bar(page)).not.toContainText("보고 있던 곡선은 그대로입니다");
+  await expect(move(page, "다시 시도")).toHaveCount(0);
+  // 스스로 한 번 더 요청했고, 두 번 다 같은 목표다.
+  expect(posts).toHaveLength(2);
+  expect(posts[1]).toBe(posts[0]);
+});

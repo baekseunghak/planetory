@@ -31,12 +31,15 @@ export type ResidualScenario =
   // 같은 회원의 다른 작업이 진행 중이다(D-4). 그쪽으로 데려가야 한다.
   | "other-job"
   // 판이 바뀌었다.
-  | "bundle-changed";
+  | "bundle-changed"
+  // 계산 도중 작업이 사라진다(Redis 재시작). 7.1절로 다시 요청해야 한다.
+  | "lose-job";
 const scenarios: ResidualScenario[] = [
   "fail",
   "queue-full",
   "other-job",
   "bundle-changed",
+  "lose-job",
 ];
 export const readResidualScenario = (value: unknown): ResidualScenario | null =>
   scenarios.find((item) => item === value) ?? null;
@@ -49,6 +52,8 @@ type Job = {
   /** 다음 조회에서 내놓을 단계. FLOW의 색인이다. */
   step: number;
   fail: boolean;
+  /** 다음 조회에서 사라진다. 한 목표당 한 번만이다. */
+  lose: boolean;
   attempt: number;
 };
 
@@ -63,11 +68,14 @@ const cacheKey = (ticId: string, target: ResidualTarget) =>
 const completed = new Set<string>();
 /** 진행 중인 작업. 같은 키는 하나만 계산한다(SETNX). */
 const running = new Map<string, Job>();
+/** 이미 한 번 사라진 목표. 다시 요청하면 정상으로 간다. */
+const lostOnce = new Set<string>();
 const byId = new Map<string, Job>();
 let serial = 0;
 
 export function resetResidualFixture(): void {
   completed.clear();
+  lostOnce.clear();
   running.clear();
   byId.clear();
   serial = 0;
@@ -169,6 +177,7 @@ export function requestResidualJobFixture(options: {
     key,
     step: 0,
     fail: scenario === "fail",
+    lose: scenario === "lose-job" && !lostOnce.has(key),
     attempt: 1,
   };
   running.set(key, job);
@@ -190,7 +199,14 @@ export function requestResidualJobFixture(options: {
 /** 7.2절 상태 조회. 부를 때마다 한 단계 전진한다. */
 export function pollResidualJobFixture(jobId: string): FixtureReply {
   const job = byId.get(jobId);
-  if (!job) return fail(404, "NOT_FOUND");
+  if (!job) return fail(404, "RESOURCE_NOT_FOUND");
+  // 계산이 시작된 뒤 사라진다. 클라이언트는 같은 목표로 7.1절을 다시 부른다.
+  if (job.lose && job.step >= 1) {
+    byId.delete(job.jobId);
+    running.delete(job.key);
+    lostOnce.add(job.key);
+    return fail(404, "RESOURCE_NOT_FOUND");
+  }
   // 실패는 주기도 계산 직전에 낸다. 중간 단계 표시가 지워지지 않는지 본다.
   const failing = job.fail && job.step >= FLOW.length - 2;
   if (job.step < FLOW.length - 1 && !failing) job.step += 1;

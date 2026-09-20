@@ -217,3 +217,50 @@ test("an unknown state is refused rather than drawn as progress", async () => {
   ]);
   await assert.rejects(() => stub.run(), /status/);
 });
+
+test("a job that vanished is asked for again, not reported as a failure", () => {
+  // 7.2절: Redis 재시작으로 작업이 사라지면 404 RESOURCE_NOT_FOUND다. 실패가
+  // 아니라 상태를 잃은 것이라 같은 목표로 7.1절을 다시 부른다(분석 프론트 8.1).
+  const box = harness([
+    queued("rj-1"),
+    { error: refused(404, "RESOURCE_NOT_FOUND") },
+    queued("rj-2"),
+    {
+      status: 200,
+      body: {
+        jobId: "rj-2",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  return box.run().then((outcome) => {
+    assert.equal(outcome.state, "ready");
+    // 사용자가 [다시 시도]를 누르지 않아도 스스로 복구한다.
+    assert.deepEqual(
+      box.calls.map((call) => call.method),
+      ["POST", "GET", "POST", "GET"],
+    );
+    // 다시 부르는 것은 **같은 목표**다. 요청 ID가 없어 이것이 곧 복구다.
+    assert.deepEqual(box.calls[2].body, box.calls[0].body);
+    assert.equal(box.calls[2].path, box.calls[0].path);
+  });
+});
+
+test("a job that keeps vanishing is told to the user instead of looping", () => {
+  const box = harness([
+    queued("rj-1"),
+    { error: refused(404, "RESOURCE_NOT_FOUND") },
+    queued("rj-2"),
+    { error: refused(404, "RESOURCE_NOT_FOUND") },
+  ]);
+  return box.run().then((outcome) => {
+    assert.equal(outcome.state, "failed");
+    assert.equal(
+      outcome.state === "failed" && outcome.code,
+      "RESOURCE_NOT_FOUND",
+    );
+    // 두 번째부터는 다시 요청하지 않는다. 무한히 돌지 않는다.
+    assert.equal(box.calls.length, 4);
+  });
+});
