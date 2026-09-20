@@ -33,7 +33,22 @@ const achievementResults = [
   "none",
 ] as const;
 export type AchievementResult = (typeof achievementResults)[number];
+/**
+ * 6.4절의 공개 상태는 **둘뿐이다.** 「미확정 매칭만 `UNPUBLISHED`, 확정·FP는
+ * `NOT_ELIGIBLE`」이라 제출 직후에는 이미 공개된 상태가 올 수 없다.
+ *
+ * 8.2절 기록 상세는 같은 본문을 쓰지만 시간이 지난 뒤라 `PUBLISHED`·`HIDDEN`이
+ * 더 온다. **여기서 넓히지 않는다** — 넓히면 제출 응답이 공개됐다고 말해도
+ * 통과한다. 읽는 쪽이 자기 계약의 집합을 준다.
+ */
 const publicationStates = ["UNPUBLISHED", "NOT_ELIGIBLE"] as const;
+export const storedPublicationStates = [
+  "UNPUBLISHED",
+  "NOT_ELIGIBLE",
+  "PUBLISHED",
+  "HIDDEN",
+] as const;
+export type PublicationState = (typeof storedPublicationStates)[number];
 const detailTargets = ["CURRENT_MATCH", "CURRENT_CURVE_HINT"] as const;
 export type DetailTarget = (typeof detailTargets)[number];
 
@@ -149,7 +164,7 @@ export type ResultExplanation = {
   evaluation: Evaluation | null;
   achievement: Achievement;
   publication: {
-    state: (typeof publicationStates)[number];
+    state: PublicationState;
     publicAnalysisId: string | null;
   };
   statistics: JudgmentStatistics | null;
@@ -306,6 +321,7 @@ function readStatistics(value: unknown): JudgmentStatistics {
 export function readResultExplanation(
   data: Record<string, unknown>,
   matchStatus: MatchStatus,
+  allowedPublication: readonly PublicationState[] = publicationStates,
 ): ResultExplanation {
   const matched = MATCHED.includes(matchStatus);
   const signal = nullable(data.signal, readSignal);
@@ -428,7 +444,7 @@ export function readResultExplanation(
       },
     },
     publication: {
-      state: oneOf(publication.state, publicationStates, "publication.state"),
+      state: oneOf(publication.state, allowedPublication, "publication.state"),
       publicAnalysisId: nullable(publication.publicAnalysisId, (item) =>
         text(item, "publication.publicAnalysisId"),
       ),

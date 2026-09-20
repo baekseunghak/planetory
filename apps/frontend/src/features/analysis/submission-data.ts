@@ -143,7 +143,7 @@ function instant(value: unknown, field: string): string {
   return raw;
 }
 
-function readProgress(value: unknown): SubmissionProgress {
+export function readProgress(value: unknown): SubmissionProgress {
   const data = record(value, "progress");
   const stage = oneOf(data.stage, progressStages, "progress.stage");
   const reason =
