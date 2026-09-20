@@ -89,16 +89,31 @@ const COMPLETION: Record<string, string> = {
   skipped: "건너뛰어 마쳤습니다.",
 };
 
+/**
+ * AI 판정의 구간 이름. 와이어프레임 SC-04가 쓰는 말이다.
+ * **모르는 값은 그대로 보여 준다.** 명세의 세 값 밖이 오면 지어내지 않는다.
+ */
+const AI_BAND: Record<string, string> = {
+  approved: "승인 구간",
+  hold: "보류 구간",
+  rejected: "기각 구간",
+};
+
 function Ai({ signal }: { signal: SubmissionSignal }) {
   const { ai } = signal;
   return (
     <section className="result-axis">
       <h5>AI 판정</h5>
       {ai.status === "completed" ? (
-        <p>
-          {percent.format(ai.score! * 100)}점 · {ai.verdict}
-          {ai.modelVersion ? ` · ${ai.modelVersion}` : ""}
-        </p>
+        <>
+          <p>
+            {AI_BAND[ai.verdict!] ?? ai.verdict}{" "}
+            {percent.format(ai.score! * 100)}점
+            {ai.modelVersion ? ` · ${ai.modelVersion}` : ""}
+          </p>
+          {/* 성과 판정과 무관하다는 것을 매번 말한다(와이어프레임 SC-04). */}
+          <p className="submission-note">인정에는 쓰이지 않습니다.</p>
+        </>
       ) : (
         // 실행하지 못한 것을 0점으로 바꾸지 않는다(RES-04).
         <p>{AI_MISSING[ai.status]}</p>
@@ -140,6 +155,13 @@ function Statistics({
           {percent.format(value.percentages.unsure)}%
         </p>
       )}
+      {/* 언제 센 값인지 없으면 지금 값으로 읽힌다(와이어프레임 SC-04). */}
+      <p className="submission-note">
+        집계 시각{" "}
+        <time dateTime={value.asOf}>
+          {new Date(value.asOf).toLocaleString("ko-KR")}
+        </time>
+      </p>
       <StaleNote stale={stale} />
     </section>
   );
@@ -201,6 +223,18 @@ export function ResultExplanationView({
         <section className="result-axis" data-testid="achievement">
           <h5>성과</h5>
           <p>{ACHIEVEMENT[achievement.result]}</p>
+          {/*
+            이 별의 누적 성과. 와이어프레임 SC-04가 「이 별 성과 2건(등급 S)」로
+            함께 보여 준다. 0건이면 등급이 없으므로 줄을 만들지 않는다.
+          */}
+          {achievement.star.count > 0 && (
+            <p>
+              이 별 성과 {count.format(achievement.star.count)}건
+              {achievement.star.grade
+                ? ` · 등급 ${achievement.star.grade}`
+                : ""}
+            </p>
+          )}
           {achievement.unlockedTicIds.length > 0 && (
             <p>
               새로 열린 별 {count.format(achievement.unlockedTicIds.length)}개 ·
@@ -309,9 +343,15 @@ export function DetailView({
             ? "이 단계에서 찾을 수 있었던 신호를 볼 수 있습니다."
             : "이 신호가 무엇이었는지 볼 수 있습니다."}
         </p>
-        {/* 누르면 열람 기록이 남는다. 대신 눌러 주지 않는다. */}
+        {/*
+          누르면 열람 기록이 남는다. 대신 눌러 주지 않는다.
+          대상이 다르면 이름도 다르다(와이어프레임 SC-04). 매칭 뒤에는 방금
+          맞힌 신호를, 미매칭에는 그 단계에서 찾을 수 있었던 신호를 본다.
+        */}
         <button type="button" onClick={() => onView(receipt.submissionId)}>
-          상세 보기
+          {receipt.explanation.detail.targetKind === "CURRENT_CURVE_HINT"
+            ? "상세 보기"
+            : "이 신호 상세 보기"}
         </button>
       </section>
     );
@@ -398,11 +438,11 @@ export function NextActions({
 
   const links: Partial<Record<NextAction, { label: string; to: string }>> = {
     PUBLISH_ANALYSIS: {
-      label: "분석 공개 검토",
+      label: "공개 내용 검토",
       to: pagePath("publication", { historyId }, { returnTo: from }),
     },
     VIEW_RESULT: {
-      label: "이 별의 결과 보기",
+      label: "결과 보기",
       to: pagePath("starResults", { ticId }, { returnTo: from }),
     },
     /**
@@ -413,7 +453,7 @@ export function NextActions({
      * 커뮤니티 쪽(하서진) 조율이 필요해 미결로 남겼다.
      */
     DISCUSS: {
-      label: "이 별 이야기 쓰기",
+      label: "일반 토론 쓰기",
       to:
         pagePath("postCreate", {}, { ticId, historyId, returnTo: from }) +
         "&purposeTag=DISCUSSION",
@@ -424,7 +464,7 @@ export function NextActions({
   // 분석 화면 안에서 일어나는 동작이라 옮겨 갈 곳이 없다. 각자 다른 티켓이다.
   const inScreen: Partial<Record<NextAction, string>> = {
     RETRY: "다시 풀기",
-    NEXT_CURVE: "다음 곡선으로",
+    NEXT_CURVE: "다음 곡선 단계로",
   };
   /**
    * 그리는 순서는 화면이 정한다. 서버의 목록은 순위가 아니라 가능한 행동의

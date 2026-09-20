@@ -36,7 +36,7 @@ const SIGNALS: Record<
     candidateId: "9007199254741101",
     disposition: "CONFIRMED",
     harmonicMultiplier: null,
-    ai: { status: "completed", score: 0.93, verdict: "planet" },
+    ai: { status: "completed", score: 0.93, verdict: "approved" },
     external: [{ source: "TOI", externalId: "TOI-9001.01", disposition: "CP" }],
   },
   // 2위: 미확정. 공개 분포 통계가 붙고 게시할 수 있다. 배수로 맞춘 경우다.

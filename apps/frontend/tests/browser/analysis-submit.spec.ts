@@ -714,7 +714,9 @@ test("the answer is revealed only when the user asks for it", async ({
   expect(calls).toHaveLength(0);
   await expect(dialog).toContainText("상세 보기");
 
-  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
   await expect(dialog).toContainText("확정된 행성 신호");
   expect(calls).toHaveLength(1);
   // 매칭한 제출에는 내 판단과의 일치 여부를 준다(RES-02).
@@ -726,7 +728,9 @@ test("an unconfirmed candidate is never explained as an answer", async ({
 }) => {
   await page.goto(`/analysis/${NORMAL}`);
   const dialog = await submitFromPeak(page, "2", "모르겠음");
-  await dialog.getByRole("button", { name: "상세 보기", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "이 신호 상세 보기", exact: true })
+    .click();
   await expect(dialog).toContainText("아직 확정되지 않은 후보입니다");
   // 확정되지 않은 것을 확정처럼 말하지 않는다.
   await expect(dialog).not.toContainText("정답");
@@ -760,20 +764,18 @@ test("the next actions are the server's list and they lead somewhere real", asyn
   const actions = dialog.getByTestId("next-actions");
   // 미확정 매칭이라 서버가 공개를 권한다. 프론트가 조건을 다시 계산하지 않는다.
   await expect(
-    actions.getByRole("link", { name: "분석 공개 검토" }),
+    actions.getByRole("link", { name: "공개 내용 검토" }),
   ).toBeVisible();
-  await expect(
-    actions.getByRole("link", { name: "이 별의 결과 보기" }),
-  ).toBeVisible();
+  await expect(actions.getByRole("link", { name: "결과 보기" })).toBeVisible();
   // 상세 보기는 상세 절이 이미 맡았다. 여기서 또 내지 않는다.
   await expect(actions).not.toContainText("상세 보기");
   // 화면 안에서 일어나는 동작은 옮겨 갈 곳이 없다고 그대로 말한다.
-  await expect(actions).toContainText("다음 곡선으로 · 연결 예정");
+  await expect(actions).toContainText("다음 곡선 단계로 · 연결 예정");
   // 6.4절: 매칭 성공에는 별지도로가 붙는다(RES-08).
   await expect(actions.getByRole("link", { name: "별지도로" })).toBeVisible();
 
   // 공개 화면으로 갔다가 분석 화면으로 돌아온다. 게시로 강제 이동이 아니다(AT-36).
-  await actions.getByRole("link", { name: "분석 공개 검토" }).click();
+  await actions.getByRole("link", { name: "공개 내용 검토" }).click();
   await expect(page).toHaveURL(/\/publication\/[^?]+\?returnTo=/);
   await expect(page.locator(".unconnected")).toContainText("분석 기록");
   await page.getByRole("link", { name: "이전 화면으로" }).click();
@@ -785,7 +787,7 @@ test("an action the server did not offer is not invented", async ({ page }) => {
   // 확정 신호는 공개 대상이 아니다. 서버가 빼면 화면에도 없다.
   const confirmed = await submitFromPeak(page, "1", "행성 같음");
   await expect(confirmed.getByTestId("next-actions")).not.toContainText(
-    "분석 공개 검토",
+    "공개 내용 검토",
   );
 });
 
@@ -874,7 +876,7 @@ test("discussing opens a draft for this star, not the board list", async ({
   await expect(dialog).toContainText("맞는 신호를 찾지 못했습니다");
   const actions = dialog.getByTestId("next-actions");
   await expect(actions).not.toContainText("별지도로");
-  await actions.getByRole("link", { name: "이 별 이야기 쓰기" }).click();
+  await actions.getByRole("link", { name: "일반 토론 쓰기" }).click();
   // 같은 TIC·DISCUSSION을 들고 글쓰기로 간다. 목록으로 보내지 않는다.
   await expect(page).toHaveURL(/\/posts\/new\?/);
   await expect(page).toHaveURL(new RegExp(`ticId=${NORMAL}`));
@@ -948,4 +950,38 @@ test("a replay a member has never seen still celebrates", async ({ page }) => {
   // 복구로 확인한 결과이고 201이 아니다.
   await expect(dialog).toContainText("이미 접수돼 있던 제출을 확인했습니다");
   await expect(dialog.getByTestId("achievement")).toContainText("축하합니다");
+});
+
+test("the result says what the wireframe says it must say", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+
+  // 성과는 인정 여부만이 아니라 이 별의 누적 건수·등급까지 보여 준다.
+  const achievement = dialog.getByTestId("achievement");
+  await expect(achievement).toContainText("성과로 인정되었습니다");
+  await expect(achievement).toContainText("이 별 성과");
+  await expect(achievement).toContainText("등급");
+
+  // AI는 구간 이름으로 읽고, 성과와 무관하다는 것을 매번 말한다.
+  const ai = dialog.locator(".result-axis").filter({
+    has: page.getByRole("heading", { name: "AI 판정", exact: true }),
+  });
+  await expect(ai).toContainText("승인 구간");
+  await expect(ai).toContainText("인정에는 쓰이지 않습니다");
+
+  // 매칭 뒤 상세는 방금 맞힌 신호가 대상이다. 미매칭 힌트와 이름이 다르다.
+  await expect(
+    dialog.getByRole("button", { name: "이 신호 상세 보기", exact: true }),
+  ).toBeVisible();
+
+  // 집계 시각은 공개 분포에만 붙는다. 채점형 통계에는 명세상 `asOf`가 없다.
+  await page.goto(`/analysis/${NORMAL}`);
+  const open = await submitFromPeak(page, "2", "모르겠음");
+  await expect(
+    open.locator(".result-axis").filter({
+      has: page.getByRole("heading", { name: "다른 사람의 판단", exact: true }),
+    }),
+  ).toContainText("집계 시각");
 });
