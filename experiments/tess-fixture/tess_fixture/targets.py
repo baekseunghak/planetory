@@ -75,7 +75,15 @@ TARGETS: tuple[Target, ...] = (
            (35.61, 7.79)),
 )
 
-TARGETS_BY_KEY: dict[str, Target] = {t.key: t for t in TARGETS}
+# Explicit selection only: default fixture commands retain the original nine.
+HOLDOUT_TARGETS: tuple[Target, ...] = (
+    Target("holdout_268637577", "TIC 268637577", 268637577, "holdout", (3,)),
+    Target("holdout_100102268", "TIC 100102268", 100102268, "holdout", (2, 3)),
+    Target("holdout_219237079", "TIC 219237079", 219237079, "holdout", (3, 4, 5)),
+    Target("holdout_358253008", "TIC 358253008", 358253008, "holdout", (2, 3, 4, 5)),
+)
+ALL_TARGETS = TARGETS + HOLDOUT_TARGETS
+TARGETS_BY_KEY: dict[str, Target] = {t.key: t for t in ALL_TARGETS}
 
 
 def product_filename(tic_id: int, sector: int) -> str:

@@ -11,6 +11,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
@@ -55,6 +56,27 @@ public class HistoryService {
                         view == null ? null : view.foldedXZoomRatio(),
                         new FoldSettings(result.serverDerived().foldReferenceTimeBtjd()),
                         result.serverDerived().centroidDataStatus()), row.previous(), row.relabel(), row.createdAt());
+    }
+
+    public record PublicationBasis(long submissionId, long ticId, long candidateId) {}
+
+    /** 첫 공개 자격은 제출 당시 판정이다. 현재 라벨·후보 목록으로 재판정하지 않는다(F07-Q2). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public PublicationBasis publicationBasis(long member, String historyId) {
+        var row = own(member, id(historyId));
+        var saved = row.submission().path("response_snapshot");
+        if (!saved.isObject()) throw unavailable();
+        if (!publicationEligible(saved)) throw new BusinessException(ErrorCode.PUBLICATION_NOT_ELIGIBLE);
+        long candidate = ExplorationIds.parse(saved.path("match").path("candidateId").asText(), ExplorationIds.CANDIDATE)
+                .orElseThrow(HistoryService::unavailable);
+        if (row.submission().path("user_id").asLong() != member
+                || row.submission().path("tic_id").asLong() != row.tic()) throw unavailable();
+        return new PublicationBasis(row.submissionId(), row.tic(), candidate);
+    }
+
+    private static boolean publicationEligible(JsonNode saved) {
+        return "analysis".equals(saved.path("signal").path("answerClass").asText())
+                && Set.of("matched", "matched_harmonic", "duplicate").contains(saved.path("match").path("status").asText());
     }
 
     public Graph graph(long member, String historyId, String mode) {
@@ -247,7 +269,7 @@ public class HistoryService {
                     progress.currentCurveStep()==null?0:progress.currentCurveStep(),matched.stream().sorted().map(ExplorationIds::candidate).toList(),remaining);
         var selected=candidates.stream().filter(c -> ExplorationIds.candidate(c.id()).equals(first.match().candidateId())).findFirst().orElse(null);
         var disposition=selected==null?null:submissions.disposition(selected.id());
-        boolean eligible=disposition!=null && disposition.answerClass().equals("analysis");
+        boolean eligible=publicationEligible(saved);
         var publication=new SubmissionViews.Publication(row.publication().isPublic()?"PUBLISHED":
                 row.publication().isModerationHidden()?"HIDDEN":eligible?"UNPUBLISHED":"NOT_ELIGIBLE",row.publication().publicAnalysisId());
         return new SubmissionViews.Result(first.submissionId(),first.historyId(),first.requestId(),first.ticId(),first.bundleId(),

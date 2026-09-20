@@ -80,3 +80,16 @@ flux = inj.inject_group(base, [rows[0]])        # 주입 곡선 하나
 - 표본 9개 별·23개 제품은 실험용 고정 입력이며 서비스 데이터 범위(DEC-01)가 아니다.
 - 실제 "무신호 별" 은 아직 포함하지 않았다. 선정 절차는 docs 문서의 TBD 항목을 따른다.
 - 고조파·식쌍성 세트, 관측 조건 스트레스 세트, 사다리꼴 모델은 격자 v1 에 없다(`not_included_yet`).
+
+## 110 독립 평가용 holdout
+
+기본 TARGETS 9별과 별도로 HOLDOUT_TARGETS 4별을 등록한다. 기본 다운로드·주입 대상은 기존 9별을 유지하며 holdout은 명시한 key로만 선택한다. 4별·10제품의 checksum/PROCVER는 checksums.json, Archive 조회 결과는 references.csv에 고정한다. 조회 결과 0행은 빈 기록으로 남기며 무신호의 증거로 해석하지 않는다.
+
+다른 환경에서 원본을 준비할 때 tess-fixture 디렉터리에서 실행한다.
+
+```powershell
+uv sync --python 3.11 --locked
+uv run --locked python -m tess_fixture download --target holdout_268637577 holdout_100102268 holdout_219237079 holdout_358253008
+```
+
+평가에는 저장된 참고값을 그대로 사용한다. `references`를 다시 조회하면 고정 입력이 달라져 holdout lock 검사가 실패한다. 평가의 설정·판정·재실행 정책은 [BLS 벤치마크](../../docs/data/tess-bls-benchmark.md)의 5.3절을 따른다.

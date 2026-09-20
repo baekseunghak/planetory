@@ -258,7 +258,7 @@ if (response.status === 401) {
 {
   "items": [
     {"type":"POST","id":"p-201","ticId":"123456789","title":"밝기 감소에 관한 질문","author":{"memberId":"u-101","nickname":"별찾는사람"},"commentCount":4,"createdAt":"2026-09-09T03:00:00Z"},
-    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
+    {"type":"SIGNAL_THREAD","id":"st-301","ticId":"123456789","title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},"commentCount":8,"judgmentSummary":{"participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3},"createdAt":"2026-09-09T02:00:00Z"}
   ],
   "nextCursor": null,
   "hasNext": false
@@ -289,9 +289,9 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-아직 구현하지 않아 응답이 고정값인 항목이 있다. `attachments`와 `sourceLinks`는 항상 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`다. 실제 값은 반응 F07·History 첨부 F09·출처 카드 F24에서 채우며, 그 전까지 이 값들을 "반응·첨부·출처가 없다"는 사실로 읽지 않는다. `commentCount`는 visible 댓글 수를 반환한다. `TIC_MISMATCH`도 첨부 구현 전까지 발생하지 않는다.
+**첨부 구현(S15P21C206-160):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. 아직 구현하지 않은 `sourceLinks`는 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`이며 실제 출처·반응이 없다는 사실로 해석하지 않는다.
 
-첨부 배열은 작성·수정 모두 비어 있을 때만 받는다. 5.2절의 연결 해제 예제처럼 `historyIds`·`sourceLinks`를 빈 배열로 함께 보내는 요청은 정상 처리하며, 항목이 담긴 요청만 400 `VALIDATION_FAILED`로 거절한다.
+`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
 
 작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
 
@@ -314,11 +314,13 @@ if (response.status === 401) {
 |---|---|---|
 | title, body | 예 | 제목 1~100자·본문 1~10,000자. 공백만 입력 금지, 일반 텍스트 |
 | purposeTag | 예(제안) | 대표 목적. ERD tag: ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL |
-| ticId | 아니오 | 별 연결. null이면 별 없는 일반 글 |
+| ticId | 아니오 | 문자열 별 ID. null이면 별 없는 일반 글 |
 | historyIds | 아니오 | 같은 TIC의 본인 History. 생략 시 빈 목록 |
 | sourceLinks | 아니오 | 같은 TIC의 공개 분석 또는 공식 스레드. type은 PUBLIC_ANALYSIS/SIGNAL_THREAD |
 
 TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC가 없으면 History·출처 카드 목록은 비어야 한다. 일반 본문 URL과 자료 선택 기능은 구분한다. 최초 발견 여부·소유권·상위 공개 상태를 서버에서 검증한다. 일반 글 작성은 공식 분석 공개·성과·판단 통계를 생성하지 않는다.
+
+160부터 작성 요청도 수정과 같은 문자열 타입 검사를 적용한다. `{"ticId":123456789}`처럼 숫자를 보내면 400 `VALIDATION_FAILED`이며 `{"ticId":"123456789"}`로 보내야 한다. 기존 작성 DTO 바인딩의 숫자→문자열 강제 변환은 더 이상 허용하지 않는다. 생략·null의 별 연결 없음 의미는 유지한다.
 
 성공 201 예시:
 
@@ -335,7 +337,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
   "postId":"p-201","title":"이 밝기 감소 구간을 어떻게 보시나요?",
   "body":"반복 간격이 일정한지 의견을 듣고 싶습니다.","purposeTag":"DISCUSSION","ticId":"123456789",
   "author":{"memberId":"u-101","nickname":"별찾는사람"},
-  "attachments":[{"historyId":"h-501","type":"HISTORY"}],
+  "attachments":[{"historyId":"h-501"}],
   "sourceLinks":[{"type":"PUBLIC_ANALYSIS","id":"pa-601","available":true}],
   "reactionSummary":{"agree":3,"disagree":1,"myReaction":"NONE"},
   "commentCount":4,"createdAt":"2026-09-09T03:00:00Z","updatedAt":"2026-09-09T03:00:00Z"
@@ -343,6 +345,8 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 ```
 
 `PATCH /api/v1/posts/p-201`은 변경 필드만 전달한다. 성공 200으로 변경된 상세와 updatedAt을 반환한다. `{"ticId":null,"historyIds":[],"sourceLinks":[]}`는 별과 자료 연결을 함께 해제하는 예다. 별만 변경하고 부적합 첨부를 남기면 400 `TIC_MISMATCH`. 원본 History의 수치·판단을 수정하지 않는다.
+
+History 배열은 생략하면 유지, 전달하면 전체 교체, `[]`면 전체 해제한다. 자료만 PATCH할 수 있으며 본문은 기존 값을 유지한다. 부모 행 잠금 안에서 최신 저장 상태와 요청 필드를 합쳐 검증·저장한다. 글 TIC 변경 시 삭제되지 않은 댓글의 History도 검사하며, 숨긴 댓글을 포함해 다른 TIC 자료가 남으면 400 `TIC_MISMATCH`로 전체 요청을 롤백한다. 다른 작성자의 댓글 자료를 자동 해제하지 않는다.
 
 `DELETE /api/v1/posts/p-201`, 별도 버전 헤더 없이 호출, 성공 204. 댓글·첨부의 일반 공개 접근도 차단하며 독립 공개 분석·성과를 취소하지 않는다. SB-D22에 따라 삭제 후 작성자도 조회할 수 없고 복원은 제공하지 않는다. 본인 소유권을 확인할 수 있는 반복 DELETE는 204다. 공개된 타인 글 수정/삭제는 403이다. 동시 수정은 공통 저장 순서 규칙을 따른다.
 
@@ -352,7 +356,7 @@ TIC가 있으면 posts.board=star, 없으면 free로 서버가 결정한다. TIC
 
 **구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
 
-History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`가 비어 있을 때만 받으며, 응답의 `attachments`와 `sourceLinks`는 항상 빈 배열이다. 항목이 담긴 배열은 400 `VALIDATION_FAILED`다.
+History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`는 F24 구현 전까지 빈 배열만 받으며 응답도 빈 배열이다.
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
@@ -384,9 +388,9 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 }
 ```
 
-부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History와 공개 출처는 F09·F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
+부모·본문 필수, 본문은 1~2,000 Unicode 코드 포인트이며 공백만 입력할 수 없다. 자료 배열 생략 시 빈 목록이다. TIC는 부모에서 결정한다. 같은 TIC의 본인 History를 첨부하며 공개 출처는 F24에서 구현한다. 성공 201은 `{"commentId":"c-801","createdAt":"2026-09-09T03:10:00Z"}`.
 
-`PATCH /api/v1/comments/c-801`은 본문·자료만 수정하며 부모 이동은 제공하지 않는 안이다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
+`PATCH /api/v1/comments/c-801`은 본문·History 자료를 수정하며 부모 이동은 제공하지 않는다. 본문 생략 시 유지하고 자료만 교체·해제할 수 있다. 별도 버전 헤더 없이 호출하며 성공 200으로 변경된 댓글과 updatedAt을 반환한다. `DELETE` 성공은 204. 작성자 소유권과 부모 상태를 검사한다. SB-D22에 따라 부모 비공개 상태에서 수정은 거부하되 본인 댓글 삭제는 허용하며 본문을 응답하지 않는다.
 
 **예외:** 다른 TIC 자료 400, 타인 수정 403, 없는 부모 404, 숨겨진 부모 접근 거부. 댓글 작성과 부모 숨김이 동시에 발생해도 숨겨진 댓글 내용이 공개돼서는 안 된다. 댓글 1~2,000자·공백만 입력 및 첨부만 작성 금지. 삭제 댓글은 목록·댓글 수에서 제외하고 삭제 자리 표시를 남기지 않는다(SB-D22).
 
@@ -415,6 +419,14 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 고유 신호 식별자는 ERD `candidates.id`에 맞춰 `candidateId`로 통일한다(분담 문서 2장 결정, 옛 `signalId` 표기 폐기). 미매칭 기록의 candidateId는 null일 수 있다. 위 예시는 첨부 선택 화면이 쓰는 최소 항목이며, 전체 항목 구조(`submissionKind`·`matchResult`·`curveStep`·`snapshotAvailable`·`relabel` 등)와 날짜·결과 필터·재도전용 원본 조회는 [탐사 API 명세 8.1절](exploration-api-spec.md)이 정의한다. 일반 글 첨부는 가능 여부를 별도로 검사하며, 공식 공개 분석은 미확정 고유 신호 매칭 자격이 필요하다. `achievementGranted`는 현재 공개 여부와 다르다.
 
 ### 7.2 공개 첨부와 출처 카드
+
+**160 구현 범위:** 일반 글과 일반 글·공식 스레드 댓글의 History 참조 저장·교체·해제 및 부모 경로 공개 조회다. 일반 첨부는 공식 분석 공개(161) 자격과 독립적이며 원본 History·스냅샷·공식 공개·성과·통계를 변경하지 않는다. 출처 카드(167)는 별도 구현이다. 댓글 ID는 기존 `c-`를 유지하며 후보의 `c-`와는 부모 종류·API 경로로 구분한다. 접두사 변경은 호출부 전체 계약 조정 시 함께 처리한다.
+
+공개 첨부 GET은 인증이 필요하다. 실제 첨부 관계, 글·댓글·상위 글의 visible 상태, 작성자와 History 소유자 일치, 동일 TIC를 매 조회와 반환 직전에 DB에서 확인한다. 권한 철회·숨김·삭제·첨부 해제는 작성자에게도 404이며 성공 응답은 `Cache-Control: no-store`다. 162의 후속 공통 정책 구현도 이 검사 경계를 유지한다.
+
+쿼리 `includeGraph`는 기본 true다. 그래프 503 발생 시 같은 부모 경로에 `includeGraph=false`로 요청하면 공개 권한을 다시 확인한 판단·근거·메모 등 공개 투영과 `graph:null`을 반환한다. 프론트는 첫 조회 실패에도 이 경로로 내용을 표시하고 그래프 오류·재조회 안내를 유지한다. 메타데이터 조회도 401/403/404이면 내용을 모두 제거하며 이전 응답으로 보충하지 않는다.
+
+부모 응답 외형은 `parentType`, `parentId`와 탐사 8.5 공개 투영을 사용한다. `userJudgment`만 서비스 필드 `judgment`로 매핑하며 no_candidate 기록은 null일 수 있다. `evidenceChecks`, `memo`, `original`, `serverDerived`, `match`, `curveContext`, `versions`, `relabel`을 포함하고 `graph`는 148의 DTO를 그대로 사용한다. `viewState`, `answerViewed`, 요청 식별자·최초 응답·성과 결과 등 개인 전용 필드는 제외한다.
 
 **그래프 조회 계약(SB-D18, 리뷰 반영):** 첨부 조회와 `GET /api/v1/public-analyses/{analysisId}`의 그래프는 분석 화면 곡선 조회·잔차 결과 곡선과 같은 DTO다. **곡선 형식은 탐사 API 명세(강재민 작성 중)에서 한 번만 정의하고 이 절은 그것을 참조한다.** 그 명세가 병합되기 전까지 아래 구조를 합의 기준으로 두며, 이 절에서 별도 배열 형식을 새로 정하지 않는다. `graphMode=CURRENT|SUBMITTED`(생략 시 CURRENT)와 같은 공개 권한 검사는 유지한다.
 
@@ -451,7 +463,7 @@ CURRENT 형식 예시. 가상 데이터이며 nPoints·gaps를 보이는 배열 
   "ticId": "123456789", "bundleId": "b-2",
   "foldReferenceTimeBtjd": 1683.4231,
   "curveContext": {"bundleId":"b-2", "curveStep": 1, "removedCandidateIds": ["c-401"], "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1"},
-  "residual": {"status": "COMPLETED", "jobId": "rj-77"},
+  "residual": {"status": "COMPLETED", "jobId": null},
   "segments": [
     {"segmentId": "seg-1", "sector": 14, "binningRevision": 1, "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 4,
      "flux": [1.0001, 0.9998, null, 1.0003], "fluxScatter": 0.0012, "gaps": [[2, 2]]}
@@ -556,19 +568,33 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
   "analysisId":"pa-601","threadId":"st-301","historyId":"h-501",
   "isPublic":true,"created":true,"achievementGranted":true,"newlyGranted":true,
   "skyVersion":"u-101:58",
-  "achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0},
+  "achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790","position":{"worldX":12.5,"worldY":-7.2,"depthZ":0.3,"layoutVersion":"personal-spiral-v1"}}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0},
   "judgmentSummary":{"participantCount":1,"likelyPlanet":0,"unlikelyPlanet":0,"unsure":1,"asOf":"2026-09-09T03:00:00Z"}
 }
 ```
 
-새 공개 기록 201, 같은 기록 재요청 200 제안. achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
+새 공개 기록은 201, 같은 기록 재요청은 200이다(161 구현). achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
 
 - posts.kind=system_thread, user_id=NULL로 공식 공간을 만든다. threadId는 posts.id, candidateId는 candidates.id다. comments.post_id도 일반/공식 posts를 가리킨다. published_analyses.history_id UNIQUE이며 post_id로 공식 스레드를 참조한다.
 - 세 판단 모두 공개·최초 성과 인정 가능. 이미 성과를 받은 duplicate의 새 제출도 공개 가능하나 추가 성과 없음.
 - 신호별 공개·공식 공간·최초 성과·진행 수·별 발견은 아래 SB-D15의 단일 트랜잭션으로 반영한다. 최초 성과 INSERT마다 stars_per_achievement개(기본 1)를 발견하고 trigger_achievement_id+seq로 중복을 막는다. TIC별 성과 수 1/2/3/4 이상을 A/S/SS/SSS로 표시하며 FP도 상한이 없다. 완료·등급 상승 자체는 발견 트리거가 아니다.
 - 일반 Post·댓글·반응은 자동 생성하지 않는다. 미공개·공개 실패가 개인 기록이나 탐색 완료를 되돌리지 않는다.
-- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환하는 안이다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
-- 다른 사람 History는 접근 거부, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE` 제안. 상위 운영 숨김은 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 전 라벨이 바뀐 옛 기록의 자격은 미정.
+- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환한다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
+- 다른 사람 History는 403 `FORBIDDEN`, 없는 History는 404 `RESOURCE_NOT_FOUND`, 최초 공개 대상 별이 미공개이거나 아직 아무도 발견하지 않았으면 404 `STAR_NOT_PUBLISHED`, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE`이다. 상위 숨김·삭제는 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 자격은 제출 당시 미확정 여부로 판정한다(F07-Q2, 2026-09-20 사용자 확정). 현재 확정/FP로 재분류되거나 후보가 은퇴해도 당시 매칭 신호의 공개·최초 미확정 성과를 허용한다. 새 후보로 자동 이전하지 않으며 기존 성과가 있으면 추가 지급하지 않는다. 당시 판정의 저장 근거가 없으면 현재 라벨로 추측하지 않고 503 `DEPENDENCY_UNAVAILABLE`을 반환한다.
+
+<a id="publication"></a>
+
+**161 구현·후속 인계**
+
+- ID 오류 코드는 입력 위치별로 구분한다. 공개 등록 본문의 잘못된 `historyId` 형식은 400 `VALIDATION_FAILED`, 형식은 유효하나 없는 기록은 404 `RESOURCE_NOT_FOUND`다. 탐사 History 조회 경로의 잘못된 ID는 기존 계약대로 404 `RESOURCE_NOT_FOUND`이며 프론트는 ID만으로 공통 오류 코드를 가정하지 않는다.
+- 기존 공개가 존재하면 성과도 존재한다는 불변식을 전제로 재요청의 `achievementGranted=true`를 반환한다. 공개·성과는 같은 트랜잭션으로 저장하고 162의 취소·재공개·숨김은 성과를 회수하지 않는다. 성과 누락은 데이터 정합성 오류이며 정상적인 미보유(false)로 응답하지 않는다. 성과 회수 기능을 새로 도입한다면 응답 계약과 이 불변식을 함께 재설계한다.
+- 회원 선잠금 규칙은 `AchievementService.recognize`의 Javadoc을 따른다. 호출자는 회원 FK를 쓰기 전에 같은 트랜잭션에서 회원 행을 잠근다. 162에서 쓰기 경로를 추가할 때도 같은 순서를 적용한다.
+- 요청은 문자열 `historyId` 하나만 받는다. 다른 필드·숫자 ID·잘못된 형식은 400이며 작성자·판단·수치를 요청으로 변경할 수 없다. 기존 세션 인증·CSRF 검증을 따른다.
+- `PublicAnalysisService.publish`가 회원 행을 먼저 잠그고 공식 스레드·공개 기록·`AchievementService.recognize`를 같은 트랜잭션으로 확정한다. PostgreSQL 부분 유일 인덱스와 `ON CONFLICT DO NOTHING`으로 첫 스레드 생성 경합을 처리한다.
+- 등록은 그래프를 계산하거나 공개 상세를 조회하지 않는다. 공개 상세의 필드 제한은 탐사 8.5절 투영을 따른다. `judgmentSummary`는 탐사 제출 결과의 **analysis 분기**와 같은 최신 유효 공개 제출 쿼리를 사용한다. 현재 라벨이 확정/FP로 바뀌어도 공개 등록·재요청의 집계는 `kind=public_analyses`와 `participantCount`·세 판단 건수·`percentages`·`asOf` 형식을 유지한다. 탐사 결과·History의 현재 `judgmentStatistics`는 현재 판정에 따라 `kind=graded`와 `matchedMemberCount`·`agreementPercent`로 달라질 수 있으며 집계 원천도 첫 매칭 기준이다. 164 공식 스레드 상세의 `judgmentSummary`는 공개 집계를 사용하고 탐사 현재 통계로 대체하지 않는다.
+- 응답의 `achievement.unlockedStars`는 탐사 6.4절의 `{ticId: string, position}` 형식이다. 재요청은 해당 `analysisId`가 실제 성과 인정 근거인 경우에만 저장된 발견 별을 순번대로 복구한다. 같은 신호의 다른 공개가 만든 별은 포함하지 않는다. `achievement.result`는 이번 신규 인정이면 `recognized`, 기존 성과이면 `already_recognized`다.
+- 162는 취소·재공개 API와 공통 접근 정책, 164는 피드·목록·상세, 165는 집계 공통화·소비 경로 완성, 166은 신호별 독립 트랜잭션의 일괄 호출, 167은 출처 카드를 담당한다. 175 알림·177/178 통계 작업을 공개 트랜잭션에 넣지 않는다.
+- V14는 공개 분석 INSERT와 시퀀스 권한만 추가한다. 160의 V13 병합 후 V13 → V14 순서로 검증·병합하며 V13 파일을 161 브랜치에 복사하지 않는다.
 
 **공개·성과 저장 경계(SB-D15, 사용자 확정)**
 
@@ -588,9 +614,9 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 **공개 후 성과·지도 응답(탐사 D-7·D-9·D-11 통합 검토안)**
 
-개별 공개와 일괄 성공 항목에 탐사 6.4절과 같은 achievement 객체 및 skyVersion을 포함한다. achievement.newlyRecognized는 기존 newlyGranted와 같은 이번 실행의 신규 여부이며 achievementGranted는 현재 보유 여부로 별개다. unlockedStars는 이번 실행에서 새로 열린 별만 담고 star는 현재 TIC 성과 수·등급·유형별 수다. skyVersion은 커밋 이후 회원 지도의 버전이며 새 별이 없어도 현재 버전을 제공한다. 재시도에는 신규 여부 false·unlockedStars 빈 배열로 중복 화면 효과를 막는다.
+개별 공개와 일괄 성공 항목에 탐사 6.4절과 같은 achievement 객체 및 skyVersion을 포함한다. achievement.newlyRecognized는 기존 newlyGranted와 같은 이번 실행의 신규 여부이며 achievementGranted는 현재 보유 여부로 별개다. unlockedStars는 최초 요청에는 새로 열린 별, 재요청에는 해당 공개가 실제로 연 별을 담고 star는 현재 TIC 성과 수·등급·유형별 수다. skyVersion은 응답 트랜잭션에서 읽은 현재 회원 지도 버전이며 새 별이 없어도 제공한다. 지도 버전의 정본은 최상위 skyVersion이고 별 원소에는 skyVersion·layoutOrdinal을 노출하지 않는다. 재요청의 newlyGranted·newlyRecognized는 false를 유지하지만 HTTP 200이나 이 값만으로 이미 표시했다고 간주하지 않는다. 프론트는 회원·analysisId별 표시 이력으로 성과·별 연출의 중복을 막는다(응답 유실 복구 정책, 2026-09-20 사용자 확정). achievementGranted로 성과 보유를 안내하며 복구한 unlockedStars로 미표시 별 연출을 제공한다. 재요청의 unlockShortfall=0은 이번 실행에서 추가 지급을 시도하지 않았다는 뜻이며 최초 지급 당시 부족 수의 복원값이 아니다.
 
-9.2절 내부 지급 함수의 newlyRecognized·unlockedStars를 그대로 받고, star는 같은 트랜잭션의 현재 진행·성과 집합, skyVersion은 탐사 지도 갱신 계약에서 가져온다. 회원 데이터는 서버에서 결정한다. 예시 unlockedStars는 TIC만 축약했으며 전체 항목은 탐사 반환 DTO를 따른다. 함수 시그니처 자체에 없는 필드를 단순 반환한다고 가정하지 않는다. 실패 항목에는 존재 여부를 확인하지 못한 성과·지도 값을 만들어 넣지 않는다. 공개 ID는 서비스 응답에서 analysisId, 탐사 publication에서는 publicAnalysisId로 명시적으로 매핑한다.
+최초 요청은 9.2절 내부 지급 함수의 newlyRecognized를 받고 unlockedStars를 탐사 6.4절 HTTP DTO로 변환한다. 재요청은 user_candidate_achievements.recognized_analysis_id와 star_unlocks.trigger_achievement_id로 저장된 별·좌표를 조회하며 성과·별을 다시 지급하지 않는다. 취소·숨김된 공개도 성과 보존 정책에 따라 복구하되 isPublic=false를 유지한다. star는 같은 트랜잭션의 현재 진행·성과 집합, skyVersion은 탐사 지도 갱신 계약에서 가져온다. 회원 데이터는 서버에서 결정한다. unlockedStars의 전체 항목은 탐사 6.4절 UnlockedStar(String ticId, StarPosition position)를 따른다. 함수 시그니처 자체에 없는 필드를 단순 반환한다고 가정하지 않는다. 실패 항목에는 존재 여부를 확인하지 못한 성과·지도 값을 만들어 넣지 않는다. 공개 ID는 서비스 응답에서 analysisId, 탐사 publication에서는 publicAnalysisId로 명시적으로 매핑한다.
 
 일괄 요청의 항목별 skyVersion은 각 신호 커밋 시점이며 프론트는 전체 처리 후 지도 메타를 다시 조회한다. 서로 다른 항목의 버전·성공 배열을 하나의 고정 스냅샷으로 가정하지 않는다. 잠금 순서는 공통 탐사 함수와 동일하게 정하고, 문서의 업무 처리 순서를 별도 잠금 획득 순서로 구현하지 않는다.
 
@@ -601,7 +627,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 ```json
 {
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
-  "title":"TIC 123456789 신호 s-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
+  "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
   "judgmentSummary":{
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
@@ -652,7 +678,7 @@ TIC 종료 화면에서 신호별 대표 기록(기본 최신 미공개 제출)�
 ```json
 {
   "results":[
-    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790"}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
+    {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790","position":{"worldX":12.5,"worldY":-7.2,"depthZ":0.3,"layoutVersion":"personal-spiral-v1"}}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
     {"historyId":"h-502","status":"FAILED","error":{"code":"DEPENDENCY_UNAVAILABLE","message":"분석 자료를 잠시 불러올 수 없습니다."},"retryable":true}
   ]
 }

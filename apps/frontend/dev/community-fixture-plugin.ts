@@ -352,6 +352,7 @@ export function communityFixturePlugin({
               ? Array.from({ length: 24 }, (_, i) => ({
                   historyId: "h-" + (501 + i),
                   ticId: "259377017",
+                  submissionKind: "candidate",
                   userJudgment: "UNSURE",
                   submittedAt: date,
                   publication: {
@@ -437,7 +438,7 @@ export function communityFixturePlugin({
             judgment: "UNSURE",
             evidenceChecks: ["ushape"],
             memo: "213 합성 첨부 메모",
-            graph: {
+            graph: url.searchParams.get("includeGraph") === "false" ? null : {
               historyId,
               reproduction: {
                 submittedBundleId: "b-1",

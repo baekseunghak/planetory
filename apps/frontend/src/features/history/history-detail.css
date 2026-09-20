@@ -1,0 +1,74 @@
+/* #190 기록 상세. 불변과 현재를 두 칸으로 갈라 둔다. */
+.history-detail .history-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 20px;
+  font-size: 12px;
+}
+.history-detail .history-receipt dt {
+  color: var(--fg-3);
+}
+.history-detail .history-receipt dd {
+  margin: 0 8px 0 4px;
+}
+.history-detail .history-graph-band {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-line);
+}
+.history-detail .history-modes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.history-detail .history-modes button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.history-detail .history-bands {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 24px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-line);
+}
+.history-detail .history-band h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-3);
+}
+.history-detail .history-band p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.history-detail .history-band dl {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 6px 16px;
+  margin: 8px 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.history-detail .history-band dt {
+  color: var(--fg-3);
+}
+.history-detail .history-band dd {
+  margin: 0;
+}
+.history-detail .history-relabel {
+  color: var(--fg-2);
+}
+.history-detail .history-id {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.history-detail .history-back {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-line);
+  font-size: 13px;
+}

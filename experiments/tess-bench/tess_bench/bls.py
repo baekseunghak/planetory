@@ -37,7 +37,18 @@ class BlsSetting:
     peak_separation_rel: float = 0.02         # 상위 피크를 '다른 피크' 로 볼 최소 상대 주기 간격
 
     def params(self) -> dict:
-        return {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items() if k in SETTING_FIELDS}
+        """manifest 에 기록하는 값. `durations_hours` 는 실제 실행에 쓰인 값(period_min 미만 필터 뒤)이고,
+        설정 파일 원문은 `durations_hours_configured` 로 따로 남긴다 (MR !59 리뷰 F1: 이름·manifest 가 필터 전 점 수를 적었다)."""
+        out = {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(self).items() if k in SETTING_FIELDS}
+        out["durations_hours_configured"] = list(self.durations_hours)
+        out["durations_hours"] = [float(d) for d in self.effective_durations_hours]
+        out["n_durations"] = len(out["durations_hours"])
+        return out
+
+    @property
+    def effective_durations_hours(self) -> tuple[float, ...]:
+        """`run_bls` 가 실제로 쓰는 duration: period_min 보다 짧은 값만 (astropy 제약)."""
+        return tuple(d for d in self.durations_hours if d / 24.0 < self.period_min_days)
 
     @property
     def durations_days(self) -> np.ndarray:
@@ -193,8 +204,7 @@ def run_bls(t: np.ndarray, f: np.ndarray, setting: BlsSetting, *, baseline_time:
     bls = BoxLeastSquares(t, f, dy=scatter)
     started = time.perf_counter()
     periods = period_grid(setting, t, bls)
-    durations = setting.durations_days
-    durations = durations[durations < setting.period_min_days]
+    durations = np.asarray(setting.effective_durations_hours, dtype=float) / 24.0
     if durations.size == 0:
         raise ValueError(f"{setting.setting_id}: no duration shorter than period_min {setting.period_min_days} d")
     res = bls.power(periods, durations, objective=setting.objective, oversample=setting.oversample)

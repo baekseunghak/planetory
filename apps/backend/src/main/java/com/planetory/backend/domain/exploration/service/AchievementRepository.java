@@ -93,6 +93,20 @@ public class AchievementRepository {
                 .params(memberId, candidateId).query(Long.class).single();
     }
 
+    /** 이 공개가 실제 성과 인정 근거인 경우에만 저장된 별을 복구한다. */
+    List<SubmissionViews.UnlockedStar> findPublicationStars(long memberId, long analysisId) {
+        return jdbc.sql("""
+                SELECT u.tic_id, u.world_x, u.world_y, u.depth_z, u.layout_version
+                FROM user_candidate_achievements a
+                JOIN star_unlocks u ON u.trigger_achievement_id = a.id AND u.user_id = a.user_id
+                WHERE a.user_id = ? AND a.recognized_analysis_id = ?
+                ORDER BY u.seq
+                """).params(memberId, analysisId).query((r, n) -> new SubmissionViews.UnlockedStar(
+                        Long.toString(r.getLong("tic_id")), new GalaxyLayout.StarPosition(
+                        r.getDouble("world_x"), r.getDouble("world_y"), r.getDouble("depth_z"),
+                        r.getString("layout_version")))).list();
+    }
+
     /** 성과 수를 올리고 FP 성과면 이력 값을 켠다(9.2절 3단계). 한 번 켠 {@code fp_success}는 끄지 않는다. */
     void countAchievement(long memberId, long ticId, boolean fp) {
         int updated = jdbc.sql("""
