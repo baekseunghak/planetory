@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다."),
+    TIC_MISMATCH(HttpStatus.BAD_REQUEST, "게시글과 같은 별의 자료만 첨부할 수 있습니다."),
     NICKNAME_CONFLICT(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),

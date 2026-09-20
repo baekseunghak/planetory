@@ -97,6 +97,10 @@ docker compose --profile service up -d --build backend
 - 사용자·별·운영 설정값을 자동으로 넣지 않는다. P1 테이블 생성이 P1 API 구현을 의미하지 않는다.
 - FK 삭제 전파는 지정하지 않았다(NO ACTION). 탈퇴 처리 정책을 임의로 확정하지 않는다.
 
+### V13 History 첨부 앱 권한
+
+160은 V1의 `post_history_attachments`·`comment_history_attachments`를 재사용한다. `V13__history_attachment_app_grants.sql`이 앱 역할에 SELECT·INSERT·DELETE와 identity 시퀀스 USAGE·SELECT를 부여한다. UPDATE·TRUNCATE와 History 원본 변경 권한은 허용하지 않는다. 소유자·동일 TIC·개수 검사는 서비스 트랜잭션이 담당한다. 기존 V1~V12는 수정하지 않으며 실행 환경에 적용할 때 Flyway 소유자 역할로 V13을 실행한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다.
+
 ### V4 ERD v1.2 반영
 
 파일: `V4__apply_erd_v1_2_star_coordinates_and_peak_source.sql`. V1 이후 ERD에서 바뀐 열 두 묶음을 반영한다.
