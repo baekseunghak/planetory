@@ -2,6 +2,7 @@ import type { Plugin } from "vite";
 import { resolve } from "node:path";
 import { observationFixtureResponse } from "./observation-fixtures.ts";
 import { periodogramFixtureResponse } from "./periodogram-fixtures.ts";
+import { historyFixtureResponse } from "./history-fixtures.ts";
 import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
@@ -59,6 +60,14 @@ export function fixturePlugin(observations = false): Plugin {
           );
           return;
         }
+        // #190 기록 상세·그래프. 읽기만 하므로 본문을 받지 않는다.
+        const history = historyFixtureResponse(url.pathname, url.searchParams);
+        if (req.method === "GET" && history) {
+          res.statusCode = history.status;
+          res.end(JSON.stringify(history.body));
+          return;
+        }
+
         // 7.1·7.2절 잔차 작업. 제출과 달리 요청 ID가 없고 목표 문맥이
         // 멱등 단위다. 같은 목표를 다시 보내면 같은 작업이나 캐시가 온다.
         {
