@@ -23,6 +23,27 @@ function Matched({
   explanation: ResultExplanation;
 }) {
   const { correction, submitted } = explanation;
+  /*
+    내 입력과 정정값을 함께 둔다. 어느 쪽이 내 것인지 분명해야 한다.
+    **없는 값을 0으로 바꾸지 않는다.** 있을 때만 줄을 만든다.
+  */
+  const pairs = (
+    <dl className="result-pairs">
+      {submitted?.periodDays != null && (
+        <>
+          <dt>내가 고른 주기</dt>
+          {/* 나눠서 되돌리지 않고 서버가 보존한 원본을 쓴다. */}
+          <dd>{decimal.format(submitted.periodDays)}일</dd>
+        </>
+      )}
+      {correction?.correctedPeriodDays != null && (
+        <>
+          <dt>신호의 주기</dt>
+          <dd>{decimal.format(correction.correctedPeriodDays)}일</dd>
+        </>
+      )}
+    </dl>
+  );
   switch (receipt.matchStatus) {
     case "matched":
       return <p>고른 주기가 신호와 맞았습니다.</p>;
@@ -33,18 +54,23 @@ function Matched({
             고른 주기의 {decimal.format(correction?.multiplier ?? 1)}배가 신호와
             맞았습니다.
           </p>
-          {/* 내 입력과 정정값을 함께 둔다. 어느 쪽이 내 것인지 분명해야 한다. */}
-          <dl className="result-pairs">
-            <dt>내가 고른 주기</dt>
-            {/* 나눠서 되돌리지 않고 서버가 보존한 원본을 쓴다. */}
-            <dd>{decimal.format(submitted?.periodDays ?? 0)}일</dd>
-            <dt>신호의 주기</dt>
-            <dd>{decimal.format(correction?.correctedPeriodDays ?? 0)}일</dd>
-          </dl>
+          {pairs}
         </>
       );
     case "duplicate":
-      return <p>이미 찾은 신호입니다.</p>;
+      // 배수로 맞힌 신호를 다시 맞히면 정정값도 그대로 온다. 서버가 보낸
+      // 정정을 화면에서 지우면 내가 낸 주기가 틀렸던 것처럼 보인다.
+      return correction === null ? (
+        <p>이미 찾은 신호입니다.</p>
+      ) : (
+        <>
+          <p>
+            이미 찾은 신호입니다. 고른 주기의{" "}
+            {decimal.format(correction.multiplier)}배가 맞았습니다.
+          </p>
+          {pairs}
+        </>
+      );
     case "not_matched":
       return <p>맞는 신호를 찾지 못했습니다.</p>;
     case "ambiguous_match":
@@ -295,20 +321,37 @@ export function ResultExplanationView({
 
       {statistics && <Statistics value={statistics} stale={staleBundle} />}
 
-      {explanation.serverDerived && (
-        <section className="result-axis">
-          <h5>서버가 계산한 값</h5>
-          {/* 제출값 확인의 미리보기가 아니라 서버 산정값이다. */}
-          <dl className="result-pairs">
-            <dt>기준 시각</dt>
-            <dd>{decimal.format(explanation.serverDerived.epochBtjd)} BTJD</dd>
-            <dt>가려진 시간</dt>
-            <dd>
-              {decimal.format(explanation.serverDerived.durationHours)} 시간
-            </dd>
-          </dl>
-        </section>
-      )}
+      {/*
+        특수 제출에는 고른 것이 없어 계산값도 없다. 서버는 객체를 두고 안쪽을
+        비우므로, 객체가 있다고 줄을 만들지 않고 값이 있을 때만 만든다.
+      */}
+      {explanation.serverDerived &&
+        (explanation.serverDerived.epochBtjd != null ||
+          explanation.serverDerived.durationHours != null) && (
+          <section className="result-axis">
+            <h5>서버가 계산한 값</h5>
+            {/* 제출값 확인의 미리보기가 아니라 서버 산정값이다. */}
+            <dl className="result-pairs">
+              {explanation.serverDerived.epochBtjd != null && (
+                <>
+                  <dt>기준 시각</dt>
+                  <dd>
+                    {decimal.format(explanation.serverDerived.epochBtjd)} BTJD
+                  </dd>
+                </>
+              )}
+              {explanation.serverDerived.durationHours != null && (
+                <>
+                  <dt>가려진 시간</dt>
+                  <dd>
+                    {decimal.format(explanation.serverDerived.durationHours)}{" "}
+                    시간
+                  </dd>
+                </>
+              )}
+            </dl>
+          </section>
+        )}
     </div>
   );
 }

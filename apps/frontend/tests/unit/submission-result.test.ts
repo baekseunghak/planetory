@@ -284,3 +284,94 @@ test("only the ids of newly opened stars are taken", () => {
   assert.deepEqual(value.unlockedTicIds, ["259377031", "259377032"]);
   assert.equal(value.star.grade, "S");
 });
+
+// 아래 세 검사는 **실제 서버가 보내는 모양**을 그대로 넣는다. fixture끼리
+// 맞추면 서로 맞다고만 확인하게 되어, 서버가 null을 보내는 칸을 놓친다.
+
+test("a column the schema does not have yet stays empty, not zero", () => {
+  // Gold 스키마에 열이 없어 SubmissionRepository가 bls.sde/snr에 null을 넣는다.
+  const bls = read({
+    signal: signal({ bls: { ...signal().bls, sde: null, snr: null } }),
+  }).signal!.bls;
+  assert.equal(bls.sde, null, "없는 자료를 0으로 바꾸면 SDE 0이라는 뜻이 된다");
+  assert.equal(bls.snr, null);
+  // 나머지 칸은 그대로 읽는다.
+  assert.equal(bls.depthPpm, 380);
+  // 숫자가 아닌 값은 여전히 거절한다.
+  assert.throws(
+    () => read({ signal: signal({ bls: { ...signal().bls, sde: "9.1" } }) }),
+    /signal.bls.sde/,
+  );
+});
+
+test("a special submission sends the boxes with the inside empty", () => {
+  // 고른 것이 없는 제출(후보 없음·건너뛰기)에도 서버는 original/serverDerived
+  // 객체를 보내고 안쪽만 비운다(SubmissionService의 Original·Derived 생성).
+  const value = readResultExplanation(
+    {
+      ...bare,
+      original: {
+        periodDays: null,
+        sourcePeakGridIndex: null,
+        phaseStart: null,
+        phaseEnd: null,
+        userJudgment: null,
+        evidenceChecks: [],
+        memo: "",
+        viewState: null,
+      },
+      serverDerived: {
+        foldReferenceTimeBtjd: 1683.35,
+        epochBtjd: null,
+        durationHours: null,
+        phaseCenter: null,
+        sourcePeakSuggestedDurationHours: null,
+        durationLimitHours: null,
+        centroidDataStatus: "unavailable",
+      },
+    },
+    "not_matched",
+  );
+  assert.equal(value.submitted?.periodDays, null);
+  assert.equal(value.submitted?.phaseStart, null);
+  assert.equal(value.serverDerived?.epochBtjd, null);
+  assert.equal(value.serverDerived?.durationHours, null);
+  // 판의 값이라 접기 기준 시각은 특수 제출에도 온다.
+  assert.equal(value.serverDerived?.foldReferenceTimeBtjd, 1683.35);
+});
+
+test("a duplicate keeps the correction it was found with", () => {
+  // 이미 찾은 신호를 다시 맞힌 결과다. 서버는 상태만 duplicate로 바꾸고
+  // 후보와 정정값은 그대로 들고 온다.
+  const value = readResultExplanation(
+    body({
+      match: {
+        status: "duplicate",
+        candidateId: "c-402",
+        harmonicMultiplier: 2,
+        correctedPeriodDays: 3,
+        correctionReason: "P/2 alias",
+      },
+    }),
+    "duplicate",
+  );
+  assert.equal(value.correction?.multiplier, 2);
+  assert.equal(value.correction?.correctedPeriodDays, 3);
+  assert.equal(value.signal?.candidateId, "c-402");
+  // 매칭하지 못한 결과에 배수가 오면 그때는 여전히 어긋난 응답이다.
+  assert.throws(
+    () =>
+      readResultExplanation(
+        {
+          ...bare,
+          match: {
+            status: "not_matched",
+            candidateId: null,
+            harmonicMultiplier: 2,
+          },
+        },
+        "not_matched",
+      ),
+    /match.harmonicMultiplier/,
+  );
+});

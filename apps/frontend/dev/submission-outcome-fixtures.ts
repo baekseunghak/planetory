@@ -178,8 +178,8 @@ export function candidateOutcome(input: OutcomeInput) {
         epochBtjd: 1743.35,
         durationHours: 2.4,
         depthPpm: 8000,
-        sde: 12.5,
-        snr: 18.2,
+        sde: null,
+        snr: null,
       },
       // 실행 불가를 0점으로 바꾸지 않는다. status만 두고 score를 넣지 않는다.
       ai: { ...signal.ai, modelVersion: "astronet-triage-fixture-188" },
@@ -330,8 +330,8 @@ export function detailOutcome(stored: {
         epochBtjd: 1743.35,
         durationHours: 2.4,
         depthPpm: 8000,
-        sde: 12.5,
-        snr: 18.2,
+        sde: null,
+        snr: null,
       },
       ai: { ...signal.ai, modelVersion: "astronet-triage-fixture-188" },
       external: signal.external.map((item) => ({

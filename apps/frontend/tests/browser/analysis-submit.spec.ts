@@ -858,6 +858,55 @@ test("an already-found signal is shown without taking the achievement twice", as
   await expect(dialog).not.toContainText("새로 열린 별");
 });
 
+test("a duplicate of a harmonic match keeps the correction it came with", async ({
+  page,
+}) => {
+  // 배수로 맞힌 신호를 다시 맞힌 경우다. 서버는 상태만 duplicate로 바꾸고
+  // 후보와 정정값은 그대로 보낸다(SubmissionMatching.markDuplicate).
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    return route.continue({
+      headers: {
+        ...route.request().headers(),
+        "x-fixture-outcome": "duplicate",
+      },
+    });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "2", "행성 같음");
+  await expect(dialog).toContainText("이미 찾은 신호입니다");
+  // 정정을 지우면 내가 낸 주기가 틀렸던 것처럼 보인다.
+  await expect(dialog).toContainText("2배가 맞았습니다");
+  await expect(dialog).toContainText("내가 고른 주기");
+  await expect(dialog).toContainText("신호의 주기");
+  // 성과는 그래도 다시 주지 않는다.
+  await expect(dialog).toContainText(
+    "이미 인정된 신호라 다시 인정되지 않습니다",
+  );
+});
+
+test("values the server does not have are left out, not drawn as zero", async ({
+  page,
+}) => {
+  // 고른 것이 없는 제출에는 원본도 계산값도 안쪽이 비어 온다. 빈 칸을
+  // 0으로 바꾸면 주기 0일·길이 0시간이라는 뜻이 된다(RES-04와 같은 이유).
+  await page.goto(`/analysis/${NORMAL}`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("더 이상 없음으로 접수했습니다");
+  await expect(dialog).not.toContainText("0일");
+  await expect(dialog).not.toContainText("0시간");
+  await expect(dialog).not.toContainText("0 ppm");
+});
+
 test("discussing opens a draft for this star, not the board list", async ({
   page,
 }) => {

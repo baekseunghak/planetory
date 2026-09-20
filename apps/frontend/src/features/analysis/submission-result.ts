@@ -49,8 +49,9 @@ export type SubmissionSignal = {
     epochBtjd: number;
     durationHours: number;
     depthPpm: number;
-    sde: number;
-    snr: number;
+    /** Gold 스키마에 열이 없어 **null로 온다.** 0이 아니라 자료가 없는 것이다. */
+    sde: number | null;
+    snr: number | null;
   };
   /**
    * 실행하지 못했으면 `score`·`verdict`가 **없다.** 0으로 바꾸지 않는다
@@ -81,9 +82,10 @@ export type HarmonicCorrection = {
 
 /** 서버가 산정한 값. 제출값 확인의 미리보기와 다를 수 있다. */
 export type ServerDerived = {
-  epochBtjd: number;
-  durationHours: number;
-  phaseCenter: number;
+  /** 고른 것이 없으면 계산할 것도 없다. 특수 제출에서는 null이다. */
+  epochBtjd: number | null;
+  durationHours: number | null;
+  phaseCenter: number | null;
   foldReferenceTimeBtjd: number;
   /** 봉우리에서 시작하지 않았으면 없다. */
   sourcePeakSuggestedDurationHours: number | null;
@@ -128,9 +130,13 @@ export type JudgmentStatistics =
 
 /** 내가 낸 값. 복구·재현으로 받은 결과에는 화면의 초안이 없을 수 있다. */
 export type SubmittedSelection = {
-  periodDays: number;
-  phaseStart: number;
-  phaseEnd: number;
+  /**
+   * 특수 제출(`no_candidate`·`skipped`)은 고른 것이 없어 **null**이다.
+   * 서버는 객체를 두고 안쪽만 비운다.
+   */
+  periodDays: number | null;
+  phaseStart: number | null;
+  phaseEnd: number | null;
   sourcePeakGridIndex: number | null;
 };
 
@@ -192,6 +198,9 @@ const MATCHED: readonly MatchStatus[] = [
   "duplicate",
 ];
 
+/** 정정값을 들고 올 수 있는 상태. 평범한 `matched`에는 오지 않는다. */
+const CORRECTABLE: readonly MatchStatus[] = ["matched_harmonic", "duplicate"];
+
 function readSignal(value: unknown): SubmissionSignal {
   const data = record(value, "signal");
   const bls = record(data.bls, "signal.bls");
@@ -217,8 +226,10 @@ function readSignal(value: unknown): SubmissionSignal {
       epochBtjd: number(bls.epochBtjd, "signal.bls.epochBtjd"),
       durationHours: number(bls.durationHours, "signal.bls.durationHours"),
       depthPpm: number(bls.depthPpm, "signal.bls.depthPpm"),
-      sde: number(bls.sde, "signal.bls.sde"),
-      snr: number(bls.snr, "signal.bls.snr"),
+      // Gold 스키마에 아직 열이 없어 서버가 null을 보낸다. **0으로 바꾸지
+      // 않는다.** 자료가 없는 것과 0은 다르다(RES-04와 같은 이유).
+      sde: nullable(bls.sde, (item) => number(item, "signal.bls.sde")),
+      snr: nullable(bls.snr, (item) => number(item, "signal.bls.snr")),
     },
     ai: {
       status,
@@ -304,8 +315,12 @@ export function readResultExplanation(
   const multiplier = nullable(match.harmonicMultiplier, (item) =>
     number(item, "match.harmonicMultiplier"),
   );
-  // 배수 정정은 고조파 매칭에만 있다.
-  if ((matchStatus === "matched_harmonic") !== (multiplier !== null))
+  // 배수 정정은 `matched_harmonic`과, 그것을 다시 맞힌 `duplicate`에만 온다
+  // (SubmissionMatching.markDuplicate가 후보와 정정값을 그대로 남긴다).
+  // 그 밖의 상태에 배수가 오면 어긋난 응답이다.
+  if (multiplier !== null && !CORRECTABLE.includes(matchStatus))
+    invalid("match.harmonicMultiplier");
+  if (matchStatus === "matched_harmonic" && multiplier === null)
     invalid("match.harmonicMultiplier");
 
   const achievement = record(data.achievement, "achievement");
@@ -324,9 +339,17 @@ export function readResultExplanation(
     submitted: nullable(data.original, (item) => {
       const row = record(item, "original");
       return {
-        periodDays: number(row.periodDays, "original.periodDays"),
-        phaseStart: number(row.phaseStart, "original.phaseStart"),
-        phaseEnd: number(row.phaseEnd, "original.phaseEnd"),
+        // 특수 제출(`no_candidate`·`skipped`)은 고른 것이 없다. 서버는
+        // 객체를 두고 **안쪽을 null로** 보낸다. 해당 없음이지 오류가 아니다.
+        periodDays: nullable(row.periodDays, (value) =>
+          number(value, "original.periodDays"),
+        ),
+        phaseStart: nullable(row.phaseStart, (value) =>
+          number(value, "original.phaseStart"),
+        ),
+        phaseEnd: nullable(row.phaseEnd, (value) =>
+          number(value, "original.phaseEnd"),
+        ),
         sourcePeakGridIndex: nullable(row.sourcePeakGridIndex, (value) =>
           number(value, "original.sourcePeakGridIndex"),
         ),
@@ -349,9 +372,17 @@ export function readResultExplanation(
     serverDerived: nullable(data.serverDerived, (item) => {
       const row = record(item, "serverDerived");
       return {
-        epochBtjd: number(row.epochBtjd, "serverDerived.epochBtjd"),
-        durationHours: number(row.durationHours, "serverDerived.durationHours"),
-        phaseCenter: number(row.phaseCenter, "serverDerived.phaseCenter"),
+        // 같은 이유로 계산값도 안쪽이 null일 수 있다. 접기 기준 시각만은
+        // 판의 값이라 특수 제출에도 온다.
+        epochBtjd: nullable(row.epochBtjd, (value) =>
+          number(value, "serverDerived.epochBtjd"),
+        ),
+        durationHours: nullable(row.durationHours, (value) =>
+          number(value, "serverDerived.durationHours"),
+        ),
+        phaseCenter: nullable(row.phaseCenter, (value) =>
+          number(value, "serverDerived.phaseCenter"),
+        ),
         foldReferenceTimeBtjd: number(
           row.foldReferenceTimeBtjd,
           "serverDerived.foldReferenceTimeBtjd",

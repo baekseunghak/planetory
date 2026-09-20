@@ -255,18 +255,21 @@ function buildResult(
   const start = finite(selection?.phaseStart) ? selection!.phaseStart : 0;
   const end = finite(selection?.phaseEnd) ? selection!.phaseEnd : 0;
   const center = (start + end) / 2;
-  const derived = selection
-    ? {
-        foldReferenceTimeBtjd: reference,
-        phaseCenter: center - Math.floor(center),
-        epochBtjd: reference + (center - Math.floor(center)) * period,
-        durationHours: (end - start) * period * 24,
-        sourcePeakSuggestedDurationHours:
-          selection.sourcePeakGridIndex === null ? null : 2,
-        durationLimitHours: selection.sourcePeakGridIndex === null ? null : 6,
-        centroidDataStatus: "unavailable",
-      }
-    : null;
+  // 특수 제출에도 **객체는 보낸다.** 실제 서버가 그렇게 한다
+  // (SubmissionService의 `Derived` 생성). 고른 것이 없으면 안쪽만 비운다.
+  const derived = {
+    foldReferenceTimeBtjd: reference,
+    phaseCenter: selection ? center - Math.floor(center) : null,
+    epochBtjd: selection
+      ? reference + (center - Math.floor(center)) * period
+      : null,
+    durationHours: selection ? (end - start) * period * 24 : null,
+    sourcePeakSuggestedDurationHours:
+      selection && selection.sourcePeakGridIndex !== null ? 2 : null,
+    durationLimitHours:
+      selection && selection.sourcePeakGridIndex !== null ? 6 : null,
+    centroidDataStatus: "unavailable",
+  };
   // 후보 제출의 여섯 축은 조합표가 채운다. 특수 제출은 6.5절이 정한 값뿐이다.
   const composed =
     kind === "candidate" && selection
@@ -299,22 +302,28 @@ function buildResult(
     submittedAt: "2026-09-19T02:30:00Z",
     submissionKind: kind,
     curveContext: body.curveContext,
-    original: selection
-      ? {
-          ...selection,
-          userJudgment: body.userJudgment,
-          evidenceChecks: body.evidenceChecks ?? [],
-          memo: body.memo ?? "",
-          viewState: body.viewState ?? null,
-        }
-      : null,
+    // 같은 이유로 원본도 객체를 보내고 고르지 않은 값만 null로 둔다.
+    original: {
+      periodDays: selection ? selection.periodDays : null,
+      sourcePeakGridIndex: selection ? selection.sourcePeakGridIndex : null,
+      phaseStart: selection ? selection.phaseStart : null,
+      phaseEnd: selection ? selection.phaseEnd : null,
+      userJudgment: body.userJudgment ?? null,
+      evidenceChecks: body.evidenceChecks ?? [],
+      memo: body.memo ?? "",
+      viewState: body.viewState ?? null,
+    },
     serverDerived: derived,
     match: composed
       ? composed.match
       : { status: matchStatus, candidateId: null },
     // 매칭 성공에만 신호가 있다(AT-14·75). 특수 제출은 후보를 고르지 않는다.
     signal: composed ? composed.signal : null,
-    judgment: composed ? composed.judgment : null,
+    // 판단도 상자는 온다. 특수 제출은 고른 판단이 없어 value만 비고
+    // 채점 대상이 아니라 NOT_APPLICABLE이다(SubmissionService의 Judgment).
+    judgment: composed
+      ? composed.judgment
+      : { value: null, evaluation: "NOT_APPLICABLE" },
     skyVersion: "u-187:1",
     // ERD achievement_result CHECK 그대로. 특수 제출은 성과 판정 자체가 없다.
     achievement: composed
