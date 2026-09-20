@@ -164,7 +164,7 @@ public class HistoryService {
                     context,state,AnalysisService.FLUX_UNIT,segments);
         }
         return new Graph(row.historyId(),new Reproduction(ExplorationIds.bundle(row.bundle()),ExplorationIds.bundle(current.id()),
-                row.bundle()!=current.id(),fallback==null,fallback,current.foldReferenceTimeBtjd()),selection(row,current),curve,snapshot,
+                row.bundle()!=current.id(),fallback==null,fallback,current.foldReferenceTimeBtjd()),selection(row,current,mode),curve,snapshot,
                 text(row.versions(),"snapshotVersion"));
     }
 
@@ -190,11 +190,11 @@ public class HistoryService {
         }
         return values;
     }
-    private static Selection selection(HistoryRepository.Row row, Bundle bundle) {
+    private static Selection selection(HistoryRepository.Row row, Bundle bundle, String mode) {
         var s = row.submission();
         Double period=number(s,"submitted_period"), epoch=number(s,"epoch_btjd"), duration=number(s,"duration_hours");
         Double start=null,end=null;
-        if (period!=null && epoch!=null && duration!=null) {
+        if (mode.equals("CURRENT") && period!=null && epoch!=null && duration!=null) {
             double center=(epoch-bundle.foldReferenceTimeBtjd())/period;
             center-=Math.floor(center);
             double width=duration/24/period;
@@ -221,7 +221,7 @@ public class HistoryService {
         return new Item(row.historyId(),ExplorationIds.submission(row.submissionId()),Long.toString(row.tic()),candidate(s),
                 text(s,"submission_kind"),text(s,"match_result"),text(s,"user_judgment"),text(s,"achievement_result"),
                 row.submittedAt(),ExplorationIds.bundle(row.bundle()),row.previous(),s.path("curve_step").asInt(),row.publication(),
-                row.granted(),row.snapshotAvailable(),s.path("answer_viewed").asBoolean(),row.relabel(),
+                row.granted(),row.snapshotAvailable(),row.detailAvailable(),s.path("answer_viewed").asBoolean(),row.relabel(),
                 s.path("retry_of_submission_id").isNumber()?ExplorationIds.submission(s.path("retry_of_submission_id").asLong()):null);
     }
     private Versions versions(HistoryRepository.Row row) {

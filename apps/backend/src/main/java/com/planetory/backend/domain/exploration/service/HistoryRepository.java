@@ -18,7 +18,7 @@ public class HistoryRepository {
     private final JdbcClient jdbc;
     record Row(long id, long member, long tic, long bundle, OffsetDateTime createdAt, JsonNode submission,
                JsonNode params, JsonNode versions, Long currentBundle, HistoryViews.Publication publication,
-               boolean granted, boolean snapshotAvailable, AchievementViews.Relabel relabel) {
+               boolean granted, boolean snapshotAvailable, boolean detailAvailable, AchievementViews.Relabel relabel) {
         String historyId() { return "h-"+id; }
         long submissionId() { return submission.path("id").asLong(); }
         OffsetDateTime submittedAt() { return OffsetDateTime.parse(submission.path("created_at").asText()); }
@@ -39,7 +39,8 @@ public class HistoryRepository {
               AND p.kind='system_thread' AND p.status='visible',false) AS is_public,
             COALESCE(pa.hidden_at IS NOT NULL OR p.status='hidden',false) AS is_hidden,
             a.id IS NOT NULL AS granted,a.relabeled_at,a.relabel_disposition,
-            EXISTS(SELECT 1 FROM analysis_snapshots sn WHERE sn.history_id=h.id) AS snapshot_available
+            EXISTS(SELECT 1 FROM analysis_snapshots sn WHERE sn.history_id=h.id) AS snapshot_available,
+            s.response_snapshot IS NOT NULL AS detail_available
             """.formatted(detail ? "(to_jsonb(s)-'request_hash')::text" : "(to_jsonb(s)-'request_hash'-'response_snapshot')::text") + FROM;
     }
     List<Row> list(HistoryQuery q) {
@@ -74,7 +75,7 @@ public class HistoryRepository {
                 r.getObject("created_at",OffsetDateTime.class),JSON.readTree(r.getString("submission")),
                 JSON.readTree(r.getString("snapshot_params")),JSON.readTree(r.getString("versions")),
                 r.getObject("current_bundle",Long.class),new HistoryViews.Publication(publicId==null?null:ExplorationIds.publicAnalysis(publicId),
-                r.getBoolean("is_public"),r.getBoolean("is_hidden")),r.getBoolean("granted"),r.getBoolean("snapshot_available"),
+                r.getBoolean("is_public"),r.getBoolean("is_hidden")),r.getBoolean("granted"),r.getBoolean("snapshot_available"),r.getBoolean("detail_available"),
                 relabeled==null?null:new AchievementViews.Relabel(relabeled,AchievementRepository.apiDisposition(r.getString("relabel_disposition"))));
     }
 }

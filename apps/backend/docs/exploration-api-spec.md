@@ -988,7 +988,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
     "achievementResult": "pending_publish", "submittedAt": "2026-09-10T02:30:00Z",
     "bundleId": "b-2", "isPreviousBundle": false, "curveStep": 1,
     "publication": {"publicAnalysisId": null, "isPublic": false, "isModerationHidden": false},
-    "achievementGranted": false, "snapshotAvailable": true, "answerViewed": false,
+    "achievementGranted": false, "snapshotAvailable": true, "detailAvailable": true, "answerViewed": false,
     "relabel": null, "retryOfSubmissionId": null
   }],
   "nextCursor": null, "hasNext": false
@@ -998,6 +998,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - `result` 필터: `matched`(matched·matched_harmonic·duplicate) / `not_matched` / `none_wrong` / `ambiguous_match` / `skipped`.
 - 정렬 `submittedAt` 내림차순, 동률 `submissionId` 내림차순(결정 7-1).
 - `achievementGranted`는 `user_candidate_achievements` 존재 여부이며 현재 공개 여부와 다르다.
+- `detailAvailable`은 최초 응답 `response_snapshot`의 저장 여부다. false이면 개인 상세 진입·재시도를 제공하지 않고 "최초 응답이 없어 상세를 제공할 수 없는 기록입니다"를 안내한다. `snapshotAvailable`과 독립적이며 목록·공개 투영·그래프의 제공 여부를 제한하지 않는다. true는 다른 의존성 장애까지 없다는 보장이 아니다.
 - 타인은 조회할 수 없다(NFR-14). 첨부·공개 분석은 8.5절 투영을 서비스 API가 사용한다.
 
 148 구현의 목록 입력은 공통 목록 규칙대로 `size` 기본 20·최대 100이다. `from`·`to`는 offset을 포함한 ISO 8601 시각(UTC로 정규화, 연도 0001~9999)이며 **from 이상·to 미만**이다. 둘 다 있으면 from < to여야 한다. 빈 선택 필터는 미지정으로 취급한다. 잘못된 ID·결과·시각·size·cursor는 400 `VALIDATION_FAILED`다. 커서는 요청 회원·ticId·candidateId·result·from·to·size와 마지막 제출의 시각/id에 묶는다. 조건 변경 시 커서를 버린다. 다른 회원·TIC·필터의 커서를 이어 쓰지 않는다. 현재 판이 없으면 저장 판은 현재 판이 아니므로 `isPreviousBundle=true`이며 목록 자체는 조회한다.
@@ -1028,9 +1029,13 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 **최초 응답 누락 방어 정책(확정):** 143 병합 직전 develop(`157fb5e`)에는 정상 제출 생성 경로가 없었다. 최초 응답 `response_snapshot`이 없는 비정상·수동 적재 기록은 당시 판단 평가 전체를 복원할 근거가 부족하므로 상세 전체 조회만 503 `DEPENDENCY_UNAVAILABLE`로 실패시키고 목록·공개 투영·그래프는 저장된 열로 계속 조회한다. 현재 후보로 재판정하거나 과거 평가를 추정하지 않는다. 이는 143이 생성한 정상 기록의 조회와 구분하며, 운영 DB의 해당 행 존재 여부를 직접 확인했다는 뜻은 아니다.
 
+목록 소비자는 8.1절 `detailAvailable=false`로 이 누락을 미리 구분한다. 직접 상세 요청의 기존 503 정책은 유지한다.
+
 ### 8.3 히스토리 그래프 (HIS-03, Q11)
 
 `GET /api/v1/histories/{historyId}/graph?mode=CURRENT|SUBMITTED` — 생략은 `CURRENT`.
+
+아래는 CURRENT 원본 대체 응답 예시다. SUBMITTED의 배열은 `{"bins":150,"foldedFlux":[...],"foldedError":[...]}` 형식이며 두 배열은 각각 150개다.
 
 ```json
 {
@@ -1042,7 +1047,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                 "epochBtjd": 1683.4231, "durationHours": 2.83,
                 "currentPhaseStart": 0.9874, "currentPhaseEnd": 0.9974},
   "curve": {"$ref": "5.2절 세그먼트 DTO. residualReproducible=false면 원본(curveStep 0)"},
-  "snapshot": {"bins": 150, "foldedFlux": [1.0, 0.98], "foldedError": [0.001, 0.002]},
+  "snapshot": null,
   "snapshotVersion": "folded-mad-v1"
 }
 ```
@@ -1050,19 +1055,27 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 모드 | 내용 |
 |---|---|
 | `CURRENT` | 현재 판 곡선(잔차 재현 가능하면 그 단계, 아니면 원본) + `selection`의 현재 위상. `snapshot`은 `null` |
-| `SUBMITTED` | `curve`는 `null`, `snapshot`은 `analysis_snapshots`. 위상 i = `-0.5 + (i + 0.5) / bins`. 매칭 실패 기록은 `snapshot: null`(409가 아니라 200) |
+| `SUBMITTED` | `curve`와 `selection.currentPhaseStart/End`는 `null`, `snapshot`은 `analysis_snapshots`. 당시 선택 창은 개인 상세의 `submission.original.phaseStart/phaseEnd` 또는 공개 내용의 `original.phaseStart/phaseEnd`를 사용한다. 위상 i = `-0.5 + (i + 0.5) / bins`. 매칭 실패 기록은 `snapshot: null`(409가 아니라 200) |
+
+SUBMITTED의 당시 선택 창은 제출 당시 T·원본 P 기준으로 저장된 값이다. 표시할 때 [-0.5, 0.5)로 순환시키되 경계를 넘는 창은 나누어 표시하고, 현재 T로 재환산하지 않는다. `selection.epochBtjd`·`durationHours`·원본/정정 주기는 두 모드에서 보존하며 현재 T로의 `currentPhase*` 환산은 CURRENT에만 적용한다. `reproduction.currentFoldReferenceTimeBtjd`는 현재 판 메타데이터이므로 SUBMITTED 선택·모델 정렬에 사용하지 않는다.
 
 접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 HTTP 200을 유지하고 `curve.segments: null`로 준다. 결과와 작업이 모두 없으면 `curve.residual: {"status":null,"jobId":null}`, 실제 작업이 있으면 해당 상태와 실제 ID를 반환한다. null 상태는 작업 생성 전 조회 표현이며 2장의 작업 상태 전이에 추가하지 않는다. 히스토리 조회는 작업을 자동 생성하지 않는다.
 
 그래프 최상위에 `snapshotVersion`을 추가한다(상세의 `versions.snapshotVersion`과 같은 저장값, 구기록에 버전이 없으면 null). `folded-mad-v0`·`folded-mad-v1`의 의미와 표시 기준은 [제출 계약](../../../docs/api/exploration/submission-readiness.md#1-채택한-스냅샷-계산)을 따른다. 값이 없다고 최신 버전으로 추정하지 않는다. 버전과 배열은 조회 시 이동·재계산하지 않는다. 특수 제출은 주기·절대 구간·현재 위상이 null이며 selection 객체 자체는 유지한다.
 
+배열이 있고 `snapshotVersion=null`이면 저장 배열을 그대로 그리되 "스냅샷 버전 정보가 없어 선택 영역과의 정렬을 보장할 수 없습니다"를 표시한다. v0·v1 어느 쪽으로도 간주하거나 배열을 이동·보정하지 않으며, 정밀한 선택·모델 정렬을 보장하는 표시는 하지 않는다. CURRENT에도 저장 버전이 전달되지만 현재 곡선의 렌더링 기준으로 사용하지 않는다.
+
 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본은 잔차로 표시하지 않으며 판단·메모 등 나머지 공개 내용은 유지한다. SUBMITTED 요청은 기존대로 curve:null·snapshot 규칙을 유지하고, 원본 대체는 CURRENT 조회로 구분한다. 개인 잔차 생성·작업 조회 API의 기존 권한을 확대하지 않는다.
 
 공개 CURRENT의 캐시 잔차가 미완료·없음이면 `fallbackReason=RESIDUAL_NOT_AVAILABLE`, `residualReproducible=false`와 현재 원본(`curveStep=0`, 제거 집합 빈 목록)을 반환한다. 원본의 residual은 원래 계약대로 `COMPLETED`·jobId null이며 잔차 작업이 완료됐다는 뜻이 아니다. 은퇴 대체는 `RETIRED_CANDIDATE`다. 완료 캐시를 사용할 때도 **공개 응답의 jobId는 null**이다. 개인 CURRENT의 `residualReproducible`은 저장된 제거 조합의 복원 가능성을 뜻하며 계산 준비 여부는 `curve.residual`과 segments로 판단한다.
 
+SUBMITTED의 `residualReproducible=false`·`fallbackReason=RETIRED_CANDIDATE`는 **현재 판에서 당시 제거 조합을 재현할 수 없다는 참고값**이다. 당시 배열의 대체·손상을 뜻하지 않으므로 SUBMITTED 화면의 "원본으로 대체됨" 안내에는 사용하지 않는다. 배지를 제공한다면 "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다"로 구분한다.
+
+Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통과 fixture다. SUBMITTED는 당시 선택과 같은 기준의 저장 배열(0부터 센 bin 87~92)·오차·버전을 보존하고 currentPhase 두 필드는 null이다. CURRENT만 현재 T 기준 0.75~0.78333…로 환산한다. 개인·공개 Graph 모두 같은 기준을 검증하며 프론트 실제 렌더링 인수와는 구분한다.
+
 현재 판이 아예 없거나 동일 판의 필수 배열이 손상된 경우는 503 `DEPENDENCY_UNAVAILABLE`이다. 정상 판 전환 중 current 공백은 86·87번의 원자 전환 계약으로 노출하지 않는다. `SUBMITTED`도 공통 reproduction의 현재 판 메타데이터를 제공하므로 현재 판 부재 시 같은 503이며, 저장 스냅샷을 없애거나 재계산하지 않는다. 이 경우를 정상 snapshot:null·잔차 미계산과 합치지 않는다. mode의 허용값 밖은 400이며 생략만 CURRENT다. 성공 그래프의 `X-Current-Bundle`은 reproduction.currentBundleId와 같다.
 
-읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). 서로 다른 판의 배열과 메타데이터를 한 응답에 섞지 않으며, `reproduction.currentBundleId`는 실제로 그래프를 만든 판이다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
+읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. CURRENT 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). CURRENT의 곡선과 메타데이터는 같은 판을 사용하며 `reproduction.currentBundleId`는 실제로 곡선을 만든 판이다. SUBMITTED의 배열은 `submittedBundleId` 기준으로 보존하고 현재 판 메타데이터와 구분한다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
 
 ### 8.4 별 결과 페이지 (RES-10, AT-74)
 
@@ -1284,7 +1297,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
 | Q09 진행 중 은퇴 후보 | 판 전환의 분석 복귀(5.1절)와 다시 풀기(6.8절)는 최신 현재 진행 문맥을 사용한다. 히스토리 CURRENT(8.3절)는 최신 원본, SUBMITTED는 당시 snapshot을 사용한다. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
 | Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
-| Q11 스냅샷 누락·고조파 좌표 | 8.3절 `snapshot: null`, 접기는 원본 주기 |
+| Q11 스냅샷 누락·고조파 좌표 | 8.3절 모드별 선택 기준·버전 미상 안내·T 변경 회귀 fixture. 원본 P·서버 duration을 보존하고 SUBMITTED는 당시 original 창·저장 배열, CURRENT만 현재 위상 환산. `snapshot: null`은 누락 안내. 프론트 종단 인수는 별도 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
 
 ### 11.3 지도 프론트(하서진) 필드 대응

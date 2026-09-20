@@ -116,6 +116,7 @@ class HistoryTest {
         String id=submit(1.5);
         var page=histories.list(member,query(null,null));
         assertEquals(1,page.items().size()); assertTrue(page.items().getFirst().snapshotAvailable());
+        assertTrue(page.items().getFirst().detailAvailable());
         assertTrue(page.items().getFirst().achievementGranted()); assertFalse(page.hasNext());
         var detail=histories.detail(member,id);
         assertEquals("matched_harmonic",detail.submission().match().status());
@@ -132,11 +133,14 @@ class HistoryTest {
         mvc.perform(get("/api/v1/histories/"+id+"/graph").param("mode","SUBMITTED").session(session(member)))
                 .andExpect(status().isOk()).andExpect(header().string("X-Current-Bundle","b-"+bundle))
                 .andExpect(jsonPath("$.curve").isEmpty()).andExpect(jsonPath("$.snapshot.foldedFlux.length()").value(150))
+                .andExpect(jsonPath("$.selection.currentPhaseStart").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.selection.currentPhaseEnd").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.snapshotVersion").value("folded-mad-v1"));
         mvc.perform(get("/api/v1/histories/"+id).session(session(member)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.submission.original.periodDays").value(1.5));
         mvc.perform(get("/api/v1/me/histories").session(session(member))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].historyId").value(id));
+                .andExpect(jsonPath("$.items[0].historyId").value(id))
+                .andExpect(jsonPath("$.items[0].detailAvailable").value(true));
     }
     @Test void 타인과_비로그인_잘못된경로_모드를_차단() throws Exception {
         String id=submit(3); long other=member();
@@ -178,6 +182,7 @@ class HistoryTest {
         assertNull(current.snapshot()); assertEquals(0,current.curve().curveContext().curveStep());
         assertArrayEquals(flux,current.curve().segments().getFirst().flux());
         assertFalse(histories.list(member,query(null,null)).items().getFirst().snapshotAvailable());
+        assertTrue(histories.list(member,query(null,null)).items().getFirst().detailAvailable());
     }
     @Test void 과거버전_배열과_오차null_영값은_그대로() {
         String id=submit(3);
@@ -189,15 +194,56 @@ class HistoryTest {
         assertEquals(0f,graph.snapshot().foldedError()[1]);
     }
     @Test void 판교체_절대값유지_현재위상환산_당시배열불변() {
+        // v1의 관측 bin 중심에 실제 통과를 넣어 당시 선택 창과 저장 배열을 함께 검증한다.
+        for (int i=0;i<flux.length;i++) {
+            double offset=((i+.5)*10/1440)%3;
+            if (offset>=.25 && offset<.35) flux[i]=.98f;
+        }
+        jdbc.update("UPDATE light_curve_segments SET flux=? WHERE id=?",flux,segment);
         String id=submit(3); var old=histories.graph(member,id,"SUBMITTED");
+        var original=histories.detail(member,id).submission().original();
+        assertEquals(.25/3,original.phaseStart(),1e-10);
+        assertEquals(.35/3,original.phaseEnd(),1e-10);
+        assertEquals(original.phaseStart(),histories.graph(member,id,"CURRENT").selection().currentPhaseStart(),1e-10);
+        int firstBin=(int)Math.floor((original.phaseStart()+.5)*150);
+        int lastBin=(int)Math.floor((original.phaseEnd()+.5)*150);
+        assertEquals(87,firstBin); assertEquals(92,lastBin);
+        assertTrue(Arrays.stream(old.snapshot().foldedFlux()).anyMatch(v -> v!=null && v<1f));
+        for (int i=0;i<150;i++) {
+            Float value=old.snapshot().foldedFlux()[i];
+            if (value!=null && value<1f) assertTrue(i>=firstBin && i<=lastBin,"당시 선택 밖 통과: "+i);
+        }
         long next=replaceBundle(101);
         var current=histories.graph(member,id,"CURRENT");
         assertEquals("b-"+next,current.reproduction().currentBundleId()); assertTrue(current.reproduction().isPreviousSubmission());
         assertEquals(old.selection().epochBtjd(),current.selection().epochBtjd());
         assertEquals(old.selection().durationHours(),current.selection().durationHours());
         assertEquals(.75,current.selection().currentPhaseStart(),1e-10);
-        assertArrayEquals(old.snapshot().foldedFlux(),histories.graph(member,id,"SUBMITTED").snapshot().foldedFlux());
+        assertEquals(.75+.1/3,current.selection().currentPhaseEnd(),1e-10);
+        for (var submitted:List.of(old,histories.graph(member,id,"SUBMITTED"),histories.publicGraph(id,"SUBMITTED",()->{}))) {
+            assertNull(submitted.selection().currentPhaseStart()); assertNull(submitted.selection().currentPhaseEnd());
+            assertNull(submitted.curve());
+            assertArrayEquals(old.snapshot().foldedFlux(),submitted.snapshot().foldedFlux());
+            assertArrayEquals(old.snapshot().foldedError(),submitted.snapshot().foldedError());
+            assertEquals(old.snapshotVersion(),submitted.snapshotVersion());
+        }
+        assertEquals(original,histories.detail(member,id).submission().original());
+        var content=histories.publicContent(id,()->{});
+        assertEquals(original.phaseStart(),content.original().phaseStart());
+        assertEquals(original.phaseEnd(),content.original().phaseEnd());
+        assertEquals(current.selection(),histories.publicGraph(id,"CURRENT",()->{}).selection());
         assertTrue(histories.detail(member,id).isPreviousBundle());
+    }
+    @Test void 버전누락은_null로전달하고_저장배열을_보존() {
+        String id=submit(3); var saved=histories.graph(member,id,"SUBMITTED").snapshot();
+        jdbc.update("UPDATE analysis_histories SET versions=versions-'snapshotVersion' WHERE id=?",number(id));
+        assertNull(histories.detail(member,id).versions().snapshotVersion());
+        assertNull(histories.publicContent(id,()->{}).versions().snapshotVersion());
+        for (var graph:List.of(histories.graph(member,id,"SUBMITTED"),histories.publicGraph(id,"SUBMITTED",()->{}))) {
+            assertNull(graph.snapshotVersion());
+            assertArrayEquals(saved.foldedFlux(),graph.snapshot().foldedFlux());
+            assertArrayEquals(saved.foldedError(),graph.snapshot().foldedError());
+        }
     }
     @Test void C02_4일주기_위상경계와_32배표시보존() {
         jdbc.update("UPDATE candidates SET period_days=4,epoch_btjd=101,duration_hours=9.6 WHERE id=?",candidate);
@@ -251,12 +297,20 @@ class HistoryTest {
         assertNull(graph.curve().residual().jobId());
     }
     @Test void 은퇴제거후보는_일부제거가아닌_원본대체() {
-        String id=residualHistory(); jdbc.update("UPDATE candidates SET status='retired' WHERE id=?",candidate);
+        String id=residualHistory(); var saved=histories.graph(member,id,"SUBMITTED").snapshot();
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?",candidate);
         clearInvocations(residuals);
         var graph=histories.graph(member,id,"CURRENT");
         assertEquals("RETIRED_CANDIDATE",graph.reproduction().fallbackReason());
         assertEquals(List.of(),graph.curve().curveContext().removedCandidateIds());
-        assertFalse(graph.reproduction().residualReproducible()); verifyNoInteractions(residuals);
+        assertFalse(graph.reproduction().residualReproducible());
+        for (var submitted:List.of(histories.graph(member,id,"SUBMITTED"),histories.publicGraph(id,"SUBMITTED",()->{}))) {
+            assertEquals("RETIRED_CANDIDATE",submitted.reproduction().fallbackReason());
+            assertFalse(submitted.reproduction().residualReproducible()); assertNull(submitted.curve());
+            // 이 fixture는 미매칭이다. 은퇴 안내 때문에 당시 배열을 만들거나 원본으로 대체하지 않는다.
+            assertEquals(saved,submitted.snapshot());
+        }
+        verifyNoInteractions(residuals);
     }
     @Test void 공개투영은_내부키를_중첩에서도_제외() {
         String id=submit(3);
@@ -355,10 +409,14 @@ class HistoryTest {
         assertEquals(before.submission().judgment(),after.submission().judgment());
         assertEquals(before.submission().match(),after.submission().match()); assertTrue(after.submission().detail().answerViewed());
     }
-    @Test void 구기록의_최초응답이없어도_목록투영그래프는_저장값으로조회() {
+    @Test void 구기록의_최초응답이없어도_목록투영그래프는_저장값으로조회() throws Exception {
         String id=submit(3);
         jdbc.update("UPDATE submissions SET response_snapshot=NULL,request_hash=NULL,request_hash_version=NULL WHERE user_id=?",member);
         assertEquals(id,histories.list(member,query(null,null)).items().getFirst().historyId());
+        assertFalse(histories.list(member,query(null,null)).items().getFirst().detailAvailable());
+        assertTrue(histories.list(member,query(null,null)).items().getFirst().snapshotAvailable());
+        mvc.perform(get("/api/v1/me/histories").session(session(member))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].detailAvailable").value(false));
         assertEquals("공개 메모",histories.publicContent(id,()->{}).memo());
         assertNotNull(histories.graph(member,id,"SUBMITTED").snapshot());
         error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->histories.detail(member,id));

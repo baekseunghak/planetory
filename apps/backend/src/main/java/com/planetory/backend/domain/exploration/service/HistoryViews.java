@@ -13,7 +13,7 @@ public final class HistoryViews {
     public record Item(String historyId, String submissionId, String ticId, String candidateId,
                        String submissionKind, String matchResult, String userJudgment, String achievementResult,
                        OffsetDateTime submittedAt, String bundleId, boolean isPreviousBundle, int curveStep,
-                       Publication publication, boolean achievementGranted, boolean snapshotAvailable,
+                       Publication publication, boolean achievementGranted, boolean snapshotAvailable, boolean detailAvailable,
                        boolean answerViewed, AchievementViews.Relabel relabel, String retryOfSubmissionId) {}
     public record Versions(String data, String preprocess, String pipeline, String rule, String residualModel,
                            String periodogramConfig, String snapshotVersion) {}

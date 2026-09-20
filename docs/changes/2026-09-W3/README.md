@@ -122,3 +122,4 @@
 | 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | History 조회·그래프 재현·공개 부모 API 연결 경계 구현 | S15P21C206-148 | CURRENT, SUBMITTED, snapshotVersion, current 부재, 권한 재확인, 160, 구기록 | 본체 구현·격리 DB 검증 완료, 구기록 정책 확인 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 최초 응답 누락 상세 503 방어 정책 확정 | S15P21C206-148 | response_snapshot, 157fb5e, 정상 제출 경로, 리뷰어 검증 | 채택·문서 반영 완료, 앞선 구기록 보류 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
