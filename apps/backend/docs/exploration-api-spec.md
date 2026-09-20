@@ -345,6 +345,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 `GET /api/v1/me/stars/{ticId}` — 별 선택 시 같은 캔버스의 근접 뷰·도킹 패널·행성 목록에서 공유한다. 인증 회원의 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`. 별도의 NASA iframe이나 전체 카탈로그 행성 API로 대체하지 않는다.
 
+경로의 `{ticId}`는 접두 없는 양의 정수다. 형식이 다르면 발견하지 않은 별과 같은 403 `STAR_LOCKED`로 덮는다(S15P21C206-246).
+
 ```json
 {
   "ticId": "123456789",
@@ -495,6 +497,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 }
 ```
 
+- 경로의 `{memberId}`는 회원 API가 주는 `u-{id}` 형식이다([서비스 API 3.2절](service-api-spec.md#32-공개-설정p1타인-프로필별-목록p0)과 같은 값). 숫자만 적은 값이나 형식이 다른 값은 400 `VALIDATION_FAILED`이며, 정수가 아닌 `size`도 같은 400이다(S15P21C206-246).
 - `scope=submitted`(기본)는 발견한 별 중 제출 이력이 있는 별(MY-02). 옛 "내 진행" 화면(HOME-03)을 이 목록이 대체한다. `scope=discovered`는 제출 이력이 없는 발견 별까지 전부 포함하며 본인 조회에서만 허용한다. `sort=recent`는 `lastActivityAt` = 최근 제출·재개·발견 시각 내림차순, 동률 `ticId`.
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
 - 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
@@ -506,6 +509,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 ### 4.5 공개 별 요약
 
 `GET /api/v1/stars/{ticId}` — 별 게시판 헤더, 게시글의 [이 별 분석하기] 버튼, 출처 카드가 쓴다. 발견하지 않은 회원도 호출할 수 있다. 서비스 API가 게시판 열람 자격(COM-01)과 분석 진입 버튼 활성(COM-11)을 이 응답으로 판정한다.
+
+경로의 `{ticId}`는 접두 없는 양의 정수다. 형식이 다르면 미공개 별과 같은 404 `STAR_NOT_PUBLISHED`로 덮는다(S15P21C206-246).
 
 ```json
 {
@@ -1391,6 +1396,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-17 | S15P21C206-140 5.1절 구현 반영. `star`·`progress`·`bundle.curveStepRule`의 출처, `minWindowDays` 계산(판 세그먼트 bin 크기의 2배), 진입 시 9.3절 완료 판정 (b) 반영, 옛 판 제출의 복귀 문맥은 현재 판 값, `nextCurveContext`가 null이면 `residualForNextStep`도 null, 운영 규칙이 없으면 503을 적었다. 사용자 결정으로 `STEP_NOT_RESTORABLE` 안내를 `currentCurveContext.notice`에 두고, 한 번 완료한 튜토리얼 별은 `skipAvailable=false`로 정했다 |
 | 2026-09-18 | S15P21C206-142 구현 반영. 6.2절 4단계 실패 필드를 `selection.periodDays`·`selection.phaseEnd`로 구체화하고 5단계에 빈 위상 구간 거절, 6단계에 관측 범위 정의를 적었다. 사용자 결정으로 관측점·관측 창을 곡선 점 시각(bin 시작)의 연속 구간으로 정했다. 수치 판정은 제출 매칭 규칙 v0 참조 구현을 따르고 공통 표본으로 대조한다는 점과 6.3절 배율 방향(P_user × m = P_c)을 명시했다 |
 | 2026-09-19 | S15P21C206-144 구현 반영. 9.1절에 요약 범위(회원 전체, `ticId`는 목록에만), `startedStarCount` 정의(4.4절 `scope=submitted` 길이), 정렬·커서·`size` 기본 50·상한 100, 항목 식별자 형식, `relabel.newDisposition` 값을 적었다. 9.2절에 인정 근거 확인과 진행 행 잠금, 시드 정책 `hash-user-achievement-seq-v1`의 계산식, 반환값(`ticId`·`byType`·`unlockShortfall`·`skyVersion`)을 명시했다. 별 저장은 9.4절과 같은 `ON CONFLICT (user_id, tic_id)`로 바꾸고, 같은 성과의 재처리는 2단계에서 막으며 `UNIQUE(trigger_achievement_id, seq)`는 DB 안전망으로 남긴다고 정정했다. MR !99 리뷰를 반영해 호출자가 기록 저장 전에 회원 행을 먼저 잠가야 한다는 조건과 그 이유(외래 키 KEY SHARE와 `FOR UPDATE`의 교착)를 적었다 |
+| 2026-09-20 | S15P21C206-246 정정. 4.2·4.4·4.5절에 경로 식별자 형식과 형식이 다를 때의 응답을 적었다. `{memberId}`는 회원 API가 주는 `u-{id}`이며 계약 밖 값과 정수가 아닌 `size`는 400, 형식이 다른 `{ticId}`는 없는 별과 같은 403·404다. S15P21C206-138 구현이 경로 값을 숫자 타입으로 받아 500을 주던 것을 고쳤다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

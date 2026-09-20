@@ -121,3 +121,4 @@
 | 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 핫 토픽 목록·선정 기준·상세 복귀 | S15P21C206-218 | S18, COM-09, 유효 참여자10명, 기간 제한 없음, cursor | 프론트 구현·계약 검증 완료, 실제 집계 인수 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
