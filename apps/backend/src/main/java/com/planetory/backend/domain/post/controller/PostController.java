@@ -2,6 +2,7 @@ package com.planetory.backend.domain.post.controller;
 
 import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.post.service.PostService;
+import com.planetory.backend.domain.post.service.HistoryAttachmentService;
 import com.planetory.backend.domain.post.service.PostService.CreateCommand;
 import com.planetory.backend.domain.post.service.PostService.Detail;
 import com.planetory.backend.global.error.BusinessException;
@@ -34,7 +35,7 @@ public class PostController {
      * `GET /me`가 회원과 탐사 요약을 합치는 방식과 같다.
      */
     public record PostDetailResponse(String postId, String title, String body, String purposeTag, String ticId,
-                                     PostService.Author author, List<Object> attachments,
+                                     PostService.Author author, List<HistoryAttachmentService.Reference> attachments,
                                      List<PostService.SourceLink> sourceLinks,
                                      PostService.ReactionSummary reactionSummary, int commentCount,
                                      Instant createdAt, Instant updatedAt) {
@@ -52,9 +53,11 @@ public class PostController {
     @Operation(summary = "일반 게시글 작성")
     @PostMapping("/api/v1/posts")
     @ResponseStatus(HttpStatus.CREATED)
-    public PostService.Created create(@AuthenticationPrincipal MemberPrincipal principal, @RequestBody CreateCommand request) {
-        if (request == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        return posts.create(principal.memberId(), request);
+    public PostService.Created create(@AuthenticationPrincipal MemberPrincipal principal, @RequestBody JsonNode request) {
+        if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        rejectItems(request, "sourceLinks");
+        return posts.create(principal.memberId(), new CreateCommand(text(request, "title"), text(request, "body"),
+                text(request, "purposeTag"), text(request, "ticId"), HistoryAttachmentService.input(request), List.of()));
     }
 
     @Operation(summary = "일반 게시글 상세")
@@ -68,12 +71,11 @@ public class PostController {
     public PostDetailResponse patch(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String postId,
                                    @RequestBody JsonNode request) {
         if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        // 명세 5.2의 연결 해제 예제가 빈 배열을 함께 보낸다. 빈 값은 받고 실제 항목이 있을 때만 거절한다.
-        rejectItems(request, "historyIds");
         rejectItems(request, "sourceLinks");
         return withCommentCount(posts.patch(principal.memberId(), parsePostId(postId), new PostService.PatchCommand(
                 text(request, "title"), request.has("title"), text(request, "body"), request.has("body"),
-                text(request, "purposeTag"), request.has("purposeTag"), text(request, "ticId"), request.has("ticId"))));
+                text(request, "purposeTag"), request.has("purposeTag"), text(request, "ticId"), request.has("ticId"),
+                HistoryAttachmentService.input(request))));
     }
 
     @Operation(summary = "일반 게시글 삭제")
@@ -83,7 +85,7 @@ public class PostController {
         posts.delete(principal.memberId(), parsePostId(postId));
     }
 
-    /** F09·F24 첨부가 구현되기 전까지 항목을 담은 요청만 막는다. 없음·null·빈 배열은 변경 없음으로 본다. */
+    /** 출처 카드(F24)는 후속 티켓에서 연결한다. */
     private static void rejectItems(JsonNode request, String field) {
         JsonNode value = request.get(field);
         if (value == null || value.isNull()) return;

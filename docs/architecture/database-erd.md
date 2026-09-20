@@ -797,7 +797,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 **post_source_links** (COM-20): post_id 또는 comment_id 중 하나 NOT NULL(CHECK), target_type thread/analysis, target_id(posts.id 또는 published_analyses.id), created_at. 조회 시 대상의 공개 상태·같은 TIC를 매번 검사. 다형 참조라 FK 없음.
 
-**post_history_attachments / comment_history_attachments** (COM-07, HIS-05): (post_id|comment_id), history_id, attached_at. UNIQUE 쌍. 히스토리 소유자 = 작성자, 히스토리 tic_id = 글 tic_id(서비스 계층 + 트리거 `확인 필요`). board=free면 첨부 불가. 공식 스레드의 토론 답글에도 첨부 가능하지만 성과·통계와 무관.
+**post_history_attachments / comment_history_attachments** (COM-07, HIS-05): (post_id|comment_id), history_id, attached_at. UNIQUE 쌍. 히스토리 소유자 = 작성자, 히스토리 tic_id = 글 tic_id. 160은 기존 테이블을 재사용하며 서비스 계층에서 부모 잠금과 함께 소유자·TIC·최대 3개를 검증한다. V13은 앱 역할에 첨부 SELECT·INSERT·DELETE와 identity 시퀀스 USAGE·SELECT만 허용한다. 트리거 추가 여부는 미결 6에 남는다. board=free면 첨부 불가. 공식 스레드의 토론 답글에도 첨부 가능하지만 성과·통계와 무관. 교체·부모 TIC 변경 및 공개 조회 규칙은 [서비스 API 5~7장](../../apps/backend/docs/service-api-spec.md#attachments)을 따른다.
 
 ### F. 운영·챌린지·알림·통계
 

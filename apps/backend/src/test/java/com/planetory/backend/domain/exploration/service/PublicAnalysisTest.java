@@ -100,6 +100,29 @@ class PublicAnalysisTest {
         return session;
     }
 
+    @Test
+    void 공식공개한_History의_일반첨부해제는_공개와성과를_변경하지않는다() throws Exception {
+        String history = submit(3);
+        var published = publications.publish(member, history);
+        String created = mvc.perform(post("/api/v1/posts").session(session(member)).with(csrf())
+                        .contentType("application/json").content("""
+                                {"title":"공개 기록 첨부","body":"본문","purposeTag":"ANALYSIS",
+                                 "ticId":"%s","historyIds":["%s"]}
+                                """.formatted(tic, history)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String postId = new tools.jackson.databind.ObjectMapper().readTree(created).path("postId").asText();
+        mvc.perform(patch("/api/v1/posts/" + postId).session(session(member)).with(csrf())
+                        .contentType("application/json").content("{\"historyIds\":[]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.attachments").isEmpty());
+        var replay = publications.publish(member, history);
+        assertEquals(published.analysisId(), replay.analysisId());
+        assertEquals(published.threadId(), replay.threadId());
+        assertTrue(replay.isPublic());
+        assertTrue(replay.achievementGranted());
+        assertFalse(replay.created());
+        assertFalse(replay.newlyGranted());
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"LIKELY_PLANET", "UNLIKELY_PLANET", "UNSURE"})
     void 세판단_최초공개와_응답유실재시도(String judgment) throws Exception {

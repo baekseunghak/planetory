@@ -66,7 +66,7 @@ export function analysisContextFixture(
       status: removedCandidateIds.length ? null : "COMPLETED",
       jobId: null,
     },
-    tutorial: { seq: null, skipAvailable: false },
+    tutorial: { seq: null as number | null, skipAvailable: false },
     ruleVersion: "rule-fixture-182",
   };
 }

@@ -97,6 +97,10 @@ docker compose --profile service up -d --build backend
 - 사용자·별·운영 설정값을 자동으로 넣지 않는다. P1 테이블 생성이 P1 API 구현을 의미하지 않는다.
 - FK 삭제 전파는 지정하지 않았다(NO ACTION). 탈퇴 처리 정책을 임의로 확정하지 않는다.
 
+### V13 History 첨부 앱 권한
+
+160은 V1의 `post_history_attachments`·`comment_history_attachments`를 재사용한다. `V13__history_attachment_app_grants.sql`이 앱 역할에 SELECT·INSERT·DELETE와 identity 시퀀스 USAGE·SELECT를 부여한다. UPDATE·TRUNCATE와 History 원본 변경 권한은 허용하지 않는다. 소유자·동일 TIC·개수 검사는 서비스 트랜잭션이 담당한다. 기존 V1~V12는 수정하지 않으며 실행 환경에 적용할 때 Flyway 소유자 역할로 V13을 실행한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다.
+
 ### V4 ERD v1.2 반영
 
 파일: `V4__apply_erd_v1_2_star_coordinates_and_peak_source.sql`. V1 이후 ERD에서 바뀐 열 두 묶음을 반영한다.
@@ -146,7 +150,7 @@ docker compose exec -T service-db psql -U planetory -d planetory_poc -c "SELECT 
 
 V13은 160의 History 첨부 권한에 사용한다. **160을 먼저 병합하고 V13 → V14 순서로 적용한다.** 161 단독 브랜치의 테스트는 새 일회용 DB/격리 스키마에서 수행한다. V13 없이 V14를 적용한 임시 DB를 이후 통합 DB로 재사용하지 않는다. 개발·공유 DB에 V14를 먼저 적용하거나 out-of-order·repair로 순서를 우회하지 않는다. 병합 전 최신 develop의 번호를 다시 확인한다.
 
-단독 검증은 160과의 통합 검증을 대신하지 않는다. 160 병합 후 V13·V14가 모두 있는 상태에서 `PublicAnalysisTest`, `HistoryAttachmentTest`, `MemberCommunityPermissionTest`와 Flyway 재기동 검증을 수행한다.
+160을 포함한 develop을 161에 병합해 V13·V14 통합 검증을 수행했다. `MemberCommunityPermissionTest`는 일회용 PostgreSQL을 V12까지 만든 뒤 V13 → V14를 순서대로 적용하고 새 Flyway 인스턴스의 validate·재실행(추가 적용 0개)을 검증한다. 공개·첨부의 동시 사용은 `PublicAnalysisTest`, 부모 경로 권한은 `HistoryAttachmentTest`로 검증한다. 공유·운영 DB 적용과 실제 프론트·잔차 공급자 연결은 별도 인수다.
 
 ### 마이그레이션 규칙
 
