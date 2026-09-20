@@ -41,7 +41,7 @@ $CodeRelease = '<이번 코드 release id>'
   -ReleaseId $Run -CodeReleaseId $CodeRelease -ExpectedCoverageSha256 $CoverageSha
 ```
 
-`RunAll`은 Worker 2~6에 보존된 FinalCoverage JSON·sidecar가 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만든다. 각 Sector 레코드의 run·source SHA-256·개수·바이트를 해당 run 선언과 다시 대조하며, 현재 HDFS 저장 계약의 `release_id`는 원천 `run_id`와 같다. Sector별 적재 직전 Preflight 뒤 `Build → Upload → uploader 완료 대기 → Audit → Commit`을 실행한다. 최종 경로가 있으면 `Commit` 재감사 후 건너뛰고, 첫 실패에서는 다음 Sector를 시작하지 않은 채 staging을 보존한다. 13개가 모두 확정된 뒤에만 `CoverageCommit`으로 전체 HDFS coverage marker를 만든다.
+`RunAll`은 Worker 2~6에 보존된 FinalCoverage JSON·sidecar가 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만든다. 각 Sector 레코드의 run·source SHA-256·개수·바이트를 해당 run 선언과 다시 대조하며, 현재 HDFS 저장 계약의 `release_id`는 원천 `run_id`와 같다. 첫 Sector는 설치 전에 통과한 Preflight를 재사용하고, 이후 Sector는 적재 직전에 다시 검사한다. 실행 흐름은 `Build → Upload → uploader 완료 대기 → Commit`이며 `Commit`이 checksum·manifest·RF2·FSCK 전수 감사를 수행한 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 단계별 진단용 `Audit`은 유지하지만 `RunAll`에서는 같은 전수 감사를 연속 두 번 수행하지 않는다. 최종 경로가 있으면 `Commit` 재감사 후 건너뛰고, 첫 실패에서는 다음 Sector를 시작하지 않은 채 staging을 보존한다. 13개가 모두 확정된 뒤에만 `CoverageCommit`으로 전체 HDFS coverage marker를 만든다.
 
 FinalCoverage가 없는 과거 Sector 3~5 재검증은 `ExpectedCoverageSha256`을 생략한 기존 명령을 사용할 수 있다. 이 호환 경로는 새 Sector를 추가하거나 전체 1~13 완료를 주장하는 용도가 아니다.
 
@@ -89,7 +89,7 @@ sha256sum /tmp/restored.fits
 & .\infra\distributed-system\scripts\test-tess-hdfs-load.ps1
 ```
 
-현재 Python 계획·감사 검사 8개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename을 포함한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
+현재 Python 계획·감사 검사 8개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename을 포함한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지도 검사한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
 
 75의 실제 FinalCoverage는 2026-09-20에 247,824개·441.62GiB·`.part` 0, Worker 5대 동일 SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 완료됐다. 76의 Sector 1~13 확장 보완은 코드와 오프라인 계약까지만 검증했다. 100GiB 예약 설정의 기존 DataNode 반영·재시작, 실제 FinalCoverage를 입력으로 한 RunAll, Sector 1~13 적재와 최종 HDFS coverage 감사는 아직 수행하지 않았으므로 76 완료로 간주하지 않는다.
 
@@ -101,7 +101,7 @@ sha256sum /tmp/restored.fits
 
 Sector 3 실측은 Build 100.1초, 5개 Worker upload 11분 8초, 독립 Audit 524.3초였다. upload는 61 bundle·15,993개·31,965,808,320바이트를 처리했고 유효 원본 처리량은 약 47.9MB/s(45.6MiB/s), unit 재시작 0, `.part` 0이었다. Audit은 checksum·RF2·offset·manifest·fsck를 모두 통과했다. 첫 Commit은 587.2초 동안 재감사와 Spark `manifest.parquet`, `_READY.json`, 최종 경로 원자 rename까지 완료하고 최종 FSCK `HEALTHY`, 370/370 blocks, 평균 복제 2.0, under/missing/corrupt 0을 확인했으나, 마지막 parser가 실제 Hadoop 표기 `Under-replicated blocks`의 하이픈을 예상하지 않아 exit 1을 냈다. 실제 확정 데이터는 정상이며 검사식을 실제 표기에 맞추고 FSCK 임시 로그를 성공·실패 모두 정리하도록 수정했다. 같은 RunId Commit 재실행은 529.9초에 전체 감사를 다시 통과하고 `COMMIT_CACHED`로 끝나 새 bundle·manifest·rename을 만들지 않았다.
 
-Sector 3의 `Build → Upload → Audit → Commit` 실측 합계는 약 31분 20초다. 읽기 전용 gate로 확인한 Sector 4는 19,997개·37,952,974,080바이트, Sector 5는 19,996개·38,469,484,800바이트다. 현재 처리량과 bundle당 감사 시간을 적용하면 같은 전체 절차는 각각 약 37분이며, 이는 아직 실행 전 추정치다. `Commit`이 안전을 위해 Audit을 다시 수행하므로 독립 Audit을 생략하면 약 10분 줄지만, 운영 확인 절차는 독립 Audit 성공을 보고 Commit하는 현재 순서를 유지한다.
+Sector 3의 기존 `Build → Upload → Audit → Commit` 실측 합계는 약 31분 20초다. 읽기 전용 gate로 확인한 Sector 4는 19,997개·37,952,974,080바이트, Sector 5는 19,996개·38,469,484,800바이트다. 기존 흐름에서 독립 `Audit` 524.3초 뒤 `Commit`이 같은 전수 감사를 다시 수행했다. Sector 1~13 확장 실행부터 `RunAll`은 `Commit`의 통합 감사만 사용해 검증 범위와 실패 시 원자성은 유지하면서 신규 Sector당 약 8~10분의 중복 검사를 제거한다. 실제 개선 시간은 전체 실행 결과로 다시 기록한다.
 
 ## 2026-09-19 완료 조건 재검증
 

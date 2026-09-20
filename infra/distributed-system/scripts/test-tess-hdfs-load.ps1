@@ -19,6 +19,12 @@ foreach ($required in @('ConfigureCapacity','Preflight','Build','Upload','Status
 if ($runnerText.Contains("test `"`$(hdfs_cmd dfsadmin -safemode get)`" = 'Safe mode is OFF'")) {
  throw 'HA safe mode validation must accept one OFF line per NameNode.'
 }
+if ($runnerText.Contains("Invoke-OrchestratedStep 'Audit' `$currentSector `$currentRunId `$currentSourceSha `$currentReleaseId `$currentBytes")) {
+ throw 'RunAll must rely on Commit integrated full audit instead of repeating the same audit twice.'
+}
+if (-not $runnerText.Contains("RUN_ALL_PREFLIGHT_REUSED sector=`$currentSector")) {
+ throw 'RunAll must reuse the pre-install preflight for its first Sector.'
+}
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit"')) { throw 'Transient HDFS upload units must not start again after boot.' }
 if ($runnerText.Contains("hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'")) { throw 'Final Sector commit must use atomic no-overwrite rename.' }

@@ -679,16 +679,23 @@ echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
    })
   }
   $first=$contexts[0]
+  Write-Host "RUN_ALL_PREFLIGHT sector=$([int]$first.sector) run=$([string]$first.run_id)"
   Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
   Invoke-OrchestratedStep 'Install' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  $firstSector=[int]$first.sector
   foreach ($context in $contexts) {
    $currentSector=[int]$context.sector
    $currentRunId=[string]$context.run_id
    $currentSourceSha=[string]$context.source_list_sha256
    $currentReleaseId=[string]$context.release_id
    $currentBytes=[long]$context.total_bytes
-   Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector run=$currentRunId"
-   Invoke-OrchestratedStep 'Preflight' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   if ($currentSector -eq $firstSector) {
+    Write-Host "RUN_ALL_PREFLIGHT_REUSED sector=$currentSector"
+    $firstSector=-1
+   } else {
+    Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector run=$currentRunId"
+    Invoke-OrchestratedStep 'Preflight' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   }
    $currentFinal="/lake/raw/tess/release=$currentReleaseId/sector=$('{0:D4}' -f $currentSector)"
    Write-Host "RUN_ALL_SECTOR_START sector=$currentSector"
    if (Test-HdfsPath $currentFinal) {
@@ -699,7 +706,6 @@ echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
    Invoke-OrchestratedStep 'Build' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
    Invoke-OrchestratedStep 'Upload' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
    Wait-HdfsUploaders $currentSector $currentRunId
-   Invoke-OrchestratedStep 'Audit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
    Invoke-OrchestratedStep 'Commit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
    Write-Host "RUN_ALL_SECTOR_COMPLETE sector=$currentSector"
   }
