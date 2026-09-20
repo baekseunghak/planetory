@@ -1,18 +1,23 @@
 # TESS HDFS Raw 적재
 
-`S15P21C206-76`의 실행 정본이다. 다운로드가 끝난 파일을 Worker 5대에서 동시에 512MiB~1GiB SequenceFile로 묶고, 전체 Sector가 검증된 경우에만 HDFS Raw 경로로 원자 확정한다.
+`S15P21C206-76`의 실행 정본이다. `S15P21C206-75`의 최종 coverage가 보증한 Sector 1~13 원본을 Worker 5대에서 동시에 512MiB~1GiB SequenceFile로 묶고, Sector별 감사와 전체 coverage가 모두 검증된 경우에만 HDFS Raw 경로로 원자 확정한다.
 
 ## 저장 계약
 
 - Worker 2~6은 각각 writer 하나만 실행한다. 서로 다른 `bundle-w<slot>-<number>.seq`를 쓰므로 전체 동시 writer는 5개다.
 - 값은 FITS 원본 바이트이며 key는 원파일명이다. Java writer가 쓰기 직전에 크기와 SHA-256을 다시 검사한다.
 - manifest는 원파일명, TIC, Sector, 크기, SHA-256, 최종 bundle 위치, SequenceFile key, 시작·끝 offset, `input_snapshot_id`, source list SHA-256과 Worker slot을 기록한다.
-- 각 bundle의 첫 레코드를 offset으로 다시 추출해 SHA-256을 비교한 뒤에만 완료 marker를 만든다.
+- 신규 plan은 각 bundle의 첫·중간·마지막 레코드를 offset으로 다시 추출해 SHA-256을 비교한 뒤에만 완료 marker를 만든다. 이미 확정된 Sector 3~5의 v1 marker는 기존 첫 레코드 증거를 보존하되 재감사한다.
 - 각 파일의 HDFS replication을 2로 맞추고 `hdfs dfs -checksum`, 전체 staging `fsck HEALTHY`를 확인한다.
 - Worker별 JSONL을 고정 Spark 3.5.5 image로 `manifest.parquet`로 변환한다. 최종 경로는 `/lake/raw/tess/release=<release>/sector=<sector>/`다.
-- 진행 중 결과는 `/lake/raw/tess/.staging/run=<run>/...`에만 있다. 다섯 Worker의 bundle·manifest·marker 감사가 모두 성공한 뒤 Sector 디렉터리 하나를 HDFS rename으로 확정한다.
+- 진행 중 결과는 `/lake/raw/tess/.staging/run=<run>/...`에만 있다. 다섯 Worker의 bundle·manifest·marker 감사가 모두 성공한 뒤 Java `FileContext.rename(..., Rename.NONE)`으로 Sector 디렉터리 하나를 원자 확정한다. 최종 경로가 이미 있으면 덮어쓰거나 하위에 중첩하지 않고 실패한다.
+- Sector plan v2는 원천 `run_id`, `release_id`, Sector 전체 `product_count`, source list SHA-256과 RF2를 고정한다. cache hit도 이 필드를 모두 정확히 비교한다.
+- Sector 1~13이 모두 확정되면 75의 coverage SHA-256을 키로 `/lake/raw/tess/coverage=<coverage-sha256>/_READY.json`을 원자 확정한다. 이 marker는 각 Sector `_READY.json`의 SHA-256과 경로, 원천 run·release·개수·바이트를 묶으며 누락·중복 Sector를 허용하지 않는다.
+- SequenceFile compression은 `NONE`을 유지한다. FITS 원본 바이트의 단순 복원·감사 계약을 우선한 결정이며, 압축 변경은 동일 데이터셋의 저장량·CPU·복원 시간 benchmark가 생긴 뒤 별도 검토한다.
 
 PoC HDFS는 Kerberos가 없는 simple mode다. staging bundle은 OS/HDFS 사용자 `planetory-admin`이 쓰고, `hdfs` 슈퍼유저는 정확한 staging 경로 준비·전체 감사·최종 rename만 수행한다. 이 권한 경계는 인터넷 또는 다중 테넌트 보안 경계로 간주하지 않는다.
+
+HDFS 사전 점검은 safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만을 확인한다. Sector마다 적재 직전에 다시 검사하고, 입력 바이트의 RF2 예상 사용량을 반영한 예상 사용률이 70% 이하여야 한다. `dfs.datanode.du.reserved`는 DataNode당 100GiB(`107374182400`)여야 하며 Worker 원본 디스크도 기본 100GiB 이상 가용해야 한다. 저장소 설정을 기존 클러스터에 반영하고 DataNode를 재시작하는 작업은 별도 통제된 운영 절차이며, 적용 전에는 Preflight가 적재를 막는다.
 
 ## 실행 순서
 
@@ -20,15 +25,18 @@ PoC HDFS는 Kerberos가 없는 simple mode다. staging bundle은 OS/HDFS 사용�
 
 ```powershell
 $Load = '.\infra\distributed-system\scripts\run-tess-hdfs-load.ps1'
-$Run = '20260918T080417Z'
-$SourceSha = '5781b664ea901bbbeecb4829e34c314e52961d111460b3e5a6ebe58918efc789'
-$CodeRelease = '20260918T134800Z'
+$Run = '20260919T005932Z'
+$SourceSha = '8c6c2370682e24351fce1223d6f463da2bd57ae2e1780033d940dd695cfe2c38'
+$CoverageSha = '<FinalCoverage가 출력한 SHA-256>'
+$CodeRelease = '<이번 코드 release id>'
 
 & $Load -Step RunAll -RunId $Run -ExpectedSourceListSha256 $SourceSha `
-  -ReleaseId $Run -CodeReleaseId $CodeRelease
+  -ReleaseId $Run -CodeReleaseId $CodeRelease -ExpectedCoverageSha256 $CoverageSha
 ```
 
-`RunAll`은 Sector 3·4·5의 다운로드 감사 gate를 모두 먼저 통과한 뒤 loader를 한 번 설치한다. Sector별로 최종 경로가 있으면 `Commit` 재감사 후 건너뛰고, 없으면 `Build → Upload → uploader 완료 대기 → Audit → Commit`을 순서대로 실행한다. 첫 실패에서 중단하고 해당 staging을 보존하므로 같은 명령으로 재개할 수 있다.
+`RunAll`은 Worker 2~6에 보존된 FinalCoverage JSON·sidecar가 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만든다. 각 Sector의 원천 run·release·source SHA-256·개수·바이트를 그대로 사용하며, Sector별 적재 직전 Preflight 뒤 `Build → Upload → uploader 완료 대기 → Audit → Commit`을 실행한다. 최종 경로가 있으면 `Commit` 재감사 후 건너뛰고, 첫 실패에서는 다음 Sector를 시작하지 않은 채 staging을 보존한다. 13개가 모두 확정된 뒤에만 `CoverageCommit`으로 전체 HDFS coverage marker를 만든다.
+
+FinalCoverage가 없는 과거 Sector 3~5 재검증은 `ExpectedCoverageSha256`을 생략한 기존 명령을 사용할 수 있다. 이 호환 경로는 새 Sector를 추가하거나 전체 1~13 완료를 주장하는 용도가 아니다.
 
 단계별 진단이나 실패 지점 재실행은 다음 명령을 사용한다.
 
@@ -48,9 +56,9 @@ $SourceSha = '5781b664ea901bbbeecb4829e34c314e52961d111460b3e5a6ebe58918efc789'
 
 `Upload`은 다섯 systemd oneshot unit을 차례로 시작할 뿐이며 실제 bundle 생성·HDFS 쓰기는 Worker 5대에서 동시에 진행된다. `Status`는 systemd와 HDFS staging을 읽기만 한다. Sector 3을 Upload하는 동안 기존 수집 supervisor가 Sector 4를 다운로드할 수 있다.
 
-업로드 unit은 현재 부팅에서 실패 시 재시작하지만 enable하지 않는다. Worker가 재부팅되면 HDFS·DataNode 정상 상태를 확인한 뒤 같은 `Upload`를 다시 실행한다. 완료 marker가 있는 bundle은 건너뛰고 중단된 현재 bundle만 다시 만든다.
+업로드 unit은 현재 부팅에서 실패 시 재시작하지만 enable하지 않는다. Worker가 재부팅되면 HDFS·DataNode 정상 상태를 확인한 뒤 같은 `Upload`를 다시 실행한다. 완료 marker가 있는 bundle은 건너뛰고 중단된 현재 bundle만 다시 만든다. systemd `NRestarts`는 최종 증거에 기록하지만 0을 성공 조건으로 요구하지 않는다. 재시작 뒤에도 같은 plan의 최종 감사가 통과하는지가 완료 조건이다.
 
-`Commit`은 Worker 2~6 전체가 지정된 경우에만 허용한다. 같은 plan 재실행은 HDFS의 완료 marker가 bundle·manifest와 일치하면 건너뛰고, 완료 marker가 없는 현재 run의 정확한 부분 bundle만 다시 만든다. 확정 경로가 이미 있으면 `_READY.json`의 run·release·source·Sector가 모두 같을 때만 `COMMIT_CACHED`로 끝낸다.
+`Commit`과 `CoverageCommit`은 Worker 2~6 전체가 지정된 경우에만 허용한다. 같은 plan 재실행은 HDFS의 완료 marker가 bundle·manifest와 일치하면 건너뛰고, 완료 marker가 없는 현재 run의 정확한 부분 bundle만 다시 만든다. 확정 경로가 이미 있으면 `_READY.json`의 schema·run·release·source·Sector·개수·RF2가 모두 같고 전수 재감사가 통과할 때만 `COMMIT_CACHED`로 끝낸다.
 
 ## 원본 추출
 
@@ -74,7 +82,9 @@ sha256sum /tmp/restored.fits
 & .\infra\distributed-system\scripts\test-tess-hdfs-load.ps1
 ```
 
-2026-09-18 기준 Python 계획·감사 검사 4개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과했다. 검사는 완전한 download audit만 허용하는지, 같은 입력의 plan ID·shard 경계가 결정적인지, plan 변조를 거부하는지, bundle manifest·HDFS checksum·RF2가 plan과 일치해야 Sector 감사가 통과하는지 확인한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
+현재 Python 계획·감사 검사 8개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename을 포함한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
+
+2026-09-20의 Sector 1~13 확장 보완은 코드와 오프라인 계약까지만 검증했다. 75의 실제 FinalCoverage 완료, 100GiB 예약 설정의 기존 DataNode 반영·재시작, Sector 1~13 적재와 최종 coverage 감사는 아직 실환경에서 수행하지 않았으므로 완료로 간주하지 않는다.
 
 권한을 승인한 같은 날의 실환경 `Preflight`는 HA `active:standby`, Live DataNode 5개, 기본 RF2, HDFS 사용률 0%와 RunId `20260918T080417Z` Sector 3의 Worker 5대 감사 gate를 통과했다. 대상은 15,993개, 원본 31,965,808,320바이트다.
 

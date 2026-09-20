@@ -14,9 +14,15 @@ from pathlib import Path
 
 from ingestion import tess
 
-PLAN_SCHEMA = "planetory.tess-hdfs-plan.v1"
+PLAN_SCHEMA = "planetory.tess-hdfs-plan.v2"
+LEGACY_PLAN_SCHEMA = "planetory.tess-hdfs-plan.v1"
 DONE_SCHEMA = "planetory.tess-hdfs-bundle.v1"
+READY_SCHEMA = "planetory.tess-hdfs-release.v1"
+COVERAGE_SCHEMA = "planetory.ingestion-coverage.v1"
+HDFS_COVERAGE_SCHEMA = "planetory.tess-hdfs-coverage.v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+RUN_ID_RE = re.compile(r"^\d{8}T\d{6}Z$")
+RELEASE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -31,13 +37,21 @@ def atomic_json(path: Path, value: dict) -> None:
 
 
 def _plan_identity(value: dict) -> dict:
-    return {
+    identity = {
         "source_list_sha256": value["source_list_sha256"],
         "worker_slot": value["worker_slot"],
         "sector": value["sector"],
         "target_bundle_bytes": value["target_bundle_bytes"],
         "bundles": value["bundles"],
     }
+    if value.get("schema") == PLAN_SCHEMA:
+        identity.update({
+            "run_id": value["run_id"],
+            "release_id": value["release_id"],
+            "sector_product_count": value["sector_product_count"],
+            "replication": value["replication"],
+        })
+    return identity
 
 
 def _plan_id(value: dict) -> str:
@@ -47,7 +61,10 @@ def _plan_id(value: dict) -> str:
 
 
 def _validate_plan(value: dict) -> None:
-    if value.get("schema") != PLAN_SCHEMA or not SHA256_RE.fullmatch(str(value.get("source_list_sha256", ""))):
+    schema = value.get("schema")
+    if schema not in (LEGACY_PLAN_SCHEMA, PLAN_SCHEMA) or not SHA256_RE.fullmatch(
+        str(value.get("source_list_sha256", ""))
+    ):
         raise ValueError("invalid HDFS load plan")
     if not 1 <= int(value.get("worker_slot", 0)) <= 5 or int(value.get("sector", 0)) < 1:
         raise ValueError("invalid HDFS load plan worker or sector")
@@ -68,6 +85,13 @@ def _validate_plan(value: dict) -> None:
         raise ValueError("HDFS plan count or filename uniqueness mismatch")
     if sum(int(item.get("size_bytes", -1)) for item in entries) != int(value.get("total_bytes", -1)):
         raise ValueError("HDFS plan total bytes mismatch")
+    if schema == PLAN_SCHEMA and (
+        not RUN_ID_RE.fullmatch(str(value.get("run_id", "")))
+        or not RELEASE_ID_RE.fullmatch(str(value.get("release_id", "")))
+        or int(value.get("sector_product_count", -1)) < len(entries)
+        or int(value.get("replication", -1)) != 2
+    ):
+        raise ValueError("invalid HDFS plan lineage")
     if any(
         int(item.get("sector", -1)) != int(value["sector"])
         or int(item.get("tic_id", 0)) < 1
@@ -105,6 +129,8 @@ def build_plan(
     worker_slot: int,
     sector: int,
     target_bundle_bytes: int,
+    run_id: str,
+    release_id: str,
 ) -> dict:
     source = tess.load_source_list(source_list_path)
     audit = json.loads(audit_manifest_path.read_text(encoding="utf-8"))
@@ -112,6 +138,7 @@ def build_plan(
         tess.select_products(source, worker_slot=worker_slot, sectors={sector}),
         key=lambda item: item.filename,
     )
+    sector_product_count = len(tess.select_products(source, worker_slot=None, sectors={sector}))
     if audit.get("schema") != "planetory.download-audit.v1":
         raise ValueError("unexpected download audit schema")
     if audit.get("source_list_sha256") != source["source_list_sha256"]:
@@ -169,8 +196,12 @@ def build_plan(
         bundle["bundle_name"] = f"bundle-w{worker_slot:02d}-{index:05d}.seq"
     identity = {
         "source_list_sha256": source["source_list_sha256"],
+        "run_id": run_id,
+        "release_id": release_id,
         "worker_slot": worker_slot,
         "sector": sector,
+        "sector_product_count": sector_product_count,
+        "replication": 2,
         "target_bundle_bytes": target_bundle_bytes,
         "bundles": bundles,
     }
@@ -182,6 +213,163 @@ def build_plan(
     }
     value["plan_id"] = _plan_id(value)
     return value
+
+
+def validate_ready(ready: dict, plan: dict) -> None:
+    """최종 Raw marker가 plan의 전체 lineage와 정확히 같은지 확인한다."""
+    expected = {
+        "schema": READY_SCHEMA,
+        "source_list_sha256": plan["source_list_sha256"],
+        "sector": int(plan["sector"]),
+    }
+    if plan.get("schema") == PLAN_SCHEMA:
+        expected.update({
+            "run_id": plan["run_id"],
+            "release_id": plan["release_id"],
+            "product_count": int(plan["sector_product_count"]),
+            "replication": int(plan["replication"]),
+        })
+    try:
+        actual = {
+            "schema": ready.get("schema"),
+            "source_list_sha256": ready.get("source_list_sha256"),
+            "sector": int(ready.get("sector", -1)),
+        }
+        if plan.get("schema") == PLAN_SCHEMA:
+            actual.update({
+                "run_id": ready.get("run_id"),
+                "release_id": ready.get("release_id"),
+                "product_count": int(ready.get("product_count", -1)),
+                "replication": int(ready.get("replication", -1)),
+            })
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("final Raw release does not match the local plan") from error
+    if actual != expected:
+        raise RuntimeError("final Raw release does not match the local plan")
+
+
+def _restore_sample_indices(entry_count: int) -> list[int]:
+    if entry_count < 1:
+        raise ValueError("restore sample requires at least one entry")
+    return sorted({0, entry_count // 2, entry_count - 1})
+
+
+def load_coverage_map(path: Path, expected_sha256: str) -> dict:
+    raw = path.read_bytes()
+    if not SHA256_RE.fullmatch(expected_sha256) or hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("coverage manifest checksum mismatch")
+    value = json.loads(raw)
+    if (
+        value.get("schema") != COVERAGE_SCHEMA
+        or value.get("passed") is not True
+        or int(value.get("part_count", -1)) != 0
+    ):
+        raise ValueError("coverage manifest is not complete")
+
+    run_sources: dict[str, str] = {}
+    run_sectors: dict[str, set[int]] = {}
+    declared_sectors: set[int] = set()
+    for key in ("existing_run", "expansion_run"):
+        run = value.get(key, {})
+        run_id = str(run.get("run_id", ""))
+        source_sha = str(run.get("source_list_sha256", ""))
+        sectors = {int(sector) for sector in run.get("sectors", [])}
+        if (
+            not RUN_ID_RE.fullmatch(run_id)
+            or not SHA256_RE.fullmatch(source_sha)
+            or not sectors
+            or run_id in run_sources
+            or declared_sectors.intersection(sectors)
+        ):
+            raise ValueError(f"invalid coverage run: {key}")
+        run_sources[run_id] = source_sha
+        run_sectors[run_id] = sectors
+        declared_sectors.update(sectors)
+    expected_sectors = set(range(1, 14))
+    if declared_sectors != expected_sectors:
+        raise ValueError("coverage runs must cover Sector 1 through 13 exactly once")
+
+    contexts = []
+    seen: set[int] = set()
+    for row in value.get("sectors", []):
+        sector = int(row.get("sector", -1))
+        run_id = str(row.get("run_id", ""))
+        expected = int(row.get("expected", -1))
+        validated = int(row.get("validated", -1))
+        total_bytes = int(row.get("total_bytes", -1))
+        if (
+            sector not in expected_sectors
+            or sector in seen
+            or run_id not in run_sources
+            or sector not in run_sectors.get(run_id, set())
+            or expected < 1
+            or validated != expected
+            or total_bytes < 1
+            or int(row.get("part_count", -1)) != 0
+        ):
+            raise ValueError(f"invalid coverage sector: {sector}")
+        seen.add(sector)
+        contexts.append({
+            "sector": sector,
+            "run_id": run_id,
+            "release_id": run_id,
+            "source_list_sha256": run_sources[run_id],
+            "product_count": expected,
+            "total_bytes": total_bytes,
+        })
+    contexts.sort(key=lambda row: int(row["sector"]))
+    expected = sum(int(row["product_count"]) for row in contexts)
+    total_bytes = sum(int(row["total_bytes"]) for row in contexts)
+    if (
+        seen != expected_sectors
+        or int(value.get("expected", -1)) != expected
+        or int(value.get("validated", -1)) != expected
+        or int(value.get("total_bytes", -1)) != total_bytes
+    ):
+        raise ValueError("coverage totals do not match Sector records")
+    return {
+        "schema": "planetory.tess-hdfs-coverage-map.v1",
+        "source_coverage_sha256": expected_sha256,
+        "expected": expected,
+        "validated": expected,
+        "total_bytes": total_bytes,
+        "sectors": contexts,
+    }
+
+
+def build_coverage_ready(path: Path, expected_sha256: str, hdfs: str) -> dict:
+    coverage = load_coverage_map(path, expected_sha256)
+    sectors = []
+    for context in coverage["sectors"]:
+        sector = int(context["sector"])
+        location = f"/lake/raw/tess/release={context['release_id']}/sector={sector:04d}"
+        ready_path = f"{location}/_READY.json"
+        raw = _run([hdfs, "dfs", "-cat", ready_path]).stdout
+        ready = json.loads(raw)
+        plan = {
+            "schema": PLAN_SCHEMA,
+            "source_list_sha256": context["source_list_sha256"],
+            "run_id": context["run_id"],
+            "release_id": context["release_id"],
+            "sector": sector,
+            "sector_product_count": int(context["product_count"]),
+            "replication": 2,
+        }
+        validate_ready(ready, plan)
+        sectors.append({
+            **context,
+            "location": location,
+            "ready_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        })
+    return {
+        "schema": HDFS_COVERAGE_SCHEMA,
+        "source_coverage_sha256": expected_sha256,
+        "expected": coverage["expected"],
+        "validated": coverage["validated"],
+        "total_bytes": coverage["total_bytes"],
+        "replication": 2,
+        "sectors": sectors,
+    }
 
 
 def _run(arguments: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -225,13 +413,7 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
         ready_path = f"{final_uri}/_READY.json"
         if not _hdfs_exists(hdfs, ready_path):
             raise RuntimeError("final Raw exists without _READY.json")
-        ready = _hdfs_json(hdfs, ready_path)
-        if (
-            ready.get("schema") != "planetory.tess-hdfs-release.v1"
-            or ready.get("source_list_sha256") != plan["source_list_sha256"]
-            or int(ready.get("sector", -1)) != int(plan["sector"])
-        ):
-            raise RuntimeError("final Raw release does not match the local plan")
+        validate_ready(_hdfs_json(hdfs, ready_path), plan)
         print(f"UPLOAD_CACHED_FINAL {final_uri}", flush=True)
         return
     control = f"{stage_uri}/.control/worker={slot}"
@@ -249,11 +431,19 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
             done_remote = f"{control}/{name}.done.json"
             if _hdfs_exists(hdfs, done_remote):
                 done = _hdfs_json(hdfs, done_remote)
+                expected_samples = [
+                    bundle["entries"][index]["filename"]
+                    for index in _restore_sample_indices(len(bundle["entries"]))
+                ]
                 if (
                     done.get("schema") == DONE_SCHEMA
                     and done.get("plan_id") == plan["plan_id"]
                     and _hdfs_exists(hdfs, remote)
                     and _hdfs_exists(hdfs, manifest_remote)
+                    and (
+                        plan.get("schema") == LEGACY_PLAN_SCHEMA
+                        or done.get("restore_samples") == expected_samples
+                    )
                 ):
                     print(f"BUNDLE_CACHED {name}", flush=True)
                     continue
@@ -290,14 +480,16 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
             _run([hdfs, "dfs", "-mv", remote + ".part", remote])
             _put_atomic(hdfs, manifest, manifest_remote)
 
-            first = bundle["entries"][0]
-            first_manifest = json.loads(manifest.read_text(encoding="utf-8").splitlines()[0])
-            extracted = root / f"{name}.sample"
-            _run([
-                "java", "-cp", classpath, "TessSequenceFileTool", "extract", remote,
-                str(first_manifest["offset_start"]), first["filename"], first["sha256"], str(extracted),
-            ])
-            extracted.unlink()
+            manifest_rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
+            sample_indices = _restore_sample_indices(len(bundle["entries"]))
+            for index in sample_indices:
+                entry = bundle["entries"][index]
+                extracted = root / f"{name}.sample-{index}"
+                _run([
+                    "java", "-cp", classpath, "TessSequenceFileTool", "extract", remote,
+                    str(manifest_rows[index]["offset_start"]), entry["filename"], entry["sha256"], str(extracted),
+                ])
+                extracted.unlink()
             checksum = _hdfs_checksum(hdfs, remote)
             done = {
                 "schema": DONE_SCHEMA,
@@ -307,8 +499,9 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
                 "source_bytes": bundle["size_bytes"],
                 "replication": 2,
                 "hdfs_checksum": checksum,
-                "sample_filename": first["filename"],
-                "sample_sha256": first["sha256"],
+                "sample_filename": bundle["entries"][0]["filename"],
+                "sample_sha256": bundle["entries"][0]["sha256"],
+                "restore_samples": [bundle["entries"][index]["filename"] for index in sample_indices],
             }
             done_local = root / f"{name}.done.json"
             atomic_json(done_local, done)
@@ -323,6 +516,9 @@ def audit_stage(
     sector: int,
     worker_slots: list[int],
     hdfs: str,
+    *,
+    run_id: str | None = None,
+    release_id: str | None = None,
 ) -> dict:
     listing = _run([hdfs, "dfs", "-find", stage_uri]).stdout.splitlines()
     if any(path.endswith(".part") for path in listing):
@@ -338,6 +534,10 @@ def audit_stage(
             int(plan.get("worker_slot", -1)) != slot
             or int(plan.get("sector", -1)) != sector
             or plan.get("source_list_sha256") != source_sha
+            or (
+                plan.get("schema") == PLAN_SCHEMA
+                and (plan.get("run_id") != run_id or plan.get("release_id") != release_id)
+            )
         ):
             raise RuntimeError(f"invalid worker plan: {path}")
         plans.append(plan)
@@ -352,6 +552,29 @@ def audit_stage(
         f"{stage_uri}/.control/worker={plan['worker_slot']}/{name}.done.json"
         for name, (plan, _) in expected_bundles.items()
     }
+    allowed = {
+        stage_uri,
+        f"{stage_uri}/.control",
+        f"{stage_uri}/_READY.json",
+        f"{stage_uri}/manifest.parquet",
+        *expected_sequences,
+        *expected_manifests,
+        *expected_done,
+        *(f"{stage_uri}/.control/worker={slot}" for slot in worker_slots),
+        *(f"{stage_uri}/.control/worker={slot}/plan.json" for slot in worker_slots),
+    }
+    parquet_prefix = f"{stage_uri}/manifest.parquet/"
+    unexpected = []
+    for path in listing:
+        if path in allowed:
+            continue
+        if path.startswith(parquet_prefix):
+            name = path[len(parquet_prefix):]
+            if name == "_SUCCESS" or name.startswith("part-"):
+                continue
+        unexpected.append(path)
+    if unexpected:
+        raise RuntimeError(f"unexpected HDFS artifact: {unexpected[0]}")
     actual_sequences = {path for path in listing if path.startswith(stage_uri + "/bundle-") and path.endswith(".seq")}
     actual_manifests = {path for path in listing if path.endswith(".manifest.jsonl")}
     actual_done = {path for path in listing if path.endswith(".done.json")}
@@ -373,6 +596,12 @@ def audit_stage(
             raise RuntimeError(f"completion count mismatch: {name}")
         if int(done.get("source_bytes", -1)) != int(bundle["size_bytes"]) or int(done.get("replication", -1)) != 2:
             raise RuntimeError(f"completion size or replication mismatch: {name}")
+        expected_samples = [
+            bundle["entries"][index]["filename"]
+            for index in _restore_sample_indices(len(bundle["entries"]))
+        ]
+        if plan.get("schema") == PLAN_SCHEMA and done.get("restore_samples") != expected_samples:
+            raise RuntimeError(f"completion restore samples mismatch: {name}")
         if _run([hdfs, "dfs", "-stat", "%r", sequence_path]).stdout.strip() != "2":
             raise RuntimeError(f"replication is not 2: {name}")
         hdfs_checksum = _hdfs_checksum(hdfs, sequence_path)
@@ -406,6 +635,12 @@ def audit_stage(
             manifests.append(row)
 
     expected_count = sum(int(plan["product_count"]) for plan in plans)
+    if any(
+        plan.get("schema") == PLAN_SCHEMA
+        and int(plan.get("sector_product_count", -1)) != expected_count
+        for plan in plans
+    ):
+        raise RuntimeError("worker plans disagree with Sector product count")
     filenames = [row.get("filename") for row in manifests]
     if len(manifests) != expected_count or len(set(filenames)) != expected_count:
         raise RuntimeError("aggregate manifest count or uniqueness mismatch")
@@ -434,6 +669,8 @@ def main() -> int:
     plan.add_argument("--raw-root", type=Path, required=True)
     plan.add_argument("--worker-slot", type=int, required=True)
     plan.add_argument("--sector", type=int, required=True)
+    plan.add_argument("--run-id", required=True)
+    plan.add_argument("--release-id", required=True)
     plan.add_argument("--target-bundle-bytes", type=int, required=True)
     plan.add_argument("--output", type=Path, required=True)
     upload = commands.add_parser("upload")
@@ -446,10 +683,28 @@ def main() -> int:
     audit.add_argument("--stage-uri", required=True)
     audit.add_argument("--final-uri", required=True)
     audit.add_argument("--source-sha", required=True)
+    audit.add_argument("--run-id", required=True)
+    audit.add_argument("--release-id", required=True)
     audit.add_argument("--sector", type=int, required=True)
     audit.add_argument("--worker-slot", type=int, action="append", required=True)
     audit.add_argument("--hdfs", default="/opt/hadoop/bin/hdfs")
     audit.add_argument("--output", type=Path)
+    ready = commands.add_parser("ready")
+    ready.add_argument("--ready-json", type=Path, required=True)
+    ready.add_argument("--run-id", required=True)
+    ready.add_argument("--release-id", required=True)
+    ready.add_argument("--source-sha", required=True)
+    ready.add_argument("--sector", type=int, required=True)
+    ready.add_argument("--product-count", type=int, required=True)
+    ready.add_argument("--replication", type=int, default=2)
+    coverage_map = commands.add_parser("coverage-map")
+    coverage_map.add_argument("--coverage-manifest", type=Path, required=True)
+    coverage_map.add_argument("--expected-sha", required=True)
+    coverage_ready = commands.add_parser("coverage-ready")
+    coverage_ready.add_argument("--coverage-manifest", type=Path, required=True)
+    coverage_ready.add_argument("--expected-sha", required=True)
+    coverage_ready.add_argument("--hdfs", default="/opt/hadoop/bin/hdfs")
+    coverage_ready.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     if args.command == "plan":
@@ -458,6 +713,7 @@ def main() -> int:
         value = build_plan(
             args.source_list, args.events, args.audit_manifest, args.raw_root,
             worker_slot=args.worker_slot, sector=args.sector, target_bundle_bytes=args.target_bundle_bytes,
+            run_id=args.run_id, release_id=args.release_id,
         )
         atomic_json(args.output, value)
         print(
@@ -469,9 +725,29 @@ def main() -> int:
         upload_plan(args.plan, args.stage_uri.rstrip("/"), args.final_uri.rstrip("/"), args.classes, args.hdfs)
         print("UPLOAD_OK")
         return 0
+    if args.command == "ready":
+        validate_ready(json.loads(args.ready_json.read_text(encoding="utf-8")), {
+            "schema": PLAN_SCHEMA,
+            "run_id": args.run_id,
+            "release_id": args.release_id,
+            "source_list_sha256": args.source_sha,
+            "sector": args.sector,
+            "sector_product_count": args.product_count,
+            "replication": args.replication,
+        })
+        print("READY_OK")
+        return 0
+    if args.command == "coverage-map":
+        print(json.dumps(load_coverage_map(args.coverage_manifest, args.expected_sha), sort_keys=True))
+        return 0
+    if args.command == "coverage-ready":
+        value = build_coverage_ready(args.coverage_manifest, args.expected_sha, args.hdfs)
+        atomic_json(args.output, value)
+        print(json.dumps(value, sort_keys=True))
+        return 0
     value = audit_stage(
         args.stage_uri.rstrip("/"), args.final_uri.rstrip("/"), args.source_sha,
-        args.sector, args.worker_slot, args.hdfs,
+        args.sector, args.worker_slot, args.hdfs, run_id=args.run_id, release_id=args.release_id,
     )
     if args.output:
         atomic_json(args.output, value)

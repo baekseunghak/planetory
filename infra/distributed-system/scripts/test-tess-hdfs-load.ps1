@@ -13,18 +13,28 @@ $parseErrors=$null
 if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
 
 $runnerText=Get-Content -LiteralPath $runner -Raw
-foreach ($required in @('Preflight','Build','Upload','Status','Audit','Commit','RunAll','Wait-HdfsUploaders','foreach ($currentSector in 3..5)','RUN_ALL_COMPLETE sectors=3,4,5','Commit requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8','sudo chmod -R a=rX,u+w "$work"','RELEASE_PERMISSION_INVALID','Under-replicated blocks:[[:space:]]+0','"$fsck"')) {
+foreach ($required in @('Preflight','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll','Wait-HdfsUploaders','Get-CoverageDocument','coverage-map','coverage-ready','ExpectedCoverageSha256','RUN_ALL_COMPLETE sectors=','requires all Workers 2..6','manifest.parquet','--no-block start','TimeoutStartSec=3h','StrictHostKeyChecking=yes','Invoke-Scp',"@(,@('node-1'",'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop','javac -encoding UTF-8','sudo chmod -R a=rX,u+w "$work"','RELEASE_PERMISSION_INVALID','Under-replicated blocks:[[:space:]]+0','dfs.datanode.du.reserved','"$fsck"')) {
  if (-not $runnerText.Contains($required)) { throw "Runner contract is missing: $required" }
 }
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit"')) { throw 'Transient HDFS upload units must not start again after boot.' }
+if ($runnerText.Contains("hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'")) { throw 'Final Sector commit must use atomic no-overwrite rename.' }
 $common=@{RunId='20260918T120000Z';ExpectedSourceListSha256=('a'*64);Sector=3}
-foreach ($step in @('Install','Build','Upload','Commit','RunAll')) {
+foreach ($step in @('Install','Build','Upload','Commit','CoverageCommit','RunAll')) {
  & $runner -Step $step @common -WhatIf
 }
+$boundary=$common.Clone()
+$boundary.Sector=1
+& $runner -Step Build @boundary -WhatIf
+$boundary.Sector=13
+& $runner -Step Build @boundary -WhatIf
 $java=Get-Content -LiteralPath (Join-Path $loader 'TessSequenceFileTool.java') -Raw
-foreach ($required in @('SequenceFile.Writer','writer.getLength()','reader.seek','SHA-256')) {
+foreach ($required in @('SequenceFile.Writer','writer.getLength()','reader.seek','SHA-256','FileContext','Options.Rename.NONE','ATOMIC_COMMIT_OK')) {
  if (-not $java.Contains($required)) { throw "SequenceFile contract is missing: $required" }
+}
+$hdfsSite=Get-Content -LiteralPath (Join-Path $root 'infra/distributed-system/config/hadoop/hdfs-site.xml') -Raw
+if (-not $hdfsSite.Contains('<name>dfs.datanode.du.reserved</name>') -or -not $hdfsSite.Contains('<value>107374182400</value>')) {
+ throw 'HDFS must reserve 100 GiB per DataNode for local staging and recovery headroom.'
 }
 
 $previousBytecode=$env:PYTHONDONTWRITEBYTECODE

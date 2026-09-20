@@ -8,6 +8,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileContext;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.SequenceFile;
@@ -106,10 +108,22 @@ public final class TessSequenceFileTool {
         System.out.println("SEQUENCE_EXTRACT_OK key=" + key + " bytes=" + bytes.length);
     }
 
+    private static void commit(String[] args) throws Exception {
+        if (args.length != 3) {
+            throw new IllegalArgumentException("commit <staging> <final>");
+        }
+        Configuration configuration = new Configuration();
+        FileContext.getFileContext(configuration).rename(
+            new Path(args[1]), new Path(args[2]), Options.Rename.NONE
+        );
+        System.out.println("ATOMIC_COMMIT_OK final=" + args[2]);
+    }
+
     public static void main(String[] args) throws Exception {
-        if (args.length == 0) throw new IllegalArgumentException("expected write or extract");
+        if (args.length == 0) throw new IllegalArgumentException("expected write, extract or commit");
         if (args[0].equals("write")) write(args);
         else if (args[0].equals("extract")) extract(args);
+        else if (args[0].equals("commit")) commit(args);
         else throw new IllegalArgumentException("unknown command: " + args[0]);
     }
 }

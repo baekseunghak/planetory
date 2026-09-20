@@ -1,22 +1,25 @@
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 param(
  [Parameter(Mandatory)]
- [ValidateSet('Preflight','Install','Build','Upload','Status','Audit','Commit','RunAll')]
+ [ValidateSet('Preflight','Install','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll')]
  [string]$Step,
  [Parameter(Mandatory)][ValidatePattern('^\d{8}T\d{6}Z$')][string]$RunId,
  [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSourceListSha256,
- [ValidateSet(3,4,5)][int]$Sector=3,
+ [ValidateRange(1,13)][int]$Sector=3,
  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')][string]$ReleaseId=$RunId,
  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')][string]$CodeReleaseId=$RunId,
  [ValidateRange(512,1024)][int]$TargetBundleMiB=512,
+ [ValidateRange(0,[long]::MaxValue)][long]$ExpectedSectorBytes=0,
+ [ValidateRange(80,1000)][int]$MinimumWorkerFreeGiB=100,
+ [AllowEmptyString()][ValidateScript({$_ -eq '' -or $_ -match '^[0-9a-f]{64}$'})][string]$ExpectedCoverageSha256='',
  [ValidateCount(1,5)][ValidateSet(2,3,4,5,6)][int[]]$NodeNumbers=(2..6),
  [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
 )
 $ErrorActionPreference='Stop'
-$mutatingSteps=@('Install','Build','Upload','Commit','RunAll')
+$mutatingSteps=@('Install','Build','Upload','Commit','CoverageCommit','RunAll')
 if ($Step -in $mutatingSteps -and -not $PSCmdlet.ShouldProcess("TESS HDFS release=$ReleaseId sector=$Sector","S15P21C206-76 $Step")) { return }
-if ($Step -eq 'Commit' -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
- throw 'Commit requires all Workers 2..6.'
+if ($Step -in @('Commit','CoverageCommit') -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
+ throw "$Step requires all Workers 2..6."
 }
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and join the project tailnet first.' }
 if ($Step -eq 'Install' -and -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install an OpenSSH client with scp first.' }
@@ -79,14 +82,14 @@ fi
  @((Invoke-RemoteCapture $node1 $command "Check HDFS path $Path")) -contains 'HDFS_PATH_PRESENT'
 }
 
-function Wait-HdfsUploaders([int]$CurrentSector) {
+function Wait-HdfsUploaders([int]$CurrentSector,[string]$CurrentRunId) {
  $started=[DateTimeOffset]::UtcNow
  $deadline=$started.AddHours(3)
  while ($true) {
   $pending=@()
   foreach ($node in $NodeNumbers) {
    $slot=$node-1
-   $unit="planetory-tess-hdfs-load-$RunId-s$CurrentSector-w$slot.service"
+   $unit="planetory-tess-hdfs-load-$CurrentRunId-s$CurrentSector-w$slot.service"
    $command="sudo systemctl show '$unit' --property=LoadState,ActiveState,SubState,Result,NRestarts,ExecMainStatus --no-pager"
    $state=@{}
    foreach ($line in @(Invoke-RemoteCapture "planetory-admin@node-$node" $command "Read Worker $slot uploader state")) {
@@ -100,8 +103,15 @@ function Wait-HdfsUploaders([int]$CurrentSector) {
    $pending += "w$slot=$($state.ActiveState)/$($state.SubState)"
   }
   if (-not $pending) {
+   $restartSummary=@()
+   foreach ($node in $NodeNumbers) {
+    $slot=$node-1
+    $unit="planetory-tess-hdfs-load-$CurrentRunId-s$CurrentSector-w$slot.service"
+    $restarts=@(Invoke-RemoteCapture "planetory-admin@node-$node" "sudo systemctl show '$unit' --property=NRestarts --value --no-pager" "Read Worker $slot uploader restarts") | Select-Object -Last 1
+    $restartSummary += "w$slot=$restarts"
+   }
    $elapsed=[Math]::Round(([DateTimeOffset]::UtcNow-$started).TotalSeconds,1)
-   Write-Host "UPLOAD_COMPLETE sector=$CurrentSector elapsed_seconds=$elapsed"
+   Write-Host "UPLOAD_COMPLETE sector=$CurrentSector elapsed_seconds=$elapsed restarts=$($restartSummary -join ',')"
    return
   }
   if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "Upload wait timed out after 3 hours: sector=$CurrentSector pending=$($pending -join ',')" }
@@ -111,20 +121,71 @@ function Wait-HdfsUploaders([int]$CurrentSector) {
  }
 }
 
-function Invoke-OrchestratedStep([string]$ChildStep,[int]$CurrentSector) {
+function Invoke-OrchestratedStep(
+ [string]$ChildStep,
+ [int]$CurrentSector,
+ [string]$CurrentRunId=$RunId,
+ [string]$CurrentSourceSha=$ExpectedSourceListSha256,
+ [string]$CurrentReleaseId=$ReleaseId,
+ [long]$CurrentSectorBytes=$ExpectedSectorBytes
+) {
  $parameters=@{
   Step=$ChildStep
-  RunId=$RunId
-  ExpectedSourceListSha256=$ExpectedSourceListSha256
+  RunId=$CurrentRunId
+  ExpectedSourceListSha256=$CurrentSourceSha
   Sector=$CurrentSector
-  ReleaseId=$ReleaseId
+  ReleaseId=$CurrentReleaseId
   CodeReleaseId=$CodeReleaseId
   TargetBundleMiB=$TargetBundleMiB
+  ExpectedSectorBytes=$CurrentSectorBytes
+  MinimumWorkerFreeGiB=$MinimumWorkerFreeGiB
+  ExpectedCoverageSha256=$ExpectedCoverageSha256
   NodeNumbers=$NodeNumbers
   LocalIngestionPath=$LocalIngestionPath
   Confirm=$false
  }
  & $PSCommandPath @parameters
+}
+
+function Get-CoverageDocument {
+ if (-not $ExpectedCoverageSha256) { throw 'ExpectedCoverageSha256 is required for Sector 1~13 coverage.' }
+ if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw 'Python is required to validate the coverage manifest.' }
+ $coverageBase64=$null
+ foreach ($node in $NodeNumbers) {
+  $command=@'
+set -eu
+manifest='/mnt/data/staging/S15P21C206-75/run-__RUN_ID__/manifests/coverage-sectors-1-13.json'
+checksum="$manifest.sha256"
+test -f "$manifest" -a -f "$checksum"
+actual=$(sha256sum "$manifest" | cut -d ' ' -f 1)
+declared=$(cut -d ' ' -f 1 "$checksum")
+test "$actual" = '__COVERAGE_SHA__'
+test "$declared" = '__COVERAGE_SHA__'
+base64 -w 0 "$manifest"
+'@.Replace('__RUN_ID__',$RunId).Replace('__COVERAGE_SHA__',$ExpectedCoverageSha256)
+  $encoded=@(Invoke-RemoteCapture "planetory-admin@node-$node" $command "Read Worker $($node-1) coverage manifest") | Select-Object -Last 1
+  if (-not $encoded) { throw "Worker $($node-1) returned no coverage manifest." }
+  if ($coverageBase64 -and $coverageBase64 -ne $encoded) { throw 'Worker coverage manifests differ despite the expected checksum.' }
+  $coverageBase64=$encoded
+ }
+ $temporary=[IO.Path]::GetTempFileName()
+ try {
+  [IO.File]::WriteAllBytes($temporary,[Convert]::FromBase64String($coverageBase64))
+  $loader=Join-Path $loaderRoot 'tess_hdfs_load.py'
+  $output=@(& python $loader coverage-map --coverage-manifest $temporary --expected-sha $ExpectedCoverageSha256 2>&1)
+  if ($LASTEXITCODE -ne 0) { throw "Coverage validation failed:`n$($output -join "`n")" }
+  $json=$output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1
+  if (-not $json) { throw 'Coverage validator returned no JSON map.' }
+  $map=$json | ConvertFrom-Json
+  if ($map.expected -ne 247824 -or $map.validated -ne 247824 -or (@($map.sectors.sector) -join ',') -ne ((1..13) -join ',')) {
+   throw 'Coverage map must contain all 247,824 products in Sector 1 through 13.'
+  }
+  $inputRun=@($map.sectors | Where-Object { $_.run_id -eq $RunId })
+  if (-not $inputRun -or @($inputRun | Where-Object { $_.source_list_sha256 -ne $ExpectedSourceListSha256 }).Count) {
+   throw 'Coverage map does not match the requested expansion RunId and source checksum.'
+  }
+  [pscustomobject]@{Map=$map;Base64=$coverageBase64}
+ } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
 }
 
 function New-LoaderBundle {
@@ -183,11 +244,21 @@ nn1=$(hdfs_cmd haadmin -getServiceState nn1)
 nn2=$(hdfs_cmd haadmin -getServiceState nn2)
 case "$nn1:$nn2" in active:standby|standby:active) ;; *) echo "INVALID_HA_STATE=$nn1:$nn2" >&2; exit 1;; esac
 test "$(hdfs_cmd getconf -confKey dfs.replication)" = 2
+test "$(hdfs_cmd getconf -confKey dfs.datanode.du.reserved)" = 107374182400
+test "$(hdfs_cmd dfsadmin -safemode get)" = 'Safe mode is OFF'
 test "$(hdfs_cmd dfsadmin -report | sed -n 's/^Live datanodes (\([0-9][0-9]*\)):.*/\1/p')" = 5
-used=$(hdfs_cmd dfs -df / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+read -r capacity used_bytes available used <<EOF
+$(hdfs_cmd dfs -df / | awk 'NR==2 {gsub(/%/,"",$5); print $2, $3, $4, $5}')
+EOF
 test "$used" -lt 75
-echo HDFS_PREFLIGHT_OK ha="$nn1:$nn2" live_datanodes=5 replication=2 used_percent="$used"
-'@
+expected=__EXPECTED_SECTOR_BYTES__
+if test "$expected" -gt 0; then
+ projected=$((used_bytes + expected * 2))
+ test $((projected * 100)) -le $((capacity * 70)) || { echo "HDFS_PROJECTED_USAGE_EXCEEDS_70_PERCENT" >&2; exit 1; }
+ test "$available" -ge $((expected * 2)) || { echo "HDFS_CAPACITY_INSUFFICIENT" >&2; exit 1; }
+fi
+echo HDFS_PREFLIGHT_OK ha="$nn1:$nn2" live_datanodes=5 replication=2 used_percent="$used" expected_source_bytes="$expected"
+'@.Replace('__EXPECTED_SECTOR_BYTES__',[string]$ExpectedSectorBytes)
   Invoke-Remote $node1 $command 'HDFS cluster preflight'
   foreach ($node in $NodeNumbers) {
    Assert-Host "node-$node" "planetory-admin@node-$node" "worker-$node"
@@ -200,6 +271,8 @@ audit="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.audit.json"
 complete="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.complete.json"
 test -x /opt/hadoop/bin/hdfs
 test -f "$source_list" -a -f "$audit" -a -f "$complete"
+available_kib=$(df -Pk /mnt/data | awk 'NR==2 {print $4}')
+test "$available_kib" -ge __MINIMUM_FREE_KIB__ || { echo "WORKER_CAPACITY_INSUFFICIENT available_kib=$available_kib" >&2; exit 1; }
 test -z "$(find '__RAW_ROOT__/sector=__SECTOR_PAD__' -maxdepth 1 -type f -name '*.part' -print -quit)"
 python3.12 - "$source_list" "$audit" "$complete" <<'PY'
 import json,sys
@@ -216,7 +289,7 @@ assert complete['worker_slot']==__SLOT__ and complete['sector']==__SECTOR__
 assert complete['source_list_sha256']=='__SOURCE_SHA__' and complete['validated']==audit['validated']
 print('WORKER_AUDIT_GATE_OK',audit['validated'],audit['total_bytes'])
 PY
-'@.Replace('__RUN_ROOT__',$runRoot).Replace('__SOURCE_LIST__',$sourceList).Replace('__RAW_ROOT__',$rawRoot).Replace('__SECTOR__',[string]$Sector).Replace('__SECTOR_PAD__',('{0:D4}' -f $Sector)).Replace('__SLOT__',[string]$slot).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256)
+'@.Replace('__RUN_ROOT__',$runRoot).Replace('__SOURCE_LIST__',$sourceList).Replace('__RAW_ROOT__',$rawRoot).Replace('__SECTOR__',[string]$Sector).Replace('__SECTOR_PAD__',('{0:D4}' -f $Sector)).Replace('__SLOT__',[string]$slot).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256).Replace('__MINIMUM_FREE_KIB__',[string]([int64]$MinimumWorkerFreeGiB*1MB))
    Invoke-Remote "planetory-admin@node-$node" $command "Worker $slot download audit gate"
   }
  }
@@ -287,7 +360,8 @@ install -d -m 0750 "$state"
 python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' plan \
  --source-list '__SOURCE_LIST__' --events '__RUN_ROOT__/manifests/sector-__SECTOR__-worker-__SLOT__.events.jsonl' \
  --audit-manifest '__RUN_ROOT__/manifests/sector-__SECTOR__-worker-__SLOT__.audit.json' --raw-root '__RAW_ROOT__' \
- --worker-slot __SLOT__ --sector __SECTOR__ --target-bundle-bytes __TARGET_BYTES__ --output "$plan"
+ --worker-slot __SLOT__ --sector __SECTOR__ --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' \
+ --target-bundle-bytes __TARGET_BYTES__ --output "$plan"
 /opt/hadoop/bin/hdfs dfs -mkdir -p '__STAGE__/.control/worker=__SLOT__'
 if /opt/hadoop/bin/hdfs dfs -test -e "$remote"; then
  /opt/hadoop/bin/hdfs dfs -cat "$remote" > "$plan.remote"
@@ -300,7 +374,7 @@ else
  /opt/hadoop/bin/hdfs dfs -mv "$remote.part" "$remote"
  echo PLAN_UPLOADED worker=__SLOT__
 fi
-'@.Replace('__RELEASE__',$codeRelease).Replace('__STATE__',$localState).Replace('__STAGE__',$stage).Replace('__SOURCE_LIST__',$sourceList).Replace('__RUN_ROOT__',$runRoot).Replace('__RAW_ROOT__',$rawRoot).Replace('__SECTOR__',[string]$Sector).Replace('__SLOT__',[string]$slot).Replace('__TARGET_BYTES__',[string]$targetBytes)
+'@.Replace('__RELEASE__',$codeRelease).Replace('__STATE__',$localState).Replace('__STAGE__',$stage).Replace('__SOURCE_LIST__',$sourceList).Replace('__RUN_ROOT__',$runRoot).Replace('__RAW_ROOT__',$rawRoot).Replace('__RUN_ID__',$RunId).Replace('__DATA_RELEASE__',$ReleaseId).Replace('__SECTOR__',[string]$Sector).Replace('__SLOT__',[string]$slot).Replace('__TARGET_BYTES__',[string]$targetBytes)
    Invoke-Remote "planetory-admin@node-$node" $command "Build Worker $slot deterministic plan"
   }
  }
@@ -368,8 +442,8 @@ echo UPLOAD_STARTED unit="$unit"
 set -eu
 sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
  python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' audit --stage-uri '__STAGE__' --final-uri '__FINAL_URI__' \
- --source-sha '__SOURCE_SHA__' --sector __SECTOR__ __SLOT_ARGS__
-'@.Replace('__RELEASE__',$codeRelease).Replace('__STAGE__',$stage).Replace('__FINAL_URI__',$finalUri).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256).Replace('__SECTOR__',[string]$Sector).Replace('__SLOT_ARGS__',$slotArgs)
+ --source-sha '__SOURCE_SHA__' --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' --sector __SECTOR__ __SLOT_ARGS__
+'@.Replace('__RELEASE__',$codeRelease).Replace('__STAGE__',$stage).Replace('__FINAL_URI__',$finalUri).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256).Replace('__RUN_ID__',$RunId).Replace('__DATA_RELEASE__',$ReleaseId).Replace('__SECTOR__',[string]$Sector).Replace('__SLOT_ARGS__',$slotArgs)
   Invoke-Remote $node1 $command 'Audit bundles, offsets, checksums and RF2'
  }
  'Commit' {
@@ -383,17 +457,15 @@ fsck=/tmp/S15P21C206-76-__RUN_ID__-fsck.txt
 cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$audit" "$spark_script" "$ready" "$fsck"; exit "$status"; }
 trap cleanup EXIT
 if hdfs_cmd dfs -test -e '__FINAL__'; then
- hdfs_cmd dfs -cat '__FINAL__/_READY.json' > "$ready"
- python3 - "$ready" <<'PY'
-import json,sys
-value=json.load(open(sys.argv[1],encoding='utf-8'))
-assert value['schema']=='planetory.tess-hdfs-release.v1'
-assert value['run_id']=='__RUN_ID__' and value['release_id']=='__DATA_RELEASE__'
-assert value['source_list_sha256']=='__SOURCE_SHA__' and value['sector']==__SECTOR__
-PY
  sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
   python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' audit --stage-uri '__FINAL__' --final-uri '__FINAL_URI__' \
-  --source-sha '__SOURCE_SHA__' --sector __SECTOR__ __SLOT_ARGS__
+  --source-sha '__SOURCE_SHA__' --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' \
+  --sector __SECTOR__ __SLOT_ARGS__ --output "$audit"
+ count=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["product_count"])' "$audit")
+ hdfs_cmd dfs -cat '__FINAL__/_READY.json' > "$ready"
+ PYTHONPATH='__RELEASE__' python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' ready --ready-json "$ready" \
+  --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' --source-sha '__SOURCE_SHA__' \
+  --sector __SECTOR__ --product-count "$count" --replication 2
  hdfs_cmd dfs -test -e '__FINAL__/manifest.parquet/_SUCCESS'
  echo COMMIT_CACHED final='__FINAL__'
  exit 0
@@ -403,7 +475,8 @@ if hdfs_cmd dfs -test -e '__STAGE__/_READY.json.part'; then
 fi
 sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
  python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' audit --stage-uri '__STAGE__' --final-uri '__FINAL_URI__' \
- --source-sha '__SOURCE_SHA__' --sector __SECTOR__ __SLOT_ARGS__ --output "$audit"
+ --source-sha '__SOURCE_SHA__' --run-id '__RUN_ID__' --release-id '__DATA_RELEASE__' \
+ --sector __SECTOR__ __SLOT_ARGS__ --output "$audit"
 count=$(sudo -u hdfs python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["product_count"])' "$audit")
 if hdfs_cmd dfs -test -e '__STAGE__/manifest.parquet'; then
  hdfs_cmd dfs -rm -r -skipTrash '__STAGE__/manifest.parquet'
@@ -433,7 +506,11 @@ fi
 hdfs_cmd dfs -put "$ready" '__STAGE__/_READY.json.part'
 hdfs_cmd dfs -mv '__STAGE__/_READY.json.part' '__STAGE__/_READY.json'
 hdfs_cmd dfs -mkdir -p '/lake/raw/tess/release=__DATA_RELEASE__'
-hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop
+classpath='__RELEASE__/classes:'"$(/opt/hadoop/bin/hadoop classpath)"
+sudo -u hdfs env JAVA_HOME="$JAVA_HOME" HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
+ java -cp "$classpath" TessSequenceFileTool commit '__STAGE__' '__FINAL__'
+hdfs_cmd dfs -cat '__FINAL__/_READY.json' | cmp -s "$ready" -
 hdfs_cmd fsck '__FINAL__' -files -blocks > "$fsck"
 grep -q 'Status: HEALTHY' "$fsck"
 grep -Eq 'Under-replicated blocks:[[:space:]]+0' "$fsck"
@@ -442,30 +519,90 @@ echo COMMIT_OK final='__FINAL__' products="$count"
 '@.Replace('__RUN_ID__',$RunId).Replace('__SECTOR__',[string]$Sector).Replace('__DATA_RELEASE__',$ReleaseId).Replace('__SOURCE_SHA__',$ExpectedSourceListSha256).Replace('__RELEASE__',$codeRelease).Replace('__STAGE__',$stage).Replace('__FINAL__',$final).Replace('__FINAL_URI__',$finalUri).Replace('__SLOT_ARGS__',$slotArgs).Replace('__SPARK_IMAGE__','apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1')
   Invoke-Remote $node1 $command 'Build manifest.parquet and atomically commit Raw sector'
  }
+ 'CoverageCommit' {
+  $document=Get-CoverageDocument
+  $coverageStage="/lake/raw/tess/.staging/coverage=$ExpectedCoverageSha256/run=$RunId"
+  $coverageFinal="/lake/raw/tess/coverage=$ExpectedCoverageSha256"
+  $command=@'
+set -eu
+hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
+source=/tmp/S15P21C206-76-__RUN_ID__-coverage-source.json
+ready=/tmp/S15P21C206-76-__RUN_ID__-coverage-ready.json
+existing=/tmp/S15P21C206-76-__RUN_ID__-coverage-existing.json
+cleanup() { status=$?; trap - EXIT; sudo rm -f -- "$source" "$ready" "$existing"; exit "$status"; }
+trap cleanup EXIT
+printf '%s' '__COVERAGE_BASE64__' | base64 --decode > "$source"
+test "$(sha256sum "$source" | cut -d ' ' -f 1)" = '__COVERAGE_SHA__'
+sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop PYTHONPATH='__RELEASE__' \
+ python3.12 '__RELEASE__/hdfs/tess_hdfs_load.py' coverage-ready --coverage-manifest "$source" \
+ --expected-sha '__COVERAGE_SHA__' --output "$ready"
+if hdfs_cmd dfs -test -e '__COVERAGE_FINAL__'; then
+ hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' > "$existing"
+ cmp -s "$ready" "$existing" || { echo COVERAGE_READY_CONFLICT >&2; exit 1; }
+ echo COVERAGE_COMMIT_CACHED final='__COVERAGE_FINAL__'
+ exit 0
+fi
+hdfs_cmd dfs -mkdir -p '__COVERAGE_STAGE__'
+unexpected=$(hdfs_cmd dfs -find '__COVERAGE_STAGE__' | grep -Ev '^__COVERAGE_STAGE__$|^__COVERAGE_STAGE__/_READY.json(.part)?$' || true)
+test -z "$unexpected" || { echo "COVERAGE_STAGE_UNEXPECTED=$unexpected" >&2; exit 1; }
+if hdfs_cmd dfs -test -e '__COVERAGE_STAGE__/_READY.json'; then
+ hdfs_cmd dfs -cat '__COVERAGE_STAGE__/_READY.json' > "$existing"
+ cmp -s "$ready" "$existing" || { echo COVERAGE_STAGE_CONFLICT >&2; exit 1; }
+else
+ if hdfs_cmd dfs -test -e '__COVERAGE_STAGE__/_READY.json.part'; then hdfs_cmd dfs -rm -f '__COVERAGE_STAGE__/_READY.json.part'; fi
+ hdfs_cmd dfs -put "$ready" '__COVERAGE_STAGE__/_READY.json.part'
+ hdfs_cmd dfs -mv '__COVERAGE_STAGE__/_READY.json.part' '__COVERAGE_STAGE__/_READY.json'
+fi
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop
+classpath='__RELEASE__/classes:'"$(/opt/hadoop/bin/hadoop classpath)"
+sudo -u hdfs env JAVA_HOME="$JAVA_HOME" HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
+ java -cp "$classpath" TessSequenceFileTool commit '__COVERAGE_STAGE__' '__COVERAGE_FINAL__'
+hdfs_cmd dfs -cat '__COVERAGE_FINAL__/_READY.json' > "$existing"
+cmp -s "$ready" "$existing"
+echo COVERAGE_COMMIT_OK final='__COVERAGE_FINAL__'
+'@.Replace('__RUN_ID__',$RunId).Replace('__COVERAGE_BASE64__',$document.Base64).Replace('__COVERAGE_SHA__',$ExpectedCoverageSha256).Replace('__RELEASE__',$codeRelease).Replace('__COVERAGE_STAGE__',$coverageStage).Replace('__COVERAGE_FINAL__',$coverageFinal)
+  Invoke-Remote $node1 $command 'Atomically commit Sector 1-13 HDFS coverage'
+ }
  'RunAll' {
   $runStarted=[DateTimeOffset]::UtcNow
-  foreach ($currentSector in 3..5) {
-   Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector"
-   Invoke-OrchestratedStep 'Preflight' $currentSector
+  if ($ExpectedCoverageSha256) {
+   $document=Get-CoverageDocument
+   $contexts=@($document.Map.sectors)
+  } else {
+   $contexts=@(3..5 | ForEach-Object {
+    [pscustomobject]@{sector=$_;run_id=$RunId;release_id=$ReleaseId;source_list_sha256=$ExpectedSourceListSha256;total_bytes=$ExpectedSectorBytes}
+   })
   }
-  Invoke-OrchestratedStep 'Install' 3
-  foreach ($currentSector in 3..5) {
-   $currentFinal="/lake/raw/tess/release=$ReleaseId/sector=$('{0:D4}' -f $currentSector)"
+  $first=$contexts[0]
+  Invoke-OrchestratedStep 'Preflight' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  Invoke-OrchestratedStep 'Install' ([int]$first.sector) ([string]$first.run_id) ([string]$first.source_list_sha256) ([string]$first.release_id) ([long]$first.total_bytes)
+  foreach ($context in $contexts) {
+   $currentSector=[int]$context.sector
+   $currentRunId=[string]$context.run_id
+   $currentSourceSha=[string]$context.source_list_sha256
+   $currentReleaseId=[string]$context.release_id
+   $currentBytes=[long]$context.total_bytes
+   Write-Host "RUN_ALL_PREFLIGHT sector=$currentSector run=$currentRunId"
+   Invoke-OrchestratedStep 'Preflight' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   $currentFinal="/lake/raw/tess/release=$currentReleaseId/sector=$('{0:D4}' -f $currentSector)"
    Write-Host "RUN_ALL_SECTOR_START sector=$currentSector"
    if (Test-HdfsPath $currentFinal) {
-    Invoke-OrchestratedStep 'Commit' $currentSector
+    Invoke-OrchestratedStep 'Commit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
     Write-Host "RUN_ALL_SECTOR_CACHED sector=$currentSector"
     continue
    }
-   Invoke-OrchestratedStep 'Build' $currentSector
-   Invoke-OrchestratedStep 'Upload' $currentSector
-   Wait-HdfsUploaders $currentSector
-   Invoke-OrchestratedStep 'Audit' $currentSector
-   Invoke-OrchestratedStep 'Commit' $currentSector
+   Invoke-OrchestratedStep 'Build' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   Invoke-OrchestratedStep 'Upload' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   Wait-HdfsUploaders $currentSector $currentRunId
+   Invoke-OrchestratedStep 'Audit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
+   Invoke-OrchestratedStep 'Commit' $currentSector $currentRunId $currentSourceSha $currentReleaseId $currentBytes
    Write-Host "RUN_ALL_SECTOR_COMPLETE sector=$currentSector"
   }
+  if ($ExpectedCoverageSha256) {
+   Invoke-OrchestratedStep 'CoverageCommit' 1 $RunId $ExpectedSourceListSha256 $ReleaseId 0
+  }
   $elapsed=[Math]::Round(([DateTimeOffset]::UtcNow-$runStarted).TotalMinutes,1)
-  Write-Host "RUN_ALL_COMPLETE sectors=3,4,5 elapsed_minutes=$elapsed"
+  Write-Host "RUN_ALL_COMPLETE sectors=$(@($contexts.sector) -join ',') elapsed_minutes=$elapsed"
  }
 }
 

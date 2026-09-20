@@ -210,7 +210,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 - [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다. `scp`는 비대화식·엄격한 host key 검증을 사용하고 실행 뒤 전용 staging 디렉터리를 정리한다.
 - [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다. 원격 명령은 Bash로 실행하고 HDFS는 `nn1`·`nn2` 중 정확히 하나가 Active인지 확인한다.
 - [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
-- [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 감사 완료 Sector를 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·offset 복원 감사 뒤 원자 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+- [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 75의 최종 coverage를 입력으로 Sector 1~13을 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·첫/중간/마지막 offset 복원 감사 뒤 덮어쓰기 없는 원자 rename으로 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
 ```powershell
@@ -361,6 +361,12 @@ Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-t
 Sector 1~13 확대는 기존 RunId를 수정하지 않는다. 2026-09-19 공식 목록은 247,824개, `source_list_sha256=8c6c2370682e24351fce1223d6f463da2bd57ae2e1780033d940dd695cfe2c38`이다. 신규 expansion Run은 Sector 1·2·6~13 191,838개만 받고, 완료 뒤 `FinalCoverage`가 기존 3~5와 신규 10개 Sector의 Worker별 audit·complete, 실제 FITS 집합·바이트, `.part` 0과 총 247,824개를 합산한다. 최종 manifest와 SHA-256 sidecar는 신규 Run의 manifest 디렉터리에 5대 모두 같은 내용으로 보존한다. 이 단계까지가 75번의 다운로드 완료 조건이며 HDFS 적재는 76번 범위다.
 
 실제 expansion은 데이터 RunId `20260919T005932Z`로 실행 중이다. 리뷰 보완 release `20260919T015748Z`, 내용 SHA `3d22c384455e6d2dd2c2049ea92ffe88b7725d63444bc571eb3770e13f54d298`은 비 ASCII FITS 무결성 처리, 따옴표 안 `/` 보존, Worker 전역 잠금과 이전 완료 unit 안전 비활성화를 포함한다. worker-2 canary는 기존 2,964개를 재사용하고 `SIGKILL` 뒤 PID `134505→134706`, `NRestarts=0→1`로 같은 Run을 재개했다. 이후 Worker 3~6을 한 대씩 재시작했고, 5대 모두 새 release `enabled/active/running`, lock PID 일치, 이전 unit disabled를 확인했다. 롤링 직후 합산은 17,273/191,838개(9.00%), 32.76GiB, 9.63MiB/s, 현재 실패·429·재시도 0이며 ETA 약 9시간 46분이다. Sector별 다운로드·감사는 서버에서 자율 수행한다. 운영자 연결이 필요한 단계는 모든 unit이 `COMPLETE`가 된 뒤 기존·신규 Run 증거를 결합하는 `FinalCoverage`뿐이며, 실패하거나 연결이 끊겨도 원본을 다시 받지 않고 같은 단계를 재실행한다.
+
+## TESS HDFS Sector 1~13 확장 (`S15P21C206-76`)
+
+HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 expansion Run의 Sector 1·2·6~13을 정확히 매핑한다. 각 Sector의 불변 final을 재감사하거나 새 staging을 적재한 뒤 Java `FileContext`의 `Rename.NONE`으로만 확정하며, 13개가 모두 성공한 뒤 source coverage SHA-256을 키로 전체 HDFS coverage marker를 원자 확정한다. systemd 재시작 횟수는 증거로 남기되 0을 성공 조건으로 두지 않고 최종 plan·bundle·manifest·RF2·복원 감사 결과로 판정한다.
+
+적재 전에는 HDFS safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만과 RF2 예상 사용률 70% 이하, Worker별 원본 디스크 가용 100GiB 이상을 확인한다. 저장소의 `hdfs-site.xml`은 `dfs.datanode.du.reserved=107374182400`(DataNode당 100GiB)을 선언하며 runner도 실제 클러스터 값을 요구한다. 기존 클러스터 설정 반영과 DataNode 재시작은 이번 코드 변경에 포함하지 않았으므로, 통제된 운영 작업으로 적용·검증하기 전에는 Sector 1~13 적재를 시작하지 않는다.
 
 ## Spark 제출
 
