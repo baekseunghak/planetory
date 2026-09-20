@@ -1,5 +1,22 @@
 # TESS 처리 벤치마크
 
+## 114 세그먼트·비닝 실험
+
+3차 화면 리뷰는 완료됐고 추가 그림 요청은 없다. 저장된 9별 counts 재집계와 115·123 인계는 [운영 채택안](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 기록했다. 운영 채택안은 10분 mean·부분 bin 유지·상한 초과 실패다. 승인 상태는 MR !101과 정합화 요청에서 관리한다. 실험의 자동 확대·`bin-exp-v1-*`을 운영 규칙으로 사용하지 않는다.
+
+MR !101 보충 시계열은 저장 결과만 읽는 `scripts/plot_binning_review.py`로 생성한다.
+주입 차분 그림은 통과 밖 배경이 제거되어 실제 가독성을 대표하지 않는다.
+설명·검증 범위는 [비닝 실험 문서](../../docs/data/tess-binning-benchmark.md#mr-101-2차-화면-리뷰와-보충-자료)를 따른다.
+Matplotlib은 일회성 실행 환경에만 추가하며 프로젝트 lock은 변경하지 않는다. output은 존재하지 않는 새 경로로 지정한다.
+
+```powershell
+uv run --locked --with matplotlib==3.11.2 python scripts/plot_binning_review.py --source results/binning/run-20260919T120741Z-84d4cc93 --output results/review-114-round2-84d4cc93
+```
+
+다른 프로젝트의 가상환경이 활성화돼 있으면 Git Bash에서 `deactivate` 후 실행한다. `uv`는 기본적으로 이 디렉터리의 `.venv`를 사용하므로 다른 환경을 강제하는 `--active`는 사용하지 않는다. `--locked`가 실패하면 로컬 경로 의존성의 메타데이터와 lock 일치를 확인하며, 실측을 위해 잠금 검사를 생략하지 않는다.
+
+`uv run --locked python -m tess_bench.binning --check-inputs`로 9별 입력을 확인하고, `--target l98_59`로 한 별을 실행한다. 인자 없이 전체 9별을 비교한다. 2·5·10·20분 평균/중앙값, 20,000점 상한, 빈 bin, 실제 신호와 전처리 후 합성 주입을 비교한다. 결과는 `results/binning/`에 별도 실행 디렉터리로 보존한다. BLS나 독립 holdout 평가는 아니다. 설계·지표·입력 준비·인수 조건은 [비닝 벤치마크](../../docs/data/tess-binning-benchmark.md)를 따른다.
+
 Jira `S15P21C206-42` (전처리·detrending, `preprocess`) 와 `S15P21C206-110` (BLS 격자·게이트, `bls`·`bls-gates`). 비닝 실측(D) 벤치마크도 이 프로젝트에 하위 명령으로 붙인다.
 BLS 실험 계획·규칙·결과는 [docs/data/tess-bls-benchmark.md](../../docs/data/tess-bls-benchmark.md) 에 있다.
 입력은 [tess-fixture](../tess-fixture/README.md) 의 고정 표본과 합성 주입 세트다. 실험 계획과 결과 읽는 법은

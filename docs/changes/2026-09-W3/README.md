@@ -133,6 +133,15 @@
 | 2026-09-19 | 분석 제출 접수·복구 구현 | S15P21C206-187 | 제출, requestId, 멱등, 응답 유실, 브라우저 POST 자동 재전송, reset-connection, outcome created/replayed, 특수 제출, no_candidate, skipped, 접수 결과 대화상자, dialog onClose 미발화 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-19.md) |
 | 2026-09-19 | C02 계약 예제의 fieldErrors 불일치 확인과 전달 | S15P21C206-187 | fieldErrors, field/reason, ErrorResponse.FieldError, contracts.json, validate.cjs 검사 누락, 소관 밖 수정 금지 | 확인 완료·미적용(C02 전달) | [기록](2026-09-19.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 세그먼트·비닝 해상도 비교 실험 준비 | S15P21C206-114 | 10분, 평균, 중앙값, gaps, 20000, bin 중심, 합성 주입 | 구현·합성 검증 완료, 실측 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 비닝 실험 잠금 파일 불일치 정정 | S15P21C206-114 | uv.lock, astro-kernel, jsonschema, VIRTUAL_ENV, locked | 동기화·입력 검증 완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 9별 비닝 실측과 짧은 통과 손실 기록 | S15P21C206-114 | 84d4cc93, 184, 3360, 10분, 20분, TOI-700, 미측정 | 실측 검증 완료·화면 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | MR !101 비차단 리뷰 설명 보완 | S15P21C206-114 | 전체 행, 3304/56, 267 bin, 1.335%, median 비선형, SVG 조건 | 문서·주석 검증 완료·화면 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 2차 화면 리뷰와 실제 시계열 보충 | S15P21C206-114 | 잡음 제거 차분, BTJD, empty bins, reference boundary, round2 | 그림·문서 검증 완료·보충 리뷰 전 | [2026-09-19](2026-09-19.md) |
+
+| 2026-09-20 | 부분 bin 분포와 운영 비닝 채택안 정합화 | S15P21C206-114 | 68910, counts, mean, robust MAD, 상한 실패, 운영 revision, 3차 화면 리뷰 | 제안·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+
+| 2026-09-20 | 114 소비자 명세·ERD 버전·counts 검산 자료 보완 | S15P21C206-114 | v1.11, 46 NPZ, counts ZIP, V1 보존, 123 인계 | 보완 완료·통합 검증 전 | [2026-09-20](2026-09-20.md) |
 | 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 핫 토픽 목록·선정 기준·상세 복귀 | S15P21C206-218 | S18, COM-09, 유효 참여자10명, 기간 제한 없음, cursor | 프론트 구현·계약 검증 완료, 실제 집계 인수 대기 | [2026-09-20](2026-09-20.md) |
@@ -141,6 +150,8 @@
 | 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | History 리뷰 반영 후 전체 백엔드 364건 회귀 검증 | S15P21C206-148 | ca013ba, Docker Desktop, History 25, gradlew test | 검증 완료, 앞선 DB 회귀 실행 대기 해소 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+
+| 2026-09-20 | 114 develop 통합 문서 충돌 해소 | S15P21C206-114 | a653abb, ERD v1.12, 143 보존, History | 통합 파일 검증 완료·병합 커밋 전 | [2026-09-20](2026-09-20.md) |
 | 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | AstroNet 평가 입력 NPZ 파일 checksum 정정 | S15P21C206-118 | astronet-eval, manifest, global_sha256, calibration, evaluation | 합성 입력 검증 완료·실제 평가 전 | [2026-09-19](2026-09-19.md) |
@@ -177,3 +188,4 @@
 | 2026-09-20 | 공개 응답 유실 복구·탐사 성과 DTO 통일 | S15P21C206-161 | analysisId 표시 이력, unlockedStars, position, STAR_NOT_PUBLISHED | 전체 400개 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 개인 기록 상세와 공용 읽기 전용 그래프 | S15P21C206-190 | 8.2 불변·현재 분리, 8.3 두 모드, 칸 중심 위상, snapshotVersion 없음, RETIRED_CANDIDATE 모드별 의미, 213 파서 감싸기, 공개 상태 집합 차이, 공용 그래프 슬롯 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
 | 2026-09-20 | 기록 상세 리뷰 반영: 안내를 화면과 맞춤 | S15P21C206-190 | 503 안내 문구, 그래프 없음 사유 분리, 실제 응답 인수(리뷰어 대행), 6.6 미구현 확인, 접기 기준 bin 시작 대 중심 | 구현 완료·인수 완료 | [기록](2026-09-20.md) |
+| 2026-09-21 | 114 과거 병합 커밋 전 상태 정정: e8f62ea 완료 | S15P21C206-114 | 과거 준비 기록, 현재 상태 대체 | 이전 통합 완료 | [정정·재검증](../2026-09-W4/2026-09-21.md) |

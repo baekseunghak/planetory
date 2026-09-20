@@ -440,7 +440,7 @@ History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대
 | segments[] | segmentId, sector, binningRevision, startBtjd, binMinutes, nPoints, flux[], fluxScatter, gaps |
 
 - 시각 배열은 보내지 않는다. i번째 점 시각은 `startBtjd + binMinutes / 1440 × i`(ERD 규칙)이고 결측은 null이다. JSON NaN/Infinity는 보내지 않는다.
-- 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트마다 둔다. DAT-11의 20,000점 초과 시 넓힌 실제 간격은 `binMinutes`로 표현한다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
+- 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트 전체 유한 비닝 flux의 `1.4826 × MAD`이며 통과·별 변동을 포함한다. 점별 측정 오차가 아니다. 운영은 10분 mean이며 빈 bin 포함 20,000점 초과 입력은 자동 확대하지 않고 실패·격리한다. 규칙은 [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)을 따른다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
 - History 그래프 조회는 작업을 자동 생성하지 않는다. 본인 History의 실제 작업 상태·미계산 null과 공개 조회의 캐시/원본/스냅샷 대체는 [탐사 API 8.3절](exploration-api-spec.md#83-히스토리-그래프-his-03-q11)을 따른다. 타인 공개 조회는 개인 jobId를 반환하거나 개인 작업 API를 폴링하지 않는다. 그래프 제공 불가여도 허용된 판단·근거·메모는 유지하며, 계산 중·자료 없음과 503 장애를 구분한다.
 
 **History 그래프 — 첨부·공개 분석 공통**

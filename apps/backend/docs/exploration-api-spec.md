@@ -638,8 +638,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | i번째 점의 시각 = `startBtjd + (binMinutes / 1440) × i`. 시각 배열은 보내지 않는다 | ERD `light_curve_segments` |
 | 결측은 `null`, `gaps`는 `[시작 인덱스, 끝 인덱스]` 폐구간. JSON `NaN`은 쓰지 않는다 | Q04 |
 | 세그먼트는 섹터 순 정렬. 섹터 사이 공백은 세그먼트 경계로 표현하고 프론트가 접어 그린다 | EXP-03, NFR-10 |
-| `binMinutes`는 세그먼트마다 다를 수 있다(20,000점 초과 시 확대) | DAT-11 |
-| `fluxScatter`는 세그먼트당 하나. 점별 오차 배열은 없다 | ERD |
+| 운영 `binMinutes`는 10분(mean). 빈 bin 포함 20,000점 초과 시 자동 확대하지 않고 실패·격리한다 | [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) |
+| `fluxScatter`는 세그먼트 전체 유한 비닝 flux의 `1.4826 × MAD`. 통과·별 변동 포함 robust 산포이며 점별 측정 오차가 아니다 | ERD v1.12 |
 | 잔차 단계의 `flux`는 같은 격자·같은 `startBtjd`에서 통과 모델을 나눈 값. 원본과 점 수·인덱스가 같다 | DAT-11·14 |
 | 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 D-2 | ERD 용량표 |
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
