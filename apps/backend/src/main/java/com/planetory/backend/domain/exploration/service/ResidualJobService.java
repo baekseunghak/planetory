@@ -2,11 +2,11 @@ package com.planetory.backend.domain.exploration.service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
+import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
 import com.planetory.backend.domain.exploration.service.ResidualJobStore.Enqueued;
@@ -40,35 +40,38 @@ public class ResidualJobService {
     /**
      * 계산을 요청한다(7.1절).
      *
+     * <p>응답에 지금 판을 함께 싣는다(D-5). 목표 검증이 현재 판만 통과시키므로 여기서는 곧 그 판이다.
+     *
      * @throws BusinessException 미공개 {@code STAR_NOT_PUBLISHED}, 미발견 {@code STAR_LOCKED},
      *                           판 교체 {@code BUNDLE_CHANGED}, 목표 형식·조합 오류 {@code VALIDATION_FAILED},
      *                           자리 없음 {@code RESIDUAL_QUEUE_FULL}, 계산 기반 미연결
      *                           {@code DEPENDENCY_UNAVAILABLE}
      */
-    public JobAccepted request(long memberId, long ticId, JobRequest body) {
+    public Answer<JobAccepted> request(long memberId, long ticId, JobRequest body) {
         CurveContext target = resolveTarget(memberId, ticId, body);
         String cacheKey = ResidualJobStore.cacheKey(ticId, target);
 
-        Optional<ResidualJobStore.Result> cached = store.result(cacheKey);
-        if (cached.isPresent()) {
-            // 이미 계산돼 있다. 작업을 만들지 않고 곧바로 문맥을 준다.
-            return new JobAccepted(null, ResidualJobStore.COMPLETED, true, target, null, null, null);
+        if (store.result(cacheKey).isPresent()) {
+            // 이미 계산돼 있다. 계산 기반 없이도 쓸 수 있는 값이라 실행기보다 먼저 본다.
+            return cached(target);
         }
 
         ResidualComputeRunner runner = runners.getIfAvailable();
         if (runner == null) {
             // 아무도 진행시키지 않을 작업을 만들지 않는다. 화면이 계산이 도는 줄 알게 된다.
-            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE,
-                    "잔차 계산 기반이 아직 연결되지 않았습니다.");
+            // 연결 상태는 내부 사정이라 기본 문구를 그대로 쓴다. 화면이 이 말을 사용자에게 보여 준다.
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
 
         Enqueued enqueued = store.enqueue(memberId, ticId, target, cacheKey);
         return switch (enqueued) {
+            // 위 확인과 등록 사이에 다른 회원의 같은 계산이 끝났다. 저장소가 그것까지 보고 답한다.
+            case Enqueued.Cached ignored -> cached(target);
             case Enqueued.Created(Job job, int queuePosition) -> {
                 runner.start(job);
-                yield accepted(job, queuePosition);
+                yield accepted(job, queuePosition, target);
             }
-            case Enqueued.Merged(Job job, int queuePosition) -> accepted(job, queuePosition);
+            case Enqueued.Merged(Job job, int queuePosition) -> accepted(job, queuePosition, target);
             case Enqueued.Full(int retryAfterSeconds, String activeJobId) -> throw queueFull(retryAfterSeconds,
                     activeJobId);
         };
@@ -81,9 +84,12 @@ public class ResidualJobService {
      * 요청하지 않은 회원의 작업과 사라진 작업은 같은 404로 덮는다. 구분하면 남의 작업 존재가 드러나고,
      * 프론트가 할 일도 「7.1절로 다시 요청」으로 같다.
      *
+     * <p><b>지금 판을 헤더로 함께 준다</b>(D-5). 조회는 판을 보지 않아 409를 내지 않으므로, 계산이 도는
+     * 동안 판이 바뀌는 것을 화면이 알아챌 수 있는 곳이 여기뿐이다. 폴링이 이미 돌고 있어 추가 요청도 없다.
+     *
      * @throws BusinessException 없거나 내 것이 아니면 {@code RESOURCE_NOT_FOUND}
      */
-    public JobStatus status(long memberId, String jobId) {
+    public Answer<JobStatus> status(long memberId, String jobId) {
         Job job = ExplorationIds.parse(jobId, ExplorationIds.RESIDUAL_JOB).isEmpty()
                 ? null
                 : store.find(jobId).filter(found -> found.watchedBy(memberId)).orElse(null);
@@ -91,13 +97,22 @@ public class ResidualJobService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         boolean completed = ResidualJobStore.COMPLETED.equals(job.status());
-        return new JobStatus(job.jobId(), String.valueOf(job.ticId()), job.target(), job.status(), job.attempt(),
-                job.timeline(), job.failure(), completed ? job.target() : null, properties.pollAfterSeconds());
+        boolean finished = completed || ResidualJobStore.FAILED.equals(job.status());
+        JobStatus body = new JobStatus(job.jobId(), String.valueOf(job.ticId()), job.target(), job.status(),
+                job.attempt(), job.timeline(), job.failure(), completed ? job.target() : null,
+                finished ? null : store.queuePosition(jobId).orElse(null), properties.pollAfterSeconds());
+        return new Answer<>(body, true, analysis.currentBundleId(job.ticId()).orElse(null));
     }
 
-    private JobAccepted accepted(Job job, int queuePosition) {
-        return new JobAccepted(job.jobId(), job.status(), false, null, queuePosition, null,
-                properties.pollAfterSeconds());
+    /** 캐시는 곧바로 쓸 수 있으니 200이다. */
+    private static Answer<JobAccepted> cached(CurveContext target) {
+        return new Answer<>(new JobAccepted(null, ResidualJobStore.COMPLETED, true, target, null, null, null),
+                true, target.bundleId());
+    }
+
+    private Answer<JobAccepted> accepted(Job job, int queuePosition, CurveContext target) {
+        return new Answer<>(new JobAccepted(job.jobId(), job.status(), false, null, queuePosition, null,
+                properties.pollAfterSeconds()), false, target.bundleId());
     }
 
     private static BusinessException queueFull(int retryAfterSeconds, String activeJobId) {

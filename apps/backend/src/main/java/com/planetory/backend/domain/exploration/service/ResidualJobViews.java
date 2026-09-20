@@ -35,9 +35,11 @@ public final class ResidualJobViews {
      * 7.2 응답. 필드 이름은 저장소 기록과 같다. 둘 다 명세 2.4·7.2절을 따르기 때문이다.
      *
      * @param resultCurveContext {@code COMPLETED}에만 있다
+     * @param queuePosition      7.1 응답과 같은 뜻이다. 끝난 작업에는 없다 — 줄이 끝났는데 「0번째」라고
+     *                           말하지 않는다. 폴링마다 다시 세므로 화면이 줄어드는 순번을 볼 수 있다
      */
     public record JobStatus(String jobId, String ticId, CurveContext target, String status, int attempt,
                             ResidualJobStore.Timeline timeline, ResidualJobStore.Failure failure,
-                            CurveContext resultCurveContext, int pollAfterSeconds) {
+                            CurveContext resultCurveContext, Integer queuePosition, int pollAfterSeconds) {
     }
 }

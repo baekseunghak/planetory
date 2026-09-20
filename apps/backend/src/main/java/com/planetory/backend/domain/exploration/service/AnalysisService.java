@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -206,6 +207,16 @@ public class AnalysisService {
             throw new IllegalStateException(target.context() + "의 잔차 주기도가 격자 크기와 맞지 않습니다.");
         }
         return target.answer(periodogramOf(target, original, residualOf(lookup), power), true);
+    }
+
+    /**
+     * 지금 판. 응답 헤더 {@code X-Current-Bundle}(D-5)에 쓴다.
+     *
+     * <p>별 접근을 다시 검사하지 않는다. 이미 통과한 요청의 응답에 값을 얹는 것이고, 여기서 또 막으면
+     * 폴링이 판 교체 대신 권한 오류를 보게 된다. 판이 없으면 빈 값이며 헤더를 붙이지 않는다.
+     */
+    public Optional<String> currentBundleId(long ticId) {
+        return gold.findCurrentBundle(ticId).map(bundle -> ExplorationIds.bundle(bundle.id()));
     }
 
     /** 5.1절 검사 순서: 공개된 별 → 회원이 연 별 → 현재 판. */

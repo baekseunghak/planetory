@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration.controller;
 
+import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.ResidualJobService;
 import com.planetory.backend.domain.exploration.service.ResidualJobViews.JobAccepted;
@@ -38,23 +39,38 @@ public class ResidualJobController {
     public ResponseEntity<JobAccepted> request(@AuthenticationPrincipal MemberPrincipal principal,
                                                @PathVariable String ticId,
                                                @RequestBody(required = false) JobRequest body) {
-        JobAccepted accepted = jobs.request(principal.memberId(), tic(ticId), body);
         // 캐시는 곧바로 쓸 수 있으니 200, 계산이 필요하면 202다(7.1절).
-        return ResponseEntity.status(accepted.cacheHit() ? HttpStatus.OK : HttpStatus.ACCEPTED).body(accepted);
+        return respond(jobs.request(principal.memberId(), tic(ticId), body));
     }
 
     @Operation(summary = "잔차 작업 상태",
             description = "v1은 폴링이며 pollAfterSeconds를 따른다. 없거나 내 작업이 아니면 404."
                     + " COMPLETED면 resultCurveContext로 곡선·주기도를 조회한다.")
     @GetMapping("/api/v1/residual-jobs/{jobId}")
-    public JobStatus status(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String jobId) {
-        return jobs.status(principal.memberId(), jobId);
+    public ResponseEntity<JobStatus> status(@AuthenticationPrincipal MemberPrincipal principal,
+                                            @PathVariable String jobId) {
+        return respond(jobs.status(principal.memberId(), jobId));
     }
 
     /** 형식이 다른 TIC은 발견하지 않은 별과 같은 응답으로 덮는다(4.2절과 같은 방침). */
     private static long tic(String ticId) {
         return ExplorationIds.parseTic(ticId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STAR_LOCKED));
+    }
+
+    /**
+     * 지금 판을 {@code X-Current-Bundle}로 함께 준다(D-5). 5.1·5.2·6장·8.3절과 같은 헤더이며, 화면은
+     * 폴링 중에 이 값이 진입 때 받은 판과 다르면 추가 요청 없이 5.1절을 다시 조회한다.
+     *
+     * <p>판을 읽지 못하면 붙이지 않는다. 「모른다」를 빈 문자열로 적으면 화면이 판이 바뀐 것으로 읽는다.
+     */
+    private static <T> ResponseEntity<T> respond(Answer<T> answer) {
+        ResponseEntity.BodyBuilder response =
+                ResponseEntity.status(answer.ready() ? HttpStatus.OK : HttpStatus.ACCEPTED);
+        if (answer.currentBundleId() != null) {
+            response.header(AnalysisController.CURRENT_BUNDLE_HEADER, answer.currentBundleId());
+        }
+        return response.body(answer.body());
     }
 
 }
