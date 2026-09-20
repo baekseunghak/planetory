@@ -85,6 +85,7 @@
 | 2026-09-17 | 튜토리얼·챌린지·재개 공용 패널 | S15P21C206-208 | quests, current round, visible notice, member event, fallback | 프론트 독립 검증 완료·실제 통합 대기 | [기록](2026-09-17.md) |
 | 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-18 | BLS 평가 단계 5별 결과 — 50k 이득 미재현으로 20k 유지 제안, SDE 문턱 미확정, dy 산정 방식 비교 | S15P21C206-110 | BLS, 평가 단계, linear20k, poc_linear20k, SDE, SNR, dy, local scatter, PDCSAP_FLUX_ERR, bls-snr-dy, CM Dra, HD 21749, WASP-18 잔여, DEC-03 | 실험 결과 · 제안 수정 | [2026-09-18](2026-09-18.md) |
 
 | 2026-09-18 | GCP 6계정 quota·비용·크레딧·예산 알림 실측 기록 | S15P21C206-228 | 무료 크레딧, 크레딧 소진 속도, DISKS_TOTAL_GB 99%, EXCLUDE_ALL_CREDITS, billing.admin, 10-09 기한, 예산 알림 5건 | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-17 | Gold manifest 추가 키 허용·배열 값 CHECK(V10)·ERD gaps NULL 정정(117 리뷰 후속) | S15P21C206-140 | GoldManifest, ignoreUnknown, checksum_version, UnrecognizedPropertyException, V10, CHECK, array_position, NaN, Infinity, 0x7FC00000, gaps, NULL, power NULL, DataAccessException, ERD v1.10 | 구현 완료 | [2026-09-17](2026-09-17.md) |
@@ -135,3 +136,5 @@
 | 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | History 리뷰 반영 후 전체 백엔드 364건 회귀 검증 | S15P21C206-148 | ca013ba, Docker Desktop, History 25, gradlew test | 검증 완료, 앞선 DB 회귀 실행 대기 해소 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |

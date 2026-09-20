@@ -58,7 +58,7 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
-## BLS 실행 (`bls`, `bls-gates`)
+## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`)
 
 ```powershell
 # 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
@@ -78,6 +78,15 @@ uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/
 # 문서 5.1절 표 생성: 여러 별 run 의 matches.csv 를 합쳐 설정별·구간별 회수율 Markdown 을 만든다 (재실행 없음).
 # 구간표는 단일 주입만 세고 쌍 주입은 따로 낸다. 세 구간표의 주변합이 다르면 종료 코드 1.
 uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id> results/bench/bls_grid_v1-1.0.0/toi451/run-<id> --baseline-days 77.724 52.812
+
+# SNR 점 오차(dy) 방식 비교 (재탐색 없음): manifest 로 같은 곡선을 다시 만들고 저장된 상위 피크에서 SNR 만
+# global(전역 robust scatter, 현재 구현)·flux_err(PDCSAP_FLUX_ERR/중앙값/추세)·local(1일 구간 scatter) 로 재계산해
+# 게이트(SNR≥7, SNR≥7&SDE≥6) 결과를 비교한다. 결과는 run 폴더의 snr_dy.csv·gates_dy.csv.
+# 시작 전에 manifest 의 grid·BLS 설정·전처리 설정 sha256, grid_set_id, 전처리·탐색 파라미터가 현재와 같은지 검사하고 다르면 중단한다.
+# 재현 판정은 설정별(global 재계산 vs 저장 snr: 중앙값 ≤ 1e-6, 1e-3 초과 피크 ≤ 25%(실측 4–14%), 최대 < 0.2(실측 최대 0.161)) 이며 하나라도 실패하면 종료 코드 1.
+# 기록된 전처리·탐색 파라미터 키가 현재 코드에서 사라지거나 이름이 바뀐 경우도 불일치다(허용된 기록용 메타 키만 예외).
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
@@ -89,7 +98,7 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 `bls-gates` 의 "잔여" 열은 주입 없는 실제 곡선(realclean `none`)에서 게이트를 통과한 피크 수다. 잡음 곡선만 보면 SNR 게이트가 충분해
 보이지만 자전 변광·제거 잔여·밝은 별의 낮은 산포가 그대로 통과하므로 이 열을 함께 본다.
 
-테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 34 passed, 없음 33 passed / 1 skipped).
+테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 40 passed, 없음 39 passed / 1 skipped).
 
 ## 산출물
 
@@ -129,3 +138,20 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 - 가장자리 마스크가 12시간 이상이면 구간 경계 ±0.5일 안에 남는 점이 없어 `boundary_ratio` 가 nan 이 된다. 그 설정의 경계 왜곡은
   이 지표로 평가하지 않는다.
 - 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).
+
+## 110 holdout 실행 (평가 전에 입력·설정 고정)
+
+대상·판정 산식·결과 기록 정본은 [BLS 벤치마크 5.3절](../../docs/data/tess-bls-benchmark.md)이다. 기존 tuning/evaluation은 조정 이력이 있으므로 holdout과 구분한다. 기본 9별에 holdout을 섞지 않는다.
+
+1. 환경은 `uv sync --python 3.11 --locked`로 준비한다. 다른 머신에서는 아래 다운로드와 고정 references.csv를 사용하며 Archive 참고값을 다시 갱신하지 않는다.
+2. 코드·설정·통과 기준·제품 checksum·참고값·lock을 검토하고 **평가 전 커밋**한다. lock은 설정을 바꿔 우회하는 도구가 아니다. Git 명령은 사용자가 실행한다.
+3. 아래 네 명령은 **tess-bench 디렉터리**에서 사용자가 실행한다. `iterate`가 아닌 `bls`다. 각 실행은 realclean + seed 3개, 바탕곡선당 주입 111그룹 + none 1그룹이며 대상당 총 448곡선이다.
+
+```powershell
+uv run --locked python -m tess_bench bls --target holdout_268637577 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_100102268 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_219237079 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_358253008 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+```
+
+각 명령 성공을 확인한 뒤 다음 대상으로 진행한다. 에러 또는 lock mismatch가 발생하면 기준 파일을 재생성하지 말고 원인을 확인한다. 결과 manifest 4개와 peaks/matches/summary CSV를 보존하고, 같은 MR에 별별·합계 검증 결과를 추가한다. Git에는 원본 FITS와 results 디렉터리를 추가하지 않는다. 모의 manifest 테스트는 실제 holdout 평가를 수행하지 않는다.
