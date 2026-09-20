@@ -1,0 +1,81 @@
+{
+  "schema": "planetory.ingestion-config.v1",
+  "version": "service-v1-sectors-1-13",
+  "product": "SPOC 2-minute Light Curve",
+  "worker_count": 5,
+  "download_concurrency": 16,
+  "disk_stop_fraction": 0.75,
+  "disk_resume_fraction": 0.70,
+  "max_part_bytes": 67108864,
+  "max_retries": 5,
+  "max_consecutive_failures": 10,
+  "retry_initial_seconds": 30,
+  "retry_max_seconds": 900,
+  "sectors": [
+    {
+      "sector": 1,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_1_lc.sh",
+      "expected_count": 15889
+    },
+    {
+      "sector": 2,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_2_lc.sh",
+      "expected_count": 15994
+    },
+    {
+      "sector": 3,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_3_lc.sh",
+      "expected_count": 15993
+    },
+    {
+      "sector": 4,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_4_lc.sh",
+      "expected_count": 19997
+    },
+    {
+      "sector": 5,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_5_lc.sh",
+      "expected_count": 19996
+    },
+    {
+      "sector": 6,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_6_lc.sh",
+      "expected_count": 19995
+    },
+    {
+      "sector": 7,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_7_lc.sh",
+      "expected_count": 19995
+    },
+    {
+      "sector": 8,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_8_lc.sh",
+      "expected_count": 19994
+    },
+    {
+      "sector": 9,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_9_lc.sh",
+      "expected_count": 19996
+    },
+    {
+      "sector": 10,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_10_lc.sh",
+      "expected_count": 19999
+    },
+    {
+      "sector": 11,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_11_lc.sh",
+      "expected_count": 19990
+    },
+    {
+      "sector": 12,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_12_lc.sh",
+      "expected_count": 19989
+    },
+    {
+      "sector": 13,
+      "bulk_script_url": "https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_13_lc.sh",
+      "expected_count": 19997
+    }
+  ]
+}

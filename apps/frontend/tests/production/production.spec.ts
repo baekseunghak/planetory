@@ -64,9 +64,8 @@ test("the built app retains routes/identity but contains no development page or 
   await page.goto("/analysis/259377017?returnTo=%2Fcommunity%3Fq%3Dtest");
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "분석", exact: true }),
+    page.getByRole("heading", { name: "분석 · TIC 259377017", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("TIC 259377017", { exact: true })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText(
     "서버 연결이 아직 준비되지 않았습니다",
   );
@@ -74,7 +73,7 @@ test("the built app retains routes/identity but contains no development page or 
     page.getByRole("region", { name: "분석 데이터 요약" }),
   ).toHaveCount(0);
   await expect(page.getByText(/개발 전용 테스트 응답입니다/)).toHaveCount(0);
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(page).toHaveURL(/\/community\?q=test$/);
   await page.goto("/accounts");
   await expect(

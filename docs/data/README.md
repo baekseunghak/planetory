@@ -11,9 +11,11 @@
 | 현재 구현과 목표의 차이, 처리 단계별 설계·검증 | [TESS 파이프라인 분석](tess-pipeline/README.md) | 팀 검토용 제안과 상세 문서 지도 |
 | 모델 후보 실행 가능성 | [AI 모델 조사](tess-ai-model-feasibility.md) | 조사·실험 결과 |
 | 전처리·detrending 설정 비교 | [전처리 벤치마크](tess-preprocess-benchmark.md) | 실행 결과·제안, 팀 리뷰 전 |
+| 42/D03 기본 전처리 커널·119 회귀 계약 | [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119) | 기본 커널·4별 회귀 완료, 재리뷰 대기. DAT-02 불량 구간 마스킹은 245 |
 | AI 평가용 PC/EB/junk 세트·201/61 입력 변환 | [AstroNet 평가 세트](tess-astronet-eval-set.md) | 1차 세트 생성·변환 완료, 팀 리뷰 전 |
-| BLS 탐색 격자·품질 게이트 비교 | [BLS 벤치마크](tess-bls-benchmark.md) | 조정·평가 단계 실행 결과 기록, 채택 제안 팀 리뷰 전 |
-| 반복 BLS·고정 모델 제거 루프의 종료·제거 QA·복구 | [반복 제거 벤치마크](tess-bls-iteration-benchmark.md) | 코드·합성 테스트 완료, fixture 실행 결과 기록 전 |
+| 단일 AstroNet 성능·임계값 검토 | [AstroNet 성능 평가](tess-astronet-benchmark.md) | 독립 평가 완료·자동 판정용 채택 보류 제안, 팀 리뷰 전 |
+| BLS 탐색 격자·품질 게이트 비교 | [BLS 벤치마크](tess-bls-benchmark.md) | 조정·평가・holdout 실행 결과와 채택 근거 |
+| 반복 BLS·고정 모델 제거 루프의 종료·제거 QA·복구 | [반복 제거 벤치마크](tess-bls-iteration-benchmark.md) | 코드·합성 테스트와 fixture 실행 결과, 최종 검증 정리 중 |
 
 저장 위치와 시스템 경계는 [아키텍처](../architecture/README.md), 서비스 정책은 [요구사항](../requirements/README.md)이 우선한다. fixture와 조사 결과를 전체 데이터 범위나 운영 완료 증거로 사용하지 않는다.
 

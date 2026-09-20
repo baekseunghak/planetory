@@ -59,6 +59,8 @@
 | 2026-09-17 | 로그인 세션 EC2-A Redis 이관 — MR !55 리뷰 반영, D1·D8 개정과 D10 추가 | S15P21C206-82, 237 | 세션 저장소, Redis 세션, Spring Session, 재시작 생존, 전원 재로그인 해소, Redis 인증 필수 의존, 503 인증 응답, synchronized session 회귀, HttpSessionWrapper, 직렬화 검증, TTL 분리, persistence 범위, SB-D07 개정, 6절 분류 정정 | 채택 (구현 237) | [2026-09-17](2026-09-17.md) |
 | 2026-09-18 | tailnet 접속을 전 서버 `tailscale ssh`로 통일 | S15P21C206-71 | Tailscale SSH, tailscale ssh, MagicDNS, donh-vnic, ec2-a, ec2-b, 개인 SSH 키 미배포, tailscale up --ssh | 검증 완료(실측) | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | `users` GRANT 구문 작성을 백엔드로 분리 | S15P21C206-83, 238 | GRANT 소유 경계, planetory_app, users, 42501, DDL, 마이그레이션 소유, V5 패턴, 인수 게이트 | 확정 (구현 238) | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | service Compose에 PostgreSQL 단일 인스턴스·영속 볼륨 추가 | S15P21C206-83 | service-db, postgres:18.6, planetory-service-db-data, /var/lib/postgresql, 외부 인바운드 0개, POSTGRES_PASSWORD 필수, Flyway V1~V9, 재기동 데이터 유지, 계정 분리 보류 | 검증 완료(로컬) · 실서버 미배포 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | DB 계정 분리 적용과 GRANT 결손 전수 검사(V11 구현은 238이 소유) | S15P21C206-83, 238 | V11, planetory_app, planetory_service, GRANT 결손 12개, FOR UPDATE에 UPDATE 필요, 소프트 삭제, spring.flyway.url, Spring Boot 4 분리 무시, initdb 훅, 인수 게이트, 42501 0건 | 검증 완료(로컬, 인수 게이트 통과) · 실서버 미배포 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Redis를 redis-session·redis-cache 두 인스턴스로 분리 | S15P21C206-82, 84, 237 | redis-session, redis-cache, maxmemory 인스턴스 단위, eviction, noeviction, 세션 유실, 장애 축 분리, persistence, 메모리 예산 분할, 논리 DB 분리 기각 | 채택 (구현 84·237) | [2026-09-18](2026-09-18.md) |
 | 2026-09-17 | Gold 적재 예제 PostgreSQL QA+round-trip 57항목 통과, 배열·레코드 checksum 규칙 v0, 공개 정책 미결 정리(69 코드만 사용) | S15P21C206-117 | Gold round-trip, publication-qa, array checksum, record-canonical, f32le, NULL 7FC00000, qa-tolerances, PUBLISH_REJECTED, PUBLISH_ROLLED_BACK, 손상 Sector, AI 실패, bundle_version 충돌, NUMERIC 정밀도, V1~V8, planetory_gold_writer, D09 | 검증 완료(로컬) · 제안 · 미결 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | 튜토리얼 순차 발견·챌린지 발견·퀘스트 패널, 회차 전환 전용 명령, 튜토리얼 완료 유지·챌린지 느낌표 기준 | S15P21C206-139 | 튜토리얼, 챌린지, 퀘스트, GET /me/quests, tutorialCompleted, completed_at, 재개, challenge-unlock, 회차 전환, 운영 명령, 비웹 기동, StarDiscoveryService, layout_ordinal, 지도 버전, marker, 빨간 느낌표, newDiscoverableCount, 미결 12, F17-Q2 | 구현 완료 | [2026-09-17](2026-09-17.md) |
@@ -101,6 +103,7 @@
 | 2026-09-18 | 수동 NameNode 전환과 Worker 장애 복구 검증 | S15P21C206-74 | HDFS, QJM, forceactive, RF2, Worker, block report, checksum, no-format | 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 제출 수치 검증·후보 매칭·고조파 판정 계산(공통 표본 31개 재현) | S15P21C206-142 | SubmissionMatching, 6.2 검증, epoch 산정, 5.1 네 조건, 배율 1 우선, matched_harmonic, ambiguous_match, duplicate, 관측 창, bin 시작 시각, matching-cases.v0, rule-0 | 구현 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 응답 보완 | S15P21C206-242 | MY-01, 가입일, joinedAt, users.created_at, GET /me | 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 실제 서비스의10만 별 데이터/히트/버퍼 비용 개선과 성능 미달 분리 | S15P21C206-215 | WebGL, quadtree, immutable cache, float32, p95, DPR, heap, 100000 | 개선 구현·로컬 기능 검증 완료, 성능 인수 진행 중 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 내 프로필 가입일 소비와 미결 조건 정정 | S15P21C206-214 | joinedAt, UTC, Asia/Seoul, 공개 필드 제한 | 프론트 계약 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | P0 프로필과 P1 팔로우 수 완료 범위 분리 | S15P21C206-214·219 | MY-01, COM-16, AT-70, AT-78, 팔로워, 팔로잉, P0, P1 | 담당자 결정·문서 반영·리뷰 전 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 분석 병합 이후 동기화와 P0 재검토 준비 | S15P21C206-214 | develop, 프로필, 403, 404, PRIVATE, 배포 순서, 재검토 | 프론트 검증 완료·리뷰 대기 | [2026-09-18](2026-09-18.md) |
@@ -110,9 +113,45 @@
 | 2026-09-18 | 주기도 대기 응답을 실제 서버 계약에 맞춤 | S15P21C206-183 | 주기도 202, power null, code 없음, decodePendingPeriodogram, fixture 정합 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
 
 | 2026-09-18 | 서버 계약 수정 반영과 판 버전 표시 정정 | S15P21C206-236 | bundleVersion 문자열, 데이터 vv7 중복 접두사, 계약 수정 누적 반영 | 구현 완료, 서버 인수 대기 | [기록](2026-09-18.md) |
+
+| 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-19 | L 98-59 가드 적용 분리 실행 결과 | S15P21C206-111 | 7cc8dcb2, 65/108, window_offset, 1 d·8 h, 가짜 1 | 실험 결과 기록·채택 미확정 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | 저장 후보 기반 창 안 편향 진단 | S15P21C206-111 | window_offset, 1 d, 8 h, 기준 밝기, 재현 검사 | 구현 완료·진단 실측 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | 진단 실측·바깥 평균 기준 창 안 편향 QA 옵션 | S15P21C206-111 | oot, unity, 12곡선, 공통 밝기 편향, 두 평균 오차, 잔차 복구 | 구현·검증 완료·반복 실측 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | oot 비교 실측·회수 개선과 가짜 증가 | S15P21C206-111 | 652fe48d, 71/108, 가짜 2, g102, 0.605876699 d | 검증 완료·채택 보류 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | 111 완료 조건·이전 정상 잔차 복구·최종 인계 준비 | S15P21C206-111 | 122, 설정 지문, empty peaks, 종료 7종, D04 승인, 15 FITS | 검증 완료·최종 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 핫 토픽 목록·선정 기준·상세 복귀 | S15P21C206-218 | S18, COM-09, 유효 참여자10명, 기간 제한 없음, cursor | 프론트 구현·계약 검증 완료, 실제 집계 인수 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 조회·그래프 재현·공개 부모 API 연결 경계 구현 | S15P21C206-148 | CURRENT, SUBMITTED, snapshotVersion, current 부재, 권한 재확인, 160, 구기록 | 본체 구현·격리 DB 검증 완료, 구기록 정책 확인 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 최초 응답 누락 상세 503 방어 정책 확정 | S15P21C206-148 | response_snapshot, 157fb5e, 정상 제출 경로, 리뷰어 검증 | 채택·문서 반영 완료, 앞선 구기록 보류 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰 반영 후 전체 백엔드 364건 회귀 검증 | S15P21C206-148 | ca013ba, Docker Desktop, History 25, gradlew test | 검증 완료, 앞선 DB 회귀 실행 대기 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 평가 입력 NPZ 파일 checksum 정정 | S15P21C206-118 | astronet-eval, manifest, global_sha256, calibration, evaluation | 합성 입력 검증 완료·실제 평가 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 후보별 AstroNet 조정용 추론 도구 | S15P21C206-118 | candidate_id, TIC 평균, TensorFlow 1.15.5, Docker digest, calibration | 구현·합성 검증 완료·사용자 실행 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 조정 실측과 임계값 미확정 | S15P21C206-118 | bb71f278, AP, PR-AUC, TOI-700 e, FP/FN | 조정 실측 완료·팀 비용 기준 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 사용자 위임 AstroNet 실험 임계값 고정 | S15P21C206-118 | triage_calibration_v1, lower 0, review, evaluation, threshold hash | 실험안 고정·사용자 평가 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 독립 평가와 자동 판정용 채택 보류 제안 | S15P21C206-118 | 183da766, 10/11, FP 2/18, review 20/35, 고정 임계값 | 실측·집계 완료·팀 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | MR !102 화면·전달 리뷰 문서 보완 | S15P21C206-118 | 분수 병기, 합성 백색 잡음, 상충관계, 내부 검토, in_truth | 문서 보완 완료·처리 리뷰 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | !102 calibration 연결 검증·소형 첨부 준비 | S15P21C206-118 | calibration hash, 57 tests, 183da766, 재집계 | 보완·검산 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Silver 전처리·42 회귀 계약 | S15P21C206-119 | biweight, 원본 행, 제외 사유, 허용 오차 0, DAT-02 | 구현·합성 검증 완료, 실측·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Silver 전처리 4별 실측 회귀 통과 | S15P21C206-119 | 9c908a11, 448/448, 428.510초, 해시 44개 일치 | 실측 검증 완료·MR 리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | !107 기본 커널 범위와 불량 구간 마스킹 후속 분리 | S15P21C206-119, 245 | DAT-02, 원래 QUALITY, 정규화 전 마스킹 | 문서 반영·후속 등록·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 110 병합 후 반복 검증 준비 | S15P21C206-111 | unity, 49ccec22320d, holdout 테스트 격리, 87+93 | 최종 실측 준비 | [기록](2026-09-20.md) |

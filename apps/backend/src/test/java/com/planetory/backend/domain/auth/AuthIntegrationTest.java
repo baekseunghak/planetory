@@ -249,6 +249,46 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void starListVisibilityChangesPersistAndOnlyHideOtherMembersList() throws Exception {
+        var owner = login("google", "settings-owner");
+        var viewer = login("google", "settings-viewer");
+        long id = memberId(owner);
+        jdbc.update("UPDATE user_settings SET onboarding_done = true, notification_prefs = '{\"achievement\":false}'::jsonb WHERE user_id = ?", id);
+
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"));
+        mvc.perform(get("/api/v1/me").session(owner))
+                .andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.onboardingDone").value(true));
+        assertEquals("false", jdbc.queryForObject("SELECT notification_prefs ->> 'achievement' FROM user_settings WHERE user_id = ?", String.class, id));
+        mvc.perform(get("/api/v1/members/u-" + id).session(viewer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"))
+                .andExpect(jsonPath("$.achievementSummary").exists());
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("STAR_LIST_PRIVATE"));
+        mvc.perform(get("/api/v1/me/stars").session(owner)).andExpect(status().isOk());
+
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PUBLIC\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PUBLIC"));
+        mvc.perform(get("/api/v1/members/u-" + id + "/stars").session(viewer)).andExpect(status().isOk());
+        jdbc.update("DELETE FROM user_settings WHERE user_id = ?", id);
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{\"starListVisibility\":\"PRIVATE\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.starListVisibility").value("PRIVATE"));
+        assertFalse(jdbc.queryForObject("SELECT star_list_public FROM user_settings WHERE user_id = ?", Boolean.class, id));
+        for (String value : List.of("public", "HIDDEN", "")) {
+            mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                            .contentType("application/json").content("{\"starListVisibility\":\"" + value + "\"}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+        mvc.perform(patch("/api/v1/me/settings").session(owner).with(csrf())
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void publicProfileShowsOnlyPublicSummaryEvenWhenStarListIsPrivate() throws Exception {
         var viewer = login("google", "viewer");
         var owner = login("google", "owner");

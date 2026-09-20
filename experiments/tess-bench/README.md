@@ -7,6 +7,25 @@ BLS 실험 계획·규칙·결과는 [docs/data/tess-bls-benchmark.md](../../doc
 
 이 코드는 **값을 정하는 실험 코드**다. 검증된 규칙은 구현 Task 에서 별도 커널로 옮긴다.
 
+## Silver 전처리 커널 회귀 (119)
+
+공용 구현·실패·회귀 계약은 [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119)을 따른다.
+아래 명령은 BLS 없이 42의 4별·주입 격자 1.1.0을 기존 전처리와 새 커널로 각각 처리한다.
+실제 실험은 사용자가 실행한다. 입력·코드·환경·오차 0 기준을 먼저 저장한다.
+
+```powershell
+cd experiments/tess-bench
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.silver_regression
+```
+
+각 별의 `112/112 curves equal; summary=True`와 마지막 `passed=True`를 확인한다.
+산출물은 `results/silver-regression/run-.../`의 plan·비교 CSV·지표 CSV·요약 CSV·manifest다.
+이 도구는 다운로드·Git 명령을 실행하지 않는다. 사용자 실행 `9c908a11`에서 448/448곡선과 4별 요약이 일치했다.
+총 428.510초이며 저장된 입력·출력·plan 해시 44개도 일치한다. 상세 수치·해시는 위 119 계약에 기록한다.
+검증 범위는 42/D03 기본 커널이며 DAT-02 전체 구현 완료가 아니다. 고정 6·12시간 일괄 제외는 넣지 않으며,
+확인된 불량 구간의 정규화 전 마스킹·원본 QUALITY/행 추적은 후속 `S15P21C206-245`에서 다룬다.
+
 ## 준비
 
 Python 3.11 이상, `uv`. FITS 표본은 tess-fixture 쪽에 받아 둔다.
@@ -174,3 +193,20 @@ uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation 
 최종 인계 후보와 110 승인 후 실행 세트는 [반복 제거 벤치마크 7절](../../docs/data/tess-bls-iteration-benchmark.md)에 모은다. 현재 oot는 미채택이고 unity·상대 0.1·duration 최대 12 h를 보수적 리뷰 후보로 둔다. 110 승인값 반영·재대조 전에 이를 최종 확정 실행으로 부르지 않는다.
 
 새 iterate manifest에는 `iterate_config_version=bls_iterate_qa_v1/<설정 SHA-256 앞 12자리>`, 전체 `iterate_config_sha256`, `grid_set_id`와 Archive 참고값·fixture checksum 파일의 해시를 기록한다. 설정 해시와 코드 commit은 별도 식별자다. 콘솔 QA 요약의 최소·절댓값 최대를 함께 확인한다.
+
+## 110 holdout 실행 (평가 전에 입력·설정 고정)
+
+대상·판정 산식·결과 기록 정본은 [BLS 벤치마크 5.3절](../../docs/data/tess-bls-benchmark.md)이다. 기존 tuning/evaluation은 조정 이력이 있으므로 holdout과 구분한다. 기본 9별에 holdout을 섞지 않는다.
+
+1. 환경은 `uv sync --python 3.11 --locked`로 준비한다. 다른 머신에서는 아래 다운로드와 고정 references.csv를 사용하며 Archive 참고값을 다시 갱신하지 않는다.
+2. 코드·설정·통과 기준·제품 checksum·참고값·lock을 검토하고 **평가 전 커밋**한다. lock은 설정을 바꿔 우회하는 도구가 아니다. Git 명령은 사용자가 실행한다.
+3. 아래 네 명령은 **tess-bench 디렉터리**에서 사용자가 실행한다. `iterate`가 아닌 `bls`다. 각 실행은 realclean + seed 3개, 바탕곡선당 주입 111그룹 + none 1그룹이며 대상당 총 448곡선이다.
+
+```powershell
+uv run --locked python -m tess_bench bls --target holdout_268637577 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_100102268 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_219237079 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_358253008 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+```
+
+각 명령 성공을 확인한 뒤 다음 대상으로 진행한다. 에러 또는 lock mismatch가 발생하면 기준 파일을 재생성하지 말고 원인을 확인한다. 결과 manifest 4개와 peaks/matches/summary CSV를 보존하고, 같은 MR에 별별·합계 검증 결과를 추가한다. Git에는 원본 FITS와 results 디렉터리를 추가하지 않는다. 모의 manifest 테스트는 실제 holdout 평가를 수행하지 않는다.

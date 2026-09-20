@@ -1,0 +1,13 @@
+{
+  "threshold_version": "triage_calibration_v1",
+  "status": "experimental_user_authorized_not_team_adopted",
+  "lower": 0.0,
+  "upper": 0.00349776993971318,
+  "rule": "score < lower: below; score >= upper: approved; otherwise: review",
+  "objective": "Disable automatic rejection; zero junk approvals on calibration, then maximize PC/EB approvals; upper is midpoint of adjacent negative and positive calibration scores.",
+  "cost_assumption": "Avoid automatic loss of real signals; accept review burden. No numerical team-approved FP/FN cost exists.",
+  "calibration_predictions_sha256": "bf3d9ba24a2b490be96140de9fac89adfdf96a1069f48ce7222bbf7b4a339bfd",
+  "conversion_manifest_sha256": "e5955cc1e676f2ffd214221d71fbf15f41137f51f48d7434a4d6e1776de34472",
+  "assets_sha256": "2eed011062fed5e9241144543127c8a5a1a56d57a65b0e08e32709ee821facc0",
+  "evaluation_policy": "Record fixed thresholds without retuning on evaluation. approved means model PC/EB triage only, never confirmed planet. Team adoption and license review remain pending."
+}

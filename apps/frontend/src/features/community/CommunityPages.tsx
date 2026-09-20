@@ -1,12 +1,22 @@
+import { CommunityFeed, DateTime, AuthorLink, StarLink } from "./CommunityFeed";
 import { MaterialCards } from "./MaterialCards";
 import { useCallback, useState } from "react";
 import {
   Link,
   useLocation,
+  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
 import { api } from "../../api";
+import { ApiError } from "../../api/client";
+import { FeedSearchForm } from "./FeedSearchForm";
+import {
+  feedSearchHref,
+  feedSearchParams,
+  readFeedSearch,
+  type FeedSearch,
+} from "./feedSearch";
 import { pagePath, safeReturnTo } from "../../app/paths";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import {
@@ -18,7 +28,6 @@ import {
   readFeed,
   readPost,
   readThread,
-  type Author,
   type Summary,
 } from "./contracts";
 import { useReadModel } from "./useReadModel";
@@ -29,40 +38,6 @@ import { Discussion } from "./Discussion";
 import { PostReactions } from "./PostReactions";
 import { PostActions } from "./PostActions";
 
-function DateTime({ value }: { value: string }) {
-  return (
-    <time dateTime={value}>
-      {new Date(value).toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })}
-    </time>
-  );
-}
-function AuthorLink({ author }: { author: Author }) {
-  const location = useLocation();
-  return (
-    <Link
-      to={pagePath(
-        "member",
-        { memberId: author.memberId },
-        { returnTo: location.pathname + location.search },
-      )}
-    >
-      {author.nickname}
-    </Link>
-  );
-}
-function StarLink({ ticId }: { ticId: string }) {
-  return (
-    <Link className="community-tic" to={pagePath("starBoard", { ticId })}>
-      TIC {ticId}
-    </Link>
-  );
-}
 function ReadState({
   state,
 }: {
@@ -79,28 +54,43 @@ export function CommunityPage() {
   const { ticId } = useParams<"ticId">();
   const [search] = useSearchParams();
   const location = useLocation();
-  const board = ticId
-    ? "STAR"
-    : search.get("board") === "FREE"
-      ? "FREE"
-      : search.get("board") === "STAR"
-        ? "STAR"
-        : null;
+  const navigate = useNavigate();
+  const { values, error: addressError } = readFeedSearch(search, ticId);
+  const board = values.board;
   const cursor = search.get("cursor");
-  const path = endpoint("/v1/community/feed", {
-    board,
-    ticId,
-    cursor,
-    size: "20",
-  });
+  const params = feedSearchParams(values);
+  params.set("size", "20");
+  if (cursor) params.set("cursor", cursor);
+  const path = "/v1/community/feed?" + params;
   const load = useCallback(
-    async (signal: AbortSignal) =>
-      readFeed(await api(path, { signal }), cursor),
-    [path, cursor],
+    async (signal: AbortSignal) => {
+      if (addressError)
+        throw new ApiError(400, "VALIDATION_FAILED", addressError);
+      return readFeed(await api(path, { signal }), cursor);
+    },
+    [path, cursor, addressError],
   );
-  const state = useReadModel(path, load);
-  usePageScroll(!state.loading);
+  const state = useReadModel(path + (addressError ?? ""), load);
   const current = location.pathname + location.search;
+  const restoration = location.state?.communityRestore;
+  usePageScroll(
+    Boolean(state.data),
+    restoration?.path === current && typeof restoration.key === "string"
+      ? restoration.key
+      : undefined,
+  );
+  const submitSearch = (next: FeedSearch) =>
+    navigate(feedSearchHref(location.pathname, next, ticId), { state: null });
+  const boardHref = (nextBoard: string) =>
+    feedSearchHref("/community", {
+      ...values,
+      board: nextBoard,
+      ticId: ticId ? "" : values.ticId,
+    });
+  const filtered = Boolean(
+    values.q || values.author || values.tag || values.ticId || values.board,
+  );
+  const firstPage = feedSearchHref(location.pathname, values, ticId);
   return (
     <div className="community-page">
       <header className="community-heading">
@@ -123,92 +113,70 @@ export function CommunityPage() {
         </Link>
       </div>
       <nav className="community-tabs" aria-label="게시판 종류">
-        <Link to="/community" aria-current={!board ? "page" : undefined}>
+        <Link
+          to={boardHref("")}
+          state={null}
+          aria-current={!board ? "page" : undefined}
+        >
           전체
         </Link>
         <Link
-          to="/community?board=STAR"
+          to={boardHref("STAR")}
+          state={null}
           aria-current={board === "STAR" ? "page" : undefined}
         >
           별 게시판
         </Link>
         <Link
-          to="/community?board=FREE"
+          to={boardHref("FREE")}
+          state={null}
           aria-current={board === "FREE" ? "page" : undefined}
         >
           자유 게시판
         </Link>
+        <Link to={pagePath("hotTopics")} state={null}>
+          핫 토픽
+        </Link>
       </nav>
-      <section aria-label="게시글 목록">
+      <FeedSearchForm
+        key={location.key}
+        initial={values}
+        addressError={addressError}
+        routeTic={ticId}
+        resetTo={location.pathname}
+        onSearch={submitSearch}
+      />
+      <section aria-label="게시글 목록" aria-busy={state.loading}>
+        <p className="community-search-summary" role="status">
+          {state.loading
+            ? "이야기를 찾고 있습니다…"
+            : state.error
+              ? "목록을 불러오지 못했습니다."
+              : filtered
+                ? "적용한 조건의 결과 · 최신 작성순"
+                : "전체 이야기 · 최신 작성순"}
+        </p>
+        {state.error && cursor && (
+          <Link to={firstPage} state={null}>
+            조건을 유지하고 처음 페이지로
+          </Link>
+        )}
         {!state.data ? (
-          <ReadState state={state} />
+          state.error ? (
+            <ReadState state={state} />
+          ) : null
         ) : (
           <>
             {!state.data.items.length && (
               <p className="community-empty">
                 {cursor
                   ? "이 페이지에 표시할 글이 없습니다. 처음 페이지에서 다시 확인해 주세요."
-                  : "아직 게시글이 없습니다."}
+                  : filtered
+                    ? "검색 조건에 맞는 글이 없습니다. 조건을 바꾸거나 초기화해 보세요."
+                    : "아직 게시글이 없습니다."}
               </p>
             )}
-            <ul className="community-feed">
-              {state.data.items.map((item) => (
-                <li key={`${item.type}:${item.id}`}>
-                  <div className="community-row-meta">
-                    <span
-                      className={
-                        item.type === "SIGNAL_THREAD"
-                          ? "community-official"
-                          : ""
-                      }
-                    >
-                      {item.type === "SIGNAL_THREAD"
-                        ? "공식 신호 스레드 · SYSTEM"
-                        : "일반 글"}
-                    </span>
-                    {item.ticId ? (
-                      <StarLink ticId={item.ticId} />
-                    ) : (
-                      <span>자유 게시판</span>
-                    )}
-                  </div>
-                  <h2>
-                    <Link
-                      state={location.state}
-                      to={
-                        item.type === "POST"
-                          ? pagePath(
-                              "post",
-                              { postId: item.id },
-                              { returnTo: current },
-                            )
-                          : pagePath(
-                              "thread",
-                              { threadId: item.id },
-                              { returnTo: current },
-                            )
-                      }
-                    >
-                      {item.title}
-                    </Link>
-                  </h2>
-                  <div className="community-row-meta">
-                    {"memberId" in item.author && (
-                      <AuthorLink author={item.author} />
-                    )}
-                    <DateTime value={item.createdAt} />
-                    <span>토론 {item.commentCount.toLocaleString()}개</span>
-                    {item.judgmentSummary && (
-                      <span>
-                        {item.judgmentSummary.participantCount
-                          ? `공개 분석 참여자 ${item.judgmentSummary.participantCount.toLocaleString()}명`
-                          : "아직 공개된 분석이 없습니다"}
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <CommunityFeed items={state.data.items} />
             <Pager page={state.data} name="cursor" label="게시글 페이지" />
           </>
         )}
@@ -220,11 +188,16 @@ export function CommunityPage() {
 function DetailBack() {
   const [search] = useSearchParams();
   const location = useLocation();
+  const returnTo = safeReturnTo(search.get("returnTo"), "/community");
+  const origin = location.state?.communityOrigin;
   return (
     <Link
       className="community-back"
-      to={safeReturnTo(search.get("returnTo"), "/community")}
-      state={location.state}
+      to={returnTo}
+      state={{
+        ...location.state,
+        communityRestore: origin?.path === returnTo ? origin : undefined,
+      }}
     >
       ← 이전 화면
     </Link>

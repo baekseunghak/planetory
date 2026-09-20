@@ -91,7 +91,7 @@ test("401 protects direct routes, preserves destination and clears identity afte
     "/analysis/259377017?historyId=h-123",
   );
   await expect(
-    page.getByRole("heading", { name: "분석", exact: true }),
+    page.getByRole("heading", { name: "분석 · TIC 259377017", exact: true }),
   ).toHaveCount(0);
   expired = false;
   await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
