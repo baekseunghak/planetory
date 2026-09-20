@@ -25,6 +25,9 @@ if ($runnerText.Contains("Invoke-OrchestratedStep 'Audit' `$currentSector `$curr
 if (-not $runnerText.Contains("RUN_ALL_PREFLIGHT_REUSED sector=`$currentSector")) {
  throw 'RunAll must reuse the pre-install preflight for its first Sector.'
 }
+foreach ($required in @('$pythonPackageRoot=$LocalIngestionPath','$env:PYTHONPATH=$pythonPackageRoot','$env:PYTHONPATH=$previousPythonPath')) {
+ if (-not $runnerText.Contains($required)) { throw "Coverage validation must scope and restore its Python package path: $required" }
+}
 if ($runnerText.Contains('__BUNDLE_BASE64__')) { throw 'Loader archive must not be embedded in a Windows process argument.' }
 if ($runnerText.Contains('systemctl enable "$unit"')) { throw 'Transient HDFS upload units must not start again after boot.' }
 if ($runnerText.Contains("hdfs_cmd dfs -mv '__STAGE__' '__FINAL__'")) { throw 'Final Sector commit must use atomic no-overwrite rename.' }
@@ -53,5 +56,11 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'HDFS load planner tests failed.' }
  & $Python -c 'import ast,pathlib,sys; [ast.parse(path.read_text(encoding="utf-8"), filename=str(path)) for path in pathlib.Path(sys.argv[1]).glob("*.py")]' $loader
  if ($LASTEXITCODE -ne 0) { throw 'HDFS loader Python syntax check failed.' }
+ $previousPythonPath=$env:PYTHONPATH
+ try {
+  $env:PYTHONPATH=(Join-Path $root 'distributed-system/ingestion')
+  & $Python (Join-Path $loader 'tess_hdfs_load.py') --help | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'HDFS loader direct CLI package import failed.' }
+ } finally { $env:PYTHONPATH=$previousPythonPath }
 } finally { $env:PYTHONDONTWRITEBYTECODE=$previousBytecode }
 Write-Host 'PASS: TESS HDFS load offline contracts'

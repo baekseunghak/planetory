@@ -170,7 +170,11 @@ base64 -w 0 "$manifest"
   $coverageBase64=$encoded
  }
  $temporary=[IO.Path]::GetTempFileName()
+ $previousPythonPath=$env:PYTHONPATH
+ $pythonPackageRoot=$LocalIngestionPath
  try {
+  $env:PYTHONPATH=$pythonPackageRoot
+  if ($previousPythonPath) { $env:PYTHONPATH="$pythonPackageRoot$([IO.Path]::PathSeparator)$previousPythonPath" }
   [IO.File]::WriteAllBytes($temporary,[Convert]::FromBase64String($coverageBase64))
   $loader=Join-Path $loaderRoot 'tess_hdfs_load.py'
   $output=@(& python $loader coverage-map --coverage-manifest $temporary --expected-sha $ExpectedCoverageSha256 2>&1)
@@ -186,7 +190,10 @@ base64 -w 0 "$manifest"
    throw 'Coverage map does not match the requested expansion RunId and source checksum.'
   }
   [pscustomobject]@{Map=$map;Base64=$coverageBase64}
- } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+ } finally {
+  $env:PYTHONPATH=$previousPythonPath
+  Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+ }
 }
 
 function New-LoaderBundle {

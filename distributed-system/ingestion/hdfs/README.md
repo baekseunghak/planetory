@@ -91,7 +91,9 @@ sha256sum /tmp/restored.fits
 
 현재 Python 계획·감사 검사 8개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, plan v2 cache 필드, 첫·중간·마지막 복원, 알 수 없는 artifact 거부, legacy v1 재감사, HDFS coverage marker와 덮어쓰기 없는 원자 rename을 포함한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지도 검사한다. 초기 오프라인 검토에서 Install 대상 tuple 열거, oneshot 직렬 시작, final rename 뒤 checksum 출력 경로 변경, Commit 중단 뒤 `_READY.json.part`가 재감사를 막는 결함을 확인했다. 각각 tuple 보존, `systemctl --no-block start`, 경로 제외 checksum 알고리즘·digest 저장, Commit 시작 시 현재 staging의 정확한 임시 marker만 정리하는 방식으로 수정하고 회귀 계약에 반영했다. 실제 Install·Upload 전 발견되어 서버 영향은 없다.
 
-75의 실제 FinalCoverage는 2026-09-20에 247,824개·441.62GiB·`.part` 0, Worker 5대 동일 SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 완료됐다. 76의 Sector 1~13 확장 보완은 코드와 오프라인 계약까지만 검증했다. 100GiB 예약 설정의 기존 DataNode 반영·재시작, 실제 FinalCoverage를 입력으로 한 RunAll, Sector 1~13 적재와 최종 HDFS coverage 감사는 아직 수행하지 않았으므로 76 완료로 간주하지 않는다.
+75의 실제 FinalCoverage는 2026-09-20에 247,824개·441.62GiB·`.part` 0, Worker 5대 동일 SHA-256 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 완료됐다. 저장소의 100GiB 예약 설정은 Node 1~6에 반영했고 Worker 2~6 DataNode의 순차 재시작과 Live DataNode 5대 복귀를 확인했다. 실제 FinalCoverage를 입력으로 한 Sector 1~13 적재와 최종 HDFS coverage 감사는 아직 끝나지 않았으므로 76 완료로 간주하지 않는다.
+
+첫 Sector 1~13 `RunAll` 시도는 Worker coverage 5개를 읽은 뒤 로컬 `coverage-map` 실행에서 `ModuleNotFoundError: No module named 'ingestion'`으로 중단됐다. HDFS staging 준비·loader 설치·uploader 시작 전이어서 데이터 영향은 없다. runner가 로컬 검증 호출 동안 `distributed-system`을 `PYTHONPATH` 앞에 추가하고 기존 값을 `finally`에서 복원하도록 수정했으며, 이 경로 설정·복원을 오프라인 계약에 추가했다. 안전한 재실행 시작점은 동일한 `RunAll` 처음이다.
 
 권한을 승인한 같은 날의 실환경 `Preflight`는 HA `active:standby`, Live DataNode 5개, 기본 RF2, HDFS 사용률 0%와 RunId `20260918T080417Z` Sector 3의 Worker 5대 감사 gate를 통과했다. 대상은 15,993개, 원본 31,965,808,320바이트다.
 
