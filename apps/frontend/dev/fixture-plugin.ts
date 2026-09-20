@@ -78,6 +78,9 @@ export function fixturePlugin(observations = false): Plugin {
           if (job && req.method === "GET") {
             const reply = pollResidualJobFixture(job[1]);
             res.statusCode = reply.status;
+            // D-5 현재 판 헤더. 폴링이 이 값으로 판 교체를 잡는다.
+            for (const [name, value] of Object.entries(reply.headers ?? {}))
+              res.setHeader(name, value);
             res.end(JSON.stringify(reply.body));
             return;
           }

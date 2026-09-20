@@ -201,3 +201,4 @@
 | 2026-09-20 | 잔차 작업 2차 리뷰 반영: 시작 실패·TIC 코드·중복 후보 | S15P21C206-147 | runner.start 실패, 고아 QUEUED, START_FAILED, STAR_NOT_PUBLISHED, curveStep 중복 제거 | 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 공개 취소·재공개와 공통 접근 판정 | S15P21C206-162 | visibility, V15, 404, 숨김, 성과 보존 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 162 리뷰 보완·공개 상태 응답 명확화 | S15P21C206-162 | isPublicByAuthor, PublicAnalysisVisibility, 409 오류 표 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 폴링의 판 교체 감지와 실패 구분 | S15P21C206-189 | X-Current-Bundle 폴링, D-5 자동 재조회, failure.retryable, DEPENDENCY_UNAVAILABLE 영구 실패, resultCurveContext, 시나리오가 캐시를 이긴다 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
