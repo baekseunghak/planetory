@@ -55,6 +55,7 @@ class PublicAnalysisTest {
     @Autowired MockMvc mvc;
     @MockitoBean ResidualResultReader residuals;
     @Autowired PublicAnalysisService publications;
+    @Autowired com.planetory.backend.domain.post.service.PublicAnalysisAccess publicAccess;
     @MockitoSpyBean StarDiscoveryService discovery;
     long member,tic,bundle,segment,candidate;
     Float[] flux;
@@ -319,11 +320,180 @@ class PublicAnalysisTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test void 공개취소_반복_재공개는_최초시각과성과를_보존한다() throws Exception {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        String path = "/api/v1/public-analyses/" + first.analysisId() + "/visibility";
+        String publishedAt = jdbc.queryForObject("SELECT published_at::text FROM published_analyses WHERE history_id=?", String.class, number(history));
+        int unlocked = count("star_unlocks", "user_id", member);
+        mvc.perform(put(path).session(session(member)).with(csrf()).contentType("application/json")
+                        .content("{\"isPublic\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.analysisId").value(first.analysisId()))
+                .andExpect(jsonPath("$.isPublicByAuthor").value(false))
+                .andExpect(jsonPath("$.isPublic").doesNotExist())
+                .andExpect(jsonPath("$.isModerationHidden").value(false))
+                .andExpect(jsonPath("$.isEffectivelyPublic").value(false));
+        String cancelledAt = jdbc.queryForObject("SELECT unpublished_at::text FROM published_analyses WHERE history_id=?", String.class, number(history));
+        publications.visibility(member, first.analysisId(), false);
+        assertEquals(cancelledAt, jdbc.queryForObject("SELECT unpublished_at::text FROM published_analyses WHERE history_id=?", String.class, number(history)));
+        assertFalse(publications.publish(member, history).isPublic());
+        assertEquals("UNPUBLISHED", histories.detail(member, history).submission().publication().state());
+        assertTrue(publications.visibility(member, first.analysisId(), true).isEffectivelyPublic());
+        mvc.perform(put(path).session(session(member)).with(csrf()).contentType("application/json")
+                        .content("{\"isPublic\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isPublicByAuthor").value(true))
+                .andExpect(jsonPath("$.isPublic").doesNotExist())
+                .andExpect(jsonPath("$.isEffectivelyPublic").value(true));
+        var replay = publications.publish(member, history);
+        assertFalse(replay.newlyGranted());
+        assertEquals(first.achievement().unlockedStars(), replay.achievement().unlockedStars());
+        assertEquals(first.achievement().star(), replay.achievement().star());
+        assertEquals(first.skyVersion(), replay.skyVersion());
+        assertEquals(unlocked, count("star_unlocks", "user_id", member));
+        assertEquals(1, count("user_candidate_achievements", "user_id", member));
+        assertEquals(publishedAt, jdbc.queryForObject("SELECT published_at::text FROM published_analyses WHERE history_id=?", String.class, number(history)));
+    }
+
+    @Test void 숨김중_취소허용_재공개거절_부모복원은_개별상태를유지한다() {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE history_id=?", number(history));
+        error(ErrorCode.PUBLICATION_HIDDEN, () -> publications.visibility(member, first.analysisId(), true));
+        jdbc.update("UPDATE posts SET status='hidden' WHERE candidate_id=?", candidate);
+        var cancelled = publications.visibility(member, first.analysisId(), false);
+        assertFalse(cancelled.isPublicByAuthor()); assertTrue(cancelled.isModerationHidden());
+        error(ErrorCode.THREAD_HIDDEN, () -> publications.visibility(member, first.analysisId(), true));
+        jdbc.update("UPDATE posts SET status='visible' WHERE candidate_id=?", candidate);
+        error(ErrorCode.PUBLICATION_HIDDEN, () -> publications.visibility(member, first.analysisId(), true));
+        jdbc.update("UPDATE published_analyses SET hidden_at=NULL WHERE history_id=?", number(history));
+        assertFalse(publications.publish(member, history).isPublic());
+        assertTrue(publications.visibility(member, first.analysisId(), true).isEffectivelyPublic());
+    }
+
+    @Test void 공개조회는_현재상태와_실제History관계를_검사한다() {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        long analysis = Long.parseLong(first.analysisId().substring(3));
+        Runnable access = () -> publicAccess.check(member, analysis, number(history));
+        assertNotNull(histories.publicContent(history, access));
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> publicAccess.check(member, analysis, number(submit(3))));
+        // 공개 내용을 이미 읽었어도 반환 직전 콜백에서 취소를 다시 확인한다.
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> histories.publicContent(history, () -> {
+            if (checks.incrementAndGet() == 2) java.util.concurrent.CompletableFuture.runAsync(
+                    () -> publications.visibility(member, first.analysisId(), false)).join();
+            access.run();
+        }));
+        for (String mode : List.of("CURRENT", "SUBMITTED")) {
+            error(ErrorCode.RESOURCE_NOT_FOUND, () -> histories.publicGraph(history, mode, access));
+        }
+        publications.visibility(member, first.analysisId(), true);
+        jdbc.update("UPDATE posts SET status='hidden' WHERE candidate_id=?", candidate);
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> histories.publicContent(history, access));
+        jdbc.update("UPDATE posts SET status='visible' WHERE candidate_id=?", candidate);
+        jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE history_id=?", number(history));
+        error(ErrorCode.RESOURCE_NOT_FOUND, access);
+        assertNotNull(histories.detail(member, history)); // 개인 원본은 유지
+    }
+
+    @Test void 공개상태변경의_인증_소유권_본문_CSRF() throws Exception {
+        var first = publications.publish(member, submit(3));
+        String path = "/api/v1/public-analyses/" + first.analysisId() + "/visibility";
+        long other = member();
+        mvc.perform(put(path).with(csrf()).contentType("application/json").content("{\"isPublic\":false}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put(path).session(session(member)).contentType("application/json").content("{\"isPublic\":false}"))
+                .andExpect(status().isForbidden());
+        for (String body : List.of("{}", "null", "{\"isPublic\":\"false\"}", "{\"isPublic\":null}",
+                "{\"isPublic\":false,\"hidden_at\":null}")) {
+            mvc.perform(put(path).session(session(member)).with(csrf()).contentType("application/json").content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        error(ErrorCode.FORBIDDEN, () -> publications.visibility(other, first.analysisId(), false));
+        publications.visibility(member, first.analysisId(), false);
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> publications.visibility(other, first.analysisId(), true));
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> publications.visibility(member, "pa-999999999999999999", true));
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> publications.visibility(member, "pa-01", true));
+    }
+
+    @Test void 취소와_POST재전송_경합은_취소와기성과를_유지한다() throws Exception {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        concurrent(() -> publications.visibility(member, first.analysisId(), false),
+                () -> publications.publish(member, history));
+        assertFalse(publications.publish(member, history).isPublic());
+        assertEquals(1, count("published_analyses", "user_id", member));
+        assertEquals(1, count("user_candidate_achievements", "user_id", member));
+    }
+
+    @Test void 부모숨김중_타인댓글수정삭제는404_본인반복삭제는204_복원후에도삭제유지() throws Exception {
+        var first = publications.publish(member, submit(3));
+        long parent = Long.parseLong(first.threadId().substring(3));
+        long comment = jdbc.queryForObject("INSERT INTO comments(post_id,user_id,body,status) VALUES (?,?,'본문','visible') RETURNING id",
+                Long.class, parent, member);
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?", parent);
+        String path = "/api/v1/comments/c-" + comment;
+        var other = session(member());
+        mvc.perform(patch(path).session(other).with(csrf()).contentType("application/json").content("{\"body\":\"변경\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete(path).session(other).with(csrf())).andExpect(status().isNotFound());
+        mvc.perform(delete(path).session(session(member)).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(delete(path).session(session(member)).with(csrf())).andExpect(status().isNoContent());
+        jdbc.update("UPDATE posts SET status='visible' WHERE id=?", parent);
+        assertEquals("deleted", jdbc.queryForObject("SELECT status FROM comments WHERE id=?", String.class, comment));
+    }
+
+    @Test void 공개취소는_독립적인_일반글History첨부를_차단하지않는다() throws Exception {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        String body = mvc.perform(post("/api/v1/posts").session(session(member)).with(csrf())
+                        .contentType("application/json").content("""
+                                {"title":"독립 첨부","body":"본문","purposeTag":"ANALYSIS","ticId":"%s","historyIds":["%s"]}
+                                """.formatted(tic, history)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String postId = new tools.jackson.databind.ObjectMapper().readTree(body).path("postId").asText();
+        publications.visibility(member, first.analysisId(), false);
+        mvc.perform(get("/api/v1/posts/" + postId + "/history-attachments/" + history)
+                        .param("includeGraph", "false").session(session(member)))
+                .andExpect(status().isOk());
+    }
+
+    @Test void DB숨김이_먼저확정되면_대기하던재공개는_거절된다() throws Exception {
+        var first = publications.publish(member, submit(3));
+        publications.visibility(member, first.analysisId(), false);
+        var locked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var hide = executor.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(s -> {
+                jdbc.update("UPDATE posts SET status='hidden' WHERE candidate_id=?", candidate);
+                locked.countDown();
+                try { if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("대기 초과"); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+            }));
+            assertTrue(locked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var publish = executor.submit(() -> publications.visibility(member, first.analysisId(), true));
+            try {
+                assertThrows(java.util.concurrent.TimeoutException.class,
+                        () -> publish.get(200, java.util.concurrent.TimeUnit.MILLISECONDS));
+            } finally { release.countDown(); }
+            hide.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> publish.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(ErrorCode.THREAD_HIDDEN, ((BusinessException) failure.getCause()).getErrorCode());
+            assertFalse(publications.publish(member, "h-" + jdbc.queryForObject(
+                    "SELECT history_id FROM published_analyses WHERE user_id=?", Long.class, member)).isPublic());
+        }
+    }
+
     @Test void 앱역할로_공개성과저장_성공() {
         String id = submit(3);
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             jdbc.execute("SET LOCAL ROLE planetory_app");
-            assertTrue(publications.publish(member, id).newlyGranted());
+            var published = publications.publish(member, id);
+            assertTrue(published.newlyGranted());
+            assertFalse(publications.visibility(member, published.analysisId(), false).isEffectivelyPublic());
+            assertTrue(publications.visibility(member, published.analysisId(), true).isEffectivelyPublic());
         });
         assertEquals(1, count("published_analyses", "history_id", number(id)));
     }
@@ -376,15 +546,17 @@ class PublicAnalysisTest {
         var newerRequest = new SubmissionRequest(request.requestId(), request.submissionKind(), request.curveContext(),
                 request.selection(), "UNSURE", request.evidenceChecks(), request.memo(), request.viewState(), null);
         String newer = submissions.submit(member, tic, newerRequest).body().path("historyId").asText();
-        publications.publish(member, newer);
+        var newerPublished = publications.publish(member, newer);
         var result = publications.publish(member, older);
         assertEquals(1L, result.judgmentSummary().get("participantCount"));
         assertEquals(1L, result.judgmentSummary().get("unsure"));
         assertEquals(0L, result.judgmentSummary().get("likelyPlanet"));
-        jdbc.update("UPDATE published_analyses SET unpublished_at=now() WHERE history_id=?", number(newer));
+        publications.visibility(member, newerPublished.analysisId(), false);
         var fallback = publications.publish(member, older);
         assertEquals(1L, fallback.judgmentSummary().get("likelyPlanet"));
         assertEquals(0L, fallback.judgmentSummary().get("unsure"));
+        publications.visibility(member, result.analysisId(), false);
+        assertEquals(0L, publications.publish(member, older).judgmentSummary().get("participantCount"));
     }
 
     private <T> List<T> concurrent(java.util.concurrent.Callable<T> first, java.util.concurrent.Callable<T> second) throws Exception {

@@ -1,5 +1,7 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -135,10 +137,9 @@ public class SubmissionRepository {
                 SELECT DISTINCT ON (s.user_id) s.user_judgment FROM published_analyses pa
                 JOIN posts p ON p.id=pa.post_id JOIN analysis_histories h ON h.id=pa.history_id
                 JOIN submissions s ON s.id=h.submission_id
-                WHERE pa.candidate_id=? AND pa.unpublished_at IS NULL AND pa.hidden_at IS NULL
-                  AND p.kind='system_thread' AND p.status='visible'
+                WHERE pa.candidate_id=? AND %s
                 ORDER BY s.user_id,s.created_at DESC,s.id DESC
-                """;
+                """.formatted(PublicAnalysisVisibility.VISIBLE);
         return jdbc.sql("SELECT count(*) AS total, count(*) FILTER (WHERE user_judgment='LIKELY_PLANET') AS likely,"
                 + " count(*) FILTER (WHERE user_judgment='UNLIKELY_PLANET') AS unlikely,"
                 + " count(*) FILTER (WHERE user_judgment='UNSURE') AS unsure,clock_timestamp() AS at FROM ("+source+") votes")

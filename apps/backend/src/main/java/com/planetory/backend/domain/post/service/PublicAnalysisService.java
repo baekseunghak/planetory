@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.post.service;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.exploration.service.AchievementService;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.HistoryService;
@@ -33,6 +34,43 @@ public class PublicAnalysisService {
                             boolean created, boolean achievementGranted, boolean newlyGranted,
                             String skyVersion, Achievement achievement, Map<String, Object> judgmentSummary) {}
     private record Existing(long id, long thread, long candidate, boolean isPublic) {}
+    public record Visibility(String analysisId, boolean isPublicByAuthor, boolean isModerationHidden,
+                             boolean isEffectivelyPublic) {}
+    private record Managed(long owner, boolean isPublic, boolean hidden) {}
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Visibility visibility(long member, String analysisId, boolean isPublic) {
+        long id = ExplorationIds.parse(analysisId, "pa-")
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        // 161과 같은 회원 선잠금. 부모→공개 행 순서로 잠가 DB 운영 숨김과 직렬화한다.
+        if (jdbc.sql("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE")
+                .param(member).query(Long.class).optional().isEmpty()) {
+            throw new BusinessException(ErrorCode.AUTH_REQUIRED);
+        }
+        long thread = jdbc.sql("SELECT post_id FROM published_analyses WHERE id=?")
+                .param(id).query(Long.class).optional()
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        String parentStatus = jdbc.sql("SELECT status FROM posts WHERE id=? AND kind='system_thread' FOR UPDATE")
+                .param(thread).query(String.class).optional()
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        Managed row = jdbc.sql("SELECT user_id, unpublished_at IS NULL, hidden_at IS NOT NULL "
+                        + "FROM published_analyses WHERE id=? FOR UPDATE")
+                .param(id).query((r, n) -> new Managed(r.getLong(1), r.getBoolean(2), r.getBoolean(3)))
+                .optional().orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        boolean parentVisible = "visible".equals(parentStatus);
+        if (row.owner() != member) {
+            throw new BusinessException(row.isPublic() && !row.hidden() && parentVisible
+                    ? ErrorCode.FORBIDDEN : ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        if (isPublic && !parentVisible) throw new BusinessException(ErrorCode.THREAD_HIDDEN);
+        if (isPublic && row.hidden()) throw new BusinessException(ErrorCode.PUBLICATION_HIDDEN);
+        if (row.isPublic() != isPublic) {
+            jdbc.sql("UPDATE published_analyses SET unpublished_at=" + (isPublic ? "NULL" : "clock_timestamp()")
+                    + " WHERE id=?").param(id).update();
+        }
+        return new Visibility(analysisId, isPublic, row.hidden() || "hidden".equals(parentStatus),
+                isPublic && !row.hidden() && parentVisible);
+    }
 
     // 부분 유일 인덱스의 ON CONFLICT와 행 잠금이 필요하므로 이 저장 경로는 JdbcClient를 사용한다.
     // 같은 DataSource의 AchievementService도 이 트랜잭션에 참여한다(Propagation.MANDATORY).
@@ -52,11 +90,10 @@ public class PublicAnalysisService {
 
         var existing = jdbc.sql("""
                 SELECT pa.id, pa.post_id, pa.candidate_id,
-                    pa.unpublished_at IS NULL AND pa.hidden_at IS NULL
-                        AND p.kind='system_thread' AND p.status='visible' AS is_public
+                    %s AS is_public
                 FROM published_analyses pa JOIN posts p ON p.id=pa.post_id
                 WHERE pa.history_id=? AND pa.user_id=?
-                """).params(history, member).query((r, n) -> new Existing(r.getLong(1), r.getLong(2),
+                """.formatted(PublicAnalysisVisibility.VISIBLE)).params(history, member).query((r, n) -> new Existing(r.getLong(1), r.getLong(2),
                         r.getLong(3), r.getBoolean(4))).optional();
         if (existing.isPresent()) {
             var old = existing.get();
