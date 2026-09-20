@@ -108,6 +108,8 @@ class ResidualJobUnavailableTest {
                 () -> jobs.request(member, ticId, request));
 
         assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, refused.getErrorCode());
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE.getDefaultMessage(), refused.getMessage(),
+                "화면이 이 문구를 그대로 보여 준다. 연결 상태는 내부 사정이라 적지 않는다");
         assertTrue(store.active(ResidualJobStore.cacheKey(ticId, target)).isEmpty(), "작업을 만들지 않는다");
         // 조회도 가짜 상태를 만들지 않는다(D-14).
         ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target);

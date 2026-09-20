@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.planetory.backend.domain.exploration.controller.ResidualJobController;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
 import com.planetory.backend.domain.exploration.service.ResidualJobService;
 import com.planetory.backend.domain.exploration.service.ResidualJobStore;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -69,12 +71,14 @@ class ResidualJobControllerTest {
 
     @Test
     void 새_작업은_202이고_캐시는_200이다() throws Exception {
-        when(jobs.request(anyLong(), anyLong(), any()))
-                .thenReturn(new JobAccepted("rj-78", ResidualJobStore.QUEUED, false, null, 3, null, 2));
+        when(jobs.request(anyLong(), anyLong(), any())).thenReturn(new Answer<>(
+                new JobAccepted("rj-78", ResidualJobStore.QUEUED, false, null, 3, null, 2), false, "b-2"));
 
         mockMvc.perform(post("/api/v1/stars/123456789/residual-jobs")
                         .contentType("application/json").content(BODY))
                 .andExpect(status().isAccepted())
+                // D-5. 폴링 중에 판이 바뀌는 것을 화면이 추가 요청 없이 본다.
+                .andExpect(header().string("X-Current-Bundle", "b-2"))
                 .andExpect(jsonPath("$.jobId").value("rj-78"))
                 .andExpect(jsonPath("$.status").value("QUEUED"))
                 .andExpect(jsonPath("$.cacheHit").value(false))
@@ -83,12 +87,13 @@ class ResidualJobControllerTest {
                 // 값이 없어도 필드는 남긴다. 빠지면 "없음"과 "모름"을 구분할 수 없다.
                 .andExpect(content().string(containsString("\"estimatedSeconds\":null")));
 
-        when(jobs.request(anyLong(), anyLong(), any()))
-                .thenReturn(new JobAccepted(null, ResidualJobStore.COMPLETED, true, TARGET, null, null, null));
+        when(jobs.request(anyLong(), anyLong(), any())).thenReturn(new Answer<>(
+                new JobAccepted(null, ResidualJobStore.COMPLETED, true, TARGET, null, null, null), true, "b-2"));
 
         mockMvc.perform(post("/api/v1/stars/123456789/residual-jobs")
                         .contentType("application/json").content(BODY))
                 .andExpect(status().isOk())
+                .andExpect(header().string("X-Current-Bundle", "b-2"))
                 .andExpect(jsonPath("$.cacheHit").value(true))
                 .andExpect(jsonPath("$.resultCurveContext.curveStep").value(1))
                 .andExpect(content().string(containsString("\"jobId\":null")));
@@ -110,12 +115,15 @@ class ResidualJobControllerTest {
     @Test
     void 상태_조회는_단계와_시각을_주고_없는_작업은_404다() throws Exception {
         OffsetDateTime at = OffsetDateTime.parse("2026-09-20T02:30:15Z");
-        when(jobs.status(anyLong(), anyString())).thenReturn(new JobStatus("rj-78", "123456789", TARGET,
-                ResidualJobStore.PERIODOGRAM_CALCULATING, 1,
-                new ResidualJobStore.Timeline(at, at, at, at, null), null, null, 2));
+        when(jobs.status(anyLong(), anyString())).thenReturn(new Answer<>(new JobStatus("rj-78", "123456789",
+                TARGET, ResidualJobStore.PERIODOGRAM_CALCULATING, 1,
+                new ResidualJobStore.Timeline(at, at, at, at, null), null, null, 0, 2), true, "b-9"));
 
         mockMvc.perform(get("/api/v1/residual-jobs/rj-78"))
                 .andExpect(status().isOk())
+                // 조회는 판을 보지 않아 409를 내지 않는다. 폴링이 판 교체를 보는 곳은 이 헤더뿐이다.
+                .andExpect(header().string("X-Current-Bundle", "b-9"))
+                .andExpect(jsonPath("$.queuePosition").value(0))
                 .andExpect(jsonPath("$.jobId").value("rj-78"))
                 .andExpect(jsonPath("$.ticId").value("123456789"))
                 .andExpect(jsonPath("$.status").value("PERIODOGRAM_CALCULATING"))

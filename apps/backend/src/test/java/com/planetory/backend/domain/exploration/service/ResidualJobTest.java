@@ -240,7 +240,7 @@ class ResidualJobTest {
         String jobId = request(member, firstMatched).jobId();
 
         store.advance(jobId, 1, ResidualJobStore.RESIDUAL_CALCULATING);
-        JobStatus calculating = jobs.status(member, jobId);
+        JobStatus calculating = status(member, jobId);
         assertEquals(ResidualJobStore.RESIDUAL_CALCULATING, calculating.status());
         assertEquals(1, calculating.attempt());
         assertNotNull(calculating.timeline().queuedAt());
@@ -249,16 +249,18 @@ class ResidualJobTest {
         assertNull(calculating.resultCurveContext(), "계산이 끝나기 전에는 바꿀 문맥을 주지 않는다");
         assertEquals(String.valueOf(ticId), calculating.ticId());
         assertEquals(2, calculating.pollAfterSeconds());
+        assertEquals(0, calculating.queuePosition(), "계산 중이면 0이다. 7.1 응답과 같은 뜻이다");
 
         store.advance(jobId, 1, ResidualJobStore.RESIDUAL_READY);
         store.advance(jobId, 1, ResidualJobStore.PERIODOGRAM_CALCULATING);
         complete(jobId);
 
-        JobStatus completed = jobs.status(member, jobId);
+        JobStatus completed = status(member, jobId);
         assertEquals(ResidualJobStore.COMPLETED, completed.status());
         assertNotNull(completed.timeline().completedAt());
         assertEquals(completed.target(), completed.resultCurveContext(), "이 문맥으로 곡선을 조회한다");
         assertNull(completed.failure());
+        assertNull(completed.queuePosition(), "줄이 끝났는데 0번째라고 말하지 않는다");
     }
 
     /** AT-101. 실패는 마지막 정상 곡선을 남기고 사유를 알린다. */
@@ -268,14 +270,18 @@ class ResidualJobTest {
         store.advance(jobId, 1, ResidualJobStore.RESIDUAL_CALCULATING);
         store.fail(jobId, 1, new ResidualJobStore.Failure("RESIDUAL", "COMPUTE_ERROR", "계산에 실패했습니다.", true));
 
-        JobStatus failed = jobs.status(member, jobId);
+        JobStatus failed = status(member, jobId);
         assertEquals(ResidualJobStore.FAILED, failed.status());
         assertEquals("RESIDUAL", failed.failure().stage());
         assertTrue(failed.failure().retryable());
         assertNull(failed.resultCurveContext());
 
+        assertNull(failed.queuePosition());
+
         JobAccepted retried = request(member, firstMatched);
         assertNotEquals(jobId, retried.jobId(), "끝난 작업에 붙이지 않고 새로 시작한다");
+        assertEquals(1, status(member, retried.jobId()).attempt(),
+                "새 작업이라 시도 번호도 1이다. 화면은 응답의 새 jobId로 갈아탄다");
     }
 
     /** 같은 목표를 요청한 사람은 같은 작업을 기다린다. 만든 사람만 볼 수 있으면 폴링이 404가 된다. */
@@ -287,8 +293,55 @@ class ResidualJobTest {
         JobAccepted merged = request(stranger, firstMatched);
 
         assertEquals(jobId, merged.jobId());
-        assertEquals(jobId, jobs.status(stranger, jobId).jobId());
-        assertEquals(jobId, jobs.status(member, jobId).jobId());
+        assertEquals(jobId, status(stranger, jobId).jobId());
+        assertEquals(jobId, status(member, jobId).jobId());
+    }
+
+    /**
+     * D-5. 조회는 판을 보지 않아 409를 내지 않으므로, 계산이 도는 동안 판 교체를 알 수 있는 곳이
+     * 이 헤더뿐이다. 작업이 들고 있는 판이 아니라 <b>지금</b> 판이어야 값이 달라진다.
+     */
+    @Test
+    void 조회_응답은_작업의_판이_아니라_지금_판을_알려_준다() {
+        String jobId = request(member, firstMatched).jobId();
+        assertEquals("b-" + currentBundleId, jobs.status(member, jobId).currentBundleId());
+
+        jdbc.update("UPDATE publication_bundles SET status = 'archived' WHERE id = ?", currentBundleId);
+        long replaced = insertBundle("current");
+
+        assertEquals("b-" + replaced, jobs.status(member, jobId).currentBundleId(),
+                "화면은 이 값이 진입 때 받은 판과 다르면 5.1절을 다시 조회한다");
+        assertEquals("b-" + currentBundleId, status(member, jobId).target().bundleId(),
+                "작업이 무엇을 계산 중인지는 그대로다");
+    }
+
+    /** 순번은 폴링마다 다시 센다. 202에만 주면 화면에서 한 번 떴다 사라진다. */
+    @Test
+    void 앞_작업이_끝나면_대기_순번이_줄어든다() {
+        match(stranger, secondMatched);
+        String running = request(member, firstMatched).jobId();
+        String waiting = request(stranger, secondMatched).jobId();
+
+        assertEquals(1, status(stranger, waiting).queuePosition(), "앞에 하나가 기다린다");
+
+        complete(running);
+
+        assertEquals(0, status(stranger, waiting).queuePosition(), "앞이 비었으니 이제 이 작업 차례다");
+    }
+
+    /** 캐시 확인과 등록이 갈라지면 이미 있는 결과를 두고 작업이 하나 더 생긴다. */
+    @Test
+    void 등록_직전에_계산이_끝나도_작업을_만들지_않는다() {
+        String jobId = request(member, firstMatched).jobId();
+        AnalysisViews.CurveContext target = contextOf(List.of(firstMatched));
+        complete(jobId);
+
+        // 호출자가 밖에서 캐시를 본 뒤 여기 오는 사이에 끝난 상황이다. 저장소가 한 자물쇠 안에서 다시 본다.
+        ResidualJobStore.Enqueued again =
+                store.enqueue(stranger, ticId, target, ResidualJobStore.cacheKey(ticId, target));
+
+        assertInstanceOf(ResidualJobStore.Enqueued.Cached.class, again);
+        assertEquals(1, runner.started.size(), "이미 있는 결과로 계산을 다시 시작하지 않는다");
     }
 
     @Test
@@ -297,7 +350,7 @@ class ResidualJobTest {
 
         for (String requested : new String[] {jobId, "rj-999999", "abc", "rj-0"}) {
             long viewer = requested.equals(jobId) ? stranger : member;
-            BusinessException missing = assertThrows(BusinessException.class, () -> jobs.status(viewer, requested));
+            BusinessException missing = assertThrows(BusinessException.class, () -> status(viewer, requested));
             assertEquals(ErrorCode.RESOURCE_NOT_FOUND, missing.getErrorCode(), requested);
         }
     }
@@ -331,7 +384,11 @@ class ResidualJobTest {
     }
 
     private JobAccepted request(long viewer, List<Long> removed) {
-        return jobs.request(viewer, ticId, target(removed, currentBundleId));
+        return jobs.request(viewer, ticId, target(removed, currentBundleId)).body();
+    }
+
+    private JobStatus status(long viewer, String jobId) {
+        return jobs.status(viewer, jobId).body();
     }
 
     private JobRequest target(List<Long> removed, long bundleId) {
