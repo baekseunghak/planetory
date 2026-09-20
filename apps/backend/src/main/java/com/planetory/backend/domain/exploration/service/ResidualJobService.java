@@ -1,0 +1,144 @@
+package com.planetory.backend.domain.exploration.service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
+
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
+import com.planetory.backend.domain.exploration.service.ResidualJobStore.Enqueued;
+import com.planetory.backend.domain.exploration.service.ResidualJobStore.Job;
+import com.planetory.backend.domain.exploration.service.ResidualJobViews.JobAccepted;
+import com.planetory.backend.domain.exploration.service.ResidualJobViews.JobRequest;
+import com.planetory.backend.domain.exploration.service.ResidualJobViews.JobStatus;
+import com.planetory.backend.global.error.BusinessException;
+import com.planetory.backend.global.error.ErrorCode;
+import com.planetory.backend.global.error.ErrorResponse.FieldError;
+
+/**
+ * 온라인 잔차 작업 요청·조회 (탐사 API 7.1·7.2절) [S15P21C206-147].
+ *
+ * <p>목표 문맥 검증은 곡선 조회(5.2절)와 <b>같은 함수</b>를 쓴다. 두 곳이 따로 판단하면 조회는 되는데
+ * 계산은 거절되는 문맥이 생긴다.
+ *
+ * <p>요청에 {@code requestId}가 없다. 같은 목표를 다시 보내면 진행 중 작업이나 캐시가 그대로 오므로
+ * 응답을 잃어도 재호출이 곧 복구다(7.1절).
+ */
+@Service
+@RequiredArgsConstructor
+public class ResidualJobService {
+
+    private final AnalysisService analysis;
+    private final ResidualJobStore store;
+    private final ResidualJobProperties properties;
+    /** 계산 실행은 Worker 어댑터(S15P21C206-88)가 채운다. 없으면 작업을 만들지 않는다. */
+    private final ObjectProvider<ResidualComputeRunner> runners;
+
+    /**
+     * 계산을 요청한다(7.1절).
+     *
+     * @throws BusinessException 미공개 {@code STAR_NOT_PUBLISHED}, 미발견 {@code STAR_LOCKED},
+     *                           판 교체 {@code BUNDLE_CHANGED}, 목표 형식·조합 오류 {@code VALIDATION_FAILED},
+     *                           자리 없음 {@code RESIDUAL_QUEUE_FULL}, 계산 기반 미연결
+     *                           {@code DEPENDENCY_UNAVAILABLE}
+     */
+    public JobAccepted request(long memberId, long ticId, JobRequest body) {
+        CurveContext target = resolveTarget(memberId, ticId, body);
+        String cacheKey = ResidualJobStore.cacheKey(ticId, target);
+
+        Optional<ResidualJobStore.Result> cached = store.result(cacheKey);
+        if (cached.isPresent()) {
+            // 이미 계산돼 있다. 작업을 만들지 않고 곧바로 문맥을 준다.
+            return new JobAccepted(null, ResidualJobStore.COMPLETED, true, target, null, null, null);
+        }
+
+        ResidualComputeRunner runner = runners.getIfAvailable();
+        if (runner == null) {
+            // 아무도 진행시키지 않을 작업을 만들지 않는다. 화면이 계산이 도는 줄 알게 된다.
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE,
+                    "잔차 계산 기반이 아직 연결되지 않았습니다.");
+        }
+
+        Enqueued enqueued = store.enqueue(memberId, ticId, target, cacheKey);
+        return switch (enqueued) {
+            case Enqueued.Created(Job job, int queuePosition) -> {
+                runner.start(job);
+                yield accepted(job, queuePosition);
+            }
+            case Enqueued.Merged(Job job, int queuePosition) -> accepted(job, queuePosition);
+            case Enqueued.Full(int retryAfterSeconds, String activeJobId) -> throw queueFull(retryAfterSeconds,
+                    activeJobId);
+        };
+    }
+
+    /**
+     * 작업 상태를 본다(7.2절). 조회는 작업을 만들지 않는다(D-14).
+     *
+     * <p>같은 목표를 요청해 같은 작업을 기다리는 회원은 모두 볼 수 있다(7.1절 「진행 중 작업 있음」).
+     * 요청하지 않은 회원의 작업과 사라진 작업은 같은 404로 덮는다. 구분하면 남의 작업 존재가 드러나고,
+     * 프론트가 할 일도 「7.1절로 다시 요청」으로 같다.
+     *
+     * @throws BusinessException 없거나 내 것이 아니면 {@code RESOURCE_NOT_FOUND}
+     */
+    public JobStatus status(long memberId, String jobId) {
+        Job job = ExplorationIds.parse(jobId, ExplorationIds.RESIDUAL_JOB).isEmpty()
+                ? null
+                : store.find(jobId).filter(found -> found.watchedBy(memberId)).orElse(null);
+        if (job == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        boolean completed = ResidualJobStore.COMPLETED.equals(job.status());
+        return new JobStatus(job.jobId(), String.valueOf(job.ticId()), job.target(), job.status(), job.attempt(),
+                job.timeline(), job.failure(), completed ? job.target() : null, properties.pollAfterSeconds());
+    }
+
+    private JobAccepted accepted(Job job, int queuePosition) {
+        return new JobAccepted(job.jobId(), job.status(), false, null, queuePosition, null,
+                properties.pollAfterSeconds());
+    }
+
+    private static BusinessException queueFull(int retryAfterSeconds, String activeJobId) {
+        // 같은 회원의 다른 작업 때문에 막힌 것과 대기열이 찬 것은 화면에서 다른 말이어야 한다(D-4).
+        Map<String, Object> details = activeJobId == null
+                ? Map.of("retryAfterSeconds", retryAfterSeconds)
+                : Map.of("retryAfterSeconds", retryAfterSeconds, "activeJobId", activeJobId);
+        return new BusinessException(ErrorCode.RESIDUAL_QUEUE_FULL, details);
+    }
+
+    /**
+     * 본문의 목표를 곡선 조회와 같은 규칙으로 확인한다.
+     *
+     * <p>검증 실패 필드 이름을 본문 경로로 바꾼다. 조회는 쿼리라 {@code removed}지만 여기서는
+     * {@code target.removedCandidateIds}다. 화면이 어느 값을 고쳐야 하는지 알아야 한다.
+     */
+    private CurveContext resolveTarget(long memberId, long ticId, JobRequest body) {
+        ResidualJobViews.TargetRequest target = body == null ? null : body.target();
+        if (target == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    ErrorCode.VALIDATION_FAILED.getDefaultMessage(),
+                    List.of(new FieldError("target", "계산할 곡선 문맥이 필요합니다.")));
+        }
+        List<String> removed = target.removedCandidateIds() == null ? List.of() : target.removedCandidateIds();
+        CurveQuery query = new CurveQuery(target.bundleId(), String.valueOf(removed.size()), removed,
+                target.residualModelVersion(), target.periodogramConfigVersion());
+        try {
+            return analysis.residualTarget(memberId, ticId, query);
+        } catch (BusinessException e) {
+            throw e.getFieldErrors().isEmpty() ? e : rename(e);
+        }
+    }
+
+    private static BusinessException rename(BusinessException from) {
+        List<FieldError> renamed = from.getFieldErrors().stream()
+                .map(error -> new FieldError(switch (error.field()) {
+                    case "bundleId" -> "target.bundleId";
+                    case "removed", "curveStep" -> "target.removedCandidateIds";
+                    default -> error.field();
+                }, error.reason()))
+                .toList();
+        return new BusinessException(from.getErrorCode(), from.getMessage(), renamed);
+    }
+}

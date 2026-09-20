@@ -227,7 +227,7 @@ public class SubmissionService {
         if (segments.isEmpty() || segments.size() != bundle.manifest().segmentIds().size()) throw unavailable();
         if (context.curveStep() > 0) {
             ResidualResultReader.Lookup lookup;
-            try { lookup = residuals.lookup(curveContext(context)); }
+            try { lookup = residuals.lookup(bundle.ticId(), curveContext(context)); }
             catch (RuntimeException e) { throw unavailable(); }
             if (lookup == null) throw unavailable();
             if (!lookup.completed()) throw new BusinessException(ErrorCode.SUBMISSION_CONTEXT_NOT_READY,

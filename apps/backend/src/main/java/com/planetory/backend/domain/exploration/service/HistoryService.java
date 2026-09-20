@@ -140,7 +140,7 @@ public class HistoryService {
         } else {
             ResidualResultReader.Lookup lookup = null;
             if (context.curveStep() > 0) {
-                try { lookup = residuals.lookup(context); }
+                try { lookup = residuals.lookup(current.ticId(), context); }
                 catch (RuntimeException e) { throw unavailable(); }
                 if (lookup == null) throw unavailable();
                 if (publicRead && !lookup.completed()) {
