@@ -282,7 +282,7 @@ erDiagram
         numeric bin_minutes "비닝 간격(분)"
         integer n_points "점 수"
         real_array flux "정규화 밝기 배열"
-        numeric flux_scatter "점간 산포(오차 대표값)"
+        numeric flux_scatter "세그먼트 robust 산포"
         jsonb gaps "빈 구간 인덱스"
     }
     periodograms["periodograms · 판별 주기도"] {
@@ -591,7 +591,7 @@ erDiagram
 | tic_id, sector, binning_revision | UNIQUE(tic_id, sector, binning_revision). observation_datasets와 같은 섹터 단위이고, 원천·전처리·비닝 설정이 바뀌면 기존 행을 덮어쓰지 않고 새 revision 행을 만든다 |
 | start_btjd DOUBLE PRECISION, bin_minutes, n_points | **시각 배열은 저장하지 않는다.** i번째 점의 시각 = `start_btjd + (bin_minutes / 1440.0) × i` (BTJD는 일 단위이므로 분을 일로 환산한다). `start_btjd`는 첫 bin의 시작 시각이다. 섹터 안에서 균등 격자이므로 계산으로 충분하다 |
 | flux `real[]` | 품질 필터 후 10분 간격으로 비닝한 밝기. 길이 = n_points. 원소는 유한수 또는 NULL(빈 bin)이며 CHECK가 NaN·±Infinity를 거절한다(V10) |
-| flux_scatter | 그 섹터의 점간 산포 하나. 점마다의 오차 배열 대신 대표값 하나만 둔다. 비닝하면 점마다의 오차가 거의 같아지므로 충분하다 |
+| flux_scatter | 세그먼트 전체의 robust 산포 하나. 통과 신호·별 변동을 포함하며 점별 측정 오차나 같은 오차를 보장하지 않는다. 식·부분 bin·운영 상한은 [Gold 114 채택안](../../contracts/gold/README.md#41-114-비닝-운영-채택안--mr-101-재리뷰-대기)을 따른다(MR !101 승인 전 목표 계약 변경안) |
 | gaps JSONB | 그 섹터 안의 빈 구간 인덱스. `[start, end]` 폐구간 배열이다. 균등 격자를 유지하려고 빈 칸은 `flux`에 NULL로 두며 NaN을 쓰지 않는다 |
 
 섹터 사이의 긴 공백(길게는 수년)은 행을 나눠서 표현한다. 전체 기간에 균등 격자를 걸면 대부분이 빈 칸이 되므로 섹터 단위가 맞다.
