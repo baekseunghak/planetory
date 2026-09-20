@@ -17,6 +17,8 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -50,6 +52,12 @@ public class SubmissionService {
     private final PlatformTransactionManager transactions;
 
     public record Answer(JsonNode body, boolean replay, String currentBundleId) {}
+
+    /** 공개 등록 응답과 탐사 결과가 같은 최신 유효 제출 집계를 사용한다. 채점형 통계와는 별개다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<String, Object> publicJudgmentSummary(long candidateId) {
+        return submissions.statistics(candidateId, new SubmissionRepository.Disposition("pc", "analysis", null));
+    }
 
     public Answer submit(long memberId, long ticId, SubmissionRequest input) {
         if (input == null) throw invalid("body");

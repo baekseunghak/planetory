@@ -138,6 +138,15 @@ public class AchievementService {
                 wanted - unlocked.size(), skyVersion);
     }
 
+    /** 공개 재전송은 현재 성과를 읽기만 한다. 취소·숨김된 공개를 다시 인정하지 않는다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Recognition existingRecognition(long memberId, long candidateId) {
+        long ticId = achievements.findCandidateTic(candidateId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        return new Recognition(false, achievements.findAchievementId(memberId, candidateId), ticId,
+                star(memberId, ticId), List.of(), 0, sky.version(memberId));
+    }
+
     /**
      * 성과 조회(9.1절). 요약과 목록을 한 스냅샷에서 읽는다.
      *

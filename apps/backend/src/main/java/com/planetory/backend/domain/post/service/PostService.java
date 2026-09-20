@@ -75,6 +75,7 @@ public class PostService {
         members.requireActive(memberId);
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        requireUserPost(post);
         if (post.getAuthor().getId() != memberId) {
             throw new BusinessException(visible(post) ? ErrorCode.FORBIDDEN : ErrorCode.RESOURCE_NOT_FOUND);
         }
@@ -84,6 +85,7 @@ public class PostService {
     private Post writable(long memberId, long postId) {
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        requireUserPost(post);
         if (!visible(post)) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         if (post.getAuthor().getId() != memberId) throw new BusinessException(ErrorCode.FORBIDDEN);
         return post;
@@ -121,7 +123,10 @@ public class PostService {
         }
     }
 
-    private static boolean visible(Post post) { return "visible".equals(post.getStatus()); }
+    private static void requireUserPost(Post post) {
+        if (!"user".equals(post.getKind())) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+    private static boolean visible(Post post) { return "user".equals(post.getKind()) && "visible".equals(post.getStatus()); }
     private static String id(Post post) { return "p-" + post.getId(); }
     private static Detail detailOf(Post post) {
         return new Detail(id(post), post.getTitle(), post.getBody(), post.getTag(),

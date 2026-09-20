@@ -95,6 +95,8 @@ docker compose --profile service up -d --wait service-db
 
 ## 더 보기
 
+공개 분석 등록(161)은 `POST /api/v1/public-analyses`로 본인 History를 공식 스레드에 등록하고 성과·별 발견을 같은 트랜잭션으로 확정한다. `PublicAnalysisTest`가 실제 제출부터 공개·동시성·롤백·앱 역할 권한을 검증한다. 취소/재공개·목록/상세·일괄 API는 후속 티켓이며, 입력과 재시도 계약은 [서비스 API 9.1절](docs/service-api-spec.md#publication)을 따른다. V14 적용 순서는 [마이그레이션 안내](docs/development-setup.md#v14-공개-분석-등록-권한)를 확인한다.
+
 히스토리 조회(148)는 개인 목록·상세·CURRENT/SUBMITTED 그래프와 서비스 도메인용 공개 투영을 제공한다. [계약·160 인계](docs/exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회), `./gradlew -PskipLocalDb test --tests '*HistoryTest'`. 일회용 PostgreSQL에서 실제 제출·조회·권한·판 교체를 검증한다. 잔차 공급자만 대체하며 147·160·프론트 실제 연결은 별도 인수다.
 
 제출 처리(143)는 `POST /api/v1/stars/{ticId}/submissions`다. V12가 요청 해시와 최초 응답 보존 열을 추가한다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest'`는 Docker의 일회용 PostgreSQL에서 저장·재전송·롤백·보안 필터를 검증하며 기존 개발 DB를 사용하지 않는다. 봉우리/잔차는 테스트 경계만 대체하고 실제 141·147 연결은 담당자 인계 후 검증한다. [채택 계약과 인수 구분](../../docs/api/exploration/submission-readiness.md).

@@ -1028,7 +1028,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 DEC-11(서비스 F04). `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
 
-148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 미확정 미공개 `UNPUBLISHED`, 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
+148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 제출 당시 미확정인 미공개 기록 `UNPUBLISHED`(현재 재분류·은퇴와 무관, F07-Q2), 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
 
 **저장 매핑:** 143의 History `versions.bundleVersion` → `versions.data`, `ruleVersion` → `rule`, `residualModelVersion` → `residualModel`, `periodogramConfigVersion` → `periodogramConfig`로 투영한다. 별도로 보존되지 않은 `preprocess`·`pipeline`은 null이며 현재 처리 버전으로 꾸며 채우지 않는다. `versions.snapshotVersion`을 추가 전달한다. 143의 `snapshot_params.viewState`가 viewport·배율의 원본이고, 최초 응답에도 같은 값이 보존되어 있다. `snapshotParams.foldSettings.referenceTimeBtjd`는 제출 당시 기준 시각이다. 현재 판을 읽지 못해도 개인 상세·목록·공개 내용은 현재 그래프와 별도로 조회한다. 없는/형식이 틀린 History ID는 404 `RESOURCE_NOT_FOUND`, 타인 개인 기록은 403 `FORBIDDEN`이다.
 
@@ -1301,7 +1301,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | Q07 경로·DTO·멱등·판 변경 | 2장, 6.4절, 6.6절. 판 변경 감지는 `BUNDLE_CHANGED`와 5.1절 재조회 |
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
 | Q09 진행 중 은퇴 후보 | 판 전환의 분석 복귀(5.1절)와 다시 풀기(6.8절)는 최신 현재 진행 문맥을 사용한다. 히스토리 CURRENT(8.3절)는 최신 원본, SUBMITTED는 당시 snapshot을 사용한다. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
-| Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
+| Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 제출 당시 미확정 기준으로 허용(F07-Q2, 2026-09-20 사용자 확정; 서비스 API 9.1절) |
 | Q11 스냅샷 누락·고조파 좌표 | 8.3절 모드별 선택 기준·버전 미상 안내·T 변경 회귀 fixture. 원본 P·서버 duration을 보존하고 SUBMITTED는 당시 original 창·저장 배열, CURRENT만 현재 위상 환산. `snapshot: null`은 누락 안내. 프론트 종단 인수는 별도 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
 

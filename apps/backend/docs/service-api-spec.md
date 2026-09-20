@@ -561,14 +561,25 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 }
 ```
 
-새 공개 기록 201, 같은 기록 재요청 200 제안. achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
+새 공개 기록은 201, 같은 기록 재요청은 200이다(161 구현). achievementGranted는 조회 시점에 해당 회원×신호의 성과가 존재하는지, newlyGranted는 이번 실행이 신규 성과를 생성했는지다. 최초 성공은 둘 다 true, 응답 유실 후 재시도는 achievementGranted=true·newlyGranted=false다. created는 이번에 공개 기록을 만들었는지다. 화면의 성과 보유 표시는 achievementGranted를 사용한다. 실패 항목에서 성과 조회도 실패했으면 null(확인 불가)로 처리하고 false로 단정하지 않는다.
 
 - posts.kind=system_thread, user_id=NULL로 공식 공간을 만든다. threadId는 posts.id, candidateId는 candidates.id다. comments.post_id도 일반/공식 posts를 가리킨다. published_analyses.history_id UNIQUE이며 post_id로 공식 스레드를 참조한다.
 - 세 판단 모두 공개·최초 성과 인정 가능. 이미 성과를 받은 duplicate의 새 제출도 공개 가능하나 추가 성과 없음.
 - 신호별 공개·공식 공간·최초 성과·진행 수·별 발견은 아래 SB-D15의 단일 트랜잭션으로 반영한다. 최초 성과 INSERT마다 stars_per_achievement개(기본 1)를 발견하고 trigger_achievement_id+seq로 중복을 막는다. TIC별 성과 수 1/2/3/4 이상을 A/S/SS/SSS로 표시하며 FP도 상한이 없다. 완료·등급 상승 자체는 발견 트리거가 아니다.
 - 일반 Post·댓글·반응은 자동 생성하지 않는다. 미공개·공개 실패가 개인 기록이나 탐색 완료를 되돌리지 않는다.
-- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환하는 안이다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
-- 다른 사람 History는 접근 거부, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE` 제안. 상위 운영 숨김은 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 전 라벨이 바뀐 옛 기록의 자격은 미정.
+- 이미 취소된 동일 기록을 POST로 재전송하면 취소 상태를 유지해 반환한다. 의도적 재공개는 아래 visibility API로 구분해 오래된 재시도가 취소를 되돌리지 않게 한다.
+- 다른 사람 History는 403 `FORBIDDEN`, 없는 History는 404 `RESOURCE_NOT_FOUND`, 미매칭/부적격은 409 `PUBLICATION_NOT_ELIGIBLE`이다. 상위 숨김·삭제는 409 `THREAD_HIDDEN`; 대체 스레드·성과를 만들지 않는다. 최초 공개 자격은 제출 당시 미확정 여부로 판정한다(F07-Q2, 2026-09-20 사용자 확정). 현재 확정/FP로 재분류되거나 후보가 은퇴해도 당시 매칭 신호의 공개·최초 미확정 성과를 허용한다. 새 후보로 자동 이전하지 않으며 기존 성과가 있으면 추가 지급하지 않는다. 당시 판정의 저장 근거가 없으면 현재 라벨로 추측하지 않고 503 `DEPENDENCY_UNAVAILABLE`을 반환한다.
+
+<a id="publication"></a>
+
+**161 구현·후속 인계**
+
+- 요청은 문자열 `historyId` 하나만 받는다. 다른 필드·숫자 ID·잘못된 형식은 400이며 작성자·판단·수치를 요청으로 변경할 수 없다. 기존 세션 인증·CSRF 검증을 따른다.
+- `PublicAnalysisService.publish`가 회원 행을 먼저 잠그고 공식 스레드·공개 기록·`AchievementService.recognize`를 같은 트랜잭션으로 확정한다. PostgreSQL 부분 유일 인덱스와 `ON CONFLICT DO NOTHING`으로 첫 스레드 생성 경합을 처리한다.
+- 등록은 그래프를 계산하거나 공개 상세를 조회하지 않는다. 공개 상세의 필드 제한은 탐사 8.5절 투영을 따른다. `judgmentSummary`는 탐사 제출 결과와 같은 최신 유효 공개 제출 쿼리를 사용한다.
+- 응답의 `achievement.unlockedStars`는 144의 `DiscoveredStar` 전체 항목이며 재시도는 빈 배열이다. `achievement.result`는 이번 신규 인정이면 `recognized`, 기존 성과이면 `already_recognized`다.
+- 162는 취소·재공개 API와 공통 접근 정책, 164는 피드·목록·상세, 165는 집계 공통화·소비 경로 완성, 166은 신호별 독립 트랜잭션의 일괄 호출, 167은 출처 카드를 담당한다. 175 알림·177/178 통계 작업을 공개 트랜잭션에 넣지 않는다.
+- V14는 공개 분석 INSERT와 시퀀스 권한만 추가한다. 160의 V13 병합 후 V13 → V14 순서로 검증·병합하며 V13 파일을 161 브랜치에 복사하지 않는다.
 
 **공개·성과 저장 경계(SB-D15, 사용자 확정)**
 
