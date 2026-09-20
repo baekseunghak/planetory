@@ -437,7 +437,7 @@ export function communityFixturePlugin({
             judgment: "UNSURE",
             evidenceChecks: ["ushape"],
             memo: "213 합성 첨부 메모",
-            graph: {
+            graph: url.searchParams.get("includeGraph") === "false" ? null : {
               historyId,
               reproduction: {
                 submittedBundleId: "b-1",

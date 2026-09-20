@@ -1,5 +1,56 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 const headers = { "X-CSRF-TOKEN": "community-fixture-209" };
+
+test("first graph 503 reloads authorized metadata; revoked metadata is removed", async ({
+  page,
+}) => {
+  const id = await seed(page);
+  let revoked = false;
+  let metadataReads = 0;
+  const privateReads: string[] = [];
+  page.on("request", (r) => {
+    if (/\/histories\/|residual-jobs/.test(r.url())) privateReads.push(r.url());
+  });
+  await page.route("**/history-attachments/**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("includeGraph") ===
+      "false"
+    ) {
+      metadataReads++;
+      if (revoked)
+        return route.fulfill({
+          status: 404,
+          json: { code: "RESOURCE_NOT_FOUND", message: "공개 취소" },
+        });
+      const response = await route.fetch();
+      return route.fulfill({
+        response,
+        json: { ...(await response.json()), judgment: null },
+      });
+    }
+    return route.fulfill({
+      status: 503,
+      json: {
+        code: "GRAPH_TEMPORARILY_UNAVAILABLE",
+        message: "그래프 재조회 필요",
+      },
+    });
+  });
+  await page.goto("/posts/" + id);
+  await page.getByRole("button", { name: "분석 기록 h-501 열기" }).click();
+  await expect(
+    page.getByText("213 합성 첨부 메모", { exact: true }),
+  ).toBeVisible();
+  expect(metadataReads).toBe(1);
+  revoked = true;
+  await page.getByRole("button", { name: "제출 당시", exact: true }).click();
+  await expect(
+    page.getByText("213 합성 첨부 메모", { exact: true }),
+  ).toHaveCount(0);
+  await expect.poll(() => metadataReads).toBe(2);
+  expect(privateReads).toEqual([]);
+});
+
 async function enter(target: Locator, value: string) {
   await target.fill(value);
   if (test.info().project.name === "firefox") {
