@@ -476,3 +476,92 @@ if ($LASTEXITCODE -ne 0) { throw 'tamper fixture failed' }
 - 검증: 최신 통합 작업 파일에서 tess-bench 108 passed, astro-kernel 93 passed. Git은 사용자 실행이며 최종 diff 검사는 커밋 후 수행한다.
 - **7.6절의 2084018 실행·CSV·ZIP은 수정 전 역사적 결과다. 새 QA 코드 검증 근거로 재사용하지 않는다.** QA 숫자 설정이 같아도 실패 처리 동작이 바뀌었으므로 새 코드 commit을 별도로 고정하고 7.4절 8개 실행 전체를 재실행한다. 기존 파일은 보존한다.
 - 새 manifest는 동일한 수정 후 commit과 git_dirty=false, 입력·출력 checksum, 1,127곡선 집계·실패 후 미채택·이전 후보 보존을 확인한다. 새 run으로 리뷰 ZIP을 생성한 후 그 SHA-256과 결과를 MR에 갱신한다. 현재 수정 후 실측은 아직 실행하지 않았다.
+
+### 7.9 QA 수정 후 최종 재실행 (2026-09-21)
+
+7.8절 수정 뒤 사용자가 8개 실행을 수행했다. 모든 manifest는 `c68c1e21f19e2d9d21c4c76df04d88fbe22e9052`, `git_dirty=false`이며 입력·출력 SHA-256 불일치 0건이다. 총 1,127곡선과 상세 회수 표 57행의 direct+alias 합계를 iterations와 대조했다. 이 절이 새 코드 검증 근거이며 2084018 결과는 비교용 과거 기록이다.
+
+| manifest (`results/manifests/`) | 곡선 | manifest 시간 | other_depth_not_measurable 단계 |
+|---|---:|---|---:|
+| iterate-l98_59-746e184e.json | 224 | total 1807.0s | 7 |
+| iterate-cm_dra-2973480f.json | 224 | total 316.4s | 58 |
+| iterate-wasp18-4f88d63f.json | 224 | total 800.2s | 1 |
+| iterate-toi700-b88c5e87.json | 224 | total 1823.7s | 6 |
+| iterate-hd21749-be776a89.json | 224 | total 682.3s | 1 |
+| iterate-wasp18-3eec0da6.json | 2 | total 7.5s | 0 |
+| iterate-toi700-3fcae0c7.json | 2 | total 15.8s | 0 |
+| iterate-toi270-49e7d1c0.json | 3 | total 11.2s | 0 |
+
+#### 회수·가짜 후보·종료 상세
+
+회수는 direct와 alias_half/alias_double 등을 구분한다. 전체 주입 분모이며 탐색 범위 안 직접 회수율이나 110 holdout 판정값이 아니다. 원본 real/none은 주입 정답이 없으므로 그 행의 가짜 후보를 실제 천체 오탐으로 해석하지 않는다.
+
+| 실행 / baseline / 종류 | 주입 신호 | direct | alias | 가짜 후보 | 종료 사유(곡선 수) |
+|---|---:|---:|---:|---:|---|
+| 746e184e / l98_59-noise20260910 / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | removal_qa_failed=1 |
+| 746e184e / l98_59-noise20260910 / single | 108 | 71 | 2 | 2 | no_quality_peak=82, removal_qa_failed=26 |
+| 746e184e / l98_59-realclean / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-realclean / pair:strong_weak | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| 746e184e / l98_59-realclean / single | 108 | 63 | 2 | 0 | no_quality_peak=89, removal_qa_failed=19 |
+| 2973480f / cm_dra-noise20260910 / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 2973480f / cm_dra-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| 2973480f / cm_dra-noise20260910 / pair:similar_strength | 2 | 1 | 0 | 0 | no_quality_peak=1 |
+| 2973480f / cm_dra-noise20260910 / pair:strong_weak | 2 | 1 | 0 | 0 | no_quality_peak=1 |
+| 2973480f / cm_dra-noise20260910 / single | 108 | 41 | 0 | 4 | no_quality_peak=95, removal_qa_failed=13 |
+| 2973480f / cm_dra-realclean / none | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 2973480f / cm_dra-realclean / pair:overlapping_transits | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 2973480f / cm_dra-realclean / pair:similar_strength | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 2973480f / cm_dra-realclean / pair:strong_weak | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 2973480f / cm_dra-realclean / single | 108 | 0 | 0 | 0 | removal_qa_failed=108 |
+| 4f88d63f / wasp18-noise20260910 / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 4f88d63f / wasp18-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| 4f88d63f / wasp18-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| 4f88d63f / wasp18-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| 4f88d63f / wasp18-noise20260910 / single | 108 | 60 | 2 | 2 | no_quality_peak=83, removal_qa_failed=25 |
+| 4f88d63f / wasp18-realclean / none | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 4f88d63f / wasp18-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| 4f88d63f / wasp18-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | removal_qa_failed=1 |
+| 4f88d63f / wasp18-realclean / pair:strong_weak | 2 | 1 | 0 | 0 | removal_qa_failed=1 |
+| 4f88d63f / wasp18-realclean / single | 108 | 44 | 0 | 1 | no_quality_peak=16, removal_qa_failed=92 |
+| b88c5e87 / toi700-noise20260910 / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| b88c5e87 / toi700-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| b88c5e87 / toi700-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| b88c5e87 / toi700-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | removal_qa_failed=1 |
+| b88c5e87 / toi700-noise20260910 / single | 108 | 77 | 0 | 1 | no_quality_peak=83, removal_qa_failed=25 |
+| b88c5e87 / toi700-realclean / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| b88c5e87 / toi700-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| b88c5e87 / toi700-realclean / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| b88c5e87 / toi700-realclean / pair:strong_weak | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| b88c5e87 / toi700-realclean / single | 108 | 61 | 0 | 0 | no_quality_peak=90, removal_qa_failed=18 |
+| be776a89 / hd21749-noise20260910 / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-noise20260910 / pair:overlapping_transits | 2 | 1 | 1 | 0 | removal_qa_failed=1 |
+| be776a89 / hd21749-noise20260910 / pair:similar_strength | 2 | 2 | 0 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-noise20260910 / pair:strong_weak | 2 | 2 | 0 | 0 | removal_qa_failed=1 |
+| be776a89 / hd21749-noise20260910 / single | 108 | 60 | 0 | 2 | no_quality_peak=83, removal_qa_failed=25 |
+| be776a89 / hd21749-realclean / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-realclean / pair:overlapping_transits | 2 | 1 | 1 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-realclean / pair:similar_strength | 2 | 1 | 0 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-realclean / pair:strong_weak | 2 | 1 | 0 | 0 | no_quality_peak=1 |
+| be776a89 / hd21749-realclean / single | 108 | 32 | 0 | 0 | no_quality_peak=100, removal_qa_failed=8 |
+| 3eec0da6 / wasp18-real / none | 0 | 0 | 0 | 1 | removal_qa_failed=1 |
+| 3eec0da6 / wasp18-realclean / none | 0 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 3fcae0c7 / toi700-real / none | 0 | 0 | 0 | 1 | no_quality_peak=1 |
+| 3fcae0c7 / toi700-realclean / none | 0 | 0 | 0 | 0 | no_quality_peak=1 |
+| 49e7d1c0 / toi270-realclean / pair:overlapping_transits | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 49e7d1c0 / toi270-realclean / pair:similar_strength | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+| 49e7d1c0 / toi270-realclean / pair:strong_weak | 2 | 0 | 0 | 0 | removal_qa_failed=1 |
+
+#### 변경 효과와 복구 검증 범위
+
+- 정상 5별 실행의 baseline별 주입 회수 합계는 2084018과 같다. 가짜 후보 합계는 15→12다: L 98-59 realclean 1→0, CM Dra noise 5→4, WASP-18 noise 3→2. 나머지는 같다. 원본 real/none 2개를 이 합계에 넣지 않는다.
+- 전체 QA 실패 곡선은 377→380이며 other_depth_not_measurable가 73단계에서 기록됐다. 기존 실패 사유와 함께 발생할 수 있으므로 실패 곡선 증가 3개와 구분한다.
+- 1,127곡선 전체의 accepted 단계 건수와 iterations.n_accepted가 일치한다. QA 실패 380곡선 모두 실패 단계 및 이후 후보를 채택하지 않았다. 이는 저장 기록 일관성 검증이며 잔차 배열 자체의 복구는 7.8절 회귀 테스트에서 원소별 확인했다.
+- 원본 재검증 실패 후보는 0개다. tamper 3곡선은 첫 단계 실패·미채택이다. CM Dra 회수 실패 등 기존 한계는 해결됐다고 주장하지 않는다.
+- 실행 코드 테스트는 108+93 passed(7.8절), 이번 결과 기록 작업은 코드·설정을 변경하지 않았으므로 테스트를 다시 실행하지 않았다. 122 인계는 7.7절에 7.8절의 고정 실패 사유 other_depth_not_measurable를 추가해 적용한다. 운영 채택·병합·Jira 완료는 새 결과의 리뷰 수용 후 판단한다.
+
+새 리뷰 첨부: `review-111-c68c1e2.zip`. SHA-256: `c5741b705981aa0eda9434eaa83f908d93765ea57ed079cfccf3eae8580a1879`. 8개 원본 manifest·출력 CSV와 checksums.json, 재집계 표·통합 steps를 포함한다. Git에는 추가하지 않고 MR !117에 첨부한다. 이전 ZIP을 덮어쓰지 않았다.
