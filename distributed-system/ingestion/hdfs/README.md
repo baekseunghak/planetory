@@ -19,6 +19,13 @@ PoC HDFS는 Kerberos가 없는 simple mode다. staging bundle은 OS/HDFS 사용�
 
 HDFS 사전 점검은 safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만을 확인한다. Sector마다 적재 직전에 다시 검사하고, 입력 바이트의 RF2 예상 사용량을 반영한 예상 사용률이 70% 이하여야 한다. `dfs.datanode.du.reserved`는 DataNode당 100GiB(`107374182400`)여야 하며 Worker 원본 디스크도 기본 100GiB 이상 가용해야 한다. 저장소 설정을 기존 클러스터에 반영하고 DataNode를 재시작하는 작업은 별도 통제된 운영 절차이며, 적용 전에는 Preflight가 적재를 막는다.
 
+기존 클러스터의 예약값이 0이면 적재 전에 다음 단계를 한 번 실행한다. 현재 `/etc/hadoop/hdfs-site.xml`에서 예약값 외 속성이 저장소 정본과 다르면 변경 전에 중단한다. 정합하면 Node 1~6에 같은 설정을 배치하고 Worker 2~6 DataNode를 한 대씩 재시작하며 매번 Live DataNode 5대 복귀를 확인한다. 재실행해도 같은 설정을 검증한 뒤 같은 롤링 순서를 반복한다.
+
+```powershell
+& $Load -Step ConfigureCapacity -RunId $Run -ExpectedSourceListSha256 $SourceSha `
+  -ReleaseId $Run -CodeReleaseId $CodeRelease
+```
+
 ## 실행 순서
 
 먼저 같은 RunId의 해당 Sector에 대해 Worker 5개 `download-audit`가 `expected=validated`, `errors=[]`이고 `.part`가 0인지 확인한다. 그 다음 저장소 루트 PowerShell에서 실행한다.

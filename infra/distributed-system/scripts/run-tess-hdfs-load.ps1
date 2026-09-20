@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 param(
  [Parameter(Mandatory)]
- [ValidateSet('Preflight','Install','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll')]
+ [ValidateSet('ConfigureCapacity','Preflight','Install','Build','Upload','Status','Audit','Commit','CoverageCommit','RunAll')]
  [string]$Step,
  [Parameter(Mandatory)][ValidatePattern('^\d{8}T\d{6}Z$')][string]$RunId,
  [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSourceListSha256,
@@ -16,15 +16,16 @@ param(
  [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
 )
 $ErrorActionPreference='Stop'
-$mutatingSteps=@('Install','Build','Upload','Commit','CoverageCommit','RunAll')
+$mutatingSteps=@('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll')
 if ($Step -in $mutatingSteps -and -not $PSCmdlet.ShouldProcess("TESS HDFS release=$ReleaseId sector=$Sector","S15P21C206-76 $Step")) { return }
-if ($Step -in @('Commit','CoverageCommit') -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
+if ($Step -in @('ConfigureCapacity','Commit','CoverageCommit') -and (@($NodeNumbers).Count -ne 5 -or (@($NodeNumbers | Sort-Object) -join ',') -ne '2,3,4,5,6')) {
  throw "$Step requires all Workers 2..6."
 }
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and join the project tailnet first.' }
-if ($Step -eq 'Install' -and -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install an OpenSSH client with scp first.' }
+if ($Step -in @('ConfigureCapacity','Install') -and -not (Get-Command scp -ErrorAction SilentlyContinue)) { throw 'Install an OpenSSH client with scp first.' }
 $LocalIngestionPath=(Resolve-Path $LocalIngestionPath).Path
 $loaderRoot=Join-Path $LocalIngestionPath 'hdfs'
+$hdfsSitePath=(Resolve-Path (Join-Path $PSScriptRoot '../config/hadoop/hdfs-site.xml')).Path
 foreach ($name in @('tess_hdfs_load.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
  if (-not (Test-Path -LiteralPath (Join-Path $loaderRoot $name) -PathType Leaf)) { throw "Missing HDFS loader file: $name" }
 }
@@ -235,6 +236,107 @@ $targetBytes=[int64]$TargetBundleMiB*1MB
 $slotArgs=($NodeNumbers | ForEach-Object { "--worker-slot $($_-1)" }) -join ' '
 
 switch ($Step) {
+ 'ConfigureCapacity' {
+  $configSha=(Get-FileHash -Algorithm SHA256 -LiteralPath $hdfsSitePath).Hash.ToLowerInvariant()
+  $targets=@(,@('node-1',$node1,'master-1'); foreach ($node in $NodeNumbers) { ,@("node-$node","planetory-admin@node-$node","worker-$node") })
+  foreach ($target in $targets) {
+   Assert-Host $target[0] $target[1] $target[2]
+   $remoteConfig="/tmp/S15P21C206-76-$CodeReleaseId-hdfs-site.xml"
+   Invoke-Scp $hdfsSitePath "$($target[1]):$remoteConfig"
+   $command=@'
+set -eu
+candidate='__CANDIDATE__'
+current=/etc/hadoop/hdfs-site.xml
+cleanup() { status=$?; trap - EXIT; rm -f -- "$candidate"; exit "$status"; }
+trap cleanup EXIT
+test -f "$current"
+test "$(sha256sum "$candidate" | cut -d ' ' -f 1)" = '__CONFIG_SHA__'
+python3 - "$current" "$candidate" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+RESERVED = "dfs.datanode.du.reserved"
+EXPECTED = "107374182400"
+
+def properties(path):
+    result = {}
+    for item in ET.parse(path).getroot().findall("property"):
+        name = (item.findtext("name") or "").strip()
+        value = (item.findtext("value") or "").strip()
+        if not name or name in result:
+            raise SystemExit(f"invalid or duplicate Hadoop property: {name!r}")
+        result[name] = value
+    return result
+
+current = properties(sys.argv[1])
+candidate = properties(sys.argv[2])
+current_reserved = current.pop(RESERVED, None)
+candidate_reserved = candidate.pop(RESERVED, None)
+if candidate_reserved != EXPECTED:
+    raise SystemExit("candidate HDFS reserve is not 100 GiB")
+if current_reserved not in (None, "0", EXPECTED):
+    raise SystemExit(f"unexpected current HDFS reserve: {current_reserved}")
+if current != candidate:
+    changed = sorted(set(current) ^ set(candidate) | {key for key in current.keys() & candidate.keys() if current[key] != candidate[key]})
+    raise SystemExit("HDFS config drift outside reserve: " + ",".join(changed))
+PY
+if test "$(sha256sum "$current" | cut -d ' ' -f 1)" = '__CONFIG_SHA__'; then
+ echo CONFIG_CACHED host="$(hostname -s)" sha256=__CONFIG_SHA__
+else
+ sudo install -o root -g root -m 0644 "$candidate" "$current"
+ test "$(sha256sum "$current" | cut -d ' ' -f 1)" = '__CONFIG_SHA__'
+ echo CONFIG_UPDATED host="$(hostname -s)" sha256=__CONFIG_SHA__
+fi
+'@.Replace('__CANDIDATE__',$remoteConfig).Replace('__CONFIG_SHA__',$configSha)
+   $output=@(Invoke-RemoteCapture $target[1] $command "Configure HDFS reserve on $($target[2])")
+   $output | ForEach-Object { Write-Host $_ }
+  }
+  foreach ($node in $NodeNumbers) {
+   $worker="planetory-admin@node-$node"
+   $command=@'
+set -eu
+sudo systemctl restart hadoop-hdfs-datanode
+for attempt in $(seq 1 40); do
+ if systemctl is-active --quiet hadoop-hdfs-datanode && pgrep -u hdfs -f org.apache.hadoop.hdfs.server.datanode.DataNode >/dev/null; then
+  value=$(env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs getconf -confKey dfs.datanode.du.reserved)
+  test "$value" = 107374182400
+  echo DATANODE_RESTARTED host="$(hostname -s)" reserved="$value"
+  exit 0
+ fi
+ sleep 3
+done
+sudo journalctl -u hadoop-hdfs-datanode -n 30 --no-pager >&2
+exit 1
+'@
+   Invoke-Remote $worker $command "Restart DataNode Worker $($node-1)"
+   $verify=@'
+set -eu
+hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
+for attempt in $(seq 1 40); do
+ live=$(hdfs_cmd dfsadmin -report | sed -n 's/^Live datanodes (\([0-9][0-9]*\)):.*/\1/p')
+ if test "$live" = 5; then
+  echo HDFS_LIVE_OK live_datanodes="$live"
+  exit 0
+ fi
+ sleep 3
+done
+echo "LIVE_DATANODES_NOT_RECOVERED=${live:-unknown}" >&2
+exit 1
+'@
+   Invoke-Remote $node1 $verify "Verify HDFS after Worker $($node-1) restart"
+  }
+  $final=@'
+set -eu
+hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
+test "$(hdfs_cmd getconf -confKey dfs.datanode.du.reserved)" = 107374182400
+safe_mode=$(hdfs_cmd dfsadmin -safemode get)
+test -n "$safe_mode"
+if printf '%s\n' "$safe_mode" | grep -qv '^Safe mode is OFF'; then echo "$safe_mode" >&2; exit 1; fi
+test "$(hdfs_cmd dfsadmin -report | sed -n 's/^Live datanodes (\([0-9][0-9]*\)):.*/\1/p')" = 5
+echo HDFS_CAPACITY_CONFIGURED reserved=107374182400 live_datanodes=5
+'@
+  Invoke-Remote $node1 $final 'Validate HDFS capacity configuration'
+ }
  'Preflight' {
   Assert-Host 'node-1' $node1 'master-1'
   $command=@'
@@ -245,7 +347,9 @@ nn2=$(hdfs_cmd haadmin -getServiceState nn2)
 case "$nn1:$nn2" in active:standby|standby:active) ;; *) echo "INVALID_HA_STATE=$nn1:$nn2" >&2; exit 1;; esac
 test "$(hdfs_cmd getconf -confKey dfs.replication)" = 2
 test "$(hdfs_cmd getconf -confKey dfs.datanode.du.reserved)" = 107374182400
-test "$(hdfs_cmd dfsadmin -safemode get)" = 'Safe mode is OFF'
+safe_mode=$(hdfs_cmd dfsadmin -safemode get)
+test -n "$safe_mode"
+if printf '%s\n' "$safe_mode" | grep -qv '^Safe mode is OFF'; then echo "$safe_mode" >&2; exit 1; fi
 test "$(hdfs_cmd dfsadmin -report | sed -n 's/^Live datanodes (\([0-9][0-9]*\)):.*/\1/p')" = 5
 read -r capacity used_bytes available used <<EOF
 $(hdfs_cmd dfs -df / | awk 'NR==2 {gsub(/%/,"",$5); print $2, $3, $4, $5}')
@@ -270,6 +374,7 @@ source_list='__SOURCE_LIST__'
 audit="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.audit.json"
 complete="$run_root/manifests/sector-__SECTOR__-worker-__SLOT__.complete.json"
 test -x /opt/hadoop/bin/hdfs
+test "$(env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs getconf -confKey dfs.datanode.du.reserved)" = 107374182400
 test -f "$source_list" -a -f "$audit" -a -f "$complete"
 available_kib=$(df -Pk /mnt/data | awk 'NR==2 {print $4}')
 test "$available_kib" -ge __MINIMUM_FREE_KIB__ || { echo "WORKER_CAPACITY_INSUFFICIENT available_kib=$available_kib" >&2; exit 1; }
