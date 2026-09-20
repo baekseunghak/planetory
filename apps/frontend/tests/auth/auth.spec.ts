@@ -27,13 +27,17 @@ test("both provider entries, protected deep return, reload, logout/back and new 
     .getByRole("button", { name: "Google 계정으로 로그인", exact: true })
     .click();
   await expect(page).toHaveURL(/\/analysis\/259377017\?historyId=000123$/);
-  await expect(
-    page.getByRole("link", { name: "구글탐사자", exact: true }),
-  ).toBeVisible();
+  // Analysis hides the shared member link, but it must retain the signed-in identity.
+  const memberLink = page.locator("a.member-link");
+  await expect(memberLink).toHaveText("구글탐사자");
   await page.reload();
+  // Analysis is now a real feature page; its old placeholder badge is gone.
+  // This auth check preserves the deep-link context, not history restoration.
+  await expect(page).toHaveURL(/\/analysis\/259377017\?historyId=000123$/);
   await expect(
-    page.getByText("분석 기록 000123", { exact: true }),
+    page.getByRole("heading", { name: "분석 · TIC 259377017", exact: true }),
   ).toBeVisible();
+  await expect(memberLink).toHaveText("구글탐사자");
   const cookies = await context.cookies();
   expect(
     cookies.find((c) => c.name === "auth-fixture-202-session")?.httpOnly,
@@ -47,18 +51,11 @@ test("both provider entries, protected deep return, reload, logout/back and new 
   await expect(
     page.getByRole("heading", { name: "로그인이 필요합니다" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "구글탐사자", exact: true }),
-  ).toHaveCount(0);
+  await expect(memberLink).toHaveCount(0);
   await page
     .getByRole("button", { name: "SSAFY 계정으로 로그인", exact: true })
     .click();
-  await expect(
-    page.getByRole("link", { name: "싸피탐사자", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "구글탐사자", exact: true }),
-  ).toHaveCount(0);
+  await expect(memberLink).toHaveText("싸피탐사자");
   expect(
     await page.evaluate(() =>
       sessionStorage.getItem("planetory.oauth.returnTo"),

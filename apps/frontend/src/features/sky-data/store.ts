@@ -50,6 +50,11 @@ export class SkyDataStore {
   private meta: SkyMeta | null = null;
   private view: SkyView | null = null;
   private cache = new Map<string, { cell: Cell; stars: Star[] }>();
+  private completeViews: {
+    sources: Star[][];
+    stars: Map<string, Star>;
+    list: Star[];
+  }[] = [];
   private ranges = new Map<
     string,
     {
@@ -123,7 +128,8 @@ export class SkyDataStore {
   }
   private publish() {
     if (this.disposed) return;
-    const stars = new Map<string, Star>();
+    let stars = new Map<string, Star>();
+    let list: Star[] | null = null;
     if (this.meta && this.view) {
       let cells: Cell[] = [];
       try {
@@ -132,28 +138,58 @@ export class SkyDataStore {
         /* loadTiles reports the range error. */
       }
       const visible = new Set(cells.map((c) => c.col + ":" + c.row));
-      for (const cell of cells) {
-        const entry = this.cache.get(
-          cacheKey(this.memberId, this.meta.version, this.view.level, cell),
-        );
-        if (entry) for (const star of entry.stars) stars.set(star.ticId, star);
-      }
-      for (const range of this.ranges.values())
-        for (const star of range.stars.values())
-          if (
-            visible.has(
-              Math.floor(star.x / this.meta.tileSize) +
-                ":" +
-                Math.floor(star.y / this.meta.tileSize),
-            )
+      const entries = cells.map((cell) =>
+        this.cache.get(
+          cacheKey(this.memberId, this.meta!.version, this.view!.level, cell),
+        ),
+      );
+      const complete = this.ranges.size === 0 && entries.every(Boolean);
+      const sources = complete ? entries.map((e) => e!.stars) : [];
+      const reused = complete
+        ? this.completeViews.find(
+            (c) =>
+              c.sources.length === sources.length &&
+              c.sources.every((s, i) => s === sources[i]),
           )
-            stars.set(star.ticId, star);
+        : undefined;
+      if (reused) {
+        stars = reused.stars;
+        list = reused.list;
+      } else {
+        for (const cell of cells) {
+          const entry = this.cache.get(
+            cacheKey(this.memberId, this.meta.version, this.view.level, cell),
+          );
+          if (entry)
+            for (const star of entry.stars) stars.set(star.ticId, star);
+        }
+        for (const range of this.ranges.values())
+          for (const star of range.stars.values())
+            if (
+              visible.has(
+                Math.floor(star.x / this.meta.tileSize) +
+                  ":" +
+                  Math.floor(star.y / this.meta.tileSize),
+              )
+            )
+              stars.set(star.ticId, star);
+        list = [...stars.values()];
+        if (
+          list.length === this.snapshot.stars.length &&
+          list.every((s, i) => s === this.snapshot.stars[i])
+        )
+          list = this.snapshot.stars;
+        if (complete) {
+          this.completeViews.unshift({ sources, stars, list });
+          this.completeViews.length = Math.min(4, this.completeViews.length);
+        }
+      }
     }
     const hasData = stars.size > 0;
     this.snapshot = {
       meta: this.meta,
       view: this.view,
-      stars: [...stars.values()],
+      stars: list ?? [],
       loadedCount: stars.size,
       pageProgress: [...this.ranges.values()].map((r) => ({
         box: r.box,
@@ -194,8 +230,35 @@ export class SkyDataStore {
     // Store an independent copy: a renderer cannot mutate the in-flight request's bounds.
     const next = { level: view.level, box: view.box ? { ...view.box } : null };
     if (JSON.stringify(this.view) === JSON.stringify(next)) return;
+    // Camera movement within the same tile coverage does not invalidate pages or data.
+    // Keep the current request epoch and array identity; only the view description changes.
+    let sameCoverage = false;
+    if (
+      this.meta &&
+      this.view?.level === next.level &&
+      !this.needsRefresh &&
+      !this.error &&
+      !this.failures.length
+    ) {
+      try {
+        const before = this.cells(),
+          after = visibleCells(next.box, this.meta);
+        sameCoverage =
+          before.length === after.length &&
+          before.every(
+            (c, i) => c.col === after[i].col && c.row === after[i].row,
+          );
+      } catch {
+        /* The normal load path reports invalid bounds. */
+      }
+    }
     this.view = next;
     if (this.loadingMeta || !this.meta || this.disposed) return;
+    if (sameCoverage) {
+      this.snapshot = { ...this.snapshot, view: this.view };
+      this.listeners.forEach((listener) => listener());
+      return;
+    }
     if (this.needsRefresh) {
       this.publish();
       return;
@@ -238,6 +301,7 @@ export class SkyDataStore {
       if (this.meta?.version !== meta.version) {
         if (this.meta) this.retired.add(this.meta.version);
         this.cache.clear();
+        this.completeViews = [];
         this.ranges.clear();
       } else if (
         this.meta &&
@@ -483,7 +547,8 @@ export class SkyDataStore {
             range.bounds = data.bounds;
             range.count = data.rangeStarCount;
             range.pages++;
-            for (const star of data.stars) range.stars.set(star.ticId, star);
+            for (const star of data.stars)
+              range.stars.set(star.ticId, known.get(star.ticId) ?? star);
             range.cursor = data.nextCursor;
             if (data.nextCursor !== null) range.seen.add(data.nextCursor);
             if (data.nextCursor === null) {
@@ -572,6 +637,7 @@ export class SkyDataStore {
     this.cancel();
     this.disposed = true;
     this.cache.clear();
+    this.completeViews = [];
     this.ranges.clear();
     this.retired.clear();
     this.meta = null;

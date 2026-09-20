@@ -42,7 +42,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
 
-서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A Redis에 있으므로 Redis를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
+서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A `redis-session`에 있으므로 그 컨테이너를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
 
 ## 필요한 GitLab 변수
 
@@ -79,6 +79,8 @@ Hadoop/YARN 데몬은 호스트에서 실행한다. 일반 애플리케이션 �
 신규 NameNode format과 Standby bootstrap은 한 번만 수동 수행한다. `initializeSharedEdits`는 기존 단일 NameNode를 HA로 전환할 때만 사용한다.
 
 GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며 CI에서 실행하지 않는다.
+
+`S15P21C206-73`은 YARN XML·`scripts/*yarn*`·`validate.py` 변경의 로컬 검사와 실환경 검증까지만 완료했다. 정확한 Linux Runner 경로 선택과 성공·실패 Pipeline 증거는 기존 [S15P21C206-91](https://ssafy.atlassian.net/browse/S15P21C206-91)에서 확인하며, 73번 완료 상태는 현재 커밋의 CI 통과를 포함하지 않는다.
 
 - CI의 XML·Compose 검사는 VM 생성이나 실제 클러스터 동작을 검증하지 않는다.
 - 설정 파일만 수정해도 validate는 실행된다.

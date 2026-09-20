@@ -42,6 +42,16 @@ def test_settings_v1_load_defaults_and_factors():
         bls.BlsSetting("x", period_max_rule="weird").period_max(10.0)
 
 
+def test_params_record_effective_durations_after_period_min_filter():
+    """MR !59 F1: `dur_log10_0.5-12h` 는 12 h 가 period_min 0.5 d 에 걸려 9점으로 실행된다. manifest 는 실행값을 적어야 한다."""
+    s = next(s for s in bls.load_bls_settings(SETTINGS)[1] if s.setting_id == "dur_log10_0.5-12h")
+    assert len(s.durations_hours) == 10 and s.effective_durations_hours == s.durations_hours[:9]
+    p = s.params()
+    assert p["n_durations"] == 9 and p["durations_hours"] == list(s.durations_hours[:9]) and p["durations_hours_configured"] == list(s.durations_hours)
+    base = bls.BlsSetting("b")
+    assert base.params()["n_durations"] == 4 and base.params()["durations_hours"] == [1.2, 1.92, 2.88, 4.8]
+
+
 def test_period_grid_linear_and_autoperiod():
     t, _ = _curve(n_days=27.0)
     lin = bls.period_grid(bls.BlsSetting("l", n_periods=100), t)

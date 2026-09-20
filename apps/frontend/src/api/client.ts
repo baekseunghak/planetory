@@ -9,12 +9,22 @@ export class ApiError extends Error {
     public readonly requestId: string | null = null,
     public readonly localRequestId: string | null = null,
     public readonly outcomeUnknown = false,
+    /**
+     * 오류 본문 그대로. 일부 오류는 `code`·`message`·`fieldErrors` 밖에 값을
+     * 더한다(예: 탐사 API `BUNDLE_CHANGED`의 `currentBundleId`). 어떤 값이
+     * 올지는 각 API가 정하므로 해석하지 않고 보관만 하며 읽는 쪽이 검사한다.
+     */
+    public readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
 }
 
-type RequestOptions = Omit<RequestInit, "credentials"> & { json?: unknown };
+type RequestOptions = Omit<RequestInit, "credentials"> & {
+  json?: unknown;
+  // Capture metadata here; handle it after the request settles.
+  onResponse?: (metadata: { status: number; headers: Headers }) => void;
+};
 type ClientOptions = {
   baseUrl: string;
   fetch?: typeof fetch;
@@ -51,7 +61,7 @@ export function createApiClient(config: ClientOptions) {
     const localRequestId = crypto.randomUUID();
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
-    const { json, ...fetchOptions } = options;
+    const { json, onResponse, ...fetchOptions } = options;
     if (json !== undefined && options.body != null)
       throw new Error("json과 body는 함께 보낼 수 없습니다.");
     if (json !== undefined) headers.set("Content-Type", "application/json");
@@ -101,6 +111,10 @@ export function createApiClient(config: ClientOptions) {
         },
       );
       controller.signal.throwIfAborted();
+      onResponse?.({
+        status: response.status,
+        headers: new Headers(response.headers),
+      });
       serverRequestId = config.requestIdHeader
         ? response.headers.get(config.requestIdHeader)
         : null;
@@ -141,6 +155,7 @@ export function createApiClient(config: ClientOptions) {
           serverRequestId,
           localRequestId,
           writing && response.status >= 500,
+          body,
         );
       }
       return result as T;

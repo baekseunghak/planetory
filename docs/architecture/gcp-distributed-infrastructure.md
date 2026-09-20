@@ -28,7 +28,7 @@ flowchart LR
 
 > 생성 스크립트는 Ubuntu Server 24.04 LTS amd64 VM과 디스크 마운트까지만 준비한다.
 >
-> `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화하고, `S15P21C206-73`에서 YARN과 Spark 3.5.5 sample application을 검증한다. Spark와 Airflow 컨테이너 설치는 호스트 HDFS 설치와 별도다.
+> `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17 기반 HDFS를 설치·초기화했고, `S15P21C206-73`에서 YARN과 Spark 3.5.5 sample application을 검증했다. Spark와 Airflow 컨테이너 실행은 호스트 Hadoop 서비스와 분리한다.
 
 ## 노드와 디스크
 
@@ -61,7 +61,7 @@ Node 1~3의 JournalNode가 QJM edit log를 구성한다.
 - 자동 장애 전환: 사용하지 않음
 - ZooKeeper·ZKFC: 사용하지 않음
 
-장애 전환 전에는 기존 Active VM이 완전히 중지됐는지 확인한다.
+장애 전환 전에는 기존 Active VM이 완전히 중지됐는지 확인한다. 계획 전환은 기존 Active를 Standby로 내린 뒤 일반 승격하고, 장애 전환은 GCP에서 기존 Active VM의 `TERMINATED`를 확인한 경우만 `--forceactive`를 사용한다.
 
 자동 fencing이 없으므로 응답 없는 Active를 대상으로 `haadmin -failover`를 실행하지 않는다.
 
@@ -86,7 +86,11 @@ Node 1~3의 JournalNode가 QJM edit log를 구성한다.
 | Node 2 | 16GiB / 2 vCore | Standby NameNode 6~8GiB, DataNode 2GiB, JournalNode 0.5~1GiB, OS |
 | Node 3~6 | 24GiB / 3 vCore | DataNode 2GiB, Node 3의 JournalNode 0.5~1GiB, OS·Docker 4~5GiB |
 
+ResourceManager의 단일 컨테이너 최대치는 24GiB/3 vCore다. Node 2는 자신이 광고한 16GiB/2 vCore를 넘는 컨테이너의 배치 후보가 되지 않고 큰 컨테이너는 Nodes 3~6에만 배치되는 의도된 비대칭이다. 현재 NodeManager unit에는 `MemoryMax`와 cgroup 기반 OS 하드캡이 없으므로 실제 Sector workload의 native·off-heap 사용량은 별도 상한 검증 대상이다.
+
 실제 파일·블록 수를 측정한 뒤 Active와 Standby NameNode heap을 같은 값으로 조정한다.
+
+2026-09-18 Node 2 실측에서 Standby NameNode RSS는 약 556MiB였다. Spark executor 1개가 배치된 동안 YARN 할당은 1GiB/1 vCore, 호스트 used는 약 2.7GiB, available은 약 32.5GiB, swap은 0이었다. 이 표본에서는 OOM과 NameNode 압박이 없었지만 실제 Sector의 메모리 상한 검증을 대신하지 않는다.
 
 ### 저장 용량과 운영 한계
 
@@ -138,6 +142,7 @@ Gold는 압축한 변경 번들만 Node 1에서 EC2로 전송한다. EC2가 pull
 - 같은 존 구성은 비용에 유리하지만 존 장애를 견디지 못한다.
 - Peering은 Hadoop 인증이나 전송 암호화를 대신하지 않는다.
 - 30일 PoC에서는 방화벽에 등록된 6개 사설 IP만 내부 신뢰 경계로 사용한다.
+- YARN NodeManager는 모든 인터페이스에 bind하므로 접근 경계는 GCP VPC 방화벽과 각 호스트의 UFW 기본 incoming deny·6개 고정 사설 IP 규칙을 함께 유지한다.
 - Kerberos와 HDFS wire encryption은 이번 범위에서 제외한다. 피어링에 VM을 추가할 때 보안 결정을 다시 검토한다.
 - ResourceManager는 Node 1 단일 인스턴스다. 장애 시 Spark 작업을 실패 처리하고, Node 1 복구 후 Airflow에서 해당 단계만 재시도한다.
 
@@ -202,6 +207,8 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 - VM·디스크·VPC·피어링 생성 스크립트
 - HDFS·YARN XML 설정
 - HDFS 호스트 설치·단계형 초기화 스크립트, Node 1~6 설치, 6대 간 사설망·DNS와 QJM·Active/Standby·DataNode 5개·RF2 런타임 검증
+- YARN 호스트 설치·단계형 기동 스크립트, ResourceManager 1개·NodeManager 5개와 Spark 3.5.5 cluster mode HDFS sample 검증
+- 수동 복구 스크립트와 Node 1·Worker 4 실제 중지, Node 2 승격, RF2 읽기·재복제와 순차 재기동 검증
 - Node 1과 Worker용 Docker Compose
 - 로컬 XML·Compose·PowerShell 정적 검사
 
@@ -215,13 +222,15 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 - [ ] 각 계정의 Trial 적용 여부와 실제 할당량을 확인한다.
 - [ ] 프로젝트마다 피어링 5개가 `ACTIVE`인지 확인한다.
-- [ ] VM과 컨테이너에서 YARN이 광고한 FQDN을 해석할 수 있는지 확인한다.
+- [x] VM과 제출 컨테이너에서 YARN이 광고한 Worker 이름을 사설 IP로 해석한다.
 - [x] `S15P21C206-72`에서 Hadoop 3.5.0·OpenJDK 17과 `hdfs` 서비스 계정을 준비한다.
 - [x] HDFS 디스크 권한과 systemd 마운트 의존성을 설정한다.
 - [x] 신규 HDFS를 한 번만 초기화하고 Standby NameNode를 bootstrap한다.
-- [ ] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
-- [ ] 모든 Worker에 동일한 Python 실행 환경을 준비한다.
-- [ ] Node 2의 Executor 메모리와 overhead가 YARN 16GiB 한도를 넘지 않는지 확인한다.
+- [x] `S15P21C206-73`에서 `yarn` 서비스 계정과 ResourceManager·NodeManager를 준비한다.
+- [x] 모든 Worker의 Python 3.12.3 실행 환경을 확인한다.
+- [x] Node 2에서 1GiB executor 표본이 YARN 16GiB 한도 안에서 실행되고 OOM·swap·NameNode 압박이 없음을 확인한다.
+- [x] Node 1 장애 중 Node 2에서 기존 파일 읽기·신규 쓰기와 Node 1 순차 복구를 확인한다.
+- [x] Worker 4 장애 중 RF2 읽기와 복귀 뒤 under·over·missing·corrupt 0 회복을 확인한다.
 - [ ] CI Runner의 SSH 경로와 Prometheus 메트릭 수집 경로를 구성한다.
 
 Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 대상이다.
@@ -237,9 +246,8 @@ CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실�
 3. PublicationBundle을 HDFS에 백업한다.
 4. EC2로 전송하고 checksum을 검증한 뒤 공개한다.
 5. 실패한 작업을 단계 단위로 재시도한다.
-6. Worker 한 대를 중지하고 HDFS 복제 상태를 확인한다.
-7. Active NameNode를 수동 전환한다.
-8. Gold 검증 실패 시 기존 `current`가 유지되는지 확인한다.
+6. Worker 한 대 중지와 Active NameNode 수동 전환은 `S15P21C206-74`에서 완료했으므로, 실제 Sector workload에서는 동일 runbook의 회귀 여부만 확인한다.
+7. Gold 검증 실패 시 기존 `current`가 유지되는지 확인한다.
 
 > 영속 데이터를 지우는 초기화 작업은 일반 배포에 포함하지 않는다.
 

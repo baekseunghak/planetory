@@ -1,5 +1,13 @@
 # 204 개별 별 은하 렌더러
 
+2026-09-20 / 215 후속: 불변 원본 배열의 경계 트리·연속 구간과 GPU 속성을 재사용한다. 원본 색·크기·순서·80px 발광 여백·개별 별 수를 보존한다. 같은 두 삼각형을 네 정점으로 그리고, 정지한 별 배경은 같은 해상도의 RGBA8 화면 버퍼에서 복사한다. 정점 버퍼 4개에 배경 framebuffer/renderbuffer 각 1개가 추가되며, 배경 재사용 프레임의 실제 별 draw call은 0이다. 캐시 실패 시 기존 직접 그리기를 사용한다. 상세 구조·GPU 메모리·지표는 [성능 문서](performance-215.md), 수치는 [측정 결과와 제한](ticket-215-readiness.md)을 따른다.
+
+2026-09-18 / 215: 별 배열·경계·스타일·float32 준비 버퍼를 재사용하고, 카메라 이동 시 전체 화면 히트 격자 재생성 대신 월드 쿼드트리 후보만 투영한다. 원본 표시·선택·공전 규칙은 유지한다. [성능 구조·최신 실행](performance-215.md), [현재 인수 상태](ticket-215-readiness.md). 아래 날짜별 내용은 해당 구현 당시 기록이다.
+
+2026-09-17 보완: 206은 기존 상세 조회 주체를 `StarDetail.tsx`로 확장하고 `SceneControl.focusStar`·동일 canvas 행성 확대·복귀를 연결했다. [206 인수 기록](ticket-206-readiness.md)이 현재 상세 구현 기준이며 아래 미래형 설명은 204 작성 당시 범위다.
+
+2026-09-17 보완: 205의 조작·히트 테스트·마커는 [205 인수 기록](ticket-205-readiness.md)을 따른다. 아래 204 구현 당시 범위와 구분한다.
+
 2026-09-15. 사용자 승인된 [표현 계약 v1.3 / MR !41](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/41)과 `7f67c5683f79e541da556ef4e6aed966ff317c11`의 개인 시제품 참조를 적용한다. 문서 팀 승인·병합 및 실제 API 인수는 대기 중이다.
 
 ## 실행
@@ -59,3 +67,7 @@ type SceneControl = {
 GalaxyPage의 PersonalGalaxyScene이 /v1/me/stars/{ticId}를 조회하고 readOwnedSystem으로 검증한 뒤 personalSystem prop을 전달한다. 순수 GalaxyScene의 SceneControl.setSystem은 개발/후속 통합용으로 유지한다. 어느 방식이든 선택·버전·표현 버전이 맞는 별 하나만 표시한다.
 
 exposure.ts는 많은 별을 멀리서 볼 때의 광량을 낮추고 줌1~6에서 부드럽게1로 회복한다. 1,000개 이하는1을 유지한다. 총수는 meta.starCount를 사용해 페이지 도착마다 밝기가 튀지 않게 한다. 좌표·색·개수는 변하지 않는다. 렌더러 setCamera의 zoom/starCount 인자가 이 정책에 연결된다.
+
+## 207 대체 목록 연결
+
+GalaxyScene의 onGraphics가 생성 실패/손실/복구를 알리며 PersonalGalaxyScene이 같은 캔버스를 보존하고 목록으로 전환한다. 목록 중에는 suspended로 렌더/입력·새 타일 범위 요청을 멈추고, SceneControl.restartGraphics로 사용자가 복구를 요청한다. 발견 목록은 타일과 독립적인 C06 scope=discovered cursor이며 기존 206 상세를 공유한다. [207 인수·구조](ticket-207-readiness.md)를 따른다.

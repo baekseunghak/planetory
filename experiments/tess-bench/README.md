@@ -1,11 +1,47 @@
 # TESS 처리 벤치마크
 
+## 114 세그먼트·비닝 실험
+
+3차 화면 리뷰는 완료됐고 추가 그림 요청은 없다. 저장된 9별 counts 재집계와 115·123 인계는 [운영 채택안](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 기록했다. 운영 채택안은 10분 mean·부분 bin 유지·상한 초과 실패다. 승인 상태는 MR !101과 정합화 요청에서 관리한다. 실험의 자동 확대·`bin-exp-v1-*`을 운영 규칙으로 사용하지 않는다.
+
+MR !101 보충 시계열은 저장 결과만 읽는 `scripts/plot_binning_review.py`로 생성한다.
+주입 차분 그림은 통과 밖 배경이 제거되어 실제 가독성을 대표하지 않는다.
+설명·검증 범위는 [비닝 실험 문서](../../docs/data/tess-binning-benchmark.md#mr-101-2차-화면-리뷰와-보충-자료)를 따른다.
+Matplotlib은 일회성 실행 환경에만 추가하며 프로젝트 lock은 변경하지 않는다. output은 존재하지 않는 새 경로로 지정한다.
+
+```powershell
+uv run --locked --with matplotlib==3.11.2 python scripts/plot_binning_review.py --source results/binning/run-20260919T120741Z-84d4cc93 --output results/review-114-round2-84d4cc93
+```
+
+다른 프로젝트의 가상환경이 활성화돼 있으면 Git Bash에서 `deactivate` 후 실행한다. `uv`는 기본적으로 이 디렉터리의 `.venv`를 사용하므로 다른 환경을 강제하는 `--active`는 사용하지 않는다. `--locked`가 실패하면 로컬 경로 의존성의 메타데이터와 lock 일치를 확인하며, 실측을 위해 잠금 검사를 생략하지 않는다.
+
+`uv run --locked python -m tess_bench.binning --check-inputs`로 9별 입력을 확인하고, `--target l98_59`로 한 별을 실행한다. 인자 없이 전체 9별을 비교한다. 2·5·10·20분 평균/중앙값, 20,000점 상한, 빈 bin, 실제 신호와 전처리 후 합성 주입을 비교한다. 결과는 `results/binning/`에 별도 실행 디렉터리로 보존한다. BLS나 독립 holdout 평가는 아니다. 설계·지표·입력 준비·인수 조건은 [비닝 벤치마크](../../docs/data/tess-binning-benchmark.md)를 따른다.
+
 Jira `S15P21C206-42` (전처리·detrending, `preprocess`) 와 `S15P21C206-110` (BLS 격자·게이트, `bls`·`bls-gates`). 비닝 실측(D) 벤치마크도 이 프로젝트에 하위 명령으로 붙인다.
 BLS 실험 계획·규칙·결과는 [docs/data/tess-bls-benchmark.md](../../docs/data/tess-bls-benchmark.md) 에 있다.
 입력은 [tess-fixture](../tess-fixture/README.md) 의 고정 표본과 합성 주입 세트다. 실험 계획과 결과 읽는 법은
 [docs/data/tess-preprocess-benchmark.md](../../docs/data/tess-preprocess-benchmark.md) 에 있다.
 
 이 코드는 **값을 정하는 실험 코드**다. 검증된 규칙은 구현 Task 에서 별도 커널로 옮긴다.
+
+## Silver 전처리 커널 회귀 (119)
+
+공용 구현·실패·회귀 계약은 [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119)을 따른다.
+아래 명령은 BLS 없이 42의 4별·주입 격자 1.1.0을 기존 전처리와 새 커널로 각각 처리한다.
+실제 실험은 사용자가 실행한다. 입력·코드·환경·오차 0 기준을 먼저 저장한다.
+
+```powershell
+cd experiments/tess-bench
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.silver_regression
+```
+
+각 별의 `112/112 curves equal; summary=True`와 마지막 `passed=True`를 확인한다.
+산출물은 `results/silver-regression/run-.../`의 plan·비교 CSV·지표 CSV·요약 CSV·manifest다.
+이 도구는 다운로드·Git 명령을 실행하지 않는다. 사용자 실행 `9c908a11`에서 448/448곡선과 4별 요약이 일치했다.
+총 428.510초이며 저장된 입력·출력·plan 해시 44개도 일치한다. 상세 수치·해시는 위 119 계약에 기록한다.
+검증 범위는 42/D03 기본 커널이며 DAT-02 전체 구현 완료가 아니다. 고정 6·12시간 일괄 제외는 넣지 않으며,
+확인된 불량 구간의 정규화 전 마스킹·원본 QUALITY/행 추적은 후속 `S15P21C206-245`에서 다룬다.
 
 ## 준비
 
@@ -58,7 +94,7 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
-## BLS 실행 (`bls`, `bls-gates`)
+## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`)
 
 ```powershell
 # 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
@@ -78,6 +114,15 @@ uv run python -m tess_bench bls-gates --run-dir results/bench/bls_grid_v1-1.0.0/
 # 문서 5.1절 표 생성: 여러 별 run 의 matches.csv 를 합쳐 설정별·구간별 회수율 Markdown 을 만든다 (재실행 없음).
 # 구간표는 단일 주입만 세고 쌍 주입은 따로 낸다. 세 구간표의 주변합이 다르면 종료 코드 1.
 uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0/toi270/run-<id> results/bench/bls_grid_v1-1.0.0/toi451/run-<id> --baseline-days 77.724 52.812
+
+# SNR 점 오차(dy) 방식 비교 (재탐색 없음): manifest 로 같은 곡선을 다시 만들고 저장된 상위 피크에서 SNR 만
+# global(전역 robust scatter, 현재 구현)·flux_err(PDCSAP_FLUX_ERR/중앙값/추세)·local(1일 구간 scatter) 로 재계산해
+# 게이트(SNR≥7, SNR≥7&SDE≥6) 결과를 비교한다. 결과는 run 폴더의 snr_dy.csv·gates_dy.csv.
+# 시작 전에 manifest 의 grid·BLS 설정·전처리 설정 sha256, grid_set_id, 전처리·탐색 파라미터가 현재와 같은지 검사하고 다르면 중단한다.
+# 재현 판정은 설정별(global 재계산 vs 저장 snr: 중앙값 ≤ 1e-6, 1e-3 초과 피크 ≤ 25%(실측 4–14%), 최대 < 0.2(실측 최대 0.161)) 이며 하나라도 실패하면 종료 코드 1.
+# 기록된 전처리·탐색 파라미터 키가 현재 코드에서 사라지거나 이름이 바뀐 경우도 불일치다(허용된 기록용 메타 키만 예외).
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
+uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
@@ -89,7 +134,7 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 `bls-gates` 의 "잔여" 열은 주입 없는 실제 곡선(realclean `none`)에서 게이트를 통과한 피크 수다. 잡음 곡선만 보면 SNR 게이트가 충분해
 보이지만 자전 변광·제거 잔여·밝은 별의 낮은 산포가 그대로 통과하므로 이 열을 함께 본다.
 
-테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 34 passed, 없음 33 passed / 1 skipped).
+테스트는 `uv run pytest -q`. `test_metrics_cli` 하나는 TOI-270 FITS 표본(`tess-fixture download`)이 없으면 skip 된다(표본 있음 40 passed, 없음 39 passed / 1 skipped).
 
 ## 산출물
 
@@ -129,3 +174,20 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 - 가장자리 마스크가 12시간 이상이면 구간 경계 ±0.5일 안에 남는 점이 없어 `boundary_ratio` 가 nan 이 된다. 그 설정의 경계 왜곡은
   이 지표로 평가하지 않는다.
 - 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).
+
+## 110 holdout 실행 (평가 전에 입력·설정 고정)
+
+대상·판정 산식·결과 기록 정본은 [BLS 벤치마크 5.3절](../../docs/data/tess-bls-benchmark.md)이다. 기존 tuning/evaluation은 조정 이력이 있으므로 holdout과 구분한다. 기본 9별에 holdout을 섞지 않는다.
+
+1. 환경은 `uv sync --python 3.11 --locked`로 준비한다. 다른 머신에서는 아래 다운로드와 고정 references.csv를 사용하며 Archive 참고값을 다시 갱신하지 않는다.
+2. 코드·설정·통과 기준·제품 checksum·참고값·lock을 검토하고 **평가 전 커밋**한다. lock은 설정을 바꿔 우회하는 도구가 아니다. Git 명령은 사용자가 실행한다.
+3. 아래 네 명령은 **tess-bench 디렉터리**에서 사용자가 실행한다. `iterate`가 아닌 `bls`다. 각 실행은 realclean + seed 3개, 바탕곡선당 주입 111그룹 + none 1그룹이며 대상당 총 448곡선이다.
+
+```powershell
+uv run --locked python -m tess_bench bls --target holdout_268637577 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_100102268 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_219237079 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+uv run --locked python -m tess_bench bls --target holdout_358253008 --stage holdout --only poc_linear20k --noise-seeds 20260910 20260917 20260918
+```
+
+각 명령 성공을 확인한 뒤 다음 대상으로 진행한다. 에러 또는 lock mismatch가 발생하면 기준 파일을 재생성하지 말고 원인을 확인한다. 결과 manifest 4개와 peaks/matches/summary CSV를 보존하고, 같은 MR에 별별·합계 검증 결과를 추가한다. Git에는 원본 FITS와 results 디렉터리를 추가하지 않는다. 모의 manifest 테스트는 실제 holdout 평가를 수행하지 않는다.

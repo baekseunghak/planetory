@@ -1,5 +1,7 @@
 # 탐사 API C02 계약 예제
 
+143번의 사용자 채택 계산·멱등·실패 경계와 본체/후속 연동 인수 구분은 [제출 구현 계약·인수 조건](submission-readiness.md)을 따른다. 141·147은 담당자 구현을 기다리며 본체 착수를 막지 않는다. `node docs/api/exploration/snapshot-v0.cjs`는 보존된 v0(bin 시작) 계약의 합성 경계만 검증한다. 현재 v1(bin 중심)은 백엔드 `SubmissionTest`로 검증한다.
+
 [#133 검토안](../../../apps/backend/docs/exploration-contract-review.md)을 위한 합성 JSON이다. 2026-09-14 원격 `develop` `321f10b`의 SRS v1.2 변경안과 탐사 API Draft 0.3을 기준으로 한 **초안 예제**이며 운영 API 구현·권한 집행·수치 정책 승인 증거가 아니다.
 
 `contracts.json`의 각 case는 독립 초기 상태다. `same-request-replay`와 `idempotency-conflict`만 normal-harmonic의 접수 완료를 전제로 한다. `request`와 `response`만 HTTP 표현이며 setup/effects/at/sourceSection은 검증 메타데이터다. 설명용 축약 UUID는 유효 UUID로, 반올림 duration은 원본 위상에서 계산한 값으로 교정했다. 기존 탐사 명세의 정상 제출·곡선·별 목록 DTO를 재사용했으며 구판 `docs/api/analysis/examples`는 변경하지 않았다.
@@ -33,3 +35,5 @@ C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·�
 **A04 화면 처리 방침(2026-09-17 백지웅, v0 사용 조건).** (1) 핸들 드래그 중 빈 구간 통과는 허용하고, 선택 구간에 관측점이 없으면 "선택한 구간에 관측점이 없습니다. 구간을 이동하거나 넓혀 주세요." 안내와 함께 제출을 제한한다. 서버가 거절해도 선택 상태를 유지해 바로 수정할 수 있게 한다. (2) 최소 위상 폭 `minWindowDays / periodDays`, 최대 `phaseWidthMax`. 봉우리에서 시작하면 `min(3 × suggestedDurationHours / (24 × periodDays), phaseWidthMax)` 을 상한으로 쓰고, fineTune 이 겹쳐도 주기로 봉우리를 역추정하지 않고 사용자가 고른 `sourcePeakGridIndex` 의 제안 duration 을 쓴다. 0.25 는 시작값이며 화면은 전달받은 설정값을 쓴다. (3) 계산·검증은 반올림 전 값, 미리보기는 "약 2.83시간" 처럼 근삿값 표기, 상세값은 더 많은 자릿수로 확인 가능. `display-rounding-boundary` 는 입력 오류가 아니라 `not_matched` 이므로 제출을 막지 않는다. 실제 프론트 계산·조작 검증은 A04 구현에서 한다.
 
 **C09 후속(강재민, 이 MR 범위 밖).** 정정하지 않은 제출은 저장 시 `harmonic_multiplier`·정정 주기를 NULL 로 둔다(V5 제약, 143). fixture 는 배율 1 우선 규칙을 보여주기 위해 `harmonicMultiplier: 1` 을 유지한다. `harmonic_multiplier`(`P_user × m = P_c`)와 `candidate_aliases.multiplier` 의 방향은 ERD 에 명시한다(142).
+
+**C09 구현 상태(S15P21C206-142).** 백엔드 `SubmissionMatching`이 이 규칙을 옮겼고 `SubmissionMatchingCasesTest`가 사례 31개의 검증·서버 산정·판정을 재현한다. V9가 넣은 운영 규칙 `rule-0`의 값이 이 JSON 규칙과 같은지도 같은 테스트가 확인한다. 운영 데이터의 관측 창은 곡선 점 시각(bin 시작)에서 결측이 아닌 점이 이어진 구간으로 만든다(탐사 API 6.2절). `harmonic_multiplier` 방향은 탐사 API 6.3절에 적었고, `candidate_aliases.multiplier` 방향은 그 표를 쓰는 작업에서 정한다.

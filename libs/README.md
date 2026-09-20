@@ -4,6 +4,9 @@
 
 한 프로그램만 사용하는 코드는 해당 프로그램 안에 유지한다. 공용화 후보가 있다는 이유만으로 새 라이브러리를 만들지 않는다.
 
+119 Silver 전처리·FITS 헤더/열 어댑터는 기존 astro-kernel에 추가한다. 회귀 도구가 사용하며 Spark 연결은 후속이다.
+[119 계약·상태](astro-kernel/README.md#silver-전처리-119)를 따른다.
+
 | 패키지 | 공유하는 실행체 | 내용 | Jira |
 | --- | --- | --- | --- |
 | [astro-kernel](astro-kernel/README.md) | Spark 배치 반복 탐색(122), EC2 온라인 Worker(88), 수치 검증(131) | 고정 transit 모델 생성·잔차 제거 순수 함수, `transit_model` JSON 검증, 계약 예제 | `S15P21C206-121` |

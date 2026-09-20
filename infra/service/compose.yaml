@@ -18,9 +18,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-planetory_poc}
       POSTGRES_USER: ${POSTGRES_USER:-planetory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # 서비스 런타임 계정. 소유자와 분리해야 GRANT/REVOKE가 실제로 집행된다(ADR D5).
+      APP_DB_USER: ${DATABASE_USER:-planetory_service}
+      APP_DB_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
     # 외부 인바운드 0개. 포트를 호스트에 노출하지 않고 service 네트워크 안에서만 붙는다.
     volumes:
       - service-db-data:/var/lib/postgresql
+      # 빈 볼륨 첫 초기화 때만 실행된다. 기존 볼륨은 README의 수동 절차를 따른다.
+      - ./service-db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planetory} -d ${POSTGRES_DB:-planetory_poc}"]
       interval: 10s
@@ -35,8 +40,12 @@ services:
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://service-db:5432/planetory_poc}
-      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-planetory}
-      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-${POSTGRES_PASSWORD}}
+      # 런타임은 planetory_app만 가진 계정으로 붙는다. 소유자로 붙으면 REVOKE가 무력화된다.
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-planetory_service}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
+      # Flyway만 소유자로 붙는다. DDL과 GRANT는 소유자여야 실행된다.
+      DATABASE_MIGRATION_USER: ${POSTGRES_USER:-planetory}
+      DATABASE_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_PROFILES_INCLUDE: ${OAUTH_PROFILES:-}
       AUTH_SUCCESS_URL: ${AUTH_SUCCESS_URL:-/api/v1/me}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

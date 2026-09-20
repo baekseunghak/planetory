@@ -1,0 +1,385 @@
+import type { Btjd } from "../../shared/types.ts";
+import {
+  readSelectionContract,
+  type SelectionContract,
+} from "./selection-rules.ts";
+
+export type CurveContext = {
+  bundleId: string;
+  curveStep: number;
+  removedCandidateIds: string[];
+  residualModelVersion: string;
+  periodogramConfigVersion: string;
+};
+export type AnalysisContext = {
+  ticId: string;
+  sectors: number[];
+  hasConfirmedCandidate: boolean;
+  bundleVersion: string;
+  foldReferenceTimeBtjd: Btjd;
+  curveContext: CurveContext;
+  periodSelectionRules?: { version: string; halfWidthCells: number };
+  selectionContract: SelectionContract;
+  notice?: "STEP_NOT_RESTORABLE";
+  /**
+   * 특수 제출(#187)이 무엇을 내놓을 수 있는지 판단하는 값. 없으면 null이다.
+   * 관측 export 문맥에는 이 필드가 없을 수 있어 필수로 만들지 않는다.
+   * 서버가 최종 권한이며 조건이 아니면 409로 거절한다.
+   */
+  progressStage: "unexplored" | "in_progress" | "completed" | null;
+  /** 튜토리얼 건너뛰기 허용 여부. 근거가 없으면 제안하지 않는다. */
+  skipAvailable: boolean;
+  /**
+   * [다음 곡선]의 기본 대상(5.1절). 매칭한 활성 후보를 **전부 제거한** 문맥을
+   * 서버가 통째로 준다. 프론트가 제거 조합을 계산하지 않는다.
+   *
+   * 남은 탐색 가능 신호가 없으면 null이고, 그때는 `nextResidual`도 null이다.
+   */
+  nextCurveContext: CurveContext | null;
+  /** 지금 단계의 잔차 캐시 상태. `curveStep=0`이면 `COMPLETED` 고정이다. */
+  currentResidual: ResidualState;
+  /**
+   * 다음 단계의 잔차 캐시 상태. **누르기 전에 이미 계산돼 있는지 알 수 있다.**
+   * 캐시면 작업을 요청하지 않고 곧바로 전환한다.
+   */
+  nextResidual: ResidualState | null;
+  /** 이 판에서 회원이 매칭한 활성 후보. 단계 표시에 쓴다. */
+  matchedCandidateIds: string[];
+};
+
+/**
+ * 잔차 캐시 상태(2.4절). `status`가 null이면 **결과도 작업도 없다**는 뜻이며
+ * 상태 열거형의 값이 아니다(D-14). 그때는 폴링하지 않는다.
+ */
+export type ResidualState = {
+  status: string | null;
+  jobId: string | null;
+  computedAt: string | null;
+};
+export type CurveSegment = {
+  segmentId: string;
+  sector: number;
+  binningRevision: string;
+  startBtjd: Btjd;
+  binMinutes: number;
+  nPoints: number;
+  flux: (number | null)[];
+  fluxScatter: number;
+  gaps: [number, number][];
+};
+export type CurveData =
+  | {
+      kind: "ready";
+      context: CurveContext;
+      fluxUnit: string;
+      segments: CurveSegment[];
+    }
+  | { kind: "not-ready"; status: string | null; jobId: string | null };
+
+function invalid(field: string): never {
+  throw new Error(`분석 응답의 ${field} 항목을 확인해 주세요.`);
+}
+function record(value: unknown, field: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    invalid(field);
+  return value as Record<string, unknown>;
+}
+function text(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) invalid(field);
+  return value;
+}
+function number(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) invalid(field);
+  return value;
+}
+function integer(value: unknown, field: string, minimum = 0): number {
+  const result = number(value, field);
+  if (!Number.isSafeInteger(result) || result < minimum) invalid(field);
+  return result;
+}
+function array(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value)) invalid(field);
+  return value;
+}
+export function readCurveContext(value: unknown): CurveContext {
+  const data = record(value, "curveContext");
+  const removed = array(data.removedCandidateIds, "removedCandidateIds")
+    .map((id) => text(id, "removedCandidateIds"))
+    .sort();
+  if (new Set(removed).size !== removed.length) invalid("removedCandidateIds");
+  const curveStep = integer(data.curveStep, "curveStep");
+  if (curveStep !== removed.length) invalid("curveStep/removedCandidateIds");
+  return {
+    bundleId: text(data.bundleId, "bundleId"),
+    curveStep,
+    removedCandidateIds: removed,
+    residualModelVersion: text(
+      data.residualModelVersion,
+      "residualModelVersion",
+    ),
+    periodogramConfigVersion: text(
+      data.periodogramConfigVersion,
+      "periodogramConfigVersion",
+    ),
+  };
+}
+export function contextKey(context: CurveContext): string {
+  return JSON.stringify([
+    context.bundleId,
+    context.curveStep,
+    [...context.removedCandidateIds].sort(),
+    context.residualModelVersion,
+    context.periodogramConfigVersion,
+  ]);
+}
+export function decodeAnalysisContext(
+  value: unknown,
+  ticId: string,
+): AnalysisContext {
+  const data = record(value, "analysis-context");
+  if (text(data.ticId, "ticId") !== ticId) invalid("ticId");
+  const star = record(data.star, "star");
+  const sectors = array(star.sectors, "sectors").map((sector) =>
+    integer(sector, "sector", 1),
+  );
+  if (
+    new Set(sectors).size !== sectors.length ||
+    integer(star.sectorCount, "sectorCount") !== sectors.length
+  )
+    invalid("sectorCount/sectors");
+  if (typeof data.hasConfirmedCandidate !== "boolean")
+    invalid("hasConfirmedCandidate");
+  const bundle = record(data.bundle, "bundle");
+  const curveContext = readCurveContext(data.currentCurveContext);
+  for (const field of [
+    "bundleId",
+    "residualModelVersion",
+    "periodogramConfigVersion",
+  ] as const)
+    if (text(bundle[field], field) !== curveContext[field])
+      invalid(`bundle/${field}`);
+  // Keep only fields consumed here. Candidate answers and other unrelated data are not copied.
+  const rules =
+    data.selectionRules === undefined
+      ? undefined
+      : record(data.selectionRules, "selectionRules");
+  const periodSelectionRules =
+    rules === undefined
+      ? undefined
+      : {
+          version: text(rules.version, "selectionRules.version"),
+          halfWidthCells: integer(
+            record(rules.fineTune, "fineTune").halfWidthCells,
+            "halfWidthCells",
+            1,
+          ),
+        };
+  return {
+    ticId,
+    sectors,
+    hasConfirmedCandidate: data.hasConfirmedCandidate,
+    bundleVersion: text(bundle.bundleVersion, "bundleVersion"),
+    foldReferenceTimeBtjd: number(
+      bundle.foldReferenceTimeBtjd,
+      "foldReferenceTimeBtjd",
+    ) as Btjd,
+    curveContext,
+    selectionContract: readSelectionContract(
+      data.selectionRules,
+      bundle.observationBounds,
+    ),
+    ...(periodSelectionRules ? { periodSelectionRules } : {}),
+    ...(record(data.currentCurveContext, "currentCurveContext").notice ===
+    "STEP_NOT_RESTORABLE"
+      ? ({ notice: "STEP_NOT_RESTORABLE" } as const)
+      : {}),
+    progressStage: readStage(data.progress),
+    ...readSteps(data, curveContext),
+    // 근거가 없으면 false다. 건너뛰기를 잘못 제안하면 409를 받는다.
+    skipAvailable:
+      record(data.tutorial ?? {}, "tutorial").skipAvailable === true,
+  };
+}
+export function readResidualState(value: unknown, at: string): ResidualState {
+  const row = record(value, at);
+  const maybe = (item: unknown, field: string) =>
+    item === undefined || item === null ? null : text(item, `${at}.${field}`);
+  return {
+    status: maybe(row.status, "status"),
+    jobId: maybe(row.jobId, "jobId"),
+    computedAt: maybe(row.computedAt, "computedAt"),
+  };
+}
+
+/**
+ * 단계 이동에 필요한 값(5.1절). `nextCurveContext`와 `residualForNextStep`은
+ * **함께 있거나 함께 없어야 한다.** 한쪽만 오면 다음 단계가 있는지 없는지
+ * 알 수 없으므로 거절한다.
+ */
+function readSteps(
+  data: Record<string, unknown>,
+  current: CurveContext,
+): Pick<
+  AnalysisContext,
+  | "nextCurveContext"
+  | "currentResidual"
+  | "nextResidual"
+  | "matchedCandidateIds"
+> {
+  const hasNext =
+    data.nextCurveContext !== undefined && data.nextCurveContext !== null;
+  const hasResidual =
+    data.residualForNextStep !== undefined && data.residualForNextStep !== null;
+  if (hasNext !== hasResidual) invalid("nextCurveContext/residualForNextStep");
+  const next = hasNext ? readCurveContext(data.nextCurveContext) : null;
+  // 다음 단계가 지금보다 앞일 수는 없다. 지금 문맥의 제거 조합은 매칭한
+  // 후보의 부분집합이고(7.1절), 다음 문맥은 그 전부를 제거한 것이기 때문이다.
+  // **같을 수는 있다.** 아직 하나도 매칭하지 않았으면 둘 다 원본이다.
+  if (next && next.curveStep < current.curveStep)
+    invalid("nextCurveContext.curveStep");
+  const progress = record(data.progress ?? {}, "progress");
+  return {
+    nextCurveContext: next,
+    currentResidual: readResidualState(
+      data.residualForCurrentStep ?? {},
+      "residualForCurrentStep",
+    ),
+    nextResidual: hasNext
+      ? readResidualState(data.residualForNextStep, "residualForNextStep")
+      : null,
+    matchedCandidateIds:
+      progress.matchedCandidateIds === undefined
+        ? []
+        : array(progress.matchedCandidateIds, "progress.matchedCandidateIds")
+            .map((id) => text(id, "progress.matchedCandidateIds"))
+            .sort(),
+  };
+}
+
+const stages = ["unexplored", "in_progress", "completed"] as const;
+function readStage(value: unknown): AnalysisContext["progressStage"] {
+  if (value === undefined || value === null) return null;
+  const stage = record(value, "progress").stage;
+  if (stage === undefined || stage === null) return null;
+  const known = stages.find((item) => item === stage);
+  return known ?? invalid("progress.stage");
+}
+/**
+ * 곡선 조회 경로. **보고 있는 문맥**을 받는다. 단계를 옮기면 진입 때 받은
+ * 문맥이 아니라 그 목표의 곡선을 읽어야 한다.
+ */
+export function curvePath(
+  context: AnalysisContext,
+  target: CurveContext = context.curveContext,
+): string {
+  const curve = target;
+  const query = new URLSearchParams({
+    bundleId: curve.bundleId,
+    curveStep: String(curve.curveStep),
+  });
+  if (curve.removedCandidateIds.length)
+    query.set("removed", curve.removedCandidateIds.join(","));
+  return `/v1/stars/${encodeURIComponent(context.ticId)}/curves?${query}`;
+}
+function readSegment(value: unknown): CurveSegment {
+  const data = record(value, "segment");
+  const nPoints = integer(data.nPoints, "nPoints", 1);
+  const binMinutes = number(data.binMinutes, "binMinutes");
+  const fluxScatter = number(data.fluxScatter, "fluxScatter");
+  if (binMinutes <= 0 || fluxScatter < 0) invalid("binMinutes/fluxScatter");
+  const flux = array(data.flux, "flux").map((point) =>
+    point === null ? null : number(point, "flux"),
+  );
+  if (flux.length !== nPoints) invalid("nPoints/flux.length");
+  const gaps = array(data.gaps, "gaps").map((value): [number, number] => {
+    const pair = array(value, "gaps");
+    if (pair.length !== 2) invalid("gaps");
+    const start = integer(pair[0], "gaps.start"),
+      end = integer(pair[1], "gaps.end");
+    if (start > end || end >= nPoints) invalid("gaps");
+    for (let i = start; i <= end; i++)
+      if (flux[i] !== null) invalid("gaps/flux");
+    return [start, end];
+  });
+  const startBtjd = number(data.startBtjd, "startBtjd") as Btjd;
+  if (!Number.isFinite(startBtjd + (binMinutes / 1440) * (nPoints - 1)))
+    invalid("time range");
+  return {
+    segmentId: text(data.segmentId, "segmentId"),
+    sector: integer(data.sector, "sector", 1),
+    binningRevision: text(data.binningRevision, "binningRevision"),
+    startBtjd,
+    binMinutes,
+    nPoints,
+    flux,
+    fluxScatter,
+    gaps,
+  };
+}
+/**
+ * 곡선 (5.2절). 잔차가 준비되지 않았으면 서버는 HTTP 202에 같은 본문 구조를 두고
+ * segments만 null로 보낸다. 본문에 code 필드는 없으므로 상태 코드로 판정한다.
+ */
+export function decodeCurve(
+  value: unknown,
+  expected: AnalysisContext,
+  status: number,
+): CurveData {
+  const data = record(value, "curves");
+  const residual = record(data.residual, "residual");
+  if (status === 202) {
+    if (data.segments !== null) invalid("pending curve segments");
+    if (expected.curveContext.curveStep === 0) invalid("original curve status");
+    const jobStatus =
+      residual.status === null
+        ? null
+        : text(residual.status, "residual.status");
+    const jobId =
+      residual.jobId === null ? null : text(residual.jobId, "residual.jobId");
+    if (
+      (jobStatus === null) !== (jobId === null) ||
+      (jobStatus !== null &&
+        ![
+          "QUEUED",
+          "RESIDUAL_CALCULATING",
+          "RESIDUAL_READY",
+          "PERIODOGRAM_CALCULATING",
+          "FAILED",
+        ].includes(jobStatus))
+    )
+      invalid("residual.status/jobId");
+    return { kind: "not-ready", status: jobStatus, jobId };
+  }
+  const context = readCurveContext(data.curveContext);
+  if (
+    text(data.ticId, "ticId") !== expected.ticId ||
+    text(data.bundleId, "bundleId") !== context.bundleId ||
+    contextKey(context) !== contextKey(expected.curveContext)
+  )
+    invalid("curveContext mismatch");
+  if (
+    number(data.foldReferenceTimeBtjd, "foldReferenceTimeBtjd") !==
+    expected.foldReferenceTimeBtjd
+  )
+    invalid("foldReferenceTimeBtjd mismatch");
+  if (residual.status !== "COMPLETED") invalid("residual.status");
+  const segments = array(data.segments, "segments").map(readSegment);
+  if (
+    new Set(segments.map((segment) => segment.segmentId)).size !==
+    segments.length
+  )
+    invalid("segmentId");
+  for (let i = 0; i < segments.length; i++) {
+    if (
+      !expected.sectors.includes(segments[i].sector) ||
+      (i > 0 && segments[i - 1].sector > segments[i].sector)
+    )
+      invalid("segment sector");
+  }
+  return {
+    kind: "ready",
+    context,
+    fluxUnit: text(data.fluxUnit, "fluxUnit"),
+    segments,
+  };
+}

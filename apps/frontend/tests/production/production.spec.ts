@@ -1,5 +1,36 @@
 import { test, expect } from "@playwright/test";
 
+test("production post creation is wired to HTTP, without writable development samples", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/me", (route) =>
+    route.fulfill({
+      json: {
+        memberId: "production-post-user",
+        nickname: "검증",
+        onboardingDone: true,
+        tutorialCompleted: true,
+      },
+    }),
+  );
+  await page.goto("/posts/new?ticId=259377017&returnTo=%2Fcommunity");
+  await expect(
+    page.getByRole("heading", { name: "새 이야기 쓰기", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("별의 TIC 번호")).toHaveValue("259377017");
+  await page
+    .getByRole("textbox", { name: "제목", exact: true })
+    .fill("실제 경로 확인");
+  await page
+    .getByRole("textbox", { name: "본문", exact: true })
+    .fill("운영 연결이 없으면 가짜 성공을 만들지 않습니다.");
+  await page.getByRole("button", { name: "게시하기", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "서버 연결이 아직 준비되지 않았습니다",
+  );
+  await expect(page.getByTestId("community-fixture-notice")).toHaveCount(0);
+});
+
 test("an unconfigured production preview has no automatic fixture identity", async ({
   page,
   request,
@@ -33,11 +64,16 @@ test("the built app retains routes/identity but contains no development page or 
   await page.goto("/analysis/259377017?returnTo=%2Fcommunity%3Fq%3Dtest");
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "분석", exact: true }),
+    page.getByRole("heading", { name: "분석 · TIC 259377017", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("TIC 259377017", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "서버 연결이 아직 준비되지 않았습니다",
+  );
+  await expect(
+    page.getByRole("region", { name: "분석 데이터 요약" }),
+  ).toHaveCount(0);
   await expect(page.getByText(/개발 전용 테스트 응답입니다/)).toHaveCount(0);
-  await page.getByRole("link", { name: "이전 화면으로", exact: true }).click();
+  await page.getByRole("link", { name: "← 이전 화면", exact: true }).click();
   await expect(page).toHaveURL(/\/community\?q=test$/);
   await page.goto("/accounts");
   await expect(

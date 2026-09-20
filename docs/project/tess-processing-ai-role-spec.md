@@ -59,7 +59,7 @@ EC2 온라인 계산은 새 Candidate를 만들거나 AI를 다시 실행하지 
 | 원천 계약 | TESS 제품·cadence·Sector 범위, FITS HDU·헤더·필수 컬럼·단위 확인 | 입력 manifest·FITS 파싱 계약 | 김동혁 |
 | 외부 원천 | TIC·TCE·TOI·Archive·ExoFOP 식별자와 갱신·매칭 규칙 정의 | 외부 snapshot·후보 연결 계약 | 강재민 |
 | 전처리 | 품질·결측·이상치·추가 마스크·정규화·구간 분리·detrending 검증 | 정제곡선 schema, 제외 사유, 전처리 버전, 벤치마크 | 김동혁·백지웅 |
-| 비닝 | 세그먼트 분할, 비닝 간격(기본 10분, 세그먼트 20,000점 초과 시 확대)과 `binning_revision` 규칙, 빈 칸 NaN·gaps, 산포 스칼라 정의 | 비닝 규칙, 가장 짧은 통과 지속시간 실측 근거 | 강재민·백지웅 |
+| 비닝 | 세그먼트 분할, 비닝 간격(기본 10분, 세그먼트 20,000점 초과 시 자동 확대 없이 실패·격리)과 `binning_revision` 규칙, 빈 칸 NULL·gaps, 세그먼트 전체 robust 산포(점별 오차 아님) 정의 | 비닝 규칙, 가장 짧은 통과 지속시간 실측 근거 | 강재민·백지웅 |
 | BLS | 주기·지속시간 격자, SDE·SNR·transit 수·Sector 일관성 계산 | 탐색용 periodogram 설정 버전, 품질 결과 | 김동혁 |
 | 반복 제거 | 후보 transit model 적합, 제거 전후 QA, 종료 사유 기록 | 실행 중 Silver residual·periodogram, 지속 저장할 removal QA 요약·반복 이력 | 김동혁·강재민 |
 | 후보 통합 | 원본 재검증, 고조파·중복 병합, 판 사이 후보 동일성 판단, 안정 ID | Candidate·CandidateAlias, 후보 동일성 허용 오차 제안 | 강재민 |
@@ -95,7 +95,7 @@ ERD v1.0은 Gold 본문을 파일이 아니라 PostgreSQL 배열 열에 둔다. 
 
 | 대상 | 내용 | 비고 |
 |---|---|---|
-| light_curve_segments | 별·섹터·`binning_revision` 단위 불변 곡선. `start_btjd`, `bin_minutes`, `n_points`, `flux real[]`(빈 칸 NaN), `flux_scatter` 스칼라, `gaps` | 시각 배열 저장 안 함: `start_btjd + (bin_minutes/1440) × i`. 판에 묶이지 않고 manifest가 세그먼트 id 집합을 참조 |
+| light_curve_segments | 별·섹터·`binning_revision` 단위 불변 곡선. `start_btjd`, `bin_minutes`, `n_points`, `flux real[]`(빈 칸 NULL), `flux_scatter` 스칼라, `gaps` | 시각 배열 저장 안 함: `start_btjd + (bin_minutes/1440) × i`. 판에 묶이지 않고 manifest가 세그먼트 id 집합을 참조 |
 | periodograms | 판 단위 원본 주기도. `period_min_days`, `period_max_days`, `n_periods`(5,000), `power real[]` | 주기 격자 배열 저장 안 함: manifest 격자 규칙(로그 등간격)으로 계산. 사용자용 잔차 주기도는 없음 |
 | candidates | 대표값(period·epoch·duration·depth·bls_power), `removal_step`, `transit_model` JSONB, `discoverable`, `status`(active/retired), `updated_bundle_id` | 후보 id는 판이 바뀌어도 유지. 미세 조정 범위는 열이 아니라 manifest 규칙 + API 계산 |
 | candidate_aliases | 고조파 배율·별칭 주기 | |
@@ -193,7 +193,7 @@ Gold에 **없는** 것: 품질 마스크 배열, 시각 배열, 주기 격자 �
 
 - 김동혁: 단계별 배열 비저장 조건을 만족하는 Spark 실행, Publisher의 DB 접속·커밋 후 알림 운영값, Python Worker·Redis 배포와 용량 검증
 - 강재민: `transit_model` JSONB 스키마, 주기도 격자 규칙과 `periodogram_config_version`, 미세 조정 허용 폭 산출, `fold_reference_time_btjd` 정본 위치, 새 판 적재 시 후보 동일성, discoverable 재계산과 재개 이벤트 연결
-- 백지웅: 세그먼트·NaN 빈 칸·gaps·10분 비닝의 화면 표현, 단위, fold 기준 시각, 판 교체 시 재로드 동작
+- 백지웅: 세그먼트·NULL 빈 칸·gaps·10분 비닝의 화면 표현, 단위, fold 기준 시각, 판 교체 시 재로드 동작
 - 백승학·하서진: 후보 추가·discoverable 변경 이후 알림·퀘스트·발견 영향(DAT-15)
 
 ### 4단계 — MR과 Jira 완료

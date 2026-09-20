@@ -21,7 +21,10 @@ test("initial view requests individual pages and renders all 1000 without overvi
   await start(page);
   const s = await stats(page);
   expect(s.stars).toBe(1000);
-  expect(s.bodyDrawCalls).toBe(2);
+  expect(s.bodyDrawCallsTotal).toBeGreaterThanOrEqual(2);
+  expect(s.bodyDrawCalls).toBeLessThanOrEqual(2);
+  expect(s.backgroundCacheAvailable).toBe(true);
+  expect(s.backgroundBlits).toBe(1);
   expect(s.planets).toBe(0);
   expect(s.orbitStars).toBe(0);
   expect(s.detailedSystems).toBe(0);
@@ -29,6 +32,156 @@ test("initial view requests individual pages and renders all 1000 without overvi
   expect(tiles.length).toBeGreaterThan(0);
   await expect(page.getByTestId("sky-total")).toHaveText("1,000");
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("cached culling spans reproduce exact GPU pixels through camera and selection changes", async ({
+  page,
+}) => {
+  await start(page);
+  const results = await page.evaluate(async () => {
+    const modelPath = "/src/features/sky-renderer/model.ts";
+    const rendererPath = "/src/features/sky-renderer/renderer.ts";
+    const referencePath = "/dev/sky-reference/reference.mjs";
+    const { renderPlan, cameraMatrix, screenPoint, INITIAL_CAMERA } =
+      await import(modelPath);
+    const { GalaxyRenderer } = await import(rendererPath);
+    const { exampleStar } = await import(referencePath);
+    const source = Array.from({ length: 1000 }, (_, i) => exampleStar(i));
+    const canvas = document.createElement("canvas");
+    const renderer = new GalaxyRenderer(canvas);
+    const gl = canvas.getContext("webgl2")!;
+    // Compare against the previous six-vertex geometry, independently of the
+    // optimized renderer's four-vertex strip and source-span preparation.
+    const referenceCanvas = document.createElement("canvas");
+    const referenceGl = referenceCanvas.getContext("webgl2", {
+      alpha: false,
+      antialias: false,
+    })!;
+    const createFramebuffer = referenceGl.createFramebuffer.bind(referenceGl);
+    // Fault injection: exercise optional cache allocation failure.
+    referenceGl.createFramebuffer = () => null as unknown as WebGLFramebuffer;
+    const referenceRenderer = new GalaxyRenderer(referenceCanvas);
+    referenceGl.createFramebuffer = createFramebuffer;
+    const draw = referenceGl.drawArraysInstanced.bind(referenceGl);
+    referenceGl.drawArraysInstanced = (mode, first, count, instances) => {
+      const gl = referenceGl;
+      if (mode !== gl.TRIANGLE_STRIP)
+        return draw(mode, first, count, instances);
+      const bound = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+      const corners = gl.getVertexAttrib(
+        0,
+        gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING,
+      );
+      gl.bindBuffer(gl.ARRAY_BUFFER, corners);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+      draw(gl.TRIANGLES, 0, 6, instances);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+      gl.bindBuffer(gl.ARRAY_BUFFER, bound);
+    };
+    const results = [];
+    try {
+      for (const camera of [
+        INITIAL_CAMERA,
+        { ...INITIAL_CAMERA, zoom: 4, x: 150 },
+        { ...INITIAL_CAMERA, zoom: 3, yaw: 1.4, x: -200 },
+        INITIAL_CAMERA,
+      ]) {
+        const matrix = cameraMatrix(camera, 600, 400);
+        const exact = source.filter((s) => {
+          const p = screenPoint(matrix, 600, 400, s.x, s.y, s.depthZ);
+          return (
+            Math.abs(p.depth) <= 1 &&
+            p.x >= -80 &&
+            p.x <= 680 &&
+            p.y >= -80 &&
+            p.y <= 480
+          );
+        });
+        const plan = renderPlan(source, matrix, 600, 400);
+        for (const selected of [null, exact.at(-1)?.ticId ?? null, null]) {
+          renderer.setCamera(matrix, 600, 400, camera.zoom, source.length);
+          renderer.setScene(plan, selected);
+          renderer.draw(0, true);
+          const actual = new Uint8Array(canvas.width * canvas.height * 4);
+          gl.readPixels(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            actual,
+          );
+          referenceRenderer.setCamera(
+            matrix,
+            600,
+            400,
+            camera.zoom,
+            source.length,
+          );
+          referenceRenderer.setScene({ stars: exact }, selected);
+          referenceRenderer.draw(0, true);
+          if (referenceRenderer.metrics().backgroundCacheAvailable)
+            throw Error(
+              "Reference must draw directly without framebuffer caching",
+            );
+          const expected = new Uint8Array(actual.length);
+          referenceGl.readPixels(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            expected,
+          );
+          renderer.draw(0, true);
+          const cached = new Uint8Array(actual.length);
+          gl.readPixels(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            cached,
+          );
+          if (renderer.metrics().backgroundCacheAvailable) {
+            if (renderer.metrics().bodyDrawCalls !== 0)
+              throw Error("Stationary stars were drawn again");
+            if (cached.some((value, i) => value !== expected[i]))
+              throw Error("Cached pixels changed");
+          }
+          results.push({
+            stars: plan.stars.length,
+            differences: actual.reduce(
+              (sum, value, i) => sum + Number(value !== expected[i]),
+              0,
+            ),
+            light: actual.some((value, i) => i % 4 !== 3 && value > 30),
+          });
+        }
+      }
+    } finally {
+      renderer.dispose();
+      referenceRenderer.dispose();
+    }
+    return results;
+  });
+  expect(results).toHaveLength(12);
+  for (const result of results) {
+    expect(result.stars).toBeGreaterThan(0);
+    expect(result.light).toBe(true);
+    expect(result.differences).toBe(0);
+  }
 });
 test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel projection", async ({
   page,
@@ -50,7 +203,9 @@ test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel project
       .screenshot({ path: "test-results/galaxy/reference-" + n + ".png" });
     if (n === 1) {
       // Independent projection from the agreed original camera; actual GPU pixel must be lit.
-      const hit = await page.evaluate(() => {
+      const hit = await page.evaluate(async () => {
+        const rendererPath = "/src/features/sky-renderer/renderer.ts";
+        const { GalaxyRenderer } = await import(rendererPath);
         const gl = document.querySelector("canvas")!.getContext("webgl2")!;
         const x = 760,
           y = 430,
@@ -66,8 +221,13 @@ test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel project
           t = a * Math.sin(roll) + v * Math.cos(roll);
         const px = Math.round((u - 0.8116955263673162) * scale + 720),
           py = Math.round((t + 104.409147077857) * scale + 836 * 0.46);
-        return new Promise<number>((resolve) =>
-          requestAnimationFrame(() => {
+        // The default drawing buffer is not preserved after compositing. Read
+        // immediately after the real application draw, not in an unrelated RAF.
+        const draw = GalaxyRenderer.prototype.draw;
+        return new Promise<number>((resolve) => {
+          GalaxyRenderer.prototype.draw = function (...args: unknown[]) {
+            draw.apply(this, args);
+            GalaxyRenderer.prototype.draw = draw;
             const bytes = new Uint8Array(7 * 7 * 4);
             gl.readPixels(
               px - 3,
@@ -79,8 +239,8 @@ test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel project
               bytes,
             );
             resolve(Math.max(...bytes.filter((_, i) => i % 4 !== 3)));
-          }),
-        );
+          };
+        });
       });
       expect(hit).toBeGreaterThan(40);
     }
@@ -154,7 +314,35 @@ test("status changes preserve actual rendered pixels; new discovery preserves ca
   const camera = (await view(page)).camera,
     coord = (await (await request.get("/api/v1/me/stars/900000001")).json())
       .unlock.position;
-  const before = await page.locator("canvas").screenshot();
+  // Canvas screenshots include the DOM markers above it. Completed badges must
+  // disappear in 205; compare the actual WebGL pixels, whose colors stay fixed.
+  const pixels = () =>
+    page.evaluate(
+      () =>
+        new Promise<string>((resolve) =>
+          requestAnimationFrame(async () => {
+            const canvas = document.querySelector("canvas")!;
+            const gl = canvas.getContext("webgl2")!;
+            const bytes = new Uint8Array(canvas.width * canvas.height * 4);
+            gl.readPixels(
+              0,
+              0,
+              canvas.width,
+              canvas.height,
+              gl.RGBA,
+              gl.UNSIGNED_BYTE,
+              bytes,
+            );
+            resolve(
+              Array.from(
+                new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+                (b) => b.toString(16).padStart(2, "0"),
+              ).join(""),
+            );
+          }),
+        ),
+    );
+  const before = await pixels();
   await page
     .getByRole("button", { name: "행성 없는 완료 응답", exact: true })
     .click();
@@ -166,8 +354,9 @@ test("status changes preserve actual rendered pixels; new discovery preserves ca
           .count,
     )
     .toBe(0);
-  const after = await page.locator("canvas").screenshot();
-  expect(after.equals(before)).toBe(true);
+  await expect.poll(async () => (await stats(page)).stars).toBe(1000);
+  const after = await pixels();
+  expect(after).toBe(before);
   await page.getByRole("button", { name: "새 발견 응답", exact: true }).click();
   await expect(page.getByTestId("sky-total")).toHaveText("1,001");
   expect((await view(page)).camera).toEqual(camera);

@@ -103,14 +103,165 @@ export function initialCamera(
     ),
   };
 }
-export type RenderPlan = { stars: Star[] };
+export type RenderPlan = {
+  stars: Star[];
+  // Ordered spans of the immutable source: reuse packed attributes when only
+  // the camera changes. This is CPU culling, never a cluster or a count limit.
+  spans?: { source: readonly Star[]; ranges: [number, number][] };
+};
+type BoundsNode = {
+  start: number;
+  end: number;
+  min: number[];
+  max: number[];
+  children?: [BoundsNode, BoundsNode];
+};
+const trees = new WeakMap<readonly Star[], BoundsNode>();
+function boundsTree(
+  stars: readonly Star[],
+  start = 0,
+  end = stars.length,
+): BoundsNode {
+  const node: BoundsNode = {
+    start,
+    end,
+    min: [Infinity, Infinity, Infinity],
+    max: [-Infinity, -Infinity, -Infinity],
+  };
+  if (end - start > 128) {
+    const middle = (start + end) >>> 1;
+    node.children = [
+      boundsTree(stars, start, middle),
+      boundsTree(stars, middle, end),
+    ];
+    for (let axis = 0; axis < 3; axis++) {
+      node.min[axis] = Math.min(...node.children.map((n) => n.min[axis]));
+      node.max[axis] = Math.max(...node.children.map((n) => n.max[axis]));
+    }
+  } else {
+    for (let i = start; i < end; i++) {
+      const s = stars[i],
+        values = [s.x, s.y, s.depthZ];
+      for (let axis = 0; axis < 3; axis++) {
+        node.min[axis] = Math.min(node.min[axis], values[axis]);
+        node.max[axis] = Math.max(node.max[axis], values[axis]);
+      }
+    }
+  }
+  return node;
+}
+// A conservative bounds check skips per-star projection when the entire loaded set
+// is visible. Immutable store snapshots make the weak cache safe and reclaimable.
+const boundsCache = new WeakMap<
+  readonly Star[],
+  { x: [number, number]; y: [number, number]; z: [number, number] }
+>();
 export function renderPlan(
   stars: readonly Star[],
   matrix: Matrix,
   width: number,
   height: number,
 ): RenderPlan {
-  // Culling only at data/camera changes. No star-count cap and no per-frame input scan.
+  let bounds = boundsCache.get(stars);
+  if (!bounds && stars.length) {
+    bounds = {
+      x: [Infinity, -Infinity],
+      y: [Infinity, -Infinity],
+      z: [Infinity, -Infinity],
+    };
+    for (const s of stars) {
+      bounds.x[0] = Math.min(bounds.x[0], s.x);
+      bounds.x[1] = Math.max(bounds.x[1], s.x);
+      bounds.y[0] = Math.min(bounds.y[0], s.y);
+      bounds.y[1] = Math.max(bounds.y[1], s.y);
+      bounds.z[0] = Math.min(bounds.z[0], s.depthZ);
+      bounds.z[1] = Math.max(bounds.z[1], s.depthZ);
+    }
+    boundsCache.set(stars, bounds);
+  }
+  // The application uses an affine projection. Perspective matrices use the exact path.
+  if (
+    bounds &&
+    matrix[3] === 0 &&
+    matrix[7] === 0 &&
+    matrix[11] === 0 &&
+    matrix[15] === 1
+  ) {
+    let allVisible = true;
+    for (const x of bounds.x)
+      for (const y of bounds.y)
+        for (const z of bounds.z) {
+          const p = screenPoint(matrix, width, height, x, y, z);
+          if (
+            Math.abs(p.depth) > 1 ||
+            p.x < -80 ||
+            p.x > width + 80 ||
+            p.y < -80 ||
+            p.y > height + 80
+          )
+            allVisible = false;
+        }
+    if (allVisible) return { stars: stars as Star[] };
+  }
+  if (
+    stars.length &&
+    matrix[3] === 0 &&
+    matrix[7] === 0 &&
+    matrix[11] === 0 &&
+    matrix[15] === 1
+  ) {
+    let root = trees.get(stars);
+    if (!root) {
+      root = boundsTree(stars);
+      trees.set(stars, root);
+    }
+    const ranges: [number, number][] = [],
+      visible: Star[] = [];
+    const low = [-1 - 160 / width, -1 - 160 / height, -1];
+    const high = [1 + 160 / width, 1 + 160 / height, 1];
+    const append = (start: number, end: number) => {
+      const last = ranges.at(-1);
+      if (last?.[1] === start) last[1] = end;
+      else ranges.push([start, end]);
+      for (let i = start; i < end; i++) visible.push(stars[i]);
+    };
+    const visit = (node: BoundsNode) => {
+      let inside = true;
+      for (let axis = 0; axis < 3; axis++) {
+        let min = matrix[12 + axis],
+          max = min;
+        for (let world = 0; world < 3; world++) {
+          const a = matrix[world * 4 + axis] * node.min[world];
+          const b = matrix[world * 4 + axis] * node.max[world];
+          min += Math.min(a, b);
+          max += Math.max(a, b);
+        }
+        // Keep a conservative tolerance at the bounds; exact leaf checks below
+        // preserve the existing 80px/depth edges despite floating-point sums.
+        if (min > high[axis] + 1e-10 || max < low[axis] - 1e-10) return;
+        if (min < low[axis] + 1e-10 || max > high[axis] - 1e-10) inside = false;
+      }
+      if (inside) append(node.start, node.end);
+      else if (node.children) node.children.forEach(visit);
+      else {
+        for (let i = node.start; i < node.end; i++) {
+          const s = stars[i],
+            p = screenPoint(matrix, width, height, s.x, s.y, s.depthZ);
+          if (
+            Math.abs(p.depth) <= 1 &&
+            p.x >= -80 &&
+            p.x <= width + 80 &&
+            p.y >= -80 &&
+            p.y <= height + 80
+          )
+            append(i, i + 1);
+        }
+      }
+    };
+    visit(root);
+    return { stars: visible, spans: { source: stars, ranges } };
+  }
+  // Perspective matrices retain the exact projection path.
   return {
     stars: stars.filter((s) => {
       const p = screenPoint(matrix, width, height, s.x, s.y, s.depthZ);
@@ -146,5 +297,9 @@ export function stablePhase(id: string) {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++)
     hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
+  // Avalanche adjacent candidate IDs so planets do not line up on the same angle.
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
+  hash ^= hash >>> 16;
   return ((hash >>> 0) / 4294967296) * Math.PI * 2;
 }
