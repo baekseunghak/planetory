@@ -18,6 +18,8 @@ public final class ExplorationIds {
     public static final String PUBLIC_ANALYSIS = "pa-";
     /** 회원. 형식의 정본은 서비스 API 명세이며 회원 API가 이 형식으로 돌려준다. */
     public static final String MEMBER = "u-";
+    /** 온라인 잔차 작업 (탐사 API 7장). */
+    public static final String RESIDUAL_JOB = "rj-";
 
     /** {@code Long.MAX_VALUE}는 19자리다. 18자리까지만 받으면 넘침을 따로 검사하지 않아도 된다. */
     private static final int MAX_DIGITS = 18;
@@ -47,6 +49,10 @@ public final class ExplorationIds {
 
     public static String publicAnalysis(long id) {
         return PUBLIC_ANALYSIS + id;
+    }
+
+    public static String residualJob(long id) {
+        return RESIDUAL_JOB + id;
     }
 
     /**
