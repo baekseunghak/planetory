@@ -106,7 +106,7 @@ for (const resource of ["periodogram", "candidate-peaks"] as const) {
       await openData(page);
       await expect(
         page.getByRole("region", { name: "분석 데이터 요약" }),
-      ).toContainText("잔차 1단계");
+      ).toContainText("곡선 단계 1");
       await expect(page.getByTestId("selected-period")).toContainText(
         "선택해 주세요",
       );

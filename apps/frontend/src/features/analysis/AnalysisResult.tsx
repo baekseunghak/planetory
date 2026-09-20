@@ -544,8 +544,14 @@ export function NextActions({
   receipt,
   returnTo,
   from,
+  onNextCurve,
 }: {
   receipt: SubmissionReceipt;
+  /**
+   * [다음 곡선 단계로]를 누르면 할 일. **같은 화면에서** 일어나므로 링크가
+   * 아니다(SRS 3.2 흐름). 없으면 버튼을 비활성으로 둔다.
+   */
+  onNextCurve?: () => void;
   /** 분석에 들어오기 전 화면. 분석을 끝내고 나갈 때 쓴다. */
   returnTo: string;
   /**
@@ -584,9 +590,9 @@ export function NextActions({
     GO_HOME: { label: "별지도로", to: "/sky" },
   };
   // 분석 화면 안에서 일어나는 동작이라 옮겨 갈 곳이 없다. 각자 다른 티켓이다.
+  // 아직 연결되지 않은 화면 안 동작. `NEXT_CURVE`는 이제 실제 버튼이다.
   const inScreen: Partial<Record<NextAction, string>> = {
     RETRY: "다시 풀기",
-    NEXT_CURVE: "다음 곡선 단계로",
   };
   /**
    * 그리는 순서는 화면이 정한다. 서버의 목록은 순위가 아니라 가능한 행동의
@@ -632,10 +638,22 @@ export function NextActions({
           .filter((action) => !links[action])
           .map((action) => (
             <li key={action}>
-              {/* 목적지가 아직 없다. 있는 척하지 않는다. */}
-              <span className="submission-note">
-                {inScreen[action]} · 연결 예정
-              </span>
+              {action === "NEXT_CURVE" ? (
+                // 같은 화면에서 일어나므로 링크가 아니다(SRS 3.2 흐름).
+                // 할 일이 없으면 비활성으로 둔다.
+                <button
+                  type="button"
+                  onClick={onNextCurve}
+                  disabled={!onNextCurve}
+                >
+                  다음 곡선 단계로
+                </button>
+              ) : (
+                // 목적지가 아직 없다. 있는 척하지 않는다.
+                <span className="submission-note">
+                  {inScreen[action]} · 연결 예정
+                </span>
+              )}
             </li>
           ))}
       </ul>

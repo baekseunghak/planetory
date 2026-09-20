@@ -1,6 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { AnalysisContext, CurveData } from "./analysis-data";
+import { useCurveStep } from "./use-curve-step";
 import type { PhaseRange, PhaseSelectionResult } from "./phase-selection";
 import type { PeriodSelectionChange } from "./period-selection";
 import { useFoldSession } from "./use-fold-session";
@@ -45,6 +46,15 @@ const FoldContext = createContext<ReturnType<typeof useFoldSession> | null>(
  * 스냅샷을 그대로 다시 보내게 된다.
  */
 const BundleRecoveryContext = createContext<(() => boolean) | null>(null);
+
+/**
+ * 곡선 단계 이동(#189). 단계 표시줄과 제출 결과의 [다음 곡선 단계로]가 같은
+ * 손잡이를 쓴다. 두 곳이 따로 상태를 들면 서로 다른 곡선을 보게 된다.
+ */
+const CurveStepContext = createContext<ReturnType<typeof useCurveStep> | null>(
+  null,
+);
+export const useCurveStepSession = () => useContext(CurveStepContext);
 export const useBundleRecovery = () => useContext(BundleRecoveryContext);
 
 const DraftContext = createContext<{
@@ -88,24 +98,32 @@ export function AnalysisSession({
   context,
   curve,
   recoverBundle,
+  step,
   children,
 }: {
   context: AnalysisContext;
   curve: CurveData;
   recoverBundle: () => boolean;
+  /**
+   * 단계 이동 상태. **페이지가 만든다.** 여기서 만들면 보고 있는 곡선을
+   * 차트·주기도가 따라갈 수 없다 — 그것들은 이 위에서 그려진다.
+   */
+  step: ReturnType<typeof useCurveStep>;
   children: ReactNode;
 }) {
   const session = useFoldSession(context, curve);
   return (
     <BundleRecoveryContext.Provider value={recoverBundle}>
-      <FoldContext.Provider value={session}>
-        <PhaseDraftProvider
-          ready={session.ready}
-          change={session.state.success?.change ?? null}
-        >
-          {children}
-        </PhaseDraftProvider>
-      </FoldContext.Provider>
+      <CurveStepContext.Provider value={step}>
+        <FoldContext.Provider value={session}>
+          <PhaseDraftProvider
+            ready={session.ready}
+            change={session.state.success?.change ?? null}
+          >
+            {children}
+          </PhaseDraftProvider>
+        </FoldContext.Provider>
+      </CurveStepContext.Provider>
     </BundleRecoveryContext.Provider>
   );
 }

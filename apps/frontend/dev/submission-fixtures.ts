@@ -159,8 +159,16 @@ function validate(
       { currentBundleId: current.bundleId },
     );
   // 3번: 제거 조합과 단계. 마지막 제출 단계와 같을 필요는 없다(EXP-09).
+  //
+  // 고를 수 있는 것은 **내가 매칭한 후보 전부**이지 마지막 제출 단계의
+  // 조합이 아니다(7.1절). 다음 단계로 옮기면 진입 문맥보다 더 많이 제거한
+  // 조합으로 제출하게 되므로, 진입 조합의 부분집합만 받으면 옮긴 뒤에는
+  // 아무것도 낼 수 없다.
   const removed = sent.removedCandidateIds;
-  const allowed = current.removedCandidateIds;
+  const matched = record(context.progress)?.matchedCandidateIds;
+  const allowed = Array.isArray(matched)
+    ? matched
+    : current.removedCandidateIds;
   if (
     !Array.isArray(removed) ||
     !Array.isArray(allowed) ||
@@ -238,6 +246,9 @@ function validate(
 }
 
 /** 6.4절 `submissionResult`. 매칭·성과는 합성 고정값이며 계산 결과가 아니다. */
+/** 신호를 실제로 맞힌 결과. 이때만 매칭 집합이 늘어난다. */
+const matchedStatuses = new Set(["matched", "matched_harmonic"]);
+
 function buildResult(
   ticId: string,
   body: Record<string, unknown>,
@@ -343,8 +354,17 @@ function buildResult(
       completionReason: kind === "skipped" ? "skipped" : null,
       reopenPending: false,
       currentCurveStep: record(body.curveContext)?.curveStep ?? 0,
-      matchedCandidateIds:
-        record(context.currentCurveContext)?.removedCandidateIds ?? [],
+      // 이 제출로 매칭한 후보를 진입 때의 집합에 **더한다**. 제거 조합을
+      // 그대로 쓰면 방금 맞힌 신호가 빠져 [다음 곡선]이 갈 곳을 잃는다.
+      matchedCandidateIds: [
+        ...new Set([
+          ...((record(context.progress)?.matchedCandidateIds as
+            string[] | undefined) ?? []),
+          ...(composed && matchedStatuses.has(String(composed.match.status))
+            ? [String(composed.match.candidateId)]
+            : []),
+        ]),
+      ].sort(),
       remainingDiscoverableCount: 1,
     },
     publication: composed

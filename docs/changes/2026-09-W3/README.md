@@ -167,3 +167,6 @@
 | 2026-09-20 | History 첨부 리뷰 보완·숫자 TIC 강제 변환 거절 명시 | S15P21C206-160 | Swagger, Operation, JsonNode, ticId, VALIDATION_FAILED, 코드 형식 | 검증 완료·31개 회귀 통과 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 판단 없는 History 첨부 선택 복구 | S15P21C206-160 | MaterialPicker, null, no_candidate, skipped, Chrome 9 | fixture 검증 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 별 가시 영역·속성 재사용과 동일 픽셀 배경 캐시 | S15P21C206-215 | 100000, WebGL, triangle strip, RGBA8, framebuffer, Firefox, p95, DPR | 개선·회귀 검증 완료, 성능 전체 인수 진행 중 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 곡선 단계 전환 계약 확정 | S15P21C206-189 | nextCurveContext, residualForNextStep, COMPLETED에서만 전환, 잔차 작업 requestId 없음, 429 두 종류, 늦은 응답 세대 폐기, 와이어프레임 DISCUSS 충돌 | 채택·구현 전 | [기록](2026-09-20.md) |
+| 2026-09-20 | 곡선 단계 전환 구현 | S15P21C206-189 | 곡선 단계 이동, 잔차 작업 폴링, pollAfterSeconds, 429 대기열·activeJobId, 세대 번호로 늦은 응답 폐기, matchedCandidateIds로 목표 문맥, 단계 줄 배치, 더 없음 의견 미채택 | 구현 완료·실제 잔차 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 리뷰 반영: 전환이 실제로 곡선을 바꾸게 함 | S15P21C206-189 | viewing 배선, 곡선 선로드 후 전환, 404 RESOURCE_NOT_FOUND 재요청, retryAfterSeconds 잠금, activeJobId 안내 정정, 개발용 응답이 진입 단계만 알던 문제 | 구현 완료·실제 잔차 API 인수 대기 | [기록](2026-09-20.md) |
