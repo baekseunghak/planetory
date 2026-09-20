@@ -53,7 +53,7 @@ OAuth 로그인 시작/콜백 주소는 인증 담당자와 제공자 등록 설
 
 - 세션 방식 로그인을 사용한다(SB-D14). 브라우저가 세션 쿠키를 전달하고 서버는 세션에서 회원을 식별한다. 요청 본문에 `authorId`나 운영자 여부를 받지 않는다.
 - 인증 없음·만료는 **401**: 프론트가 재로그인 안내. 인증됐지만 권한 부족은 기본 **403**: 권한 부족 안내.
-- 실제 없는 자원은 **404**. 비노출 자원의 상태 코드는 자원 종류별로 이미 정한 것을 따른다: 삭제·숨김된 일반 글·댓글(부모 비공개 포함)은 존재를 감추는 404(SB-D22), 타인의 비공개 별 목록은 프로필에 공개 상태가 드러나므로 403(SB-D23), 미공개·미발견 별은 탐사 명세의 404 `STAR_NOT_PUBLISHED`·403 `STAR_LOCKED`. 취소·숨김된 공개 분석과 숨김 공식 스레드의 직접 조회 코드만 미정이며, 합의 전에도 공개 응답에서 비공개 내용을 반환하지 않는 규칙은 유지한다.
+- 실제 없는 자원은 **404**. 비노출 자원의 상태 코드는 자원 종류별로 이미 정한 것을 따른다: 삭제·숨김된 일반 글·댓글(부모 비공개 포함)은 존재를 감추는 404(SB-D22), 타인의 비공개 별 목록은 프로필에 공개 상태가 드러나므로 403(SB-D23), 미공개·미발견 별은 탐사 명세의 404 `STAR_NOT_PUBLISHED`·403 `STAR_LOCKED`. 취소·숨김된 공개 분석과 숨김 공식 스레드의 직접 조회도 404 `RESOURCE_NOT_FOUND`로 통일한다(162, 2026-09-20 사용자 확정). 작성자의 개인 History 조회와 본인 공개 상태 관리 경로는 별도이며 공개 본문을 우회 제공하지 않는다.
 - 마지막 유효한 인증 API 요청의 서버 접수 시각부터 30분간 유지하고 다음 유효 인증 요청마다 연장한다. 자동 폴링도 포함한다. 별도 5분 활동 확인·갱신 API는 사용하지 않는다. 만료된 세션은 401이며 갱신으로 되살리지 않는다. 쿠키 이름은 `SESSION`이고 저장소는 EC2-A `redis-session`이다(SB-D07, 구현 `S15P21C206-237`). 그 컨테이너를 함께 재시작하지 않는 배포에서는 재시작 후에도 세션이 유지된다. 인증 구현 시 쿠키 보안 설정·CSRF 방어·로그인 시 세션 ID 교체·로그아웃 무효화를 함께 검토한다.
 - 회원 차단 API는 v1에 없다. 탈퇴 API 제공 시점과 데이터 정책은 보류한다.
 
@@ -140,8 +140,8 @@ if (response.status === 401) {
 | 400 | `VALIDATION_FAILED`, `TIC_MISMATCH` | 잘못된 입력 안내·수정 |
 | 401 | `AUTH_REQUIRED` | 재로그인 안내 |
 | 403 | `FORBIDDEN`, `CONTENT_NOT_ACCESSIBLE`, `STAR_LIST_PRIVATE` | 권한 부족·접근 불가 안내. 타인 비공개 별 목록(SB-D23)이 여기에 해당 |
-| 404 | `RESOURCE_NOT_FOUND` | 없는 대상과 삭제·숨김 글·댓글(SB-D22)을 같은 안내로 처리. 취소·숨김 공개 분석의 직접 조회 코드는 미정 |
-| 409 | `NICKNAME_UNAVAILABLE`, `THREAD_HIDDEN` | 충돌 원인에 따라 새로 조회·입력 변경·동일 요청 재시도 |
+| 404 | `RESOURCE_NOT_FOUND` | 없는 대상과 삭제·숨김 글·댓글(SB-D22)을 같은 안내로 처리. 취소·숨김 공개 분석과 숨김 공식 스레드 직접 조회도 동일 |
+| 409 | `NICKNAME_UNAVAILABLE`, `THREAD_HIDDEN`, `PUBLICATION_NOT_ELIGIBLE`, `PUBLICATION_HIDDEN` | 충돌 원인에 따라 새로 조회·입력 변경·동일 요청 재시도 |
 | 503 | `DEPENDENCY_UNAVAILABLE` | 원본 자료 조회 등 일시 장애. 입력을 유지하고 재시도 |
 
 이 표의 업무 코드와 세부 HTTP 매핑은 제안이다. 내부 장애를 ‘자료가 없음’으로 바꿔 반환하지 않는다.
@@ -657,10 +657,19 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"isPublic":false}
 ```
 
-성공 200은 `{"analysisId":"pa-601","isPublic":false,"isModerationHidden":false,"isEffectivelyPublic":false}`. 재공개는 true. published_at은 첫 등록 시각을 유지하며 취소는 unpublished_at 기록, 재공개는 NULL로 해제한다. 작성자만 변경 가능하며 같은 상태 반복은 중복 반영하지 않는다.
+성공 200은 `{"analysisId":"pa-601","isPublicByAuthor":false,"isModerationHidden":false,"isEffectivelyPublic":false}`. 재공개 요청은 isPublic=true. published_at은 첫 등록 시각을 유지하며 취소는 unpublished_at 기록, 재공개는 NULL로 해제한다. 작성자만 변경 가능하며 같은 상태 반복은 중복 반영하지 않는다.
 
-본인 공개 상태와 운영 숨김은 별도로 유지한다. 운영 숨김 중 true 요청은 409로 거부하는 안이다. false 요청은 본인 관리 경로에서 허용하는 안이며 최종 권한 합의가 필요하다. 숨겨진 콘텐츠를 응답에 다시 담지 않는다. 취소 후 남은 유효 기록 중 최신 판단을 선택하고 없으면 통계에서 회원을 제외한다. 성과·등급·History·탐색 완료는 유지한다.
+본인 공개 상태와 운영 숨김은 별도로 유지한다(162, 2026-09-20 사용자 확정). 개별 운영 숨김 중 true 요청은 409 `PUBLICATION_HIDDEN`, 부모 숨김·삭제 중 true 요청은 409 `THREAD_HIDDEN`으로 거절한다(부모 상태 우선). false 요청은 숨김·부모 비공개 중에도 작성자의 관리 경로에서 허용한다. 응답에는 상태만 담고 숨겨진 콘텐츠를 다시 담지 않는다. 취소 후 남은 유효 기록 중 최신 판단을 선택하고 없으면 통계에서 회원을 제외한다. 성과·등급·History·탐색 완료는 유지한다.
 
+**162 구현·후속 인계**
+
+- PUT 응답의 `isPublicByAuthor`는 본인 공개 의사(`unpublished_at IS NULL`), `isModerationHidden`은 개별 숨김 또는 부모 `hidden`, `isEffectivelyPublic`은 본인 공개·개별 비숨김·공식 부모 `visible`이 모두 성립하는지다. 결과 화면은 실제 공개 표시를 `isEffectivelyPublic`로 판단한다. 161 POST 응답의 기존 `isPublic`은 유효 공개 여부로 유지하며, PUT 응답에는 `isPublic`을 제공하지 않는다. 요청 본문의 `isPublic`은 그대로 유지한다.
+- 본문은 boolean `isPublic` 하나만 받는다. 문자열·null·추가 필드는 400 `VALIDATION_FAILED`, 경로 ID 형식 오류·없는 대상은 404다. 인증·CSRF를 적용한다. 타인의 현재 공개 자료 관리 요청은 403, 취소·숨김 자료 관리 요청은 404다. 작성자는 숨김 중에도 상태 변경 결과만 받는다.
+- 같은 상태 반복은 `unpublished_at`을 다시 쓰지 않는다. `published_at`·공개 ID·원본 History·성과·별 발견·지도 버전을 변경하지 않는다. 161 POST 재전송은 취소를 되돌리지 않고 기존 별 복구 계약을 유지한다. 의도적 재공개만 이 PUT을 사용한다.
+- 잠금 순서는 회원 → 부모 Post → 공개 분석 행이다. DB 운영자가 같은 작업에서 부모와 하위를 함께 수정할 때도 부모 → 하위 순서를 사용한다. 숨김이 먼저 확정되면 뒤의 재공개는 거절되며, 재공개 후 숨김이 확정돼도 공개 조회에서는 현재 숨김을 적용한다. 운영 복원은 `hidden → visible` 조건부 변경만 사용하고 `deleted`를 되살리지 않는다.
+- `domain.PublicAnalysisVisibility.VISIBLE`은 `pa`·`p` 별칭의 유효 공개 SQL 조건이며 POST 재요청·History 공개 상태·기존 판단 집계가 공유한다. 서비스 의존성이 없는 공통 조건을 사용해 exploration에서 post 서비스로 역참조하지 않는다. `PublicAnalysisAccess.check(memberId, analysisId, historyId)`는 실제 공개→History 관계와 현재 DB 상태를 검사한다. 백승학 담당 164 공개 상세·167 출처는 148 공개 투영의 검사 콜백으로 연결하고, 169 검색은 같은 조건을 적용한다. 이 후속 HTTP 조회·검색·출처 API 자체는 162에서 추가하지 않는다.
+- 일반 History 첨부는 160의 실제 부모·첨부 관계로 판정한다. 동일 History의 공식 공개를 취소해도 독립된 정상 글·댓글 첨부까지 해제하지 않는다. 해당 첨부 부모가 숨겨지거나 관계가 해제되면 내용·그래프 재시도와 반환 직전 검사를 통해 차단한다. 캐시된 결과가 접근 허가를 대신하지 않는다.
+- V15는 앱 역할에 `published_analyses.unpublished_at` 열 UPDATE만 추가한다. `hidden_at`·최초 공개 시각·공개 근거 수정 및 물리 삭제 권한은 주지 않는다. V14를 수정하거나 운영 숨김 API를 추가하지 않는다.
 <a id="batch"></a>
 
 ### 9.4 여러 신호 일괄 공개 — F23

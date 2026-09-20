@@ -254,3 +254,9 @@ domain/<도메인>/  controller · dto(request/response) · entity · repository
 | 기동·마이그레이션 | `PlanetoryApplicationTests` (UUID 스키마 격리) | 필요 |
 
 `GlobalExceptionHandlerTest`가 컨트롤러 테스트 템플릿이다. 공통 픽스처는 `src/test/java/.../support`, 도메인 픽스처는 `domain/<도메인>/support`에 둔다.
+
+### V15 공개 취소·재공개 권한
+
+`V15__public_analysis_visibility_grant.sql`(162)은 `planetory_app`에 `published_analyses.unpublished_at` 열 UPDATE만 부여한다. SELECT·INSERT는 V14를 유지하며 운영 숨김·최초 공개 시각·History 연결 변경과 DELETE·TRUNCATE는 허용하지 않는다. PostgreSQL 행 잠금에 필요한 UPDATE 권한도 이 열 권한으로 충족한다.
+
+기존 V1~V14를 수정하지 않고 V13 → V14 → V15를 순서대로 적용한다. `MemberCommunityPermissionTest`에서 업그레이드·Flyway validate·재실행 0건과 금지 열의 42501을, `PublicAnalysisTest`에서 실제 앱 역할의 공개→취소→재공개를 검증한다. 공유·운영 DB 적용은 별도 인수다.
