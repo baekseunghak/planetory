@@ -152,7 +152,7 @@ AI와 외부 출처는 **나란히 두고 어느 쪽도 다른 쪽을 덮어쓰�
 | --------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `signal.disposition`                    | **대문자** `CONFIRMED` `UNCONFIRMED` `FP` | API의 표시 어휘. [탐사 명세 6.4·6.7](../../backend/docs/exploration-api-spec.md), [구판 분석 명세](../../../docs/api/analysis/README.md)와 그 예제 5개가 일관되게 쓴다 |
 | `achievement.star.byType` 키            | **소문자** `confirmed` `unconfirmed` `fp` | 같은 응답 안에서 표기가 다르다. 탐사 명세 네 곳이 모두 소문자다                                                                                                        |
-| DB `candidate_dispositions.disposition` | 소문자 `confirmed` `fp` **`pc`** `none`   | 저장 어휘. `pc`가 API의 `UNCONFIRMED`에 대응하며 프론트는 이 어휘를 보지 않는다                                                                                        |
+| DB `candidate_dispositions.disposition` | 소문자 `confirmed` `fp` **`pc`** `none`   | 저장 어휘. **`pc`·`none`이 API의 `UNCONFIRMED`에 대응한다**(9.1절 `items[].relabel`). 프론트는 이 어휘를 보지 않는다                                                   |
 | `signal.external[].disposition`         | **원천 표기**                             | 우리 열거형이 아니다                                                                                                                                                   |
 
 **`external[].disposition`을 우리 열거형으로 해석하면 안 된다.** [ERD](../../../docs/architecture/database-erd.md)가 `external_signal_references.disposition`을 「원천 표기」로 정의한다. TOI의 `PC`처럼 출처가 쓰는 말이 그대로 오므로, 출처 이름·조회일과 함께 **받은 문자열을 그대로** 보여 주고 우리 판정으로 번역하지 않는다. 확정·FP는 여기에 행성명·출처·조회일·링크가 온다(RES-02).
@@ -256,7 +256,6 @@ AI를 실행하지 못했으면 `score`·`verdict`를 **읽지 않는다.** 응�
 
 ## 미결
 
-- **DB의 `pc`가 API의 `UNCONFIRMED`에 대응한다는 문장이 어디에도 없다.** 두 어휘가 나란히 쓰이는 것은 확인했지만 대응표가 문서에 없다. 프론트는 API 어휘만 보므로 구현에는 영향이 없으나, C10·C12 담당(강재민)이 매핑을 적어 두면 좋다.
 - **같은 응답에서 `signal.disposition`은 대문자, `byType` 키는 소문자다.** 명세가 일관되게 그렇게 적으므로 그대로 따르되, 실제 구현이 나오면 표기를 대조한다.
 - `answerClass`(`graded`·`analysis`)와 `planetTruth`(`planet`·`not_planet`)는 문서와 스키마가 같은 소문자다.
 - **`judgment.evaluation`의 FP + 모르겠음 칸이 명세에 없다.** 확정 쪽 대칭으로 `UNSURE`를 쓰고 있으나 확인이 필요하다.
