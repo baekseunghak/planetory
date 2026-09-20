@@ -22,28 +22,9 @@ function Matched({
   receipt: SubmissionReceipt;
   explanation: ResultExplanation;
 }) {
-  const { correction, submitted } = explanation;
-  /*
-    내 입력과 정정값을 함께 둔다. 어느 쪽이 내 것인지 분명해야 한다.
-    **없는 값을 0으로 바꾸지 않는다.** 있을 때만 줄을 만든다.
-  */
-  const pairs = (
-    <dl className="result-pairs">
-      {submitted?.periodDays != null && (
-        <>
-          <dt>내가 고른 주기</dt>
-          {/* 나눠서 되돌리지 않고 서버가 보존한 원본을 쓴다. */}
-          <dd>{decimal.format(submitted.periodDays)}일</dd>
-        </>
-      )}
-      {correction?.correctedPeriodDays != null && (
-        <>
-          <dt>신호의 주기</dt>
-          <dd>{decimal.format(correction.correctedPeriodDays)}일</dd>
-        </>
-      )}
-    </dl>
-  );
+  // 내 값과 신호의 값을 나란히 두는 일은 비교표가 한다. 여기서는 무슨 일이
+  // 있었는지 한 문장으로만 말한다. 같은 숫자를 두 곳에 두지 않는다.
+  const { correction } = explanation;
   switch (receipt.matchStatus) {
     case "matched":
       return <p>고른 주기가 신호와 맞았습니다.</p>;
@@ -54,7 +35,6 @@ function Matched({
             고른 주기의 {decimal.format(correction?.multiplier ?? 1)}배가 신호와
             맞았습니다.
           </p>
-          {pairs}
         </>
       );
     case "duplicate":
@@ -68,7 +48,6 @@ function Matched({
             이미 찾은 신호입니다. 고른 주기의{" "}
             {decimal.format(correction.multiplier)}배가 맞았습니다.
           </p>
-          {pairs}
         </>
       );
     case "not_matched":
@@ -148,13 +127,7 @@ function Ai({ signal }: { signal: SubmissionSignal }) {
   );
 }
 
-function Statistics({
-  value,
-  stale,
-}: {
-  value: JudgmentStatistics;
-  stale: boolean;
-}) {
+function Statistics({ value }: { value: JudgmentStatistics }) {
   if (value.kind === "graded")
     return (
       <section className="result-axis">
@@ -164,7 +137,6 @@ function Statistics({
           이 신호를 처음 찾은 {count.format(value.matchedMemberCount)}명 중{" "}
           {percent.format(value.agreementPercent)}%가 같은 판단이었습니다.
         </p>
-        <StaleNote stale={stale} />
       </section>
     );
   return (
@@ -188,7 +160,6 @@ function Statistics({
           {new Date(value.asOf).toLocaleString("ko-KR")}
         </time>
       </p>
-      <StaleNote stale={stale} />
     </section>
   );
 }
@@ -203,12 +174,110 @@ function Statistics({
  * 최신 값을 가져오려면 6.6절(145)로 다시 조회해야 하는데 아직 연결 전이다.
  * 그래서 **당시 결과를 그대로 두고 모른다고 말한다.** 최신인 척하지 않는다.
  */
-function StaleNote({ stale }: { stale: boolean }) {
+/**
+ * D-5 재전송 성공 예외. 접수 뒤 판이 바뀌었어도 성공을 취소하지 않고, 최신이
+ * 필요한 축이 어디인지만 알린다. **축마다 같은 문장을 되풀이하지 않는다** —
+ * 네 곳에 흩어 놓으면 무엇이 옛 값인지보다 경고가 많다는 인상만 남는다.
+ * 당시 값이 정본인 축(매칭·판단·성과·서버 계산값)은 여기에 들어가지 않는다.
+ */
+function StaleBand({ stale }: { stale: boolean }) {
   if (!stale) return null;
   return (
-    <p className="submission-note" data-testid="stale-axis">
-      접수 당시 기준입니다. 최신 상태는 아직 확인하지 못했습니다.
+    <p className="submission-note result-stale" data-testid="stale-axis">
+      진행 · 공개 · 다른 사람의 판단 · 다음에 할 수 있는 일은 접수 당시
+      기준입니다. 최신 상태는 아직 확인하지 못했습니다.
     </p>
+  );
+}
+
+/** 표의 한 줄. 양쪽이 모두 비면 줄 자체를 만들지 않는다. */
+type Row = { label: string; mine: string | null; theirs: string | null };
+const day = (value: number | null | undefined) =>
+  value == null ? null : `${decimal.format(value)}일`;
+const hour = (value: number | null | undefined) =>
+  value == null ? null : `${decimal.format(value)}시간`;
+const btjd = (value: number | null | undefined) =>
+  value == null ? null : `${decimal.format(value)} BTJD`;
+const plain = (value: number | null | undefined) =>
+  value == null ? null : decimal.format(value);
+
+/**
+ * 내가 낸 것과 기록의 신호를 **나란히** 둔다. 위아래로 쌓으면 같은 항목을
+ * 비교하려고 화면을 오르내려야 한다.
+ *
+ * 신호가 없으면(미매칭·특수 제출) 한 칸만 그린다. **빈 열을 만들어 두고
+ * 줄을 그으면 신호가 있는데 값만 없는 것처럼 보인다.**
+ */
+function Comparison({ explanation }: { explanation: ResultExplanation }) {
+  const { submitted, serverDerived, signal, correction } = explanation;
+  const bls = signal?.bls;
+  const span =
+    submitted?.phaseStart != null && submitted.phaseEnd != null
+      ? `${decimal.format(submitted.phaseStart)} ~ ${decimal.format(submitted.phaseEnd)}`
+      : null;
+  const rows: Row[] = [
+    // 서버가 보존한 원본을 쓴다. 정정값을 배율로 나눠 되돌리지 않는다.
+    {
+      label: "주기",
+      mine: day(submitted?.periodDays),
+      theirs: day(bls?.periodDays),
+    },
+    {
+      label: "기준 시각",
+      mine: btjd(serverDerived?.epochBtjd),
+      theirs: btjd(bls?.epochBtjd),
+    },
+    {
+      label: "가려진 시간",
+      mine: hour(serverDerived?.durationHours),
+      theirs: hour(bls?.durationHours),
+    },
+    { label: "위상 구간", mine: span, theirs: null },
+    {
+      label: "깊이",
+      mine: null,
+      theirs:
+        bls?.depthPpm == null ? null : `${count.format(bls.depthPpm)} ppm`,
+    },
+    // Gold 스키마에 열이 아직 없어 늘 빈다. 0으로 바꾸지 않는다.
+    { label: "SDE", mine: null, theirs: plain(bls?.sde) },
+    { label: "SNR", mine: null, theirs: plain(bls?.snr) },
+  ].filter((row) => row.mine !== null || row.theirs !== null);
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="result-compare" data-testid="result-compare">
+      <table>
+        <caption>내가 낸 것과 기록의 신호</caption>
+        <thead>
+          <tr>
+            <th scope="col">항목</th>
+            <th scope="col">내가 낸 것</th>
+            {signal && <th scope="col">기록의 신호</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row">{row.label}</th>
+              {/* 없는 값은 빈 칸이 아니라 없음 표시다. 0으로 바꾸지 않는다. */}
+              <td>{row.mine ?? <span className="result-none">—</span>}</td>
+              {signal && (
+                <td>{row.theirs ?? <span className="result-none">—</span>}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {correction && (
+        <p className="submission-note">
+          두 주기는 배수 관계입니다. 정정 주기 = 고른 주기 ×{" "}
+          {decimal.format(correction.multiplier)} ={" "}
+          {decimal.format(correction.correctedPeriodDays)}일
+          {correction.reason ? ` · ${correction.reason}` : ""}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -231,127 +300,97 @@ export function ResultExplanationView({
     explanation;
   return (
     <div className="submission-result">
-      <section className="result-axis">
-        <h5>매칭</h5>
-        <Matched receipt={receipt} explanation={explanation} />
-      </section>
-
-      {/* 채점 대상이 아니면 줄을 만들지 않는다. */}
-      {evaluation && evaluation !== "NOT_APPLICABLE" && (
+      <Comparison explanation={explanation} />
+      <div className="result-bands">
         <section className="result-axis">
-          <h5>내 판단</h5>
-          <p>{EVALUATION[evaluation]}</p>
+          <h5>매칭</h5>
+          <Matched receipt={receipt} explanation={explanation} />
         </section>
-      )}
 
-      {/* 성과 판정 자체가 없으면(`none`) 줄을 만들지 않는다. */}
-      {achievement.result !== "none" && (
-        <section className="result-axis" data-testid="achievement">
-          <h5>성과</h5>
-          <p>{ACHIEVEMENT[achievement.result]}</p>
-          {/*
+        {/* 채점 대상이 아니면 줄을 만들지 않는다. */}
+        {evaluation && evaluation !== "NOT_APPLICABLE" && (
+          <section className="result-axis">
+            <h5>내 판단</h5>
+            <p>{EVALUATION[evaluation]}</p>
+          </section>
+        )}
+
+        {/* 성과 판정 자체가 없으면(`none`) 줄을 만들지 않는다. */}
+        {achievement.result !== "none" && (
+          <section className="result-axis" data-testid="achievement">
+            <h5>성과</h5>
+            <p>{ACHIEVEMENT[achievement.result]}</p>
+            {/*
             이 별의 누적 성과. 와이어프레임 SC-04가 「이 별 성과 2건(등급 S)」로
             함께 보여 준다. 0건이면 등급이 없으므로 줄을 만들지 않는다.
           */}
-          {achievement.star.count > 0 && (
-            <p>
-              이 별 성과 {count.format(achievement.star.count)}건
-              {achievement.star.grade
-                ? ` · 등급 ${achievement.star.grade}`
-                : ""}
-            </p>
-          )}
-          {achievement.unlockedTicIds.length > 0 && (
-            <p>
-              새로 열린 별 {count.format(achievement.unlockedTicIds.length)}개 ·
-              TIC {achievement.unlockedTicIds.join(", ")}
-            </p>
-          )}
-          {/*
+            {achievement.star.count > 0 && (
+              <p>
+                이 별 성과 {count.format(achievement.star.count)}건
+                {achievement.star.grade
+                  ? ` · 등급 ${achievement.star.grade}`
+                  : ""}
+              </p>
+            )}
+            {achievement.unlockedTicIds.length > 0 && (
+              <p>
+                새로 열린 별 {count.format(achievement.unlockedTicIds.length)}개
+                · TIC {achievement.unlockedTicIds.join(", ")}
+              </p>
+            )}
+            {/*
             연출은 이 회원이 이 제출을 처음 볼 때만이다(2.2절). 재현 응답에도
             당시 값이 그대로 실리므로 사실은 언제나 보여 주고, 축하만 가린다.
           */}
-          {celebrate && <p className="result-celebrate">축하합니다!</p>}
-        </section>
-      )}
-
-      <section className="result-axis">
-        <h5>이 별의 탐색</h5>
-        {progress.stage === "completed" ? (
-          <p>
-            탐색을 마쳤습니다.
-            {progress.completionReason
-              ? ` ${COMPLETION[progress.completionReason]}`
-              : ""}
-          </p>
-        ) : (
-          <p>
-            남은 탐색 가능 신호{" "}
-            {count.format(progress.remainingDiscoverableCount)}개
-          </p>
-        )}
-        <StaleNote stale={staleBundle} />
-      </section>
-
-      {/* 공개는 할 수 있을 때만 알린다. 게시 화면으로 끌고 가지 않는다(AT-36). */}
-      {publication.state === "UNPUBLISHED" && (
-        <section className="result-axis">
-          <h5>공개</h5>
-          <p>이 분석은 공개할 수 있습니다.</p>
-          <StaleNote stale={staleBundle} />
-        </section>
-      )}
-
-      {signal && <Ai signal={signal} />}
-
-      {signal && signal.external.length > 0 && (
-        <section className="result-axis">
-          <h5>외부 자료</h5>
-          <ul>
-            {signal.external.map((item) => (
-              <li key={`${item.source}:${item.externalId}`}>
-                {/* 원천 표기를 그대로 둔다. 우리 판정으로 번역하지 않는다. */}
-                {item.source} {item.externalId} · {item.disposition} ·{" "}
-                <time dateTime={item.fetchedOn}>{item.fetchedOn}</time> 조회
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {statistics && <Statistics value={statistics} stale={staleBundle} />}
-
-      {/*
-        특수 제출에는 고른 것이 없어 계산값도 없다. 서버는 객체를 두고 안쪽을
-        비우므로, 객체가 있다고 줄을 만들지 않고 값이 있을 때만 만든다.
-      */}
-      {explanation.serverDerived &&
-        (explanation.serverDerived.epochBtjd != null ||
-          explanation.serverDerived.durationHours != null) && (
-          <section className="result-axis">
-            <h5>서버가 계산한 값</h5>
-            {/* 제출값 확인의 미리보기가 아니라 서버 산정값이다. */}
-            <dl className="result-pairs">
-              {explanation.serverDerived.epochBtjd != null && (
-                <>
-                  <dt>기준 시각</dt>
-                  <dd>
-                    {decimal.format(explanation.serverDerived.epochBtjd)} BTJD
-                  </dd>
-                </>
-              )}
-              {explanation.serverDerived.durationHours != null && (
-                <>
-                  <dt>가려진 시간</dt>
-                  <dd>
-                    {decimal.format(explanation.serverDerived.durationHours)}{" "}
-                    시간
-                  </dd>
-                </>
-              )}
-            </dl>
+            {celebrate && <p className="result-celebrate">축하합니다!</p>}
           </section>
         )}
+
+        <section className="result-axis">
+          <h5>이 별의 탐색</h5>
+          {progress.stage === "completed" ? (
+            <p>
+              탐색을 마쳤습니다.
+              {progress.completionReason
+                ? ` ${COMPLETION[progress.completionReason]}`
+                : ""}
+            </p>
+          ) : (
+            <p>
+              남은 탐색 가능 신호{" "}
+              {count.format(progress.remainingDiscoverableCount)}개
+            </p>
+          )}
+        </section>
+
+        {/* 공개는 할 수 있을 때만 알린다. 게시 화면으로 끌고 가지 않는다(AT-36). */}
+        {publication.state === "UNPUBLISHED" && (
+          <section className="result-axis">
+            <h5>공개</h5>
+            <p>이 분석은 공개할 수 있습니다.</p>
+          </section>
+        )}
+
+        {signal && <Ai signal={signal} />}
+
+        {signal && signal.external.length > 0 && (
+          <section className="result-axis">
+            <h5>외부 자료</h5>
+            <ul>
+              {signal.external.map((item) => (
+                <li key={`${item.source}:${item.externalId}`}>
+                  {/* 원천 표기를 그대로 둔다. 우리 판정으로 번역하지 않는다. */}
+                  {item.source} {item.externalId} · {item.disposition} ·{" "}
+                  <time dateTime={item.fetchedOn}>{item.fetchedOn}</time> 조회
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {statistics && <Statistics value={statistics} />}
+      </div>
+      <StaleBand stale={staleBundle} />
     </div>
   );
 }
@@ -462,11 +501,8 @@ export function NextActions({
   receipt,
   returnTo,
   from,
-  staleBundle = false,
 }: {
   receipt: SubmissionReceipt;
-  /** 접수 뒤 판이 바뀌었는가. 힌트도 최신이 필요한 영역이다(D-5). */
-  staleBundle?: boolean;
   /** 분석에 들어오기 전 화면. 분석을 끝내고 나갈 때 쓴다. */
   returnTo: string;
   /**
@@ -529,26 +565,37 @@ export function NextActions({
   const shown = order.filter((action) => offered.has(action));
   if (shown.length === 0) return null;
 
+  /*
+    닫기와 같은 구역에 둔다. 「다음에 할 수 있는 일」이라는 이름표는 두지
+    않는다 — 바닥 줄에 있는 것이 이미 그 뜻이고, 이름표가 있으면 결과의 한
+    축처럼 읽혀 사실과 선택지의 경계가 흐려진다.
+
+    떠나는 링크는 왼쪽, 이 화면에서 계속하는 동작은 오른쪽 닫기 옆에 둔다.
+    누르면 화면이 바뀌는 것과 여기 남는 것은 무게가 다르다.
+  */
   return (
-    <section className="result-axis result-actions" data-testid="next-actions">
-      <h5>다음에 할 수 있는 일</h5>
-      <ul>
-        {shown.map((action) => {
-          const link = links[action];
-          return (
+    <div className="result-actions" data-testid="next-actions">
+      <ul className="result-actions-links">
+        {shown
+          .filter((action) => links[action])
+          .map((action) => (
             <li key={action}>
-              {link ? (
-                <Link to={link.to}>{link.label}</Link>
-              ) : (
-                <span className="submission-note">
-                  {inScreen[action]} · 연결 예정
-                </span>
-              )}
+              <Link to={links[action]!.to}>{links[action]!.label}</Link>
             </li>
-          );
-        })}
+          ))}
       </ul>
-      <StaleNote stale={staleBundle} />
-    </section>
+      <ul className="result-actions-here">
+        {shown
+          .filter((action) => !links[action])
+          .map((action) => (
+            <li key={action}>
+              {/* 목적지가 아직 없다. 있는 척하지 않는다. */}
+              <span className="submission-note">
+                {inScreen[action]} · 연결 예정
+              </span>
+            </li>
+          ))}
+      </ul>
+    </div>
   );
 }

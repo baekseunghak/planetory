@@ -975,6 +975,14 @@ body:has(.analysis-screen) {
   box-shadow: var(--panel-shadow);
   color: var(--fg-1);
 }
+/* 결과 대화상자는 비교표를 좌우로 놓으려고 넓게 쓴다. 좁은 화면에서는
+   같은 표가 한 칸으로 접히므로 폭만 따라 줄인다. */
+.analysis-screen .submission-dialog-wide {
+  width: min(880px, calc(100vw - 48px));
+  /* 좌우로 편 만큼 높이도 쓸 수 있다. 여기서 더 조이면 표와 축이 다시
+     세로로 길어져 좌우 배치의 뜻이 없어진다. */
+  max-height: min(86vh, 860px);
+}
 .analysis-screen .submission-dialog::backdrop {
   background: rgba(34, 40, 49, 0.72);
 }
@@ -1125,14 +1133,6 @@ body:has(.analysis-screen) {
 }
 
 /* 다음 행동. 서버가 준 선택지이며 강제로 옮겨 가지 않는다(AT-36). */
-.analysis-screen .result-actions ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .analysis-screen .result-actions a {
   color: var(--accent);
   font-size: 13px;
@@ -1148,3 +1148,108 @@ body:has(.analysis-screen) {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* 접수 정보. 결과를 읽는 값이 아니라 무엇이 접수됐는지 가리키는 값이라
+   맨 위 한 줄로 둔다. 세로로 쌓으면 본문이 시작되기도 전에 화면을 쓴다. */
+.analysis-screen .submission-dialog .result-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--panel-line);
+  font-size: 12px;
+}
+.analysis-screen .submission-dialog .result-receipt dt {
+  color: var(--fg-3);
+}
+.analysis-screen .submission-dialog .result-receipt dd {
+  margin-right: 8px;
+}
+
+/* 내가 낸 것과 기록의 신호를 나란히 둔다. 위아래로 쌓으면 같은 항목을
+   비교하려고 화면을 오르내려야 한다. */
+.analysis-screen .result-compare {
+  margin-top: 16px;
+}
+.analysis-screen .result-compare table {
+  width: 100%;
+  /* 두 칸을 판 끝까지 벌리지 않는다. 비교할 값끼리 멀어진다. */
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-screen .result-compare caption {
+  text-align: left;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.analysis-screen .result-compare th,
+.analysis-screen .result-compare td {
+  text-align: left;
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--panel-line);
+}
+.analysis-screen .result-compare thead th {
+  font-weight: 500;
+  color: var(--fg-3);
+}
+.analysis-screen .result-compare tbody th {
+  font-weight: 400;
+  color: var(--fg-3);
+  width: 104px;
+}
+.analysis-screen .result-compare td {
+  color: var(--fg-1);
+}
+/* 없는 값은 빈 칸이 아니라 없음 표시다. 흐리게 두어 값과 구분한다. */
+.analysis-screen .result-compare .result-none {
+  color: var(--fg-3);
+}
+.analysis-screen .result-compare .submission-note {
+  margin-top: 8px;
+}
+
+/* 결과의 축들. 넓은 판에서는 두 칸으로 접는다. 한 칸으로 길게 쌓으면
+   비교표를 보려고 다시 올라가야 한다. */
+.analysis-screen .result-bands {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 24px;
+}
+.analysis-screen .result-bands > .result-axis {
+  border-bottom: 0;
+  padding: 10px 0;
+}
+.analysis-screen .result-stale {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-line);
+}
+
+/* 다음 행동은 닫기와 같은 줄이다. 떠나는 링크는 왼쪽, 이 화면에 남는
+   동작은 오른쪽 닫기 옆에 둔다. */
+.analysis-screen .submission-dialog .result-actions {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.analysis-screen .result-actions ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+/* 좁은 화면용 접힘 규칙은 두지 않는다. 앱이 1024px 미만에서는 화면 자체를
+   내주지 않으므로(`DesktopGate`) 가장 좁은 곳에서도 판은 880px이다. 닿지
+   않는 규칙을 두면 지켜지는지 확인할 길이 없다. */

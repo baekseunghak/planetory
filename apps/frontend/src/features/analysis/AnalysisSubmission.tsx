@@ -140,7 +140,13 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
       )}
       <dialog
         ref={dialogRef}
-        className="submission-dialog"
+        className={
+          // 비교표가 좌우로 놓이려면 폭이 필요하다. 결과가 아닐 때는 한 줄
+          // 안내뿐이라 넓히면 오히려 읽기 어렵다.
+          settled?.state === "accepted"
+            ? "submission-dialog submission-dialog-wide"
+            : "submission-dialog"
+        }
         data-testid="submission-result"
         aria-labelledby={headingId}
       >
@@ -170,7 +176,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
                 바뀌었으니 분석을 이어가려면 최신 자료를 다시 불러와 주세요.
               </p>
             )}
-            <dl>
+            {/* 접수 정보는 맨 위 한 줄이다. 결과를 읽는 데 쓰는 값이 아니라
+                무엇이 접수됐는지 가리키는 값이라 자리를 적게 쓴다. */}
+            <dl className="result-receipt">
               <dt>접수 번호</dt>
               <dd>{settled.receipt.submissionId}</dd>
               <dt>기록 번호</dt>
@@ -197,12 +205,6 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               onSkip={() =>
                 submission.submit(skippedInput(settled.receipt.curveContext))
               }
-            />
-            <NextActions
-              staleBundle={stale}
-              receipt={settled.receipt}
-              returnTo={returnTo}
-              from={currentPath}
             />
           </>
         ) : settled.state === "unresolved" ? (
@@ -307,6 +309,15 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           className="submission-dialog-actions"
           hidden={state.phase === "idle"}
         >
+          {/* 다음 행동은 닫기와 같은 줄이다. 결과를 다 읽고 나서 고르는
+              것이라 본문이 아니라 바닥에 둔다. */}
+          {settled?.state === "accepted" && (
+            <NextActions
+              receipt={settled.receipt}
+              returnTo={returnTo}
+              from={currentPath}
+            />
+          )}
           <button type="button" onClick={close}>
             {settled &&
             settled.state !== "accepted" &&

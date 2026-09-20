@@ -650,9 +650,15 @@ test("an unscored signal is not called wrong, and a harmonic keeps both periods"
   // 미확정은 틀렸다고 하지 않는다.
   await expect(dialog).toContainText("채점하지 않습니다");
   await expect(dialog).not.toContainText("판단이 달랐습니다");
-  // 내 입력과 정정값을 함께 보여 준다.
-  await expect(dialog).toContainText("내가 고른 주기");
-  await expect(dialog).toContainText("신호의 주기");
+  // 내 입력과 신호의 값을 비교표에 나란히 둔다.
+  const compare = dialog.getByTestId("result-compare");
+  await expect(compare).toContainText("내가 낸 것");
+  await expect(compare).toContainText("기록의 신호");
+  // 두 주기가 모두 있고 배수 관계라고 적는다.
+  const period = compare.locator("tr").filter({ hasText: "주기" }).first();
+  await expect(period).toContainText("4.474096일");
+  await expect(period).toContainText("8.948193일");
+  await expect(compare).toContainText("정정 주기 = 고른 주기 × 2");
   // 공개할 수 있는 것은 미확정뿐이다.
   await expect(dialog).toContainText("공개할 수 있습니다");
 });
@@ -877,8 +883,9 @@ test("a duplicate of a harmonic match keeps the correction it came with", async 
   await expect(dialog).toContainText("이미 찾은 신호입니다");
   // 정정을 지우면 내가 낸 주기가 틀렸던 것처럼 보인다.
   await expect(dialog).toContainText("2배가 맞았습니다");
-  await expect(dialog).toContainText("내가 고른 주기");
-  await expect(dialog).toContainText("신호의 주기");
+  const compare = dialog.getByTestId("result-compare");
+  await expect(compare).toContainText("4.474096일");
+  await expect(compare).toContainText("8.948193일");
   // 성과는 그래도 다시 주지 않는다.
   await expect(dialog).toContainText(
     "이미 인정된 신호라 다시 인정되지 않습니다",
@@ -951,20 +958,23 @@ test("a result from an older plate marks only what needs to be fresh", async ({
   const dialog = await submitFromPeak(page, "2", "행성 같음");
   await expect(dialog.getByTestId("stale-bundle")).toBeVisible();
 
-  const axis = (name: string) =>
-    dialog
-      .locator(".result-axis")
-      .filter({ has: page.getByRole("heading", { name, exact: true }) });
-  // 최신이 필요한 영역에만 붙인다. 145가 아직 없으니 모른다고 말한다.
-  for (const name of ["이 별의 탐색", "공개", "다른 사람의 판단"])
-    await expect(axis(name).getByTestId("stale-axis")).toBeVisible();
-  await expect(
-    dialog.getByTestId("next-actions").getByTestId("stale-axis"),
-  ).toBeVisible();
+  // 최신이 필요한 축을 **한 줄에 모아** 이름으로 말한다. 축마다 같은
+  // 문장을 되풀이하면 무엇이 옛 값인지보다 경고가 많다는 인상만 남는다.
+  const band = dialog.getByTestId("stale-axis");
+  await expect(band).toHaveCount(1);
+  for (const name of [
+    "진행",
+    "공개",
+    "다른 사람의 판단",
+    "다음에 할 수 있는 일",
+  ])
+    await expect(band).toContainText(name);
 
-  // 당시 값이 정본인 축은 건드리지 않는다.
-  for (const name of ["매칭", "내 판단", "성과", "서버가 계산한 값"])
-    await expect(axis(name).getByTestId("stale-axis")).toHaveCount(0);
+  // 당시 값이 정본인 축은 이름을 올리지 않는다. 145가 아직 없으니 최신
+  // 상태는 모른다고 말한다.
+  for (const name of ["매칭", "내 판단", "성과"])
+    await expect(band).not.toContainText(name);
+  await expect(band).toContainText("최신 상태는 아직 확인하지 못했습니다");
 });
 
 test("an achievement celebrates once per member, not once per 201", async ({
@@ -1033,4 +1043,74 @@ test("the result says what the wireframe says it must say", async ({
       has: page.getByRole("heading", { name: "다른 사람의 판단", exact: true }),
     }),
   ).toContainText("집계 시각");
+});
+
+test("the comparison table puts my values beside the signal's, all of bls", async ({
+  page,
+}) => {
+  // Gold에 열이 생기면 SDE·SNR이 값으로 온다. 그때 표가 그 줄을 만드는지
+  // 본다. fixture가 null만 보내는 동안에는 줄이 없어 확인되지 않는 자리다.
+  await page.route("**/api/v1/stars/*/submissions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.signal.bls.sde = 9.1;
+    body.signal.bls.snr = 7.8;
+    return route.fulfill({ response, json: body });
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  const compare = dialog.getByTestId("result-compare");
+  const row = (name: string) =>
+    compare.locator("tbody tr").filter({ hasText: name }).first();
+  await expect(row("SDE")).toContainText("9.1");
+  await expect(row("SNR")).toContainText("7.8");
+  await expect(row("깊이")).toContainText("ppm");
+  // 내가 내지 않은 값은 빈 칸이 아니라 없음 표시다.
+  await expect(row("SDE").locator("td").first()).toContainText("—");
+  // 서버가 내 제출로 계산한 값은 내 쪽 칸에 온다.
+  await expect(row("기준 시각").locator("td").first()).toContainText("BTJD");
+});
+
+test("a submission with nothing chosen draws no comparison at all", async ({
+  page,
+}) => {
+  // 고른 것이 없으면 양쪽 모두 빈다. 빈 표를 두면 값만 없는 것처럼 보인다.
+  await page.goto(`/analysis/${NORMAL}`);
+  await page
+    .locator(".submission-alternatives")
+    .getByRole("button", { name: "더 이상 없음", exact: true })
+    .click();
+  await page
+    .getByTestId("submission-confirm")
+    .getByRole("button", { name: "보내기", exact: true })
+    .click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("더 이상 없음으로 접수했습니다");
+  await expect(dialog.getByTestId("result-compare")).toHaveCount(0);
+});
+
+test("the next actions share the closing band and drop their label", async ({
+  page,
+}) => {
+  await page.goto(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  const dialog = await submitFromPeak(page, "1", "행성 같음");
+  const band = dialog.locator(".submission-dialog-actions");
+  // 바닥 한 줄에 다음 행동과 닫기가 함께 있다. 이름표는 두지 않는다.
+  await expect(band.getByTestId("next-actions")).toBeVisible();
+  await expect(dialog).not.toContainText("다음에 할 수 있는 일");
+  await expect(
+    band.getByRole("button", { name: "닫기", exact: true }),
+  ).toBeVisible();
+
+  // 떠나는 링크는 왼쪽, 닫기는 오른쪽이다. 좌표로 잰다.
+  const link = await band
+    .getByRole("link", { name: "결과 보기", exact: true })
+    .boundingBox();
+  const close = await band
+    .getByRole("button", { name: "닫기", exact: true })
+    .boundingBox();
+  expect(link).not.toBeNull();
+  expect(close).not.toBeNull();
+  expect(link!.x).toBeLessThan(close!.x);
 });
