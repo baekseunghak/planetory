@@ -11,6 +11,46 @@ export const ANALYSIS_FIXTURE_TICS = {
   changing: "259377023",
 } as const;
 
+/**
+ * 단계 이동에 얽힌 값을 한꺼번에 다시 맞춘다(5.1절).
+ *
+ * 제거 조합은 **매칭한 후보의 부분집합**이어야 하고(7.1절), `nextCurveContext`는
+ * 매칭한 것을 전부 제거한 문맥이다. 현재 단계만 손으로 바꾸면 이 관계가
+ * 깨지므로 바꾼 뒤에는 반드시 이 함수를 부른다.
+ */
+export function withMatched<
+  T extends {
+    currentCurveContext: {
+      curveStep: number;
+      removedCandidateIds: string[];
+    } & Record<string, unknown>;
+    progress: Record<string, unknown>;
+    residualForCurrentStep: { status: string | null; jobId: string | null };
+    nextCurveContext?: unknown;
+    residualForNextStep?: unknown;
+  },
+>(result: T, extraMatched: string[] = []): T {
+  const current = result.currentCurveContext;
+  const matched = [
+    ...new Set([...current.removedCandidateIds, ...extraMatched]),
+  ].sort();
+  result.progress.matchedCandidateIds = matched;
+  result.nextCurveContext = {
+    ...current,
+    curveStep: matched.length,
+    removedCandidateIds: matched,
+  };
+  // 다음이 지금과 같으면 지금 것의 상태다. 다르면 아직 계산 전이다.
+  result.residualForNextStep = {
+    status:
+      matched.length === current.curveStep
+        ? result.residualForCurrentStep.status
+        : null,
+    jobId: null,
+  };
+  return result;
+}
+
 export function analysisContextFixture(
   ticId: string = ANALYSIS_FIXTURE_TICS.normal,
 ) {
@@ -23,52 +63,52 @@ export function analysisContextFixture(
     residualModelVersion: "rm-fixture-182",
     periodogramConfigVersion: "pg-fixture-182",
   };
-  return {
-    ticId,
-    star: { sectorCount: 2, sectors: [14, 41], tmag: 9.8 },
-    hasConfirmedCandidate: true,
-    bundle: {
-      bundleId: ANALYSIS_FIXTURE_BUNDLE,
-      bundleVersion: "v7",
-      publishedAt: "2026-09-14T00:00:00Z",
-      foldReferenceTimeBtjd: 1683.4231,
-      baseDays: 0.12,
-      observationBounds: [1683.35, 2420.0594444444446],
-      residualModelVersion: currentCurveContext.residualModelVersion,
-      periodogramConfigVersion: currentCurveContext.periodogramConfigVersion,
-      binningRevision: "10m-v1",
-      curveStepRule: "one_candidate_per_step",
+  // 보통 별은 하나를 이미 매칭해 둬서 [다음 곡선]이 실제로 다음 단계를
+  // 가리키게 한다. 같으면 전환할 것이 없어 흐름을 볼 수 없다.
+  return withMatched(
+    {
+      ticId,
+      star: { sectorCount: 2, sectors: [14, 41], tmag: 9.8 },
+      hasConfirmedCandidate: true,
+      bundle: {
+        bundleId: ANALYSIS_FIXTURE_BUNDLE,
+        bundleVersion: "v7",
+        publishedAt: "2026-09-14T00:00:00Z",
+        foldReferenceTimeBtjd: 1683.4231,
+        baseDays: 0.12,
+        observationBounds: [1683.35, 2420.0594444444446],
+        residualModelVersion: currentCurveContext.residualModelVersion,
+        periodogramConfigVersion: currentCurveContext.periodogramConfigVersion,
+        binningRevision: "10m-v1",
+        curveStepRule: "one_candidate_per_step",
+      },
+      selectionRules: {
+        version: "sel-fixture-182",
+        minWindowDays: 20 / 1440,
+        phaseWidthMax: 0.25,
+        maxDurationMultipleOfSuggested: 3,
+        allowEmptyPhaseSpan: false,
+        fineTune: { halfWidthCells: 3 },
+      },
+      progress: {
+        stage: "in_progress",
+        currentCurveStep: currentCurveContext.curveStep,
+        matchedCandidateIds: removedCandidateIds,
+        completionReason: null,
+        reopenPending: false,
+        achievementCount: 0,
+        grade: null,
+      },
+      currentCurveContext,
+      residualForCurrentStep: {
+        status: removedCandidateIds.length ? null : "COMPLETED",
+        jobId: null,
+      },
+      tutorial: { seq: null as number | null, skipAvailable: false },
+      ruleVersion: "rule-fixture-182",
     },
-    selectionRules: {
-      version: "sel-fixture-182",
-      minWindowDays: 20 / 1440,
-      phaseWidthMax: 0.25,
-      maxDurationMultipleOfSuggested: 3,
-      allowEmptyPhaseSpan: false,
-      fineTune: { halfWidthCells: 3 },
-    },
-    progress: {
-      stage: "in_progress",
-      currentCurveStep: currentCurveContext.curveStep,
-      matchedCandidateIds: removedCandidateIds,
-      completionReason: null,
-      reopenPending: false,
-      achievementCount: 0,
-      grade: null,
-    },
-    currentCurveContext,
-    residualForCurrentStep: {
-      status: removedCandidateIds.length ? null : "COMPLETED",
-      jobId: null,
-    },
-    nextCurveContext: currentCurveContext,
-    residualForNextStep: {
-      status: removedCandidateIds.length ? null : "COMPLETED",
-      jobId: null,
-    },
-    tutorial: { seq: null as number | null, skipAvailable: false },
-    ruleVersion: "rule-fixture-182",
-  };
+    ticId === ANALYSIS_FIXTURE_TICS.normal ? ["9007199254740994"] : [],
+  );
 }
 export function analysisCurveFixture(
   ticId: string = ANALYSIS_FIXTURE_TICS.normal,

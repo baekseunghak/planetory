@@ -3,6 +3,7 @@ import {
   analysisCurveFixture,
   analysisFixtureResponse,
   ANALYSIS_FIXTURE_TICS,
+  withMatched,
 } from "./analysis-fixtures.ts";
 
 // Authored synthetic display data, not BLS output. Never mix with observation exports.
@@ -73,6 +74,12 @@ export function periodContextFixture(
   }
   if (ticId === PERIODOGRAM_FIXTURE_TICS.tutorial)
     result.tutorial = { seq: 1, skipAvailable: true };
+  // 현재 단계를 손으로 바꿨으므로 매칭 집합·다음 문맥을 다시 맞춘다. 보통
+  // 별은 하나를 더 매칭해 둬서 [다음 곡선]이 실제 다음 단계를 가리킨다.
+  withMatched(
+    result,
+    ticId === PERIODOGRAM_FIXTURE_TICS.normal ? ["9007199254741094"] : [],
+  );
   result.star = { sectorCount: 1, sectors: [14], tmag: 9.8 };
   Object.assign(result.bundle, {
     bundleId: current.bundleId,

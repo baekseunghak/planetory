@@ -14,8 +14,10 @@ import {
   decodeCurve,
 } from "../../src/features/analysis/analysis-data";
 
+const contextFixture = () =>
+  analysisContextFixture(ANALYSIS_FIXTURE_TICS.normal);
 const context = () =>
-  decodeAnalysisContext(analysisContextFixture(), ANALYSIS_FIXTURE_TICS.normal);
+  decodeAnalysisContext(contextFixture(), ANALYSIS_FIXTURE_TICS.normal);
 
 test("analysis preserves large string IDs, full segment arrays, null gaps and scalar scatter", () => {
   const current = context();
@@ -174,9 +176,7 @@ test("not-computed residual remains unavailable rather than an empty success or 
   // 200인데 segments가 null이면 정상 응답이 아니다.
   assert.throws(() => decodeCurve(body, current, 200));
   // 202인데 segments가 있으면 대기 상태로 받아들이지 않는다.
-  assert.throws(() =>
-    decodeCurve({ ...body, segments: [] }, current, 202),
-  );
+  assert.throws(() => decodeCurve({ ...body, segments: [] }, current, 202));
 });
 test("synthetic responses use the real query shape and never provide an answer catalog", () => {
   const response = analysisFixtureResponse(
@@ -201,5 +201,62 @@ test("synthetic responses use the real query shape and never provide an answer c
       new URL("/v1/members/member", "http://fixture.invalid"),
     ),
     null,
+  );
+});
+
+test("the next step comes from the server, not from our own arithmetic", () => {
+  const value = context();
+  // 5.1절이 매칭한 활성 후보를 전부 제거한 문맥을 통째로 준다.
+  assert.equal(value.nextCurveContext?.curveStep, 1);
+  assert.deepEqual(value.nextCurveContext?.removedCandidateIds, [
+    "9007199254740994",
+  ]);
+  assert.deepEqual(value.matchedCandidateIds, ["9007199254740994"]);
+  // 누르기 전에 이미 계산돼 있는지 안다. 캐시면 작업을 요청하지 않는다.
+  assert.equal(value.currentResidual.status, "COMPLETED");
+  assert.equal(value.nextResidual?.status, null);
+});
+
+test("a missing next step must be missing on both fields", () => {
+  const raw = contextFixture();
+  // 남은 탐색 가능 신호가 없으면 둘 다 null이다.
+  const none = decodeAnalysisContext(
+    { ...raw, nextCurveContext: null, residualForNextStep: null },
+    ANALYSIS_FIXTURE_TICS.normal,
+  );
+  assert.equal(none.nextCurveContext, null);
+  assert.equal(none.nextResidual, null);
+  // 한쪽만 오면 다음 단계가 있는지 없는지 알 수 없다. 추측하지 않는다.
+  for (const patch of [
+    { nextCurveContext: null },
+    { residualForNextStep: null },
+  ])
+    assert.throws(
+      () =>
+        decodeAnalysisContext(
+          { ...raw, ...patch },
+          ANALYSIS_FIXTURE_TICS.normal,
+        ),
+      /nextCurveContext\/residualForNextStep/,
+    );
+});
+
+test("the next step is never behind the current one", () => {
+  const raw = contextFixture();
+  // 제거 조합은 매칭한 후보의 부분집합이므로(7.1절) 뒤로 갈 수 없다.
+  assert.throws(
+    () =>
+      decodeAnalysisContext(
+        {
+          ...raw,
+          currentCurveContext: {
+            ...raw.currentCurveContext,
+            curveStep: 2,
+            removedCandidateIds: ["9007199254740994", "9007199254741094"],
+          },
+        },
+        ANALYSIS_FIXTURE_TICS.normal,
+      ),
+    /nextCurveContext.curveStep/,
   );
 });
