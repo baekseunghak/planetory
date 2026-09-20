@@ -139,6 +139,25 @@ public class AchievementService {
     }
 
     /**
+     * 공개 재전송은 현재 성과를 읽기만 한다. 취소·숨김된 공개를 다시 인정하지 않는다.
+     * 공개와 성과는 원자적으로 저장되며 공개 취소·숨김도 성과를 회수하지 않는다(서비스 API 9.3절).
+     * 기존 공개의 성과 누락은 정상적인 미보유가 아닌 데이터 불일치이므로 false로 숨기지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Recognition existingRecognition(long memberId, long candidateId) {
+        long ticId = achievements.findCandidateTic(candidateId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        return new Recognition(false, achievements.findAchievementId(memberId, candidateId), ticId,
+                star(memberId, ticId), List.of(), 0, sky.version(memberId));
+    }
+
+    /** 공개 응답 유실 복구용이며 성과·별을 추가 지급하지 않는다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<SubmissionViews.UnlockedStar> publicationStars(long memberId, long analysisId) {
+        return achievements.findPublicationStars(memberId, analysisId);
+    }
+
+    /**
      * 성과 조회(9.1절). 요약과 목록을 한 스냅샷에서 읽는다.
      *
      * @param requestedTicId 목록 필터. 요약에는 적용하지 않는다

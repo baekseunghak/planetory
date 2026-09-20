@@ -23,7 +23,7 @@ class MemberCommunityPermissionTest {
             List.of("users", "user_settings", "posts", "comments");
     private static final List<String> UNUSED = List.of(
             "follows", "notifications", "post_reactions", "post_source_links",
-            "post_history_attachments", "comment_history_attachments", "stats_snapshots");
+            "stats_snapshots");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -36,8 +36,21 @@ class MemberCommunityPermissionTest {
         Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
+                .target("12")
                 .load()
                 .migrate();
+
+        Flyway upgraded = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load();
+        assertEquals(2, upgraded.migrate().migrationsExecuted); // V13 첨부 → V14 공개 등록
+        Flyway restarted = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load();
+        restarted.validate();
+        assertEquals(0, restarted.migrate().migrationsExecuted);
 
         try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
              Statement st = owner.createStatement()) {
@@ -59,7 +72,12 @@ class MemberCommunityPermissionTest {
             }
 
             assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
-            for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+            for (String table : List.of("post_history_attachments", "comment_history_attachments")) {
+                for (String allowed : List.of("SELECT", "INSERT", "DELETE")) assertTrue(hasPrivilege(owner, table, allowed));
+                for (String denied : List.of("UPDATE", "TRUNCATE")) assertFalse(hasPrivilege(owner, table, denied));
+            }
+            assertTrue(hasPrivilege(owner, "published_analyses", "INSERT"));
+            for (String denied : List.of("UPDATE", "DELETE", "TRUNCATE")) {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
 
@@ -100,12 +118,11 @@ class MemberCommunityPermissionTest {
     }
 
     @Test
-    void 앱_계정의_물리_삭제와_공개_분석_쓰기는_권한으로_거절된다() throws SQLException {
+    void 앱_계정의_물리_삭제와_공개_분석_변경은_권한으로_거절된다() throws SQLException {
         try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
             assertPermissionDenied(() -> st.execute("DELETE FROM users WHERE id = -1"));
             assertPermissionDenied(() -> st.execute(
-                    "INSERT INTO published_analyses(post_id, user_id, candidate_id, history_id, published_at) "
-                            + "VALUES (1, 1, 1, 1, now())"));
+                    "UPDATE published_analyses SET unpublished_at=now() WHERE id=-1"));
         }
     }
 

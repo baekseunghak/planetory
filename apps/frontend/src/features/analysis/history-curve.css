@@ -1,0 +1,43 @@
+/* #190 읽기 전용 접힌 곡선. 조작이 없으므로 초점·커서 규칙도 두지 않는다. */
+.history-curve {
+  margin: 0;
+}
+.history-curve svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.history-curve-point {
+  fill: var(--fg-1);
+}
+.history-curve-error {
+  stroke: var(--fg-3);
+  stroke-width: 1;
+}
+.history-curve-axis {
+  stroke: var(--panel-line);
+  stroke-width: 1;
+}
+.history-curve-tick {
+  fill: var(--fg-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* 고른 구간. 곡선 뒤에 깔아 관측점을 가리지 않는다. */
+.history-curve-window {
+  fill: var(--accent);
+  opacity: 0.14;
+}
+.history-curve figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.history-curve-warning {
+  color: var(--danger);
+}
+.history-curve-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-3);
+}

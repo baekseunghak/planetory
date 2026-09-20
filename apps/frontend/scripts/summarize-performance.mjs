@@ -1,9 +1,39 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const rows = [];
+const diagnostics = [];
 for (const folder of (
   await readdir("performance-results", { withFileTypes: true })
 ).filter((x) => x.isDirectory())) {
+  const gpuPath = `performance-results/${folder.name}/gpu.json`;
+  try {
+    const data = await readFile(gpuPath);
+    const diagnostic = JSON.parse(data);
+    diagnostics.push({
+      folder: folder.name,
+      sha256: createHash("sha256").update(data).digest("hex"),
+      date: diagnostic.date,
+      browser: diagnostic.channel,
+      browserVersion: diagnostic.browserVersion,
+      failure: diagnostic.failure ?? null,
+      scenarios: diagnostic.scenarios.map((s) => ({
+        name: s.name,
+        supported: s.supported,
+        disjoint: s.disjoint,
+        samples: s.ms.length,
+        p95: s.p95,
+        worst: s.worst,
+        camera: s.after.camera,
+        canvas: s.after.canvas,
+        dpr: s.after.dpr,
+        pending: s.after.pending,
+        visibility: s.after.visibility,
+        metrics: s.after.metrics,
+      })),
+    });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   let text;
   try {
     text = await readFile(
@@ -63,6 +93,15 @@ for (const folder of (
       planets: s.after.metrics?.planets,
       drawCalls: s.after.metrics?.drawCalls,
       gpuBuffers: s.after.metrics?.gpuBuffers,
+      backgroundCacheAvailable:
+        s.after.metrics?.backgroundCacheAvailable ?? null,
+      backgroundBytes: s.after.metrics?.backgroundBytes ?? null,
+      backgroundBlits: s.after.metrics?.backgroundBlits ?? null,
+      bodyDrawCallsDelta:
+        s.after.metrics?.bodyDrawCallsTotal != null
+          ? s.after.metrics.bodyDrawCallsTotal -
+            s.before.metrics.bodyDrawCallsTotal
+          : null,
       uploadBytesDelta:
         s.after.metrics?.uploadBytes - s.before.metrics?.uploadBytes,
       packedNodesDelta:
@@ -88,6 +127,7 @@ await writeFile(
       generatedAt: new Date().toISOString(),
       note: "Windows local synthetic HTTP / production App. Not real C05 or Safari/deployment acceptance. baseline/optimized-v1/final-a are historical iterations; maximum zoom of final-a was not validated. Only final-b and later camera.zoom=0.001 prove maximum zoom out. Dirty runs are identified by compiled bundle hash when available.",
       runs: rows,
+      diagnostics,
     },
     null,
     2,

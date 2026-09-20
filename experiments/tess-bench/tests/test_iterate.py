@@ -287,3 +287,41 @@ def test_refine_caps_duration_to_fraction_of_period_and_unmeasurable_qa_fails():
     res = it.iterate_curve(t, f, SETTING, it.IterateConfig(max_candidates=2, max_duration_fraction=0.9, qa_require_measurable=True))
     wide = [s for s in res.steps if s.status in ("accepted", "qa_failed") and s.duration_hours / 24 > 0.25 * s.period_days]
     assert all("qa_not_measurable" in s.qa_failures for s in wide)                                    # 넓은 창은 측정 불가로 실패
+
+@pytest.mark.parametrize("bad", [float("nan"), 0.0, -0.001])
+@pytest.mark.parametrize("invalid_before", [False, True])
+def test_other_depth_invalid_preserves_previous_candidate(monkeypatch, bad, invalid_before):
+    t, f = _curve([(3, 1402, 2, .005), (7, 1403.5, 2, .001)])
+    peaks = iter([bls.Peak(1, p, ep, 2, d, 1e-5, 100, 100, 10, 50, 50, 4, 100, 0)
+                  for p, ep, d in [(3, 1402, .005), (7, 1403.5, .001)]])
+    monkeypatch.setattr(bls, 'run_bls', lambda *a, **k: bls.BlsRun('t', 3000, .5, 9, .01, 0, 1, [next(peaks)]))
+    powers = iter([10., 1., 10., 1.])
+    monkeypatch.setattr(it, 'local_max_power', lambda *a, **k: next(powers))
+    depths = iter([bad, .001] if invalid_before else [.001, bad])
+    monkeypatch.setattr(it, 'fixed_depth', lambda *a, **k: next(depths))
+    monkeypatch.setattr(it, 'edge_excess', lambda *a, **k: .5)
+    monkeypatch.setattr(it, 'window_offset', lambda *a, **k: (0., 0.))
+    result = it.iterate_curve(t, f, SETTING, it.IterateConfig(refine_peak=False), keep_residual=True)
+    assert result.termination == 'removal_qa_failed'
+    assert result.qa_failed_step == 1 and len(result.accepted) == 1
+    assert 'other_depth_not_measurable' in result.steps[-1].qa_failures
+    expected = it.remove_transit_models(t, f, [result.accepted[0].model('first')]).flux_residual
+    np.testing.assert_array_equal(result.residual, expected)
+
+
+def test_flat_overlap_returns_float_nan_and_loop_terminates(monkeypatch):
+    t, f = _curve([(3, 1402, 2, .005)], noise=0)
+    candidate = it.Candidate(step=0, period_days=3, epoch_btjd=1402,
+                             duration_hours=2, depth_ppm=5000, sde=50, snr=50, n_transits=9, rank=1)
+    truth = [(7, 1402, 2 / 24)]
+    frac, dev = it.overlap_metrics(t, np.ones_like(f), candidate, truth)
+    assert isinstance(frac, float) and frac > 0
+    assert isinstance(dev, float) and np.isnan(dev)
+    peak = bls.Peak(1, 3, 1402, 2, .005, 1e-5, 100, 100, 10, 50, 50, 9, 100, 0)
+    monkeypatch.setattr(bls, 'run_bls', lambda *a, **k: bls.BlsRun('t', 3000, .5, 9, .01, 0, 1, [peak]))
+    powers = iter([10., 1.])
+    monkeypatch.setattr(it, 'local_max_power', lambda *a, **k: next(powers))
+    result = it.iterate_curve(t, f, SETTING, it.IterateConfig(refine_peak=False), truth=truth, keep_residual=True)
+    assert result.termination == 'removal_qa_failed'
+    assert not result.accepted
+    np.testing.assert_array_equal(result.residual, f)

@@ -5,6 +5,9 @@ import com.planetory.backend.domain.comment.repository.CommentRepository;
 import com.planetory.backend.domain.member.service.MemberService;
 import com.planetory.backend.domain.post.entity.Post;
 import com.planetory.backend.domain.post.repository.PostRepository;
+import com.planetory.backend.domain.post.service.HistoryAttachmentService;
+import com.planetory.backend.domain.post.service.HistoryAttachmentService.Parent;
+import com.planetory.backend.domain.post.service.HistoryAttachmentService.Reference;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import java.time.Clock;
@@ -26,12 +29,14 @@ public class CommentService {
     private final PostRepository posts;
     private final MemberService members;
     private final Clock clock;
+    private final HistoryAttachmentService attachments;
 
     public enum ParentType { POST, SIGNAL_THREAD }
-    public record CreateCommand(ParentType parentType, long parentId, String body) {}
+    public record CreateCommand(ParentType parentType, long parentId, String body, List<String> historyIds) {}
+    public record PatchCommand(String body, boolean hasBody, List<String> historyIds) {}
     public record Created(String commentId, Instant createdAt) {}
     public record Author(String memberId, String nickname) {}
-    public record Detail(String commentId, Author author, String body, List<Object> attachments,
+    public record Detail(String commentId, Author author, String body, List<Reference> attachments,
                          List<Object> sourceLinks, Instant createdAt, Instant updatedAt) {}
 
     /** {@code hasNext}는 {@code nextCursor != null}과 같은 뜻이다. 피드 4.1과 같은 목록 구조를 쓴다. */
@@ -43,6 +48,7 @@ public class CommentService {
         // 부모 삭제도 같은 Post 행을 잠그므로, 삭제가 먼저면 새 댓글을 저장하지 않는다.
         Post parent = parent(command.parentId(), command.parentType(), true);
         Comment comment = comments.saveAndFlush(new Comment(parent, author, body(command.body())));
+        attachments.replace(Parent.COMMENT, comment.getId(), memberId, parent.getTicId(), command.historyIds());
         return new Created(id(comment), comment.getCreatedAt());
     }
 
@@ -80,18 +86,21 @@ public class CommentService {
             next = CommentCursor.after(parentType.name(), parentId, size,
                     last.getCreatedAt(), last.getId()).encode();
         }
-        return new CommentList(shown.stream().map(CommentService::detailOf).toList(), next, hasNext);
+        var refs = attachments.references(Parent.COMMENT, shown.stream().map(Comment::getId).toList());
+        return new CommentList(shown.stream().map(c -> detailOf(c, refs.getOrDefault(c.getId(), List.of()))).toList(), next, hasNext);
     }
 
     @Transactional
-    public Detail patch(long memberId, long commentId, String input) {
+    public Detail patch(long memberId, long commentId, PatchCommand command) {
         members.requireActive(memberId);
+        if (!command.hasBody() && command.historyIds() == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         Comment comment = comments.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         writable(comment, memberId);
-        requireOpenParent(comment.getPost().getId());
-        comment.update(body(input), Instant.now(clock));
-        return detailOf(comment);
+        Post parent = requireOpenParent(comment.getPost().getId());
+        attachments.replace(Parent.COMMENT, commentId, memberId, parent.getTicId(), command.historyIds());
+        comment.update(command.hasBody() ? body(command.body()) : comment.getBody(), Instant.now(clock));
+        return detailOf(comment, attachments.references(Parent.COMMENT, commentId));
     }
 
     @Transactional
@@ -106,10 +115,11 @@ public class CommentService {
     }
 
     /** 수정은 부모가 공개일 때만 허용한다(SB-D22). 삭제는 부모 상태를 보지 않으므로 여기를 거치지 않는다. */
-    private void requireOpenParent(long postId) {
+    private Post requireOpenParent(long postId) {
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (!visible(post)) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        return post;
     }
 
     private Post parent(long postId, ParentType type, boolean lock) {
@@ -142,8 +152,8 @@ public class CommentService {
     private static boolean visible(Post post) { return "visible".equals(post.getStatus()); }
     private static boolean visible(Comment comment) { return "visible".equals(comment.getStatus()); }
     private static String id(Comment comment) { return "c-" + comment.getId(); }
-    private static Detail detailOf(Comment comment) {
+    private static Detail detailOf(Comment comment, List<Reference> attachments) {
         return new Detail(id(comment), new Author("u-" + comment.getAuthor().getId(), comment.getAuthor().getNickname()),
-                comment.getBody(), List.of(), List.of(), comment.getCreatedAt(), comment.getUpdatedAt());
+                comment.getBody(), attachments, List.of(), comment.getCreatedAt(), comment.getUpdatedAt());
     }
 }

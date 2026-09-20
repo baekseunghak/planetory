@@ -505,7 +505,7 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.ticId").doesNotExist());
         assertEquals("free", jdbc.queryForObject("SELECT board FROM posts WHERE id = ?", String.class,
                 Long.parseLong(starPostId.substring(2))));
-        // 항목이 실제로 담긴 요청은 F09·F24 구현 전까지 계속 거절한다.
+        // 별 연결을 해제한 자유글에는 History를 붙일 수 없다.
         mvc.perform(patch("/api/v1/posts/" + starPostId).session(other).with(csrf())
                         .contentType("application/json").content("{\"historyIds\":[\"h-1\"]}"))
                 .andExpect(status().isBadRequest());
@@ -738,12 +738,12 @@ class AuthIntegrationTest {
             var title = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false));
+                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false, null));
             });
             var body = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false));
+                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false, null));
             });
             start.countDown();
             title.get(20, TimeUnit.SECONDS);

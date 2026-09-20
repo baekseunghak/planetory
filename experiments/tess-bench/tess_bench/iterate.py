@@ -294,7 +294,9 @@ def overlap_metrics(t: np.ndarray, residual: np.ndarray, removed: Candidate, oth
     if both.sum() < 3:
         return frac, float("nan")
     scatter = robust_scatter(residual[np.isfinite(residual)])
-    return frac, float(np.median(np.abs(residual[both] - 1.0)) / scatter) if scatter > 0 else (frac, float("nan"))
+    if not (np.isfinite(scatter) and scatter > 0):
+        return frac, float("nan")
+    return frac, float(np.median(np.abs(residual[both] - 1.0)) / scatter)
 
 
 # --------------------------------------------------------------------------- 루프
@@ -411,7 +413,11 @@ def iterate_curve(t: np.ndarray, f: np.ndarray, setting: bl.BlsSetting, cfg: Ite
                 r0 = np.asarray(remove_transit_models(t, f, [model_cand.model(f"c-{step}")]).flux_residual, float); ok0r = np.isfinite(r0)
                 depth_after += [fixed_depth(t[ok0r], r0[ok0r], P, Dd, ep) for (P, ep, Dd) in others]
             depth_after += [fixed_depth(t[ok_r], residual[ok_r], P, Dd, ep) for (P, ep, Dd) in remaining_truth]
-        log2s = [abs(np.log2(a / b)) for a, b in zip(depth_after, depth_before) if np.isfinite(a) and np.isfinite(b) and a > 0 and b > 0]
+        if (len(depth_after) != len(depth_before)
+                or any(not (np.isfinite(a) and np.isfinite(b) and a > 0 and b > 0)
+                       for a, b in zip(depth_after, depth_before))):
+            failures.append("other_depth_not_measurable")
+        log2s = [abs(np.log2(a) - np.log2(b)) for a, b in zip(depth_after, depth_before) if np.isfinite(a) and np.isfinite(b) and a > 0 and b > 0]
         other_log2 = max(log2s) if log2s else float("nan")
         if np.isfinite(other_log2) and other_log2 > cfg.qa_other_depth_log2_max:
             failures.append("other_candidate_damaged")

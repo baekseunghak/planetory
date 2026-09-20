@@ -638,8 +638,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | i번째 점의 시각 = `startBtjd + (binMinutes / 1440) × i`. 시각 배열은 보내지 않는다 | ERD `light_curve_segments` |
 | 결측은 `null`, `gaps`는 `[시작 인덱스, 끝 인덱스]` 폐구간. JSON `NaN`은 쓰지 않는다 | Q04 |
 | 세그먼트는 섹터 순 정렬. 섹터 사이 공백은 세그먼트 경계로 표현하고 프론트가 접어 그린다 | EXP-03, NFR-10 |
-| `binMinutes`는 세그먼트마다 다를 수 있다(20,000점 초과 시 확대) | DAT-11 |
-| `fluxScatter`는 세그먼트당 하나. 점별 오차 배열은 없다 | ERD |
+| 운영 `binMinutes`는 10분(mean). 빈 bin 포함 20,000점 초과 시 자동 확대하지 않고 실패·격리한다 | [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) |
+| `fluxScatter`는 세그먼트 전체 유한 비닝 flux의 `1.4826 × MAD`. 통과·별 변동 포함 robust 산포이며 점별 측정 오차가 아니다 | ERD v1.12 |
 | 잔차 단계의 `flux`는 같은 격자·같은 `startBtjd`에서 통과 모델을 나눈 값. 원본과 점 수·인덱스가 같다 | DAT-11·14 |
 | 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 D-2 | ERD 용량표 |
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
@@ -1028,7 +1028,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 DEC-11(서비스 F04). `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
 
-148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 미확정 미공개 `UNPUBLISHED`, 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
+148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 제출 당시 미확정인 미공개 기록 `UNPUBLISHED`(현재 재분류·은퇴와 무관, F07-Q2), 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
 
 **저장 매핑:** 143의 History `versions.bundleVersion` → `versions.data`, `ruleVersion` → `rule`, `residualModelVersion` → `residualModel`, `periodogramConfigVersion` → `periodogramConfig`로 투영한다. 별도로 보존되지 않은 `preprocess`·`pipeline`은 null이며 현재 처리 버전으로 꾸며 채우지 않는다. `versions.snapshotVersion`을 추가 전달한다. 143의 `snapshot_params.viewState`가 viewport·배율의 원본이고, 최초 응답에도 같은 값이 보존되어 있다. `snapshotParams.foldSettings.referenceTimeBtjd`는 제출 당시 기준 시각이다. 현재 판을 읽지 못해도 개인 상세·목록·공개 내용은 현재 그래프와 별도로 조회한다. 없는/형식이 틀린 History ID는 404 `RESOURCE_NOT_FOUND`, 타인 개인 기록은 403 `FORBIDDEN`이다.
 
@@ -1301,7 +1301,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | Q07 경로·DTO·멱등·판 변경 | 2장, 6.4절, 6.6절. 판 변경 감지는 `BUNDLE_CHANGED`와 5.1절 재조회 |
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
 | Q09 진행 중 은퇴 후보 | 판 전환의 분석 복귀(5.1절)와 다시 풀기(6.8절)는 최신 현재 진행 문맥을 사용한다. 히스토리 CURRENT(8.3절)는 최신 원본, SUBMITTED는 당시 snapshot을 사용한다. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
-| Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
+| Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 제출 당시 미확정 기준으로 허용(F07-Q2, 2026-09-20 사용자 확정; 서비스 API 9.1절) |
 | Q11 스냅샷 누락·고조파 좌표 | 8.3절 모드별 선택 기준·버전 미상 안내·T 변경 회귀 fixture. 원본 P·서버 duration을 보존하고 SUBMITTED는 당시 original 창·저장 배열, CURRENT만 현재 위상 환산. `snapshot: null`은 누락 안내. 프론트 종단 인수는 별도 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
 
@@ -1353,7 +1353,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | D-6 | 별지도 표현·공간 조회 | **v1.3 변경안:** 서버 저장 은하 좌표·회원별 공간 인덱스/타일 캐시는 유지하고 공식 군집 사전 계산·응답은 제거한다. 모든 level은 개별 별 페이지다. 새 발견/상태 변경 시 영향 범위와 회원 version 갱신, 웹 워커는 투영·히트 테스트 보조 | 제공자/소비자 교차 리뷰 후 적용 | 4.1, 9.2, ERD 항목 8 | 하서진·강재민 |
 | D-7 | 지도 최신성 | `asOf`(지도 메타·타일·별 상세·퀘스트)와 `skyVersion`(제출·공개·재개 응답) 채택 | 하서진 통합 문서 B.6 요청. 없으면 화면이 매번 전체 재조회 | 4.1, 6.4 | 하서진 |
 | D-8 | 첫 방문 안내 완료 시점 | 둘 다. 튜토리얼 1번 별 첫 제출 성공 시 서버가 `onboarding_done=true`, 사용자가 닫으면 서비스 설정 API로 즉시 true. 별 클릭만으로는 끝내지 않음 | HOME-09 초기 안내 완료 뒤 자동 재노출 없음. GIF 사용법 다시 보기는 상태 변경·분석 실행 없음 | 4.1, 6.3 | 백승학·백지웅·하서진 |
-| D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 반환값(`newlyRecognized`·`unlockedStars`·`achievement.star`·`skyVersion`)을 그대로 포함 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
+| D-9 | 공개 응답의 성과·새 별 | 서비스 API 공개·일괄 응답 항목에 9.2절 성과 결과를 포함하되 `unlockedStars`는 6.4절 HTTP DTO(문자열 `ticId`·`position`)로 변환한다. 공개 재요청의 별 복구와 표시 이력은 서비스 API 9.1절을 따른다 | 제출 응답(6.4절)과 같은 모양이라 프론트 처리가 하나 | 9.2, 11.1 | 백승학·백지웅 |
 | D-10 | 완료 별의 `no_candidate` | 저장하지 않고 409 `STAR_ALREADY_COMPLETED` | SUB-11 "다시 제출할 필요는 없다". 저장할 의미 없음 | 6.5 | 백지웅 |
 | D-11 | 미발견 별 부족 | 있는 만큼만 열고 응답 `achievement.unlockShortfall`에 부족 수. 성과는 인정 | OPS-08 제외 규칙 안에서 처리. 다음 정본 개정 때 한 문장 추가 제안 | 9.2 | — |
 | D-12 | 입력·요청 상한 | 분석 메모 200 코드포인트(2026-09-17 사용자 채택·서버 반영 확인 대기), 타일 요청 상자 `tileSize × 64`, 타일 페이지 limit 기본 1000·최대 2000, 잘못된 cursor 및 `locate`·타일 요청 크기 초과는 400 | 분석 메모는 서비스 댓글의 2,000자와 별도 적용. 타일 상한은 기존 결정 유지 | 4.1, 6.1 | 하서진 |

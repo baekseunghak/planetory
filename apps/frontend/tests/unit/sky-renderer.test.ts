@@ -98,6 +98,56 @@ test("whole-view uses stored bounds at 1/10/100/1000 and never rewrites position
     assert.deepEqual(stars, before);
   }
 });
+
+test("camera culling preserves every visible star, order and depth at viewport edges", () => {
+  const stars = Array.from({ length: 4097 }, (_, i) => exampleStar(i));
+  for (const width of [1024, 1440])
+    for (const zoom of [0.001, 1, 3, 9, 30])
+      for (const yaw of [-2, 0.12, 1.5]) {
+        const matrix = cameraMatrix(
+          { ...INITIAL_CAMERA, zoom, yaw, x: 150, y: -80 },
+          width,
+          836,
+        );
+        const expected = stars.filter((s) => {
+          const p = screenPoint(matrix, width, 836, s.x, s.y, s.depthZ);
+          return (
+            Math.abs(p.depth) <= 1 &&
+            p.x >= -80 &&
+            p.x <= width + 80 &&
+            p.y >= -80 &&
+            p.y <= 916
+          );
+        });
+        const plan = renderPlan(stars, matrix, width, 836);
+        assert.deepEqual(plan.stars, expected);
+        if (plan.spans) {
+          assert.equal(plan.spans.source, stars);
+          assert.deepEqual(
+            plan.spans.ranges.flatMap(([start, end]) =>
+              stars.slice(start, end),
+            ),
+            expected,
+          );
+        }
+      }
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const boundary = [-1.16, 1.16, -1.160001, 1.160001].map((x, i) => ({
+    ...stars[i],
+    x,
+    y: 0,
+    depthZ: 0,
+  }));
+  boundary.push(
+    { ...stars[4], x: 0, y: 0, depthZ: 1 },
+    { ...stars[5], x: 0, y: 0, depthZ: 1.00001 },
+  );
+  assert.deepEqual(renderPlan(boundary, identity, 1000, 1000).stars, [
+    boundary[0],
+    boundary[1],
+    boundary[4],
+  ]);
+});
 const detail = (count: number) => {
   const s = { ...exampleStar(0), planetCount: count },
     m = meta();

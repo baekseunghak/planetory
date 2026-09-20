@@ -1,5 +1,116 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 const headers = { "X-CSRF-TOKEN": "community-fixture-209" };
+
+for (const [submissionKind, label] of [
+  ["no_candidate", "신호 없음으로 제출"],
+  ["skipped", "건너뛴 기록"],
+]) {
+  test(`mixed histories allow selecting null judgment (${submissionKind})`, async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/me/histories?**", async (route) => {
+      const response = await route.fetch();
+      const dto = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...dto,
+          items: dto.items.map((item: { historyId: string }) =>
+            item.historyId === "h-502"
+              ? { ...item, submissionKind, userJudgment: null }
+              : item,
+          ),
+        },
+      });
+    });
+    await page.goto("/posts/new?ticId=259377017");
+    await enter(
+      page.getByRole("textbox", { name: "제목", exact: true }),
+      "혼합 기록 첨부",
+    );
+    await enter(
+      page.getByRole("textbox", { name: "본문", exact: true }),
+      "판단 없는 기록도 선택",
+    );
+    await page.getByRole("button", { name: "자료 선택 열기" }).click();
+    const choices = page.getByRole("region", { name: "내 기록 선택" });
+    await expect(
+      choices.getByRole("listitem").filter({ hasText: "h-502" }),
+    ).toContainText(label);
+    await expect(
+      choices.getByRole("listitem").filter({ hasText: "h-501" }),
+    ).toContainText("모르겠음");
+    for (const id of ["h-501", "h-502"])
+      await choices
+        .getByRole("button", { name: id + " 첨부", exact: true })
+        .click();
+    await expect(
+      page.getByText("자료 응답을 확인할 수 없습니다.", { exact: true }),
+    ).toHaveCount(0);
+    const saved = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" && request.url().endsWith("/api/v1/posts"),
+    );
+    await page.getByRole("button", { name: "게시하기", exact: true }).click();
+    expect((await saved).postDataJSON().historyIds).toEqual(["h-501", "h-502"]);
+    await expect(page).toHaveURL(/\/posts\/p-\d+/);
+    for (const id of ["h-501", "h-502"])
+      await expect(
+        page.getByRole("button", { name: "분석 기록 " + id + " 열기" }),
+      ).toBeVisible();
+  });
+}
+
+test("first graph 503 reloads authorized metadata; revoked metadata is removed", async ({
+  page,
+}) => {
+  const id = await seed(page);
+  let revoked = false;
+  let metadataReads = 0;
+  const privateReads: string[] = [];
+  page.on("request", (r) => {
+    if (/\/histories\/|residual-jobs/.test(r.url())) privateReads.push(r.url());
+  });
+  await page.route("**/history-attachments/**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("includeGraph") ===
+      "false"
+    ) {
+      metadataReads++;
+      if (revoked)
+        return route.fulfill({
+          status: 404,
+          json: { code: "RESOURCE_NOT_FOUND", message: "공개 취소" },
+        });
+      const response = await route.fetch();
+      return route.fulfill({
+        response,
+        json: { ...(await response.json()), judgment: null },
+      });
+    }
+    return route.fulfill({
+      status: 503,
+      json: {
+        code: "GRAPH_TEMPORARILY_UNAVAILABLE",
+        message: "그래프 재조회 필요",
+      },
+    });
+  });
+  await page.goto("/posts/" + id);
+  await page.getByRole("button", { name: "분석 기록 h-501 열기" }).click();
+  await expect(
+    page.getByText("213 합성 첨부 메모", { exact: true }),
+  ).toBeVisible();
+  expect(metadataReads).toBe(1);
+  revoked = true;
+  await page.getByRole("button", { name: "제출 당시", exact: true }).click();
+  await expect(
+    page.getByText("213 합성 첨부 메모", { exact: true }),
+  ).toHaveCount(0);
+  await expect.poll(() => metadataReads).toBe(2);
+  expect(privateReads).toEqual([]);
+});
+
 async function enter(target: Locator, value: string) {
   await target.fill(value);
   if (test.info().project.name === "firefox") {
