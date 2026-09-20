@@ -237,6 +237,22 @@ class StarListTest {
         assertEquals(ErrorCode.STAR_LIST_PRIVATE, thrown.getErrorCode());
     }
 
+    @Test
+    void 공개_목록의_커서도_비공개_전환_뒤에는_우회하지_못한다() {
+        long first = unlockAt(otherMemberId, 0, "2026-09-10T00:00:00Z");
+        long second = unlockAt(otherMemberId, 1, "2026-09-11T00:00:00Z");
+        submitAt(otherMemberId, first, "2026-09-12T00:00:00Z");
+        submitAt(otherMemberId, second, "2026-09-13T00:00:00Z");
+        String cursor = stars.list(memberId, otherMemberId, null, null, 1, null).nextCursor();
+        jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, false)"
+                + " ON CONFLICT (user_id) DO UPDATE SET star_list_public = false", otherMemberId);
+
+        var thrown = assertThrows(BusinessException.class,
+                () -> stars.list(memberId, otherMemberId, null, null, 1, cursor));
+
+        assertEquals(ErrorCode.STAR_LIST_PRIVATE, thrown.getErrorCode());
+    }
+
     /** 비공개여도 본인은 본다. */
     @Test
     void 비공개여도_본인은_자기_목록을_본다() {

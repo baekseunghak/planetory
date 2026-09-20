@@ -160,6 +160,22 @@ function readFeedItem(value: unknown): FeedItem {
 export const readFeed = (value: unknown, cursor?: string | null) =>
   readPage(value, readFeedItem, (item) => `${item.type}:${item.id}`, cursor);
 
+// Selection and ordering belong to S18. Validate its result rather than
+// filtering the general feed, counting analyses, or ranking in the browser.
+export function readHotTopics(value: unknown, cursor?: string | null) {
+  const page = readFeed(value, cursor);
+  if (
+    page.items.some(
+      (item) =>
+        item.type !== "SIGNAL_THREAD" ||
+        !item.judgmentSummary ||
+        item.judgmentSummary.participantCount < 10,
+    )
+  )
+    return invalid();
+  return page;
+}
+
 export function readPost(value: unknown) {
   const row = object(value);
   return {

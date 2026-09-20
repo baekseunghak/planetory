@@ -129,7 +129,7 @@ epoch = reference + (phase_center + k) * period_days
 
 ## 7. 재전송·잔차·재도전
 
-- 같은 사용자·같은 동작의 동일 `request_id` 재전송은 기존 처리 결과를 반환한다. 같은 키의 다른 입력은 `IDEMPOTENCY_CONFLICT`로 거절하는 안이며 보관기간·처리 중 응답은 Q3에서 결정한다. 통신 실패를 이유로 즉시 새 ID로 재제출하지 않는다.
+- 구판 Mock의 `request_id` 제안은 운영 제출 계약이 아니다. 현재 `requestId` 충돌·처리 중 응답·유지/갱신·복구는 [탐사 API 2.2절](../../../apps/backend/docs/exploration-api-spec.md#22-요청-id와-멱등)을 따른다. 통신 실패를 이유로 즉시 새 ID로 재제출하지 않는다.
 - 다시 풀기는 원본의 Bundle·제출 전 곡선·제거 집합·입력·표시 상태를 편집 초안으로 돌려준다. 이 동작만으로 새 Submission·History·성과를 만들지 않는다. 사용자가 제출할 때 새 요청 ID와 새 기록을 만들며 이전 제출 참조를 남긴다.
 - 구 Bundle이 만료되거나 해당 복원이 불가능하면 명시적 오류를 돌려준다. 최신 Bundle로 조용히 바꾸지 않고 누적 진행도 유지한다. 만료 기간은 이 초안에서 정하지 않는다.
 - 잔차 작업은 `QUEUED → RESIDUAL_CALCULATING → RESIDUAL_READY → PERIODOGRAM_CALCULATING → COMPLETED/FAILED`. 캐시 적중은 바로 COMPLETED 가능하다. 작업 응답은 `job_id`, `source_submission_id`, `source_curve_context`, 목표 제거 집합·버전, `failure`, `result_curve_context`를 제공한다.

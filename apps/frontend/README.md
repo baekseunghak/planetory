@@ -1,12 +1,16 @@
 # Planetory 공용 프론트
 
+2026-09-20 W20-2: 커뮤니티의 핫 토픽 목록·유효 공개 분석 참여자10명 선정 기준·상세 복귀를 연결했다. `npm run dev:hot-topics`로58368에서 합성 HTTP 데이터를 확인한다. [218 구현·검증·216 인계](docs/ticket-218-readiness.md)를 따른다. 실제 S18 집계 인수는216-218에서 진행한다.
+
+2026-09-18 W20-1: 커뮤니티 제목·본문/현재 닉네임/TIC/게시판/태그 검색과 상세 복귀를 연결했다. `npm run dev:search`로58364에서 합성 HTTP 데이터를 확인한다. [217 구현·검증·216 인계](docs/ticket-217-readiness.md)를 따른다. 실제 S16 연결은216-217에서 인수한다.
+
 2026-09-18 W13-2: 일반 글 반응·취소·반응자 목록을 연결했다. `npm run dev:reactions`로58352에서 개발 자료를 확인한다. [212 구현·검증 및216 인계](docs/ticket-212-readiness.md)를 따른다.211 MR !78 선행 병합이 필요하다.
 
 2026-09-18 W13-1: 일반 글·공식 스레드 댓글 CRUD와 응답 유실 복구를 연결했다. `npm run dev:comments`로58350에서 개발 자료를 확인한다. [211 구현·검증 및216 인계](docs/ticket-211-readiness.md)를 따른다.210 MR !76 선행 병합이 필요하다.
 
 2026-09-18 W12: 일반 글 작성·본인 수정/삭제와 응답 유실 복구를 연결했다. `npm run dev:posts`로58348에서 개발 자료를 확인한다. [210 구현·검증 및216 인계](docs/ticket-210-readiness.md)를 따른다.209 MR !75 선행 병합이 필요하다.
 
-2026-09-18 W11: 전체/별/자유 피드, 일반 글 상세, 공식 신호 스레드·공개 판단 요약·공개 분석 목록·토론 조회를 연결했다. `npm run dev:community`로58346에서 개발 자료를 확인한다. [209 구현·계약 검증 및 실제 연동 인수](docs/ticket-209-readiness.md)를 따른다. 글/댓글 쓰기·공개 분석 상세·검색/핫 토픽은 각각 담당 티켓에서 연결한다.
+2026-09-18 W11: 전체/별/자유 피드, 일반 글 상세, 공식 신호 스레드·공개 판단 요약·공개 분석 목록·토론 조회를 연결했다. `npm run dev:community`로58346에서 개발 자료를 확인한다. [209 구현·계약 검증 및 실제 연동 인수](docs/ticket-209-readiness.md)를 따른다. 검색은217, 핫 토픽은218에서 연결했다.
 2026-09-17: 208 튜토리얼·챌린지·재개 퀘스트를 지도와 대체 목록의 공용 패널로 연결했다. `npm run dev:quests`는 58345의 개발용 합성 응답이다. 실제 API 확인 범위와 남은 제공자 연결은 [208 구현·인수 기록](docs/ticket-208-readiness.md)을 따른다.
 
 2026-09-17: 207 WebGL 대체 발견 목록·키보드 전환을 연결했다. `npm run dev:fallback`으로 58338에서 확인한다. [207 구현·검증과 실제 인수 대기](docs/ticket-207-readiness.md)를 따른다.
@@ -121,6 +125,8 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 `npm run test:docker-defaults`는 Dockerfile의 build 단계에 있는 `VITE_*` 기본값을 읽어 별도 `dist/docker-defaults`에 빌드한 후 58330 포트에서 기존 운영 브라우저 검사를 실행한다. 호스트 `VITE_*`와 로컬 `.env`를 제외해 잘못된 기본값이 개인 설정으로 가려지지 않게 한다. 이 검사는 Docker 엔진 없이 실행할 수 있으며 실제 Linux 이미지/Nginx·배포 HTTPS 검증을 대체하지 않는다. `npm run check`에도 포함한다. [리뷰 수정 검증](docs/merge-readiness-202.md#docker-oauth-기본값-리뷰-수정).
 
 ## W04 로그인 화면 검증
+
+별지도 성능 측정은 [215 재현 방법·구조](docs/performance-215.md)와 [215 결과·잔여 조건](docs/ticket-215-readiness.md)을 따른다. `npm run dev:performance`는 별도 production-compiled 서비스 화면과 로컬 HTTP fixture를58360에서 제공한다. 제품 빌드에는 포함되지 않으며214 브랜치가 필요하지 않다.
 
 `npm run dev:auth` → http://127.0.0.1:58268/login. 두 버튼은 개발 전용 인증 응답을 사용한다. 실제 OAuth 제공자 연동이 아니다. 최초 닉네임·취소·실패·서버 연결 설정과 남은 인수 조건은 [202 검증 기록](docs/ticket-202-readiness.md)을 참고한다. 기존 별지도 시제품은 이 브랜치에 포함하지 않는다.
 

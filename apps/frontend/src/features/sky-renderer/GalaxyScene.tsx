@@ -227,20 +227,19 @@ export function GalaxyScene({
     if (matrix && !suspended)
       void store.setView({ level, box: viewportBounds(matrix) });
   }, [store, matrix, level, suspended]);
+  const sourceStars = useMemo(
+    () =>
+      selectedStar && !data.stars.some((s) => s.ticId === selectedStar.ticId)
+        ? [...data.stars, selectedStar]
+        : data.stars,
+    [data.stars, selectedStar],
+  );
   const plan = useMemo(
     () =>
       matrix
-        ? renderPlan(
-            selectedStar &&
-              !data.stars.some((s) => s.ticId === selectedStar.ticId)
-              ? [...data.stars, selectedStar]
-              : data.stars,
-            matrix,
-            dimensions.width,
-            dimensions.height,
-          )
+        ? renderPlan(sourceStars, matrix, dimensions.width, dimensions.height)
         : { stars: [] },
-    [data.stars, selectedStar, matrix, dimensions],
+    [sourceStars, matrix, dimensions],
   );
   // Retire stale detail synchronously, before effects/paint after a version or selection change.
   const requestedSystem =
@@ -295,7 +294,9 @@ export function GalaxyScene({
         data-focused-planet={focusedPlanet ?? ""}
         tabIndex={suspended ? -1 : 0}
         role="listbox"
-        {...(import.meta.env.DEV ? { "data-camera": JSON.stringify(camera) } : {})}
+        {...(import.meta.env.DEV
+          ? { "data-camera": JSON.stringify(camera) }
+          : {})}
         aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
       />
       {camera && matrix && (
@@ -306,7 +307,7 @@ export function GalaxyScene({
           matrix={matrix}
           width={dimensions.width}
           height={dimensions.height}
-          stars={plan.stars}
+          stars={sourceStars}
           system={visibleSystem}
           data={data}
           store={store}

@@ -1,5 +1,7 @@
 # 별지도 데이터 어댑터 연결 계약
 
+2026-09-18 / 215: 같은 level·타일 집합 내 카메라 이동은 진행 중 페이지 요청을 보존한다. 완료 타일 집합 최대4개의 배열/객체를 재사용하고 버전 교체·dispose 때 비운다. 오류·버전·페이지 검증 규칙은 유지한다. [성능 구조·측정](performance-215.md).
+
 2026-09-15 · `S15P21C206-203` / W05. [MR !41의 7f67c568 계약](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/blob/7f67c5683f79e541da556ef4e6aed966ff317c11/docs/development/sky-presentation-contract.md), SRS v1.3·탐사 API Draft 0.4에 맞춘 선행 구현이다. 사용자가 문서 승인은 내일 받고 개발을 먼저 진행하도록 요청했다. 팀 승인·실제 API 인수를 뜻하지 않는다.
 
 ## 렌더러 연결

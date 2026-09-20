@@ -199,9 +199,9 @@ if (response.status === 401) {
 
 ### 3.2 공개 설정(P1)·타인 프로필·별 목록(P0)
 
-**ERD 기준:** 공개 설정 변경은 user_settings의 P1 범위를 따른다. P0에서는 기본 공개를 사용하고 설정 변경 API·화면은 제공하지 않는다. 설정 행이 없을 때 PUBLIC으로 응답하되, 기존 행이 있으면 star_list_public 값을 존중한다. P1의 PUBLIC/PRIVATE는 DB의 true/false에 대응한다.
+**구현 확정(S15P21C206-181):** `GET /api/v1/me`가 현재 `starListVisibility`를 조회한다. 설정 행이 없을 때 PUBLIC으로 응답하며, `PATCH /api/v1/me/settings`는 행이 없어도 생성하고 기존 onboarding·알림 설정을 보존한다. PUBLIC/PRIVATE는 DB의 true/false에 대응한다.
 
-P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 보내면 200으로 변경된 설정을 반환한다. 값은 `PUBLIC`/`PRIVATE`, 기본은 PUBLIC. 이 설정이 공개 게시글·반응·공식 판단 통계를 비공개로 바꾸지는 않는다.
+`PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 보내면 200으로 `{"starListVisibility":"PRIVATE"}`를 반환한다. 값은 대소문자를 구분하는 `PUBLIC`/`PRIVATE`만 허용하며, 누락·그 밖의 값은 400 `VALIDATION_FAILED`다. 같은 값의 반복 요청도 200이다. 이 설정은 공개 게시글·반응·공식 판단 통계를 비공개로 바꾸지 않는다.
 
 `GET /api/v1/members/u-102`의 공개 응답(SB-D23):
 
@@ -216,7 +216,7 @@ P1에서 `PATCH /api/v1/me/settings`에 `{"starListVisibility":"PRIVATE"}`를 �
 
 서비스 쪽에서 유지하는 규칙만 남긴다.
 
-- 타인 비공개 목록은 403 `STAR_LIST_PRIVATE`(권한 부족 안내, SB-D23)로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다.
+- 타인 비공개 목록은 403 `STAR_LIST_PRIVATE`(권한 부족 안내, SB-D23)로 거부하며 별별 진행도 함께 숨긴다. 프로필에 공개 상태가 이미 드러나므로 404로 숨기지 않는다. 이전 공개 목록의 cursor도 조회 전 공개 상태를 다시 확인하므로 우회할 수 없다.
 - 본인 조회에만 있는 필드(미게시 신호 수 등)를 타인 조회에서 빼는 규칙은 탐사 명세 4.4절·NFR-14를 따른다.
 - 이 목록의 완료 여부는 탐사 진행 상태이며 공개 여부·성과 유무와 다르다.
 
@@ -429,7 +429,7 @@ History·출처 첨부는 F09·F24 구현 전이라 `historyIds`·`sourceLinks`�
 
 - 시각 배열은 보내지 않는다. i번째 점 시각은 `startBtjd + binMinutes / 1440 × i`(ERD 규칙)이고 결측은 null이다. JSON NaN/Infinity는 보내지 않는다.
 - 산포(`fluxScatter` = ERD `flux_scatter`)는 세그먼트마다 둔다. DAT-11의 20,000점 초과 시 넓힌 실제 간격은 `binMinutes`로 표현한다. EXP-03·NFR-10의 Sector 경계·다년 공백 접기는 세그먼트 경계와 `gaps`로 판단한다.
-- 첨부·공개 분석의 History 그래프 조회는 작업을 자동 생성하지 않는다. 진행 중이면 `curve.segments:null`과 기존 `curve.residual.jobId`로 폴링한다. 작업이 아예 없으면 가짜 QUEUED/jobId를 만들지 않고 미계산 상태로 안내한다. 사용자 확정: 초기에는 공개 조회자에게 타인의 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 그래프 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본과 잔차는 구분해 표시하고 나머지 공개 내용은 계속 표시한다. 본인 분석용 잔차 요청 API의 기존 권한은 유지한다. 결과와 작업이 모두 없으면 residual의 status·jobId를 모두 null로 반환하고 폴링하지 않는다. null은 작업 생성 전 조회 표현이며 작업 상태 enum은 추가하지 않는다. 실제 작업이 있을 때만 그 상태와 ID를 반환하며, 타인에게 개인 작업 조회 권한을 추가하지 않는다. 계산 중은 503이 아니며 503은 의존성 장애·판 일관성 재조회 실패에 사용한다.
+- History 그래프 조회는 작업을 자동 생성하지 않는다. 본인 History의 실제 작업 상태·미계산 null과 공개 조회의 캐시/원본/스냅샷 대체는 [탐사 API 8.3절](exploration-api-spec.md#83-히스토리-그래프-his-03-q11)을 따른다. 타인 공개 조회는 개인 jobId를 반환하거나 개인 작업 API를 폴링하지 않는다. 그래프 제공 불가여도 허용된 판단·근거·메모는 유지하며, 계산 중·자료 없음과 503 장애를 구분한다.
 
 **History 그래프 — 첨부·공개 분석 공통**
 
@@ -463,6 +463,8 @@ CURRENT 형식 예시. 가상 데이터이며 nPoints·gaps를 보이는 배열 
 ```
 
 세그먼트는 탐사 5.2절, graph 외형과 snapshot:null 처리는 8.3절을 참조한다. 호출 경로의 graphMode는 탐사 내부 mode로 매핑한다. 아래 첨부 응답은 graphMode=SUBMITTED이지만 스냅샷이 없는 기록의 예다(curve:null, snapshot:null). graph 외형은 이 전체 객체이며 중첩 객체를 다시 평탄화하지 않는다.
+
+**148 구현 인계:** [탐사 API 8.5.1](exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회)의 `publicContent`·`publicGraph`를 사용한다. 부모 권한 검사 함수는 160·공개 분석 조회 담당이 제공하며 매 시도·반환 직전에 DB 상태를 다시 확인한다. 타인의 개인 jobId는 공개 응답에서 null이고 개인 작업 API를 폴링하지 않는다. 공개 CURRENT의 미준비 잔차는 원본으로 대체하며, 계산 중 자체를 503으로 처리하지 않는다. 원본 대체·snapshotVersion·판 교체·의존성 장애의 상세 응답은 탐사 8.3절 한 곳에서 관리한다. 그래프 실패가 허용된 판단·근거·메모를 지우지 않도록 소비 화면을 구성하며 503을 정상적인 자료 없음으로 숨기지 않는다.
 
 **데이터 판 전환·실패 처리**
 

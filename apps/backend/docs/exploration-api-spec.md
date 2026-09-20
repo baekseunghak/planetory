@@ -63,6 +63,19 @@
 
 서비스 API는 글·댓글에 요청 키를 두지 않으므로(SB-D17) 요청 ID는 탐사 API의 본문 `requestId`뿐이다(D-1, Q07).
 
+**제출 복구·ID 수명(143 리뷰 반영):** 아래 표가 제출 클라이언트의 확정 전송 계약이다. 구판 Mock의 제안이나 프론트 명세의 의미 분류보다 우선한다. `keep`은 원본 요청 본문과 ID를 함께 보존함을 뜻하며, `renew`는 사용자가 변경한 입력으로 새 제출을 확정할 때만 발급한다.
+
+| 결과 | requestId 처리 | 다음 행동 |
+| --- | --- | --- |
+| 응답 유실·네트워크 오류, `REQUEST_IN_PROGRESS` | keep | by-request로 복구한다. 미접수 404면 같은 본문·ID로 재전송한다 |
+| `SUBMISSION_CONTEXT_NOT_READY` | keep | 잔차를 명시적으로 준비한 뒤 같은 본문·ID로 재전송한다 |
+| `DEPENDENCY_UNAVAILABLE` | keep | 입력을 보존하고 같은 요청을 재시도한다. 과거 해시·최초 응답이 없는 기록은 반복해도 복구되지 않을 수 있으며 새 ID로 자동 우회하지 않는다 |
+| `BUNDLE_CHANGED` | renew | 5.1절 재조회 후 곡선 단계·제거 조합을 유지하고 주기·위상을 초기화한다. 재선택·사용자 확인 후 새 본문·새 ID로 제출한다 |
+| `IDEMPOTENCY_CONFLICT` | 자동 재전송 안 함 | 기존 ID·원본 요청을 보존하고 본인 by-request 조회로 기존 접수를 확인한다. 원본 복구는 같은 ID, 사용자가 별도 제출을 선택한 경우에만 새 ID를 사용한다. 404도 자동 새 ID 발급 근거가 아니다 |
+| `VALIDATION_FAILED`, `EPOCH_OUT_OF_RANGE` | 수정 전 재전송 안 함, 수정 후 renew | 입력을 보존해 오류 위치를 안내하고 사용자 수정·확인 후 새 제출한다 |
+| 인증·권한·공개 상태 오류, `SKIP_NOT_AVAILABLE`, `STAR_ALREADY_COMPLETED` | 자동 재전송 안 함 | 해당 상태를 안내·재조회한다. 응답을 못 받은 기존 요청이 있다면 먼저 기존 ID로 접수 여부를 복구한다 |
+| 성공 `201`·재전송 `200` | 재전송 불필요 | 모두 접수 성공으로 처리한다. 연출은 HTTP 상태가 아니라 회원·submissionId별 표시 이력으로 중복을 억제한다. 최초 201이 유실된 뒤 200으로 처음 복구한 결과도 표시할 수 있어야 한다 |
+
 ### 2.3 판 교체와 별 잠김
 
 | 코드 | HTTP | 뜻·프론트 처리 |
@@ -76,6 +89,7 @@
 | `STEP_NOT_RESTORABLE` | (안내값) | 오류가 아니라 6.8절·5.1절 응답의 `notice` 값. 제거 조합에 은퇴 후보가 있어 그 조합 그대로는 복원할 수 없을 때, 분석 복귀와 다시 풀기는 그 별의 최신 현재 진행 문맥을 돌려준다. History CURRENT는 별도 규칙에 따라 최신 원본을 사용한다 |
 | `CANDIDATE_RETIRED` | 409 | 재도전 대상 신호가 현재 판에서 은퇴함 |
 | `CURVE_NOT_READY` | 202 | 잔차가 아직 없음. 본문에 `residual` 상태(5.2절) |
+| `SUBMISSION_CONTEXT_NOT_READY` | 409 | 새 제출에 필요한 해당 단계 잔차가 미준비. `residual`에 실제 상태·jobId·computedAt을 담는다. 미접수이며 잔차를 명시적으로 준비한 뒤 같은 requestId로 재전송한다 |
 | `RESIDUAL_QUEUE_FULL` | 429 | 대기열 초과. 본문에 `retryAfterSeconds` |
 | `VALIDATION_FAILED` | 400 | 입력 검증 실패. `fieldErrors[]`에 위치·사유 |
 | `EPOCH_OUT_OF_RANGE` | 400 | 위상 중심을 관측 범위 안의 epoch로 환산할 정수 k가 없음(EXP-06) |
@@ -86,6 +100,8 @@
 **현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다. 구현은 5.2·5.3절 응답(200·202)부터 붙였고(`S15P21C206-140`), 나머지 API는 각 구현 때 붙인다.
 
 `BUNDLE_CHANGED` 본문은 공통 오류 본문에 `currentBundleId`를 더한다: `{"code": "BUNDLE_CHANGED", "message": "...", "currentBundleId": "b-3"}`.
+
+**D-5 재전송 성공 예외:** POST 재전송 200은 판이 바뀌어도 접수 당시 본문을 그대로 반환한다. `X-Current-Bundle`과 본문 `bundleId`가 다르면 성공을 취소하거나 다시 제출하지 않고 결과에 ‘접수 당시 판 기준’을 표시한다. 최신 진행·공개 상태·통계·후속 행동이 필요한 영역만 6.6절(145)로 재조회하며 당시 판정·선택·스냅샷을 덮어쓰지 않는다. 분석을 계속할 때는 5.1절로 현재 문맥을 갱신한다. GET 미연결·실패 시 당시 결과를 유지하고 최신 영역의 미확인 상태를 표시한다.
 
 ### 2.4 잔차 상태 열거형
 
@@ -716,7 +732,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `selection` | candidate만 | 원본 입력. `sourcePeakGridIndex`는 사용자가 선택한 봉우리의 `gridIndex`이며 주기도의 다른 위치를 직접 선택했으면 null이다. `epoch`·`duration`·정정 주기·성과를 보내도 무시한다(SUB-01) |
 | `userJudgment` | candidate만 | `LIKELY_PLANET` / `UNLIKELY_PLANET` / `UNSURE` |
 | `evidenceChecks` | 아니오 | `oddeven`, `secondary`, `ushape` 중 0~3개. 그 외 값(중심 위치 포함)은 400(POL-13, AT-93) |
-| `memo` | 아니오 | 0~200 유니코드 코드포인트. 2026-09-17 사용자 채택·프론트 적용, 서버 DTO 검증·오류 응답 반영 확인 대기 |
+| `memo` | 아니오 | 0~200 유니코드 코드포인트. 서버 DTO 검증·초과 시 `VALIDATION_FAILED` 반영 완료(143) |
 | `viewState` | 아니오 | 재현용. 서버 매칭 입력이 아니며 범위만 검증(HIS-02). `foldedXZoomRatio`를 제공하면 유한한 수이며 `1 ≤ 값 ≤ 32`여야 한다. 기존 1~8 값도 유효하다(SRS v1.3.1 변경안) |
 | `retryOfSubmissionId` | 아니오 | [다시 풀기]에서 온 제출. 본인 제출·같은 TIC만 |
 
@@ -724,7 +740,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ### 6.2 검증 (SUB-02, Q03)
 
-순서대로 검사하고 첫 실패에서 400을 돌려준다. `fieldErrors[].field`는 아래 이름을 쓴다.
+아래 순서로 검사하고 첫 실패에서 표의 HTTP 상태를 돌려준다. `fieldErrors` 원소는 `{field, reason}`이며 `field`는 아래 이름을 쓴다. 예: `{"field":"selection.periodDays","reason":"유한한 양수여야 합니다."}`. 요청 ID 유지·갱신은 2.2절을 따른다.
 
 | 순서 | 검사 | 실패 코드 |
 |---|---|---|
@@ -747,6 +763,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 **C02-R3 결정:** 추천 duration 3배 상한은 정답 판정 범위가 아니라 선택 폭 제한이다. 서로 다른 봉우리의 `fineTune` 범위가 겹쳐도 `sourcePeakGridIndex`가 가리키는 사용자 선택 봉우리의 `suggestedDurationHours`만 사용한다. source가 null인 직접 주기 선택은 Bundle 공통 `phaseWidthMax`만 적용한다. 추천 배열 순서나 가장 가까운 봉우리로 source를 추정하지 않는다. 3배 값은 DEC-19의 현재 기본안이며 운영값은 `selectionRules.version`으로 버전 관리한다.
 
 ### 6.3 처리 순서 (한 트랜잭션, NFR-01)
+
+**143 채택 계약(2026-09-19, 사용자 결정):** `foldedError`는 150개 위상 구간별 `1.4826 × MAD` 밝기 산포이며 표준오차/신뢰구간이 아니다. 빈 구간은 flux/error 모두 null, 단일 점은 error만 null이다. 원본 제출 주기와 판의 T를 사용하며 새 제출은 bin 중심 시각 기준 `folded-mad-v1`을 이력에 기록한다. 기존 v0 배열·버전과 최초 응답은 보존하며 소급 재계산하지 않는다. 정규화·응답 보존·세부 계산은 [제출 구현 계약·인수 조건](../../../docs/api/exploration/submission-readiness.md)을 따른다. POST 재전송은 저장한 최초 본문을 재현하고 GET 145의 현재값 필드와 구분한다. 필요한 잔차가 미준비면 409 `SUBMISSION_CONTEXT_NOT_READY`와 residual 상태를 반환하고 저장하지 않는다. 봉우리 생산자 부재·통신/배열 손상은 503 `DEPENDENCY_UNAVAILABLE`이다. 141·147은 담당자 인계 후 실제 연결을 검증하며 143 본체의 선행 완료 조건으로 삼지 않는다.
 
 ```text
 1. request_id로 기존 행 조회 → 있으면 본문 해시 비교 후 재현 또는 IDEMPOTENCY_CONFLICT
@@ -832,6 +850,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `nextActions` | 서버 힌트(RES-03·08). `NEXT_CURVE`(남은 탐색 가능 신호 있음), `VIEW_DETAIL`, `RETRY`, `PUBLISH_ANALYSIS`(미확정 매칭), `LATER`, `VIEW_RESULT`, `GO_HOME`, `DISCUSS`(not_matched), `SKIP_TUTORIAL`. 실행 시 서버가 다시 검증. 게시 화면으로 강제 이동시키지 않는다(AT-36) |
 
 `ambiguous_match`: 어느 후보도 고르지 않고 `signal: null`, 성과·진행 변화 없음, `nextActions`는 `RETRY`(AT-13). 판 교체 후 재전송된 `requestId`는 저장된 결과를 그대로 재현하며 새 판으로 다시 판정하지 않는다.
+
+`GO_HOME`은 `matched`·`matched_harmonic`·`duplicate` 결과에서 제공한다(RES-08). `DISCUSS`는 `not_matched`에서만 제공하며 같은 TIC·DISCUSSION·현재 본인 historyId를 가진 작성 초안을 연다(COM-10). 힌트 자체는 게시·성과를 만들지 않는다. `none_wrong`·`skipped`에는 이 두 힌트를 추가하지 않고 `ambiguous_match`는 기존대로 `RETRY`만 제공한다. 기존 저장 응답에 새 힌트를 소급 추가하지 않는다.
 
 ### 6.5 특수 제출
 
@@ -968,7 +988,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
     "achievementResult": "pending_publish", "submittedAt": "2026-09-10T02:30:00Z",
     "bundleId": "b-2", "isPreviousBundle": false, "curveStep": 1,
     "publication": {"publicAnalysisId": null, "isPublic": false, "isModerationHidden": false},
-    "achievementGranted": false, "snapshotAvailable": true, "answerViewed": false,
+    "achievementGranted": false, "snapshotAvailable": true, "detailAvailable": true, "answerViewed": false,
     "relabel": null, "retryOfSubmissionId": null
   }],
   "nextCursor": null, "hasNext": false
@@ -978,7 +998,10 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - `result` 필터: `matched`(matched·matched_harmonic·duplicate) / `not_matched` / `none_wrong` / `ambiguous_match` / `skipped`.
 - 정렬 `submittedAt` 내림차순, 동률 `submissionId` 내림차순(결정 7-1).
 - `achievementGranted`는 `user_candidate_achievements` 존재 여부이며 현재 공개 여부와 다르다.
+- `detailAvailable`은 최초 응답 `response_snapshot`의 저장 여부다. false이면 개인 상세 진입·재시도를 제공하지 않고 "최초 응답이 없어 상세를 제공할 수 없는 기록입니다"를 안내한다. `snapshotAvailable`과 독립적이며 목록·공개 투영·그래프의 제공 여부를 제한하지 않는다. true는 다른 의존성 장애까지 없다는 보장이 아니다.
 - 타인은 조회할 수 없다(NFR-14). 첨부·공개 분석은 8.5절 투영을 서비스 API가 사용한다.
+
+148 구현의 목록 입력은 공통 목록 규칙대로 `size` 기본 20·최대 100이다. `from`·`to`는 offset을 포함한 ISO 8601 시각(UTC로 정규화, 연도 0001~9999)이며 **from 이상·to 미만**이다. 둘 다 있으면 from < to여야 한다. 빈 선택 필터는 미지정으로 취급한다. 잘못된 ID·결과·시각·size·cursor는 400 `VALIDATION_FAILED`다. 커서는 요청 회원·ticId·candidateId·result·from·to·size와 마지막 제출의 시각/id에 묶는다. 조건 변경 시 커서를 버린다. 다른 회원·TIC·필터의 커서를 이어 쓰지 않는다. 현재 판이 없으면 저장 판은 현재 판이 아니므로 `isPreviousBundle=true`이며 목록 자체는 조회한다.
 
 ### 8.2 히스토리 상세
 
@@ -1000,9 +1023,19 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 DEC-11(서비스 F04). `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
 
+148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 미확정 미공개 `UNPUBLISHED`, 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
+
+**저장 매핑:** 143의 History `versions.bundleVersion` → `versions.data`, `ruleVersion` → `rule`, `residualModelVersion` → `residualModel`, `periodogramConfigVersion` → `periodogramConfig`로 투영한다. 별도로 보존되지 않은 `preprocess`·`pipeline`은 null이며 현재 처리 버전으로 꾸며 채우지 않는다. `versions.snapshotVersion`을 추가 전달한다. 143의 `snapshot_params.viewState`가 viewport·배율의 원본이고, 최초 응답에도 같은 값이 보존되어 있다. `snapshotParams.foldSettings.referenceTimeBtjd`는 제출 당시 기준 시각이다. 현재 판을 읽지 못해도 개인 상세·목록·공개 내용은 현재 그래프와 별도로 조회한다. 없는/형식이 틀린 History ID는 404 `RESOURCE_NOT_FOUND`, 타인 개인 기록은 403 `FORBIDDEN`이다.
+
+**최초 응답 누락 방어 정책(확정):** 143 병합 직전 develop(`157fb5e`)에는 정상 제출 생성 경로가 없었다. 최초 응답 `response_snapshot`이 없는 비정상·수동 적재 기록은 당시 판단 평가 전체를 복원할 근거가 부족하므로 상세 전체 조회만 503 `DEPENDENCY_UNAVAILABLE`로 실패시키고 목록·공개 투영·그래프는 저장된 열로 계속 조회한다. 현재 후보로 재판정하거나 과거 평가를 추정하지 않는다. 이는 143이 생성한 정상 기록의 조회와 구분하며, 운영 DB의 해당 행 존재 여부를 직접 확인했다는 뜻은 아니다.
+
+목록 소비자는 8.1절 `detailAvailable=false`로 이 누락을 미리 구분한다. 직접 상세 요청의 기존 503 정책은 유지한다.
+
 ### 8.3 히스토리 그래프 (HIS-03, Q11)
 
 `GET /api/v1/histories/{historyId}/graph?mode=CURRENT|SUBMITTED` — 생략은 `CURRENT`.
+
+아래는 CURRENT 원본 대체 응답 예시다. SUBMITTED의 배열은 `{"bins":150,"foldedFlux":[...],"foldedError":[...]}` 형식이며 두 배열은 각각 150개다.
 
 ```json
 {
@@ -1014,20 +1047,35 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                 "epochBtjd": 1683.4231, "durationHours": 2.83,
                 "currentPhaseStart": 0.9874, "currentPhaseEnd": 0.9974},
   "curve": {"$ref": "5.2절 세그먼트 DTO. residualReproducible=false면 원본(curveStep 0)"},
-  "snapshot": {"bins": 150, "foldedFlux": [1.0, 0.98], "foldedError": [0.001, 0.002]}
+  "snapshot": null,
+  "snapshotVersion": "folded-mad-v1"
 }
 ```
 
 | 모드 | 내용 |
 |---|---|
 | `CURRENT` | 현재 판 곡선(잔차 재현 가능하면 그 단계, 아니면 원본) + `selection`의 현재 위상. `snapshot`은 `null` |
-| `SUBMITTED` | `curve`는 `null`, `snapshot`은 `analysis_snapshots`. 위상 i = `-0.5 + (i + 0.5) / bins`. 매칭 실패 기록은 `snapshot: null`(409가 아니라 200) |
+| `SUBMITTED` | `curve`와 `selection.currentPhaseStart/End`는 `null`, `snapshot`은 `analysis_snapshots`. 당시 선택 창은 개인 상세의 `submission.original.phaseStart/phaseEnd` 또는 공개 내용의 `original.phaseStart/phaseEnd`를 사용한다. 위상 i = `-0.5 + (i + 0.5) / bins`. 매칭 실패 기록은 `snapshot: null`(409가 아니라 200) |
+
+SUBMITTED의 당시 선택 창은 제출 당시 T·원본 P 기준으로 저장된 값이다. 표시할 때 [-0.5, 0.5)로 순환시키되 경계를 넘는 창은 나누어 표시하고, 현재 T로 재환산하지 않는다. `selection.epochBtjd`·`durationHours`·원본/정정 주기는 두 모드에서 보존하며 현재 T로의 `currentPhase*` 환산은 CURRENT에만 적용한다. `reproduction.currentFoldReferenceTimeBtjd`는 현재 판 메타데이터이므로 SUBMITTED 선택·모델 정렬에 사용하지 않는다.
 
 접기는 `userPeriodDays`(원본 주기)로 한다. 정정 주기는 참고 표시다. 잔차 단계가 캐시에 없으면 HTTP 200을 유지하고 `curve.segments: null`로 준다. 결과와 작업이 모두 없으면 `curve.residual: {"status":null,"jobId":null}`, 실제 작업이 있으면 해당 상태와 실제 ID를 반환한다. null 상태는 작업 생성 전 조회 표현이며 2장의 작업 상태 전이에 추가하지 않는다. 히스토리 조회는 작업을 자동 생성하지 않는다.
 
+그래프 최상위에 `snapshotVersion`을 추가한다(상세의 `versions.snapshotVersion`과 같은 저장값, 구기록에 버전이 없으면 null). `folded-mad-v0`·`folded-mad-v1`의 의미와 표시 기준은 [제출 계약](../../../docs/api/exploration/submission-readiness.md#1-채택한-스냅샷-계산)을 따른다. 값이 없다고 최신 버전으로 추정하지 않는다. 버전과 배열은 조회 시 이동·재계산하지 않는다. 특수 제출은 주기·절대 구간·현재 위상이 null이며 selection 객체 자체는 유지한다.
+
+배열이 있고 `snapshotVersion=null`이면 저장 배열을 그대로 그리되 "스냅샷 버전 정보가 없어 선택 영역과의 정렬을 보장할 수 없습니다"를 표시한다. v0·v1 어느 쪽으로도 간주하거나 배열을 이동·보정하지 않으며, 정밀한 선택·모델 정렬을 보장하는 표시는 하지 않는다. CURRENT에도 저장 버전이 전달되지만 현재 곡선의 렌더링 기준으로 사용하지 않는다.
+
 첨부·공개 분석을 보는 타인에게는 잔차 재계산 요청 기능을 제공하지 않는다. 제공 가능한 원본 또는 제출 스냅샷만 표시하고 둘 다 없으면 그래프 제공 불가를 안내한다. 원본은 잔차로 표시하지 않으며 판단·메모 등 나머지 공개 내용은 유지한다. SUBMITTED 요청은 기존대로 curve:null·snapshot 규칙을 유지하고, 원본 대체는 CURRENT 조회로 구분한다. 개인 잔차 생성·작업 조회 API의 기존 권한을 확대하지 않는다.
 
-읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). 서로 다른 판의 배열과 메타데이터를 한 응답에 섞지 않으며, `reproduction.currentBundleId`는 실제로 그래프를 만든 판이다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
+공개 CURRENT의 캐시 잔차가 미완료·없음이면 `fallbackReason=RESIDUAL_NOT_AVAILABLE`, `residualReproducible=false`와 현재 원본(`curveStep=0`, 제거 집합 빈 목록)을 반환한다. 원본의 residual은 원래 계약대로 `COMPLETED`·jobId null이며 잔차 작업이 완료됐다는 뜻이 아니다. 은퇴 대체는 `RETIRED_CANDIDATE`다. 완료 캐시를 사용할 때도 **공개 응답의 jobId는 null**이다. 개인 CURRENT의 `residualReproducible`은 저장된 제거 조합의 복원 가능성을 뜻하며 계산 준비 여부는 `curve.residual`과 segments로 판단한다.
+
+SUBMITTED의 `residualReproducible=false`·`fallbackReason=RETIRED_CANDIDATE`는 **현재 판에서 당시 제거 조합을 재현할 수 없다는 참고값**이다. 당시 배열의 대체·손상을 뜻하지 않으므로 SUBMITTED 화면의 "원본으로 대체됨" 안내에는 사용하지 않는다. 배지를 제공한다면 "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다"로 구분한다.
+
+Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통과 fixture다. SUBMITTED는 당시 선택과 같은 기준의 저장 배열(0부터 센 bin 87~92)·오차·버전을 보존하고 currentPhase 두 필드는 null이다. CURRENT만 현재 T 기준 0.75~0.78333…로 환산한다. 개인·공개 Graph 모두 같은 기준을 검증하며 프론트 실제 렌더링 인수와는 구분한다.
+
+현재 판이 아예 없거나 동일 판의 필수 배열이 손상된 경우는 503 `DEPENDENCY_UNAVAILABLE`이다. 정상 판 전환 중 current 공백은 86·87번의 원자 전환 계약으로 노출하지 않는다. `SUBMITTED`도 공통 reproduction의 현재 판 메타데이터를 제공하므로 현재 판 부재 시 같은 503이며, 저장 스냅샷을 없애거나 재계산하지 않는다. 이 경우를 정상 snapshot:null·잔차 미계산과 합치지 않는다. mode의 허용값 밖은 400이며 생략만 CURRENT다. 성공 그래프의 `X-Current-Bundle`은 reproduction.currentBundleId와 같다.
+
+읽기 조회이므로 판 교체는 `BUNDLE_CHANGED`로 거절하지 않는다. CURRENT 응답을 만드는 동안 선택한 판이 `archived`가 되면 서버가 최신 판으로 조회 전체를 **최대 1회** 다시 시도하고, 그래도 한 판으로 일관된 결과를 만들지 못하면 503 `GRAPH_TEMPORARILY_UNAVAILABLE`을 돌려준다(서비스 API 7.2절 SB-D18과 같은 규칙). CURRENT의 곡선과 메타데이터는 같은 판을 사용하며 `reproduction.currentBundleId`는 실제로 곡선을 만든 판이다. SUBMITTED의 배열은 `submittedBundleId` 기준으로 보존하고 현재 판 메타데이터와 구분한다. 서비스 API의 첨부·공개 분석 그래프 조회도 이 절을 그대로 쓴다.
 
 ### 8.4 별 결과 페이지 (RES-10, AT-74)
 
@@ -1078,6 +1126,14 @@ serverDerived.epochBtjd, serverDerived.durationHours, match.status, match.correc
 curveContext, versions, graph(8.3절, mode 양쪽), relabel
 ```
 
+### 8.5.1 서비스 도메인 인계(148 → 160·공개 분석 조회)
+
+`HistoryService.publicContent(historyId, checkAccess)`는 공개 허용 내용과 versions를 반환하며 graph는 null이다. `publicGraph(historyId, mode, checkAccess)`는 공용 8.3절 Graph를 반환한다. 같은 History이면 `content.withGraph(graph)`로 조합할 수 있다. 저장 JSON의 `originalMatch` 등 내부 항목을 versions에 그대로 펼치지 않는다. 개인 조회 DTO와 공개 DTO는 분리하지만 그래프 배열 형식은 같다.
+
+`checkAccess`는 호출자가 전달하는 **읽기 전용 부모 권한 검사**다. 현재 요청 회원, 부모 종류/id와 실제 History 연결, 같은 TIC, 공개·숨김·삭제·취소 상태를 DB에서 검사하고 거절 시 기존 권한 오류를 던진다. 미리 구한 boolean이나 아무 동작 없는 함수로 대체하지 않는다. 148은 그래프 각 시도 시작 및 반환 직전에 새 트랜잭션에서 검사한다. 호출자는 아직 커밋하지 않은 첨부 쓰기를 이 조회에 연결하지 않는다. 현재 판 확인도 읽기 스냅샷 밖에서 수행하여 교체를 감지한다. 판 교체 중 캐시 소실도 판 확인 후 한 번 재조회하며, 안정된 판의 캐시 장애를 단순 미계산으로 숨기지 않는다.
+
+공개 내용과 그래프를 분리해 제공하므로 소비자는 그래프 장애 시에도 이미 권한이 확인된 판단·근거·메모를 유지하고 그래프 오류만 표시할 수 있다. 503을 graph:null인 정상 성공으로 조용히 바꾸지 않는다. 숨김·삭제·취소 후 재요청은 내용·그래프 모두 다시 권한 검사를 통과해야 한다. 148은 공개 HTTP 경로를 열지 않으며, 160이 부모 경로와 첨부 저장을 구현한다. 147 실제 캐시/Worker·160 실제 부모 경로·190/191 렌더러·213 소비 화면의 종단 인수는 각각 연결 후 수행하고 테스트 경계 대체 성공과 구분한다.
+
 ## 9. 성과·등급·별 열림·완료·재개
 
 ### 9.1 성과 조회
@@ -1098,32 +1154,54 @@ curveContext, versions, graph(8.3절, mode 양쪽), relabel
 
 `summary`는 MY-01 프로필 요약의 원천이며 서비스 API `GET /me`·`GET /members/{id}`가 읽는다. 타인 프로필 노출 범위는 서비스 SB-D23(미병합)에 따른다. 순위·백분위는 없다(STA-04).
 
+| 필드 | 규칙 |
+|---|---|
+| `summary` | 회원 전체 값이다. `ticId` 필터는 `items`에만 적용한다. 별 하나의 성과·등급은 4.2절 `achievement`가 준다 |
+| `summary.startedStarCount` | 제출 이력이 있는 발견 별 수. 4.4절 `scope=submitted` 목록의 길이와 같다 |
+| `summary.gradeDistribution` | 별마다 `user_star_progress.achievement_count`를 1/2/3/4 이상으로 묶어 센 별 수. 성과가 없는 별은 세지 않는다 |
+| `items` | 인정 시각 내림차순이고 같은 시각은 성과 id 내림차순이다. 한 트랜잭션에서 인정된 성과는 시각이 같다 |
+| `items[].recognizedSubmissionId` · `recognizedAnalysisId` | `sub-{id}` · `pa-{id}`. 확정·FP는 `recognizedAnalysisId`가 null이다 |
+| `items[].unlockedStars` | 이 성과로 열린 별. 9.2절 순번(`seq`) 순서이며, 못 찾은 별이 모자랐으면 `stars_per_achievement`보다 적다 |
+| `items[].relabel` | 9.5절 표식이 없으면 null. 있으면 8.2절과 같은 `{relabeledAt, newDisposition}`이다. `newDisposition`은 6.4절 `signal.disposition` 값을 쓰고 DB `pc`·`none`은 `UNCONFIRMED`다 |
+
+- `size`는 기본 50, 상한 100이다. `ticId`는 4.2절 경로와 같이 접두 없는 양의 정수다. 없는 별이나 발견하지 않은 별이어도 거절하지 않고 빈 목록을 준다. 계약 밖 `size`·`ticId`는 400 `VALIDATION_FAILED`다.
+- `cursor`는 불투명 값이며 요청 회원·`ticId` 필터·`size`에 묶는다. 하나라도 다르거나 형식이 깨졌으면 400이다. 위치는 인정 시각과 성과 id를 함께 담는다.
+
 ### 9.2 내부 계약: 성과 지급·별 열림
 
 HTTP가 아니라 서비스 계층 함수다. 제출(6.3절 7단계)과 서비스 API의 공개 등록·일괄 공개(SB-D15)가 **같은 함수·같은 PostgreSQL 트랜잭션**에서 호출한다.
 
 ```text
 recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recognizedAnalysisId?)
-  → { newlyRecognized, achievementId, ticAchievementCount, grade, unlockedStars[] }
+  → { newlyRecognized, achievementId, ticId, ticAchievementCount, grade, byType, unlockedStars[], unlockShortfall, skyVersion }
 
 1. SELECT users WHERE id = userId FOR UPDATE          -- 회원 단위 직렬화. 잠금 순서: users → user_star_progress → user_candidate_achievements → star_unlocks
+   인정 근거 확인: recognizedSubmissionId는 이 회원이 candidateId를 매칭한 제출이다. 미확정은 recognizedAnalysisId가
+   같은 회원·신호의 공개 분석이어야 하고, 확정·FP는 null이어야 한다. 어긋나면 아무것도 쓰지 않고 예외(호출자 오류)
+   SELECT user_star_progress WHERE (userId, 신호의 TIC) FOR UPDATE   -- 잠금 순서 두 번째. 행이 없으면(발견하지 않은 별) 예외
 2. INSERT user_candidate_achievements ON CONFLICT (user_id, candidate_id) DO NOTHING
-   → 충돌이면 newlyRecognized=false로 반환. 아래를 실행하지 않는다 (SUB-06, AT-12)
-3. user_star_progress.achievement_count += 1, fp_success = true (type=fp일 때)
-4. n = operation_settings.stars_per_achievement (기본 1)
+   → 충돌이면 newlyRecognized=false, 기존 achievementId와 현재 누적값, unlockedStars=[], unlockShortfall=0으로 반환.
+     아래를 실행하지 않는다 (SUB-06, AT-12)
+3. user_star_progress.achievement_count += 1, fp_success = true (type=fp일 때. 한 번 켠 값은 끄지 않는다)
+4. n = 호출 시점 현재 운영 규칙의 discovery.stars_per_achievement (기본 1). 현재 규칙이 없으면 503 DEPENDENCY_UNAVAILABLE
    후보 = stars.service_status=published
         AND NOT EXISTS star_unlocks(user_id, tic_id)
         AND tic_id NOT IN tutorial_stars.active AND tic_id != 진행 중 challenge_rounds.target_tic_id      (OPS-08 제외 규칙)
-   무작위 n개 선택. 시드 정책은 operation_settings (재현용 seed = hash(userId, achievementId, seq))
+   seq = 0부터 하나씩 고른다. 시드 정책 hash-user-achievement-seq-v1:
+     seed = SHA-256("{userId}:{achievementId}:{seq}", 십진 UTF-8)의 앞 8바이트를 부호 없는 빅엔디언 정수로 읽은 값
+     후보를 tic_id 오름차순으로 세우고 seed mod 후보 수 번째(0부터)를 연다. 연 별은 다음 seq의 후보에서 빠진다
    후보가 n보다 적으면 있는 만큼만 열고 반환값 unlockShortfall = n − 실제 수 (D-11). 성과 인정은 그대로
 5. 회원 잠금 안에서 실제 새 별마다 안정 layout_ordinal을 배정한다. 4.1절 personal-spiral-v1을 호출한다.
    star_unlocks INSERT (unlock_reason=achievement, trigger_tic_id=성과 별, trigger_achievement_id, seq=0..n-1,
    layout_ordinal, world_x, world_y, depth_z, layout_version=4.1절 은하 배치 함수 결과)
-   ON CONFLICT (trigger_achievement_id, seq) DO NOTHING          -- 재처리 중복 방지 (GRD-08)
-6. 반환
+   ON CONFLICT (user_id, tic_id) DO NOTHING   -- 9.4절과 같은 발견 함수. 고른 별이 그사이 다른 경로로 열렸으면 같은 seed로 다시 고른다
+   같은 성과의 재처리는 2단계에서 멈춰 여기 오지 않는다. UNIQUE(trigger_achievement_id, seq)는 DB 안전망이다 (GRD-08)
+6. 반환. skyVersion은 새 별을 열었을 때만 오른다
 ```
 
 등급 상승·완료는 트리거가 아니다(POL-27, GRD-08, 결정 1·2). 확정·FP 경로(제출)와 미확정 경로(공개)가 같은 함수를 쓰므로 여러 신호의 일괄 공개도 순차 개별 인정과 같은 결과가 된다(COM-19, AT-107).
+
+호출자 트랜잭션 안에서만 부른다. **호출자는 제출·공개 기록 저장과 진행 행 갱신 전에 같은 트랜잭션에서 회원 행을 먼저 잠근다**([서비스 API 9.1절](service-api-spec.md#91-공개-등록)과 같은 원칙). 회원을 참조하는 행을 먼저 쓰면 외래 키 검사가 회원 행에 KEY SHARE 잠금을 남기고, 같은 회원의 두 트랜잭션이 1단계 `FOR UPDATE`에서 서로를 기다리다 교착한다. 함수 안의 잠금만으로는 호출자 전체의 잠금 순서가 보장되지 않는다. 별 저장이 실패하면 호출자 트랜잭션이 통째로 되돌아가 성과만 남는 일이 없다. 성과는 인정되고 별이 모자란 경우는 `unlockShortfall`뿐이다. `ticAchievementCount`·`grade`·`byType`은 4.2절 별 상세와 같은 계산이며 6.4절 `achievement.star`에 그대로 쓴다. 성과 수·등급은 지도 응답에 없으므로 별을 열지 않은 인정은 `skyVersion`을 올리지 않는다.
 
 ### 9.3 내부 계약: 완료·재개 판정
 
@@ -1219,7 +1297,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | Q08 잔차 선노출·상태 전달 | 7.2절 폴링, `COMPLETED`에서만 전환. D-3 |
 | Q09 진행 중 은퇴 후보 | 판 전환의 분석 복귀(5.1절)와 다시 풀기(6.8절)는 최신 현재 진행 문맥을 사용한다. 히스토리 CURRENT(8.3절)는 최신 원본, SUBMITTED는 당시 snapshot을 사용한다. 대상 신호 자체가 은퇴하면 `CANDIDATE_RETIRED` |
 | Q10 ambiguous·구판 힌트·재분류 공개 자격 | 6.4절 ambiguous, 6.7절 힌트는 제출 당시 단계, 재분류 공개 자격은 서비스 F07-Q2(미결) |
-| Q11 스냅샷 누락·고조파 좌표 | 8.3절 `snapshot: null`, 접기는 원본 주기 |
+| Q11 스냅샷 누락·고조파 좌표 | 8.3절 모드별 선택 기준·버전 미상 안내·T 변경 회귀 fixture. 원본 P·서버 duration을 보존하고 SUBMITTED는 당시 original 창·저장 배열, CURRENT만 현재 위상 환산. `snapshot: null`은 누락 안내. 프론트 종단 인수는 별도 |
 | Q12 확인 도구 계산 위치 | 브라우저 계산(서버 API 없음). 입력은 5.2절 곡선 전 점. 관측 부족 기준은 윤성용 |
 
 ### 11.3 지도 프론트(하서진) 필드 대응
@@ -1348,6 +1426,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-17 | S15P21C206-151 구현 반영. 5.1절 `selectionRules.version`을 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열로 통일하고(별도 `sel-N` 없음, S15P21C206-128 합의) 각 값의 출처(규칙 버전·별 케이던스·판 manifest)를 명시. 12.2 미결 4·5의 값 저장 형식을 운영 규칙 형식 1로 고정하고 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)을 연결. 값 자체는 미결 유지 |
 | 2026-09-17 | S15P21C206-140 5.1절 구현 반영. `star`·`progress`·`bundle.curveStepRule`의 출처, `minWindowDays` 계산(판 세그먼트 bin 크기의 2배), 진입 시 9.3절 완료 판정 (b) 반영, 옛 판 제출의 복귀 문맥은 현재 판 값, `nextCurveContext`가 null이면 `residualForNextStep`도 null, 운영 규칙이 없으면 503을 적었다. 사용자 결정으로 `STEP_NOT_RESTORABLE` 안내를 `currentCurveContext.notice`에 두고, 한 번 완료한 튜토리얼 별은 `skipAvailable=false`로 정했다 |
 | 2026-09-18 | S15P21C206-142 구현 반영. 6.2절 4단계 실패 필드를 `selection.periodDays`·`selection.phaseEnd`로 구체화하고 5단계에 빈 위상 구간 거절, 6단계에 관측 범위 정의를 적었다. 사용자 결정으로 관측점·관측 창을 곡선 점 시각(bin 시작)의 연속 구간으로 정했다. 수치 판정은 제출 매칭 규칙 v0 참조 구현을 따르고 공통 표본으로 대조한다는 점과 6.3절 배율 방향(P_user × m = P_c)을 명시했다 |
+| 2026-09-19 | S15P21C206-144 구현 반영. 9.1절에 요약 범위(회원 전체, `ticId`는 목록에만), `startedStarCount` 정의(4.4절 `scope=submitted` 길이), 정렬·커서·`size` 기본 50·상한 100, 항목 식별자 형식, `relabel.newDisposition` 값을 적었다. 9.2절에 인정 근거 확인과 진행 행 잠금, 시드 정책 `hash-user-achievement-seq-v1`의 계산식, 반환값(`ticId`·`byType`·`unlockShortfall`·`skyVersion`)을 명시했다. 별 저장은 9.4절과 같은 `ON CONFLICT (user_id, tic_id)`로 바꾸고, 같은 성과의 재처리는 2단계에서 막으며 `UNIQUE(trigger_achievement_id, seq)`는 DB 안전망으로 남긴다고 정정했다. MR !99 리뷰를 반영해 호출자가 기록 저장 전에 회원 행을 먼저 잠가야 한다는 조건과 그 이유(외래 키 KEY SHARE와 `FOR UPDATE`의 교착)를 적었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

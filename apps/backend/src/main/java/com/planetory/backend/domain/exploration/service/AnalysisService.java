@@ -348,7 +348,7 @@ public class AnalysisService {
         return new Residual(lookup.status(), lookup.jobId(), lookup.computedAt());
     }
 
-    private static Segment segmentOf(LightCurveSegment segment, Float[] flux) {
+    static Segment segmentOf(LightCurveSegment segment, Float[] flux) {
         return new Segment(ExplorationIds.segment(segment.id()), segment.sector(), segment.binningRevision(),
                 segment.startBtjd(), segment.binMinutes(), segment.nPoints(), flux, segment.fluxScatter(),
                 gapsOf(segment));

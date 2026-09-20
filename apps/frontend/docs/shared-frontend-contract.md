@@ -1,5 +1,7 @@
 # W03 공통 코드와 A/W 화면 연결
 
+215의 지도 내부 성능 개선은 라우트·인증·이벤트·API 계약을 변경하지 않는다. [공간 인덱스와 데이터 재사용](performance-215.md)은 `sky-data`/`sky-renderer` 내부에 한정되며214 프로필이나 분석 화면을 선행 병합할 필요가 없다.
+
 기준: `develop` 321f10b / SRS v1.2 / 서비스 API 2~3절 / Jira `S15P21C206-201`. 2026-09-14 작성. 아래 **프론트 경로와 파일 구조는 이 구현의 검토안**이다. 백지웅 화면이 실제 연결됐거나 미확정 API가 합의됐다는 의미는 아니다.
 
 2026-09-15 현행: 실제 SSAFY·Google 및 공통 오류 계약 검증을 마쳤다. 서진님은 지웅님이 공통 기반 사용에 이견이 없다고 전달했다. 배포가 지연되어도 코드 공유·리뷰는 진행한다. 실제 A 화면 연결 시험과 배포 인수를 통과한 뜻은 아니다. [현재 상태와 다음 단계](ticket-201-readiness.md), [검증 결과](verification.md)를 따른다.
@@ -74,6 +76,7 @@ W04에서는 `useSession().logout()`을 사용한다. 공통 Provider가 로그�
 | profile                            | /me                                                                                                | 하서진 페이지, 백지웅 내 별/History 목록을 후속 연결               |
 | settings / member                  | /settings, /members/:memberId                                                                      | 하서진                                                             |
 | community / starBoard              | /community, /community/stars/:ticId                                                                | 하서진                                                             |
+| hotTopics                          | /community/hot-topics                                                                             | 하서진 · S18 목록, cursor 유지                                     |
 | postCreate / postEdit / post       | /posts/new, /posts/:postId/edit, /posts/:postId                                                    | 하서진                                                             |
 | thread                             | /signal-threads/:threadId                                                                          | 하서진                                                             |
 | postAttachment / commentAttachment | /posts/:postId/history-attachments/:historyId, /comments/:commentId/history-attachments/:historyId | 하서진 진입·권한, 백지웅 그래프                                    |
@@ -129,6 +132,10 @@ await api("/v1/posts", { method: "POST", json: input });
 P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보여준다. 접는 메뉴는 dialog·Tab 순환·Escape 닫기·원래 버튼 포커스 복귀를 유지했다.
 
 ## 팀원에게 전달할 내용
+
+W20-1 검색은 기존 community/starBoard 슬롯 안에서 동작한다. `q/searchIn/author/ticId/board/tag/cursor`는 URL로 전달하고 공통 API 클라이언트로 S16을 호출한다. 검색 조건 변경 시 cursor 이력을 비우며 상세 복귀는 새 조회 후 위치만 복원한다. 전체 응답을 로컬 검색 DB로 만들지 않는다. 호출·검증 경계와 실제216-217 인계는 [217 구현 기록](ticket-217-readiness.md)을 따른다.
+
+W20-2 핫 토픽은 hotTopics 슬롯에서 S18을 조회하고 기존 공식 신호 상세로 이동한다. 선정·집계·정렬은 서버 책임이며 피드를 프론트에서 다시 계산하지 않는다. N≥10·기간 제한 없음 안내, cursor/상세 복귀와 실제216-218 인계는 [218 구현 기록](ticket-218-readiness.md)을 따른다.
 
 201에서 준비하는 것은 앱 실행·페이지 이동·현재 회원 조회·HTTP 요청의 공통 코드다. 지웅님에게 이 검증을 위해 새로운 분석 화면을 만들도록 요청하지 않는다.
 

@@ -26,6 +26,7 @@ const composite = (fg, bg, alpha) =>
 const BG = [34, 40, 49]; // --bg #222831
 const FG = [238, 238, 238]; // --fg #eeeeee
 const ACCENT = [255, 211, 105]; // --accent #ffd369
+const DANGER = [255, 181, 181]; // --danger #ffb5b5
 const GLASS = [57, 57, 70]; // 패널 유리색 — Figma 원본
 
 const OVERLAY = 0.75; // Figma 0.4에서 올림. 유리는 그대로 두고 뒤쪽만 어둡게 한다
@@ -53,6 +54,7 @@ const TEXT_LEVELS = [
   ["--fg-2 수치 강조", 0.8, 14],
   ["--fg-3 라벨·축·설명", 0.67, 11],
   ["--accent 강조", "accent", 13],
+  ["--danger 오류 문구", "danger", 13],
 ];
 const GRID_LEVEL = ["--grid 격자", 0.42, 0];
 
@@ -66,7 +68,9 @@ const check = (surfaceName, bg, levels) => {
         ? FG
         : alpha === "accent"
           ? ACCENT
-          : composite(FG, bg, alpha);
+          : alpha === "danger"
+            ? DANGER
+            : composite(FG, bg, alpha);
     const ratio = contrast(color, bg);
     const required = px === 0 ? 3 : px >= 18 ? 3 : 4.5;
     const ok = ratio >= required;
@@ -93,7 +97,13 @@ console.log("\n참고 · 패널 밖에서 순백 별 픽셀이 글자 뒤에 올
   console.log(`  배경 rgb(${bare.join(", ")})`);
   for (const [name, alpha, px] of TEXT_LEVELS) {
     const color =
-      alpha === null ? FG : alpha === "accent" ? ACCENT : composite(FG, bare, alpha);
+      alpha === null
+        ? FG
+        : alpha === "accent"
+          ? ACCENT
+          : alpha === "danger"
+            ? DANGER
+            : composite(FG, bare, alpha);
     const ratio = contrast(color, bare);
     console.log(
       `    ${name.padEnd(22)} ${`${px}px`.padEnd(6)} ${ratio.toFixed(2)}:1${ratio >= 4.5 ? "" : "  ← 4.5:1 미달"}`,

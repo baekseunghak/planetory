@@ -12,6 +12,10 @@ public final class ExplorationIds {
     public static final String BUNDLE = "b-";
     public static final String CANDIDATE = "c-";
     public static final String SEGMENT = "seg-";
+    public static final String ACHIEVEMENT = "ach-";
+    public static final String SUBMISSION = "sub-";
+    /** 공개 분석. 형식의 정본은 서비스 API 명세다. */
+    public static final String PUBLIC_ANALYSIS = "pa-";
 
     /** {@code Long.MAX_VALUE}는 19자리다. 18자리까지만 받으면 넘침을 따로 검사하지 않아도 된다. */
     private static final int MAX_DIGITS = 18;
@@ -29,6 +33,18 @@ public final class ExplorationIds {
 
     public static String segment(long id) {
         return SEGMENT + id;
+    }
+
+    public static String achievement(long id) {
+        return ACHIEVEMENT + id;
+    }
+
+    public static String submission(long id) {
+        return SUBMISSION + id;
+    }
+
+    public static String publicAnalysis(long id) {
+        return PUBLIC_ANALYSIS + id;
     }
 
     /**

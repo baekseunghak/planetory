@@ -112,7 +112,7 @@
 }
 .period-selection-error {
   min-height: 24px;
-  color: var(--fg-1);
+  color: var(--danger);
 }
 .periodogram-plot:active {
   cursor: grabbing;
