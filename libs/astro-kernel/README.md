@@ -599,3 +599,23 @@ Gold와 사용자 응답으로 원본 QUALITY 장부를 전달하지 않는다. 
 Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 실행한다. 원본 Bronze·기존 공개 판은 덮어쓰지 않는다.
 새 판의 검증·승인 후 기존 Publisher의 원자 전환 절차를 사용한다. 전체 제외 또는 관측 부족·수치 실패는
 정상 무후보로 적재하지 않는다. 원본 시각 배열을 마스크 적용 전에 보존해야 이후 제외율 진단 기준을 잃지 않는다.
+
+## 세그먼트 비닝·revision (123)
+
+상태: **비닝·119 연결부 구현 및 합성 검증 완료, 123 전체 완료 전**.
+정본은 [114 Gold 채택안](../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)이다.
+`astro_kernel.segmentation`은 `bin_sector`, `segment_revision`, `segment_silver`를 제공한다.
+
+- `bin_sector(time, flux)`는 단일 Sector의 전처리 입력 시간축 전체를 받는다. 제외된 flux는 NaN으로 전달한다. 시각은 정렬하며 중복·비유한 시각은 거절한다. 10분 mean, 부분 bin 유지, 빈 bin 보존, 20,000점 초과 실패를 적용한다.
+- `Segment.values()`는 빈 값을 JSON null로 변환하고 폐구간 gaps와 전체 n_points를 반환한다. DB ID는 생성하지 않는다. counts는 진단용이며 Gold flux 배열과 함께 게시하는 열이 아니다.
+- 유효 bin이 전혀 없으면 `no_valid_bins`로 실패한다. 유한한 상수 곡선의 MAD 0은 산포 0으로 보존한다. 이것을 잡음 분모나 탐지 성공으로 해석하지 않는다.
+- `segment_revision`은 제품 SHA-256·snapshot·TIC/Sector·전처리 버전과 파라미터·비닝 규칙·수치 구현 버전의 키 정렬 JSON을 SHA-256으로 식별한다. 문자열은 UTF-8, JSON 구분자는 쉼표/콜론, 비유한 수치는 거절한다. 파라미터 숫자 타입도 직렬화의 일부이므로 호출자는 고정 설정의 타입을 유지한다. 실행 시각·경로·lock 전체 hash는 받지 않는다.
+- `segment_silver`는 정렬·정합성이 확인된 119 `PreparedCurve`/`DetrendedCurve`와 제품 checksum을 받는다. 전처리 status가 ok가 아니면 중단한다. 적용 마스크 전체를 revision 재료에 포함한다. 개별 Sector의 비닝 실패는 quarantined에 별도 기록한다.
+- 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_115_rule`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
+
+검증: `uv run --locked python -m pytest -q`에서 전체 225개 통과(새 segmentation 20개 포함).
+경계 스냅·부분 bin·빈 구간·전처리 제외점 시간축·상한·revision 변경·출처 누락·실패 격리를 검사했다.
+실제 FITS/114 실측 회귀, 115 기준과 122 모델을 연결한 제공 해상도 잔차 periodogram·discoverable,
+판별 결과의 false→true 변화 목록은 아직 구현·검증 전이다. 기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
+Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 완료를 뜻하지 않는다.
+114 인계의 Java 설명·새 DB COMMENT migration도 후속 작업으로 남아 있다. 기존 V1은 수정하지 않았다.
