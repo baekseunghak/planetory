@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class PostService {
-    private static final Set<String> TAGS = Set.of("ANALYSIS", "QUESTION", "DISCUSSION", "INFORMATION", "GENERAL");
+    static final Set<String> TAGS = Set.of("ANALYSIS", "QUESTION", "DISCUSSION", "INFORMATION", "GENERAL");
     private final PostRepository posts;
     private final MemberService members;
     private final StarService stars;
