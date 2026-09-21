@@ -21,9 +21,12 @@
 | 2026-09-21 | 검색 검증기 미정 입력·정렬·인계 경계 보완 | S15P21C206-170 | UNSPECIFIED, Date.parse, 합성 분포, 217, 218 | 표본 검증 완료·교차 검토 대기 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 기본 피드·공식 스레드·공개 분석 조회와 별 접근 차단 | S15P21C206-164 | SYSTEM, cursor, REPEATABLE_READ, contributesToSummary, 공개 Graph, 442건 | 구현·백엔드 회귀 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 특정 별 기본 피드의 board=STAR 요청 호환 | S15P21C206-164 | ticId, board=STAR, 400, 커서 동치, 프론트 계약 | 구현·대상 회귀 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | TESS Raw 1~13 Sector Bronze 변환 | S15P21C206-77 | Spark, Bronze, Parquet, error contract, atomic rename, systemd | 구현·Sector 1~13 변환·전체 재감사 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | Bronze 영구 데이터 오류 재시작 차단 | S15P21C206-77 | terminal_failed, exit 65, RestartPreventExitStatus, staging attempt | 구현·오프라인 검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 시제품 기준 기존 P0 화면 배치·디자인 정합화 | S15P21C206-248 | 전체 은하, 접는 퀘스트, 프로필, 커뮤니티, Chrome 145 | 구현·로컬 검증 완료, 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 크기 변경 시 별 상세 상태 유지·시제품 일치 범위 정정 | S15P21C206-248 | 1×1 캡처, DesktopGate, 상태 보존, Chrome 66+31, 상세 이식 미완료 | 오류 검증 완료·디자인 진행 중 | [기록](2026-09-21.md) |
 | 2026-09-21 | 공개 판단·챌린지 참여 수 공통 조건과 소비 계약 | S15P21C206-165 | 최신 유효 공개, 동률 ID, N=15, COUNT DISTINCT, REPEATABLE_READ, asOf | 전체 437건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 리뷰 반영: 별 결과 페이지 통계 기준 명확화 | S15P21C206-165 | 146, answerClass, judgmentStatistics, graded, public_analyses | 채택·문서 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 일반 글 반응 최종 상태·커서·상세 합계·V16 최소 권한 | S15P21C206-163 | post_reactions, NONE, 삭제 경합, 최신 닉네임, V16 | 전체 442건 검증 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 공식 스레드 네 수치 공개와 오류 계약·예제 정합화 | S15P21C206-164 | COM-17, signal, N=0, STAR_NOT_PUBLISHED, README 충돌 | 정책 채택·문서 보완 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | Bronze manifest 영구 오류 전달 누락 정정 | S15P21C206-77 | manifest, _TERMINAL, terminal_failed, exit 65, spark-submit | 구현·오프라인 검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
