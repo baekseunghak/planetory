@@ -464,7 +464,8 @@ export type DetailView = {
   /** 이 호출로 열람 기록이 남았다. 건너뛰기 조건에 쓰인다(6.5절). */
   answerViewed: boolean;
   targetKind: DetailTarget;
-  signal: SubmissionSignal & { explanation: string };
+  /** 해설은 **키는 있고 값이 없을 수 있다**. 서버가 아직 이 문장을 만들 곳이 없다(6.7절). */
+  signal: SubmissionSignal & { explanation: string | null };
   /** 매칭한 제출에만 일치 여부가 있다(RES-02). 채점하지 않았으면 null이다. */
   userJudgmentAgrees: boolean | null;
   /** 참이면 화면 끝에 [다음 튜토리얼로]를 둔다. */
@@ -473,6 +474,19 @@ export type DetailView = {
 
 export const detailViewPath = (submissionId: string) =>
   `/v1/submissions/${encodeURIComponent(submissionId)}/detail-view`;
+
+/**
+ * 6.7절 `signal.explanation`. **키는 있고 값이 null일 수 있다.** 서버가 이 문장을 만들 곳이 아직
+ * 없어 지금은 늘 null이다.
+ *
+ * 키가 아예 없으면 null로 읽지 않는다. 「해설 없음」과 「모르는 응답」은 다르고, 명세가 자리를
+ * 남긴 이유가 그 구분이다.
+ */
+function explanation(signal: Record<string, unknown>): string | null {
+  if (!("explanation" in signal)) invalid("signal.explanation");
+  const value = signal.explanation;
+  return value === null ? null : text(value, "signal.explanation");
+}
 
 export function decodeDetailView(
   value: unknown,
@@ -489,10 +503,7 @@ export function decodeDetailView(
     targetKind: oneOf(data.targetKind, detailTargets, "targetKind"),
     signal: {
       ...signal,
-      explanation: text(
-        record(data.signal, "signal").explanation,
-        "signal.explanation",
-      ),
+      explanation: explanation(record(data.signal, "signal")),
     },
     userJudgmentAgrees: nullable(data.userJudgmentAgrees, (item) =>
       flag(item, "userJudgmentAgrees"),

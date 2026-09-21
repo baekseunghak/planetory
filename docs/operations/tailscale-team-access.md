@@ -30,9 +30,8 @@ tailscale ping node-1
 
 | 서버 | 역할·태그 | 팀원 접근 | 접속 방법 |
 | --- | --- | --- | --- |
-| `donh-vnic` | CI/CD 컨테이너 , `tag:registry` | 22 port 접근·Tailscale SSH 허용 | `tailscale ssh claude@donh-vnic` |
 | `ec2-a` | 프로젝트 서비스 단일 노드, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-a` |
-| `ec2-b` | 서비스 역할 없음(tailnet 등록만 유지), `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-b` |
+| `ec2-b` | CI 빌드 Runner·이미지 레지스트리·외부 관찰, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-b` |
 | `node-1` | GCP master, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh SSAFY@node-1` |
 | `node-2` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-2` |
 | `node-3` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-3` |
@@ -42,13 +41,15 @@ tailscale ping node-1
 
 EC2 계정은 추정하지 않는다. 관리자가 해당 서버에 실제 존재하는 계정을 확인해 별도로 안내한 뒤 사용한다.
 
-프로젝트 서비스는 `ec2-a` 한 노드에서만 실행한다. `ec2-b`에는 앱·복제·백업·관측 역할이 없고 tailnet 등록만 남아 있다. 근거는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
+프로젝트 서비스는 `ec2-a` 한 노드에서만 실행한다. `ec2-b`에는 앱·복제·백업과 서비스 관측 스택 어느 것도 없고, 사용자 요청 경로 밖에서 CI 빌드 Runner·이미지 레지스트리와 알림 전용 외부 관찰만 맡는다. 근거는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)의 D4와 [CI/CD](cicd.md)를 따른다.
+
+레지스트리는 `ec2-b`의 Tailscale IP에만 바인딩하고 인터넷에 열지 않는다. 배포 노드는 tailnet으로 pull하며 별도 자격 증명을 두지 않는다.
 
 ## 3. 접속 확인과 주의사항
 
 모든 서버의 일상 로그인과 운영 자동화는 MagicDNS 이름을 사용하는 `tailscale ssh`가 기본이다. `gcloud compute ssh`(GCP)와 EC2 키 페어 직접 접속은 최초 Tailscale 설치·등록 또는 tailnet 장애 복구에만 사용하며, 복구 접속 성공을 tailnet 복구 완료로 간주하지 않는다.
 
-`tailscale ssh`를 쓰면 대상 서버에 개인 SSH 키를 배포하지 않아도 되고, 접속 주체가 tailnet 신원으로 남는다. 2026-09-18에 `donh-vnic`·`ec2-a`·`ec2-b`·`node-1`에서 `tailscale ssh <계정>@<이름> hostname -s`가 응답하는 것을 확인했다.
+`tailscale ssh`를 쓰면 대상 서버에 개인 SSH 키를 배포하지 않아도 되고, 접속 주체가 tailnet 신원으로 남는다. 2026-09-18에 `ec2-a`·`ec2-b`·`node-1`에서 `tailscale ssh <계정>@<이름> hostname -s`가 응답하는 것을 확인했다.
 
 접속 전에 서버 이름이 Tailscale 경로로 응답하는지 확인하고 `tailscale ssh`로 접속한다.
 

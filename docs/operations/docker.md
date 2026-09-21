@@ -45,7 +45,7 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 기준 브랜치 변경
   → GitLab CI가 필요한 Dockerfile만 빌드
   → linux/amd64 이미지 생성
-  → GitLab Container Registry에 commit SHA 태그로 push
+  → 자체 호스팅 레지스트리에 commit SHA 태그로 push
   → 노드별 수동 deploy job
   → SSH로 대상 서버의 Compose 파일 갱신
   → 해당 이미지만 pull·재시작
@@ -55,7 +55,7 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 - GCP Node 1: `infra/distributed-system/compose.control-plane.yaml`, Node 2~6: `infra/distributed-system/compose.worker.yaml`, 모두 `linux/amd64`
 - EC2-A와 GCP Node 1~6 배포 job은 따로 실행한다.
 - Airflow·Spark submit·Publisher는 GCP Node 1에서, 수집 이미지는 Node 2~6에서 관리한다.
-- 서버의 `.env`에 실제 경로와 비밀 값을 보관한다. Registry 읽기 전용 로그인도 서버에서 미리 설정한다.
+- 서버의 `.env`에 실제 경로와 비밀 값을 보관한다. 레지스트리는 tailnet 내부 전용이라 노드에 별도 로그인을 설정하지 않는다.
 - 이전 커밋 SHA 이미지를 다시 배포할 수 있어야 한다. DB migration과 Gold 릴리스 전환은 이미지 되돌리기와 별도 절차다.
 
 세부 CI 변수와 job은 [CI/CD](cicd.md)를 따른다.
