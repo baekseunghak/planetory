@@ -2,7 +2,6 @@ package com.planetory.backend;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -38,6 +37,9 @@ public class PlanetoryApplication {
 	/** 실행할 수 없는 명령 인자. sysexits의 사용법 오류(EX_USAGE)와 같은 값이다. */
 	static final int INVALID_COMMAND_EXIT_CODE = 64;
 
+	/** 기동 중 마이그레이션 실행 여부를 정하는 속성. 읽기 전용 명령은 이것을 false로 강제한다. */
+	static final String FLYWAY_ENABLED = "spring.flyway.enabled";
+
 	private static final String COMMAND_ARGUMENT = "--" + COMMAND_PROPERTY + "=";
 
 	public static void main(String[] args) {
@@ -49,8 +51,9 @@ public class PlanetoryApplication {
 			System.exit(INVALID_COMMAND_EXIT_CODE);
 			return;
 		}
-		ConfigurableApplicationContext context = application(args).run(args);
-		if (isCommand(args)) {
+		String[] effective = withReadOnlyGuards(args);
+		ConfigurableApplicationContext context = application(effective).run(effective);
+		if (isCommand(effective)) {
 			// 명령은 한 번 실행하고 끝난다. 종료 코드는 명령이 정한다.
 			System.exit(SpringApplication.exit(context));
 		}
@@ -62,21 +65,24 @@ public class PlanetoryApplication {
 		if (isCommand(args)) {
 			application.setWebApplicationType(WebApplicationType.NONE);
 		}
-		Map<String, Object> defaults = defaultPropertiesFor(args);
-		if (!defaults.isEmpty()) {
-			application.setDefaultProperties(defaults);
-		}
 		return application;
 	}
 
 	/**
-	 * 읽기 전용 명령에 걸 기본 속성. 기본 속성은 우선순위가 가장 낮으므로 필요하면 명령줄에서
-	 * 되돌릴 수 있지만, 아무 말 없이 마이그레이션이 도는 일은 없어진다.
+	 * 읽기 전용 명령에 Flyway 비활성화를 <b>명령줄 인자로</b> 덧붙인다.
+	 *
+	 * <p>기본 속성(setDefaultProperties)은 우선순위가 가장 낮아 설정 파일 한 줄로 뒤집힌다. 명령줄
+	 * 인자는 가장 높으므로 운영자가 옵션을 빼먹어도, 설정이 켜 두어도 마이그레이션이 돌지 않는다.
+	 * 같은 키를 명시적으로 주면 스프링이 두 값을 이어 붙여 Boolean 바인딩이 실패하므로, 조용히
+	 * 켜지는 경로가 없다 [S15P21C206-154 리뷰].
 	 */
-	static Map<String, Object> defaultPropertiesFor(String[] args) {
-		return commandValues(args).stream().anyMatch(READ_ONLY_COMMANDS::contains)
-				? Map.of("spring.flyway.enabled", "false")
-				: Map.of();
+	static String[] withReadOnlyGuards(String[] args) {
+		if (commandValues(args).stream().noneMatch(READ_ONLY_COMMANDS::contains)) {
+			return args;
+		}
+		String[] guarded = Arrays.copyOf(args, args.length + 1);
+		guarded[args.length] = "--" + FLYWAY_ENABLED + "=false";
+		return guarded;
 	}
 
 	static boolean isCommand(String[] args) {

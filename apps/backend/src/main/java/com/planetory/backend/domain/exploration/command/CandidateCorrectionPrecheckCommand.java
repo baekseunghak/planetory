@@ -127,6 +127,13 @@ public class CandidateCorrectionPrecheckCommand implements ApplicationRunner, Ex
         log.info("바뀌지 않는 것: 성과, 성과로 연 별, 공개 분석, 공식 스레드, 히스토리, 제출, 통계 스냅샷.");
         log.info("아직 실행하지 않는 것: 별칭·외부 참조·disposition 이동과 분리 산물 추가"
                 + "(복구 절차 미확정, 계약 5.4).");
+        int submissions = result.impacts().stream().mapToInt(CandidateImpact::submissions).sum();
+        if (submissions > 0) {
+            // 제출은 승인 문턱이 아니지만 흔적이 없다는 뜻은 아니다. 종료 코드 0을 "아무 일도
+            // 없다"로 읽지 않게 적어 둔다 [S15P21C206-154 리뷰].
+            log.info("매칭 제출 {}건은 승인 문턱이 아닙니다(계약 3.1·5.2, 어떤 정정에서도 옮기지 않음). "
+                    + "다만 채점형 일치율의 모집단이라 정정 뒤에도 그 후보에 남습니다.", submissions);
+        }
         if (result.needsMemberApproval()) {
             log.warn("회원 데이터가 걸려 있어 Gold 쪽만 적용할 수 있습니다. "
                     + "회원 쪽 정정은 계약 4장 승인 뒤에만 가능하며 v1에는 경로가 없습니다.");
@@ -178,10 +185,14 @@ public class CandidateCorrectionPrecheckCommand implements ApplicationRunner, Ex
         }
 
         private static List<Long> ids(String value) {
-            List<Long> parsed = java.util.Arrays.stream(value.split(","))
+            // limit -1로 끝의 빈 조각도 남긴다. 빈 항목을 걸러 내면 "101,,102"나 "101,"이 조용히
+            // 보정되어 운영자가 무엇을 줬는지와 무엇을 셌는지가 달라진다 [S15P21C206-154 리뷰].
+            List<Long> parsed = java.util.Arrays.stream(value.split(",", -1))
                     .map(String::strip)
-                    .filter(part -> !part.isEmpty())
                     .map(part -> {
+                        if (part.isEmpty()) {
+                            throw new IllegalArgumentException("후보 id 목록에 빈 항목이 있습니다: '" + value + "'");
+                        }
                         try {
                             return Long.parseLong(part);
                         } catch (NumberFormatException notANumber) {
@@ -189,9 +200,6 @@ public class CandidateCorrectionPrecheckCommand implements ApplicationRunner, Ex
                         }
                     })
                     .toList();
-            if (parsed.isEmpty()) {
-                throw new IllegalArgumentException("후보 id가 비어 있습니다: '" + value + "'");
-            }
             if (parsed.stream().distinct().count() != parsed.size()) {
                 throw new IllegalArgumentException("후보 id가 중복됩니다: " + parsed);
             }
