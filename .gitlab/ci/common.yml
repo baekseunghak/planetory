@@ -87,6 +87,9 @@ validate:tess-hdfs-loader:
     DEPLOY_HEALTH_PORT: "8080"
     DEPLOY_HEALTH_TIMEOUT: "90"
     DEPLOY_DB_BACKUP: "false"
+    # compose.yaml이 상대 경로로 참조하는 디렉터리. 대상 노드에 함께 올린다.
+    # 비어 있으면 올리지 않는다.
+    DEPLOY_AUX_DIR: ""
   # SSH 키를 두지 않는다. 대상 노드가 Tailscale SSH로 22번을 처리하므로
   # authorized_keys가 아니라 tailnet 신원으로 인증한다. job 컨테이너의 연결은
   # Runner 호스트의 tailnet 신원으로 나가고, ACL의 ssh 규칙이 deploy 계정을
@@ -110,6 +113,10 @@ validate:tess-hdfs-loader:
     - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml.incoming"
     - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh.incoming"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && mv compose.yaml.incoming compose.yaml && mv deploy.sh.incoming deploy.sh"
+    # compose.yaml이 ./service-db-init 처럼 상대 경로로 읽는 디렉터리를 함께 올린다.
+    # 빠지면 bind mount 대상이 빈 디렉터리로 생성되고, 빈 볼륨을 처음 초기화할 때
+    # 런타임 계정 생성이 조용히 건너뛰어진다.
+    - if [ -n "$DEPLOY_AUX_DIR" ]; then scp -r "$DEPLOY_AUX_DIR" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"; fi
     - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
@@ -119,6 +126,7 @@ validate:tess-hdfs-loader:
     DEPLOY_HOST: $EC2_A_HOST
     DEPLOY_PATH: $EC2_A_DEPLOY_PATH
     DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
+    DEPLOY_AUX_DIR: infra/service/service-db-init
 
 .deploy-gcp-node-1:
   extends: .remote-compose-deploy
