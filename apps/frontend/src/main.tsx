@@ -10,6 +10,7 @@ import { SharedHistoryCurve } from "./features/analysis/HistoryCurveChart";
 import { HistoryDetailPage } from "./features/history/HistoryDetailPage";
 import { MyHistorySection } from "./features/my-lists/MyHistorySection";
 import { MyStarsSection } from "./features/my-lists/MyStarsSection";
+import { PublicAnalysisPage } from "./features/history/PublicAnalysisPage";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
@@ -65,6 +66,7 @@ async function start() {
     ...pages,
     analysis: AnalysisPage,
     historyDetail: HistoryDetailPage,
+    publicAnalysis: PublicAnalysisPage,
   };
   if (import.meta.env.DEV && import.meta.env.VITE_SKY_DATA_FIXTURE === "true")
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
