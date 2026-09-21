@@ -34,6 +34,10 @@ export type ResidualScenario =
   // 실행기를 시작하지 못했다. 같은 503이지만 **화면이 할 일이 반대**라
   // `retryable: true`다. 서버는 그 작업을 `START_FAILED`로 끝낸다.
   | "start-failed"
+  // `retryable`을 싣지 않는 503. `S15P21C206-249` 전의 서버이며, 화면이
+  // 필드를 읽기 시작했는데 서버가 아직 안 보내는 **배포 순서의 창**이다.
+  // 88이 붙어 서버가 늘 필드를 실으면 지운다.
+  | "unavailable-legacy"
   // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
   | "plate-changed"
   // 캐시를 건너뛰고 매번 새로 계산한다. **검사 전용**이다. 목표를 몰래
@@ -56,6 +60,8 @@ const scenarios: ResidualScenario[] = [
   "unavailable",
   // 실행기 시작 실패. 같은 503이지만 다시 요청하는 것이 맞다(`retryable: true`).
   "start-failed",
+  // 249 전의 서버. 503에 `retryable`이 없다 — 화면은 참으로 읽어야 한다.
+  "unavailable-legacy",
   // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
   "plate-changed",
   "fresh",
@@ -176,10 +182,13 @@ export const DEPENDENCY_UNAVAILABLE_MESSAGE = {
   /** 계산 기반 미연결. 다시 요청해도 같은 결과다(`retryable: false`). */
   notConnected: "잔차 계산 기능이 아직 준비되지 않았습니다.",
   /**
-   * 실행기 시작 실패. 공통 기본 문구가 그대로 맞다(`retryable: true`).
-   * `ErrorCode.DEPENDENCY_UNAVAILABLE`의 기본 문구와 같은 값이다.
+   * 공통 기본 문구. `ErrorCode.DEPENDENCY_UNAVAILABLE`의 기본값과 같은 값이다.
+   *
+   * 두 곳이 쓴다 — **실행기 시작 실패**(`retryable: true`)가 이 문구를 쓰는 것이
+   * 맞고, `S15P21C206-249` **전의 서버는 미연결에도** 이 문구로 답했다
+   * (`unavailable-legacy`). 한쪽 이름을 붙이면 다른 쪽에서 거짓이 된다.
    */
-  startFailed: "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  serverDefault: "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.",
 } as const;
 
 const fail = (
@@ -219,7 +228,16 @@ export function requestResidualJobFixture(options: {
       503,
       "DEPENDENCY_UNAVAILABLE",
       { retryable: true },
-      DEPENDENCY_UNAVAILABLE_MESSAGE.startFailed,
+      DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
+    );
+  // **필드를 싣지 않는다.** 249 전의 서버이고, 화면이 없는 값을 참으로 읽는지
+  // 보는 것이 이 시나리오의 전부다.
+  if (scenario === "unavailable-legacy")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      {},
+      DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
     );
   if (scenario === "bundle-changed")
     return fail(409, "BUNDLE_CHANGED", { currentBundleId: "9007199254749999" });
