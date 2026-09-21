@@ -101,16 +101,16 @@
 .personal-galaxy .personal-camera-controls {
   z-index: 7;
 }
-.personal-galaxy:has(.prototype-detail) .galaxy-input-toolbar,
-.personal-galaxy:has(.prototype-detail) .galaxy-markers,
-.personal-galaxy:has(.prototype-detail) .galaxy-stats,
-.personal-galaxy:has(.prototype-detail) .galaxy-selection {
+.personal-galaxy:has(.detail-ready) .galaxy-input-toolbar,
+.personal-galaxy:has(.detail-ready) .galaxy-markers,
+.personal-galaxy:has(.detail-ready) .galaxy-stats,
+.personal-galaxy:has(.detail-ready) .galaxy-selection {
   visibility: hidden;
 }
-.sky-page:has(.prototype-detail) .quest-layer,
-.sky-page:has(.prototype-detail) .sky-view-switch,
-.sky-page:has(.prototype-detail) .sky-data-status,
-.sky-page:has(.prototype-detail) .sky-legend {
+.sky-page:has(.detail-ready) .quest-layer,
+.sky-page:has(.detail-ready) .sky-view-switch,
+.sky-page:has(.detail-ready) .sky-data-status,
+.sky-page:has(.detail-ready) .sky-legend {
   visibility: hidden;
   pointer-events: none;
 }
@@ -126,3 +126,4 @@
     width: 260px;
   }
 }
+

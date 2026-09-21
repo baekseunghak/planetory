@@ -381,7 +381,7 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
           <aside
             ref={panelRef}
             className={
-              "star-detail" + (detail && !listOpen ? " prototype-detail" : "")
+              "star-detail" + (!listOpen ? " prototype-detail" : "") + (detail ? " detail-ready" : "")
             }
             aria-label="별 상세"
             onKeyDown={(e) => {
@@ -578,3 +578,4 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     </>
   );
 }
+
