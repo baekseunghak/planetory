@@ -77,7 +77,7 @@ Sector 1~13을 한 실행에 모두 지정하면 먼저 Raw coverage marker가 1
 
 ## 127 전처리·최초 BLS Worker 초기 검증
 
-상태: **Sector 3의 20 TIC 실제 Spark/YARN 수치·부분 재실행 검증 완료, 리뷰 전**. Jira `S15P21C206-127`.
+상태: **Sector 3의 20 TIC 실제 Spark/YARN 수치·부분 재실행 검증 및 develop 병합 완료**. Jira `S15P21C206-127`.
 `tess_kernel_check.py`는 119·120을 재사용하는 고정 소규모 검증 실행기다. Silver 운영 공개·전체 데이터 처리,
 반복 BLS·Gold·DB 변경은 하지 않는다. Tailscale로 서버에 접속하며, 사용자 승인으로 에이전트도 검증을 실행한다.
 
@@ -155,7 +155,7 @@ Driver와 Executor 모두 `PYTHONPATH=./kernel-check.zip:./environment`로 고�
 관측 부족 실패·NaN/마스크 비교를 확인한다. 같은 실패 결과끼리 일치해도 all_successful=false로 별도 보고하며
 parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Sector 표본 검증은 아직 수행하지 않았다.
 이번 결과는 아래 단일 Sector 범위이며 전체 Silver 운영이나 과학적 회수 성능 검증으로 확대 해석하지 않는다.
-Jira 완료는 리뷰·병합 후 판단한다.
+검증 결과는 develop 병합 커밋 `8653e21`에 포함됐다.
 
 ### 2026-09-21 실제 검증 결과
 
@@ -184,3 +184,80 @@ Jira 완료는 리뷰·병합 후 판단한다.
 `comparison-s3.jsonl`과 `retry-comparison-s3.jsonl` 모두 `parity_passed=true`, `all_successful=true`다.
 실행 로그·종료 코드·입출력 SHA와 결과는 리뷰 증빙으로 함께 보관한다. 오프라인 테스트 19 passed,
 실행 스크립트 `bash -n` 통과. Git 검사는 사용자 실행 단계로 남긴다.
+## TESS Bronze → Silver 최초 탐색 (`S15P21C206-78`)
+
+`tess_silver.py`는 확정 Bronze coverage가 가리키는 Sector 1~13 Parquet을 읽고 `tic_id`로 분산 그룹화한다. 각 TIC에서 `astro_kernel.preprocessing.preprocess_silver`와 `astro_kernel.bls.search_bls`를 순서대로 호출하며, 전체 Bronze나 TIC 목록을 드라이버에 수집하지 않는다. 한 TIC의 데이터·수치 오류는 그 TIC의 manifest 행으로 격리하고 다른 TIC 결과를 보존한다.
+
+현재 구현 범위는 전처리와 최초 BLS까지다. 반복 BLS·제거 QA·후보 ID(`122`), 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)은 해당 커널과 계약이 확정된 뒤 같은 run의 후속 stage로 연결한다. 구현되지 않은 단계를 성공으로 표시하거나 빈 결과로 만들지 않는다.
+
+### 입력·출력 경계
+
+입력은 Bronze coverage marker의 `sectors[].location` 13개만 사용한다. 임의의 Sector glob이나 Raw 파일을 다시 읽지 않는다. 제어기는 coverage와 각 Sector `_READY.json`의 SHA-256, schema, pipeline version, 제품·관측점 수와 RF2를 대조한 뒤 제출한다.
+
+```text
+/lake/silver/pipeline_version=<version>/run_id=<run>/attempt=<UTC>/
+├─ target_combined/
+├─ periodogram/
+├─ manifest/
+├─ summary/
+└─ _READY.json
+```
+
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 세 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v2` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 성공·무품질 후보·실패 수는 marker에서 별도로 확인한다. 선택 TIC와 manifest TIC는 개수뿐 아니라 정확한 집합을 양방향 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+
+`target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `time`, `normalized_flux`, `flux_err` | TIC 결합 후 정렬된 관측 배열 |
+| `sector`, `product_id`, `source_row`, `cadenceno` | 각 관측점의 Bronze 원천 위치 |
+| `trend`, `cleaned_flux`, `kept`, `segment_id` | 전처리 수치 결과와 BLS 입력 mask |
+| `normalization_median_json`, `excluded_json`, `detrend_failures_json` | Sector 정규화와 제외·수치 진단 |
+| `input_snapshot_id` | 정렬한 `product_id`, Bronze `input_snapshot_id`, Raw SHA-256의 LF 직렬화 SHA-256 |
+| `preprocessing_version`, `provenance_status` | 계산 버전과 추적 계약 완성도 |
+
+`periodogram`은 최초 탐색의 주기·power·epoch·duration·depth·depth error·SNR·SDE 배열, 유효 입력 mask, BLS 설정과 상위 peak·채택 peak JSON을 기록한다. 반복 제거용 residual·periodogram 배열은 현재 만들지 않는다. 이 20,000점 선형 탐색 결과는 후속 `periodograms` Gold용 5,000점 로그 격자 결과가 아니며 그대로 게시하지 않는다. `bls_config_version=bls_grid_v1/poc_linear20k`, `candidate_quality_version=gate_v1/snr7_sde6`을 행마다 기록한다.
+
+manifest schema는 `planetory.tess-silver-stage.v1`이며 TIC·stage 한 쌍당 한 행이다.
+
+| 필드 | 계약 |
+| --- | --- |
+| `stage` | 현재 `initial_bls`만 허용한다. |
+| `status` | `succeeded`, `no_quality_peak`, `failed` 중 하나다. `no_quality_peak`는 정상 종료이며 실패가 아니다. |
+| `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. |
+| `input_snapshot_id`, 계산 버전 3종 | 입력과 전처리·탐색·품질 게이트를 함께 고정한다. |
+| `target_location`, `periodogram_location` | 실제 생성된 출력만 기록한다. |
+| `error_code`, `error_detail` | 실패 원인과 공백 정규화·500자 제한 상세를 기록한다. 원본 배열은 넣지 않는다. |
+
+`Retry`는 완료 attempt의 manifest에서 `status=failed`인 TIC만 Bronze와 semi join해 새 attempt로 실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 코드·입력 수정 여부와 `retryable`을 확인한 뒤 명시적으로 시작한다.
+
+### 담당자 인계 인터페이스
+
+| 담당 작업 | 이 작업이 제공하는 입력 | 담당 작업이 제공해야 하는 결과 | 현재 처리 |
+| --- | --- | --- | --- |
+| `245` 관측 구간 마스킹 | `product_id`, `source_row`, `cadenceno`, `sector`, Bronze `quality` | 정규화 전에 적용할 관측점별 evidence mask, 원래 QUALITY, 제외 사유·근거 버전 | 현재 `provenance_status=quality0_baseline_pending_interval_mask`로 불완전함을 고정한다. `245` 완료 전 결과를 최종 DAT-02로 간주하지 않는다. |
+| `127` Worker 초기 연결 | `process_tic`의 `SectorInput[]` 호출과 TIC별 결과 계약 | 실제 YARN canary의 executor 배치·자원·수치 동일성 증거 | 127의 Sector 3 20 TIC local/Worker parity·실패 재실행과 78의 다중 Sector 단일 TIC Canary를 모두 통과했다. 전체 처리량·장시간 안정성은 별도 gate로 남는다. |
+| `122` 반복 탐색 | `target_combined`, 최초 `periodogram`, 계산 버전 | 반복 BLS·제거 QA·종료 사유·후보 ID | 미구현이며 manifest에 가짜 stage를 만들지 않는다. |
+| `123`·`124`·`126` | 확정 후보 ID와 TIC snapshot | 비닝·외부 snapshot 조인·AI 결과 및 각 계산 버전 | 각 결과 계약이 확정된 뒤 별도 stage로 연결한다. |
+
+같은 Python/Spark release를 공유하므로 내부 호출 계약은 `tess_silver.py`의 `TicStageResult`와 `_schemas`가 정본이다. 독립 서비스 간 직렬화 계약이 아니므로 `contracts/`에 같은 형식을 중복 정의하지 않는다.
+
+### 실행과 검증
+
+저장소 루트에서 먼저 오프라인 계약 검증을 실행한다. `Canary`는 관측점이 충분한 것으로 확인된 TIC를 1~5개 명시해야 하며 임의의 앞 N개를 선택하지 않는다.
+
+```powershell
+.\infra\distributed-system\scripts\test-tess-silver.ps1
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Install -CodeReleaseId <code-release>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Preflight -CodeReleaseId <code-release>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Canary -CodeReleaseId <code-release> -RunId <run> -TicId <tic>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <code-release> -RunId <run>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Status -CodeReleaseId <code-release> -RunId <run>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Retry -CodeReleaseId <code-release> -RunId <run> -UnitId <new-unit-id> -RetryFrom <completed-attempt>
+```
+
+`Install`은 Silver job·제어기, 77의 검증된 공용 제어 primitive, 고정 Python 의존성, `astro_kernel`과 원자 rename helper를 불변 release로 설치한다. `Start`와 `Retry`는 systemd oneshot에 인계한다. HDFS·YARN 같은 일시 인프라 실패만 5분 뒤 재기동하고, coverage·schema 같은 결정적 계약 오류는 종료 코드 65로 자동 반복을 중단한다.
+
+Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Sector·관측점 수·상위 채택 peak 5개·오류를 `SILVER_CANARY_AUDIT` 로그와 `/var/lib/planetory-silver/run=<run>/attempt=<attempt>.json`의 `result.science_audit`에 남긴다. 성공한 정확한 attempt의 Spark staging과 빈 run 부모만 정리하며 다른 attempt가 있으면 부모 삭제를 건너뛴다.
+
+오프라인 검증은 데이터 담당 관점의 Bronze coverage·lineage, 과학 담당 관점의 전처리 상태·BLS 정렬 입력, Spark 운영 관점의 TIC 실패 격리·실패 TIC 재선택·드라이버 전체 수집 금지를 확인한다. 2026-09-21 최종 CodeReleaseId `20260921T062449Z`(archive SHA-256 `86f68700bd92281f356b3e8fc4f9957e9893cc91474d4ac3085f57ccbbab25d9`), RunId `20260921T062522Z`로 TIC `259377017`을 실제 YARN Canary 실행했다. `application_1789686202146_0029`는 `SUCCEEDED`, RF2·checksum·FSCK·원자 rename과 상세 출력 삭제·staging 정리를 통과했다. Sector 3·4·5에서 Raw 57,320개, 준비 44,553개, BLS 유효 44,550개를 처리했고 채택 peak 5개 중 1위 `5.6593303027일`, SNR `52.8359`, SDE `22.5652`였다. 저장소 TOI-270 c fixture `5.66051일`과 약 0.021% 차이며 직전 검증 release에서도 같은 snapshot·관측점 수·과학값을 재현했다. 이는 최초 BLS 재현 증거이며 반복 제거·전체 TIC 성능이나 최종 과학 판정을 증명하지 않는다.

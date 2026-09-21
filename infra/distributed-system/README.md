@@ -211,6 +211,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 - [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다. 원격 명령은 Bash로 실행하고 HDFS는 `nn1`·`nn2` 중 정확히 하나가 Active인지 확인한다.
 - [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
 - [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 75의 최종 coverage를 입력으로 Sector 1~13을 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·첫/중간/마지막 offset 복원 감사 뒤 덮어쓰기 없는 원자 rename으로 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+- [run-tess-silver.ps1](scripts/run-tess-silver.ps1), [test-tess-silver.ps1](scripts/test-tess-silver.ps1): 확정 Bronze coverage를 TIC별로 그룹화해 전처리·최초 BLS를 YARN cluster mode로 실행한다. TIC별 manifest로 성공을 보존하고 실패 TIC만 새 attempt에서 재처리하며 RF2·part checksum·FSCK 뒤 attempt 전체를 원자 확정한다. Canary는 상세 데이터를 삭제하기 전에 bounded science audit을 상태 파일에 남기고 성공 attempt의 빈 staging 경로를 정리한다. 상세 계약과 미완 선행 작업 경계는 [Spark README](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78)를 따른다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
 ```powershell

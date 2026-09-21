@@ -255,10 +255,10 @@ def application_state(application_id: str) -> str:
     return match.group(1) if match else "UNKNOWN"
 
 
-def wait_application(application_id: str, poll_seconds: int = 30) -> None:
+def wait_application(application_id: str, poll_seconds: int = 30, label: str = "BRONZE") -> None:
     while True:
         state = application_state(application_id)
-        print(f"BRONZE_APPLICATION_STATUS id={application_id} state={state}", flush=True)
+        print(f"{label}_APPLICATION_STATUS id={application_id} state={state}", flush=True)
         if state == "SUCCEEDED":
             return
         if state in ("FAILED", "KILLED"):
