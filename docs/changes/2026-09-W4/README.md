@@ -74,6 +74,9 @@
 | 2026-09-21 | 팔로우 대상·중복 제거 피드·구독 사건·173/174 인수 | S15P21C206-172 | COM-16, DEC-33, AT-78, AT-79, matchedBy, 멱등성, DEC-11 | 제안·정책 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 179 탈퇴 초안과 팔로우 접근 의존성 교차 검토 | S15P21C206-172 | W2, W3, W5, Q3, WD-12, star_unlocks, P16 | 제안·공유 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | MR !155 리뷰: 회원 재개·공통 원인·사건 복구·관계 해제 | S15P21C206-172 | 150, 174, eventId, occurredAt, P17, COM-13 | 검토안 보완·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 반복 탐색·QA·후보 ID 연결 | S15P21C206-122 | iteration, rollback, candidate_catalog, BIGINT, 보류, removal_step, 170 passed | 구현·로컬 검증·리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 Publisher 필드별 인계 보완 | S15P21C206-122 | is_confirmed, 116·124, SDE/SNR Silver 진단, 열 투영, alias 책임 | 문서 보완·재확인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 실제 진단·원본 SNR 종료 기록 보완 | S15P21C206-122 | baseline_time, search_diagnostics, original_validation, 207 passed | 수정 검증·develop 통합 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 마이페이지 내 별·분석 기록 목록 연결 | S15P21C206-196 | 프로필 슬롯, 커서에 size 묶임, unpublishedSignalCount 없음과 0, detailAvailable, StrictMode 두 쪽 읽기 | 구현·검증 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
 
 | 2026-09-21 | 근거 구간 마스킹·원본 행 장부 | S15P21C206-245 | interval mask, QUALITY, DRN4, DR42 | 구현·로컬 검증·리뷰 전 | [2026-09-21](2026-09-21.md) |
@@ -94,3 +97,4 @@
 | 2026-09-21 | 172·176·179 정책 문서 병렬 변경 충돌 해결 | S15P21C206-172 | follow-policy, statistics-policy, AT-77, AT-78, AT-79 | 문서 통합·정책 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 커뮤니티 검색·공식 네 수치 본문 동기화 | S15P21C206-169 | searchIn, JS trim, SHA-256, pg_trgm, V19, 공식 요약, 10만 행 | 구현·격리 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 169 리뷰 반영·후보 요약 격리 검증 | S15P21C206-169 | MR !156, READ COMMITTED, 25000, N=0, BTJD, 540건, FE 빌드 | 수정·격리 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 122 !160 develop 통합·실제 진단 최종 검증 | S15P21C206-122 | 205 passed, 184 passed, 16곡선, search_diagnostics, review-122-r2 | 검증 완료·병합 commit 대기 | [기록](2026-09-21.md) |
