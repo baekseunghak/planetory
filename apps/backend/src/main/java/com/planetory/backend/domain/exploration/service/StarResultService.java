@@ -76,7 +76,7 @@ public class StarResultService {
                 results.findDiscoveredStars(memberId, ticId),
                 unpublished,
                 links(ticId, signals),
-                nextActions(memberId, ticId, saved.stage(), unpublished));
+                nextActions(memberId, ticId, saved.stage()));
     }
 
     private StarResultViews.Progress progress(long memberId, long ticId, StarViews.Progress saved,
@@ -162,12 +162,15 @@ public class StarResultService {
     /**
      * 서버 힌트다(RES-03·08). 실행하면 서버가 다시 검증하며, 게시 화면으로 강제로 옮기지 않는다(AT-36).
      *
-     * <p>[모두 게시]·[나중에]는 <b>탐색이 끝나고</b> 공개하지 않은 신호가 남았을 때만 준다(RES-08
+     * <p>[모두 게시]·[나중에]는 <b>탐색이 끝나고</b> 일괄 공개할 기록이 남았을 때만 준다(RES-08
      * "별 탐색 종료 후", RES-10 "종료 시"). 진행 중에는 개별 [분석 공개]가 그 일을 한다.
+     *
+     * <p>기준은 미게시 <b>신호</b> 수가 아니라 <b>일괄 공개 후보</b>다. 같은 신호의 첫 기록을 공개한
+     * 뒤 새 적격 기록을 제출하면 신호 수는 0인데 공개할 기록은 남아 있다(!157 리뷰).
      */
-    private List<String> nextActions(long memberId, long ticId, String stage, int unpublished) {
+    private List<String> nextActions(long memberId, long ticId, String stage) {
         List<String> actions = new ArrayList<>();
-        if ("completed".equals(stage) && unpublished > 0) {
+        if ("completed".equals(stage) && results.hasBatchPublishCandidate(memberId, ticId)) {
             actions.add("PUBLISH_ALL");
             actions.add("LATER");
         }

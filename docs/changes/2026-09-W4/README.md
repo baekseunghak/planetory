@@ -62,3 +62,4 @@
 | 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | 결과 페이지 리뷰 반영: 유효 공개 조건·일괄 공개 후보·은퇴 대상 | S15P21C206-146 | unpublishedSignalCount, PublicAnalysisVisibility, PUBLISH_ALL, RETRY, CANDIDATE_RETIRED | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |

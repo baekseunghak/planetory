@@ -12,6 +12,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,6 +49,8 @@ class StarResultTest {
 
     @Autowired StarResultService results;
     @Autowired SubmissionService submissions;
+    @Autowired com.planetory.backend.domain.post.service.PublicAnalysisService publications;
+    @Autowired com.planetory.backend.domain.post.service.PublicAnalysisBatchService batch;
     @Autowired ExplorationCompletionRepository completion;
     @Autowired JdbcTemplate jdbc;
     @Autowired GalaxyLayout layout;
@@ -256,7 +260,65 @@ class StarResultTest {
                 () -> results.result(member, 999_999_999L)).getErrorCode());
     }
 
+    // ---------- !157 리뷰: 유효 공개 조건·일괄 공개 후보·은퇴 대상 ----------
+
+    /**
+     * 공개 기록의 취소·숨김만 보면 부모 스레드가 숨겨진 뒤 <b>한 응답이 두 말을 한다.</b> 신호
+     * 카드는 {@code HIDDEN}인데 미게시 수는 0이 된다.
+     */
+    @Test
+    void 부모_스레드가_숨겨지면_다시_미게시로_센다() {
+        var published = publications.publish(member, historyOf(submitBody(5, "LIKELY_PLANET")));
+        assertEquals(0, results.result(member, tic).unpublishedSignalCount(),
+                "유효하게 공개된 신호는 세지 않는다");
+
+        // 운영이 부모 스레드를 숨기면 그 공개는 더 이상 유효 공개가 아니다.
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?",
+                Long.parseLong(published.threadId().substring(3)));
+
+        var result = results.result(member, tic);
+        assertEquals("HIDDEN", result.signals().getFirst().publication().state());
+        assertEquals(1, result.unpublishedSignalCount(),
+                "카드가 HIDDEN인데 수가 0이면 같은 응답이 서로 다른 말을 한다");
+    }
+
+    /**
+     * 미게시 <b>신호</b> 수와 <b>일괄 공개 후보</b>는 다른 값이다. 같은 신호의 첫 기록을 공개한 뒤 새
+     * 적격 기록을 제출하면 신호 수는 0이지만 공개할 기록은 남아 있다.
+     */
+    @Test
+    void 공개한_신호에_새_기록이_있으면_모두_게시를_권한다() {
+        publications.publish(member, historyOf(submitBody(5, "LIKELY_PLANET")));
+        submit(5, "UNSURE"); // 같은 신호의 새 적격 기록
+        complete();
+
+        var result = results.result(member, tic);
+
+        assertEquals(0, result.unpublishedSignalCount(), "신호 기준으로는 이미 공개했다");
+        assertTrue(result.nextActions().contains("PUBLISH_ALL"), "그래도 공개할 기록이 남아 있다");
+        // 버튼과 목록이 다른 말을 하지 않도록 166 후보 목록과 함께 묶는다.
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("ticId", String.valueOf(tic));
+        assertEquals(1, batch.candidates(member, params).items().size());
+    }
+
+    /** 누르면 409 `CANDIDATE_RETIRED`가 될 행동을 힌트로 주지 않는다(6.8절). */
+    @Test
+    void 은퇴한_후보는_다시_풀기를_권하지_않는다() {
+        submit(3, "LIKELY_PLANET");
+        assertTrue(results.result(member, tic).nextActions().contains("RETRY"));
+
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?", graded);
+
+        assertFalse(results.result(member, tic).nextActions().contains("RETRY"),
+                "다시 풀기 초안이 거절할 대상인데 계속 권하면 화면이 막다른 길로 안내한다");
+    }
+
     // ---------- 도구 ----------
+
+    private static String historyOf(tools.jackson.databind.JsonNode body) {
+        return body.path("historyId").asText();
+    }
 
     private String state() {
         return jdbc.queryForObject("SELECT (SELECT count(*) FILTER (WHERE answer_viewed) FROM submissions"
@@ -296,12 +358,16 @@ class StarResultTest {
     }
 
     private String submit(double period, String judgment) {
+        return submitBody(period, judgment).path("submissionId").asText();
+    }
+
+    private tools.jackson.databind.JsonNode submitBody(double period, String judgment) {
         var request = new SubmissionRequest(UUID.randomUUID().toString(), "candidate",
                 new SubmissionRequest.Context("b-" + bundle, 0, List.of(), "rm-1", "pg-1"),
                 new SubmissionRequest.Selection(period, null, .25 / period, .35 / period), judgment,
                 List.of("ushape"), "결과 메모",
                 new SubmissionRequest.ViewState(new SubmissionRequest.Viewport(1.0, 10.0), 2.0), null);
-        return submissions.submit(member, tic, request).body().path("submissionId").asText();
+        return submissions.submit(member, tic, request).body();
     }
 
     private long member() {

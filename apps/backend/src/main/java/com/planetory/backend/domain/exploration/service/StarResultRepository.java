@@ -226,7 +226,11 @@ public class StarResultRepository {
     }
 
     /**
-     * 매칭했지만 공개하지 않은 신호 수. 4.4절 목록과 <b>같은 식</b>이라 두 화면이 어긋나지 않는다.
+     * 매칭했지만 <b>지금 유효하게 공개되어 있지 않은</b> 신호 수.
+     *
+     * <p>유효 공개 조건은 {@link PublicAnalysisVisibility#VISIBLE} 하나를 쓴다. 공개 기록의 취소·숨김만
+     * 보고 <b>부모 스레드 상태를 빼면</b> 스레드가 숨겨진 뒤 신호 카드는 {@code HIDDEN}인데 이 수는
+     * 0이 된다 — 한 응답이 서로 다른 말을 한다(!157 리뷰).
      *
      * <p>{@code progress.stage=completed}와 동시에 0보다 클 수 있다. 그것이 "탐색 완료 / 미게시
      * 분석 있음"이다(RES-10).
@@ -239,25 +243,67 @@ public class StarResultRepository {
                            AND s.matched_candidate_id IS NOT NULL
                            AND NOT EXISTS (
                                SELECT 1 FROM published_analyses pa
+                                 JOIN posts p ON p.id = pa.post_id
                                 WHERE pa.user_id = s.user_id
                                   AND pa.candidate_id = s.matched_candidate_id
-                                  AND pa.unpublished_at IS NULL
-                                  AND pa.hidden_at IS NULL)
-                        """)
+                                  AND %s)
+                        """.formatted(PublicAnalysisVisibility.VISIBLE))
                 .param("memberId", memberId).param("ticId", ticId)
                 .query(Integer.class).single();
     }
 
     /**
+     * 지금 일괄 공개할 수 있는 기록이 있는가(166).
+     *
+     * <p>미게시 <b>신호</b> 수와 다른 값이다. 같은 신호의 첫 기록을 공개한 뒤 새 적격 기록을 제출하면
+     * 신호 수로는 0이지만 일괄 공개 후보는 1건이다. 신호 수로 [모두 게시]를 가르면 그 기록이 화면에서
+     * 사라진다(!157 리뷰).
+     *
+     * <p>조건은 {@code PublicAnalysisBatchService.candidates}의 것을 그대로 옮겼다. 두 곳이 갈리면
+     * 버튼과 목록이 다른 말을 하므로 검사로 함께 묶는다.
+     */
+    public boolean hasBatchPublishCandidate(long memberId, long ticId) {
+        return jdbc.sql("""
+                        SELECT EXISTS(
+                            SELECT 1
+                              FROM analysis_histories h
+                              JOIN submissions s ON s.id = h.submission_id
+                              JOIN candidates c ON ('c-' || c.id) = s.response_snapshot #>> '{match,candidateId}'
+                                               AND c.tic_id = h.tic_id
+                             WHERE h.user_id = :memberId AND s.user_id = :memberId
+                               AND h.tic_id = :ticId AND s.tic_id = :ticId
+                               AND s.response_snapshot #>> '{signal,answerClass}' = 'analysis'
+                               AND s.response_snapshot #>> '{match,status}'
+                                   IN ('matched', 'matched_harmonic', 'duplicate')
+                               AND NOT EXISTS (SELECT 1 FROM published_analyses pa WHERE pa.history_id = h.id)
+                               AND NOT EXISTS (SELECT 1 FROM posts p
+                                                WHERE p.kind = 'system_thread' AND p.candidate_id = c.id
+                                                  AND p.status <> 'visible'))
+                        """)
+                .param("memberId", memberId).param("ticId", ticId)
+                .query(Boolean.class).single();
+    }
+
+    /**
      * 다시 풀 수 있는 제출이 하나라도 있는가.
      *
-     * <p>6.8절 초안은 저장된 당시 응답에서 만든다. 응답이 없는 옛 기록은 복원할 수 없으므로
-     * {@code RETRY}를 권하지 않는다 — 누르면 503이 될 행동을 힌트로 주지 않는다.
+     * <p>6.8절 초안은 저장된 당시 응답에서 만들고, 그 제출이 매칭한 후보가 <b>은퇴했으면 409</b>다.
+     * 저장 응답만 보고 권하면 눌렀을 때 {@code CANDIDATE_RETIRED}가 되는 행동을 힌트로 주게 된다
+     * (!157 리뷰). 조건은 {@code SubmissionLookupService.requireLivingTarget}과 같다.
      */
     public boolean hasRestorableSubmission(long memberId, long ticId) {
-        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM submissions"
-                        + " WHERE user_id = ? AND tic_id = ? AND response_snapshot IS NOT NULL)")
-                .params(memberId, ticId)
+        return jdbc.sql("""
+                        SELECT EXISTS(
+                            SELECT 1 FROM submissions s
+                             WHERE s.user_id = :memberId AND s.tic_id = :ticId
+                               AND s.response_snapshot IS NOT NULL
+                               AND NOT EXISTS (
+                                   SELECT 1 FROM candidates c
+                                    WHERE ('c-' || c.id) = s.response_snapshot #>> '{match,candidateId}'
+                                      AND c.tic_id = s.tic_id
+                                      AND c.status = 'retired'))
+                        """)
+                .param("memberId", memberId).param("ticId", ticId)
                 .query(Boolean.class).single();
     }
 }
