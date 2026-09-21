@@ -108,7 +108,6 @@
   visibility: hidden;
 }
 .sky-page:has(.detail-ready) .quest-layer,
-.sky-page:has(.detail-ready) .sky-view-switch,
 .sky-page:has(.detail-ready) .sky-data-status,
 .sky-page:has(.detail-ready) .sky-legend {
   visibility: hidden;
@@ -129,4 +128,7 @@
 
 
 .personal-galaxy:has(.detail-ready) .galaxy-visible-count, .personal-galaxy:has(.detail-ready) .galaxy-legend { visibility: hidden; pointer-events: none; }
+
+
+.service-presentation .sky-page:has(.detail-ready) .sky-view-switch {left:32px;bottom:24px;max-width:290px;z-index:8;}
 
