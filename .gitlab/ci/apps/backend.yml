@@ -1,3 +1,77 @@
+# 마이그레이션 파일만 검사한다. grep이라 수 초에 끝나므로 JDK 이미지를 끌어오는
+# backend:build와 분리했다. 컨트롤러만 고친 MR에서는 아예 돌지 않는다.
+backend:schema:
+  stage: validate
+  image: alpine:3.20
+  needs: []
+  script:
+    - cd apps/backend/src/main/resources/db/migration
+    # 1. 버전 번호는 브랜치 사이의 선점 경쟁 대상이다. 두 브랜치가 각각 V16을
+    #    만들면 develop에서 만나 Flyway 적용 순서가 꼬인다.
+    - |
+      duplicates=$(ls V*.sql 2>/dev/null | sed -E 's/^V([0-9]+)__.*/\1/' | sort -n | uniq -d)
+      if [ -n "$duplicates" ]; then
+        echo "마이그레이션 버전 번호가 겹칩니다: $duplicates" >&2
+        ls V*.sql >&2
+        echo "develop의 최신 번호 다음으로 올려 이름을 바꾸십시오." >&2
+        exit 1
+      fi
+    # 2. 열·테이블을 지우거나 이름을 바꾸면 구 버전 앱이 새 스키마에서 뜨지 못한다.
+    #    배포가 실패했을 때 이미지를 되돌려도 살아나지 않는다는 뜻이다
+    #    (infra/service/deploy.sh는 이미지만 되돌린다).
+    #    정말 필요하면 해당 파일에 `-- IRREVERSIBLE:` 줄과 근거를 남긴다.
+    - |
+      for file in $(grep -lniE 'DROP (TABLE|COLUMN)|RENAME (TO|COLUMN)|ALTER COLUMN [a-z_]+ TYPE' V*.sql R*.sql 2>/dev/null); do
+        if ! grep -q '^-- IRREVERSIBLE:' "$file"; then
+          echo "되돌릴 수 없는 변경이 있습니다: $file" >&2
+          grep -niE 'DROP (TABLE|COLUMN)|RENAME (TO|COLUMN)|ALTER COLUMN [a-z_]+ TYPE' "$file" >&2
+          echo "" >&2
+          echo "세 배포로 나누면 어느 단계에서 실패해도 이미지 롤백으로 복구됩니다." >&2
+          echo "  1차: 새 열을 추가만 한다 (구 앱·신 앱 모두 동작)" >&2
+          echo "  2차: 코드가 새 열을 쓰게 바꾼다 (스키마 변경 없음)" >&2
+          echo "  3차: 아무도 쓰지 않게 된 구 열을 지운다" >&2
+          echo "" >&2
+          echo "나눌 수 없다면 파일에 '-- IRREVERSIBLE: <근거>' 줄을 추가하십시오." >&2
+          exit 1
+        fi
+        echo "되돌릴 수 없는 변경을 명시적으로 허용했습니다: $file"
+      done
+      echo "마이그레이션 검사 통과"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [apps/backend/src/main/resources/db/migration/**/*]
+    - if: $CI_COMMIT_BRANCH
+      changes: [apps/backend/src/main/resources/db/migration/**/*]
+
+# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
+# 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
+# startLocalDb가 건너뛰어지므로(CI=true), 그냥 돌리면 DB 없이 41개 클래스가 돈다.
+# CI에 Postgres 서비스를 붙이는 일은 따로 정한다.
+backend:build:
+  stage: validate
+  image: eclipse-temurin:21-jdk-alpine
+  needs: []
+  variables:
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/apps/backend/.gradle
+  # Gradle 배포판(9.7.1)과 의존성을 캐싱한다. 없으면 매번 수백 MB를 내려받는다.
+  cache:
+    key:
+      files:
+        - apps/backend/build.gradle
+        - apps/backend/gradle/wrapper/gradle-wrapper.properties
+    paths:
+      - apps/backend/.gradle/caches
+      - apps/backend/.gradle/wrapper
+  script:
+    - cd apps/backend
+    - chmod +x gradlew
+    - ./gradlew bootJar --no-daemon
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [apps/backend/**/*]
+    - if: $CI_COMMIT_BRANCH
+      changes: [apps/backend/**/*]
+
 build:backend:
   extends: .docker-build
   variables:
