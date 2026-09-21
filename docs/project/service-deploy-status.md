@@ -8,7 +8,7 @@
 
 ## 한 줄 요약
 
-`planetory.space`로 서비스가 뜨고 Google·SSAFY 로그인이 동작한다. 다만 **지금 떠 있는 것은 EC2-A에서 손으로 빌드한 이미지**다. CI 파이프라인은 실행되고 있으나 **`build:*`가 레지스트리 push에서 실패해 레지스트리에 쓸 수 있는 이미지가 없다.** 원인과 필요한 조치는 「CI가 막힌 지점」에 있다.
+`planetory.space`로 서비스가 뜨고 Google·SSAFY 로그인이 동작한다. **CI 파이프라인은 빌드와 레지스트리 push까지 통과한다**(2026-09-21). 커밋 SHA 태그가 붙은 이미지가 레지스트리에 있고 EC2-A에서 그 태그가 보인다. 다만 **지금 떠 있는 것은 아직 손으로 빌드한 `:local` 이미지**이며, 배포 job을 눌러야 교체된다.
 
 ## 실환경에서 확인된 것 (2026-09-18)
 
@@ -46,9 +46,9 @@ develop의 계정 분리(`S15P21C206-238`)가 들어오면서 배포 계약이 �
 
 런타임 계정은 아직 테이블 권한이 없다. `planetory_app` GRANT가 V10~V18에 나뉘어 있고 EC2-A의 DB는 V9에서 멈춰 있기 때문이다. 다음 백엔드 배포에서 Flyway가 소유자로 마이그레이션을 돌리면서 채운다. 기동과 같은 트랜잭션 흐름 안에서 처리되므로 별도 조치는 필요 없다.
 
-## CI가 막힌 지점
+## CI push 차단과 해소 (2026-09-21)
 
-`build:frontend`는 이미지 빌드까지 성공하고 **레지스트리 push에서 실패한다.**
+`build:frontend`는 이미지 빌드까지 성공하고 **레지스트리 push에서 실패했다.** 아래 조치로 해소했고 지금은 통과한다.
 
 ```text
 Get "https://<레지스트리 호스트>:<포트>/v2/": net/http: request canceled
@@ -77,9 +77,9 @@ while waiting for connection (Client.Timeout exceeded while awaiting headers)
 
 Tailscale 문제가 아니다. 호스트의 어느 주소로 가든 똑같이 막히며, tailnet과 무관한 도커 게이트웨이도 마찬가지다. 반대로 tailnet 피어로 나가는 경로는 정상이다.
 
-### push는 방화벽을 건드리지 않고 풀 수 있다
+### 적용한 해법: 방화벽을 건드리지 않는다
 
-컨테이너에서 **레지스트리 컨테이너로 직접 가면 이미 통한다.** 같은 브리지 위라 호스트 `INPUT`을 거치지 않는다. Runner 설정의 호스트 매핑을 바꾸면 끝난다.
+컨테이너에서 **레지스트리 컨테이너로 직접 가면 통한다.** 같은 브리지 위라 호스트 `INPUT`을 거치지 않는다. Runner 설정의 호스트 매핑을 레지스트리 컨테이너 주소로 바꿨다.
 
 ```toml
 # /srv/gitlab-runner/config/config.toml
@@ -88,6 +88,8 @@ extra_hosts = ["<레지스트리 호스트>:<레지스트리 컨테이너 주소
 
 인증서는 이름으로 검증하므로 그대로 유효하고, push가 호스트 밖으로 나가지 않아 「이미지 레지스트리」가 적어둔 의도에 더 맞는다.
 
+적용 후 `build:frontend`를 재실행해 **push 성공과 레지스트리 태그 등록을 확인했다.** EC2-A에서도 같은 태그가 조회된다. 되돌리려면 EC2-B의 `config.toml.bak-20260921`을 복원하고 Runner를 재시작한다.
+
 **한계.** 레지스트리 컨테이너 주소는 기본 브리지가 순서대로 준 값이라 레지스트리 컨테이너를 다시 만들면 바뀔 수 있다. 바뀌면 push가 같은 방식으로 다시 깨진다. 고정이 필요해지면 사용자 정의 네트워크에 네트워크 별칭으로 붙여 Docker DNS가 이름을 풀게 한다.
 
 ### 배포 job의 SSH 경로는 정상이다
@@ -95,8 +97,6 @@ extra_hosts = ["<레지스트리 호스트>:<레지스트리 컨테이너 주소
 컨테이너에서 EC2-A로 나가는 경로는 막혀 있지 않다. `tcpdump`로 보면 출발지가 EC2-B의 tailnet 주소로 masquerade되어 나가고 handshake가 완료된다. 컨테이너에서 `deploy` 계정으로 실제 SSH가 붙고, 배포 경로에서 `docker compose config -q`까지 통과한다.
 
 따라서 `.remote-compose-deploy`의 "job 컨테이너의 연결은 Runner 호스트의 tailnet 신원으로 나간다"는 주석은 **맞다.** masquerade로 성립한다.
-
-남은 차단은 레지스트리 push 하나뿐이다.
 
 Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `amd64-docker` 태그와 `run_untagged=true`를 갖는다. CI 변수 `DEPLOY_USER`·`EC2_A_HOST`·`EC2_A_DEPLOY_PATH`·`REGISTRY_IMAGE_PREFIX`도 실제 서버 구성과 일치한다.
 
@@ -127,7 +127,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 **실환경에서 확인한 것(2026-09-21).** GitLab 파이프라인은 실행되고 있다. develop의 `build:frontend`는 Runner를 잡고 dind에서 이미지 빌드까지 마치며 커밋 SHA 태그도 정확히 붙는다. `rules: changes` 판정과 dind 기동도 동작한다. EC2-A의 배포 경로는 `deploy` 계정으로 `docker compose config -q`를 통과하고, 레지스트리 인증서는 EC2-A에서 유효하다.
 
-**확인하지 못한 것.** 레지스트리 push가 막혀 있어 **끝까지 성공한 파이프라인이 없다.** 따라서 배포 job은 한 번도 실행되지 않았고, 롤백이 진짜 서버에서 동작하는지도 여전히 미검증이다. 캐시 적중도 push 성공 이후에야 의미 있게 관찰된다.
+**확인하지 못한 것.** **배포 job을 아직 실행하지 않았다.** 따라서 교체·헬스 확인·롤백이 진짜 서버에서 동작하는지는 미검증이다. 캐시 적중도 관찰하지 않았다. 백엔드 쪽 `build:backend`도 아직 돌리지 않았다.
 
 ## 남은 결정 (MR에서 확인)
 
