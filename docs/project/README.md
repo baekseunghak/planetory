@@ -26,3 +26,4 @@
 | `docs/git-jira-convention.md` | 요청 유형별 워크플로 가이드로 분할 | [워크플로 문서 안내](../workflows/README.md) | 단일 컨벤션 문서로 합쳐야 할 검증된 필요가 생긴 경우 |
 | `apps/backend/docs/api-spec-ownership.md` | 실제 API 문서 디렉터리의 인덱스로 승격 | [백엔드 API 문서](../../apps/backend/docs/README.md) | 별도 분담 문서가 다시 필요해진 경우 |
 | `docs/experiments/distributed-poc-cicd-plan.md` | 중복 문서 지도와 폐기된 계약을 제거하고 상태만 분리 | [분산 PoC 진행 상태](distributed-poc-status.md) | 실험별 별도 계획 문서가 다시 필요해진 경우 |
+| `docs/workflows/mattermost-message.md` | 외부 메신저 직접 전송을 저장소 워크플로 범위에서 제거 | 없음 | 별도 Jira 범위와 비밀정보 관리 방식이 합의된 경우 |

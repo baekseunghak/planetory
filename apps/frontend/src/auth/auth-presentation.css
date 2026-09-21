@@ -1,0 +1,110 @@
+.auth-page.auth-presentation {
+  position: relative;
+  display: block;
+  padding: clamp(120px, 18vh, 180px) 8.5vw 90px;
+  overflow: hidden;
+  background: #010304;
+}
+.auth-presentation .auth-universe {
+  display: contents;
+}
+.auth-presentation .auth-universe::before {
+  display: none;
+}
+.auth-presentation .brand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 64px;
+  padding: 24px 30px;
+  border-bottom: 1px solid #ffffff20;
+}
+.auth-presentation .auth-intro {
+  position: relative;
+  inset: auto;
+  z-index: 2;
+  max-width: 510px;
+}
+.auth-presentation .auth-intro h1 {
+  font-size: clamp(37px, 4vw, 58px);
+  font-weight: 420;
+  line-height: 1.28;
+  letter-spacing: -0.055em;
+  margin: 24px 0;
+}
+.auth-presentation .auth-intro .eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+}
+.auth-presentation .auth-intro > p:last-child {
+  font-size: 16px;
+  color: #a1aab5;
+  margin-bottom: 28px;
+}
+.auth-presentation .auth-content {
+  position: relative;
+  z-index: 2;
+  padding: 0;
+  width: 390px;
+  max-width: 100%;
+  min-height: 0;
+  margin: 0;
+  background: none;
+  display: block;
+  justify-self: start;
+  align-self: start;
+}
+.auth-presentation .auth-content > .eyebrow {
+  display: none;
+}
+.auth-presentation .auth-content h2 {
+  font-size: 17px;
+  font-weight: 450;
+}
+.auth-presentation .auth-content > p {
+  font-size: 13px;
+}
+.auth-presentation .auth-provider {
+  color: #dde9f2;
+  height: 54px;
+  background: #030609d9;
+  border-color: #ffffff30;
+  border-radius: 2px;
+  font-size: 13px;
+}
+.auth-presentation .auth-provider.ssafy:hover {
+  background: #1b2e40;
+  color: #eef7ff;
+}
+.auth-presentation .auth-galaxy {
+  position: absolute;
+  z-index: 0;
+  right: -2%;
+  top: 8%;
+  width: 68%;
+  height: 88%;
+  pointer-events: none;
+  mask-image: linear-gradient(to right, transparent, #000 22%, #000);
+}
+.auth-presentation .galaxy-artwork {
+  width: 100%;
+  height: 100%;
+}
+.auth-presentation .auth-caption {
+  z-index: 2;
+  bottom: 28px;
+  left: 30px;
+  font-size: 11px;
+}
+@media (max-width: 1100px) {
+  .auth-page.auth-presentation {
+    padding-left: 6vw;
+  }
+  .auth-presentation .auth-galaxy {
+    right: -18%;
+    width: 80%;
+    opacity: 0.75;
+  }
+}

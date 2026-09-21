@@ -32,6 +32,7 @@ from tess_fixture.targets import iter_products, select_targets
 
 from . import bls as bl
 from . import bls_dy as bd
+from . import iterate as it
 from . import bls_match as bm
 from . import holdout as ho
 from . import metrics as mt
@@ -661,6 +662,120 @@ def cmd_bls_snr_dy(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_iterate(args: argparse.Namespace) -> int:
+    """반복 BLS·고정 모델 제거 루프 벤치마크 (S15P21C206-111). 곡선마다 종료 사유·단계별 QA 수치·복구 결과를 기록한다."""
+    started = time.time()
+    cfg, settings = bl.load_bls_settings(args.settings, [args.setting])
+    setting = settings[0]
+    _, pre_settings = load_settings(args.preprocess_settings, [cfg["preprocess_setting_id"]])
+    icfg = it.IterateConfig(snr_min=args.snr_min, sde_min=args.sde_min, min_transits=args.min_transits, max_candidates=args.max_candidates,
+                            qa_window_offset_reference=args.window_offset_reference,
+                            qa_window_offset_rel_depth=args.window_offset_rel_depth, refine_duration_max_hours=args.refine_duration_max_hours,
+                            refine_duration_span=(0.5, 2.0) if args.refine_duration_max_hours > 0 else (0.7, 1.4),
+                            continue_after_qa_fail=args.continue_after_qa_fail)
+    bi = build_bls_inputs(args.target, args.stage, cfg, pre_settings[0], args.grid, args.raw, noise_seeds=[] if args.no_noise else args.noise_seeds,
+                          include_raw_real=args.include_raw_real, limit=0)
+    # 그룹 선택: pairs(쌍 주입) / singles(단일) / none(주입 없음) / all
+    want = set(args.groups)
+    for bkey, by_group in bi.groups.items():
+        keep = {}
+        for gid, members in by_group.items():
+            kind = "none" if not members else ("pairs" if len(members) > 1 else "singles")
+            if "all" in want or kind in want:
+                keep[gid] = members
+        if args.limit:
+            pairs = {g: m for g, m in keep.items() if len(m) > 1}; rest = {g: m for g, m in keep.items() if len(m) <= 1}
+            keep = {**pairs, **dict(list(rest.items())[:args.limit])}
+        bi.groups[bkey] = keep
+    run_id = mf.new_run_id()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = args.results / "bench" / f"bls_iterate_v1-{cfg['version']}" / bi.target.key / f"run-{stamp}-{run_id[:8]}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    print(f"target={bi.target.key} stage={args.stage} setting={setting.setting_id} gate=snr>={icfg.snr_min}&sde>={icfg.sde_min}&ntr>={icfg.min_transits} "
+          f"max_candidates={icfg.max_candidates} groups={bi.n_groups} tamper={args.tamper_depth_factor} "
+          f"opts(rel_depth={icfg.qa_window_offset_rel_depth}, reference={icfg.qa_window_offset_reference}, dur_max_h={icfg.refine_duration_max_hours}, continue={icfg.continue_after_qa_fail}) run={run_dir.name}")
+    print("전처리 중...", end="", flush=True); t0 = time.time()
+    preprocess_groups(bi)
+    print(f" {time.time()-t0:.1f}s ({len(bi.prepared)} curves)")
+
+    step_rows, iter_rows, match_rows = [], [], []
+    for bkey, by_group in bi.groups.items():
+        bid = f"{bi.target.key}-{bkey}"
+        t_b = time.time()
+        for g_i, (gid, members) in enumerate(by_group.items(), 1):
+            t_c, f_c = bi.prepared[(bkey, gid)]
+            truth = [(r.period_days, r.t0_btjd, r.duration_hours / 24.0) for r in members]
+            kind = "none" if not members else ("pair:" + members[0].phase_label if len(members) > 1 else "single")
+            res = it.iterate_curve(t_c, f_c, setting, icfg, truth=truth, tamper_depth_factor=args.tamper_depth_factor)
+            matches = it.match_accepted(t_c, members, res.accepted, window_overlap_min=cfg["matching"]["window_overlap_min"])
+            common = {"baseline_id": bid, "group_id": gid, "kind": kind, "setting_id": setting.setting_id}
+            for s in res.steps:
+                step_rows.append({**common, **s.as_row()})
+            for m in matches:
+                match_rows.append({**common, **m})
+            iter_rows.append({**common, **it.summarize(res, matches),
+                              "accepted_periods": ";".join(f"{c.period_days:.5f}" for c in res.accepted),
+                              "blocked_periods": ";".join(f"{s.period_days:.5f}" for s in res.steps if s.status == "qa_failed"),
+                              "accepted_original_snr": ";".join(f"{c.original_snr:.1f}" for c in res.accepted),
+                              "elapsed_s": round(sum(s.bls_elapsed_s for s in res.steps if np.isfinite(s.bls_elapsed_s)), 2)})
+            print(f"\r    [{bkey:<14}] {g_i:>4}/{len(by_group)} curves  {time.time()-t_b:6.1f}s", end="", flush=True)
+        print()
+
+    for name, rows in (("steps.csv", step_rows), ("iterations.csv", iter_rows), ("matches.csv", match_rows)):
+        if rows:
+            with (run_dir / name).open("w", newline="", encoding="utf-8") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
+
+    # ---- 요약: 바탕곡선 × 종류별 종료 사유·회수·가짜 후보
+    print("\n=== 곡선 종류별 요약 (종료 사유 수 | 정답 회수 | 가짜 후보 합 | QA 실패 곡선) ===")
+    kinds = sorted({r["kind"] for r in iter_rows}, key=lambda k: ("none", "single", "pair").index(k.split(":")[0]) if k.split(":")[0] in ("none", "single", "pair") else 9)
+    for bkey in bi.groups:
+        bid = f"{bi.target.key}-{bkey}"
+        for kind in kinds:
+            rows = [r for r in iter_rows if r["baseline_id"] == bid and r["kind"] == kind]
+            if not rows:
+                continue
+            term = {}
+            for r in rows:
+                term[r["termination"]] = term.get(r["termination"], 0) + 1
+            n_inj = sum(r["n_injected"] for r in rows); n_rec = sum(r["n_recovered"] for r in rows)
+            print(f"  [{bkey:<14}] {kind:<26} n={len(rows):>3} | " + ", ".join(f"{k}={v}" for k, v in sorted(term.items()))
+                  + f" | 회수 {n_rec}/{n_inj} | 가짜 {sum(r['n_false_candidates'] for r in rows)} | QA실패 {sum(1 for r in rows if r['qa_failed_step'] >= 0)}")
+    acc = [r for r in step_rows if r["status"] in ("accepted", "qa_failed")]
+    if acc:
+        def q(name):
+            v = np.array([r[name] for r in acc], float); v = v[np.isfinite(v)]
+            return (f"{name}: 중앙값 {np.median(v):.3f} 최소 {np.min(v):.3f} 최대 {np.max(v):.3f} "
+                    f"절댓값최대 {np.max(np.abs(v)):.3f} (n={v.size})") if v.size else f"{name}: -"
+        print("\n=== 제거 QA 원시 수치 (채택+실패 단계) ===")
+        for name in ("power_ratio", "edge_excess", "window_offset_z", "window_offset_rel", "other_depth_log2_max", "overlap_fraction", "overlap_dev"):
+            print("  " + q(name))
+        fails = {}
+        for r in acc:
+            for f_ in filter(None, r["qa_failures"].split(",")):
+                fails[f_] = fails.get(f_, 0) + 1
+        print("  QA 실패 항목:", fails or "없음")
+
+    manifest = mf.build_manifest(
+        task="S15P21C206-111 iterate", command=_command_line(), repo_dir=REPO_DIR, run_id=run_id,
+        inputs=bi.inputs + [mf.file_entry(args.grid, role="grid"), mf.file_entry(args.settings, role="bls_settings"), mf.file_entry(args.preprocess_settings, role="preprocess_settings"),
+                           mf.file_entry(FIXTURE_DIR / "references.csv", role="references"), mf.file_entry(FIXTURE_CHECKSUMS, role="fixture_checksums")],
+        config={"name": args.settings.name, "version": cfg["version"], "sha256": mf.file_entry(args.settings)["sha256"],
+                "parameters": {"target": bi.target.key, "stage": args.stage, "setting": setting.setting_id, "setting_params": setting.params(),
+                               "iterate": icfg.params(), "groups": sorted(want), "limit": args.limit, "tamper_depth_factor": args.tamper_depth_factor,
+                               "iterate_config_version": f"bls_iterate_qa_v1/{icfg.fingerprint()[:12]}",
+                               "iterate_config_sha256": icfg.fingerprint(), "grid_set_id": bi.set_id,
+                               "noise_seeds": bi.noise_seeds, "baselines": list(bi.baselines), "known_signals_removed": bi.known_models,
+                               "preprocess_setting": bi.pre.params(), "termination_reasons": list(it.TERMINATION_REASONS), "run_dir": str(run_dir),
+                               "baseline_days": float(bi.strict.time.max() - bi.strict.time.min())}},
+        outputs=[mf.file_entry(run_dir / n, kind=n.split(".")[0], rows=len(r)) for n, r in (("steps.csv", step_rows), ("iterations.csv", iter_rows), ("matches.csv", match_rows)) if r],
+        notes=f"total {time.time() - started:.1f}s", packages=("numpy", "scipy", "astropy"),
+    )
+    mpath = mf.write_manifest(manifest, args.results / "manifests" / f"iterate-{bi.target.key}-{run_id[:8]}.json")
+    print(f"\nsteps: {run_dir / 'steps.csv'}\niterations: {run_dir / 'iterations.csv'}\nmanifest: {mpath}\n총 소요 {time.time() - started:.1f}s")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m tess_bench", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -702,6 +817,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sde-min", type=float, default=6.0)
     p.add_argument("--baseline-days", type=float, default=None, help="in_search_range 열이 없는 옛 run 의 관측 기간")
     p.set_defaults(func=cmd_bls_snr_dy)
+
+    p = sub.add_parser("iterate", help="반복 BLS·고정 모델 제거 루프 벤치마크: 종료 사유·제거 QA·복구 (S15P21C206-111)")
+    p.add_argument("--target", required=True)
+    p.add_argument("--stage", choices=["tuning", "evaluation"], default="evaluation")
+    p.add_argument("--setting", default="poc_linear20k", help="BLS setting_id (110 수정 제안 기본값)")
+    p.add_argument("--settings", type=Path, default=DEFAULT_BLS_SETTINGS)
+    p.add_argument("--preprocess-settings", type=Path, default=DEFAULT_SETTINGS)
+    p.add_argument("--grid", type=Path, default=DEFAULT_GRID)
+    p.add_argument("--raw", type=Path, default=DEFAULT_RAW)
+    p.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
+    p.add_argument("--groups", nargs="+", default=["pairs", "singles", "none"], choices=["pairs", "singles", "none", "all"], help="돌릴 곡선 종류")
+    p.add_argument("--limit", type=int, default=0, help="쌍은 전부, 단일·none 은 처음 N개만 (빠른 확인)")
+    p.add_argument("--noise-seeds", type=int, nargs="*", default=[20260910])
+    p.add_argument("--no-noise", action="store_true")
+    p.add_argument("--include-raw-real", action="store_true", help="알려진 행성을 제거하지 않은 real 곡선 추가 (실제 행성 회수·잔여 고조파 시험)")
+    p.add_argument("--snr-min", type=float, default=7.0)
+    p.add_argument("--sde-min", type=float, default=6.0)
+    p.add_argument("--min-transits", type=int, default=2)
+    p.add_argument("--max-candidates", type=int, default=5)
+    p.add_argument("--tamper-depth-factor", type=float, default=None, help="실패 사례: 1단계 제거 모델 깊이에 이 배수를 곱해 QA 실패·복구를 시험")
+    p.add_argument("--window-offset-rel-depth", type=float, default=0.0, help="창 안 편향 QA 에 깊이 상대 허용(예 0.1). 0 은 z 만 (5절 실행값)")
+    p.add_argument("--window-offset-reference", choices=["unity", "oot"], default="unity",
+                   help="창 안 편향 기준: unity=기존 1, oot=바깥 평균·두 평균의 표본 오차 (실험 옵션)")
+    p.add_argument("--refine-duration-max-hours", type=float, default=0.0, help="재적합 지속시간 상한(예 12). 주면 배수 범위도 0.5–2.0 으로 넓힌다. 0 은 5절 실행값")
+    p.add_argument("--continue-after-qa-fail", action="store_true", help="QA 실패 피크를 제거 불가로 기록·제외하고 계속 탐색 (설계 변경 제안 시험)")
+    p.set_defaults(func=cmd_iterate)
 
     p = sub.add_parser("bls-report", help="저장된 bls run 들의 matches.csv 로 문서 5.1절 회수율 표를 생성 (재실행 없음)")
     p.add_argument("--run-dir", nargs="+", required=True, help="run 디렉터리(여러 별)")

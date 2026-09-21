@@ -10,8 +10,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+/** 목록·집계의 부모 조건은 서비스 사전 검사 후 숨김이 확정된 경우 조회 시점에 다시 거른다. */
 public interface CommentRepository extends JpaRepository<Comment, Long> {
-    int countByPostIdAndStatus(long postId, String status);
+    @Query("select count(c) from Comment c where c.post.id=:postId and c.status='visible' and c.post.status='visible'")
+    int countVisibleByVisiblePostId(long postId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Comment c where c.id = :id")
@@ -23,7 +25,7 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
      */
     @Query("""
             select c from Comment c join fetch c.author
-             where c.post.id = :postId and c.status = 'visible'
+             where c.post.id = :postId and c.status = 'visible' and c.post.status = 'visible'
              order by c.createdAt desc, c.id desc
             """)
     List<Comment> findVisibleFirstPage(long postId, Pageable pageable);
@@ -37,7 +39,7 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
      */
     @Query("""
             select c from Comment c join fetch c.author
-             where c.post.id = :postId and c.status = 'visible'
+             where c.post.id = :postId and c.status = 'visible' and c.post.status = 'visible'
                and (c.createdAt < :afterCreatedAt
                     or (c.createdAt = :afterCreatedAt and c.id < :afterId))
              order by c.createdAt desc, c.id desc

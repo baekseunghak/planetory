@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -141,9 +142,9 @@ public class AnalysisService {
                         achievementCount,
                         StarService.grade(achievementCount)),
                 CurrentCurveContext.of(current, restorable ? null : CurrentCurveContext.STEP_NOT_RESTORABLE),
-                residualStateOf(current),
+                residualStateOf(ticId, current),
                 next,
-                next == null ? null : residualStateOf(next),
+                next == null ? null : residualStateOf(ticId, next),
                 tutorialOf(memberId, ticId, rule, progress),
                 rule.ruleVersion());
         return new Answer<>(body, true, ExplorationIds.bundle(bundle.id()));
@@ -167,7 +168,7 @@ public class AnalysisService {
             return target.answer(curveOf(ticId, target, Residual.ORIGINAL, original), true);
         }
 
-        ResidualResultReader.Lookup lookup = residuals.lookup(target.context());
+        ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target.context());
         if (!lookup.completed()) {
             // 보내지 않을 원본 배열은 읽지 않는다.
             return target.answer(curveOf(ticId, target, residualOf(lookup), null), false);
@@ -197,7 +198,7 @@ public class AnalysisService {
             return target.answer(periodogramOf(target, original, Residual.ORIGINAL, original.power()), true);
         }
 
-        ResidualResultReader.Lookup lookup = residuals.lookup(target.context());
+        ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target.context());
         if (!lookup.completed()) {
             return target.answer(periodogramOf(target, original, residualOf(lookup), null), false);
         }
@@ -206,6 +207,16 @@ public class AnalysisService {
             throw new IllegalStateException(target.context() + "의 잔차 주기도가 격자 크기와 맞지 않습니다.");
         }
         return target.answer(periodogramOf(target, original, residualOf(lookup), power), true);
+    }
+
+    /**
+     * 지금 판. 응답 헤더 {@code X-Current-Bundle}(D-5)에 쓴다.
+     *
+     * <p>별 접근을 다시 검사하지 않는다. 이미 통과한 요청의 응답에 값을 얹는 것이고, 여기서 또 막으면
+     * 폴링이 판 교체 대신 권한 오류를 보게 된다. 판이 없으면 빈 값이며 헤더를 붙이지 않는다.
+     */
+    public Optional<String> currentBundleId(long ticId) {
+        return gold.findCurrentBundle(ticId).map(bundle -> ExplorationIds.bundle(bundle.id()));
     }
 
     /** 5.1절 검사 순서: 공개된 별 → 회원이 연 별 → 현재 판. */
@@ -220,7 +231,35 @@ public class AnalysisService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
     }
 
+    /**
+     * 잔차 계산 목표(7.1절). 곡선 조회(5.2절)와 <b>같은 검증</b>을 쓴다. 조회는 되는데 계산은 거절되는
+     * 문맥이 생기지 않게 한 곳에서 판단한다.
+     *
+     * <p>원본은 제거할 것이 없어 계산 대상이 아니다. 7.1절이 빈 배열을 400으로 정한다.
+     *
+     * <p>본문에는 {@code curveStep}이 없다. <b>중복을 지운 제거 집합에서 센다</b>(2.1절 서버 정렬·중복
+     * 제거). 같은 후보를 두 번 보낸 요청이 한 번 보낸 것과 같은 목표가 된다.
+     *
+     * @throws BusinessException 미공개·미발견·판 교체·형식·조합 오류는 {@link #curve}와 같다
+     */
+    @Transactional(readOnly = true)
+    public CurveContext residualTarget(long memberId, long ticId, CurveQuery query) {
+        CurveContext target = resolve(memberId, ticId, query, true).context();
+        if (target.curveStep() == 0) {
+            throw invalid("removed", "원본은 계산할 것이 없습니다. 제거할 후보를 하나 이상 주십시오.");
+        }
+        return target;
+    }
+
     private Target resolve(long memberId, long ticId, CurveQuery query) {
+        return resolve(memberId, ticId, query, false);
+    }
+
+    /**
+     * @param stepFromRemoved 제거 집합에서 단계를 센다. 본문 요청(7.1절)에는 보낸 단계가 없어 대조할 것이
+     *                        없다. 쿼리(5.2절)는 클라이언트가 보낸 값과 대조해 어긋난 요청을 거절한다
+     */
+    private Target resolve(long memberId, long ticId, CurveQuery query, boolean stepFromRemoved) {
         Bundle bundle = openCurrentBundle(memberId, ticId);
 
         Requested requested = Requested.parse(query);
@@ -231,7 +270,7 @@ public class AnalysisService {
                     Map.of("currentBundleId", ExplorationIds.bundle(bundle.id())));
         }
 
-        if (requested.curveStep() != requested.removed().size()) {
+        if (!stepFromRemoved && requested.curveStep() != requested.removed().size()) {
             throw invalid("curveStep", "제거한 후보 수와 같아야 합니다.");
         }
         if (!requested.removed().isEmpty()
@@ -321,8 +360,8 @@ public class AnalysisService {
     }
 
     /** 원본 단계는 계산할 것이 없어 항상 완료다. */
-    private Residual residualStateOf(CurveContext context) {
-        return context.curveStep() == 0 ? Residual.ORIGINAL : residualOf(residuals.lookup(context));
+    private Residual residualStateOf(long ticId, CurveContext context) {
+        return context.curveStep() == 0 ? Residual.ORIGINAL : residualOf(residuals.lookup(ticId, context));
     }
 
     /** 판이 참조하는 세그먼트를 섹터 순으로. 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다. */

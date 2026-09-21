@@ -30,6 +30,7 @@ import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 /** 실제 PostgreSQL 저장·멱등·권한 검증. 봉우리/잔차 생산자는 담당 티켓의 경계에서 대체한다. */
@@ -60,7 +61,7 @@ class SubmissionTest {
 
     @BeforeEach
     void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         member = member();
         tic = Math.abs(UUID.randomUUID().getMostSignificantBits() % 900_000_000) + 1;
         jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,1,'published')", tic);
@@ -161,7 +162,7 @@ class SubmissionTest {
         error(ErrorCode.SUBMISSION_CONTEXT_NOT_READY,()->service.submit(member,tic,retry));
         assertEquals(1,count("submissions"));
         Float[] residual=flux.clone(); Arrays.fill(residual,2f);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","rj-test",null,Map.of(segment,residual),new Float[]{1f,2f,1f}));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","rj-test",null,Map.of(segment,residual),new Float[]{1f,2f,1f}));
         assertEquals("matched",service.submit(member,tic,retry).body().at("/match/status").asText());
         assertEquals(2f,jdbc.queryForObject("SELECT max(v) FROM analysis_snapshots a JOIN analysis_histories h ON h.id=a.history_id CROSS JOIN LATERAL unnest(a.folded_flux) v WHERE h.user_id=?",Float.class,member));
     }
@@ -387,10 +388,10 @@ class SubmissionTest {
         var residualRequest=new SubmissionRequest(r.requestId(),r.submissionKind(),
                 new SubmissionRequest.Context("b-"+bundle,1,List.of("c-"+candidate),"rm-1","pg-1"),r.selection(),r.userJudgment(),r.evidenceChecks(),null,null,null);
         for(Float[] bad:List.of(new Float[]{1f},new Float[flux.length])) {
-            when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","rj-test",null,Map.of(segment,bad),null));
+            when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","rj-test",null,Map.of(segment,bad),null));
             error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->service.submit(member,tic,residualRequest));
         }
-        when(residuals.lookup(any())).thenThrow(new IllegalStateException("cache unavailable"));
+        when(residuals.lookup(anyLong(), any())).thenThrow(new IllegalStateException("cache unavailable"));
         error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->service.submit(member,tic,residualRequest));
         assertEquals(1,count("submissions"));
     }

@@ -118,7 +118,7 @@ uv run python -m tess_bench preprocess --target toi270 --no-noise --only poc_bas
 실행 중 설정마다 진행 카운터와 요약 한 줄(깊이 보존·통과점 유지·잡음·경계·실패 구간·소요)이 터미널에 찍히고,
 끝나면 설정별 요약표를 다시 보여준다.
 
-## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`)
+## BLS 실행 (`bls`, `bls-gates`, `bls-report`, `bls-snr-dy`, `iterate`)
 
 ```powershell
 # 빠른 확인: 설정 1개, group 3개, 잡음 생략 (1분 안)
@@ -147,6 +147,16 @@ uv run python -m tess_bench bls-report --run-dir results/bench/bls_grid_v1-1.0.0
 # 기록된 전처리·탐색 파라미터 키가 현재 코드에서 사라지거나 이름이 바뀐 경우도 불일치다(허용된 기록용 메타 키만 예외).
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/l98_59/run-<id>
 uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0/pi_men/run-<id> --only linear50k --baseline-days 131.097
+
+# 반복 제거 루프 벤치마크 (S15P21C206-111): BLS → 중복·고조파 아닌 최강 피크 → 게이트 → box 모델 제거(astro-kernel)
+# → 제거 QA(power 감소·경계 돌출·다른 후보 훼손·겹친 transit·유한성) → 통과면 잔차로 반복, 실패면 직전 단계로 복구.
+# 곡선마다 종료 사유(설계 5.6절 7종)·단계별 QA 원시 수치·정답 회수 순서를 steps.csv / iterations.csv / matches.csv 에 남긴다.
+uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pairs none --no-noise          # 빠른 확인 (30초)
+uv run python -m tess_bench iterate --target l98_59 --stage evaluation                                    # 쌍 3 + 단일 108 + none, realclean + 잡음 1
+uv run python -m tess_bench iterate --target wasp18 --stage evaluation --include-raw-real --groups none    # 실제 행성 회수·잔여 고조파 시험
+uv run python -m tess_bench iterate --target toi270 --stage tuning --groups pairs --no-noise --tamper-depth-factor 3   # QA 실패·복구 fixture
+# 옵션 실험(문서 5.5절): 창 안 편향 깊이 상대 허용, 재적합 지속시간 확대, QA 실패 피크 마스킹 뒤 계속 탐색
+uv run python -m tess_bench iterate --target cm_dra --stage evaluation --no-noise --continue-after-qa-fail --window-offset-rel-depth 0.1 --refine-duration-max-hours 12
 ```
 
 옵션: `--stage tuning|evaluation` 별·주입 선택(설정 파일 `stages`), `--only`, `--limit`, `--no-noise`, `--noise-seeds <seed ...>` 잡음
@@ -199,6 +209,32 @@ uv run python -m tess_bench bls-snr-dy --run-dir results/bench/bls_grid_v1-1.0.0
   이 지표로 평가하지 않는다.
 - 2단계 detrending 은 1단계 추세로 나눈 뒤 2단계를 적합하므로 계산 시간이 두 배다(biweight 3일→1일: 228 group 에 약 5분).
 
+## 제거 편향 진단 (111)
+
+저장된 첫 단계 후보를 고정해 1 d·8 h 단일 주입 12곡선만 복원한다. BLS 재탐색 없이 제거 전후 창 안·바깥 평균과 기존 QA 재현 여부를 기록한다. 실제 실행은 사용자 담당이다.
+
+```powershell
+uv run --locked python -m tess_bench.iterate_diagnose --manifest results/manifests/iterate-l98_59-7cc8dcb2.json
+```
+
+`results/diagnostics/iterate-7cc8dcb2-<UTC>/window_offsets.csv`와 `provenance.json`을 생성한다. 원본 입력·CSV checksum 또는 Archive 모델이 다르면 중단한다. `source metrics reproduced: False`면 결과를 보존하고 원본과의 차이부터 조사한다. 진단은 QA 기준을 변경하지 않으며 결과가 나와도 자동 채택하지 않는다. 현재 111 브랜치의 원본 설정으로 실행하고 110 설정을 합친 뒤에는 같은 입력이라고 가정하지 않는다.
+
+## 바깥 평균 기준 제거 QA 비교 (111, 미채택 옵션)
+
+진단 뒤 비교 실행은 기존 `7cc8dcb2` 조건에 `--window-offset-reference oot`만 추가한다. 실제 실행은 사용자가 수행한다.
+
+```powershell
+uv run --locked python -m tess_bench iterate --target l98_59 --stage evaluation --no-noise --window-offset-rel-depth 0.1 --refine-duration-max-hours 12 --window-offset-reference oot
+```
+
+기본값 `unity`는 기존 기준 1과 비교하고 `oot`는 창 안·바깥 평균 차이와 두 평균의 표본 오차를 쓴다. 제거 모델·재적합·다른 QA는 유지한다. `steps.csv`에 판정 방식과 기존 unity 지표를 함께 남기고 manifest에 옵션을 기록한다. 상세 산식·한계·진단 결과는 [반복 제거 벤치마크 5.5.3](../../docs/data/tess-bls-iteration-benchmark.md)에 있다. L 98-59 비교 실행에서 단일 회수 65→71, 가짜 1→2로 기록했으며 기본값 승격은 보류한다(벤치마크 5.5.4절).
+
+## 111 최종 검증 준비
+
+최종 인계 후보와 110 승인 후 실행 세트는 [반복 제거 벤치마크 7절](../../docs/data/tess-bls-iteration-benchmark.md)에 모은다. 현재 oot는 미채택이고 unity·상대 0.1·duration 최대 12 h를 보수적 리뷰 후보로 둔다. 110 승인값 반영·재대조 전에 이를 최종 확정 실행으로 부르지 않는다.
+
+새 iterate manifest에는 `iterate_config_version=bls_iterate_qa_v1/<설정 SHA-256 앞 12자리>`, 전체 `iterate_config_sha256`, `grid_set_id`와 Archive 참고값·fixture checksum 파일의 해시를 기록한다. 설정 해시와 코드 commit은 별도 식별자다. 콘솔 QA 요약의 최소·절댓값 최대를 함께 확인한다.
+
 ## 110 holdout 실행 (평가 전에 입력·설정 고정)
 
 대상·판정 산식·결과 기록 정본은 [BLS 벤치마크 5.3절](../../docs/data/tess-bls-benchmark.md)이다. 기존 tuning/evaluation은 조정 이력이 있으므로 holdout과 구분한다. 기본 9별에 holdout을 섞지 않는다.
@@ -215,3 +251,7 @@ uv run --locked python -m tess_bench bls --target holdout_358253008 --stage hold
 ```
 
 각 명령 성공을 확인한 뒤 다음 대상으로 진행한다. 에러 또는 lock mismatch가 발생하면 기준 파일을 재생성하지 말고 원인을 확인한다. 결과 manifest 4개와 peaks/matches/summary CSV를 보존하고, 같은 MR에 별별·합계 검증 결과를 추가한다. Git에는 원본 FITS와 results 디렉터리를 추가하지 않는다. 모의 manifest 테스트는 실제 holdout 평가를 수행하지 않는다.
+
+### 111 QA 재검증 안내 (2026-09-21)
+
+MR !117 리뷰에 따라 0 산포의 overlap 반환 타입과 다른 후보 깊이 측정 실패 시 거절 처리를 수정했다. 비교 대상이 있는데 제거 전·후 깊이가 비유한·0·음수이면 `other_depth_not_measurable`로 거절한다. 비교 대상이 없을 때의 미산출은 허용한다. 수정 전 2084018 결과는 새 코드의 검증 근거가 아니며, 깨끗한 수정 후 commit에서 [벤치마크 7.4·7.8절](../../docs/data/tess-bls-iteration-benchmark.md)의 8개 실행과 리뷰 ZIP을 갱신해야 한다.

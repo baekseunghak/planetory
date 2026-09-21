@@ -55,14 +55,15 @@ def test_lock_change_is_rejected(tmp_path):
 @pytest.mark.parametrize("target", HOLDOUT_TARGETS)
 def test_cli_writes_holdout_manifest_without_running_science(monkeypatch, tmp_path, target):
     """Exercise actual CLI CSV/manifest writer; mock computation, never evaluate holdout."""
+    # Exercise lock validation against an isolated current-code fixture. The
+    # historical evaluation lock must remain unchanged as development continues.
+    test_lock = tmp_path / "holdout_lock.json"
+    test_lock.write_text(json.dumps(ho.build_lock()), encoding="utf-8")
+    validate_lock = ho.validate_lock
+    monkeypatch.setattr(ho, "LOCK", test_lock)
+    monkeypatch.setattr(ho, "validate_lock", lambda: validate_lock(test_lock))
     args = args_for(target)
     args.results = tmp_path
-    # This test exercises the writer with synthetic inputs, not the historical
-    # holdout execution. Validate a temporary snapshot with the real validator.
-    lock = tmp_path / "synthetic-lock.json"
-    lock.write_text(json.dumps(ho.build_lock()), encoding="utf-8")
-    validate = ho.validate_lock
-    monkeypatch.setattr(ho, "validate_lock", lambda: validate(lock))
     cfg, _ = bls.load_bls_settings(args.settings, args.only)
     strict = SimpleNamespace(time=np.array([1., 28.]), sectors=target.sectors, n_valid=2)
     baseline_keys = ["realclean", *[f"noise{s}" for s in ho.SEEDS]]
@@ -83,3 +84,16 @@ def test_cli_writes_holdout_manifest_without_running_science(monkeypatch, tmp_pa
     assert p["noise_seeds"] == ho.SEEDS and p["baselines"] == baseline_keys
     assert {r["role"] for r in man["inputs"]} >= {"holdout_criteria", "holdout_lock", "references", "fixture_checksums"}
     assert all(r["sha256"] for r in man["outputs"])
+
+
+def test_holdout_cli_stops_before_computation_on_lock_mismatch(monkeypatch):
+    def reject_lock():
+        raise ValueError("holdout lock mismatch")
+
+    def unexpected_computation(*args, **kwargs):
+        pytest.fail("holdout computation must not start after lock failure")
+
+    monkeypatch.setattr(ho, "validate_lock", reject_lock)
+    monkeypatch.setattr(cli, "build_bls_inputs", unexpected_computation)
+    with pytest.raises(ValueError, match="holdout lock mismatch"):
+        cli.cmd_bls(args_for())

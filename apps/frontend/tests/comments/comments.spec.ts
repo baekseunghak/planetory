@@ -156,7 +156,9 @@ test("PATCH loss compares stored body and DELETE loss never falsely asserts abse
   await page.evaluate(() => (window.commentLoss = "PATCH"));
   await page.getByRole("button", { name: "댓글 저장", exact: true }).click();
   await page.getByRole("button", { name: "최신 댓글 확인" }).click();
-  await expect(page.getByRole("status")).toContainText("보낸 내용과 같습니다");
+  await expect(
+    page.locator(".community-discussion").getByRole("status"),
+  ).toContainText("보낸 내용과 같습니다");
   await page.getByRole("button", { name: "확인하고 편집 종료" }).click();
   await page.evaluate(() => (window.commentLoss = "DELETE"));
   await page.getByRole("button", { name: "댓글 삭제", exact: true }).click();

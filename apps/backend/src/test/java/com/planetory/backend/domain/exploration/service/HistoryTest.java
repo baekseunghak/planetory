@@ -64,7 +64,7 @@ class HistoryTest {
     private static final JsonMapper JSON=JsonMapper.builder().build();
 
     @BeforeEach void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         member=member(); tic=Math.abs(UUID.randomUUID().getMostSignificantBits()%900_000_000)+1;
         jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,1,'published')",tic);
         var p=layout.place(0);
@@ -270,14 +270,14 @@ class HistoryTest {
     }
     String residualHistory() {
         submit(3);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","job-private",null,Map.of(segment,flux),null));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","job-private",null,Map.of(segment,flux),null));
         var r=request(5);
         String id=submissions.submit(member,tic,new SubmissionRequest(r.requestId(),r.submissionKind(),
                 new SubmissionRequest.Context("b-"+bundle,1,List.of("c-"+candidate),"rm-1","pg-1"),r.selection(),r.userJudgment(),r.evidenceChecks(),r.memo(),r.viewState(),null)).body().path("historyId").asText();
         clearInvocations(residuals); return id;
     }
     @Test void 잔차없는_개인조회와_공개원본대체를_구분() {
-        String id=residualHistory(); when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        String id=residualHistory(); when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         var own=histories.graph(member,id,"CURRENT");
         assertNull(own.curve().segments()); assertNull(own.curve().residual().status()); assertNull(own.curve().residual().jobId());
         var publicGraph=histories.publicGraph(id,"CURRENT",()->{});
@@ -287,11 +287,11 @@ class HistoryTest {
     }
     @Test void 진행중과_완료잔차_타인작업ID비노출() {
         String id=residualHistory();
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("QUEUED","job-private",null,Map.of(),null));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("QUEUED","job-private",null,Map.of(),null));
         assertEquals("job-private",histories.graph(member,id,"CURRENT").curve().residual().jobId());
         assertNull(histories.publicGraph(id,"CURRENT",()->{}).curve().residual().jobId());
         Float[] residual=flux.clone(); Arrays.fill(residual,.9f);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","job-private",OffsetDateTime.now(),Map.of(segment,residual),null));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","job-private",OffsetDateTime.now(),Map.of(segment,residual),null));
         var graph=histories.publicGraph(id,"CURRENT",()->{});
         assertEquals(1,graph.curve().curveContext().curveStep()); assertEquals(.9f,graph.curve().segments().getFirst().flux()[0]);
         assertNull(graph.curve().residual().jobId());
@@ -357,7 +357,7 @@ class HistoryTest {
     }
     @Test void 판전환으로_잔차읽기실패해도_최신판에서_재조회() {
         String id=residualHistory(); var calls=new AtomicInteger();
-        when(residuals.lookup(any())).thenAnswer(call->{
+        when(residuals.lookup(anyLong(), any())).thenAnswer(call->{
             if(calls.incrementAndGet()==1) { replaceBundle(101); throw new IllegalStateException("archived cache removed"); }
             return ResidualResultReader.Lookup.none();
         });
@@ -374,7 +374,7 @@ class HistoryTest {
     }
     @Test void 잔차손상은_503_공개내용과_당시스냅샷은_유지() {
         String id=residualHistory();
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED",null,null,Map.of(segment,new Float[]{1f}),null));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED",null,null,Map.of(segment,new Float[]{1f}),null));
         error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->histories.graph(member,id,"CURRENT"));
         assertEquals("공개 메모",histories.publicContent(id,()->{}).memo());
         assertNull(histories.graph(member,id,"SUBMITTED").curve());
