@@ -2,7 +2,9 @@
 # backend:build와 분리했다. 컨트롤러만 고친 MR에서는 아예 돌지 않는다.
 backend:schema:
   stage: validate
-  image: alpine:3.20
+  # git이 필요하다. 타깃 브랜치의 마이그레이션 번호와 대조해야 선점 충돌을
+  # 머지 전에 잡을 수 있다.
+  image: alpine/git:2.45.2
   needs: []
   variables:
     # 이미 적용된 마이그레이션은 검사에서 뺀다. 파일을 고치면 Flyway 체크섬이 바뀌어
@@ -14,10 +16,47 @@ backend:schema:
     # 권한 회수와 제약 강화도 구 앱을 깨뜨리므로 같이 본다.
     SCHEMA_IRREVERSIBLE: 'DROP +(TABLE|COLUMN|VIEW|MATERIALIZED|TYPE|SEQUENCE|FUNCTION|TRIGGER)|ALTER +TABLE +[^ ]+ +DROP|RENAME|SET +NOT +NULL|REVOKE|ALTER +COLUMN +[^ ]+ +TYPE'
   script:
+    # 1-a. 다른 브랜치가 먼저 쓴 번호를 재사용하면, 머지 뒤 그 번호가 이미 적용된
+    #      최대값보다 낮아져 Flyway가 거부한다. V14 주석대로 이 저장소는
+    #      out-of-order를 쓰지 않으므로 번호는 항상 앞으로만 가야 한다.
+    #      MR에서만 가능한 검사다. 가져오지 못하면 막지 않고 건너뛴다 —
+    #      신호를 더할 뿐, 헛되이 차단하지 않는다.
+    - |
+      DIR=apps/backend/src/main/resources/db/migration
+      version_of() { n=${1#V}; echo "${n%%__*}"; }
+      TARGET="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
+      if [ -z "$TARGET" ]; then
+        echo "브랜치 파이프라인이라 타깃 비교를 건너뜁니다."
+      elif ! git fetch --quiet --depth=50 origin "$TARGET" 2>/dev/null; then
+        echo "경고: 타깃 브랜치($TARGET)를 가져오지 못해 선점 검사를 건너뜁니다." >&2
+      else
+        base_max=$(git ls-tree --name-only "origin/$TARGET" -- "$DIR/" | while read -r path; do
+          case "${path##*/}" in V*__*.sql) version_of "${path##*/}" ;; esac
+        done | sort -n | tail -1)
+        if [ -z "$base_max" ]; then
+          echo "타깃에 마이그레이션이 없습니다. 선점 검사를 건너뜁니다."
+        else
+          echo "타깃($TARGET)의 최대 버전: V$base_max"
+          taken=0
+          for f in "$DIR"/V*.sql; do
+            name=${f##*/}
+            num=$(version_of "$name")
+            case "$num" in ''|*[!0-9]*) continue ;; esac
+            git cat-file -e "origin/$TARGET:$DIR/$name" 2>/dev/null && continue
+            if [ "$num" -le "$base_max" ]; then
+              echo "V$num 는 타깃에 이미 있는 번호이거나 그보다 낮습니다: $name" >&2
+              taken=1
+            fi
+          done
+          if [ "$taken" = "1" ]; then
+            echo "타깃의 최대 번호(V$base_max)보다 큰 번호로 바꾸십시오." >&2
+            exit 1
+          fi
+          echo "버전 선점 검사 통과"
+        fi
+      fi
     - cd apps/backend/src/main/resources/db/migration
-    # 1. 같은 번호를 두 파일이 쓰면 Flyway 적용 순서가 꼬인다.
-    #    현재 체크아웃된 파일만 본다. 다른 브랜치가 같은 번호를 선점한 경우는
-    #    develop에 머지된 뒤에야 잡힌다. 타깃 브랜치와 비교하려면 job에 git이 필요하다.
+    # 1-b. 한 브랜치 안에서 같은 번호를 두 번 쓴 경우.
     - |
       numbers=$(ls V*.sql 2>/dev/null | sed -nE 's/^V([0-9]+)__.*/\1/p')
       if [ "$(echo "$numbers" | grep -c .)" != "$(ls V*.sql 2>/dev/null | grep -c .)" ]; then
