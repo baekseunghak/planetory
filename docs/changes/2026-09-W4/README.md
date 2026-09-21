@@ -78,3 +78,4 @@
 | 2026-09-21 | 결과 페이지 리뷰 반영: 유효 공개 조건·일괄 공개 후보·은퇴 대상 | S15P21C206-146 | unpublishedSignalCount, PublicAnalysisVisibility, PUBLISH_ALL, RETRY, CANDIDATE_RETIRED | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 112 v3 소비자 인계 보완 | S15P21C206-112 | 재개, newDiscoverableCount, candidate_aliases, retired 공개물, removal_step, tolerance | 문서 보완·승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 봉우리와 미세 조정 범위(5.4절)와 미결 5 제안 | S15P21C206-141 | candidate-peaks, 최소 간격 2h+1, 고조파 허용 오차 h, peakRuleVersion, suggestedDurationHours | 구현 완료·규칙 제안 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 고조파 판정을 주기 값으로, 간격 근거를 정책으로 | S15P21C206-141 | 고조파 반올림 결함, 2h+1 근거, peakRuleVersion 조건, BLS 제안값 계약 | 검증 완료 | [2026-09-21](2026-09-21.md) |
