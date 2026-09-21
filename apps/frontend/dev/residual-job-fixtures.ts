@@ -28,8 +28,12 @@ export type ResidualScenario =
   | "fail"
   // 다시 시도해도 같은 실패다(`failure.retryable: false`).
   | "fail-permanent"
-  // 잔차 계산 기반이 아직 연결되지 않았다. 88번 전까지 영구 실패다.
+  // 잔차 계산 기반이 아직 연결되지 않았다. 다시 요청해도 같은 결과라
+  // 503 본문이 `retryable: false`다(7.1절).
   | "unavailable"
+  // 실행기를 시작하지 못했다. 같은 503이지만 **화면이 할 일이 반대**라
+  // `retryable: true`다. 서버는 그 작업을 `START_FAILED`로 끝낸다.
+  | "start-failed"
   // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
   | "plate-changed"
   // 캐시를 건너뛰고 매번 새로 계산한다. **검사 전용**이다. 목표를 몰래
@@ -48,8 +52,10 @@ const scenarios: ResidualScenario[] = [
   "fail",
   // 다시 시도해도 같은 실패. 7.2절 `failure.retryable: false`다.
   "fail-permanent",
-  // 잔차 계산 기반이 아직 연결되지 않았다(88번 전까지 영구).
+  // 잔차 계산 기반이 아직 연결되지 않았다(`retryable: false`).
   "unavailable",
+  // 실행기 시작 실패. 같은 503이지만 다시 요청하는 것이 맞다(`retryable: true`).
+  "start-failed",
   // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
   "plate-changed",
   "fresh",
@@ -156,17 +162,25 @@ export type FixtureReply = {
   headers?: Record<string, string>;
 };
 /**
- * 서버 공통 기본 문구를 **비추는 값**이다. 화면은 503 `message`를 사용자에게
- * 그대로 보여 주므로(탐사 API 7.1절), 여기에 코드 이름을 넣으면 화면 검사가
- * 「실제로 무엇이 보이는지」를 한 번도 보지 못한다. 실제로 그렇게 눈이 멀어,
- * 재시도 버튼을 숨겨 놓고 문구로는 다시 시도하라고 말하는 상태를 검사가
- * 통과시켰다(`S15P21C206-147` 리뷰).
+ * 503 `DEPENDENCY_UNAVAILABLE`의 **정본 문구 두 개**를 비추는 값이다. 탐사 API
+ * 7.1절이 두 문장을 그대로 적고 「위 두 문장이 정본이다. 백엔드 검사와 프론트
+ * 개발용 응답이 같은 값을 들고 있으므로, 바꾸려면 이 줄과 양쪽을 한 번에
+ * 바꾼다」고 못박았다(`S15P21C206-249`).
  *
- * **서버 문구가 바뀌면 이 값도 따라간다.** 화면이 무엇을 옮기는지는 이 상수
- * 하나로 검사가 확인한다.
+ * 화면은 이 `message`를 사용자에게 **그대로** 보여 준다. 그래서 여기에 코드
+ * 이름을 넣으면 화면 검사가 「실제로 무엇이 보이는지」를 한 번도 보지 못한다.
+ * 실제로 그렇게 눈이 멀어, 재시도 버튼을 숨겨 놓고 문구로는 다시 시도하라고
+ * 말하는 상태를 검사가 통과시켰다(`S15P21C206-147` 리뷰).
  */
-export const DEPENDENCY_UNAVAILABLE_MESSAGE =
-  "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+export const DEPENDENCY_UNAVAILABLE_MESSAGE = {
+  /** 계산 기반 미연결. 다시 요청해도 같은 결과다(`retryable: false`). */
+  notConnected: "잔차 계산 기능이 아직 준비되지 않았습니다.",
+  /**
+   * 실행기 시작 실패. 공통 기본 문구가 그대로 맞다(`retryable: true`).
+   * `ErrorCode.DEPENDENCY_UNAVAILABLE`의 기본 문구와 같은 값이다.
+   */
+  startFailed: "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+} as const;
 
 const fail = (
   status: number,
@@ -192,12 +206,20 @@ export function requestResidualJobFixture(options: {
   // 빈 배열은 원본이므로 작업이 아니다(7.1절).
   if (target.removedCandidateIds.length === 0)
     return fail(400, "VALIDATION_FAILED");
+  // 같은 코드·같은 상태지만 `retryable`이 화면의 할 일을 가른다(7.1절).
   if (scenario === "unavailable")
     return fail(
       503,
       "DEPENDENCY_UNAVAILABLE",
-      {},
-      DEPENDENCY_UNAVAILABLE_MESSAGE,
+      { retryable: false },
+      DEPENDENCY_UNAVAILABLE_MESSAGE.notConnected,
+    );
+  if (scenario === "start-failed")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      { retryable: true },
+      DEPENDENCY_UNAVAILABLE_MESSAGE.startFailed,
     );
   if (scenario === "bundle-changed")
     return fail(409, "BUNDLE_CHANGED", { currentBundleId: "9007199254749999" });
