@@ -1057,7 +1057,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 }
 ```
 
-불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 DEC-11(서비스 F04). `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
+불변이다(HIS-06, NFR-12). 수정·삭제 API는 없고 그래프는 이미지가 아니라 재현 파라미터로만 보관한다. 장기 보관·탈퇴 처리는 [DEC-11 결정표](../../../docs/requirements/planetory-decision-register.md#dec-11)(서비스 F04)의 승인 대기다. 179의 공개 첨부 철회·현재 집계 제외는 제안이며 현행 History 불변 권한이나 원천 보관을 변경하지 않는다. 실제 삭제/식별 연결 정리 권한·FK 순서와 [180 인수](../../../docs/requirements/planetory-acceptance-criteria.md#withdrawal-180)는 정책 승인 후 검토한다. `relabel`은 `{"relabeledAt": "...", "newDisposition": "CONFIRMED"}`로 "기록이 갱신됨" 표시에 쓴다(GRD-06).
 
 148은 6.6절과 같이 당시 `original`·`serverDerived`·`match`·`judgment`·`achievement.result`를 보존하고, `achievement.star`·`progress`·`publication`·`judgmentStatistics`를 조회 시점으로 구성한다. `signal`의 현재 정보·재분류와 실제 `answerViewed`도 조회하되 상세 보기를 수행하거나 진행을 갱신하지 않는다. `publication.state`는 유효 공개 `PUBLISHED`, 운영 숨김 `HIDDEN`, 제출 당시 미확정인 미공개 기록 `UNPUBLISHED`(현재 재분류·은퇴와 무관, F07-Q2), 그 외 `NOT_ELIGIBLE`을 구분하며 공개 ID는 존재하면 유지한다. 성과 존재 여부는 8.1절의 별도 값이다. 최초 연출용 `newlyRecognized`·`unlockedStars`, `skyVersion`·`tutorial`·`nextActions`는 저장 응답 값이며 현재 행동 허가의 근거로 사용하지 않는다.
 

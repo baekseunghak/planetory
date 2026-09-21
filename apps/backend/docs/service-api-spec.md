@@ -578,7 +578,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 모든 인증 회원이 동의·비동의별 목록을 조회한다. 회원을 조인해 최신 닉네임을 반환하며 공개 프로필 설정은 반응을 숨기지 않는다. 정렬은 `updated_at DESC, id DESC`, size는 기본 20·최대 100(1 미만·100 초과는 400)이다. `nextCursor`를 같은 글·reaction·size의 `cursor`로 전달한다. 다른 조건 또는 잘못된 커서는 400 `VALIDATION_FAILED`다. NONE은 목록 필터로 허용하지 않는다.
 
-GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 후속이며 현재 관계를 임의로 삭제하거나 필터링하지 않는다.
+GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 승인 대기다. 현재 반응자 조회·합계는 회원 active 필터가 없으며 관계를 임의로 삭제하지 않는다. W4의 제외안은 신규 제안으로서 승인 전 현행 계약을 바꾸지 않는다.
 
 <a id="analyses"></a>
 
@@ -832,7 +832,9 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 일반 알림·설정 | P1 | `GET /api/v1/me/notifications`, `PATCH /api/v1/me/notification-settings` | 종류·읽음·채널·보관·중복. F17 첫 접속 안내와 분리 |
 | 내·전체·비교 통계 | P1 | `GET /api/v1/me/statistics`, `GET /api/v1/statistics` | 전체 global_stats 10분 갱신·비교 stats_snapshots 일별. 첫 매칭 산식·90일 경계·분모 0 |
 | 전문가 제보 | 보류 | 경로 미정 | SRS RPT P1과 ERD expert_reports 제외 충돌. 팀 합의 후 구현 |
-| 탈퇴 | 보류, 데이터 정책 P1 | API 제공 시점·경로 미정 | 보관·익명화·재가입과 접근 차단. 제공 시 탈퇴/작성 DB 확정 순서 적용 |
+| 탈퇴 | 보류, 데이터 정책 P1 | API 제공 시점·경로 미정 | [DEC-11 결정표](../../../docs/requirements/planetory-decision-register.md#dec-11) 승인 후 제공. 기존 탈퇴/작성 DB 확정 순서 유지, 데이터 처리·재가입·결과 유실 확인은 미정 |
+
+탈퇴 179는 정책 초안이다. 현재 withdrawn 로그인 거절·요청별 상태 확인·타인 프로필 404와 모든 세션 폐기·탈퇴 실행 API는 구분한다. FE222의 available:false·정책 버전·prepare/confirm·상태 전용 쿠키는 DEC-11 4절의 **인계 제안**이며 백엔드 구현 계약으로 승인하지 않았다. 제공 시 [180 인수 준비](../../../docs/requirements/planetory-acceptance-criteria.md#withdrawal-180)의 쓰기 경합·조회 철회·집계·실패 복구를 실제 API로 검증한다.
 
 회원 차단·다중 제공자 연결·이메일 수정·챌린지 전용 성공/보상은 이번 API에 추가하지 않는다. 개인 History 삭제 API도 현재 범위에 없다.
 

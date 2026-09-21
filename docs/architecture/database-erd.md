@@ -837,7 +837,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 1 | operation_settings 기본값 확정. 항목 목록은 v1.9 형식 1로 정했고 `rule-0`은 개발용 v0 값이다. 확정 값은 새 규칙 버전으로 넣는다 | OPS-04·08, DEC-03, D20·D11 |
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
-| 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
+| 4 | 탈퇴 시 users·OAuth 식별자·게시물·History·공개 분석·관계·통계·백업 처리와 기간. NO ACTION FK·제공자 UNIQUE·History 불변 권한을 유지한 상태로 정책/정리 권한·순서를 후속 검토. 179에서는 DDL을 변경하지 않음 | [DEC-11 결정표](../requirements/planetory-decision-register.md#dec-11), 제안·승인 대기 |
 | 5 | published_analyses는 161에서 앱 역할 INSERT만 허용해 원본 참조·최초 시각을 보호한다. 162에서 상태 열의 UPDATE 권한을 추가한다. analysis_histories·analysis_snapshots의 기존 불변 권한은 유지한다 | HIS-06, S08·S09 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |
