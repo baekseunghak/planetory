@@ -20,6 +20,16 @@ public final class SubmissionViews {
                           Double sourcePeakSuggestedDurationHours, Double durationLimitHours, String centroidDataStatus) {}
     public record Match(String status, String candidateId, Double harmonicMultiplier, Double correctedPeriodDays, String correctionReason) {}
     public record Judgment(String value, String evaluation) {}
+
+    /**
+     * 6.7절 상세 보기. 본문이 없고 반복 호출이 같은 대상을 준다.
+     *
+     * @param userJudgmentAgrees {@code CURRENT_MATCH}에서 당시 판단이 신호 판정과 맞았는지.
+     *                           미확정·모르겠음·힌트 대상에는 없다
+     */
+    public record DetailView(String submissionId, boolean answerViewed, String targetKind,
+                             Map<String, Object> signal, Boolean userJudgmentAgrees,
+                             AnalysisViews.TutorialState tutorial) {}
     public record UnlockedStar(String ticId, GalaxyLayout.StarPosition position) {}
     public record Achievement(String result, boolean newlyRecognized, List<UnlockedStar> unlockedStars,
                               StarViews.Achievement star) {}

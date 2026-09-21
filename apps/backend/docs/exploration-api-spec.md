@@ -896,6 +896,10 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - 대상이 없으면 409 `DETAIL_UNAVAILABLE`, `answer_viewed`도 바꾸지 않는다.
 - `tutorial.skipAvailable`이 true면 프론트가 화면 끝에 [다음 튜토리얼로]를 두고 `skipped` 제출로 실행한다.
 
+구현 상태(S15P21C206-145). `targetKind`는 **저장된 당시 값**이며 지금 후보로 다시 판단하지 않는다. 힌트 대상은 그 제출의 `curveContext.removedCandidateIds`만 빼고 고르므로 **회원이 그 뒤에 매칭한 후보도 빠지지 않는다**(RES-09). 누적으로 세면 뒤의 제출이 옛 제출의 힌트를 바꾼다. `CURRENT_MATCH`의 대상은 당시 매칭 신호이며 은퇴했어도 보여 준다. `userJudgmentAgrees`는 저장된 `judgment.evaluation`에서 유도하고 `AGREES`·`DISAGREES`만 값이 있다. `tutorial`은 `answer_viewed`를 켠 **뒤에** 센다 — 건너뛰기 조건이 「정답을 본 뒤」라서 먼저 세면 방금 본 제출이 빠진다. 없는 제출·형식 오류는 404, 타인 제출은 403, 당시 응답이 없는 기록은 503이다.
+
+**`signal.explanation`은 현재 null이다.** 이 문장을 저장하는 열이 Gold·탐사 스키마 어디에도 없고 생성 규칙도 정해지지 않았다. `bls.sde`·`bls.snr`과 같은 이유로 **없는 값을 만들어 내지 않는다.** 출처가 정해지면 같은 자리에 채운다.
+
 ### 6.8 다시 풀기 초안 (SUB-10, AT-54·100·118)
 
 `GET /api/v1/submissions/{submissionId}/retry-draft` — 초안 조회만이며 아무것도 저장하지 않는다.

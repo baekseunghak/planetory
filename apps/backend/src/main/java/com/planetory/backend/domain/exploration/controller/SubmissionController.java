@@ -44,6 +44,15 @@ public class SubmissionController {
         return respond(lookup.byRequest(principal.memberId(), requestId));
     }
 
+    @Operation(summary = "상세 보기",
+            description = "오답 분기에서 신호 상세를 연다. 본문이 없고 반복 호출은 같은 대상을 준다."
+                    + " 볼 대상이 없으면 409 DETAIL_UNAVAILABLE이며 조회 표시도 켜지 않는다.")
+    @PostMapping("/api/v1/submissions/{submissionId}/detail-view")
+    public SubmissionViews.DetailView detailView(@AuthenticationPrincipal MemberPrincipal principal,
+                                                 @PathVariable String submissionId) {
+        return lookup.detailView(principal.memberId(), submissionId);
+    }
+
     /** 조회는 언제나 200이며 지금 판을 헤더로 함께 준다(D-5). 판을 읽지 못하면 붙이지 않는다. */
     private static <T> ResponseEntity<T> respond(AnalysisViews.Answer<T> answer) {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok();

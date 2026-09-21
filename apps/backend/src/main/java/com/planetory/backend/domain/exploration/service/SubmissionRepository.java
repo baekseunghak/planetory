@@ -122,6 +122,11 @@ public class SubmissionRepository {
                 """).param("member", member).param("tic", tic).param("step", curveStep)
                 .param("count", planetCount).param("skipped", skipped).update();
     }
+    /** 6.7절 상세 보기. 이미 본 제출을 다시 봐도 값이 달라지지 않는다. */
+    void markAnswerViewed(long submissionId) {
+        jdbc.sql("UPDATE submissions SET answer_viewed = true WHERE id = ?").param(submissionId).update();
+    }
+
     void saveResponse(long submission, String response) {
         if (jdbc.sql("UPDATE submissions SET response_snapshot=CAST(? AS jsonb) WHERE id=? AND response_snapshot IS NULL")
                 .params(response, submission).update() != 1) throw new IllegalStateException("최초 제출 응답 저장 실패");

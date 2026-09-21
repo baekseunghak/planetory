@@ -36,13 +36,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 제출 조회와 요청 ID 복구 (탐사 API 6.6절) [S15P21C206-145].
+ * 제출 조회·요청 ID 복구·상세 보기 (탐사 API 6.6·6.7절) [S15P21C206-145].
  *
  * <p>실제 제출을 만들고 조회한다. 외부 잔차 공급자만 대체하고 HTTP·DB·보안 필터는 실제로 실행한다.
  */
@@ -207,6 +209,94 @@ class SubmissionLookupTest {
         assertEquals("requestId", refused.getFieldErrors().getFirst().field());
     }
 
+    // ---------- 6.7 상세 보기 ----------
+
+    /** 판단이 달랐던 제출은 그 제출이 매칭한 신호를 연다. */
+    @Test
+    void 판단이_달랐던_제출은_매칭한_신호를_보여_준다() {
+        graded("confirmed", "planet");
+        String submissionId = submit(3, "UNLIKELY_PLANET").path("submissionId").asText();
+
+        var view = lookup.detailView(member, submissionId);
+
+        assertEquals("CURRENT_MATCH", view.targetKind());
+        assertTrue(view.answerViewed());
+        assertEquals("c-" + candidate, view.signal().get("candidateId"));
+        assertEquals(Boolean.FALSE, view.userJudgmentAgrees(), "당시 판단이 신호 판정과 달랐다");
+        assertTrue(viewed(submissionId));
+    }
+
+    /**
+     * RES-09. 힌트는 <b>그 제출의</b> 제거 집합만 본다. 회원이 이미 매칭한 후보도 빼지 않는다 —
+     * 누적으로 세면 뒤의 제출이 옛 제출의 힌트를 바꾼다.
+     */
+    @Test
+    void 힌트는_누적_매칭이_아니라_그_제출_단계를_본다() {
+        jdbc.update("UPDATE candidates SET bls_power=50 WHERE id=?", candidate);
+        long weaker = candidate(7, 10);
+
+        submit(3, "LIKELY_PLANET");
+        String unmatched = submit(13, "LIKELY_PLANET").path("submissionId").asText();
+
+        var view = lookup.detailView(member, unmatched);
+
+        assertEquals("CURRENT_CURVE_HINT", view.targetKind());
+        assertEquals("c-" + candidate, view.signal().get("candidateId"),
+                "이미 매칭한 후보라도 세기가 가장 크면 힌트다");
+        assertNull(view.userJudgmentAgrees(), "힌트는 당시 판단을 채점한 대상이 아니다");
+        assertNotEquals("c-" + weaker, view.signal().get("candidateId"));
+    }
+
+    /** 맞힌 제출에는 열어 볼 상세가 없다. 본 것으로 적으면 건너뛰기 조건이 잘못 열린다. */
+    @Test
+    void 볼_대상이_없으면_409이고_조회_표시도_켜지_않는다() {
+        graded("confirmed", "planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        error(ErrorCode.DETAIL_UNAVAILABLE, () -> lookup.detailView(member, submissionId));
+
+        assertFalse(viewed(submissionId));
+    }
+
+    @Test
+    void 상세_보기는_반복해도_같은_대상이다() {
+        graded("fp", "not_planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        var first = lookup.detailView(member, submissionId);
+        var again = lookup.detailView(member, submissionId);
+
+        assertEquals(first.targetKind(), again.targetKind());
+        assertEquals(first.signal().get("candidateId"), again.signal().get("candidateId"));
+        assertEquals(first.userJudgmentAgrees(), again.userJudgmentAgrees());
+    }
+
+    @Test
+    void 상세_보기도_타인_제출은_403이고_없는_제출은_404다() {
+        graded("fp", "not_planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        error(ErrorCode.FORBIDDEN, () -> lookup.detailView(stranger, submissionId));
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> lookup.detailView(member, "sub-999999999"));
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> lookup.detailView(member, "abc"));
+        assertFalse(viewed(submissionId), "실패한 요청은 조회 표시를 남기지 않는다");
+    }
+
+    @Test
+    void 상세_보기_HTTP는_튜토리얼_상태를_함께_준다() throws Exception {
+        graded("fp", "not_planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        mvc.perform(post("/api/v1/submissions/" + submissionId + "/detail-view")
+                        .session(session(member)).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.submissionId").value(submissionId))
+                .andExpect(jsonPath("$.answerViewed").value(true))
+                .andExpect(jsonPath("$.targetKind").value("CURRENT_MATCH"))
+                .andExpect(jsonPath("$.signal.candidateId").value("c-" + candidate))
+                .andExpect(jsonPath("$.tutorial.skipAvailable").value(false));
+    }
+
     // ---------- HTTP ----------
 
     @Test
@@ -282,6 +372,27 @@ class SubmissionLookupTest {
             ((ObjectNode) node.get("judgmentStatistics")).remove("asOf");
         }
         return node;
+    }
+
+    /** 판정을 채점형으로 바꾼다. 제출 시점에 채점되므로 제출 전에 불러야 한다. */
+    private void graded(String disposition, String truth) {
+        jdbc.update("UPDATE candidate_dispositions SET disposition=?,answer_class='graded',planet_truth=? "
+                + "WHERE candidate_id=?", disposition, truth, candidate);
+    }
+
+    private long candidate(double period, double blsPower) {
+        long id = jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,"
+                        + "period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,"
+                        + "is_confirmed) VALUES (?,'active',?,1,?,100.3,2.4,1000,?,'{}',true,true) RETURNING id",
+                Long.class, tic, bundle, period, blsPower);
+        jdbc.update("INSERT INTO candidate_dispositions(candidate_id,disposition,answer_class,planet_truth,"
+                + "rule_version,applied_at,source_refs) VALUES (?,'pc','analysis',NULL,'rule-0',now(),'[]')", id);
+        return id;
+    }
+
+    private boolean viewed(String submissionId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT answer_viewed FROM submissions WHERE id=?",
+                Boolean.class, Long.parseLong(submissionId.substring(4))));
     }
 
     private void error(ErrorCode expected, Runnable action) {
