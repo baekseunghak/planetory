@@ -76,7 +76,7 @@ uv run --locked python -m tess_bench.discoverability
 실패 시 failure.json만 남기며 completed manifest를 만들지 않는다. manifest에 NPZ·후보표·집계·probe의 SHA-256을 기록한다.
 결과는 Git 제외 `results/discoverability/run-*`에 저장한다.
 
-검증: tess-bench 전체 **219 passed** 후 revision 기록 테스트 3개를 추가하여 신규 테스트 **16 passed**를 확인했다. 실제 FITS 실행·검산 결과는 아래 9별 실측 절에 기록한다.
+검증(2026-09-22 최종 합계 정정): 신규 discoverability 테스트는 **16 passed**다. 리뷰 환경은 기존 테스트 **205 passed·1 skipped**, 신규 포함 전체 **221 passed·1 skipped**이며, TOI-270 FITS가 있는 담당자 PC에서 전체 **222 passed**를 확인했다. 기존 **219 passed**는 revision 기록 테스트 3개 추가 전 기록이며 최종 합계로 사용하지 않는다. 담당자 PC는 기존 가상환경 Python에 저장소 libs·bench·fixture의 PYTHONPATH를 명시해 `python -m pytest tests -q -p no:cacheprovider`로 검증했다. 이번 확인은 전체 테스트 실행이며 9별 discoverability 실험 CLI 재실행은 아니다. 실제 실험·검산 결과는 아래 9별 실측 절에 기록한다.
 실행 후 대상별 판정·실패·품질 봉우리 없음·revision 전이와 소형 검토 자료를 정리한다.
 최종 봉우리/격자 기준의 승인 후 123에 운영 버전과 재평가 규칙을 이관한다.
 
@@ -121,3 +121,17 @@ measurements SHA-256: `517889464259002c57ee93c6d938b144d57c2a24157ff8bb87705dbf6
 
 리뷰에서는 판정 문턱·국소 최대/일치 규칙·duration 격자 및 합성 전이의 인수 범위를 확인한다.
 115 규칙 승인 후 123에 이관하며 현재 티켓 완료나 운영 채택을 선언하지 않는다.
+
+## !165 리뷰 후 123 이관 전 정리 사항
+
+병합 전 요청인 최종 테스트 합계는 위 검증 절과 변경 이력의 정정 항목에 반영했다.
+아래는 리뷰의 후속 항목이며 이번 문서 정정에서 코드·설정·저장 결과를 변경하지 않았다.
+
+- 설정 정본의 `grid.max_rule`, `epoch_tolerance`, `harmonic_matching`, `status`와 실제 동작의 관계를 명시하고, 지원하지 않는 설정 변경이 조용히 무시되지 않도록 정리한다.
+- `evaluate`의 `invalid_input`은 구현·호출 오류로 전파하고 측정 실패로 허용할 오류 종류를 구분한다.
+- `segments[].gaps`는 Sector 내부 bin 인덱스다. 결합·정렬된 반환 배열과의 대응을 명시한다. Sector 시각이 겹치는 경우에도 해석 가능한지 확인한다.
+- 품질 봉우리에는 고조파 중복이 포함될 수 있으므로 봉우리 개수를 독립 신호 수로 해석하지 않는다. 대조 지표는 품질 봉우리 유무의 이진 판정을 사용하며, 개수는 진단으로만 제공한다. 고조파가 주된 원인이라는 정량 결론은 별도 검산 없이 확정하지 않는다.
+- SNR/SDE 기준 미달 봉우리는 관측 통과 횟수 계산 전에 제외하도록 정리한다.
+
+한글 경로의 .pth 인코딩 문제는 리뷰에서 보고된 별도 환경 이슈이며 이번 작업에서 재현·수정하지 않았다.
+조건부 LGTM과 수치 규칙의 운영 채택은 구분하며, 123 이관 시 규칙 채택 범위를 확인한다.
