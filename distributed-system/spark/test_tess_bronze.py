@@ -30,6 +30,7 @@ from tess_bronze_ctl import (  # noqa: E402
     RAW_COVERAGE_SHA256,
     BronzeDataContractError,
     cli,
+    command_coverage,
     finalize_sector,
     run_sector,
     submit,
@@ -353,6 +354,25 @@ class BronzeTransformTest(unittest.TestCase):
             self.assertEqual(state["status"], "terminal_failed")
             self.assertEqual(state["failure_type"], "BronzeDataContractError")
             self.assertEqual(state["failure_detail"], "bad checksum")
+
+    def test_coverage_command_requires_all_raw_sectors_before_commit(self):
+        contexts = {sector: {"sector": sector} for sector in range(1, 14)}
+        args = SimpleNamespace(release_dir=".", run_id="run", pipeline_version="pipeline")
+        with patch(
+            "tess_bronze_ctl.cluster_preflight", return_value=contexts
+        ) as preflight, patch(
+            "tess_bronze_ctl.raw_coverage", return_value=({}, "a" * 64)
+        ) as raw_coverage, patch("tess_bronze_ctl.commit_coverage") as commit_coverage:
+            command_coverage(args)
+        preflight.assert_called_once_with(list(range(1, 14)))
+        raw_coverage.assert_called_once_with(contexts)
+        commit_coverage.assert_called_once_with(
+            release_dir=Path(".").resolve(),
+            contexts=contexts,
+            raw_coverage_ready_sha256="a" * 64,
+            run_id="run",
+            pipeline_version="pipeline",
+        )
 
     def test_submit_contract_failure_is_recorded_for_operator_review(self):
         with tempfile.TemporaryDirectory() as root, patch(

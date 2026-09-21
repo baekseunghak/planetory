@@ -370,9 +370,15 @@ docker compose up -d airflow-db airflow-scheduler airflow-webserver
 
 - Airflow: 2.10.x, LocalExecutor
 - 웹 UI: Node 1의 `127.0.0.1:8081`
-- 접근 방법: SSH 터널
+- 접근 방법: Tailscale Serve의 tailnet 전용 `https://node-1.tail97e363.ts.net/`. Airflow 자체는 `127.0.0.1:8081`에만 바인딩하고 Funnel은 사용하지 않는다.
 
-최초 UI 계정 생성과 scheduler/webserver의 동일한 Fernet·webserver secret key 설정은 서버 초기 설정에 포함한다.
+2026-09-22에는 [Node 1 전용 배포 스크립트](scripts/deploy-tess-airflow-node1.sh)로 `/opt/planetory-airflow/releases/20260921T213515Z` 이미지를 빌드하고 DB·Scheduler·Webserver를 시작했다. `airflow dags list-import-errors` 0건, `tess_sector_download_raw_bronze` 표시·일시정지, DB healthy, tailnet HTTPS 응답 200을 확인했다. 다른 운영 서비스나 기존 HDFS 데이터는 변경하지 않았다. 생성된 UI `viewer` 계정은 읽기 전용이다. 최초 `--use-random-password` 출력에는 암호가 없어 계정 암호를 재설정했고, 새 암호는 Node 1의 root 전용 `/etc/planetory/airflow/viewer-password`에만 보관한다. 권한 있는 운영자가 아래 명령으로 직접 확인한다. 암호를 Git·Jira·채팅에 기록하지 않는다.
+
+```powershell
+tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
+```
+
+현재 DAG 화면은 볼 수 있지만 실행 전 SSH Connection 6개, 제한 sudo 권한, HDFS/Bronze 불변 release와 현재 수집 run 계보를 별도로 확인해야 한다. DAG를 일시정지 해제하거나 trigger하지 않는다.
 
 ## TESS 원천 수집 (`S15P21C206-75`)
 
@@ -397,6 +403,8 @@ Sector 1~13 확대는 기존 RunId를 수정하지 않는다. 2026-09-19 공식 
 HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 expansion Run의 Sector 1·2·6~13을 정확히 매핑한다. 각 Sector의 불변 final을 재감사하거나 새 staging을 적재한 뒤 Java `FileContext`의 `Rename.NONE`으로만 확정하며, 13개가 모두 성공한 뒤 source coverage SHA-256을 키로 전체 HDFS coverage marker를 원자 확정한다. systemd 재시작 횟수는 증거로 남기되 0을 성공 조건으로 두지 않고 최종 plan·bundle·manifest·RF2·복원 감사 결과로 판정한다.
 
 전체 적재는 `run-tess-hdfs-load.ps1 -Step ServerRunAll`로 Node 1의 enabled systemd 조정기에 인계한다. 인계 뒤에는 운영자 PC가 꺼져도 실행과 실패 재시작이 계속된다. Node 1은 Worker 2~6을 `10.20.2.10`~`10.20.6.10`으로 직접 기동·감시하며 source bind를 `10.20.1.10`으로 고정하고, HDFS 데이터 경로도 `hdfs://planetory`의 사설망 이름 해석을 사용한다. Tailscale은 최초 배치와 운영자 조회 경로이지 서버 간 실행 경로가 아니다. 세부 재개·감사 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+
+`-CleanupSourceAfterCommit`을 지정하면 각 Sector의 최종 Raw 전수 감사가 끝난 뒤 그 Sector Worker plan에 포함된 로컬 FITS만 삭제한다. plan identity·정확한 경로·크기·SHA-256을 삭제 전에 다시 확인하고 불일치 시 삭제 없이 실패한다. HDFS 확정·감사와 cleanup은 같은 enabled systemd 조정기가 재시작 후 이어서 수행한다.
 
 적재 전에는 HDFS safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만과 RF2 예상 사용률 70% 이하, Worker별 원본 디스크 가용 100GiB 이상을 확인한다. 저장소의 `hdfs-site.xml`은 `dfs.datanode.du.reserved=107374182400`(DataNode당 100GiB)을 선언하며 runner도 실제 클러스터 값을 요구한다. 기존 클러스터 설정 반영과 DataNode 재시작은 이번 코드 변경에 포함하지 않았으므로, 통제된 운영 작업으로 적용·검증하기 전에는 Sector 1~13 적재를 시작하지 않는다.
 
@@ -425,9 +433,10 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 제출 이미지에만 설치한 패키지는 Worker에 전달되지 않는다.
 
+Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시도 경계는 [TESS DAG 계약](../../distributed-system/airflow/dags/README.md)을 따른다. DAG 코드는 구현됐으며 운영 반영 전 SSH Connection·불변 release·제한 sudo 권한을 준비하고 실제 DAG import 및 장애 재개 검증을 수행한다.
+
 다음 항목은 후속 구현 대상이다.
 
-- Airflow 실제 DAG
 - TIC·TCE·TOI·Archive·ExoFOP 원천별 snapshot 수집
 - Spark 제출 연결
 - Spark History Server

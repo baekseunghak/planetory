@@ -13,7 +13,8 @@ param(
  [ValidateRange(80,1000)][int]$MinimumWorkerFreeGiB=100,
  [AllowEmptyString()][ValidateScript({$_ -eq '' -or $_ -match '^[0-9a-f]{64}$'})][string]$ExpectedCoverageSha256='',
  [ValidateCount(1,5)][ValidateSet(2,3,4,5,6)][int[]]$NodeNumbers=(2..6),
- [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
+ [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion'),
+ [switch]$CleanupSourceAfterCommit
 )
 $ErrorActionPreference='Stop'
 $mutatingSteps=@('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll','ServerRunAll')
@@ -612,7 +613,7 @@ count=$(sudo -u hdfs python3 -c 'import json,sys; print(json.load(open(sys.argv[
 if hdfs_cmd dfs -test -e '__STAGE__/manifest.parquet'; then
  hdfs_cmd dfs -rm -r -skipTrash '__STAGE__/manifest.parquet'
 fi
-sudo docker pull '__SPARK_IMAGE__'
+sudo docker image inspect '__SPARK_IMAGE__' >/dev/null
 sudo docker run --rm --network host \
  --add-host master-1:10.20.1.10 --add-host worker-2:10.20.2.10 --add-host worker-3:10.20.3.10 \
  --add-host worker-4:10.20.4.10 --add-host worker-5:10.20.5.10 --add-host worker-6:10.20.6.10 \
@@ -742,13 +743,14 @@ echo INTERNAL_SSH_AUTHORIZED source=10.20.1.10
   $remoteCoverage="$remoteDirectory/$RunId.coverage.json"
   $remoteKnownHosts="$remoteDirectory/known_hosts"
   $unit="planetory-tess-hdfs-runall-$RunId.service"
+  $completionMarker=if ($CleanupSourceAfterCommit) { 'cleanup-complete' } else { 'complete' }
   $unitText=@"
 [Unit]
 Description=Planetory TESS HDFS autonomous RunAll $RunId
 Wants=network-online.target
 After=network-online.target hadoop-hdfs-namenode.service docker.service
 StartLimitIntervalSec=0
-ConditionPathExists=!/var/lib/planetory-tess-hdfs-runall-$RunId/complete
+ConditionPathExists=!/var/lib/planetory-tess-hdfs-runall-$RunId/$completionMarker
 
 [Service]
 Type=simple
@@ -787,6 +789,7 @@ WantedBy=multi-user.target
    coverage_manifest=$remoteCoverage
    target_bundle_bytes=$targetBytes
    minimum_worker_free_gib=$MinimumWorkerFreeGiB
+   cleanup_source_after_commit=[bool]$CleanupSourceAfterCommit
    workers=@($NodeNumbers | ForEach-Object { [ordered]@{slot=$_-1;internal_ip="10.20.$_.10"} })
   }
   $temporaryConfig=[IO.Path]::GetTempFileName()

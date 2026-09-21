@@ -716,6 +716,19 @@ def command_run_all(args: argparse.Namespace) -> None:
     print(f"BRONZE_RUN_ALL_OK sectors={','.join(map(str, completed))}", flush=True)
 
 
+def command_coverage(args: argparse.Namespace) -> None:
+    release_dir = Path(args.release_dir).resolve()
+    contexts = cluster_preflight(list(range(1, 14)))
+    _, raw_coverage_ready_sha256 = raw_coverage(contexts)
+    commit_coverage(
+        release_dir=release_dir,
+        contexts=contexts,
+        raw_coverage_ready_sha256=raw_coverage_ready_sha256,
+        run_id=args.run_id,
+        pipeline_version=args.pipeline_version,
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     subparsers = root.add_subparsers(dest="command", required=True)
@@ -738,6 +751,11 @@ def parser() -> argparse.ArgumentParser:
     run_all.add_argument("--output-partitions", type=int, default=40)
     run_all.add_argument("--state-root", default="/var/lib/planetory-bronze")
     run_all.set_defaults(handler=command_run_all)
+    coverage = subparsers.add_parser("coverage")
+    coverage.add_argument("--release-dir", required=True)
+    coverage.add_argument("--run-id", required=True)
+    coverage.add_argument("--pipeline-version", required=True)
+    coverage.set_defaults(handler=command_coverage, sectors=list(range(1, 14)))
     return root
 
 
