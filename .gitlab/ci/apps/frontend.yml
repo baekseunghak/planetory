@@ -1,13 +1,14 @@
 # 웹 검증은 MR에서 돌고, 이미지 빌드·배포는 기본 브랜치에서만 돈다.
 #
-# 검증 job 셋은 서로 의존하지 않는다. `needs: []`로 스테이지를 기다리지 않고
-# 파이프라인 시작과 동시에 병렬로 뜬다. 하나가 실패해도 나머지 결과가 같이 보인다.
-#
-# Playwright 스위트는 여기에 넣지 않는다. 설정이 24개이고 `npm run check`가 약 20개를
-# 직렬로 돌아 블로킹 CI에 들어가면 머지가 막힌다. 배치 방법은 따로 정한다.
+# 지금 검증은 `web:build` 하나다. "빌드가 안 되는 코드는 머지할 수 없다"만 막는다.
+# 단위 테스트·포맷 검사·Playwright는 넣지 않았다. 전부 빌드와 배포를 막지 않고,
+# 단위 테스트는 남의 테스트가 남의 MR을 막는 구조라 팀 합의가 먼저다.
+# 필요해지면 아래 템플릿을 extends 하는 job을 하나씩 늘린다.
 .web-checks:
   stage: validate
   image: node:22.12-alpine
+  # 스테이지를 기다리지 않고 파이프라인 시작과 동시에 뜬다. job이 여럿이 되면
+  # 서로 의존하지 않고 병렬로 돌며, 하나가 실패해도 나머지 결과가 같이 보인다.
   needs: []
   # lock 파일이 그대로면 네트워크 왕복이 사라진다. node_modules는 캐싱하지 않는다.
   # npm ci가 어차피 지우고 다시 깔기 때문이다.
@@ -32,14 +33,6 @@ web:build:
   extends: .web-checks
   script:
     - npm run build
-
-web:unit:
-  extends: .web-checks
-  script:
-    - npm test
-
-# 포맷 검사(`npm run format:check`)는 두지 않는다. 빌드·배포·동작과 무관하고
-# 로컬에서 언제든 돌릴 수 있다. CI는 배포를 막을 수 있는 것만 본다.
 
 build:frontend:
   extends: .docker-build
