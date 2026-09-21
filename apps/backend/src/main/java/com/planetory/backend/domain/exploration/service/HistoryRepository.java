@@ -61,6 +61,14 @@ public class HistoryRepository {
                 .params(params).query(this::row).list();
     }
     Optional<Row> find(long id) { return jdbc.sql(select(true)+" WHERE h.id=?").param(id).query(this::row).optional(); }
+    /** 6.6절 제출 조회. 같은 행을 제출 ID로 찾는다. 제출과 기록은 같은 트랜잭션에서 만들어져 1:1이다. */
+    Optional<Row> findBySubmission(long submissionId) {
+        return jdbc.sql(select(true)+" WHERE s.id=?").param(submissionId).query(this::row).optional();
+    }
+    /** 6.6절 응답 유실 복구. 요청 ID는 제출에 UNIQUE라 최대 한 건이다. */
+    Optional<Row> findByRequest(java.util.UUID requestId) {
+        return jdbc.sql(select(true)+" WHERE s.request_id=?").param(requestId).query(this::row).optional();
+    }
     Optional<HistoryViews.Snapshot> snapshot(long id) {
         return jdbc.sql("SELECT bins,folded_flux,folded_err FROM analysis_snapshots WHERE history_id=?").param(id)
                 .query((r,n)->new HistoryViews.Snapshot(r.getInt(1),(Float[])r.getArray(2).getArray(),(Float[])r.getArray(3).getArray())).optional();
