@@ -127,3 +127,6 @@
   }
 }
 
+
+.personal-galaxy:has(.detail-ready) .galaxy-visible-count, .personal-galaxy:has(.detail-ready) .galaxy-legend { visibility: hidden; pointer-events: none; }
+
