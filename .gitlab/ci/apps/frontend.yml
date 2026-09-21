@@ -38,10 +38,8 @@ web:unit:
   script:
     - npm test
 
-# 포맷 검사는 아직 넣지 않는다. LF 체크아웃 기준으로 `npm run format:check`가 16개
-# 파일에서 실패한다(tests 6, apps/frontend/docs 9, src의 README 1). 지금 넣으면
-# 첫 파이프라인부터 빨간불이라 머지를 막는다. `npm run format`으로 한 번 정리한
-# 뒤에 job을 추가한다.
+# 포맷 검사(`npm run format:check`)는 두지 않는다. 빌드·배포·동작과 무관하고
+# 로컬에서 언제든 돌릴 수 있다. CI는 배포를 막을 수 있는 것만 본다.
 
 build:frontend:
   extends: .docker-build
