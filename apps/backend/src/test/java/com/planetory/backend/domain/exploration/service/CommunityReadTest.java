@@ -479,6 +479,12 @@ class CommunityReadTest {
         assertTrue(feedIds(read(FEED+"?ticId="+tic+"&q=1000%20ppm&searchIn=BODY")).isEmpty());
         publications.visibility(member,p.analysisId(),false);
         assertEquals(List.of(p.threadId()),feedIds(read(FEED+"?ticId="+tic+"&q=1200.5%20ppm")));
+        var emptySummary=read(FEED+"?ticId="+tic+"&q=1200.5%20ppm").path("items").get(0).path("judgmentSummary");
+        assertEquals("public_analyses",emptySummary.path("kind").asText());
+        assertEquals("c-"+candidate,emptySummary.path("candidateId").asText());
+        for(String key:List.of("participantCount","likelyPlanet","unlikelyPlanet","unsure")) assertEquals(0,emptySummary.path(key).asInt());
+        assertTrue(emptySummary.path("percentages").isNull());assertTrue(emptySummary.hasNonNull("asOf"));
+        assertEquals(1200.5,read(threadPath(p)).path("signal").path("depthPpm").asDouble());
         jdbc.update("UPDATE posts SET status='hidden' WHERE id=?",id);
         jdbc.update("UPDATE candidates SET depth_ppm=2E-7 WHERE id=?",candidate);
         assertTrue(jdbc.queryForObject("SELECT body FROM posts WHERE id=?",String.class,id).endsWith("0.0000002 ppm"));
@@ -489,6 +495,32 @@ class CommunityReadTest {
             assertTrue(community.feed(member,com.planetory.backend.domain.post.service.CommunityQuery.feed(params)).items().stream().noneMatch(i -> i.id().equals(p.threadId())));
             jdbc.execute("RESET ROLE");
         });
+    }
+
+    @Test void 후보갱신_이전스냅샷뒤_생긴스레드_갱신또는격리오류롤백() throws Exception {
+        for (int isolation : List.of(java.sql.Connection.TRANSACTION_READ_COMMITTED,
+                java.sql.Connection.TRANSACTION_REPEATABLE_READ, java.sql.Connection.TRANSACTION_SERIALIZABLE)) {
+            long signal=jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) VALUES (?,'active',?,1,3,100.3,2.4,1000,10,'{}',true,true) RETURNING id",Long.class,tic,bundle);
+            try(var writer=java.sql.DriverManager.getConnection(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword());
+                var statement=writer.createStatement()) {
+                writer.setTransactionIsolation(isolation);writer.setAutoCommit(false);
+                statement.execute("SET LOCAL ROLE planetory_gold_writer");
+                // 이 스냅샷에는 아직 공식 스레드가 없다. 다음 INSERT는 다른 연결에서 커밋한다.
+                try(var result=statement.executeQuery("SELECT depth_ppm FROM candidates WHERE id="+signal)) { assertTrue(result.next()); }
+                jdbc.update("INSERT INTO posts(kind,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',?,'star',?,'격리 검사','','visible')",signal,tic);
+                String update="UPDATE candidates SET depth_ppm=987.6 WHERE id="+signal;
+                if(isolation==java.sql.Connection.TRANSACTION_READ_COMMITTED) {
+                    assertEquals(1,statement.executeUpdate(update));writer.commit();
+                } else {
+                    var failure=assertThrows(java.sql.SQLException.class,()->statement.executeUpdate(update));
+                    assertEquals("25000",failure.getSQLState());
+                    assertTrue(failure.getMessage().contains("READ COMMITTED"));writer.rollback();
+                }
+            }
+            String expected=isolation==java.sql.Connection.TRANSACTION_READ_COMMITTED?"987.6":"1000";
+            assertEquals(expected,jdbc.queryForObject("SELECT trim_scale(depth_ppm)::text FROM candidates WHERE id=?",String.class,signal));
+            assertTrue(jdbc.queryForObject("SELECT body FROM posts WHERE candidate_id=?",String.class,signal).endsWith(expected+" ppm"));
+        }
     }
 
     @Test void 후보갱신과_공식최초생성_양방향경합() throws Exception {
