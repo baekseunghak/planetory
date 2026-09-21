@@ -35,3 +35,5 @@
 | 2026-09-21 | 공개 첨부 모드별 대체 안내·작업 재조회 정정 | S15P21C206-213 | 191, SUBMITTED, fallbackReason, jobId, lastMeta, Chrome 14 | 로컬 검증 완료·리뷰 전 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 120 develop 통합 테스트 중복 정리 | S15P21C206-120 | holdout, monkeypatch, 111 passed | 통합 테스트·호출 경로 확인 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
