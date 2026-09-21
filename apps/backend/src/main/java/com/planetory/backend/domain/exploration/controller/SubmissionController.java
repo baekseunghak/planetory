@@ -53,6 +53,15 @@ public class SubmissionController {
         return lookup.detailView(principal.memberId(), submissionId);
     }
 
+    @Operation(summary = "다시 풀기 초안",
+            description = "조회만이며 아무것도 저장하지 않는다. 위상은 현재 판 기준 시각으로 다시 만들고,"
+                    + " 제거 후보가 은퇴했으면 현재 진행 문맥으로 바꿔 restored.step=false로 알린다.")
+    @GetMapping("/api/v1/submissions/{submissionId}/retry-draft")
+    public SubmissionViews.RetryDraft retryDraft(@AuthenticationPrincipal MemberPrincipal principal,
+                                                 @PathVariable String submissionId) {
+        return lookup.retryDraft(principal.memberId(), submissionId);
+    }
+
     /** 조회는 언제나 200이며 지금 판을 헤더로 함께 준다(D-5). 판을 읽지 못하면 붙이지 않는다. */
     private static <T> ResponseEntity<T> respond(AnalysisViews.Answer<T> answer) {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok();

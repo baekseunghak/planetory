@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration.service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.gold.GoldCatalogRepository;
@@ -21,7 +23,7 @@ import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.error.ErrorResponse.FieldError;
 
 /**
- * 제출 조회·요청 ID 복구·상세 보기 (탐사 API 6.6·6.7절) [S15P21C206-145].
+ * 제출 조회·요청 ID 복구·상세 보기·다시 풀기 초안 (탐사 API 6.6·6.7·6.8절) [S15P21C206-145].
  *
  * <p>본문은 6.4절 제출 응답과 같고, 8.2절 기록 상세와도 같다. 그래서 만드는 함수도 하나다
  * ({@code HistoryService}). 두 벌이 되면 같은 제출이 화면마다 다른 진행·공개 상태를 말한다.
@@ -34,7 +36,11 @@ import com.planetory.backend.global.error.ErrorResponse.FieldError;
 @RequiredArgsConstructor
 public class SubmissionLookupService {
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     private final HistoryService histories;
+    private final AnalysisService analysis;
+    private final ResidualResultReader residuals;
     private final SubmissionService submissionService;
     private final SubmissionRepository submissions;
     private final StarRepository stars;
@@ -148,6 +154,90 @@ public class SubmissionLookupService {
             case "DISAGREES" -> Boolean.FALSE;
             default -> null;
         };
+    }
+
+    /**
+     * 다시 풀기 초안(6.8절). <b>조회만이며 아무것도 저장하지 않는다</b> — 새 제출·성과·진행이 생기지 않는다.
+     *
+     * <p>위상은 저장값을 복사하지 않고 <b>현재 판 기준 시각으로 다시 만든다</b>(HIS-02). 판이 바뀌면 같은
+     * 통과가 다른 위상에 오므로, 절대 시각과 지속 시간에서 환산해야 창이 통과 위에 놓인다.
+     *
+     * <p>원 제출이 제거한 후보가 은퇴했으면 단계를 되살리지 못한다. 그때는 현재 진행 문맥으로 바꾸고
+     * {@code restored.step=false}로 알린다(C02-R1). 대상 신호 자체가 은퇴했으면 409다.
+     *
+     * @throws BusinessException 없는 제출 {@code RESOURCE_NOT_FOUND}, 타인 제출 {@code FORBIDDEN},
+     *                           대상 신호 은퇴 {@code CANDIDATE_RETIRED}
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SubmissionViews.RetryDraft retryDraft(long member, String submissionId) {
+        long id = ExplorationIds.parse(submissionId, ExplorationIds.SUBMISSION)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        var row = histories.ownedSubmission(member, id);
+        JsonNode saved = row.submission().path("response_snapshot");
+        if (!saved.isObject()) throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        requireLivingTarget(row.tic(), saved);
+
+        List<String> removed = new ArrayList<>();
+        saved.path("curveContext").path("removedCandidateIds").forEach(node -> removed.add(node.asText()));
+        var restored = analysis.retryContext(member, row.tic(), List.copyOf(removed));
+
+        var residual = restored.context().curveStep() == 0
+                ? AnalysisViews.Residual.ORIGINAL
+                : lookupResidual(row.tic(), restored.context());
+        return new SubmissionViews.RetryDraft(ExplorationIds.submission(id),
+                restored.context().bundleId(), row.previous(), restored.context(),
+                new SubmissionViews.Restored(restored.stepRestored(),
+                        restored.stepRestored() ? null : "STEP_NOT_RESTORABLE"),
+                draft(saved, restored.bundle().foldReferenceTimeBtjd()),
+                residual, ExplorationIds.submission(id));
+    }
+
+    /** 대상 신호가 은퇴했으면 이어 풀 것이 없다. 매칭하지 않은 제출에는 대상이 없어 그대로 둔다. */
+    private void requireLivingTarget(long tic, JsonNode saved) {
+        String candidateId = saved.path("match").path("candidateId").isString()
+                ? saved.path("match").path("candidateId").asText() : null;
+        if (candidateId == null) {
+            return;
+        }
+        boolean retired = gold.findCandidates(tic).stream()
+                .filter(c -> ExplorationIds.candidate(c.id()).equals(candidateId))
+                .anyMatch(c -> c.status() == Candidate.Status.RETIRED);
+        if (retired) throw new BusinessException(ErrorCode.CANDIDATE_RETIRED);
+    }
+
+    /** 조회는 잔차 작업을 만들지 않는다(D-14). 결과도 작업도 없으면 둘 다 null이다. */
+    private AnalysisViews.Residual lookupResidual(long tic, AnalysisViews.CurveContext context) {
+        ResidualResultReader.Lookup lookup;
+        try {
+            lookup = residuals.lookup(tic, context);
+        } catch (RuntimeException e) {
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+        if (lookup == null) throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        return new AnalysisViews.Residual(lookup.status(), lookup.jobId(), lookup.computedAt());
+    }
+
+    /** 판단·근거·메모는 비운다. 다시 푸는 것이지 옛 답을 다시 내는 것이 아니다. */
+    private static SubmissionViews.Draft draft(JsonNode saved, double foldReferenceTimeBtjd) {
+        JsonNode original = saved.path("original");
+        JsonNode derived = saved.path("serverDerived");
+        Double period = number(original, "periodDays");
+        Double epoch = number(derived, "epochBtjd");
+        Double duration = number(derived, "durationHours");
+        Double start = null;
+        Double end = null;
+        if (period != null && period > 0 && epoch != null && duration != null) {
+            double[] window = HistoryService.phaseWindow(period, epoch, duration, foldReferenceTimeBtjd);
+            start = window[0];
+            end = window[1];
+        }
+        var viewState = original.path("viewState").isObject()
+                ? JSON.treeToValue(original.path("viewState"), SubmissionRequest.ViewState.class) : null;
+        return new SubmissionViews.Draft(period, start, end, viewState, null, List.of(), null);
+    }
+
+    private static Double number(JsonNode node, String key) {
+        return node.path(key).isNumber() ? node.path(key).asDouble() : null;
     }
 
     /** 지금 판을 헤더로 함께 준다(D-5). 별의 현재 판을 읽지 못하면 붙이지 않는다. */

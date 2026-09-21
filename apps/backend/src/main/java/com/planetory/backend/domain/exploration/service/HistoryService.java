@@ -217,12 +217,8 @@ public class HistoryService {
         Double period=number(s,"submitted_period"), epoch=number(s,"epoch_btjd"), duration=number(s,"duration_hours");
         Double start=null,end=null;
         if (mode.equals("CURRENT") && period!=null && epoch!=null && duration!=null) {
-            double center=(epoch-bundle.foldReferenceTimeBtjd())/period;
-            center-=Math.floor(center);
-            double width=duration/24/period;
-            start=center-width/2;
-            start-=Math.floor(start);
-            end=start+width;
+            double[] window=phaseWindow(period,epoch,duration,bundle.foldReferenceTimeBtjd());
+            start=window[0]; end=window[1];
         }
         var match=match(row);
         return new Selection(period,match.correctedPeriodDays(),match.harmonicMultiplier(),epoch,duration,start,end);
@@ -306,6 +302,24 @@ public class HistoryService {
         var row = found.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (row.member() != member) throw new BusinessException(ErrorCode.FORBIDDEN);
         return row;
+    }
+
+    /**
+     * 현재 판 기준 시각으로 위상 창을 다시 만든다(HIS-02). <b>저장된 위상을 복사하지 않는다</b> — 판이
+     * 바뀌면 같은 통과가 다른 위상에 온다. 절대 시각과 지속 시간만이 판을 건너도 같은 값이다.
+     *
+     * <p>8.3절 {@code CURRENT}와 6.8절 다시 풀기 초안이 같은 식을 쓴다. 두 벌이 되면 같은 제출을
+     * 이어 풀 때와 되돌아볼 때 창이 다른 자리에 그려진다.
+     *
+     * @return {@code [phaseStart, phaseEnd]}. 끝은 1을 넘을 수 있다 — 창이 경계를 지나면 이어진 값이다
+     */
+    static double[] phaseWindow(double period, double epochBtjd, double durationHours, double foldReferenceTimeBtjd) {
+        double center = (epochBtjd - foldReferenceTimeBtjd) / period;
+        center -= Math.floor(center);
+        double width = durationHours / 24 / period;
+        double start = center - width / 2;
+        start -= Math.floor(start);
+        return new double[] {start, start + width};
     }
 
     private static SubmissionViews.Match match(HistoryRepository.Row row) {

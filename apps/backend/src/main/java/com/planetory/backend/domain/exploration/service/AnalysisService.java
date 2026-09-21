@@ -210,6 +210,30 @@ public class AnalysisService {
     }
 
     /**
+     * 6.8절 다시 풀기 초안의 곡선 문맥. 5.1절 복귀 문맥과 <b>같은 규칙</b>으로 정한다.
+     *
+     * <p>매칭은 누적되므로, 원 제출이 제거한 후보가 지금 매칭 집합에 없으면 그 후보는 은퇴한 것이다.
+     * 그때는 단계를 되살리지 못하므로 <b>그 별의 현재 진행 문맥</b>으로 대체한다(C02-R1). 옛 조합을
+     * 그대로 주면 5.2절 조회가 거절하는 문맥을 초안으로 건네게 된다.
+     *
+     * @param removedCandidateIds 원 제출의 제거 조합
+     */
+    @Transactional(readOnly = true)
+    RetryContext retryContext(long memberId, long ticId, List<String> removedCandidateIds) {
+        Bundle bundle = openCurrentBundle(memberId, ticId);
+        Set<Long> matched = new TreeSet<>(analysis.findMatchedActiveCandidateIds(memberId, ticId));
+        List<Long> removed = removedCandidateIds.stream()
+                .map(id -> ExplorationIds.parse(id, ExplorationIds.CANDIDATE))
+                .filter(OptionalLong::isPresent).map(OptionalLong::getAsLong).toList();
+        boolean restorable = removed.size() == removedCandidateIds.size() && matched.containsAll(removed);
+        return new RetryContext(bundle, contextOf(bundle, restorable ? removed : matched), restorable);
+    }
+
+    /** @param stepRestored 원 제출의 단계를 그대로 되살렸는지. 거짓이면 현재 진행 문맥이다 */
+    record RetryContext(Bundle bundle, CurveContext context, boolean stepRestored) {
+    }
+
+    /**
      * 지금 판. 응답 헤더 {@code X-Current-Bundle}(D-5)에 쓴다.
      *
      * <p>별 접근을 다시 검사하지 않는다. 이미 통과한 요청의 응답에 값을 얹는 것이고, 여기서 또 막으면

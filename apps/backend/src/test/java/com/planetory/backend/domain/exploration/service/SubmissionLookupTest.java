@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 제출 조회·요청 ID 복구·상세 보기 (탐사 API 6.6·6.7절) [S15P21C206-145].
+ * 제출 조회·요청 ID 복구·상세 보기·다시 풀기 초안 (탐사 API 6.6·6.7·6.8절) [S15P21C206-145].
  *
  * <p>실제 제출을 만들고 조회한다. 외부 잔차 공급자만 대체하고 HTTP·DB·보안 필터는 실제로 실행한다.
  */
@@ -297,6 +297,116 @@ class SubmissionLookupTest {
                 .andExpect(jsonPath("$.tutorial.skipAvailable").value(false));
     }
 
+    // ---------- 6.8 다시 풀기 초안 ----------
+
+    /**
+     * AT-118. 기준 시각이 100에서 101로 바뀌면 저장된 0.20~0.30이 0.95~1.05로 복원된다.
+     * 저장값을 그대로 복사하면 창이 통과에서 벗어난다.
+     */
+    @Test
+    void 위상은_현재_판_기준_시각으로_다시_만든다() {
+        // 주기 4일, 창 0.20~0.30 → 기준 시각 100에서 epoch 101.0, 지속 9.6시간이다.
+        String submissionId = submit(4, 0.20, 0.30).path("submissionId").asText();
+        var before = lookup.retryDraft(member, submissionId);
+        assertEquals(0.20, before.draft().phaseStart(), 1e-9);
+        assertEquals(0.30, before.draft().phaseEnd(), 1e-9);
+
+        replaceBundle(101);
+
+        var after = lookup.retryDraft(member, submissionId);
+
+        assertEquals(0.95, after.draft().phaseStart(), 1e-9, "저장값을 복사하지 않는다");
+        assertEquals(1.05, after.draft().phaseEnd(), 1e-9, "경계를 넘는 창은 이어진 값으로 준다");
+        assertEquals(4.0, after.draft().periodDays(), 1e-9, "고른 주기는 그대로다");
+        assertTrue(after.isPreviousBundle());
+    }
+
+    /** 다시 푸는 것이지 옛 답을 다시 내는 것이 아니다. */
+    @Test
+    void 초안은_판단과_근거와_메모를_비운다() {
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        var draft = lookup.retryDraft(member, submissionId).draft();
+
+        assertNull(draft.userJudgment());
+        assertTrue(draft.evidenceChecks().isEmpty());
+        assertNull(draft.memo());
+        assertNotNull(draft.viewState(), "보던 화면은 그대로 연다");
+        assertEquals(10.0, draft.viewState().periodogramViewport().maxDays(), 1e-9);
+    }
+
+    /** C02-R1. 제거한 후보가 은퇴하면 단계를 되살리지 못하고 현재 진행 문맥으로 바꾼다. */
+    @Test
+    void 제거_후보가_은퇴하면_현재_진행_문맥으로_바꾸고_알린다() {
+        long second = candidate(7, 5);
+        submit(3, "LIKELY_PLANET");
+        Float[] residual = new Float[4320];
+        Arrays.fill(residual, 0.9f);
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup(
+                "COMPLETED", null, java.time.OffsetDateTime.now(), java.util.Map.of(segment, residual), null));
+        String step1 = submissions.submit(member, tic, step(7, List.of("c-" + candidate)))
+                .body().path("submissionId").asText();
+
+        var restored = lookup.retryDraft(member, step1);
+        assertTrue(restored.restored().step(), "아직은 그대로 되살린다");
+        assertNull(restored.restored().notice());
+        assertEquals(List.of("c-" + candidate), restored.curveContext().removedCandidateIds());
+
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?", candidate);
+
+        var replaced = lookup.retryDraft(member, step1);
+
+        assertFalse(replaced.restored().step());
+        assertEquals("STEP_NOT_RESTORABLE", replaced.restored().notice());
+        assertEquals(List.of("c-" + second), replaced.curveContext().removedCandidateIds(),
+                "은퇴한 후보 대신 지금 매칭한 후보로 선다");
+        assertEquals(1, replaced.curveContext().curveStep());
+    }
+
+    @Test
+    void 대상_신호가_은퇴했으면_409다() {
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?", candidate);
+
+        error(ErrorCode.CANDIDATE_RETIRED, () -> lookup.retryDraft(member, submissionId));
+    }
+
+    /** 완료 조건 (4). 초안 조회로 새 행·성과가 생기지 않는다. */
+    @Test
+    void 초안_조회는_아무것도_저장하지_않는다() {
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+        int submissionCount = count("submissions");
+        int achievementCount = count("user_candidate_achievements");
+        int historyCount = count("analysis_histories");
+
+        lookup.retryDraft(member, submissionId);
+        lookup.retryDraft(member, submissionId);
+
+        assertEquals(submissionCount, count("submissions"));
+        assertEquals(achievementCount, count("user_candidate_achievements"));
+        assertEquals(historyCount, count("analysis_histories"));
+    }
+
+    @Test
+    void 초안_HTTP는_원본_제출과_잔차_상태를_함께_준다() throws Exception {
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        mvc.perform(get("/api/v1/submissions/" + submissionId + "/retry-draft").session(session(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceSubmissionId").value(submissionId))
+                .andExpect(jsonPath("$.retryOfSubmissionId").value(submissionId))
+                .andExpect(jsonPath("$.bundleId").value("b-" + bundle))
+                .andExpect(jsonPath("$.isPreviousBundle").value(false))
+                .andExpect(jsonPath("$.restored.step").value(true))
+                .andExpect(jsonPath("$.curveContext.curveStep").value(0))
+                // 원본 단계는 계산할 것이 없어 항상 완료다.
+                .andExpect(jsonPath("$.residualForStep.status").value("COMPLETED"));
+
+        mvc.perform(get("/api/v1/submissions/" + submissionId + "/retry-draft").session(session(stranger)))
+                .andExpect(status().isForbidden());
+    }
+
     // ---------- HTTP ----------
 
     @Test
@@ -372,6 +482,35 @@ class SubmissionLookupTest {
             ((ObjectNode) node.get("judgmentStatistics")).remove("asOf");
         }
         return node;
+    }
+
+    private int count(String table) {
+        return jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class);
+    }
+
+    /** 현재 판을 기준 시각만 다른 새 판으로 바꾼다. */
+    private void replaceBundle(double reference) {
+        jdbc.update("UPDATE publication_bundles SET status='archived' WHERE tic_id=? AND status='current'", tic);
+        jdbc.update("INSERT INTO publication_bundles(tic_id,bundle_version,status,manifest,"
+                + "fold_reference_time_btjd,base_days) SELECT tic_id,?,'current',manifest,?,base_days "
+                + "FROM publication_bundles WHERE id=?", "lookup-" + UUID.randomUUID(), reference, bundle);
+    }
+
+    private SubmissionRequest step(double period, List<String> removed) {
+        return new SubmissionRequest(UUID.randomUUID().toString(), "candidate",
+                new SubmissionRequest.Context("b-" + bundle, removed.size(), removed, "rm-1", "pg-1"),
+                new SubmissionRequest.Selection(period, null, .25 / period, .35 / period), "LIKELY_PLANET",
+                List.of("ushape"), "조회 메모",
+                new SubmissionRequest.ViewState(new SubmissionRequest.Viewport(1.0, 10.0), 2.0), null);
+    }
+
+    private tools.jackson.databind.JsonNode submit(double period, double phaseStart, double phaseEnd) {
+        var request = new SubmissionRequest(UUID.randomUUID().toString(), "candidate",
+                new SubmissionRequest.Context("b-" + bundle, 0, List.of(), "rm-1", "pg-1"),
+                new SubmissionRequest.Selection(period, null, phaseStart, phaseEnd), "LIKELY_PLANET",
+                List.of("ushape"), "조회 메모",
+                new SubmissionRequest.ViewState(new SubmissionRequest.Viewport(1.0, 10.0), 2.0), null);
+        return submissions.submit(member, tic, request).body();
     }
 
     /** 판정을 채점형으로 바꾼다. 제출 시점에 채점되므로 제출 전에 불러야 한다. */

@@ -32,6 +32,7 @@ public enum ErrorCode {
     PUBLICATION_NOT_ELIGIBLE(HttpStatus.CONFLICT, "공개할 수 없는 분석 기록입니다."),
     THREAD_HIDDEN(HttpStatus.CONFLICT, "공식 스레드를 이용할 수 없습니다."),
     PUBLICATION_HIDDEN(HttpStatus.CONFLICT, "숨겨진 분석은 공개 상태로 설정할 수 없습니다."),
+    CANDIDATE_RETIRED(HttpStatus.CONFLICT, "이 신호는 더 이상 분석 대상이 아닙니다."),
     DETAIL_UNAVAILABLE(HttpStatus.CONFLICT, "지금은 볼 수 있는 상세가 없습니다."),
     SUBMISSION_CONTEXT_NOT_READY(HttpStatus.CONFLICT, "제출할 곡선이 준비되지 않았습니다."),
     STAR_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 탐색을 완료한 별입니다."),
