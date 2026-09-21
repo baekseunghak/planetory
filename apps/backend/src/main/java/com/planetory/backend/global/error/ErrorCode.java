@@ -31,6 +31,7 @@ public enum ErrorCode {
     REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "같은 요청을 처리 중입니다."),
     PUBLICATION_NOT_ELIGIBLE(HttpStatus.CONFLICT, "공개할 수 없는 분석 기록입니다."),
     THREAD_HIDDEN(HttpStatus.CONFLICT, "공식 스레드를 이용할 수 없습니다."),
+    PUBLICATION_HIDDEN(HttpStatus.CONFLICT, "숨겨진 분석은 공개 상태로 설정할 수 없습니다."),
     SUBMISSION_CONTEXT_NOT_READY(HttpStatus.CONFLICT, "제출할 곡선이 준비되지 않았습니다."),
     STAR_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 탐색을 완료한 별입니다."),
     SKIP_NOT_AVAILABLE(HttpStatus.CONFLICT, "지금은 튜토리얼을 건너뛸 수 없습니다."),
