@@ -6,6 +6,8 @@ PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcCl
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
+S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.
+
 ## 빠른 시작
 
 준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
