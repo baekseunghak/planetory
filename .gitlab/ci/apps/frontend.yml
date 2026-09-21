@@ -38,6 +38,37 @@ web:build:
   script:
     - npm run build
 
+# MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
+#
+# web:build는 npm run build만 돌아서 Dockerfile·COPY 경로·빌드 ARG가 검증되지 않는다.
+# 그 결과 초록으로 통과한 MR이 develop에서 build:frontend를 깨뜨린다.
+#
+# 빌드한 이미지 안에서 nginx -t 까지 돌린다. nginx는 기동 시점에 upstream 호스트명을
+# 해석하므로, `proxy_pass http://backend:8080` 같은 리터럴이 돌아오면 여기서 잡힌다.
+# 실제로 S15P21C206-84에서 그 결함으로 프론트 컨테이너가 기동하지 못했다.
+web:image:
+  extends: .docker-build
+  stage: validate
+  needs: []
+  variables:
+    DOCKERFILE: apps/frontend/Dockerfile
+    IMAGE_NAME: frontend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+    CHECK_TAG: ci-check/frontend:$CI_COMMIT_SHORT_SHA
+  # 푸시하지 않으므로 레지스트리가 필요 없다. .docker-build의 전제 검사를 비운다.
+  before_script: []
+  script:
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CHECK_TAG" $BUILD_ARGS .
+    - docker run --rm --entrypoint nginx "$CHECK_TAG" -t
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - apps/frontend/Dockerfile
+        - apps/frontend/nginx.conf
+        - apps/frontend/package-lock.json
+        - .gitlab/ci/apps/frontend.yml
+
 build:frontend:
   extends: .docker-build
   variables:

@@ -156,6 +156,27 @@ backend:build:
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
       changes: *backend_paths
 
+# MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
+# backend:build가 bootJar까지는 검증하지만 Dockerfile 자체는 검증하지 않는다.
+# Dockerfile이 바뀔 때만 돌므로 Gradle 빌드가 중복되는 경우는 드물다.
+backend:image:
+  extends: .docker-build
+  stage: validate
+  needs: []
+  variables:
+    DOCKERFILE: apps/backend/Dockerfile
+    IMAGE_NAME: backend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  before_script: []
+  script:
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "ci-check/backend:$CI_COMMIT_SHORT_SHA" $BUILD_ARGS .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - apps/backend/Dockerfile
+        - .gitlab/ci/apps/backend.yml
+
 build:backend:
   extends: .docker-build
   variables:
