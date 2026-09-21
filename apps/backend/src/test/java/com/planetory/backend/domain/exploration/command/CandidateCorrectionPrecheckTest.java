@@ -14,8 +14,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.PlanetoryApplication;
 import com.planetory.backend.domain.exploration.command.CorrectionViews.CandidateImpact;
@@ -60,6 +63,7 @@ class CandidateCorrectionPrecheckTest {
     @Autowired CandidateCorrectionPrecheck precheck;
     @Autowired CandidateCorrectionPrecheckCommand command;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactionManager;
 
     private long ticId;
     private long bundleId;
@@ -254,6 +258,38 @@ class CandidateCorrectionPrecheckTest {
                 "--planetory.correction.candidates=" + candidate), "같은 인자를 두 번");
     }
 
+    /** 목록의 빈 항목은 조용히 보정하지 않는다. 준 것과 센 것이 달라지기 때문이다 [154 리뷰]. */
+    @Test
+    void 후보_목록의_빈_항목은_64로_거절한다() {
+        long one = candidate();
+        long two = candidate();
+        for (String candidates : List.of(one + ",," + two, "," + one, one + ",", ",", "")) {
+            assertEquals(INVALID, run("--planetory.correction.kind=merge",
+                    "--planetory.correction.candidates=" + candidates), "'" + candidates + "'");
+        }
+        // 정상 입력은 그대로 통과한다. 공백만 있는 구분은 허용한다.
+        assertEquals(0, run("--planetory.correction.kind=merge",
+                "--planetory.correction.candidates=" + one + ", " + two,
+                "--planetory.correction.keep=" + one));
+    }
+
+    /**
+     * 제출만 있는 후보는 <b>0</b>이다. 계약 3.1이 제출을 어떤 정정에서도 옮기지 않는다고 정했고
+     * (HIS-06·SUB-05), 5.2의 승인 문턱은 그래서 나머지 다섯이다 [154 리뷰].
+     */
+    @Test
+    void 제출만_있는_후보는_승인_문턱이_아니다() {
+        long kept = candidate();
+        long merged = candidate();
+        submit(member(), merged);
+
+        Precheck result = precheck.check(Kind.MERGE, List.of(kept, merged), kept);
+
+        assertEquals(1, impact(result, merged).submissions());
+        assertFalse(result.needsMemberApproval(), result.approvals().toString());
+        assertEquals(0, exitCodeOf("merge", kept + "," + merged, kept));
+    }
+
     /** 회원 데이터가 걸려 있으면 3, 없으면 0이다. 자동화가 이 값으로 다음 단계를 가른다. */
     @Test
     void 회원_영향_여부로_종료_코드를_가른다() {
@@ -297,20 +333,78 @@ class CandidateCorrectionPrecheckTest {
     }
 
     /**
-     * 후보별 건수와 충돌 회원 수를 <b>따로</b> 읽으므로 한 스냅샷이어야 한다. 기본 격리 수준
-     * (READ COMMITTED)은 문장마다 새 스냅샷을 잡아, 사이에 성과가 등록되면 "성과 0건인데 별은 1개"가
-     * 나온다 [154 리뷰]. 두 질의가 한 트랜잭션에 묶여 있고 격리 수준이 올라가 있는지 확인한다.
+     * 사전검사가 자기 트랜잭션에 <b>REPEATABLE_READ를 선언하는지</b>. 이것이 없으면 아래 두
+     * 대조 검사가 보여주는 차이가 실제 실행에 그대로 나타난다 [154 리뷰].
+     *
+     * <p>아래 두 검사는 바깥 트랜잭션을 직접 만들어 격리 수준의 효과를 보여준다. 사전검사는
+     * {@code REQUIRED}라 바깥 트랜잭션에 참여하고, 참여할 때 스프링은 메서드의 격리 수준 속성을
+     * 무시한다. 그래서 선언 자체는 이 검사가 따로 지킨다.
      */
     @Test
-    void 건수를_한_스냅샷에서_읽는다() throws Exception {
-        Transactional tx = CandidateCorrectionPrecheck.class
+    void 사전검사는_한_스냅샷_격리를_선언한다() throws Exception {
+        Transactional declared = CandidateCorrectionPrecheck.class
                 .getMethod("check", Kind.class, List.class, Long.class)
                 .getAnnotation(Transactional.class);
 
-        assertNotNull(tx, "사전검사가 트랜잭션 밖이면 질의마다 스냅샷이 달라진다");
-        assertTrue(tx.readOnly());
-        assertEquals(Isolation.REPEATABLE_READ, tx.isolation(),
-                "기본 격리 수준이면 후보별 건수와 충돌 회원 수가 어긋날 수 있다");
+        assertNotNull(declared, "트랜잭션 밖이면 질의마다 스냅샷이 달라진다");
+        assertTrue(declared.readOnly());
+        assertEquals(Isolation.REPEATABLE_READ, declared.isolation());
+    }
+
+    /** 선언한 격리 수준에서 조회 사이의 커밋이 보이지 않는다. 위 선언이 무엇을 사는지 보여준다. */
+    @Test
+    void 조회_사이에_성과가_등록돼도_같은_스냅샷을_본다() {
+        long kept = candidate();
+        long merged = candidate();
+
+        Precheck[] seen = snapshotAround(TransactionDefinition.ISOLATION_REPEATABLE_READ, kept, merged);
+
+        assertEquals(seen[0], seen[1], "한 실행 안에서 건수가 달라지면 앞뒤가 안 맞는 보고가 나간다");
+        assertEquals(0, seen[1].conflictingMembers());
+        assertEquals(0, impact(seen[1], kept).achievements());
+    }
+
+    /** 대조군. 기본 격리 수준이면 같은 자리에서 값이 달라진다 — 그래서 격리 수준을 올려야 한다. */
+    @Test
+    void 기본_격리_수준이면_같은_자리에서_값이_달라진다() {
+        long kept = candidate();
+        long merged = candidate();
+
+        Precheck[] seen = snapshotAround(TransactionDefinition.ISOLATION_READ_COMMITTED, kept, merged);
+
+        assertNotEquals(seen[0], seen[1], "이 차이가 REPEATABLE_READ를 거는 이유다");
+    }
+
+    /**
+     * 주어진 격리 수준의 트랜잭션 안에서 사전검사를 두 번 부르고, 그 사이에 <b>다른 연결</b>이
+     * 성과를 커밋한다. 같은 연결에서 넣으면 자기 변경이라 격리 수준과 무관하게 보인다.
+     */
+    private Precheck[] snapshotAround(int isolation, long kept, long merged) {
+        TransactionTemplate outer = new TransactionTemplate(transactionManager);
+        outer.setIsolationLevel(isolation);
+        outer.setReadOnly(true);
+        return outer.execute(status -> {
+            Precheck before = precheck.check(Kind.MERGE, List.of(kept, merged), kept);
+            commitFromAnotherConnection(kept, merged);
+            return new Precheck[] {before, precheck.check(Kind.MERGE, List.of(kept, merged), kept)};
+        });
+    }
+
+    /** 별도 스레드 = 별도 연결 = 별도 트랜잭션. 끝날 때까지 기다린 뒤 두 번째 조회로 넘어간다. */
+    private void commitFromAnotherConnection(long kept, long merged) {
+        Thread writer = new Thread(() -> {
+            long member = member();
+            recognize(member, kept, submit(member, kept));
+            recognize(member, merged, submit(member, merged));
+        });
+        writer.start();
+        try {
+            writer.join(30_000);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(interrupted);
+        }
+        assertFalse(writer.isAlive(), "다른 연결의 커밋이 끝나야 두 번째 조회가 의미 있다");
     }
 
     // ---------- 완료 조건: 재실행과 무변경 ----------

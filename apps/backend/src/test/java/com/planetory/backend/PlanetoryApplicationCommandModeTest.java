@@ -3,6 +3,7 @@ package com.planetory.backend;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -56,13 +57,19 @@ class PlanetoryApplicationCommandModeTest {
      */
     @Test
     void 읽기_전용_명령은_기동할_때_마이그레이션을_실행하지_않는다() {
-        assertEquals("false", PlanetoryApplication.defaultPropertiesFor(
-                new String[]{"--planetory.command=candidate-correction-precheck"}).get("spring.flyway.enabled"));
+        String guard = "--spring.flyway.enabled=false";
 
-        // 다른 명령과 평소 기동은 그대로 둔다. 챌린지 명령은 쓰기 명령이라 이 보호 대상이 아니다.
-        assertTrue(PlanetoryApplication.defaultPropertiesFor(
-                new String[]{"--planetory.command=challenge-unlock"}).isEmpty());
-        assertTrue(PlanetoryApplication.defaultPropertiesFor(new String[]{}).isEmpty());
+        // 운영자가 옵션을 빼먹어도 붙는다. 명령줄 인자라 설정 파일보다 우선한다.
+        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(
+                new String[]{"--planetory.command=candidate-correction-precheck"})).contains(guard));
+        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(new String[]{
+                "--planetory.command=candidate-correction-precheck",
+                "--planetory.correction.kind=merge"})).contains(guard), "다른 인자와 함께 줘도 붙는다");
+
+        // 쓰기 명령과 평소 기동은 건드리지 않는다. 챌린지 명령은 마이그레이션이 필요할 수 있다.
+        assertFalse(List.of(PlanetoryApplication.withReadOnlyGuards(
+                new String[]{"--planetory.command=challenge-unlock"})).contains(guard));
+        assertEquals(0, PlanetoryApplication.withReadOnlyGuards(new String[]{}).length);
     }
 
     /**
