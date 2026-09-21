@@ -86,6 +86,7 @@
 | 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-18 | BLS 평가 단계 5별 결과 — 50k 이득 미재현으로 20k 유지 제안, SDE 문턱 미확정, dy 산정 방식 비교 | S15P21C206-110 | BLS, 평가 단계, linear20k, poc_linear20k, SDE, SNR, dy, local scatter, PDCSAP_FLUX_ERR, bls-snr-dy, CM Dra, HD 21749, WASP-18 잔여, DEC-03 | 실험 결과 · 제안 수정 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 반복 BLS·제거 QA·복구 벤치마크 — 종료 사유 7종 채택, QA 문턱 분포, QA 실패 뒤 계속 탐색 설계 변경 제안 | S15P21C206-111 | 반복 BLS, 제거 QA, removal_qa_failed, 복구, iterate, window_offset, power_ratio, edge_excess, 재적합, 고조파, CM Dra, WASP-18, D14-2, DEC-05, DEC-06 | 실험 결과 · 제안 | [2026-09-18](2026-09-18.md) |
 
 | 2026-09-18 | GCP 6계정 quota·비용·크레딧·예산 알림 실측 기록 | S15P21C206-228 | 무료 크레딧, 크레딧 소진 속도, DISKS_TOTAL_GB 99%, EXCLUDE_ALL_CREDITS, billing.admin, 10-09 기한, 예산 알림 5건 | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-17 | Gold manifest 추가 키 허용·배열 값 CHECK(V10)·ERD gaps NULL 정정(117 리뷰 후속) | S15P21C206-140 | GoldManifest, ignoreUnknown, checksum_version, UnrecognizedPropertyException, V10, CHECK, array_position, NaN, Infinity, 0x7FC00000, gaps, NULL, power NULL, DataAccessException, ERD v1.10 | 구현 완료 | [2026-09-17](2026-09-17.md) |
@@ -115,6 +116,11 @@
 
 | 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | L 98-59 가드 적용 분리 실행 결과 | S15P21C206-111 | 7cc8dcb2, 65/108, window_offset, 1 d·8 h, 가짜 1 | 실험 결과 기록·채택 미확정 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 저장 후보 기반 창 안 편향 진단 | S15P21C206-111 | window_offset, 1 d, 8 h, 기준 밝기, 재현 검사 | 구현 완료·진단 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 진단 실측·바깥 평균 기준 창 안 편향 QA 옵션 | S15P21C206-111 | oot, unity, 12곡선, 공통 밝기 편향, 두 평균 오차, 잔차 복구 | 구현·검증 완료·반복 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | oot 비교 실측·회수 개선과 가짜 증가 | S15P21C206-111 | 652fe48d, 71/108, 가짜 2, g102, 0.605876699 d | 검증 완료·채택 보류 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 111 완료 조건·이전 정상 잔차 복구·최종 인계 준비 | S15P21C206-111 | 122, 설정 지문, empty peaks, 종료 7종, D04 승인, 15 FITS | 검증 완료·최종 실측 대기 | [2026-09-19](2026-09-19.md) |
 | 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
@@ -164,6 +170,7 @@
 | 2026-09-20 | Silver 전처리·42 회귀 계약 | S15P21C206-119 | biweight, 원본 행, 제외 사유, 허용 오차 0, DAT-02 | 구현·합성 검증 완료, 실측·리뷰 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | Silver 전처리 4별 실측 회귀 통과 | S15P21C206-119 | 9c908a11, 448/448, 428.510초, 해시 44개 일치 | 실측 검증 완료·MR 리뷰 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | !107 기본 커널 범위와 불량 구간 마스킹 후속 분리 | S15P21C206-119, 245 | DAT-02, 원래 QUALITY, 정규화 전 마스킹 | 문서 반영·후속 등록·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 110 병합 후 반복 검증 준비 | S15P21C206-111 | unity, 49ccec22320d, holdout 테스트 격리, 87+93 | 최종 실측 준비 | [기록](2026-09-20.md) |
 | 2026-09-20 | 공식 스레드·공개 분석 등록과 원자적 성과 연결 | S15P21C206-161 | F07-Q2, 회원 선잠금, 재전송, V14, 387·69 테스트 | 구현·단독 검증 완료, 160 통합 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 거절된 제출을 고쳐서 다시 낼 수 있게 함 | S15P21C206-187 | 400 VALIDATION_FAILED, rejected 상태, 결과를 모름과 끝나지 않음 구분, 403·404는 pending 유지, 지문으로 새 ID 발급, 기록 미삭제 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
 
