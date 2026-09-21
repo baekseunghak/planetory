@@ -1,3 +1,4 @@
+import { PublicSkyPage } from "./features/public-sky/PublicSky";
 import {
   MyProfilePage,
   MemberProfilePage,
@@ -45,7 +46,9 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
-    ...(p1Enabled ? { withdrawal: WithdrawalPage } : {}),
+    ...(p1Enabled
+      ? { withdrawal: WithdrawalPage, publicSky: PublicSkyPage }
+      : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
     ...(p1Enabled
       ? { following: FollowingPage, followingFeed: FollowingFeedPage }

@@ -101,6 +101,14 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               )}
             </>
           )}
+          {p1Enabled && !own && profile.starListVisibility === "PUBLIC" && (
+            <Link
+              className="primary-link"
+              to={"/members/" + encodeURIComponent(memberId) + "/sky"}
+            >
+              은하 방문하기 →
+            </Link>
+          )}
           {section === "summary" && <Summary profile={profile} own={own} />}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
@@ -129,21 +137,22 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
-          {section !== "summary" && (own && section === "stars" && slots.stars ? (
-            <ProfileStarFilters
-              Page={slots.stars}
-              memberId={memberId}
-              isOwn
-              starListVisibility={profile.starListVisibility}
-            />
-          ) : (
-            <ProfileSection
-              section={section}
-              memberId={memberId}
-              isOwn={own}
-              starListVisibility={profile.starListVisibility}
-            />
-          ))}
+          {section !== "summary" &&
+            (own && section === "stars" && slots.stars ? (
+              <ProfileStarFilters
+                Page={slots.stars}
+                memberId={memberId}
+                isOwn
+                starListVisibility={profile.starListVisibility}
+              />
+            ) : (
+              <ProfileSection
+                section={section}
+                memberId={memberId}
+                isOwn={own}
+                starListVisibility={profile.starListVisibility}
+              />
+            ))}
         </>
       )}
     </section>

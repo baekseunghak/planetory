@@ -1,3 +1,4 @@
+import { publicSkyFixturePlugin } from "../dev/public-sky-fixture-plugin.ts";
 // Local visual review only. All data is synthetic and kept in memory.
 // This entry point is never loaded by the production Vite configuration.
 import { followFixturePlugin } from "../dev/follow-fixture-plugin.ts";
@@ -65,6 +66,7 @@ const server = await createServer({
   mode: "presentation",
   plugins: [
     react(),
+    publicSkyFixturePlugin(),
     withdrawalFixturePlugin(),
     settingsFixturePlugin({
       member: () => ({
