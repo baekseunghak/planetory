@@ -213,11 +213,17 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 덤프는 `$DEPLOY_PATH/backups/service-db-<YYYYMMDD-HHMMSS>.sql`에 쌓이며 최근 10개만 남는다. 복원은 이미 마이그레이션된 DB에 데이터만 넣는 경우 트리거와 `rule-0` 충돌을 먼저 처리해야 한다. 절차는 [운영 규칙 런북](../../docs/operations/operation-rule-runbook.md)을 따른다.
 
+`compose.yaml`은 되돌리지 않는다. 포트·환경변수·볼륨 정의를 바꾸는 변경은 이미지 배포와 같은 파이프라인에 싣지 않는다. 실패하면 "구 이미지 + 신 정의"라는 검증되지 않은 조합이 된다.
+
+덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 볼륨과 함께 사라진다. 배포 실패 복구용이지 재해 복구용이 아니다.
+
 배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
 
 - `되돌렸습니다` — 서비스는 직전 이미지로 살아 있다. 원인을 고쳐 다시 배포한다.
 - `되돌릴 이미지가 없습니다` — 첫 배포였다. 서비스가 떠 있지 않다.
-- `되돌린 뒤에도 헬스가 통과하지 않습니다` — 사람이 봐야 한다.
+- `되돌린 뒤에도 헬스가 통과하지 않습니다` — 사람이 봐야 한다. `restart: unless-stopped`가 계속 재시작시키므로 조사 전에 `docker compose stop <service>`로 루프를 멈춘다.
+- `DB 덤프에 실패했습니다` — 교체하지 않았다. `service-db`를 먼저 확인한다.
+- `교체가 반영되지 않았습니다` — compose가 읽는 이미지 변수 이름이 배포 job의 `DEPLOY_IMAGE_VARIABLE`과 다르다.
 
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 

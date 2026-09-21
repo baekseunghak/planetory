@@ -4,38 +4,62 @@ backend:schema:
   stage: validate
   image: alpine:3.20
   needs: []
+  variables:
+    # 이미 적용된 마이그레이션은 검사에서 뺀다. 파일을 고치면 Flyway 체크섬이 바뀌어
+    # 기존 DB가 기동을 거부하므로 허용 표시를 넣을 방법이 없다. V5의
+    # `ALTER COLUMN layout_ordinal SET NOT NULL`이 여기 해당한다.
+    SCHEMA_GRANDFATHERED: "V5__exploration_domain_constraints.sql"
+    # PostgreSQL은 COLUMN 키워드를 생략할 수 있고 `RENAME a TO b`처럼 이름이 사이에
+    # 끼므로 인접 매칭으로는 잡히지 않는다. 컬럼명에 숫자·따옴표가 들어가는 경우도 있다.
+    # 권한 회수와 제약 강화도 구 앱을 깨뜨리므로 같이 본다.
+    SCHEMA_IRREVERSIBLE: 'DROP +(TABLE|COLUMN|VIEW|MATERIALIZED|TYPE|SEQUENCE|FUNCTION|TRIGGER)|ALTER +TABLE +[^ ]+ +DROP|RENAME|SET +NOT +NULL|REVOKE|ALTER +COLUMN +[^ ]+ +TYPE'
   script:
     - cd apps/backend/src/main/resources/db/migration
-    # 1. 버전 번호는 브랜치 사이의 선점 경쟁 대상이다. 두 브랜치가 각각 V16을
-    #    만들면 develop에서 만나 Flyway 적용 순서가 꼬인다.
+    # 1. 같은 번호를 두 파일이 쓰면 Flyway 적용 순서가 꼬인다.
+    #    현재 체크아웃된 파일만 본다. 다른 브랜치가 같은 번호를 선점한 경우는
+    #    develop에 머지된 뒤에야 잡힌다. 타깃 브랜치와 비교하려면 job에 git이 필요하다.
     - |
-      duplicates=$(ls V*.sql 2>/dev/null | sed -E 's/^V([0-9]+)__.*/\1/' | sort -n | uniq -d)
-      if [ -n "$duplicates" ]; then
-        echo "마이그레이션 버전 번호가 겹칩니다: $duplicates" >&2
+      numbers=$(ls V*.sql 2>/dev/null | sed -nE 's/^V([0-9]+)__.*/\1/p')
+      if [ "$(echo "$numbers" | grep -c .)" != "$(ls V*.sql 2>/dev/null | grep -c .)" ]; then
+        echo "이름 규칙에 맞지 않는 마이그레이션이 있습니다. V<정수>__<설명>.sql 이어야 합니다." >&2
         ls V*.sql >&2
-        echo "develop의 최신 번호 다음으로 올려 이름을 바꾸십시오." >&2
         exit 1
       fi
-    # 2. 열·테이블을 지우거나 이름을 바꾸면 구 버전 앱이 새 스키마에서 뜨지 못한다.
-    #    배포가 실패했을 때 이미지를 되돌려도 살아나지 않는다는 뜻이다
-    #    (infra/service/deploy.sh는 이미지만 되돌린다).
-    #    정말 필요하면 해당 파일에 `-- IRREVERSIBLE:` 줄과 근거를 남긴다.
+      duplicates=$(echo "$numbers" | sort -n | uniq -d)
+      if [ -n "$duplicates" ]; then
+        echo "마이그레이션 버전 번호가 겹칩니다: $duplicates" >&2
+        exit 1
+      fi
+    # 2. 열·테이블을 지우거나, 이름을 바꾸거나, 제약을 좁히거나, 권한을 회수하면
+    #    구 버전 앱이 새 스키마에서 뜨지 못한다. 배포가 실패했을 때 이미지를
+    #    되돌려도 살아나지 않는다는 뜻이다(infra/service/deploy.sh는 이미지만 되돌린다).
+    #    주석과 문자열 리터럴은 먼저 걷어낸다. 설명을 썼다는 이유로 막으면
+    #    아무도 설명을 쓰지 않게 된다.
     - |
-      for file in $(grep -lniE 'DROP (TABLE|COLUMN)|RENAME (TO|COLUMN)|ALTER COLUMN [a-z_]+ TYPE' V*.sql R*.sql 2>/dev/null); do
-        if ! grep -q '^-- IRREVERSIBLE:' "$file"; then
-          echo "되돌릴 수 없는 변경이 있습니다: $file" >&2
-          grep -niE 'DROP (TABLE|COLUMN)|RENAME (TO|COLUMN)|ALTER COLUMN [a-z_]+ TYPE' "$file" >&2
-          echo "" >&2
-          echo "세 배포로 나누면 어느 단계에서 실패해도 이미지 롤백으로 복구됩니다." >&2
-          echo "  1차: 새 열을 추가만 한다 (구 앱·신 앱 모두 동작)" >&2
-          echo "  2차: 코드가 새 열을 쓰게 바꾼다 (스키마 변경 없음)" >&2
-          echo "  3차: 아무도 쓰지 않게 된 구 열을 지운다" >&2
-          echo "" >&2
-          echo "나눌 수 없다면 파일에 '-- IRREVERSIBLE: <근거>' 줄을 추가하십시오." >&2
-          exit 1
+      failed=0
+      for file in V*.sql R*.sql; do
+        [ -f "$file" ] || continue
+        case " $SCHEMA_GRANDFATHERED " in *" $file "*) continue ;; esac
+        hits=$(sed -e 's/--.*$//' -e "s/'[^']*'//g" "$file" | grep -niE "$SCHEMA_IRREVERSIBLE" || true)
+        [ -n "$hits" ] || continue
+        if grep -qiE '^[[:space:]]*--[[:space:]]*IRREVERSIBLE' "$file"; then
+          echo "되돌릴 수 없는 변경을 명시적으로 허용했습니다: $file"
+          continue
         fi
-        echo "되돌릴 수 없는 변경을 명시적으로 허용했습니다: $file"
+        failed=1
+        echo "되돌릴 수 없는 변경이 있습니다: $file" >&2
+        echo "$hits" >&2
       done
+      if [ "$failed" = "1" ]; then
+        echo "" >&2
+        echo "세 배포로 나누면 어느 단계에서 실패해도 이미지 롤백으로 복구됩니다." >&2
+        echo "  1차: 새 열을 추가만 한다 (구 앱·신 앱 모두 동작)" >&2
+        echo "  2차: 코드가 새 열을 쓰게 바꾼다 (스키마 변경 없음)" >&2
+        echo "  3차: 아무도 쓰지 않게 된 구 열을 지운다" >&2
+        echo "" >&2
+        echo "나눌 수 없다면 파일에 '-- IRREVERSIBLE: <근거>' 줄을 추가하십시오." >&2
+        exit 1
+      fi
       echo "마이그레이션 검사 통과"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

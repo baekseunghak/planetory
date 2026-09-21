@@ -78,11 +78,15 @@ validate:tess-hdfs-loader:
 .remote-compose-deploy:
   stage: deploy
   image: alpine:3.20
+  # 배포 중에 취소되면 compose가 반쯤 교체된 상태로 남고 deploy.sh의 롤백도 돌지 못한다.
+  # 루트의 default: interruptible: true 를 배포에서만 끈다.
+  interruptible: false
   variables:
     # 서비스 배포 job이 덮어쓴다. 비어 있으면 교체만 하고 확인·롤백을 하지 않는다.
     DEPLOY_HEALTH_PATH: ""
-    DEPLOY_DB_BACKUP: "false"
+    DEPLOY_HEALTH_PORT: "8080"
     DEPLOY_HEALTH_TIMEOUT: "90"
+    DEPLOY_DB_BACKUP: "false"
   # SSH 키를 두지 않는다. 대상 노드가 Tailscale SSH로 22번을 처리하므로
   # authorized_keys가 아니라 tailnet 신원으로 인증한다. job 컨테이너의 연결은
   # Runner 호스트의 tailnet 신원으로 나가고, ACL의 ssh 규칙이 deploy 계정을
@@ -99,12 +103,15 @@ validate:tess-hdfs-loader:
   # 되돌릴 대상을 기억할 수도 없다. DEPLOY_HEALTH_PATH가 비면 확인과 롤백을
   # 건너뛰므로 헬스 경로가 없는 GCP 노드 배포는 이전과 같이 동작한다.
   script:
-    - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
+    - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH" && test -n "$DEPLOY_USER"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
-    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
-    - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh"
+    # 임시 이름으로 받고 원격에서 옮긴다. 다른 배포가 진행 중일 때 실행 중인
+    # 파일을 덮어쓰면 sh가 중간부터 엉뚱한 바이트를 읽는다.
+    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml.incoming"
+    - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh.incoming"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && mv compose.yaml.incoming compose.yaml && mv deploy.sh.incoming deploy.sh"
     - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
 .deploy-ec2-a:
   extends: .remote-compose-deploy
