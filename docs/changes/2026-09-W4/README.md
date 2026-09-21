@@ -30,3 +30,4 @@
 | 2026-09-21 | 일반 글 반응 최종 상태·커서·상세 합계·V16 최소 권한 | S15P21C206-163 | post_reactions, NONE, 삭제 경합, 최신 닉네임, V16 | 전체 442건 검증 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 공식 스레드 네 수치 공개와 오류 계약·예제 정합화 | S15P21C206-164 | COM-17, signal, N=0, STAR_NOT_PUBLISHED, README 충돌 | 정책 채택·문서 보완 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | Bronze manifest 영구 오류 전달 누락 정정 | S15P21C206-77 | manifest, _TERMINAL, terminal_failed, exit 65, spark-submit | 구현·오프라인 검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 첨부 모드별 대체 안내·작업 재조회 정정 | S15P21C206-213 | 191, SUBMITTED, fallbackReason, jobId, lastMeta, Chrome 14 | 로컬 검증 완료·리뷰 전 | [2026-09-21](2026-09-21.md) |
