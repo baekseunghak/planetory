@@ -14,6 +14,20 @@
 
 개별 기능 MR은 위 순서로 앞 브랜치를 기반으로 한다. 앞 MR 병합 후 뒤 MR 대상은 develop로 바꾸고 충돌/통합 검사를 수행한다. 작성자가 승인 없이 병합하지 않는다. P0 216의 범위를 P1로 넓히지 않으며 실제 P1 배포 검증은 244에서 한다.
 
+2026-09-21 담당자 결정으로 P1 구현은 216의 완료를 기다리지 않고 병행한다. Jira 219~223의 과거 순차 착수 문구와 216 차단 관계는 이 결정으로 대체한다. 기능 미구현·정책 미확정·리뷰 대기를 통합 인수 대기와 구분하며, MR 제출만으로 티켓을 완료하지 않는다.
+
+| 티켓 | 리뷰 요청 | 현재 대상 |
+|---|---|---|
+|219|[!143](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/143)|develop|
+|220|[!144](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/144)|219 브랜치|
+|221|[!145](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/145)|220 브랜치|
+|222|[!146](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/146)|221 브랜치|
+|223|[!147](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/147)|222 브랜치|
+|248 후속|[!149](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/149)|223 브랜치|
+|250|[!150](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/150)|248 후속 브랜치|
+
+모두 일반 MR이며 백지웅 리뷰 대기다. 위 대상은 적층 변경량 검토를 위한 것이다. **선행 MR이 develop에 병합되기 전에 다음 MR을 선행 feature 브랜치로 병합하지 않는다.** 선행 병합 후 대상을 develop로 변경해 순서대로 진행한다. 공개 은하 백엔드 생산자는 [S15P21C206-251](https://ssafy.atlassian.net/browse/S15P21C206-251)이며 담당자·SP 배정 전이다.
+
 ## 백엔드 AI가 먼저 읽을 것
 
 1. `apps/backend/docs/p1-service-contract.md`: 219~223 요청·응답·불명확한 쓰기 결과 처리. 각 API를 빈 200이나 임시 성공으로 대체하지 않는다.
