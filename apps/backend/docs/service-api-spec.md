@@ -283,7 +283,13 @@ if (response.status === 401) {
 
 **확정(SB-D16, DEC-09):** 공식 스레드의 현재 유효 참여자 `participantCount >= 10`이면 핫 토픽으로 선정한다. 어느 판단이 다수인지는 무관하다.
 
-`GET /api/v1/community/hot-topics?size=20`, 성공 200. 공통 피드 목록 구조를 재사용하고 공식 스레드 항목의 hotReasons에 JUDGMENT_THRESHOLD를 반환하는 안이다.
+**구현(S15P21C206-171):** `GET /api/v1/community/hot-topics?size=20&cursor=...`, 성공 200. 기존 피드의 `items`, `nextCursor`, `hasNext`와 `SIGNAL_THREAD` 항목을 재사용한다. `hotReasons`는 제안 필드이며 반환하지 않는다. 세션 인증이 필요하고 `Cache-Control: no-store`를 반환한다.
+
+- 허용 쿼리는 `size`, `cursor`뿐이다. size는 기본 20·최대 100의 양의 정수이며 프론트 미리보기의 size=3도 지원한다. 미지·중복 키, 빈 값, 잘못된 정수·커서는 400 `VALIDATION_FAILED`다. 첫 페이지는 cursor를 생략한다.
+- 공개되고 한 명 이상 발견한 별의 visible 공식 스레드 전체에서 유효 공개 분석의 참여자를 먼저 집계한다. N>=10 필터와 아래 정렬을 적용한 뒤 커서·LIMIT을 적용한다. 일반 피드 한 페이지를 가져와 재정렬하지 않는다.
+- 선정 N은 기존 공개 조건과 History→Submission 조인에 대한 `COUNT(DISTINCT s.user_id)`다. 응답 판단 분포는 기존 `publicJudgmentSummary(candidateId)`를 호출한다. 선정과 페이지별 요약을 같은 REPEATABLE_READ 읽기 트랜잭션에서 수행해 선정 N과 요약 N을 맞춘다.
+- 커서는 hot scope·size·N·생성 시각·숫자 ID에 묶인 위치다. 다른 크기·일반 피드·공개 분석 목록 커서는 거절한다. 커서가 권한이나 페이지 간 고정 스냅샷을 의미하지 않으며, 각 요청에서 현재 참여 수와 공개 상태를 재평가한다. 페이지 사이 N이 바뀌면 항목의 순위 이동으로 중복·누락이 가능하고 첫 페이지 새로고침에서 최신 순서를 확인한다.
+- 대상이 없으면 `200 {"items":[],"nextCursor":null,"hasNext":false}`다. 본인의 분석 잠금과 무관하게 공개 게시판 집합을 조회하며 일반 글·개인 History를 항목으로 반환하지 않는다.
 
 - 현재 공개 분석 통계 F16의 LIKELY_PLANET+UNLIKELY_PLANET+UNSURE 합계 N을 재사용한다. 회원×신호당 최신 유효 공개 판단 한 건이며 반복 제출 횟수를 더하지 않는다. 별도 투표 버튼은 추가하지 않는다.
 - 예: 세 판단이 4/3/3이면 합계 10명으로 선정된다. 한 회원의 판단 변경은 비율만 바꾸고 총인원은 늘리지 않는다.
