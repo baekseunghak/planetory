@@ -5,10 +5,8 @@ import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -82,7 +80,7 @@ public class PublicAnalysisBatchService {
                 results.add(failure(history, ErrorCode.DEPENDENCY_UNAVAILABLE, true));
             } catch (RuntimeException e) {
                 // 결과 불명·내부 결함을 성공이나 자동 재시도 대상으로 바꾸지 않는다. DB 메시지는 반환하지 않는다.
-                log.error("Batch publication failed: {}", e.getClass().getSimpleName());
+                log.error("Batch publication failed", e);
                 results.add(failure(history, ErrorCode.INTERNAL_ERROR, false));
             }
         }
@@ -94,22 +92,15 @@ public class PublicAnalysisBatchService {
         CommunityQuery.only(params, Set.of("ticId", "size", "cursor"));
         long tic = ExplorationIds.parseTic(params.getFirst("ticId")).orElseThrow(PublicAnalysisBatchService::invalid);
         long size = params.containsKey("size")
-                ? ExplorationIds.parseTic(params.getFirst("size")).orElseThrow(PublicAnalysisBatchService::invalid) : 20;
+                ? CommunityQuery.positive(params.getFirst("size")) : 20;
         if (size > 100) throw invalid();
         String binding = "batch-candidates-v1|" + member + "|" + tic + "|" + size;
         OffsetDateTime afterAt = null;
         Long afterId = null;
         if (params.containsKey("cursor")) {
-            String cursor = params.getFirst("cursor");
-            try {
-                if (cursor == null || cursor.isEmpty() || cursor.length() > 1024) throw invalid();
-                String[] parts = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).split("\\|", -1);
-                if (parts.length != 6 || !String.join("|", java.util.Arrays.copyOf(parts, 4)).equals(binding)) throw invalid();
-                afterAt = OffsetDateTime.parse(parts[4]);
-                afterId = ExplorationIds.parseTic(parts[5]).orElseThrow(PublicAnalysisBatchService::invalid);
-                if (afterAt.getYear() < 1 || afterAt.getYear() > 9999 || afterAt.getNano() % 1000 != 0
-                        || !next(binding, afterAt, afterId).equals(cursor)) throw invalid();
-            } catch (IllegalArgumentException | java.time.DateTimeException e) { throw invalid(); }
+            var position = CommunityQuery.cursor(params.getFirst("cursor"), binding);
+            afterAt = position.at();
+            afterId = position.id();
         }
         stars.requireOpenStarBoard(tic);
         // 먼저 적격 미공개 기록의 신호별 대표를 선택한 뒤 커서와 LIMIT을 적용한다.
@@ -137,16 +128,15 @@ public class PublicAnalysisBatchService {
                 r.getString("user_judgment"))).list();
         boolean more = rows.size() > size;
         var page = rows.subList(0, Math.min(rows.size(), (int) size));
-        String cursor = more ? next(binding, page.getLast().submittedAt(),
+        String cursor = more ? CommunityQuery.next(binding, page.getLast().submittedAt(),
                 ExplorationIds.parse(page.getLast().submissionId(), ExplorationIds.SUBMISSION).orElseThrow()) : null;
         return new Page(List.copyOf(page), cursor, more);
     }
 
-    private static String next(String binding, OffsetDateTime at, long id) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString((binding + "|" + at + "|" + id).getBytes(StandardCharsets.UTF_8));
-    }
     private static Failure failure(String history, ErrorCode code, boolean retryable) {
-        return new Failure(history, "FAILED", new Error(code.name(), code.getDefaultMessage()), retryable);
+        String message = code == ErrorCode.TIC_MISMATCH
+                ? "요청한 별과 같은 별의 분석 기록만 공개할 수 있습니다." : code.getDefaultMessage();
+        return new Failure(history, "FAILED", new Error(code.name(), message), retryable);
     }
     private static BusinessException invalid() { return new BusinessException(ErrorCode.VALIDATION_FAILED); }
 }

@@ -720,6 +720,8 @@ TIC 종료 화면에서 신호별 대표 기록을 검토한 후 호출한다. S
 
 - 인증 회원 본인의 해당 TIC History 중 **공개 이력이 없는** 적격 기록을 먼저 고른다. 제출 당시 `response_snapshot.signal.answerClass=analysis`, `match.status=matched/matched_harmonic/duplicate`와 유효한 같은 별 candidate를 기준으로 한다. 현재 라벨로 재판정하지 않는다.
 - 취소·개별 숨김을 포함해 `published_analyses` 이력이 있는 History와 숨김·삭제된 공식 스레드의 기록은 제외한다. 공개 별·최초 발견 조건은 기존 별 게시판 검사와 같다.
+- 공개 이력 제외는 회원×신호가 아닌 **History 단위**다. 같은 신호를 이미 공개했어도 다른 적격 미공개 History는 대표 후보가 될 수 있다. 새 공개가 추가돼도 고유 신호 성과는 중복 지급하지 않으며 판단 통계는 기존 최신 유효 공개 선택 규칙을 따른다.
+- 정상 제출 경로는 매칭된 History의 저장 스냅샷과 최초 응답을 같은 트랜잭션으로 저장한다. 최초 응답이 없는 기록은 후보 조건에서 제외된다. 다만 후보 쿼리가 `analysis_snapshots`의 존재·무결성을 직접 검사하는 것은 아니므로 구기록·저장 이상까지 `SUBMITTED` 그래프 제공을 보장하지 않는다. 상세·그래프 조회의 오류 및 snapshot 누락 처리는 기존 History 계약을 따른다.
 - 신호별 제출 시각 내림차순, 동률이면 숫자 Submission ID 내림차순의 대표를 선정한 **뒤** 전체 대표를 같은 순서로 정렬하고 커서·페이지 크기를 적용한다. 일반 History 첫 페이지에서만 대표를 고르지 않는다.
 - `size`는 기본 20, 1~100이다. POST의 최대 20개와는 별개다. 커서는 후보 범위·회원·TIC·size에 묶이며 다른 목록·필터의 커서는 400이다. 필수 TIC 누락·잘못된 형식·중복/미지원 query parameter도 400이다.
 - `items` 항목은 `historyId`, `submissionId`, `ticId`, `candidateId`, `submittedAt`, `userJudgment`를 제공한다. 페이지는 `nextCursor`와 `hasMore`를 포함한다. 빈 결과는 `items:[]`, `nextCursor:null`, `hasMore:false`다. 상세·그래프는 기존 개인 History API를 사용한다.
@@ -734,6 +736,8 @@ TIC 종료 화면에서 신호별 대표 기록을 검토한 후 호출한다. S
 요청은 정확히 `ticId` 문자열과 `items` 배열을 받으며 각 항목은 `historyId` 문자열만 받는다. 항목 수는 **1~20개로 확정**한다. 잘못된 JSON·필드 타입·ID 형식·추가 필드·빈 배열·상한 초과·중복 History·본인 기록의 같은 신호 복수 선택은 공개 시작 전 전체 400이며 저장하지 않는다. 중복 신호 검사는 접근 가능한 본인 History/Submission만 조회한다. 타인·없는 기록의 신호 정보를 중복 오류로 노출하지 않는다.
 
 전체 형식 검증 후 입력 순서대로 기존 단건 `publish`의 외부 프록시를 호출한다. 조정 서비스는 바깥 트랜잭션을 중단하고 각 항목을 독립 트랜잭션으로 확정한다. 존재·소유권·TIC·공개 자격·별/스레드 상태 오류는 해당 항목만 실패한다. 단건과 같은 `RESOURCE_NOT_FOUND`/`FORBIDDEN` 계약을 유지하며 다른 TIC는 `TIC_MISMATCH`다.
+
+일괄 공개의 `TIC_MISMATCH` 메시지는 `요청한 별과 같은 별의 분석 기록만 공개할 수 있습니다.`다. 일반 첨부 경로의 메시지는 변경하지 않는다.
 
 ```json
 {

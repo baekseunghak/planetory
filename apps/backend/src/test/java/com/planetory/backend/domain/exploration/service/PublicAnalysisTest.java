@@ -786,6 +786,8 @@ class PublicAnalysisTest {
             assertEquals("FORBIDDEN", result.get(0).path("error").path("code").asText());
             assertEquals("RESOURCE_NOT_FOUND", result.get(2).path("error").path("code").asText());
             assertEquals("TIC_MISMATCH", result.get(3).path("error").path("code").asText());
+            assertEquals("요청한 별과 같은 별의 분석 기록만 공개할 수 있습니다.",
+                    result.get(3).path("error").path("message").asText());
             assertEquals("PUBLICATION_NOT_ELIGIBLE", result.get(4).path("error").path("code").asText());
             assertEquals(1, count("published_analyses", "user_id", member));
         }
@@ -832,7 +834,17 @@ class PublicAnalysisTest {
             jdbc.update("UPDATE submissions SET response_snapshot=NULL WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", number(missing));
             StarDiscoveryService target = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(discovery);
             doThrow(new IllegalStateException("private DB detail")).when(target).discoverByAchievement(anyLong(), anyLong(), any());
-            var result = publish(List.of(first, missing));
+            var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(
+                    com.planetory.backend.domain.post.service.PublicAnalysisBatchService.class);
+            var logs = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+            logs.start(); logger.addAppender(logs);
+            tools.jackson.databind.JsonNode result;
+            try {
+                result = publish(List.of(first, missing));
+                assertTrue(logs.list.stream().anyMatch(event -> event.getThrowableProxy() != null
+                        && event.getThrowableProxy().getStackTraceElementProxyArray().length > 0));
+            } finally { logger.detachAppender(logs); logs.stop(); }
+            assertFalse(result.toString().contains("private DB detail"));
             assertEquals("INTERNAL_ERROR", result.get(0).path("error").path("code").asText());
             assertEquals("DEPENDENCY_UNAVAILABLE", result.get(1).path("error").path("code").asText());
             assertFalse(result.get(0).path("retryable").asBoolean());
@@ -893,6 +905,11 @@ class PublicAnalysisTest {
             jdbc.update("UPDATE submissions SET created_at='2026-09-01T00:00:00Z' WHERE user_id=?", member);
             var first = batches.candidates(member, params("1", null));
             assertTrue(first.hasMore()); assertEquals(latest, first.items().getFirst().historyId());
+            assertTrue(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM analysis_snapshots WHERE history_id=?)", Boolean.class, number(latest)));
+            assertNotNull(histories.detail(member, latest).submission());
+            jdbc.update("DELETE FROM analysis_snapshots WHERE history_id=?", number(latest));
+            assertEquals(latest, batches.candidates(member, params("1", null)).items().getFirst().historyId());
+            assertNull(histories.graph(member, latest, "SUBMITTED").snapshot());
             var last = batches.candidates(member, params("1", first.nextCursor()));
             assertEquals(second, last.items().getFirst().historyId()); assertFalse(last.hasMore());
             assertEquals(2, batches.candidates(member, params("100", null)).items().size());
@@ -900,7 +917,9 @@ class PublicAnalysisTest {
             error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("2", first.nextCursor())));
             error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member(), params("1", first.nextCursor())));
             publications.publish(member, latest);
-            assertNotEquals(latest, batches.candidates(member, params("20", null)).items().getFirst().historyId());
+            var remaining = batches.candidates(member, params("20", null));
+            assertNotEquals(latest, remaining.items().getFirst().historyId());
+            assertTrue(remaining.items().stream().anyMatch(item -> item.candidateId().equals("c-" + candidate)));
             mvc.perform(get("/api/v1/public-analyses/batch-candidates").session(session(member)).param("ticId", Long.toString(tic)))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].submissionId").isString())
                     .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
@@ -936,6 +955,16 @@ class PublicAnalysisTest {
                 error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params(size, null)));
             for (String cursor : List.of("", "garbage", "a".repeat(1025)))
                 error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("20", cursor)));
+            String binding = "batch-candidates-v1|" + member + "|" + tic + "|20|";
+            String legacyCursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    (binding + "2026-09-01T00:00Z|1").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            assertDoesNotThrow(() -> batches.candidates(member, params("20", legacyCursor)));
+            for (String raw : List.of("feed-v1|" + tic + "||20|2026-09-01T00:00Z|1",
+                    binding + "2026-09-01T00:00:00.000000001Z|1", binding + "0000-09-01T00:00Z|1",
+                    binding + "2026-09-01T00:00Z|01", binding + "2026-09-01T00:00Z|9223372036854775808")) {
+                String cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("20", cursor)));
+            }
             var extra = params("20", null); extra.add("userId", "1");
             error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, extra));
             var duplicate = params("20", null); duplicate.add("ticId", Long.toString(tic));
