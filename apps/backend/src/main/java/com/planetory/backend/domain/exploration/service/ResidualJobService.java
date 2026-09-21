@@ -3,6 +3,7 @@ package com.planetory.backend.domain.exploration.service;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +29,7 @@ import com.planetory.backend.global.error.ErrorResponse.FieldError;
  * 응답을 잃어도 재호출이 곧 복구다(7.1절).
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ResidualJobService {
 
@@ -68,7 +70,7 @@ public class ResidualJobService {
             // 위 확인과 등록 사이에 다른 회원의 같은 계산이 끝났다. 저장소가 그것까지 보고 답한다.
             case Enqueued.Cached ignored -> cached(target);
             case Enqueued.Created(Job job, int queuePosition) -> {
-                runner.start(job);
+                start(runner, job);
                 yield accepted(job, queuePosition, target);
             }
             case Enqueued.Merged(Job job, int queuePosition) -> accepted(job, queuePosition, target);
@@ -102,6 +104,26 @@ public class ResidualJobService {
                 job.attempt(), job.timeline(), job.failure(), completed ? job.target() : null,
                 finished ? null : store.queuePosition(jobId).orElse(null), properties.pollAfterSeconds());
         return new Answer<>(body, true, analysis.currentBundleId(job.ticId()).orElse(null));
+    }
+
+    /**
+     * 계산을 시작시킨다. <b>시작하지 못하면 작업을 끝낸다.</b>
+     *
+     * <p>등록만 해 두고 시작에 실패하면 아무도 진행시키지 않는 {@code QUEUED}가 남는다. 같은 목표의
+     * 재요청은 그 작업에 병합돼 실행기를 다시 부르지 않으므로, 화면은 오지 않을 결과를 만료까지
+     * 기다린다. 실패로 끝내면 병합 대상에서 빠져 다음 요청이 새로 시작한다.
+     *
+     * <p>회원에게는 실행기의 예외를 보이지 않는다. 화면이 할 일은 잠시 뒤 다시 요청하는 것뿐이다.
+     */
+    private void start(ResidualComputeRunner runner, Job job) {
+        try {
+            runner.start(job);
+        } catch (RuntimeException e) {
+            log.warn("잔차 작업 {}의 계산을 시작하지 못해 실패로 끝냅니다.", job.jobId(), e);
+            store.fail(job.jobId(), job.attempt(), new ResidualJobStore.Failure(ResidualJobStore.QUEUED,
+                    "START_FAILED", "계산을 시작하지 못했습니다.", true));
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
     }
 
     /** 캐시는 곧바로 쓸 수 있으니 200이다. */
