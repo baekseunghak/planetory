@@ -169,3 +169,4 @@
 | 2026-09-20 | 별 가시 영역·속성 재사용과 동일 픽셀 배경 캐시 | S15P21C206-215 | 100000, WebGL, triangle strip, RGBA8, framebuffer, Firefox, p95, DPR | 개선·회귀 검증 완료, 성능 전체 인수 진행 중 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 온라인 잔차 작업 요청·조회 API와 계산 기반 연결점 | S15P21C206-147 | residual-jobs, RESIDUAL_QUEUE_FULL, activeJobId, cacheHit, pollAfterSeconds, ResidualComputeRunner, ResidualJobStore, 503 | 구현 완료·연동 대기 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 잔차 작업 리뷰 반영: 판 교체 헤더와 사라지는 대기 순번 | S15P21C206-147 | X-Current-Bundle, queuePosition, attempt, jobId 갈아타기, DEPENDENCY_UNAVAILABLE 문구, enqueue 캐시 확인 | 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 작업 2차 리뷰 반영: 시작 실패·TIC 코드·중복 후보 | S15P21C206-147 | runner.start 실패, 고아 QUEUED, START_FAILED, STAR_NOT_PUBLISHED, curveStep 중복 제거 | 검증 완료 | [2026-09-20](2026-09-20.md) |
