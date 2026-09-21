@@ -1,181 +1,202 @@
-# 고조파·판 사이 후보 동일성 실험 (112)
+# 고조파·판 사이 후보 동일성 검증 (112)
 
-상태: **4별 비교·추가 배율 실험 완료, 계약 검토안 v1·미승인**. Jira `S15P21C206-112`.
-상위: [데이터 문서](README.md). 입력 근거: [111 확정 결과](tess-bls-iteration-benchmark.md).
-운영 구현은 122이며 이 문서의 제안값을 자동으로 운영에 적용하지 않는다.
+상태: **계약 검토안 v3·일반 MR 리뷰 준비, 강재민 승인 전**.
+Jira: [S15P21C206-112](https://ssafy.atlassian.net/browse/S15P21C206-112).
+상위: [데이터 문서](README.md). 입력: [111 확정 결과](tess-bls-iteration-benchmark.md).
 
-## 입력 감사
+## 범위와 완료 판단
 
-인계 ZIP 안의 `review-111-c68c1e2.zip` SHA-256은
-`c5741b705981aa0eda9434eaa83f908d93765ea57ed079cfccf3eae8580a1879`와 일치했다.
-내부 checksums.json, 8개 manifest의 코드 c68c1e21 및 git_dirty=false를 검증했다.
-1,127곡선, QA 실패 380곡선, 채택 단계 569개, 원본 재검증 실패 0개를 재집계했다.
-같은 곡선 안의 채택 후보 쌍은 20개다. 기존 matches에서 미회수로 분류된 단계는
-물리적 오탐 정답이 아니며, 원본 real 곡선에는 주입 정답 자체가 없다.
+112는 고조파 병합 규칙·판 사이 후보 ID 유지/추가/retired 기대 결과를 검증하고
+계약 승인을 받는 분석 작업이다. Jira 원문은 운영 커널·retired UI/API 구현을 제외한다.
+운영 구현은 122이며, 실험 구현을 운영 채택·Jira 완료로 표현하지 않는다.
+일반 MR은 아래 구체적인 계약안의 승인을 요청하는 용도다. MR 생성 전에 리뷰어 승인을
+이미 받아야 하는 것은 아니다. 리뷰어가 계약을 거절하거나 변경을 요청하면 수정한다.
 
-주기비가 가까운 유리수인지는 진단으로만 기록한다. 주기비·epoch 일치만으로
-실제 공명 행성 두 개를 합쳐서는 안 된다. 기존 111의 임시 고조파 규칙은 수정하지 않았다.
+| Jira 완료 조건 | 제출 근거 | 현재 상태 |
+| --- | --- | --- |
+| 직접·P/2·2P·동률·경계 중복률과 버전 있는 규칙 | 아래 v3 규칙, 111 쌍 감사, 합성 병합·경계 테스트 | 검토 자료 준비 |
+| 두 Bundle 유지·추가·retired 및 period/epoch 범위 승인 | 실제 4별 비교, 합성 유지/추가/retired, 허용값 비교 | 강재민 승인 대기 |
+| D05-1 확정 후보 재검증과 D06·D08·D14-2 공동 계약 | 최신 승인 입력 재감사, 이 문서의 공통 인계 표 | 재검증 완료·계약 승인 대기 |
+
+## 계약 검토안 v3
+
+버전: `candidate_identity_v3_review`. 기존의 v1·v2를 대체하는 **제안**이다.
+코드: [candidate_identity.py](../../experiments/tess-bench/tess_bench/candidate_identity.py).
+
+| 상황 | 제안 동작 | 보존할 정보 |
+| --- | --- | --- |
+| ID 부여 전 period·duration·depth가 정확히 같고 epoch만 정수 주기 이동 | `group_exact_models`로 같은 모델 기록을 한 그룹으로 정리 | 모든 원시 peak, 대표 기록, `exact_model_copy` 중복 목록 |
+| 기존 DB ID가 있는 기록 | 위 중복 정리 함수는 거절. 기존 ID를 합치거나 삭제하지 않음 | 기존 ID·성과·히스토리 연결 |
+| 판 사이 직접 대응이 지속시간 0.5 이내이고 유일한 1:1 | 기존 ID 유지 | 새 파라미터·갱신 Bundle·기존 ID |
+| 완전한 판에서 대응도 의심 관계도 없는 새 후보 | 신규 ID 할당 대상으로 반환 | 원시 후보·생성 Bundle |
+| 완전한 판에서 대응도 의심 관계도 없는 이전 후보 | retired 대상으로 반환. 삭제하지 않음 | 기존 ID·과거 파라미터·히스토리 |
+| 동률·일대다·다대일 | `ambiguous`로 전체 ID 변경 보류 | 대응 근거·원시 후보 |
+| P/4·P/3·P/2·2P·3P·4P 의심 관계 | `possible_alias`로 보류. 주기비만으로 병합하지 않음 | 의심 배율·주기·epoch·duration |
+| 한 판 안에 미해결 직접 겹침·고조파 의심 쌍 | `within_bundle_ambiguous`로 보류 | 쌍별 근거. A≈B·B≈C만으로 A/B/C를 묶지 않음 |
+| QA 실패·불완전 종료·원본 재검증 실패 | `incomplete`로 모든 유지/추가/retired 적용 보류 | 이전 공개 판과 실패 사유 |
+
+정확한 모델 기록 중복 정리는 물리적 행성 수를 확정하지 않는다. 원시 peak 식별자 순으로
+대표 **기록**을 선택하며 서로 다른 추정값에 허용오차를 적용해 강제로 같은 모델로 만들지 않는다.
+`review_candidates`의 `display_representative`도 검토 표시 순서일 뿐이다.
+원본 재검증과 유한한 양수 original_snr로 순서를 정하고 동률은 별도로 남긴다.
+검토 화면 순서를 고유 candidate ID나 물리적 대표 공전주기로 사용하지 않는다.
+
+**자동 P/2·2P 병합의 운영 기본값은 이 제안에서 활성화하지 않는다.** 아래 정량 실험은
+병합이 가능한 극히 제한된 조건과 실패 범위를 보이는 비교 대상이다. 이를 승인된
+`candidate_aliases`로 자동 변환하지 않는다. 이 보류 정책을 계약으로 수용할지가 MR의 명시적인
+승인 요청이며, 자동 병합이 운영에서 완성됐다는 주장으로 승인받지 않는다.
+
+### 직접 동일성 식
+
+관측 구간은 두 판의 시작 최솟값부터 종료 최댓값까지다. 각 후보를 기준으로 구간 중앙
+근처 transit에 epoch를 정수 주기 이동하여 맞춘다. 중심 차이에 구간 끝까지의 보수적
+누적 주기 오차를 더하고 작은 쪽 duration으로 나눈다. **양방향 계산 중 큰 값**을 사용한다.
+period·epoch·각 duration·구간이 유한해야 하고 각 duration은 자신의 주기보다 작아야 한다.
+계산식과 단위 변환은 위 코드의 `distance` 한 곳에서 관리한다.
+
+v1은 4.006일/4일, epoch 0, duration 3시간, 구간 0~40일에서 방향에 따라
+0.528/0.480을 반환했다. v2부터 양방향 최대값으로 수정했다. 문턱 0.5와 정확히 같으면
+통과하며 이를 초과하면 직접 대응하지 않는다. 서로 다른 epoch 주기 표기·경계 안/밖·
+비정상 duration을 회귀 테스트로 확인한다. 이 식은 사용자 제출 매칭 D20의 변경이 아니다.
+
+### D06·D08·122 공통 인계
+
+| 소비자 | 적용할 동일한 계약 |
+| --- | --- |
+| D06 모델 | 원시 peak/모델 기록 중복 정리와 물리적 고유 신호 판정을 구분한다. 모델·alias 근거를 보존하며 검토 표시 순서로 ID를 만들지 않는다. |
+| D08 외부 조인 | period·외부 ID를 candidate ID로 대신하지 않는다. 확정된 내부 ID에 외부 참조를 연결하며 모호한 관계는 조인 확정으로 전달하지 않는다. |
+| D14-2 / 122 | 완전성 확인 → ID 부여 전 모델 기록 정리 → 판 내부 모호성 검사 → 기존 ID와 유일 직접 대응 → 유지/추가/retired 제안 순으로 처리한다. 단계 사이의 실제 연결·원자적 적용은 122 구현 범위다. |
+| Publisher·DB | retired는 삭제가 아니다. 부분 실패·모호한 판으로 기존 공개 판을 교체하지 않는다. `publishable`은 실험상의 준비 여부이며 운영 승인 표시가 아니다. |
+
+DB 열은 [서비스 ERD](../architecture/database-erd.md)의 `candidates`, `candidate_aliases`,
+`candidate_status_history`를 따른다. 이 MR은 DB·API·운영 커널을 수정하지 않는다.
+실험 ID `fixture-*`, source peak ID와 DB ID를 구분하고 실제 신규 ID 할당은 소비자가 수행한다.
+
+## 111 확정 후보 감사와 중복률
+
+승인 ZIP `review-111-c68c1e2.zip` SHA-256:
+`c5741b705981aa0eda9434eaa83f908d93765ea57ed079cfccf3eae8580a1879`.
+내부 checksums.json, 8개 manifest의 코드 `c68c1e21`·git_dirty=false를 확인했다.
+1,127곡선, QA 실패 380곡선, 채택 569개, 원본 재검증 실패 0개,
+같은 곡선의 채택 후보 쌍 20개다. 미매칭은 물리적 오탐 정답이 아니다.
+
+[배율 비교 실행기](../../experiments/tess-bench/tess_bench/candidate_ratio_sweep.py)는
+111의 기존 `is_duplicate` 산식으로 고정된 20쌍을 검사한다. 전체 탐색을 다시 실행한
+회수율이 아니다. 기본 집합의 직접·P/2·2P 각 표지도 0/20이다.
+
+| 배율 집합 | 표시 쌍/20 | 양쪽 주입 정답 매칭 | 미매칭 단계 포함 |
+| --- | ---: | ---: | ---: |
+| 1/2,1,2 | 0 (0%) | 0 | 0 |
+| 1/4,1/3,1/2,1,2,3,4 | 4 (20%) | 0 | 4 |
+| 관찰 배율 19개 | 4 (20%) | 0 | 4 |
+| 분자·분모 1~9 전체 기약 비율 | 11 (55%) | 6 | 5 |
+
+따라서 3·4배는 좁은 의심 표지에만 사용하며 더 넓은 자동 차단은 미채택한다.
+최신 v3 원본 정제곡선 재구성에서도 20쌍 모두 정렬된 2배 주기 조건 밖으로
+자동 병합 0건이다. **실제 고조파 양성 사례가 없어 병합 성능 입증이 되지는 않는다.**
+111의 BLS 탐색 자체는 재실행하지 않았고 raw FITS hash를 승인 입력과 대조했다.
 
 ## 실제 두 Bundle 비교
 
-TOI-270 원본 FITS의 Sector 3·4를 A, Sector 3·4·5를 B로 실행했다.
-기존 checksum 검증 로더·전처리·111 반복 루프를 재사용했다. realclean 주입 결과가 아닌
-실제 관측 곡선이며 양쪽 모두 3개 후보, no_quality_peak 종료, 원본 재검증 통과다.
-실행 전 입력·코드·설정·환경을 plan에 고정하고 종료 후 변조 여부를 확인했다.
+별마다 등록된 마지막 Sector를 제외한 A와 전체 Sector B를 비교한다.
+같은 전처리·111 설정으로 실행한 v1 Bundle checksum을 검증하고 v3 동일성 식으로 다시 비교했다.
 
-| 대응 후보 | A 주기(day) | B 주기(day) | 제안식 오차/지속시간 |
-| --- | --- | --- | --- |
-| 0 | 5.6606641271 | 5.6603212600 | 0.053096 |
-| 1 | 11.3806337812 | 11.3805842185 | 0.004337 |
-| 2 | 3.3608719418 | 3.3601822976 | 0.317236 |
+| 별 | A Sector | B Sector | 후보 수 A/B | 결과 |
+| --- | --- | --- | --- | --- |
+| TOI-270 | 3,4 | 3,4,5 | 3/3 | 양쪽 no_quality_peak, 0.5에서 ID 3개 유지 |
+| TOI-451 | 4 | 4,5 | 0/0 | 양쪽 no_quality_peak, 빈 결과 일치 |
+| WASP-62 | 2,3,4 | 2,3,4,8 | 1/1 | 양쪽 removal_qa_failed, ID 변경 보류 |
+| pi Men | 4 | 4,8 | 0/0 | 양쪽 no_quality_peak, 빈 결과 일치 |
 
-제안식은 두 판 관측 구간 합집합의 중앙 부근에서 epoch를 정수 주기만큼 이동하고,
-epoch 차이와 구간 끝까지의 보수적 누적 주기 오차를 더해 두 지속시간 중 작은 값으로 나눈다.
-배율 1의 직접 대응만 ID 유지에 사용한다. 허용값 0.125·0.25는 2개 유지/1개 추가·retired,
-0.5·1.0은 3개 유지다. 이 별에서는 0.5가 더 작은 통과값이지만 최적값·일반화 증거로 보지 않는다.
+TOI-270 대응 오차/지속시간은 0.053096, 0.004337, 0.317236이다.
+0.125·0.25는 2개 유지/1개 추가·retired, 0.5·1.0은 3개 유지다.
+이 표본에서 동일 결과를 내는 더 작은 0.5를 제안한다. 전역 최적값·독립 평가 증거는 아니다.
+WASP-62 오차 0.070690도 QA 실패 판을 공개할 근거가 아니다.
+양성 ID 유지 근거는 TOI-270이며 '4별 양성 유지 성공'으로 표현하지 않는다.
+유지·추가·retired 동시 발생은 별도 합성 fixture로 검증했다.
 
-## 실험용 생명주기 제안
+## 자동 고조파 병합 비교 실험 — 운영 미채택
 
-- 직접 일치가 유일한 1:1일 때 기존 ID를 유지한다. ID는 실수 파라미터 해시로 만들지 않는다.
-- 다대일·일대다·동률이면 ambiguous로 판 전환을 보류하며 임의로 가장 가까운 후보를 고르지 않는다.
-- 검토안 v1은 P/4·P/3·P/2·2P·3P·4P 관계에서 어느 한쪽이라도 직접 대응이 없으면 possible_alias로 보류한다. 기존 후보가 이미 직접 대응됐어도 새 고조파 피크를 자동 추가하지 않는다. 주기 환산만으로 ID를 합치거나 retired시키지 않는다.
-- 다른 후보의 추가·retired는 완전한 성공 판에서만 판정한다. 호출자는 `new_complete`를 명시해야 하며 True가 아니면 incomplete로 모든 생명주기 변경을 보류한다. 부분 계산·실패 판을 빈 후보표로 전달하면 안 된다.
-- retired는 삭제가 아니다. 실제 DB ID 할당·status 변경은 이 실험에서 수행하지 않는다.
-- 함수의 publishable은 실험상의 모호성 여부만 나타내며 운영 승인·스키마 통과를 뜻하지 않는다.
+### 이전 조건부 깊이 SNR 실험
 
-## 실행·산출물
+80일·2분 간격, 주기 4일/8일, 깊이 2000ppm, 잡음 200ppm, seed 0~9로
+단일·강한 두 신호·약한 두 신호·동일 창·마스킹·균등 주부극소 등 80건을 비교했다.
+강한 두 신호는 두 조건부 SNR 모두 7 이상이나, 단일 신호와 약한 2ppm 두 번째 신호는
+같이 SNR 미달이다. SNR 미달만으로 병합하면 약한 두 신호를 합친다.
+111의 20쌍은 미매칭 단계 포함 7쌍까지 모두 두 조건부 SNR이 7 이상이었다.
+따라서 이 SNR만으로 병합·독립 신호를 확정하는 규칙은 미채택했다.
 
-코드: [입력 감사](../../experiments/tess-bench/tess_bench/candidate_identity_audit.py),
-[두 Bundle 실행](../../experiments/tess-bench/tess_bench/candidate_bundle_regression.py),
-[동일성 제안](../../experiments/tess-bench/tess_bench/candidate_identity.py).
-결과는 Git 제외 경로 `experiments/tess-bench/results/candidate-identity-112/`에 보존한다.
-`audit-111.json`, `two-bundles-v1/plan.json`, `bundle-A.json`, `bundle-B.json`, `manifest.json`,
-`identity-sweep.json`은 초기 실측 자료다. 두 Bundle JSON의 step NaN은 기존 실험 표기이며 Gold 계약이 아니다.
+### 관측 오차를 포함하는 동등성 실험
+
+`harmonic_equivalence`와 `merge_harmonic_pair`는 명시적으로 전달한 ppm 한계 아래에서만
+**광도 모델의 동등성**을 판정하는 별도 실험이다. 기본 ppm 값은 없으며 위 v3 생명주기
+함수에 자동 연결하지 않는다. `physical_period_confirmed=false`를 항상 보존한다.
+
+정렬된 2배 주기·같은 duration·중첩 transit 창·양쪽 원본 검증·유효한 저장 depth를 요구한다.
+각 긴 주기 구간에서 짧은 주기에만 있는 transit와 공통 transit의 깊이 차이를 계산한다.
+구간별 최소 5점·최소 4개 구간이 필요하고, 구간 자체가 사라지거나 구분 창이 없으면 보류한다.
+구간별 평균의 표준오차와 구간 사이 산포를 사용한 보수적 오차 점수를 깊이 차이 최댓값에 더한다.
+모든 구간의 차이와 저장 depth의 차이가 한계 안일 때만 짧은 **광도 주기**를 대표로 묶고
+긴 주기는 raw peak와 함께 alias로 보존한다. 물리적 공전주기나 행성 수를 확정하지 않는다.
+
+차이 검정의 실패를 동등성 증거로 쓰지 않고 구간 전체가 사전 한계 안인지 검사하는 발상은
+[NIST의 동등성 검정 설명](https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.2106.pdf)을 참고했다.
+현재 오차 점수는 이 TESS 문제에서 신뢰수준이 검증된 공식 검정이 아니다. 구간 간 상관,
+비정규 잡음·모델 오차·실제 선택된 BLS 피크의 불확실성이 남는다.
+
+교정 seed 0~19에서 한계 0.1·0.25·0.5·1ppm을 비교했다. 고정밀 단일 신호의 19/20 이상
+병합과 2ppm 이상 두 번째 신호 오병합 0건을 만족하는 최소값 0.25ppm을 선택했다.
+최종 코드에서 새 seed 1000~1079를 사용했다. 같은 합성 분포의 새 잡음 반복이며 독립 천체 평가가 아니다.
+원본 검증 플래그는 합성 입력의 가정이며 BLS 전체 탐색을 통과한 관측 후보라는 뜻이 아니다.
+
+| 최종 검증 사례 | 건수 | 병합 | 해석 |
+| --- | ---: | ---: | --- |
+| 단일 box, 잡음 0.1ppm | 80 | 80 | 극고정밀 합성에서만 양성 근거 |
+| 단일 box, 잡음 200ppm | 80 | 0 | 불확실성 때문에 전부 보류 |
+| 2ppm 두 번째 신호, 잡음 0.1ppm | 80 | 0 | 깊이 차이 구분 |
+| 2ppm 두 번째 신호, 잡음 200ppm | 80 | 0 | 불확실성 때문에 전부 보류 |
+| 1000ppm 두 번째 신호, 잡음 200ppm | 80 | 0 | 깊이 차이 구분 |
+| 구분 창 마스킹 | 80 | 0 | 전부 보류 |
+| 상관잡음 20ppm 추가 | 80 | 0 | 전부 보류 |
+| 사다리꼴 신호 | 80 | 0 | 모델/관측 차이로 보류 |
+| 균등 주·부극소와 같은 box 곡선 | 80 | 80 | 광도 반복주기만 일치, 물리적 주기 비식별 |
+| **0.05ppm 실제 두 번째 신호** | **80** | **80** | **한계 미만 신호를 합침. 물리적 오병합 0이 아님** |
+
+교정 200곡선×4한계=800회, 최종 검증 800곡선×선택 한계=800회, 총 1,600회 판정이다.
+0.25ppm을 운영에 채택하지 않는 이유는 일반 잡음·사다리꼴에서 양성 병합을 입증하지 못했고,
+한계 미만 실제 신호를 병합하며, 실제 111 쌍에 적용 가능한 양성 사례가 없기 때문이다.
+성공하는 극고정밀 사례만 골라 자동 병합 검증 완료라고 보고하지 않는다.
+
+## 실행·검증 자료
+
+최신 산출물은 Git 제외 경로 `experiments/tess-bench/results/candidate-identity-112/review-v3/`다.
+`equivalence`의 plan·selection·evidence·summary·manifest,
+`approved-111`의 승인 입력 재구성 100건·20쌍 동등성 검사,
+`four-star-comparison`의 저장 Bundle 재비교를 함께 보존한다.
+입력·코드·설정 hash를 검증했으며 원본 FITS와 대용량 결과는 Git에 넣지 않는다.
 
 ```powershell
 cd experiments/tess-bench
-uv run --locked python -m tess_bench.candidate_identity_audit --source results/candidate-identity-112/source-111 --output results/candidate-identity-112/audit-new.json
-uv run --locked python -m tess_bench.candidate_bundle_regression --output results/candidate-identity-112/two-bundles-new
-uv run --locked pytest tests/test_candidate_identity.py -q
+uv run --locked pytest tests/test_candidate_identity.py tests/test_iterate.py tests/test_iterate_diagnose.py -q
+uv run --locked python -m tess_bench.candidate_harmonic_benchmark --equivalence --output results/candidate-identity-112/equivalence-new
+uv run --locked python -m tess_bench.candidate_harmonic_benchmark --source results/candidate-identity-112/source-111 --margin-ppm .25 --output results/candidate-identity-112/approved-new
+uv run --locked python -m tess_bench.candidate_bundle_regression --compare-runs results/candidate-identity-112/review-v1/toi270 results/candidate-identity-112/review-v1/toi451 results/candidate-identity-112/review-v1/wasp62 results/candidate-identity-112/review-v1/pi_men --output results/candidate-identity-112/comparison-new
 ```
 
-## 검증과 남은 완료 조건
+**69 passed**: 동일성·중복·병합 경계 37개와 기존 반복 제거 32개다.
+판 내부 모호성 우회 차단, epoch 이동과 양방향 경계, 정확한 모델 중복 정리,
+기존 DB ID 축약 거절, 대표·alias·raw 보존, 병합 후 두 판 ID 유지,
+한계 미만 오병합의 명시적 재현과 유지/추가/retired·불완전 판을 포함한다.
+Git 검사는 사용자가 실행하며 코드·문서 정적 검증과 구분한다.
 
-최신 경계·통합 테스트 18개와 기존 반복 제거 관련 테스트 32개, 총 50개가 통과했다.
-epoch 정수 주기 이동, 허용오차 경계 안/밖, alias 보류, 추가·retired,
-일대다/다대일 모호성, 불완전 판 보류, 잘못된 입력과 감광 창 식별 불가를 확인했다.
-실제 두 Bundle 계산 완료와 동일성 규칙 확정은 구분한다.
-아래 감광 창 진단은 실행했으나 자동 병합을 정당화하지 못했다.
-추가 배율과 여러 별의 비교는 아래와 같이 수행했다. 단순 box 이외의 모델 오차·관측 상관잡음에
-견디는 자동 고조파 병합은 검증하지 못했다. 이를 검토안의 명시적 한계로 남긴다.
-112 완료 조건의 강재민 스키마·계약 승인은 아직 받지 않았다. 122 운영 규약으로 확정 인계하지 않는다.
+## 변경 이력과 승인 요청
 
-## 고조파 오병합 검증 — 자동 병합 문턱 미채택
+v1은 직접 동일성·고조파 의심 표지를 제안했고, v2는 방향 비대칭과 판 내부 모호성 우회를 수정했다.
+v3는 정확한 모델 기록 중복 정리와 자동 병합 비교 실험·공통 인계 계약을 추가했다.
+이전 `review-v1`, `review-v2`, `equivalence-v1`, `equivalence-v2`는 덮어쓰지 않고 보존한다.
+최종 코드가 고정된 `review-v3`와 이전 진단 실행을 구분한다.
 
-[실행기](../../experiments/tess-bench/tess_bench/candidate_harmonic_benchmark.py)는
-독립적인 두 box 창과 절편을 원본 정제 flux에 동시에 적합해 조건부 깊이·표준오차·SNR을 기록한다.
-기간·epoch·duration은 고정하며 후보 검색이나 운영 제거 모델 변경은 하지 않는다.
-각 창 단독·공통·바깥 관측점 수를 남기고 설계행렬 rank가 부족하면 unidentifiable로 반환한다.
-이 SNR은 잔차의 표준편차와 독립 잡음 가정에 기초한 실험 진단이며 BLS SNR과 다른 값이다.
-상관잡음·box 모델 오차의 불확실성을 충분히 반영하지 못하므로 유의성의 과학적 확정값이 아니다.
-
-합성은 80일·2분 간격, 잡음 sigma=200ppm, seed 0~9다. 기본 신호는 4일/3시간/2000ppm,
-강한 두 번째 신호는 1000ppm, 약한 두 번째는 2ppm이다. 두 신호 주입은 모델 곱셈으로 생성했다.
-균등 깊이 주·부극소 사례는 이 box 관측만으로 4일 단일 신호와 동일하게 구성한 비식별 예시이며
-실제 식쌍성 파형이나 분류 성능 검증이 아니다.
-
-| 사례 | 실행 수 | 두 조건부 SNR 모두 3 이상 | 5 이상 | 7 이상 | 해석 |
-| --- | ---: | ---: | ---: | ---: | --- |
-| 단일 신호 + 2P 피크 | 10 | 0 | 0 | 0 | 추가 깊이 지지 없음 |
-| 실제 두 신호, 정확한 2:1·같은 epoch | 10 | 10 | 10 | 10 | 강한 추가 깊이 구분 |
-| 두 신호, epoch 다름 | 10 | 10 | 10 | 10 | 강한 두 신호 지지 |
-| 두 신호, 4일/4.03일 | 10 | 10 | 10 | 10 | 가까운 두 신호 지지 |
-| 실제 약한 두 번째 신호 | 10 | 0 | 0 | 0 | 지지 없음이 동일 신호의 증거는 아님 |
-| 동일한 관측 창 | 10 | 0 | 0 | 0 | 전부 unidentifiable |
-| 서로 다른 창 부분을 마스킹 | 10 | 0 | 0 | 0 | 전부 unidentifiable |
-| 균등 주·부극소 비식별 예시 | 10 | 0 | 0 | 0 | 대표 공전주기 확정 불가 |
-| 111 실제 채택 후보 쌍 | 20 | 20 | 20 | 20 | 자동 독립 신호 판정에도 불충분 |
-
-111 쌍 중 7개는 적어도 한 단계가 기존 주입 정답 매칭에서 미회수로 분류됐다.
-그 쌍까지 모두 SNR 7을 넘었으므로 높은 조건부 SNR만으로 독립 신호라고 확정하지 않는다.
-반대로 SNR 미달을 자동 병합 근거로 쓰면 이 합성의 약한 두 신호 10건을 모두 오병합한다.
-비식별 20건을 alias로 간주하는 것도 근거가 없다. 자동 병합은 비활성화했으며,
-이를 ‘오병합률 0으로 검증된 병합 알고리즘’으로 표현하지 않는다.
-
-111 입력은 승인 ZIP의 고정 후보를 유지하고 현재 코드로 해당 20개 쌍의 원본 정제곡선만 재구성했다.
-raw FITS checksum을 승인 manifest와 대조하고 코드·설정·참조표·입력·환경을 실행 전 plan에 기록했다.
-111의 전체 BLS 탐색은 재실행하지 않았다. 역사적 환경의 비트 단위 재현이나 독립 정답 세트는 아니다.
-최신 결과는 `results/candidate-identity-112/harmonic-v3/`의 plan·evidence·summary·manifest다.
-
-```powershell
-uv run --locked python -m tess_bench.candidate_harmonic_benchmark --source results/candidate-identity-112/source-111 --output results/candidate-identity-112/harmonic-new
-```
-
-초기 제안에서 직접 대응된 기존 후보의 고조파가 새 후보로 추가되는 누락을 실패 테스트로 재현했다.
-어느 한쪽이라도 직접 대응이 없으면 alias 검사를 하도록 수정했다. 절반 주기 epoch가 다른 통과를
-가리킬 수 있으므로 possible_alias 보류는 주기 오차로 넓게 검사하며, 실제 병합에는 사용하지 않는다.
-
-## 여러 별의 Sector 추가 비교
-
-기존 fixture 4별을 사용한다. 별마다 등록된 마지막 Sector를 뺀 A와 전체 Sector B를 비교한다.
-TOI-270 기존 결과를 재사용하고, 추가 3별은 새 입력·코드·설정 manifest로 실행했다.
-실측 실행기는 `candidate_bundle_regression --target <target> --output <새 경로>`다.
-
-| 별 | A Sector | B Sector | A/B 후보 수 | 종료 | ID 검증 해석 |
-| --- | --- | --- | --- | --- | --- |
-| TOI-270 | 3,4 | 3,4,5 | 3/3 | 양쪽 no_quality_peak | 0.5 제안값에서 3개 유지 |
-| TOI-451 | 4 | 4,5 | 0/0 | 양쪽 no_quality_peak | 빈 결과 일치, 양성 ID 유지 증거 아님 |
-| WASP-62 | 2,3,4 | 2,3,4,8 | 1/1 | 양쪽 removal_qa_failed | 양성 후보가 있어도 불완전 판이므로 ID 변경 보류 |
-| pi Men | 4 | 4,8 | 0/0 | 양쪽 no_quality_peak | 빈 결과 일치, 양성 ID 유지 증거 아님 |
-
-WASP-62 후보의 제안식 오차/지속시간은 0.070690이지만 QA 실패 판을 공개 가능한 판으로
-취급하지 않는다. A와 B 모두 정상 종료·원본 재검증을 만족해야 비교에 의한 생명주기 변경을 허용한다.
-최종 비교는 저장된 Bundle checksum을 확인한 뒤 현재 검토안으로 재평가했다.
-`four-star-comparison-v2/comparison.json`은 비교 코드와 입력 checksum을 포함한다.
-이를 ‘4별의 양성 후보 ID 유지 검증 통과’라고 표현하지 않는다. 양성 유지 근거는 여전히 TOI-270이다.
-
-## 추가 고조파 배율 비교
-
-[비교 실행기](../../experiments/tess-bench/tess_bench/candidate_ratio_sweep.py)는 111의 기존
-`is_duplicate` 누적 오차식을 그대로 호출하고 배율 집합만 바꾼다. 20개 고정 채택 쌍에 대한
-사후 민감도 검사이며 전체 반복 탐색을 재실행한 회수율 비교가 아니다.
-
-| 배율 집합 | 걸리는 쌍/20 | 양쪽 모두 주입 정답에 매칭된 쌍 | 미매칭 단계 포함 쌍 |
-| --- | ---: | ---: | ---: |
-| 기존 1/2,1,2 | 0 | 0 | 0 |
-| 1/4,1/3,1/2,1,2,3,4 | 4 | 0 | 4 |
-| 111에서 관찰한 추가 배율 19개 | 4 | 0 | 4 |
-| 분자·분모 1~9의 모든 기약 비율 | 11 | 6 | 5 |
-
-좁은 3·4배 확장은 이 표본에서 더 넓은 관찰 배율 집합과 같은 4쌍을 표시했다.
-따라서 v1의 **검토 필요 표지**로 좁은 집합을 사용한다. 미매칭이 물리적 오탐 정답은 아니므로
-이 4쌍을 자동 병합해도 안전하다고 확정하지 않는다. 모든 유리수 비율로 넓히는 안은
-정답에 매칭된 6쌍까지 차단하므로 미채택한다. 원시 후보·주기·alias 근거를 삭제하지 않는다.
-결과는 `ratios-v1/report.json`과 manifest에 보존한다.
-
-## 122 인계를 위한 계약 검토안 v1
-
-버전은 `candidate_identity_v1_proposal`이다. 강재민 검토 전이며 운영 채택 상태가 아니다.
-
-1. 직접 일치 허용값은 작은 쪽 지속시간의 0.5를 제안한다. 0.125·0.25보다 TOI-270 유지가 개선됐고
-   1.0과 결과가 같아 더 작은 값을 선택했다. 제한된 표본에서의 선택이며 전역 최적값이 아니다.
-2. 직접 일치는 유일한 1:1 관계에서만 ID를 유지한다. 동률·다대일·일대다는 ambiguous로 보류한다.
-3. 나머지의 P/4·P/3·P/2·2P·3P·4P 근접 관계는 possible_alias로 보류하며 자동 병합하지 않는다.
-4. 불완전 판·원본 검증 실패는 ID 유지/추가/retired를 적용하지 않고 기존 공개 판을 유지한다.
-5. 완전한 판에서 직접 대응도 의심 관계도 없는 후보만 신규/retired 대상으로 낸다. retired 행은 삭제하지 않는다.
-6. 이 실험은 판 사이 대응 제안이다. 한 판 안의 고조파 대표 선택·자동 병합 전체를 구현한 것으로 보지 않는다.
-
-리뷰에서 확인할 사항은 0.5 직접 동일성 허용값의 제한된 근거 수용 여부,
-possible_alias·ambiguous·incomplete를 122와 후속 소비자가 어떻게 보류 처리할지,
-자동 병합 미검증 범위를 112 완료로 인정할 수 있는지다. 기존 티켓의 자동 병합 기대를
-임의로 축소하여 완료 처리하지 않는다. 합의 전에는 Jira 진행 중을 유지한다.
-
-## 최종 검토 자료
-
-최신 실행 묶음은 `results/candidate-identity-112/review-v1/`이다. 최종 코드로 4별 A/B 계산,
-저장 결과 비교, 감광 창 100건 및 추가 배율 비교를 다시 실행했고 위 결론이 유지됐다.
-하위 `toi270`, `toi451`, `wasp62`, `pi_men`, `four-star-comparison`, `harmonics`, `ratios`의
-manifest와 plan을 함께 제공한다. 이전 run은 과정 기록이며 최신 실행 근거와 구분한다.
-원본 FITS는 리뷰 ZIP과 Git에 넣지 않고 checksum·위치만 남긴다.
-실행 소스·설정과 결과를 `review-112-proposal-v1.zip`으로 별도 제공한다.
-이 ZIP은 검토안의 증빙이며 112 승인·자동 병합 검증 완료의 증명은 아니다.
+강재민에게 직접 동일성 0.5의 제한된 근거, exact model copy 정리,
+모호한 고조파/불완전 판의 전체 보류, 유지/추가/retired 및 D06·D08·122 공통 계약을
+검토 요청한다. **이 보류 정책의 수용 여부는 아직 미승인**이며 승인 전 112 완료 또는
+122 운영 적용을 선언하지 않는다. 후속 자동 병합 고도화는 이 MR에서 입증하지 않은 사항이다.

@@ -13,7 +13,7 @@ from .bls import load_bls_settings
 from .iterate import IterateConfig, iterate_curve
 from .preprocess import load_settings, preprocess
 from .silver_regression import ROOT, BENCH, FIXTURE, verify_snapshot
-from .candidate_identity import distance, reconcile
+from .candidate_identity import distance, reconcile, review_candidates
 
 
 def compare_bundles(a, b):
@@ -30,11 +30,22 @@ def compare_bundles(a, b):
                     and all(c["validated_on_original"] for c in record["candidates"])
                     for name,record in (("A",a),("B",b))}
     complete = all(completeness.values())
+    reviews = {name: review_candidates(
+        [dict(c, peak_id=f"{name}-step-{c.get('step', i)}") for i,c in enumerate(record["candidates"])],
+        start, end, tolerance=.5, complete=completeness[name])
+        for name,record in (("A",a),("B",b))}
+    # Unresolved within-bundle peaks must not pass via a cross-bundle 1:1 match.
+    identity_complete = complete and all(r["status"] == "clear" for r in reviews.values())
+    sweep = {str(t): reconcile(old,new,start,end,tolerance=t,new_complete=bool(identity_complete))
+             for t in (.125,.25,.5,1.)}
+    if complete and not identity_complete:
+        for decision in sweep.values():
+            decision["status"] = "within_bundle_ambiguous"
     return dict(old_count=len(old), new_count=len(new), old_complete=completeness["A"],
                 new_complete=completeness["B"], comparison_complete=complete,
+                candidate_reviews=reviews, identity_ready=identity_complete,
                 distance_matrix=[[distance(x,y,start,end) for y in new] for x in old],
-                sweep={str(t):reconcile(old,new,start,end,tolerance=t,new_complete=bool(complete))
-                       for t in (.125,.25,.5,1.)}, rule_approved=False)
+                sweep=sweep, rule_approved=False)
 
 
 def run(output, target_key="toi270"):
