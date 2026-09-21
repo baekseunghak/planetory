@@ -15,3 +15,4 @@
 | 2026-09-21 | 공개 상태 응답 호환·공통 조건 배치 규칙 보완 | S15P21C206-162 | isPublic, isEffectivelyPublic, domain, deleted | 전체 409건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | develop 테스트 컴파일 복구와 변경 이력 위치 정정 | S15P21C206-147 | ResidualResultReader.lookup, PublicAnalysisTest, 스텁 인자, 병합 후 컴파일 | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 제출 조회·상세 보기·다시 풀기 초안 구현 | S15P21C206-145 | submissions, by-request, REQUEST_IN_PROGRESS, detail-view, DETAIL_UNAVAILABLE, retry-draft, STEP_NOT_RESTORABLE, AT-118 | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 제출 조회 리뷰 반영: 해설 자리와 힌트 대상 고정 | S15P21C206-145 | signal.explanation, detail_target_candidate_id, V16, 멱등 힌트 | 검증 완료 | [2026-09-21](2026-09-21.md) |

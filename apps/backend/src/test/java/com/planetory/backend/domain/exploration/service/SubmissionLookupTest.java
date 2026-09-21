@@ -39,6 +39,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -295,6 +297,59 @@ class SubmissionLookupTest {
                 .andExpect(jsonPath("$.targetKind").value("CURRENT_MATCH"))
                 .andExpect(jsonPath("$.signal.candidateId").value("c-" + candidate))
                 .andExpect(jsonPath("$.tutorial.skipAvailable").value(false));
+    }
+
+    /**
+     * 6.7절 「반복 호출은 같은 대상」. 매번 현재 후보에서 다시 고르면 판이 갱신될 때 같은 제출의
+     * 답이 달라진다.
+     */
+    @Test
+    void 후보가_갱신돼도_힌트_대상은_처음_고른_신호다() {
+        long weaker = candidate(7, 5);
+        String unmatched = submit(13, "LIKELY_PLANET").path("submissionId").asText();
+
+        var first = lookup.detailView(member, unmatched);
+        assertEquals("c-" + candidate, first.signal().get("candidateId"), "세기가 큰 쪽을 고른다");
+
+        // 다른 후보의 세기를 올린다. 다시 고르면 대상이 이쪽으로 바뀐다.
+        jdbc.update("UPDATE candidates SET bls_power=99 WHERE id=?", weaker);
+
+        var again = lookup.detailView(member, unmatched);
+
+        assertEquals("c-" + candidate, again.signal().get("candidateId"), "한 번 정한 대상은 바꾸지 않는다");
+        assertEquals(candidate, jdbc.queryForObject("SELECT detail_target_candidate_id FROM submissions "
+                + "WHERE id=?", Long.class, Long.parseLong(unmatched.substring(4))));
+    }
+
+    /** 한 번 보여 준 신호가 은퇴했다고 없던 일이 되지는 않는다. */
+    @Test
+    void 처음_고른_힌트가_은퇴해도_같은_신호를_보여_준다() {
+        candidate(7, 5);
+        String unmatched = submit(13, "LIKELY_PLANET").path("submissionId").asText();
+        var first = lookup.detailView(member, unmatched);
+
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?", candidate);
+
+        assertEquals(first.signal().get("candidateId"),
+                lookup.detailView(member, unmatched).signal().get("candidateId"));
+    }
+
+    /**
+     * 6.7절 signal에는 해설 자리가 있다. 저장할 열도 생성 규칙도 없어 값은 null이지만, <b>키를 빼면</b>
+     * 소비자가 「해설 없음」과 「모르는 응답」을 구분하지 못한다.
+     */
+    @Test
+    void 상세_보기_signal에는_해설_자리가_있다() throws Exception {
+        graded("fp", "not_planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+
+        assertTrue(lookup.detailView(member, submissionId).signal().containsKey("explanation"));
+        assertNull(lookup.detailView(member, submissionId).signal().get("explanation"));
+
+        mvc.perform(post("/api/v1/submissions/" + submissionId + "/detail-view")
+                        .session(session(member)).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"explanation\":null")));
     }
 
     // ---------- 6.8 다시 풀기 초안 ----------

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
@@ -113,17 +114,37 @@ public class SubmissionLookupService {
                 ? saved.path("detail").path("targetKind").asText() : null;
         if (targetKind == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
 
-        Candidate target = "CURRENT_MATCH".equals(targetKind)
-                ? matched(row.tic(), saved)
-                : hint(row.tic(), saved);
+        Candidate target = target(row, saved, targetKind);
         if (target == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
 
-        submissions.markAnswerViewed(id);
+        submissions.markDetailViewed(id, target.id());
         var disposition = submissions.disposition(target.id());
+        Map<String, Object> signal = submissions.signal(member, target, disposition);
+        // 6.7절 signal에는 해설이 있고 6.4절에는 없다. 공용 빌더를 넓히지 않고 여기서만 더한다.
+        // 값은 아직 null이지만 키를 빼면 소비자가 「해설 없음」과 「모르는 응답」을 구분하지 못한다.
+        signal.put("explanation", null);
         return new SubmissionViews.DetailView(ExplorationIds.submission(id), true, targetKind,
-                submissions.signal(member, target, disposition),
-                "CURRENT_MATCH".equals(targetKind) ? agrees(saved) : null,
+                signal, "CURRENT_MATCH".equals(targetKind) ? agrees(saved) : null,
                 submissionService.tutorialState(member, row.tic()));
+    }
+
+    /**
+     * 열어 볼 신호. <b>한 번 정한 대상은 바꾸지 않는다</b>(6.7절 「반복 호출은 같은 대상」).
+     *
+     * <p>힌트를 매번 다시 고르면 후보표가 갱신될 때 같은 제출의 답이 달라진다. 처음 고른 값을 제출에
+     * 남기고 이후에는 그 신호를 상태와 무관하게 찾는다 — 한 번 보여 준 신호가 은퇴했다고 없던 일이
+     * 되지는 않는다. 행 자체가 사라졌을 때만 볼 대상이 없다.
+     */
+    private Candidate target(HistoryRepository.Row row, JsonNode saved, String targetKind) {
+        if ("CURRENT_MATCH".equals(targetKind)) {
+            return matched(row.tic(), saved);
+        }
+        JsonNode chosen = row.submission().path("detail_target_candidate_id");
+        return chosen.isNumber() ? byId(row.tic(), chosen.asLong()) : hint(row.tic(), saved);
+    }
+
+    private Candidate byId(long tic, long candidateId) {
+        return gold.findCandidates(tic).stream().filter(c -> c.id() == candidateId).findFirst().orElse(null);
     }
 
     /** 그 제출이 매칭한 신호. 은퇴했어도 당시 매칭은 사라지지 않으므로 그대로 보여 준다. */

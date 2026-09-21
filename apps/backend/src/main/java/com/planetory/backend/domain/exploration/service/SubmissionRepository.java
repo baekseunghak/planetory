@@ -122,9 +122,16 @@ public class SubmissionRepository {
                 """).param("member", member).param("tic", tic).param("step", curveStep)
                 .param("count", planetCount).param("skipped", skipped).update();
     }
-    /** 6.7절 상세 보기. 이미 본 제출을 다시 봐도 값이 달라지지 않는다. */
-    void markAnswerViewed(long submissionId) {
-        jdbc.sql("UPDATE submissions SET answer_viewed = true WHERE id = ?").param(submissionId).update();
+    /**
+      * 6.7절 상세 보기. 이미 본 제출을 다시 봐도 값이 달라지지 않는다.
+      *
+      * <p>대상은 <b>처음 고른 것만</b> 남긴다. {@code COALESCE}가 그 일을 하므로 두 요청이 겹쳐도
+      * 먼저 쓴 값이 이긴다. 매번 덮어쓰면 후보표가 바뀔 때 같은 제출의 답이 달라진다.
+      */
+    void markDetailViewed(long submissionId, long candidateId) {
+        jdbc.sql("UPDATE submissions SET answer_viewed = true,"
+                        + " detail_target_candidate_id = COALESCE(detail_target_candidate_id, ?) WHERE id = ?")
+                .params(candidateId, submissionId).update();
     }
 
     void saveResponse(long submission, String response) {
