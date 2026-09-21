@@ -2,7 +2,7 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 검색·공개 출처 카드 API는 후속 범위다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 검색 API는 후속 범위다. 공개 출처 카드는 아래 167 안내를 따른다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
@@ -112,6 +112,8 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
 
 커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
+
+출처 카드(167)는 같은 별의 공식 스레드·공개 분석 미리보기와 글·댓글 연결을 제공한다. 취소·숨김된 기존 출처는 ID 없는 안내만 반환하며 본문 수정에서 보존한다. [서비스 API 5~7장](docs/service-api-spec.md#attachments), [V18 권한](docs/development-setup.md#v18-출처-관계-권한)을 따른다. `SourceCardTest`는 일회용 PostgreSQL에서 HTTP·공개 상태·동일 스냅샷·교체 및 삭제 경합·최소 앱 권한·성과 비변경을 검증한다.
 
 핫 토픽(171)은 [서비스 API 4.2절](docs/service-api-spec.md#42-핫-토픽)에 따라 현재 유효 참여자 10명 이상 공식 스레드를 전역 순위와 전용 커서로 제공한다. 위 164 구현 당시의 후속 범위 중 171을 구현했다. `./gradlew -PskipLocalDb test --tests '*HotTopicsTest' --tests '*CommunityReadTest' --tests '*PublicAnalysisTest'`는 일회용 PostgreSQL에서 선정·공개 철회·커서·동일 스냅샷·앱 역할 및 기존 조회·공개 회귀를 검증한다. 새 테이블·마이그레이션은 없고 실제 프론트 브라우저 인수는 별도다.
 

@@ -64,6 +64,15 @@ export function MaterialCards({
           author={author}
         />
       ))}
+      {value.unavailableSources?.map((type, index) => (
+        <div className="material-viewer" key={`unavailable-${index}`}>
+          <h3>
+            공개 출처 ·{" "}
+            {type === "PUBLIC_ANALYSIS" ? "공개 분석" : "공식 스레드"}
+          </h3>
+          <p>공개 취소되었거나 볼 수 없는 출처입니다.</p>
+        </div>
+      ))}
       {value.sourceLinks?.map((source) => (
         <SourceCard
           key={source.type + source.id}

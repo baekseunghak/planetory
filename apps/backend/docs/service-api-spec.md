@@ -305,9 +305,9 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. 아직 구현하지 않은 `sourceLinks`는 빈 배열이며 실제 출처가 없다는 사실로 해석하지 않는다.
+**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. `sourceLinks`는 167에서 실제 출처 관계를 반환한다. 유효 항목은 `type/id/available:true`, 취소·숨김 등 무효 항목은 `type/available:false`만 포함한다.
 
-`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
+`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`는 같은 TIC의 공개 분석(`PUBLIC_ANALYSIS/pa-ID`)·공식 스레드(`SIGNAL_THREAD/st-ID`)를 최대 3개 받는다. 중복·형식·상한·명시적 null은 400 `VALIDATION_FAILED`, 현재 접근 불가 대상은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 연결은 400 `TIC_MISMATCH`다.
 
 작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
 
@@ -372,7 +372,7 @@ History 배열은 생략하면 유지, 전달하면 전체 교체, `[]`면 전�
 
 **구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
 
-History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`는 F24 구현 전까지 빈 배열만 받으며 응답도 빈 배열이다.
+History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`도 167에서 실제 저장·조회하며 5장과 같은 검증·생략·전체 교체 규칙을 따른다. 목록·수정 응답에서 취소·숨김 출처는 `type/available:false`만 반환한다. 댓글 수정도 생성과 같이 별 열림을 검사하므로, 별이 비공개·미발견 상태가 되면 본문 수정은 404 `STAR_NOT_PUBLISHED`로 거절한다.
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
@@ -537,7 +537,16 @@ CURRENT 검사는 응답 후까지 최신성을 영구 보장하지 않는다. �
 {"type":"PUBLIC_ANALYSIS","id":"pa-601","ticId":"123456789","author":{"memberId":"u-102","nickname":"관측자"},"judgment":"LIKELY_PLANET","submittedAt":"2026-09-09T02:00:00Z","available":true}
 ```
 
-세 쿼리는 필수. SIGNAL_THREAD 카드는 9장의 judgmentSummary와 신호 요약을 포함한다. 미리보기 성공 후에도 게시·별 변경·조회 때 다시 검증한다. 취소·숨김된 출처는 내용을 반환하지 않는다. 기존 글에서는 `available:false` 같은 안내만 남기는 안이며 비노출 ID 반환 범위는 별도 합의한다. 타인의 개인 History 원본 전체 접근은 허용하지 않는다.
+세 쿼리는 필수다. 인증된 활성 회원에게 `Cache-Control: no-store`로 반환한다. `SIGNAL_THREAD` 카드는 `type/id/available/ticId/threadId/candidateId/author`와 기존 신호 요약(`signal.periodDays/epochBtjd/durationHours/depthPpm`), 9장의 `judgmentSummary`를 포함한다. `threadId`로 공식 스레드의 전체/판단 필터 경로에 연결한다. 공개 분석 카드는 위 예제의 제한된 필드만 제공하며 개인 History ID·메모·전체 원본·그래프를 포함하지 않는다.
+
+**167 구현·확정 계약:**
+
+- CREATE에서 `sourceLinks` 생략은 빈 관계다. PATCH 생략은 기존 관계를 유지하고 `[]`는 전체 제거, 배열은 전체 교체다. 명시적 null은 허용하지 않는다. 본문·History만 수정할 때 기존 비공개 출처를 재공개·암묵 삭제하지 않는다.
+- 새 연결·별 변경은 대상과 상위 공식 스레드의 공개 상태, 열린 별, 같은 TIC를 다시 검사한다. 미리보기 후 취소·숨김되면 저장을 거절한다. 부모 글의 TIC 변경은 미삭제 댓글의 History·출처까지 검사하며 다른 작성자의 자료를 제거하거나 다른 별에 노출하지 않는다.
+- 이미 연결된 무효 출처는 `{"type":"PUBLIC_ANALYSIS","available":false}` 또는 `{"type":"SIGNAL_THREAD","available":false}`만 반환한다. 대상 ID·작성자·내용은 포함하지 않는다. 직접 미리보기는 404이며 조회 때 현재 공개 상태를 다시 판정한다. 복원되면 기존 관계가 다시 유효해진다.
+- 프론트는 ID 없는 항목에 대체 안내를 표시하고 추가 조회·직접 링크를 만들지 않는다. 편집용 유효 선택과 무효 안내를 분리하며, 본문이나 History만 수정할 때 `sourceLinks`를 보내지 않는다. 무효 출처를 바꾸려면 사용자가 공개 출처 전체 제거를 명시적으로 선택한다. 응답 유실 뒤 전체 제거의 반영 여부는 유효·무효 출처가 모두 없어야 성공으로 판단한다. 본문만 수정한 요청은 출처 보존 여부 때문에 실패로 판단하지 않는다.
+- 부모 행 잠금으로 교체·삭제·별 변경을 직렬화한다. 출처 대상 행은 추가로 잠그지 않고 관계 저장 전후에 현재 가용성을 검사하여, 서로를 참조하는 공식 스레드 댓글의 교착을 피한다. 최종 검사 뒤 발생한 취소·숨김은 다음 조회에서 무효 출처로 반영한다. 글 상세 서비스·미리보기·댓글 목록은 REPEATABLE_READ에서 읽고 신호 통계는 기존 `SubmissionService.publicJudgmentSummary`를 소비한다. 댓글 한 페이지의 출처는 관계·가용성을 일괄 조회하고 같은 별의 열림을 한 번 검사한다.
+- V1 `post_source_links`를 재사용한다. 출처 저장·조회는 공개 분석·성과·반응·판단 통계를 생성하거나 복제하지 않는다. V18 앱 권한은 [개발 환경 안내](development-setup.md#v18-출처-관계-권한)를 따른다.
 
 <a id="reactions"></a>
 
