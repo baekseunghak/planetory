@@ -17,6 +17,17 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import com.planetory.backend.global.security.MemberPrincipal;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.planetory.backend.domain.exploration.service.ExplorationSummaryService;
 import com.planetory.backend.domain.exploration.service.InitialExplorationService;
@@ -40,7 +51,12 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @ActiveProfiles("local")
 @SpringBootTest
+@AutoConfigureMockMvc
+@Testcontainers
 class QuestPanelTest {
+
+    @Container
+    static final PostgreSQLContainer<?> DB = new PostgreSQLContainer<>("postgres:18.6-alpine");
 
     private static final String SCHEMA =
             "quest_panel_" + UUID.randomUUID().toString().replace("-", "");
@@ -58,6 +74,9 @@ class QuestPanelTest {
 
     @DynamicPropertySource
     static void isolatedSchema(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", DB::getJdbcUrl);
+        registry.add("spring.datasource.username", DB::getUsername);
+        registry.add("spring.datasource.password", DB::getPassword);
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
@@ -77,6 +96,7 @@ class QuestPanelTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired MockMvc mvc;
 
     private long bundleId;
 
@@ -376,6 +396,133 @@ class QuestPanelTest {
         assertEquals("\"2026-09-14\"", round.get("startsOn").toString());
         assertEquals("\"2026-09-21\"", round.get("endsOn").toString());
         assertEquals("\"cr-", round.get("roundId").toString().substring(0, 4));
+    }
+
+    // ---------- 현재 챌린지 (168) ----------
+
+    @Test
+    void 현재회차없음과_예정종료는_null이며_인증필수() throws Exception {
+        mvc.perform(get("/api/v1/challenges/current")).andExpect(status().isUnauthorized());
+        long member = signUp();
+        var empty = current(member);
+        assertTrue(empty.get("round").isNull());
+        assertFalse(empty.get("eligible").asBoolean());
+        assertTrue(empty.get("participantCount").isNull());
+        long round = insertRound("planned");
+        assertTrue(current(member).get("round").isNull());
+        jdbc.update("UPDATE challenge_rounds SET status='closed' WHERE id=?", round);
+        assertTrue(current(member).get("round").isNull());
+    }
+
+    @Test
+    void 미자격은_이미발견했어도_TIC비노출_날짜대신_active선택() throws Exception {
+        long round = insertRound("active");
+        long member = signUp();
+        jdbc.update("INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,world_x,world_y,depth_z,"
+                + "layout_version,layout_ordinal,unlocked_at) VALUES (?,?,'challenge',1,1,0,'v',9,now())",
+                member, CHALLENGE);
+        for (int year : List.of(2000, 2100)) {
+            jdbc.update("UPDATE challenge_rounds SET starts_on=?,ends_on=? WHERE id=?",
+                    LocalDate.of(year, 1, 1), LocalDate.of(year, 1, 7), round);
+            var response = current(member);
+            assertFalse(response.get("eligible").asBoolean());
+            assertTrue(response.get("round").get("ticId").isNull());
+            assertEquals("cr-" + round, response.get("round").get("roundId").asText());
+            assertEquals("active", response.get("round").get("status").asText());
+            assertEquals(year + "-01-01", response.get("round").get("startsOn").asText());
+            assertEquals(year + "-01-07", response.get("round").get("endsOn").asText());
+            assertEquals(3, response.get("round").get("roundNo").asInt());
+            assertEquals("얕은 별에서 두 번째 신호 찾기", response.get("round").get("description").asText());
+            assertTrue(response.get("participantCount").isIntegralNumber());
+            assertEquals(0, response.get("participantCount").asInt());
+        }
+    }
+
+    @Test
+    void 완료재개자격_미발견TIC제공_GET전체데이터불변_앱역할조회() throws Exception {
+        long member = signUp();
+        for (int seq = 1; seq <= 5; seq++) complete(member, seq, "all_found");
+        insertRound("active"); // 회차 전환 명령 이전: 자격은 있지만 아직 별을 받지 않았다.
+        jdbc.update("UPDATE user_star_progress SET progress_stage='in_progress',reopened_at=now()"
+                + " WHERE user_id=? AND tic_id=?", member, TUTORIAL[1]);
+        var before = databaseSnapshot();
+        var response = current(member);
+        assertTrue(response.get("eligible").asBoolean());
+        assertEquals(Long.toString(CHALLENGE), response.get("round").get("ticId").asText());
+        assertFalse(quests.quests(member).challenge().unlocked());
+        assertNull(quests.quests(member).challenge().ticId());
+        var tx = new TransactionTemplate(transactionManager);
+        tx.setReadOnly(true);
+        tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        tx.executeWithoutResult(s -> {
+            jdbc.execute("SET LOCAL ROLE planetory_app");
+            assertTrue(quests.currentChallenge(member).eligible());
+            assertEquals(0, quests.currentChallenge(member).participantCount());
+        });
+        assertEquals(before, databaseSnapshot());
+    }
+
+    @Test
+    void 현재회차_HTTP참여수는_다중신호취소숨김복원때_퀘스트와동일() throws Exception {
+        insertRound("active");
+        long member = signUp();
+        long first = insertThread(insertCandidate(), "visible");
+        long second = insertThread(insertCandidate(), "visible");
+        publish(first, member, null, null);
+        publish(second, member, null, null);
+        assertParticipants(member, 1);
+        jdbc.update("UPDATE published_analyses SET unpublished_at=now() WHERE post_id=?", first);
+        assertParticipants(member, 1);
+        jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE post_id=?", second);
+        assertParticipants(member, 0);
+        jdbc.update("UPDATE published_analyses SET hidden_at=NULL WHERE post_id=?", second);
+        assertParticipants(member, 1);
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?", second);
+        assertParticipants(member, 0);
+        jdbc.update("UPDATE posts SET status='visible' WHERE id=?", second);
+        assertParticipants(member, 1);
+        publish(first, insertMember(), null, null);
+        assertParticipants(member, 2);
+        jdbc.update("UPDATE published_analyses SET unpublished_at=now()");
+        assertParticipants(member, 0);
+    }
+
+    private void assertParticipants(long member, int expected) throws Exception {
+        var count = current(member).get("participantCount");
+        assertTrue(count.isIntegralNumber());
+        assertEquals(expected, count.asInt());
+        assertEquals(expected, quests.quests(member).challenge().participantCount());
+    }
+
+    private tools.jackson.databind.JsonNode current(long member) throws Exception {
+        var session = new MockHttpSession();
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new TestingAuthenticationToken(new MemberPrincipal(member), null, "ROLE_USER"));
+        session.setAttribute("SPRING_SECURITY_CONTEXT", context);
+        session.setAttribute(com.planetory.backend.domain.auth.service.AuthSessionService.class.getName()
+                + ".lastActivity", java.time.Instant.now());
+        var response = json.readTree(mvc.perform(get("/api/v1/challenges/current").session(session))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andReturn().getResponse().getContentAsString());
+        var panel = quests.quests(member).challenge();
+        assertEquals(panel.eligible(), response.get("eligible").asBoolean());
+        if (panel.round() == null) {
+            assertTrue(response.get("round").isNull());
+        } else {
+            assertEquals(panel.round().roundId(), response.get("round").get("roundId").asText());
+        }
+        return response;
+    }
+
+    private java.util.Map<String, String> databaseSnapshot() {
+        var snapshot = new java.util.TreeMap<String, String>();
+        for (String table : jdbc.queryForList("SELECT tablename FROM pg_tables WHERE schemaname=?",
+                String.class, SCHEMA)) {
+            snapshot.put(table, jdbc.queryForObject("SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)),"
+                    + "'[]'::jsonb)::text FROM \"" + table + "\" t", String.class));
+        }
+        return snapshot;
     }
 
     // ---------- 도우미 ----------

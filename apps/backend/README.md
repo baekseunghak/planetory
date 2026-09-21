@@ -110,3 +110,5 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
 
 커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
+
+현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.

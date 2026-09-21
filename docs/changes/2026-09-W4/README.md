@@ -38,3 +38,4 @@
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 화면이 잔차 503을 retryable로 가른다 | S15P21C206-189 | retryable, DEPENDENCY_UNAVAILABLE, 정본 문구, START_FAILED, 개발용 응답, 화면 검사 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 현재 챌린지 조회·active 회차·자격 TIC·별 참여 수 | S15P21C206-168 | challenges/current, REPEATABLE_READ, GET 불변, COUNT DISTINCT | 구현·관련 54+6건 검증 완료 | [2026-09-21](2026-09-21.md) |
