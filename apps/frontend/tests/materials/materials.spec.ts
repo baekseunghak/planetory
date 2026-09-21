@@ -504,3 +504,102 @@ for (const status of ["QUEUED", "COMPLETED"]) {
     ).toHaveCount(0);
   });
 }
+
+test("hidden sources have no lookup or link; post body/history edits preserve them until explicit clear", async ({
+  page,
+}) => {
+  const id = await seed(page);
+  const sourceReads: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/source-cards"))
+      sourceReads.push(request.url());
+  });
+  await page.route(`**/api/v1/posts/${id}`, async (route) => {
+    const response = await route.fetch();
+    const dto = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...dto,
+        sourceLinks: [{ type: "PUBLIC_ANALYSIS", available: false }],
+      },
+    });
+  });
+  await page.goto(`/posts/${id}`);
+  await expect(
+    page.getByText("공개 취소되었거나 볼 수 없는 출처입니다.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /^출처 .* 열기$/ })).toHaveCount(
+    0,
+  );
+  expect(sourceReads).toEqual([]);
+  await page.goto(`/posts/${id}/edit`);
+  await enter(
+    page.getByRole("textbox", { name: "본문", exact: true }),
+    "본문만 수정",
+  );
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().endsWith(`/posts/${id}`),
+  );
+  await page.getByRole("button", { name: "수정 저장", exact: true }).click();
+  expect((await saved).postDataJSON()).toEqual({ body: "본문만 수정" });
+  await page.goto(`/posts/${id}/edit`);
+  await page
+    .getByRole("button", { name: "공개 출처 모두 제거", exact: true })
+    .click();
+  const removed = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().endsWith(`/posts/${id}`),
+  );
+  await page.getByRole("button", { name: "수정 저장", exact: true }).click();
+  expect((await removed).postDataJSON().sourceLinks).toEqual([]);
+  expect(sourceReads).toEqual([]);
+});
+
+test("comment unavailable source is visible and body-only edit omits sourceLinks", async ({
+  page,
+}) => {
+  const id = await seed(page, []);
+  const created = await page.request.post("/api/v1/comments", {
+    headers,
+    data: { parentType: "POST", parentId: id, body: "출처 댓글" },
+  });
+  expect(created.status()).toBe(201);
+  const commentId = (await created.json()).commentId;
+  let reads = 0;
+  page.on("request", (r) => {
+    if (r.url().includes("/source-cards")) reads++;
+  });
+  await page.route("**/api/v1/comments?**", async (route) => {
+    const response = await route.fetch();
+    const dto = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...dto,
+        items: dto.items.map((item: { commentId: string }) =>
+          item.commentId === commentId
+            ? {
+                ...item,
+                sourceLinks: [{ type: "SIGNAL_THREAD", available: false }],
+              }
+            : item,
+        ),
+      },
+    });
+  });
+  await page.goto(`/posts/${id}`);
+  await expect(
+    page.getByText("공개 취소되었거나 볼 수 없는 출처입니다.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "댓글 수정", exact: true }).click();
+  await enter(
+    page.getByRole("textbox", { name: "댓글 본문" }),
+    "본문만 바꾼 댓글",
+  );
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().endsWith(`/comments/${commentId}`),
+  );
+  await page.getByRole("button", { name: "댓글 저장", exact: true }).click();
+  expect((await saved).postDataJSON()).toEqual({ body: "본문만 바꾼 댓글" });
+  expect(reads).toBe(0);
+});

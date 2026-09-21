@@ -1,4 +1,8 @@
-import { type Materials, sameMaterials } from "./materialContracts";
+import {
+  type Materials,
+  sameMaterials,
+  changedMaterials,
+} from "./materialContracts";
 import { ApiError } from "../../api/client";
 import { readPost } from "./contracts";
 
@@ -77,10 +81,7 @@ export function changedPostFields(
   for (const key of ["title", "body", "purposeTag", "ticId"] as const)
     if (original[key] !== values[key])
       Object.assign(patch, { [key]: values[key] });
-  if (!sameMaterials(original, values)) {
-    patch.historyIds = values.historyIds ?? [];
-    patch.sourceLinks = values.sourceLinks ?? [];
-  }
+  Object.assign(patch, changedMaterials(original, draft));
   return patch;
 }
 export function patchIsVisible(post: PostValues, sent: Partial<PostValues>) {
