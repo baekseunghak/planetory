@@ -88,6 +88,13 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
           ]
         : []),
       ...(profileFixture ? [profileFixture.plugin] : []),
+      ...(mode === "profiles"
+        ? [
+            (
+              await import("./dev/my-lists-fixture-plugin.ts")
+            ).myListsFixturePlugin(),
+          ]
+        : []),
       ...(communityFixture
         ? [
             (
