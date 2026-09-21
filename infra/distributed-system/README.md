@@ -382,6 +382,8 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 기존 Airflow의 코드만 갱신할 때는 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치한 뒤 Node 1에서 `sudo bash <release>/infra/distributed-system/scripts/deploy-tess-airflow-node1.sh --update`를 실행한다. 이 경로는 기존 이미지를 기반으로 새 이미지를 네트워크 없이 빌드하고 DAG import·4개 신규 DAG의 기본 일시정지 상태를 검사한다. 활성 DAG run이 없을 때만 Scheduler·Webserver를 교체하며 DB·비밀 환경 파일·Tailscale Serve는 건드리지 않는다. 교체 뒤 UI·import·컨테이너 상태가 실패하면 이전 이미지로 두 서비스를 되돌린다. 새 DAG를 일시정지 해제하거나 데이터 작업을 trigger하는 것은 별도 단계다.
 
+2026-09-22에는 `/opt/planetory-hdfs-load/releases/20260921T230610Z`를 Node 1~6에, `/opt/planetory-bronze/releases/20260921T230610Z`를 Node 1에 설치했다. Node 1 Airflow에도 `/opt/planetory-airflow/releases/20260921T230610Z`를 설치하고 위 갱신 경로로 Scheduler·Webserver만 새 이미지로 교체했다. 기존 DB 컨테이너와 Tailscale Serve는 유지했다. 새 DAG 4개와 기존 단일 DAG 모두 일시정지, 신규 DagRun 0건, import 오류 0건, 로컬 UI health 성공을 확인했다. 이는 **코드 배포 검증**이며 SSH Connection·제한 sudo 권한과 실제 데이터 처리·재개는 검증하지 않았다. 어떤 DAG도 실행하거나 로컬 FITS를 삭제하지 않았다.
+
 ## TESS 원천 수집 (`S15P21C206-75`)
 
 Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-tess-ingestion.ps1)로 SPOC 2분 Light Curve를 수집한다. Tailscale 대상과 실제 호스트명, `/mnt/data` mount, passwordless sudo, 디스크 사용률 75% 미만·가용 공간 기본 100GiB 이상, 다른 활성 수집 unit·수동 downloader 부재와 공식 MAST 연결을 `Preflight`에서 먼저 확인한다. 코드는 `/mnt/data/planetory-ingestion/releases/<ReleaseId>`, 실행 데이터는 `/mnt/data/staging/S15P21C206-75/run-<RunId>`에 둔다. release는 결정적 내용 SHA로 식별하고 root 소유·일반 사용자 쓰기 금지로 고정한다.
@@ -435,7 +437,7 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 제출 이미지에만 설치한 패키지는 Worker에 전달되지 않는다.
 
-Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시도 경계는 [TESS DAG 계약](../../distributed-system/airflow/dags/README.md)을 따른다. DAG 코드는 구현됐으며 운영 반영 전 SSH Connection·불변 release·제한 sudo 권한을 준비하고 실제 DAG import 및 장애 재개 검증을 수행한다.
+Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시도 경계는 [TESS DAG 계약](../../distributed-system/airflow/dags/README.md)을 따른다. DAG와 HDFS/Bronze 코드는 불변 release로 설치됐고 Airflow import를 확인했다. 실행 전 SSH Connection·제한 sudo 권한·run 계보를 확인하고 실제 처리·장애 재개를 별도로 검증해야 한다.
 
 다음 항목은 후속 구현 대상이다.
 

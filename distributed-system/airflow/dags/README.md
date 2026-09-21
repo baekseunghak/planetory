@@ -4,7 +4,7 @@
 
 `tess_sector_download_raw_bronze`는 Sector 1부터 13까지 아래 순서를 직렬로 연결한다.
 
-2026-09-22 Node 1 Airflow에는 import 오류 없이 배포됐으며 안전을 위해 일시정지 상태다. [Tailnet 접속·읽기 전용 계정 안내](../../../infra/distributed-system/README.md#airflow-db)를 따른다. UI 배포는 SSH Connection·실제 DAG 실행 검증을 뜻하지 않는다.
+2026-09-22 Node 1 Airflow에는 기존 단일 DAG와 신규 단계별 DAG 4개가 import 오류 없이 배포됐으며 모두 일시정지 상태다. [Tailnet 접속·읽기 전용 계정 안내](../../../infra/distributed-system/README.md#airflow-db)를 따른다. UI 배포는 SSH Connection·실제 DAG 실행 검증을 뜻하지 않는다.
 
 ```text
 Worker 5대 다운로드 완료 marker 검증
@@ -36,7 +36,7 @@ python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"
 
 ## 후속 목표 설계: 단계별 DAG와 Sector 자동 재개
 
-2026-09-22 사용자 요청으로 아래 설계와 구현을 시작했다. 위의 단일 DAG 설명은 **현재 배포된 구현**이며, 아래는 **목표 설계**다. Jira `S15P21C206-252`는 아직 단일 DAG·제한 Sector 완료 조건을 적고 있어 이 확장 범위와 정합화가 필요하다.
+2026-09-22 사용자 요청으로 아래 설계와 구현을 시작했다. 위의 단일 DAG 설명은 **일시정지된 기존 구현**이며, 아래 4개 단계 DAG는 **배포된 수동 trigger 구현과 아직 미완료인 자동화 목표 설계**를 함께 구분해 설명한다. Jira `S15P21C206-252`는 아직 단일 DAG·제한 Sector 완료 조건을 적고 있어 이 확장 범위와 정합화가 필요하다.
 
 | 단계 DAG | 시작 게이트 | 완료 증거 | 실행기 |
 | --- | --- | --- | --- |
@@ -60,4 +60,4 @@ python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"
 3. 제한된 신규 Sector 1개에서 정상 경로를 검증한다. 업로드 중·Raw 확정 직후·삭제 중·Bronze 중단과 Node 1/Worker 재부팅을 시험해 중복 final·잘못된 삭제가 없는지 확인한다.
 4. 연속 2개 Sector에서 N Raw와 N+1 다운로드가 실제로 겹치는지, 단계별 시간·NameNode RPC·YARN 메모리·Worker 디스크를 측정한다. 빠른 감사 전후를 같은 조건에서 비교한 뒤에만 기본 상한 70 자동 허가를 켠다.
 
-현재 **오프라인 구현·검증 완료**는 4개 수동 trigger 단계 DAG, 계보 지문·실제 marker 게이트·단계 간 트리거, cached Raw 빠른 감사, Worker 병렬 cleanup, 신규 Sector용 Bronze Raw release 인자까지다. 새 DAG도 기본 일시정지이며 미배포다. 기존 단일 DAG도 일시정지 상태를 유지한다. **미완료**는 자동 Sector 발견·원천 목록 고정, 1~13 전제의 HDFS coverage 일반화, 영속 중지/drain·재부팅 후 보충, 단계별 Pool/용량 조정, Airflow 실제 import·실환경 기능/성능 검증이다. 따라서 Sector 14~70 자동 수집과 무인 복구는 아직 동작하지 않는다. 운영 배포·실제 삭제는 정확한 대상과 영향을 확인한 별도 통제 절차에서만 수행한다.
+현재 **코드 배포·Airflow import 검증 완료**는 4개 수동 trigger 단계 DAG, 계보 지문·실제 marker 게이트·단계 간 트리거, cached Raw 빠른 감사, Worker 병렬 cleanup, 신규 Sector용 Bronze Raw release 인자까지다. HDFS 코드는 Node 1~6, Bronze와 Airflow 코드는 Node 1의 불변 release `20260921T230610Z`에 설치됐다. 신규 4개와 기존 단일 DAG는 모두 일시정지이며 신규 실행 이력은 0건이다. **미완료**는 SSH Connection·제한 sudo 권한·현재 run 계보 점검, 자동 Sector 발견·원천 목록 고정, 1~13 전제의 HDFS coverage 일반화, 영속 중지/drain·재부팅 후 보충, 단계별 Pool/용량 조정, 실환경 기능/장애/성능 검증이다. 따라서 Sector 14~70 자동 수집과 무인 복구는 아직 동작하지 않는다. 실제 데이터 삭제는 별도의 정확한 대상 확인과 승인 후에만 수행한다.
