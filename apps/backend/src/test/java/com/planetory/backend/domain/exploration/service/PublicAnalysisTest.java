@@ -55,6 +55,7 @@ class PublicAnalysisTest {
     @Autowired MockMvc mvc;
     @MockitoBean ResidualResultReader residuals;
     @Autowired PublicAnalysisService publications;
+    @Autowired com.planetory.backend.domain.post.service.PublicAnalysisBatchService batches;
     @Autowired com.planetory.backend.domain.post.service.PostReactionService reactions;
     @Autowired com.planetory.backend.domain.post.service.PostService posts;
     @Autowired com.planetory.backend.domain.post.service.PublicAnalysisAccess publicAccess;
@@ -679,6 +680,296 @@ class PublicAnalysisTest {
 
     private java.util.Map<String, Object> summary() {
         return new TransactionTemplate(transactions).execute(status -> submissions.publicJudgmentSummary(candidate));
+    }
+
+    @org.junit.jupiter.api.Nested
+    class BatchPublication {
+        final tools.jackson.databind.ObjectMapper json = new tools.jackson.databind.ObjectMapper();
+
+        tools.jackson.databind.JsonNode requestBody(List<String> ids) {
+            return json.valueToTree(java.util.Map.of("ticId", Long.toString(tic),
+                    "items", ids.stream().map(id -> java.util.Map.of("historyId", id)).toList()));
+        }
+        tools.jackson.databind.JsonNode publish(List<String> ids) throws Exception {
+            return json.readTree(mvc.perform(post("/api/v1/public-analyses/batch")
+                    .session(session(member)).with(csrf()).contentType("application/json")
+                    .content(requestBody(ids).toString())).andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                    .andReturn().getResponse().getContentAsString()).path("results");
+        }
+        org.springframework.util.LinkedMultiValueMap<String, String> params(String size, String cursor) {
+            var params = new org.springframework.util.LinkedMultiValueMap<String, String>();
+            params.add("ticId", Long.toString(tic)); params.add("size", size);
+            if (cursor != null) params.add("cursor", cursor);
+            return params;
+        }
+        // 실제 제출로 만든 History에 합성 신호를 연결한다. 공개·성과·트랜잭션은 실제 경로다.
+        String otherSignal() {
+            String history = submit(3);
+            long signal = jdbc.queryForObject("""
+                    INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,
+                        duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed)
+                    SELECT tic_id,'retired',updated_bundle_id,(SELECT max(removal_step)+1 FROM candidates WHERE tic_id=?),
+                        period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed
+                    FROM candidates WHERE id=? RETURNING id
+                    """, Long.class, tic, candidate);
+            jdbc.update("""
+                    UPDATE submissions SET matched_candidate_id=?,
+                        response_snapshot=jsonb_set(response_snapshot,'{match,candidateId}',to_jsonb(?::text))
+                    WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)
+                    """, signal, "c-" + signal, number(history));
+            return history;
+        }
+        long signal(String history) {
+            return jdbc.queryForObject("SELECT s.matched_candidate_id FROM submissions s JOIN analysis_histories h ON h.submission_id=s.id WHERE h.id=?",
+                    Long.class, number(history));
+        }
+
+        @Test void 전체형식오류_0_21_중복History_중복신호는_저장전400() throws Exception {
+            String first = submit(3), same = submit(3);
+            var bodies = new java.util.ArrayList<>(List.of("null", "{}", "[]",
+                    "{\"ticId\":1,\"items\":[]}", "{\"ticId\":\"01\",\"items\":[{\"historyId\":\"h-1\"}]}",
+                    "{\"ticId\":\"1\",\"items\":[{\"historyId\":1}]}",
+                    "{\"ticId\":\"1\",\"items\":[{\"historyId\":\"h-01\"}]}",
+                    "{\"ticId\":\"1\",\"items\":[{\"historyId\":\"h-1\",\"candidateId\":\"c-1\"}]}",
+                    "{\"ticId\":\"1\",\"items\":[{\"historyId\":\"h-1\"}],\"userId\":1}"));
+            for (var ids : List.of(List.<String>of(), List.of(first, first), List.of(first, same),
+                    java.util.stream.LongStream.rangeClosed(1, 21).mapToObj(i -> "h-" + i).toList()))
+                bodies.add(requestBody(ids).toString());
+            for (String body : bodies) mvc.perform(post("/api/v1/public-analyses/batch").session(session(member))
+                    .with(csrf()).contentType("application/json").content(body)).andExpect(status().isBadRequest());
+            assertEquals(0, count("published_analyses", "user_id", member));
+            assertEquals(0, count("user_candidate_achievements", "user_id", member));
+        }
+
+        @Test void 한개_20개_입력순서_재시도_응답유실은_성과와별을중복지급하지않는다() throws Exception {
+            String first = submit(3);
+            assertEquals("PUBLISHED", publish(List.of(first)).get(0).path("status").asText());
+            var ids = new java.util.ArrayList<String>(); ids.add(first);
+            for (int i = 1; i < 20; i++) ids.add(otherSignal());
+            var result = publish(ids);
+            assertEquals(20, result.size());
+            for (int i = 0; i < 20; i++) {
+                assertEquals(ids.get(i), result.get(i).path("historyId").asText());
+                assertEquals("PUBLISHED", result.get(i).path("status").asText());
+                assertEquals(i + 1, result.get(i).path("achievement").path("star").path("count").asInt());
+            }
+            int unlocked = count("star_unlocks", "user_id", member);
+            var replay = publish(ids);
+            for (int i = 0; i < 20; i++) {
+                assertFalse(replay.get(i).path("newlyGranted").asBoolean());
+                assertFalse(replay.get(i).path("created").asBoolean());
+                assertEquals(result.get(i).path("analysisId"), replay.get(i).path("analysisId"));
+                assertEquals(result.get(i).path("achievement").path("unlockedStars"),
+                        replay.get(i).path("achievement").path("unlockedStars"));
+            }
+            assertEquals(20, count("published_analyses", "user_id", member));
+            assertEquals(20, count("user_candidate_achievements", "user_id", member));
+            assertEquals(unlocked, count("star_unlocks", "user_id", member));
+        }
+
+        @Test void 타인_없는기록_다른TIC_미자격은_항목별실패이고_신호정보를누출하지않는다() throws Exception {
+            String own = submit(3), foreign = submit(3), mismatch = otherSignal(), ineligible = otherSignal();
+            long other = member();
+            jdbc.update("UPDATE analysis_histories SET user_id=? WHERE id=?", other, number(foreign));
+            jdbc.update("UPDATE submissions SET user_id=? WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", other, number(foreign));
+            jdbc.update("UPDATE analysis_histories SET tic_id=? WHERE id=?", tic + 1000000000, number(mismatch));
+            jdbc.update("UPDATE submissions SET response_snapshot=jsonb_set(response_snapshot,'{signal,answerClass}','\"graded\"') WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", number(ineligible));
+            var result = publish(List.of(foreign, own, "h-999999999999999999", mismatch, ineligible));
+            assertEquals("PUBLISHED", result.get(1).path("status").asText());
+            for (int index : List.of(0, 2, 3, 4)) {
+                assertEquals("FAILED", result.get(index).path("status").asText());
+                assertFalse(result.get(index).has("candidateId"));
+                assertFalse(result.get(index).has("analysisId"));
+                assertFalse(result.get(index).path("retryable").asBoolean());
+            }
+            assertEquals("FORBIDDEN", result.get(0).path("error").path("code").asText());
+            assertEquals("RESOURCE_NOT_FOUND", result.get(2).path("error").path("code").asText());
+            assertEquals("TIC_MISMATCH", result.get(3).path("error").path("code").asText());
+            assertEquals("요청한 별과 같은 별의 분석 기록만 공개할 수 있습니다.",
+                    result.get(3).path("error").path("message").asText());
+            assertEquals("PUBLICATION_NOT_ELIGIBLE", result.get(4).path("error").path("code").asText());
+            assertEquals(1, count("published_analyses", "user_id", member));
+        }
+
+        @Test void 전항목실패도200_취소숨김재전송은_NOT_PUBLISHED() throws Exception {
+            assertEquals("FAILED", publish(List.of("h-999999999999999999")).get(0).path("status").asText());
+            String cancelled = submit(3), hidden = otherSignal();
+            var publication = publications.publish(member, cancelled);
+            publications.publish(member, hidden);
+            publications.visibility(member, publication.analysisId(), false);
+            jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE history_id=?", number(hidden));
+            var result = publish(List.of(cancelled, hidden));
+            for (var item : result) {
+                assertEquals("NOT_PUBLISHED", item.path("status").asText());
+                assertFalse(item.path("isPublic").asBoolean());
+                assertFalse(item.path("newlyGranted").asBoolean());
+            }
+            assertTrue(batches.candidates(member, params("20", null)).items().isEmpty());
+        }
+
+        @Test void 중간일시장애는_롤백하고_앞뒤성공유지_실패분만재시도한다() throws Exception {
+            var ids = List.of(submit(3), otherSignal(), otherSignal());
+            var calls = new java.util.concurrent.atomic.AtomicInteger();
+            StarDiscoveryService target = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(discovery);
+            doAnswer(invocation -> {
+                if (calls.incrementAndGet() == 2) throw new org.springframework.dao.CannotAcquireLockException("private DB detail");
+                return invocation.callRealMethod();
+            }).when(target).discoverByAchievement(anyLong(), anyLong(), any());
+            var result = publish(ids);
+            assertEquals("PUBLISHED", result.get(0).path("status").asText());
+            assertEquals("FAILED", result.get(1).path("status").asText());
+            assertTrue(result.get(1).path("retryable").asBoolean());
+            assertFalse(result.toString().contains("private DB detail"));
+            assertEquals("PUBLISHED", result.get(2).path("status").asText());
+            assertEquals(0, count("published_analyses", "history_id", number(ids.get(1))));
+            assertEquals(0, count("posts", "candidate_id", signal(ids.get(1))));
+            assertEquals(2, count("user_candidate_achievements", "user_id", member));
+            assertEquals("PUBLISHED", publish(List.of(ids.get(1))).get(0).path("status").asText());
+            assertEquals(3, count("user_candidate_achievements", "user_id", member));
+        }
+
+        @Test void 내부장애와_근거누락은_임의재시도가능으로표시하지않는다() throws Exception {
+            String first = submit(3), missing = otherSignal();
+            jdbc.update("UPDATE submissions SET response_snapshot=NULL WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", number(missing));
+            StarDiscoveryService target = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(discovery);
+            doThrow(new IllegalStateException("private DB detail")).when(target).discoverByAchievement(anyLong(), anyLong(), any());
+            var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(
+                    com.planetory.backend.domain.post.service.PublicAnalysisBatchService.class);
+            var logs = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+            logs.start(); logger.addAppender(logs);
+            tools.jackson.databind.JsonNode result;
+            try {
+                result = publish(List.of(first, missing));
+                assertTrue(logs.list.stream().anyMatch(event -> event.getThrowableProxy() != null
+                        && event.getThrowableProxy().getStackTraceElementProxyArray().length > 0));
+            } finally { logger.detachAppender(logs); logs.stop(); }
+            assertFalse(result.toString().contains("private DB detail"));
+            assertEquals("INTERNAL_ERROR", result.get(0).path("error").path("code").asText());
+            assertEquals("DEPENDENCY_UNAVAILABLE", result.get(1).path("error").path("code").asText());
+            assertFalse(result.get(0).path("retryable").asBoolean());
+            assertFalse(result.get(1).path("retryable").asBoolean());
+            assertEquals(0, count("published_analyses", "user_id", member));
+        }
+
+        @Test void 항목사이상태변경을_다음단건에서재검사한다() throws Exception {
+            String first = submit(3), second = otherSignal();
+            StarDiscoveryService target = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(discovery);
+            doAnswer(invocation -> {
+                Object result = invocation.callRealMethod();
+                jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic);
+                return result;
+            }).when(target).discoverByAchievement(anyLong(), anyLong(), any());
+            var result = publish(List.of(first, second));
+            assertEquals("PUBLISHED", result.get(0).path("status").asText());
+            assertEquals("STAR_NOT_PUBLISHED", result.get(1).path("error").path("code").asText());
+            assertEquals(1, count("published_analyses", "user_id", member));
+        }
+
+        @Test void 동시전체재전송과_바깥롤백도_항목의독립확정을바꾸지않는다() throws Exception {
+            var ids = List.of(submit(3), otherSignal());
+            concurrent(() -> batches.publish(member, requestBody(ids)), () -> batches.publish(member, requestBody(ids)));
+            String next = otherSignal();
+            new TransactionTemplate(transactions).executeWithoutResult(s -> {
+                batches.publish(member, requestBody(List.of(next)));
+                s.setRollbackOnly();
+            });
+            assertEquals(3, count("published_analyses", "user_id", member));
+            assertEquals(3, count("user_candidate_achievements", "user_id", member));
+        }
+
+        @Test void 순차단건과_일괄공개의_누적성과등급발견개수는같다() throws Exception {
+            var ids = List.of(submit(3), otherSignal(), otherSignal());
+            var sequential = new TransactionTemplate(transactions).execute(s -> {
+                var results = ids.stream().map(id -> publications.publish(member, id)).toList();
+                s.setRollbackOnly();
+                return results;
+            });
+            assertEquals(0, count("published_analyses", "user_id", member));
+            var result = publish(ids);
+            for (int i = 0; i < ids.size(); i++) {
+                var expected = sequential.get(i).achievement();
+                var actual = result.get(i).path("achievement");
+                assertEquals(expected.star().count(), actual.path("star").path("count").asInt());
+                assertEquals(expected.star().grade(), actual.path("star").path("grade").asText());
+                assertEquals(expected.unlockedStars().size(), actual.path("unlockedStars").size());
+                assertEquals(expected.unlockShortfall(), actual.path("unlockShortfall").asInt());
+            }
+        }
+
+        @Test void 대표후보는_신호별최신선택후페이지하며_동률은제출ID다() throws Exception {
+            submit(3); submit(3);
+            String second = otherSignal();
+            for (int i = 0; i < 22; i++) submit(3);
+            String latest = submit(3);
+            jdbc.update("UPDATE submissions SET created_at='2026-09-01T00:00:00Z' WHERE user_id=?", member);
+            var first = batches.candidates(member, params("1", null));
+            assertTrue(first.hasMore()); assertEquals(latest, first.items().getFirst().historyId());
+            assertTrue(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM analysis_snapshots WHERE history_id=?)", Boolean.class, number(latest)));
+            assertNotNull(histories.detail(member, latest).submission());
+            jdbc.update("DELETE FROM analysis_snapshots WHERE history_id=?", number(latest));
+            assertEquals(latest, batches.candidates(member, params("1", null)).items().getFirst().historyId());
+            assertNull(histories.graph(member, latest, "SUBMITTED").snapshot());
+            var last = batches.candidates(member, params("1", first.nextCursor()));
+            assertEquals(second, last.items().getFirst().historyId()); assertFalse(last.hasMore());
+            assertEquals(2, batches.candidates(member, params("100", null)).items().size());
+            assertEquals(0, count("published_analyses", "user_id", member));
+            error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("2", first.nextCursor())));
+            error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member(), params("1", first.nextCursor())));
+            publications.publish(member, latest);
+            var remaining = batches.candidates(member, params("20", null));
+            assertNotEquals(latest, remaining.items().getFirst().historyId());
+            assertTrue(remaining.items().stream().anyMatch(item -> item.candidateId().equals("c-" + candidate)));
+            mvc.perform(get("/api/v1/public-analyses/batch-candidates").session(session(member)).param("ticId", Long.toString(tic)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].submissionId").isString())
+                    .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+        }
+
+        @Test void 후보는_타인_다른별_비자격_숨김스레드_공개이력을제외하고_조회후에도재검사한다() throws Exception {
+            String eligible = submit(3), wrongOwner = otherSignal(), wrongTic = otherSignal(),
+                    graded = otherSignal(), published = otherSignal(), hidden = otherSignal();
+            jdbc.update("UPDATE analysis_histories SET user_id=? WHERE id=?", member(), number(wrongOwner));
+            jdbc.update("UPDATE analysis_histories SET tic_id=? WHERE id=?", tic + 1000000000, number(wrongTic));
+            jdbc.update("UPDATE submissions SET response_snapshot=jsonb_set(response_snapshot,'{signal,answerClass}','\"graded\"') WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", number(graded));
+            publications.publish(member, published);
+            jdbc.update("INSERT INTO posts(kind,user_id,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',NULL,?,'star',?,'hidden','','hidden')", signal(hidden), tic);
+            var page = batches.candidates(member, params("20", null));
+            assertEquals(List.of(eligible), page.items().stream().map(p -> p.historyId()).toList());
+            new TransactionTemplate(transactions).executeWithoutResult(s -> {
+                jdbc.execute("SET LOCAL ROLE planetory_app");
+                assertEquals(page, batches.candidates(member, params("20", null)));
+            });
+            assertEquals("THREAD_HIDDEN", publish(List.of(hidden)).get(0).path("error").path("code").asText());
+            jdbc.update("UPDATE submissions SET response_snapshot=jsonb_set(response_snapshot,'{signal,answerClass}','\"graded\"') WHERE id=(SELECT submission_id FROM analysis_histories WHERE id=?)", number(eligible));
+            assertEquals("PUBLICATION_NOT_ELIGIBLE", publish(List.of(eligible)).get(0).path("error").path("code").asText());
+        }
+
+        @Test void 인증_CSRF_잘못된후보필터_커서를거절한다() throws Exception {
+            mvc.perform(get("/api/v1/public-analyses/batch-candidates").param("ticId", Long.toString(tic)))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/v1/public-analyses/batch").with(csrf()).contentType("application/json").content(requestBody(List.of("h-1")).toString()))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/v1/public-analyses/batch").session(session(member)).contentType("application/json").content(requestBody(List.of("h-1")).toString()))
+                    .andExpect(status().isForbidden());
+            for (String size : List.of("0", "101", "-1", "01", "x"))
+                error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params(size, null)));
+            for (String cursor : List.of("", "garbage", "a".repeat(1025)))
+                error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("20", cursor)));
+            String binding = "batch-candidates-v1|" + member + "|" + tic + "|20|";
+            String legacyCursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    (binding + "2026-09-01T00:00Z|1").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            assertDoesNotThrow(() -> batches.candidates(member, params("20", legacyCursor)));
+            for (String raw : List.of("feed-v1|" + tic + "||20|2026-09-01T00:00Z|1",
+                    binding + "2026-09-01T00:00:00.000000001Z|1", binding + "0000-09-01T00:00Z|1",
+                    binding + "2026-09-01T00:00Z|01", binding + "2026-09-01T00:00Z|9223372036854775808")) {
+                String cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, params("20", cursor)));
+            }
+            var extra = params("20", null); extra.add("userId", "1");
+            error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, extra));
+            var duplicate = params("20", null); duplicate.add("ticId", Long.toString(tic));
+            error(ErrorCode.VALIDATION_FAILED, () -> batches.candidates(member, duplicate));
+        }
     }
 
     private <T> List<T> concurrent(java.util.concurrent.Callable<T> first, java.util.concurrent.Callable<T> second) throws Exception {

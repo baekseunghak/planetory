@@ -2,6 +2,7 @@ package com.planetory.backend.domain.post.controller;
 
 import com.planetory.backend.domain.post.service.CommunityQuery;
 import com.planetory.backend.domain.post.service.CommunityReadService;
+import com.planetory.backend.domain.post.service.HotTopicsQuery;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
@@ -20,6 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class CommunityReadController {
     private final CommunityReadService community;
+
+    @GetMapping("/api/v1/community/hot-topics")
+    public ResponseEntity<CommunityReadService.Feed> hotTopics(@AuthenticationPrincipal MemberPrincipal member,
+            @RequestParam MultiValueMap<String, String> params) {
+        return response(community.hotTopics(member.memberId(), HotTopicsQuery.parse(params)));
+    }
 
     @GetMapping("/api/v1/community/feed")
     public ResponseEntity<CommunityReadService.Feed> feed(@AuthenticationPrincipal MemberPrincipal member,
