@@ -504,10 +504,10 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 - 경로의 `{memberId}`는 회원 API가 주는 `u-{id}` 형식이다([서비스 API 3.2절](service-api-spec.md#32-공개-설정p1타인-프로필별-목록p0)과 같은 값). 숫자만 적은 값이나 형식이 다른 값은 400 `VALIDATION_FAILED`이며, 정수가 아닌 `size`도 같은 400이다(S15P21C206-246).
 - `scope=submitted`(기본)는 발견한 별 중 제출 이력이 있는 별(MY-02). 옛 "내 진행" 화면(HOME-03)을 이 목록이 대체한다. `scope=discovered`는 제출 이력이 없는 발견 별까지 전부 포함하며 본인 조회에서만 허용한다. `sort=recent`는 `lastActivityAt` = 최근 제출·재개·발견 시각 내림차순, 동률 `ticId`.
 - `unpublishedSignalCount`는 본인 조회에서만 있고 타인 조회는 필드를 뺀다(NFR-14).
-- 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다.
+- 필터 `stage`, `grade`, `ticId`는 HOME-04(P1). 확정 행성 보유 여부로는 필터하지 않는다. 구현(S15P21C206-152): 단독·복합으로 쓸 수 있고 셋 다 생략하면 조건 없는 목록이다. `stage`는 `unexplored`·`in_progress`·`completed`, `grade`는 `A`·`S`·`SS`·`SSS`, `ticId`는 선행 0 없는 양의 정수다. **계약 밖 값은 빈 목록이 아니라 400** `VALIDATION_FAILED`다 — 오타를 「그런 별이 없다」로 답하면 화면이 조건을 고칠 근거를 잃는다. 빈 문자열은 그 조건을 걸지 않은 것과 같다. `grade`는 성과 수로 거르며 그 대응은 목록이 표시하는 등급과 **같은 함수**를 쓴다. 숨겨진 후보 수로 거르는 조건은 두지 않는다.
 - WebGL 대체 목록 뷰(NFR-18)는 `scope=discovered&sort=recent`를 쓴다. 성과로 막 발견해 아직 제출하지 않은 별도 목록에서 골라 분석에 진입할 수 있어야 하기 때문이다(지웅 리뷰 6). 마이페이지는 기본값을 유지한다.
 - `size`는 기본 20, 상한 100이다. 상한 밖이거나 계약 밖 `scope`·`sort`는 400 `VALIDATION_FAILED`다. 타인 조회에 `scope=discovered`를 쓰면 같은 400으로 거절한다. 미제출 발견까지 보이면 그 회원의 진행 상태가 드러나기 때문이다.
-- `cursor`는 불투명 값이며 **요청 회원·대상 회원·`scope`·`sort`·`size`**에 묶는다. 하나라도 다르면 400이다. 요청 회원까지 묶는 이유는 같은 대상이라도 보는 사람에 따라 응답이 다르기 때문이다(`unpublishedSignalCount`). 위치는 `lastActivityAt`과 `ticId`를 함께 담는다. 시각만 담으면 같은 시각의 별들이 페이지 경계에서 통째로 밀리거나 빠진다.
+- `cursor`는 불투명 값이며 **요청 회원·대상 회원·`scope`·`sort`·`size`와 필터 세 값**에 묶는다(필터는 S15P21C206-152에서 더했다). 커서는 결과 집합 안의 위치라, 필터가 달라지면 같은 위치가 다른 집합의 한가운데를 가리킨다. 하나라도 다르면 400이다. 요청 회원까지 묶는 이유는 같은 대상이라도 보는 사람에 따라 응답이 다르기 때문이다(`unpublishedSignalCount`). 위치는 `lastActivityAt`과 `ticId`를 함께 담는다. 시각만 담으면 같은 시각의 별들이 페이지 경계에서 통째로 밀리거나 빠진다.
 - `unpublishedSignalCount`는 회원이 이 별에서 매칭한 고유 신호 중 유효한 공개가 없는 수다. 타인 조회에서는 0이 아니라 **필드를 뺀다**. "공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다.
 
 ### 4.5 공개 별 요약

@@ -139,24 +139,33 @@ public class StarService {
      *                           scope·sort·size가 계약 밖이면 {@code VALIDATION_FAILED}
      */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    /** 필터 없는 기본 조회. 4.4절의 조건 없는 목록이다. */
     public StarViews.StarList list(long viewerId, long targetId, String requestedScope,
                                    String requestedSort, Integer requestedSize, String cursor) {
+        return list(viewerId, targetId, requestedScope, requestedSort, requestedSize, cursor,
+                StarViews.ListFilter.NONE);
+    }
+
+    public StarViews.StarList list(long viewerId, long targetId, String requestedScope,
+                                   String requestedSort, Integer requestedSize, String cursor,
+                                   StarViews.ListFilter requestedFilter) {
         boolean self = viewerId == targetId;
         String scope = validateScope(requestedScope, self);
         String sort = validateSort(requestedSort);
         int size = validateSize(requestedSize);
+        StarViews.ListFilter filter = validateFilter(requestedFilter);
 
         if (!self && !stars.isStarListPublic(targetId)) {
             throw new BusinessException(ErrorCode.STAR_LIST_PRIVATE);
         }
 
-        StarListCursor request = new StarListCursor(viewerId, targetId, scope, sort, size, 0, 0);
+        StarListCursor request = new StarListCursor(viewerId, targetId, scope, sort, size, token(filter), 0, 0);
         StarListCursor position = cursor == null ? null
                 : StarListCursor.decode(cursor, request)
                         .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED));
 
         // 한 건 더 읽어 다음 페이지 유무를 판단한다.
-        List<StarViews.StarListItem> page = stars.findStarList(targetId, scope,
+        List<StarViews.StarListItem> page = stars.findStarList(targetId, scope, filter,
                 position == null ? null : position.afterActivity(),
                 position == null ? null : position.afterTicId(),
                 size + 1);
@@ -170,10 +179,58 @@ public class StarService {
         String nextCursor = null;
         if (hasNext) {
             StarViews.StarListItem last = visible.get(visible.size() - 1);
-            nextCursor = StarListCursor.after(viewerId, targetId, scope, sort, size,
+            nextCursor = StarListCursor.after(viewerId, targetId, scope, sort, size, token(filter),
                     last.lastActivityAt(), Long.parseLong(last.ticId())).encode();
         }
         return new StarViews.StarList(items, nextCursor, hasNext);
+    }
+
+    /** 진행 단계 값. {@code user_star_progress.progress_stage}의 CHECK와 같아야 한다. */
+    private static final java.util.Set<String> STAGES = java.util.Set.of("unexplored", "in_progress", "completed");
+
+    /**
+     * 필터 값을 계약 안으로 좁힌다(4.4절). 계약 밖 값은 빈 목록이 아니라 400이다 — 오타를 「그런 별이
+     * 없다」로 답하면 화면이 조건을 고칠 근거를 잃는다.
+     */
+    private static StarViews.ListFilter validateFilter(StarViews.ListFilter requested) {
+        StarViews.ListFilter filter = requested == null ? StarViews.ListFilter.NONE : requested;
+        String stage = blankToNull(filter.stage());
+        String grade = blankToNull(filter.grade());
+        String ticId = blankToNull(filter.ticId());
+        if (stage != null && !STAGES.contains(stage)) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        if (grade != null && gradeRange(grade) == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        if (ticId != null && ExplorationIds.parseTic(ticId).isEmpty()) {
+            // 필터는 경로가 아니라 조건이다. 없는 별을 감추는 404가 아니라 잘못된 입력이다.
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return new StarViews.ListFilter(stage, grade, ticId);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    /** 커서에 묶을 값. 세 조건이 모두 같아야 이어읽는다. */
+    private static String token(StarViews.ListFilter filter) {
+        return (filter.stage() == null ? "" : filter.stage()) + ":"
+                + (filter.grade() == null ? "" : filter.grade()) + ":"
+                + (filter.ticId() == null ? "" : filter.ticId());
+    }
+
+    /**
+     * 등급이 뜻하는 성과 수 범위. {@link #grade}의 역이며 <b>한 곳에서 같이 관리한다</b> — 둘이
+     * 어긋나면 목록이 거른 별과 그 별이 표시하는 등급이 달라진다.
+     *
+     * @return {@code [최소, 최대]}. 계약 밖 등급이면 null
+     */
+    static int[] gradeRange(String grade) {
+        return switch (grade) {
+            case "A" -> new int[] {1, 1};
+            case "S" -> new int[] {2, 2};
+            case "SS" -> new int[] {3, 3};
+            case "SSS" -> new int[] {4, Integer.MAX_VALUE};
+            default -> null;
+        };
     }
 
     /** 타인에게는 미게시 수를 주지 않는다. 0이 아니라 없음이다(NFR-14). */

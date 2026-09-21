@@ -31,9 +31,9 @@ class StarListContractTest {
     @Test
     void 커서는_마이크로초까지_잃지_않는다() {
         OffsetDateTime lastActivity = OffsetDateTime.parse("2026-09-10T02:30:00.123456Z");
-        StarListCursor expected = new StarListCursor(1, 1, "discovered", "recent", 4, 0, 0);
+        StarListCursor expected = new StarListCursor(1, 1, "discovered", "recent", 4, "", 0, 0);
 
-        String encoded = StarListCursor.after(1, 1, "discovered", "recent", 4, lastActivity, 42)
+        String encoded = StarListCursor.after(1, 1, "discovered", "recent", 4, "", lastActivity, 42)
                 .encode();
         StarListCursor decoded = StarListCursor.decode(encoded, expected).orElseThrow();
 
@@ -42,15 +42,43 @@ class StarListContractTest {
         assertEquals(42, decoded.afterTicId());
     }
 
+    /**
+     * 등급 필터와 등급 표시가 <b>같은 규칙</b>이어야 한다(S15P21C206-152). 갈라지면 「S로 걸렀는데
+     * A가 나온다」가 된다. 성과 수를 넓게 훑어 둘이 서로의 역인지 본다.
+     */
+    @Test
+    void 등급_필터_범위는_등급_표시의_역이다() {
+        for (int count = 0; count <= 12; count++) {
+            String grade = StarService.grade(count);
+            if (grade == null) {
+                assertEquals(0, count, "성과가 있는데 등급이 없으면 필터가 그 별을 영영 못 찾는다");
+                continue;
+            }
+            int[] range = StarService.gradeRange(grade);
+            assertNotNull(range, grade);
+            assertTrue(range[0] <= count && count <= range[1],
+                    "성과 " + count + "은 " + grade + " 범위 " + range[0] + "~" + range[1] + " 안이어야 한다");
+        }
+        // 범위 안의 수는 모두 그 등급이어야 한다. 한쪽만 넓으면 다른 등급이 섞인다.
+        for (String grade : java.util.List.of("A", "S", "SS", "SSS")) {
+            int[] range = StarService.gradeRange(grade);
+            int upper = Math.min(range[1], range[0] + 8);
+            for (int count = range[0]; count <= upper; count++) {
+                assertEquals(grade, StarService.grade(count), "성과 " + count);
+            }
+        }
+        assertNull(StarService.gradeRange("B"), "계약 밖 등급은 범위가 없다");
+    }
+
     /** DB 해상도는 마이크로초다. 나노초 자리는 늘 0이므로 마이크로초면 손실이 없다. */
     @Test
     void 마이크로초_경계값도_그대로_돌아온다() {
-        StarListCursor expected = new StarListCursor(1, 1, "submitted", "recent", 20, 0, 0);
+        StarListCursor expected = new StarListCursor(1, 1, "submitted", "recent", 20, "", 0, 0);
         for (String value : List.of("2026-09-10T02:30:00.000001Z", "2026-09-10T02:30:00.999999Z",
                 "1970-01-01T00:00:00.000001Z", "2026-09-10T02:30:00Z")) {
             OffsetDateTime at = OffsetDateTime.parse(value);
             StarListCursor decoded = StarListCursor.decode(
-                    StarListCursor.after(1, 1, "submitted", "recent", 20, at, 7).encode(), expected)
+                    StarListCursor.after(1, 1, "submitted", "recent", 20, "", at, 7).encode(), expected)
                     .orElseThrow();
 
             assertEquals(at.toInstant(), decoded.afterActivity().toInstant(), value);
