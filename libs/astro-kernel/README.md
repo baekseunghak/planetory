@@ -435,7 +435,7 @@ wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와
 
 `PreparedCurve.original_quality`는 생존 행의 원래 QUALITY다. `excluded`에는 `source_row`,
 `cadenceno`, `original_quality`, `original_time`, 겹친 모든 `reasons`·`interval_ids`가 보존된다.
-`interval_masks`에는 근거와 마스크 버전 전체가 남는다. `exclusion_ledger(prepared, result)`는
+`interval_masks`에는 근거와 마스크 버전 전체가 남는다. 허용한 NumPy scalar는 검증 후 `sector`와 cadence 경계를 Python `int`, BTJD 경계를 `float`로 정규화해 저장하므로 `json.dumps(prepared.interval_masks, allow_nan=False)`를 지원한다. `exclusion_ledger(prepared, result)`는
 추세·clipping·관측 부족 제외까지 원본 행으로 합친다. 내부 `excluded`는 원본 NaN/Inf를 보존하고,
 장부 함수는 `original_time=null`과 `original_time_nonfinite`의 `NaN`/`+Infinity`/`-Infinity`로 구분해
 엄격한 JSON 직렬화를 지원한다. 유한 시각은 원래 숫자다. 행 번호를 다시 매기지 않는다.

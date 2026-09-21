@@ -75,3 +75,13 @@ SRS의 DAT-02 요구를 완화하거나 전체 범위 완료로 변경하지 않
 245의 별도 `docs/data/tess-interval-mask-validation.md`는 사용자 요청으로 삭제하고
 [기존 tess-bench README](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)에 통합했다.
 같은 검증 범위에 별도 문서를 다시 만들지 않는다.
+
+## S15P21C206-153 GRD-06 재분류 표식 위치 (2026-09-21)
+
+| 문서·위치 | 현재 문구 | 수정 제안 | 근거 |
+| --- | --- | --- | --- |
+| SRS GRD-06 | "AnalysisHistory와 UserCandidateAchievement에 재분류 표식(relabeled_at, new_disposition)만 남기고" | "UserCandidateAchievement에 재분류 표식(relabeled_at, relabel_disposition)을 남기고" | `analysis_histories`에는 두 열이 없다(V1 스키마). 탐사 API 9.5절과 현재 구현은 성과 행에만 두고, 히스토리 화면 표식은 `(user_id, candidate_id)` 조인으로 만든다 |
+
+**이 차이가 남기는 것:** 성과가 없는 히스토리는 「기록이 갱신됨」을 표시할 수 없다. 미확정 미공개 기록과 판단 불일치 기록이 여기에 해당한다.
+그 기록에도 표식이 필요하다면 문구 정정이 아니라 스키마를 늘리는 요구사항 변경이므로 팀 결정이 필요하다.
+판단 근거는 [후보 병합·분리 정정 계약](../architecture/candidate-correction-contract.md) 2장 S6에 정리했다. 다른 영역의 요청 상태는 바꾸지 않는다.

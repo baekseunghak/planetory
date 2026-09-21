@@ -3,7 +3,7 @@
 The biweight arithmetic follows D03's frozen reference, not astropy/wotan.
 Policy details and intentional reference differences live in README.md.
 """
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, replace
 import re
 
 import numpy as np
@@ -110,6 +110,7 @@ def _identifier(value, name):
 def _validate_masks(curves, interval_masks):
     masks = tuple(interval_masks)
     ids = set()
+    normalized = []
     for m in masks:
         if not isinstance(m, IntervalMask):
             raise PreprocessError("invalid_mask", "IntervalMask required")
@@ -132,7 +133,12 @@ def _validate_masks(curves, interval_masks):
         targets = [c for c in curves if c.product_id == m.product_id and c.sector == m.sector]
         if len(targets) != 1 or targets[0].source_sha256 != m.product_sha256:
             raise PreprocessError("mask_source_mismatch", m.interval_id)
-    return masks
+        boundary_type = int if m.coordinate == "cadenceno" else float
+        start, end = boundary_type(m.start), boundary_type(m.end)
+        if not np.isfinite(start) or not np.isfinite(end) or start >= end:
+            raise PreprocessError("invalid_mask", "bounds not representable in JSON numeric types")
+        normalized.append(replace(m, sector=int(m.sector), start=start, end=end))
+    return tuple(normalized)
 
 
 def prepare_silver(curves: list[SectorInput], *, interval_masks=()) -> PreparedCurve:

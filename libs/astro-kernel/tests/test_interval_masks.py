@@ -109,3 +109,24 @@ def test_multisector_unsorted_provenance_and_strict_json():
         assert b.original_quality[i]==source.quality[row]
     assert len(ledger)+int(d.kept.sum())==1200
     assert [r["original_time_nonfinite"] for r in ledger if "original_time_nonfinite" in r]==["NaN","+Infinity","-Infinity"]
+
+
+@pytest.mark.parametrize("coordinate,start,end,bound_type", [
+    ("cadenceno", np.int64(0), np.int64(10), int),
+    ("cadenceno", np.float64(0), np.float64(10), int),
+    ("BTJD_TDB_day", np.float64(0), np.float64(0.1), float),
+    ("BTJD_TDB_day", np.float32(0), np.float32(0.1), float),
+])
+def test_mask_numpy_scalars_are_strict_json(coordinate, start, end, bound_type):
+    import json
+    original = mask(sector=np.int64(3), coordinate=coordinate, start=start, end=end)
+    prepared = p.prepare_silver([curve()], interval_masks=[original])
+    stored = prepared.interval_masks[0]
+    assert type(stored["sector"]) is int
+    assert type(stored["start"]) is bound_type
+    assert type(stored["end"]) is bound_type
+    assert json.loads(json.dumps(prepared.interval_masks, allow_nan=False))[0] == stored
+    assert type(original.sector) is np.int64
+    expected = p.prepare_silver([curve()], interval_masks=[replace(original, sector=3, start=bound_type(start), end=bound_type(end))])
+    np.testing.assert_array_equal(prepared.source_row, expected.source_row)
+    np.testing.assert_array_equal(prepared.flux, expected.flux)

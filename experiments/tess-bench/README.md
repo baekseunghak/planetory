@@ -1,5 +1,13 @@
 # TESS 처리 벤치마크
 
+## 112 고조파·후보 동일성 실험
+
+111 확정 ZIP 감사, 4별 두 Bundle 비교, 정확한 모델 중복 정리와 자동 고조파 병합 비교 실험은
+[후보 동일성 벤치마크](../../docs/data/tess-candidate-identity-benchmark.md)를 따른다.
+`candidate_identity_v3_review`는 일반 MR에서 계약 승인을 요청하는 검토안이다.
+69개 관련 테스트와 최종 `review-v3` 결과를 제공한다. 0.25ppm 동등성 실험은 운영 미채택이며
+운영 ID 할당·122 통합은 이 실험의 범위가 아니다.
+
 ## 120 공용 BLS 커널 회귀
 
 [함수 계약과 상태](../../libs/astro-kernel/README.md#bls-탐색과-품질-게이트-120)를 따른다.
@@ -335,3 +343,21 @@ manifest SHA-256: `f97eab1a35cadf746361e6e0ab91dfc4c24e5e85ff4ff18fd77065a1a7a50
 
 근거 구간·버전 승인과 MR 병합은 아직 남아 있다. 운영 전체 Sector 적용, 클러스터 배포 또는
 새 BLS 회수율 검증을 완료했다고 주장하지 않는다.
+
+
+### 245 MR !158 리뷰 수정 검증
+
+`9f62bb0` 리뷰의 NumPy scalar 직렬화와 최적화 모드 검증 누락을 수정했다.
+입력 마스크를 변경하지 않고 검증된 복사본의 sector/cadence는 Python int, BTJD 경계는 float로 보존한다.
+회귀 실행기의 행 수·원본 추적·수치 일치·사후 해시 검증은 명시적 ValueError로 실패한다.
+실행 plan에 `sys.flags.optimize`도 기록한다.
+
+- 통합 기준 develop: `8aaf335d4f13456c8a8bbc1cb89f5e916e1e0498`. 153 정합화 기록과 245 기록을 모두 보존했다.
+- astro-kernel 전체: 124 passed (NumPy int64/float64/float32 JSON 직렬화 4사례 포함).
+- 최적화 모드 검증 10사례 + 기존 Silver 참조 6사례: 16 passed.
+- `-O`와 `PYTHONOPTIMIZE=1` 각각에서 정상 대조는 통과하고, 행 수·cadence 추적·수치·입력 hash 변조는 성공 manifest 생성 전에 거절했다.
+- 실제 `python -O -m tess_bench.interval_mask_regression` 5제품 통과, 신규 제외0·전후 수치 동일.
+- 결과: `results/interval-masks-245/review-fix-optimized`. 최적화 모드에서도 입력·코드 snapshot과 출력 hash를 확인한다.
+- 기존 448곡선 실측은 앞 절의 이전 실행 증거다. 이번에는 전체448곡선을 재실행하지 않았고, 위 테스트와5제품을 재검증했다.
+
+Git 충돌 해제 확정은 해결 파일 stage·merge commit·push 후 MR에서 확인한다. 로컬 마커 제거만으로 원격 MR 충돌 해제를 선언하지 않는다.

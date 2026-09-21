@@ -41,7 +41,7 @@ def run(raw, evidence, output):
                   root/"experiments/tess-bench/uv.lock"]
     code = [dict(path=str(p), sha256=sha(p)) for p in code_paths]
     plan = dict(inputs=inputs, sources=sources, code=code,
-                environment=dict(python=sys.version, platform=platform.platform(),
+                environment=dict(python=sys.version, optimize=sys.flags.optimize, platform=platform.platform(),
                                  packages={k:importlib.metadata.version(k) for k in ("numpy", "astropy")}),
                 mask_contract_version=MASK_CONTRACT_VERSION,
                 mask_settings=dict(ranges=RANGES, coordinate="cadenceno", closed="both",
@@ -60,23 +60,27 @@ def run(raw, evidence, output):
                SOURCES["tess_sector_03_drn04_v02.pdf"],"sector3-acs-dr42-review-v1") for i,(a,b) in enumerate(RANGES)]
         a,da=preprocess_silver([c]); b,db=preprocess_silver([c],interval_masks=masks)
         ledger=exclusion_ledger(b,db)
-        assert len(ledger)+int(db.kept.sum())==len(c.time)
+        if len(ledger)+int(db.kept.sum()) != len(c.time):
+            raise ValueError(f"row conservation mismatch: {path.name}")
         for row in ledger:
             i=row["source_row"]
-            assert row["cadenceno"]==int(c.cadenceno[i]) and row["original_quality"]==int(c.quality[i])
+            if row["cadenceno"] != int(c.cadenceno[i]) or row["original_quality"] != int(c.quality[i]):
+                raise ValueError(f"provenance mismatch: {path.name} row {i}")
         ledgers.extend(ledger)
         equal = all(np.array_equal(getattr(a,k),getattr(b,k),equal_nan=True)
                     for k in ("time","flux","flux_err","sector","source_row","cadenceno","original_quality"))
         equal = equal and all(np.array_equal(getattr(da,k),getattr(db,k),equal_nan=True)
                               for k in ("trend","flux_det","kept","segment_id","segment_edges","noise_scatter"))
         equal = equal and da.status == db.status
-        assert equal, "DR42 sample contains newly excluded rows; review required"
+        if not equal:
+            raise ValueError(f"numerical mismatch: {path.name}; review required")
         record=dict(product=path.name,sha256=entry["sha256"],data_rel=42,procver=meta["PROCVER"],raw=len(c.time),
                     interval_rows=sum(bool(r["interval_ids"]) for r in b.excluded),newly_excluded=len(a.time)-len(b.time),
                     prepared=len(b.time),kept=int(db.kept.sum()),status=db.status,numerical_equal=equal,masks=[asdict(m) for m in masks])
         records.append(record)
     for entry in inputs+sources+code:
-        assert sha(Path(entry["path"]))==entry["sha256"]
+        if sha(Path(entry["path"])) != entry["sha256"]:
+            raise ValueError(f"snapshot checksum mismatch: {entry['path']}")
     (output/"exclusions.json").write_text(json.dumps(ledgers,allow_nan=False),encoding="utf-8")
     (output/"report.json").write_text(json.dumps(records,indent=2),encoding="utf-8")
     (output/"manifest.json").write_text(json.dumps(dict(completed=True,exclusions_sha256=sha(output/"exclusions.json"),report_sha256=sha(output/"report.json"),
