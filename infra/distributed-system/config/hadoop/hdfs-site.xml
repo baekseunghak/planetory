@@ -53,6 +53,10 @@
     <value>file:///mnt/data/hdfs</value>
   </property>
   <property>
+    <name>dfs.datanode.du.reserved</name>
+    <value>107374182400</value>
+  </property>
+  <property>
     <name>dfs.replication</name>
     <value>2</value>
   </property>
