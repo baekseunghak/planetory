@@ -50,7 +50,8 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
-        assertEquals(1, upgraded.migrate().migrationsExecuted); // 기존 V15 → V16 반응
+        // 기존 V15 → V16 반응 → V17 상세 보기 대상. 새 마이그레이션마다 이 수를 올린다.
+        assertEquals(2, upgraded.migrate().migrationsExecuted);
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")

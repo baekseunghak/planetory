@@ -39,20 +39,30 @@ public record CommunityQuery(String scope, Long target, String judgment, int siz
         var expected = new CommunityQuery(scope, target, judgment, (int) size, null, null);
         String cursor = params.getFirst("cursor");
         if (!params.containsKey("cursor")) return expected;
+        var position = cursor(cursor, expected.binding());
+        return new CommunityQuery(scope, target, judgment, (int) size, position.at(), position.id());
+    }
+
+    record Cursor(OffsetDateTime at, long id) {}
+
+    static Cursor cursor(String cursor, String binding) {
         try {
             if (cursor == null || cursor.isEmpty() || cursor.length() > 1024) throw invalid();
             String[] parts = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).split("\\|", -1);
-            if (parts.length != 6 || !String.join("|", java.util.Arrays.copyOf(parts, 4)).equals(expected.binding())) throw invalid();
+            if (parts.length != 6 || !String.join("|", java.util.Arrays.copyOf(parts, 4)).equals(binding)) throw invalid();
             OffsetDateTime at = OffsetDateTime.parse(parts[4]);
             if (at.getYear() < 1 || at.getYear() > 9999 || at.getNano() % 1000 != 0) throw invalid();
             long id = positive(parts[5]);
-            if (!expected.next(at, id).equals(cursor)) throw invalid();
-            return new CommunityQuery(scope, target, judgment, (int) size, at, id);
+            if (!next(binding, at, id).equals(cursor)) throw invalid();
+            return new Cursor(at, id);
         } catch (IllegalArgumentException | DateTimeException e) { throw invalid(); }
     }
 
     public String next(OffsetDateTime at, long id) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString((binding() + "|" + at + "|" + id).getBytes(StandardCharsets.UTF_8));
+        return next(binding(), at, id);
+    }
+    static String next(String binding, OffsetDateTime at, long id) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString((binding + "|" + at + "|" + id).getBytes(StandardCharsets.UTF_8));
     }
     private String binding() { return scope + "|" + target + "|" + judgment + "|" + size; }
 
@@ -62,7 +72,7 @@ public record CommunityQuery(String scope, Long target, String judgment, int siz
             return positive(value.substring(prefix.length()));
         } catch (BusinessException e) { throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND); }
     }
-    private static long positive(String value) {
+    static long positive(String value) {
         if (value == null || !value.matches("[1-9][0-9]{0,18}")) throw invalid();
         try { return Long.parseLong(value); }
         catch (NumberFormatException e) { throw invalid(); }
