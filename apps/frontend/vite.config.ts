@@ -38,11 +38,12 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "reactions",
       "materials",
       "profiles",
+      "settings",
       "search",
       "hot-topics",
     ].includes(mode);
   const profileFixture =
-    command === "serve" && !isPreview && mode === "profiles"
+    command === "serve" && !isPreview && ["profiles", "settings"].includes(mode)
       ? (await import("./dev/profile-fixture-plugin.ts")).createProfileFixture()
       : null;
   const testing =
@@ -80,6 +81,13 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   return {
     plugins: [
       react(),
+      ...(communityFixture && mode === "settings"
+        ? [
+            (
+              await import("./dev/settings-fixture-plugin.ts")
+            ).settingsFixturePlugin(),
+          ]
+        : []),
       ...(communityFixture && mode === "hot-topics"
         ? [
             (

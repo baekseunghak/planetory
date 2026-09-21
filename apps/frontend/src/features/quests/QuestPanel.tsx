@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { pagePath } from "../../app/paths";
 import { useQuests } from "./QuestProvider";
 import {
@@ -104,6 +104,16 @@ export function QuestPanel({
   const [expanded, setExpanded] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
+  const [search] = useSearchParams();
+  const requestedRound =
+    search.get("quest") === "challenge" ? search.get("roundId") : null;
+  useEffect(() => {
+    if (requestedRound) setExpanded(true);
+  }, [requestedRound]);
+  useEffect(() => {
+    if (expanded && requestedRound && challengeRef.current)
+      challengeRef.current.open = true;
+  }, [expanded, requestedRound, quests]);
   useEffect(() => {
     if (!expanded) return;
     const dismiss = (event: PointerEvent) => {
@@ -236,6 +246,14 @@ export function QuestPanel({
             )}
           </details>
           <details className="quest-challenge" ref={challengeRef}>
+            {requestedRound &&
+              current &&
+              current.round?.roundId !== requestedRound && (
+                <p role="status">
+                  알림의 회차는 종료되었거나 변경되었습니다. 현재 챌린지를
+                  확인해 주세요.
+                </p>
+              )}
             <summary>
               챌린지{" "}
               <span>

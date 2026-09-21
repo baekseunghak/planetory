@@ -24,8 +24,8 @@
 | 내 별 목록 | P0 | `GET /api/v1/me/stars` | 내가 발견한 별과 진행 상태 확인. 응답 정의는 탐사 명세 4.4절 | [회원](#member) |
 | 타인 별 목록 | P0 | `GET /api/v1/members/{memberId}/stars` | 공개 설정이 허용한 별 목록 조회. 응답 정의는 탐사 명세 4.4절 | [회원](#member) |
 | 로그아웃 | P0 | `POST /api/v1/auth/logout` | 현재 로그인 종료 | [회원](#member) |
-| 피드·검색 | 피드 P0 / 검색 P1(P0 상향 요청) | `GET /api/v1/community/feed` | 일반 글·공식 스레드를 제목·본문·작성자·TIC·게시판·태그로 검색 | [검색](#feed) |
-| 핫 토픽 | P1(P0 상향 요청) | `GET /api/v1/community/hot-topics` | 산식 확정(DEC-09): 유효 참여자(세 판단 합계) 10명 이상 공식 스레드 | [검색](#feed) |
+| 피드·검색 | 피드 P0 / 검색 P0 (SRS v1.1 확정) | `GET /api/v1/community/feed` | 일반 글·공식 스레드를 제목·본문·작성자·TIC·게시판·태그로 검색 | [검색](#feed) |
+| 핫 토픽 | P0 (SRS v1.1 확정) | `GET /api/v1/community/hot-topics` | 산식 확정(DEC-09): 유효 참여자(세 판단 합계) 10명 이상 공식 스레드 | [검색](#feed) |
 | 일반 글 | P0 | `POST /api/v1/posts`, `GET/PATCH/DELETE /api/v1/posts/{postId}` | 일반 글 작성·조회·수정·삭제 | [게시글](#posts) |
 | 댓글 목록·작성 | P0 | `GET/POST /api/v1/comments` | 일반 글 또는 공식 스레드의 토론 조회·작성 | [댓글](#comments) |
 | 댓글 수정·삭제 | P0 | `PATCH/DELETE /api/v1/comments/{commentId}` | 본인 댓글 수정·삭제 | [댓글](#comments) |
@@ -232,6 +232,16 @@ if (response.status === 401) {
 
 ### 4.1 피드 검색
 
+**164 구현 범위:** `GET /api/v1/community/feed`는 조건 없는 전체 피드와 `ticId`별 피드, `size`·`cursor`를 제공한다. 특정 별 경로의 프론트가 보내는 `ticId=259377017&board=STAR&size=20`도 기본 별 조회로 허용한다. 이때 `board=STAR`는 TIC에 이미 포함된 범위이므로 생략과 같은 의미다. 프론트 운영 코드 변경 없이 이 서버 수정이 배포된 시점부터 연결할 수 있다. 아래 검색 목표 계약은 169 범위다. 현재 `q/searchIn/author/tag` 및 다른 미지원 쿼리는 400 `VALIDATION_FAILED`로 반환한다. 핫 토픽·팔로우도 이 경로에 포함하지 않는다.
+
+**연결 가능한 화면:** 검색 조건 없는 전체 피드와 특정 TIC 게시판 기본 목록이다. **169 연결 전 사용 불가:** TIC 없는 ‘별 게시판’(`board=STAR`)·‘자유 게시판’(`board=FREE`) 탭과 검색어·작성자·태그를 사용한 검색 결과 화면이다. 이 요청들은 현재 400이며, 성공한 빈 목록으로 처리하지 않는다. `ticId + board=FREE`, 빈 값·잘못된 board·중복 board도 400이다.
+
+- 모든 쿼리 키는 한 번만 허용한다. 빈 값·미지의 키·중복 키는 400이다. `ticId`는 선행 0 없는 양의 signed-64-bit 십진 문자열, `size`는 1~100(생략 시 20)이다.
+- `cursor`는 서버 응답을 그대로 전달한다. 피드 경로·TIC 범위·최신순 정렬 버전·size에 묶으며 다른 범위·크기·공개 분석 경로의 커서와 비정상 형식은 400이다. 같은 TIC·size에서 `board=STAR`의 추가/생략은 범위가 같아 커서를 서로 재사용할 수 있다. PostgreSQL 마이크로초 시각과 실제 숫자 posts.id를 보존한다. 접두 문자열로 정렬하지 않는다.
+- 전체 피드는 visible 일반 글과 공식 스레드를 포함한다. 별 연결 항목은 해당 별이 공개 상태이며 누군가 최초 발견한 경우만 포함한다. 지정한 별이 닫혀 있으면 404 `STAR_NOT_PUBLISHED`, 접근 가능한 별의 결과가 없으면 200 빈 목록이다. 열람 회원 자신의 별 발견·개인 분석 잠금은 요구하지 않는다.
+- 응답은 `items/nextCursor/hasNext`이며 `Cache-Control: no-store`다. POST의 `judgmentSummary`는 null, SIGNAL_THREAD는 기존 `publicJudgmentSummary` 응답 전체(`kind/candidateId/participantCount/likelyPlanet/unlikelyPlanet/unsure/percentages/asOf`)다. 일반 글 반응 합계는 상세 API 계약을 따른다.
+- 한 피드 응답의 목록·댓글 수·공개 판단 집계는 같은 REPEATABLE_READ 스냅샷에서 읽는다. 다음 페이지 요청은 새 상태를 보며 새 글·숨김·삭제로 페이지 간 고정 스냅샷을 보장하지 않는다. 마지막 항목이 삭제돼도 커서 위치는 유지한다.
+
 예: TIC `123456789`에서 제목이나 본문에 ‘밝기’가 들어간 일반 글·공식 스레드를 조회한다.
 
 `GET /api/v1/community/feed?ticId=123456789&q=밝기&size=20`
@@ -248,9 +258,9 @@ if (response.status === 401) {
 | tag | 아니오 | `ANALYSIS`/`QUESTION`/`DISCUSSION`/`INFORMATION`/`GENERAL`. 공식 스레드 제외 |
 | cursor, size | 아니오 | 다음 페이지·페이지 크기. 기본 20개·최대 100개 |
 
-**우선순위:** SRS COM-03은 P1이며 P0 상향을 팀에 요청한다(정합화 요청 D1).
+**우선순위:** SRS v1.1 COM-03은 P0다(2026-09-11 팀 결정, 정합화 요청 D1).
 
-**검색 정책(SB-D24 제안, SB-D21 대체):** 검색 대상 필드는 SRS COM-03과 같고, 쿼리 형식·일치 방식은 담당자 제안이다. 일반 글·공식 스레드에서 제목·본문 키워드(`q`, 부분 일치, `searchIn`=TITLE_BODY 기본/TITLE/BODY), 작성자(`author`, 현재 닉네임 정확 일치·영문 대소문자 무시), TIC(`ticId`, 정확 일치), 게시판 종류(`board`=STAR/FREE), 대표 목적 태그(`tag`)로 검색·필터한다(SRS COM-03). 키워드는 영문 대소문자를 무시하고 앞뒤 공백 제거·내부 공백 유지 후 1~100자이며 LIKE 와일드카드는 이스케이프해 문자 그대로 찾는다. 조건은 모두 AND, 조건이 없으면 접근 가능한 전체 피드다. 공식 스레드는 제목과 시스템이 채운 신호 요약 본문으로 검색되며, 작성자·태그 조건이 있으면 제외한다(SYSTEM은 회원이 아니고 태그가 없다). 바뀐 이전 닉네임으로는 찾지 않는다. 댓글은 검색 대상이 아니다. 생성 시각 내림차순 → ID 내림차순, 기본 20개·최대 100개, 결과 없음 200 빈 목록, 삭제·숨김 제외. 오타 보정·형태소 분석·별도 검색 엔진은 제외한다. 본문 부분 일치 성능을 위해 PostgreSQL `pg_trgm` GIN 인덱스(title, body)를 사용한다(ERD 반영 요청). 허용값 밖의 enum·길이 초과는 400이다. 공식 스레드 제목 생성 규칙은 별도 협의한다.
+**검색 정책(SB-D24 제안, SB-D21 대체):** 검색 대상 필드는 SRS COM-03과 같고, 쿼리 형식·일치 방식은 담당자 제안이다. 일반 글·공식 스레드에서 제목·본문 키워드(`q`, 부분 일치, `searchIn`=TITLE_BODY 기본/TITLE/BODY), 작성자(`author`, 현재 닉네임 정확 일치·영문 대소문자 무시), TIC(`ticId`, 정확 일치), 게시판 종류(`board`=STAR/FREE), 대표 목적 태그(`tag`)로 검색·필터한다(SRS COM-03). 키워드는 영문 대소문자를 무시하고 앞뒤 공백 제거·내부 공백 유지 후 1~100자이며 LIKE 와일드카드는 이스케이프해 문자 그대로 찾는다. 조건은 모두 AND, 조건이 없으면 접근 가능한 전체 피드다. 공식 스레드는 제목과 시스템이 채운 신호 요약 본문으로 검색되며, 작성자·태그 조건이 있으면 제외한다(SYSTEM은 회원이 아니고 태그가 없다). 바뀐 이전 닉네임으로는 찾지 않는다. 댓글은 검색 대상이 아니다. 생성 시각 내림차순 → ID 내림차순, 기본 20개·최대 100개, 결과 없음 200 빈 목록, 삭제·숨김 제외. 오타 보정·형태소 분석·별도 검색 엔진은 제외한다. 본문 부분 일치 성능을 위해 PostgreSQL `pg_trgm` GIN 인덱스(title, body)를 사용한다(ERD v1.1·V1 마이그레이션 반영 완료). 허용값 밖의 enum·길이 초과는 400이다. 공식 제목은 161에서 `TIC {ticId} 신호 c-{candidateId} 밝기 분석`으로 구현됐다. 현재 생성 본문은 빈 문자열이므로 신호 요약 본문 검색은 후속 구현 쟁점이다. [170 공통 표본·인덱스 검증 기준](../../../docs/api/community/README.md)에서 현재 상태와 목표 계약, 169·프론트 인계 항목을 구분한다.
 
 예: TIC 123456789 + q=밝기는 해당 별에서 제목 또는 본문에 밝기가 포함된 일반 글·공식 스레드만 반환한다. 검증은 조건별 단독·AND 조합, searchIn 세 값, 닉네임 변경 전후 author 검색, 작성자·태그 조건 시 공식 스레드 제외, `%`·`_` 문자 그대로 검색, 영문 대소문자, 앞뒤/내부 공백, 조건 없음·결과 없음, 삭제·숨김 제외, 최신순·동률 정렬과 페이지 크기를 포함한다.
 
@@ -269,7 +279,7 @@ if (response.status === 401) {
 
 ### 4.2 핫 토픽
 
-**우선순위·상태:** SRS COM-09는 P1이며 P0 상향을 팀에 요청한다. 산식은 DEC-09로 팀이 확정했다(10.1 안건 5, SB-D16 대안 채택). SRS 10.1 안건 5의 기본안이던 “최근 7일 (답글 수 + 동의·비동의 수) 가중, 별 스레드 기준”은 폐기했다.
+**우선순위·상태:** SRS v1.1 COM-09는 P0다(2026-09-11 팀 결정). 산식은 DEC-09로 팀이 확정했다(10.1 안건 5, SB-D16 대안 채택). SRS 10.1 안건 5의 기본안이던 “최근 7일 (답글 수 + 동의·비동의 수) 가중, 별 스레드 기준”은 폐기했다.
 
 **확정(SB-D16, DEC-09):** 공식 스레드의 현재 유효 참여자 `participantCount >= 10`이면 핫 토픽으로 선정한다. 어느 판단이 다수인지는 무관하다.
 
@@ -289,7 +299,7 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-**첨부 구현(S15P21C206-160):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. 아직 구현하지 않은 `sourceLinks`는 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`이며 실제 출처·반응이 없다는 사실로 해석하지 않는다.
+**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. 아직 구현하지 않은 `sourceLinks`는 빈 배열이며 실제 출처가 없다는 사실로 해석하지 않는다.
 
 `historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
 
@@ -539,7 +549,11 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"postId":"p-201","myReaction":"AGREE","agree":4,"disagree":1}
 ```
 
-같은 요청 반복은 숫자를 더하지 않는다. AGREE에서 DISAGREE로 바꾸면 기존 동의가 제거되고 비동의가 하나 생긴다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 공식 스레드 세 판단과는 별개다.
+같은 요청 반복은 숫자·행·갱신 시각을 바꾸지 않는다. AGREE에서 DISAGREE로 바꾸면 같은 관계 행을 갱신하고 NONE은 관계 행을 삭제한다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 반응은 공개 분석·History·성과·별 발견·공식 스레드 세 판단 통계를 변경하지 않는다.
+
+**구현(S15P21C206-163):** V1의 `post_reactions`와 `UNIQUE(post_id,user_id)`를 재사용한다. 글 행 잠금을 획득한 뒤 반응을 조회·저장하고 같은 트랜잭션에서 합계를 반환한다. 동일 회원의 다른 상태 요청은 잠금 획득 후 저장·커밋 순서대로 반영한다. 요청 시작·응답 도착 순서는 최종 상태 기준이 아니다. 일반 글 수정·삭제도 같은 글 행 잠금을 사용한다.
+
+**접근 정책 확정(2026-09-21):** 숨김·삭제 글은 본인 글·본인 기존 반응 여부와 관계없이 AGREE·DISAGREE·NONE 모두 404 `RESOURCE_NOT_FOUND`다. 상세·합계·반응자 조회도 404다. 공식 스레드 ID를 `p-`로 보내도 404이며 공식 스레드 반응 경로는 제공하지 않는다. 인증된 활성 회원만 사용할 수 있고 쓰기는 CSRF 검사를 적용한다. 누락·null·소문자·알 수 없는 reaction은 400 `VALIDATION_FAILED`다.
 
 `GET /api/v1/posts/p-201/reactions?reaction=AGREE&size=20`의 reaction은 AGREE/DISAGREE 필수:
 
@@ -547,7 +561,9 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"items":[{"memberId":"u-101","nickname":"별찾는사람"}],"nextCursor":null,"hasNext":false}
 ```
 
-모든 인증 회원이 페이지 순회로 반응자 전원을 볼 수 있는 안이다. 최신 닉네임 사용. 목록·합계는 각 응답의 조회 시점 기준이어서 별도 호출 사이 변동 가능하다. 숨김·삭제 상태의 변경/취소 허용과 탈퇴 회원 표시는 미정이다.
+모든 인증 회원이 동의·비동의별 목록을 조회한다. 회원을 조인해 최신 닉네임을 반환하며 공개 프로필 설정은 반응을 숨기지 않는다. 정렬은 `updated_at DESC, id DESC`, size는 기본 20·최대 100(1 미만·100 초과는 400)이다. `nextCursor`를 같은 글·reaction·size의 `cursor`로 전달한다. 다른 조건 또는 잘못된 커서는 400 `VALIDATION_FAILED`다. NONE은 목록 필터로 허용하지 않는다.
+
+GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 후속이며 현재 관계를 임의로 삭제하거나 필터링하지 않는다.
 
 <a id="analyses"></a>
 
@@ -622,13 +638,24 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 ### 9.2 스레드·공개 목록·상세
 
+**164 조회 계약:** 아래 세 GET은 로그인·활성 회원 검사를 거치며 `Cache-Control: no-store`를 반환한다. 일반 글 상세·공식 스레드·기존 댓글 목록과 글/댓글의 History 첨부 직접 경로 모두 별의 공개/최초 발견 조건을 검사한다. 공개 분석 취소와 독립 첨부 권한의 구분은 유지하며, 별 자체가 닫히면 첨부도 404다. 토론은 `GET /api/v1/comments?parentType=SIGNAL_THREAD&parentId=st-{id}`를 그대로 사용한다. 공개 분석별 댓글 API는 제공하지 않는다.
+
+스레드 상세는 아래 예제에 `signal: {periodDays, epochBtjd, durationHours, depthPpm}`, `commentCount`, `createdAt`을 함께 반환한다. 신호 수치는 현재 공식 후보 요약이며 단위는 일·BTJD·시간·ppm이다. 회원별 미공개 제출·진행 정보를 합치지 않는다. 통계는 기존 함수가 반환하는 `kind=public_analyses`, `candidateId`도 포함한다. 공식 제목은 저장값을 사용하고 최초 공개 회원을 작성자로 표시하지 않는다. 신호 요약 본문의 저장·갱신·기존 스레드 채움과 본문 검색은 [169 후속 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)이며 이 GET에서 데이터를 쓰지 않는다.
+
+공식 스레드의 신호 요약(COM-15·17)은 후보표의 `periodDays/epochBtjd/durationHours/depthPpm` 네 수치를 공개한다(2026-09-21 사용자 확정). 별 게시판이 열려 있고 스레드가 visible이면 본인이 아직 분석하지 않았거나 유효 공개 분석이 0건이어도 동일하게 제공한다. 이는 공개 분석의 회원 제출값에 관한 SB-D23과 구분되는 공개 범위이며, 탐사 상세 보기와 달리 `answer_viewed`를 변경하거나 튜토리얼 건너뛰기 자격을 부여하지 않는다.
+
+별이 미공개이거나 아무도 발견하지 않아 닫힌 경우 특정 별 피드·일반 글 상세·댓글 부모 경로·공식 스레드 상세/목록은 404 `STAR_NOT_PUBLISHED`를 반환한다. 없는 글·숨김/삭제 부모는 404 `RESOURCE_NOT_FOUND`다. 공개 분석 상세와 History 첨부 공개 조회는 별 닫힘도 404 `RESOURCE_NOT_FOUND`로 통합한다. HTTP 상태가 같아도 경로별 오류 코드는 이 구분을 유지한다.
+
 `GET /api/v1/signal-threads/st-301`, 성공 200:
 
 ```json
 {
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
   "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
+  "signal":{"periodDays":3.5,"epochBtjd":1500.25,"durationHours":2.1,"depthPpm":1200.0},
+  "commentCount":2,"createdAt":"2026-09-09T02:00:00Z",
   "judgmentSummary":{
+    "kind":"public_analyses","candidateId":"c-401",
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
     "asOf":"2026-09-09T03:00:00Z"
@@ -636,16 +663,28 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 }
 ```
 
-판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각·동률 Submission id이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. N=0은 percentages를 null로 반환하고 ‘아직 공개된 분석이 없습니다’를 표시하는 안이다. 비율은 행성일 확률이 아니다.
+판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각 내림차순·동률 Submission id 내림차순이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. 유효 공개는 본인 취소 없음·개별 숨김 없음·부모가 visible SYSTEM 스레드인 조건을 모두 만족한다. 최신 기록이 취소·숨김되면 남은 과거 유효 기록으로 복귀하고, 없으면 회원을 분모에서 제외한다. 부모 숨김·삭제는 모든 기록을 제외하며 복원해도 개별 숨김·본인 취소 상태는 유지한다. N=0은 세 판단 건수 0·percentages=null을 반환한다. 화면은 COM-14에 따라 ‘아직 공개된 분석이 없습니다’를 표시한다. 각 비율은 건수/N×100을 소수 첫째 자리로 반올림하며, 비율은 행성일 확률이 아니다.
+
+**집계 소비 계약(165):** `SubmissionService.publicJudgmentSummary(candidateId)`는 기존 트랜잭션 안에서 호출한다(MANDATORY). 공개 등록 응답·공식 스레드의 `judgmentSummary`는 현재 라벨과 무관하게 `kind=public_analyses`와 위 필드를 유지한다. 탐사 결과·History의 `judgmentStatistics`는 현재 `answerClass=analysis`일 때 같은 집계를 사용하고 `answerClass=graded`일 때 아래 첫 매칭 통계를 사용한다. **별 결과 페이지(146)의 신호별 `judgmentStatistics`도 탐사 결과 기준**이며 상세 계약은 [탐사 API 8.4절](exploration-api-spec.md#84-별-결과-페이지-res-10-at-74)을 따른다. 조회는 성과·등급·History·탐색 완료를 변경하지 않는다. 일괄 공개(166)·공개 출처 카드(167)는 공개 요약 원천을 재사용하고, 171의 N≥10 판정에는 신호별 participantCount를 사용한다. 해당 후속 API 전체의 구현 완료를 의미하지 않는다.
+
+`asOf`는 집계 쿼리 실행 시각(UTC)이며 장기 보존 스냅샷 식별자가 아니다. 한 응답에서 목록·대표 여부·통계를 여러 SQL로 조립하는 소비자는 REPEATABLE_READ 읽기 트랜잭션에서 같은 DB 스냅샷을 사용하고, 한 번 계산한 요약과 asOf를 공유한다. 판단 필터·페이지 크기는 집계 함수 입력이 아니며 대표 선택 전에 적용하지 않는다. 별도 HTTP 요청 사이의 동일성은 보장하지 않는다. 164의 실제 목록/HTTP 결합 검증은 164에서 수행한다.
 
 `GET /api/v1/signal-threads/st-301/analyses?judgment=UNSURE&size=20`:
 
 - judgment는 생략 또는 LIKELY_PLANET/UNLIKELY_PLANET/UNSURE. 목록은 현재 유효한 공개 기록을 대상으로 하며 과거 공개 분석도 포함한다. 한 회원의 기록이 여럿 보일 수 있지만 통계 기여는 한 건이다.
-- 성공 200 공통 목록의 항목: analysisId, author, submittedAt, judgment, contributesToSummary. 마지막 필드는 현재 통계 대표 기록인지 나타내는 제안이다.
+- 성공 200 응답은 `items/nextCursor/hasNext/judgmentSummary`다. 항목은 `analysisId`, `author: {memberId,nickname}`, `submittedAt`, `judgment`, `contributesToSummary`이며 마지막 필드는 현재 통계 대표 기록인지 나타낸다. 내부 Submission ID를 응답 필드로 노출하지 않는다.
 - 판단 필터는 목록만 좁힌다. 전체 judgmentSummary의 N을 바꾸지 않는다. 목록 건수와 참여자 N은 다를 수 있다.
-- 목록 정렬은 제출 시각 내림차순·Submission id 제안. 신호 통계는 실시간 쿼리로 같은 요청 안에서 한 번 계산해 공유한다. 별도 요청 사이에는 변화할 수 있다.
+- 목록 정렬은 제출 시각 내림차순·동률 Submission id 내림차순이다. 기본 20·최대 100개이며 커서는 경로·스레드·판단 필터·size에 묶는다. 목록·필터 전 대표 여부·전체 신호 통계는 같은 REPEATABLE_READ 스냅샷에서 읽고 통계는 요청당 한 번 계산한다. 별도 요청 사이에는 변화할 수 있다.
+
+- `judgment`는 생략만 전체를 뜻한다. 빈 값·미지원 값·중복 키·미지의 쿼리 키는 400 `VALIDATION_FAILED`다. 커서 형식·정렬 정밀도는 4.1절과 같다. 숨김/삭제 부모는 404이며 부모가 visible이면 개별 공개가 모두 취소돼도 스레드는 유지되고 빈 목록·N=0을 반환한다.
 
 `GET /api/v1/public-analyses/pa-601`은 analysisId, threadId, ticId, author, submittedAt, firstPublishedAt, judgment, 근거 체크, 메모, 판단 재현에 필요한 수치(period·기준 시각·통과 지속시간 등), graph(최신 판·제출 당시 스냅샷), 제거 후보 조합·데이터 판·계산 버전만 반환한다(SB-D23). 다른 제출·미공개 기록·성과 내부 처리 정보는 반환하지 않는다. 수치 단위·필드명은 탐사와 합의한다. 개인 원본 전체를 그대로 응답하는 방식은 금지한다.
+
+164 상세의 정확한 허용 필드는 `analysisId/threadId/ticId/candidateId/author/submittedAt/firstPublishedAt/judgment/evidenceChecks/memo/original/serverDerived/match/curveContext/versions/graph/relabel`이다. `original/serverDerived/match/curveContext/versions/graph/relabel`은 [History 공개 투영](exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회)의 제한된 DTO를 재사용한다. `historyId` 루트 필드·Submission ID·requestId·개인 viewState·성과/진행·재시도 관계를 추가하지 않는다. 기존 Graph의 historyId는 이 공개 항목의 History 참조이며 개인 상세 접근 권한을 부여하지 않는다. firstPublishedAt은 최초 published_at을 유지한다.
+
+- `graphMode=CURRENT|SUBMITTED`(생략 CURRENT), `includeGraph=true|false`(생략 true)만 허용한다. 빈 값·다른 값·중복/미지 키는 400이다.
+- `includeGraph=false`는 그래프를 계산하지 않고 `graph=null`로 공개 내용만 반환한다. 그래프 의존성 실패는 기존 503 `DEPENDENCY_UNAVAILABLE`/`GRAPH_TEMPORARILY_UNAVAILABLE` 계약을 유지한다. 제출 당시 스냅샷 없음과 현재 잔차 fallback도 기존 Graph 계약을 유지한다.
+- `HistoryService.publicContent/publicGraph`와 `PublicAnalysisAccess`로 매 읽기 및 반환 직전 새 DB 상태에서 회원·공개→History 연결·부모·별 열림을 재검사한다. 취소·개별 숨김·부모 숨김/삭제·별 닫힘은 404 `RESOURCE_NOT_FOUND`다. 캐시가 있어도 우회하지 않으며 타인의 잔차 jobId를 노출하거나 새 작업을 생성하지 않는다.
 
 채점형은 성과 여부와 무관하게 해당 신호에 matched/matched_harmonic한 회원의 첫 매칭 제출을 사용한다. 접수 시각 오름차순·동률 Submission id 오름차순으로 선택하며 재제출로 바꾸지 않는다. 세 판단 막대 대신 ‘이 신호를 찾은 사람 중 기록과 일치 N% · M명’으로 표시한다. 공개 분석 API를 확정/FP 전체에 확장하지 않는다. 결과 화면용 API는 탐사 담당자와 별도 계약한다.
 
@@ -731,9 +770,10 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
 }
 ```
 
-roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. 시작 요일·기준 시간대·종료일 포함 여부는 합의 후 경계 계산에 적용한다. 진행 회차가 없으면 200 `{"round":null,"eligible":false}`. 서버는 shouldShow·acknowledged를 반환하지 않는다.
+roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. **168 구현 완료:** 운영 `status='active'` 회차 하나를 선택하며 현재 날짜로 회차를 선택하거나 상태를 자동 전환하지 않는다. planned·closed만 있거나 회차가 없으면 200 `{"round":null,"eligible":false,"participantCount":null}`을 반환한다. 인증 세션이 필요하며 미인증은 401 `AUTH_REQUIRED`, 응답은 `Cache-Control: no-store`다. 서버는 shouldShow·acknowledged를 반환하지 않는다.
 
-- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 미완료 회원에게는 eligible=false, ticId=null로 대상 노출을 제한하는 최소안을 유지하며 소개 표시 여부는 별도 합의한다.
+- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
+- 자격이 있으면 `round.ticId`를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
 - SB-D20 확정: 진행 중 회차에 참여 가능한 회원에게만 새 챌린지 안내를 표시한다. 프론트는 현재 roundId와 브라우저의 회원별 마지막 안내 회차를 비교한다. 실제 안내 표시 후에만 회차를 기록하며 API 조회만으로 기록하지 않는다. 확인 테이블·서버 확인 API는 추가하지 않는다.
 - 같은 회원·브라우저에서 기록된 회차는 재안내하지 않고 다음 회차에는 다시 안내한다. 이 방식은 기기·브라우저 간 확인 상태를 공유하지 않는다. 브라우저 저장소 삭제·다른 기기 접속 시 같은 회차 안내가 다시 나올 수 있다. 엄격한 회원별 1회 안내를 보장하지 않는다.
 - 브라우저 저장 실패는 챌린지 이용을 막지 않으며 안내 반복을 허용한다. 같은 브라우저의 다른 회원은 별도 기록을 사용한다. 여러 탭의 동시 안내까지 정확히 한 번으로 보장하지 않는다. 기기 간 확인 공유는 P1 일반 알림에서 검토한다.
@@ -742,9 +782,13 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
+139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 새 DB 테이블·권한·마이그레이션은 없다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
+
 <a id="later"></a>
 
 ## 12. 추가 운영 및 P1 API 후보
+
+2026-09-21 서진의 프론트 우선 진행 요청에 따라 **회원·별 팔로우의 소비 계약은 [P1 서비스 계약 2절](p1-service-contract.md#2-팔로우--219)**로 구체화한다. 아래 팔로우 행의 미결 문구는 이 인계안으로 대체하며 백엔드 172/173의 교차 리뷰·구현은 별도다. 다른 P1 정책을 이미 구현한 것으로 해석하지 않는다.
 
 아래는 책임과 범위를 확인하기 위한 후보이며 요청·응답이 확정된 API가 아니다. 미정 정책을 임의 구현하지 않는다.
 
@@ -787,7 +831,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 닉네임 | 확정: NFC·앞뒤 공백 제거 후 2~20자. 한글 완성형·영문·숫자·밑줄만. 내부 공백 불허, 영문 대소문자 무시 중복 | DB 중복 제약 반영·금칙어 관리 담당 |
 | 자료 수 | 확정: 글·댓글 각각 History 최대 3개, 출처 카드 최대 3개. 동일 종류·ID 중복 거부 | 본문 필수, 첨부만 작성 불허 |
 | 일괄 공개 | 제안: 요청당 20개, 같은 신호 한 건(9.4절) | 탐사 처리 시간·트랜잭션 제한 확인 후 팀 확정 |
-| 검색 | P1(P0 상향 요청). SB-D24 제안: 제목·본문 키워드(searchIn)·작성자 현재 닉네임·TIC·게시판·태그 AND, 앞뒤 공백 제거·내부 유지, 최신순·기본 20/최대 100개 | pg_trgm GIN 인덱스 ERD 반영·성능 측정·공식 제목 생성 규칙·팀 교차 검토. 바인딩·와일드카드 이스케이프로 문자 그대로 검색 |
+| 검색 | P0 (SRS v1.1 확정). SB-D24 제안: 제목·본문 키워드(searchIn)·작성자 현재 닉네임·TIC·게시판·태그 AND, 앞뒤 공백 제거·내부 유지, 최신순·기본 20/최대 100개 | pg_trgm GIN은 ERD·V1 반영 완료. 성능 측정·공식 요약 본문 처리·팀 교차 검토. 바인딩·와일드카드 이스케이프로 문자 그대로 검색 |
 | 핫 토픽 임계값 | DEC-09 확정(SB-D16): 공식 스레드 N >= 10, 일반 글·댓글 조건 제외 | 구현·팀 교차 검토 |
 | 핫 토픽 기간·정렬 | SB-D16 확정: 기간 제한 없음, 참여자 수→스레드 생성 시각→ID 내림차순 | 조회·동률 검증 |
 | 핫 토픽 탈락 | SB-D16 확정: N < 10 제외, N >= 10 재진입, 숨김은 무조건 비노출 | 공개 취소·숨김·복원 후 유효 집합 검증 |
@@ -807,7 +851,8 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 - [ ] 입력 정책의 DB·프론트 반영, 페이지·일괄 상한을 검토했다.
 - [ ] 세션·CSRF 전달 계약, 401/403과 비노출 404 대상을 합의했다.
 - [x] 핫 토픽 산식을 DEC-09 팀 결정으로 확정했다(SB-D16 채택, 안건 5 기본안 폐기).
-- [ ] 검색·핫 토픽 P0 상향과 검색 세부 방식(SB-D24 제안)을 팀과 합의했다.
+- [x] 검색·핫 토픽 P0 상향은 SRS v1.1 팀 결정으로 반영했다.
+- [ ] 검색 세부 방식은 170 공통 표본으로 BE·FE 교차 검토한다.
 - [ ] 검색·핫 토픽 정책을 팀과 교차 검토했다.
 - [x] SB-D23 타인 프로필·공개 분석 공개 범위(메모 포함, SRS 기준)를 사용자와 확정했다.
 - [ ] 공개 분석 수치 필드명·단위를 탐사와 합의했다.

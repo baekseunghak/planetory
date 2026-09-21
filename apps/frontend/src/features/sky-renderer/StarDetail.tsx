@@ -13,6 +13,9 @@ import {
 } from "./detail";
 import { DiscoveredStars } from "./DiscoveredStars";
 import { QuestPanel } from "../quests/QuestPanel";
+import { StarSearch } from "./StarSearch";
+import type { StarLocation } from "./star-search";
+import { focusCamera } from "./detail";
 
 const progressLabel = {
   unexplored: "미탐사",
@@ -93,6 +96,7 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
   const panelRef = useRef<HTMLElement>(null),
     planetInfoRef = useRef<HTMLDivElement>(null);
   const refreshedVersions = useRef(new Set<string>());
+  const located = useRef<StarLocation | null>(null);
   const current = useRef(data);
   current.current = data;
   const onReady = useCallback((value: SceneControl | null) => {
@@ -160,7 +164,8 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
   }, [selectedPlanet]);
   useEffect(() => {
     if (ticId && !previousSelection.current) {
-      savedCamera.current = control.current?.getCamera() ?? null;
+      if (!savedCamera.current)
+        savedCamera.current = control.current?.getCamera() ?? null;
       launcher.current =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
@@ -192,7 +197,18 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     if (focused.current !== key) {
       if (!savedCamera.current)
         savedCamera.current = control.current?.getCamera() ?? null;
-      control.current?.focusStar(detail.system.position);
+      const destination = located.current;
+      const camera = control.current?.getCamera();
+      if (
+        destination?.ticId === key &&
+        destination.version === meta.version &&
+        camera
+      ) {
+        control.current?.setCamera(
+          { ...focusCamera(camera, destination), zoom: destination.zoom },
+          { level: destination.level },
+        );
+      } else control.current?.focusStar(detail.system.position);
       focused.current = key;
       if (panelRef.current) panelRef.current.scrollTop = 0;
       heading.current?.focus({ preventScroll: true });
@@ -201,21 +217,39 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
   const close = () => {
     store.select(null);
     // Also retire a deep-link selection so later search changes cannot resurrect it.
-    navigate(listOpen ? "/sky?view=list" : "/sky", { replace: true });
+    const params = new URLSearchParams(location.search);
+    params.delete("star");
+    params.delete("focus");
+    if (listOpen) params.set("view", "list");
+    else params.delete("view");
+    located.current = null;
+    navigate(
+      { pathname: "/sky", search: params.toString() },
+      { replace: true },
+    );
   };
   const selectPlanet = useCallback((id: string | null) => setPlanet(id), []);
   const retryDetail = () => {
     refreshedVersions.current.delete(meta.version);
     setRetry((n) => n + 1);
   };
-  const returnTo = `/sky?${new URLSearchParams({ star: ticId ?? "", ...(listOpen ? { view: "list" } : {}) })}`;
+  const returnParams = new URLSearchParams(location.search);
+  returnParams.set("star", ticId ?? "");
+  if (listOpen) returnParams.set("view", "list");
+  else returnParams.delete("view");
+  const returnTo = `/sky?${returnParams}`;
   const selectFromList = (id: string) => {
     launcher.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     store.select(id);
-    navigate(`/sky?${new URLSearchParams({ star: id, view: "list" })}`, {
+    const params = new URLSearchParams(location.search);
+    params.set("star", id);
+    params.set("view", "list");
+    params.delete("focus");
+    located.current = null;
+    navigate(`/sky?${params}`, {
       replace: true,
     });
   };
@@ -254,10 +288,13 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
               ? document.activeElement
               : null;
           store.select(id);
-          navigate(
-            `/sky?${new URLSearchParams({ star: id, ...(listOpen ? { view: "list" } : {}) })}`,
-            { replace: true },
-          );
+          located.current = null;
+          const params = new URLSearchParams(location.search);
+          params.set("star", id);
+          params.delete("focus");
+          if (listOpen) params.set("view", "list");
+          else params.delete("view");
+          navigate(`/sky?${params}`, { replace: true });
         }}
       />
       <div className="sky-view-switch">
@@ -279,6 +316,28 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
       <div
         className={`personal-galaxy${ticId ? " has-detail" : ""}${listOpen ? " shows-list" : ""}`}
       >
+        <StarSearch
+          {...props}
+          onLocate={(destination) => {
+            const camera = control.current?.getCamera();
+            if (camera && !savedCamera.current) savedCamera.current = camera;
+            located.current = destination;
+            void store.setView({
+              level: destination.level,
+              box: destination.bounds,
+            });
+            if (camera)
+              control.current?.setCamera(
+                { ...focusCamera(camera, destination), zoom: destination.zoom },
+                { level: destination.level },
+              );
+            store.select(destination.ticId);
+            const params = new URLSearchParams(location.search);
+            params.set("star", destination.ticId);
+            params.delete("focus");
+            navigate({ pathname: "/sky", search: params.toString() });
+          }}
+        />
         <DiscoveredStars {...props} active={listOpen} select={selectFromList} />
         <GalaxyScene
           {...props}

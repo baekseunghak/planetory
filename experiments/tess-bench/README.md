@@ -1,5 +1,29 @@
 # TESS 처리 벤치마크
 
+## 120 공용 BLS 커널 회귀
+
+[함수 계약과 상태](../../libs/astro-kernel/README.md#bls-탐색과-품질-게이트-120)를 따른다.
+합성 비교는 `tests/test_bls_kernel.py`에서 수행한다. 실제 FITS 회귀는 사용자가 아래 명령으로 실행한다.
+
+```powershell
+cd experiments/tess-bench
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.bls_kernel_regression
+```
+
+현재 설정 파일의 tuning 대상·전체 주입 그룹에 realclean과 seed 20260910 잡음을 적용한다.
+119의 `detrend_silver` 결과와 기존 전처리의 일치, 110 참조와 전체 power·상위 5피크의 수치
+(rtol=1e-12, atol=0), 확정 게이트 및 direct/alias 회수 판정 일치를 검증한다.
+FITS checksum은 기존 입력 로더로 검사하고 계산 전 plan에 입력·코드·설정·환경을 고정한다.
+완료 시 `results/bls-kernel-regression/run-.../`에 comparisons·matches CSV와 출력 해시 manifest를 기록한다.
+계산 중 예외·전처리 실패·불일치는 failure.json과 비정상 종료로 남는다. 입력 파일이 없으면 계산 전에 종료한다.
+다운로드·Git 명령은 실행하지 않으며 원본·결과 파일은 Git에 추가하지 않는다.
+2026-09-21 실제 4별·320곡선 회귀가 통과했다. [실측 결과](../../libs/astro-kernel/README.md#120-실제-4별-회귀-결과)를 참조한다. 새 독립 평가나 과거 환경 재현으로 해석하지 않는다.
+
+과거 `holdout_lock_v1.json`은 유지한다. 코드·의존성이 바뀐 현재 checkout에서 과거 holdout 재실행이
+거절되는 것은 정상이다. CLI 출력 단위 테스트만 임시 snapshot을 실제 validator로 검증하며,
+잠금 변조 거절 테스트를 유지한다. 잠금을 갱신해서 과거 평가를 다시 통과시키지 않는다.
+
 ## 114 세그먼트·비닝 실험
 
 3차 화면 리뷰는 완료됐고 추가 그림 요청은 없다. 저장된 9별 counts 재집계와 115·123 인계는 [운영 채택안](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 기록했다. 운영 채택안은 10분 mean·부분 bin 유지·상한 초과 실패다. 승인 상태는 MR !101과 정합화 요청에서 관리한다. 실험의 자동 확대·`bin-exp-v1-*`을 운영 규칙으로 사용하지 않는다.

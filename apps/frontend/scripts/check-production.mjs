@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 const sentinels = [
+  "settings-fixture-221",
+  "설정 확인 탐사자",
   "248 화면 검토용",
   "synthetic-preview-only",
   "218 개발 검증용 핫 토픽",

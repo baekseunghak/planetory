@@ -127,7 +127,11 @@
 | 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS HDFS Raw 병렬 bundle·manifest·원본 복원 | S15P21C206-76 | SequenceFile, offset, manifest.parquet, RF2, atomic rename, idempotency | Sector 3 실환경 검증·멱등 재실행 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | Sector 3 HDFS Raw 완료 조건 재검증 | S15P21C206-76 | byte-identical, COMMIT_CACHED, staging isolation, manifest.parquet, RF2, YARN read | Sector 3 검증 완료·전체 범위 미완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | Sector 3~5 HDFS Raw 자동 연속 적재 | S15P21C206-76 | RunAll, uploader wait, resume, manifest.parquet, RF2, FSCK | 전체 범위 적재·검증 완료 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | Sector 1~13 HDFS coverage·원자 커밋·Node 1 자율 실행 보강 | S15P21C206-76 | FinalCoverage, Sector 1~13, Rename.NONE, plan v2, systemd, internal IP, RF2, reserved | 구현·오프라인 검증 완료·실환경 적재 진행 중 | [2026-09-20](2026-09-20.md) |
 | 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
 | 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
@@ -201,3 +205,5 @@
 | 2026-09-20 | 잔차 작업 2차 리뷰 반영: 시작 실패·TIC 코드·중복 후보 | S15P21C206-147 | runner.start 실패, 고아 QUEUED, START_FAILED, STAR_NOT_PUBLISHED, curveStep 중복 제거 | 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 공개 취소·재공개와 공통 접근 판정 | S15P21C206-162 | visibility, V15, 404, 숨김, 성과 보존 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-20 | 162 리뷰 보완·공개 상태 응답 명확화 | S15P21C206-162 | isPublicByAuthor, PublicAnalysisVisibility, 409 오류 표 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 검색 공통 표본·인덱스 검증 기준 | S15P21C206-170 | SB-D24, P0, DEC-09, searchIn, GIN, 공식 본문 | 표본 검증 완료·교차 검토 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 폴링의 판 교체 감지와 실패 구분 | S15P21C206-189 | X-Current-Bundle 폴링, D-5 자동 재조회, failure.retryable, DEPENDENCY_UNAVAILABLE 영구 실패, resultCurveContext, 시나리오가 캐시를 이긴다 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |

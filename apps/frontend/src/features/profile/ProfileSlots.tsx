@@ -1,8 +1,11 @@
 import { createContext, useContext, type ComponentType } from "react";
+import type { StarFilters } from "../sky-renderer/star-search";
 export type ProfileSlotProps = {
   memberId: string;
   isOwn: boolean;
   starListVisibility: "PUBLIC" | "PRIVATE";
+  /** A13 own-star list: consume via starSearchPath(filters, cursor, "submitted"). */
+  starFilters?: StarFilters;
 };
 export type ProfileSlotComponents = {
   stars?: ComponentType<ProfileSlotProps>;
