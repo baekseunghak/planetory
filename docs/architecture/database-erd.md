@@ -773,7 +773,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | candidate_id | FK, `UNIQUE(candidate_id) WHERE kind='system_thread'` | 신호당 스레드 하나. kind=user는 NULL |
 | board | CHECK star/free | star면 tic_id NOT NULL, free면 NULL |
 | tag | ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL. system_thread는 NULL | |
-| title, body | | system_thread는 신호 요약을 시스템이 채움 |
+| title, body | | system_thread는 공개 후보 네 수치 요약을 V19 트리거로 생성·동기화한다. [검색 본문 계약](../api/community/README.md#공식-제목본문의-구현-차이) |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
 | 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
