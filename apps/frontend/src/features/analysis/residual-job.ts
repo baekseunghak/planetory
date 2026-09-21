@@ -40,7 +40,21 @@ export type ResidualOutcome =
   /** 아직이다. `pollAfterSeconds` 뒤에 다시 묻는다. */
   | { state: "running"; progress: ResidualProgress }
   /** 계산이 실패했다. 마지막 정상 곡선은 그대로 둔다. */
-  | { state: "failed"; jobId: string; code: string; message: string }
+  | {
+      state: "failed";
+      jobId: string;
+      code: string;
+      message: string;
+      /**
+       * 7.2절 `failure.retryable`. **거짓이면 다시 시도를 권하지 않는다.**
+       * 눌러도 같은 결과인 버튼은 사용자에게 「내가 뭘 잘못했나」를 묻게
+       * 만든다.
+       *
+       * 값이 없으면 **참으로 둔다.** 모르는 것 때문에 나갈 길을 막는 쪽이,
+       * 헛클릭 한 번보다 비싸다.
+       */
+      retryable: boolean;
+    }
   /**
    * 대기열이 찼다. `activeJobId`가 있으면 **내가 이미 돌리고 있는 작업**이라
    * 기다리라고만 하면 영문을 모른다(회원당 1개, D-4). 다만 그 작업으로
@@ -162,10 +176,28 @@ export async function pollResidualJob(options: {
   request: Request;
   jobId: string;
   signal: AbortSignal;
+  /** 분석 진입 때 받은 판. 헤더와 다르면 계산 도중에 바뀐 것이다. */
+  entryBundleId?: string;
 }): Promise<ResidualOutcome> {
-  const { request, jobId, signal } = options;
+  const { request, jobId, signal, entryBundleId } = options;
   try {
-    const value = await request<unknown>(residualJobPath(jobId), { signal });
+    // D-5: 이 헤더가 계산이 도는 동안의 판 교체를 알려 주는 **유일한**
+    // 길이다. 409는 POST에만 오고 `FAILED(BUNDLE_ARCHIVED)`는 88번 몫이다.
+    // 7.2절의 값은 작업의 `target.bundleId`가 아니라 조회 시점의 현재 판이다.
+    let currentBundleId: string | null = null;
+    const value = await request<unknown>(residualJobPath(jobId), {
+      signal,
+      onResponse: (response) => {
+        // 판을 못 읽으면 서버가 아예 붙이지 않는다. 없음은 **모름**이며
+        // 판 교체로 읽지 않는다. 빈 문자열로 주지 않는 이유가 그것이다.
+        currentBundleId =
+          response.headers.get("X-Current-Bundle")?.trim() || null;
+      },
+    });
+    // 상태보다 먼저 본다. 판이 바뀌었으면 이 작업의 결과는 옛 판 것이라
+    // `COMPLETED`여도 쓸 수 없다.
+    if (entryBundleId && currentBundleId && currentBundleId !== entryBundleId)
+      return { state: "bundle-changed", currentBundleId };
     const data = record(value, "본문");
     const state = status(data.status, "본문.status");
     if (state === "COMPLETED")
@@ -181,6 +213,7 @@ export async function pollResidualJob(options: {
         jobId,
         code: text(failure.code, "본문.failure.code"),
         message: text(failure.message, "본문.failure.message"),
+        retryable: failure.retryable !== false,
       };
     }
     return { state: "running", progress: readProgress(data, "본문") };
@@ -215,8 +248,13 @@ export async function runResidualJob(options: {
   /** 상태가 바뀔 때마다 부른다. 화면이 순서를 그린다. */
   onProgress?: (progress: ResidualProgress) => void;
   wait?: (ms: number) => Promise<void>;
+  /**
+   * 분석 진입 때 받은 판. 폴링 응답의 `X-Current-Bundle`과 다르면 계산이
+   * 도는 동안 판이 바뀐 것이다(D-5). 주지 않으면 검사하지 않는다.
+   */
+  entryBundleId?: string;
 }): Promise<ResidualOutcome> {
-  const { request, ticId, target, signal, onProgress } = options;
+  const { request, ticId, target, signal, onProgress, entryBundleId } = options;
   const wait = options.wait ?? sleep;
   let outcome = await requestResidualJob({ request, ticId, target, signal });
   // 작업이 사라졌을 때 **한 번만** 다시 요청한다. 계속 사라지면 그때는
@@ -230,6 +268,9 @@ export async function runResidualJob(options: {
           jobId: "",
           code: "RESOURCE_NOT_FOUND",
           message: "계산 작업이 사라져 다시 요청했지만 또 사라졌습니다.",
+          // 서버가 준 실패가 아니라 우리가 만든 것이다. 사용자가 다시
+          // 해 볼 여지는 남긴다.
+          retryable: true,
         };
       restarted = true;
       outcome = await requestResidualJob({ request, ticId, target, signal });
@@ -242,6 +283,7 @@ export async function runResidualJob(options: {
       request,
       jobId: outcome.progress.jobId,
       signal,
+      entryBundleId,
     });
   }
   if (outcome.state === "ready" && !outcome.cacheHit) {
