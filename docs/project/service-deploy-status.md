@@ -123,9 +123,11 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 ## 검증 경계
 
-**실행해서 확인한 것.** 프론트 `npm test` 343개와 `npm run build` 통과. 배포 스크립트는 가짜 `docker`·`curl`로 정상 배포, `up -d` 실패 시 롤백, 복수 서비스 교체, `curl` 부재 시 교체 전 중단, 덤프 실패 시 중단, 이미지 변수 오타 검출을 확인했다. 스키마 검사는 실제 git 저장소로 선점 차단·통과·건너뛰기를 확인했고, 되돌릴 수 없는 구문 6종 차단과 한국어 주석 오탐 없음을 확인했다. 이미지 빌드 두 개는 로컬 Docker에서 실제로 실행했다. 수정 전 `nginx.conf`로 `nginx -t`가 `host not found in upstream`으로 실패하는 것도 확인했다.
+**실행해서 확인한 것.** 프론트 `npm test` 343개와 `npm run build` 통과. 배포 스크립트는 가짜 `docker`·`curl`로 정상 배포, `up -d` 실패 시 롤백, 복수 서비스 교체, `curl` 부재 시 교체 전 중단, 덤프 실패 시 중단, 이미지 변수 오타 검출을 확인했다. 스키마 검사는 **로컬에서** 실제 저장소로 선점 차단·통과·건너뛰기를 확인했고, 되돌릴 수 없는 구문 6종 차단과 한국어 주석 오탐 없음을 확인했다. 이미지 빌드 두 개는 로컬 Docker에서 실제로 실행했다. 수정 전 `nginx.conf`로 `nginx -t`가 `host not found in upstream`으로 실패하는 것도 확인했다.
 
 **실환경에서 확인한 것(2026-09-21).** GitLab 파이프라인은 실행되고 있다. develop의 `build:frontend`는 Runner를 잡고 dind에서 이미지 빌드까지 마치며 커밋 SHA 태그도 정확히 붙는다. `rules: changes` 판정과 dind 기동도 동작한다. EC2-A의 배포 경로는 `deploy` 계정으로 `docker compose config -q`를 통과하고, 레지스트리 인증서는 EC2-A에서 유효하다.
+
+**MR 단계 검증 job이 실제로 돌았다(2026-09-22).** MR 파이프라인에서 `backend:schema`, `backend:build`, `backend:image`, `web:build`, `web:image`가 모두 통과했다. 스키마 검사는 타깃 브랜치를 가져와 develop의 최대 버전 `V19`와 대조하고 선점 검사를 통과했다. 그 전까지 이 job은 **추가된 뒤 한 번도 실행되지 않았다.** 원인은 아래 「MR 단계 검사가 실행되지 않던 결함」에 있다.
 
 **배포까지 확인한 것(2026-09-21).** `deploy:frontend:ec2-a`를 실행해 성공했다. 프론트엔드 컨테이너가 레지스트리의 커밋 SHA 이미지로 교체됐고 `planetory.space`와 로컬 오리진이 모두 200을 반환한다. 다른 컨테이너는 영향받지 않았다.
 
@@ -156,6 +158,20 @@ Tunnel 진입과 프론트·백엔드 기동만 구현했다. 티켓의 나머�
 - health/readiness 설계(`S15P21C206-93`)
 - 애플리케이션 계층 남용 제어 위치
 - 단일 connector 지속 처리량·재연결 실측
+
+## MR 단계 검사가 실행되지 않던 결함 (2026-09-22 해소)
+
+`backend:schema`가 `alpine/git` 이미지를 쓰는데 이 이미지의 `ENTRYPOINT`가 `["git"]`이다. Runner가 붙이는 셸이 `git sh -c ...`로 조립되고 git이 `sh`를 하위 명령으로 오인해 죽었다.
+
+```text
+git: 'sh' is not a git command. See 'git --help'.
+```
+
+**스크립트가 한 줄도 실행되지 않았다.** 검사 로직에는 문제가 없었고, 빨강이 떠서 MR이 막혀 있었다. `entrypoint: [""]`로 비워 해소했다.
+
+같은 함정이 있는 이미지는 이것뿐이다. 나머지 job은 `docker:cli`, `alpine`, `node`, `eclipse-temurin`, `python`을 쓰며 모두 셸을 기본 진입점으로 삼는다.
+
+**교훈.** 로컬에서 스크립트를 돌려 통과한 것은 CI에서 그 스크립트가 실행된다는 뜻이 아니다. 이미지의 진입점이 다르면 스크립트에 도달하지도 못한다. 검증을 적을 때 실행 위치를 함께 남긴다.
 
 ## develop의 배포 job은 구버전이다
 
