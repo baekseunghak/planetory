@@ -11,7 +11,10 @@ import {
 import { exampleStar } from "./sky-reference/reference.mjs";
 
 // Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
-export function galaxyFixturePlugin(performanceFixture = false): Plugin {
+export function galaxyFixturePlugin(
+  performanceFixture = false,
+  initialStarCount = 1000,
+): Plugin {
   let revision = 1,
     failed = false;
   const completedTutorials = new Map<number, string>();
@@ -33,7 +36,9 @@ export function galaxyFixturePlugin(performanceFixture = false): Plugin {
           ? 2
           : 0,
   });
-  let stars: Star[] = Array.from({ length: 1000 }, (_, i) => makeStar(i));
+  let stars: Star[] = Array.from({ length: initialStarCount }, (_, i) =>
+    makeStar(i),
+  );
   const cursors = new Map<string, { scope: string; offset: number }>();
   const version = () => "galaxy-fixture-204:" + revision;
   const levels = [0.25, 1, 4].map((scale, level) => ({ scale, level }));

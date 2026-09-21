@@ -33,6 +33,7 @@ test("independently collapsed regions, all five goals, locked target privacy, se
     r.fulfill({ json: current(false) }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
   expect(await tutorial(page).getAttribute("open")).toBeNull();
   expect(await challenge(page).getAttribute("open")).toBeNull();
@@ -61,7 +62,9 @@ test("independently collapsed regions, all five goals, locked target privacy, se
     page.getByRole("complementary", { name: "별 상세" }),
   ).toContainText("TIC 900000001");
   await page.getByRole("button", { name: "은하로 돌아가기" }).click();
-  await expect(tutorial(page).getByRole("button").first()).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "퀘스트", exact: true }),
+  ).toBeFocused();
   await expect(
     page.getByRole("button", {
       name: /다음 튜토리얼로|건너뛰기/,
@@ -79,6 +82,7 @@ test("server progress 1→5 and skip, badge retirement, reopening and same-versi
     r.fulfill({ json: c }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await tutorial(page).locator("summary").click();
   for (let done = 1; done <= 5; done++) {
     q = quests(done, done === 2);
@@ -132,6 +136,7 @@ test("guide closure and another member's events do not advance tutorials or writ
     r.fulfill({ json: current(false) }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
   const before = reads;
   await notify(page, "guide-closed");
@@ -168,6 +173,7 @@ test("round notice is stored after visible paint, once per member/round, new rou
     };
   });
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(page.locator(".quest-round-notice")).toBeVisible();
   await expect
     .poll(() =>
@@ -231,6 +237,7 @@ test("storage disabled still permits challenge; details contain period/TIC/count
     r.fulfill({ json: current() }),
   );
   await page.goto("/sky?view=list");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(page.locator(".quest-round-notice")).toBeVisible();
   await challenge(page).locator("summary").click();
   await expect(challenge(page)).toContainText("2026-09-14");
@@ -258,6 +265,7 @@ test("partial failure/retry and denied target stay safe; no fake round notice or
     r.fulfill({ status: 404, json: { code: "NOT_FOUND", message: "test" } }),
   );
   await page.goto("/sky?view=list");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(page.locator(".discovered-rows button")).toHaveCount(20);
   await tutorial(page).locator("summary").click();
   await expect(tutorial(page)).toContainText("불러오지 못했습니다");
@@ -283,6 +291,7 @@ test("eligible but not discovered stays pending; round API does not grant select
     r.fulfill({ json: current() }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await challenge(page).locator("summary").click();
   await expect(challenge(page)).toContainText("대상 별이 열리기를 기다리고");
   await expect(challenge(page).getByRole("link")).toHaveCount(0);
@@ -305,6 +314,7 @@ test("hidden tab never records the notice until it becomes visible", async ({
     r.fulfill({ json: current() }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(page.locator(".quest-round-notice")).toBeVisible();
   expect(
     await page.evaluate(
@@ -337,6 +347,7 @@ test("service round closure hides stale challenge action and marker until quests
     r.fulfill({ json: c }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await challenge(page).locator("summary").click();
   await expect(challenge(page)).toContainText("회차가 변경되었습니다");
   await expect(challenge(page).getByRole("link")).toHaveCount(0);
@@ -366,6 +377,7 @@ test("late old read cannot undo completed state and foreground return refreshes 
     r.fulfill({ json: current(false) }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
   await expect(page.locator("canvas")).not.toHaveAttribute(
     "data-camera",
@@ -403,6 +415,7 @@ test("tab return events and polling do not replace an in-flight quest read", asy
     route.fulfill({ json: current(false) }),
   );
   await page.goto("/sky");
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
   const initial = requests;
   hold = true;

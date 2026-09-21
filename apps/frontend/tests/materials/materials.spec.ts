@@ -279,9 +279,13 @@ test("server rejects other owner/other TIC/4 items and public UI sends no mutati
   });
   await page.goto("/posts/" + id);
   await page.getByRole("button", { name: "분석 기록 h-501 열기" }).click();
-  await expect(page.getByText(/공용 그래프 화면은 연결 준비 중/)).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /현재 판으로 다시 접은 곡선.*관측점 3개/ }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "제출 당시", exact: true }).click();
-  await expect(page.getByText(/공용 그래프 화면은 연결 준비 중/)).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /제출 당시 접힌 곡선.*관측점 150개/ }),
+  ).toBeVisible();
   expect(writes).toEqual([]);
 });
 

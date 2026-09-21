@@ -70,23 +70,38 @@ function UnconnectedPage({ pageKey }: { pageKey: PageKey }) {
   );
 }
 function DesktopGate({ children }: { children: React.ReactNode }) {
-  const [small, setSmall] = useState(
-    () => window.matchMedia("(max-width: 1023px)").matches,
-  );
+  const [{ small, entered }, setViewport] = useState(() => {
+    const small = window.matchMedia("(max-width: 1023px)").matches;
+    return { small, entered: !small };
+  });
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)");
-    const change = () => setSmall(media.matches);
+    const change = () => {
+      const small = media.matches;
+      setViewport((previous) => ({
+        small,
+        entered: previous.entered || !small,
+      }));
+    };
     media.addEventListener("change", change);
+    change();
     return () => media.removeEventListener("change", change);
   }, []);
-  return small ? (
-    <main className="desktop-notice">
-      <span className="brand">PLANETORY</span>
-      <h1>데스크톱에서 이용해 주세요</h1>
-      <p>Planetory는 폭 1024px 이상의 화면을 지원합니다.</p>
-    </main>
-  ) : (
-    children
+  return (
+    <>
+      {small && (
+        <main className="desktop-notice">
+          <span className="brand">PLANETORY</span>
+          <h1>데스크톱에서 이용해 주세요</h1>
+          <p>Planetory는 폭 1024px 이상의 화면을 지원합니다.</p>
+        </main>
+      )}
+      {/* Resizing changes availability, not the route or session. Preserve an
+          entered page's canvas and selection; auth expiry still unmounts it. */}
+      <div className="desktop-content" hidden={small} inert={small}>
+        {entered ? children : null}
+      </div>
+    </>
   );
 }
 export function App({

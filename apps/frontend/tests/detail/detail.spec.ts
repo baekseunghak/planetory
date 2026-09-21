@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { project, exampleStar } from "../../dev/sky-reference/reference.mjs";
 import { stablePhase } from "../../src/features/sky-renderer/model";
-const canvas = (page: Page) => page.locator("canvas");
+const canvas = (page: Page) => page.locator(".galaxy-scene canvas");
 const camera = async (page: Page) =>
   JSON.parse((await canvas(page).getAttribute("data-camera"))!);
 const panel = (page: Page) =>
