@@ -24,3 +24,4 @@
 | 2026-09-21 | 공개 판단·챌린지 참여 수 공통 조건과 소비 계약 | S15P21C206-165 | 최신 유효 공개, 동률 ID, N=15, COUNT DISTINCT, REPEATABLE_READ, asOf | 전체 437건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 리뷰 반영: 별 결과 페이지 통계 기준 명확화 | S15P21C206-165 | 146, answerClass, judgmentStatistics, graded, public_analyses | 채택·문서 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
