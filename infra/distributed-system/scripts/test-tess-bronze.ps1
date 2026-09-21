@@ -33,6 +33,8 @@ try {
 
 $control = Get-Content -LiteralPath $pythonFiles[1] -Raw
 foreach ($required in @(
+    'DATA_CONTRACT_EXIT_CODE = 65',
+    'BronzeDataContractError',
     'TessSequenceFileTool',
     'contract_ok',
     'raw_ready_sha256',
@@ -54,9 +56,26 @@ if ($control -match 'hdfs\("dfs", "-rm", "-r", "-skipTrash", (?!output)') {
 }
 $runner = Get-Content -LiteralPath $scripts[0] -Raw
 foreach ($required in @('Type=oneshot', 'Restart=on-failure', 'RestartSec=5min', 'StartLimitIntervalSec=0',
+                         'RestartPreventExitStatus=65', 'ExecStopPost=-/bin/sh', '`$EXIT_STATUS',
                          'TimeoutStartSec=infinity', 'ExecStartPost=-/usr/bin/systemctl disable %n',
                          'systemctl enable', 'systemctl --no-block start')) {
     if (-not $runner.Contains($required)) { throw "Missing autonomous Bronze unit contract: $required" }
+}
+$runnerTokens = $null
+$runnerErrors = $null
+$runnerAst = [Management.Automation.Language.Parser]::ParseFile($scripts[0], [ref]$runnerTokens, [ref]$runnerErrors)
+$unitAssignment = $runnerAst.Find({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text -eq '$unitText'
+}, $true)
+if (-not $unitAssignment) { throw 'Bronze systemd unit template assignment is missing.' }
+$RunId = 'test-run'
+$release = '/opt/planetory-bronze/releases/test'
+$exec = '/usr/bin/true'
+Invoke-Expression $unitAssignment.Extent.Text
+foreach ($required in @('RestartPreventExitStatus=65', '$EXIT_CODE', '$EXIT_STATUS', 'systemctl disable "%n"')) {
+    if (-not $unitText.Contains($required)) { throw "Rendered Bronze unit contract is missing: $required" }
 }
 $java = Get-Content -LiteralPath (Join-Path $repoRoot 'distributed-system\ingestion\hdfs\TessSequenceFileTool.java') -Raw
 if (-not $java.Contains('Options.Rename.NONE')) { throw 'Atomic no-overwrite rename contract is missing.' }

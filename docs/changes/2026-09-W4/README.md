@@ -20,3 +20,4 @@
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 검색 검증기 미정 입력·정렬·인계 경계 보완 | S15P21C206-170 | UNSPECIFIED, Date.parse, 합성 분포, 217, 218 | 표본 검증 완료·교차 검토 대기 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | TESS Raw 1~13 Sector Bronze 변환 | S15P21C206-77 | Spark, Bronze, Parquet, error contract, atomic rename, systemd | 구현·Sector 1~13 변환·전체 재감사 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | Bronze 영구 데이터 오류 재시작 차단 | S15P21C206-77 | terminal_failed, exit 65, RestartPreventExitStatus, staging attempt | 구현·오프라인 검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |

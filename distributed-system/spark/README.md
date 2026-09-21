@@ -50,7 +50,7 @@ Raw SHA-256이 77의 원본 바이트 무결성 기준이다. 2026-09-21 실환�
 | `raw_checksum` | `raw_size_mismatch`, `raw_sha256_mismatch` |
 | `fits_parse` | `fits_open_failed`, `invalid_identity`, `invalid_array`, `unsupported_time_metadata`, `unsupported_flux_unit`, `missing_header`, `missing_header_or_column`, `invalid_fits_structure`, `length_mismatch`, `sector_identity_mismatch`, `tic_identity_mismatch`, `unexpected_parse_error` |
 
-오류가 하나라도 있으면 summary의 `contract_ok=false`이며 staging과 오류 Parquet을 보존하고 Sector final을 만들지 않는다. manifest 자체의 구조·개수·lineage 오류나 Spark/YARN 실패도 final 공개 전에 중단한다.
+오류가 하나라도 있으면 summary의 `contract_ok=false`이며 staging과 오류 Parquet을 보존하고 Sector final을 만들지 않는다. 제품 파싱·Raw checksum, Raw·Bronze marker 불일치처럼 같은 입력에서 반복되는 데이터 계약 오류는 전용 오류와 종료 코드 65로 구분하며, Sector 변환 중 확인한 오류는 상태 파일에도 `terminal_failed`로 기록한다. systemd는 이 종료 코드를 재시작하지 않고 unit을 disable하므로 해당 attempt 하나만 남는다. HDFS·YARN 명령 실패처럼 운영 중 복구될 수 있는 오류만 5분 뒤 다시 시도한다. manifest 자체의 구조·개수·lineage 오류나 Spark/YARN 실패도 final 공개 전에 중단한다.
 
 ### 실행
 
@@ -65,7 +65,7 @@ Raw SHA-256이 77의 원본 바이트 무결성 기준이다. 2026-09-21 실환�
 .\infra\distributed-system\scripts\run-tess-bronze.ps1 -Step Status -CodeReleaseId <code-release> -RunId <run>
 ```
 
-`Install`은 코드, 고정 Python 의존성, 기존 FITS adapter와 원자 rename Java helper를 root 소유 불변 release로 설치한다. 실행 환경은 Astropy·NumPy·adapter를 결정적 tar archive로 만들고 HDFS RF2에 한 번 올린 뒤 YARN `--archives`로 배포한다. `Canary`는 한 bundle의 정렬된 앞 5개만 validation 경로에서 검증하고 성공 시 그 경로만 삭제한다. `Start`는 enabled systemd oneshot에 실행을 인계하므로 운영자 PC가 끊기거나 재부팅돼도 서버에서 재개한다. 일시 실패 시 5분 뒤 서버가 자체 재시작하며 시작 횟수 제한은 두지 않는다. 성공하면 unit을 disable해 다음 부팅의 불필요한 재실행을 막는다. 재실행은 동일 pipeline version의 검증된 final만 재감사해 건너뛰고, 실패 attempt와 오류 목록은 원인 확인을 위해 보존한다.
+`Install`은 코드, 고정 Python 의존성, 기존 FITS adapter와 원자 rename Java helper를 root 소유 불변 release로 설치한다. 실행 환경은 Astropy·NumPy·adapter를 결정적 tar archive로 만들고 HDFS RF2에 한 번 올린 뒤 YARN `--archives`로 배포한다. `Canary`는 한 bundle의 정렬된 앞 5개만 validation 경로에서 검증하고 성공 시 그 경로만 삭제한다. `Start`는 enabled systemd oneshot에 실행을 인계하므로 운영자 PC가 끊기거나 재부팅돼도 서버에서 재개한다. 일시적인 인프라 실패는 5분 뒤 서버가 자체 재시작하며 시작 횟수 제한을 두지 않는다. 데이터 계약 오류는 자동 재시작과 다음 부팅 실행을 중단하고 실패 상태·attempt·오류 목록을 운영자 확인용으로 보존한다. 입력이나 코드를 수정한 뒤 새 RunId로 명시적으로 다시 시작한다. 성공하면 unit을 disable해 다음 부팅의 불필요한 재실행을 막는다. 재실행은 동일 pipeline version의 검증된 final만 재감사해 건너뛴다.
 
 Sector 1~13을 한 실행에 모두 지정하면 먼저 Raw coverage marker가 13개 Raw `_READY.json`을 정확히 가리키는지 확인한다. 모든 Bronze Sector를 완료·재감사한 뒤 각 Bronze marker의 SHA-256, 제품·관측점 합계, Raw coverage marker SHA-256과 pipeline version을 묶은 Bronze coverage marker를 RF2·FSCK 확인 후 원자 확정한다. 이 marker가 없으면 일부 또는 13개 Sector 경로가 존재해도 전체 Bronze 완료로 판단하지 않는다.
 

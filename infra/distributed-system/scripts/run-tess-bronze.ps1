@@ -160,8 +160,10 @@ WorkingDirectory=$release
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=$exec
 ExecStartPost=-/usr/bin/systemctl disable %n
+ExecStopPost=-/bin/sh -c 'if [ "`$EXIT_CODE" = "exited" ] && [ "`$EXIT_STATUS" = "65" ]; then /usr/bin/systemctl disable "%n"; fi'
 TimeoutStartSec=infinity
 Restart=on-failure
+RestartPreventExitStatus=65
 RestartSec=5min
 UMask=0027
 

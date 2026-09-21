@@ -1,5 +1,7 @@
 import hashlib
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,8 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from astro_kernel.preprocessing import PreprocessError  # noqa: E402
 from tess_bronze import BRONZE_SCHEMA_VERSION, _hash_values, transform_record  # noqa: E402
 from tess_bronze_ctl import (  # noqa: E402
+    DATA_CONTRACT_EXIT_CODE,
     RAW_COVERAGE_SCHEMA,
     RAW_COVERAGE_SHA256,
+    BronzeDataContractError,
+    cli,
+    finalize_sector,
+    run_sector,
     validate_raw_coverage,
 )
 
@@ -180,6 +187,60 @@ class BronzeTransformTest(unittest.TestCase):
         self.assertIsNone(row)
         self.assertEqual(product, "sample.fits")
         self.assertEqual(error[5:7], ("fits_parse", "invalid_fits_structure"))
+
+    def test_sector_contract_failure_is_terminal(self):
+        summary = {
+            "contract_ok": False,
+            "success_products": 0,
+            "error_products": 1,
+        }
+        context = {"ready": {"product_count": 1}}
+        with patch(
+            "tess_bronze_ctl.hdfs",
+            return_value=SimpleNamespace(stdout=json.dumps(summary) + "\n"),
+        ):
+            with self.assertRaisesRegex(BronzeDataContractError, "sector=3"):
+                finalize_sector(
+                    release_dir=Path("."),
+                    context=context,
+                    sector=3,
+                    run_id="run",
+                    pipeline_version="pipeline",
+                    output="/staging/attempt",
+                    application_id="application_1_1",
+                )
+
+    def test_terminal_failure_is_recorded_for_operator_review(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            "tess_bronze_ctl.audit_final", return_value=False
+        ), patch("tess_bronze_ctl.prepare_spark_paths"), patch(
+            "tess_bronze_ctl.submit", return_value="application_1_1"
+        ), patch(
+            "tess_bronze_ctl.finalize_sector",
+            side_effect=BronzeDataContractError("bad checksum"),
+        ):
+            with self.assertRaises(BronzeDataContractError):
+                run_sector(
+                    release_dir=Path("."),
+                    runtime_hdfs="/runtime.tar.gz",
+                    context={},
+                    sector=3,
+                    run_id="run",
+                    pipeline_version="pipeline",
+                    output_partitions=1,
+                    state_root=Path(root),
+                )
+            state = json.loads((Path(root) / "run=run" / "sector=0003.json").read_text())
+            self.assertEqual(state["status"], "terminal_failed")
+            self.assertEqual(state["failure_type"], "BronzeDataContractError")
+            self.assertEqual(state["failure_detail"], "bad checksum")
+
+    def test_cli_maps_only_data_contract_failures_to_non_retryable_exit(self):
+        with patch("tess_bronze_ctl.main", side_effect=BronzeDataContractError("bad input")):
+            self.assertEqual(cli(), DATA_CONTRACT_EXIT_CODE)
+        with patch("tess_bronze_ctl.main", side_effect=RuntimeError("temporary outage")):
+            with self.assertRaisesRegex(RuntimeError, "temporary outage"):
+                cli()
 
 
 if __name__ == "__main__":

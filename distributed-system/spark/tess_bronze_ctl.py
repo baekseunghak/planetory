@@ -30,8 +30,13 @@ RAW_RELEASES = {**{sector: "20260919T005932Z" for sector in range(1, 14)},
                 3: "20260918T080417Z", 4: "20260918T080417Z", 5: "20260918T080417Z"}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 APP_ID_RE = re.compile(r"application_[0-9]+_[0-9]+")
+DATA_CONTRACT_EXIT_CODE = 65
 HOST_ARGS = [item for number in range(1, 7)
              for item in ("--add-host", f"{'master' if number == 1 else 'worker'}-{number}:10.20.{number}.10")]
+
+
+class BronzeDataContractError(RuntimeError):
+    """A deterministic input/output contract violation that operator action must fix."""
 
 
 def utc_now() -> str:
@@ -88,13 +93,13 @@ def raw_context(sector: int) -> dict[str, Any]:
     }
     for key, value in expected.items():
         if ready.get(key) != value:
-            raise RuntimeError(f"Raw ready mismatch sector={sector} field={key}")
+            raise BronzeDataContractError(f"Raw ready mismatch sector={sector} field={key}")
     if int(ready.get("product_count", 0)) <= 0 or not SHA256_RE.fullmatch(
         str(ready.get("source_list_sha256", ""))
     ):
-        raise RuntimeError(f"Raw ready counts/checksum invalid sector={sector}")
+        raise BronzeDataContractError(f"Raw ready counts/checksum invalid sector={sector}")
     if not hdfs_exists(f"{path}/manifest.parquet/_SUCCESS"):
-        raise RuntimeError(f"Raw manifest is not complete sector={sector}")
+        raise BronzeDataContractError(f"Raw manifest is not complete sector={sector}")
     return {"release": release, "path": path, "ready": ready, "ready_sha256": ready_sha}
 
 
@@ -112,7 +117,7 @@ def validate_raw_coverage(value: dict[str, Any], contexts: dict[int, dict[str, A
         or len(rows) != 13
         or set(by_sector) != expected_sectors
     ):
-        raise RuntimeError("Raw coverage marker does not prove Sector 1 through 13")
+        raise BronzeDataContractError("Raw coverage marker does not prove Sector 1 through 13")
     for sector, context in contexts.items():
         row = by_sector[sector]
         expected = {
@@ -124,7 +129,7 @@ def validate_raw_coverage(value: dict[str, Any], contexts: dict[int, dict[str, A
             "ready_sha256": context["ready_sha256"],
         }
         if any(row.get(key) != expected_value for key, expected_value in expected.items()):
-            raise RuntimeError(f"Raw coverage mismatch sector={sector}")
+            raise BronzeDataContractError(f"Raw coverage mismatch sector={sector}")
 
 
 def raw_coverage(contexts: dict[int, dict[str, Any]]) -> tuple[dict[str, Any], str]:
@@ -379,10 +384,10 @@ def audit_final(sector: int, context: dict[str, Any], pipeline_version: str) -> 
     }
     for key, value in expected.items():
         if ready.get(key) != value:
-            raise RuntimeError(f"existing Bronze mismatch sector={sector} field={key}")
+            raise BronzeDataContractError(f"existing Bronze mismatch sector={sector} field={key}")
     count, digest = part_checksum_digest(final)
     if ready.get("part_file_count") != count or ready.get("part_checksums_sha256") != digest:
-        raise RuntimeError(f"existing Bronze part checksum mismatch sector={sector}")
+        raise BronzeDataContractError(f"existing Bronze part checksum mismatch sector={sector}")
     fsck_healthy(final)
     print(f"BRONZE_CACHED sector={sector} products={ready['product_count']}", flush=True)
     return True
@@ -418,7 +423,7 @@ def finalize_sector(
     expected_count = int(context["ready"]["product_count"])
     if not summary.get("contract_ok") or int(summary.get("success_products", -1)) != expected_count:
         print(f"BRONZE_PARSE_ERRORS sector={sector} errors={summary.get('error_products')} path={output}/errors")
-        raise RuntimeError(f"Bronze conversion contract failed sector={sector}")
+        raise BronzeDataContractError(f"Bronze conversion contract failed sector={sector}")
 
     staging_data = f"{output}/data"
     hdfs("dfs", "-setrep", "-w", "2", staging_data)
@@ -450,11 +455,11 @@ def finalize_sector(
     fsck_healthy(staging_data)
     final = f"/lake/bronze/tess/sector={sector:04d}"
     if hdfs_exists(final):
-        raise RuntimeError(f"final Bronze path appeared before commit: {final}")
+        raise BronzeDataContractError(f"final Bronze path appeared before commit: {final}")
     atomic_commit(release_dir, staging_data, final)
     fsck_healthy(final)
     if not audit_final(sector, context, pipeline_version):
-        raise RuntimeError(f"final audit did not find sector={sector}")
+        raise BronzeDataContractError(f"final audit did not find sector={sector}")
     hdfs("dfs", "-rm", "-r", "-skipTrash", output)
     print(f"BRONZE_COMMIT_OK sector={sector} products={expected_count} final={final}", flush=True)
     return ready
@@ -495,7 +500,7 @@ def commit_coverage(
     if hdfs_exists(final):
         existing, _ = hdfs_json(f"{final}/_READY.json")
         if any(existing.get(key) != value for key, value in stable.items()):
-            raise RuntimeError("existing Bronze coverage marker conflicts with Sector finals")
+            raise BronzeDataContractError("existing Bronze coverage marker conflicts with Sector finals")
         fsck_healthy(final)
         print(f"BRONZE_COVERAGE_CACHED products={stable['product_count']} final={final}", flush=True)
         return
@@ -511,7 +516,7 @@ def commit_coverage(
     if hdfs_exists(f"{stage}/_READY.json"):
         marker, _ = hdfs_json(f"{stage}/_READY.json")
         if any(marker.get(key) != value for key, value in stable.items()):
-            raise RuntimeError("staged Bronze coverage marker conflicts with Sector finals")
+            raise BronzeDataContractError("staged Bronze coverage marker conflicts with Sector finals")
     else:
         marker = {
             **stable,
@@ -572,15 +577,25 @@ def run_sector(
     )
     state.update(status="application_succeeded", application_id=application_id, updated_at_utc=utc_now())
     write_state(state_file, state)
-    ready = finalize_sector(
-        release_dir=release_dir,
-        context=context,
-        sector=sector,
-        run_id=run_id,
-        pipeline_version=pipeline_version,
-        output=output,
-        application_id=application_id,
-    )
+    try:
+        ready = finalize_sector(
+            release_dir=release_dir,
+            context=context,
+            sector=sector,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            output=output,
+            application_id=application_id,
+        )
+    except BronzeDataContractError as exc:
+        state.update(
+            status="terminal_failed",
+            failure_type=type(exc).__name__,
+            failure_detail=str(exc),
+            updated_at_utc=utc_now(),
+        )
+        write_state(state_file, state)
+        raise
     state.update(status="complete", updated_at_utc=utc_now())
     write_state(state_file, state)
     return ready
@@ -592,7 +607,7 @@ def command_canary(args: argparse.Namespace) -> None:
     runtime_hdfs = build_runtime(release_dir)
     output = f"/validation/S15P21C206-77/run={args.run_id}/sector={args.sector:04d}"
     if hdfs_exists(output):
-        raise RuntimeError(f"canary output already exists: {output}")
+        raise BronzeDataContractError(f"canary output already exists: {output}")
     state_file = state_path(Path(args.state_root), args.run_id, args.sector)
     state = {
         "run_id": args.run_id,
@@ -621,7 +636,7 @@ def command_canary(args: argparse.Namespace) -> None:
         raise RuntimeError("canary summary row is missing")
     summary = json.loads(summary_lines[0])
     if not summary.get("contract_ok") or int(summary.get("error_products", -1)) != 0:
-        raise RuntimeError(f"canary contract failed; inspect {output}/errors")
+        raise BronzeDataContractError(f"canary contract failed; inspect {output}/errors")
     if int(summary.get("success_products", 0)) <= 0:
         raise RuntimeError("canary produced no products")
     state.update(status="canary_complete", application_id=application_id, updated_at_utc=utc_now())
@@ -713,9 +728,20 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> int:
     try:
-        raise SystemExit(main())
+        return main()
+    except BronzeDataContractError as exc:
+        print(
+            f"BRONZE_DATA_CONTRACT_FAILED type={type(exc).__name__} detail={exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return DATA_CONTRACT_EXIT_CODE
     except Exception as exc:
         print(f"BRONZE_CONTROL_FAILED type={type(exc).__name__} detail={exc}", file=sys.stderr, flush=True)
         raise
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())
