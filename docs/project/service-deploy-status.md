@@ -55,15 +55,18 @@ Get "https://<레지스트리 호스트>:<포트>/v2/": net/http: request cancel
 while waiting for connection (Client.Timeout exceeded while awaiting headers)
 ```
 
-원인은 **EC2-B의 컨테이너가 자기 호스트에 닿지 못하는 것**이다. 호스트에서는 레지스트리가 정상 응답하지만(`200`), 같은 호스트의 컨테이너에서는 시간 초과한다. 인터넷은 나간다.
+원인은 **EC2-B의 컨테이너가 자기 호스트에 닿지 못하는 것**이다. 호스트에서는 레지스트리가 정상 응답하지만(`200`), 같은 호스트의 컨테이너가 호스트 주소로 접근하면 막힌다. 인터넷과 tailnet 피어로는 나간다.
 
 | 경로 | 결과 |
 | --- | --- |
 | EC2-B 호스트 → 레지스트리 | 200 |
 | EC2-A → 레지스트리 | 200. 인증서 유효, `docker pull` 경로 정상 |
-| EC2-B 컨테이너 → 레지스트리 | 시간 초과 |
-| EC2-B 컨테이너 → EC2-A `22` | 시간 초과 |
+| EC2-B 컨테이너 → 호스트 주소의 레지스트리 포트 | 차단 |
+| EC2-B 컨테이너 → 레지스트리 컨테이너 주소 | 200 |
+| EC2-B 컨테이너 → EC2-A의 `deploy` 계정 SSH | 정상. 배포 경로에서 `config -q`까지 통과 |
 | EC2-B 컨테이너 → 인터넷 | 200 |
+
+측정 주의. `curl telnet://`은 연결에 성공해도 세션을 닫지 않아 `--max-time`에 걸린다. 연결 여부 판정에 쓰면 정상 경로를 차단으로 오판한다. 포트 도달만 볼 때는 `tcpdump`로 핸드셰이크를 보거나 실제 프로토콜로 확인한다.
 
 차단 주체는 UFW다. 커널이 직접 남긴 기록이 있다.
 
@@ -72,7 +75,7 @@ while waiting for connection (Client.Timeout exceeded while awaiting headers)
 [UFW BLOCK] IN=docker0 SRC=<컨테이너> DST=<docker0 게이트웨이> DPT=<레지스트리 포트>
 ```
 
-Tailscale 문제가 아니다. 호스트의 어느 주소로 가든 똑같이 막히며, tailnet과 무관한 도커 게이트웨이와 호스트의 사설 주소도 마찬가지다. `DEFAULT_FORWARD_POLICY`도 `DROP`이다.
+Tailscale 문제가 아니다. 호스트의 어느 주소로 가든 똑같이 막히며, tailnet과 무관한 도커 게이트웨이도 마찬가지다. 반대로 tailnet 피어로 나가는 경로는 정상이다.
 
 ### push는 방화벽을 건드리지 않고 풀 수 있다
 
@@ -87,11 +90,13 @@ extra_hosts = ["<레지스트리 호스트>:<레지스트리 컨테이너 주소
 
 **한계.** 레지스트리 컨테이너 주소는 기본 브리지가 순서대로 준 값이라 레지스트리 컨테이너를 다시 만들면 바뀔 수 있다. 바뀌면 push가 같은 방식으로 다시 깨진다. 고정이 필요해지면 사용자 정의 네트워크에 네트워크 별칭으로 붙여 Docker DNS가 이름을 풀게 한다.
 
-### 배포 job의 SSH는 원인 미확정
+### 배포 job의 SSH 경로는 정상이다
 
-컨테이너에서 EC2-A의 22번으로 나가는 경로는 여전히 막힌다. UFW의 전달 정책이 `DROP`인 것은 확인했으나, 그것이 원인인지 `tailscale0`으로 나가는 사설 출발지가 처리되지 않는 것인지는 구분하지 못했다. 둘 중 무엇인지 확인한 뒤 조치한다.
+컨테이너에서 EC2-A로 나가는 경로는 막혀 있지 않다. `tcpdump`로 보면 출발지가 EC2-B의 tailnet 주소로 masquerade되어 나가고 handshake가 완료된다. 컨테이너에서 `deploy` 계정으로 실제 SSH가 붙고, 배포 경로에서 `docker compose config -q`까지 통과한다.
 
-`.remote-compose-deploy`의 "job 컨테이너의 연결은 Runner 호스트의 tailnet 신원으로 나간다"는 주석은 **사실이 아니다.** job 컨테이너는 docker 브리지에 있고 tailnet 경로를 갖지 않는다.
+따라서 `.remote-compose-deploy`의 "job 컨테이너의 연결은 Runner 호스트의 tailnet 신원으로 나간다"는 주석은 **맞다.** masquerade로 성립한다.
+
+남은 차단은 레지스트리 push 하나뿐이다.
 
 Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `amd64-docker` 태그와 `run_untagged=true`를 갖는다. CI 변수 `DEPLOY_USER`·`EC2_A_HOST`·`EC2_A_DEPLOY_PATH`·`REGISTRY_IMAGE_PREFIX`도 실제 서버 구성과 일치한다.
 
