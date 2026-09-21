@@ -158,7 +158,8 @@ class HotTopicsTest {
         var t=topic(10);
         long post=jdbc.queryForObject("INSERT INTO posts(kind,user_id,board,tag,title,body,status) VALUES ('user',?,'free','GENERAL','글','본문','visible') RETURNING id",Long.class,viewer);
         jdbc.update("INSERT INTO post_reactions(post_id,user_id,reaction) VALUES (?,?,'agree')",post,viewer);
-        jdbc.update("INSERT INTO comments(post_id,user_id,body,status) VALUES (?,?,'댓글','visible'),(?,?,'숨김','hidden')",t.id(),viewer,t.id(),viewer);
+        jdbc.update("INSERT INTO comments(post_id,user_id,body,status) VALUES (?,?,'댓글','visible'),(?,?,'숨김','hidden'),(?,?,'삭제','deleted')",
+                t.id(),viewer,t.id(),viewer,t.id(),viewer);
         var page=read(""); ids(page,t);
         assertEquals(1,page.path("items").get(0).path("commentCount").asInt());
         assertEquals(10,page.path("items").get(0).path("judgmentSummary").path("participantCount").asInt());
@@ -223,7 +224,7 @@ class HotTopicsTest {
         assertEquals(before,jdbc.queryForObject("SELECT count(*) FROM published_analyses",Long.class));
     }
 
-    @Test void 기존인덱스_합성집합_선정쿼리_실행계획() throws Exception {
+    @Test void 선정쿼리_합성스레드100개_조회와실행계획측정() throws Exception {
         for (int i=0;i<100;i++) topic(9+i%3);
         jdbc.execute("ANALYZE");
         var page=read("?size=20"); assertEquals(20,page.path("items").size());

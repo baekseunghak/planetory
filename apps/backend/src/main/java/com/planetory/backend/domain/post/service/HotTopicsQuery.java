@@ -11,6 +11,8 @@ import org.springframework.util.MultiValueMap;
 
 /** 현재 순위의 위치만 전달한다. 다음 요청에서는 공개 상태와 참여 수를 다시 평가한다. */
 public record HotTopicsQuery(int size, Long afterCount, OffsetDateTime afterAt, Long afterId) {
+    static final int HOT_TOPIC_MIN_PARTICIPANTS = 10;
+
     public static HotTopicsQuery parse(MultiValueMap<String, String> params) {
         CommunityQuery.only(params, Set.of("size", "cursor"));
         long size = params.containsKey("size") ? positive(params.getFirst("size")) : 20;
@@ -24,7 +26,7 @@ public record HotTopicsQuery(int size, Long afterCount, OffsetDateTime afterAt, 
             if (parts.length != 5 || !parts[0].equals("hot-v1") || !parts[1].equals(Long.toString(size))) throw invalid();
             long count = positive(parts[2]), id = positive(parts[4]);
             OffsetDateTime at = OffsetDateTime.parse(parts[3]);
-            if (count < 10 || at.getYear() < 1 || at.getYear() > 9999 || at.getNano() % 1000 != 0) throw invalid();
+            if (count < HOT_TOPIC_MIN_PARTICIPANTS || at.getYear() < 1 || at.getYear() > 9999 || at.getNano() % 1000 != 0) throw invalid();
             if (!first.next(count, at, id).equals(cursor)) throw invalid();
             return new HotTopicsQuery((int) size, count, at, id);
         } catch (IllegalArgumentException | DateTimeException e) { throw invalid(); }
