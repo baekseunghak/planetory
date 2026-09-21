@@ -260,6 +260,30 @@ sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용�
 
 `/validation/S15P21C206-73/run-<UTC>`는 실패하더라도 자동 삭제하지 않아 검증 증거와 실패 원인을 보존한다. 확인이 끝난 run은 운영자가 정확한 경로를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-73/run-<UTC>`로 정리한다. unit 중지는 UFW 규칙, `/yarn-logs`, `/validation` 결과를 되돌리지 않는다.
 
+## 배포용 Docker 준비 (`S15P21C206-226`)
+
+CI의 deploy job은 SSH로 접속해 `docker compose`를 실행한다. 그러려면 노드에 Docker 엔진과 **compose 플러그인**이 있고 배포 계정이 `docker` 그룹에 있어야 한다. `docker.io` 패키지에는 compose 플러그인이 들어 있지 않으므로 엔진만 설치하면 배포가 실패한다.
+
+[install-docker-host.sh](scripts/install-docker-host.sh)가 사전 검사·설치·검증을 한 번에 한다. Hadoop·YARN 데몬과 설정에는 손대지 않는다.
+
+```bash
+# 변경 없이 현재 상태만 본다. 준비됐으면 0, 조치가 필요하면 1을 반환한다.
+bash install-docker-host.sh --node 6 --deploy-user planetory-admin --check-only
+
+# 실제 설치. root로 실행한다.
+sudo bash install-docker-host.sh --node 6 --deploy-user planetory-admin
+```
+
+사전 검사는 노드 번호와 실제 호스트명이 맞는지, 배포 계정이 있는지, `/`에 5GB 이상 여유가 있는지 확인하고 하나라도 어긋나면 변경 전에 중단한다. 이미 갖춰진 항목은 건너뛰므로 여러 번 실행해도 안전하다.
+
+검증은 설치 사실이 아니라 **배포 계정이 새 로그인에서 데몬에 도달하는지**를 본다. `usermod`는 이미 열려 있는 세션에 소급되지 않기 때문이다. 이어서 이 호스트의 Hadoop unit이 `active`인지 확인하고, 하나라도 아니면 실패로 끝낸다.
+
+실패하면 그 노드에서 멈추고 다음 노드로 넘어가지 않는다. Docker 설치만 되돌리려면 `sudo apt-get remove --purge docker.io docker-compose-v2`를 실행한다. 그룹 변경은 `sudo gpasswd -d <계정> docker`로 되돌린다.
+
+2026-09-21에 node-1~6 전부에서 Docker 29.1.3과 compose 2.40.3을 확인했고, 각 배포 계정이 레지스트리에서 이미지를 pull 하는 것과 Hadoop 데몬이 계속 `active`인 것을 실측했다. 같은 노드에 두 번 실행해 멱등성도 확인했다.
+
+초기 판은 Hadoop unit 이름을 `hdfs-*`로 추측해 검사가 아무것도 확인하지 않고 통과했다. 실제 이름은 `hadoop-hdfs-*`다. unit 이름이 하나도 맞지 않으면 경고를 남기도록 고쳤다.
+
 ## 수동 전환
 
 실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다. `Prepare`는 256MiB 무작위 표본을 만들고 원본 SHA-256을 같은 run의 `baseline-256m.sha256`에 별도로 보존하며, `FinalAudit`은 이 값과 HDFS에서 다시 받은 표본의 SHA-256을 비교한다. 두 단계의 로컬 `/tmp` 파일은 RunId를 포함한 정확한 경로만 `rm -f --`로 성공·실패 종료 때 정리한다. cleanup 실패는 출력에 남기고, 본 검증이 이미 실패했다면 그 종료 코드를 유지한다.
