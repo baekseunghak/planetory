@@ -51,6 +51,33 @@ public class AnalysisRepository {
     }
 
     /**
+     * 회원이 매칭한 이 별 활성 후보의 주기 (5.4절 {@code matchedCandidates}).
+     *
+     * <p>{@link #findMatchedActiveCandidateIds}와 같은 기준에 주기를 더한 것이다. 이미 매칭한 후보만
+     * 나오므로 매칭 전에 후보 주기가 드러나지 않는다(POL-05). 주기 오름차순이라 같은 회원·같은 별의
+     * 응답이 호출마다 같은 순서다.
+     */
+    public List<AnalysisViews.MatchedCandidate> findMatchedActiveCandidatePeriods(long memberId, long ticId) {
+        return jdbc.sql("""
+                        SELECT c.id, c.period_days
+                          FROM candidates c
+                         WHERE c.tic_id = :ticId
+                           AND c.status = 'active'
+                           AND EXISTS (
+                               SELECT 1 FROM submissions s
+                                WHERE s.user_id = :memberId
+                                  AND s.tic_id = :ticId
+                                  AND s.matched_candidate_id = c.id)
+                         ORDER BY c.period_days, c.id
+                        """)
+                .param("memberId", memberId)
+                .param("ticId", ticId)
+                .query((rs, n) -> new AnalysisViews.MatchedCandidate(
+                        ExplorationIds.candidate(rs.getLong("id")), rs.getDouble("period_days")))
+                .list();
+    }
+
+    /**
      * 마지막 제출이 쓴 제거 조합. 분석 복귀는 이 조합으로 돌아간다(5.1절). 제출이 없으면 비어 있다.
      *
      * <p>같은 시각이면 id가 큰 쪽이 최신이다.

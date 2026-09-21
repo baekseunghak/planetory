@@ -17,8 +17,11 @@
 | 단일 AstroNet 성능·임계값 검토 | [AstroNet 성능 평가](tess-astronet-benchmark.md) | 독립 평가 완료·자동 판정용 채택 보류 제안, 팀 리뷰 전 |
 | BLS 탐색 격자·품질 게이트 비교 | [BLS 벤치마크](tess-bls-benchmark.md) | 조정·평가・holdout 실행 결과와 채택 근거 |
 | 반복 BLS·고정 모델 제거 루프의 종료·제거 QA·복구 | [반복 제거 벤치마크](tess-bls-iteration-benchmark.md) | 코드·합성 테스트와 fixture 실행 결과, 최종 검증 정리 중 |
+| 고조파·판 사이 후보 ID 동일성 | [후보 동일성 벤치마크](tess-candidate-identity-benchmark.md) | 112 v3 계약 리뷰 준비·69 tests, 자동 고조파 병합 운영 미채택·계약 미승인 |
 | 세그먼트·비닝 해상도 비교 | [비닝 벤치마크](tess-binning-benchmark.md) | 9별 실측·3차 화면 검토 완료, 부분 bin 근거·운영 채택안 및 후속 인계 기록 |
 
 저장 위치와 시스템 경계는 [아키텍처](../architecture/README.md), 서비스 정책은 [요구사항](../requirements/README.md)이 우선한다. fixture와 조사 결과를 전체 데이터 범위나 운영 완료 증거로 사용하지 않는다.
 
 운영에 채택한 실험 결과는 담당 규칙 문서와 실제 코드 위치로 옮기고, 과거 실험 문서는 근거로 보존한다.
+
+245 구간 마스크의 실제 근거와 검증은 [관측 구간 마스킹](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)을 참조한다.
