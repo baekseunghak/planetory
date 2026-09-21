@@ -55,6 +55,8 @@ class PublicAnalysisTest {
     @Autowired MockMvc mvc;
     @MockitoBean ResidualResultReader residuals;
     @Autowired PublicAnalysisService publications;
+    @Autowired com.planetory.backend.domain.post.service.PostReactionService reactions;
+    @Autowired com.planetory.backend.domain.post.service.PostService posts;
     @Autowired com.planetory.backend.domain.post.service.PublicAnalysisAccess publicAccess;
     @MockitoSpyBean StarDiscoveryService discovery;
     long member,tic,bundle,segment,candidate;
@@ -99,6 +101,31 @@ class PublicAnalysisTest {
         session.setAttribute("SPRING_SECURITY_CONTEXT",context);
         session.setAttribute(com.planetory.backend.domain.auth.service.AuthSessionService.class.getName()+".lastActivity",java.time.Instant.now());
         return session;
+    }
+
+    @Test void 일반반응은_공개판단과_성과를_바꾸지않고_공식스레드에는_허용되지않는다() throws Exception {
+        var publication = publications.publish(member, submit(3));
+        long thread = Long.parseLong(publication.threadId().substring(3));
+        var tx = new TransactionTemplate(transactions);
+        var summary = tx.execute(s -> submissions.publicJudgmentSummary(candidate));
+        int achievements = count("user_candidate_achievements", "user_id", member);
+        long postId = Long.parseLong(posts.create(member, new com.planetory.backend.domain.post.service.PostService.CreateCommand(
+                "일반 의견", "본문", "GENERAL", null, List.of(), List.of())).postId().substring(2));
+        for (String reaction : List.of("AGREE", "DISAGREE", "NONE")) {
+            reactions.put(member, postId, reaction);
+            mvc.perform(put("/api/v1/posts/p-" + thread + "/my-reaction").session(session(member)).with(csrf())
+                            .contentType("application/json").content("{\"reaction\":\"" + reaction + "\"}"))
+                    .andExpect(status().isNotFound());
+        }
+        mvc.perform(get("/api/v1/posts/p-" + thread + "/reactions").session(session(member)).param("reaction", "AGREE"))
+                .andExpect(status().isNotFound());
+        var after = tx.execute(s -> submissions.publicJudgmentSummary(candidate));
+        summary.forEach((key, value) -> {
+            if (!key.equals("asOf")) assertEquals(value, after.get(key), key);
+        });
+        assertEquals(achievements, count("user_candidate_achievements", "user_id", member));
+        assertEquals(1, count("published_analyses", "user_id", member));
+        assertEquals(0, count("post_reactions", "post_id", thread));
     }
 
     @Test

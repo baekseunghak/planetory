@@ -289,7 +289,7 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-**첨부 구현(S15P21C206-160):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. 아직 구현하지 않은 `sourceLinks`는 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`이며 실제 출처·반응이 없다는 사실로 해석하지 않는다.
+**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. 아직 구현하지 않은 `sourceLinks`는 빈 배열이며 실제 출처가 없다는 사실로 해석하지 않는다.
 
 `historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
 
@@ -539,7 +539,11 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"postId":"p-201","myReaction":"AGREE","agree":4,"disagree":1}
 ```
 
-같은 요청 반복은 숫자를 더하지 않는다. AGREE에서 DISAGREE로 바꾸면 기존 동의가 제거되고 비동의가 하나 생긴다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 공식 스레드 세 판단과는 별개다.
+같은 요청 반복은 숫자·행·갱신 시각을 바꾸지 않는다. AGREE에서 DISAGREE로 바꾸면 같은 관계 행을 갱신하고 NONE은 관계 행을 삭제한다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 반응은 공개 분석·History·성과·별 발견·공식 스레드 세 판단 통계를 변경하지 않는다.
+
+**구현(S15P21C206-163):** V1의 `post_reactions`와 `UNIQUE(post_id,user_id)`를 재사용한다. 글 행 잠금을 획득한 뒤 반응을 조회·저장하고 같은 트랜잭션에서 합계를 반환한다. 동일 회원의 다른 상태 요청은 잠금 획득 후 저장·커밋 순서대로 반영한다. 요청 시작·응답 도착 순서는 최종 상태 기준이 아니다. 일반 글 수정·삭제도 같은 글 행 잠금을 사용한다.
+
+**접근 정책 확정(2026-09-21):** 숨김·삭제 글은 본인 글·본인 기존 반응 여부와 관계없이 AGREE·DISAGREE·NONE 모두 404 `RESOURCE_NOT_FOUND`다. 상세·합계·반응자 조회도 404다. 공식 스레드 ID를 `p-`로 보내도 404이며 공식 스레드 반응 경로는 제공하지 않는다. 인증된 활성 회원만 사용할 수 있고 쓰기는 CSRF 검사를 적용한다. 누락·null·소문자·알 수 없는 reaction은 400 `VALIDATION_FAILED`다.
 
 `GET /api/v1/posts/p-201/reactions?reaction=AGREE&size=20`의 reaction은 AGREE/DISAGREE 필수:
 
@@ -547,7 +551,9 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"items":[{"memberId":"u-101","nickname":"별찾는사람"}],"nextCursor":null,"hasNext":false}
 ```
 
-모든 인증 회원이 페이지 순회로 반응자 전원을 볼 수 있는 안이다. 최신 닉네임 사용. 목록·합계는 각 응답의 조회 시점 기준이어서 별도 호출 사이 변동 가능하다. 숨김·삭제 상태의 변경/취소 허용과 탈퇴 회원 표시는 미정이다.
+모든 인증 회원이 동의·비동의별 목록을 조회한다. 회원을 조인해 최신 닉네임을 반환하며 공개 프로필 설정은 반응을 숨기지 않는다. 정렬은 `updated_at DESC, id DESC`, size는 기본 20·최대 100(1 미만·100 초과는 400)이다. `nextCursor`를 같은 글·reaction·size의 `cursor`로 전달한다. 다른 조건 또는 잘못된 커서는 400 `VALIDATION_FAILED`다. NONE은 목록 필터로 허용하지 않는다.
+
+GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 후속이며 현재 관계를 임의로 삭제하거나 필터링하지 않는다.
 
 <a id="analyses"></a>
 

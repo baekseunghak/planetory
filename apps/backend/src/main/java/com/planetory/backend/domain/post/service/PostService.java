@@ -33,11 +33,11 @@ public class PostService {
                                List<String> historyIds) {}
     public record Created(String postId, Instant createdAt) {}
     public record Author(String memberId, String nickname) {}
-    public record ReactionSummary(int agree, int disagree, String myReaction) {}
+    public record ReactionSummary(long agree, long disagree, String myReaction) {}
     /** 글 자체의 값만 담는다. 댓글 수처럼 다른 도메인이 소유한 값은 컨트롤러가 합친다. */
     public record Detail(String postId, String title, String body, String purposeTag, String ticId,
                          Author author, List<HistoryAttachmentService.Reference> attachments, List<SourceLink> sourceLinks,
-                         ReactionSummary reactionSummary, Instant createdAt, Instant updatedAt) {}
+                         Instant createdAt, Instant updatedAt) {}
 
     @Transactional
     public Created create(long memberId, CreateCommand command) {
@@ -140,7 +140,7 @@ public class PostService {
         return new Detail(id(post), post.getTitle(), post.getBody(), post.getTag(),
                 post.getTicId() == null ? null : String.valueOf(post.getTicId()),
                 new Author("u-" + post.getAuthor().getId(), post.getAuthor().getNickname()),
-                attachments.references(HistoryAttachmentService.Parent.POST, post.getId()), List.of(), new ReactionSummary(0, 0, "NONE"),
+                attachments.references(HistoryAttachmentService.Parent.POST, post.getId()), List.of(),
                 post.getCreatedAt(), post.getUpdatedAt());
     }
     private record Values(String board, Long ticId, String tag, String title, String body) {}
