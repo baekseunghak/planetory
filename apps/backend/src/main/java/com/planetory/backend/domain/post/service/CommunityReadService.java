@@ -60,6 +60,33 @@ public class CommunityReadService {
     private record ThreadRow(long id, long tic, long candidate, String title, Signal signal, OffsetDateTime at) {}
     private record AnalysisRow(AnalysisItem item, long submission) {}
     private record PublicRow(long history, long thread, PostService.Author author, OffsetDateTime publishedAt) {}
+    private record HotRow(long id, String tic, long candidate, String title, long participants, OffsetDateTime at) {}
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Feed hotTopics(long member, HotTopicsQuery q) {
+        members.requireActive(member);
+        var rows = jdbc.sql("""
+                WITH ranked AS (
+                    SELECT p.id,p.tic_id,p.candidate_id,p.title,p.created_at,count(DISTINCT s.user_id) AS participants
+                    FROM posts p JOIN published_analyses pa ON pa.post_id=p.id AND pa.candidate_id=p.candidate_id
+                    JOIN analysis_histories h ON h.id=pa.history_id JOIN submissions s ON s.id=h.submission_id
+                    WHERE %s AND %s
+                    GROUP BY p.id HAVING count(DISTINCT s.user_id)>=10
+                )
+                SELECT * FROM ranked
+                WHERE (CAST(:count AS BIGINT) IS NULL OR (participants,created_at,id)<(:count,:at,:id))
+                ORDER BY participants DESC,created_at DESC,id DESC LIMIT :limit
+                """.formatted(PublicAnalysisVisibility.VISIBLE, OPEN_BOARD))
+                .param("count", q.afterCount()).param("at", q.afterAt()).param("id", q.afterId()).param("limit", q.size() + 1)
+                .query((r, n) -> new HotRow(r.getLong("id"), r.getString("tic_id"), r.getLong("candidate_id"),
+                        r.getString("title"), r.getLong("participants"), r.getObject("created_at", OffsetDateTime.class))).list();
+        boolean more = rows.size() > q.size();
+        var page = rows.subList(0, Math.min(rows.size(), q.size()));
+        // ponytail: 최대 100개 단건 요약. 후보별 일괄 계약이 제공되면 이 조립부만 교체한다.
+        var items = page.stream().map(r -> new FeedItem("SIGNAL_THREAD", "st-" + r.id(), r.tic(), r.title(), SYSTEM,
+                comments.countVisible(r.id()), submissions.publicJudgmentSummary(r.candidate()), r.at())).toList();
+        return new Feed(items, more ? q.next(page.getLast().participants(), page.getLast().at(), page.getLast().id()) : null, more);
+    }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Feed feed(long member, CommunityQuery q) {

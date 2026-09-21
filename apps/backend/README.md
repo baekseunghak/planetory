@@ -110,3 +110,5 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
 
 커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
+
+핫 토픽(171)은 [서비스 API 4.2절](docs/service-api-spec.md#42-핫-토픽)에 따라 현재 유효 참여자 10명 이상 공식 스레드를 전역 순위와 전용 커서로 제공한다. 위 164 구현 당시의 후속 범위 중 171을 구현했다. `./gradlew -PskipLocalDb test --tests '*HotTopicsTest' --tests '*CommunityReadTest' --tests '*PublicAnalysisTest'`는 일회용 PostgreSQL에서 선정·공개 철회·커서·동일 스냅샷·앱 역할 및 기존 조회·공개 회귀를 검증한다. 새 테이블·마이그레이션은 없고 실제 프론트 브라우저 인수는 별도다.
