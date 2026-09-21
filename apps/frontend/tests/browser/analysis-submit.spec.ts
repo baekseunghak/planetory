@@ -723,7 +723,8 @@ test("the answer is revealed only when the user asks for it", async ({
   await dialog
     .getByRole("button", { name: "이 신호 상세 보기", exact: true })
     .click();
-  await expect(dialog).toContainText("확정된 행성 신호");
+  // 해설 자리는 서버가 아직 채우지 못한다. 빈 자리를 지어내지 않고 안내만 둔다(6.7절).
+  await expect(dialog).toContainText("이 신호의 해설은 아직 없습니다");
   expect(calls).toHaveLength(1);
   // 매칭한 제출에는 내 판단과의 일치 여부를 준다(RES-02).
   await expect(dialog).toContainText("내 판단과 다릅니다");
@@ -737,8 +738,9 @@ test("an unconfirmed candidate is never explained as an answer", async ({
   await dialog
     .getByRole("button", { name: "이 신호 상세 보기", exact: true })
     .click();
-  await expect(dialog).toContainText("아직 확정되지 않은 후보입니다");
-  // 확정되지 않은 것을 확정처럼 말하지 않는다.
+  await expect(dialog).toContainText("이 신호의 해설은 아직 없습니다");
+  // 확정되지 않은 것을 확정처럼 말하지 않는다. 비어 온 해설을 화면이 대신 지어내면
+  // 가장 먼저 깨지는 약속이다.
   await expect(dialog).not.toContainText("정답");
   // 채점하지 않았으므로 일치 여부도 없다.
   await expect(dialog).not.toContainText("내 판단과");
@@ -1161,7 +1163,7 @@ test("opening the answer does not make the panel grow", async ({ page }) => {
   await dialog
     .getByRole("button", { name: "이 신호 상세 보기", exact: true })
     .click();
-  await expect(dialog).toContainText("확정된 행성 신호");
+  await expect(dialog).toContainText("이 신호의 해설은 아직 없습니다");
 
   // 깊이는 표에 한 번만 있다.
   const body = await dialog.innerText();

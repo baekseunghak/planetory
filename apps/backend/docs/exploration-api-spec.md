@@ -884,7 +884,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
              "bls": {"periodDays": 2.77, "epochBtjd": 1684.9, "durationHours": 4.1, "depthPpm": 12000, "sde": 14.2, "snr": 21.0},
              "ai": {"status": "completed", "score": 0.12, "verdict": "rejected", "modelVersion": "astronet-triage-1"},
              "external": [{"source": "TOI", "externalId": "TOI-1234.01", "disposition": "FP", "fetchedOn": "2026-09-01"}],
-             "explanation": "깊이가 크고 2차 식이 뚜렷한 식쌍성 신호입니다."},
+             "explanation": null},
   "userJudgmentAgrees": null,
   "tutorial": {"seq": 2, "skipAvailable": true}
 }
@@ -892,7 +892,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 - `CURRENT_MATCH`: 그 제출이 매칭한 신호. `userJudgmentAgrees`에 일치 여부(RES-02).
 - `CURRENT_CURVE_HINT`: 그 제출의 `curveContext`에서 제거되지 않은 탐색 가능 후보 중 `bls_power`(SDE·SNR) 최고 하나. 누적 매칭 집합이 아니라 그 제출 단계 기준(RES-09). 한 번에 하나만.
-- 미확정 후보는 `explanation`에 "정답"이라는 표현을 쓰지 않는다.
+- 미확정 후보는 `explanation`에 "정답"이라는 표현을 쓰지 않는다. 값이 null일 때 **화면이 대신 문장을 지어내지 않는다.** 지어낸 문장이 이 규칙을 가장 먼저 깬다.
 - 대상이 없으면 409 `DETAIL_UNAVAILABLE`, `answer_viewed`도 바꾸지 않는다.
 - `tutorial.skipAvailable`이 true면 프론트가 화면 끝에 [다음 튜토리얼로]를 두고 `skipped` 제출로 실행한다.
 
@@ -1455,6 +1455,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-145 구현 반영. 6.6절에 본문을 8.2절과 같은 함수로 만든다는 것과 요청 ID 복구가 미접수·처리 중을 가르는 방법, 6.7절에 힌트가 그 제출 단계 기준이라는 것과 `signal.explanation`의 출처가 없어 null이라는 것, 6.8절에 위상 재환산이 8.3절과 같은 함수라는 것과 단계 복원 판정이 5.1절과 같은 규칙이라는 것을 적었다 |
 | 2026-09-20 | S15P21C206-147 리뷰(김동혁) 반영. 7.1절에 실행기 시작 실패 시 작업을 기다리는 상태로 남기지 않는다는 것, 본문의 중복 후보를 서버가 지우고 단계를 다시 센다는 것, 경로 TIC 형식 오류가 2.3절과 같은 404라는 것을 적었다 |
 | 2026-09-20 | S15P21C206-147 리뷰(백지웅) 반영. 7.1·7.2절 응답에 `X-Current-Bundle`을 붙이고(2.3절 적용 범위도 갱신), 7.2 응답에 `queuePosition`을 더했다. 실패 뒤 재시도가 **새 `jobId`로 갈아타는 것**임을 바로잡고(같은 작업을 계속 폴링하면 영원히 `FAILED`만 본다), `attempt`를 올리는 함수가 아직 없다는 것과 캐시 확인이 등록과 한 번에 일어난다는 것을 적었다 |
+| 2026-09-21 | S15P21C206-145 리뷰(백지웅) 반영. 6.7절 예시의 `signal.explanation`을 실제 응답과 같은 null로 맞추고, 값이 null일 때 화면이 문장을 지어내지 않는다는 것을 적었다. 예시만 문장을 들고 있어 소비자가 필수 문자열로 읽었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
