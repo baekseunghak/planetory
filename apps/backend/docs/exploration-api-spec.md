@@ -858,6 +858,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `GO_HOME`은 `matched`·`matched_harmonic`·`duplicate` 결과에서 제공한다(RES-08). `DISCUSS`는 `not_matched`에서만 제공하며 같은 TIC·DISCUSSION·현재 본인 historyId를 가진 작성 초안을 연다(COM-10). 힌트 자체는 게시·성과를 만들지 않는다. `none_wrong`·`skipped`에는 이 두 힌트를 추가하지 않고 `ambiguous_match`는 기존대로 `RETRY`만 제공한다. 기존 저장 응답에 새 힌트를 소급 추가하지 않는다.
 
+공개 통계의 유효 조건·최신 대표 선택·반올림·asOf·소비자 트랜잭션 계약은 [서비스 API 9.2절](service-api-spec.md#92-스레드공개-목록상세)을 따른다. 현재 라벨을 조회하는 History 결과는 재분류 후 graded로 바뀔 수 있지만 공개 스레드 요약은 public_analyses를 유지한다. POST 재전송은 D-5에 따라 저장된 당시 통계를 반환하므로 최신 조회와 구분한다. 별 결과(146)·일괄 공개(166)·출처 카드(167)·핫 토픽(171)은 이 원천을 소비하며 각각의 전체 API 구현은 후속 범위다. 챌린지(139·168·208)는 신호별 N 합계가 아닌 [서비스 API 11장](service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)의 별 단위 참여 수를 사용한다.
+
 ### 6.5 특수 제출
 
 **`no_candidate` (SUB-11 (2)).** `selection`·`userJudgment`·`evidenceChecks` 없음. 현재 단계에서 제거되지 않은 탐색 가능 신호가 남아 있으면 `match.status=none_wrong`, 성과 없음, `detail.targetKind=CURRENT_CURVE_HINT`(AT-55). 별이 이미 완료면 저장하지 않고 409 `STAR_ALREADY_COMPLETED`.
@@ -1116,11 +1118,16 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
      "latestSubmissionId": "sub-6990", "latestHistoryId": "h-490", "matchResult": "matched", "userJudgment": "LIKELY_PLANET",
      "judgmentEvaluation": "AGREES", "achievement": {"result": "recognized", "recognizedAt": "…"},
      "publication": {"state": "NOT_ELIGIBLE"}, "ai": {"status": "completed", "score": 0.93, "verdict": "approved"},
+     "judgmentStatistics": {"kind": "graded", "matchedMemberCount": 10, "agreementPercent": 70.0},
      "relabel": null, "curveStepAtMatch": 0, "submissionIds": ["sub-6990"], "threadId": "st-301"},
     {"candidateId": "c-402", "disposition": "UNCONFIRMED", "status": "active",
      "latestSubmissionId": "sub-7001", "latestHistoryId": "h-501", "matchResult": "matched_harmonic", "userJudgment": "LIKELY_PLANET",
      "judgmentEvaluation": "UNSCORED", "achievement": {"result": "pending_publish", "recognizedAt": null},
      "publication": {"state": "UNPUBLISHED"}, "ai": {"status": "completed", "score": 0.71, "verdict": "hold"},
+     "judgmentStatistics": {"kind": "public_analyses", "candidateId": "c-402", "participantCount": 15,
+                            "likelyPlanet": 8, "unlikelyPlanet": 4, "unsure": 3,
+                            "percentages": {"likelyPlanet": 53.3, "unlikelyPlanet": 26.7, "unsure": 20.0},
+                            "asOf": "2026-09-21T01:00:00Z"},
      "relabel": null, "curveStepAtMatch": 1, "submissionIds": ["sub-7001"], "threadId": null}
   ],
   "unmatchedSubmissions": [{"submissionId": "sub-7002", "historyId": "h-502", "matchResult": "not_matched", "submittedAt": "…"}],
@@ -1134,6 +1141,8 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 ```
 
 - `signals`는 회원이 매칭한 고유 신호마다 한 항목. 미매칭 후보는 절대 나열하지 않는다(DEC-28).
+- `signals[].judgmentStatistics`는 RES-11·6.4절의 **탐사 결과 통계**다. 조회 시점의 현재 `answerClass=analysis`이면 최신 유효 공개 판단의 `kind=public_analyses`·`participantCount`·세 판단 분포를, `answerClass=graded`이면 첫 매칭 기준의 `kind=graded`·`matchedMemberCount`·`agreementPercent`를 반환한다. 본인의 공개 여부나 `threadId` 유무로 분기하지 않으며 한 신호 카드에 두 통계를 섞지 않는다. 위 예시의 미공개 상태는 본인 기록의 상태이고 참여자 15명은 해당 신호의 전체 유효 공개 참여자 수다.
+- 미확정에서 확정·FP로 재분류되면 이 페이지의 최신 조회 통계는 graded로 바뀌지만, 기존 공식 스레드의 `judgmentSummary`는 public_analyses를 유지한다. 6.6절의 최신 제출 조회와 같은 기준이며 POST 재전송의 저장된 당시 통계는 바꾸지 않는다. 산식·공개 유효 조건·동일 스냅샷 계약은 [서비스 API 9.2절](service-api-spec.md#92-스레드공개-목록상세)을 따른다. 146 API의 구현·연동 검증은 146에서 수행한다.
 - "탐색 완료 / 미게시 분석 있음"은 `progress.stage=completed`와 `unpublishedSignalCount>0`으로 공존한다.
 - `threadId`는 서비스 API 공식 스레드 ID(있을 때만).
 

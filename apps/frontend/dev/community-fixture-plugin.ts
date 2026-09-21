@@ -438,57 +438,62 @@ export function communityFixturePlugin({
             judgment: "UNSURE",
             evidenceChecks: ["ushape"],
             memo: "213 합성 첨부 메모",
-            graph: url.searchParams.get("includeGraph") === "false" ? null : {
-              historyId,
-              reproduction: {
-                submittedBundleId: "b-1",
-                currentBundleId: "b-2",
-                residualReproducible: true,
-                fallbackReason: null,
-              },
-              selection: {
-                userPeriodDays: 3.21,
-                correctedPeriodDays: 3.21,
-                harmonicMultiplier: 1,
-                epochBtjd: 1684.02,
-                durationHours: 2.4,
-              },
-              curve: submitted
+            graph:
+              url.searchParams.get("includeGraph") === "false"
                 ? null
                 : {
-                    ticId: "259377017",
-                    bundleId: "b-2",
-                    curveContext: {
-                      bundleId: "b-2",
-                      curveStep: 0,
-                      removedCandidateIds: [],
-                      residualModelVersion: "rm-1",
-                      periodogramConfigVersion: "pg-1",
+                    historyId,
+                    reproduction: {
+                      submittedBundleId: "b-1",
+                      currentBundleId: "b-2",
+                      isPreviousSubmission: true,
+                      currentFoldReferenceTimeBtjd: 1683.35,
+                      residualReproducible: true,
+                      fallbackReason: null,
                     },
-                    foldReferenceTimeBtjd: 1683.35,
-                    segments: [
-                      {
-                        segmentId: "seg-1",
-                        sector: 14,
-                        binningRevision: 1,
-                        startBtjd: 1683.35,
-                        binMinutes: 10,
-                        nPoints: 4,
-                        flux: [1, 0.99, null, 1.01],
-                        fluxScatter: 0.001,
-                        gaps: [[2, 2]],
-                      },
-                    ],
+                    selection: {
+                      userPeriodDays: 3.21,
+                      correctedPeriodDays: 3.21,
+                      harmonicMultiplier: 1,
+                      epochBtjd: 1684.02,
+                      durationHours: 2.4,
+                    },
+                    curve: submitted
+                      ? null
+                      : {
+                          ticId: "259377017",
+                          bundleId: "b-2",
+                          curveContext: {
+                            bundleId: "b-2",
+                            curveStep: 0,
+                            removedCandidateIds: [],
+                            residualModelVersion: "rm-1",
+                            periodogramConfigVersion: "pg-1",
+                          },
+                          foldReferenceTimeBtjd: 1683.35,
+                          segments: [
+                            {
+                              segmentId: "seg-1",
+                              sector: 14,
+                              binningRevision: 1,
+                              startBtjd: 1683.35,
+                              binMinutes: 10,
+                              nPoints: 4,
+                              flux: [1, 0.99, null, 1.01],
+                              fluxScatter: 0.001,
+                              gaps: [[2, 2]],
+                            },
+                          ],
+                        },
+                    snapshot:
+                      submitted && historyId !== "h-502"
+                        ? {
+                            bins: 150,
+                            foldedFlux: Array(150).fill(1),
+                            foldedError: Array(150).fill(0.001),
+                          }
+                        : null,
                   },
-              snapshot:
-                submitted && historyId !== "h-502"
-                  ? {
-                      bins: 150,
-                      foldedFlux: Array(150).fill(1),
-                      foldedError: Array(150).fill(0.001),
-                    }
-                  : null,
-            },
           });
           return;
         }

@@ -101,7 +101,8 @@ function AnalysisReady({
   recoverBundle: () => boolean;
   notice: ReactNode;
 }) {
-  const step = useCurveStep(context, entryCurve);
+  // 계산이 도는 동안 판이 바뀌면 곡선 조회와 똑같이 자동으로 다시 읽는다.
+  const step = useCurveStep(context, entryCurve, recoverBundle);
   // 보고 있는 곡선. 전환이 끝나야 바뀌므로 그 전에는 진입 곡선 그대로다.
   const curve = step.curve.kind === "ready" ? step.curve : entryCurve;
   /**

@@ -122,11 +122,22 @@ export function CurveStepBar({ context }: { context: AnalysisContext }) {
 
       {transition.phase === "failed" && (
         <p role="alert">
-          {transition.message} 보고 있던 곡선은 그대로입니다.{" "}
-          <button type="button" onClick={() => step.retry()}>
-            다시 시도
-          </button>
+          {transition.message} 보고 있던 곡선은 그대로입니다.
+          {/* 눌러도 같은 결과인 버튼은 「내가 뭘 잘못했나」를 묻게 만든다. */}
+          {transition.retryable && (
+            <>
+              {" "}
+              <button type="button" onClick={() => step.retry()}>
+                다시 시도
+              </button>
+            </>
+          )}
         </p>
+      )}
+
+      {/* 실패가 아니라 준비되지 않은 것이다. 다시 시도를 권하지 않는다. */}
+      {transition.phase === "unavailable" && (
+        <p role="status">{transition.message} 보고 있던 곡선은 그대로입니다.</p>
       )}
 
       {transition.phase === "queue-full" && (
@@ -146,9 +157,10 @@ export function CurveStepBar({ context }: { context: AnalysisContext }) {
         </p>
       )}
 
+      {/* 이제 스스로 다시 읽는다. 눌러 달라고 하지 않는다. */}
       {transition.phase === "bundle-changed" && (
-        <p role="alert">
-          새 데이터 판이 공개되었습니다. 최신 자료를 다시 불러와 주세요.
+        <p role="status">
+          새 데이터 판이 공개되어 최신 자료를 다시 불러오고 있습니다.
         </p>
       )}
     </section>
