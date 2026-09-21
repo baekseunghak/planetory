@@ -3,6 +3,8 @@ import {
   MemberProfilePage,
 } from "./features/profile/ProfilePage";
 import { StrictMode } from "react";
+import { FollowingPage, FollowingFeedPage } from "./features/follow/Follow";
+import { p1Enabled } from "./features/p1";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App, type PageSlots } from "./app/App";
@@ -40,6 +42,9 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
+    ...(p1Enabled
+      ? { following: FollowingPage, followingFeed: FollowingFeedPage }
+      : {}),
     sky: SkyDataPage,
     profile: MyProfilePage,
     member: MemberProfilePage,

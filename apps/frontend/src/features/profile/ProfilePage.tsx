@@ -14,6 +14,8 @@ import {
 import { UsageGuide } from "./UsageGuide";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
+import { FollowButton, FollowSummary } from "../follow/Follow";
+import { p1Enabled } from "../p1";
 export function MyProfilePage() {
   const { member } = useSession();
   return member ? (
@@ -83,6 +85,20 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         )
       ) : (
         <>
+          {p1Enabled && (
+            <>
+              <FollowSummary memberId={memberId} own={own} />
+              {!own && (
+                <FollowButton
+                  target={{
+                    kind: "MEMBER",
+                    id: memberId,
+                    label: profile.nickname,
+                  }}
+                />
+              )}
+            </>
+          )}
           {section === "summary" && <Summary profile={profile} own={own} />}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
