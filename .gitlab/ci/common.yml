@@ -78,6 +78,11 @@ validate:tess-hdfs-loader:
 .remote-compose-deploy:
   stage: deploy
   image: alpine:3.20
+  variables:
+    # 서비스 배포 job이 덮어쓴다. 비어 있으면 교체만 하고 확인·롤백을 하지 않는다.
+    DEPLOY_HEALTH_PATH: ""
+    DEPLOY_DB_BACKUP: "false"
+    DEPLOY_HEALTH_TIMEOUT: "90"
   # SSH 키를 두지 않는다. 대상 노드가 Tailscale SSH로 22번을 처리하므로
   # authorized_keys가 아니라 tailnet 신원으로 인증한다. job 컨테이너의 연결은
   # Runner 호스트의 tailnet 신원으로 나가고, ACL의 ssh 규칙이 deploy 계정을
@@ -89,12 +94,17 @@ validate:tess-hdfs-loader:
     # 호스트 키 검증은 Tailscale SSH가 맡는다.
     - printf 'StrictHostKeyChecking accept-new\nConnectTimeout 15\n' > ~/.ssh/config
     - chmod 600 ~/.ssh/config
+  # 교체·헬스 확인·롤백은 infra/service/deploy.sh가 배포 노드에서 수행한다.
+  # 한 줄짜리 ssh 명령으로는 어느 단계에서 실패했는지 구분할 수 없고, 실패했을 때
+  # 되돌릴 대상을 기억할 수도 없다. DEPLOY_HEALTH_PATH가 비면 확인과 롤백을
+  # 건너뛰므로 헬스 경로가 없는 GCP 노드 배포는 이전과 같이 동작한다.
   script:
     - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
     - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+    - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh"
     - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && export $DEPLOY_IMAGE_VARIABLE='$FULL_IMAGE' && docker compose -f compose.yaml config -q && docker compose -f compose.yaml pull $DEPLOY_SERVICES && if [ '$DEPLOY_ACTION' = 'up' ]; then docker compose -f compose.yaml up -d --no-deps $DEPLOY_SERVICES && docker compose -f compose.yaml ps $DEPLOY_SERVICES; fi"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
 .deploy-ec2-a:
   extends: .remote-compose-deploy

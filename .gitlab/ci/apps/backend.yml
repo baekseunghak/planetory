@@ -19,6 +19,13 @@ deploy:backend:ec2-a:
     DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
     DEPLOY_SERVICES: backend
     DEPLOY_ACTION: up
+    # GET /actuator/health는 SecurityConfig에서 permitAll이다.
+    DEPLOY_HEALTH_PATH: "/actuator/health"
+    # 기동과 동시에 Flyway가 돈다. 교체 전에 덤프를 남긴다. 롤백은 이미지만
+    # 되돌리므로, 스키마까지 되돌려야 하면 이 덤프가 유일한 수단이다.
+    DEPLOY_DB_BACKUP: "true"
+    # Gradle 앱은 기동이 느리다. 실측 기준 13초대이나 마이그레이션이 붙으면 늘어난다.
+    DEPLOY_HEALTH_TIMEOUT: "180"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/backend/gradlew]

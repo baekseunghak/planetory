@@ -1,3 +1,5 @@
 # 변경 이력은 append-only 로그이므로 병합 충돌 대신 양쪽 항목을 모두 보존한다.
 docs/changes/**/*.md merge=union
-infra/distributed-system/scripts/*.sh text eol=lf
+# 배포·설치 스크립트는 리눅스 노드에서 sh로 실행된다. CRLF가 섞이면 첫 줄부터
+# 깨지므로 체크아웃 플랫폼과 무관하게 LF로 고정한다.
+infra/**/*.sh text eol=lf

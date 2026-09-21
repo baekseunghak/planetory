@@ -198,6 +198,27 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
 곧 서빙되는 판이다.
 
+## 배포와 롤백
+
+`deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
+
+| 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
+| --- | --- | --- | --- |
+| `frontend` | `/` | 없음 | 90초 |
+| `backend` | `/actuator/health` | 남긴다 | 180초 |
+
+확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
+
+**롤백은 이미지만 되돌린다. 스키마는 되돌리지 않는다.** Flyway는 앞으로만 가고 `clean`이 막혀 있다. 지금까지의 마이그레이션은 열·테이블 추가뿐이라 구 앱이 새 스키마에서도 `validate`를 통과하지만, 열을 지우거나 이름을 바꾸는 마이그레이션이 들어오면 그 가정이 깨진다. 그때는 덤프에서 복원해야 한다.
+
+덤프는 `$DEPLOY_PATH/backups/service-db-<YYYYMMDD-HHMMSS>.sql`에 쌓이며 최근 10개만 남는다. 복원은 이미 마이그레이션된 DB에 데이터만 넣는 경우 트리거와 `rule-0` 충돌을 먼저 처리해야 한다. 절차는 [운영 규칙 런북](../../docs/operations/operation-rule-runbook.md)을 따른다.
+
+배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
+
+- `되돌렸습니다` — 서비스는 직전 이미지로 살아 있다. 원인을 고쳐 다시 배포한다.
+- `되돌릴 이미지가 없습니다` — 첫 배포였다. 서비스가 떠 있지 않다.
+- `되돌린 뒤에도 헬스가 통과하지 않습니다` — 사람이 봐야 한다.
+
 ## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
 
 `cloudflared`는 외부 인바운드 포트를 열지 않고 edge에서만 트래픽을 받는다. 서비스 컨테이너는 같은 `service` 네트워크에 있으므로 Tunnel의 public hostname은 `http://frontend:8080`을 origin으로 지정한다.
