@@ -57,3 +57,4 @@
 | 2026-09-21 | 일괄 공개 리뷰 보완·후보 보장 범위 | S15P21C206-166 | 로그 스택, TIC_MISMATCH, CommunityQuery, 스냅샷, History 단위 후보 | 관련 81건·추가 46건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 내 별 목록 필터와 별 위치 찾기 구현 | S15P21C206-152 | stage, grade, ticId 필터, 커서 묶기, gradeRange, me/sky/locate, STAR_LOCKED | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 별 목록 조회의 트랜잭션 누락 정정과 스냅샷 계약 명시 | S15P21C206-152 | REPEATABLE_READ, 자기 호출, 프록시, 오버로드, STAR_LIST_PRIVATE, 스냅샷 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |

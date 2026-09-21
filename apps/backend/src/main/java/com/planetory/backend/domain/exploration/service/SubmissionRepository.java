@@ -179,6 +179,26 @@ public class SubmissionRepository {
                 }).single();
     }
     private static Double percent(long count,long total) { return total==0?null:Math.round(count*1000.0/total)/10.0; }
+    /**
+     * 후보의 최신 AI 평가. 6.4절 제출 결과와 8.4절 결과 페이지가 <b>같은 모양</b>을 써야 한다 —
+     * 두 화면이 같은 신호를 다르게 말하면 어느 쪽이 맞는지 알 수 없다.
+     *
+     * <p>실행 기록이 없으면 {@code not_evaluated}이며 점수·판정은 null이다. 0점으로 바꾸지 않는다.
+     */
+    Map<String, Object> ai(long candidateId) {
+        return jdbc.sql("""
+                SELECT x.status,e.score,e.verdict,x.model_version FROM ai_evaluations e
+                JOIN ai_executions x ON x.id=e.execution_id WHERE e.candidate_id=?
+                ORDER BY x.started_at DESC,e.id DESC LIMIT 1
+                """).param(candidateId).query((r, n) -> {
+                    Map<String,Object> m = new LinkedHashMap<>();
+                    m.put("status", r.getString(1)); m.put("score", r.getBigDecimal(2));
+                    m.put("verdict", r.getString(3)); m.put("modelVersion", r.getString(4)); return m;
+                }).optional().orElseGet(() -> {
+                    Map<String,Object> m = new LinkedHashMap<>(); m.put("status", "not_evaluated");
+                    m.put("score", null); m.put("verdict", null); m.put("modelVersion", null); return m;
+                });
+    }
     Map<String, Object> signal(long member, Candidate candidate, Disposition disposition) {
         Map<String, Object> signal = new LinkedHashMap<>();
         signal.put("candidateId", ExplorationIds.candidate(candidate.id()));
@@ -190,19 +210,7 @@ public class SubmissionRepository {
         bls.put("durationHours", candidate.durationHours()); bls.put("depthPpm", candidate.depthPpm());
         // Gold 현재 스키마에는 SDE/SNR 열이 없다. 없는 수치를 만들어 내지 않는다.
         bls.put("sde", null); bls.put("snr", null); signal.put("bls", bls);
-        Map<String, Object> ai = jdbc.sql("""
-                SELECT x.status,e.score,e.verdict,x.model_version FROM ai_evaluations e
-                JOIN ai_executions x ON x.id=e.execution_id WHERE e.candidate_id=?
-                ORDER BY x.started_at DESC,e.id DESC LIMIT 1
-                """).param(candidate.id()).query((r, n) -> {
-                    Map<String,Object> m = new LinkedHashMap<>();
-                    m.put("status", r.getString(1)); m.put("score", r.getBigDecimal(2));
-                    m.put("verdict", r.getString(3)); m.put("modelVersion", r.getString(4)); return m;
-                }).optional().orElseGet(() -> {
-                    Map<String,Object> m = new LinkedHashMap<>(); m.put("status", "not_evaluated");
-                    m.put("score", null); m.put("verdict", null); m.put("modelVersion", null); return m;
-                });
-        signal.put("ai", ai);
+        signal.put("ai", ai(candidate.id()));
         signal.put("external", jdbc.sql("SELECT source,external_id,disposition,fetched_on FROM external_signal_references WHERE candidate_id=? ORDER BY id")
                 .param(candidate.id()).query((r, n) -> {
                     Map<String,Object> m = new LinkedHashMap<>();
