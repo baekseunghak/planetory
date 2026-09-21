@@ -59,3 +59,5 @@
 | 2026-09-21 | 별 목록 조회의 트랜잭션 누락 정정과 스냅샷 계약 명시 | S15P21C206-152 | REPEATABLE_READ, 자기 호출, 프록시, 오버로드, STAR_LIST_PRIVATE, 스냅샷 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | MR 단계 컨테이너 이미지 빌드 검증 추가 | S15P21C206-84 | web:image, nginx -t, host not found in upstream, dind | 구현 완료·파이프라인 미실행 | [기록](2026-09-21.md) |
+| 2026-09-21 | EC2-A 계정 분리 적용과 CI push 차단 원인 규명 | S15P21C206-84 | planetory_service, DATABASE_PASSWORD, DEPLOY_AUX_DIR, registry push timeout, UFW, tailscale0 | EC2-A 적용 완료·EC2-B 조치 승인 대기 | [기록](2026-09-21.md) |

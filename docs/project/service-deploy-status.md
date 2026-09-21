@@ -8,7 +8,7 @@
 
 ## 한 줄 요약
 
-`planetory.space`로 서비스가 뜨고 Google·SSAFY 로그인이 동작한다. 다만 **지금 떠 있는 것은 EC2-A에서 손으로 빌드한 이미지**이고 CI 파이프라인은 아직 한 번도 실행되지 않았다.
+`planetory.space`로 서비스가 뜨고 Google·SSAFY 로그인이 동작한다. 다만 **지금 떠 있는 것은 EC2-A에서 손으로 빌드한 이미지**다. CI 파이프라인은 실행되고 있으나 **`build:*`가 레지스트리 push에서 실패해 레지스트리에 쓸 수 있는 이미지가 없다.** 원인과 필요한 조치는 「CI가 막힌 지점」에 있다.
 
 ## 실환경에서 확인된 것 (2026-09-18)
 
@@ -33,14 +33,67 @@
 
 더미 별은 `DELETE FROM star_unlocks WHERE tic_id >= 900000002;`로 지운다. 튜토리얼 별은 운영 TIC이 정해지면 교체한다. 빈 DB에서 가입이 막히는 조건과 시드 순서는 [EC2 서비스 배포](../../infra/service/README.md)에 있다.
 
-## 다음 배포 전에 반드시 할 것
+## 계정 분리 적용 (2026-09-21 완료)
 
-develop의 계정 분리(`S15P21C206-238`)가 들어오면서 **배포 계약이 바뀌었다.** 지금 EC2-A의 `.env`로는 배포가 실패한다.
+develop의 계정 분리(`S15P21C206-238`)가 들어오면서 배포 계약이 바뀌었고, EC2-A에 적용을 마쳤다. 절차는 [EC2 서비스 배포](../../infra/service/README.md)의 「계정 분리」 절을 따랐다.
 
-1. 기존 볼륨에 런타임 계정을 만든다. initdb 훅은 빈 볼륨을 처음 초기화할 때만 돌기 때문이다.
-2. `.env`에 `DATABASE_PASSWORD`를 넣는다. `POSTGRES_PASSWORD`와 **다른 값**이어야 한다.
+| 항목 | 상태 |
+| --- | --- |
+| `planetory_service` 계정 | 기존 볼륨에 수동 생성. `planetory_app` 부여, `public` 스키마 `CREATE` 회수 |
+| `.env`의 `DATABASE_PASSWORD` | 추가. `POSTGRES_PASSWORD`와 다른 값 |
+| CI 배포 경로 `/home/deploy/planetory` | `.env`와 `service-db-init/`를 배치. `deploy` 계정 소유 |
+| `docker compose config -q` | `deploy` 계정으로 통과 |
 
-순서를 지켜야 한다. `.env`만 먼저 고치면 없는 계정으로 붙어 기동에 실패하고, 계정만 먼저 만들면 compose가 `DATABASE_PASSWORD` 없다고 모든 명령을 거부한다. SQL은 [EC2 서비스 배포](../../infra/service/README.md)의 「계정 분리」 절을 따른다.
+런타임 계정은 아직 테이블 권한이 없다. `planetory_app` GRANT가 V10~V18에 나뉘어 있고 EC2-A의 DB는 V9에서 멈춰 있기 때문이다. 다음 백엔드 배포에서 Flyway가 소유자로 마이그레이션을 돌리면서 채운다. 기동과 같은 트랜잭션 흐름 안에서 처리되므로 별도 조치는 필요 없다.
+
+## CI가 막힌 지점
+
+`build:frontend`는 이미지 빌드까지 성공하고 **레지스트리 push에서 실패한다.**
+
+```text
+Get "https://<레지스트리 호스트>:<포트>/v2/": net/http: request canceled
+while waiting for connection (Client.Timeout exceeded while awaiting headers)
+```
+
+원인은 **EC2-B의 컨테이너가 자기 호스트에 닿지 못하는 것**이다. 호스트에서는 레지스트리가 정상 응답하지만(`200`), 같은 호스트의 컨테이너에서는 시간 초과한다. 인터넷은 나간다.
+
+| 경로 | 결과 |
+| --- | --- |
+| EC2-B 호스트 → 레지스트리 | 200 |
+| EC2-A → 레지스트리 | 200. 인증서 유효, `docker pull` 경로 정상 |
+| EC2-B 컨테이너 → 레지스트리 | 시간 초과 |
+| EC2-B 컨테이너 → EC2-A `22` | 시간 초과 |
+| EC2-B 컨테이너 → 인터넷 | 200 |
+
+차단 주체는 UFW다. 커널이 직접 남긴 기록이 있다.
+
+```text
+[UFW BLOCK] IN=docker0 SRC=<컨테이너> DST=<EC2-B tailnet 주소> DPT=<레지스트리 포트>
+[UFW BLOCK] IN=docker0 SRC=<컨테이너> DST=<docker0 게이트웨이> DPT=<레지스트리 포트>
+```
+
+Tailscale 문제가 아니다. 호스트의 어느 주소로 가든 똑같이 막히며, tailnet과 무관한 도커 게이트웨이와 호스트의 사설 주소도 마찬가지다. `DEFAULT_FORWARD_POLICY`도 `DROP`이다.
+
+### push는 방화벽을 건드리지 않고 풀 수 있다
+
+컨테이너에서 **레지스트리 컨테이너로 직접 가면 이미 통한다.** 같은 브리지 위라 호스트 `INPUT`을 거치지 않는다. Runner 설정의 호스트 매핑을 바꾸면 끝난다.
+
+```toml
+# /srv/gitlab-runner/config/config.toml
+extra_hosts = ["<레지스트리 호스트>:<레지스트리 컨테이너 주소>"]
+```
+
+인증서는 이름으로 검증하므로 그대로 유효하고, push가 호스트 밖으로 나가지 않아 「이미지 레지스트리」가 적어둔 의도에 더 맞는다.
+
+**한계.** 레지스트리 컨테이너 주소는 기본 브리지가 순서대로 준 값이라 레지스트리 컨테이너를 다시 만들면 바뀔 수 있다. 바뀌면 push가 같은 방식으로 다시 깨진다. 고정이 필요해지면 사용자 정의 네트워크에 네트워크 별칭으로 붙여 Docker DNS가 이름을 풀게 한다.
+
+### 배포 job의 SSH는 원인 미확정
+
+컨테이너에서 EC2-A의 22번으로 나가는 경로는 여전히 막힌다. UFW의 전달 정책이 `DROP`인 것은 확인했으나, 그것이 원인인지 `tailscale0`으로 나가는 사설 출발지가 처리되지 않는 것인지는 구분하지 못했다. 둘 중 무엇인지 확인한 뒤 조치한다.
+
+`.remote-compose-deploy`의 "job 컨테이너의 연결은 Runner 호스트의 tailnet 신원으로 나간다"는 주석은 **사실이 아니다.** job 컨테이너는 docker 브리지에 있고 tailnet 경로를 갖지 않는다.
+
+Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `amd64-docker` 태그와 `run_untagged=true`를 갖는다. CI 변수 `DEPLOY_USER`·`EC2_A_HOST`·`EC2_A_DEPLOY_PATH`·`REGISTRY_IMAGE_PREFIX`도 실제 서버 구성과 일치한다.
 
 ## CI/CD 구성
 
@@ -67,7 +120,9 @@ develop의 계정 분리(`S15P21C206-238`)가 들어오면서 **배포 계약이
 
 **실행해서 확인한 것.** 프론트 `npm test` 343개와 `npm run build` 통과. 배포 스크립트는 가짜 `docker`·`curl`로 정상 배포, `up -d` 실패 시 롤백, 복수 서비스 교체, `curl` 부재 시 교체 전 중단, 덤프 실패 시 중단, 이미지 변수 오타 검출을 확인했다. 스키마 검사는 실제 git 저장소로 선점 차단·통과·건너뛰기를 확인했고, 되돌릴 수 없는 구문 6종 차단과 한국어 주석 오탐 없음을 확인했다. 이미지 빌드 두 개는 로컬 Docker에서 실제로 실행했다. 수정 전 `nginx.conf`로 `nginx -t`가 `host not found in upstream`으로 실패하는 것도 확인했다.
 
-**확인하지 못한 것.** **GitLab 파이프라인을 한 번도 실행하지 않았다.** 실제 Runner에서의 캐시 적중, `rules: changes` 판정, `alpine/git`·dind 이미지 동작은 돌려봐야 안다. 배포 job도 실환경에서 실행한 적이 없어 롤백이 진짜 서버에서 동작하는지는 미검증이다.
+**실환경에서 확인한 것(2026-09-21).** GitLab 파이프라인은 실행되고 있다. develop의 `build:frontend`는 Runner를 잡고 dind에서 이미지 빌드까지 마치며 커밋 SHA 태그도 정확히 붙는다. `rules: changes` 판정과 dind 기동도 동작한다. EC2-A의 배포 경로는 `deploy` 계정으로 `docker compose config -q`를 통과하고, 레지스트리 인증서는 EC2-A에서 유효하다.
+
+**확인하지 못한 것.** 레지스트리 push가 막혀 있어 **끝까지 성공한 파이프라인이 없다.** 따라서 배포 job은 한 번도 실행되지 않았고, 롤백이 진짜 서버에서 동작하는지도 여전히 미검증이다. 캐시 적중도 push 성공 이후에야 의미 있게 관찰된다.
 
 ## 남은 결정 (MR에서 확인)
 
