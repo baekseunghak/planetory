@@ -61,6 +61,13 @@ test("공개하지 않은 신호 수는 없음과 0이 다르다", () => {
   void unpublishedSignalCount;
   const other = readMyStars({ items: [withoutField] });
   assert.equal(other.items[0].unpublishedSignalCount, null);
+
+  // 서버는 키를 빼지만 개발용 응답·프록시가 null을 실을 수 있다. 그것 때문에
+  // 목록 전체를 잃지 않는다.
+  const asNull = readMyStars({
+    items: [{ ...star, unpublishedSignalCount: null }],
+  });
+  assert.equal(asNull.items[0].unpublishedSignalCount, null);
 });
 
 test("없을 수 있는 값을 지어내지 않는다", () => {

@@ -97,9 +97,13 @@ export function readMyStars(value: unknown): Page<MyStar> {
     reopenPending: flag(row.reopenPending, "reopenPending"),
     reopened: flag(row.reopened, "reopened"),
     // 키가 아예 없는 것과 0이 온 것을 가른다. `?? null`로 뭉치면 둘이 같아진다.
-    unpublishedSignalCount: Object.hasOwn(row, "unpublishedSignalCount")
-      ? integer(row.unpublishedSignalCount, "unpublishedSignalCount")
-      : null,
+    // **`null`도 「모름」으로 받는다** — 서버는 키를 빼지만 개발용 응답이나
+    // 프록시가 null을 실을 수 있고, 그것 때문에 목록 전체를 잃을 이유는 없다.
+    unpublishedSignalCount:
+      row.unpublishedSignalCount === null ||
+      row.unpublishedSignalCount === undefined
+        ? null
+        : integer(row.unpublishedSignalCount, "unpublishedSignalCount"),
     lastActivityAt: text(row.lastActivityAt, "lastActivityAt"),
     unlockReason: maybeText(row.unlockReason, "unlockReason"),
   }));

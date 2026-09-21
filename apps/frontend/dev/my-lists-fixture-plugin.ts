@@ -81,12 +81,47 @@ const history = (index: number): Row => {
 /** `result=matched`는 셋을 묶는다. 화면 이름표와 일대일이 아니다. */
 const MATCHED = new Set(["matched", "matched_harmonic", "duplicate"]);
 
-function page(rows: Row[], cursor: string | null, size = 3) {
-  const start = cursor ? Number(cursor) : 0;
-  if (!Number.isSafeInteger(start) || start < 0) return null;
+/**
+ * **커서를 조건에 묶는다.** 명세 4.4·8.1이 「하나라도 다르면 400」이라 하고
+ * `size`도 그 묶음에 들어간다. 단순 offset으로 두면 화면이 옛 커서를 실어
+ * 보내기 시작해도 개발용 응답이 통과시켜, 이 MR이 고정하려는 계약을 검사가
+ * 못 잡는다.
+ */
+function encode(binding: string, offset: number) {
+  return Buffer.from(binding + "|" + offset, "utf8").toString("base64url");
+}
+
+function page(
+  rows: Row[],
+  binding: string,
+  cursor: string | null,
+  size: number,
+) {
+  let start = 0;
+  if (cursor) {
+    let decoded: string;
+    try {
+      decoded = Buffer.from(cursor, "base64url").toString("utf8");
+    } catch {
+      return null;
+    }
+    const at = decoded.lastIndexOf("|");
+    if (at < 0 || decoded.slice(0, at) !== binding) return null;
+    start = Number(decoded.slice(at + 1));
+    if (!Number.isSafeInteger(start) || start < 0) return null;
+  }
   const slice = rows.slice(start, start + size);
-  const next = start + size < rows.length ? String(start + size) : null;
+  const next =
+    start + size < rows.length ? encode(binding, start + size) : null;
   return { items: slice, nextCursor: next, hasNext: next !== null };
+}
+
+/** 개발용 기본 크기. 실제 서버 기본은 20이지만 여기 자료가 적어 쪽을 나눈다. */
+function pageSize(url: URL) {
+  const raw = url.searchParams.get("size");
+  if (raw === null) return 3;
+  const size = Number(raw);
+  return Number.isSafeInteger(size) && size >= 1 && size <= 100 ? size : null;
 }
 
 export function myListsFixturePlugin(): Plugin {
@@ -139,7 +174,20 @@ export function myListsFixturePlugin(): Plugin {
               (!grade || row.grade === grade) &&
               (!tic || row.ticId === tic),
           );
-          const body = page(rows, cursor);
+          const size = pageSize(url);
+          if (size === null) return reject("size");
+          // 4.4절: 요청 회원·대상 회원·scope·sort·size와 필터 셋에 묶는다.
+          const binding = [
+            "stars",
+            path,
+            url.searchParams.get("scope") ?? "",
+            url.searchParams.get("sort") ?? "",
+            stage ?? "",
+            grade ?? "",
+            tic ?? "",
+            url.searchParams.get("size") ?? "",
+          ].join("|");
+          const body = page(rows, binding, cursor, size);
           return body ? send(body) : reject("cursor");
         }
 
@@ -161,7 +209,19 @@ export function myListsFixturePlugin(): Plugin {
             const value = String(row.matchResult);
             return result === "matched" ? MATCHED.has(value) : value === result;
           });
-          const body = page(rows, cursor);
+          const size = pageSize(url);
+          if (size === null) return reject("size");
+          // 8.1절: 회원·ticId·candidateId·result·from·to·size에 묶는다.
+          const binding = [
+            "histories",
+            url.searchParams.get("ticId") ?? "",
+            url.searchParams.get("candidateId") ?? "",
+            result,
+            url.searchParams.get("from") ?? "",
+            url.searchParams.get("to") ?? "",
+            url.searchParams.get("size") ?? "",
+          ].join("|");
+          const body = page(rows, binding, cursor, size);
           return body ? send(body) : reject("cursor");
         }
 

@@ -204,3 +204,52 @@ test("기록 상세에 갔다 오면 보던 칸과 필터가 그대로다", asyn
     page.getByRole("button", { name: "맞은 신호", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
 });
+
+test("조건이 다른 커서는 개발용 응답도 400으로 거절한다", async ({ page }) => {
+  // 이 MR의 핵심 주장이 「커서가 조건·size에 묶인다」인데, 개발용 응답이
+  // 통과시켜 주면 화면이 옛 커서를 실어 보내도 검사가 못 잡는다. 서버처럼
+  // 거절하는지 직접 확인한다(명세 4.4·8.1).
+  const first = await page.request.get("/api/v1/me/histories?result=matched");
+  expect(first.status()).toBe(200);
+  const cursor = (await first.json()).nextCursor as string;
+  expect(cursor).toBeTruthy();
+
+  // 같은 조건이면 이어 읽힌다.
+  expect(
+    (
+      await page.request.get(
+        `/api/v1/me/histories?result=matched&cursor=${encodeURIComponent(cursor)}`,
+      )
+    ).status(),
+  ).toBe(200);
+
+  // 필터가 달라지면 거절한다.
+  expect(
+    (
+      await page.request.get(
+        `/api/v1/me/histories?result=skipped&cursor=${encodeURIComponent(cursor)}`,
+      )
+    ).status(),
+  ).toBe(400);
+
+  // **크기가 달라져도 거절한다.** 명세에 size가 묶음에 들어 있다.
+  expect(
+    (
+      await page.request.get(
+        `/api/v1/me/histories?result=matched&size=5&cursor=${encodeURIComponent(cursor)}`,
+      )
+    ).status(),
+  ).toBe(400);
+
+  // 별 목록도 같다 — 대상 회원이 다르면 이어 쓸 수 없다.
+  const mine = await page.request.get("/api/v1/me/stars");
+  const starCursor = (await mine.json()).nextCursor as string;
+  expect(starCursor).toBeTruthy();
+  expect(
+    (
+      await page.request.get(
+        `/api/v1/members/u-211/stars?cursor=${encodeURIComponent(starCursor)}`,
+      )
+    ).status(),
+  ).toBe(400);
+});
