@@ -217,12 +217,8 @@ public class HistoryService {
         Double period=number(s,"submitted_period"), epoch=number(s,"epoch_btjd"), duration=number(s,"duration_hours");
         Double start=null,end=null;
         if (mode.equals("CURRENT") && period!=null && epoch!=null && duration!=null) {
-            double center=(epoch-bundle.foldReferenceTimeBtjd())/period;
-            center-=Math.floor(center);
-            double width=duration/24/period;
-            start=center-width/2;
-            start-=Math.floor(start);
-            end=start+width;
+            double[] window=phaseWindow(period,epoch,duration,bundle.foldReferenceTimeBtjd());
+            start=window[0]; end=window[1];
         }
         var match=match(row);
         return new Selection(period,match.correctedPeriodDays(),match.harmonicMultiplier(),epoch,duration,start,end);
@@ -280,6 +276,52 @@ public class HistoryService {
                 new SubmissionViews.Detail(first.detail().available(),first.detail().targetKind(),row.submission().path("answer_viewed").asBoolean()),
                 first.tutorial(),first.nextActions());
     }
+    /**
+     * 6.6절 제출 조회. 8.2절 상세와 <b>같은 본문</b>이며 키만 제출 ID다.
+     *
+     * <p>당시 값과 조회 시점 값을 가르는 규칙이 하나뿐이어야 해서 같은 재구성 함수를 쓴다. 두 벌이 되면
+     * 같은 제출이 화면마다 다른 진행·공개 상태를 말한다.
+     *
+     * @throws BusinessException 없으면 {@code RESOURCE_NOT_FOUND}, 타인 제출이면 {@code FORBIDDEN}
+     */
+    SubmissionViews.Result resultOf(long member, long submissionId) {
+        return currentResult(ownedSubmission(member, submissionId));
+    }
+
+    /** 6.6절 응답 유실 복구. 찾은 제출이 타인 것이면 6.6절과 같은 403이다. */
+    SubmissionViews.Result resultOfRequest(long member, java.util.UUID requestId) {
+        return currentResult(owned(member, histories.findByRequest(requestId)));
+    }
+
+    /** 6.7·6.8절은 본문을 다시 만들지 않고 저장된 당시 응답만 읽는다. */
+    HistoryRepository.Row ownedSubmission(long member, long submissionId) {
+        return owned(member, histories.findBySubmission(submissionId));
+    }
+
+    private HistoryRepository.Row owned(long member, java.util.Optional<HistoryRepository.Row> found) {
+        var row = found.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (row.member() != member) throw new BusinessException(ErrorCode.FORBIDDEN);
+        return row;
+    }
+
+    /**
+     * 현재 판 기준 시각으로 위상 창을 다시 만든다(HIS-02). <b>저장된 위상을 복사하지 않는다</b> — 판이
+     * 바뀌면 같은 통과가 다른 위상에 온다. 절대 시각과 지속 시간만이 판을 건너도 같은 값이다.
+     *
+     * <p>8.3절 {@code CURRENT}와 6.8절 다시 풀기 초안이 같은 식을 쓴다. 두 벌이 되면 같은 제출을
+     * 이어 풀 때와 되돌아볼 때 창이 다른 자리에 그려진다.
+     *
+     * @return {@code [phaseStart, phaseEnd]}. 끝은 1을 넘을 수 있다 — 창이 경계를 지나면 이어진 값이다
+     */
+    static double[] phaseWindow(double period, double epochBtjd, double durationHours, double foldReferenceTimeBtjd) {
+        double center = (epochBtjd - foldReferenceTimeBtjd) / period;
+        center -= Math.floor(center);
+        double width = durationHours / 24 / period;
+        double start = center - width / 2;
+        start -= Math.floor(start);
+        return new double[] {start, start + width};
+    }
+
     private static SubmissionViews.Match match(HistoryRepository.Row row) {
         JsonNode original=row.versions().path("originalMatch");
         if (original.isObject()) return JSON.treeToValue(original,SubmissionViews.Match.class);

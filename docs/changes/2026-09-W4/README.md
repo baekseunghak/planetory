@@ -16,6 +16,10 @@
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 공개 상태 응답 호환·공통 조건 배치 규칙 보완 | S15P21C206-162 | isPublic, isEffectivelyPublic, domain, deleted | 전체 409건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | develop 테스트 컴파일 복구와 변경 이력 위치 정정 | S15P21C206-147 | ResidualResultReader.lookup, PublicAnalysisTest, 스텁 인자, 병합 후 컴파일 | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 제출 조회·상세 보기·다시 풀기 초안 구현 | S15P21C206-145 | submissions, by-request, REQUEST_IN_PROGRESS, detail-view, DETAIL_UNAVAILABLE, retry-draft, STEP_NOT_RESTORABLE, AT-118 | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 제출 조회 리뷰 반영: 해설 자리와 힌트 대상 고정 | S15P21C206-145 | signal.explanation, detail_target_candidate_id, V17, 멱등 힌트 | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 겹친 상세 보기 응답을 저장된 대상으로 맞춤 | S15P21C206-145 | 상세 보기, detail_target_candidate_id, RETURNING, 겹친 요청, 힌트 대상, explanation null | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 빈 해설을 프론트가 받아 안내로 채움 | S15P21C206-145 | signal.explanation, decodeDetailView, nullable, 대체 안내, 6.7절 예시 | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | HDFS marker 권한 경계 수정·Sector 7 확정 | S15P21C206-76 | stdin, UMask, immutable release, atomic rename, Sector 7 | 구현·Sector 7 검증 완료, 전체 적재 진행 중 | [기록](2026-09-21.md) |
 | 2026-09-21 | Sector 1~13 완료 정정·HDFS 감사 경계 강화 | S15P21C206-76 | coverage, total_bytes, full audit, completion marker, CI | 실환경 완료·방어 코드 오프라인 검증 완료, MR 재리뷰 대기 | [기록](2026-09-21.md) |
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
@@ -46,3 +50,4 @@
 | 2026-09-21 | 배포 접속을 SSH 키 없이 tailnet 신원으로 전환 | S15P21C206-226 | Tailscale SSH, 22번 가로챔, ACL ssh 규칙, deploy 계정, sudo 없음, DEPLOY_SSH_KEY 폐기 | 검증 완료(실측) | [기록](2026-09-21.md) |
 | 2026-09-21 | MR 리뷰 지적 4건 수정과 검증 방식 정정 | S15P21C206-226 | MR !132 리뷰, GC 중 push, docker save 레이어 검사, config 블롭 created, set -e 알림 침묵, 스텁 우회 | 검증 완료(실측) | [기록](2026-09-21.md) |
 | 2026-09-21 | 당시 배열이 없는데 그대로라고 말하던 안내 수정 | S15P21C206-190 | snapshot null, RETIRED_CANDIDATE, SUBMITTED 배지, 모순 문구 | 구현·검증 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 상세 해설 안내 문구 방향 정정과 해설 표시 검사 보강 | S15P21C206-145 | explanation, 위 비교표, explained 사례, x-fixture-outcome, 안내 문구 | 구현 완료 | [기록](2026-09-21.md) |
