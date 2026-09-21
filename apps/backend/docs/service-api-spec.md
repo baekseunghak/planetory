@@ -232,6 +232,14 @@ if (response.status === 401) {
 
 ### 4.1 피드 검색
 
+**164 구현 범위:** `GET /api/v1/community/feed`는 조건 없는 전체 피드와 `ticId`별 피드, `size`·`cursor`를 제공한다. 아래 검색 목표 계약은 169 범위다. 현재 `q/searchIn/author/board/tag` 및 다른 미지원 쿼리를 보내면 무시하지 않고 400 `VALIDATION_FAILED`로 반환한다. 핫 토픽·팔로우도 이 경로에 포함하지 않는다.
+
+- 모든 쿼리 키는 한 번만 허용한다. 빈 값·미지의 키·중복 키는 400이다. `ticId`는 선행 0 없는 양의 signed-64-bit 십진 문자열, `size`는 1~100(생략 시 20)이다.
+- `cursor`는 서버 응답을 그대로 전달한다. 피드 경로·TIC 범위·최신순 정렬 버전·size에 묶으며 다른 범위·크기·공개 분석 경로의 커서와 비정상 형식은 400이다. PostgreSQL 마이크로초 시각과 실제 숫자 posts.id를 보존한다. 접두 문자열로 정렬하지 않는다.
+- 전체 피드는 visible 일반 글과 공식 스레드를 포함한다. 별 연결 항목은 해당 별이 공개 상태이며 누군가 최초 발견한 경우만 포함한다. 지정한 별이 닫혀 있으면 404 `STAR_NOT_PUBLISHED`, 접근 가능한 별의 결과가 없으면 200 빈 목록이다. 열람 회원 자신의 별 발견·개인 분석 잠금은 요구하지 않는다.
+- 응답은 `items/nextCursor/hasNext`이며 `Cache-Control: no-store`다. POST의 `judgmentSummary`는 null, SIGNAL_THREAD는 기존 `publicJudgmentSummary` 응답 전체(`kind/candidateId/participantCount/likelyPlanet/unlikelyPlanet/unsure/percentages/asOf`)다. 일반 글 반응 합계는 상세 API 계약을 따른다.
+- 한 피드 응답의 목록·댓글 수·공개 판단 집계는 같은 REPEATABLE_READ 스냅샷에서 읽는다. 다음 페이지 요청은 새 상태를 보며 새 글·숨김·삭제로 페이지 간 고정 스냅샷을 보장하지 않는다. 마지막 항목이 삭제돼도 커서 위치는 유지한다.
+
 예: TIC `123456789`에서 제목이나 본문에 ‘밝기’가 들어간 일반 글·공식 스레드를 조회한다.
 
 `GET /api/v1/community/feed?ticId=123456789&q=밝기&size=20`
@@ -622,6 +630,10 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 ### 9.2 스레드·공개 목록·상세
 
+**164 조회 계약:** 아래 세 GET은 로그인·활성 회원 검사를 거치며 `Cache-Control: no-store`를 반환한다. 일반 글 상세·공식 스레드·기존 댓글 목록과 글/댓글의 History 첨부 직접 경로 모두 별의 공개/최초 발견 조건을 검사한다. 공개 분석 취소와 독립 첨부 권한의 구분은 유지하며, 별 자체가 닫히면 첨부도 404다. 토론은 `GET /api/v1/comments?parentType=SIGNAL_THREAD&parentId=st-{id}`를 그대로 사용한다. 공개 분석별 댓글 API는 제공하지 않는다.
+
+스레드 상세는 아래 예제에 `signal: {periodDays, epochBtjd, durationHours, depthPpm}`, `commentCount`, `createdAt`을 함께 반환한다. 신호 수치는 현재 공식 후보 요약이며 단위는 일·BTJD·시간·ppm이다. 회원별 미공개 제출·진행 정보를 합치지 않는다. 통계는 기존 함수가 반환하는 `kind=public_analyses`, `candidateId`도 포함한다. 공식 제목은 저장값을 사용하고 최초 공개 회원을 작성자로 표시하지 않는다. 신호 요약 본문의 저장·갱신·기존 스레드 채움과 본문 검색은 [169 후속 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)이며 이 GET에서 데이터를 쓰지 않는다.
+
 `GET /api/v1/signal-threads/st-301`, 성공 200:
 
 ```json
@@ -641,11 +653,19 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 `GET /api/v1/signal-threads/st-301/analyses?judgment=UNSURE&size=20`:
 
 - judgment는 생략 또는 LIKELY_PLANET/UNLIKELY_PLANET/UNSURE. 목록은 현재 유효한 공개 기록을 대상으로 하며 과거 공개 분석도 포함한다. 한 회원의 기록이 여럿 보일 수 있지만 통계 기여는 한 건이다.
-- 성공 200 공통 목록의 항목: analysisId, author, submittedAt, judgment, contributesToSummary. 마지막 필드는 현재 통계 대표 기록인지 나타내는 제안이다.
+- 성공 200 응답은 `items/nextCursor/hasNext/judgmentSummary`다. 항목은 `analysisId`, `author: {memberId,nickname}`, `submittedAt`, `judgment`, `contributesToSummary`이며 마지막 필드는 현재 통계 대표 기록인지 나타낸다. 내부 Submission ID를 응답 필드로 노출하지 않는다.
 - 판단 필터는 목록만 좁힌다. 전체 judgmentSummary의 N을 바꾸지 않는다. 목록 건수와 참여자 N은 다를 수 있다.
-- 목록 정렬은 제출 시각 내림차순·Submission id 제안. 신호 통계는 실시간 쿼리로 같은 요청 안에서 한 번 계산해 공유한다. 별도 요청 사이에는 변화할 수 있다.
+- 목록 정렬은 제출 시각 내림차순·동률 Submission id 내림차순이다. 기본 20·최대 100개이며 커서는 경로·스레드·판단 필터·size에 묶는다. 목록·필터 전 대표 여부·전체 신호 통계는 같은 REPEATABLE_READ 스냅샷에서 읽고 통계는 요청당 한 번 계산한다. 별도 요청 사이에는 변화할 수 있다.
+
+- `judgment`는 생략만 전체를 뜻한다. 빈 값·미지원 값·중복 키·미지의 쿼리 키는 400 `VALIDATION_FAILED`다. 커서 형식·정렬 정밀도는 4.1절과 같다. 숨김/삭제 부모는 404이며 부모가 visible이면 개별 공개가 모두 취소돼도 스레드는 유지되고 빈 목록·N=0을 반환한다.
 
 `GET /api/v1/public-analyses/pa-601`은 analysisId, threadId, ticId, author, submittedAt, firstPublishedAt, judgment, 근거 체크, 메모, 판단 재현에 필요한 수치(period·기준 시각·통과 지속시간 등), graph(최신 판·제출 당시 스냅샷), 제거 후보 조합·데이터 판·계산 버전만 반환한다(SB-D23). 다른 제출·미공개 기록·성과 내부 처리 정보는 반환하지 않는다. 수치 단위·필드명은 탐사와 합의한다. 개인 원본 전체를 그대로 응답하는 방식은 금지한다.
+
+164 상세의 정확한 허용 필드는 `analysisId/threadId/ticId/candidateId/author/submittedAt/firstPublishedAt/judgment/evidenceChecks/memo/original/serverDerived/match/curveContext/versions/graph/relabel`이다. `original/serverDerived/match/curveContext/versions/graph/relabel`은 [History 공개 투영](exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회)의 제한된 DTO를 재사용한다. `historyId` 루트 필드·Submission ID·requestId·개인 viewState·성과/진행·재시도 관계를 추가하지 않는다. 기존 Graph의 historyId는 이 공개 항목의 History 참조이며 개인 상세 접근 권한을 부여하지 않는다. firstPublishedAt은 최초 published_at을 유지한다.
+
+- `graphMode=CURRENT|SUBMITTED`(생략 CURRENT), `includeGraph=true|false`(생략 true)만 허용한다. 빈 값·다른 값·중복/미지 키는 400이다.
+- `includeGraph=false`는 그래프를 계산하지 않고 `graph=null`로 공개 내용만 반환한다. 그래프 의존성 실패는 기존 503 `DEPENDENCY_UNAVAILABLE`/`GRAPH_TEMPORARILY_UNAVAILABLE` 계약을 유지한다. 제출 당시 스냅샷 없음과 현재 잔차 fallback도 기존 Graph 계약을 유지한다.
+- `HistoryService.publicContent/publicGraph`와 `PublicAnalysisAccess`로 매 읽기 및 반환 직전 새 DB 상태에서 회원·공개→History 연결·부모·별 열림을 재검사한다. 취소·개별 숨김·부모 숨김/삭제·별 닫힘은 404 `RESOURCE_NOT_FOUND`다. 캐시가 있어도 우회하지 않으며 타인의 잔차 jobId를 노출하거나 새 작업을 생성하지 않는다.
 
 채점형은 성과 여부와 무관하게 해당 신호에 matched/matched_harmonic한 회원의 첫 매칭 제출을 사용한다. 접수 시각 오름차순·동률 Submission id 오름차순으로 선택하며 재제출로 바꾸지 않는다. 세 판단 막대 대신 ‘이 신호를 찾은 사람 중 기록과 일치 N% · M명’으로 표시한다. 공개 분석 API를 확정/FP 전체에 확장하지 않는다. 결과 화면용 API는 탐사 담당자와 별도 계약한다.
 
