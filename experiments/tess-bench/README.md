@@ -255,3 +255,74 @@ uv run --locked python -m tess_bench bls --target holdout_358253008 --stage hold
 ### 111 QA 재검증 안내 (2026-09-21)
 
 MR !117 리뷰에 따라 0 산포의 overlap 반환 타입과 다른 후보 깊이 측정 실패 시 거절 처리를 수정했다. 비교 대상이 있는데 제거 전·후 깊이가 비유한·0·음수이면 `other_depth_not_measurable`로 거절한다. 비교 대상이 없을 때의 미산출은 허용한다. 수정 전 2084018 결과는 새 코드의 검증 근거가 아니며, 깨끗한 수정 후 commit에서 [벤치마크 7.4·7.8절](../../docs/data/tess-bls-iteration-benchmark.md)의 8개 실행과 리뷰 ZIP을 갱신해야 한다.
+
+## 122 반복 BLS 공용 커널 회귀
+
+`astro_kernel.iteration.iterate_bls`를 승인된 111 반복 설정과 같은 입력에서 비교한다.
+TOI-270·TOI-451·WASP-62·pi Men의 기존 realclean에 등록된 두 신호 주입 3종과 무주입을
+각각 적용하는 총 16곡선이다. 정답 목록을 제거 QA에 전달하지 않는다. 전체 111 실험이나
+새 독립 평가를 대체하지 않으며, 기존 holdout을 임계값 조정에 재사용하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.iteration_kernel_regression --raw ../tess-fixture/sample_raw
+```
+
+다른 워크트리의 FITS를 읽을 때는 `--raw`에 해당 sample_raw 절대 경로를 전달한다.
+원본 파일을 수정하지 않는다. 출력은 `results/iteration-kernel-regression/run-*` 아래에 생성한다.
+`plan.json`은 입력·코드·설정 SHA-256과 환경을 고정한다. 성공 시 `manifest.json`,
+`comparisons.csv`, 곡선별 `curve-*.json`을 남기고 실패 시 `failure.json`을 남긴다.
+종료·채택·QA 실패 단계·단계별 모든 참조 수치와 임시 잔차를 비교한다. 수치는 rtol=1e-12,
+atol=0이며 벽시계 시간은 제외한다. NaN 참조 진단은 운영 JSON의 null과 대조한다.
+원본·실행 결과는 Git에 추가하지 않는다.
+
+수치 회귀가 끝난 저장 결과를 후보 ID·모델 계약까지 연결해 확인할 수 있다.
+이 검증은 신규 DB ID를 만들지 않고 fixture 전용 ID와 **테스트용 승인 표시**만 사용한다.
+실제 정책 승인을 뜻하지 않는다. 승인 표시가 없을 때의 보류, 113 JSON Schema·모델 파서,
+같은 계산 결과를 다음 Bundle로 전달했을 때 ID 유지·추가/은퇴 없음도 확인한다.
+후보가 없거나 QA 실패·동일성 보류인 곡선은 성공 카탈로그로 강제 변환하지 않는다.
+
+`jsonschema`가 있는 기존 astro-kernel 개발 환경에서 같은 작업트리의 libs·bench·fixture를
+PYTHONPATH에 지정하고 다음 모듈을 실행한다. 이 보조 검증 때문에 운영 의존성을 추가하지 않는다.
+
+```powershell
+python -m tess_bench.candidate_catalog_regression --source results/iteration-kernel-regression/<성공-run>
+```
+
+출력은 `results/candidate-catalog-regression/run-*`의 plan·manifest·proofs.json이다.
+이 연결 검증은 **같은 결과의 ID 유지**를 확인하며 다른 Sector 판의 과학적 동일성 검증이나
+실제 DB 할당·Publisher 트랜잭션 검증을 대신하지 않는다. 유지·추가·retired 동시 발생과
+부적절한 ID·불완전 판은 공용 커널의 합성 회귀 테스트에서 확인한다.
+
+### 122 최종 로컬 검증 결과 (2026-09-21)
+
+커널 전체 **170 passed**, 벤치마크 전체 **121 passed·1 skipped**다.
+건너뛴 `test_metrics_cli`는 워크트리 내부 TOI-270 FITS 부재가 원인이다. 아래 실제 회귀는
+기존 원본 디렉터리를 명시했고 11개 FITS checksum과 실행 전후 코드·입력 snapshot을 확인했다.
+Python 3.11.9 / NumPy 2.4.6 / Astropy 7.2.2 / SciPy 1.17.1의 수치 실행이다.
+
+최종 수치 실행 `run-20260921T074418Z-99a5ec46`: **4별·16곡선 전부 참조회귀 통과**, 306.374초.
+QA 통과 이력 후보 19개, `no_quality_peak` 15곡선, `removal_qa_failed` 1곡선이다.
+실패 곡선의 `power_not_reduced` 사유와 직전 잔차 보존까지 일치했다.
+후보 19개는 행성 확정 수나 공개 후보 수가 아니다.
+
+카탈로그 연결 실행 `run-20260921T074940Z-0bf59071`: 승인 근거가 없을 때 **16곡선 모두 보류,
+수명주기 작업 0건**이다. 테스트 전용 승인 표시·fixture ID로 연결했을 때 11곡선의 후보
+18개가 새 Bundle에서도 같은 ID를 유지했고 추가·은퇴는 0건이었다.
+나머지 5곡선은 QA 불완전 1·빈 후보 4로 보류했다. 모든 준비 모델은 113 JSON Schema와
+공용 파서를 통과했다. 이는 운영 승인이나 DB 반영 결과가 아니다.
+
+| 실행 | 파일 | SHA-256 |
+| --- | --- | --- |
+| 수치 회귀 | plan.json | `b00c0ab404f950259cdf9172d2e4cf24a8a77ee8ca293cfa7b002b1944df4004` |
+| 수치 회귀 | manifest.json | `0afa1acec1baf9b166bec9e3cad8fa7f4986021a4311aec5024fc23c165d1a26` |
+| 후보 연결 | plan.json | `43d04f7a1b0fe5209c634150a13668e7c2f25a6ee2f0fc71e0aa317bd52dd4ee` |
+| 후보 연결 | manifest.json | `607ba761710f9b3025f6f30415b1b7f8fcd4b372ef8edcb14d48de1efb8f95de` |
+
+112 최종 승인 참조·소비자 리뷰, 123/125/Publisher 연결과 별도 245 브랜치를 합친 통합 검증은
+남아 있다. 이번 회귀 통과를 전체 111 실험 재실행이나 운영 배포 완료로 표현하지 않는다.
+
+리뷰 자료: `results/review-122.zip` (59,477 bytes, 23 entries).
+SHA-256: `2108374dfca4fbe1b7aae42cb00d66d3aacfa8605af5131766d6802c187edc08`.
+최종 두 실행의 plan·manifest·출력만 묶었으며 원본 FITS·임시 잔차 배열은 넣지 않았다.
+입력·코드·결과 snapshot 77개와 ZIP 내부 checksum을 확인했다. Git 검사는 사용자가
+수행하며 이 검증을 `git diff --check` 실행 결과로 대신 표기하지 않는다.
