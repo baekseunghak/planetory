@@ -64,3 +64,4 @@
 | 2026-09-22 | MR 단계 마이그레이션 검사가 실행되지 않던 결함 수정 | S15P21C206-84 | alpine/git, ENTRYPOINT, entrypoint 비우기, backend:schema, V19 선점 | MR 파이프라인 통과 확인 | [기록](2026-09-22.md) |
 | 2026-09-22 | 검증 경계 정정 — 로컬 실행과 CI 실행 구분 | S15P21C206-84 | 로컬 통과, CI 미실행, 실행 위치 명시 | 정정 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | Runner 동시 실행 3으로 상향·Runner 대수 정정 | S15P21C206-84 | concurrent, concurrent-0 슬롯, 202초→126초, run_untagged, vCPU 4 | 적용·실측 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 백엔드 CI 이미지 배포와 계정 분리 완료 | S15P21C206-84 | deploy:backend:ec2-a, V9→V19, planetory_service, pg_dump, BACKEND_IMAGE 어긋남 | 배포·검증 완료 | [기록](2026-09-22.md) |
