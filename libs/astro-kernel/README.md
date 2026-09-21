@@ -202,7 +202,7 @@ r.n_points, r.n_valid_input, r.n_finite_residual                       # 성공�
 상태: **구현·합성 검증·실제 4별 회귀 완료, MR 리뷰 대기** (2026-09-20).
 Jira `S15P21C206-119`, 담당 윤성용. `silver-biweight-1.0.0`은 **42/D03 기준 공용 전처리 기본 커널**이다.
 위 완료 상태는 이 기본 커널과 회귀 검증에 한정되며 **DAT-02 전체 구현 완료가 아니다**.
-Spark·DB·BLS 연결과 확인된 실제 불량 구간의 추가 마스킹은 이번 MR 범위가 아니다.
+119 당시에는 Spark·DB·BLS 연결과 실제 불량 구간 추가 마스킹을 제외했다. 후속 245 구현은 [아래 계약](#근거-구간-마스킹-245)을 따른다.
 
 ### 근거와 리뷰 항목
 
@@ -226,8 +226,7 @@ Spark·DB·BLS 연결과 확인된 실제 불량 구간의 추가 마스킹은 �
 행을 외부에서 먼저 삭제하고 `source_row`를 다시 매기는 방식으로 연결하지 않는다.
 생존 배열과 제외 장부에 `product_id`, 원본 `source_row`, `cadenceno`, 원래 `QUALITY`, 원본 시각,
 겹친 모든 제외 사유, 근거 구간 ID·출처/checksum·마스크 버전을 보존해야 한다.
-추가 마스크를 원래 QUALITY에 덮어쓰지 않는다. 현재 `PreparedCurve.excluded`의 사유 기록만으로는
-원래 QUALITY 값까지 보존하는 후속 계약이 완성되지 않으므로 245에서 어댑터/커널 확장과 버전을 검토한다.
+추가 마스크를 원래 QUALITY에 덮어쓰지 않는다. 119의 사유 기록을 245에서 원래 QUALITY와 근거 구간을 보존하도록 확장했다. 상세 계약·버전·검증 범위는 [245](#근거-구간-마스킹-245)를 따른다.
 구간 단위·경계 포함·원천 일치·전체 제외·관측 부족 검증도 245가 담당하고 127의 Spark 연결로 인계한다.
 
 ```python
@@ -417,3 +416,37 @@ wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와
 
 자료는 `experiments/tess-bench/results/bls-kernel-regression/run-20260921T002811Z-24dc68f1/`에 있다.
 원본과 생성 결과는 Git 제외를 유지하며 MR 검토 자료로 별도 전달한다.
+
+
+## 근거 구간 마스킹 (245)
+
+상태: 구현·로컬 검증 완료, 리뷰 전. 숫자 커널 `silver-biweight-1.0.0`은 유지하고 입력 마스크 계약을
+`silver-interval-mask-1.0.0`으로 구분한다. 기존 호출은 빈 마스크로 수치가 동일하다.
+
+`prepare_silver(curves, interval_masks=...)`와 `preprocess_silver`는 `IntervalMask` 목록을 받는다.
+각 항목은 `interval_id`, `product_id`, `sector`, `product_sha256`, `coordinate`, `start/end`,
+`closed`, `reason`, `source_uri`, `source_sha256`, `version`을 필수로 받는다.
+`coordinate`는 `cadenceno` 또는 `BTJD_TDB_day`이며 `closed`는 both/left/right/neither이다.
+구간은 `start < end`이며 길이 0은 거절한다. 실제 행과 겹치지 않는 구간은 허용하고 근거를 남긴다.
+단위 변환·시간대 추정은 하지 않는다. 정규화 전 모든 원본 행에서 마스크를 계산하며 QUALITY를 덮어쓰지 않는다.
+호출자는 원본 바이트 checksum을 검증한 뒤 `SectorInput.source_sha256` 또는 FITS 어댑터의
+`source_sha256=`에 전달한다. 제품·Sector·SHA가 다른 마스크는 `mask_source_mismatch`로 실패한다.
+근거 snapshot 바이트 checksum 검증은 파일을 열지 않는 커널 밖 호출자의 책임이다.
+
+`PreparedCurve.original_quality`는 생존 행의 원래 QUALITY다. `excluded`에는 `source_row`,
+`cadenceno`, `original_quality`, `original_time`, 겹친 모든 `reasons`·`interval_ids`가 보존된다.
+`interval_masks`에는 근거와 마스크 버전 전체가 남는다. `exclusion_ledger(prepared, result)`는
+추세·clipping·관측 부족 제외까지 원본 행으로 합친다. 내부 `excluded`는 원본 NaN/Inf를 보존하고,
+장부 함수는 `original_time=null`과 `original_time_nonfinite`의 `NaN`/`+Infinity`/`-Infinity`로 구분해
+엄격한 JSON 직렬화를 지원한다. 유한 시각은 원래 숫자다. 행 번호를 다시 매기지 않는다.
+전체 제외 시 Sector 중앙값은 None, 결과는 `insufficient_observations`다. 정상 무후보와 구분한다.
+
+실제 Sector 3 근거·재현 명령·검증 범위는 [245 실측](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)을 따른다.
+127/Spark 소비자는 기존 `preprocess_silver`에 검증된 마스크를 전달하고 장부·근거를 Silver에 저장한다.
+Gold와 사용자 응답으로 원본 QUALITY 장부를 전달하지 않는다. 클러스터 배포·전체 Sector 구간 채택은 이번 로컬 검증과 구분한다.
+
+마스크 목록(제품/근거 SHA·버전·경계 포함) 전체와 `MASK_CONTRACT_VERSION`을 실행 manifest에 기록한다.
+숫자 전처리 버전만으로 캐시를 재사용하지 않는다. 마스크가 바뀐 제품을 포함하는 TIC의
+Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 실행한다. 원본 Bronze·기존 공개 판은 덮어쓰지 않는다.
+새 판의 검증·승인 후 기존 Publisher의 원자 전환 절차를 사용한다. 전체 제외 또는 관측 부족·수치 실패는
+정상 무후보로 적재하지 않는다. 원본 시각 배열을 마스크 적용 전에 보존해야 이후 제외율 진단 기준을 잃지 않는다.

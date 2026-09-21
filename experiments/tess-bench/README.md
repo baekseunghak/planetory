@@ -255,3 +255,83 @@ uv run --locked python -m tess_bench bls --target holdout_358253008 --stage hold
 ### 111 QA 재검증 안내 (2026-09-21)
 
 MR !117 리뷰에 따라 0 산포의 overlap 반환 타입과 다른 후보 깊이 측정 실패 시 거절 처리를 수정했다. 비교 대상이 있는데 제거 전·후 깊이가 비유한·0·음수이면 `other_depth_not_measurable`로 거절한다. 비교 대상이 없을 때의 미산출은 허용한다. 수정 전 2084018 결과는 새 코드의 검증 근거가 아니며, 깨끗한 수정 후 commit에서 [벤치마크 7.4·7.8절](../../docs/data/tess-bls-iteration-benchmark.md)의 8개 실행과 리뷰 ZIP을 갱신해야 한다.
+
+245의 `tess_bench.interval_mask_regression`은 [아래 검증 기록](#245-근거-구간-마스크-검증)을 따른다.
+
+
+## 245 근거 구간 마스크 검증
+
+상태: 구현·로컬 검증 완료, 리뷰 전. Jira S15P21C206-245.
+입력 계약은 [astro-kernel](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)을 따른다.
+
+### 실제 근거와 적용 범위
+
+공식 [DRN4 Table 1·1.2절](https://archive.stsci.edu/missions/tess/doc/tess_drn/tess_sector_03_drn04_v02.pdf)은
+Sector 3의 ACS 시험과 과학 관측 cadence 경계를 제공한다. 과학 cadence 바깥 구간을 다음처럼 해석한다.
+경계는 정수 cadence 양끝 포함이며 과학 시작·종료 cadence 자체는 제외하지 않는다.
+
+| 구간 ID | CADENCENO 시작 | 끝 | 근거 |
+|---|---:|---:|---|
+| s3-acs-0 | 111297 | 114077 | 첫 과학 관측 이전 |
+| s3-acs-1 | 120979 | 121787 | 두 궤도 사이 |
+| s3-acs-2 | 128764 | 130988 | 마지막 과학 관측 이후 |
+
+[DRN42](https://archive.stsci.edu/missions/tess/doc/tess_drn/tess_reprocessing-sector_1_13_drn42_v02.pdf)는
+재처리 시각과 품질 플래그 변경을 설명한다. DRN의 TJD 숫자를 별별 BTJD로 그대로 대입하지 않는다.
+이번 실제 fixture는 DATA_REL=42, PROCVER=spoc-5.0.20-20201120이며 각각 원본 SHA로 고정한다.
+마스크 목록은 이 고정 제품별 검토 fixture다. Sector 번호만 보고 모든 제품·재처리판에 자동 적용하지 않는다.
+
+공식 PDF 원문 snapshot은 Git 제외 결과 폴더에 보존한다.
+
+| snapshot | SHA-256 |
+|---|---|
+| tess_sector_03_drn04_v02.pdf | 5a825ad259483b0a8d1e9922b66e962752047f9046fe5b2bcc43442b4bfebffa |
+| tess_reprocessing-sector_1_13_drn42_v02.pdf | 20fbfdd24157119be69a13b08ca91d51d01a6f690a69cf8f051e7959fa1fb2da |
+
+### 검증 결과
+
+2026-09-21: Sector 3 실제 5제품(HD21749, TOI270, TOI700, WASP18, WASP62), 각 19,692행을 읽었다.
+각 제품의 5,815행에 ACS 구간 근거를 남겼다. 이 행은 모두 기존 QUALITY/유한값 필터에서도 제외돼
+신규 제외는 0행이다. 준비 flux와 추세 후 flux는 전후 동일하며 모든 결과 status=ok이다.
+원본 행 장부와 최종 생존 행의 합은 각 19,692행이고 cadence/QUALITY 원본 대응을 검증했다.
+이는 추가 잡음 감소나 BLS 회수율 개선의 증거가 아니다. 이번 실측에는 BLS를 다시 실행하지 않았다.
+
+합성 경계 검증은 정규화 전에 유효한 불량값 제거, 겹친 사유 보존, BTJD 경계 네 종류,
+잘못된 단위·출처·checksum·구간 거절, 전체 제외·관측 부족, 빈 마스크 수치 동일성을 검사한다.
+고정 6·12시간 일괄 제외는 추가하지 않았다.
+
+### 재현
+
+공식 PDF 두 개를 evidence 폴더에 원문 그대로 저장한다. 검증 스크립트가 고정 SHA를 검사한다.
+원본 FITS는 읽기 전용으로 전달하고 새 결과 경로를 지정한다.
+
+```powershell
+python -m tess_bench.interval_mask_regression --raw <sample_raw> --evidence <evidence> --output <새_결과_경로>
+```
+
+실측 결과는 `experiments/tess-bench/results/interval-masks-245/run-v3`의 plan/report/manifest에 있다.
+원본과 생성 결과는 Git에 추가하지 않는다. 127 Spark 실제 호출 연결·클러스터 검증 및 다른 Sector의
+불량 구간 근거는 별도이며 이번 검증으로 전 구간 완비를 선언하지 않는다.
+
+실행 전 plan에 원본·PDF·코드·uv.lock SHA, Python/NumPy/Astropy 환경, cadence 구간·경계·버전과
+허용 오차 `rtol=0, atol=0, equal_nan=true`를 기록한다. 종료 후 입력·코드 해시를 다시 확인한다.
+manifest는 plan/report/제외 장부 해시를 연결하며 실패는 failure.json으로 남긴다.
+공용 커널 전체 테스트는 120 passed이다. 생존 행의 정렬·다중 Sector 원본 대응과 추세 적합 전 제외,
+비유한 시각의 엄격한 JSON 직렬화까지 포함한다. 근거 구간의 운영 채택은 김동혁 리뷰 전이다.
+
+
+5제품 합계 원본 98,460행 = 최종 생존 64,025행 + 제외 장부 34,435행이다.
+장부의 `(product_id, source_row)` 중복은 0이고, 구간 근거가 붙은 행은 29,075행이다.
+run-v3의 plan/report/exclusions 출력 해시 3개와 입력·코드 snapshot 일치를 다시 확인했다.
+
+
+#### 마스크 없는 119 회귀 재검증
+
+`no-mask-regression/run-20260921T073157Z-e454941a`에서 TOI-270·TOI-451·WASP-62·π Men 각각
+112곡선, 총 448곡선의 정규화·추세·정제값·마스크·구간·산포·상태·요약이 기존42 참조와 정확히 일치했다.
+소요 410.42초. 입력/코드/출력/plan 해시 52개도 다시 확인했다. 이 실행만 최종 회귀 증거로 사용한다.
+앞선 중단 실행은 failure.json으로 별도 표시했고 성공 자료에 포함하지 않는다.
+manifest SHA-256: `f97eab1a35cadf746361e6e0ab91dfc4c24e5e85ff4ff18fd77065a1a7a50bb3`.
+
+근거 구간·버전 승인과 MR 병합은 아직 남아 있다. 운영 전체 Sector 적용, 클러스터 배포 또는
+새 BLS 회수율 검증을 완료했다고 주장하지 않는다.
