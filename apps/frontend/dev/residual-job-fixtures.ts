@@ -155,13 +155,29 @@ export type FixtureReply = {
   /** D-5 현재 판 헤더. 주지 않으면 붙이지 않는다(= 모름). */
   headers?: Record<string, string>;
 };
+/**
+ * 서버 공통 기본 문구를 **비추는 값**이다. 화면은 503 `message`를 사용자에게
+ * 그대로 보여 주므로(탐사 API 7.1절), 여기에 코드 이름을 넣으면 화면 검사가
+ * 「실제로 무엇이 보이는지」를 한 번도 보지 못한다. 실제로 그렇게 눈이 멀어,
+ * 재시도 버튼을 숨겨 놓고 문구로는 다시 시도하라고 말하는 상태를 검사가
+ * 통과시켰다(`S15P21C206-147` 리뷰).
+ *
+ * **서버 문구가 바뀌면 이 값도 따라간다.** 화면이 무엇을 옮기는지는 이 상수
+ * 하나로 검사가 확인한다.
+ */
+export const DEPENDENCY_UNAVAILABLE_MESSAGE =
+  "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.";
+
 const fail = (
   status: number,
   code: string,
   extra: Record<string, unknown> = {},
+  // 문구를 주지 않은 실패는 코드 이름을 그대로 쓴다. 화면이 옮겨 보여 주는
+  // 자리에만 실제 문장을 준다 — 나머지는 개발용 응답임이 드러나는 편이 낫다.
+  message: string = code,
 ) => ({
   status,
-  body: { code, message: code, fieldErrors: [], ...extra },
+  body: { code, message, fieldErrors: [], ...extra },
 });
 
 /** 7.1절 요청. */
@@ -176,7 +192,13 @@ export function requestResidualJobFixture(options: {
   // 빈 배열은 원본이므로 작업이 아니다(7.1절).
   if (target.removedCandidateIds.length === 0)
     return fail(400, "VALIDATION_FAILED");
-  if (scenario === "unavailable") return fail(503, "DEPENDENCY_UNAVAILABLE");
+  if (scenario === "unavailable")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      {},
+      DEPENDENCY_UNAVAILABLE_MESSAGE,
+    );
   if (scenario === "bundle-changed")
     return fail(409, "BUNDLE_CHANGED", { currentBundleId: "9007199254749999" });
   if (scenario === "queue-full")

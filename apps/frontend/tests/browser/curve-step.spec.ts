@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PERIODOGRAM_FIXTURE_TICS } from "../../dev/periodogram-fixtures.ts";
-import { RESIDUAL_FIXTURE_HEADER } from "../../dev/residual-job-fixtures.ts";
+import {
+  DEPENDENCY_UNAVAILABLE_MESSAGE,
+  RESIDUAL_FIXTURE_HEADER,
+} from "../../dev/residual-job-fixtures.ts";
 import { beginRange, selectPeak, showJudgment } from "../analysis-ui";
 
 // 곡선 단계 이동(#189). 계산이 끝나야 곡선이 바뀐다.
@@ -311,6 +314,10 @@ test("a dependency that is not wired yet is not called a failure", async ({
   await expect(move(page, "다시 시도")).toHaveCount(0);
   // 실패가 아니라 준비되지 않은 것이라 경보로 외치지 않는다.
   await expect(bar(page).getByRole("alert")).toHaveCount(0);
+  // **서버 문구를 그대로 옮긴다**(7.1절). 화면이 문구를 지어내지 않는다.
+  // 개발용 응답이 여기에 코드 이름을 넣고 있던 동안 이 줄이 없어서, 문구가
+  // 재시도를 권하는데 버튼은 없는 상태를 검사가 통과시켰다.
+  await expect(bar(page)).toContainText(DEPENDENCY_UNAVAILABLE_MESSAGE);
 });
 
 test("a plate that changes mid-computation reloads by itself", async ({
