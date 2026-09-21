@@ -184,6 +184,11 @@ export function SettingsPage() {
       <section className="settings-row">
         <h2>계정</h2>
         <div>
+          {p1Enabled && (
+            <p>
+              <Link to="/settings/withdrawal">계정 탈퇴 안내</Link>
+            </p>
+          )}
           <button type="button" onClick={() => void session.logout()}>
             로그아웃
           </button>
