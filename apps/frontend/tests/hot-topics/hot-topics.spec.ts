@@ -328,5 +328,5 @@ test("1024px keyboard access, no overflow, and small-screen notice", async ({
   await expect(
     page.getByRole("heading", { name: "데스크톱에서 이용해 주세요" }),
   ).toBeVisible();
-  await expect(rows(page)).toHaveCount(0);
+  await expect(page.locator(".community-feed")).toBeHidden();
 });

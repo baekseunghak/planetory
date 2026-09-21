@@ -130,7 +130,7 @@ test("guide keeps keyboard dismissal and focus; minimum-width pages and mobile g
   await noOverflow(page);
   await page.setViewportSize({ width: 767, height: 900 });
   await expect(page.locator(".desktop-notice")).toBeVisible();
-  await expect(page.locator(".community-feed")).toHaveCount(0);
+  await expect(page.locator(".community-feed")).toBeHidden();
 });
 test("login artwork is decorative, with no private sky requests or private counts", async ({
   page,
