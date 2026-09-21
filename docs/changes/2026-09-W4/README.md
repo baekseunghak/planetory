@@ -52,9 +52,13 @@
 | 2026-09-21 | MR 리뷰 지적 4건 수정과 검증 방식 정정 | S15P21C206-226 | MR !132 리뷰, GC 중 push, docker save 레이어 검사, config 블롭 created, set -e 알림 침묵, 스텁 우회 | 검증 완료(실측) | [기록](2026-09-21.md) |
 | 2026-09-21 | 출처 카드 리뷰 수정과 V18 마이그레이션 충돌 해소 | S15P21C206-167 | 교차 댓글 교착, 일괄 조회, REPEATABLE_READ, 출처 제거 재조회, 145 V17 선행, V18 | 검증 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 당시 배열이 없는데 그대로라고 말하던 안내 수정 | S15P21C206-190 | snapshot null, RETIRED_CANDIDATE, SUBMITTED 배지, 모순 문구 | 구현·검증 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 History 그래프의 범위와 현재 상태 정리 | S15P21C206-191 | 8.5 공개 투영, 허용 목록 파서 불필요, lastMeta 이력, RESIDUAL_NOT_AVAILABLE 공개 전용, 공개 분석 어댑터 미연결, 두 계정 인수 미결 | 문서 확정·어댑터/인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 분석 진입 어댑터 연결과 공개 소비 경계 공유 | S15P21C206-191 | public-analyses 상세, 공개 소비 경계, jobId 거절 공유, includeGraph=false 재조회, 두 계정 인수 미결 | 구현·검증 완료·인수 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 상세 해설 안내 문구 방향 정정과 해설 표시 검사 보강 | S15P21C206-145 | explanation, 위 비교표, explained 사례, x-fixture-outcome, 안내 문구 | 구현 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 대표 후보와 항목별 독립 일괄 공개 | S15P21C206-166 | batch, 20개, 부분 성공, NOT_PUBLISHED, 대표 후보, 독립 트랜잭션 | 구현·관련 117개 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 일괄 공개 리뷰 보완·후보 보장 범위 | S15P21C206-166 | 로그 스택, TIC_MISMATCH, CommunityQuery, 스냅샷, History 단위 후보 | 관련 81건·추가 46건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 내 별 목록 필터와 별 위치 찾기 구현 | S15P21C206-152 | stage, grade, ticId 필터, 커서 묶기, gradeRange, me/sky/locate, STAR_LOCKED | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 별 목록 조회의 트랜잭션 누락 정정과 스냅샷 계약 명시 | S15P21C206-152 | REPEATABLE_READ, 자기 호출, 프록시, 오버로드, STAR_LIST_PRIVATE, 스냅샷 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
