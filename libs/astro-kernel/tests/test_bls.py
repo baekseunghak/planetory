@@ -44,6 +44,28 @@ def test_d12_output_connects_without_changing_provenance():
     np.testing.assert_array_equal(raw.flux, f)
 
 
+def test_fully_masked_sector_is_preserved_without_changing_bls_or_gate():
+    t, f = curve()
+    reference = search(t, f, sector=np.ones(len(t), dtype=int), baseline_time=t)
+    # Overlapping sectors make the expected masked fraction exactly one half.
+    time = np.repeat(t, 2)
+    flux = np.column_stack((f, np.full(len(f), np.nan))).ravel()
+    sectors = np.tile([1, 2], len(t))
+    result = search(time, flux, sector=sectors, baseline_time=time)
+    np.testing.assert_array_equal(result["periodogram"].power, reference["periodogram"].power)
+    assert result["status"] == reference["status"]
+    assert result["n_accepted"] == reference["n_accepted"]
+    for peak, old in zip(result["peaks"], reference["peaks"], strict=True):
+        assert peak["status"] == old["status"]
+        assert peak["reasons"] == old["reasons"]
+        assert peak["sector_consistency_status"] == "not_evaluated"
+        assert [row["sector"] for row in peak["sector_stats"]] == [1, 2]
+        assert peak["sector_stats"][0] == old["sector_stats"][0]
+        assert peak["sector_stats"][1] == dict(
+            sector=2, n_in_transit=0, n_out_transit=0, depth=None, snr=None)
+        assert peak["mask_dropped_fraction"] == 0.5
+
+
 def test_provided_log_grid_keeps_nan_positions_and_rejects_bad_grid():
     t, f = curve()
     f[30:40] = np.nan

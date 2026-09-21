@@ -26,3 +26,4 @@
 | 2026-09-21 | 공개 판단·챌린지 참여 수 공통 조건과 소비 계약 | S15P21C206-165 | 최신 유효 공개, 동률 ID, N=15, COUNT DISTINCT, REPEATABLE_READ, asOf | 전체 437건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 리뷰 반영: 별 결과 페이지 통계 기준 명확화 | S15P21C206-165 | 146, answerClass, judgmentStatistics, graded, public_analyses | 채택·문서 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 120 develop 통합 테스트 중복 정리 | S15P21C206-120 | holdout, monkeypatch, 111 passed | 통합 테스트·호출 경로 확인 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |

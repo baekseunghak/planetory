@@ -370,6 +370,9 @@ Inf flux는 numerical_failure로 거절한다. 유효 100점 미만·짧은 base
 MAD=0은 degenerate_flux이며 정상 후보 0개와 구분한다. 입력·격자 오류와 계산 실패는 `BlsError.code`로 전달한다.
 
 Sector별 고정 전체 피크의 통과 안/밖 점 수·평균 차 깊이·전역 MAD 기반 SNR 및 transit별 점 수를 기록한다.
+진단 대상과 단일/다중 Sector 구분은 유효 flux만이 아닌 전체 입력의 고유 Sector를 기준으로 한다.
+유효점이 전부 마스킹된 Sector도 행을 유지하며 통과 안/밖 점 수는 0, depth·snr은 None(JSON null)이다.
+호출자가 미리 삭제해 전달하지 않은 Sector는 복원할 수 없으므로 진단에는 마스킹 위치를 NaN으로 보존한 배열을 전달한다.
 Sector별 독립 epoch 재적합은 하지 않는다. 단일 Sector는 not_applicable, 다중 Sector는 not_evaluated,
 Sector 미제공은 unavailable이다. 마스크 지표는 baseline_time의 예상 통과점 대비 제외 비율이며
 기준 시각을 주지 않으면 None이다. baseline_time은 중복 관측까지 입력 시각을 포함해야 한다.

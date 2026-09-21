@@ -179,6 +179,7 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
     pg = bls_periodogram(t, f, period_grid(0.5, pmax, 20000, spacing="linear"),
                          config_version=SEARCH_VERSION)
     tv, fv = t[valid], f[valid]
+    input_sectors = np.unique(sectors) if sectors is not None else []
     peaks = []
     for rank, i in enumerate(top_period_peaks(pg.periods, pg.power), 1):
         period, epoch, duration = pg.periods[i], pg.epoch_btjd[i], pg.duration_hours[i] / 24
@@ -192,7 +193,7 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         cycle_ids, cycle_counts = np.unique(cycles, return_counts=True)
         sector_stats = []
         if sectors is not None and status != "failed":
-            for sid in np.unique(sectors[valid]):
+            for sid in input_sectors:
                 group = sectors[valid] == sid
                 ni, no = int((group & inside).sum()), int((group & ~inside).sum())
                 depth = float(np.mean(fv[group & ~inside]) - np.mean(fv[group & inside])) if ni and no else None
@@ -210,7 +211,7 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
                           n_transits=len(cycle_ids), n_in_transit=int(inside.sum()),
                           transit_counts=cycle_counts.tolist(), sector_stats=sector_stats,
                           sector_consistency_status="unavailable" if sectors is None else
-                          "not_applicable" if len(sector_stats) == 1 else "not_evaluated",
+                          "not_applicable" if len(input_sectors) == 1 else "not_evaluated",
                           mask_dropped_fraction=dropped,
                           diagnostic_reasons=["sector_threshold_not_defined", "mask_threshold_not_defined"] +
                           (["baseline_time_unavailable"] if baseline is None else [])))
