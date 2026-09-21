@@ -16,3 +16,6 @@
 | 2026-09-21 | develop 테스트 컴파일 복구와 변경 이력 위치 정정 | S15P21C206-147 | ResidualResultReader.lookup, PublicAnalysisTest, 스텁 인자, 병합 후 컴파일 | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | HDFS marker 권한 경계 수정·Sector 7 확정 | S15P21C206-76 | stdin, UMask, immutable release, atomic rename, Sector 7 | 구현·Sector 7 검증 완료, 전체 적재 진행 중 | [기록](2026-09-21.md) |
 | 2026-09-21 | Sector 1~13 완료 정정·HDFS 감사 경계 강화 | S15P21C206-76 | coverage, total_bytes, full audit, completion marker, CI | 실환경 완료·방어 코드 오프라인 검증 완료, MR 재리뷰 대기 | [기록](2026-09-21.md) |
+| 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-21 | 검색 검증기 미정 입력·정렬·인계 경계 보완 | S15P21C206-170 | UNSPECIFIED, Date.parse, 합성 분포, 217, 218 | 표본 검증 완료·교차 검토 대기 | [2026-09-21](2026-09-21.md) |
