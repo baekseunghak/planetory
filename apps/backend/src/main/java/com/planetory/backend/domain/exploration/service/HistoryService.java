@@ -280,6 +280,29 @@ public class HistoryService {
                 new SubmissionViews.Detail(first.detail().available(),first.detail().targetKind(),row.submission().path("answer_viewed").asBoolean()),
                 first.tutorial(),first.nextActions());
     }
+    /**
+     * 6.6절 제출 조회. 8.2절 상세와 <b>같은 본문</b>이며 키만 제출 ID다.
+     *
+     * <p>당시 값과 조회 시점 값을 가르는 규칙이 하나뿐이어야 해서 같은 재구성 함수를 쓴다. 두 벌이 되면
+     * 같은 제출이 화면마다 다른 진행·공개 상태를 말한다.
+     *
+     * @throws BusinessException 없으면 {@code RESOURCE_NOT_FOUND}, 타인 제출이면 {@code FORBIDDEN}
+     */
+    SubmissionViews.Result resultOf(long member, long submissionId) {
+        return owned(member, histories.findBySubmission(submissionId));
+    }
+
+    /** 6.6절 응답 유실 복구. 찾은 제출이 타인 것이면 6.6절과 같은 403이다. */
+    SubmissionViews.Result resultOfRequest(long member, java.util.UUID requestId) {
+        return owned(member, histories.findByRequest(requestId));
+    }
+
+    private SubmissionViews.Result owned(long member, java.util.Optional<HistoryRepository.Row> found) {
+        var row = found.orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (row.member() != member) throw new BusinessException(ErrorCode.FORBIDDEN);
+        return currentResult(row);
+    }
+
     private static SubmissionViews.Match match(HistoryRepository.Row row) {
         JsonNode original=row.versions().path("originalMatch");
         if (original.isObject()) return JSON.treeToValue(original,SubmissionViews.Match.class);

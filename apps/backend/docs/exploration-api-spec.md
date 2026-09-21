@@ -870,6 +870,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `GET /api/v1/submissions/by-request/{requestId}` — 응답 유실 후 복구. 200 같은 본문 / 404 미접수(새 요청 아님, 같은 ID로 재전송) / 409 `REQUEST_IN_PROGRESS`.
 
+구현 상태(S15P21C206-145). 본문을 만드는 함수는 8.2절 기록 상세와 **하나**다. 두 벌이면 같은 제출이 화면마다 다른 진행·공개 상태를 말한다. 없는 제출과 형식이 다른 제출 ID는 404 `RESOURCE_NOT_FOUND`, 타인 제출은 403 `FORBIDDEN`이다. 요청 ID가 UUID 형식이 아니면 400 `VALIDATION_FAILED`이며 실패 필드는 `requestId`다. 두 조회 모두 200이며 `X-Current-Bundle`을 싣는다(D-5). 처리 중 판정은 6.1절이 쓰는 같은 권고 잠금으로 하되 **제출 행을 먼저 찾고 없을 때만** 확인한다. 이미 접수된 요청까지 잠그면 응답을 잃어 조회하는 동안 같은 요청의 재전송이 막힌다. `judgmentStatistics.asOf`는 집계 시각이라 호출마다 달라진다.
+
 ### 6.7 상세 보기
 
 `POST /api/v1/submissions/{submissionId}/detail-view` — 오답 분기의 [상세 보기]. 본문 없음. 멱등(반복 호출은 같은 대상).
