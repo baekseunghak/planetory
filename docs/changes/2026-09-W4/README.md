@@ -77,3 +77,4 @@
 | 2026-09-21 | 정정 계약 승인 조건의 보존 강제 해제와 실행 문턱 셋 정리 | S15P21C206-153 | C18-Q1, C18-Q2, C18-Q4, 승인 조건, retired, 실행 문턱 | 결정 요청 초안 | [기록](2026-09-21.md) |
 | 2026-09-21 | 결과 페이지 리뷰 반영: 유효 공개 조건·일괄 공개 후보·은퇴 대상 | S15P21C206-146 | unpublishedSignalCount, PublicAnalysisVisibility, PUBLISH_ALL, RETRY, CANDIDATE_RETIRED | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 112 v3 소비자 인계 보완 | S15P21C206-112 | 재개, newDiscoverableCount, candidate_aliases, retired 공개물, removal_step, tolerance | 문서 보완·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 봉우리와 미세 조정 범위(5.4절)와 미결 5 제안 | S15P21C206-141 | candidate-peaks, 최소 간격 2h+1, 고조파 허용 오차 h, peakRuleVersion, suggestedDurationHours | 구현 완료·규칙 제안 | [2026-09-21](2026-09-21.md) |

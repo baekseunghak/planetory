@@ -699,7 +699,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
      "suggestedDurationHours": 2.2, "suggestedPhaseCenter": 0.81}
   ],
   "matchedCandidates": [{"candidateId": "c-401", "periodDays": 3.0021}],
-  "peakRuleVersion": "peak-1"
+  "peakRuleVersion": "rule-0"
 }
 ```
 
@@ -708,12 +708,23 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | `peaks`는 주기도 상위 N개 봉우리(N은 운영 설정, 기본 10). 후보든 아니든 구분하지 않으며 `candidateId`를 넣지 않는다 | POL-05, EXP-13 "상위 봉우리에 번호" |
 | `gridIndex`는 같은 `curveContext`·`peakRuleVersion` 안에서 사용자가 고른 봉우리의 식별값이다. `rank`는 정렬 결과이므로 제출 식별값으로 쓰지 않는다 | C02-R3 |
 | `fineTune`은 manifest의 격자 간격·허용 폭 규칙을 그 봉우리 주기에 적용해 계산. 하드코딩 금지 | EXP-05, DAT-11 |
-| `suggestedDurationHours`·`suggestedPhaseCenter`는 BLS 제안 밴드(EXP-06 "제안 밴드로 표시할 수 있으나"). 제출 입력이 아니다 | EXP-06 |
+| `suggestedDurationHours`·`suggestedPhaseCenter`는 BLS 제안 밴드(EXP-06 "제안 밴드로 표시할 수 있으나"). 제출 입력이 아니다. **현재 구현은 항상 null이며 키는 빼지 않는다**(`S15P21C206-141`): `periodograms`는 주기별 `power`만 싣고 duration·위상 배열이 없다(ERD). 주기만으로 추정하려면 항성 밀도 같은 새 가정을 넣어야 해서 모른다고 답한다. 출처를 만들지(판이 주기별 BLS 값을 싣는 방향)는 미결 5와 함께 정한다 | EXP-06 |
 | `matchedCandidates`는 회원이 이미 매칭한 후보의 주기. 흐린 선 표시용 | EXP-13 |
+| `peakRuleVersion`은 운영 규칙 버전 문자열이다. `peak-N`을 따로 두지 않는다 | 아래 미결 5 제안 |
 | 목록은 **표시·추천용**이다. 제출 주기가 상위 N개에 속할 필요는 없으며, 어떤 주기 P의 미세 조정 범위는 `selectionRules.fineTune.halfWidthCells`로 주기도 격자에서 `P × r^(−h) ~ P × r^(+h)` (r = 격자 비율, h = halfWidthCells), step은 격자 한 칸 폭이다. 목록의 `fineTune`은 이 규칙을 각 봉우리에 미리 적용한 값 | EXP-05 재선택·미세 조정 구분 |
 | 선택 봉우리의 미세 조정 범위 밖으로 값을 바꾸는 것은 프론트가 막고 새 주기 선택을 안내한다. 서버도 `sourcePeakGridIndex`가 있으면 같은 범위를 검증한다. 주기도의 다른 위치를 새로 고른 경우 source를 null로 바꾸며, 전체 주기 격자 안이면 봉우리 범위 밖이라는 이유만으로 거절하지 않는다 | EXP-05, C02-R3 |
 
-봉우리 추출 규칙(N, 최소 간격, 고조파 제외)은 윤성용과 정한다(미결 5). 봉우리를 선택해 시작한 제출은 `sourcePeakGridIndex`로 그 선택을 전달하고, 서버는 해당 봉우리의 추천 duration을 6.2절 상한에 사용한다. 주기도의 다른 위치를 직접 선택한 제출은 이 값을 null로 보낸다.
+**봉우리 추출 규칙(미결 5) 제안 — 윤성용 리뷰 대기.** 새 숫자를 만들지 않고 이미 정해진 값에서 유도한다. 정하지 않은 채 기본값이 굳는 것을 막는다. 구현은 `CandidatePeaks`이며 고정 배열 시험(`CandidatePeaksTest`)으로 수치를 검증한다.
+
+| 규칙 | 값 | 그 값인 이유 |
+|---|---|---|
+| 상위 N | 운영 규칙 `peaks.top_n` (기본 10) | 이미 `operation_settings`에 있는 값이다 |
+| 최소 간격 | `2h + 1`칸 (h = 판 manifest `fine_tune.half_width_cells`) | 미세 조정 범위가 겹치는 두 봉우리는 사용자에게 **같은 선택**이다. 어느 쪽을 골라도 같은 주기로 맞출 수 있어 목록에서 자리만 차지한다 |
+| 고조파 제외 | 운영 규칙 `matching.harmonic_multipliers`, 허용 오차 `h`칸 | 제출이 「이 주기는 저 후보의 2배다」라고 판정하는 배수와 목록이 「이 봉우리는 위 봉우리의 2배다」라고 판정하는 배수가 같아야 화면과 채점이 어긋나지 않는다. 오차가 `2h+1`이 아니라 `h`인 것은, 그 봉우리를 미세 조정해 **정확히 그 배수에 닿을 수 있는** 범위가 `h`이기 때문이다. 겹침 기준을 그대로 쓰면 배수 자리에서 한참 떨어진 봉우리까지 고조파로 몰아 목록이 비어 간다 |
+
+`peakRuleVersion`은 **운영 규칙 버전**이다. 봉우리를 정하는 두 값이 운영 규칙에서 오고 나머지 한 값(h)은 판 manifest에서 오는데 판은 이미 `curveContext.bundleId`에 있다. 둘이 같으면 결과가 같으므로 `peak-N`을 따로 두지 않는다. 제출 검증(6.2절)은 같은 문맥·같은 버전으로 목록을 **다시 계산**하며 저장하지 않는다.
+
+봉우리를 선택해 시작한 제출은 `sourcePeakGridIndex`로 그 선택을 전달하고, 서버는 해당 봉우리의 추천 duration을 6.2절 상한에 사용한다. 주기도의 다른 위치를 직접 선택한 제출은 이 값을 null로 보낸다.
 
 ## 6. 제출·결과
 
@@ -760,7 +771,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
 | 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
 | 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.periodDays`(주기·위상 값이 유한하지 않거나 주기가 0 이하) 또는 `selection.phaseEnd`(위상 범위) |
-| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 봉우리는 있는데 그 `suggestedDurationHours`가 null이면(출처 없음, 5.4절) 마찬가지로 이 상한을 적용하지 않는다 — 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
 | 6 | 정수 k가 존재해 epoch가 `observationBounds`(세그먼트 시작의 최솟값 ~ 마지막 bin 끝의 최댓값) 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
@@ -1422,7 +1433,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | # | 항목 | 담당 | 처리 |
 |---|---|---|---|
 | 4 | `selectionRules` 값(위상 폭 min/max, 관측점 없는 구간 허용) | 윤성용·강재민 | DEC-19, Q03. 계약 형태는 5.1절, 숫자만 채움. 저장 형식은 운영 규칙 형식 1(S15P21C206-151) |
-| 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만. 저장 형식은 운영 규칙 형식 1(S15P21C206-151) |
+| 5 | 봉우리 추출 규칙(N·최소 간격·고조파), 매칭 허용 오차·N 상한 | 윤성용 | DEC-03, Q06. `operation_settings`에 값만. 저장 형식은 운영 규칙 형식 1(S15P21C206-151). **5.4절에 제안을 올렸다(`S15P21C206-141`): 최소 간격 `2h+1`칸, 고조파 허용 오차 `h`칸, `peakRuleVersion` = 운영 규칙 버전. 구현·검증까지 끝냈고 리뷰 대기다** |
 | 12 | 회원 생성 시 튜토리얼 1번 열림 실패 처리(회원 생성 롤백 여부) | 강재민·백승학 | 서비스 F01-Q5 |
 
 해소된 항목: 10(`stars` 표시 열) → D-18, 1(요청 ID, SB-D17) → D-1, 13(참여 수 정의) → SRS v1.1 안건 15, 나머지 옛 2·3·6·8·9·11·14·15·16·17·18 → D-2~D-12.
@@ -1499,6 +1510,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-146 리뷰 반영. 8.4절 `unpublishedSignalCount`의 유효 공개 조건을 `PublicAnalysisVisibility.VISIBLE`(부모 스레드 포함)로 적고, `PUBLISH_ALL`의 기준이 미게시 신호 수가 아니라 일괄 공개 후보(166)라는 것과 `RETRY`가 은퇴 후보를 제외한다는 것을 명시했다. 4.4절 목록의 같은 집계도 같은 조건으로 맞췄다 |
 | 2026-09-21 | S15P21C206-146 구현 반영. 8.4절에 구현 규칙을 적었다. 404 통합, 조회 무변경, `threadIds`를 매칭한 신호로 제한(DEC-28), 남은 탐색 가능 수를 완료 판정과 같은 집계로, 당시 값(`judgmentEvaluation`·`publication`)과 조회 시점 값(`judgmentStatistics`)의 구분, `curveSteps`의 빈 배열 유지와 2.4절 `Residual` 재사용, `nextActions` 유도 규칙을 명시했다 |
 | 2026-09-21 | S15P21C206-145 리뷰(백지웅) 반영. 6.7절 예시의 `signal.explanation`을 실제 응답과 같은 null로 맞추고, 값이 null일 때 화면이 문장을 지어내지 않는다는 것을 적었다. 예시만 문장을 들고 있어 소비자가 필수 문자열로 읽었다 |
+| 2026-09-21 | S15P21C206-141 반영. 5.4절 봉우리 목록을 구현하고 미결 5(봉우리 추출 규칙) 제안을 표로 적었다. 최소 간격 `2h+1`칸과 고조파 허용 오차 `h`칸을 이미 정해진 값(운영 규칙 `peaks.top_n`·`matching.harmonic_multipliers`, 판 manifest `fine_tune.half_width_cells`)에서 유도하고 새 숫자를 만들지 않았다. `peakRuleVersion`을 운영 규칙 버전으로 정하고 `suggestedDurationHours`는 출처가 없어 null임을 적었다. 6.2절에 그 값이 null이면 duration 상한을 걸지 않는다는 단서를 더했다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
