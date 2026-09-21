@@ -2,9 +2,11 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회는 [서비스 API 명세](docs/service-api-spec.md) 3장·5~7장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 피드·공개 출처 카드·반응 API는 아직 구현하지 않았다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 검색 API는 후속 범위다. 공개 출처 카드는 아래 167 안내를 따른다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
+
+S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.
 
 ## 빠른 시작
 
@@ -95,7 +97,9 @@ docker compose --profile service up -d --wait service-db
 
 ## 더 보기
 
-공개 분석 등록(161)은 `POST /api/v1/public-analyses`로 본인 History를 공식 스레드에 등록하고 성과·별 발견을 같은 트랜잭션으로 확정한다. `PublicAnalysisTest`가 실제 제출부터 공개·동시성·롤백·앱 역할 권한을 검증한다. 취소/재공개·목록/상세·일괄 API는 후속 티켓이며, 입력과 재시도 계약은 [서비스 API 9.1절](docs/service-api-spec.md#publication)을 따른다. V14 적용 순서는 [마이그레이션 안내](docs/development-setup.md#v14-공개-분석-등록-권한)를 확인한다.
+일반 글 반응(163)은 최종 상태 PUT과 반응자 커서 GET을 제공하며 상세·수정 응답에 실제 반응 합계를 반환한다. `./gradlew -PskipLocalDb test --tests '*PostReactionTest' --tests '*MemberCommunityPermissionTest' --tests '*PublicAnalysisTest'`로 일회용 PostgreSQL의 HTTP·동시성·삭제 경합·최소 권한·공개 판단 비변경을 검증한다. [서비스 API 8장](docs/service-api-spec.md#reactions), [V16 권한 안내](docs/development-setup.md#v16-일반-글-반응-권한)를 따른다.
+
+공개 분석 등록(161)은 `POST /api/v1/public-analyses`로 본인 History를 공식 스레드에 등록하고 성과·별 발견을 같은 트랜잭션으로 확정한다. `PublicAnalysisTest`가 실제 제출부터 공개·동시성·롤백·앱 역할 권한을 검증한다. 취소/재공개(162)와 목록/상세(164)를 제공하며 일괄 API는 후속 티켓이다. 입력과 재시도 계약은 [서비스 API 9.1절](docs/service-api-spec.md#publication)을 따른다. V14 적용 순서는 [마이그레이션 안내](docs/development-setup.md#v14-공개-분석-등록-권한)를 확인한다.
 
 히스토리 조회(148)는 개인 목록·상세·CURRENT/SUBMITTED 그래프와 서비스 도메인용 공개 투영을 제공한다. [계약·160 인계](docs/exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회), `./gradlew -PskipLocalDb test --tests '*HistoryTest'`. 일회용 PostgreSQL에서 실제 제출·조회·권한·판 교체를 검증한다. 160은 이 공개 투영과 Graph를 재사용하며 147 잔차 공급자·프론트 실제 렌더러 연결은 별도 인수다.
 
@@ -106,3 +110,13 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 - [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
 - [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
+
+커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
+
+출처 카드(167)는 같은 별의 공식 스레드·공개 분석 미리보기와 글·댓글 연결을 제공한다. 취소·숨김된 기존 출처는 ID 없는 안내만 반환하며 본문 수정에서 보존한다. [서비스 API 5~7장](docs/service-api-spec.md#attachments), [V18 권한](docs/development-setup.md#v18-출처-관계-권한)을 따른다. `SourceCardTest`는 일회용 PostgreSQL에서 HTTP·공개 상태·동일 스냅샷·교체 및 삭제 경합·최소 앱 권한·성과 비변경을 검증한다.
+
+핫 토픽(171)은 [서비스 API 4.2절](docs/service-api-spec.md#42-핫-토픽)에 따라 현재 유효 참여자 10명 이상 공식 스레드를 전역 순위와 전용 커서로 제공한다. 위 164 구현 당시의 후속 범위 중 171을 구현했다. `./gradlew -PskipLocalDb test --tests '*HotTopicsTest' --tests '*CommunityReadTest' --tests '*PublicAnalysisTest'`는 일회용 PostgreSQL에서 선정·공개 철회·커서·동일 스냅샷·앱 역할 및 기존 조회·공개 회귀를 검증한다. 새 테이블·마이그레이션은 없고 실제 프론트 브라우저 인수는 별도다.
+
+171 리뷰 보완: 댓글 수는 선정 SQL에서 함께 조회하며 항목별 추가 왕복을 하지 않는다. 선정과 커서의 임계값은 `HotTopicsQuery.HOT_TOPIC_MIN_PARTICIPANTS`를 공유한다. 합성 스레드 100개 테스트의 실행 계획 출력은 측정 자료이며 특정 인덱스 사용을 보장하는 검사가 아니다. 해당 SQL 측정 시간은 항목별 판단 요약을 포함한 전체 API 응답 시간이 아니다.
+
+현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.

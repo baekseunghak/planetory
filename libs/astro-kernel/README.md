@@ -11,7 +11,8 @@ Jira `S15P21C206-121` (계획 ID D14-1) / 담당: 윤성용
 
 Spark 배치의 Silver 반복 탐색(`S15P21C206-122`)과 EC2 온라인 Worker(`S15P21C206-88`, 김동혁)가 **같은 수식**으로
 "후보 신호를 제거한 잔차곡선"을 만들도록, 순수 함수만 모아 둔 패키지다. 파일·DB·네트워크·큐를 다루지 않고 numpy 외
-의존성이 없다. 수치 검증(`S15P21C206-131`)도 이 구현을 기준값으로 쓴다.
+기본 의존성이 없다. BLS(120)는 선택 extra `astro-kernel[bls]`로 Astropy를 사용한다.
+수치 검증(`S15P21C206-131`)도 이 구현을 기준값으로 쓴다.
 
 여기서 하지 않는 것: 반복 BLS·후보 병합(122), Worker 프로세스·큐·Redis·후보 조회·오류 상태 매핑(88), `transit_model`
 스키마 최종 확정(113), 실제 PostgreSQL round-trip 과 배치–EC2 환경 비교(131), 온라인 재적합(`joint_refit`).
@@ -336,3 +337,83 @@ FITS PROCVER는 `spoc-5.0.11-20200915`, `spoc-5.0.19-20201114`, `spoc-5.0.20-202
 | comparisons.csv | `a4dfee09cc3d466c1e4f4d5f96d9f5fd0fafaa060605d87cbb394de8063380f3` |
 | metrics.csv | `bce61a5139d663d78b6fd1803c415a7fc118bb7bff37fe4df7f68b1f154ef381` |
 | summary.csv | `f3c80bd4f0a891b3a216cb275d4afe7c407b8c07d1104efcac47354efb74fb07` |
+
+## BLS 탐색과 품질 게이트 (120)
+
+상태: **구현·합성·실제 4별 회귀 검증 완료, MR 리뷰 대기**. Jira `S15P21C206-120`.
+110의 고정 기준을 순수 함수 `astro_kernel.bls`로 옮겼다. 반복 제거·고조파 병합·Spark·온라인 연결은 후속 범위다.
+BLS 소비자는 `astro-kernel[bls]`로 Astropy를 설치한다. 기본 전처리·고정 모델 함수에는 Astropy가 필요 없다.
+
+| 함수 | 계약 |
+|---|---|
+| `search_bls(time, flux, *, input_snapshot_id, preprocessing_version, sector=None, baseline_time=None)` | 고정 탐색, 상위 피크·게이트·진단·입력 버전 반환 |
+| `bls_periodogram(time, flux, periods, *, durations_hours, config_version)` | 호출자가 제공한 주기·duration 격자로 계산, `Periodogram` 반환 |
+| `period_grid(min, max, n, *, spacing)` | 양수 증가 범위의 linear/log 격자 생성 |
+| `top_period_peaks(periods, power, *, count=5, separation_rel=0.02)` | power 순 2% 분리. 고조파 병합 없음 |
+| `quality_gate(snr, sde)` | 상태와 사유 목록 반환 |
+
+탐색 버전은 `bls_grid_v1/poc_linear20k`다. 0.5일부터 min(유효 시각 baseline/3, 100일)까지
+선형 20,000점, duration 1.2·1.92·2.88·4.8시간, likelihood·oversample 10을 사용한다.
+오차는 정제 flux의 전역 `1.4826 × MAD`, SNR은 Astropy depth_snr,
+SDE는 전체 power의 `(power-mean)/std`(ddof=0)다. 243의 대안 SDE를 미리 반영하지 않는다.
+`Periodogram`에는 전체 격자별 power·epoch·duration·깊이·오차·SNR·SDE, 원래 위치의 valid_input,
+실제 설정이 있다. 제공용 로그 5,000점은 명시적으로 생성할 수 있으며 제공용 범위·duration·버전은 호출자가 전달한다.
+
+품질 버전 `gate_v1/snr7_sde6`은 **SNR >= 7 그리고 SDE >= 6**이다. 최소 transit 수를 추가 문턱으로 넣지 않는다.
+개별 피크 상태는 accepted/held/failed이고, 보류 사유는 snr_below_threshold·sde_below_threshold다.
+성공 실행 상태는 ok 또는 no_quality_peak다. 후자는 품질 게이트를 넘는 피크가 없다는 뜻이며 천체의 무신호를 확정하지 않는다.
+비유한 지표·잘못된 피크 기하가 있으면 실행 failed, accepted_peaks는 빈 목록으로 반환한다.
+호출자는 개별 진단 피크 대신 실행 상태와 accepted_peaks를 사용한다.
+
+입력은 정렬된 유한 BTJD time·정제 flux의 같은 길이 숫자 배열이다. NaN flux는 결측으로 보존하고
+Inf flux는 numerical_failure로 거절한다. 유효 100점 미만·짧은 baseline은 insufficient_observations,
+MAD=0은 degenerate_flux이며 정상 후보 0개와 구분한다. 입력·격자 오류와 계산 실패는 `BlsError.code`로 전달한다.
+
+Sector별 고정 전체 피크의 통과 안/밖 점 수·평균 차 깊이·전역 MAD 기반 SNR 및 transit별 점 수를 기록한다.
+진단 대상과 단일/다중 Sector 구분은 유효 flux만이 아닌 전체 입력의 고유 Sector를 기준으로 한다.
+유효점이 전부 마스킹된 Sector도 행을 유지하며 통과 안/밖 점 수는 0, depth·snr은 None(JSON null)이다.
+호출자가 미리 삭제해 전달하지 않은 Sector는 복원할 수 없으므로 진단에는 마스킹 위치를 NaN으로 보존한 배열을 전달한다.
+Sector별 독립 epoch 재적합은 하지 않는다. 단일 Sector는 not_applicable, 다중 Sector는 not_evaluated,
+Sector 미제공은 unavailable이다. 마스크 지표는 baseline_time의 예상 통과점 대비 제외 비율이며
+기준 시각을 주지 않으면 None이다. baseline_time은 중복 관측까지 입력 시각을 포함해야 한다.
+이는 제공된 기준 배열 이후의 제외 비율이며 원본 QUALITY 제외까지 자동 복원하는 지표가 아니다.
+**Sector·마스크 문턱은 미정**으로 diagnostic_reasons에 남기고 게이트에는 적용하지 않는다(사용자 합의).
+
+```python
+from astro_kernel.bls import search_bls
+
+# 119의 실패/부분 결과를 정상 탐색 입력으로 전달하지 않는다.
+if detrended.status == "ok":
+    result = search_bls(
+        prepared.time, detrended.flux_det, sector=prepared.sector,
+        baseline_time=prepared.time, input_snapshot_id=snapshot_id,
+        preprocessing_version=detrended.version,
+    )
+```
+
+119 실제 함수 출력 연결·게이트 경계·결측/실패와 기존 기능을 포함해 astro-kernel 98개,
+기존 110과의 합성 수치 비교를 포함해 tess-bench 78개 테스트가 통과했다.
+[실제 FITS 회귀 명령](../../experiments/tess-bench/README.md#120-공용-bls-커널-회귀)은 별도 사용자 실행으로 검증한다.
+실제 회귀 결과는 아래에 기록한다. 참조 구현과의 일치를 새 독립 평가·Jira 완료·병합 승인으로 간주하지 않는다.
+
+### 120 실제 4별 회귀 결과
+
+사용자 실행 `run-20260921T002811Z-24dc68f1` (2026-09-21), 소요 6,704.365초(약 1시간 51분 44초).
+Python 3.11.9 / NumPy 2.4.6 / Astropy 7.2.2 / SciPy 1.17.1, Windows AMD64.
+TOI-270·TOI-451·WASP-62·π Men 각각 80곡선, 총 320곡선 모두 참조와의 비교를 통과했다.
+119 전처리 결과·마스크 일치와 110 전체 주기도·상위 피크 수치(rtol=1e-12, atol=0),
+SNR/SDE 게이트 및 주입 회수 종류·순위 일치를 검사했다.
+
+336개 주입 신호의 게이트 적용 후 매칭은 direct 188, alias_half 25, alias_double 4,
+wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와 일치한다는 뜻이며 전 신호 회수가 아니다.
+입력·코드·설정·plan·출력 해시 52개를 사후 검사해 불일치 0건, CSV 행 수와 manifest 불일치 0건을 확인했다.
+이후 최신 develop 통합·Git 검사·MR 리뷰는 별도이며, 계산 관련 변경이 생기면 재검증 범위를 판단한다.
+
+| 파일 | SHA-256 |
+|---|---|
+| plan.json | `cec3ffe5c5f8ba31b813f0ec6785c5bef1554176102774a61b92eff0ca506575` |
+| comparisons.csv | `62ad3a3afac3e4538c7a13e3ea438c51758eec2d847f754131374e1ab224fa6e` |
+| matches.csv | `29764e7578ea7b86386f78f7d66908639d51897ac4825030a6ad38606540713f` |
+
+자료는 `experiments/tess-bench/results/bls-kernel-regression/run-20260921T002811Z-24dc68f1/`에 있다.
+원본과 생성 결과는 Git 제외를 유지하며 MR 검토 자료로 별도 전달한다.

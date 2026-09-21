@@ -261,3 +261,18 @@ domain/<도메인>/  controller · dto(request/response) · entity · repository
 `V15__public_analysis_visibility_grant.sql`(162)은 `planetory_app`에 `published_analyses.unpublished_at` 열 UPDATE만 부여한다. SELECT·INSERT는 V14를 유지하며 운영 숨김·최초 공개 시각·History 연결 변경과 DELETE·TRUNCATE는 허용하지 않는다. PostgreSQL 행 잠금에 필요한 UPDATE 권한도 이 열 권한으로 충족한다.
 
 기존 V1~V14를 수정하지 않고 V13 → V14 → V15를 순서대로 적용한다. `MemberCommunityPermissionTest`에서 업그레이드·Flyway validate·재실행 0건과 금지 열의 42501을, `PublicAnalysisTest`에서 실제 앱 역할의 공개→취소→재공개를 검증한다. 공유·운영 DB 적용은 별도 인수다.
+
+### V16 일반 글 반응 권한
+
+`V16__post_reaction_app_grants.sql`(163)은 기존 `post_reactions`에 `planetory_app`의 SELECT·INSERT·UPDATE·DELETE만 부여하고 TRUNCATE는 금지한다. NONE은 관계 행의 삭제이므로 DELETE가 필요하다. IDENTITY 시퀀스의 사용 권한은 기존 V11을 재사용하며 다른 테이블 권한·스키마는 변경하지 않는다.
+
+V15 다음에 적용한다. `MemberCommunityPermissionTest`는 V12 → V15의 3건, V15 → V16의 1건 적용·validate·재실행 0건과 실제 앱 계정의 생성·변경·삭제·TRUNCATE 거절을 검증한다. `PostReactionTest`는 빈 일회용 DB에 전체 마이그레이션을 적용하고 실제 JPA 앱 역할 경로도 검증한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다.
+
+
+<a id="v17-출처-관계-권한"></a>
+
+### V18 출처 관계 권한
+
+`V18__source_link_app_grants.sql`(167)은 V1 `post_source_links`에 `planetory_app`의 SELECT·INSERT·DELETE와 IDENTITY 시퀀스 USAGE·SELECT만 부여한다. 배열 교체는 부모 잠금 아래 DELETE·INSERT로 수행하므로 UPDATE·TRUNCATE는 허용하지 않는다. 테이블·열·제약은 변경하지 않는다.
+
+145번의 `V17__submission_detail_target.sql`과 번호가 겹쳐, develop 미병합인 출처 권한 파일을 V18로 옮겼다. V17 제출 상세 마이그레이션을 먼저 병합·적용하고 V18을 뒤에 적용한다. 번호 충돌을 피하려고 out-of-order나 repair를 켜지 않는다. 기존 V17 출처 파일을 적용한 일회용 검증 DB는 새로 만들며 공유·운영 DB 이력은 수정하지 않는다. `MemberCommunityPermissionTest`는 V16→V18 출처 권한 1건·validate·재실행 0건, 실제 앱 역할의 생성·삭제와 권한 경계를 검증한다. `SourceCardTest`는 같은 역할로 실제 서비스 저장·조회·교체를 실행한다. 이번 검증은 일회용 PostgreSQL에만 적용하며 공유·운영 DB 적용은 별도다.

@@ -52,6 +52,15 @@ public final class QuestViews {
     public record Round(String roundId, int roundNo, LocalDate startsOn, LocalDate endsOn, String description) {
     }
 
+    /** 서비스 API 11장. 대상 TIC는 실제 발견 여부가 아니라 튜토리얼 완료 자격으로 제한한다. */
+    public record CurrentChallenge(CurrentRound round, boolean eligible, Integer participantCount) {
+        static final CurrentChallenge NONE = new CurrentChallenge(null, false, null);
+    }
+
+    public record CurrentRound(String roundId, int roundNo, String ticId, LocalDate startsOn,
+                               LocalDate endsOn, String status, String description) {
+    }
+
     /**
      * 다시 열린 별 카드(DEC-27). 재개 뒤 새 제출이 생기면 빠진다.
      *

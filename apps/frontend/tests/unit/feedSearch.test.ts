@@ -7,6 +7,13 @@ import {
   validateFeedSearch,
 } from "../../src/features/community/feedSearch";
 const base = readFeedSearch(new URLSearchParams()).values;
+test("default star route sends the supported TIC and STAR combination", () => {
+  const result = readFeedSearch(new URLSearchParams(), "259377017");
+  assert.equal(result.error, null);
+  const params = feedSearchParams(result.values);
+  params.set("size", "20");
+  assert.equal(params.toString(), "ticId=259377017&board=STAR&size=20");
+});
 test("q trims edges, preserves internal spaces and encodes literals exactly once", () => {
   const params = feedSearchParams({ ...base, q: "  10%_ + A&B  두  공백  " });
   assert.equal(

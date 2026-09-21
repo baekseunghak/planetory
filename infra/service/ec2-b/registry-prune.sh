@@ -26,6 +26,7 @@ in_use=""
 apply=0
 do_gc=0
 container="${REGISTRY_CONTAINER:-registry}"
+data_dir="${REGISTRY_DATA_DIR:-/srv/registry/data}"
 while (($#)); do
   case "$1" in
     --registry) (($# >= 2)) || fail '--registry requires a value.'; registry="$2"; shift 2 ;;
@@ -40,10 +41,24 @@ done
 [[ -n "$registry" ]] || fail '--registry is required. 예: https://<호스트>:5000'
 [[ "$keep" =~ ^[0-9]+$ ]] && ((keep >= 1)) || fail '--keep must be a positive integer.'
 command -v curl >/dev/null 2>&1 || fail 'curl이 필요하다.'
+command -v python3 >/dev/null 2>&1 || fail 'python3가 필요하다. JSON 파싱에 쓴다.'
 
 api() { curl -sS --max-time 20 "$@"; }
 
-json_array() { tr -d ' ' | sed -n "s/.*\"$1\":\\[\\([^]]*\\)\\].*/\\1/p" | tr ',' '\n' | tr -d '"' | sed '/^$/d'; }
+# JSON은 python으로 읽는다. 무엇을 지울지 정하는 입력이라 파싱이 틀리면
+# 곧바로 잘못된 삭제가 된다. 레지스트리 응답은 여러 줄로 정렬돼 오고
+# 매니페스트는 중첩이라 sed·grep으로는 조용히 어긋난다.
+json_array() {
+  python3 -c "
+import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+for v in (d.get('$1') or []):
+    print(v)
+"
+}
 
 digest_of() {
   api -I \
@@ -55,10 +70,59 @@ digest_of() {
     grep -i '^docker-content-digest:' | tr -d '\r' | awk '{print $2}'
 }
 
+ACCEPT_ALL=(
+  -H 'Accept: application/vnd.oci.image.index.v1+json'
+  -H 'Accept: application/vnd.oci.image.manifest.v1+json'
+  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json'
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json'
+)
+
+# 생성 시각은 이미지 config 블롭에만 있다.
+# schema1(v1+prettyjws)에서 읽던 초판은 registry 3이 OCI 매니페스트를 쓰면서
+# 항상 404를 받았다. 그래서 모든 태그의 시각이 비고, 보존 대상이 생성순이 아니라
+# 태그 문자열 역순으로 정해졌다. 최신 이미지가 삭제 후보가 되는 상태였다.
+# 매니페스트에서 config 블롭 digest를 꺼낸다. 인덱스면 첫 자식을 가리킨다.
+# 출력은 `child <digest>` 또는 `config <digest>`.
+manifest_ref() {
+  python3 -c "
+import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+ms=d.get('manifests')
+if ms:
+    print('child', ms[0]['digest'])
+elif d.get('config',{}).get('digest'):
+    print('config', d['config']['digest'])
+else:
+    sys.exit(1)
+"
+}
+
 created_of() {
-  api -H 'Accept: application/vnd.docker.distribution.manifest.v1+prettyjws' \
-    "$registry/v2/$1/manifests/$2" 2>/dev/null |
-    grep -o '"created":"[^"]*"' | head -1 | cut -d'"' -f4
+  _repo="$1"
+  _ref="$2"
+  _out="$(api "${ACCEPT_ALL[@]}" "$registry/v2/$_repo/manifests/$_ref" 2>/dev/null | manifest_ref)" || return 1
+  _kind="${_out%% *}"
+  _dig="${_out##* }"
+
+  # 멀티 아키텍처 인덱스면 첫 자식 매니페스트를 한 번 더 따라간다.
+  if [[ "$_kind" == child ]]; then
+    _out="$(api "${ACCEPT_ALL[@]}" "$registry/v2/$_repo/manifests/$_dig" 2>/dev/null | manifest_ref)" || return 1
+    [[ "${_out%% *}" == config ]] || return 1
+    _dig="${_out##* }"
+  fi
+
+  _created="$(api "$registry/v2/$_repo/blobs/$_dig" 2>/dev/null | python3 -c "
+import json,sys
+try:
+    print(json.load(sys.stdin).get('created') or '')
+except Exception:
+    sys.exit(1)
+")" || return 1
+  [[ -n "$_created" ]] || return 1
+  printf '%s' "$_created"
 }
 
 repos="$(api "$registry/v2/_catalog?n=1000" | json_array repositories)"
@@ -87,14 +151,28 @@ for repo in $repos; do
     continue
   fi
 
-  # 최신 판단은 매니페스트 생성 시각으로 한다. 태그 문자열 순서는 의미가 없다.
+  # 최신 판단은 이미지 생성 시각으로 한다. 태그 문자열 순서는 의미가 없다.
+  #
+  # 시각을 하나라도 못 읽으면 이 저장소는 건드리지 않는다. 대체값을 넣으면
+  # 정렬이 조용히 태그 문자열 순서로 바뀌어 최신 이미지를 지우게 된다.
+  # 못 지우는 것보다 잘못 지우는 것이 훨씬 비싸다.
   ranked=""
+  missing=0
   while IFS= read -r tag; do
     [[ -n "$tag" ]] || continue
-    created="$(created_of "$repo" "$tag" || true)"
-    [[ -n "$created" ]] || created="0000-00-00T00:00:00Z"
-    ranked+="$created $tag"$'\n'
+    if created="$(created_of "$repo" "$tag")"; then
+      ranked+="$created $tag"$'\n'
+    else
+      printf '%s: %s 생성 시각을 읽지 못했다\n' "$repo" "${tag:0:12}"
+      missing=1
+    fi
   done <<<"$sha_tags"
+
+  if ((missing)); then
+    printf '%s: 생성 시각을 확인하지 못해 이 저장소는 건너뛴다\n' "$repo"
+    continue
+  fi
+
   sorted="$(printf '%s' "$ranked" | sed '/^$/d' | sort -r | awk '{print $2}')"
 
   # 1단계: 남길 태그와 지울 후보를 나눈다.
@@ -161,12 +239,26 @@ fi
 if ((do_gc)); then
   ((apply)) || fail '--gc는 --apply와 함께 써야 의미가 있다.'
   command -v docker >/dev/null 2>&1 || fail 'docker가 필요하다.'
-  # 가비지 수집 중 push가 들어오면 방금 올린 블롭이 회수될 수 있다.
-  # 레지스트리를 읽기 전용으로 두고 돌린 뒤 되돌린다.
-  printf '\n가비지 수집 시작. 그동안 push가 거부된다.\n'
-  docker exec -e REGISTRY_STORAGE_MAINTENANCE_READONLY='{"enabled":true}' "$container" \
-    registry garbage-collect /etc/distribution/config.yml ||
-    fail '가비지 수집 실패. 레지스트리 상태를 확인한다.'
-  docker restart "$container" >/dev/null
-  printf '가비지 수집 완료, 레지스트리 재시작됨.\n'
+  # 가비지 수집 중에 push가 들어오면 방금 올라온 블롭이 아직 어떤 매니페스트에도
+  # 매달려 있지 않아 회수 대상이 된다. 이미지가 조용히 깨진다.
+  #
+  # `docker exec -e`로는 막지 못한다. 그 환경변수는 exec한 프로세스에만 붙고
+  # 이미 떠 있는 레지스트리 서버는 그대로 쓰기를 받는다. 서버를 실제로 멈춰야 한다.
+  # 그래서 컨테이너를 정지한 뒤 일회용 컨테이너로 스토리지를 직접 청소한다.
+  gc_image="$(docker inspect "$container" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  [[ -n "$gc_image" ]] || fail "레지스트리 컨테이너를 찾을 수 없다: $container"
+  [[ -d "$data_dir" ]] || fail "레지스트리 데이터 디렉터리가 없다: $data_dir"
+
+  printf '\n레지스트리를 정지하고 가비지 수집을 실행한다. 그동안 push·pull이 모두 멈춘다.\n'
+  docker stop "$container" >/dev/null || fail '레지스트리를 정지하지 못했다.'
+
+  gc_status=0
+  docker run --rm -v "$data_dir":/var/lib/registry "$gc_image" \
+    garbage-collect /etc/distribution/config.yml || gc_status=$?
+
+  # 수집이 실패해도 레지스트리는 반드시 되살린다. 여기서 멈추면 CI 전체가 멈춘다.
+  docker start "$container" >/dev/null || fail '레지스트리를 다시 띄우지 못했다. 즉시 확인한다.'
+
+  ((gc_status == 0)) || fail "가비지 수집이 실패했다(exit $gc_status). 레지스트리는 다시 떴다."
+  printf '가비지 수집 완료, 레지스트리 재기동됨.\n'
 fi

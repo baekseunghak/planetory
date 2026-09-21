@@ -15,11 +15,21 @@ dependencies = [
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
+[package.optional-dependencies]
+bls = [
+    { name = "astropy" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "numpy", specifier = ">=1.26,<3" }]
+requires-dist = [
+    { name = "astropy", marker = "extra == 'bls'", specifier = ">=6.0,<8" },
+    { name = "numpy", specifier = ">=1.26,<3" },
+]
+provides-extras = ["bls"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "astropy", specifier = ">=6.0,<8" },
     { name = "jsonschema", specifier = ">=4.18,<5" },
     { name = "pytest", specifier = ">=8.0,<10" },
 ]
@@ -503,7 +513,7 @@ name = "tess-bench"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "astro-kernel" },
+    { name = "astro-kernel", extra = ["bls"] },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -518,7 +528,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astro-kernel", editable = "../../libs/astro-kernel" },
+    { name = "astro-kernel", extras = ["bls"], editable = "../../libs/astro-kernel" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "scipy", specifier = ">=1.12,<2" },
     { name = "tess-fixture", editable = "../tess-fixture" },

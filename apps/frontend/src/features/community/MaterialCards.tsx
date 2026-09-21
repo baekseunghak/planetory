@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import {
   SharedHistoryGraph,
   readHistoryGraph,
-  isGraphPending,
   type GraphMode,
+  type HistoryGraphDto,
 } from "../history/HistoryGraph";
 import { endpoint, judgmentLabels, type Author } from "./contracts";
 import {
@@ -19,6 +19,24 @@ import {
 } from "./materialContracts";
 import { useReadModel } from "./useReadModel";
 import "./materials.css";
+
+function fallbackMessage(graph: HistoryGraphDto, mode: GraphMode) {
+  const reason = graph.reproduction.fallbackReason;
+  if (!reason) return null;
+  if (mode === "SUBMITTED") {
+    // 재현 가능성은 현재 판의 참고값이다. 저장된 배열이 대체됐다는 뜻이 아니다.
+    if (reason !== "RETIRED_CANDIDATE") return null;
+    const message = "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다.";
+    return graph.snapshot
+      ? `${message} 아래 배열은 당시 그대로입니다.`
+      : message;
+  }
+  if (reason === "RETIRED_CANDIDATE")
+    return "당시 조합에 은퇴한 후보가 있어 원본 곡선으로 대체했습니다.";
+  if (reason === "RESIDUAL_NOT_AVAILABLE")
+    return "현재 사용할 수 있는 잔차 자료가 없어 현재 원본 곡선으로 표시합니다.";
+  return "현재 자료의 재현 상태를 확인할 수 없습니다.";
+}
 
 export function MaterialCards({
   value,
@@ -45,6 +63,15 @@ export function MaterialCards({
           parentId={parentId}
           author={author}
         />
+      ))}
+      {value.unavailableSources?.map((type, index) => (
+        <div className="material-viewer" key={`unavailable-${index}`}>
+          <h3>
+            공개 출처 ·{" "}
+            {type === "PUBLIC_ANALYSIS" ? "공개 분석" : "공식 스레드"}
+          </h3>
+          <p>공개 취소되었거나 볼 수 없는 출처입니다.</p>
+        </div>
       ))}
       {value.sourceLinks?.map((source) => (
         <SourceCard
@@ -151,7 +178,6 @@ function AttachmentDetail({
 }) {
   const [mode, setMode] = useState<GraphMode>("CURRENT"),
     [snapshotMissing, setSnapshotMissing] = useState(false);
-  const poll = useRef(0);
   const path = `/v1/${parentType === "POST" ? "posts" : "comments"}/${encodeURIComponent(parentId)}/history-attachments/${encodeURIComponent(id)}`;
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -178,9 +204,15 @@ function AttachmentDetail({
         return invalidMaterial();
       materialText(row.submittedAt);
       if (row.judgment !== null) materialText(row.judgment);
+      const graph = graphError
+        ? null
+        : readHistoryGraph(row.graph, id, ticId, mode);
+      // 공개 응답에는 완료된 작업도 jobId를 포함하지 않는다(탐사 8.3).
+      // 개인 History와 공유하는 파서 대신 공개 소비 경계에서 검사한다.
+      if (graph?.curve?.residual?.jobId != null) return invalidMaterial();
       return {
         ...row,
-        graph: graphError ? null : readHistoryGraph(row.graph, id, ticId, mode),
+        graph,
         graphError,
       };
     },
@@ -197,19 +229,6 @@ function AttachmentDetail({
         setSnapshotMissing(true);
     }
   }, [state.data, mode]);
-  useEffect(() => {
-    if (
-      !state.data?.graph ||
-      !isGraphPending(state.data.graph) ||
-      poll.current >= 6
-    )
-      return;
-    const timer = setTimeout(() => {
-      poll.current++;
-      state.reload();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [state.data, state.reload]);
   const denied =
     state.error instanceof ApiError &&
     [401, 403, 404].includes(state.error.status);
@@ -217,6 +236,7 @@ function AttachmentDetail({
   const row: Record<string, unknown> | null = state.data,
     graph = state.data?.graph,
     error = state.error ?? state.data?.graphError;
+  const fallback = graph ? fallbackMessage(graph, mode) : null;
   const label = (v: unknown) =>
     typeof v === "string"
       ? (judgmentLabels[v as keyof typeof judgmentLabels] ?? v)
@@ -227,10 +247,7 @@ function AttachmentDetail({
         <button
           type="button"
           aria-pressed={mode === "CURRENT"}
-          onClick={() => {
-            poll.current = 0;
-            setMode("CURRENT");
-          }}
+          onClick={() => setMode("CURRENT")}
         >
           현재 자료
         </button>
@@ -238,10 +255,7 @@ function AttachmentDetail({
           type="button"
           disabled={snapshotMissing}
           aria-pressed={mode === "SUBMITTED"}
-          onClick={() => {
-            poll.current = 0;
-            setMode("SUBMITTED");
-          }}
+          onClick={() => setMode("SUBMITTED")}
         >
           제출 당시
         </button>
@@ -285,12 +299,7 @@ function AttachmentDetail({
             제출 판 {graph.reproduction.submittedBundleId} · 현재 판{" "}
             {graph.reproduction.currentBundleId}
           </p>
-          {graph.reproduction.fallbackReason && (
-            <p>
-              당시 잔차를 재현할 수 없어 제공 가능한 현재 원본 자료를
-              확인합니다. 사유: {graph.reproduction.fallbackReason}
-            </p>
-          )}
+          {fallback && <p>{fallback}</p>}
           {mode === "SUBMITTED" ? (
             graph.snapshot ? (
               <SharedHistoryGraph graph={graph} mode={mode} readOnly />
@@ -311,24 +320,11 @@ function AttachmentDetail({
             </>
           ) : (
             <p role="status">
-              {isGraphPending(graph)
-                ? "기존 잔차 작업이 진행 중입니다."
-                : graph.curve?.residual?.status === "FAILED"
-                  ? "잔차 처리에 실패했습니다."
-                  : "제공 가능한 현재 그래프가 없습니다."}{" "}
+              {graph.curve?.residual?.status === "FAILED"
+                ? "잔차 처리에 실패했습니다."
+                : "제공 가능한 현재 그래프가 없습니다."}{" "}
               제출 당시 자료도 확인할 수 있습니다.
             </p>
-          )}
-          {isGraphPending(graph) && poll.current >= 6 && (
-            <button
-              type="button"
-              onClick={() => {
-                poll.current = 0;
-                state.reload();
-              }}
-            >
-              작업 상태 다시 확인
-            </button>
           )}
         </>
       )}

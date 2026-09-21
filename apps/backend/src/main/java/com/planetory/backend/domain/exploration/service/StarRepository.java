@@ -279,8 +279,10 @@ public class StarRepository {
      * @param limit         한 건 더 요청해 다음 페이지 유무를 판단한다
      */
     public List<StarViews.StarListItem> findStarList(long targetId, String scope,
+                                                     StarViews.ListFilter filter,
                                                      java.time.OffsetDateTime afterActivity,
                                                      Long afterTicId, int limit) {
+        int[] gradeRange = filter.grade() == null ? null : StarService.gradeRange(filter.grade());
         return jdbc.sql("""
                         WITH base AS (
                             SELECT u.tic_id,
@@ -327,6 +329,10 @@ public class StarRepository {
                         )
                         SELECT * FROM base
                          WHERE (:scope = 'discovered' OR submitted)
+                           AND (CAST(:stage AS TEXT) IS NULL OR progress_stage = :stage)
+                           AND (CAST(:ticId AS BIGINT) IS NULL OR tic_id = :ticId)
+                           AND (CAST(:gradeMin AS INTEGER) IS NULL
+                                OR achievement_count BETWEEN :gradeMin AND :gradeMax)
                            AND (CAST(:afterActivity AS TIMESTAMPTZ) IS NULL
                                 OR (last_activity_at, -tic_id) < (:afterActivity, -CAST(:afterTicId AS BIGINT)))
                          ORDER BY last_activity_at DESC, tic_id
@@ -334,6 +340,10 @@ public class StarRepository {
                         """)
                 .param("targetId", targetId)
                 .param("scope", scope)
+                .param("stage", filter.stage())
+                .param("ticId", filter.ticId() == null ? null : Long.parseLong(filter.ticId()))
+                .param("gradeMin", gradeRange == null ? null : gradeRange[0])
+                .param("gradeMax", gradeRange == null ? null : gradeRange[1])
                 .param("afterActivity", afterActivity)
                 .param("afterTicId", afterTicId)
                 .param("limit", limit)

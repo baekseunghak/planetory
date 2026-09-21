@@ -1,6 +1,10 @@
 import { MaterialPicker } from "./MaterialPicker";
 import { MaterialCards } from "./MaterialCards";
-import { sameMaterials, materialError } from "./materialContracts";
+import {
+  sameMaterials,
+  materialError,
+  changedMaterials,
+} from "./materialContracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api";
@@ -181,9 +185,7 @@ export function Discussion({
           method: "PATCH",
           json: {
             body: edit.body,
-            ...(!sameMaterials(edit.materials, edit.item ?? {})
-              ? edit.materials
-              : {}),
+            ...changedMaterials(edit.item ?? {}, edit.materials),
           },
           signal,
         }),
@@ -474,6 +476,7 @@ export function Discussion({
                             materials: {
                               historyIds: item.historyIds,
                               sourceLinks: item.sourceLinks,
+                              unavailableSources: item.unavailableSources,
                             },
                           });
                           textArea.current?.focus();

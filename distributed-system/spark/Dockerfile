@@ -9,8 +9,9 @@ WORKDIR /opt/planetory
 COPY distributed-system/spark/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY distributed-system/spark/ ./jobs/
+COPY libs/astro-kernel/astro_kernel/ ./astro_kernel/
 RUN chown -R 185:0 /opt/planetory
 
 USER 185
 ENTRYPOINT ["/opt/spark/bin/spark-submit"]
-CMD ["--master", "yarn", "--deploy-mode", "cluster", "/opt/planetory/jobs/sector_pipeline.py"]
+CMD ["--master", "yarn", "--deploy-mode", "cluster", "/opt/planetory/jobs/tess_bronze.py", "--help"]

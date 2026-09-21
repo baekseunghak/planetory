@@ -2,6 +2,7 @@ package com.planetory.backend.domain.post.service;
 
 import com.planetory.backend.domain.exploration.service.HistoryService;
 import com.planetory.backend.domain.exploration.service.HistoryViews;
+import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import tools.jackson.databind.JsonNode;
 public class HistoryAttachmentService {
     private final JdbcClient jdbc;
     private final HistoryService histories;
+    private final StarService stars;
 
     public enum Parent {
         POST("post_history_attachments", "post_id", "p-"),
@@ -109,10 +111,16 @@ public class HistoryAttachmentService {
     public void checkAccess(long member, Parent parent, long parentId, long historyId) {
         if (!jdbc.sql("SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND status='active')")
                 .param(member).query(Boolean.class).single()) throw error(ErrorCode.AUTH_REQUIRED);
-        boolean allowed = jdbc.sql("SELECT EXISTS(SELECT 1" + visibleFrom(parent)
-                + " AND a." + parent.column + "=? AND h.id=?)")
-                .params(parentId, historyId).query(Boolean.class).single();
-        if (!allowed) throw error(ErrorCode.RESOURCE_NOT_FOUND);
+        long tic = jdbc.sql("SELECT p.tic_id" + visibleFrom(parent)
+                + " AND a." + parent.column + "=? AND h.id=?")
+                .params(parentId, historyId).query(Long.class).optional()
+                .orElseThrow(() -> error(ErrorCode.RESOURCE_NOT_FOUND));
+        try {
+            stars.requireOpenStarBoard(tic);
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != ErrorCode.STAR_NOT_PUBLISHED) throw e;
+            throw error(ErrorCode.RESOURCE_NOT_FOUND);
+        }
     }
 
     public HistoryViews.PublicHistory read(long member, Parent parent, long parentId, String historyId,
