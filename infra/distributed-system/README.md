@@ -378,6 +378,14 @@ HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 �
 
 ## Spark 제출
 
+### TESS Raw → Bronze 운영 (`S15P21C206-77`)
+
+[run-tess-bronze.ps1](scripts/run-tess-bronze.ps1)은 Node 1에 불변 코드를 설치하고 HDFS·YARN 사전 점검, Sector 단위 5제품 canary, enabled systemd 전체 실행과 상태 조회를 제공한다. 사전 점검은 NameNode active/standby, 양쪽 safe mode OFF, DataNode·NodeManager 각 5개, HDFS 사용률 75% 미만, 다른 실행 중 YARN application 부재와 Raw marker·manifest를 요구한다.
+
+전체 실행은 Spark 3.5.5 YARN cluster mode에서 executor 5개×2 core, executor 6GiB+overhead 2GiB로 한 Sector씩 직렬 처리한다. Python 3.12 wheel과 `astro_kernel`은 HDFS RF2 archive로 배포하며 Spark HDFS 사용자는 Raw 소유자인 `planetory-admin`으로 고정한다. enabled systemd oneshot은 로컬 세션과 무관하게 실행된다. HDFS·YARN 등 일시적인 인프라 실패는 5분 뒤 자체 재시작하고, 제품 파싱·Raw checksum·marker 불일치 같은 데이터 계약 오류는 종료 코드 65로 구분한다. Sector 변환 오류는 `terminal_failed` 상태도 남기며, unit을 disable해 같은 실패 attempt가 누적되지 않게 한다. 성공해도 다음 부팅의 재실행을 막기 위해 disable한다. 최종 `/lake/bronze/tess/sector=<NNNN>`은 오류 0·제품 수 일치·출력 재읽기·RF2·checksum·FSCK를 통과한 staging `data`만 `Rename.NONE`으로 확정한다. 상세 스키마·오류 코드·명령은 [Spark README](../../distributed-system/spark/README.md)를 따른다.
+
+2026-09-21 run `20260920T230600Z`에서 Sector 1~13 제품 247,824개·관측점 4,666,320,826개·520 parts·오류 0을 확정했다. 실행 시간은 2:14:41이며, 로컬 연결 단절 중에도 서버 실행이 계속됐다. 13개 marker 독립 합산, coverage marker, YARN 잔여 application 0과 전체 Bronze FSCK `HEALTHY`를 확인했다.
+
 Spark는 다음 모드로 제출한다.
 
 ```bash

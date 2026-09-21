@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "../auth/SessionProvider";
+import "./service-presentation.css";
+import { p1Enabled } from "../features/p1";
+import { NotificationBell } from "../features/notifications/Notifications";
 
 export function ServiceLayout() {
   const session = useSession();
@@ -27,7 +30,7 @@ export function ServiceLayout() {
     }
   }, [open]);
   return (
-    <>
+    <div className="service-presentation">
       <a className="skip-link" href="#main-content">
         본문으로 이동
       </a>
@@ -38,16 +41,26 @@ export function ServiceLayout() {
           PLANETORY
         </Link>
         <button
+          className="menu-trigger"
           ref={trigger}
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={open}
         >
+          <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18">
+            <path
+              d="M3 5h14M3 10h14M3 15h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+          </svg>
           메뉴
         </button>
         <Link className="member-link" to="/me">
           {session.member?.nickname}
         </Link>
+        {p1Enabled && <NotificationBell />}
         <button
           type="button"
           className="logout-button"
@@ -101,13 +114,17 @@ export function ServiceLayout() {
             ["/community", "커뮤니티"],
             ["/me", "마이페이지"],
             ["/statistics", "통계"],
-            ["/settings", "설정"],
           ].map(([to, label]) => (
             <NavLink key={to} to={to} onClick={() => setOpen(false)}>
               {label}
             </NavLink>
           ))}
         </nav>
+        <p className="navigation-caption">
+          별빛의 변화를 읽고
+          <br />
+          나의 발견으로 밤하늘을 채워보세요.
+        </p>
         <button
           className="auth-text-action"
           onClick={() => void session.logout()}
@@ -120,12 +137,18 @@ export function ServiceLayout() {
         className={
           location.pathname.startsWith("/analysis/")
             ? "page analysis-page-container"
-            : "page"
+            : location.pathname === "/sky"
+              ? "page sky-page-container"
+              : /^(\/community|\/posts|\/signal-threads|\/stars\/[^/]+\/board|\/me$|\/members\/)/.test(
+                    location.pathname,
+                  )
+                ? "page service-page"
+                : "page"
         }
         tabIndex={-1}
       >
         <Outlet />
       </main>
-    </>
+    </div>
   );
 }

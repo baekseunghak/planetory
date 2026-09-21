@@ -77,6 +77,7 @@ test("creation failure: new unsubmitted tutorial is listed, locked TICs hidden, 
   await page.goto("/sky");
   await expect(listHeading(page)).toBeVisible();
   await expect(rows(page)).toHaveCount(1);
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await page.locator(".quest-tutorial summary").click();
   await expect(page.locator(".quest-tutorial")).toContainText(
     "튜토리얼 2 · 잠김",
@@ -184,6 +185,7 @@ test("list is independent of tile failures; quest failure does not remove star a
     }),
   );
   await list(page);
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await page.locator(".quest-tutorial summary").click();
   await expect(page.locator(".quest-tutorial")).toContainText(
     "튜토리얼을 불러오지 못했습니다",
@@ -287,7 +289,7 @@ test("401 on list clears the private scene", async ({ page }) => {
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).click();
   await expect(page).toHaveURL(/\/login/);
   await expect(rows(page)).toHaveCount(0);
-  await expect(page.locator("canvas")).toHaveCount(0);
+  await expect(page.locator(".galaxy-scene canvas")).toHaveCount(0);
 });
 
 test("list return from analysis keeps view/selection; successful change resets cursor and refreshes rows", async ({

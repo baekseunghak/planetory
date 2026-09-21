@@ -125,6 +125,12 @@ small {
 .status h1 {
   font-size: 28px;
 }
+.desktop-content {
+  display: contents;
+}
+.desktop-content[hidden] {
+  display: none;
+}
 .desktop-notice {
   padding: 15vh 24px;
   max-width: 620px;

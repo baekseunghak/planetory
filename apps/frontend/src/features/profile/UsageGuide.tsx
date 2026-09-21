@@ -105,39 +105,55 @@ export function UsageGuide() {
                 닫기
               </button>
             </header>
-            <h2 id="usage-guide-title">{info[1]}</h2>
-            <p>{info[2]}</p>
-            <p className="guide-caption">
-              조작을 설명하는 예시입니다. 이 안내를 읽어도 탐사 상태는 바뀌지
-              않습니다.
-            </p>
-            {!failed ? (
-              <img
-                key={info[0] + still}
-                src={`/guides/${info[0]}.${still ? "png" : "gif"}`}
-                alt={`${info[1]} 조작 예시`}
-                width={960}
-                height={540}
-                onError={() => setFailed(true)}
-              />
-            ) : (
-              <p className="guide-image-error" role="status">
-                이미지를 불러오지 못했습니다. 위 설명과 단계 이동은 계속 이용할
-                수 있습니다.
-              </p>
-            )}
-            {!reduced && (
-              <button
-                type="button"
-                aria-pressed={paused}
-                onClick={() => {
-                  setPaused(!paused);
-                  setFailed(false);
-                }}
-              >
-                {paused ? "움직임 재생" : "움직임 멈춤"}
-              </button>
-            )}
+            <div className="guide-layout">
+              <nav className="guide-steps" aria-label="사용법 안내 단계">
+                {guideSteps.map((item, index) => (
+                  <button
+                    key={item[0]}
+                    aria-current={step === index ? "step" : undefined}
+                    onClick={() => move(index)}
+                  >
+                    <span>0{index + 1}</span>
+                    {item[1]}
+                  </button>
+                ))}
+              </nav>
+              <section className="guide-current">
+                <h2 id="usage-guide-title">{info[1]}</h2>
+                <p>{info[2]}</p>
+                <p className="guide-caption">
+                  조작을 설명하는 예시입니다. 이 안내를 읽어도 탐사 상태는
+                  바뀌지 않습니다.
+                </p>
+                {!failed ? (
+                  <img
+                    key={info[0] + still}
+                    src={`/guides/${info[0]}.${still ? "png" : "gif"}`}
+                    alt={`${info[1]} 조작 예시`}
+                    width={960}
+                    height={540}
+                    onError={() => setFailed(true)}
+                  />
+                ) : (
+                  <p className="guide-image-error" role="status">
+                    이미지를 불러오지 못했습니다. 위 설명과 단계 이동은 계속
+                    이용할 수 있습니다.
+                  </p>
+                )}
+                {!reduced && (
+                  <button
+                    type="button"
+                    aria-pressed={paused}
+                    onClick={() => {
+                      setPaused(!paused);
+                      setFailed(false);
+                    }}
+                  >
+                    {paused ? "움직임 재생" : "움직임 멈춤"}
+                  </button>
+                )}
+              </section>
+            </div>
             <footer>
               <button
                 type="button"

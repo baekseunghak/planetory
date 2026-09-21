@@ -156,7 +156,7 @@ W20-2 핫 토픽은 hotTopics 슬롯에서 S18을 조회하고 기존 공식 신
 
 ## W14 공개 History 그래프 연결
 
-App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).
+App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한 재확인은 W14가 관리한다. 공개 첨부는 작업 폴링을 하지 않으며 non-null jobId 응답을 공개 소비 경계에서 거절한다. 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 190의 SharedHistoryCurve는 main.tsx에 연결돼 있고, 슬롯 미등록 때만 연결 준비 상태를 표시한다. 실제 서버·부모 권한 인수는 별도다. 모드별 대체 안내와 검증 범위는 [213 구현·인수](ticket-213-readiness.md)를 따른다.
 
 ## W16 마이페이지 내부 슬롯
 

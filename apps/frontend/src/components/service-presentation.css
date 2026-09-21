@@ -1,0 +1,789 @@
+/* The approved prototype's composition, scoped away from analysis and its tokens. */
+.service-presentation {
+  min-height: 100dvh;
+  background: radial-gradient(
+    ellipse at 82% 18%,
+    #0a1722 0,
+    #05090e 38%,
+    #020507 78%
+  );
+}
+.service-presentation > .explorer-header:not(.analysis-service-header) {
+  position: relative;
+  z-index: 20;
+  background: #070a0f;
+  border-color: #ffffff18;
+}
+.service-presentation .menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.service-presentation .navigation {
+  width: 304px;
+  padding: 28px;
+  background: #090d13;
+}
+.service-presentation .navigation h2 {
+  font-size: 14px;
+  font-weight: 400;
+  color: #929eae;
+}
+.service-presentation .navigation-head button {
+  border: 0;
+  font-size: 13px;
+}
+.service-presentation .navigation nav a {
+  padding: 20px 0;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+}
+.service-presentation .navigation nav a[aria-current] {
+  color: #bce6ff;
+}
+.service-presentation .navigation-caption {
+  margin: 48px 0 24px;
+  font-size: 12px;
+  line-height: 2;
+  color: #929eae;
+}
+.service-presentation .service-page {
+  max-width: 1500px;
+  padding: 26px clamp(28px, 4vw, 64px) 96px;
+  font-size: 14px;
+}
+.service-presentation .service-page::before {
+  content: "";
+  position: fixed;
+  inset: 64px 0 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 78% 30%, #b9dfff66 0 1px, transparent 1.6px),
+    radial-gradient(circle at 91% 70%, #fff 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 14% 83%, #81c4ff55 0 1px, transparent 1.5px);
+  background-size:
+    157px 137px,
+    211px 181px,
+    251px 237px;
+  opacity: 0.32;
+}
+.service-presentation .service-page > * {
+  position: relative;
+}
+.service-presentation [hidden] {
+  display: none;
+}
+
+/* The map occupies the viewport. Information floats around its perimeter. */
+.service-presentation .sky-page-container {
+  max-width: none;
+  padding: 0;
+  height: calc(100dvh - 64px);
+  min-height: 0;
+}
+.service-presentation .sky-page {
+  position: relative;
+  height: 100%;
+  background: #000104;
+  isolation: isolate;
+}
+.service-presentation .sky-heading {
+  position: absolute;
+  top: 25px;
+  left: 28px;
+  z-index: 3;
+  pointer-events: none;
+}
+.service-presentation .sky-heading h1 {
+  font-size: 21px;
+  margin: 8px 0 6px;
+  font-weight: 500;
+}
+.service-presentation .sky-heading p {
+  margin: 0;
+  font-size: 13px;
+  color: #b6beca;
+}
+.service-presentation .sky-heading .eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #8e9baa;
+}
+.service-presentation .sky-heading strong {
+  font-weight: 500;
+}
+.service-presentation .sky-page:has(.has-detail) .sky-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.service-presentation .personal-galaxy {
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+.service-presentation .galaxy-scene {
+  border: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.service-presentation .personal-galaxy .galaxy-scene canvas {
+  height: 100%;
+  min-height: 0;
+}
+.service-presentation .sky-data-status {
+  position: absolute;
+  z-index: 5;
+  top: 122px;
+  left: 28px;
+  max-width: min(500px, calc(100% - 400px));
+  pointer-events: none;
+}
+.service-presentation .sky-data-status > :not([aria-hidden="true"]) {
+  pointer-events: auto;
+  background: #060a10ed;
+  padding: 12px;
+  font-size: 13px;
+}
+.service-presentation .sky-data-status > [aria-hidden="true"] {
+  display: none;
+}
+.service-presentation .sky-data-status .status {
+  padding: 16px;
+}
+.service-presentation .sky-page:has(.has-detail) .sky-data-status {
+  left: 358px;
+  top: 88px;
+}
+.service-presentation .galaxy-input-toolbar {
+  top: auto;
+  right: 26px;
+  bottom: 20px;
+  background: #000104c4;
+  gap: 8px;
+}
+.service-presentation .galaxy-input-toolbar button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+  border-color: #7a879640;
+  font-size: 12px;
+}
+.service-presentation
+  .galaxy-input-toolbar
+  button:is([aria-label="확대"], [aria-label="축소"]) {
+  border-radius: 50%;
+}
+.service-presentation .galaxy-visible-count {
+  top: auto;
+  right: 28px;
+  bottom: 80px;
+  font-size: 11px;
+  color: #929eae;
+}
+.service-presentation .galaxy-legend {
+  left: 28px;
+  bottom: 59px;
+  max-width: 370px;
+  font-size: 12px;
+}
+.service-presentation .galaxy-legend[open] {
+  background: #090d13f7;
+  border: 1px solid #ffffff19;
+  padding: 14px 20px;
+  border-radius: 3px;
+}
+.service-presentation .sky-view-switch {
+  position: absolute;
+  left: 28px;
+  bottom: 14px;
+  z-index: 4;
+  margin: 0;
+  max-width: calc(100% - 56px);
+  flex-wrap: wrap;
+}
+.service-presentation .sky-page:has(.shows-list) .sky-data-status {
+  display: none;
+}
+.service-presentation .sky-page:has(.has-detail) .sky-view-switch {
+  left: 358px;
+  max-width: calc(100% - 386px);
+}
+.service-presentation .guide-steps button > span {
+  display: inline-block;
+  margin-right: 10px;
+}
+.service-presentation .sky-view-switch button {
+  border: 0;
+  font-size: 11px;
+  padding: 10px 0;
+  color: #9ca9b9;
+}
+.service-presentation .galaxy-selection {
+  bottom: 140px;
+}
+.service-presentation .quest-layer {
+  position: absolute;
+  top: 23px;
+  right: 28px;
+  z-index: 8;
+}
+.service-presentation .quest-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  font-size: 13px;
+  background: #060a10b8;
+  border: 0;
+}
+.service-presentation .quest-toggle > span:first-child {
+  font-size: 22px;
+  color: #b9d6eb;
+}
+.service-presentation .quest-panel {
+  position: absolute;
+  top: 55px;
+  right: 0;
+  width: 330px;
+  max-height: calc(100dvh - 200px);
+  margin: 0;
+  padding: 18px 22px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #090d13fa;
+  border: 1px solid #ffffff19;
+  border-radius: 3px;
+  box-shadow: 0 18px 70px #0008;
+}
+.service-presentation .quest-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ffffff20;
+  padding-bottom: 12px;
+}
+.service-presentation .quest-panel-heading h2 {
+  font-size: 16px;
+}
+.service-presentation .quest-panel-heading button {
+  border: 0;
+  padding: 8px;
+  font-size: 12px;
+}
+.service-presentation .quest-sections {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.service-presentation .quest-sections > details {
+  border: 0;
+  border-bottom: 1px solid #ffffff20;
+  padding: 10px 0;
+}
+.service-presentation .quest-steps button {
+  padding-inline: 0;
+}
+.service-presentation .quest-round-notice {
+  position: absolute;
+  right: 0;
+  top: 55px;
+  width: 330px;
+  background: #090d13fa;
+  border: 1px solid #ffffff20;
+  padding: 16px;
+}
+.service-presentation
+  .quest-layer:has(.quest-toggle[aria-expanded="true"])
+  .quest-round-notice {
+  position: relative;
+  top: auto;
+  margin-top: 10px;
+}
+.service-presentation
+  .quest-layer:has(.quest-round-notice):has(.quest-toggle[aria-expanded="true"])
+  .quest-panel {
+  position: relative;
+  top: auto;
+  margin-top: 10px;
+  max-height: calc(100dvh - 390px);
+}
+.service-presentation .sky-renderer-pending {
+  padding: 150px 28px 28px;
+}
+.service-presentation .personal-galaxy .star-detail {
+  max-height: 100%;
+  padding: 22px 28px 84px;
+  background: #000104;
+  border: 0;
+}
+.service-presentation .detail-return {
+  font-size: 12px;
+  background: #000104;
+  color: #9faab9;
+  box-shadow: 0 -28px #000104;
+}
+.service-presentation .star-detail h2 {
+  margin-top: 25px;
+  font-size: 27px;
+  font-weight: 450;
+  letter-spacing: -0.045em;
+}
+.service-presentation .star-detail h3 {
+  font-size: 13px;
+  color: #c3ccd7;
+}
+.service-presentation .detail-actions .detail-primary {
+  background: #dceaf3;
+  color: #10212d;
+  border-radius: 2px;
+}
+.service-presentation .planet-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+.service-presentation .planet-list button {
+  border: 0;
+  border-bottom: 1px solid #ffffff24;
+  padding: 10px 0;
+  border-radius: 0;
+}
+.service-presentation .planet-list [aria-pressed="true"] {
+  background: transparent;
+  color: #bce6ff;
+  border-bottom-color: #bce6ff;
+}
+.service-presentation .discovered-stars {
+  max-height: 100%;
+  min-height: 0;
+  padding: 145px 32px 100px;
+}
+.service-presentation .has-detail .discovered-stars {
+  padding-top: 85px;
+}
+.service-presentation .shows-list:not(.has-detail) {
+  padding-top: 0;
+}
+
+/* Quiet, editorial pages share the prototype's type scale and open columns. */
+.service-presentation .community-page {
+  max-width: none;
+}
+.service-presentation .community-heading {
+  min-height: 92px;
+  padding: 4px 0 22px;
+  margin-bottom: 12px;
+}
+.service-presentation .community-heading h1 {
+  font-size: clamp(28px, 2.3vw, 36px);
+  font-weight: 470;
+  letter-spacing: -0.045em;
+  margin: 8px 0 10px;
+}
+.service-presentation .community-page:has(> .community-columns) {
+  position: relative;
+}
+.service-presentation
+  .community-page:has(> .community-columns)
+  > .post-actions {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  margin: 0;
+}
+.service-presentation
+  .community-page:has(> .community-columns)
+  > .community-heading {
+  padding-right: 170px;
+}
+.service-presentation
+  .community-page:has(> .community-columns)
+  > .post-actions
+  a {
+  padding: 12px 20px;
+  border: 1px solid #ffffff30;
+  text-decoration: none;
+}
+.service-presentation .community-heading p {
+  font-size: 14px;
+  color: #929eae;
+}
+.service-presentation .community-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 29%);
+  gap: clamp(36px, 5vw, 78px);
+}
+.service-presentation .community-main {
+  min-width: 0;
+}
+.service-presentation .community-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 42px;
+}
+.service-presentation .community-detail-main {
+  min-width: 0;
+}
+.service-presentation .community-detail > .community-aside {
+  align-self: start;
+  position: sticky;
+  top: 28px;
+}
+.service-presentation .community-detail .community-heading {
+  border-bottom: 1px solid #ffffff20;
+}
+.service-presentation .community-detail .community-heading h1 {
+  font-size: clamp(28px, 3vw, 43px);
+  line-height: 1.3;
+}
+.service-presentation .community-post-body {
+  min-height: 230px;
+  line-height: 2.05;
+}
+.service-presentation .post-editor {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.service-presentation .post-editor :is(input, textarea, select),
+.service-presentation .comment-editor textarea {
+  background: #03070b;
+  border-color: #ffffff30;
+  border-radius: 2px;
+}
+.service-presentation .post-editor label {
+  font-size: 13px;
+}
+.service-presentation .post-editor textarea {
+  min-height: 280px;
+}
+.service-presentation .post-dialog {
+  background: #090f16;
+  border-color: #ffffff30;
+  border-radius: 3px;
+}
+.service-presentation .community-aside {
+  border-left: 1px solid #ffffff18;
+  padding-left: clamp(24px, 3vw, 42px);
+}
+.service-presentation .community-aside h2 {
+  font-size: 17px;
+}
+.service-presentation .community-aside h3 {
+  font-size: 21px;
+  letter-spacing: -0.035em;
+  font-weight: 450;
+}
+.service-presentation .hot-topic-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.service-presentation .hot-topic-preview > header a {
+  font-size: 11px;
+  text-decoration: none;
+  color: #929eae;
+}
+.service-presentation .hot-topic-preview ol {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 34px;
+}
+.service-presentation .hot-topic-preview li {
+  border-bottom: 1px solid #ffffff18;
+  padding: 20px 0;
+}
+.service-presentation .hot-topic-preview li a {
+  text-decoration: none;
+  display: block;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.service-presentation .hot-topic-preview li small {
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+.service-presentation .community-feed h2 {
+  font-size: 20px;
+  line-height: 1.6;
+  font-weight: 470;
+  margin: 6px 0;
+}
+.service-presentation .community-feed > li {
+  padding: 14px 0;
+}
+.service-presentation .community-row-meta {
+  font-size: 13px;
+  color: #929eae;
+}
+.service-presentation .community-search {
+  padding-top: 20px;
+}
+.service-presentation .community-search :is(input, select) {
+  background: #060c12;
+  border-color: #ffffff24;
+  border-radius: 2px;
+}
+.service-presentation .community-search-help {
+  font-size: 11px;
+}
+.service-presentation .community-post-body {
+  max-width: 900px;
+  padding-block: 24px 48px;
+}
+.service-presentation .community-discussion {
+  max-width: 900px;
+}
+.service-presentation .my-sky-preview {
+  min-width: 0;
+  position: relative;
+  padding: 24px 0;
+  border-top: 1px solid #ffffff18;
+}
+.service-presentation .my-sky-preview h3 {
+  margin: 12px 0 0;
+}
+.service-presentation .my-sky-preview .eyebrow {
+  font-size: 10px;
+  color: #8392a3;
+}
+.galaxy-artwork {
+  display: block;
+  width: 100%;
+  height: 250px;
+}
+.service-presentation .my-sky-preview > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.service-presentation .my-sky-preview > footer p {
+  font-size: 12px;
+}
+.service-presentation .my-sky-preview > footer a {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #ffffff30;
+  border-radius: 50%;
+  text-decoration: none;
+}
+.service-presentation .my-sky-preview > p {
+  font-size: 12px;
+}
+.service-presentation .profile-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.service-presentation .profile-heading {
+  padding: 4px 0 22px;
+  min-height: 92px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #ffffff20;
+}
+.service-presentation .profile-heading .eyebrow {
+  margin: 0 0 4px;
+}
+.service-presentation .profile-heading h1 {
+  font-size: clamp(28px, 2.3vw, 36px);
+  font-weight: 470;
+  margin: 0 0 10px;
+}
+.service-presentation .profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 30px;
+}
+.service-presentation .profile-identity h2 {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 500;
+}
+.service-presentation .profile-identity p {
+  margin: 3px 0 0;
+}
+.service-presentation .profile-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  color: #eef7ff;
+  background: linear-gradient(135deg, #91b3e1, #263c5b);
+  font-size: 19px;
+}
+.service-presentation .profile-actions {
+  margin: 0 0 0 auto;
+  gap: 20px;
+}
+.service-presentation .profile-actions > button {
+  font-size: 13px;
+  border: 0;
+  border-bottom: 1px solid #ffffff35;
+  padding-inline: 0;
+  border-radius: 0;
+}
+.service-presentation .profile-tabs {
+  margin: 24px 0 0;
+  border-color: #ffffff20;
+  gap: 32px;
+}
+.service-presentation .profile-tabs button {
+  font-size: 14px;
+}
+.service-presentation .profile-summary {
+  gap: 0;
+  padding: 28px 0;
+  margin: 0;
+  border-bottom: 1px solid #ffffff18;
+}
+.service-presentation .profile-summary > div {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 0 36px;
+  border-left: 1px solid #ffffff20;
+}
+.service-presentation .profile-summary > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.service-presentation .profile-summary dt {
+  font-size: 13px;
+}
+.service-presentation .profile-summary dd {
+  margin: 0;
+  font-size: 24px;
+}
+.service-presentation .profile-summary small {
+  display: inline;
+  font-size: 12px;
+}
+.service-presentation .profile-collection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(250px, 1fr);
+  gap: 64px;
+  padding: 0 0 36px;
+}
+.service-presentation .profile-collection.public-profile {
+  display: block;
+}
+.service-presentation .profile-collection .my-sky-preview {
+  border-top: 0;
+}
+.service-presentation .profile-collection .my-sky-preview h3 {
+  font-size: 24px;
+  font-weight: 450;
+}
+.service-presentation .profile-collection .galaxy-artwork {
+  height: 230px;
+}
+.service-presentation .profile-grades {
+  border: 0;
+  padding: 24px 0;
+}
+.service-presentation .profile-grades h2 {
+  font-size: 24px;
+  font-weight: 450;
+}
+.service-presentation .profile-grades p {
+  font-size: 12px;
+}
+.service-presentation .profile-grades dl {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+.service-presentation .profile-grades dt {
+  color: #aec4d5;
+  font-size: 21px;
+}
+.service-presentation .profile-grades dd {
+  font-size: 13px;
+  color: #929eae;
+}
+.service-presentation .profile-meta {
+  border-color: #ffffff18;
+  font-size: 12px;
+  padding: 24px 0;
+}
+.service-presentation .usage-guide {
+  width: min(1040px, 90vw);
+  border-radius: 3px;
+  background: #070c13;
+  padding: 28px;
+}
+.service-presentation .usage-guide > header {
+  border-bottom: 1px solid #ffffff20;
+  padding-bottom: 18px;
+}
+.service-presentation .guide-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  padding-block: 24px;
+}
+.service-presentation .guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-right: 1px solid #ffffff20;
+  padding-right: 24px;
+}
+.service-presentation .guide-steps button {
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 12px 8px;
+  color: #929eae;
+}
+.service-presentation .guide-steps button[aria-current] {
+  color: #c5e8ff;
+  background: #7ab8df12;
+}
+.service-presentation .guide-current {
+  min-width: 0;
+}
+.service-presentation .guide-current h2 {
+  font-size: 24px;
+}
+.service-presentation .usage-guide img {
+  border-radius: 2px;
+  max-height: 35vh;
+}
+@media (max-width: 1100px) {
+  .service-presentation .community-columns {
+    gap: 30px;
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  .service-presentation .profile-collection {
+    gap: 28px;
+  }
+  .service-presentation .profile-summary > div {
+    padding-inline: 24px;
+    gap: 14px;
+  }
+  .service-presentation .personal-galaxy.has-detail {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .service-presentation .personal-galaxy .star-detail {
+    padding-inline: 22px;
+  }
+  .service-presentation .sky-page:has(.has-detail) .sky-data-status {
+    left: 328px;
+  }
+  .service-presentation .sky-page:has(.has-detail) .sky-view-switch {
+    left: 328px;
+    max-width: calc(100% - 356px);
+  }
+}
