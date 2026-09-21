@@ -45,13 +45,27 @@ scan_image() {
   docker history --no-trunc --format '{{.CreatedBy}}' "$image" 2>/dev/null |
     grep -Ei "$RISKY_HISTORY" >"$work/hist" || true
 
-  # 3) 레이어가 담은 파일 이름
-  cid="$(docker create "$image" true 2>/dev/null)" || fail "컨테이너를 만들 수 없다: $image"
-  docker export "$cid" 2>/dev/null | tar -t 2>/dev/null |
-    tee "$work/all" >/dev/null || true
-  { grep -Ei "$RISKY_ALWAYS" "$work/all" || true; 
-    grep -Ei "$RISKY_CERT" "$work/all" | grep -Ev "$CERT_ALLOW" || true; } | head -20 >"$work/files"
-  docker rm -f "$cid" >/dev/null 2>&1 || true
+  # 3) 각 레이어가 담은 파일 이름
+  #
+  # `docker export`는 평탄화된 최종 파일시스템만 준다. 한 레이어에서 비밀을
+  # 넣고 다음 레이어에서 지우면 거기엔 안 보이지만 앞 레이어에는 그대로 남아
+  # 있고, 이미지를 받는 쪽은 그 레이어까지 전부 받는다. 초판이 export를 써서
+  # 바로 이 경우를 놓쳤다. 그래서 레이어 아카이브를 하나씩 본다.
+  rm -rf "$work/img"
+  mkdir -p "$work/img"
+  docker save "$image" 2>/dev/null | tar -x -C "$work/img" 2>/dev/null ||
+    fail "이미지를 저장할 수 없다: $image"
+
+  : >"$work/all"
+  find "$work/img" -type f -print0 |
+    while IFS= read -r -d '' blob; do
+      tar -tf "$blob" 2>/dev/null >>"$work/all" || true
+    done
+
+  { grep -Ei "$RISKY_ALWAYS" "$work/all" || true
+    grep -Ei "$RISKY_CERT" "$work/all" | grep -Ev "$CERT_ALLOW" || true; } |
+    sort -u | head -20 >"$work/files"
+  rm -rf "$work/img"
 
   n=0
   while IFS= read -r line; do
@@ -80,7 +94,7 @@ scan_image() {
 
 self_test() {
   st="$(mktemp -d)"
-  trap 'rm -rf -- "$work" "$st"; docker rmi -f planetory-scan-selftest:dirty planetory-scan-selftest:clean >/dev/null 2>&1 || true' EXIT
+  trap 'rm -rf -- "$work" "$st"; docker rmi -f planetory-scan-selftest:dirty planetory-scan-selftest:clean planetory-scan-selftest:deleted >/dev/null 2>&1 || true' EXIT
 
   printf 'DB_PASSWORD=hunter2\n' >"$st/.env"
   cat >"$st/Dockerfile.dirty" <<'DF'
@@ -93,8 +107,16 @@ FROM alpine:3.20
 ENV SPRING_PROFILES_ACTIVE=prod
 DF
 
+  # 넣었다가 다음 레이어에서 지운 경우. 최종 파일시스템에는 없지만 레이어에는 남는다.
+  cat >"$st/Dockerfile.deleted" <<'DF'
+FROM alpine:3.20
+COPY .env /app/.env
+RUN rm -f /app/.env
+DF
+
   docker build -q -f "$st/Dockerfile.dirty" -t planetory-scan-selftest:dirty "$st" >/dev/null
   docker build -q -f "$st/Dockerfile.clean" -t planetory-scan-selftest:clean "$st" >/dev/null
+  docker build -q -f "$st/Dockerfile.deleted" -t planetory-scan-selftest:deleted "$st" >/dev/null
 
   if "$0" planetory-scan-selftest:clean >/dev/null 2>&1; then
     printf '  깨끗한 이미지: 오탐 없음\n'
@@ -112,7 +134,15 @@ DF
   printf '%s' "$out" | grep -q 'FILE .*\.env' || { printf 'FAIL: 파일 탐지 실패\n%s\n' "$out"; exit 1; }
   printf '%s' "$out" | grep -q 'hunter2' && { printf 'FAIL: 비밀 원문이 리포트에 노출됐다\n'; exit 1; }
   printf '  오염된 이미지: ENV와 파일 모두 탐지, 원문 미노출\n'
-  printf 'PASS: 탐지·오탐 없음·마스킹 확인\n'
+  # 회귀 방지의 핵심. export만 보던 초판은 여기서 "발견 없음"을 냈다.
+  out2="$("$0" planetory-scan-selftest:deleted 2>&1)" && {
+    printf 'FAIL: 다음 레이어에서 지운 비밀을 놓쳤다. 레이어별 검사가 동작하지 않는다\n%s\n' "$out2"
+    exit 1
+  }
+  printf '%s' "$out2" | grep -q 'FILE .*\.env' || { printf 'FAIL: 삭제된 .env를 레이어에서 찾지 못했다\n%s\n' "$out2"; exit 1; }
+  printf '  지워진 레이어의 비밀: 탐지\n'
+
+  printf 'PASS: 탐지·오탐 없음·마스킹·삭제된 레이어까지 확인\n'
 }
 
 (($#)) || fail '사용법: image-secret-scan.sh <이미지 참조> [...] | --self-test'

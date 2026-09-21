@@ -99,11 +99,16 @@ check_cert() {
   read_state registry-cert
   _before=$(cksum "$CERT_DIR/tls.crt" 2>/dev/null | awk '{print $1}')
 
-  if [ -n "${REGISTRY_CERT_STUB:-}" ]; then
-    _ok=$([ "$REGISTRY_CERT_STUB" = "ok" ] && echo 0 || echo 1)
+  # 반드시 if로 감싼다. set -e 아래에서 그냥 실행하면 실패한 순간 스크립트가
+  # 끝나 아래 알림에 도달하지 못한다. 갱신 실패를 알리려고 만든 점검이
+  # 갱신 실패 때문에 침묵하는 형태가 된다.
+  # 명령을 주입 가능하게 둬서 테스트가 스텁이 아니라 실제 실패 경로를 타게 한다.
+  if "${REGISTRY_CERT_CMD:-tailscale}" cert \
+       --cert-file "$CERT_DIR/tls.crt" --key-file "$CERT_DIR/tls.key" \
+       "$REGISTRY_CERT_NAME" >/dev/null 2>&1; then
+    _ok=0
   else
-    tailscale cert --cert-file "$CERT_DIR/tls.crt" --key-file "$CERT_DIR/tls.key" "$REGISTRY_CERT_NAME" >/dev/null 2>&1
-    _ok=$?
+    _ok=1
   fi
 
   if [ "$_ok" -ne 0 ]; then
