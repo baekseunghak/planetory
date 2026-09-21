@@ -55,6 +55,8 @@ EC2-B에 **서비스 역할을 두지 않는다**([시스템 아키텍처](../..
 | `notify.sh` | 알림 공용 함수. 심각도별 이모지와 Webhook 전송. 실행 파일이 아니라 점(`.`)으로 읽어 쓴다 |
 | `uptime-watch.sh` | 공개 URL 관찰 |
 | `registry-watch.sh` | 레지스트리 무응답·디스크·인증서 갱신. `health`·`daily`·`disk`·`cert` 모드 |
+| `image-secret-scan.sh` | 이미지에 비밀값이 섞였는지 검사 |
+| `registry-prune.sh` | 오래된 commit SHA 태그 정리와 가비지 수집 |
 
 외부 관찰은 **사람에게 알리기만 한다.** 진입 전환이나 DNS 편집에 개입하지 않으며, 그렇게 쓰는 것은 기각된 안이다(진입·장애 전환 경계 문서의 기각 목록).
 
@@ -64,12 +66,45 @@ EC2-A와 **같은 가용 영역**에서 돌기 때문에 인스턴스·애플리
 
 레지스트리 TLS 인증서는 `tailscale cert`로 받는다. 만료되면 **빌드와 배포가 함께 멈춘다.** `tailscale cert`는 갱신 시점이 아니면 같은 인증서를 그대로 쓰므로 매일 돌려도 안전하다. 파일이 실제로 바뀌었을 때만 레지스트리를 재시작한다. 레지스트리는 기동할 때만 인증서를 읽기 때문이다. 갱신에 **실패했을 때만** 알린다.
 
+## 이미지 비밀값 점검
+
+`image-secret-scan.sh`가 이미지의 환경변수, 빌드 히스토리, 레이어가 담은 파일 이름을 본다. 레이어는 지워도 남는다. 한 레이어에서 비밀 파일을 넣고 다음 레이어에서 지워도 앞 레이어에 그대로 있으므로 최종 파일 목록만 봐서는 놓친다.
+
+```bash
+image-secret-scan.sh <이미지 참조> [...]
+image-secret-scan.sh --self-test
+```
+
+찾은 값은 앞 4글자만 남기고 가려서 출력한다. 리포트 자체가 비밀을 흘리면 안 된다. 종료 코드는 0이 발견 없음, 1이 발견이다.
+
+검출은 두 갈래다. `.env`·`.ssh/`·`.aws/`·`id_rsa`·`credentials`처럼 **어디에 있든 우리 비밀인 것**은 예외 없이 잡는다. 인증서와 키 스토어는 베이스 이미지와 타사 패키지가 정상적으로 잔뜩 넣으므로 시스템 CA 경로와 `site-packages`·`node_modules` 같은 벤더 경로는 건너뛴다. 이 구분이 없으면 경보가 무뎌져 진짜를 놓친다.
+
+## SHA 태그 정리
+
+`registry-prune.sh`가 저장소마다 최신 N개만 남기고 오래된 commit SHA 태그를 지운다.
+
+```bash
+registry-prune.sh --registry https://<호스트>:5000 --keep 10            # 모의 실행
+registry-prune.sh --registry https://<호스트>:5000 --keep 10 --apply    # 실제 삭제
+registry-prune.sh --registry https://<호스트>:5000 --keep 10 --apply --gc  # 용량 회수까지
+```
+
+기본은 모의 실행이다. `--apply` 없이는 아무것도 지우지 않는다.
+
+지켜야 할 것이 셋 있다.
+
+- **commit SHA 형식(40자리 16진수) 태그만 후보다.** `latest`처럼 사람이 붙인 이름은 형식이 달라 손대지 않는다.
+- **삭제는 digest 단위다.** 같은 digest를 가리키는 태그는 함께 사라진다. 내용이 같은 커밋은 digest도 같으므로, 남길 태그와 digest가 겹치는 후보는 건너뛴다. 이 보호가 없으면 오래된 태그를 지우다가 최신 태그와 `latest`까지 날아간다.
+- **배포 중인 이미지는 `--in-use`로 보호한다.** 각 노드 `.env`에 적힌 SHA를 넘긴다. 지우면 롤백이 막힌다.
+
+매니페스트만 지우면 용량은 줄지 않는다. `--gc`가 레지스트리를 잠시 읽기 전용으로 두고 블롭을 회수한 뒤 재시작한다. 그동안 push가 거부되므로 빌드가 없는 시간에 돌린다.
+
 ## 설치
 
 ```bash
 sudo install -d -m 755 /opt/planetory /var/lib/planetory-watch
 sudo install -d -m 750 /etc/planetory
-sudo install -m 755 notify.sh uptime-watch.sh registry-watch.sh /opt/planetory/
+sudo install -m 755 notify.sh uptime-watch.sh registry-watch.sh   image-secret-scan.sh registry-prune.sh /opt/planetory/
 ```
 
 Webhook URL은 자격 증명이므로 저장소에 넣지 않고 서버 파일에만 둔다. 환경변수로 두지 않는 이유는 cron 파일이 644라 평문으로 남고 프로세스 환경에서도 보이기 때문이다.
@@ -114,6 +149,7 @@ EOF
 ```bash
 sh uptime-watch-test.sh
 sh registry-watch-test.sh
+image-secret-scan.sh --self-test   # docker가 필요하다
 ```
 
 프로브 결과·디스크 사용률·인증서 갱신 결과를 주입해 임계 도달 시 알림 1건, 중복 억제, 복구 알림, 정상 시 무알림을 확인한다. 네트워크·Webhook·docker를 타지 않는다.

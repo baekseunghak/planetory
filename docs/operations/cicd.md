@@ -68,9 +68,13 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 | 전송 | `tailscale cert`로 발급한 MagicDNS 이름의 정식 인증서로 HTTPS 서빙 |
 | 인증 | 없음. tailnet 접근 자체가 경계다 |
 | 저장 경로 | 빌드 노드의 별도 디렉터리 |
-| 삭제 | `REGISTRY_STORAGE_DELETE_ENABLED=true`. 태그 정리는 수동이다 |
+| 삭제 | `REGISTRY_STORAGE_DELETE_ENABLED=true`. 태그 정리는 `infra/service/ec2-b/registry-prune.sh`를 따른다 |
 
 정식 인증서를 쓰므로 배포 노드에 `insecure-registries` 설정이 필요 없다. 인증서는 만료 전에 `tailscale cert`를 다시 실행하고 레지스트리 컨테이너를 재시작해 갱신한다. 갱신을 놓치면 빌드와 배포가 함께 멈춘다.
+
+이미지 태그는 커밋 SHA다. 커밋마다 쌓이므로 저장소별로 최신 10개만 남기고 정리한다. 배포 중인 SHA는 `--in-use`로 보호하고, 매니페스트 삭제만으로는 용량이 줄지 않으므로 빌드가 없는 시간에 가비지 수집을 함께 돌린다. 절차와 주의점은 [EC2-B 설정](../../infra/service/ec2-b/README.md)을 따른다.
+
+빌드한 이미지에 비밀값이 섞였는지는 같은 문서의 `image-secret-scan.sh`로 검사한다. 레지스트리가 tailnet 내부 전용이라 외부 노출 위험은 낮지만, 이미지에 박힌 비밀은 레이어에 영구히 남으므로 공개 범위와 무관하게 점검한다.
 
 레지스트리와 빌더를 같은 노드에 둬서 push가 tailnet을 타지 않는다. tailnet ACL이 태그 사이 통신을 전부 허용하지는 않으므로, 다른 노드를 빌더로 쓰려면 그 태그에서 레지스트리 포트가 열려 있는지 먼저 확인한다.
 
@@ -91,7 +95,6 @@ Runner는 두 대이고 job은 태그로 나눈다.
 
 ## 도입 전 확인
 
-- `lab.ssafy.com` Runner가 Docker-in-Docker와 Buildx를 실행할 수 있는지
 - 기준 브랜치가 `main`인지 `master`인지
 - Spark·Airflow 기반 이미지의 amd64 지원
 - 각 서버의 Docker Compose, `.env`, 볼륨 경로와 방화벽
