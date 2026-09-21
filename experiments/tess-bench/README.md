@@ -1,5 +1,13 @@
 # TESS 처리 벤치마크
 
+## 112 고조파·후보 동일성 실험
+
+111 확정 ZIP 감사, 4별 두 Bundle 비교, 정확한 모델 중복 정리와 자동 고조파 병합 비교 실험은
+[후보 동일성 벤치마크](../../docs/data/tess-candidate-identity-benchmark.md)를 따른다.
+`candidate_identity_v3_review`는 일반 MR에서 계약 승인을 요청하는 검토안이다.
+69개 관련 테스트와 최종 `review-v3` 결과를 제공한다. 0.25ppm 동등성 실험은 운영 미채택이며
+운영 ID 할당·122 통합은 이 실험의 범위가 아니다.
+
 ## 120 공용 BLS 커널 회귀
 
 [함수 계약과 상태](../../libs/astro-kernel/README.md#bls-탐색과-품질-게이트-120)를 따른다.
