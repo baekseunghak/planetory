@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { ErrorState, LoadingState } from "../../components/RequestState";
+import type { GraphMode } from "../history/HistoryGraph";
 import {
-  SharedHistoryGraph,
-  readHistoryGraph,
-  type GraphMode,
-  type HistoryGraphDto,
-} from "../history/HistoryGraph";
+  PublicHistoryGraph,
+  fetchPublicGraph,
+  readPublicGraph,
+  useSnapshotMissing,
+} from "../history/public-graph";
 import { endpoint, judgmentLabels, type Author } from "./contracts";
 import {
   materialObject,
@@ -19,24 +20,6 @@ import {
 } from "./materialContracts";
 import { useReadModel } from "./useReadModel";
 import "./materials.css";
-
-function fallbackMessage(graph: HistoryGraphDto, mode: GraphMode) {
-  const reason = graph.reproduction.fallbackReason;
-  if (!reason) return null;
-  if (mode === "SUBMITTED") {
-    // 재현 가능성은 현재 판의 참고값이다. 저장된 배열이 대체됐다는 뜻이 아니다.
-    if (reason !== "RETIRED_CANDIDATE") return null;
-    const message = "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다.";
-    return graph.snapshot
-      ? `${message} 아래 배열은 당시 그대로입니다.`
-      : message;
-  }
-  if (reason === "RETIRED_CANDIDATE")
-    return "당시 조합에 은퇴한 후보가 있어 원본 곡선으로 대체했습니다.";
-  if (reason === "RESIDUAL_NOT_AVAILABLE")
-    return "현재 사용할 수 있는 잔차 자료가 없어 현재 원본 곡선으로 표시합니다.";
-  return "현재 자료의 재현 상태를 확인할 수 없습니다.";
-}
 
 export function MaterialCards({
   value,
@@ -167,24 +150,11 @@ function AttachmentDetail({
   parentId: string;
   author: Author;
 }) {
-  const [mode, setMode] = useState<GraphMode>("CURRENT"),
-    [snapshotMissing, setSnapshotMissing] = useState(false);
+  const [mode, setMode] = useState<GraphMode>("CURRENT");
   const path = `/v1/${parentType === "POST" ? "posts" : "comments"}/${encodeURIComponent(parentId)}/history-attachments/${encodeURIComponent(id)}`;
   const load = useCallback(
     async (signal: AbortSignal) => {
-      let raw: unknown;
-      let graphError: ApiError | null = null;
-      try {
-        raw = await api(endpoint(path, { graphMode: mode }), { signal });
-      } catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 503) throw error;
-        // 첫 그래프 조회 실패도 공개 내용을 잃지 않는다. 저장된 응답 대신 현재 부모 권한을 다시 검사한다.
-        raw = await api(
-          endpoint(path, { graphMode: mode, includeGraph: "false" }),
-          { signal },
-        );
-        graphError = error;
-      }
+      const { raw, graphError } = await fetchPublicGraph(path, mode, signal);
       const row = materialObject(raw);
       if (
         row.parentType !== parentType ||
@@ -197,10 +167,7 @@ function AttachmentDetail({
       if (row.judgment !== null) materialText(row.judgment);
       const graph = graphError
         ? null
-        : readHistoryGraph(row.graph, id, ticId, mode);
-      // 공개 응답에는 완료된 작업도 jobId를 포함하지 않는다(탐사 8.3).
-      // 개인 History와 공유하는 파서 대신 공개 소비 경계에서 검사한다.
-      if (graph?.curve?.residual?.jobId != null) return invalidMaterial();
+        : readPublicGraph(row.graph, id, ticId, mode);
       return {
         ...row,
         graph,
@@ -210,16 +177,7 @@ function AttachmentDetail({
     [path, mode, parentType, parentId, id, ticId],
   );
   const state = useReadModel(path + mode, load);
-  useEffect(() => {
-    if (state.data) {
-      if (
-        mode === "SUBMITTED" &&
-        state.data.graph &&
-        state.data.graph.snapshot === null
-      )
-        setSnapshotMissing(true);
-    }
-  }, [state.data, mode]);
+  const snapshotMissing = useSnapshotMissing(mode, state.data?.graph);
   const denied =
     state.error instanceof ApiError &&
     [401, 403, 404].includes(state.error.status);
@@ -227,7 +185,6 @@ function AttachmentDetail({
   const row: Record<string, unknown> | null = state.data,
     graph = state.data?.graph,
     error = state.error ?? state.data?.graphError;
-  const fallback = graph ? fallbackMessage(graph, mode) : null;
   const label = (v: unknown) =>
     typeof v === "string"
       ? (judgmentLabels[v as keyof typeof judgmentLabels] ?? v)
@@ -284,41 +241,8 @@ function AttachmentDetail({
       ) : state.loading ? (
         <LoadingState />
       ) : null}
-      {graph && (
-        <>
-          <p>
-            제출 판 {graph.reproduction.submittedBundleId} · 현재 판{" "}
-            {graph.reproduction.currentBundleId}
-          </p>
-          {fallback && <p>{fallback}</p>}
-          {mode === "SUBMITTED" ? (
-            graph.snapshot ? (
-              <SharedHistoryGraph graph={graph} mode={mode} readOnly />
-            ) : (
-              <p role="status">
-                제출 당시 스냅샷이 없습니다. 현재 자료를 당시 자료로 대신
-                표시하지 않습니다.
-              </p>
-            )
-          ) : graph.curve?.segments?.length ? (
-            <>
-              <p>
-                {graph.curve.curveContext.curveStep === 0
-                  ? "현재 원본 곡선"
-                  : "현재 잔차 곡선"}
-              </p>
-              <SharedHistoryGraph graph={graph} mode={mode} readOnly />
-            </>
-          ) : (
-            <p role="status">
-              {graph.curve?.residual?.status === "FAILED"
-                ? "잔차 처리에 실패했습니다."
-                : "제공 가능한 현재 그래프가 없습니다."}{" "}
-              제출 당시 자료도 확인할 수 있습니다.
-            </p>
-          )}
-        </>
-      )}
+      {/* 그래프 표시는 공개 소비 경계가 맡는다(#191). */}
+      {graph && <PublicHistoryGraph graph={graph} mode={mode} />}
     </>
   );
 }
