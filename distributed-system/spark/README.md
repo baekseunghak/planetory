@@ -184,3 +184,15 @@ Jira 완료는 리뷰·병합 후 판단한다.
 `comparison-s3.jsonl`과 `retry-comparison-s3.jsonl` 모두 `parity_passed=true`, `all_successful=true`다.
 실행 로그·종료 코드·입출력 SHA와 결과는 리뷰 증빙으로 함께 보관한다. 오프라인 테스트 19 passed,
 실행 스크립트 `bash -n` 통과. Git 검사는 사용자 실행 단계로 남긴다.
+
+
+### 245 구간 마스크 인계 (로컬 검증, 배포 전)
+
+127의 최초 BLS 연결에 추가할 입력 계약은 [공용 커널 245](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)를 따른다.
+원본 제품 SHA와 근거 snapshot을 검증한 목록을 `preprocess_silver(curves, interval_masks=masks)`에 전달한다.
+`SectorInput.source_sha256`는 원본 FITS 바이트의 SHA이며 Bronze Parquet 파일 SHA로 대체하지 않는다.
+Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다. 호출자는 원본 제품의 0-based 행 배열을
+복원한 뒤 마스크를 전달하며, 다른 배열 순서라면 명시적인 원본 행 매핑 없이 이 커널을 호출하지 않는다.
+`exclusion_ledger(prepared, detrended)`와 `prepared.interval_masks`, 입력 마스크 계약 버전을 Silver 감사 산출물에 남긴다.
+`detrended.status != "ok"`는 정상 무후보가 아니므로 후속 BLS로 넘기지 않는다. 원본 QUALITY는 변경하지 않는다.
+실제 클러스터에 마스크를 활성화하거나 기존 공개 판을 바꾸는 작업은 이번 245 로컬 검증에서 실행하지 않았다.

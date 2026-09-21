@@ -132,6 +132,42 @@ public final class AnalysisViews {
                               String gridRule, BigDecimal baselineHalfDays, Float[] power) {
     }
 
+    /**
+     * 봉우리와 미세 조정 범위 (5.4절). 잔차가 준비되지 않았으면 {@code peaks}가 null이고 202로 나간다.
+     *
+     * <p>{@code peakRuleVersion}은 <b>운영 규칙 버전</b>이다. 봉우리를 정하는 값(상위 N, 고조파 배수)이
+     * 모두 운영 규칙에서 오고 나머지 한 값(미세 조정 반폭)은 판 manifest에서 오는데 판은 이미
+     * {@code curveContext.bundleId}에 있다. 둘이 같으면 결과가 같으므로 별도 버전을 새로 만들지 않는다.
+     */
+    public record CandidatePeakList(String ticId, String bundleId, CurveContext curveContext, Residual residual,
+                                    List<PeakView> peaks, List<MatchedCandidate> matchedCandidates,
+                                    String peakRuleVersion) {
+    }
+
+    /**
+     * 한 봉우리. {@code gridIndex}가 제출 식별값이고 {@code rank}는 정렬 결과다(C02-R3).
+     *
+     * <p>{@code suggestedDurationHours}·{@code suggestedPhaseCenter}는 BLS 제안 밴드다(EXP-06).
+     * 판이 주기별 제안값을 싣지 않으면 null이며 <b>키는 빼지 않는다</b> — 빠지면 "제안 없음"과
+     * "필드 누락"을 구분할 수 없다.
+     */
+    public record PeakView(int rank, double periodDays, double power, int gridIndex, FineTuneRange fineTune,
+                           Double suggestedDurationHours, Double suggestedPhaseCenter) {
+    }
+
+    /** 그 봉우리에서 고를 수 있는 주기 범위. {@code periodStepDays}는 그 자리 격자 한 칸 폭이다. */
+    public record FineTuneRange(double periodMinDays, double periodMaxDays, double periodStepDays) {
+    }
+
+    /**
+     * 회원이 이미 매칭한 후보의 주기. 흐린 선 표시용이다(EXP-13).
+     *
+     * <p>아직 매칭하지 않은 후보는 들어가지 않는다. 넣으면 매칭 전에 후보 개수와 주기가 드러난다
+     * (POL-05, EXP-02).
+     */
+    public record MatchedCandidate(String candidateId, double periodDays) {
+    }
+
     /** 서비스 결과. 컨트롤러가 준비 여부로 200·202를, 현재 판으로 {@code X-Current-Bundle}을 정한다. */
     public record Answer<T>(T body, boolean ready, String currentBundleId) {
     }
