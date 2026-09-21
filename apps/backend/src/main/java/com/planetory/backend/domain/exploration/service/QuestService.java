@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.domain.exploration.service.QuestViews.Challenge;
+import com.planetory.backend.domain.exploration.service.QuestViews.CurrentChallenge;
+import com.planetory.backend.domain.exploration.service.QuestViews.CurrentRound;
 import com.planetory.backend.domain.exploration.service.QuestViews.Quests;
 import com.planetory.backend.domain.exploration.service.QuestViews.Round;
 import com.planetory.backend.domain.exploration.service.QuestViews.Tutorial;
@@ -22,6 +24,19 @@ public class QuestService {
     private final QuestRepository quests;
     private final TutorialRepository tutorials;
     private final Clock clock;
+
+    /** 운영 active 회차를 읽는다. 날짜에 따른 상태 전환·발견·안내 확인 기록은 쓰지 않는다. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public CurrentChallenge currentChallenge(long memberId) {
+        return tutorials.findActiveRound().map(round -> {
+            boolean eligible = tutorials.isTutorialCompleted(memberId);
+            return new CurrentChallenge(
+                    new CurrentRound("cr-" + round.id(), round.roundNo(),
+                            eligible ? String.valueOf(round.targetTicId()) : null,
+                            round.startsOn(), round.endsOn(), "active", round.description()),
+                    eligible, quests.countChallengeParticipants(round.targetTicId()));
+        }).orElse(CurrentChallenge.NONE);
+    }
 
     /**
      * 튜토리얼·챌린지·다시 열린 별을 <b>한 스냅샷</b>에서 읽는다. 따로 읽으면 방금 끝낸 튜토리얼이

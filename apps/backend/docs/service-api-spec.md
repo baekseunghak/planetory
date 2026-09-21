@@ -770,9 +770,10 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
 }
 ```
 
-roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. 시작 요일·기준 시간대·종료일 포함 여부는 합의 후 경계 계산에 적용한다. 진행 회차가 없으면 200 `{"round":null,"eligible":false}`. 서버는 shouldShow·acknowledged를 반환하지 않는다.
+roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. **168 구현 완료:** 운영 `status='active'` 회차 하나를 선택하며 현재 날짜로 회차를 선택하거나 상태를 자동 전환하지 않는다. planned·closed만 있거나 회차가 없으면 200 `{"round":null,"eligible":false,"participantCount":null}`을 반환한다. 인증 세션이 필요하며 미인증은 401 `AUTH_REQUIRED`, 응답은 `Cache-Control: no-store`다. 서버는 shouldShow·acknowledged를 반환하지 않는다.
 
-- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 미완료 회원에게는 eligible=false, ticId=null로 대상 노출을 제한하는 최소안을 유지하며 소개 표시 여부는 별도 합의한다.
+- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
+- 자격이 있으면 `round.ticId`를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
 - SB-D20 확정: 진행 중 회차에 참여 가능한 회원에게만 새 챌린지 안내를 표시한다. 프론트는 현재 roundId와 브라우저의 회원별 마지막 안내 회차를 비교한다. 실제 안내 표시 후에만 회차를 기록하며 API 조회만으로 기록하지 않는다. 확인 테이블·서버 확인 API는 추가하지 않는다.
 - 같은 회원·브라우저에서 기록된 회차는 재안내하지 않고 다음 회차에는 다시 안내한다. 이 방식은 기기·브라우저 간 확인 상태를 공유하지 않는다. 브라우저 저장소 삭제·다른 기기 접속 시 같은 회차 안내가 다시 나올 수 있다. 엄격한 회원별 1회 안내를 보장하지 않는다.
 - 브라우저 저장 실패는 챌린지 이용을 막지 않으며 안내 반복을 허용한다. 같은 브라우저의 다른 회원은 별도 기록을 사용한다. 여러 탭의 동시 안내까지 정확히 한 번으로 보장하지 않는다. 기기 간 확인 공유는 P1 일반 알림에서 검토한다.
@@ -781,7 +782,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
-139 퀘스트 패널은 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 168 회차 API와 208 화면의 참여 수도 같은 원천을 소비한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. 168 API 구현과 208 실제 HTTP 연동 인수는 별도다.
+139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 새 DB 테이블·권한·마이그레이션은 없다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
 
 <a id="later"></a>
 
