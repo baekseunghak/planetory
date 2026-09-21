@@ -45,4 +45,4 @@
 | 2026-09-21 | 배포 접속을 SSH 키 없이 tailnet 신원으로 전환 | S15P21C206-226 | Tailscale SSH, 22번 가로챔, ACL ssh 규칙, deploy 계정, sudo 없음, DEPLOY_SSH_KEY 폐기 | 검증 완료(실측) | [기록](2026-09-21.md) |
 | 2026-09-21 | MR 리뷰 지적 4건 수정과 검증 방식 정정 | S15P21C206-226 | MR !132 리뷰, GC 중 push, docker save 레이어 검사, config 블롭 created, set -e 알림 침묵, 스텁 우회 | 검증 완료(실측) | [기록](2026-09-21.md) |
 | 2026-09-21 | 당시 배열이 없는데 그대로라고 말하던 안내 수정 | S15P21C206-190 | snapshot null, RETIRED_CANDIDATE, SUBMITTED 배지, 모순 문구 | 구현·검증 완료 | [기록](2026-09-21.md) |
-| 2026-09-21 | 공개 History 그래프의 범위와 현재 상태 정리 | S15P21C206-191 | 8.5 공개 투영, 허용 목록 파서 불필요, lastMeta 이력, RESIDUAL_NOT_AVAILABLE 공개 전용, 두 계정 인수 미결 | 문서 확정·인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 History 그래프의 범위와 현재 상태 정리 | S15P21C206-191 | 8.5 공개 투영, 허용 목록 파서 불필요, lastMeta 이력, RESIDUAL_NOT_AVAILABLE 공개 전용, 공개 분석 어댑터 미연결, 두 계정 인수 미결 | 문서 확정·어댑터/인수 대기 | [기록](2026-09-21.md) |
