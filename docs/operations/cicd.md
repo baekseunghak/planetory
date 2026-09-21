@@ -48,9 +48,9 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 | 구분 | 변수 |
 | --- | --- |
-| 공통 SSH | `DEPLOY_USER`, File 타입 `DEPLOY_SSH_KEY`, File 타입 `DEPLOY_KNOWN_HOSTS` |
-| EC2 | `EC2_A_HOST`, `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
-| GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`, `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
+| 공통 SSH | `DEPLOY_USER`(전용 배포 계정 이름). SSH 키 변수는 두지 않는다 |
+| EC2 | `EC2_A_HOST`(Tailscale IP), `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
+| GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`(Tailscale IP), `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
 | 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
 | 레지스트리 | `REGISTRY_IMAGE_PREFIX` (`<레지스트리 호스트>:<포트>/<네임스페이스>`) |
@@ -90,6 +90,16 @@ Runner는 두 대이고 job은 태그로 나눈다.
 배포 대상이 전부 `linux/amd64`라 이미지 빌드는 x86_64 Runner에서만 실행한다. `.docker-build`에 `tags: [amd64-docker]`를 둔 이유이며, 이 태그를 떼면 job이 aarch64 Runner로 가서 에뮬레이션 설정 없이 실패한다. 빌드 Runner는 dind를 쓰므로 `privileged`가 필요하고, 컨테이너 안에서는 MagicDNS가 해석되지 않으므로 Runner 설정에 레지스트리 이름의 `extra_hosts`를 둔다.
 
 `deploy:*`는 대상 서버에 SSH로만 접속하고 이미지는 대상 서버가 직접 pull한다. 따라서 CI 노드에는 레지스트리 접근 권한이 필요 없다.
+
+## 배포 접속
+
+대상 노드는 `tailscale up --ssh` 상태라 **tailscaled가 22번을 직접 처리한다.** 그래서 `authorized_keys`가 아니라 tailnet 신원으로 인증하며, SSH 키를 배포해도 쓰이지 않는다. job 컨테이너에서 나가는 연결은 Runner 호스트의 tailnet 신원으로 보이고, tailnet ACL의 `ssh` 규칙이 배포 계정을 허용해야 통과한다. 규칙이 없으면 `tailnet policy does not permit you to SSH to this node`로 거부된다.
+
+접속 계정은 CI 전용 `deploy` 하나다. 사람의 관리 계정을 쓰지 않으므로 키·권한을 회수할 때 사람 계정을 건드리지 않아도 되고 접속 주체가 로그에서 갈린다. 이 계정에 `sudo`를 주지 않는다. 배포에 필요한 권한은 `docker` 그룹뿐이다. 계정 생성은 [provision-deploy-user.sh](../../infra/provisioning/provision-deploy-user.sh)가 맡는다.
+
+**접근 차단은 ACL에서 한다.** 규칙 한 줄을 지우면 모든 노드에서 동시에 끊긴다.
+
+`DEPLOY_HOST`에는 MagicDNS 이름이 아니라 **Tailscale IP**를 넣는다. 컨테이너 안에서는 MagicDNS가 해석되지 않는다.
 
 이미지는 `docker build`와 `docker push`로 만든다. buildx를 쓰면 container driver가 dind 안에 buildkit 컨테이너를 따로 띄우고 push를 그 컨테이너가 수행하는데, Runner의 `extra_hosts`가 거기까지 닿지 않아 레지스트리 이름 해석에 실패한다. 빌드는 성공하고 push만 실패하는 형태로 나타나 원인을 찾기 어렵다. 빌드 Runner가 x86_64라 교차 빌드가 필요 없어 buildx를 쓸 이유도 없다.
 

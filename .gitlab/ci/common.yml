@@ -65,13 +65,17 @@ validate:hadoop-config:
 .remote-compose-deploy:
   stage: deploy
   image: alpine:3.20
+  # SSH 키를 두지 않는다. 대상 노드가 Tailscale SSH로 22번을 처리하므로
+  # authorized_keys가 아니라 tailnet 신원으로 인증한다. job 컨테이너의 연결은
+  # Runner 호스트의 tailnet 신원으로 나가고, ACL의 ssh 규칙이 deploy 계정을
+  # 허용한다. 키를 배포해도 쓰이지 않으면서 회수 대상만 늘어난다.
+  # 접근을 끊으려면 ACL에서 해당 규칙을 지운다.
   before_script:
     - apk add --no-cache openssh-client
     - install -d -m 700 ~/.ssh
-    - cp "$DEPLOY_SSH_KEY" ~/.ssh/id_ed25519
-    - chmod 600 ~/.ssh/id_ed25519
-    - cp "$DEPLOY_KNOWN_HOSTS" ~/.ssh/known_hosts
-    - chmod 600 ~/.ssh/known_hosts
+    # 호스트 키 검증은 Tailscale SSH가 맡는다.
+    - printf 'StrictHostKeyChecking accept-new\nConnectTimeout 15\n' > ~/.ssh/config
+    - chmod 600 ~/.ssh/config
   script:
     - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
