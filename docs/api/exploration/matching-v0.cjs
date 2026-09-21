@@ -69,8 +69,11 @@ function validate(bundle, rules, selection, peaks) {
     if (!peak) return fail('selection.sourcePeakGridIndex', 'UNKNOWN_PEAK');
     if (!(P >= peak.fineTune.periodMinDays && P <= peak.fineTune.periodMaxDays)) return fail('selection.sourcePeakGridIndex', 'OUTSIDE_FINE_TUNE');
     suggested = peak.suggestedDurationHours;
-    durationLimitHours = suggested * rules.validation.maxDurationMultipleOfSuggested.value;
-    if (width * P * 24 > durationLimitHours) return fail('selection.phaseEnd', 'DURATION_LIMIT');
+    // API 5.4/6.2: 주기별 duration 출처가 없으면 null이며 0시간으로 해석하지 않는다.
+    if (suggested !== null && suggested !== undefined) {
+      durationLimitHours = suggested * rules.validation.maxDurationMultipleOfSuggested.value;
+      if (width * P * 24 > durationLimitHours) return fail('selection.phaseEnd', 'DURATION_LIMIT');
+    }
   }
   if (rules.validation.allowEmptyPhaseSpan.value === false && !spanHasObservedPoint(bundle, P, ps, pe)) return fail('selection.phaseEnd', 'EMPTY_PHASE_SPAN');
   const d = deriveEpoch(bundle, selection);

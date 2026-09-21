@@ -1,5 +1,12 @@
 # TESS 처리 벤치마크
 
+## 128 제출 매칭 부분 검산
+
+`tess_bench.matching_evidence`는 저장된 111 manifest·CSV만 읽어 출력 해시·행 수와
+회수 신호의 주기·duration 조건을 검사한다. BLS나 Git을 실행하지 않는다.
+실행 명령·측정 한계·rule-1 잔여 범위는 [제출 매칭 검증](../../docs/data/tess-submission-matching-benchmark.md)을 따른다.
+단위 테스트는 `uv run --locked pytest tests/test_matching_evidence.py -q`로 실행한다.
+
 ## 112 고조파·후보 동일성 실험
 
 111 확정 ZIP 감사, 4별 두 Bundle 비교, 정확한 모델 중복 정리와 자동 고조파 병합 비교 실험은

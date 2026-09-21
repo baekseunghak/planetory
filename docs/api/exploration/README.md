@@ -14,6 +14,12 @@ C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·�
 
 ## 제출 매칭 수치 규칙 v0 (`rule-0`, Jira S15P21C206-128)
 
+2026-09-21 최신 계약 정합화와 111 저장 결과의 부분 검산·rule-1 잔여 범위는
+[제출 매칭 검증](../../data/tess-submission-matching-benchmark.md)을 따른다.
+`suggestedDurationHours=null`은 0시간 상한이 아니다(API 5.4·6.2). 이때 duration 상한만 생략하고
+기존 폭·source·fineTune 검사는 유지한다. `node --test docs/api/exploration/matching-contract.test.cjs`로
+추가 5개 경계를 검증한다. 기존 31개 fixture와 규칙 수치는 변경하지 않는다.
+
 사용자 제출(주기·위상 구간)을 배치 BLS 후보와 대조하는 수치 규칙의 **개발용 v0**다. SRS 5.1 초기값과 탐사 API 예시값에 출처를 붙인 것이며 운영 기본값·확정 인수 기준이 아니다. 확정 v1(`rule-1`)은 `S15P21C206-111` 실측과 강재민(C09)·백지웅(A04) 공동 승인 뒤 만든다. 128의 완료는 v0 제공만으로 처리하지 않는다.
 
 | 파일 | 내용 |
