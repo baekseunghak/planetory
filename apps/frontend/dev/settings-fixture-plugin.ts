@@ -1,6 +1,15 @@
 import type { Plugin } from "vite";
-export function settingsFixturePlugin(): Plugin {
+export function settingsFixturePlugin(
+  options: { member?: () => Record<string, unknown> } = {},
+): Plugin {
   let visibility = "PUBLIC";
+  const preferences: Record<string, boolean> = {
+    ACHIEVEMENT: true,
+    REOPEN: true,
+    CHALLENGE: true,
+    FOLLOW: true,
+    COMMENT: true,
+  };
   return {
     name: "settings-fixture-221",
     apply: "serve",
@@ -22,7 +31,6 @@ export function settingsFixturePlugin(): Plugin {
             joinedAt: "2026-09-14T15:30:00Z",
             onboardingDone: true,
             tutorialCompleted: true,
-            starListVisibility: visibility,
             achievementSummary: {
               discoveredStarCount: 57,
               completedStarCount: 5,
@@ -30,10 +38,18 @@ export function settingsFixturePlugin(): Plugin {
               byType: { confirmed: 5, unconfirmed: 3, fp: 1 },
               starCountByGrade: { A: 3, S: 1, SS: 1, SSS: 0 },
             },
+            ...options.member?.(),
+            starListVisibility: visibility,
           });
           return;
         }
-        if (path !== "/v1/me/settings" || req.method !== "PATCH") return next();
+        if (path === "/v1/me/notification-settings" && req.method === "GET")
+          return send({ preferences });
+        if (
+          !["/v1/me/settings", "/v1/me/notification-settings"].includes(path) ||
+          req.method !== "PATCH"
+        )
+          return next();
         if (req.headers["x-csrf-token"] !== "community-fixture-209")
           return send({ code: "CSRF_INVALID", message: "CSRF 확인" }, 403);
         try {
@@ -42,7 +58,23 @@ export function settingsFixturePlugin(): Plugin {
             body += String(chunk);
             if (body.length > 10000) throw Error();
           }
-          const value = JSON.parse(body).starListVisibility;
+          const parsed = JSON.parse(body);
+          if (path === "/v1/me/notification-settings") {
+            const values = parsed.preferences;
+            if (
+              !values ||
+              typeof values !== "object" ||
+              Array.isArray(values) ||
+              !Object.keys(values).length ||
+              Object.entries(values).some(
+                ([key, v]) => !(key in preferences) || typeof v !== "boolean",
+              )
+            )
+              throw Error();
+            Object.assign(preferences, values);
+            return send({ preferences });
+          }
+          const value = parsed.starListVisibility;
           if (!["PUBLIC", "PRIVATE"].includes(value)) throw Error();
           visibility = value;
           send({ starListVisibility: value });

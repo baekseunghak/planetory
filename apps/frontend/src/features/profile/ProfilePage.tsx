@@ -1,5 +1,5 @@
 import { useCallback, useContext, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -68,6 +68,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         </div>
         {own && (
           <div className="profile-actions">
+            <Link to="/settings">설정</Link>
             <NicknameEditor
               memberId={memberId}
               nickname={profile?.nickname ?? member?.nickname ?? ""}

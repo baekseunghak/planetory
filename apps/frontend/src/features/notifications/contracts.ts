@@ -8,6 +8,21 @@ export const noticeKinds = [
   "COMMENT",
 ] as const;
 export type NoticeKind = (typeof noticeKinds)[number];
+export function readNotificationPreferences(
+  value: unknown,
+): Record<NoticeKind, boolean> {
+  const settings = object(object(value).preferences);
+  for (const kind of noticeKinds)
+    if (typeof settings[kind] !== "boolean")
+      throw new ApiError(
+        0,
+        "INVALID_RESPONSE",
+        "알림 수신 설정을 확인할 수 없습니다.",
+      );
+  return Object.fromEntries(
+    noticeKinds.map((kind) => [kind, settings[kind]]),
+  ) as Record<NoticeKind, boolean>;
+}
 export const noticeLabels: Record<NoticeKind, string> = {
   ACHIEVEMENT: "성과·등급",
   REOPEN: "다시 열린 탐사",

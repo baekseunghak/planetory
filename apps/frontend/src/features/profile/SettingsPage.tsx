@@ -6,6 +6,8 @@ import { UsageGuide } from "./UsageGuide";
 import { NicknameEditor } from "./NicknameEditor";
 import { readVisibility, type Visibility } from "./settings";
 import "./settings.css";
+import { NotificationPreferences } from "../notifications/NotificationPreferences";
+import { p1Enabled } from "../p1";
 
 export function SettingsPage() {
   const session = useSession();
@@ -134,13 +136,13 @@ export function SettingsPage() {
         <h2 id="visibility-title">공개 범위</h2>
         <div aria-busy={busy}>
           <div className="settings-switchline">
-            <span>내 별 목록 공개</span>
+            <span>내 은하·별 목록 공개</span>
             {saved !== null && (
               <button
                 type="button"
                 className="settings-switch"
                 role="switch"
-                aria-label="내 별 목록 공개"
+                aria-label="내 은하·별 목록 공개"
                 aria-checked={saved === "PUBLIC"}
                 aria-describedby="visibility-help"
                 disabled={busy}
@@ -153,7 +155,8 @@ export function SettingsPage() {
             )}
           </div>
           <p id="visibility-help">
-            다른 탐사자에게 별 목록과 별별 진행 상태를 보여줍니다.
+            다른 탐사자에게 전체 보유 별의 은하와 별 목록을 보여줍니다. 개인
+            분석 기록은 공개하지 않습니다.
           </p>
           <small>
             공개한 글과 판단 분포, 성과 요약의 공개 여부는 바뀌지 않습니다.
@@ -177,6 +180,7 @@ export function SettingsPage() {
           <p role="status">{notice}</p>
         </div>
       </section>
+      {p1Enabled && <NotificationPreferences />}
       <section className="settings-row">
         <h2>계정</h2>
         <div>

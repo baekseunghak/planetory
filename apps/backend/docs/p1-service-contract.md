@@ -73,3 +73,16 @@
 벨은 보이는 동안60초마다 갱신하며 focus/pageshow 복귀 재조회는 공용 훅을 사용한다. 화면을 숨길 때 알림 내용을 비우고 새 응답 전까지 이전 내용을 복원하지 않는다. 이벤트가 오면 벨/목록을 함께 갱신한다.
 
 소비 코드: [notifications/contracts.ts](../../frontend/src/features/notifications/contracts.ts), [Notifications.tsx](../../frontend/src/features/notifications/Notifications.tsx). 합성 제공자: [notifications-fixture-plugin.ts](../../frontend/dev/notifications-fixture-plugin.ts). DB·알림 생성·수신 설정·경합 검증은 실제 제공자 작업이며 fixture 통과로 대체하지 않는다.
+
+## 4. 개인 설정 · 221
+
+설정은 마이페이지에서 들어간다. 주 메뉴의 중복 설정 진입은 제거한다. 닉네임 편집·가입일·사용법 다시 보기는 기존 P0 계약을 유지한다. 가입 안내 완료 API와 설정 API를 섞지 않는다.
+
+- 공개 범위: 기존 GET `/api/v1/me`의 `starListVisibility`, PATCH `/api/v1/me/settings`의 `{starListVisibility:"PUBLIC"|"PRIVATE"}`를 그대로 사용한다. 이 값 하나로 **전체 보유 별의 공개 은하와 별 목록**을 제어한다. PUBLIC이 개인 History/정답 열람/분석 재시도 권한까지 공개한다는 뜻은 아니다. 은하 방문의 상세 투영은 별도 방문 계약을 따른다.
+- GET `/api/v1/me/notification-settings` → `{preferences:{ACHIEVEMENT:true,REOPEN:true,CHALLENGE:true,FOLLOW:true,COMMENT:true}}`.
+- PATCH 같은 경로에 `{preferences:{FOLLOW:false}}`처럼 **변경한 키만** 전송한다. 응답은 저장 후 전체 preferences다. 알림5종 모두 boolean이며 GET 누락을 true로 추측하지 않는다. 현재 프론트 기준 최초 기본은5종 모두true다. 알림 전달 채널은 서비스 내 알림함이며 이메일/푸시는 포함하지 않는다.
+- 빈 객체·알 수 없는 종류·null·boolean 이외 값은400 VALIDATION_FAILED. 기존 키는 보존하며 한 탭에서 FOLLOW를 바꿔도 다른 탭이 저장한 COMMENT를 덮어쓰지 않는다. 원자적인 부분 갱신이 필요하다.
+- 설정은 **이후 생성하는 알림**에 적용한다. 이미 생성한 알림/읽음 상태/팔로우 관계는 삭제하지 않는다. 수신 차단을 풀어도 과거 차단 기간의 알림을 소급 생성하지 않는다.
+- 응답 유실 시 쓰기를 자동 재전송하지 않고 GET으로 확인한다. 실제 계정별 유지·알림 생성과의 경합은175/244 P1-221에서 검증한다.
+
+소비 코드: [SettingsPage.tsx](../../frontend/src/features/profile/SettingsPage.tsx), [NotificationPreferences.tsx](../../frontend/src/features/notifications/NotificationPreferences.tsx). 합성 서버: [settings-fixture-plugin.ts](../../frontend/dev/settings-fixture-plugin.ts).
