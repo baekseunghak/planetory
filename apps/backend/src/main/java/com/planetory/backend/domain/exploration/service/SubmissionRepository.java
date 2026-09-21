@@ -122,6 +122,24 @@ public class SubmissionRepository {
                 """).param("member", member).param("tic", tic).param("step", curveStep)
                 .param("count", planetCount).param("skipped", skipped).update();
     }
+    /**
+      * 6.7절 상세 보기. 이미 본 제출을 다시 봐도 값이 달라지지 않는다.
+      *
+      * <p>대상은 <b>처음 고른 것만</b> 남긴다. {@code COALESCE}가 그 일을 하므로 두 요청이 겹쳐도
+      * 먼저 쓴 값이 이긴다. 매번 덮어쓰면 후보표가 바뀔 때 같은 제출의 답이 달라진다.
+      *
+      * <p><b>실제로 저장된 대상을 돌려준다.</b> 겹친 요청이 각자 고른 대상으로 응답을 만들면 저장은
+      * 하나인데 같은 제출에 두 답이 나간다. 호출자는 이 값으로 응답을 만든다.
+      *
+      * @return 이 제출에 남은 대상 후보 ID
+      */
+    long markDetailViewed(long submissionId, long candidateId) {
+        return jdbc.sql("UPDATE submissions SET answer_viewed = true,"
+                        + " detail_target_candidate_id = COALESCE(detail_target_candidate_id, ?) WHERE id = ?"
+                        + " RETURNING detail_target_candidate_id")
+                .params(candidateId, submissionId).query(Long.class).single();
+    }
+
     void saveResponse(long submission, String response) {
         if (jdbc.sql("UPDATE submissions SET response_snapshot=CAST(? AS jsonb) WHERE id=? AND response_snapshot IS NULL")
                 .params(response, submission).update() != 1) throw new IllegalStateException("최초 제출 응답 저장 실패");
@@ -161,6 +179,26 @@ public class SubmissionRepository {
                 }).single();
     }
     private static Double percent(long count,long total) { return total==0?null:Math.round(count*1000.0/total)/10.0; }
+    /**
+     * 후보의 최신 AI 평가. 6.4절 제출 결과와 8.4절 결과 페이지가 <b>같은 모양</b>을 써야 한다 —
+     * 두 화면이 같은 신호를 다르게 말하면 어느 쪽이 맞는지 알 수 없다.
+     *
+     * <p>실행 기록이 없으면 {@code not_evaluated}이며 점수·판정은 null이다. 0점으로 바꾸지 않는다.
+     */
+    Map<String, Object> ai(long candidateId) {
+        return jdbc.sql("""
+                SELECT x.status,e.score,e.verdict,x.model_version FROM ai_evaluations e
+                JOIN ai_executions x ON x.id=e.execution_id WHERE e.candidate_id=?
+                ORDER BY x.started_at DESC,e.id DESC LIMIT 1
+                """).param(candidateId).query((r, n) -> {
+                    Map<String,Object> m = new LinkedHashMap<>();
+                    m.put("status", r.getString(1)); m.put("score", r.getBigDecimal(2));
+                    m.put("verdict", r.getString(3)); m.put("modelVersion", r.getString(4)); return m;
+                }).optional().orElseGet(() -> {
+                    Map<String,Object> m = new LinkedHashMap<>(); m.put("status", "not_evaluated");
+                    m.put("score", null); m.put("verdict", null); m.put("modelVersion", null); return m;
+                });
+    }
     Map<String, Object> signal(long member, Candidate candidate, Disposition disposition) {
         Map<String, Object> signal = new LinkedHashMap<>();
         signal.put("candidateId", ExplorationIds.candidate(candidate.id()));
@@ -172,19 +210,7 @@ public class SubmissionRepository {
         bls.put("durationHours", candidate.durationHours()); bls.put("depthPpm", candidate.depthPpm());
         // Gold 현재 스키마에는 SDE/SNR 열이 없다. 없는 수치를 만들어 내지 않는다.
         bls.put("sde", null); bls.put("snr", null); signal.put("bls", bls);
-        Map<String, Object> ai = jdbc.sql("""
-                SELECT x.status,e.score,e.verdict,x.model_version FROM ai_evaluations e
-                JOIN ai_executions x ON x.id=e.execution_id WHERE e.candidate_id=?
-                ORDER BY x.started_at DESC,e.id DESC LIMIT 1
-                """).param(candidate.id()).query((r, n) -> {
-                    Map<String,Object> m = new LinkedHashMap<>();
-                    m.put("status", r.getString(1)); m.put("score", r.getBigDecimal(2));
-                    m.put("verdict", r.getString(3)); m.put("modelVersion", r.getString(4)); return m;
-                }).optional().orElseGet(() -> {
-                    Map<String,Object> m = new LinkedHashMap<>(); m.put("status", "not_evaluated");
-                    m.put("score", null); m.put("verdict", null); m.put("modelVersion", null); return m;
-                });
-        signal.put("ai", ai);
+        signal.put("ai", ai(candidate.id()));
         signal.put("external", jdbc.sql("SELECT source,external_id,disposition,fetched_on FROM external_signal_references WHERE candidate_id=? ORDER BY id")
                 .param(candidate.id()).query((r, n) -> {
                     Map<String,Object> m = new LinkedHashMap<>();

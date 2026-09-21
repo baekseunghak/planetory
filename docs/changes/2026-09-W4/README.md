@@ -16,6 +16,10 @@
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 공개 상태 응답 호환·공통 조건 배치 규칙 보완 | S15P21C206-162 | isPublic, isEffectivelyPublic, domain, deleted | 전체 409건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | develop 테스트 컴파일 복구와 변경 이력 위치 정정 | S15P21C206-147 | ResidualResultReader.lookup, PublicAnalysisTest, 스텁 인자, 병합 후 컴파일 | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 제출 조회·상세 보기·다시 풀기 초안 구현 | S15P21C206-145 | submissions, by-request, REQUEST_IN_PROGRESS, detail-view, DETAIL_UNAVAILABLE, retry-draft, STEP_NOT_RESTORABLE, AT-118 | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 제출 조회 리뷰 반영: 해설 자리와 힌트 대상 고정 | S15P21C206-145 | signal.explanation, detail_target_candidate_id, V17, 멱등 힌트 | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 겹친 상세 보기 응답을 저장된 대상으로 맞춤 | S15P21C206-145 | 상세 보기, detail_target_candidate_id, RETURNING, 겹친 요청, 힌트 대상, explanation null | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 빈 해설을 프론트가 받아 안내로 채움 | S15P21C206-145 | signal.explanation, decodeDetailView, nullable, 대체 안내, 6.7절 예시 | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | HDFS marker 권한 경계 수정·Sector 7 확정 | S15P21C206-76 | stdin, UMask, immutable release, atomic rename, Sector 7 | 구현·Sector 7 검증 완료, 전체 적재 진행 중 | [기록](2026-09-21.md) |
 | 2026-09-21 | Sector 1~13 완료 정정·HDFS 감사 경계 강화 | S15P21C206-76 | coverage, total_bytes, full audit, completion marker, CI | 실환경 완료·방어 코드 오프라인 검증 완료, MR 재리뷰 대기 | [기록](2026-09-21.md) |
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
@@ -37,10 +41,40 @@
 | 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 112 후보 감사·실제 두 Sector 구성 비교 | S15P21C206-112 | candidate identity, TOI270, 0.5 duration | 초기 실측·미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 감광 창 진단 100건·자동 병합 미채택 | S15P21C206-112 | conditional depth, possible_alias, incomplete, 44 passed | 실험 완료·규칙 미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 4별·추가 배율 비교 및 계약 검토안 v1 | S15P21C206-112 | possible_alias, 0.5 duration, 50 passed | 실험 완료·계약 미승인 | [기록](2026-09-21.md) |
+
+| 2026-09-21 | 112 동일성 대칭성·원시 후보 보존·판 내부 모호성 우회 차단 | S15P21C206-112 | candidate_identity_v2, 59 passed | 실험 검증·계약 미승인 | [기록](2026-09-21.md) |
+
+| 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-21 | 112 v3 공통 계약·정확한 모델 중복·동등성 실험 한계 | S15P21C206-112 | candidate_identity_v3_review, 69 passed, 0.25ppm | 계약 리뷰 준비·운영 자동 병합 미채택 | [기록](2026-09-21.md) |
+| 2026-09-21 | 같은 별 공개 출처 저장·미리보기·무효 안내 | S15P21C206-167 | sourceLinks, available:false, V17, 출처 카드 | 구현·관련 검증 완료 | [기록](2026-09-21.md#s15p21c206-167-같은-별-공개-출처-카드와-비공개-안내) |
+| 2026-09-21 | 전체 공개 집합 기반 핫 토픽·순위 커서와 동일 스냅샷 | S15P21C206-171 | COUNT DISTINCT, N>=10, hot-v1, REPEATABLE_READ, 전역 순위, 기존 인덱스 | 구현·관련 52건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 화면이 잔차 503을 retryable로 가른다 | S15P21C206-189 | retryable, DEPENDENCY_UNAVAILABLE, 정본 문구, START_FAILED, 개발용 응답, 화면 검사 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 현재 챌린지 조회·active 회차·자격 TIC·별 참여 수 | S15P21C206-168 | challenges/current, REPEATABLE_READ, GET 불변, COUNT DISTINCT | 구현·관련 54+6건 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | CI 레지스트리 자체 호스팅·amd64 빌드 노드 분리 | S15P21C206-226 | registry, tailscale cert, REGISTRY_IMAGE_PREFIX, amd64-docker, privileged, extra_hosts, binfmt 제거, D4 충돌 | 레지스트리 검증 완료, Runner 등록 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | D4 범위 한정과 외부 관찰 EC2-B 이관 | S15P21C206-226 | D4, EC2-B, CI 빌드 노드, 외부 관찰 이관, 인계 100, 같은 AZ 한계, ap-northeast-2a | 채택, 관찰 구현 미완 | [기록](2026-09-21.md) |
+| 2026-09-21 | 배포 노드 Docker 준비와 이미지 위생 도구 | S15P21C206-226 | install-docker-host.sh, docker-compose-v2, image-secret-scan, registry-prune, digest 공유 삭제, 가비지 수집 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | 배포 접속을 SSH 키 없이 tailnet 신원으로 전환 | S15P21C206-226 | Tailscale SSH, 22번 가로챔, ACL ssh 규칙, deploy 계정, sudo 없음, DEPLOY_SSH_KEY 폐기 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | MR 리뷰 지적 4건 수정과 검증 방식 정정 | S15P21C206-226 | MR !132 리뷰, GC 중 push, docker save 레이어 검사, config 블롭 created, set -e 알림 침묵, 스텁 우회 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | 출처 카드 리뷰 수정과 V18 마이그레이션 충돌 해소 | S15P21C206-167 | 교차 댓글 교착, 일괄 조회, REPEATABLE_READ, 출처 제거 재조회, 145 V17 선행, V18 | 검증 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 당시 배열이 없는데 그대로라고 말하던 안내 수정 | S15P21C206-190 | snapshot null, RETIRED_CANDIDATE, SUBMITTED 배지, 모순 문구 | 구현·검증 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 History 그래프의 범위와 현재 상태 정리 | S15P21C206-191 | 8.5 공개 투영, 허용 목록 파서 불필요, lastMeta 이력, RESIDUAL_NOT_AVAILABLE 공개 전용, 공개 분석 어댑터 미연결, 두 계정 인수 미결 | 문서 확정·어댑터/인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 공개 분석 진입 어댑터 연결과 공개 소비 경계 공유 | S15P21C206-191 | public-analyses 상세, 공개 소비 경계, jobId 거절 공유, includeGraph=false 재조회, 두 계정 인수 미결 | 구현·검증 완료·인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 상세 해설 안내 문구 방향 정정과 해설 표시 검사 보강 | S15P21C206-145 | explanation, 위 비교표, explained 사례, x-fixture-outcome, 안내 문구 | 구현 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 대표 후보와 항목별 독립 일괄 공개 | S15P21C206-166 | batch, 20개, 부분 성공, NOT_PUBLISHED, 대표 후보, 독립 트랜잭션 | 구현·관련 117개 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 일괄 공개 리뷰 보완·후보 보장 범위 | S15P21C206-166 | 로그 스택, TIC_MISMATCH, CommunityQuery, 스냅샷, History 단위 후보 | 관련 81건·추가 46건 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 내 별 목록 필터와 별 위치 찾기 구현 | S15P21C206-152 | stage, grade, ticId 필터, 커서 묶기, gradeRange, me/sky/locate, STAR_LOCKED | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 별 목록 조회의 트랜잭션 누락 정정과 스냅샷 계약 명시 | S15P21C206-152 | REPEATABLE_READ, 자기 호출, 프록시, 오버로드, STAR_LIST_PRIVATE, 스냅샷 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
 | 2026-09-21 | 후보 병합·분리 정정 계약과 C19 수행 범위 고정 | S15P21C206-153 | 후보 병합, 분리, retired, GRD-06, DEC-26, C18-Q1~Q6, gold_writer 권한, 사전검사 | 결정 요청 초안·교차 검토 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 후보 정정 영향 사전검사 명령과 런북 | S15P21C206-154 | candidate-correction-precheck, dry-run, 사전 거절, 종료 코드 0/2/3, S2, S3, 읽기 전용 | 구현 완료·적용 절차 미착수 | [기록](2026-09-21.md) |
 | 2026-09-21 | 정정 계약 리뷰 반영: 확정·제안 분리와 복구·역할 정정 | S15P21C206-153 | GRD-06 재계산, 제안과 확정, status 복구 불가, gold_writer SELECT 없음, 역할 분리 | 리뷰 반영 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 발견한 별 유지를 확정에서 미확정(C18-Q7)으로 | S15P21C206-153 | C18-Q7, star_unlocks, GRD-06, S4, DEC-26, 근거 철회 | 결정 요청 초안 | [기록](2026-09-21.md) |
 | 2026-09-21 | 정정 계약 승인 조건의 보존 강제 해제와 실행 문턱 셋 정리 | S15P21C206-153 | C18-Q1, C18-Q2, C18-Q4, 승인 조건, retired, 실행 문턱 | 결정 요청 초안 | [기록](2026-09-21.md) |
+| 2026-09-21 | 결과 페이지 리뷰 반영: 유효 공개 조건·일괄 공개 후보·은퇴 대상 | S15P21C206-146 | unpublishedSignalCount, PublicAnalysisVisibility, PUBLISH_ALL, RETRY, CANDIDATE_RETIRED | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 v3 소비자 인계 보완 | S15P21C206-112 | 재개, newDiscoverableCount, candidate_aliases, retired 공개물, removal_step, tolerance | 문서 보완·승인 대기 | [기록](2026-09-21.md) |
