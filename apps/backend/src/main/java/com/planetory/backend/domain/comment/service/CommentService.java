@@ -42,7 +42,7 @@ public class CommentService {
     public record Created(String commentId, Instant createdAt) {}
     public record Author(String memberId, String nickname) {}
     public record Detail(String commentId, Author author, String body, List<Reference> attachments,
-                         List<java.util.Map<String, Object>> sourceLinks, Instant createdAt, Instant updatedAt) {}
+                         List<SourceLinkService.Reference> sourceLinks, Instant createdAt, Instant updatedAt) {}
 
     /** {@code hasNext}는 {@code nextCursor != null}과 같은 뜻이다. 피드 4.1과 같은 목록 구조를 쓴다. */
     public record CommentList(List<Detail> items, String nextCursor, boolean hasNext) {}
@@ -72,7 +72,7 @@ public class CommentService {
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public CommentList list(long parentId, ParentType parentType, int size, String cursor) {
         if (size < 1 || size > MAX_LIST_SIZE) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        parent(parentId, parentType, false);
+        Post parent = parent(parentId, parentType, false);
         CommentCursor expected = new CommentCursor(parentType.name(), parentId, size, 0, 0);
         CommentCursor after = null;
         if (cursor != null && !cursor.isBlank()) {
@@ -93,7 +93,9 @@ public class CommentService {
                     last.getCreatedAt(), last.getId()).encode();
         }
         var refs = attachments.references(Parent.COMMENT, shown.stream().map(Comment::getId).toList());
-        return new CommentList(shown.stream().map(c -> detailOf(c, refs.getOrDefault(c.getId(), List.of()))).toList(), next, hasNext);
+        var sourceRefs = sources.references(Parent.COMMENT, shown.stream().map(Comment::getId).toList(), parent.getTicId());
+        return new CommentList(shown.stream().map(c -> detailOf(c, refs.getOrDefault(c.getId(), List.of()),
+                sourceRefs.getOrDefault(c.getId(), List.of()))).toList(), next, hasNext);
     }
 
     @Transactional
@@ -107,7 +109,8 @@ public class CommentService {
         attachments.replace(Parent.COMMENT, commentId, memberId, parent.getTicId(), command.historyIds());
         sources.replace(Parent.COMMENT, commentId, parent.getTicId(), command.sourceLinks(), false);
         comment.update(command.hasBody() ? body(command.body()) : comment.getBody(), Instant.now(clock));
-        return detailOf(comment, attachments.references(Parent.COMMENT, commentId));
+        return detailOf(comment, attachments.references(Parent.COMMENT, commentId),
+                sources.references(Parent.COMMENT, commentId, parent.getTicId()));
     }
 
     @Transactional
@@ -162,8 +165,8 @@ public class CommentService {
     private static boolean visible(Post post) { return "visible".equals(post.getStatus()); }
     private static boolean visible(Comment comment) { return "visible".equals(comment.getStatus()); }
     private static String id(Comment comment) { return "c-" + comment.getId(); }
-    private Detail detailOf(Comment comment, List<Reference> attachments) {
+    private Detail detailOf(Comment comment, List<Reference> attachments, List<SourceLinkService.Reference> sourceLinks) {
         return new Detail(id(comment), new Author("u-" + comment.getAuthor().getId(), comment.getAuthor().getNickname()),
-                comment.getBody(), attachments, sources.references(Parent.COMMENT, comment.getId(), comment.getPost().getTicId()), comment.getCreatedAt(), comment.getUpdatedAt());
+                comment.getBody(), attachments, sourceLinks, comment.getCreatedAt(), comment.getUpdatedAt());
     }
 }

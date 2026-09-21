@@ -2,7 +2,6 @@ package com.planetory.backend.domain.post.controller;
 
 import com.planetory.backend.domain.post.service.SourceLinkService;
 import com.planetory.backend.global.security.MemberPrincipal;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +16,7 @@ public class SourceCardController {
     private final SourceLinkService sources;
 
     @GetMapping("/api/v1/source-cards")
-    public ResponseEntity<Map<String, Object>> preview(@AuthenticationPrincipal MemberPrincipal principal,
+    public ResponseEntity<SourceLinkService.Card> preview(@AuthenticationPrincipal MemberPrincipal principal,
             @RequestParam String type, @RequestParam String id, @RequestParam String ticId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(sources.preview(principal.memberId(), type, id, ticId));
     }

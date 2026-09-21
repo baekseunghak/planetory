@@ -249,3 +249,27 @@ test("unavailable sources preserve only type and never enter editable selections
   );
   assert.throws(() => readMaterials({ sourceLinks: [{ available: false }] }));
 });
+
+test("uncertain removal must verify both visible and unavailable sources", () => {
+  const fields = {
+    title: "title",
+    body: "after",
+    purposeTag: "GENERAL",
+    ticId: "123",
+  };
+  const retained = {
+    ...fields,
+    ...readMaterials({
+      sourceLinks: [{ type: "PUBLIC_ANALYSIS", available: false }],
+    }),
+  };
+  assert.equal(patchIsVisible(retained, { sourceLinks: [] }), false);
+  assert.equal(
+    patchIsVisible(
+      { ...fields, ...readMaterials({ sourceLinks: [] }) },
+      { sourceLinks: [] },
+    ),
+    true,
+  );
+  assert.equal(patchIsVisible(retained, { body: "after" }), true);
+});

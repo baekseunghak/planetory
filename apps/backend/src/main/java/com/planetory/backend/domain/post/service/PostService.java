@@ -37,7 +37,7 @@ public class PostService {
     public record ReactionSummary(long agree, long disagree, String myReaction) {}
     /** 글 자체의 값만 담는다. 댓글 수처럼 다른 도메인이 소유한 값은 컨트롤러가 합친다. */
     public record Detail(String postId, String title, String body, String purposeTag, String ticId,
-                         Author author, List<HistoryAttachmentService.Reference> attachments, List<java.util.Map<String, Object>> sourceLinks,
+                         Author author, List<HistoryAttachmentService.Reference> attachments, List<SourceLinkService.Reference> sourceLinks,
                          Instant createdAt, Instant updatedAt) {}
 
     @Transactional
@@ -51,7 +51,7 @@ public class PostService {
         return new Created(id(post), post.getCreatedAt());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Detail detail(long postId) {
         Post post = posts.findWithAuthorById(postId).filter(PostService::visible)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));

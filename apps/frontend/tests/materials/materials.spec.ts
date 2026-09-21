@@ -603,3 +603,64 @@ test("comment unavailable source is visible and body-only edit omits sourceLinks
   expect((await saved).postDataJSON()).toEqual({ body: "본문만 바꾼 댓글" });
   expect(reads).toBe(0);
 });
+
+for (const applied of [false, true]) {
+  test(`uncertain hidden-source removal verifies actual deletion (${applied})`, async ({
+    page,
+  }) => {
+    const id = await seed(page, []);
+    let attempted = false;
+    await page.addInitScript((postId) => {
+      const original = window.fetch;
+      window.fetch = async (input, init) => {
+        const response = await original(input, init);
+        if (
+          init?.method === "PATCH" &&
+          String(input) === "/api/v1/posts/" + postId
+        ) {
+          await response.clone().text();
+          throw new TypeError("Test response loss");
+        }
+        return response;
+      };
+    }, id);
+    await page.route(`**/api/v1/posts/${id}`, async (route) => {
+      if (route.request().method() === "PATCH") {
+        attempted = true;
+        return route.fulfill({ status: 200, json: {} });
+      }
+      const response = await route.fetch();
+      const dto = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...dto,
+          sourceLinks:
+            attempted && applied
+              ? []
+              : [{ type: "PUBLIC_ANALYSIS", available: false }],
+        },
+      });
+    });
+    await page.goto(`/posts/${id}/edit`);
+    await page
+      .getByRole("button", { name: "공개 출처 모두 제거", exact: true })
+      .click();
+    await page.getByRole("button", { name: "수정 저장", exact: true }).click();
+    await page.getByRole("button", { name: "저장 여부 다시 확인" }).click();
+    if (applied)
+      await expect(page.getByRole("status")).toContainText(
+        "요청한 변경이 반영",
+      );
+    else {
+      await expect(page.getByRole("status")).toContainText(
+        "현재 서버 내용이 내 요청과 다릅니다",
+      );
+      await expect(
+        page.getByText("현재 조회한 글에 요청한 변경이 반영되어 있습니다.", {
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    }
+  });
+}

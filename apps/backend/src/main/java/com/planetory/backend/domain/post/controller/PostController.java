@@ -43,7 +43,7 @@ public class PostController {
      */
     public record PostDetailResponse(String postId, String title, String body, String purposeTag, String ticId,
                                      PostService.Author author, List<HistoryAttachmentService.Reference> attachments,
-                                     List<java.util.Map<String, Object>> sourceLinks,
+                                     List<SourceLinkService.Reference> sourceLinks,
                                      PostService.ReactionSummary reactionSummary, int commentCount,
                                      Instant createdAt, Instant updatedAt) {
         static PostDetailResponse of(Detail post, int commentCount, PostService.ReactionSummary summary) {

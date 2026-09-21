@@ -104,7 +104,9 @@ class SourceCardTest {
 
 
     private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
-    @Autowired com.planetory.backend.domain.post.service.SourceLinkService sources;
+    @MockitoSpyBean com.planetory.backend.domain.post.service.SourceLinkService sources;
+    @MockitoSpyBean org.springframework.jdbc.core.simple.JdbcClient sourceJdbc;
+    @Autowired com.planetory.backend.domain.comment.service.CommentService comments;
     @Autowired com.planetory.backend.domain.post.service.PostService posts;
     @MockitoSpyBean SubmissionRepository summaryRepository;
     String link(String type, String id) { return "{\"type\":\""+type+"\",\"id\":\""+id+"\"}"; }
@@ -278,5 +280,82 @@ class SourceCardTest {
             release.countDown(); deleting.get(10,java.util.concurrent.TimeUnit.SECONDS); modifying.get(10,java.util.concurrent.TimeUnit.SECONDS);
         }
         assertEquals(0,jdbc.queryForObject("SELECT count(*) FROM post_source_links WHERE post_id=?",Integer.class,number(post)));
+    }
+
+    @Test void 서로를참조하는_공식스레드댓글_생성과수정_40회_교착없음() throws Exception {
+        var a=publications.publish(member,submit(3));
+        long secondCandidate=jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) VALUES (?,'active',?,2,5,100.3,2.4,1000,10,'{}',true,true) RETURNING id",Long.class,tic,bundle);
+        long secondThread=jdbc.queryForObject("INSERT INTO posts(kind,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',?,'star',?,'두번째','','visible') RETURNING id",Long.class,secondCandidate,tic);
+        long firstThread=Long.parseLong(a.threadId().substring(3));
+        long other=member();
+        var barrier=new java.util.concurrent.CyclicBarrier(2);
+        doAnswer(call -> { barrier.await(5,java.util.concurrent.TimeUnit.SECONDS); return call.callRealMethod(); })
+                .when(org.springframework.test.util.AopTestUtils.<com.planetory.backend.domain.post.service.SourceLinkService>getUltimateTargetObject(sources)).replace(org.mockito.ArgumentMatchers.eq(com.planetory.backend.domain.post.service.HistoryAttachmentService.Parent.COMMENT),anyLong(),anyLong(),org.mockito.ArgumentMatchers.anyList(),org.mockito.ArgumentMatchers.eq(false));
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            for(int i=0;i<40;i++) {
+                var leftLinks=List.of(new com.planetory.backend.domain.post.service.PostService.SourceLink("SIGNAL_THREAD","st-"+secondThread));
+                var rightLinks=List.of(new com.planetory.backend.domain.post.service.PostService.SourceLink("SIGNAL_THREAD",a.threadId()));
+                var left=pool.submit(() -> comments.create(member,new com.planetory.backend.domain.comment.service.CommentService.CreateCommand(
+                        com.planetory.backend.domain.comment.service.CommentService.ParentType.SIGNAL_THREAD,firstThread,"교차",null,leftLinks)));
+                var right=pool.submit(() -> comments.create(other,new com.planetory.backend.domain.comment.service.CommentService.CreateCommand(
+                        com.planetory.backend.domain.comment.service.CommentService.ParentType.SIGNAL_THREAD,secondThread,"교차",null,rightLinks)));
+                long leftId=number(left.get(10,java.util.concurrent.TimeUnit.SECONDS).commentId());
+                long rightId=number(right.get(10,java.util.concurrent.TimeUnit.SECONDS).commentId());
+                var editLeft=pool.submit(() -> comments.patch(member,leftId,new com.planetory.backend.domain.comment.service.CommentService.PatchCommand(null,false,null,leftLinks)));
+                var editRight=pool.submit(() -> comments.patch(other,rightId,new com.planetory.backend.domain.comment.service.CommentService.PatchCommand(null,false,null,rightLinks)));
+                assertEquals(1,editLeft.get(10,java.util.concurrent.TimeUnit.SECONDS).sourceLinks().size());
+                assertEquals(1,editRight.get(10,java.util.concurrent.TimeUnit.SECONDS).sourceLinks().size());
+            }
+        }
+    }
+    @Test void 댓글20개_출처60개는_한번의출처쿼리로_가용성을조회() throws Exception {
+        var a=publications.publish(member,submit(3)); var b=publications.publish(member,submit(3));
+        String post=create("[]");
+        for(int i=0;i<20;i++) {
+            long comment=jdbc.queryForObject("INSERT INTO comments(post_id,user_id,body,status) VALUES (?,?,'목록','visible') RETURNING id",Long.class,number(post),member);
+            jdbc.update("INSERT INTO post_source_links(comment_id,target_type,target_id) VALUES (?,'analysis',?),(?,'analysis',?),(?,'thread',?)",
+                    comment,Long.parseLong(a.analysisId().substring(3)),comment,Long.parseLong(b.analysisId().substring(3)),comment,Long.parseLong(a.threadId().substring(3)));
+        }
+        publications.visibility(member,a.analysisId(),false);
+        clearInvocations(sourceJdbc);
+        var page=read("/api/v1/comments?parentType=POST&parentId="+post);
+        assertEquals(20,page.path("items").size());
+        for(var item:page.path("items")) {
+            assertEquals(3,item.path("sourceLinks").size());
+            assertEquals(2,item.path("sourceLinks").get(0).size());
+            assertFalse(item.path("sourceLinks").get(0).path("available").asBoolean());
+            assertTrue(item.path("sourceLinks").get(1).path("available").asBoolean());
+        }
+        verify(sourceJdbc,times(1)).sql(org.mockito.ArgumentMatchers.contains("FROM post_source_links a"));
+        verify(sourceJdbc,never()).sql(org.mockito.ArgumentMatchers.startsWith("SELECT target_type,target_id FROM post_source_links"));
+    }
+    @Test void 서비스직접글상세도_취소와_동일스냅샷() throws Exception {
+        var p=publications.publish(member,submit(3)); String post=create(links(p));
+        doAnswer(call -> {
+            try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                pool.submit(() -> publications.visibility(member,p.analysisId(),false)).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return call.callRealMethod();
+        }).when(sources).references(com.planetory.backend.domain.post.service.HistoryAttachmentService.Parent.POST,number(post),tic);
+        assertTrue(posts.detail(number(post)).sourceLinks().getFirst().available());
+        reset(sources);
+        assertFalse(posts.detail(number(post)).sourceLinks().getFirst().available());
+    }
+    @Test void 출처저장도중취소는_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
+        var p=publications.publish(member,submit(3)); String post=create("[]");
+        doAnswer(call -> {
+            var statement=call.callRealMethod();
+            try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                pool.submit(() -> publications.visibility(member,p.analysisId(),false)).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return statement;
+        }).when(sourceJdbc).sql(org.mockito.ArgumentMatchers.startsWith("INSERT INTO post_source_links("));
+        patchPost(post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());
+        assertEquals(0,jdbc.queryForObject("SELECT count(*) FROM post_source_links WHERE post_id=?",Integer.class,number(post)));
+        var comment=comments.create(member,new com.planetory.backend.domain.comment.service.CommentService.CreateCommand(
+                com.planetory.backend.domain.comment.service.CommentService.ParentType.POST,number(post),"본문",null,null));
+        jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?",tic);
+        error(ErrorCode.STAR_NOT_PUBLISHED,() -> comments.patch(member,number(comment.commentId()),
+                new com.planetory.backend.domain.comment.service.CommentService.PatchCommand("수정",true,null,null)));
     }
 }

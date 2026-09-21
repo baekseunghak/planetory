@@ -93,7 +93,13 @@ export function patchIsVisible(post: PostValues, sent: Partial<PostValues>) {
     (!Object.hasOwn(sent, "historyIds") ||
       sameMaterials({ historyIds: post.historyIds }, { historyIds })) &&
     (!Object.hasOwn(sent, "sourceLinks") ||
-      sameMaterials({ sourceLinks: post.sourceLinks }, { sourceLinks }))
+      sameMaterials(
+        {
+          sourceLinks: post.sourceLinks,
+          unavailableSources: post.unavailableSources,
+        },
+        { sourceLinks },
+      ))
   );
 }
 export function toDraft(post: PostValues): PostDraft {

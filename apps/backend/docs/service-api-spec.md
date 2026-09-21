@@ -366,7 +366,7 @@ History 배열은 생략하면 유지, 전달하면 전체 교체, `[]`면 전�
 
 **구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
 
-History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`도 167에서 실제 저장·조회하며 5장과 같은 검증·생략·전체 교체 규칙을 따른다. 목록·수정 응답에서 취소·숨김 출처는 `type/available:false`만 반환한다.
+History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`도 167에서 실제 저장·조회하며 5장과 같은 검증·생략·전체 교체 규칙을 따른다. 목록·수정 응답에서 취소·숨김 출처는 `type/available:false`만 반환한다. 댓글 수정도 생성과 같이 별 열림을 검사하므로, 별이 비공개·미발견 상태가 되면 본문 수정은 404 `STAR_NOT_PUBLISHED`로 거절한다.
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
@@ -538,9 +538,9 @@ CURRENT 검사는 응답 후까지 최신성을 영구 보장하지 않는다. �
 - CREATE에서 `sourceLinks` 생략은 빈 관계다. PATCH 생략은 기존 관계를 유지하고 `[]`는 전체 제거, 배열은 전체 교체다. 명시적 null은 허용하지 않는다. 본문·History만 수정할 때 기존 비공개 출처를 재공개·암묵 삭제하지 않는다.
 - 새 연결·별 변경은 대상과 상위 공식 스레드의 공개 상태, 열린 별, 같은 TIC를 다시 검사한다. 미리보기 후 취소·숨김되면 저장을 거절한다. 부모 글의 TIC 변경은 미삭제 댓글의 History·출처까지 검사하며 다른 작성자의 자료를 제거하거나 다른 별에 노출하지 않는다.
 - 이미 연결된 무효 출처는 `{"type":"PUBLIC_ANALYSIS","available":false}` 또는 `{"type":"SIGNAL_THREAD","available":false}`만 반환한다. 대상 ID·작성자·내용은 포함하지 않는다. 직접 미리보기는 404이며 조회 때 현재 공개 상태를 다시 판정한다. 복원되면 기존 관계가 다시 유효해진다.
-- 프론트는 ID 없는 항목에 대체 안내를 표시하고 추가 조회·직접 링크를 만들지 않는다. 편집용 유효 선택과 무효 안내를 분리하며, 본문이나 History만 수정할 때 `sourceLinks`를 보내지 않는다. 무효 출처를 바꾸려면 사용자가 공개 출처 전체 제거를 명시적으로 선택한다.
-- 부모 행 잠금으로 교체·삭제·별 변경을 직렬화하고 공개 상태 변경과 같은 SYSTEM 부모→공개 분석 행 순서로 현재 대상을 잠근다. 미리보기와 댓글 목록은 REPEATABLE_READ에서 읽고 신호 통계는 기존 `SubmissionService.publicJudgmentSummary`를 소비한다. 조회 한 응답은 같은 스냅샷이며 다음 조회는 새 상태를 반영한다.
-- V1 `post_source_links`를 재사용한다. 출처 저장·조회는 공개 분석·성과·반응·판단 통계를 생성하거나 복제하지 않는다. V17 앱 권한은 [개발 환경 안내](development-setup.md#v17-출처-관계-권한)를 따른다.
+- 프론트는 ID 없는 항목에 대체 안내를 표시하고 추가 조회·직접 링크를 만들지 않는다. 편집용 유효 선택과 무효 안내를 분리하며, 본문이나 History만 수정할 때 `sourceLinks`를 보내지 않는다. 무효 출처를 바꾸려면 사용자가 공개 출처 전체 제거를 명시적으로 선택한다. 응답 유실 뒤 전체 제거의 반영 여부는 유효·무효 출처가 모두 없어야 성공으로 판단한다. 본문만 수정한 요청은 출처 보존 여부 때문에 실패로 판단하지 않는다.
+- 부모 행 잠금으로 교체·삭제·별 변경을 직렬화한다. 출처 대상 행은 추가로 잠그지 않고 관계 저장 전후에 현재 가용성을 검사하여, 서로를 참조하는 공식 스레드 댓글의 교착을 피한다. 최종 검사 뒤 발생한 취소·숨김은 다음 조회에서 무효 출처로 반영한다. 글 상세 서비스·미리보기·댓글 목록은 REPEATABLE_READ에서 읽고 신호 통계는 기존 `SubmissionService.publicJudgmentSummary`를 소비한다. 댓글 한 페이지의 출처는 관계·가용성을 일괄 조회하고 같은 별의 열림을 한 번 검사한다.
+- V1 `post_source_links`를 재사용한다. 출처 저장·조회는 공개 분석·성과·반응·판단 통계를 생성하거나 복제하지 않는다. V18 앱 권한은 [개발 환경 안내](development-setup.md#v18-출처-관계-권한)를 따른다.
 
 <a id="reactions"></a>
 
@@ -779,9 +779,10 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
 }
 ```
 
-roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. 시작 요일·기준 시간대·종료일 포함 여부는 합의 후 경계 계산에 적용한다. 진행 회차가 없으면 200 `{"round":null,"eligible":false}`. 서버는 shouldShow·acknowledged를 반환하지 않는다.
+roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. **168 구현 완료:** 운영 `status='active'` 회차 하나를 선택하며 현재 날짜로 회차를 선택하거나 상태를 자동 전환하지 않는다. planned·closed만 있거나 회차가 없으면 200 `{"round":null,"eligible":false,"participantCount":null}`을 반환한다. 인증 세션이 필요하며 미인증은 401 `AUTH_REQUIRED`, 응답은 `Cache-Control: no-store`다. 서버는 shouldShow·acknowledged를 반환하지 않는다.
 
-- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 미완료 회원에게는 eligible=false, ticId=null로 대상 노출을 제한하는 최소안을 유지하며 소개 표시 여부는 별도 합의한다.
+- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
+- 자격이 있으면 `round.ticId`를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
 - SB-D20 확정: 진행 중 회차에 참여 가능한 회원에게만 새 챌린지 안내를 표시한다. 프론트는 현재 roundId와 브라우저의 회원별 마지막 안내 회차를 비교한다. 실제 안내 표시 후에만 회차를 기록하며 API 조회만으로 기록하지 않는다. 확인 테이블·서버 확인 API는 추가하지 않는다.
 - 같은 회원·브라우저에서 기록된 회차는 재안내하지 않고 다음 회차에는 다시 안내한다. 이 방식은 기기·브라우저 간 확인 상태를 공유하지 않는다. 브라우저 저장소 삭제·다른 기기 접속 시 같은 회차 안내가 다시 나올 수 있다. 엄격한 회원별 1회 안내를 보장하지 않는다.
 - 브라우저 저장 실패는 챌린지 이용을 막지 않으며 안내 반복을 허용한다. 같은 브라우저의 다른 회원은 별도 기록을 사용한다. 여러 탭의 동시 안내까지 정확히 한 번으로 보장하지 않는다. 기기 간 확인 공유는 P1 일반 알림에서 검토한다.
@@ -790,7 +791,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
-139 퀘스트 패널은 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 168 회차 API와 208 화면의 참여 수도 같은 원천을 소비한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. 168 API 구현과 208 실제 HTTP 연동 인수는 별도다.
+139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 새 DB 테이블·권한·마이그레이션은 없다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
 
 <a id="later"></a>
 
