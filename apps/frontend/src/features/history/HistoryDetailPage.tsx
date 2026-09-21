@@ -4,6 +4,7 @@ import { usePageContext } from "../../app/usePageContext.ts";
 import { HistoryCurveChart } from "../analysis/HistoryCurveChart.tsx";
 import { wrapPhaseWindow } from "../analysis/history-graph.ts";
 import type { HistoryDetail } from "../analysis/history-data.ts";
+import { FallbackNote } from "./fallback-note.tsx";
 import { useHistoryDetail } from "./use-history-detail.ts";
 import "./history-detail.css";
 
@@ -225,16 +226,11 @@ export function HistoryDetailPage() {
                 {/*
                   같은 값이 모드마다 다른 뜻이다. 한 문구로 뭉치면 거짓이 된다.
                 */}
-                {graph.view.reproduction.fallbackReason ===
-                  "RETIRED_CANDIDATE" && (
-                  <p className="submission-note">
-                    {mode === "CURRENT"
-                      ? "당시 조합에 은퇴한 후보가 있어 원본 곡선으로 대체했습니다."
-                      : graph.view.dto.snapshot
-                        ? "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다. 아래 배열은 당시 그대로입니다."
-                        : "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다."}
-                  </p>
-                )}
+                <FallbackNote
+                  reason={graph.view.reproduction.fallbackReason}
+                  mode={mode}
+                  hasSnapshot={graph.view.dto.snapshot !== null}
+                />
               </>
             )}
           </section>
