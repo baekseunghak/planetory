@@ -32,9 +32,12 @@ export type StepTransition =
       retryable: boolean;
     }
   /**
-   * 잔차 계산 기반이 아직 연결되지 않았다(503 `DEPENDENCY_UNAVAILABLE`).
-   * **실패가 아니라 준비되지 않은 것이다.** `S15P21C206-88`이 붙기 전까지
-   * 영구적이라 다시 시도를 권하지 않는다.
+   * 잔차 계산 기반이 아직 연결되지 않았다(503 `DEPENDENCY_UNAVAILABLE`이면서
+   * `retryable: false`). **실패가 아니라 준비되지 않은 것이다.** 다시 요청해도
+   * 같은 결과라 시도를 권하지 않는다.
+   *
+   * 같은 503이라도 `retryable: true`는 실행기를 시작하지 못한 것이고 **화면이
+   * 할 일이 반대**다(7.1절, `S15P21C206-249`). 그쪽은 `failed`로 보낸다.
    */
   | { phase: "unavailable"; target: CurveContext; message: string }
   /** 대기열이 찼다. `activeJobId`가 있으면 내가 이미 돌리고 있는 작업이다. */
@@ -230,11 +233,16 @@ export function useCurveStep(
           error instanceof ApiError &&
           error.code === "DEPENDENCY_UNAVAILABLE"
         ) {
-          setTransition({
-            phase: "unavailable",
-            target,
-            message: error.message,
-          });
+          // 같은 503이 두 가지다(7.1절). 원인은 묻지 않고 **서버가 준
+          // `retryable`로만 가른다** — 그것이 이 필드를 둔 이유다. 값이 없으면
+          // 참으로 읽는다. 모르는 것 때문에 나갈 길을 막지 않는다.
+          const retryable = error.details.retryable !== false;
+          setTransition(
+            retryable
+              ? // 서버 문구가 이미 다시 시도하라고 말한다. 덧붙이지 않는다.
+                { phase: "failed", target, message: error.message, retryable }
+              : { phase: "unavailable", target, message: error.message },
+          );
           return;
         }
         setTransition({
