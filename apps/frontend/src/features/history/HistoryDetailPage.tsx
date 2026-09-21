@@ -230,7 +230,9 @@ export function HistoryDetailPage() {
                   <p className="submission-note">
                     {mode === "CURRENT"
                       ? "당시 조합에 은퇴한 후보가 있어 원본 곡선으로 대체했습니다."
-                      : "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다. 아래 배열은 당시 그대로입니다."}
+                      : graph.view.dto.snapshot
+                        ? "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다. 아래 배열은 당시 그대로입니다."
+                        : "현재 데이터에서는 당시 잔차 조합을 재현할 수 없습니다."}
                   </p>
                 )}
               </>
