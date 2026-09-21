@@ -1108,11 +1108,16 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
      "latestSubmissionId": "sub-6990", "latestHistoryId": "h-490", "matchResult": "matched", "userJudgment": "LIKELY_PLANET",
      "judgmentEvaluation": "AGREES", "achievement": {"result": "recognized", "recognizedAt": "…"},
      "publication": {"state": "NOT_ELIGIBLE"}, "ai": {"status": "completed", "score": 0.93, "verdict": "approved"},
+     "judgmentStatistics": {"kind": "graded", "matchedMemberCount": 10, "agreementPercent": 70.0},
      "relabel": null, "curveStepAtMatch": 0, "submissionIds": ["sub-6990"], "threadId": "st-301"},
     {"candidateId": "c-402", "disposition": "UNCONFIRMED", "status": "active",
      "latestSubmissionId": "sub-7001", "latestHistoryId": "h-501", "matchResult": "matched_harmonic", "userJudgment": "LIKELY_PLANET",
      "judgmentEvaluation": "UNSCORED", "achievement": {"result": "pending_publish", "recognizedAt": null},
      "publication": {"state": "UNPUBLISHED"}, "ai": {"status": "completed", "score": 0.71, "verdict": "hold"},
+     "judgmentStatistics": {"kind": "public_analyses", "candidateId": "c-402", "participantCount": 15,
+                            "likelyPlanet": 8, "unlikelyPlanet": 4, "unsure": 3,
+                            "percentages": {"likelyPlanet": 53.3, "unlikelyPlanet": 26.7, "unsure": 20.0},
+                            "asOf": "2026-09-21T01:00:00Z"},
      "relabel": null, "curveStepAtMatch": 1, "submissionIds": ["sub-7001"], "threadId": null}
   ],
   "unmatchedSubmissions": [{"submissionId": "sub-7002", "historyId": "h-502", "matchResult": "not_matched", "submittedAt": "…"}],
@@ -1126,6 +1131,8 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 ```
 
 - `signals`는 회원이 매칭한 고유 신호마다 한 항목. 미매칭 후보는 절대 나열하지 않는다(DEC-28).
+- `signals[].judgmentStatistics`는 RES-11·6.4절의 **탐사 결과 통계**다. 조회 시점의 현재 `answerClass=analysis`이면 최신 유효 공개 판단의 `kind=public_analyses`·`participantCount`·세 판단 분포를, `answerClass=graded`이면 첫 매칭 기준의 `kind=graded`·`matchedMemberCount`·`agreementPercent`를 반환한다. 본인의 공개 여부나 `threadId` 유무로 분기하지 않으며 한 신호 카드에 두 통계를 섞지 않는다. 위 예시의 미공개 상태는 본인 기록의 상태이고 참여자 15명은 해당 신호의 전체 유효 공개 참여자 수다.
+- 미확정에서 확정·FP로 재분류되면 이 페이지의 최신 조회 통계는 graded로 바뀌지만, 기존 공식 스레드의 `judgmentSummary`는 public_analyses를 유지한다. 6.6절의 최신 제출 조회와 같은 기준이며 POST 재전송의 저장된 당시 통계는 바꾸지 않는다. 산식·공개 유효 조건·동일 스냅샷 계약은 [서비스 API 9.2절](service-api-spec.md#92-스레드공개-목록상세)을 따른다. 146 API의 구현·연동 검증은 146에서 수행한다.
 - "탐색 완료 / 미게시 분석 있음"은 `progress.stage=completed`와 `unpublishedSignalCount>0`으로 공존한다.
 - `threadId`는 서비스 API 공식 스레드 ID(있을 때만).
 
