@@ -61,7 +61,7 @@ class PublicAnalysisTest {
     Float[] flux;
 
     @BeforeEach void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         member=member(); tic=Math.abs(UUID.randomUUID().getMostSignificantBits()%900_000_000)+1;
         jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,1,'published')",tic);
         var p=layout.place(0);
