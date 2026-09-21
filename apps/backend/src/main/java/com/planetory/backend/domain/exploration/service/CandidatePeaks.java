@@ -20,17 +20,29 @@ import java.util.List;
  *
  * <ol>
  * <li><b>최소 간격 = {@code 2h+1}칸</b>(h는 판 manifest의 {@code fine_tune.half_width_cells}).
- *     미세 조정 범위가 겹치는 두 봉우리는 사용자에게 <b>같은 선택</b>이다 — 어느 쪽을 골라도 같은
- *     주기로 맞출 수 있다. 목록에 둘 다 두면 자리만 차지한다.</li>
- * <li><b>고조파 제외는 {@code matching.harmonic_multipliers}를 그대로 쓴다.</b> 제출이 「이 주기는
- *     저 후보의 2배다」라고 판정하는 배수와, 목록이 「이 봉우리는 위 봉우리의 2배다」라고 판정하는
- *     배수가 다르면 화면과 채점이 어긋난다. 허용 오차는 <b>{@code h}칸</b>이다 — 그 봉우리를 미세
- *     조정해 정확히 그 배수에 닿을 수 있으면 같은 고조파로 본다.</li>
+ *     <b>가까운 추천을 줄이는 정책이지 선택 가능 범위를 보존하는 규칙이 아니다.</b> 두 미세 조정
+ *     범위가 닿지 않을 만큼만 떼어 놓는다. h=3에서 100번과 106번의 범위 {@code [97,103]}·
+ *     {@code [103,109]}는 한 점에서 닿지만, 100번을 골라 106번까지 조정할 수는 없다. 목록에서 빠진
+ *     주기도 주기도에서 직접 고를 수 있다(5.4절).</li>
+ * <li><b>고조파 제외는 {@code matching.harmonic_multipliers}를 그대로 쓴다.</b> 제출이 「2배 맞음」
+ *     이라고 판정하는 배수와 목록이 거르는 배수가 다르면 화면과 채점이 어긋난다. 다만 이것이
+ *     <b>같은 신호임을 판정하는 것은 아니다</b> — 제출 매칭에는 위상·duration·관측 통과 조건이 더
+ *     있다. 기준은 <b>정확한 배수 주기가 그 봉우리의 미세 조정 범위 안에 드는가</b>이며 칸 수로
+ *     반올림해 비교하지 않는다.</li>
  * </ol>
  *
  * <p>둘 다 <b>이미 뽑힌 더 센 봉우리</b>를 기준으로만 본다. 약한 쪽이 밀려난다.
  */
 final class CandidatePeaks {
+
+    /**
+     * 격자 계산의 반올림만 흡수하는 상대 여유.
+     *
+     * <p>칸 폭(로그 격자에서 {@code r-1})보다 여러 자릿수 작아 판정을 넓히지 않는다.
+     * 이것이 없으면 {@code h=0}에서 범위가 한 점이라, 정확히 배수 자리에 있는 봉우리도
+     * {@code pow} 반올림 차이(상대 1e-16 수준)만으로 빠져나가 고조파 규칙이 사실상 꾨진다.
+     */
+    private static final double GRID_EPSILON = 1e-12;
 
     private CandidatePeaks() {
     }
@@ -66,28 +78,17 @@ final class CandidatePeaks {
                     : (maxDays - minDays) / (count - 1);
         }
 
-        /** 배수 {@code multiple}이 격자에서 몇 칸인지. 로그 격자에서만 자리에 무관하게 일정하다. */
-        int cellsFor(double multiple, int from) {
-            double target = periodAt(from) * multiple;
-            if (target <= 0) {
-                return Integer.MAX_VALUE;
-            }
-            double exact = logSpaced
-                    ? Math.log(target / minDays) / Math.log(ratio())
-                    : (target - minDays) * (count - 1) / (maxDays - minDays);
-            return (int) Math.round(exact) - from;
-        }
     }
 
     /**
      * 고를 때 쓰는 규칙.
      *
-     * @param halfWidthCells 판 manifest의 미세 조정 반폭 h. 최소 간격과 고조파 허용 오차가 여기서 나온다
+     * @param halfWidthCells 판 manifest의 미세 조정 반폭 h. 최소 간격과 고조파 판정 범위가 여기서 나온다
      * @param harmonicMultipliers 운영 규칙 {@code matching.harmonic_multipliers}. 1은 자기 자신이라 건너뛴다
      */
     record Rules(int topN, int halfWidthCells, List<Double> harmonicMultipliers) {
 
-        /** 미세 조정 범위가 겹치지 않으려면 이만큼 떨어져야 한다. */
+        /** 두 미세 조정 범위가 닿지 않으려면 이만큼 떨어져야 한다. 추천을 줄이는 정책이다. */
         int minSeparationCells() {
             return 2 * halfWidthCells + 1;
         }
@@ -144,11 +145,21 @@ final class CandidatePeaks {
      * 자른다 — 격자 밖 주기는 애초에 고를 수 없다.
      */
     static Peak peakAt(int rank, int gridIndex, double power, Grid grid, int halfWidthCells) {
-        double period = grid.periodAt(gridIndex);
+        double[] range = fineTune(grid, gridIndex, halfWidthCells);
+        return new Peak(rank, gridIndex, grid.periodAt(gridIndex), power,
+                range[0], range[1], grid.cellWidthAt(gridIndex));
+    }
+
+    /**
+     * {@code gridIndex}에서 미세 조정으로 닿을 수 있는 주기 범위 {@code [최소, 최대]}.
+     *
+     * <p>격자를 벗어나지 않도록 자른다. 격자 밖 주기는 애초에 고를 수 없으므로 고조파 판정도 화면이
+     * 실제로 고를 수 있는 범위로 해야 한다.
+     */
+    private static double[] fineTune(Grid grid, int gridIndex, int halfWidthCells) {
         int low = Math.max(0, gridIndex - halfWidthCells);
         int high = Math.min(grid.count() - 1, gridIndex + halfWidthCells);
-        return new Peak(rank, gridIndex, period, power,
-                grid.periodAt(low), grid.periodAt(high), grid.cellWidthAt(gridIndex));
+        return new double[] {grid.periodAt(low), grid.periodAt(high)};
     }
 
     /**
@@ -186,21 +197,26 @@ final class CandidatePeaks {
     /**
      * 이미 고른 봉우리와 너무 가깝거나 그 고조파인가.
      *
-     * <p>두 기준의 폭이 다르다. <b>겹침</b>은 두 미세 조정 범위가 닿는지라 {@code 2h+1}칸이고,
-     * <b>고조파</b>는 이 봉우리를 조정해 그 배수에 닿을 수 있는지라 {@code h}칸이다. 고조파에도
-     * {@code 2h+1}을 쓰면 배수 자리에서 한참 떨어진 봉우리까지 고조파로 몰아 목록이 비어 간다.
+     * <p>두 기준의 뜻이 다르다. <b>간격</b>은 가까운 추천을 줄이는 정책이고, <b>고조파</b>는 정확한
+     * 배수 주기가 이 봉우리의 미세 조정 범위 안에 드는지다.
+     *
+     * <p>고조파는 <b>주기 값으로 직접</b> 본다. 배수 자리를 칸 수로 반올림하면 격자에 따라 최대 반
+     * 칸이 어긋나, 조정해도 닿을 수 없는 봉우리가 제외된다 — 0.5~40일 5000점 h=3에서 1000번의 2배
+     * 자리는 1790.74번이고 1794번은 실제 3.26칸 떨어져 있는데, 반올림하면 3칸으로 보여 제외됐다
+     * (S15P21C206-141 리뷰, 윤성용).
      */
     private static boolean tooClose(int index, int chosen, Grid grid, Rules rules) {
         if (Math.abs(index - chosen) < rules.minSeparationCells()) {
             return true;
         }
+        double[] reachable = fineTune(grid, index, rules.halfWidthCells());
         for (double multiple : rules.harmonicMultipliers()) {
             if (multiple <= 0 || multiple == 1) {
                 continue;
             }
-            int cells = grid.cellsFor(multiple, chosen);
-            if (cells != Integer.MAX_VALUE
-                    && Math.abs(index - (chosen + cells)) <= rules.halfWidthCells()) {
+            double target = grid.periodAt(chosen) * multiple;
+            double slack = target * GRID_EPSILON;
+            if (target >= reachable[0] - slack && target <= reachable[1] + slack) {
                 return true;
             }
         }
