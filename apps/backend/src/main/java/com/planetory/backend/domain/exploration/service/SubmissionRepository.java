@@ -122,6 +122,24 @@ public class SubmissionRepository {
                 """).param("member", member).param("tic", tic).param("step", curveStep)
                 .param("count", planetCount).param("skipped", skipped).update();
     }
+    /**
+      * 6.7절 상세 보기. 이미 본 제출을 다시 봐도 값이 달라지지 않는다.
+      *
+      * <p>대상은 <b>처음 고른 것만</b> 남긴다. {@code COALESCE}가 그 일을 하므로 두 요청이 겹쳐도
+      * 먼저 쓴 값이 이긴다. 매번 덮어쓰면 후보표가 바뀔 때 같은 제출의 답이 달라진다.
+      *
+      * <p><b>실제로 저장된 대상을 돌려준다.</b> 겹친 요청이 각자 고른 대상으로 응답을 만들면 저장은
+      * 하나인데 같은 제출에 두 답이 나간다. 호출자는 이 값으로 응답을 만든다.
+      *
+      * @return 이 제출에 남은 대상 후보 ID
+      */
+    long markDetailViewed(long submissionId, long candidateId) {
+        return jdbc.sql("UPDATE submissions SET answer_viewed = true,"
+                        + " detail_target_candidate_id = COALESCE(detail_target_candidate_id, ?) WHERE id = ?"
+                        + " RETURNING detail_target_candidate_id")
+                .params(candidateId, submissionId).query(Long.class).single();
+    }
+
     void saveResponse(long submission, String response) {
         if (jdbc.sql("UPDATE submissions SET response_snapshot=CAST(? AS jsonb) WHERE id=? AND response_snapshot IS NULL")
                 .params(response, submission).update() != 1) throw new IllegalStateException("최초 제출 응답 저장 실패");
