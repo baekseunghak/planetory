@@ -35,3 +35,5 @@
 | 2026-09-21 | 공개 첨부 모드별 대체 안내·작업 재조회 정정 | S15P21C206-213 | 191, SUBMITTED, fallbackReason, jobId, lastMeta, Chrome 14 | 로컬 검증 완료·리뷰 전 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 120 develop 통합 테스트 중복 정리 | S15P21C206-120 | holdout, monkeypatch, 111 passed | 통합 테스트·호출 경로 확인 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
