@@ -91,7 +91,7 @@ test("filters through HTTP, locates using server scale, and preserves query when
           .zoom,
     )
     .toBe(1);
-  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await page.getByRole("button", { name: "별지도" }).click();
   await expect(page).toHaveURL(/filterGrade=A/);
   await expect(
     page.getByRole("list", { name: "별 검색 결과" }).getByRole("button"),

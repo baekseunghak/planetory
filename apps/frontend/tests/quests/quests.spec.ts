@@ -61,7 +61,7 @@ test("independently collapsed regions, all five goals, locked target privacy, se
   await expect(
     page.getByRole("complementary", { name: "별 상세" }),
   ).toContainText("TIC 900000001");
-  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await page.getByRole("button", { name: "별지도" }).click();
   await expect(
     page.getByRole("button", { name: "퀘스트", exact: true }),
   ).toBeFocused();

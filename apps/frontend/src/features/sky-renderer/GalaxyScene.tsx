@@ -14,12 +14,15 @@ import {
 } from "./model";
 import { GalaxyRenderer, type RendererMetrics } from "./renderer";
 import "./galaxy.css";
+import type { SystemView, BodyPoint } from "./personal-system";
 import {
   GalaxyInteraction,
   type InteractionControl,
 } from "./GalaxyInteraction";
 
 export type SceneControl = {
+  readonly systemBodies: BodyPoint[];
+  readonly focusAmount: number;
   setCamera(patch: Partial<GalaxyCamera>, options?: { level?: number }): void;
   getCamera(): GalaxyCamera | null;
   restartGraphics(): void;
@@ -28,6 +31,7 @@ export type SceneControl = {
   focusStar(position: Pick<Star, "x" | "y" | "depthZ">): void;
 };
 type Props = SkySceneProps & {
+  systemView?: SystemView | null;
   personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
   onMetrics?: (value: RendererMetrics) => void;
@@ -50,6 +54,7 @@ export function GalaxyScene({
   focusedPlanet = null,
   suspended = false,
   onGraphics,
+  systemView = null,
 }: Props) {
   const cameraAnimation = useRef(0);
   const interaction = useRef<InteractionControl | null>(null);
@@ -86,6 +91,12 @@ export function GalaxyScene({
   }, [meta, camera, dimensions]);
   useEffect(() => {
     onReady?.({
+      get systemBodies() {
+        return renderer.current?.systemBodies ?? [];
+      },
+      get focusAmount() {
+        return renderer.current?.systemBodies.length ? 1 : 0;
+      },
       restartGraphics: () => setGeneration((n) => n + 1),
       setCamera(patch, options) {
         cancelAnimationFrame(cameraAnimation.current);
@@ -264,6 +275,7 @@ export function GalaxyScene({
     try {
       r.setScene(plan, data.selectedTicId, visibleSystem);
       r.setPlanetFocus(focusedPlanet);
+      r.setSystemView(visibleSystem ? systemView : null);
       setFailure(null);
     } catch (e) {
       r.setScene({ stars: [] }, null);
@@ -280,6 +292,7 @@ export function GalaxyScene({
     camera,
     meta.starCount,
     focusedPlanet,
+    systemView,
   ]);
   return (
     <div
@@ -313,7 +326,9 @@ export function GalaxyScene({
           store={store}
           onPlanetSelect={onPlanetSelect}
           onDeselect={onDeselect}
-          enabled={ready && !failure && !data.needsRefresh && !suspended}
+          enabled={
+            ready && !failure && !data.needsRefresh && !suspended && !systemView
+          }
           changeCamera={(next) => {
             cancelAnimationFrame(cameraAnimation.current);
             setForcedLevel(null);
