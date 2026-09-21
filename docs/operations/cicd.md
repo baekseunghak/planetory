@@ -53,15 +53,45 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 | GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`, `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
 | 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
+| 레지스트리 | `REGISTRY_IMAGE_PREFIX` (`<레지스트리 호스트>:<포트>/<네임스페이스>`) |
 | Node 1 Airflow | 서버 `.env`의 `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DATABASE_URL`, `AIRFLOW_FERNET_KEY`, `AIRFLOW_WEBSERVER_SECRET_KEY`, `AIRFLOW_DB_PATH`, `AIRFLOW_LOGS_PATH` |
 
-변수는 Protected·Masked 범위를 적용한다. 운영 서버에는 Container Registry 읽기 전용 자격 증명을 미리 설정한다.
+변수는 Protected·Masked 범위를 적용한다. 레지스트리는 tailnet 내부 전용이라 노드에 읽기 전용 자격 증명을 배포하지 않는다.
+
+## 이미지 레지스트리
+
+`lab.ssafy.com`은 Container Registry가 비활성이라 GitLab 내장 `CI_REGISTRY*` 변수가 주입되지 않는다. 대신 빌드 노드에서 자체 레지스트리(`registry:3`)를 운영한다. 근거와 경위는 [S15P21C206-226](https://ssafy.atlassian.net/browse/S15P21C206-226)을 따른다.
+
+| 항목 | 값 |
+| --- | --- |
+| 호스트 | 빌드 노드. Tailscale IP에만 바인딩해 tailnet 외부로 열지 않는다 |
+| 전송 | `tailscale cert`로 발급한 MagicDNS 이름의 정식 인증서로 HTTPS 서빙 |
+| 인증 | 없음. tailnet 접근 자체가 경계다 |
+| 저장 경로 | 빌드 노드의 별도 디렉터리 |
+| 삭제 | `REGISTRY_STORAGE_DELETE_ENABLED=true`. 태그 정리는 수동이다 |
+
+정식 인증서를 쓰므로 배포 노드에 `insecure-registries` 설정이 필요 없다. 인증서는 만료 전에 `tailscale cert`를 다시 실행하고 레지스트리 컨테이너를 재시작해 갱신한다. 갱신을 놓치면 빌드와 배포가 함께 멈춘다.
+
+레지스트리와 빌더를 같은 노드에 둬서 push가 tailnet을 타지 않는다. tailnet ACL이 태그 사이 통신을 전부 허용하지는 않으므로, 다른 노드를 빌더로 쓰려면 그 태그에서 레지스트리 포트가 열려 있는지 먼저 확인한다.
+
+## Runner 구성
+
+Runner는 두 대이고 job은 태그로 나눈다.
+
+| Runner | 아키텍처 | 태그 | 맡는 job |
+| --- | --- | --- | --- |
+| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*` |
+| CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` |
+
+배포 대상이 전부 `linux/amd64`라 이미지 빌드는 x86_64 Runner에서만 실행한다. `.docker-build`에 `tags: [amd64-docker]`를 둔 이유이며, 이 태그를 떼면 job이 aarch64 Runner로 가서 에뮬레이션 설정 없이 실패한다. 빌드 Runner는 dind를 쓰므로 `privileged`가 필요하고, 컨테이너 안에서는 MagicDNS가 해석되지 않으므로 Runner 설정에 레지스트리 이름의 `extra_hosts`를 둔다.
+
+`deploy:*`는 대상 서버에 SSH로만 접속하고 이미지는 대상 서버가 직접 pull한다. 따라서 CI 노드에는 레지스트리 접근 권한이 필요 없다.
+
+이미지는 `docker build`와 `docker push`로 만든다. buildx를 쓰면 container driver가 dind 안에 buildkit 컨테이너를 따로 띄우고 push를 그 컨테이너가 수행하는데, Runner의 `extra_hosts`가 거기까지 닿지 않아 레지스트리 이름 해석에 실패한다. 빌드는 성공하고 push만 실패하는 형태로 나타나 원인을 찾기 어렵다. 빌드 Runner가 x86_64라 교차 빌드가 필요 없어 buildx를 쓸 이유도 없다.
 
 ## 도입 전 확인
 
 - `lab.ssafy.com` Runner가 Docker-in-Docker와 Buildx를 실행할 수 있는지
-- 현재 ARM64 Runner가 privileged DinD에서 고정된 `tonistiigi/binfmt` 이미지를 실행해 amd64를 에뮬레이션할 수 있는지
-- Container Registry 사용 권한
 - 기준 브랜치가 `main`인지 `master`인지
 - Spark·Airflow 기반 이미지의 amd64 지원
 - 각 서버의 Docker Compose, `.env`, 볼륨 경로와 방화벽

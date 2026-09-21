@@ -45,19 +45,22 @@ validate:hadoop-config:
 .docker-build:
   stage: build
   image: docker:27.5-cli
+  # amd64 Runner에서만 실행한다. 다른 Runner로 가면 에뮬레이션 설정 없이 amd64 빌드가 실패한다.
+  tags:
+    - amd64-docker
   services:
-    - name: docker:27.5-dind
-      alias: docker
+    - docker:27.5-dind
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+  # buildx를 쓰지 않는다. buildx의 container driver는 dind 안에 buildkit 컨테이너를 따로 띄우고
+  # push를 그 컨테이너가 수행하는데, Runner의 extra_hosts가 거기까지 닿지 않아 레지스트리 이름 해석에 실패한다.
+  # 일반 build·push는 dind 데몬이 직접 수행하므로 dind에 적용된 extra_hosts를 그대로 쓴다.
   before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
-    - docker run --privileged --rm tonistiigi/binfmt:qemu-v10.2.3-68 --install amd64
-    - docker run --rm --platform linux/amd64 alpine:3.20 uname -m | grep -qx x86_64
-    - docker buildx create --use
+    - test -n "$REGISTRY_IMAGE_PREFIX"
   script:
-    - docker buildx build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS --push .
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS .
+    - docker push "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
 
 .remote-compose-deploy:
   stage: deploy
@@ -73,7 +76,7 @@ validate:hadoop-config:
     - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
     - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
-    - export FULL_IMAGE="$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA"
+    - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && export $DEPLOY_IMAGE_VARIABLE='$FULL_IMAGE' && docker compose -f compose.yaml config -q && docker compose -f compose.yaml pull $DEPLOY_SERVICES && if [ '$DEPLOY_ACTION' = 'up' ]; then docker compose -f compose.yaml up -d --no-deps $DEPLOY_SERVICES && docker compose -f compose.yaml ps $DEPLOY_SERVICES; fi"
 
 .deploy-ec2-a:
