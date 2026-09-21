@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ sys.path.insert(0, str(ROOT / "libs" / "astro-kernel"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from tess_silver import (  # noqa: E402
+    MASKED_PROVENANCE_STATUS,
     PROVENANCE_STATUS,
     SILVER_MANIFEST_SCHEMA_VERSION,
     _schemas,
@@ -24,7 +26,7 @@ from tess_silver_ctl import (  # noqa: E402
     SilverDataContractError,
     validate_bronze_coverage,
 )
-from astro_kernel.preprocessing import preprocess_silver  # noqa: E402
+from astro_kernel.preprocessing import MASK_CONTRACT_VERSION, IntervalMask, preprocess_silver  # noqa: E402
 from astro_kernel.bls import search_bls  # noqa: E402
 
 
@@ -53,9 +55,11 @@ def prepared():
         product_id=np.array(["p1", "p1"], dtype=object),
         source_row=np.array([0, 1]),
         cadenceno=np.array([1, 2]),
+        original_quality=np.array([0, 0]),
         normalization_median={1: 10.0},
         excluded=[],
         n_raw=2,
+        interval_masks=(),
     )
 
 
@@ -63,10 +67,12 @@ def detrended(status="ok"):
     return SimpleNamespace(
         version="silver-biweight-1.0.0",
         status=status,
+        time=np.array([1.0, 2.0]),
         trend=np.array([1.0, 1.0]),
         flux_det=np.array([1.0, 0.99]),
         kept=np.array([True, True]),
         segment_id=np.array([0, 0]),
+        reasons=np.array(["", ""], dtype=object),
         failures=[],
     )
 
@@ -99,7 +105,7 @@ def search_result(status="ok"):
     }
 
 
-def call(rows, preprocess, search):
+def call(rows, preprocess, search, *, interval_masks=()):
     return process_tic(
         rows,
         run_id="run",
@@ -107,6 +113,7 @@ def call(rows, preprocess, search):
         pipeline_version="pipeline",
         target_location="/final/target_combined",
         periodogram_location="/final/periodogram",
+        interval_masks=interval_masks,
         preprocess=preprocess,
         search=search,
     )
@@ -125,9 +132,9 @@ class SilverDataOwnerContractTest(unittest.TestCase):
     def test_missing_lineage_is_a_per_tic_failure(self):
         row = bronze_row()
         row["raw_sha256"] = "bad"
-        result = call([row], lambda curves: (prepared(), detrended()), lambda *args, **kwargs: None)
+        result = call([row], lambda curves, **kwargs: (prepared(), detrended()), lambda *args, **kwargs: None)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[15], "invalid_lineage")
+        self.assertEqual(result.manifest[17], "invalid_lineage")
         self.assertIsNone(result.target)
 
 
@@ -157,7 +164,85 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
 
         result = call([row], preprocess_silver, search)
         self.assertEqual(result.manifest[5], "succeeded")
-        self.assertEqual(result.target[19:22], (count, count, count))
+        self.assertEqual(result.target[23:27], (count, count, count, 0))
+
+    def test_interval_mask_contract_preserves_original_rows_and_evidence(self):
+        row = self.real_bronze_row()
+        row["quality"][15] = 128
+        captured = {}
+        mask = IntervalMask(
+            interval_id="drn4-s1-test",
+            product_id="p1",
+            sector=1,
+            product_sha256="a" * 64,
+            coordinate="cadenceno",
+            start=10,
+            end=20,
+            closed="both",
+            reason="known_bad_interval",
+            source_uri="fixture://drn4",
+            source_sha256="b" * 64,
+            version="fixture-v1",
+        )
+
+        def preprocess(curves, **kwargs):
+            captured["source_sha256"] = curves[0].source_sha256
+            return preprocess_silver(curves, **kwargs)
+
+        def search(*args, **kwargs):
+            result = search_result("ok")
+            result["input_snapshot_id"] = kwargs["input_snapshot_id"]
+            return result
+
+        result = call([row], preprocess, search, interval_masks=[mask])
+        self.assertEqual(captured["source_sha256"], "a" * 64)
+        self.assertEqual(result.manifest[12:15], (MASKED_PROVENANCE_STATUS, MASK_CONTRACT_VERSION, 1))
+        self.assertEqual(result.target[4], MASKED_PROVENANCE_STATUS)
+        self.assertEqual(result.target[20], MASK_CONTRACT_VERSION)
+        self.assertEqual(json.loads(result.target[21])[0]["interval_id"], "drn4-s1-test")
+        ledger = json.loads(result.target[22])
+        self.assertEqual(len(ledger), 11)
+        overlap = next(row for row in ledger if row["source_row"] == 15)
+        self.assertEqual(overlap["original_quality"], 128)
+        self.assertEqual(overlap["interval_ids"], ["drn4-s1-test"])
+        self.assertEqual(overlap["reasons"], ["quality_flag", "interval_mask", "known_bad_interval"])
+        self.assertEqual(result.target[23], result.target[25] + result.target[26])
+
+    def test_broken_row_conservation_fails_closed(self):
+        def preprocess(curves, **kwargs):
+            value = prepared()
+            value.n_raw = 3
+            return value, detrended()
+
+        result = call([bronze_row()], preprocess, lambda *args, **kwargs: search_result("ok"))
+        self.assertEqual(result.manifest[5], "failed")
+        self.assertEqual(result.manifest[17], "provenance_mismatch")
+        self.assertIsNone(result.target)
+
+    def test_mask_for_another_raw_product_is_isolated(self):
+        mask = IntervalMask(
+            interval_id="wrong-product",
+            product_id="p1",
+            sector=1,
+            product_sha256="c" * 64,
+            coordinate="cadenceno",
+            start=10,
+            end=20,
+            closed="both",
+            reason="known_bad_interval",
+            source_uri="fixture://drn4",
+            source_sha256="b" * 64,
+            version="fixture-v1",
+        )
+        result = call(
+            [self.real_bronze_row()],
+            preprocess_silver,
+            lambda *args, **kwargs: search_result("ok"),
+            interval_masks=[mask],
+        )
+        self.assertEqual(result.manifest[5], "failed")
+        self.assertEqual(result.manifest[17], "mask_source_mismatch")
+        self.assertIsNone(result.target)
 
     @unittest.skipUnless(importlib.util.find_spec("astropy"), "Astropy runtime is not installed")
     def test_real_preprocessing_to_bls_boundary_executes(self):
@@ -174,10 +259,11 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
             result["input_snapshot_id"] = kwargs["input_snapshot_id"]
             return result
 
-        result = call([bronze_row()], lambda curves: (prepared(), detrended()), search)
+        result = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()), search)
         self.assertEqual(result.manifest[0], SILVER_MANIFEST_SCHEMA_VERSION)
         self.assertEqual(result.manifest[5], "succeeded")
         self.assertEqual(result.manifest[12], PROVENANCE_STATUS)
+        self.assertEqual(result.manifest[13:15], (MASK_CONTRACT_VERSION, 0))
         np.testing.assert_array_equal(captured["sector"], prepared().sector)
         np.testing.assert_array_equal(captured["baseline_time"], prepared().time)
         self.assertIsNotNone(result.target)
@@ -192,34 +278,36 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
 
         result = call(
             [bronze_row()],
-            lambda curves: (prepared(), detrended("insufficient_observations")),
+            lambda curves, **kwargs: (prepared(), detrended("insufficient_observations")),
             search,
         )
         self.assertFalse(called)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[15], "insufficient_observations")
+        self.assertEqual(result.manifest[17], "insufficient_observations")
         self.assertIsNotNone(result.target)
         self.assertIsNone(result.periodogram)
 
     def test_no_quality_peak_is_terminal_success_without_candidate(self):
         result = call(
             [bronze_row()],
-            lambda curves: (prepared(), detrended()),
+            lambda curves, **kwargs: (prepared(), detrended()),
             lambda *args, **kwargs: search_result("no_quality_peak"),
         )
         self.assertEqual(result.manifest[5], "no_quality_peak")
         self.assertFalse(result.manifest[6])
-        self.assertIsNone(result.manifest[15])
+        self.assertIsNone(result.manifest[17])
 
     def test_canary_audit_is_bounded_and_keeps_science_metrics(self):
         result = call(
             [bronze_row()],
-            lambda curves: (prepared(), detrended()),
+            lambda curves, **kwargs: (prepared(), detrended()),
             lambda *args, **kwargs: search_result("ok"),
         )
         audit = science_audit(result)
         self.assertEqual(audit["tic_id"], 123)
         self.assertEqual(audit["sectors"], [1])
+        self.assertEqual(audit["provenance_status"], PROVENANCE_STATUS)
+        self.assertEqual(audit["interval_mask_count"], 0)
         self.assertEqual(audit["accepted_peak_count"], 0)
         self.assertEqual(audit["accepted_peaks"], [])
 
@@ -238,7 +326,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         target_schema, periodogram_schema, manifest_schema, _ = _schemas(fake)
         result = call(
             [bronze_row()],
-            lambda curves: (prepared(), detrended()),
+            lambda curves, **kwargs: (prepared(), detrended()),
             lambda *args, **kwargs: search_result("ok"),
         )
         self.assertEqual(len(result.target), len(target_schema))
@@ -248,29 +336,29 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
     def test_unexpected_failure_is_retryable_and_does_not_escape_tic(self):
         failed = call(
             [bronze_row()],
-            lambda curves: (_ for _ in ()).throw(RuntimeError("worker bug")),
+            lambda curves, **kwargs: (_ for _ in ()).throw(RuntimeError("worker bug")),
             lambda *args, **kwargs: None,
         )
         succeeded = call(
             [bronze_row(tic_id=456)],
-            lambda curves: (prepared(), detrended()),
+            lambda curves, **kwargs: (prepared(), detrended()),
             lambda *args, **kwargs: search_result("ok"),
         )
         self.assertEqual(failed.manifest[5:7], ("failed", True))
-        self.assertEqual(failed.manifest[15], "unexpected_processing_error")
+        self.assertEqual(failed.manifest[17], "unexpected_processing_error")
         self.assertEqual(succeeded.manifest[5], "succeeded")
 
     def test_malformed_bronze_row_is_isolated_before_sorting(self):
         row = bronze_row()
         del row["sector"]
-        result = call([row], lambda curves: (prepared(), detrended()), lambda *args, **kwargs: None)
+        result = call([row], lambda curves, **kwargs: (prepared(), detrended()), lambda *args, **kwargs: None)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[15], "invalid_bronze_row")
+        self.assertEqual(result.manifest[17], "invalid_bronze_row")
 
     def test_manifest_tic_survives_malformed_product_sort_key(self):
         row = bronze_row(tic_id=456)
         row["sector"] = None
-        result = call([row], lambda curves: (prepared(), detrended()), lambda *args, **kwargs: None)
+        result = call([row], lambda curves, **kwargs: (prepared(), detrended()), lambda *args, **kwargs: None)
         self.assertEqual(result.manifest[3], 456)
         self.assertEqual(result.manifest[5], "failed")
 

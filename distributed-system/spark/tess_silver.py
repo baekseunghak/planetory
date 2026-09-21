@@ -19,18 +19,22 @@ import numpy as np
 
 from astro_kernel.bls import BlsError, QUALITY_VERSION, SEARCH_VERSION, search_bls
 from astro_kernel.preprocessing import (
+    MASK_CONTRACT_VERSION,
     PREPROCESS_VERSION,
+    IntervalMask,
     PreprocessError,
     SectorInput,
+    exclusion_ledger,
     preprocess_silver,
 )
 
 
 BRONZE_SCHEMA_VERSION = "planetory.tess-bronze.v1"
-SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v1"
+SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v2"
 SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v2"
 SILVER_TERMINAL_SCHEMA_VERSION = "planetory.tess-silver-terminal.v1"
 PROVENANCE_STATUS = "quality0_baseline_pending_interval_mask"
+MASKED_PROVENANCE_STATUS = "interval_mask_contract_applied"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 RUN_ID_RE = re.compile(r"[0-9]{8}T[0-9]{6}Z")
 VERSION_RE = re.compile(r"[A-Za-z0-9._-]+")
@@ -115,12 +119,17 @@ def _ints(value: object) -> list[int]:
 
 
 def _target_row(prepared: object, detrended: object, snapshot: str) -> tuple:
+    ledger = exclusion_ledger(prepared, detrended)
+    kept_count = int(np.asarray(detrended.kept).sum())
+    if int(prepared.n_raw) != kept_count + len(ledger):
+        raise PreprocessError("provenance_mismatch", "raw rows must equal kept rows plus exclusions")
+    provenance_status = MASKED_PROVENANCE_STATUS if prepared.interval_masks else PROVENANCE_STATUS
     return (
         int(prepared.tic_id),
         snapshot,
         str(detrended.version),
         str(detrended.status),
-        PROVENANCE_STATUS,
+        provenance_status,
         _floats(prepared.time),
         _floats(prepared.flux),
         _floats(prepared.flux_err),
@@ -128,6 +137,7 @@ def _target_row(prepared: object, detrended: object, snapshot: str) -> tuple:
         [str(value) for value in prepared.product_id],
         _ints(prepared.source_row),
         _ints(prepared.cadenceno),
+        _ints(prepared.original_quality),
         _floats(detrended.trend),
         _floats(detrended.flux_det),
         np.asarray(detrended.kept, dtype=bool).tolist(),
@@ -135,9 +145,13 @@ def _target_row(prepared: object, detrended: object, snapshot: str) -> tuple:
         _json(prepared.normalization_median),
         _json(prepared.excluded),
         _json(detrended.failures),
+        MASK_CONTRACT_VERSION,
+        _json(prepared.interval_masks),
+        _json(ledger),
         int(prepared.n_raw),
         int(len(prepared.time)),
-        int(np.asarray(detrended.kept).sum()),
+        kept_count,
+        int(len(ledger)),
     )
 
 
@@ -175,15 +189,19 @@ def science_audit(result: TicStageResult) -> dict[str, Any]:
         "tic_id": int(manifest[3]),
         "status": str(manifest[5]),
         "input_snapshot_id": manifest[7],
-        "error_code": manifest[15],
-        "error_detail": manifest[16],
+        "provenance_status": manifest[12],
+        "mask_contract_version": manifest[13],
+        "interval_mask_count": int(manifest[14]),
+        "error_code": manifest[17],
+        "error_detail": manifest[18],
     }
     if result.target is not None:
         audit.update({
             "sectors": sorted(set(int(value) for value in result.target[8])),
-            "raw_observation_count": int(result.target[19]),
-            "prepared_observation_count": int(result.target[20]),
-            "kept_observation_count": int(result.target[21]),
+            "raw_observation_count": int(result.target[23]),
+            "prepared_observation_count": int(result.target[24]),
+            "kept_observation_count": int(result.target[25]),
+            "excluded_observation_count": int(result.target[26]),
         })
     if result.periodogram is not None:
         peaks = json.loads(result.periodogram[17])[:5]
@@ -214,6 +232,8 @@ def _manifest_row(
     preprocessing_version: str | None,
     target_location: str | None,
     periodogram_location: str | None,
+    provenance_status: str = PROVENANCE_STATUS,
+    interval_mask_count: int = 0,
     error_code: str | None = None,
     error_detail: object | None = None,
 ) -> tuple:
@@ -230,7 +250,9 @@ def _manifest_row(
         preprocessing_version,
         SEARCH_VERSION,
         QUALITY_VERSION,
-        PROVENANCE_STATUS,
+        provenance_status,
+        MASK_CONTRACT_VERSION,
+        interval_mask_count,
         target_location,
         periodogram_location,
         error_code,
@@ -246,13 +268,16 @@ def process_tic(
     pipeline_version: str,
     target_location: str,
     periodogram_location: str,
-    preprocess: Callable[[list[SectorInput]], tuple[Any, Any]] = preprocess_silver,
+    interval_masks: Iterable[IntervalMask] = (),
+    preprocess: Callable[..., tuple[Any, Any]] = preprocess_silver,
     search: Callable[..., Mapping[str, Any]] = search_bls,
 ) -> TicStageResult:
     """Run one TIC without allowing its data/science failure to abort siblings."""
     tic_id = -1
     snapshot = None
     target = None
+    provenance_status = PROVENANCE_STATUS
+    interval_mask_count = 0
     try:
         products = sorted((dict(row) for row in rows), key=lambda row: (row["sector"], row["product_id"]))
         tic_id = int(products[0]["tic_id"]) if products else -1
@@ -269,10 +294,13 @@ def process_tic(
                 flux_err=np.asarray(row["flux_err"]),
                 quality=np.asarray(row["quality"]),
                 cadenceno=np.asarray(row["cadenceno"]),
+                source_sha256=str(row["raw_sha256"]),
             )
             for row in products
         ]
-        prepared, detrended = preprocess(curves)
+        prepared, detrended = preprocess(curves, interval_masks=tuple(interval_masks))
+        interval_mask_count = len(prepared.interval_masks)
+        provenance_status = MASKED_PROVENANCE_STATUS if interval_mask_count else PROVENANCE_STATUS
         target = _target_row(prepared, detrended, snapshot)
         if detrended.status != "ok":
             return TicStageResult(
@@ -289,6 +317,8 @@ def process_tic(
                     preprocessing_version=detrended.version,
                     target_location=target_location,
                     periodogram_location=None,
+                    provenance_status=provenance_status,
+                    interval_mask_count=interval_mask_count,
                     error_code=detrended.status,
                     error_detail=f"preprocessing status={detrended.status}",
                 ),
@@ -320,6 +350,8 @@ def process_tic(
                 preprocessing_version=detrended.version,
                 target_location=target_location,
                 periodogram_location=periodogram_location,
+                provenance_status=provenance_status,
+                interval_mask_count=interval_mask_count,
                 error_code="bls_failed" if manifest_status == "failed" else None,
                 error_detail="BLS returned failed peak geometry" if manifest_status == "failed" else None,
             ),
@@ -340,6 +372,8 @@ def process_tic(
                 preprocessing_version=PREPROCESS_VERSION if target is not None else None,
                 target_location=target_location if target is not None else None,
                 periodogram_location=None,
+                provenance_status=provenance_status,
+                interval_mask_count=interval_mask_count,
                 error_code=str(code),
                 error_detail=exc,
             ),
@@ -361,6 +395,8 @@ def process_tic(
                 preprocessing_version=PREPROCESS_VERSION if target is not None else None,
                 target_location=target_location if target is not None else None,
                 periodogram_location=None,
+                provenance_status=provenance_status,
+                interval_mask_count=interval_mask_count,
                 error_code="unexpected_processing_error",
                 error_detail=type(exc).__name__,
             ),
@@ -383,6 +419,7 @@ def _schemas(types: object) -> tuple[object, object, object, object]:
         types.StructField("product_id", types.ArrayType(types.StringType(), False), False),
         types.StructField("source_row", array_long, False),
         types.StructField("cadenceno", array_long, False),
+        types.StructField("original_quality", array_long, False),
         types.StructField("trend", array_double, False),
         types.StructField("cleaned_flux", array_double, False),
         types.StructField("kept", types.ArrayType(types.BooleanType(), False), False),
@@ -390,9 +427,13 @@ def _schemas(types: object) -> tuple[object, object, object, object]:
         types.StructField("normalization_median_json", types.StringType(), False),
         types.StructField("excluded_json", types.StringType(), False),
         types.StructField("detrend_failures_json", types.StringType(), False),
+        types.StructField("mask_contract_version", types.StringType(), False),
+        types.StructField("interval_masks_json", types.StringType(), False),
+        types.StructField("exclusion_ledger_json", types.StringType(), False),
         types.StructField("raw_observation_count", types.LongType(), False),
         types.StructField("prepared_observation_count", types.LongType(), False),
         types.StructField("kept_observation_count", types.LongType(), False),
+        types.StructField("excluded_observation_count", types.LongType(), False),
     ])
     periodogram = types.StructType([
         types.StructField("tic_id", types.LongType(), False),
@@ -426,6 +467,8 @@ def _schemas(types: object) -> tuple[object, object, object, object]:
         types.StructField("bls_config_version", types.StringType(), False),
         types.StructField("candidate_quality_version", types.StringType(), False),
         types.StructField("provenance_status", types.StringType(), False),
+        types.StructField("mask_contract_version", types.StringType(), False),
+        types.StructField("interval_mask_count", types.LongType(), False),
         types.StructField("target_location", types.StringType(), True),
         types.StructField("periodogram_location", types.StringType(), True),
         types.StructField("error_code", types.StringType(), True),

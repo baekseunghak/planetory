@@ -35,7 +35,7 @@ from tess_bronze_ctl import (
 
 
 SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v2"
-SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v1"
+SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v2"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
 DEFAULT_BRONZE_COVERAGE = (
     "/lake/bronze/tess/coverage="

@@ -188,7 +188,7 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 
 `tess_silver.py`는 확정 Bronze coverage가 가리키는 Sector 1~13 Parquet을 읽고 `tic_id`로 분산 그룹화한다. 각 TIC에서 `astro_kernel.preprocessing.preprocess_silver`와 `astro_kernel.bls.search_bls`를 순서대로 호출하며, 전체 Bronze나 TIC 목록을 드라이버에 수집하지 않는다. 한 TIC의 데이터·수치 오류는 그 TIC의 manifest 행으로 격리하고 다른 TIC 결과를 보존한다.
 
-현재 구현 범위는 전처리와 최초 BLS까지다. 반복 BLS·제거 QA·후보 ID(`122`), 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)은 해당 커널과 계약이 확정된 뒤 같은 run의 후속 stage로 연결한다. 구현되지 않은 단계를 성공으로 표시하거나 빈 결과로 만들지 않는다.
+현재 구현 범위는 245 원본 행·구간 마스크 추적을 포함한 전처리와 최초 BLS까지다. 반복 BLS·제거 QA·후보 제안 커널(`122`)은 공용 라이브러리에 병합됐지만 Spark 후속 stage에는 아직 연결하지 않았다. 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)도 결과 계약이 확정된 뒤 연결한다. 구현되지 않은 단계를 성공으로 표시하거나 빈 결과로 만들지 않는다.
 
 ### 입력·출력 경계
 
@@ -210,15 +210,17 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 | 필드 | 의미 |
 | --- | --- |
 | `time`, `normalized_flux`, `flux_err` | TIC 결합 후 정렬된 관측 배열 |
-| `sector`, `product_id`, `source_row`, `cadenceno` | 각 관측점의 Bronze 원천 위치 |
+| `sector`, `product_id`, `source_row`, `cadenceno`, `original_quality` | 각 관측점의 Bronze 원천 위치와 변경하지 않은 원래 QUALITY |
 | `trend`, `cleaned_flux`, `kept`, `segment_id` | 전처리 수치 결과와 BLS 입력 mask |
 | `normalization_median_json`, `excluded_json`, `detrend_failures_json` | Sector 정규화와 제외·수치 진단 |
+| `mask_contract_version`, `interval_masks_json`, `exclusion_ledger_json` | 적용한 마스크 계약·근거와 원본 제품·행별 제외 장부 |
+| `raw_observation_count`, `prepared_observation_count`, `kept_observation_count`, `excluded_observation_count` | `raw = kept + excluded` 행 보존 검증값 |
 | `input_snapshot_id` | 정렬한 `product_id`, Bronze `input_snapshot_id`, Raw SHA-256의 LF 직렬화 SHA-256 |
 | `preprocessing_version`, `provenance_status` | 계산 버전과 추적 계약 완성도 |
 
 `periodogram`은 최초 탐색의 주기·power·epoch·duration·depth·depth error·SNR·SDE 배열, 유효 입력 mask, BLS 설정과 상위 peak·채택 peak JSON을 기록한다. 반복 제거용 residual·periodogram 배열은 현재 만들지 않는다. 이 20,000점 선형 탐색 결과는 후속 `periodograms` Gold용 5,000점 로그 격자 결과가 아니며 그대로 게시하지 않는다. `bls_config_version=bls_grid_v1/poc_linear20k`, `candidate_quality_version=gate_v1/snr7_sde6`을 행마다 기록한다.
 
-manifest schema는 `planetory.tess-silver-stage.v1`이며 TIC·stage 한 쌍당 한 행이다.
+manifest schema는 `planetory.tess-silver-stage.v2`이며 TIC·stage 한 쌍당 한 행이다.
 
 | 필드 | 계약 |
 | --- | --- |
@@ -226,6 +228,7 @@ manifest schema는 `planetory.tess-silver-stage.v1`이며 TIC·stage 한 쌍당 
 | `status` | `succeeded`, `no_quality_peak`, `failed` 중 하나다. `no_quality_peak`는 정상 종료이며 실패가 아니다. |
 | `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. |
 | `input_snapshot_id`, 계산 버전 3종 | 입력과 전처리·탐색·품질 게이트를 함께 고정한다. |
+| `provenance_status`, `mask_contract_version`, `interval_mask_count` | 마스크 공급 여부와 적용한 245 계약을 기록한다. 빈 마스크는 baseline 상태를 유지한다. |
 | `target_location`, `periodogram_location` | 실제 생성된 출력만 기록한다. |
 | `error_code`, `error_detail` | 실패 원인과 공백 정규화·500자 제한 상세를 기록한다. 원본 배열은 넣지 않는다. |
 
@@ -235,9 +238,9 @@ manifest schema는 `planetory.tess-silver-stage.v1`이며 TIC·stage 한 쌍당 
 
 | 담당 작업 | 이 작업이 제공하는 입력 | 담당 작업이 제공해야 하는 결과 | 현재 처리 |
 | --- | --- | --- | --- |
-| `245` 관측 구간 마스킹 | `product_id`, `source_row`, `cadenceno`, `sector`, Bronze `quality` | 정규화 전에 적용할 관측점별 evidence mask, 원래 QUALITY, 제외 사유·근거 버전 | 현재 `provenance_status=quality0_baseline_pending_interval_mask`로 불완전함을 고정한다. `245` 완료 전 결과를 최종 DAT-02로 간주하지 않는다. |
+| `245` 관측 구간 마스킹 | `product_id`, `source_row`, `cadenceno`, `sector`, Bronze `quality`, Raw FITS SHA-256 | 정규화 전에 적용할 관측점별 evidence mask, 원래 QUALITY, 제외 사유·근거 버전 | 공용 계약과 Silver 출력 연결은 완료했다. 운영 manifest가 공급되지 않은 실행은 빈 마스크와 `provenance_status=quality0_baseline_pending_interval_mask`를 유지하므로 최종 DAT-02로 간주하지 않는다. |
 | `127` Worker 초기 연결 | `process_tic`의 `SectorInput[]` 호출과 TIC별 결과 계약 | 실제 YARN canary의 executor 배치·자원·수치 동일성 증거 | 127의 Sector 3 20 TIC local/Worker parity·실패 재실행과 78의 다중 Sector 단일 TIC Canary를 모두 통과했다. 전체 처리량·장시간 안정성은 별도 gate로 남는다. |
-| `122` 반복 탐색 | `target_combined`, 최초 `periodogram`, 계산 버전 | 반복 BLS·제거 QA·종료 사유·후보 ID | 미구현이며 manifest에 가짜 stage를 만들지 않는다. |
+| `122` 반복 탐색 | `target_combined`, 최초 `periodogram`, 계산 버전 | 반복 BLS·제거 QA·종료 사유·후보 제안 | 공용 커널은 병합됐지만 Spark stage는 미구현이다. 최초 BLS 중복 계산을 해소한 뒤 연결하며 manifest에 가짜 stage를 만들지 않는다. |
 | `123`·`124`·`126` | 확정 후보 ID와 TIC snapshot | 비닝·외부 snapshot 조인·AI 결과 및 각 계산 버전 | 각 결과 계약이 확정된 뒤 별도 stage로 연결한다. |
 
 같은 Python/Spark release를 공유하므로 내부 호출 계약은 `tess_silver.py`의 `TicStageResult`와 `_schemas`가 정본이다. 독립 서비스 간 직렬화 계약이 아니므로 `contracts/`에 같은 형식을 중복 정의하지 않는다.
@@ -263,11 +266,11 @@ Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Se
 오프라인 검증은 데이터 담당 관점의 Bronze coverage·lineage, 과학 담당 관점의 전처리 상태·BLS 정렬 입력, Spark 운영 관점의 TIC 실패 격리·실패 TIC 재선택·드라이버 전체 수집 금지를 확인한다. 2026-09-21 최종 CodeReleaseId `20260921T062449Z`(archive SHA-256 `86f68700bd92281f356b3e8fc4f9957e9893cc91474d4ac3085f57ccbbab25d9`), RunId `20260921T062522Z`로 TIC `259377017`을 실제 YARN Canary 실행했다. `application_1789686202146_0029`는 `SUCCEEDED`, RF2·checksum·FSCK·원자 rename과 상세 출력 삭제·staging 정리를 통과했다. Sector 3·4·5에서 Raw 57,320개, 준비 44,553개, BLS 유효 44,550개를 처리했고 채택 peak 5개 중 1위 `5.6593303027일`, SNR `52.8359`, SDE `22.5652`였다. 저장소 TOI-270 c fixture `5.66051일`과 약 0.021% 차이며 직전 검증 release에서도 같은 snapshot·관측점 수·과학값을 재현했다. 이는 최초 BLS 재현 증거이며 반복 제거·전체 TIC 성능이나 최종 과학 판정을 증명하지 않는다.
 ### 245 구간 마스크 인계 (로컬 검증, 배포 전)
 
-127의 최초 BLS 연결에 추가할 입력 계약은 [공용 커널 245](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)를 따른다.
+127의 최초 BLS 연결에 추가한 입력 계약은 [공용 커널 245](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)를 따른다.
 원본 제품 SHA와 근거 snapshot을 검증한 목록을 `preprocess_silver(curves, interval_masks=masks)`에 전달한다.
 `SectorInput.source_sha256`는 원본 FITS 바이트의 SHA이며 Bronze Parquet 파일 SHA로 대체하지 않는다.
 Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다. 호출자는 원본 제품의 0-based 행 배열을
 복원한 뒤 마스크를 전달하며, 다른 배열 순서라면 명시적인 원본 행 매핑 없이 이 커널을 호출하지 않는다.
-`exclusion_ledger(prepared, detrended)`와 `prepared.interval_masks`, 입력 마스크 계약 버전을 Silver 감사 산출물에 남긴다.
+`process_tic(..., interval_masks=())`는 TIC별 마스크를 선택적으로 받는다. `target_combined`에는 `exclusion_ledger(prepared, detrended)`, `prepared.interval_masks`, 원래 QUALITY와 마스크 계약 버전을 남기고 `raw = kept + excluded`를 만족하지 않으면 해당 TIC를 실패로 격리한다.
 `detrended.status != "ok"`는 정상 무후보가 아니므로 후속 BLS로 넘기지 않는다. 원본 QUALITY는 변경하지 않는다.
-실제 클러스터에 마스크를 활성화하거나 기존 공개 판을 바꾸는 작업은 이번 245 로컬 검증에서 실행하지 않았다.
+빈 마스크는 기존 수치 결과와 `quality0_baseline_pending_interval_mask` 상태를 유지한다. 실제 클러스터 활성화에는 버전 고정된 마스크 manifest 위치·스키마와 근거 snapshot checksum 승인이 필요하다. 승인 전에는 실험용 Sector 3 범위를 운영 코드에 하드코딩하거나 기존 공개 판을 바꾸지 않는다.

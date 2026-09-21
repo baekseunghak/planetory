@@ -32,7 +32,10 @@ try {
 
 $job = Get-Content -LiteralPath $pythonFiles[0] -Raw
 foreach ($required in @(
-    'planetory.tess-silver-stage.v1',
+    'planetory.tess-silver-stage.v2',
+    'MASK_CONTRACT_VERSION',
+    'source_sha256=str(row["raw_sha256"])',
+    'exclusion_ledger(prepared, detrended)',
     'quality0_baseline_pending_interval_mask',
     'groupByKey(args.shuffle_partitions)',
     'StorageLevel.DISK_ONLY',
