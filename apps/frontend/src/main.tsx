@@ -1,4 +1,3 @@
-import { PublicSkyPage } from "./features/public-sky/PublicSky";
 import {
   MyProfilePage,
   MemberProfilePage,
@@ -47,7 +46,7 @@ async function start() {
   }
   let pages: PageSlots = {
     ...(p1Enabled
-      ? { withdrawal: WithdrawalPage, publicSky: PublicSkyPage }
+      ? { withdrawal: WithdrawalPage }
       : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
     ...(p1Enabled
@@ -68,6 +67,7 @@ async function start() {
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
     ).GalaxyPage;
+  if (p1Enabled) pages.publicSky = (await import("./features/public-sky/PublicSky")).PublicSkyPage;
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
@@ -104,3 +104,4 @@ async function start() {
   );
 }
 void start();
+

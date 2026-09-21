@@ -150,6 +150,7 @@ function PublicSky({ memberId }: { memberId: string }) {
         )}
         <Link to="/sky">내 별지도</Link>
       </header>
+      {data.meta?.starCount === 0 && <p className="public-empty">아직 공개할 보유 별이 없습니다.</p>}
       {error ? (
         <div className="public-sky-error">
           <p>
@@ -254,7 +255,7 @@ function PublicScene({
         (list ? " shows-list" : "")
       }
     >
-      <GalaxyScene
+      <GalaxyScene canvasLabel="이 탐사자가 공개한 별의 3D 은하 지도"
         data={data}
         store={store}
         onReady={onReady}
@@ -342,7 +343,7 @@ function PublicScene({
       )}
       {ticId && (
         <aside
-          className={"star-detail" + (!list ? " prototype-detail" : "")}
+          className={"star-detail" + (!list ? " prototype-detail" : "") + (system ? " detail-ready" : "")}
           aria-label="공개 별 상세"
           onKeyDown={(e) => {
             if (e.key === "Escape") close();
@@ -423,3 +424,5 @@ function PublicScene({
     </div>
   );
 }
+
+

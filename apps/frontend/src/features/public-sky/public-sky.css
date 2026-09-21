@@ -55,3 +55,4 @@
 .public-galaxy .galaxy-legend {
   display: none;
 }
+.public-empty{position:absolute;top:130px;left:32px;z-index:8;}
