@@ -7,6 +7,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "dev:settings": "vite --mode settings --host 127.0.0.1 --port 58382 --strictPort",
+    "test:settings": "playwright test --config=playwright.settings.config.ts",
     "data:prepare": "tsx scripts/prepare-observations.ts",
     "dev:observations": "vite --mode observations --host 127.0.0.1 --port 5182 --strictPort",
     "test:observations": "playwright test --config=playwright.observations.config.ts",
@@ -22,7 +24,7 @@
     "test:performance": "npm run build && playwright test --config=playwright.performance.config.ts",
     "test:gpu": "playwright test --config=playwright.gpu.config.ts",
     "test:gpu:app": "playwright test --config=playwright.gpu-app.config.ts",
-    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback && npm run test:quests && npm run test:community && npm run test:posts && npm run test:comments && npm run test:reactions && npm run test:materials && npm run test:profiles && npm run test:search -- --project=chromium && npm run test:hot-topics -- --project=chromium",
+    "check": "npm run build && npm test && npm run test:browser && npm run test:auth && npm run test:sky-data && npm run test:galaxy && npm run test:production && npm run test:interaction && npm run test:detail && npm run test:docker-defaults && npm run test:fallback && npm run test:quests && npm run test:community && npm run test:posts && npm run test:comments && npm run test:reactions && npm run test:materials && npm run test:profiles && npm run test:search -- --project=chromium && npm run test:hot-topics -- --project=chromium && npm run test:settings",
     "format": "prettier --write src dev tests scripts docs *.ts *.json *.html *.md",
     "format:check": "prettier --check src dev tests scripts docs *.ts *.json *.html *.md",
     "dev:auth": "vite --mode auth --host 127.0.0.1 --port 58268 --strictPort",
