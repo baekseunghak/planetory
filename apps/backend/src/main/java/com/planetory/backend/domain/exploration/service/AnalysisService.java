@@ -237,11 +237,14 @@ public class AnalysisService {
      *
      * <p>원본은 제거할 것이 없어 계산 대상이 아니다. 7.1절이 빈 배열을 400으로 정한다.
      *
+     * <p>본문에는 {@code curveStep}이 없다. <b>중복을 지운 제거 집합에서 센다</b>(2.1절 서버 정렬·중복
+     * 제거). 같은 후보를 두 번 보낸 요청이 한 번 보낸 것과 같은 목표가 된다.
+     *
      * @throws BusinessException 미공개·미발견·판 교체·형식·조합 오류는 {@link #curve}와 같다
      */
     @Transactional(readOnly = true)
     public CurveContext residualTarget(long memberId, long ticId, CurveQuery query) {
-        CurveContext target = resolve(memberId, ticId, query).context();
+        CurveContext target = resolve(memberId, ticId, query, true).context();
         if (target.curveStep() == 0) {
             throw invalid("removed", "원본은 계산할 것이 없습니다. 제거할 후보를 하나 이상 주십시오.");
         }
@@ -249,6 +252,14 @@ public class AnalysisService {
     }
 
     private Target resolve(long memberId, long ticId, CurveQuery query) {
+        return resolve(memberId, ticId, query, false);
+    }
+
+    /**
+     * @param stepFromRemoved 제거 집합에서 단계를 센다. 본문 요청(7.1절)에는 보낸 단계가 없어 대조할 것이
+     *                        없다. 쿼리(5.2절)는 클라이언트가 보낸 값과 대조해 어긋난 요청을 거절한다
+     */
+    private Target resolve(long memberId, long ticId, CurveQuery query, boolean stepFromRemoved) {
         Bundle bundle = openCurrentBundle(memberId, ticId);
 
         Requested requested = Requested.parse(query);
@@ -259,7 +270,7 @@ public class AnalysisService {
                     Map.of("currentBundleId", ExplorationIds.bundle(bundle.id())));
         }
 
-        if (requested.curveStep() != requested.removed().size()) {
+        if (!stepFromRemoved && requested.curveStep() != requested.removed().size()) {
             throw invalid("curveStep", "제거한 후보 수와 같아야 합니다.");
         }
         if (!requested.removed().isEmpty()

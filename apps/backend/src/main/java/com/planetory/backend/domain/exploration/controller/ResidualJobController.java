@@ -52,10 +52,14 @@ public class ResidualJobController {
         return respond(jobs.status(principal.memberId(), jobId));
     }
 
-    /** 형식이 다른 TIC은 발견하지 않은 별과 같은 응답으로 덮는다(4.2절과 같은 방침). */
+    /**
+     * 형식이 다른 TIC은 없는 별과 같은 응답으로 덮는다. 2.3절이 {@code abc}·{@code 01}·{@code -1}도
+     * {@code STAR_NOT_PUBLISHED}로 정했고 5.2·6장 컨트롤러도 같다. 형식만 403으로 갈라지면 그 응답
+     * 차이로 별의 존재를 알 수 있다.
+     */
     private static long tic(String ticId) {
         return ExplorationIds.parseTic(ticId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.STAR_LOCKED));
+                .orElseThrow(() -> new BusinessException(ErrorCode.STAR_NOT_PUBLISHED));
     }
 
     /**
