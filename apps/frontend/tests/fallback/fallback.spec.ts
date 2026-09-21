@@ -31,7 +31,12 @@ test("browser Back from analysis restores a star chosen in the list", async ({
 }) => {
   await list(page);
   await rows(page).nth(1).click();
-  await expect(page).toHaveURL(/star=900000002&view=list/);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/sky" &&
+      url.searchParams.get("star") === "900000002" &&
+      url.searchParams.get("view") === "list",
+  );
   await panel(page)
     .getByRole("link", { name: /분석 시작/ })
     .click();

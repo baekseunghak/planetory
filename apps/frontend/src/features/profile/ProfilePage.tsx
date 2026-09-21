@@ -12,6 +12,7 @@ import {
   type ProfileSlotComponents,
 } from "./ProfileSlots";
 import { UsageGuide } from "./UsageGuide";
+import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 export function MyProfilePage() {
   const { member } = useSession();
@@ -100,6 +101,13 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
           </nav>
           {section === "summary" ? (
             <Summary profile={profile} own={own} />
+          ) : own && section === "stars" && slots.stars ? (
+            <ProfileStarFilters
+              Page={slots.stars}
+              memberId={memberId}
+              isOwn
+              starListVisibility={profile.starListVisibility}
+            />
           ) : (
             <ProfileSection
               section={section}
