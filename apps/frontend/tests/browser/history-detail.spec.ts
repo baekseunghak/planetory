@@ -108,3 +108,24 @@ test("a record that is not there is not invented", async ({ page }) => {
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator(".history-band")).toHaveCount(0);
 });
+
+test("a missing snapshot is not described as the array kept as it was", async ({
+  page,
+}) => {
+  // h-502는 은퇴 후보가 있는 옛 판 기록이다. 여기에 당시 배열이 없는 경우를
+  // 겹친다 — 배지가 「아래 배열은 당시 그대로입니다」라고 말하면, 바로 아래
+  // 「제출 당시 스냅샷이 없습니다」와 서로 모순된다.
+  await page.route("**/v1/histories/h-502/graph?mode=SUBMITTED", async (r) => {
+    const response = await r.fetch();
+    await r.fulfill({
+      response,
+      json: { ...(await response.json()), snapshot: null },
+    });
+  });
+  await page.goto("/history/h-502");
+  await page.getByRole("button", { name: "제출 당시 기준" }).click();
+
+  const note = page.locator(".history-graph-band .submission-note");
+  await expect(note).toContainText("당시 잔차 조합을 재현할 수 없습니다");
+  await expect(note).not.toContainText("아래 배열은 당시 그대로입니다");
+});
