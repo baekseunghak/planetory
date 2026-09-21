@@ -2,6 +2,7 @@ package com.planetory.backend.domain.exploration.controller;
 
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.StarService;
+import com.planetory.backend.domain.exploration.service.StarViews.ListFilter;
 import com.planetory.backend.domain.exploration.service.StarViews.PublicStarSummary;
 import com.planetory.backend.domain.exploration.service.StarViews.StarList;
 import com.planetory.backend.domain.exploration.service.StarViews.StarDetail;
@@ -49,15 +50,20 @@ public class StarController {
 
     @Operation(summary = "내 별 목록",
             description = "scope=submitted(기본)는 제출 이력이 있는 별, discovered는 발견한 별 전부."
-                    + " 필터 stage·grade·ticId는 P1이라 아직 받지 않는다.")
+                    + " 필터 stage·grade·ticId를 단독·복합으로 쓸 수 있고 계약 밖 값은 400."
+                    + " 커서는 필터에도 묶이므로 조건을 바꾸면 처음부터 다시 읽는다.")
     @GetMapping("/api/v1/me/stars")
     public StarList myStars(@AuthenticationPrincipal MemberPrincipal principal,
                             @RequestParam(required = false) String scope,
                             @RequestParam(required = false) String sort,
                             @RequestParam(required = false) String size,
-                            @RequestParam(required = false) String cursor) {
+                            @RequestParam(required = false) String cursor,
+                            @RequestParam(required = false) String stage,
+                            @RequestParam(required = false) String grade,
+                            @RequestParam(required = false) String ticId) {
         long memberId = principal.memberId();
-        return stars.list(memberId, memberId, scope, sort, size(size), cursor);
+        return stars.list(memberId, memberId, scope, sort, size(size), cursor,
+                new ListFilter(stage, grade, ticId));
     }
 
     @Operation(summary = "타인 별 목록",
@@ -70,8 +76,12 @@ public class StarController {
                                 @RequestParam(required = false) String scope,
                                 @RequestParam(required = false) String sort,
                                 @RequestParam(required = false) String size,
-                                @RequestParam(required = false) String cursor) {
-        return stars.list(principal.memberId(), member(memberId), scope, sort, size(size), cursor);
+                                @RequestParam(required = false) String cursor,
+                                @RequestParam(required = false) String stage,
+                                @RequestParam(required = false) String grade,
+                                @RequestParam(required = false) String ticId) {
+        return stars.list(principal.memberId(), member(memberId), scope, sort, size(size), cursor,
+                new ListFilter(stage, grade, ticId));
     }
 
     /**
