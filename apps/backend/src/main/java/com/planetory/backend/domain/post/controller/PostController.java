@@ -2,6 +2,7 @@ package com.planetory.backend.domain.post.controller;
 
 import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.post.service.PostService;
+import com.planetory.backend.domain.post.service.SourceLinkService;
 import com.planetory.backend.domain.post.service.PostReactionService;
 import com.planetory.backend.domain.post.service.HistoryAttachmentService;
 import com.planetory.backend.domain.post.service.PostService.CreateCommand;
@@ -42,7 +43,7 @@ public class PostController {
      */
     public record PostDetailResponse(String postId, String title, String body, String purposeTag, String ticId,
                                      PostService.Author author, List<HistoryAttachmentService.Reference> attachments,
-                                     List<PostService.SourceLink> sourceLinks,
+                                     List<SourceLinkService.Reference> sourceLinks,
                                      PostService.ReactionSummary reactionSummary, int commentCount,
                                      Instant createdAt, Instant updatedAt) {
         static PostDetailResponse of(Detail post, int commentCount, PostService.ReactionSummary summary) {
@@ -62,9 +63,8 @@ public class PostController {
     @ResponseStatus(HttpStatus.CREATED)
     public PostService.Created create(@AuthenticationPrincipal MemberPrincipal principal, @RequestBody JsonNode request) {
         if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        rejectItems(request, "sourceLinks");
         return posts.create(principal.memberId(), new CreateCommand(text(request, "title"), text(request, "body"),
-                text(request, "purposeTag"), text(request, "ticId"), HistoryAttachmentService.input(request), List.of()));
+                text(request, "purposeTag"), text(request, "ticId"), HistoryAttachmentService.input(request), SourceLinkService.input(request)));
     }
 
     @Operation(summary = "일반 게시글 상세")
@@ -80,11 +80,10 @@ public class PostController {
     public PostDetailResponse patch(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String postId,
                                    @RequestBody JsonNode request) {
         if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        rejectItems(request, "sourceLinks");
         return withCounts(posts.patch(principal.memberId(), parsePostId(postId), new PostService.PatchCommand(
                 text(request, "title"), request.has("title"), text(request, "body"), request.has("body"),
                 text(request, "purposeTag"), request.has("purposeTag"), text(request, "ticId"), request.has("ticId"),
-                HistoryAttachmentService.input(request))), principal.memberId());
+                HistoryAttachmentService.input(request), SourceLinkService.input(request))), principal.memberId());
     }
 
     @Operation(summary = "일반 글 반응 최종 상태 설정")
@@ -108,13 +107,6 @@ public class PostController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String postId) {
         posts.delete(principal.memberId(), parsePostId(postId));
-    }
-
-    /** 출처 카드(F24)는 후속 티켓에서 연결한다. */
-    private static void rejectItems(JsonNode request, String field) {
-        JsonNode value = request.get(field);
-        if (value == null || value.isNull()) return;
-        if (!value.isArray() || !value.isEmpty()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
     }
 
     private static String text(JsonNode request, String field) {

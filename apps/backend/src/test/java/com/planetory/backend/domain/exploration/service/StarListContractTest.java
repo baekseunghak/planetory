@@ -1,8 +1,12 @@
 package com.planetory.backend.domain.exploration.service;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import com.planetory.backend.domain.exploration.service.StarViews.StarList;
@@ -31,9 +35,9 @@ class StarListContractTest {
     @Test
     void 커서는_마이크로초까지_잃지_않는다() {
         OffsetDateTime lastActivity = OffsetDateTime.parse("2026-09-10T02:30:00.123456Z");
-        StarListCursor expected = new StarListCursor(1, 1, "discovered", "recent", 4, 0, 0);
+        StarListCursor expected = new StarListCursor(1, 1, "discovered", "recent", 4, "", 0, 0);
 
-        String encoded = StarListCursor.after(1, 1, "discovered", "recent", 4, lastActivity, 42)
+        String encoded = StarListCursor.after(1, 1, "discovered", "recent", 4, "", lastActivity, 42)
                 .encode();
         StarListCursor decoded = StarListCursor.decode(encoded, expected).orElseThrow();
 
@@ -42,15 +46,43 @@ class StarListContractTest {
         assertEquals(42, decoded.afterTicId());
     }
 
+    /**
+     * 등급 필터와 등급 표시가 <b>같은 규칙</b>이어야 한다(S15P21C206-152). 갈라지면 「S로 걸렀는데
+     * A가 나온다」가 된다. 성과 수를 넓게 훑어 둘이 서로의 역인지 본다.
+     */
+    @Test
+    void 등급_필터_범위는_등급_표시의_역이다() {
+        for (int count = 0; count <= 12; count++) {
+            String grade = StarService.grade(count);
+            if (grade == null) {
+                assertEquals(0, count, "성과가 있는데 등급이 없으면 필터가 그 별을 영영 못 찾는다");
+                continue;
+            }
+            int[] range = StarService.gradeRange(grade);
+            assertNotNull(range, grade);
+            assertTrue(range[0] <= count && count <= range[1],
+                    "성과 " + count + "은 " + grade + " 범위 " + range[0] + "~" + range[1] + " 안이어야 한다");
+        }
+        // 범위 안의 수는 모두 그 등급이어야 한다. 한쪽만 넓으면 다른 등급이 섞인다.
+        for (String grade : java.util.List.of("A", "S", "SS", "SSS")) {
+            int[] range = StarService.gradeRange(grade);
+            int upper = Math.min(range[1], range[0] + 8);
+            for (int count = range[0]; count <= upper; count++) {
+                assertEquals(grade, StarService.grade(count), "성과 " + count);
+            }
+        }
+        assertNull(StarService.gradeRange("B"), "계약 밖 등급은 범위가 없다");
+    }
+
     /** DB 해상도는 마이크로초다. 나노초 자리는 늘 0이므로 마이크로초면 손실이 없다. */
     @Test
     void 마이크로초_경계값도_그대로_돌아온다() {
-        StarListCursor expected = new StarListCursor(1, 1, "submitted", "recent", 20, 0, 0);
+        StarListCursor expected = new StarListCursor(1, 1, "submitted", "recent", 20, "", 0, 0);
         for (String value : List.of("2026-09-10T02:30:00.000001Z", "2026-09-10T02:30:00.999999Z",
                 "1970-01-01T00:00:00.000001Z", "2026-09-10T02:30:00Z")) {
             OffsetDateTime at = OffsetDateTime.parse(value);
             StarListCursor decoded = StarListCursor.decode(
-                    StarListCursor.after(1, 1, "submitted", "recent", 20, at, 7).encode(), expected)
+                    StarListCursor.after(1, 1, "submitted", "recent", 20, "", at, 7).encode(), expected)
                     .orElseThrow();
 
             assertEquals(at.toInstant(), decoded.afterActivity().toInstant(), value);
@@ -91,5 +123,30 @@ class StarListContractTest {
         return new StarListItem("123456789", "in_progress", 0, false, 0, null, null, false, false,
                 unpublishedSignalCount, OffsetDateTime.parse("2026-09-10T02:30:00.123456Z"),
                 "tutorial", null);
+    }
+
+    /**
+     * 목록 조회의 <b>모든 공개 진입점</b>이 같은 스냅샷 설정을 들고 있어야 한다.
+     *
+     * <p>공개 여부 검사와 목록 조회가 다른 시점을 읽으면, 상대가 비공개로 바꾸며 만든 기록까지
+     * 돌려준다. 필터를 더하면서 실제 조회를 새 오버로드로 옮겼는데 애너테이션은 옛 메서드에
+     * 남아, 컨트롤러가 늘 부르는 운영 경로만 트랜잭션 밖에 있었다(!138 리뷰).
+     *
+     * <p>자기 호출은 프록시를 타지 않으므로 "하나만 붙여도 안쪽이 따라온다"가 성립하지 않는다.
+     * 그래서 개수를 함께 센다. 오버로드가 늘어나면 이 검사가 먼저 걸린다.
+     */
+    @Test
+    void 목록_조회의_모든_진입점이_같은_스냅샷을_요구한다() {
+        int checked = 0;
+        for (Method method : StarService.class.getDeclaredMethods()) {
+            if (!method.getName().equals("list") || !Modifier.isPublic(method.getModifiers())) continue;
+            Transactional tx = method.getAnnotation(Transactional.class);
+            assertNotNull(tx, method + " 에 트랜잭션이 없다. 컨트롤러가 이 진입점을 부르면 검사와"
+                    + " 조회가 다른 스냅샷을 읽는다");
+            assertTrue(tx.readOnly(), method.toString());
+            assertEquals(Isolation.REPEATABLE_READ, tx.isolation(), method.toString());
+            checked++;
+        }
+        assertEquals(2, checked, "필터 있는 조회와 없는 조회 둘 다 검사해야 한다");
     }
 }

@@ -283,7 +283,13 @@ if (response.status === 401) {
 
 **확정(SB-D16, DEC-09):** 공식 스레드의 현재 유효 참여자 `participantCount >= 10`이면 핫 토픽으로 선정한다. 어느 판단이 다수인지는 무관하다.
 
-`GET /api/v1/community/hot-topics?size=20`, 성공 200. 공통 피드 목록 구조를 재사용하고 공식 스레드 항목의 hotReasons에 JUDGMENT_THRESHOLD를 반환하는 안이다.
+**구현(S15P21C206-171):** `GET /api/v1/community/hot-topics?size=20&cursor=...`, 성공 200. 기존 피드의 `items`, `nextCursor`, `hasNext`와 `SIGNAL_THREAD` 항목을 재사용한다. `hotReasons`는 제안 필드이며 반환하지 않는다. 세션 인증이 필요하고 `Cache-Control: no-store`를 반환한다.
+
+- 허용 쿼리는 `size`, `cursor`뿐이다. size는 기본 20·최대 100의 양의 정수이며 프론트 미리보기의 size=3도 지원한다. 미지·중복 키, 빈 값, 잘못된 정수·커서는 400 `VALIDATION_FAILED`다. 첫 페이지는 cursor를 생략한다.
+- 공개되고 한 명 이상 발견한 별의 visible 공식 스레드 전체에서 유효 공개 분석의 참여자를 먼저 집계한다. N>=10 필터와 아래 정렬을 적용한 뒤 커서·LIMIT을 적용한다. 일반 피드 한 페이지를 가져와 재정렬하지 않는다.
+- 선정 N은 기존 공개 조건과 History→Submission 조인에 대한 `COUNT(DISTINCT s.user_id)`다. 응답 판단 분포는 기존 `publicJudgmentSummary(candidateId)`를 호출한다. 선정과 페이지별 요약을 같은 REPEATABLE_READ 읽기 트랜잭션에서 수행해 선정 N과 요약 N을 맞춘다.
+- 커서는 hot scope·size·N·생성 시각·숫자 ID에 묶인 위치다. 다른 크기·일반 피드·공개 분석 목록 커서는 거절한다. 커서가 권한이나 페이지 간 고정 스냅샷을 의미하지 않으며, 각 요청에서 현재 참여 수와 공개 상태를 재평가한다. 페이지 사이 N이 바뀌면 항목의 순위 이동으로 중복·누락이 가능하고 첫 페이지 새로고침에서 최신 순서를 확인한다.
+- 대상이 없으면 `200 {"items":[],"nextCursor":null,"hasNext":false}`다. 본인의 분석 잠금과 무관하게 공개 게시판 집합을 조회하며 일반 글·개인 History를 항목으로 반환하지 않는다.
 
 - 현재 공개 분석 통계 F16의 LIKELY_PLANET+UNLIKELY_PLANET+UNSURE 합계 N을 재사용한다. 회원×신호당 최신 유효 공개 판단 한 건이며 반복 제출 횟수를 더하지 않는다. 별도 투표 버튼은 추가하지 않는다.
 - 예: 세 판단이 4/3/3이면 합계 10명으로 선정된다. 한 회원의 판단 변경은 비율만 바꾸고 총인원은 늘리지 않는다.
@@ -299,9 +305,9 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. 아직 구현하지 않은 `sourceLinks`는 빈 배열이며 실제 출처가 없다는 사실로 해석하지 않는다.
+**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. `sourceLinks`는 167에서 실제 출처 관계를 반환한다. 유효 항목은 `type/id/available:true`, 취소·숨김 등 무효 항목은 `type/available:false`만 포함한다.
 
-`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
+`historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`는 같은 TIC의 공개 분석(`PUBLIC_ANALYSIS/pa-ID`)·공식 스레드(`SIGNAL_THREAD/st-ID`)를 최대 3개 받는다. 중복·형식·상한·명시적 null은 400 `VALIDATION_FAILED`, 현재 접근 불가 대상은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 연결은 400 `TIC_MISMATCH`다.
 
 작성·수정에서 연결할 수 없는 TIC를 보내면 탐사 도메인의 판정을 그대로 전달해 404 `STAR_NOT_PUBLISHED`가 된다. 입력 검증 실패지만 별의 존재·공개 여부를 숨기는 기존 판정을 재사용한 결과이며, 400으로 바꿀지는 별 도메인 담당과 함께 정한다.
 
@@ -366,7 +372,7 @@ History 배열은 생략하면 유지, 전달하면 전체 교체, `[]`면 전�
 
 **구현 상태(S15P21C206-159):** 일반 글(`POST`)과 공식 신호 스레드(`SIGNAL_THREAD`)에 1단계 댓글 작성·목록·본문 PATCH·상태 삭제를 구현했다. 부모 종류·공개 상태와 작성자 소유권을 서버에서 검사하며, 생성은 부모 Post 행을 잠가 부모 삭제가 먼저 확정되면 새 댓글을 저장하지 않는다.
 
-History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`는 F24 구현 전까지 빈 배열만 받으며 응답도 빈 배열이다.
+History 첨부는 160에서 구현했다. `historyIds`의 소유자·TIC·최대 3개·중복·생략/교체/해제 규칙과 오류는 5장과 같다. 목록·수정 응답은 실제 `attachments`를 반환한다. `sourceLinks`도 167에서 실제 저장·조회하며 5장과 같은 검증·생략·전체 교체 규칙을 따른다. 목록·수정 응답에서 취소·숨김 출처는 `type/available:false`만 반환한다. 댓글 수정도 생성과 같이 별 열림을 검사하므로, 별이 비공개·미발견 상태가 되면 본문 수정은 404 `STAR_NOT_PUBLISHED`로 거절한다.
 
 공식 스레드의 ‘토론’과 일반 글의 댓글만 대상이다. 개별 공개 분석에 댓글을 붙이거나 2단계 답글을 만드는 API는 추가하지 않는다.
 
@@ -531,7 +537,16 @@ CURRENT 검사는 응답 후까지 최신성을 영구 보장하지 않는다. �
 {"type":"PUBLIC_ANALYSIS","id":"pa-601","ticId":"123456789","author":{"memberId":"u-102","nickname":"관측자"},"judgment":"LIKELY_PLANET","submittedAt":"2026-09-09T02:00:00Z","available":true}
 ```
 
-세 쿼리는 필수. SIGNAL_THREAD 카드는 9장의 judgmentSummary와 신호 요약을 포함한다. 미리보기 성공 후에도 게시·별 변경·조회 때 다시 검증한다. 취소·숨김된 출처는 내용을 반환하지 않는다. 기존 글에서는 `available:false` 같은 안내만 남기는 안이며 비노출 ID 반환 범위는 별도 합의한다. 타인의 개인 History 원본 전체 접근은 허용하지 않는다.
+세 쿼리는 필수다. 인증된 활성 회원에게 `Cache-Control: no-store`로 반환한다. `SIGNAL_THREAD` 카드는 `type/id/available/ticId/threadId/candidateId/author`와 기존 신호 요약(`signal.periodDays/epochBtjd/durationHours/depthPpm`), 9장의 `judgmentSummary`를 포함한다. `threadId`로 공식 스레드의 전체/판단 필터 경로에 연결한다. 공개 분석 카드는 위 예제의 제한된 필드만 제공하며 개인 History ID·메모·전체 원본·그래프를 포함하지 않는다.
+
+**167 구현·확정 계약:**
+
+- CREATE에서 `sourceLinks` 생략은 빈 관계다. PATCH 생략은 기존 관계를 유지하고 `[]`는 전체 제거, 배열은 전체 교체다. 명시적 null은 허용하지 않는다. 본문·History만 수정할 때 기존 비공개 출처를 재공개·암묵 삭제하지 않는다.
+- 새 연결·별 변경은 대상과 상위 공식 스레드의 공개 상태, 열린 별, 같은 TIC를 다시 검사한다. 미리보기 후 취소·숨김되면 저장을 거절한다. 부모 글의 TIC 변경은 미삭제 댓글의 History·출처까지 검사하며 다른 작성자의 자료를 제거하거나 다른 별에 노출하지 않는다.
+- 이미 연결된 무효 출처는 `{"type":"PUBLIC_ANALYSIS","available":false}` 또는 `{"type":"SIGNAL_THREAD","available":false}`만 반환한다. 대상 ID·작성자·내용은 포함하지 않는다. 직접 미리보기는 404이며 조회 때 현재 공개 상태를 다시 판정한다. 복원되면 기존 관계가 다시 유효해진다.
+- 프론트는 ID 없는 항목에 대체 안내를 표시하고 추가 조회·직접 링크를 만들지 않는다. 편집용 유효 선택과 무효 안내를 분리하며, 본문이나 History만 수정할 때 `sourceLinks`를 보내지 않는다. 무효 출처를 바꾸려면 사용자가 공개 출처 전체 제거를 명시적으로 선택한다. 응답 유실 뒤 전체 제거의 반영 여부는 유효·무효 출처가 모두 없어야 성공으로 판단한다. 본문만 수정한 요청은 출처 보존 여부 때문에 실패로 판단하지 않는다.
+- 부모 행 잠금으로 교체·삭제·별 변경을 직렬화한다. 출처 대상 행은 추가로 잠그지 않고 관계 저장 전후에 현재 가용성을 검사하여, 서로를 참조하는 공식 스레드 댓글의 교착을 피한다. 최종 검사 뒤 발생한 취소·숨김은 다음 조회에서 무효 출처로 반영한다. 글 상세 서비스·미리보기·댓글 목록은 REPEATABLE_READ에서 읽고 신호 통계는 기존 `SubmissionService.publicJudgmentSummary`를 소비한다. 댓글 한 페이지의 출처는 관계·가용성을 일괄 조회하고 같은 별의 열림을 한 번 검사한다.
+- V1 `post_source_links`를 재사용한다. 출처 저장·조회는 공개 분석·성과·반응·판단 통계를 생성하거나 복제하지 않는다. V18 앱 권한은 [개발 환경 안내](development-setup.md#v18-출처-관계-권한)를 따른다.
 
 <a id="reactions"></a>
 
@@ -714,7 +729,18 @@ GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부�
 
 ### 9.4 여러 신호 일괄 공개 — F23
 
-TIC 종료 화면에서 신호별 대표 기록(기본 최신 미공개 제출)을 검토한 후 호출한다.
+TIC 종료 화면에서 신호별 대표 기록을 검토한 후 호출한다. S15P21C206-166에서 아래 백엔드 계약을 구현한다. 실제 검토 화면의 API 연결·브라우저 인수는 별도다.
+
+`GET /api/v1/public-analyses/batch-candidates?ticId=123456789&size=20&cursor=...`:
+
+- 인증 회원 본인의 해당 TIC History 중 **공개 이력이 없는** 적격 기록을 먼저 고른다. 제출 당시 `response_snapshot.signal.answerClass=analysis`, `match.status=matched/matched_harmonic/duplicate`와 유효한 같은 별 candidate를 기준으로 한다. 현재 라벨로 재판정하지 않는다.
+- 취소·개별 숨김을 포함해 `published_analyses` 이력이 있는 History와 숨김·삭제된 공식 스레드의 기록은 제외한다. 공개 별·최초 발견 조건은 기존 별 게시판 검사와 같다.
+- 공개 이력 제외는 회원×신호가 아닌 **History 단위**다. 같은 신호를 이미 공개했어도 다른 적격 미공개 History는 대표 후보가 될 수 있다. 새 공개가 추가돼도 고유 신호 성과는 중복 지급하지 않으며 판단 통계는 기존 최신 유효 공개 선택 규칙을 따른다.
+- 정상 제출 경로는 매칭된 History의 저장 스냅샷과 최초 응답을 같은 트랜잭션으로 저장한다. 최초 응답이 없는 기록은 후보 조건에서 제외된다. 다만 후보 쿼리가 `analysis_snapshots`의 존재·무결성을 직접 검사하는 것은 아니므로 구기록·저장 이상까지 `SUBMITTED` 그래프 제공을 보장하지 않는다. 상세·그래프 조회의 오류 및 snapshot 누락 처리는 기존 History 계약을 따른다.
+- 신호별 제출 시각 내림차순, 동률이면 숫자 Submission ID 내림차순의 대표를 선정한 **뒤** 전체 대표를 같은 순서로 정렬하고 커서·페이지 크기를 적용한다. 일반 History 첫 페이지에서만 대표를 고르지 않는다.
+- `size`는 기본 20, 1~100이다. POST의 최대 20개와는 별개다. 커서는 후보 범위·회원·TIC·size에 묶이며 다른 목록·필터의 커서는 400이다. 필수 TIC 누락·잘못된 형식·중복/미지원 query parameter도 400이다.
+- `items` 항목은 `historyId`, `submissionId`, `ticId`, `candidateId`, `submittedAt`, `userJudgment`를 제공한다. 페이지는 `nextCursor`와 `hasMore`를 포함한다. 빈 결과는 `items:[]`, `nextCursor:null`, `hasMore:false`다. 상세·그래프는 기존 개인 History API를 사용한다.
+- 읽기 전용 REPEATABLE_READ 조회이며 응답은 `Cache-Control: no-store`다. 조회 결과를 공개 권한의 보장으로 쓰지 않고 실제 POST가 다시 검사한다. 페이지 사이 새 제출·공개 상태 변화가 있으면 대표와 순서도 바뀔 수 있다.
 
 `POST /api/v1/public-analyses/batch`:
 
@@ -722,18 +748,24 @@ TIC 종료 화면에서 신호별 대표 기록(기본 최신 미공개 제출)�
 {"ticId":"123456789","items":[{"historyId":"h-501"},{"historyId":"h-502"}]}
 ```
 
-본문 전체 형식 오류·항목 상한 초과는 처리 전 400. 항목 상한은 요청당 20개를 **제안**하며 탐사 처리 시간·트랜잭션 제한을 확인한 뒤 팀이 확정한다(14장). 같은 신호 복수 선택은 검토 화면에서 한 건으로 제한하고 서버에서도 처리 전 거부하는 안이다. 서로 다른 신호는 항목별로 처리한다.
+요청은 정확히 `ticId` 문자열과 `items` 배열을 받으며 각 항목은 `historyId` 문자열만 받는다. 항목 수는 **1~20개로 확정**한다. 잘못된 JSON·필드 타입·ID 형식·추가 필드·빈 배열·상한 초과·중복 History·본인 기록의 같은 신호 복수 선택은 공개 시작 전 전체 400이며 저장하지 않는다. 중복 신호 검사는 접근 가능한 본인 History/Submission만 조회한다. 타인·없는 기록의 신호 정보를 중복 오류로 노출하지 않는다.
+
+전체 형식 검증 후 입력 순서대로 기존 단건 `publish`의 외부 프록시를 호출한다. 조정 서비스는 바깥 트랜잭션을 중단하고 각 항목을 독립 트랜잭션으로 확정한다. 존재·소유권·TIC·공개 자격·별/스레드 상태 오류는 해당 항목만 실패한다. 단건과 같은 `RESOURCE_NOT_FOUND`/`FORBIDDEN` 계약을 유지하며 다른 TIC는 `TIC_MISMATCH`다.
+
+일괄 공개의 `TIC_MISMATCH` 메시지는 `요청한 별과 같은 별의 분석 기록만 공개할 수 있습니다.`다. 일반 첨부 경로의 메시지는 변경하지 않는다.
 
 ```json
 {
   "results":[
     {"historyId":"h-501","status":"PUBLISHED","analysisId":"pa-601","threadId":"st-301","achievementGranted":true,"newlyGranted":true,"skyVersion":"u-101:58","achievement":{"result":"recognized","newlyRecognized":true,"unlockedStars":[{"ticId":"123456790","position":{"worldX":12.5,"worldY":-7.2,"depthZ":0.3,"layoutVersion":"personal-spiral-v1"}}],"star":{"count":1,"grade":"A","byType":{"confirmed":0,"unconfirmed":1,"fp":0}},"unlockShortfall":0}},
-    {"historyId":"h-502","status":"FAILED","error":{"code":"DEPENDENCY_UNAVAILABLE","message":"분석 자료를 잠시 불러올 수 없습니다."},"retryable":true}
+    {"historyId":"h-502","status":"FAILED","error":{"code":"DEPENDENCY_UNAVAILABLE","message":"일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."},"retryable":true}
   ]
 }
 ```
 
-요청을 처리한 결과는 일부 실패도 **200 + 항목별 결과**로 반환하는 안이다. 프론트는 HTTP 성공만 보고 ‘모두 성공’으로 표시하지 않는다. status는 PUBLISHED/FAILED/NOT_PUBLISHED 제안이며 이미 취소된 기록의 단순 재전송은 NOT_PUBLISHED와 의도적 재공개 필요 안내로 구분한다.
+전체 요청이 유효하면 일부 또는 **전 항목 실패도 200 + 입력 순서의 results**를 반환한다. 프론트는 HTTP 성공만 보고 ‘모두 성공’으로 표시하지 않는다. 성공 항목은 단건 공개 응답의 모든 필드(`isPublic`, `created`, `judgmentSummary` 포함)를 그대로 펼치고 `status`를 추가한다. 현재 유효 공개는 `PUBLISHED`, 취소·개별/부모 숨김 등 기존 비공개 결과는 `NOT_PUBLISHED`다. 재전송으로 자동 재공개하지 않으며 의도적 재공개는 9.3절 visibility 경로를 사용한다.
+
+실패 항목은 요청 `historyId`, `status:FAILED`, 안전한 `error.code/message`, `retryable`만 제공한다. 일시적 DB 잠금·직렬화 실패 등 `TransientDataAccessException` 또는 업무 오류가 명시적으로 재시도 가능하다고 알린 경우만 `retryable:true`다. 저장 snapshot 근거 누락 같은 원인 미확정 `DEPENDENCY_UNAVAILABLE`은 false이며 HTTP 503 코드만으로 true를 추측하지 않는다. 예상하지 못한 내부 오류는 해당 항목 `INTERNAL_ERROR`, false로 구분하고 DB 내부 메시지·비공개 대상 정보는 반환하지 않는다. 인증·CSRF·사전 조회 자체의 장애는 항목 처리를 시작하기 전 기존 요청 전체 오류로 반환한다.
 
 성공분은 유지하고 실패한 h-502만 재전송한다. 응답이 유실돼 전체 재시도해도 같은 History와 성과를 중복 생성하지 않는다. 항목별 처리 중 상태는 프론트 표시 상태이며 비동기 Job 도입을 뜻하지 않는다. 여러 성과의 성과당 별 발견·누적 등급 표시는 순차 개별 인정과 동일한 결과여야 한다.
 
@@ -770,9 +802,10 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
 }
 ```
 
-roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. 시작 요일·기준 시간대·종료일 포함 여부는 합의 후 경계 계산에 적용한다. 진행 회차가 없으면 200 `{"round":null,"eligible":false}`. 서버는 shouldShow·acknowledged를 반환하지 않는다.
+roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. **168 구현 완료:** 운영 `status='active'` 회차 하나를 선택하며 현재 날짜로 회차를 선택하거나 상태를 자동 전환하지 않는다. planned·closed만 있거나 회차가 없으면 200 `{"round":null,"eligible":false,"participantCount":null}`을 반환한다. 인증 세션이 필요하며 미인증은 401 `AUTH_REQUIRED`, 응답은 `Cache-Control: no-store`다. 서버는 shouldShow·acknowledged를 반환하지 않는다.
 
-- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 미완료 회원에게는 eligible=false, ticId=null로 대상 노출을 제한하는 최소안을 유지하며 소개 표시 여부는 별도 합의한다.
+- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
+- 자격이 있으면 `round.ticId`를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
 - SB-D20 확정: 진행 중 회차에 참여 가능한 회원에게만 새 챌린지 안내를 표시한다. 프론트는 현재 roundId와 브라우저의 회원별 마지막 안내 회차를 비교한다. 실제 안내 표시 후에만 회차를 기록하며 API 조회만으로 기록하지 않는다. 확인 테이블·서버 확인 API는 추가하지 않는다.
 - 같은 회원·브라우저에서 기록된 회차는 재안내하지 않고 다음 회차에는 다시 안내한다. 이 방식은 기기·브라우저 간 확인 상태를 공유하지 않는다. 브라우저 저장소 삭제·다른 기기 접속 시 같은 회차 안내가 다시 나올 수 있다. 엄격한 회원별 1회 안내를 보장하지 않는다.
 - 브라우저 저장 실패는 챌린지 이용을 막지 않으며 안내 반복을 허용한다. 같은 브라우저의 다른 회원은 별도 기록을 사용한다. 여러 탭의 동시 안내까지 정확히 한 번으로 보장하지 않는다. 기기 간 확인 공유는 P1 일반 알림에서 검토한다.
@@ -781,7 +814,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
-139 퀘스트 패널은 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 168 회차 API와 208 화면의 참여 수도 같은 원천을 소비한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. 168 API 구현과 208 실제 HTTP 연동 인수는 별도다.
+139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 새 DB 테이블·권한·마이그레이션은 없다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
 
 <a id="later"></a>
 

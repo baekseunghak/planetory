@@ -3,6 +3,8 @@ package com.planetory.backend.domain.exploration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -15,14 +17,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
+import com.planetory.backend.domain.exploration.service.StarRepository;
 import com.planetory.backend.domain.exploration.service.StarService;
+import com.planetory.backend.domain.exploration.service.StarViews;
 import com.planetory.backend.domain.exploration.service.StarViews.StarListItem;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 
 /**
  * 내 별·타인 별 목록 계약 [S15P21C206-138].
@@ -52,6 +62,9 @@ class StarListTest {
     @Autowired StarService stars;
     @Autowired GalaxyLayout layout;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
+    /** 공개 여부 검사가 끝나는 순간을 잡으려고 감싼다. 기본 동작은 실제 조회 그대로다. */
+    @MockitoSpyBean StarRepository repository;
 
     private static final String MANIFEST = """
             {"segment_ids": [1], "array_checksums": {},
@@ -323,6 +336,217 @@ class StarListTest {
     }
 
     // ---------- 픽스처 ----------
+
+    // ---------- 4.4 필터 (HOME-04) ----------
+
+    /** 단독 필터 셋이 각자 대상 집합과 맞는다. */
+    @Test
+    void 단계_등급_TIC을_각각_거른다() {
+        long inProgress = unlockAt(memberId, 0, "2026-09-10T00:00:00Z");
+        long completed = unlockAt(memberId, 1, "2026-09-09T00:00:00Z");
+        long untouched = unlockAt(memberId, 2, "2026-09-08T00:00:00Z");
+        progress(memberId, inProgress, "in_progress", 1);
+        progress(memberId, completed, "completed", 2);
+
+        assertEquals(List.of(inProgress), ticIds(filter("in_progress", null, null)));
+        assertEquals(List.of(completed), ticIds(filter("completed", null, null)));
+        assertEquals(List.of(untouched), ticIds(filter("unexplored", null, null)));
+        assertEquals(List.of(completed), ticIds(filter(null, "S", null)));
+        assertEquals(List.of(inProgress), ticIds(filter(null, null, String.valueOf(inProgress))));
+    }
+
+    /** 복합 필터는 모두 만족하는 별만 남긴다. 겹치지 않으면 빈 목록이다. */
+    @Test
+    void 복합_필터와_빈_결과() {
+        long matching = unlockAt(memberId, 0, "2026-09-10T00:00:00Z");
+        long otherStage = unlockAt(memberId, 1, "2026-09-09T00:00:00Z");
+        progress(memberId, matching, "completed", 3);
+        progress(memberId, otherStage, "in_progress", 3);
+
+        assertEquals(List.of(matching), ticIds(filter("completed", "SS", String.valueOf(matching))));
+        assertTrue(ticIds(filter("completed", "SS", String.valueOf(otherStage))).isEmpty());
+        assertTrue(ticIds(filter("in_progress", "A", null)).isEmpty());
+    }
+
+    /**
+     * 등급 필터와 화면에 찍히는 등급이 <b>같은 규칙</b>이어야 한다. 갈라지면 「S로 걸렀는데 A가 나온다」가
+     * 된다. 성과 수 0~5를 만들어 모든 등급을 한 번에 본다.
+     */
+    @Test
+    void 등급_필터는_표시되는_등급과_같은_규칙이다() {
+        List<Long> byCount = new ArrayList<>();
+        for (int count = 0; count <= 5; count++) {
+            long ticId = unlockAt(memberId, count, "2026-09-%02dT00:00:00Z".formatted(10 + count));
+            progress(memberId, ticId, "in_progress", count);
+            byCount.add(ticId);
+        }
+
+        // 성과 수 → 등급은 StarListContractTest가 gradeRange와 맞물리는지 따로 못박는다.
+        Map<String, List<Integer>> counts = Map.of("A", List.of(1), "S", List.of(2),
+                "SS", List.of(3), "SSS", List.of(4, 5));
+        for (var entry : counts.entrySet()) {
+            Set<Long> expected = entry.getValue().stream().map(byCount::get).collect(Collectors.toSet());
+            assertEquals(expected, new HashSet<>(ticIds(filter(null, entry.getKey(), null))), entry.getKey());
+        }
+        // 성과가 없으면 등급도 없다. 어느 등급으로도 걸리지 않는다.
+        assertFalse(ticIds(filter(null, "A", null)).contains(byCount.get(0)));
+    }
+
+    /** 커서는 필터에도 묶인다. 조건이 달라지면 같은 위치가 다른 집합의 한가운데를 가리킨다. */
+    @Test
+    void 필터가_다른_커서는_거절한다() {
+        for (int i = 0; i < 3; i++) {
+            long ticId = unlockAt(memberId, i, "2026-09-%02dT00:00:00Z".formatted(10 + i));
+            progress(memberId, ticId, "in_progress", 1);
+        }
+        String cursor = stars.list(memberId, memberId, "discovered", "recent", 2, null,
+                new StarViews.ListFilter("in_progress", null, null)).nextCursor();
+        assertNotNull(cursor);
+
+        // 같은 필터면 이어 읽는다.
+        assertDoesNotThrow(() -> stars.list(memberId, memberId, "discovered", "recent", 2, cursor,
+                new StarViews.ListFilter("in_progress", null, null)));
+
+        for (StarViews.ListFilter changed : List.of(StarViews.ListFilter.NONE,
+                new StarViews.ListFilter("completed", null, null),
+                new StarViews.ListFilter("in_progress", "A", null))) {
+            assertEquals(ErrorCode.VALIDATION_FAILED,
+                    assertThrows(BusinessException.class, () -> stars.list(memberId, memberId,
+                            "discovered", "recent", 2, cursor, changed)).getErrorCode());
+        }
+    }
+
+    /** 계약 밖 값은 빈 목록이 아니라 400이다. 오타를 「그런 별이 없다」로 답하지 않는다. */
+    @Test
+    void 계약_밖_필터_값은_400이다() {
+        for (StarViews.ListFilter bad : List.of(new StarViews.ListFilter("done", null, null),
+                new StarViews.ListFilter(null, "B", null),
+                new StarViews.ListFilter(null, "a", null),
+                new StarViews.ListFilter(null, null, "abc"),
+                new StarViews.ListFilter(null, null, "01"),
+                new StarViews.ListFilter(null, null, "-1"))) {
+            assertEquals(ErrorCode.VALIDATION_FAILED, assertThrows(BusinessException.class,
+                    () -> stars.list(memberId, memberId, null, null, 20, null, bad)).getErrorCode(),
+                    String.valueOf(bad));
+        }
+        // 빈 값은 조건을 걸지 않은 것과 같다.
+        assertDoesNotThrow(() -> stars.list(memberId, memberId, null, null, 20, null,
+                new StarViews.ListFilter("", " ", null)));
+    }
+
+    /** 필터가 비공개 목록을 열어 주지 않는다. */
+    @Test
+    void 필터로는_비공개_목록을_우회할_수_없다() {
+        long ticId = unlockAt(otherMemberId, 0, "2026-09-10T00:00:00Z");
+        progress(otherMemberId, ticId, "in_progress", 1);
+        jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, false) "
+                + "ON CONFLICT (user_id) DO UPDATE SET star_list_public = false", otherMemberId);
+
+        assertEquals(ErrorCode.STAR_LIST_PRIVATE, assertThrows(BusinessException.class,
+                () -> stars.list(memberId, otherMemberId, null, null, 20, null,
+                        new StarViews.ListFilter("in_progress", null, String.valueOf(ticId)))).getErrorCode());
+    }
+
+    /** 진행 행을 직접 둔다. 단계·성과 수로 거르는 필터를 보려면 둘이 필요하다. */
+    private void progress(long member, long ticId, String stage, int achievementCount) {
+        if (achievementCount > 0) {
+            insertCandidate(ticId);
+        }
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, achievement_count)"
+                        + " VALUES (?, ?, ?, ?) ON CONFLICT (user_id, tic_id)"
+                        + " DO UPDATE SET progress_stage = EXCLUDED.progress_stage,"
+                        + " achievement_count = EXCLUDED.achievement_count",
+                member, ticId, stage, achievementCount);
+        // 목록의 성과 수는 진행 행이 아니라 성과 표에서 센다. 제출 없이 성과만 둘 수 없다.
+        // 제출 시각은 발견 시각보다 앞에 둬 마지막 활동 시각이 흔들리지 않게 한다.
+        // 판은 별마다 하나뿐이다(current 부분 유일 제약). 후보를 여럿 둘 때 판을 다시 만들지 않는다.
+        Long bundleId = achievementCount == 0 ? null : jdbc.queryForObject("SELECT id FROM "
+                + "publication_bundles WHERE tic_id = ? AND status = 'current'", Long.class, ticId);
+        for (int i = 0; i < achievementCount; i++) {
+            long candidateId = jdbc.queryForObject("INSERT INTO candidates"
+                    + "(tic_id, status, updated_bundle_id, removal_step, period_days, epoch_btjd,"
+                    + " duration_hours, depth_ppm, bls_power, transit_model, discoverable, is_confirmed)"
+                    + " VALUES (?, 'active', ?, 1, 3.0, 1501.0, 2.8, 900, 12.5, '{}'::jsonb, true, true)"
+                    + " RETURNING id", Long.class, ticId, bundleId);
+            submitMatched(member, ticId, candidateId, "2026-09-01T00:00:00Z");
+            recognize(member, candidateId);
+        }
+    }
+
+    private StarViews.StarList filter(String stage, String grade, String ticId) {
+        return stars.list(memberId, memberId, "discovered", "recent", 100, null,
+                new StarViews.ListFilter(stage, grade, ticId));
+    }
+
+    private static List<Long> ticIds(StarViews.StarList list) {
+        return list.items().stream().map(item -> Long.parseLong(item.ticId())).toList();
+    }
+
+    // ---------- 공개 여부 검사와 목록 조회의 스냅샷 (!138 리뷰) ----------
+
+    /**
+     * 공개 여부를 확인한 뒤 상대가 비공개로 바꾸며 새 제출을 만들어도, 그 기록은 이번 응답에
+     * 섞이지 않아야 한다. 두 질의가 같은 스냅샷을 읽는다는 뜻이다.
+     *
+     * <p>시간을 재지 않는다. 공개 여부 질의가 <b>끝나는 순간</b> 다른 연결에서 커밋하므로 순서가
+     * 항상 같다.
+     */
+    @Test
+    void 비공개로_바뀌며_생긴_기록은_목록에_섞이지_않는다() {
+        long visible = publicTargetWithOneSubmission();
+        long late = unlockAt(otherMemberId, 7, "2026-09-11T00:00:00Z");
+
+        List<Long> items = listWhileTargetGoesPrivate(StarViews.ListFilter.NONE, late);
+
+        assertEquals(List.of(visible), items,
+                "검사 뒤에 생긴 기록이 보이면 검사와 조회가 다른 시점을 읽은 것이다");
+    }
+
+    /** 필터를 붙인 요청도 같은 진입점을 타므로 같은 스냅샷이어야 한다. */
+    @Test
+    void 필터가_있어도_같은_스냅샷을_읽는다() {
+        publicTargetWithOneSubmission();
+        long late = unlockAt(otherMemberId, 7, "2026-09-11T00:00:00Z");
+
+        List<Long> items = listWhileTargetGoesPrivate(
+                new StarViews.ListFilter(null, null, String.valueOf(late)), late);
+
+        assertTrue(items.isEmpty(), "필터가 가리킨 별이 검사 뒤에 생겼다면 이번 응답에는 없어야 한다");
+    }
+
+    /** 목록을 공개한 상대와 이미 보이는 제출 한 건. */
+    private long publicTargetWithOneSubmission() {
+        long ticId = unlockAt(otherMemberId, 0, "2026-09-10T00:00:00Z");
+        submitAt(otherMemberId, ticId, "2026-09-12T00:00:00Z");
+        jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, true)"
+                + " ON CONFLICT (user_id) DO UPDATE SET star_list_public = true", otherMemberId);
+        return ticId;
+    }
+
+    /**
+     * 공개 여부 검사 직후에 다른 연결이 비공개 전환과 새 제출을 커밋하게 해 두고 목록을 부른다.
+     * {@code REQUIRES_NEW}라 바깥 읽기 트랜잭션과 다른 연결을 쓰고 먼저 커밋한다.
+     */
+    private List<Long> listWhileTargetGoesPrivate(StarViews.ListFilter filter, long lateTicId) {
+        doAnswer(invocation -> {
+            boolean open = (boolean) invocation.callRealMethod();
+            TransactionTemplate tx = new TransactionTemplate(transactions);
+            tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            tx.executeWithoutResult(status -> {
+                jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, false)"
+                        + " ON CONFLICT (user_id) DO UPDATE SET star_list_public = false",
+                        otherMemberId);
+                submitAt(otherMemberId, lateTicId, "2026-09-13T00:00:00Z");
+            });
+            return open;
+        }).when(repository).isStarListPublic(otherMemberId);
+
+        try {
+            return ticIds(stars.list(memberId, otherMemberId, null, null, 20, null, filter));
+        } finally {
+            reset(repository);
+        }
+    }
 
     private long insertMember() {
         String unique = UUID.randomUUID().toString();
