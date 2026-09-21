@@ -258,11 +258,6 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
             `/sky?${new URLSearchParams({ star: id, ...(listOpen ? { view: "list" } : {}) })}`,
             { replace: true },
           );
-          requestAnimationFrame(() =>
-            document
-              .querySelector(".personal-galaxy")
-              ?.scrollIntoView({ block: "start" }),
-          );
         }}
       />
       <div className="sky-view-switch">
