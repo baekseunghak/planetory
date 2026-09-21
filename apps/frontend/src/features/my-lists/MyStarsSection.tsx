@@ -10,8 +10,9 @@ import "./my-lists.css";
 // #196 내 별 목록(탐사 API 4.4). W16이 만든 프로필 슬롯을 채운다.
 // **권한은 여기서 다시 보지 않는다** — 타인의 비공개 목록은 슬롯이 먼저 막는다.
 
+// 백엔드 StarService.STAGES와 같은 값이다. 저장소의 다른 파서도 이 셋을 쓴다.
 const STAGE: Record<string, string> = {
-  not_started: "아직 시작하지 않음",
+  unexplored: "아직 시작하지 않음",
   in_progress: "탐색 중",
   completed: "탐색 완료",
 };
@@ -56,7 +57,12 @@ export function MyStarsSection({ memberId, isOwn }: ProfileSlotProps) {
     <div className="my-list">
       <ul aria-label="별 목록">
         {state.items.map((star) => (
-          <StarRow key={star.ticId} star={star} returnTo={returnTo} />
+          <StarRow
+            key={star.ticId}
+            star={star}
+            returnTo={returnTo}
+            isOwn={isOwn}
+          />
         ))}
       </ul>
       <More state={state} more={more} label="별" />
@@ -64,14 +70,22 @@ export function MyStarsSection({ memberId, isOwn }: ProfileSlotProps) {
   );
 }
 
-function StarRow({ star, returnTo }: { star: MyStar; returnTo: string }) {
+function StarRow({
+  star,
+  returnTo,
+  isOwn,
+}: {
+  star: MyStar;
+  returnTo: string;
+  isOwn: boolean;
+}) {
   return (
     <li className="my-list-row">
       <p className="my-list-title">TIC {star.ticId}</p>
       <dl>
         <dt>진행</dt>
-        <dd>{STAGE[star.progressStage] ?? star.progressStage}</dd>
-        <dt>내 행성</dt>
+        <dd>{STAGE[star.progressStage]}</dd>
+        <dt>{isOwn ? "내 행성" : "발견한 행성"}</dt>
         <dd>
           {count.format(star.planetCount)}개
           {/* 「없다」와 「행성 없이 끝냈다」는 다른 말이다. */}
@@ -109,9 +123,22 @@ function StarRow({ star, returnTo }: { star: MyStar; returnTo: string }) {
       {star.reopenPending && (
         <p role="status">새 자료가 있어 다시 열릴 예정입니다.</p>
       )}
-      <Link to={pagePath("analysis", { ticId: star.ticId }, { returnTo })}>
-        이 별 분석하기
-      </Link>
+      {/*
+        **타인의 별에 분석 링크를 주지 않는다.** 그 사람이 발견한 별을 내가
+        발견했다는 보장이 없고, `AnalysisService.openCurrentBundle`이 내가 열지
+        않은 별을 403 `STAR_LOCKED`로 거절한다. 서버 권한을 우회하는 문제가
+        아니라 **누르면 막히는 길을 먼저 내미는** 문제다. 대신 누구나 볼 수
+        있는 읽기 경로로 잇는다.
+      */}
+      {isOwn ? (
+        <Link to={pagePath("analysis", { ticId: star.ticId }, { returnTo })}>
+          이 별 분석하기
+        </Link>
+      ) : (
+        <Link to={pagePath("starBoard", { ticId: star.ticId }, { returnTo })}>
+          이 별 게시판 보기
+        </Link>
+      )}
     </li>
   );
 }

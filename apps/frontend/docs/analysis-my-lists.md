@@ -50,11 +50,23 @@ type ProfileSlotComponents = {
 
 명세 4.4가 이유를 적었다 — 「"공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다」.
 
-## 서버가 받지 않는 필터를 보내지 않는다
+## 필터는 서버에 있지만 이 티켓은 쓰지 않는다
 
-`GET /me/stars` 컨트롤러가 받는 것은 **`scope`·`sort`·`size`·`cursor`뿐**이다. 명세 4.4의 `stage`·`grade`·`ticId`는 **P1이며 구현돼 있지 않다.** 마이페이지는 기본값(`scope=submitted`·`sort=recent`)을 쓴다.
+**정정.** 처음 이 문서는 `stage`·`grade`·`ticId`가 「P1이며 구현돼 있지 않다」고 적었다. **틀렸다.** `S15P21C206-152`가 붙였고 컨트롤러가 받는다.
+
+| 필터    | 허용값                                     | 계약 밖 |
+| ------- | ------------------------------------------ | ------- |
+| `stage` | `unexplored` · `in_progress` · `completed` | 400     |
+| `grade` | `A` · `S` · `SS` · `SSS`                   | 400     |
+| `ticId` | 양의 정수                                  | 400     |
+
+그리고 **커서가 이 셋에도 묶인다.** 조건을 하나 더 실으면 이어읽기 조건이 달라진다.
+
+그런데도 이 화면은 **필터를 보내지 않는다.** 티켓의 제외 범위가 「마이페이지 별 검색/진행 필터의 P1 확장」이기 때문이다. 서버가 못 받아서가 아니라 **범위 밖이라서** 안 보낸다. 나중에 붙일 때는 기록 목록과 같은 규칙을 쓴다 — 조건이 바뀌면 커서를 버린다.
 
 기록 목록은 `ticId`·`candidateId`·`result`·`from`·`to`를 받는다. `result`의 허용값은 `matched`·`not_matched`·`none_wrong`·`ambiguous_match`·`skipped`이며, **`matched`는 `matched`·`matched_harmonic`·`duplicate` 셋을 묶는다.** 화면의 이름표를 서버 값과 일대일로 두면 어긋난다.
+
+**진행 단계 값은 `unexplored`다.** `not_started`가 아니다 — 저장소의 다른 파서도 이 셋을 쓴다.
 
 ## 막다른 길을 만들지 않는다
 

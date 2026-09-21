@@ -18,6 +18,17 @@ export type PagedState<T> =
       moreError: string | null;
     };
 
+/**
+ * 권한·존재를 숨기는 응답. **이 뒤에는 이미 보여 준 것도 남기지 않는다.**
+ *
+ * 슬롯은 들어올 때의 공개 여부를 보지만, 목록 API가 **그 뒤에** 알려 주는
+ * 철회까지 알지는 못한다. 이어 읽다 거절당하면 앞서 받은 항목이 이미 볼 수
+ * 없게 된 내용일 수 있으므로 누적과 커서를 함께 버린다. 잠깐의 통신
+ * 실패(5xx·네트워크)와는 다르다 — 그쪽은 보던 것을 지우지 않는다.
+ */
+const revoked = (error: unknown) =>
+  error instanceof ApiError && [401, 403, 404].includes(error.status);
+
 const message = (error: unknown) =>
   error instanceof ApiError || error instanceof Error
     ? error.message
@@ -105,6 +116,10 @@ export function usePagedList<T>(
         );
       } catch (error) {
         if (next.signal.aborted || mine !== generation.current) return;
+        // 권한이 철회됐으면 쌓아 둔 것과 커서를 버린다. 남기면 볼 수 없게 된
+        // 내용을 계속 보여 주게 된다.
+        if (revoked(error))
+          return setState({ phase: "error", message: message(error) });
         setState((prior) =>
           prior.phase === "ready"
             ? { ...prior, loadingMore: false, moreError: message(error) }

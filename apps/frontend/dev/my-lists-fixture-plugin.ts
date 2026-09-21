@@ -10,6 +10,10 @@ import type { Plugin } from "vite";
 
 const AT = "2026-09-20T02:30:00Z";
 
+/** 백엔드 StarService와 같은 허용값. 계약 밖은 400이다. */
+const STAGES = ["unexplored", "in_progress", "completed"];
+const GRADES = ["A", "S", "SS", "SSS"];
+
 type Row = Record<string, unknown>;
 
 const star = (index: number, own: boolean): Row => ({
@@ -117,14 +121,25 @@ export function myListsFixturePlugin(): Plugin {
           path === "/v1/me/stars" ||
           /^\/v1\/members\/[^/]+\/stars$/.test(path)
         ) {
-          // 서버가 받지 않는 값이 실려 오면 실제로 400이다. 화면이 보내지
-          // 않는다는 것을 검사가 실제로 확인할 수 있게 여기서도 거절한다.
-          for (const unsupported of ["stage", "grade", "ticId"])
-            if (url.searchParams.has(unsupported)) return reject(unsupported);
+          // S15P21C206-152가 단계·등급·TIC 필터를 붙였다. 서버처럼 허용값만
+          // 받고 계약 밖 값은 400이다. 화면(#196)은 필터 UI가 제외 범위라
+          // 보내지 않지만, 보내면 어떻게 되는지를 여기서 사실대로 둔다.
+          const stage = url.searchParams.get("stage");
+          if (stage && !STAGES.includes(stage)) return reject("stage");
+          const grade = url.searchParams.get("grade");
+          if (grade && !GRADES.includes(grade)) return reject("grade");
+          const tic = url.searchParams.get("ticId");
+          if (tic && !/^[1-9][0-9]*$/.test(tic)) return reject("ticId");
           const mine = path === "/v1/me/stars";
           if (!mine && url.searchParams.get("scope") === "discovered")
             return reject("scope");
-          const body = page(mine ? own : other, cursor);
+          const rows = (mine ? own : other).filter(
+            (row) =>
+              (!stage || row.progressStage === stage) &&
+              (!grade || row.grade === grade) &&
+              (!tic || row.ticId === tic),
+          );
+          const body = page(rows, cursor);
           return body ? send(body) : reject("cursor");
         }
 

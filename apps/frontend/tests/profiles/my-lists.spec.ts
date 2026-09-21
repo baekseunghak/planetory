@@ -89,7 +89,7 @@ test("공개하지 않은 신호 수는 본인에게만, 0도 사실로 보인�
   await expect(page.getByText(/공개하지 않은 신호/)).toHaveCount(0);
 });
 
-test("서버가 받지 않는 것을 보내지 않는다", async ({ page }) => {
+test("이 티켓 범위 밖의 조건을 목록이 보내지 않는다", async ({ page }) => {
   const urls = watch(page, /\/stars(\?|$)/);
   await page.goto("/me");
   await page.getByRole("button", { name: "내 별", exact: true }).click();
@@ -126,4 +126,81 @@ test("목록 조회가 실패하면 다시 불러올 수 있다", async ({ page 
   await page.unroute("**/v1/me/histories*");
   await page.getByRole("button", { name: "다시 불러오기" }).click();
   await expect(histories(page)).toBeVisible();
+});
+
+test("이어 읽다 권한이 철회되면 보던 것도 남기지 않는다", async ({ page }) => {
+  await page.goto("/members/u-211?section=stars");
+  await expect(stars(page)).toBeVisible();
+  await expect(stars(page).getByRole("listitem")).toHaveCount(3);
+
+  // 목록 API가 그제서야 알려 주는 철회다. 슬롯은 들어올 때의 공개 여부만 본다.
+  await page.route("**/v1/members/u-211/stars*", (route) =>
+    route.fulfill({
+      status: 403,
+      json: {
+        code: "STAR_LIST_PRIVATE",
+        message: "별 목록이 비공개로 변경되었습니다.",
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "별 더 보기" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("비공개로 변경");
+  // 이미 볼 수 없게 된 내용을 계속 보여 주지 않는다.
+  await expect(stars(page)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /게시판|분석/ })).toHaveCount(0);
+});
+
+test("잠깐의 통신 실패는 보던 것을 지우지 않는다", async ({ page }) => {
+  await page.goto("/me?section=stars");
+  await expect(stars(page).getByRole("listitem")).toHaveCount(3);
+  await page.route("**/v1/me/stars*", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { code: "DEPENDENCY_UNAVAILABLE", message: "잠시 후 다시" },
+    }),
+  );
+  await page.getByRole("button", { name: "별 더 보기" }).click();
+  await expect(page.getByRole("alert")).toContainText("잠시 후 다시");
+  // 권한 철회와 다르다. 보고 있던 별은 그대로 둔다.
+  await expect(stars(page).getByRole("listitem")).toHaveCount(3);
+});
+
+test("타인의 별에는 막히는 분석 링크를 내밀지 않는다", async ({ page }) => {
+  await page.goto("/me?section=stars");
+  await expect(
+    stars(page).getByRole("link", { name: "이 별 분석하기" }).first(),
+  ).toBeVisible();
+  await expect(stars(page).getByText("내 행성")).toBeTruthy();
+
+  await page.goto("/members/u-211?section=stars");
+  await expect(stars(page)).toBeVisible();
+  // 그 사람이 발견한 별을 내가 열었다는 보장이 없다. 서버는 403 STAR_LOCKED다.
+  await expect(
+    stars(page).getByRole("link", { name: "이 별 분석하기" }),
+  ).toHaveCount(0);
+  await expect(
+    stars(page).getByRole("link", { name: "이 별 게시판 보기" }).first(),
+  ).toBeVisible();
+  await expect(stars(page).getByText("내 행성")).toHaveCount(0);
+});
+
+test("기록 상세에 갔다 오면 보던 칸과 필터가 그대로다", async ({ page }) => {
+  await page.goto("/me");
+  await page.getByRole("button", { name: "내 분석 기록", exact: true }).click();
+  await page.getByRole("button", { name: "맞은 신호", exact: true }).click();
+  await expect(histories(page)).toBeVisible();
+
+  await histories(page)
+    .getByRole("link", { name: "기록 상세 보기" })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/history\//);
+  // 돌아갈 곳이 분석이 아니므로 그렇게 적지 않는다.
+  await page.getByRole("link", { name: "마이페이지로 돌아가기" }).click();
+
+  await expect(histories(page)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "맞은 신호", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });

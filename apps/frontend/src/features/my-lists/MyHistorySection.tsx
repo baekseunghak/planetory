@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useCallback } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { http } from "../../api";
 import { pagePath } from "../../app/paths";
 import type { ProfileSlotProps } from "../profile/ProfileSlots";
@@ -44,8 +44,20 @@ const when = (value: string) => new Date(value).toLocaleString("ko-KR");
 // 두 곳에서 판단하면 어긋난다.
 export function MyHistorySection(_props: ProfileSlotProps) {
   const location = useLocation();
+  // **고른 필터를 주소에 둔다.** 상세로 갔다 돌아올 때 returnTo가 이 주소를
+  // 그대로 들고 가므로, 지역 상태로 두면 돌아온 화면에서 조건이 사라진다.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("result") ?? "";
+  const result = FILTERS.some((filter) => filter.value === requested)
+    ? requested
+    : "";
+  const setResult = (next: string) => {
+    const copy = new URLSearchParams(params);
+    if (next) copy.set("result", next);
+    else copy.delete("result");
+    setParams(copy, { replace: true });
+  };
   const returnTo = location.pathname + location.search;
-  const [result, setResult] = useState("");
   const load = useCallback(
     async (cursor: string | null, signal: AbortSignal) =>
       readMyHistories(

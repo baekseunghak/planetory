@@ -22,6 +22,13 @@ function integer(value: unknown, field: string, minimum = 0): number {
     invalid(field);
   return value as number;
 }
+/** 진행 단계. 백엔드 CHECK와 같은 셋이며 모르는 값은 통과시키지 않는다. */
+const STAGES = ["unexplored", "in_progress", "completed"];
+function stage(value: unknown, field: string): string {
+  const result = text(value, field);
+  if (!STAGES.includes(result)) invalid(field);
+  return result;
+}
 function flag(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") invalid(field);
   return value;
@@ -75,7 +82,7 @@ export type MyStar = {
 export function readMyStars(value: unknown): Page<MyStar> {
   return readPage(value, "내 별 목록", (row) => ({
     ticId: text(row.ticId, "ticId"),
-    progressStage: text(row.progressStage, "progressStage"),
+    progressStage: stage(row.progressStage, "progressStage"),
     planetCount: integer(row.planetCount, "planetCount"),
     completedWithoutPlanets: flag(
       row.completedWithoutPlanets,
