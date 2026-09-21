@@ -4,7 +4,13 @@ backend:schema:
   stage: validate
   # git이 필요하다. 타깃 브랜치의 마이그레이션 번호와 대조해야 선점 충돌을
   # 머지 전에 잡을 수 있다.
-  image: alpine/git:2.45.2
+  #
+  # entrypoint를 비워야 한다. 이 이미지는 ENTRYPOINT가 ["git"]이라 Runner가 붙이는
+  # 셸이 `git sh -c ...`로 조립되고 "git: 'sh' is not a git command"로 죽는다.
+  # 스크립트가 한 줄도 실행되지 않으므로 검사가 있으나 마나가 된다.
+  image:
+    name: alpine/git:2.45.2
+    entrypoint: [""]
   needs: []
   variables:
     # 이미 적용된 마이그레이션은 검사에서 뺀다. 파일을 고치면 Flyway 체크섬이 바뀌어
