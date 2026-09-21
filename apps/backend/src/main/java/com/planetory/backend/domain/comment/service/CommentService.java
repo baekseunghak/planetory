@@ -55,7 +55,7 @@ public class CommentService {
     /** 글 상세가 쓰는 공개 댓글 수. 세는 규칙을 댓글 도메인 한 곳에 둔다(삭제·숨김 제외, SB-D22). */
     @Transactional(readOnly = true)
     public int countVisible(long postId) {
-        return comments.countByPostIdAndStatus(postId, "visible");
+        return comments.countVisibleByVisiblePostId(postId);
     }
 
     /**
@@ -96,8 +96,8 @@ public class CommentService {
         if (!command.hasBody() && command.historyIds() == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         Comment comment = comments.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        writable(comment, memberId);
         Post parent = requireOpenParent(comment.getPost().getId());
+        writable(comment, memberId);
         attachments.replace(Parent.COMMENT, commentId, memberId, parent.getTicId(), command.historyIds());
         comment.update(command.hasBody() ? body(command.body()) : comment.getBody(), Instant.now(clock));
         return detailOf(comment, attachments.references(Parent.COMMENT, commentId));
@@ -109,7 +109,8 @@ public class CommentService {
         Comment comment = comments.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (comment.getAuthor().getId() != memberId) {
-            throw new BusinessException(visible(comment) ? ErrorCode.FORBIDDEN : ErrorCode.RESOURCE_NOT_FOUND);
+            throw new BusinessException(visible(comment) && visible(comment.getPost())
+                    ? ErrorCode.FORBIDDEN : ErrorCode.RESOURCE_NOT_FOUND);
         }
         if (!"deleted".equals(comment.getStatus())) comment.delete(Instant.now(clock));
     }

@@ -9,14 +9,20 @@ const NORMAL = PERIODOGRAM_FIXTURE_TICS.normal;
 const bar = (page: Page) => page.locator(".curve-step-bar");
 const move = (page: Page, name: string) =>
   bar(page).getByRole("button", { name, exact: true });
-/** 개발용 응답의 캐시는 서버 수명 동안 남는다. 목표를 매번 다르게 만든다. */
+/**
+ * 개발용 응답의 캐시는 서버 수명 동안 남는다. **캐시만 건너뛴다.**
+ *
+ * 전에는 나가는 목표를 몰래 바꿔 캐시를 피했는데, 그러면 서버가 돌려주는
+ * 문맥과 화면이 들고 있는 목표가 달라진다. 실제로는 일어날 수 없는 상태라,
+ * 서버가 준 `resultCurveContext`로 조회하기 시작하자 곧바로 깨졌다.
+ */
 async function freshTarget(page: Page) {
   await page.route("**/api/v1/stars/*/residual-jobs", async (route) => {
     const request = route.request();
     if (request.method() !== "POST") return route.continue();
-    const body = JSON.parse(request.postData() ?? "{}");
-    body.target.residualModelVersion = `rm-${crypto.randomUUID().slice(0, 8)}`;
-    return route.continue({ postData: JSON.stringify(body) });
+    return route.continue({
+      headers: { ...request.headers(), [RESIDUAL_FIXTURE_HEADER]: "fresh" },
+    });
   });
 }
 
@@ -265,4 +271,72 @@ test("what the bar says is what the charts and the submission use", async ({
     "원본 곡선",
   );
   expect(curves.at(-1)).toBe("0");
+});
+
+/** 시나리오 헤더를 붙여 보낸다. */
+async function withScenario(page: Page, scenario: string) {
+  await page.route("**/api/v1/stars/*/residual-jobs", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.continue();
+    return route.continue({
+      headers: { ...request.headers(), [RESIDUAL_FIXTURE_HEADER]: scenario },
+    });
+  });
+}
+
+test("a failure that will not change is not offered a retry", async ({
+  page,
+}) => {
+  // 7.2절 `failure.retryable: false`. 눌러도 같은 결과인 버튼은 사용자에게
+  // 「내가 뭘 잘못했나」를 묻게 만든다.
+  await withScenario(page, "fail-permanent");
+  await page.goto(`/analysis/${NORMAL}`);
+  await move(page, "다음 곡선 단계로").click();
+  await expect(bar(page)).toContainText("보고 있던 곡선은 그대로입니다");
+  await expect(move(page, "다시 시도")).toHaveCount(0);
+  // 보던 곡선은 그대로다.
+  await expect(bar(page).locator(".curve-step-where")).toContainText(
+    "원본 곡선",
+  );
+});
+
+test("a dependency that is not wired yet is not called a failure", async ({
+  page,
+}) => {
+  // 503은 88번이 붙기 전까지 영구다. 「잠시 후 다시」는 거짓말이 된다.
+  await withScenario(page, "unavailable");
+  await page.goto(`/analysis/${NORMAL}`);
+  await move(page, "다음 곡선 단계로").click();
+  await expect(bar(page)).toContainText("보고 있던 곡선은 그대로입니다");
+  await expect(move(page, "다시 시도")).toHaveCount(0);
+  // 실패가 아니라 준비되지 않은 것이라 경보로 외치지 않는다.
+  await expect(bar(page).getByRole("alert")).toHaveCount(0);
+});
+
+test("a plate that changes mid-computation reloads by itself", async ({
+  page,
+}) => {
+  // D-5: 계산이 도는 동안의 교체는 폴링 헤더로만 드러난다. 곡선 조회가
+  // 하던 것을 폴링도 한다 — 누르라고 하지 않고 스스로 다시 읽는다.
+  const entries: string[] = [];
+  page.on("request", (request) => {
+    if (/analysis-context$/.test(request.url())) entries.push(request.url());
+  });
+  await withScenario(page, "plate-changed");
+  await page.goto(`/analysis/${NORMAL}`);
+  const before = entries.length;
+  await move(page, "다음 곡선 단계로").click();
+  // 다 읽고 나면 화면이 갱신됐다고 말한다. 곡선 조회가 판 교체를 만났을
+  // 때와 **같은 안내**다 — 어느 경로로 감지됐든 화면이 같아야 한다.
+  await expect(page.locator("body")).toContainText(
+    "새 데이터 판으로 갱신했습니다",
+  );
+  // 안내만 띄우고 마는 것이 아니라 진입을 실제로 다시 조회한다.
+  await expect
+    .poll(() => entries.length, { timeout: 5000 })
+    .toBeGreaterThan(before);
+  // 누르라고 하지 않는다.
+  await expect(
+    page.getByRole("button", { name: "최신 자료 불러오기" }),
+  ).toHaveCount(0);
 });

@@ -32,6 +32,8 @@ Backend와 Worker는 내부 동기 HTTP/JSON `POST /internal/v1/derived-compute`
 
 필드·단위·식별자·오류와 합성 fixture는 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)이 정본이다. 실제 Worker HTTP 어댑터는 `S15P21C206-88`, Redis 실행 제어는 89, lease·fencing·복구는 90에서 구현한다.
 
+Backend 쪽 사용자 API와 작업 수명주기는 `S15P21C206-147`이 구현했고 두 자리를 인터페이스로 비워 두었다. 계산을 시작시키는 `ResidualComputeRunner`는 88이, 상태·결과·상한을 맡는 `ResidualJobStore`는 89가 채운다. 둘 다 없는 동안에는 잔차 요청이 503으로 거절되고 작업이 만들어지지 않는다. 지금 포트는 `attempt`를 **읽기만** 한다 — 단계 전이·완료·실패 모두 값을 보존하므로, 임대가 끝난 계산을 다시 시작하며 `attempt`를 올리는 함수는 88이 실행기를 붙일 때 함께 더한다.
+
 ## 요청과 중복 방지
 
 ```text

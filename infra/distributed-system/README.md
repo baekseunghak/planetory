@@ -210,6 +210,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 - [install-yarn-hosts.ps1](scripts/install-yarn-hosts.ps1): Node 1 canary와 Node 2~6 배치를 분리하고 원격 호스트명을 변경 전에 확인한다. `scp`는 비대화식·엄격한 host key 검증을 사용하고 실행 뒤 전용 staging 디렉터리를 정리한다.
 - [initialize-yarn-cluster.ps1](scripts/initialize-yarn-cluster.ps1): `Preflight`, `ConfigureFirewall`, `Start`, `ValidateNodes`, `FinalAudit`을 독립 실행한다. 원격 명령은 Bash로 실행하고 HDFS는 `nn1`·`nn2` 중 정확히 하나가 Active인지 확인한다.
 - [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
+- [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 75의 최종 coverage를 입력으로 Sector 1~13을 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·첫/중간/마지막 offset 복원 감사 뒤 덮어쓰기 없는 원자 rename으로 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
 ```powershell
@@ -256,7 +257,7 @@ Worker Python 요구 조건은 3.12.x이며, 2026-09-18 검증 당시에는 모�
 
 클러스터의 단일 컨테이너 최대치는 24GiB/3 vCore지만 Node 2는 16GiB/2 vCore만 광고하므로 그보다 큰 컨테이너를 받지 않고 Nodes 3~6만 후보가 된다. 이는 의도된 이기종 자원 배치다. 다만 현재 Node 2 unit은 `MemoryMax`나 cgroup 기반 OS 하드캡을 두지 않으므로 2줄 sample 결과를 실제 Sector workload의 메모리 안전성으로 확대하지 않는다.
 
-sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용이다. Bronze·Silver 배치의 HDFS 서비스 사용자 이름과 경로 소유·그룹 권한 규칙은 분산 PoC 3단계인 `S15P21C206-76`에서 확정한다.
+sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용이다. `S15P21C206-76` Raw 적재는 `planetory-admin:hadoop`, mode `0750`인 정확한 staging Sector만 쓰고 `hdfs` 슈퍼유저는 staging 준비·감사·최종 rename만 수행한다. `yarn`은 `hadoop` 기본 그룹으로 확정 Raw를 읽는다. Bronze·Silver 출력 경로의 소유권은 각 변환 작업에서 별도로 확정한다.
 
 `/validation/S15P21C206-73/run-<UTC>`는 실패하더라도 자동 삭제하지 않아 검증 증거와 실패 원인을 보존한다. 확인이 끝난 run은 운영자가 정확한 경로를 다시 확인하고 승인한 뒤 `hdfs dfs -rm -r /validation/S15P21C206-73/run-<UTC>`로 정리한다. unit 중지는 UFW 규칙, `/yarn-logs`, `/validation` 결과를 되돌리지 않는다.
 
@@ -366,6 +367,14 @@ Sector 1~13 확대는 기존 RunId를 수정하지 않는다. 2026-09-19 공식 
 최종 expansion은 Worker 2~6 모두 `COMPLETE`, 191,838/191,838개, 340.68GiB, `.part`·현재 실패·429·HTTP 재시도 0으로 끝났다. 기타 재시도 누적 21회는 모두 최종 성공했다. 두 Run을 결합한 `FinalCoverage`는 247,824/247,824개, 441.62GiB, `.part` 0을 확인했고 5대의 `coverage-sectors-1-13.json` SHA-256은 `df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94`로 같다. 이 단계는 Sector 감사 시점의 SHA-256 증거와 현재 파일 집합·바이트를 결합하며 모든 FITS를 다시 해시하지 않는다.
 
 `/mnt/data`는 수집 staging뿐 아니라 HDFS DataNode와 YARN local/log에도 공유된다. 2026-09-20 Worker 2~6의 실제 사용률은 모두 7%였지만 `dfs.datanode.du.reserved=0`으로 별도 HDFS 예약 공간이 없다. 현재 75/70% 수집 hysteresis는 수집 프로세스만 제어하므로, HDFS 적재 전에 staging 보존량·RF2 증가량·YARN 여유를 합산해 별도 용량 예산과 DataNode 예약값을 76번 운영 범위에서 확정해야 한다.
+
+## TESS HDFS Sector 1~13 확장 (`S15P21C206-76`)
+
+HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 expansion Run의 Sector 1·2·6~13을 정확히 매핑한다. 각 Sector의 불변 final을 재감사하거나 새 staging을 적재한 뒤 Java `FileContext`의 `Rename.NONE`으로만 확정하며, 13개가 모두 성공한 뒤 source coverage SHA-256을 키로 전체 HDFS coverage marker를 원자 확정한다. systemd 재시작 횟수는 증거로 남기되 0을 성공 조건으로 두지 않고 최종 plan·bundle·manifest·RF2·복원 감사 결과로 판정한다.
+
+전체 적재는 `run-tess-hdfs-load.ps1 -Step ServerRunAll`로 Node 1의 enabled systemd 조정기에 인계한다. 인계 뒤에는 운영자 PC가 꺼져도 실행과 실패 재시작이 계속된다. Node 1은 Worker 2~6을 `10.20.2.10`~`10.20.6.10`으로 직접 기동·감시하며 source bind를 `10.20.1.10`으로 고정하고, HDFS 데이터 경로도 `hdfs://planetory`의 사설망 이름 해석을 사용한다. Tailscale은 최초 배치와 운영자 조회 경로이지 서버 간 실행 경로가 아니다. 세부 재개·감사 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+
+적재 전에는 HDFS safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만과 RF2 예상 사용률 70% 이하, Worker별 원본 디스크 가용 100GiB 이상을 확인한다. 저장소의 `hdfs-site.xml`은 `dfs.datanode.du.reserved=107374182400`(DataNode당 100GiB)을 선언하며 runner도 실제 클러스터 값을 요구한다. 기존 클러스터 설정 반영과 DataNode 재시작은 이번 코드 변경에 포함하지 않았으므로, 통제된 운영 작업으로 적용·검증하기 전에는 Sector 1~13 적재를 시작하지 않는다.
 
 ## Spark 제출
 

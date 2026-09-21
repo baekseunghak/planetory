@@ -68,7 +68,7 @@ class HistoryAttachmentTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @BeforeEach void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
         member=member(); other=member(); tic=Math.abs(UUID.randomUUID().getMostSignificantBits()%900_000_000)+1;
         jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,1,'published')",tic);
         var p=layout.place(0);
@@ -221,7 +221,7 @@ class HistoryAttachmentTest {
                 .andExpect(jsonPath("$.graph.curve.curveContext.curveStep").value(0))
                 .andExpect(jsonPath("$.graph.curve.residual.jobId").isEmpty());
         Float[] flux=new Float[4320]; Arrays.fill(flux,.99f);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","private-job",null,Map.of(segment,flux),null));
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED","private-job",null,Map.of(segment,flux),null));
         mvc.perform(get(path(post)).session(session(other))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.graph.curve.curveContext.curveStep").value(1))
                 .andExpect(jsonPath("$.graph.curve.residual.jobId").isEmpty());

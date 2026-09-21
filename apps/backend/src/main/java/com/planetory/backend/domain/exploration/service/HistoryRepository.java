@@ -1,5 +1,7 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -35,13 +37,13 @@ public class HistoryRepository {
         return """
             SELECT h.id,h.user_id,h.tic_id,s.bundle_id,h.created_at,
             %s AS submission,h.snapshot_params::text,h.versions::text,b.id AS current_bundle,
-            pa.id AS public_analysis, COALESCE(pa.unpublished_at IS NULL AND pa.hidden_at IS NULL
-              AND p.kind='system_thread' AND p.status='visible',false) AS is_public,
+            pa.id AS public_analysis, COALESCE(%s,false) AS is_public,
             COALESCE(pa.hidden_at IS NOT NULL OR p.status='hidden',false) AS is_hidden,
             a.id IS NOT NULL AS granted,a.relabeled_at,a.relabel_disposition,
             EXISTS(SELECT 1 FROM analysis_snapshots sn WHERE sn.history_id=h.id) AS snapshot_available,
             s.response_snapshot IS NOT NULL AS detail_available
-            """.formatted(detail ? "(to_jsonb(s)-'request_hash')::text" : "(to_jsonb(s)-'request_hash'-'response_snapshot')::text") + FROM;
+            """.formatted(detail ? "(to_jsonb(s)-'request_hash')::text" : "(to_jsonb(s)-'request_hash'-'response_snapshot')::text",
+                    PublicAnalysisVisibility.VISIBLE) + FROM;
     }
     List<Row> list(HistoryQuery q) {
         // submissions(user_id,tic_id,created_at) 인덱스도 사용할 수 있도록 양쪽 소유자를 제한한다.

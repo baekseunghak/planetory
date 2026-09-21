@@ -44,7 +44,7 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
-        assertEquals(2, upgraded.migrate().migrationsExecuted); // V13 첨부 → V14 공개 등록
+        assertEquals(3, upgraded.migrate().migrationsExecuted); // V13 첨부 → V14 공개 등록 → V15 공개 상태
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -118,11 +118,16 @@ class MemberCommunityPermissionTest {
     }
 
     @Test
-    void 앱_계정의_물리_삭제와_공개_분석_변경은_권한으로_거절된다() throws SQLException {
+    void 앱_계정은_공개취소열만_변경하고_운영숨김과_원본은_변경할수없다() throws SQLException {
         try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
             assertPermissionDenied(() -> st.execute("DELETE FROM users WHERE id = -1"));
-            assertPermissionDenied(() -> st.execute(
-                    "UPDATE published_analyses SET unpublished_at=now() WHERE id=-1"));
+            assertDoesNotThrow(() -> st.execute("UPDATE published_analyses SET unpublished_at=now() WHERE id=-1"));
+            assertDoesNotThrow(() -> st.executeQuery("SELECT id FROM published_analyses WHERE id=-1 FOR UPDATE").close());
+            for (String column : List.of("hidden_at", "published_at")) {
+                assertPermissionDenied(() -> st.execute("UPDATE published_analyses SET " + column + "=now() WHERE id=-1"));
+            }
+            assertPermissionDenied(() -> st.execute("UPDATE published_analyses SET history_id=history_id WHERE id=-1"));
+            assertPermissionDenied(() -> st.execute("DELETE FROM published_analyses WHERE id=-1"));
         }
     }
 

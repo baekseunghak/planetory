@@ -273,9 +273,9 @@ test("delayed request shows loading; navigation cancels it instead of leaking a 
   });
   await page.goto(root);
   await entry;
-  await expect(page.getByRole("status")).toContainText(
-    "핫 토픽을 불러오고 있습니다",
-  );
+  await expect(
+    page.locator(".community-main").getByRole("status"),
+  ).toContainText("핫 토픽을 불러오고 있습니다");
   await expect(
     page.getByRole("button", { name: "최신 목록 확인" }),
   ).toBeDisabled();
@@ -328,5 +328,5 @@ test("1024px keyboard access, no overflow, and small-screen notice", async ({
   await expect(
     page.getByRole("heading", { name: "데스크톱에서 이용해 주세요" }),
   ).toBeVisible();
-  await expect(rows(page)).toHaveCount(0);
+  await expect(page.locator(".community-feed")).toBeHidden();
 });

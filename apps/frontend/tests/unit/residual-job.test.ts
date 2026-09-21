@@ -25,7 +25,9 @@ const resultContext = {
   residualModelVersion: "rm-1",
   periodogramConfigVersion: "pg-1",
 };
-type Step = { status?: number; body?: unknown } | { error: ApiError };
+type Step =
+  | { status?: number; body?: unknown; headers?: Record<string, string> }
+  | { error: ApiError };
 function harness(steps: Step[]) {
   const calls: { path: string; method: string; body?: unknown }[] = [];
   const waits: number[] = [];
@@ -35,7 +37,7 @@ function harness(steps: Step[]) {
     calls.push({ path, method: options.method ?? "GET", body: options.json });
     options.onResponse?.({
       status: "error" in step ? 0 : (step.status ?? 200),
-      headers: new Headers(),
+      headers: new Headers("error" in step ? {} : (step.headers ?? {})),
     });
     if ("error" in step) throw step.error;
     return step.body;
@@ -45,12 +47,13 @@ function harness(steps: Step[]) {
     calls,
     waits,
     progress,
-    run: (signal = new AbortController().signal) =>
+    run: (signal = new AbortController().signal, entryBundleId?: string) =>
       runResidualJob({
         request,
         ticId: TIC,
         target,
         signal,
+        entryBundleId,
         onProgress: (value) => void progress.push(value),
         wait: async (ms) => void waits.push(ms),
       }),
@@ -263,4 +266,81 @@ test("a job that keeps vanishing is told to the user instead of looping", () => 
     // 두 번째부터는 다시 요청하지 않는다. 무한히 돌지 않는다.
     assert.equal(box.calls.length, 4);
   });
+});
+
+test("a failure says whether trying again is worth it", async () => {
+  // 7.2절 `failure.retryable`. 눌러도 같은 결과인 버튼을 내지 않기 위해서다.
+  const fail = (failure: Record<string, unknown>) =>
+    harness([
+      queued("rj-9", 1),
+      {
+        body: {
+          jobId: "rj-9",
+          status: "FAILED",
+          failure: { code: "C", message: "m", ...failure },
+          resultCurveContext: null,
+        },
+      },
+    ]).run();
+
+  const permanent = await fail({ retryable: false });
+  assert.equal(permanent.state === "failed" && permanent.retryable, false);
+  const transient = await fail({ retryable: true });
+  assert.equal(transient.state === "failed" && transient.retryable, true);
+  // 값이 없으면 참으로 둔다. 모르는 것 때문에 나갈 길을 막지 않는다.
+  const unknown = await fail({});
+  assert.equal(unknown.state === "failed" && unknown.retryable, true);
+});
+
+test("polling notices the plate changing under it", async () => {
+  // D-5: 계산이 도는 동안의 판 교체를 잡는 유일한 길이다. 409는 POST에만
+  // 오고 FAILED(BUNDLE_ARCHIVED)는 88번 몫이다.
+  const stub = harness([
+    queued("rj-9", 1),
+    {
+      headers: { "X-Current-Bundle": "9007199254749999" },
+      body: {
+        jobId: "rj-9",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  const outcome = await stub.run(undefined, target.bundleId);
+  // COMPLETED여도 옛 판 결과라 쓰지 않는다.
+  assert.equal(outcome.state, "bundle-changed");
+  assert.equal(
+    outcome.state === "bundle-changed" && outcome.currentBundleId,
+    "9007199254749999",
+  );
+});
+
+test("a missing header is unknown, not a changed plate", async () => {
+  // 판을 못 읽으면 서버가 아예 붙이지 않는다. 빈 문자열로 주지 않는 이유다.
+  const stub = harness([
+    queued("rj-9", 1),
+    {
+      body: {
+        jobId: "rj-9",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  const outcome = await stub.run(undefined, target.bundleId);
+  assert.equal(outcome.state, "ready");
+
+  // 같은 판이면 당연히 그대로 간다.
+  const same = harness([
+    queued("rj-9", 1),
+    {
+      headers: { "X-Current-Bundle": target.bundleId },
+      body: {
+        jobId: "rj-9",
+        status: "COMPLETED",
+        resultCurveContext: resultContext,
+      },
+    },
+  ]);
+  assert.equal((await same.run(undefined, target.bundleId)).state, "ready");
 });
