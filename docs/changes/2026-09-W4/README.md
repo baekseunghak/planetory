@@ -25,3 +25,4 @@
 | 2026-09-21 | 크기 변경 시 별 상세 상태 유지·시제품 일치 범위 정정 | S15P21C206-248 | 1×1 캡처, DesktopGate, 상태 보존, Chrome 66+31, 상세 이식 미완료 | 오류 검증 완료·디자인 진행 중 | [기록](2026-09-21.md) |
 | 2026-09-21 | 공개 판단·챌린지 참여 수 공통 조건과 소비 계약 | S15P21C206-165 | 최신 유효 공개, 동률 ID, N=15, COUNT DISTINCT, REPEATABLE_READ, asOf | 전체 437건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 리뷰 반영: 별 결과 페이지 통계 기준 명확화 | S15P21C206-165 | 146, answerClass, judgmentStatistics, graded, public_analyses | 채택·문서 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | Bronze manifest 영구 오류 전달 누락 정정 | S15P21C206-77 | manifest, _TERMINAL, terminal_failed, exit 65, spark-submit | 구현·오프라인 검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |

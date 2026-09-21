@@ -50,7 +50,7 @@ Raw SHA-256이 77의 원본 바이트 무결성 기준이다. 2026-09-21 실환�
 | `raw_checksum` | `raw_size_mismatch`, `raw_sha256_mismatch` |
 | `fits_parse` | `fits_open_failed`, `invalid_identity`, `invalid_array`, `unsupported_time_metadata`, `unsupported_flux_unit`, `missing_header`, `missing_header_or_column`, `invalid_fits_structure`, `length_mismatch`, `sector_identity_mismatch`, `tic_identity_mismatch`, `unexpected_parse_error` |
 
-오류가 하나라도 있으면 summary의 `contract_ok=false`이며 staging과 오류 Parquet을 보존하고 Sector final을 만들지 않는다. 제품 파싱·Raw checksum, Raw·Bronze marker 불일치처럼 같은 입력에서 반복되는 데이터 계약 오류는 전용 오류와 종료 코드 65로 구분하며, Sector 변환 중 확인한 오류는 상태 파일에도 `terminal_failed`로 기록한다. systemd는 이 종료 코드를 재시작하지 않고 unit을 disable하므로 해당 attempt 하나만 남는다. HDFS·YARN 명령 실패처럼 운영 중 복구될 수 있는 오류만 5분 뒤 다시 시도한다. manifest 자체의 구조·개수·lineage 오류나 Spark/YARN 실패도 final 공개 전에 중단한다.
+오류가 하나라도 있으면 summary의 `contract_ok=false`이며 staging과 오류 Parquet을 보존하고 Sector final을 만들지 않는다. 제품 파싱·Raw checksum, Raw·Bronze marker 불일치처럼 같은 입력에서 반복되는 데이터 계약 오류는 전용 오류와 종료 코드 65로 구분하며, Sector 변환 중 확인한 오류는 상태 파일에도 `terminal_failed`로 기록한다. Spark 드라이버에서 확인한 manifest 구조·개수·lineage 오류는 해당 attempt의 `_TERMINAL` marker로 제어기에 전달해 같은 경로로 처리한다. systemd는 이 종료 코드를 재시작하지 않고 unit을 disable하므로 해당 attempt 하나만 남는다. terminal marker가 없는 HDFS·YARN·Spark 제출 실패처럼 운영 중 복구될 수 있는 오류만 5분 뒤 다시 시도한다. 모든 실패는 final 공개 전에 중단한다.
 
 ### 실행
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -14,6 +15,7 @@ from astro_kernel.preprocessing import PreprocessError
 
 
 BRONZE_SCHEMA_VERSION = "planetory.tess-bronze.v1"
+BRONZE_TERMINAL_SCHEMA = "planetory.tess-bronze-terminal.v1"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 REQUIRED_MANIFEST_FIELDS = (
     "filename",
@@ -29,6 +31,14 @@ REQUIRED_MANIFEST_FIELDS = (
     "source_list_sha256",
     "worker_slot",
 )
+
+
+class ManifestContractError(RuntimeError):
+    """A deterministic manifest violation that must not be retried unchanged."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
 
 
 def _clean_message(value: object) -> str:
@@ -239,23 +249,32 @@ def _manifest_map(frame: object, args: argparse.Namespace) -> tuple[dict, int, s
 
     missing_columns = sorted(set(REQUIRED_MANIFEST_FIELDS) - set(frame.columns))
     if missing_columns:
-        raise RuntimeError(f"manifest missing columns: {','.join(missing_columns)}")
+        raise ManifestContractError(
+            "manifest_missing_columns",
+            f"manifest missing columns: {','.join(missing_columns)}",
+        )
     selected = frame.select(*REQUIRED_MANIFEST_FIELDS)
     null_expr = functions.lit(False)
     for name in REQUIRED_MANIFEST_FIELDS:
         null_expr = null_expr | functions.col(name).isNull()
     if selected.filter(null_expr).limit(1).count():
-        raise RuntimeError("manifest contains null required fields")
+        raise ManifestContractError("manifest_null_required_fields", "manifest contains null required fields")
     if selected.filter(functions.col("sector") != args.sector).limit(1).count():
-        raise RuntimeError("manifest sector mismatch")
+        raise ManifestContractError("manifest_sector_mismatch", "manifest sector mismatch")
     if selected.filter(functions.col("source_list_sha256") != args.source_list_sha256).limit(1).count():
-        raise RuntimeError("manifest source checksum mismatch")
+        raise ManifestContractError("manifest_source_checksum_mismatch", "manifest source checksum mismatch")
     if selected.filter(functions.col("filename") != functions.col("sequence_key")).limit(1).count():
-        raise RuntimeError("manifest filename and SequenceFile key differ")
+        raise ManifestContractError(
+            "manifest_sequence_key_mismatch",
+            "manifest filename and SequenceFile key differ",
+        )
     if selected.count() != args.expected_products:
-        raise RuntimeError("manifest product count mismatch")
+        raise ManifestContractError("manifest_product_count_mismatch", "manifest product count mismatch")
     if selected.select("sequence_key").distinct().count() != args.expected_products:
-        raise RuntimeError("manifest contains duplicate SequenceFile keys")
+        raise ManifestContractError(
+            "manifest_duplicate_sequence_keys",
+            "manifest contains duplicate SequenceFile keys",
+        )
 
     snapshots = [
         row[0]
@@ -272,7 +291,7 @@ def _manifest_map(frame: object, args: argparse.Namespace) -> tuple[dict, int, s
         ).limit(args.canary_products)
         effective_expected = selected.count()
         if effective_expected <= 0:
-            raise RuntimeError("canary manifest selection is empty")
+            raise ManifestContractError("manifest_canary_empty", "canary manifest selection is empty")
         sequence_path = first_bundle
     manifest = {row["sequence_key"]: row.asDict(recursive=False) for row in selected.toLocalIterator()}
     return (
@@ -282,6 +301,23 @@ def _manifest_map(frame: object, args: argparse.Namespace) -> tuple[dict, int, s
         sequence_path,
         effective_expected,
     )
+
+
+def _write_terminal_marker(spark: object, args: argparse.Namespace, error: ManifestContractError) -> None:
+    marker = {
+        "schema": BRONZE_TERMINAL_SCHEMA,
+        "failure_type": "data_contract",
+        "error_stage": "manifest",
+        "error_code": error.code,
+        "error_detail": _clean_message(error),
+        "sector": args.sector,
+        "run_id": args.run_id,
+        "completed_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        ),
+    }
+    payload = json.dumps(marker, sort_keys=True, separators=(",", ":"))
+    spark.sparkContext.parallelize([payload], 1).saveAsTextFile(f"{args.output}/_TERMINAL")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -295,13 +331,17 @@ def run(args: argparse.Namespace) -> None:
     bronze_schema, error_schema, summary_schema = _schemas(types)
     try:
         manifest_frame = spark.read.parquet(f"{args.raw_path}/manifest.parquet")
-        (
-            manifest,
-            input_snapshot_count,
-            input_snapshots_sha256,
-            sequence_path,
-            effective_expected,
-        ) = _manifest_map(manifest_frame, args)
+        try:
+            (
+                manifest,
+                input_snapshot_count,
+                input_snapshots_sha256,
+                sequence_path,
+                effective_expected,
+            ) = _manifest_map(manifest_frame, args)
+        except ManifestContractError as exc:
+            _write_terminal_marker(spark, args, exc)
+            raise
         broadcast = spark.sparkContext.broadcast(manifest)
 
         def parse_partition(rows: object) -> object:

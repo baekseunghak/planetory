@@ -23,6 +23,7 @@ SPARK_HDFS_USER = "planetory-admin"
 BRONZE_READY_SCHEMA = "planetory.tess-bronze-sector.v1"
 BRONZE_COVERAGE_SCHEMA = "planetory.tess-bronze-coverage.v1"
 BRONZE_DATA_SCHEMA = "planetory.tess-bronze.v1"
+BRONZE_TERMINAL_SCHEMA = "planetory.tess-bronze-terminal.v1"
 RAW_READY_SCHEMA = "planetory.tess-hdfs-release.v1"
 RAW_COVERAGE_SCHEMA = "planetory.tess-hdfs-coverage.v1"
 RAW_COVERAGE_SHA256 = "df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94"
@@ -267,6 +268,24 @@ def wait_application(application_id: str, poll_seconds: int = 30) -> None:
         time.sleep(poll_seconds)
 
 
+def terminal_data_contract_error(output: str) -> BronzeDataContractError | None:
+    terminal = f"{output}/_TERMINAL"
+    if not hdfs_exists(f"{terminal}/_SUCCESS"):
+        return None
+    marker, _ = hdfs_json(f"{terminal}/part-*")
+    if (
+        marker.get("schema") != BRONZE_TERMINAL_SCHEMA
+        or marker.get("failure_type") != "data_contract"
+        or marker.get("error_stage") != "manifest"
+        or not marker.get("error_code")
+    ):
+        raise RuntimeError(f"invalid Bronze terminal marker: {terminal}")
+    return BronzeDataContractError(
+        "Spark manifest contract failed "
+        f"code={marker['error_code']} detail={marker.get('error_detail', '')}"
+    )
+
+
 def submit(
     *,
     release_dir: Path,
@@ -326,10 +345,17 @@ def submit(
             write_state(state_file, state)
     return_code = process.wait()
     if return_code:
+        if contract_error := terminal_data_contract_error(output):
+            raise contract_error
         raise RuntimeError(f"spark-submit failed with exit {return_code}")
     if not application_id:
         raise RuntimeError("spark-submit did not report an application id")
-    wait_application(application_id)
+    try:
+        wait_application(application_id)
+    except RuntimeError:
+        if contract_error := terminal_data_contract_error(output):
+            raise contract_error
+        raise
     return application_id
 
 
@@ -563,21 +589,21 @@ def run_sector(
     }
     write_state(state_file, state)
     prepare_spark_paths(output, run_id, sector)
-    application_id = submit(
-        release_dir=release_dir,
-        runtime_hdfs=runtime_hdfs,
-        context=context,
-        sector=sector,
-        run_id=run_id,
-        pipeline_version=pipeline_version,
-        output=output,
-        output_partitions=output_partitions,
-        state_file=state_file,
-        state=state,
-    )
-    state.update(status="application_succeeded", application_id=application_id, updated_at_utc=utc_now())
-    write_state(state_file, state)
     try:
+        application_id = submit(
+            release_dir=release_dir,
+            runtime_hdfs=runtime_hdfs,
+            context=context,
+            sector=sector,
+            run_id=run_id,
+            pipeline_version=pipeline_version,
+            output=output,
+            output_partitions=output_partitions,
+            state_file=state_file,
+            state=state,
+        )
+        state.update(status="application_succeeded", application_id=application_id, updated_at_utc=utc_now())
+        write_state(state_file, state)
         ready = finalize_sector(
             release_dir=release_dir,
             context=context,

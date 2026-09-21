@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -14,7 +14,16 @@ sys.path.insert(0, str(ROOT / "libs" / "astro-kernel"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from astro_kernel.preprocessing import PreprocessError  # noqa: E402
-from tess_bronze import BRONZE_SCHEMA_VERSION, _hash_values, transform_record  # noqa: E402
+from tess_bronze import (  # noqa: E402
+    BRONZE_SCHEMA_VERSION,
+    BRONZE_TERMINAL_SCHEMA,
+    REQUIRED_MANIFEST_FIELDS,
+    ManifestContractError,
+    _hash_values,
+    _manifest_map,
+    _write_terminal_marker,
+    transform_record,
+)
 from tess_bronze_ctl import (  # noqa: E402
     DATA_CONTRACT_EXIT_CODE,
     RAW_COVERAGE_SCHEMA,
@@ -23,6 +32,7 @@ from tess_bronze_ctl import (  # noqa: E402
     cli,
     finalize_sector,
     run_sector,
+    submit,
     validate_raw_coverage,
 )
 
@@ -94,6 +104,24 @@ class FakeFits:
 
 
 class BronzeTransformTest(unittest.TestCase):
+    @staticmethod
+    def fake_pyspark_functions():
+        class Expression:
+            def isNull(self):
+                return self
+
+            def __or__(self, other):
+                return self
+
+            def __ne__(self, other):
+                return self
+
+        sql = ModuleType("pyspark.sql")
+        sql.functions = SimpleNamespace(lit=lambda value: Expression(), col=lambda name: Expression())
+        pyspark = ModuleType("pyspark")
+        pyspark.sql = sql
+        return {"pyspark": pyspark, "pyspark.sql": sql}
+
     def test_snapshot_hash_is_sorted_and_delimited(self):
         expected = hashlib.sha256(b"a\nb\n").hexdigest()
         self.assertEqual(_hash_values(["b", "a"]), expected)
@@ -188,6 +216,97 @@ class BronzeTransformTest(unittest.TestCase):
         self.assertEqual(product, "sample.fits")
         self.assertEqual(error[5:7], ("fits_parse", "invalid_fits_structure"))
 
+    def test_manifest_missing_columns_is_terminal(self):
+        frame = SimpleNamespace(columns=[])
+        with patch.dict(sys.modules, self.fake_pyspark_functions()):
+            with self.assertRaisesRegex(ManifestContractError, "missing columns") as caught:
+                _manifest_map(frame, SimpleNamespace())
+        self.assertEqual(caught.exception.code, "manifest_missing_columns")
+
+    def test_manifest_product_count_mismatch_is_terminal(self):
+        class EmptyQuery:
+            def limit(self, count):
+                return self
+
+            def count(self):
+                return 0
+
+        class Selected:
+            def filter(self, expression):
+                return EmptyQuery()
+
+            def count(self):
+                return 1
+
+        frame = SimpleNamespace(
+            columns=list(REQUIRED_MANIFEST_FIELDS),
+            select=lambda *columns: Selected(),
+        )
+        args = SimpleNamespace(sector=3, source_list_sha256="a" * 64, expected_products=2)
+        with patch.dict(sys.modules, self.fake_pyspark_functions()):
+            with self.assertRaisesRegex(ManifestContractError, "product count") as caught:
+                _manifest_map(frame, args)
+        self.assertEqual(caught.exception.code, "manifest_product_count_mismatch")
+
+    def test_manifest_terminal_marker_is_written_to_attempt(self):
+        written = {}
+
+        class Output:
+            def saveAsTextFile(self, path):
+                written["path"] = path
+
+        class Context:
+            def parallelize(self, rows, partitions):
+                written["rows"] = rows
+                written["partitions"] = partitions
+                return Output()
+
+        args = SimpleNamespace(output="/staging/attempt", sector=3, run_id="run")
+        _write_terminal_marker(
+            SimpleNamespace(sparkContext=Context()),
+            args,
+            ManifestContractError("manifest_missing_columns", "manifest missing columns: sha256"),
+        )
+        marker = json.loads(written["rows"][0])
+        self.assertEqual(written["path"], "/staging/attempt/_TERMINAL")
+        self.assertEqual(written["partitions"], 1)
+        self.assertEqual(marker["schema"], BRONZE_TERMINAL_SCHEMA)
+        self.assertEqual(marker["error_code"], "manifest_missing_columns")
+
+    def test_submit_maps_manifest_terminal_marker_to_data_contract_error(self):
+        marker = {
+            "schema": BRONZE_TERMINAL_SCHEMA,
+            "failure_type": "data_contract",
+            "error_stage": "manifest",
+            "error_code": "manifest_product_count_mismatch",
+            "error_detail": "manifest product count mismatch",
+        }
+        process = SimpleNamespace(stdout=iter(["application_1_1\n"]), wait=lambda: 1)
+        context = {
+            "path": "/lake/raw/sector=0003",
+            "release": "release",
+            "ready_sha256": "a" * 64,
+            "ready": {"source_list_sha256": "b" * 64, "product_count": 2},
+        }
+        with tempfile.TemporaryDirectory() as root, patch(
+            "tess_bronze_ctl.subprocess.Popen", return_value=process
+        ), patch("tess_bronze_ctl.hdfs_exists", return_value=True), patch(
+            "tess_bronze_ctl.hdfs_json", return_value=(marker, "c" * 64)
+        ):
+            with self.assertRaisesRegex(BronzeDataContractError, "manifest_product_count_mismatch"):
+                submit(
+                    release_dir=Path("."),
+                    runtime_hdfs="/runtime.tar.gz",
+                    context=context,
+                    sector=3,
+                    run_id="run",
+                    pipeline_version="pipeline",
+                    output="/staging/attempt",
+                    output_partitions=1,
+                    state_file=Path(root) / "state.json",
+                    state={"status": "prepared"},
+                )
+
     def test_sector_contract_failure_is_terminal(self):
         summary = {
             "contract_ok": False,
@@ -234,6 +353,29 @@ class BronzeTransformTest(unittest.TestCase):
             self.assertEqual(state["status"], "terminal_failed")
             self.assertEqual(state["failure_type"], "BronzeDataContractError")
             self.assertEqual(state["failure_detail"], "bad checksum")
+
+    def test_submit_contract_failure_is_recorded_for_operator_review(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            "tess_bronze_ctl.audit_final", return_value=False
+        ), patch("tess_bronze_ctl.prepare_spark_paths"), patch(
+            "tess_bronze_ctl.submit",
+            side_effect=BronzeDataContractError("manifest product count mismatch"),
+        ), patch("tess_bronze_ctl.finalize_sector") as finalize:
+            with self.assertRaises(BronzeDataContractError):
+                run_sector(
+                    release_dir=Path("."),
+                    runtime_hdfs="/runtime.tar.gz",
+                    context={},
+                    sector=3,
+                    run_id="run",
+                    pipeline_version="pipeline",
+                    output_partitions=1,
+                    state_root=Path(root),
+                )
+            finalize.assert_not_called()
+            state = json.loads((Path(root) / "run=run" / "sector=0003.json").read_text())
+            self.assertEqual(state["status"], "terminal_failed")
+            self.assertEqual(state["failure_detail"], "manifest product count mismatch")
 
     def test_cli_maps_only_data_contract_failures_to_non_retryable_exit(self):
         with patch("tess_bronze_ctl.main", side_effect=BronzeDataContractError("bad input")):
