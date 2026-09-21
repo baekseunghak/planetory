@@ -15,6 +15,10 @@ include:
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # MR이 열린 브랜치는 MR 파이프라인만 돈다. 둘 다 돌면 Runner를 두 배로 쓰고,
+    # rules:changes도 MR 파이프라인에서만 타깃 브랜치 기준으로 비교한다.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
     - if: $CI_COMMIT_BRANCH
 
 default:

@@ -1,3 +1,48 @@
+# 웹 검증은 MR에서 돌고, 이미지 빌드·배포는 기본 브랜치에서만 돈다.
+#
+# 검증 job 셋은 서로 의존하지 않는다. `needs: []`로 스테이지를 기다리지 않고
+# 파이프라인 시작과 동시에 병렬로 뜬다. 하나가 실패해도 나머지 결과가 같이 보인다.
+#
+# Playwright 스위트는 여기에 넣지 않는다. 설정이 24개이고 `npm run check`가 약 20개를
+# 직렬로 돌아 블로킹 CI에 들어가면 머지가 막힌다. 배치 방법은 따로 정한다.
+.web-checks:
+  stage: validate
+  image: node:22.12-alpine
+  needs: []
+  # lock 파일이 그대로면 네트워크 왕복이 사라진다. node_modules는 캐싱하지 않는다.
+  # npm ci가 어차피 지우고 다시 깔기 때문이다.
+  cache:
+    key:
+      files: [apps/frontend/package-lock.json]
+    paths: [apps/frontend/.npm]
+  before_script:
+    - cd apps/frontend
+    - npm ci --cache .npm --prefer-offline --no-audit --fund=false
+  # MR 파이프라인의 changes는 타깃 브랜치 기준으로 비교한다. 브랜치 파이프라인은
+  # 직전 커밋과만 비교하지만, MR이 열리면 그쪽만 돌므로 판정이 중요한 자리는 MR이다.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [apps/frontend/**/*]
+    - if: $CI_COMMIT_BRANCH
+      changes: [apps/frontend/**/*]
+
+# typecheck을 따로 두지 않는다. `npm run build`가 typecheck → vite build →
+# check-production 순서라 타입 오류·번들 실패·프로덕션 위생을 한 job이 모두 잡는다.
+web:build:
+  extends: .web-checks
+  script:
+    - npm run build
+
+web:unit:
+  extends: .web-checks
+  script:
+    - npm test
+
+# 포맷 검사는 아직 넣지 않는다. LF 체크아웃 기준으로 `npm run format:check`가 16개
+# 파일에서 실패한다(tests 6, apps/frontend/docs 9, src의 README 1). 지금 넣으면
+# 첫 파이프라인부터 빨간불이라 머지를 막는다. `npm run format`으로 한 번 정리한
+# 뒤에 job을 추가한다.
+
 build:frontend:
   extends: .docker-build
   variables:
@@ -10,22 +55,9 @@ build:frontend:
       exists: [apps/frontend/package-lock.json]
       changes: [apps/frontend/**/*]
 
+# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:frontend:ec2-a:
   extends: .deploy-ec2-a
-  needs: ["build:frontend"]
-  variables:
-    IMAGE_NAME: frontend
-    DEPLOY_IMAGE_VARIABLE: FRONTEND_IMAGE
-    DEPLOY_SERVICES: frontend
-    DEPLOY_ACTION: up
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
-      when: manual
-
-deploy:frontend:ec2-b:
-  extends: .deploy-ec2-b
   needs: ["build:frontend"]
   variables:
     IMAGE_NAME: frontend

@@ -10,22 +10,9 @@ build:backend:
       exists: [apps/backend/gradlew]
       changes: [apps/backend/**/*]
 
+# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:backend:ec2-a:
   extends: .deploy-ec2-a
-  needs: ["build:backend"]
-  variables:
-    IMAGE_NAME: backend
-    DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
-    DEPLOY_SERVICES: backend
-    DEPLOY_ACTION: up
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [apps/backend/gradlew]
-      changes: [apps/backend/**/*]
-      when: manual
-
-deploy:backend:ec2-b:
-  extends: .deploy-ec2-b
   needs: ["build:backend"]
   variables:
     IMAGE_NAME: backend

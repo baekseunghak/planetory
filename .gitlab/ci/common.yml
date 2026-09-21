@@ -103,13 +103,6 @@ validate:tess-hdfs-loader:
     DEPLOY_PATH: $EC2_A_DEPLOY_PATH
     DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
 
-.deploy-ec2-b:
-  extends: .remote-compose-deploy
-  variables:
-    DEPLOY_HOST: $EC2_B_HOST
-    DEPLOY_PATH: $EC2_B_DEPLOY_PATH
-    DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
-
 .deploy-gcp-node-1:
   extends: .remote-compose-deploy
   variables:
