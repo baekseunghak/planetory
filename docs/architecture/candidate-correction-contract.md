@@ -159,7 +159,7 @@
 
 **할 수 있는 것**
 
-1. 5.2의 사전검사 — 영향 건수 여섯 개를 세어 보고한다.
+1. 5.2의 사전검사 — 영향 건수 여섯 개를 세어 보고한다. **구현 완료**([S15P21C206-154](https://ssafy.atlassian.net/browse/S15P21C206-154), 읽기 전용 명령 `candidate-correction-precheck`, 절차는 [사전검사 런북](../operations/candidate-correction-runbook.md)).
 2. 병합에서 남는 후보의 `status`를 `retired`로 바꾸고 별칭·외부 참조·disposition을 대표 후보로 모은다.
 3. 참조가 없는 후보의 분리 — 새 판 적재 경로로 처리한다(3.4).
 4. 5.3의 `candidate_status_history` 기록.
