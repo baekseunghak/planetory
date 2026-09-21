@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import shlex
+import hashlib
+import json
 from pathlib import PurePosixPath
 
 
@@ -23,6 +25,42 @@ def sector_inputs(params: dict, sector: int) -> tuple[str, str]:
     if not RUN_ID_RE.fullmatch(run_id) or not SHA256_RE.fullmatch(source_sha):
         raise ValueError(f"invalid Sector {sector} lineage")
     return run_id, source_sha
+
+
+def stage_inputs(conf: dict) -> dict:
+    """Validate the immutable lineage passed between Sector-stage DAG runs."""
+    if not isinstance(conf, dict) or isinstance(conf.get("sector"), bool):
+        raise ValueError("stage run requires a Sector configuration")
+    try:
+        sector = int(conf["sector"])
+        partitions = int(conf["bronze_output_partitions"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("invalid Sector or Bronze partition count") from error
+    if sector < 1 or not 1 <= partitions <= 200:
+        raise ValueError("Sector must be positive and Bronze partitions must be in 1..200")
+    run_id = str(conf.get("run_id", ""))
+    source_sha = str(conf.get("source_list_sha256", ""))
+    bronze_run_id = str(conf.get("bronze_run_id", ""))
+    version = str(conf.get("bronze_pipeline_version", ""))
+    if not RUN_ID_RE.fullmatch(run_id) or not SHA256_RE.fullmatch(source_sha):
+        raise ValueError("invalid Sector source lineage")
+    if not RUN_ID_RE.fullmatch(bronze_run_id) or not RELEASE_RE.fullmatch(version):
+        raise ValueError("invalid Bronze lineage")
+    value = {
+        "sector": sector,
+        "run_id": run_id,
+        "source_list_sha256": source_sha,
+        "hdfs_release": release_path(str(conf.get("hdfs_release", "")), "/opt/planetory-hdfs-load/releases/"),
+        "hdfs_config": exact_path(str(conf.get("hdfs_config", "")), "/etc/planetory/tess-hdfs-runall/"),
+        "bronze_release": release_path(str(conf.get("bronze_release", "")), "/opt/planetory-bronze/releases/"),
+        "bronze_run_id": bronze_run_id,
+        "bronze_pipeline_version": version,
+        "bronze_output_partitions": partitions,
+    }
+    lineage_sha = hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    if conf.get("lineage_sha256", lineage_sha) != lineage_sha:
+        raise ValueError("Sector stage lineage changed")
+    return {**value, "lineage_sha256": lineage_sha}
 
 
 def validate_download_markers(markers: list[dict], sector: int, run_id: str, source_sha: str) -> dict:

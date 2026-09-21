@@ -64,3 +64,5 @@
 | 2026-09-21 | Sector 파이프라인 자율 실행·Raw 검증 후 원본 회수 | S15P21C206-252 | Airflow, systemd, Raw audit, cleanup, SHA-256 | DAG·cleanup 구현 및 오프라인 검증, 운영 배포 전 | [기록](2026-09-21.md) |
 | 2026-09-22 | Airflow UI Node 1 배포·Tailnet 전용 공개 | S15P21C206-252 | Airflow DB, Scheduler, Webserver, Tailscale Serve, Viewer | UI 접속 검증, DAG 실행 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | Airflow Viewer 초기 암호 전달 오류 정정 | S15P21C206-252 | Viewer, password reset, root-only file | 수정·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector별 단계 DAG와 빠른 Raw 재검증 착수 | S15P21C206-252 | 4 DAG, lineage, manifest checksum, cached audit, parallel cleanup | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow DB 유지 갱신·실패 시 이전 이미지 복귀 | S15P21C206-252 | Airflow update, paused DAG, rollback | 스크립트 검증, 운영 적용 전 | [기록](2026-09-22.md) |

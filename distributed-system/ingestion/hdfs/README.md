@@ -43,13 +43,15 @@ $CodeRelease = '<이번 코드 release id>'
 
 Raw 전수 감사 뒤 Worker 로컬 FITS를 회수하려면 같은 명령에 `-CleanupSourceAfterCommit`을 추가한다. 조정기는 각 Sector `Commit`이 bundle checksum·manifest·RF2·FSCK와 최종 `_READY.json`, `manifest.parquet/_SUCCESS`를 모두 확인한 뒤에만 cleanup을 시작한다. 삭제 대상은 적재에 사용한 불변 Worker plan의 정확한 파일 목록이며, 삭제 직전에도 경로·크기·SHA-256을 모두 다시 확인한다. 하나라도 다르거나 처음 시작할 때 누락돼 있으면 그 Worker에서는 아무 파일도 지우지 않는다. 중단 후 재시작은 `worker-<slot>.cleanup.json`과 같은 plan identity가 있을 때만 이미 삭제한 파일을 인정하고 남은 파일을 이어서 지운다. manifest·audit·state·`.part`, 다른 run과 plan에 없는 파일은 삭제하지 않는다.
 
-cleanup을 포함한 완료 marker는 `/var/lib/planetory-tess-hdfs-runall-<run>/cleanup-complete`다. 기존 `/complete`가 있는 적재도 cleanup 옵션으로 다시 시작하면 HDFS final을 전수 재감사한 뒤 cleanup만 멱등 수행할 수 있다. cleanup 뒤 원본 복구 경로는 RF2 HDFS Raw 또는 MAST 재다운로드이므로 HDFS 감사 실패·복제 부족 상태에서는 삭제하지 않는다.
+cleanup을 포함한 완료 marker는 `/var/lib/planetory-tess-hdfs-runall-<run>/cleanup-complete`다. 기존 `/complete`가 있는 적재도 cleanup 옵션으로 다시 시작하면 HDFS final을 재검증한 뒤 cleanup만 멱등 수행할 수 있다. 새 marker는 아래 빠른 감사, 구형 marker는 상세 감사를 사용한다. cleanup 뒤 원본 복구 경로는 RF2 HDFS Raw 또는 MAST 재다운로드이므로 HDFS 감사 실패·복제 부족 상태에서는 삭제하지 않는다.
 
 `ServerRunAll`은 검증된 FinalCoverage와 loader를 배치한 뒤 Node 1의 enabled systemd unit으로 전체 실행을 넘긴다. 이 시점부터 운영자 PC와 Tailscale 세션이 종료돼도 Node 1이 실패 시 30초 뒤 재시작하며 같은 staging에서 재개한다. 전체 coverage 확정 뒤에는 `/var/lib/planetory-tess-hdfs-runall-<run>/complete` 또는 cleanup 포함 실행의 `/cleanup-complete`를 원자 생성하고 systemd `ConditionPathExists=!`가 완료 작업의 재부팅 재실행을 막는다. Node 1의 Worker 기동·상태 확인은 고정 내부 IP `10.20.2.10`~`10.20.6.10`의 SSH만 사용하고 소스 주소도 `10.20.1.10`으로 고정한다. 전용 키는 Node 1의 `/etc/planetory/tess-hdfs-runall/`에만 두며 Worker는 해당 내부 IP에서 온 키만 허용한다. bundle 데이터와 감사 명령은 기존 `hdfs://planetory` 사설망 경로를 사용한다. Tailscale은 최초 배치와 운영자 상태 조회에만 사용한다.
 
 서버 조정기는 기존 Run의 Sector 3~5와 확장 Run의 Sector 1·2·6~13을 합친 정확한 1~13 입력 지도를 만들고 Sector마다 HDFS Preflight를 다시 수행한다. final이 있으면 용량 예상값 0으로 상태 검사를 수행한 뒤 전수 재감사하고, 미완료 Sector는 `plan → Worker 5대 병렬 upload → uploader 완료 대기 → Commit`으로 처리한다. Worker unit은 실패 시 재시작하고 Node 1 조정기가 재기동되면 active unit은 그대로 감시하며 inactive 미완료 unit만 멱등 재실행한다. `Commit`은 checksum·manifest·RF2·FSCK 전수 감사 뒤에만 manifest와 `_READY.json`을 만들고 원자 rename한다. 첫 실패에서는 다음 Sector를 시작하지 않고 staging을 보존하며, 13개가 모두 확정된 뒤에만 전체 HDFS coverage marker를 만든다. 조정기 내부 coverage 확정은 직전 Sector 감사 결과를 재사용하지만, 독립 `CoverageCommit`은 13개 Sector를 다시 전수 감사한다. 기존 로컬 `RunAll`은 단계별 장애 진단용 수동 fallback으로 유지한다.
 
-Airflow는 `runall --sector <N> --skip-cleanup`으로 Raw만 확정하고, 다음 task에서 `cleanup-sector --config <path> --sector <N>`을 호출한다. cleanup 명령은 final을 다시 전수 감사한 뒤 삭제하므로 두 task 사이 장애가 발생해도 원본을 먼저 지우지 않는다. 마지막 Sector cleanup 뒤 `coverage --config <path>`가 전체 coverage와 완료 marker를 확정한다.
+Airflow는 `runall --sector <N> --skip-cleanup`으로 Raw만 확정하고, 다음 task에서 `cleanup-sector --config <path> --sector <N>`을 호출한다. cleanup 명령은 final을 다시 검증한 뒤 삭제하므로 두 task 사이 장애가 발생해도 원본을 먼저 지우지 않는다. 마지막 Sector cleanup 뒤 `coverage --config <path>`가 전체 coverage와 완료 marker를 확정한다.
+
+2026-09-22 후속 구현부터 신규 bundle 완료 marker에는 HDFS manifest checksum도 남긴다. `cleanup-sector`는 먼저 기존 Raw `_READY`와 plan·bundle checksum·manifest checksum·RF2·FSCK를 재확인하는 빠른 감사를 수행한다. 해당 checksum이 없는 과거 bundle은 기존의 manifest 행별 상세 감사로 돌아간다. 감사 결과의 `fast_bundles`·`full_bundles`는 실제로 어느 경로가 실행됐는지 나타낸다. 불일치하면 삭제를 시작하지 않는다. 첫 Raw Commit의 상세 감사와 Worker별 로컬 원본 파일 SHA-256 검사는 유지한다. `cleanup-sector`는 Worker 5대의 삭제 검사를 병렬 실행하되 각 Worker의 불변 plan·영속 cleanup state와 실패 후 재개 규칙은 그대로 적용한다. 이 변경은 오프라인 테스트만 완료했으며 기존 서버 release에 배포·실측한 결과가 아니다.
 
 운영자는 다음 읽기 전용 명령으로 Node 1 조정기 상태를 본다. 이 조회가 끊겨도 서버 unit에는 영향이 없다.
 

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import tess_hdfs_load as loader
@@ -293,7 +294,7 @@ def run_loader_as_hdfs(config: dict, arguments: list[str]) -> subprocess.Complet
     ])
 
 
-def audit(config: dict, context: dict, source: str, output: Path) -> dict:
+def audit(config: dict, context: dict, source: str, output: Path, *, fast: bool = False) -> dict:
     _, _, final_uri = context_paths(context)
     arguments = [
         "audit", "--stage-uri", source, "--final-uri", final_uri,
@@ -303,6 +304,8 @@ def audit(config: dict, context: dict, source: str, output: Path) -> dict:
     ]
     for slot in range(1, 6):
         arguments.extend(["--worker-slot", str(slot)])
+    if fast:
+        arguments.append("--fast")
     run_loader_as_hdfs(config, arguments)
     return json.loads(output.read_text(encoding="utf-8"))
 
@@ -321,7 +324,7 @@ def java_commit(config: dict, source: str, destination: str) -> None:
     ])
 
 
-def commit_sector(config: dict, context: dict) -> None:
+def commit_sector(config: dict, context: dict, *, fast_cached: bool = False) -> None:
     stage, final, final_uri = context_paths(context)
     with tempfile.TemporaryDirectory(prefix=f"tess-hdfs-s{context['sector']}-") as temporary:
         root = Path(temporary)
@@ -329,7 +332,9 @@ def commit_sector(config: dict, context: dict) -> None:
         root.chmod(0o750)
         audit_path = root / "audit.json"
         if hdfs_exists(final):
-            result = audit(config, context, final, audit_path)
+            result = audit(config, context, final, audit_path, fast=True) if fast_cached else audit(
+                config, context, final, audit_path
+            )
             validate_audit_coverage(result, context)
             ready = hdfs_json(f"{final}/_READY.json")
             loader.validate_ready(ready, {
@@ -585,11 +590,20 @@ def process_sector(config: dict, context: dict, *, cleanup_source: bool | None =
         prepare_stage(context)
         units = {int(worker["slot"]): start_worker(config, context, worker) for worker in config["workers"]}
         wait_workers(config, context, units)
-    commit_sector(config, context)
+    if final_exists and cleanup_source is True:
+        commit_sector(config, context, fast_cached=True)
+    else:
+        commit_sector(config, context)
     cleanup_enabled = config.get("cleanup_source_after_commit", False) if cleanup_source is None else cleanup_source
     if cleanup_enabled:
-        for worker_config in config["workers"]:
-            cleanup_worker(config, context, worker_config)
+        if cleanup_source is True:
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = [pool.submit(cleanup_worker, config, context, worker) for worker in config["workers"]]
+                for future in futures:
+                    future.result()
+        else:
+            for worker_config in config["workers"]:
+                cleanup_worker(config, context, worker_config)
     print(f"RUN_ALL_SECTOR_COMPLETE sector={context['sector']}")
 
 
@@ -608,7 +622,16 @@ def coordinator(
     requested_sectors: list[int] | None = None,
     *,
     cleanup_source: bool | None = None,
+    expected_run_id: str | None = None,
+    expected_source_sha: str | None = None,
+    expected_code_release: str | None = None,
 ) -> None:
+    if expected_run_id is not None and config["run_id"] != expected_run_id:
+        raise ValueError("requested run_id differs from HDFS config")
+    if expected_source_sha is not None and config["expected_source_list_sha256"] != expected_source_sha:
+        raise ValueError("requested source checksum differs from HDFS config")
+    if expected_code_release is not None and config["code_release"] != expected_code_release:
+        raise ValueError("requested code release differs from HDFS config")
     coverage = loader.load_coverage_map(Path(config["coverage_manifest"]), config["expected_coverage_sha256"])
     contexts = list(coverage["sectors"])
     expansion = [item for item in contexts if item["run_id"] == config["run_id"]]
@@ -689,9 +712,15 @@ def main() -> int:
     runall.add_argument("--config", type=Path, required=True)
     runall.add_argument("--sector", type=int, action="append")
     runall.add_argument("--skip-cleanup", action="store_true")
+    runall.add_argument("--expected-run-id")
+    runall.add_argument("--expected-source-sha")
+    runall.add_argument("--expected-code-release")
     cleanup_sector = commands.add_parser("cleanup-sector")
     cleanup_sector.add_argument("--config", type=Path, required=True)
     cleanup_sector.add_argument("--sector", type=int, action="append", required=True)
+    cleanup_sector.add_argument("--expected-run-id")
+    cleanup_sector.add_argument("--expected-source-sha")
+    cleanup_sector.add_argument("--expected-code-release")
     coverage = commands.add_parser("coverage")
     coverage.add_argument("--config", type=Path, required=True)
     upload = commands.add_parser("worker")
@@ -721,9 +750,17 @@ def main() -> int:
             load_config(arguments.config),
             arguments.sector,
             cleanup_source=False if arguments.skip_cleanup else None,
+            expected_run_id=arguments.expected_run_id,
+            expected_source_sha=arguments.expected_source_sha,
+            expected_code_release=arguments.expected_code_release,
         )
     elif arguments.command == "cleanup-sector":
-        coordinator(load_config(arguments.config), arguments.sector, cleanup_source=True)
+        coordinator(
+            load_config(arguments.config), arguments.sector, cleanup_source=True,
+            expected_run_id=arguments.expected_run_id,
+            expected_source_sha=arguments.expected_source_sha,
+            expected_code_release=arguments.expected_code_release,
+        )
     elif arguments.command == "coverage":
         finalize_coverage(load_config(arguments.config))
     elif arguments.command == "worker":

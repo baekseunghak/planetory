@@ -82,8 +82,10 @@ def hdfs_json(path: str) -> tuple[dict[str, Any], str]:
     return json.loads(payload), hashlib.sha256(payload).hexdigest()
 
 
-def raw_context(sector: int) -> dict[str, Any]:
-    release = RAW_RELEASES[sector]
+def raw_context(sector: int, raw_release: str | None = None) -> dict[str, Any]:
+    release = raw_release or RAW_RELEASES.get(sector)
+    if release is None or not re.fullmatch(r"\d{8}T\d{6}Z", release):
+        raise BronzeDataContractError(f"Sector {sector} requires an immutable Raw release")
     path = f"/lake/raw/tess/release={release}/sector={sector:04d}"
     ready, ready_sha = hdfs_json(f"{path}/_READY.json")
     expected = {
@@ -141,7 +143,9 @@ def raw_coverage(contexts: dict[int, dict[str, Any]]) -> tuple[dict[str, Any], s
     return value, ready_sha256
 
 
-def cluster_preflight(sectors: list[int], *, allow_running: bool = False) -> dict[int, dict[str, Any]]:
+def cluster_preflight(
+    sectors: list[int], *, allow_running: bool = False, raw_release: str | None = None,
+) -> dict[int, dict[str, Any]]:
     nn1 = hdfs("haadmin", "-getServiceState", "nn1").stdout.strip()
     nn2 = hdfs("haadmin", "-getServiceState", "nn2").stdout.strip()
     if f"{nn1}:{nn2}" not in ("active:standby", "standby:active"):
@@ -163,7 +167,7 @@ def cluster_preflight(sectors: list[int], *, allow_running: bool = False) -> dic
     running = APP_ID_RE.findall(applications)
     if running and not allow_running:
         raise RuntimeError(f"another YARN application is running: {','.join(running)}")
-    contexts = {sector: raw_context(sector) for sector in sectors}
+    contexts = {sector: raw_context(sector, raw_release) for sector in sectors}
     print(
         f"BRONZE_PREFLIGHT_OK sectors={','.join(map(str, sectors))} "
         f"ha={nn1}:{nn2} live_datanodes=5 running_apps={len(running)}",
@@ -676,14 +680,19 @@ def command_canary(args: argparse.Namespace) -> None:
 
 
 def command_preflight(args: argparse.Namespace) -> None:
-    contexts = cluster_preflight(args.sectors)
+    contexts = cluster_preflight(args.sectors, raw_release=args.raw_release)
     if set(args.sectors) == set(range(1, 14)):
         raw_coverage(contexts)
 
 
 def command_run_all(args: argparse.Namespace) -> None:
     release_dir = Path(args.release_dir).resolve()
-    contexts = cluster_preflight(args.sectors)
+    contexts = cluster_preflight(args.sectors, raw_release=args.raw_release)
+    if args.expected_source_sha is not None and any(
+        context["ready"]["source_list_sha256"] != args.expected_source_sha
+        for context in contexts.values()
+    ):
+        raise BronzeDataContractError("Raw source checksum differs from requested Sector lineage")
     full_coverage = set(args.sectors) == set(range(1, 14))
     raw_coverage_ready_sha256 = None
     if full_coverage:
@@ -692,7 +701,7 @@ def command_run_all(args: argparse.Namespace) -> None:
     hdfs("dfs", "-mkdir", "-p", "/lake/bronze/tess/.staging", "/lake/bronze/tess/.spark-staging")
     completed = []
     for sector in args.sectors:
-        cluster_preflight([sector], allow_running=False)
+        cluster_preflight([sector], allow_running=False, raw_release=args.raw_release)
         run_sector(
             release_dir=release_dir,
             runtime_hdfs=runtime_hdfs,
@@ -734,6 +743,7 @@ def parser() -> argparse.ArgumentParser:
     subparsers = root.add_subparsers(dest="command", required=True)
     preflight = subparsers.add_parser("preflight")
     preflight.add_argument("--sector", dest="sectors", type=int, action="append", required=True)
+    preflight.add_argument("--raw-release")
     preflight.set_defaults(handler=command_preflight)
     canary = subparsers.add_parser("canary")
     canary.add_argument("--release-dir", required=True)
@@ -748,6 +758,8 @@ def parser() -> argparse.ArgumentParser:
     run_all.add_argument("--run-id", required=True)
     run_all.add_argument("--pipeline-version", required=True)
     run_all.add_argument("--sector", dest="sectors", type=int, action="append", required=True)
+    run_all.add_argument("--raw-release")
+    run_all.add_argument("--expected-source-sha")
     run_all.add_argument("--output-partitions", type=int, default=40)
     run_all.add_argument("--state-root", default="/var/lib/planetory-bronze")
     run_all.set_defaults(handler=command_run_all)
@@ -762,8 +774,8 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     sectors = args.sectors if getattr(args, "sectors", None) is not None else [args.sector]
-    if any(sector not in range(1, 14) for sector in sectors):
-        raise SystemExit("sectors must be in 1..13")
+    if any(sector < 1 for sector in sectors):
+        raise SystemExit("sectors must be positive")
     if len(set(sectors)) != len(sectors):
         raise SystemExit("duplicate sector")
     if getattr(args, "canary_products", 1) <= 0:

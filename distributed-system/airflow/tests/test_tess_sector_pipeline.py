@@ -1,3 +1,4 @@
+import ast
 import sys
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from tess_pipeline_contract import (  # noqa: E402
     command,
     release_path,
     sector_inputs,
+    stage_inputs,
     validate_download_markers,
 )
 
@@ -79,6 +81,41 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         self.assertIn('task_id=f"cleanup_local_sector_{sector:02d}"', source)
         self.assertIn('"coverage", "--release-dir", release,', source)
         self.assertIn("terminal_exit=65", source)
+
+    def test_stage_lineage_and_four_paused_dags(self):
+        conf = {
+            "sector": 70, "run_id": "20260922T000000Z", "source_list_sha256": "a" * 64,
+            "hdfs_release": "/opt/planetory-hdfs-load/releases/20260922T000000Z",
+            "hdfs_config": "/etc/planetory/tess-hdfs-runall/20260922T000000Z.json",
+            "bronze_release": "/opt/planetory-bronze/releases/20260922T000000Z",
+            "bronze_run_id": "20260922T000000Z", "bronze_pipeline_version": "S15P21C206-252",
+            "bronze_output_partitions": 40,
+        }
+        value = stage_inputs(conf)
+        self.assertEqual(value, stage_inputs(value))
+        with self.assertRaisesRegex(ValueError, "lineage changed"):
+            stage_inputs({**value, "source_list_sha256": "b" * 64})
+        with self.assertRaises(ValueError):
+            stage_inputs({**conf, "hdfs_config": "/etc/planetory/tess-hdfs-runall/../other"})
+        source = (DAGS / "tess_stage_dags.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        ids = [
+            keyword.value.value
+            for node in ast.walk(tree) if isinstance(node, ast.Call)
+            for keyword in node.keywords
+            if keyword.arg == "dag_id" and isinstance(keyword.value, ast.Constant)
+        ]
+        self.assertEqual(set(ids), {
+            "tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze",
+        })
+        self.assertIn('is_paused_upon_creation=True', source)
+        self.assertIn('"--expected-source-sha"', source)
+        marker_func = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "download_markers"
+        )
+        worker_loop = next(node for node in marker_func.body if isinstance(node, ast.For))
+        self.assertFalse(any(isinstance(node, ast.Return) for node in ast.walk(worker_loop)))
 
 
 if __name__ == "__main__":

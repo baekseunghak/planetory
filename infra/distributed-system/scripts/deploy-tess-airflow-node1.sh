@@ -27,6 +27,69 @@ if [[ "${1:-}" == --viewer-password ]]; then
   echo 'AIRFLOW_VIEWER_PASSWORD_SET'
   exit 0
 fi
+if [[ "${1:-}" == --update ]]; then
+  [[ -f /etc/planetory/airflow/airflow.env ]] || { echo 'AIRFLOW_ENV_MISSING' >&2; exit 1; }
+  cd "$release_dir"
+  scheduler=planetory-distributed-system-airflow-scheduler-1
+  webserver=planetory-distributed-system-airflow-webserver-1
+  old_image="$(docker inspect -f '{{.Config.Image}}' "$scheduler")"
+  [[ "$old_image" == "$(docker inspect -f '{{.Config.Image}}' "$webserver")" ]] || {
+    echo 'AIRFLOW_IMAGE_DRIFT' >&2; exit 1;
+  }
+  docker image inspect "$old_image" >/dev/null
+  docker exec "$scheduler" python -c '
+from airflow.models.dagrun import DagRun
+from airflow.settings import Session
+session = Session()
+try:
+    active = session.query(DagRun).filter(DagRun.state.in_(("queued", "running"))).count()
+    assert active == 0, f"AIRFLOW_ACTIVE_DAG_RUNS={active}"
+finally:
+    session.close()
+'
+  image="local/planetory-airflow:$(basename "$release_dir")"
+  [[ "$image" != "$old_image" ]] || { echo 'AIRFLOW_RELEASE_ALREADY_ACTIVE' >&2; exit 1; }
+  compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose.yaml)
+  AIRFLOW_IMAGE="$image" "${compose[@]}" config --quiet
+  docker build --network none --build-arg "AIRFLOW_IMAGE=$old_image" \
+    -f distributed-system/airflow/Dockerfile -t "$image" .
+  docker run --rm --network none --entrypoint python "$image" -c '
+from airflow.models.dagbag import DagBag
+bag = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
+required = {"tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze"}
+assert not bag.import_errors, bag.import_errors
+assert required <= set(bag.dags), required - set(bag.dags)
+assert all(bag.dags[dag_id].is_paused_upon_creation for dag_id in required)
+print("AIRFLOW_FOUR_PAUSED_DAGS_READY")
+'
+  switched=0
+  rollback() {
+    status=$?
+    trap - EXIT
+    if [[ "$status" != 0 && "$switched" == 1 ]]; then
+      AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-webserver || \
+        echo 'AIRFLOW_ROLLBACK_FAILED' >&2
+      echo "AIRFLOW_UPDATE_ROLLED_BACK old_image=$old_image" >&2
+    fi
+    exit "$status"
+  }
+  trap rollback EXIT
+  switched=1
+  AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-webserver
+  for attempt in $(seq 1 60); do
+    if curl --fail --silent --output /dev/null http://127.0.0.1:8081/health; then break; fi
+    sleep 2
+  done
+  curl --fail --silent --output /dev/null http://127.0.0.1:8081/health
+  "${compose[@]}" exec -T airflow-scheduler airflow dags list-import-errors | grep -Fq 'No data found'
+  [[ "$(docker inspect -f '{{.Config.Image}}' "$scheduler")" == "$image" ]]
+  [[ "$(docker inspect -f '{{.Config.Image}}' "$webserver")" == "$image" ]]
+  [[ "$(docker inspect -f '{{.State.Running}}' "$scheduler")" == true ]]
+  [[ "$(docker inspect -f '{{.State.Running}}' "$webserver")" == true ]]
+  trap - EXIT
+  echo "AIRFLOW_UPDATE_READY image=$image previous=$old_image"
+  exit 0
+fi
 [[ ! -e /etc/planetory/airflow ]] || [[ -d /etc/planetory/airflow ]] || exit 1
 [[ -z "$(docker ps -q --filter 'name=planetory-distributed-system-airflow')" ]] || {
   echo 'AIRFLOW_CONTAINERS_ALREADY_RUNNING' >&2; exit 1;

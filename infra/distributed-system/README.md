@@ -380,6 +380,8 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 현재 DAG 화면은 볼 수 있지만 실행 전 SSH Connection 6개, 제한 sudo 권한, HDFS/Bronze 불변 release와 현재 수집 run 계보를 별도로 확인해야 한다. DAG를 일시정지 해제하거나 trigger하지 않는다.
 
+기존 Airflow의 코드만 갱신할 때는 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치한 뒤 Node 1에서 `sudo bash <release>/infra/distributed-system/scripts/deploy-tess-airflow-node1.sh --update`를 실행한다. 이 경로는 기존 이미지를 기반으로 새 이미지를 네트워크 없이 빌드하고 DAG import·4개 신규 DAG의 기본 일시정지 상태를 검사한다. 활성 DAG run이 없을 때만 Scheduler·Webserver를 교체하며 DB·비밀 환경 파일·Tailscale Serve는 건드리지 않는다. 교체 뒤 UI·import·컨테이너 상태가 실패하면 이전 이미지로 두 서비스를 되돌린다. 새 DAG를 일시정지 해제하거나 데이터 작업을 trigger하는 것은 별도 단계다.
+
 ## TESS 원천 수집 (`S15P21C206-75`)
 
 Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-tess-ingestion.ps1)로 SPOC 2분 Light Curve를 수집한다. Tailscale 대상과 실제 호스트명, `/mnt/data` mount, passwordless sudo, 디스크 사용률 75% 미만·가용 공간 기본 100GiB 이상, 다른 활성 수집 unit·수동 downloader 부재와 공식 MAST 연결을 `Preflight`에서 먼저 확인한다. 코드는 `/mnt/data/planetory-ingestion/releases/<ReleaseId>`, 실행 데이터는 `/mnt/data/staging/S15P21C206-75/run-<RunId>`에 둔다. release는 결정적 내용 SHA로 식별하고 root 소유·일반 사용자 쓰기 금지로 고정한다.

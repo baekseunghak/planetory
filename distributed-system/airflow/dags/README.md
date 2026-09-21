@@ -33,3 +33,31 @@ python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"
 ```
 
 현재 Node 1의 Airflow scheduler·metadata DB는 단일 장애 경계다. 호스트 복구 뒤에는 멱등 task가 이어지지만 Node 1 장애 중 무중단 전환은 보장하지 않으며, 필요하면 Airflow/HDFS/YARN HA를 별도 작업으로 도입한다.
+
+## 후속 목표 설계: 단계별 DAG와 Sector 자동 재개
+
+2026-09-22 사용자 요청으로 아래 설계와 구현을 시작했다. 위의 단일 DAG 설명은 **현재 배포된 구현**이며, 아래는 **목표 설계**다. Jira `S15P21C206-252`는 아직 단일 DAG·제한 Sector 완료 조건을 적고 있어 이 확장 범위와 정합화가 필요하다.
+
+| 단계 DAG | 시작 게이트 | 완료 증거 | 실행기 |
+| --- | --- | --- | --- |
+| 다운로드·검증 | 직전 Sector 다운로드 완료 또는 첫 미완료 Sector 재개 | Worker 5대 완료 marker·source SHA-256·제품 수·바이트 | 기존 supervisor, Worker당 파일 스레드 최대 16 |
+| Raw 적재·검증 | 같은 Sector 다운로드 감사 완료 | Sector `_READY.json`, bundle·manifest·RF2·FSCK 감사 | 기존 Worker 5대 SequenceFile uploader |
+| 로컬 삭제 | 같은 Sector Raw final 재검증 | Worker별 불변 plan의 삭제 상태 | 기존 `cleanup-sector` |
+| Bronze 변환·검증 | 같은 Sector Raw `_READY.json` 재확인 | Sector Bronze `_READY.json`·품질 감사 | Spark on YARN |
+
+별도 발견·허가 DAG는 MAST에 공식 **일반 LC bulk script**가 게시된 Sector를 확인하고, 영속 중지 상태·디스크 여유·설정 상한을 검사해 새 Sector를 순서대로 허가한다. 설정 상한은 기본 70이고 실제 목표는 `min(설정 상한, 이용 가능한 최신 Sector)`다. 게시되지 않은 Sector는 실패가 아니라 다음 조회까지 대기한다. 신규 원천 목록은 URL·조회 시각·script SHA-256·제품 수·source-list SHA-256으로 한 번 고정하며 이전 1~13 run과 coverage는 수정하지 않는다.
+
+각 단계 DAG run은 Sector 하나와 `sector`, `run_id`, `source_list_sha256`, HDFS/Bronze 불변 release·설정 경로, Bronze run·version·partition 수의 정규화된 계보 지문을 전달받는다. 각 단계는 Airflow 성공 상태가 아닌 해당 Worker marker 또는 제어기 내부의 실제 Raw/Bronze final을 재검증한다. 결정적인 run ID와 중복 skip은 동일 계보의 재트리거를 막지만, 이미 존재하는 **실패 run을 자동 복구하지는 않는다**. 이 경우 조정 DAG가 실제 marker와 Airflow run 상태를 확인해 실패 task를 재실행해야 한다. 큰 원천 목록과 FITS는 XCom에 넣지 않는다. 같은 Sector 안에서는 순서를 지키되, Sector N 다운로드가 검증되면 N Raw와 N+1 다운로드를 겹쳐 실행한다. 초기 동시성은 다운로드 Sector 1개·Raw Sector 1개·Bronze Sector 1개로 제한하고 Airflow Pool, `max_active_runs`, Worker·HDFS 용량 게이트와 실측을 통해 조정한다. 현재 Node 1 LocalExecutor `parallelism=2`는 목표 동시성에 맞춰 별도 검증해야 한다.
+
+재개 지점은 `마지막 다운로드 Sector+1` 하나로 정하지 않는다. 각 Sector의 다운로드 marker, Raw `_READY`, 삭제 기록, Bronze `_READY`를 대조해 첫 미완료 단계부터 재개한다. 삭제된 로컬 FITS를 다운로드 재감사 대상으로 삼지 않는다. **정상 중지**는 신규 Sector 허가를 영속적으로 끄고 이미 허가한 Sector를 끝까지 처리하는 drain을 기본으로 한다. 빠른 중지는 supervisor를 종료하되 `.part`·이벤트·plan·HDFS staging을 보존하고 명시적 중지 상태를 재부팅 뒤에도 유지한다. **비정상 종료**는 중지 표식이 없는 경우에만 Airflow/systemd 재기동과 멱등 marker 검증으로 자동 재개한다. UI의 DAG pause만으로 외부 systemd·YARN 작업이 멈추는 것으로 간주하지 않는다.
+
+첫 Raw Commit은 원본 FITS 파일별 SHA-256, bundle 복원 표본, manifest 내용, HDFS checksum·RF2·FSCK를 검증한다. 후속 cleanup은 불변 plan·bundle checksum·새로 기록한 manifest HDFS checksum과 final `_READY`·FSCK를 비교하는 **빠른 감사**를 사용한다. 구형 bundle에 manifest checksum이 없으면 상세 감사로 돌아가며 불일치 시 삭제를 막는다. 원본 FITS SHA-256과 SequenceFile의 HDFS checksum은 서로 직접 비교할 수 없다. 로컬 삭제는 정확한 plan의 경로·크기·파일별 SHA-256을 삭제 직전에 다시 확인하고 Worker 5대에서 병렬 수행한다. Worker별 영속 cleanup 상태와 중단 후 재개 규칙은 유지한다.
+
+### 구현·검증 순서
+
+1. 기존 1~13 완료 증거를 읽기 전용으로 확인하고 신규 Sector용 원천 목록·coverage 계약을 정의한다. 수집 설정, Raw coverage, Bronze 입력의 1~13 전제를 일반화하되 이전 계약은 보존한다.
+2. 4개 DAG를 Sector 인자 기반으로 구현하고 단계별 marker 게이트·계보 전달·중복 방지·재시도를 오프라인 검증한다. 이후 발견·허가 DAG와 영속 중지 상태를 연결한다.
+3. 제한된 신규 Sector 1개에서 정상 경로를 검증한다. 업로드 중·Raw 확정 직후·삭제 중·Bronze 중단과 Node 1/Worker 재부팅을 시험해 중복 final·잘못된 삭제가 없는지 확인한다.
+4. 연속 2개 Sector에서 N Raw와 N+1 다운로드가 실제로 겹치는지, 단계별 시간·NameNode RPC·YARN 메모리·Worker 디스크를 측정한다. 빠른 감사 전후를 같은 조건에서 비교한 뒤에만 기본 상한 70 자동 허가를 켠다.
+
+현재 **오프라인 구현·검증 완료**는 4개 수동 trigger 단계 DAG, 계보 지문·실제 marker 게이트·단계 간 트리거, cached Raw 빠른 감사, Worker 병렬 cleanup, 신규 Sector용 Bronze Raw release 인자까지다. 새 DAG도 기본 일시정지이며 미배포다. 기존 단일 DAG도 일시정지 상태를 유지한다. **미완료**는 자동 Sector 발견·원천 목록 고정, 1~13 전제의 HDFS coverage 일반화, 영속 중지/drain·재부팅 후 보충, 단계별 Pool/용량 조정, Airflow 실제 import·실환경 기능/성능 검증이다. 따라서 Sector 14~70 자동 수집과 무인 복구는 아직 동작하지 않는다. 운영 배포·실제 삭제는 정확한 대상과 영향을 확인한 별도 통제 절차에서만 수행한다.

@@ -31,7 +31,9 @@ from tess_bronze_ctl import (  # noqa: E402
     BronzeDataContractError,
     cli,
     command_coverage,
+    command_run_all,
     finalize_sector,
+    raw_context,
     run_sector,
     submit,
     validate_raw_coverage,
@@ -105,6 +107,34 @@ class FakeFits:
 
 
 class BronzeTransformTest(unittest.TestCase):
+    def test_run_all_rejects_wrong_raw_source_before_build(self):
+        args = SimpleNamespace(
+            release_dir=".", sectors=[70], raw_release="20260922T000000Z",
+            expected_source_sha="b" * 64,
+        )
+        context = {70: {"ready": {"source_list_sha256": "a" * 64}}}
+        with patch("tess_bronze_ctl.cluster_preflight", return_value=context), patch(
+            "tess_bronze_ctl.build_runtime"
+        ) as build:
+            with self.assertRaisesRegex(BronzeDataContractError, "source checksum"):
+                command_run_all(args)
+            build.assert_not_called()
+
+    def test_new_sector_requires_explicit_raw_release(self):
+        sector = 14
+        with self.assertRaisesRegex(BronzeDataContractError, "requires an immutable Raw release"):
+            raw_context(sector)
+        ready = {
+            "schema": "planetory.tess-hdfs-release.v1", "sector": sector,
+            "release_id": "20260922T000000Z", "replication": 2,
+            "product_count": 1, "source_list_sha256": "a" * 64,
+        }
+        with patch("tess_bronze_ctl.hdfs_json", return_value=(ready, "b" * 64)), patch(
+            "tess_bronze_ctl.hdfs_exists", return_value=True
+        ):
+            context = raw_context(sector, "20260922T000000Z")
+        self.assertEqual(context["path"], "/lake/raw/tess/release=20260922T000000Z/sector=0014")
+
     @staticmethod
     def fake_pyspark_functions():
         class Expression:

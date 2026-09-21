@@ -25,6 +25,20 @@ from ingestion import tess
 
 
 class PlanTest(unittest.TestCase):
+    def test_server_runall_rejects_mismatched_stage_lineage_before_coverage(self):
+        config = {
+            "run_id": "20260919T005932Z", "expected_source_list_sha256": "a" * 64,
+            "code_release": "/opt/planetory-hdfs-load/releases/20260919T005932Z",
+        }
+        with mock.patch.object(MODULE, "load_coverage_map") as coverage:
+            with self.assertRaisesRegex(ValueError, "run_id differs"):
+                RUNALL.coordinator(config, [3], expected_run_id="20260922T000000Z")
+            with self.assertRaisesRegex(ValueError, "source checksum differs"):
+                RUNALL.coordinator(config, [3], expected_source_sha="b" * 64)
+            with self.assertRaisesRegex(ValueError, "code release differs"):
+                RUNALL.coordinator(config, [3], expected_code_release="/opt/planetory-hdfs-load/releases/other")
+            coverage.assert_not_called()
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -343,6 +357,29 @@ class PlanTest(unittest.TestCase):
             result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs")
         self.assertEqual(result["product_count"], 1)
         self.assertEqual(result["status"], "HEALTHY")
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (0, 1))
+
+        done["manifest_checksum"] = "MD5 checksum-line"
+        calls = []
+        def tracked_run(arguments, check=True):
+            calls.append(arguments)
+            return run(arguments, check=check)
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=tracked_run):
+            result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        self.assertEqual(result["product_count"], 1)
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (1, 0))
+        self.assertFalse(any(arguments[1:3] == ["dfs", "-cat"] for arguments in calls))
+
+        done["manifest_checksum"] = "changed"
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "manifest checksum changed"):
+                MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        del done["manifest_checksum"]
+        calls.clear()
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=tracked_run):
+            result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (0, 1))
+        self.assertTrue(any(arguments[1:3] == ["dfs", "-cat"] for arguments in calls))
 
         listing.append("/stage/unexpected.bin")
         with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
@@ -470,6 +507,24 @@ class PlanTest(unittest.TestCase):
             RUNALL.coordinator(config, [2])
         process_sector.assert_called_once_with(config, contexts[1], cleanup_source=None)
         finalize_coverage.assert_not_called()
+
+    def test_cleanup_sector_uses_fast_final_audit_and_all_workers(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 7,
+            "product_count": 5, "total_bytes": 20,
+        }
+        config = {"workers": [{"slot": slot} for slot in range(1, 6)]}
+        cleaned = []
+        with (
+            mock.patch.object(RUNALL, "hdfs_exists", return_value=True),
+            mock.patch.object(RUNALL, "preflight"),
+            mock.patch.object(RUNALL, "commit_sector") as commit,
+            mock.patch.object(RUNALL, "cleanup_worker", side_effect=lambda _, __, worker: cleaned.append(worker["slot"])),
+        ):
+            RUNALL.process_sector(config, context, cleanup_source=True)
+        commit.assert_called_once_with(config, context, fast_cached=True)
+        self.assertEqual(set(cleaned), set(range(1, 6)))
 
     def test_server_runall_accepts_ha_safe_mode_output(self):
         self.assertTrue(RUNALL.safe_mode_is_off(

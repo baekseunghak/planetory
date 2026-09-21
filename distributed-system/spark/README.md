@@ -71,6 +71,8 @@ Sector 1~13을 한 실행에 모두 지정하면 먼저 Raw coverage marker가 1
 
 Airflow처럼 Sector를 하나씩 실행하는 조정기는 마지막 Sector 뒤 `tess_bronze_ctl.py coverage --release-dir <release> --run-id <run> --pipeline-version <version>`을 호출한다. 이 명령은 Raw coverage와 Bronze Sector 1~13을 모두 재감사한 뒤 같은 coverage marker를 멱등 확정한다.
 
+2026-09-22 단계별 DAG 연동을 위해 `run-all --sector <N> --raw-release <UTC release> --expected-source-sha <SHA-256>` 인자를 추가했다. 신규 Sector는 Raw release를 명시하고 `_READY.json`의 source SHA가 인자와 다르면 변환 전에 종료 코드 65로 중단한다. Sector 1~13의 기존 고정 release·전체 coverage 계약은 변경하지 않았다. Sector 14 이상 자동 수집은 원천 목록·HDFS coverage 일반화와 운영 검증이 끝나기 전까지 활성화하지 않는다.
+
 ### 2026-09-21 실행 결과
 
 전체 run `20260920T230600Z`는 서버 systemd와 YARN cluster mode에서 `2:14:41` 동안 실행됐다. Sector 1~13의 제품 247,824개와 관측점 4,666,320,826개를 520개 Parquet part로 확정했으며 parse 오류는 0이다. 최종 Sector 경로의 논리 용량 합계는 83,007,747,330 bytes이고 RF2 적용 용량은 166,015,494,660 bytes다.

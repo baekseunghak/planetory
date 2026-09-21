@@ -9,7 +9,6 @@ from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException, AirflowFailException
 from airflow.models.param import Param
 from airflow.operators.python import get_current_context
-from airflow.providers.ssh.hooks.ssh import SSHHook
 from airflow.sensors.base import PokeReturnValue
 
 from tess_pipeline_contract import (
@@ -21,6 +20,7 @@ from tess_pipeline_contract import (
     sector_inputs,
     validate_download_markers,
 )
+from tess_pipeline_remote import remote as _remote, require_success as _require_success
 
 
 OLD_RUN = "20260918T080417Z"
@@ -31,24 +31,6 @@ DEFAULT_SECTOR_RUNS = {str(sector): OLD_RUN if sector in (3, 4, 5) else NEW_RUN 
 DEFAULT_SECTOR_SOURCES = {
     str(sector): OLD_SOURCE if sector in (3, 4, 5) else NEW_SOURCE for sector in range(1, 14)
 }
-
-
-def _remote(connection_id: str, remote_command: str) -> tuple[int, str]:
-    client = SSHHook(ssh_conn_id=connection_id).get_conn()
-    _, stdout, _ = client.exec_command(remote_command)
-    stdout.channel.set_combine_stderr(True)
-    output = stdout.read().decode("utf-8", errors="replace")
-    return stdout.channel.recv_exit_status(), output
-
-
-def _require_success(connection_id: str, remote_command: str, *, terminal_exit: int | None = None) -> None:
-    status, output = _remote(connection_id, remote_command)
-    if output:
-        print(output, end="" if output.endswith("\n") else "\n")
-    if terminal_exit is not None and status == terminal_exit:
-        raise AirflowFailException(f"remote data-contract failure on {connection_id} (exit {status})")
-    if status:
-        raise AirflowException(f"remote command failed on {connection_id} (exit {status})")
 
 
 @dag(
