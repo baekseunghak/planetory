@@ -116,12 +116,48 @@ class CandidatePeaksTest {
         assertEquals(List.of(50, 60), indexes(peaks));
     }
 
-    /** 고조파 판정도 최소 간격만큼 어긋나도 걸린다. 격자가 배수와 정확히 맞지 않을 수 있다. */
+    /**
+     * 경계 바로 안과 바로 밖. 50번이 32일이면 60번이 정확히 2배(64일)다.
+     *
+     * <p>h=1에서 61번의 범위는 {@code [60번, 62번]}이라 2배 주기를 하한으로 품고, 62번의 범위는
+     * {@code [61번, 63번]}이라 2배 주기가 한 칸 아래로 빠진다.
+     */
     @Test
-    void 고조파_자리에서_한두_칸_어긋나도_같은_고조파로_본다() {
-        Float[] power = peaksAt(101, 50, 90, 61, 80);
+    void 고조파_판정은_미세_조정_범위_경계에서_갈린다() {
+        assertEquals(List.of(50),
+                indexes(CandidatePeaks.extract(peaksAt(101, 50, 90, 61, 80), GRID, rules(10, 1))),
+                "2배 주기가 범위 안이다");
+        assertEquals(List.of(50, 62),
+                indexes(CandidatePeaks.extract(peaksAt(101, 50, 90, 62, 80), GRID, rules(10, 1))),
+                "2배 주기가 범위 밖이면 남는다");
+    }
 
-        assertEquals(List.of(50), indexes(CandidatePeaks.extract(power, GRID, rules(10, 1))));
+    /**
+     * 배수 자리가 정수 칸에 놓이지 않는 격자 (S15P21C206-141 리뷰, 윤성용).
+     *
+     * <p>0.5~40일 5000점에서 1000번의 2배 자리는 <b>1790.74번</b>이다. 1794번은 실제로 3.26칸
+     * 떨어져 있어 h=3으로 조정해도 그 주기에 닿을 수 없는데, 자리를 반올림(1791번)해 칸 수로 비교하면
+     * 3칸으로 보여 잘못 빠졌다. 주기 값으로 직접 보면 남는다.
+     */
+    @Test
+    void 배수_자리가_칸에_맞지_않는_격자에서도_닿는지로_가른다() {
+        var grid = new CandidatePeaks.Grid(0.5, 40, 5000, true);
+
+        assertEquals(List.of(1000, 1794),
+                indexes(CandidatePeaks.extract(peaksAt(5000, 1000, 90, 1794, 70), grid, rules(10, 3))),
+                "2배 주기가 1794번 범위의 아래로 빠진다");
+        assertEquals(List.of(1000),
+                indexes(CandidatePeaks.extract(peaksAt(5000, 1000, 90, 1791, 80), grid, rules(10, 3))),
+                "1791번 범위에는 2배 주기가 들어온다");
+    }
+
+    /** 반폭이 0이면 고를 수 있는 주기가 그 칸 하나뿐이라, 자리가 정확히 맞을 때만 고조파다. */
+    @Test
+    void 반폭이_0이면_정확히_맞는_자리만_고조파다() {
+        // 50번이 32일이면 60번이 정확히 64일(2배)이고 65번은 아니다.
+        Float[] power = peaksAt(101, 50, 90, 60, 80, 65, 70);
+
+        assertEquals(List.of(50, 65), indexes(CandidatePeaks.extract(power, GRID, rules(10, 0))));
     }
 
     // ---------- 미세 조정 범위 ----------
