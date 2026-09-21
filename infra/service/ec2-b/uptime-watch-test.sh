@@ -35,9 +35,9 @@ if [ "$lines" -ne 2 ]; then
   exit 1
 fi
 
-head -1 "$tmp/notify" | grep -q '장애 의심' || { echo "FAIL: 첫 알림은 장애여야 한다"; cat "$tmp/notify"; exit 1; }
+head -1 "$tmp/notify" | grep -q '\[긴급\] 서비스 무응답' || { echo "FAIL: 첫 알림은 긴급이어야 한다"; cat "$tmp/notify"; exit 1; }
 head -1 "$tmp/notify" | grep -q '연속 3회' || { echo "FAIL: 임계 3회에서 알려야 한다"; cat "$tmp/notify"; exit 1; }
-tail -1 "$tmp/notify" | grep -q '복구' || { echo "FAIL: 마지막 알림은 복구여야 한다"; cat "$tmp/notify"; exit 1; }
+tail -1 "$tmp/notify" | grep -q '\[복구\]' || { echo "FAIL: 마지막 알림은 복구여야 한다"; cat "$tmp/notify"; exit 1; }
 
 read -r fails alerted <"$tmp/state"
 [ "$fails" = "0" ] && [ "$alerted" = "0" ] || { echo "FAIL: 복구 후 상태가 '0 0'이 아니다: $fails $alerted"; exit 1; }
