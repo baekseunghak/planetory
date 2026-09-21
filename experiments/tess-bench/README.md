@@ -1,5 +1,11 @@
 # TESS 처리 벤치마크
 
+## 112 고조파·후보 동일성 실험
+
+111 확정 ZIP 감사, TOI-270 Sector 3·4/3·4·5 두 판 실행과 직접 동일성 허용오차 비교는
+[후보 동일성 벤치마크](../../docs/data/tess-candidate-identity-benchmark.md)를 따른다.
+초기 실측·실험용 제안이며 운영 ID 할당이나 고조파 규칙 확정이 아니다.
+
 ## 120 공용 BLS 커널 회귀
 
 [함수 계약과 상태](../../libs/astro-kernel/README.md#bls-탐색과-품질-게이트-120)를 따른다.

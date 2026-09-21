@@ -37,3 +37,6 @@
 | 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 112 후보 감사·실제 두 Sector 구성 비교 | S15P21C206-112 | candidate identity, TOI270, 0.5 duration | 초기 실측·미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 감광 창 진단 100건·자동 병합 미채택 | S15P21C206-112 | conditional depth, possible_alias, incomplete, 44 passed | 실험 완료·규칙 미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 4별·추가 배율 비교 및 계약 검토안 v1 | S15P21C206-112 | possible_alias, 0.5 duration, 50 passed | 실험 완료·계약 미승인 | [기록](2026-09-21.md) |
