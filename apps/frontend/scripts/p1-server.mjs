@@ -1,6 +1,7 @@
 // Local visual review only. All data is synthetic and kept in memory.
 // This entry point is never loaded by the production Vite configuration.
 import { followFixturePlugin } from "../dev/follow-fixture-plugin.ts";
+import { notificationsFixturePlugin } from "../dev/notifications-fixture-plugin.ts";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -95,6 +96,7 @@ const server = await createServer({
       },
     },
     followFixturePlugin(),
+    notificationsFixturePlugin(),
     profile.plugin,
     hotTopicsFixturePlugin(),
     galaxyRoutes(galaxyFixturePlugin(false, starCount)),

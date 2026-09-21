@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "../auth/SessionProvider";
 import "./service-presentation.css";
+import { p1Enabled } from "../features/p1";
+import { NotificationBell } from "../features/notifications/Notifications";
 
 export function ServiceLayout() {
   const session = useSession();
@@ -58,6 +60,7 @@ export function ServiceLayout() {
         <Link className="member-link" to="/me">
           {session.member?.nickname}
         </Link>
+        {p1Enabled && <NotificationBell />}
         <button
           type="button"
           className="logout-button"
