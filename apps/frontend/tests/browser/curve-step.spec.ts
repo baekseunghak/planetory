@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PERIODOGRAM_FIXTURE_TICS } from "../../dev/periodogram-fixtures.ts";
-import { RESIDUAL_FIXTURE_HEADER } from "../../dev/residual-job-fixtures.ts";
+import {
+  DEPENDENCY_UNAVAILABLE_MESSAGE,
+  RESIDUAL_FIXTURE_HEADER,
+} from "../../dev/residual-job-fixtures.ts";
 import { beginRange, selectPeak, showJudgment } from "../analysis-ui";
 
 // 곡선 단계 이동(#189). 계산이 끝나야 곡선이 바뀐다.
@@ -303,7 +306,7 @@ test("a failure that will not change is not offered a retry", async ({
 test("a dependency that is not wired yet is not called a failure", async ({
   page,
 }) => {
-  // 503은 88번이 붙기 전까지 영구다. 「잠시 후 다시」는 거짓말이 된다.
+  // 미연결 503은 다시 요청해도 같은 결과다(`retryable: false`).
   await withScenario(page, "unavailable");
   await page.goto(`/analysis/${NORMAL}`);
   await move(page, "다음 곡선 단계로").click();
@@ -311,6 +314,48 @@ test("a dependency that is not wired yet is not called a failure", async ({
   await expect(move(page, "다시 시도")).toHaveCount(0);
   // 실패가 아니라 준비되지 않은 것이라 경보로 외치지 않는다.
   await expect(bar(page).getByRole("alert")).toHaveCount(0);
+  // **서버 문구를 그대로 옮긴다**(7.1절). 화면이 문구를 지어내지 않는다.
+  // 개발용 응답이 여기에 코드 이름을 넣고 있던 동안 이 줄이 없어서, 문구가
+  // 재시도를 권하는데 버튼은 없는 상태를 검사가 통과시켰다.
+  await expect(bar(page)).toContainText(
+    DEPENDENCY_UNAVAILABLE_MESSAGE.notConnected,
+  );
+});
+
+test("the same 503 offers a retry when the server says it is retryable", async ({
+  page,
+}) => {
+  // 같은 코드·같은 상태인데 화면이 할 일이 반대다(7.1절, #249). 실행기를
+  // 시작하지 못한 것은 다시 요청하는 것이 맞다.
+  await withScenario(page, "start-failed");
+  await page.goto(`/analysis/${NORMAL}`);
+  await move(page, "다음 곡선 단계로").click();
+  await expect(move(page, "다시 시도")).toHaveCount(1);
+  await expect(bar(page)).toContainText(
+    DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
+  );
+  // **덧붙이지 않는다.** 서버 문구가 이미 다시 시도하라고 말하므로 일반 실패
+  // 경로처럼 꼬리를 붙이면 같은 말이 두 번 나온다.
+  expect(
+    ((await bar(page).innerText()).match(/잠시 후 다시 시도해 주세요/g) ?? [])
+      .length,
+  ).toBe(1);
+});
+
+test("a 503 without the field is read as retryable", async ({ page }) => {
+  // **배포 순서의 창.** 화면이 `retryable`을 읽기 시작했는데 서버가 아직
+  // 보내지 않는 동안이다(#249 전). 모르는 것 때문에 나갈 길을 막지 않는다 —
+  // 7.2절 `failure.retryable`과 같은 규칙이다.
+  //
+  // 이 검사가 없으면 기본값을 `=== true`로 뒤집어도 아무것도 깨지지 않는다.
+  // 개발용 503 둘이 모두 필드를 실어, 필드가 없는 경로가 검사에 오지 않는다.
+  await withScenario(page, "unavailable-legacy");
+  await page.goto(`/analysis/${NORMAL}`);
+  await move(page, "다음 곡선 단계로").click();
+  await expect(move(page, "다시 시도")).toHaveCount(1);
+  await expect(bar(page)).toContainText(
+    DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
+  );
 });
 
 test("a plate that changes mid-computation reloads by itself", async ({

@@ -38,3 +38,11 @@
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 전체 공개 집합 기반 핫 토픽·순위 커서와 동일 스냅샷 | S15P21C206-171 | COUNT DISTINCT, N>=10, hot-v1, REPEATABLE_READ, 전역 순위, 기존 인덱스 | 구현·관련 52건 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 화면이 잔차 503을 retryable로 가른다 | S15P21C206-189 | retryable, DEPENDENCY_UNAVAILABLE, 정본 문구, START_FAILED, 개발용 응답, 화면 검사 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 현재 챌린지 조회·active 회차·자격 TIC·별 참여 수 | S15P21C206-168 | challenges/current, REPEATABLE_READ, GET 불변, COUNT DISTINCT | 구현·관련 54+6건 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | CI 레지스트리 자체 호스팅·amd64 빌드 노드 분리 | S15P21C206-226 | registry, tailscale cert, REGISTRY_IMAGE_PREFIX, amd64-docker, privileged, extra_hosts, binfmt 제거, D4 충돌 | 레지스트리 검증 완료, Runner 등록 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | D4 범위 한정과 외부 관찰 EC2-B 이관 | S15P21C206-226 | D4, EC2-B, CI 빌드 노드, 외부 관찰 이관, 인계 100, 같은 AZ 한계, ap-northeast-2a | 채택, 관찰 구현 미완 | [기록](2026-09-21.md) |
+| 2026-09-21 | 배포 노드 Docker 준비와 이미지 위생 도구 | S15P21C206-226 | install-docker-host.sh, docker-compose-v2, image-secret-scan, registry-prune, digest 공유 삭제, 가비지 수집 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | 배포 접속을 SSH 키 없이 tailnet 신원으로 전환 | S15P21C206-226 | Tailscale SSH, 22번 가로챔, ACL ssh 규칙, deploy 계정, sudo 없음, DEPLOY_SSH_KEY 폐기 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | MR 리뷰 지적 4건 수정과 검증 방식 정정 | S15P21C206-226 | MR !132 리뷰, GC 중 push, docker save 레이어 검사, config 블롭 created, set -e 알림 침묵, 스텁 우회 | 검증 완료(실측) | [기록](2026-09-21.md) |
+| 2026-09-21 | 당시 배열이 없는데 그대로라고 말하던 안내 수정 | S15P21C206-190 | snapshot null, RETIRED_CANDIDATE, SUBMITTED 배지, 모순 문구 | 구현·검증 완료 | [기록](2026-09-21.md) |
