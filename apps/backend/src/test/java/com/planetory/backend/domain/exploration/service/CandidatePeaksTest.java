@@ -1,0 +1,205 @@
+package com.planetory.backend.domain.exploration.service;
+
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 봉우리 추출 규칙 (탐사 API 5.4절) [S15P21C206-141].
+ *
+ * <p>고정 power 배열로 규칙만 본다. DB·회원·HTTP가 없다 — 규칙이 틀렸을 때 다른 이유로 깨지지
+ * 않아야 수치를 고칠 수 있다.
+ *
+ * <p>격자는 주기 1~1024일에 101칸이라 비율이 {@code 2^0.1}이고 <b>2배가 정확히 10칸</b>이다. 고조파
+ * 규칙을 자리 계산 오차 없이 볼 수 있어 이 격자를 쓴다.
+ */
+class CandidatePeaksTest {
+
+    private static final CandidatePeaks.Grid GRID = new CandidatePeaks.Grid(1, 1024, 101, true);
+    /** 운영 규칙 rule-0의 값이다. 여기서 새로 정하지 않는다. */
+    private static final List<Double> HARMONICS = List.of(1.0, 2.0, 0.5);
+
+    private static CandidatePeaks.Rules rules(int topN, int halfWidthCells) {
+        return new CandidatePeaks.Rules(topN, halfWidthCells, HARMONICS);
+    }
+
+    private static Float[] flat(int size) {
+        Float[] power = new Float[size];
+        java.util.Arrays.fill(power, 0f);
+        return power;
+    }
+
+    private static Float[] peaksAt(int size, int... indexAndPower) {
+        Float[] power = flat(size);
+        for (int i = 0; i < indexAndPower.length; i += 2) {
+            power[indexAndPower[i]] = indexAndPower[i + 1] / 100f;
+        }
+        return power;
+    }
+
+    private static List<Integer> indexes(List<CandidatePeaks.Peak> peaks) {
+        return peaks.stream().map(CandidatePeaks.Peak::gridIndex).toList();
+    }
+
+    // ---------- 상위 N과 정렬 ----------
+
+    @Test
+    void 센_순서로_상위_N개만_고른다() {
+        Float[] power = peaksAt(101, 10, 40, 30, 90, 50, 70, 70, 60, 90, 20);
+
+        var peaks = CandidatePeaks.extract(power, GRID, rules(3, 1));
+
+        assertEquals(List.of(30, 50, 70), indexes(peaks), "세기 내림차순이다");
+        assertEquals(List.of(1, 2, 3), peaks.stream().map(CandidatePeaks.Peak::rank).toList());
+        assertEquals(0.9, peaks.getFirst().power(), 1e-6);
+        assertEquals(3, peaks.size(), "상위 N에서 끊는다. 0.40·0.20은 빠진다");
+    }
+
+    /** {@code rank}는 정렬 결과이고 {@code gridIndex}가 식별값이다(C02-R3). */
+    @Test
+    void 세기가_같으면_낮은_칸이_앞이다() {
+        Float[] power = peaksAt(101, 20, 50, 60, 50);
+
+        var peaks = CandidatePeaks.extract(power, GRID, rules(10, 1));
+
+        assertEquals(List.of(20, 60), indexes(peaks));
+    }
+
+    // ---------- 최소 간격 ----------
+
+    /** 미세 조정 범위가 겹치는 두 봉우리는 사용자에게 같은 선택이다. 약한 쪽이 밀려난다. */
+    @Test
+    void 미세_조정_범위가_겹치면_약한_쪽을_버린다() {
+        Float[] power = peaksAt(101, 50, 90, 52, 80);
+
+        assertEquals(List.of(50), indexes(CandidatePeaks.extract(power, GRID, rules(10, 1))),
+                "h=1이면 3칸 미만은 겹친다");
+        assertEquals(List.of(50, 52), indexes(CandidatePeaks.extract(power, GRID, rules(10, 0))),
+                "h=0이면 1칸만 떨어져도 따로 고를 수 있다");
+    }
+
+    /** 간격은 판의 h를 따라간다. 여기에 별도 설정을 두지 않는다. */
+    @Test
+    void 최소_간격은_판의_미세_조정_반폭에서_나온다() {
+        Float[] power = peaksAt(101, 20, 90, 26, 80);
+
+        assertEquals(List.of(20, 26), indexes(CandidatePeaks.extract(power, GRID, rules(10, 2))),
+                "h=2면 5칸 간격이라 6칸은 남는다");
+        assertEquals(List.of(20), indexes(CandidatePeaks.extract(power, GRID, rules(10, 3))),
+                "h=3이면 7칸 미만이라 밀려난다");
+    }
+
+    // ---------- 고조파 제외 ----------
+
+    /** 제출이 「2배 맞음」이라고 판정하는 배수와 목록이 거르는 배수가 같아야 한다. */
+    @Test
+    void 이미_고른_봉우리의_고조파는_버린다() {
+        // 50번 칸이 32일이면 60번이 64일(2배), 40번이 16일(0.5배)이다.
+        Float[] power = peaksAt(101, 50, 90, 60, 80, 40, 70, 30, 60);
+
+        var peaks = CandidatePeaks.extract(power, GRID, rules(10, 1));
+
+        assertEquals(List.of(50, 30), indexes(peaks), "2배·0.5배는 빠지고 4분의 1은 남는다");
+        assertEquals(32.0, peaks.getFirst().periodDays(), 1e-9);
+        assertEquals(8.0, peaks.getLast().periodDays(), 1e-9);
+    }
+
+    /** 배수 목록이 비면 고조파를 거르지 않는다. 규칙은 운영 규칙이 정한다. */
+    @Test
+    void 배수_목록이_비면_고조파도_남는다() {
+        Float[] power = peaksAt(101, 50, 90, 60, 80);
+
+        var peaks = CandidatePeaks.extract(power, GRID,
+                new CandidatePeaks.Rules(10, 1, List.of()));
+
+        assertEquals(List.of(50, 60), indexes(peaks));
+    }
+
+    /** 고조파 판정도 최소 간격만큼 어긋나도 걸린다. 격자가 배수와 정확히 맞지 않을 수 있다. */
+    @Test
+    void 고조파_자리에서_한두_칸_어긋나도_같은_고조파로_본다() {
+        Float[] power = peaksAt(101, 50, 90, 61, 80);
+
+        assertEquals(List.of(50), indexes(CandidatePeaks.extract(power, GRID, rules(10, 1))));
+    }
+
+    // ---------- 미세 조정 범위 ----------
+
+    /** 하드코딩 금지(완료 조건 3). 격자 비율 r과 반폭 h로만 만든다. */
+    @Test
+    void 미세_조정_범위는_격자_비율과_반폭으로_계산한다() {
+        Float[] power = peaksAt(101, 50, 90);
+
+        var peak = CandidatePeaks.extract(power, GRID, rules(10, 3)).getFirst();
+
+        double r = GRID.ratio();
+        assertEquals(32.0 * Math.pow(r, -3), peak.fineTuneMinDays(), 1e-9);
+        assertEquals(32.0 * Math.pow(r, 3), peak.fineTuneMaxDays(), 1e-9);
+        assertEquals(32.0 * (r - 1), peak.fineTuneStepDays(), 1e-9, "step은 그 자리 한 칸 폭이다");
+    }
+
+    /** 로그 격자는 칸 폭이 주기에 비례한다. 짧은 주기에서 좁다. */
+    @Test
+    void 칸_폭은_주기에_비례한다() {
+        Float[] power = peaksAt(101, 10, 90, 50, 80);
+
+        var peaks = CandidatePeaks.extract(power, GRID, rules(10, 1));
+        var shorter = peaks.stream().filter(p -> p.gridIndex() == 10).findFirst().orElseThrow();
+        var longer = peaks.stream().filter(p -> p.gridIndex() == 50).findFirst().orElseThrow();
+
+        assertEquals(longer.fineTuneStepDays() / longer.periodDays(),
+                shorter.fineTuneStepDays() / shorter.periodDays(), 1e-12);
+        assertTrue(shorter.fineTuneStepDays() < longer.fineTuneStepDays());
+    }
+
+    /** 격자 밖 주기는 고를 수 없으므로 범위를 자른다. */
+    @Test
+    void 격자_끝에서는_범위를_자른다() {
+        Float[] power = peaksAt(101, 0, 90, 100, 80);
+
+        var peaks = CandidatePeaks.extract(power, GRID, rules(10, 3));
+        var first = peaks.stream().filter(p -> p.gridIndex() == 0).findFirst().orElseThrow();
+        var last = peaks.stream().filter(p -> p.gridIndex() == 100).findFirst().orElseThrow();
+
+        assertEquals(1.0, first.fineTuneMinDays(), 1e-9, "격자 아래로 내려가지 않는다");
+        assertEquals(1024.0, last.fineTuneMaxDays(), 1e-9, "격자 위로 올라가지 않는다");
+    }
+
+    // ---------- 모양이 이상한 배열 ----------
+
+    @Test
+    void 평평한_봉우리는_첫_칸만_남긴다() {
+        Float[] power = flat(101);
+        power[40] = 0.9f;
+        power[41] = 0.9f;
+        power[42] = 0.9f;
+
+        assertEquals(List.of(40), indexes(CandidatePeaks.extract(power, GRID, rules(10, 0))));
+    }
+
+    @Test
+    void 끝_칸도_봉우리가_될_수_있다() {
+        Float[] power = peaksAt(101, 0, 90, 100, 80);
+
+        assertEquals(List.of(0, 100), indexes(CandidatePeaks.extract(power, GRID, rules(10, 1))));
+    }
+
+    @Test
+    void 빈_배열과_길이_불일치와_평평한_주기도는_빈_목록이다() {
+        assertTrue(CandidatePeaks.extract(null, GRID, rules(10, 1)).isEmpty());
+        assertTrue(CandidatePeaks.extract(new Float[] {1f, 2f}, GRID, rules(10, 1)).isEmpty(),
+                "격자와 길이가 다르면 무엇이 맞는지 알 수 없다");
+        assertTrue(CandidatePeaks.extract(flat(101), GRID, rules(10, 1)).isEmpty(),
+                "모두 같은 값이면 봉우리가 없다");
+    }
+
+    @Test
+    void 값이_없는_칸은_건너뛴다() {
+        Float[] power = peaksAt(101, 50, 90);
+        power[70] = null;
+        power[71] = Float.NaN;
+
+        assertEquals(List.of(50), indexes(CandidatePeaks.extract(power, GRID, rules(10, 1))));
+    }
+}
