@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.domain.exploration.command.CorrectionViews.CandidateImpact;
@@ -20,8 +21,9 @@ import com.planetory.backend.domain.exploration.command.CorrectionViews.Precheck
  * 바꾸지 않는다.</b> 계약 4장의 미확정 항목이 승인되기 전까지 회원 데이터를 고치는 경로는 만들지
  * 않으므로(티켓 차단 조건), 이 클래스가 C19에서 먼저 쓸 수 있는 전부다.
  *
- * <p>모든 질의를 한 스냅샷에서 읽는다. 건수를 따로 읽으면 성과가 그사이 늘어 "성과 0건인데 별은
- * 1개" 같은 앞뒤가 안 맞는 보고가 나온다.
+ * <p>모든 질의를 <b>한 스냅샷에서</b> 읽는다. 기본 격리 수준(READ COMMITTED)은 문장마다 새 스냅샷을
+ * 잡으므로, 후보별 건수와 충돌 회원 수를 따로 읽는 사이에 성과가 등록되면 "성과 0건인데 별은 1개"
+ * 같은 앞뒤가 안 맞는 보고가 나온다. 그래서 {@code REPEATABLE_READ}를 건다 [S15P21C206-154 리뷰].
  */
 @Service
 @RequiredArgsConstructor
@@ -29,7 +31,7 @@ public class CandidateCorrectionPrecheck {
 
     private final JdbcClient jdbc;
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Precheck check(Kind kind, List<Long> candidateIds, Long keepId) {
         List<CandidateImpact> impacts = impacts(candidateIds);
         List<String> rejections = new ArrayList<>();
@@ -72,6 +74,13 @@ public class CandidateCorrectionPrecheck {
             rejections.add("대표로 남길 후보를 지정해야 합니다(계약 3.3, C18-Q1).");
         } else if (!candidateIds.contains(keepId)) {
             rejections.add("대표 후보 " + keepId + "가 병합 대상에 없습니다: " + candidateIds);
+        } else {
+            // 이미 은퇴한 후보를 대표로 삼으면 병합 결과가 처음부터 은퇴 상태가 된다. 조회는 허용하되
+            // 적용 대상으로는 받지 않는다 [S15P21C206-154 리뷰].
+            impacts.stream()
+                    .filter(impact -> impact.candidateId() == keepId && !"active".equals(impact.status()))
+                    .forEach(impact -> rejections.add("대표 후보 " + keepId + "는 이미 '" + impact.status()
+                            + "' 상태라 새 병합의 대표로 쓸 수 없습니다."));
         }
 
         impacts.stream().filter(CandidateImpact::touchesMembers).forEach(impact ->
@@ -107,6 +116,24 @@ public class CandidateCorrectionPrecheck {
                         + "어느 산물로 옮겨도 성과를 줄이거나 복제하거나 임의 결정이 됩니다."));
     }
 
+    /**
+     * 사전검사에 필요한 테이블 중 없는 것. 읽기 전용 명령은 Flyway를 끄고 뜨므로(기동 코드) 스키마가
+     * 최신이 아니면 조용히 SQL 오류로 끝난다. 그 전에 무엇이 없는지 이름으로 알려 준다.
+     */
+    @Transactional(readOnly = true)
+    public List<String> missingTables() {
+        List<String> required = List.of("candidates", "user_candidate_achievements", "star_unlocks",
+                "published_analyses", "posts", "submissions");
+        List<String> present = jdbc.sql("""
+                        SELECT table_name FROM information_schema.tables
+                         WHERE table_schema = current_schema() AND table_name IN (:names)
+                        """)
+                .param("names", required)
+                .query(String.class)
+                .list();
+        return required.stream().filter(name -> !present.contains(name)).toList();
+    }
+
     /** 계약 5.2절의 건수. 후보마다 한 행이며 없는 후보는 행이 없다. */
     private List<CandidateImpact> impacts(List<Long> candidateIds) {
         if (candidateIds.isEmpty()) {
@@ -119,6 +146,8 @@ public class CandidateCorrectionPrecheck {
                                (SELECT count(*) FROM star_unlocks u
                                   JOIN user_candidate_achievements a ON a.id = u.trigger_achievement_id
                                  WHERE a.candidate_id = c.id) AS unlocked_stars,
+                               -- 회원별 별 열림 기록 건수다. 여러 회원이 같은 별을 열 수 있으므로
+                               -- 고유 TIC 수와 다르다 [S15P21C206-154 리뷰].
                                (SELECT count(*) FROM published_analyses p
                                  WHERE p.candidate_id = c.id) AS published_analyses,
                                (SELECT count(*) FROM published_analyses p

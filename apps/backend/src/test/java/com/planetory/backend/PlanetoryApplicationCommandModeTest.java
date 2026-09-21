@@ -50,6 +50,22 @@ class PlanetoryApplicationCommandModeTest {
     }
 
     /**
+     * 읽기 전용 명령은 <b>기동 단계까지</b> 아무것도 바꾸지 않아야 한다. Flyway는 컨텍스트가 뜨는 중에
+     * DDL을 실행하고 배포 compose가 마이그레이션 계정까지 넘기므로, 끄지 않으면 "영향만 세어 보는"
+     * 실행이 미적용 migration을 적용한다. 메서드의 readOnly=true는 그보다 한참 뒤다 [154 리뷰].
+     */
+    @Test
+    void 읽기_전용_명령은_기동할_때_마이그레이션을_실행하지_않는다() {
+        assertEquals("false", PlanetoryApplication.defaultPropertiesFor(
+                new String[]{"--planetory.command=candidate-correction-precheck"}).get("spring.flyway.enabled"));
+
+        // 다른 명령과 평소 기동은 그대로 둔다. 챌린지 명령은 쓰기 명령이라 이 보호 대상이 아니다.
+        assertTrue(PlanetoryApplication.defaultPropertiesFor(
+                new String[]{"--planetory.command=challenge-unlock"}).isEmpty());
+        assertTrue(PlanetoryApplication.defaultPropertiesFor(new String[]{}).isEmpty());
+    }
+
+    /**
      * 실제 main을 별도 JVM으로 실행해 종료 코드를 본다. 운영 자동화는 이 값으로 성공을 판단한다.
      *
      * <p>검증이 빠지면 스프링이 뜬다. 닿을 수 없는 DB 주소를 줘 로컬 DB를 건드리지 않고 다른 종료 코드로

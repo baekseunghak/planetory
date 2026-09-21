@@ -14,6 +14,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.PlanetoryApplication;
 import com.planetory.backend.domain.exploration.command.CorrectionViews.CandidateImpact;
@@ -261,6 +263,54 @@ class CandidateCorrectionPrecheckTest {
 
         recognize(member(), merged, submit(member(), merged));
         assertEquals(NEEDS_APPROVAL, exitCodeOf("merge", kept + "," + merged, kept));
+    }
+
+    /** 대표 후보는 정확히 하나다. 둘을 주면 앞의 것을 조용히 고르지 않는다 [154 리뷰]. */
+    @Test
+    void 대표_후보를_둘_주면_거절한다() {
+        long kept = candidate();
+        long merged = candidate();
+
+        assertEquals(INVALID, run("--planetory.correction.kind=merge",
+                "--planetory.correction.candidates=" + kept + "," + merged,
+                "--planetory.correction.keep=" + kept + "," + merged));
+        assertEquals(INVALID, run("--planetory.correction.kind=merge",
+                "--planetory.correction.candidates=" + kept + "," + merged,
+                "--planetory.correction.keep="), "빈 값도 거절한다");
+    }
+
+    /** 은퇴한 후보를 대표로 삼으면 병합 결과가 처음부터 은퇴 상태가 된다 [154 리뷰]. */
+    @Test
+    void 은퇴한_후보는_병합_대표가_될_수_없다() {
+        long kept = candidate();
+        long merged = candidate();
+        jdbc.update("UPDATE candidates SET status = 'retired' WHERE id = ?", kept);
+
+        Precheck asKeep = precheck.check(Kind.MERGE, List.of(kept, merged), kept);
+        assertTrue(asKeep.rejected());
+        assertTrue(asKeep.rejections().stream().anyMatch(r -> r.contains("retired")), asKeep.rejections().toString());
+
+        // 은퇴한 쪽이 대표가 아니면 조회는 그대로 된다. 영향 집계까지 막지는 않는다.
+        Precheck asMerged = precheck.check(Kind.MERGE, List.of(kept, merged), merged);
+        assertFalse(asMerged.rejected(), asMerged.rejections().toString());
+        assertEquals("retired", impact(asMerged, kept).status());
+    }
+
+    /**
+     * 후보별 건수와 충돌 회원 수를 <b>따로</b> 읽으므로 한 스냅샷이어야 한다. 기본 격리 수준
+     * (READ COMMITTED)은 문장마다 새 스냅샷을 잡아, 사이에 성과가 등록되면 "성과 0건인데 별은 1개"가
+     * 나온다 [154 리뷰]. 두 질의가 한 트랜잭션에 묶여 있고 격리 수준이 올라가 있는지 확인한다.
+     */
+    @Test
+    void 건수를_한_스냅샷에서_읽는다() throws Exception {
+        Transactional tx = CandidateCorrectionPrecheck.class
+                .getMethod("check", Kind.class, List.class, Long.class)
+                .getAnnotation(Transactional.class);
+
+        assertNotNull(tx, "사전검사가 트랜잭션 밖이면 질의마다 스냅샷이 달라진다");
+        assertTrue(tx.readOnly());
+        assertEquals(Isolation.REPEATABLE_READ, tx.isolation(),
+                "기본 격리 수준이면 후보별 건수와 충돌 회원 수가 어긋날 수 있다");
     }
 
     // ---------- 완료 조건: 재실행과 무변경 ----------

@@ -2,6 +2,7 @@ package com.planetory.backend;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -24,6 +25,15 @@ public class PlanetoryApplication {
 	/** 실행할 수 있는 운영 명령. 명령을 추가하면 여기에 등록한다. */
 	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME,
 			CandidateCorrectionPrecheckCommand.NAME);
+
+	/**
+	 * 아무것도 바꾸지 않는 명령. <b>기동 단계까지 읽기 전용이어야 한다.</b>
+	 *
+	 * <p>Flyway는 컨텍스트가 뜨는 중에 DDL을 실행하고, 배포 compose는 마이그레이션(소유자) 계정까지
+	 * 넘긴다. 그래서 끄지 않으면 "영향만 세어 보는" 실행이 미적용 migration을 적용해 버린다.
+	 * 메서드의 {@code readOnly = true}는 그보다 한참 뒤에야 걸린다 [S15P21C206-154 리뷰].
+	 */
+	static final Set<String> READ_ONLY_COMMANDS = Set.of(CandidateCorrectionPrecheckCommand.NAME);
 
 	/** 실행할 수 없는 명령 인자. sysexits의 사용법 오류(EX_USAGE)와 같은 값이다. */
 	static final int INVALID_COMMAND_EXIT_CODE = 64;
@@ -52,7 +62,21 @@ public class PlanetoryApplication {
 		if (isCommand(args)) {
 			application.setWebApplicationType(WebApplicationType.NONE);
 		}
+		Map<String, Object> defaults = defaultPropertiesFor(args);
+		if (!defaults.isEmpty()) {
+			application.setDefaultProperties(defaults);
+		}
 		return application;
+	}
+
+	/**
+	 * 읽기 전용 명령에 걸 기본 속성. 기본 속성은 우선순위가 가장 낮으므로 필요하면 명령줄에서
+	 * 되돌릴 수 있지만, 아무 말 없이 마이그레이션이 도는 일은 없어진다.
+	 */
+	static Map<String, Object> defaultPropertiesFor(String[] args) {
+		return commandValues(args).stream().anyMatch(READ_ONLY_COMMANDS::contains)
+				? Map.of("spring.flyway.enabled", "false")
+				: Map.of();
 	}
 
 	static boolean isCommand(String[] args) {

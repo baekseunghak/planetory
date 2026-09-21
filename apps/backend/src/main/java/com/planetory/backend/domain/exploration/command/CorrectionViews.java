@@ -31,6 +31,9 @@ public final class CorrectionViews {
      *
      * <p>{@code submissions}는 불변 기록이라 어떤 정정에서도 옮기지 않는다(계약 3.1). 그래도 세는
      * 이유는 채점형 일치율의 모집단이 이 값이라 정정 뒤 통계가 어디에 남는지를 보여주기 때문이다.
+     *
+     * @param unlockedStars <b>별 열림 기록 건수</b>다. 여러 회원이 같은 별을 열 수 있으므로 고유 TIC
+     *                      수도, 이 정정이 영향을 주는 별 전체 수도 아니다 [S15P21C206-154 리뷰]
      */
     public record CandidateImpact(long candidateId, long ticId, String status, int achievements,
                                   int unlockedStars, int publishedAnalyses, int activePublishedAnalyses,
