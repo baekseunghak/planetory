@@ -61,11 +61,15 @@ backend:schema:
         exit 1
       fi
       echo "마이그레이션 검사 통과"
+  # 검사 자체를 고칠 때도 돌아야 한다. 지금은 마이그레이션 파일을 억지로
+  # 건드려야 검증할 수 있다.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: [apps/backend/src/main/resources/db/migration/**/*]
+      changes: &schema_paths
+        - apps/backend/src/main/resources/db/migration/**/*
+        - .gitlab/ci/apps/backend.yml
     - if: $CI_COMMIT_BRANCH
-      changes: [apps/backend/src/main/resources/db/migration/**/*]
+      changes: *schema_paths
 
 # bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
 # 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
@@ -76,25 +80,42 @@ backend:build:
   image: eclipse-temurin:21-jdk-alpine
   needs: []
   variables:
-    GRADLE_USER_HOME: $CI_PROJECT_DIR/apps/backend/.gradle
-  # Gradle 배포판(9.7.1)과 의존성을 캐싱한다. 없으면 매번 수백 MB를 내려받는다.
+    # Gradle이 프로젝트 캐시로도 쓰는 apps/backend/.gradle 과 겹치지 않게 분리한다.
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+  # 캐시를 둘로 나눈다. 하나로 묶으면 build.gradle 한 줄만 고쳐도 키가 바뀌어
+  # Gradle 배포판 130MB까지 다시 받는다. 배포판은 wrapper 설정이 바뀔 때만 무효화한다.
   cache:
-    key:
-      files:
-        - apps/backend/build.gradle
-        - apps/backend/gradle/wrapper/gradle-wrapper.properties
-    paths:
-      - apps/backend/.gradle/caches
-      - apps/backend/.gradle/wrapper
+    - key:
+        files: [apps/backend/gradle/wrapper/gradle-wrapper.properties]
+        prefix: gradle-dist
+      paths: [.gradle-home/wrapper]
+    - key:
+        files:
+          - apps/backend/build.gradle
+          - apps/backend/settings.gradle
+        prefix: gradle-deps
+      paths: [.gradle-home/caches]
   script:
     - cd apps/backend
     - chmod +x gradlew
     - ./gradlew bootJar --no-daemon
+  # 추출된 배포판과 원본 zip이 둘 다 남아 캐시가 두 배가 된다.
+  after_script:
+    - rm -f "$CI_PROJECT_DIR"/.gradle-home/wrapper/dists/*/*/*.zip
+  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 build:backend가
+  # 이미지 안에서 같은 bootJar를 수행하므로 돌리지 않는다.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: [apps/backend/**/*]
-    - if: $CI_COMMIT_BRANCH
-      changes: [apps/backend/**/*]
+      changes: &backend_paths
+        - apps/backend/src/**/*
+        - apps/backend/build.gradle
+        - apps/backend/settings.gradle
+        - apps/backend/gradle/**/*
+        - apps/backend/gradlew
+        - apps/backend/Dockerfile
+        - .gitlab/ci/apps/backend.yml
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *backend_paths
 
 build:backend:
   extends: .docker-build

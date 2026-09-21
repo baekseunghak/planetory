@@ -21,11 +21,15 @@
     - npm ci --cache .npm --prefer-offline --no-audit --fund=false
   # MR 파이프라인의 changes는 타깃 브랜치 기준으로 비교한다. 브랜치 파이프라인은
   # 직전 커밋과만 비교하지만, MR이 열리면 그쪽만 돌므로 판정이 중요한 자리는 MR이다.
+  # 기본 브랜치에서는 돌리지 않는다. build:frontend가 이미지 안에서 같은
+  # npm run build를 수행하므로 검증이 중복된다.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: [apps/frontend/**/*]
-    - if: $CI_COMMIT_BRANCH
-      changes: [apps/frontend/**/*]
+      changes: &web_paths
+        - apps/frontend/**/*
+        - .gitlab/ci/apps/frontend.yml
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *web_paths
 
 # typecheck을 따로 두지 않는다. `npm run build`가 typecheck → vite build →
 # check-production 순서라 타입 오류·번들 실패·프로덕션 위생을 한 job이 모두 잡는다.
