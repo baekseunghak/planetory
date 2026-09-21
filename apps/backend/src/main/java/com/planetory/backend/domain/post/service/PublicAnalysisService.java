@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.post.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.exploration.service.AchievementService;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
@@ -35,12 +36,15 @@ public class PublicAnalysisService {
                             String skyVersion, Achievement achievement, Map<String, Object> judgmentSummary) {}
     private record Existing(long id, long thread, long candidate, boolean isPublic) {}
     public record Visibility(String analysisId, boolean isPublicByAuthor, boolean isModerationHidden,
-                             boolean isEffectivelyPublic) {}
+                             boolean isEffectivelyPublic) {
+        @JsonProperty("isPublic")
+        public boolean isPublic() { return isEffectivelyPublic; }
+    }
     private record Managed(long owner, boolean isPublic, boolean hidden) {}
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Visibility visibility(long member, String analysisId, boolean isPublic) {
-        long id = ExplorationIds.parse(analysisId, "pa-")
+        long id = ExplorationIds.parse(analysisId, ExplorationIds.PUBLIC_ANALYSIS)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         // 161과 같은 회원 선잠금. 부모→공개 행 순서로 잠가 DB 운영 숨김과 직렬화한다.
         if (jdbc.sql("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE")

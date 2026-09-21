@@ -657,17 +657,18 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"isPublic":false}
 ```
 
-성공 200은 `{"analysisId":"pa-601","isPublicByAuthor":false,"isModerationHidden":false,"isEffectivelyPublic":false}`. 재공개 요청은 isPublic=true. published_at은 첫 등록 시각을 유지하며 취소는 unpublished_at 기록, 재공개는 NULL로 해제한다. 작성자만 변경 가능하며 같은 상태 반복은 중복 반영하지 않는다.
+성공 200은 `{"analysisId":"pa-601","isPublicByAuthor":false,"isModerationHidden":false,"isEffectivelyPublic":false,"isPublic":false}`. 재공개 요청은 isPublic=true. published_at은 첫 등록 시각을 유지하며 취소는 unpublished_at 기록, 재공개는 NULL로 해제한다. 작성자만 변경 가능하며 같은 상태 반복은 중복 반영하지 않는다.
 
 본인 공개 상태와 운영 숨김은 별도로 유지한다(162, 2026-09-20 사용자 확정). 개별 운영 숨김 중 true 요청은 409 `PUBLICATION_HIDDEN`, 부모 숨김·삭제 중 true 요청은 409 `THREAD_HIDDEN`으로 거절한다(부모 상태 우선). false 요청은 숨김·부모 비공개 중에도 작성자의 관리 경로에서 허용한다. 응답에는 상태만 담고 숨겨진 콘텐츠를 다시 담지 않는다. 취소 후 남은 유효 기록 중 최신 판단을 선택하고 없으면 통계에서 회원을 제외한다. 성과·등급·History·탐색 완료는 유지한다.
 
 **162 구현·후속 인계**
 
-- PUT 응답의 `isPublicByAuthor`는 본인 공개 의사(`unpublished_at IS NULL`), `isModerationHidden`은 개별 숨김 또는 부모 `hidden`, `isEffectivelyPublic`은 본인 공개·개별 비숨김·공식 부모 `visible`이 모두 성립하는지다. 결과 화면은 실제 공개 표시를 `isEffectivelyPublic`로 판단한다. 161 POST 응답의 기존 `isPublic`은 유효 공개 여부로 유지하며, PUT 응답에는 `isPublic`을 제공하지 않는다. 요청 본문의 `isPublic`은 그대로 유지한다.
+- PUT 응답의 `isPublicByAuthor`는 본인 공개 의사(`unpublished_at IS NULL`), `isModerationHidden`은 개별 숨김 또는 부모 `hidden`, `isEffectivelyPublic`은 본인 공개·개별 비숨김·공식 부모 `visible`이 모두 성립하는지다. PUT 응답에는 161 POST와 동일한 의미의 `isPublic`을 함께 제공하며 `isEffectivelyPublic`에서 계산한 별칭으로 항상 값이 같다. 결과 화면·164 후속 공개 상세는 실제 공개 여부를 `isPublic`으로 일관되게 읽을 수 있다. `isPublicByAuthor`는 본인 의사로 별도 유지한다. 요청 본문의 `isPublic`은 그대로 유지한다.
+- 부모가 `deleted`인 경우 삭제를 운영 숨김으로 취급하지 않는다. 개별 숨김도 없으면 `isModerationHidden=false`이고 `isPublic`·`isEffectivelyPublic=false`다. 두 필드는 비공개 사유를 열거하는 응답이 아니며 별도 사유 필드는 추가하지 않는다.
 - 본문은 boolean `isPublic` 하나만 받는다. 문자열·null·추가 필드는 400 `VALIDATION_FAILED`, 경로 ID 형식 오류·없는 대상은 404다. 인증·CSRF를 적용한다. 타인의 현재 공개 자료 관리 요청은 403, 취소·숨김 자료 관리 요청은 404다. 작성자는 숨김 중에도 상태 변경 결과만 받는다.
 - 같은 상태 반복은 `unpublished_at`을 다시 쓰지 않는다. `published_at`·공개 ID·원본 History·성과·별 발견·지도 버전을 변경하지 않는다. 161 POST 재전송은 취소를 되돌리지 않고 기존 별 복구 계약을 유지한다. 의도적 재공개만 이 PUT을 사용한다.
 - 잠금 순서는 회원 → 부모 Post → 공개 분석 행이다. DB 운영자가 같은 작업에서 부모와 하위를 함께 수정할 때도 부모 → 하위 순서를 사용한다. 숨김이 먼저 확정되면 뒤의 재공개는 거절되며, 재공개 후 숨김이 확정돼도 공개 조회에서는 현재 숨김을 적용한다. 운영 복원은 `hidden → visible` 조건부 변경만 사용하고 `deleted`를 되살리지 않는다.
-- `domain.PublicAnalysisVisibility.VISIBLE`은 `pa`·`p` 별칭의 유효 공개 SQL 조건이며 POST 재요청·History 공개 상태·기존 판단 집계가 공유한다. 서비스 의존성이 없는 공통 조건을 사용해 exploration에서 post 서비스로 역참조하지 않는다. `PublicAnalysisAccess.check(memberId, analysisId, historyId)`는 실제 공개→History 관계와 현재 DB 상태를 검사한다. 백승학 담당 164 공개 상세·167 출처는 148 공개 투영의 검사 콜백으로 연결하고, 169 검색은 같은 조건을 적용한다. 이 후속 HTTP 조회·검색·출처 API 자체는 162에서 추가하지 않는다.
+- `domain.PublicAnalysisVisibility.VISIBLE`은 `pa`·`p` 별칭의 유효 공개 SQL 조건이며 POST 재요청·History 공개 상태·기존 판단 집계가 공유한다. 서비스 의존성이 없는 공통 조건을 사용해 exploration에서 post 서비스로 역참조하지 않는다. `PublicAnalysisAccess.check(memberId, analysisId, historyId)`는 실제 공개→History 관계와 현재 DB 상태를 검사한다. 백승학 담당 164 공개 상세·167 출처는 148 공개 투영의 검사 콜백으로 연결하고, 169 검색은 같은 조건을 적용한다. 이 후속 HTTP 조회·검색·출처 API 자체는 162에서 추가하지 않는다. 164·167 인수에서는 실제 읽기 경로의 매 읽기 트랜잭션과 반환 전 재검사 연결을 확인하고, HistoryAttachmentService와 회원 active 검사·401/404 매핑이 일치하는지 함께 대조한다.
 - 일반 History 첨부는 160의 실제 부모·첨부 관계로 판정한다. 동일 History의 공식 공개를 취소해도 독립된 정상 글·댓글 첨부까지 해제하지 않는다. 해당 첨부 부모가 숨겨지거나 관계가 해제되면 내용·그래프 재시도와 반환 직전 검사를 통해 차단한다. 캐시된 결과가 접근 허가를 대신하지 않는다.
 - V15는 앱 역할에 `published_analyses.unpublished_at` 열 UPDATE만 추가한다. `hidden_at`·최초 공개 시각·공개 근거 수정 및 물리 삭제 권한은 주지 않는다. V14를 수정하거나 운영 숨김 API를 추가하지 않는다.
 <a id="batch"></a>

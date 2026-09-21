@@ -222,6 +222,7 @@ domain/<도메인>/  controller · dto(request/response) · entity · repository
 
 ### 도메인 패키지
 
+- 서비스·저장소 의존성이 없는 도메인 간 공유 조건은 순환 참조 방지를 위해 `domain` 바로 아래에 둘 수 있다(`PublicAnalysisVisibility`). 서비스·저장소·컨트롤러를 이 위치로 이동하는 예외는 아니다.
 - 담당 영역([API 명세 파트 분담](README.md))별로 `domain/member`, `domain/post`, `domain/comment`, `domain/exploration`처럼 나눈다. 다른 도메인의 repository를 직접 주입하지 않고 service를 통해 호출한다.
 - 요청·응답 DTO는 Java `record`로 쓴다. Lombok은 엔티티(`@Getter`, `@NoArgsConstructor(access = PROTECTED)`)와 `@RequiredArgsConstructor`·`@Slf4j`에 한정하고 `@Data`·`@Setter`는 쓰지 않는다.
 - 컨트롤러 경로는 `/api/v1`로 시작하며 `@Operation(summary)`를 붙여 Swagger에 설명이 나오게 한다.

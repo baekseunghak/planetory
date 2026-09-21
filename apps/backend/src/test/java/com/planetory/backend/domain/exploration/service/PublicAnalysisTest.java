@@ -330,7 +330,7 @@ class PublicAnalysisTest {
                         .content("{\"isPublic\":false}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.analysisId").value(first.analysisId()))
                 .andExpect(jsonPath("$.isPublicByAuthor").value(false))
-                .andExpect(jsonPath("$.isPublic").doesNotExist())
+                .andExpect(jsonPath("$.isPublic").value(false))
                 .andExpect(jsonPath("$.isModerationHidden").value(false))
                 .andExpect(jsonPath("$.isEffectivelyPublic").value(false));
         String cancelledAt = jdbc.queryForObject("SELECT unpublished_at::text FROM published_analyses WHERE history_id=?", String.class, number(history));
@@ -343,7 +343,7 @@ class PublicAnalysisTest {
                         .content("{\"isPublic\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.isPublicByAuthor").value(true))
-                .andExpect(jsonPath("$.isPublic").doesNotExist())
+                .andExpect(jsonPath("$.isPublic").value(true))
                 .andExpect(jsonPath("$.isEffectivelyPublic").value(true));
         var replay = publications.publish(member, history);
         assertFalse(replay.newlyGranted());
@@ -369,6 +369,24 @@ class PublicAnalysisTest {
         jdbc.update("UPDATE published_analyses SET hidden_at=NULL WHERE history_id=?", number(history));
         assertFalse(publications.publish(member, history).isPublic());
         assertTrue(publications.visibility(member, first.analysisId(), true).isEffectivelyPublic());
+    }
+
+    @Test void 삭제된_공식부모는_숨김과구분하고_공개호환필드는_false다() throws Exception {
+        String history = submit(3);
+        var first = publications.publish(member, history);
+        jdbc.update("UPDATE posts SET status='deleted' WHERE candidate_id=?", candidate);
+        error(ErrorCode.THREAD_HIDDEN, () -> publications.visibility(member, first.analysisId(), true));
+        assertFalse(publications.publish(member, history).isPublic());
+        error(ErrorCode.RESOURCE_NOT_FOUND, () -> publicAccess.check(member,
+                Long.parseLong(first.analysisId().substring(3)), number(history)));
+        mvc.perform(put("/api/v1/public-analyses/" + first.analysisId() + "/visibility")
+                        .session(session(member)).with(csrf()).contentType("application/json")
+                        .content("{\"isPublic\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isPublicByAuthor").value(false))
+                .andExpect(jsonPath("$.isModerationHidden").value(false))
+                .andExpect(jsonPath("$.isEffectivelyPublic").value(false))
+                .andExpect(jsonPath("$.isPublic").value(false));
     }
 
     @Test void 공개조회는_현재상태와_실제History관계를_검사한다() {
