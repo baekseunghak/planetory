@@ -2,16 +2,17 @@
   position: absolute;
   z-index: 7;
   left: 1.5rem;
-  top: 1.5rem;
-  width: min(420px, calc(100% - 3rem));
-  max-height: calc(100% - 3rem);
+  top: 128px;
+  width: min(360px, calc(100% - 3rem));
+  max-height: calc(100% - 244px);
   overflow: auto;
   background: #080e1df0;
   border: 1px solid #ffffff26;
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 1rem 1.2rem;
   box-shadow: 0 12px 40px #0005;
 }
+.star-search:not([open]) { width: auto; background: #080e1dcc; padding: .6rem 1rem; }
 .star-search summary {
   cursor: pointer;
   letter-spacing: 0.04em;

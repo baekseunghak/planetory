@@ -109,3 +109,11 @@
 - PROCESSING/FAILED/만료는 각 상태로 표시한다. 단순 오류로 영구 탈퇴 완료를 선언하지 않는다. 게시글·댓글·History 처리, 실제 익명화, 재가입 허용은 S26 승인 정책을 따르며 S27 생산자 테스트와244 P1-222에서 대조한다.
 
 소비자: [WithdrawalPage.tsx](../../frontend/src/features/profile/WithdrawalPage.tsx), [withdrawal.ts](../../frontend/src/features/profile/withdrawal.ts). [검증용 제공자](../../frontend/dev/withdrawal-fixture-plugin.ts)는 합성 메모리 계정만 종료하며 실제 탈퇴 정책·쿠키 보안·DB 처리를 검증한 증거가 아니다.
+
+## 6. 별 검색 · 223
+
+탐사 API4.1/4.4의 기존 계약을 소비한다. GET `/api/v1/me/stars?scope=discovered&sort=recent&size=20&ticId=...&stage=...&grade=...&cursor=...`는 개인이 발견한 별만 조회한다. scope=submitted는 A13 목록 소비자의 기존 범위다. 공용 입력의 TIC는 문자열이며 상태는unexplored/in_progress/completed, 등급은A/S/SS/SSS. 없는 조건은 전송하지 않는다.
+
+GET `/api/v1/me/sky/locate?ticId=...`의 ID·version·layoutVersion·layoutOrdinal·x/y/depthZ·level·bounds를 검증한 뒤 서버 배율로 이동한다. 프론트는 별 배치나 좌표를 다시 만들지 않는다. 검색/위치 권한·페이지/계정/버전은 서버가 검사한다. URL의 filterTic/filterStage/filterGrade는 프론트 복귀 상태이며 API 필드와 구별한다.
+
+223의 A13 입력 어댑터는 [ProfileStarFilters.tsx](../../frontend/src/features/profile/ProfileStarFilters.tsx)와 ProfileSlotProps.starFilters다. 현재develop에 A13 실제 목록이 등록되지 않아 해당 소비자의 연결은 아직 미완료다. 이 문서로 다른 담당자의 A13 구현 완료를 선언하지 않는다. 실제 C17 대조와 배포는244 P1-223에 남긴다.
