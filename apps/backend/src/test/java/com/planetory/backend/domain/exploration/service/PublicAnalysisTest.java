@@ -577,6 +577,83 @@ class PublicAnalysisTest {
         assertEquals(0L, publications.publish(member, older).judgmentSummary().get("participantCount"));
     }
 
+    @Test void 공개15명_세판단비율과_빈집계는_null이다() {
+        assertEquals(0L, summary().get("participantCount"));
+        assertNull(summary().get("percentages"));
+        for (int i = 0; i < 15; i++) {
+            long voter = member();
+            var position = layout.place(0);
+            jdbc.update("INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,depth_z,unlocked_at,world_x,world_y,layout_version,layout_ordinal) VALUES (?,?,'tutorial',?,now(),?,?,?,0)",
+                    voter, tic, position.depthZ(), position.worldX(), position.worldY(), position.layoutVersion());
+            publications.publish(voter, submitJudgment(voter, i < 8 ? "LIKELY_PLANET" : i < 12 ? "UNLIKELY_PLANET" : "UNSURE"));
+        }
+        var result = summary();
+        assertEquals("public_analyses", result.get("kind"));
+        assertEquals("c-" + candidate, result.get("candidateId"));
+        assertEquals(15L, result.get("participantCount"));
+        assertEquals(8L, result.get("likelyPlanet"));
+        assertEquals(4L, result.get("unlikelyPlanet"));
+        assertEquals(3L, result.get("unsure"));
+        assertEquals(java.util.Map.of("likelyPlanet", 53.3, "unlikelyPlanet", 26.7, "unsure", 20.0), result.get("percentages"));
+        assertInstanceOf(java.time.OffsetDateTime.class, result.get("asOf"));
+        // 조회는 공개·성과·History·진행 행을 만들지 않는다.
+        assertEquals(15, count("published_analyses", "candidate_id", candidate));
+        assertEquals(15, count("user_candidate_achievements", "candidate_id", candidate));
+        assertEquals(15, count("analysis_histories", "tic_id", tic));
+        assertEquals(15, count("user_star_progress", "tic_id", tic));
+    }
+
+    @Test void 동률은_큰제출ID이며_미공개와숨김복원은_유효대표만_선택한다() {
+        String older = submitJudgment(member, "LIKELY_PLANET");
+        String newer = submitJudgment(member, "UNSURE");
+        jdbc.update("UPDATE submissions SET created_at='2026-09-01T00:00:00Z' WHERE user_id=? AND tic_id=?", member, tic);
+        var latest = publications.publish(member, newer);
+        publications.publish(member, older); // 공개 순서와 ID 선택은 독립이다.
+        assertEquals(1L, summary().get("unsure"));
+        submitJudgment(member, "UNLIKELY_PLANET");
+        assertEquals(1L, summary().get("unsure"));
+        jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE history_id=?", number(newer));
+        assertEquals(1L, summary().get("likelyPlanet"));
+        for (String state : List.of("hidden", "deleted")) {
+            jdbc.update("UPDATE posts SET status=? WHERE candidate_id=?", state, candidate);
+            assertEquals(0L, summary().get("participantCount"));
+            assertNull(summary().get("percentages"));
+        }
+        jdbc.update("UPDATE posts SET status='visible' WHERE candidate_id=?", candidate);
+        assertEquals(1L, summary().get("likelyPlanet"));
+        publications.visibility(member, latest.analysisId(), false);
+        jdbc.update("UPDATE published_analyses SET hidden_at=NULL WHERE history_id=?", number(newer));
+        assertEquals(1L, summary().get("likelyPlanet")); // 숨김 복구가 본인 취소를 되돌리지 않는다.
+        assertEquals(3, count("analysis_histories", "user_id", member));
+        assertEquals(1, count("user_candidate_achievements", "user_id", member));
+    }
+
+    @Test void 읽기트랜잭션은_동시취소에도_같은분모를_유지하고_다음조회는_갱신한다() {
+        var published = publications.publish(member, submit(3));
+        var tx = new TransactionTemplate(transactions);
+        tx.setReadOnly(true);
+        tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        tx.executeWithoutResult(status -> {
+            var before = submissions.publicJudgmentSummary(candidate);
+            java.util.concurrent.CompletableFuture.runAsync(
+                    () -> publications.visibility(member, published.analysisId(), false)).join();
+            assertEquals(1L, before.get("participantCount"));
+            assertEquals(before.get("participantCount"), submissions.publicJudgmentSummary(candidate).get("participantCount"));
+        });
+        assertEquals(0L, summary().get("participantCount"));
+        assertNull(summary().get("percentages"));
+    }
+
+    private String submitJudgment(long voter, String judgment) {
+        var r = request(3);
+        return submissions.submit(voter, tic, new SubmissionRequest(r.requestId(), r.submissionKind(), r.curveContext(),
+                r.selection(), judgment, r.evidenceChecks(), r.memo(), r.viewState(), null)).body().path("historyId").asText();
+    }
+
+    private java.util.Map<String, Object> summary() {
+        return new TransactionTemplate(transactions).execute(status -> submissions.publicJudgmentSummary(candidate));
+    }
+
     private <T> List<T> concurrent(java.util.concurrent.Callable<T> first, java.util.concurrent.Callable<T> second) throws Exception {
         var start = new java.util.concurrent.CyclicBarrier(2);
         try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {

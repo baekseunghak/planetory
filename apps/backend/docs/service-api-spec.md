@@ -629,6 +629,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
   "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
   "judgmentSummary":{
+    "kind":"public_analyses","candidateId":"c-401",
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
     "asOf":"2026-09-09T03:00:00Z"
@@ -636,7 +637,11 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 }
 ```
 
-판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각·동률 Submission id이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. N=0은 percentages를 null로 반환하고 ‘아직 공개된 분석이 없습니다’를 표시하는 안이다. 비율은 행성일 확률이 아니다.
+판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각 내림차순·동률 Submission id 내림차순이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. 유효 공개는 본인 취소 없음·개별 숨김 없음·부모가 visible SYSTEM 스레드인 조건을 모두 만족한다. 최신 기록이 취소·숨김되면 남은 과거 유효 기록으로 복귀하고, 없으면 회원을 분모에서 제외한다. 부모 숨김·삭제는 모든 기록을 제외하며 복원해도 개별 숨김·본인 취소 상태는 유지한다. N=0은 세 판단 건수 0·percentages=null을 반환한다. 화면은 COM-14에 따라 ‘아직 공개된 분석이 없습니다’를 표시한다. 각 비율은 건수/N×100을 소수 첫째 자리로 반올림하며, 비율은 행성일 확률이 아니다.
+
+**집계 소비 계약(165):** `SubmissionService.publicJudgmentSummary(candidateId)`는 기존 트랜잭션 안에서 호출한다(MANDATORY). 공개 등록 응답·공식 스레드의 `judgmentSummary`는 현재 라벨과 무관하게 `kind=public_analyses`와 위 필드를 유지한다. 탐사 결과·History의 `judgmentStatistics`는 현재 `answerClass=analysis`일 때 같은 집계를 사용하고 `answerClass=graded`일 때 아래 첫 매칭 통계를 사용한다. **별 결과 페이지(146)의 신호별 `judgmentStatistics`도 탐사 결과 기준**이며 상세 계약은 [탐사 API 8.4절](exploration-api-spec.md#84-별-결과-페이지-res-10-at-74)을 따른다. 조회는 성과·등급·History·탐색 완료를 변경하지 않는다. 일괄 공개(166)·공개 출처 카드(167)는 공개 요약 원천을 재사용하고, 171의 N≥10 판정에는 신호별 participantCount를 사용한다. 해당 후속 API 전체의 구현 완료를 의미하지 않는다.
+
+`asOf`는 집계 쿼리 실행 시각(UTC)이며 장기 보존 스냅샷 식별자가 아니다. 한 응답에서 목록·대표 여부·통계를 여러 SQL로 조립하는 소비자는 REPEATABLE_READ 읽기 트랜잭션에서 같은 DB 스냅샷을 사용하고, 한 번 계산한 요약과 asOf를 공유한다. 판단 필터·페이지 크기는 집계 함수 입력이 아니며 대표 선택 전에 적용하지 않는다. 별도 HTTP 요청 사이의 동일성은 보장하지 않는다. 164의 실제 목록/HTTP 결합 검증은 164에서 수행한다.
 
 `GET /api/v1/signal-threads/st-301/analyses?judgment=UNSURE&size=20`:
 
@@ -741,6 +746,8 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 - 기기 간 읽음 동기화가 필요하면 P1 notifications의 type=challenge, payload의 회차 참조, read_at을 활용하는 방향으로 상세화한다. 별도 회원×회차 확인 테이블을 추가하지 않는다. 알림 중복 생성 방지는 P1 계약에서 정한다.
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
+
+139 퀘스트 패널은 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 168 회차 API와 208 화면의 참여 수도 같은 원천을 소비한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. 168 API 구현과 208 실제 HTTP 연동 인수는 별도다.
 
 <a id="later"></a>
 
