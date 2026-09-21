@@ -96,13 +96,13 @@ GCP는 `asia-east1-b` 한 존의 6개 프로젝트를 full-mesh VPC Peering으�
 | 노드 | 역할 |
 | --- | --- |
 | EC2-A | 단일 서비스 노드. 애플리케이션 인스턴스 1개 + PostgreSQL Primary(Read/Write) + Redis + Python Derived Worker + Prometheus/Grafana |
-| EC2-B | 사용하지 않는다. 앱·복제·백업·관측 어느 역할도 두지 않는다 |
+| EC2-B | 서비스 역할 없음. 앱·복제·백업과 서비스 관측 스택을 두지 않는다. 사용자 요청 경로 밖에서 CI 빌드 Runner, 이미지 레지스트리, 알림 전용 외부 관찰을 맡는다 |
 
 - PostgreSQL Standby를 두지 않는다. 승격 선택지가 없으므로 EC2-A 장애는 서비스 전면 중단이다. Backend에 읽기·쓰기 분리도 없다.
 - 백업을 두지 않는다. EBS 스냅샷 도입 여부는 별도 결정으로 남긴다(10장).
 - **데이터 손실 경계**: Gold 카탈로그는 GCP HDFS에 PublicationBundle이 RF2로 백업돼 재게시로 복구할 수 있다. 반면 **회원·제출·분석 히스토리·커뮤니티 데이터는 사본이 없어 볼륨 상실이나 논리 오류에서 복구할 수 없다.** PoC 범위에서 수용한 경계다.
 - 배포·재시작은 전면 중단을 동반하지만 `redis-session`을 함께 재시작하지 않으면 로그인은 유지된다. 무중단 배포를 목표로 두지 않는다.
-- EC2-B를 앱 노드나 콜드 백업으로 쓰는 안, 오사카 CI/CD 노드를 LB·단독 헬스체크로 쓰는 안은 검토 후 기각했다. 사유는 8장이 가리키는 상세 문서에 있다.
+- EC2-B를 앱 노드나 콜드 백업으로 쓰는 안, CI·빌드 노드를 LB·단독 헬스체크로 쓰는 안은 검토 후 기각했다. EC2-B의 CI 용도는 사용자 요청 경로 밖이라 이 기각과 무관하다. 사유는 8장이 가리키는 상세 문서에 있다.
 
 ### GCP
 
@@ -239,7 +239,7 @@ app → PostgreSQL Primary · Redis(loopback) · Python Worker  (모두 EC2-A)
 - Grafana는 Prometheus를 조회한다.
 - API 오류율·지연, HDFS 사용률, YARN 자원, Spark/Airflow 상태, Gold 버전을 관측한다. DB 복제 지연은 Standby가 없어 관측 대상이 아니다.
 - 온라인 계산은 `QUEUED`, `RESIDUAL_CALCULATING`, `RESIDUAL_READY`, `PERIODOGRAM_CALCULATING`, `COMPLETED`, `FAILED` 상태별 대기·처리 시간과 실패율을 관측한다.
-- Prometheus·Grafana는 서비스와 같은 EC2-A에 둔다. 따라서 EC2-A가 멈추면 관측도 함께 멈추고 장애 당시 지표를 볼 수 없다. 서비스 생존 여부의 외부 확인은 오사카 CI/CD 노드의 알림 전용 외부 관찰에만 의존한다(해당 노드를 LB나 진입 경로로 쓰지 않는다). 이 구조는 현재 비용 제약상 허용한다.
+- Prometheus·Grafana는 서비스와 같은 EC2-A에 둔다. 따라서 EC2-A가 멈추면 관측도 함께 멈추고 장애 당시 지표를 볼 수 없다. 서비스 생존 여부의 외부 확인은 EC2-B의 알림 전용 외부 관찰에 의존한다(해당 노드를 LB나 진입 경로로 쓰지 않는다). **두 EC2가 같은 가용 영역이라 이 관찰은 인스턴스·앱·터널 장애만 덮고 가용 영역·리전 단위 장애는 덮지 못한다.** 이 구조는 현재 비용 제약상 허용한다.
 - PostgreSQL, Redis, HDFS, YARN, Spark 관리 포트를 인터넷에 공개하지 않는다. EC2의 외부 인바운드 개방을 0개로 둔다(적용·확인은 84). 진입은 Cloudflare Tunnel의 egress 연결로만 이뤄진다(8장).
 - GCP–AWS 전송과 메트릭 수집은 인증·암호화된 경로만 사용한다.
 - EC2와 GCP는 x86_64(`linux/amd64`) 이미지를 사용한다. 이미지 빌드와 실제 실행 검증 기준은 [CI/CD](../operations/cicd.md)를 따른다.
