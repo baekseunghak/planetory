@@ -41,6 +41,15 @@
 | 2026-09-21 | 120 전체 마스킹 Sector 진단 보존 | S15P21C206-120 | sector_stats, not_evaluated, 99 passed | 수정·검증 완료, 재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 잔차 503의 원인 구분(retryable)과 미연결 안내 문구 | S15P21C206-249 | 잔차, 503, DEPENDENCY_UNAVAILABLE, retryable, START_FAILED, 미연결, 재시도, 7.1, 2.3 | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 잔차 503 리뷰 반영: 문구 정본과 분기 시점 | S15P21C206-249 | retryable, 문구 정본, 배포 순서, failure.retryable | 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 112 후보 감사·실제 두 Sector 구성 비교 | S15P21C206-112 | candidate identity, TOI270, 0.5 duration | 초기 실측·미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 감광 창 진단 100건·자동 병합 미채택 | S15P21C206-112 | conditional depth, possible_alias, incomplete, 44 passed | 실험 완료·규칙 미승인 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 4별·추가 배율 비교 및 계약 검토안 v1 | S15P21C206-112 | possible_alias, 0.5 duration, 50 passed | 실험 완료·계약 미승인 | [기록](2026-09-21.md) |
+
+| 2026-09-21 | 112 동일성 대칭성·원시 후보 보존·판 내부 모호성 우회 차단 | S15P21C206-112 | candidate_identity_v2, 59 passed | 실험 검증·계약 미승인 | [기록](2026-09-21.md) |
+
+| 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-21 | 112 v3 공통 계약·정확한 모델 중복·동등성 실험 한계 | S15P21C206-112 | candidate_identity_v3_review, 69 passed, 0.25ppm | 계약 리뷰 준비·운영 자동 병합 미채택 | [기록](2026-09-21.md) |
 | 2026-09-21 | 같은 별 공개 출처 저장·미리보기·무효 안내 | S15P21C206-167 | sourceLinks, available:false, V17, 출처 카드 | 구현·관련 검증 완료 | [기록](2026-09-21.md#s15p21c206-167-같은-별-공개-출처-카드와-비공개-안내) |
 | 2026-09-21 | 전체 공개 집합 기반 핫 토픽·순위 커서와 동일 스냅샷 | S15P21C206-171 | COUNT DISTINCT, N>=10, hot-v1, REPEATABLE_READ, 전역 순위, 기존 인덱스 | 구현·관련 52건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 화면이 잔차 503을 retryable로 가른다 | S15P21C206-189 | retryable, DEPENDENCY_UNAVAILABLE, 정본 문구, START_FAILED, 개발용 응답, 화면 검사 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
@@ -62,3 +71,35 @@
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 준비 기록·후속 YARN 검증과 병합 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증·develop 병합 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | Bronze→Silver 최초 탐색·TIC별 실패 격리와 재처리 | S15P21C206-78 | target_combined, initial_bls, manifest, retry, YARN | 단일 TIC 실클러스터 Canary 완료, 전체 실행 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | 팔로우 대상·중복 제거 피드·구독 사건·173/174 인수 | S15P21C206-172 | COM-16, DEC-33, AT-78, AT-79, matchedBy, 멱등성, DEC-11 | 제안·정책 승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 179 탈퇴 초안과 팔로우 접근 의존성 교차 검토 | S15P21C206-172 | W2, W3, W5, Q3, WD-12, star_unlocks, P16 | 제안·공유 승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | MR !155 리뷰: 회원 재개·공통 원인·사건 복구·관계 해제 | S15P21C206-172 | 150, 174, eventId, occurredAt, P17, COM-13 | 검토안 보완·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 반복 탐색·QA·후보 ID 연결 | S15P21C206-122 | iteration, rollback, candidate_catalog, BIGINT, 보류, removal_step, 170 passed | 구현·로컬 검증·리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 Publisher 필드별 인계 보완 | S15P21C206-122 | is_confirmed, 116·124, SDE/SNR Silver 진단, 열 투영, alias 책임 | 문서 보완·재확인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 실제 진단·원본 SNR 종료 기록 보완 | S15P21C206-122 | baseline_time, search_diagnostics, original_validation, 207 passed | 수정 검증·develop 통합 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 마이페이지 내 별·분석 기록 목록 연결 | S15P21C206-196 | 프로필 슬롯, 커서에 size 묶임, unpublishedSignalCount 없음과 0, detailAvailable, StrictMode 두 쪽 읽기 | 구현·검증 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
+
+| 2026-09-21 | 근거 구간 마스킹·원본 행 장부 | S15P21C206-245 | interval mask, QUALITY, DRN4, DR42 | 구현·로컬 검증·리뷰 전 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 후보 병합·분리 정정 계약과 C19 수행 범위 고정 | S15P21C206-153 | 후보 병합, 분리, retired, GRD-06, DEC-26, C18-Q1~Q6, gold_writer 권한, 사전검사 | 결정 요청 초안·교차 검토 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 후보 정정 영향 사전검사 명령과 런북 | S15P21C206-154 | candidate-correction-precheck, dry-run, 사전 거절, 종료 코드 0/2/3, S2, S3, 읽기 전용 | 구현 완료·적용 절차 미착수 | [기록](2026-09-21.md) |
+| 2026-09-21 | 정정 계약 리뷰 반영: 확정·제안 분리와 복구·역할 정정 | S15P21C206-153 | GRD-06 재계산, 제안과 확정, status 복구 불가, gold_writer SELECT 없음, 역할 분리 | 리뷰 반영 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 발견한 별 유지를 확정에서 미확정(C18-Q7)으로 | S15P21C206-153 | C18-Q7, star_unlocks, GRD-06, S4, DEC-26, 근거 철회 | 결정 요청 초안 | [기록](2026-09-21.md) |
+| 2026-09-21 | 정정 계약 승인 조건의 보존 강제 해제와 실행 문턱 셋 정리 | S15P21C206-153 | C18-Q1, C18-Q2, C18-Q4, 승인 조건, retired, 실행 문턱 | 결정 요청 초안 | [기록](2026-09-21.md) |
+| 2026-09-21 | 결과 페이지 리뷰 반영: 유효 공개 조건·일괄 공개 후보·은퇴 대상 | S15P21C206-146 | unpublishedSignalCount, PublicAnalysisVisibility, PUBLISH_ALL, RETRY, CANDIDATE_RETIRED | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 112 v3 소비자 인계 보완 | S15P21C206-112 | 재개, newDiscoverableCount, candidate_aliases, retired 공개물, removal_step, tolerance | 문서 보완·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 봉우리와 미세 조정 범위(5.4절)와 미결 5 제안 | S15P21C206-141 | candidate-peaks, 최소 간격 2h+1, 고조파 허용 오차 h, peakRuleVersion, suggestedDurationHours | 구현 완료·규칙 제안 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 리뷰 반영: 고조파 판정을 주기 값으로, 간격 근거를 정책으로 | S15P21C206-141 | 고조파 반올림 결함, 2h+1 근거, peakRuleVersion 조건, BLS 제안값 계약 | 검증 완료 | [2026-09-21](2026-09-21.md) |
+
+| 2026-09-21 | 245 !158 NumPy JSON·최적화 모드 검증·153 기록 보존 | S15P21C206-245 | numpy scalar, python -O, assert | 로컬 검증·재리뷰 대기 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 통계 지표 사전·시간 경계 권장안·177/178 인수 | S15P21C206-176 | 첫 매칭, 10분 MV, 90일, 중앙값, null, asOf, 멱등, 탈퇴 | 제안·문서 검산 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 통계 리뷰 보완: AI 원천·지표 상태·현재 완료·검산 10개 | S15P21C206-176 | threshold_version, AI_ATTEMPT_UNKNOWN, Sector, duplicate, ST-17~26 | 제안·문서 검증 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | DEC-11 탈퇴 데이터 결정표·180 인수 준비 | S15P21C206-179 | 탈퇴, 보관기간, 익명화, 재가입, W1~W5, FE222, 세션, 현재/과거 통계 | 제안·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 179 리뷰: 재현 필드·처리 안내·백업/세션 현황 보완 | S15P21C206-179 | MR154, 재계산, snapshot_params, T/C, 백업 없음, HttpSession, 철회 상태 | 제안·승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 172·176·179 정책 문서 병렬 변경 충돌 해결 | S15P21C206-172 | follow-policy, statistics-policy, AT-77, AT-78, AT-79 | 문서 통합·정책 승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 커뮤니티 검색·공식 네 수치 본문 동기화 | S15P21C206-169 | searchIn, JS trim, SHA-256, pg_trgm, V19, 공식 요약, 10만 행 | 구현·격리 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 169 리뷰 반영·후보 요약 격리 검증 | S15P21C206-169 | MR !156, READ COMMITTED, 25000, N=0, BTJD, 540건, FE 빌드 | 수정·격리 검증 완료 | [2026-09-21](2026-09-21.md) |
+| 2026-09-21 | 122 !160 develop 통합·실제 진단 최종 검증 | S15P21C206-122 | 205 passed, 184 passed, 16곡선, search_diagnostics, review-122-r2 | 검증 완료·병합 commit 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 사전검사 재리뷰 반영: develop 통합과 승인 문턱·재실행 문구 | S15P21C206-154 | 6장 충돌, 문턱 셋, 제출 제외, 읽기 전용, 재실행 건수 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |

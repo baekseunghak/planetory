@@ -261,3 +261,13 @@ manifest schema는 `planetory.tess-silver-stage.v1`이며 TIC·stage 한 쌍당 
 Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Sector·관측점 수·상위 채택 peak 5개·오류를 `SILVER_CANARY_AUDIT` 로그와 `/var/lib/planetory-silver/run=<run>/attempt=<attempt>.json`의 `result.science_audit`에 남긴다. 성공한 정확한 attempt의 Spark staging과 빈 run 부모만 정리하며 다른 attempt가 있으면 부모 삭제를 건너뛴다.
 
 오프라인 검증은 데이터 담당 관점의 Bronze coverage·lineage, 과학 담당 관점의 전처리 상태·BLS 정렬 입력, Spark 운영 관점의 TIC 실패 격리·실패 TIC 재선택·드라이버 전체 수집 금지를 확인한다. 2026-09-21 최종 CodeReleaseId `20260921T062449Z`(archive SHA-256 `86f68700bd92281f356b3e8fc4f9957e9893cc91474d4ac3085f57ccbbab25d9`), RunId `20260921T062522Z`로 TIC `259377017`을 실제 YARN Canary 실행했다. `application_1789686202146_0029`는 `SUCCEEDED`, RF2·checksum·FSCK·원자 rename과 상세 출력 삭제·staging 정리를 통과했다. Sector 3·4·5에서 Raw 57,320개, 준비 44,553개, BLS 유효 44,550개를 처리했고 채택 peak 5개 중 1위 `5.6593303027일`, SNR `52.8359`, SDE `22.5652`였다. 저장소 TOI-270 c fixture `5.66051일`과 약 0.021% 차이며 직전 검증 release에서도 같은 snapshot·관측점 수·과학값을 재현했다. 이는 최초 BLS 재현 증거이며 반복 제거·전체 TIC 성능이나 최종 과학 판정을 증명하지 않는다.
+### 245 구간 마스크 인계 (로컬 검증, 배포 전)
+
+127의 최초 BLS 연결에 추가할 입력 계약은 [공용 커널 245](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)를 따른다.
+원본 제품 SHA와 근거 snapshot을 검증한 목록을 `preprocess_silver(curves, interval_masks=masks)`에 전달한다.
+`SectorInput.source_sha256`는 원본 FITS 바이트의 SHA이며 Bronze Parquet 파일 SHA로 대체하지 않는다.
+Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다. 호출자는 원본 제품의 0-based 행 배열을
+복원한 뒤 마스크를 전달하며, 다른 배열 순서라면 명시적인 원본 행 매핑 없이 이 커널을 호출하지 않는다.
+`exclusion_ledger(prepared, detrended)`와 `prepared.interval_masks`, 입력 마스크 계약 버전을 Silver 감사 산출물에 남긴다.
+`detrended.status != "ok"`는 정상 무후보가 아니므로 후속 BLS로 넘기지 않는다. 원본 QUALITY는 변경하지 않는다.
+실제 클러스터에 마스크를 활성화하거나 기존 공개 판을 바꾸는 작업은 이번 245 로컬 검증에서 실행하지 않았다.
