@@ -162,6 +162,29 @@ class CommunityReadTest {
         assertTrue(ids.contains("p-" + free)); assertFalse(ids.contains("p-" + hidden)); assertFalse(ids.contains("p-" + deleted));
     }
 
+    @Test void 프론트_특정별_기본요청의_STAR중복범위와_커서호환() throws Exception {
+        long first = post(tic, "visible"), second = post(tic, "visible");
+        // readFeedSearch(routeTic) → feedSearchParams → CommunityPage가 보내는 실제 조합이다.
+        var response = read(FEED + "?ticId=" + tic + "&board=STAR&size=20");
+        assertEquals(2, response.path("items").size());
+        assertEquals("p-" + second, response.path("items").get(0).path("id").asText());
+        assertEquals(read(FEED + "?ticId=" + tic + "&size=20"), response);
+        String cursor = read(FEED + "?ticId=" + tic + "&board=STAR&size=1").path("nextCursor").asText();
+        assertEquals(read(FEED + "?ticId=" + tic + "&size=1").path("nextCursor").asText(), cursor);
+        for (String board : List.of("", "&board=STAR")) {
+            var next = read(FEED + "?ticId=" + tic + board + "&size=1&cursor=" + cursor);
+            assertEquals("p-" + first, next.path("items").get(0).path("id").asText());
+            assertFalse(next.path("hasNext").asBoolean());
+        }
+        for (String query : List.of("board=STAR", "board=FREE", "ticId=" + tic + "&board=FREE",
+                "ticId=" + tic + "&board=", "ticId=" + tic + "&board=star",
+                "ticId=" + tic + "&board=STAR&board=STAR", "ticId=" + tic + "&board=STAR&q=x"))
+            mvc.perform(get(FEED + "?" + query).session(session(member))).andExpect(status().isBadRequest());
+        jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic);
+        mvc.perform(get(FEED + "?ticId=" + tic + "&board=STAR&size=20").session(session(member)))
+                .andExpect(status().isNotFound());
+    }
+
     @Test void 미지원검색_빈값_중복_잘못된커서와범위_인증거절() throws Exception {
         var p = publications.publish(member, submit(3)); post(tic, "visible");
         String cursor = read(FEED + "?ticId=" + tic + "&size=1").path("nextCursor").asText();

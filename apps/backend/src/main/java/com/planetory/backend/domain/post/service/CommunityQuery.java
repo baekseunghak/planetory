@@ -13,8 +13,10 @@ import org.springframework.util.MultiValueMap;
 public record CommunityQuery(String scope, Long target, String judgment, int size,
                              OffsetDateTime afterAt, Long afterId) {
     public static CommunityQuery feed(MultiValueMap<String, String> params) {
-        only(params, Set.of("ticId", "size", "cursor"));
+        only(params, Set.of("ticId", "board", "size", "cursor"));
         Long tic = params.containsKey("ticId") ? positive(params.getFirst("ticId")) : null;
+        // 특정 별 경로의 프론트가 붙이는 중복 범위만 허용한다. 커서는 ticId 단독과 같다.
+        if (params.containsKey("board") && (tic == null || !"STAR".equals(params.getFirst("board")))) throw invalid();
         return page("feed-v1", tic, "", params);
     }
 

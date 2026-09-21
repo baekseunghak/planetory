@@ -232,10 +232,12 @@ if (response.status === 401) {
 
 ### 4.1 피드 검색
 
-**164 구현 범위:** `GET /api/v1/community/feed`는 조건 없는 전체 피드와 `ticId`별 피드, `size`·`cursor`를 제공한다. 아래 검색 목표 계약은 169 범위다. 현재 `q/searchIn/author/board/tag` 및 다른 미지원 쿼리를 보내면 무시하지 않고 400 `VALIDATION_FAILED`로 반환한다. 핫 토픽·팔로우도 이 경로에 포함하지 않는다.
+**164 구현 범위:** `GET /api/v1/community/feed`는 조건 없는 전체 피드와 `ticId`별 피드, `size`·`cursor`를 제공한다. 특정 별 경로의 프론트가 보내는 `ticId=259377017&board=STAR&size=20`도 기본 별 조회로 허용한다. 이때 `board=STAR`는 TIC에 이미 포함된 범위이므로 생략과 같은 의미다. 프론트 운영 코드 변경 없이 이 서버 수정이 배포된 시점부터 연결할 수 있다. 아래 검색 목표 계약은 169 범위다. 현재 `q/searchIn/author/tag` 및 다른 미지원 쿼리는 400 `VALIDATION_FAILED`로 반환한다. 핫 토픽·팔로우도 이 경로에 포함하지 않는다.
+
+**연결 가능한 화면:** 검색 조건 없는 전체 피드와 특정 TIC 게시판 기본 목록이다. **169 연결 전 사용 불가:** TIC 없는 ‘별 게시판’(`board=STAR`)·‘자유 게시판’(`board=FREE`) 탭과 검색어·작성자·태그를 사용한 검색 결과 화면이다. 이 요청들은 현재 400이며, 성공한 빈 목록으로 처리하지 않는다. `ticId + board=FREE`, 빈 값·잘못된 board·중복 board도 400이다.
 
 - 모든 쿼리 키는 한 번만 허용한다. 빈 값·미지의 키·중복 키는 400이다. `ticId`는 선행 0 없는 양의 signed-64-bit 십진 문자열, `size`는 1~100(생략 시 20)이다.
-- `cursor`는 서버 응답을 그대로 전달한다. 피드 경로·TIC 범위·최신순 정렬 버전·size에 묶으며 다른 범위·크기·공개 분석 경로의 커서와 비정상 형식은 400이다. PostgreSQL 마이크로초 시각과 실제 숫자 posts.id를 보존한다. 접두 문자열로 정렬하지 않는다.
+- `cursor`는 서버 응답을 그대로 전달한다. 피드 경로·TIC 범위·최신순 정렬 버전·size에 묶으며 다른 범위·크기·공개 분석 경로의 커서와 비정상 형식은 400이다. 같은 TIC·size에서 `board=STAR`의 추가/생략은 범위가 같아 커서를 서로 재사용할 수 있다. PostgreSQL 마이크로초 시각과 실제 숫자 posts.id를 보존한다. 접두 문자열로 정렬하지 않는다.
 - 전체 피드는 visible 일반 글과 공식 스레드를 포함한다. 별 연결 항목은 해당 별이 공개 상태이며 누군가 최초 발견한 경우만 포함한다. 지정한 별이 닫혀 있으면 404 `STAR_NOT_PUBLISHED`, 접근 가능한 별의 결과가 없으면 200 빈 목록이다. 열람 회원 자신의 별 발견·개인 분석 잠금은 요구하지 않는다.
 - 응답은 `items/nextCursor/hasNext`이며 `Cache-Control: no-store`다. POST의 `judgmentSummary`는 null, SIGNAL_THREAD는 기존 `publicJudgmentSummary` 응답 전체(`kind/candidateId/participantCount/likelyPlanet/unlikelyPlanet/unsure/percentages/asOf`)다. 일반 글 반응 합계는 상세 API 계약을 따른다.
 - 한 피드 응답의 목록·댓글 수·공개 판단 집계는 같은 REPEATABLE_READ 스냅샷에서 읽는다. 다음 페이지 요청은 새 상태를 보며 새 글·숨김·삭제로 페이지 간 고정 스냅샷을 보장하지 않는다. 마지막 항목이 삭제돼도 커서 위치는 유지한다.
