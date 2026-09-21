@@ -272,27 +272,21 @@ function statistics(disposition: Disposition, empty: boolean) {
   };
 }
 
-/**
- * 6.7절 상세 보기. 오답 분기에서 대상 신호를 드러낸다.
- *
- * 미확정 후보의 설명에는 **「정답」이라는 표현을 쓰지 않는다.** 아직 확정되지
- * 않은 것을 확정처럼 말하게 된다.
- */
-const EXPLANATION: Record<Disposition, string> = {
-  CONFIRMED:
-    "확정된 행성 신호입니다. 통과 깊이가 일정하고 2차 식이 나타나지 않습니다.",
-  UNCONFIRMED:
-    "아직 확정되지 않은 후보입니다. 통과는 반복되지만 깊이가 얕아 추가 관측이 필요합니다.",
-  FP: "식쌍성 신호입니다. 통과가 깊고 홀짝 깊이가 다르며 2차 식이 뚜렷합니다.",
-};
-
 /** 미매칭·더 없음에 주는 힌트. 그 단계에서 가장 power가 높은 후보 하나다. */
 const HINT_PEAK = 3600;
 
+/**
+ * 6.7절 상세 보기. 오답 분기에서 대상 신호를 드러낸다.
+ *
+ * 해설 문장은 두지 않는다. 서버에 그 문장을 만들 곳이 없어 늘 null이며, 개발용
+ * 응답이 지어내면 화면이 서버에 없는 모양으로 자란다.
+ */
 export function detailOutcome(stored: {
   matchStatus: string;
   candidateId: string | null;
   evaluation: string | null;
+  /** 개발 전용 헤더. `explained`일 때만 해설이 채워진 응답을 흉내 낸다. */
+  outcome?: string | null;
 }) {
   // 대상이 없으면 409다. 열람 기록도 바뀌지 않는다.
   if (
@@ -338,7 +332,16 @@ export function detailOutcome(stored: {
         ...item,
         fetchedOn: "2026-09-01",
       })),
-      explanation: EXPLANATION[signal.disposition],
+      // 서버는 이 문장을 만들 곳이 없어 늘 null을 보낸다(6.7절). 개발용 응답이 지어내면
+      // 화면이 서버에 없는 모양으로 자란다. 기본값은 그래서 null이다.
+      //
+      // 서버가 채우기 시작하는 날 가장 먼저 필요한 검사가 「오면 그대로 보여준다」라
+      // 개발 전용 `explained` 사례 하나만 문장을 들고 있게 둔다. 이 사례는 클릭으로
+      // 만들 수 없고 헤더로만 켜지므로 기본 응답은 그대로 서버와 같다.
+      explanation:
+        stored.outcome === "explained"
+          ? "가려진 시간이 길고 깊이가 커 식쌍성으로 보입니다."
+          : null,
     },
     // 매칭한 제출에만 일치 여부를 준다(RES-02). 채점하지 않았으면 null이다.
     userJudgmentAgrees: !matched

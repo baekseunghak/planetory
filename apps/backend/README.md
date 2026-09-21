@@ -6,6 +6,8 @@ PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcCl
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
+S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.
+
 ## 빠른 시작
 
 준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
@@ -112,5 +114,9 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
 
 출처 카드(167)는 같은 별의 공식 스레드·공개 분석 미리보기와 글·댓글 연결을 제공한다. 취소·숨김된 기존 출처는 ID 없는 안내만 반환하며 본문 수정에서 보존한다. [서비스 API 5~7장](docs/service-api-spec.md#attachments), [V18 권한](docs/development-setup.md#v18-출처-관계-권한)을 따른다. `SourceCardTest`는 일회용 PostgreSQL에서 HTTP·공개 상태·동일 스냅샷·교체 및 삭제 경합·최소 앱 권한·성과 비변경을 검증한다.
+
+핫 토픽(171)은 [서비스 API 4.2절](docs/service-api-spec.md#42-핫-토픽)에 따라 현재 유효 참여자 10명 이상 공식 스레드를 전역 순위와 전용 커서로 제공한다. 위 164 구현 당시의 후속 범위 중 171을 구현했다. `./gradlew -PskipLocalDb test --tests '*HotTopicsTest' --tests '*CommunityReadTest' --tests '*PublicAnalysisTest'`는 일회용 PostgreSQL에서 선정·공개 철회·커서·동일 스냅샷·앱 역할 및 기존 조회·공개 회귀를 검증한다. 새 테이블·마이그레이션은 없고 실제 프론트 브라우저 인수는 별도다.
+
+171 리뷰 보완: 댓글 수는 선정 SQL에서 함께 조회하며 항목별 추가 왕복을 하지 않는다. 선정과 커서의 임계값은 `HotTopicsQuery.HOT_TOPIC_MIN_PARTICIPANTS`를 공유한다. 합성 스레드 100개 테스트의 실행 계획 출력은 측정 자료이며 특정 인덱스 사용을 보장하는 검사가 아니다. 해당 SQL 측정 시간은 항목별 판단 요약을 포함한 전체 API 응답 시간이 아니다.
 
 현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.

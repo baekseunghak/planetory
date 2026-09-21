@@ -54,9 +54,9 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
+        // V16 이후 제출 상세 V17과 출처 권한 V18을 순서대로 적용한다.
         var applied = upgraded.migrate();
-        assertEquals(1, applied.migrations.stream().filter(m -> "18".equals(m.version)).count());
-        assertTrue(applied.migrations.stream().allMatch(m -> List.of("17", "18").contains(m.version))); // V17 제출 상세 + V18 출처
+        assertEquals(List.of("17", "18"), applied.migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")

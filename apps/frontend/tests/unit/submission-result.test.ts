@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readResultExplanation } from "../../src/features/analysis/submission-result";
+import {
+  decodeDetailView,
+  readResultExplanation,
+} from "../../src/features/analysis/submission-result";
 import type { MatchStatus } from "../../src/features/analysis/submission-data";
 
 // 여섯 축을 각각 읽고 서로 추측하지 않는지 본다. 한 축이 비었다고 다른 축을
@@ -373,5 +376,56 @@ test("a duplicate keeps the correction it was found with", () => {
         "not_matched",
       ),
     /match.harmonicMultiplier/,
+  );
+});
+
+/** 6.7절 상세 보기의 최소 신호. 해설만 사례마다 바꾼다. */
+const detailSignal = {
+  candidateId: "c-402",
+  disposition: "FP",
+  answerClass: "graded",
+  planetTruth: "not_planet",
+  bls: {
+    periodDays: 11.7,
+    epochBtjd: 1743.3,
+    durationHours: 2.4,
+    depthPpm: 8000,
+    sde: null,
+    snr: null,
+  },
+  ai: { status: "not_evaluated", modelVersion: "m-1" },
+  external: [],
+};
+
+test("상세 보기의 해설은 키가 있고 값이 없을 수 있다", () => {
+  const body = (explanation: unknown) => ({
+    submissionId: "sub-1",
+    answerViewed: true,
+    targetKind: "CURRENT_CURVE_HINT",
+    signal: { ...detailSignal, explanation },
+    userJudgmentAgrees: null,
+    tutorial: { seq: null, skipAvailable: false },
+  });
+
+  // 서버는 지금 늘 null을 보낸다(6.7절).
+  assert.equal(
+    decodeDetailView(body(null), { submissionId: "sub-1" }).signal.explanation,
+    null,
+  );
+  assert.equal(
+    decodeDetailView(body("식쌍성 신호입니다."), { submissionId: "sub-1" })
+      .signal.explanation,
+    "식쌍성 신호입니다.",
+  );
+  // 키가 없으면 「해설 없음」이 아니라 모르는 응답이다.
+  const missing = body(null) as { signal: Record<string, unknown> };
+  delete missing.signal.explanation;
+  assert.throws(
+    () => decodeDetailView(missing, { submissionId: "sub-1" }),
+    /signal.explanation/,
+  );
+  assert.throws(
+    () => decodeDetailView(body(3), { submissionId: "sub-1" }),
+    /signal.explanation/,
   );
 });
