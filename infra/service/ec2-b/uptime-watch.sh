@@ -31,7 +31,9 @@ probe() {
     return $?
   fi
 
-  _code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time "$TIMEOUT" "$URL" 2>/dev/null || echo 000)
+  # curl은 실패해도 -w로 코드를 찍는다(도달 실패는 000). 여기서 또 찍으면 코드가 겹친다.
+  _code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time "$TIMEOUT" "$URL" 2>/dev/null) || true
+  [ -n "$_code" ] || _code=000
   printf 'http:%s' "$_code"
   case "$_code" in
     2??|3??) return 0 ;;
