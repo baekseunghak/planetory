@@ -112,6 +112,21 @@ class ResidualJobControllerTest {
                 .andExpect(jsonPath("$.activeJobId").value("rj-70"));
     }
 
+    /** 503도 본문에 추가 필드를 싣는다. 화면이 재시도를 낼지 이 값으로 가른다(S15P21C206-249). */
+    @Test
+    void 계산_기반_거절은_503에_재시도_가능_여부가_실린다() throws Exception {
+        when(jobs.request(anyLong(), anyLong(), any())).thenThrow(new BusinessException(
+                ErrorCode.DEPENDENCY_UNAVAILABLE, "잔차 계산 기능이 아직 준비되지 않았습니다.",
+                List.of(), Map.of("retryable", false)));
+
+        mockMvc.perform(post("/api/v1/stars/123456789/residual-jobs")
+                        .contentType("application/json").content(BODY))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value("잔차 계산 기능이 아직 준비되지 않았습니다."))
+                .andExpect(jsonPath("$.retryable").value(false));
+    }
+
     @Test
     void 상태_조회는_단계와_시각을_주고_없는_작업은_404다() throws Exception {
         OffsetDateTime at = OffsetDateTime.parse("2026-09-20T02:30:15Z");

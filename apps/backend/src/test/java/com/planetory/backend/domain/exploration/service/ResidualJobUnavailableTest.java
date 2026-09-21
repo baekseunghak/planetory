@@ -1,6 +1,7 @@
 package com.planetory.backend.domain.exploration.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -108,8 +109,11 @@ class ResidualJobUnavailableTest {
                 () -> jobs.request(member, ticId, request));
 
         assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, refused.getErrorCode());
-        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE.getDefaultMessage(), refused.getMessage(),
-                "화면이 이 문구를 그대로 보여 준다. 연결 상태는 내부 사정이라 적지 않는다");
+        assertEquals(Map.of("retryable", false), refused.getDetails(),
+                "다시 요청해도 같은 결과다. 화면은 이 값으로 재시도를 낼지 정한다");
+        assertFalse(refused.getMessage().contains("다시 시도"),
+                "화면이 이 문구를 그대로 보여 준다. 재시도를 권하지 않는 자리라 권하는 말을 쓰지 않는다");
+        assertFalse(refused.getMessage().isBlank());
         assertTrue(store.active(ResidualJobStore.cacheKey(ticId, target)).isEmpty(), "작업을 만들지 않는다");
         // 조회도 가짜 상태를 만들지 않는다(D-14).
         ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target);
