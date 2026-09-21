@@ -433,6 +433,7 @@ class QuestPanelTest {
             assertEquals(year + "-01-07", response.get("round").get("endsOn").asText());
             assertEquals(3, response.get("round").get("roundNo").asInt());
             assertEquals("얕은 별에서 두 번째 신호 찾기", response.get("round").get("description").asText());
+            assertTrue(response.get("participantCount").isIntegralNumber());
             assertEquals(0, response.get("participantCount").asInt());
         }
     }
@@ -487,7 +488,9 @@ class QuestPanelTest {
     }
 
     private void assertParticipants(long member, int expected) throws Exception {
-        assertEquals(expected, current(member).get("participantCount").asInt());
+        var count = current(member).get("participantCount");
+        assertTrue(count.isIntegralNumber());
+        assertEquals(expected, count.asInt());
         assertEquals(expected, quests.quests(member).challenge().participantCount());
     }
 
@@ -498,10 +501,18 @@ class QuestPanelTest {
         session.setAttribute("SPRING_SECURITY_CONTEXT", context);
         session.setAttribute(com.planetory.backend.domain.auth.service.AuthSessionService.class.getName()
                 + ".lastActivity", java.time.Instant.now());
-        return json.readTree(mvc.perform(get("/api/v1/challenges/current").session(session))
+        var response = json.readTree(mvc.perform(get("/api/v1/challenges/current").session(session))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
                 .andReturn().getResponse().getContentAsString());
+        var panel = quests.quests(member).challenge();
+        assertEquals(panel.eligible(), response.get("eligible").asBoolean());
+        if (panel.round() == null) {
+            assertTrue(response.get("round").isNull());
+        } else {
+            assertEquals(panel.round().roundId(), response.get("round").get("roundId").asText());
+        }
+        return response;
     }
 
     private java.util.Map<String, String> databaseSnapshot() {

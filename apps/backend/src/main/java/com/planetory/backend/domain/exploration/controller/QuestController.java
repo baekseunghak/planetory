@@ -1,8 +1,8 @@
 package com.planetory.backend.domain.exploration.controller;
 
 import com.planetory.backend.domain.exploration.service.QuestService;
-import com.planetory.backend.domain.exploration.service.QuestViews.Quests;
 import com.planetory.backend.domain.exploration.service.QuestViews.CurrentChallenge;
+import com.planetory.backend.domain.exploration.service.QuestViews.Quests;
 import com.planetory.backend.global.security.MemberPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 퀘스트 패널 (탐사 API 4.3) [S15P21C206-139]. */
+/** 퀘스트 패널(탐사 API 4.3)·현재 챌린지(서비스 API 11장) [S15P21C206-139, S15P21C206-168]. */
 @RestController
 @RequiredArgsConstructor
 public class QuestController {
