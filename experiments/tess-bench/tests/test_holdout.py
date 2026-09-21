@@ -57,6 +57,12 @@ def test_cli_writes_holdout_manifest_without_running_science(monkeypatch, tmp_pa
     """Exercise actual CLI CSV/manifest writer; mock computation, never evaluate holdout."""
     args = args_for(target)
     args.results = tmp_path
+    # This test exercises the writer with synthetic inputs, not the historical
+    # holdout execution. Validate a temporary snapshot with the real validator.
+    lock = tmp_path / "synthetic-lock.json"
+    lock.write_text(json.dumps(ho.build_lock()), encoding="utf-8")
+    validate = ho.validate_lock
+    monkeypatch.setattr(ho, "validate_lock", lambda: validate(lock))
     cfg, _ = bls.load_bls_settings(args.settings, args.only)
     strict = SimpleNamespace(time=np.array([1., 28.]), sectors=target.sectors, n_valid=2)
     baseline_keys = ["realclean", *[f"noise{s}" for s in ho.SEEDS]]
