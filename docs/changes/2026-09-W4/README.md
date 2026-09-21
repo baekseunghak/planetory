@@ -62,3 +62,4 @@
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
 | 2026-09-21 | 122 반복 탐색·QA·후보 ID 연결 | S15P21C206-122 | iteration, rollback, candidate_catalog, BIGINT, 보류, removal_step, 170 passed | 구현·로컬 검증·리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 122 Publisher 필드별 인계 보완 | S15P21C206-122 | is_confirmed, 116·124, SDE/SNR Silver 진단, 열 투영, alias 책임 | 문서 보완·재확인 대기 | [기록](2026-09-21.md) |

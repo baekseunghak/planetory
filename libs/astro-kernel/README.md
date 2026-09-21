@@ -511,6 +511,33 @@ DB에서 할당·예약한 bigint를 `new_candidate_ids={peak_id: candidate_id}`
 123의 제공 해상도 discoverable·125의 Gold 검증·Publisher의 원자적 current 전환이 남는다.
 `discoverable`을 SNR에서 추정하거나 이전 활성 후보의 값을 그대로 복사하지 않는다.
 
+#### Publisher 필드별 인계 (122 소비자 리뷰 보완)
+
+`proposed_candidates`는 Silver 진단을 포함하는 **변경안이지 DB 행이 아니다**.
+125의 Gold 직렬화와 Publisher는 아래 책임으로 필수 값을 보완하고, 현재 스키마에 실제로
+있는 열만 명시적으로 선택·매핑해 적재한다. 전체 dict를 INSERT 인자로 전달하지 않는다.
+`downstream_required`는 후속 단계 표시이며 필수 DB 열의 완전한 목록이 아니다.
+
+| 값 | 생성·검증 책임 | DB 적재 시 처리 |
+| --- | --- | --- |
+| `candidate_id`, 모델·주기·깊이·`removal_step` 등 | 122 후보 변경안 | `candidate_id`를 `candidates.id`로 매핑하고 실제 열만 선택한다. 모델 ID는 `c-<id>`를 유지한다. |
+| `discoverable` | 123의 제공 해상도 판정 | 125가 판정 결과를 검증한 뒤 Publisher가 필수 boolean을 적재한다. |
+| `is_confirmed` | **116(D08) 외부 매칭 계약에 따른 124 외부 카탈로그 조인·라벨 처리** | 내부 후보 ID에 연결된 외부 확정 여부를 124가 제공하고 125가 검증하며 Publisher가 NOT NULL boolean으로 적재한다. 113은 모델 계약이며 외부 라벨 담당이 아니다. 미실행·실패·누락을 임의의 false로 채우지 않고 공개를 보류한다. 미매칭·상충 라벨 해석은 116 계약을 따른다. |
+| `sde`, `snr` | 122 품질 게이트·Silver 진단 | **현행 candidates DB에 보존하지 않는다.** Silver 실행·검증 결과에서 보존하며 이번 MR에 열 추가 계획·마이그레이션은 없다. 145 상세 API의 null을 0이나 이 진단 값으로 바꾸지 않는다. |
+| `peak_id`, `step`, `original_snr`, `validated_on_original`, `search_diagnostics` 등 | 원시 기록·원본 재검증·추적용 Silver 진단 | candidates 열이 아니므로 DB 행 투영에서 제외한다. `step`은 122가 명시적으로 만든 `removal_step` 열을 사용한다. |
+
+필드·DB 열 정본은 [서비스 ERD](../../docs/architecture/database-erd.md),
+단계 소유권은 [후속 Task 계획](../../docs/project/tess-processing-ai-task-plan.md)의 116·124·125를 따른다.
+122의 `catalog_ready=true`만으로 `discoverable`·`is_confirmed`가 채워졌다고 판단하지 않는다.
+향후 SDE/SNR의 Gold 저장이 필요해지면 별도 스키마·API 계약 변경으로 검토한다.
+
+**candidate_aliases의 책임도 구분한다.** 별칭 관계의 과학적 판정 규칙은 112, 승인된 규칙에
+따라 신규 확정 alias를 계산·출력하는 배치 책임은 122, Gold 직렬화·검증은 125,
+실제 테이블 쓰기는 Publisher(김동혁 담당)다. Backend나 외부 라벨 조인 124가 추정해 채우지 않는다.
+현재 v3는 자동 확정 규칙을 채택하지 않았으므로 **이번 122에서 새로 채울 alias는 없다**.
+기존 확정 행은 보존하고 의심 배율은 Silver 검토 근거로만 남긴다. 향후 신규 생성은
+112 규칙 승인과 122 구현·검증을 거쳐야 하며, 이 인계는 자동 병합 구현 완료 선언이 아니다.
+
 QA 실패·상한 도달·원본 재검증 실패, 일대다/다대일·고조파 의심은 ID 변경 전체를 보류하고
 기존 후보·alias를 유지한다. retired ID와 새 후보의 관계가 다시 의심되면 자동 재활성하지 않고
 검토 대상으로 남긴다. 완전 종료했더라도 후보 0개인 별은 무신호 별 공개 제외 정책에 따라
