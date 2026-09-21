@@ -51,7 +51,12 @@ export const readScenario = (value: unknown): SubmissionScenario | null =>
  * 조합에는 쓰지 않는다.** 화면에서 클릭으로 재현되지 않는 셋만 여기서 만든다.
  */
 export const SUBMISSION_OUTCOME_HEADER = "x-fixture-outcome";
-const outcomes = ["duplicate", "ambiguous", "empty-statistics"] as const;
+const outcomes = [
+  "duplicate",
+  "ambiguous",
+  "empty-statistics",
+  "explained",
+] as const;
 export type SubmissionOutcomeKind = (typeof outcomes)[number];
 export const readOutcome = (value: unknown): SubmissionOutcomeKind | null =>
   outcomes.find((item) => item === value) ?? null;
@@ -438,6 +443,7 @@ export function submissionFixtureResponse(options: {
         typeof match.candidateId === "string" ? match.candidateId : null,
       evaluation:
         typeof judgment?.evaluation === "string" ? judgment.evaluation : null,
+      outcome,
     });
     // 대상이 없으면 열람 기록도 바꾸지 않는다.
     if (!target)

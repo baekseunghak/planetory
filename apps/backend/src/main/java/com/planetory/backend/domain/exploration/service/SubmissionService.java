@@ -261,6 +261,20 @@ public class SubmissionService {
     private static AnalysisViews.CurveContext curveContext(SubmissionRequest.Context c) {
         return new AnalysisViews.CurveContext(c.bundleId(), c.curveStep(), c.removedCandidateIds(), c.residualModelVersion(), c.periodogramConfigVersion());
     }
+    /**
+     * 6.7절 상세 보기 응답의 튜토리얼 블록. 6.4절과 <b>같은 규칙</b>으로 센다.
+     *
+     * <p>건너뛰기는 「정답을 본 뒤」가 조건이라 상세 보기로 {@code answer_viewed}를 켠 다음에 세야 한다.
+     * 먼저 세면 방금 본 제출이 빠진다.
+     */
+    AnalysisViews.TutorialState tutorialState(long member, long tic) {
+        OperationRule rule = rules.findCurrent().orElseThrow(SubmissionService::unavailable);
+        Integer seq = tutorials.findActiveSeq(tic).orElse(null);
+        StarViews.Progress progress = stars.findProgress(member, tic).orElse(null);
+        return new AnalysisViews.TutorialState(seq,
+                progress != null && skipAvailable(member, tic, rule, seq, progress));
+    }
+
     private boolean skipAvailable(long member, long tic, OperationRule rule, Integer seq, StarViews.Progress progress) {
         if (seq == null || !rule.tutorial().skipEnabled() || "completed".equals(progress.stage()) || progress.completedAt() != null) return false;
         var failures = analysis.countMismatches(member, tic);
