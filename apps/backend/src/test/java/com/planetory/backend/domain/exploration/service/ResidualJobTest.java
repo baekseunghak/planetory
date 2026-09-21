@@ -62,10 +62,15 @@ class ResidualJobTest {
     /** 계산을 시작시키는 자리. 실제 실행은 Worker 어댑터가 채운다. */
     static class RecordingRunner implements ResidualComputeRunner {
         final List<ResidualJobStore.Job> started = Collections.synchronizedList(new ArrayList<>());
+        /** 워커 제출·실행기 등록이 동기로 실패하는 상황. */
+        volatile RuntimeException failure;
 
         @Override
         public void start(ResidualJobStore.Job job) {
             started.add(job);
+            if (failure != null) {
+                throw failure;
+            }
         }
     }
 
@@ -102,6 +107,7 @@ class ResidualJobTest {
         // 저장소는 인스턴스 안에 있어 테스트끼리 남는다. 상한 검사가 앞 테스트의 작업에 걸린다.
         store.clear();
         runner.started.clear();
+        runner.failure = null;
         member = insertMember();
         stranger = insertMember();
         ticId = insertStar("published");
@@ -313,6 +319,44 @@ class ResidualJobTest {
                 "화면은 이 값이 진입 때 받은 판과 다르면 5.1절을 다시 조회한다");
         assertEquals("b-" + currentBundleId, status(member, jobId).target().bundleId(),
                 "작업이 무엇을 계산 중인지는 그대로다");
+    }
+
+    /**
+     * 등록만 해 두고 시작하지 못하면 아무도 진행시키지 않는 작업이 남는다. 같은 목표의 재요청은 그
+     * 작업에 병합돼 실행기를 다시 부르지 않으므로 화면이 만료까지 기다리게 된다.
+     */
+    @Test
+    void 계산을_시작하지_못하면_기다리는_작업을_남기지_않는다() {
+        runner.failure = new IllegalStateException("워커 제출 실패");
+
+        BusinessException refused = assertThrows(BusinessException.class, () -> request(member, firstMatched));
+
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, refused.getErrorCode());
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE.getDefaultMessage(), refused.getMessage(),
+                "실행기 예외를 사용자에게 보여 주지 않는다");
+        assertEquals(1, runner.started.size());
+
+        ResidualJobStore.Job orphan = store.find(runner.started.getFirst().jobId()).orElseThrow();
+        assertEquals(ResidualJobStore.FAILED, orphan.status());
+        assertTrue(orphan.failure().retryable());
+        assertTrue(store.active(orphan.cacheKey()).isEmpty(), "병합 대상으로 남으면 재요청이 시작을 못 한다");
+
+        runner.failure = null;
+        JobAccepted retried = request(member, firstMatched);
+
+        assertNotEquals(orphan.jobId(), retried.jobId(), "끝난 작업에 붙이지 않고 새로 시작한다");
+        assertEquals(2, runner.started.size());
+    }
+
+    /** 2.1절. 서버가 정렬·중복 제거하므로 같은 후보를 두 번 보내도 한 번 보낸 것과 같은 목표다. */
+    @Test
+    void 같은_후보를_중복해_보내도_같은_작업이다() {
+        JobAccepted once = request(member, firstMatched);
+
+        JobAccepted twice = request(member, List.of(firstMatched, firstMatched));
+
+        assertEquals(once.jobId(), twice.jobId());
+        assertEquals(1, runner.started.size(), "중복 때문에 계산이 하나 더 돌지 않는다");
     }
 
     /** 순번은 폴링마다 다시 센다. 202에만 주면 화면에서 한 번 떴다 사라진다. */

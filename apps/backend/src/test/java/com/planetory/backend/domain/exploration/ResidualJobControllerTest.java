@@ -141,12 +141,17 @@ class ResidualJobControllerTest {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
-    /** 형식이 다른 TIC은 발견하지 않은 별과 같은 응답으로 덮는다. 500이 되지 않는다. */
+    /**
+     * 형식이 다른 TIC은 없는 별과 같은 응답으로 덮는다(2.3절). 500이 되지 않고, 5.2·6장과 코드도 같다 —
+     * 형식만 다른 코드로 갈라지면 그 차이로 별의 존재를 알 수 있다.
+     */
     @Test
-    void 형식이_다른_TIC은_403이다() throws Exception {
-        mockMvc.perform(post("/api/v1/stars/abc/residual-jobs")
-                        .contentType("application/json").content(BODY))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("STAR_LOCKED"));
+    void 형식이_다른_TIC은_404다() throws Exception {
+        for (String ticId : new String[] {"abc", "01", "-1"}) {
+            mockMvc.perform(post("/api/v1/stars/" + ticId + "/residual-jobs")
+                            .contentType("application/json").content(BODY))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("STAR_NOT_PUBLISHED"));
+        }
     }
 }
