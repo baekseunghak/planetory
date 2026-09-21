@@ -33,6 +33,18 @@ import com.planetory.backend.global.error.ErrorResponse.FieldError;
 @RequiredArgsConstructor
 public class ResidualJobService {
 
+    /** 503 본문에 더하는 필드. 다시 요청해서 달라질 수 있는 거절인지 알린다(7.1절). */
+    private static final String RETRYABLE = "retryable";
+
+    /**
+     * 계산 기반이 아직 없다는 안내 [S15P21C206-249].
+     *
+     * <p>기본 문구는 "잠시 후 다시 시도해 주세요"인데 지금은 다시 요청해도 같은 결과다. 화면은 이 거절에
+     * 재시도를 권하지 않으므로(S15P21C206-189) 기본 문구를 그대로 쓰면 문구와 화면이 어긋난다.
+     * 어떤 기반이 없는지는 내부 사정이라 적지 않는다.
+     */
+    private static final String NOT_CONNECTED = "잔차 계산 기능이 아직 준비되지 않았습니다.";
+
     private final AnalysisService analysis;
     private final ResidualJobStore store;
     private final ResidualJobProperties properties;
@@ -46,8 +58,8 @@ public class ResidualJobService {
      *
      * @throws BusinessException 미공개 {@code STAR_NOT_PUBLISHED}, 미발견 {@code STAR_LOCKED},
      *                           판 교체 {@code BUNDLE_CHANGED}, 목표 형식·조합 오류 {@code VALIDATION_FAILED},
-     *                           자리 없음 {@code RESIDUAL_QUEUE_FULL}, 계산 기반 미연결
-     *                           {@code DEPENDENCY_UNAVAILABLE}
+     *                           자리 없음 {@code RESIDUAL_QUEUE_FULL}, 계산 기반 미연결·시작 실패
+     *                           {@code DEPENDENCY_UNAVAILABLE}. 503 본문의 {@code retryable}이 둘을 가른다
      */
     public Answer<JobAccepted> request(long memberId, long ticId, JobRequest body) {
         CurveContext target = resolveTarget(memberId, ticId, body);
@@ -61,8 +73,9 @@ public class ResidualJobService {
         ResidualComputeRunner runner = runners.getIfAvailable();
         if (runner == null) {
             // 아무도 진행시키지 않을 작업을 만들지 않는다. 화면이 계산이 도는 줄 알게 된다.
-            // 연결 상태는 내부 사정이라 기본 문구를 그대로 쓴다. 화면이 이 말을 사용자에게 보여 준다.
-            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+            // 다시 요청해도 같은 결과라 retryable=false다. 화면은 이 문구를 그대로 보여 준다.
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE, NOT_CONNECTED, List.of(),
+                    Map.of(RETRYABLE, false));
         }
 
         Enqueued enqueued = store.enqueue(memberId, ticId, target, cacheKey);
@@ -113,7 +126,8 @@ public class ResidualJobService {
      * 재요청은 그 작업에 병합돼 실행기를 다시 부르지 않으므로, 화면은 오지 않을 결과를 만료까지
      * 기다린다. 실패로 끝내면 병합 대상에서 빠져 다음 요청이 새로 시작한다.
      *
-     * <p>회원에게는 실행기의 예외를 보이지 않는다. 화면이 할 일은 잠시 뒤 다시 요청하는 것뿐이다.
+     * <p>회원에게는 실행기의 예외를 보이지 않는다. 화면이 할 일은 잠시 뒤 다시 요청하는 것뿐이라
+     * {@code retryable=true}로 알린다. 미연결과 같은 503이지만 화면의 할 일이 반대다.
      */
     private void start(ResidualComputeRunner runner, Job job) {
         try {
@@ -122,7 +136,7 @@ public class ResidualJobService {
             log.warn("잔차 작업 {}의 계산을 시작하지 못해 실패로 끝냅니다.", job.jobId(), e);
             store.fail(job.jobId(), job.attempt(), new ResidualJobStore.Failure(ResidualJobStore.QUEUED,
                     "START_FAILED", "계산을 시작하지 못했습니다.", true));
-            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+            throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE, Map.of(RETRYABLE, true));
         }
     }
 

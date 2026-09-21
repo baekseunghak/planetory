@@ -13,6 +13,9 @@ import {
 } from "./ProfileSlots";
 import { UsageGuide } from "./UsageGuide";
 import "./profile.css";
+import { MySkyPreview } from "../sky-data/MySkyPreview";
+import { FollowButton, FollowSummary } from "../follow/Follow";
+import { p1Enabled } from "../p1";
 export function MyProfilePage() {
   const { member } = useSession();
   return member ? (
@@ -46,12 +49,23 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
     <section className="profile-page">
       <header className="profile-heading">
         <p className="eyebrow">{own ? "MY OBSERVATORY" : "EXPLORER PROFILE"}</p>
-        <h1>{profile?.nickname ?? (own ? "나의 탐사" : "탐사자 프로필")}</h1>
-        <p>
-          {own
-            ? "차곡차곡 쌓인 발견과 관측의 기록"
-            : "이 탐사자가 공개한 발견을 살펴보세요."}
-        </p>
+        <h1>{own ? "마이페이지" : "탐사자 프로필"}</h1>
+      </header>
+      <div className="profile-identity">
+        <span className="profile-avatar" aria-hidden="true">
+          {(profile?.nickname ?? (own ? member?.nickname : null) ?? "P").slice(
+            0,
+            1,
+          )}
+        </span>
+        <div>
+          <h2>{profile?.nickname ?? (own ? "나의 탐사" : "탐사자")}</h2>
+          <p>
+            {own
+              ? "차곡차곡 쌓인 발견과 관측의 기록"
+              : "이 탐사자가 공개한 발견을 살펴보세요."}
+          </p>
+        </div>
         {own && (
           <div className="profile-actions">
             <NicknameEditor
@@ -62,7 +76,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
             <UsageGuide />
           </div>
         )}
-      </header>
+      </div>
       {!profile ? (
         state.error ? (
           <ErrorState error={state.error} retry={state.reload} />
@@ -71,6 +85,21 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         )
       ) : (
         <>
+          {p1Enabled && (
+            <>
+              <FollowSummary memberId={memberId} own={own} />
+              {!own && (
+                <FollowButton
+                  target={{
+                    kind: "MEMBER",
+                    id: memberId,
+                    label: profile.nickname,
+                  }}
+                />
+              )}
+            </>
+          )}
+          {section === "summary" && <Summary profile={profile} own={own} />}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
               [
@@ -98,9 +127,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
-          {section === "summary" ? (
-            <Summary profile={profile} own={own} />
-          ) : (
+          {section !== "summary" && (
             <ProfileSection
               section={section}
               memberId={memberId}
@@ -117,6 +144,26 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
   const s = profile.achievementSummary;
   return (
     <>
+      <div
+        className={
+          own ? "profile-collection" : "profile-collection public-profile"
+        }
+      >
+        {own && <MySkyPreview />}
+        <section className="profile-grades">
+          <p className="eyebrow">YOUR DISCOVERIES</p>
+          <h2>성과를 쌓은 별</h2>
+          <p>한 별에서 인정받은 성과가 쌓일수록 등급이 올라갑니다.</p>
+          <dl>
+            {Object.entries(s.starCountByGrade).map(([grade, count]) => (
+              <div key={grade}>
+                <dt>{grade}</dt>
+                <dd>{count.toLocaleString()}개</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      </div>
       <dl className="profile-summary">
         {own && (
           <>
@@ -144,18 +191,6 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
           </dd>
         </div>
       </dl>
-      <section className="profile-grades">
-        <h2>성과를 쌓은 별</h2>
-        <p>서버가 집계한 별의 등급별 수입니다.</p>
-        <dl>
-          {Object.entries(s.starCountByGrade).map(([grade, count]) => (
-            <div key={grade}>
-              <dt>{grade}</dt>
-              <dd>{count.toLocaleString()}개</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
       {own ? (
         <dl className="profile-meta">
           <dt>가입일 (한국 시간)</dt>

@@ -26,6 +26,24 @@ export const RESIDUAL_FIXTURE_HEADER = "x-fixture-residual";
 export type ResidualScenario =
   // 이 목표의 계산이 실패한다. 마지막 정상 곡선은 유지돼야 한다.
   | "fail"
+  // 다시 시도해도 같은 실패다(`failure.retryable: false`).
+  | "fail-permanent"
+  // 잔차 계산 기반이 아직 연결되지 않았다. 다시 요청해도 같은 결과라
+  // 503 본문이 `retryable: false`다(7.1절).
+  | "unavailable"
+  // 실행기를 시작하지 못했다. 같은 503이지만 **화면이 할 일이 반대**라
+  // `retryable: true`다. 서버는 그 작업을 `START_FAILED`로 끝낸다.
+  | "start-failed"
+  // `retryable`을 싣지 않는 503. `S15P21C206-249` 전의 서버이며, 화면이
+  // 필드를 읽기 시작했는데 서버가 아직 안 보내는 **배포 순서의 창**이다.
+  // 88이 붙어 서버가 늘 필드를 실으면 지운다.
+  | "unavailable-legacy"
+  // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
+  | "plate-changed"
+  // 캐시를 건너뛰고 매번 새로 계산한다. **검사 전용**이다. 목표를 몰래
+  // 바꿔 캐시를 피하면 서버가 돌려주는 문맥과 화면이 들고 있는 목표가
+  // 달라져, 실제로는 일어날 수 없는 상태가 만들어진다.
+  | "fresh"
   // 대기열이 찼다. 기다리는 안내다.
   | "queue-full"
   // 같은 회원의 다른 작업이 진행 중이다(D-4). 무엇이 막는지 알려야 한다.
@@ -36,6 +54,17 @@ export type ResidualScenario =
   | "lose-job";
 const scenarios: ResidualScenario[] = [
   "fail",
+  // 다시 시도해도 같은 실패. 7.2절 `failure.retryable: false`다.
+  "fail-permanent",
+  // 잔차 계산 기반이 아직 연결되지 않았다(`retryable: false`).
+  "unavailable",
+  // 실행기 시작 실패. 같은 503이지만 다시 요청하는 것이 맞다(`retryable: true`).
+  "start-failed",
+  // 249 전의 서버. 503에 `retryable`이 없다 — 화면은 참으로 읽어야 한다.
+  "unavailable-legacy",
+  // 계산이 도는 동안 판이 바뀐다. 폴링 응답 헤더로만 드러난다(D-5).
+  "plate-changed",
+  "fresh",
   "queue-full",
   "other-job",
   "bundle-changed",
@@ -52,6 +81,10 @@ type Job = {
   /** 다음 조회에서 내놓을 단계. FLOW의 색인이다. */
   step: number;
   fail: boolean;
+  /** 다시 시도해도 같은 실패다. `failure.retryable: false`로 나간다. */
+  permanent?: boolean;
+  /** 폴링 응답에 다른 판을 실어 계산 도중 교체를 흉내 낸다. */
+  plateChanged?: boolean;
   /** 다음 조회에서 사라진다. 한 목표당 한 번만이다. */
   lose: boolean;
   attempt: number;
@@ -128,14 +161,46 @@ const resultContext = (target: ResidualTarget) => ({
   periodogramConfigVersion: target.periodogramConfigVersion,
 });
 
-export type FixtureReply = { status: number; body: unknown };
+export type FixtureReply = {
+  status: number;
+  body: unknown;
+  /** D-5 현재 판 헤더. 주지 않으면 붙이지 않는다(= 모름). */
+  headers?: Record<string, string>;
+};
+/**
+ * 503 `DEPENDENCY_UNAVAILABLE`의 **정본 문구 두 개**를 비추는 값이다. 탐사 API
+ * 7.1절이 두 문장을 그대로 적고 「위 두 문장이 정본이다. 백엔드 검사와 프론트
+ * 개발용 응답이 같은 값을 들고 있으므로, 바꾸려면 이 줄과 양쪽을 한 번에
+ * 바꾼다」고 못박았다(`S15P21C206-249`).
+ *
+ * 화면은 이 `message`를 사용자에게 **그대로** 보여 준다. 그래서 여기에 코드
+ * 이름을 넣으면 화면 검사가 「실제로 무엇이 보이는지」를 한 번도 보지 못한다.
+ * 실제로 그렇게 눈이 멀어, 재시도 버튼을 숨겨 놓고 문구로는 다시 시도하라고
+ * 말하는 상태를 검사가 통과시켰다(`S15P21C206-147` 리뷰).
+ */
+export const DEPENDENCY_UNAVAILABLE_MESSAGE = {
+  /** 계산 기반 미연결. 다시 요청해도 같은 결과다(`retryable: false`). */
+  notConnected: "잔차 계산 기능이 아직 준비되지 않았습니다.",
+  /**
+   * 공통 기본 문구. `ErrorCode.DEPENDENCY_UNAVAILABLE`의 기본값과 같은 값이다.
+   *
+   * 두 곳이 쓴다 — **실행기 시작 실패**(`retryable: true`)가 이 문구를 쓰는 것이
+   * 맞고, `S15P21C206-249` **전의 서버는 미연결에도** 이 문구로 답했다
+   * (`unavailable-legacy`). 한쪽 이름을 붙이면 다른 쪽에서 거짓이 된다.
+   */
+  serverDefault: "일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+} as const;
+
 const fail = (
   status: number,
   code: string,
   extra: Record<string, unknown> = {},
+  // 문구를 주지 않은 실패는 코드 이름을 그대로 쓴다. 화면이 옮겨 보여 주는
+  // 자리에만 실제 문장을 준다 — 나머지는 개발용 응답임이 드러나는 편이 낫다.
+  message: string = code,
 ) => ({
   status,
-  body: { code, message: code, fieldErrors: [], ...extra },
+  body: { code, message, fieldErrors: [], ...extra },
 });
 
 /** 7.1절 요청. */
@@ -150,6 +215,30 @@ export function requestResidualJobFixture(options: {
   // 빈 배열은 원본이므로 작업이 아니다(7.1절).
   if (target.removedCandidateIds.length === 0)
     return fail(400, "VALIDATION_FAILED");
+  // 같은 코드·같은 상태지만 `retryable`이 화면의 할 일을 가른다(7.1절).
+  if (scenario === "unavailable")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      { retryable: false },
+      DEPENDENCY_UNAVAILABLE_MESSAGE.notConnected,
+    );
+  if (scenario === "start-failed")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      { retryable: true },
+      DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
+    );
+  // **필드를 싣지 않는다.** 249 전의 서버이고, 화면이 없는 값을 참으로 읽는지
+  // 보는 것이 이 시나리오의 전부다.
+  if (scenario === "unavailable-legacy")
+    return fail(
+      503,
+      "DEPENDENCY_UNAVAILABLE",
+      {},
+      DEPENDENCY_UNAVAILABLE_MESSAGE.serverDefault,
+    );
   if (scenario === "bundle-changed")
     return fail(409, "BUNDLE_CHANGED", { currentBundleId: "9007199254749999" });
   if (scenario === "queue-full")
@@ -161,7 +250,10 @@ export function requestResidualJobFixture(options: {
     });
 
   const key = cacheKey(ticId, target);
-  if (completed.has(key))
+  // **시나리오가 있으면 캐시를 쓰지 않는다.** 「이렇게 굴어라」는 지시이지
+  // 「저장된 것을 내놔라」가 아니다. 캐시가 지시를 덮으면 검사가 엉뚱한
+  // 경로를 본다.
+  if (completed.has(key) && scenario === null)
     return {
       status: 200,
       body: {
@@ -172,7 +264,7 @@ export function requestResidualJobFixture(options: {
       },
     };
   const existing = running.get(key);
-  if (existing)
+  if (existing && scenario === null)
     // 같은 키는 하나만 계산한다. 그 작업의 상태를 그대로 돌려준다.
     return {
       status: 202,
@@ -191,7 +283,9 @@ export function requestResidualJobFixture(options: {
     target,
     key,
     step: 0,
-    fail: scenario === "fail",
+    fail: scenario === "fail" || scenario === "fail-permanent",
+    permanent: scenario === "fail-permanent",
+    plateChanged: scenario === "plate-changed",
     lose: scenario === "lose-job" && !lostOnce.has(key),
     attempt: 1,
   };
@@ -258,11 +352,23 @@ export function pollResidualJobFixture(jobId: string): FixtureReply {
         completedAt: status === "COMPLETED" ? "2026-09-20T00:00:04Z" : null,
       },
       failure: failing
-        ? { code: "RESIDUAL_FAILED", message: "잔차 계산에 실패했습니다." }
+        ? {
+            code: "RESIDUAL_FAILED",
+            message: "잔차 계산에 실패했습니다.",
+            // 실제 서버가 함께 준다. 화면이 재시도를 낼지 여기서 갈린다.
+            retryable: job.permanent !== true,
+          }
         : null,
       resultCurveContext:
         status === "COMPLETED" ? resultContext(job.target) : null,
       pollAfterSeconds: 0,
+    },
+    // D-5. 판이 바뀌면 조회 시점의 현재 판이 실린다. 평소에는 진입 때와
+    // 같은 판이라 화면이 아무 일도 하지 않는다.
+    headers: {
+      "X-Current-Bundle": job.plateChanged
+        ? "9007199254749999"
+        : job.target.bundleId,
     },
   };
 }

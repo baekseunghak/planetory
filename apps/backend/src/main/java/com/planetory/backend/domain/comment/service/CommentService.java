@@ -3,6 +3,7 @@ package com.planetory.backend.domain.comment.service;
 import com.planetory.backend.domain.comment.entity.Comment;
 import com.planetory.backend.domain.comment.repository.CommentRepository;
 import com.planetory.backend.domain.member.service.MemberService;
+import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.domain.post.entity.Post;
 import com.planetory.backend.domain.post.repository.PostRepository;
 import com.planetory.backend.domain.post.service.HistoryAttachmentService;
@@ -30,6 +31,7 @@ public class CommentService {
     private final MemberService members;
     private final Clock clock;
     private final HistoryAttachmentService attachments;
+    private final StarService stars;
 
     public enum ParentType { POST, SIGNAL_THREAD }
     public record CreateCommand(ParentType parentType, long parentId, String body, List<String> historyIds) {}
@@ -127,6 +129,7 @@ public class CommentService {
         Post post = (lock ? posts.findByIdForUpdate(postId) : posts.findById(postId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (!visible(post) || typeOf(post) != type) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        if (post.getTicId() != null) stars.requireOpenStarBoard(post.getTicId());
         return post;
     }
 

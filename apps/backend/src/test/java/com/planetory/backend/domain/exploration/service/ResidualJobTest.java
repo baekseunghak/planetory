@@ -334,6 +334,8 @@ class ResidualJobTest {
         assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, refused.getErrorCode());
         assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE.getDefaultMessage(), refused.getMessage(),
                 "실행기 예외를 사용자에게 보여 주지 않는다");
+        assertEquals(Map.of("retryable", true), refused.getDetails(),
+                "미연결과 같은 503이지만 화면이 할 일은 반대다. 다시 요청하면 새 작업이 시작한다");
         assertEquals(1, runner.started.size());
 
         ResidualJobStore.Job orphan = store.find(runner.started.getFirst().jobId()).orElseThrow();

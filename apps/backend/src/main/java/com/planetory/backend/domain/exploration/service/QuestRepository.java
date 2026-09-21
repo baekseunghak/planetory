@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -72,10 +73,9 @@ public class QuestRepository {
         return jdbc.sql("""
                         SELECT count(DISTINCT pa.user_id)
                           FROM published_analyses pa
-                          JOIN posts thread ON thread.id = pa.post_id
-                         WHERE thread.tic_id = ? AND thread.kind = 'system_thread' AND thread.status = 'visible'
-                           AND pa.unpublished_at IS NULL AND pa.hidden_at IS NULL
-                        """)
+                          JOIN posts p ON p.id = pa.post_id
+                         WHERE p.tic_id = ? AND %s
+                        """.formatted(PublicAnalysisVisibility.VISIBLE))
                 .param(ticId).query(Integer.class).single();
     }
 

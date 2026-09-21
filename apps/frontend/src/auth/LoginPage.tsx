@@ -12,6 +12,8 @@ import {
   returnStorageKey,
 } from "./flow";
 import "./auth.css";
+import { GalaxyArtwork } from "../components/GalaxyArtwork";
+import "./auth-presentation.css";
 
 function savedReturn() {
   try {
@@ -194,27 +196,25 @@ export function LoginPage() {
     </div>
   );
   return (
-    <main className="auth-page">
+    <main className="auth-page auth-presentation">
       <section className="auth-universe" aria-label="Planetory 소개">
         <Link className="brand" to="/login">
           PLANETORY
         </Link>
-        <div className="auth-orbit" aria-hidden="true">
-          <i />
-          <i />
-          <i />
+        <div className="auth-galaxy">
+          <GalaxyArtwork decorative />
         </div>
         <div className="auth-intro">
-          <p className="eyebrow">YOUR NEXT DISCOVERY</p>
+          <p className="eyebrow">A UNIVERSE OF YOUR OWN</p>
           <h1>
-            당신의 발견으로
+            나의 발견으로
             <br />
-            넓어지는 우주.
+            채워지는 밤하늘
           </h1>
           <p>
-            별빛 속 작은 변화를 찾아
+            별빛의 변화를 살펴 행성의 흔적을 찾고,
             <br />
-            나만의 탐사 기록을 쌓아 보세요.
+            발견을 나의 은하에 모으세요.
           </p>
         </div>
         <span className="auth-caption">

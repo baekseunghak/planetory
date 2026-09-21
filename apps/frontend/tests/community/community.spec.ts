@@ -312,7 +312,9 @@ test("slow previous scope cannot replace free board; response fields fail closed
     await route.fulfill({ json: { items: undefined } });
   });
   await page.goto("/community");
-  await expect(page.getByRole("status")).toBeVisible();
+  await expect(
+    page.locator(".community-main").getByRole("status"),
+  ).toBeVisible();
   await page
     .getByRole("navigation", { name: "게시판 종류" })
     .getByRole("link", { name: "자유 게시판", exact: true })
