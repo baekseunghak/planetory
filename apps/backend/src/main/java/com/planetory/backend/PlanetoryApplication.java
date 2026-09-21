@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import com.planetory.backend.domain.exploration.command.CandidateCorrectionPrecheckCommand;
 import com.planetory.backend.domain.exploration.command.ChallengeUnlockCommand;
 
 @SpringBootApplication
@@ -21,7 +22,8 @@ public class PlanetoryApplication {
 	public static final String COMMAND_PROPERTY = "planetory.command";
 
 	/** 실행할 수 있는 운영 명령. 명령을 추가하면 여기에 등록한다. */
-	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME);
+	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME,
+			CandidateCorrectionPrecheckCommand.NAME);
 
 	/** 실행할 수 없는 명령 인자. sysexits의 사용법 오류(EX_USAGE)와 같은 값이다. */
 	static final int INVALID_COMMAND_EXIT_CODE = 64;
