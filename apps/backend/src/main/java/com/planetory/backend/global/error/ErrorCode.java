@@ -25,6 +25,8 @@ public enum ErrorCode {
     STAR_LIST_PRIVATE(HttpStatus.FORBIDDEN, "별 목록을 공개하지 않은 회원입니다."),
     // 요청의 판·계산 버전이 현재 판과 다르다. 본문에 currentBundleId를 싣는다(탐사 API 2.3).
     BUNDLE_CHANGED(HttpStatus.CONFLICT, "분석 중인 판이 바뀌었습니다. 최신 판을 다시 불러와 주세요."),
+    /** 온라인 잔차 계산 대기열이 찼거나 같은 회원의 작업이 이미 돌고 있다 (탐사 API 7.1, D-3·D-4). */
+    RESIDUAL_QUEUE_FULL(HttpStatus.TOO_MANY_REQUESTS, "계산 대기가 가득 찼습니다. 잠시 후 다시 시도해 주세요."),
     IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "같은 요청 ID에 다른 제출이 있습니다."),
     REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "같은 요청을 처리 중입니다."),
     PUBLICATION_NOT_ELIGIBLE(HttpStatus.CONFLICT, "공개할 수 없는 분석 기록입니다."),

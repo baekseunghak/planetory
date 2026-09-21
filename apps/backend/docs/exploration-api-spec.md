@@ -97,7 +97,7 @@
 | `SKIP_NOT_AVAILABLE` | 409 | 튜토리얼 건너뛰기 조건 미충족(SUB-12) |
 | `STAR_ALREADY_COMPLETED` | 409 | 완료된 별에 `no_candidate` 제출(SUB-11 (4)) |
 
-**현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다. 구현은 5.2·5.3절 응답(200·202)부터 붙였고(`S15P21C206-140`), 나머지 API는 각 구현 때 붙인다.
+**현재 판 헤더(D-5).** 탐사 API의 모든 응답에 `X-Current-Bundle: {bundleId}` 헤더를 붙인다. 프론트는 잔차 폴링·곡선 응답의 이 값이 분석 진입 때 받은 `bundleId`와 다르면 EXP-01대로 5.1절을 다시 조회한다. 쓰기 요청은 이와 별개로 `BUNDLE_CHANGED`로 거절된다. 구현은 5.2·5.3절 응답(200·202)부터 붙였고(`S15P21C206-140`), 7.1·7.2절이 뒤따랐다(`S15P21C206-147`). 나머지 API는 각 구현 때 붙인다.
 
 `BUNDLE_CHANGED` 본문은 공통 오류 본문에 `currentBundleId`를 더한다: `{"code": "BUNDLE_CHANGED", "message": "...", "currentBundleId": "b-3"}`.
 
@@ -948,6 +948,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 잔차 요청에는 `requestId`가 없다. 같은 `target`을 다시 POST하면 진행 중 작업 또는 캐시 결과를 그대로 돌려주므로, **응답 유실 후 복구도 같은 `target`으로 재호출**한다. 별도 복구 조회 API는 두지 않는다. 동일 요청 재전송과 새 요청을 구분할 필요가 없는 이유는 결과가 회원과 무관한 캐시이고 요청 자체가 상태를 만들지 않기 때문이다.
 
+구현 상태(S15P21C206-147). 요청·조회·검증·상한은 구현했고 **계산을 실제로 돌리는 Worker 어댑터(`S15P21C206-88`)와 Redis 저장소(`S15P21C206-89`)는 아직 없다.** 계산 기반이 연결되기 전에는 요청을 503 `DEPENDENCY_UNAVAILABLE`로 거절하고 **작업을 만들지 않는다.** 아무도 진행시키지 않는 `QUEUED`를 쌓으면 화면이 오지 않을 결과를 기다린다. 목표 검증은 5.2절 곡선 조회와 같은 함수를 쓰며 실패 필드는 `target.bundleId`·`target.removedCandidateIds`다. 상한은 설정값이다(`planetory.residual.max-running`·`max-queued`·`per-member`, 기본 2·20·1). `pollAfterSeconds`·`retryAfterSeconds`도 같은 접두사의 설정이며 기본값은 2초·10초다. `estimatedSeconds`는 실측 전까지 null이고 0으로 채우지 않는다. 경로의 TIC이 양의 정수가 아니면 2.3절대로 404 `STAR_NOT_PUBLISHED`이며 5.2·6장과 같다. `target.removedCandidateIds`에 같은 후보가 두 번 오면 서버가 지우고 단계를 다시 센다(2.1절). 본문에는 보낸 `curveStep`이 없어 대조할 것이 없으므로, 중복을 이유로 거절하지 않고 한 번 보낸 것과 같은 목표로 합친다. **계산을 시작시키지 못하면 작업을 기다리는 상태로 남기지 않는다** — 등록만 해 두고 실패하면 아무도 진행시키지 않는 `QUEUED`가 남고, 같은 목표의 재요청이 그 작업에 병합돼 실행기를 다시 부르지 않는다. 그 작업을 재시도 가능한 `FAILED`로 끝내고 요청은 503으로 답한다. 503 본문은 공통 기본 문구를 쓴다 — 화면이 `message`를 사용자에게 그대로 보여 주므로 어떤 기반이 연결되지 않았는지는 적지 않는다. 캐시 확인·병합·상한·등록은 저장소가 **한 번에** 결정한다. 캐시를 밖에서만 보면 확인과 등록 사이에 다른 회원의 같은 계산이 끝났을 때 이미 있는 결과를 두고 작업이 하나 더 생긴다.
+
 ### 7.2 상태 조회
 
 `GET /api/v1/residual-jobs/{jobId}` — v1은 폴링(D-3, Q08). `pollAfterSeconds`를 따른다.
@@ -961,21 +963,26 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
   "timeline": {"queuedAt": "…", "residualStartedAt": "…", "residualReadyAt": "…", "periodogramStartedAt": "…", "completedAt": null},
   "failure": null,
   "resultCurveContext": null,
+  "queuePosition": 0,
   "pollAfterSeconds": 2
 }
 ```
 
+- `queuePosition`은 7.1 응답과 같은 뜻이며(0이면 계산 중, N이면 앞에 N개) 폴링마다 다시 센다. `COMPLETED`·`FAILED`에는 없다 — 줄이 끝났는데 「0번째」라고 말하지 않는다. 202에만 주면 화면에서 한 번 떴다 사라지므로 여기에도 싣는다(`S15P21C206-147`).
+- 응답에 `X-Current-Bundle`을 싣는다(D-5). 조회는 판을 보지 않아 `BUNDLE_CHANGED`를 내지 않으므로, 계산이 도는 동안 판이 바뀌는 것을 화면이 알아챌 수 있는 곳이 이 헤더뿐이다. 7.1절 응답(200·202)도 같다.
 - `COMPLETED`면 `resultCurveContext`에 5.2·5.3절로 조회할 문맥을 준다. `curveStep = removedCandidateIds.length`.
-- `FAILED`면 `failure: {"stage": "PERIODOGRAM", "code": "COMPUTE_ERROR", "message": "…", "retryable": true}`. 저장된 제출·매칭·완료·성과는 바뀌지 않고 마지막 정상 곡선을 유지한다(AT-101). 재시도는 7.1절 재호출이며 `attempt`가 오른다.
+- `FAILED`면 `failure: {"stage": "PERIODOGRAM", "code": "COMPUTE_ERROR", "message": "…", "retryable": true}`. 저장된 제출·매칭·완료·성과는 바뀌지 않고 마지막 정상 곡선을 유지한다(AT-101). 재시도는 7.1절 재호출이며 **응답이 주는 새 `jobId`로 갈아탄다.** 끝난 작업은 병합 대상이 아니라 새 작업이 만들어지고 `attempt`는 다시 1이다. 같은 `jobId`를 계속 폴링하면 영원히 `FAILED`만 본다. `attempt`가 오르는 것은 한 작업 안에서 다시 계산할 때다(7.3절 임대 만료).
 - v1은 `RESIDUAL_READY`에서 곡선을 먼저 노출하지 않고 `COMPLETED`에서만 전환한다(D-3). 선노출·SSE는 계산 시간 실측 후 재검토한다.
 - Redis 재시작으로 작업이 사라지면 404 `RESOURCE_NOT_FOUND`. 프론트는 7.1절로 다시 요청한다(분석 프론트 8.1 "Redis 결과 없음").
 - 계산 중 새 판이 공개되면 작업은 `FAILED(stage: BUNDLE_ARCHIVED)`로 끝나고 프론트는 최신 판을 다시 불러온다(AT-80).
 
 ### 7.3 중복·만료·관측
 
-- Worker 임대 시간을 두고 만료 시 다른 Worker가 다시 계산한다. 늦은 결과는 `attempt`가 최신보다 작으면 버린다(온라인 파생 계산 문서).
+- Worker 임대 시간을 두고 만료 시 다른 Worker가 다시 계산한다. 늦은 결과는 `attempt`가 최신보다 작으면 버린다(온라인 파생 계산 문서). 지금 저장소 포트는 `attempt`를 **읽기만** 한다. 올리는 함수는 다시 계산을 시작하는 쪽(`S15P21C206-88`)이 붙일 때 함께 더한다.
 - 판이 `archived`가 되면 그 판의 키를 모두 지운다(DAT-11). TTL·동시 실행 상한(초기값 전체 2, EC2당 1, 대기 20)은 DEC-35·김동혁.
 - 잔차 계산 완료·곡선 전환·원본 복귀는 서버 상태를 바꾸지 않는다. `user_star_progress.current_curve_step`은 **회원이 그 단계에서 제출할 때** 제출 트랜잭션이 갱신한다(6.3절 8단계). 통신 오류 후 복귀는 5.1절의 `currentCurveContext`·`nextCurveContext`로 판단한다.
+- 7.2절 조회는 **같은 목표를 요청해 같은 작업을 기다리는 회원 모두**에게 열린다. 같은 키는 하나만 계산하므로 만든 회원만 볼 수 있으면 병합된 쪽의 폴링이 404가 된다. 요청하지 않은 회원의 작업과 사라진 작업은 같은 404로 덮는다. 구분하면 남의 작업 존재가 드러나고, 프론트가 할 일은 어느 쪽이든 「7.1절로 다시 요청」으로 같다(S15P21C206-147).
+- 저장소가 Redis로 바뀌기 전에는 작업·결과가 인스턴스 안에 있다. 재시작하면 사라지며 계약상 Redis 유실과 같은 상황이다(404 뒤 재요청).
 
 ## 8. 히스토리·결과 페이지
 
@@ -1433,6 +1440,9 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-18 | S15P21C206-142 구현 반영. 6.2절 4단계 실패 필드를 `selection.periodDays`·`selection.phaseEnd`로 구체화하고 5단계에 빈 위상 구간 거절, 6단계에 관측 범위 정의를 적었다. 사용자 결정으로 관측점·관측 창을 곡선 점 시각(bin 시작)의 연속 구간으로 정했다. 수치 판정은 제출 매칭 규칙 v0 참조 구현을 따르고 공통 표본으로 대조한다는 점과 6.3절 배율 방향(P_user × m = P_c)을 명시했다 |
 | 2026-09-19 | S15P21C206-144 구현 반영. 9.1절에 요약 범위(회원 전체, `ticId`는 목록에만), `startedStarCount` 정의(4.4절 `scope=submitted` 길이), 정렬·커서·`size` 기본 50·상한 100, 항목 식별자 형식, `relabel.newDisposition` 값을 적었다. 9.2절에 인정 근거 확인과 진행 행 잠금, 시드 정책 `hash-user-achievement-seq-v1`의 계산식, 반환값(`ticId`·`byType`·`unlockShortfall`·`skyVersion`)을 명시했다. 별 저장은 9.4절과 같은 `ON CONFLICT (user_id, tic_id)`로 바꾸고, 같은 성과의 재처리는 2단계에서 막으며 `UNIQUE(trigger_achievement_id, seq)`는 DB 안전망으로 남긴다고 정정했다. MR !99 리뷰를 반영해 호출자가 기록 저장 전에 회원 행을 먼저 잠가야 한다는 조건과 그 이유(외래 키 KEY SHARE와 `FOR UPDATE`의 교착)를 적었다 |
 | 2026-09-20 | S15P21C206-246 정정. 4.2·4.4·4.5절에 경로 식별자 형식과 형식이 다를 때의 응답을 적었다. `{memberId}`는 회원 API가 주는 `u-{id}`이며 계약 밖 값과 정수가 아닌 `size`는 400, 형식이 다른 `{ticId}`는 없는 별과 같은 403·404다. S15P21C206-138 구현이 경로 값을 숫자 타입으로 받아 500을 주던 것을 고쳤다 |
+| 2026-09-20 | S15P21C206-147 구현 반영. 7.1·7.3절에 계산 기반이 연결되기 전의 동작(503, 작업 생성 없음), 목표 검증 실패 필드 이름, 상한·폴링 설정값, 없는 작업과 남의 작업을 같은 404로 덮는 이유, 인스턴스 안 저장소의 유실 의미를 적었다 |
+| 2026-09-20 | S15P21C206-147 리뷰(김동혁) 반영. 7.1절에 실행기 시작 실패 시 작업을 기다리는 상태로 남기지 않는다는 것, 본문의 중복 후보를 서버가 지우고 단계를 다시 센다는 것, 경로 TIC 형식 오류가 2.3절과 같은 404라는 것을 적었다 |
+| 2026-09-20 | S15P21C206-147 리뷰(백지웅) 반영. 7.1·7.2절 응답에 `X-Current-Bundle`을 붙이고(2.3절 적용 범위도 갱신), 7.2 응답에 `queuePosition`을 더했다. 실패 뒤 재시도가 **새 `jobId`로 갈아타는 것**임을 바로잡고(같은 작업을 계속 폴링하면 영원히 `FAILED`만 본다), `attempt`를 올리는 함수가 아직 없다는 것과 캐시 확인이 등록과 한 번에 일어난다는 것을 적었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

@@ -196,3 +196,6 @@
 | 2026-09-20 | 개인 기록 상세와 공용 읽기 전용 그래프 | S15P21C206-190 | 8.2 불변·현재 분리, 8.3 두 모드, 칸 중심 위상, snapshotVersion 없음, RETIRED_CANDIDATE 모드별 의미, 213 파서 감싸기, 공개 상태 집합 차이, 공용 그래프 슬롯 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
 | 2026-09-20 | 기록 상세 리뷰 반영: 안내를 화면과 맞춤 | S15P21C206-190 | 503 안내 문구, 그래프 없음 사유 분리, 실제 응답 인수(리뷰어 대행), 6.6 미구현 확인, 접기 기준 bin 시작 대 중심 | 구현 완료·인수 완료 | [기록](2026-09-20.md) |
 | 2026-09-21 | 114 과거 병합 커밋 전 상태 정정: e8f62ea 완료 | S15P21C206-114 | 과거 준비 기록, 현재 상태 대체 | 이전 통합 완료 | [정정·재검증](../2026-09-W4/2026-09-21.md) |
+| 2026-09-20 | 온라인 잔차 작업 요청·조회 API와 계산 기반 연결점 | S15P21C206-147 | residual-jobs, RESIDUAL_QUEUE_FULL, activeJobId, cacheHit, pollAfterSeconds, ResidualComputeRunner, ResidualJobStore, 503 | 구현 완료·연동 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 작업 리뷰 반영: 판 교체 헤더와 사라지는 대기 순번 | S15P21C206-147 | X-Current-Bundle, queuePosition, attempt, jobId 갈아타기, DEPENDENCY_UNAVAILABLE 문구, enqueue 캐시 확인 | 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 작업 2차 리뷰 반영: 시작 실패·TIC 코드·중복 후보 | S15P21C206-147 | runner.start 실패, 고아 QUEUED, START_FAILED, STAR_NOT_PUBLISHED, curveStep 중복 제거 | 검증 완료 | [2026-09-20](2026-09-20.md) |
