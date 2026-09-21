@@ -17,8 +17,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
+import com.planetory.backend.domain.exploration.service.StarRepository;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.domain.exploration.service.StarViews;
 import com.planetory.backend.domain.exploration.service.StarViews.StarListItem;
@@ -26,6 +31,8 @@ import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 
 /**
  * 내 별·타인 별 목록 계약 [S15P21C206-138].
@@ -55,6 +62,9 @@ class StarListTest {
     @Autowired StarService stars;
     @Autowired GalaxyLayout layout;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
+    /** 공개 여부 검사가 끝나는 순간을 잡으려고 감싼다. 기본 동작은 실제 조회 그대로다. */
+    @MockitoSpyBean StarRepository repository;
 
     private static final String MANIFEST = """
             {"segment_ids": [1], "array_checksums": {},
@@ -470,6 +480,72 @@ class StarListTest {
 
     private static List<Long> ticIds(StarViews.StarList list) {
         return list.items().stream().map(item -> Long.parseLong(item.ticId())).toList();
+    }
+
+    // ---------- 공개 여부 검사와 목록 조회의 스냅샷 (!138 리뷰) ----------
+
+    /**
+     * 공개 여부를 확인한 뒤 상대가 비공개로 바꾸며 새 제출을 만들어도, 그 기록은 이번 응답에
+     * 섞이지 않아야 한다. 두 질의가 같은 스냅샷을 읽는다는 뜻이다.
+     *
+     * <p>시간을 재지 않는다. 공개 여부 질의가 <b>끝나는 순간</b> 다른 연결에서 커밋하므로 순서가
+     * 항상 같다.
+     */
+    @Test
+    void 비공개로_바뀌며_생긴_기록은_목록에_섞이지_않는다() {
+        long visible = publicTargetWithOneSubmission();
+        long late = unlockAt(otherMemberId, 7, "2026-09-11T00:00:00Z");
+
+        List<Long> items = listWhileTargetGoesPrivate(StarViews.ListFilter.NONE, late);
+
+        assertEquals(List.of(visible), items,
+                "검사 뒤에 생긴 기록이 보이면 검사와 조회가 다른 시점을 읽은 것이다");
+    }
+
+    /** 필터를 붙인 요청도 같은 진입점을 타므로 같은 스냅샷이어야 한다. */
+    @Test
+    void 필터가_있어도_같은_스냅샷을_읽는다() {
+        publicTargetWithOneSubmission();
+        long late = unlockAt(otherMemberId, 7, "2026-09-11T00:00:00Z");
+
+        List<Long> items = listWhileTargetGoesPrivate(
+                new StarViews.ListFilter(null, null, String.valueOf(late)), late);
+
+        assertTrue(items.isEmpty(), "필터가 가리킨 별이 검사 뒤에 생겼다면 이번 응답에는 없어야 한다");
+    }
+
+    /** 목록을 공개한 상대와 이미 보이는 제출 한 건. */
+    private long publicTargetWithOneSubmission() {
+        long ticId = unlockAt(otherMemberId, 0, "2026-09-10T00:00:00Z");
+        submitAt(otherMemberId, ticId, "2026-09-12T00:00:00Z");
+        jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, true)"
+                + " ON CONFLICT (user_id) DO UPDATE SET star_list_public = true", otherMemberId);
+        return ticId;
+    }
+
+    /**
+     * 공개 여부 검사 직후에 다른 연결이 비공개 전환과 새 제출을 커밋하게 해 두고 목록을 부른다.
+     * {@code REQUIRES_NEW}라 바깥 읽기 트랜잭션과 다른 연결을 쓰고 먼저 커밋한다.
+     */
+    private List<Long> listWhileTargetGoesPrivate(StarViews.ListFilter filter, long lateTicId) {
+        doAnswer(invocation -> {
+            boolean open = (boolean) invocation.callRealMethod();
+            TransactionTemplate tx = new TransactionTemplate(transactions);
+            tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            tx.executeWithoutResult(status -> {
+                jdbc.update("INSERT INTO user_settings(user_id, star_list_public) VALUES (?, false)"
+                        + " ON CONFLICT (user_id) DO UPDATE SET star_list_public = false",
+                        otherMemberId);
+                submitAt(otherMemberId, lateTicId, "2026-09-13T00:00:00Z");
+            });
+            return open;
+        }).when(repository).isStarListPublic(otherMemberId);
+
+        try {
+            return ticIds(stars.list(memberId, otherMemberId, null, null, 20, null, filter));
+        } finally {
+            reset(repository);
+        }
     }
 
     private long insertMember() {

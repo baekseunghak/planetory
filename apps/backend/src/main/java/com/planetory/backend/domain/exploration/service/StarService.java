@@ -139,13 +139,24 @@ public class StarService {
      *                           scope·sort·size가 계약 밖이면 {@code VALIDATION_FAILED}
      */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    /** 필터 없는 기본 조회. 4.4절의 조건 없는 목록이다. */
     public StarViews.StarList list(long viewerId, long targetId, String requestedScope,
                                    String requestedSort, Integer requestedSize, String cursor) {
         return list(viewerId, targetId, requestedScope, requestedSort, requestedSize, cursor,
                 StarViews.ListFilter.NONE);
     }
 
+    /**
+     * 필터를 받는 실제 조회. <b>컨트롤러는 필터를 생략해도 늘 이쪽을 부른다.</b>
+     *
+     * <p>공개 여부 검사와 목록 조회는 <b>같은 스냅샷</b>을 읽어야 한다. 트랜잭션이 없으면 두 질의가
+     * 각각 다른 시점을 보게 되고, 그 사이에 상대가 비공개로 바꾸며 만든 기록까지 돌려준다.
+     *
+     * <p>위 오버로드에도 같은 설정을 남긴다. 거기서 이쪽을 부르는 것은 <b>자기 호출이라 프록시를
+     * 타지 않으므로</b>, 한쪽에만 붙이면 나머지 진입점이 통째로 트랜잭션 밖에 놓인다. 필터를
+     * 더하면서 실제 조회만 이쪽으로 옮기고 애너테이션은 옛 메서드에 남겨 둔 것이 !138 리뷰에서
+     * 걸린 결함이다.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public StarViews.StarList list(long viewerId, long targetId, String requestedScope,
                                    String requestedSort, Integer requestedSize, String cursor,
                                    StarViews.ListFilter requestedFilter) {

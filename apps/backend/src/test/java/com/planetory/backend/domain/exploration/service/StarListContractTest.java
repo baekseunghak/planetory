@@ -1,8 +1,12 @@
 package com.planetory.backend.domain.exploration.service;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import com.planetory.backend.domain.exploration.service.StarViews.StarList;
@@ -119,5 +123,30 @@ class StarListContractTest {
         return new StarListItem("123456789", "in_progress", 0, false, 0, null, null, false, false,
                 unpublishedSignalCount, OffsetDateTime.parse("2026-09-10T02:30:00.123456Z"),
                 "tutorial", null);
+    }
+
+    /**
+     * 목록 조회의 <b>모든 공개 진입점</b>이 같은 스냅샷 설정을 들고 있어야 한다.
+     *
+     * <p>공개 여부 검사와 목록 조회가 다른 시점을 읽으면, 상대가 비공개로 바꾸며 만든 기록까지
+     * 돌려준다. 필터를 더하면서 실제 조회를 새 오버로드로 옮겼는데 애너테이션은 옛 메서드에
+     * 남아, 컨트롤러가 늘 부르는 운영 경로만 트랜잭션 밖에 있었다(!138 리뷰).
+     *
+     * <p>자기 호출은 프록시를 타지 않으므로 "하나만 붙여도 안쪽이 따라온다"가 성립하지 않는다.
+     * 그래서 개수를 함께 센다. 오버로드가 늘어나면 이 검사가 먼저 걸린다.
+     */
+    @Test
+    void 목록_조회의_모든_진입점이_같은_스냅샷을_요구한다() {
+        int checked = 0;
+        for (Method method : StarService.class.getDeclaredMethods()) {
+            if (!method.getName().equals("list") || !Modifier.isPublic(method.getModifiers())) continue;
+            Transactional tx = method.getAnnotation(Transactional.class);
+            assertNotNull(tx, method + " 에 트랜잭션이 없다. 컨트롤러가 이 진입점을 부르면 검사와"
+                    + " 조회가 다른 스냅샷을 읽는다");
+            assertTrue(tx.readOnly(), method.toString());
+            assertEquals(Isolation.REPEATABLE_READ, tx.isolation(), method.toString());
+            checked++;
+        }
+        assertEquals(2, checked, "필터 있는 조회와 없는 조회 둘 다 검사해야 한다");
     }
 }
