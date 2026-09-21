@@ -42,6 +42,9 @@ export function usePagedList<T>(
 ) {
   const [state, setState] = useState<PagedState<T>>({ phase: "loading" });
   const generation = useRef(0);
+  // 렌더마다 최신 상태를 담아 둔다. 업데이터 안에서 부수효과를 내지 않기 위해서다.
+  const latest = useRef<PagedState<T>>(state);
+  latest.current = state;
   const controller = useRef<AbortController | null>(null);
 
   const first = useCallback(() => {
@@ -73,40 +76,42 @@ export function usePagedList<T>(
     // key가 바뀌면 조건이 달라진 것이다. 커서를 들고 가지 않는다.
   }, [key, first]);
 
+  // **업데이터 안에서 요청하지 않는다.** React는 setState 업데이터를 두 번
+  // 부를 수 있고(StrictMode), 그러면 같은 커서로 두 번 읽어 한 번 눌렀는데 두
+  // 쪽이 붙는다. 현재 값은 ref로 보고 요청은 바깥에서 한 번만 보낸다.
   const more = useCallback(() => {
-    setState((current) => {
-      if (current.phase !== "ready" || !current.nextCursor) return current;
-      if (current.loadingMore) return current;
-      const cursor = current.nextCursor;
-      const mine = generation.current;
-      const next = new AbortController();
-      void (async () => {
-        try {
-          const page = await load(cursor, next.signal);
-          if (next.signal.aborted || mine !== generation.current) return;
-          setState((prior) =>
-            prior.phase === "ready"
-              ? {
-                  ...prior,
-                  // 이어 읽은 것은 **뒤에 붙인다.** 덮어쓰면 앞쪽이 사라진다.
-                  items: [...prior.items, ...page.items],
-                  nextCursor: page.nextCursor,
-                  loadingMore: false,
-                  moreError: null,
-                }
-              : prior,
-          );
-        } catch (error) {
-          if (next.signal.aborted || mine !== generation.current) return;
-          setState((prior) =>
-            prior.phase === "ready"
-              ? { ...prior, loadingMore: false, moreError: message(error) }
-              : prior,
-          );
-        }
-      })();
-      return { ...current, loadingMore: true, moreError: null };
-    });
+    const current = latest.current;
+    if (current.phase !== "ready" || !current.nextCursor || current.loadingMore)
+      return;
+    const cursor = current.nextCursor;
+    const mine = generation.current;
+    const next = new AbortController();
+    setState({ ...current, loadingMore: true, moreError: null });
+    void (async () => {
+      try {
+        const page = await load(cursor, next.signal);
+        if (next.signal.aborted || mine !== generation.current) return;
+        setState((prior) =>
+          prior.phase === "ready"
+            ? {
+                ...prior,
+                // 이어 읽은 것은 **뒤에 붙인다.** 덮어쓰면 앞쪽이 사라진다.
+                items: [...prior.items, ...page.items],
+                nextCursor: page.nextCursor,
+                loadingMore: false,
+                moreError: null,
+              }
+            : prior,
+        );
+      } catch (error) {
+        if (next.signal.aborted || mine !== generation.current) return;
+        setState((prior) =>
+          prior.phase === "ready"
+            ? { ...prior, loadingMore: false, moreError: message(error) }
+            : prior,
+        );
+      }
+    })();
   }, [load]);
 
   return { state, reload: first, more };
