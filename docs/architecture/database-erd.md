@@ -813,6 +813,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
+
+**176 확인·후속 설계:** 위 두 항목은 목표 설계다. 현재 V1 `stats_snapshots`에는 날짜·scope·round_id별 UNIQUE가 없고 기능 전용 앱 권한은 V11에서 보류했다. `global_stats`와 P1 집계 잡은 미구현이다. 178은 CONCURRENTLY 요건을 만족하는 MV 인덱스·최초 적재·REFRESH 역할, Snapshot의 global/null round_id 멱등 키·최소 읽기/쓰기 권한·중첩 실행·직전 성공본 보존을 설계·검증한다. [176 지표 사전·기준 시각·인수표](../requirements/planetory-statistics-policy.md)를 참조하며 원천 읽기 기준 시각과 집계 완료 시각을 구분한다. 탈퇴 원천 보존은 DEC-11/179, 현재·과거 집계 영향은 연계 미정이다. 이 항목은 DDL 적용이나 권한 부여 완료를 의미하지 않는다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
 ## 4. 설계 결정과 근거
