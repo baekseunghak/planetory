@@ -114,10 +114,14 @@ public class SubmissionLookupService {
                 ? saved.path("detail").path("targetKind").asText() : null;
         if (targetKind == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
 
-        Candidate target = target(row, saved, targetKind);
-        if (target == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
+        Candidate chosen = target(row, saved, targetKind);
+        if (chosen == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
 
-        submissions.markDetailViewed(id, target.id());
+        // 저장된 대상이 정본이다. 읽은 뒤 저장 사이에 겹친 요청이 먼저 쓰면 그 값을 받아 그대로 따른다.
+        // 각자 고른 대상으로 답하면 저장은 하나인데 같은 제출에 두 답이 나간다.
+        long stored = submissions.markDetailViewed(id, chosen.id());
+        Candidate target = stored == chosen.id() ? chosen : byId(row.tic(), stored);
+        if (target == null) throw new BusinessException(ErrorCode.DETAIL_UNAVAILABLE);
         var disposition = submissions.disposition(target.id());
         Map<String, Object> signal = submissions.signal(member, target, disposition);
         // 6.7절 signal에는 해설이 있고 6.4절에는 없다. 공용 빌더를 넓히지 않고 여기서만 더한다.

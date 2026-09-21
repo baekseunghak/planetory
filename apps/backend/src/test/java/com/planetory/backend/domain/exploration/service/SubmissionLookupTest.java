@@ -19,6 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -33,6 +34,8 @@ import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -65,6 +68,8 @@ class SubmissionLookupTest {
     }
 
     @Autowired SubmissionLookupService lookup;
+    /** 읽은 뒤 저장 사이에 다른 요청이 끼어드는 순간을 만들기 위해서만 쓴다. */
+    @MockitoSpyBean SubmissionRepository submissionRows;
     @Autowired SubmissionService submissions;
     @Autowired HistoryService histories;
     @Autowired JdbcTemplate jdbc;
@@ -319,6 +324,30 @@ class SubmissionLookupTest {
         assertEquals("c-" + candidate, again.signal().get("candidateId"), "한 번 정한 대상은 바꾸지 않는다");
         assertEquals(candidate, jdbc.queryForObject("SELECT detail_target_candidate_id FROM submissions "
                 + "WHERE id=?", Long.class, Long.parseLong(unmatched.substring(4))));
+    }
+
+    /**
+     * 겹친 두 요청은 <b>먼저 저장된 대상</b>으로 답한다(MR !125 리뷰).
+     *
+     * <p>각자 고른 대상으로 응답을 만들면 저장은 하나인데 같은 제출에 두 답이 나간다. 읽은 뒤 저장
+     * 사이에 다른 요청이 먼저 쓰는 순간을 만들어 확인한다.
+     */
+    @Test
+    void 겹친_상세_보기는_먼저_저장된_대상으로_답한다() {
+        long weaker = candidate(7, 5);
+        String unmatched = submit(13, "LIKELY_PLANET").path("submissionId").asText();
+        long submissionRow = Long.parseLong(unmatched.substring(4));
+        // 내 요청이 고를 대상은 세기가 큰 candidate다. 저장 직전에 다른 요청이 weaker를 먼저 쓴다.
+        doAnswer(call -> {
+            jdbc.update("UPDATE submissions SET detail_target_candidate_id=? WHERE id=?", weaker, submissionRow);
+            return call.callRealMethod();
+        }).when(submissionRows).markDetailViewed(anyLong(), anyLong());
+
+        var view = lookup.detailView(member, unmatched);
+
+        assertEquals("c-" + weaker, view.signal().get("candidateId"), "먼저 저장된 대상으로 답한다");
+        assertEquals(weaker, jdbc.queryForObject("SELECT detail_target_candidate_id FROM submissions WHERE id=?",
+                Long.class, submissionRow), "저장된 값은 먼저 쓴 쪽 그대로다");
     }
 
     /** 한 번 보여 준 신호가 은퇴했다고 없던 일이 되지는 않는다. */
