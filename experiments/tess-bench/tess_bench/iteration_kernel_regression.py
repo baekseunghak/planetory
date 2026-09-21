@@ -9,6 +9,8 @@ from uuid import uuid4
 
 import numpy as np
 from astro_kernel.iteration import iterate_bls
+from astro_kernel.bls import search_bls
+from astro_kernel.transit_model import remove_transit_models
 from astro_kernel.preprocessing import detrend_silver
 from tess_fixture import inject as inj, manifest as mf
 from tess_fixture.targets import select_targets, iter_products
@@ -30,8 +32,21 @@ def compare(reference, actual):
     for key in ("termination", "qa_failed_step"):
         if actual[key] != getattr(reference, key):
             raise AssertionError(f"{key}: {actual[key]!r} != {getattr(reference, key)!r}")
+    actual_steps = actual["steps"]
+    if reference.termination == "candidate_validation_failed":
+        # 111 only changed its top-level termination. 122 now records the final
+        # original-validation failure explicitly, preserving the search history.
+        last = actual_steps[-1]
+        failed = [c.step for c in reference.accepted if c.validated_on_original is False]
+        expected = dict(phase="original_validation", status="error",
+                        reason="candidate_validation_failed", failed_candidate_steps=failed,
+                        search_termination=reference.steps[-1].reason)
+        if not failed or any(last.get(key) != value for key, value in expected.items()):
+            raise AssertionError("inconsistent original-validation terminal record")
+        actual_steps = actual_steps[:-1]
     for collection in ("accepted", "steps"):
-        for index, (old, new) in enumerate(zip(getattr(reference, collection), actual[collection], strict=True)):
+        records = actual_steps if collection == "steps" else actual[collection]
+        for index, (old, new) in enumerate(zip(getattr(reference, collection), records, strict=True)):
             for key, value in asdict(old).items():
                 if key == "bls_elapsed_s":
                     continue
@@ -46,6 +61,50 @@ def compare(reference, actual):
                 elif other != value:
                     raise AssertionError(f"{collection}[{index}].{key}: {other!r} != {value!r}")
     np.testing.assert_allclose(actual["residual"], reference.residual, rtol=1e-12, atol=0, equal_nan=True)
+
+
+DIAGNOSTIC_FIELDS = ("period_days", "epoch_btjd", "duration_hours", "sector_stats",
+                     "sector_consistency_status", "mask_dropped_fraction", "diagnostic_reasons")
+
+
+def compare_diagnostic(expected, actual, path="search_diagnostics"):
+    """Compare nested 120 diagnostics without allowing omitted/null measurements."""
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict) or actual.keys() != expected.keys():
+            raise AssertionError(f"{path}: diagnostic keys differ")
+        for key in expected:
+            compare_diagnostic(expected[key], actual[key], f"{path}.{key}")
+    elif isinstance(expected, list):
+        if not isinstance(actual, list) or len(actual) != len(expected):
+            raise AssertionError(f"{path}: diagnostic rows differ")
+        for index, (left, right) in enumerate(zip(expected, actual, strict=True)):
+            compare_diagnostic(left, right, f"{path}[{index}]")
+    elif isinstance(expected, float):
+        if type(actual) not in (int, float) or not np.isfinite(actual):
+            raise AssertionError(f"{path}: finite measurement required")
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=0, err_msg=path)
+    elif type(actual) is not type(expected) or actual != expected:
+        raise AssertionError(f"{path}: {actual!r} != {expected!r}")
+
+
+def compare_search_diagnostics(time, flux, sector, baseline_time, reference, actual, *,
+                               input_snapshot_id, preprocessing_version):
+    # Rebuild each pre-removal residual from 111's accepted models, not from
+    # actual's model/diagnostic fields. Direct 120 calls are the transfer oracle.
+    current = np.asarray(flux, dtype=float).copy()
+    for expected_candidate, candidate in zip(reference.accepted, actual["accepted"], strict=True):
+        searched = search_bls(time, current, sector=sector, baseline_time=baseline_time,
+                              input_snapshot_id=input_snapshot_id,
+                              preprocessing_version=preprocessing_version)
+        if searched["status"] == "failed":
+            raise AssertionError("diagnostic reference search failed")
+        peaks = [peak for peak in searched["peaks"] if peak["rank"] == expected_candidate.rank]
+        if len(peaks) != 1:
+            raise AssertionError("reference coarse rank not found")
+        expected = {key: peaks[0][key] for key in DIAGNOSTIC_FIELDS}
+        compare_diagnostic(expected, candidate.get("search_diagnostics"))
+        current = remove_transit_models(time, current,
+            [expected_candidate.model(f"reference-step-{expected_candidate.step}")]).flux_residual
 
 
 def run(raw, results, targets=TARGETS):
@@ -65,6 +124,8 @@ def run(raw, results, targets=TARGETS):
                 environment=mf.environment_info(("numpy", "astropy", "scipy")),
                 reference_settings=settings[0].params(), iteration_settings=approved.params(),
                 rtol=1e-12, atol=0,
+                diagnostic_baseline="prepared.time: post-baseline input before detrend masking; not original FITS QUALITY rows",
+                diagnostic_reference="direct 120 search on sequentially removed 111 accepted models",
                 scope="realclean: no injection plus all three registered two-signal groups; no holdout; no truth-assisted QA",
                 limitation="current-reference parity on existing fixtures, not reproduction of the full 111 oracle-assisted experiment")
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -86,9 +147,13 @@ def run(raw, results, targets=TARGETS):
                     raise ValueError(f"preprocessing failed: {target}/{gid}")
                 reference = iterate_curve(prepared.time, prepared.flux_det, settings[0], approved, keep_residual=True)
                 actual = iterate_bls(prepared.time, prepared.flux_det, sector=baseline.sector_of_point,
+                                     baseline_time=prepared.time,
                                      input_snapshot_id=plan_entry["sha256"], preprocessing_version=prepared.version,
                                      keep_residual=True)
                 compare(reference, actual)
+                compare_search_diagnostics(prepared.time, prepared.flux_det, baseline.sector_of_point,
+                    prepared.time, reference, actual, input_snapshot_id=plan_entry["sha256"],
+                    preprocessing_version=prepared.version)
                 record = {key: value for key, value in actual.items() if key != "residual"}
                 filename = f"curve-{len(rows):03d}.json"
                 (out / filename).write_text(json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")

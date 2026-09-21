@@ -418,7 +418,13 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         c["validated_on_original"] = bool(np.isfinite(score) and score >= cfg.snr_min)
     if accepted and not all(c["validated_on_original"] for c in accepted) and termination in (
             "no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
+        search_termination = termination
         termination = "candidate_validation_failed"
+        steps.append(dict(step=len(accepted), status="error", reason=termination,
+                          phase="original_validation", search_termination=search_termination,
+                          failed_candidate_steps=[c["step"] for c in accepted
+                                                  if not c["validated_on_original"]],
+                          n_points=int(valid_original.sum())))
     # Stable step fields keep absent measurements explicit, never NaN in JSON.
     defaults = dict(rank=0, n_transits=0, n_points=0, duplicate_of_step=-1,
                     window_offset_reference="unity", masked_points=0,

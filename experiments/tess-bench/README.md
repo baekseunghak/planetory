@@ -326,3 +326,35 @@ SHA-256: `2108374dfca4fbe1b7aae42cb00d66d3aacfa8605af5131766d6802c187edc08`.
 최종 두 실행의 plan·manifest·출력만 묶었으며 원본 FITS·임시 잔차 배열은 넣지 않았다.
 입력·코드·결과 snapshot 77개와 ZIP 내부 checksum을 확인했다. Git 검사는 사용자가
 수행하며 이 검증을 `git diff --check` 실행 결과로 대신 표기하지 않는다.
+
+
+### 122 리뷰 보완 검증 (최신 develop 통합 전)
+
+기존 16곡선 회귀는 `baseline_time`을 전달하지 않았고 search_diagnostics를 비교하지 않았다.
+그 실행의 수치·복구 검증 범위는 유지하지만 마스크·Sector 진단 검증 근거로 사용하지 않는다.
+보완 실행기는 `baseline_time=prepared.time`을 전달한다. 기준은 realclean baseline 구성 이후,
+detrend 마스킹 전의 시각 배열이며 원본 FITS QUALITY 제외 행 전체를 복원한 기준은 아니다.
+
+111 참조의 채택 모델을 순서대로 제거하여 각 탐색 직전 잔차를 재구성하고, 그 잔차로
+120 `search_bls`를 직접 실행해 같은 coarse rank의 진단을 대조한다. 재적합 전 period·epoch·duration,
+전체 sector_stats(유효점 없는 Sector 포함), sector_consistency_status, mask_dropped_fraction,
+diagnostic_reasons의 누락·행 수·값을 비교한다. 수치 허용오차는 rtol=1e-12, atol=0이다.
+이는 120에서 122로 진단이 제대로 전달되는지 확인하며 120 수식 자체의 독립 천문 검증은 아니다.
+
+111은 원본 SNR 실패 시 최상위 termination만 변경했으므로, 보완 검산기는 122의 마지막
+original_validation 실패 기록을 명시적으로 검증한 뒤 나머지 탐색 이력과 참조 수치를 비교한다.
+실패 이유·대상 후보 단계가 다르거나 기록이 누락되면 거절한다.
+
+동기화 전 커널·수정 검산기 합계 207 passed, 벤치마크 전체 137 passed·1 skipped를 확인했다.
+skip은 워크트리 내부 TOI-270 FITS 부재다. 전체 NaN Sector·진단 누락/변조와 원본 SNR
+저값/NaN/예외 경계를 추가했고 `python -O`에서도 진단 변조 3건의 명시적 실패를 확인했다.
+최신 develop 반영 이후 전체 실제 16곡선·카탈로그 연결 재검증과 새 리뷰 자료 생성이 남는다.
+기존 review-122.zip은 이 수정 전 검증 자료이며 갱신된 실행의 근거로 표기하지 않는다.
+
+동기화 전 실제 연결 확인: `run-20260921T084803Z-21026f33`, TOI-270 4곡선 통과(65.715초).
+채택 이력 5개의 진단 모두 Sector 3개 행을 유지했고 마스크 비율은 null이 아닌 0.0으로
+계산·참조 일치했다. 이 입력에서는 기준 시각 이후 해당 통과점의 추가 제외가 없다는 뜻이며,
+원본 QUALITY 제외가 없다는 뜻이 아니다. 비율이 양수인 경우와 전체 NaN Sector는 합성 경계
+테스트에서 확인했다. manifest SHA-256:
+`a5c3bfdf87158c50abd1ca41fc825f1eeecdd418e1110665715940272e381d7b`.
+입력·코드·출력 hash를 사후 대조했다. 이 4곡선 확인은 최신 develop 통합 후 전체 회귀를 대신하지 않는다.

@@ -420,7 +420,7 @@ wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와
 
 ## 반복 BLS·제거 QA·후보 출력 (122)
 
-상태: **구현·로컬 수치 회귀·후보 연결 검증 완료, 112 v3 소비자 최종 승인·MR 리뷰 대기**. Jira `S15P21C206-122`.
+상태: **구현·로컬 검증 완료, 122 리뷰 보완·최신 develop 통합 검증 중**. 112는 사용자 확인에 따라 최종 승인·병합 완료다. Jira `S15P21C206-122`.
 `astro_kernel.iteration`은 120 최초 탐색과 121 고정 모델 제거를 연결한다. 데이터베이스 쓰기,
 Spark 전체 배치·온라인 API 연결은 이 모듈의 책임이 아니다.
 
@@ -504,8 +504,8 @@ DB에서 할당·예약한 bigint를 `new_candidate_ids={peak_id: candidate_id}`
 같은 예약 ID를 사용해야 한다. 같은 신호의 유일 1:1 대응이면 ID를 유지하며,
 새 판의 파라미터·`removal_step`을 반영하고 `transit_model.candidate_id`는 `c-<id>`로 맞춘다.
 
-`identity_approval`은 소비자 최종 승인 근거의 참조 문자열이다. 현재 112는 최종 확인 전이므로
-생략한 상태로 검토하고, 임의의 문자열을 넣어 승인된 것으로 표현하지 않는다.
+`identity_approval`은 소비자 최종 승인 근거의 참조 문자열이다. 112 최종 승인·병합은 사용자 확인으로 완료됐으며, 호출자는 해당 승인 근거를 명시한다.
+승인 참조를 자동 생성하거나 임의의 문자열을 넣어 승인된 것으로 표현하지 않는다.
 승인 근거와 필요한 ID가 없으면 제안·필요 항목만 반환하고 `lifecycle_actions`는 비운다.
 `catalog_ready=true`도 122의 후보 처리 준비만 뜻하며 `publishable`은 false다.
 123의 제공 해상도 discoverable·125의 Gold 검증·Publisher의 원자적 current 전환이 남는다.
@@ -556,3 +556,14 @@ QA 실패·상한 도달·원본 재검증 실패, 일대다/다대일·고조�
 - 122의 `added`는 재개 이벤트 자체가 아니다. 신규 또는 false→true 후보 중 현재 활성·탐색 가능하고
   해당 회원이 미매칭인 고유 ID를 150에서 판정한다. retired만으로 재개하지 않는다.
   `newDiscoverableCount`·알림·기존 성과 갱신은 이 계산 모듈에서 만들지 않는다.
+
+
+### 122 리뷰 보완: 원본 검증 종료 이력
+
+원본 SNR 재검증 실패로 정상 탐색 종료 또는 안전 상한 종료를
+`candidate_validation_failed`로 변경할 때, 기존 탐색 기록을 수정·삭제하지 않고
+마지막에 `phase=original_validation`, `status=error`, `reason=candidate_validation_failed`
+기록을 추가한다. `search_termination`은 직전 탐색 종료 사유,
+`failed_candidate_steps`는 원본 검증을 통과하지 못한 후보의 단계 목록이다.
+최상위 termination과 마지막 steps.reason은 일치한다. 이전 정상 잔차·후보 진단은 보존하지만
+공개 가능 후보로 승격하지 않는다. 이미 제거 QA 실패 등으로 끝난 경우에는 그 실패 사유를 유지한다.
