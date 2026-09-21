@@ -56,6 +56,7 @@ public class PostService {
     public Detail detail(long postId) {
         Post post = posts.findWithAuthorById(postId).filter(PostService::visible)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (post.getTicId() != null) stars.requireOpenStarBoard(post.getTicId());
         return detailOf(post);
     }
 
