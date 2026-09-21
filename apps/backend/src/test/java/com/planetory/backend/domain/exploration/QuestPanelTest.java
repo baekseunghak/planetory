@@ -306,6 +306,31 @@ class QuestPanelTest {
         assertNull(quests.quests(member).challenge().ticId(), "끝난 회차에는 느낌표 대상이 없다");
     }
 
+    @Test
+    void 두신호중_하나만_남아도_한명이며_마지막취소후_0명이다() {
+        insertRound("active");
+        long first = insertThread(insertCandidate(), "visible");
+        long second = insertThread(insertCandidate(), "visible");
+        long member = insertMember();
+        publish(first, member, null, null);
+        publish(second, member, null, null);
+        assertEquals(1, quests.quests(member).challenge().participantCount());
+        jdbc.update("UPDATE published_analyses SET unpublished_at=now() WHERE post_id=?", first);
+        assertEquals(1, quests.quests(member).challenge().participantCount());
+        jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE post_id=?", second);
+        assertEquals(0, quests.quests(member).challenge().participantCount());
+        jdbc.update("UPDATE published_analyses SET hidden_at=NULL WHERE post_id=?", second);
+        assertEquals(1, quests.quests(member).challenge().participantCount());
+        for (String state : List.of("hidden", "deleted")) {
+            jdbc.update("UPDATE posts SET status=? WHERE id=?", state, second);
+            assertEquals(0, quests.quests(member).challenge().participantCount());
+        }
+        jdbc.update("UPDATE posts SET status='visible' WHERE id IN (?,?)", first, second);
+        assertEquals(1, quests.quests(member).challenge().participantCount());
+        jdbc.update("UPDATE published_analyses SET unpublished_at=now() WHERE post_id=?", second);
+        assertEquals(0, quests.quests(member).challenge().participantCount());
+    }
+
     // ---------- 다시 열린 별 ----------
 
     /** 재개 뒤 새 제출이 생기면 빠진다. 새로 찾을 수 있는 신호 수는 재개 이벤트 저장 전까지 null이다. */

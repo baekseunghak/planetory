@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../api";
+import { ApiError, api } from "../../api";
 import {
   contextKey,
   curvePath,
@@ -24,7 +24,19 @@ export type StepTransition =
       progress: ResidualProgress | null;
     }
   /** 계산이 실패했다. 보고 있던 곡선은 그대로다. */
-  | { phase: "failed"; target: CurveContext; message: string }
+  | {
+      phase: "failed";
+      target: CurveContext;
+      message: string;
+      /** 거짓이면 [다시 시도]를 내지 않는다. 눌러도 같은 결과다. */
+      retryable: boolean;
+    }
+  /**
+   * 잔차 계산 기반이 아직 연결되지 않았다(503 `DEPENDENCY_UNAVAILABLE`).
+   * **실패가 아니라 준비되지 않은 것이다.** `S15P21C206-88`이 붙기 전까지
+   * 영구적이라 다시 시도를 권하지 않는다.
+   */
+  | { phase: "unavailable"; target: CurveContext; message: string }
   /** 대기열이 찼다. `activeJobId`가 있으면 내가 이미 돌리고 있는 작업이다. */
   | {
       phase: "queue-full";
@@ -73,7 +85,16 @@ async function readCurve(
   }
 }
 
-export function useCurveStep(context: AnalysisContext, entry: CurveData) {
+/**
+ * @param onBundleChanged 판이 바뀐 것을 알았을 때. **곡선 조회가 하던 것을
+ * 폴링도 하게 한다** — 자동으로 5.1절을 다시 조회한다. 같은 사건에 두 가지
+ * 반응을 두면 어느 경로로 감지됐느냐에 따라 화면이 달라진다.
+ */
+export function useCurveStep(
+  context: AnalysisContext,
+  entry: CurveData,
+  onBundleChanged?: () => void,
+) {
   const [viewing, setViewing] = useState<CurveContext>(context.curveContext);
   /**
    * 지금 보고 있는 곡선. **`viewing`과 함께 바뀐다.** 단계 이름만 바꾸고
@@ -141,10 +162,16 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
       /**
        * 목표의 곡선을 **손에 넣은 뒤에** 보는 곳을 바꾼다. 이름만 먼저
        * 바꾸면 표시줄은 다음 단계인데 차트·제출은 이전 문맥이 된다.
+       *
+       * @param resolved 계산이 끝났으면 서버가 준 `resultCurveContext`,
+       * 캐시로 곧바로 가는 경우에는 목표 그대로. **서버가 준 값이 있으면
+       * 그것으로 조회한다**(7.2절). 지금은 5.2절이 제거 조합 순서를 똑같이
+       * 정규화해 결과가 같지만, 서버가 조합을 대체하거나 정규화를 바꾸면
+       * 그때 갈린다.
        */
-      const commit = async () => {
+      const commit = async (resolved: CurveContext) => {
         if (cameFrom !== "stay") {
-          const loaded = await readCurve(context, target, controller.signal);
+          const loaded = await readCurve(context, resolved, controller.signal);
           if (!current()) return;
           if (loaded === null) {
             setTransition({
@@ -152,11 +179,15 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
               target,
               message:
                 "계산은 끝났지만 곡선을 불러오지 못했습니다. 다시 시도해 주세요.",
+              // 계산은 이미 끝났다. 곡선 조회만 다시 하면 된다.
+              retryable: true,
             });
             return;
           }
           setCurve(loaded);
-          setViewing(target);
+          // 보는 곳도 서버가 준 문맥이다. 조회한 것과 보고 있다고 말하는
+          // 것이 다르면 다음 이동이 엉뚱한 곳을 가리킨다.
+          setViewing(resolved);
           setVisited((list) =>
             cameFrom === "back" ? list.slice(0, -1) : [...list, cameFrom],
           );
@@ -172,7 +203,8 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
             ? context.currentResidual
             : null;
       if (!needsResidual(target, cached)) {
-        await commit();
+        // 계산이 필요 없으면 서버에 물은 적이 없다. 목표가 곧 문맥이다.
+        await commit(target);
         return;
       }
 
@@ -184,6 +216,7 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
           ticId: context.ticId,
           target,
           signal: controller.signal,
+          entryBundleId: context.curveContext.bundleId,
           onProgress: (progress) => {
             if (current())
               setTransition({ phase: "running", target, progress });
@@ -191,20 +224,39 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
         });
       } catch (error) {
         if (controller.signal.aborted || !current()) return;
+        // 계산 기반이 아직 없는 것과 계산이 실패한 것은 다르다. 앞은
+        // 눌러도 같은 결과라 「잠시 후 다시」가 거짓말이 된다.
+        if (
+          error instanceof ApiError &&
+          error.code === "DEPENDENCY_UNAVAILABLE"
+        ) {
+          setTransition({
+            phase: "unavailable",
+            target,
+            message: error.message,
+          });
+          return;
+        }
         setTransition({
           phase: "failed",
           target,
           message: `${(error as Error).message} 잠시 후 다시 시도해 주세요.`,
+          retryable: true,
         });
         return;
       }
       if (!current()) return;
       switch (outcome.state) {
         case "ready":
-          await commit();
+          await commit(outcome.curveContext);
           return;
         case "failed":
-          setTransition({ phase: "failed", target, message: outcome.message });
+          setTransition({
+            phase: "failed",
+            target,
+            message: outcome.message,
+            retryable: outcome.retryable,
+          });
           return;
         case "queue-full":
           setTransition({
@@ -220,10 +272,14 @@ export function useCurveStep(context: AnalysisContext, entry: CurveData) {
             phase: "bundle-changed",
             currentBundleId: outcome.currentBundleId,
           });
+          // 돌던 작업은 옛 판 목표라 결과를 쓰지 않는다. 서버 작업은
+          // 계속 돌지만 UI 이탈을 취소로 처리하지 않는다는 규칙 그대로다.
+          controller.abort();
+          onBundleChanged?.();
           return;
       }
     },
-    [viewing, context],
+    [viewing, context, onBundleChanged],
   );
 
   return {

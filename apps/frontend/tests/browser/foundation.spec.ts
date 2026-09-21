@@ -207,6 +207,17 @@ test("menu traps keyboard focus and returns it; small screens get the desktop no
   await expect(trigger).toHaveCount(0);
   await page.setViewportSize({ width: 1024, height: 800 });
   await expect(trigger).toBeVisible();
+  await trigger.click();
+  await page.setViewportSize({ width: 767, height: 800 });
+  await expect(page.locator(".desktop-notice")).toBeVisible();
+  await expect(page.locator("dialog.navigation")).toBeHidden();
+  await expect(page.getByRole("button", { name: "메뉴 닫기" })).toHaveCount(0);
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await expect(
+    page.getByRole("dialog", { name: "메뉴", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
 });
 test("missing fields never count as a successful session; account demo routes do not exist", async ({
   page,

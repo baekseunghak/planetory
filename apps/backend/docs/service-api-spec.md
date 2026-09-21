@@ -299,7 +299,7 @@ if (response.status === 401) {
 
 **구현 상태(S15P21C206-158):** 기존 `posts` 테이블을 사용해 일반 글 작성·상세·변경 필드 PATCH·상태 삭제를 구현했다. 공개되고 한 명 이상 발견한 TIC만 연결할 수 있으며, 제목·본문·태그와 소유권을 서버에서 검사한다.
 
-**첨부 구현(S15P21C206-160):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. 아직 구현하지 않은 `sourceLinks`는 빈 배열, `reactionSummary`는 `{"agree":0,"disagree":0,"myReaction":"NONE"}`이며 실제 출처·반응이 없다는 사실로 해석하지 않는다.
+**첨부·반응 구현(S15P21C206-160·163):** `attachments`는 공개 가능한 실제 History 참조를 `[{"historyId":"h-501"}]`로 반환한다. `commentCount`는 visible 댓글 수다. `reactionSummary`는 실제 동의·비동의 수와 요청 회원의 현재 반응(`AGREE`/`DISAGREE`/`NONE`)을 반환하며 GET 상세와 PATCH 응답에 동일하게 적용한다. 아직 구현하지 않은 `sourceLinks`는 빈 배열이며 실제 출처가 없다는 사실로 해석하지 않는다.
 
 `historyIds`는 같은 TIC의 본인 History를 최대 3개 받는다. 중복·형식 오류·명시적 null은 400 `VALIDATION_FAILED`, 타인 기록은 403 `FORBIDDEN`, 없는 기록은 404 `RESOURCE_NOT_FOUND`, TIC 불일치·자유 게시판 첨부는 400 `TIC_MISMATCH`다. `sourceLinks`의 비어 있지 않은 배열은 F24 구현 전까지 400 `VALIDATION_FAILED`다.
 
@@ -549,7 +549,11 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"postId":"p-201","myReaction":"AGREE","agree":4,"disagree":1}
 ```
 
-같은 요청 반복은 숫자를 더하지 않는다. AGREE에서 DISAGREE로 바꾸면 기존 동의가 제거되고 비동의가 하나 생긴다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 공식 스레드 세 판단과는 별개다.
+같은 요청 반복은 숫자·행·갱신 시각을 바꾸지 않는다. AGREE에서 DISAGREE로 바꾸면 같은 관계 행을 갱신하고 NONE은 관계 행을 삭제한다. 회원·일반 글당 최대 하나이며 본인 글도 가능하다. 반응은 공개 분석·History·성과·별 발견·공식 스레드 세 판단 통계를 변경하지 않는다.
+
+**구현(S15P21C206-163):** V1의 `post_reactions`와 `UNIQUE(post_id,user_id)`를 재사용한다. 글 행 잠금을 획득한 뒤 반응을 조회·저장하고 같은 트랜잭션에서 합계를 반환한다. 동일 회원의 다른 상태 요청은 잠금 획득 후 저장·커밋 순서대로 반영한다. 요청 시작·응답 도착 순서는 최종 상태 기준이 아니다. 일반 글 수정·삭제도 같은 글 행 잠금을 사용한다.
+
+**접근 정책 확정(2026-09-21):** 숨김·삭제 글은 본인 글·본인 기존 반응 여부와 관계없이 AGREE·DISAGREE·NONE 모두 404 `RESOURCE_NOT_FOUND`다. 상세·합계·반응자 조회도 404다. 공식 스레드 ID를 `p-`로 보내도 404이며 공식 스레드 반응 경로는 제공하지 않는다. 인증된 활성 회원만 사용할 수 있고 쓰기는 CSRF 검사를 적용한다. 누락·null·소문자·알 수 없는 reaction은 400 `VALIDATION_FAILED`다.
 
 `GET /api/v1/posts/p-201/reactions?reaction=AGREE&size=20`의 reaction은 AGREE/DISAGREE 필수:
 
@@ -557,7 +561,9 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 {"items":[{"memberId":"u-101","nickname":"별찾는사람"}],"nextCursor":null,"hasNext":false}
 ```
 
-모든 인증 회원이 페이지 순회로 반응자 전원을 볼 수 있는 안이다. 최신 닉네임 사용. 목록·합계는 각 응답의 조회 시점 기준이어서 별도 호출 사이 변동 가능하다. 숨김·삭제 상태의 변경/취소 허용과 탈퇴 회원 표시는 미정이다.
+모든 인증 회원이 동의·비동의별 목록을 조회한다. 회원을 조인해 최신 닉네임을 반환하며 공개 프로필 설정은 반응을 숨기지 않는다. 정렬은 `updated_at DESC, id DESC`, size는 기본 20·최대 100(1 미만·100 초과는 400)이다. `nextCursor`를 같은 글·reaction·size의 `cursor`로 전달한다. 다른 조건 또는 잘못된 커서는 400 `VALIDATION_FAILED`다. NONE은 목록 필터로 허용하지 않는다.
+
+GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 후속이며 현재 관계를 임의로 삭제하거나 필터링하지 않는다.
 
 <a id="analyses"></a>
 
@@ -636,13 +642,20 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 스레드 상세는 아래 예제에 `signal: {periodDays, epochBtjd, durationHours, depthPpm}`, `commentCount`, `createdAt`을 함께 반환한다. 신호 수치는 현재 공식 후보 요약이며 단위는 일·BTJD·시간·ppm이다. 회원별 미공개 제출·진행 정보를 합치지 않는다. 통계는 기존 함수가 반환하는 `kind=public_analyses`, `candidateId`도 포함한다. 공식 제목은 저장값을 사용하고 최초 공개 회원을 작성자로 표시하지 않는다. 신호 요약 본문의 저장·갱신·기존 스레드 채움과 본문 검색은 [169 후속 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)이며 이 GET에서 데이터를 쓰지 않는다.
 
+공식 스레드의 신호 요약(COM-15·17)은 후보표의 `periodDays/epochBtjd/durationHours/depthPpm` 네 수치를 공개한다(2026-09-21 사용자 확정). 별 게시판이 열려 있고 스레드가 visible이면 본인이 아직 분석하지 않았거나 유효 공개 분석이 0건이어도 동일하게 제공한다. 이는 공개 분석의 회원 제출값에 관한 SB-D23과 구분되는 공개 범위이며, 탐사 상세 보기와 달리 `answer_viewed`를 변경하거나 튜토리얼 건너뛰기 자격을 부여하지 않는다.
+
+별이 미공개이거나 아무도 발견하지 않아 닫힌 경우 특정 별 피드·일반 글 상세·댓글 부모 경로·공식 스레드 상세/목록은 404 `STAR_NOT_PUBLISHED`를 반환한다. 없는 글·숨김/삭제 부모는 404 `RESOURCE_NOT_FOUND`다. 공개 분석 상세와 History 첨부 공개 조회는 별 닫힘도 404 `RESOURCE_NOT_FOUND`로 통합한다. HTTP 상태가 같아도 경로별 오류 코드는 이 구분을 유지한다.
+
 `GET /api/v1/signal-threads/st-301`, 성공 200:
 
 ```json
 {
   "threadId":"st-301","ticId":"123456789","candidateId":"c-401",
   "title":"TIC 123456789 신호 c-401 밝기 분석","author":{"type":"SYSTEM","displayName":"SYSTEM"},
+  "signal":{"periodDays":3.5,"epochBtjd":1500.25,"durationHours":2.1,"depthPpm":1200.0},
+  "commentCount":2,"createdAt":"2026-09-09T02:00:00Z",
   "judgmentSummary":{
+    "kind":"public_analyses","candidateId":"c-401",
     "participantCount":15,"likelyPlanet":8,"unlikelyPlanet":4,"unsure":3,
     "percentages":{"likelyPlanet":53.3,"unlikelyPlanet":26.7,"unsure":20.0},
     "asOf":"2026-09-09T03:00:00Z"
@@ -650,7 +663,11 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 }
 ```
 
-판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각·동률 Submission id이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. N=0은 percentages를 null로 반환하고 ‘아직 공개된 분석이 없습니다’를 표시하는 안이다. 비율은 행성일 확률이 아니다.
+판단은 회원×고유 신호당 **최신 유효 공개 제출 한 건**이다. 최신 기준은 Submission 서버 접수 시각 내림차순·동률 Submission id 내림차순이며 공개한 시각이 아니다. 미공개 재제출은 영향을 주지 않는다. 유효 공개는 본인 취소 없음·개별 숨김 없음·부모가 visible SYSTEM 스레드인 조건을 모두 만족한다. 최신 기록이 취소·숨김되면 남은 과거 유효 기록으로 복귀하고, 없으면 회원을 분모에서 제외한다. 부모 숨김·삭제는 모든 기록을 제외하며 복원해도 개별 숨김·본인 취소 상태는 유지한다. N=0은 세 판단 건수 0·percentages=null을 반환한다. 화면은 COM-14에 따라 ‘아직 공개된 분석이 없습니다’를 표시한다. 각 비율은 건수/N×100을 소수 첫째 자리로 반올림하며, 비율은 행성일 확률이 아니다.
+
+**집계 소비 계약(165):** `SubmissionService.publicJudgmentSummary(candidateId)`는 기존 트랜잭션 안에서 호출한다(MANDATORY). 공개 등록 응답·공식 스레드의 `judgmentSummary`는 현재 라벨과 무관하게 `kind=public_analyses`와 위 필드를 유지한다. 탐사 결과·History의 `judgmentStatistics`는 현재 `answerClass=analysis`일 때 같은 집계를 사용하고 `answerClass=graded`일 때 아래 첫 매칭 통계를 사용한다. **별 결과 페이지(146)의 신호별 `judgmentStatistics`도 탐사 결과 기준**이며 상세 계약은 [탐사 API 8.4절](exploration-api-spec.md#84-별-결과-페이지-res-10-at-74)을 따른다. 조회는 성과·등급·History·탐색 완료를 변경하지 않는다. 일괄 공개(166)·공개 출처 카드(167)는 공개 요약 원천을 재사용하고, 171의 N≥10 판정에는 신호별 participantCount를 사용한다. 해당 후속 API 전체의 구현 완료를 의미하지 않는다.
+
+`asOf`는 집계 쿼리 실행 시각(UTC)이며 장기 보존 스냅샷 식별자가 아니다. 한 응답에서 목록·대표 여부·통계를 여러 SQL로 조립하는 소비자는 REPEATABLE_READ 읽기 트랜잭션에서 같은 DB 스냅샷을 사용하고, 한 번 계산한 요약과 asOf를 공유한다. 판단 필터·페이지 크기는 집계 함수 입력이 아니며 대표 선택 전에 적용하지 않는다. 별도 HTTP 요청 사이의 동일성은 보장하지 않는다. 164의 실제 목록/HTTP 결합 검증은 164에서 수행한다.
 
 `GET /api/v1/signal-threads/st-301/analyses?judgment=UNSURE&size=20`:
 
@@ -763,6 +780,8 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 - 기기 간 읽음 동기화가 필요하면 P1 notifications의 type=challenge, payload의 회차 참조, read_at을 활용하는 방향으로 상세화한다. 별도 회원×회차 확인 테이블을 추가하지 않는다. 알림 중복 생성 방지는 P1 계약에서 정한다.
 
 챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
+
+139 퀘스트 패널은 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 168 회차 API와 208 화면의 참여 수도 같은 원천을 소비한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. 168 API 구현과 208 실제 HTTP 연동 인수는 별도다.
 
 <a id="later"></a>
 

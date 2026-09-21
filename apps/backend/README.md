@@ -2,7 +2,7 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회는 [서비스 API 명세](docs/service-api-spec.md) 3장·5~7장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세를 제공하며, 검색·공개 출처 카드·반응 API는 후속 범위다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 검색·공개 출처 카드 API는 후속 범위다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
@@ -94,6 +94,8 @@ docker compose --profile service up -d --wait service-db
 ```
 
 ## 더 보기
+
+일반 글 반응(163)은 최종 상태 PUT과 반응자 커서 GET을 제공하며 상세·수정 응답에 실제 반응 합계를 반환한다. `./gradlew -PskipLocalDb test --tests '*PostReactionTest' --tests '*MemberCommunityPermissionTest' --tests '*PublicAnalysisTest'`로 일회용 PostgreSQL의 HTTP·동시성·삭제 경합·최소 권한·공개 판단 비변경을 검증한다. [서비스 API 8장](docs/service-api-spec.md#reactions), [V16 권한 안내](docs/development-setup.md#v16-일반-글-반응-권한)를 따른다.
 
 공개 분석 등록(161)은 `POST /api/v1/public-analyses`로 본인 History를 공식 스레드에 등록하고 성과·별 발견을 같은 트랜잭션으로 확정한다. `PublicAnalysisTest`가 실제 제출부터 공개·동시성·롤백·앱 역할 권한을 검증한다. 취소/재공개(162)와 목록/상세(164)를 제공하며 일괄 API는 후속 티켓이다. 입력과 재시도 계약은 [서비스 API 9.1절](docs/service-api-spec.md#publication)을 따른다. V14 적용 순서는 [마이그레이션 안내](docs/development-setup.md#v14-공개-분석-등록-권한)를 확인한다.
 
