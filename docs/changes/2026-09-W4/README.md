@@ -71,6 +71,7 @@
 | 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | 마이페이지 내 별·분석 기록 목록 연결 | S15P21C206-196 | 프로필 슬롯, 커서에 size 묶임, unpublishedSignalCount 없음과 0, detailAvailable, StrictMode 두 쪽 읽기 | 구현·검증 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 후보 병합·분리 정정 계약과 C19 수행 범위 고정 | S15P21C206-153 | 후보 병합, 분리, retired, GRD-06, DEC-26, C18-Q1~Q6, gold_writer 권한, 사전검사 | 결정 요청 초안·교차 검토 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 정정 계약 리뷰 반영: 확정·제안 분리와 복구·역할 정정 | S15P21C206-153 | GRD-06 재계산, 제안과 확정, status 복구 불가, gold_writer SELECT 없음, 역할 분리 | 리뷰 반영 완료 | [기록](2026-09-21.md) |
 | 2026-09-21 | 발견한 별 유지를 확정에서 미확정(C18-Q7)으로 | S15P21C206-153 | C18-Q7, star_unlocks, GRD-06, S4, DEC-26, 근거 철회 | 결정 요청 초안 | [기록](2026-09-21.md) |
