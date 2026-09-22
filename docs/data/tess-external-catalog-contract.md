@@ -1,7 +1,7 @@
 # 외부 카탈로그 계약 검증 — 116
 
 - Jira: S15P21C206-116
-- 상태: 네 원천 수집·9별 실측·검산 완료. 외부 시간 기준 보완과 매칭 계약 승인은 남아 있다. 운영 채택 전 검토안이다.
+- 상태: 네 원천 수집·9별 실측·검산 완료. 사용자가 전달한 !187 리뷰에서 강재민·김동혁 승인 확인. 운영 적용과 시간 기준 보류 해소는 별도이며 병합 여부는 아직 확인하지 않았다.
 - 범위: 원천 식별·단위·snapshot·후보 조인 계약. 운영 배치·DB 게시 구현은 124에서 담당한다.
 - 근거: [외부 원천 검토안](tess-pipeline/external-sources-and-ai.md), [요구사항](../requirements/planetory-requirements-spec.md)의 DAT-09, [결정 기록](../requirements/planetory-decision-register.md)의 DEC-20.
 
@@ -69,7 +69,7 @@ MAST 선택 8행은 WASP-62 1·TOI-700 3·pi Men 1·L 98-59 3행이다. 파일 �
 
 ## 116 매칭 검토안 v1과 실측 준비
 
-상태: 합성 검증·원본 광도곡선 실측 완료·팀 미승인. 구현은 [external_matching.py](../../experiments/tess-bench/tess_bench/external_matching.py), 사용자 실측은 [bench 사용법](../../experiments/tess-bench/README.md#116-원본-광도곡선외부-참조-실측)을 따른다.
+상태: 합성 검증·원본 광도곡선 실측 완료·!187 리뷰 승인. 운영 배치 적용 완료를 뜻하지 않는다. 구현은 [external_matching.py](../../experiments/tess-bench/tess_bench/external_matching.py), 사용자 실측은 [bench 사용법](../../experiments/tess-bench/README.md#116-원본-광도곡선외부-참조-실측)을 따른다.
 
 ### 판정과 근거
 
@@ -99,7 +99,7 @@ snapshot_proposal은 순수 검토 모델이다. 수집 완전성 또는 검증 
 4. 결과 문서·최소 검산 산출물 준비 후 사용자가 commit/push/MR을 진행한다.
 5. 계약 승인·병합 뒤 Jira 116 완료 여부를 판단한다. 정책 미결을 코드 기본값으로 확정하지 않는다.
 
-수집·감사 테스트 18개, 매칭·변환·실행기 합성 테스트 32개가 통과했다. 실행기 테스트는 가짜 FITS/커널 대역이며 실제 실측 성공 증거가 아니다. 실제 실행과 Git 명령은 사용자 실행 전이다.
+수집·감사 테스트 18개, 리뷰 보완 후 매칭·변환·실행기 합성 테스트 41개가 통과했다. 실행기 테스트는 가짜 FITS/커널 대역이며 실제 실측 성공 증거가 아니다. 사용자 실제 실행 결과는 아래 6348c862 절에 기록한다.
 
 ## 원본 9별 실측 결과 — 6348c862
 
@@ -140,7 +140,7 @@ snapshot_proposal은 순수 검토 모델이다. 수집 완전성 또는 검증 
 
 ## !187 소비자 리뷰 보완 — disposition 전체 열 인계
 
-상태: 재민님 리뷰 반영·재승인 대기. DB 스키마와 기존 migration은 변경하지 않는다. `disposition()`은 순수 판정 함수이며 DB INSERT 행 완성기가 아니다. 판정 규칙 버전은 `external-disposition-review-v2`로 분리했다. 매칭 규칙 `external-match-review-v1`과 다른 책임이다.
+상태: 재민님이 3c5e48dd의 반영을 확인하고 승인했다. DB 스키마와 기존 migration은 변경하지 않는다. `disposition()`은 순수 판정 함수이며 DB INSERT 행 완성기가 아니다. 판정 규칙 버전은 `external-disposition-review-v2`로 분리했다. 매칭 규칙 `external-match-review-v1`과 다른 책임이다.
 
 | TFOPWG 입력 | disposition | answer_class | planet_truth | 판정 |
 | --- | --- | --- | --- | --- |
@@ -206,3 +206,20 @@ PC/APC→pc와 라벨 없음→none은 DB 상태를 구분한다. 150의 pc↔no
 매칭/변환/실행기/판정 테스트 41개 통과(빈 값·PC/APC·FP·실제 충돌·unknown 추가). 기존 6348c862 실측 경로는 disposition()을 호출하지 않는다. 매칭·BLS 산식과 문턱은 바꾸지 않았으므로 BLS 재실행은 하지 않았다. 기존 manifest와 ZIP은 당시 코드의 불변 근거로 보존하며 **새 HEAD의 전체 코드 checksum 일치 증거로 재사용하지 않는다.** 새 판정 동작 근거는 이번 회귀 테스트다. 124의 실제 INSERT 및 source_refs 구성·125 검증·Publisher 적용은 후속 구현 범위다.
 
 !104와의 uv.lock 충돌은 리뷰어의 교차 MR 확인 사항이며 이번 보완에서 lockfile을 수정하지 않았다. 실제 통합 시 최신 develop과 충돌 여부를 다시 확인한다.
+
+## 최종 리뷰 승인과 비차단 후속 인계
+
+사용자가 전달한 !187 댓글에서 강재민은 3c5e48dd의 disposition·필수 열 인계를, 김동혁은 수집·감사·매칭 검토안·실측·인계 범위를 승인했다. 김동혁은 수집/감사 18개와 매칭/실행기 41개 테스트를 직접 실행했다. 한글 워크트리의 editable 경로 로딩은 PYTHONPATH 지정으로 해결했으며 MR 결함으로 판단하지 않았다. 두 리뷰어가 실제 BLS와 ZIP checksum을 재실행한 것으로 기록하지 않는다.
+
+검토 자료 ZIP은 Git 제외 results 경로의 로컬 생성물이며 [GitLab MR !187](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/187)의 첨부 자료로 제공한다. 저장소 checkout만으로 생기지 않는다. 위 SHA-256으로 해당 첨부의 동일성을 확인한다.
+
+다음은 병합 차단이 아닌 124 구현·검증 인계다. 이번 문서 보완에서는 계산·수집·실측 코드를 변경하지 않는다.
+
+| 담당 | 후속 조치 | 검증 조건 |
+| --- | --- | --- |
+| 124 실행 manifest | 현재 glob("*.py")는 평면 모듈만 포함한다. 하위 패키지 도입 전 재귀 코드 snapshot으로 확대하고 정렬·범위를 고정한다. | 하위 패키지 파일 하나의 변경도 입력 hash 변경으로 감지하는 테스트 |
+| 124 원천 검증 | 중복 외부 키는 해당 원천을 보류하고 기존 성공 snapshot을 유지한다. 현재 실험은 duplicate_id_in_source 예외로 실행 전체를 중단한다. | 중복 원천의 라벨 게시 금지, 다른 원천의 진단 보존. 부분 결과를 전체 성공 snapshot으로 승격하지 않음 |
+| 124 라벨 호출부 | no_label 판정 호출 전에 absence_evidence·완전성·시간 기준·매칭 상태를 명시적으로 검사한다. | 실패·부분·invalid time·ambiguous·possible_alias가 none 갱신으로 이어지지 않는 테스트 |
+| 124 시간 정규화 | TCE tce_time0bt의 원점뿐 아니라 TDB 시간 척도까지 공식 MAST 근거로 확인한다. | 근거 URI·변환 규칙 버전·재검증 후에만 현재 8행 보류 해소. 이름만으로 BTJD-TDB 추정 금지 |
+
+1~4번 문서 정합성 의견(인덱스 상태·41개 테스트 수·fixture 사용법 위치·MR 첨부 안내)을 반영했다. 원천별 부분 보류와 재귀 snapshot은 후속 구현 항목이며 현재 기능으로 보고하지 않는다. 승인된 검토 범위를 운영 적용 완료 또는 모든 외부 시간 척도 검증 완료로 확대하지 않는다.

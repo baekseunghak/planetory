@@ -575,6 +575,6 @@ uv run --locked python -m tess_bench.external_catalog_replay --manifest ../tess-
 
 `--targets wasp18` 등으로 부분 실행할 수 있으며 plan에 대상 목록을 남긴다. 기본은 9별이다. 시작 전 전체 입력·구현 hash를 고정하고 종료 후 대조한다. 결과는 results/external-catalog-replay 아래 새 디렉터리에 저장한다. 다운로드·Git·DB 호출은 없다. time standard가 확인되지 않은 외부 행은 invalid_external로 남는다. diagnostic ID는 실험 식별자이며 운영 candidate ID가 아니다.
 
-단위 검증: `uv run --locked python -m pytest tests/test_external_matching.py tests/test_external_catalog_replay.py -q`. 실제 FITS 실험과 별도인 합성 테스트 32개다.
+단위 검증: `uv run --locked python -m pytest tests/test_external_matching.py tests/test_external_catalog_replay.py -q`. 실제 FITS 실험과 별도인 합성 테스트 41개다.
 
 116 !187 소비자 리뷰 보완: disposition()은 confirmed/fp/pc/none과 판정 규칙 버전을 반환하며 빈 라벨과 충돌을 구분한다. DB 행 공급자는 [116 필수 열 인계](../../docs/data/tess-external-catalog-contract.md)에 명시한다. hold는 DB에 저장하지 않으며 124 source_refs·Publisher applied_at은 후속 공급이다. 관련 테스트 41개 통과, 기존 BLS 실측은 재실행하지 않았다.

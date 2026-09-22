@@ -12,6 +12,14 @@ uv run --locked python -m tess_fixture.external_catalog
 
 단위 검증: `uv run --locked python -m pytest tests/test_external_catalog.py -q`. 합성 응답만 사용하며 다운로드나 Git 명령을 실행하지 않는다.
 
+`--source nea_pscomppars exofop_toi`를 붙이면 지정 원천만 새 폴더에 수집한다. 부분 실행은 manifest의 `subset=true`로 표시되며 기존 성공 파일은 유지한다.
+
+저장 원천 감사는 다음처럼 실행한다. 네 성공 원천을 요구하고 해시·행 수 검증 후 9 TIC 천문 필드만 추출한다. 기존 출력은 덮어쓰지 않는다. 인자는 실제 파일 경로로 바꾼다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog_audit --manifest <첫-manifest> --manifest <재수집-manifest> --output <새-json>
+```
+
 ## 고정 fixture
 
 Jira `S15P21C206-41`. 후속 전처리·BLS·비닝·AI 실험이 같은 입력으로 비교되도록 고정 SPOC 2분 광도곡선 표본과
@@ -107,6 +115,3 @@ uv run --locked python -m tess_fixture download --target holdout_268637577 holdo
 ```
 
 평가에는 저장된 참고값을 그대로 사용한다. `references`를 다시 조회하면 고정 입력이 달라져 holdout lock 검사가 실패한다. 평가의 설정·판정·재실행 정책은 [BLS 벤치마크](../../docs/data/tess-bls-benchmark.md)의 5.3절을 따른다.
-`--source nea_pscomppars exofop_toi`를 붙이면 지정 원천만 새 폴더에 수집한다. 부분 실행은 manifest의 `subset=true`로 표시되며 기존 성공 파일은 유지한다.
-
-저장 원천 감사: python -m tess_fixture.external_catalog_audit --manifest <첫-manifest> --manifest <재수집-manifest> --output <새-json>. uv run --locked로 실행한다. 네 성공 원천을 요구하고 해시·행 수 검증 후 9 TIC 천문 필드만 추출한다. 기존 출력은 덮어쓰지 않는다.
