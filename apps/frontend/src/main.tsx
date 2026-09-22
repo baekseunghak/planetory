@@ -3,6 +3,9 @@ import {
   MemberProfilePage,
 } from "./features/profile/ProfilePage";
 import { StrictMode } from "react";
+import { FollowingPage, FollowingFeedPage } from "./features/follow/Follow";
+import { p1Enabled } from "./features/p1";
+import { NotificationsPage } from "./features/notifications/Notifications";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App, type PageSlots } from "./app/App";
@@ -18,6 +21,8 @@ import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
 import { HotTopicsPage } from "./features/community/HotTopicsPage";
+import { SettingsPage } from "./features/profile/SettingsPage";
+import { WithdrawalPage } from "./features/profile/WithdrawalPage";
 import {
   CommunityPage,
   PostPage,
@@ -43,6 +48,13 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
+    ...(p1Enabled
+      ? { withdrawal: WithdrawalPage }
+      : {}),
+    ...(p1Enabled ? { notifications: NotificationsPage } : {}),
+    ...(p1Enabled
+      ? { following: FollowingPage, followingFeed: FollowingFeedPage }
+      : {}),
     sky: SkyDataPage,
     profile: MyProfilePage,
     member: MemberProfilePage,
@@ -58,12 +70,14 @@ async function start() {
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
     ).GalaxyPage;
+  if (p1Enabled) pages.publicSky = (await import("./features/public-sky/PublicSky")).PublicSkyPage;
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
   // Use the analysis page in both fixture and real-server modes.
   pages = {
     ...pages,
+    settings: SettingsPage,
     analysis: AnalysisPage,
     historyDetail: HistoryDetailPage,
     publicAnalysis: PublicAnalysisPage,
@@ -103,3 +117,4 @@ async function start() {
   );
 }
 void start();
+

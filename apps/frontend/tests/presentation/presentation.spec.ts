@@ -34,7 +34,7 @@ test("5000-star viewport, collapsed quests and keyboard return preserve an unobs
     page.getByRole("complementary", { name: "별 상세" }),
   ).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await page.getByRole("button", { name: "별지도" }).click();
   await expect(toggle).toBeFocused();
   const notice = page.getByRole("button", { name: "새 챌린지 안내 닫기" });
   if (await notice.isVisible()) await notice.click();

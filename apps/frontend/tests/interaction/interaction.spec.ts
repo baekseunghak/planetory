@@ -129,7 +129,7 @@ test("GPU projected star hover/click matches TIC after rotation and 1024px resiz
     "900000001",
   );
   await expect(canvas).toHaveAttribute("data-rendered-planets", "5");
-  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await page.getByRole("button", { name: "별지도" }).click();
   const box = (await canvas.boundingBox())!;
   await page.mouse.click(box.x + 20, box.y + 160);
   await expect(page.getByTestId("selection-summary")).toHaveCount(0);
@@ -308,7 +308,7 @@ test("2501 paginated data preserves selected ID and camera through zoom/page rep
   await expect(page.getByTestId("selection-summary")).toContainText(
     "900000001",
   );
-  await page.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await page.getByRole("button", { name: "별지도" }).click();
   await expect(page.locator("canvas")).toHaveAttribute(
     "data-rendered-stars",
     "2501",

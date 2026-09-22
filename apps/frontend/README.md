@@ -1,5 +1,9 @@
 # Planetory 공용 프론트
 
+2026-09-21: [223 별 검색·위치 이동과 A13 연결 범위](docs/ticket-223-readiness.md). `npm run dev:star-search`로58384에서 서버 좌표 기반 검색·선택을 확인한다. 필터 HTTP·공용 입력 슬롯을 구현했으며 실제 A13 소비자와 백엔드 연결은 아직 미검증이다.
+2026-09-21: [221 개인 설정 구현·잔여](docs/ticket-221-readiness.md). `/settings`에서 별 목록 공개 범위를 저장·복구한다. `npm run dev:settings`로58382에서 확인한다. 알림 수신 설정의 정책/API는 미정이며 221 전체 완료가 아니다.
+219 팔로우: [프론트 기준 P1 HTTP 계약](../backend/docs/p1-service-contract.md)을 백엔드와 함께 사용한다. `node --import tsx scripts/p1-server.mjs`는58392에서 실제 제품 코드에 개발용 HTTP를 공급한다. 제품 활성화는 `VITE_P1_ENABLED=true`이며 가짜 응답을 운영으로 가져오지 않는다. 커뮤니티의 팔로잉과 마이페이지의 관계 관리를 분리한다.
+
 2026-09-21: 기존 P0 화면을 승인된 시제품의 배치와 디자인에 맞춘다. [248 명세 비교·제외 범위·검증 체크리스트](docs/prototype-presentation-248.md)를 따른다. `npm run dev:presentation`은 58381에서 실제 제품 화면에 메모리 임시 별 5,000개를 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
 
 248 후속: 별 상세의 구조·표면·조작 이식은 아직 미완료다. [시제품 상세 이식 기준·간헐 실패 원인](docs/prototype-detail-parity-248.md)을 따른다. 작은 화면으로 바뀔 때 이미 연 페이지를 숨겨 상태를 보존하며, 세션 만료 시 비공개 화면 제거는 유지한다.
@@ -182,6 +186,9 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.
 
 분석 1–5단계의 Figma 적용 범위와 조작·검증은 [분석 디자인 적용 기록](docs/analysis-design.md)을 따른다.
+
+### P1 시제품 반영 인계
+[구현 순서·백엔드 인계](docs/p1-prototype-rollout.md). 공개 은하 250은 전체 보유 별을 대상으로 하며 219~223 계약과 함께 배포 연결한다. 개발용 실행은 npm run dev:p1, 검증은 npm run test:p1.
 
 2026-09-21 출처 카드(167): ID 없는 `available:false` 항목은 글·댓글에서 대체 안내로 표시하며 조회·링크를 생성하지 않는다. 본문·History만 수정하면 출처 PATCH를 생략하고, 무효 출처는 공개 출처 전체 제거로 명시적으로 해제한다. 기존 213 첨부 그래프 동작을 유지한다. 계약은 [서비스 API 7장](../backend/docs/service-api-spec.md#attachments)을 따른다.
 

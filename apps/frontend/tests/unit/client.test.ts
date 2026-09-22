@@ -178,6 +178,38 @@ test("expired-session cancellation aborts other pending requests", async () => {
   client.cancelPending();
   await assert.rejects(request, { name: "AbortError" });
 });
+test("session cancellation does not abort an independent receipt read", async () => {
+  let releaseReceipt!: (response: Response) => void;
+  const client = createApiClient({
+    baseUrl: "/api",
+    fetch: async (url, options) => {
+      if (String(url).endsWith("/v1/me"))
+        return new Response(JSON.stringify({ code: "UNAUTHENTICATED" }), {
+          status: 401,
+        });
+      return new Promise<Response>((resolve, reject) => {
+        releaseReceipt = resolve;
+        options!.signal!.addEventListener(
+          "abort",
+          () => reject(options!.signal!.reason),
+          { once: true },
+        );
+      });
+    },
+  });
+  client.onUnauthorized(() => client.cancelPending());
+  const receipt = client.request("/v1/withdrawal-requests/receipt-1", {
+    sessionBound: false,
+  });
+  await assert.rejects(
+    client.request("/v1/me"),
+    (error) => error instanceof ApiError && error.status === 401,
+  );
+  releaseReceipt(
+    new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 }),
+  );
+  assert.deepEqual(await receipt, { status: "COMPLETED" });
+});
 test("cancelling a dispatched write does not claim that the server rolled back", async () => {
   const abort = new AbortController();
   let entered!: () => void;
