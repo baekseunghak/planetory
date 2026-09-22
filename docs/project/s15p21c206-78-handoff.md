@@ -1,6 +1,6 @@
 # S15P21C206-78 Silver 처리·Airflow 인계
 
-> 상태: 구현·로컬 검증 완료, 운영 배포·실제 YARN Canary 전<br>
+> 상태: 구현·252 통합·로컬 검증 완료, 운영 배포·실제 YARN Canary 전<br>
 > 기준 브랜치: `feature/S15P21C206-78-spark-silver-distributed-processing`<br>
 > 기준일: 2026-09-23<br>
 > Jira: [S15P21C206-78](https://ssafy.atlassian.net/browse/S15P21C206-78)
@@ -23,7 +23,8 @@
 - DAG는 `tess_pipeline_enabled=false`와 실행 중인 252 Raw/Bronze DAG 부재를 확인한 뒤 `planetory_node_1` SSH connection으로 Silver controller를 실행한다. task는 `tess_yarn` Pool을 요구한다.
 - `distributed-system/spark/tess_bronze_ctl.py`와 `tess_silver_ctl.py`는 Node 1의 `/run/planetory-tess-yarn.lock`을 공유해 YARN 제출을 직렬화한다. 이는 현재 단일 클러스터 여유를 보수적으로 보호하는 전역 잠금이며, 실제 용량 검증으로 동시 실행이 안전하다고 확인될 때에만 분리한다.
 - `infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh`는 지정 release 경로와 상위 디렉터리의 root 소유·비쓰기 권한을 검사한 뒤, 해당 release controller만 허용하는 sudoers와 `tess_yarn` 1-slot Pool을 만든다. 기존 sudoers 내용이 다르면 덮어쓰지 않고 실패한다.
-- `distributed-system/airflow/requirements.txt`에 현재 서버 Airflow와 호환되는 `apache-airflow-providers-ssh==4.1.6`을 명시한다.
+- `distributed-system/airflow/requirements.txt`는 252가 전환한 `apache-airflow==3.2.2`와 FAB·SSH `5.0.2`·Standard provider 고정을 따른다. 78이 Airflow 2.10.5 기준으로 넣었던 `apache-airflow-providers-ssh==4.1.6` 핀은 통합 시 제거했다.
+- Airflow 3에서는 DAG 코드가 metadata DB에 접근할 수 없으므로 Silver 사전 게이트의 Raw/Bronze 실행 확인은 Task SDK `ti.get_dr_count(dag_id=..., states=[...])`를 사용한다. 252가 제거한 레거시 `tess_sector_download_raw_bronze`는 검사 대상이 아니다.
 
 ## 문서·테스트 변경
 
@@ -45,16 +46,17 @@
 | 커널·Spark·Airflow 계약 | `libs/astro-kernel/.venv/Scripts/python.exe -m pytest -q libs/astro-kernel/tests distributed-system/spark/test_tess_silver.py distributed-system/spark/test_tess_bronze.py distributed-system/airflow/tests/test_tess_silver_dag.py` | 246 passed, 12 subtests passed |
 | 변경 핵심 회귀 | `pytest -q -p no:cacheprovider distributed-system/airflow/tests/test_tess_silver_dag.py distributed-system/spark/test_tess_silver.py distributed-system/spark/test_tess_bronze.py` | 40 passed, 14 subtests passed |
 | PowerShell 통합 검사 | `infra/distributed-system/scripts/test-tess-silver.ps1` | 20 passed, 1 skipped(Astropy가 system Python에 없음), Airflow 계약 4건 통과 |
-| 서버 정적 점검 | Airflow 2.10.5 scheduler container에 새 DAG/계약을 메모리 import, Node 1에서 Bash·생성 sudoers 문법 검사 | 통과 |
+| 서버 정적 점검(2026-09-22, Airflow 2.10.5 시점) | 당시 scheduler container에 새 DAG/계약을 메모리 import, Node 1에서 Bash·생성 sudoers 문법 검사 | 통과. **3.2.2 전환 후 재확인 필요** |
+| 252 통합(2026-09-23) | `unittest discover distributed-system/airflow/tests` 20 passed, `pytest libs/astro-kernel/tests distributed-system/spark/test_tess_silver.py test_tess_bronze.py` 245 passed·3 subtests | 통과. 로컬에 Airflow 3.2.2가 없어 실제 DAG import와 `get_dr_count(states=...)` 동작은 미검증 |
 | 문서·diff | 상대 링크 검사, `git diff --check` | 통과 |
 
 실제 Spark/PySpark·YARN Canary, Airflow DAG 배포·trigger, sudoers/Pool 변경은 실행하지 않았다. 따라서 위 결과를 운영 배포 또는 전체 Silver 생성 완료로 해석하지 않는다.
 
 ## 서버에서 확인한 기준 상태
 
-2026-09-22 읽기 전용 확인 기준으로 Node 1은 Airflow 2.10.5, `LocalExecutor`, `parallelism=2`를 사용한다. 252의 Sector 14 수집→Raw→Bronze 4단계는 성공했으나 서버에는 Silver DAG가 없었다. 단계형 DAG는 자체 schedule이 없고, legacy 1~13 결합 DAG와 discovery DAG는 pause 상태였다. `tess_pipeline_enabled=false`, Sector 상한은 14였다.
+2026-09-23 기준 Node 1은 252가 전환한 Airflow 3.2.2(API Server·Scheduler·별도 DAG Processor·Triggerer)와 `LocalExecutor`를 사용한다. 통합 소스의 `compose.control-plane.yaml`은 `AIRFLOW__CORE__PARALLELISM=8`이지만 252 변경 이력 기준 이 값의 운영 배포·회귀는 아직 미검증이므로, 배포 전 서버 실제 값을 확인한다. 이전 2.10.5 DB·release는 롤백용으로 보존한다. 아래 서술은 2026-09-22 Airflow 2.10.5·`parallelism=2` 시점의 읽기 전용 확인이다. 당시 252의 Sector 14 수집→Raw→Bronze 4단계는 성공했으나 서버에는 Silver DAG가 없었다. 단계형 DAG는 자체 schedule이 없고, legacy 1~13 결합 DAG와 discovery DAG는 pause 상태였다. `tess_pipeline_enabled=false`, Sector 상한은 14였다.
 
-서버에 배포된 252 DAG 파일 6개는 당시 `origin/feature/S15P21C206-252-pipeline-sector-ingestion-bronze-dag`의 배포 기준 commit과 SHA-256이 일치했다. 이 78 브랜치에는 252 DAG 소스가 포함되어 있지 않으므로, 이 브랜치만으로 Airflow 이미지를 재배포하면 기존 단계형 DAG가 빠질 수 있다. **252 소스와 78 변경을 의도적으로 통합한 release에서만 Airflow 이미지를 빌드·배포한다.**
+서버에 배포된 252 DAG 파일 6개는 당시 `origin/feature/S15P21C206-252-pipeline-sector-ingestion-bronze-dag`의 배포 기준 commit과 SHA-256이 일치했다. 2026-09-23 병합 `0e50e3b4`로 252 소스를 이 브랜치에 통합했으므로 이 경고는 해소됐다. 다만 **배포 전 252 DAG 5개와 `tess_bronze_to_silver`가 같은 이미지에서 함께 import되는지 반드시 확인한다.**
 
 ## 반드시 지켜야 할 입력·범위 경계
 
@@ -62,14 +64,14 @@
 2. Sector 14+의 누적 snapshot, 변경 TIC 재처리, 혼합 Bronze pipeline version 및 기존 Silver 결과 조합은 아직 계약되지 않았다. 이는 252/80의 별도 범위이며, 이 DAG의 입력 검사나 우회 conf로 해결하지 않는다.
 3. 새 공통 잠금은 이번 브랜치의 Bronze controller에 들어 있다. 운영 중인 기존 252 Bronze release에는 아직 없으므로, 새 Bronze release가 적용되기 전에는 discovery/Raw/Bronze를 drain한 상태에서만 Silver DAG를 실행한다.
 4. `tess_yarn` Pool은 setup script를 실제 실행하기 전에는 존재·설정되었다고 가정하지 않는다. Silver DAG는 pause 상태로 배포하고, Pool·sudo 권한·release를 확인한 뒤에만 명시적으로 unpause/trigger한다.
-5. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 현재 `parallelism=2` 환경에서 이 보수적 선택은 실행 충돌을 줄이지만, 장기적으로 비동기 상태 감시로 바꾸는 일은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
+5. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 252가 `parallelism=8`로 올렸어도 Silver는 며칠 단위로 한 슬롯을 잡으므로 252의 단계 DAG 5개와 합쳐 슬롯이 모자라지 않는지 확인한다. Airflow 3는 queue 투입 시점에 실행 토큰을 발급하고 기본 600초에 만료하므로, 슬롯 부족으로 대기가 길어지면 252가 겪은 `Invalid auth token: Signature has expired`가 Silver에서도 발생할 수 있다. 비동기 상태 감시 전환은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
 
 ## 다음 담당자의 실행 순서
 
 운영 변경은 대상 Node 1, release ID, 영향 범위를 확인하고 별도 승인을 받은 뒤 아래 순서를 지킨다.
 
-1. 252의 현재 DAG·Bronze controller 변경과 이번 78 변경을 충돌 검토하여 하나의 배포 release로 통합한다. 252 브랜치를 통째로 이 브랜치에 무검토 병합하지 않는다.
-2. 통합 소스에서 Airflow 이미지를 빌드하고, 기존 252 DAG와 `tess_bronze_to_silver`가 함께 import되는지 확인한다. 기존 활성 DAG·connection을 삭제하거나 재생성하지 않는다.
+1. **완료(2026-09-23, 병합 `0e50e3b4`)** — 252의 Airflow 3.2.2 전환·단계 DAG와 78 변경을 충돌 검토해 통합하고 Silver DAG를 Task SDK로 이식했다. 이후 252가 더 진행되면 같은 방식으로 다시 통합한다.
+2. 통합 소스에서 Airflow 3.2.2 이미지를 빌드하고, 252 DAG 5개와 `tess_bronze_to_silver`가 함께 import 오류 0건으로 올라오는지 확인한다. Silver 게이트의 `get_dr_count(states=...)` 호출이 실제 3.2.2에서 동작하는지도 이 단계에서 처음 검증한다. 기존 활성 DAG·connection을 삭제하거나 재생성하지 않는다.
 3. `run-tess-silver.ps1 -Step Install`로 immutable Silver release를 설치하고 controller·상위 디렉터리가 root 소유·비쓰기를 만족하는지 확인한다.
 4. Node 1 root 권한으로 `configure-tess-silver-airflow-node1.sh <release-id>`를 한 번 실행한다. 이 단계는 `/etc/sudoers.d`와 Airflow metadata DB의 Pool을 변경하므로 실행 전 승인과 사후 `visudo -c`, Pool slot=1 확인이 필요하다.
 5. discovery와 Raw/Bronze 실행이 완전히 끝난 상태, `tess_pipeline_enabled=false`, 정확한 1~13 Bronze coverage marker를 확인한다. 처음에는 1~5개의 명시 TIC Canary만 trigger한다.
