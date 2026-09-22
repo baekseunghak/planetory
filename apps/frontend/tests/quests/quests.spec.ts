@@ -34,6 +34,9 @@ test("independently collapsed regions, all five goals, locked target privacy, se
   );
   await page.goto("/sky");
   await page.getByRole("button", { name: "퀘스트", exact: true }).click();
+  await expect(
+    challenge(page).locator(":scope > summary:first-child"),
+  ).toHaveCount(1);
   await expect(tutorial(page).locator("summary")).toContainText("0 / 5");
   expect(await tutorial(page).getAttribute("open")).toBeNull();
   expect(await challenge(page).getAttribute("open")).toBeNull();

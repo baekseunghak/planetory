@@ -5,6 +5,7 @@ import {
 import { StrictMode } from "react";
 import { FollowingPage, FollowingFeedPage } from "./features/follow/Follow";
 import { p1Enabled } from "./features/p1";
+import { NotificationsPage } from "./features/notifications/Notifications";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App, type PageSlots } from "./app/App";
@@ -45,6 +46,7 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
+    ...(p1Enabled ? { notifications: NotificationsPage } : {}),
     ...(p1Enabled
       ? { following: FollowingPage, followingFeed: FollowingFeedPage }
       : {}),

@@ -43,3 +43,33 @@
 - 합성 제공자: [follow-fixture-plugin.ts](../../frontend/dev/follow-fixture-plugin.ts). 권한/페이지/DB 경합 검증을 대체하지 않는다.
 - 생산자 검증: 자기/탈퇴/미해금 공개 별, 중복 PUT·반복 DELETE, 두 계정 관계 격리, 정렬·페이지 중복, 숨김·권한 철회, GET과 요약 일치, CSRF/401/503을 검증한다.
 - FE 계약 테스트 통과 후에도 실제 두 계정·실제 DB·배포 검증은 `244 P1-219`에 남는다. API를 다르게 구현해야 한다면 이 문서와 소비 파서를 같은 MR에서 변경하고 교차 리뷰한다.
+
+## 3. 알림 · 220
+
+프론트 `/notifications`는 헤더 종 아이콘으로 진입한다. 주 메뉴에 중복 항목을 추가하지 않는다. 제공자는174/175이며 실제 인수는244 P1-220이다.
+
+| 메서드·경로 | 요청·응답 |
+|---|---|
+| GET `/api/v1/me/notifications?size=20&cursor=...&unreadOnly=false` | `{items:[Notice],nextCursor:null,hasNext:false,readBoundary:"opaque"}` |
+| GET `/api/v1/me/notifications/unread-count` | `{unreadCount:2}` |
+| GET `/api/v1/me/notifications/{notificationId}/target` | `{notificationId:"n1",available:true,target:{kind:"POST",postId:"p1"}}` |
+| PATCH `/api/v1/me/notifications/{notificationId}` | `{read:true}` → `{notificationId:"n1",read:true}` |
+| PATCH `/api/v1/me/notifications/read` | `{through:"opaque"}` → `{unreadCount:0}` |
+
+`Notice` 예시: `{notificationId:"n1",kind:"COMMENT",createdAt:"2026-09-21T01:00:00Z",read:false,available:true,title:"탐사 기록에 새 댓글이 달렸습니다",body:"새 의견을 확인하세요."}`. 시간은 UTC ISO8601이다. 종류는 ACHIEVEMENT(성과·등급), REOPEN(재탐색), CHALLENGE(현재 회차), FOLLOW(팔로우 소식), COMMENT(내 글의 댓글)다. 전문가/비전문가 신규 알림 정책은 여기서 만들지 않는다.
+
+### 3.1 현재 권한과 목적지
+
+- 알림 자체는 본인만 조회/변경한다. 타인 ID는404, 인증은401, CSRF 오류는기존403이다. false/null 읽음 변경은400이다. 읽음은 true로만 진행하며 반복 PATCH는 같은 결과다.
+- 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 숨김·삭제·첨부 철회 후 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
+- 클릭 시 target을 새로 조회한다. 접근 불가면200 `{notificationId:"n1",available:false,target:null}`이며 프론트는 이동하지 않는다. 허용되어도 목적지 API가 권한을 다시 검사한다. 이 조회가 권한 토큰이나 보호 우회 수단은 아니다.
+- target은 URL 문자열이 아닌 고정 DTO다. `POST/postId`, `THREAD/threadId`, `STAR/ticId`, `CHALLENGE/roundId` 중 하나다. POST/THREAD에 commentId가 있으면 서버가 해당 댓글이 있는 페이지의 discussionCursor도 제공하고 프론트는 토론 영역으로 이동한다. 외부 URL/임의 경로는 거절한다.
+- STAR 목적지는 본인이 해금하여 개인 상세를 볼 수 있는 TIC에만 사용한다. 팔로우한 미해금 별 소식은 공개 게시글/스레드 목적지를 사용한다. 삭제 댓글/종료 회차/권한 철회를 검증한다. 종료 회차는 현재 퀘스트를 보여주되 회차 변경을 안내하고 자동으로 분석을 시작하지 않는다.
+
+### 3.2 읽음 범위·경합
+
+목록은 생성시각 내림차순·동률 ID 내림차순이다. readBoundary는 첫 조회 당시의 본인 전체 알림 경계를 표현하는 불투명 값이며 필터/현재 페이지의 항목 목록만을 뜻하지 않는다. 모두 읽음은 그 시점까지에만 적용하며 그 이후 새 알림은 읽지 않은 상태를 유지한다. 서버는 다른 회원/위조 경계를400으로 거절한다. 응답의 unreadCount는 적용 후 실제 값이다. 응답 유실 시 PATCH를 자동 반복하지 않고 목록과 수를 재조회한다.
+
+벨은 보이는 동안60초마다 갱신하며 focus/pageshow 복귀 재조회는 공용 훅을 사용한다. 화면을 숨길 때 알림 내용을 비우고 새 응답 전까지 이전 내용을 복원하지 않는다. 이벤트가 오면 벨/목록을 함께 갱신한다.
+
+소비 코드: [notifications/contracts.ts](../../frontend/src/features/notifications/contracts.ts), [Notifications.tsx](../../frontend/src/features/notifications/Notifications.tsx). 합성 제공자: [notifications-fixture-plugin.ts](../../frontend/dev/notifications-fixture-plugin.ts). DB·알림 생성·수신 설정·경합 검증은 실제 제공자 작업이며 fixture 통과로 대체하지 않는다.
