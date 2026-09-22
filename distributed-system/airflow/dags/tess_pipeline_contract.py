@@ -6,6 +6,7 @@ import re
 import shlex
 import hashlib
 import json
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 
 
@@ -118,3 +119,10 @@ def release_path(value: str, prefix: str) -> str:
 
 def command(arguments: list[str]) -> str:
     return shlex.join(arguments)
+
+
+def remaining_wait_time(started_at: datetime | None, timeout: timedelta, now: datetime) -> timedelta:
+    """Keep a deferred task's original deadline instead of restarting it on every wake-up."""
+    if timeout <= timedelta():
+        raise ValueError("wait timeout must be positive")
+    return (started_at or now) + timeout - now

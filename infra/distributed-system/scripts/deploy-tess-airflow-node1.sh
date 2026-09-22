@@ -8,9 +8,18 @@ release_dir="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 [[ -f "$release_dir/compose.yaml" && -f "$release_dir/distributed-system/airflow/Dockerfile" ]] || {
   echo 'AIRFLOW_RELEASE_INCOMPLETE' >&2; exit 1;
 }
+runtime_env_file() {
+  local airflow3_envs=(/etc/planetory/airflow/airflow3-*.env)
+  if [[ ${airflow3_envs[0]} != '/etc/planetory/airflow/airflow3-*.env' ]]; then
+    [[ ${#airflow3_envs[@]} == 1 ]] || { echo 'AIRFLOW3_ENV_AMBIGUOUS' >&2; return 1; }
+    printf '%s\n' "${airflow3_envs[0]}"
+    return
+  fi
+  printf '%s\n' /etc/planetory/airflow/airflow.env
+}
 if [[ "${1:-}" == --viewer-password ]]; then
   cd "$release_dir"
-  compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose.yaml)
+  compose=(docker compose --env-file "$(runtime_env_file)" -f compose.yaml)
   password_file=/etc/planetory/airflow/viewer-password
   if [[ ! -f "$password_file" ]]; then openssl rand -hex 24 > "$password_file"; fi
   chmod 0600 "$password_file"
@@ -28,10 +37,12 @@ if [[ "${1:-}" == --viewer-password ]]; then
   exit 0
 fi
 if [[ "${1:-}" == --update ]]; then
-  [[ -f /etc/planetory/airflow/airflow.env ]] || { echo 'AIRFLOW_ENV_MISSING' >&2; exit 1; }
+  env_file="$(runtime_env_file)"
+  [[ -f "$env_file" ]] || { echo 'AIRFLOW_ENV_MISSING' >&2; exit 1; }
   cd "$release_dir"
   scheduler=planetory-distributed-system-airflow-scheduler-1
   api_server=planetory-distributed-system-airflow-api-server-1
+  triggerer=planetory-distributed-system-airflow-triggerer-1
   old_image="$(docker inspect -f '{{.Config.Image}}' "$scheduler")"
   [[ "$old_image" == "$(docker inspect -f '{{.Config.Image}}' "$api_server")" ]] || {
     echo 'AIRFLOW_IMAGE_DRIFT' >&2; exit 1;
@@ -52,7 +63,7 @@ finally:
 '
   image="local/planetory-airflow:$(basename "$release_dir")"
   [[ "$image" != "$old_image" ]] || { echo 'AIRFLOW_RELEASE_ALREADY_ACTIVE' >&2; exit 1; }
-  compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose.yaml)
+  compose=(docker compose --env-file "$env_file" -f compose.yaml)
   AIRFLOW_IMAGE="$image" "${compose[@]}" config --quiet
   docker build --network none --build-arg "AIRFLOW_IMAGE=$old_image" \
     -f distributed-system/airflow/Dockerfile -t "$image" .
@@ -71,6 +82,7 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
     status=$?
     trap - EXIT
     if [[ "$status" != 0 && "$switched" == 1 ]]; then
+      docker rm -f "$triggerer" >/dev/null 2>&1 || true
       AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-api-server || \
         echo 'AIRFLOW_ROLLBACK_FAILED' >&2
       echo "AIRFLOW_UPDATE_ROLLED_BACK old_image=$old_image" >&2
@@ -79,7 +91,7 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
   }
   trap rollback EXIT
   switched=1
-  AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-api-server
+  AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
   for attempt in $(seq 1 60); do
     if curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health; then break; fi
     sleep 2
@@ -89,9 +101,11 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
   [[ "$(docker inspect -f '{{.Config.Image}}' "$scheduler")" == "$image" ]]
   [[ "$(docker inspect -f '{{.Config.Image}}' "$api_server")" == "$image" ]]
   [[ "$(docker inspect -f '{{.Config.Image}}' planetory-distributed-system-airflow-dag-processor-1)" == "$image" ]]
+  [[ "$(docker inspect -f '{{.Config.Image}}' "$triggerer")" == "$image" ]]
   [[ "$(docker inspect -f '{{.State.Running}}' "$scheduler")" == true ]]
   [[ "$(docker inspect -f '{{.State.Running}}' "$api_server")" == true ]]
   [[ "$(docker inspect -f '{{.State.Running}}' planetory-distributed-system-airflow-dag-processor-1)" == true ]]
+  [[ "$(docker inspect -f '{{.State.Running}}' "$triggerer")" == true ]]
   trap - EXIT
   echo "AIRFLOW_UPDATE_READY image=$image previous=$old_image"
   exit 0

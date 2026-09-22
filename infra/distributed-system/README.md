@@ -389,7 +389,7 @@ Fernet key와 webserver secret key는 모든 Airflow 컨테이너에 동일하�
 
 ```bash
 docker compose --profile setup run --rm airflow-init
-docker compose up -d airflow-db airflow-scheduler airflow-webserver
+docker compose up -d airflow-db airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
 ```
 
 위 명령은 CI가 `compose.yaml`을 복사한 서버 배포 디렉터리에서 실행한다. 저장소 파일을 직접 사용할 때는 다음 옵션을 모든 명령에 추가한다.
@@ -410,7 +410,7 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 최초 UI 배포 시점에는 DAG 화면만 볼 수 있었고, 실행 전 SSH Connection 6개·제한 sudo·불변 release·수집 run 계보의 별도 확인이 필요했다. 후속 release의 실제 설정과 제한 실행 결과는 아래에 기록한다.
 
-2.x에서의 기존 코드 갱신은 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치하고 `--update`를 실행해 활성 run 0건과 DAG import를 확인한 뒤 Scheduler·Webserver만 교체했다. 3.2.2용 현재 스크립트의 `--update`는 Scheduler가 이미 3.2.2인 경우에만 실행하며 Scheduler·DAG Processor·API Server를 교체한다. 어느 버전에서도 코드 갱신 명령은 새 Sector 실행이나 DB 버전 마이그레이션을 수행하지 않는다.
+2.x에서의 기존 코드 갱신은 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치하고 `--update`를 실행해 활성 run 0건과 DAG import를 확인한 뒤 Scheduler·Webserver만 교체했다. 3.2.2용 현재 스크립트의 `--update`는 Scheduler가 이미 3.2.2인 경우에만 실행하며 Scheduler·DAG Processor·Triggerer·API Server를 교체한다. Triggerer가 없으면 다운로드 marker의 Temporal 대기가 재개되지 않으므로 image·running 상태를 함께 확인한다. 어느 버전에서도 코드 갱신 명령은 새 Sector 실행이나 DB 버전 마이그레이션을 수행하지 않는다.
 
 ### Airflow 3.2.2 전환
 

@@ -113,6 +113,29 @@ services:
     extra_hosts: *cluster-hosts
     network_mode: host
 
+  airflow-triggerer:
+    image: ${AIRFLOW_IMAGE:-local/planetory-airflow:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["triggerer"]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
+      AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set a shared Airflow JWT secret}
+      AIRFLOW__API__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:?Set a shared Airflow API secret}
+      AIRFLOW__API__BASE_URL: https://node-1.tail97e363.ts.net
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://127.0.0.1:8081/execution/
+    volumes:
+      - ${AIRFLOW_LOGS_PATH:-/mnt/data/airflow-logs}:/opt/airflow/logs
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    extra_hosts: *cluster-hosts
+    network_mode: host
+
   airflow-api-server:
     image: ${AIRFLOW_IMAGE:-local/planetory-airflow:not-configured}
     platform: linux/amd64

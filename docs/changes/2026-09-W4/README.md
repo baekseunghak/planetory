@@ -76,3 +76,5 @@
 | 2026-09-22 | 현행 Airflow DAG 한국어 표시 이름 배포 | S15P21C206-252 | Airflow, dag_display_name, description, release 20260922T135740Z | 운영 배포·검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | Airflow 3.2.2 전환 코드·격리 import 검증 | S15P21C206-252 | Airflow 3, Task SDK, DB clone, rollback | 코드·이미지 검증, 운영 전환 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-23 | Airflow 다운로드 대기 Temporal Trigger 도입 | S15P21C206-252 | Temporal Trigger, Triggerer, 14일 deadline | 운영 배포·첫 deferred 재개 확인, 장시간 미검증 | [기록](2026-09-23.md) |
+| 2026-09-23 | Triggerer 배포 후 토큰 만료 재발 정정 | S15P21C206-252 | Sector 21·22, queued, LocalExecutor, JWT | 재발 확인·원인 미해결 | [기록](2026-09-23.md) |

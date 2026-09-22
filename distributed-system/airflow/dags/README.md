@@ -4,7 +4,13 @@
 
 `tess_sector_discovery`와 다운로드·Raw·로컬 삭제·Bronze 단계 DAG 4개가 현행 구성이다. 과거 Sector 1~13 단일 DAG `tess_sector_download_raw_bronze`는 운영에서 사용하지 않아 제거했다. [Tailnet 접속·읽기 전용 계정 안내](../../../infra/distributed-system/README.md#airflow-db)를 따른다.
 
-Airflow 3.2.2에서도 다섯 `dag_id`, Sector 계보, 단계 순서·pause 기본값을 유지한다. 발견 DAG의 메타데이터 DB 직접 조회는 Task SDK의 DAG·DagRun 상태 조회로 교체했다. 시도 번호는 이 파이프라인이 생성하는 `_r0`, `_r1`, … 연속 ID를 조회하며, 외부에서 같은 prefix의 비연속 run ID를 만들지 않는다. Node 1 운영 DB 복제·마이그레이션 뒤 DAG 5개·이력 20개·task 이력 39개·SSH Connection 6개·pause 상태가 원본과 일치하고 import 오류 0건이다. **3.2.2에서 실제 Sector 단계 실행·재개는 아직 미검증**이다.
+Airflow 3.2.2에서도 다섯 `dag_id`, Sector 계보, 단계 순서·pause 기본값을 유지한다. 발견 DAG의 메타데이터 DB 직접 조회는 Task SDK의 DAG·DagRun 상태 조회로 교체했다. 시도 번호는 이 파이프라인이 생성하는 `_r0`, `_r1`, … 연속 ID를 조회하며, 외부에서 같은 prefix의 비연속 run ID를 만들지 않는다. Node 1 운영 DB 복제·마이그레이션 뒤 DAG 5개·이력 20개·task 이력 39개·SSH Connection 6개·pause 상태가 원본과 일치하고 import 오류 0건이다.
+
+Airflow 3.2.2의 일반 `reschedule` Python sensor는 실제 Sector 17·18에서 대기 후 재개할 때 만료된 내부 실행 토큰으로 실패했다. 따라서 다운로드 완료 대기는 LocalExecutor에 Task를 남기지 않는 **5분 Temporal Trigger**로 구현한다. Node 1의 `airflow-triggerer`가 깨운 뒤에만 marker를 다시 확인하며, 최초 Task 시작 시점에서 계산한 14일 deadline은 매 wake-up마다 연장하지 않는다. 이 대기는 Worker systemd·HDFS·Spark 작업을 실행하거나 변경하지 않으며, 완료 marker가 없으면 다음 확인만 예약한다.
+
+2026-09-23 운영 release `20260922T170848Z`에서 Scheduler·DAG Processor·API Server·Triggerer를 함께 기동했고, API health와 DAG import 오류 0건을 확인했다. Sector 20의 `check_download`는 실제로 5분 대기 후 다시 `deferred`로 전환됐으며 Triggerer 로그에 `Invalid auth token`·`Signature has expired` 오류는 없었다.
+
+후속 운영 관찰에서 Sector 21·22의 `check_download`와 발견 DAG의 `reconcile`이 다시 `Invalid auth token: Signature has expired`로 실패·재시도했다. 첫 5분 재개만으로는 토큰 오류가 해결됐다고 볼 수 없다. Airflow LocalExecutor 실행 경로의 원인은 미확정이며 [임시 장애 인계](../../../docs/project/tess-airflow-handoff-2026-09-23.md)에 현재 증거와 다음 점검을 기록했다.
 
 화면에는 `dag_display_name`으로 ID 옆에 한국어 역할을 표시한다. 자동 trigger와 실행 이력은 변경하지 않은 `dag_id`를 계속 사용한다.
 
@@ -24,7 +30,7 @@ Airflow 3.2.2에서도 다섯 `dag_id`, Sector 계보, 단계 순서·pause 기�
 
 | 단계 DAG | 시작 게이트 | 완료 증거 | 실행기 |
 | --- | --- | --- | --- |
-| 다운로드·검증 | 직전 Sector 다운로드 완료 또는 첫 미완료 Sector 재개 | Worker 5대 완료 marker·source SHA-256·제품 수·바이트 | 기존 supervisor, Worker당 파일 스레드 최대 16 |
+| 다운로드·검증 | 직전 Sector 다운로드 완료 또는 첫 미완료 Sector 재개 | Worker 5대 완료 marker·source SHA-256·제품 수·바이트 | 기존 supervisor + Airflow Triggerer 5분 대기, Worker당 파일 스레드 최대 16 |
 | Raw 적재·검증 | 같은 Sector 다운로드 감사 완료 | Sector `_READY.json`, bundle·manifest·RF2·FSCK 감사 | 기존 Worker 5대 SequenceFile uploader |
 | 로컬 삭제 | 같은 Sector Raw final 재검증 | Worker별 불변 plan의 삭제 상태 | 기존 `cleanup-sector` |
 | Bronze 변환·검증 | 같은 Sector Raw `_READY.json` 재확인 | Sector Bronze `_READY.json`·품질 감사 | Spark on YARN |

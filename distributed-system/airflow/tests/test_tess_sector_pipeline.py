@@ -1,6 +1,7 @@
 import ast
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -10,6 +11,7 @@ sys.path.insert(0, str(DAGS))
 from tess_pipeline_contract import (  # noqa: E402
     command,
     release_path,
+    remaining_wait_time,
     sector_inputs,
     stage_inputs,
     validate_download_markers,
@@ -72,6 +74,17 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing Sector 2 lineage"):
             sector_inputs(params, 2)
 
+    def test_download_wait_keeps_its_original_deadline_after_deferral(self):
+        started = datetime(2026, 9, 22, tzinfo=timezone.utc)
+        timeout = timedelta(days=14)
+        self.assertEqual(
+            remaining_wait_time(started, timeout, started + timedelta(minutes=5)),
+            timeout - timedelta(minutes=5),
+        )
+        self.assertLessEqual(remaining_wait_time(started, timeout, started + timeout), timedelta())
+        with self.assertRaisesRegex(ValueError, "positive"):
+            remaining_wait_time(started, timedelta(), started)
+
     def test_legacy_sector_1_to_13_dag_is_retired(self):
         self.assertFalse((DAGS / "tess_sector_pipeline.py").exists())
 
@@ -108,6 +121,10 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         self.assertIn('"--expected-source-sha"', source)
         self.assertIn('Variable.set("tess_pipeline_enabled", "false")', source)
         self.assertIn('except AirflowFailException as error:', source)
+        self.assertIn('class DownloadMarkerWaitOperator(BaseOperator):', source)
+        self.assertIn('TimeDeltaTrigger(timedelta(minutes=5))', source)
+        self.assertIn('timeout=remaining', source)
+        self.assertNotIn('mode="reschedule"', source)
         marker_func = next(
             node for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == "download_markers"

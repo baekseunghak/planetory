@@ -6,10 +6,11 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.sdk import PokeReturnValue, Variable, dag, get_current_context, task
+from airflow.providers.standard.triggers.temporal import TimeDeltaTrigger
+from airflow.sdk import BaseOperator, Variable, dag, get_current_context, task
 from airflow.sdk.exceptions import AirflowException, AirflowFailException
 
-from tess_pipeline_contract import command, stage_inputs, validate_download_markers
+from tess_pipeline_contract import command, remaining_wait_time, stage_inputs, validate_download_markers
 from tess_pipeline_remote import remote, require_success
 
 
@@ -20,9 +21,9 @@ def stop_on_contract_failure(message: str) -> None:
     raise AirflowFailException(message)
 
 
-def inputs() -> dict:
+def inputs(context: dict | None = None) -> dict:
     try:
-        return stage_inputs(get_current_context()["dag_run"].conf)
+        return stage_inputs((context or get_current_context())["dag_run"].conf)
     except ValueError as error:
         stop_on_contract_failure(str(error))
 
@@ -58,6 +59,33 @@ def download_markers(value: dict, *, start_missing: bool) -> bool:
     except ValueError as error:
         stop_on_contract_failure(str(error))
     return True
+
+
+class DownloadMarkerWaitOperator(BaseOperator):
+    """Poll Worker completion through Triggerer without retaining a LocalExecutor process."""
+
+    def _check_or_defer(self, context: dict) -> dict:
+        value = inputs(context)
+        if download_markers(value, start_missing=True):
+            return value
+        remaining = remaining_wait_time(
+            context["ti"].start_date,
+            timedelta(days=14),
+            datetime.now(timezone.utc),
+        )
+        if remaining <= timedelta():
+            raise AirflowFailException(f"Sector {value['sector']} download did not complete within 14 days")
+        self.defer(
+            trigger=TimeDeltaTrigger(timedelta(minutes=5)),
+            method_name="execute_complete",
+            timeout=remaining,
+        )
+
+    def execute(self, context: dict) -> dict:
+        return self._check_or_defer(context)
+
+    def execute_complete(self, context: dict, event: dict | None = None) -> dict:
+        return self._check_or_defer(context)
 
 
 def hdfs_stage(value: dict, operation: str) -> None:
@@ -130,13 +158,8 @@ STAGE_ARGS = dict(
     **STAGE_ARGS,
 )
 def download_dag():
-    @task.sensor(task_id="check_download", poke_interval=60, timeout=14 * 24 * 60 * 60, mode="reschedule")
-    def check_download() -> PokeReturnValue:
-        value = inputs()
-        done = download_markers(value, start_missing=True)
-        return PokeReturnValue(is_done=done, xcom_value=value if done else None)
-
-    check_download() >> trigger_next("tess_sector_raw", "check_download")
+    check_download = DownloadMarkerWaitOperator(task_id="check_download")
+    check_download >> trigger_next("tess_sector_raw", "check_download")
 
 
 @dag(

@@ -10,6 +10,7 @@
 | TESS 파이프라인 Jira·MR 검토 | [파이프라인 리뷰 체크리스트](tess-pipeline-review-checklist.md) | 검토 기록 |
 | 분산 PoC 완료·미검증 상태 | [분산 PoC 진행 상태](distributed-poc-status.md) | 현재 검증 상태와 후속 작업 |
 | 문서 충돌·반영 대기 | [문서 정합화 요청](planetory-doc-sync-requests.md) | 현재 상태·차단 항목 |
+| TESS Airflow 최근 대화·운영 장애 인계 | [2026-09-23 임시 핸드오프](tess-airflow-handoff-2026-09-23.md) | 임시 인계. 토큰 만료 장애 해결·운영 회귀 완료 후 삭제 필수 |
 
 역할 문서는 기술 정본을 대신하지 않는다. 문서 정합화 요청은 해결된 항목을 표시하되 과거 결정 전체를 복제하지 않고 관련 Jira·정본에 연결한다.
 
