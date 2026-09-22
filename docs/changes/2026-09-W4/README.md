@@ -131,3 +131,4 @@
 | 2026-09-22 | 123 Backend 리뷰 V22 단계·Publisher 인계 | S15P21C206-123 | 254 passed, READ COMMITTED, FOR SHARE, M1 인수 | Python 검증·DB 검사 미실행 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 개인 통계 리뷰: DB 시계·프로필 용어·비교 표시·develop 통합 | S15P21C206-177 | transaction_timestamp, HISTORICAL_SOURCE_UNAVAILABLE, 79c45f35 | 수정·68건 통합 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 탈퇴 정책 재확인·영수증 복구·완료 화면 전환 | S15P21C206-222 | POLICY_CHANGED, prepare, COMPLETED, 로컬 세션, Chrome25 | 프론트·로컬 검증 완료, 정책·제공자 확인 별도 | [기록](2026-09-22.md) |

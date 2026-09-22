@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -21,6 +21,28 @@ export function WithdrawalPage() {
     [confirmation, setConfirmation] = useState(""),
     [requestId, setRequestId] = useState<string | null>(null);
   const policy = state.data;
+  // POLICY_CHANGED는 실행 전 거절이다. 응답 유실/5xx와 달리 새 정책에
+  // 다시 동의할 수 있지만, 재조회 버튼 자체가 새 POST를 보내지는 않는다.
+  const policyRejected =
+    write.error instanceof ApiError &&
+    write.error.status === 409 &&
+    write.error.code === "POLICY_CHANGED" &&
+    !write.uncertain;
+  function showReceipt(id: string, completed: boolean) {
+    // 보호 화면에서 먼저 clear하면 라우트 전환보다 로그인 게이트가 앞설 수 있다.
+    // 확인된 완료는 같은 회원·요청의 로컬 정리 신호만 넘기고 결과 화면에서 정리한다.
+    navigate("/withdrawal/status/" + encodeURIComponent(id), {
+      replace: true,
+      state: completed
+        ? {
+            completedWithdrawal: {
+              requestId: id,
+              memberId: session.member?.memberId,
+            },
+          }
+        : null,
+    });
+  }
   async function submit() {
     if (
       !policy?.available ||
@@ -36,21 +58,18 @@ export function WithdrawalPage() {
           json: { policyVersion: policy.version },
           signal,
         }),
-        (value) => {
-          const result = readWithdrawalStatus(value);
-          if (result.status !== "READY")
-            throw new ApiError(
-              0,
-              "INVALID_RESPONSE",
-              "탈퇴 준비 상태를 확인해 주세요.",
-            );
-          return result;
-        },
+        readWithdrawalStatus,
       ),
     );
     if (!prepared) return;
     const id = prepared.value.requestId;
     setRequestId(id);
+    // 중복 준비 조회가 기존 요청의 현재 상태를 돌려주면 재확정하지 않는다.
+    // 알 수 없는 상태/다른 형식은 위 파서에서 거절하고 영수증을 추측하지 않는다.
+    if (prepared.value.status !== "READY") {
+      showReceipt(id, prepared.value.status === "COMPLETED");
+      return;
+    }
     const result = await write.run(async (signal) =>
       decodeWritten(
         await api(
@@ -65,10 +84,7 @@ export function WithdrawalPage() {
       ),
     );
     if (result?.value.status === "COMPLETED") {
-      navigate("/withdrawal/status/" + encodeURIComponent(id), {
-        replace: true,
-      });
-      session.clear(null);
+      showReceipt(id, true);
     }
   }
   return (
@@ -145,30 +161,33 @@ export function WithdrawalPage() {
             : write.error.message}
         </p>
       )}
-      {requestId ? (
+      {requestId && (
         <p>
           <Link to={"/withdrawal/status/" + encodeURIComponent(requestId)}>
             탈퇴 처리 상태 확인
           </Link>
         </p>
-      ) : (
-        write.error && (
-          <button
-            onClick={() => {
-              setAccepted("");
-              write.clearError();
-              state.reload();
-            }}
-          >
-            정책 다시 확인
-          </button>
-        )
+      )}
+      {write.error && (!requestId || policyRejected) && (
+        <button
+          disabled={write.pending}
+          onClick={() => {
+            setAccepted("");
+            setConfirmation("");
+            setRequestId(null);
+            write.clearError();
+            state.reload();
+          }}
+        >
+          정책 다시 확인
+        </button>
       )}
     </section>
   );
 }
 export function WithdrawalStatusPage() {
   const { requestId = "" } = useParams();
+  const location = useLocation();
   const load = useCallback(
     async (signal: AbortSignal) =>
       readWithdrawalStatus(
@@ -182,13 +201,25 @@ export function WithdrawalStatusPage() {
   );
   const state = useReadModel("withdrawal:" + requestId, load),
     session = useSession();
+  const completion = location.state?.completedWithdrawal;
+  const completedByConfirmation =
+    completion?.requestId === requestId &&
+    !!session.member &&
+    completion?.memberId === session.member.memberId;
   useEffect(() => {
     if (
-      state.data?.status === "COMPLETED" &&
+      (completedByConfirmation || state.data?.status === "COMPLETED") &&
       session.status === "authenticated"
     )
       session.clear(null);
-  }, [state.data?.status, session.status, session.clear]);
+  }, [
+    completedByConfirmation,
+    state.data?.status,
+    session.status,
+    session.clear,
+  ]);
+  // 화면의 완료 표시와 영수증 권한은 계속 GET 응답에만 의존한다.
+  // 로컬 정리 신호는 서버 권한/성공 표시를 대신하지 않으며, GET 실패에도 초안을 정리한다.
   // This page uses a server-issued HttpOnly receipt cookie, never a public ID alone.
   const labels = {
     READY: "아직 탈퇴가 확정되지 않았습니다",

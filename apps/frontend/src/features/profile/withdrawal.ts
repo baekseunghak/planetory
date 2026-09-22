@@ -47,7 +47,8 @@ export function readWithdrawalStatus(
   const r = object(v);
   if (id !== undefined && r.requestId !== id) return fail();
   if (
-    !["READY", "PROCESSING", "COMPLETED", "FAILED"].includes(String(r.status))
+    typeof r.status !== "string" ||
+    !["READY", "PROCESSING", "COMPLETED", "FAILED"].includes(r.status)
   )
     return fail();
   return {
