@@ -150,9 +150,16 @@ function StarRow({
         있는 읽기 경로로 잇는다.
       */}
       {isOwn ? (
-        <Link to={pagePath("analysis", { ticId: star.ticId }, { returnTo })}>
-          이 별 분석하기
-        </Link>
+        <>
+          <Link to={pagePath("analysis", { ticId: star.ticId }, { returnTo })}>
+            이 별 분석하기
+          </Link>
+          <Link
+            to={pagePath("starResults", { ticId: star.ticId }, { returnTo })}
+          >
+            별 결과 보기
+          </Link>
+        </>
       ) : (
         <Link to={pagePath("starBoard", { ticId: star.ticId }, { returnTo })}>
           이 별 게시판 보기

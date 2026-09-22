@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { observationFixtureResponse } from "./observation-fixtures.ts";
 import { periodogramFixtureResponse } from "./periodogram-fixtures.ts";
 import { historyFixtureResponse } from "./history-fixtures.ts";
+import { starResultFixture } from "./star-result-fixtures.ts";
 import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
@@ -50,6 +51,21 @@ export function fixturePlugin(observations = false): Plugin {
           return;
         }
         const url = new URL(req.url ?? "/", "http://fixture.invalid");
+        const starResult = /^\/v1\/stars\/([^/]+)\/result$/.exec(url.pathname);
+        if (req.method === "GET" && starResult) {
+          if (starResult[1] === "259377024")
+            res.end(JSON.stringify(starResultFixture()));
+          else {
+            res.statusCode = 404;
+            res.end(
+              JSON.stringify({
+                code: "RESOURCE_NOT_FOUND",
+                message: "볼 수 있는 별 결과가 없습니다.",
+              }),
+            );
+          }
+          return;
+        }
         if (req.method === "GET" && url.pathname === "/v1/auth/csrf") {
           // 쓰기 요청마다 새로 받는 토큰. 고정값이며 실제 CSRF 방어가 아니다.
           res.end(
