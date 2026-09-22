@@ -575,7 +575,7 @@ erDiagram
 
 **user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB `{"achievement":true,"reopen":true,"challenge":true,"follow":false}`, onboarding_done.
 
-**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). 다형 참조라 FK 없음.
+**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). target은 다형 참조라 FK 없이 서비스에서 검증하며 user_id는 users FK다. 173은 기존 테이블·IDENTITY·created_at을 재사용한다. V20은 앱 SELECT·INSERT·DELETE만 추가하고 UPDATE·TRUNCATE를 금지한다(V11 sequence 권한 재사용). 반복 PUT은 created_at을 유지한다. 사용자 승인(2026-09-22)에 따른 현재 유효 관계·개인 관리 ID·탈퇴 제외 계약은 [서비스 API 12.1](../../apps/backend/docs/service-api-spec.md#follow-policy)을 따른다. 원천 보관/탈퇴 삭제·익명화·마지막 발견자 공개 자격은 별도 미정이다. 테이블·열·관계선 변경이 없어 ERD SVG는 변경하지 않는다.
 
 ### B. 별·공개 데이터 카탈로그 (Gold 메타데이터)
 
