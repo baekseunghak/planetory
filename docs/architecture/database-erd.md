@@ -773,7 +773,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | candidate_id | FK, `UNIQUE(candidate_id) WHERE kind='system_thread'` | 신호당 스레드 하나. kind=user는 NULL |
 | board | CHECK star/free | star면 tic_id NOT NULL, free면 NULL |
 | tag | ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL. system_thread는 NULL | |
-| title, body | | system_thread는 신호 요약을 시스템이 채움 |
+| title, body | | system_thread는 공개 후보 네 수치 요약을 V19 트리거로 생성·동기화한다. [검색 본문 계약](../api/community/README.md#공식-제목본문의-구현-차이) |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
 | 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
@@ -813,6 +813,8 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
+
+**176 확인·후속 설계:** 위 두 항목은 목표 설계다. 현재 V1 `stats_snapshots`에는 날짜·scope·round_id별 UNIQUE가 없고 기능 전용 앱 권한은 V11에서 보류했다. `global_stats`와 P1 집계 잡은 미구현이다. 178은 CONCURRENTLY 요건을 만족하는 MV 인덱스·최초 적재·REFRESH 역할, Snapshot의 global/null round_id 멱등 키·최소 읽기/쓰기 권한·중첩 실행·직전 성공본 보존을 설계·검증한다. [176 지표 사전·기준 시각·인수표](../requirements/planetory-statistics-policy.md)를 참조하며 원천 읽기 기준 시각과 집계 완료 시각을 구분한다. 탈퇴 원천 보존은 DEC-11/179, 현재·과거 집계 영향은 연계 미정이다. 이 항목은 DDL 적용이나 권한 부여 완료를 의미하지 않는다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
 ## 4. 설계 결정과 근거
@@ -837,7 +839,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 1 | operation_settings 기본값 확정. 항목 목록은 v1.9 형식 1로 정했고 `rule-0`은 개발용 v0 값이다. 확정 값은 새 규칙 버전으로 넣는다 | OPS-04·08, DEC-03, D20·D11 |
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
-| 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
+| 4 | 탈퇴 시 users·OAuth 식별자·게시물·History·공개 분석·관계·통계·백업 처리와 기간. NO ACTION FK·제공자 UNIQUE·History 불변 권한을 유지한 상태로 정책/정리 권한·순서를 후속 검토. snapshot_params의 메모와 재현 필드를 분리하며 당시 표시/재계산 보장 수준은 DEC-11 3.1절에서 결정한다. 공개 철회는 기존 unpublished_at 재사용/전용 열 추가와 식별 연결 정리 후 제외 근거를 Q1에서 선택하며 전용 열의 DDL·GRANT는 180 범위다. 179에서는 DDL을 변경하지 않음 | [DEC-11 결정표](../requirements/planetory-decision-register.md#dec-11), 제안·승인 대기 |
 | 5 | published_analyses는 161에서 앱 역할 INSERT만 허용해 원본 참조·최초 시각을 보호한다. 162에서 상태 열의 UPDATE 권한을 추가한다. analysis_histories·analysis_snapshots의 기존 불변 권한은 유지한다 | HIS-06, S08·S09 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |

@@ -57,6 +57,17 @@ public final class StarViews {
      * <p>{@code hasNext}는 {@code nextCursor != null}과 같은 뜻이다. 프론트가 둘 중 편한 쪽을
      * 쓰도록 둘 다 준다.
      */
+    /**
+     * 4.4절 목록 필터(HOME-04). 값이 없는 조건은 걸지 않는다.
+     *
+     * <p>확정 행성 보유 여부와 숨겨진 후보 수로는 거르지 않는다. 그 둘로 거를 수 있으면 남의 목록에서
+     * 답을 역산할 수 있다.
+     */
+    public record ListFilter(String stage, String grade, String ticId) {
+
+        public static final ListFilter NONE = new ListFilter(null, null, null);
+    }
+
     public record StarList(List<StarListItem> items, String nextCursor, boolean hasNext) {
     }
 

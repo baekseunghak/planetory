@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   materialError,
+  changedMaterials,
   sameMaterials,
   readSource,
   readMaterials,
@@ -68,8 +69,15 @@ test("materials enforce independent maximum three, duplicate identities and sele
     assert.notEqual(materialError(values, "123"), "");
   assert.notEqual(materialError({ historyIds: ["a"] }, null), "");
   assert.deepEqual(
-    readMaterials({ attachments: [], sourceLinks: [{ available: false }] }),
-    { historyIds: [], sourceLinks: [] },
+    readMaterials({
+      attachments: [],
+      sourceLinks: [{ type: "PUBLIC_ANALYSIS", available: false }],
+    }),
+    {
+      historyIds: [],
+      sourceLinks: [],
+      unavailableSources: ["PUBLIC_ANALYSIS"],
+    },
   );
 });
 test("source permission, identity and TIC checked before attaching", () => {
@@ -96,7 +104,7 @@ test("changing TIC can atomically detach materials and uncertain PATCH compares 
     historyIds: [],
     sourceLinks: [],
   });
-  assert.deepEqual(patch, { ticId: null, historyIds: [], sourceLinks: [] });
+  assert.deepEqual(patch, { ticId: null, historyIds: [] });
   assert.equal(patchIsVisible({ ...original, ...patch }, patch), true);
 });
 test("graph keeps exploration envelope; modes, bundle identity and snapshot sizes cannot be mixed", () => {
@@ -198,4 +206,70 @@ test("reordered attachments reconcile an uncertain write without hiding changed 
     true,
   );
   assert.deepEqual(original.historyIds, ["h1", "h2"]);
+});
+
+test("unavailable sources preserve only type and never enter editable selections", () => {
+  const materials = readMaterials({
+    sourceLinks: [
+      {
+        type: "PUBLIC_ANALYSIS",
+        available: false,
+        id: "secret",
+        author: "hidden",
+      },
+    ],
+  });
+  assert.deepEqual(materials, {
+    historyIds: [],
+    sourceLinks: [],
+    unavailableSources: ["PUBLIC_ANALYSIS"],
+  });
+  const original = {
+    ...materials,
+    title: "title",
+    body: "before",
+    purposeTag: "GENERAL",
+    ticId: "123",
+  };
+  assert.deepEqual(
+    changedPostFields(original, { ...toDraft(original), body: "after" }),
+    { body: "after" },
+  );
+  assert.deepEqual(
+    changedMaterials(materials, { ...materials, historyIds: ["h-1"] }),
+    { historyIds: ["h-1"] },
+  );
+  assert.deepEqual(
+    changedMaterials(materials, {
+      ...materials,
+      unavailableSources: [],
+      sourceLinks: [],
+    }),
+    { sourceLinks: [] },
+  );
+  assert.throws(() => readMaterials({ sourceLinks: [{ available: false }] }));
+});
+
+test("uncertain removal must verify both visible and unavailable sources", () => {
+  const fields = {
+    title: "title",
+    body: "after",
+    purposeTag: "GENERAL",
+    ticId: "123",
+  };
+  const retained = {
+    ...fields,
+    ...readMaterials({
+      sourceLinks: [{ type: "PUBLIC_ANALYSIS", available: false }],
+    }),
+  };
+  assert.equal(patchIsVisible(retained, { sourceLinks: [] }), false);
+  assert.equal(
+    patchIsVisible(
+      { ...fields, ...readMaterials({ sourceLinks: [] }) },
+      { sourceLinks: [] },
+    ),
+    true,
+  );
+  assert.equal(patchIsVisible(retained, { body: "after" }), true);
 });
