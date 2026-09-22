@@ -21,8 +21,8 @@ class MemberCommunityPermissionTest {
 
     private static final List<String> WRITABLE =
             List.of("users", "user_settings", "posts", "comments");
-    private static final List<String> UNUSED = List.of(
-            "notifications");
+    // V11이 "필요한 동사를 코드로 확정할 수 없으므로 각 기능 티켓이 추가한다"로 남긴 마지막 테이블이
+    // notifications였다. V22(S15P21C206-150)가 재개 사건 쓰기 경로와 함께 확정해 UNUSED는 비었다.
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -65,6 +65,10 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration").target("21").load();
         assertEquals(List.of("21"), statsUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway reopenUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("22").load();
+        assertEquals(List.of("22"), reopenUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -110,10 +114,12 @@ class MemberCommunityPermissionTest {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
 
-            for (String table : UNUSED) {
-                for (String privilege : List.of("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
-                    assertFalse(hasPrivilege(owner, table, privilege), table + ": " + privilege);
-                }
+            // 재개 사건(V22)은 만들기만 한다. 읽음 표시의 UPDATE는 알림 조회 티켓이 받는다.
+            for (String allowed : List.of("SELECT", "INSERT")) {
+                assertTrue(hasPrivilege(owner, "notifications", allowed), allowed);
+            }
+            for (String denied : List.of("UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "notifications", denied), denied);
             }
         }
     }
