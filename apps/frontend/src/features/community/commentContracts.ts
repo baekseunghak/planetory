@@ -6,10 +6,7 @@ export type CommentParent = {
   parentId: string;
 };
 // W14 supplies selections only at final submit; the empty selection sends no fields.
-export type CommentMaterials = {
-  historyIds?: string[];
-  sourceLinks?: { type: "PUBLIC_ANALYSIS" | "SIGNAL_THREAD"; id: string }[];
-};
+export type CommentMaterials = import("./materialContracts").Materials;
 export function commentError(body: string) {
   return !stripTitle(body) || codePoints(body) > 2000
     ? "댓글은 공백만 입력할 수 없으며 1~2,000자로 입력해 주세요."

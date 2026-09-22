@@ -1,5 +1,6 @@
 import type { Plugin } from "vite";
 import { searchFixtureFeed } from "./search-fixture.ts";
+import { publicAnalysisFixture } from "./public-analysis-fixtures.ts";
 
 // Development HTTP samples only. Imported exclusively by Vite serve mode.
 const date = "2026-09-18T01:00:00Z";
@@ -395,6 +396,12 @@ export function communityFixturePlugin({
             submittedAt: date,
             judgmentSummary: summary,
           });
+          return;
+        }
+        // #191 공개 분석 상세. 첨부와 같은 공개 투영이며 겉의 네 값만 다르다.
+        const analysis = publicAnalysisFixture(url.pathname, url.searchParams);
+        if (req.method === "GET" && analysis) {
+          send(analysis.body, analysis.status);
           return;
         }
         const attachment = url.pathname.match(
