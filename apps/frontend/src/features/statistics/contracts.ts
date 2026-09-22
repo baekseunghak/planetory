@@ -200,6 +200,10 @@ export function readPersonalStatistics(v: unknown): Current {
   };
 }
 export const unitLabels: Record<string, string> = {
+  STAR: "개",
+  SIGNAL: "개",
+  ACHIEVEMENT: "건",
+  PARTICIPATION: "건",
   STARS: "개",
   SIGNALS: "개",
   SUBMISSIONS: "건",
