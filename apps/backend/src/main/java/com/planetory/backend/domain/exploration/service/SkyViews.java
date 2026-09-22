@@ -87,6 +87,19 @@ public final class SkyViews {
      * 회차의 대상 별에 붙어야 하는데, 회차 전환·종료는 회원 지도 버전을 바꾸지 않아 타일에 실으면
      * 갱신되지 않는다. 프론트는 퀘스트 응답의 {@code challenge.ticId}로 그린다(탐사 API 4.3).
      */
+    /**
+     * `GET /me/sky/locate` — 검색·필터로 고른 별로 카메라를 옮기기 위한 조회(4.1절).
+     *
+     * <p>좌표는 타일·별 상세와 <b>같은 저장값</b>이다. 세 곳이 다른 값을 주면 목록에서 고른 별과
+     * 지도에서 보이는 별이 어긋난다.
+     *
+     * @param level  배율 1.0인 기준 단계. 위치를 옮기는 조회라 가장 넓거나 좁은 쪽이 아니라 기본 배율이다
+     * @param bounds 그 별이 들어 있는 타일 한 칸. 이 상자로 타일을 요청하면 아직 받지 않은 범위라도 온다
+     */
+    public record Locate(String ticId, double x, double y, double depthZ, int level,
+                         TileBounds bounds, int layoutOrdinal, String layoutVersion, String version) {
+    }
+
     public record Marker(String type, Integer seq) {
     }
 }

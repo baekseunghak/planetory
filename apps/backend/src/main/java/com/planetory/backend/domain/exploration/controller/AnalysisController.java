@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.planetory.backend.domain.exploration.service.AnalysisService;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CandidatePeakList;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
@@ -22,7 +23,7 @@ import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
 
-/** 분석 화면의 진입·곡선·주기도 (탐사 API 5.1·5.2·5.3) [S15P21C206-140]. */
+/** 분석 화면의 진입·곡선·주기도 (탐사 API 5.1·5.2·5.3·5.4) [S15P21C206-140, S15P21C206-141]. */
 @RestController
 @RequiredArgsConstructor
 public class AnalysisController {
@@ -69,6 +70,23 @@ public class AnalysisController {
                                                    @RequestParam(required = false) String residualModelVersion,
                                                    @RequestParam(required = false) String periodogramConfigVersion) {
         return respond(analysis.periodogram(principal.memberId(), tic(ticId),
+                new CurveQuery(bundleId, curveStep, removed, residualModelVersion, periodogramConfigVersion)));
+    }
+
+    @Operation(summary = "봉우리와 미세 조정 범위",
+            description = "현재 주기도에서 상위 N개 봉우리를 뽑는다."
+                    + " 후보표에서 뽑지 않으므로 항목에 후보 여부가 없다."
+                    + " 사용자가 고른 봉우리의 식별값은 gridIndex이고 rank는 정렬 결과다."
+                    + " 요청 규칙과 202·409는 주기도와 같고, 준비되지 않았으면 peaks만 null이다.")
+    @GetMapping("/api/v1/stars/{ticId}/candidate-peaks")
+    public ResponseEntity<CandidatePeakList> candidatePeaks(@AuthenticationPrincipal MemberPrincipal principal,
+                                                            @PathVariable String ticId,
+                                                            @RequestParam(required = false) String bundleId,
+                                                            @RequestParam(required = false) String curveStep,
+                                                            @RequestParam(required = false) List<String> removed,
+                                                            @RequestParam(required = false) String residualModelVersion,
+                                                            @RequestParam(required = false) String periodogramConfigVersion) {
+        return respond(analysis.candidatePeaks(principal.memberId(), tic(ticId),
                 new CurveQuery(bundleId, curveStep, removed, residualModelVersion, periodogramConfigVersion)));
     }
 

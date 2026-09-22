@@ -1,7 +1,10 @@
 package com.planetory.backend.domain.exploration.controller;
 
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
+import com.planetory.backend.domain.exploration.service.StarResultService;
+import com.planetory.backend.domain.exploration.service.StarResultViews.StarResult;
 import com.planetory.backend.domain.exploration.service.StarService;
+import com.planetory.backend.domain.exploration.service.StarViews.ListFilter;
 import com.planetory.backend.domain.exploration.service.StarViews.PublicStarSummary;
 import com.planetory.backend.domain.exploration.service.StarViews.StarList;
 import com.planetory.backend.domain.exploration.service.StarViews.StarDetail;
@@ -28,6 +31,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class StarController {
 
     private final StarService stars;
+    private final StarResultService starResults;
+
+    @Operation(summary = "별 결과 페이지",
+            description = "제출 이력이 있는 별의 진행·성과·매칭한 신호·제출 기록·곡선 단계·발견한 별을"
+                    + " 모아 준다(RES-10). 제출한 적 없는 별과 없는 TIC은 같은 404다."
+                    + " 매칭하지 못한 후보는 어떤 필드에도 나열하지 않는다(DEC-28)."
+                    + " 조회는 열람 기록·진행·잔차 작업을 만들지 않는다.")
+    @GetMapping("/api/v1/stars/{ticId}/result")
+    public StarResult result(@AuthenticationPrincipal MemberPrincipal principal,
+                             @PathVariable String ticId) {
+        return starResults.result(principal.memberId(), tic(ticId, ErrorCode.RESOURCE_NOT_FOUND));
+    }
 
     @Operation(summary = "내 별 상세",
             description = "발견한 별의 근접 뷰·도킹 패널·행성 목록이 공유한다. 미발견 별은 403 STAR_LOCKED."
@@ -49,15 +64,20 @@ public class StarController {
 
     @Operation(summary = "내 별 목록",
             description = "scope=submitted(기본)는 제출 이력이 있는 별, discovered는 발견한 별 전부."
-                    + " 필터 stage·grade·ticId는 P1이라 아직 받지 않는다.")
+                    + " 필터 stage·grade·ticId를 단독·복합으로 쓸 수 있고 계약 밖 값은 400."
+                    + " 커서는 필터에도 묶이므로 조건을 바꾸면 처음부터 다시 읽는다.")
     @GetMapping("/api/v1/me/stars")
     public StarList myStars(@AuthenticationPrincipal MemberPrincipal principal,
                             @RequestParam(required = false) String scope,
                             @RequestParam(required = false) String sort,
                             @RequestParam(required = false) String size,
-                            @RequestParam(required = false) String cursor) {
+                            @RequestParam(required = false) String cursor,
+                            @RequestParam(required = false) String stage,
+                            @RequestParam(required = false) String grade,
+                            @RequestParam(required = false) String ticId) {
         long memberId = principal.memberId();
-        return stars.list(memberId, memberId, scope, sort, size(size), cursor);
+        return stars.list(memberId, memberId, scope, sort, size(size), cursor,
+                new ListFilter(stage, grade, ticId));
     }
 
     @Operation(summary = "타인 별 목록",
@@ -70,8 +90,12 @@ public class StarController {
                                 @RequestParam(required = false) String scope,
                                 @RequestParam(required = false) String sort,
                                 @RequestParam(required = false) String size,
-                                @RequestParam(required = false) String cursor) {
-        return stars.list(principal.memberId(), member(memberId), scope, sort, size(size), cursor);
+                                @RequestParam(required = false) String cursor,
+                                @RequestParam(required = false) String stage,
+                                @RequestParam(required = false) String grade,
+                                @RequestParam(required = false) String ticId) {
+        return stars.list(principal.memberId(), member(memberId), scope, sort, size(size), cursor,
+                new ListFilter(stage, grade, ticId));
     }
 
     /**

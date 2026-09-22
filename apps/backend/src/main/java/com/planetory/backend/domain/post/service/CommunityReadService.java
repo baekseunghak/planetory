@@ -93,17 +93,35 @@ public class CommunityReadService {
     public Feed feed(long member, CommunityQuery q) {
         members.requireActive(member);
         if (q.target() != null) stars.requireOpenStarBoard(q.target());
-        var rows = jdbc.sql("""
+        var search = q.search();
+        String filters = "";
+        if (search != null) {
+            if (!search.q().isEmpty()) filters += switch (search.searchIn()) {
+                case "TITLE" -> " AND p.title ILIKE :pattern ESCAPE E'\\\\'";
+                case "BODY" -> " AND p.body ILIKE :pattern ESCAPE E'\\\\'";
+                default -> " AND (p.title ILIKE :pattern ESCAPE E'\\\\' OR p.body ILIKE :pattern ESCAPE E'\\\\')";
+            };
+            if (!search.author().isEmpty()) filters += " AND p.kind='user' AND lower(u.nickname)=lower(:author)";
+            if (!search.board().isEmpty()) filters += " AND p.board=:board";
+            if (!search.tag().isEmpty()) filters += " AND p.kind='user' AND p.tag=:tag";
+        }
+        var statement = jdbc.sql("""
                 SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,p.created_at,
                     (SELECT count(*) FROM comments c WHERE c.post_id=p.id AND c.status='visible') AS comments
                 FROM posts p LEFT JOIN users u ON u.id=p.user_id
-                WHERE p.status='visible' AND %s
+                WHERE p.status='visible' AND %s %s
                     AND (CAST(:tic AS BIGINT) IS NULL OR p.tic_id=:tic)
                     AND (CAST(:at AS TIMESTAMPTZ) IS NULL OR (p.created_at,p.id)<(:at,:id))
                 ORDER BY p.created_at DESC,p.id DESC LIMIT :limit
-                """.formatted(OPEN_BOARD))
-                .param("tic", q.target()).param("at", q.afterAt()).param("id", q.afterId()).param("limit", q.size() + 1)
-                .query((r, n) -> new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
+                """.formatted(OPEN_BOARD, filters))
+                .param("tic", q.target()).param("at", q.afterAt()).param("id", q.afterId()).param("limit", q.size() + 1);
+        if (search != null) {
+            if (!search.q().isEmpty()) statement.param("pattern", search.pattern());
+            if (!search.author().isEmpty()) statement.param("author", search.author());
+            if (!search.board().isEmpty()) statement.param("board", search.board().toLowerCase(java.util.Locale.ROOT));
+            if (!search.tag().isEmpty()) statement.param("tag", search.tag());
+        }
+        var rows = statement.query((r, n) -> new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
                         r.getObject("candidate_id", Long.class), r.getString("title"),
                         "system_thread".equals(r.getString("kind")) ? SYSTEM : new PostService.Author("u-" + r.getLong("user_id"), r.getString("nickname")),
                         r.getLong("comments"), r.getObject("created_at", OffsetDateTime.class))).list();

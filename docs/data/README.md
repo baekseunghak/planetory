@@ -14,11 +14,17 @@
 | 전처리·detrending 설정 비교 | [전처리 벤치마크](tess-preprocess-benchmark.md) | 실행 결과·제안, 팀 리뷰 전 |
 | 42/D03 기본 전처리 커널·119 회귀 계약 | [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119) | 기본 커널·4별 회귀 완료, 재리뷰 대기. DAT-02 불량 구간 마스킹은 245 |
 | AI 평가용 PC/EB/junk 세트·201/61 입력 변환 | [AstroNet 평가 세트](tess-astronet-eval-set.md) | 1차 세트 생성·변환 완료, 팀 리뷰 전 |
-| 단일 AstroNet 성능·임계값 검토 | [AstroNet 성능 평가](tess-astronet-benchmark.md) | 독립 평가 완료·자동 판정용 채택 보류 제안, 팀 리뷰 전 |
+| 단일 AstroNet 성능·임계값 검토 | [AstroNet 성능 평가](tess-astronet-benchmark.md) | 실측 완료·팀 최종 운영 채택 보류, 내부 검토 자료 보존 |
 | BLS 탐색 격자·품질 게이트 비교 | [BLS 벤치마크](tess-bls-benchmark.md) | 조정·평가・holdout 실행 결과와 채택 근거 |
 | 반복 BLS·고정 모델 제거 루프의 종료·제거 QA·복구 | [반복 제거 벤치마크](tess-bls-iteration-benchmark.md) | 코드·합성 테스트와 fixture 실행 결과, 최종 검증 정리 중 |
+| 고조파·판 사이 후보 ID 동일성 | [후보 동일성 벤치마크](tess-candidate-identity-benchmark.md) | 112 v3 계약 리뷰 준비·69 tests, 자동 고조파 병합 운영 미채택·계약 미승인 |
+| 사용자 제출 매칭 수치·공통 fixture | [제출 매칭 검증](tess-submission-matching-benchmark.md) | 128 최신 계약 정합화·111 부분 검산, rule-1 미확정 |
 | 세그먼트·비닝 해상도 비교 | [비닝 벤치마크](tess-binning-benchmark.md) | 9별 실측·3차 화면 검토 완료, 부분 bin 근거·운영 채택안 및 후속 인계 기록 |
 
 저장 위치와 시스템 경계는 [아키텍처](../architecture/README.md), 서비스 정책은 [요구사항](../requirements/README.md)이 우선한다. fixture와 조사 결과를 전체 데이터 범위나 운영 완료 증거로 사용하지 않는다.
 
 운영에 채택한 실험 결과는 담당 규칙 문서와 실제 코드 위치로 옮기고, 과거 실험 문서는 근거로 보존한다.
+
+245 구간 마스크의 실제 근거와 검증은 [관측 구간 마스킹](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)을 참조한다.
+
+115 제공 해상도 판정의 설계·실행·승인 경계는 [discoverable 벤치마크](tess-discoverability-benchmark.md)를 참조한다. 현재 9별 실측·검산 완료, 규칙 승인 전이다.

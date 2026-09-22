@@ -7,17 +7,52 @@ import java.time.OffsetDateTime;
 import java.time.DateTimeException;
 import java.util.Base64;
 import java.util.Set;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.List;
 import org.springframework.util.MultiValueMap;
 
 /** 기본 피드와 공개 분석 페이지. 커서 위치는 권한이 아니며 매 요청에서 공개 조건을 다시 적용한다. */
 public record CommunityQuery(String scope, Long target, String judgment, int size,
-                             OffsetDateTime afterAt, Long afterId) {
+                             OffsetDateTime afterAt, Long afterId, Search search) {
+    public record Search(String q, String searchIn, String author, String board, String tag) {
+        String binding() {
+            // 길이 접두사로 임의의 구분자 입력을 구분하고 커서 길이를 일정하게 유지한다.
+            String value = String.join("", List.of(q, searchIn, author, board, tag).stream()
+                    .map(s -> s.length() + ":" + s).toList());
+            try {
+                return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+            } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+        }
+        String pattern() { return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"; }
+    }
+
     public static CommunityQuery feed(MultiValueMap<String, String> params) {
-        only(params, Set.of("ticId", "board", "size", "cursor"));
+        only(params, Set.of("q", "searchIn", "author", "ticId", "board", "tag", "size", "cursor"));
         Long tic = params.containsKey("ticId") ? positive(params.getFirst("ticId")) : null;
-        // 특정 별 경로의 프론트가 붙이는 중복 범위만 허용한다. 커서는 ticId 단독과 같다.
-        if (params.containsKey("board") && (tic == null || !"STAR".equals(params.getFirst("board")))) throw invalid();
-        return page("feed-v1", tic, "", params);
+        String q = text(params, "q"), author = text(params, "author");
+        String field = params.containsKey("searchIn") ? params.getFirst("searchIn") : "TITLE_BODY";
+        if (q.codePointCount(0, q.length()) > 100 || params.containsKey("searchIn") && q.isEmpty()
+                || !Set.of("TITLE_BODY", "TITLE", "BODY").contains(field)) throw invalid();
+        String board = params.containsKey("board") ? params.getFirst("board") : "";
+        String tag = params.containsKey("tag") ? params.getFirst("tag") : "";
+        if (params.containsKey("board") && !Set.of("STAR", "FREE").contains(board)
+                || tic != null && board.equals("FREE")
+                || params.containsKey("tag") && !PostService.TAGS.contains(tag)) throw invalid();
+        // TIC는 STAR를 이미 뜻하므로 기존 기본 피드 커서와 같은 정규화 범위를 쓴다.
+        if (tic != null) board = "";
+        Search search = new Search(q, field, author, board, tag);
+        boolean basic = q.isEmpty() && author.isEmpty() && board.isEmpty() && tag.isEmpty();
+        return page(basic ? "feed-v1" : "feed-v2", tic, "", params, basic ? null : search);
+    }
+
+    private static String text(MultiValueMap<String, String> params, String key) {
+        if (!params.containsKey(key)) return "";
+        // ECMAScript trim: Java strip와 달리 NBSP/BOM을 포함하고 U+0085 등은 제외한다.
+        String value = params.getFirst(key).replaceAll("^[\\s\\p{Zs}\\u2028\\u2029\\uFEFF]+|[\\s\\p{Zs}\\u2028\\u2029\\uFEFF]+$", "");
+        if (value.isEmpty() || value.indexOf('\0') >= 0) throw invalid();
+        return value;
     }
 
     public static CommunityQuery analyses(long thread, MultiValueMap<String, String> params) {
@@ -25,7 +60,7 @@ public record CommunityQuery(String scope, Long target, String judgment, int siz
         String judgment = params.containsKey("judgment") ? params.getFirst("judgment") : "";
         if (!Set.of("", "LIKELY_PLANET", "UNLIKELY_PLANET", "UNSURE").contains(judgment)
                 || params.containsKey("judgment") && judgment.isEmpty()) throw invalid();
-        return page("analyses-v1", thread, judgment, params);
+        return page("analyses-v1", thread, judgment, params, null);
     }
 
     public static void only(MultiValueMap<String, String> params, Set<String> allowed) {
@@ -33,14 +68,14 @@ public record CommunityQuery(String scope, Long target, String judgment, int siz
             throw invalid();
     }
 
-    private static CommunityQuery page(String scope, Long target, String judgment, MultiValueMap<String, String> params) {
+    private static CommunityQuery page(String scope, Long target, String judgment, MultiValueMap<String, String> params, Search search) {
         long size = params.containsKey("size") ? positive(params.getFirst("size")) : 20;
         if (size > 100) throw invalid();
-        var expected = new CommunityQuery(scope, target, judgment, (int) size, null, null);
+        var expected = new CommunityQuery(scope, target, judgment, (int) size, null, null, search);
         String cursor = params.getFirst("cursor");
         if (!params.containsKey("cursor")) return expected;
         var position = cursor(cursor, expected.binding());
-        return new CommunityQuery(scope, target, judgment, (int) size, position.at(), position.id());
+        return new CommunityQuery(scope, target, judgment, (int) size, position.at(), position.id(), search);
     }
 
     record Cursor(OffsetDateTime at, long id) {}
@@ -64,7 +99,7 @@ public record CommunityQuery(String scope, Long target, String judgment, int siz
     static String next(String binding, OffsetDateTime at, long id) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString((binding + "|" + at + "|" + id).getBytes(StandardCharsets.UTF_8));
     }
-    private String binding() { return scope + "|" + target + "|" + judgment + "|" + size; }
+    private String binding() { return scope + "|" + target + "|" + (search == null ? judgment : search.binding()) + "|" + size; }
 
     public static long id(String value, String prefix) {
         try {
