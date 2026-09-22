@@ -83,7 +83,7 @@ class RedisSessionIntegrationTest {
         }
     }
     void start() {
-        start("none");
+        start("framework");
     }
     void start(String forwardedHeadersStrategy) {
         app = new SpringApplicationBuilder(PlanetoryApplication.class, Config.class).run(
@@ -155,7 +155,9 @@ class RedisSessionIntegrationTest {
         IDP.server.stop(0);
     }
 
-    @Test void forwardedHeadersRequireExplicitTrustForOAuthRedirects() throws Exception {
+    @Test void forwardedHeadersRestoreExternalOAuthRedirectsAndNoneIgnoresThem() throws Exception {
+        app.close();
+        start("none");
         for (String provider : List.of("google", "ssafy")) {
             cookies.getCookieStore().removeAll();
             login(provider, false);

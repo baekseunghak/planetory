@@ -10,17 +10,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class ForwardedHeadersConfigurationTest {
     private static final String KEY = "server.forward-headers-strategy";
 
-    @Test void commonConfigurationHasOneExplicitSafeDefault() throws Exception {
+    @Test void commonConfigurationHasOneFrameworkStrategy() throws Exception {
         var properties = checkedProperties();
         try (var stream = getClass().getResourceAsStream("/application.properties")) {
             assertNotNull(stream);
             properties.load(new InputStreamReader(stream, StandardCharsets.UTF_8));
         }
-        assertEquals("none", properties.getProperty(KEY));
+        assertEquals("framework", properties.getProperty(KEY));
     }
 
     @Test void duplicateStrategyFailsRegardlessOfOrderOrValue() {
-        for (String values : new String[]{"framework,none", "none,framework", "none,none"}) {
+        for (String values : new String[]{"framework,none", "none,framework", "none,none", "framework,framework"}) {
             var pair = values.split(",");
             assertThrows(IllegalArgumentException.class, () -> checkedProperties().load(
                     new StringReader(KEY + "=" + pair[0] + "\n" + KEY + ": " + pair[1])));

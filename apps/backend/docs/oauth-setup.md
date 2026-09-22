@@ -177,14 +177,14 @@ if (response.ok) {
 
 ### 프록시 전달 헤더의 신뢰 경계(240 → 84·239)
 
-공통 기본값은 `server.forward-headers-strategy=none`이다. 직접 접속에서는 클라이언트가 보낸 `Forwarded`·`X-Forwarded-*`로 OAuth 주소를 바꾸지 않는다. 신뢰 프록시의 아래 인수 조건을 충족한 배포에서만 표준 환경변수 `SERVER_FORWARD_HEADERS_STRATEGY=framework`로 활성화한다. 별도 애플리케이션 필터는 두지 않는다.
+공통 기본값은 `server.forward-headers-strategy=framework`다(2026-09-22 사용자 결정). 프록시가 전달한 외부 HTTPS 출처를 OAuth 주소에 반영한다. 이 설정은 전달 헤더를 신뢰하므로 아래 조건을 배포 전에 확인한다. 직접 접속 환경에서 전달 헤더를 사용하지 않으려면 표준 환경변수 `SERVER_FORWARD_HEADERS_STRATEGY=none`으로 끈다. 별도 애플리케이션 필터는 두지 않는다.
 
 - 공개 진입 계층은 외부의 `Forwarded`와 `X-Forwarded-Proto/Host/Port/Prefix/Ssl/For`를 제거하고 필요한 값만 다시 설정한다. `X-Forwarded-Proto`는 신뢰 경로의 `http`·`https`로 제한하며 외부 Host도 서비스 호스트로 검증한다. `Forwarded`가 남으면 `X-Forwarded-Proto/Host`만 덮어도 Spring에서 다른 출처를 사용할 수 있다.
 - backend의 공개 직결을 차단하고 loopback 게시뿐 아니라 내부 Docker 네트워크에서 접근하는 주체도 확인한다. `framework` 자체는 신뢰 프록시 IP를 판별하지 않는다.
-- 2026-09-22 교차 리뷰에서 84(!161)와 240의 공통값·위치·주석을 `none`으로 통일했다. `framework`를 다른 위치에 추가하던 84의 줄과 반대 의미의 주석을 교체했으며, `ForwardedHeadersConfigurationTest`가 중복 키와 기본값 변경을 검사한다. nginx의 외부 헤더 제거·Proto 허용값 제한 인수는 남아 있으므로 운영 활성화는 위 조건을 충족한 환경 주입으로 수행한다.
+- 240은 84(!161)의 원래 `framework` 방향을 채택하고 프록시 인수는 84·239 담당에게 남긴다. `ForwardedHeadersConfigurationTest`는 공통 키가 정확히 하나이고 값이 `framework`인지 검사한다. 84의 `d02d910e`에는 앞선 `none` 변경이 남아 있으므로 담당자가 반영 여부를 정리한 뒤 병합 결과도 키 1개=`framework`로 확인해야 한다. 240 작업에서 84를 추가 수정·푸시하지 않는다.
 - 239의 `absolute_redirect off`는 nginx 자체 리다이렉트의 내부 포트 노출을 막는 설정이다. Spring 전달 헤더 신뢰와는 별도로 검증한다. nginx의 콜백 503 → `authentication_failed` 표시는 239 담당이며 이 작업에서 바꾸지 않는다.
 
-인가 시작과 콜백에 같은 외부 Proto/Host를 전달한다. `{baseUrl}` 콜백 템플릿은 `framework`에서 외부 출처를 사용하며, 명시적 `GOOGLE_REDIRECT_URI`·`SSAFY_REDIRECT_URI`는 제공자 등록 주소와 함께 확인한다. 성공 목적지는 계속 `AUTH_SUCCESS_URL`의 같은 출처 고정 경로다. 신뢰 헤더가 있으면 Spring의 `ForwardedHeaderFilter`가 성공 Location에 외부 출처를 사용한다. 현재 Boot의 실제 HTTP 검증에서는 전달 헤더 없이 성공하면 backend의 내부 HTTP 주소·포트를 포함한 절대 Location이 반환된다. 따라서 `none` 상태만으로 운영 HTTPS 복귀가 해결됐다고 보지 않으며, 위 프록시 인수와 `framework` 활성화를 함께 완료해야 한다.
+인가 시작과 콜백에 같은 외부 Proto/Host를 전달한다. `{baseUrl}` 콜백 템플릿은 `framework`에서 외부 출처를 사용하며, 명시적 `GOOGLE_REDIRECT_URI`·`SSAFY_REDIRECT_URI`는 제공자 등록 주소와 함께 확인한다. 성공 목적지는 계속 `AUTH_SUCCESS_URL`의 같은 출처 고정 경로다. 신뢰 헤더가 있으면 Spring의 `ForwardedHeaderFilter`가 성공 Location에 외부 출처를 사용한다. 현재 Boot의 실제 HTTP 검증에서는 전달 헤더 없이 성공하면 backend의 내부 HTTP 주소·포트를 포함한 절대 Location이 반환된다. 따라서 `framework` 설정만으로 운영 HTTPS 복귀 인수가 끝나는 것은 아니며 올바른 헤더 전달과 신뢰 경계를 함께 확인해야 한다.
 
 격리 HTTP 검사는 `none` 무헤더·위조 헤더와 `framework` 무헤더·정제 HTTPS 헤더에서 Google형/SSAFY형 인가 `redirect_uri`·성공 Location·로그인 세션을 확인한다. 실제 Cloudflare/nginx의 헤더 제거·직결 제한·브라우저 Secure 쿠키·외부 제공자 인수는 84·239 및 운영 Redis 준비 후 별도다. 235의 후속 인수는 240 병합 이후 수행한다.
 
@@ -230,10 +230,10 @@ state·nonce·audience·issuer·만료·서명 오류, 동시 가입, 초기화�
 240 회귀는 개인 OAuth 파일을 읽지 않는 테스트 설정에서 실행한다. `AuthIntegrationTest`에는 `DATABASE_URL`·`DATABASE_USER`·`DATABASE_PASSWORD`로 **전용 일회용 PostgreSQL**을 지정하고 `-PskipLocalDb`를 사용한다. `RedisSessionIntegrationTest`는 자체 PostgreSQL·Redis 두 컨테이너를 사용한다.
 
 ```powershell
-.\gradlew.bat -PskipLocalDb test --tests '*AuthIntegrationTest' --tests '*OAuthLoginSuccessHandlerTest' --tests '*RedisSessionIntegrationTest' --tests '*AuthSessionTimeoutTest' --tests '*SessionDependencyFilterTest'
+.\gradlew.bat -PskipLocalDb test --tests '*ForwardedHeadersConfigurationTest' --tests '*AuthIntegrationTest' --tests '*OAuthLoginSuccessHandlerTest' --tests '*RedisSessionIntegrationTest' --tests '*AuthSessionTimeoutTest' --tests '*SessionDependencyFilterTest'
 ```
 
-2026-09-22 전용 일회용 PostgreSQL 18.6과 Redis 8.2 두 인스턴스에서 위 5개 클래스의 40개 검사를 통과했다(실패·건너뜀 0). 합성 오류 입력의 안전 로그·튜토리얼 미구성·DB/배치 실패 롤백·세션 정리와 기존 로그아웃 CSRF·Redis 재시작/장애 경계를 포함한다. DB 예외는 초기화 도중 합성 `DataAccessResourceFailureException`을 주입해 실제 가입 트랜잭션의 롤백을 확인했다. 실제 운영 DB 장애·제공자·프록시 인수와 구분한다.
+2026-09-22 공통값을 `framework`로 변경한 뒤 전용 일회용 PostgreSQL 18.6과 Redis 8.2 두 인스턴스에서 위 6개 클래스의 42개 검사를 통과했다(실패·건너뜀 0). 중복 키 검사, 합성 오류 입력의 안전 로그·튜토리얼 미구성·DB/배치 실패 롤백·세션 정리와 기존 로그아웃 CSRF·Redis 재시작/장애 경계를 포함한다. DB 예외는 초기화 도중 합성 `DataAccessResourceFailureException`을 주입해 실제 가입 트랜잭션의 롤백을 확인했다. 실제 운영 DB 장애·제공자·프록시 인수와 구분한다.
 
 참고: [Spring OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html),
 [Spring CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html),
