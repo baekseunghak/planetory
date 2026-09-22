@@ -64,7 +64,9 @@ class InternalTokenFilterTest {
 
     private static InternalTokenFilter filter(String configured) {
         return new InternalTokenFilter(new InternalApiProperties(configured),
-                new SecurityErrorWriter(new ObjectMapper()));
+                new SecurityErrorWriter(new ObjectMapper()),
+                org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher
+                        .withDefaults().matcher(InternalTokenFilter.PATTERN));
     }
 
     private static MockHttpServletRequest request(String path, String token) {

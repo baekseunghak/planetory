@@ -35,6 +35,18 @@ public class BundleActivationRepository {
     }
 
     /**
+     * 이 별에서 <b>현재 판이 아닌</b> 판. 잔차 캐시 정리 대상이다(10장 4단계 (1)).
+     *
+     * <p>「현재 판 말고 전부」로 지우지 않고 이 목록으로 지운다. 조회 시점 이후에 current가 된 판은
+     * 여기에 없으므로 그 판의 계산이 살아남는다(MR !177 리뷰 P2). 이 조회와 삭제 사이에 새로
+     * archived가 된 판은 이번에 못 지우지만, 정리는 다음 전환이 이어서 한다.
+     */
+    public List<Long> findSupersededBundleIds(long ticId) {
+        return jdbc.sql("SELECT id FROM publication_bundles WHERE tic_id = ? AND status <> 'current'")
+                .param(ticId).query(Long.class).list();
+    }
+
+    /**
      * 이 별에 진행 행이 있는 회원. 미탐사는 후처리할 것이 없어 제외한다.
      *
      * <p>회원 ID 오름차순이라 중간에 멈춰도 다음 실행이 같은 순서로 이어간다.
@@ -61,12 +73,17 @@ public class BundleActivationRepository {
      * <p>{@code completed_at}은 그대로 둔다. 튜토리얼 완료와 챌린지 자격이 그 값으로 유지되므로
      * (4.3절) 재개가 자격을 거둬들이면 안 된다.
      *
+     * <p>반면 {@code completion_reason}은 비운다. 다시 연 별에 「탐색 불가만 남음」이 붙어 있으면
+     * 진행 단계와 사유가 서로 어긋난 행이 된다. 다시 완료하면 그때의 사유가 새로 들어간다
+     * (MR !177 리뷰 참고 의견, 김동혁).
+     *
      * @return 바꾼 행 수. 0이면 이미 열려 있었다는 뜻이다
      */
     public int reopen(long memberId, long ticId) {
         return jdbc.sql("""
                         UPDATE user_star_progress
                            SET progress_stage = 'in_progress',
+                               completion_reason = NULL,
                                reopen_pending = false,
                                reopened_at = clock_timestamp()
                          WHERE user_id = ? AND tic_id = ? AND progress_stage = 'completed'
@@ -110,30 +127,44 @@ public class BundleActivationRepository {
      * <p>{@code pc ↔ none}은 표식을 만들지 않는다. 둘 다 미확정으로 보이므로(6.4절
      * {@code signal.disposition}) 회원에게 달라진 것이 없다.
      *
+     * <p><b>라벨이 원래 값으로 돌아오면 표식을 지운다.</b> {@code confirmed → fp → confirmed}처럼
+     * 되돌아왔는데 이전 표식이 남으면 화면이 「기록이 갱신됨」을 계속 보여 주고 조회의
+     * {@code newDisposition}으로 옛 판정이 나간다(MR !177 리뷰 P2, 백승학). 그래서 이 문장은
+     * 표식을 남기기만 하는 것이 아니라 <b>현재 판정에 맞는 값으로 맞춘다</b> — 다르면 채우고
+     * 같아지면 비운다.
+     *
      * <p>성과 유형·등급·발견 별·통계는 건드리지 않는다. 이 UPDATE가 바꾸는 열은
      * {@code relabeled_at}·{@code relabel_disposition} 둘뿐이다(9.5절, 후보 정정 계약).
      *
      * <p>같은 이력을 다시 받아도 두 번째에는 이미 같은 값이라 0행이다.
      *
-     * @return 표식을 새로 남기거나 바꾼 성과 수
+     * @return 표식을 새로 남기거나 바꾸거나 지운 성과 수
      */
     public int markRelabeledAchievements(long ticId) {
         return jdbc.sql("""
                         UPDATE user_candidate_achievements a
-                           SET relabeled_at = d.applied_at,
-                               relabel_disposition = d.disposition
-                          FROM candidates c
-                          JOIN candidate_dispositions d ON d.candidate_id = c.id
-                         WHERE a.candidate_id = c.id
-                           AND c.tic_id = ?
-                           AND d.applied_at > a.recognized_at
-                           AND a.achievement_type <> CASE d.disposition
-                                                         WHEN 'confirmed' THEN 'confirmed'
-                                                         WHEN 'fp' THEN 'fp'
-                                                         ELSE 'unconfirmed'
-                                                     END
-                           AND (a.relabeled_at IS DISTINCT FROM d.applied_at
-                                OR a.relabel_disposition IS DISTINCT FROM d.disposition)
+                           SET relabeled_at = t.marked_at,
+                               relabel_disposition = t.marked_disposition
+                          FROM (
+                              SELECT m.id,
+                                     CASE WHEN m.relabeled THEN m.applied_at END AS marked_at,
+                                     CASE WHEN m.relabeled THEN m.disposition END AS marked_disposition
+                                FROM (
+                                    SELECT a2.id, d.applied_at, d.disposition,
+                                           a2.achievement_type <> CASE d.disposition
+                                                                      WHEN 'confirmed' THEN 'confirmed'
+                                                                      WHEN 'fp' THEN 'fp'
+                                                                      ELSE 'unconfirmed'
+                                                                  END AS relabeled
+                                      FROM user_candidate_achievements a2
+                                      JOIN candidates c ON c.id = a2.candidate_id
+                                      JOIN candidate_dispositions d ON d.candidate_id = a2.candidate_id
+                                     WHERE c.tic_id = ? AND d.applied_at > a2.recognized_at
+                                ) m
+                          ) t
+                         WHERE a.id = t.id
+                           AND (a.relabeled_at IS DISTINCT FROM t.marked_at
+                                OR a.relabel_disposition IS DISTINCT FROM t.marked_disposition)
                         """)
                 .param(ticId).update();
     }

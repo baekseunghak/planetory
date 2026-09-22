@@ -29,7 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 필터 체인에 붙어 있고 후처리 결과가 응답으로 나오는지를 확인한다.
  */
 @ActiveProfiles("local")
-@SpringBootTest(properties = "planetory.internal.service-token=" + InternalBundleActivationTest.TOKEN)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "planetory.internal.service-token=" + InternalBundleActivationTest.TOKEN)
 @AutoConfigureMockMvc
 @Testcontainers
 class InternalBundleActivationTest {
@@ -67,6 +68,7 @@ class InternalBundleActivationTest {
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @org.springframework.boot.test.web.server.LocalServerPort int port;
 
     private long bundleId;
 
@@ -144,6 +146,39 @@ class InternalBundleActivationTest {
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
         }
+    }
+
+    /**
+     * 인코딩된 경로로도 토큰 검사를 우회할 수 없다 (MR !177 리뷰 P1, 백승학).
+     *
+     * <p>{@code getRequestURI()}는 서블릿 규약대로 디코딩하지 않은 값을 준다. 반면 Security의 경로
+     * 매처와 MVC 라우팅은 디코딩한 경로를 쓴다. 필터가 원본 문자열을 직접 비교하면 {@code %69}가
+     * 필터에는 다른 경로로, 라우팅에는 같은 경로로 보여 인증 없이 실행된다. MockMvc는 요청 URI를
+     * 그대로 넣어 이 차이를 드러내지 못하므로 실제 서버로 확인한다.
+     */
+    @Test
+    void 인코딩된_경로로도_토큰_검사를_우회할_수_없다() throws Exception {
+        long member = member();
+        jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, completion_reason,"
+                + " completed_at) VALUES (?, ?, 'completed', 'undiscoverable_only', now())", member, TIC);
+        insertCandidate(true);
+
+        for (String path : new String[] {"/%69nternal/bundles/b-" + bundleId + "/activated",
+                                         "/internal/../internal/bundles/b-" + bundleId + "/activated",
+                                         "/INTERNAL/bundles/b-" + bundleId + "/activated"}) {
+            var response = java.net.http.HttpClient.newHttpClient().send(
+                    java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://localhost:" + port + path))
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+
+            org.junit.jupiter.api.Assertions.assertNotEquals(200, response.statusCode(),
+                    "토큰 없이 실행되면 안 된다: " + path + " -> " + response.body());
+        }
+        // 어느 경로로도 후처리가 돌지 않았다.
+        org.junit.jupiter.api.Assertions.assertEquals("completed", jdbc.queryForObject(
+                "SELECT progress_stage FROM user_star_progress WHERE user_id = ?", String.class, member));
+        org.junit.jupiter.api.Assertions.assertEquals(0, (int) jdbc.queryForObject(
+                "SELECT count(*) FROM notifications", Integer.class));
     }
 
     // ---------- 도우미 ----------

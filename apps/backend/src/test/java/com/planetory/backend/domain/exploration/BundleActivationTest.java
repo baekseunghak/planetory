@@ -19,6 +19,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.planetory.backend.domain.exploration.service.AnalysisViews;
+import com.planetory.backend.domain.exploration.service.BundleActivationRepository;
 import com.planetory.backend.domain.exploration.service.BundleActivationService;
 import com.planetory.backend.domain.exploration.service.QuestService;
 import com.planetory.backend.domain.exploration.service.QuestViews;
@@ -69,6 +70,7 @@ class BundleActivationTest {
     }
 
     @Autowired BundleActivationService activation;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean BundleActivationRepository repository;
     @Autowired ResidualJobStore residualJobs;
     @Autowired QuestService quests;
     @Autowired JdbcTemplate jdbc;
@@ -103,6 +105,8 @@ class BundleActivationTest {
                 Boolean.class, member));
         // 튜토리얼 완료와 챌린지 자격이 completed_at으로 유지된다(4.3절). 재개가 거둬들이면 안 된다.
         assertNotNull(column(member, "completed_at"));
+        // 반면 완료 사유는 비운다. 진행 중인 별에 「탐색 불가만 남음」이 붙어 있으면 어긋난 행이다.
+        assertNull(column(member, "completion_reason"));
         assertEquals(1, reopenEvents(member));
         assertEquals(1, jdbc.queryForObject("SELECT (payload ->> 'newDiscoverableCount')::int FROM notifications"
                 + " WHERE user_id = ? AND type = 'reopen'", Integer.class, member));
@@ -250,6 +254,53 @@ class BundleActivationTest {
         assertEquals(1, reopenEvents(member));
     }
 
+    /**
+     * 재개와 제출이 겹쳐도 교착하지 않는다 (MR !177 리뷰 P1, 백승학).
+     *
+     * <p>제출 경로는 회원 행을 먼저 잠근 뒤 진행 행을 건드린다(9.2절 {@code recognize}의 잠금
+     * 순서). 재개가 진행 행을 먼저 잠그고 알림 INSERT의 외래 키 검사로 회원 행을 뒤에 잠그면
+     * 두 트랜잭션이 서로의 잠금을 기다린다. 같은 순서로 잠가야 한다.
+     */
+    @Test
+    void 재개와_제출이_겹쳐도_교착하지_않는다() throws Exception {
+        long member = member();
+        complete(member, "undiscoverable_only");
+        insertCandidate(true);
+        var startReopen = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            // 제출과 같은 순서: 회원 행 → 진행 행.
+            var submission = pool.submit(() -> {
+                new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                    jdbc.queryForObject("SELECT id FROM users WHERE id = ? FOR UPDATE", Long.class, member);
+                    startReopen.countDown();
+                    sleep(1500); // 재개가 진행 행을 잡고 회원 행에서 멈출 시간을 준다.
+                    jdbc.update("UPDATE user_star_progress SET current_curve_step = current_curve_step"
+                            + " WHERE user_id = ?", member);
+                });
+                return null;
+            });
+            var reopen = pool.submit(() -> {
+                startReopen.await();
+                return activation.onBundleActivated(bundleId);
+            });
+
+            assertEquals(1, reopen.get(60, java.util.concurrent.TimeUnit.SECONDS).reopened());
+            submission.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, reopenEvents(member));
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     // ---------- 9.5 외부 라벨 표식 ----------
 
     /** 라벨이 바뀌면 표식만 남기고 성과·등급·발견 별·통계는 건드리지 않는다(9.5절, GRD-06). */
@@ -274,6 +325,36 @@ class BundleActivationTest {
         assertEquals(before, achievementSnapshot());
         assertEquals(0, (int) jdbc.queryForObject("SELECT count(*) FROM star_unlocks", Integer.class));
         assertEquals(0, (int) jdbc.queryForObject("SELECT count(*) FROM stats_snapshots", Integer.class));
+    }
+
+    /**
+     * 라벨이 원래 값으로 돌아오면 표식을 지운다 (MR !177 리뷰 P2, 백승학).
+     *
+     * <p>표식은 「무엇이 바뀌었나」가 아니라 「지금 판정이 인정 당시와 다른가」를 보여 준다.
+     * 되돌아왔는데 옛 표식이 남으면 조회의 {@code newDisposition}으로 옛 판정이 나간다.
+     */
+    @Test
+    void 라벨이_원래_값으로_돌아오면_표식을_지운다() {
+        long member = member();
+        long candidate = insertCandidate(true);
+        long achievement = recognize(member, candidate, "confirmed");
+
+        disposition(candidate, "fp");
+        assertEquals(1, activation.onBundleActivated(bundleId).relabeled());
+        assertEquals("fp", jdbc.queryForObject("SELECT relabel_disposition FROM user_candidate_achievements"
+                + " WHERE id = ?", String.class, achievement));
+
+        disposition(candidate, "confirmed");
+        assertEquals(1, activation.onBundleActivated(bundleId).relabeled());
+
+        assertNull(jdbc.queryForObject("SELECT relabel_disposition FROM user_candidate_achievements WHERE id = ?",
+                String.class, achievement));
+        assertNull(jdbc.queryForObject("SELECT relabeled_at FROM user_candidate_achievements WHERE id = ?",
+                java.time.OffsetDateTime.class, achievement));
+        // 성과 유형은 그대로다. 표식만 움직인다.
+        assertEquals("confirmed", jdbc.queryForObject("SELECT achievement_type FROM user_candidate_achievements"
+                + " WHERE id = ?", String.class, achievement));
+        assertEquals(0, activation.onBundleActivated(bundleId).relabeled());
     }
 
     /** 같은 이력을 다시 받아도 표식이 늘거나 바뀌지 않는다(150 완료 조건). */
@@ -339,6 +420,33 @@ class BundleActivationTest {
         assertTrue(residualJobs.active(stale).isEmpty(), "이전 판 작업은 남지 않는다");
         assertTrue(residualJobs.active(fresh).isPresent(), "현재 판 작업은 그대로다");
         assertEquals(0, activation.onBundleActivated(bundleId).evicted());
+    }
+
+    /**
+     * 정리 도중 판이 바뀌어도 새 현재 판의 작업은 남는다 (MR !177 리뷰 P2, 백승학).
+     *
+     * <p>현재 판 확인과 캐시 정리 사이에 전환이 끼어드는 상황을 만든다. 「현재 판 말고 전부」로
+     * 지우면 그 사이에 생긴 새 판의 계산까지 사라진다.
+     */
+    @Test
+    void 정리_도중_판이_바뀌어도_새_판_작업은_남긴다() {
+        String stale = enqueue(member(), insertBundle("archived"));
+        long[] fresh = new long[1];
+        String[] freshKey = new String[1];
+        // 현재 판을 확인한 직후 새 판으로 전환하고 그 판의 작업을 등록한다.
+        org.mockito.Mockito.doAnswer(call -> {
+            var answer = call.callRealMethod();
+            jdbc.update("UPDATE publication_bundles SET status = 'archived' WHERE id = ?", bundleId);
+            fresh[0] = insertBundle("current");
+            freshKey[0] = enqueue(member(), fresh[0]);
+            return answer;
+        }).when(repository).findCurrentBundleTic(bundleId);
+
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(1, result.evicted(), "지난 판 하나만 지운다");
+        assertTrue(residualJobs.active(stale).isEmpty(), "지난 판 작업은 지운다");
+        assertTrue(residualJobs.active(freshKey[0]).isPresent(), "새 현재 판 작업은 남긴다");
     }
 
     // ---------- 도우미 ----------
@@ -408,10 +516,18 @@ class BundleActivationTest {
                 + " RETURNING id", Long.class, member, candidate, type, submit(member, candidate));
     }
 
-    /** 배치가 적재한 현재 판정. 적용 시각이 표식의 relabeled_at이 된다. */
+    /**
+     * 배치가 적재한 현재 판정. 적용 시각이 표식의 relabeled_at이 된다.
+     *
+     * <p>{@code candidate_id}가 PK라 판정 변경은 INSERT가 아니라 갱신이다. 같은 후보의 판정을
+     * 여러 번 바꾸는 경로를 재현하려면 upsert여야 한다.
+     */
     private java.time.OffsetDateTime disposition(long candidate, String value) {
         return jdbc.queryForObject("INSERT INTO candidate_dispositions(candidate_id, disposition, answer_class,"
-                + " rule_version, applied_at, source_refs) VALUES (?, ?, 'graded', 'rule-0', now(), '{}'::jsonb)"
+                + " rule_version, applied_at, source_refs)"
+                + " VALUES (?, ?, 'graded', 'rule-0', clock_timestamp(), '{}'::jsonb)"
+                + " ON CONFLICT (candidate_id) DO UPDATE"
+                + " SET disposition = EXCLUDED.disposition, applied_at = EXCLUDED.applied_at"
                 + " RETURNING applied_at", java.time.OffsetDateTime.class, candidate, value);
     }
 

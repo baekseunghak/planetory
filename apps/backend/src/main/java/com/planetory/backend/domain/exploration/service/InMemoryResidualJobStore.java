@@ -157,17 +157,24 @@ public class InMemoryResidualJobStore implements ResidualJobStore {
     }
 
     @Override
-    public int evictOtherBundles(long ticId, long currentBundleId) {
+    public int evictBundles(long ticId, java.util.Collection<Long> bundleIds) {
+        if (bundleIds.isEmpty()) {
+            return 0;
+        }
         // 접두에 구분자를 붙여 비교한다. 붙이지 않으면 tic:400이 tic:4001을, b-1이 b-12를 함께 지운다.
-        String star = "tic:" + ticId + ":";
-        String keep = star + ExplorationIds.bundle(currentBundleId) + ":";
+        Set<String> victims = bundleIds.stream()
+                .map(bundleId -> "tic:" + ticId + ":" + ExplorationIds.bundle(bundleId) + ":")
+                .collect(java.util.stream.Collectors.toSet());
         synchronized (lock) {
             int before = jobs.size() + results.size();
-            jobs.values().removeIf(job -> job.ticId() == ticId
-                    && !job.cacheKey().startsWith(keep));
-            results.keySet().removeIf(key -> key.startsWith(star) && !key.startsWith(keep));
+            jobs.values().removeIf(job -> matches(victims, job.cacheKey()));
+            results.keySet().removeIf(key -> matches(victims, key));
             return before - (jobs.size() + results.size());
         }
+    }
+
+    private static boolean matches(Set<String> victims, String cacheKey) {
+        return victims.stream().anyMatch(cacheKey::startsWith);
     }
 
     /**

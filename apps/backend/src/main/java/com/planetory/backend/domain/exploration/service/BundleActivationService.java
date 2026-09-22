@@ -29,6 +29,7 @@ import com.planetory.backend.domain.exploration.service.ExplorationCompletionPol
 public class BundleActivationService {
 
     private final BundleActivationRepository repository;
+    private final AchievementRepository achievements;
     private final ExplorationCompletionService completion;
     private final ExplorationCompletionRepository completionRepository;
     private final ResidualJobStore residualJobs;
@@ -74,7 +75,7 @@ public class BundleActivationService {
         var template = new TransactionTemplate(transactionManager);
         // (1) 이전 판 잔차 캐시 정리. 회원 판정과 묶지 않는다 — 캐시는 없어도 다시 계산되므로
         // 여기서 실패해도 회원 상태를 되돌릴 이유가 없고, 반대로 판정이 실패해도 정리는 유효하다.
-        int evicted = residualJobs.evictOtherBundles(ticId, bundleId);
+        int evicted = residualJobs.evictBundles(ticId, repository.findSupersededBundleIds(ticId));
         // (3) 외부 라벨 갱신 표식. 회원별 판정과 독립이며 한 문장으로 끝난다.
         int relabeled = template.execute(status -> repository.markRelabeledAchievements(ticId));
         // (2) 완료 재판정과 재개.
@@ -102,8 +103,14 @@ public class BundleActivationService {
      * <p>위 {@code TransactionTemplate}이 만든 트랜잭션 안에서 실행된다. 같은 클래스에서 부르므로
      * 애노테이션을 달아도 프록시를 타지 않아 경계를 만들지 못한다. 트랜잭션이 없으면
      * {@code evaluateAndApply}의 {@code MANDATORY}가 먼저 막는다.
+     *
+     * <p><b>회원 행을 먼저 잠근다.</b> 제출·공개 경로가 {@code users → user_star_progress} 순서로
+     * 잠그므로(9.2절 {@code recognize}) 여기서 진행 행을 먼저 잡으면 반대 순서가 된다. 재개는
+     * 알림 INSERT의 외래 키 검사로 회원 행에 KEY SHARE를 요구하는데, 그 시점에 제출이 이미 회원
+     * 행을 {@code FOR UPDATE}로 들고 진행 행을 기다리고 있으면 서로를 기다린다(MR !177 리뷰, 백승학).
      */
     Outcome apply(ProgressRow row, long ticId, long bundleId) {
+        achievements.lockMember(row.memberId());
         if ("in_progress".equals(row.stage())) {
             return completion.evaluateAndApply(row.memberId(), ticId)
                     .filter(Decision::completes).isPresent() ? Outcome.COMPLETED : Outcome.NONE;

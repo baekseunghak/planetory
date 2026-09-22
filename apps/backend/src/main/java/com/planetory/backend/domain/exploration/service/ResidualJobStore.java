@@ -130,19 +130,25 @@ public interface ResidualJobStore {
     void fail(String jobId, int attempt, Failure failure);
 
     /**
-     * 이 별에서 현재 판이 아닌 키를 모두 버린다 (탐사 API 10장 4단계 (1)) [S15P21C206-150].
+     * 이 별에서 <b>지정한 판</b>의 키를 버린다 (탐사 API 10장 4단계 (1)) [S15P21C206-150].
      *
      * <p>키에 판이 들어 있으므로({@link #cacheKey}) 판이 바뀌면 이전 판의 결과는 다시 쓰이지 않는다.
      * 그래도 지우는 것은 TTL이 끝날 때까지 메모리를 잡고 있기 때문이다. 정합성 장치가 아니라 정리다 —
      * Backend는 결과를 저장하기 전에 요청의 판이 아직 {@code current}인지 다시 확인하고 아니면 버린다
      * ({@code docs/architecture/online-derived-compute.md}).
      *
+     * <p><b>버릴 판을 호출자가 지목한다.</b> 「현재 판이 아닌 것 전부」로 지우면 확인과 삭제 사이에
+     * 새 판이 current가 됐을 때 그 새 판의 작업까지 지운다(MR !177 리뷰 P2, 백승학). 지목한 판만
+     * 지우면 그 사이에 생긴 판은 목록에 없어 살아남는다. 정리가 늦는 것은 다음 전환이 이어서 한다 —
+     * 정리는 늦어도 되지만 살아 있는 계산을 지우면 사용자가 기다리던 결과가 사라진다.
+     *
      * <p>계산 중인 작업도 버린다. 이전 판으로 계산한 잔차는 채택될 수 없고, 작업이 사라지면 조회가
      * 404가 되는데 그것은 「Redis 유실」과 같은 상황이라 호출자가 이미 다룬다(7.2절).
      *
-     * <p>같은 판으로 다시 불러도 결과가 같다. 두 번째에는 버릴 것이 없어 0을 돌려준다.
+     * <p>같은 목록으로 다시 불러도 결과가 같다. 두 번째에는 버릴 것이 없어 0을 돌려준다.
      *
+     * @param bundleIds 버릴 판. 비어 있으면 아무것도 하지 않는다
      * @return 버린 작업과 결과의 수
      */
-    int evictOtherBundles(long ticId, long currentBundleId);
+    int evictBundles(long ticId, java.util.Collection<Long> bundleIds);
 }
