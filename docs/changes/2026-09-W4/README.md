@@ -106,6 +106,7 @@
 | 2026-09-21 | 실제 매칭 재생과 거절 사유 검산 | S15P21C206-128 | 3e9bf8ea, 534/549, 527/549, 86 hashes | 재생·검산 완료, rule-1 미확정 | [기록](2026-09-21.md) |
 | 2026-09-21 | rule-1 수치안·공동 fixture·소비자 인계 | S15P21C206-128 | 47 fixtures, 10980 rows, rule-1 | 채택안 검증 완료·v1 확인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | AstroNet 운영 채택 최종 보류 결정 | S15P21C206-118 | FP/FN, checkpoint, 126, 130, 내부 검토 | 팀 최종 보류 결정 반영 | [기록](2026-09-21.md) |
+| 2026-09-22 | 개인 통계·첫 매칭 통합·현재 완료·과거 본인값 자료 부족 | S15P21C206-177 | KST, 8주, sourceObservedAt, MISSING_BASIS, 112 tests | 개인 구현·격리 검증 완료, 178 통합 별도 | [기록](2026-09-22.md) |
 | 2026-09-22 | 별도 Redis 세션 저장·30분 idle·장애 경계 | S15P21C206-237 | Spring Session, Redis, TTL, stale save, OAuth, 503, 1MiB | 구현·격리 통합 검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 전체 MV·일별 비교·원천 관측 시각·최소권한 | S15P21C206-178 | V21, NULLS NOT DISTINCT, sourceObservedAt, AI_ATTEMPT_UNKNOWN, 158건, V19→20→21 | 사용자 승인·격리 통합 검증 완료, 운영 미적용 | [기록](2026-09-22.md) |
 | 2026-09-21 | 10분 비닝 커널과 revision 연결 | S15P21C206-123 | mean, gaps, revision, 225 tests | 부분 구현·합성 검증 완료 | [기록](2026-09-21.md) |
@@ -129,3 +130,4 @@
 | 2026-09-22 | 123 develop 충돌 해결·산포 migration V22 | S15P21C206-123 | b831cd8f, V20 follow, V21 통계 예약, V22 | 통합 검증·병합 커밋 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 Backend 리뷰 V22 단계·Publisher 인계 | S15P21C206-123 | 254 passed, READ COMMITTED, FOR SHARE, M1 인수 | Python 검증·DB 검사 미실행 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 개인 통계 리뷰: DB 시계·프로필 용어·비교 표시·develop 통합 | S15P21C206-177 | transaction_timestamp, HISTORICAL_SOURCE_UNAVAILABLE, 79c45f35 | 수정·68건 통합 검증 완료 | [기록](2026-09-22.md) |

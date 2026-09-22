@@ -1072,6 +1072,8 @@ MV 최초 적재·일별 멱등·최소 권한·외부 스케줄은 [통계 실�
 
 비교 성공본이 없으면 `comparison.status=UNAVAILABLE`, `unavailableReason=AGGREGATE_NOT_READY`, 시각·날짜·모수 수는 null이며 중앙값과 본인 값도 null이다. 개인 현재 통계는 계속 READY일 수 있다. D 이후 가입자는 `myValue`가 NOT_APPLICABLE/JOINED_AFTER_CUTOFF다. 그 밖의 회원은 당시 원천을 재현하지 못하면 HISTORICAL_SOURCE_UNAVAILABLE로 표시한다. 모수 명단을 저장하지 않으므로 과거 `inCohort`는 확인할 수 없을 때 null이며 신규 회원만 false로 확정한다. 비교 막대를 현재값으로 채우지 않는다.
 
+화면은 `myValue`가 HISTORICAL_SOURCE_UNAVAILABLE이면 본인 막대 대신 ‘당시 자료 부족’을 표시하고, 유효한 중앙값만 기준일·원천 확인 시각과 함께 보여준다. JOINED_AFTER_CUTOFF이면 ‘가입 전 기준 통계’로 표시한다. `current.metrics`의 같은 키는 별도 현재 통계 영역에서 현재 `asOf`와 함께 제공하며 과거 중앙값과의 비교 막대·차이·우열 계산에 사용하지 않는다. 프로필의 완료 수 표시 문구는 기존 화면과 같은 ‘탐색 완료한 별’을 유지한다. 지표의 현재 완료 산식과 재개 시 감소는 유지하며 화면 전체 용어 변경은 별도 작업으로 다룬다.
+
 시작한 별은 제출이 있는 TIC 수다. 기존 프로필 요약의 ‘제출한 발견 별’과 구분하며 발견·현재 완료·성과·등급은 `ExplorationSummaryService`를 재사용한다. 미공개 신호는 166의 미게시 History 자격을 적용하여 duplicate를 포함하고 공개 후 취소 이력은 제외한다. 재도전 인정·근거 일치율은 보존된 제출 응답의 당시 판단을 쓰며 현재 라벨로 과거 근거를 만들지 않는다.
 
 ## 13. 탐사·프론트와 함께 확인할 계약

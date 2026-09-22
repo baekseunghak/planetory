@@ -130,5 +130,7 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 
 현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.
 
+개인 통계(177)는 인증된 `GET /api/v1/me/statistics`로 현재 개인 지표·KST 기준 8주·비교 기준선을 제공한다. 첫 매칭·공개 대표·인정 근거를 구분하며 과거 원천이 없으면 본인 비교값은 당시 자료 부족이다. [서비스 API 12.2.1](docs/service-api-spec.md#1221-본인-상세-통계--177)을 따른다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest' --tests '*QuestPanelTest' --tests '*PublicAnalysisTest' --tests '*StarResultTest'`로 일회용 PostgreSQL에서 검증한다. Snapshot 읽기·마이그레이션은 178과 함께 통합해야 하며 프론트 상세 통계 연결은 별도 인수다.
+
 
 팔로우(173)는 회원·별 관계, 본인 명단/공개 수치, 팔로잉 피드와 비공개 별 관리 해제를 제공한다. [서비스 API 12.1](docs/service-api-spec.md#follow-policy)·[V20 권한](docs/development-setup.md#v20-팔로우-권한)을 따른다. `./gradlew -PskipLocalDb test --tests '*FollowTest' --tests '*MemberCommunityPermissionTest' --tests '*CommunityReadTest' --tests '*HotTopicsTest'`는 실제 앱 역할과 일회용 PostgreSQL에서 관계/경합/페이지/기존 조회 회귀를 검사한다. FE219 관리 UI·첫 페이지 복귀와 실제 배포 인수는 별도다.
