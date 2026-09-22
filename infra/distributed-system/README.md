@@ -285,6 +285,34 @@ sudo bash install-docker-host.sh --node 6 --deploy-user planetory-admin
 
 초기 판은 Hadoop unit 이름을 `hdfs-*`로 추측해 검사가 아무것도 확인하지 않고 통과했다. 실제 이름은 `hadoop-hdfs-*`다. unit 이름이 하나도 맞지 않으면 경고를 남기도록 고쳤다.
 
+## 전체 노드 부팅 복구
+
+`S15P21C206-252`: 구현 완료·운영 적용 전. 2026-09-22 `.ssh` 경유 읽기 전용 점검에서 Node 1~6은 모두 접속·mount·Hadoop 3.5.0이 확인되고 서비스는 실행 중이나 boot enable은 비활성이다. Node 1·2 NameNode는 모두 Standby, 두 Safe Mode는 OFF, JournalNode 세 대는 응답해 HDFS Active가 없는 상태를 관찰했다. **이 시점에는 HDFS 클라이언트 조회가 성공하지 않으므로** 설치·파이프라인 재개 전 HA 복구 범위를 별도 승인하고 상태를 다시 확인한다. 이는 그 시각의 관측이며 적용·복구 증거는 아니다.
+
+[configure-hadoop-boot-recovery.sh](scripts/configure-hadoop-boot-recovery.sh)는 기존 Node 1~6 HDFS·YARN systemd unit을 재부팅 시 기동하도록 등록한다. 설치 전 실제 호스트·사설 IP·mount·Hadoop 3.5.0·기존 NameNode format·가동 unit을 확인하고, Node 1에서는 양쪽 NameNode가 응답하며 정확히 한 Active이거나, 둘 다 Standby라면 JournalNode 정족수와 Safe Mode OFF를 확인한다. 기존 unit·HDFS 데이터·실행 중 데몬은 변경하거나 재시작하지 않는다. NameNode는 로컬 JournalNode, NodeManager는 로컬 DataNode 뒤에 시작을 시도하되 선행 서비스의 일시 실패가 재시도를 영구 차단하지 않는다. Node 1 ResourceManager는 HDFS 파일 조회가 가능해질 때까지 30초 간격으로 시작을 재시도한다. Node 1의 별도 systemd timer는 부팅 40초 뒤부터 매분 [boot controller](scripts/hadoop-boot-controller.sh)를 실행한다. **설치 시점에도 두 NameNode가 Standby라면 timer 즉시 활성화에 따라 nn1 승격이 일어날 수 있으므로, 적용 직전 승인 범위에 이 승격을 포함한다.**
+
+적용 전에는 파이프라인을 drain하고 진행 중 YARN application이 없는지 확인한다. Node 2~6, 마지막에 Node 1 순서로 **각 노드에서** 스크립트 두 파일을 안전하게 전달·검증한 후 실행한다. 설치·enable 및 테스트 재부팅은 운영 변경이므로 정확한 노드·작업 범위의 직전 승인을 별도로 받는다. 기존 설치 스크립트 `install-hdfs-host.sh`와 `install-yarn-host.sh`는 초기 빈 클러스터 전용이므로 실행 중 서버에 다시 사용하지 않는다.
+
+```powershell
+# 작업 PC에서 먼저 접근 계정/호스트 키를 확인한다. 업로드와 설치는 운영 승인 후에만 실행한다.
+tailscale ssh SSAFY@node-1 'hostname -s'
+tailscale ssh planetory-admin@node-2 'hostname -s'
+```
+
+```bash
+# 6대 각각, sudo 권한으로 실행한다. 예: Node 2 (Node 1에는 --node 1).
+# 두 파일은 같은 디렉터리에 보관하며, 배포 전 SHA-256과 root 소유권을 확인한다.
+sudo bash configure-hadoop-boot-recovery.sh --node 2 --check
+sudo bash configure-hadoop-boot-recovery.sh --node 2 --install
+for unit in hadoop-hdfs-journalnode hadoop-hdfs-namenode hadoop-hdfs-datanode hadoop-yarn-nodemanager; do systemctl is-enabled "$unit" || exit 1; done
+# 마지막 Node 1 설치 후 timer가 즉시 활성화된다.
+systemctl is-active planetory-hdfs-boot-recovery.timer
+```
+
+Controller는 mount·NameNode format·양쪽 NameNode의 **모두 응답하는** HA 상태·JournalNode 정족수·Node 1 Safe Mode 종료를 확인한다. 양쪽이 10초 간격으로 계속 standby일 때만 `nn1`을 일반 `-transitionToActive`로 승격한다. 이미 Active가 있으면 유지하고, 상대가 응답하지 않거나 두 Active가 관측되면 승격하지 않는다. `--forceactive`, fencing, format, 데이터 삭제를 실행하지 않는다. 계획 전환이나 HA 유지보수 **전에** Node 1에서 `sudo touch /etc/planetory/hadoop-boot-recovery.disabled`로 timer의 승격 동작을 막고, 수동 복구·검증을 마친 후 정확한 파일을 운영자가 해제한다. 구형 [수동 장애 전환](#수동-전환) 절차와 달리 **응답 없는 기존 Active의 자동 failover는 지원하지 않는다**. Node 1이 계속 중단되면 ResourceManager·Airflow 및 이 controller도 복구되지 않으며 Node 2 강제 승격에는 별도 VM 종료 확인이 필요하다.
+
+실환경 검증은 노드별 새 부팅 ID, mount, 활성/부팅 enabled unit, Node 1 timer, `haadmin` active/standby, Safe Mode OFF, `dfsadmin -report` Live DataNode 5개·RF2, `yarn node -list` NodeManager 5개, Airflow DB·Scheduler/Webserver 자동 재시작, 중단된 Sector DAG의 재개와 원본 checksum을 순서대로 확인한다. Worker 단일 재부팅 → Node 2/3 재부팅 → Node 1 재부팅 → 전체 재부팅 순서로 작은 범위부터 실측하고, 노드별 실패 시 다음 재부팅을 중단한다. Node 1이 재부팅 중 Node 2가 이미 Active였다면 timer는 건드리지 않는다. 설치 직후 timer가 구동됐어도 재부팅 성공으로 보고하지 않는다. 장애 시에는 `systemctl status planetory-hdfs-boot-recovery.timer`, `journalctl -u planetory-hdfs-boot-recovery.service -n 50 --no-pager`와 기존 수동 복구 절차로 원인을 확인한다. 자동 시작을 일시 중단하려면 해당 노드의 정확한 unit만 `systemctl disable`하고 현재 실행 중인 서비스는 별도로 판단한다.
+
 ## 수동 전환
 
 실행 스크립트는 [validate-hdfs-recovery.ps1](scripts/validate-hdfs-recovery.ps1)이다. 각 변경 단계는 `WhatIf`를 지원하며 실행 전 YARN 실행 작업 0개, VM·HA 상태, 대상 호스트를 다시 확인한다. `RunId`는 UTC `yyyyMMddTHHmmssZ` 형식이고 검증 파일은 `/validation/S15P21C206-74/run-<RunId>`에 남긴다. `Prepare`는 256MiB 무작위 표본을 만들고 원본 SHA-256을 같은 run의 `baseline-256m.sha256`에 별도로 보존하며, `FinalAudit`은 이 값과 HDFS에서 다시 받은 표본의 SHA-256을 비교한다. 두 단계의 로컬 `/tmp` 파일은 RunId를 포함한 정확한 경로만 `rm -f --`로 성공·실패 종료 때 정리한다. cleanup 실패는 출력에 남기고, 본 검증이 이미 실패했다면 그 종료 코드를 유지한다.

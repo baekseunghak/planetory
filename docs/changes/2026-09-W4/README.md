@@ -70,3 +70,4 @@
 | 2026-09-22 | MAST Sector 발견·증거 기반 재개 선택 착수 | S15P21C206-252 | MAST 일반 LC, 상한 70, read-only DAG, resume planner | 오프라인 구현·테스트, 배포 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | Sector 14~70 자동 admission·실패 재개 구현 | S15P21C206-252 | Airflow 조정, Worker unit, 불변 원천, 단일 Sector Raw, retry | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | Sector 14 제한 운영 배포·재부팅 검증 | S15P21C206-252 | 20260922T021406Z, SSH, sudo, Worker 4, Node 1, Raw, cleanup, Bronze | 4단계 완료·drain, 무인 Hadoop 복구 미검증 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 전 노드 부팅 복구 오프라인 구현 | S15P21C206-252 | systemd, HDFS HA standby gate, timer, YARN readiness | 오프라인 검증·운영 미배포 | [기록](2026-09-22.md) |

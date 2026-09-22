@@ -172,6 +172,8 @@ sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
 
 재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit을 disabled로 유지하고, 운영자가 기존 Active 부재와 서비스 의존 순서를 확인한 뒤 수동 기동한다.
 
+`S15P21C206-252`의 [부팅 복구 구성과 검증 절차](../../infra/distributed-system/README.md#전체-노드-부팅-복구)는 오프라인 구현 상태이며 아직 이 노드에 적용한 증거가 없다. 운영 승인·설치 전에는 위의 수동 기동 상태가 실제 기준이다. 설치 후에도 자동 fencing 없이 응답 없는 Active를 승격할 수 없으므로 장애 전환은 아래 수동 절차를 따른다.
+
 ## 6. HDFS 수동 장애 전환과 재기동
 
 [복구 검증 스크립트](../../infra/distributed-system/scripts/validate-hdfs-recovery.ps1)는 `Preflight`와 `Prepare` 뒤 계획 전환, Node 1 장애, Worker 장애를 서로 분리한다. 변경 단계는 먼저 `-WhatIf`로 대상 프로젝트·VM을 확인하고 실행 중인 YARN 작업이 0개인 유지보수 창에서만 실행한다. 복구 중 `-format`, `-bootstrapStandby`, `-initializeSharedEdits`, HDFS 삭제는 사용하지 않는다.
