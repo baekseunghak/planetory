@@ -49,3 +49,210 @@ spring.flyway.password=${DATABASE_MIGRATION_PASSWORD:${spring.datasource.passwor
 `service-db-init/10-app-account.sh`는 빈 볼륨 초기화 때 `planetory_stats_job NOLOGIN`도 만든다. 기존 볼륨의 initdb 훅은 재실행되지 않는다. CREATEROLE이 없는 마이그레이션 계정으로 V21을 적용하기 전, 운영 담당이 역할 존재를 확인하고 없으면 역할 생성 권한이 있는 계정으로 `CREATE ROLE planetory_stats_job NOLOGIN;`을 실행한다. 누락되면 V21은 원인과 사전 생성 명령을 안내하고 실패한다. 앱 런타임에 CREATEROLE이나 이 그룹을 부여하지 않는다.
 
 통계 전용 로그인 공급·권한 부여·외부 스케줄은 [통계 실행 런북](../../docs/operations/statistics-runbook.md)을 따른다. 이 변경은 운영 DB 실행이나 계정 공급 완료를 뜻하지 않는다.
+
+## 최초 가입에 필요한 초기 데이터
+
+빈 DB에서는 **아무도 가입할 수 없다.** 가입 트랜잭션이 튜토리얼 1번 별을 지급하는데, 마이그레이션의 시드가 `operation_settings` 한 건뿐이라 `tutorial_stars`가 비어 있기 때문이다. 이때 콜백은 `503 DEPENDENCY_UNAVAILABLE`이 되고 회원 생성까지 롤백된다(자세한 조건은 [OAuth 설정](../../apps/backend/docs/oauth-setup.md)).
+
+화면에는 이 503이 `/oauth/callback?error=authentication_failed`로 보인다. `apps/frontend/nginx.conf`가 `/login/oauth2/`의 401·403·503을 같은 경로로 모으기 때문이며, 인증 정보 문제로 오인하기 쉽다.
+
+넣는 순서가 정해져 있다. `tutorial_stars.tic_id`는 `stars`를 참조하고(`fk_tutorial_stars_tic_id`), `trg_tutorial_stars_published` 트리거가 `service_status='published'`를 요구한다. 순서를 뒤집으면 거절된다.
+
+```sql
+BEGIN;
+INSERT INTO stars (tic_id, confirmed_count, service_status)
+VALUES (<운영 TIC>, 1, 'published')
+ON CONFLICT (tic_id) DO UPDATE SET service_status = 'published';
+
+INSERT INTO tutorial_stars (seq, tic_id, intent, active)
+VALUES (1, <운영 TIC>, 'deep_confirmed', true)
+ON CONFLICT (seq) DO NOTHING;
+COMMIT;
+```
+
+로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
+
+## ERD
+
+Liam ERD 한 벌을 낸다. 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜨며
+Tunnel이 `erd.planetory.space` -> `http://erd:80`으로 잡는다. 외부 인바운드는 0개다.
+
+SchemaSpy는 2026-09-18에 내렸다. 정적 SVG 한 장이라 35개 규모에서 관계를 읽기
+어려웠고, UI 라벨을 한국어로 바꿀 수단이 없었다(7.0.2에 `-lang` 옵션도 번역 번들도
+없다). Liam이 같은 정보를 더 낫게 준다.
+
+### 한국어 설명은 DB가 갖는다
+
+설명은 도구가 아니라 `pg_description`에 있다. `COMMENT ON TABLE`·`COMMENT ON COLUMN`을
+한 번 쓰면 도구를 바꿔도 설명이 따라가므로 ERD 도구에 직접 적어 넣지 않는다. 테이블
+설명은 `R__table_comments.sql`에 있다. 버전 번호 선점을 피하려고 반복 마이그레이션으로 둔다.
+
+화면에서는 테이블을 고르면 오른쪽 상세 패널에 테이블 설명과 컬럼별 설명이 나온다.
+캔버스 노드에는 이름과 타입만 그린다. 노드 위에 설명을 얹는 설정은 없다.
+
+### 생성
+
+생성기는 `erd-refresh` profile에 묶여 평시 `docker compose up -d` 대상이 아니다.
+스키마나 코멘트가 바뀌었을 때만 수동으로 돌린다.
+
+```
+docker compose --profile erd-refresh run --rm erd-generator
+```
+
+`erd-generator`는 `erd-dump`를 먼저 끝내고 시작한다(`service_completed_successfully`).
+`erd-dump`는 서버와 같은 `postgres:18.6-alpine`으로 뜬다. 하위 버전 클라이언트는 상위
+서버를 덤프하지 못하고 거부하므로 이미지 버전을 서버와 따로 올리지 않는다.
+
+### 후처리
+
+빌드 산출물에 세 가지를 덧댄다. `erd-generator`의 `postprocess.js`가 한다.
+
+Liam v0.7.24의 postgres 파서는 `COMMENT ON TABLE` 일부를 흘린다. 34개 중 9개
+(`users`, `posts`, `comments`, `submissions` 등)가 누락되는 것을 실측했다. 원인은 SQL
+형태가 아니다. 같은 구조의 테이블이 붙기도 하고 빠지기도 한다. 그래서 `erd-dump`가
+`pg_description`을 `comments.json`으로 따로 뜨고 빌드 뒤 `schema.json`에 덮어쓴다.
+파서 결과가 아니라 DB가 정본이다. 생성 로그의
+`postprocess: comments tables=34 columns=264, dropped=1`이 이 단계가 돈 증거다.
+Liam을 올릴 때 이 보정이 불필요해졌는지 확인하고, 그래도 두는 편이 안전하다.
+
+`flyway_schema_history`는 Flyway 내부 테이블이라 도메인 ERD가 아니다. 테이블과 이를
+가리키는 제약을 지운다.
+
+쿼리 없이 들어오면 `?showMode=ALL_FIELDS`로 연다. `index.html` `</head>` 앞에 인라인
+스크립트를 넣는다. 앱 번들은 `type="module"`이라 defer로 동작하므로 이 인라인이 먼저
+돈다. 사용자가 붙인 쿼리는 건드리지 않고 `data-liam-default-showmode` 표식으로 중복
+주입을 막는다.
+
+### 산출물
+
+`planetory-erd-output`에 있다. 재생성 가능한 파생물이라 지워져도 데이터 손실이 아니다.
+`service-db-data`와 혼동하지 않는다. `erd-scratch`·`erd-work`·`erd-npm-cache`는 빌드
+중간물이다.
+
+DB 비밀번호는 명령줄 인자에 두지 않고 `PGPASSWORD` 환경변수로만 넘긴다.
+`docker inspect`와 `ps`에 노출되지 않는다.
+
+읽기 계정은 분리하지 않았다. 소유자 `planetory`로 접속한다. `planetory_app`·
+`planetory_gold_writer` 역할 분리가 들어오면 ERD 생성기를 읽기 전용 역할로 옮긴다.
+
+## API 문서 (Swagger UI)
+
+`api-docs.planetory.space` -> `http://api-docs:80`. 호스트 포트를 열지 않고 `service`
+네트워크 안에만 뜬다. 외부 인바운드는 0개다.
+
+### 운영 백엔드는 건드리지 않는다
+
+springdoc은 이미 의존성에 있지만 운영에서는 두 겹으로 잠겨 있다.
+
+- `application.properties`의 `springdoc.*.enabled=${SWAGGER_ENABLED:false}` — 기본 꺼짐
+- `SecurityConfig`의 swagger `permitAll`이 `local` 프로필 안에만 있다
+
+배포 백엔드는 `prod`·`oauth-google`로 뜨므로 `/swagger-ui/**`와 `/v3/api-docs/**`는 401이다.
+이 게이트는 팀이 의도해서 건 것이라 풀지 않는다. 대신 같은 이미지를 일회용으로 띄워
+스펙만 받아 오고, 결과는 정적으로 서빙한다. 운영 백엔드의 설정과 보안은 그대로다.
+
+### 생성
+
+```
+docker compose --profile api-docs-refresh run --rm api-docs-generator
+docker compose --profile api-docs-refresh rm -sf api-docs-app api-docs-db
+```
+
+첫 명령이 `api-docs-db`(스크래치) -> `api-docs-app`(local 프로필) 순으로 띄우고
+`/v3/api-docs`를 받아 Swagger UI와 함께 `planetory-api-docs-output`에 쓴다. 둘째 명령이
+일회용 컨테이너 둘만 정지·제거한다. `api-docs-generator`는 `run --rm`이 이미 지웠다.
+백엔드 이미지가 바뀌면 다시 돌린다.
+
+**`down`을 쓰지 않는다.** `down`은 프로필 지정과 무관하게 프로젝트 전체를 내린다.
+문서를 새로 뽑을 때마다 `frontend`·`backend`·`service-db`·`cloudflared`까지 함께
+멈춰 서비스가 중단된다. 정리 대상은 이름으로 지정한다.
+
+`api-docs-db`는 스펙 추출 전용이다. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
+붙이지 않는다. tmpfs라 컨테이너가 사라지면 데이터도 같이 사라지며, Flyway가 매번 V1부터
+새로 깐다.
+
+### 스펙 손질
+
+springdoc이 내는 스펙에는 `servers`가 없다. 그대로 두면 Swagger UI가 페이지 주소
+(`api-docs.planetory.space`)를 API 주소로 읽는다. 생성 시 `API_SERVER_URL`
+(기본 `https://planetory.space`)을 `servers`에 박는다.
+
+Try it out은 문서 호스트에서 운영 API로 나가는 교차 출처 요청이라 CORS와 세션 쿠키가
+걸린다. 이 사이트는 열람용으로 본다.
+
+`/api/v1/hello`는 개발용 엔드포인트인데 스펙에 그대로 올라온다. 공개 문서에서 빼려면
+`HelloController`에 `@Hidden`을 단다.
+
+## 와이어프레임
+
+`wireframe.planetory.space` -> `http://wireframe:80`. 호스트 포트를 열지 않고 `service`
+네트워크 안에만 뜬다. 외부 인바운드는 0개다.
+
+저장소의 `docs/requirements/planetory-wireframe.html`을 그대로 낸다. 이 HTML은
+`../images/sky-reference-20260915/01-galaxy.png`를 참조하므로 `docs/images`도 함께 올린다.
+문서를 루트의 `index.html`로 두면 브라우저가 `../images`를 `/images`로 정규화하므로 경로가
+맞는다.
+
+### 동기화
+
+```
+docker compose --profile wireframe-refresh run --rm wireframe-sync
+```
+
+`wireframe-sync`가 저장소 체크아웃(`../../docs`)을 읽어 `planetory-wireframe-output`
+볼륨에 복사한다. 문서가 바뀌면 다시 돌린다. ERD·API 문서와 달리 생성이 아니라 복사다.
+
+체크아웃이 없으면 이 동기화만 실패하고 `wireframe`은 마지막 사본을 계속 서빙한다. CI
+배포 job은 `compose.yaml`만 scp하므로 저장소가 없는 서버에서는 동기화를 돌릴 수 없다.
+그런 경우 파일을 직접 볼륨에 넣는다.
+
+문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
+곧 서빙되는 판이다.
+
+## 배포와 롤백
+
+`deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
+
+| 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
+| --- | --- | --- | --- |
+| `frontend` | `/` | 없음 | 90초 |
+| `backend` | `/actuator/health` | 남긴다 | 180초 |
+
+확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
+
+**롤백은 이미지만 되돌린다. 스키마는 되돌리지 않는다.** Flyway는 앞으로만 가고 `clean`이 막혀 있다. 지금까지의 마이그레이션은 열·테이블 추가뿐이라 구 앱이 새 스키마에서도 `validate`를 통과하지만, 열을 지우거나 이름을 바꾸는 마이그레이션이 들어오면 그 가정이 깨진다. 그때는 덤프에서 복원해야 한다.
+
+덤프는 `$DEPLOY_PATH/backups/service-db-<YYYYMMDD-HHMMSS>.sql`에 쌓이며 최근 10개만 남는다. 복원은 이미 마이그레이션된 DB에 데이터만 넣는 경우 트리거와 `rule-0` 충돌을 먼저 처리해야 한다. 절차는 [운영 규칙 런북](../../docs/operations/operation-rule-runbook.md)을 따른다.
+
+`compose.yaml`은 되돌리지 않는다. 포트·환경변수·볼륨 정의를 바꾸는 변경은 이미지 배포와 같은 파이프라인에 싣지 않는다. 실패하면 "구 이미지 + 신 정의"라는 검증되지 않은 조합이 된다.
+
+덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 볼륨과 함께 사라진다. 배포 실패 복구용이지 재해 복구용이 아니다.
+
+배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
+
+- `되돌렸습니다` — 서비스는 직전 이미지로 살아 있다. 원인을 고쳐 다시 배포한다.
+- `되돌릴 이미지가 없습니다` — 첫 배포였다. 서비스가 떠 있지 않다.
+- `되돌린 뒤에도 헬스가 통과하지 않습니다` — 사람이 봐야 한다. `restart: unless-stopped`가 계속 재시작시키므로 조사 전에 `docker compose stop <service>`로 루프를 멈춘다.
+- `DB 덤프에 실패했습니다` — 교체하지 않았다. `service-db`를 먼저 확인한다.
+- `교체가 반영되지 않았습니다` — compose가 읽는 이미지 변수 이름이 배포 job의 `DEPLOY_IMAGE_VARIABLE`과 다르다.
+
+## Cloudflare Tunnel 진입 (S15P21C206-84, 부분)
+
+`cloudflared`는 외부 인바운드 포트를 열지 않고 edge에서만 트래픽을 받는다. 서비스 컨테이너는 같은 `service` 네트워크에 있으므로 Tunnel의 public hostname은 `http://frontend:8080`을 origin으로 지정한다.
+
+도메인은 `planetory.space`이며 Cloudflare zone에 등록되어 있다. Tunnel 이름은 `planetory-service`다.
+
+1. Cloudflare Zero Trust에서 Tunnel을 만들고 connector 토큰을 발급한다.
+2. 서버의 `$DEPLOY_PATH/.env`에 `CLOUDFLARE_TUNNEL_TOKEN=<토큰>`을 추가한다. 토큰은 Git·이미지·명령줄 인자에 두지 않는다.
+3. `docker compose up -d cloudflared`로 기동한다. GitLab 배포 job은 `frontend`·`backend`만 갱신하므로 `cloudflared`를 내리지 않는다.
+4. Tunnel의 public hostname → service `http://frontend:8080`을 연결하고 도메인으로 접속을 확인한다.
+
+connector는 EC2-A에만 둔다. 같은 Tunnel에 커넥터를 여럿 붙여도 Cloudflare는 가장 가까운 하나로만 보내고 분산하지 않으므로(2026-09-16 실측 10/10), EC2-B가 선택되면 전면 장애가 된다.
+
+2026-09-17 확인: EC2-A에서 Cloudflare edge(`icn06`)로 QUIC egress가 열려 있고, 보안그룹 인바운드 개방 없이 `planetory.space` 응답까지 확인했다.
+
+Backend가 아직 배포되지 않은 단계에서도 frontend는 기동한다. `apps/frontend/nginx.conf`가 backend를 요청 시점에 해석하기 때문이다. **API 응답은 모두 원래 상태 코드를 그대로 전달한다.** 한때 세션 조회(`/api/v1/me`)의 502·504만 401로 낮췄으나, 프론트의 공통 인증 만료 처리가 그 401을 받아 세션을 비우고 보관 중인 분석 초안까지 지워 걷어냈다.
+
+Tunnel → nginx 구간은 평문이므로 외부 HTTPS 출처를 별도로 전달해야 한다. Backend 공통값은 240과 같은 `server.forward-headers-strategy=framework`로 통일한다. 공통 설정으로 활성화되므로 별도 환경변수 주입은 필요하지 않다. 현재 nginx는 외부 `Forwarded`와 일부 `X-Forwarded-*`를 제거하지 않고 Proto도 임의 값을 전달하므로, 공개 진입 계층에서 외부 전달 헤더를 제거하고 허용한 Proto/Host만 다시 설정하며 backend 직결 제한을 배포 전에 검증한다. 설정 변경만으로 실제 운영 HTTPS 로그인 복귀 인수가 완료된 것은 아니다. nginx의 `absolute_redirect off`는 nginx 자체 리다이렉트 설정이며 이 신뢰 경계를 대신하지 않는다.
+
+미완료: Redis runtime, 메모리 상한·eviction 정책, health/readiness, 남용 제어 위치, connector 지속 처리량 실측은 이 변경에 포함되지 않았다.

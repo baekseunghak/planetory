@@ -80,12 +80,32 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 ## Runner 구성
 
-Runner는 두 대이고 job은 태그로 나눈다.
+**현재 Runner는 한 대다(2026-09-22 확인).** 빌드 노드의 `planetory-docker-runner` 하나가 `amd64-docker` 태그를 갖고 `run_untagged=true`로 등록되어 태그 job과 무태그 job을 모두 처리한다. 아래 표는 목표 배치이며 aarch64 CI 노드는 아직 등록되지 않았다.
 
-| Runner | 아키텍처 | 태그 | 맡는 job |
-| --- | --- | --- | --- |
-| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*` |
-| CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` |
+| Runner | 아키텍처 | 태그 | 맡는 job | 상태 |
+| --- | --- | --- | --- | --- |
+| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*` | 등록됨. 현재 전체 job 처리 |
+| CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` | 미등록 |
+
+태그 분리는 CI 노드를 붙이는 시점에 의미를 갖는다. 지금은 한 대가 둘 다 받으므로 태그가 job을 가르지 않는다.
+
+### 동시 실행
+
+Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수와 다른 값이며, **한 대가 여러 job을 동시에 처리한다.** Runner는 job을 실행하는 셸이 아니라 job마다 컨테이너를 새로 띄우는 관리 프로세스다. 컨테이너 이름의 `concurrent-<n>`이 그 슬롯 번호다.
+
+현재 값은 `3`이다. 등록 기본값 `1`로는 같은 stage의 job이 전부 줄을 섰다. 실측 비교는 아래와 같다.
+
+| | `concurrent = 1` | `concurrent = 3` |
+| --- | --- | --- |
+| 동시 실행 최대 | 1개 | 3개 |
+| 벽시계 | 202초 | 126초 |
+| job 소요 합계 | 201초 | 250초 |
+
+같은 MR 파이프라인의 job 8개를 기준으로 쟀다. 벽시계는 38% 줄었고 job 하나하나는 느려졌다. 코어 4개를 세 job이 나눠 쓰기 때문이며, 전체 대기 시간이 목적이므로 감수한다.
+
+`4`로 올리지 않는다. 빌드 노드는 vCPU 4개이고 dind와 레지스트리가 같은 노드에 있다. 꽉 채우면 경합이 커져 벽시계 이득이 줄고 레지스트리 응답도 밀린다.
+
+벽시계의 하한은 가장 긴 job 하나다. 현재 `backend:image`가 약 106초이며 그보다 짧아지지 않는다. 더 줄이려면 병렬화가 아니라 이미지 레이어 캐시를 붙여야 한다.
 
 배포 대상이 전부 `linux/amd64`라 이미지 빌드는 x86_64 Runner에서만 실행한다. `.docker-build`에 `tags: [amd64-docker]`를 둔 이유이며, 이 태그를 떼면 job이 aarch64 Runner로 가서 에뮬레이션 설정 없이 실패한다. 빌드 Runner는 dind를 쓰므로 `privileged`가 필요하고, 컨테이너 안에서는 MagicDNS가 해석되지 않으므로 Runner 설정에 레지스트리 이름의 `extra_hosts`를 둔다.
 
