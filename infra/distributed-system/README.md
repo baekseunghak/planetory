@@ -184,7 +184,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 
 `FinalAudit`은 과거 오류와 수정 뒤 새 오류를 구분하기 위해 UTC 검사 시작 시각을 필수로 받는다. 로그 파일 목록 조회와 읽기는 `hdfs` 권한 안에서 수행하며, 로그 없음·읽기 실패·검색 실패도 감사 실패로 처리한다. 두 NameNode에서 세 JournalNode의 8485/TCP와 8480/HTTP도 함께 검증한다.
 
-현재 HDFS unit은 실행 중이지만 부팅 자동 시작은 활성화하지 않았다. 재부팅 후에는 JournalNode·NameNode·DataNode를 순서대로 시작하고 두 NameNode가 올라온 뒤 기존 Active가 없음을 확인해 수동 전환해야 한다.
+최초 설치 당시 HDFS unit은 실행 중이지만 부팅 자동 시작은 비활성이었다. 2026-09-22 이후의 운영 상태와 재부팅 복구는 [전체 노드 부팅 복구](#전체-노드-부팅-복구)를 따른다.
 
 ## HDFS 완료 검증
 
@@ -231,7 +231,7 @@ $AuditSinceUtc = (@(& tailscale ssh SSAFY@node-1 'date -u +%Y-%m-%dT%H:%M:%SZ') 
 
 설치 전에 OpenSSH `known_hosts`에 각 `node-*` host key를 별도 확인해 등록해야 한다. 미등록되거나 변경된 key는 자동 수락하지 않고 설치와 sample 전송을 중단한다.
 
-설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit의 부팅 자동 시작을 활성화하지 않고 운영자 확인 뒤 수동 복구 순서를 유지한다. 재부팅 후에는 JournalNode·NameNode·DataNode와 HA 상태를 먼저 복구한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다.
+최초 설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. `S15P21C206-74` 당시에는 자동 fencing이 없어 HDFS·YARN unit을 부팅 시 비활성으로 유지했다. 현재 부팅 설정·검증 범위는 [전체 노드 부팅 복구](#전체-노드-부팅-복구)를 따른다.
 
 `Preflight`는 6개 노드가 NTP 동기화 상태이며 `Etc/UTC` 시간대를 사용하는지 확인한다. 감사 시작 시각은 운영자 PC가 아니라 Node 1에서 가져온다. `FinalAudit`은 이 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
 
@@ -287,7 +287,9 @@ sudo bash install-docker-host.sh --node 6 --deploy-user planetory-admin
 
 ## 전체 노드 부팅 복구
 
-`S15P21C206-252`: 구현 완료·운영 적용 전. 2026-09-22 `.ssh` 경유 읽기 전용 점검에서 Node 1~6은 모두 접속·mount·Hadoop 3.5.0이 확인되고 서비스는 실행 중이나 boot enable은 비활성이다. Node 1·2 NameNode는 모두 Standby, 두 Safe Mode는 OFF, JournalNode 세 대는 응답해 HDFS Active가 없는 상태를 관찰했다. **이 시점에는 HDFS 클라이언트 조회가 성공하지 않으므로** 설치·파이프라인 재개 전 HA 복구 범위를 별도 승인하고 상태를 다시 확인한다. 이는 그 시각의 관측이며 적용·복구 증거는 아니다.
+`S15P21C206-252` 적용 전 관측: 2026-09-22 `.ssh` 경유 읽기 전용 점검에서 Node 1~6은 모두 접속·mount·Hadoop 3.5.0이 확인되고 서비스는 실행 중이나 boot enable은 비활성이었다. Node 1·2 NameNode는 모두 Standby, 두 Safe Mode는 OFF, JournalNode 세 대는 응답해 HDFS Active가 없는 상태였다. **당시에는 HDFS 클라이언트 조회가 성공하지 않았으므로** 설치 전 HA 복구를 별도 승인받았다. 다음 문단은 이 관측 이후의 운영 적용 결과다.
+
+2026-09-22 후속 운영 적용·순차 재부팅 검증 완료: 승인 뒤 두 NameNode가 모두 Standby이고 Safe Mode OFF·JournalNode 3대가 응답함을 재확인해 `nn1`을 일반 승격했다. TESS/Airflow/HDFS/Bronze 운영 release `20260922T021406Z`의 대표 코드 SHA-256은 현재 저장소와 일치해 중복 배포하지 않았다. 새 root 소유 부팅 복구 release `/opt/planetory-boot-recovery/releases/5fec7b88`를 Node 1~6에 설치하고 Node 2~6의 역할별 unit, 마지막으로 Node 1 unit과 timer를 활성화했다. Node 6→5→4→3→2→1을 한 대씩 재부팅했고 매번 boot ID 변경·로컬 mount/서비스 자동 시작·클러스터의 Live DataNode 5개와 YARN NodeManager 5개를 확인했다. Node 1 재부팅 때는 Safe Mode ON 동안 timer가 승격을 보류한 뒤 OFF가 되자 `nn1`을 일반 승격했고 ResourceManager가 자동 복구됐다. 최종 `nn1=active`, `nn2=standby`, JournalNode 3대, 저복제·누락 block 0, Sector 14 Raw·Bronze `_READY.json` FSCK `HEALTHY`, YARN 실행 application 0, Airflow DB·Scheduler healthy와 Tailnet UI proxy를 확인했다. 파이프라인은 의도적으로 `tess_pipeline_enabled=false`, 상한 14, 발견 DAG pause를 유지했다. **응답 없는 Active의 자동 장애 전환, 동시 다중 노드 장애, Sector 15 이후 데이터 처리까지 검증한 것은 아니다.**
 
 [configure-hadoop-boot-recovery.sh](scripts/configure-hadoop-boot-recovery.sh)는 기존 Node 1~6 HDFS·YARN systemd unit을 재부팅 시 기동하도록 등록한다. 설치 전 실제 호스트·사설 IP·mount·Hadoop 3.5.0·기존 NameNode format·가동 unit을 확인하고, Node 1에서는 양쪽 NameNode가 응답하며 정확히 한 Active이거나, 둘 다 Standby라면 JournalNode 정족수와 Safe Mode OFF를 확인한다. 기존 unit·HDFS 데이터·실행 중 데몬은 변경하거나 재시작하지 않는다. NameNode는 로컬 JournalNode, NodeManager는 로컬 DataNode 뒤에 시작을 시도하되 선행 서비스의 일시 실패가 재시도를 영구 차단하지 않는다. Node 1 ResourceManager는 HDFS 파일 조회가 가능해질 때까지 30초 간격으로 시작을 재시도한다. Node 1의 별도 systemd timer는 부팅 40초 뒤부터 매분 [boot controller](scripts/hadoop-boot-controller.sh)를 실행한다. **설치 시점에도 두 NameNode가 Standby라면 timer 즉시 활성화에 따라 nn1 승격이 일어날 수 있으므로, 적용 직전 승인 범위에 이 승격을 포함한다.**
 
@@ -416,7 +418,7 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 운영 상한은 DAG Param 기본 70과 영속 `tess_pipeline_max_sector` 중 작은 값이다. 이 실험은 `14`로 고정하고 `tess_pipeline_enabled=true`를 켜 [Sector 14 제어 스크립트](scripts/control-tess-sector14.ps1)로 최초 발견 run을 시작했다. `-Step Drain`은 신규 허가·trigger를 멈추지만 이미 시작된 Worker/systemd 작업은 이어진다. Sector 14 원천 19,970개의 run `20260922T024642Z`에서 다운로드·Raw·로컬 삭제·Bronze 네 DAG가 모두 성공했다. Raw `_READY`의 제품 수 19,970·RF2·Parquet success, FSCK HEALTHY·저복제/누락/손상 0을 확인했다. cleanup 전 75개 bundle 모두 fast 재감사가 HEALTHY였고 Worker 5대의 FITS 19,970개 삭제 뒤 잔여 0개다. Bronze final `_READY`의 제품 19,970개·관측값 386,159,890개·파싱 오류 0개·RF2, Spark/YARN 성공과 FSCK HEALTHY를 확인했다. cleanup task는 약 13분 30초로, 성능 개선은 별도 검증이 필요하다. 이후 `-Step Drain`을 실행해 `tess_pipeline_enabled=false`, 발견 DAG pause·활성 단계 run 0건으로 제한했다. 배포·실행과 재부팅 검증은 사용자가 Node 1~6 release, Sector 14 삭제, Worker 4와 Node 1 재부팅 범위를 명시 승인한 뒤 수행했다.
 
-Worker 4 다운로드 중 재부팅은 부팅 ID 변경, 수집 unit enabled 자동 재개, 이벤트 688→1,728건 증가, DataNode·NodeManager 수동 복구로 확인했다. Node 1 재부팅 뒤 Docker/Airflow는 자동 재시작했지만 HDFS/YARN은 자동 fencing이 없는 현재 설계상 수동 복구가 필요하다. NameNode가 6,631개 block의 30초 Safe Mode 연장 중 Active 전환을 거부했으므로 [재부팅 검증 스크립트](scripts/verify-tess-reboot.ps1)는 Safe Mode OFF를 기다린 뒤 전환한다. 부팅은 이미 끝났는데 후속 복구만 실패했다면 `-Step RecoverNode1`로 **재부팅 없이** 이어서 복구한다. Sector 14 처리 완료는 확인했지만 전체 무인 복구나 Sector 15~70 실행까지 입증한 것은 아니다.
+당시 Worker 4 다운로드 중 재부팅은 부팅 ID 변경, 수집 unit enabled 자동 재개, 이벤트 688→1,728건 증가, DataNode·NodeManager 수동 복구로 확인했다. 당시 Node 1 재부팅 뒤 Docker/Airflow는 자동 재시작했지만 HDFS/YARN은 수동 복구가 필요했다. NameNode가 6,631개 block의 30초 Safe Mode 연장 중 Active 전환을 거부했으므로 [기존 재부팅 검증 스크립트](scripts/verify-tess-reboot.ps1)는 Safe Mode OFF를 기다린 뒤 전환한다. 부팅은 이미 끝났는데 후속 복구만 실패했다면 `-Step RecoverNode1`로 **재부팅 없이** 이어서 복구한다. 이후의 자동 부팅 검증은 [전체 노드 부팅 복구](#전체-노드-부팅-복구)에 기록했다. Sector 15~70 실행까지 입증한 것은 아니다.
 
 ## TESS 원천 수집 (`S15P21C206-75`)
 
