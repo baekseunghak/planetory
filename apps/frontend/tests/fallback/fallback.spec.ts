@@ -166,7 +166,7 @@ test("real context loss/restoration keeps selection and camera; restoration neve
   await page.getByRole("button", { name: "3D 지도 보기" }).click();
   await expect(canvas).toBeFocused();
   expect(await cam(page)).toEqual(selected);
-  await panel(page).getByRole("button", { name: "은하로 돌아가기" }).click();
+  await panel(page).getByRole("button", { name: "별지도" }).click();
   await expect.poll(() => cam(page)).toEqual(before);
 });
 test("list is independent of tile failures; quest failure does not remove star access", async ({
