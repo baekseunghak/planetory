@@ -185,19 +185,18 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 4. **두 Redis 연결 분리.** 세션과 계산 캐시가 다른 인스턴스이므로(D1) Spring Session이 쓰는 연결과 계산 캐시 연결을 따로 구성해야 한다. Boot 기본 설정은 단일 Redis를 가정한다. TTL도 세션 30분 idle(SB-D14)과 계산 캐시 값을 같은 값으로 묶지 않는다.
 5. **persistence 범위.** 앱만 재배포하면 `redis-session`이 살아 있으므로 persistence 없이도 세션이 유지된다. persistence가 필요한 경우는 **`redis-session` 컨테이너 재시작과 호스트 재부팅뿐이다.** 어디까지 보장할지와 설정은 84에서 정한다.
 
-현재 `apps/backend/build.gradle`에 `spring-boot-starter-data-redis`·`spring-session-data-redis`가 없고 `apps/backend/src/main`의 Redis 참조가 0건이다. 설정 스위치가 아니라 앱의 첫 Redis 연동이다.
+2026-09-22 사용자 승인 범위의 237에서 Spring Session Redis와 별도 세션/캐시 연결을 구현했다. 단일 앱의 저장·삭제 경계 직렬화로 활동 시각 역전과 로그아웃 후 늦은 저장을 방지한다. 실제 HTTP·격리 Redis 검증과 운영 인수를 구분하며 [구현·검증 경계](../../apps/backend/docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. 84의 운영 연결·persistence 인수는 남아 있다.
 
 **수용한 저하를 숨기지 않는다.** 이관 전에는 Redis가 죽어도 조회·쓰기가 살아 있었다. 이관 후에는 Redis 장애가 인증 전면 중단이다. 재시작 후 로그인 유지는 요구사항이 아니므로(ACC-03·04는 인증 검사와 로그아웃만, SB-D11·14는 30분 idle 창만 정한다) 비용이 예상보다 크면 되돌리는 것이 정당한 선택이다.
 
 ### 인스턴스를 늘리게 될 때 먼저 지불할 것
 
-지금 구현하지 않는다. 문서로만 보존한다.
+로그아웃 CSRF 면제 제거(234)는 구현·병합 완료다. 로그인 여부와 무관하게 현재 세션의 유효 토큰이 필요하며, 반복 로그아웃은 새 토큰 조회 후 204다. 아래 항목은 다중 인스턴스 전환 시 검토한다.
 
-1. `SecurityConfig`의 로그아웃 CSRF 면제 수정(234). 면제 조건이 세션 부재 기준이라 **저장소와 무관하며** 단일 노드에서는 Redis 이관 후에도 멱등이다. 두 번째 인스턴스가 생기면 검사 우회가 된다. **순서상 선행 조건이다.**
-2. 쿠키 CSRF로 전환하는 경우의 프론트 변경. 프론트가 `X-CSRF-TOKEN`을 하드코딩하고 있다. 세션을 Redis로 옮기는 데는 필요 없다.
-3. 노드 시계 동기와 허용 skew.
-4. `server.forward-headers-strategy`. 부재 시 쿠키 `Secure`가 조용히 빠질 수 있다.
-5. **진입 계층 재구축.** Tunnel replica는 가장 가까운 connector 하나로만 보내고 분산하지 않으므로(2026-09-16 실측 10/10) 두 번째 노드는 트래픽을 받지 못한다. 계약으로 막을 수 없는 재구축이며 이 결정의 가장 큰 숨은 비용이다.
+1. 쿠키 CSRF로 전환하는 경우의 프론트 변경. 프론트가 `X-CSRF-TOKEN`을 하드코딩하고 있다. 세션을 Redis로 옮기는 데는 필요 없다.
+2. 노드 시계 동기와 허용 skew.
+3. `server.forward-headers-strategy`. 부재 시 쿠키 `Secure`가 조용히 빠질 수 있다.
+4. **진입 계층 재구축.** Tunnel replica는 가장 가까운 connector 하나로만 보내고 분산하지 않으므로(2026-09-16 실측 10/10) 두 번째 노드는 트래픽을 받지 못한다. 계약으로 막을 수 없는 재구축이며 이 결정의 가장 큰 숨은 비용이다.
 
 ## 7. 후속 인계
 
@@ -205,12 +204,12 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 | --- | --- |
 | 83 | 계정 4분리(서비스 런타임·Publisher 분리 포함), 마이그레이션 계정 권한. `CREATEROLE`을 주지 않으려면 V2 우회 경로로 역할을 미리 만든다. 238의 V11을 적용한 뒤 **`planetory_app`으로 42501 없이 동작하는지 인수 검증**한다 |
 | 238 | V11로 회원·커뮤니티 GRANT 결손을 해소한다(5절). 필요한 동사 집합을 코드로 확정하고 V5 패턴을 따르며, `planetory_app` 로그인 계정의 실제 DML·행 잠금·권한 거절을 회귀 테스트로 검증한다 |
-| 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **`redis-session`·`redis-cache` 두 컨테이너**를 올리고 각각의 포트·메모리 상한·eviction·persistence를 정한다(1.1절). `redis-session`은 `noeviction`과 persistence, `redis-cache`는 캐시 eviction과 결과 TTL이다. 두 상한의 합이 PostgreSQL을 OOM으로 밀어내지 않는지 함께 확인한다 |
+| 84 | Cloudflare Tunnel 단일 connector 세팅과 자격증명 파일 주입, 무료 플랜 제약 확정(실패 시 대안은 proxied A 레코드 1개 + 443 개방), 인바운드 0개 보안그룹, 애플리케이션 포트 loopback 바인드, 애플리케이션 계층 남용 제어 위치와 `CF-Connecting-IP` 전달(3.1절). 호스트 Nginx는 만들지 않는다. **`redis-session`·`redis-cache` 두 컨테이너**를 올리고 각각의 포트·메모리 상한·eviction·persistence를 정한다(1.1절). `redis-session`은 `noeviction`과 persistence, `redis-cache`는 캐시 eviction과 결과 TTL이다. 두 상한의 합이 PostgreSQL을 OOM으로 밀어내지 않는지 함께 확인한다. 익명 CSRF 호출률에 따른 키 증가·표본 952 bytes·30분 TTL과 운영 배포 차단 조건은 [237 인계](../../apps/backend/docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다 |
 | 100 | **EC2-B에서 알림 전용 외부 관찰.** 공개 URL 확인과 알림만 수행하고 진입·DNS 개입 권한은 주지 않는다. 같은 AZ라 리전 단위 장애는 덮지 못한다(4장) |
-| 93 | 컨테이너 재기동 정책과 헬스체크 연동. liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분한다. 구현은 contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다 — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 착수 시 Boot 버전에서 확인한다. `/actuator/health`는 현재 `show-details=never`로 UP/DOWN만 반환한다(2026-09-16 Backend 확인) |
-| 234·235 | 로그아웃 CSRF 면제 조건 수정(6절 1번의 선행 조건)과 prod 유사 `Set-Cookie`·DB 중단 응답 실측. 인스턴스 수와 무관하게 유효하다 |
+| 93 | 컨테이너 재기동 정책과 헬스체크 연동. liveness와 readiness를 나눠 앱 장애와 공유 의존성 장애를 구분한다. 구현은 contributor 비활성(`management.health.*.enabled=false`)이 아니라 `management.endpoint.health.group.*`이어야 한다 — contributor를 끄면 빈 자체가 사라져 어떤 group에도 넣을 수 없다. 착수 시 Boot 버전에서 확인한다. `/actuator/health`는 `show-details=never`로 UP/DOWN만 반환한다. 237은 Redis contributor를 끄지 않고 세션 전용 indicator로 대체하여 캐시 장애를 전체 health에서 제외한다. 캐시 전용 관측을 추가할 때 93의 health group으로 분리한다. |
+| 234·235 | 234의 로그아웃 CSRF 면제 제거는 병합 완료다. 235의 prod 유사 `Set-Cookie`·DB 중단 응답 실측은 별도 인수다 |
 | 237 | 로그인 세션 Redis 이관 구현. `synchronized (session)` 2곳 재설계, 세션 기반 저장소 직렬화 실제 검증, Redis 장애 시 503, TTL·네임스페이스 분리. 84가 사실상 선행이다(Redis가 떠야 검증 가능) |
-| 102 | 실부하에서 단일 connector와 단일 노드가 병목인지 확인한다. 병목이면 진입 계층 재구축 비용(6절 6번)을 포함해 별도 티켓으로 재검토한다 |
+| 102 | 실부하에서 단일 connector와 단일 노드가 병목인지 확인한다. 병목이면 진입 계층 재구축 비용(6절 진입 계층 재구축)을 포함해 별도 티켓으로 재검토한다 |
 
 **이 Task에서 실측한 것:** 두 EC2 SSH 접속과 동일 VPC 사설 도달, 사설 RTT 평균 약 0.8ms(최소 0.5·최대 1.1ms), tailnet 노출 포트가 22만 응답하는 것, Cloudflare Tunnel egress 동작과 replica 라우팅 10/10 단일 노드. 실제 IP·대역은 문서에 적지 않는다.
 

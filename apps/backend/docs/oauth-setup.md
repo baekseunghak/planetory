@@ -140,7 +140,7 @@ if (response.ok) {
 
 ## 4. 세션·배포
 
-- 서비스 인스턴스는 1개로 확정됐고 세션은 EC2-A `redis-session`에 둔다(2026-09-17 리뷰 반영, 구현 `S15P21C206-237`). 계산 캐시는 별도 `redis-cache`다. 배포·재시작은 전면 중단이지만 `redis-session`을 함께 재시작하지 않으면 로그인은 유지된다. 구현 전까지는 메모리 HttpSession이라 전원 재로그인이 필요하다.
+- 서비스 인스턴스는 1개로 확정됐고 세션은 EC2-A `redis-session`에 둔다(2026-09-17 리뷰 반영, 구현 `S15P21C206-237`). 계산 캐시는 별도 `redis-cache`다. 배포·재시작은 전면 중단이지만 `redis-session`을 함께 재시작하지 않으면 로그인은 유지된다. 237에서 Spring Session Redis를 구현했으며 격리 환경에서 검증한다. 공유·운영 Redis 연결 및 배포 완료를 의미하지 않는다. 기존 메모리 세션은 첫 전환 시 승계하지 않으므로 재로그인이 필요하다.
 - 마지막 유효 인증 API 요청 접수 시각부터 정확히 30분이다. 만료 시각과 같아도 401이다.
 - 폴링·입력 오류·권한 부족도 유효 인증 요청이면 연장한다. 정적 경로·개발 hello·CSRF 토큰 조회는 연장하지 않는다.
 - 별도 토큰 갱신·주기적 heartbeat API는 없다. 동시에 여러 기기를 로그인할 수 있다.
@@ -151,8 +151,27 @@ if (response.ok) {
 - 외부 Origin에 대한 CORS 허용은 추가하지 않았다. 별도 출처가 필요하면 허용 Origin·쿠키 정책을 명시적으로 설계한다.
 - `infra/service/compose.yaml`에 제공자 환경변수 전달을 추가했다. 서버 `.env` 또는 보호 변수에 값을 설정한다.
 - Compose의 프로필 선택 변수는 `OAUTH_PROFILES=oauth-google,oauth-ssafy`다. 컨테이너 안에서는 `SPRING_PROFILES_INCLUDE`로 전달된다.
-- 세션을 Redis로 옮기면 `HttpSessionCsrfTokenRepository`·`HttpSessionOAuth2AuthorizationRequestRepository`·`HttpSessionOAuth2AuthorizedClientRepository`·`HttpSessionSecurityContextRepository`가 **함께** 이동한다. 직렬화가 실제로 되는지는 단위 테스트가 아니라 실제 로그인·콜백·로그아웃으로 확인한다(`S15P21C206-237`).
+- Spring Session Redis가 CSRF·OAuth 인가 요청·SecurityContext·활동 시각을 저장한다. 제공자 authorized client는 기존 성공 처리에서 제거하므로 제공자 토큰을 장기 보관하지 않는다. 실제 로컬 OAuth 서버의 code 교환·콜백·로그아웃으로 직렬화 경계를 검증한다(`S15P21C206-237`).
 - 다중 인스턴스는 별개 문제다. `SecurityConfig`의 세션 부재에 따른 로그아웃 CSRF 면제는 234에서 제거했다. 남은 선행 항목은 [EC2 서비스 진입·장애 전환 경계](../../../docs/architecture/ec2-service-entry-failover.md) 6절을 따른다.
+
+
+### Redis 연결과 저장 경계(237)
+
+사용자 승인일은 2026-09-22다. 단일 앱의 재시작 후 로그인 유지가 목적이며 다중 앱 지원은 포함하지 않는다. `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`와 `CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 각각 별도 인스턴스로 주입한다. 필요한 경우 `SESSION_REDIS_PASSWORD`·`CACHE_REDIS_PASSWORD`를 안전한 환경 설정에서 주입한다. 동일 host/port 설정은 기동 시 거절한다. 운영 주소·포트의 기본값은 두지 않는다. local 프로필만 세션 `localhost:16379`, 캐시 `localhost:16380`을 기본으로 사용하며 별도 Redis 두 개가 실행 중이어야 한다. 문자열이 다른 DNS 별칭이 같은 인스턴스를 가리키는지는 앱 검사로 보장하지 않으므로 84 배포 인수에서 확인한다.
+
+- Spring Session은 세션 전용 연결과 `planetory:session` 키를 사용한다. 기본 RedisTemplate은 계산 캐시 전용 연결을 사용하며 세션 TTL을 계산 캐시 TTL로 재사용하지 않는다.
+- `RedisSessions`는 단일 앱에서 저장·삭제·활동 갱신만 같은 공정 잠금으로 직렬화한다. 잠금 대기·Redis 연결·명령 타임아웃은 각각 2초이며 잠금 획득 실패도 503이다. 단순 생성·조회는 잠그지 않는다. 잠금 대기 뒤 명령 지연이 이어지면 작업 하나도 약 4초가 걸릴 수 있고 저장·활동 갱신은 경합 시 503이 될 수 있다. HTTP 업무 처리 전체를 잠그지 않고 세션 내용이나 무효화 목록을 프로세스 메모리에 보관하지 않는다. 다중 앱에서는 이 잠금이 유효하지 않으므로 Redis 원자 연산으로 교체해야 한다.
+- 동시 요청이 만료된 과거 활동을 보지 않도록 유효 인증 요청의 활동 시각을 Redis에 즉시 반영하고(응답 커밋까지 미루지 않는다), 지연된 응답의 저장은 최신 시각과 합쳐 단조 증가를 유지한다. 인증 세션의 만료 시각은 마지막 활동+30분이며 CSRF 조회·정적 요청은 TTL을 연장하지 않는다. 활동 시각이 없으면 인증을 거절한다.
+- `ON_SAVE`·변경된 속성만 저장하는 정책을 고정한다. 기존 세션 저장과 삭제를 같은 경계에서 실행해 로그아웃/ID 교체 이후 늦은 저장이 이전 세션을 다시 만들지 못하게 한다.
+- Spring Session의 기본 응답 커밋 훅이 본문 전송·flush 전에 세션을 저장한다. 외부 오류 필터는 RedisSessions가 표시한 세션 저장소 장애·잠금 실패만 포획하고 커밋 전 읽기/저장 실패를 503 `DEPENDENCY_UNAVAILABLE`로 변환한다. 일반 업무 PostgreSQL 오류는 이 필터가 재분류하지 않는다. 기존 인증 필터의 회원 조회 DB 장애 503은 유지한다. 응답 본문을 별도 복사·캐시하지 않는다. 오류 필터는 한 번만 등록하고 OncePerRequestFilter의 ASYNC/ERROR 재디스패치 제외 기본값을 유지한다. 현재 동기 API 경로를 검증하며 향후 비동기·스트리밍은 요청 종료 후 세션 변경을 허용하지 않도록 별도 검토한다. 이미 커밋된 응답의 오류를 거짓 새 응답으로 덮지 않는다.
+- 테스트는 일회용 PostgreSQL·Redis 두 개를 사용한다. 앱 컨텍스트 전체 종료/재기동과 로컬 OAuth 공급자 HTTP 교환을 검증하며, 실제 Google/SSAFY 제공자 인수·운영 프로세스 배포·Redis 자체 재시작 persistence는 검증 범위 밖이다.
+- 84 원격 브랜치 `8be195fb`의 Compose에서는 두 Redis 연결 구성을 확인하지 못했다. 운영 연결값·메모리·eviction·persistence 인수는 84 담당으로 남긴다. 현재 develop의 운영 Compose에도 두 Redis와 환경변수 전달이 없다. **84가 두 인스턴스·연결 변수 주입을 준비하기 전에는 이 변경을 운영 배포하지 않는다.** local 기본값 추가는 운영 배포 차단을 해소하지 않는다. 운영 인프라는 변경하지 않는다.
+
+- 앱 전체 `/actuator/health`의 Redis 검사는 세션 연결만 사용한다. 캐시 중단은 health 200, 세션 중단은 503이다. Redis health 자체를 끄지 않는다. 캐시 전용 관측과 liveness/readiness 세분화는 93에서 별도 health group으로 추가한다.
+- 익명 CSRF 조회는 쿠키 없는 호출마다 세션을 만들고 30분 TTL을 부여한다. 같은 익명 세션을 사용하면 접근 시각과 TTL이 갱신된다. 이는 인증 활동 연장과 별개인 Spring Session 기본 동작이다. 84는 동시 로그인 수뿐 아니라 미인증 호출률·남용 제한을 용량 산정에 포함해야 한다.
+- 리뷰어의 격리 탐침(b54a4106): 쿠키 없는 25회 요청이 25개 키를 만들었고 표본 키는 952 bytes, TTL 1800초였다. 표본 크기×호출률×TTL 계산으로 100 req/s는 약 171 MB, 1000 req/s는 약 1.7 GB이며 Redis 전체 오버헤드·로그인 세션을 제외한 추정이다. 이 수치는 운영 측정값이 아니다. noeviction 상한 도달 시 인증 장애가 되므로 84의 메모리 상한·유입 제한 인수 전 운영 배포를 보류한다.
+
+검증 명령은 `./gradlew -PskipLocalDb test --tests '*RedisSessionIntegrationTest'`다. 이 테스트는 자체 컨테이너만 중지/일시정지하며 기존 개발 DB를 사용하지 않는다. 기존 MockHttpSession 회귀는 테스트 작업에서만 `planetory.session.redis.enabled=false`를 사용한다. 이 속성은 배포 설정에 넣지 않는다. 레거시 MockHttpSession 검사는 테스트 편의용 폴백이며 운영 Redis 검증을 대체하지 않는다. 해당 테스트들이 실제 HTTP 쿠키+Redis 하네스로 이관되면 Gradle 전역 비활성 속성과 AuthSessionService 폴백을 함께 제거한다. 실제 Redis 검사는 OAuth/재시작·만료·저장 경합·캐시 장애·세션 장애·익명 세션을 독립 테스트로 구분한다.
 
 ## 5. 코드 위치와 검증
 

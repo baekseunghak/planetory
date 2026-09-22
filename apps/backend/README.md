@@ -10,7 +10,7 @@ S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 �
 
 ## 빠른 시작
 
-준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
+준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. local 기본 연결은 세션 `localhost:16379`, 캐시 `localhost:16380`이다. 다른 주소에서는 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
 
 ```sh
 cd apps/backend
@@ -35,6 +35,13 @@ cd apps/backend
 
 ```sh
 ./gradlew clean build      # Windows: .\gradlew.bat clean build
+```
+
+로컬 Redis가 없다면 아래 두 개발용 컨테이너를 먼저 실행한다(운영 설정이 아니다). Gradle은 Redis를 자동으로 시작하지 않는다.
+
+```powershell
+docker run -d --name planetory-local-session -p 127.0.0.1:16379:6379 redis:8.2-alpine
+docker run -d --name planetory-local-cache -p 127.0.0.1:16380:6379 redis:8.2-alpine
 ```
 
 ### IDE에서 실행

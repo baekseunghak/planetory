@@ -16,6 +16,10 @@ import com.planetory.backend.global.security.MemberPrincipal;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -93,7 +97,7 @@ class AuthIntegrationTest {
     @Autowired PostService posts;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
-    @org.springframework.boot.test.web.server.LocalServerPort int port;
+    @LocalServerPort int port;
 
     @BeforeEach
     void resetOnlyTestData() {
@@ -379,6 +383,7 @@ class AuthIntegrationTest {
         var second = login("google", "devices");
         mvc.perform(post("/api/v1/auth/logout").session(first)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        assertFalse(first.isInvalid());
         var token = mapper.readTree(mvc.perform(get("/api/v1/auth/csrf").session(first))
                 .andReturn().getResponse().getContentAsString());
         mvc.perform(post("/api/v1/auth/logout").session(first)
@@ -414,22 +419,22 @@ class AuthIntegrationTest {
     @Test
     void realHttpCookieAndCsrfRoundTripRequiresNewTokenAfterLogout() throws Exception {
         var cookies = new java.net.CookieManager();
-        var client = java.net.http.HttpClient.newBuilder().cookieHandler(cookies).build();
+        var client = HttpClient.newBuilder().cookieHandler(cookies).build();
         var base = "http://127.0.0.1:" + port + "/api/v1/auth/";
-        var body = java.net.http.HttpResponse.BodyHandlers.ofString();
-        var empty = java.net.http.HttpRequest.BodyPublishers.noBody();
+        var body = HttpResponse.BodyHandlers.ofString();
+        var empty = HttpRequest.BodyPublishers.noBody();
         String previous = "invalid-token";
         for (int i = 0; i < 2; i++) {
-            assertEquals(403, client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+            assertEquals(403, client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
                     .POST(empty).build(), body).statusCode());
-            var issued = client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "csrf")).build(), body);
+            var issued = client.send(HttpRequest.newBuilder(URI.create(base + "csrf")).build(), body);
             assertEquals(200, issued.statusCode());
             var token = mapper.readTree(issued.body());
             String header = token.get("headerName").asText();
-            assertEquals(403, client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+            assertEquals(403, client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
                     .header(header, previous).POST(empty).build(), body).statusCode());
             previous = token.get("token").asText();
-            var result = client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+            var result = client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
                     .header(header, previous).POST(empty).build(), body);
             assertEquals(204, result.statusCode());
             assertTrue(result.headers().allValues("set-cookie").stream()
