@@ -97,6 +97,8 @@ export function usePagedList<T>(
     const cursor = current.nextCursor;
     const mine = generation.current;
     const next = new AbortController();
+    // 이어 읽기도 현재 요청으로 등록해 조건 변경·화면 이탈 시 함께 취소한다.
+    controller.current = next;
     setState({ ...current, loadingMore: true, moreError: null });
     void (async () => {
       try {

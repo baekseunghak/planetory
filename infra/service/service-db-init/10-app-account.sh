@@ -34,6 +34,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'planetory_gold_writer') THEN
         CREATE ROLE planetory_gold_writer NOLOGIN;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'planetory_stats_job') THEN
+        CREATE ROLE planetory_stats_job NOLOGIN;
+    END IF;
 END $$;
 
 CREATE USER :"app_user" PASSWORD :'app_password';

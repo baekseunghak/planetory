@@ -38,11 +38,28 @@ class GoldRoleDeploymentTest {
             // 운영 DB 프로비저닝이 하는 일
             st.execute("CREATE ROLE planetory_gold_writer NOLOGIN");
             st.execute("CREATE ROLE planetory_app NOLOGIN");
+            st.execute("CREATE ROLE planetory_stats_job NOLOGIN");
         }
         createMigrationAccount("provisioned");
 
         assertFalse(canCreateRole("provisioned"), "CREATEROLE이 없어야 이 검증에 의미가 있다");
         assertDoesNotThrow(() -> migrateAs("provisioned", "provisioned"));
+    }
+
+    @Test
+    void 통계_역할만_빠졌으면_V21이_사전_생성_방법을_안내한다() throws SQLException {
+        try (Connection owner = asOwner(); Statement st = owner.createStatement()) {
+            st.execute("CREATE ROLE planetory_gold_writer NOLOGIN");
+            st.execute("CREATE ROLE planetory_app NOLOGIN");
+        }
+        createMigrationAccount("missing_stats");
+        assertFalse(canCreateRole("missing_stats"));
+
+        Exception failure = assertThrows(Exception.class,
+                () -> migrateAs("missing_stats", "missing_stats"));
+        String message = allMessages(failure);
+        assertTrue(message.contains("CREATEROLE"), message);
+        assertTrue(message.contains("CREATE ROLE planetory_stats_job NOLOGIN"), message);
     }
 
     /** 프로비저닝이 빠졌을 때: 원인과 조치를 담은 메시지로 실패해야 한다. */
