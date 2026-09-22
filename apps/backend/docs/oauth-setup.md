@@ -138,6 +138,24 @@ if (response.ok) {
 타인 자원의 소유권 검사는 각 도메인 서비스가 내부 회원 ID로 수행해야 한다.
 `/api/v1/operator/**`는 운영자 권한을 요구하며, 해당 업무 API는 별도 구현 대상이다.
 
+<a id="oauth-diagnostics-240"></a>
+
+### 실패 진단 로그(240)
+
+콜백의 HTTP 상태·공개 오류 코드는 유지하며 다음 고정 필드로 실패 지점을 구분한다.
+
+| 지점 | 로그 | 응답 |
+|---|---|---|
+| Spring OAuth 검증·제공자 거부 | `OAuth authentication failed`, `exception`, `oauth_error` | 401 `AUTH_REQUIRED` |
+| 회원 초기화의 업무 예외 | `branch=business`, 내부 `code`, `exception` | 기존 업무 오류 코드·상태 |
+| 회원 초기화의 DB 예외 | `branch=database`, `code=DEPENDENCY_UNAVAILABLE`, `exception` | 503 `DEPENDENCY_UNAVAILABLE` |
+| 회원 초기화의 예상 밖 예외 | `branch=unexpected`, `code=INTERNAL_ERROR`, `exception` | 500 `INTERNAL_ERROR` |
+| 활성 튜토리얼 1번 미구성 | `reason=active_tutorial_missing seq=1` | 업무 예외 경계에서 503, 가입 트랜잭션 롤백 |
+
+`exception`은 클래스명만 기록한다. `oauth_error`는 `SecurityConfig.safeOAuthErrorCode`의 명시적 허용 목록과 정확히 일치하는 값만 기록한다. 알려지지 않은 제공자 코드는 `unrecognized`, OAuth 예외가 아니면 `unavailable`이다. 임의 문자를 지워 원문을 남기는 방식은 사용하지 않는다. 예외 본문·원인·스택, 토큰·code·state·nonce, 사용자 속성·subject·회원 ID, 요청 URI·쿼리·헤더는 이 진단 로그에 넣지 않는다. 운영에서 HTTP/OAuth 디버그·SQL 바인딩 로그를 켜지 않는다.
+
+튜토리얼 원인 로그와 콜백의 업무 오류 로그는 원인과 응답 분기를 각각 식별한다. 다른 호출 계층에는 중복 로그를 추가하지 않는다. 실패 시 기존 로그아웃 처리가 세션·SecurityContext·SESSION 쿠키를 정리한다. 기동 DB 검사, 자동 seed, 새 API 오류 코드는 추가하지 않는다. 튜토리얼 준비는 [운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)의 별도 승인 절차를 따른다.
+
 ## 4. 세션·배포
 
 - 서비스 인스턴스는 1개로 확정됐고 세션은 EC2-A `redis-session`에 둔다(2026-09-17 리뷰 반영, 구현 `S15P21C206-237`). 계산 캐시는 별도 `redis-cache`다. 배포·재시작은 전면 중단이지만 `redis-session`을 함께 재시작하지 않으면 로그인은 유지된다. 237에서 Spring Session Redis를 구현했으며 격리 환경에서 검증한다. 공유·운영 Redis 연결 및 배포 완료를 의미하지 않는다. 기존 메모리 세션은 첫 전환 시 승계하지 않으므로 재로그인이 필요하다.
@@ -154,6 +172,21 @@ if (response.ok) {
 - Spring Session Redis가 CSRF·OAuth 인가 요청·SecurityContext·활동 시각을 저장한다. 제공자 authorized client는 기존 성공 처리에서 제거하므로 제공자 토큰을 장기 보관하지 않는다. 실제 로컬 OAuth 서버의 code 교환·콜백·로그아웃으로 직렬화 경계를 검증한다(`S15P21C206-237`).
 - 다중 인스턴스는 별개 문제다. `SecurityConfig`의 세션 부재에 따른 로그아웃 CSRF 면제는 234에서 제거했다. 남은 선행 항목은 [EC2 서비스 진입·장애 전환 경계](../../../docs/architecture/ec2-service-entry-failover.md) 6절을 따른다.
 
+
+<a id="oauth-proxy-240"></a>
+
+### 프록시 전달 헤더의 신뢰 경계(240 → 84·239)
+
+공통 기본값은 `server.forward-headers-strategy=framework`다(2026-09-22 사용자 결정). 프록시가 전달한 외부 HTTPS 출처를 OAuth 주소에 반영한다. 이 설정은 전달 헤더를 신뢰하므로 아래 조건을 배포 전에 확인한다. 직접 접속 환경에서 전달 헤더를 사용하지 않으려면 표준 환경변수 `SERVER_FORWARD_HEADERS_STRATEGY=none`으로 끈다. 별도 애플리케이션 필터는 두지 않는다.
+
+- 공개 진입 계층은 외부의 `Forwarded`와 `X-Forwarded-Proto/Host/Port/Prefix/Ssl/For`를 제거하고 필요한 값만 다시 설정한다. `X-Forwarded-Proto`는 신뢰 경로의 `http`·`https`로 제한하며 외부 Host도 서비스 호스트로 검증한다. `Forwarded`가 남으면 `X-Forwarded-Proto/Host`만 덮어도 Spring에서 다른 출처를 사용할 수 있다.
+- backend의 공개 직결을 차단하고 loopback 게시뿐 아니라 내부 Docker 네트워크에서 접근하는 주체도 확인한다. `framework` 자체는 신뢰 프록시 IP를 판별하지 않는다.
+- 240과 84(!161)는 공통값·위치·주석을 `framework`로 통일하고 프록시 인수는 84·239 담당에게 남긴다. `ForwardedHeadersConfigurationTest`는 공통 키가 정확히 하나이고 값이 `framework`인지 검사한다. 84의 앞선 `none` 변경은 사용자 요청에 따라 `2b7c0153`에서 정정했다. 두 브랜치의 양방향 가상 병합에서 충돌 없이 키 1개=`framework`가 유지됨을 확인했다.
+- 239의 `absolute_redirect off`는 nginx 자체 리다이렉트의 내부 포트 노출을 막는 설정이다. Spring 전달 헤더 신뢰와는 별도로 검증한다. nginx의 콜백 503 → `authentication_failed` 표시는 239 담당이며 이 작업에서 바꾸지 않는다.
+
+인가 시작과 콜백에 같은 외부 Proto/Host를 전달한다. `{baseUrl}` 콜백 템플릿은 `framework`에서 외부 출처를 사용하며, 명시적 `GOOGLE_REDIRECT_URI`·`SSAFY_REDIRECT_URI`는 제공자 등록 주소와 함께 확인한다. 성공 목적지는 계속 `AUTH_SUCCESS_URL`의 같은 출처 고정 경로다. 신뢰 헤더가 있으면 Spring의 `ForwardedHeaderFilter`가 성공 Location에 외부 출처를 사용한다. 현재 Boot의 실제 HTTP 검증에서는 전달 헤더 없이 성공하면 backend의 내부 HTTP 주소·포트를 포함한 절대 Location이 반환된다. 따라서 `framework` 설정만으로 운영 HTTPS 복귀 인수가 끝나는 것은 아니며 올바른 헤더 전달과 신뢰 경계를 함께 확인해야 한다.
+
+격리 HTTP 검사는 `none` 무헤더·위조 헤더와 `framework` 무헤더·정제 HTTPS 헤더에서 Google형/SSAFY형 인가 `redirect_uri`·성공 Location·로그인 세션을 확인한다. 실제 Cloudflare/nginx의 헤더 제거·직결 제한·브라우저 Secure 쿠키·외부 제공자 인수는 84·239 및 운영 Redis 준비 후 별도다. 235의 후속 인수는 240 병합 이후 수행한다.
 
 ### Redis 연결과 저장 경계(237)
 
@@ -193,6 +226,14 @@ Google과 같은 OIDC code 교환·RSA 서명 검증, SSAFY용 표준 OAuth2 Use
 state·nonce·audience·issuer·만료·서명 오류, 동시 가입, 초기화·배치 실패 롤백, 첫 별 좌표·배치 버전 저장과 좌표 CHECK 제약,
 30분 만료·활동 연장, 현재 역할·상태 반영, CSRF·세션 ID 교체·기기별 로그아웃을 포함한다.
 실제 Google·SSAFY 앱 등록/동의 화면과 프록시·HTTPS 쿠키 검증은 자격 증명 설정 후 별도로 수행한다.
+
+240 회귀는 개인 OAuth 파일을 읽지 않는 테스트 설정에서 실행한다. `AuthIntegrationTest`에는 `DATABASE_URL`·`DATABASE_USER`·`DATABASE_PASSWORD`로 **전용 일회용 PostgreSQL**을 지정하고 `-PskipLocalDb`를 사용한다. `RedisSessionIntegrationTest`는 자체 PostgreSQL·Redis 두 컨테이너를 사용한다.
+
+```powershell
+.\gradlew.bat -PskipLocalDb test --tests '*ForwardedHeadersConfigurationTest' --tests '*AuthIntegrationTest' --tests '*OAuthLoginSuccessHandlerTest' --tests '*RedisSessionIntegrationTest' --tests '*AuthSessionTimeoutTest' --tests '*SessionDependencyFilterTest'
+```
+
+2026-09-22 공통값을 `framework`로 변경한 뒤 전용 일회용 PostgreSQL 18.6과 Redis 8.2 두 인스턴스에서 위 6개 클래스의 42개 검사를 통과했다(실패·건너뜀 0). 중복 키 검사, 합성 오류 입력의 안전 로그·튜토리얼 미구성·DB/배치 실패 롤백·세션 정리와 기존 로그아웃 CSRF·Redis 재시작/장애 경계를 포함한다. DB 예외는 초기화 도중 합성 `DataAccessResourceFailureException`을 주입해 실제 가입 트랜잭션의 롤백을 확인했다. 실제 운영 DB 장애·제공자·프록시 인수와 구분한다.
 
 참고: [Spring OAuth2 Login](https://docs.spring.io/spring-security/reference/servlet/oauth2/login/advanced.html),
 [Spring CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html),

@@ -83,8 +83,12 @@ class RedisSessionIntegrationTest {
         }
     }
     void start() {
+        start("framework");
+    }
+    void start(String forwardedHeadersStrategy) {
         app = new SpringApplicationBuilder(PlanetoryApplication.class, Config.class).run(
                 "--spring.profiles.active=local", "--server.port=0", "--planetory.session.redis.enabled=true",
+                "--server.forward-headers-strategy=" + forwardedHeadersStrategy,
                 "--spring.datasource.url=" + DB.getJdbcUrl(), "--spring.datasource.username=" + DB.getUsername(),
                 "--spring.datasource.password=" + DB.getPassword(),
                 "--planetory.redis.session.host=" + REDIS.getHost(), "--planetory.redis.session.port=" + REDIS.getMappedPort(6379),
@@ -93,8 +97,10 @@ class RedisSessionIntegrationTest {
                 "--spring.config.import=optional:classpath:/oauth-test-no-local.properties");
         base = "http://127.0.0.1:" + ((WebServerApplicationContext) app).getWebServer().getPort();
     }
-    HttpResponse<String> get(String path) throws Exception {
-        return http.send(HttpRequest.newBuilder(URI.create(base + path)).build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> get(String path, String... headers) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create(base + path));
+        if (headers.length > 0) request.headers(headers);
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
     HttpResponse<String> logout(String header, String token) throws Exception {
         var request = HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/logout")).POST(HttpRequest.BodyPublishers.noBody());
@@ -110,14 +116,24 @@ class RedisSessionIntegrationTest {
         return values;
     }
     void login(String provider, boolean restartDuringCallback) throws Exception {
-        var response = get("/oauth2/authorization/" + provider);
+        // Boot의 기본 use-relative-redirects=false로 실제 HTTP Location은 절대 주소다.
+        login(provider, restartDuringCallback, base, base + "/api/v1/me");
+    }
+    void login(String provider, boolean restartDuringCallback, String redirectBase, String successLocation,
+               String... headers) throws Exception {
+        var response = get("/oauth2/authorization/" + provider, headers);
         assertEquals(302, response.statusCode());
         var params = query(response.headers().firstValue("location").orElseThrow());
+        assertEquals(redirectBase + "/login/oauth2/code/" + provider, params.get("redirect_uri"));
         String code = IDP.issue("redis-" + provider, params.get("nonce"), "");
-        if (restartDuringCallback) { app.close(); start(); }
+        if (restartDuringCallback) {
+            app.close(); start();
+            successLocation = base + "/api/v1/me";
+        }
         response = get("/login/oauth2/code/" + provider + "?state=" + URLEncoder.encode(params.get("state"), StandardCharsets.UTF_8)
-                + (provider.equals("ssafy") ? "&Code=" : "&code=") + code);
+                + (provider.equals("ssafy") ? "&Code=" : "&code=") + code, headers);
         assertEquals(302, response.statusCode());
+        assertEquals(successLocation, response.headers().firstValue("location").orElseThrow());
         assertEquals(200, get("/api/v1/me").statusCode());
     }
 
@@ -137,6 +153,36 @@ class RedisSessionIntegrationTest {
     @AfterAll void stopApplication() {
         if (app != null) app.close();
         IDP.server.stop(0);
+    }
+
+    @Test void forwardedHeadersRestoreExternalOAuthRedirectsAndNoneIgnoresThem() throws Exception {
+        app.close();
+        start("none");
+        for (String provider : List.of("google", "ssafy")) {
+            cookies.getCookieStore().removeAll();
+            login(provider, false);
+            cookies.getCookieStore().removeAll();
+            login(provider, false, base, base + "/api/v1/me",
+                    "Forwarded", "proto=https;host=attacker.example:9443;for=192.0.2.1",
+                    "X-Forwarded-Proto", "https", "X-Forwarded-Host", "attacker.example",
+                    "X-Forwarded-Port", "9443", "X-Forwarded-Prefix", "/untrusted",
+                    "X-Forwarded-Ssl", "on", "X-Forwarded-For", "192.0.2.1");
+        }
+        app.close();
+        try {
+            start("framework");
+            for (String provider : List.of("google", "ssafy")) {
+                cookies.getCookieStore().removeAll();
+                login(provider, false);
+                cookies.getCookieStore().removeAll();
+                // 신뢰 프록시가 외부 전달 헤더를 제거하고 다시 설정한 입력만 가정한다.
+                login(provider, false, "https://service.example", "https://service.example/api/v1/me",
+                        "X-Forwarded-Proto", "https", "X-Forwarded-Host", "service.example");
+            }
+        } finally {
+            app.close();
+            start();
+        }
     }
 
     @Test void oauthStateAndLoginSurviveRestartAndLogoutRequiresFreshToken() throws Exception {
