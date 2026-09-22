@@ -15,6 +15,7 @@ public final class PublicSkyViews {
     public record Tile(String representation, String version, int level, boolean versionChanged,
                        SkyViews.TileBounds bounds, long rangeStarCount, List<Star> stars,
                        String nextCursor, OffsetDateTime asOf) {}
+    /** completedWithoutPlanets는 탐색 완료 + 현재 공개 행성 0개이며, 개인 성과가 없다는 뜻이 아니다. */
     public record Star(String ticId, double x, double y, double depthZ, int layoutOrdinal,
                        int planetCount, String progressStage, boolean completedWithoutPlanets) {}
     public record Detail(String memberId, String ticId, String version, String presentationVersion,

@@ -15,7 +15,7 @@ import { GalaxyScene, type SceneControl } from "../sky-renderer/GalaxyScene";
 import type { GalaxyCamera, OwnedSystem } from "../sky-renderer/model";
 import { PersonalSceneControls } from "../sky-renderer/PersonalSceneControls";
 import { INITIAL_SYSTEM, signalSeed } from "../sky-renderer/personal-system";
-import { readPublicMeta, readPublicSystem, publicTiles } from "./contracts";
+import { readPublicMeta, readPublicSystem, publicTiles, publicStarLabel } from "./contracts";
 import "../sky-renderer/detail-presentation.css";
 import "./public-sky.css";
 const empty = new SkyDataStore(async () => undefined, "").getSnapshot();
@@ -256,6 +256,7 @@ function PublicScene({
       }
     >
       <GalaxyScene canvasLabel="이 탐사자가 공개한 별의 3D 은하 지도"
+        starLabel={publicStarLabel}
         data={data}
         store={store}
         onReady={onReady}
@@ -307,7 +308,7 @@ function PublicScene({
             {rows.map((s) => (
               <li key={s.ticId}>
                 <button onClick={() => store.select(s.ticId)}>
-                  TIC {s.ticId} · 행성 {s.planetCount}개
+                  {publicStarLabel(s)}
                 </button>
               </li>
             ))}
@@ -359,7 +360,7 @@ function PublicScene({
               <LoadingState />
             ) : (
               <>
-                <h3>이 탐사자가 찾은 행성 {system.items.length}개</h3>
+                <h3>공개 행성 {system.items.length}개</h3>
                 <button onClick={() => setView({ ...INITIAL_SYSTEM })}>
                   항성계
                 </button>
@@ -388,7 +389,7 @@ function PublicScene({
                     </li>
                   ))}
                 </ul>
-                {!system.items.length && <p>아직 표시할 행성이 없어요.</p>}
+                {!system.items.length && <p>현재 공개할 행성이 없습니다. 개인 탐사 결과와 다를 수 있습니다.</p>}
                 {planet && (
                   <dl>
                     <dt>신호</dt>

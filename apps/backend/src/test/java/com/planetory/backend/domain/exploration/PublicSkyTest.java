@@ -261,6 +261,37 @@ class PublicSkyTest {
     }
 
     @Test
+    void 공개완료표식은_현재공개행성기준이며_개인성과를_회수하지_않는다() {
+        unlock(owner, 1);
+        long bundle = bundle(FIRST_TIC);
+        long candidate = candidate(bundle, true, "confirmed");
+        long submission = submit(owner, bundle, candidate, "LIKELY_PLANET");
+        jdbc.update("INSERT INTO user_star_progress(user_id,tic_id,planet_count,progress_stage)"
+                + " VALUES (?,?,1,'completed')", owner, FIRST_TIC);
+        var personal = sky.tiles(owner, 2, X, Y, W, H, sky.version(owner), 1000, null).stars().getFirst();
+        assertEquals(1, personal.planetCount());
+        assertFalse(personal.completedWithoutPlanets());
+        String before = publicSky.meta(owner).version();
+        assertTrue(page(viewer, owner, before, 1000, null).stars().getFirst().completedWithoutPlanets());
+        assertEquals(0, publicSky.detail(owner, FIRST_TIC).planets().count());
+
+        recognize(owner, candidate, "confirmed", submission);
+        String recognized = publicSky.meta(owner).version();
+        assertNotEquals(before, recognized);
+        assertFalse(page(viewer, owner, recognized, 1000, null).stars().getFirst().completedWithoutPlanets());
+        assertEquals(1, publicSky.detail(owner, FIRST_TIC).planets().count());
+
+        jdbc.update("UPDATE candidate_dispositions SET disposition='fp' WHERE candidate_id=?", candidate);
+        String relabeled = publicSky.meta(owner).version();
+        assertNotEquals(recognized, relabeled);
+        assertTrue(page(viewer, owner, relabeled, 1000, null).stars().getFirst().completedWithoutPlanets());
+        assertEquals(0, publicSky.detail(owner, FIRST_TIC).planets().count());
+        assertEquals(personal, sky.tiles(owner, 2, X, Y, W, H, sky.version(owner), 1000, null).stars().getFirst());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM user_candidate_achievements"
+                + " WHERE user_id=? AND candidate_id=? AND achievement_type='confirmed'", Integer.class, owner, candidate));
+    }
+
+    @Test
     void 공개_projection_변경은_개인버전이_그대로여도_기존페이지를_무효화한다() {
         unlock(owner, 2);
         long bundle = bundle(FIRST_TIC);
