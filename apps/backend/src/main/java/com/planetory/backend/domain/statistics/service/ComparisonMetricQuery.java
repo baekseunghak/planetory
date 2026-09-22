@@ -16,8 +16,7 @@ public class ComparisonMetricQuery {
     private final JdbcClient jdbc;
     public static final List<String> KEYS = List.of("firstMatchAccuracy", "submissionsPerStar",
             "harmonicRecognitionRate", "evidencePerSubmission");
-    public static final String SQL = """
-            WITH members AS (SELECT id FROM users WHERE status='active' AND (id=:memberId OR :memberId=0)),
+    private static final String METRICS_SQL = """
             submissions_before AS (
                 SELECT s.id,s.user_id,s.tic_id,s.matched_candidate_id,s.match_result,s.created_at,
                     s.submission_kind,s.user_judgment,s.evidence_checks
@@ -55,9 +54,15 @@ public class ComparisonMetricQuery {
                 LEFT JOIN recognition r ON r.user_id=m.id ORDER BY m.id
             """;
 
+    public static final String SQL = "WITH members AS (SELECT id FROM users WHERE status='active' AND id=:memberId),"
+            + METRICS_SQL;
+    // 집계 대상을 먼저 제한한다. cohort는 집계 서비스가 정의한다.
+    static final String COHORT_SQL = "WITH members AS (SELECT user_id AS id FROM cohort)," + METRICS_SQL;
+
     public record MemberMetrics(long memberId, Map<String, Metric> metrics) {}
 
     public List<MemberMetrics> read(long memberId, OffsetDateTime asOf) {
+        if (memberId <= 0) throw new IllegalArgumentException("memberId는 양수여야 합니다");
         return jdbc.sql(SQL).param("memberId", memberId).param("asOf", asOf).query((r, n) -> {
             Map<String, Metric> values = new LinkedHashMap<>();
             values.put("firstMatchAccuracy", Metric.ratio("PERCENT", r.getLong("agreed"), r.getLong("graded")));

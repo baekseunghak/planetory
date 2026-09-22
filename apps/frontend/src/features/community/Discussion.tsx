@@ -222,7 +222,7 @@ export function Discussion({
   const editable = !!member && !!state.data && active;
   if (!active) return null;
   return (
-    <section className="community-discussion" aria-label="토론">
+    <section id="discussion" className="community-discussion" aria-label="토론">
       <h2>토론</h2>
       {notice && <p role="status">{notice}</p>}
       {!state.data ? (

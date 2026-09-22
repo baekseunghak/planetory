@@ -76,7 +76,7 @@ Chrome 개발자 도구의 Network에서 `analysis-context`와 `curves`를 필�
 
 ## 3단계 시간 차트
 
-[time-curve.ts](../src/features/analysis/time-curve.ts)는 검증된 세그먼트에서 `BTJD = startBtjd + index × binMinutes / 1440`으로 시각을 복원한다. 원래 배열을 변경하지 않고 유효점의 원본 인덱스·세그먼트 ID·Sector·실제 시각·밝기를 보존한다. 화면 좌표는 별도로 둔다.
+[time-curve.ts](../src/features/analysis/time-curve.ts)는 검증된 세그먼트에서 `BTJD = startBtjd + (index + 0.5) × binMinutes / 1440`으로 시각을 복원한다. 원래 배열을 변경하지 않고 유효점의 원본 인덱스·세그먼트 ID·Sector·실제 시각·밝기를 보존한다. 화면 좌표는 별도로 둔다.
 
 - 세그먼트 내부의 null은 음영으로 표시하고 그 앞뒤의 선을 끊는다. 유효한 0은 결측으로 취급하지 않는다.
 - 세그먼트를 시작 시각 순서로 배치한다. 각 세그먼트 내부는 실제 시간 간격을 유지하고, 세그먼트 사이는 총 표시 구간 길이의 8%를 나눠 경계 공간으로 사용한다. 이 값은 표시용 간격이며 과학 시각이나 계산에 사용하지 않는다.
@@ -120,3 +120,5 @@ Chrome 개발자 도구의 Network에서 `analysis-context`와 `curves`를 필�
 통합 후 `npm run check`, `npm run test:observations`, `npm run format:check -- --end-of-line auto`가 통과했다. 타입 검사·프로덕션 빌드·fixture 제외 검사와 함께 단위 41개, Chromium 20개, 프로덕션 2개, 실관측 브라우저 1개(전체 64개)를 검증했다. 실관측 입력·가공 방식은 [관측 데이터 안내](observation-fixtures.md)를 따른다.
 
 이 결과는 로컬 응답과 관측 export를 이용한 프론트 검증이다. 실제 분석 API·운영 Gold·권한·배포 성능 검증은 남아 있으며 #182 전체 완료를 의미하지 않는다. #183은 이 커밋된 기반에서 별도 브랜치와 worktree로 진행하고, #182가 develop에 병합된 뒤 #183에서 추가한 커밋만 최신 develop 위로 옮긴다.
+
+2026-09-22 (#192): Gold bin 중앙 시각으로 표시·접기를 정합화했다. 저장 시작 시각과 과거 스냅샷은 유지한다. [재도전 및 시각 기준 안내](analysis-retry-draft.md)를 참고한다.

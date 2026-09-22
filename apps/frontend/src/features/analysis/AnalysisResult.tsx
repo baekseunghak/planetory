@@ -1,3 +1,4 @@
+import { AnalysisReturnLink } from "./AnalysisReturnLink";
 import { Link } from "react-router-dom";
 import { pagePath } from "../../app/paths";
 import type { NextAction, SubmissionReceipt } from "./submission-data";
@@ -413,6 +414,17 @@ export function ResultExplanationView({
             <p>이 분석은 공개할 수 있습니다.</p>
           </section>
         )}
+        {(publication.state === "PUBLISHED" ||
+          publication.state === "HIDDEN") && (
+          <section className="result-axis">
+            <h5>현재 공개 상태</h5>
+            <p>
+              {publication.state === "PUBLISHED"
+                ? "공개되어 있습니다."
+                : "운영에 의해 숨겨진 분석입니다."}
+            </p>
+          </section>
+        )}
 
         {signal && <Ai signal={signal} />}
 
@@ -572,6 +584,12 @@ export function NextActions({
   const offered = new Set(nextActions);
 
   const links: Partial<Record<NextAction, { label: string; to: string }>> = {
+    RETRY: {
+      label: "다시 풀기",
+      to:
+        pagePath("analysis", { ticId }, { returnTo }) +
+        `&retryOfSubmissionId=${encodeURIComponent(receipt.submissionId)}`,
+    },
     PUBLISH_ANALYSIS: {
       label: "공개 내용 검토",
       to: pagePath("publication", { historyId }, { returnTo: from }),
@@ -636,7 +654,13 @@ export function NextActions({
           .filter((action) => links[action])
           .map((action) => (
             <li key={action}>
-              <Link to={links[action]!.to}>{links[action]!.label}</Link>
+              {action === "LATER" ? (
+                <AnalysisReturnLink ticId={ticId} to={links[action]!.to}>
+                  {links[action]!.label}
+                </AnalysisReturnLink>
+              ) : (
+                <Link to={links[action]!.to}>{links[action]!.label}</Link>
+              )}
             </li>
           ))}
       </ul>

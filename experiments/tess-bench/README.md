@@ -496,3 +496,10 @@ manifest SHA-256: `f97eab1a35cadf746361e6e0ab91dfc4c24e5e85ff4ff18fd77065a1a7a50
 - 기존 448곡선 실측은 앞 절의 이전 실행 증거다. 이번에는 전체448곡선을 재실행하지 않았고, 위 테스트와5제품을 재검증했다.
 
 Git 충돌 해제 확정은 해결 파일 stage·merge commit·push 후 MR에서 확인한다. 로컬 마커 제거만으로 원격 MR 충돌 해제를 선언하지 않는다.
+
+## 115 제공 해상도 discoverable 실험
+
+10분 mean·제공 로그 5,000점·발견 직전 고정 모델 잔차의 봉우리 판정 검토안이다.
+실행·분모·실패 상태·revision 사례·승인 경계는 [115 벤치마크](../../docs/data/tess-discoverability-benchmark.md)를 따른다.
+`uv run --locked python -m tess_bench.discoverability --targets l98_59`로 한 별을 확인하고,
+대상 옵션 없이 전체 9별을 실행한다. 9별 실측·검산을 완료했으며 규칙 승인 전이다. 운영 discoverable을 갱신하지 않는다.

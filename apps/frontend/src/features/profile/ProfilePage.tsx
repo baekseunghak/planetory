@@ -1,5 +1,5 @@
 import { useCallback, useContext } from "react";
-import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -12,8 +12,11 @@ import {
   type ProfileSlotComponents,
 } from "./ProfileSlots";
 import { UsageGuide } from "./UsageGuide";
+import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
+import { FollowButton, FollowSummary } from "../follow/Follow";
+import { p1Enabled } from "../p1";
 export function MyProfilePage() {
   const { member } = useSession();
   return member ? (
@@ -80,6 +83,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         </div>
         {own && (
           <div className="profile-actions">
+            <Link to="/settings">설정</Link>
             <NicknameEditor
               memberId={memberId}
               nickname={profile?.nickname ?? member?.nickname ?? ""}
@@ -97,6 +101,28 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         )
       ) : (
         <>
+          {p1Enabled && (
+            <>
+              <FollowSummary memberId={memberId} own={own} />
+              {!own && (
+                <FollowButton
+                  target={{
+                    kind: "MEMBER",
+                    id: memberId,
+                    label: profile.nickname,
+                  }}
+                />
+              )}
+            </>
+          )}
+          {p1Enabled && !own && profile.starListVisibility === "PUBLIC" && (
+            <Link
+              className="primary-link"
+              to={"/members/" + encodeURIComponent(memberId) + "/sky"}
+            >
+              은하 방문하기 →
+            </Link>
+          )}
           {section === "summary" && <Summary profile={profile} own={own} />}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
@@ -125,14 +151,22 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
-          {section !== "summary" && (
-            <ProfileSection
-              section={section}
-              memberId={memberId}
-              isOwn={own}
-              starListVisibility={profile.starListVisibility}
-            />
-          )}
+          {section !== "summary" &&
+            (own && section === "stars" && slots.stars ? (
+              <ProfileStarFilters
+                Page={slots.stars}
+                memberId={memberId}
+                isOwn
+                starListVisibility={profile.starListVisibility}
+              />
+            ) : (
+              <ProfileSection
+                section={section}
+                memberId={memberId}
+                isOwn={own}
+                starListVisibility={profile.starListVisibility}
+              />
+            ))}
         </>
       )}
     </section>
@@ -173,7 +207,7 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
               </dd>
             </div>
             <div>
-              <dt>현재 완료한 별</dt>
+              <dt>탐색 완료한 별</dt>
               <dd>
                 {s.completedStarCount!.toLocaleString()}
                 <small>개</small>

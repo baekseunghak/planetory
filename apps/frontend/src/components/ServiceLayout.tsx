@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "../auth/SessionProvider";
 import "./service-presentation.css";
+import { p1Enabled } from "../features/p1";
+import { NotificationBell } from "../features/notifications/Notifications";
 
 export function ServiceLayout() {
   const session = useSession();
@@ -58,6 +60,7 @@ export function ServiceLayout() {
         <Link className="member-link" to="/me">
           {session.member?.nickname}
         </Link>
+        {p1Enabled && <NotificationBell />}
         <button
           type="button"
           className="logout-button"
@@ -111,7 +114,6 @@ export function ServiceLayout() {
             ["/community", "커뮤니티"],
             ["/me", "마이페이지"],
             ["/statistics", "통계"],
-            ["/settings", "설정"],
           ].map(([to, label]) => (
             <NavLink key={to} to={to} onClick={() => setOpen(false)}>
               {label}
@@ -135,7 +137,8 @@ export function ServiceLayout() {
         className={
           location.pathname.startsWith("/analysis/")
             ? "page analysis-page-container"
-            : location.pathname === "/sky"
+            : location.pathname === "/sky" ||
+                /^\/members\/[^/]+\/sky$/.test(location.pathname)
               ? "page sky-page-container"
               : /^(\/community|\/posts|\/signal-threads|\/stars\/[^/]+\/board|\/me$|\/members\/)/.test(
                     location.pathname,

@@ -43,3 +43,9 @@ spring.flyway.password=${DATABASE_MIGRATION_PASSWORD:${spring.datasource.passwor
 ```
 
 대체값이 런타임 연결 설정을 따라가므로, `DATABASE_MIGRATION_*`를 주지 않는 환경(로컬 개발·테스트)은 마이그레이션과 런타임이 같은 계정을 쓰고 동작이 바뀌지 않는다. 계정 분리는 `DATABASE_MIGRATION_*`를 줄 때만 성립한다.
+
+### V21 통계 역할 사전 생성
+
+`service-db-init/10-app-account.sh`는 빈 볼륨 초기화 때 `planetory_stats_job NOLOGIN`도 만든다. 기존 볼륨의 initdb 훅은 재실행되지 않는다. CREATEROLE이 없는 마이그레이션 계정으로 V21을 적용하기 전, 운영 담당이 역할 존재를 확인하고 없으면 역할 생성 권한이 있는 계정으로 `CREATE ROLE planetory_stats_job NOLOGIN;`을 실행한다. 누락되면 V21은 원인과 사전 생성 명령을 안내하고 실패한다. 앱 런타임에 CREATEROLE이나 이 그룹을 부여하지 않는다.
+
+통계 전용 로그인 공급·권한 부여·외부 스케줄은 [통계 실행 런북](../../docs/operations/statistics-runbook.md)을 따른다. 이 변경은 운영 DB 실행이나 계정 공급 완료를 뜻하지 않는다.

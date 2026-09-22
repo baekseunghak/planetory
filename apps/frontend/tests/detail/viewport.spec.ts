@@ -53,7 +53,7 @@ test("viewport shrink and full-page capture preserve the same canvas, selected p
     await expect(panel).toBeVisible();
     expect(await original!.evaluate((node) => node.isConnected)).toBe(true);
   }
-  await panel.getByRole("button", { name: "은하로 돌아가기" }).click();
+  await panel.getByRole("button", { name: "별지도" }).click();
   await expect(panel).toHaveCount(0);
   expect(await readCamera()).toEqual(before);
 });

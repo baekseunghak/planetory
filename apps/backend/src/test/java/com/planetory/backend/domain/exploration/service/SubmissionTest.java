@@ -260,7 +260,8 @@ class SubmissionTest {
         service.submit(member,tic,request());
         new TransactionTemplate(transactions).execute(status->{
             jdbc.execute("SET LOCAL ROLE planetory_app");
-            assertEquals(1,comparisonQuery.read(member,java.time.OffsetDateTime.now()).getFirst().metrics().get("submissionsPerStar").value().intValueExact());
+            var asOf=jdbc.queryForObject("SELECT transaction_timestamp()",java.time.OffsetDateTime.class);
+            assertEquals(1,comparisonQuery.read(member,asOf).getFirst().metrics().get("submissionsPerStar").value().intValueExact());
             assertEquals(1,personalQuery.activity(member).get("submissionCount").value().intValueExact());
             assertDoesNotThrow(()->personalQuery.weeks(member,java.time.LocalDate.now()));
             assertDoesNotThrow(()->personalQuery.judgmentAccuracy(member));

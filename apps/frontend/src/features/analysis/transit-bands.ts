@@ -16,7 +16,7 @@ export type TransitBand = {
 };
 
 /** Project only visible segment time; never enumerate compressed Sector gaps.
- * Half-cadence aligns real BTJD with the chart's existing bin centers. */
+ * Display points and scientific times both use Gold bin centers. */
 export function projectTransitBands(
   curve: TimeCurve,
   window: TransitWindow,
@@ -42,8 +42,7 @@ export function projectTransitBands(
     const left = Math.max(low, segment.start),
       right = Math.min(high, segment.end);
     if (left >= right) continue;
-    const offset =
-      segment.source.startBtjd - segment.start - segment.cadence / 2;
+    const offset = segment.source.startBtjd - segment.start;
     const timeLow = left + offset,
       timeHigh = right + offset;
     const first = Math.ceil((timeLow - half - epoch) / period);
