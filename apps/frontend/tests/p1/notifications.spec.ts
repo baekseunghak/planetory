@@ -34,8 +34,10 @@ test("revoked target never navigates and never exposes cached content on refresh
   );
   await page.goto("/notifications");
   await page.getByRole("button", { name: /새로운 성과가 인정/ }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "지금은 해당 소식을 확인할 수 없습니다.",
-  );
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "지금은 해당 소식을 확인할 수 없습니다." }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/notifications$/);
 });
