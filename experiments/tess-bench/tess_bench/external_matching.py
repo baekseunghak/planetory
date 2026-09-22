@@ -7,6 +7,7 @@ import numpy as np
 from astro_kernel.candidate_catalog import distance, possible_multipliers
 
 VERSION = "external-match-review-v1"
+DISPOSITION_VERSION = "external-disposition-review-v2"
 # Proposals for 116 review, not calibrated or operationally approved thresholds.
 RULE = {"identity_tolerance": 0.5, "duration_ratio_max": 2.0,
         "observed_jaccard_min": 0.5, "min_shared_points": 1}
@@ -114,16 +115,28 @@ def match_source(internal, external, observed_times):
 
 
 def disposition(raw_labels):
-    """Only already-direct-matched TFOPWG labels; raw source values retained."""
-    mapping = {"KP": "planet", "CP": "planet", "FP": "not_planet", "FA": "not_planet",
-               "PC": None, "APC": None, "": None, None: None}
+    """Direct-matched TFOPWG labels only; blocked decisions must not be inserted.
+
+    124 supplies candidate_id/source_refs; Publisher supplies applied_at. This
+    pure decision is not a complete candidate_dispositions database row.
+    """
+    mapping = {"KP": "confirmed", "CP": "confirmed", "FP": "fp", "FA": "fp",
+               "PC": "pc", "APC": "pc"}
     labels = list(raw_labels)
-    if any(x not in mapping for x in labels):
-        return {"planet_truth": None, "answer_class": "analysis", "source_conflict": True}
-    meanings = {mapping[x] for x in labels}
+    present = [x for x in labels if x is not None and x != ""]
+    unknown = any(not isinstance(x, str) or x not in mapping for x in present)
+    meanings = {mapping[x] for x in present if isinstance(x, str) and x in mapping}
     conflict = len(meanings) > 1
-    truth = next(iter(meanings)) if len(meanings) == 1 else None
-    return {"planet_truth": truth, "answer_class": "graded" if truth else "analysis", "source_conflict": conflict}
+    blocked = unknown or conflict
+    selected = None if blocked else next(iter(meanings), "none")
+    truth = {"confirmed": "planet", "fp": "not_planet"}.get(selected)
+    return {"disposition": selected, "planet_truth": truth,
+            "answer_class": "graded" if truth else "analysis", "source_conflict": conflict,
+            "rule_version": DISPOSITION_VERSION, "raw_labels": deepcopy(labels),
+            "missing_label_count": len(labels) - len(present),
+            "decision_status": "hold" if blocked else "resolved",
+            "reason": "unknown_label" if unknown else "conflicting_labels" if conflict else
+                      "no_label" if not present else "partial_labels" if len(present) < len(labels) else "consistent_labels"}
 
 
 def snapshot_proposal(previous, incoming, *, complete, validated):

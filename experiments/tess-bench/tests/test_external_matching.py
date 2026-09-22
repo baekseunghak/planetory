@@ -92,12 +92,41 @@ def test_different_tic_and_offset_not_matched():
 @pytest.mark.parametrize("labels,truth,conflict", [
     (["KP", "CP"], "planet", False), (["FP", "FA"], "not_planet", False),
     (["PC", "APC"], None, False), (["CP", "FP"], None, True),
-    (["CP", "PC"], None, True), (["unknown"], None, True), ([], None, False),
+    (["CP", "PC"], None, True), (["unknown"], None, False), ([], None, False),
 ])
 def test_tfopwg_labels_and_conflicts(labels, truth, conflict):
     result = disposition(labels)
     assert result["planet_truth"] == truth
     assert result["source_conflict"] == conflict
+
+
+@pytest.mark.parametrize("labels,expected,reason", [
+    (["CP", ""], "confirmed", "partial_labels"),
+    (["FP", None], "fp", "partial_labels"),
+    (["PC", "APC"], "pc", "consistent_labels"),
+    (["", None], "none", "no_label"), ([], "none", "no_label"),
+])
+def test_operational_disposition_projection(labels, expected, reason):
+    result = disposition(labels)
+    assert result["disposition"] == expected
+    assert result["reason"] == reason
+    assert result["decision_status"] == "resolved"
+    assert result["source_conflict"] is False
+    assert result["rule_version"] == "external-disposition-review-v2"
+    assert result["raw_labels"] == labels
+    assert "applied_at" not in result  # Publisher application time, not evaluation time.
+
+
+@pytest.mark.parametrize("labels,reason", [
+    (["CP", "FP"], "conflicting_labels"), (["CP", "PC"], "conflicting_labels"),
+    (["CP", "unknown"], "unknown_label"), ([{}], "unknown_label"),
+])
+def test_blocked_decision_cannot_supply_not_null_disposition(labels, reason):
+    result = disposition(labels)
+    assert result["decision_status"] == "hold"
+    assert result["disposition"] is None
+    assert result["reason"] == reason
+    assert result["planet_truth"] is None
 
 
 def test_failed_partial_and_same_snapshot_preserve_previous():

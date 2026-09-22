@@ -19,8 +19,8 @@ Archive·TOI는 fixture 9 TIC, TCE는 공식 S1–13 파일 하나, ExoFOP는 TO
 | --- | --- | --- |
 | NEA TOI | `tid`, `toi`, `tfopwg_disp`, `pl_orbper`, `pl_tranmid`, `pl_trandurh`, `pl_trandep` | TIC와 TOI 구분. 주기 day, epoch BJD, duration hour, depth ppm. BJD 표기만으로 TDB 척도를 추정하지 않는다. |
 | NEA PSCompPars | `tic_id`, `pl_name`, `pl_tranmid_systemref` 및 period/epoch/duration/depth | `pl_trandep`는 percent다. ppm 변환은 10,000배다. epoch reference 값·결측은 실제 export로 대조한다. |
-| MAST TCE | 실제 헤더 대조 대기 | TIC+TCE 번호만 전역 키로 확정하지 않고 Sector 범위·배포·pipeline 근거를 보존한다. |
-| ExoFOP TOI | 실제 헤더 대조 대기 | NEA TOI를 대신 받아 ExoFOP 검증으로 표시하지 않는다. |
+| MAST TCE | `ticid`, `tceid`, `tce_plnt_num`, `sectors`, `tce_time0bt`, `tce_time0` 등 실제 헤더 확인 | TIC+TCE 번호만 전역 키로 확정하지 않고 Sector 범위·배포·pipeline 근거를 보존한다. 시간 척도는 별도 확인 대상이다. |
+| ExoFOP TOI | `TIC ID`, `TOI`, `TFOPWG Disposition`, `Epoch (BJD)` 등 실제 헤더 확인 | NEA TOI와 별도 export를 감사했다. BJD의 시간 척도 확인과 헤더 확인을 구분한다. |
 
 공식 근거: [TOI 열](https://exoplanetarchive.ipac.caltech.edu/docs/API_TOI_columns.html), [PS/PSCompPars 열](https://exoplanetarchive.ipac.caltech.edu/docs/API_PS_columns.html), [TCE 배포](https://archive.stsci.edu/tess/bulk_downloads/bulk_downloads_tce.html).
 
@@ -83,7 +83,7 @@ MAST 선택 8행은 WASP-62 1·TOI-700 3·pi Men 1·L 98-59 3행이다. 파일 �
 
 ### 라벨과 대표값·갱신 계약 제안
 
-직접 매칭이 끝난 TFOPWG 라벨에만 DAT-09를 적용한다. KP/CP는 planet, FP/FA는 not_planet, PC/APC/없음은 null이다. 원천끼리 의미가 다르거나 알 수 없는 라벨이면 source_conflict로 보류한다. TCE 존재나 Archive 이름만으로 TFOPWG 라벨을 만들지 않는다. 이 함수는 입력 라벨의 매칭 여부를 스스로 판별하지 않으므로 124 호출 계층에서 direct_match를 강제해야 한다.
+직접 매칭이 끝난 TFOPWG 라벨에만 DAT-09를 적용한다. KP/CP는 planet, FP/FA는 not_planet, PC/APC/없음은 null이다. 원천끼리 의미가 다르면 source_conflict, 알 수 없는 라벨이면 unknown_label로 구분해 보류한다. 빈 값은 다른 라벨에 대한 반대 의견이 아니다. TCE 존재나 Archive 이름만으로 TFOPWG 라벨을 만들지 않는다. 이 함수는 입력 라벨의 매칭 여부를 스스로 판별하지 않으므로 124 호출 계층에서 direct_match를 강제해야 한다. 운영 disposition 및 필수 열 공급은 아래 소비자 인계 표를 따른다.
 
 DEC-20 검토 제안은 자체 BLS 대표값 유지, 외부값 별도 보존이다. 이번 실험이 대표값 외부 정렬을 승인하지 않는다. AI 원점수·상태·과거 인정 성과에는 쓰기를 수행하지 않는다.
 
@@ -137,3 +137,72 @@ snapshot_proposal은 순수 검토 모델이다. 수집 완전성 또는 검증 
 ### 승인 요청 범위
 
 124 소비자는 시간 척도 미확인 원천을 보류하는 범위, 직접/다중/고조파 조인 계약, label conflict 보류, 기존 snapshot·AI·성과 보존을 검토해야 한다. DEC-20은 자체 대표값 유지·외부값 별도 보존 제안을 승인받아야 한다. 원천별 시간 척도 근거 없이 BJD를 TDB로 추정해 55행을 강제 연결하지 않는다. 이번 자료만으로 116 완료를 선언하지 않는다.
+
+## !187 소비자 리뷰 보완 — disposition 전체 열 인계
+
+상태: 재민님 리뷰 반영·재승인 대기. DB 스키마와 기존 migration은 변경하지 않는다. `disposition()`은 순수 판정 함수이며 DB INSERT 행 완성기가 아니다. 판정 규칙 버전은 `external-disposition-review-v2`로 분리했다. 매칭 규칙 `external-match-review-v1`과 다른 책임이다.
+
+| TFOPWG 입력 | disposition | answer_class | planet_truth | 판정 |
+| --- | --- | --- | --- | --- |
+| KP/CP | confirmed | graded | planet | resolved |
+| FP/FA | fp | graded | not_planet | resolved |
+| PC/APC | pc | analysis | null | resolved |
+| 유효하게 확인된 라벨 없음 | none | analysis | null | resolved |
+| 서로 다른 의미의 유효 라벨 | null | analysis | null | hold, conflicting_labels |
+| 알 수 없는 라벨 | null | analysis | null | hold, unknown_label |
+
+빈 문자열/null은 missing_label_count에 기록한다. CP+빈 값은 confirmed/partial_labels, FP+null은 fp/partial_labels이며 충돌이 아니다. CP+PC는 confirmed와 pc라는 서로 다른 판정이므로 충돌이다. PC+APC는 같은 pc다. 알 수 없는 라벨과 충돌이 동시에 있으면 source_conflict=true도 보존한다. raw_labels는 그대로 유지한다.
+
+**hold의 null disposition은 DB 저장값이 아니다.** 124는 decision_status=hold이면 INSERT/UPDATE하지 않고 기존 판정을 유지하며 보류 사유·참조를 검토 산출물에 보존한다. 신규 후보는 완성된 판정이 없으므로 125/Publisher 게시 검증에서 보류한다. none으로 바꿔 필수 열 제약을 우회하지 않는다. ai_evaluations·성과 테이블은 판정 함수의 입력/출력 대상이 아니다.
+
+### 필수 열별 공급자
+
+| DB 열 | 공급자 | 계약 |
+| --- | --- | --- |
+| candidate_id | 122 확정 ID → 124 | 실제 내부 ID. diagnostic ID나 외부 ID를 넣지 않는다. |
+| disposition | 116 판정 규칙 → 124 | 위 confirmed/fp/pc/none 매핑. hold이면 행을 쓰지 않는다. |
+| answer_class | 116 판정 규칙 → 124 | disposition과 같은 결정에서 graded/analysis를 함께 공급한다. |
+| planet_truth | 116 판정 규칙 → 124 | 같은 결정에서 planet/not_planet/null을 공급한다. |
+| rule_version | 116 판정 규칙 → 124 | 검토 모델은 external-disposition-review-v2. 승인 후 채택한 불변 버전을 manifest와 DB에 동일하게 기록한다. 제출 매칭 rule_version을 가져오지 않는다. |
+| source_refs | 124 조인/출처 구성 → 125 검증 | 아래 JSON 객체. 판정에 사용한 원천 근거·결측·불일치를 보존한다. |
+| applied_at | Publisher 적용 트랜잭션 | TIMESTAMPTZ 적용 시각. 조회 시각·실험 실행 시각을 대신 넣지 않는다. 변경 없는 재처리에서는 기존 행과 시각을 유지한다. |
+
+124가 네 판정 열(disposition/answer_class/planet_truth/rule_version)과 source_refs를 같은 행으로 구성하고, 125가 일관성과 필수값을 검증하며 Publisher가 applied_at과 함께 원자적으로 적용한다. 한 열만 갱신해서 화면·통계가 다른 판정을 읽는 상태를 만들지 않는다. 운영 DB 쓰기·권한 검증은 이번 실험에서 실행하지 않았다.
+
+### source_refs JSON 검토 계약
+
+```json
+{
+  "schema_version": "external-disposition-refs-v1",
+  "decision_reason": "partial_labels",
+  "refs": [
+    {
+      "source": "nea_toi",
+      "source_table": "toi",
+      "snapshot_id": "<124 snapshot identifier>",
+      "snapshot_sha256": "<64 lowercase hex>",
+      "external_id": "<TOI string>",
+      "tic_id": "<decimal string>",
+      "retrieved_at": "<UTC ISO-8601>",
+      "source_row_updated_at": null,
+      "match_status": "direct_match",
+      "matching_rule_version": "external-match-review-v1",
+      "raw_disposition": "CP"
+    }
+  ],
+  "missing_label_count": 0,
+  "absence_evidence": null
+}
+```
+
+이는 실제 DB 행이 아닌 구조 예시다. snapshot의 URI/query와 해시는 수집 manifest까지 연결되어야 한다. 124는 각 ref가 해당 candidate_id와 동일 TIC의 유일 직접 대응인지 검증한다. source_refs의 raw_disposition과 함수 raw_labels 순서를 맞추고, 자유 입력 댓글은 넣지 않는다. 매칭 상세 수치는 snapshot/조인 산출물에서 참조한다.
+
+라벨이 정말 없으면 refs=[]도 JSONB NOT NULL을 만족하지만 **빈 배열만으로 none을 게시하지 않는다.** absence_evidence에 검증 완료된 source/scope/snapshot_id/hash, 조회 완전성, unmatched 또는 missing_field 사유를 남긴다. 조회 실패·부분 결과·invalid time·ambiguous·possible_alias는 유효한 라벨 부재의 증거가 아니므로 호출 전에 hold로 분기한다. 본 판정 함수는 조회 성공 여부를 알 수 없으며 이 분기는 124 책임이다. 기존 source_refs를 실패 응답으로 비우지 않는다.
+
+PC/APC→pc와 라벨 없음→none은 DB 상태를 구분한다. 150의 pc↔none 표식 생략 규칙을 변경하지 않는다. 배치의 성과 테이블 쓰기 금지와 앱의 relabeled_at/relabel_disposition 후처리 경계도 그대로 유지한다.
+
+### 검증·기존 실측 근거의 범위
+
+매칭/변환/실행기/판정 테스트 41개 통과(빈 값·PC/APC·FP·실제 충돌·unknown 추가). 기존 6348c862 실측 경로는 disposition()을 호출하지 않는다. 매칭·BLS 산식과 문턱은 바꾸지 않았으므로 BLS 재실행은 하지 않았다. 기존 manifest와 ZIP은 당시 코드의 불변 근거로 보존하며 **새 HEAD의 전체 코드 checksum 일치 증거로 재사용하지 않는다.** 새 판정 동작 근거는 이번 회귀 테스트다. 124의 실제 INSERT 및 source_refs 구성·125 검증·Publisher 적용은 후속 구현 범위다.
+
+!104와의 uv.lock 충돌은 리뷰어의 교차 MR 확인 사항이며 이번 보완에서 lockfile을 수정하지 않았다. 실제 통합 시 최신 develop과 충돌 여부를 다시 확인한다.
