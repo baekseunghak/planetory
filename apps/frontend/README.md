@@ -190,3 +190,6 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 ### P1 시제품 반영 인계
 [구현 순서·백엔드 인계](docs/p1-prototype-rollout.md). 공개 은하 250은 전체 보유 별을 대상으로 하며 219~223 계약과 함께 배포 연결한다. 개발용 실행은 npm run dev:p1, 검증은 npm run test:p1.
 
+2026-09-21 출처 카드(167): ID 없는 `available:false` 항목은 글·댓글에서 대체 안내로 표시하며 조회·링크를 생성하지 않는다. 본문·History만 수정하면 출처 PATCH를 생략하고, 무효 출처는 공개 출처 전체 제거로 명시적으로 해제한다. 기존 213 첨부 그래프 동작을 유지한다. 계약은 [서비스 API 7장](../backend/docs/service-api-spec.md#attachments)을 따른다.
+
+2026-09-21 출처 카드 리뷰 보완(167): 응답 유실 후 `sourceLinks:[]`의 반영 여부는 유효·무효 출처가 모두 사라졌을 때만 성공으로 판단한다. 출처 필드를 생략한 본문 수정은 기존 무효 출처를 유지한다.

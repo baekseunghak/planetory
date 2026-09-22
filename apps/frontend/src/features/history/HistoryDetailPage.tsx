@@ -46,6 +46,21 @@ const PUBLICATION: Record<string, string> = {
   NOT_ELIGIBLE: "공개 대상이 아닙니다.",
 };
 
+/**
+ * 돌아갈 곳의 이름. **주소에서 읽는다** — 기록으로 들어오는 길이 분석·마이
+ * 페이지·지도·게시글로 여럿이라, 어디서 왔든 「분석으로」라고 적으면 거짓이
+ * 된다. 모르는 곳이면 목적지를 지어내지 않고 그냥 돌아간다고만 말한다.
+ */
+function backLabel(returnTo: string) {
+  if (returnTo.startsWith("/analysis/")) return "분석으로 돌아가기";
+  if (returnTo === "/me" || returnTo.startsWith("/me?"))
+    return "마이페이지로 돌아가기";
+  if (returnTo.startsWith("/sky")) return "별지도로 돌아가기";
+  if (returnTo.startsWith("/posts/") || returnTo.startsWith("/comments/"))
+    return "글로 돌아가기";
+  return "돌아가기";
+}
+
 function Pair({ term, children }: { term: string; children: ReactNode }) {
   return (
     <>
@@ -262,7 +277,7 @@ export function HistoryDetailPage() {
         남겨 둔다 — 막다른 길에서 나갈 수 있어야 한다.
       */}
       <p className="history-back">
-        <Link to={returnTo}>분석으로 돌아가기</Link>
+        <Link to={returnTo}>{backLabel(returnTo)}</Link>
       </p>
     </main>
   );

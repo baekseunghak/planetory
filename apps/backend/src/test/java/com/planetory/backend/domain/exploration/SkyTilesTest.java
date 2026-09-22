@@ -23,6 +23,7 @@ import com.planetory.backend.domain.exploration.service.SkyService;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyStar;
 import com.planetory.backend.domain.exploration.service.SkyViews.SkyTile;
 import com.planetory.backend.global.error.BusinessException;
+import com.planetory.backend.global.error.ErrorCode;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -93,6 +94,78 @@ class SkyTilesTest {
 
     private SkyTile page(String cursor, int limit) {
         return sky.tiles(memberId, 0, BOX_X, BOX_Y, BOX_W, BOX_H, version, limit, cursor);
+    }
+
+    // ---------- 4.1 위치 찾기 ----------
+
+    /**
+     * 위치 찾기는 <b>타일이 주는 좌표와 같은 값</b>이어야 한다. 둘이 다르면 목록에서 고른 별과
+     * 지도에 그려진 별이 어긋난다.
+     */
+    @Test
+    void 위치_찾기는_타일과_같은_좌표를_준다() {
+        long ticId = 900_000_003L;
+        var star = sky.tiles(memberId, 0, BOX_X, BOX_Y, BOX_W, BOX_H, version, 1000, null)
+                .stars().stream().filter(s -> s.ticId().equals(String.valueOf(ticId))).findFirst().orElseThrow();
+
+        var located = sky.locate(memberId, ticId);
+
+        assertEquals(star.x(), located.x());
+        assertEquals(star.y(), located.y());
+        assertEquals(star.depthZ(), located.depthZ());
+        assertEquals(star.layoutOrdinal(), located.layoutOrdinal());
+        assertEquals(sky.version(memberId), located.version());
+        assertEquals(String.valueOf(ticId), located.ticId());
+    }
+
+    /** 경계 상자는 그 별이 든 타일 한 칸이다. 그대로 타일 조회에 넣으면 그 별이 와야 한다. */
+    @Test
+    void 경계_상자는_그_별이_든_타일_한_칸이다() {
+        long ticId = 900_000_005L;
+        var located = sky.locate(memberId, ticId);
+        int tile = sky.tileSize();
+
+        assertEquals(tile, located.bounds().w());
+        assertEquals(tile, located.bounds().h());
+        assertTrue(located.bounds().x() <= located.x() && located.x() < located.bounds().x() + tile,
+                "x가 상자 밖이면 그 상자로 타일을 받아도 별이 오지 않는다");
+        assertTrue(located.bounds().y() <= located.y() && located.y() < located.bounds().y() + tile);
+        // 음수 좌표의 나머지는 -0.0이라 delta로 본다. 부호 있는 0을 가르는 것이 목적이 아니다.
+        assertEquals(0.0, located.bounds().x() % tile, 0.0, "타일 격자에 맞춘다");
+        assertEquals(0.0, located.bounds().y() % tile, 0.0);
+
+        // 아직 받지 않은 범위라도 이 상자로 요청하면 그 별이 온다(완료 조건).
+        var tiles = sky.tiles(memberId, located.level(), located.bounds().x(), located.bounds().y(),
+                located.bounds().w(), located.bounds().h(), located.version(), 1000, null);
+        assertTrue(tiles.stars().stream().anyMatch(s -> s.ticId().equals(String.valueOf(ticId))));
+    }
+
+    /** 기준 배율은 1.0이다. 카메라를 옮기는 조회라 가장 넓은 쪽도 좁은 쪽도 아니다. */
+    @Test
+    void 기준_배율_단계를_준다() {
+        var located = sky.locate(memberId, 900_000_001L);
+
+        double scale = sky.meta(memberId, false).zoomLevels().stream()
+                .filter(zoom -> zoom.level() == located.level()).findFirst().orElseThrow().scale();
+        assertEquals(1.0, scale);
+    }
+
+    /** 회원 경계. 남의 별은 발견하지 않은 별과 같다. */
+    @Test
+    void 발견하지_않은_별과_남의_별은_STAR_LOCKED다() {
+        long othersOnly = 900_000_009L;
+        assertEquals(10, jdbc.queryForObject("SELECT count(*) FROM star_unlocks WHERE user_id = ?",
+                Integer.class, memberId), "이 별은 내 것이고");
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM star_unlocks WHERE user_id = ? "
+                + "AND tic_id = ?", Integer.class, otherMemberId, othersOnly), "상대에게는 없다");
+
+        for (long ticId : new long[] {123_456_789L, 900_000_099L}) {
+            assertEquals(ErrorCode.STAR_LOCKED, assertThrows(BusinessException.class,
+                    () -> sky.locate(memberId, ticId)).getErrorCode(), String.valueOf(ticId));
+        }
+        assertEquals(ErrorCode.STAR_LOCKED, assertThrows(BusinessException.class,
+                () -> sky.locate(otherMemberId, othersOnly)).getErrorCode(),
+                "남의 별을 위치로 찾을 수 없다");
     }
 
     /** first-page: 한 페이지만 받으면 범위가 아직 안 찼고 nextCursor가 있다. */

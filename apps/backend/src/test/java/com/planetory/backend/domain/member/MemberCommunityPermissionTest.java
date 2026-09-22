@@ -22,7 +22,7 @@ class MemberCommunityPermissionTest {
     private static final List<String> WRITABLE =
             List.of("users", "user_settings", "posts", "comments");
     private static final List<String> UNUSED = List.of(
-            "follows", "notifications", "post_source_links",
+            "follows", "notifications",
             "stats_snapshots");
 
     @Container
@@ -46,12 +46,17 @@ class MemberCommunityPermissionTest {
                 .target("15")
                 .load();
         assertEquals(3, throughVisibility.migrate().migrationsExecuted); // V13 첨부 → V14 공개 등록 → V15 공개 상태
+        Flyway throughReactions = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("16").load();
+        assertEquals(1, throughReactions.migrate().migrationsExecuted);
         Flyway upgraded = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
-        // 기존 V15 → V16 반응 → V17 상세 보기 대상. 새 마이그레이션마다 이 수를 올린다.
-        assertEquals(2, upgraded.migrate().migrationsExecuted);
+        // V16 이후 제출 상세 V17과 출처 권한 V18을 순서대로 적용한다.
+        var applied = upgraded.migrate();
+        assertEquals(List.of("17", "18", "19"), applied.migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -82,7 +87,7 @@ class MemberCommunityPermissionTest {
             for (String allowed : List.of("SELECT", "INSERT", "UPDATE", "DELETE"))
                 assertTrue(hasPrivilege(owner, "post_reactions", allowed));
             assertFalse(hasPrivilege(owner, "post_reactions", "TRUNCATE"));
-            for (String table : List.of("post_history_attachments", "comment_history_attachments")) {
+            for (String table : List.of("post_history_attachments", "comment_history_attachments", "post_source_links")) {
                 for (String allowed : List.of("SELECT", "INSERT", "DELETE")) assertTrue(hasPrivilege(owner, table, allowed));
                 for (String denied : List.of("UPDATE", "TRUNCATE")) assertFalse(hasPrivilege(owner, table, denied));
             }
@@ -127,6 +132,8 @@ class MemberCommunityPermissionTest {
             assertDoesNotThrow(() -> st.executeQuery(
                     "SELECT id FROM users WHERE id = " + userId + " FOR UPDATE").close());
 
+            long source = returnedId(st, "INSERT INTO post_source_links(post_id,target_type,target_id) VALUES (" + postId + ",'thread',1) RETURNING id");
+            assertEquals(1, st.executeUpdate("DELETE FROM post_source_links WHERE id=" + source));
             app.rollback();
         }
     }

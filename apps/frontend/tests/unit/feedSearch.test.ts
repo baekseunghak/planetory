@@ -53,8 +53,26 @@ test("malformed direct addresses cannot silently broaden the search", () => {
     "q=a&q=b",
     "cursor=a&cursor=b",
     "ticId=-1",
+    "ticId=1&board=FREE",
+    "ticId=",
+    "board=",
+    "tag=",
+    "author=%20",
+    "cursor=",
+    "size=0",
+    "size=20&size=20",
+    "unknown=value",
+    "q=a%00b",
   ])
     assert.ok(readFeedSearch(new URLSearchParams(query)).error, query);
+});
+test("JS whitespace and author text survive normalized request generation", () => {
+  const values = readFeedSearch(new URLSearchParams({ q: "\u00a0a|b\ufeff", author: " Orbit " })).values;
+  const params = feedSearchParams(values);
+  assert.equal(params.get("q"), "a|b");
+  assert.equal(params.get("author"), "Orbit");
+  assert.equal(readFeedSearch(new URLSearchParams({ author: "SYSTEM" })).error, null);
+  assert.equal(readFeedSearch(new URLSearchParams({ author: "a".repeat(1000) })).error, null);
 });
 test("TIC filters share the positive signed-64-bit range across form, URL and star board", () => {
   for (const ticId of ["1", "9007199254740993", "9223372036854775807"]) {

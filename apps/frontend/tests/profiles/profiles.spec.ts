@@ -83,7 +83,10 @@ test("own summary uses server counts; public whitelist and private stars stay di
   await expect(page.getByText(/이 회원의 별 목록은 비공개/)).toBeVisible();
   await page.goto("/members/u-211");
   await page.getByRole("button", { name: "공개한 별", exact: true }).click();
-  await expect(page.getByText(/별 목록 화면은 연결 준비 중/)).toBeVisible();
+  // #196이 이 슬롯을 채웠다. 공개한 회원의 별 목록이 실제로 보인다.
+  await expect(page.getByRole("list", { name: "별 목록" })).toBeVisible();
+  // 타인 응답에는 공개하지 않은 신호 수가 없다(NFR-14). 0으로도 보이지 않는다.
+  await expect(page.getByText(/공개하지 않은 신호/)).toHaveCount(0);
   await page.goto("/members/u-209");
   await expect(page).toHaveURL(/\/me$/);
   await page.goto("/members/u-999");

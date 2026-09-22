@@ -6,7 +6,7 @@
 
 - [x] 은하 위 접을 수 있는 내 별 찾기. TIC·진행 단계·등급 조합, 입력 검증, 검색/초기화, 불투명 cursor 페이지, 빈/로딩/오류/재시도.
 - [x] 지도는 `GET /api/v1/me/stars?scope=discovered&sort=recent&size=20`에 필요한 `ticId/stage/grade/cursor`만 보낸다. 확정 행성 여부 필터나 미발견 별 카탈로그를 추가하지 않는다.
-- [x] 선택은 `GET /api/v1/me/sky/locate?ticId=...`의 좌표·depthZ·level·bounds·version·layoutVersion·layoutOrdinal을 검사한다. 월드 좌표를 생성하지 않는다. 서버 level의 scale로 카메라를 움직이고 bounds를 타일 조회에 전달한다.
+- [x] 선택은 `GET /api/v1/me/sky/locate?ticId=...`의 좌표·depthZ·level·bounds·version·layoutVersion·layoutOrdinal을 검사한다. 월드 좌표를 생성하지 않는다. 서버 level의 scale로 카메라를 움직이고 bounds를 타일 조회에 전달한다. bounds는 타일 계약과 같은 좌·상단 포함/우·하단 제외 반개구간으로 검사한다.
 - [x] 검색 조건은 URL의 filterTic/filterStage/filterGrade에 보존한다. 상세 닫기·분석 복귀 경로에 같은 조건을 유지한다. 다른 조건·판·회원으로 바뀌면 늦은 결과/위치 응답을 폐기한다.
 - [x] 검색을 열기 전 추가 목록 요청 없음. P0 지도·대체 목록 흐름을 유지한다. 403 locate는 별을 선택하거나 상세를 보여주지 않는다.
 - [x] `ProfileStarFilters`와 `ProfileSlotProps.starFilters`로 A13 내 별 목록의 공용 필터 입력을 제공한다. 타인에게는 이 필터를 적용하지 않으며 기존 PRIVATE 차단을 유지한다.
@@ -19,7 +19,7 @@
 
 ## 검증 및 남은 것
 
-- [x] 신규 단위: TIC 정규화·scope·cursor·URL 보존, locate의 ID/판/좌표/깊이/경계 거부. 기존 포함 단위342개 통과.
+- [x] 신규 단위: TIC 정규화·scope·cursor·URL 보존, locate의 ID/판/좌표/깊이/경계 거부. 우·하단 끝점이 locate에서만 승인되지 않도록 회귀를 고정했다. 기존 포함 단위342개는 최초 구현 당시 기록이다.
 - [x] Chrome 별 검색 8개: 필터·서버 배율·상세 복귀, 입력/빈 결과,403, cursor/뒤로가기, 목록 모드, 늦은 locate 폐기, 조회 오류 재시도.
 - [x] Chrome 기존 프로필8개·별 상세9개·대체 목록11개 통과. 타입·렌더러 운영 빌드·개발 fixture 제외 통과. 대체 목록 URL 검사는 검색 조건 보존에 따른 query 순서 변화와 무관하게 선택 TIC와 list 모드를 확인하도록 바꿨다.
 - [ ] A13 소비자에서 실제 필터 요청과 목록/History 왕복. 준비된 입력 슬롯만으로 완료 체크하지 않는다.

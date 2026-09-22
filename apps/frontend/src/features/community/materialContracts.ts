@@ -1,10 +1,15 @@
 import { ApiError } from "../../api/client";
 
 export type Source = { type: "PUBLIC_ANALYSIS" | "SIGNAL_THREAD"; id: string };
-export type Materials = { historyIds?: string[]; sourceLinks?: Source[] };
+export type Materials = {
+  historyIds?: string[];
+  sourceLinks?: Source[];
+  unavailableSources?: Source["type"][];
+};
 export const emptyMaterials = (): Required<Materials> => ({
   historyIds: [],
   sourceLinks: [],
+  unavailableSources: [],
 });
 const sameIdentities = (a: string[], b: string[]) => {
   const left = new Set(a),
@@ -18,17 +23,48 @@ const sameIdentities = (a: string[], b: string[]) => {
 };
 // Attachments are identified by ID (sources also by type), not response order.
 export const sameMaterials = (a: Materials, b: Materials) =>
+  JSON.stringify(a.unavailableSources ?? []) ===
+    JSON.stringify(b.unavailableSources ?? []) &&
   sameIdentities(a.historyIds ?? [], b.historyIds ?? []) &&
   sameIdentities(
     (a.sourceLinks ?? []).map((s) => JSON.stringify([s.type, s.id])),
     (b.sourceLinks ?? []).map((s) => JSON.stringify([s.type, s.id])),
   );
+// PATCH each relationship independently; editing history must not erase hidden sources.
+export function changedMaterials(
+  original: Materials,
+  next: Materials,
+): Materials {
+  const patch: Materials = {};
+  if (!sameIdentities(original.historyIds ?? [], next.historyIds ?? []))
+    patch.historyIds = next.historyIds ?? [];
+  if (
+    !sameMaterials(
+      {
+        sourceLinks: original.sourceLinks,
+        unavailableSources: original.unavailableSources,
+      },
+      {
+        sourceLinks: next.sourceLinks,
+        unavailableSources: next.unavailableSources,
+      },
+    )
+  )
+    patch.sourceLinks = next.sourceLinks ?? [];
+  return patch;
+}
 export function materialError(value: Materials, ticId: string | null) {
   const histories = value.historyIds ?? [],
     sources = value.sourceLinks ?? [];
-  if (!ticId && (histories.length || sources.length))
+  if (
+    !ticId &&
+    (histories.length || sources.length || value.unavailableSources?.length)
+  )
     return "자료를 첨부하려면 별을 먼저 선택해 주세요.";
-  if (histories.length > 3 || sources.length > 3)
+  if (
+    histories.length > 3 ||
+    sources.length + (value.unavailableSources?.length ?? 0) > 3
+  )
     return "분석 기록과 공개 출처는 각각 최대 3개입니다.";
   if (
     new Set(histories).size !== histories.length ||
@@ -57,7 +93,15 @@ export function readMaterials(
     sources = raw.sourceLinks ?? [];
   if (!Array.isArray(attachments) || !Array.isArray(sources))
     return invalidMaterial();
+  const unavailableSources: Source["type"][] = [];
+  for (const value of sources) {
+    const item = materialObject(value);
+    if (item.type !== "PUBLIC_ANALYSIS" && item.type !== "SIGNAL_THREAD")
+      return invalidMaterial();
+    if (item.available === false) unavailableSources.push(item.type);
+  }
   const result = {
+    unavailableSources,
     historyIds: attachments.map((v) =>
       materialText(materialObject(v).historyId),
     ),

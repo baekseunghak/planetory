@@ -62,3 +62,26 @@ product_id·원본 source_row·cadenceno·원래 QUALITY·원본 시각·모든 
 현재 커널이 원래 QUALITY까지 보존하는 추가 마스킹 연결을 완료한 것은 아니다. 구간 근거·경계·실패·추적 회귀는
 245의 완료 조건이며 127에 인계한다. SRS 정합화 방향은 “일괄 6·12시간 제외는 적용하지 않고, 확인된 Sector 시작·
 궤도 근점 불량 구간은 근거 있는 구간만 별도 마스킹”이다. 요구 삭제로 처리하지 않는다.
+
+
+### 2026-09-21: 245 구현·로컬 검증 보완
+
+245에서 구간별 제품/근거 SHA, 원본 QUALITY와 모든 겹친 제외 사유를 보존하는 입력 계약을 구현했다.
+[실측 범위와 근거](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증), [소비 계층·재처리 계약](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)을 따른다.
+실제 Sector 3 DR42 표본에서는 추가 제외가 없으며 근거 구간 운영 채택·127 연결 리뷰는 남아 있다.
+SRS의 DAT-02 요구를 완화하거나 전체 범위 완료로 변경하지 않는다.
+
+
+245의 별도 `docs/data/tess-interval-mask-validation.md`는 사용자 요청으로 삭제하고
+[기존 tess-bench README](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)에 통합했다.
+같은 검증 범위에 별도 문서를 다시 만들지 않는다.
+
+## S15P21C206-153 GRD-06 재분류 표식 위치 (2026-09-21)
+
+| 문서·위치 | 현재 문구 | 수정 제안 | 근거 |
+| --- | --- | --- | --- |
+| SRS GRD-06 | "AnalysisHistory와 UserCandidateAchievement에 재분류 표식(relabeled_at, new_disposition)만 남기고" | "UserCandidateAchievement에 재분류 표식(relabeled_at, relabel_disposition)을 남기고" | `analysis_histories`에는 두 열이 없다(V1 스키마). 탐사 API 9.5절과 현재 구현은 성과 행에만 두고, 히스토리 화면 표식은 `(user_id, candidate_id)` 조인으로 만든다 |
+
+**이 차이가 남기는 것:** 성과가 없는 히스토리는 「기록이 갱신됨」을 표시할 수 없다. 미확정 미공개 기록과 판단 불일치 기록이 여기에 해당한다.
+그 기록에도 표식이 필요하다면 문구 정정이 아니라 스키마를 늘리는 요구사항 변경이므로 팀 결정이 필요하다.
+판단 근거는 [후보 병합·분리 정정 계약](../architecture/candidate-correction-contract.md) 2장 S6에 정리했다. 다른 영역의 요청 상태는 바꾸지 않는다.

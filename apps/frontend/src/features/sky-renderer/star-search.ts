@@ -101,9 +101,9 @@ export function readStarLocation(
   if (
     !zoom ||
     x < bounds.x ||
-    x > bounds.x + bounds.w ||
+    x >= bounds.x + bounds.w ||
     y < bounds.y ||
-    y > bounds.y + bounds.h ||
+    y >= bounds.y + bounds.h ||
     x < meta.bounds.minX ||
     x > meta.bounds.maxX ||
     y < meta.bounds.minY ||
