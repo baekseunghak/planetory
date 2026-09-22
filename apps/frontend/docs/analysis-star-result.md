@@ -34,3 +34,11 @@ fixture는 API 8.4 모양의 합성 회귀 자료이며 실제 항성 자료/서
 초기 파서가 API 2.4절의 중간 상태 3종을 거부하여 별 결과 전체를 오류로 처리했다. 기존 공용 residualStates를 재사용하고 표시 문구를 ResidualStatus에 대해 빠짐없이 정의했다. RESIDUAL_READY는 잔차 준비·주기도 대기로 표시하며 전체 계산 완료로 표현하지 않는다. 계약에 없는 RUNNING·CANCELLED는 허용하지 않는다.
 
 검증: 운영 빌드, 단위 417개, 별 결과 Chromium 10개 통과. 단위 검사는 서버 상태 6종과 null을, 브라우저 검사는 중간 상태 3종에서 집계·History 링크가 유지되는 것을 확인한다. 실제 API 인수는 별도다.
+
+### 2026-09-22 MR !175 리뷰 반영
+
+- 하서진 리뷰: 현재 분류와 분류 변경값이 같은 `Record<Disposition, string>` 표기를 사용한다. `relabel.newDisposition`도 기존 공용 `dispositions`로 검증한다. 세 분류의 relabel fixture·브라우저 회귀와 미지원 값 거부 검사를 추가했다. 당시 판단·채점 결과는 변경하지 않는다.
+- 강재민 리뷰: API 8.4 예시의 원본 단계에 `removedCandidateIds: []`를 추가하고 모든 예시 residual에 `jobId`·`computedAt`을 명시했다. 서버 `StarResultService.curveSteps`는 원본에도 제거 목록을 직렬화한다. 빈 목록과 누락을 구분하는 파서를 유지한다.
+- 단계 불변식의 근거는 탐사 API 2.1절과 6.3절이다. `SubmissionRequest`와 `AnalysisService`도 단계와 제거 집합 크기를 검증한다. 단계는 작업 횟수가 아니므로 두 후보 조합은 2단계다. 8.4절에 이 근거를 연결했다. DB CHECK 유무와 별개이며 새 스키마 제약은 이번 범위가 아니다.
+- `publicationBatch`는 193이 필요한 진입·복귀 문맥을 예약한 슬롯이고 실제 컴포넌트·게시 처리는 195 범위다. 나머지 열거형의 일괄 공용화와 지연 로딩 제안은 이번 필수 수정에서 제외한다.
+- 검증: 운영 빌드·단위 419개·별 결과 Chromium 13개 통과. 분류 변경 3종에서도 History와 기존 판단을 유지한다. 실제 API·DB 인수와 데스크톱 타 브라우저·스크린리더 실기 검증은 수행하지 않았다.

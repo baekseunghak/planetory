@@ -5,7 +5,7 @@ import type { MatchStatus } from "./submission-data.ts";
 // 자세한 이유는 docs/analysis-result.md.
 
 /** 후보 판정. API의 표시 어휘이며 DB의 소문자 어휘와 다르다. */
-const dispositions = ["CONFIRMED", "UNCONFIRMED", "FP"] as const;
+export const dispositions = ["CONFIRMED", "UNCONFIRMED", "FP"] as const;
 export type Disposition = (typeof dispositions)[number];
 const answerClasses = ["graded", "analysis"] as const;
 const planetTruths = ["planet", "not_planet"] as const;

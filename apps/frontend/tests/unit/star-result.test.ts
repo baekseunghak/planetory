@@ -1,8 +1,59 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { starResultFixture } from "../../dev/star-result-fixtures.ts";
+import {
+  starResultFixture,
+  relabeledStarResultFixture,
+} from "../../dev/star-result-fixtures.ts";
 import { readStarResult } from "../../src/features/analysis/star-result.ts";
 const ticId = "259377024";
+
+test("relabel accepts the same classification enum without changing the stored judgment", () => {
+  for (const disposition of ["CONFIRMED", "UNCONFIRMED", "FP"]) {
+    const result = readStarResult(
+      relabeledStarResultFixture(disposition),
+      ticId,
+    );
+    assert.equal(result.signals[0].relabel?.newDisposition, disposition);
+    assert.equal(result.signals[0].judgmentEvaluation, "UNSCORED");
+  }
+  const body = relabeledStarResultFixture();
+  body.signals[0].relabel!.newDisposition = "UNKNOWN";
+  assert.throws(() => readStarResult(body, ticId));
+});
+
+test("original curve requires an explicit empty removed set; a two-candidate set is step two", () => {
+  const body = starResultFixture();
+  assert.deepEqual(
+    readStarResult(body, ticId).curveSteps[0].removedCandidateIds,
+    [],
+  );
+  const { removedCandidateIds: omitted, ...missing } = body.curveSteps[0];
+  assert.throws(() =>
+    readStarResult({ ...body, curveSteps: [missing] }, ticId),
+  );
+  assert.throws(() =>
+    readStarResult(
+      { ...body, curveSteps: [{ ...missing, removedCandidateIds: null }] },
+      ticId,
+    ),
+  );
+  const combined = {
+    ...body.curveSteps[1],
+    curveStep: 2,
+    removedCandidateIds: ["c-401", "c-402"],
+  };
+  assert.equal(
+    readStarResult({ ...body, curveSteps: [combined] }, ticId).curveSteps[0]
+      .curveStep,
+    2,
+  );
+  assert.throws(() =>
+    readStarResult(
+      { ...body, curveSteps: [{ ...combined, curveStep: 1 }] },
+      ticId,
+    ),
+  );
+});
 test("star aggregate distinguishes duplicate submissions from signals and preserves server achievement", () => {
   const result = readStarResult(starResultFixture(), ticId);
   assert.equal(result.signals.length, 1);

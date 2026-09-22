@@ -8,6 +8,13 @@ import { SubmissionHistoryButton } from "./SubmissionHistoryButton";
 import { readStarResult, starResultPath, type StarResult } from "./star-result";
 import "./star-result.css";
 import type { ResidualStatus } from "./residual-job";
+import type { Disposition } from "./submission-result";
+
+const dispositionLabels: Record<Disposition, string> = {
+  CONFIRMED: "확정 행성",
+  UNCONFIRMED: "미확정",
+  FP: "거짓 양성",
+};
 
 type State =
   | { phase: "loading" }
@@ -225,13 +232,7 @@ function StarResultEntry({
               >
                 <h3>신호 {signal.candidateId}</h3>
                 <p>
-                  {
-                    {
-                      CONFIRMED: "확정 행성",
-                      UNCONFIRMED: "미확정",
-                      FP: "거짓 양성",
-                    }[signal.disposition]
-                  }
+                  {dispositionLabels[signal.disposition]}
                   {signal.status === "retired" && " · 은퇴한 신호"} ·{" "}
                   {publication[signal.publication.state]}
                 </p>
@@ -252,7 +253,8 @@ function StarResultEntry({
                 </p>
                 {signal.relabel && (
                   <p>
-                    분류 변경: {signal.relabel.newDisposition} ·{" "}
+                    분류 변경:{" "}
+                    {dispositionLabels[signal.relabel.newDisposition]} ·{" "}
                     {new Date(signal.relabel.relabeledAt).toLocaleString(
                       "ko-KR",
                     )}

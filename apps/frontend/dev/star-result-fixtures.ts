@@ -1,4 +1,14 @@
 // #193 API 8.4에 맞춘 합성 화면 회귀 자료. 실제 API/DB 검증을 대체하지 않는다.
+export function relabeledStarResultFixture(newDisposition = "FP") {
+  const body = starResultFixture();
+  body.signals[0].disposition = newDisposition;
+  body.signals[0].relabel = {
+    newDisposition,
+    relabeledAt: "2026-09-22T04:00:00Z",
+  };
+  return body;
+}
+
 export function starResultFixture(ticId = "259377024") {
   return {
     ticId,
@@ -40,7 +50,7 @@ export function starResultFixture(ticId = "259377024") {
           percentages: null,
           asOf: "2026-09-21T01:00:00Z",
         },
-        relabel: null,
+        relabel: null as { relabeledAt: string; newDisposition: string } | null,
         curveStepAtMatch: 0,
         submissionIds: ["sub-6990", "sub-7001"],
         threadId: "st-301",

@@ -1,6 +1,35 @@
 import { expect, test } from "@playwright/test";
-import { starResultFixture } from "../../dev/star-result-fixtures";
+import {
+  starResultFixture,
+  relabeledStarResultFixture,
+} from "../../dev/star-result-fixtures";
 const url = "/results/259377024?returnTo=%2Fsky";
+
+for (const [value, label] of [
+  ["CONFIRMED", "확정 행성"],
+  ["UNCONFIRMED", "미확정"],
+  ["FP", "거짓 양성"],
+]) {
+  test(`relabel ${value} uses the current-classification label without rescoring`, async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/stars/259377024/result", (route) =>
+      route.fulfill({ json: relabeledStarResultFixture(value) }),
+    );
+    await page.goto(url);
+    const signal = page.getByRole("region", {
+      name: "신호 c-402",
+      exact: true,
+    });
+    await expect(signal).toContainText(`분류 변경: ${label}`);
+    await expect(signal).not.toContainText(`분류 변경: ${value}`);
+    await expect(signal).toContainText("당시 판단을 다시 채점한 값이 아닙니다");
+    await expect(signal).toContainText("미확정 신호로 채점하지 않습니다");
+    await expect(
+      signal.getByRole("link", { name: "최신 기록과 곡선 보기" }),
+    ).toBeVisible();
+  });
+}
 test("read-only aggregate keeps completion, unpublished records and reopening independent", async ({
   page,
 }) => {

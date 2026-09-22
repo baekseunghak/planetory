@@ -123,3 +123,4 @@
 | 2026-09-22 | 현재 판 재도전 연결·Gold 중앙 시각 정합화 | S15P21C206-192 | retry-draft, bin center, 초안, requestId, 관측 창 | 프론트·로컬 검증 완료, 실제 API 인수 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 별 결과·History·공개 검토 연결 | S15P21C206-193 | curveSteps, 신호·제출, publication, star 쿼리 | 로컬 검증 완료·실제 API 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 별 결과 계산 중 잔차 상태 파서 수정 | S15P21C206-193 | residualStates, RESIDUAL_READY, 중간 상태 | 로컬 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | !175 분류 변경 번역·검증과 0단계 명세 예시 정정 | S15P21C206-193 | relabel, dispositions, removedCandidateIds, 2.1, 6.3 | 로컬 검증·커밋 전 | [기록](2026-09-22.md) |

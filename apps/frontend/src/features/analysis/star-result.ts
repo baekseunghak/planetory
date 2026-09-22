@@ -1,5 +1,6 @@
 import { residualStates } from "./residual-job.ts";
 import {
+  dispositions,
   readStatistics,
   storedPublicationStates,
   type SubmissionSignal,
@@ -72,11 +73,7 @@ function readSignal(v: unknown) {
     publication = object(s.publication);
   return {
     candidateId: text(s.candidateId),
-    disposition: choice(s.disposition, [
-      "CONFIRMED",
-      "UNCONFIRMED",
-      "FP",
-    ] as const),
+    disposition: choice(s.disposition, dispositions),
     status: choice(s.status, ["active", "retired"] as const),
     latestSubmissionId: text(s.latestSubmissionId),
     latestHistoryId: nullable(s.latestHistoryId, text),
@@ -119,7 +116,7 @@ function readSignal(v: unknown) {
       const r = object(v);
       return {
         relabeledAt: instant(r.relabeledAt),
-        newDisposition: text(r.newDisposition),
+        newDisposition: choice(r.newDisposition, dispositions),
       };
     }),
     curveStepAtMatch: nullable(s.curveStepAtMatch, count),
@@ -172,6 +169,7 @@ export function readStarResult(value: unknown, ticId: string) {
       r = object(c.residual);
     const curveStep = count(c.curveStep),
       removedCandidateIds = ids(c.removedCandidateIds);
+    // API 2.1 and 6.3: the step is the removed set's cardinality, not the number of clicks/jobs.
     if (curveStep !== removedCandidateIds.length) invalid("곡선 단계");
     return {
       curveStep,
