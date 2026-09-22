@@ -197,13 +197,13 @@ public class SkyService {
         return new TileBounds(minX, minY, maxX - minX, maxY - minY);
     }
 
-    private void validateLevel(int level) {
+    void validateLevel(int level) {
         if (ZOOM_LEVELS.stream().noneMatch(zoom -> zoom.level() == level)) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
     }
 
-    private void validateBox(double x, double y, double w, double h) {
+    void validateBox(double x, double y, double w, double h) {
         boolean finite = Double.isFinite(x) && Double.isFinite(y)
                 && Double.isFinite(w) && Double.isFinite(h);
         if (!finite || w <= 0 || h <= 0 || w > maxBox() || h > maxBox()) {
@@ -211,7 +211,7 @@ public class SkyService {
         }
     }
 
-    private int validateLimit(Integer requested) {
+    int validateLimit(Integer requested) {
         if (requested == null) {
             return DEFAULT_LIMIT;
         }

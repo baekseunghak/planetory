@@ -141,3 +141,5 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 
 
 팔로우(173)는 회원·별 관계, 본인 명단/공개 수치, 팔로잉 피드와 비공개 별 관리 해제를 제공한다. [서비스 API 12.1](docs/service-api-spec.md#follow-policy)·[V20 권한](docs/development-setup.md#v20-팔로우-권한)을 따른다. `./gradlew -PskipLocalDb test --tests '*FollowTest' --tests '*MemberCommunityPermissionTest' --tests '*CommunityReadTest' --tests '*HotTopicsTest'`는 실제 앱 역할과 일회용 PostgreSQL에서 관계/경합/페이지/기존 조회 회귀를 검사한다. FE219 관리 UI·첫 페이지 복귀와 실제 배포 인수는 별도다.
+
+공개 은하(251)는 인증된 `GET /api/v1/members/{memberId}/sky`, `/sky/tiles`, `/stars/{ticId}`로 소유자의 전체 보유 별과 성과 조건을 충족한 공개 행성을 조회한다. 저장 좌표를 재사용하며 공개 전용 DTO·커서·버전과 반환 직전 최신 공개 권한 검사를 적용한다. 구현·격리 DB 검증 완료이며 상세 정책과 검증 범위는 [공개 은하 계약](docs/public-sky-contract.md)을 따른다. 새 마이그레이션은 없고, 250 프론트와의 실제 로그인·공개 설정 변경·배포 인수는 244에 남는다.
