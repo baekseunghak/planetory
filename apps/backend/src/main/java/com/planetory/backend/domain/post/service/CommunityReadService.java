@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.post.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.exploration.service.HistoryService;
@@ -35,10 +36,7 @@ public class CommunityReadService {
     private final FollowTokens followTokens;
 
     private static final Map<String, String> SYSTEM = Map.of("type", "SYSTEM", "displayName", "SYSTEM");
-    // StarService.requireOpenStarBoard와 같은 집합 조건. 목록에서 회원별 개인 잠금을 검사하지 않는다.
-    private static final String OPEN_BOARD = "(p.tic_id IS NULL OR EXISTS (SELECT 1 FROM stars star "
-            + "WHERE star.tic_id=p.tic_id AND star.service_status='published' "
-            + "AND EXISTS (SELECT 1 FROM star_unlocks unlock WHERE unlock.tic_id=star.tic_id)))";
+    private static final String OPEN_BOARD = "(p.tic_id IS NULL OR " + StarBoardVisibility.OPEN.formatted("p.tic_id") + ")";
 
     public record FeedItem(String type, String id, String ticId, String title, Object author,
                            long commentCount, Map<String, Object> judgmentSummary, OffsetDateTime createdAt) {}

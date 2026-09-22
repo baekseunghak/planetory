@@ -312,7 +312,7 @@ class FollowTest {
         assertEquals(0,read(BASE+"unavailable-stars?size=1&cursor="+hidden.path("nextCursor").asText()).path("items").size());
     }
 
-    @Test void 관리해제경합_재팔로우는새관계_커서재시작은별도복구() throws Exception {
+    @Test void 관리해제경합_재팔로우는새관계_커서는재초기화후에도유지() throws Exception {
         follows.change(viewer,"STAR",tic,true);
         String id=tokens.management(owner.queryForObject("SELECT id FROM follows WHERE user_id=?",Long.class,viewer));
         try(var pool=Executors.newFixedThreadPool(2)) {
@@ -332,9 +332,19 @@ class FollowTest {
             follows.removeManaged(viewer,id);
             assertFalse(follows.managed(viewer,id).following()); assertTrue(follows.relation(viewer,"STAR",tic).following());
         }
-        String cursor=tokens.next(page("stars",1),java.time.OffsetDateTime.parse("2026-09-01T00:00:00Z"),0,tic);
+        String cursor=tokens.next(page("stars",1),java.time.OffsetDateTime.parse("9999-01-01T00:00:00Z"),0,tic);
         var params=new LinkedMultiValueMap<String,String>();params.add("size","1");params.add("cursor",cursor);
-        assertThrows(com.planetory.backend.global.error.BusinessException.class,()->new FollowTokens().page(viewer,"stars",params));
+        assertEquals(tokens.page(viewer,"stars",params),new FollowTokens().page(viewer,"stars",params));
+        assertEquals(1,read(BASE+"stars?size=1&cursor="+cursor).path("items").size());
+        // 커서는 권한 증명이 아니다. 재인코딩한 다른 회원 binding도 실제 해당 회원 관계만 조회한다.
+        String payload=new String(java.util.Base64.getUrlDecoder().decode(cursor),java.nio.charset.StandardCharsets.UTF_8);
+        String otherCursor=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                payload.replace("|"+viewer+"|stars|","|"+third+"|stars|").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(0,read(BASE+"stars?size=1&cursor="+otherCursor,third).path("items").size());
+        String legacy=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                payload.replace("follow-v2|","follow-v1|").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        mvc.perform(get(BASE+"stars?size=1&cursor="+legacy).session(session(viewer))).andExpect(status().isBadRequest());
+        mvc.perform(get(BASE+"stars?size=1&cursor="+cursor+"=").session(session(viewer))).andExpect(status().isBadRequest());
         assertEquals(1,read(BASE+"stars").path("items").size());
         assertEquals(tokens.relation(id),new FollowTokens().relation(id));
     }

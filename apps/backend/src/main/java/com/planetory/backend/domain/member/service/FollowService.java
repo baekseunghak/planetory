@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.member.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
@@ -19,9 +20,7 @@ public class FollowService {
     private final StarService stars;
     private final FollowTokens tokens;
 
-    // StarService.requireOpenStarBoard와 동일한 전역 공개 자격. 탈퇴 원천 정리 정책을 새로 만들지 않는다.
-    private static final String OPEN_STAR = "EXISTS (SELECT 1 FROM stars s WHERE s.tic_id=f.target_id "
-            + "AND s.service_status='published' AND EXISTS (SELECT 1 FROM star_unlocks su WHERE su.tic_id=s.tic_id))";
+    private static final String OPEN_STAR = StarBoardVisibility.OPEN.formatted("f.target_id");
     private static final String ACTIVE_TARGET = "EXISTS (SELECT 1 FROM users u WHERE u.id=f.target_id AND u.status='active')";
     public record Relation(String kind, String id, boolean following) {}
     public record Target(String kind, String id, String label) {}
