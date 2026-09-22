@@ -20,7 +20,7 @@ test("time chart preserves all points, shows actual times, and supports keyboard
   await plot.focus();
   await page.keyboard.press("ArrowDown");
   await expect(chart.locator(".analysis-time-readout")).toContainText(
-    "BTJD 1683.35 · 밝기 1 normalized",
+    `BTJD ${1683.35 + 5 / 1440} · 밝기 1 normalized`,
   );
   await page.keyboard.press("+");
   await expect(chart.getByTestId("time-zoom")).toHaveText("×2");
@@ -38,7 +38,7 @@ test("time chart preserves all points, shows actual times, and supports keyboard
   await openData(page);
   await expect(
     page.locator(".analysis-secondary").getByText(/Sector 14 → 41:/),
-  ).toContainText("736.59139일");
+  ).toContainText("736.59486일");
 });
 test("wheel zoom, drag pan, resize and reset redraw the same curve", async ({
   page,

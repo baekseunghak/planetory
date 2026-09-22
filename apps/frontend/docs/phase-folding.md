@@ -9,7 +9,7 @@
 [buildFoldData](../src/features/analysis/fold-data.ts)는 #182에서 해석한 `AnalysisContext`와 `CurveData`를 받는다. 현재 문맥의 준비된 곡선인지 검사하고 각 세그먼트에서 다음과 같이 시각을 복원한다.
 
 ```text
-BTJD[i] = startBtjd + i × binMinutes / 1440
+BTJD[i] = startBtjd + (i + 0.5) × binMinutes / 1440
 phase[i] = positive_mod((BTJD[i] - foldReferenceTimeBtjd) / periodDays, 1)
 ```
 
@@ -143,3 +143,5 @@ v1.3.1 변경안 적용 당시 실패·취소의 원자적 복구는 3단계 범
 ## 개발용 GPU 표시 검증
 
 개발 화면에서 Canvas/WebGL을 선택해 같은 주기·보기 상태로 비교할 수 있다. GPU 실패 시 새 Canvas로 자동 전환하며 과학 계산·Worker/session 계약은 유지한다. 일반 배포는 Canvas만 사용한다. 사용법, 처리 경계와 검증 진행표는 [GPU 실험 및 앱 연결 기록](phase-folding-gpu-experiment.md#후속-개발-실제-분석-화면-연결)을 따른다.
+
+2026-09-22 (#192): Gold bin 중앙 시각으로 표시·접기를 정합화했다. 저장 시작 시각과 과거 스냅샷은 유지한다. [재도전 및 시각 기준 안내](analysis-retry-draft.md)를 참고한다.

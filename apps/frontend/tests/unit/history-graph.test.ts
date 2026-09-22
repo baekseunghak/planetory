@@ -201,7 +201,7 @@ test("both modes land on the same axis", () => {
             {
               segmentId: "s-1",
               sector: 14,
-              startBtjd: 1683.4231,
+              startBtjd: 1683.4231 - 11.802 * 0.25,
               binMinutes: 11.802 * 0.5 * 1440,
               nPoints: 2,
               flux: [1, 0.99],

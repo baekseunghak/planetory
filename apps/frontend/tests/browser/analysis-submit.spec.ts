@@ -903,7 +903,10 @@ test("a match the server could not settle offers only a retry", async ({
   const actions = ambiguous.getByTestId("next-actions");
   // 모호한 매칭의 힌트는 다시 풀기뿐이다(AT-13). 갈 곳을 지어내지 않는다.
   await expect(actions).toContainText("다시 풀기");
-  await expect(actions.getByRole("link")).toHaveCount(0);
+  await expect(actions.getByRole("link")).toHaveCount(1);
+  await expect(
+    actions.getByRole("link", { name: "다시 풀기" }),
+  ).toHaveAttribute("href", /retryOfSubmissionId=/);
 });
 
 test("a skipped star is not offered the map or the board", async ({ page }) => {

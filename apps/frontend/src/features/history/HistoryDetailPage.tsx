@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { usePageContext } from "../../app/usePageContext.ts";
+import { pagePath } from "../../app/paths.ts";
 import { HistoryCurveChart } from "../analysis/HistoryCurveChart.tsx";
 import { wrapPhaseWindow } from "../analysis/history-graph.ts";
 import type { HistoryDetail } from "../analysis/history-data.ts";
@@ -180,6 +181,7 @@ function HistoryDetail({
     retryDetail,
     snapshotMissing,
   } = useHistoryDetail(historyId);
+  const { currentPath } = usePageContext();
 
   return (
     <main className="page history-detail">
@@ -201,6 +203,18 @@ function HistoryDetail({
 
       {detail.phase === "ready" && (
         <>
+          <Link
+            to={
+              pagePath(
+                "analysis",
+                { ticId: detail.detail.ticId },
+                { returnTo: currentPath },
+              ) +
+              `&retryOfSubmissionId=${encodeURIComponent(detail.detail.submissionId)}`
+            }
+          >
+            다시 풀기
+          </Link>
           <dl className="history-receipt">
             <Pair term="기록 번호">{detail.detail.historyId}</Pair>
             <Pair term="별">TIC {detail.detail.ticId}</Pair>
