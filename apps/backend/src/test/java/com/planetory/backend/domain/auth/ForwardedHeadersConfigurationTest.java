@@ -19,7 +19,7 @@ class ForwardedHeadersConfigurationTest {
         assertEquals("framework", properties.getProperty(KEY));
     }
 
-    @Test void duplicateStrategyFailsRegardlessOfOrderOrValue() {
+    @Test void checkedPropertiesRejectsDuplicateStrategyRegardlessOfOrderOrValue() {
         for (String values : new String[]{"framework,none", "none,framework", "none,none", "framework,framework"}) {
             var pair = values.split(",");
             assertThrows(IllegalArgumentException.class, () -> checkedProperties().load(
