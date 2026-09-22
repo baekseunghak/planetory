@@ -10,7 +10,7 @@ Airflow 3.2.2의 일반 `reschedule` Python sensor는 실제 Sector 17·18에서
 
 2026-09-23 운영 release `20260922T170848Z`에서 Scheduler·DAG Processor·API Server·Triggerer를 함께 기동했고, API health와 DAG import 오류 0건을 확인했다. Sector 20의 `check_download`는 실제로 5분 대기 후 다시 `deferred`로 전환됐으며 Triggerer 로그에 `Invalid auth token`·`Signature has expired` 오류는 없었다.
 
-후속 운영 관찰에서 Sector 21·22의 `check_download`와 발견 DAG의 `reconcile`이 다시 `Invalid auth token: Signature has expired`로 실패·재시도했다. 첫 5분 재개만으로는 토큰 오류가 해결됐다고 볼 수 없다. Airflow LocalExecutor 실행 경로의 원인은 미확정이며 [임시 장애 인계](../../../docs/project/tess-airflow-handoff-2026-09-23.md)에 현재 증거와 다음 점검을 기록했다.
+후속 운영 관찰에서 Sector 21·22의 `check_download`와 발견 DAG의 `reconcile`이 다시 `Invalid auth token: Signature has expired`로 실패·재시도했다. 첫 5분 재개만으로는 토큰 오류가 해결됐다고 볼 수 없다. 원인은 LocalExecutor 슬롯 부족에 따른 queued 대기 중 실행 토큰 만료였고, `parallelism=8`로 해결한 뒤 운영 회귀를 확인했다. 근거는 [2026-09-23 변경 이력](../../../docs/changes/2026-09-W4/2026-09-23.md)에 있다.
 
 화면에는 `dag_display_name`으로 ID 옆에 한국어 역할을 표시한다. 자동 trigger와 실행 이력은 변경하지 않은 `dag_id`를 계속 사용한다.
 
