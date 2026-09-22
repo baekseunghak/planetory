@@ -87,9 +87,9 @@ type ProfileSlotComponents = {
 
 **개발용 응답은 이쪽 소유로 새로 둔다.** `profiles` 모드는 `profile-fixture-plugin`(하서진)과 `community-fixture-plugin`(하서진·백승학)을 함께 쓴다. `/v1/me/histories`는 community 쪽이 첨부 선택용으로 주지만 `/v1/me/stars`는 **galaxy 모드에서만** 준다. 남의 fixture를 넓히면 그쪽 검사의 전제를 바꾸게 되므로 **목록 화면이 필요한 경우를 담은 플러그인을 따로 만든다.**
 
-**갈 곳이 없는 링크는 걸지 않는다.** 포함 범위에 「다시 풀기·별 결과·공개 검토로 연결」이 있으나 `S15P21C206-192`·`193`·`195` 화면이 없고 백엔드도 `retry-draft`·`stars/{ticId}/result`가 미구현이다. **지금 있는 곳만 잇고 나머지는 자리를 비워 둔다.**
+2026-09-22 갱신: 192 재도전과 백엔드 `retry-draft`·`stars/{ticId}/result`가 develop에 병합되었다. 193에서 본인 별 목록의 결과 링크를 연결한다. 공개 검토 이동 문맥은 준비하지만 실제 공개 처리는 195 범위다. [193 구현 범위](analysis-star-result.md)를 따른다.
 
 ## 미결
 
 - **실제 API 인수.** 완료 조건이 「실제 내 별/History 목록 API·커서·필터 검사」와 「목록→상세/재도전/공개→목록 E2E」를 요구한다. 로컬 OAuth 설정이 없어 [#190](analysis-history.md)·[#191](analysis-public-history.md)과 같은 지점에서 막힌다. **개발용 응답까지만 닫고 티켓을 완료로 보지 않는다.**
-- **이동 대상 화면.** 위 셋이 생기면 링크를 잇는다. 그때 어느 티켓이 잇는지 정한다.
+- **이동 대상 화면.** 193 결과 연결 뒤에도 195 공개 검토와 실제 API 왕복 검증은 남는다.

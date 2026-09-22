@@ -268,7 +268,7 @@ function readSignal(value: unknown): SubmissionSignal {
   };
 }
 
-function readStatistics(value: unknown): JudgmentStatistics {
+export function readStatistics(value: unknown): JudgmentStatistics {
   const data = record(value, "judgmentStatistics");
   if (data.kind === "graded")
     return {

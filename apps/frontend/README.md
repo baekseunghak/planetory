@@ -1,5 +1,7 @@
 # Planetory 공용 프론트
 
+2026-09-22: [193 별 결과 화면과 공개 검토 연결](docs/analysis-star-result.md). 신호·제출 집계와 History 이동을 구현했다. 공개 처리는 195, 실제 API 인수는 별도다.
+
 2026-09-21: [223 별 검색·위치 이동과 A13 연결 범위](docs/ticket-223-readiness.md). `npm run dev:star-search`로58384에서 서버 좌표 기반 검색·선택을 확인한다. 필터 HTTP·공용 입력 슬롯을 구현했으며 실제 A13 소비자와 백엔드 연결은 아직 미검증이다.
 2026-09-21: [221 개인 설정 구현·잔여](docs/ticket-221-readiness.md). `/settings`에서 별 목록 공개 범위를 저장·복구한다. `npm run dev:settings`로58382에서 확인한다. 알림 수신 설정의 정책/API는 미정이며 221 전체 완료가 아니다.
 219 팔로우: [프론트 기준 P1 HTTP 계약](../backend/docs/p1-service-contract.md)을 백엔드와 함께 사용한다. `node --import tsx scripts/p1-server.mjs`는58392에서 실제 제품 코드에 개발용 HTTP를 공급한다. 제품 활성화는 `VITE_P1_ENABLED=true`이며 가짜 응답을 운영으로 가져오지 않는다. 커뮤니티의 팔로잉과 마이페이지의 관계 관리를 분리한다.

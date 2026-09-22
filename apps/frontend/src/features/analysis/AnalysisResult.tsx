@@ -105,11 +105,17 @@ const AI_BAND: Record<string, string> = {
   rejected: "기각 구간",
 };
 
-function Ai({ signal }: { signal: SubmissionSignal }) {
+export function Ai({
+  signal,
+  heading: Heading = "h5",
+}: {
+  signal: Pick<SubmissionSignal, "ai">;
+  heading?: "h4" | "h5";
+}) {
   const { ai } = signal;
   return (
     <section className="result-axis">
-      <h5>AI 판정</h5>
+      <Heading>AI 판정</Heading>
       {ai.status === "completed" ? (
         <>
           <p>
@@ -128,11 +134,17 @@ function Ai({ signal }: { signal: SubmissionSignal }) {
   );
 }
 
-function Statistics({ value }: { value: JudgmentStatistics }) {
+export function Statistics({
+  value,
+  heading: Heading = "h5",
+}: {
+  value: JudgmentStatistics;
+  heading?: "h4" | "h5";
+}) {
   if (value.kind === "graded")
     return (
       <section className="result-axis">
-        <h5>다른 사람의 판단</h5>
+        <Heading>다른 사람의 판단</Heading>
         {/* 분모가 「첫 매칭 회원」이다. 공개 분포와 섞어 쓸 수 없다. */}
         <p>
           이 신호를 처음 찾은 {count.format(value.matchedMemberCount)}명 중{" "}
@@ -142,7 +154,7 @@ function Statistics({ value }: { value: JudgmentStatistics }) {
     );
   return (
     <section className="result-axis">
-      <h5>다른 사람의 판단</h5>
+      <Heading>다른 사람의 판단</Heading>
       {value.percentages === null ? (
         // 0%가 아니라 아직 없는 것이다.
         <p>아직 공개된 분석이 없습니다.</p>
