@@ -40,3 +40,38 @@ test("invalid residual context and mismatched private thread lists are rejected"
     ),
   );
 });
+
+for (const status of [
+  "QUEUED",
+  "RESIDUAL_CALCULATING",
+  "RESIDUAL_READY",
+  "PERIODOGRAM_CALCULATING",
+  "COMPLETED",
+  "FAILED",
+  null,
+]) {
+  test(`star result accepts API residual state ${status} without dropping records`, () => {
+    const body = starResultFixture();
+    const result = readStarResult(
+      {
+        ...body,
+        curveSteps: [
+          {
+            ...body.curveSteps[1],
+            residual: { status, jobId: null, computedAt: null },
+          },
+        ],
+      },
+      ticId,
+    );
+    assert.equal(result.curveSteps[0].residual.status, status);
+    assert.equal(result.submissionCount, 3);
+  });
+}
+test("non-contract residual states are rejected", () => {
+  for (const status of ["RUNNING", "CANCELLED"]) {
+    const body = starResultFixture();
+    body.curveSteps[1].residual.status = status;
+    assert.throws(() => readStarResult(body, ticId));
+  }
+});

@@ -170,3 +170,30 @@ test("desktop width wraps and narrow screens retain the desktop guidance", async
   await page.setViewportSize({ width: 1024, height: 768 });
   await expect(page.getByRole("heading", { name: "탐색 요약" })).toBeVisible();
 });
+
+for (const [status, label] of [
+  ["RESIDUAL_CALCULATING", "잔차 계산 중"],
+  ["RESIDUAL_READY", "잔차 준비됨 · 주기도 계산 대기"],
+  ["PERIODOGRAM_CALCULATING", "주기도 계산 중"],
+]) {
+  test(`ongoing residual ${status} keeps the whole result readable`, async ({
+    page,
+  }) => {
+    const body = starResultFixture();
+    body.curveSteps[1].residual.status = status;
+    await page.route("**/api/v1/stars/259377024/result", (route) =>
+      route.fulfill({ json: body }),
+    );
+    await page.goto(url);
+    await expect(
+      page.getByRole("heading", { name: "탐색 요약" }),
+    ).toBeVisible();
+    await expect(page.locator(".star-result")).toContainText(
+      `1단계 · ${label}`,
+    );
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "최신 기록과 곡선 보기" }),
+    ).toBeVisible();
+  });
+}

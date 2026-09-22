@@ -1,3 +1,4 @@
+import { residualStates } from "./residual-job.ts";
 import {
   readStatistics,
   storedPublicationStates,
@@ -176,15 +177,7 @@ export function readStarResult(value: unknown, ticId: string) {
       curveStep,
       removedCandidateIds,
       residual: {
-        status: nullable(r.status, (x) =>
-          choice(x, [
-            "QUEUED",
-            "RUNNING",
-            "COMPLETED",
-            "FAILED",
-            "CANCELLED",
-          ] as const),
-        ),
+        status: nullable(r.status, (x) => choice(x, residualStates)),
         jobId: nullable(r.jobId, text),
         computedAt: nullable(r.computedAt, instant),
       },

@@ -7,6 +7,7 @@ import { Ai, Statistics } from "./AnalysisResult";
 import { SubmissionHistoryButton } from "./SubmissionHistoryButton";
 import { readStarResult, starResultPath, type StarResult } from "./star-result";
 import "./star-result.css";
+import type { ResidualStatus } from "./residual-job";
 
 type State =
   | { phase: "loading" }
@@ -32,12 +33,13 @@ const publication: Record<string, string> = {
   HIDDEN: "운영에 의해 숨겨짐",
   NOT_ELIGIBLE: "게시 대상 아님",
 };
-const residual: Record<string, string> = {
+const residual: Record<ResidualStatus, string> = {
   COMPLETED: "계산 완료",
   QUEUED: "계산 대기",
-  RUNNING: "계산 중",
+  RESIDUAL_CALCULATING: "잔차 계산 중",
+  RESIDUAL_READY: "잔차 준비됨 · 주기도 계산 대기",
+  PERIODOGRAM_CALCULATING: "주기도 계산 중",
   FAILED: "계산 실패",
-  CANCELLED: "계산 취소",
 };
 const judgment: Record<string, string> = {
   LIKELY_PLANET: "행성 같음",
