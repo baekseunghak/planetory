@@ -70,6 +70,9 @@ class PlanetoryApplicationCommandModeTest {
         assertFalse(List.of(PlanetoryApplication.withReadOnlyGuards(
                 new String[]{"--planetory.command=challenge-unlock"})).contains(guard));
         assertEquals(0, PlanetoryApplication.withReadOnlyGuards(new String[]{}).length);
+        // 통계 잡 역할에는 DDL 권한을 주지 않는다. 통계 명령도 기동 migration을 강제로 막는다.
+        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(
+                new String[]{"--planetory.command=statistics", "--planetory.statistics.mode=refresh"})).contains(guard));
     }
 
     /**

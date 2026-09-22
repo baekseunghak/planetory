@@ -86,6 +86,10 @@ docker compose --profile service up -d --build backend
 
 ## 4. Flyway 최초 스키마
 
+### V21 전체·비교 통계
+
+`V21__statistics_aggregation.sql`은 173의 V20 다음에 적용한다. 기존 V1~V19를 수정하거나 repair/outOfOrder를 사용하지 않는다. MV 최초 미적재와 실제 0건을 구분하며 Snapshot global의 NULL 회차에도 중복 방지를 적용한다. 최소 역할과 실행·재시작 방법은 [통계 실행 런북](../../../docs/operations/statistics-runbook.md), 구조는 [ERD](../../../docs/architecture/database-erd.md#f-운영·챌린지·알림·통계)를 따른다. 통계 명령은 기동 Flyway를 강제로 끄므로 사전 migration은 소유자 전용 절차로 완료해야 한다. 공유/운영 DB 적용은 별도다.
+
 파일: `src/main/resources/db/migration/V1__initial_schema.sql`.
 기준: [ERD v1.1](../../../docs/architecture/database-erd.md) 그림과 3장 본문. 그림에 생략된 memo·계산 버전·time_system·round_id·수정 시각 등도 본문에 따라 포함했다.
 

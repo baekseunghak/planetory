@@ -532,6 +532,12 @@ erDiagram
         timestamptz read_at "읽은 시각"
         timestamptz created_at "생성 시각"
     }
+    global_stats["global_stats · 전체 통계 MV"] {
+        integer singleton UK "한 행 유일 키"
+        timestamptz as_of "원천 기준 시각"
+        timestamptz generated_at "집계 생성 시각"
+        jsonb payload "비식별 전체 통계"
+    }
     stats_snapshots["stats_snapshots · 통계 일일 집계"] {
         bigint id PK "고유 번호"
         date snapshot_date "집계일"
@@ -814,7 +820,9 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 - **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
 
-**176 확인·후속 설계:** 위 두 항목은 목표 설계다. 현재 V1 `stats_snapshots`에는 날짜·scope·round_id별 UNIQUE가 없고 기능 전용 앱 권한은 V11에서 보류했다. `global_stats`와 P1 집계 잡은 미구현이다. 178은 CONCURRENTLY 요건을 만족하는 MV 인덱스·최초 적재·REFRESH 역할, Snapshot의 global/null round_id 멱등 키·최소 읽기/쓰기 권한·중첩 실행·직전 성공본 보존을 설계·검증한다. [176 지표 사전·기준 시각·인수표](../requirements/planetory-statistics-policy.md)를 참조하며 원천 읽기 기준 시각과 집계 완료 시각을 구분한다. 탈퇴 원천 보존은 DEC-11/179, 현재·과거 집계 영향은 연계 미정이다. 이 항목은 DDL 적용이나 권한 부여 완료를 의미하지 않는다.
+**178 구현(사용자 승인 2026-09-22):** V21이 `stats_snapshots(snapshot_date,scope,round_id) NULLS NOT DISTINCT` 유일 인덱스를 추가하여 global의 NULL 회차도 멱등 키로 보호한다. 기존 중복이 있으면 migration을 실패시키고 성공본을 임의 삭제하지 않는다. 별도 개인 Snapshot 테이블은 없다. `global_stats`는 `singleton` 유일 인덱스와 `as_of/generated_at/payload`를 가진 한 행 MV이며 `WITH NO DATA`로 생성한다. 최초 명시적 적재 뒤 CONCURRENTLY를 사용한다. 앱 역할은 두 집계의 SELECT만, `planetory_stats_job`은 MV MAINTAIN·Snapshot SELECT/INSERT와 필요한 원천 SELECT만 가진다. UPDATE/DELETE 없이 성공본을 보존한다. MV 계산은 소유자 권한으로 수행되지만 잡 계정에는 소유권·역할 상속·원천 쓰기를 주지 않는다.
+
+Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
 ## 4. 설계 결정과 근거

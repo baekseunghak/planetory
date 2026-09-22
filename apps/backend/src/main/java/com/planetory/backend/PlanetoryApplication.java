@@ -13,6 +13,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 import com.planetory.backend.domain.exploration.command.CandidateCorrectionPrecheckCommand;
 import com.planetory.backend.domain.exploration.command.ChallengeUnlockCommand;
+import com.planetory.backend.domain.statistics.command.StatisticsCommand;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
@@ -23,7 +24,7 @@ public class PlanetoryApplication {
 
 	/** 실행할 수 있는 운영 명령. 명령을 추가하면 여기에 등록한다. */
 	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME,
-			CandidateCorrectionPrecheckCommand.NAME);
+			CandidateCorrectionPrecheckCommand.NAME, StatisticsCommand.NAME);
 
 	/**
 	 * 아무것도 바꾸지 않는 명령. <b>기동 단계까지 읽기 전용이어야 한다.</b>
@@ -77,7 +78,8 @@ public class PlanetoryApplication {
 	 * 켜지는 경로가 없다 [S15P21C206-154 리뷰].
 	 */
 	static String[] withReadOnlyGuards(String[] args) {
-		if (commandValues(args).stream().noneMatch(READ_ONLY_COMMANDS::contains)) {
+		if (commandValues(args).stream().noneMatch(command -> READ_ONLY_COMMANDS.contains(command)
+                || StatisticsCommand.NAME.equals(command))) {
 			return args;
 		}
 		String[] guarded = Arrays.copyOf(args, args.length + 1);
