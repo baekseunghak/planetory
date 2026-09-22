@@ -185,7 +185,7 @@ RPO·RTO는 협의해서 조정할 수치가 아니다. 복구 수단이 없으�
 4. **두 Redis 연결 분리.** 세션과 계산 캐시가 다른 인스턴스이므로(D1) Spring Session이 쓰는 연결과 계산 캐시 연결을 따로 구성해야 한다. Boot 기본 설정은 단일 Redis를 가정한다. TTL도 세션 30분 idle(SB-D14)과 계산 캐시 값을 같은 값으로 묶지 않는다.
 5. **persistence 범위.** 앱만 재배포하면 `redis-session`이 살아 있으므로 persistence 없이도 세션이 유지된다. persistence가 필요한 경우는 **`redis-session` 컨테이너 재시작과 호스트 재부팅뿐이다.** 어디까지 보장할지와 설정은 84에서 정한다.
 
-현재 `apps/backend/build.gradle`에 `spring-boot-starter-data-redis`·`spring-session-data-redis`가 없고 `apps/backend/src/main`의 Redis 참조가 0건이다. 설정 스위치가 아니라 앱의 첫 Redis 연동이다.
+2026-09-22 사용자 승인 범위의 237에서 Spring Session Redis와 별도 세션/캐시 연결을 구현했다. 단일 앱의 저장·삭제 경계 직렬화로 활동 시각 역전과 로그아웃 후 늦은 저장을 방지한다. 실제 HTTP·격리 Redis 검증과 운영 인수를 구분하며 [구현·검증 경계](../../apps/backend/docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. 84의 운영 연결·persistence 인수는 남아 있다.
 
 **수용한 저하를 숨기지 않는다.** 이관 전에는 Redis가 죽어도 조회·쓰기가 살아 있었다. 이관 후에는 Redis 장애가 인증 전면 중단이다. 재시작 후 로그인 유지는 요구사항이 아니므로(ACC-03·04는 인증 검사와 로그아웃만, SB-D11·14는 30분 idle 창만 정한다) 비용이 예상보다 크면 되돌리는 것이 정당한 선택이다.
 

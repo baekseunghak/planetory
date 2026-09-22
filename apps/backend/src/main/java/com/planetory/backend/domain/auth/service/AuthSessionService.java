@@ -2,6 +2,8 @@ package com.planetory.backend.domain.auth.service;
 
 import com.planetory.backend.domain.member.entity.Member;
 import com.planetory.backend.global.security.MemberPrincipal;
+import com.planetory.backend.global.security.RedisSessions;
+import org.springframework.beans.factory.ObjectProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -24,6 +26,7 @@ public class AuthSessionService {
     private static final String LAST_ACTIVITY = AuthSessionService.class.getName() + ".lastActivity";
     private static final Duration IDLE_TIMEOUT = Duration.ofMinutes(30);
     private final Clock clock;
+    private final ObjectProvider<RedisSessions<?>> redisSessions;
 
     public void login(Member member, HttpServletRequest request, HttpServletResponse response) {
         // OAuth2LoginAuthenticationFilter의 세션 ID 교체·CSRF 토큰 교체 이후 호출된다.
@@ -40,18 +43,21 @@ public class AuthSessionService {
 
     public boolean isExpired(HttpSession session, Instant receivedAt) {
         if (session == null) return true;
-        synchronized (session) {
-            var last = session.getAttribute(LAST_ACTIVITY);
-            return !(last instanceof Instant instant) || !receivedAt.isBefore(instant.plus(IDLE_TIMEOUT));
-        }
+        var repository = redisSessions.getIfAvailable();
+        if (repository != null) return !repository.active(session.getId(), receivedAt, false);
+        var last = session.getAttribute(LAST_ACTIVITY);
+        return !(last instanceof Instant instant) || !receivedAt.isBefore(instant.plus(IDLE_TIMEOUT));
     }
 
     public void touch(HttpSession session, Instant receivedAt) {
-        synchronized (session) {
-            var last = (Instant) session.getAttribute(LAST_ACTIVITY);
-            // 병렬 요청의 처리 순서가 바뀌어도 마지막 접수 시각을 과거로 되돌리지 않는다.
-            if (receivedAt.isAfter(last)) session.setAttribute(LAST_ACTIVITY, receivedAt);
+        if (session == null) throw new IllegalStateException("Session was invalidated");
+        var repository = redisSessions.getIfAvailable();
+        if (repository != null && !repository.active(session.getId(), receivedAt, true)) {
+            throw new IllegalStateException("Session was invalidated");
         }
+        var last = session.getAttribute(LAST_ACTIVITY);
+        if (!(last instanceof Instant instant)) throw new IllegalStateException("Session activity is missing");
+        if (receivedAt.isAfter(instant)) session.setAttribute(LAST_ACTIVITY, receivedAt);
     }
 
     public void logout(HttpServletRequest request, HttpServletResponse response) {

@@ -50,7 +50,7 @@ DB를 잠시 멈출 때는 `docker compose stop service-db`를 사용한다. `do
 
 ## 3. 로컬 빌드·실행 — apps/backend
 
-프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있어 환경변수 없이 실행된다. 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
+프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있다. 237 이후 서버 실행에는 별도 세션/캐시 Redis 연결 환경변수가 필요하다([연결 안내](oauth-setup.md#redis-연결과-저장-경계237)). 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
 
 `bootRun`과 `test`는 먼저 `startLocalDb` 태스크로 루트 Compose의 `service-db`를 띄운다(`docker compose --profile service up -d --wait service-db`). 이미 떠 있으면 바로 끝난다. `CI=true`·`SKIP_LOCAL_DB=true` 환경이거나 `-PskipLocalDb`를 주면 건너뛴다. 로컬 Compose의 `backend` 컨테이너는 `SKIP_LOCAL_DB=true`로 실행한다.
 
@@ -72,6 +72,8 @@ docker compose --profile service up -d --build backend
 ```
 
 ### 환경변수
+
+세션·계산 캐시 연결의 `SESSION_REDIS_*`·`CACHE_REDIS_*` 변수와 필수값은 [OAuth Redis 연결 안내](oauth-setup.md#redis-연결과-저장-경계237)를 따른다.
 
 | 변수 | 역할 / 기본값 |
 |---|---|

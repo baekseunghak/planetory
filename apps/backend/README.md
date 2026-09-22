@@ -10,7 +10,7 @@ S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 �
 
 ## 빠른 시작
 
-준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
+준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. 실행 전에 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
 
 ```sh
 cd apps/backend
