@@ -1333,13 +1333,19 @@ for each user_star_progress(tic_id):
 
 ### 9.5 외부 라벨 갱신 표식 (GRD-06, DEC-26)
 
-배치가 `candidate_dispositions`를 바꾸면 같은 배치가 아래만 한다.
+배치가 `candidate_dispositions`를 바꾸면 아래만 일어난다.
 
-- `candidate_status_history` INSERT
+- 배치가 `candidate_status_history` INSERT (Gold)
 - 그 후보의 `user_candidate_achievements.relabeled_at`, `relabel_disposition` 설정
 - 응답의 `relabel` 필드(6.4·8.1·8.2·8.4·9.1절)로 "기록이 갱신됨" 표시
 
+**두 번째는 배치가 아니라 앱이 한다(150 정정).** 배치 역할은 Gold 12개 테이블에만 쓰기 권한이 있어 `user_candidate_achievements`를 고칠 수 없다(이 절 마지막 문장). 같은 절이 배치가 그 열을 설정한다고 적고 있었던 것은 모순이었다. 실행 주체는 판 전환 후처리(10장 4단계)이며 앱 역할이 표식 두 열만 UPDATE한다.
+
 성과 유형·등급·발견 별·통계 스냅샷은 바꾸지 않는다. 채점형 통계는 현재 `planet_truth`로 계산하므로 별도 조치 없이 반영된다. 후보 병합·분리·부정 사용 조치에 따른 성과 재계산(GRD-06 예외, OPS-03)은 v1에 운영 API가 없으므로 DB 작업과 `candidate_status_history` 기록으로 처리한다. 무엇을 보존·정정·사전 거절하는지와 아직 정하지 않은 항목은 [후보 병합·분리 정정 계약](../../../docs/architecture/candidate-correction-contract.md)에 있다. 그 문서의 결론은 **이 절의 라벨 표식이 v1에서 회원 데이터에 닿는 유일한 경로**라는 것이다. 배치 역할은 Gold 12개 테이블에만 쓰기 권한이 있어 성과·별·공개 분석·공식 스레드를 고칠 수 없다.
+
+**150 구현.** 무엇이 바뀌었는지를 `candidate_status_history`가 아니라 **현재 라벨과 성과 유형의 차이**로 찾는다. 이력의 `field` 값은 아직 약속되지 않았고([후보 병합·분리 정정 계약](../../../docs/architecture/candidate-correction-contract.md) 5.3은 초안이며 C19에서 확정), 판정 변경을 어떤 이름으로 남길지 정한 곳이 없다. 반면 `candidate_dispositions.disposition`과 `achievement_type`은 둘 다 CHECK로 고정된 값이다. 성과 유형은 인정 시점의 라벨에서 정해지므로(9.2절) 지금 라벨과 다르다는 것은 그 뒤에 바뀌었다는 뜻이다. 판정 이력의 `field`가 확정되면 그 이력으로 옮길 수 있고, 그때도 이 절의 결과는 같아야 한다.
+
+표식 조건은 `apiDisposition(현재 판정) ≠ 성과 유형`이고 `candidate_dispositions.applied_at > recognized_at`이다. `pc ↔ none`은 회원에게 둘 다 미확정이라(6.4절 `signal.disposition`) 표식을 만들지 않는다. `relabeled_at`은 `applied_at`, `relabel_disposition`은 DB 판정 값을 넣는다. 같은 이력을 다시 받으면 이미 같은 값이라 0행이다. UPDATE가 건드리는 열은 그 둘뿐이라 성과 유형·인정 근거·인정 시각·등급·발견 별·통계는 바뀌지 않는다.
 
 ## 10. 배치·Gold 적재 경계
 
@@ -1352,7 +1358,13 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 
 알림은 전환 감지 지연을 줄이는 신호일 뿐 정본이 아니다. 탐사 API는 요청마다 PostgreSQL의 `current`를 기준으로 판 변경을 검증한다.
 
-**150 구현 범위.** 4단계 중 (2) 9.3 재개 판정만 구현했다. 받은 `bundleId`가 현재 판이 아니면 아무것도 하지 않으므로 늦게 온 알림이 지난 판 기준으로 재개를 만들지 않는다. (1) 이전 판 Redis 캐시 삭제와 (3) 9.5 라벨 표식은 미구현이고, 3단계의 알림을 받는 내부 경로(`POST /internal/bundles/{bundleId}/activated`)도 아직 없다 — Publisher(S15P21C206-87)가 없어 호출자가 없다. 그때까지 재개 판정은 운영이 직접 부르거나 후속 티켓이 경로를 붙여 실행한다.
+**150 구현.** 3단계의 알림은 `POST /internal/bundles/{bundleId}/activated`로 받는다. 회원 세션이 아니라 요청 헤더 `X-Planetory-Service-Token`의 공유 비밀로 인증한다 — 부르는 쪽이 사람이 아니라 배치다. 토큰을 설정하지 않은 환경에서는 경로 전체가 401이다. 설정 누락이 인증 없는 구멍으로 이어지지 않게 하기 위해서다. 쿠키로 인증하지 않으므로 이 경로는 CSRF 대상이 아니다.
+
+응답은 지난 판을 알려도 200이다. 알림은 정본이 아니므로(위 문단) 실패로 답하면 이미 끝난 전환을 계속 다시 보내게 된다. 실제로 무엇을 했는지는 본문의 `applied`와 `evictedCacheEntries`·`completedMembers`·`reopenedMembers`·`relabeledAchievements`로 알린다.
+
+4단계의 셋은 서로 독립이라 한 트랜잭션으로 묶지 않는다. (1) 이전 판 잔차 캐시 정리는 `tic:{ticId}:{bundleId}:…` 키에서 현재 판이 아닌 것을 버린다(7.1절). 정합성 장치가 아니라 정리다 — 결과 채택 전에 판이 `current`인지 다시 확인하는 것은 그대로다. 계산 중인 작업도 버리며 그 조회는 「Redis 유실」과 같은 404가 된다(7.2절).
+
+같은 알림을 여러 번 받아도 결과가 같다. (1)은 두 번째에 버릴 것이 없고, (2)는 이미 `in_progress`라 재개 대상이 아니며, (3)은 이미 같은 값이라 0행이다. **누락 대비 폴링은 아직 없다.** 알림이 오지 않으면 다음 요청이 현재 판을 기준으로 판정하지만 재개·표식은 다음 알림까지 밀린다. 주기 실행을 둘지는 Publisher(S15P21C206-87) 연동에서 정한다.
 
 ## 11. 다른 담당과의 계약
 
@@ -1529,6 +1541,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-141 반영. 5.4절 봉우리 목록을 구현하고 미결 5(봉우리 추출 규칙) 제안을 표로 적었다. 최소 간격 `2h+1`칸과 고조파 허용 오차 `h`칸을 이미 정해진 값(운영 규칙 `peaks.top_n`·`matching.harmonic_multipliers`, 판 manifest `fine_tune.half_width_cells`)에서 유도하고 새 숫자를 만들지 않았다. `peakRuleVersion`을 운영 규칙 버전으로 정하고 `suggestedDurationHours`는 출처가 없어 null임을 적었다. 6.2절에 그 값이 null이면 duration 상한을 걸지 않는다는 단서를 더했다 |
 | 2026-09-21 | S15P21C206-141 리뷰(윤성용) 반영. 고조파 판정을 **칸 반올림에서 주기 값 비교로** 고쳤다 — 배수 자리를 반올림하면 조정해도 닿을 수 없는 봉우리까지 제외됐다(0.5~40일 5000점 h=3 반례). 최소 간격 `2h+1`의 근거를 「같은 선택」이 아니라 **추천을 줄이는 정책**으로 고치고, 고조파 배수 공유가 **같은 신호 판정이 아님**을 적었다. `peakRuleVersion`에 알고리즘 변경 시 버전 갱신 조건을, 제안값에는 후속 BLS 계약 네 가지를 더했다 |
 | 2026-09-22 | S15P21C206-150 판 전환 재개 후처리 구현. 9.3절에 재개 사건의 저장 위치(`notifications` `type='reopen'`)와 payload, `reason`을 아직 싣지 않는 이유, 멱등 보장 방법을 적었다. 10장에 4단계 중 재개 판정만 구현했고 Redis 캐시 삭제·라벨 표식·내부 알림 경로는 미구현임을 명시했다 |
+| 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

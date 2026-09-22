@@ -15,6 +15,9 @@ import com.planetory.backend.domain.exploration.service.ExplorationCompletionPol
  * <p>Publisher가 판을 바꾼 뒤 알린다. 알림은 전환을 빨리 알아채기 위한 신호일 뿐이고 정본은
  * DB의 {@code current}다(10장). 그래서 알림이 없어도, 늦게 와도, 두 번 와도 결과가 같아야 한다.
  *
+ * <p>10장 4단계의 세 가지를 순서대로 한다 — (1) 이전 판 잔차 캐시 정리, (2) 9.3 완료·재개 판정,
+ * (3) 9.5 외부 라벨 표식. 셋은 서로 독립이라 한 트랜잭션으로 묶지 않는다.
+ *
  * <p>회원마다 트랜잭션을 나눈다. 한 별에 진행 행이 많을 수 있고, 한 회원에서 실패했다고 앞서
  * 끝낸 회원의 판정을 되돌릴 이유가 없다.
  *
@@ -28,6 +31,7 @@ public class BundleActivationService {
     private final BundleActivationRepository repository;
     private final ExplorationCompletionService completion;
     private final ExplorationCompletionRepository completionRepository;
+    private final ResidualJobStore residualJobs;
     private final PlatformTransactionManager transactionManager;
 
     /** 회원 한 명을 처리한 결과. */
@@ -40,11 +44,18 @@ public class BundleActivationService {
         REOPENED
     }
 
-    /** 후처리 결과. 실행 여부를 알 수 있어야 재시도할지 판단할 수 있다. */
-    public record Result(boolean applied, long ticId, int completed, int reopened) {
+    /**
+     * 후처리 결과. 실행 여부를 알 수 있어야 재시도할지 판단할 수 있다.
+     *
+     * @param evicted   버린 이전 판 잔차 캐시 키 수(10장 4단계 (1))
+     * @param completed 완료로 바꾼 회원 수(9.3절 (c))
+     * @param reopened  다시 연 회원 수(9.3절)
+     * @param relabeled 라벨 갱신 표식을 남긴 성과 수(9.5절)
+     */
+    public record Result(boolean applied, long ticId, int evicted, int completed, int reopened, int relabeled) {
 
         /** 현재 판이 아니어서 아무것도 하지 않았다. */
-        static final Result SKIPPED = new Result(false, 0, 0, 0);
+        static final Result SKIPPED = new Result(false, 0, 0, 0, 0, 0);
     }
 
     /**
@@ -61,6 +72,12 @@ public class BundleActivationService {
         }
         long ticId = tic.get();
         var template = new TransactionTemplate(transactionManager);
+        // (1) 이전 판 잔차 캐시 정리. 회원 판정과 묶지 않는다 — 캐시는 없어도 다시 계산되므로
+        // 여기서 실패해도 회원 상태를 되돌릴 이유가 없고, 반대로 판정이 실패해도 정리는 유효하다.
+        int evicted = residualJobs.evictOtherBundles(ticId, bundleId);
+        // (3) 외부 라벨 갱신 표식. 회원별 판정과 독립이며 한 문장으로 끝난다.
+        int relabeled = template.execute(status -> repository.markRelabeledAchievements(ticId));
+        // (2) 완료 재판정과 재개.
         int completed = 0;
         int reopened = 0;
         for (ProgressRow row : repository.findProgressRows(ticId)) {
@@ -70,8 +87,9 @@ public class BundleActivationService {
                 case NONE -> { }
             }
         }
-        log.info("판 {}(TIC {}) 후처리: 재개 {}명, 완료 재판정 {}명.", bundleId, ticId, reopened, completed);
-        return new Result(true, ticId, completed, reopened);
+        log.info("판 {}(TIC {}) 후처리: 캐시 {}건 정리, 라벨 표식 {}건, 재개 {}명, 완료 재판정 {}명.",
+                bundleId, ticId, evicted, relabeled, reopened, completed);
+        return new Result(true, ticId, evicted, completed, reopened, relabeled);
     }
 
     /**

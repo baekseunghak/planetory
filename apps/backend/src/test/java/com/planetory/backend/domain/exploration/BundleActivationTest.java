@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration;
 
+import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -17,7 +18,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.planetory.backend.domain.exploration.service.AnalysisViews;
 import com.planetory.backend.domain.exploration.service.BundleActivationService;
+import com.planetory.backend.domain.exploration.service.ExplorationIds;
+import com.planetory.backend.domain.exploration.service.ResidualJobStore;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -63,6 +67,7 @@ class BundleActivationTest {
     }
 
     @Autowired BundleActivationService activation;
+    @Autowired ResidualJobStore residualJobs;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
 
@@ -210,6 +215,97 @@ class BundleActivationTest {
         assertEquals(1, reopenEvents(member));
     }
 
+    // ---------- 9.5 외부 라벨 표식 ----------
+
+    /** 라벨이 바뀌면 표식만 남기고 성과·등급·발견 별·통계는 건드리지 않는다(9.5절, GRD-06). */
+    @Test
+    void 라벨이_바뀐_성과에_표식을_남기고_성과_자체는_바꾸지_않는다() {
+        long member = member();
+        long candidate = insertCandidate(true);
+        long achievement = recognize(member, candidate, "unconfirmed");
+        var before = achievementSnapshot();
+        var relabeledAt = disposition(candidate, "confirmed");
+
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(1, result.relabeled());
+        assertEquals(relabeledAt, jdbc.queryForObject(
+                "SELECT relabeled_at FROM user_candidate_achievements WHERE id = ?",
+                java.time.OffsetDateTime.class, achievement));
+        assertEquals("confirmed", jdbc.queryForObject(
+                "SELECT relabel_disposition FROM user_candidate_achievements WHERE id = ?",
+                String.class, achievement));
+        // 성과 유형·인정 근거·인정 시각은 그대로다. 등급은 이 값들로 계산하므로 함께 보존된다.
+        assertEquals(before, achievementSnapshot());
+        assertEquals(0, (int) jdbc.queryForObject("SELECT count(*) FROM star_unlocks", Integer.class));
+        assertEquals(0, (int) jdbc.queryForObject("SELECT count(*) FROM stats_snapshots", Integer.class));
+    }
+
+    /** 같은 이력을 다시 받아도 표식이 늘거나 바뀌지 않는다(150 완료 조건). */
+    @Test
+    void 같은_라벨_이력을_다시_받아도_표식은_그대로다() {
+        long member = member();
+        long candidate = insertCandidate(true);
+        recognize(member, candidate, "unconfirmed");
+        disposition(candidate, "fp");
+
+        assertEquals(1, activation.onBundleActivated(bundleId).relabeled());
+        var marked = relabelSnapshot();
+        assertEquals(0, activation.onBundleActivated(bundleId).relabeled());
+        assertEquals(marked, relabelSnapshot());
+    }
+
+    /** 라벨이 그대로면 표식을 남기지 않는다. pc↔none은 회원에게 같은 미확정이다(6.4절). */
+    @Test
+    void 회원에게_보이는_판정이_같으면_표식을_남기지_않는다() {
+        long member = member();
+        long unchanged = insertCandidate(true);
+        long invisible = insertCandidate(true);
+        recognize(member, unchanged, "fp");
+        recognize(member, invisible, "unconfirmed");
+        disposition(unchanged, "fp");
+        disposition(invisible, "none");
+
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(0, result.relabeled());
+        assertEquals(0, (int) jdbc.queryForObject(
+                "SELECT count(*) FROM user_candidate_achievements WHERE relabeled_at IS NOT NULL", Integer.class));
+    }
+
+    /** 인정보다 먼저 적용된 판정은 이번 전환이 바꾼 것이 아니다. */
+    @Test
+    void 인정보다_오래된_판정은_표식_대상이_아니다() {
+        long member = member();
+        long candidate = insertCandidate(true);
+        jdbc.update("INSERT INTO candidate_dispositions(candidate_id, disposition, answer_class, rule_version,"
+                + " applied_at, source_refs) VALUES (?, 'confirmed', 'graded', 'rule-0', now() - interval '1 day',"
+                + " '{}'::jsonb)", candidate);
+        recognize(member, candidate, "unconfirmed");
+
+        assertEquals(0, activation.onBundleActivated(bundleId).relabeled());
+        assertEquals(0, (int) jdbc.queryForObject(
+                "SELECT count(*) FROM user_candidate_achievements WHERE relabeled_at IS NOT NULL", Integer.class));
+    }
+
+    // ---------- 10장 (1) 이전 판 캐시 정리 ----------
+
+    /** 이전 판 키만 버리고 현재 판 키는 남긴다. 다시 실행하면 버릴 것이 없다. */
+    @Test
+    void 이전_판_잔차_캐시만_정리한다() {
+        long previous = insertBundle("archived");
+        // 회원당 진행 작업은 하나다(planetory.residual.per-member). 두 작업을 함께 두려면 회원도 둘이다.
+        String stale = enqueue(member(), previous);
+        String fresh = enqueue(member(), bundleId);
+
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(1, result.evicted());
+        assertTrue(residualJobs.active(stale).isEmpty(), "이전 판 작업은 남지 않는다");
+        assertTrue(residualJobs.active(fresh).isPresent(), "현재 판 작업은 그대로다");
+        assertEquals(0, activation.onBundleActivated(bundleId).evicted());
+    }
+
     // ---------- 도우미 ----------
 
     private long member() {
@@ -232,14 +328,14 @@ class BundleActivationTest {
     }
 
     /** 후보 하나를 매칭한 제출. 완료 판정이 보는 것은 matched_candidate_id뿐이다. */
-    private void submit(long member, long candidate) {
-        jdbc.update("INSERT INTO submissions(user_id, tic_id, bundle_id, request_id, submission_kind, curve_step,"
-                + " removed_candidate_ids, submitted_period, phase_start, phase_end, user_judgment,"
+    private long submit(long member, long candidate) {
+        return jdbc.queryForObject("INSERT INTO submissions(user_id, tic_id, bundle_id, request_id, submission_kind,"
+                + " curve_step, removed_candidate_ids, submitted_period, phase_start, phase_end, user_judgment,"
                 + " fold_reference_time_btjd, evidence_checks, match_result, matched_candidate_id,"
                 + " achievement_result, residual_model_version, periodogram_config_version, rule_version)"
                 + " VALUES (?, ?, ?, ?::uuid, 'candidate', 0, '{}', 3.5, 0.4, 0.6, 'LIKELY_PLANET', 1500.5,"
-                + " '[]'::jsonb, 'matched', ?, 'recognized', 'rm-1', 'pg-1', 'rule-0')",
-                member, TIC, bundleId, UUID.randomUUID().toString(), candidate);
+                + " '[]'::jsonb, 'matched', ?, 'recognized', 'rm-1', 'pg-1', 'rule-0') RETURNING id",
+                Long.class, member, TIC, bundleId, UUID.randomUUID().toString(), candidate);
     }
 
     private void complete(long member, String reason) {
@@ -261,5 +357,41 @@ class BundleActivationTest {
     private int reopenEvents(long member) {
         return jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND type = 'reopen'",
                 Integer.class, member);
+    }
+
+    /** 성과 한 건을 인정된 상태로 넣는다. 인정 경로(9.2절)의 부작용은 이 테스트의 관심이 아니다. */
+    private long recognize(long member, long candidate, String type) {
+        return jdbc.queryForObject("INSERT INTO user_candidate_achievements(user_id, candidate_id,"
+                + " achievement_type, recognized_submission_id, recognized_at) VALUES (?, ?, ?, ?, now())"
+                + " RETURNING id", Long.class, member, candidate, type, submit(member, candidate));
+    }
+
+    /** 배치가 적재한 현재 판정. 적용 시각이 표식의 relabeled_at이 된다. */
+    private java.time.OffsetDateTime disposition(long candidate, String value) {
+        return jdbc.queryForObject("INSERT INTO candidate_dispositions(candidate_id, disposition, answer_class,"
+                + " rule_version, applied_at, source_refs) VALUES (?, ?, 'graded', 'rule-0', now(), '{}'::jsonb)"
+                + " RETURNING applied_at", java.time.OffsetDateTime.class, candidate, value);
+    }
+
+    /** 표식 외의 성과 열. 라벨 갱신이 이 값을 바꾸면 안 된다. */
+    private String achievementSnapshot() {
+        return jdbc.queryForObject("SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'type', achievement_type,"
+                + " 'submission', recognized_submission_id, 'analysis', recognized_analysis_id,"
+                + " 'at', recognized_at) ORDER BY id), '[]'::jsonb)::text"
+                + " FROM user_candidate_achievements", String.class);
+    }
+
+    private String relabelSnapshot() {
+        return jdbc.queryForObject("SELECT coalesce(jsonb_agg(jsonb_build_object('id', id, 'at', relabeled_at,"
+                + " 'disposition', relabel_disposition) ORDER BY id), '[]'::jsonb)::text"
+                + " FROM user_candidate_achievements", String.class);
+    }
+
+    /** 잔차 작업 하나를 등록하고 캐시 키를 돌려준다. */
+    private String enqueue(long member, long bundle) {
+        var target = new AnalysisViews.CurveContext(ExplorationIds.bundle(bundle), 0, List.of(), "rm-1", "pg-1");
+        String key = ResidualJobStore.cacheKey(TIC, target);
+        residualJobs.enqueue(member, TIC, target, key);
+        return key;
     }
 }

@@ -156,6 +156,20 @@ public class InMemoryResidualJobStore implements ResidualJobStore {
         }
     }
 
+    @Override
+    public int evictOtherBundles(long ticId, long currentBundleId) {
+        // 접두에 구분자를 붙여 비교한다. 붙이지 않으면 tic:400이 tic:4001을, b-1이 b-12를 함께 지운다.
+        String star = "tic:" + ticId + ":";
+        String keep = star + ExplorationIds.bundle(currentBundleId) + ":";
+        synchronized (lock) {
+            int before = jobs.size() + results.size();
+            jobs.values().removeIf(job -> job.ticId() == ticId
+                    && !job.cacheKey().startsWith(keep));
+            results.keySet().removeIf(key -> key.startsWith(star) && !key.startsWith(keep));
+            return before - (jobs.size() + results.size());
+        }
+    }
+
     /**
      * 작업과 결과를 모두 버린다. <b>테스트에서만 쓴다.</b> 운영 저장소는 Redis의 TTL이 이 일을 한다.
      * 이 구현에는 만료가 없어 한 인스턴스가 살아 있는 동안 기록이 남는다.

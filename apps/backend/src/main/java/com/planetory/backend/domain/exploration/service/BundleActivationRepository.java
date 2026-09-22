@@ -97,4 +97,44 @@ public class BundleActivationRepository {
                 .params(memberId, String.valueOf(ticId), String.valueOf(bundleId), newDiscoverableCount, reason)
                 .update();
     }
+
+    /**
+     * 외부 라벨 갱신 표식 (9.5절, GRD-06).
+     *
+     * <p>바뀐 것을 {@code candidate_status_history}가 아니라 <b>현재 라벨과 성과 유형의 차이</b>로
+     * 찾는다. 이력의 {@code field} 값은 아직 정해지지 않았고(후보 정정 계약 5.3은 초안, C19에서 확정)
+     * 판정 변경을 어떤 이름으로 남길지 약속한 곳이 없다. 반면 {@code candidate_dispositions.disposition}과
+     * {@code achievement_type}은 둘 다 CHECK로 고정된 값이라 지어낼 것이 없다. 성과 유형은 인정 시점의
+     * 라벨에서 정해지므로(9.2절) 지금 값과 다르다는 것은 그 뒤에 라벨이 바뀌었다는 뜻이다.
+     *
+     * <p>{@code pc ↔ none}은 표식을 만들지 않는다. 둘 다 미확정으로 보이므로(6.4절
+     * {@code signal.disposition}) 회원에게 달라진 것이 없다.
+     *
+     * <p>성과 유형·등급·발견 별·통계는 건드리지 않는다. 이 UPDATE가 바꾸는 열은
+     * {@code relabeled_at}·{@code relabel_disposition} 둘뿐이다(9.5절, 후보 정정 계약).
+     *
+     * <p>같은 이력을 다시 받아도 두 번째에는 이미 같은 값이라 0행이다.
+     *
+     * @return 표식을 새로 남기거나 바꾼 성과 수
+     */
+    public int markRelabeledAchievements(long ticId) {
+        return jdbc.sql("""
+                        UPDATE user_candidate_achievements a
+                           SET relabeled_at = d.applied_at,
+                               relabel_disposition = d.disposition
+                          FROM candidates c
+                          JOIN candidate_dispositions d ON d.candidate_id = c.id
+                         WHERE a.candidate_id = c.id
+                           AND c.tic_id = ?
+                           AND d.applied_at > a.recognized_at
+                           AND a.achievement_type <> CASE d.disposition
+                                                         WHEN 'confirmed' THEN 'confirmed'
+                                                         WHEN 'fp' THEN 'fp'
+                                                         ELSE 'unconfirmed'
+                                                     END
+                           AND (a.relabeled_at IS DISTINCT FROM d.applied_at
+                                OR a.relabel_disposition IS DISTINCT FROM d.disposition)
+                        """)
+                .param(ticId).update();
+    }
 }

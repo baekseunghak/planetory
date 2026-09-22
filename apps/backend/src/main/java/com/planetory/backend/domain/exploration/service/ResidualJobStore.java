@@ -128,4 +128,21 @@ public interface ResidualJobStore {
 
     /** 실패로 끝낸다. 저장된 제출·매칭·성과는 건드리지 않는다(AT-101). */
     void fail(String jobId, int attempt, Failure failure);
+
+    /**
+     * 이 별에서 현재 판이 아닌 키를 모두 버린다 (탐사 API 10장 4단계 (1)) [S15P21C206-150].
+     *
+     * <p>키에 판이 들어 있으므로({@link #cacheKey}) 판이 바뀌면 이전 판의 결과는 다시 쓰이지 않는다.
+     * 그래도 지우는 것은 TTL이 끝날 때까지 메모리를 잡고 있기 때문이다. 정합성 장치가 아니라 정리다 —
+     * Backend는 결과를 저장하기 전에 요청의 판이 아직 {@code current}인지 다시 확인하고 아니면 버린다
+     * ({@code docs/architecture/online-derived-compute.md}).
+     *
+     * <p>계산 중인 작업도 버린다. 이전 판으로 계산한 잔차는 채택될 수 없고, 작업이 사라지면 조회가
+     * 404가 되는데 그것은 「Redis 유실」과 같은 상황이라 호출자가 이미 다룬다(7.2절).
+     *
+     * <p>같은 판으로 다시 불러도 결과가 같다. 두 번째에는 버릴 것이 없어 0을 돌려준다.
+     *
+     * @return 버린 작업과 결과의 수
+     */
+    int evictOtherBundles(long ticId, long currentBundleId);
 }

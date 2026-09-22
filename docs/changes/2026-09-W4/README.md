@@ -130,3 +130,4 @@
 | 2026-09-22 | 123 Backend 리뷰 V22 단계·Publisher 인계 | S15P21C206-123 | 254 passed, READ COMMITTED, FOR SHARE, M1 인수 | Python 검증·DB 검사 미실행 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 판 전환 재개 후처리·재개 사건 저장 | S15P21C206-150 | notifications reopen, V22, 부분 유일 인덱스, completed_at 유지, 647 passed | 구현·로컬 검증 완료, 공유 DB 적용 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | 150 나머지 범위·9.5절 모순 정정 | S15P21C206-150 | 내부 진입점, 서비스 토큰, 잔차 캐시 정리, relabel 표식, 661 passed | 구현·로컬 검증 완료, Publisher 연동 전 | [기록](2026-09-22.md) |

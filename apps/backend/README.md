@@ -8,6 +8,13 @@ PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcCl
 
 S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.
 
+S15P21C206-150의 판 전환 후처리는 `POST /internal/bundles/{bundleId}/activated`로 실행한다([탐사 API 10장](docs/exploration-api-spec.md)). 회원 세션이 아니라 `INTERNAL_SERVICE_TOKEN`으로 설정한 공유 비밀을 요청 헤더 `X-Planetory-Service-Token`에 넣어 부른다. **설정하지 않으면 `/internal/**` 전체가 401이라 로컬에서도 부를 수 없다.** 실제 호출자인 Publisher(S15P21C206-87)는 아직 없으므로 지금은 직접 부를 때만 필요하다.
+
+```sh
+INTERNAL_SERVICE_TOKEN=local-only ./gradlew bootRun
+curl -X POST http://localhost:8080/internal/bundles/b-1/activated -H 'X-Planetory-Service-Token: local-only'
+```
+
 ## 빠른 시작
 
 준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. local 기본 연결은 세션 `localhost:16379`, 캐시 `localhost:16380`이다. 다른 주소에서는 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
