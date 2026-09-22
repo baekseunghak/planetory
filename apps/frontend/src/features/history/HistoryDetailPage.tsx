@@ -189,14 +189,14 @@ function HistoryDetail({
       {(detail.phase === "denied" ||
         detail.phase === "error" ||
         detail.phase === "unreadable") && (
-        <p role="alert">
-          {detail.message}
+        <>
+          <p role="alert">{detail.message}</p>
           {detail.phase === "error" && (
             <button type="button" onClick={retryDetail}>
               기록 다시 불러오기
             </button>
           )}
-        </p>
+        </>
       )}
 
       {detail.phase === "ready" && (
