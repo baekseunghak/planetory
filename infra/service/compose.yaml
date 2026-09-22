@@ -214,7 +214,10 @@ services:
 
   # 아래 3개는 api-docs-refresh profile에 묶여 평시 up 대상이 아니다.
   #   docker compose --profile api-docs-refresh run --rm api-docs-generator
-  #   docker compose --profile api-docs-refresh down --remove-orphans   (생성 후 정리)
+  #   docker compose --profile api-docs-refresh rm -sf api-docs-app api-docs-db
+  #
+  # 정리에 down을 쓰지 않는다. down은 profile과 무관하게 프로젝트 전체를 내려
+  # frontend·backend·service-db·cloudflared까지 멈춘다. 이름으로 지정한다.
 
   # 스펙 추출 전용 스크래치 DB. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
   # 붙이지 않는다. tmpfs라 컨테이너가 사라지면 같이 사라진다.

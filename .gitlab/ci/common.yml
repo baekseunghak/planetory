@@ -80,6 +80,13 @@ validate:tess-hdfs-loader:
   image: alpine:3.20
   # 배포 중에 취소되면 compose가 반쯤 교체된 상태로 남고 deploy.sh의 롤백도 돌지 못한다.
   # 루트의 default: interruptible: true 를 배포에서만 끈다.
+  #
+  # interruptible: false는 취소만 막고 동시 실행은 막지 않는다. 직렬화는 아래
+  # .deploy-* 가 노드별로 주는 resource_group이 담당한다. 같은 노드로 향하는
+  # 배포가 겹치면 compose.yaml.incoming·deploy.sh.incoming 같은 고정 이름을
+  # 서로 덮어쓰고, 한쪽 mv가 대상을 잃으며, deploy.sh의 .env 기록도 유실된다.
+  # 그룹은 서비스가 아니라 **노드 단위**여야 한다. 프론트와 백엔드를 다른
+  # 그룹으로 두면 같은 경로를 공유하는 경합이 그대로 남는다.
   interruptible: false
   variables:
     # 서비스 배포 job이 덮어쓴다. 비어 있으면 교체만 하고 확인·롤백을 하지 않는다.
@@ -120,8 +127,12 @@ validate:tess-hdfs-loader:
     - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
+# resource_group은 노드 이름을 그대로 쓴다. 값에 $DEPLOY_HOST를 끼우면 그룹
+# 이름과 GitLab UI에 tailnet 주소가 새어 나가고, 변수 해석 시점에 따라 그룹이
+# 갈릴 수 있다. 노드가 늘면 여기에 한 줄을 더한다.
 .deploy-ec2-a:
   extends: .remote-compose-deploy
+  resource_group: deploy-ec2-a
   variables:
     DEPLOY_HOST: $EC2_A_HOST
     DEPLOY_PATH: $EC2_A_DEPLOY_PATH
@@ -130,6 +141,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-1:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-1
   variables:
     DEPLOY_HOST: $GCP_NODE_1_HOST
     DEPLOY_PATH: $GCP_NODE_1_DEPLOY_PATH
@@ -137,6 +149,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-2:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-2
   variables:
     DEPLOY_HOST: $GCP_NODE_2_HOST
     DEPLOY_PATH: $GCP_NODE_2_DEPLOY_PATH
@@ -144,6 +157,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-3:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-3
   variables:
     DEPLOY_HOST: $GCP_NODE_3_HOST
     DEPLOY_PATH: $GCP_NODE_3_DEPLOY_PATH
@@ -151,6 +165,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-4:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-4
   variables:
     DEPLOY_HOST: $GCP_NODE_4_HOST
     DEPLOY_PATH: $GCP_NODE_4_DEPLOY_PATH
@@ -158,6 +173,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-5:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-5
   variables:
     DEPLOY_HOST: $GCP_NODE_5_HOST
     DEPLOY_PATH: $GCP_NODE_5_DEPLOY_PATH
@@ -165,6 +181,7 @@ validate:tess-hdfs-loader:
 
 .deploy-gcp-node-6:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-6
   variables:
     DEPLOY_HOST: $GCP_NODE_6_HOST
     DEPLOY_PATH: $GCP_NODE_6_DEPLOY_PATH

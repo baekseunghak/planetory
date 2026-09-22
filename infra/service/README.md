@@ -149,12 +149,17 @@ springdoc은 이미 의존성에 있지만 운영에서는 두 겹으로 잠겨 
 
 ```
 docker compose --profile api-docs-refresh run --rm api-docs-generator
-docker compose --profile api-docs-refresh down --remove-orphans
+docker compose --profile api-docs-refresh rm -sf api-docs-app api-docs-db
 ```
 
 첫 명령이 `api-docs-db`(스크래치) -> `api-docs-app`(local 프로필) 순으로 띄우고
 `/v3/api-docs`를 받아 Swagger UI와 함께 `planetory-api-docs-output`에 쓴다. 둘째 명령이
-일회용 컨테이너를 정리한다. 백엔드 이미지가 바뀌면 다시 돌린다.
+일회용 컨테이너 둘만 정지·제거한다. `api-docs-generator`는 `run --rm`이 이미 지웠다.
+백엔드 이미지가 바뀌면 다시 돌린다.
+
+**`down`을 쓰지 않는다.** `down`은 프로필 지정과 무관하게 프로젝트 전체를 내린다.
+문서를 새로 뽑을 때마다 `frontend`·`backend`·`service-db`·`cloudflared`까지 함께
+멈춰 서비스가 중단된다. 정리 대상은 이름으로 지정한다.
 
 `api-docs-db`는 스펙 추출 전용이다. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
 붙이지 않는다. tmpfs라 컨테이너가 사라지면 데이터도 같이 사라지며, Flyway가 매번 V1부터

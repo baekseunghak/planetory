@@ -12,106 +12,23 @@ backend:schema:
     name: alpine/git:2.45.2
     entrypoint: [""]
   needs: []
-  variables:
-    # 이미 적용된 마이그레이션은 검사에서 뺀다. 파일을 고치면 Flyway 체크섬이 바뀌어
-    # 기존 DB가 기동을 거부하므로 허용 표시를 넣을 방법이 없다. V5의
-    # `ALTER COLUMN layout_ordinal SET NOT NULL`이 여기 해당한다.
-    SCHEMA_GRANDFATHERED: "V5__exploration_domain_constraints.sql"
-    # PostgreSQL은 COLUMN 키워드를 생략할 수 있고 `RENAME a TO b`처럼 이름이 사이에
-    # 끼므로 인접 매칭으로는 잡히지 않는다. 컬럼명에 숫자·따옴표가 들어가는 경우도 있다.
-    # 권한 회수와 제약 강화도 구 앱을 깨뜨리므로 같이 본다.
-    SCHEMA_IRREVERSIBLE: 'DROP +(TABLE|COLUMN|VIEW|MATERIALIZED|TYPE|SEQUENCE|FUNCTION|TRIGGER)|ALTER +TABLE +[^ ]+ +DROP|RENAME|SET +NOT +NULL|REVOKE|ALTER +COLUMN +[^ ]+ +TYPE'
   script:
-    # 1-a. 다른 브랜치가 먼저 쓴 번호를 재사용하면, 머지 뒤 그 번호가 이미 적용된
-    #      최대값보다 낮아져 Flyway가 거부한다. V14 주석대로 이 저장소는
-    #      out-of-order를 쓰지 않으므로 번호는 항상 앞으로만 가야 한다.
-    #      MR에서만 가능한 검사다. 가져오지 못하면 막지 않고 건너뛴다 —
-    #      신호를 더할 뿐, 헛되이 차단하지 않는다.
-    - |
-      DIR=apps/backend/src/main/resources/db/migration
-      version_of() { n=${1#V}; echo "${n%%__*}"; }
-      TARGET="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
-      if [ -z "$TARGET" ]; then
-        echo "브랜치 파이프라인이라 타깃 비교를 건너뜁니다."
-      elif ! git fetch --quiet --depth=50 origin "$TARGET" 2>/dev/null; then
-        echo "경고: 타깃 브랜치($TARGET)를 가져오지 못해 선점 검사를 건너뜁니다." >&2
-      else
-        base_max=$(git ls-tree --name-only "origin/$TARGET" -- "$DIR/" | while read -r path; do
-          case "${path##*/}" in V*__*.sql) version_of "${path##*/}" ;; esac
-        done | sort -n | tail -1)
-        if [ -z "$base_max" ]; then
-          echo "타깃에 마이그레이션이 없습니다. 선점 검사를 건너뜁니다."
-        else
-          echo "타깃($TARGET)의 최대 버전: V$base_max"
-          taken=0
-          for f in "$DIR"/V*.sql; do
-            name=${f##*/}
-            num=$(version_of "$name")
-            case "$num" in ''|*[!0-9]*) continue ;; esac
-            git cat-file -e "origin/$TARGET:$DIR/$name" 2>/dev/null && continue
-            if [ "$num" -le "$base_max" ]; then
-              echo "V$num 는 타깃에 이미 있는 번호이거나 그보다 낮습니다: $name" >&2
-              taken=1
-            fi
-          done
-          if [ "$taken" = "1" ]; then
-            echo "타깃의 최대 번호(V$base_max)보다 큰 번호로 바꾸십시오." >&2
-            exit 1
-          fi
-          echo "버전 선점 검사 통과"
-        fi
-      fi
-    - cd apps/backend/src/main/resources/db/migration
-    # 1-b. 한 브랜치 안에서 같은 번호를 두 번 쓴 경우.
-    - |
-      numbers=$(ls V*.sql 2>/dev/null | sed -nE 's/^V([0-9]+)__.*/\1/p')
-      if [ "$(echo "$numbers" | grep -c .)" != "$(ls V*.sql 2>/dev/null | grep -c .)" ]; then
-        echo "이름 규칙에 맞지 않는 마이그레이션이 있습니다. V<정수>__<설명>.sql 이어야 합니다." >&2
-        ls V*.sql >&2
-        exit 1
-      fi
-      duplicates=$(echo "$numbers" | sort -n | uniq -d)
-      if [ -n "$duplicates" ]; then
-        echo "마이그레이션 버전 번호가 겹칩니다: $duplicates" >&2
-        exit 1
-      fi
-    # 2. 열·테이블을 지우거나, 이름을 바꾸거나, 제약을 좁히거나, 권한을 회수하면
-    #    구 버전 앱이 새 스키마에서 뜨지 못한다. 배포가 실패했을 때 이미지를
-    #    되돌려도 살아나지 않는다는 뜻이다(infra/service/deploy.sh는 이미지만 되돌린다).
-    #    주석과 문자열 리터럴은 먼저 걷어낸다. 설명을 썼다는 이유로 막으면
-    #    아무도 설명을 쓰지 않게 된다.
-    - |
-      failed=0
-      for file in V*.sql R*.sql; do
-        [ -f "$file" ] || continue
-        case " $SCHEMA_GRANDFATHERED " in *" $file "*) continue ;; esac
-        hits=$(sed -e 's/--.*$//' -e "s/'[^']*'//g" "$file" | grep -niE "$SCHEMA_IRREVERSIBLE" || true)
-        [ -n "$hits" ] || continue
-        if grep -qiE '^[[:space:]]*--[[:space:]]*IRREVERSIBLE' "$file"; then
-          echo "되돌릴 수 없는 변경을 명시적으로 허용했습니다: $file"
-          continue
-        fi
-        failed=1
-        echo "되돌릴 수 없는 변경이 있습니다: $file" >&2
-        echo "$hits" >&2
-      done
-      if [ "$failed" = "1" ]; then
-        echo "" >&2
-        echo "세 배포로 나누면 어느 단계에서 실패해도 이미지 롤백으로 복구됩니다." >&2
-        echo "  1차: 새 열을 추가만 한다 (구 앱·신 앱 모두 동작)" >&2
-        echo "  2차: 코드가 새 열을 쓰게 바꾼다 (스키마 변경 없음)" >&2
-        echo "  3차: 아무도 쓰지 않게 된 구 열을 지운다" >&2
-        echo "" >&2
-        echo "나눌 수 없다면 파일에 '-- IRREVERSIBLE: <근거>' 줄을 추가하십시오." >&2
-        exit 1
-      fi
-      echo "마이그레이션 검사 통과"
-  # 검사 자체를 고칠 때도 돌아야 한다. 지금은 마이그레이션 파일을 억지로
-  # 건드려야 검증할 수 있다.
+    # 검사 로직은 apps/backend/scripts/check-migrations.sh에 있다. YAML 안에 두면
+    # 로컬에서 돌릴 수 없어, 리뷰에서 나온 우회 사례를 회귀로 고정할 수 없었다.
+    #
+    # 검사 범위는 타깃 대비 이번에 추가·수정된 파일뿐이다. 작업 트리 전체를 훑던
+    # 방식은 이미 병합된 마이그레이션을 계속 다시 잡아, 병합 직후 기본 브랜치의
+    # 파이프라인을 멈추게 했다(develop의 V19가 평문 REVOKE 3줄로 걸렸다).
+    #
+    # 회귀 검사를 먼저 돌려 검사 자체가 망가지지 않았는지 본다. 이것이 없으면
+    # 검사를 고칠 때 마이그레이션 파일을 억지로 건드려야 검증할 수 있었다.
+    - sh apps/backend/scripts/check-migrations.sh --self-test
+    - sh apps/backend/scripts/check-migrations.sh
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &schema_paths
         - apps/backend/src/main/resources/db/migration/**/*
+        - apps/backend/scripts/check-migrations.sh
         - .gitlab/ci/apps/backend.yml
     - if: $CI_COMMIT_BRANCH
       changes: *schema_paths

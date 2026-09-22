@@ -48,6 +48,23 @@ set_image() {
     export "$IMAGE_VAR=$1"
 }
 
+# 선언된 상태와 도는 상태를 맞춘다. 이게 없으면 노드에서 누가 인자 없이
+# docker compose up -d 를 실행할 때 .env의 옛 이미지로 조용히 되돌아간다.
+#
+# 임시 파일에 쓰고 옮긴다. sed -i 와 append 를 나눠 쓰면 중간에 죽었을 때
+# 잘린 .env가 남고, 그 파일은 DB 비밀번호까지 들고 있다.
+#
+# 단일 서비스와 복수 서비스 양쪽에서 부른다. 복수 서비스 분기가 이 기록 없이
+# 끝나던 탓에 Airflow는 새 이미지로 돌면서 선언만 옛 이미지로 남았다.
+record_image() {
+    touch .env
+    tmp=".env.deploy.$$"
+    { grep -v "^${IMAGE_VAR}=" .env || true; echo "${IMAGE_VAR}=${IMAGE}"; } > "$tmp"
+    chmod 600 "$tmp"
+    mv "$tmp" .env
+    echo "선언 갱신: ${IMAGE_VAR}=${IMAGE}"
+}
+
 set_image "$IMAGE"
 $COMPOSE config -q
 
@@ -60,6 +77,9 @@ case "$SERVICE" in
         if [ "$ACTION" = "up" ]; then
             # shellcheck disable=SC2086
             $COMPOSE up -d --no-deps $SERVICE
+            # 교체에 성공한 뒤에만 선언을 갱신한다. pull만 한 경우는 아직
+            # 도는 이미지가 옛것이므로 기록하지 않는다.
+            record_image
             # shellcheck disable=SC2086
             $COMPOSE ps $SERVICE
         fi
@@ -194,14 +214,7 @@ if [ "$RUNNING" != "$IMAGE" ]; then
     exit 4
 fi
 
-# 선언된 상태와 도는 상태를 맞춘다. 이게 없으면 노드에서 누가 인자 없이
-# docker compose up -d 를 실행할 때 .env의 옛 이미지로 조용히 되돌아간다.
-touch .env
-if [ -s .env ] && [ "$(tail -c1 .env | wc -l)" -eq 0 ]; then
-    echo >> .env
-fi
-sed -i "/^${IMAGE_VAR}=/d" .env
-echo "${IMAGE_VAR}=${IMAGE}" >> .env
+record_image
 
 $COMPOSE ps "$SERVICE"
 echo "배포 완료: $SERVICE <- $IMAGE"

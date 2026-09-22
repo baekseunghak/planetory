@@ -43,6 +43,7 @@ COMMENT ON TABLE comment_history_attachments IS '답글에 첨부된 분석 히�
 COMMENT ON TABLE user_star_progress IS '회원의 별 단위 탐색 진행도와 완료 사유';
 COMMENT ON TABLE user_candidate_achievements IS '회원이 후보에 대해 인정받은 성과';
 COMMENT ON TABLE star_unlocks IS '회원이 연 별과 은하 지도상의 배치 좌표';
+COMMENT ON TABLE member_sky_revisions IS '회원 지도의 단조 증가 개정값. 발견·상태 변경과 같은 트랜잭션에서 올린다';
 COMMENT ON TABLE tutorial_stars IS '튜토리얼에서 순서대로 제시하는 별과 그 의도';
 COMMENT ON TABLE challenge_rounds IS '기간제 챌린지 회차. 대상 별과 진행 상태를 관리한다';
 
