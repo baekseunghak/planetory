@@ -48,6 +48,8 @@
 
 프론트 `/notifications`는 헤더 종 아이콘으로 진입한다. 주 메뉴에 중복 항목을 추가하지 않는다. 제공자는174/175이며 실제 인수는244 P1-220이다.
 
+174는 [알림 정책 F15](../../../docs/development/service-backend/community.md#notification-policy)를 작성하고 175가 제공자를 구현한다. 아래는 기존 FE 소비 계약이며, 사건별 수신 범위·보관기간은 F15의 승인 상태를 따른다. 150의 개인 재개 저장만으로 현재 계약이 제공되거나 별 구독 공통 사건까지 완성된 것은 아니다. AI·외부 상태 변경은 현재 5종 파서에 없으므로 새 종류를 보내거나 ACHIEVEMENT로 합치기 전에 F15 Q4를 합의한다.
+
 | 메서드·경로 | 요청·응답 |
 |---|---|
 | GET `/api/v1/me/notifications?size=20&cursor=...&unreadOnly=false` | `{items:[Notice],nextCursor:null,hasNext:false,readBoundary:"opaque"}` |
@@ -61,7 +63,7 @@
 ### 3.1 현재 권한과 목적지
 
 - 알림 자체는 본인만 조회/변경한다. 타인 ID는404, 인증은401, CSRF 오류는기존403이다. false/null 읽음 변경은400이다. 읽음은 true로만 진행하며 반복 PATCH는 같은 결과다.
-- 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 숨김·삭제·첨부 철회 후 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
+- 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 알림의 대상 자료가 숨김·삭제·첨부 철회로 접근 불가하면 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 첨부/출처만 철회된 경우 유효한 부모 글의 공개 접근까지 차단하지 않는다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
 - 클릭 시 target을 새로 조회한다. 접근 불가면200 `{notificationId:"n1",available:false,target:null}`이며 프론트는 이동하지 않는다. 허용되어도 목적지 API가 권한을 다시 검사한다. 이 조회가 권한 토큰이나 보호 우회 수단은 아니다.
 - target은 URL 문자열이 아닌 고정 DTO다. `POST/postId`, `THREAD/threadId`, `STAR/ticId`, `CHALLENGE/roundId` 중 하나다. POST/THREAD에 commentId가 있으면 서버가 해당 댓글이 있는 페이지의 discussionCursor도 제공하고 프론트는 토론 영역으로 이동한다. 외부 URL/임의 경로는 거절한다.
 - STAR 목적지는 본인이 해금하여 개인 상세를 볼 수 있는 TIC에만 사용한다. 팔로우한 미해금 별 소식은 공개 게시글/스레드 목적지를 사용한다. 삭제 댓글/종료 회차/권한 철회를 검증한다. 종료 회차는 현재 퀘스트를 보여주되 회차 변경을 안내하고 자동으로 분석을 시작하지 않는다.
@@ -84,6 +86,8 @@
 - 빈 객체·알 수 없는 종류·null·boolean 이외 값은400 VALIDATION_FAILED. 기존 키는 보존하며 한 탭에서 FOLLOW를 바꿔도 다른 탭이 저장한 COMMENT를 덮어쓰지 않는다. 원자적인 부분 갱신이 필요하다.
 - 설정은 **이후 생성하는 알림**에 적용한다. 이미 생성한 알림/읽음 상태/팔로우 관계는 삭제하지 않는다. 수신 차단을 풀어도 과거 차단 기간의 알림을 소급 생성하지 않는다.
 - 응답 유실 시 쓰기를 자동 재전송하지 않고 GET으로 확인한다. 실제 계정별 유지·알림 생성과의 경합은175/244 P1-221에서 검증한다.
+
+현재 DB 기본은 `follow:false`이며 comment 키가 없어 위의 프론트 기본과 다르다. 기존 false 보존·누락 키·기존 기본값 전환은 [F15.3·A4](../../../docs/development/service-backend/community.md#notification-delivery-policy)의 미해결 인계다. 또한 150은 수신 설정과 무관하게 notifications에 사건을 기록하므로 현재 설정으로 목록만 걸러서는 OFF 기간 사건의 ON 이후 소급 노출을 막을 수 없다. 175는 원 사건 보존과 사용자 알림 발행을 구분하는 계약을 먼저 해소한다.
 
 소비 코드: [SettingsPage.tsx](../../frontend/src/features/profile/SettingsPage.tsx), [NotificationPreferences.tsx](../../frontend/src/features/notifications/NotificationPreferences.tsx). 합성 서버: [settings-fixture-plugin.ts](../../frontend/dev/settings-fixture-plugin.ts).
 
