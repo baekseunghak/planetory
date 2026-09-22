@@ -74,4 +74,11 @@ test("locate rejects foreign IDs, versions, non-finite coordinates, invalid dept
     assert.throws(() =>
       readStarLocation({ ...location, ...patch }, "123", meta),
     );
+  for (const patch of [
+    { x: location.bounds.x + location.bounds.w },
+    { y: location.bounds.y + location.bounds.h },
+  ])
+    assert.throws(() =>
+      readStarLocation({ ...location, ...patch }, "123", meta),
+    );
 });
