@@ -49,7 +49,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__PARALLELISM: "8"
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
       AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set a shared Airflow JWT secret}
@@ -74,7 +74,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__PARALLELISM: "8"
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
       AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set a shared Airflow JWT secret}
@@ -145,7 +145,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL:?Set AIRFLOW_DATABASE_URL on GCP Node 1}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__PARALLELISM: "8"
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?Set a shared Airflow Fernet key}
       AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?Set a shared Airflow JWT secret}
