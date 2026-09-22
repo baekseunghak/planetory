@@ -544,7 +544,9 @@ QA 실패·무후보로 122 카탈로그가 보류된 곡선은 bin 비교와 �
 모든 곡선의 discoverability_ready 또는 Gold 게시 허용을 뜻하지 않는다.
 수치 비교 허용치는 로컬 회귀용이고 Gold `pending-measurement` 허용 오차를 확정하지 않는다.
 
-검증: tess-bench 전체 225개(신규 실행기 3개 포함), 커널 전체 248개 통과.
+검증: TOI-270 FITS가 있는 담당자 환경에서 tess-bench 전체 225 passed(신규 실행기 3개 포함),
+해당 FITS가 없는 리뷰 환경에서는 224 passed·1 skipped다. 최초 리뷰 HEAD의 커널은 248 passed,
+은퇴 후보 boolean 방어 수정 후에는 253 passed다.
 신규 실행기 테스트는 합성 입력의 실제 BLS·manifest·출력 hash를 포함한다.
 실제 FITS 비교는 아래 결과를 따른다. DB COMMENT migration 적용·운영 Publisher·EC2 비교는 아직 실행하지 않았다.
 

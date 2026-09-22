@@ -613,9 +613,10 @@ Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 �
 - `segment_silver`는 정렬·정합성이 확인된 119 `PreparedCurve`/`DetrendedCurve`와 제품 checksum을 받는다. 전처리 status가 ok가 아니면 중단한다. 적용 마스크 전체를 revision 재료에 포함한다. 개별 Sector의 비닝 실패는 quarantined에 별도 기록한다.
 - 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_evaluation`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
 
-검증: `uv run --locked python -m pytest -q`에서 전체 225개 통과(새 segmentation 20개 포함).
+검증: 최초 비닝 구현 당시 전체 225개 통과였으며, 123 최초 리뷰 HEAD `26f409ee`는 전체 248개였다.
+은퇴 후보 boolean 방어를 추가한 현재 전체 커널은 253개 통과다(신규 segmentation 20개·discoverability 28개 포함).
 경계 스냅·부분 bin·빈 구간·전처리 제외점 시간축·상한·revision 변경·출처 누락·실패 격리를 검사했다.
-제공 해상도 판정 연결과 비교 실행기는 아래 절을 따른다. 실제 FITS 회귀는 실행 전이다.
+제공 해상도 판정 연결과 완료된 36곡선 FITS 회귀는 아래 절과 벤치마크 README를 따른다.
 기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
 Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 완료를 뜻하지 않는다.
 114 인계의 Java 설명과 새 V20 DB COMMENT migration을 준비했다. 기존 V1은 수정하지 않았고 DB 적용은 하지 않았다.
@@ -624,6 +625,10 @@ Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 
 
 `astro_kernel.discoverability.prepare_discoverability`는 `segment_silver` 결과와 122의
 `build_candidate_catalog` 결과를 받는다. 실험 모듈·파일·DB에 의존하지 않는다.
+후속 파이프라인의 진입점은 반드시 `prepare_discoverability`로 고정한다.
+`evaluate`·`classify`는 하위 계산 함수이며 manifest의 실제 미세 조정 폭·게시 계약을 검사하지 않는다.
+두 함수만 호출한 결과로 후보를 게시하지 않는다. 은퇴 후보도 엄격한 Python bool discoverable을
+보유해야 하며 누락·null·숫자·문자열은 입력 오류다. 유효한 기존 boolean은 그대로 보존한다.
 게시·실패·회원 재개 경계는 [Gold 계약 4.2절](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계)이 정본이다.
 
 ```python
@@ -664,3 +669,10 @@ SNR/SDE 문턱을 먼저 검사하고 관측 통과 수를 계산한다. 품질 
 그 외 제안은 엄격한 JSON으로 직렬화할 수 있다. 원본 단계와 각 후보 단계의 잔차/주기도를 모두 반환한다.
 revision은 canonical JSON hash이며 승인 댓글 문자열·실행 시각을 포함하지 않는다.
 기존 판을 보존한 held 결과에는 새 후보 제안·변경 이력을 내보내지 않는다.
+
+Inf 처리 판단(123 리뷰 L1): 이번 버전은 114 참조와 같은 유한값 평균을 유지한다.
+`bin_sector`는 NaN과 ±Inf를 모두 평균에서 제외하고 해당 bin에 유한점이 없으면 gap으로 기록한다.
+따라서 비닝 결과만으로 Inf 계산 실패와 NaN 제외점을 구분할 수 없다. 이는 BLS·잔차 모듈의
+Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실패 원인을 보존한다는 뜻이 아니다.
+호출자는 전처리 상태·제외 근거를 별도로 보존해야 한다. Inf 거절로 정책을 바꾸려면 비닝 규칙/revision과
+114 비교 기준을 함께 변경·검증한다. 이번 리뷰 수정에서는 이 계산 규칙을 변경하지 않았다.

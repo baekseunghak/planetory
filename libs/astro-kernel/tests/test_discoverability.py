@@ -226,3 +226,26 @@ def test_grid_uses_gold_contract_margin(monkeypatch):
     cat["raw_peaks"][0]["transit_model"]["parameters"]["period_days"] = 40.
     result = run(seg, cat, rule_approval="fixture")
     assert result["period_max_days"] == 46.
+
+
+@pytest.mark.parametrize("value", [None, 0, "false"])
+def test_retired_requires_boolean(monkeypatch, value):
+    fake_evaluator(monkeypatch)
+    seg, cat = inputs()
+    retired = dict(candidate_id=2, status="retired", transit_model=model(2))
+    if value is not None:
+        retired["discoverable"] = value
+    cat["proposed_candidates"].append(retired)
+    with pytest.raises(ValueError, match="retired candidates require boolean"):
+        run(seg, cat, rule_approval="fixture")
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_retired_boolean_is_preserved(monkeypatch, value):
+    fake_evaluator(monkeypatch)
+    seg, cat = inputs()
+    retired = dict(candidate_id=2, status="retired", transit_model=model(2), discoverable=value)
+    cat["proposed_candidates"].append(retired)
+    result = run(seg, cat, rule_approval="fixture")
+    assert result["discoverability_ready"]
+    assert result["candidates"][1] == retired

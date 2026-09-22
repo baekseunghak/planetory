@@ -6,7 +6,7 @@ import json
 import numpy as np
 
 from .bls import BlsError, bls_periodogram, period_grid
-from .segmentation import BIN_MINUTES
+from .segmentation import BIN_MINUTES, MAX_POINTS
 from .transit_model import parse_transit_model, phase_distance_days, remove_transit_models
 
 
@@ -89,7 +89,7 @@ def provided_arrays(segments):
         if type(segment["sector"]) is not int or segment["sector"] <= 0:
             raise ValueError("positive integer Sector required")
         n = segment["n_points"]
-        if type(n) is not int or not 0 < n <= 20000 or segment["bin_minutes"] != BIN_MINUTES:
+        if type(n) is not int or not 0 < n <= MAX_POINTS or segment["bin_minutes"] != BIN_MINUTES:
             raise ValueError("invalid provided segment grid")
         f = np.asarray(segment["flux"], dtype=float)
         if f.shape != (n,) or np.isinf(f).any() or not np.isfinite(segment["start_btjd"]):
@@ -174,6 +174,8 @@ def prepare_discoverability(segmented, catalog, *, fine_tune, candidate_quality_
     for c in proposals:
         if c.get("status") not in ("active", "retired"):
             raise ValueError("invalid candidate status")
+        if c["status"] == "retired" and type(c.get("discoverable")) is not bool:
+            raise ValueError("retired candidates require boolean discoverable")
         model = parse_transit_model(c["transit_model"]).to_dict()
         if model["candidate_id"] != f"c-{c['candidate_id']}":
             raise ValueError("candidate model ID mismatch")

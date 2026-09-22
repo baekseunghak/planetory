@@ -93,3 +93,20 @@ SRS의 DAT-02 요구를 완화하거나 전체 범위 완료로 변경하지 않
 옛 실험 수치로 새 격자의 성능을 확정하지 않는다. null은 새 Bundle 전체 보류·기존 current 유지로 처리한다.
 상세 정본은 [Gold 계약 4.2절](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계)이다.
 상태: 구현·로컬 검증, FITS 비교·수치 규칙 채택 근거 확인·후속 리뷰 전. API·DB boolean 타입 변경은 없다.
+
+### 123 리뷰 후속: bin 중심 소비자 정합화
+
+상태: 후속 Task 등록 대기(아직 Jira 키 없음). 123 리뷰에서 기존 소비자 불일치를 확인했다.
+Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 소비자 계산 코드를 변경하지 않는다.
+
+- 대상: Backend `SubmissionMatching.observedWindows`의 실제 시작/끝 계산 및 javadoc,
+  `AnalysisViews` 설명, Frontend `fold-data.ts`, `history-graph.ts`, `time-curve.ts`의 BTJD,
+  `analysis-data.ts` 마지막 점 검증. 기준은 `start_btjd + (i + 0.5) × bin_minutes / 1440`이다.
+- `FoldedSnapshot`의 기존 bin 중심 결과와 같은 입력으로 대조하고, 관측 창·빈 bin·첫/마지막 점 및
+  제출 매칭 경계가 서버/화면에서 일치하는 회귀 테스트를 추가한다. 10분 bin의 기존 5분 차이를 확인한다.
+- `start_btjd` DB COMMENT를 '첫 bin 시작 시각'으로 정정한다. V1은 수정하지 않고 신규 migration으로 처리한다.
+  V20 산포 COMMENT의 적용 검증도 함께 수행한다. 병합 직전 migration 번호 중복을 재확인한다.
+- 완료 조건: 소비자 코드·API 설명·DB COMMENT 정합화와 경계 회귀·DB 적용 검증, 담당 리뷰를 기록한다.
+
+리뷰어는 `prepare_discoverability`를 진입점으로 고정하는 조건으로 123 규칙의 후속 적용에 동의했다.
+1.15배 상한의 실제 데이터 효과는 여전히 미검증이다. 조건부 승인을 운영 배포 승인으로 해석하지 않는다.
