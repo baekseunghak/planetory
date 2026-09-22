@@ -1,0 +1,42 @@
+.personal-statistics {
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.statistics-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 16px;
+}
+.statistics-metrics dd {
+  margin: 4px 0;
+}
+.personal-statistics small {
+  display: block;
+}
+.statistics-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.statistics-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.statistics-table th,
+.statistics-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid currentColor;
+}
+.statistics-bar {
+  display: block;
+  height: 6px;
+  background: currentColor;
+}
+.personal-statistics button {
+  min-height: 44px;
+}
+.personal-statistics :focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
