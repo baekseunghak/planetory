@@ -603,6 +603,12 @@ test("a replay from an older plate is kept, not cancelled", async ({
   await expect(dialog.getByTestId("stale-bundle")).toContainText(
     "접수 당시 판 기준",
   );
+  await expect(
+    dialog.getByRole("button", { name: "다음 곡선 단계로", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "최신 자료 불러오기", exact: true }),
+  ).toBeVisible();
   // 다시 보내지도 않는다.
   expect(posts).toHaveLength(1);
 });
@@ -618,6 +624,59 @@ async function submitFromPeak(page: Page, peak: string, judgment: string) {
   await expect(dialog).toBeVisible();
   return dialog;
 }
+
+test("a restored request shows current publication and progress without resubmitting", async ({
+  page,
+}) => {
+  let posts = 0;
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/stars\/[^/]+\/submissions$/.test(r.url()))
+      posts += 1;
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("접수되었습니다");
+  // 서버에는 접수됐지만 클라이언트는 결과를 잃고 탭을 다시 연 상황.
+  await page.evaluate(() => {
+    for (const key of Object.keys(sessionStorage)) {
+      if (
+        !key.startsWith("planetory:analysis-draft:") ||
+        !key.endsWith(',"submission"]')
+      )
+        continue;
+      const value = JSON.parse(sessionStorage.getItem(key)!);
+      if (value.schema === 2 && value.requestId)
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({ ...value, state: "pending" }),
+        );
+    }
+  });
+  await page.route("**/api/v1/submissions/by-request/*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        publication: { state: "PUBLISHED", publicAnalysisId: "pa-9" },
+        progress: {
+          ...body.progress,
+          currentCurveStep: body.curveContext.curveStep + 1,
+        },
+      },
+    });
+  });
+  await page.reload();
+  await dialog
+    .getByRole("button", { name: "접수 결과 확인", exact: true })
+    .click();
+  await expect(dialog).toContainText("접수되었습니다");
+  await expect(dialog).toContainText("공개되어 있습니다.");
+  expect(posts).toBe(1);
+});
 
 test("the result separates matching, scoring and achievement", async ({
   page,

@@ -2,6 +2,7 @@ import { ApiError, type FieldError } from "../../api/client.ts";
 import { readCurveContext, type CurveContext } from "./analysis-data.ts";
 import {
   readResultExplanation,
+  storedPublicationStates,
   type ResultExplanation,
 } from "./submission-result.ts";
 
@@ -187,7 +188,10 @@ export function decodeSubmissionReceipt(
   value: unknown,
   expected: { ticId: string; requestId: string },
   status: number,
+  source: "submission" | "lookup" = "submission",
 ): SubmissionReceipt {
+  // POST 재전송도 200이다. 상태 코드가 아니라 실제 요청 경로로 구분한다.
+  if (source === "lookup" && status !== 200) invalid("status");
   const data = record(value, "submissionResult");
   if (text(data.ticId, "ticId") !== expected.ticId) invalid("ticId");
   if (text(data.requestId, "requestId") !== expected.requestId)
@@ -208,8 +212,11 @@ export function decodeSubmissionReceipt(
     invalid("bundleId/curveContext");
 
   const progress = readProgress(data.progress);
-  // 제출한 단계와 진행 단계는 같아야 한다(6.3절 8번).
-  if (progress.currentCurveStep !== curveContext.curveStep)
+  // POST는 당시 값, GET 6.6은 현재 진행이다. 이후 제출로 단계가 달라질 수 있다.
+  if (
+    source === "submission" &&
+    progress.currentCurveStep !== curveContext.curveStep
+  )
     invalid("progress.currentCurveStep");
 
   if (!Array.isArray(data.nextActions)) invalid("nextActions");
@@ -234,7 +241,11 @@ export function decodeSubmissionReceipt(
     matchStatus,
     progress,
     skyVersion: text(data.skyVersion, "skyVersion"),
-    explanation: readResultExplanation(data, matchStatus),
+    explanation: readResultExplanation(
+      data,
+      matchStatus,
+      source === "lookup" ? storedPublicationStates : undefined,
+    ),
     // 모르는 힌트 때문에 접수된 제출을 실패로 만들지 않는다. 버튼 하나가
     // 줄어들 뿐이고, 되살릴 수 없는 접수 결과를 잃는 쪽이 훨씬 비싸다.
     nextActions: knownActions.filter((action) => offered.includes(action)),
