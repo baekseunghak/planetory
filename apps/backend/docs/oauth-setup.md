@@ -93,8 +93,9 @@ scope는 인가 요청에 보내지 않는다. 개인정보 동의는 개발자�
 초기 데이터가 없으면 콜백은 `503 DEPENDENCY_UNAVAILABLE`이고 회원 생성도 롤백된다.
 테스트는 격리된 스키마에 가상의 튜토리얼 별을 넣고 종료 후 그 스키마만 삭제한다.
 
-첫 별의 자리는 이후 발견 별과 같은 `StarDiscoveryService`와 `GalaxyLayout.place(layoutOrdinal)`로 계산해 `world_x`·`world_y`·`depth_z`·`layout_version`으로 저장한다(탐사 API 4.1·9.4절). 139의 `PersonalSpiralGalaxyLayout`이 현재 구현이며 첫 발견 순번은 0이다.
-`bootstrap-0` 좌표가 남은 개발 DB는 별 지급 기록만 지우지 말고 [개발 환경 안내의 V4 DB 준비](development-setup.md#v4-erd-v12-반영)를 따른다. 기존 회원은 로그인해도 첫 별이 다시 생성되지 않는다. 배치에 실패하면 회원 생성도 롤백된다.
+첫 별의 자리는 이후 발견 별과 같은 `GalaxyLayout.place(layoutOrdinal)` 결과를 `world_x`·`world_y`·`depth_z`·`layout_version`으로 저장한다(탐사 API 4.1·9.4절). `S15P21C206-139`의 `PersonalSpiralGalaxyLayout`이 `layout_version=personal-spiral-v1`로 배치한다. 좌표는 회원·별과 무관하게 순번만으로 정해지며 참조 구현은 `docs/development/sky-reference/reference.mjs`의 `layout()`이다.
+
+임시 구현 `BootstrapGalaxyLayout`은 삭제됐다. `layout_version=bootstrap-0` 행이 남은 개발 DB는 V7 마이그레이션이 기동을 막으므로 회원 관련 데이터까지 함께 정리한다. 기존 회원은 로그인해도 첫 별이 다시 생성되지 않는다. 배치에 실패하면 회원 생성도 롤백된다.
 
 닉네임은 `별_`와 16자리 임의 16진수로 자동 생성한다. 기존 V1의 `lower(nickname)` 유일 인덱스를 사용한다.
 닉네임 중복 제약이 이미 있으므로 V1 수정이나 중복 마이그레이션은 추가하지 않았다.
@@ -180,7 +181,7 @@ if (response.ok) {
 
 - 공개 진입 계층은 외부의 `Forwarded`와 `X-Forwarded-Proto/Host/Port/Prefix/Ssl/For`를 제거하고 필요한 값만 다시 설정한다. `X-Forwarded-Proto`는 신뢰 경로의 `http`·`https`로 제한하며 외부 Host도 서비스 호스트로 검증한다. `Forwarded`가 남으면 `X-Forwarded-Proto/Host`만 덮어도 Spring에서 다른 출처를 사용할 수 있다.
 - backend의 공개 직결을 차단하고 loopback 게시뿐 아니라 내부 Docker 네트워크에서 접근하는 주체도 확인한다. `framework` 자체는 신뢰 프록시 IP를 판별하지 않는다.
-- 84 원격 브랜치 `2bd97c2b`의 공통 `framework` 한 줄은 선반영하지 않는다. 같은 브랜치 nginx는 `X-Forwarded-Proto/Host` 전달은 있지만 나머지 외부 헤더 제거와 proto 허용값 제한이 없어 신뢰 경계가 완성됐다고 볼 수 없다. 84 병합 시 이 설정 한 줄을 중복 적용하지 말고 위 조건을 충족한 운영 환경 주입으로 조율한다.
+- 2026-09-22 교차 리뷰에서 84(!161)와 240의 공통값·위치·주석을 `none`으로 통일했다. `framework`를 다른 위치에 추가하던 84의 줄과 반대 의미의 주석을 교체했으며, `ForwardedHeadersConfigurationTest`가 중복 키와 기본값 변경을 검사한다. nginx의 외부 헤더 제거·Proto 허용값 제한 인수는 남아 있으므로 운영 활성화는 위 조건을 충족한 환경 주입으로 수행한다.
 - 239의 `absolute_redirect off`는 nginx 자체 리다이렉트의 내부 포트 노출을 막는 설정이다. Spring 전달 헤더 신뢰와는 별도로 검증한다. nginx의 콜백 503 → `authentication_failed` 표시는 239 담당이며 이 작업에서 바꾸지 않는다.
 
 인가 시작과 콜백에 같은 외부 Proto/Host를 전달한다. `{baseUrl}` 콜백 템플릿은 `framework`에서 외부 출처를 사용하며, 명시적 `GOOGLE_REDIRECT_URI`·`SSAFY_REDIRECT_URI`는 제공자 등록 주소와 함께 확인한다. 성공 목적지는 계속 `AUTH_SUCCESS_URL`의 같은 출처 고정 경로다. 신뢰 헤더가 있으면 Spring의 `ForwardedHeaderFilter`가 성공 Location에 외부 출처를 사용한다. 현재 Boot의 실제 HTTP 검증에서는 전달 헤더 없이 성공하면 backend의 내부 HTTP 주소·포트를 포함한 절대 Location이 반환된다. 따라서 `none` 상태만으로 운영 HTTPS 복귀가 해결됐다고 보지 않으며, 위 프록시 인수와 `framework` 활성화를 함께 완료해야 한다.
