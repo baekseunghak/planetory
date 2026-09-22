@@ -125,3 +125,4 @@
 | 2026-09-22 | History 스냅샷 누락과 일시적 오류 복구 | S15P21C206-190 | 복구, 프런트엔드, 회귀 검사 | 구현·로컬 검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 develop 충돌 해결·산포 migration V22 | S15P21C206-123 | b831cd8f, V20 follow, V21 통계 예약, V22 | 통합 검증·병합 커밋 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 Backend 리뷰 V22 단계·Publisher 인계 | S15P21C206-123 | 254 passed, READ COMMITTED, FOR SHARE, M1 인수 | Python 검증·DB 검사 미실행 | [기록](2026-09-22.md) |
+| 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |

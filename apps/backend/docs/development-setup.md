@@ -296,11 +296,12 @@ V19 다음에 적용하며 V21은 178 통계 작업 소유다. 적용한 V1~V19�
 
 173 측정(2026-09-22): 일회용 PostgreSQL 18.6, 합성 회원/관계/발견 기록 각1만 건과 소량 기능 표본, size20, 실제 앱 역할, ANALYZE 후 실제 목록 SQL의 EXPLAIN ANALYZE를 각3회 실행했다. 회원 팔로잉/공개 별/역방향 팔로워의 DB 실행시간 중앙값은 각각 0.106/0.470/0.484ms였다. 공개 별 측정에는 발견 기록 끝의 TIC도 포함했다. 해당 범위에서는 V20에 인덱스를 추가하지 않았다. 전체 HTTP 지연·최대 규모·고밀도 팔로워 성능을 보장하는 측정은 아니며, 실제 규모에서 역방향 follows 탐색·관계 정렬·TIC 단독 자격 비용을 다시 확인한다. 재현은 FollowTest의 합성관계10000개 실행계획 사례이며 원시 계획은 무시되는 build 테스트 결과에 남는다.
 
-### V22 세그먼트 산포 설명
+### 세그먼트 COMMENT 후속 인계 (123)
 
-`V22__segment_scatter_comment.sql`(123)은 `light_curve_segments.flux_scatter`의 COMMENT만
-[114 Gold 산포 계약](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)에 맞춘다.
-열 타입·제약·데이터·API 응답은 바꾸지 않는다. V1은 수정하지 않는다.
-파일 준비 상태이며 DB 적용 검증은 아직 하지 않았다. 병합 전 원격 migration 번호 중복을 확인한다.
-
-123 Backend 리뷰 보완: 현재 checkout에는 V21 통계 파일이 없으므로 MemberCommunityPermissionTest에 V20 다음 V22 적용 단계를 추가했다. 이후 validate·재실행 0건 검사로 이어진다. V21을 통합할 때에는 통계 담당의 단계별 검사도 함께 반영해야 한다. 이번 환경은 Java/Docker 실행 불가로 해당 DB 테스트를 실행하지 못했다. 리뷰어의 V21 임시 수정본 615건 통과는 이 V22 수정본의 실행 결과가 아니다.
+123에서는 새 migration을 추가하지 않는다. 준비했던 산포 COMMENT 파일과 그 전용 Flyway
+단계는 열린 브랜치의 번호 충돌·역순 적용을 피하기 위해 제거했다. 기존 V1과 V20 팔로우는 유지한다.
+`flux_scatter`와 `start_btjd` COMMENT 정정은 Backend 후속에서 함께 처리한다.
+수정 문구·완료 조건은 [정합화 요청](../../../docs/project/planetory-doc-sync-requests.md#123-review-comment-handoff)을 따른다.
+후속 담당자는 열린 migration·실제 적용 이력·병합 및 배포 순서를 확인한 뒤 새 번호를 결정한다.
+번호만 올리거나 repair/outOfOrder로 우회하지 않는다. 적용 이력이 있는 영속 DB에서 파일 삭제·이력 삭제를
+수행하는 절차가 아니다. 리뷰어가 사용한 V22 적용 검증 DB는 별도의 일회용 환경이며 운영 적용 근거가 아니다.

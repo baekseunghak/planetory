@@ -548,7 +548,7 @@ QA 실패·무후보로 122 카탈로그가 보류된 곡선은 bin 비교와 �
 해당 FITS가 없는 리뷰 환경에서는 224 passed·1 skipped다. 최초 리뷰 HEAD의 커널은 248 passed,
 은퇴 후보 boolean 방어 및 하위 함수 규칙 검사 보완 후에는 254 passed다.
 신규 실행기 테스트는 합성 입력의 실제 BLS·manifest·출력 hash를 포함한다.
-실제 FITS 비교는 아래 결과를 따른다. DB COMMENT migration 적용·운영 Publisher·EC2 비교는 아직 실행하지 않았다.
+실제 FITS 비교는 아래 결과를 따른다. DB COMMENT migration은 Backend 후속으로 분리했다. 운영 Publisher·EC2 비교는 아직 실행하지 않았다.
 
 ### 9별 FITS 비교 결과 (2026-09-22)
 
