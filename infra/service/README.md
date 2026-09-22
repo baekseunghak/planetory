@@ -253,6 +253,6 @@ connector는 EC2-A에만 둔다. 같은 Tunnel에 커넥터를 여럿 붙여도 
 
 Backend가 아직 배포되지 않은 단계에서도 frontend는 기동한다. `apps/frontend/nginx.conf`가 backend를 요청 시점에 해석하기 때문이다. **API 응답은 모두 원래 상태 코드를 그대로 전달한다.** 한때 세션 조회(`/api/v1/me`)의 502·504만 401로 낮췄으나, 프론트의 공통 인증 만료 처리가 그 401을 받아 세션을 비우고 보관 중인 분석 초안까지 지워 걷어냈다.
 
-Tunnel → nginx 구간은 평문이므로 nginx의 `$scheme`은 항상 `http`다. Cloudflare가 준 `X-Forwarded-Proto`를 그대로 넘기고 Backend는 `server.forward-headers-strategy=framework`로 이를 반영한다. 둘 중 하나라도 빠지면 Tomcat이 상대 리다이렉트를 `http://planetory.space:8080/...`로 절대화해 OAuth 로그인 복귀가 깨진다.
+Tunnel → nginx 구간은 평문이므로 외부 HTTPS 출처를 별도로 전달해야 한다. Backend 공통값은 240과 같은 `server.forward-headers-strategy=none`으로 통일한다. 현재 nginx는 외부 `Forwarded`와 일부 `X-Forwarded-*`를 제거하지 않고 Proto도 임의 값을 전달하므로 아직 `framework`를 활성화하지 않는다. 공개 진입 계층에서 외부 전달 헤더를 제거하고 허용한 Proto/Host만 다시 설정하며 backend 직결 제한을 검증한 뒤, backend 컨테이너에 표준 환경변수 `SERVER_FORWARD_HEADERS_STRATEGY=framework`를 명시적으로 전달한다. 현재 Compose에는 이 환경변수 전달이 없어 운영 활성화 전에 함께 반영해야 한다. `none` 상태는 내부 주소의 성공 Location을 외부 HTTPS로 바꾸지 않으므로 로그인 복귀 인수 완료를 의미하지 않는다. nginx의 `absolute_redirect off`는 nginx 자체 리다이렉트 설정이며 이 신뢰 경계를 대신하지 않는다.
 
 미완료: Redis runtime, 메모리 상한·eviction 정책, health/readiness, 남용 제어 위치, connector 지속 처리량 실측은 이 변경에 포함되지 않았다.
