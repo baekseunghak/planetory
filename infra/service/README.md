@@ -44,6 +44,12 @@ spring.flyway.password=${DATABASE_MIGRATION_PASSWORD:${spring.datasource.passwor
 
 대체값이 런타임 연결 설정을 따라가므로, `DATABASE_MIGRATION_*`를 주지 않는 환경(로컬 개발·테스트)은 마이그레이션과 런타임이 같은 계정을 쓰고 동작이 바뀌지 않는다. 계정 분리는 `DATABASE_MIGRATION_*`를 줄 때만 성립한다.
 
+### V21 통계 역할 사전 생성
+
+`service-db-init/10-app-account.sh`는 빈 볼륨 초기화 때 `planetory_stats_job NOLOGIN`도 만든다. 기존 볼륨의 initdb 훅은 재실행되지 않는다. CREATEROLE이 없는 마이그레이션 계정으로 V21을 적용하기 전, 운영 담당이 역할 존재를 확인하고 없으면 역할 생성 권한이 있는 계정으로 `CREATE ROLE planetory_stats_job NOLOGIN;`을 실행한다. 누락되면 V21은 원인과 사전 생성 명령을 안내하고 실패한다. 앱 런타임에 CREATEROLE이나 이 그룹을 부여하지 않는다.
+
+통계 전용 로그인 공급·권한 부여·외부 스케줄은 [통계 실행 런북](../../docs/operations/statistics-runbook.md)을 따른다. 이 변경은 운영 DB 실행이나 계정 공급 완료를 뜻하지 않는다.
+
 ## 최초 가입에 필요한 초기 데이터
 
 빈 DB에서는 **아무도 가입할 수 없다.** 가입 트랜잭션이 튜토리얼 1번 별을 지급하는데, 마이그레이션의 시드가 `operation_settings` 한 건뿐이라 `tutorial_stars`가 비어 있기 때문이다. 이때 콜백은 `503 DEPENDENCY_UNAVAILABLE`이 되고 회원 생성까지 롤백된다(자세한 조건은 [OAuth 설정](../../apps/backend/docs/oauth-setup.md)).
@@ -245,7 +251,7 @@ connector는 EC2-A에만 둔다. 같은 Tunnel에 커넥터를 여럿 붙여도 
 
 2026-09-17 확인: EC2-A에서 Cloudflare edge(`icn06`)로 QUIC egress가 열려 있고, 보안그룹 인바운드 개방 없이 `planetory.space` 응답까지 확인했다.
 
-Backend가 아직 배포되지 않은 단계에서도 frontend는 기동한다. `apps/frontend/nginx.conf`가 backend를 요청 시점에 해석하고, 세션 조회(`/api/v1/me`)가 502·504면 401로 낮춰 SPA가 로그인 화면을 보여준다. 다른 `/api/*`는 502를 그대로 전달한다.
+Backend가 아직 배포되지 않은 단계에서도 frontend는 기동한다. `apps/frontend/nginx.conf`가 backend를 요청 시점에 해석하기 때문이다. **API 응답은 모두 원래 상태 코드를 그대로 전달한다.** 한때 세션 조회(`/api/v1/me`)의 502·504만 401로 낮췄으나, 프론트의 공통 인증 만료 처리가 그 401을 받아 세션을 비우고 보관 중인 분석 초안까지 지워 걷어냈다.
 
 Tunnel → nginx 구간은 평문이므로 nginx의 `$scheme`은 항상 `http`다. Cloudflare가 준 `X-Forwarded-Proto`를 그대로 넘기고 Backend는 `server.forward-headers-strategy=framework`로 이를 반영한다. 둘 중 하나라도 빠지면 Tomcat이 상대 리다이렉트를 `http://planetory.space:8080/...`로 절대화해 OAuth 로그인 복귀가 깨진다.
 

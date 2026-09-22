@@ -1,14 +1,17 @@
 {
-  "version": "S17-v1",
+  "version": "S16-S17-v2",
   "status": "cross-review-pending",
-  "members": [{"id":"u-1","nickname":"Orbit","previousNickname":"OldOrbit"},{"id":"u-2","nickname":"관측자"}],
+  "members": [
+    {"id":"u-1","nickname":"Orbit","previousNickname":"OldOrbit"},
+    {"id":"u-2","nickname":"관측자"}
+  ],
   "posts": [
     {"id":"p-101","kind":"user","memberId":"u-1","ticId":"123456789","board":"STAR","tag":"QUESTION","title":"밝기 감소 질문","body":"Transit 10%_ + A&B \\ 관측","status":"visible","createdAt":"2026-09-20T01:00:00Z"},
     {"id":"p-102","kind":"user","memberId":"u-2","ticId":null,"board":"FREE","tag":"GENERAL","title":"관측 일지","body":"밝기  감소 transit","status":"visible","createdAt":"2026-09-20T02:00:00Z"},
-    {"id":"st-103","kind":"system_thread","memberId":null,"ticId":"123456789","board":"STAR","tag":null,"title":"TIC 123456789 신호 c-401 밝기 분석","body":"","status":"visible","createdAt":"2026-09-20T02:00:00Z"},
+    {"id":"st-103","kind":"system_thread","memberId":null,"ticId":"123456789","board":"STAR","tag":null,"title":"TIC 123456789 신호 c-401 밝기 분석","body":"주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm","status":"visible","createdAt":"2026-09-20T02:00:00Z"},
     {"id":"p-104","kind":"user","memberId":"u-1","ticId":"123456789","board":"STAR","tag":"QUESTION","title":"숨김 밝기","body":"Transit","status":"hidden","createdAt":"2026-09-20T03:00:00Z"},
     {"id":"p-105","kind":"user","memberId":"u-1","ticId":null,"board":"FREE","tag":"GENERAL","title":"삭제 밝기","body":"Transit","status":"deleted","createdAt":"2026-09-20T04:00:00Z"},
-    {"id":"st-106","kind":"system_thread","memberId":null,"ticId":"123456789","board":"STAR","tag":null,"title":"숨김 공식 밝기","body":"","status":"hidden","createdAt":"2026-09-20T05:00:00Z"},
+    {"id":"st-106","kind":"system_thread","memberId":null,"ticId":"123456789","board":"STAR","tag":null,"title":"숨김 공식 밝기","body":"주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm","status":"hidden","createdAt":"2026-09-20T05:00:00Z"},
     {"id":"p-107","kind":"user","memberId":"u-2","ticId":"9007199254740993","board":"STAR","tag":"ANALYSIS","title":"먼 별","body":"다른 기록","status":"visible","createdAt":"2026-09-20T00:00:00Z"}
   ],
   "cases": [
@@ -30,7 +33,7 @@
     {"id":"free","query":[["board","FREE"]],"expectedIds":["p-102"]},
     {"id":"tag-excludes-system","query":[["tag","QUESTION"]],"expectedIds":["p-101"]},
     {"id":"official-title","query":[["q","c-401"]],"expectedIds":["st-103"]},
-    {"id":"official-body-current","query":[["q","c-401"],["searchIn","BODY"]],"expectedIds":[],"note":"161 현재 구현의 빈 본문 관찰 예제. 목표 신호 요약 본문 계약의 완료 증거가 아니다."},
+    {"id":"official-body","query":[["q","100.3 BTJD"],["searchIn","BODY"]],"expectedIds":["st-103"]},
     {"id":"tic-string","query":[["ticId","9007199254740993"]],"expectedIds":["p-107"]},
     {"id":"none","query":[["q","존재하지않음"]],"expectedIds":[]},
     {"id":"empty-q","query":[["q",""]],"expectedError":"VALIDATION_FAILED"},
@@ -41,22 +44,22 @@
     {"id":"bad-board","query":[["board","PRIVATE"]],"expectedError":"VALIDATION_FAILED"},
     {"id":"bad-tag","query":[["tag","UNKNOWN"]],"expectedError":"VALIDATION_FAILED"},
     {"id":"tic-leading-zero","query":[["ticId","01"]],"expectedError":"VALIDATION_FAILED"},
-    {"id":"tic-overflow","query":[["ticId","9223372036854775808"]],"expectedError":"VALIDATION_FAILED"}
+    {"id":"tic-overflow","query":[["ticId","9223372036854775808"]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"empty-tic","query":[["ticId",""]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"empty-board","query":[["board",""]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"empty-tag","query":[["tag",""]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"empty-author","query":[["author",""]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"blank-author","query":[["author","  "]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"author-trim","query":[["author"," Orbit "]],"expectedIds":["p-101"]},
+    {"id":"non-ascii-space","query":[["q"," 밝기"]],"expectedIds":["st-103","p-102","p-101"]},
+    {"id":"empty-cursor","query":[["cursor",""]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"invalid-cursor","query":[["cursor","abc"]],"expectedError":"VALIDATION_FAILED"},
+    {"id":"size-20","query":[["size","20"]],"expectedIds":["st-103","p-102","p-101","p-107"]},
+    {"id":"unknown-key","query":[["unknown","value"]],"expectedError":"VALIDATION_FAILED"}
   ],
-  "unspecifiedCases": [
-    {"id":"empty-tic","query":[["ticId",""]]},
-    {"id":"empty-board","query":[["board",""]]},
-    {"id":"empty-tag","query":[["tag",""]]},
-    {"id":"empty-author","query":[["author",""]]},
-    {"id":"blank-author","query":[["author","  "]]},
-    {"id":"author-trim","query":[["author"," Orbit "]]},
-    {"id":"non-ascii-space","query":[["q","\u00a0밝기"]]},
-    {"id":"empty-cursor","query":[["cursor",""]]},
-    {"id":"cursor-not-implemented","query":[["cursor","abc"]]},
-    {"id":"size-not-implemented","query":[["size","20"]]},
-    {"id":"unknown-key","query":[["unknown","value"]]}
+  "pages": [
+    {"id":"same-time-order","caseId":"all","size":2,"expectedPages":[["st-103","p-102"],["p-101","p-107"]]}
   ],
-  "pages": [{"id":"same-time-order","caseId":"all","size":2,"expectedPages":[["st-103","p-102"],["p-101","p-107"]]}],
   "hotTopics": [
     {"id":"nine","participants":9,"parentVisible":true,"expectedEligible":false},
     {"id":"ten","participants":10,"parentVisible":true,"expectedEligible":true},

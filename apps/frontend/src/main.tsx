@@ -3,18 +3,28 @@ import {
   MemberProfilePage,
 } from "./features/profile/ProfilePage";
 import { StrictMode } from "react";
+import { FollowingPage, FollowingFeedPage } from "./features/follow/Follow";
+import { p1Enabled } from "./features/p1";
+import { NotificationsPage } from "./features/notifications/Notifications";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App, type PageSlots } from "./app/App";
 import { SharedHistoryCurve } from "./features/analysis/HistoryCurveChart";
 import { HistoryDetailPage } from "./features/history/HistoryDetailPage";
+import { MyHistorySection } from "./features/my-lists/MyHistorySection";
+import { MyStarsSection } from "./features/my-lists/MyStarsSection";
+import { PublicAnalysisPage } from "./features/history/PublicAnalysisPage";
+import { PublicationPage } from "./features/publication/PublicationPage";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
+import { StarResultPage } from "./features/analysis/StarResultPage";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
 import { HotTopicsPage } from "./features/community/HotTopicsPage";
+import { SettingsPage } from "./features/profile/SettingsPage";
+import { WithdrawalPage } from "./features/profile/WithdrawalPage";
 import {
   CommunityPage,
   PostPage,
@@ -40,6 +50,13 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
+    ...(p1Enabled
+      ? { withdrawal: WithdrawalPage }
+      : {}),
+    ...(p1Enabled ? { notifications: NotificationsPage } : {}),
+    ...(p1Enabled
+      ? { following: FollowingPage, followingFeed: FollowingFeedPage }
+      : {}),
     sky: SkyDataPage,
     profile: MyProfilePage,
     member: MemberProfilePage,
@@ -55,14 +72,20 @@ async function start() {
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
     ).GalaxyPage;
+  if (p1Enabled) pages.publicSky = (await import("./features/public-sky/PublicSky")).PublicSkyPage;
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
   // Use the analysis page in both fixture and real-server modes.
   pages = {
     ...pages,
+    settings: SettingsPage,
     analysis: AnalysisPage,
+    starResults: StarResultPage,
     historyDetail: HistoryDetailPage,
+    publicAnalysis: PublicAnalysisPage,
+    publication: PublicationPage,
+    publicationBatch: PublicationPage,
   };
   if (import.meta.env.DEV && import.meta.env.VITE_SKY_DATA_FIXTURE === "true")
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
@@ -82,7 +105,16 @@ async function start() {
           <SessionProvider>
             {/* 공용 읽기 전용 그래프(#190). 게시글 첨부가 이 슬롯을
                 기다리고 있었다(213). 비어 있으면 「연결 준비 중」이 뜬다. */}
-            <App pages={pages} historyGraphRenderer={SharedHistoryCurve} />
+            {/* 마이페이지 두 목록(#196). W16이 만든 슬롯을 채운다.
+                통계는 #198~200 몫이라 비워 둔다. */}
+            <App
+              pages={pages}
+              historyGraphRenderer={SharedHistoryCurve}
+              profileSections={{
+                stars: MyStarsSection,
+                history: MyHistorySection,
+              }}
+            />
           </SessionProvider>
         </BrowserRouter>
       </ErrorBoundary>
@@ -90,3 +122,4 @@ async function start() {
   );
 }
 void start();
+

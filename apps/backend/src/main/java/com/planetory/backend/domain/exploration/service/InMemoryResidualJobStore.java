@@ -156,6 +156,27 @@ public class InMemoryResidualJobStore implements ResidualJobStore {
         }
     }
 
+    @Override
+    public int evictBundles(long ticId, java.util.Collection<Long> bundleIds) {
+        if (bundleIds.isEmpty()) {
+            return 0;
+        }
+        // 접두에 구분자를 붙여 비교한다. 붙이지 않으면 tic:400이 tic:4001을, b-1이 b-12를 함께 지운다.
+        Set<String> victims = bundleIds.stream()
+                .map(bundleId -> "tic:" + ticId + ":" + ExplorationIds.bundle(bundleId) + ":")
+                .collect(java.util.stream.Collectors.toSet());
+        synchronized (lock) {
+            int before = jobs.size() + results.size();
+            jobs.values().removeIf(job -> matches(victims, job.cacheKey()));
+            results.keySet().removeIf(key -> matches(victims, key));
+            return before - (jobs.size() + results.size());
+        }
+    }
+
+    private static boolean matches(Set<String> victims, String cacheKey) {
+        return victims.stream().anyMatch(cacheKey::startsWith);
+    }
+
     /**
      * 작업과 결과를 모두 버린다. <b>테스트에서만 쓴다.</b> 운영 저장소는 Redis의 TTL이 이 일을 한다.
      * 이 구현에는 만료가 없어 한 인스턴스가 살아 있는 동안 기록이 남는다.

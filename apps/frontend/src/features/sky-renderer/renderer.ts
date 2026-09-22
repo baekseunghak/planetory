@@ -2,6 +2,8 @@ import { planetOrbit, planetLabel, type HitTarget } from "./interaction.ts";
 import { screenPoint } from "./model.ts";
 import type { Matrix } from "../sky-data/geometry.ts";
 import { galaxyExposure } from "./exposure.ts";
+import { SystemRenderer } from "./system-renderer.ts";
+import { focusCenter, signalSeed, type SystemView } from "./personal-system.ts";
 import {
   ORBIT_COLOR,
   rgb,
@@ -194,6 +196,15 @@ type Pipeline = {
   focusMix: WebGLUniformLocation | null;
 };
 export class GalaxyRenderer {
+  private detailRenderer: SystemRenderer | null = null;
+  private systemView: SystemView | null = null;
+  get systemBodies() {
+    return this.detailRenderer?.bodies ?? [];
+  }
+  setSystemView(view: SystemView | null) {
+    this.systemView = view;
+    if (!view) this.detailRenderer?.clear();
+  }
   private gl: WebGL2RenderingContext;
   private quadBuffer: WebGLBuffer;
   private bodies: ReusableBuffer;
@@ -628,6 +639,36 @@ export class GalaxyRenderer {
       this.stats.backgroundBlits = 1;
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (this.system && this.systemView) {
+      this.detailRenderer ??= new SystemRenderer(gl);
+      this.detailRenderer.draw(
+        {
+          id: this.system.ticId,
+          view: this.systemView,
+          planets: this.system.items.map((p, i) => ({
+            id: p.candidateId,
+            label: "행성 " + (i + 1),
+            candidate: p.kind === "unconfirmed",
+            period: p.periodDays ?? 1,
+            seed: signalSeed(p.candidateId),
+          })),
+        },
+        this.width,
+        this.height,
+        focusCenter(this.width, this.height),
+        1,
+        this.time * 1000,
+        Math.max(0, Math.min(deltaSeconds, 0.05)) * 1000,
+        reducedMotion,
+      );
+      this.stats.bodyDrawCalls = bodyCalls;
+      this.stats.bodyDrawCallsTotal += bodyCalls;
+      this.stats.orbitDrawCalls = this.system.items.length ? 1 : 0;
+      this.stats.planetDrawCalls = this.system.items.length;
+      this.stats.drawCalls = bodyCalls + this.detailRenderer.drawCalls;
+      this.stats.frameCount++;
+      return;
+    }
     if (this.rings.length) {
       this.bind(this.ringPipeline);
       gl.uniform3f(
@@ -651,6 +692,7 @@ export class GalaxyRenderer {
     this.stats.frameCount++;
   }
   planetTargets(): HitTarget[] {
+    if (this.systemView) return [];
     if (!this.system || this.disposed || this.gl.isContextLost()) return [];
     const { position, items } = this.system;
     const center = screenPoint(
@@ -705,6 +747,7 @@ export class GalaxyRenderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.detailRenderer?.destroy();
     for (const b of [this.bodies, this.rings, this.planets]) b.dispose();
     const pipelines = [
       this.bodyPipeline,

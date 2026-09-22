@@ -1,11 +1,13 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.exploration.service.StarViews.Achievement;
 import com.planetory.backend.domain.exploration.service.StarViews.AchievementByType;
 import com.planetory.backend.domain.exploration.service.StarViews.PlanetItem;
@@ -225,12 +227,7 @@ public class StarRepository {
      * 존재 확인 하나로 둔다.
      */
     public boolean isOpenPublishedStar(long ticId) {
-        return jdbc.sql("""
-                        SELECT EXISTS(
-                            SELECT 1 FROM stars s
-                             WHERE s.tic_id = ? AND s.service_status = 'published'
-                               AND EXISTS (SELECT 1 FROM star_unlocks u WHERE u.tic_id = s.tic_id))
-                        """)
+        return jdbc.sql("SELECT " + StarBoardVisibility.OPEN.formatted("?"))
                 .param(ticId)
                 .query(Boolean.class).single();
     }
@@ -315,10 +312,10 @@ public class StarRepository {
                                        AND s.matched_candidate_id IS NOT NULL
                                        AND NOT EXISTS (
                                            SELECT 1 FROM published_analyses pa
+                                             JOIN posts p ON p.id = pa.post_id
                                             WHERE pa.user_id = s.user_id
                                               AND pa.candidate_id = s.matched_candidate_id
-                                              AND pa.unpublished_at IS NULL
-                                              AND pa.hidden_at IS NULL))
+                                              AND %s))
                                        AS unpublished_signal_count
                               FROM star_unlocks u
                          LEFT JOIN user_star_progress p
@@ -337,7 +334,7 @@ public class StarRepository {
                                 OR (last_activity_at, -tic_id) < (:afterActivity, -CAST(:afterTicId AS BIGINT)))
                          ORDER BY last_activity_at DESC, tic_id
                          LIMIT :limit
-                        """)
+                        """.formatted(PublicAnalysisVisibility.VISIBLE))
                 .param("targetId", targetId)
                 .param("scope", scope)
                 .param("stage", filter.stage())

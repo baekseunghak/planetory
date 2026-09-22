@@ -69,8 +69,11 @@ function validate(bundle, rules, selection, peaks) {
     if (!peak) return fail('selection.sourcePeakGridIndex', 'UNKNOWN_PEAK');
     if (!(P >= peak.fineTune.periodMinDays && P <= peak.fineTune.periodMaxDays)) return fail('selection.sourcePeakGridIndex', 'OUTSIDE_FINE_TUNE');
     suggested = peak.suggestedDurationHours;
-    durationLimitHours = suggested * rules.validation.maxDurationMultipleOfSuggested.value;
-    if (width * P * 24 > durationLimitHours) return fail('selection.phaseEnd', 'DURATION_LIMIT');
+    // API 5.4/6.2: 주기별 duration 출처가 없으면 null이며 0시간으로 해석하지 않는다.
+    if (suggested !== null && suggested !== undefined) {
+      durationLimitHours = suggested * rules.validation.maxDurationMultipleOfSuggested.value;
+      if (width * P * 24 > durationLimitHours) return fail('selection.phaseEnd', 'DURATION_LIMIT');
+    }
   }
   if (rules.validation.allowEmptyPhaseSpan.value === false && !spanHasObservedPoint(bundle, P, ps, pe)) return fail('selection.phaseEnd', 'EMPTY_PHASE_SPAN');
   const d = deriveEpoch(bundle, selection);
@@ -104,7 +107,9 @@ function evaluate(bundle, rules, derived, c, m) {
   const Du = derived.durationDays;
   const halfC = Math.max(Dc / 2, rules.validation.minWindowDays.value / 2);
   const transits = candidateTransits(bundle, c);
-  const N = Math.min(c.nTransitsObserved ?? transits.length, rules.matching.nTransits.cap ?? Infinity);
+  // 서버와 동일하게 관측 창에서 센다. N 상한은 주기 오차에만 적용한다.
+  const observedTransits = transits.length;
+  const N = Math.min(observedTransits, rules.matching.nTransits.cap ?? Infinity);
   const ePeriod = Math.abs(Pu - Pc) * N / halfC;                  // halfC = max(D_c/2, minWindowDays/2)
   const Pmod = Math.min(derived.periodDays, Pc);          // 절반 주기 alias 는 사용자 주기로 순환 (규칙 epoch.modulusNote)
   const kEp = Math.round((derived.epochBtjd - c.epochBtjd) / Pmod);
@@ -126,7 +131,8 @@ function evaluate(bundle, rules, derived, c, m) {
   const overlapPass = overlapTransits >= rules.matching.conditions.overlap.minOverlapTransits;
   const pass = ePeriod <= 1 && eEpoch <= 1 && durationPass && overlapPass;
   return { candidateId: c.id, multiplier: m, correctedPeriodDays: Pu, nTransits: N, ePeriod, eEpoch, eDuration, durationRatio: ratio,
-           durationPass, overlapTransits, overlapRatio: N ? overlapTransits / N : 0, pass,
+           durationPass, overlapTransits, observedTransits,
+           overlapRatio: observedTransits ? overlapTransits / observedTransits : 0, pass,
            score: Math.max(ePeriod, eEpoch, eDuration) };
 }
 
@@ -166,9 +172,9 @@ function match(bundle, rules, derived, candidates, removedIds) {
 // ---------------------------------------------------------------- 사례 실행
 const round = (x, d = 6) => (x === null || x === undefined) ? x : Math.round(x * 10 ** d) / 10 ** d;
 
-function runCase(fx, c) {
+function runCase(fx, c, baseRules = RULES) {
   const bundle = { ...fx.bundle, ...(c.bundleOverride || {}) };
-  const rules = JSON.parse(JSON.stringify(RULES));
+  const rules = JSON.parse(JSON.stringify(baseRules));
   if (c.rulesOverride) for (const [k, v] of Object.entries(c.rulesOverride)) {
     const [sec, key] = k.split('.');
     rules[sec][key].value = v;

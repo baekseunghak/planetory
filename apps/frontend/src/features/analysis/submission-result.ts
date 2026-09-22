@@ -5,7 +5,7 @@ import type { MatchStatus } from "./submission-data.ts";
 // 자세한 이유는 docs/analysis-result.md.
 
 /** 후보 판정. API의 표시 어휘이며 DB의 소문자 어휘와 다르다. */
-const dispositions = ["CONFIRMED", "UNCONFIRMED", "FP"] as const;
+export const dispositions = ["CONFIRMED", "UNCONFIRMED", "FP"] as const;
 export type Disposition = (typeof dispositions)[number];
 const answerClasses = ["graded", "analysis"] as const;
 const planetTruths = ["planet", "not_planet"] as const;
@@ -37,7 +37,7 @@ export type AchievementResult = (typeof achievementResults)[number];
  * 6.4절의 공개 상태는 **둘뿐이다.** 「미확정 매칭만 `UNPUBLISHED`, 확정·FP는
  * `NOT_ELIGIBLE`」이라 제출 직후에는 이미 공개된 상태가 올 수 없다.
  *
- * 8.2절 기록 상세는 같은 본문을 쓰지만 시간이 지난 뒤라 `PUBLISHED`·`HIDDEN`이
+ * 6.6절 조회·8.2절 기록 상세는 같은 본문을 쓰지만 시간이 지난 뒤라 `PUBLISHED`·`HIDDEN`이
  * 더 온다. **여기서 넓히지 않는다** — 넓히면 제출 응답이 공개됐다고 말해도
  * 통과한다. 읽는 쪽이 자기 계약의 집합을 준다.
  */
@@ -268,7 +268,7 @@ function readSignal(value: unknown): SubmissionSignal {
   };
 }
 
-function readStatistics(value: unknown): JudgmentStatistics {
+export function readStatistics(value: unknown): JudgmentStatistics {
   const data = record(value, "judgmentStatistics");
   if (data.kind === "graded")
     return {

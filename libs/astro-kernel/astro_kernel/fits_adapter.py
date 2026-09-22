@@ -4,7 +4,7 @@ import numpy as np
 from .preprocessing import PreprocessError, SectorInput, _array, _identifier
 
 
-def parse_spoc_hdul(hdul, *, product_id: str) -> tuple[SectorInput, dict]:
+def parse_spoc_hdul(hdul, *, product_id: str, source_sha256: str | None = None) -> tuple[SectorInput, dict]:
     """Accept an astropy HDUList. Copy arrays before its file is closed.
 
     Requires native SPOC BTJD/TDB and electrons/s; never guesses or converts
@@ -37,7 +37,7 @@ def parse_spoc_hdul(hdul, *, product_id: str) -> tuple[SectorInput, dict]:
         if len({len(a) for a in arrays}) != 1:
             raise PreprocessError("length_mismatch", product_id)
         meta["FLUX_UNIT"] = units["PDCSAP_FLUX"]
-        return SectorInput(meta["TICID"], meta["SECTOR"], product_id, *arrays), meta
+        return SectorInput(meta["TICID"], meta["SECTOR"], product_id, *arrays, source_sha256=source_sha256), meta
     except PreprocessError:
         raise
     except KeyError as exc:

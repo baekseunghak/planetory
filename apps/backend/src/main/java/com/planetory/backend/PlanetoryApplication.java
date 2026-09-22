@@ -11,7 +11,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import com.planetory.backend.domain.exploration.command.CandidateCorrectionPrecheckCommand;
 import com.planetory.backend.domain.exploration.command.ChallengeUnlockCommand;
+import com.planetory.backend.domain.statistics.command.StatisticsCommand;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
@@ -21,10 +23,23 @@ public class PlanetoryApplication {
 	public static final String COMMAND_PROPERTY = "planetory.command";
 
 	/** 실행할 수 있는 운영 명령. 명령을 추가하면 여기에 등록한다. */
-	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME);
+	static final Set<String> COMMANDS = Set.of(ChallengeUnlockCommand.NAME,
+			CandidateCorrectionPrecheckCommand.NAME, StatisticsCommand.NAME);
+
+	/**
+	 * 기동 마이그레이션을 금지하는 명령. 통계처럼 쓰기 명령도 포함한다.
+	 *
+	 * <p>Flyway는 컨텍스트가 뜨는 중에 DDL을 실행하고, 배포 compose는 마이그레이션(소유자) 계정까지
+	 * 넘긴다. 그래서 끄지 않으면 "영향만 세어 보는" 실행이 미적용 migration을 적용해 버린다.
+	 * 메서드의 {@code readOnly = true}는 그보다 한참 뒤에야 걸린다 [S15P21C206-154 리뷰].
+	 */
+	static final Set<String> FLYWAY_DISABLED_COMMANDS = Set.of(CandidateCorrectionPrecheckCommand.NAME, StatisticsCommand.NAME);
 
 	/** 실행할 수 없는 명령 인자. sysexits의 사용법 오류(EX_USAGE)와 같은 값이다. */
 	static final int INVALID_COMMAND_EXIT_CODE = 64;
+
+	/** 기동 중 마이그레이션 실행 여부를 정하는 속성. 등록된 명령은 이것을 false로 강제한다. */
+	static final String FLYWAY_ENABLED = "spring.flyway.enabled";
 
 	private static final String COMMAND_ARGUMENT = "--" + COMMAND_PROPERTY + "=";
 
@@ -37,8 +52,9 @@ public class PlanetoryApplication {
 			System.exit(INVALID_COMMAND_EXIT_CODE);
 			return;
 		}
-		ConfigurableApplicationContext context = application(args).run(args);
-		if (isCommand(args)) {
+		String[] effective = withFlywayDisabledGuards(args);
+		ConfigurableApplicationContext context = application(effective).run(effective);
+		if (isCommand(effective)) {
 			// 명령은 한 번 실행하고 끝난다. 종료 코드는 명령이 정한다.
 			System.exit(SpringApplication.exit(context));
 		}
@@ -51,6 +67,23 @@ public class PlanetoryApplication {
 			application.setWebApplicationType(WebApplicationType.NONE);
 		}
 		return application;
+	}
+
+	/**
+	 * 등록된 명령에 Flyway 비활성화를 <b>명령줄 인자로</b> 덧붙인다.
+	 *
+	 * <p>기본 속성(setDefaultProperties)은 우선순위가 가장 낮아 설정 파일 한 줄로 뒤집힌다. 명령줄
+	 * 인자는 가장 높으므로 운영자가 옵션을 빼먹어도, 설정이 켜 두어도 마이그레이션이 돌지 않는다.
+	 * 같은 키를 명시적으로 주면 스프링이 두 값을 이어 붙여 Boolean 바인딩이 실패하므로, 조용히
+	 * 켜지는 경로가 없다 [S15P21C206-154 리뷰].
+	 */
+	static String[] withFlywayDisabledGuards(String[] args) {
+		if (commandValues(args).stream().noneMatch(FLYWAY_DISABLED_COMMANDS::contains)) {
+			return args;
+		}
+		String[] guarded = Arrays.copyOf(args, args.length + 1);
+		guarded[args.length] = "--" + FLYWAY_ENABLED + "=false";
+		return guarded;
 	}
 
 	static boolean isCommand(String[] args) {

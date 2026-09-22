@@ -113,7 +113,7 @@ public class PublicAnalysisService {
                 .params(basis.candidateId(), basis.ticId()).query(Boolean.class).single()) {
             throw new BusinessException(ErrorCode.PUBLICATION_NOT_ELIGIBLE);
         }
-        // 최초 생성 경합은 DB가 해소한다. 실패한 SQL 예외를 잡아 같은 트랜잭션을 계속하지 않는다.
+        // 최초 생성 경합과 공개 후보 요약 본문은 DB가 처리한다(V19). GET에서 본문을 채우지 않는다.
         jdbc.sql("""
                 INSERT INTO posts(kind, user_id, candidate_id, board, tic_id, title, body, status)
                 VALUES ('system_thread', NULL, ?, 'star', ?, ?, '', 'visible')

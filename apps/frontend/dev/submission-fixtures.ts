@@ -245,8 +245,13 @@ function validate(
     if (kind === "skipped" && !record(context.tutorial)?.skipAvailable)
       return fail(409, "SKIP_NOT_AVAILABLE", "지금은 건너뛸 수 없습니다.");
   }
-  if (body.retryOfSubmissionId != null)
-    return invalid("retryOfSubmissionId", "Not supported by this fixture");
+  if (
+    body.retryOfSubmissionId != null &&
+    ![...accepted.values()].some(
+      (entry) => entry.result.submissionId === body.retryOfSubmissionId,
+    )
+  )
+    return invalid("retryOfSubmissionId", "Unknown source submission");
   return null;
 }
 
@@ -405,6 +410,58 @@ export function submissionFixtureResponse(options: {
   contextFor: (ticId: string) => ContextProbe;
 }): SubmissionFixtureReply | null {
   const { method, url, csrf, scenario, outcome, body, contextFor } = options;
+  const retry = /^\/v1\/submissions\/([^/]+)(\/retry-draft)?$/.exec(
+    url.pathname,
+  );
+  if (retry && method === "GET") {
+    const entry = [...accepted.values()].find(
+      (item) => item.result.submissionId === retry[1],
+    );
+    if (!entry) return fail(404, "RESOURCE_NOT_FOUND", "접수 기록이 없습니다.");
+    if (!retry[2]) return json(200, entry.result, storedBundle(entry));
+    const probe = contextFor(entry.ticId);
+    if (!probe || probe.status !== 200)
+      return fail(409, "STAR_RETIRED", "현재 분석할 수 없는 항성입니다.");
+    const context = record(probe.body)!;
+    const bundle = record(context.bundle)!;
+    const original = record(entry.result.original)!;
+    const derived = record(entry.result.serverDerived);
+    const period = original.periodDays as number | null;
+    const epoch = derived?.epochBtjd as number | undefined;
+    const duration = derived?.durationHours as number | undefined;
+    let phaseStart = original.phaseStart as number | null;
+    let phaseEnd = original.phaseEnd as number | null;
+    if (period && epoch != null && duration != null) {
+      const center =
+        ((((epoch - Number(bundle.foldReferenceTimeBtjd)) / period) % 1) + 1) %
+        1;
+      const width = duration / 24 / period;
+      phaseStart = (((center - width / 2) % 1) + 1) % 1;
+      phaseEnd = phaseStart + width;
+    }
+    return json(
+      200,
+      {
+        sourceSubmissionId: retry[1],
+        retryOfSubmissionId: retry[1],
+        bundleId: bundle.bundleId,
+        isPreviousBundle: entry.result.bundleId !== bundle.bundleId,
+        curveContext: entry.result.curveContext,
+        restored: { step: true, notice: null },
+        draft: {
+          periodDays: period,
+          phaseStart,
+          phaseEnd,
+          viewState: original.viewState,
+          userJudgment: null,
+          evidenceChecks: [],
+          memo: null,
+        },
+        residualForStep: { status: "COMPLETED", jobId: null },
+      },
+      String(bundle.bundleId),
+    );
+  }
   const byRequest = /^\/v1\/submissions\/by-request\/([^/]+)$/.exec(
     url.pathname,
   );

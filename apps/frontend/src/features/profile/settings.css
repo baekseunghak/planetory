@@ -1,0 +1,121 @@
+.explorer-settings {
+  max-width: 1080px;
+  margin: 2rem auto;
+  padding: 1rem 2rem 4rem;
+}
+.explorer-settings > header {
+  padding-bottom: 3.5rem;
+}
+.explorer-settings h1 {
+  font-size: clamp(2rem, 3.5vw, 3.5rem);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  margin: 0.65rem 0;
+}
+.explorer-settings p {
+  color: #b9c4d8;
+  line-height: 1.8;
+}
+.explorer-settings a {
+  color: #b7d1ff;
+}
+.settings-row {
+  display: grid;
+  grid-template-columns: 135px minmax(0, 1fr);
+  gap: 20px;
+  padding: 30px 0;
+  border-bottom: 1px solid #ffffff26;
+}
+.settings-index {
+  color: #9aaec8;
+  font: 0.75rem monospace;
+  letter-spacing: 0.15em;
+}
+.settings-row h2 {
+  font-size: 1.35rem;
+  font-weight: 500;
+  margin: 0.75rem 0;
+}
+.settings-row h3 {
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 500;
+}
+.settings-switchline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-switch {
+  padding: 4px;
+  width: 48px;
+  min-width: 48px;
+  height: 28px;
+  border-radius: 20px;
+  background: #344158;
+  border: 1px solid #8492ab;
+}
+.settings-switch span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.settings-switch[aria-checked="true"] {
+  background: #42789f;
+}
+.settings-switch[aria-checked="true"] span {
+  transform: translateX(18px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch span {
+    transition: none;
+  }
+}
+.settings-row fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.settings-row legend {
+  padding: 0 0 1rem;
+  font-size: 0.875rem;
+  color: #bac9e1;
+}
+.settings-row label {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  min-height: 3rem;
+  cursor: pointer;
+}
+.settings-row input {
+  accent-color: #a4c7ff;
+  width: 1rem;
+  height: 1rem;
+}
+.settings-current {
+  font-size: 0.8rem;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.settings-actions button {
+  min-height: 2.75rem;
+}
+.settings-row [role="alert"] {
+  color: #ffbfba;
+}
+.settings-row [role="status"] {
+  min-height: 1.5em;
+  color: #bbd5ff;
+}
+@media (max-width: 1100px) {
+  .settings-row {
+    gap: 2rem;
+  }
+}

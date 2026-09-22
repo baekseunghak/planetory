@@ -21,9 +21,8 @@ class MemberCommunityPermissionTest {
 
     private static final List<String> WRITABLE =
             List.of("users", "user_settings", "posts", "comments");
-    private static final List<String> UNUSED = List.of(
-            "follows", "notifications",
-            "stats_snapshots");
+    // V11이 "필요한 동사를 코드로 확정할 수 없으므로 각 기능 티켓이 추가한다"로 남긴 마지막 테이블이
+    // notifications였다. V22(S15P21C206-150)가 재개 사건 쓰기 경로와 함께 확정해 UNUSED는 비었다.
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -53,10 +52,23 @@ class MemberCommunityPermissionTest {
         Flyway upgraded = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
+                .target("19")
                 .load();
         // V16 이후 제출 상세 V17과 출처 권한 V18을 순서대로 적용한다.
         var applied = upgraded.migrate();
-        assertEquals(List.of("17", "18"), applied.migrations.stream().map(m -> m.version).toList());
+        assertEquals(List.of("17", "18", "19"), applied.migrations.stream().map(m -> m.version).toList());
+        Flyway followUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("20").load();
+        assertEquals(List.of("20"), followUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway statsUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("21").load();
+        assertEquals(List.of("21"), statsUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway reopenUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("22").load();
+        assertEquals(List.of("22"), reopenUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -84,10 +96,16 @@ class MemberCommunityPermissionTest {
             }
 
             assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
+            assertTrue(hasPrivilege(owner, "stats_snapshots", "SELECT"));
+            assertTrue(hasPrivilege(owner, "global_stats", "SELECT"));
+            for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "stats_snapshots", denied), denied);
+            }
+            assertFalse(hasPrivilege(owner, "global_stats", "MAINTAIN"));
             for (String allowed : List.of("SELECT", "INSERT", "UPDATE", "DELETE"))
                 assertTrue(hasPrivilege(owner, "post_reactions", allowed));
             assertFalse(hasPrivilege(owner, "post_reactions", "TRUNCATE"));
-            for (String table : List.of("post_history_attachments", "comment_history_attachments", "post_source_links")) {
+            for (String table : List.of("post_history_attachments", "comment_history_attachments", "post_source_links", "follows")) {
                 for (String allowed : List.of("SELECT", "INSERT", "DELETE")) assertTrue(hasPrivilege(owner, table, allowed));
                 for (String denied : List.of("UPDATE", "TRUNCATE")) assertFalse(hasPrivilege(owner, table, denied));
             }
@@ -96,10 +114,12 @@ class MemberCommunityPermissionTest {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
 
-            for (String table : UNUSED) {
-                for (String privilege : List.of("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
-                    assertFalse(hasPrivilege(owner, table, privilege), table + ": " + privilege);
-                }
+            // 재개 사건(V22)은 만들기만 한다. 읽음 표시의 UPDATE는 알림 조회 티켓이 받는다.
+            for (String allowed : List.of("SELECT", "INSERT")) {
+                assertTrue(hasPrivilege(owner, "notifications", allowed), allowed);
+            }
+            for (String denied : List.of("UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "notifications", denied), denied);
             }
         }
     }

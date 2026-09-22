@@ -302,7 +302,7 @@ function readSegment(value: unknown): CurveSegment {
     return [start, end];
   });
   const startBtjd = number(data.startBtjd, "startBtjd") as Btjd;
-  if (!Number.isFinite(startBtjd + (binMinutes / 1440) * (nPoints - 1)))
+  if (!Number.isFinite(startBtjd + (binMinutes / 1440) * nPoints))
     invalid("time range");
   return {
     segmentId: text(data.segmentId, "segmentId"),

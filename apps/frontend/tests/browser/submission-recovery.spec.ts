@@ -123,6 +123,30 @@ test("a dropped response after acceptance is recovered by request id", async ({
   expect(result.released).toBe(0);
 });
 
+test("recovery accepts the current published state and later progress over HTTP", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/submissions/by-request/*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        progress: {
+          ...body.progress,
+          currentCurveStep: body.curveContext.curveStep + 1,
+        },
+        publication: { state: "PUBLISHED", publicAnalysisId: "pa-9" },
+      },
+    });
+  });
+  const result = await run(page, "drop-saved");
+  expect(result.state).toBe("accepted");
+  expect(result.posts).toBe(1);
+  expect(result.gets).toBe(1);
+});
+
 test("a dropped response before acceptance resends the same id and succeeds", async ({
   page,
 }) => {

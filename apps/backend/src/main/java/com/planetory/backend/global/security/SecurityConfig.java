@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.client.web.HttpSessionOAuth2Authorize
 import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
@@ -32,7 +33,11 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, MemberService members, AuthSessionService sessions,
             SecurityErrorWriter errors, OAuthLoginSuccessHandler success, Clock clock, Environment environment,
-            ObjectProvider<ClientRegistrationRepository> clients) throws Exception {
+            InternalApiProperties internal, ObjectProvider<ClientRegistrationRepository> clients) throws Exception {
+        // 인가·CSRF 예외·토큰 검사가 같은 매처를 쓴다. 문자열을 각자 비교하면 디코딩 차이로
+        // 한쪽만 통과하는 경로가 생긴다(MR !177 리뷰 P1).
+        RequestMatcher internalPaths = PathPatternRequestMatcher.withDefaults()
+                .matcher(InternalTokenFilter.PATTERN);
         RequestMatcher logoutPost = request -> request.getMethod().equals("POST")
                 && request.getRequestURI().equals(request.getContextPath() + "/api/v1/auth/logout");
         http.httpBasic(basic -> basic.disable())
@@ -40,13 +45,14 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                         .sessionFixation(fixation -> fixation.changeSessionId()))
-                .csrf(csrf -> csrf.ignoringRequestMatchers(request -> logoutPost.matches(request)
-                        && request.getSession(false) == null))
                 .authorizeHttpRequests(auth -> {
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
                             .requestMatchers("/login", "/oauth2/authorization/*", "/login/oauth2/code/*").permitAll()
                             .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health").permitAll()
                             .requestMatchers(logoutPost).permitAll();
+                    // 내부 경로는 InternalTokenFilter의 서비스 토큰이 막는다. 회원 인증 대상이
+                    // 아니므로 여기서 authenticated()로 두면 토큰이 맞아도 401이 된다.
+                    auth.requestMatchers(internalPaths).permitAll();
                     if (environment.acceptsProfiles(Profiles.of("local"))) {
                         auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/hello").permitAll();
                     }
@@ -58,6 +64,11 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, e) -> errors.write(response, ErrorCode.FORBIDDEN)))
                 .logout(logout -> logout.logoutUrl("/api/v1/auth/logout").deleteCookies("SESSION")
                         .logoutSuccessHandler((request, response, auth) -> response.setStatus(204)))
+                // 내부 경로는 쿠키가 아니라 요청 헤더의 서비스 토큰으로 인증한다. 브라우저가
+                // 교차 출처에서 그 헤더를 붙일 수 없으므로 CSRF가 막을 공격이 없다. 대신 토큰이
+                // 없거나 틀리면 InternalTokenFilter가 먼저 401로 끝낸다.
+                .csrf(csrf -> csrf.ignoringRequestMatchers(internalPaths))
+                .addFilterBefore(new InternalTokenFilter(internal, errors, internalPaths), CsrfFilter.class)
                 .addFilterBefore(new SessionAuthenticationFilter(members, sessions, errors, clock), CsrfFilter.class);
         if (clients.getIfAvailable() != null) {
             http.addFilterBefore(new SsafyCallbackFilter(errors), OAuth2LoginAuthenticationFilter.class);

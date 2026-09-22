@@ -532,6 +532,12 @@ erDiagram
         timestamptz read_at "읽은 시각"
         timestamptz created_at "생성 시각"
     }
+    global_stats["global_stats · 전체 통계 MV"] {
+        integer singleton UK "한 행 유일 키"
+        timestamptz as_of "원천 기준 시각"
+        timestamptz generated_at "집계 생성 시각"
+        jsonb payload "비식별 전체 통계"
+    }
     stats_snapshots["stats_snapshots · 통계 일일 집계"] {
         bigint id PK "고유 번호"
         date snapshot_date "집계일"
@@ -575,7 +581,7 @@ erDiagram
 
 **user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB `{"achievement":true,"reopen":true,"challenge":true,"follow":false}`, onboarding_done.
 
-**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). 다형 참조라 FK 없음.
+**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). target은 다형 참조라 FK 없이 서비스에서 검증하며 user_id는 users FK다. 173은 기존 테이블·IDENTITY·created_at을 재사용한다. V20은 앱 SELECT·INSERT·DELETE만 추가하고 UPDATE·TRUNCATE를 금지한다(V11 sequence 권한 재사용). 반복 PUT은 created_at을 유지한다. 사용자 승인(2026-09-22)에 따른 현재 유효 관계·개인 관리 ID·탈퇴 제외 계약은 [서비스 API 12.1](../../apps/backend/docs/service-api-spec.md#follow-policy)을 따른다. 원천 보관/탈퇴 삭제·익명화·마지막 발견자 공개 자격은 별도 미정이다. 테이블·열·관계선 변경이 없어 ERD SVG는 변경하지 않는다.
 
 ### B. 별·공개 데이터 카탈로그 (Gold 메타데이터)
 
@@ -773,7 +779,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | candidate_id | FK, `UNIQUE(candidate_id) WHERE kind='system_thread'` | 신호당 스레드 하나. kind=user는 NULL |
 | board | CHECK star/free | star면 tic_id NOT NULL, free면 NULL |
 | tag | ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL. system_thread는 NULL | |
-| title, body | | system_thread는 신호 요약을 시스템이 채움 |
+| title, body | | system_thread는 공개 후보 네 수치 요약을 V19 트리거로 생성·동기화한다. [검색 본문 계약](../api/community/README.md#공식-제목본문의-구현-차이) |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
 | 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
@@ -810,9 +816,13 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 - **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6). `tic_id`는 공개된 별만(v1.9 트리거).
 - **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04). **v1.9:** `values`는 형식 1(`format_version`과 `selection`·`matching`·`peaks`·`discovery`·`tutorial`·`ai`·`bls` 묶음, 예: `tutorial_skip_after` → `tutorial.skip_after`)만 받는다(CHECK `ck_operation_settings_values_valid`). 적용 시각 유일(`uq_operation_settings_applied_at`), 적용된 행 수정·삭제·비우기와 지난 시각 삽입 거절(트리거), 초기 규칙 `rule-0`. 상세는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md).
 - **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
-- **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
-- **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
+- **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC). **150 구현:** 판 전환 재개 사건(탐사 API 9.3절)이 이 테이블의 첫 쓰기 경로다. `type='reopen'`, payload는 `{ticId, bundleId, newDiscoverableCount}`이며 `reason`은 근거가 되는 `candidate_status_history`를 남길 Publisher(S15P21C206-87)가 없어 아직 싣지 않는다. V22가 `(user_id, payload->>'ticId', payload->>'bundleId') WHERE type='reopen'` 부분 유일 인덱스로 같은 판의 중복 사건을 DB에서 막고, 앱 역할에 SELECT·INSERT만 준다. 읽음 표시(read_at)의 UPDATE는 알림 조회를 구현하는 티켓이 받는다.
+- **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. `metrics` 컬럼에는 지표 map만이 아니라 상태·기준/관측/생성 시각·코호트 메타데이터·지표 map을 포함한 `ComparisonSnapshot` 전체 JSON을 저장한다. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
+
+**178 구현(사용자 승인 2026-09-22):** V21이 `stats_snapshots(snapshot_date,scope,round_id) NULLS NOT DISTINCT` 유일 인덱스를 추가하여 global의 NULL 회차도 멱등 키로 보호한다. 기존 중복이 있으면 migration을 실패시키고 성공본을 임의 삭제하지 않는다. 별도 개인 Snapshot 테이블은 없다. `global_stats`는 `singleton` 유일 인덱스와 `as_of/generated_at/payload`를 가진 한 행 MV이며 `WITH NO DATA`로 생성한다. 최초 명시적 적재 뒤 CONCURRENTLY를 사용한다. 앱 역할은 두 집계의 SELECT만, `planetory_stats_job`은 MV MAINTAIN·Snapshot SELECT/INSERT와 필요한 원천 SELECT만 가진다. UPDATE/DELETE 없이 성공본을 보존한다. MV 계산은 소유자 권한으로 수행되지만 잡 계정에는 소유권·역할 상속·원천 쓰기를 주지 않는다.
+
+Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
 ## 4. 설계 결정과 근거
@@ -837,7 +847,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | 1 | operation_settings 기본값 확정. 항목 목록은 v1.9 형식 1로 정했고 `rule-0`은 개발용 v0 값이다. 확정 값은 새 규칙 버전으로 넣는다 | OPS-04·08, DEC-03, D20·D11 |
 | 2 | 새 판 적재 시 후보 동일성 판단 기준(주기·중심 시각 허용 오차) | DEC-03, DAT-05·08 |
 | 3 | 채택 신호 0개 별 비율 실측 결과에 따른 BLS 임계값 조정 | DEC-01·03 |
-| 4 | 탈퇴 시 users 익명화 범위와 posts·submissions·published_analyses 보존 | DEC-11 |
+| 4 | 탈퇴 시 users·OAuth 식별자·게시물·History·공개 분석·관계·통계·백업 처리와 기간. NO ACTION FK·제공자 UNIQUE·History 불변 권한을 유지한 상태로 정책/정리 권한·순서를 후속 검토. snapshot_params의 메모와 재현 필드를 분리하며 당시 표시/재계산 보장 수준은 DEC-11 3.1절에서 결정한다. 공개 철회는 기존 unpublished_at 재사용/전용 열 추가와 식별 연결 정리 후 제외 근거를 Q1에서 선택하며 전용 열의 DDL·GRANT는 180 범위다. 179에서는 DDL을 변경하지 않음 | [DEC-11 결정표](../requirements/planetory-decision-register.md#dec-11), 제안·승인 대기 |
 | 5 | published_analyses는 161에서 앱 역할 INSERT만 허용해 원본 참조·최초 시각을 보호한다. 162에서 상태 열의 UPDATE 권한을 추가한다. analysis_histories·analysis_snapshots의 기존 불변 권한은 유지한다 | HIS-06, S08·S09 |
 | 6 | 히스토리 첨부의 소유자·TIC 일치 검증을 트리거로 둘지 | COM-07 |
 | 8 | 별 지도는 user_id·layout_version으로 격리한 world_x/world_y 공간 인덱스와 타일 캐시로 개별 별을 조회한다. 서버 공식 군집/군집 통계 응답을 만들지 않는다. 새 발견/표시 상태 변경 시 영향받은 인덱스·타일 캐시와 회원 version을 갱신한다. 조회/범위 수/version은 일관된 DB 스냅샷으로 읽고 cursor는 회원·version·level·bbox·limit에 묶는다. 인덱스 구조·쿼리 계획·rangeStarCount 집계 비용은 10만 별 실측으로 검증하며 generation만으로 조회하지 않는다 | NFR-20a·d, SRS v1.3, 탐사 API 4.1 |

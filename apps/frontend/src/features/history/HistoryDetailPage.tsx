@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { usePageContext } from "../../app/usePageContext.ts";
+import { pagePath } from "../../app/paths.ts";
 import { HistoryCurveChart } from "../analysis/HistoryCurveChart.tsx";
 import { wrapPhaseWindow } from "../analysis/history-graph.ts";
 import type { HistoryDetail } from "../analysis/history-data.ts";
@@ -45,6 +46,21 @@ const PUBLICATION: Record<string, string> = {
   UNPUBLISHED: "공개할 수 있습니다.",
   NOT_ELIGIBLE: "공개 대상이 아닙니다.",
 };
+
+/**
+ * 돌아갈 곳의 이름. **주소에서 읽는다** — 기록으로 들어오는 길이 분석·마이
+ * 페이지·지도·게시글로 여럿이라, 어디서 왔든 「분석으로」라고 적으면 거짓이
+ * 된다. 모르는 곳이면 목적지를 지어내지 않고 그냥 돌아간다고만 말한다.
+ */
+function backLabel(returnTo: string) {
+  if (returnTo.startsWith("/analysis/")) return "분석으로 돌아가기";
+  if (returnTo === "/me" || returnTo.startsWith("/me?"))
+    return "마이페이지로 돌아가기";
+  if (returnTo.startsWith("/sky")) return "별지도로 돌아가기";
+  if (returnTo.startsWith("/posts/") || returnTo.startsWith("/comments/"))
+    return "글로 돌아가기";
+  return "돌아가기";
+}
 
 function Pair({ term, children }: { term: string; children: ReactNode }) {
   return (
@@ -143,8 +159,29 @@ export function HistoryDetailPage() {
   // 분석·지도·게시글 셋이라 화면마다 돌아갈 곳이 다르고, 그 값을 주소가
   // 들고 온다. **여기서 목적지를 지어내지 않는다.**
   const { historyId = "", returnTo } = usePageContext();
-  const { detail, graph, mode, setMode, retryGraph } =
-    useHistoryDetail(historyId);
+  // 기록이 바뀌면 모드·없음 관찰·진행 중 요청을 함께 새로 시작한다.
+  return (
+    <HistoryDetail key={historyId} historyId={historyId} returnTo={returnTo} />
+  );
+}
+
+function HistoryDetail({
+  historyId,
+  returnTo,
+}: {
+  historyId: string;
+  returnTo: string;
+}) {
+  const {
+    detail,
+    graph,
+    mode,
+    setMode,
+    retryGraph,
+    retryDetail,
+    snapshotMissing,
+  } = useHistoryDetail(historyId);
+  const { currentPath } = usePageContext();
 
   return (
     <main className="page history-detail">
@@ -153,10 +190,43 @@ export function HistoryDetailPage() {
       {detail.phase === "loading" && <p role="status">불러오는 중입니다.</p>}
       {(detail.phase === "denied" ||
         detail.phase === "error" ||
-        detail.phase === "unreadable") && <p role="alert">{detail.message}</p>}
+        detail.phase === "unreadable") && (
+        <>
+          <p role="alert">{detail.message}</p>
+          {detail.phase === "error" && (
+            <button type="button" onClick={retryDetail}>
+              기록 다시 불러오기
+            </button>
+          )}
+        </>
+      )}
 
       {detail.phase === "ready" && (
         <>
+          {(detail.detail.explanation.publication.state !== "NOT_ELIGIBLE" ||
+            detail.detail.explanation.publication.publicAnalysisId) && (
+            <Link
+              to={pagePath(
+                "publication",
+                { historyId },
+                { ticId: detail.detail.ticId, returnTo: currentPath },
+              )}
+            >
+              공개 검토·설정
+            </Link>
+          )}
+          <Link
+            to={
+              pagePath(
+                "analysis",
+                { ticId: detail.detail.ticId },
+                { returnTo: currentPath },
+              ) +
+              `&retryOfSubmissionId=${encodeURIComponent(detail.detail.submissionId)}`
+            }
+          >
+            다시 풀기
+          </Link>
           <dl className="history-receipt">
             <Pair term="기록 번호">{detail.detail.historyId}</Pair>
             <Pair term="별">TIC {detail.detail.ticId}</Pair>
@@ -188,11 +258,20 @@ export function HistoryDetailPage() {
               <button
                 type="button"
                 aria-pressed={mode === "SUBMITTED"}
+                disabled={snapshotMissing}
+                aria-describedby={
+                  snapshotMissing ? "history-snapshot-missing" : undefined
+                }
                 onClick={() => setMode("SUBMITTED")}
               >
                 제출 당시 기준
               </button>
             </div>
+            {snapshotMissing && (
+              <p id="history-snapshot-missing">
+                제출 당시 스냅샷이 없어 당시 보기를 사용할 수 없습니다.
+              </p>
+            )}
             {graph.phase === "loading" && (
               <p role="status">그래프를 불러오는 중입니다.</p>
             )}
@@ -262,7 +341,7 @@ export function HistoryDetailPage() {
         남겨 둔다 — 막다른 길에서 나갈 수 있어야 한다.
       */}
       <p className="history-back">
-        <Link to={returnTo}>분석으로 돌아가기</Link>
+        <Link to={returnTo}>{backLabel(returnTo)}</Link>
       </p>
     </main>
   );

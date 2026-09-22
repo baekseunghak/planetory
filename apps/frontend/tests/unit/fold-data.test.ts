@@ -13,6 +13,7 @@ import {
   foldTimes,
 } from "../../src/features/analysis/fold-data";
 import { createFoldProcessor } from "../../src/features/analysis/fold-worker-core";
+import { buildTimeCurve } from "../../src/features/analysis/time-curve";
 
 function sample() {
   const raw = analysisContextFixture();
@@ -21,6 +22,34 @@ function sample() {
   if (curve.kind !== "ready") throw new Error("expected ready");
   return { context, curve };
 }
+
+test("10-minute Gold centers match the model's 9–63 minute window without changing storage times", () => {
+  const { context, curve } = sample();
+  curve.segments = [
+    {
+      ...curve.segments[0],
+      startBtjd: 0 as (typeof curve.segments)[0]["startBtjd"],
+      binMinutes: 10,
+      nPoints: 12,
+      flux: Array(12).fill(1),
+      gaps: [],
+    },
+  ];
+  const folded = buildFoldData(context, curve),
+    time = buildTimeCurve(curve.segments);
+  assert.deepEqual(
+    folded.points
+      .filter((p) => p.btjd * 1440 >= 9 && p.btjd * 1440 <= 63)
+      .map((p) => p.index),
+    [1, 2, 3, 4, 5],
+  );
+  assert.deepEqual(
+    [...folded.times],
+    time.points.map((p) => p.btjd),
+  );
+  assert.equal(curve.segments[0].startBtjd, 0);
+  assert.equal(JSON.parse(folded.dataId)[0], "gold-bin-center-v1");
+});
 
 test("fold input preserves every valid bin, original indices, flux and multi-Sector actual times", () => {
   const { context, curve } = sample();
@@ -32,8 +61,8 @@ test("fold input preserves every valid bin, original indices, flux and multi-Sec
     data.points.map((p) => p.index),
     [0, 1, 4, 5, 6, 7, 0, 2, 3, 4, 5],
   );
-  assert.equal(data.times[1], 1683.35 + 10 / 1440);
-  assert.equal(data.times[7], 2419.99 + (2 * 20) / 1440);
+  assert.equal(data.times[1], 1683.35 + 15 / 1440);
+  assert.equal(data.times[7], 2419.99 + 50 / 1440);
   assert.ok(data.times.at(-1)! - data.times[0] > 700);
   for (const point of data.points) {
     const source = curve.segments.find((s) => s.segmentId === point.segmentId)!;

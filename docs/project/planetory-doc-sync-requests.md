@@ -45,7 +45,7 @@
 
 ### 114 추가 정합화 — 9942ee67 재검토 반영
 
-상태: 추가 보완·재리뷰 대기. 서비스/탐사 API·처리 역할·리뷰 체크리스트의 자동 확대·NaN·점별 오차 설명을 Gold와 맞췄다. develop의 143 변경(v1.11)을 보존하여 ERD v1.12에 114 변경 요약을 추가했고 상태가 포함된 Gold 제목·앵커를 고정 문구로 교체했다. 123은 GoldCatalogViews.java 설명과 새 migration의 DB COMMENT를 함께 정정하며 기존 V1은 보존한다. counts 전용 첨부·검산 절차는 비닝 벤치마크를 따른다. 이전 develop 통합은 e8f62ea에서 커밋·push까지 완료됐다. 최종 리뷰에 따라 최신 develop `2c1c857c591647289bb1e9803080a663d815c00e`의 119 추가 마스킹 항목과 114 항목을 모두 보존하도록 통합했다. 현재 승인 여부는 MR !101에서 관리한다.
+상태: 추가 보완·재리뷰 대기. 서비스/탐사 API·처리 역할·리뷰 체크리스트의 자동 확대·NaN·점별 오차 설명을 Gold와 맞췄다. develop의 143 변경(v1.11)을 보존하여 ERD v1.12에 114 변경 요약을 추가했고 상태가 포함된 Gold 제목·앵커를 고정 문구로 교체했다. 123은 GoldCatalogViews.java 설명을 정정한다. DB COMMENT는 아래 123 리뷰 후속으로 이관하며 기존 V1은 보존한다. counts 전용 첨부·검산 절차는 비닝 벤치마크를 따른다. 이전 develop 통합은 e8f62ea에서 커밋·push까지 완료됐다. 최종 리뷰에 따라 최신 develop `2c1c857c591647289bb1e9803080a663d815c00e`의 119 추가 마스킹 항목과 114 항목을 모두 보존하도록 통합했다. 현재 승인 여부는 MR !101에서 관리한다.
 ## S15P21C206-119 추가 마스킹 기준 정합화 (2026-09-20)
 
 상태: **!107 리뷰 반영·후속 245 등록, 재리뷰 대기**. 상단의 과거 R1~R9 완료와 별개다.
@@ -62,3 +62,68 @@ product_id·원본 source_row·cadenceno·원래 QUALITY·원본 시각·모든 
 현재 커널이 원래 QUALITY까지 보존하는 추가 마스킹 연결을 완료한 것은 아니다. 구간 근거·경계·실패·추적 회귀는
 245의 완료 조건이며 127에 인계한다. SRS 정합화 방향은 “일괄 6·12시간 제외는 적용하지 않고, 확인된 Sector 시작·
 궤도 근점 불량 구간은 근거 있는 구간만 별도 마스킹”이다. 요구 삭제로 처리하지 않는다.
+
+
+### 2026-09-21: 245 구현·로컬 검증 보완
+
+245에서 구간별 제품/근거 SHA, 원본 QUALITY와 모든 겹친 제외 사유를 보존하는 입력 계약을 구현했다.
+[실측 범위와 근거](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증), [소비 계층·재처리 계약](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)을 따른다.
+실제 Sector 3 DR42 표본에서는 추가 제외가 없으며 근거 구간 운영 채택·127 연결 리뷰는 남아 있다.
+SRS의 DAT-02 요구를 완화하거나 전체 범위 완료로 변경하지 않는다.
+
+
+245의 별도 `docs/data/tess-interval-mask-validation.md`는 사용자 요청으로 삭제하고
+[기존 tess-bench README](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)에 통합했다.
+같은 검증 범위에 별도 문서를 다시 만들지 않는다.
+
+## S15P21C206-153 GRD-06 재분류 표식 위치 (2026-09-21)
+
+| 문서·위치 | 현재 문구 | 수정 제안 | 근거 |
+| --- | --- | --- | --- |
+| SRS GRD-06 | "AnalysisHistory와 UserCandidateAchievement에 재분류 표식(relabeled_at, new_disposition)만 남기고" | "UserCandidateAchievement에 재분류 표식(relabeled_at, relabel_disposition)을 남기고" | `analysis_histories`에는 두 열이 없다(V1 스키마). 탐사 API 9.5절과 현재 구현은 성과 행에만 두고, 히스토리 화면 표식은 `(user_id, candidate_id)` 조인으로 만든다 |
+
+**이 차이가 남기는 것:** 성과가 없는 히스토리는 「기록이 갱신됨」을 표시할 수 없다. 미확정 미공개 기록과 판단 불일치 기록이 여기에 해당한다.
+그 기록에도 표식이 필요하다면 문구 정정이 아니라 스키마를 늘리는 요구사항 변경이므로 팀 결정이 필요하다.
+판단 근거는 [후보 병합·분리 정정 계약](../architecture/candidate-correction-contract.md) 2장 S6에 정리했다. 다른 영역의 요청 상태는 바꾸지 않는다.
+
+## S15P21C206-123 제공 격자·null 게시 경계 (2026-09-22)
+
+115의 실험 격자 `max(40, 최장 주기)`와 기존 API·Gold의 `max(40, 1.15 × 최장 주기)` 차이를 확인했다.
+담당자 윤성용은 기존 API·Gold 계약에 맞춰 123을 구현하고 새 비교 실험을 실행하는 방향을 선택했다.
+옛 실험 수치로 새 격자의 성능을 확정하지 않는다. null은 새 Bundle 전체 보류·기존 current 유지로 처리한다.
+상세 정본은 [Gold 계약 4.2절](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계)이다.
+상태: 구현·로컬 검증, FITS 비교·수치 규칙 채택 근거 확인·후속 리뷰 전. API·DB boolean 타입 변경은 없다.
+
+### 123 리뷰 후속: bin 중심 소비자 정합화
+
+상태: 후속 Task 등록 대기(아직 Jira 키 없음). 123 리뷰에서 기존 소비자 불일치를 확인했다.
+Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 소비자 계산 코드를 변경하지 않는다.
+
+- 대상: Backend `SubmissionMatching.observedWindows`의 실제 시작/끝 계산 및 javadoc,
+  `AnalysisViews` 설명, Frontend `fold-data.ts`, `history-graph.ts`, `time-curve.ts`의 BTJD,
+  `analysis-data.ts` 마지막 점 검증. 기준은 `start_btjd + (i + 0.5) × bin_minutes / 1440`이다.
+- `FoldedSnapshot`의 기존 bin 중심 결과와 같은 입력으로 대조하고, 관측 창·빈 bin·첫/마지막 점 및
+  제출 매칭 경계가 서버/화면에서 일치하는 회귀 테스트를 추가한다. 10분 bin의 기존 5분 차이를 확인한다.
+- `start_btjd` DB COMMENT를 '첫 bin 시작 시각'으로 정정한다. V1은 수정하지 않고 신규 migration으로 처리한다.
+  산포 COMMENT도 함께 정정·검증한다. 번호는 미정이며 열린 브랜치·적용 이력과 병합/배포 순서를 확정한 뒤 부여한다.
+- 완료 조건: 소비자 코드·API 설명·DB COMMENT 정합화와 경계 회귀·DB 적용 검증, 담당 리뷰를 기록한다.
+
+리뷰어는 `prepare_discoverability`를 진입점으로 고정하는 조건으로 123 규칙의 후속 적용에 동의했다.
+1.15배 상한의 실제 데이터 효과는 여전히 미검증이다. 조건부 승인을 운영 배포 승인으로 해석하지 않는다.
+
+123 Backend 리뷰 후속 갱신: 강재민이 M1 Backend 수정·matching-cases 표본 재검증·과거 제출 재판정 금지 확인을 자신의 후속 티켓으로 인수한다고 답했다. Frontend 4곳은 API 계약 확정 후 연결한다. start_btjd COMMENT 정정도 같은 후속 범위다. 실제 Jira 키는 아직 전달받지 않았다. Publisher 87 인계의 READ COMMITTED·FOR SHARE 대기 경계는 Gold 계약 4.2절에 기록했다.
+
+<a id="123-review-comment-handoff"></a>
+
+### 123 COMMENT migration 분리 결정
+
+사용자 요청으로 123의 V22 산포 COMMENT와 전용 검사 단계를 제거했다. 계산 커널·판정 기준은 변경하지 않는다.
+후속 정정 문구는 다음과 같다.
+
+- `light_curve_segments.start_btjd`: 첫 bin 시작 시각(BTJD). flux[i]의 시각은 start_btjd + (i + 0.5) × bin_minutes / 1440.
+- `light_curve_segments.flux_scatter`: 세그먼트의 유한 비닝 flux 전체에 대한 1.4826 × MAD. 무차원 상대 flux이며 통과·별 변동 포함. 점별 측정 오차·통과 밖 잡음·역분산 가중치가 아님.
+
+강재민이 인수한 M1 후속에 두 COMMENT를 함께 인계 요청한다. 산포 COMMENT의 추가 인수 확인과 실제 Jira 키 연결은 남아 있다.
+열린 V21 통계·V22 판 전환의 병합/배포 순서 및 대상 DB의 적용 이력을 먼저 확인해야 한다.
+후속 완료 조건은 새 DB 전체 적용, 기존 DB 순차 업그레이드, validate·재실행 0건 및 두 COMMENT 조회 확인이다.
+이미 적용된 영속 migration을 삭제하거나 repair/outOfOrder를 켜서 우회하지 않는다.

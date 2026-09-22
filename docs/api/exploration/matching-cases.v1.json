@@ -1,0 +1,2827 @@
+{
+  "fixtureVersion": "matching-v1.0-proposal",
+  "ruleVersion": "rule-1",
+  "contractStatus": "proposed-not-activated",
+  "synthetic": true,
+  "jira": "S15P21C206-128",
+  "description": "rule-1 공동 인계용 합성 JSON. cases는 기존 31개 전체 expected를 보존한다. contractChecks는 명시한 expectedSubset 필드만 정본으로 비교하며, 중간 부동소수값/문구를 새 계약으로 고정하지 않는다. 실제 프론트/서버 실행 완료를 뜻하지 않는다.",
+  "bundle": {
+    "foldReferenceTimeBtjd": 2000,
+    "observationBounds": [
+      1990,
+      2050
+    ],
+    "observedWindows": [
+      [
+        1990,
+        2015
+      ],
+      [
+        2020,
+        2050
+      ]
+    ],
+    "cadenceDays": 0.006944444444444444,
+    "periodGrid": {
+      "periodMinDays": 0.5,
+      "periodMaxDays": 40
+    },
+    "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+  },
+  "peaks": [
+    {
+      "gridIndex": 100,
+      "periodDays": 5,
+      "fineTune": {
+        "periodMinDays": 4.95,
+        "periodMaxDays": 5.05
+      },
+      "suggestedDurationHours": 2.4
+    },
+    {
+      "gridIndex": 200,
+      "periodDays": 2.5,
+      "fineTune": {
+        "periodMinDays": 2.47,
+        "periodMaxDays": 2.53
+      },
+      "suggestedDurationHours": 1.6
+    },
+    {
+      "gridIndex": 300,
+      "periodDays": 5.02,
+      "fineTune": {
+        "periodMinDays": 4.97,
+        "periodMaxDays": 5.07
+      },
+      "suggestedDurationHours": 4,
+      "note": "gridIndex 100 과 fineTune 이 겹친다"
+    },
+    {
+      "gridIndex": 400,
+      "periodDays": 11.8,
+      "fineTune": {
+        "periodMinDays": 11.7,
+        "periodMaxDays": 11.9
+      },
+      "suggestedDurationHours": 3.1
+    }
+  ],
+  "candidates": [
+    {
+      "id": "c-401",
+      "periodDays": 5,
+      "epochBtjd": 2001,
+      "durationHours": 2.4,
+      "note": "기본 직접 일치 대상. 통과 11회(2016 은 공백)"
+    },
+    {
+      "id": "c-403",
+      "periodDays": 11.8,
+      "epochBtjd": 1995.4,
+      "durationHours": 3.1,
+      "note": "P/2 alias 대상. 2019.0 통과는 공백"
+    },
+    {
+      "id": "c-404",
+      "periodDays": 2.5,
+      "epochBtjd": 2001,
+      "durationHours": 1.6,
+      "note": "2P alias 대상이자 c-401 과 같은 epoch 의 절반 주기"
+    },
+    {
+      "id": "c-405",
+      "periodDays": 28,
+      "epochBtjd": 2017,
+      "durationHours": 4,
+      "note": "통과 3회 중 1989 는 범위 밖, 2017 은 공백 → 관측 통과 1회"
+    }
+  ],
+  "cases": [
+    {
+      "id": "direct-401",
+      "tags": [
+        "direct"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "위상 중심 0.2 → epoch 2001.0, 폭 0.02×5 d = 2.4 h. c-401 과 정확히 일치.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "durationHoursDisplay": 2.4,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-401"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-404",
+            "multiplier": 0.5,
+            "score": 0.584963,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0.584963,
+            "overlapTransits": 11,
+            "nTransits": 22
+          }
+        ]
+      }
+    },
+    {
+      "id": "harmonic-half-403",
+      "tags": [
+        "harmonic-half"
+      ],
+      "selection": {
+        "periodDays": 5.9,
+        "phaseStart": 0.2093,
+        "phaseEnd": 0.2313,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "사용자가 c-403(11.8 d) 의 절반 주기를 골랐다. 배율 2 → 정정 주기 11.8. epoch 는 P_mod = min(5.9, 11.8) 로 순환해야 통과.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2203,
+          "epochBtjd": 2001.29977,
+          "durationHours": 3.1152,
+          "durationHoursDisplay": 3.12,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "matched_harmonic",
+          "candidateId": "c-403",
+          "harmonicMultiplier": 2,
+          "correctedPeriodDays": 11.8,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-403"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-403",
+            "multiplier": 2,
+            "score": 0.007057,
+            "ePeriod": 0,
+            "eEpoch": 0.003561,
+            "eDuration": 0.007057,
+            "overlapTransits": 4,
+            "nTransits": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "direct-over-harmonic",
+      "tags": [
+        "direct-over-harmonic"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "c-401 배율 1 과 c-404 배율 0.5(2P alias) 가 모두 통과하지만 배율 1 이 있으면 고조파는 비교 집합에서 제외(SRS 5.2 (4)).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "durationHoursDisplay": 2.4,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-401"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-404",
+            "multiplier": 0.5,
+            "score": 0.584963,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0.584963,
+            "overlapTransits": 11,
+            "nTransits": 22
+          }
+        ]
+      }
+    },
+    {
+      "id": "harmonic-double-404",
+      "tags": [
+        "harmonic-double"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": 100
+      },
+      "removedCandidateIds": [
+        "c-401"
+      ],
+      "notes": "c-401 을 제거한 잔차 단계. 같은 제출이 c-404 의 2P alias 로 matched_harmonic, 정정 주기 2.5.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "durationHoursDisplay": 2.4,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched_harmonic",
+          "candidateId": "c-404",
+          "harmonicMultiplier": 0.5,
+          "correctedPeriodDays": 2.5,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-404"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-404",
+            "multiplier": 0.5,
+            "score": 0.584963,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0.584963,
+            "overlapTransits": 11,
+            "nTransits": 22
+          }
+        ]
+      }
+    },
+    {
+      "id": "not-matched-epoch",
+      "tags": [
+        "not-matched"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.206,
+        "phaseEnd": 0.226,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "위상 중심 0.216 → epoch 2001.08. c-401 과 0.08 d 차이 = 반폭 0.05 d 초과(e_epoch 1.6). 어느 후보도 네 조건을 다 만족하지 못한다.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.216,
+          "epochBtjd": 2001.08,
+          "durationHours": 2.4,
+          "durationHoursDisplay": 2.4,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "zero-tie",
+      "tags": [
+        "zero-tie"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "note": "기본 직접 일치 대상. 통과 11회(2016 은 공백)"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "note": "c-401 과 파라미터 동일(합성)"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "서로 다른 후보 둘이 모두 0점. 동률 → ambiguous_match. id 정렬로 한쪽을 고르지 않는다.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 2.4,
+          "durationHoursDisplay": 2.4,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "ambiguous_match",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "tie (|s1−s2| ≤ epsilon)",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": false,
+            "ratioOk": false,
+            "overlapOk": true,
+            "tie": true
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "near-zero-ratio-only",
+      "tags": [
+        "near-zero-ratio-only"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.940625,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.04"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "s1=0, s2=0.04. 비율 조건(0 ≤ 0.02)은 만족하지만 점수 차 0.04 < minScoreGap 0.1 → ambiguous_match.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "ambiguous_match",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "score gap below minScoreGap",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.04,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": false,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.04,
+            "ePeriod": 0,
+            "eEpoch": 0.04,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "gap-just-below",
+      "tags": [
+        "gap-just-below"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.945,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.096"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "점수 차 0.096 < 0.1 → ambiguous_match.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "ambiguous_match",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "score gap below minScoreGap",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.096,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": false,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.096,
+            "ePeriod": 0,
+            "eEpoch": 0.096,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "gap-exact",
+      "tags": [
+        "gap-exact"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.9453125,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.1 = (1/128)/(5/64), 2진 정확"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "점수 차 정확히 0.1 = minScoreGap → 경계 포함(≥) → 우세. epoch 2000.9375·offset 1/128·반폭 5/64 가 모두 2진 정확해 e_epoch 가 double(0.1) 과 같다. 언어 간 차이가 없어야 하는 경계 사례.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.1,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.1,
+            "ePeriod": 0,
+            "eEpoch": 0.1,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "gap-just-above",
+      "tags": [
+        "gap-just-above"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.945625,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.104"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "점수 차 0.104 > 0.1, 비율 0 → 우세, c-401 matched.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.104,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.104,
+            "ePeriod": 0,
+            "eEpoch": 0.104,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "ratio-exact-boundary",
+      "tags": [
+        "ratio-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.95703125,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.25 (5/256)"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.9765625,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.5 (5/128)"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "s1 0.25, s2 0.5 → 비율 정확히 0.5 = dominanceRatio(경계 포함), 차 0.25 ≥ 0.1 → 우세. offset 5/256·5/128, 반폭 5/64 로 2진 정확.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0.25,
+            "s2": 0.5,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0.25,
+            "ePeriod": 0,
+            "eEpoch": 0.25,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.5,
+            "ePeriod": 0,
+            "eEpoch": 0.5,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "ratio-just-above",
+      "tags": [
+        "ratio-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.95703125,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.25"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.975,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.48"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "s1 0.25 > 0.5×0.48 = 0.24 → 비율 조건 실패 → ambiguous_match (점수 차 0.23 은 충분).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "ambiguous_match",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "ratio above dominanceRatio",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0.25,
+            "s2": 0.48,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": false,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0.25,
+            "ePeriod": 0,
+            "eEpoch": 0.25,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.48,
+            "ePeriod": 0,
+            "eEpoch": 0.48,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "overlap-recorded-no-inversion",
+      "tags": [
+        "overlap-vs-score"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2001,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.8"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "사용자 폭 1/32×5 d = 3.75 h. 두 후보의 중첩 비율이 모두 기록되고 (3) r1 ≥ r2 − 0.1 검사가 실행된다. v0 정의에서는 주기·epoch 통과가 창 이탈을 D_c 이내로 제한해 점수 1위가 중첩에서 '명확히' 불리해지는 사례를 구성할 수 없었다(offset+drift ≤ D_c, 창 반폭 합 ≥ 0.75 D_c). 중첩 우세가 점수 우세를 뒤집는 실제 사례는 111 실측에서 찾고, 없으면 (3) 을 제거한다.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.8,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.8,
+            "ePeriod": 0,
+            "eEpoch": 0.8,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "three-candidates",
+      "tags": [
+        "three-candidates",
+        "order-independent"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.9765625,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.5"
+        },
+        {
+          "id": "c-406",
+          "periodDays": 5,
+          "epochBtjd": 2001,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.8"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "세 후보 모두 통과. 점수 0 / 0.5 / 0.8 → 1위 c-401 우세(차 0.5, 비율 0). rankedCandidateIds 는 점수 오름차순.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402",
+            "c-406"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.5,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.5,
+            "ePeriod": 0,
+            "eEpoch": 0.5,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-406",
+            "multiplier": 1,
+            "score": 0.8,
+            "ePeriod": 0,
+            "eEpoch": 0.8,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "three-candidates-reversed",
+      "tags": [
+        "order-independent"
+      ],
+      "candidates": [
+        {
+          "id": "c-401",
+          "periodDays": 5,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "note": "우세 사례용. epoch 2000.9375 = 2000 + 0.1875×5, D 3.75 h → 반폭 0.078125 d. 모두 2진 정확"
+        },
+        {
+          "id": "c-402",
+          "periodDays": 5,
+          "epochBtjd": 2000.9765625,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.5"
+        },
+        {
+          "id": "c-406",
+          "periodDays": 5,
+          "epochBtjd": 2001,
+          "durationHours": 3.75,
+          "note": "e_epoch 0.8"
+        }
+      ],
+      "candidateOrder": "reversed",
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.171875,
+        "phaseEnd": 0.203125,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "three-candidates 와 입력 후보 순서만 반대. match 결과가 같아야 한다(검증기가 비교).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.1875,
+          "epochBtjd": 2000.9375,
+          "durationHours": 3.75,
+          "durationHoursDisplay": 3.75,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-401",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "dominant",
+          "rankedCandidateIds": [
+            "c-401",
+            "c-402",
+            "c-406"
+          ],
+          "dominance": {
+            "s1": 0,
+            "s2": 0.5,
+            "r1": 1,
+            "r2": 1,
+            "gapOk": true,
+            "ratioOk": true,
+            "overlapOk": true,
+            "tie": false
+          }
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-401",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-402",
+            "multiplier": 1,
+            "score": 0.5,
+            "ePeriod": 0,
+            "eEpoch": 0.5,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          },
+          {
+            "candidateId": "c-406",
+            "multiplier": 1,
+            "score": 0.8,
+            "ePeriod": 0,
+            "eEpoch": 0.8,
+            "eDuration": 0,
+            "overlapTransits": 11,
+            "nTransits": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "duration-2x-boundary",
+      "tags": [
+        "duration-2-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-407",
+          "periodDays": 4,
+          "epochBtjd": 2000.875,
+          "durationHours": 3,
+          "note": "P 4, epoch 2000.875 = 2000 + 0.21875×4 (2진 정확)"
+        }
+      ],
+      "selection": {
+        "periodDays": 4,
+        "phaseStart": 0.1875,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "폭 0.0625×4 d = 0.25 d = 6.0 h, 후보 3.0 h → 비율 정확히 2.0 → 경계 포함으로 통과, e_duration 1. 모든 값이 2진 정확.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.21875,
+          "epochBtjd": 2000.875,
+          "durationHours": 6,
+          "durationHoursDisplay": 6,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-407",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 4,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-407"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-407",
+            "multiplier": 1,
+            "score": 1,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 1,
+            "overlapTransits": 14,
+            "nTransits": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "duration-2x-just-over",
+      "tags": [
+        "duration-2-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-407",
+          "periodDays": 4,
+          "epochBtjd": 2000.875,
+          "durationHours": 3
+        }
+      ],
+      "selection": {
+        "periodDays": 4,
+        "phaseStart": 0.1875,
+        "phaseEnd": 0.2501,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "비율 2.0032 > 2 → 지속시간 조건 실패 → not_matched.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2188,
+          "epochBtjd": 2000.8752,
+          "durationHours": 6.0096,
+          "durationHoursDisplay": 6.01,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "duration-0.5x-boundary",
+      "tags": [
+        "duration-0.5-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-407",
+          "periodDays": 4,
+          "epochBtjd": 2000.875,
+          "durationHours": 3
+        }
+      ],
+      "selection": {
+        "periodDays": 4,
+        "phaseStart": 0.2109375,
+        "phaseEnd": 0.2265625,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "폭 0.015625×4 d = 1.5 h, 후보 3.0 h → 비율 정확히 0.5 → 통과, e_duration 1. minWindow(0.0139 d) 도 통과(0.0625 d).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.21875,
+          "epochBtjd": 2000.875,
+          "durationHours": 1.5,
+          "durationHoursDisplay": 1.5,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-407",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 4,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-407"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-407",
+            "multiplier": 1,
+            "score": 1,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 1,
+            "overlapTransits": 14,
+            "nTransits": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "duration-0.5x-just-under",
+      "tags": [
+        "duration-0.5-boundary"
+      ],
+      "candidates": [
+        {
+          "id": "c-407",
+          "periodDays": 4,
+          "epochBtjd": 2000.875,
+          "durationHours": 3
+        }
+      ],
+      "selection": {
+        "periodDays": 4,
+        "phaseStart": 0.2109375,
+        "phaseEnd": 0.2265,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "비율 0.498 < 0.5 → 실패 → not_matched.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.218719,
+          "epochBtjd": 2000.874875,
+          "durationHours": 1.494,
+          "durationHoursDisplay": 1.49,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "phase-end-over-1",
+      "tags": [
+        "phase-end-over-1"
+      ],
+      "candidates": [
+        {
+          "id": "c-408",
+          "periodDays": 5,
+          "epochBtjd": 2000,
+          "durationHours": 1.2,
+          "note": "epoch 가 기준 시각과 같아 위상 0 에 통과"
+        }
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.995,
+        "phaseEnd": 1.005,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "위상 경계 통과 선택(AT-09). 중심 (0.995+1.005)/2 = 1.0 → mod 1 = 0 → epoch 2000.0. 정상 입력으로 matched.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0,
+          "epochBtjd": 2000,
+          "durationHours": 1.2,
+          "durationHoursDisplay": 1.2,
+          "sourcePeakSuggestedDurationHours": 2.4,
+          "durationLimitHours": 7.199999999999999
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-408",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 5,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-408"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-408",
+            "multiplier": 1,
+            "score": 0,
+            "ePeriod": 0,
+            "eEpoch": 0,
+            "eDuration": 0,
+            "overlapTransits": 13,
+            "nTransits": 13
+          }
+        ]
+      }
+    },
+    {
+      "id": "min-window-reject",
+      "tags": [
+        "min-window-reject"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.199,
+        "phaseEnd": 0.201,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "폭 0.002×5 d = 0.01 d < minWindowDays 0.01389 → 400 selection.phaseEnd.",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection.phaseEnd",
+          "code": "MIN_WINDOW"
+        }
+      }
+    },
+    {
+      "id": "phase-width-reject",
+      "tags": [
+        "phase-width-reject"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.05,
+        "phaseEnd": 0.35,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "폭 0.30 > phaseWidthMax 0.25 → 400 selection.phaseEnd. minWindow 는 통과했으므로 검사 순서가 드러난다.",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection.phaseEnd",
+          "code": "PHASE_WIDTH_MAX"
+        }
+      }
+    },
+    {
+      "id": "duration-limit-reject",
+      "tags": [
+        "duration-limit-reject"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.165,
+        "phaseEnd": 0.235,
+        "sourcePeakGridIndex": 100
+      },
+      "notes": "sourcePeak 100(제안 2.4 h → 상한 7.2 h). 폭 0.07×5 d = 8.4 h > 7.2 → 400 selection.phaseEnd (C02-R3).",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection.phaseEnd",
+          "code": "DURATION_LIMIT"
+        }
+      }
+    },
+    {
+      "id": "no-source-peak-width-only",
+      "tags": [
+        "no-source-peak"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.165,
+        "phaseEnd": 0.235,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "같은 선택이지만 sourcePeak null → 3배 상한을 적용하지 않고 phaseWidthMax 만 검사(0.07 ≤ 0.25) → 검증 통과. 매칭에서는 8.4 h vs 2.4 h 비율 3.5 로 실패 → not_matched.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 8.4,
+          "durationHoursDisplay": 8.4,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "overlapping-finetune-uses-chosen-peak",
+      "tags": [
+        "overlapping-finetune"
+      ],
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.16,
+        "phaseEnd": 0.24,
+        "sourcePeakGridIndex": 300
+      },
+      "notes": "P 5.0 은 gridIndex 100(제안 2.4 h, 상한 7.2 h) 과 300(제안 4.0 h, 상한 12 h) 의 fineTune 에 모두 들어간다. 사용자가 300 을 골랐으므로 상한 12 h. 폭 0.08×5 d = 9.6 h ≤ 12 → 통과(100 이었으면 거절). 주기로 봉우리를 역추정하지 않는다.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001,
+          "durationHours": 9.6,
+          "durationHoursDisplay": 9.6,
+          "sourcePeakSuggestedDurationHours": 4,
+          "durationLimitHours": 12
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "empty-span-reject",
+      "tags": [
+        "empty-span-reject"
+      ],
+      "selection": {
+        "periodDays": 40,
+        "phaseStart": 0.4,
+        "phaseEnd": 0.48,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "P 40 d 로 접으면 위상 (0.375, 0.5) 구간에는 관측점이 없다(1990–2015 → 0.75–1·0–0.375, 2020–2050 → 0.5–1·0–0.25). allowEmptyPhaseSpan=false → 400 selection.phaseEnd.",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection.phaseEnd",
+          "code": "EMPTY_PHASE_SPAN"
+        }
+      }
+    },
+    {
+      "id": "epoch-out-of-range",
+      "tags": [
+        "epoch-out-of-range"
+      ],
+      "bundleOverride": {
+        "foldReferenceTimeBtjd": 2035,
+        "observationBounds": [
+          2020,
+          2050
+        ],
+        "observedWindows": [
+          [
+            2020,
+            2050
+          ]
+        ]
+      },
+      "selection": {
+        "periodDays": 40,
+        "phaseStart": 0.37,
+        "phaseEnd": 0.41,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "관측 30 일, P 40 d. 선택 구간에는 관측점(2049.8–2050, 위상 0.37–0.375)이 있지만 중심 0.39 의 epoch 후보 2050.6·2010.6 이 모두 범위 밖 → 400 EPOCH_OUT_OF_RANGE.",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection",
+          "code": "EPOCH_OUT_OF_RANGE"
+        }
+      }
+    },
+    {
+      "id": "outside-grid-reject",
+      "tags": [
+        "outside-grid"
+      ],
+      "selection": {
+        "periodDays": 45,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "P 45 > periodMaxDays 40 → 400 selection.periodDays (6.2절 9행, 마지막 검사).",
+      "expected": {
+        "validation": {
+          "ok": false,
+          "field": "selection.periodDays",
+          "code": "OUTSIDE_PERIOD_GRID"
+        }
+      }
+    },
+    {
+      "id": "outside-recommended-allowed",
+      "tags": [
+        "outside-recommended-allowed",
+        "not-matched"
+      ],
+      "selection": {
+        "periodDays": 7.3,
+        "phaseStart": 0.19,
+        "phaseEnd": 0.21,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "어느 봉우리 fineTune 에도 없는 임의 주기, sourcePeak null. 탐사 API 5.4절대로 제출은 허용되고 매칭만 not_matched. 6.8절 다시 풀기는 sourcePeakGridIndex=null 로 시작하므로 5.4 와 충돌하지 않는다(강재민 확인).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.2,
+          "epochBtjd": 2001.46,
+          "durationHours": 3.504,
+          "durationHoursDisplay": 3.5,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "display-rounding-boundary",
+      "tags": [
+        "display-rounding"
+      ],
+      "candidates": [
+        {
+          "id": "c-409",
+          "periodDays": 11.802,
+          "epochBtjd": 2001,
+          "durationHours": 5.66,
+          "note": "D_c 5.66 h: 표시값 2.83 h 로 계산하면 비율 정확히 0.5(통과), 실제값 2.8285 h 로 계산하면 0.49973(실패)"
+        }
+      ],
+      "selection": {
+        "periodDays": 11.802,
+        "phaseStart": 0.08,
+        "phaseEnd": 0.0899862,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "서버 산정 duration 2.8285 h(표시 2.83 h). 검증·매칭은 반올림 전 값으로 → 지속시간 조건 실패 → not_matched. 표시값으로 계산하는 구현은 matched 가 나와 이 사례에서 갈린다.",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.084993,
+          "epochBtjd": 2001.003089,
+          "durationHours": 2.828571,
+          "durationHoursDisplay": 2.83,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "not_matched",
+          "candidateId": null,
+          "harmonicMultiplier": null,
+          "correctedPeriodDays": null,
+          "decision": "no candidate passed all four conditions",
+          "rankedCandidateIds": [],
+          "dominance": null
+        },
+        "passingEvaluations": []
+      }
+    },
+    {
+      "id": "gap-excluded-transit",
+      "tags": [
+        "gap-excluded-transit"
+      ],
+      "selection": {
+        "periodDays": 28,
+        "phaseStart": 0.60417,
+        "phaseEnd": 0.61012,
+        "sourcePeakGridIndex": null
+      },
+      "notes": "c-405 는 통과 3회 중 2017.0 이 공백, 1989 가 범위 밖이라 관측 통과 N=1(2045). 사용자 P 28, epoch ≈ 2017.0 → matched, nTransits 1, overlapTransits 1(공백 통과는 세지 않음).",
+      "expected": {
+        "validation": {
+          "ok": true
+        },
+        "serverDerived": {
+          "phaseCenter": 0.607145,
+          "epochBtjd": 2017.00006,
+          "durationHours": 3.9984,
+          "durationHoursDisplay": 4,
+          "sourcePeakSuggestedDurationHours": null,
+          "durationLimitHours": null
+        },
+        "match": {
+          "status": "matched",
+          "candidateId": "c-405",
+          "harmonicMultiplier": 1,
+          "correctedPeriodDays": 28,
+          "decision": "single passer",
+          "rankedCandidateIds": [
+            "c-405"
+          ],
+          "dominance": null
+        },
+        "passingEvaluations": [
+          {
+            "candidateId": "c-405",
+            "multiplier": 1,
+            "score": 0.00072,
+            "ePeriod": 0,
+            "eEpoch": 0.00072,
+            "eDuration": 0.000577,
+            "overlapTransits": 1,
+            "nTransits": 1
+          }
+        ]
+      }
+    }
+  ],
+  "contractChecks": [
+    {
+      "id": "null-duration",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": 100
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": null,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": null
+        }
+      ],
+      "expectedSubset": {
+        "ok": true,
+        "durationLimitHours": null,
+        "sourcePeakSuggestedDurationHours": null
+      }
+    },
+    {
+      "id": "selected-overlapping-peak-cap",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": 100
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": 2.4
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": 1.6
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": 4,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": 3.1
+        }
+      ],
+      "expectedSubset": {
+        "ok": false,
+        "code": "DURATION_LIMIT",
+        "field": "selection.phaseEnd"
+      }
+    },
+    {
+      "id": "other-overlapping-peak-cap",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": 300
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": 2.4
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": 1.6
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": 4,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": 3.1
+        }
+      ],
+      "expectedSubset": {
+        "ok": true,
+        "durationLimitHours": 12
+      }
+    },
+    {
+      "id": "null-duration-min-width",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.151,
+        "sourcePeakGridIndex": 100
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": null,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": null
+        }
+      ],
+      "expectedSubset": {
+        "ok": false,
+        "code": "MIN_WINDOW",
+        "field": "selection.phaseEnd"
+      }
+    },
+    {
+      "id": "null-duration-max-width",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.5,
+        "sourcePeakGridIndex": 100
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": null,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": null
+        }
+      ],
+      "expectedSubset": {
+        "ok": false,
+        "code": "PHASE_WIDTH_MAX",
+        "field": "selection.phaseEnd"
+      }
+    },
+    {
+      "id": "outside-topn-retry",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": null
+      },
+      "peaks": [],
+      "expectedSubset": {
+        "ok": true,
+        "durationLimitHours": null
+      }
+    },
+    {
+      "id": "outside-topn-retry-n-changed",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": null
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": 2.4
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": 1.6
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": 4,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": 3.1
+        }
+      ],
+      "expectedSubset": {
+        "ok": true,
+        "durationLimitHours": null
+      }
+    },
+    {
+      "id": "unknown-source",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": 999
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": null,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": null
+        }
+      ],
+      "expectedSubset": {
+        "ok": false,
+        "code": "UNKNOWN_PEAK",
+        "field": "selection.sourcePeakGridIndex"
+      }
+    },
+    {
+      "id": "outside-selected-finetune",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 2000,
+        "observationBounds": [
+          1990,
+          2050
+        ],
+        "observedWindows": [
+          [
+            1990,
+            2015
+          ],
+          [
+            2020,
+            2050
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 5.06,
+        "phaseStart": 0.15,
+        "phaseEnd": 0.25,
+        "sourcePeakGridIndex": 100
+      },
+      "peaks": [
+        {
+          "gridIndex": 100,
+          "periodDays": 5,
+          "fineTune": {
+            "periodMinDays": 4.95,
+            "periodMaxDays": 5.05
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 200,
+          "periodDays": 2.5,
+          "fineTune": {
+            "periodMinDays": 2.47,
+            "periodMaxDays": 2.53
+          },
+          "suggestedDurationHours": null
+        },
+        {
+          "gridIndex": 300,
+          "periodDays": 5.02,
+          "fineTune": {
+            "periodMinDays": 4.97,
+            "periodMaxDays": 5.07
+          },
+          "suggestedDurationHours": null,
+          "note": "gridIndex 100 과 fineTune 이 겹친다"
+        },
+        {
+          "gridIndex": 400,
+          "periodDays": 11.8,
+          "fineTune": {
+            "periodMinDays": 11.7,
+            "periodMaxDays": 11.9
+          },
+          "suggestedDurationHours": null
+        }
+      ],
+      "expectedSubset": {
+        "ok": false,
+        "code": "OUTSIDE_FINE_TUNE",
+        "field": "selection.sourcePeakGridIndex"
+      }
+    },
+    {
+      "id": "empty-selection",
+      "mode": "validate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            0
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "selection": {
+        "periodDays": 2,
+        "phaseStart": 0.2,
+        "phaseEnd": 0.3,
+        "sourcePeakGridIndex": null
+      },
+      "peaks": [],
+      "expectedSubset": {
+        "ok": false,
+        "code": "EMPTY_PHASE_SPAN",
+        "field": "selection.phaseEnd"
+      }
+    },
+    {
+      "id": "observed-gap-count",
+      "mode": "evaluate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidate": {
+        "id": "c-1",
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationHours": 3
+      },
+      "derived": {
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationDays": 0.125
+      },
+      "multiplier": 1,
+      "overrides": {},
+      "expectedSubset": {
+        "nTransits": 8,
+        "observedTransits": 8,
+        "overlapTransits": 8,
+        "overlapRatio": 1,
+        "pass": true
+      }
+    },
+    {
+      "id": "cap-not-overlap-denominator",
+      "mode": "evaluate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidate": {
+        "id": "c-1",
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationHours": 3
+      },
+      "derived": {
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationDays": 0.125
+      },
+      "multiplier": 1,
+      "overrides": {
+        "matching.nTransits.cap": 2
+      },
+      "expectedSubset": {
+        "nTransits": 2,
+        "observedTransits": 8,
+        "overlapTransits": 8,
+        "overlapRatio": 1,
+        "pass": true
+      }
+    },
+    {
+      "id": "zero-observed-transits",
+      "mode": "evaluate",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidate": {
+        "id": "c-1",
+        "periodDays": 30,
+        "epochBtjd": 6,
+        "durationHours": 3
+      },
+      "derived": {
+        "periodDays": 30,
+        "epochBtjd": 6,
+        "durationDays": 0.125
+      },
+      "multiplier": 1,
+      "overrides": {},
+      "expectedSubset": {
+        "observedTransits": 0,
+        "overlapRatio": 0,
+        "pass": false
+      }
+    },
+    {
+      "id": "equal-candidates",
+      "mode": "match",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidates": [
+        {
+          "id": "c-1",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        },
+        {
+          "id": "c-2",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        }
+      ],
+      "derived": {
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationDays": 0.125
+      },
+      "removedCandidateIds": [],
+      "expectedSubset": {
+        "status": "ambiguous_match",
+        "candidateId": null
+      }
+    },
+    {
+      "id": "equal-candidates-reversed",
+      "mode": "match",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidates": [
+        {
+          "id": "c-2",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        },
+        {
+          "id": "c-1",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        }
+      ],
+      "derived": {
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationDays": 0.125
+      },
+      "removedCandidateIds": [],
+      "expectedSubset": {
+        "status": "ambiguous_match",
+        "candidateId": null
+      }
+    },
+    {
+      "id": "removed-candidate",
+      "mode": "match",
+      "bundle": {
+        "foldReferenceTimeBtjd": 0,
+        "observationBounds": [
+          0,
+          20
+        ],
+        "observedWindows": [
+          [
+            0,
+            4
+          ],
+          [
+            8,
+            20
+          ]
+        ],
+        "cadenceDays": 0.006944444444444444,
+        "periodGrid": {
+          "periodMinDays": 0.5,
+          "periodMaxDays": 40
+        },
+        "note": "합성 별. 60일 관측에 5일 공백(2015–2020). 10분 bin. 실제 TIC 이 아니다."
+      },
+      "candidates": [
+        {
+          "id": "c-1",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        },
+        {
+          "id": "c-2",
+          "periodDays": 2,
+          "epochBtjd": 1,
+          "durationHours": 3
+        }
+      ],
+      "derived": {
+        "periodDays": 2,
+        "epochBtjd": 1,
+        "durationDays": 0.125
+      },
+      "removedCandidateIds": [
+        "c-2"
+      ],
+      "expectedSubset": {
+        "status": "matched",
+        "candidateId": "c-1"
+      }
+    }
+  ]
+}

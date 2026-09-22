@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
+import { sessionDraftKey } from "../../auth/session-draft-storage";
 import type { AnalysisContext } from "./analysis-data";
 import type { SubmissionInput } from "./submission-input";
 import type { SubmissionKind } from "./submission-data";
@@ -10,6 +11,7 @@ import {
   type SubmissionResult,
 } from "./submit-analysis";
 import { ApiError } from "../../api/client";
+import { useRetryDraft } from "./AnalysisSession";
 import {
   decodeDetailView,
   detailViewPath,
@@ -40,6 +42,7 @@ export type SubmissionState =
  * 하고, 여기서는 진행 상태와 초안 잠금만 다룬다.
  */
 export function useSubmission(context: AnalysisContext) {
+  const { draft: retryDraft, retryAttemptId } = useRetryDraft();
   const auth = useSession();
   const memberId = auth.member?.memberId ?? null;
   const [state, setState] = useState<SubmissionState>({ phase: "idle" });
@@ -110,7 +113,18 @@ export function useSubmission(context: AnalysisContext) {
         if (controller.signal.aborted) return;
         // 확정된 기록은 다른 본문의 예약을 막지 않는다. 나머지는 막는다.
         if (key) {
-          if (result.state === "accepted") markSubmissionAccepted(key);
+          if (result.state === "accepted") {
+            markSubmissionAccepted(key);
+            // Accepted input is now History, not an unsent draft. Preserve request recovery separately.
+            try {
+              if (memberId)
+                sessionStorage.removeItem(
+                  sessionDraftKey(memberId, context.ticId),
+                );
+            } catch {
+              /* Current receipt remains usable. */
+            }
+          }
           // ID는 살아 있고 그 ID로 무엇이 접수됐는지 조회할 수 있다.
           if (result.state === "conflict") markSubmissionConflict(key);
           // 서버가 응답으로 거절했다. 접수되지 않았음이 확정이라 고친
@@ -134,17 +148,29 @@ export function useSubmission(context: AnalysisContext) {
         if (running.current === controller) running.current = null;
       }
     },
-    [key],
+    [key, memberId, context.ticId],
   );
 
   const submit = useCallback(
     (input: SubmissionInput) => {
       if (!key) return;
+      input = {
+        ...input,
+        retryOfSubmissionId: retryDraft?.retryOfSubmissionId ?? null,
+      };
       attempted.current = input;
-      const reserved = reserveRequestId(key, submissionFingerprint(input), {
-        kind: input.submissionKind,
-        body: { ...input },
-      });
+      const reserved = reserveRequestId(
+        key,
+        submissionFingerprint(
+          retryAttemptId
+            ? { ...input, clientRetryAttemptId: retryAttemptId }
+            : input,
+        ),
+        {
+          kind: input.submissionKind,
+          body: { ...input },
+        },
+      );
       // 앞선 요청의 결과를 모른다. 보내지 않고 그 요청의 확인으로 돌린다.
       if (reserved.status === "blocked") {
         const { pending } = reserved;
@@ -177,7 +203,7 @@ export function useSubmission(context: AnalysisContext) {
         }),
       );
     },
-    [key, context.ticId, run],
+    [key, context.ticId, run, retryDraft, retryAttemptId],
   );
 
   /** 보내지 않고 접수 결과만 확인한다. 중복 접수를 만들 수 없는 경로다. */

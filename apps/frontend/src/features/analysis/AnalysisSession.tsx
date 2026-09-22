@@ -4,6 +4,7 @@ import type { AnalysisContext, CurveData } from "./analysis-data";
 import { useCurveStep } from "./use-curve-step";
 import type { PhaseRange, PhaseSelectionResult } from "./phase-selection";
 import type { PeriodSelectionChange } from "./period-selection";
+import type { RetryDraft } from "./retry-draft";
 import { useFoldSession } from "./use-fold-session";
 import {
   emptyJudgment,
@@ -46,6 +47,13 @@ const FoldContext = createContext<ReturnType<typeof useFoldSession> | null>(
  * 스냅샷을 그대로 다시 보내게 된다.
  */
 const BundleRecoveryContext = createContext<(() => boolean) | null>(null);
+const RetryContext = createContext<{
+  draft: RetryDraft | null;
+  resume: boolean;
+  retryAttemptId?: string;
+  autoRestore: boolean;
+}>({ draft: null, resume: false, autoRestore: false });
+export const useRetryDraft = () => useContext(RetryContext);
 
 /**
  * 곡선 단계 이동(#189). 단계 표시줄과 제출 결과의 [다음 곡선 단계로]가 같은
@@ -100,6 +108,10 @@ export function AnalysisSession({
   recoverBundle,
   step,
   children,
+  retryDraft = null,
+  resume = false,
+  autoRestore = false,
+  retryAttemptId,
 }: {
   context: AnalysisContext;
   curve: CurveData;
@@ -110,21 +122,29 @@ export function AnalysisSession({
    */
   step: ReturnType<typeof useCurveStep>;
   children: ReactNode;
+  retryDraft?: RetryDraft | null;
+  resume?: boolean;
+  autoRestore?: boolean;
+  retryAttemptId?: string;
 }) {
   const session = useFoldSession(context, curve);
   return (
-    <BundleRecoveryContext.Provider value={recoverBundle}>
-      <CurveStepContext.Provider value={step}>
-        <FoldContext.Provider value={session}>
-          <PhaseDraftProvider
-            ready={session.ready}
-            change={session.state.success?.change ?? null}
-          >
-            {children}
-          </PhaseDraftProvider>
-        </FoldContext.Provider>
-      </CurveStepContext.Provider>
-    </BundleRecoveryContext.Provider>
+    <RetryContext.Provider
+      value={{ draft: retryDraft, resume, autoRestore, retryAttemptId }}
+    >
+      <BundleRecoveryContext.Provider value={recoverBundle}>
+        <CurveStepContext.Provider value={step}>
+          <FoldContext.Provider value={session}>
+            <PhaseDraftProvider
+              ready={session.ready}
+              change={session.state.success?.change ?? null}
+            >
+              {children}
+            </PhaseDraftProvider>
+          </FoldContext.Provider>
+        </CurveStepContext.Provider>
+      </BundleRecoveryContext.Provider>
+    </RetryContext.Provider>
   );
 }
 export function useAnalysisFold() {

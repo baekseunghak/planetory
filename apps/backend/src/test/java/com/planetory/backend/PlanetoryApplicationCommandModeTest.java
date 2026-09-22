@@ -3,6 +3,7 @@ package com.planetory.backend;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -47,6 +48,31 @@ class PlanetoryApplicationCommandModeTest {
                 new String[]{"--planetory.command=x", "--planetory.command=challenge-unlock"}).isPresent());
         assertTrue(PlanetoryApplication.invalidCommand(
                 new String[]{"--planetory.command=challenge-unlock", "--planetory.command=challenge-unlock"}).isPresent());
+    }
+
+    /**
+     * 읽기 전용 명령은 <b>기동 단계까지</b> 아무것도 바꾸지 않아야 한다. Flyway는 컨텍스트가 뜨는 중에
+     * DDL을 실행하고 배포 compose가 마이그레이션 계정까지 넘기므로, 끄지 않으면 "영향만 세어 보는"
+     * 실행이 미적용 migration을 적용한다. 메서드의 readOnly=true는 그보다 한참 뒤다 [154 리뷰].
+     */
+    @Test
+    void 읽기_전용_명령은_기동할_때_마이그레이션을_실행하지_않는다() {
+        String guard = "--spring.flyway.enabled=false";
+
+        // 운영자가 옵션을 빼먹어도 붙는다. 명령줄 인자라 설정 파일보다 우선한다.
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(
+                new String[]{"--planetory.command=candidate-correction-precheck"})).contains(guard));
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(new String[]{
+                "--planetory.command=candidate-correction-precheck",
+                "--planetory.correction.kind=merge"})).contains(guard), "다른 인자와 함께 줘도 붙는다");
+
+        // 쓰기 명령과 평소 기동은 건드리지 않는다. 챌린지 명령은 마이그레이션이 필요할 수 있다.
+        assertFalse(List.of(PlanetoryApplication.withFlywayDisabledGuards(
+                new String[]{"--planetory.command=challenge-unlock"})).contains(guard));
+        assertEquals(0, PlanetoryApplication.withFlywayDisabledGuards(new String[]{}).length);
+        // 통계 잡 역할에는 DDL 권한을 주지 않는다. 통계 명령도 기동 migration을 강제로 막는다.
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(
+                new String[]{"--planetory.command=statistics", "--planetory.statistics.mode=refresh"})).contains(guard));
     }
 
     /**

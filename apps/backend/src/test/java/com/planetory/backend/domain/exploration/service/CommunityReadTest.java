@@ -105,13 +105,14 @@ class CommunityReadTest {
     @Autowired com.planetory.backend.domain.post.service.CommunityReadService community;
     @MockitoSpyBean HistoryRepository historyRepository;
     @MockitoSpyBean SubmissionRepository summaryRepository;
+    @MockitoSpyBean org.springframework.jdbc.core.simple.JdbcClient feedJdbc;
 
     private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
     private static final String FEED = "/api/v1/community/feed";
     String threadPath(PublicAnalysisService.Published p) { return "/api/v1/signal-threads/" + p.threadId(); }
     String publicPath(PublicAnalysisService.Published p) { return "/api/v1/public-analyses/" + p.analysisId(); }
     tools.jackson.databind.JsonNode read(String path) throws Exception {
-        return JSON.readTree(mvc.perform(get(path).session(session(member))).andExpect(status().isOk())
+        return JSON.readTree(mvc.perform(get(java.net.URI.create(path)).session(session(member))).andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store"))).andReturn().getResponse().getContentAsString());
     }
     long post(Long star, String status) {
@@ -176,19 +177,19 @@ class CommunityReadTest {
             assertEquals("p-" + first, next.path("items").get(0).path("id").asText());
             assertFalse(next.path("hasNext").asBoolean());
         }
-        for (String query : List.of("board=STAR", "board=FREE", "ticId=" + tic + "&board=FREE",
+        for (String query : List.of("ticId=" + tic + "&board=FREE",
                 "ticId=" + tic + "&board=", "ticId=" + tic + "&board=star",
-                "ticId=" + tic + "&board=STAR&board=STAR", "ticId=" + tic + "&board=STAR&q=x"))
+                "ticId=" + tic + "&board=STAR&board=STAR"))
             mvc.perform(get(FEED + "?" + query).session(session(member))).andExpect(status().isBadRequest());
         jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic);
         mvc.perform(get(FEED + "?ticId=" + tic + "&board=STAR&size=20").session(session(member)))
                 .andExpect(status().isNotFound());
     }
 
-    @Test void 미지원검색_빈값_중복_잘못된커서와범위_인증거절() throws Exception {
+    @Test void 검색오류_빈값_중복_잘못된커서와범위_인증거절() throws Exception {
         var p = publications.publish(member, submit(3)); post(tic, "visible");
         String cursor = read(FEED + "?ticId=" + tic + "&size=1").path("nextCursor").asText();
-        for (String query : List.of("q=x", "searchIn=TITLE", "author=x", "board=STAR", "tag=GENERAL", "sort=hot",
+        for (String query : List.of("q=", "searchIn=TITLE", "author=", "board=BAD", "tag=BAD", "sort=hot",
                 "size=0", "size=101", "size=1.0", "size=", "size=1&size=1", "ticId=01", "ticId=", "ticId=-1",
                 "ticId=9223372036854775808", "cursor=", "cursor=broken", "size=2&ticId=" + tic + "&cursor=" + cursor,
                 "size=1&cursor=" + cursor)) {
@@ -282,7 +283,7 @@ class CommunityReadTest {
         jdbc.update("UPDATE posts SET status='hidden' WHERE id=?", thread);
         for (String path : List.of(threadPath(visible), threadPath(visible) + "/analyses", publicPath(visible),
                 "/api/v1/comments?parentType=SIGNAL_THREAD&parentId=" + visible.threadId()))
-            mvc.perform(get(path).session(session(member))).andExpect(status().isNotFound());
+            mvc.perform(get(java.net.URI.create(path)).session(session(member))).andExpect(status().isNotFound());
         assertEquals(0, read(FEED + "?ticId=" + tic).path("items").size());
         jdbc.update("UPDATE posts SET status='visible' WHERE id=?", thread);
         assertEquals(1, read(threadPath(visible) + "/analyses").path("items").size());
@@ -358,6 +359,276 @@ class CommunityReadTest {
         mvc.perform(get(publicPath(p)).session(session(member))).andExpect(status().isNotFound());
         // 개인·공개 그래프의 캐시가 있어도 닫힌 별은 전체 피드에도 남지 않는다.
         for (var item : read(FEED).path("items")) assertNotEquals(p.threadId(), item.path("id").asText());
+    }
+
+    @Test void 공통검색표본을_실제HTTP와DB에_대조() throws Exception {
+        var data = JSON.readTree(java.nio.file.Files.readString(java.nio.file.Path.of("../../docs/api/community/search-cases.json")));
+        jdbc.update("UPDATE posts SET status='hidden'"); // 이 클래스의 일회용 DB만 격리한다.
+        long other = member();
+        jdbc.update("UPDATE users SET nickname='Orbit' WHERE id=?", member);
+        jdbc.update("UPDATE users SET nickname='관측자' WHERE id=?", other);
+        int ordinal=1;
+        for (long star : List.of(123456789L, 9007199254740993L)) {
+            jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,1,'published')", star);
+            var position = layout.place(ordinal);
+            jdbc.update("INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,depth_z,world_x,world_y,layout_version,layout_ordinal,unlocked_at) VALUES (?,?,'tutorial',?,?,?,?,?,now())",
+                    member,star,position.depthZ(),position.worldX(),position.worldY(),position.layoutVersion(),ordinal++);
+        }
+        var ids = new java.util.HashMap<String,String>();
+        for (var p : data.path("posts")) {
+            Long star = p.path("ticId").isNull() ? null : Long.parseLong(p.path("ticId").asText());
+            Long signal = null;
+            boolean system = p.path("kind").asText().equals("system_thread");
+            if (system) signal = jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) VALUES (?,'active',?,1,3,100.3,2.4,1000,10,'{}',true,true) RETURNING id", Long.class,star,bundle);
+            long id = jdbc.queryForObject("INSERT INTO posts(kind,user_id,candidate_id,board,tic_id,tag,title,body,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?::timestamptz) RETURNING id", Long.class,
+                    p.path("kind").asText(),system ? null : p.path("memberId").asText().equals("u-1") ? member : other,
+                    signal,p.path("board").asText().toLowerCase(java.util.Locale.ROOT),star,p.path("tag").isNull() ? null : p.path("tag").asText(),
+                    p.path("title").asText(),p.path("body").asText(),p.path("status").asText(),p.path("createdAt").asText());
+            ids.put(p.path("id").asText(), (system ? "st-" : "p-") + id);
+        }
+        for (var c : data.path("cases")) {
+            var request = get(FEED).session(session(member));
+            for (var pair : c.path("query")) request.param(pair.get(0).asText(),pair.get(1).asText());
+            var result = mvc.perform(request).andExpect(status().is(c.has("expectedError") ? 400 : 200));
+            if (c.has("expectedError")) result.andExpect(jsonPath("$.code").value(c.path("expectedError").asText()));
+            else {
+                var body = JSON.readTree(result.andReturn().getResponse().getContentAsString());
+                var expected = new java.util.ArrayList<String>();
+                c.path("expectedIds").forEach(id -> expected.add(ids.get(id.asText())));
+                assertEquals(expected, feedIds(body), c.path("id").asText());
+                assertFalse(body.path("hasNext").asBoolean()); assertTrue(body.path("nextCursor").isNull());
+            }
+        }
+        String cursor = null;
+        for (var expectedPage : data.path("pages").get(0).path("expectedPages")) {
+            var request = get(FEED).param("size","2").session(session(member));
+            if (cursor != null) request.param("cursor",cursor);
+            var page = JSON.readTree(mvc.perform(request).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            var expected = new java.util.ArrayList<String>(); expectedPage.forEach(id -> expected.add(ids.get(id.asText())));
+            assertEquals(expected,feedIds(page)); cursor=page.path("nextCursor").asText();
+        }
+        jdbc.update("UPDATE users SET nickname='NewOrbit' WHERE id=?",member);
+        assertEquals(List.of(),feedIds(read(FEED + "?author=Orbit")));
+        assertEquals(List.of(ids.get("p-101")),feedIds(read(FEED + "?author=neworbit")));
+    }
+
+    java.util.List<String> feedIds(tools.jackson.databind.JsonNode body) {
+        var ids = new java.util.ArrayList<String>(); body.path("items").forEach(i -> ids.add(i.path("id").asText())); return ids;
+    }
+
+    @Test void 검색커서_구분자와_모든필터결속_마이크로초_권한재검사() throws Exception {
+        jdbc.update("UPDATE users SET nickname=? WHERE id=?", "Cursor" + member, member);
+        long a=post(tic,"visible"), b=post(tic,"visible"), c=post(tic,"visible");
+        jdbc.update("UPDATE posts SET title='a|b %_\\',body='a|b',created_at='2026-09-21T00:00:00.123456Z' WHERE id IN (?,?,?)",a,b,c);
+        jdbc.update("UPDATE posts SET created_at='2026-09-21T00:00:00.123457Z' WHERE id=?",a);
+        var params = new org.springframework.util.LinkedMultiValueMap<String,String>();
+        params.set("q","a|b");params.set("searchIn","TITLE");params.set("author","Cursor"+member);
+        params.set("ticId",""+tic);params.set("board","STAR");params.set("tag","GENERAL");params.set("size","1");
+        var first=JSON.readTree(mvc.perform(get(FEED).params(params).session(session(member))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of("p-"+a),feedIds(first));
+        String cursor=first.path("nextCursor").asText();
+        for (String key : List.of("q","searchIn","author","ticId","board","tag","size")) {
+            var changed=new org.springframework.util.LinkedMultiValueMap<>(params);changed.set("cursor",cursor);
+            changed.set(key,switch(key){case "q" -> "a";case "searchIn" -> "BODY";case "author" -> "other";case "ticId" -> ""+(tic+1);case "board" -> "FREE";case "tag" -> "QUESTION";default -> "2";});
+            mvc.perform(get(FEED).params(changed).session(session(member))).andExpect(status().isBadRequest());
+        }
+        for (String path : List.of("/api/v1/community/hot-topics", "/api/v1/signal-threads/st-1/analyses"))
+            mvc.perform(get(path).param("size","1").param("cursor",cursor).session(session(member))).andExpect(status().isBadRequest());
+        params.set("cursor",cursor);params.set("q","\u00a0a|b\ufeff");params.remove("board");
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?",c);post(tic,"visible");
+        var second=JSON.readTree(mvc.perform(get(FEED).params(params).session(session(member))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of("p-"+b),feedIds(second));assertFalse(second.path("hasNext").asBoolean());
+        params.set("cursor",cursor+"=");
+        mvc.perform(get(FEED).params(params).session(session(member))).andExpect(status().isBadRequest());
+        params.set("cursor",cursor);jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?",tic);
+        mvc.perform(get(FEED).params(params).session(session(member))).andExpect(status().isNotFound());
+        assertTrue(feedIds(read(FEED+"?q=a%7Cb")).stream().noneMatch(id -> List.of("p-"+a,"p-"+b,"p-"+c).contains(id)));
+    }
+
+    @Test void 코드포인트_공백_리터럴_입력경계() throws Exception {
+        long id=post(tic,"visible");
+        jdbc.update("UPDATE posts SET title=?,body=? WHERE id=?", "🪐".repeat(100),"x' OR 1=1 -- a|b %_ \\",id);
+        for (String q : List.of("🪐".repeat(100),"x' OR 1=1 --","%_","\\","a|b")) {
+            var result=JSON.readTree(mvc.perform(get(FEED).param("q",q).param("ticId",""+tic).session(session(member)))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            assertEquals(List.of("p-"+id),feedIds(result));
+        }
+        for (String q : List.of("🪐".repeat(101),"한".repeat(101),"\u00a0\ufeff\u202f","a\0b"))
+            mvc.perform(get(FEED).param("q",q).session(session(member))).andExpect(status().isBadRequest());
+        // author는 생성 검증이 아니라 조회 값이다. 예약명·부분명·긴 값도 불일치면 빈 목록이다.
+        for (String author : List.of("SYSTEM","a","a".repeat(1000),"%_")) {
+            var result=JSON.readTree(mvc.perform(get(FEED).param("author",author).session(session(member)))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            assertTrue(feedIds(result).isEmpty());
+        }
+    }
+
+    @Test void 공식요약_생성_후보수치변경_역할_비공개메모제외() throws Exception {
+        var p=publications.publish(member,submit(3));long id=Long.parseLong(p.threadId().substring(3));
+        assertEquals("주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm",jdbc.queryForObject("SELECT body FROM posts WHERE id=?",String.class,id));
+        assertEquals(List.of(p.threadId()),feedIds(read(FEED+"?ticId="+tic+"&q=1000%20ppm&searchIn=BODY")));
+        assertTrue(feedIds(read(FEED+"?ticId="+tic+"&q=공개%20메모")).isEmpty());
+        var before=jdbc.queryForMap("SELECT status,created_at FROM posts WHERE id=?",id);
+        new TransactionTemplate(transactions).executeWithoutResult(s -> {
+            jdbc.execute("SET LOCAL ROLE planetory_gold_writer");
+            jdbc.update("UPDATE candidates SET depth_ppm=1200.5000 WHERE id=?",candidate);
+            jdbc.execute("RESET ROLE");
+        });
+        assertEquals(before,jdbc.queryForMap("SELECT status,created_at FROM posts WHERE id=?",id));
+        assertEquals(List.of(p.threadId()),feedIds(read(FEED+"?ticId="+tic+"&q=1200.5%20ppm&searchIn=BODY")));
+        assertTrue(feedIds(read(FEED+"?ticId="+tic+"&q=1000%20ppm&searchIn=BODY")).isEmpty());
+        publications.visibility(member,p.analysisId(),false);
+        assertEquals(List.of(p.threadId()),feedIds(read(FEED+"?ticId="+tic+"&q=1200.5%20ppm")));
+        var emptySummary=read(FEED+"?ticId="+tic+"&q=1200.5%20ppm").path("items").get(0).path("judgmentSummary");
+        assertEquals("public_analyses",emptySummary.path("kind").asText());
+        assertEquals("c-"+candidate,emptySummary.path("candidateId").asText());
+        for(String key:List.of("participantCount","likelyPlanet","unlikelyPlanet","unsure")) assertEquals(0,emptySummary.path(key).asInt());
+        assertTrue(emptySummary.path("percentages").isNull());assertTrue(emptySummary.hasNonNull("asOf"));
+        assertEquals(1200.5,read(threadPath(p)).path("signal").path("depthPpm").asDouble());
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?",id);
+        jdbc.update("UPDATE candidates SET depth_ppm=2E-7 WHERE id=?",candidate);
+        assertTrue(jdbc.queryForObject("SELECT body FROM posts WHERE id=?",String.class,id).endsWith("0.0000002 ppm"));
+        assertTrue(feedIds(read(FEED+"?ticId="+tic+"&q=ppm")).isEmpty());
+        var params=new org.springframework.util.LinkedMultiValueMap<String,String>();params.set("q","ppm");
+        new TransactionTemplate(transactions).executeWithoutResult(s -> {
+            jdbc.execute("SET LOCAL ROLE planetory_app");
+            assertTrue(community.feed(member,com.planetory.backend.domain.post.service.CommunityQuery.feed(params)).items().stream().noneMatch(i -> i.id().equals(p.threadId())));
+            jdbc.execute("RESET ROLE");
+        });
+    }
+
+    @Test void 후보갱신_이전스냅샷뒤_생긴스레드_갱신또는격리오류롤백() throws Exception {
+        for (int isolation : List.of(java.sql.Connection.TRANSACTION_READ_COMMITTED,
+                java.sql.Connection.TRANSACTION_REPEATABLE_READ, java.sql.Connection.TRANSACTION_SERIALIZABLE)) {
+            long signal=jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) VALUES (?,'active',?,1,3,100.3,2.4,1000,10,'{}',true,true) RETURNING id",Long.class,tic,bundle);
+            try(var writer=java.sql.DriverManager.getConnection(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword());
+                var statement=writer.createStatement()) {
+                writer.setTransactionIsolation(isolation);writer.setAutoCommit(false);
+                statement.execute("SET LOCAL ROLE planetory_gold_writer");
+                // 이 스냅샷에는 아직 공식 스레드가 없다. 다음 INSERT는 다른 연결에서 커밋한다.
+                try(var result=statement.executeQuery("SELECT depth_ppm FROM candidates WHERE id="+signal)) { assertTrue(result.next()); }
+                jdbc.update("INSERT INTO posts(kind,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',?,'star',?,'격리 검사','','visible')",signal,tic);
+                String update="UPDATE candidates SET depth_ppm=987.6 WHERE id="+signal;
+                if(isolation==java.sql.Connection.TRANSACTION_READ_COMMITTED) {
+                    assertEquals(1,statement.executeUpdate(update));writer.commit();
+                } else {
+                    var failure=assertThrows(java.sql.SQLException.class,()->statement.executeUpdate(update));
+                    assertEquals("25000",failure.getSQLState());
+                    assertTrue(failure.getMessage().contains("READ COMMITTED"));writer.rollback();
+                }
+            }
+            String expected=isolation==java.sql.Connection.TRANSACTION_READ_COMMITTED?"987.6":"1000";
+            assertEquals(expected,jdbc.queryForObject("SELECT trim_scale(depth_ppm)::text FROM candidates WHERE id=?",String.class,signal));
+            assertTrue(jdbc.queryForObject("SELECT body FROM posts WHERE candidate_id=?",String.class,signal).endsWith(expected+" ppm"));
+        }
+    }
+
+    @Test void 후보갱신과_공식최초생성_양방향경합() throws Exception {
+        for (boolean insertFirst : List.of(false,true)) {
+            long signal=jdbc.queryForObject("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) VALUES (?,'active',?,1,3,100.3,2.4,1000,10,'{}',true,true) RETURNING id",Long.class,tic,bundle);
+            String insert="INSERT INTO posts(kind,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',"+signal+",'star',"+tic+",'경합','','visible')";
+            String update="UPDATE candidates SET depth_ppm=987.600 WHERE id="+signal;
+            try(var first=java.sql.DriverManager.getConnection(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword());
+                var second=java.sql.DriverManager.getConnection(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword());
+                var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                first.setAutoCommit(false);
+                first.createStatement().execute(insertFirst?insert:update);
+                int pid;
+                try(var statement=second.createStatement();var result=statement.executeQuery("SELECT pg_backend_pid()")) {
+                    result.next();pid=result.getInt(1);
+                }
+                var waiting=pool.submit(()->second.createStatement().execute(insertFirst?update:insert));
+                try {
+                    long until=System.nanoTime()+java.time.Duration.ofSeconds(5).toNanos();
+                    boolean blocked=false;
+                    while(System.nanoTime()<until) {
+                        if(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid=? AND wait_event_type='Lock')",Boolean.class,pid)){blocked=true;break;}
+                        java.util.concurrent.locks.LockSupport.parkNanos(10_000_000);
+                    }
+                    assertTrue(blocked,"공식 생성과 후보 갱신은 행 잠금에서 직렬화돼야 한다");
+                } finally { first.commit(); }
+                waiting.get(5,java.util.concurrent.TimeUnit.SECONDS);
+            }
+            assertTrue(jdbc.queryForObject("SELECT body FROM posts WHERE candidate_id=?",String.class,signal).endsWith("987.6 ppm"));
+        }
+    }
+
+    @Test void V18기존공식본문_채움과_재실행_롤백() throws Exception {
+        String schema="search_"+UUID.randomUUID().toString().replace("-", "");
+        var previous=org.flywaydb.core.Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
+                .schemas(schema).locations("classpath:db/migration").target("18").load();
+        previous.migrate();
+        // 현재 테스트 후보의 공개 네 수치와 최소 FK만 새 격리 스키마에 복사한다.
+        jdbc.execute("INSERT INTO "+schema+".stars SELECT * FROM public.stars WHERE tic_id="+tic);
+        jdbc.execute("INSERT INTO "+schema+".publication_bundles SELECT * FROM public.publication_bundles WHERE id="+bundle);
+        jdbc.execute("INSERT INTO "+schema+".candidates SELECT * FROM public.candidates WHERE id="+candidate);
+        jdbc.execute("INSERT INTO "+schema+".users SELECT * FROM public.users WHERE id="+member);
+        jdbc.update("INSERT INTO "+schema+".posts(kind,candidate_id,board,tic_id,title,body,status) VALUES ('system_thread',?,'star',?,'공식','','hidden')",candidate,tic);
+        jdbc.update("INSERT INTO "+schema+".posts(kind,user_id,board,title,body,status) VALUES ('user',?,'free','일반','유지','visible')",member);
+        var before=jdbc.queryForMap("SELECT status,created_at FROM "+schema+".posts WHERE kind='system_thread'");
+        var upgraded=org.flywaydb.core.Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
+                .schemas(schema).locations("classpath:db/migration").target("19").load();
+        assertEquals(1,upgraded.migrate().migrationsExecuted);upgraded.validate();assertEquals(0,upgraded.migrate().migrationsExecuted);
+        String body=jdbc.queryForObject("SELECT body FROM "+schema+".posts WHERE kind='system_thread'",String.class);
+        assertEquals("주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm",body);
+        assertEquals(before,jdbc.queryForMap("SELECT status,created_at FROM "+schema+".posts WHERE kind='system_thread'"));
+        assertEquals("유지",jdbc.queryForObject("SELECT body FROM "+schema+".posts WHERE kind='user'",String.class));
+        new TransactionTemplate(transactions).executeWithoutResult(s -> {
+            jdbc.update("UPDATE "+schema+".candidates SET period_days=7 WHERE id=?",candidate);s.setRollbackOnly();
+        });
+        assertEquals(body,jdbc.queryForObject("SELECT body FROM "+schema+".posts WHERE kind='system_thread'",String.class));
+        assertEquals("주기 미정 일 · 기준 시각 미정 BTJD · 지속시간 미정 시간 · 깊이 미정 ppm",
+                jdbc.queryForObject("SELECT "+schema+".official_signal_summary(NULL,NULL,NULL,NULL)",String.class));
+    }
+
+    @org.junit.jupiter.api.Tag("perf")
+    @Test void 검색_실제SQL_10만행_3회_실행계획() throws Exception {
+        jdbc.execute("INSERT INTO users(provider,provider_user_id,nickname) SELECT 'perf',g::text,'Perf'||g FROM generate_series(0,99) g");
+        jdbc.update("""
+                INSERT INTO posts(kind,user_id,board,tic_id,tag,title,body,status,created_at)
+                SELECT 'user',u.id,CASE WHEN g%3=0 THEN 'free' ELSE 'star' END,
+                    CASE WHEN g%3=0 THEN NULL WHEN g%7=0 THEN ? ELSE ? END,
+                    CASE WHEN g%4=0 THEN 'QUESTION' ELSE 'GENERAL' END,
+                    CASE WHEN g%2000=0 THEN 'spectrumrare' ELSE '관측 '||g END,
+                    CASE WHEN g%2000=1 THEN 'spectrumrare ' ELSE '' END ||
+                    CASE WHEN g%5<3 THEN '관측 빛 ' ELSE '기록 ' END || repeat(md5(g::text),8+g%40),
+                    CASE WHEN g%31=0 THEN 'hidden' WHEN g%47=0 THEN 'deleted' ELSE 'visible' END,
+                    '2026-09-21T00:00:00Z'::timestamptz + g*interval '1 microsecond'
+                FROM generate_series(1,100000) g JOIN users u ON u.provider='perf' AND u.provider_user_id=(g%100)::text
+                """,tic+1000000000,tic);
+        jdbc.update("INSERT INTO comments(post_id,user_id,body,status) SELECT p.id,?,'합성 댓글','visible' FROM posts p WHERE p.id%10=0",member);
+        for (String table : List.of("posts","users","stars","star_unlocks","comments")) jdbc.execute("ANALYZE "+table);
+        var output=new StringBuilder("# 169 실제 검색 SQL 실행 계획\n\n");
+        output.append(jdbc.queryForObject("SELECT version()",String.class)).append('\n');
+        output.append(jdbc.queryForMap("SELECT datcollate,datctype FROM pg_database WHERE datname=current_database()")).append('\n');
+        output.append(jdbc.queryForMap("SELECT count(*) AS rows,min(length(body)) AS min_body,max(length(body)) AS max_body,avg(length(body)) AS avg_body FROM posts")).append('\n');
+        output.append(jdbc.queryForList("SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND tablename IN ('posts','users','comments')")).append("\n\n");
+        var captured=new java.util.concurrent.atomic.AtomicReference<String>();
+        doAnswer(call -> { String sql=call.getArgument(0);if(sql.contains("SELECT p.id,p.kind"))captured.set(sql);return call.callRealMethod(); }).when(feedJdbc).sql(any(String.class));
+        var scenarios=List.of(
+                java.util.Map.of("q","spectrumrare","searchIn","TITLE"),
+                java.util.Map.of("q","spectrumrare","searchIn","BODY"),
+                java.util.Map.of("q","spectrumrare"),java.util.Map.of("q","빛"),java.util.Map.of("q","관측"),
+                java.util.Map.of("q","관측","ticId",""+tic,"board","STAR","tag","QUESTION"),
+                java.util.Map.of("author","Perf0"),java.util.Map.of("q","관측","page","next"));
+        for (var input : scenarios) {
+            var params=new org.springframework.util.LinkedMultiValueMap<String,String>();input.forEach((k,v)->{if(!k.equals("page"))params.set(k,v);});
+            var q=com.planetory.backend.domain.post.service.CommunityQuery.feed(params);
+            var result=community.feed(member,q);
+            if(input.containsKey("page")){params.set("cursor",result.nextCursor());q=com.planetory.backend.domain.post.service.CommunityQuery.feed(params);community.feed(member,q);}
+            String sql=captured.get();assertNotNull(sql);
+            var binds=new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                    .addValue("tic",q.target()).addValue("at",q.afterAt()).addValue("id",q.afterId()).addValue("limit",q.size()+1)
+                    .addValue("pattern","%"+input.getOrDefault("q","")+"%").addValue("author",input.get("author"))
+                    .addValue("board","star").addValue("tag",input.get("tag"));
+            output.append("## ").append(input).append("\n```sql\n").append(sql).append("\n```\n");
+            var named=new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(jdbc);
+            String count=sql.substring(sql.indexOf("FROM posts"),sql.indexOf("ORDER BY p.created_at"));
+            output.append("matched rows: ").append(named.queryForObject("SELECT count(*) "+count,binds,Long.class)).append('\n');
+            for(int run=1;run<=3;run++)output.append("### run ").append(run).append("\n```text\n")
+                    .append(String.join("\n",named.queryForList("EXPLAIN (ANALYZE,BUFFERS,SETTINGS) "+sql,binds,String.class))).append("\n```\n");
+        }
+        java.nio.file.Files.writeString(java.nio.file.Path.of("build/search-performance.md"),output);
     }
 
     @Test void 앱역할_읽기트랜잭션_통계계약_성과진행불변() {

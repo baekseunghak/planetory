@@ -4,17 +4,20 @@ import {
   draftStorageGeneration,
   sessionDraftKey,
 } from "../../auth/session-draft-storage";
-import type { AnalysisContext } from "./analysis-data";
+import { contextKey, type AnalysisContext } from "./analysis-data";
+import { clampFoldView } from "./folded-curve";
 import {
   emptyPhaseDraft,
   useAnalysisFold,
   usePhaseDraft,
+  useRetryDraft,
 } from "./AnalysisSession";
 import type {
   PeriodSelection,
   PeriodSelectionChange,
   ReadyPeriodogram,
 } from "./period-selection";
+import { choosePeriod } from "./period-selection";
 import { previewPhaseSelection } from "./phase-selection";
 import {
   draftIdentity,
@@ -33,6 +36,16 @@ export function AnalysisDraftPersistence({
   onRestore: (selection: PeriodSelection) => PeriodSelectionChange;
 }) {
   const auth = useSession();
+  const {
+    draft: retryDraft,
+    resume,
+    autoRestore,
+    retryAttemptId,
+  } = useRetryDraft();
+  const freshRetry =
+    retryDraft &&
+    !resume &&
+    contextKey(retryDraft.curveContext) === contextKey(context.curveContext);
   const fold = useAnalysisFold();
   const { state: phase, setState } = usePhaseDraft();
   const key = sessionDraftKey(auth.member!.memberId, context.ticId);
@@ -42,6 +55,7 @@ export function AnalysisDraftPersistence({
   );
   const lease = useRef(draftStorageGeneration());
   const [initial] = useState(() => {
+    if (freshRetry) return { saved: null, notice: "" };
     try {
       const raw = sessionStorage.getItem(key);
       if (!raw) return { saved: null, notice: "" };
@@ -68,7 +82,84 @@ export function AnalysisDraftPersistence({
   const [restoring, setRestoring] = useState<{
     draft: SavedAnalysisDraft;
     change: PeriodSelectionChange;
+    retry?: boolean;
   } | null>(null);
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    if (freshRetry && retryDraft.draft.periodDays === null) {
+      try {
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({
+            schema: 1,
+            identity,
+            periodDays: null,
+            sourcePeakGridIndex: null,
+            range: null,
+            judgment: emptyPhaseDraft.judgment,
+            retryOfSubmissionId: retryDraft.retryOfSubmissionId,
+            retryAttemptId,
+            curveContext: context.curveContext,
+          }),
+        );
+      } catch {
+        setNotice(
+          "초안을 저장하지 못했습니다. 화면을 나가면 재도전 출처가 사라질 수 있습니다.",
+        );
+      }
+    }
+    if (freshRetry && retryDraft.draft.periodDays !== null) {
+      try {
+        const { periodDays, phaseStart, phaseEnd } = retryDraft.draft;
+        const shift = phaseEnd !== null && phaseEnd > 1.5 ? 1 : 0;
+        const range =
+          phaseStart === null || phaseEnd === null
+            ? null
+            : {
+                phaseStart: phaseStart - shift,
+                phaseEnd: phaseEnd - shift,
+              };
+        setRestoring({
+          retry: true,
+          change: onRestore(choosePeriod(data, { kind: "direct", periodDays })),
+          draft: {
+            schema: 1,
+            identity,
+            periodDays,
+            sourcePeakGridIndex: null,
+            range,
+            judgment: emptyPhaseDraft.judgment,
+          },
+        });
+      } catch (error) {
+        setNotice(
+          `이전 주기를 복원하지 못했습니다. ${(error as Error).message} 새 주기를 선택해 주세요.`,
+        );
+      }
+    } else if (autoRestore && saved) {
+      try {
+        setRestoring({
+          draft: saved,
+          change: onRestore(restoreDraftPeriod(saved, data)),
+        });
+      } catch (error) {
+        setNotice((error as Error).message);
+      }
+    }
+  }, [
+    freshRetry,
+    retryDraft,
+    autoRestore,
+    saved,
+    onRestore,
+    data,
+    identity,
+    key,
+    retryAttemptId,
+    context.curveContext,
+  ]);
   const change = fold.state.success?.change;
   useEffect(() => {
     if (!restoring) return;
@@ -90,14 +181,34 @@ export function AnalysisDraftPersistence({
         preview,
         committedPreview: preview,
         judgment,
+        confirmed:
+          restoring.retry && preview?.kind === "preview" ? preview : null,
       });
+      if (restoring.retry && retryDraft?.draft.viewState) {
+        const zoom = retryDraft.draft.viewState.foldedXZoomRatio;
+        fold.dispatch({
+          type: "view",
+          update: () =>
+            clampFoldView({
+              zoom,
+              center: range ? (range.phaseStart + range.phaseEnd) / 2 : 0.5,
+            }),
+        });
+      }
       setSaved(null);
       setRestoring(null);
-      setNotice("초안을 불러왔습니다. 선택 구간과 판단을 다시 확인해 주세요.");
+      setNotice(
+        restoring.retry
+          ? preview?.kind === "invalid"
+            ? "이전 구간이 현재 선택 규칙에 맞지 않습니다. 구간을 다시 선택해 주세요."
+            : "주기·구간을 복원했습니다. 판단·근거·메모는 새로 작성해 주세요."
+          : "초안을 불러왔습니다. 선택 구간과 판단을 다시 확인해 주세요.",
+      );
     } else if (
       fold.state.status !== "pending" ||
       fold.state.change !== restoring.change
     ) {
+      setSaved(restoring.draft);
       setRestoring(null);
       setNotice(
         "초안의 주기를 복원하지 못했습니다. 초안 불러오기로 다시 시도해 주세요.",
@@ -112,6 +223,8 @@ export function AnalysisDraftPersistence({
     context,
     data,
     setState,
+    retryDraft,
+    fold.dispatch,
   ]);
   // A new manual selection replaces the offered draft only after a successful fold.
   useEffect(() => {
@@ -133,6 +246,9 @@ export function AnalysisDraftPersistence({
       sourcePeakGridIndex: change.selection.sourcePeakGridIndex,
       range: phase.committed,
       judgment: phase.judgment,
+      retryOfSubmissionId: retryDraft?.retryOfSubmissionId ?? null,
+      retryAttemptId,
+      curveContext: context.curveContext,
     };
     try {
       sessionStorage.setItem(key, JSON.stringify(draft));
@@ -150,6 +266,9 @@ export function AnalysisDraftPersistence({
     key,
     phase.committed,
     phase.judgment,
+    retryDraft,
+    context.curveContext,
+    retryAttemptId,
   ]);
   const restore = () => {
     if (!saved) return;
