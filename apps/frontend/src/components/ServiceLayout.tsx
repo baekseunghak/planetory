@@ -137,7 +137,8 @@ export function ServiceLayout() {
         className={
           location.pathname.startsWith("/analysis/")
             ? "page analysis-page-container"
-            : location.pathname === "/sky"
+            : location.pathname === "/sky" ||
+                /^\/members\/[^/]+\/sky$/.test(location.pathname)
               ? "page sky-page-container"
               : /^(\/community|\/posts|\/signal-threads|\/stars\/[^/]+\/board|\/me$|\/members\/)/.test(
                     location.pathname,

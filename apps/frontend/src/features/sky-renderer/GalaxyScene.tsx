@@ -31,6 +31,7 @@ export type SceneControl = {
   focusStar(position: Pick<Star, "x" | "y" | "depthZ">): void;
 };
 type Props = SkySceneProps & {
+  canvasLabel?: string;
   systemView?: SystemView | null;
   personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
@@ -55,6 +56,7 @@ export function GalaxyScene({
   suspended = false,
   onGraphics,
   systemView = null,
+  canvasLabel = "내가 발견한 개별 별로 이루어진 3D 은하 지도",
 }: Props) {
   const cameraAnimation = useRef(0);
   const interaction = useRef<InteractionControl | null>(null);
@@ -310,7 +312,7 @@ export function GalaxyScene({
         {...(import.meta.env.DEV
           ? { "data-camera": JSON.stringify(camera) }
           : {})}
-        aria-label="내가 발견한 개별 별로 이루어진 3D 은하 지도"
+        aria-label={canvasLabel}
       />
       {camera && matrix && (
         <GalaxyInteraction
@@ -394,3 +396,4 @@ export function GalaxyPage() {
     />
   );
 }
+

@@ -1,5 +1,11 @@
 export const routeDefinitions = [
   {
+    key: "publicSky",
+    path: "/members/:memberId/sky",
+    title: "공개 은하",
+    owner: "하서진",
+  },
+  {
     key: "withdrawal",
     path: "/settings/withdrawal",
     title: "계정 탈퇴",

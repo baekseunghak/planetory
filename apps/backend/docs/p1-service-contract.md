@@ -117,3 +117,7 @@
 GET `/api/v1/me/sky/locate?ticId=...`의 ID·version·layoutVersion·layoutOrdinal·x/y/depthZ·level·bounds를 검증한 뒤 서버 배율로 이동한다. 프론트는 별 배치나 좌표를 다시 만들지 않는다. 검색/위치 권한·페이지/계정/버전은 서버가 검사한다. URL의 filterTic/filterStage/filterGrade는 프론트 복귀 상태이며 API 필드와 구별한다.
 
 223의 A13 입력 어댑터는 [ProfileStarFilters.tsx](../../frontend/src/features/profile/ProfileStarFilters.tsx)와 ProfileSlotProps.starFilters다. 현재develop에 A13 실제 목록이 등록되지 않아 해당 소비자의 연결은 아직 미완료다. 이 문서로 다른 담당자의 A13 구현 완료를 선언하지 않는다. 실제 C17 대조와 배포는244 P1-223에 남긴다.
+
+## 7. 공개 은하 방문 (250)
+[공개 은하 계약](public-sky-contract.md)을 함께 구현한다. 전체 보유 별 공개이며 개인 지도와 저장 좌표를 공유한다. 기존 A13 제출 목록과 혼동하지 않는다.
+

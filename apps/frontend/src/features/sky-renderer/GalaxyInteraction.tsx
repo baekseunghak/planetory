@@ -9,7 +9,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { useQuests } from "../quests/QuestProvider";
+import { useOptionalQuests } from "../quests/QuestProvider";
 import type { SkySceneProps } from "../sky-data/SkyDataPage";
 import type { Matrix } from "../sky-data/geometry";
 import {
@@ -54,7 +54,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       enabled,
     } = props;
     const [mode, setMode] = useState<"rotate" | "pan">("rotate");
-    const quest = useQuests();
+    const quest = useOptionalQuests();
     const [selectedPlanet, setSelectedPlanet] = useState<string | null>(null);
     const selectedPlanetRef = useRef(selectedPlanet);
     selectedPlanetRef.current = selectedPlanet;
@@ -86,14 +86,14 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     );
     const current = useRef({ ...props, mode, index });
     current.current = { ...props, mode, index };
-    const tutorials = quest.markers;
+    const tutorials = quest?.markers ?? null;
     const staleRound = currentChallengeMismatch(
-      quest.current,
-      quest.quests?.challenge,
+      quest?.current,
+      quest?.quests?.challenge,
     );
     const challengeTicId =
-      quest.quests?.challenge.unlocked && !staleRound
-        ? quest.quests.challenge.ticId
+      quest?.quests?.challenge.unlocked && !staleRound
+        ? quest?.quests.challenge.ticId
         : null;
     useEffect(() => {
       setSelectedPlanet(null);
@@ -574,7 +574,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         {quest?.error && (
           <div className="galaxy-marker-warning" role="status">
             튜토리얼 번호를 확인하지 못했습니다.{" "}
-            <button onClick={quest.refresh}>번호 다시 확인</button>
+            <button onClick={quest?.refresh}>번호 다시 확인</button>
           </div>
         )}
       </>
