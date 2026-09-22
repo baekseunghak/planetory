@@ -1,5 +1,9 @@
 package com.planetory.backend.domain.auth;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -7,12 +11,15 @@ import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.planetory.backend.domain.auth.oauth.OAuthLoginSuccessHandler;
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
+import com.planetory.backend.domain.exploration.service.InitialExplorationService;
 import com.planetory.backend.domain.member.service.MemberService;
 import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
+import com.planetory.backend.global.security.SecurityConfig;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -27,12 +34,14 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.*;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.context.SecurityContext;
@@ -98,6 +107,10 @@ class AuthIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @LocalServerPort int port;
+    private final ListAppender<ILoggingEvent> diagnosticLogs = new ListAppender<>();
+    private final List<Logger> diagnosticLoggers = List.of(SecurityConfig.class,
+                    OAuthLoginSuccessHandler.class, InitialExplorationService.class).stream()
+            .map(type -> (Logger) LoggerFactory.getLogger(type)).toList();
 
     @BeforeEach
     void resetOnlyTestData() {
@@ -108,7 +121,15 @@ class AuthIntegrationTest {
             jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (?, ?, 'deep_confirmed', true)", i, i);
         }
         TIME.now = Instant.parse("2026-09-15T01:00:00Z");
-        LAYOUT.fail = false;
+        LAYOUT.failure = null;
+        diagnosticLogs.start();
+        diagnosticLoggers.forEach(logger -> logger.addAppender(diagnosticLogs));
+    }
+
+    @AfterEach
+    void detachDiagnosticLogs() {
+        diagnosticLoggers.forEach(logger -> logger.detachAppender(diagnosticLogs));
+        diagnosticLogs.stop();
     }
 
     @AfterAll
@@ -349,6 +370,29 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void oauthRejectionLogsOnlyAllowedCodeAndClearsExistingSession() throws Exception {
+        for (String error : List.of("access_denied", "private@example.invalid", "x".repeat(256))) {
+            var session = login("google", "diagnostic-member");
+            var start = mvc.perform(get("/oauth2/authorization/google").session(session)).andReturn();
+            var params = query(start.getResponse().getRedirectedUrl());
+            diagnosticLogs.list.clear();
+            mvc.perform(get("/login/oauth2/code/google").session(session)
+                            .param("state", params.get("state")).param("error", error)
+                            .param("error_description", "private-provider-description")
+                            .param("error_uri", "https://private.example.invalid/failure"))
+                    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("AUTH_REQUIRED"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("private"))));
+            assertTrue(session.isInvalid());
+            assertEquals(1, diagnosticLogs.list.size());
+            assertDiagnostic(0, Level.WARN, "OAuth authentication failed: exception=OAuth2AuthenticationException oauth_error="
+                    + (error.equals("access_denied") ? "access_denied" : "unrecognized"));
+            mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
+        }
+        assertEquals(1, count("users"));
+    }
+
+    @Test
     void sessionExpiresAtThirtyMinutesAndOnlyAuthenticatedApiActivityExtendsIt() throws Exception {
         var session = login("google", "idle");
         TIME.advance(Duration.ofMinutes(29));
@@ -506,14 +550,39 @@ class AuthIntegrationTest {
         assertTrue(session.isInvalid());
         assertEquals(0, count("users"));
         assertEquals(0, count("user_settings"));
+        assertEquals(0, count("star_unlocks"));
+        assertEquals(2, diagnosticLogs.list.size());
+        assertDiagnostic(0, Level.ERROR, "OAuth member initialization failed: reason=active_tutorial_missing seq=1");
+        assertDiagnostic(1, Level.WARN,
+                "OAuth member initialization failed: branch=business code=DEPENDENCY_UNAVAILABLE exception=BusinessException");
     }
 
     @Test
-    void signupRollsBackIfGalaxyLayoutFails() {
-        LAYOUT.fail = true;
-        assertThrows(RuntimeException.class, () -> members.login("google", "layout-failure"));
-        assertEquals(0, count("users"));
-        assertEquals(0, count("star_unlocks"));
+    void signupRollsBackAndClearsSessionIfInitializationThrows() throws Exception {
+        for (RuntimeException failure : List.of(new IllegalStateException("private-layout-message"),
+                new DataAccessResourceFailureException("private-database-message"))) {
+            LAYOUT.failure = failure;
+            boolean database = failure instanceof DataAccessResourceFailureException;
+            var start = mvc.perform(get("/oauth2/authorization/google")).andReturn();
+            var params = query(start.getResponse().getRedirectedUrl());
+            var session = (MockHttpSession) start.getRequest().getSession(false);
+            diagnosticLogs.list.clear();
+            mvc.perform(get("/login/oauth2/code/google").session(session)
+                            .param("state", params.get("state"))
+                            .param("code", IDP.issue("private-failure-subject", params.get("nonce"), "")))
+                    .andExpect(status().is(database ? 503 : 500))
+                    .andExpect(jsonPath("$.code").value(database ? "DEPENDENCY_UNAVAILABLE" : "INTERNAL_ERROR"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("private"))));
+            assertTrue(session.isInvalid());
+            assertEquals(0, count("users"));
+            assertEquals(0, count("user_settings"));
+            assertEquals(0, count("star_unlocks"));
+            assertEquals(1, diagnosticLogs.list.size());
+            assertDiagnostic(0, Level.ERROR, "OAuth member initialization failed: branch="
+                    + (database ? "database code=DEPENDENCY_UNAVAILABLE" : "unexpected code=INTERNAL_ERROR")
+                    + " exception=" + failure.getClass().getSimpleName());
+        }
     }
 
     @Test
@@ -854,6 +923,12 @@ class AuthIntegrationTest {
         assertEquals(1, count("user_settings"));
     }
 
+    private void assertDiagnostic(int index, Level level, String message) {
+        var event = diagnosticLogs.list.get(index);
+        assertEquals(level, event.getLevel());
+        assertEquals(message, event.getFormattedMessage());
+        assertNull(event.getThrowableProxy());
+    }
     private int count(String table) { return jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class); }
     private long memberId(MockHttpSession session) {
         var context = (SecurityContext) session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
@@ -885,9 +960,9 @@ class AuthIntegrationTest {
     /** 원점이 아닌 결정적 좌표를 돌려 저장 값이 배치 함수에서 왔는지 구분한다. */
     static class TestGalaxyLayout implements GalaxyLayout {
         static final String VERSION = "test-layout-1";
-        volatile boolean fail;
+        volatile RuntimeException failure;
         @Override public StarPosition place(int layoutOrdinal) {
-            if (fail) throw new IllegalStateException("layout unavailable");
+            if (failure != null) throw failure;
             return new StarPosition(layoutOrdinal * 10.5 + 1, layoutOrdinal * -2.25 - 1, 0.5, VERSION);
         }
     }

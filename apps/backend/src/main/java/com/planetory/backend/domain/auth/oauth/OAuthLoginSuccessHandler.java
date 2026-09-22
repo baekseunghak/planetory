@@ -52,15 +52,20 @@ public class OAuthLoginSuccessHandler implements AuthenticationSuccessHandler {
             var member = members.login(oauth.getAuthorizedClientRegistrationId(), oauth.getName());
             sessions.login(member, request, response);
         } catch (BusinessException e) {
+            log.warn("OAuth member initialization failed: branch=business code={} exception={}",
+                    e.getErrorCode(), e.getClass().getSimpleName());
             sessions.logout(request, response);
             errors.write(response, e.getErrorCode());
             return;
         } catch (DataAccessException e) {
+            log.error("OAuth member initialization failed: branch=database code={} exception={}",
+                    ErrorCode.DEPENDENCY_UNAVAILABLE, e.getClass().getSimpleName());
             sessions.logout(request, response);
             errors.write(response, ErrorCode.DEPENDENCY_UNAVAILABLE);
             return;
         } catch (RuntimeException e) {
-            log.error("OAuth member initialization failed: {}", e.getClass().getSimpleName());
+            log.error("OAuth member initialization failed: branch=unexpected code={} exception={}",
+                    ErrorCode.INTERNAL_ERROR, e.getClass().getSimpleName());
             sessions.logout(request, response);
             errors.write(response, ErrorCode.INTERNAL_ERROR);
             return;
