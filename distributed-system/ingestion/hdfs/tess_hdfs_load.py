@@ -498,6 +498,7 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
                 raise RuntimeError(f"replication is not 2: {name}")
             _run([hdfs, "dfs", "-mv", remote + ".part", remote])
             _put_atomic(hdfs, manifest, manifest_remote)
+            manifest_checksum = _hdfs_checksum(hdfs, manifest_remote)
 
             manifest_rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
             sample_indices = _restore_sample_indices(len(bundle["entries"]))
@@ -518,6 +519,7 @@ def upload_plan(plan_path: Path, stage_uri: str, final_uri: str, classes: Path, 
                 "source_bytes": bundle["size_bytes"],
                 "replication": 2,
                 "hdfs_checksum": checksum,
+                "manifest_checksum": manifest_checksum,
                 "sample_filename": bundle["entries"][0]["filename"],
                 "sample_sha256": bundle["entries"][0]["sha256"],
                 "restore_samples": [bundle["entries"][index]["filename"] for index in sample_indices],
@@ -538,6 +540,7 @@ def audit_stage(
     *,
     run_id: str | None = None,
     release_id: str | None = None,
+    fast: bool = False,
 ) -> dict:
     listing = _run([hdfs, "dfs", "-find", stage_uri]).stdout.splitlines()
     if any(path.endswith(".part") for path in listing):
@@ -600,6 +603,8 @@ def audit_stage(
     if (actual_sequences, actual_manifests, actual_done) != (expected_sequences, expected_manifests, expected_done):
         raise RuntimeError("unexpected or missing bundle artifacts")
     manifests: list[dict] = []
+    fast_bundles = 0
+    full_bundles = 0
     for name, (plan, bundle) in expected_bundles.items():
         slot = int(plan["worker_slot"])
         sequence_path = f"{stage_uri}/{name}"
@@ -626,32 +631,39 @@ def audit_stage(
         hdfs_checksum = _hdfs_checksum(hdfs, sequence_path)
         if not hdfs_checksum or done.get("hdfs_checksum") != hdfs_checksum:
             raise RuntimeError(f"HDFS checksum changed after completion: {name}")
-        rows = _run([hdfs, "dfs", "-cat", manifest_path]).stdout.splitlines()
-        if len(rows) != len(bundle["entries"]):
-            raise RuntimeError(f"manifest count mismatch: {name}")
-        expected = {entry["filename"]: entry for entry in bundle["entries"]}
-        previous_end = -1
-        for line in rows:
-            row = json.loads(line)
-            item = expected.get(row.get("filename"))
-            if not item or any(row.get(field) != item[field] for field in (
-                "tic_id", "sector", "size_bytes", "sha256", "input_snapshot_id"
-            )):
-                raise RuntimeError(f"manifest entry does not match plan: {name}")
-            if row.get("bundle_location") != f"{final_uri}/{name}":
-                raise RuntimeError(f"final bundle location mismatch: {name}")
-            if (
-                row.get("sequence_key") != row.get("filename")
-                or row.get("source_list_sha256") != source_sha
-                or int(row.get("worker_slot", -1)) != slot
-            ):
-                raise RuntimeError(f"manifest lineage mismatch: {name}")
-            if int(row.get("offset_start", -1)) < 0 or int(row.get("offset_end", -1)) <= int(row["offset_start"]):
-                raise RuntimeError(f"invalid SequenceFile offset: {name}")
-            if int(row["offset_start"]) < previous_end:
-                raise RuntimeError(f"overlapping SequenceFile offsets: {name}")
-            previous_end = int(row["offset_end"])
-            manifests.append(row)
+        if fast and done.get("manifest_checksum"):
+            if _hdfs_checksum(hdfs, manifest_path) != done["manifest_checksum"]:
+                raise RuntimeError(f"manifest checksum changed after completion: {name}")
+            manifests.extend({"filename": entry["filename"]} for entry in bundle["entries"])
+            fast_bundles += 1
+        else:
+            full_bundles += 1
+            rows = _run([hdfs, "dfs", "-cat", manifest_path]).stdout.splitlines()
+            if len(rows) != len(bundle["entries"]):
+                raise RuntimeError(f"manifest count mismatch: {name}")
+            expected = {entry["filename"]: entry for entry in bundle["entries"]}
+            previous_end = -1
+            for line in rows:
+                row = json.loads(line)
+                item = expected.get(row.get("filename"))
+                if not item or any(row.get(field) != item[field] for field in (
+                    "tic_id", "sector", "size_bytes", "sha256", "input_snapshot_id"
+                )):
+                    raise RuntimeError(f"manifest entry does not match plan: {name}")
+                if row.get("bundle_location") != f"{final_uri}/{name}":
+                    raise RuntimeError(f"final bundle location mismatch: {name}")
+                if (
+                    row.get("sequence_key") != row.get("filename")
+                    or row.get("source_list_sha256") != source_sha
+                    or int(row.get("worker_slot", -1)) != slot
+                ):
+                    raise RuntimeError(f"manifest lineage mismatch: {name}")
+                if int(row.get("offset_start", -1)) < 0 or int(row.get("offset_end", -1)) <= int(row["offset_start"]):
+                    raise RuntimeError(f"invalid SequenceFile offset: {name}")
+                if int(row["offset_start"]) < previous_end:
+                    raise RuntimeError(f"overlapping SequenceFile offsets: {name}")
+                previous_end = int(row["offset_end"])
+                manifests.append(row)
 
     expected_count = sum(int(plan["product_count"]) for plan in plans)
     if any(
@@ -675,6 +687,8 @@ def audit_stage(
         "bundle_count": len(expected_bundles),
         "total_bytes": sum(int(plan["total_bytes"]) for plan in plans),
         "status": "HEALTHY",
+        "fast_bundles": fast_bundles,
+        "full_bundles": full_bundles,
     }
 
 
@@ -708,6 +722,7 @@ def main() -> int:
     audit.add_argument("--worker-slot", type=int, action="append", required=True)
     audit.add_argument("--hdfs", default="/opt/hadoop/bin/hdfs")
     audit.add_argument("--output", type=Path)
+    audit.add_argument("--fast", action="store_true")
     ready = commands.add_parser("ready")
     ready.add_argument("--ready-json", type=Path, required=True)
     ready.add_argument("--run-id", required=True)
@@ -771,6 +786,7 @@ def main() -> int:
     value = audit_stage(
         args.stage_uri.rstrip("/"), args.final_uri.rstrip("/"), args.source_sha,
         args.sector, args.worker_slot, args.hdfs, run_id=args.run_id, release_id=args.release_id,
+        fast=args.fast,
     )
     if args.output:
         atomic_json(args.output, value)

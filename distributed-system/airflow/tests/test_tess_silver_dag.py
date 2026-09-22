@@ -60,7 +60,8 @@ class SilverDagContractTest(unittest.TestCase):
         self.assertIn('pool="tess_yarn"', source)
         self.assertIn('tess_pipeline_enabled', source)
         self.assertIn('"tess_sector_raw", "tess_sector_bronze"', source)
-        self.assertIn('"tess_sector_download_raw_bronze"', source)
+        self.assertIn('airflow.sdk', source)
+        self.assertNotIn('create_session', source)
 
 
 if __name__ == "__main__":

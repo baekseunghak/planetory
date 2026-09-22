@@ -13,7 +13,8 @@ param(
  [ValidateRange(80,1000)][int]$MinimumWorkerFreeGiB=100,
  [AllowEmptyString()][ValidateScript({$_ -eq '' -or $_ -match '^[0-9a-f]{64}$'})][string]$ExpectedCoverageSha256='',
  [ValidateCount(1,5)][ValidateSet(2,3,4,5,6)][int[]]$NodeNumbers=(2..6),
- [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion')
+ [string]$LocalIngestionPath=(Join-Path $PSScriptRoot '../../../distributed-system/ingestion'),
+ [switch]$CleanupSourceAfterCommit
 )
 $ErrorActionPreference='Stop'
 $mutatingSteps=@('ConfigureCapacity','Install','Build','Upload','Commit','CoverageCommit','RunAll','ServerRunAll')
@@ -26,7 +27,7 @@ if ($Step -in @('ConfigureCapacity','Install','ServerRunAll') -and -not (Get-Com
 $LocalIngestionPath=(Resolve-Path $LocalIngestionPath).Path
 $loaderRoot=Join-Path $LocalIngestionPath 'hdfs'
 $hdfsSitePath=(Resolve-Path (Join-Path $PSScriptRoot '../config/hadoop/hdfs-site.xml')).Path
-foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
+foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','tess_sector_admission.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
  if (-not (Test-Path -LiteralPath (Join-Path $loaderRoot $name) -PathType Leaf)) { throw "Missing HDFS loader file: $name" }
 }
 
@@ -212,9 +213,10 @@ function New-LoaderBundle {
  try {
   $files=@(
    Get-ChildItem -LiteralPath (Join-Path $LocalIngestionPath 'ingestion') -Recurse -File
-   foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
+   foreach ($name in @('tess_hdfs_load.py','tess_hdfs_runall.py','tess_sector_admission.py','TessSequenceFileTool.java','manifest_to_parquet.py')) {
     Get-Item -LiteralPath (Join-Path $loaderRoot $name)
    }
+   Get-Item -LiteralPath (Join-Path $LocalIngestionPath 'config/service-v1.json')
   ) | Where-Object { $_.FullName -notmatch '[\\/]__pycache__[\\/]|\.pyc$' } | Sort-Object FullName
   foreach ($file in $files) {
    $relative=[IO.Path]::GetRelativePath($LocalIngestionPath,$file.FullName).Replace('\','/')
@@ -227,7 +229,7 @@ function New-LoaderBundle {
    $hasher.AppendData([byte[]]@(0))
   }
   $contentSha=[Convert]::ToHexString($hasher.GetHashAndReset()).ToLowerInvariant()
-  & tar -czf $archive '--exclude=__pycache__' '--exclude=*.pyc' -C $LocalIngestionPath ingestion hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/TessSequenceFileTool.java hdfs/manifest_to_parquet.py
+  & tar -czf $archive '--exclude=__pycache__' '--exclude=*.pyc' -C $LocalIngestionPath ingestion config/service-v1.json hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/tess_sector_admission.py hdfs/TessSequenceFileTool.java hdfs/manifest_to_parquet.py
   if ($LASTEXITCODE -ne 0) { throw 'Failed to create HDFS loader bundle.' }
   [pscustomobject]@{
    Path=$archive
@@ -431,7 +433,7 @@ work=/tmp/S15P21C206-76-__CODE_RELEASE__-work-$$
 cleanup() { status=$?; trap - EXIT; rm -f -- "$archive"; test -z "$work" || sudo rm -rf -- "$work"; exit "$status"; }
 trap cleanup EXIT
 validate_release_permissions() {
- for file in hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/manifest_to_parquet.py classes/TessSequenceFileTool.class ingestion/__init__.py ingestion/tess.py; do
+ for file in hdfs/tess_hdfs_load.py hdfs/tess_hdfs_runall.py hdfs/tess_sector_admission.py hdfs/manifest_to_parquet.py classes/TessSequenceFileTool.class ingestion/__init__.py ingestion/tess.py config/service-v1.json; do
   test -f "$release/$file" || { echo RELEASE_FILE_MISSING="$file" >&2; return 1; }
  done
  test -z "$(sudo find "$release" \( ! -user root -o ! -group root \) -print -quit)" || { echo RELEASE_OWNER_INVALID >&2; return 1; }
@@ -612,7 +614,7 @@ count=$(sudo -u hdfs python3 -c 'import json,sys; print(json.load(open(sys.argv[
 if hdfs_cmd dfs -test -e '__STAGE__/manifest.parquet'; then
  hdfs_cmd dfs -rm -r -skipTrash '__STAGE__/manifest.parquet'
 fi
-sudo docker pull '__SPARK_IMAGE__'
+sudo docker image inspect '__SPARK_IMAGE__' >/dev/null
 sudo docker run --rm --network host \
  --add-host master-1:10.20.1.10 --add-host worker-2:10.20.2.10 --add-host worker-3:10.20.3.10 \
  --add-host worker-4:10.20.4.10 --add-host worker-5:10.20.5.10 --add-host worker-6:10.20.6.10 \
@@ -742,13 +744,14 @@ echo INTERNAL_SSH_AUTHORIZED source=10.20.1.10
   $remoteCoverage="$remoteDirectory/$RunId.coverage.json"
   $remoteKnownHosts="$remoteDirectory/known_hosts"
   $unit="planetory-tess-hdfs-runall-$RunId.service"
+  $completionMarker=if ($CleanupSourceAfterCommit) { 'cleanup-complete' } else { 'complete' }
   $unitText=@"
 [Unit]
 Description=Planetory TESS HDFS autonomous RunAll $RunId
 Wants=network-online.target
 After=network-online.target hadoop-hdfs-namenode.service docker.service
 StartLimitIntervalSec=0
-ConditionPathExists=!/var/lib/planetory-tess-hdfs-runall-$RunId/complete
+ConditionPathExists=!/var/lib/planetory-tess-hdfs-runall-$RunId/$completionMarker
 
 [Service]
 Type=simple
@@ -787,6 +790,7 @@ WantedBy=multi-user.target
    coverage_manifest=$remoteCoverage
    target_bundle_bytes=$targetBytes
    minimum_worker_free_gib=$MinimumWorkerFreeGiB
+   cleanup_source_after_commit=[bool]$CleanupSourceAfterCommit
    workers=@($NodeNumbers | ForEach-Object { [ordered]@{slot=$_-1;internal_ip="10.20.$_.10"} })
   }
   $temporaryConfig=[IO.Path]::GetTempFileName()

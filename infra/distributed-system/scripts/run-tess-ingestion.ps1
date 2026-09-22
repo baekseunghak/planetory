@@ -10,6 +10,7 @@ param(
  [ValidateRange(1,1440)][int]$RateWindowMinutes=15,
  [ValidateRange(80,1000)][int]$MinimumFreeGiB=100,
  [string]$ReleaseId='',
+ [switch]$CodeOnly,
  [ValidateCount(1,13)][ValidateRange(1,13)][int[]]$Sectors=@(1,2,6,7,8,9,10,11,12,13),
  [ValidateCount(1,5)][ValidateSet(2,3,4,5,6)][int[]]$NodeNumbers=(2..6),
  [ValidatePattern('^\d{8}T\d{6}Z$')][string]$ExistingRunId='20260918T080417Z',
@@ -19,6 +20,7 @@ param(
 $ErrorActionPreference='Stop'
 $ReleaseId=if ($ReleaseId) { $ReleaseId } else { $RunId }
 if ($ReleaseId -notmatch '^\d{8}T\d{6}Z$') { throw 'ReleaseId must use UTC yyyyMMddTHHmmssZ.' }
+if ($CodeOnly -and $Step -ne 'Install') { throw 'CodeOnly is valid only with Install.' }
 
 if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { throw 'Install Tailscale CLI and join the project tailnet first.' }
 $LocalIngestionPath=(Resolve-Path $LocalIngestionPath).Path
@@ -155,6 +157,7 @@ echo PREFLIGHT_OK host=$(hostname -s) disk_percent=$disk_percent free_bytes=$fre
  }
  'Install' {
   $bundle=New-Bundle
+  $runDirectories=if ($CodeOnly) { '' } else { '"$run_root" "$run_root/manifests" "$run_root/logs" "$run_root/pids" "$run_root/raw"' }
   try {
    foreach ($node in $NodeNumbers) {
     Assert-RemoteHost $node
@@ -165,7 +168,7 @@ run_root='__RUN_ROOT__'
 archive=/tmp/S15P21C206-75-__RUN_ID__-ingestion.tgz
 cleanup() { status=$?; trap - EXIT; rm -f -- "$archive"; exit "$status"; }
 trap cleanup EXIT
-sudo install -d -o "$(id -un)" -g "$(id -gn)" "$release" "$run_root" "$run_root/manifests" "$run_root/logs" "$run_root/pids" "$run_root/raw"
+sudo install -d -o "$(id -un)" -g "$(id -gn)" "$release" __RUN_DIRECTORIES__
 if test -f "$release/READY"; then
  if test "$(cat "$release/READY")" = '__CONTENT_SHA__'; then
   echo INSTALL_CACHED content_sha256=__CONTENT_SHA__
@@ -186,7 +189,7 @@ printf '%s\n' '__CONTENT_SHA__' > "$release/READY"
 sudo chown -R root:root "$release"
 sudo chmod -R go-w "$release"
 echo INSTALL_OK release="$release" content_sha256=__CONTENT_SHA__ archive_sha256=__ARCHIVE_SHA__
-'@.Replace('__RELEASE__',$release).Replace('__RUN_ROOT__',$runRoot).Replace('__RUN_ID__',$RunId).Replace('__CONTENT_SHA__',$bundle.ContentSha256).Replace('__ARCHIVE_SHA__',$bundle.ArchiveSha256).Replace('__BUNDLE_BASE64__',$bundle.Base64)
+'@.Replace('__RELEASE__',$release).Replace('__RUN_ROOT__',$runRoot).Replace('__RUN_ID__',$RunId).Replace('__CONTENT_SHA__',$bundle.ContentSha256).Replace('__ARCHIVE_SHA__',$bundle.ArchiveSha256).Replace('__BUNDLE_BASE64__',$bundle.Base64).Replace('__RUN_DIRECTORIES__',$runDirectories)
     Invoke-Remote $node $command 'install immutable run bundle'
    }
   } finally {

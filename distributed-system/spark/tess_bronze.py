@@ -441,7 +441,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--raw-release", required=True)
     parser.add_argument("--raw-ready-sha256", required=True)
     parser.add_argument("--source-list-sha256", required=True)
-    parser.add_argument("--sector", type=int, choices=range(1, 14), required=True)
+    parser.add_argument("--sector", type=int, required=True)
     parser.add_argument("--expected-products", type=int, required=True)
     parser.add_argument("--pipeline-version", required=True)
     parser.add_argument("--run-id", required=True)
@@ -452,7 +452,7 @@ def parse_args() -> argparse.Namespace:
     for name in ("raw_ready_sha256", "source_list_sha256"):
         if not SHA256_RE.fullmatch(getattr(args, name)):
             parser.error(f"--{name.replace('_', '-')} must be lowercase SHA-256")
-    if args.expected_products <= 0 or args.output_partitions <= 0 or args.canary_products < 0:
+    if args.sector < 1 or args.expected_products <= 0 or args.output_partitions <= 0 or args.canary_products < 0:
         parser.error("counts and partition count must be positive")
     return args
 

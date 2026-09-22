@@ -184,7 +184,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 
 `FinalAudit`은 과거 오류와 수정 뒤 새 오류를 구분하기 위해 UTC 검사 시작 시각을 필수로 받는다. 로그 파일 목록 조회와 읽기는 `hdfs` 권한 안에서 수행하며, 로그 없음·읽기 실패·검색 실패도 감사 실패로 처리한다. 두 NameNode에서 세 JournalNode의 8485/TCP와 8480/HTTP도 함께 검증한다.
 
-현재 HDFS unit은 실행 중이지만 부팅 자동 시작은 활성화하지 않았다. 재부팅 후에는 JournalNode·NameNode·DataNode를 순서대로 시작하고 두 NameNode가 올라온 뒤 기존 Active가 없음을 확인해 수동 전환해야 한다.
+최초 설치 당시 HDFS unit은 실행 중이지만 부팅 자동 시작은 비활성이었다. 2026-09-22 이후의 운영 상태와 재부팅 복구는 [전체 노드 부팅 복구](#전체-노드-부팅-복구)를 따른다.
 
 ## HDFS 완료 검증
 
@@ -232,7 +232,7 @@ $AuditSinceUtc = (@(& tailscale ssh SSAFY@node-1 'date -u +%Y-%m-%dT%H:%M:%SZ') 
 
 설치 전에 OpenSSH `known_hosts`에 각 `node-*` host key를 별도 확인해 등록해야 한다. 미등록되거나 변경된 key는 자동 수락하지 않고 설치와 sample 전송을 중단한다.
 
-설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit의 부팅 자동 시작을 활성화하지 않고 운영자 확인 뒤 수동 복구 순서를 유지한다. 재부팅 후에는 JournalNode·NameNode·DataNode와 HA 상태를 먼저 복구한 뒤 같은 `Start`와 `ValidateNodes`를 실행한다.
+최초 설치 단계는 unit을 활성화하거나 시작하지 않는다. `Start`는 Node 1의 ResourceManager와 Node 2~6의 NodeManager만 시작하고 준비 포트를 최대 30초 기다린다. `S15P21C206-74` 당시에는 자동 fencing이 없어 HDFS·YARN unit을 부팅 시 비활성으로 유지했다. 현재 부팅 설정·검증 범위는 [전체 노드 부팅 복구](#전체-노드-부팅-복구)를 따른다.
 
 `Preflight`는 6개 노드가 NTP 동기화 상태이며 `Etc/UTC` 시간대를 사용하는지 확인한다. 감사 시작 시각은 운영자 PC가 아니라 Node 1에서 가져온다. `FinalAudit`은 이 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
 
@@ -285,6 +285,36 @@ sudo bash install-docker-host.sh --node 6 --deploy-user planetory-admin
 2026-09-21에 node-1~6 전부에서 Docker 29.1.3과 compose 2.40.3을 확인했고, 각 배포 계정이 레지스트리에서 이미지를 pull 하는 것과 Hadoop 데몬이 계속 `active`인 것을 실측했다. 같은 노드에 두 번 실행해 멱등성도 확인했다.
 
 초기 판은 Hadoop unit 이름을 `hdfs-*`로 추측해 검사가 아무것도 확인하지 않고 통과했다. 실제 이름은 `hadoop-hdfs-*`다. unit 이름이 하나도 맞지 않으면 경고를 남기도록 고쳤다.
+
+## 전체 노드 부팅 복구
+
+`S15P21C206-252` 적용 전 관측: 2026-09-22 `.ssh` 경유 읽기 전용 점검에서 Node 1~6은 모두 접속·mount·Hadoop 3.5.0이 확인되고 서비스는 실행 중이나 boot enable은 비활성이었다. Node 1·2 NameNode는 모두 Standby, 두 Safe Mode는 OFF, JournalNode 세 대는 응답해 HDFS Active가 없는 상태였다. **당시에는 HDFS 클라이언트 조회가 성공하지 않았으므로** 설치 전 HA 복구를 별도 승인받았다. 다음 문단은 이 관측 이후의 운영 적용 결과다.
+
+2026-09-22 후속 운영 적용·순차 재부팅 검증 완료: 승인 뒤 두 NameNode가 모두 Standby이고 Safe Mode OFF·JournalNode 3대가 응답함을 재확인해 `nn1`을 일반 승격했다. TESS/Airflow/HDFS/Bronze 운영 release `20260922T021406Z`의 대표 코드 SHA-256은 현재 저장소와 일치해 중복 배포하지 않았다. 새 root 소유 부팅 복구 release `/opt/planetory-boot-recovery/releases/5fec7b88`를 Node 1~6에 설치하고 Node 2~6의 역할별 unit, 마지막으로 Node 1 unit과 timer를 활성화했다. Node 6→5→4→3→2→1을 한 대씩 재부팅했고 매번 boot ID 변경·로컬 mount/서비스 자동 시작·클러스터의 Live DataNode 5개와 YARN NodeManager 5개를 확인했다. Node 1 재부팅 때는 Safe Mode ON 동안 timer가 승격을 보류한 뒤 OFF가 되자 `nn1`을 일반 승격했고 ResourceManager가 자동 복구됐다. 최종 `nn1=active`, `nn2=standby`, JournalNode 3대, 저복제·누락 block 0, Sector 14 Raw·Bronze `_READY.json` FSCK `HEALTHY`, YARN 실행 application 0, Airflow DB·Scheduler healthy와 Tailnet UI proxy를 확인했다. 파이프라인은 의도적으로 `tess_pipeline_enabled=false`, 상한 14, 발견 DAG pause를 유지했다. **응답 없는 Active의 자동 장애 전환, 동시 다중 노드 장애, Sector 15 이후 데이터 처리까지 검증한 것은 아니다.**
+
+[configure-hadoop-boot-recovery.sh](scripts/configure-hadoop-boot-recovery.sh)는 기존 Node 1~6 HDFS·YARN systemd unit을 재부팅 시 기동하도록 등록한다. 설치 전 실제 호스트·사설 IP·mount·Hadoop 3.5.0·기존 NameNode format·가동 unit을 확인하고, Node 1에서는 양쪽 NameNode가 응답하며 정확히 한 Active이거나, 둘 다 Standby라면 JournalNode 정족수와 Safe Mode OFF를 확인한다. 기존 unit·HDFS 데이터·실행 중 데몬은 변경하거나 재시작하지 않는다. NameNode는 로컬 JournalNode, NodeManager는 로컬 DataNode 뒤에 시작을 시도하되 선행 서비스의 일시 실패가 재시도를 영구 차단하지 않는다. Node 1 ResourceManager는 HDFS 파일 조회가 가능해질 때까지 30초 간격으로 시작을 재시도한다. Node 1의 별도 systemd timer는 부팅 40초 뒤부터 매분 [boot controller](scripts/hadoop-boot-controller.sh)를 실행한다. **설치 시점에도 두 NameNode가 Standby라면 timer 즉시 활성화에 따라 nn1 승격이 일어날 수 있으므로, 적용 직전 승인 범위에 이 승격을 포함한다.**
+
+적용 전에는 파이프라인을 drain하고 진행 중 YARN application이 없는지 확인한다. Node 2~6, 마지막에 Node 1 순서로 **각 노드에서** 스크립트 두 파일을 안전하게 전달·검증한 후 실행한다. 설치·enable 및 테스트 재부팅은 운영 변경이므로 정확한 노드·작업 범위의 직전 승인을 별도로 받는다. 기존 설치 스크립트 `install-hdfs-host.sh`와 `install-yarn-host.sh`는 초기 빈 클러스터 전용이므로 실행 중 서버에 다시 사용하지 않는다.
+
+```powershell
+# 작업 PC에서 먼저 접근 계정/호스트 키를 확인한다. 업로드와 설치는 운영 승인 후에만 실행한다.
+tailscale ssh SSAFY@node-1 'hostname -s'
+tailscale ssh planetory-admin@node-2 'hostname -s'
+```
+
+```bash
+# 6대 각각, sudo 권한으로 실행한다. 예: Node 2 (Node 1에는 --node 1).
+# 두 파일은 같은 디렉터리에 보관하며, 배포 전 SHA-256과 root 소유권을 확인한다.
+sudo bash configure-hadoop-boot-recovery.sh --node 2 --check
+sudo bash configure-hadoop-boot-recovery.sh --node 2 --install
+for unit in hadoop-hdfs-journalnode hadoop-hdfs-namenode hadoop-hdfs-datanode hadoop-yarn-nodemanager; do systemctl is-enabled "$unit" || exit 1; done
+# 마지막 Node 1 설치 후 timer가 즉시 활성화된다.
+systemctl is-active planetory-hdfs-boot-recovery.timer
+```
+
+Controller는 mount·NameNode format·양쪽 NameNode의 **모두 응답하는** HA 상태·JournalNode 정족수·Node 1 Safe Mode 종료를 확인한다. 양쪽이 10초 간격으로 계속 standby일 때만 `nn1`을 일반 `-transitionToActive`로 승격한다. 이미 Active가 있으면 유지하고, 상대가 응답하지 않거나 두 Active가 관측되면 승격하지 않는다. `--forceactive`, fencing, format, 데이터 삭제를 실행하지 않는다. 계획 전환이나 HA 유지보수 **전에** Node 1에서 `sudo touch /etc/planetory/hadoop-boot-recovery.disabled`로 timer의 승격 동작을 막고, 수동 복구·검증을 마친 후 정확한 파일을 운영자가 해제한다. 구형 [수동 장애 전환](#수동-전환) 절차와 달리 **응답 없는 기존 Active의 자동 failover는 지원하지 않는다**. Node 1이 계속 중단되면 ResourceManager·Airflow 및 이 controller도 복구되지 않으며 Node 2 강제 승격에는 별도 VM 종료 확인이 필요하다.
+
+실환경 검증은 노드별 새 부팅 ID, mount, 활성/부팅 enabled unit, Node 1 timer, `haadmin` active/standby, Safe Mode OFF, `dfsadmin -report` Live DataNode 5개·RF2, `yarn node -list` NodeManager 5개, Airflow DB·Scheduler/Webserver 자동 재시작, 중단된 Sector DAG의 재개와 원본 checksum을 순서대로 확인한다. Worker 단일 재부팅 → Node 2/3 재부팅 → Node 1 재부팅 → 전체 재부팅 순서로 작은 범위부터 실측하고, 노드별 실패 시 다음 재부팅을 중단한다. Node 1이 재부팅 중 Node 2가 이미 Active였다면 timer는 건드리지 않는다. 설치 직후 timer가 구동됐어도 재부팅 성공으로 보고하지 않는다. 장애 시에는 `systemctl status planetory-hdfs-boot-recovery.timer`, `journalctl -u planetory-hdfs-boot-recovery.service -n 50 --no-pager`와 기존 수동 복구 절차로 원인을 확인한다. 자동 시작을 일시 중단하려면 해당 노드의 정확한 unit만 `systemctl disable`하고 현재 실행 중인 서비스는 별도로 판단한다.
 
 ## 수동 전환
 
@@ -360,7 +390,7 @@ Fernet key와 webserver secret key는 모든 Airflow 컨테이너에 동일하�
 
 ```bash
 docker compose --profile setup run --rm airflow-init
-docker compose up -d airflow-db airflow-scheduler airflow-webserver
+docker compose up -d airflow-db airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
 ```
 
 위 명령은 CI가 `compose.yaml`을 복사한 서버 배포 디렉터리에서 실행한다. 저장소 파일을 직접 사용할 때는 다음 옵션을 모든 명령에 추가한다.
@@ -371,9 +401,39 @@ docker compose up -d airflow-db airflow-scheduler airflow-webserver
 
 - Airflow: 2.10.x, LocalExecutor
 - 웹 UI: Node 1의 `127.0.0.1:8081`
-- 접근 방법: SSH 터널
+- 접근 방법: Tailscale Serve의 tailnet 전용 `https://node-1.tail97e363.ts.net/`. Airflow 자체는 `127.0.0.1:8081`에만 바인딩하고 Funnel은 사용하지 않는다.
 
-최초 UI 계정 생성과 scheduler/webserver의 동일한 Fernet·webserver secret key 설정은 서버 초기 설정에 포함한다.
+2026-09-22에는 [Node 1 전용 배포 스크립트](scripts/deploy-tess-airflow-node1.sh)로 `/opt/planetory-airflow/releases/20260921T213515Z` 이미지를 빌드하고 DB·Scheduler·Webserver를 시작했다. `airflow dags list-import-errors` 0건, `tess_sector_download_raw_bronze` 표시·일시정지, DB healthy, tailnet HTTPS 응답 200을 확인했다. 다른 운영 서비스나 기존 HDFS 데이터는 변경하지 않았다. 생성된 UI `viewer` 계정은 읽기 전용이다. 최초 `--use-random-password` 출력에는 암호가 없어 계정 암호를 재설정했고, 새 암호는 Node 1의 root 전용 `/etc/planetory/airflow/viewer-password`에만 보관한다. 권한 있는 운영자가 아래 명령으로 직접 확인한다. 암호를 Git·Jira·채팅에 기록하지 않는다.
+
+```powershell
+tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
+```
+
+최초 UI 배포 시점에는 DAG 화면만 볼 수 있었고, 실행 전 SSH Connection 6개·제한 sudo·불변 release·수집 run 계보의 별도 확인이 필요했다. 후속 release의 실제 설정과 제한 실행 결과는 아래에 기록한다.
+
+2.x에서의 기존 코드 갱신은 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치하고 `--update`를 실행해 활성 run 0건과 DAG import를 확인한 뒤 Scheduler·Webserver만 교체했다. 3.2.2용 현재 스크립트의 `--update`는 Scheduler가 이미 3.2.2인 경우에만 실행하며 Scheduler·DAG Processor·Triggerer·API Server를 교체한다. Triggerer가 없으면 다운로드 marker의 Temporal 대기가 재개되지 않으므로 image·running 상태를 함께 확인한다. 어느 버전에서도 코드 갱신 명령은 새 Sector 실행이나 DB 버전 마이그레이션을 수행하지 않는다.
+
+### Airflow 3.2.2 전환
+
+전환 전 Node 1 운영은 2.10.5였다. 2026-09-22 먼저 공식 3.2.2 베이스로 격리 이미지를 빌드해 다섯 DAG import 오류 0건을 확인했다. 이후 승인된 일회성 전환으로 release `/opt/planetory-airflow/releases/20260922T143000Z`를 설치했다. 기존 `--update`는 2.x→3.x 마이그레이션 경로가 아니며 3.2.2가 이미 실행 중일 때만 허용한다.
+
+전환은 [Node 1 일회성 업그레이드 스크립트](scripts/upgrade-tess-airflow3-node1.sh)로 수행한다. 활성 DagRun 0건·발견 DAG pause·`tess_pipeline_enabled=false` 확인 → 기존 Scheduler·Webserver 정지 → PostgreSQL `airflow` DB 일관성 백업 → 새 이름의 DB에 백업 복제 → **복제본에만** `airflow db migrate` → 새 API Server(`127.0.0.1:8081`)·Scheduler·DAG Processor 시작 → DAG import·Viewer·중지 플래그·health 검증 순서다. 새 DB URL과 별도 JWT secret은 root 전용 Airflow 환경 파일에 보관하고 기존 Fernet key·UI secret은 유지한다. SSH Connection·DagRun·pause 보존, Task SDK 상태 조회, UI 로그인·Tailnet Serve·재부팅 자동 시작은 운영 전환 후 별도 검증한다. 새 Sector 처리와 로컬 삭제는 전환 검증에 포함하지 않고 파이프라인 중지 상태를 유지한다. 운영 DB 스키마나 원본 데이터는 제자리 수정하지 않는다.
+
+오류 시 스크립트가 새 3.x 서비스를 중지하고 보존한 2.10.5 release·기존 DB URL로 Scheduler·Webserver 복귀를 시도한다. 자동 복귀 실패는 수동 조사가 필요하다. 전환 후 3.x에서 새 DagRun이 생성되면 구 DB에 반영되지 않으므로, 복귀 전 이를 확인하고 별도 복구 판단을 한다. DB 복제·서비스 교체는 대상 DB명, 백업 위치, rollback release와 영향 시간을 확정해 실행 직전 별도 승인을 받는다. 전환 중에는 UI가 잠시 중단되며 HDFS·YARN·수집 Worker는 건드리지 않는다.
+
+2026-09-22 운영 전환 결과: 기존 `airflow` DB는 그대로 보존하고 root 전용 `/mnt/data/airflow-backups/20260922T143000Z/airflow2.dump`(mode 0600)로 백업했다. 복제 DB `airflow3_20260922t143000z`에만 `airflow db migrate`를 적용하고 새 root 전용 `/etc/planetory/airflow/airflow3-20260922T143000Z.env`(mode 0600)로 연결했다. 새 Scheduler·DAG Processor·API Server의 이미지가 모두 `local/planetory-airflow:20260922T143000Z`, 재시작 정책 `unless-stopped`, 상태 running이다. 구 Webserver는 중지했으나 삭제하지 않았다. API `/api/v2/version`은 3.2.2, metadata·Scheduler·DAG Processor health는 모두 healthy, Tailnet UI와 health는 HTTP 200, Tailscale Serve는 tailnet 전용 loopback 프록시를 유지한다. 원본/복제 DB의 TESS DAG 5개·DagRun 20개·task 이력 39개·SSH Connection 6개와 다섯 DAG pause 상태가 일치하고 import 오류 0건이다. Viewer 계정과 `tess_pipeline_enabled=false`도 보존했다. **Viewer 실제 로그인, Task SDK를 통한 실행, 신규 Sector 처리, 서버 재부팅은 이번 버전 전환에서 검증하지 않았다.**
+
+2026-09-22 release `20260922T134419Z`에서 기존 1~13 단일 DAG `tess_sector_download_raw_bronze`를 제거했다. 갱신 이미지가 이전 이미지를 기반으로 하므로 Dockerfile에서 해당 이전 DAG 파일도 명시적으로 제거한다. 활성 run 0건과 과거 DAG DagRun 0건을 확인한 뒤 Scheduler·Webserver만 교체하고 Airflow DB의 비활성 과거 DAG metadata 행 1건을 삭제했다. 현행 5개 DAG, import 오류 0건, UI health 200을 확인했다. 기존 DB 볼륨·다른 release·HDFS 데이터는 유지한다.
+
+후속 release `20260922T135740Z`는 현행 5개 DAG의 `dag_display_name`에 `dag_id · 한국어 역할`을 설정하고 `description`을 추가했다. Node 1 Scheduler·Webserver만 교체한 뒤 운영 metadata에서 다섯 한국어 이름과 설명, DAG ID·pause 상태 보존, import 오류 0건, UI health 200을 확인했다. 표시 문구만 바꿨으며 데이터 DAG를 trigger하지 않았다.
+
+2026-09-22에는 `/opt/planetory-hdfs-load/releases/20260921T230610Z`를 Node 1~6에, `/opt/planetory-bronze/releases/20260921T230610Z`를 Node 1에 설치했다. Node 1 Airflow에도 `/opt/planetory-airflow/releases/20260921T230610Z`를 설치하고 위 갱신 경로로 Scheduler·Webserver만 새 이미지로 교체했다. 기존 DB 컨테이너와 Tailscale Serve는 유지했다. 새 DAG 4개와 기존 단일 DAG 모두 일시정지, 신규 DagRun 0건, import 오류 0건, 로컬 UI health 성공을 확인했다. 이는 **코드 배포 검증**이며 SSH Connection·제한 sudo 권한과 실제 데이터 처리·재개는 검증하지 않았다. 어떤 DAG도 실행하거나 로컬 FITS를 삭제하지 않았다.
+
+2026-09-22 후속 release `20260922T021406Z`에는 HDFS 코드를 Node 1~6, ingestion 코드를 Worker 2~6, Bronze와 Airflow를 Node 1에 설치했다. Airflow DB·Tailscale Serve는 유지하고 Scheduler·Webserver만 교체했으며 import 오류 0건이다. [Airflow 전용 접근 설정](scripts/configure-tess-airflow-node1.sh)은 Node 1의 root 관리 SSH 키와 별도의 Airflow 공개키를 사용한다. 전용 `tess-airflow` 계정은 Node 1 사설 IP에서만 인증하고 Worker에서는 완료 marker를 읽을 수 있는 그룹에만 속한다. 새 키의 비밀 값은 Node 1의 `/etc/planetory/airflow/ssh/`에 보관하고 Scheduler에 읽기 전용으로 mount한다. DB에는 내부 IP·계정·키 *경로*만 저장하며 기존 관리 계정의 광범위한 sudo 권한은 변경하지 않는다. 전용 계정의 sudo는 release 고정 Node 1 admission/Raw/Bronze 명령과 Worker의 수집 unit 시작으로 제한된다. Airflow SSH Connection 6개 모두 공개키 인증과 host-key 검증으로 연결됐다.
+
+운영 상한은 DAG Param 기본 70과 영속 `tess_pipeline_max_sector` 중 작은 값이다. 이 실험은 `14`로 고정하고 `tess_pipeline_enabled=true`를 켜 [Sector 14 제어 스크립트](scripts/control-tess-sector14.ps1)로 최초 발견 run을 시작했다. `-Step Drain`은 신규 허가·trigger를 멈추지만 이미 시작된 Worker/systemd 작업은 이어진다. Sector 14 원천 19,970개의 run `20260922T024642Z`에서 다운로드·Raw·로컬 삭제·Bronze 네 DAG가 모두 성공했다. Raw `_READY`의 제품 수 19,970·RF2·Parquet success, FSCK HEALTHY·저복제/누락/손상 0을 확인했다. cleanup 전 75개 bundle 모두 fast 재감사가 HEALTHY였고 Worker 5대의 FITS 19,970개 삭제 뒤 잔여 0개다. Bronze final `_READY`의 제품 19,970개·관측값 386,159,890개·파싱 오류 0개·RF2, Spark/YARN 성공과 FSCK HEALTHY를 확인했다. cleanup task는 약 13분 30초로, 성능 개선은 별도 검증이 필요하다. 이후 `-Step Drain`을 실행해 `tess_pipeline_enabled=false`, 발견 DAG pause·활성 단계 run 0건으로 제한했다. 배포·실행과 재부팅 검증은 사용자가 Node 1~6 release, Sector 14 삭제, Worker 4와 Node 1 재부팅 범위를 명시 승인한 뒤 수행했다.
+
+당시 Worker 4 다운로드 중 재부팅은 부팅 ID 변경, 수집 unit enabled 자동 재개, 이벤트 688→1,728건 증가, DataNode·NodeManager 수동 복구로 확인했다. 당시 Node 1 재부팅 뒤 Docker/Airflow는 자동 재시작했지만 HDFS/YARN은 수동 복구가 필요했다. NameNode가 6,631개 block의 30초 Safe Mode 연장 중 Active 전환을 거부했으므로 [기존 재부팅 검증 스크립트](scripts/verify-tess-reboot.ps1)는 Safe Mode OFF를 기다린 뒤 전환한다. 부팅은 이미 끝났는데 후속 복구만 실패했다면 `-Step RecoverNode1`로 **재부팅 없이** 이어서 복구한다. 이후의 자동 부팅 검증은 [전체 노드 부팅 복구](#전체-노드-부팅-복구)에 기록했다. Sector 15~70 실행까지 입증한 것은 아니다.
 
 1~13 Bronze coverage의 Silver 수동 DAG는 [Airflow DAG 안내](../../distributed-system/airflow/dags/README.md)를 따른다. Silver release 설치 후 [configure-tess-silver-airflow-node1.sh](scripts/configure-tess-silver-airflow-node1.sh)가 해당 release 전용 제한 sudo와 `tess_yarn` Pool 한 슬롯을 구성한다. 현재 서버에 자동 적용된 상태가 아니며 운영 설정 변경 승인을 받아야 한다.
 
@@ -400,6 +460,8 @@ Sector 1~13 확대는 기존 RunId를 수정하지 않는다. 2026-09-19 공식 
 HDFS runner는 75의 FinalCoverage JSON과 SHA-256 sidecar가 Worker 2~6에서 모두 같은지 확인하고, 기존 Run의 Sector 3~5와 expansion Run의 Sector 1·2·6~13을 정확히 매핑한다. 각 Sector의 불변 final을 재감사하거나 새 staging을 적재한 뒤 Java `FileContext`의 `Rename.NONE`으로만 확정하며, 13개가 모두 성공한 뒤 source coverage SHA-256을 키로 전체 HDFS coverage marker를 원자 확정한다. systemd 재시작 횟수는 증거로 남기되 0을 성공 조건으로 두지 않고 최종 plan·bundle·manifest·RF2·복원 감사 결과로 판정한다.
 
 전체 적재는 `run-tess-hdfs-load.ps1 -Step ServerRunAll`로 Node 1의 enabled systemd 조정기에 인계한다. 인계 뒤에는 운영자 PC가 꺼져도 실행과 실패 재시작이 계속된다. Node 1은 Worker 2~6을 `10.20.2.10`~`10.20.6.10`으로 직접 기동·감시하며 source bind를 `10.20.1.10`으로 고정하고, HDFS 데이터 경로도 `hdfs://planetory`의 사설망 이름 해석을 사용한다. Tailscale은 최초 배치와 운영자 조회 경로이지 서버 간 실행 경로가 아니다. 세부 재개·감사 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
+
+`-CleanupSourceAfterCommit`을 지정하면 각 Sector의 최종 Raw 전수 감사가 끝난 뒤 그 Sector Worker plan에 포함된 로컬 FITS만 삭제한다. plan identity·정확한 경로·크기·SHA-256을 삭제 전에 다시 확인하고 불일치 시 삭제 없이 실패한다. HDFS 확정·감사와 cleanup은 같은 enabled systemd 조정기가 재시작 후 이어서 수행한다.
 
 적재 전에는 HDFS safe mode OFF, Live DataNode 5개, 기본 RF2, 현재 사용률 75% 미만과 RF2 예상 사용률 70% 이하, Worker별 원본 디스크 가용 100GiB 이상을 확인한다. 저장소의 `hdfs-site.xml`은 `dfs.datanode.du.reserved=107374182400`(DataNode당 100GiB)을 선언하며 runner도 실제 클러스터 값을 요구한다. 기존 클러스터 설정 반영과 DataNode 재시작은 이번 코드 변경에 포함하지 않았으므로, 통제된 운영 작업으로 적용·검증하기 전에는 Sector 1~13 적재를 시작하지 않는다.
 
@@ -428,9 +490,10 @@ Executor는 Docker 이미지가 아니라 Worker의 YARN 프로세스에서 실�
 
 제출 이미지에만 설치한 패키지는 Worker에 전달되지 않는다.
 
+Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시도 경계는 [TESS DAG 계약](../../distributed-system/airflow/dags/README.md)을 따른다. DAG와 HDFS/Bronze 코드는 불변 release로 설치됐고 Airflow import를 확인했다. 실행 전 SSH Connection·제한 sudo 권한·run 계보를 확인하고 실제 처리·장애 재개를 별도로 검증해야 한다.
+
 다음 항목은 후속 구현 대상이다.
 
-- Airflow 실제 DAG
 - TIC·TCE·TOI·Archive·ExoFOP 원천별 snapshot 수집
 - Spark 제출 연결
 - Spark History Server

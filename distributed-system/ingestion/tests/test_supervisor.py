@@ -43,6 +43,24 @@ class SupervisorTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_reboot_after_verified_raw_cleanup_does_not_redownload(self):
+        path = self.run_root / "hdfs-load" / "sector=0014" / "worker-1.cleanup.json"
+        path.parent.mkdir(parents=True)
+        for status in ("in_progress", "complete"):
+            with self.subTest(status=status):
+                path.write_text(json.dumps({
+                    "schema": "planetory.tess-source-cleanup.v1", "status": status,
+                    "run_id": "run", "release_id": "run", "source_list_sha256": "a" * 64,
+                    "sector": 14, "worker_slot": 1,
+                }), encoding="utf-8")
+                with mock.patch.object(supervisor.tess, "run_download") as download:
+                    result = supervisor.run_supervisor(
+                        config(), {"source_list_sha256": "a" * 64}, self.output, self.run_root,
+                        worker_slot=1, sectors=[14], notify=lambda _: None,
+                    )
+                self.assertEqual(result, 0)
+                download.assert_not_called()
+
     def test_capacity_pause_resumes_below_low_watermark(self):
         usage_values = iter(
             [SimpleNamespace(total=100, used=75, free=25), SimpleNamespace(total=100, used=69, free=31)]

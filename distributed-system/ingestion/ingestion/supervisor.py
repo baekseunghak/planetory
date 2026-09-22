@@ -108,6 +108,25 @@ def _paths(run_root: Path, sector: int, worker_slot: int) -> dict[str, Path]:
     }
 
 
+def _cleaned_after_raw(run_root: Path, source: dict, sector: int, worker_slot: int) -> bool:
+    path = run_root / "hdfs-load" / f"sector={sector:04d}" / f"worker-{worker_slot}.cleanup.json"
+    if not path.is_file():
+        return False
+    state = json.loads(path.read_text(encoding="utf-8"))
+    expected = {
+        "schema": "planetory.tess-source-cleanup.v1",
+        "run_id": run_root.name.removeprefix("run-"),
+        "release_id": run_root.name.removeprefix("run-"),
+        "source_list_sha256": source["source_list_sha256"],
+        "sector": sector,
+        "worker_slot": worker_slot,
+    }
+    if (any(state.get(key) != value for key, value in expected.items())
+            or state.get("status") not in {"in_progress", "complete"}):
+        raise RuntimeError("local cleanup state conflicts with the Sector source")
+    return True
+
+
 def _write_exit(path: Path, code: int) -> None:
     temporary = path.with_name(path.name + ".part")
     temporary.write_text(f"{code}\n", encoding="ascii")
@@ -200,6 +219,8 @@ def run_supervisor(
             paths = _paths(run_root, sector, worker_slot)
             retry_attempt = 0
             while True:
+                if _cleaned_after_raw(run_root, source, sector, worker_slot):
+                    break
                 if paths["complete"].is_file() and _audit_sector(
                     source, output_root, paths, worker_slot, sector, progress=heartbeat
                 ):
