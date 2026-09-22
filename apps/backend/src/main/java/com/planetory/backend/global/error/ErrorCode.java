@@ -25,6 +25,7 @@ public enum ErrorCode {
     // 이쪽은 반대로 존재를 드러내지 않는다. 없는 TIC과 미공개 별을 같은 응답으로 덮는다.
     STAR_NOT_PUBLISHED(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다."),
     STAR_LIST_PRIVATE(HttpStatus.FORBIDDEN, "별 목록을 공개하지 않은 회원입니다."),
+    PUBLIC_SKY_NOT_AVAILABLE(HttpStatus.NOT_FOUND, "요청한 공개 은하를 찾을 수 없습니다."),
     // 요청의 판·계산 버전이 현재 판과 다르다. 본문에 currentBundleId를 싣는다(탐사 API 2.3).
     BUNDLE_CHANGED(HttpStatus.CONFLICT, "분석 중인 판이 바뀌었습니다. 최신 판을 다시 불러와 주세요."),
     /** 온라인 잔차 계산 대기열이 찼거나 같은 회원의 작업이 이미 돌고 있다 (탐사 API 7.1, D-3·D-4). */
