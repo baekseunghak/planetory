@@ -284,3 +284,10 @@ V15 다음에 적용한다. `MemberCommunityPermissionTest`는 V12 → V15의 3�
 V18 다음으로 적용하며 병합 시 번호 충돌을 다시 확인한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다. 기존 공식 본문 전체에 대한 UPDATE가 발생하므로 적용 전 대상 건수·잠금 시간을 확인하고 별도 승인 후 실행한다.
 
 169 리뷰 보완에서 develop 미병합 V19에 후보 수치 변경의 격리 수준 검사를 추가했다. 적용 계약은 [검색 본문 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다. 수정 전 V19를 적용한 일회용 검증 DB는 새로 만들어 검증하며 checksum을 repair로 우회하지 않는다. 영속 DB에 이전 V19를 적용한 이력이 있다면 파일 재적용 대신 별도 후속 마이그레이션이 필요하므로 적용 전에 이력을 확인한다.
+
+### V20 세그먼트 산포 설명
+
+`V20__segment_scatter_comment.sql`(123)은 `light_curve_segments.flux_scatter`의 COMMENT만
+[114 Gold 산포 계약](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)에 맞춘다.
+열 타입·제약·데이터·API 응답은 바꾸지 않는다. V1은 수정하지 않는다.
+파일 준비 상태이며 DB 적용 검증은 아직 하지 않았다. 병합 전 원격 migration 번호 중복을 확인한다.

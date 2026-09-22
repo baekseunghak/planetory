@@ -611,11 +611,56 @@ Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 �
 - 유효 bin이 전혀 없으면 `no_valid_bins`로 실패한다. 유한한 상수 곡선의 MAD 0은 산포 0으로 보존한다. 이것을 잡음 분모나 탐지 성공으로 해석하지 않는다.
 - `segment_revision`은 제품 SHA-256·snapshot·TIC/Sector·전처리 버전과 파라미터·비닝 규칙·수치 구현 버전의 키 정렬 JSON을 SHA-256으로 식별한다. 문자열은 UTF-8, JSON 구분자는 쉼표/콜론, 비유한 수치는 거절한다. 파라미터 숫자 타입도 직렬화의 일부이므로 호출자는 고정 설정의 타입을 유지한다. 실행 시각·경로·lock 전체 hash는 받지 않는다.
 - `segment_silver`는 정렬·정합성이 확인된 119 `PreparedCurve`/`DetrendedCurve`와 제품 checksum을 받는다. 전처리 status가 ok가 아니면 중단한다. 적용 마스크 전체를 revision 재료에 포함한다. 개별 Sector의 비닝 실패는 quarantined에 별도 기록한다.
-- 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_115_rule`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
+- 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_evaluation`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
 
 검증: `uv run --locked python -m pytest -q`에서 전체 225개 통과(새 segmentation 20개 포함).
 경계 스냅·부분 bin·빈 구간·전처리 제외점 시간축·상한·revision 변경·출처 누락·실패 격리를 검사했다.
-실제 FITS/114 실측 회귀, 115 기준과 122 모델을 연결한 제공 해상도 잔차 periodogram·discoverable,
-판별 결과의 false→true 변화 목록은 아직 구현·검증 전이다. 기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
+제공 해상도 판정 연결과 비교 실행기는 아래 절을 따른다. 실제 FITS 회귀는 실행 전이다.
+기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
 Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 완료를 뜻하지 않는다.
-114 인계의 Java 설명·새 DB COMMENT migration도 후속 작업으로 남아 있다. 기존 V1은 수정하지 않았다.
+114 인계의 Java 설명과 새 V20 DB COMMENT migration을 준비했다. 기존 V1은 수정하지 않았고 DB 적용은 하지 않았다.
+
+## 제공 해상도 판정 (123)
+
+`astro_kernel.discoverability.prepare_discoverability`는 `segment_silver` 결과와 122의
+`build_candidate_catalog` 결과를 받는다. 실험 모듈·파일·DB에 의존하지 않는다.
+게시·실패·회원 재개 경계는 [Gold 계약 4.2절](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계)이 정본이다.
+
+```python
+from astro_kernel.discoverability import prepare_discoverability
+
+proposal = prepare_discoverability(
+    segmented, catalog,
+    fine_tune={"half_width_cells": 3},
+    candidate_quality_version=iteration_result["candidate_quality_version"],
+    rule_approval=approved_rule_reference,
+    previous_bundle=previous_public_snapshot,
+)
+```
+
+`previous_bundle`은 기존 공개 판의 TIC·Bundle ID, `complete=true`, 후보 목록과
+`candidate_quality_revision`이다. 122의 ready 결과에 있는 `candidates`는 새 제안이므로
+기존 공개 판 대신 넘기지 않는다. 최초 게시는 None이다. 기존 ID를 유지·은퇴시키는 경우 이전 snapshot은 필수다.
+비어 있지 않은 `rule_approval`은 호출자가 확인한 승인 근거다. 문자열 존재 검사만으로 외부 승인을 검증하지는 않는다.
+
+지원 규칙 정본은 코드의 `RULE`(`discoverability-1.0.0`)이다. 로그 5,000점·0.5일 시작·Gold 상한,
+SNR 7·SDE 6·관측 통과 2, 직접 대응 3칸·epoch 반폭, 엄격한 내부 극대이며 고조파만으로 매칭하지 않는다.
+`RULE`과 다른 설정은 명시적으로 거절하므로 설명 필드만 바꾸어 계산이 그대로 실행되지 않는다.
+승인 상태는 규칙에서 분리했고 변경된 규칙은 새 버전 구현·검증을 요구한다.
+115의 `discoverability_v1.json`은 이전 실험 재현용으로 그대로 보존한다.
+
+모델은 bin 중심에서 평가하며, 현재 후보보다 앞선 **모든 raw peak** 제거 이력으로 잔차를 만든다.
+ID 그룹화로 생략된 raw peak도 제거하며 현재 후보 자신은 제거하지 않는다.
+`removed_peak_ids`는 카탈로그 candidate ID가 없는 raw peak 식별자다.
+`segment_index_map`의 gaps는 Sector 내부 bin 인덱스다. `sorted_indices[i]`로 최종 정렬 배열의
+해당 bin 위치를 찾는다. `concatenated_offset`은 정렬 전 위치이며 겹친 Sector에는 단일 offset만 사용하지 않는다.
+
+SNR/SDE 문턱을 먼저 검사하고 관측 통과 수를 계산한다. 품질 봉우리 수에는 P/2·2P 등 중복이
+포함되므로 독립 신호 수가 아니다. 대조군은 품질 봉우리 유무로 해석한다.
+`insufficient_observations`, `degenerate_flux`, `numerical_failure`만 측정 실패로 기록하고
+잘못된 입력·격자 등 구현/설정 오류는 전파한다.
+
+`periodograms`에는 NumPy 배열과 BLS 객체가 있으므로 런타임 산출물로 따로 저장한다.
+그 외 제안은 엄격한 JSON으로 직렬화할 수 있다. 원본 단계와 각 후보 단계의 잔차/주기도를 모두 반환한다.
+revision은 canonical JSON hash이며 승인 댓글 문자열·실행 시각을 포함하지 않는다.
+기존 판을 보존한 held 결과에는 새 후보 제안·변경 이력을 내보내지 않는다.

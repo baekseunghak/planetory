@@ -164,4 +164,4 @@ def segment_silver(prepared, detrended, *, snapshot_id, product_checksums,
                               diagnostics=dict(counts=segment.counts.tolist(),
                                                n_kept=int(segment.counts.sum()))))
     return dict(segments=proposals, quarantined=quarantined, publishable=False,
-                discoverability_status="pending_115_rule")
+                discoverability_status="pending_evaluation")

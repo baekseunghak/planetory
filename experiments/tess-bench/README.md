@@ -503,3 +503,62 @@ Git 충돌 해제 확정은 해결 파일 stage·merge commit·push 후 MR에서
 실행·분모·실패 상태·revision 사례·승인 경계는 [115 벤치마크](../../docs/data/tess-discoverability-benchmark.md)를 따른다.
 `uv run --locked python -m tess_bench.discoverability --targets l98_59`로 한 별을 확인하고,
 대상 옵션 없이 전체 9별을 실행한다. 9별 실측·검산을 완료했으며 규칙 승인 전이다. 운영 discoverable을 갱신하지 않는다.
+
+## 123 비닝·제공 해상도 회귀
+
+상태: 실행기·합성 검증 및 아래 9별 FITS 비교 완료, 리뷰 전이다. `segmentation_regression`은 114 비닝 참조,
+115 판정 참조와 123 커널을 비교한다. 운영 규칙·게시 경계는 [Gold 계약](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계),
+호출법은 [커널 README](../../libs/astro-kernel/README.md#제공-해상도-판정-123)를 따른다.
+
+123은 API·Gold의 `max(40, 최장 후보 주기 × 1.15)`를 사용한다. 115의 옛 상한은 보존한다.
+같은 새 격자에서 구현 간 판정·봉우리 인덱스·잔차·BLS power를 비교하고, 별도로 옛 격자를
+동일 후보에 적용해 양방향 boolean 변경 목록을 기록한다. false→true가 없어도 임의로 사례를 만들지 않는다.
+실제 122 후보 모델을 쓰지만 ID·Bundle·승인 근거는 실행 전용 합성값이다. 회원 재개·실제 DB 판 전환 검증은 아니다.
+
+저장된 115 ZIP 검산만 실행하면 FITS와 BLS를 재실행하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.segmentation_regression --saved-115 C:/Users/SSAFY/Downloads/review-115-2fb9d38f.zip
+```
+
+2026-09-22 제공 ZIP의 plan 및 출력 112개 checksum을 대조했고, 저장된 72개 주기도의 판정을
+재분류해 모두 일치했다(후보 35/36, 대조 4/9). ZIP의 집 PC 절대 경로는 파일명으로 대응한다.
+이 명령은 78개 원천 입력을 검증하지 않으며 191개 전체 파일 검증이나 새 격자 실측을 뜻하지 않는다.
+
+사용자가 FITS를 준비한 환경에서 `experiments/tess-bench`를 작업 디렉터리로 실행한다. 자동 다운로드는 없다.
+
+```powershell
+uv run --locked python -m tess_bench.segmentation_regression --targets l98_59
+# 한 별 확인 후 전체 9별 × 4곡선
+uv run --locked python -m tess_bench.segmentation_regression
+```
+
+결과는 Git 제외 `results/segmentation-regression/run-*`에 별도 저장한다. plan에 입력·코드·환경·
+설정·로컬 비교 오차를 기록하고 종료 전 입력과 plan hash를 다시 대조한다. 변경·불일치는 명시적으로 실패한다.
+`curve-*.json`은 이전 격자 판정과 122 원본 결과·보류 사유·새 제안·변경 목록,
+NPZ는 각 단계의 런타임 배열, `comparisons.json`은 곡선별 요약이다. 마지막 manifest만 성공 근거로 사용한다.
+입력·코드를 실행 중 수정하지 않는다. 실패는 `failure.json`이며 성공으로 합산하지 않는다.
+
+QA 실패·무후보로 122 카탈로그가 보류된 곡선은 bin 비교와 보류 상태를 기록한다.
+그 곡선의 후보를 게시 가능하도록 우회하지 않는다. `passed=true`는 비교가 완료됐다는 뜻이며
+모든 곡선의 discoverability_ready 또는 Gold 게시 허용을 뜻하지 않는다.
+수치 비교 허용치는 로컬 회귀용이고 Gold `pending-measurement` 허용 오차를 확정하지 않는다.
+
+검증: tess-bench 전체 225개(신규 실행기 3개 포함), 커널 전체 248개 통과.
+신규 실행기 테스트는 합성 입력의 실제 BLS·manifest·출력 hash를 포함한다.
+실제 FITS 비교는 아래 결과를 따른다. DB COMMENT migration 적용·운영 Publisher·EC2 비교는 아직 실행하지 않았다.
+
+### 9별 FITS 비교 결과 (2026-09-22)
+
+사용자 실행 `run-20260922T005624Z-bcdaf492`에서 9별 × 4곡선 모두 비교를 통과했다.
+소요 251.484초이며 입력·코드·plan·출력 합계 168개 파일 checksum 불일치는 0이다.
+최대 bin flux 절대 차이는 `4.440892098500626e-16`이다.
+
+- ready 19곡선, held 17곡선이다. held는 제거 QA 실패 10곡선과 정상 종료·채택 후보 0개인 7곡선이다.
+- ready 곡선의 원본 단계 19개와 후보 단계 30개, 합계 49단계를 비교했다. 후보 판정은 true 29개·false 1개다.
+- QA 실패 곡선의 앞선 채택 후보 6개는 공개 판정에서 제외했다. 따라서 115의 전체 진단 후보 36개와 분모가 다르며 29/30을 전체 주입 회수율로 해석하지 않는다.
+- 실제 비교 대상에서는 구·신 규칙 모두 상한 40일이었다. 상한 변경 0곡선·boolean 변화 0건이다. 실제 데이터의 false→true 또는 1.15배 상한 변경 효과를 입증한 결과는 아니다. 40일 후보→46일 상한 경계는 합성 테스트 근거다.
+- tuning 목록 밖 대상도 기존 fixture 재검증이며 독립 평가가 아니다. ready는 계산 제안 준비 상태이고 운영 게시 승인이 아니다.
+
+manifest와 출력 목록은 해당 결과 폴더에 보존한다. 계산 코드는 실행 후 변경하지 않았으며
+실측 문서만 갱신했다. Git 검사·리뷰, 규칙 승인 근거 확인 및 DB COMMENT 적용 검증은 남아 있다.
