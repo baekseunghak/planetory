@@ -40,8 +40,6 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                         .sessionFixation(fixation -> fixation.changeSessionId()))
-                .csrf(csrf -> csrf.ignoringRequestMatchers(request -> logoutPost.matches(request)
-                        && request.getSession(false) == null))
                 .authorizeHttpRequests(auth -> {
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
                             .requestMatchers("/login", "/oauth2/authorization/*", "/login/oauth2/code/*").permitAll()
