@@ -188,7 +188,9 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 
 `tess_silver.py`는 확정 Bronze coverage가 가리키는 Sector 1~13 Parquet을 읽고 `tic_id`로 분산 그룹화한다. 각 TIC에서 `astro_kernel.preprocessing.preprocess_silver`와 `astro_kernel.bls.search_bls`를 순서대로 호출하며, 전체 Bronze나 TIC 목록을 드라이버에 수집하지 않는다. 한 TIC의 데이터·수치 오류는 그 TIC의 manifest 행으로 격리하고 다른 TIC 결과를 보존한다.
 
-현재 구현 범위는 245 원본 행·구간 마스크 추적을 포함한 전처리와 최초 BLS까지다. 반복 BLS·제거 QA·후보 제안 커널(`122`)은 공용 라이브러리에 병합됐지만 Spark 후속 stage에는 아직 연결하지 않았다. 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)도 결과 계약이 확정된 뒤 연결한다. 구현되지 않은 단계를 성공으로 표시하거나 빈 결과로 만들지 않는다.
+Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약을 검사하므로 다른 TIC의 전체 sector distinct를 선행 스캔하지 않는다. 전체 run만 13개 Sector 분포를 검사한다. Bronze/Silver 제어기의 YARN 작업은 Node 1의 `/run/planetory-tess-yarn.lock`으로 직렬화한다. 이 잠금은 두 제어기의 **새 release를 모두 배포한 뒤** 효력이 있으며, 다른 YARN 사용자 작업을 잠그지 않으므로 기존 실행 중 앱 검사도 유지한다. Airflow 실행 계약과 14+ 제외 범위는 [Silver DAG 안내](../airflow/dags/README.md)를 따른다.
+
+현재 구현 범위는 245 원본 행·구간 마스크 추적 전처리, 최초 BLS, 122 반복 BLS·제거 QA까지다. 첫 탐색의 검증된 메모리 결과를 반복 커널에 전달해 중복 탐색하지 않는다. 후보 ID·판 비교·생명주기 변경은 Publisher의 이전 판·ID 예약·승인 근거를 받아 별도 연결한다. 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)은 아직 연결하지 않는다.
 
 ### 입력·출력 경계
 
@@ -198,12 +200,13 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 /lake/silver/pipeline_version=<version>/run_id=<run>/attempt=<UTC>/
 ├─ target_combined/
 ├─ periodogram/
+├─ iteration/
 ├─ manifest/
 ├─ summary/
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 세 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v2` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 성공·무품질 후보·실패 수는 marker에서 별도로 확인한다. 선택 TIC와 manifest TIC는 개수뿐 아니라 정확한 집합을 양방향 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v3` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료 수를 별도로 기록한다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 
@@ -220,19 +223,21 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 
 `periodogram`은 최초 탐색의 주기·power·epoch·duration·depth·depth error·SNR·SDE 배열, 유효 입력 mask, BLS 설정과 상위 peak·채택 peak JSON을 기록한다. 반복 제거용 residual·periodogram 배열은 현재 만들지 않는다. 이 20,000점 선형 탐색 결과는 후속 `periodograms` Gold용 5,000점 로그 격자 결과가 아니며 그대로 게시하지 않는다. `bls_config_version=bls_grid_v1/poc_linear20k`, `candidate_quality_version=gate_v1/snr7_sde6`을 행마다 기록한다.
 
-manifest schema는 `planetory.tess-silver-stage.v2`이며 TIC·stage 한 쌍당 한 행이다.
+`iteration`은 최초 탐색이 정상 수행된 TIC에만 실행한다. 공용 `iterate_bls(..., initial_search=first_result)`에 최초 결과를 메모리에서 직접 전달하고, `result_json`에 단계별 QA·종료 사유·채택 제안·설정 지문을 엄격 JSON으로 기록한다. `residual` 배열을 저장하지 않으며 후보의 `peak_id=step-N`을 DB candidate ID로 취급하지 않는다. `complete=true`인 `status=ok`만 다음 후보 검토의 입력으로 사용할 수 있고 `incomplete`·`failed`는 기존 공개 판을 바꾸지 않는다.
+
+manifest schema는 `planetory.tess-silver-stage.v3`이며 TIC·stage 한 쌍당 한 행이다.
 
 | 필드 | 계약 |
 | --- | --- |
-| `stage` | 현재 `initial_bls`만 허용한다. |
-| `status` | `succeeded`, `no_quality_peak`, `failed` 중 하나다. `no_quality_peak`는 정상 종료이며 실패가 아니다. |
+| `stage` | `initial_bls`는 모든 TIC, `iteration`은 정상 최초 탐색 TIC에 한 행이다. |
+| `status` | 최초 탐색은 `succeeded`/`no_quality_peak`/`failed`, 반복 탐색은 `succeeded`/`incomplete`/`failed`다. 정상 첫 무후보도 반복 종료를 확인한다. |
 | `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. |
 | `input_snapshot_id`, 계산 버전 3종 | 입력과 전처리·탐색·품질 게이트를 함께 고정한다. |
 | `provenance_status`, `mask_contract_version`, `interval_mask_count` | 마스크 공급 여부와 적용한 245 계약을 기록한다. 빈 마스크는 baseline 상태를 유지한다. |
-| `target_location`, `periodogram_location` | 실제 생성된 출력만 기록한다. |
+| `target_location`, `periodogram_location`, `iteration_location` | 실제 생성된 출력만 기록한다. 반복 실패로 출력이 없으면 마지막 값은 null이다. |
 | `error_code`, `error_detail` | 실패 원인과 공백 정규화·500자 제한 상세를 기록한다. 원본 배열은 넣지 않는다. |
 
-`Retry`는 완료 attempt의 manifest에서 `status=failed`인 TIC만 Bronze와 semi join해 새 attempt로 실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 코드·입력 수정 여부와 `retryable`을 확인한 뒤 명시적으로 시작한다.
+`Retry`는 현재 v3 완료 attempt의 manifest에서 `status=failed` 또는 `incomplete`인 TIC만 Bronze와 semi join해 새 attempt에서 최초·반복 단계를 함께 재실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 실패·상한 원인과 코드·입력 수정 여부를 확인한 뒤 명시적으로 시작한다. 이전 v2 attempt는 새 스키마로 직접 재시도하지 않는다.
 
 ### 담당자 인계 인터페이스
 
@@ -240,7 +245,7 @@ manifest schema는 `planetory.tess-silver-stage.v2`이며 TIC·stage 한 쌍당 
 | --- | --- | --- | --- |
 | `245` 관측 구간 마스킹 | `product_id`, `source_row`, `cadenceno`, `sector`, Bronze `quality`, Raw FITS SHA-256 | 정규화 전에 적용할 관측점별 evidence mask, 원래 QUALITY, 제외 사유·근거 버전 | 공용 계약과 Silver 출력 연결은 완료했다. 운영 manifest가 공급되지 않은 실행은 빈 마스크와 `provenance_status=quality0_baseline_pending_interval_mask`를 유지하므로 최종 DAT-02로 간주하지 않는다. |
 | `127` Worker 초기 연결 | `process_tic`의 `SectorInput[]` 호출과 TIC별 결과 계약 | 실제 YARN canary의 executor 배치·자원·수치 동일성 증거 | 127의 Sector 3 20 TIC local/Worker parity·실패 재실행과 78의 다중 Sector 단일 TIC Canary를 모두 통과했다. 전체 처리량·장시간 안정성은 별도 gate로 남는다. |
-| `122` 반복 탐색 | `target_combined`, 최초 `periodogram`, 계산 버전 | 반복 BLS·제거 QA·종료 사유·후보 제안 | 공용 커널은 병합됐지만 Spark stage는 미구현이다. 최초 BLS 중복 계산을 해소한 뒤 연결하며 manifest에 가짜 stage를 만들지 않는다. |
+| `122` 반복 탐색 | `target_combined`, 최초 탐색 메모리 결과·계산 버전 | 반복 BLS·제거 QA·종료 사유·후보 제안 | Spark `iteration` stage에 연결했다. ID 예약·이전 판·승인 입력이 없어 DB 후보 ID와 생명주기 결정은 만들지 않는다. |
 | `123`·`124`·`126` | 확정 후보 ID와 TIC snapshot | 비닝·외부 snapshot 조인·AI 결과 및 각 계산 버전 | 각 결과 계약이 확정된 뒤 별도 stage로 연결한다. |
 
 같은 Python/Spark release를 공유하므로 내부 호출 계약은 `tess_silver.py`의 `TicStageResult`와 `_schemas`가 정본이다. 독립 서비스 간 직렬화 계약이 아니므로 `contracts/`에 같은 형식을 중복 정의하지 않는다.

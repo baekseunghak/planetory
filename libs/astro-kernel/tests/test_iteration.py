@@ -8,6 +8,7 @@ import pytest
 
 from astro_kernel import iteration as it
 from astro_kernel.bls import BlsError
+from astro_kernel.bls import _search_input_sha256, SEARCH_VERSION, QUALITY_VERSION
 
 
 def inputs():
@@ -38,6 +39,34 @@ def run(t=None, f=None, **kwargs):
     if t is None:
         t, f = inputs()
     return it.iterate_bls(t, f, input_snapshot_id="test-snapshot", preprocessing_version="silver-test", **kwargs)
+
+
+def test_initial_search_is_reused_once_and_matches_normal_path(monkeypatch):
+    t, f = inputs()
+    config = dict(period_min_days=.5, period_max_days=6., n_periods=20000,
+                  durations_hours=[1.2, 1.92, 2.88, 4.8])
+    first = dict(status="no_quality_peak", peaks=[], periodogram=SimpleNamespace(config=config),
+                 input_snapshot_id="test-snapshot", preprocessing_version="silver-test",
+                 bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+                 n_input=len(t), n_valid=len(t),
+                 search_input_sha256=_search_input_sha256(t, f, None, None))
+    calls = []
+    def search(*args, **kwargs):
+        calls.append(1)
+        return first
+    monkeypatch.setattr(it, "search_bls", search)
+    normal = run(t, f)
+    assert len(calls) == 1
+    reused = run(t, f, initial_search=first)
+    assert len(calls) == 1
+    assert reused == normal
+    for changed in (dict(search_input_sha256="0" * 64), dict(bls_config_version="stale"),
+                    dict(input_snapshot_id="another"), dict(n_valid=3)):
+        other = dict(first, **changed)
+        with pytest.raises(BlsError, match="initial search does not match"):
+            run(t, f, initial_search=other)
+    with pytest.raises(BlsError, match="initial search does not match"):
+        run(t, f + .01, initial_search=first)
 
 
 @pytest.mark.parametrize("termination", it.TERMINATION_REASONS)

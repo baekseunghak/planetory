@@ -18,6 +18,7 @@ from typing import Any, Callable, Iterable, Mapping
 import numpy as np
 
 from astro_kernel.bls import BlsError, QUALITY_VERSION, SEARCH_VERSION, search_bls
+from astro_kernel.iteration import ITERATION_VERSION, iterate_bls
 from astro_kernel.preprocessing import (
     MASK_CONTRACT_VERSION,
     PREPROCESS_VERSION,
@@ -30,8 +31,8 @@ from astro_kernel.preprocessing import (
 
 
 BRONZE_SCHEMA_VERSION = "planetory.tess-bronze.v1"
-SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v2"
-SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v2"
+SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v3"
+SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v3"
 SILVER_TERMINAL_SCHEMA_VERSION = "planetory.tess-silver-terminal.v1"
 PROVENANCE_STATUS = "quality0_baseline_pending_interval_mask"
 MASKED_PROVENANCE_STATUS = "interval_mask_contract_applied"
@@ -64,11 +65,13 @@ class SilverContractError(RuntimeError):
 
 @dataclass(frozen=True)
 class TicStageResult:
-    """One isolated TIC result consumed by the three Silver Parquet outputs."""
+    """One isolated TIC result consumed by the Silver Parquet outputs."""
 
     target: tuple | None
     periodogram: tuple | None
     manifest: tuple
+    iteration: tuple | None = None
+    iteration_manifest: tuple | None = None
 
 
 def utc_now() -> str:
@@ -192,8 +195,8 @@ def science_audit(result: TicStageResult) -> dict[str, Any]:
         "provenance_status": manifest[12],
         "mask_contract_version": manifest[13],
         "interval_mask_count": int(manifest[14]),
-        "error_code": manifest[17],
-        "error_detail": manifest[18],
+        "error_code": manifest[18],
+        "error_detail": manifest[19],
     }
     if result.target is not None:
         audit.update({
@@ -217,6 +220,13 @@ def science_audit(result: TicStageResult) -> dict[str, Any]:
                 for peak in peaks
             ],
         })
+    if result.iteration_manifest is not None:
+        audit.update(iteration_status=result.iteration_manifest[5],
+                     iteration_error_code=result.iteration_manifest[18])
+    if result.iteration is not None:
+        audit.update(iteration_termination=result.iteration[3],
+                     iteration_complete=result.iteration[4],
+                     iteration_accepted_count=result.iteration[5])
     return audit
 
 
@@ -234,6 +244,8 @@ def _manifest_row(
     periodogram_location: str | None,
     provenance_status: str = PROVENANCE_STATUS,
     interval_mask_count: int = 0,
+    stage: str = "initial_bls",
+    iteration_location: str | None = None,
     error_code: str | None = None,
     error_detail: object | None = None,
 ) -> tuple:
@@ -242,7 +254,7 @@ def _manifest_row(
         run_id,
         attempt_id,
         tic_id,
-        "initial_bls",
+        stage,
         status,
         retryable,
         snapshot,
@@ -255,6 +267,7 @@ def _manifest_row(
         interval_mask_count,
         target_location,
         periodogram_location,
+        iteration_location,
         error_code,
         None if error_detail is None else _clean_message(error_detail),
     )
@@ -268,9 +281,11 @@ def process_tic(
     pipeline_version: str,
     target_location: str,
     periodogram_location: str,
+    iteration_location: str | None = None,
     interval_masks: Iterable[IntervalMask] = (),
     preprocess: Callable[..., tuple[Any, Any]] = preprocess_silver,
     search: Callable[..., Mapping[str, Any]] = search_bls,
+    iterate: Callable[..., Mapping[str, Any]] = iterate_bls,
 ) -> TicStageResult:
     """Run one TIC without allowing its data/science failure to abort siblings."""
     tic_id = -1
@@ -336,26 +351,62 @@ def process_tic(
         manifest_status = "succeeded" if status == "ok" else status
         if manifest_status not in {"succeeded", "no_quality_peak", "failed"}:
             raise BlsError("invalid_output", f"unknown BLS status={status}")
-        return TicStageResult(
-            target,
-            periodogram,
-            _manifest_row(
-                run_id=run_id,
-                attempt_id=attempt_id,
-                tic_id=tic_id,
-                status=manifest_status,
-                retryable=False,
-                snapshot=snapshot,
-                pipeline_version=pipeline_version,
-                preprocessing_version=detrended.version,
-                target_location=target_location,
-                periodogram_location=periodogram_location,
-                provenance_status=provenance_status,
-                interval_mask_count=interval_mask_count,
-                error_code="bls_failed" if manifest_status == "failed" else None,
-                error_detail="BLS returned failed peak geometry" if manifest_status == "failed" else None,
-            ),
+        initial_manifest = _manifest_row(
+            run_id=run_id, attempt_id=attempt_id, tic_id=tic_id,
+            status=manifest_status, retryable=False, snapshot=snapshot,
+            pipeline_version=pipeline_version, preprocessing_version=detrended.version,
+            target_location=target_location, periodogram_location=periodogram_location,
+            provenance_status=provenance_status, interval_mask_count=interval_mask_count,
+            error_code="bls_failed" if manifest_status == "failed" else None,
+            error_detail="BLS returned failed peak geometry" if manifest_status == "failed" else None,
         )
+        if manifest_status == "failed" or iteration_location is None:
+            return TicStageResult(target, periodogram, initial_manifest)
+        try:
+            iteration = iterate(
+                prepared.time, detrended.flux_det, input_snapshot_id=snapshot,
+                preprocessing_version=detrended.version, sector=prepared.sector,
+                baseline_time=prepared.time, initial_search=result,
+            )
+            if (iteration["input_snapshot_id"] != snapshot or
+                    iteration["preprocessing_version"] != detrended.version or
+                    iteration["iteration_version"] != ITERATION_VERSION or
+                    iteration["bls_config_version"] != SEARCH_VERSION or
+                    iteration["candidate_quality_version"] != QUALITY_VERSION or
+                    iteration["status"] not in {"ok", "incomplete", "failed"} or
+                    type(iteration["complete"]) is not bool or
+                    iteration["complete"] != (iteration["status"] == "ok") or
+                    (iteration["status"] == "ok") != (iteration["termination"] in
+                        {"no_quality_peak", "duplicate_or_harmonic_only"}) or
+                    (iteration["status"] == "incomplete") != (iteration["termination"] == "max_iterations_reached") or
+                    not SHA256_RE.fullmatch(iteration["iteration_config_sha256"]) or
+                    int(iteration["n_accepted"]) != len(iteration["accepted"])):
+                raise BlsError("invalid_output", "iteration metadata or completion disagrees")
+            iteration_row = (
+                tic_id, snapshot, str(iteration["status"]), str(iteration["termination"]),
+                iteration["complete"], int(iteration["n_accepted"]), ITERATION_VERSION,
+                str(iteration["iteration_config_sha256"]), SEARCH_VERSION, QUALITY_VERSION,
+                str(detrended.version), _json(iteration),
+            )
+            stage_status = "succeeded" if iteration["status"] == "ok" else str(iteration["status"])
+            stage_error = iteration["termination"] if stage_status != "succeeded" else None
+            retryable = False
+        except MemoryError:
+            raise
+        except Exception as exc:
+            iteration_row = None
+            stage_status, stage_error = "failed", getattr(exc, "code", "unexpected_iteration_error")
+            retryable = not isinstance(exc, (BlsError, KeyError, TypeError, ValueError))
+        iteration_manifest = _manifest_row(
+            run_id=run_id, attempt_id=attempt_id, tic_id=tic_id,
+            status=stage_status, retryable=retryable, snapshot=snapshot,
+            pipeline_version=pipeline_version, preprocessing_version=detrended.version,
+            target_location=target_location, periodogram_location=None,
+            provenance_status=provenance_status, interval_mask_count=interval_mask_count,
+            stage="iteration", iteration_location=iteration_location if iteration_row is not None else None,
+            error_code=stage_error, error_detail=stage_error,
+        )
+        return TicStageResult(target, periodogram, initial_manifest, iteration_row, iteration_manifest)
     except (PreprocessError, BlsError, KeyError, TypeError, ValueError) as exc:
         code = getattr(exc, "code", "invalid_bronze_row")
         return TicStageResult(
@@ -403,7 +454,7 @@ def process_tic(
         )
 
 
-def _schemas(types: object) -> tuple[object, object, object, object]:
+def _schemas(types: object) -> tuple[object, object, object, object, object]:
     array_double = types.ArrayType(types.DoubleType(), False)
     array_long = types.ArrayType(types.LongType(), False)
     target = types.StructType([
@@ -471,6 +522,7 @@ def _schemas(types: object) -> tuple[object, object, object, object]:
         types.StructField("interval_mask_count", types.LongType(), False),
         types.StructField("target_location", types.StringType(), True),
         types.StructField("periodogram_location", types.StringType(), True),
+        types.StructField("iteration_location", types.StringType(), True),
         types.StructField("error_code", types.StringType(), True),
         types.StructField("error_detail", types.StringType(), True),
     ])
@@ -488,11 +540,29 @@ def _schemas(types: object) -> tuple[object, object, object, object]:
         types.StructField("no_quality_peak_tics", types.LongType(), False),
         types.StructField("failed_tics", types.LongType(), False),
         types.StructField("retryable_failed_tics", types.LongType(), False),
+        types.StructField("iteration_tics", types.LongType(), False),
+        types.StructField("iteration_succeeded_tics", types.LongType(), False),
+        types.StructField("iteration_incomplete_tics", types.LongType(), False),
+        types.StructField("iteration_failed_tics", types.LongType(), False),
         types.StructField("contract_ok", types.BooleanType(), False),
         types.StructField("science_audit_json", types.StringType(), False),
         types.StructField("completed_at_utc", types.StringType(), False),
     ])
-    return target, periodogram, manifest, summary
+    iteration = types.StructType([
+        types.StructField("tic_id", types.LongType(), False),
+        types.StructField("input_snapshot_id", types.StringType(), False),
+        types.StructField("status", types.StringType(), False),
+        types.StructField("termination", types.StringType(), False),
+        types.StructField("complete", types.BooleanType(), False),
+        types.StructField("accepted_count", types.LongType(), False),
+        types.StructField("iteration_version", types.StringType(), False),
+        types.StructField("iteration_config_sha256", types.StringType(), False),
+        types.StructField("bls_config_version", types.StringType(), False),
+        types.StructField("candidate_quality_version", types.StringType(), False),
+        types.StructField("preprocessing_version", types.StringType(), False),
+        types.StructField("result_json", types.StringType(), False),
+    ])
+    return target, periodogram, manifest, summary, iteration
 
 
 def _write_terminal_marker(spark: object, args: argparse.Namespace, error: SilverContractError) -> None:
@@ -514,13 +584,20 @@ def run(args: argparse.Namespace) -> None:
 
     spark = SparkSession.builder.appName(f"S15P21C206-78-silver-{args.run_id}-{args.attempt_id}").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
-    target_schema, periodogram_schema, manifest_schema, summary_schema = _schemas(types)
+    target_schema, periodogram_schema, manifest_schema, summary_schema, iteration_schema = _schemas(types)
     try:
         try:
             bronze = spark.read.parquet(*args.bronze_path)
             missing = sorted(REQUIRED_BRONZE_COLUMNS - set(bronze.columns))
             if missing:
                 raise SilverContractError("bronze_missing_columns", ",".join(missing))
+            if args.tic_id:
+                bronze = bronze.filter(functions.col("tic_id").isin(args.tic_id))
+            if args.retry_manifest:
+                failed = spark.read.parquet(args.retry_manifest).filter(
+                    functions.col("status").isin("failed", "incomplete")
+                ).select("tic_id").distinct()
+                bronze = bronze.join(failed, "tic_id", "inner")
             if bronze.filter(functions.col("schema_version") != BRONZE_SCHEMA_VERSION).limit(1).count():
                 raise SilverContractError("bronze_schema_mismatch", BRONZE_SCHEMA_VERSION)
             if bronze.filter(functions.col("pipeline_version") != args.bronze_pipeline_version).limit(1).count():
@@ -532,16 +609,10 @@ def run(args: argparse.Namespace) -> None:
                 | ~functions.col("sector").between(1, 13)
             ).limit(1).count():
                 raise SilverContractError("bronze_invalid_identity", "positive TIC and Sector 1 through 13 required")
-            sectors = {int(row[0]) for row in bronze.select("sector").distinct().toLocalIterator()}
-            if sectors != set(range(1, 14)):
-                raise SilverContractError("bronze_sector_coverage_mismatch", str(sorted(sectors)))
-            if args.tic_id:
-                bronze = bronze.filter(functions.col("tic_id").isin(args.tic_id))
-            if args.retry_manifest:
-                failed = spark.read.parquet(args.retry_manifest).filter(
-                    functions.col("status") == "failed"
-                ).select("tic_id").distinct()
-                bronze = bronze.join(failed, "tic_id", "inner")
+            if not args.tic_id and not args.retry_manifest:
+                sectors = {int(row[0]) for row in bronze.select("sector").distinct().toLocalIterator()}
+                if sectors != set(range(1, 14)):
+                    raise SilverContractError("bronze_sector_coverage_mismatch", str(sorted(sectors)))
             selected_ids = bronze.select("tic_id").distinct().cache()
             selected_tics = selected_ids.count()
             if selected_tics <= 0:
@@ -552,6 +623,7 @@ def run(args: argparse.Namespace) -> None:
 
         target_location = f"{args.final_output}/target_combined"
         periodogram_location = f"{args.final_output}/periodogram"
+        iteration_location = f"{args.final_output}/iteration"
         grouped = bronze.rdd.map(
             lambda row: (int(row["tic_id"]), row.asDict(recursive=True))
         ).groupByKey(args.shuffle_partitions)
@@ -563,6 +635,7 @@ def run(args: argparse.Namespace) -> None:
                 pipeline_version=args.pipeline_version,
                 target_location=target_location,
                 periodogram_location=periodogram_location,
+                iteration_location=iteration_location,
             )
         ).persist(StorageLevel.DISK_ONLY)
 
@@ -574,29 +647,66 @@ def run(args: argparse.Namespace) -> None:
             results.filter(lambda result: result.periodogram is not None).map(lambda result: result.periodogram),
             periodogram_schema,
         )
-        manifests = spark.createDataFrame(results.map(lambda result: result.manifest), manifest_schema)
+        iterations = spark.createDataFrame(
+            results.filter(lambda result: result.iteration is not None).map(lambda result: result.iteration),
+            iteration_schema,
+        )
+        manifests = spark.createDataFrame(results.flatMap(
+            lambda result: (result.manifest, result.iteration_manifest) if result.iteration_manifest is not None
+            else (result.manifest,)
+        ), manifest_schema)
         targets.coalesce(args.output_partitions).write.mode("errorifexists").parquet(
             f"{args.output}/target_combined"
         )
         periodograms.coalesce(args.output_partitions).write.mode("errorifexists").parquet(
             f"{args.output}/periodogram"
         )
+        iterations.coalesce(args.output_partitions).write.mode("errorifexists").parquet(
+            f"{args.output}/iteration"
+        )
+        written_iterations = spark.read.schema(iteration_schema).parquet(f"{args.output}/iteration")
+        written_iteration_count = written_iterations.count()
         manifests.coalesce(args.manifest_partitions).write.mode("errorifexists").parquet(
             f"{args.output}/manifest"
         )
 
         written = spark.read.schema(manifest_schema).parquet(f"{args.output}/manifest")
-        status_counts = {row["status"]: int(row["count"]) for row in written.groupBy("status").count().collect()}
-        manifest_ids = written.select("tic_id").distinct().cache()
-        manifest_tics = manifest_ids.count()
-        missing_ids = [int(row[0]) for row in selected_ids.join(manifest_ids, "tic_id", "left_anti").limit(5).collect()]
-        unexpected_ids = [int(row[0]) for row in manifest_ids.join(selected_ids, "tic_id", "left_anti").limit(5).collect()]
+        status_counts = {(row["stage"], row["status"]): int(row["count"])
+                         for row in written.groupBy("stage", "status").count().collect()}
+        initial_ids = written.filter(functions.col("stage") == "initial_bls").select("tic_id").cache()
+        iteration_ids = written.filter(functions.col("stage") == "iteration").select("tic_id").cache()
+        manifest_tics = initial_ids.distinct().count()
+        iteration_tics = iteration_ids.distinct().count()
+        missing_ids = [int(row[0]) for row in selected_ids.join(initial_ids, "tic_id", "left_anti").limit(5).collect()]
+        unexpected_ids = [int(row[0]) for row in initial_ids.join(selected_ids, "tic_id", "left_anti").limit(5).collect()]
+        expected_iteration = written.filter(
+            (functions.col("stage") == "initial_bls") & functions.col("status").isin("succeeded", "no_quality_peak")
+        ).select("tic_id")
+        persisted_iteration_ids = written_iterations.select("tic_id")
+        manifest_output_ids = written.filter(
+            (functions.col("stage") == "iteration") & functions.col("iteration_location").isNotNull()
+        ).select("tic_id")
+        missing_iteration = expected_iteration.join(iteration_ids, "tic_id", "left_anti").limit(1).count()
+        unexpected_iteration = iteration_ids.join(expected_iteration, "tic_id", "left_anti").limit(1).count()
+        mismatched_iteration_output = (
+            persisted_iteration_ids.join(manifest_output_ids, "tic_id", "left_anti").limit(1).count() or
+            manifest_output_ids.join(persisted_iteration_ids, "tic_id", "left_anti").limit(1).count()
+        )
         retryable_failed = written.filter(
             (functions.col("status") == "failed") & functions.col("retryable")
-        ).count()
+        ).select("tic_id").distinct().count()
+        initial_status = lambda status: status_counts.get(("initial_bls", status), 0)
+        iteration_status = lambda status: status_counts.get(("iteration", status), 0)
+        failed_tics = initial_status("failed") + iteration_status("failed") + iteration_status("incomplete")
         contract_ok = (
             manifest_tics == selected_tics
-            and sum(status_counts.values()) == selected_tics
+            and written.count() == selected_tics + iteration_tics
+            and sum(initial_status(status) for status in ("succeeded", "no_quality_peak", "failed")) == selected_tics
+            and sum(iteration_status(status) for status in ("succeeded", "incomplete", "failed")) == iteration_tics
+            and iteration_tics == initial_status("succeeded") + initial_status("no_quality_peak")
+            and written_iteration_count == manifest_output_ids.count()
+            and not mismatched_iteration_output
+            and not missing_iteration and not unexpected_iteration
             and not missing_ids
             and not unexpected_ids
         )
@@ -613,10 +723,14 @@ def run(args: argparse.Namespace) -> None:
             args.pipeline_version,
             selected_tics,
             manifest_tics,
-            status_counts.get("succeeded", 0),
-            status_counts.get("no_quality_peak", 0),
-            status_counts.get("failed", 0),
+            initial_status("succeeded"),
+            initial_status("no_quality_peak"),
+            failed_tics,
             retryable_failed,
+            iteration_tics,
+            iteration_status("succeeded"),
+            iteration_status("incomplete"),
+            iteration_status("failed"),
             contract_ok,
             audit_json,
             utc_now(),
@@ -634,13 +748,14 @@ def run(args: argparse.Namespace) -> None:
             raise error
         print(
             "SILVER_INITIAL_BLS_COMPLETE "
-            f"selected={selected_tics} succeeded={status_counts.get('succeeded', 0)} "
-            f"no_quality_peak={status_counts.get('no_quality_peak', 0)} "
-            f"failed={status_counts.get('failed', 0)}"
+            f"selected={selected_tics} initial_succeeded={initial_status('succeeded')} "
+            f"iteration_succeeded={iteration_status('succeeded')} "
+            f"incomplete={iteration_status('incomplete')} failed={failed_tics}"
         )
         results.unpersist()
         selected_ids.unpersist()
-        manifest_ids.unpersist()
+        initial_ids.unpersist()
+        iteration_ids.unpersist()
     finally:
         spark.stop()
 

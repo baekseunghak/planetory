@@ -31,11 +31,12 @@ from tess_bronze_ctl import (
     wait_application,
     write_state,
     yarn,
+    yarn_exclusive,
 )
 
 
-SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v2"
-SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v2"
+SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v3"
+SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v3"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
 DEFAULT_BRONZE_COVERAGE = (
     "/lake/bronze/tess/coverage="
@@ -89,9 +90,10 @@ def validate_bronze_coverage(value: dict[str, Any], markers: dict[int, tuple[dic
 
 
 def bronze_coverage(path: str) -> dict[str, Any]:
-    coverage_sha256 = path.rstrip("/").split("coverage=")[-1]
-    if not SHA256_RE.fullmatch(coverage_sha256):
-        raise SilverDataContractError("Bronze coverage path must end with a lowercase SHA-256")
+    match = re.fullmatch(r"/lake/bronze/tess/coverage=([0-9a-f]{64})", path)
+    if not match:
+        raise SilverDataContractError("Bronze coverage must be an immutable 1..13 coverage path")
+    coverage_sha256 = match.group(1)
     value, ready_sha256 = hdfs_json(f"{path}/_READY.json")
     markers = {}
     for row in value.get("sectors", []):
@@ -272,7 +274,7 @@ def audit_attempt(final: str, expected: dict[str, Any]) -> dict[str, Any]:
     for key, value in expected.items():
         if marker.get(key) != value:
             raise SilverDataContractError(f"Silver attempt mismatch field={key}")
-    for name in ("target_combined", "periodogram", "manifest"):
+    for name in ("target_combined", "periodogram", "iteration", "manifest"):
         count, digest = part_checksum_digest(f"{final}/{name}")
         if marker.get(f"{name}_part_count") != count or marker.get(f"{name}_checksums_sha256") != digest:
             raise SilverDataContractError(f"Silver checksum mismatch output={name}")
@@ -304,7 +306,7 @@ def finalize_attempt(
     if not isinstance(science_audit, list) or len(science_audit) > 5:
         raise SilverDataContractError("Silver science audit exceeds the Canary contract")
     checksums = {}
-    for name in ("target_combined", "periodogram", "manifest"):
+    for name in ("target_combined", "periodogram", "iteration", "manifest"):
         path = f"{output}/{name}"
         hdfs("dfs", "-setrep", "-w", "2", path)
         count, digest = part_checksum_digest(path)
@@ -325,6 +327,10 @@ def finalize_attempt(
         "no_quality_peak_tics": int(summary["no_quality_peak_tics"]),
         "failed_tics": int(summary["failed_tics"]),
         "retryable_failed_tics": int(summary["retryable_failed_tics"]),
+        "iteration_tics": int(summary["iteration_tics"]),
+        "iteration_succeeded_tics": int(summary["iteration_succeeded_tics"]),
+        "iteration_incomplete_tics": int(summary["iteration_incomplete_tics"]),
+        "iteration_failed_tics": int(summary["iteration_failed_tics"]),
         "science_audit": science_audit,
         "replication": 2,
         **checksums,
@@ -344,6 +350,7 @@ def finalize_attempt(
     atomic_commit(release_dir, output, final)
     audit_attempt(final, {
         "schema": SILVER_READY_SCHEMA,
+        "manifest_schema": SILVER_MANIFEST_SCHEMA,
         "run_id": run_id,
         "attempt_id": attempt_id,
         "pipeline_version": pipeline_version,
@@ -448,7 +455,9 @@ def command_run(args: argparse.Namespace) -> None:
 def command_retry(args: argparse.Namespace) -> None:
     coverage = cluster_preflight(args.bronze_coverage)
     previous, _ = hdfs_json(f"{args.retry_from}/_READY.json")
-    if previous.get("schema") != SILVER_READY_SCHEMA or not hdfs_exists(f"{args.retry_from}/manifest/_SUCCESS"):
+    if (previous.get("schema") != SILVER_READY_SCHEMA or
+            previous.get("manifest_schema") != SILVER_MANIFEST_SCHEMA or
+            not hdfs_exists(f"{args.retry_from}/manifest/_SUCCESS")):
         raise SilverDataContractError("retry source is not a completed Silver attempt")
     if (
         previous.get("run_id") != args.run_id
@@ -497,7 +506,11 @@ def main() -> int:
     if getattr(args, "output_partitions", 1) <= 0 or getattr(args, "shuffle_partitions", 1) <= 0:
         raise SystemExit("partition counts must be positive")
     try:
-        args.handler(args)
+        if args.command in ("canary", "run", "retry"):
+            with yarn_exclusive():
+                args.handler(args)
+        else:
+            args.handler(args)
         return 0
     except SilverDataContractError as exc:
         print(f"SILVER_TERMINAL_FAILURE {exc}", file=sys.stderr, flush=True)

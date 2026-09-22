@@ -13,6 +13,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,23 @@ HOST_ARGS = [item for number in range(1, 7)
 
 class BronzeDataContractError(RuntimeError):
     """A deterministic input/output contract violation that operator action must fix."""
+
+
+@contextmanager
+def yarn_exclusive(lock: Path = Path("/run/planetory-tess-yarn.lock")):
+    """Serialize Planetory Bronze/Silver YARN work on Node 1 across schedulers."""
+    # ponytail: one cluster-wide job; split locks only after measured YARN capacity permits overlap.
+    import fcntl  # Node 1 is Linux; keep offline contract tests importable on Windows.
+
+    if lock.is_symlink():
+        raise RuntimeError("YARN lock path must not be a symlink")
+    with lock.open("a+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        print("PLANETORY_YARN_LOCK_ACQUIRED", flush=True)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def utc_now() -> str:
@@ -750,7 +768,11 @@ def main() -> int:
         raise SystemExit("duplicate sector")
     if getattr(args, "canary_products", 1) <= 0:
         raise SystemExit("canary products must be positive")
-    args.handler(args)
+    if args.command in ("run-all", "canary"):
+        with yarn_exclusive():
+            args.handler(args)
+    else:
+        args.handler(args)
     return 0
 
 

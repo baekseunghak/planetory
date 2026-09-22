@@ -375,6 +375,8 @@ docker compose up -d airflow-db airflow-scheduler airflow-webserver
 
 최초 UI 계정 생성과 scheduler/webserver의 동일한 Fernet·webserver secret key 설정은 서버 초기 설정에 포함한다.
 
+1~13 Bronze coverage의 Silver 수동 DAG는 [Airflow DAG 안내](../../distributed-system/airflow/dags/README.md)를 따른다. Silver release 설치 후 [configure-tess-silver-airflow-node1.sh](scripts/configure-tess-silver-airflow-node1.sh)가 해당 release 전용 제한 sudo와 `tess_yarn` Pool 한 슬롯을 구성한다. 현재 서버에 자동 적용된 상태가 아니며 운영 설정 변경 승인을 받아야 한다.
+
 ## TESS 원천 수집 (`S15P21C206-75`)
 
 Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-tess-ingestion.ps1)로 SPOC 2분 Light Curve를 수집한다. Tailscale 대상과 실제 호스트명, `/mnt/data` mount, passwordless sudo, 디스크 사용률 75% 미만·가용 공간 기본 100GiB 이상, 다른 활성 수집 unit·수동 downloader 부재와 공식 MAST 연결을 `Preflight`에서 먼저 확인한다. 코드는 `/mnt/data/planetory-ingestion/releases/<ReleaseId>`, 실행 데이터는 `/mnt/data/staging/S15P21C206-75/run-<RunId>`에 둔다. release는 결정적 내용 SHA로 식별하고 root 소유·일반 사용자 쓰기 금지로 고정한다.

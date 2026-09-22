@@ -6,13 +6,14 @@ publication are handled separately; accepted here means runtime QA acceptance.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from collections.abc import Mapping
 import hashlib
 import json
 from types import SimpleNamespace
 
 import numpy as np
 
-from .bls import BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector
+from .bls import BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector, _search_input_sha256
 from .transit_model import phase_distance_days, remove_transit_models
 
 ITERATION_VERSION = "iteration_v1/111-unity-relative01-duration12"
@@ -279,7 +280,7 @@ def _qa(t, original, current, residual, candidate, accepted, removal, cfg):
 
 
 def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
-                sector=None, baseline_time=None, keep_residual=False):
+                sector=None, baseline_time=None, keep_residual=False, initial_search=None):
     """Iterate frozen 120 search and 121 removal with approved 111 QA.
 
     Invalid contracts raise BlsError. Numerical/QA failures return status=failed
@@ -287,6 +288,7 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
     The default result is strict JSON. keep_residual adds an ndarray for runtime
     verification only; callers must not persist that array in candidate payloads.
     transit_model deliberately has no catalog ID until identity reconciliation.
+    initial_search is the in-memory search_bls result for these exact inputs.
     """
     t, f = _vector(time, "time"), _vector(flux, "flux")
     if len(t) != len(f) or not np.isfinite(t).all() or np.any(np.diff(t) < 0):
@@ -308,6 +310,17 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         if (np.any(positions >= len(raw)) or not np.array_equal(raw[positions], times) or
                 np.any(raw_counts[positions] < counts)):
             raise BlsError("invalid_input", "baseline must contain every input observation")
+    if initial_search is not None:
+        expected = dict(input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
+                        bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+                        search_input_sha256=_search_input_sha256(t, f, sector, baseline_time),
+                        n_input=len(t), n_valid=int(np.isfinite(f).sum()))
+        if (not isinstance(initial_search, Mapping) or
+                any(initial_search.get(key) != value for key, value in expected.items()) or
+                initial_search.get("status") not in ("ok", "no_quality_peak", "failed") or
+                not isinstance(initial_search.get("peaks"), list) or
+                not hasattr(initial_search.get("periodogram"), "config")):
+            raise BlsError("invalid_input", "initial search does not match the iteration input")
     cfg = _CONFIG
     current, accepted, steps = f.copy(), [], []
     termination, qa_failed_step = "", -1
@@ -326,9 +339,9 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
             steps.append(dict(**terminal, status="terminated", reason=termination))
             break
         try:
-            run = search_bls(t, current, input_snapshot_id=input_snapshot_id,
-                             preprocessing_version=preprocessing_version,
-                             sector=sector, baseline_time=baseline_time)
+            run = initial_search if step == 0 and initial_search is not None else search_bls(
+                t, current, input_snapshot_id=input_snapshot_id,
+                preprocessing_version=preprocessing_version, sector=sector, baseline_time=baseline_time)
             if run["status"] == "failed":
                 raise BlsError("numerical_failure", "search returned a failed peak")
             config = run["periodogram"].config

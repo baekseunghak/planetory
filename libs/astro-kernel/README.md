@@ -436,6 +436,12 @@ if detrended.status == "ok":
     )
 ```
 
+78 Silver가 이미 `search_bls`를 실행했다면 동일 배열·Sector·baseline·입력 버전으로 받은
+**메모리상의 최초 결과**를 `initial_search=first_result`로 넘긴다. `search_bls`는 이 입력의
+`search_input_sha256`을 반환하며, `iterate_bls`는 digest·입력 개수·버전·상태가 다르면
+`BlsError(invalid_input)`으로 거절한다. 첫 반복만 결과를 재사용하고 제거 후 탐색은 새로 계산한다.
+직렬화한 periodogram으로 결과를 재구성하거나 digest를 대신 만들어 전달하지 않는다.
+
 ### 고정 계산과 실패 처리
 
 탐색은 120의 선형 20,000점·상위 5피크를 사용한다. coarse 피크를 기존 채택 후보와

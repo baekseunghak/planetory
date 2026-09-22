@@ -24,10 +24,12 @@ from tess_silver import (  # noqa: E402
 from tess_silver_ctl import (  # noqa: E402
     SILVER_READY_SCHEMA,
     SilverDataContractError,
+    bronze_coverage,
     validate_bronze_coverage,
 )
 from astro_kernel.preprocessing import MASK_CONTRACT_VERSION, IntervalMask, preprocess_silver  # noqa: E402
 from astro_kernel.bls import search_bls  # noqa: E402
+from astro_kernel.iteration import ITERATION_VERSION, iterate_bls  # noqa: E402
 
 
 def bronze_row(tic_id=123, sector=1, product_id="p1", suffix="a"):
@@ -105,7 +107,7 @@ def search_result(status="ok"):
     }
 
 
-def call(rows, preprocess, search, *, interval_masks=()):
+def call(rows, preprocess, search, *, interval_masks=(), iteration_location=None, iterate=iterate_bls):
     return process_tic(
         rows,
         run_id="run",
@@ -113,9 +115,11 @@ def call(rows, preprocess, search, *, interval_masks=()):
         pipeline_version="pipeline",
         target_location="/final/target_combined",
         periodogram_location="/final/periodogram",
+        iteration_location=iteration_location,
         interval_masks=interval_masks,
         preprocess=preprocess,
         search=search,
+        iterate=iterate,
     )
 
 
@@ -134,7 +138,7 @@ class SilverDataOwnerContractTest(unittest.TestCase):
         row["raw_sha256"] = "bad"
         result = call([row], lambda curves, **kwargs: (prepared(), detrended()), lambda *args, **kwargs: None)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[17], "invalid_lineage")
+        self.assertEqual(result.manifest[18], "invalid_lineage")
         self.assertIsNone(result.target)
 
 
@@ -216,7 +220,7 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
 
         result = call([bronze_row()], preprocess, lambda *args, **kwargs: search_result("ok"))
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[17], "provenance_mismatch")
+        self.assertEqual(result.manifest[18], "provenance_mismatch")
         self.assertIsNone(result.target)
 
     def test_mask_for_another_raw_product_is_isolated(self):
@@ -241,14 +245,18 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
             interval_masks=[mask],
         )
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[17], "mask_source_mismatch")
+        self.assertEqual(result.manifest[18], "mask_source_mismatch")
         self.assertIsNone(result.target)
 
     @unittest.skipUnless(importlib.util.find_spec("astropy"), "Astropy runtime is not installed")
     def test_real_preprocessing_to_bls_boundary_executes(self):
-        result = call([self.real_bronze_row()], preprocess_silver, search_bls)
+        result = call([self.real_bronze_row()], preprocess_silver, search_bls,
+                      iteration_location="/final/iteration")
         self.assertIn(result.manifest[5], {"succeeded", "no_quality_peak"})
         self.assertIsNotNone(result.periodogram)
+        self.assertIsNotNone(result.iteration)
+        self.assertIn(result.iteration_manifest[5], {"succeeded", "incomplete", "failed"})
+        self.assertEqual(result.iteration[1], result.periodogram[1])
 
     def test_ok_preprocessing_passes_aligned_provenance_to_bls(self):
         captured = {}
@@ -283,7 +291,7 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
         )
         self.assertFalse(called)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[17], "insufficient_observations")
+        self.assertEqual(result.manifest[18], "insufficient_observations")
         self.assertIsNotNone(result.target)
         self.assertIsNone(result.periodogram)
 
@@ -295,7 +303,7 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
         )
         self.assertEqual(result.manifest[5], "no_quality_peak")
         self.assertFalse(result.manifest[6])
-        self.assertIsNone(result.manifest[17])
+        self.assertIsNone(result.manifest[18])
 
     def test_canary_audit_is_bounded_and_keeps_science_metrics(self):
         result = call(
@@ -323,7 +331,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             StringType=lambda: object(),
             BooleanType=lambda: object(),
         )
-        target_schema, periodogram_schema, manifest_schema, _ = _schemas(fake)
+        target_schema, periodogram_schema, manifest_schema, _, iteration_schema = _schemas(fake)
         result = call(
             [bronze_row()],
             lambda curves, **kwargs: (prepared(), detrended()),
@@ -332,6 +340,51 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(len(result.target), len(target_schema))
         self.assertEqual(len(result.periodogram), len(periodogram_schema))
         self.assertEqual(len(result.manifest), len(manifest_schema))
+
+        seen = {}
+        def iterate(time, flux, **kwargs):
+            seen.update(kwargs)
+            return dict(status="ok", termination="no_quality_peak", complete=True, n_accepted=0,
+                        accepted=[], input_snapshot_id=kwargs["input_snapshot_id"],
+                        preprocessing_version=kwargs["preprocessing_version"],
+                        iteration_version=ITERATION_VERSION, iteration_config_sha256="f" * 64,
+                        bls_config_version=kwargs["initial_search"]["bls_config_version"],
+                        candidate_quality_version=kwargs["initial_search"]["candidate_quality_version"])
+        connected = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()),
+                         lambda *args, **kwargs: search_result("ok"),
+                         iteration_location="/final/iteration", iterate=iterate)
+        self.assertIsNotNone(seen["initial_search"])
+        self.assertEqual(connected.iteration_manifest[4:6], ("iteration", "succeeded"))
+        self.assertEqual(connected.iteration_manifest[17], "/final/iteration")
+        self.assertEqual(len(connected.iteration), len(iteration_schema))
+        self.assertTrue(json.loads(connected.iteration[-1])["complete"])
+
+    def test_iteration_failure_keeps_initial_search_and_is_retryable_per_stage(self):
+        result = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()),
+                      lambda *args, **kwargs: search_result("ok"),
+                      iteration_location="/final/iteration",
+                      iterate=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("worker problem")))
+        self.assertEqual(result.manifest[5], "succeeded")
+        self.assertIsNotNone(result.periodogram)
+        self.assertIsNone(result.iteration)
+        self.assertEqual(result.iteration_manifest[4:7], ("iteration", "failed", True))
+        self.assertIsNone(result.iteration_manifest[17])
+        self.assertEqual(result.iteration_manifest[18], "unexpected_iteration_error")
+
+    def test_incomplete_iteration_is_not_success_or_gold_candidate(self):
+        def incomplete(time, flux, **kwargs):
+            return dict(status="incomplete", termination="max_iterations_reached", complete=False,
+                        n_accepted=0, accepted=[], input_snapshot_id=kwargs["input_snapshot_id"],
+                        preprocessing_version=kwargs["preprocessing_version"],
+                        iteration_version=ITERATION_VERSION, iteration_config_sha256="f" * 64,
+                        bls_config_version=kwargs["initial_search"]["bls_config_version"],
+                        candidate_quality_version=kwargs["initial_search"]["candidate_quality_version"])
+        result = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()),
+                      lambda *args, **kwargs: search_result("ok"),
+                      iteration_location="/final/iteration", iterate=incomplete)
+        self.assertEqual(result.iteration_manifest[5:7], ("incomplete", False))
+        self.assertEqual(result.iteration_manifest[18], "max_iterations_reached")
+        self.assertFalse(result.iteration[4])
 
     def test_unexpected_failure_is_retryable_and_does_not_escape_tic(self):
         failed = call(
@@ -345,7 +398,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             lambda *args, **kwargs: search_result("ok"),
         )
         self.assertEqual(failed.manifest[5:7], ("failed", True))
-        self.assertEqual(failed.manifest[17], "unexpected_processing_error")
+        self.assertEqual(failed.manifest[18], "unexpected_processing_error")
         self.assertEqual(succeeded.manifest[5], "succeeded")
 
     def test_malformed_bronze_row_is_isolated_before_sorting(self):
@@ -353,7 +406,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         del row["sector"]
         result = call([row], lambda curves, **kwargs: (prepared(), detrended()), lambda *args, **kwargs: None)
         self.assertEqual(result.manifest[5], "failed")
-        self.assertEqual(result.manifest[17], "invalid_bronze_row")
+        self.assertEqual(result.manifest[18], "invalid_bronze_row")
 
     def test_manifest_tic_survives_malformed_product_sort_key(self):
         row = bronze_row(tic_id=456)
@@ -398,7 +451,20 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             validate_bronze_coverage(coverage, markers)
 
     def test_attempt_ready_schema_is_versioned(self):
-        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v2")
+        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v3")
+
+    def test_coverage_path_cannot_escape_the_bronze_snapshot_root(self):
+        for path in ("/tmp/coverage=" + "a" * 64,
+                     "/lake/bronze/tess/sector=0014",
+                     "/lake/bronze/tess/coverage=" + "a" * 64 + "/../other"):
+            with self.subTest(path=path), self.assertRaises(SilverDataContractError):
+                bronze_coverage(path)
+
+    def test_canary_filters_tic_before_row_scans(self):
+        source = (Path(__file__).resolve().parent / "tess_silver.py").read_text(encoding="utf-8")
+        self.assertLess(source.index('if args.tic_id:\n                bronze = bronze.filter'),
+                        source.index('bronze.filter(functions.col("schema_version")'))
+        self.assertIn('if not args.tic_id and not args.retry_manifest:', source)
 
 
 if __name__ == "__main__":

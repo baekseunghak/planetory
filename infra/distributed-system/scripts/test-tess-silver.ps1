@@ -26,13 +26,17 @@ try {
     $env:PYTHONDONTWRITEBYTECODE = '1'
     & python $pythonFiles[2]
     if ($LASTEXITCODE -ne 0) { throw 'Silver contract tests failed.' }
+    & python -m unittest discover -s (Join-Path $repoRoot 'distributed-system\airflow\tests') -p 'test_tess_silver_dag.py'
+    if ($LASTEXITCODE -ne 0) { throw 'Silver Airflow contract tests failed.' }
 } finally {
     $env:PYTHONDONTWRITEBYTECODE = $previousBytecode
 }
 
 $job = Get-Content -LiteralPath $pythonFiles[0] -Raw
 foreach ($required in @(
-    'planetory.tess-silver-stage.v2',
+    'planetory.tess-silver-stage.v3',
+    'initial_search=result',
+    'f"{args.output}/iteration"',
     'MASK_CONTRACT_VERSION',
     'source_sha256=str(row["raw_sha256"])',
     'exclusion_ledger(prepared, detrended)',
@@ -40,7 +44,7 @@ foreach ($required in @(
     'groupByKey(args.shuffle_partitions)',
     'StorageLevel.DISK_ONLY',
     '--retry-manifest',
-    'status") == "failed"',
+    'functions.col("status").isin("failed", "incomplete")',
     'baseline_time=prepared.time',
     '"left_anti"',
     'science_audit_json',
@@ -55,6 +59,9 @@ foreach ($forbidden in @('.toPandas(', 'bronze.collect(', 'grouped.collect(')) {
 $control = Get-Content -LiteralPath $pythonFiles[1] -Raw
 foreach ($required in @(
     'validate_bronze_coverage',
+    'planetory.tess-silver-attempt.v3',
+    'planetory.tess-silver-stage.v3',
+    '("target_combined", "periodogram", "iteration", "manifest")',
     'SilverDataContractError',
     'SILVER_TERMINAL_SCHEMA',
     'part_checksum_digest',
@@ -64,6 +71,7 @@ foreach ($required in @(
     'SILVER_CANARY_AUDIT=',
     'cleanup_spark_staging',
     'retry source is not a completed Silver attempt'
+    'yarn_exclusive'
 )) {
     if (-not $control.Contains($required)) { throw "Missing Silver control contract: $required" }
 }

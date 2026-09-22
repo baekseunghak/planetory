@@ -34,6 +34,7 @@ from tess_bronze_ctl import (  # noqa: E402
     run_sector,
     submit,
     validate_raw_coverage,
+    yarn_exclusive,
 )
 
 
@@ -383,6 +384,14 @@ class BronzeTransformTest(unittest.TestCase):
         with patch("tess_bronze_ctl.main", side_effect=RuntimeError("temporary outage")):
             with self.assertRaisesRegex(RuntimeError, "temporary outage"):
                 cli()
+
+    def test_yarn_lock_is_held_for_full_control_operation(self):
+        events = []
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, flock=lambda _handle, mode: events.append(mode))
+        with tempfile.TemporaryDirectory() as root, patch.dict(sys.modules, {"fcntl": fake}):
+            with yarn_exclusive(Path(root) / "yarn.lock"):
+                self.assertEqual(events, [2])
+            self.assertEqual(events, [2, 8])
 
 
 if __name__ == "__main__":

@@ -104,3 +104,5 @@
 | 2026-09-21 | 122 !160 develop 통합·실제 진단 최종 검증 | S15P21C206-122 | 205 passed, 184 passed, 16곡선, search_diagnostics, review-122-r2 | 검증 완료·병합 commit 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 사전검사 재리뷰 반영: develop 통합과 승인 문턱·재실행 문구 | S15P21C206-154 | 6장 충돌, 문턱 셋, 제출 제외, 읽기 전용, 재실행 건수 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | Silver 245 원본 행·구간 마스크 계약 연결 | S15P21C206-78 | stage.v2, source_sha256, original_quality, exclusion_ledger, row conservation | 구현·로컬 검증 완료, 운영 마스크 활성화 전 | [기록](2026-09-21.md) |
+| 2026-09-22 | 최초 BLS 결과 재사용과 반복 탐색 Silver stage 연결 | S15P21C206-78 | initial_search, search_input_sha256, iteration, stage.v3 | 구현·로컬 검증, 클러스터 Canary 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Silver 수동 DAG·YARN 경합 방지 경계 | S15P21C206-78 | tess_bronze_to_silver, tess_yarn, Node 1 lock, 14+ 제외 | 구현·로컬 검증, 운영 배포 전 | [기록](2026-09-22.md) |

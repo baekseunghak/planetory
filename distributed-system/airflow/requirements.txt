@@ -1,1 +1,2 @@
 psycopg2-binary==2.9.10
+apache-airflow-providers-ssh==4.1.6
