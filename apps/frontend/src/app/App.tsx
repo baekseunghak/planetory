@@ -21,6 +21,8 @@ import { ErrorState, LoadingState } from "../components/RequestState";
 import { ServiceLayout } from "../components/ServiceLayout";
 import { routeDefinitions, safeReturnTo, type PageKey } from "./paths";
 import { usePageContext } from "./usePageContext";
+import { p1Enabled } from "../features/p1";
+import { WithdrawalStatusPage } from "../features/profile/WithdrawalPage";
 
 export type PageSlots = Partial<Record<PageKey, ComponentType>>;
 function ProtectedRoutes() {
@@ -119,6 +121,12 @@ export function App({
         <DesktopGate>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            {p1Enabled && (
+              <Route
+                path="/withdrawal/status/:requestId"
+                element={<WithdrawalStatusPage />}
+              />
+            )}
             <Route path="/oauth/callback" element={<LoginPage />} />
             <Route element={<ProtectedRoutes />}>
               <Route element={<ServiceLayout />}>

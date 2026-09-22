@@ -1,5 +1,5 @@
 import { useCallback, useContext } from "react";
-import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -12,6 +12,7 @@ import {
   type ProfileSlotComponents,
 } from "./ProfileSlots";
 import { UsageGuide } from "./UsageGuide";
+import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
 import { FollowButton, FollowSummary } from "../follow/Follow";
@@ -82,6 +83,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         </div>
         {own && (
           <div className="profile-actions">
+            <Link to="/settings">설정</Link>
             <NicknameEditor
               memberId={memberId}
               nickname={profile?.nickname ?? member?.nickname ?? ""}
@@ -113,6 +115,14 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               )}
             </>
           )}
+          {p1Enabled && !own && profile.starListVisibility === "PUBLIC" && (
+            <Link
+              className="primary-link"
+              to={"/members/" + encodeURIComponent(memberId) + "/sky"}
+            >
+              은하 방문하기 →
+            </Link>
+          )}
           {section === "summary" && <Summary profile={profile} own={own} />}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
@@ -141,14 +151,22 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
-          {section !== "summary" && (
-            <ProfileSection
-              section={section}
-              memberId={memberId}
-              isOwn={own}
-              starListVisibility={profile.starListVisibility}
-            />
-          )}
+          {section !== "summary" &&
+            (own && section === "stars" && slots.stars ? (
+              <ProfileStarFilters
+                Page={slots.stars}
+                memberId={memberId}
+                isOwn
+                starListVisibility={profile.starListVisibility}
+              />
+            ) : (
+              <ProfileSection
+                section={section}
+                memberId={memberId}
+                isOwn={own}
+                starListVisibility={profile.starListVisibility}
+              />
+            ))}
         </>
       )}
     </section>
