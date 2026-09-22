@@ -3,6 +3,7 @@
 import { followFixturePlugin } from "../dev/follow-fixture-plugin.ts";
 import { notificationsFixturePlugin } from "../dev/notifications-fixture-plugin.ts";
 import { settingsFixturePlugin } from "../dev/settings-fixture-plugin.ts";
+import { withdrawalFixturePlugin } from "../dev/withdrawal-fixture-plugin.ts";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -64,6 +65,7 @@ const server = await createServer({
   mode: "presentation",
   plugins: [
     react(),
+    withdrawalFixturePlugin(),
     settingsFixturePlugin({
       member: () => ({
         nickname: profile.nickname(),

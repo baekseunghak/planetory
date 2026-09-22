@@ -22,6 +22,7 @@ import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
 import { HotTopicsPage } from "./features/community/HotTopicsPage";
 import { SettingsPage } from "./features/profile/SettingsPage";
+import { WithdrawalPage } from "./features/profile/WithdrawalPage";
 import {
   CommunityPage,
   PostPage,
@@ -47,6 +48,7 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
+    ...(p1Enabled ? { withdrawal: WithdrawalPage } : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
     ...(p1Enabled
       ? { following: FollowingPage, followingFeed: FollowingFeedPage }

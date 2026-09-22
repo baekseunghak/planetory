@@ -1,5 +1,11 @@
 export const routeDefinitions = [
   {
+    key: "withdrawal",
+    path: "/settings/withdrawal",
+    title: "계정 탈퇴",
+    owner: "하서진",
+  },
+  {
     key: "notifications",
     path: "/notifications",
     title: "알림",
