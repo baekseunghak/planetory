@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
+import { useOnboardingSubmission } from "../onboarding/Onboarding";
 import { useSession } from "../../auth/SessionProvider";
 import { sessionDraftKey } from "../../auth/session-draft-storage";
 import type { AnalysisContext } from "./analysis-data";
@@ -46,6 +47,11 @@ export function useSubmission(context: AnalysisContext) {
   const auth = useSession();
   const memberId = auth.member?.memberId ?? null;
   const [state, setState] = useState<SubmissionState>({ phase: "idle" });
+  useOnboardingSubmission(
+    state.phase === "settled" && state.state === "accepted"
+      ? state.receipt.submissionId
+      : null,
+  );
   // 결과를 모르는 채로 화면을 떠나도 ID는 저장소에 남는다. 중단은 화면 갱신만 멈춘다.
   const running = useRef<AbortController | null>(null);
   const last = useRef<{ requestId: string; kind: Kind } | null>(null);
