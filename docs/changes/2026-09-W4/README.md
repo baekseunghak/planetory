@@ -25,6 +25,8 @@
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-21 | 검색 검증기 미정 입력·정렬·인계 경계 보완 | S15P21C206-170 | UNSPECIFIED, Date.parse, 합성 분포, 217, 218 | 표본 검증 완료·교차 검토 대기 | [2026-09-21](2026-09-21.md) |
+
+| 2026-09-21 | 지도 검색·A13 필터 입력 계약 | S15P21C206-223 | discovered, submitted, locate, starFilters | 일부 구현·소비자 연결 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 기본 피드·공식 스레드·공개 분석 조회와 별 접근 차단 | S15P21C206-164 | SYSTEM, cursor, REPEATABLE_READ, contributesToSummary, 공개 Graph, 442건 | 구현·백엔드 회귀 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 특정 별 기본 피드의 board=STAR 요청 호환 | S15P21C206-164 | ticId, board=STAR, 400, 커서 동치, 프론트 계약 | 구현·대상 회귀 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | TESS Raw 1~13 Sector Bronze 변환 | S15P21C206-77 | Spark, Bronze, Parquet, error contract, atomic rename, systemd | 구현·Sector 1~13 변환·전체 재감사 완료 | [기록](2026-09-21.md) |

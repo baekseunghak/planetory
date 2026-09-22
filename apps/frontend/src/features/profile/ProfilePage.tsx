@@ -12,6 +12,7 @@ import {
   type ProfileSlotComponents,
 } from "./ProfileSlots";
 import { UsageGuide } from "./UsageGuide";
+import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
 import { FollowButton, FollowSummary } from "../follow/Follow";
@@ -142,14 +143,21 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
-          {section !== "summary" && (
+          {section !== "summary" && (own && section === "stars" && slots.stars ? (
+            <ProfileStarFilters
+              Page={slots.stars}
+              memberId={memberId}
+              isOwn
+              starListVisibility={profile.starListVisibility}
+            />
+          ) : (
             <ProfileSection
               section={section}
               memberId={memberId}
               isOwn={own}
               starListVisibility={profile.starListVisibility}
             />
-          )}
+          ))}
         </>
       )}
     </section>
