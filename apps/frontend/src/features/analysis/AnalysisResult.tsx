@@ -413,6 +413,17 @@ export function ResultExplanationView({
             <p>이 분석은 공개할 수 있습니다.</p>
           </section>
         )}
+        {(publication.state === "PUBLISHED" ||
+          publication.state === "HIDDEN") && (
+          <section className="result-axis">
+            <h5>현재 공개 상태</h5>
+            <p>
+              {publication.state === "PUBLISHED"
+                ? "공개되어 있습니다."
+                : "운영에 의해 숨겨진 분석입니다."}
+            </p>
+          </section>
+        )}
 
         {signal && <Ai signal={signal} />}
 
