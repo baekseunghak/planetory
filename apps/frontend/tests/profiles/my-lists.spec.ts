@@ -89,7 +89,9 @@ test("공개하지 않은 신호 수는 본인에게만, 0도 사실로 보인�
   await expect(page.getByText(/공개하지 않은 신호/)).toHaveCount(0);
 });
 
-test("이 티켓 범위 밖의 조건을 목록이 보내지 않는다", async ({ page }) => {
+test("내 목록은 223 검색 계약을 쓰고 타인 목록에는 넘기지 않는다", async ({
+  page,
+}) => {
   const urls = watch(page, /\/stars(\?|$)/);
   await page.goto("/me");
   await page.getByRole("button", { name: "내 별", exact: true }).click();
@@ -99,10 +101,18 @@ test("이 티켓 범위 밖의 조건을 목록이 보내지 않는다", async (
   await expect(stars(page)).toBeVisible();
 
   expect(urls.length).toBeGreaterThan(0);
-  for (const url of urls) {
-    // P1이라 구현돼 있지 않은 필터. 보내면 400이다.
-    expect(url).not.toMatch(/[?&](stage|grade|ticId|size)=/);
-    // 타인에게 쓰면 400이다.
+  const own = urls.filter((url) => url.includes("/v1/me/stars?"));
+  const foreign = urls.filter((url) => /\/v1\/members\/[^/]+\/stars/.test(url));
+  expect(own.length).toBeGreaterThan(0);
+  for (const url of own) {
+    expect(url).toContain("scope=submitted");
+    expect(url).toContain("size=20");
+    expect(url).not.toContain("discovered");
+  }
+  expect(foreign.length).toBeGreaterThan(0);
+  for (const url of foreign) {
+    // 223의 개인 검색 조건은 타인 공개 목록 계약에 섞지 않는다.
+    expect(url).not.toMatch(/[?&](stage|grade|ticId)=/);
     expect(url).not.toContain("discovered");
   }
 });
@@ -152,18 +162,21 @@ test("이어 읽다 권한이 철회되면 보던 것도 남기지 않는다", a
 });
 
 test("잠깐의 통신 실패는 보던 것을 지우지 않는다", async ({ page }) => {
-  await page.goto("/me?section=stars");
-  await expect(stars(page).getByRole("listitem")).toHaveCount(3);
-  await page.route("**/v1/me/stars*", (route) =>
+  // 223은 별 목록을 size=20으로 읽어 개발 fixture 7개가 한 쪽에 끝난다.
+  // 일시 실패의 "이어 읽기" 보존 규칙은 같은 usePagedList를 쓰는 History의
+  // 실제 다중 페이지 fixture로 검증한다.
+  await openHistories(page);
+  await expect(histories(page).getByRole("listitem")).toHaveCount(3);
+  await page.route("**/v1/me/histories*", (route) =>
     route.fulfill({
       status: 503,
       json: { code: "DEPENDENCY_UNAVAILABLE", message: "잠시 후 다시" },
     }),
   );
-  await page.getByRole("button", { name: "별 더 보기" }).click();
+  await page.getByRole("button", { name: "기록 더 보기" }).click();
   await expect(page.getByRole("alert")).toContainText("잠시 후 다시");
-  // 권한 철회와 다르다. 보고 있던 별은 그대로 둔다.
-  await expect(stars(page).getByRole("listitem")).toHaveCount(3);
+  // 권한 철회와 다르다. 보고 있던 기록은 그대로 둔다.
+  await expect(histories(page).getByRole("listitem")).toHaveCount(3);
 });
 
 test("타인의 별에는 막히는 분석 링크를 내밀지 않는다", async ({ page }) => {

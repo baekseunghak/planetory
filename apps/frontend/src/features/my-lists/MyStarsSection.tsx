@@ -5,6 +5,7 @@ import { pagePath } from "../../app/paths";
 import type { ProfileSlotProps } from "../profile/ProfileSlots";
 import { readMyStars, starsPath, type MyStar } from "./my-lists-data";
 import { usePagedList } from "./use-paged-list";
+import { emptyStarFilters, starSearchPath } from "../sky-renderer/star-search";
 import "./my-lists.css";
 
 // #196 내 별 목록(탐사 API 4.4). W16이 만든 프로필 슬롯을 채운다.
@@ -19,17 +20,33 @@ const STAGE: Record<string, string> = {
 const count = new Intl.NumberFormat("ko-KR");
 const when = (value: string) => new Date(value).toLocaleString("ko-KR");
 
-export function MyStarsSection({ memberId, isOwn }: ProfileSlotProps) {
+export function MyStarsSection({
+  memberId,
+  isOwn,
+  starFilters,
+}: ProfileSlotProps) {
   const location = useLocation();
   const returnTo = location.pathname + location.search;
   const target = isOwn ? null : memberId;
+  const filters = isOwn ? (starFilters ?? emptyStarFilters) : emptyStarFilters;
+  const filterKey = JSON.stringify(filters);
   const load = useCallback(
     async (cursor: string | null, signal: AbortSignal) =>
-      readMyStars(await http.request(starsPath(target, cursor), { signal })),
-    [target],
+      readMyStars(
+        await http.request(
+          isOwn
+            ? starSearchPath(filters, cursor, "submitted")
+            : starsPath(target, cursor),
+          { signal },
+        ),
+      ),
+    [target, isOwn, filterKey],
   );
   const { state, reload, more } = usePagedList(
-    useMemo(() => `stars:${target ?? "me"}`, [target]),
+    useMemo(
+      () => `stars:${target ?? "me"}:${isOwn ? filterKey : "public"}`,
+      [target, isOwn, filterKey],
+    ),
     load,
   );
 
@@ -47,9 +64,11 @@ export function MyStarsSection({ memberId, isOwn }: ProfileSlotProps) {
   if (!state.items.length)
     return (
       <p role="status">
-        {isOwn
-          ? "아직 제출한 별이 없습니다. 별지도에서 별을 골라 분석해 보세요."
-          : "이 회원이 제출한 별이 없습니다."}
+        {isOwn && (filters.ticId || filters.stage || filters.grade)
+          ? "조건에 맞는 별이 없습니다."
+          : isOwn
+            ? "아직 제출한 별이 없습니다. 별지도에서 별을 골라 분석해 보세요."
+            : "이 회원이 제출한 별이 없습니다."}
       </p>
     );
 

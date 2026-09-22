@@ -14,7 +14,7 @@ type ProfileSlotComponents = {
 };
 ```
 
-지금 `main.tsx`가 `profileSections`를 넘기지 않아 기본값 `{}`이고 「연결 준비 중입니다」가 뜬다. [#190](analysis-history.md)이 `historyGraphRenderer`를 채운 것과 같은 방식이다.
+최초 구현 전에는 `main.tsx`의 `profileSections`가 비어 있었다. 현재는 `MyStarsSection`과 `MyHistorySection`이 등록돼 실제 두 목록을 렌더한다. [#190](analysis-history.md)이 `historyGraphRenderer`를 채운 것과 같은 방식이다.
 
 **이 티켓은 `stars`와 `history` 둘을 채운다.** `statistics`는 `S15P21C206-198`~`200` 몫이고 백엔드 통계 엔드포인트가 아직 없다.
 
@@ -50,7 +50,7 @@ type ProfileSlotComponents = {
 
 명세 4.4가 이유를 적었다 — 「"공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다」.
 
-## 필터는 서버에 있지만 이 티켓은 쓰지 않는다
+## 필터는 196의 기본 범위와 223의 P1 확장을 구분한다
 
 **정정.** 처음 이 문서는 `stage`·`grade`·`ticId`가 「P1이며 구현돼 있지 않다」고 적었다. **틀렸다.** `S15P21C206-152`가 붙였고 컨트롤러가 받는다.
 
@@ -62,7 +62,7 @@ type ProfileSlotComponents = {
 
 그리고 **커서가 이 셋에도 묶인다.** 조건을 하나 더 실으면 이어읽기 조건이 달라진다.
 
-그런데도 이 화면은 **필터를 보내지 않는다.** 티켓의 제외 범위가 「마이페이지 별 검색/진행 필터의 P1 확장」이기 때문이다. 서버가 못 받아서가 아니라 **범위 밖이라서** 안 보낸다. 나중에 붙일 때는 기록 목록과 같은 규칙을 쓴다 — 조건이 바뀌면 커서를 버린다.
+196의 최초 구현은 「마이페이지 별 검색/진행 필터의 P1 확장」을 제외했다. 이후 223에서 본인 목록에 `starFilters`를 연결했다. `scope=submitted`를 유지하며 조건 변경 시 커서를 버리고 이전 요청을 취소한다. 타인 공개 목록에는 본인의 검색 조건을 넘기지 않는다. 구현·직접 검증과 반영 상태는 [223 기록](ticket-223-readiness.md)을 따른다.
 
 기록 목록은 `ticId`·`candidateId`·`result`·`from`·`to`를 받는다. `result`의 허용값은 `matched`·`not_matched`·`none_wrong`·`ambiguous_match`·`skipped`이며, **`matched`는 `matched`·`matched_harmonic`·`duplicate` 셋을 묶는다.** 화면의 이름표를 서버 값과 일대일로 두면 어긋난다.
 
