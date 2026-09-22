@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { observationFixtureResponse } from "./observation-fixtures.ts";
 import { periodogramFixtureResponse } from "./periodogram-fixtures.ts";
 import { historyFixtureResponse } from "./history-fixtures.ts";
+import { createPublicationFixture } from "./publication-fixtures.ts";
 import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
@@ -29,6 +30,7 @@ export function fixturePlugin(observations = false): Plugin {
     name: "foundation-fixture",
     apply: "serve",
     configureServer(server) {
+      const publicationFixture = createPublicationFixture();
       server.middlewares.use("/api", async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
@@ -59,6 +61,21 @@ export function fixturePlugin(observations = false): Plugin {
             }),
           );
           return;
+        }
+        if (url.pathname.startsWith("/v1/public-analyses") || /^\/v1\/histories\/h-195[123](\/graph)?$/.test(url.pathname) ||
+            (url.pathname === "/v1/me/histories" && url.searchParams.get("candidateId")?.startsWith("c-195"))) {
+          let body: unknown;
+          if (req.method !== "GET") {
+            let raw = "";
+            for await (const chunk of req) {
+              raw += chunk;
+              if (raw.length > BODY_LIMIT) { res.statusCode = 413; res.end(); return; }
+            }
+            try { body = raw ? JSON.parse(raw) : undefined; }
+            catch { res.statusCode = 400; res.end(); return; }
+          }
+          const reply = publicationFixture(req.method ?? "GET", url, body);
+          if (reply) { res.statusCode = reply.status; res.end(JSON.stringify(reply.body)); return; }
         }
         // #190 기록 상세·그래프. 읽기만 하므로 본문을 받지 않는다.
         const history = historyFixtureResponse(url.pathname, url.searchParams);

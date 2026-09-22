@@ -203,6 +203,18 @@ function HistoryDetail({
 
       {detail.phase === "ready" && (
         <>
+          {(detail.detail.explanation.publication.state !== "NOT_ELIGIBLE" ||
+            detail.detail.explanation.publication.publicAnalysisId) && (
+            <Link
+              to={pagePath(
+                "publication",
+                { historyId },
+                { ticId: detail.detail.ticId, returnTo: currentPath },
+              )}
+            >
+              공개 검토·설정
+            </Link>
+          )}
           <Link
             to={
               pagePath(
