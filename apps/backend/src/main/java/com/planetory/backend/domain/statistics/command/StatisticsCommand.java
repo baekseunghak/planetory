@@ -16,26 +16,35 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name=PlanetoryApplication.COMMAND_PROPERTY,havingValue=StatisticsCommand.NAME)
+@ConditionalOnProperty(name = PlanetoryApplication.COMMAND_PROPERTY, havingValue = StatisticsCommand.NAME)
 public class StatisticsCommand implements ApplicationRunner, ExitCodeGenerator {
-    public static final String NAME="statistics";
+    public static final String NAME = "statistics";
     private final StatisticsAggregationService aggregation;
     private final Environment environment;
-    private int exitCode=1;
+    private int exitCode = 1;
 
-    @Override public void run(ApplicationArguments arguments) {
-        String mode=environment.getProperty("planetory.statistics.mode","");
-        String cutoff=environment.getProperty("planetory.statistics.cutoff");
+    @Override
+    public void run(ApplicationArguments arguments) {
+        String mode = environment.getProperty("planetory.statistics.mode", "");
+        String cutoff = environment.getProperty("planetory.statistics.cutoff");
         StatisticsAggregationService.Result result;
-        if ("refresh".equals(mode) && cutoff==null) result=aggregation.refresh();
-        else if ("snapshot".equals(mode)) result=aggregation.snapshot(cutoff==null?null:LocalDate.parse(cutoff));
-        else throw new IllegalArgumentException("statistics mode는 refresh 또는 snapshot이며 cutoff는 snapshot에만 허용됩니다");
-        exitCode=switch (result) {
+        if ("refresh".equals(mode) && cutoff == null) {
+            result = aggregation.refresh();
+        } else if ("snapshot".equals(mode)) {
+            result = aggregation.snapshot(cutoff == null ? null : LocalDate.parse(cutoff));
+        } else {
+            throw new IllegalArgumentException("statistics mode는 refresh 또는 snapshot이며 cutoff는 snapshot에만 허용됩니다");
+        }
+        exitCode = switch (result) {
             case CREATED, ALREADY_EXISTS -> 0;
             case BUSY -> 2;
-            case HISTORICAL_SOURCE_UNAVAILABLE -> 3;
+            case HISTORICAL_SOURCE_UNAVAILABLE, FUTURE_CUTOFF_NOT_ALLOWED -> 3;
         };
-        log.info("통계 작업 {}: {}",mode,result);
+        log.info("통계 작업 {}: {}", mode, result);
     }
-    @Override public int getExitCode() { return exitCode; }
+
+    @Override
+    public int getExitCode() {
+        return exitCode;
+    }
 }

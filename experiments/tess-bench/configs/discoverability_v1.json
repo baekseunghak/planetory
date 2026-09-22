@@ -1,0 +1,13 @@
+{
+  "version": "discoverability-proposal-v1",
+  "status": "experimental_not_approved",
+  "bin_minutes": 10.0,
+  "grid": {"min_days": 0.5, "max_rule": "max(40,candidate_max)", "count": 5000, "spacing": "log"},
+  "durations_hours": [1.2, 1.92, 2.88, 4.8],
+  "snr_min": 7.0,
+  "sde_min": 6.0,
+  "min_observed_transits": 2,
+  "match_half_width_cells": 3,
+  "epoch_tolerance": "half_max_duration",
+  "harmonic_matching": false
+}

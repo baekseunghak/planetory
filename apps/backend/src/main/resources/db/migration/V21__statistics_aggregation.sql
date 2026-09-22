@@ -9,6 +9,7 @@ s AS MATERIALIZED (
     FROM submissions s JOIN active_members u ON u.id=s.user_id
 ),
 unlocks AS MATERIALIZED (
+    -- V1의 UNIQUE (user_id, tic_id)가 회원별 동일 별의 재발견 행을 차단한다.
     SELECT su.* FROM star_unlocks su JOIN active_members u ON u.id=su.user_id
 ),
 progress AS MATERIALIZED (
@@ -93,6 +94,7 @@ sectors AS (
     GROUP BY d.sector
 ),
 rounds AS (
+    -- 정책: active 회차 대상 별의 전 기간 공개 대표 참여(회원×신호)를 센다.
     SELECT r.id,r.round_no,count(DISTINCT p.user_id) AS members,count(p.user_id) AS participations,
         count(*) FILTER (WHERE p.user_judgment='LIKELY_PLANET') AS likely,
         count(*) FILTER (WHERE p.user_judgment='UNLIKELY_PLANET') AS unlikely,
@@ -126,7 +128,12 @@ CREATE UNIQUE INDEX uq_global_stats_singleton ON global_stats(singleton);
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='planetory_stats_job') THEN
-        CREATE ROLE planetory_stats_job NOLOGIN;
+        BEGIN
+            CREATE ROLE planetory_stats_job NOLOGIN;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE EXCEPTION '통계 역할 planetory_stats_job을 만들 수 없습니다. 마이그레이션 계정에 CREATEROLE이 없습니다.'
+                USING HINT = '운영 DB 프로비저닝에서 먼저 실행하십시오: CREATE ROLE planetory_stats_job NOLOGIN;';
+        END;
     END IF;
     EXECUTE format('GRANT USAGE ON SCHEMA %I TO planetory_stats_job',current_schema());
     EXECUTE format('GRANT SELECT ON %I.global_stats, %I.stats_snapshots TO planetory_app, planetory_stats_job',
@@ -139,3 +146,6 @@ BEGIN
         current_schema(),current_schema(),current_schema(),current_schema());
     EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON %I.stats_snapshots FROM planetory_app',current_schema());
 END $$;
+
+COMMENT ON COLUMN stats_snapshots.metrics IS
+    'ComparisonSnapshot 전체 JSON: status, asOf, sourceObservedAt, generatedAt, snapshotDate, cohortStart, cohortEnd, cohortMemberCount, metrics';

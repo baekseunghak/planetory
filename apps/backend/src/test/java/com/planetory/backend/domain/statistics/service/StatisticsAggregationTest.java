@@ -55,6 +55,7 @@ class StatisticsAggregationTest {
     @Autowired PlatformTransactionManager transactions;
     @Autowired MockMvc mvc;
     @Autowired JsonMapper json;
+    @Autowired ComparisonMetricQuery comparisonMetrics;
     long member,bundle,candidate;
     OffsetDateTime cutoff;
 
@@ -158,6 +159,20 @@ class StatisticsAggregationTest {
         assertFalse(json.writeValueAsString(saved).contains("memberId"));
     }
 
+    @Test void 개인비교쿼리는양수회원만허용하고다른회원은반환하지않는다() {
+        submit(member, candidate, "LIKELY_PLANET", cutoff.minusDays(1), "[]");
+        submit(member(), candidate, "UNLIKELY_PLANET", cutoff.minusDays(1), "[]");
+        for (long invalidId : List.of(0L, -1L)) {
+            var failure = assertThrows(org.springframework.dao.InvalidDataAccessApiUsageException.class,
+                    () -> comparisonMetrics.read(invalidId, cutoff));
+            assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+        }
+        var result = comparisonMetrics.read(member, cutoff);
+        assertEquals(1, result.size());
+        assertEquals(member, result.get(0).memberId());
+        assertEquals(100, result.get(0).metrics().get("firstMatchAccuracy").value().intValue());
+    }
+
     @Test void 공개대표취소복귀와AI최신불명및챌린지고유회원을검증한다() {
         long old=submit(member,candidate,"LIKELY_PLANET",cutoff.minusDays(2),"[]");
         publish(old,member,candidate);
@@ -165,12 +180,16 @@ class StatisticsAggregationTest {
         long pa=publish(latest,member,candidate);
         long other=candidate(); publish(submit(member,other,"UNLIKELY_PLANET",cutoff.minusDays(1),"[]"),member,other);
         jdbc.update("INSERT INTO challenge_rounds(round_no,starts_on,ends_on,target_tic_id,description,status) VALUES (1,current_date,current_date+7,101,'test','active')");
+        jdbc.update("UPDATE published_analyses SET published_at=?", cutoff.minusDays(1));
         long execution=jdbc.queryForObject("INSERT INTO ai_executions(model_version,checkpoint,status,started_at) VALUES ('m','test','success',now()) RETURNING id",Long.class);
         jdbc.update("INSERT INTO ai_evaluations(candidate_id,execution_id,score,verdict,threshold_version) VALUES (?,?,0,'rejected','t')",candidate,execution);
         jdbc.update("INSERT INTO ai_executions(model_version,checkpoint,status,started_at) VALUES ('m','test','failed',now())");
         job(aggregation::refresh);
         var data=global.current().data();
         assertEquals(2,data.path("metrics").path("aiAttemptUnknown").path("value").asInt());
+        assertEquals(data.path("metrics").path("publicParticipations").path("value"),
+                data.path("metrics").path("aiAttemptUnknown").path("value"));
+        assertEquals("AVAILABLE", data.path("metrics").path("aiAttemptUnknown").path("status").asString());
         assertEquals("AI_ATTEMPT_UNKNOWN",data.path("aiJudgmentBands").path("reason").asString());
         assertEquals(1,data.path("challenges").get(0).path("participantCount").asInt());
         assertEquals(2,data.path("challenges").get(0).path("participationCount").asInt());
@@ -192,6 +211,7 @@ class StatisticsAggregationTest {
         }
         assertEquals(saved,global.current());
         assertEquals(HISTORICAL_SOURCE_UNAVAILABLE,job(()->aggregation.snapshot(LocalDate.now(ZONE).minusDays(1))));
+        assertEquals(FUTURE_CUTOFF_NOT_ALLOWED,job(()->aggregation.snapshot(LocalDate.now(ZONE).plusDays(1))));
         assertEquals(BlockStatus.UNAVAILABLE,snapshots.latest().status());
         assertThrows(RuntimeException.class,()->job(()->{
             aggregation.refresh(); throw new IllegalStateException("synthetic rollback");
@@ -224,6 +244,10 @@ class StatisticsAggregationTest {
                 INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,depth_z,unlocked_at,world_x,world_y,layout_version,layout_ordinal)
                 VALUES (?,?,'tutorial',0,now(),0,0,'test',?)
                 """,member,101+i,i);
+        assertThrows(org.springframework.dao.DuplicateKeyException.class, () -> jdbc.update("""
+                INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,depth_z,unlocked_at,world_x,world_y,layout_version,layout_ordinal)
+                VALUES (?,101,'challenge',0,now(),0,0,'test',2)
+                """, member));
         jdbc.update("INSERT INTO user_star_progress(user_id,tic_id,progress_stage,completed_at) VALUES (?,101,'completed',now()),(?,103,'completed',now())",member,member);
         jdbc.update("""
                 INSERT INTO observation_datasets(tic_id,sector,start_btjd,end_btjd,cadence,source_version,time_system)
@@ -293,7 +317,7 @@ class StatisticsAggregationTest {
         assertEquals(old.asOf(),tomorrow.asOf()); assertEquals(old.metrics(),tomorrow.metrics());
     }
 
-    @Test void 앱역할에서177개인조회와178기준선이같은메타데이터로연결된다() {
+    @Test void 앱역할에서전체조회와공통기준선이같은메타데이터로연결된다() {
         submit(member,candidate,"LIKELY_PLANET",cutoff.minusDays(1),"[]");
         job(aggregation::refresh); job(()->aggregation.snapshot(null));
         var tx=new TransactionTemplate(transactions);
@@ -302,12 +326,11 @@ class StatisticsAggregationTest {
             jdbc.execute("SET LOCAL ROLE planetory_app");
             try {
                 mvc.perform(get("/api/v1/statistics").session(session())).andExpect(status().isOk())
-                        .andExpect(jsonPath("$.comparison.cohortMemberCount").value(1));
-                mvc.perform(get("/api/v1/me/statistics").session(session())).andExpect(status().isOk())
+                        .andExpect(jsonPath("$.comparison.cohortMemberCount").value(1))
                         .andExpect(jsonPath("$.comparison.status").value("READY"))
                         .andExpect(jsonPath("$.comparison.sourceObservedAt").isNotEmpty())
-                        .andExpect(jsonPath("$.comparison.metrics.firstMatchAccuracy.median").value(100))
-                        .andExpect(jsonPath("$.comparison.metrics.firstMatchAccuracy.myValue.reason").value("HISTORICAL_SOURCE_UNAVAILABLE"));
+                        .andExpect(jsonPath("$.comparison.metrics.firstMatchAccuracy.median").value(100));
+                assertEquals(global.read(member).comparison(), snapshots.latest());
             } catch(Exception e) { throw new RuntimeException(e); }
             return null;
         });

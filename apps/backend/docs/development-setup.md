@@ -288,3 +288,15 @@ V15 다음에 적용한다. `MemberCommunityPermissionTest`는 V12 → V15의 3�
 V18 다음으로 적용하며 병합 시 번호 충돌을 다시 확인한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다. 기존 공식 본문 전체에 대한 UPDATE가 발생하므로 적용 전 대상 건수·잠금 시간을 확인하고 별도 승인 후 실행한다.
 
 169 리뷰 보완에서 develop 미병합 V19에 후보 수치 변경의 격리 수준 검사를 추가했다. 적용 계약은 [검색 본문 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다. 수정 전 V19를 적용한 일회용 검증 DB는 새로 만들어 검증하며 checksum을 repair로 우회하지 않는다. 영속 DB에 이전 V19를 적용한 이력이 있다면 파일 재적용 대신 별도 후속 마이그레이션이 필요하므로 적용 전에 이력을 확인한다.
+
+
+### V20 팔로우 권한
+
+`V20__follow_app_grants.sql`(173)은 기존 follows에 앱 SELECT·INSERT·DELETE를 부여하고 UPDATE·TRUNCATE를 금지한다. V11의 IDENTITY sequence 권한을 재사용하고 새 테이블·열을 만들지 않는다. 반복 PUT은 등록 시각을 유지하며 같은 회원의 쓰기는 users 행 잠금으로 직렬화한다. 현재 합성 측정 범위에서는 추가 인덱스를 만들지 않는다.
+
+V19 다음에 적용하며 V21은 178 통계 작업 소유다. 적용한 V1~V19를 수정하거나 repair/outOfOrder로 우회하지 않는다. `MemberCommunityPermissionTest`는 V19→V20 1건·validate·재실행0, `FollowTest`는 새 일회용 DB 전체 적용과 실제 앱 로그인 역할의 HTTP/쓰기/조회·경합을 검사한다. V20→V21과 통합 새 DB/업그레이드는 178의 별도 일회용 환경에서 검증한다. 공유·운영 DB에는 적용하지 않았다.
+
+팔로우 커서는 기존 조회 커서처럼 binding·정규 인코딩·값 범위를 검사하며 프로세스 키를 사용하지 않는다. follow-v2는 앱 재시작 후에도 유지하고 이전 서명형 follow-v1만 첫 페이지 GET으로 전환한다. 커서는 권한이 아니므로 실제 인증 회원·현재 관계·공개 자격을 매번 DB에서 검사한다. 관리 relationId도 DB 소유권 검사로 보호한다. 컴포넌트 재초기화와 동일 DB 조회/해제를 테스트하며 JVM 재시작·237 Redis 로그인 유지 통합은 별도다. 전역 게시판 공개 자격은 `StarBoardVisibility.OPEN`을 StarRepository·FollowService·CommunityReadService에서 공유한다. FE 연결·오류 복구 계약은 [서비스 API](service-api-spec.md#follow-policy)를 따른다.
+
+
+173 측정(2026-09-22): 일회용 PostgreSQL 18.6, 합성 회원/관계/발견 기록 각1만 건과 소량 기능 표본, size20, 실제 앱 역할, ANALYZE 후 실제 목록 SQL의 EXPLAIN ANALYZE를 각3회 실행했다. 회원 팔로잉/공개 별/역방향 팔로워의 DB 실행시간 중앙값은 각각 0.106/0.470/0.484ms였다. 공개 별 측정에는 발견 기록 끝의 TIC도 포함했다. 해당 범위에서는 V20에 인덱스를 추가하지 않았다. 전체 HTTP 지연·최대 규모·고밀도 팔로워 성능을 보장하는 측정은 아니며, 실제 규모에서 역방향 follows 탐색·관계 정렬·TIC 단독 자격 비용을 다시 확인한다. 재현은 FollowTest의 합성관계10000개 실행계획 사례이며 원시 계획은 무시되는 build 테스트 결과에 남는다.

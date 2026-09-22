@@ -60,18 +60,18 @@ class PlanetoryApplicationCommandModeTest {
         String guard = "--spring.flyway.enabled=false";
 
         // 운영자가 옵션을 빼먹어도 붙는다. 명령줄 인자라 설정 파일보다 우선한다.
-        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(
                 new String[]{"--planetory.command=candidate-correction-precheck"})).contains(guard));
-        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(new String[]{
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(new String[]{
                 "--planetory.command=candidate-correction-precheck",
                 "--planetory.correction.kind=merge"})).contains(guard), "다른 인자와 함께 줘도 붙는다");
 
         // 쓰기 명령과 평소 기동은 건드리지 않는다. 챌린지 명령은 마이그레이션이 필요할 수 있다.
-        assertFalse(List.of(PlanetoryApplication.withReadOnlyGuards(
+        assertFalse(List.of(PlanetoryApplication.withFlywayDisabledGuards(
                 new String[]{"--planetory.command=challenge-unlock"})).contains(guard));
-        assertEquals(0, PlanetoryApplication.withReadOnlyGuards(new String[]{}).length);
+        assertEquals(0, PlanetoryApplication.withFlywayDisabledGuards(new String[]{}).length);
         // 통계 잡 역할에는 DDL 권한을 주지 않는다. 통계 명령도 기동 migration을 강제로 막는다.
-        assertTrue(List.of(PlanetoryApplication.withReadOnlyGuards(
+        assertTrue(List.of(PlanetoryApplication.withFlywayDisabledGuards(
                 new String[]{"--planetory.command=statistics", "--planetory.statistics.mode=refresh"})).contains(guard));
     }
 

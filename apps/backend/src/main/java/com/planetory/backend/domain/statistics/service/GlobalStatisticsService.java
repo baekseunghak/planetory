@@ -3,6 +3,7 @@ package com.planetory.backend.domain.statistics.service;
 import com.planetory.backend.domain.member.service.MemberService;
 import com.planetory.backend.domain.statistics.dto.StatisticsDtos.BlockStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,8 @@ import static com.planetory.backend.domain.statistics.dto.StatisticsDtos.*;
 @Service
 @RequiredArgsConstructor
 public class GlobalStatisticsService {
+    // 런북의 외부 MV 갱신 주기와 함께 변경한다.
+    private static final Duration REFRESH_INTERVAL = Duration.ofMinutes(10);
     private final JdbcClient jdbc;
     private final MemberService members;
     private final JsonMapper json;
@@ -36,7 +39,7 @@ public class GlobalStatisticsService {
         if (!populated(jdbc)) return new GlobalBlock(BlockStatus.UNAVAILABLE, null, null, "AGGREGATE_NOT_READY", null);
         return jdbc.sql("SELECT as_of,generated_at,payload::text FROM global_stats").query((r,n) -> {
             Instant asOf=r.getObject(1,OffsetDateTime.class).toInstant();
-            boolean stale=!clock.instant().isBefore(asOf.plusSeconds(600));
+            boolean stale=!clock.instant().isBefore(asOf.plus(REFRESH_INTERVAL));
             return new GlobalBlock(stale?BlockStatus.STALE:BlockStatus.READY,asOf,
                     r.getObject(2,OffsetDateTime.class).toInstant(),stale?"REFRESH_DELAYED":null,json.readTree(r.getString(3)));
         }).single();
