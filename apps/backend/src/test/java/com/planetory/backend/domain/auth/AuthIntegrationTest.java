@@ -48,7 +48,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** 외부 자격 증명 없이 실제 code 교환·OIDC 서명·state/nonce 검증과 DB 가입을 함께 실행한다. */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
 class AuthIntegrationTest {
@@ -93,6 +93,7 @@ class AuthIntegrationTest {
     @Autowired PostService posts;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
+    @org.springframework.boot.test.web.server.LocalServerPort int port;
 
     @BeforeEach
     void resetOnlyTestData() {
@@ -385,8 +386,84 @@ class AuthIntegrationTest {
                 .andExpect(status().isNoContent()).andExpect(cookie().maxAge("SESSION", 0));
         assertTrue(first.isInvalid());
         mvc.perform(get("/api/v1/me").session(second)).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anonymousLogoutRequiresFreshSessionTokenEvenWhenRepeated() throws Exception {
+        String previousToken = "invalid-token";
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isForbidden());
+            var issued = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+            var session = (MockHttpSession) issued.getRequest().getSession(false);
+            var token = mapper.readTree(issued.getResponse().getContentAsString());
+            String header = token.get("headerName").asText();
+            mvc.perform(post("/api/v1/auth/logout").session(session).header(header, previousToken))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            assertFalse(session.isInvalid());
+            previousToken = token.get("token").asText();
+            mvc.perform(post("/api/v1/auth/logout").session(session).header(header, previousToken))
+                    .andExpect(status().isNoContent()).andExpect(cookie().maxAge("SESSION", 0));
+            assertTrue(session.isInvalid());
+            mvc.perform(post("/api/v1/auth/logout").header(header, previousToken))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void realHttpCookieAndCsrfRoundTripRequiresNewTokenAfterLogout() throws Exception {
+        var cookies = new java.net.CookieManager();
+        var client = java.net.http.HttpClient.newBuilder().cookieHandler(cookies).build();
+        var base = "http://127.0.0.1:" + port + "/api/v1/auth/";
+        var body = java.net.http.HttpResponse.BodyHandlers.ofString();
+        var empty = java.net.http.HttpRequest.BodyPublishers.noBody();
+        String previous = "invalid-token";
+        for (int i = 0; i < 2; i++) {
+            assertEquals(403, client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .POST(empty).build(), body).statusCode());
+            var issued = client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "csrf")).build(), body);
+            assertEquals(200, issued.statusCode());
+            var token = mapper.readTree(issued.body());
+            String header = token.get("headerName").asText();
+            assertEquals(403, client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .header(header, previous).POST(empty).build(), body).statusCode());
+            previous = token.get("token").asText();
+            var result = client.send(java.net.http.HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .header(header, previous).POST(empty).build(), body);
+            assertEquals(204, result.statusCode());
+            assertTrue(result.headers().allValues("set-cookie").stream()
+                    .flatMap(value -> java.net.HttpCookie.parse(value).stream())
+                    .anyMatch(cookie -> cookie.getName().equals("SESSION") && cookie.hasExpired()));
+            assertTrue(cookies.getCookieStore().getCookies().stream()
+                    .noneMatch(cookie -> cookie.getName().equals("SESSION") && !cookie.hasExpired()));
+        }
+    }
+
+    @Test
+    void expiryBetweenCsrfAndLogoutRejectsOldTokenAndFreshAnonymousTokenSucceeds() throws Exception {
+        var session = login("google", "logout-expiry");
+        var token = mapper.readTree(mvc.perform(get("/api/v1/auth/csrf").session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        TIME.advance(Duration.ofMinutes(30));
+        mvc.perform(post("/api/v1/auth/logout").session(session)
+                        .header(token.get("headerName").asText(), token.get("token").asText()))
+                .andExpect(status().isForbidden());
+        assertTrue(session.isInvalid());
+        var fresh = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+        var freshToken = mapper.readTree(fresh.getResponse().getContentAsString());
+        mvc.perform(post("/api/v1/auth/logout").session((MockHttpSession) fresh.getRequest().getSession(false))
+                        .header(freshToken.get("headerName").asText(), freshToken.get("token").asText()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void firstCsrfReadAfterExpiryReturns401ThenAnonymousReadSucceeds() throws Exception {
+        var session = login("google", "csrf-expiry");
+        TIME.advance(Duration.ofMinutes(30));
+        mvc.perform(get("/api/v1/auth/csrf").session(session)).andExpect(status().isUnauthorized());
+        assertTrue(session.isInvalid());
+        mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk());
     }
 
     @Test
