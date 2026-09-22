@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.exploration.service.StarViews.Achievement;
 import com.planetory.backend.domain.exploration.service.StarViews.AchievementByType;
 import com.planetory.backend.domain.exploration.service.StarViews.PlanetItem;
@@ -279,8 +280,10 @@ public class StarRepository {
      * @param limit         한 건 더 요청해 다음 페이지 유무를 판단한다
      */
     public List<StarViews.StarListItem> findStarList(long targetId, String scope,
+                                                     StarViews.ListFilter filter,
                                                      java.time.OffsetDateTime afterActivity,
                                                      Long afterTicId, int limit) {
+        int[] gradeRange = filter.grade() == null ? null : StarService.gradeRange(filter.grade());
         return jdbc.sql("""
                         WITH base AS (
                             SELECT u.tic_id,
@@ -313,10 +316,10 @@ public class StarRepository {
                                        AND s.matched_candidate_id IS NOT NULL
                                        AND NOT EXISTS (
                                            SELECT 1 FROM published_analyses pa
+                                             JOIN posts p ON p.id = pa.post_id
                                             WHERE pa.user_id = s.user_id
                                               AND pa.candidate_id = s.matched_candidate_id
-                                              AND pa.unpublished_at IS NULL
-                                              AND pa.hidden_at IS NULL))
+                                              AND %s))
                                        AS unpublished_signal_count
                               FROM star_unlocks u
                          LEFT JOIN user_star_progress p
@@ -327,13 +330,21 @@ public class StarRepository {
                         )
                         SELECT * FROM base
                          WHERE (:scope = 'discovered' OR submitted)
+                           AND (CAST(:stage AS TEXT) IS NULL OR progress_stage = :stage)
+                           AND (CAST(:ticId AS BIGINT) IS NULL OR tic_id = :ticId)
+                           AND (CAST(:gradeMin AS INTEGER) IS NULL
+                                OR achievement_count BETWEEN :gradeMin AND :gradeMax)
                            AND (CAST(:afterActivity AS TIMESTAMPTZ) IS NULL
                                 OR (last_activity_at, -tic_id) < (:afterActivity, -CAST(:afterTicId AS BIGINT)))
                          ORDER BY last_activity_at DESC, tic_id
                          LIMIT :limit
-                        """)
+                        """.formatted(PublicAnalysisVisibility.VISIBLE))
                 .param("targetId", targetId)
                 .param("scope", scope)
+                .param("stage", filter.stage())
+                .param("ticId", filter.ticId() == null ? null : Long.parseLong(filter.ticId()))
+                .param("gradeMin", gradeRange == null ? null : gradeRange[0])
+                .param("gradeMax", gradeRange == null ? null : gradeRange[1])
                 .param("afterActivity", afterActivity)
                 .param("afterTicId", afterTicId)
                 .param("limit", limit)
