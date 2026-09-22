@@ -6,6 +6,27 @@ import {
   readMetric,
 } from "../../src/features/statistics/contracts";
 import { personalStatisticsFixture } from "../fixtures/personal-statistics";
+
+test("policy identifier revisions preserve valid current metrics", () => {
+  const fixture = personalStatisticsFixture();
+  fixture.policyVersion = "2026-09-23";
+  const result = readPersonalStatistics(fixture);
+  assert.equal(result.policyVersion, fixture.policyVersion);
+  assert.deepEqual(
+    result.metrics,
+    readPersonalStatistics(personalStatisticsFixture()).metrics,
+  );
+  fixture.policyVersion = "policy-next";
+  assert.equal(readPersonalStatistics(fixture).policyVersion, "policy-next");
+  fixture.current.metrics.firstMatchAccuracy.value = Number.NaN;
+  assert.throws(() => readPersonalStatistics(fixture));
+});
+test("policy identifier must be a nonblank string", () => {
+  for (const value of [undefined, null, 12, "", "   "]) {
+    const fixture = { ...personalStatisticsFixture(), policyVersion: value };
+    assert.throws(() => readPersonalStatistics(fixture));
+  }
+});
 test("keeps server values, rounds only display, and ignores unavailable comparison", () => {
   const c = readPersonalStatistics(personalStatisticsFixture());
   assert.equal(c.metrics.evidencePerSubmission.value, 2 / 3);

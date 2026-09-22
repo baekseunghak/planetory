@@ -29,6 +29,7 @@ export type Week = {
   submissionCount: number;
 };
 export type Current = {
+  policyVersion: string;
   asOf: string;
   generatedAt: string;
   periodStart: string;
@@ -120,12 +121,9 @@ function date(v: unknown) {
 export function readPersonalStatistics(v: unknown): Current {
   const root = object(v),
     c = object(root.current);
-  if (
-    root.timeZone !== "Asia/Seoul" ||
-    root.policyVersion !== "2026-09-22" ||
-    c.status !== "READY"
-  )
-    return invalid();
+  const policyVersion = string(root.policyVersion);
+  if (!policyVersion.trim()) return invalid();
+  if (root.timeZone !== "Asia/Seoul" || c.status !== "READY") return invalid();
   const all = metrics(c.metrics, Object.keys(metricLabels));
   for (const k of Object.keys(metricLabels)) if (!all[k]) return invalid();
   if (
@@ -170,6 +168,7 @@ export function readPersonalStatistics(v: unknown): Current {
   )
     return invalid();
   return {
+    policyVersion,
     asOf: instant(c.asOf),
     generatedAt: instant(c.generatedAt),
     periodStart: instant(c.periodStart),
