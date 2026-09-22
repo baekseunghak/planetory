@@ -967,7 +967,7 @@ SQL의 두 EXISTS로 현재 관계를 판정한 뒤 페이지를 나누므로 �
 
 별 새 원글·재개가 알림 대상이며 설정으로 끌 수 있다는 기존 요구를 유지한다. 사건별 수신자·내용·대상 공개 검사·중복 키와 언팔로우/재팔로우·자기 행동·읽음·보관·실패 처리 상세는 [174 알림 정책 F15](../../../docs/development/service-backend/community.md#notification-policy)에서 관리한다. 관계 PUT/DELETE 자체는 알림 사건이 아니며 회원 팔로우만으로 새 글 알림을 추가하는 정책도 만들지 않는다. F15의 권장안은 승인 전 **미정**이다.
 
-**2026-09-22 현행화:** [150 탐사 API 9.3절](exploration-api-spec.md#93-내부-계약-완료재개-판정)은 회원별 재개와 `notifications(type='reopen')` 저장을 구현했다. payload는 `{ticId,bundleId,newDiscoverableCount}`이고 동일 회원·TIC·Bundle 중복은 V22가 막는다. 기존 “사건 저장 미제공” 설명은 이 사실로 대체한다. 다만 별 공통 원인·개인 사건 연결, 불변 도메인 ID/발생시각·reason·누락 복구 순서, 설정 OFF와 사건 보존/알림 발행의 경계는 [F15.5 A1~A5](../../../docs/development/service-backend/community.md#notification-event-handoff)의 대기 항목이다. 퀘스트의 `newDiscoverableCount`는 아직 이 사건을 소비하지 않는다.
+**2026-09-22 현행화:** [150 탐사 API 9.3절](exploration-api-spec.md#93-내부-계약-완료재개-판정)은 회원별 재개와 `notifications(type='reopen')` 저장을 구현했다. 현재 저장 payload는 `{ticId,bundleId,newDiscoverableCount}`이며 이미 지원하는 선택적 `reason`은 null이라 생략된다. 3키 고정 계약이 아니며 상세는 F15.5를 따른다. 동일 회원·TIC·Bundle 중복은 V22가 막는다. 기존 “사건 저장 미제공” 설명은 이 사실로 대체한다. 다만 별 공통 원인·개인 사건 연결, 불변 도메인 ID/발생시각·reason·누락 복구 순서, 설정 OFF와 사건 보존/알림 발행의 경계는 [F15.5 A1~A5](../../../docs/development/service-backend/community.md#notification-event-handoff)의 대기 항목이다. 퀘스트의 `newDiscoverableCount`는 아직 이 사건을 소비하지 않는다.
 
 174는 정책 초안을 진행하고 **175가 승인·사건 계약 해소 후 구현**한다. 개인 사건이 저장됐다는 이유로 별 팔로워 공통 사건까지 제공됐다고 보거나 COM-16의 수신 범위를 개인 재개로 축소하지 않는다. 사건 저장·수신 설정과 독립인 탐사 재개·같은 원인/수신자 중복 제거를 함께 보장해야 한다. 173은 관계 재등록 시 새 `follows.id`를 만들지만 사건 당시 관계 증거와 발행 시 재검사는 175가 인수한다.
 
