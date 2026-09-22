@@ -94,7 +94,7 @@
 | 메서드·경로 | 의미 |
 |---|---|
 | GET `/api/v1/me/withdrawal-policy` | 미승인 `{available:false,reason:"탈퇴 정책을 준비하고 있습니다."}` 또는 승인 `{available:true,version:"approved-version",effects:["승인 문구"],retention:["승인 문구"],rejoining:["승인 문구"]}` |
-| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"approved-version"}` →200 `{requestId:"opaque-id",status:"READY",message:"처리 전"}`. **준비만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
+| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"approved-version"}` → 최초 준비는200 `{requestId:"opaque-id",status:"READY",message:"처리 전"}`. 기존 활성 요청을 반환하면 그 요청의 현재 상태를 제공한다. **이 요청 자체는 준비·기존 요청 확인만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
 | POST `/api/v1/me/withdrawal-requests/{requestId}/confirm` | `{policyVersion:"approved-version",confirmation:"탈퇴"}` →200 처리상태. 이 단계만 승인된 탈퇴를 수행한다. |
 | GET `/api/v1/withdrawal-requests/{requestId}` | 아래의 결과 확인 전용 쿠키로200 `{requestId,status,message}`. 상태는 READY/PROCESSING/COMPLETED/FAILED. |
 
@@ -109,6 +109,19 @@
 - PROCESSING/FAILED/만료는 각 상태로 표시한다. 단순 오류로 영구 탈퇴 완료를 선언하지 않는다. 게시글·댓글·History 처리, 실제 익명화, 재가입 허용은 S26 승인 정책을 따르며 S27 생산자 테스트와244 P1-222에서 대조한다.
 
 소비자: [WithdrawalPage.tsx](../../frontend/src/features/profile/WithdrawalPage.tsx), [withdrawal.ts](../../frontend/src/features/profile/withdrawal.ts). [검증용 제공자](../../frontend/dev/withdrawal-fixture-plugin.ts)는 합성 메모리 계정만 종료하며 실제 탈퇴 정책·쿠키 보안·DB 처리를 검증한 증거가 아니다.
+
+### 5.2 2026-09-22 프론트 기준 진행과 복구 경계
+
+사용자가 백엔드에서 프론트에 맞춰 진행한다고 전달하고 222 진행을 요청했다. 222는 위 정책 GET → 준비 POST → 확정 POST → 영수증 GET을 구현 기준으로 유지한다. **이 진행 방향은 effects/retention/rejoining의 실제 정책 문구·기간·재가입 허용이나 운영 제공 승인을 대신하지 않는다.** 해당 정책 입력은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11), 준비 및 검증 범위는 [222 기록](../../frontend/docs/ticket-222-readiness.md)을 따른다.
+
+- 정책 재확인은 GET만 수행한다. 동의 체크·확인 입력·화면의 이전 요청 번호를 초기화하며, 사용자가 다시 동의하고 신청하기 전에는 POST를 보내지 않는다. 준비 응답 유실 후의 재확인은 탈퇴 완료 판정이 아니다.
+- 확정에서 `409 POLICY_CHANGED`를 받으면 실행 전 거절로 처리해 정책 재확인 경로를 제공한다. 단순409, 네트워크 장애,5xx,잘못된 성공 응답을 이 거절로 바꾸지 않는다. 결과가 불명확하고 요청 번호가 있으면 기존 영수증 GET으로만 확인한다.
+- 준비의 유효한 응답이 기존 요청의 PROCESSING/COMPLETED/FAILED이면 confirm을 추가 전송하지 않고 해당 요청의 읽기 전용 결과 화면으로 이동한다. READY일 때만 명시적으로 동의한 버전으로 confirm을 한 번 보낸다. 서버는 기존 요청과 새 정책 버전의 정합성을 다시 검사한다.
+- 상태는 문자열 READY/PROCESSING/COMPLETED/FAILED만 허용한다. 배열·객체를 문자열로 강제 변환하지 않으며, 결과의 requestId가 조회한 요청과 다르면 완료로 인정하지 않는다.
+- 영수증 GET의401/404는 탈퇴 완료를 뜻하지 않고 다른 유효 로그인 세션을 종료시키지도 않는다. 이 조회는 자기 취소·시간 제한과 영수증 권한 검사를 유지한다.
+- 유효한 confirm COMPLETED 이후에는 결과 경로 전환을 먼저 확정하고 로컬 세션·임시 입력을 정리한다. 결과 GET 장애가 이미 확인된 완료의 로컬 정리를 막지 않게 한다. 경로에 전달한 로컬 정리 신호를 서버 권한이나 완료 화면의 응답으로 사용하지 않는다.
+
+S27 제공자는 준비 중복·정책 변경의 비실행 보장, confirm 멱등성, 영수증 쿠키의 권한·수명과 세션 독립성, COMPLETED의 실제 데이터 처리 의미를 대조해야 한다. 이 문서는 실제 DB·쿠키·모든 기기 세션 무효화 검증을 수행했다는 기록이 아니다.
 
 ## 6. 별 검색 · 223
 
