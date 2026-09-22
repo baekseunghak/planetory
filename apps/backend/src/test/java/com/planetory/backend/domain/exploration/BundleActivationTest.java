@@ -20,6 +20,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.planetory.backend.domain.exploration.service.AnalysisViews;
 import com.planetory.backend.domain.exploration.service.BundleActivationService;
+import com.planetory.backend.domain.exploration.service.QuestService;
+import com.planetory.backend.domain.exploration.service.QuestViews;
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.ResidualJobStore;
 
@@ -68,6 +70,7 @@ class BundleActivationTest {
 
     @Autowired BundleActivationService activation;
     @Autowired ResidualJobStore residualJobs;
+    @Autowired QuestService quests;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
 
@@ -108,6 +111,38 @@ class BundleActivationTest {
         // 근거 없는 사유는 담지 않는다. candidate_status_history를 남길 Publisher(-87)가 아직 없다.
         assertFalse(jdbc.queryForObject("SELECT jsonb_exists(payload, 'reason') FROM notifications"
                 + " WHERE user_id = ?", Boolean.class, member));
+    }
+
+    /** 후보가 늘지 않아도 탐색 불가가 탐색 가능으로 바뀌면 재개한다(티켓 검증 시나리오). */
+    @Test
+    void 탐색_불가_후보가_탐색_가능으로_바뀌면_재개한다() {
+        long member = member();
+        complete(member, "undiscoverable_only");
+        long candidate = insertCandidate(false);
+        assertEquals(0, activation.onBundleActivated(bundleId).reopened());
+
+        jdbc.update("UPDATE candidates SET discoverable = true WHERE id = ?", candidate);
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(1, result.reopened());
+        assertEquals("in_progress", stage(member));
+        assertEquals(1, reopenEvents(member));
+    }
+
+    /** 재개 카드는 새 제출이 들어오면 사라진다(4.3절, 150 완료 조건). */
+    @Test
+    void 재개_카드는_새_제출_뒤_정리된다() {
+        long member = member();
+        unlock(member);
+        complete(member, "undiscoverable_only");
+        long candidate = insertCandidate(true);
+
+        activation.onBundleActivated(bundleId);
+
+        assertEquals(List.of(String.valueOf(TIC)),
+                quests.quests(member).reopened().stream().map(QuestViews.Reopened::ticId).toList());
+        submit(member, candidate);
+        assertEquals(List.of(), quests.quests(member).reopened());
     }
 
     /** 같은 판의 알림이 다시 와도 재개 사건은 하나다(150 완료 조건). */
@@ -342,6 +377,13 @@ class BundleActivationTest {
         jdbc.update("INSERT INTO user_star_progress(user_id, tic_id, progress_stage, completion_reason,"
                 + " reopen_pending, completed_at) VALUES (?, ?, 'completed', ?, ?, now())",
                 member, TIC, reason, "undiscoverable_only".equals(reason));
+    }
+
+    /** 퀘스트 재개 카드는 발견한 별만 보여 준다(4.3절). 발견 경로 자체는 이 테스트의 관심이 아니다. */
+    private void unlock(long member) {
+        jdbc.update("INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, layout_ordinal, depth_z,"
+                + " world_x, world_y, layout_version, unlocked_at) VALUES (?, ?, 'tutorial', 1, 0, 1.5, 2.5,"
+                + " 'personal-galaxy-v1', now())", member, TIC);
     }
 
     private String stage(long member) {
