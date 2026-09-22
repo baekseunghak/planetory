@@ -30,8 +30,8 @@ test("actual BTJD uses each segment cadence while the long display gap is compre
   const segments = sample(),
     curve = buildTimeCurve(segments);
   assert.equal(curve.points.length, 11);
-  assert.equal(curve.points[1].btjd, 1683.35 + 10 / 1440);
-  assert.equal(curve.points[7].btjd, 2419.99 + (2 * 20) / 1440);
+  assert.equal(curve.points[1].btjd, 1683.35 + 15 / 1440);
+  assert.equal(curve.points[7].btjd, 2419.99 + 50 / 1440);
   assert.equal(curve.points[7].index, 2);
   assert.ok(curve.width < 1);
   assert.ok(curve.points.at(-1)!.btjd - curve.points[0].btjd > 700);
@@ -135,7 +135,7 @@ test("overlapping segments remain separate and a full 20,000-bin segment is not 
   assert.equal(large.points.length, 20000);
   assert.equal(
     large.points.at(-1)!.btjd,
-    first.startBtjd + (19999 * first.binMinutes) / 1440,
+    first.startBtjd + (19999.5 * first.binMinutes) / 1440,
   );
 });
 test("zoom preserves its pointer anchor and panning cannot leave the display bounds", () => {

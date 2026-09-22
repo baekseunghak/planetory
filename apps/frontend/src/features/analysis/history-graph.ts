@@ -271,7 +271,7 @@ export function historySeries(view: HistoryGraphView): GraphSeries {
     for (let i = 0; i < segment.nPoints; i++) {
       const flux = segment.flux[i];
       if (flux === null) continue;
-      times.push(segment.startBtjd + i * (segment.binMinutes / 1440));
+      times.push(segment.startBtjd + (i + 0.5) * (segment.binMinutes / 1440));
       fluxes.push(flux);
     }
   }

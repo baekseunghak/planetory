@@ -1,5 +1,5 @@
 import { useAnalysisStage } from "./analysis-stage";
-import { usePhaseDraft } from "./AnalysisSession";
+import { usePhaseDraft, useRetryDraft } from "./AnalysisSession";
 import { useCallback, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { PeriodogramChart } from "./PeriodogramChart";
@@ -117,6 +117,7 @@ export function PeriodSelectionWorkspace({
   onPeriodChange?: (change: PeriodSelectionChange) => void;
 }) {
   const session = useAnalysisFold();
+  const { draft: retryDraft, resume } = useRetryDraft();
   const { stage } = useAnalysisStage();
   const { state: phase } = usePhaseDraft();
   const viewport = useRef<PeriodogramViewport>({
@@ -176,6 +177,9 @@ export function PeriodSelectionWorkspace({
         onSelect={select}
         selectedPeriod={change?.selection.periodDays ?? null}
         onViewportChange={trackViewport}
+        initialViewport={
+          !resume ? retryDraft?.draft.viewState?.periodogramViewport : undefined
+        }
       />
       <FoldedCurvePanel
         curve={curve}

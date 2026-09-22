@@ -1,4 +1,8 @@
-import type { AnalysisContext } from "./analysis-data";
+import {
+  readCurveContext,
+  type AnalysisContext,
+  type CurveContext,
+} from "./analysis-data";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -14,10 +18,13 @@ import type { PhaseRange } from "./phase-selection";
 export type SavedAnalysisDraft = {
   schema: 1;
   identity: string;
-  periodDays: number;
+  periodDays: number | null;
   sourcePeakGridIndex: number | null;
   range: PhaseRange | null;
   judgment: JudgmentDraft;
+  retryOfSubmissionId?: string | null;
+  retryAttemptId?: string;
+  curveContext?: CurveContext;
 };
 export function draftIdentity(
   context: AnalysisContext,
@@ -36,12 +43,25 @@ export function readSavedDraft(
   identity: string,
 ): SavedAnalysisDraft {
   const draft = JSON.parse(raw) as SavedAnalysisDraft;
+  if (draft?.curveContext !== undefined) readCurveContext(draft.curveContext);
   if (
     !draft ||
     draft.schema !== 1 ||
     draft.identity !== identity ||
-    !Number.isFinite(draft.periodDays) ||
-    draft.periodDays <= 0 ||
+    !(
+      draft.retryAttemptId === undefined ||
+      (typeof draft.retryAttemptId === "string" &&
+        draft.retryAttemptId.length > 0)
+    ) ||
+    !(
+      draft.retryOfSubmissionId == null ||
+      (typeof draft.retryOfSubmissionId === "string" &&
+        draft.retryOfSubmissionId.trim())
+    ) ||
+    !(
+      draft.periodDays === null ||
+      (Number.isFinite(draft.periodDays) && draft.periodDays > 0)
+    ) ||
     !(
       draft.sourcePeakGridIndex === null ||
       (Number.isSafeInteger(draft.sourcePeakGridIndex) &&
@@ -75,6 +95,8 @@ export function restoreDraftPeriod(
   draft: SavedAnalysisDraft,
   data: ReadyPeriodogram,
 ) {
+  if (draft.periodDays === null)
+    throw new Error("저장된 주기가 없습니다. 새 주기를 선택해 주세요.");
   const selection = choosePeriod(
     data,
     draft.sourcePeakGridIndex === null

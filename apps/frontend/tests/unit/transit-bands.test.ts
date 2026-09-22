@@ -30,16 +30,16 @@ function segment(startBtjd: number, binMinutes = 1440): CurveSegment {
   };
 }
 test("expected centers align with BTJD bin centers across compressed gaps and different cadences", () => {
-  const curve = buildTimeCurve([segment(100), segment(1100, 720)]);
+  const curve = buildTimeCurve([segment(100), segment(1100.25, 720)]);
   const bands = projectTransitBands(
     curve,
-    { periodDays: 2, epochPreviewBtjd: 100, durationPreviewDays: 0.5 },
+    { periodDays: 2, epochPreviewBtjd: 100.5, durationPreviewDays: 0.5 },
     0,
     curve.width,
   );
   assert.deepEqual(
     bands.map((b) => b.centerBtjd),
-    [100, 102, 1100],
+    [100.5, 102.5, 1100.5],
   );
   assert.deepEqual(
     bands.map((b) => b.cycle),
@@ -60,14 +60,14 @@ test("visible clipping uses actual time and does not enumerate centuries of hidd
   const second = curve.segments[1];
   const bands = projectTransitBands(
     curve,
-    { periodDays: 2, epochPreviewBtjd: 100, durationPreviewDays: 1 },
+    { periodDays: 2, epochPreviewBtjd: 100.5, durationPreviewDays: 1 },
     second.start + 0.5,
     second.start + 0.75,
   );
   assert.equal(bands.length, 1);
   assert.equal(bands[0].cycle, 500000);
-  assert.equal(bands[0].startBtjd, 1_000_100);
-  assert.equal(bands[0].endBtjd, 1_000_100.25);
+  assert.equal(bands[0].startBtjd, 1_000_100.5);
+  assert.equal(bands[0].endBtjd, 1_000_100.75);
   assert.ok(Math.abs(bands[0].xStart - (second.start + 0.5)) < 1e-9);
   assert.ok(Math.abs(bands[0].xEnd - (second.start + 0.75)) < 1e-9);
 });
@@ -76,18 +76,18 @@ test("predictions may cross null bins without adding observations; segment separ
   const pointsBefore = curve.points.slice();
   const bands = projectTransitBands(
     curve,
-    { periodDays: 2, epochPreviewBtjd: 101, durationPreviewDays: 0.5 },
+    { periodDays: 2, epochPreviewBtjd: 101.5, durationPreviewDays: 0.5 },
     0,
     curve.width,
   );
-  assert.equal(bands[0].centerBtjd, 101);
+  assert.equal(bands[0].centerBtjd, 101.5);
   assert.equal(bands[0].xStart, 1.25);
   assert.equal(bands[0].xEnd, 1.75);
   assert.deepEqual(curve.points, pointsBefore);
   assert.deepEqual(
     projectTransitBands(
       curve,
-      { periodDays: 2, epochPreviewBtjd: 101, durationPreviewDays: 0.5 },
+      { periodDays: 2, epochPreviewBtjd: 101.5, durationPreviewDays: 0.5 },
       curve.segments[0].end,
       curve.segments[1].start,
     ),
@@ -98,7 +98,7 @@ test("segment edges clip partial windows and viewports without transit centers r
   const curve = buildTimeCurve([segment(100)]);
   const window = {
     periodDays: 2,
-    epochPreviewBtjd: 99.5,
+    epochPreviewBtjd: 100,
     durationPreviewDays: 0.5,
   };
   assert.equal(projectTransitBands(curve, window, 0, curve.width)[0].xStart, 0);
@@ -122,7 +122,7 @@ test("invalid windows and unsafe cycle indices fail explicitly", () => {
   assert.throws(() =>
     projectTransitBands(
       curve,
-      { periodDays: 1, epochPreviewBtjd: 100, durationPreviewDays: 1 },
+      { periodDays: 1, epochPreviewBtjd: 100.5, durationPreviewDays: 1 },
       0,
       curve.width,
     ),

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import { loadAnalysis } from "./load-analysis";
+import { loadAnalysis, type AnalysisEntry } from "./load-analysis";
 
 type Snapshot = Awaited<ReturnType<typeof loadAnalysis>>;
 type State = {
@@ -11,7 +11,7 @@ type State = {
   bundleChanged: boolean;
 };
 
-export function useAnalysisData(ticId: string) {
+export function useAnalysisData(ticId: string, entry?: AnalysisEntry) {
   const [version, setVersion] = useState(0);
   const [state, setState] = useState<State>({
     ticId,
@@ -95,6 +95,7 @@ export function useAnalysisData(ticId: string) {
       },
       previous.current?.ticId === ticId ? previous.current.bundleId : undefined,
       claimBundleRecovery,
+      entry,
     )
       .then((data) => {
         if (!active()) return;
@@ -123,11 +124,12 @@ export function useAnalysisData(ticId: string) {
       ++sequence.current;
       controller.abort();
     };
-  }, [ticId, version, claimBundleRecovery]);
+  }, [ticId, version, claimBundleRecovery, entry]);
 
   const current = state.ticId === ticId ? state : null;
   return {
     context: current?.data?.context ?? null,
+    retryDraft: current?.data?.retryDraft ?? null,
     curve: current?.data?.curve ?? null,
     loading: current?.loading ?? true,
     error: current?.error ?? null,
