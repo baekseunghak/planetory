@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { observationFixtureResponse } from "./observation-fixtures.ts";
 import { periodogramFixtureResponse } from "./periodogram-fixtures.ts";
 import { historyFixtureResponse } from "./history-fixtures.ts";
+import { createPublicationFixture } from "./publication-fixtures.ts";
+import { starResultFixture } from "./star-result-fixtures.ts";
 import {
   ANALYSIS_FIXTURE_BUNDLE,
   analysisFixtureResponse,
@@ -29,6 +31,7 @@ export function fixturePlugin(observations = false): Plugin {
     name: "foundation-fixture",
     apply: "serve",
     configureServer(server) {
+      const publicationFixture = createPublicationFixture();
       server.middlewares.use("/api", async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
@@ -50,6 +53,21 @@ export function fixturePlugin(observations = false): Plugin {
           return;
         }
         const url = new URL(req.url ?? "/", "http://fixture.invalid");
+        const starResult = /^\/v1\/stars\/([^/]+)\/result$/.exec(url.pathname);
+        if (req.method === "GET" && starResult) {
+          if (starResult[1] === "259377024")
+            res.end(JSON.stringify(starResultFixture()));
+          else {
+            res.statusCode = 404;
+            res.end(
+              JSON.stringify({
+                code: "RESOURCE_NOT_FOUND",
+                message: "볼 수 있는 별 결과가 없습니다.",
+              }),
+            );
+          }
+          return;
+        }
         if (req.method === "GET" && url.pathname === "/v1/auth/csrf") {
           // 쓰기 요청마다 새로 받는 토큰. 고정값이며 실제 CSRF 방어가 아니다.
           res.end(
@@ -59,6 +77,21 @@ export function fixturePlugin(observations = false): Plugin {
             }),
           );
           return;
+        }
+        if (url.pathname.startsWith("/v1/public-analyses") || /^\/v1\/histories\/h-195[123](\/graph)?$/.test(url.pathname) ||
+            (url.pathname === "/v1/me/histories" && url.searchParams.get("candidateId")?.startsWith("c-195"))) {
+          let body: unknown;
+          if (req.method !== "GET") {
+            let raw = "";
+            for await (const chunk of req) {
+              raw += chunk;
+              if (raw.length > BODY_LIMIT) { res.statusCode = 413; res.end(); return; }
+            }
+            try { body = raw ? JSON.parse(raw) : undefined; }
+            catch { res.statusCode = 400; res.end(); return; }
+          }
+          const reply = publicationFixture(req.method ?? "GET", url, body);
+          if (reply) { res.statusCode = reply.status; res.end(JSON.stringify(reply.body)); return; }
         }
         // #190 기록 상세·그래프. 읽기만 하므로 본문을 받지 않는다.
         const history = historyFixtureResponse(url.pathname, url.searchParams);

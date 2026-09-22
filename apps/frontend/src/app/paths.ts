@@ -109,6 +109,12 @@ export const routeDefinitions = [
     owner: "백지웅",
   },
   {
+    key: "publicationBatch",
+    path: "/publication",
+    title: "별 분석 일괄 공개 검토",
+    owner: "백지웅",
+  },
+  {
     key: "publicAnalysis",
     path: "/public-analyses/:analysisId",
     title: "공개 분석",

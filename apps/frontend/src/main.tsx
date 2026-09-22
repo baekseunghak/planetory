@@ -14,9 +14,11 @@ import { HistoryDetailPage } from "./features/history/HistoryDetailPage";
 import { MyHistorySection } from "./features/my-lists/MyHistorySection";
 import { MyStarsSection } from "./features/my-lists/MyStarsSection";
 import { PublicAnalysisPage } from "./features/history/PublicAnalysisPage";
+import { PublicationPage } from "./features/publication/PublicationPage";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AnalysisPage } from "./features/analysis/AnalysisPage";
+import { StarResultPage } from "./features/analysis/StarResultPage";
 import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
@@ -79,8 +81,11 @@ async function start() {
     ...pages,
     settings: SettingsPage,
     analysis: AnalysisPage,
+    starResults: StarResultPage,
     historyDetail: HistoryDetailPage,
     publicAnalysis: PublicAnalysisPage,
+    publication: PublicationPage,
+    publicationBatch: PublicationPage,
   };
   if (import.meta.env.DEV && import.meta.env.VITE_SKY_DATA_FIXTURE === "true")
     pages.sky = (await import("../dev/SkyDataInspector")).SkyDataInspector;
