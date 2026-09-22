@@ -1,6 +1,7 @@
 // Synthetic DTO fixture: service-api-spec 12.2.1, policy 2026-09-22,
 // PersonalStatisticsService/StatisticsDtos at develop 02b734b9. No real account data.
 import type { Metric } from "../../src/features/statistics/contracts";
+import { comparisonFixture } from "./comparison";
 const count = (unit: string, value: number): Metric => ({
   unit,
   value,
@@ -127,9 +128,6 @@ export function personalStatisticsFixture(empty = false) {
         ? "별을 선택해 첫 탐사 기록을 남겨 보세요."
         : "최근 탐사 기록과 선택한 근거를 함께 살펴보세요.",
     },
-    comparison: {
-      status: "UNAVAILABLE",
-      unavailableReason: "AGGREGATE_NOT_READY",
-    },
+    comparison: comparisonFixture(true),
   };
 }
