@@ -1,42 +1,24 @@
 # DAG
 
-## TESS Sector 수집 → Raw → Bronze (`S15P21C206-252`)
-
-`tess_sector_download_raw_bronze`는 Sector 1부터 13까지 아래 순서를 직렬로 연결한다.
-
-2026-09-22 이전 release에서는 기존 단일 DAG와 신규 단계별 DAG 4개가 import 오류 없이 배포됐지만 모두 일시정지였다. 후속 release에서는 아래 Sector 14 검증을 시작했다. [Tailnet 접속·읽기 전용 계정 안내](../../../infra/distributed-system/README.md#airflow-db)를 따른다.
-
-```text
-Worker 5대 다운로드 완료 marker 검증
-  → HDFS Raw 적재·전수 감사
-  → Worker 로컬 FITS 안전 삭제
-  → Spark/YARN Bronze 변환·감사
-```
-
-Airflow는 순서·재시도·상태만 관리한다. 다운로드는 기존 ingestion systemd supervisor, Raw는 `tess_hdfs_runall.py`, Bronze는 `tess_bronze_ctl.py`를 그대로 사용한다. HDFS·YARN·네트워크 오류는 5분 간격으로 재시도하고, Bronze 데이터 계약 오류(exit 65)는 즉시 실패한다.
-
-다운로드 sensor는 Worker별 `planetory.ingestion-sector-complete.v1` marker의 Sector·Worker slot·source SHA-256·제품 수·바이트를 확인한다. marker가 없으면 이미 설치된 ingestion unit을 시작하고 60초 뒤 다시 확인한다. Raw task는 해당 Sector만 적재·감사하고 cleanup을 건너뛴다. 다음 cleanup task가 동일한 HDFS final을 재감사한 뒤 불변 upload plan에 포함된 FITS만 경로·크기·SHA-256 대조 후 삭제한다. 따라서 Raw 감사 실패나 복제 부족 상태에서는 로컬 파일을 지우지 않는다.
-
-Sector 13 cleanup 뒤 Raw coverage를, Sector 13 Bronze 뒤 Bronze coverage를 별도 확정한다. 모든 제어기는 final과 state를 먼저 재검증하므로 Scheduler나 호스트 재시작 뒤 동일 task를 다시 실행해도 이미 확정된 결과는 재사용한다.
-
-실행 전 다음 Airflow SSH Connection이 metadata DB에 준비되어야 한다. 키·암호는 DAG나 Git에 넣지 않는다.
-
-- `planetory_node_1`: `planetory-admin@10.20.1.10`
-- `planetory_worker_1` … `planetory_worker_5`: `planetory-admin@10.20.2.10` … `10.20.6.10`
-
-Node 1과 Worker에는 DAG Param이 가리키는 불변 ingestion/HDFS/Bronze release, systemd unit, HDFS 설정과 제한된 비대화형 sudo 권한이 미리 설치되어야 한다. 기본 Param은 현재 Sector 1~13 계보와 검증된 release를 가리키며 새 수집 run에서는 DAG trigger 시 값을 명시적으로 바꾼다. DAG 실행 중 package·image 다운로드나 운영자 PC·Tailscale 세션은 사용하지 않는다. 단, MAST 원천 다운로드 자체에는 인터넷 연결이 필요하다.
-
-오프라인 계약 검사는 저장소 루트에서 실행한다.
-
-```powershell
-python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"
-```
-
-현재 Node 1의 Airflow scheduler·metadata DB는 단일 장애 경계다. 호스트 복구 뒤에는 멱등 task가 이어지지만 Node 1 장애 중 무중단 전환은 보장하지 않으며, 필요하면 Airflow/HDFS/YARN HA를 별도 작업으로 도입한다.
-
 ## Sector 14~70 자동 발견·단계 재개 (Sector 14 제한 운영 검증 완료)
 
-위의 단일 DAG 설명은 **일시정지된 기존 1~13 구현**이다. 아래 4개 단계 DAG와 `tess_sector_discovery`·신규 admission은 운영 release `20260922T021406Z`에 배포했다. 2026-09-22 영속 상한 `tess_pipeline_max_sector=14`에서 Sector 14의 다운로드·Raw·로컬 삭제·Bronze 네 DAG가 모두 성공했다. 이후 `tess_pipeline_enabled=false`와 발견 DAG pause로 신규 허가를 drain했고 활성 단계 run은 0건이다. Jira `S15P21C206-252`의 기존 단일 DAG·1~13 완료 조건과 확장 범위는 정합화가 필요하다.
+`tess_sector_discovery`와 다운로드·Raw·로컬 삭제·Bronze 단계 DAG 4개가 현행 구성이다. 과거 Sector 1~13 단일 DAG `tess_sector_download_raw_bronze`는 운영에서 사용하지 않아 제거했다. [Tailnet 접속·읽기 전용 계정 안내](../../../infra/distributed-system/README.md#airflow-db)를 따른다.
+
+화면에는 `dag_display_name`으로 ID 옆에 한국어 역할을 표시한다. 자동 trigger와 실행 이력은 변경하지 않은 `dag_id`를 계속 사용한다.
+
+| DAG ID | 화면 표시 이름 |
+| --- | --- |
+| `tess_sector_discovery` | `tess_sector_discovery · 새 섹터 발견·재개` |
+| `tess_sector_download` | `tess_sector_download · TESS 다운로드·검증` |
+| `tess_sector_raw` | `tess_sector_raw · HDFS Raw 적재·검증` |
+| `tess_sector_cleanup` | `tess_sector_cleanup · 로컬 원본 안전 삭제` |
+| `tess_sector_bronze` | `tess_sector_bronze · Bronze 변환·검증` |
+
+2026-09-22 Airflow release `20260922T135740Z`에서 다섯 표시 이름과 짧은 설명을 배포했다. 운영 metadata의 표시 이름·설명, import 오류 0건, UI health 200을 확인했다. DAG ID와 pause 상태는 유지하고 데이터 작업은 시작하지 않았다.
+
+2026-09-22 Airflow release `20260922T134419Z`에서 과거 DAG 파일과 실행 이력 0건의 비활성 metadata 행을 제거했다. 새 이미지의 DAG import와 현행 5개 DAG, UI health를 확인했으며 이전 이미지는 롤백용으로 보존한다.
+
+단계별 DAG와 신규 admission은 운영 release `20260922T021406Z`에 배포했다. 2026-09-22 영속 상한 `tess_pipeline_max_sector=14`에서 Sector 14의 다운로드·Raw·로컬 삭제·Bronze 네 DAG가 모두 성공했다. 이후 `tess_pipeline_enabled=false`와 발견 DAG pause로 신규 허가를 drain했고 활성 단계 run은 0건이다. Jira `S15P21C206-252`의 기존 단일 DAG·1~13 완료 조건과 확장 범위는 정합화가 필요하다.
 
 | 단계 DAG | 시작 게이트 | 완료 증거 | 실행기 |
 | --- | --- | --- | --- |

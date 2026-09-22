@@ -59,6 +59,7 @@ bag = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
 required = {"tess_sector_discovery", "tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze"}
 assert not bag.import_errors, bag.import_errors
 assert required <= set(bag.dags), required - set(bag.dags)
+assert "tess_sector_download_raw_bronze" not in bag.dags
 assert all(bag.dags[dag_id].is_paused_upon_creation for dag_id in required)
 print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
 '
@@ -145,7 +146,7 @@ compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose
 "${compose[@]}" --profile setup run --rm airflow-init
 "${compose[@]}" up -d airflow-scheduler airflow-webserver
 "${compose[@]}" exec -T airflow-scheduler airflow dags list-import-errors
-"${compose[@]}" exec -T airflow-scheduler airflow dags list | grep -F tess_sector_download_raw_bronze
+"${compose[@]}" exec -T airflow-scheduler airflow dags list | grep -F tess_sector_discovery
 bash "$0" --viewer-password
 for attempt in $(seq 1 60); do
   if curl --fail --silent --output /dev/null http://127.0.0.1:8081/health; then break; fi

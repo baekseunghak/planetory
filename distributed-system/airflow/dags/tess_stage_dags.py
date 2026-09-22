@@ -124,7 +124,12 @@ STAGE_ARGS = dict(
 )
 
 
-@dag(dag_id="tess_sector_download", **STAGE_ARGS)
+@dag(
+    dag_id="tess_sector_download",
+    dag_display_name="tess_sector_download · TESS 다운로드·검증",
+    description="섹터별 Worker 다운로드 완료 증거를 확인한다.",
+    **STAGE_ARGS,
+)
 def download_dag():
     @task.sensor(task_id="check_download", poke_interval=60, timeout=14 * 24 * 60 * 60, mode="reschedule")
     def check_download() -> PokeReturnValue:
@@ -135,7 +140,12 @@ def download_dag():
     check_download() >> trigger_next("tess_sector_raw", "check_download")
 
 
-@dag(dag_id="tess_sector_raw", **STAGE_ARGS)
+@dag(
+    dag_id="tess_sector_raw",
+    dag_display_name="tess_sector_raw · HDFS Raw 적재·검증",
+    description="다운로드가 완료된 섹터를 HDFS Raw에 적재하고 검증한다.",
+    **STAGE_ARGS,
+)
 def raw_dag():
     @task(task_id="commit_raw", retries=12, retry_delay=timedelta(minutes=5))
     def commit_raw() -> dict:
@@ -147,7 +157,12 @@ def raw_dag():
     commit_raw() >> trigger_next("tess_sector_cleanup", "commit_raw")
 
 
-@dag(dag_id="tess_sector_cleanup", **STAGE_ARGS)
+@dag(
+    dag_id="tess_sector_cleanup",
+    dag_display_name="tess_sector_cleanup · 로컬 원본 안전 삭제",
+    description="Raw 정합성 재검증 후 해당 섹터의 로컬 FITS만 삭제한다.",
+    **STAGE_ARGS,
+)
 def cleanup_dag():
     @task(task_id="cleanup_local", retries=12, retry_delay=timedelta(minutes=5))
     def cleanup_local() -> dict:
@@ -158,7 +173,12 @@ def cleanup_dag():
     cleanup_local() >> trigger_next("tess_sector_bronze", "cleanup_local")
 
 
-@dag(dag_id="tess_sector_bronze", **STAGE_ARGS)
+@dag(
+    dag_id="tess_sector_bronze",
+    dag_display_name="tess_sector_bronze · Bronze 변환·검증",
+    description="HDFS Raw를 Spark로 Bronze로 변환하고 결과를 검증한다.",
+    **STAGE_ARGS,
+)
 def bronze_dag():
     @task(task_id="commit_bronze", retries=12, retry_delay=timedelta(minutes=5))
     def commit_bronze() -> None:

@@ -73,6 +73,8 @@ def stage_attempt(dag_id: str, prefix: str) -> int | None:
 
 @dag(
     dag_id="tess_sector_discovery",
+    dag_display_name="tess_sector_discovery · 새 섹터 발견·재개",
+    description="게시된 TESS 섹터와 완료 증거를 확인해 다음 단계를 시작한다.",
     schedule=timedelta(minutes=5),
     start_date=datetime(2026, 9, 22, tzinfo=timezone.utc),
     catchup=False,

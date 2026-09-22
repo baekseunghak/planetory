@@ -72,15 +72,8 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing Sector 2 lineage"):
             sector_inputs(params, 2)
 
-    def test_dag_keeps_the_required_sector_order_and_terminal_exit(self):
-        source = (DAGS / "tess_sector_pipeline.py").read_text(encoding="utf-8")
-        self.assertIn("for sector in range(1, 14):", source)
-        self.assertIn('previous >> downloaded', source)
-        self.assertIn('"runall", "--config", config,', source)
-        self.assertIn('"cleanup-sector", "--config", config,', source)
-        self.assertIn('task_id=f"cleanup_local_sector_{sector:02d}"', source)
-        self.assertIn('"coverage", "--release-dir", release,', source)
-        self.assertIn("terminal_exit=65", source)
+    def test_legacy_sector_1_to_13_dag_is_retired(self):
+        self.assertFalse((DAGS / "tess_sector_pipeline.py").exists())
 
     def test_stage_lineage_and_four_paused_dags(self):
         conf = {
