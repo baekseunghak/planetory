@@ -116,6 +116,70 @@ const result = (patch: Record<string, unknown> = {}) => ({
 const expected = { ticId: TIC, requestId: REQUEST_ID };
 const decode = (patch?: Record<string, unknown>, status = 201) =>
   decodeSubmissionReceipt(result(patch), expected, status);
+
+for (const state of ["PUBLISHED", "HIDDEN"] as const) {
+  test(`lookup accepts current ${state} but POST replay keeps its original contract`, () => {
+    const body = result({ publication: { state, publicAnalysisId: "pa-9" } });
+    const read = decodeSubmissionReceipt(body, expected, 200, "lookup");
+    assert.equal(read.explanation.publication.state, state);
+    assert.throws(
+      () => decodeSubmissionReceipt(body, expected, 200),
+      /publication.state/,
+    );
+  });
+}
+test("lookup separates current progress from submitted curve and still checks identity", () => {
+  const original = result();
+  const body = {
+    ...original,
+    progress: {
+      ...original.progress,
+      currentCurveStep: 2,
+      matchedCandidateIds: ["c-401", "c-402"],
+    },
+  };
+  const read = decodeSubmissionReceipt(body, expected, 200, "lookup");
+  assert.equal(read.curveContext.curveStep, 1);
+  assert.equal(read.progress.currentCurveStep, 2);
+  assert.throws(
+    () => decodeSubmissionReceipt(body, expected, 200),
+    /progress.currentCurveStep/,
+  );
+  assert.throws(
+    () => decodeSubmissionReceipt(body, expected, 201, "lookup"),
+    /status/,
+  );
+  assert.throws(
+    () =>
+      decodeSubmissionReceipt(
+        { ...body, ticId: "123" },
+        expected,
+        200,
+        "lookup",
+      ),
+    /ticId/,
+  );
+  assert.throws(
+    () =>
+      decodeSubmissionReceipt(
+        { ...body, requestId: "other" },
+        expected,
+        200,
+        "lookup",
+      ),
+    /requestId/,
+  );
+  assert.throws(
+    () =>
+      decodeSubmissionReceipt(
+        { ...body, bundleId: "other" },
+        expected,
+        200,
+        "lookup",
+      ),
+    /bundleId/,
+  );
+});
 /** 매칭 성공이 아닌 결과. 신호·통계가 없고 배수 정정도 없다(6.4절). */
 const unmatched = (patch: Record<string, unknown>) => ({
   match: { status: "not_matched", candidateId: null, harmonicMultiplier: null },

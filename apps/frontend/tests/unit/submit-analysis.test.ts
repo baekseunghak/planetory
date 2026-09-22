@@ -108,6 +108,38 @@ function harness(steps: Step[]) {
 }
 const lost = (status = 0, code = "TIMEOUT") =>
   new ApiError(status, code, code, [], null, null, true);
+
+for (const state of ["PUBLISHED", "HIDDEN"] as const) {
+  test(`automatic and manual recovery accept current ${state} and later progress without POST`, async () => {
+    const original = receiptBody();
+    const body = {
+      ...original,
+      publication: { state, publicAnalysisId: "pa-9" },
+      progress: {
+        ...original.progress,
+        currentCurveStep: 1,
+        matchedCandidateIds: ["c-401"],
+      },
+    };
+    for (const automatic of [true, false]) {
+      const stub = harness([
+        ...(automatic ? [{ error: lost() }] : []),
+        { status: 200, body },
+      ]);
+      const recovered = await (automatic ? stub.run() : stub.check());
+      assert.equal(recovered.state, "accepted");
+      if (recovered.state !== "accepted") throw new Error("expected accepted");
+      assert.equal(recovered.receipt.requestId, REQUEST_ID);
+      assert.equal(recovered.receipt.curveContext.curveStep, 0);
+      assert.equal(recovered.receipt.progress.currentCurveStep, 1);
+      assert.equal(recovered.receipt.explanation.publication.state, state);
+      assert.deepEqual(
+        stub.calls.map((c) => c.method),
+        automatic ? ["POST", "GET"] : ["GET"],
+      );
+    }
+  });
+}
 const refused = (
   status: number,
   code: string,

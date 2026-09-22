@@ -619,7 +619,7 @@ Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 �
 제공 해상도 판정 연결과 완료된 36곡선 FITS 회귀는 아래 절과 벤치마크 README를 따른다.
 기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
 Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 완료를 뜻하지 않는다.
-114 인계의 Java 설명과 새 V20 DB COMMENT migration을 준비했다. 기존 V1은 수정하지 않았고 DB 적용은 하지 않았다.
+114 인계의 Java 설명과 새 V22 DB COMMENT migration을 준비했다. 기존 V1은 수정하지 않았고 DB 적용은 하지 않았다.
 
 ## 제공 해상도 판정 (123)
 

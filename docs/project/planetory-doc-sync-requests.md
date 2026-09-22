@@ -105,7 +105,7 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 - `FoldedSnapshot`의 기존 bin 중심 결과와 같은 입력으로 대조하고, 관측 창·빈 bin·첫/마지막 점 및
   제출 매칭 경계가 서버/화면에서 일치하는 회귀 테스트를 추가한다. 10분 bin의 기존 5분 차이를 확인한다.
 - `start_btjd` DB COMMENT를 '첫 bin 시작 시각'으로 정정한다. V1은 수정하지 않고 신규 migration으로 처리한다.
-  V20 산포 COMMENT의 적용 검증도 함께 수행한다. 병합 직전 migration 번호 중복을 재확인한다.
+  V22 산포 COMMENT의 적용 검증도 함께 수행한다. 병합 직전 migration 번호 중복을 재확인한다.
 - 완료 조건: 소비자 코드·API 설명·DB COMMENT 정합화와 경계 회귀·DB 적용 검증, 담당 리뷰를 기록한다.
 
 리뷰어는 `prepare_discoverability`를 진입점으로 고정하는 조건으로 123 규칙의 후속 적용에 동의했다.

@@ -116,7 +116,7 @@ scope는 인가 요청에 보내지 않는다. 개인정보 동의는 개발자�
 설정된 제공자가 없는 경우 `/login`은 503 안내 페이지를 반환한다.
 API 미인증·만료는 `401 AUTH_REQUIRED`, 권한 부족·CSRF 검증 실패는 `403 FORBIDDEN`이다.
 OAuth 콜백 검증 실패도 토큰이나 제공자 오류 원문 없이 401 JSON으로 응답한다.
-로그아웃은 활성 세션이 있으면 CSRF가 필요하다. 이미 세션이 없는 반복 로그아웃은 CSRF 없이 204다.
+로그아웃은 로그인 여부와 관계없이 현재 세션의 유효한 CSRF 토큰이 필요하다(234, 사용자 승인 2026-09-22). 토큰 없음·오류·이전 세션 토큰은 403이다. 반복 요청은 새 CSRF 토큰 조회 후 보내면 204다. 만료 경계와 재시도는 [서비스 API 3.3절](service-api-spec.md#33-로그아웃)을 따른다.
 
 브라우저는 로그인 성공 후 CSRF를 다시 조회하고 변경 요청에 전달한다.
 Spring의 기본 XOR/BREACH 보호 토큰을 응답 그대로 사용하며, 직접 디코딩하지 않는다.
@@ -152,7 +152,7 @@ if (response.ok) {
 - `infra/service/compose.yaml`에 제공자 환경변수 전달을 추가했다. 서버 `.env` 또는 보호 변수에 값을 설정한다.
 - Compose의 프로필 선택 변수는 `OAUTH_PROFILES=oauth-google,oauth-ssafy`다. 컨테이너 안에서는 `SPRING_PROFILES_INCLUDE`로 전달된다.
 - 세션을 Redis로 옮기면 `HttpSessionCsrfTokenRepository`·`HttpSessionOAuth2AuthorizationRequestRepository`·`HttpSessionOAuth2AuthorizedClientRepository`·`HttpSessionSecurityContextRepository`가 **함께** 이동한다. 직렬화가 실제로 되는지는 단위 테스트가 아니라 실제 로그인·콜백·로그아웃으로 확인한다(`S15P21C206-237`).
-- 다중 인스턴스는 별개 문제다. 그때는 `SecurityConfig`의 로그아웃 CSRF 면제 수정(`S15P21C206-234`)이 선행 조건이며 남은 선행 항목은 [EC2 서비스 진입·장애 전환 경계](../../../docs/architecture/ec2-service-entry-failover.md) 6절을 따른다. 면제 조건이 세션 부재 기준이라 저장소 변경과는 무관하다.
+- 다중 인스턴스는 별개 문제다. `SecurityConfig`의 세션 부재에 따른 로그아웃 CSRF 면제는 234에서 제거했다. 남은 선행 항목은 [EC2 서비스 진입·장애 전환 경계](../../../docs/architecture/ec2-service-entry-failover.md) 6절을 따른다.
 
 ## 5. 코드 위치와 검증
 

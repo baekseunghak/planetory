@@ -228,7 +228,7 @@ export async function submitAnalysis(
     }
     return {
       state: "accepted",
-      receipt: decodeSubmissionReceipt(value, expected, status),
+      receipt: decodeSubmissionReceipt(value, expected, status, "lookup"),
       recovered: true,
       currentBundleId: polledBundleId,
     };
@@ -289,7 +289,12 @@ export async function checkSubmission(options: {
     });
     return {
       state: "accepted",
-      receipt: decodeSubmissionReceipt(value, { ticId, requestId }, status),
+      receipt: decodeSubmissionReceipt(
+        value,
+        { ticId, requestId },
+        status,
+        "lookup",
+      ),
       recovered: true,
       currentBundleId,
     };

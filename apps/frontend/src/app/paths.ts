@@ -1,4 +1,34 @@
 export const routeDefinitions = [
+  {
+    key: "publicSky",
+    path: "/members/:memberId/sky",
+    title: "공개 은하",
+    owner: "하서진",
+  },
+  {
+    key: "withdrawal",
+    path: "/settings/withdrawal",
+    title: "계정 탈퇴",
+    owner: "하서진",
+  },
+  {
+    key: "notifications",
+    path: "/notifications",
+    title: "알림",
+    owner: "하서진",
+  },
+  {
+    key: "following",
+    path: "/me/following",
+    title: "나의 연결",
+    owner: "하서진",
+  },
+  {
+    key: "followingFeed",
+    path: "/community/following",
+    title: "팔로잉",
+    owner: "하서진",
+  },
   { key: "sky", path: "/sky", title: "별지도", owner: "하서진" },
   {
     key: "profile",
@@ -106,7 +136,7 @@ export function safeReturnTo(value: unknown, fallback = "/sky"): string {
     const url = new URL(value, "https://planetory.invalid");
     if (
       url.origin !== "https://planetory.invalid" ||
-      !/^\/(sky|me|settings|members|community|signal-threads|posts|comments|analysis|results|submissions|history|publication|public-analyses|statistics)(\/|$)/.test(
+      !/^\/(sky|me|settings|notifications|members|community|signal-threads|posts|comments|analysis|results|submissions|history|publication|public-analyses|statistics)(\/|$)/.test(
         url.pathname,
       )
     )

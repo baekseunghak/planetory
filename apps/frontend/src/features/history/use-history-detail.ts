@@ -13,7 +13,7 @@ import {
 import type { GraphMode } from "./HistoryGraph.tsx";
 
 // #190 기록 상세 조회. 상세와 그래프는 **따로** 온다(8.2·8.3). 모드를 바꿀
-// 때 상세를 다시 부르지 않는다 — 불변 값이라 바뀌지 않는다.
+// 때 상세를 다시 부르지 않는다. 일시 오류 재시도는 상세만 다시 읽는다.
 
 export type DetailState =
   | { phase: "loading" }
@@ -37,6 +37,9 @@ export function useHistoryDetail(historyId: string) {
   const [detail, setDetail] = useState<DetailState>({ phase: "loading" });
   const [mode, setMode] = useState<GraphMode>("CURRENT");
   const [graph, setGraph] = useState<GraphState>({ phase: "loading" });
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const [snapshotMissing, setSnapshotMissing] = useState(false);
+  const graphRequest = useRef<AbortController | null>(null);
   // 모드를 바꾸면 앞선 조회가 늦게 돌아올 수 있다. 세대가 다르면 버린다.
   const generation = useRef(0);
 
@@ -79,14 +82,16 @@ export function useHistoryDetail(historyId: string) {
       }
     })();
     return () => controller.abort();
-  }, [historyId]);
+  }, [historyId, detailAttempt]);
 
   const ticId = detail.phase === "ready" ? detail.detail.ticId : null;
 
   const loadGraph = useCallback(
     (next: GraphMode) => {
       if (!ticId) return () => {};
+      graphRequest.current?.abort();
       const controller = new AbortController();
+      graphRequest.current = controller;
       const mine = ++generation.current;
       setGraph({ phase: "loading" });
       void (async () => {
@@ -96,9 +101,12 @@ export function useHistoryDetail(historyId: string) {
             { signal: controller.signal },
           );
           if (controller.signal.aborted || mine !== generation.current) return;
+          const view = readHistoryGraphView(body, historyId, ticId, next);
+          if (next === "SUBMITTED" && view.dto.snapshot === null)
+            setSnapshotMissing(true);
           setGraph({
             phase: "ready",
-            view: readHistoryGraphView(body, historyId, ticId, next),
+            view,
           });
         } catch (error) {
           if (controller.signal.aborted || mine !== generation.current) return;
@@ -125,12 +133,15 @@ export function useHistoryDetail(historyId: string) {
   );
 
   useEffect(() => loadGraph(mode), [loadGraph, mode]);
+  useEffect(() => () => graphRequest.current?.abort(), []);
 
   return {
     detail,
     graph,
     mode,
     setMode,
+    snapshotMissing,
+    retryDetail: () => setDetailAttempt((attempt) => attempt + 1),
     retryGraph: () => loadGraph(mode),
   };
 }

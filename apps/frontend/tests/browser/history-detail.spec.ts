@@ -101,12 +101,18 @@ test("a record without its first response says so instead of guessing", async ({
   await expect(page.getByRole("alert")).toContainText(
     "이 화면에서는 그래프도 볼 수 없습니다",
   );
+  await expect(
+    page.getByRole("button", { name: "기록 다시 불러오기" }),
+  ).toHaveCount(0);
 });
 
 test("a record that is not there is not invented", async ({ page }) => {
   await page.goto("/history/h-000");
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator(".history-band")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "기록 다시 불러오기" }),
+  ).toHaveCount(0);
 });
 
 test("a missing snapshot is not described as the array kept as it was", async ({
@@ -128,4 +134,46 @@ test("a missing snapshot is not described as the array kept as it was", async ({
   const note = page.locator(".history-graph-band .submission-note");
   await expect(note).toContainText("당시 잔차 조합을 재현할 수 없습니다");
   await expect(note).not.toContainText("아래 배열은 당시 그대로입니다");
+  const submitted = page.getByRole("button", { name: "제출 당시 기준" });
+  await expect(submitted).toBeDisabled();
+  await page.getByRole("button", { name: "현재 판 기준" }).click();
+  await expect(submitted).toBeDisabled();
+  await expect(page.locator("#history-snapshot-missing")).toBeVisible();
+  // SPA 안에서 다른 기록으로 이동해도 앞 기록의 모드/없음 관찰이 남지 않는다.
+  await page.evaluate(() => {
+    history.pushState(null, "", "/history/h-501");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.locator(".history-id")).toHaveText("분석 기록 h-501");
+  await expect(submitted).toBeEnabled();
+  await submitted.click();
+  await expect(page.locator(".history-curve svg")).toBeVisible();
+});
+
+test("temporary detail failure retries without a reload and then loads its graph", async ({
+  page,
+}) => {
+  let attempts = 0;
+  let unavailable = true;
+  await page.route("**/api/v1/histories/h-501", async (route) => {
+    attempts += 1;
+    if (unavailable)
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "INTERNAL_ERROR",
+          message: "잠시 후 다시 시도해 주세요.",
+        }),
+      });
+    return route.continue();
+  });
+  await page.goto("/history/h-501");
+  await expect(page.locator(".history-detail [role=alert]")).toBeVisible();
+  const beforeRetry = attempts;
+  unavailable = false;
+  await page.getByRole("button", { name: "기록 다시 불러오기" }).click();
+  await expect(page.locator(".history-curve svg")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "그때 낸 것" })).toBeVisible();
+  expect(attempts).toBe(beforeRetry + 1);
 });
