@@ -64,7 +64,7 @@ public final class SubmissionMatching {
     }
 
     /** 같은 곡선 문맥의 봉우리(5.4절). 미세 조정 범위와 추천 duration만 쓴다. */
-    public record Peak(int gridIndex, double fineTuneMinDays, double fineTuneMaxDays, double suggestedDurationHours) {
+    public record Peak(int gridIndex, double fineTuneMinDays, double fineTuneMaxDays, Double suggestedDurationHours) {
     }
 
     /** 비교 대상 후보. {@link #candidatesToCompare}가 거른 뒤의 값이다. */
@@ -229,10 +229,15 @@ public final class SubmissionMatching {
             if (!(period >= peak.fineTuneMinDays() && period <= peak.fineTuneMaxDays())) {
                 return Validation.rejected("selection.sourcePeakGridIndex", Reason.OUTSIDE_FINE_TUNE);
             }
+            // 제안 duration은 판이 주기별 BLS 값을 실을 때만 있다. 모르면 상한을 걸지 않는다 —
+            // 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 폭 상한과 최소 창은
+            // 그대로 적용된다(S15P21C206-141, 미결 5 후속).
             suggested = peak.suggestedDurationHours();
-            durationLimitHours = suggested * rules.maxDurationMultipleOfSuggested();
-            if (width * period * HOURS_PER_DAY > durationLimitHours) {
-                return Validation.rejected("selection.phaseEnd", Reason.DURATION_LIMIT);
+            if (suggested != null) {
+                durationLimitHours = suggested * rules.maxDurationMultipleOfSuggested();
+                if (width * period * HOURS_PER_DAY > durationLimitHours) {
+                    return Validation.rejected("selection.phaseEnd", Reason.DURATION_LIMIT);
+                }
             }
         }
         if (!rules.allowEmptyPhaseSpan() && !spanHasObservedPoint(observation, period, phaseStart, phaseEnd)) {

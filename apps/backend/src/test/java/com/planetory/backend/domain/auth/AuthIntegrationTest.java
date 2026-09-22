@@ -738,12 +738,12 @@ class AuthIntegrationTest {
             var title = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false, null));
+                        new PostService.PatchCommand("동시 제목", true, null, false, null, false, null, false, null, null));
             });
             var body = executor.submit(() -> {
                 start.await();
                 return posts.patch(ownerId, postId,
-                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false, null));
+                        new PostService.PatchCommand(null, false, "동시 본문", true, null, false, null, false, null, null));
             });
             start.countDown();
             title.get(20, TimeUnit.SECONDS);

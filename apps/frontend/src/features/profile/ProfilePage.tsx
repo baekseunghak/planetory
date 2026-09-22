@@ -1,5 +1,5 @@
-import { useCallback, useContext, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { useCallback, useContext } from "react";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -33,10 +33,24 @@ export function MemberProfilePage() {
 }
 function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   const { member } = useSession(),
-    slots = useContext(ProfileSlots),
-    [section, setSection] = useState<"summary" | keyof ProfileSlotComponents>(
-      "summary",
-    );
+    slots = useContext(ProfileSlots);
+  // 어느 칸을 보고 있었는지를 주소에 둔다(#196). 지역 상태로 두면 기록
+  // 상세에 갔다 돌아왔을 때 늘 「탐사 요약」으로 되돌아간다.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("section") ?? "";
+  const section = (
+    ["stars", "history", "statistics"].includes(requested)
+      ? requested
+      : "summary"
+  ) as "summary" | keyof ProfileSlotComponents;
+  const setSection = (next: string) => {
+    const copy = new URLSearchParams(params);
+    if (next === "summary") copy.delete("section");
+    else copy.set("section", next);
+    // 칸을 바꾸는 것은 새 자리가 아니라 같은 화면의 다른 면이다. 뒤로 가기가
+    // 칸 전환마다 걸리지 않게 현재 주소를 바꾼다.
+    setParams(copy, { replace: true });
+  };
   const path = own ? "/v1/me" : `/v1/members/${encodeURIComponent(memberId)}`;
   const load = useCallback(
     async (signal: AbortSignal) =>

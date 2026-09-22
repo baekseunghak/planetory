@@ -267,3 +267,20 @@ domain/<도메인>/  controller · dto(request/response) · entity · repository
 `V16__post_reaction_app_grants.sql`(163)은 기존 `post_reactions`에 `planetory_app`의 SELECT·INSERT·UPDATE·DELETE만 부여하고 TRUNCATE는 금지한다. NONE은 관계 행의 삭제이므로 DELETE가 필요하다. IDENTITY 시퀀스의 사용 권한은 기존 V11을 재사용하며 다른 테이블 권한·스키마는 변경하지 않는다.
 
 V15 다음에 적용한다. `MemberCommunityPermissionTest`는 V12 → V15의 3건, V15 → V16의 1건 적용·validate·재실행 0건과 실제 앱 계정의 생성·변경·삭제·TRUNCATE 거절을 검증한다. `PostReactionTest`는 빈 일회용 DB에 전체 마이그레이션을 적용하고 실제 JPA 앱 역할 경로도 검증한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다.
+
+
+<a id="v17-출처-관계-권한"></a>
+
+### V18 출처 관계 권한
+
+`V18__source_link_app_grants.sql`(167)은 V1 `post_source_links`에 `planetory_app`의 SELECT·INSERT·DELETE와 IDENTITY 시퀀스 USAGE·SELECT만 부여한다. 배열 교체는 부모 잠금 아래 DELETE·INSERT로 수행하므로 UPDATE·TRUNCATE는 허용하지 않는다. 테이블·열·제약은 변경하지 않는다.
+
+145번의 `V17__submission_detail_target.sql`과 번호가 겹쳐, develop 미병합인 출처 권한 파일을 V18로 옮겼다. V17 제출 상세 마이그레이션을 먼저 병합·적용하고 V18을 뒤에 적용한다. 번호 충돌을 피하려고 out-of-order나 repair를 켜지 않는다. 기존 V17 출처 파일을 적용한 일회용 검증 DB는 새로 만들며 공유·운영 DB 이력은 수정하지 않는다. `MemberCommunityPermissionTest`는 V16→V18 출처 권한 1건·validate·재실행 0건, 실제 앱 역할의 생성·삭제와 권한 경계를 검증한다. `SourceCardTest`는 같은 역할로 실제 서비스 저장·조회·교체를 실행한다. 이번 검증은 일회용 PostgreSQL에만 적용하며 공유·운영 DB 적용은 별도다.
+
+### V19 공식 검색 본문
+
+`V19__official_search_summary.sql`(169)은 공개 후보 네 수치를 공식 posts.body에 투영하는 생성·갱신 트리거와 기존 본문 채움을 추가한다. 테이블·열·인덱스·역할 권한을 추가하지 않는다. 숫자·템플릿·동시성·기존 값 처리 정본은 [검색 본문 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다. SECURITY DEFINER 함수는 신뢰 스키마를 명시하고 PUBLIC 실행을 금지한다. 후보 변경 실패 시 본문 변경도 롤백한다.
+
+V18 다음으로 적용하며 병합 시 번호 충돌을 다시 확인한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다. 기존 공식 본문 전체에 대한 UPDATE가 발생하므로 적용 전 대상 건수·잠금 시간을 확인하고 별도 승인 후 실행한다.
+
+169 리뷰 보완에서 develop 미병합 V19에 후보 수치 변경의 격리 수준 검사를 추가했다. 적용 계약은 [검색 본문 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다. 수정 전 V19를 적용한 일회용 검증 DB는 새로 만들어 검증하며 checksum을 repair로 우회하지 않는다. 영속 DB에 이전 V19를 적용한 이력이 있다면 파일 재적용 대신 별도 후속 마이그레이션이 필요하므로 적용 전에 이력을 확인한다.
