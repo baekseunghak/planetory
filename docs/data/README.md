@@ -29,3 +29,5 @@
 245 구간 마스크의 실제 근거와 검증은 [관측 구간 마스킹](../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)을 참조한다.
 
 115 제공 해상도 판정의 설계·실행·승인 경계는 [discoverable 벤치마크](tess-discoverability-benchmark.md)를 참조한다. 현재 9별 실측·검산 완료, 규칙 승인 전이다.
+
+124 운영 커널의 입력·출력과 검증 한계는 [외부 스냅샷·후보 조인 구현](tess-external-catalog-implementation.md)을 참조한다. 122 산출물의 후보 ID·실제 관측 시각 연결 회귀와 검산을 완료했으며 리뷰 대기 중이다. 운영 DB ID 검증은 포함하지 않으며 미확인 외부 시간 척도는 보류한다.
