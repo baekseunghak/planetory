@@ -1,0 +1,51 @@
+.first-visit-guide {
+  padding: 12px 16px;
+  margin-block: 12px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  max-width: 60rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.first-visit-guide p {
+  margin: 0 0 8px;
+}
+.first-visit-guide button {
+  min-height: 44px;
+}
+.first-visit-guide button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.sky-page-container:has(> .first-visit-guide) {
+  position: relative;
+}
+.sky-page-container > .first-visit-guide {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  box-sizing: border-box;
+  max-height: calc(100% - 116px);
+  overflow-y: auto;
+  margin: 0;
+  background: #060a10;
+  color: #eef2f7;
+}
+.analysis-step-row:has(> .first-visit-guide) {
+  flex-wrap: wrap;
+}
+.analysis-step-row > .first-visit-guide {
+  flex-basis: 100%;
+}
+.onboarding-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

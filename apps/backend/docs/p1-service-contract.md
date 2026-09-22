@@ -48,6 +48,8 @@
 
 프론트 `/notifications`는 헤더 종 아이콘으로 진입한다. 주 메뉴에 중복 항목을 추가하지 않는다. 제공자는174/175이며 실제 인수는244 P1-220이다.
 
+174는 [알림 정책 F15](../../../docs/development/service-backend/community.md#notification-policy)를 작성하고 175가 제공자를 구현한다. 아래는 기존 FE 소비 계약이며, 사건별 수신 범위·보관기간은 F15의 승인 상태를 따른다. 150의 개인 재개 저장만으로 현재 계약이 제공되거나 별 구독 공통 사건까지 완성된 것은 아니다. AI·외부 상태 변경은 현재 5종 파서에 없으므로 새 종류를 보내거나 ACHIEVEMENT로 합치기 전에 F15 Q4를 합의한다.
+
 | 메서드·경로 | 요청·응답 |
 |---|---|
 | GET `/api/v1/me/notifications?size=20&cursor=...&unreadOnly=false` | `{items:[Notice],nextCursor:null,hasNext:false,readBoundary:"opaque"}` |
@@ -61,7 +63,7 @@
 ### 3.1 현재 권한과 목적지
 
 - 알림 자체는 본인만 조회/변경한다. 타인 ID는404, 인증은401, CSRF 오류는기존403이다. false/null 읽음 변경은400이다. 읽음은 true로만 진행하며 반복 PATCH는 같은 결과다.
-- 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 숨김·삭제·첨부 철회 후 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
+- 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 알림의 대상 자료가 숨김·삭제·첨부 철회로 접근 불가하면 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 첨부/출처만 철회된 경우 유효한 부모 글의 공개 접근까지 차단하지 않는다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
 - 클릭 시 target을 새로 조회한다. 접근 불가면200 `{notificationId:"n1",available:false,target:null}`이며 프론트는 이동하지 않는다. 허용되어도 목적지 API가 권한을 다시 검사한다. 이 조회가 권한 토큰이나 보호 우회 수단은 아니다.
 - target은 URL 문자열이 아닌 고정 DTO다. `POST/postId`, `THREAD/threadId`, `STAR/ticId`, `CHALLENGE/roundId` 중 하나다. POST/THREAD에 commentId가 있으면 서버가 해당 댓글이 있는 페이지의 discussionCursor도 제공하고 프론트는 토론 영역으로 이동한다. 외부 URL/임의 경로는 거절한다.
 - STAR 목적지는 본인이 해금하여 개인 상세를 볼 수 있는 TIC에만 사용한다. 팔로우한 미해금 별 소식은 공개 게시글/스레드 목적지를 사용한다. 삭제 댓글/종료 회차/권한 철회를 검증한다. 종료 회차는 현재 퀘스트를 보여주되 회차 변경을 안내하고 자동으로 분석을 시작하지 않는다.
@@ -85,6 +87,8 @@
 - 설정은 **이후 생성하는 알림**에 적용한다. 이미 생성한 알림/읽음 상태/팔로우 관계는 삭제하지 않는다. 수신 차단을 풀어도 과거 차단 기간의 알림을 소급 생성하지 않는다.
 - 응답 유실 시 쓰기를 자동 재전송하지 않고 GET으로 확인한다. 실제 계정별 유지·알림 생성과의 경합은175/244 P1-221에서 검증한다.
 
+현재 DB 기본은 `follow:false`이며 comment 키가 없어 위의 프론트 기본과 다르다. 기존 false 보존·누락 키·기존 기본값 전환은 [F15.3·A4](../../../docs/development/service-backend/community.md#notification-delivery-policy)의 미해결 인계다. 또한 150은 수신 설정과 무관하게 notifications에 사건을 기록하므로 현재 설정으로 목록만 걸러서는 OFF 기간 사건의 ON 이후 소급 노출을 막을 수 없다. 175는 원 사건 보존과 사용자 알림 발행을 구분하는 계약을 먼저 해소한다.
+
 소비 코드: [SettingsPage.tsx](../../frontend/src/features/profile/SettingsPage.tsx), [NotificationPreferences.tsx](../../frontend/src/features/notifications/NotificationPreferences.tsx). 합성 서버: [settings-fixture-plugin.ts](../../frontend/dev/settings-fixture-plugin.ts).
 
 ## 5. 탈퇴 확인 화면 · 222 / S26·S27 인계 제안
@@ -94,7 +98,7 @@
 | 메서드·경로 | 의미 |
 |---|---|
 | GET `/api/v1/me/withdrawal-policy` | 미승인 `{available:false,reason:"탈퇴 정책을 준비하고 있습니다."}` 또는 승인 `{available:true,version:"approved-version",effects:["승인 문구"],retention:["승인 문구"],rejoining:["승인 문구"]}` |
-| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"approved-version"}` →200 `{requestId:"opaque-id",status:"READY",message:"처리 전"}`. **준비만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
+| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"approved-version"}` → 최초 준비는200 `{requestId:"opaque-id",status:"READY",message:"처리 전"}`. 기존 활성 요청을 반환하면 그 요청의 현재 상태를 제공한다. **이 요청 자체는 준비·기존 요청 확인만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
 | POST `/api/v1/me/withdrawal-requests/{requestId}/confirm` | `{policyVersion:"approved-version",confirmation:"탈퇴"}` →200 처리상태. 이 단계만 승인된 탈퇴를 수행한다. |
 | GET `/api/v1/withdrawal-requests/{requestId}` | 아래의 결과 확인 전용 쿠키로200 `{requestId,status,message}`. 상태는 READY/PROCESSING/COMPLETED/FAILED. |
 
@@ -109,6 +113,19 @@
 - PROCESSING/FAILED/만료는 각 상태로 표시한다. 단순 오류로 영구 탈퇴 완료를 선언하지 않는다. 게시글·댓글·History 처리, 실제 익명화, 재가입 허용은 S26 승인 정책을 따르며 S27 생산자 테스트와244 P1-222에서 대조한다.
 
 소비자: [WithdrawalPage.tsx](../../frontend/src/features/profile/WithdrawalPage.tsx), [withdrawal.ts](../../frontend/src/features/profile/withdrawal.ts). [검증용 제공자](../../frontend/dev/withdrawal-fixture-plugin.ts)는 합성 메모리 계정만 종료하며 실제 탈퇴 정책·쿠키 보안·DB 처리를 검증한 증거가 아니다.
+
+### 5.2 2026-09-22 프론트 기준 진행과 복구 경계
+
+사용자가 백엔드에서 프론트에 맞춰 진행한다고 전달하고 222 진행을 요청했다. 222는 위 정책 GET → 준비 POST → 확정 POST → 영수증 GET을 구현 기준으로 유지한다. **이 진행 방향은 effects/retention/rejoining의 실제 정책 문구·기간·재가입 허용이나 운영 제공 승인을 대신하지 않는다.** 해당 정책 입력은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11), 준비 및 검증 범위는 [222 기록](../../frontend/docs/ticket-222-readiness.md)을 따른다.
+
+- 정책 재확인은 GET만 수행한다. 동의 체크·확인 입력·화면의 이전 요청 번호를 초기화하며, 사용자가 다시 동의하고 신청하기 전에는 POST를 보내지 않는다. 준비 응답 유실 후의 재확인은 탈퇴 완료 판정이 아니다.
+- 확정에서 `409 POLICY_CHANGED`를 받으면 실행 전 거절로 처리해 정책 재확인 경로를 제공한다. 단순409, 네트워크 장애,5xx,잘못된 성공 응답을 이 거절로 바꾸지 않는다. 결과가 불명확하고 요청 번호가 있으면 기존 영수증 GET으로만 확인한다.
+- 준비의 유효한 응답이 기존 요청의 PROCESSING/COMPLETED/FAILED이면 confirm을 추가 전송하지 않고 해당 요청의 읽기 전용 결과 화면으로 이동한다. READY일 때만 명시적으로 동의한 버전으로 confirm을 한 번 보낸다. 서버는 기존 요청과 새 정책 버전의 정합성을 다시 검사한다.
+- 상태는 문자열 READY/PROCESSING/COMPLETED/FAILED만 허용한다. 배열·객체를 문자열로 강제 변환하지 않으며, 결과의 requestId가 조회한 요청과 다르면 완료로 인정하지 않는다.
+- 영수증 GET의401/404는 탈퇴 완료를 뜻하지 않고 다른 유효 로그인 세션을 종료시키지도 않는다. 이 조회는 자기 취소·시간 제한과 영수증 권한 검사를 유지한다.
+- 유효한 confirm COMPLETED 이후에는 결과 경로 전환을 먼저 확정하고 로컬 세션·임시 입력을 정리한다. 결과 GET 장애가 이미 확인된 완료의 로컬 정리를 막지 않게 한다. 경로에 전달한 로컬 정리 신호를 서버 권한이나 완료 화면의 응답으로 사용하지 않는다.
+
+S27 제공자는 준비 중복·정책 변경의 비실행 보장, confirm 멱등성, 영수증 쿠키의 권한·수명과 세션 독립성, COMPLETED의 실제 데이터 처리 의미를 대조해야 한다. 이 문서는 실제 DB·쿠키·모든 기기 세션 무효화 검증을 수행했다는 기록이 아니다.
 
 ## 6. 별 검색 · 223
 

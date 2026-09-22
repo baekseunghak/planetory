@@ -564,3 +564,17 @@ QA 실패·무후보로 122 카탈로그가 보류된 곡선은 bin 비교와 �
 
 manifest와 출력 목록은 해당 결과 폴더에 보존한다. 계산 코드는 실행 후 변경하지 않았으며
 실측 문서만 갱신했다. Git 검사·리뷰, 규칙 승인 근거 확인 및 DB COMMENT 적용 검증은 남아 있다.
+
+## 116 원본 광도곡선·외부 참조 실측
+
+외부 원천 수집·감사 뒤 `python -m tess_bench.external_catalog_replay`로 원본 9별의 반복 BLS 후보를 비교한다. [116 계약 검증안](../../docs/data/tess-external-catalog-contract.md)의 문턱은 운영 승인 전이다. realclean·주입 회수 결과를 외부 행성 매칭 증거로 재사용하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.external_catalog_replay --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
+```
+
+`--targets wasp18` 등으로 부분 실행할 수 있으며 plan에 대상 목록을 남긴다. 기본은 9별이다. 시작 전 전체 입력·구현 hash를 고정하고 종료 후 대조한다. 결과는 results/external-catalog-replay 아래 새 디렉터리에 저장한다. 다운로드·Git·DB 호출은 없다. time standard가 확인되지 않은 외부 행은 invalid_external로 남는다. diagnostic ID는 실험 식별자이며 운영 candidate ID가 아니다.
+
+단위 검증: `uv run --locked python -m pytest tests/test_external_matching.py tests/test_external_catalog_replay.py -q`. 실제 FITS 실험과 별도인 합성 테스트 41개다.
+
+116 !187 소비자 리뷰 보완: disposition()은 confirmed/fp/pc/none과 판정 규칙 버전을 반환하며 빈 라벨과 충돌을 구분한다. DB 행 공급자는 [116 필수 열 인계](../../docs/data/tess-external-catalog-contract.md)에 명시한다. hold는 DB에 저장하지 않으며 124 source_refs·Publisher applied_at은 후속 공급이다. 관련 테스트 41개 통과, 기존 BLS 실측은 재실행하지 않았다.

@@ -32,6 +32,7 @@ export type SceneControl = {
 };
 type Props = SkySceneProps & {
   canvasLabel?: string;
+  starLabel?: (star: Star) => string;
   systemView?: SystemView | null;
   personalSystem?: OwnedSystem | null;
   onReady?: (control: SceneControl | null) => void;
@@ -57,6 +58,7 @@ export function GalaxyScene({
   onGraphics,
   systemView = null,
   canvasLabel = "내가 발견한 개별 별로 이루어진 3D 은하 지도",
+  starLabel,
 }: Props) {
   const cameraAnimation = useRef(0);
   const interaction = useRef<InteractionControl | null>(null);
@@ -316,6 +318,7 @@ export function GalaxyScene({
       />
       {camera && matrix && (
         <GalaxyInteraction
+          starLabel={starLabel}
           ref={interaction}
           canvas={canvas}
           camera={camera}

@@ -9,6 +9,7 @@
 | TESS 처리·AI 후속 Task와 Epic 구조 | [TESS 처리·AI 후속 Task 계획](tess-processing-ai-task-plan.md) | Epic·티켓 생성 완료, MR 리뷰 대기 |
 | TESS 파이프라인 Jira·MR 검토 | [파이프라인 리뷰 체크리스트](tess-pipeline-review-checklist.md) | 검토 기록 |
 | 분산 PoC 완료·미검증 상태 | [분산 PoC 진행 상태](distributed-poc-status.md) | 현재 검증 상태와 후속 작업 |
+| 서비스 배포·CI/CD 상태 | [서비스 배포 현재 상태](service-deploy-status.md) | 현재 배포 상태·검증 경계·남은 결정 |
 | 문서 충돌·반영 대기 | [문서 정합화 요청](planetory-doc-sync-requests.md) | 현재 상태·차단 항목 |
 
 역할 문서는 기술 정본을 대신하지 않는다. 문서 정합화 요청은 해결된 항목을 표시하되 과거 결정 전체를 복제하지 않고 관련 Jira·정본에 연결한다.

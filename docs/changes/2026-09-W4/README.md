@@ -74,6 +74,13 @@
 | 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
+| 2026-09-21 | MR 단계 컨테이너 이미지 빌드 검증 추가 | S15P21C206-84 | web:image, nginx -t, host not found in upstream, dind | 구현 완료·파이프라인 미실행 | [기록](2026-09-21.md) |
+| 2026-09-21 | EC2-A 계정 분리 적용과 CI push 차단 원인 규명 | S15P21C206-84 | planetory_service, DATABASE_PASSWORD, DEPLOY_AUX_DIR, registry push timeout, UFW, tailscale0 | EC2-A 적용 완료·EC2-B 조치 승인 대기 | [기록](2026-09-21.md) |
+| 2026-09-22 | MR 단계 마이그레이션 검사가 실행되지 않던 결함 수정 | S15P21C206-84 | alpine/git, ENTRYPOINT, entrypoint 비우기, backend:schema, V19 선점 | MR 파이프라인 통과 확인 | [기록](2026-09-22.md) |
+| 2026-09-22 | 검증 경계 정정 — 로컬 실행과 CI 실행 구분 | S15P21C206-84 | 로컬 통과, CI 미실행, 실행 위치 명시 | 정정 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Runner 동시 실행 3으로 상향·Runner 대수 정정 | S15P21C206-84 | concurrent, concurrent-0 슬롯, 202초→126초, run_untagged, vCPU 4 | 적용·실측 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 백엔드 CI 이미지 배포와 계정 분리 완료 | S15P21C206-84 | deploy:backend:ec2-a, V9→V19, planetory_service, pg_dump, BACKEND_IMAGE 어긋남 | 배포·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | MR !161 리뷰 지적 8건 반영 | S15P21C206-84 | V19 REVOKE, 변경 파일만 검사, down --remove-orphans, 502→401, resource_group, record_image, member_sky_revisions | 수정·검증 완료·재리뷰 대기 | [기록](2026-09-22.md) |
 | 2026-09-21 | 팔로우 대상·중복 제거 피드·구독 사건·173/174 인수 | S15P21C206-172 | COM-16, DEC-33, AT-78, AT-79, matchedBy, 멱등성, DEC-11 | 제안·정책 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 179 탈퇴 초안과 팔로우 접근 의존성 교차 검토 | S15P21C206-172 | W2, W3, W5, Q3, WD-12, star_unlocks, P16 | 제안·공유 승인 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | MR !155 리뷰: 회원 재개·공통 원인·사건 복구·관계 해제 | S15P21C206-172 | 150, 174, eventId, occurredAt, P17, COM-13 | 검토안 보완·승인 대기 | [기록](2026-09-21.md) |
@@ -136,6 +143,7 @@
 | 2026-09-22 | 123 Backend 리뷰 V22 단계·Publisher 인계 | S15P21C206-123 | 254 passed, READ COMMITTED, FOR SHARE, M1 인수 | Python 검증·DB 검사 미실행 | [기록](2026-09-22.md) |
 | 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 개인 통계 리뷰: DB 시계·프로필 용어·비교 표시·develop 통합 | S15P21C206-177 | transaction_timestamp, HISTORICAL_SOURCE_UNAVAILABLE, 79c45f35 | 수정·68건 통합 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 탈퇴 정책 재확인·영수증 복구·완료 화면 전환 | S15P21C206-222 | POLICY_CHANGED, prepare, COMPLETED, 로컬 세션, Chrome25 | 프론트·로컬 검증 완료, 정책·제공자 확인 별도 | [기록](2026-09-22.md) |
 
 - S15P21C206-195: [별 결과 통합과 공개 검토 왕복 검증](2026-09-22.md).
 
@@ -151,3 +159,19 @@
 | 2026-09-22 | 240·84 전달 헤더 중복 키 방지와 V7 안내 통일 | S15P21C206-240 | !161, properties, none, 중복 키, V7, bootstrap-0 | 설정 회귀 2건 통과 | [기록](2026-09-22.md) |
 | 2026-09-22 | 240 공통 전략 framework 정정·프록시 인수 분리 | S15P21C206-240 | framework, HTTPS, 중복 키, 42 passed, 84 담당 조율 | 구현·격리 검증 완료, 외부 인수 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 84 framework 복원과 240 양방향 통합 확인 | S15P21C206-240 | 2b7c0153, framework, 설정 키 1개, 충돌 0 | 통합 정적 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 84 2차 리뷰 반영·develop 충돌 해소 | S15P21C206-84 | 선점 차단 복구, exit 1, 대조 범위 축소, 문자열 안 --, V21 절 이동, nginx 서술 정정 | 수정·검증 완료·승인 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 240 교차 리뷰의 프록시 기본값 none 통일 | S15P21C206-84 | !161, 240, forward-headers, 중복 키, 운영 활성화 | 설정 회귀 2건 통과 | [기록](2026-09-22.md) |
+| 2026-09-22 | 84 전달 헤더 기본값 framework 복원 | S15P21C206-84 | framework, 240, d02d910e 정정, 중복 키 | 설정 회귀 2건 통과 | [기록](2026-09-22.md) |
+| 2026-09-22 | 첫 방문 안내 전용 저장 계약과 분석 단계 연결 | S15P21C206-197 | onboardingDone, me/onboarding, 입력 보존 | 구현·실제 인수 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 외부 원천 수집·계약 검증 초안 | S15P21C206-116 | TCE, TOI, ExoFOP, Archive, snapshot | 수집 단위 검증·실제 대조 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 외부 수집 쿼리·실패 진단 보완 | S15P21C206-116 | rowupdate, subset, HTTPError | 14 tests·재수집 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 네 외부 원천 실측 감사 | S15P21C206-116 | checksum, epoch 기준, 18·22·8·18행 | 감사 완료·매칭 검증 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 외부 매칭 검토안·원본 실측 실행기 | S15P21C206-116 | direct, ambiguous, time standard, snapshot | 합성 50개·실측 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 원본 9별 외부 매칭 실측 | S15P21C206-116 | 6348c862, 직접3·미연결8·보류55 | 실측 검산·계약 승인 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 116 disposition 필수 열 인계 | S15P21C206-116 | pc/none, source_refs, applied_at, 빈 라벨 | 41 tests·재승인 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 116 최종 리뷰 승인·문서 정합화 | S15P21C206-116 | 41 tests, MR 첨부, 124 인계 | 리뷰 승인·병합 미확인 | [기록](2026-09-22.md) |
+| 2026-09-22 | 알림 정책·90일 보관·150/175 인계 정합화 | S15P21C206-174 | F15, 수신자, 읽음, 보관, 중복, FE220·221, 재개 사건, 설정 기본값 | 정책 초안·90일 사용자 승인·나머지 계약 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 174 리뷰 반영: 선택적 reason·JSONB 키·최초 저장 시각 | S15P21C206-174 | F15.5, jsonb_strip_nulls, 표현식 인덱스, ON CONFLICT, created_at | 문서 보완·도메인 발생시각 계약 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | 공개 은하 전체 보유별·성과 행성·철회 재검사 | S15P21C206-251 | public-sky, all-owned, public-v1, REQUIRES_NEW, 5000별, 성과1000, 개인개수차이 | 구현·격리 검증 완료, 244 실제 인수 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | 공개 완료 표식의 의미·방문자 문구 정정 | S15P21C206-251 | completedWithoutPlanets, 공개 행성, FP 재라벨, 페이지 지문 비용 | API 15·프론트 단위 11·Chrome 5건 통과, 재리뷰 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | 공개 은하 후속 리뷰: 파싱 예외·A13 차이·집계 비용 | S15P21C206-251 | NumberFormatException, STAR_LIST_PRIVATE, 작은 limit, 반복 측정 제거 | 격리 API 15·컨트롤러 1건 통과 | [기록](2026-09-22.md) |

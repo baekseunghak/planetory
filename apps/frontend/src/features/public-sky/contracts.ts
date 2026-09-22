@@ -6,6 +6,14 @@ import {
   type Star,
 } from "../sky-data/contracts";
 import { readOwnedSystem } from "../sky-renderer/model";
+export function publicStarLabel(star: Star) {
+  const progress = {
+    unexplored: "미탐사",
+    in_progress: "탐색 중",
+    completed: "탐색 완료",
+  };
+  return `TIC ${star.ticId} · 공개 행성 ${star.planetCount}개 · ${progress[star.progressStage]}${star.completedWithoutPlanets ? " · 현재 공개할 행성이 없습니다" : ""}`;
+}
 const invalid = (): never => {
   throw new ApiError(
     0,

@@ -37,3 +37,46 @@ test("withdrawal status requires the exact receipt and known final status", () =
     }),
   );
 });
+
+test("withdrawal rejects status coercion and incomplete policy text", () => {
+  for (const status of [
+    ["COMPLETED"],
+    { toString: () => "COMPLETED" },
+    null,
+    true,
+    1,
+  ]) {
+    assert.throws(() =>
+      readWithdrawalStatus(
+        { requestId: "mine", status, message: "test" },
+        "mine",
+      ),
+    );
+  }
+  for (const status of [
+    "READY",
+    "PROCESSING",
+    "COMPLETED",
+    "FAILED",
+  ] as const) {
+    assert.equal(
+      readWithdrawalStatus(
+        { requestId: "mine", status, message: "test" },
+        "mine",
+      ).status,
+      status,
+    );
+  }
+  const policy = {
+    available: true,
+    version: "test",
+    effects: ["test"],
+    retention: ["test"],
+    rejoining: ["test"],
+  };
+  for (const field of ["effects", "retention", "rejoining"] as const) {
+    for (const value of [[], [" "], [null], "not-an-array"]) {
+      assert.throws(() => readWithdrawalPolicy({ ...policy, [field]: value }));
+    }
+  }
+});

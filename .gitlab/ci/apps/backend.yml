@@ -1,3 +1,105 @@
+# 마이그레이션 파일만 검사한다. grep이라 수 초에 끝나므로 JDK 이미지를 끌어오는
+# backend:build와 분리했다. 컨트롤러만 고친 MR에서는 아예 돌지 않는다.
+backend:schema:
+  stage: validate
+  # git이 필요하다. 타깃 브랜치의 마이그레이션 번호와 대조해야 선점 충돌을
+  # 머지 전에 잡을 수 있다.
+  #
+  # entrypoint를 비워야 한다. 이 이미지는 ENTRYPOINT가 ["git"]이라 Runner가 붙이는
+  # 셸이 `git sh -c ...`로 조립되고 "git: 'sh' is not a git command"로 죽는다.
+  # 스크립트가 한 줄도 실행되지 않으므로 검사가 있으나 마나가 된다.
+  image:
+    name: alpine/git:2.45.2
+    entrypoint: [""]
+  needs: []
+  script:
+    # 검사 로직은 apps/backend/scripts/check-migrations.sh에 있다. YAML 안에 두면
+    # 로컬에서 돌릴 수 없어, 리뷰에서 나온 우회 사례를 회귀로 고정할 수 없었다.
+    #
+    # 검사 범위는 타깃 대비 이번에 추가·수정된 파일뿐이다. 작업 트리 전체를 훑던
+    # 방식은 이미 병합된 마이그레이션을 계속 다시 잡아, 병합 직후 기본 브랜치의
+    # 파이프라인을 멈추게 했다(develop의 V19가 평문 REVOKE 3줄로 걸렸다).
+    #
+    # 회귀 검사를 먼저 돌려 검사 자체가 망가지지 않았는지 본다. 이것이 없으면
+    # 검사를 고칠 때 마이그레이션 파일을 억지로 건드려야 검증할 수 있었다.
+    - sh apps/backend/scripts/check-migrations.sh --self-test
+    - sh apps/backend/scripts/check-migrations.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: &schema_paths
+        - apps/backend/src/main/resources/db/migration/**/*
+        - apps/backend/scripts/check-migrations.sh
+        - .gitlab/ci/apps/backend.yml
+    - if: $CI_COMMIT_BRANCH
+      changes: *schema_paths
+
+# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
+# 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
+# startLocalDb가 건너뛰어지므로(CI=true), 그냥 돌리면 DB 없이 41개 클래스가 돈다.
+# CI에 Postgres 서비스를 붙이는 일은 따로 정한다.
+backend:build:
+  stage: validate
+  image: eclipse-temurin:21-jdk-alpine
+  needs: []
+  variables:
+    # Gradle이 프로젝트 캐시로도 쓰는 apps/backend/.gradle 과 겹치지 않게 분리한다.
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+  # 캐시를 둘로 나눈다. 하나로 묶으면 build.gradle 한 줄만 고쳐도 키가 바뀌어
+  # Gradle 배포판 130MB까지 다시 받는다. 배포판은 wrapper 설정이 바뀔 때만 무효화한다.
+  cache:
+    - key:
+        files: [apps/backend/gradle/wrapper/gradle-wrapper.properties]
+        prefix: gradle-dist
+      paths: [.gradle-home/wrapper]
+    - key:
+        files:
+          - apps/backend/build.gradle
+          - apps/backend/settings.gradle
+        prefix: gradle-deps
+      paths: [.gradle-home/caches]
+  script:
+    - cd apps/backend
+    - chmod +x gradlew
+    - ./gradlew bootJar --no-daemon
+  # 추출된 배포판과 원본 zip이 둘 다 남아 캐시가 두 배가 된다.
+  after_script:
+    - rm -f "$CI_PROJECT_DIR"/.gradle-home/wrapper/dists/*/*/*.zip
+  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 build:backend가
+  # 이미지 안에서 같은 bootJar를 수행하므로 돌리지 않는다.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: &backend_paths
+        - apps/backend/src/**/*
+        - apps/backend/build.gradle
+        - apps/backend/settings.gradle
+        - apps/backend/gradle/**/*
+        - apps/backend/gradlew
+        - apps/backend/Dockerfile
+        - .gitlab/ci/apps/backend.yml
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *backend_paths
+
+# MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
+# backend:build가 bootJar까지는 검증하지만 Dockerfile 자체는 검증하지 않는다.
+# Dockerfile이 바뀔 때만 돌므로 Gradle 빌드가 중복되는 경우는 드물다.
+backend:image:
+  extends: .docker-build
+  stage: validate
+  needs: []
+  variables:
+    DOCKERFILE: apps/backend/Dockerfile
+    IMAGE_NAME: backend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: ""
+  before_script: []
+  script:
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "ci-check/backend:$CI_COMMIT_SHORT_SHA" $BUILD_ARGS .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - apps/backend/Dockerfile
+        - .gitlab/ci/apps/backend.yml
+
 build:backend:
   extends: .docker-build
   variables:
@@ -10,6 +112,7 @@ build:backend:
       exists: [apps/backend/gradlew]
       changes: [apps/backend/**/*]
 
+# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:backend:ec2-a:
   extends: .deploy-ec2-a
   needs: ["build:backend"]
@@ -18,20 +121,13 @@ deploy:backend:ec2-a:
     DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
     DEPLOY_SERVICES: backend
     DEPLOY_ACTION: up
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [apps/backend/gradlew]
-      changes: [apps/backend/**/*]
-      when: manual
-
-deploy:backend:ec2-b:
-  extends: .deploy-ec2-b
-  needs: ["build:backend"]
-  variables:
-    IMAGE_NAME: backend
-    DEPLOY_IMAGE_VARIABLE: BACKEND_IMAGE
-    DEPLOY_SERVICES: backend
-    DEPLOY_ACTION: up
+    # GET /actuator/health는 SecurityConfig에서 permitAll이다.
+    DEPLOY_HEALTH_PATH: "/actuator/health"
+    # 기동과 동시에 Flyway가 돈다. 교체 전에 덤프를 남긴다. 롤백은 이미지만
+    # 되돌리므로, 스키마까지 되돌려야 하면 이 덤프가 유일한 수단이다.
+    DEPLOY_DB_BACKUP: "true"
+    # Gradle 앱은 기동이 느리다. 실측 기준 13초대이나 마이그레이션이 붙으면 늘어난다.
+    DEPLOY_HEALTH_TIMEOUT: "180"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/backend/gradlew]

@@ -11,7 +11,7 @@ test("public canvas selects a stored star and focuses owned planets without pers
   const point = project(exampleStar(0), camera, box.width, box.height);
   await canvas.click({ position: { x: point.x, y: point.y } });
   const detail = page.getByRole("complementary", { name: "공개 별 상세" });
-  await expect(detail).toContainText("이 탐사자가 찾은 행성 2개");
+  await expect(detail).toContainText("공개 행성 2개");
   await detail.getByRole("button", { name: "행성 1", exact: true }).click();
   await expect(detail).toContainText("3.37일");
   await page.screenshot({ path: "test-results/p1/public-planet.png" });
@@ -40,7 +40,7 @@ test("public galaxy loads all owned stars and shows only visitor actions", async
   await expect(page.locator(".public-star-list")).toContainText("전체 1,000개");
   await page.getByRole("button", { name: /TIC 900000001 / }).click();
   const detail = page.getByRole("complementary", { name: "공개 별 상세" });
-  await expect(detail).toContainText("이 탐사자가 찾은 행성 2개");
+  await expect(detail).toContainText("공개 행성 2개");
   await detail.getByRole("button", { name: "행성 2", exact: true }).click();
   await expect(detail).toContainText("정보 없음");
   await expect(
@@ -49,6 +49,31 @@ test("public galaxy loads all owned stars and shows only visitor actions", async
   expect(urls.some((url) => /\/me\/(stars|sky|quests)/.test(url))).toBe(false);
   await page.screenshot({ path: "test-results/p1/public-visit.png" });
 });
+test("public zero planets uses visibility wording in tooltip, keyboard option and detail", async ({ page }) => {
+  await page.route("**/api/v1/members/u-211/sky/tiles?*", async route => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.stars = body.stars.map((star: object) => ({...star, planetCount: 0, progressStage: "completed", completedWithoutPlanets: true}));
+    await route.fulfill({response, json: body});
+  });
+  await page.route("**/api/v1/members/u-211/stars/*", async route => {
+    const response = await route.fetch();
+    await route.fulfill({response, json: {...await response.json(), planets: {count: 0, items: []}}});
+  });
+  await page.goto("/members/u-211/sky");
+  const canvas = page.locator(".galaxy-scene canvas");
+  await expect(canvas).toHaveAttribute("data-rendered-stars", "1000");
+  await canvas.focus();
+  await canvas.press("]");
+  await expect(page.getByRole("tooltip")).toContainText("현재 공개할 행성이 없습니다");
+  await expect(page.getByRole("option")).toContainText("현재 공개할 행성이 없습니다");
+  await expect(page.getByRole("tooltip")).not.toContainText("내 행성 없이 완료");
+  await canvas.press("Enter");
+  const detail = page.getByRole("complementary", {name: "공개 별 상세"});
+  await expect(detail).toContainText("공개 행성 0개");
+  await expect(detail).toContainText("개인 탐사 결과와 다를 수 있습니다");
+});
+
 test("permission revoked or disconnected clears rendered owner data; late data stays retired", async ({
   page,
 }) => {
