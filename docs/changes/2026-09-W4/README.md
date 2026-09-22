@@ -132,3 +132,4 @@
 | 2026-09-22 | 123 COMMENT migration 후속 분리 | S15P21C206-123 | V22 제거, 적용 순서, start_btjd, flux_scatter | 코드·문서 정리, 후속 인수 확인 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 개인 통계 리뷰: DB 시계·프로필 용어·비교 표시·develop 통합 | S15P21C206-177 | transaction_timestamp, HISTORICAL_SOURCE_UNAVAILABLE, 79c45f35 | 수정·68건 통합 검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 정정 이력 형식·재실행·복구 보관 확정 | S15P21C206-154 | field 속성 이름, reason 코드, IS DISTINCT FROM, candidate_correction_jobs, undo JSONB | 문서 확정, Q1 대기 | [기록](2026-09-22.md) |
+| 2026-09-22 | C18-Q1 건별 승인 결정 반영·179 리뷰 조치 | S15P21C206-154 | 건별 승인, keep 인자 검증, status 열 UPDATE, Gold 12개 서술 | 결정 채택·문서 반영 | [기록](2026-09-22.md) |
