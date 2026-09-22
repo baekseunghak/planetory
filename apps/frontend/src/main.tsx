@@ -5,6 +5,7 @@ import {
 import { StrictMode } from "react";
 import { FollowingPage, FollowingFeedPage } from "./features/follow/Follow";
 import { p1Enabled } from "./features/p1";
+import { PersonalStatistics } from "./features/statistics/PersonalStatistics";
 import { NotificationsPage } from "./features/notifications/Notifications";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -50,9 +51,7 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
-    ...(p1Enabled
-      ? { withdrawal: WithdrawalPage }
-      : {}),
+    ...(p1Enabled ? { withdrawal: WithdrawalPage } : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
     ...(p1Enabled
       ? { following: FollowingPage, followingFeed: FollowingFeedPage }
@@ -72,7 +71,10 @@ async function start() {
     pages.sky = (
       await import("./features/sky-renderer/GalaxyScene")
     ).GalaxyPage;
-  if (p1Enabled) pages.publicSky = (await import("./features/public-sky/PublicSky")).PublicSkyPage;
+  if (p1Enabled)
+    pages.publicSky = (
+      await import("./features/public-sky/PublicSky")
+    ).PublicSkyPage;
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
@@ -106,13 +108,14 @@ async function start() {
             {/* 공용 읽기 전용 그래프(#190). 게시글 첨부가 이 슬롯을
                 기다리고 있었다(213). 비어 있으면 「연결 준비 중」이 뜬다. */}
             {/* 마이페이지 두 목록(#196). W16이 만든 슬롯을 채운다.
-                통계는 #198~200 몫이라 비워 둔다. */}
+                개인 통계는 #198에서 P1 활성화 시 연결한다. */}
             <App
               pages={pages}
               historyGraphRenderer={SharedHistoryCurve}
               profileSections={{
                 stars: MyStarsSection,
                 history: MyHistorySection,
+                ...(p1Enabled ? { statistics: PersonalStatistics } : {}),
               }}
             />
           </SessionProvider>
@@ -122,4 +125,3 @@ async function start() {
   );
 }
 void start();
-
