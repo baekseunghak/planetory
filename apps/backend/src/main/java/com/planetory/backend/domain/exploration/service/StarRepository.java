@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -226,12 +227,7 @@ public class StarRepository {
      * 존재 확인 하나로 둔다.
      */
     public boolean isOpenPublishedStar(long ticId) {
-        return jdbc.sql("""
-                        SELECT EXISTS(
-                            SELECT 1 FROM stars s
-                             WHERE s.tic_id = ? AND s.service_status = 'published'
-                               AND EXISTS (SELECT 1 FROM star_unlocks u WHERE u.tic_id = s.tic_id))
-                        """)
+        return jdbc.sql("SELECT " + StarBoardVisibility.OPEN.formatted("?"))
                 .param(ticId)
                 .query(Boolean.class).single();
     }
