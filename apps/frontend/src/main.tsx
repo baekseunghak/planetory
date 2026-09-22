@@ -79,6 +79,10 @@ async function start() {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
   // Use the analysis page in both fixture and real-server modes.
+  if (p1Enabled)
+    pages.statistics = (
+      await import("./features/statistics/GlobalStatistics")
+    ).GlobalStatisticsPage;
   pages = {
     ...pages,
     settings: SettingsPage,
