@@ -158,8 +158,28 @@ export function HistoryDetailPage() {
   // 분석·지도·게시글 셋이라 화면마다 돌아갈 곳이 다르고, 그 값을 주소가
   // 들고 온다. **여기서 목적지를 지어내지 않는다.**
   const { historyId = "", returnTo } = usePageContext();
-  const { detail, graph, mode, setMode, retryGraph } =
-    useHistoryDetail(historyId);
+  // 기록이 바뀌면 모드·없음 관찰·진행 중 요청을 함께 새로 시작한다.
+  return (
+    <HistoryDetail key={historyId} historyId={historyId} returnTo={returnTo} />
+  );
+}
+
+function HistoryDetail({
+  historyId,
+  returnTo,
+}: {
+  historyId: string;
+  returnTo: string;
+}) {
+  const {
+    detail,
+    graph,
+    mode,
+    setMode,
+    retryGraph,
+    retryDetail,
+    snapshotMissing,
+  } = useHistoryDetail(historyId);
 
   return (
     <main className="page history-detail">
@@ -168,7 +188,16 @@ export function HistoryDetailPage() {
       {detail.phase === "loading" && <p role="status">불러오는 중입니다.</p>}
       {(detail.phase === "denied" ||
         detail.phase === "error" ||
-        detail.phase === "unreadable") && <p role="alert">{detail.message}</p>}
+        detail.phase === "unreadable") && (
+        <p role="alert">
+          {detail.message}
+          {detail.phase === "error" && (
+            <button type="button" onClick={retryDetail}>
+              기록 다시 불러오기
+            </button>
+          )}
+        </p>
+      )}
 
       {detail.phase === "ready" && (
         <>
@@ -203,11 +232,20 @@ export function HistoryDetailPage() {
               <button
                 type="button"
                 aria-pressed={mode === "SUBMITTED"}
+                disabled={snapshotMissing}
+                aria-describedby={
+                  snapshotMissing ? "history-snapshot-missing" : undefined
+                }
                 onClick={() => setMode("SUBMITTED")}
               >
                 제출 당시 기준
               </button>
             </div>
+            {snapshotMissing && (
+              <p id="history-snapshot-missing">
+                제출 당시 스냅샷이 없어 당시 보기를 사용할 수 없습니다.
+              </p>
+            )}
             {graph.phase === "loading" && (
               <p role="status">그래프를 불러오는 중입니다.</p>
             )}
