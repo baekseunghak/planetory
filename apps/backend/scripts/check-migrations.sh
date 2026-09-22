@@ -38,6 +38,15 @@ STRICT="${SCHEMA_IRREVERSIBLE_STRICT:-REVOKE|DROP +TABLE|DROP +COLUMN|RENAME|SET
 # 주석을 줄 단위로 걷어낸 뒤 줄바꿈·탭을 공백 하나로 접는다. 줄 단위 grep은
 # `ALTER TABLE users` 다음 줄의 `DROP nickname`을 놓치고, 탭으로 띄운 키워드도
 # 놓친다. 주석 제거는 줄을 합치기 전에 해야 뒤 내용이 삼켜지지 않는다.
+#
+# 남은 구멍 하나. 주석 제거가 문자열 리터럴을 구분하지 않으므로, 문자열 안에
+# `--`가 있으면 같은 줄의 나머지가 통째로 지워진다. 아래 한 줄은 통과한다.
+#
+#   EXECUTE format('a--b'); REVOKE UPDATE ON t FROM planetory_app;
+#
+# 걸리려면 "문자열 안의 --"와 "한 줄에 두 문장"이 동시에 성립해야 하는데 지금
+# 저장소에는 각각 0건이다. 막으려면 SQL 문자열을 인식하는 파서가 필요해 비용이
+# 크다. **이 검사는 완전한 차단이 아니라 실수 방지다.**
 flatten() {
     sed -e 's/--.*$//' "$1" | tr '\n\t' '  ' | tr -s ' '
 }
@@ -96,6 +105,15 @@ ALTER TABLE users ADD COLUMN memo TEXT;
 '
     expect set_not_null block 'ALTER TABLE users ALTER COLUMN nickname SET NOT NULL;
 '
+
+    # 번호 역전은 차단이어야 한다. 인라인 구현을 스크립트로 옮기면서 한 번
+    # 경고로 약해진 적이 있다. exit 1 이 남아 있는지 여기서 고정한다.
+    if grep -A6 'if \[ "\$taken" = "1" \]; then' "$0" | grep -q "exit 1"; then
+        echo "  ok    version_preemption_blocks (exit 1 유지)"
+    else
+        echo "  FAIL  version_preemption_blocks: 번호 역전이 차단이 아니라 경고입니다" >&2
+        fail=1
+    fi
 
     if [ "$fail" = "1" ]; then
         echo "회귀 검사 실패" >&2
@@ -178,20 +196,29 @@ else
         fi
     done
     if [ "$taken" = "1" ]; then
-        echo "다른 브랜치가 먼저 쓴 번호일 수 있습니다. 머지 뒤 Flyway가 거부합니다." >&2
-        echo "번호를 올리고 팀과 조율하십시오. 이 검사는 막지 않고 경고만 합니다." >&2
-    else
-        echo "버전 선점 검사 통과"
+        echo "" >&2
+        echo "타깃의 최대 번호(V$base_max)보다 큰 번호로 바꾸십시오." >&2
+        echo "이 저장소는 out-of-order를 쓰지 않습니다. V$base_max 까지 적용된 DB에" >&2
+        echo "그보다 낮은 번호가 들어가면 Flyway가 기동을 거부합니다." >&2
+        exit 1
     fi
+    echo "버전 선점 검사 통과"
     echo "한계: 타깃과만 비교한다. 열려 있는 MR 둘이 각각 같은 번호를 추가하면"
-    echo "      둘 다 통과하고 나중에 머지되는 쪽이 깨진다."
+    echo "      둘 다 통과하고 나중에 머지되는 쪽이 깨진다. 타깃에서 이미 확인되는"
+    echo "      번호 역전은 위에서 막는다. 둘은 별개다."
 fi
 
-# 2. R__table_comments.sql이 테이블 전체를 덮는지. 머리말이 "새 테이블이 생기면
+# 2. R__table_comments.sql이 테이블을 덮는지. 머리말이 "새 테이블이 생기면
 #    여기에 추가한다"고 적었지만 강제할 수단이 없어 member_sky_revisions가
-#    34개 중 하나만 빠진 채로 남아 있었다. DB 없이도 대조할 수 있다.
-#    전체를 보므로 이미 병합된 것 때문에 실패하지는 않는다 — 빠진 게 있으면
-#    그건 지금 고쳐야 하는 결손이다.
+#    34개 중 하나만 빠진 채로 남아 있었다. DB 없이 대조할 수 있다.
+#
+#    **설명 누락은 이번 변경이 만든 테이블만 본다.** 전체를 훑으면 누가 설명을
+#    빠뜨린 뒤로 마이그레이션을 건드리는 모든 MR이 남의 결손 때문에 막힌다.
+#    위 1번에서 고친 것과 같은 구조다.
+#
+#    유령 설명(없는 테이블에 COMMENT ON)은 전체를 본다. 그 상태로는 Flyway가
+#    기동 중 실패하므로 타깃에 미리 존재할 수 없고, 따라서 남의 결손이 될 일이
+#    없다. 이번 변경이 만든 것만 잡힌다.
 comments_file="$DIR/R__table_comments.sql"
 if [ -f "$comments_file" ]; then
     strip='s/--.*$//'
@@ -205,7 +232,18 @@ if [ -f "$comments_file" ]; then
     commented=$(sed -e "$strip" "$comments_file" \
         | grep -oiE 'COMMENT +ON +TABLE +[a-z_][a-z0-9_]*' \
         | awk '{print tolower($NF)}' | sort -u)
-    missing=$(echo "$tables" | grep -vxF "$commented" || true)
+
+    # 누락은 이번 변경이 만든 테이블만 본다.
+    changed_v=$(echo "$CHANGED" | grep -E '/V[0-9]+__.*\.sql$' || true)
+    if [ -n "$changed_v" ]; then
+        new_tables=$(sed -e "$strip" $changed_v 2>/dev/null \
+            | grep -oiE 'CREATE +TABLE +(IF +NOT +EXISTS +)?[a-z_][a-z0-9_]*' \
+            | awk '{print tolower($NF)}' | sort -u)
+        new_tables=$(echo "$new_tables" | grep -vxF "$dropped" 2>/dev/null || echo "$new_tables")
+    else
+        new_tables=""
+    fi
+    missing=$(echo "$new_tables" | grep -vxF "$commented" | grep -v '^$' || true)
     stale=$(echo "$commented" | grep -vxF "$tables" || true)
     if [ -n "$missing" ]; then
         echo "R__table_comments.sql에 설명이 없는 테이블이 있습니다:" >&2
@@ -219,7 +257,11 @@ if [ -f "$comments_file" ]; then
         echo "없는 테이블에 COMMENT ON을 걸면 Flyway가 기동 중 실패합니다." >&2
         exit 1
     fi
-    echo "테이블 설명 대조 통과($(echo "$tables" | grep -c .)개)"
+    if [ -n "$new_tables" ]; then
+        echo "테이블 설명 대조 통과(이번 변경이 만든 $(echo "$new_tables" | grep -c .)개, 전체 $(echo "$tables" | grep -c .)개)"
+    else
+        echo "테이블 설명 대조 통과(이번 변경은 새 테이블을 만들지 않음, 전체 $(echo "$tables" | grep -c .)개)"
+    fi
 fi
 
 # 3. 되돌릴 수 없는 변경
