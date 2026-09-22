@@ -18,15 +18,13 @@ function newestFirst(a, b) {
 }
 function select(query) {
   const params = new URLSearchParams(query);
-  // UNSPECIFIED는 API 오류가 아니라 이 검증기의 계약 범위 밖이라는 표시다.
-  for (const [key, value] of params) {
-    if (!['q', 'searchIn', 'author', 'ticId', 'board', 'tag'].includes(key) ||
-        /[^\S ]/u.test(value) ||
-        (['author', 'ticId', 'board', 'tag'].includes(key) && !value.trim()) ||
-        (key === 'author' && value !== value.trim())) throw new Error('UNSPECIFIED');
-  }
   const invalid = () => { throw new Error('VALIDATION_FAILED'); };
-  for (const key of ['q', 'searchIn', 'author', 'ticId', 'board', 'tag'])
+  for (const [key, value] of params)
+    if (!['q', 'searchIn', 'author', 'ticId', 'board', 'tag', 'size', 'cursor'].includes(key) || !value.trim()) invalid();
+  // 성공 커서 직렬화·DB 페이지 경계는 실제 HTTP 테스트에서 검증한다.
+  if (params.has('cursor')) invalid();
+  if (params.has('size') && (!/^[1-9]\d{0,2}$/.test(params.get('size')) || Number(params.get('size')) > 100)) invalid();
+  for (const key of ['q', 'searchIn', 'author', 'ticId', 'board', 'tag', 'size', 'cursor'])
     if (params.getAll(key).length > 1) invalid();
   const q = params.get('q')?.trim();
   const scope = params.get('searchIn') ?? 'TITLE_BODY';
@@ -43,7 +41,7 @@ function select(query) {
         !(scope !== 'TITLE' && fold(p.body).includes(fold(q)))) return false;
     if (params.has('author')) {
       const member = data.members.find(m => m.id === p.memberId);
-      if (!member || fold(member.nickname) !== fold(params.get('author'))) return false;
+      if (!member || fold(member.nickname) !== fold(params.get('author').trim())) return false;
     }
     return ['ticId', 'board', 'tag'].every(k => !params.has(k) || p[k] === params.get(k));
   }).sort(newestFirst).map(p => p.id);
@@ -55,8 +53,6 @@ for (const c of data.cases) {
   else assert.deepEqual(select(c.query), c.expectedIds, c.id);
   assert.deepEqual([...new URLSearchParams(new URLSearchParams(c.query).toString())], c.query, c.id);
 }
-for (const c of data.unspecifiedCases)
-  assert.throws(() => select(c.query), {message: 'UNSPECIFIED'}, c.id);
 assert.equal(newestFirst({id:'p-1', createdAt:'2026-09-21T09:00:00+09:00'},
   {id:'p-1', createdAt:'2026-09-21T00:00:00.000Z'}), 0);
 assert.ok(newestFirst({id:'p-1', createdAt:'2026-09-21T00:00:00.100Z'},
@@ -73,13 +69,14 @@ for (const c of data.hotTopics) assert.equal(c.parentVisible && c.participants >
 assert.deepEqual(select([['q', '🪐'.repeat(100)]]), []);
 assert.throws(() => select([['q', '🪐'.repeat(101)]]), {message:'VALIDATION_FAILED'});
 console.log(`PASS: ${data.cases.length} search cases, ${data.pages.length} page example, ${data.hotTopics.length} hot-topic boundaries, 2 Unicode boundaries`);
-console.log(`PASS: ${data.unspecifiedCases.length} unspecified inputs rejected, 3 timestamp ordering checks`);
+console.log('PASS: 3 timestamp ordering checks');
 if (process.argv.includes('--frontend')) {
   const { pathToFileURL } = require('node:url');
   import(pathToFileURL(path.resolve(__dirname, '../../../apps/frontend/src/features/community/feedSearch.ts')).href)
     .then(({ readFeedSearch }) => {
-      for (const c of data.cases)
+      // opaque 커서의 구조는 서버가 검증한다. FE는 비어 있지 않은 커서를 그대로 전달한다.
+      for (const c of data.cases.filter(c => c.id !== 'invalid-cursor'))
         assert.equal(Boolean(readFeedSearch(new URLSearchParams(c.query)).error), Boolean(c.expectedError), c.id);
-      console.log(`PASS: ${data.cases.length} shared input cases against existing frontend`);
+      console.log(`PASS: ${data.cases.length - 1} shared input cases against frontend; opaque cursor validated by server`);
     }).catch(error => { console.error(error.message); console.error(frontendHint); process.exitCode = 1; });
 }

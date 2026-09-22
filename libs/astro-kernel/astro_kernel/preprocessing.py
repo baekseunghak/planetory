@@ -3,11 +3,13 @@
 The biweight arithmetic follows D03's frozen reference, not astropy/wotan.
 Policy details and intentional reference differences live in README.md.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, field, replace
+import re
 
 import numpy as np
 
 PREPROCESS_VERSION = "silver-biweight-1.0.0"
+MASK_CONTRACT_VERSION = "silver-interval-mask-1.0.0"
 
 
 class PreprocessError(ValueError):
@@ -35,6 +37,23 @@ class SectorInput:
     flux_err: np.ndarray
     quality: np.ndarray
     cadenceno: np.ndarray
+    source_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class IntervalMask:
+    interval_id: str
+    product_id: str
+    sector: int
+    product_sha256: str
+    coordinate: str
+    start: float
+    end: float
+    closed: str
+    reason: str
+    source_uri: str
+    source_sha256: str
+    version: str
 
 
 @dataclass
@@ -50,6 +69,8 @@ class PreparedCurve:
     normalization_median: dict
     excluded: list[dict]
     n_raw: int
+    original_quality: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
+    interval_masks: tuple[dict, ...] = ()
 
 
 @dataclass
@@ -86,7 +107,41 @@ def _identifier(value, name):
         raise PreprocessError("invalid_identity", name)
 
 
-def prepare_silver(curves: list[SectorInput]) -> PreparedCurve:
+def _validate_masks(curves, interval_masks):
+    masks = tuple(interval_masks)
+    ids = set()
+    normalized = []
+    for m in masks:
+        if not isinstance(m, IntervalMask):
+            raise PreprocessError("invalid_mask", "IntervalMask required")
+        for name in ("interval_id", "product_id", "reason", "source_uri", "version"):
+            if not isinstance(getattr(m, name), str) or not getattr(m, name).strip():
+                raise PreprocessError("invalid_mask", name)
+        if m.interval_id in ids:
+            raise PreprocessError("invalid_mask", "duplicate interval_id")
+        ids.add(m.interval_id)
+        _identifier(m.sector, "mask sector")
+        for digest in (m.product_sha256, m.source_sha256):
+            if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise PreprocessError("invalid_mask", "SHA-256 required")
+        if m.coordinate not in ("cadenceno", "BTJD_TDB_day") or m.closed not in ("both", "left", "right", "neither"):
+            raise PreprocessError("invalid_mask", "coordinate or boundary")
+        if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, float, np.integer, np.floating)) or not np.isfinite(v) for v in (m.start, m.end)) or m.start >= m.end:
+            raise PreprocessError("invalid_mask", "finite increasing bounds required")
+        if m.coordinate == "cadenceno" and any(v < 0 or v != int(v) or v > np.iinfo(np.int64).max for v in (m.start, m.end)):
+            raise PreprocessError("invalid_mask", "integer cadence bounds required")
+        targets = [c for c in curves if c.product_id == m.product_id and c.sector == m.sector]
+        if len(targets) != 1 or targets[0].source_sha256 != m.product_sha256:
+            raise PreprocessError("mask_source_mismatch", m.interval_id)
+        boundary_type = int if m.coordinate == "cadenceno" else float
+        start, end = boundary_type(m.start), boundary_type(m.end)
+        if not np.isfinite(start) or not np.isfinite(end) or start >= end:
+            raise PreprocessError("invalid_mask", "bounds not representable in JSON numeric types")
+        normalized.append(replace(m, sector=int(m.sector), start=start, end=end))
+    return tuple(normalized)
+
+
+def prepare_silver(curves: list[SectorInput], *, interval_masks=()) -> PreparedCurve:
     """Filter and normalize each Sector, preserving product + zero-based row.
 
     Non-finite flux errors are retained as missing metadata, not used as a
@@ -95,6 +150,7 @@ def prepare_silver(curves: list[SectorInput]) -> PreparedCurve:
     """
     if not curves:
         raise PreprocessError("empty_input", "no products")
+    masks = _validate_masks(curves, interval_masks)
     parts, medians, excluded = [], {}, []
     seen, products, tic_ids, n_raw = set(), set(), set(), 0
     for c in curves:
@@ -114,7 +170,15 @@ def prepare_silver(curves: list[SectorInput]) -> PreparedCurve:
         if len({len(x) for x in (t, f, e, q, cadence)}) != 1:
             raise PreprocessError("length_mismatch", c.product_id)
         n_raw += len(t)
-        valid = (q == 0) & np.isfinite(t) & np.isfinite(f)
+        hits = {}
+        for m in masks:
+            if m.product_id != c.product_id:
+                continue
+            x = cadence if m.coordinate == "cadenceno" else t
+            hit = ((x >= m.start) if m.closed in ("both", "left") else (x > m.start)) & ((x <= m.end) if m.closed in ("both", "right") else (x < m.end))
+            hits[m.interval_id] = hit
+        masked = np.logical_or.reduce(list(hits.values())) if hits else np.zeros(len(t), dtype=bool)
+        valid = (q == 0) & np.isfinite(t) & np.isfinite(f) & ~masked
         for i in np.flatnonzero(~valid):
             reasons = []
             if q[i] != 0:
@@ -123,8 +187,13 @@ def prepare_silver(curves: list[SectorInput]) -> PreparedCurve:
                 reasons.append("nonfinite_time")
             if not np.isfinite(f[i]):
                 reasons.append("nonfinite_flux")
+            interval_ids = [key for key, hit in hits.items() if hit[i]]
+            if interval_ids:
+                reasons.append("interval_mask")
+                reasons.extend(dict.fromkeys(m.reason for m in masks if m.interval_id in interval_ids))
             excluded.append(dict(product_id=c.product_id, sector=c.sector,
-                                 source_row=int(i), reasons=reasons))
+                                 source_row=int(i), cadenceno=int(cadence[i]), original_quality=int(q[i]),
+                                 original_time=float(t[i]), reasons=reasons, interval_ids=interval_ids))
         idx = np.flatnonzero(valid)
         idx = idx[np.argsort(t[idx], kind="stable")]
         if len(idx) and np.any(np.diff(t[idx]) == 0):
@@ -143,14 +212,14 @@ def prepare_silver(curves: list[SectorInput]) -> PreparedCurve:
         # Error metadata is not a selection criterion of D03.
         error[~np.isfinite(error) | (error < 0)] = np.nan
         parts.append((t[idx], normalized, error, np.full(len(idx), c.sector, dtype=np.int64),
-                      np.full(len(idx), c.product_id, dtype=object), idx, cadence[idx]))
+                      np.full(len(idx), c.product_id, dtype=object), idx, cadence[idx], q[idx]))
     if parts:
-        cols = [np.concatenate([p[k] for p in parts]) for k in range(7)]
+        cols = [np.concatenate([p[k] for p in parts]) for k in range(8)]
         order = np.lexsort((cols[5], cols[3], cols[0]))
         cols = [x[order] for x in cols]
     else:
-        cols = [np.empty(0, dtype=d) for d in (float, float, float, int, object, int, int)]
-    return PreparedCurve(curves[0].tic_id, *cols, medians, excluded, n_raw)
+        cols = [np.empty(0, dtype=d) for d in (float, float, float, int, object, int, int, int)]
+    return PreparedCurve(curves[0].tic_id, *cols[:7], medians, excluded, n_raw, cols[7], tuple(asdict(m) for m in masks))
 
 
 def _biweight_location(x):
@@ -245,7 +314,31 @@ def detrend_silver(time, normalized_flux, sector) -> DetrendedCurve:
                           reasons, failures, status)
 
 
-def preprocess_silver(curves: list[SectorInput]) -> tuple[PreparedCurve, DetrendedCurve]:
+def preprocess_silver(curves: list[SectorInput], *, interval_masks=()) -> tuple[PreparedCurve, DetrendedCurve]:
     """Return provenance + numerical result. Only status='ok' may reach BLS."""
-    prepared = prepare_silver(curves)
+    prepared = prepare_silver(curves, interval_masks=interval_masks)
     return prepared, detrend_silver(prepared.time, prepared.flux, prepared.sector)
+
+
+def exclusion_ledger(prepared: PreparedCurve, result: DetrendedCurve) -> list[dict]:
+    """All preparation and detrending exclusions, keyed by original product/row.
+
+    Non-finite original times use null plus original_time_nonfinite so the
+    ledger is strict JSON and the original NaN/+Inf/-Inf distinction survives.
+    """
+    if len(prepared.time) != len(result.time) or not np.array_equal(prepared.time, result.time):
+        raise PreprocessError("provenance_mismatch", "prepared/result time")
+    if len(result.kept) != len(prepared.time) or len(result.reasons) != len(prepared.time):
+        raise PreprocessError("provenance_mismatch", "prepared/result length")
+    rows = [dict(row, reasons=list(row["reasons"]), interval_ids=list(row["interval_ids"])) for row in prepared.excluded]
+    for i in np.flatnonzero(~result.kept):
+        rows.append(dict(product_id=str(prepared.product_id[i]), sector=int(prepared.sector[i]),
+                         source_row=int(prepared.source_row[i]), cadenceno=int(prepared.cadenceno[i]),
+                         original_quality=int(prepared.original_quality[i]), original_time=float(prepared.time[i]),
+                         reasons=[str(result.reasons[i])], interval_ids=[]))
+    for row in rows:
+        value = row["original_time"]
+        if not np.isfinite(value):
+            row["original_time_nonfinite"] = "NaN" if np.isnan(value) else "+Infinity" if value > 0 else "-Infinity"
+            row["original_time"] = None
+    return sorted(rows, key=lambda row: (row["product_id"], row["source_row"]))

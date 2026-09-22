@@ -1,5 +1,13 @@
 # 탐사 API C02 계약 예제
 
+## 128 rule-1 채택안
+
+[규칙 JSON](matching-rules.v1.json)과 [공통 fixture](matching-cases.v1.json)는
+`proposed-not-activated` 상태의 공동 인계안이다. `node docs/api/exploration/matching-v1.cjs`로
+전체 expected 31개와 추가 계약 필드 검사 16개를 검증한다.
+[수치 선택 근거·실측·소비자 전환](../../data/tess-submission-matching-benchmark.md#6-rule-1-채택안과-선택-근거)을 따른다.
+기존 v0·과거 제출과 운영 설정을 자동 교체하지 않는다. 기존 v0 승인을 새 v1 승인으로 간주하지 않는다.
+
 143번의 사용자 채택 계산·멱등·실패 경계와 본체/후속 연동 인수 구분은 [제출 구현 계약·인수 조건](submission-readiness.md)을 따른다. 141·147은 담당자 구현을 기다리며 본체 착수를 막지 않는다. `node docs/api/exploration/snapshot-v0.cjs`는 보존된 v0(bin 시작) 계약의 합성 경계만 검증한다. 현재 v1(bin 중심)은 백엔드 `SubmissionTest`로 검증한다.
 
 [#133 검토안](../../../apps/backend/docs/exploration-contract-review.md)을 위한 합성 JSON이다. 2026-09-14 원격 `develop` `321f10b`의 SRS v1.2 변경안과 탐사 API Draft 0.3을 기준으로 한 **초안 예제**이며 운영 API 구현·권한 집행·수치 정책 승인 증거가 아니다.
@@ -13,6 +21,13 @@
 C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·재도전은 최신 현재 진행, History CURRENT는 원본으로 고정했다. C02-R2 기준 시각은 같은 날 Bundle 공통값으로 결정했으며 모든 유효 원본 관측 시각의 중앙값을 한 번 저장한다. C02-R3은 사용자가 고른 봉우리의 grid index를 제출하고 그 봉우리의 추천 duration 3배를 선택 폭 상한으로 적용한다. 직접 주기 선택은 Bundle 공통 위상 상한만 쓴다. 세 결정은 정본·API·JSON에 같은 버전으로 반영했으며 MR !32에서는 반영 누락과 문서 충돌을 검토한다. 예제의 합성 수치를 운영 설정에 복사하지 않는다.
 
 ## 제출 매칭 수치 규칙 v0 (`rule-0`, Jira S15P21C206-128)
+
+2026-09-21 최신 계약 정합화와 111 저장 결과의 부분 검산·rule-1 잔여 범위는
+[제출 매칭 검증](../../data/tess-submission-matching-benchmark.md)을 따른다.
+`suggestedDurationHours=null`은 0시간 상한이 아니다(API 5.4·6.2). 이때 duration 상한만 생략하고
+기존 폭·source·fineTune 검사는 유지한다. `node --test docs/api/exploration/matching-contract.test.cjs`로
+추가 12개 계약·재생 경계를 검증한다. 기존 31개 fixture와 규칙 수치는 변경하지 않는다.
+관측 통과 상한은 서버처럼 주기 오차에만 적용하고 중첩 비율에는 실제 관측 통과 수를 사용한다.
 
 사용자 제출(주기·위상 구간)을 배치 BLS 후보와 대조하는 수치 규칙의 **개발용 v0**다. SRS 5.1 초기값과 탐사 API 예시값에 출처를 붙인 것이며 운영 기본값·확정 인수 기준이 아니다. 확정 v1(`rule-1`)은 `S15P21C206-111` 실측과 강재민(C09)·백지웅(A04) 공동 승인 뒤 만든다. 128의 완료는 v0 제공만으로 처리하지 않는다.
 
@@ -28,7 +43,7 @@ C02-R1 은퇴 3경로는 2026-09-14 사용자 선택에 따라 분석 복귀·�
 
 **중첩 우세.** SRS 5.2 (6) 의 "통과 구간 중첩 비교" 는 조건 (3) 으로 넣었다. 다만 v0 정의에서는 주기·epoch 통과가 창 이탈을 D_c 이내로 제한해 점수 1위가 중첩에서 명확히 불리해지는 사례를 구성할 수 없었다(`overlap-recorded-no-inversion`). 111 실측에서 실제 사례가 없으면 (3) 을 제거한다.
 
-**미결(이 fixture 로 확정하지 않은 것).** N 상한(DEC-03), 최소 중첩 통과 수·비율, `dominanceRatio`·`minScoreGap`·`overlapRatioTolerance` 값, alias epoch 순환 주기 해석, epoch 허용 폭의 창 전체/반폭 해석, `phaseWidthMax` 0.25·`allowEmptyPhaseSpan=false`(DEC-19/Q03), 3배 고조파(112 뒤). 탐사 API 5.4 vs 6.8 은 충돌이 아님으로 확인돼 미결에서 뺐다(6.8 다시 풀기는 `sourcePeakGridIndex=null` 로 시작). 전부 `matching-rules.v0.json` 의 `openItems` 와 각 항목 `status` 에 있다.
+**미결(이 fixture 로 확정하지 않은 것).** N 상한(DEC-03), 최소 중첩 통과 수·비율, `dominanceRatio`·`minScoreGap`·`overlapRatioTolerance` 값, `phaseWidthMax` 0.25·`allowEmptyPhaseSpan=false`(DEC-19/Q03), 3배 고조파(112 뒤). alias epoch 순환 주기와 반폭 해석은 2026-09-17 강재민 리뷰에서 확인되어 미결 목록에서 제거했다. 탐사 API 5.4 vs 6.8도 충돌이 아니다(6.8 다시 풀기는 `sourcePeakGridIndex=null`로 시작). 남은 항목은 `matching-rules.v0.json`의 `openItems`와 각 항목 `status`에 있다.
 
 **버전.** 선택 규칙(최소·최대 폭, 3배 상한, `allowEmptyPhaseSpan`, fineTune)과 매칭 허용치를 한 `rule-N` 으로 묶는다. `submissions.rule_version` 하나로 그 제출의 검증·판정을 재현해야 하기 때문이며, 선택 규칙 값만 바뀌어도 새 `rule-N` 을 만든다. 탐사 API 5.1 의 `selectionRules.version` 은 같은 문자열을 내려준다. 별도 `sel-N` 은 두지 않는다(2026-09-17 강재민 질문 반영, API 표기는 151).
 

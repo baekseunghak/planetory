@@ -15,7 +15,11 @@ AstroNet-Triage 입력 `global_view`(201)·`local_view`(61) NPZ, (3) 실행 mani
 118의 실행 순서는 입력 생성·변환 → calibration 점수로 하한·상한 결정 및 잠금 → evaluation 검증이다.
 입력 생성은 양쪽 split을 포함해도 되지만 evaluation 점수를 보고 임계값을 조정하지 않는다.
 `build-set`·`convert`는 입력 준비만 수행한다. 118의 조정용 추론은 아래 별도 실행기를 사용한다.
-지표 계산·실험안 잠금·사용자 독립 평가(35/35)는 완료했다. 자동 판정용 채택 보류를 제안하며 라이선스·팀 채택 판단은 남아 있다.
+지표 계산·실험안 잠금·사용자 독립 평가(35/35)는 완료했다. 2026-09-21 팀은 현재 checkpoint·임계값의
+운영 채택을 보류하고 실험 결과만 내부 검토 자료로 보존하기로 최종 결정했다. 사용자 화면·자동 승인·기각에는 연결하지 않는다.
+서비스 FP/FN 허용 기준과 평가 범위의 한계를 보류 근거로 남기고, 재채택 전 코드·checkpoint의 서비스 사용·재배포 조건을 다시 검토한다.
+AI-01~04와 126·130은 유지하며 대안 모델·AI 출시 범위는 별도 결정이다.
+118의 완료 경계는 [최종 보류 결정](../../docs/data/tess-astronet-benchmark.md#6-최종-운영-채택-보류-결정과-완료-경계)을 따른다.
 
 Windows(uv) 에서 세트·변환, WSL TensorFlow 1 환경에서 TFRecord 순서다. 원본 FITS 는 tess-fixture 의 `sample_raw/` 를 그대로 읽는다.
 
@@ -153,7 +157,7 @@ manifest 양쪽의 hash와 일치해야 한다. calibration과 evaluation의 con
 2026-09-19 사용자 evaluation `183da766` 완료: PC/EB TP 10·FN 1, junk FP 2·TN 16,
 정밀도 10/12(83.33%)·재현율 10/11(90.91%), 전체 review 20/35(57.14%)다.
 FP 2/18(11.11%)은 합성 백색 잡음에 대한 값이며 실제 계통 오차의 오탐률로 일반화하지 않는다. 아래 명령은 저장 결과만 집계한다.
-전체 수치·checksum·보류 제안은 [성능 평가 5·6절](../../docs/data/tess-astronet-benchmark.md#5-독립-평가-결과)에 기록한다.
+전체 수치·checksum·최종 보류 결정은 [성능 평가 5·6절](../../docs/data/tess-astronet-benchmark.md#5-독립-평가-결과)에 기록한다.
 
 ```powershell
 uv run --locked python -m astronet_eval.metrics --run-dir results/predictions/evaluation-20260919T131808Z-183da766/run
