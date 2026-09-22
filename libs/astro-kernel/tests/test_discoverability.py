@@ -249,3 +249,10 @@ def test_retired_boolean_is_preserved(monkeypatch, value):
     result = run(seg, cat, rule_approval="fixture")
     assert result["discoverability_ready"]
     assert result["candidates"][1] == retired
+
+
+def test_evaluate_still_rejects_unsupported_rule():
+    rule = deepcopy(d.RULE)
+    rule["objective"] = "unsupported"
+    with pytest.raises(ValueError, match="unsupported discoverability rule"):
+        d.evaluate([0., 1.], [1., 1.], [], None, [1., 2.], rule)

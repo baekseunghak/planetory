@@ -62,6 +62,11 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration").target("20").load();
         assertEquals(List.of("20"), followUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        // V21 is reserved for the separate statistics change; this checkout has V22 only.
+        Flyway scatterComment = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("22").load();
+        assertEquals(List.of("22"), scatterComment.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")

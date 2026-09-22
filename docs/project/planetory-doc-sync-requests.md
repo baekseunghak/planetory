@@ -110,3 +110,5 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 
 리뷰어는 `prepare_discoverability`를 진입점으로 고정하는 조건으로 123 규칙의 후속 적용에 동의했다.
 1.15배 상한의 실제 데이터 효과는 여전히 미검증이다. 조건부 승인을 운영 배포 승인으로 해석하지 않는다.
+
+123 Backend 리뷰 후속 갱신: 강재민이 M1 Backend 수정·matching-cases 표본 재검증·과거 제출 재판정 금지 확인을 자신의 후속 티켓으로 인수한다고 답했다. Frontend 4곳은 API 계약 확정 후 연결한다. start_btjd COMMENT 정정도 같은 후속 범위다. 실제 Jira 키는 아직 전달받지 않았다. Publisher 87 인계의 READ COMMITTED·FOR SHARE 대기 경계는 Gold 계약 4.2절에 기록했다.

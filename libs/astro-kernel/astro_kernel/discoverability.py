@@ -24,11 +24,15 @@ def _digest(material):
                                      ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
-def validate_rule(rule, half_width_cells):
+def _validate_supported_rule(rule):
     # This implementation supports exactly one scientific rule. Changing a
     # descriptive key cannot silently leave the calculation unchanged.
     if rule != RULE or _digest(rule) != _digest(RULE):
         raise ValueError("unsupported discoverability rule; new rules require a versioned implementation")
+
+
+def validate_rule(rule, half_width_cells):
+    _validate_supported_rule(rule)
     if type(half_width_cells) is not int or half_width_cells < rule["match_half_width_cells"]:
         raise ValueError("match_half_width_cells must not exceed manifest fine_tune.half_width_cells")
 
@@ -67,7 +71,8 @@ def classify(pg, time, flux, model, rule):
 
 def evaluate(time, flux, previous_models, model, periods, rule=RULE):
     """Programming/configuration errors propagate; only measurement failures become null."""
-    validate_rule(rule, rule["match_half_width_cells"])
+    # No manifest is available here. Only prepare_discoverability validates its width.
+    _validate_supported_rule(rule)
     t = np.asarray(time, dtype=float)
     residual = remove_transit_models(t, flux, previous_models).flux_residual
     try:

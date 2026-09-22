@@ -614,7 +614,7 @@ Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 �
 - 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_evaluation`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
 
 검증: 최초 비닝 구현 당시 전체 225개 통과였으며, 123 최초 리뷰 HEAD `26f409ee`는 전체 248개였다.
-은퇴 후보 boolean 방어를 추가한 현재 전체 커널은 253개 통과다(신규 segmentation 20개·discoverability 28개 포함).
+은퇴 후보 boolean 방어를 추가한 현재 전체 커널은 254개 통과다(신규 segmentation 20개·discoverability 29개 포함).
 경계 스냅·부분 bin·빈 구간·전처리 제외점 시간축·상한·revision 변경·출처 누락·실패 격리를 검사했다.
 제공 해상도 판정 연결과 완료된 36곡선 FITS 회귀는 아래 절과 벤치마크 README를 따른다.
 기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
