@@ -22,8 +22,7 @@ class MemberCommunityPermissionTest {
     private static final List<String> WRITABLE =
             List.of("users", "user_settings", "posts", "comments");
     private static final List<String> UNUSED = List.of(
-            "notifications",
-            "stats_snapshots");
+            "notifications");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -62,6 +61,10 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration").target("20").load();
         assertEquals(List.of("20"), followUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway statsUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("21").load();
+        assertEquals(List.of("21"), statsUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -89,6 +92,12 @@ class MemberCommunityPermissionTest {
             }
 
             assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
+            assertTrue(hasPrivilege(owner, "stats_snapshots", "SELECT"));
+            assertTrue(hasPrivilege(owner, "global_stats", "SELECT"));
+            for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "stats_snapshots", denied), denied);
+            }
+            assertFalse(hasPrivilege(owner, "global_stats", "MAINTAIN"));
             for (String allowed : List.of("SELECT", "INSERT", "UPDATE", "DELETE"))
                 assertTrue(hasPrivilege(owner, "post_reactions", allowed));
             assertFalse(hasPrivilege(owner, "post_reactions", "TRUNCATE"));

@@ -1034,14 +1034,47 @@ COM-16의 별 구독 범위를 유지하려면 회원별 전이와 별개인 공
 
 <a id="statistics-policy"></a>
 
-### 12.2 통계 후속 계약 — 176 초안
+### 12.2 전체·비교 통계 — 178
 
-`GET /api/v1/me/statistics`, `GET /api/v1/statistics`는 P1 후보 경로이며 아직 구현되지 않았다. 지표 사전·손계산 표본·177/178 인수 기준은 [통계 정책 상세](../../../docs/requirements/planetory-statistics-policy.md)가 담당한다. 시간 경계·활동 모수·첫 제출 일치율 등 미정 정책은 DEC-31에서 승인한 뒤 적용한다.
+2026-09-22 사용자 승인으로 `GET /api/v1/statistics`를 구현한다. 로그인한 active 회원만 조회하며 쿼리 파라미터는 받지 않는다. 성공 200·`Cache-Control: no-store`, 무인증/탈퇴 401, 잘못된 쿼리 400, DB 접근 장애 503이다. 지표 사전·177/178 인수 기준은 [통계 정책](../../../docs/requirements/planetory-statistics-policy.md)이 담당한다. 본인 실시간 조회와 비교값 결합인 `GET /api/v1/me/statistics`는 177 소유다.
 
 - 기존 9.2절 신호별 실시간 `judgmentSummary`와 새 P1 통계를 구분한다. 전체는 10분 MV, 비교는 일별 Snapshot의 최근 90일 제출 회원 중앙값이며 사용자 순위·백분위는 제공하지 않는다.
-- 응답 권장안은 블록별 `asOf/generatedAt/status`, 기간·시간대·정책 버전, 비율의 분자/분모, 비교의 유효 표본 수·모수 수다. 정확한 JSON·오류 코드는 177·178에서 승인·검증한다. 상세 메타데이터·직전 성공본·최초 미생성·동일 날짜 재실행은 [정책 4절](../../../docs/requirements/planetory-statistics-policy.md#4-기준-시각갱신응답-인계안)을 따른다.
-- 90일은 회원 선정 창만으로, 비교값은 기준일 이전 누적으로 계산하는 안을 권장한다. 본인 값과 중앙값의 기간을 맞춘다. 회원별 비율 중앙값을 전체 합산 비율로 바꾸지 않는다.
-- 탈퇴 원천 보존은 DEC-11/179 담당이며 현재·과거 통계 적용은 연계 미정이다. 기존 신호 쿼리에 active 필터가 있다는 전제로 계약을 작성하지 않는다. MV·Snapshot·권한·스케줄은 후속 설계이며 이번 공개 트랜잭션이나 GET에서 실행하지 않는다.
+- 응답 최상위는 `policyVersion=2026-09-22`, `timeZone=Asia/Seoul`, `global`, `comparison`이다. `global={status,asOf,generatedAt,reason,data}`이며 data에는 `metrics`, 8개 `weeklySubmissions`, `mostPostsStars`, `sectorCompletion`, `challenges`, `aiJudgmentBands`가 있다. Metric은 `{unit,value,numerator,denominator,status,reason}`이고 건수 0은 AVAILABLE, 분모 0은 null/NO_SAMPLE이다. 블록 상태 READY·STALE·UNAVAILABLE과 지표 상태를 구분한다.
+- 전체 성공본이 없으면 `global.status=UNAVAILABLE`, `reason=AGGREGATE_NOT_READY`, data/시각=null이다. 성공본 기준 10분이 경과하면 STALE/REFRESH_DELAYED와 기존 값·시각을 반환한다. 실제 DB 접속 실패는 성공본 유무를 추측하지 않고 503이다. 조회 요청과 공개 트랜잭션에서 갱신을 실행하지 않는다.
+- `comparison={status,asOf,sourceObservedAt,generatedAt,snapshotDate,cohortStart,cohortEnd,cohortMemberCount,metrics}`다. metrics 키는 `firstMatchAccuracy`, `submissionsPerStar`, `harmonicRecognitionRate`, `evidencePerSubmission`; 값은 `{unit,median,sampleCount,status,reason}`다. 첫 성공 전 metadata=null/metrics={}이고 UNAVAILABLE, 최신 날짜가 어제보다 오래되면 STALE이다. 회원별 원자료·회원 ID·닉네임은 포함하지 않는다.
+- KST D의 `[D-90,D)`에 저장된 candidate/no_candidate/skipped 제출이 있는 active 회원을 선정하고 D 이전 누적값의 중앙값을 저장한다. null만 제외하고 0을 포함하며 짝수는 가운데 두 값의 평균이다. `cohortMemberCount`와 지표별 `sampleCount`를 구분하고 중간 표시 반올림은 하지 않는다. 90일을 값 계산 기간으로 사용하거나 회원별 비율 중앙값을 전체 분자/분모 비율로 대체하지 않는다.
+- **2026-09-22 추가 사용자 승인:** `asOf/cohortEnd`는 기록 종료 경계 D, `sourceObservedAt`은 집계 트랜잭션이 원천을 확인한 시각, `generatedAt`은 계산 완료다. 전날까지의 기록을 **실행 시점에 확인한 상태로 계산한 값**이다. 늦게 커밋된 기록과 D 이후 원천 관측 전 라벨·회원상태 변경이 반영될 수 있다. 정확한 자정 당시 상태라고 표시하지 않는다. `snapshotDate=D-1`이며 과거 날짜 신규 계산은 거절하고 기존 성공본만 유지한다. 같은 원천 시점을 재현할 수 없는 본인 비교값은 177에서 null/HISTORICAL_SOURCE_UNAVAILABLE로 제공한다.
+- 현재 집계의 회원 기여는 탈퇴 효력 이후 다음 성공 갱신부터 제외하고 과거 비식별 성공본은 보존한다. 원본 보관·물리 삭제는 DEC-11/179 별도 범위다. 기존 P0 신호 통계를 이 변경으로 일괄 수정하지 않는다.
+- AI 후보별 최신 실행을 입증할 원천이 없으므로 모든 유효 공개 참여를 `aiAttemptUnknown` 건수에 넣고 `aiJudgmentBands={status:NO_SAMPLE,reason:AI_ATTEMPT_UNKNOWN,items:[]}`로 반환한다. 과거 성공 평가·정상 0점을 최신 시도로 단정하지 않는다. 원천 확보 후에는 확인된 정상 0점도 판정 구간에 포함해야 한다. 버전별 판정 구간 구현은 원천 확보와 후속 계약이 선행한다.
+- `aiAttemptUnknown`은 AI 시도 횟수가 아니라 **최신 AI 시도를 확인할 수 없는 회원×신호 공개 참여 건수**다. 현재 원천에서는 `publicParticipations`와 항상 같으며 두 값을 더하지 않는다. `AVAILABLE`은 이 제외 대상 건수를 계산할 수 있다는 뜻이고 AI 결과 가용성을 뜻하지 않는다. 판정 구간은 별도로 `NO_SAMPLE / AI_ATTEMPT_UNKNOWN`이다.
+- 발견·현재 완료는 회원×별 수와 서비스 고유 TIC 수를 분리한다. 성과 유형은 저장 당시 유형, 고유 신호 유형은 현재 판정이다. `mostPostsStars`는 현재 공개 별에서 visible 일반/공식 원글 수 순 상위5개(동률 TIC 오름차순)이고 댓글·반응·자유글을 포함하지 않는다. `sectorCompletion`은 관측 버전 중복을 제거하고 발견 집합 내부의 현재 완료만 센다. 회차끼리 합산하지 않는다. 챌린지 `participantCount`는 고유 회원 수, `participationCount`와 판단 분포는 대상 별의 회원×신호 공개 대표 참여 수다. 현재 active 회차의 대상 별에 대한 전 기간 유효 공개를 포함하며 `starts_on/ends_on`으로 자르지 않는다. 고유 신호 수는 전체 후보 카탈로그가 아니라 성과가 있는 후보 집합을 센다.
+
+MV 최초 적재·일별 멱등·최소 권한·외부 스케줄은 [통계 실행 런북](../../../docs/operations/statistics-runbook.md)을 따른다. V21은 V20 다음에 적용하며 운영 활성화·프론트 브라우저 인수는 별도다.
+
+### 12.2.1 본인 상세 통계 — 177
+
+활성 회원의 세션 인증이 필요하며 회원 ID·기간 등 쿼리 파라미터를 받지 않는다. 미인증·탈퇴 회원은 401, 지원하지 않는 쿼리는 400, DB 장애는 503이다. 응답은 `Cache-Control: no-store`다. 타인 상세 통계 경로는 없다.
+
+| 필드 | 계약 |
+| --- | --- |
+| `policyVersion`, `timeZone` | `2026-09-22`, `Asia/Seoul` |
+| `current` | 한 REPEATABLE_READ에서 읽은 현재 개인 통계. `status=READY`, `asOf`, `generatedAt`, `periodStart`(가입), `periodEnd`(조회 기준)를 UTC로 제공 |
+| `current.metrics` | `discoveredStarCount`, `startedStarCount`, `completedStarCount`, `recognizedTotal`, `submissionCount`, `activeDays`, `retryRecognitionCount`, `postCount`, `commentCount`, `unpublishedSignalCount`와 아래 공통 4키 |
+| 공통 4키 | `firstMatchAccuracy`, `submissionsPerStar`, `harmonicRecognitionRate`, `evidencePerSubmission`. 첫 제출 지표는 별도로 제공하지 않음 |
+| `Metric` | `{unit,value,numerator,denominator,status,reason}`. 건수는 0도 AVAILABLE, 비율·평균의 분모 0은 null/NO_SAMPLE/ZERO_DENOMINATOR. 당시 근거 부족은 null/UNAVAILABLE/MISSING_BASIS. 숫자는 계산 중 표시 반올림 없이 전달하며 화면에서 소수 첫째 자리로 표시 |
+| `current.achievementByType`, `gradeDistribution` | 기존 탐사 요약을 재사용한 유형별 성과·등급별 별 수의 Metric 맵 |
+| `current.judgmentDistribution`, `judgmentAccuracy`, `publicJudgmentDistribution` | 각각 모든 후보 제출 판단, 첫 매칭의 판단별 일치율, 최신 유효 공개 판단. 분포 건수는 numerator, 전체 건수는 denominator. 판단 키는 LIKELY_PLANET/UNLIKELY_PLANET/UNSURE이며 세부 일치율은 앞 두 키만 제공 |
+| `current.weeks` | 오름차순 8개 `{weekStart,weekEnd,partial,submissionCount}`. KST 월요일·시작 포함/끝 제외, 현재 주만 partial=true, 빈 주 0 |
+| `current.evidence` | 3개 `{key,useCount,accuracy,excludedCount}`. oddeven/secondary/ushape만, 제출 내 중복 제거. 당시 graded 판단 근거 없는 선택 제출은 일치율 분모에서 빼고 excludedCount로 표시 |
+| `current.nextGoal` | 현재 제출 유무에 따른 안내 한 줄. 일치율로 실력이나 과학적 진위를 단정하지 않음 |
+| `comparison` | 178의 성공 Snapshot 메타데이터를 보존한 `status,unavailableReason,asOf,sourceObservedAt,generatedAt,snapshotDate,cohortStart,cohortEnd,cohortMemberCount,inCohort,metrics` |
+| `comparison.metrics` | 공통 4키별 `{myValue:Metric,median,sampleCount,status,reason}`. 뒤 status/reason은 중앙값 상태이며 myValue 상태와 독립 |
+
+비교 성공본이 없으면 `comparison.status=UNAVAILABLE`, `unavailableReason=AGGREGATE_NOT_READY`, 시각·날짜·모수 수는 null이며 중앙값과 본인 값도 null이다. 개인 현재 통계는 계속 READY일 수 있다. D 이후 가입자는 `myValue`가 NOT_APPLICABLE/JOINED_AFTER_CUTOFF다. 그 밖의 회원은 당시 원천을 재현하지 못하면 HISTORICAL_SOURCE_UNAVAILABLE로 표시한다. 모수 명단을 저장하지 않으므로 과거 `inCohort`는 확인할 수 없을 때 null이며 신규 회원만 false로 확정한다. 비교 막대를 현재값으로 채우지 않는다.
+
+화면은 `myValue`가 HISTORICAL_SOURCE_UNAVAILABLE이면 본인 막대 대신 ‘당시 자료 부족’을 표시하고, 유효한 중앙값만 기준일·원천 확인 시각과 함께 보여준다. JOINED_AFTER_CUTOFF이면 ‘가입 전 기준 통계’로 표시한다. `current.metrics`의 같은 키는 별도 현재 통계 영역에서 현재 `asOf`와 함께 제공하며 과거 중앙값과의 비교 막대·차이·우열 계산에 사용하지 않는다. 프로필의 완료 수 표시 문구는 기존 화면과 같은 ‘탐색 완료한 별’을 유지한다. 지표의 현재 완료 산식과 재개 시 감소는 유지하며 화면 전체 용어 변경은 별도 작업으로 다룬다.
+
+시작한 별은 제출이 있는 TIC 수다. 기존 프로필 요약의 ‘제출한 발견 별’과 구분하며 발견·현재 완료·성과·등급은 `ExplorationSummaryService`를 재사용한다. 미공개 신호는 166의 미게시 History 자격을 적용하여 duplicate를 포함하고 공개 후 취소 이력은 제외한다. 재도전 인정·근거 일치율은 보존된 제출 응답의 당시 판단을 쓰며 현재 라벨로 과거 근거를 만들지 않는다.
 
 ## 13. 탐사·프론트와 함께 확인할 계약
 

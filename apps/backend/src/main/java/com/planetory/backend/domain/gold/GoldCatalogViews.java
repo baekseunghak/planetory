@@ -41,7 +41,7 @@ public final class GoldCatalogViews {
      * 별·섹터 단위 곡선. revision이 같으면 판 사이에 공유하므로 판마다 복제하지 않는다.
      *
      * <p>시각 배열은 저장하지 않는다. i번째 점의 시각은
-     * {@code startBtjd + (binMinutes / 1440.0) * i}로 계산한다(BTJD는 일 단위).
+     * {@code startBtjd + (binMinutes / 1440.0) * (i + 0.5)}인 bin 중심에서 계산한다(BTJD는 일 단위).
      */
     public record LightCurveSegment(
             long id,
@@ -53,7 +53,7 @@ public final class GoldCatalogViews {
             int nPoints,
             /** 정규화 밝기. 결측은 null이며 길이는 {@code nPoints}와 같다. */
             Float[] flux,
-            /** 점간 산포 대표값. 점마다의 오차 배열 대신 하나만 둔다. */
+            /** 유한 비닝 flux 전체의 1.4826 × MAD. 통과·별 변동을 포함하며 점별 측정 오차나 가중치가 아니다. */
             BigDecimal fluxScatter,
             /** 빈 구간 인덱스. */
             JsonNode gaps) {

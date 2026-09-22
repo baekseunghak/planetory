@@ -22,15 +22,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.testcontainers.junit.jupiter.Testcontainers
 @ActiveProfiles("local")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class PlanetoryApplicationTests {
+    @org.testcontainers.junit.jupiter.Container
+    static final org.testcontainers.containers.GenericContainer<?> REDIS =
+            new org.testcontainers.containers.GenericContainer<>("redis:8.2-alpine").withExposedPorts(6379);
 
     // Every run uses its own schema; never migrate or delete development tables.
     private static final String SCHEMA = "backend_test_" + UUID.randomUUID().toString().replace("-", "");
 
     @DynamicPropertySource
     static void isolatedSchema(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);

@@ -1166,8 +1166,9 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
      "relabel": null, "curveStepAtMatch": 1, "submissionIds": ["sub-7001"], "threadId": null}
   ],
   "unmatchedSubmissions": [{"submissionId": "sub-7002", "historyId": "h-502", "matchResult": "not_matched", "submittedAt": "…"}],
-  "curveSteps": [{"curveStep": 0, "residual": {"status": "COMPLETED"}}, {"curveStep": 1, "removedCandidateIds": ["c-401"], "residual": {"status": "COMPLETED"}},
-                 {"curveStep": 2, "removedCandidateIds": ["c-401", "c-402"], "residual": {"status": "FAILED"}}],
+  "curveSteps": [{"curveStep": 0, "removedCandidateIds": [], "residual": {"status": "COMPLETED", "jobId": null, "computedAt": null}},
+                 {"curveStep": 1, "removedCandidateIds": ["c-401"], "residual": {"status": "COMPLETED", "jobId": null, "computedAt": null}},
+                 {"curveStep": 2, "removedCandidateIds": ["c-401", "c-402"], "residual": {"status": "FAILED", "jobId": null, "computedAt": null}}],
   "discoveredStars": [{"ticId": "123456790", "unlockedAt": "…", "triggerAchievementId": "ach-31"}],
   "unpublishedSignalCount": 1,
   "links": {"boardOpen": true, "threadIds": ["st-301"]},
@@ -1191,7 +1192,7 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 - `signals[].publication.state`도 **제출 당시** 자격으로 가른다(8.2절과 같다). 지금 확정으로 바뀌어도 그때 미확정으로 남긴 미공개 기록은 계속 `UNPUBLISHED`다.
 - `signals[].curveStepAtMatch`는 **처음** 맞힌 제출의 단계다. 같은 신호를 다시 제출해도 바뀌지 않는다. `submissionIds`는 그 신호를 맞힌 본인 제출 전부이며 오래된 것부터다 — **신호 수와 제출 수는 다르다.**
 - `signals[].ai`는 6.4절 `signal.ai`와 **같은 모양**이며 `modelVersion`을 포함한다. 두 화면이 같은 신호를 다르게 말하지 않게 한 곳에서 만든다.
-- `curveSteps`는 **회원이 실제로 제출한 단계**다. `removedCandidateIds`는 원본(0단계)에서도 빈 배열로 싣는다 — 키를 빼면 "제거 없음"과 "필드 누락"을 구분할 수 없다. `residual`은 2.4절 `Residual` 그대로라 `status`·`jobId`·`computedAt`을 갖는다. 원본은 DB 행이 곧 결과이므로 늘 `COMPLETED`다.
+- `curveSteps`는 **회원이 실제로 제출한 단계**다. `removedCandidateIds`는 원본(0단계)에서도 빈 배열로 싣는다 — 키를 빼면 "제거 없음"과 "필드 누락"을 구분할 수 없다. 2.1절 식별자 규칙과 6.3절 제출 검증에 따라 `curveStep = removedCandidateIds.length`다. 단계는 요청·클릭 횟수가 아니라 제거한 고유 후보 수이므로 두 후보를 한 번에 제거하는 조합도 2단계다. `residual`은 2.4절 `Residual` 그대로라 `status`·`jobId`·`computedAt`을 갖는다. 원본은 DB 행이 곧 결과이므로 늘 `COMPLETED`다.
 - `unpublishedSignalCount`는 **지금 유효하게 공개되어 있지 않은** 신호 수다. 유효 공개 조건은 `PublicAnalysisVisibility.VISIBLE` 하나를 쓰며 **부모 스레드 상태까지 본다.** 공개 기록의 취소·숨김만 보면 스레드가 숨겨진 뒤 신호 카드는 `HIDDEN`인데 이 수는 0이 되어 한 응답이 서로 다른 말을 한다. 4.4절 목록의 같은 값도 같은 조건이다.
 - `nextActions`: `PUBLISH_ALL`·`LATER`는 **탐색이 끝나고**(`progress.stage=completed`) **일괄 공개할 기록이 남았을 때만** 준다(RES-08 "별 탐색 종료 후", RES-10 "종료 시"). 기준은 미게시 **신호** 수가 아니라 **일괄 공개 후보**(166)다 — 같은 신호의 첫 기록을 공개한 뒤 새 적격 기록을 제출하면 신호 수는 0인데 공개할 기록은 남아 있다. 진행 중에는 개별 [분석 공개]가 그 일을 한다. `RETRY`는 6.8절 초안을 만들 수 있는 제출이 있을 때만 주며 **그 제출이 매칭한 후보가 은퇴했으면 주지 않는다** — 누르면 409 `CANDIDATE_RETIRED`가 될 행동을 힌트로 주지 않는다. **이 규칙은 요구사항에서 유도했고 명세에 예시만 있었다. 교차 리뷰 대상이다.**
 - 여러 질의로 한 응답을 만들므로 **같은 스냅샷**에서 읽는다. 중간에 판이 바뀌거나 공개 상태가 달라지면 신호 카드와 미게시 수가 서로 다른 시점을 말하게 된다.

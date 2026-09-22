@@ -14,7 +14,7 @@ type ProfileSlotComponents = {
 };
 ```
 
-지금 `main.tsx`가 `profileSections`를 넘기지 않아 기본값 `{}`이고 「연결 준비 중입니다」가 뜬다. [#190](analysis-history.md)이 `historyGraphRenderer`를 채운 것과 같은 방식이다.
+최초 구현 전에는 `main.tsx`의 `profileSections`가 비어 있었다. 현재는 `MyStarsSection`과 `MyHistorySection`이 등록돼 실제 두 목록을 렌더한다. [#190](analysis-history.md)이 `historyGraphRenderer`를 채운 것과 같은 방식이다.
 
 **이 티켓은 `stars`와 `history` 둘을 채운다.** `statistics`는 `S15P21C206-198`~`200` 몫이고 백엔드 통계 엔드포인트가 아직 없다.
 
@@ -50,7 +50,7 @@ type ProfileSlotComponents = {
 
 명세 4.4가 이유를 적었다 — 「"공개하지 않은 신호가 없다"와 "볼 수 없다"는 다른 뜻이다」.
 
-## 필터는 서버에 있지만 이 티켓은 쓰지 않는다
+## 필터는 196의 기본 범위와 223의 P1 확장을 구분한다
 
 **정정.** 처음 이 문서는 `stage`·`grade`·`ticId`가 「P1이며 구현돼 있지 않다」고 적었다. **틀렸다.** `S15P21C206-152`가 붙였고 컨트롤러가 받는다.
 
@@ -62,7 +62,7 @@ type ProfileSlotComponents = {
 
 그리고 **커서가 이 셋에도 묶인다.** 조건을 하나 더 실으면 이어읽기 조건이 달라진다.
 
-그런데도 이 화면은 **필터를 보내지 않는다.** 티켓의 제외 범위가 「마이페이지 별 검색/진행 필터의 P1 확장」이기 때문이다. 서버가 못 받아서가 아니라 **범위 밖이라서** 안 보낸다. 나중에 붙일 때는 기록 목록과 같은 규칙을 쓴다 — 조건이 바뀌면 커서를 버린다.
+196의 최초 구현은 「마이페이지 별 검색/진행 필터의 P1 확장」을 제외했다. 이후 223에서 본인 목록에 `starFilters`를 연결했다. `scope=submitted`를 유지하며 조건 변경 시 커서를 버리고 이전 요청을 취소한다. 타인 공개 목록에는 본인의 검색 조건을 넘기지 않는다. 구현·직접 검증과 반영 상태는 [223 기록](ticket-223-readiness.md)을 따른다.
 
 기록 목록은 `ticId`·`candidateId`·`result`·`from`·`to`를 받는다. `result`의 허용값은 `matched`·`not_matched`·`none_wrong`·`ambiguous_match`·`skipped`이며, **`matched`는 `matched`·`matched_harmonic`·`duplicate` 셋을 묶는다.** 화면의 이름표를 서버 값과 일대일로 두면 어긋난다.
 
@@ -87,9 +87,9 @@ type ProfileSlotComponents = {
 
 **개발용 응답은 이쪽 소유로 새로 둔다.** `profiles` 모드는 `profile-fixture-plugin`(하서진)과 `community-fixture-plugin`(하서진·백승학)을 함께 쓴다. `/v1/me/histories`는 community 쪽이 첨부 선택용으로 주지만 `/v1/me/stars`는 **galaxy 모드에서만** 준다. 남의 fixture를 넓히면 그쪽 검사의 전제를 바꾸게 되므로 **목록 화면이 필요한 경우를 담은 플러그인을 따로 만든다.**
 
-**갈 곳이 없는 링크는 걸지 않는다.** 포함 범위에 「다시 풀기·별 결과·공개 검토로 연결」이 있으나 `S15P21C206-192`·`193`·`195` 화면이 없고 백엔드도 `retry-draft`·`stars/{ticId}/result`가 미구현이다. **지금 있는 곳만 잇고 나머지는 자리를 비워 둔다.**
+2026-09-22 갱신: 192 재도전과 백엔드 `retry-draft`·`stars/{ticId}/result`가 develop에 병합되었다. 193에서 본인 별 목록의 결과 링크를 연결한다. 공개 검토 이동 문맥은 준비하지만 실제 공개 처리는 195 범위다. [193 구현 범위](analysis-star-result.md)를 따른다.
 
 ## 미결
 
 - **실제 API 인수.** 완료 조건이 「실제 내 별/History 목록 API·커서·필터 검사」와 「목록→상세/재도전/공개→목록 E2E」를 요구한다. 로컬 OAuth 설정이 없어 [#190](analysis-history.md)·[#191](analysis-public-history.md)과 같은 지점에서 막힌다. **개발용 응답까지만 닫고 티켓을 완료로 보지 않는다.**
-- **이동 대상 화면.** 위 셋이 생기면 링크를 잇는다. 그때 어느 티켓이 잇는지 정한다.
+- **이동 대상 화면.** 193 결과 연결 뒤에도 195 공개 검토와 실제 API 왕복 검증은 남는다.

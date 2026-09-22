@@ -6,6 +6,39 @@ import {
   PUBLICATION_TIC,
 } from "../../dev/publication-fixtures";
 import { historyFixtureResponse } from "../../dev/history-fixtures";
+import { starResultFixture } from "../../dev/star-result-fixtures";
+
+test("star result and History round trips refresh publication after publish and cancel", async ({ page }) => {
+  const { respond, writes } = await fixture(page);
+  let resultReads = 0;
+  await page.route("**/api/v1/stars/259377024/result", route => {
+    resultReads++;
+    const body = starResultFixture();
+    const detail = respond("GET", new URL("http://fixture/api/v1/histories/h-1951"))!.body as ReturnType<typeof publicationDetail>;
+    body.signals[0].latestHistoryId = "h-1951";
+    body.signals[0].publication.state = detail.submission.publication.state;
+    body.unpublishedSignalCount = detail.submission.publication.state === "PUBLISHED" ? 0 : 1;
+    return route.fulfill({ json: body });
+  });
+  const resultUrl = "/results/259377024?returnTo=%2Fsky";
+  await page.goto(resultUrl);
+  await page.getByRole("link", { name: "분석 공개 검토", exact: true }).click();
+  await expect(card(page)).toContainText("통과 모양을 확인했습니다.");
+  expect(writes).toHaveLength(0);
+  await card(page).getByRole("button", { name: "이 기록 게시", exact: true }).click();
+  await expect(card(page)).toContainText("공개 중");
+  await page.getByRole("link", { name: "나중에 · 돌아가기" }).click();
+  await expect(page.locator(".star-result")).toContainText("게시됨");
+  expect(resultReads).toBeGreaterThan(1);
+  await page.getByRole("link", { name: "최신 기록과 곡선 보기" }).click();
+  await page.getByRole("link", { name: "공개 검토·설정" }).click();
+  await card(page).getByRole("button", { name: "공개 취소", exact: true }).click();
+  await expect(card(page)).toContainText("공개되지 않음");
+  await page.getByRole("link", { name: "나중에 · 돌아가기" }).click();
+  await expect(page).toHaveURL(/\/history\/h-1951/);
+  await expect(page.getByText("공개할 수 있습니다.", { exact: true })).toBeVisible();
+  expect(writes.map(write => write.method)).toEqual(["POST", "PUT"]);
+});
 
 test("21 failures across pages are retried in batches of 20 without resending successes", async ({
   page,

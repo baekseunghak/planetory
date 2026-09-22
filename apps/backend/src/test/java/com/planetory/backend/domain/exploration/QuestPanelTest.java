@@ -187,6 +187,7 @@ class QuestPanelTest {
                 panel.tutorial().items().get(1));
         assertEquals(List.of(String.valueOf(TUTORIAL[2])), panel.reopened().stream().map(Reopened::ticId).toList());
         assertTrue(summary.overview(member).tutorialCompleted());
+        assertEquals(4, summary.overview(member).achievementSummary().completedStarCount());
     }
 
     // ---------- 챌린지 ----------
