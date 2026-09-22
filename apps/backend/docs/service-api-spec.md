@@ -1021,14 +1021,36 @@ COM-16의 별 구독 범위를 유지하려면 회원별 전이와 별개인 공
 
 <a id="statistics-policy"></a>
 
-### 12.2 통계 후속 계약 — 176 초안
+### 12.2 통계 계약
 
-`GET /api/v1/me/statistics`, `GET /api/v1/statistics`는 P1 후보 경로이며 아직 구현되지 않았다. 지표 사전·손계산 표본·177/178 인수 기준은 [통계 정책 상세](../../../docs/requirements/planetory-statistics-policy.md)가 담당한다. 시간 경계·활동 모수·첫 제출 일치율 등 미정 정책은 DEC-31에서 승인한 뒤 적용한다.
+개인 조회는 `GET /api/v1/me/statistics`다. 2026-09-22 사용자가 승인한 시간·모수·첫 매칭 통합·현재 완료 기준을 적용한다. 지표 사전·손계산 표본·177/178 인수 기준은 [통계 정책 상세](../../../docs/requirements/planetory-statistics-policy.md)가 담당한다. 전체 조회·Snapshot 저장과 실행은 178 소유다.
 
 - 기존 9.2절 신호별 실시간 `judgmentSummary`와 새 P1 통계를 구분한다. 전체는 10분 MV, 비교는 일별 Snapshot의 최근 90일 제출 회원 중앙값이며 사용자 순위·백분위는 제공하지 않는다.
-- 응답 권장안은 블록별 `asOf/generatedAt/status`, 기간·시간대·정책 버전, 비율의 분자/분모, 비교의 유효 표본 수·모수 수다. 정확한 JSON·오류 코드는 177·178에서 승인·검증한다. 상세 메타데이터·직전 성공본·최초 미생성·동일 날짜 재실행은 [정책 4절](../../../docs/requirements/planetory-statistics-policy.md#4-기준-시각갱신응답-인계안)을 따른다.
-- 90일은 회원 선정 창만으로, 비교값은 기준일 이전 누적으로 계산하는 안을 권장한다. 본인 값과 중앙값의 기간을 맞춘다. 회원별 비율 중앙값을 전체 합산 비율로 바꾸지 않는다.
-- 탈퇴 원천 보존은 DEC-11/179 담당이며 현재·과거 통계 적용은 연계 미정이다. 기존 신호 쿼리에 active 필터가 있다는 전제로 계약을 작성하지 않는다. MV·Snapshot·권한·스케줄은 후속 설계이며 이번 공개 트랜잭션이나 GET에서 실행하지 않는다.
+- 90일은 회원 선정 창이며 값은 기준일 이전 누적 기록이다. 중앙값은 집계 실행 때 확인한 원천 상태로 계산하고 `sourceObservedAt`을 표시한다(2026-09-22 추가 승인). 같은 시점의 본인 원천을 복원할 수 없으면 `myValue.value=null`, `HISTORICAL_SOURCE_UNAVAILABLE`이며 현재값으로 대체하지 않는다.
+- 탈퇴 효력 이후 현재 회원 기준 통계에서 제외한다. 원천 보존·삭제·익명화는 DEC-11/179의 미정 범위다. GET에서 MV 갱신·Snapshot 생성은 하지 않는다.
+
+#### 12.2.1 본인 상세 통계 — 177
+
+활성 회원의 세션 인증이 필요하며 회원 ID·기간 등 쿼리 파라미터를 받지 않는다. 미인증·탈퇴 회원은 401, 지원하지 않는 쿼리는 400, DB 장애는 503이다. 응답은 `Cache-Control: no-store`다. 타인 상세 통계 경로는 없다.
+
+| 필드 | 계약 |
+| --- | --- |
+| `policyVersion`, `timeZone` | `2026-09-22`, `Asia/Seoul` |
+| `current` | 한 REPEATABLE_READ에서 읽은 현재 개인 통계. `status=READY`, `asOf`, `generatedAt`, `periodStart`(가입), `periodEnd`(조회 기준)를 UTC로 제공 |
+| `current.metrics` | `discoveredStarCount`, `startedStarCount`, `completedStarCount`, `recognizedTotal`, `submissionCount`, `activeDays`, `retryRecognitionCount`, `postCount`, `commentCount`, `unpublishedSignalCount`와 아래 공통 4키 |
+| 공통 4키 | `firstMatchAccuracy`, `submissionsPerStar`, `harmonicRecognitionRate`, `evidencePerSubmission`. 첫 제출 지표는 별도로 제공하지 않음 |
+| `Metric` | `{unit,value,numerator,denominator,status,reason}`. 건수는 0도 AVAILABLE, 비율·평균의 분모 0은 null/NO_SAMPLE/ZERO_DENOMINATOR. 당시 근거 부족은 null/UNAVAILABLE/MISSING_BASIS. 숫자는 계산 중 표시 반올림 없이 전달하며 화면에서 소수 첫째 자리로 표시 |
+| `current.achievementByType`, `gradeDistribution` | 기존 탐사 요약을 재사용한 유형별 성과·등급별 별 수의 Metric 맵 |
+| `current.judgmentDistribution`, `judgmentAccuracy`, `publicJudgmentDistribution` | 각각 모든 후보 제출 판단, 첫 매칭의 판단별 일치율, 최신 유효 공개 판단. 분포 건수는 numerator, 전체 건수는 denominator. 판단 키는 LIKELY_PLANET/UNLIKELY_PLANET/UNSURE이며 세부 일치율은 앞 두 키만 제공 |
+| `current.weeks` | 오름차순 8개 `{weekStart,weekEnd,partial,submissionCount}`. KST 월요일·시작 포함/끝 제외, 현재 주만 partial=true, 빈 주 0 |
+| `current.evidence` | 3개 `{key,useCount,accuracy,excludedCount}`. oddeven/secondary/ushape만, 제출 내 중복 제거. 당시 graded 판단 근거 없는 선택 제출은 일치율 분모에서 빼고 excludedCount로 표시 |
+| `current.nextGoal` | 현재 제출 유무에 따른 안내 한 줄. 일치율로 실력이나 과학적 진위를 단정하지 않음 |
+| `comparison` | 178의 성공 Snapshot 메타데이터를 보존한 `status,unavailableReason,asOf,sourceObservedAt,generatedAt,snapshotDate,cohortStart,cohortEnd,cohortMemberCount,inCohort,metrics` |
+| `comparison.metrics` | 공통 4키별 `{myValue:Metric,median,sampleCount,status,reason}`. 뒤 status/reason은 중앙값 상태이며 myValue 상태와 독립 |
+
+비교 성공본이 없으면 `comparison.status=UNAVAILABLE`, `unavailableReason=AGGREGATE_NOT_READY`, 시각·날짜·모수 수는 null이며 중앙값과 본인 값도 null이다. 개인 현재 통계는 계속 READY일 수 있다. D 이후 가입자는 `myValue`가 NOT_APPLICABLE/JOINED_AFTER_CUTOFF다. 그 밖의 회원은 당시 원천을 재현하지 못하면 HISTORICAL_SOURCE_UNAVAILABLE로 표시한다. 모수 명단을 저장하지 않으므로 과거 `inCohort`는 확인할 수 없을 때 null이며 신규 회원만 false로 확정한다. 비교 막대를 현재값으로 채우지 않는다.
+
+시작한 별은 제출이 있는 TIC 수다. 기존 프로필 요약의 ‘제출한 발견 별’과 구분하며 발견·현재 완료·성과·등급은 `ExplorationSummaryService`를 재사용한다. 미공개 신호는 166의 미게시 History 자격을 적용하여 duplicate를 포함하고 공개 후 취소 이력은 제외한다. 재도전 인정·근거 일치율은 보존된 제출 응답의 당시 판단을 쓰며 현재 라벨로 과거 근거를 만들지 않는다.
 
 ## 13. 탐사·프론트와 함께 확인할 계약
 

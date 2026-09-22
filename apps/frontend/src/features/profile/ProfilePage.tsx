@@ -173,7 +173,7 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
               </dd>
             </div>
             <div>
-              <dt>탐색 완료한 별</dt>
+              <dt>현재 완료한 별</dt>
               <dd>
                 {s.completedStarCount!.toLocaleString()}
                 <small>개</small>
