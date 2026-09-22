@@ -118,6 +118,8 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 - [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
 
+전체·비교 통계(178)는 인증된 `GET /api/v1/statistics`와 별도 `statistics` 운영 명령이다. V21은 173의 V20 다음에 적용한다. MV 10분·일별 기준선은 [통계 실행 런북](../../docs/operations/statistics-runbook.md)을 따르며 웹 요청에서 갱신하지 않는다. `StatisticsAggregationTest`, `StatisticsMigrationTest`, `StatisticsCommandTest`는 전용 일회용 PostgreSQL에서 모수·중앙값·실패·최소권한·신규 및 업그레이드를 검증한다. 공유/운영 DB 적용과 스케줄 활성화는 별도다.
+
 커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
 
 출처 카드(167)는 같은 별의 공식 스레드·공개 분석 미리보기와 글·댓글 연결을 제공한다. 취소·숨김된 기존 출처는 ID 없는 안내만 반환하며 본문 수정에서 보존한다. [서비스 API 5~7장](docs/service-api-spec.md#attachments), [V18 권한](docs/development-setup.md#v18-출처-관계-권한)을 따른다. `SourceCardTest`는 일회용 PostgreSQL에서 HTTP·공개 상태·동일 스냅샷·교체 및 삭제 경합·최소 앱 권한·성과 비변경을 검증한다.
