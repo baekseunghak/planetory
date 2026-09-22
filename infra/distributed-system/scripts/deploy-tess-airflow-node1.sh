@@ -15,11 +15,11 @@ if [[ "${1:-}" == --viewer-password ]]; then
   if [[ ! -f "$password_file" ]]; then openssl rand -hex 24 > "$password_file"; fi
   chmod 0600 "$password_file"
   password="$(<"$password_file")"
-  if "${compose[@]}" exec -T airflow-webserver airflow users list -o plain | grep -Eq '[[:space:]]viewer[[:space:]]'; then
-    "${compose[@]}" exec -T airflow-webserver airflow users reset-password \
+  if "${compose[@]}" exec -T airflow-api-server airflow users list -o plain | grep -Eq '[[:space:]]viewer[[:space:]]'; then
+    "${compose[@]}" exec -T airflow-api-server airflow users reset-password \
       --username viewer --password "$password" >/dev/null
   else
-    "${compose[@]}" exec -T airflow-webserver airflow users create \
+    "${compose[@]}" exec -T airflow-api-server airflow users create \
       --username viewer --firstname Planetory --lastname Viewer \
       --role Viewer --email viewer@planetory.invalid --password "$password" >/dev/null
   fi
@@ -31,10 +31,13 @@ if [[ "${1:-}" == --update ]]; then
   [[ -f /etc/planetory/airflow/airflow.env ]] || { echo 'AIRFLOW_ENV_MISSING' >&2; exit 1; }
   cd "$release_dir"
   scheduler=planetory-distributed-system-airflow-scheduler-1
-  webserver=planetory-distributed-system-airflow-webserver-1
+  api_server=planetory-distributed-system-airflow-api-server-1
   old_image="$(docker inspect -f '{{.Config.Image}}' "$scheduler")"
-  [[ "$old_image" == "$(docker inspect -f '{{.Config.Image}}' "$webserver")" ]] || {
+  [[ "$old_image" == "$(docker inspect -f '{{.Config.Image}}' "$api_server")" ]] || {
     echo 'AIRFLOW_IMAGE_DRIFT' >&2; exit 1;
+  }
+  [[ "$(docker exec "$scheduler" airflow version)" == "3.2.2" ]] || {
+    echo 'AIRFLOW_MAJOR_UPGRADE_REQUIRES_DB_CLONE_AND_MIGRATION' >&2; exit 1;
   }
   docker image inspect "$old_image" >/dev/null
   docker exec "$scheduler" python -c '
@@ -54,7 +57,7 @@ finally:
   docker build --network none --build-arg "AIRFLOW_IMAGE=$old_image" \
     -f distributed-system/airflow/Dockerfile -t "$image" .
   docker run --rm --network none --entrypoint python "$image" -c '
-from airflow.models.dagbag import DagBag
+from airflow.dag_processing.dagbag import DagBag
 bag = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
 required = {"tess_sector_discovery", "tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze"}
 assert not bag.import_errors, bag.import_errors
@@ -68,7 +71,7 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
     status=$?
     trap - EXIT
     if [[ "$status" != 0 && "$switched" == 1 ]]; then
-      AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-webserver || \
+      AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-api-server || \
         echo 'AIRFLOW_ROLLBACK_FAILED' >&2
       echo "AIRFLOW_UPDATE_ROLLED_BACK old_image=$old_image" >&2
     fi
@@ -76,17 +79,19 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
   }
   trap rollback EXIT
   switched=1
-  AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-webserver
+  AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-api-server
   for attempt in $(seq 1 60); do
-    if curl --fail --silent --output /dev/null http://127.0.0.1:8081/health; then break; fi
+    if curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health; then break; fi
     sleep 2
   done
-  curl --fail --silent --output /dev/null http://127.0.0.1:8081/health
-  "${compose[@]}" exec -T airflow-scheduler airflow dags list-import-errors | grep -Fq 'No data found'
+  curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health
+  "${compose[@]}" exec -T airflow-dag-processor airflow dags list-import-errors | grep -Fq 'No data found'
   [[ "$(docker inspect -f '{{.Config.Image}}' "$scheduler")" == "$image" ]]
-  [[ "$(docker inspect -f '{{.Config.Image}}' "$webserver")" == "$image" ]]
+  [[ "$(docker inspect -f '{{.Config.Image}}' "$api_server")" == "$image" ]]
+  [[ "$(docker inspect -f '{{.Config.Image}}' planetory-distributed-system-airflow-dag-processor-1)" == "$image" ]]
   [[ "$(docker inspect -f '{{.State.Running}}' "$scheduler")" == true ]]
-  [[ "$(docker inspect -f '{{.State.Running}}' "$webserver")" == true ]]
+  [[ "$(docker inspect -f '{{.State.Running}}' "$api_server")" == true ]]
+  [[ "$(docker inspect -f '{{.State.Running}}' planetory-distributed-system-airflow-dag-processor-1)" == true ]]
   trap - EXIT
   echo "AIRFLOW_UPDATE_READY image=$image previous=$old_image"
   exit 0
@@ -121,6 +126,7 @@ values = {
     'AIRFLOW_DATABASE_URL': f'postgresql+psycopg2://airflow:{password}@127.0.0.1:5432/airflow',
     'AIRFLOW_FERNET_KEY': fernet,
     'AIRFLOW_WEBSERVER_SECRET_KEY': secrets.token_hex(32),
+    'AIRFLOW_JWT_SECRET': secrets.token_hex(48),
     'AIRFLOW_IMAGE': 'local/planetory-airflow:' + release.name,
     'AIRFLOW_DB_PATH': '/mnt/data/airflow-postgres',
     'AIRFLOW_LOGS_PATH': '/mnt/data/airflow-logs',
@@ -138,21 +144,21 @@ PY
 
 cd "$release_dir"
 image="local/planetory-airflow:$(basename "$release_dir")"
-docker build --build-arg AIRFLOW_IMAGE=apache/airflow:2.10.5-python3.12 \
+docker build --build-arg AIRFLOW_IMAGE=apache/airflow:3.2.2-python3.12 \
   -f distributed-system/airflow/Dockerfile -t "$image" .
 compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose.yaml)
 "${compose[@]}" config --quiet
 "${compose[@]}" up -d airflow-db
 "${compose[@]}" --profile setup run --rm airflow-init
-"${compose[@]}" up -d airflow-scheduler airflow-webserver
-"${compose[@]}" exec -T airflow-scheduler airflow dags list-import-errors
+"${compose[@]}" up -d airflow-scheduler airflow-dag-processor airflow-api-server
+"${compose[@]}" exec -T airflow-dag-processor airflow dags list-import-errors
 "${compose[@]}" exec -T airflow-scheduler airflow dags list | grep -F tess_sector_discovery
 bash "$0" --viewer-password
 for attempt in $(seq 1 60); do
-  if curl --fail --silent --output /dev/null http://127.0.0.1:8081/health; then break; fi
+  if curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health; then break; fi
   sleep 2
 done
-curl --fail --silent --output /dev/null http://127.0.0.1:8081/health
+curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health
 tailscale serve --bg --https=443 http://127.0.0.1:8081
 tailscale serve status
 echo 'AIRFLOW_TAILNET_READY'

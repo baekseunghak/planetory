@@ -15,6 +15,7 @@ try {
     & tar -czf $archive '--exclude=__pycache__' '--exclude=*.pyc' -C $repoRoot `
         'infra/distributed-system/compose.control-plane.yaml' `
         'infra/distributed-system/scripts/deploy-tess-airflow-node1.sh' `
+        'infra/distributed-system/scripts/upgrade-tess-airflow3-node1.sh' `
         'infra/distributed-system/scripts/configure-tess-airflow-node1.sh' `
         'infra/distributed-system/scripts/configure-tess-airflow-account.sh' `
         'distributed-system/airflow/Dockerfile' `

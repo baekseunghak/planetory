@@ -5,12 +5,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from airflow.decorators import dag, task
-from airflow.exceptions import AirflowException, AirflowFailException
-from airflow.models import Variable
-from airflow.operators.python import get_current_context
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.sensors.base import PokeReturnValue
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.sdk import PokeReturnValue, Variable, dag, get_current_context, task
+from airflow.sdk.exceptions import AirflowException, AirflowFailException
 
 from tess_pipeline_contract import command, stage_inputs, validate_download_markers
 from tess_pipeline_remote import remote, require_success
@@ -18,6 +15,8 @@ from tess_pipeline_remote import remote, require_success
 
 def stop_on_contract_failure(message: str) -> None:
     Variable.set("tess_pipeline_enabled", "false")
+    if Variable.get("tess_pipeline_enabled") != "false":
+        raise AirflowFailException("Failed to persist TESS pipeline stop flag")
     raise AirflowFailException(message)
 
 

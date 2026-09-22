@@ -1,7 +1,7 @@
 """Small SSH adapter shared by the legacy and Sector-stage TESS DAGs."""
 
-from airflow.exceptions import AirflowException, AirflowFailException
 from airflow.providers.ssh.hooks.ssh import SSHHook
+from airflow.sdk.exceptions import AirflowException, AirflowFailException
 
 
 def remote(connection_id: str, remote_command: str) -> tuple[int, str]:

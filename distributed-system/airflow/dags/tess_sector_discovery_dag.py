@@ -5,16 +5,13 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from airflow.decorators import dag, task
-from airflow.exceptions import AirflowException, AirflowFailException
-from airflow.models import DagModel, DagRun, Variable
-from airflow.operators.python import get_current_context
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.utils.session import create_session
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.sdk import Variable, dag, get_current_context, task
+from airflow.sdk.exceptions import AirflowException, AirflowFailException
 
 from tess_pipeline_contract import command, release_path, stage_inputs
 from tess_pipeline_remote import remote
-from tess_sector_discovery import effective_max_sector, published_lc_scripts, resume_stage, retry_attempt
+from tess_sector_discovery import effective_max_sector, published_lc_scripts, resume_stage, retry_attempt_from_task
 
 
 STAGE_DAGS = {
@@ -47,28 +44,28 @@ def admission(release: str, operation: str, sector: int, *options: str) -> dict:
 
 def settings() -> dict:
     try:
-        value = Variable.get("tess_pipeline_settings", deserialize_json=True)
+        value = Variable.get("tess_pipeline_settings", default=None, deserialize_json=True)
         if not isinstance(value, dict):
             raise ValueError("settings must be a JSON object")
         return value
-    except (KeyError, ValueError) as error:
+    except ValueError as error:
         raise AirflowFailException("tess_pipeline_settings is missing or invalid") from error
 
 
 def check_stage_dags() -> None:
-    with create_session() as session:
-        for dag_id in STAGE_DAGS.values():
-            model = session.query(DagModel).filter(DagModel.dag_id == dag_id).one_or_none()
-            if model is None or model.is_paused or model.has_import_errors:
-                raise AirflowException(f"Sector stage DAG is unavailable: {dag_id}")
+    ti = get_current_context()["ti"]
+    for dag_id in STAGE_DAGS.values():
+        try:
+            if ti.get_dag(dag_id).is_paused:
+                raise AirflowException(f"Sector stage DAG is paused: {dag_id}")
+        except AirflowException:
+            raise
+        except Exception as error:
+            raise AirflowException(f"Sector stage DAG is unavailable: {dag_id}") from error
 
 
 def stage_attempt(dag_id: str, prefix: str) -> int | None:
-    with create_session() as session:
-        rows = session.query(DagRun.run_id, DagRun.state).filter(
-            DagRun.dag_id == dag_id
-        ).all()
-    return retry_attempt([(run_id, str(state)) for run_id, state in rows if run_id.startswith(prefix)], prefix)
+    return retry_attempt_from_task(get_current_context()["ti"], dag_id, prefix)
 
 
 @dag(
@@ -89,7 +86,7 @@ def discovery_dag():
     @task(retries=3, retry_delay=timedelta(minutes=5))
     def reconcile() -> list[dict]:
         # A durable stop flag prevents new admission after scheduler or host restart.
-        if Variable.get("tess_pipeline_enabled", default_var="false").lower() != "true":
+        if Variable.get("tess_pipeline_enabled", default="false").lower() != "true":
             return []
         config = settings()
         try:
@@ -100,7 +97,7 @@ def discovery_dag():
         try:
             max_sector = effective_max_sector(
                 get_current_context()["params"]["max_sector"],
-                Variable.get("tess_pipeline_max_sector", default_var="70"),
+                Variable.get("tess_pipeline_max_sector", default="70"),
             )
         except ValueError as error:
             raise AirflowFailException(str(error)) from error

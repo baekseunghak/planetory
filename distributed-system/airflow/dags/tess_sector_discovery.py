@@ -129,3 +129,14 @@ def retry_attempt(runs: list[tuple[str, str]], prefix: str) -> int | None:
     if attempt > 10000:
         raise ValueError("Sector stage retry limit exceeded")
     return None if active else attempt
+
+
+def retry_attempt_from_task(ti: object, dag_id: str, prefix: str) -> int | None:
+    """Read our contiguous attempt IDs through the Airflow 3 Task SDK."""
+    runs = []
+    for attempt in range(10002):
+        run_id = f"{prefix}{attempt}"
+        if not ti.get_dr_count(dag_id=dag_id, run_ids=[run_id]):
+            return retry_attempt(runs, prefix)
+        runs.append((run_id, ti.get_dagrun_state(dag_id=dag_id, run_id=run_id)))
+    raise ValueError("Sector stage retry limit exceeded")

@@ -410,7 +410,17 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 최초 UI 배포 시점에는 DAG 화면만 볼 수 있었고, 실행 전 SSH Connection 6개·제한 sudo·불변 release·수집 run 계보의 별도 확인이 필요했다. 후속 release의 실제 설정과 제한 실행 결과는 아래에 기록한다.
 
-기존 Airflow의 코드만 갱신할 때는 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치한 뒤 Node 1에서 `sudo bash <release>/infra/distributed-system/scripts/deploy-tess-airflow-node1.sh --update`를 실행한다. 이 경로는 기존 이미지를 기반으로 새 이미지를 네트워크 없이 빌드하고 DAG import·4개 신규 DAG의 기본 일시정지 상태를 검사한다. 활성 DAG run이 없을 때만 Scheduler·Webserver를 교체하며 DB·비밀 환경 파일·Tailscale Serve는 건드리지 않는다. 교체 뒤 UI·import·컨테이너 상태가 실패하면 이전 이미지로 두 서비스를 되돌린다. 새 DAG를 일시정지 해제하거나 데이터 작업을 trigger하는 것은 별도 단계다.
+2.x에서의 기존 코드 갱신은 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치하고 `--update`를 실행해 활성 run 0건과 DAG import를 확인한 뒤 Scheduler·Webserver만 교체했다. 3.2.2용 현재 스크립트의 `--update`는 Scheduler가 이미 3.2.2인 경우에만 실행하며 Scheduler·DAG Processor·API Server를 교체한다. 어느 버전에서도 코드 갱신 명령은 새 Sector 실행이나 DB 버전 마이그레이션을 수행하지 않는다.
+
+### Airflow 3.2.2 전환
+
+전환 전 Node 1 운영은 2.10.5였다. 2026-09-22 먼저 공식 3.2.2 베이스로 격리 이미지를 빌드해 다섯 DAG import 오류 0건을 확인했다. 이후 승인된 일회성 전환으로 release `/opt/planetory-airflow/releases/20260922T143000Z`를 설치했다. 기존 `--update`는 2.x→3.x 마이그레이션 경로가 아니며 3.2.2가 이미 실행 중일 때만 허용한다.
+
+전환은 [Node 1 일회성 업그레이드 스크립트](scripts/upgrade-tess-airflow3-node1.sh)로 수행한다. 활성 DagRun 0건·발견 DAG pause·`tess_pipeline_enabled=false` 확인 → 기존 Scheduler·Webserver 정지 → PostgreSQL `airflow` DB 일관성 백업 → 새 이름의 DB에 백업 복제 → **복제본에만** `airflow db migrate` → 새 API Server(`127.0.0.1:8081`)·Scheduler·DAG Processor 시작 → DAG import·Viewer·중지 플래그·health 검증 순서다. 새 DB URL과 별도 JWT secret은 root 전용 Airflow 환경 파일에 보관하고 기존 Fernet key·UI secret은 유지한다. SSH Connection·DagRun·pause 보존, Task SDK 상태 조회, UI 로그인·Tailnet Serve·재부팅 자동 시작은 운영 전환 후 별도 검증한다. 새 Sector 처리와 로컬 삭제는 전환 검증에 포함하지 않고 파이프라인 중지 상태를 유지한다. 운영 DB 스키마나 원본 데이터는 제자리 수정하지 않는다.
+
+오류 시 스크립트가 새 3.x 서비스를 중지하고 보존한 2.10.5 release·기존 DB URL로 Scheduler·Webserver 복귀를 시도한다. 자동 복귀 실패는 수동 조사가 필요하다. 전환 후 3.x에서 새 DagRun이 생성되면 구 DB에 반영되지 않으므로, 복귀 전 이를 확인하고 별도 복구 판단을 한다. DB 복제·서비스 교체는 대상 DB명, 백업 위치, rollback release와 영향 시간을 확정해 실행 직전 별도 승인을 받는다. 전환 중에는 UI가 잠시 중단되며 HDFS·YARN·수집 Worker는 건드리지 않는다.
+
+2026-09-22 운영 전환 결과: 기존 `airflow` DB는 그대로 보존하고 root 전용 `/mnt/data/airflow-backups/20260922T143000Z/airflow2.dump`(mode 0600)로 백업했다. 복제 DB `airflow3_20260922t143000z`에만 `airflow db migrate`를 적용하고 새 root 전용 `/etc/planetory/airflow/airflow3-20260922T143000Z.env`(mode 0600)로 연결했다. 새 Scheduler·DAG Processor·API Server의 이미지가 모두 `local/planetory-airflow:20260922T143000Z`, 재시작 정책 `unless-stopped`, 상태 running이다. 구 Webserver는 중지했으나 삭제하지 않았다. API `/api/v2/version`은 3.2.2, metadata·Scheduler·DAG Processor health는 모두 healthy, Tailnet UI와 health는 HTTP 200, Tailscale Serve는 tailnet 전용 loopback 프록시를 유지한다. 원본/복제 DB의 TESS DAG 5개·DagRun 20개·task 이력 39개·SSH Connection 6개와 다섯 DAG pause 상태가 일치하고 import 오류 0건이다. Viewer 계정과 `tess_pipeline_enabled=false`도 보존했다. **Viewer 실제 로그인, Task SDK를 통한 실행, 신규 Sector 처리, 서버 재부팅은 이번 버전 전환에서 검증하지 않았다.**
 
 2026-09-22 release `20260922T134419Z`에서 기존 1~13 단일 DAG `tess_sector_download_raw_bronze`를 제거했다. 갱신 이미지가 이전 이미지를 기반으로 하므로 Dockerfile에서 해당 이전 DAG 파일도 명시적으로 제거한다. 활성 run 0건과 과거 DAG DagRun 0건을 확인한 뒤 Scheduler·Webserver만 교체하고 Airflow DB의 비활성 과거 DAG metadata 행 1건을 삭제했다. 현행 5개 DAG, import 오류 0건, UI health 200을 확인했다. 기존 DB 볼륨·다른 release·HDFS 데이터는 유지한다.
 

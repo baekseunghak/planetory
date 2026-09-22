@@ -74,3 +74,5 @@
 | 2026-09-22 | Hadoop 6대 순차 재부팅 자동 복구 운영 검증 | S15P21C206-252 | release 5fec7b88, boot ID, Journal quorum, NN Active, YARN, Airflow | 6대 순차 재부팅·복구 검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 과거 Sector 1~13 Airflow DAG 제거 | S15P21C206-252 | Airflow, legacy DAG, metadata, release 20260922T134419Z | 운영 제거·검증 완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 현행 Airflow DAG 한국어 표시 이름 배포 | S15P21C206-252 | Airflow, dag_display_name, description, release 20260922T135740Z | 운영 배포·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow 3.2.2 전환 코드·격리 import 검증 | S15P21C206-252 | Airflow 3, Task SDK, DB clone, rollback | 코드·이미지 검증, 운영 전환 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |

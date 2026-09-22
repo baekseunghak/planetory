@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dags"))
 
 from tess_sector_discovery import (  # noqa: E402
     INDEX_URL, MAX_INDEX_BYTES, effective_max_sector, latest_published_sector, next_sector_stage,
-    parse_lc_scripts, published_lc_scripts, resume_stage, retry_attempt,
+    parse_lc_scripts, published_lc_scripts, resume_stage, retry_attempt, retry_attempt_from_task,
 )
 
 
@@ -100,13 +100,34 @@ class TessSectorDiscoveryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unexpected"):
             retry_attempt([(prefix + "other", "failed")], prefix)
 
+    def test_task_sdk_retry_uses_existing_run_states(self):
+        prefix = "tess_s14_" + "a" * 16 + "_r"
+
+        class TaskInstance:
+            states = {prefix + "0": "failed", prefix + "1": "running"}
+
+            def get_dr_count(self, dag_id, run_ids):
+                assert dag_id == "tess_sector_raw"
+                return int(run_ids[0] in self.states)
+
+            def get_dagrun_state(self, dag_id, run_id):
+                return self.states[run_id]
+
+        ti = TaskInstance()
+        self.assertIsNone(retry_attempt_from_task(ti, "tess_sector_raw", prefix))
+        ti.states[prefix + "1"] = "failed"
+        self.assertEqual(retry_attempt_from_task(ti, "tess_sector_raw", prefix), 2)
+        ti.states[prefix + "1"] = "success"
+        with self.assertRaisesRegex(ValueError, "lacks its final evidence"):
+            retry_attempt_from_task(ti, "tess_sector_raw", prefix)
+
     def test_discovery_dag_maps_sector_plans_and_defaults_to_paused(self):
         source = (Path(__file__).resolve().parents[1] / "dags" / "tess_sector_discovery_dag.py").read_text(
             encoding="utf-8"
         )
         ast.parse(source)
         self.assertIn('is_paused_upon_creation=True', source)
-        self.assertIn('default_var="false"', source)
+        self.assertIn('default="false"', source)
         self.assertIn(').expand_kwargs(reconcile())', source)
         self.assertIn('if stage == "download":', source)
         self.assertIn('resuming admitted Sectors only', source)
