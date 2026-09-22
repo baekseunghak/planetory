@@ -174,6 +174,7 @@ export function WithdrawalStatusPage() {
       readWithdrawalStatus(
         await api("/v1/withdrawal-requests/" + encodeURIComponent(requestId), {
           signal,
+          sessionBound: false,
         }),
         requestId,
       ),
