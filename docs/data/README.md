@@ -8,6 +8,7 @@
 | 수집·Hadoop·Spark 배치 | [Hadoop·Spark 개발 규칙](spark-hadoop-guidelines.md) | 배치 구현·검증 규칙 |
 | 감사 완료 FITS의 HDFS Raw 적재·복원 | [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md) | S15P21C206-76 실행·복구 절차 |
 | 공통 실험 입력 | [TESS fixture 세트](tess-fixture-set.md) | 실험용 고정 입력 계약 |
+| 외부 TCE·TOI·Archive·ExoFOP 계약 | [외부 카탈로그 검증](tess-external-catalog-contract.md) | 116 네 원천 감사·9별 실측 완료, 소비자·처리 운영 리뷰 승인. 운영 구현은 124 |
 | 서비스 TESS 범위 시나리오·대표 표본·초기 예산 | [서비스 범위 초안](tess-service-scope-v1.md) | 초안, I03 결과·김동혁 검토로 승인 전 |
 | 현재 구현과 목표의 차이, 처리 단계별 설계·검증 | [TESS 파이프라인 분석](tess-pipeline/README.md) | 팀 검토용 제안과 상세 문서 지도 |
 | 모델 후보 실행 가능성 | [AI 모델 조사](tess-ai-model-feasibility.md) | 조사·실험 결과 |

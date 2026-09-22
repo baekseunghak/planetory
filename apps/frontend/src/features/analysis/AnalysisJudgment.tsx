@@ -1,4 +1,5 @@
 import { stageLabels, useAnalysisStage } from "./analysis-stage";
+import { OnboardingTip } from "../onboarding/Onboarding";
 import { useSustained } from "./fold-progress";
 import yesIcon from "./assets/yes.svg";
 import noIcon from "./assets/no.svg";
@@ -26,26 +27,32 @@ export function AnalysisSteps() {
   const fold = useAnalysisFold();
   const { stage, go, ready, confirmed } = useAnalysisStage();
   return (
-    <ol className="analysis-steps" aria-label="분석 단계">
-      {stageLabels.map((label, index) => (
-        <li key={label} aria-current={stage === index + 1 ? "step" : undefined}>
-          <button
-            type="button"
-            disabled={
-              index === 0
-                ? !fold.state.change
-                : !ready ||
-                  index === 3 ||
-                  (index === 1 && stage < 2) ||
-                  (index === 2 && !confirmed)
-            }
-            onClick={() => go((index + 1) as 1 | 2 | 3)}
+    <>
+      <OnboardingTip step={stage as 1 | 2 | 3 | 4} />
+      <ol className="analysis-steps" aria-label="분석 단계">
+        {stageLabels.map((label, index) => (
+          <li
+            key={label}
+            aria-current={stage === index + 1 ? "step" : undefined}
           >
-            {index + 1 < stage ? "✓" : index + 1} {label}
-          </button>
-        </li>
-      ))}
-    </ol>
+            <button
+              type="button"
+              disabled={
+                index === 0
+                  ? !fold.state.change
+                  : !ready ||
+                    index === 3 ||
+                    (index === 1 && stage < 2) ||
+                    (index === 2 && !confirmed)
+              }
+              onClick={() => go((index + 1) as 1 | 2 | 3)}
+            >
+              {index + 1 < stage ? "✓" : index + 1} {label}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 
