@@ -9,9 +9,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.time.Duration;
+import org.springframework.boot.convert.DurationStyle;
+import org.springframework.core.env.Environment;
 import java.time.Instant;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,12 +22,17 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class AuthSessionService {
-    private static final String LAST_ACTIVITY = AuthSessionService.class.getName() + ".lastActivity";
-    private static final Duration IDLE_TIMEOUT = Duration.ofMinutes(30);
+    private static final String LAST_ACTIVITY = RedisSessions.LAST_ACTIVITY;
+    private final Duration idleTimeout;
     private final Clock clock;
     private final ObjectProvider<RedisSessions<?>> redisSessions;
+
+    public AuthSessionService(Clock clock, ObjectProvider<RedisSessions<?>> redisSessions, Environment environment) {
+        this.clock = clock;
+        this.redisSessions = redisSessions;
+        this.idleTimeout = DurationStyle.detectAndParse(environment.getRequiredProperty("server.servlet.session.timeout"));
+    }
 
     public void login(Member member, HttpServletRequest request, HttpServletResponse response) {
         // OAuth2LoginAuthenticationFilter의 세션 ID 교체·CSRF 토큰 교체 이후 호출된다.
@@ -37,16 +43,17 @@ public class AuthSessionService {
         SecurityContextHolder.setContext(context);
         new HttpSessionSecurityContextRepository().saveContext(context, request, response);
         HttpSession session = request.getSession();
-        session.setMaxInactiveInterval((int) IDLE_TIMEOUT.toSeconds());
+        session.setMaxInactiveInterval((int) idleTimeout.toSeconds());
         session.setAttribute(LAST_ACTIVITY, clock.instant());
     }
 
     public boolean isExpired(HttpSession session, Instant receivedAt) {
         if (session == null) return true;
         var repository = redisSessions.getIfAvailable();
+        // ponytail: MockHttpSession 회귀 이관 완료 시 테스트 전용 메모리 폴백과 Gradle 비활성 속성을 함께 제거한다.
         if (repository != null) return !repository.active(session.getId(), receivedAt, false);
         var last = session.getAttribute(LAST_ACTIVITY);
-        return !(last instanceof Instant instant) || !receivedAt.isBefore(instant.plus(IDLE_TIMEOUT));
+        return !(last instanceof Instant instant) || !receivedAt.isBefore(instant.plus(idleTimeout));
     }
 
     public void touch(HttpSession session, Instant receivedAt) {

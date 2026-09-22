@@ -10,7 +10,7 @@ S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 �
 
 ## 빠른 시작
 
-준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. 실행 전에 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
+준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. local 기본 연결은 세션 `localhost:16379`, 캐시 `localhost:16380`이다. 다른 주소에서는 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
 
 ```sh
 cd apps/backend
@@ -35,6 +35,13 @@ cd apps/backend
 
 ```sh
 ./gradlew clean build      # Windows: .\gradlew.bat clean build
+```
+
+로컬 Redis가 없다면 아래 두 개발용 컨테이너를 먼저 실행한다(운영 설정이 아니다). Gradle은 Redis를 자동으로 시작하지 않는다.
+
+```powershell
+docker run -d --name planetory-local-session -p 127.0.0.1:16379:6379 redis:8.2-alpine
+docker run -d --name planetory-local-cache -p 127.0.0.1:16380:6379 redis:8.2-alpine
 ```
 
 ### IDE에서 실행
@@ -120,3 +127,6 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 171 리뷰 보완: 댓글 수는 선정 SQL에서 함께 조회하며 항목별 추가 왕복을 하지 않는다. 선정과 커서의 임계값은 `HotTopicsQuery.HOT_TOPIC_MIN_PARTICIPANTS`를 공유한다. 합성 스레드 100개 테스트의 실행 계획 출력은 측정 자료이며 특정 인덱스 사용을 보장하는 검사가 아니다. 해당 SQL 측정 시간은 항목별 판단 요약을 포함한 전체 API 응답 시간이 아니다.
 
 현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.
+
+
+팔로우(173)는 회원·별 관계, 본인 명단/공개 수치, 팔로잉 피드와 비공개 별 관리 해제를 제공한다. [서비스 API 12.1](docs/service-api-spec.md#follow-policy)·[V20 권한](docs/development-setup.md#v20-팔로우-권한)을 따른다. `./gradlew -PskipLocalDb test --tests '*FollowTest' --tests '*MemberCommunityPermissionTest' --tests '*CommunityReadTest' --tests '*HotTopicsTest'`는 실제 앱 역할과 일회용 PostgreSQL에서 관계/경합/페이지/기존 조회 회귀를 검사한다. FE219 관리 UI·첫 페이지 복귀와 실제 배포 인수는 별도다.

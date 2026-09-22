@@ -567,7 +567,7 @@ class CommunityReadTest {
         jdbc.update("INSERT INTO "+schema+".posts(kind,user_id,board,title,body,status) VALUES ('user',?,'free','일반','유지','visible')",member);
         var before=jdbc.queryForMap("SELECT status,created_at FROM "+schema+".posts WHERE kind='system_thread'");
         var upgraded=org.flywaydb.core.Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
-                .schemas(schema).locations("classpath:db/migration").load();
+                .schemas(schema).locations("classpath:db/migration").target("19").load();
         assertEquals(1,upgraded.migrate().migrationsExecuted);upgraded.validate();assertEquals(0,upgraded.migrate().migrationsExecuted);
         String body=jdbc.queryForObject("SELECT body FROM "+schema+".posts WHERE kind='system_thread'",String.class);
         assertEquals("주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm",body);

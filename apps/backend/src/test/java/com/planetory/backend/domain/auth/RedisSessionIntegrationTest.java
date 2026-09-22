@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
@@ -32,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RedisSessionIntegrationTest {
     @Container static final PostgreSQLContainer<?> DB = new PostgreSQLContainer<>("postgres:18.6-alpine");
     @Container static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.2-alpine").withExposedPorts(6379);
@@ -119,78 +120,130 @@ class RedisSessionIntegrationTest {
         assertEquals(200, get("/api/v1/me").statusCode());
     }
 
-    @Test void realRedisOAuthRestartConcurrencyExpiryAndFailureBoundaries() throws Exception {
+    @BeforeAll void startApplication() {
         TIME.now = Instant.now();
         start();
-        try {
-            var jdbc = app.getBean(JdbcTemplate.class);
-            for (int i = 1; i <= 5; i++) {
-                jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,0,'published')", i);
-                jdbc.update("INSERT INTO tutorial_stars(seq,tic_id,intent,active) VALUES (?,?,'deep_confirmed',true)", i, i);
-            }
-            assertEquals(403, logout("X-CSRF-TOKEN", null).statusCode());
-            var before = json.readTree(get("/api/v1/auth/csrf").body());
-            login("google", true); // OAuth 인가 상태도 앱 재시작을 통과한다.
-            assertEquals(403, logout(before.get("headerName").asText(), before.get("token").asText()).statusCode());
-            app.close(); start();
-            assertEquals(200, get("/api/v1/me").statusCode());
-            RedisSessions<?> repository = app.getBean(RedisSessions.class);
-            verifyRepository(repository);
-            var token = json.readTree(get("/api/v1/auth/csrf").body());
-            assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
-            assertEquals(401, get("/api/v1/me").statusCode());
-            assertEquals(403, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
-            token = json.readTree(get("/api/v1/auth/csrf").body());
-            assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
-            login("ssafy", false);
-            TIME.advance(Duration.ofMinutes(29));
-            assertEquals(200, get("/api/v1/auth/csrf").statusCode());
-            TIME.advance(Duration.ofMinutes(1));
-            assertEquals(401, get("/api/v1/auth/csrf").statusCode());
-            assertEquals(200, get("/api/v1/auth/csrf").statusCode());
-            TIME.now = Instant.now();
-            login("google", false);
-            token = json.readTree(get("/api/v1/auth/csrf").body());
-            TIME.advance(Duration.ofMinutes(30));
-            assertEquals(403, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
-            token = json.readTree(get("/api/v1/auth/csrf").body());
-            assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
-            TIME.now = Instant.now();
-            login("google", false);
-            CACHE.getDockerClient().pauseContainerCmd(CACHE.getContainerId()).exec();
-            try {
-                var cache = new StringRedisTemplate(app.getBean("redisConnectionFactory", LettuceConnectionFactory.class));
-                assertThrows(org.springframework.dao.DataAccessException.class, () -> cache.opsForValue().get("probe"));
-                assertEquals(200, get("/api/v1/me").statusCode());
-                token = json.readTree(get("/api/v1/auth/csrf").body());
-                var update = HttpRequest.newBuilder(URI.create(base + "/api/v1/me/onboarding"))
-                        .header("Content-Type", "application/json")
-                        .header(token.get("headerName").asText(), token.get("token").asText())
-                        .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"onboardingDone\":true}")).build();
-                assertEquals(200, http.send(update, HttpResponse.BodyHandlers.ofString()).statusCode());
-            } finally { CACHE.getDockerClient().unpauseContainerCmd(CACHE.getContainerId()).exec(); }
-            var large = get("/api/v1/test/session-large");
-            assertEquals(200, large.statusCode());
-            assertEquals(1024 * 1024, large.body().length());
-            try {
-                assertEquals(503, get("/api/v1/test/session-large-failure").statusCode());
-            } finally { REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec(); }
-            try {
-                var failedSave = get("/api/v1/test/session-save-failure");
-                assertEquals(503, failedSave.statusCode());
-                assertEquals("DEPENDENCY_UNAVAILABLE", json.readTree(failedSave.body()).get("code").asText());
-                long outageStart = System.nanoTime();
-                try (var requests = Executors.newFixedThreadPool(3)) {
-                    var results = new ArrayList<Future<Integer>>();
-                    for (int i = 0; i < 3; i++) results.add(requests.submit(() -> get("/api/v1/me").statusCode()));
-                    for (var result : results) assertEquals(503, result.get(15, TimeUnit.SECONDS));
-                }
-                assertTrue(Duration.ofNanos(System.nanoTime() - outageStart).compareTo(Duration.ofSeconds(15)) < 0);
-            } finally { REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec(); }
-        } finally {
-            if (app != null) app.close();
-            IDP.server.stop(0);
+        var jdbc = app.getBean(JdbcTemplate.class);
+        for (int i = 1; i <= 5; i++) {
+            jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,0,'published')", i);
+            jdbc.update("INSERT INTO tutorial_stars(seq,tic_id,intent,active) VALUES (?,?,'deep_confirmed',true)", i, i);
         }
+    }
+    @BeforeEach void resetClient() {
+        TIME.now = Instant.now();
+        cookies.getCookieStore().removeAll();
+    }
+    @AfterAll void stopApplication() {
+        if (app != null) app.close();
+        IDP.server.stop(0);
+    }
+
+    @Test void oauthStateAndLoginSurviveRestartAndLogoutRequiresFreshToken() throws Exception {
+        assertEquals(403, logout("X-CSRF-TOKEN", null).statusCode());
+        var before = json.readTree(get("/api/v1/auth/csrf").body());
+        login("google", true); // OAuth 인가 상태도 앱 재시작을 통과한다.
+        assertEquals(403, logout(before.get("headerName").asText(), before.get("token").asText()).statusCode());
+        app.close(); start();
+        assertEquals(200, get("/api/v1/me").statusCode());
+        var token = json.readTree(get("/api/v1/auth/csrf").body());
+        assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
+        assertEquals(401, get("/api/v1/me").statusCode());
+        assertEquals(403, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
+        token = json.readTree(get("/api/v1/auth/csrf").body());
+        assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
+    }
+
+    @Test void csrfDoesNotExtendAuthenticatedIdleTimeout() throws Exception {
+        login("ssafy", false);
+        TIME.advance(Duration.ofMinutes(29));
+        assertEquals(200, get("/api/v1/auth/csrf").statusCode());
+        TIME.advance(Duration.ofMinutes(1));
+        assertEquals(401, get("/api/v1/auth/csrf").statusCode());
+        assertEquals(200, get("/api/v1/auth/csrf").statusCode());
+        TIME.now = Instant.now();
+        login("google", false);
+        var token = json.readTree(get("/api/v1/auth/csrf").body());
+        TIME.advance(Duration.ofMinutes(30));
+        assertEquals(403, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
+        token = json.readTree(get("/api/v1/auth/csrf").body());
+        assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
+    }
+
+    @Test void cacheFailureKeepsHealthAndAuthenticatedReadWriteAvailable() throws Exception {
+        login("google", false);
+        CACHE.getDockerClient().pauseContainerCmd(CACHE.getContainerId()).exec();
+        try {
+            var cache = new StringRedisTemplate(app.getBean("redisConnectionFactory", LettuceConnectionFactory.class));
+            assertThrows(org.springframework.dao.DataAccessException.class, () -> cache.opsForValue().get("probe"));
+            assertEquals(200, get("/actuator/health").statusCode());
+            assertEquals(200, get("/api/v1/me").statusCode());
+            var token = json.readTree(get("/api/v1/auth/csrf").body());
+            var update = HttpRequest.newBuilder(URI.create(base + "/api/v1/me/onboarding"))
+                    .header("Content-Type", "application/json")
+                    .header(token.get("headerName").asText(), token.get("token").asText())
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"onboardingDone\":true}")).build();
+            assertEquals(200, http.send(update, HttpResponse.BodyHandlers.ofString()).statusCode());
+        } finally { CACHE.getDockerClient().unpauseContainerCmd(CACHE.getContainerId()).exec(); }
+    }
+
+    @Test void sessionFailureReturns503BeforeLargeResponseCommit() throws Exception {
+        login("google", false);
+        var large = get("/api/v1/test/session-large");
+        assertEquals(200, large.statusCode());
+        assertEquals(1024 * 1024, large.body().length());
+        try {
+            assertEquals(503, get("/api/v1/test/session-large-failure").statusCode());
+        } finally { REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec(); }
+        try {
+            var failedSave = get("/api/v1/test/session-save-failure");
+            assertEquals(503, failedSave.statusCode());
+            assertEquals("DEPENDENCY_UNAVAILABLE", json.readTree(failedSave.body()).get("code").asText());
+            assertEquals(503, get("/actuator/health").statusCode());
+            long outageStart = System.nanoTime();
+            try (var requests = Executors.newFixedThreadPool(3)) {
+                var results = new ArrayList<Future<Integer>>();
+                for (int i = 0; i < 3; i++) results.add(requests.submit(() -> get("/api/v1/me").statusCode()));
+                for (var result : results) assertEquals(503, result.get(15, TimeUnit.SECONDS));
+            }
+            assertTrue(Duration.ofNanos(System.nanoTime() - outageStart).compareTo(Duration.ofSeconds(15)) < 0);
+        } finally { REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec(); }
+    }
+
+    @Test void repositoryPreservesActivityAndRejectsStaleSaves() throws Exception {
+        verifyRepository(app.getBean(RedisSessions.class));
+    }
+
+    @Test void anonymousCsrfCreatesOneThirtyMinuteSessionPerCookielessRequest() throws Exception {
+        var redis = new StringRedisTemplate(app.getBean("sessionRedisConnectionFactory", LettuceConnectionFactory.class));
+        var before = redis.keys("planetory:session:sessions:*");
+        try (var client = HttpClient.newHttpClient()) {
+            for (int i = 0; i < 5; i++) {
+                var response = client.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/csrf")).build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode());
+                assertTrue(response.headers().firstValue("set-cookie").isPresent());
+            }
+        }
+        var added = redis.keys("planetory:session:sessions:*");
+        added.removeAll(before);
+        assertEquals(5, added.size());
+        for (String key : added) assertTrue(redis.getExpire(key) > 1790 && redis.getExpire(key) <= 1800);
+        redis.delete(added);
+    }
+
+    @Test void anonymousAccessTimeCannotMoveBackwards() {
+        verifyAnonymousActivity(app.getBean(RedisSessions.class));
+    }
+    <S extends Session> void verifyAnonymousActivity(RedisSessions<S> sessions) {
+        S session = sessions.createSession();
+        sessions.save(session);
+        S older = sessions.findById(session.getId()), newer = sessions.findById(session.getId());
+        var latest = Instant.now().plusSeconds(10).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        newer.setLastAccessedTime(latest);
+        sessions.save(newer);
+        sessions.save(older);
+        assertEquals(latest, sessions.findById(session.getId()).getLastAccessedTime());
+        sessions.deleteById(session.getId());
     }
 
     <S extends Session> void verifyRepository(RedisSessions<S> sessions) throws Exception {

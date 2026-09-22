@@ -48,7 +48,8 @@ public class RedisSessionConfig {
         return new LettuceConnectionFactory(server, client);
     }
     @Bean RedisSessions<?> sessionRepository(
-            @Qualifier("sessionRedisConnectionFactory") LettuceConnectionFactory connection) {
+            @Qualifier("sessionRedisConnectionFactory") LettuceConnectionFactory connection,
+            org.springframework.boot.web.server.autoconfigure.ServerProperties server) {
         var template = new RedisTemplate<String, Object>();
         template.setConnectionFactory(connection);
         template.setKeySerializer(new StringRedisSerializer());
@@ -57,18 +58,24 @@ public class RedisSessionConfig {
         template.afterPropertiesSet();
         var repository = new RedisSessionRepository(template);
         repository.setRedisKeyNamespace("planetory:session");
-        repository.setDefaultMaxInactiveInterval(Duration.ofMinutes(30));
+        repository.setDefaultMaxInactiveInterval(server.getServlet().getSession().getTimeout());
         repository.setFlushMode(org.springframework.session.FlushMode.ON_SAVE);
         repository.setSaveMode(org.springframework.session.SaveMode.ON_SET_ATTRIBUTE);
         return new RedisSessions<>(repository);
     }
-    @Bean DefaultCookieSerializer cookieSerializer(Environment env) {
+    @Bean org.springframework.boot.data.redis.health.DataRedisHealthIndicator redisHealthIndicator(
+            @Qualifier("sessionRedisConnectionFactory") LettuceConnectionFactory connection) {
+        // 캐시는 선택 의존성이므로 앱 전체 health는 인증 저장소만 검사한다.
+        return new org.springframework.boot.data.redis.health.DataRedisHealthIndicator(connection);
+    }
+    @Bean DefaultCookieSerializer cookieSerializer(org.springframework.boot.web.server.autoconfigure.ServerProperties server) {
         var cookie = new DefaultCookieSerializer();
-        cookie.setCookieName("SESSION");
-        cookie.setCookiePath("/");
-        cookie.setUseHttpOnlyCookie(true);
-        cookie.setUseSecureCookie(env.getProperty("server.servlet.session.cookie.secure", Boolean.class, true));
-        cookie.setSameSite("Lax");
+        var configured = server.getServlet().getSession().getCookie();
+        cookie.setCookieName(configured.getName());
+        cookie.setCookiePath(configured.getPath());
+        cookie.setUseHttpOnlyCookie(Boolean.TRUE.equals(configured.getHttpOnly()));
+        cookie.setUseSecureCookie(Boolean.TRUE.equals(configured.getSecure()));
+        cookie.setSameSite(configured.getSameSite().attributeValue());
         return cookie;
     }
     @Bean FilterRegistrationBean<SessionDependencyFilter> sessionDependencyFilter(SecurityErrorWriter errors) {

@@ -247,6 +247,35 @@ test("logout failure still active on server permits explicit retry only; CSRF is
   ).toBeVisible();
   expect(posts).toBe(2);
 });
+test("logout CSRF rejection keeps failure visible and allows only explicit retry", async ({
+  page,
+}) => {
+  await login(page);
+  let posts = 0;
+  await page.route("**/api/v1/auth/logout", async (route) => {
+    posts++;
+    expect(route.request().headers()["x-fixture-202-csrf"]).toBeTruthy();
+    if (posts === 1)
+      await route.fulfill({
+        status: 403,
+        json: { code: "FORBIDDEN", message: "요청을 확인해 주세요." },
+      });
+    else await route.continue();
+  });
+  await logout(page);
+  await expect(
+    page.getByRole("heading", { name: "로그아웃하지 못했습니다" }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+  await page
+    .getByRole("button", { name: "다시 로그아웃", exact: true })
+    .click();
+  await expect(
+    page.getByText("로그아웃되었습니다.", { exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(2);
+});
+
 test("ordinary 403 is not first nickname; raw OAuth code is removed without granting access", async ({
   page,
 }) => {

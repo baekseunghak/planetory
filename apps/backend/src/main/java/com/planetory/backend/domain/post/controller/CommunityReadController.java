@@ -3,6 +3,7 @@ package com.planetory.backend.domain.post.controller;
 import com.planetory.backend.domain.post.service.CommunityQuery;
 import com.planetory.backend.domain.post.service.CommunityReadService;
 import com.planetory.backend.domain.post.service.HotTopicsQuery;
+import com.planetory.backend.domain.member.service.FollowTokens;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
@@ -21,6 +22,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class CommunityReadController {
     private final CommunityReadService community;
+    private final FollowTokens followTokens;
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "본인 팔로잉 피드")
+    @GetMapping("/api/v1/community/following-feed")
+    public ResponseEntity<CommunityReadService.FollowingFeed> following(@AuthenticationPrincipal MemberPrincipal member,
+            @RequestParam MultiValueMap<String, String> params) {
+        try {
+            return response(community.following(member.memberId(), followTokens.page(member.memberId(), "feed", params)));
+        } catch (org.springframework.dao.DataAccessException e) { throw new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE); }
+    }
 
     @GetMapping("/api/v1/community/hot-topics")
     public ResponseEntity<CommunityReadService.Feed> hotTopics(@AuthenticationPrincipal MemberPrincipal member,

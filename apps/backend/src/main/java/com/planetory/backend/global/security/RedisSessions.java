@@ -1,26 +1,24 @@
 package com.planetory.backend.global.security;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
-import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 
 /** 단일 앱의 Redis 저장 경계. 세션 내용은 Redis에만 보관한다. */
 public final class RedisSessions<S extends Session> implements SessionRepository<S> {
     public static final String LAST_ACTIVITY = "com.planetory.backend.domain.auth.service.AuthSessionService.lastActivity";
-    private static final Duration IDLE = Duration.ofMinutes(30);
     private final SessionRepository<S> delegate;
     private final ReentrantLock lock = new ReentrantLock(true);
 
     public RedisSessions(SessionRepository<S> delegate) { this.delegate = delegate; }
 
     // ponytail: 단일 앱의 저장 작업만 직렬화한다. 다중 앱 전환 시 Redis 원자 연산으로 교체한다.
-    @Override public S createSession() { return locked(delegate::createSession); }
-    @Override public S findById(String id) { return locked(() -> delegate.findById(id)); }
+    @Override public S createSession() { return access(delegate::createSession); }
+    @Override public S findById(String id) { return access(() -> delegate.findById(id)); }
     @Override public void deleteById(String id) { locked(() -> { delegate.deleteById(id); return null; }); }
 
     @Override public void save(S session) { locked(() -> { saveCurrent(session); return null; }); }
@@ -34,7 +32,8 @@ public final class RedisSessions<S extends Session> implements SessionRepository
                 activity = latest;
                 session.setAttribute(LAST_ACTIVITY, latest);
             }
-            if (current.getLastAccessedTime().isAfter(session.getLastAccessedTime())) {
+            // 익명 세션도 역순 저장이 최신 접근 시각을 되돌리지 않도록 한다.
+            if (activity == null && current.getLastAccessedTime().isAfter(session.getLastAccessedTime())) {
                 session.setLastAccessedTime(current.getLastAccessedTime());
             }
         }
@@ -45,18 +44,19 @@ public final class RedisSessions<S extends Session> implements SessionRepository
         } catch (IllegalStateException ex) {
             // RedisSessionRepository는 이미 삭제/ID 교체된 사본의 저장을 거부한다.
             // 같은 잠금 안에서 delete와 save가 실행되므로 존재 확인 후 재생성 경합도 없다.
-            if (!"Session was invalidated".equals(ex.getMessage())) throw ex;
+            if (delegate.findById(session.getId()) != null) throw ex;
         }
     }
 
     public boolean active(String id, Instant receivedAt, boolean touch) {
-        return locked(() -> updateActivity(id, receivedAt, touch));
+        return touch ? locked(() -> updateActivity(id, receivedAt, true))
+                : access(() -> updateActivity(id, receivedAt, false));
     }
     private boolean updateActivity(String id, Instant receivedAt, boolean touch) {
         S session = delegate.findById(id);
         if (session == null) return false;
         Instant last = session.getAttribute(LAST_ACTIVITY);
-        if (last == null || !receivedAt.isBefore(last.plus(IDLE))) return false;
+        if (last == null || !receivedAt.isBefore(last.plus(session.getMaxInactiveInterval()))) return false;
         if (touch && receivedAt.isAfter(last)) {
             session.setAttribute(LAST_ACTIVITY, receivedAt);
             session.setLastAccessedTime(receivedAt);
@@ -65,14 +65,25 @@ public final class RedisSessions<S extends Session> implements SessionRepository
         return true;
     }
 
+    /** 저장소에서 나온 장애만 외부 필터가 503으로 변환한다. */
+    public static final class StoreUnavailableException extends DataAccessException {
+        StoreUnavailableException(String message) { super(message); }
+        StoreUnavailableException(String message, Throwable cause) { super(message, cause); }
+    }
+
+    private <T> T access(Supplier<T> operation) {
+        try { return operation.get(); }
+        catch (DataAccessException ex) { throw new StoreUnavailableException("Session store unavailable", ex); }
+    }
+
     private <T> T locked(Supplier<T> operation) {
         try {
-            if (!lock.tryLock(2, TimeUnit.SECONDS)) throw new CannotAcquireLockException("Session store is busy");
+            if (!lock.tryLock(2, TimeUnit.SECONDS)) throw new StoreUnavailableException("Session store is busy");
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new CannotAcquireLockException("Session store wait was interrupted", ex);
+            throw new StoreUnavailableException("Session store wait was interrupted", ex);
         }
-        try { return operation.get(); }
+        try { return access(operation); }
         finally { lock.unlock(); }
     }
 }
