@@ -21,6 +21,7 @@ import "./styles.css";
 import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
 import { HotTopicsPage } from "./features/community/HotTopicsPage";
+import { SettingsPage } from "./features/profile/SettingsPage";
 import {
   CommunityPage,
   PostPage,
@@ -71,6 +72,7 @@ async function start() {
   // Use the analysis page in both fixture and real-server modes.
   pages = {
     ...pages,
+    settings: SettingsPage,
     analysis: AnalysisPage,
     historyDetail: HistoryDetailPage,
     publicAnalysis: PublicAnalysisPage,

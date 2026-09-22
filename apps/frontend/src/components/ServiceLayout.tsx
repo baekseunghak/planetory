@@ -114,7 +114,6 @@ export function ServiceLayout() {
             ["/community", "커뮤니티"],
             ["/me", "마이페이지"],
             ["/statistics", "통계"],
-            ["/settings", "설정"],
           ].map(([to, label]) => (
             <NavLink key={to} to={to} onClick={() => setOpen(false)}>
               {label}

@@ -2,6 +2,7 @@
 // This entry point is never loaded by the production Vite configuration.
 import { followFixturePlugin } from "../dev/follow-fixture-plugin.ts";
 import { notificationsFixturePlugin } from "../dev/notifications-fixture-plugin.ts";
+import { settingsFixturePlugin } from "../dev/settings-fixture-plugin.ts";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -63,38 +64,18 @@ const server = await createServer({
   mode: "presentation",
   plugins: [
     react(),
-    {
-      name: "presentation-member",
-      configureServer(server) {
-        server.middlewares.use("/api", (req, res, next) => {
-          const path = new URL(req.url ?? "/", "http://localhost").pathname;
-          if (req.method !== "GET" || path !== "/v1/me") return next();
-          res.writeHead(200, {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-            "X-Planetory-Data": "synthetic-preview-only",
-          });
-          res.end(
-            JSON.stringify({
-              memberId: "u-209",
-              nickname: profile.nickname(),
-              joinedAt: "2026-09-01T00:00:00Z",
-              role: "MEMBER",
-              starListVisibility: "PUBLIC",
-              onboardingDone: true,
-              tutorialCompleted: true,
-              achievementSummary: {
-                discoveredStarCount: starCount,
-                completedStarCount: 5,
-                signalCount: 7,
-                byType: { confirmed: 7, unconfirmed: 0, fp: 0 },
-                starCountByGrade: { A: 1, S: 0, SS: 1, SSS: 0 },
-              },
-            }),
-          );
-        });
-      },
-    },
+    settingsFixturePlugin({
+      member: () => ({
+        nickname: profile.nickname(),
+        achievementSummary: {
+          discoveredStarCount: starCount,
+          completedStarCount: 5,
+          signalCount: 7,
+          byType: { confirmed: 7, unconfirmed: 0, fp: 0 },
+          starCountByGrade: { A: 1, S: 0, SS: 1, SSS: 0 },
+        },
+      }),
+    }),
     followFixturePlugin(),
     notificationsFixturePlugin(),
     profile.plugin,
