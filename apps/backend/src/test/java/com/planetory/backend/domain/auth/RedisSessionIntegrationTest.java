@@ -89,6 +89,7 @@ class RedisSessionIntegrationTest {
                 "--spring.datasource.password=" + DB.getPassword(),
                 "--planetory.redis.session.host=" + REDIS.getHost(), "--planetory.redis.session.port=" + REDIS.getMappedPort(6379),
                 "--planetory.redis.cache.host=" + CACHE.getHost(), "--planetory.redis.cache.port=" + CACHE.getMappedPort(6379),
+                // 의도적으로 없는 optional 리소스로 개인 OAuth 파일 import를 대체한다. 제공자는 Config.clients()가 등록한다.
                 "--spring.config.import=optional:classpath:/oauth-test-no-local.properties");
         base = "http://127.0.0.1:" + ((WebServerApplicationContext) app).getWebServer().getPort();
     }

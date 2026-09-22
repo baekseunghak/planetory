@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.core.env.Environment;
 import java.time.Instant;
@@ -31,7 +32,8 @@ public class AuthSessionService {
     public AuthSessionService(Clock clock, ObjectProvider<RedisSessions<?>> redisSessions, Environment environment) {
         this.clock = clock;
         this.redisSessions = redisSessions;
-        this.idleTimeout = DurationStyle.detectAndParse(environment.getRequiredProperty("server.servlet.session.timeout"));
+        this.idleTimeout = DurationStyle.detectAndParse(
+                environment.getRequiredProperty("server.servlet.session.timeout"), ChronoUnit.SECONDS);
     }
 
     public void login(Member member, HttpServletRequest request, HttpServletResponse response) {
