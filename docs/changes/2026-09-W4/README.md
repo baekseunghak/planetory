@@ -54,6 +54,8 @@
 | 2026-09-21 | 전체 공개 집합 기반 핫 토픽·순위 커서와 동일 스냅샷 | S15P21C206-171 | COUNT DISTINCT, N>=10, hot-v1, REPEATABLE_READ, 전역 순위, 기존 인덱스 | 구현·관련 52건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 화면이 잔차 503을 retryable로 가른다 | S15P21C206-189 | retryable, DEPENDENCY_UNAVAILABLE, 정본 문구, START_FAILED, 개발용 응답, 화면 검사 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 현재 챌린지 조회·active 회차·자격 TIC·별 참여 수 | S15P21C206-168 | challenges/current, REPEATABLE_READ, GET 불변, COUNT DISTINCT | 구현·관련 54+6건 검증 완료 | [2026-09-21](2026-09-21.md) |
+
+| 2026-09-21 | 프론트 기준 팔로우 소비 계약 | S15P21C206-219 | P1, 팔로우, 시제품 | 구현·교차 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | CI 레지스트리 자체 호스팅·amd64 빌드 노드 분리 | S15P21C206-226 | registry, tailscale cert, REGISTRY_IMAGE_PREFIX, amd64-docker, privileged, extra_hosts, binfmt 제거, D4 충돌 | 레지스트리 검증 완료, Runner 등록 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | D4 범위 한정과 외부 관찰 EC2-B 이관 | S15P21C206-226 | D4, EC2-B, CI 빌드 노드, 외부 관찰 이관, 인계 100, 같은 AZ 한계, ap-northeast-2a | 채택, 관찰 구현 미완 | [기록](2026-09-21.md) |
 | 2026-09-21 | 배포 노드 Docker 준비와 이미지 위생 도구 | S15P21C206-226 | install-docker-host.sh, docker-compose-v2, image-secret-scan, registry-prune, digest 공유 삭제, 가비지 수집 | 검증 완료(실측) | [기록](2026-09-21.md) |

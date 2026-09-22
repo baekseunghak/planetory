@@ -1,4 +1,16 @@
 export const routeDefinitions = [
+  {
+    key: "following",
+    path: "/me/following",
+    title: "나의 연결",
+    owner: "하서진",
+  },
+  {
+    key: "followingFeed",
+    path: "/community/following",
+    title: "팔로잉",
+    owner: "하서진",
+  },
   { key: "sky", path: "/sky", title: "별지도", owner: "하서진" },
   {
     key: "profile",

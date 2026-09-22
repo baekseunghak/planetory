@@ -60,7 +60,9 @@
     "dev:search": "vite --mode search --host 127.0.0.1 --port 58364 --strictPort",
     "test:search": "playwright test --config=playwright.search.config.ts",
     "dev:hot-topics": "vite --mode hot-topics --host 127.0.0.1 --port 58368 --strictPort",
-    "test:hot-topics": "playwright test --config=playwright.hot-topics.config.ts"
+    "test:hot-topics": "playwright test --config=playwright.hot-topics.config.ts",
+    "dev:p1": "node --import tsx scripts/p1-server.mjs",
+    "test:p1": "playwright test --config=playwright.p1.config.ts"
   },
   "dependencies": {
     "react": "19.2.8",
