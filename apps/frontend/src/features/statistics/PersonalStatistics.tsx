@@ -10,6 +10,8 @@ import {
   type Metric,
 } from "./contracts";
 import "./statistics.css";
+import { readComparison } from "./comparison";
+import { ComparisonStatistics } from "./ComparisonStatistics";
 const labels: Record<string, string> = {
   confirmed: "확정 행성",
   unconfirmed: "미확정",
@@ -72,11 +74,19 @@ export function PersonalStatistics(props: ProfileSlotProps) {
   ) : null;
 }
 function Statistics({ memberId }: { memberId: string }) {
-  const load = useCallback(
-    async (signal: AbortSignal) =>
-      readPersonalStatistics(await api("/v1/me/statistics", { signal })),
-    [],
-  );
+  const load = useCallback(async (signal: AbortSignal) => {
+    const raw = await api<unknown>("/v1/me/statistics", { signal });
+    const current = readPersonalStatistics(raw);
+    try {
+      return {
+        ...current,
+        comparison: readComparison((raw as Record<string, unknown>).comparison),
+      };
+    } catch {
+      // A malformed comparison must not discard valid current statistics.
+      return { ...current, comparison: null };
+    }
+  }, []);
   const state = useReadModel(memberId, load);
   if (state.loading)
     return <p role="status">내 탐사 통계를 불러오고 있습니다…</p>;
@@ -206,6 +216,7 @@ function Statistics({ memberId }: { memberId: string }) {
         </div>
       </section>
       <p>{c.nextGoal}</p>
+      <ComparisonStatistics data={c.comparison} retry={state.reload} />
       <button type="button" onClick={state.reload}>
         통계 새로고침
       </button>
