@@ -592,9 +592,17 @@ uv run --locked python -m tess_bench.external_catalog_regression --manifest ../t
 122 저장 후보·관측 시각 연결은 다음 명령을 사용한다. ZIP 외부 해시와 내부 22개 파일, 122 원본 FITS·시간 복원 코드/설정 hash를 검사한다. BLS·다운로드·Git·DB 쓰기는 하지 않으며, FITS 전처리와 매칭 회귀는 사용자가 실행한다.
 
 ```powershell
-uv run --locked python -m tess_bench.external_catalog_candidate_regression --catalog-zip C:/Users/User/Downloads/review-122-r2.zip --catalog-zip-sha256 c4476feba5e8e02a33852bb507b3def28e33080932568c1df23434b34f35bd68 --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
+uv run --locked python -m tess_bench.external_catalog_candidate_regression --catalog-zip "<다운로드 경로>/review-122-r2.zip" --catalog-zip-sha256 c4476feba5e8e02a33852bb507b3def28e33080932568c1df23434b34f35bd68 --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
 ```
 
 실제 외부 자료 결과와 통제용 외부 행 시나리오는 산출물에서 분리한다. 122의 테스트 ID를 그대로 유지하며 운영 DB ID 할당·적재 검증으로 표현하지 않는다. checksum 불일치나 시나리오 실패를 우회하지 않고 원인을 확인한다.
 
 124 사용자 실행 `696cda44`는 16곡선 중 ready 11·기존 테스트 ID 18개, 상위 보류 5개, 통제 시나리오 99건을 검증했다. 실제 외부 조인은 11개 모두 라벨 보류이며 정상 매칭 진단은 별도로 보존했다. 입력·출력 79개 checksum 불일치 0. [결과·리뷰 ZIP 해시](../../docs/data/tess-external-catalog-implementation.md#2026-09-22-사용자-실행독립-검산)를 참조한다. 운영 DB ID·게시 검증은 아니다.
+
+124 단위·통제 회귀 검증(실제 FITS 재실행과 구분):
+
+```powershell
+uv run --locked python -m pytest tests/test_external_catalog_regression.py tests/test_external_catalog_candidate_regression.py -q
+```
+
+`<다운로드 경로>`는 실제 ZIP을 저장한 디렉터리로 바꾼다.

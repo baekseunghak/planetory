@@ -244,3 +244,27 @@ def test_previous_snapshot_tamper_rejected():
     old["snapshots"]["toi"]["rows"][0]["raw_disposition"] = "FP"
     with pytest.raises(ValueError, match="integrity"):
         run(previous=old)
+
+
+def test_missing_csv_tic_is_held():
+    result = normalize_export_row("nea_toi", {"tid": None, "toi": "1.01"})
+    assert result["status"] == "hold" and result["reason"]
+    assert result["row"] is None and result["tic_id"] is None
+
+
+def test_empty_transit_union_is_not_direct_even_with_zero_minimum(monkeypatch):
+    from astro_kernel import external_catalog as mod
+    monkeypatch.setitem(mod.RULE, "min_shared_points", 0)
+    result = join_catalog(catalog(), {"toi": delivery()}, np.array([0., 2., 4.]),
+                          required_sources=["toi"], approval="fixture-only")
+    evidence = result["joins"]["toi"]["evidence"][0]
+    assert evidence["observed_jaccard"] is None
+    assert not evidence["direct_edge"]
+
+
+def test_partial_source_failure_retains_diagnostic_references_only():
+    result = run({"toi": delivery(), "archive": delivery(source="archive", complete=False)},
+                 sources=["toi", "archive"])
+    assert result["status"] == "hold" and not result["publishable"]
+    assert len(result["external_references"]) == 1
+    assert result["rows"] == result["reference_changes"] == []

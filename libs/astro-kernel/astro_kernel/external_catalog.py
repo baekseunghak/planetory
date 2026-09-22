@@ -44,7 +44,7 @@ def normalize_export_row(source, raw):
                   raw_ephemeris={k: raw.get(k) for k in (tic, key, period, epoch, duration)},
                   original_time_system=system)
     try:
-        t = str(int(raw[tic].strip().removeprefix("TIC ")))
+        t = str(int(str(raw[tic]).strip().removeprefix("TIC ")))
         _id(int(t))
         result["tic_id"] = t
         if not _text(raw.get(key)):
@@ -196,7 +196,8 @@ def _join(candidates, rows, times):
             ratio = max(candidate["duration_hours"], row["duration_hours"]) / min(candidate["duration_hours"], row["duration_hours"])
             jac = shared / union if union else None
             direct = (d <= RULE["identity_tolerance"] and ratio <= RULE["duration_ratio_max"]
-                      and shared >= RULE["min_shared_points"] and jac >= RULE["observed_jaccard_min"])
+                      and shared >= RULE["min_shared_points"]
+                      and jac is not None and jac >= RULE["observed_jaccard_min"])
             multipliers = possible_multipliers(candidate, row, float(times[0]), float(times[-1]), RULE["identity_tolerance"])
             evidence.append(dict(candidate_id=candidate["candidate_id"], external_id=row["external_id"],
                                  identity_distance=d, duration_ratio=ratio, shared_points=shared,

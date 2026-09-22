@@ -29,7 +29,7 @@
 | --- | --- |
 | rows | disposition/answer_class/planet_truth/rule_version/source_refs를 같은 결정에서 공급한다. is_confirmed는 confirmed 여부다. 보류를 false로 대신하지 않는다. |
 | representative_model | 자체 BLS period/epoch/duration을 보존한다. 외부 모델로 덮어쓰지 않는다. |
-| external_references | 유일 직접 대응만 candidate_id를 가지며, 미연결은 null이다. match_status/snapshot은 검증용 부가 정보다. Publisher는 DB 열만 명시적으로 투영한다. |
+| external_references | 유일 직접 대응만 candidate_id를 가지며, 미연결은 null이다. match_status/snapshot은 검증용 부가 정보다. status=hold에서도 성공 원천의 진단 참조가 남는다. Publisher는 status=ready 및 별도 게시 검증을 통과한 경우에만 DB 열을 명시적으로 투영하며, hold의 참조는 적용하지 않는다. |
 | changes/history | 이전 성공 결과와 다른 행만 변경안으로 만든다. disposition/planet_truth 실제 전환만 출처 근거와 함께 이력 입력을 만든다. 같은 값으로 재실행하면 이력이 없고 되돌아가는 전환은 남긴다. 적용 시각은 생성하지 않는다. |
 | reference_changes | 원천/TIC/external_id별 add/update/remove 전후 값을 기록한다. 원천 실패 때는 비우며 원본 소실이 확인된 성공 snapshot에서만 remove 제안을 만든다. 실제 DELETE 명령은 실행하지 않는다. |
 | applied_at | Publisher가 적용 트랜잭션에서 생성한다. 조회 시각을 대신 사용하지 않는다. |
@@ -89,3 +89,9 @@
 2. Jira의 ‘D14-2 실제 후보 ID 조인’을 실제 122 후보 결과·기존 테스트 ID를 사용한 로컬 통합으로 충족하는지 소비자 리뷰에서 확인한다. Jira가 운영 DB 적재를 명시하지 않으므로 운영 ID 부재만으로 작업 전체를 중단하지 않으며, 운영 검증 완료로도 표현하지 않는다.
 3. 시간 기준 불명인 행은 기존 116 계약대로 보류한다. TCE tce_time0bt의 BTJD 원점·TDB 척도 및 TOI/ExoFOP 근거 확보 전 자동 해제하지 않는다. [MAST 배포 페이지](https://archive.stsci.edu/tess/bulk_downloads/bulk_downloads_tce.html)의 Sector별 CSV 배포 안내만으로 시간 척도 검증 완료를 주장하지 않는다.
 4. 125/Publisher 인계 리뷰. 필수 열 투영·DB 예약·적재·current 원자적 전환의 운영 검증은 후속 범위로 구분한다. 팀 승인·병합 전 Jira 완료로 바꾸지 않는다.
+
+## 2026-09-23 승인 리뷰의 비차단 보완
+
+불완전 CSV의 TIC=None은 정규화 hold로 회수하고, 관측 통과 합집합이 비어 Jaccard가 미산출이면 최소 공유 점 설정과 무관하게 직접 매칭하지 않는다. 성공 원천의 참조는 전체 hold에도 진단용으로 보존하되 Publisher 적용은 금지한다.
+
+검증: astro-kernel 전체 300개(외부 카탈로그 46개 포함), bench 124 실행기 테스트 6개 통과. None TIC·최소 공유 점 0의 빈 합집합·일부 원천 실패 시 진단 참조 보존을 회귀로 추가했다. 기존 696cda44 실측 및 ZIP은 수정 전 실행의 근거로 유지한다. 이번 수정 후 원본 FITS 회귀를 재실행하거나 기존 79개 checksum이 새 코드를 검증한다고 주장하지 않는다.
