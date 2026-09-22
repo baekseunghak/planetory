@@ -246,6 +246,12 @@ export function QuestPanel({
             )}
           </details>
           <details className="quest-challenge" ref={challengeRef}>
+            <summary>
+              챌린지{" "}
+              <span>
+                {challenge?.round ? `${challenge.round.roundNo}회차` : ""}
+              </span>
+            </summary>
             {requestedRound &&
               current &&
               current.round?.roundId !== requestedRound && (
@@ -254,12 +260,6 @@ export function QuestPanel({
                   확인해 주세요.
                 </p>
               )}
-            <summary>
-              챌린지{" "}
-              <span>
-                {challenge?.round ? `${challenge.round.roundNo}회차` : ""}
-              </span>
-            </summary>
             {error ? (
               <div role="alert">
                 <p>챌린지를 불러오지 못했습니다.</p>
