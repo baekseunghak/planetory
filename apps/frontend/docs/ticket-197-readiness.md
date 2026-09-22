@@ -31,3 +31,11 @@
 198은 개인 통계 슬롯과 main.tsx 등록을 맡는다. 197은 ServiceLayout, AnalysisJudgment, use-submission 및 onboarding 기능을 수정한다. 공유 인증·프로필 계약을 바꾸지 않는다.
 
 개발 fixture 실행은 `npm run dev -- --mode fixture --port 58397 --strictPort`이다. 최초 방문 상태는 `tests/browser/onboarding.spec.ts`에서 명시적으로 주입한다. 기본 fixture 화면만 보고 최초 계정 API 인수로 간주하지 않는다. 기본 Playwright 설정에서도 이 검사를 실행할 수 있다.
+
+## MR !182 별지도 배치 리뷰 보완
+
+별지도에서만 안내를 하단 조작 영역 위에 겹쳐 배치한다. 일반 문서 흐름에서 제외하여 표시·저장 실패 문구 증가·닫기 성공이 캔버스 위치와 높이를 바꾸지 않는다. 배경을 불투명하게 하고 화면 폭·높이를 제한하며 안내 내용이 길면 안내 내부에서 스크롤한다. 분석 단계의 기존 배치는 유지한다.
+
+`tests/galaxy/onboarding-layout.spec.ts`를 추가했다. 실제 갤럭시 렌더러가 켜진 fixture에서 onboardingDone=true를 기준으로 false·PATCH 503·재시도 성공을 비교한다. 1280×800과 1024×768 모두 캔버스 bounding box·문서 높이 동일, 안내의 뷰포트 내 배치, 키보드 재시도와 본문 포커스 복귀가 통과했다(Chromium 2건). 타입 검사도 통과했다. 초기 테스트의 재시도 실패는 갤럭시 fixture에 CSRF 응답이 없었기 때문이며 테스트에 합성 CSRF 응답을 추가했다. 관리형 서버 종료 지연을 피한 기존 서버 연결 실행은 exit 0이었다.
+
+기존 onboarding.spec.ts에도 /sky 방문은 있으나 렌더러 캔버스 배치 검증은 없었다. 이번 검사가 해당 공백을 보완한다. 실제 계정·배포·스크린리더 인수는 여전히 대기다.

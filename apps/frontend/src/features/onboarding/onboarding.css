@@ -17,6 +17,23 @@
   outline: 2px solid currentColor;
   outline-offset: 3px;
 }
+.sky-page-container:has(> .first-visit-guide) {
+  position: relative;
+}
+.sky-page-container > .first-visit-guide {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  box-sizing: border-box;
+  max-height: calc(100% - 116px);
+  overflow-y: auto;
+  margin: 0;
+  background: #060a10;
+  color: #eef2f7;
+}
 .analysis-step-row:has(> .first-visit-guide) {
   flex-wrap: wrap;
 }
