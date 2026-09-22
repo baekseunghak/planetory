@@ -4,6 +4,7 @@
 
 - 작성: 강재민 / 탐사 코어. [S15P21C206-153](https://ssafy.atlassian.net/browse/S15P21C206-153) (계획 추적 ID C18)
 - 상태: **결정 요청 초안.** 2장은 스키마에서 확인한 사실, 3.1은 정본에서 그대로 오는 확정 규칙, 3.1.1과 3.2의 병합·분리 열은 **이번 제안**, 4장은 **미확정**이다. 제안과 미확정을 구현자가 확정 규칙으로 인용하거나 임의로 정하지 않는다.
+- 5.3(`field`·`reason`·`bundle_id` 형식)과 5.4(재실행·복구 보관)는 이 문서가 C19에 맡겼던 항목이며 **2026-09-22에 C19가 확정했다**([S15P21C206-154](https://ssafy.atlassian.net/browse/S15P21C206-154)). 절차 결정이라 4장의 미확정 정책과 무관하며, 그 확정이 4장을 대신하지 않는다.
 - 범위: 후보가 병합·분리되거나 외부 라벨만 바뀔 때 서비스 DB의 기록·성과·공개 관계를 어떻게 처리하는지. 실행은 [S15P21C206-154](https://ssafy.atlassian.net/browse/S15P21C206-154)(C19)가 맡고 이 문서는 그 수행 범위를 가른다.
 - 이 문서는 운영 데이터를 바꾸지 않고 운영 화면·운영 API를 만들지 않는다(OPS v1.0, [탐사 API 9.5절](../../apps/backend/docs/exploration-api-spec.md#95-외부-라벨-갱신-표식-grd-06-dec-26)).
 
@@ -166,7 +167,19 @@
 
 ### 5.3 변경 이력 기록
 
-정정은 `candidate_status_history`에 남긴다. 열은 `candidate_id, bundle_id, field, old_value, new_value, rule_version, reason, changed_at`이다. `reason` 형식을 아래로 제안한다(초안, C19에서 확정).
+정정은 `candidate_status_history`에 남긴다. 열은 `candidate_id, bundle_id, field, old_value, new_value, rule_version, reason, changed_at`이다.
+
+**`field`는 후보의 속성 이름이다(C19 확정).** 어느 테이블에 저장되는지는 보지 않는다. 이력의 독자는 "이 후보의 **무엇이** 바뀌었나"를 묻지 어느 테이블인지를 묻지 않는다. 이름은 스키마에 이미 있는 열 이름을 그대로 쓰므로 지어낼 것이 없다.
+
+| `field` | 원천 | 쓰는 곳 |
+| --- | --- | --- |
+| `status` | `candidates.status` | 병합·분리의 은퇴와 산물 추가 |
+| `discoverable` | `candidates.discoverable` | 판 전환의 탐색 가능 전환([탐사 API 9.3절](../../apps/backend/docs/exploration-api-spec.md)의 재개 사유) |
+| `disposition` | `candidate_dispositions.disposition` | 외부 라벨 갱신(9.5절 표식) |
+| `planet_truth` | `candidate_dispositions.planet_truth` | 채점형 판정 변경 |
+| 그 밖 | `candidates`의 열 이름 그대로 | 병합에서 대표 쪽의 수치 열 |
+
+**`reason`은 `<코드>` 또는 `<코드>:<인자>`다(C19 확정).** 인자가 없으면 코드만 적는다.
 
 | 사건 | field | old_value → new_value | reason |
 | --- | --- | --- | --- |
@@ -174,18 +187,39 @@
 | 병합에서 대표 쪽 | 바뀐 열마다 한 행 | 실제 값 | `merged_from:<남는 candidate_id>` |
 | 분리 원본 | `status` | `active` → `retired` | `split_into:<새 id>,<새 id>` |
 | 분리 산물 | `status` | (없음) → `active` | `split_from:<원본 candidate_id>` |
+| 새 후보 등장 | `status` | (없음) → `active` | `new_candidate` |
+| 탐색 가능 전환 | `discoverable` | `false` → `true` | `became_discoverable` |
+| 탐색 불가 전환 | `discoverable` | `true` → `false` | `became_undiscoverable` |
+| 외부 라벨 갱신 | `disposition` | 실제 값 | `disposition_updated:<외부 출처>` |
 
-`bundle_id`는 정정을 반영한 판이다. 정정만 하고 새 판을 만들지 않는 경우에 이 값을 무엇으로 쓸지는 C19에서 정한다. 열이 `NOT NULL`이라 비워 둘 수 없다.
+`new_candidate`와 `became_discoverable`은 [탐사 API 9.3절](../../apps/backend/docs/exploration-api-spec.md)이 재개 사건의 사유로 이미 그 이름을 적어 두었다. 두 문서가 같은 것을 다르게 부르지 않도록 그 문자열을 그대로 쓴다.
+
+**`bundle_id`는 정정을 반영한 판이다.** 새 판을 만들지 않는 정정에는 **그 후보의 현재 `updated_bundle_id`**를 쓴다(C19 확정). 열이 `NOT NULL`이고 FK라 비우거나 임의 값을 넣을 수 없고, 반영할 새 판이 없으면 "정정 시점에 그 후보가 속한 판"이 가장 가까운 사실이다. 정정 전용 판을 새로 만들지는 않는다 — 판은 후보 집합의 스냅샷이므로 후보를 담지 않는 판이 생기면 그 의미가 깨진다.
 
 ### 5.4 재실행과 복구
 
-- **재실행:** `status` 갱신은 같은 값을 다시 써도 결과가 같다. 반면 `candidate_status_history`는 덧붙이기만 하므로 재실행하면 같은 내용의 행이 늘어난다. 중복을 막을지, 늘어나도 두고 조회에서 걸러낼지는 C19에서 정한다.
+- **재실행: 실제 변경이 있을 때만 이력을 남긴다(C19 확정).** 적용은 `WHERE 현재값 IS DISTINCT FROM 새값`으로 바꾸고, **바뀐 행에 대해서만** 이력을 쓴다. 재실행하면 바꿀 것이 없어 이력도 생기지 않으므로 중복을 따로 걸러낼 일이 없다.
+  - 유일 제약으로 막지 않는다. `discoverable`은 판이 바뀌며 false→true→false처럼 정당하게 여러 번 바뀔 수 있는데 `(candidate_id, field, new_value)` 유일 제약은 그 두 번째 전환까지 막는다. 이력은 **사건이 아니라 기록**이므로 같은 값으로 다시 바뀐 사실 자체는 정상이다.
+  - 조회는 `DISTINCT ON (candidate_id, field) … ORDER BY changed_at DESC`로 최신 행을 쓴다. 같은 후보·같은 속성의 이력이 여럿이어도 "지금 무엇인가"의 답은 흔들리지 않는다.
 - **복구: `status`를 되돌리는 것은 복구가 아니다.** 6장이 허용하는 Gold 쪽 적용에는 상태 전환 말고도 별칭·외부 참조·disposition의 `candidate_id`를 대표 후보로 옮기는 것과, 분리에서 새 후보 행을 넣는 것이 들어 있다. 상태만 되돌리면 옮겨진 관계는 옮겨진 채로, 추가된 후보는 추가된 채로 남는다.
-- **복구하려면 변경 대상별 이전 값을 먼저 보관해야 한다.** 최소한 아래 셋이다. 보관 형식과 보관 위치는 C19에서 정한다.
+- **복구하려면 변경 대상별 이전 값을 먼저 보관해야 한다.** 최소한 아래 셋이다.
   - 옮긴 행마다 `(테이블, 행 id, 이전 candidate_id)`
   - 분리로 새로 넣은 후보 id 목록
   - 바꾼 `candidates.status`의 이전 값
-- **그 보관·복원 절차가 정해지기 전에는 관계 이동과 후보 추가를 실행하지 않는다.** 되돌릴 수 있는 것은 상태 전환뿐이므로 6장의 실행 범위도 거기까지다.
+- **보관 위치는 Gold 스키마의 `candidate_correction_jobs` 한 테이블이다(C19 확정).** 적용과 **같은 트랜잭션**에서 쓴다. 파일로 두면 적용과 원자적이지 않아 "적용은 됐는데 되돌릴 정보가 없다"가 생긴다.
+
+  | 열 | 담는 것 |
+  | --- | --- |
+  | `id`, `kind`(`merge`\|`split`), `candidate_ids BIGINT[]`, `keep_candidate_id` | 무엇을 정정했나 |
+  | `requested_by`, `approved_by`, `approval_ref` | 5.1의 승인 기록 |
+  | `precheck JSONB` | 5.2 여섯 건수의 승인 시점 스냅샷 |
+  | `undo JSONB` | 위 셋 |
+  | `applied_at`, `status`(`applied`\|`reverted`) | 적용 상태 |
+
+  `undo`는 `{"moved": [{"table": …, "id": …, "previous_candidate_id": …}], "inserted_candidate_ids": [...], "previous_status": {"<candidate_id>": "active"}}` 형태다. 열로 펼치지 않는 이유는 되돌릴 대상의 모양이 정정 종류마다 다르고, 이 값이 조회 대상이 아니라 복원 입력이기 때문이다. 유형이 늘 때마다 스키마를 늘리지 않는다.
+
+  재실행 방지는 `(kind, candidate_ids) WHERE status='applied'` 유일 인덱스가 맡는다. 권한은 `planetory_gold_writer`의 SELECT·INSERT뿐이며 앱 역할에는 주지 않는다(5.1).
+- **이 절의 보관·복원 절차를 구현하기 전에는 관계 이동과 후보 추가를 실행하지 않는다.** 되돌릴 수 있는 것은 상태 전환뿐이므로 그때까지 6장의 실행 범위도 거기까지다. 위 설계는 확정이고 테이블 생성과 적용 명령은 C18-Q1이 풀린 뒤 은퇴 전환과 같은 작업에서 만든다.
 - **회원 쪽을 바꾼 정정은 어떤 경우에도 복구되지 않는다.** 성과를 옮기거나 지운 뒤 원래 어디에 있었는지가 현재 스키마 어디에도 남지 않기 때문이다. 이것이 회원 쪽 정정을 v1 범위 밖에 두는 마지막 이유다.
 - 복구가 필요한 상황을 줄이려면 5.2의 사전검사 결과를 승인 시점에 보관하고, 적용 후 같은 여섯 건수를 다시 세어 사전검사와 일치하는지 확인한다.
 
@@ -195,9 +229,9 @@ C19의 실행 범위는 **서로 독립인 문턱 셋**에 걸려 있다. 먼저
 
 | 문턱 | 풀리면 가능해지는 것 |
 | --- | --- |
-| **C18-Q1 확정**(대표 후보 선택) | 은퇴 대상이 정해져 아래 2~4번이 시작된다 |
-| **5.4 복구 절차 확정** | 관계 이동과 분리 산물 추가 |
-| **4장 Q2~Q7 승인** | 회원 데이터(성과·별·공개·스레드·통계) 정정 |
+| **C18-Q1 확정**(대표 후보 선택) | 은퇴 대상이 정해져 아래 2~4번이 시작된다. **미확정**(담당 윤성용, 승인 조건이던 D05-2는 완료) |
+| **5.4 복구 절차** | 관계 이동과 분리 산물 추가. **설계 확정, 구현 대기** — `candidate_correction_jobs`는 Q1이 풀린 뒤 은퇴 전환과 같은 작업에서 만든다 |
+| **4장 Q2~Q7 승인** | 회원 데이터(성과·별·공개·스레드·통계) 정정. **미확정** |
 
 **할 수 있는 것**
 
