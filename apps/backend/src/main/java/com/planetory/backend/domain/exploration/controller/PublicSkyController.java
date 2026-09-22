@@ -36,13 +36,20 @@ public class PublicSkyController {
             @RequestParam String h, @RequestParam String version,
             @RequestParam(required = false) String limit, @RequestParam(required = false) String cursor) {
         long owner = member(memberId);
+        int parsedLevel;
+        double bx, by, bw, bh;
+        Integer parsedLimit;
         try {
-            return sky.tiles(principal.memberId(), owner, Integer.parseInt(level), Double.parseDouble(x),
-                    Double.parseDouble(y), Double.parseDouble(w), Double.parseDouble(h), version,
-                    limit == null ? null : Integer.valueOf(limit), cursor);
+            parsedLevel = Integer.parseInt(level);
+            bx = Double.parseDouble(x);
+            by = Double.parseDouble(y);
+            bw = Double.parseDouble(w);
+            bh = Double.parseDouble(h);
+            parsedLimit = limit == null ? null : Integer.valueOf(limit);
         } catch (NumberFormatException e) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
+        return sky.tiles(principal.memberId(), owner, parsedLevel, bx, by, bw, bh, version, parsedLimit, cursor);
     }
 
     @Operation(summary = "공개 은하 소유 별·성과 행성 상세")

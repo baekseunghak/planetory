@@ -459,7 +459,7 @@ class PublicSkyTest {
     }
 
     @Test
-    void 별5000_성과행성1000의_메타_전체페이지_상세를_세번_측정한다() {
+    void 별5000_성과행성1000의_전체페이지와_상세가_일치한다() {
         unlock(owner, 5000);
         long bundle = bundle(FIRST_TIC);
         jdbc.update("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,"
@@ -476,38 +476,30 @@ class PublicSkyTest {
         jdbc.update("INSERT INTO user_candidate_achievements(user_id,candidate_id,achievement_type,"
                 + "recognized_submission_id,recognized_at)"
                 + " SELECT user_id,matched_candidate_id,'unconfirmed',id,now() FROM submissions WHERE user_id=?", owner);
-        double[] elapsed = new double[3];
-        for (int sample = 0; sample < elapsed.length; sample++) {
-            long started = System.nanoTime();
-            var meta = publicSky.meta(owner);
-            assertEquals(5000, meta.starCount());
-            Set<String> seen = new HashSet<>();
-            String cursor = null;
-            int pages = 0;
-            int planetCount = 0;
-            do {
-                var tile = page(viewer, owner, meta.version(), 1000, cursor);
-                assertFalse(tile.versionChanged());
-                assertEquals(5000, tile.rangeStarCount());
-                for (var star : tile.stars()) {
-                    assertTrue(seen.add(star.ticId()));
-                    planetCount += star.planetCount();
-                }
-                cursor = tile.nextCursor();
-                assertTrue(++pages <= 5);
-            } while (cursor != null);
-            var detail = publicSky.detail(owner, FIRST_TIC);
-            elapsed[sample] = (System.nanoTime() - started) / 1_000_000.0;
-            assertEquals(5, pages);
-            assertEquals(5000, seen.size());
-            assertEquals(1000, planetCount);
-            assertEquals(meta.version(), detail.version());
-            assertEquals(1000, detail.planets().count());
-            assertEquals(1000, detail.planets().items().stream().map(PublicSkyViews.Planet::candidateId).distinct().count());
-        }
-        System.out.printf("PUBLIC_SKY_SYNTHETIC_5000_STARS_1000_PLANETS samples_ms=%s%n", java.util.Arrays.toString(elapsed));
-        java.util.Arrays.sort(elapsed);
-        System.out.printf("PUBLIC_SKY_SYNTHETIC_5000_STARS_1000_PLANETS median_ms=%.3f%n", elapsed[1]);
+        var meta = publicSky.meta(owner);
+        assertEquals(5000, meta.starCount());
+        Set<String> seen = new HashSet<>();
+        String cursor = null;
+        int pages = 0;
+        int planetCount = 0;
+        do {
+            var tile = page(viewer, owner, meta.version(), 1000, cursor);
+            assertFalse(tile.versionChanged());
+            assertEquals(5000, tile.rangeStarCount());
+            for (var star : tile.stars()) {
+                assertTrue(seen.add(star.ticId()));
+                planetCount += star.planetCount();
+            }
+            cursor = tile.nextCursor();
+            assertTrue(++pages <= 5);
+        } while (cursor != null);
+        var detail = publicSky.detail(owner, FIRST_TIC);
+        assertEquals(5, pages);
+        assertEquals(5000, seen.size());
+        assertEquals(1000, planetCount);
+        assertEquals(meta.version(), detail.version());
+        assertEquals(1000, detail.planets().count());
+        assertEquals(1000, detail.planets().items().stream().map(PublicSkyViews.Planet::candidateId).distinct().count());
     }
 
     private PublicSkyViews.Tile page(long reader, long target, String version, int limit, String cursor) {
