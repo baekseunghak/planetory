@@ -180,7 +180,10 @@ def load_config(path: Path) -> dict:
 def fetch_bytes(url: str, timeout: float = 120.0) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+        content = response.read((64 << 20) + 1)
+    if len(content) > 64 << 20:
+        raise ValueError("bulk script exceeds the 64 MiB limit")
+    return content
 
 
 def _source_list_hash(products: list[Product]) -> str:
@@ -207,8 +210,10 @@ def build_source_list(
         url = str(row["bulk_script_url"])
         content = fetcher(url)
         parsed = parse_bulk_script(content.decode("utf-8"), sector, worker_count)
-        expected = int(row["expected_count"])
-        if len(parsed) != expected:
+        expected = int(row["expected_count"]) if "expected_count" in row else None
+        if not parsed:
+            raise ValueError(f"sector {sector}: official bulk script has no products")
+        if expected is not None and len(parsed) != expected:
             raise ValueError(f"sector {sector}: expected {expected:,} products, got {len(parsed):,}")
         scripts.append(
             {

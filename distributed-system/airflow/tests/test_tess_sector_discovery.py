@@ -1,0 +1,118 @@
+import ast
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dags"))
+
+from tess_sector_discovery import (  # noqa: E402
+    INDEX_URL, MAX_INDEX_BYTES, effective_max_sector, latest_published_sector, next_sector_stage,
+    parse_lc_scripts, published_lc_scripts, resume_stage, retry_attempt,
+)
+
+
+class TessSectorDiscoveryTest(unittest.TestCase):
+    def test_index_fetch_rejects_redirect_and_oversized_body(self):
+        class Response:
+            def __init__(self, url, body):
+                self.url, self.body = url, body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return self.body[:limit]
+
+        with patch("tess_sector_discovery.urlopen", return_value=Response("https://evil.example/", b"")):
+            with self.assertRaisesRegex(ValueError, "redirected"):
+                published_lc_scripts()
+        with patch("tess_sector_discovery.urlopen", return_value=Response(INDEX_URL, b"x" * (MAX_INDEX_BYTES + 1))):
+            with self.assertRaisesRegex(ValueError, "size limit"):
+                published_lc_scripts()
+
+    def test_only_official_two_minute_lc_links_are_discovered(self):
+        html = """
+        <a href="https://archive.stsci.edu/missions/tess/download_scripts/sector/tesscurl_sector_14_lc.sh">LC</a>
+        <a href="/missions/tess/download_scripts/sector/tesscurl_sector_15_lc.sh">LC</a>
+        <a href="/missions/tess/download_scripts/sector/tesscurl_sector_15_fast-lc.sh">fast LC</a>
+        <a href="https://evil.example/missions/tess/download_scripts/sector/tesscurl_sector_16_lc.sh">other</a>
+        """
+        scripts = parse_lc_scripts(html)
+        self.assertEqual(set(scripts), {14, 15})
+        self.assertEqual(scripts[14].split("/")[-1], "tesscurl_sector_14_lc.sh")
+
+    def test_empty_or_untrusted_index_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "no official"):
+            parse_lc_scripts('<a href="https://evil.example/tesscurl_sector_14_lc.sh">x</a>')
+
+    def test_configured_ceiling_bounds_latest(self):
+        scripts = {14: "script14", 70: "script70", 71: "script71"}
+        self.assertEqual(latest_published_sector(scripts, 70), 70)
+        self.assertEqual(latest_published_sector(scripts, 15), 14)
+        self.assertIsNone(latest_published_sector(scripts, 13))
+        with self.assertRaisesRegex(ValueError, "1..70"):
+            latest_published_sector(scripts, True)
+
+    def test_persistent_cap_bounds_scheduled_and_manual_runs(self):
+        self.assertEqual(effective_max_sector(70, "14"), 14)
+        self.assertEqual(effective_max_sector(15, "70"), 15)
+        for invalid in ("13", "71", "bad", True):
+            with self.assertRaises(ValueError):
+                effective_max_sector(70, invalid)
+
+    def test_resume_uses_downstream_evidence_after_download_cleanup(self):
+        self.assertEqual(resume_stage({"download": True}), "raw")
+        self.assertEqual(resume_stage({"raw": True}), "cleanup")
+        self.assertEqual(resume_stage({"raw": True, "cleanup": True, "bronze": True}), None)
+        with self.assertRaisesRegex(ValueError, "without Raw final"):
+            resume_stage({"cleanup": True})
+        with self.assertRaisesRegex(ValueError, "without local cleanup"):
+            resume_stage({"raw": True, "bronze": True})
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            resume_stage({"raw": "true"})
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            resume_stage(None)
+
+    def test_first_unfinished_sector_is_selected_without_skipping_gap(self):
+        published = {14: "script14", 15: "script15", 17: "script17"}
+        evidence = {14: {"raw": True, "cleanup": True, "bronze": True}, 15: {"raw": True}}
+        self.assertEqual(next_sector_stage(published, evidence, max_sector=17), (15, "cleanup"))
+        evidence[15] = {"raw": True, "cleanup": True, "bronze": True}
+        self.assertIsNone(next_sector_stage(published, evidence, max_sector=17))
+        with self.assertRaisesRegex(ValueError, "1..70"):
+            next_sector_stage(published, evidence, max_sector=71)
+
+    def test_failed_stage_is_retried_but_running_or_successful_is_not_replayed(self):
+        prefix = "tess_s14_" + "a" * 16 + "_r"
+        self.assertEqual(retry_attempt([], prefix), 0)
+        self.assertEqual(retry_attempt([(prefix + "0", "failed")], prefix), 1)
+        self.assertIsNone(retry_attempt([(prefix + "0", "failed"), (prefix + "1", "running")], prefix))
+        with self.assertRaisesRegex(ValueError, "lacks its final evidence"):
+            retry_attempt([(prefix + "0", "success")], prefix)
+        with self.assertRaisesRegex(ValueError, "unexpected"):
+            retry_attempt([(prefix + "other", "failed")], prefix)
+
+    def test_discovery_dag_maps_sector_plans_and_defaults_to_paused(self):
+        source = (Path(__file__).resolve().parents[1] / "dags" / "tess_sector_discovery_dag.py").read_text(
+            encoding="utf-8"
+        )
+        ast.parse(source)
+        self.assertIn('is_paused_upon_creation=True', source)
+        self.assertIn('default_var="false"', source)
+        self.assertIn(').expand_kwargs(reconcile())', source)
+        self.assertIn('if stage == "download":', source)
+        self.assertIn('resuming admitted Sectors only', source)
+        self.assertLess(source.index('current = admission(hdfs_release, "status", sector)'),
+                        source.index('sector not in scripts'))
+
+
+if __name__ == "__main__":
+    unittest.main()

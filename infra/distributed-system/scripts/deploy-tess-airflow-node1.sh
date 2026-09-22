@@ -56,11 +56,11 @@ finally:
   docker run --rm --network none --entrypoint python "$image" -c '
 from airflow.models.dagbag import DagBag
 bag = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
-required = {"tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze"}
+required = {"tess_sector_discovery", "tess_sector_download", "tess_sector_raw", "tess_sector_cleanup", "tess_sector_bronze"}
 assert not bag.import_errors, bag.import_errors
 assert required <= set(bag.dags), required - set(bag.dags)
 assert all(bag.dags[dag_id].is_paused_upon_creation for dag_id in required)
-print("AIRFLOW_FOUR_PAUSED_DAGS_READY")
+print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
 '
   switched=0
   rollback() {

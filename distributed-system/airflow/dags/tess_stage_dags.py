@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException, AirflowFailException
+from airflow.models import Variable
 from airflow.operators.python import get_current_context
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.sensors.base import PokeReturnValue
@@ -15,11 +16,16 @@ from tess_pipeline_contract import command, stage_inputs, validate_download_mark
 from tess_pipeline_remote import remote, require_success
 
 
+def stop_on_contract_failure(message: str) -> None:
+    Variable.set("tess_pipeline_enabled", "false")
+    raise AirflowFailException(message)
+
+
 def inputs() -> dict:
     try:
         return stage_inputs(get_current_context()["dag_run"].conf)
     except ValueError as error:
-        raise AirflowFailException(str(error)) from error
+        stop_on_contract_failure(str(error))
 
 
 def download_markers(value: dict, *, start_missing: bool) -> bool:
@@ -39,24 +45,47 @@ def download_markers(value: dict, *, start_missing: bool) -> bool:
             pending = True
             continue
         if status == 76:
-            raise AirflowFailException(f"Worker {slot} download marker is missing for Sector {sector}")
+            stop_on_contract_failure(f"Worker {slot} download marker is missing for Sector {sector}")
         if status:
             raise AirflowException(f"Worker {slot} download marker check failed (exit {status})")
         try:
             markers.append(json.loads(output))
         except json.JSONDecodeError as error:
-            raise AirflowFailException(f"Worker {slot} returned an invalid marker") from error
+            stop_on_contract_failure(f"Worker {slot} returned an invalid marker")
     if pending:
         return False
     try:
         validate_download_markers(markers, sector, run_id, source_sha)
     except ValueError as error:
-        raise AirflowFailException(str(error)) from error
+        stop_on_contract_failure(str(error))
     return True
 
 
 def hdfs_stage(value: dict, operation: str) -> None:
     release = value["hdfs_release"]
+    if operation == "runall" and value["sector"] >= 14:
+        finalize = command([
+            "/usr/bin/sudo", "-n", "/usr/bin/env", f"PYTHONPATH={release}",
+            "/usr/bin/python3.12", f"{release}/hdfs/tess_sector_admission.py",
+            "finalize", "--sector", str(value["sector"]),
+        ])
+        status, output = remote("planetory_node_1", finalize)
+        if status:
+            raise AirflowException(f"Sector Raw configuration failed (exit {status}): {output}")
+        rows = [line.removeprefix("ADMISSION_JSON=") for line in output.splitlines()
+                if line.startswith("ADMISSION_JSON=")]
+        if len(rows) != 1:
+            raise AirflowException("Sector Raw configuration returned no unique result")
+        try:
+            prepared = json.loads(rows[0])
+        except json.JSONDecodeError:
+            stop_on_contract_failure("Sector Raw configuration returned invalid JSON")
+        if any(prepared.get(key) != expected for key, expected in {
+            "sector": value["sector"], "run_id": value["run_id"],
+            "source_list_sha256": value["source_list_sha256"],
+            "hdfs_config": value["hdfs_config"],
+        }.items()):
+            stop_on_contract_failure("Sector Raw configuration lineage changed")
     args = [
         "/usr/bin/sudo", "-n", "/usr/bin/env",
         "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64", "HADOOP_CONF_DIR=/etc/hadoop",
@@ -76,7 +105,7 @@ def trigger_next(target: str, source_task: str) -> TriggerDagRunOperator:
     return TriggerDagRunOperator(
         task_id="trigger_next_stage",
         trigger_dag_id=target,
-        trigger_run_id=f"tess_s{{{{ {result}['sector'] }}}}_{{{{ {result}['lineage_sha256'][:16] }}}}",
+        trigger_run_id=f"tess_s{{{{ {result}['sector'] }}}}_{{{{ {result}['lineage_sha256'][:16] }}}}_r{{{{ {result}['attempt'] }}}}",
         conf=f"{{{{ {result} }}}}",
         reset_dag_run=False,
         skip_when_already_exists=True,
@@ -143,7 +172,10 @@ def bronze_dag():
             "--sector", str(value["sector"]), "--raw-release", value["run_id"],
             "--expected-source-sha", value["source_list_sha256"],
         ]
-        require_success("planetory_node_1", command(args), terminal_exit=65)
+        try:
+            require_success("planetory_node_1", command(args), terminal_exit=65)
+        except AirflowFailException as error:
+            stop_on_contract_failure(str(error))
 
     commit_bronze()
 

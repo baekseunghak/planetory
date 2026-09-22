@@ -76,6 +76,7 @@ services:
     volumes:
       - ${HADOOP_CONF_PATH:-/etc/hadoop}:/etc/hadoop:ro
       - ${AIRFLOW_LOGS_PATH:-/mnt/data/airflow-logs}:/opt/airflow/logs
+      - /etc/planetory/airflow/ssh:/home/airflow/.ssh:ro
     depends_on:
       airflow-db:
         condition: service_healthy

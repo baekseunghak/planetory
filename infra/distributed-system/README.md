@@ -378,11 +378,17 @@ docker compose up -d airflow-db airflow-scheduler airflow-webserver
 tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 ```
 
-현재 DAG 화면은 볼 수 있지만 실행 전 SSH Connection 6개, 제한 sudo 권한, HDFS/Bronze 불변 release와 현재 수집 run 계보를 별도로 확인해야 한다. DAG를 일시정지 해제하거나 trigger하지 않는다.
+최초 UI 배포 시점에는 DAG 화면만 볼 수 있었고, 실행 전 SSH Connection 6개·제한 sudo·불변 release·수집 run 계보의 별도 확인이 필요했다. 후속 release의 실제 설정과 제한 실행 결과는 아래에 기록한다.
 
 기존 Airflow의 코드만 갱신할 때는 새 불변 `/opt/planetory-airflow/releases/<UTC release>`에 `compose.yaml`, `distributed-system/airflow/`, `infra/distributed-system/scripts/deploy-tess-airflow-node1.sh`를 배치한 뒤 Node 1에서 `sudo bash <release>/infra/distributed-system/scripts/deploy-tess-airflow-node1.sh --update`를 실행한다. 이 경로는 기존 이미지를 기반으로 새 이미지를 네트워크 없이 빌드하고 DAG import·4개 신규 DAG의 기본 일시정지 상태를 검사한다. 활성 DAG run이 없을 때만 Scheduler·Webserver를 교체하며 DB·비밀 환경 파일·Tailscale Serve는 건드리지 않는다. 교체 뒤 UI·import·컨테이너 상태가 실패하면 이전 이미지로 두 서비스를 되돌린다. 새 DAG를 일시정지 해제하거나 데이터 작업을 trigger하는 것은 별도 단계다.
 
 2026-09-22에는 `/opt/planetory-hdfs-load/releases/20260921T230610Z`를 Node 1~6에, `/opt/planetory-bronze/releases/20260921T230610Z`를 Node 1에 설치했다. Node 1 Airflow에도 `/opt/planetory-airflow/releases/20260921T230610Z`를 설치하고 위 갱신 경로로 Scheduler·Webserver만 새 이미지로 교체했다. 기존 DB 컨테이너와 Tailscale Serve는 유지했다. 새 DAG 4개와 기존 단일 DAG 모두 일시정지, 신규 DagRun 0건, import 오류 0건, 로컬 UI health 성공을 확인했다. 이는 **코드 배포 검증**이며 SSH Connection·제한 sudo 권한과 실제 데이터 처리·재개는 검증하지 않았다. 어떤 DAG도 실행하거나 로컬 FITS를 삭제하지 않았다.
+
+2026-09-22 후속 release `20260922T021406Z`에는 HDFS 코드를 Node 1~6, ingestion 코드를 Worker 2~6, Bronze와 Airflow를 Node 1에 설치했다. Airflow DB·Tailscale Serve는 유지하고 Scheduler·Webserver만 교체했으며 import 오류 0건이다. [Airflow 전용 접근 설정](scripts/configure-tess-airflow-node1.sh)은 Node 1의 root 관리 SSH 키와 별도의 Airflow 공개키를 사용한다. 전용 `tess-airflow` 계정은 Node 1 사설 IP에서만 인증하고 Worker에서는 완료 marker를 읽을 수 있는 그룹에만 속한다. 새 키의 비밀 값은 Node 1의 `/etc/planetory/airflow/ssh/`에 보관하고 Scheduler에 읽기 전용으로 mount한다. DB에는 내부 IP·계정·키 *경로*만 저장하며 기존 관리 계정의 광범위한 sudo 권한은 변경하지 않는다. 전용 계정의 sudo는 release 고정 Node 1 admission/Raw/Bronze 명령과 Worker의 수집 unit 시작으로 제한된다. Airflow SSH Connection 6개 모두 공개키 인증과 host-key 검증으로 연결됐다.
+
+운영 상한은 DAG Param 기본 70과 영속 `tess_pipeline_max_sector` 중 작은 값이다. 이 실험은 `14`로 고정하고 `tess_pipeline_enabled=true`를 켜 [Sector 14 제어 스크립트](scripts/control-tess-sector14.ps1)로 최초 발견 run을 시작했다. `-Step Drain`은 신규 허가·trigger를 멈추지만 이미 시작된 Worker/systemd 작업은 이어진다. Sector 14 원천 19,970개의 run `20260922T024642Z`에서 다운로드·Raw·로컬 삭제·Bronze 네 DAG가 모두 성공했다. Raw `_READY`의 제품 수 19,970·RF2·Parquet success, FSCK HEALTHY·저복제/누락/손상 0을 확인했다. cleanup 전 75개 bundle 모두 fast 재감사가 HEALTHY였고 Worker 5대의 FITS 19,970개 삭제 뒤 잔여 0개다. Bronze final `_READY`의 제품 19,970개·관측값 386,159,890개·파싱 오류 0개·RF2, Spark/YARN 성공과 FSCK HEALTHY를 확인했다. cleanup task는 약 13분 30초로, 성능 개선은 별도 검증이 필요하다. 이후 `-Step Drain`을 실행해 `tess_pipeline_enabled=false`, 발견 DAG pause·활성 단계 run 0건으로 제한했다. 배포·실행과 재부팅 검증은 사용자가 Node 1~6 release, Sector 14 삭제, Worker 4와 Node 1 재부팅 범위를 명시 승인한 뒤 수행했다.
+
+Worker 4 다운로드 중 재부팅은 부팅 ID 변경, 수집 unit enabled 자동 재개, 이벤트 688→1,728건 증가, DataNode·NodeManager 수동 복구로 확인했다. Node 1 재부팅 뒤 Docker/Airflow는 자동 재시작했지만 HDFS/YARN은 자동 fencing이 없는 현재 설계상 수동 복구가 필요하다. NameNode가 6,631개 block의 30초 Safe Mode 연장 중 Active 전환을 거부했으므로 [재부팅 검증 스크립트](scripts/verify-tess-reboot.ps1)는 Safe Mode OFF를 기다린 뒤 전환한다. 부팅은 이미 끝났는데 후속 복구만 실패했다면 `-Step RecoverNode1`로 **재부팅 없이** 이어서 복구한다. Sector 14 처리 완료는 확인했지만 전체 무인 복구나 Sector 15~70 실행까지 입증한 것은 아니다.
 
 ## TESS 원천 수집 (`S15P21C206-75`)
 

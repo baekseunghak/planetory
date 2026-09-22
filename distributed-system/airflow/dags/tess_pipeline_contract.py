@@ -38,6 +38,9 @@ def stage_inputs(conf: dict) -> dict:
         raise ValueError("invalid Sector or Bronze partition count") from error
     if sector < 1 or not 1 <= partitions <= 200:
         raise ValueError("Sector must be positive and Bronze partitions must be in 1..200")
+    attempt = conf.get("attempt", 0)
+    if type(attempt) is not int or not 0 <= attempt <= 10000:
+        raise ValueError("stage retry attempt must be an integer in 0..10000")
     run_id = str(conf.get("run_id", ""))
     source_sha = str(conf.get("source_list_sha256", ""))
     bronze_run_id = str(conf.get("bronze_run_id", ""))
@@ -60,7 +63,7 @@ def stage_inputs(conf: dict) -> dict:
     lineage_sha = hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
     if conf.get("lineage_sha256", lineage_sha) != lineage_sha:
         raise ValueError("Sector stage lineage changed")
-    return {**value, "lineage_sha256": lineage_sha}
+    return {**value, "lineage_sha256": lineage_sha, "attempt": attempt}
 
 
 def validate_download_markers(markers: list[dict], sector: int, run_id: str, source_sha: str) -> dict:

@@ -424,6 +424,36 @@ class PlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact five Worker internal IPs"):
             RUNALL.validate_config(value)
 
+    def test_single_sector_runall_uses_immutable_context_without_legacy_coverage(self):
+        run_id = "20260922T120000Z"
+        context = {
+            "sector": 14, "run_id": run_id, "release_id": run_id,
+            "source_list_sha256": "a" * 64, "product_count": 42, "total_bytes": 4200,
+        }
+        config = {
+            "schema": RUNALL.CONFIG_SCHEMA, "run_id": run_id,
+            "expected_source_list_sha256": "a" * 64,
+            "code_release_id": run_id,
+            "code_release": f"/opt/planetory-hdfs-load/releases/{run_id}",
+            "target_bundle_bytes": 512 << 20, "minimum_worker_free_gib": 100,
+            "workers": [{"slot": slot, "internal_ip": f"10.20.{slot + 1}.10"} for slot in range(1, 6)],
+            "sector_contexts": [context],
+        }
+        RUNALL.validate_config(config)
+        with (
+            mock.patch.object(RUNALL.loader, "load_coverage_map") as legacy_coverage,
+            mock.patch.object(RUNALL, "process_sector") as process,
+            mock.patch.object(RUNALL, "finalize_coverage") as final_coverage,
+        ):
+            RUNALL.coordinator(config, [14])
+        legacy_coverage.assert_not_called()
+        process.assert_called_once_with(config, context, cleanup_source=None)
+        final_coverage.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "must not reuse legacy coverage"):
+            RUNALL.validate_config({**config, "expected_coverage_sha256": "b" * 64})
+        with self.assertRaisesRegex(ValueError, "no legacy coverage"):
+            RUNALL.finalize_coverage(config)
+
     def test_server_hdfs_exists_distinguishes_absence_from_command_failure(self):
         with mock.patch.object(RUNALL, "hdfs", return_value=CompletedProcess([], 1, "", "")):
             self.assertFalse(RUNALL.hdfs_exists("/missing"))
@@ -432,6 +462,25 @@ class PlanTest(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "existence check failed"),
         ):
             RUNALL.hdfs_exists("/unknown")
+
+    def test_cached_raw_cleanup_can_audit_when_hdfs_crosses_admission_threshold(self):
+        def response(arguments, **_kwargs):
+            if arguments[0] == "haadmin":
+                output = "active\n" if arguments[-1] == "nn1" else "standby\n"
+            elif arguments[0] == "getconf":
+                output = "2\n" if arguments[-1] == "dfs.replication" else "107374182400\n"
+            elif arguments[0] == "dfsadmin" and arguments[1] == "-safemode":
+                output = "Safe mode is OFF\nSafe mode is OFF\n"
+            elif arguments[0] == "dfsadmin":
+                output = "Live datanodes (5):\n"
+            else:
+                output = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 800 200 80%\n"
+            return CompletedProcess(arguments, 0, output, "")
+
+        with mock.patch.object(RUNALL, "hdfs", side_effect=response):
+            RUNALL.preflight(0)
+            with self.assertRaisesRegex(RuntimeError, "75 percent"):
+                RUNALL.preflight(100)
 
     def test_server_coordinator_skips_capacity_for_cached_sector_and_marks_complete(self):
         context = {

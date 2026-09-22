@@ -93,6 +93,9 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         }
         value = stage_inputs(conf)
         self.assertEqual(value, stage_inputs(value))
+        self.assertEqual(stage_inputs({**conf, "attempt": 3})["lineage_sha256"], value["lineage_sha256"])
+        with self.assertRaisesRegex(ValueError, "attempt"):
+            stage_inputs({**conf, "attempt": -1})
         with self.assertRaisesRegex(ValueError, "lineage changed"):
             stage_inputs({**value, "source_list_sha256": "b" * 64})
         with self.assertRaises(ValueError):
@@ -110,6 +113,8 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         })
         self.assertIn('is_paused_upon_creation=True', source)
         self.assertIn('"--expected-source-sha"', source)
+        self.assertIn('Variable.set("tess_pipeline_enabled", "false")', source)
+        self.assertIn('except AirflowFailException as error:', source)
         marker_func = next(
             node for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == "download_markers"

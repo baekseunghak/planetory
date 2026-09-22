@@ -66,7 +66,7 @@ if (-not $hdfsSite.Contains('<name>dfs.datanode.du.reserved</name>') -or -not $h
 $previousBytecode=$env:PYTHONDONTWRITEBYTECODE
 try {
  $env:PYTHONDONTWRITEBYTECODE='1'
- & $Python -m unittest (Join-Path $loader 'test_tess_hdfs_load.py')
+ & $Python -m unittest discover -s $loader -p 'test_*.py'
  if ($LASTEXITCODE -ne 0) { throw 'HDFS load planner tests failed.' }
  & $Python -c 'import ast,pathlib,sys; [ast.parse(path.read_text(encoding="utf-8"), filename=str(path)) for path in pathlib.Path(sys.argv[1]).glob("*.py")]' $loader
  if ($LASTEXITCODE -ne 0) { throw 'HDFS loader Python syntax check failed.' }

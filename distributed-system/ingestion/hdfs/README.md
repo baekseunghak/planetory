@@ -51,7 +51,9 @@ cleanup을 포함한 완료 marker는 `/var/lib/planetory-tess-hdfs-runall-<run>
 
 Airflow는 `runall --sector <N> --skip-cleanup`으로 Raw만 확정하고, 다음 task에서 `cleanup-sector --config <path> --sector <N>`을 호출한다. cleanup 명령은 final을 다시 검증한 뒤 삭제하므로 두 task 사이 장애가 발생해도 원본을 먼저 지우지 않는다. 마지막 Sector cleanup 뒤 `coverage --config <path>`가 전체 coverage와 완료 marker를 확정한다.
 
-2026-09-22 후속 구현부터 신규 bundle 완료 marker에는 HDFS manifest checksum도 남긴다. `cleanup-sector`는 먼저 기존 Raw `_READY`와 plan·bundle checksum·manifest checksum·RF2·FSCK를 재확인하는 빠른 감사를 수행한다. 해당 checksum이 없는 과거 bundle은 기존의 manifest 행별 상세 감사로 돌아간다. 감사 결과의 `fast_bundles`·`full_bundles`는 실제로 어느 경로가 실행됐는지 나타낸다. 불일치하면 삭제를 시작하지 않는다. 첫 Raw Commit의 상세 감사와 Worker별 로컬 원본 파일 SHA-256 검사는 유지한다. `cleanup-sector`는 Worker 5대의 삭제 검사를 병렬 실행하되 각 Worker의 불변 plan·영속 cleanup state와 실패 후 재개 규칙은 그대로 적용한다. 이 변경은 오프라인 테스트만 완료했으며 기존 서버 release에 배포·실측한 결과가 아니다.
+Sector 14~70 자동 수집 경로는 기존 1~13 coverage와 별도로, Node 1의 `tess_sector_admission.py`가 Sector당 불변 원천 목록과 `sector_contexts` 1개짜리 Raw 설정을 고정한다. `prepare`는 Worker 5대에 동일한 source/config와 reboot 후 재시작되는 ingestion unit을 설치하고, `finalize`는 Worker 완료 marker 5개를 확인한 뒤 `/etc/planetory/tess-hdfs-runall/<run_id>.json`을 만든다. `status`는 실제 Raw/Bronze `_READY`와 Worker cleanup 상태를 재개 판단에 제공한다. cleanup이 `in_progress`면 삭제를 다시 시작할 수 있지만 다운로드는 재시작하지 않는다. 신규 Sector에는 1~13 전체 coverage 확정 경로를 사용하지 않는다. 기존 Raw final의 감사·cleanup은 신규 HDFS 저장량이 없으므로 75% 신규 적재 중단선에 막히지 않지만 HA·RF2·FSCK와 원본 SHA-256 게이트는 유지한다. 이 경로는 운영 release `20260922T021406Z`에 배포했고 Sector 14 원천 19,970개를 Raw로 확정·삭제했다. 기존 데이터와 run은 수정하지 않았다.
+
+2026-09-22 후속 구현부터 신규 bundle 완료 marker에는 HDFS manifest checksum도 남긴다. `cleanup-sector`는 먼저 기존 Raw `_READY`와 plan·bundle checksum·manifest checksum·RF2·FSCK를 재확인하는 빠른 감사를 수행한다. 해당 checksum이 없는 과거 bundle은 기존의 manifest 행별 상세 감사로 돌아간다. 감사 결과의 `fast_bundles`·`full_bundles`는 실제로 어느 경로가 실행됐는지 나타낸다. 불일치하면 삭제를 시작하지 않는다. 첫 Raw Commit의 상세 감사와 Worker별 로컬 원본 파일 SHA-256 검사는 유지한다. `cleanup-sector`는 Worker 5대의 삭제 검사를 병렬 실행하되 각 Worker의 불변 plan·영속 cleanup state와 실패 후 재개 규칙은 그대로 적용한다. 운영 release `20260922T021406Z`의 Sector 14 실측은 `fast_bundles=75`, `full_bundles=0`, `product_count=19970`, RF2·FSCK `HEALTHY`였다. Worker별 SHA-256 검사 뒤 정확히 19,970개 FITS를 삭제했고 잔여 FITS는 0개다. 다만 cleanup task 전체에 약 13분 30초가 걸려 fast 경로의 성능 개선은 아직 입증하지 못했다.
 
 운영자는 다음 읽기 전용 명령으로 Node 1 조정기 상태를 본다. 이 조회가 끊겨도 서버 unit에는 영향이 없다.
 
@@ -106,7 +108,7 @@ sha256sum /tmp/restored.fits
 & .\infra\distributed-system\scripts\test-tess-hdfs-load.ps1
 ```
 
-현재 Python 계획·감사 검사 21개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, run 내부 Sector·Worker 중복 거부, plan v2 cache 필드, 첫·중간·마지막 복원, 중첩 Parquet를 포함한 알 수 없는 artifact 거부, legacy v1 재감사, 제품 수·원본 바이트의 coverage 일치, 독립 CoverageCommit의 13개 Sector 전수 감사, HDFS 조회 오류 전파와 완료 Sector 용량 검사 제외를 포함한다. 조정기 marker 검사는 UTF-8 정본 JSON의 `stdin → hdfs dfs -put -`, 쓰기 실패 전파, Sector의 `stale part 제거 → put → marker rename → final rename` 순서와 기존 coverage marker가 있을 때 stale part를 먼저 지우는 순서도 고정한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지, 완료 표식과 교차 사용자 임시 파일·변경 가능한 release를 거부하는지도 검사한다.
+현재 Python 계획·감사·admission 검사 35개, Python AST 문법 검사, PowerShell parser와 필수 계약 검사를 통과한다. 검사는 FinalCoverage의 두 Run lineage와 Sector 1~13 전역 개수, run 내부 Sector·Worker 중복 거부, plan v2 cache 필드, 첫·중간·마지막 복원, 중첩 Parquet를 포함한 알 수 없는 artifact 거부, legacy v1 재감사, 제품 수·원본 바이트의 coverage 일치, 독립 CoverageCommit의 13개 Sector 전수 감사, HDFS 조회 오류 전파와 완료 Sector 용량 검사 제외를 포함한다. 조정기 marker 검사는 UTF-8 정본 JSON의 `stdin → hdfs dfs -put -`, 쓰기 실패 전파, Sector의 `stale part 제거 → put → marker rename → final rename` 순서와 기존 coverage marker가 있을 때 stale part를 먼저 지우는 순서도 고정한다. PowerShell 계약은 `RunAll`이 첫 Preflight를 재사용하고 `Commit`의 전수 감사 외에 같은 `Audit`을 중복 실행하지 않는지, 완료 표식과 교차 사용자 임시 파일·변경 가능한 release를 거부하는지도 검사한다.
 
 ## 2026-09-21 Sector 1~13 최종 완료
 

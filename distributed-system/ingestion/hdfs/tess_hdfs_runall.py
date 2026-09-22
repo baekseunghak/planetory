@@ -53,8 +53,29 @@ def validate_config(value: dict) -> dict:
         raise ValueError("invalid server RunAll run_id")
     if not loader.SHA256_RE.fullmatch(str(value.get("expected_source_list_sha256", ""))):
         raise ValueError("invalid server RunAll source checksum")
-    if not loader.SHA256_RE.fullmatch(str(value.get("expected_coverage_sha256", ""))):
-        raise ValueError("invalid server RunAll coverage checksum")
+    sector_contexts = value.get("sector_contexts")
+    if sector_contexts is None:
+        if not loader.SHA256_RE.fullmatch(str(value.get("expected_coverage_sha256", ""))):
+            raise ValueError("invalid server RunAll coverage checksum")
+    else:
+        if value.get("expected_coverage_sha256") or value.get("coverage_manifest"):
+            raise ValueError("single-Sector RunAll must not reuse legacy coverage")
+        if not isinstance(sector_contexts, list) or len(sector_contexts) != 1:
+            raise ValueError("single-Sector RunAll requires one context")
+        context = sector_contexts[0]
+        if (
+            not isinstance(context, dict)
+            or type(context.get("sector")) is not int
+            or not 14 <= context["sector"] <= 70
+            or context.get("run_id") != value["run_id"]
+            or context.get("release_id") != value["run_id"]
+            or context.get("source_list_sha256") != value["expected_source_list_sha256"]
+            or type(context.get("product_count")) is not int
+            or context["product_count"] < 1
+            or type(context.get("total_bytes")) is not int
+            or context["total_bytes"] < 1
+        ):
+            raise ValueError("invalid single-Sector RunAll context")
     code_release_id = str(value.get("code_release_id", ""))
     if not loader.RELEASE_ID_RE.fullmatch(code_release_id):
         raise ValueError("invalid server RunAll code release")
@@ -71,9 +92,10 @@ def validate_config(value: dict) -> dict:
     workers = {int(item.get("slot", 0)): str(item.get("internal_ip", "")) for item in worker_rows}
     if len(worker_rows) != 5 or len(workers) != 5 or workers != WORKER_IPS:
         raise ValueError("server RunAll requires the exact five Worker internal IPs")
-    coverage = str(value.get("coverage_manifest", ""))
-    if not coverage.startswith("/"):
-        raise ValueError("server RunAll coverage manifest must be an absolute path")
+    if sector_contexts is None:
+        coverage = str(value.get("coverage_manifest", ""))
+        if not coverage.startswith("/"):
+            raise ValueError("server RunAll coverage manifest must be an absolute path")
     return value
 
 
@@ -158,7 +180,7 @@ def preflight(expected_bytes: int) -> None:
     fields = hdfs(["dfs", "-df", "/"], echo=False).stdout.splitlines()[-1].split()
     capacity, used_bytes, available = map(int, fields[1:4])
     used_percent = int(fields[4].rstrip("%"))
-    if used_percent >= 75:
+    if expected_bytes and used_percent >= 75:
         raise RuntimeError("HDFS usage is already 75 percent or higher")
     if expected_bytes and (
         used_bytes + expected_bytes * 2 > capacity * 70 // 100
@@ -608,6 +630,8 @@ def process_sector(config: dict, context: dict, *, cleanup_source: bool | None =
 
 
 def finalize_coverage(config: dict) -> None:
+    if "sector_contexts" in config:
+        raise ValueError("single-Sector RunAll has no legacy coverage marker")
     preflight(0)
     commit_coverage(config, reuse_sector_audits=True)
     loader.atomic_json(completion_path(config), {
@@ -632,18 +656,21 @@ def coordinator(
         raise ValueError("requested source checksum differs from HDFS config")
     if expected_code_release is not None and config["code_release"] != expected_code_release:
         raise ValueError("requested code release differs from HDFS config")
-    coverage = loader.load_coverage_map(Path(config["coverage_manifest"]), config["expected_coverage_sha256"])
-    contexts = list(coverage["sectors"])
-    expansion = [item for item in contexts if item["run_id"] == config["run_id"]]
-    if not expansion or any(item["source_list_sha256"] != config["expected_source_list_sha256"] for item in expansion):
-        raise RuntimeError("coverage does not match the requested expansion run")
+    if "sector_contexts" in config:
+        contexts = config["sector_contexts"]
+    else:
+        coverage = loader.load_coverage_map(Path(config["coverage_manifest"]), config["expected_coverage_sha256"])
+        contexts = list(coverage["sectors"])
+        expansion = [item for item in contexts if item["run_id"] == config["run_id"]]
+        if not expansion or any(item["source_list_sha256"] != config["expected_source_list_sha256"] for item in expansion):
+            raise RuntimeError("coverage does not match the requested expansion run")
     available = {int(item["sector"]): item for item in contexts}
     selected = list(available) if requested_sectors is None else requested_sectors
     if len(selected) != len(set(selected)) or any(sector not in available for sector in selected):
         raise ValueError("requested Sector is missing or duplicated in coverage")
     for sector in selected:
         process_sector(config, available[sector], cleanup_source=cleanup_source)
-    if set(selected) == set(available):
+    if "sector_contexts" not in config and set(selected) == set(available):
         finalize_coverage(config)
         print("RUN_ALL_COMPLETE sectors=" + ",".join(str(sector) for sector in selected))
 
