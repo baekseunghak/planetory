@@ -3,3 +3,6 @@ docs/changes/**/*.md merge=union
 # 배포·설치 스크립트는 리눅스 노드에서 sh로 실행된다. CRLF가 섞이면 첫 줄부터
 # 깨지므로 체크아웃 플랫폼과 무관하게 LF로 고정한다.
 infra/**/*.sh text eol=lf
+# CI가 리눅스 컨테이너에서 sh로 실행하는 스크립트도 같다. CRLF가 섞이면
+# 첫 줄부터 깨진다.
+apps/**/scripts/*.sh text eol=lf
