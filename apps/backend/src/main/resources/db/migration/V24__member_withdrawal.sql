@@ -21,6 +21,7 @@ VALUES(-1,'internal','withdrawn-author','탈퇴한 회원','withdrawn');
 
 CREATE TABLE withdrawal_requests (
     id UUID PRIMARY KEY,
+    -- C에서 users 행을 삭제한 뒤에도 영수증·처리 상태를 90일 유지하므로 users FK를 두지 않는다.
     user_id BIGINT NOT NULL UNIQUE,
     policy_version TEXT NOT NULL,
     receipt_hash TEXT NOT NULL,

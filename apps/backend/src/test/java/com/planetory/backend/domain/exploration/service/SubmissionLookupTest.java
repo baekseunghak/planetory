@@ -5,6 +5,8 @@ import java.sql.PreparedStatement;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -276,6 +278,26 @@ class SubmissionLookupTest {
         assertEquals(first.targetKind(), again.targetKind());
         assertEquals(first.signal().get("candidateId"), again.signal().get("candidateId"));
         assertEquals(first.userJudgmentAgrees(), again.userJudgmentAgrees());
+    }
+
+    @Test
+    void 회원_공유잠금을_잡은_상세_보기가_다른_상세_보기를_막지_않는다() throws Exception {
+        graded("fp", "not_planet");
+        String submissionId = submit(3, "LIKELY_PLANET").path("submissionId").asText();
+        try (var worker = Executors.newSingleThreadExecutor(); var held = dataSource.getConnection()) {
+            held.setAutoCommit(false);
+            try (var statement = held.prepareStatement("SELECT id FROM users WHERE id=? FOR SHARE")) {
+                statement.setLong(1, member);
+                try (var rows = statement.executeQuery()) { assertTrue(rows.next()); }
+            }
+            try {
+                assertEquals("c-" + candidate,
+                        worker.submit(() -> lookup.detailView(member, submissionId))
+                                .get(5, TimeUnit.SECONDS).signal().get("candidateId"));
+            } finally {
+                held.rollback();
+            }
+        }
     }
 
     @Test
