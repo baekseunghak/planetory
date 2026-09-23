@@ -27,6 +27,19 @@ def effective_max_sector(param: object, configured_cap: object) -> int:
     return min(requested, cap)
 
 
+def completed_through(value: object) -> int:
+    """Highest Sector whose contiguous 14..N Bronze evidence was already confirmed."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        sector = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("completed Sector mark must be an integer in 13..70") from error
+    if not 13 <= sector <= 70:
+        raise ValueError("completed Sector mark must be in 13..70")
+    return sector
+
+
 class _ScriptLinks(HTMLParser):
     def __init__(self) -> None:
         super().__init__()

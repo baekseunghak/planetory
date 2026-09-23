@@ -66,7 +66,7 @@ rollback() {
   status=$?
   trap - EXIT
   if (( status != 0 && stopped == 1 )); then
-    "${new_compose[@]}" stop airflow-api-server airflow-dag-processor airflow-scheduler || true
+    "${new_compose[@]}" stop airflow-api-server airflow-dag-processor airflow-scheduler airflow-triggerer || true
     "${old_compose[@]}" up -d --no-deps airflow-scheduler airflow-webserver || echo AIRFLOW_ROLLBACK_FAILED >&2
     echo AIRFLOW_2X_ROLLBACK_ATTEMPTED >&2
   fi
@@ -81,14 +81,14 @@ docker exec "$db_container" pg_dump -U airflow -Fc airflow > "$backup_dir/airflo
 docker exec "$db_container" createdb -U airflow -O airflow "$new_db"
 docker exec -i "$db_container" pg_restore -U airflow -d "$new_db" --no-owner --no-privileges < "$backup_dir/airflow2.dump"
 "${new_compose[@]}" --profile setup run --rm --no-deps airflow-init
-"${new_compose[@]}" up -d --no-deps airflow-api-server airflow-dag-processor airflow-scheduler
+"${new_compose[@]}" up -d --no-deps airflow-api-server airflow-dag-processor airflow-scheduler airflow-triggerer
 healthy=0
 for attempt in $(seq 1 90); do
   if curl --fail --silent http://127.0.0.1:8081/api/v2/monitor/health | python3 -c '
 import json, sys
 try:
     health = json.load(sys.stdin)
-    assert all(health[key]["status"] == "healthy" for key in ("metadatabase", "scheduler", "dag_processor"))
+    assert all(health[key]["status"] == "healthy" for key in ("metadatabase", "scheduler", "dag_processor", "triggerer"))
 except (AssertionError, KeyError, ValueError):
     sys.exit(1)
 '; then healthy=1; break; fi

@@ -6,6 +6,7 @@ validate:compose:
     AIRFLOW_DB_PASSWORD: ci-validation-only
     AIRFLOW_FERNET_KEY: ci-validation-only
     AIRFLOW_WEBSERVER_SECRET_KEY: ci-validation-only
+    AIRFLOW_JWT_SECRET: ci-validation-only
     AIRFLOW_DATABASE_URL: postgresql+psycopg2://airflow:ci-validation-only@127.0.0.1:5432/airflow
     GCP_NODE_1_PROJECT: ci-node-1-project
     GCP_NODE_2_PROJECT: ci-node-2-project

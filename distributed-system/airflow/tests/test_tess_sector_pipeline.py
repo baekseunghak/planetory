@@ -12,7 +12,6 @@ from tess_pipeline_contract import (  # noqa: E402
     command,
     release_path,
     remaining_wait_time,
-    sector_inputs,
     stage_inputs,
     validate_download_markers,
 )
@@ -56,11 +55,6 @@ class TessSectorPipelineContractTest(unittest.TestCase):
             validate_download_markers(markers, 7, "20260919T005932Z", source_sha)
 
     def test_lineage_paths_and_shell_arguments_are_bounded(self):
-        params = {
-            "sector_runs": {"1": "20260919T005932Z"},
-            "sector_source_sha256": {"1": "a" * 64},
-        }
-        self.assertEqual(sector_inputs(params, 1), ("20260919T005932Z", "a" * 64))
         self.assertEqual(
             release_path(
                 "/opt/planetory-hdfs-load/releases/20260921T101150Z",
@@ -71,8 +65,6 @@ class TessSectorPipelineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stay below"):
             release_path("/opt/planetory-hdfs-load/releases/../current", "/opt/planetory-hdfs-load/releases/")
         self.assertEqual(command(["printf", "%s", "a b"]), "printf %s 'a b'")
-        with self.assertRaisesRegex(ValueError, "missing Sector 2 lineage"):
-            sector_inputs(params, 2)
 
     def test_download_wait_keeps_its_original_deadline_after_deferral(self):
         started = datetime(2026, 9, 22, tzinfo=timezone.utc)

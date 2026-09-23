@@ -132,8 +132,9 @@ def trigger_next(target: str, source_task: str) -> TriggerDagRunOperator:
     return TriggerDagRunOperator(
         task_id="trigger_next_stage",
         trigger_dag_id=target,
-        trigger_run_id=f"tess_s{{{{ {result}['sector'] }}}}_{{{{ {result}['lineage_sha256'][:16] }}}}_r{{{{ {result}['attempt'] }}}}",
-        conf=f"{{{{ {result} }}}}",
+        # Each stage numbers its own attempts from r0; discovery's contiguous lookup relies on it.
+        trigger_run_id=f"tess_s{{{{ {result}['sector'] }}}}_{{{{ {result}['lineage_sha256'][:16] }}}}_r0",
+        conf=f"{{{{ dict({result}, attempt=0) }}}}",
         reset_dag_run=False,
         skip_when_already_exists=True,
     )

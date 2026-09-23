@@ -25,3 +25,7 @@ experiments/**/*.parquet
 
 .claude/
 .codex/
+
+# Python bytecode
+__pycache__/
+*.pyc

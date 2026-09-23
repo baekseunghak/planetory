@@ -398,7 +398,8 @@ docker compose up -d airflow-db airflow-scheduler airflow-dag-processor airflow-
 -f infra/distributed-system/compose.control-plane.yaml --env-file <서버-env-경로>
 ```
 
-- Airflow: 2.10.x, LocalExecutor
+- Airflow: 3.2.2, LocalExecutor(`parallelism=8`). Scheduler·DAG Processor·Triggerer·API Server 네 서비스가 모두 필요하다.
+- 배포: CI의 범용 compose 배포 job은 두지 않는다. 활성 DagRun 0건, DAG import, 네 서비스 health(Triggerer 포함)를 확인하는 [Node 1 전용 배포 스크립트](scripts/deploy-tess-airflow-node1.sh)의 `--update`로만 교체한다. 실패 시 rollback도 네 서비스를 이전 이미지로 되돌린다.
 - 웹 UI: Node 1의 `127.0.0.1:8081`
 - 접근 방법: Tailscale Serve의 tailnet 전용 `https://node-1.tail97e363.ts.net/`. Airflow 자체는 `127.0.0.1:8081`에만 바인딩하고 Funnel은 사용하지 않는다.
 

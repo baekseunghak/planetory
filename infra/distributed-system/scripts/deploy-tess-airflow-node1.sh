@@ -17,6 +17,20 @@ runtime_env_file() {
   fi
   printf '%s\n' /etc/planetory/airflow/airflow.env
 }
+# Deferred download waits resume only through a live Triggerer heartbeat.
+wait_airflow_healthy() {
+  for attempt in $(seq 1 60); do
+    if curl --fail --silent http://127.0.0.1:8081/api/v2/monitor/health | python3 -c '
+import json, sys
+health = json.load(sys.stdin)
+sys.exit(not all(health[key]["status"] == "healthy"
+                 for key in ("metadatabase", "scheduler", "dag_processor", "triggerer")))
+' 2>/dev/null; then return 0; fi
+    sleep 2
+  done
+  echo 'AIRFLOW_HEALTH_TIMEOUT' >&2
+  return 1
+}
 if [[ "${1:-}" == --viewer-password ]]; then
   cd "$release_dir"
   compose=(docker compose --env-file "$(runtime_env_file)" -f compose.yaml)
@@ -82,8 +96,7 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
     status=$?
     trap - EXIT
     if [[ "$status" != 0 && "$switched" == 1 ]]; then
-      docker rm -f "$triggerer" >/dev/null 2>&1 || true
-      AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-api-server || \
+      AIRFLOW_IMAGE="$old_image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server || \
         echo 'AIRFLOW_ROLLBACK_FAILED' >&2
       echo "AIRFLOW_UPDATE_ROLLED_BACK old_image=$old_image" >&2
     fi
@@ -92,11 +105,7 @@ print("AIRFLOW_FIVE_PAUSED_DAGS_READY")
   trap rollback EXIT
   switched=1
   AIRFLOW_IMAGE="$image" "${compose[@]}" up -d --no-deps airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
-  for attempt in $(seq 1 60); do
-    if curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health; then break; fi
-    sleep 2
-  done
-  curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health
+  wait_airflow_healthy
   "${compose[@]}" exec -T airflow-dag-processor airflow dags list-import-errors | grep -Fq 'No data found'
   [[ "$(docker inspect -f '{{.Config.Image}}' "$scheduler")" == "$image" ]]
   [[ "$(docker inspect -f '{{.Config.Image}}' "$api_server")" == "$image" ]]
@@ -164,15 +173,11 @@ compose=(docker compose --env-file /etc/planetory/airflow/airflow.env -f compose
 "${compose[@]}" config --quiet
 "${compose[@]}" up -d airflow-db
 "${compose[@]}" --profile setup run --rm airflow-init
-"${compose[@]}" up -d airflow-scheduler airflow-dag-processor airflow-api-server
+"${compose[@]}" up -d airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
 "${compose[@]}" exec -T airflow-dag-processor airflow dags list-import-errors
 "${compose[@]}" exec -T airflow-scheduler airflow dags list | grep -F tess_sector_discovery
 bash "$0" --viewer-password
-for attempt in $(seq 1 60); do
-  if curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health; then break; fi
-  sleep 2
-done
-curl --fail --silent --output /dev/null http://127.0.0.1:8081/api/v2/monitor/health
+wait_airflow_healthy
 tailscale serve --bg --https=443 http://127.0.0.1:8081
 tailscale serve status
 echo 'AIRFLOW_TAILNET_READY'
