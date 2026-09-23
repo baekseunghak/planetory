@@ -84,3 +84,5 @@ GCP Hadoop/YARN 데몬은 호스트에서 실행한다. 운영 Compose가 DataNo
 - 호스트에서 만든 `node_modules`, `.venv`, JAR와 네이티브 파일을 이미지에 복사하지 않는다.
 - `latest` 대신 commit SHA와 이미지 내용 식별값을 사용한다.
 - 분산 이미지는 실제 GCP amd64 노드에서 import와 짧은 작업 실행까지 확인한다.
+
+175 알림 목록·모두 읽음에는 backend의 `NOTIFICATION_SIGNING_KEY` 주입이 필요하다. 서버 보호 환경에서 관리하고 실제 값을 출력하지 않는다. 길이·인스턴스 공유·교체·미설정 동작과 V23/FE 동시 반영은 [알림 키·전환](../../apps/backend/docs/development-setup.md#notification-key)을 따른다. 이 구성 변경은 배포 완료를 뜻하지 않는다.

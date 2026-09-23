@@ -19,6 +19,16 @@ test("settings is reached through profile; preference patch changes one field an
   await expect(toggle).not.toBeChecked();
   await page.reload();
   await expect(toggle).not.toBeChecked();
+  const relabel = page.getByRole("switch", { name: "신호 상태 변경 알림" });
+  await expect(relabel).toBeChecked();
+  const relabelSent = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().endsWith("/notification-settings"),
+  );
+  await relabel.click();
+  expect((await relabelSent).postDataJSON()).toEqual({ preferences: { RELABEL: false } });
+  await page.reload();
+  await expect(relabel).not.toBeChecked();
+  await expect(toggle).not.toBeChecked();
   await expect(
     page.getByRole("switch", { name: "내 글의 댓글 알림" }),
   ).toBeChecked();

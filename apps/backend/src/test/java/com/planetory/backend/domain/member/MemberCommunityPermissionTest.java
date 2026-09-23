@@ -69,6 +69,10 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration").target("22").load();
         assertEquals(List.of("22"), reopenUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway notificationUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("23").load();
+        assertEquals(List.of("23"), notificationUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -114,7 +118,7 @@ class MemberCommunityPermissionTest {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
 
-            // 재개 사건(V22)은 만들기만 한다. 읽음 표시의 UPDATE는 알림 조회 티켓이 받는다.
+            // V23은 읽음·발행 열의 UPDATE만 허용한다. 테이블 전체 UPDATE 권한은 없다.
             for (String allowed : List.of("SELECT", "INSERT")) {
                 assertTrue(hasPrivilege(owner, "notifications", allowed), allowed);
             }

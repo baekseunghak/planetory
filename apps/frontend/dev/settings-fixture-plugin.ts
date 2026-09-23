@@ -9,6 +9,7 @@ export function settingsFixturePlugin(
     CHALLENGE: true,
     FOLLOW: true,
     COMMENT: true,
+    RELABEL: true,
   };
   return {
     name: "settings-fixture-221",

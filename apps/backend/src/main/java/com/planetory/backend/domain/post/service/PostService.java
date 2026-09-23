@@ -25,6 +25,7 @@ public class PostService {
     private final Clock clock;
     private final HistoryAttachmentService attachments;
     private final SourceLinkService sources;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     public record SourceLink(String type, String id) {}
     public record CreateCommand(String title, String body, String purposeTag, String ticId,
@@ -48,6 +49,7 @@ public class PostService {
                 values.title(), values.body()));
         attachments.replace(HistoryAttachmentService.Parent.POST, post.getId(), memberId, values.ticId(), command.historyIds());
         sources.replace(HistoryAttachmentService.Parent.POST, post.getId(), values.ticId(), command.sourceLinks(), false);
+        notifications.postCreated(memberId, post.getId(), values.ticId(), false);
         return new Created(id(post), post.getCreatedAt());
     }
 

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Repository;
 public class BundleActivationRepository {
 
     private final JdbcClient jdbc;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     /** 후처리 대상 회원 한 명. 진행 단계로 할 일이 갈린다. */
     public record ProgressRow(long memberId, String stage) {
@@ -102,7 +103,7 @@ public class BundleActivationRepository {
      */
     public int recordReopenEvent(long memberId, long ticId, long bundleId, int newDiscoverableCount,
                                  String reason) {
-        return jdbc.sql("""
+        var inserted = jdbc.sql("""
                         INSERT INTO notifications (user_id, type, payload)
                         VALUES (?, 'reopen', jsonb_strip_nulls(jsonb_build_object(
                                    'ticId', ?::text,
@@ -110,9 +111,18 @@ public class BundleActivationRepository {
                                    'newDiscoverableCount', ?::int,
                                    'reason', ?::text)))
                         ON CONFLICT DO NOTHING
+                        RETURNING id
                         """)
                 .params(memberId, String.valueOf(ticId), String.valueOf(bundleId), newDiscoverableCount, reason)
-                .update();
+                .query(Long.class).optional();
+        if (inserted.isEmpty()) return 0;
+        var payload = new java.util.LinkedHashMap<String, Object>();
+        payload.put("ticId", String.valueOf(ticId));
+        payload.put("bundleId", String.valueOf(bundleId));
+        payload.put("newDiscoverableCount", newDiscoverableCount);
+        if (reason != null) payload.put("reason", reason);
+        notifications.record(memberId, "reopen", "reopen:" + ticId + ":" + bundleId, payload, inserted.get());
+        return 1;
     }
 
     /**
