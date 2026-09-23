@@ -42,8 +42,10 @@ test("OAuth accepts configured HTTPS or local HTTP endpoints only", () => {
 });
 test("callback cancellation, failure and clean server landing differ; codes never grant access", () => {
   assert.equal(callbackProblem("?error=access_denied"), "cancelled");
+  assert.equal(callbackProblem("?error=service_unavailable"), "unavailable");
   for (const query of [
     "?error=bad",
+    "?error=authentication_failed",
     "?code=abc",
     "?access_token=abc",
     "?id_token=abc",

@@ -41,6 +41,7 @@
     "dev:interaction": "vite --mode interaction --host 127.0.0.1 --port 58326 --strictPort",
     "test:interaction": "playwright test --config=playwright.interaction.config.ts --project=chromium",
     "test:docker-defaults": "node scripts/test-docker-defaults.mjs",
+    "test:nginx": "node scripts/test-nginx.mjs",
     "dev:detail": "vite --mode interaction --host 127.0.0.1 --port 58335 --strictPort",
     "test:detail": "playwright test --config=playwright.detail.config.ts --project=chromium",
     "dev:fallback": "vite --mode interaction --host 127.0.0.1 --port 58338 --strictPort",

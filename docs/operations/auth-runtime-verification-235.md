@@ -2,7 +2,7 @@
 
 - Jira: [S15P21C206-235](https://ssafy.atlassian.net/browse/S15P21C206-235)
 - 측정일: 2026-09-23
-- 상태: DB 장애 인증 예외 경계 수정·격리 재검증 완료(15건 통과). 239·실제 외부 제공자·운영 인수는 미완료다.
+- 상태: 235의 DB 장애 인증 예외 경계 수정·격리 재검증 완료(15건 통과). 239 통합 이후의 표시 분리·재검증 상태는 [239 검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)을 따른다. 실제 외부 제공자·운영 인수는 별도다.
 - 목적: prod 설정의 실제 쿠키 속성과 DB 중단 시 인증 응답을 기록하고 발견한 인증 예외 처리 누락을 수정한다. 정책·운영 설정·마이그레이션은 변경하지 않는다.
 - 기준: [OAuth·세션 계약](../../apps/backend/docs/oauth-setup.md), [서비스 배포](../../infra/service/README.md), [운영 문서](README.md).
 
@@ -16,7 +16,7 @@
 | 237 | 실제 세션 Redis와 캐시 Redis의 별도 연결, `SESSION`·30분 idle | 운영 연결·지속성 검증과 구분 |
 | 234 | 로그아웃에 현재 세션의 CSRF 필요 | 아래 반복·오래된 토큰 검증 |
 | 84 | 기준 develop에 병합됨. 현재 `infra/service/compose.yaml`에는 두 Redis 서비스와 `SESSION_REDIS_*`·`CACHE_REDIS_*` 전달이 없음 | 병합을 운영 준비 완료로 보지 않음 |
-| 239 | nginx의 요청 시점 DNS, Proto/Host 전달, `absolute_redirect off`, `/me` 장애를 401로 바꾸지 않는 라우팅은 존재 | 콜백 503은 여전히 `authentication_failed`. `flow.ts`도 `service_unavailable` 구분 없음 |
+| 239 | nginx의 요청 시점 DNS, Proto/Host 전달, `absolute_redirect off`, `/me` 장애를 401로 바꾸지 않는 라우팅은 존재 | 최초 측정 때는 콜백 503이 `authentication_failed`였으며, 239 통합 후 `service_unavailable`과 별도 화면 안내로 구분한다. 현재 결과는 [239 검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)을 따른다 |
 
 현재 nginx의 외부 `Forwarded`·일부 `X-Forwarded-*` 미제거와 임의 Proto 통과는 [기존 신뢰 경계](../../apps/backend/docs/oauth-setup.md#oauth-proxy-240)에 남아 있다. 이번 시험은 정상 입력만 사용하며 그 취약 경로의 운영 인수를 대신하지 않는다.
 
@@ -137,7 +137,7 @@ Java 실행 버전은 21.0.11이며 로컬 Docker 서버는 29.6.2다. 실행 �
 | OAuthLoginSuccessHandler.java | `db31426d5938cd9842005f9471263705ab2d447eed3777468376a8648221be1c` |
 | AuthRuntimeVerificationTest.java | `2b1b09ff753c2820219e13b834c19240dc3ae0fe9eb6e78056b62fb0b74f8a3c` |
 
-239의 nginx 콜백 표시 문제는 그대로 남는다. DB 장애를 일반 업무 전체에서 모두 503으로 바꾸는 변경이 아니라 인증 경계의 누락된 예외만 보완한 것이다. 운영 설정·마이그레이션·배포·공유 DB 변경과 commit·push는 수행하지 않았다.
+235 단독 수정 시점에는 239의 nginx 콜백 표시 문제가 남아 있었다. DB 장애를 일반 업무 전체에서 모두 503으로 바꾸는 변경이 아니라 인증 경계의 누락된 예외만 보완한 것이다. 이 시점에는 운영 설정·마이그레이션·배포·공유 DB 변경과 commit·push를 수행하지 않았다. 이후 239 통합에서는 아래 검사의 DB 장애 콜백 기대값을 `service_unavailable`로 변경한다. 위의 실행 식별자·해시·응답 표는 당시 측정 이력으로 보존한다.
 
 ## 재현
 
@@ -160,5 +160,5 @@ Set-Location apps/backend
 
 - Google/SSAFY 실제 제공자의 등록·동의·콜백과 실제 사용자 브라우저 쿠키 동작은 미검증이다. 합성 공급자의 실제 HTTP code 교환·OIDC 서명 검증과 구분한다.
 - 실제 Cloudflare TLS → Tunnel 평문 → 운영 nginx 경로, 배포 이미지 SHA, 실제 배포 연결 변수·Redis 지속성·메모리/eviction/용량, backend 직결 차단은 확인하지 않는다.
-- `/oauth/callback` SPA 화면의 실제 렌더링은 실행하지 않는다. nginx Location 실측과 현재 `callbackProblem` 소스 확인까지만 범위로 한다.
-- 239의 의존성 장애 표시 분리와 전달 헤더 신뢰 경계는 해당 담당 작업에서 수정·인수한다. 이 검증 티켓에서 앱·프록시를 임의 수정하거나 Jira를 만들지 않는다.
+- 이 Java 런타임 검사는 `/oauth/callback` SPA를 렌더링하지 않고 nginx Location을 검증한다. 화면의 Chrome 검사는 [239 검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)으로 구분한다.
+- 239의 의존성 장애 표시 분리·검사 정합화는 239에서 반영한다. 실제 프록시의 전달 헤더 정제·직결 차단과 운영 인수는 별도로 남는다.

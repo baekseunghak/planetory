@@ -179,5 +179,8 @@
 | 2026-09-22 | 122 후보 기반 외부 조인 회귀 준비 | S15P21C206-124 | fixture IDs, held_rows, reference_changes | 합성 검증 완료·연결 회귀 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 외부 카탈로그 후보 연결 696cda44 검산 | S15P21C206-124 | 18 IDs, 99 scenarios, 79 checksums, hold | 로컬 검증 완료·리뷰 대기 | [기록](2026-09-22.md) |
 | 2026-09-23 | 외부 카탈로그 승인 리뷰 보완 | S15P21C206-124 | None TIC, 빈 합집합, hold 진단 참조 | 커널 300·bench 6개 통과 | [기록](2026-09-23.md) |
+| 2026-09-21 | 프론트 단독 기동·OAuth 장애와 인증 실패 구분 | S15P21C206-239 | nginx, resolver, forwarded, service_unavailable, 503, 가짜401 | 로컬 검증 완료·업로드 전 | [기록](2026-09-21.md) |
+| 2026-09-23 | 최신 develop 기준 OAuth 장애 분리·재검증 | S15P21C206-239 | 84 병합, 503 분리, API 상태 보존, Chrome, nginx | 로컬 검증 완료·리뷰 대상 | [기록](2026-09-23.md) |
 | 2026-09-23 | prod 쿠키·격리 DB 중단 인증 실측 | S15P21C206-235 | Secure, SESSION, nginx, 500, 503, 239, Redis, 동일 포트 복구 | 14건 통과·1건 계약 실패, 운영 인수 별도 | [기록](2026-09-23.md) |
 | 2026-09-23 | 인증 DB 트랜잭션 시작 실패의 503 경계 보완 | S15P21C206-235 | CannotCreateTransactionException, /me, OAuth, 503, 복구 | 수정·15건 검증 통과 | [기록](2026-09-23.md) |
+| 2026-09-23 | 235 병합 후 OAuth 장애 콜백 기대값 정합화 | S15P21C206-239 | e510d1da, service_unavailable, TLS, 실제 DB, Chrome | 인증 15개·Chrome 14개 통과, MR 갱신 | [기록](2026-09-23.md) |

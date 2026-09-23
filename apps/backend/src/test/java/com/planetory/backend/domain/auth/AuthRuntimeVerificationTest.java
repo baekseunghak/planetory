@@ -147,7 +147,7 @@ class AuthRuntimeVerificationTest {
                     jar.getCookieStore().removeAll();
                     authorization = get(browser, "/oauth2/authorization/" + provider);
                     proxyFailure("database-down-callback-proxy-" + provider,
-                            get(browser, callback(authorization, provider)), "authentication_failed");
+                            get(browser, callback(authorization, provider)), "service_unavailable");
                 }
                 prolongedOutage = get(authenticated, "/api/v1/me");
                 observeOutage("database-down-after-pool-reconnect", prolongedOutage);
