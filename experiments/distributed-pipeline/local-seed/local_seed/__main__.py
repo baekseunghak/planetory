@@ -17,7 +17,7 @@ import time
 import psycopg
 
 from .catalog import CATALOG
-from .load import SeedError, apply_settings, connect, is_local, notify_backend, preflight, publish_star
+from .load import SeedError, apply_settings, connect, notify_backend, notify_targets, preflight, publish_star
 from .payload import GenerationError, build_all
 
 INTENT_KO = {"deep_confirmed": "깊은 확정", "shallow_confirmed": "얕은 확정", "fp": "오검출", "deep_fp": "깊은 오검출",
@@ -70,17 +70,20 @@ def cmd_plan(_args) -> int:
 
 def cmd_seed(args) -> int:
     url = args.database_url or os.environ.get("SEED_DATABASE_URL") or default_url()
-    if not is_local(url) and not args.allow_non_local:
-        print("로컬 DB 가 아니다. 공유·운영 DB 에는 적재하지 않는다(필요하면 --allow-non-local).", file=sys.stderr)
+    token = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+    if args.notify_backend and not token:
+        print("--notify-backend 에는 INTERNAL_SERVICE_TOKEN 이 필요하다. 적재하지 않았다.", file=sys.stderr)
         return 2
-    payloads = build()
-    with connect(url, args.schema) as conn:
+    # 실제 접속 주소를 먼저 확인하고(connect), 마이그레이션 상태를 본 뒤에 생성한다. 막힐 일을 생성 전에 알린다.
+    with connect(url, args.schema, allow_non_local=args.allow_non_local) as conn:
         target = preflight(conn, args.schema, require_flyway=not args.skip_migration_check)
         version = f"V{target.flyway_version}" if target.flyway_version is not None else "기록 없음"
-        print(f"대상: 스키마 {target.schema}, 마이그레이션 {version}, "
+        print(f"대상: {conn.info.hostaddr or conn.info.host}:{conn.info.port}/{conn.info.dbname} 스키마 {target.schema}, "
+              f"마이그레이션 {version}, "
               f"Gold 역할 {'planetory_gold_writer' if target.use_writer_role else '연결 계정(역할 전환 불가)'}")
         for warning in target.warnings:
             print(f"주의: {warning}")
+        payloads = build()
         results = []
         for p in payloads:
             result = publish_star(conn, p, target)
@@ -90,15 +93,16 @@ def cmd_seed(args) -> int:
         if not args.no_settings:
             for s in apply_settings(conn, payloads, dt.date.today()):
                 print(f"  {s.name}: {s.code} {s.detail}")
-    published = [r.bundle_id for r in results if r.code == "PUBLISHED"]
-    if published and args.notify_backend:
-        token = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
-        if not token:
-            print("INTERNAL_SERVICE_TOKEN 이 없어 판 전환 후처리를 부르지 않았다.", file=sys.stderr)
-        else:
-            for bundle_id, outcome in notify_backend(args.notify_backend, token, published):
-                print(f"  후처리 b-{bundle_id}: {outcome}")
-    elif published:
+    if args.notify_backend:
+        failed = 0
+        for bundle_id, ok, outcome in notify_backend(args.notify_backend, token, notify_targets(results)):
+            print(f"  후처리 b-{bundle_id}: {outcome}")
+            failed += not ok
+        if failed:
+            print(f"판 전환 후처리 {failed}건이 실패했다. 백엔드를 확인한 뒤 같은 명령을 다시 실행하면 current 판 전체에 "
+                  "다시 알린다(후처리는 여러 번 받아도 결과가 같다).", file=sys.stderr)
+            return 1
+    elif any(r.code == "PUBLISHED" for r in results):
         print("새 판을 게시했다. 이미 가입한 회원이 있으면 --notify-backend 로 판 전환 후처리를 부른다.")
     print("완료. 백엔드를 띄우고 OAuth 로 가입하면 튜토리얼 1번 별이 열린다. 정답표: python -m local_seed plan")
     return 0
@@ -115,12 +119,14 @@ def main(argv: list[str] | None = None) -> int:
     seed = sub.add_parser("seed", help="로컬 DB 에 적재")
     seed.add_argument("--database-url", help="postgresql://… (기본 SEED_DATABASE_URL 또는 로컬 Compose)")
     seed.add_argument("--schema", default="public", help="대상 스키마(기본 public)")
-    seed.add_argument("--allow-non-local", action="store_true", help="localhost 가 아닌 DB 도 허용")
+    seed.add_argument("--allow-non-local", action="store_true",
+                      help="실제 접속 주소가 이 PC(루프백·Unix 소켓)가 아닌 DB 도 허용")
     seed.add_argument("--skip-migration-check", action="store_true",
                       help="flyway_schema_history 없이 마이그레이션 SQL 을 직접 적용한 검증용 스키마")
     seed.add_argument("--no-settings", action="store_true", help="튜토리얼·챌린지 설정을 넣지 않는다")
     seed.add_argument("--notify-backend", metavar="URL",
-                      help="새 판마다 POST /internal/bundles/{id}/activated (토큰은 INTERNAL_SERVICE_TOKEN)")
+                      help="current 판마다 POST /internal/bundles/{id}/activated (토큰은 INTERNAL_SERVICE_TOKEN, "
+                           "실패하면 종료 코드 1, 다시 실행하면 다시 알린다)")
     seed.set_defaults(func=cmd_seed)
     args = parser.parse_args(argv)
     try:

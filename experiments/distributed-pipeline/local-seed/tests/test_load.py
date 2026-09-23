@@ -9,12 +9,15 @@ import datetime as dt
 import os
 import re
 import secrets
+from contextlib import contextmanager
 from pathlib import Path
 
 import psycopg
 import pytest
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
+from local_seed import __main__ as cli
 from local_seed.load import (SeedError, apply_settings, connect, preflight, publish_star,
                              repository_migration_version)
 
@@ -33,8 +36,8 @@ def migration_files() -> list[Path]:
     return versioned + sorted(MIGRATIONS.glob("R__*.sql"))
 
 
-@pytest.fixture(scope="module")
-def db():
+@contextmanager
+def migrated_schema():
     schema = f"seed_it_{secrets.token_hex(4)}"
     admin = psycopg.connect(URL, autocommit=True)
     admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
@@ -44,13 +47,27 @@ def db():
             admin.execute("SET LOCAL planetory.tutorial_skip_after = '3'")     # local 프로필과 같은 값
             for path in migration_files():
                 admin.execute(path.read_text(encoding="utf-8"))
-        conn = connect(URL, schema)
-        target = preflight(conn, schema, require_flyway=False)
-        yield conn, target
-        conn.close()
+        yield schema
     finally:
         admin.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
         admin.close()
+
+
+@pytest.fixture(scope="module")
+def db():
+    with migrated_schema() as schema:
+        conn = connect(URL, schema)
+        try:
+            yield conn, preflight(conn, schema, require_flyway=False)
+        finally:
+            conn.close()
+
+
+@pytest.fixture
+def fresh_schema():
+    """앞 테스트가 바꾼 상태 없이 명령 전체를 돌릴 새 스키마."""
+    with migrated_schema() as schema:
+        yield schema
 
 
 def counts(conn) -> dict[str, int]:
@@ -154,3 +171,35 @@ def test_refuses_database_behind_repository_migrations(db):
         assert preflight(conn, target.schema, require_flyway=True).flyway_version == latest
     finally:
         conn.execute("DROP TABLE flyway_schema_history")
+
+
+def test_local_check_uses_the_address_libpq_connected_to():
+    """리뷰 P1: host 이름이 아니라 libpq 가 실제로 붙은 주소로 판정한다. 이름이 로컬이 아니어도 주소가 루프백이면
+    통과하고, 반대로 이름이 localhost 여도 주소가 원격이면 거절한다(거절 쪽은 test_local_guard.py)."""
+    with psycopg.connect(URL) as probe:
+        address = probe.info.hostaddr
+    assert address, "TCP 로 붙는 일회용 DB 여야 한다"
+    conn = connect(make_conninfo(URL, host="db.invalid", hostaddr=address), "public")
+    try:
+        assert (conn.info.host, conn.info.hostaddr) == ("db.invalid", address)
+    finally:
+        conn.close()
+
+
+def test_rerun_recovers_failed_post_processing(fresh_schema, payloads, backend, down_url, monkeypatch):
+    """리뷰 P2: 첫 실행에서 판 전환 후처리가 실패하면 종료 코드 1 이고, 같은 명령을 다시 실행하면 이미 current 인
+    판까지 전부 다시 알려 복구된다."""
+    monkeypatch.setattr(cli, "build", lambda: payloads)
+    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "local-test-token")
+    args = ["seed", "--database-url", URL, "--schema", fresh_schema, "--skip-migration-check", "--notify-backend"]
+
+    assert cli.main(args + [down_url]) == 1                 # 백엔드가 꺼져 있다. 적재는 끝났고 알림만 실패
+    with psycopg.connect(URL) as conn:
+        current = {r[0] for r in conn.execute(
+            sql.SQL("SELECT id FROM {} WHERE status = 'current'").format(
+                sql.Identifier(fresh_schema, "publication_bundles"))).fetchall()}
+    assert len(current) == len(payloads)
+
+    assert cli.main(args + [backend.url]) == 0              # 모두 ALREADY_PUBLISHED 지만 다시 알린다
+    assert sorted(b for b, _ in backend.requests) == sorted(current)
+    assert {token for _, token in backend.requests} == {"local-test-token"}

@@ -1,6 +1,6 @@
 # local-seed: 통합 테스트용 로컬 Gold 시드
 
-Jira `S15P21C206-256` / 담당: 강재민 / 상태: 구현·일회용 DB 검증 완료, 팀 리뷰 전
+Jira `S15P21C206-256` / 담당: 강재민 / 상태: 구현·일회용 DB 검증 완료, 팀 리뷰 중
 
 Gold 실데이터 적재가 끝나기 전에도 로컬 DB에서 가입부터 분석·제출·챌린지까지 프론트·백엔드 통합 테스트를 하기 위한 데이터다. 합성 별 14개와 저장소에 있는 실제 TESS 곡선 예제 1개(TOI-270)를 넣는다. 실데이터 적재는 Gold staging 적재(`S15P21C206-86`), current 전환(`S15P21C206-87`), Gold 직렬화(`S15P21C206-125`)가 맡는다. 가입 처리는 튜토리얼 1번 별이 없으면 회원을 만들지 않으므로, Gold가 비어 있는 DB에서는 로그인부터 막힌다.
 
@@ -24,7 +24,7 @@ Gold 실데이터 적재가 끝나기 전에도 로컬 DB에서 가입부터 분
 따로 넘길 파일은 없다. 로컬 DB는 팀원마다 자기 PC의 Docker 볼륨이라, 각자 이 브랜치(병합 뒤에는 develop)를 받아 아래 [실행](#실행)을 한 번 하면 된다. 합성 곡선은 코드가 매번 같은 값으로 다시 만들고, 실제 곡선 예제는 이미 저장소에 있다([gold-toi270-s3.json](../../gold-roundtrip/fixtures/gold-toi270-s3.json)). 그래서 누가 돌려도 같은 TIC·같은 판 내용이 들어간다.
 
 - uv를 설치하기 어려운 팀원에게만 [덤프](#덤프가-필요할-때)를 떠서 넘긴다. 덤프는 뜬 시점의 마이그레이션 버전에 고정된다.
-- 공유 개발 서버(`app.planetory.space`)의 DB는 별개다. 이 시드는 localhost가 아니면 멈추며, 공유 DB에 넣는 것은 인프라 담당과 정할 일이다. 그 DB에는 로그인용으로 손으로 넣은 튜토리얼 1번 별과 더미 별이 이미 있다([서비스 배포 현재 상태](../../../docs/project/service-deploy-status.md)).
+- 공유 개발 서버(`app.planetory.space`)의 DB는 별개다. 이 시드는 실제로 접속한 주소가 이 PC가 아니면 아무것도 읽거나 쓰기 전에 멈추며([옵션](#실행)의 `--allow-non-local`), 공유 DB에 넣는 것은 인프라 담당과 정할 일이다. 그 DB에는 로그인용으로 손으로 넣은 튜토리얼 1번 별과 더미 별이 이미 있다([서비스 배포 현재 상태](../../../docs/project/service-deploy-status.md)).
 
 ## 실행
 
@@ -41,15 +41,15 @@ uv sync
 uv run python -m local_seed seed
 ```
 
-출력 끝에 별마다 `PUBLISHED b-<id>`, 튜토리얼 1~5와 챌린지 회차의 `SET`이 보이면 된다. 이후 프론트를 실제 백엔드에 붙여(`API_PROXY_TARGET`, [프론트 README](../../../apps/frontend/README.md)) OAuth로 가입하면 튜토리얼 1번 별이 열린다. DB 마이그레이션이 저장소 최신보다 뒤처져 있으면 `MIGRATION_BEHIND`로 멈추므로 1)을 먼저 한다.
+출력의 `대상:` 줄에 실제로 접속한 주소가 나오고, 끝에 별마다 `PUBLISHED b-<id>`, 튜토리얼 1~5와 챌린지 회차의 `SET`이 보이면 된다. 이후 프론트를 실제 백엔드에 붙여(`API_PROXY_TARGET`, [프론트 README](../../../apps/frontend/README.md)) OAuth로 가입하면 튜토리얼 1번 별이 열린다. DB 마이그레이션이 저장소 최신보다 뒤처져 있으면 `MIGRATION_BEHIND`로 멈추므로 1)을 먼저 한다.
 
 | 옵션 | 뜻 |
 | --- | --- |
 | `--database-url` | `postgresql://…` 형식. 기본은 `SEED_DATABASE_URL`, 없으면 루트 Compose `service-db` 로컬 기본값. 백엔드의 JDBC 형식 `DATABASE_URL`은 읽지 않는다 |
 | `--schema` | 대상 스키마. 기본 `public` |
-| `--allow-non-local` | localhost가 아닌 DB도 허용한다. 공유·운영 DB에는 쓰지 않는다 |
+| `--allow-non-local` | 실제 접속 주소가 이 PC(루프백 주소나 Unix 소켓)가 아니어도 허용한다. URL의 host가 아니라 연결된 뒤 libpq가 알려 주는 주소로 판정하므로 `hostaddr`·service 파일·`PGHOST`로 다른 곳을 가리켜도 막힌다. 공유·운영 DB에는 쓰지 않는다 |
 | `--no-settings` | 튜토리얼·챌린지 설정을 넣지 않는다 |
-| `--notify-backend URL` | 새로 게시한 판마다 `POST /internal/bundles/{bundleId}/activated`를 부른다. 토큰은 `INTERNAL_SERVICE_TOKEN`([백엔드 README](../../../apps/backend/README.md)) |
+| `--notify-backend URL` | 적재 뒤 current 판마다(이번에 게시한 판과 이미 current인 판) `POST /internal/bundles/{bundleId}/activated`를 부른다. 토큰은 `INTERNAL_SERVICE_TOKEN`([백엔드 README](../../../apps/backend/README.md))이며 없으면 적재 전에 멈춘다. 한 건이라도 실패하면 종료 코드 1이다 |
 | `--skip-migration-check` | Flyway 이력 없이 마이그레이션 SQL을 직접 적용한 검증용 스키마에만 쓴다 |
 
 ## 정답표
@@ -98,7 +98,7 @@ uv run python -m local_seed seed
 ## 다시 실행·초기화
 
 - 같은 내용이면 다시 실행해도 바뀌지 않는다(`ALREADY_PUBLISHED`, `KEPT`).
-- 시드 규칙(`catalog.py`의 `GENERATOR_VERSION`)이 바뀌면 새 판을 게시한다. 이전 판은 archived, 그 판의 후보는 retired가 되고 `candidate_status_history`에 남는다. 실제 Publisher의 후보 동일성 판단(id 유지)은 하지 않는다. 이미 가입한 회원이 있으면 `--notify-backend http://127.0.0.1:8080`으로 판 전환 후처리를 부른다.
+- 시드 규칙(`catalog.py`의 `GENERATOR_VERSION`)이 바뀌면 새 판을 게시한다. 이전 판은 archived, 그 판의 후보는 retired가 되고 `candidate_status_history`에 남는다. 실제 Publisher의 후보 동일성 판단(id 유지)은 하지 않는다. 이미 가입한 회원이 있으면 `--notify-backend http://127.0.0.1:8080`으로 판 전환 후처리를 부른다. 백엔드가 꺼져 있는 등으로 알림이 실패하면 종료 코드 1로 끝난다. 백엔드를 띄우고 같은 명령을 다시 실행하면 적재는 `ALREADY_PUBLISHED`로 넘어가고 current 판 전체에 다시 알린다(후처리는 같은 판을 여러 번 받아도 결과가 같다).
 - `IDEMPOTENCY_CONFLICT`는 같은 판 이름이나 같은 세그먼트 자연 키에 다른 내용이 들어 있다는 뜻이다. TOI-270 예제를 다시 만든 경우(`gold-roundtrip build`)에도 난다. 로컬 DB를 초기화한다.
 - 튜토리얼·챌린지 `CONFLICT`는 다른 별이 이미 설정돼 있다는 뜻이다. 그대로 두며, 시드 별로 바꾸려면 로컬 DB를 초기화한다.
 - 새 마이그레이션이 기존 행 때문에 멈추면(V4·V7처럼 데이터가 있으면 실패하는 방식) 백엔드 README의 "로컬 DB 초기화" → `bootRun` → 시드 순서로 다시 만든다.
@@ -130,7 +130,9 @@ uv run pytest -q
 
 - `test_canonical.py`: [Gold 계약 벡터](../../../contracts/gold/examples/)(배열·레코드 checksum, bundle_version)를 재현한다.
 - `test_payload.py`: 튜토리얼 의도·정답, manifest 필수 키, transit_model 계약 1.0, checksum, U자 가장자리 비, TOI-270이 원본 예제와 checksum까지 같은지를 DB 없이 본다.
-- `test_load.py`: `LOCAL_SEED_TEST_DATABASE_URL`이 있을 때만 돈다. 새 스키마에 저장소 마이그레이션 전체를 적용하고 적재·재적재·내용 충돌·새 판 교체·운영 설정 보존·마이그레이션 뒤처짐 거절을 검사한 뒤 스키마를 지운다. 개발 DB가 아닌 일회용 PostgreSQL을 가리킨다.
+- `test_local_guard.py`: 로컬 판정을 DB 없이 본다. 실제 접속 주소가 루프백·Unix 소켓이면 통과하고, host가 `localhost`여도 주소가 원격이면 아무 쿼리 전에 연결을 닫고 `NOT_LOCAL`로 멈춘다.
+- `test_notify.py`: 판 전환 후처리 알림을 로컬 HTTP 서버로 본다. 판마다 성공·실패를 따로 알리고, 백엔드에 연결하지 못하면 실패로 센다. 시스템 프록시가 잡혀 있어도 서비스 토큰을 프록시로 보내지 않는다. 토큰이 없으면 DB에 붙기 전에 멈춘다.
+- `test_load.py`: `LOCAL_SEED_TEST_DATABASE_URL`이 있을 때만 돈다. 새 스키마에 저장소 마이그레이션 전체를 적용하고 적재·재적재·내용 충돌·새 판 교체·운영 설정 보존·마이그레이션 뒤처짐 거절을 검사한 뒤 스키마를 지운다. 실제 연결에서 host 이름이 아니라 접속 주소로 판정하는지, 후처리 알림이 실패한 뒤 같은 명령을 다시 실행하면 current 판 전체에 다시 알리는지도 본다. 개발 DB가 아닌 일회용 PostgreSQL을 가리킨다.
 
 백엔드 경로 확인은 `LOCAL_SEED_SMOKE=1`로 켜는 `LocalSeedSmokeTest`다. Flyway가 만든 격리 스키마에 시드를 넣고, 운영과 같은 가입 경로로 회원을 만든다. 튜토리얼 다섯 별의 정답을 원본 곡선에서 제출해 챌린지 별이 열리는지 본 뒤, 모든 공개 별의 분석 조회와 TOI-270의 정답 제출까지 확인하고 별마다 원본 봉우리 목록을 출력한다. uv가 필요해 기본 빌드에서는 건너뛴다.
 

@@ -15,6 +15,7 @@ Gold 는 Publisher 계약과 같은 순서로 넣는다(contracts/gold/README.md
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 import re
 import urllib.error
 import urllib.request
@@ -24,12 +25,10 @@ from pathlib import Path
 
 import psycopg
 from psycopg import sql
-from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from .canonical import array_checksum, normalize_array, record_checksum
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
 REQUIRED_TABLES = ("stars", "observation_datasets", "publication_bundles", "light_curve_segments", "periodograms",
                    "candidates", "candidate_dispositions", "external_signal_references", "ai_executions",
                    "ai_evaluations", "candidate_status_history", "tutorial_stars", "challenge_rounds",
@@ -66,15 +65,41 @@ def num(value) -> Decimal | None:
     return None if value is None else Decimal(repr(float(value)))
 
 
-def is_local(url: str) -> bool:
-    host = conninfo_to_dict(url).get("host", "")
-    return all(h.strip() in LOCAL_HOSTS for h in str(host).split(","))
+def is_local_endpoint(host: str, hostaddr: str) -> bool:
+    """연결된 곳이 이 PC 인지 본다.
+
+    URL 문자열로 판정하지 않는다. libpq 는 hostaddr·service 파일·PGHOST 환경변수 때문에 URL 의 host 와 다른
+    곳에 붙을 수 있다. 그래서 연결이 성립한 뒤의 값을 받는다. TCP 연결이면 실제로 붙은 숫자 주소(hostaddr)가
+    루프백이어야 하고, 주소가 없으면 Unix 소켓 경로여야 한다.
+    """
+    if hostaddr:
+        try:
+            address = ipaddress.ip_address(hostaddr)
+        except ValueError:
+            return False
+        return (getattr(address, "ipv4_mapped", None) or address).is_loopback
+    return host.startswith(("/", "@"))
 
 
-def connect(url: str, schema: str) -> psycopg.Connection:
+def connect(url: str, schema: str, *, allow_non_local: bool = False) -> psycopg.Connection:
+    """연결한 뒤 실제 접속 주소가 이 PC 가 아니면 아무것도 읽거나 쓰기 전에 닫는다."""
     conn = psycopg.connect(url, autocommit=True)
+    endpoint = conn.info.hostaddr or conn.info.host
+    if not allow_non_local and not is_local_endpoint(conn.info.host, conn.info.hostaddr):
+        conn.close()
+        raise SeedError("NOT_LOCAL", f"실제 접속 주소 {endpoint}:{conn.info.port} 가 이 PC 가 아니다. 공유·운영 DB 에는 "
+                                     "적재하지 않는다(정말 필요하면 --allow-non-local)")
     conn.execute(sql.SQL("SET search_path TO {}, public").format(sql.Identifier(schema)))
     return conn
+
+
+def notify_targets(results: list[StarResult]) -> list[int]:
+    """판 전환 후처리를 알릴 판. 이번에 게시한 판뿐 아니라 이미 current 인 판도 넣는다.
+
+    후처리는 같은 판에 여러 번 와도 결과가 같다(탐사 API 10장). 앞선 실행에서 알림이 실패했어도 같은 명령을 다시
+    실행하면 복구된다. 교체된 판(BUNDLE_SUPERSEDED)에는 알리지 않는다(Gold 계약 6절).
+    """
+    return [r.bundle_id for r in results if r.code in ("PUBLISHED", "ALREADY_PUBLISHED")]
 
 
 @dataclass
@@ -383,17 +408,18 @@ def apply_settings(conn: psycopg.Connection, payloads: list[dict], today: dt.dat
     return results
 
 
-def notify_backend(base_url: str, token: str, bundle_ids: list[int]) -> list[tuple[int, str]]:
-    """커밋 뒤 판 전환 후처리를 부른다(탐사 API 10장). 실패해도 DB 전환은 되돌리지 않는다."""
+def notify_backend(base_url: str, token: str, bundle_ids: list[int]) -> list[tuple[int, bool, str]]:
+    """커밋 뒤 판 전환 후처리를 부른다(탐사 API 10장). 실패해도 DB 전환은 되돌리지 않고 결과로 알린다."""
     outcomes = []
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 내부 호출은 시스템 프록시를 타지 않는다
     for bundle_id in bundle_ids:
         request = urllib.request.Request(f"{base_url.rstrip('/')}/internal/bundles/b-{bundle_id}/activated",
                                          method="POST", headers={"X-Planetory-Service-Token": token})
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
-                outcomes.append((bundle_id, f"HTTP {response.status}"))
+            with opener.open(request, timeout=15) as response:
+                outcomes.append((bundle_id, 200 <= response.status < 300, f"HTTP {response.status}"))
         except urllib.error.HTTPError as e:
-            outcomes.append((bundle_id, f"HTTP {e.code}"))
+            outcomes.append((bundle_id, False, f"HTTP {e.code}"))
         except urllib.error.URLError as e:
-            outcomes.append((bundle_id, f"연결 실패: {e.reason}"))
+            outcomes.append((bundle_id, False, f"연결 실패: {e.reason}"))
     return outcomes
