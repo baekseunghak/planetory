@@ -182,7 +182,7 @@ if (response.ok) {
 - 공개 진입 계층은 외부의 `Forwarded`와 `X-Forwarded-Proto/Host/Port/Prefix/Ssl/For`를 제거하고 필요한 값만 다시 설정한다. `X-Forwarded-Proto`는 신뢰 경로의 `http`·`https`로 제한하며 외부 Host도 서비스 호스트로 검증한다. `Forwarded`가 남으면 `X-Forwarded-Proto/Host`만 덮어도 Spring에서 다른 출처를 사용할 수 있다.
 - backend의 공개 직결을 차단하고 loopback 게시뿐 아니라 내부 Docker 네트워크에서 접근하는 주체도 확인한다. `framework` 자체는 신뢰 프록시 IP를 판별하지 않는다.
 - 240과 84(!161)는 공통값·위치·주석을 `framework`로 통일하고 프록시 인수는 84·239 담당에게 남긴다. `ForwardedHeadersConfigurationTest`는 공통 키가 정확히 하나이고 값이 `framework`인지 검사한다. 84의 앞선 `none` 변경은 사용자 요청에 따라 `2b7c0153`에서 정정했다. 두 브랜치의 양방향 가상 병합에서 충돌 없이 키 1개=`framework`가 유지됨을 확인했다.
-- 239의 `absolute_redirect off`는 nginx 자체 리다이렉트의 내부 포트 노출을 막는 설정이다. Spring 전달 헤더 신뢰와는 별도로 검증한다. nginx의 콜백 503 → `authentication_failed` 표시는 239 담당이며 이 작업에서 바꾸지 않는다.
+- 84에서 반영한 `absolute_redirect off`는 nginx 자체 리다이렉트의 내부 포트 노출을 막는 설정이다. Spring 전달 헤더 신뢰와는 별도로 검증한다. 239는 콜백 401·403과 502·503·504를 분리하고 장애를 `service_unavailable` 화면 복귀 코드로 안내한다. 백엔드의 HTTP 상태·`DEPENDENCY_UNAVAILABLE` 계약은 바꾸지 않는다. [239 검증 기록](../../frontend/docs/ticket-239-readiness.md)에서 로컬 Nginx 검증과 실제 프록시·제공자 인수를 구분한다.
 
 인가 시작과 콜백에 같은 외부 Proto/Host를 전달한다. `{baseUrl}` 콜백 템플릿은 `framework`에서 외부 출처를 사용하며, 명시적 `GOOGLE_REDIRECT_URI`·`SSAFY_REDIRECT_URI`는 제공자 등록 주소와 함께 확인한다. 성공 목적지는 계속 `AUTH_SUCCESS_URL`의 같은 출처 고정 경로다. 신뢰 헤더가 있으면 Spring의 `ForwardedHeaderFilter`가 성공 Location에 외부 출처를 사용한다. 현재 Boot의 실제 HTTP 검증에서는 전달 헤더 없이 성공하면 backend의 내부 HTTP 주소·포트를 포함한 절대 Location이 반환된다. 따라서 `framework` 설정만으로 운영 HTTPS 복귀 인수가 끝나는 것은 아니며 올바른 헤더 전달과 신뢰 경계를 함께 확인해야 한다.
 

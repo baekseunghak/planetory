@@ -19,6 +19,8 @@
 219 팔로우: [프론트 기준 P1 HTTP 계약](../backend/docs/p1-service-contract.md)을 백엔드와 함께 사용한다. `node --import tsx scripts/p1-server.mjs`는58392에서 실제 제품 코드에 개발용 HTTP를 공급한다. 제품 활성화는 `VITE_P1_ENABLED=true`이며 가짜 응답을 운영으로 가져오지 않는다. 커뮤니티의 팔로잉과 마이페이지의 관계 관리를 분리한다.
 192 현재 판 다시 풀기: [계획·구현·로컬 검증·시각 기준 확인 사항](docs/analysis-retry-draft.md). 화면·초안·제출 출처 연결과 Gold 중앙 시각 정합화를 구현했다. 실제 API·DB 인수는 남아 있다.
 
+239: Docker/Nginx 배포·OAuth 장애 구분은 [변경 범위·검증 기록](docs/ticket-239-readiness.md)을 따른다. 실제 프록시 회귀는 `npm run test:nginx`로 실행한다.
+
 2026-09-21: 기존 P0 화면을 승인된 시제품의 배치와 디자인에 맞춘다. [248 명세 비교·제외 범위·검증 체크리스트](docs/prototype-presentation-248.md)를 따른다. `npm run dev:presentation`은 58381에서 실제 제품 화면에 메모리 임시 별 5,000개를 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
 
 248 후속: 별 상세의 구조·표면·조작 이식은 아직 미완료다. [시제품 상세 이식 기준·간헐 실패 원인](docs/prototype-detail-parity-248.md)을 따른다. 작은 화면으로 바뀔 때 이미 연 페이지를 숨겨 상태를 보존하며, 세션 만료 시 비공개 화면 제거는 유지한다.

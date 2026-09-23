@@ -201,7 +201,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 | 티켓 | 내용 |
 | --- | --- |
-| `S15P21C206-239` | nginx가 `/login/oauth2/`의 401·403·503을 모두 `authentication_failed`로 뭉쳐 의존성 장애가 인증 실패로 보인다 |
+| `S15P21C206-239` | 401·403과 502·503·504를 분리하는 Nginx·로그인 화면 수정 및 로컬 프록시 검증 완료. [239 검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)을 따르며 리뷰·병합·실제 배포 반영은 별도다 |
 | `S15P21C206-240` | OAuth `failureHandler`가 실패 원인을 기록하지 않는다. 초기 데이터가 없을 때 가입이 막히는 증상도 진단이 어렵다 |
 
 ## 84에 남은 범위

@@ -41,6 +41,19 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 
 ## 실제 배포
 
+### 프론트 Nginx와 OAuth 오류 구분 — S15P21C206-239
+
+`apps/frontend/nginx.conf`는 Docker 내장 DNS(`127.0.0.11`)로 `backend:8080`을 요청 시점에 해석한다. 백엔드가 아직 없는 프론트 단독 배포에서도 정적 화면은 실행되며, 이후 백엔드가 등록되면 Nginx 재시작 없이 조회한다. DNS 결과의 유효 시간은 10초다.
+
+- 신뢰하는 앞단 프록시가 전달한 `X-Forwarded-Proto`를 보존하고, 헤더가 없는 직접 로컬 요청에는 Nginx의 스킴을 사용한다. `Host`와 `X-Forwarded-Host`는 요청 Host를 전달한다. 운영의 컨테이너 진입 경로는 신뢰하는 프록시로 제한해야 한다. 백엔드의 전달 헤더 해석 설정(`server.forward-headers-strategy=framework` 등)은 인증·인프라 배포에서 함께 확인한다.
+- Nginx 자체 리다이렉트는 상대 경로로 보낸다(`absolute_redirect off`). 컨테이너의 HTTP 스킴이나 내부 포트 8080을 외부 주소로 노출하지 않는다. 이미 백엔드가 잘못 만든 절대 URL을 이 설정만으로 고치는 것은 아니다.
+- `/login/oauth2/`의 401·403은 기존 `authentication_failed` 안내로 보내며, 제공자 취소 `access_denied`는 유지한다. 이 경로와 로그인 시작 `/oauth2/`의 502·503·504는 `/oauth/callback?error=service_unavailable`로 보낸다. 이 오류 복귀 응답은 `Cache-Control: no-store`다.
+- `/api/`는 원래 상태와 본문을 유지한다. 특히 `/api/v1/me`의 502·503·504를 401로 바꾸지 않는다. 서버 장애가 세션 만료를 의미하지 않으며 로그인 완료·만료 여부는 실제 인증 응답으로 판단한다.
+
+`service_unavailable`은 Nginx가 만드는 화면 복귀 코드다. API의 `DEPENDENCY_UNAVAILABLE` 계약이나 외부 OAuth 제공자 설정을 바꾸지 않는다. 화면은 일시 장애를 안내하고 로그인 요청을 자동으로 반복하지 않으며 기존 복귀 목적지를 유지한다.
+
+재현: `apps/frontend`에서 `npm run test:nginx`를 실행한다. 실제 Dockerfile의 기본 runtime 이미지와 별도 합성 백엔드·네트워크를 사용하며 Chrome으로 오류 화면을 확인한다. 테스트가 만든 컨테이너와 네트워크만 종료한다. [239 변경 범위·검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)에서 로컬 검증과 실제 배포 검증을 구분한다.
+
 ```text
 기준 브랜치 변경
   → GitLab CI가 필요한 Dockerfile만 빌드
