@@ -296,6 +296,22 @@ class NotificationTest {
         assertEquals("cr-"+round,notices.target(recipient,Long.parseLong(first.notificationId().substring(2))).target().get("roundId"));
         owner.update("UPDATE challenge_rounds SET status='active' WHERE id=?",round);
         assertEquals(1,notices.count(recipient).unreadCount());assertEquals(0,notices.count(actor).unreadCount());
+        // 활성 개수가 바뀌어도 Java 자격과 사건 당시 수신 판정은 함께 false/true여야 한다.
+        var tutorial=new com.planetory.backend.domain.exploration.service.TutorialRepository(
+                org.springframework.jdbc.core.simple.JdbcClient.create(owner));
+        for(int active:new int[]{0,4,5}) {
+            new TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(owner.getDataSource())).executeWithoutResult(st->{
+                owner.update("UPDATE challenge_rounds SET status='closed' WHERE id=?",round);
+                owner.update("UPDATE tutorial_stars SET active=(seq<=?)",active);
+                // 재개되어도 과거 완료 시각이 남으면 완료로 센다.
+                owner.update("UPDATE user_star_progress SET progress_stage='in_progress' WHERE user_id=?",recipient);
+                long next=owner.queryForObject("INSERT INTO challenge_rounds(round_no,starts_on,ends_on,target_tic_id,description,status) VALUES (?,current_date,current_date+7,70001,'판정 일치','active') RETURNING id",Long.class,active+2);
+                boolean eligible=tutorial.isTutorialCompleted(recipient);
+                assertEquals(active==5,eligible);
+                assertEquals(eligible,owner.queryForObject("SELECT EXISTS(SELECT 1 FROM notification_outbox WHERE event_key=? AND user_id=?)",Boolean.class,"challenge:"+next,recipient));
+                st.setRollbackOnly();
+            });
+        }
     }
 
     long[] signal() {
@@ -443,6 +459,20 @@ class NotificationTest {
         long user=owner.queryForObject("SELECT min(user_id) FROM notification_outbox WHERE event_key=?",Long.class,key);
         start=System.nanoTime();assertEquals(1,notices.count(user).unreadCount());long deliveryNanos=System.nanoTime()-start;
         System.out.printf("notification local sample: recipients=1000 gold_commit_ms=%.1f single_recipient_dispatch_ms=%.1f%n",captureNanos/1e6,deliveryNanos/1e6);
+    }
+
+    @Test void bundle_candidate_count_commit_cost_is_measured_separately_from_recipients() {
+        for(int count:new int[]{1,100,1000}) {
+            var signal=signal();long tic=signal[0],bundle=signal[1];
+            owner.update("INSERT INTO candidates(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed) SELECT ?,'active',?,i,3.5,1501,2.8,400,12.5,'{}',true,false FROM generate_series(2,?) i",tic,bundle,count);
+            long start=System.nanoTime();
+            gold.update("UPDATE publication_bundles SET status='current' WHERE id=?",bundle);
+            long nanos=System.nanoTime()-start;
+            assertEquals(count,owner.queryForObject("SELECT count(*) FROM notification_signal_state s JOIN candidates c ON c.id=s.candidate_id WHERE c.updated_bundle_id=?",Integer.class,bundle));
+            assertEquals(1,owner.queryForObject("SELECT count(*) FROM notification_events WHERE event_key=?",Integer.class,"reopen:"+tic+":"+bundle));
+            assertEquals(0,owner.queryForObject("SELECT count(*) FROM notification_outbox WHERE event_key=?",Integer.class,"reopen:"+tic+":"+bundle));
+            System.out.printf("notification candidate sample: candidates=%d recipients=0 gold_commit_ms=%.1f%n",count,nanos/1e6);
+        }
     }
 
     static void await(CountDownLatch latch) {

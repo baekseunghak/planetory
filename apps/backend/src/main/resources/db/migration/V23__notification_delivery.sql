@@ -66,6 +66,8 @@ BEGIN
                coalesce((s.notification_epochs->>'challenge')::bigint,0),
                CASE WHEN coalesce((s.notification_prefs->>'challenge')::boolean,true) THEN 'pending' ELSE 'excluded' END
           FROM users u LEFT JOIN user_settings s ON s.user_id=u.id
+         -- HOME-06/POL-24: 활성 튜토리얼 5개 완료. Java TUTORIAL_STAR_COUNT와 함께 변경한다.
+         -- 활성 개수로 나누면 0개/4개 설정에서도 자격을 주므로 여기만 동적으로 바꾸지 않는다.
          WHERE u.status='active' AND (SELECT count(*) FROM tutorial_stars t
                  JOIN user_star_progress p ON p.tic_id=t.tic_id
                  WHERE t.active AND p.user_id=u.id AND (p.progress_stage='completed' OR p.completed_at IS NOT NULL))=5
@@ -104,6 +106,8 @@ CREATE TABLE notification_candidate_changes (
     is_discoverable BOOLEAN NOT NULL,
     PRIMARY KEY(bundle_id,candidate_id)
 );
+-- 보존·정리 정책은 S15P21C206-258에서 확정한다. 알림함 90일은 원천/중복 근거의 삭제 TTL이 아니다.
+-- archived 계산 캐시와 구분하며 재게시·재처리·pending 참조를 확인하기 전 자동 삭제하지 않는다.
 
 -- 승인된 예외: Gold 역할에 회원 SELECT를 부여하지 않고 고정된 트리거 경로만 수신 의도를 쓴다.
 CREATE FUNCTION notification_candidate_change() RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
