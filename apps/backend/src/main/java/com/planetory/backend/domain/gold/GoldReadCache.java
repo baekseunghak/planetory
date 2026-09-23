@@ -119,6 +119,7 @@ public class GoldReadCache {
     }
 
     static String segmentKey(Collection<Long> ids) {
+        // 세그먼트 행은 불변이며 판 사이에 공유되므로 같은 ID 집합은 같은 곡선이다.
         return "planetory:gold:v1:segments:" + ids.stream().sorted()
                 .map(String::valueOf).collect(Collectors.joining("-"));
     }

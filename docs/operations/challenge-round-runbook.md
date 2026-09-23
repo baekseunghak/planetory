@@ -1,7 +1,7 @@
 # 챌린지 별 등록·회차 전환 런북
 
 - 상태: 초안. 명령·Gold 캐시는 구현·격리 검증 완료, 운영 서버 실행은 미검증
-- Jira: [S15P21C206-139](https://ssafy.atlassian.net/browse/S15P21C206-139) 회차 전환, [S15P21C206-260](https://ssafy.atlassian.net/browse/S15P21C206-260) Gold 읽기 캐시 범위 정합화 대기
+- Jira: [S15P21C206-139](https://ssafy.atlassian.net/browse/S15P21C206-139) 회차 전환, [S15P21C206-260](https://ssafy.atlassian.net/browse/S15P21C206-260) Gold 읽기 캐시, [S15P21C206-263](https://ssafy.atlassian.net/browse/S15P21C206-263) 운영 용량·지연 실측
 - 상위 정본: [탐사 API 9.4절](../../apps/backend/docs/exploration-api-spec.md), [요구사항 OPS-07·CHL-03](../requirements/planetory-requirements-spec.md)
 
 운영자가 새 주간 챌린지 회차를 등록하고 시작할 때 따르는 절차다. 등록은 운영 화면·API 없이 DB의 `challenge_rounds`에 직접 넣는다(OPS-07). **현재 한 회차의 대상 별은 1개**다. Redis 사전 적재를 예상하는 5개 또는 10개는 캐시 대상 규모이며, 회차당 별 개수가 아니다. 챌린지 등록과 Redis 대상 지정은 별도 작업이다.
@@ -43,13 +43,14 @@ GOLD_CACHE_TIC_IDS=<TARGET_TIC_ID>,<OTHER_TIC_ID>
 ```
 
 설정 위치·128mb 임시 용량·Redis 장애 시 DB 복구는 [서비스 Redis 운영](../../infra/service/README.md#세션캐시-redis)을 따른다. 변경된 환경변수는 이미 실행 중인 Backend에 바로 반영되지 않는다. 운영 데이터와 캐시 용량을 확인하지 않고 5개 또는 10개를 한꺼번에 활성화하지 않는다.
+시작 시 한 별의 사전 적재가 실패해도 Backend는 기동하고 다른 지정 별의 적재를 시도한다. DB 데이터가 정상이라면 실패한 별은 다음 분석 요청에서 DB를 읽어 캐시를 다시 채운다.
 
 ```powershell
 # 배포 위치의 compose.yaml·.env에서, 승인된 Backend 재시작 시 실행한다.
 docker compose up -d --no-deps backend
 ```
 
-4. 재시작 뒤 current 판의 두 Redis 키가 있는지 확인한다. 아래 조회가 `segments_key`·`periodogram_key`를 출력한다. 두 키가 모두 있으면 `EXISTS`가 `2`를 반환한다. Redis가 비거나 키가 축출됐어도 분석 API는 DB로 조회해 다시 채운다. `used_memory`·`used_memory_rss`·`evicted_keys`도 확인해 선택한 별이 128mb 안에 유지되는지 측정한다.
+4. 재시작 뒤 Backend 로그의 `Gold 기동 사전 적재 종료`에서 시도 개수와 소요 시간을 확인하고, 배포 헬스 대기 한계(기본 90초) 안에 준비됐는지 기록한다. 실제 TIC 목록과 개수별 기동 시간·응답 지연은 [S15P21C206-263](https://ssafy.atlassian.net/browse/S15P21C206-263)에서 측정한다. current 판의 두 Redis 키도 확인한다. 아래 조회가 `segments_key`·`periodogram_key`를 출력한다. 두 키가 모두 있으면 `EXISTS`가 `2`를 반환한다. Redis가 비거나 키가 축출됐어도 분석 API는 DB로 조회해 다시 채운다. `used_memory`·`used_memory_rss`·`evicted_keys`도 확인해 선택한 별이 128mb 안에 유지되는지 측정한다.
 
 ```sql
 SELECT 'planetory:gold:v1:segments:' ||
@@ -60,10 +61,12 @@ SELECT 'planetory:gold:v1:segments:' ||
  WHERE b.tic_id = :target_tic_id AND b.status = 'current';
 ```
 
-```powershell
-$segmentKey = '<SQL에서 조회한 segments_key>'
-$periodogramKey = '<SQL에서 조회한 periodogram_key>'
-docker compose exec cache-redis redis-cli EXISTS $segmentKey $periodogramKey
+EC2-A의 Bash 셸에서 조회한 키를 대입해 확인한다.
+
+```bash
+segmentKey='<SQL에서 조회한 segments_key>'
+periodogramKey='<SQL에서 조회한 periodogram_key>'
+docker compose exec cache-redis redis-cli EXISTS "$segmentKey" "$periodogramKey"
 docker compose exec cache-redis redis-cli INFO memory
 docker compose exec cache-redis redis-cli INFO stats
 ```

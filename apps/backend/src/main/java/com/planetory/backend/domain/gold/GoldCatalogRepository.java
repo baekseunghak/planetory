@@ -52,10 +52,19 @@ public class GoldCatalogRepository implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (cache == null) return;
+        long started = System.nanoTime();
+        int attempted = 0;
         for (long ticId : cache.selectedTics()) {
             if (!cache.available()) break;
-            preloadSelectedTic(ticId);
+            attempted++;
+            try {
+                preloadSelectedTic(ticId);
+            } catch (RuntimeException ex) {
+                log.warn("TIC {} 기동 시 Gold 사전 적재 실패, PostgreSQL 조회를 유지합니다", ticId, ex);
+            }
         }
+        log.info("Gold 기동 사전 적재 종료: 시도 {}/{}개, 소요 {}ms", attempted,
+                cache.selectedTics().size(), (System.nanoTime() - started) / 1_000_000);
     }
 
     /** 시작 시와 Publisher의 판 전환 알림에서 현재 판만 적재한다. */
