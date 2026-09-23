@@ -95,6 +95,7 @@ DB를 직접 관리해서 Gradle의 자동 기동을 끄고 싶으면 `-PskipLoc
 | `Validate failed: Migration checksum mismatch` | 적용된 뒤에 마이그레이션 파일이 바뀜(병합 전 브랜치에서 수정한 경우) | 아래 "로컬 DB 초기화" |
 | `Port 8080 was already in use` | 다른 터미널·IDE·컨테이너에서 서버가 이미 실행 중 | 기존 서버를 종료한다 |
 | Swagger가 404 | `SPRING_PROFILES_ACTIVE`가 다른 값으로 설정돼 있음 | 로그에 `profile: "local"`이 보이는지 확인하고 IDE 실행 구성·환경변수에서 프로필 설정을 지운다 |
+| OAuth 로그인 콜백이 503 `DEPENDENCY_UNAVAILABLE`, 로그에 `reason=active_tutorial_missing` | 튜토리얼 1번 별(Gold)이 없어 가입 처리가 회원을 만들지 않음 | [로컬 시드](../../experiments/distributed-pipeline/local-seed/README.md)를 적재한다 |
 | IDE에서 `import ... cannot be resolved` 빨간줄 | IDE가 Gradle 의존성을 아직 못 읽음 | VS Code: 명령 팔레트 → `Java: Clean Java Language Server Workspace`. IntelliJ: Gradle 새로고침 |
 | Lombok 메서드(`getXxx`)를 못 찾음 | 어노테이션 처리 꺼짐 | IntelliJ Annotation Processors 설정. 터미널 빌드는 영향 없음 |
 | Windows에서 `clean` 실패 | 실행 중인 서버가 build 폴더를 잡고 있음 | 서버 종료 후 다시 실행 |
