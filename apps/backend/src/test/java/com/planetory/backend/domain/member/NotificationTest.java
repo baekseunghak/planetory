@@ -47,7 +47,7 @@ class NotificationTest {
     static JdbcTemplate gold;
     @DynamicPropertySource static void database(DynamicPropertyRegistry r) {
         Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
-                .locations("classpath:db/migration").target("22").load().migrate();
+                .locations("classpath:db/migration").repeatableSqlMigrationPrefix("preupgrade").target("22").load().migrate();
         owner=new JdbcTemplate(new DriverManagerDataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword()));
         long legacy=owner.queryForObject("INSERT INTO users(provider,provider_user_id,nickname) VALUES ('test','legacy','legacy') RETURNING id",Long.class);
         owner.update("INSERT INTO user_settings(user_id) VALUES (?)",legacy);
@@ -56,6 +56,8 @@ class NotificationTest {
         var f=Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
                 .locations("classpath:db/migration").load();
         f.migrate(); f.validate(); assertEquals(0,f.migrate().migrationsExecuted);
+        for(String table:new String[]{"notification_outbox","notification_events","notification_candidate_changes","notification_signal_state"})
+            assertNotNull(owner.queryForObject("SELECT obj_description(?::regclass,'pg_class')",String.class,table));
         assertEquals(original,owner.queryForMap("SELECT id,user_id,type,payload,read_at,created_at FROM notifications WHERE user_id=?",legacy));
         assertTrue(owner.queryForObject("SELECT event_key IS NULL AND published_at IS NULL AND publication_seq IS NULL FROM notifications WHERE user_id=?",Boolean.class,legacy));
         assertTrue(owner.queryForObject("SELECT NOT (notification_prefs->>'follow')::boolean AND (notification_prefs->>'comment')::boolean AND (notification_prefs->>'relabel')::boolean FROM user_settings WHERE user_id=?",Boolean.class,legacy));

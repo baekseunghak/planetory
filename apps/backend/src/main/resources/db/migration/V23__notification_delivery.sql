@@ -1,4 +1,5 @@
 -- 사건 원본과 알림함 발행을 구분한다 [S15P21C206-175]. 기존 행은 승인된 비소급 전환으로 보존한다.
+-- IRREVERSIBLE: 새 SECURITY DEFINER 함수의 기본 직접 실행 권한을 생성과 같은 트랜잭션에서 회수해야 한다. 기존 함수 권한은 변경하지 않는다. 이미지 롤백은 스키마를 되돌리지 않으며 운영 적용 전 백업·복구 확인이 필요하다.
 ALTER TABLE notifications
     ADD COLUMN event_key TEXT,
     ADD COLUMN published_at TIMESTAMPTZ,
