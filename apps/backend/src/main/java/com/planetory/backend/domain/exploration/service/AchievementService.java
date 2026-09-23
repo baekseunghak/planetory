@@ -47,6 +47,7 @@ public class AchievementService {
     private final StarDiscoveryService discovery;
     private final ExplorationSummaryService summaries;
     private final SkyService sky;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     /** 성과 유형. {@code user_candidate_achievements.achievement_type} 값이다. 등급에는 유형 구분이 없다. */
     public enum AchievementType {
@@ -115,6 +116,7 @@ public class AchievementService {
             throw new IllegalStateException("회원 " + memberId + "이 발견하지 않은 별 " + ticId + "의 성과입니다.");
         }
 
+        String beforeGrade = star(memberId, ticId).grade();
         OptionalLong inserted = achievements.insertAchievement(memberId, candidateId, type.column, submissionId,
                 analysisId);
         if (inserted.isEmpty()) {
@@ -134,7 +136,10 @@ public class AchievementService {
             unlocked.add(star.get());
         }
         String skyVersion = unlocked.isEmpty() ? sky.version(memberId) : unlocked.getLast().skyVersion();
-        return new Recognition(true, achievementId, ticId, star(memberId, ticId), List.copyOf(unlocked),
+        var afterStar = star(memberId, ticId);
+        if (!Objects.equals(beforeGrade, afterStar.grade())) notifications.record(memberId, "achievement", "achievement:" + achievementId,
+                java.util.Map.of("ticId", Long.toString(ticId)), null);
+        return new Recognition(true, achievementId, ticId, afterStar, List.copyOf(unlocked),
                 wanted - unlocked.size(), skyVersion);
     }
 

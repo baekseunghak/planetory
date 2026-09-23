@@ -223,6 +223,24 @@ class BundleActivationTest {
         assertEquals(0, reopenEvents(member));
     }
 
+    @Test
+    void 대상_조회_후_탈퇴가_확정되면_재개와_사건을_저장하지_않는다() {
+        long member = member();
+        complete(member, "undiscoverable_only");
+        insertCandidate(true);
+        org.mockito.Mockito.doAnswer(call -> {
+            Object rows = call.callRealMethod();
+            jdbc.update("UPDATE users SET status='withdrawn', withdrawn_at=now() WHERE id=?", member);
+            return rows;
+        }).when(repository).findProgressRows(TIC);
+
+        var result = activation.onBundleActivated(bundleId);
+
+        assertEquals(0, result.reopened());
+        assertEquals("completed", stage(member));
+        assertEquals(0, reopenEvents(member));
+    }
+
     /** 탈퇴 회원은 후처리 대상이 아니다. */
     @Test
     void 탈퇴한_회원은_후처리하지_않는다() {

@@ -19,7 +19,7 @@ import java.util.Optional;
  * <p>보는 사람에 따라 응답이 달라지지 않으므로 회원 ID는 묶지 않는다. 다른 회원의 커서를 받아도
  * 같은 페이지를 볼 뿐이며, 목록 자체가 인증 회원 모두에게 같다.
  */
-record CommentCursor(String parentType, long parentId, int size,
+public record CommentCursor(String parentType, long parentId, int size,
                      long afterCreatedEpochMicro, long afterId) {
 
     private static final String FIELD_SEPARATOR = "|";
@@ -28,7 +28,7 @@ record CommentCursor(String parentType, long parentId, int size,
     private static final long NANOS_PER_MICRO = 1_000L;
 
     /** 마지막으로 준 항목에서 다음 페이지 커서를 만든다. */
-    static CommentCursor after(String parentType, long parentId, int size, Instant createdAt, long id) {
+    public static CommentCursor after(String parentType, long parentId, int size, Instant createdAt, long id) {
         long micros = Math.addExact(Math.multiplyExact(createdAt.getEpochSecond(), MICROS_PER_SECOND),
                 createdAt.getNano() / NANOS_PER_MICRO);
         return new CommentCursor(parentType, parentId, size, micros, id);
@@ -41,7 +41,7 @@ record CommentCursor(String parentType, long parentId, int size,
                 Math.floorMod(afterCreatedEpochMicro, MICROS_PER_SECOND) * NANOS_PER_MICRO);
     }
 
-    String encode() {
+    public String encode() {
         String raw = String.join(FIELD_SEPARATOR, parentType, Long.toString(parentId),
                 Integer.toString(size), Long.toString(afterCreatedEpochMicro), Long.toString(afterId));
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));

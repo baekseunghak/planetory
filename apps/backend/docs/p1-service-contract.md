@@ -48,7 +48,7 @@
 
 프론트 `/notifications`는 헤더 종 아이콘으로 진입한다. 주 메뉴에 중복 항목을 추가하지 않는다. 제공자는174/175이며 실제 인수는244 P1-220이다.
 
-174는 [알림 정책 F15](../../../docs/development/service-backend/community.md#notification-policy)를 작성하고 175가 제공자를 구현한다. 아래는 기존 FE 소비 계약이며, 사건별 수신 범위·보관기간은 F15의 승인 상태를 따른다. 150의 개인 재개 저장만으로 현재 계약이 제공되거나 별 구독 공통 사건까지 완성된 것은 아니다. AI·외부 상태 변경은 현재 5종 파서에 없으므로 새 종류를 보내거나 ACHIEVEMENT로 합치기 전에 F15 Q4를 합의한다.
+174는 [알림 정책 F15](../../../docs/development/service-backend/community.md#notification-policy)를 작성하고 175가 제공자를 구현한다. 아래는 기존 FE 소비 계약이며, 사건별 수신 범위·보관기간은 F15의 승인 상태를 따른다. 150의 개인 재개 저장만으로 현재 계약이 제공되거나 별 구독 공통 사건까지 완성된 것은 아니다. Q1~Q5와 기존 사건 비소급을 채택했고 RELABEL을 포함한 6종 FE/API를 구현했다. E3·E6·E7의 DB 생산 계약은 F15.8을 따른다. 운영 Publisher 실제 게시·배포 인수는 남아 있다.
 
 | 메서드·경로 | 요청·응답 |
 |---|---|
@@ -58,19 +58,19 @@
 | PATCH `/api/v1/me/notifications/{notificationId}` | `{read:true}` → `{notificationId:"n1",read:true}` |
 | PATCH `/api/v1/me/notifications/read` | `{through:"opaque"}` → `{unreadCount:0}` |
 
-`Notice` 예시: `{notificationId:"n1",kind:"COMMENT",createdAt:"2026-09-21T01:00:00Z",read:false,available:true,title:"탐사 기록에 새 댓글이 달렸습니다",body:"새 의견을 확인하세요."}`. 시간은 UTC ISO8601이다. 종류는 ACHIEVEMENT(성과·등급), REOPEN(재탐색), CHALLENGE(현재 회차), FOLLOW(팔로우 소식), COMMENT(내 글의 댓글)다. 전문가/비전문가 신규 알림 정책은 여기서 만들지 않는다.
+`Notice` 예시: `{notificationId:"n1",kind:"COMMENT",createdAt:"2026-09-21T01:00:00Z",read:false,available:true,title:"탐사 기록에 새 댓글이 달렸습니다",body:"새 의견을 확인하세요."}`. 시간은 UTC ISO8601이다. 종류는 ACHIEVEMENT(성과·등급), REOPEN(재탐색), CHALLENGE(현재 회차), FOLLOW(팔로우 소식), COMMENT(내 글의 댓글), RELABEL(신호 상태 변경)이다. 전문가/비전문가 신규 알림 정책은 여기서 만들지 않는다.
 
 ### 3.1 현재 권한과 목적지
 
 - 알림 자체는 본인만 조회/변경한다. 타인 ID는404, 인증은401, CSRF 오류는기존403이다. false/null 읽음 변경은400이다. 읽음은 true로만 진행하며 반복 PATCH는 같은 결과다.
 - 목록/카운트/대상 조회 모두 현재 공개 상태를 검사한다. 알림의 대상 자료가 숨김·삭제·첨부 철회로 접근 불가하면 목록에는 과거 민감한 제목/본문을 남기지 않고 `available:false,title:"",body:""`를 반환한다. 첨부/출처만 철회된 경우 유효한 부모 글의 공개 접근까지 차단하지 않는다. 미확인 수는 본인 알림 저장 상태에서 집계하며 오류를 0으로 바꾸지 않는다.
 - 클릭 시 target을 새로 조회한다. 접근 불가면200 `{notificationId:"n1",available:false,target:null}`이며 프론트는 이동하지 않는다. 허용되어도 목적지 API가 권한을 다시 검사한다. 이 조회가 권한 토큰이나 보호 우회 수단은 아니다.
-- target은 URL 문자열이 아닌 고정 DTO다. `POST/postId`, `THREAD/threadId`, `STAR/ticId`, `CHALLENGE/roundId` 중 하나다. POST/THREAD에 commentId가 있으면 서버가 해당 댓글이 있는 페이지의 discussionCursor도 제공하고 프론트는 토론 영역으로 이동한다. 외부 URL/임의 경로는 거절한다.
-- STAR 목적지는 본인이 해금하여 개인 상세를 볼 수 있는 TIC에만 사용한다. 팔로우한 미해금 별 소식은 공개 게시글/스레드 목적지를 사용한다. 삭제 댓글/종료 회차/권한 철회를 검증한다. 종료 회차는 현재 퀘스트를 보여주되 회차 변경을 안내하고 자동으로 분석을 시작하지 않는다.
+- target은 URL 문자열이 아닌 고정 DTO다. `POST/postId`, `THREAD/threadId`, `STAR/ticId`, `STAR_BOARD/ticId`, `CHALLENGE/roundId` 중 하나다. POST/THREAD에 commentId가 있으면 서버가 해당 댓글이 있는 페이지의 discussionCursor도 제공하고 프론트는 토론 영역으로 이동한다. 외부 URL/임의 경로는 거절한다.
+- STAR 목적지는 본인이 해금하여 개인 상세를 볼 수 있는 TIC에만 사용한다. 팔로우한 미해금 별 소식은 공개 별 게시판(STAR_BOARD)으로 이동하며 빈 게시판도 허용한다. 개인 분석 권한은 추가하지 않는다. 삭제 댓글/종료 회차/권한 철회를 검증한다. 종료 회차는 현재 퀘스트를 보여주되 회차 변경을 안내하고 자동으로 분석을 시작하지 않는다.
 
 ### 3.2 읽음 범위·경합
 
-목록은 생성시각 내림차순·동률 ID 내림차순이다. readBoundary는 첫 조회 당시의 본인 전체 알림 경계를 표현하는 불투명 값이며 필터/현재 페이지의 항목 목록만을 뜻하지 않는다. 모두 읽음은 그 시점까지에만 적용하며 그 이후 새 알림은 읽지 않은 상태를 유지한다. 서버는 다른 회원/위조 경계를400으로 거절한다. 응답의 unreadCount는 적용 후 실제 값이다. 응답 유실 시 PATCH를 자동 반복하지 않고 목록과 수를 재조회한다.
+목록의 createdAt은 최초 발행 시각이며 그 내림차순·동률 ID 내림차순이다. readBoundary는 첫 조회 당시의 본인 전체 알림 경계를 표현하는 불투명 값이며 필터/현재 페이지의 항목 목록만을 뜻하지 않는다. 모두 읽음은 그 시점까지에만 적용하며 그 이후 새 알림은 읽지 않은 상태를 유지한다. 서버는 다른 회원/위조 경계를400으로 거절한다. 응답의 unreadCount는 적용 후 실제 값이다. 응답 유실 시 PATCH를 자동 반복하지 않고 목록과 수를 재조회한다.
 
 벨은 보이는 동안60초마다 갱신하며 focus/pageshow 복귀 재조회는 공용 훅을 사용한다. 화면을 숨길 때 알림 내용을 비우고 새 응답 전까지 이전 내용을 복원하지 않는다. 이벤트가 오면 벨/목록을 함께 갱신한다.
 
@@ -81,13 +81,13 @@
 설정은 마이페이지에서 들어간다. 주 메뉴의 중복 설정 진입은 제거한다. 닉네임 편집·가입일·사용법 다시 보기는 기존 P0 계약을 유지한다. 가입 안내 완료 API와 설정 API를 섞지 않는다.
 
 - 공개 범위: 기존 GET `/api/v1/me`의 `starListVisibility`, PATCH `/api/v1/me/settings`의 `{starListVisibility:"PUBLIC"|"PRIVATE"}`를 그대로 사용한다. 이 값 하나로 **전체 보유 별의 공개 은하와 별 목록**을 제어한다. PUBLIC이 개인 History/정답 열람/분석 재시도 권한까지 공개한다는 뜻은 아니다. 은하 방문의 상세 투영은 별도 방문 계약을 따른다.
-- GET `/api/v1/me/notification-settings` → `{preferences:{ACHIEVEMENT:true,REOPEN:true,CHALLENGE:true,FOLLOW:true,COMMENT:true}}`.
-- PATCH 같은 경로에 `{preferences:{FOLLOW:false}}`처럼 **변경한 키만** 전송한다. 응답은 저장 후 전체 preferences다. 알림5종 모두 boolean이며 GET 누락을 true로 추측하지 않는다. 현재 프론트 기준 최초 기본은5종 모두true다. 알림 전달 채널은 서비스 내 알림함이며 이메일/푸시는 포함하지 않는다.
+- GET `/api/v1/me/notification-settings` → `{preferences:{ACHIEVEMENT:true,REOPEN:true,CHALLENGE:true,FOLLOW:true,COMMENT:true,RELABEL:true}}`.
+- PATCH 같은 경로에 `{preferences:{FOLLOW:false}}`처럼 **변경한 키만** 전송한다. 응답은 저장 후 전체 preferences다. 알림6종 모두 boolean이며 GET 누락을 true로 추측하지 않는다. 현재 프론트 기준 신규 회원 기본은6종 모두true다. 알림 전달 채널은 서비스 내 알림함이며 이메일/푸시는 포함하지 않는다.
 - 빈 객체·알 수 없는 종류·null·boolean 이외 값은400 VALIDATION_FAILED. 기존 키는 보존하며 한 탭에서 FOLLOW를 바꿔도 다른 탭이 저장한 COMMENT를 덮어쓰지 않는다. 원자적인 부분 갱신이 필요하다.
-- 설정은 **이후 생성하는 알림**에 적용한다. 이미 생성한 알림/읽음 상태/팔로우 관계는 삭제하지 않는다. 수신 차단을 풀어도 과거 차단 기간의 알림을 소급 생성하지 않는다.
+- 설정은 **아직 발행하지 않은 알림**에 적용하고 OFF 전환은 해당 대기 사유를 영구 제외한다. 이미 생성한 알림/읽음 상태/팔로우 관계는 삭제하지 않는다. 수신 차단을 풀어도 과거 차단 기간의 알림을 소급 생성하지 않는다.
 - 응답 유실 시 쓰기를 자동 재전송하지 않고 GET으로 확인한다. 실제 계정별 유지·알림 생성과의 경합은175/244 P1-221에서 검증한다.
 
-현재 DB 기본은 `follow:false`이며 comment 키가 없어 위의 프론트 기본과 다르다. 기존 false 보존·누락 키·기존 기본값 전환은 [F15.3·A4](../../../docs/development/service-backend/community.md#notification-delivery-policy)의 미해결 인계다. 또한 150은 수신 설정과 무관하게 notifications에 사건을 기록하므로 현재 설정으로 목록만 걸러서는 OFF 기간 사건의 ON 이후 소급 노출을 막을 수 없다. 175는 원 사건 보존과 사용자 알림 발행을 구분하는 계약을 먼저 해소한다.
+V23은 기존 true/false를 보존하고 누락 키만 true로 채운다. 기존 원본 행은 보존·자동 소급 없음이며 새 사건만 발행 대상이다. 최초 발행 후 90일 경계부터 목록·수에서 제외하되 원본을 삭제하지 않는다. 서버 서명 경계·최소 권한·재처리는 [F15.7](../../../docs/development/service-backend/community.md#notification-policy), 키 주입은 [개발 환경](development-setup.md#notification-key)을 따른다.
 
 소비 코드: [SettingsPage.tsx](../../frontend/src/features/profile/SettingsPage.tsx), [NotificationPreferences.tsx](../../frontend/src/features/notifications/NotificationPreferences.tsx). 합성 서버: [settings-fixture-plugin.ts](../../frontend/dev/settings-fixture-plugin.ts).
 

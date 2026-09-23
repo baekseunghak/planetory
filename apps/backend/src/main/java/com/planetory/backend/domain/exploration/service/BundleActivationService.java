@@ -29,7 +29,7 @@ import com.planetory.backend.domain.exploration.service.ExplorationCompletionPol
 public class BundleActivationService {
 
     private final BundleActivationRepository repository;
-    private final AchievementRepository achievements;
+    private final TutorialRepository tutorials;
     private final ExplorationCompletionService completion;
     private final ExplorationCompletionRepository completionRepository;
     private final ResidualJobStore residualJobs;
@@ -110,7 +110,7 @@ public class BundleActivationService {
      * 행을 {@code FOR UPDATE}로 들고 진행 행을 기다리고 있으면 서로를 기다린다(MR !177 리뷰, 백승학).
      */
     Outcome apply(ProgressRow row, long ticId, long bundleId) {
-        achievements.lockMember(row.memberId());
+        if (!tutorials.lockActiveMember(row.memberId())) return Outcome.NONE;
         if ("in_progress".equals(row.stage())) {
             return completion.evaluateAndApply(row.memberId(), ticId)
                     .filter(Decision::completes).isPresent() ? Outcome.COMPLETED : Outcome.NONE;

@@ -35,6 +35,7 @@ public class CommentService {
     private final HistoryAttachmentService attachments;
     private final StarService stars;
     private final SourceLinkService sources;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     public enum ParentType { POST, SIGNAL_THREAD }
     public record CreateCommand(ParentType parentType, long parentId, String body, List<String> historyIds, List<SourceLink> sourceLinks) {}
@@ -55,6 +56,7 @@ public class CommentService {
         Comment comment = comments.saveAndFlush(new Comment(parent, author, body(command.body())));
         attachments.replace(Parent.COMMENT, comment.getId(), memberId, parent.getTicId(), command.historyIds());
         sources.replace(Parent.COMMENT, comment.getId(), parent.getTicId(), command.sourceLinks(), false);
+        if ("user".equals(parent.getKind())) notifications.commentCreated(memberId, parent.getAuthor().getId(), parent.getId(), comment.getId());
         return new Created(id(comment), comment.getCreatedAt());
     }
 
