@@ -100,8 +100,12 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 
 **전체 `run` 전에 해결할 것**
 1. Spark 작업이 전체를 한 번에 확정하며 `spark.yarn.maxAppAttempts=1`이다. 중간 실패 시 처음부터 다시 돌고, 실패한 attempt의 `/lake/silver/.staging` 부분 출력은 정리되지 않는다. systemd는 5분마다 새 attempt로 재시작하므로 실패가 반복되면 staging이 누적되고, 75% HDFS 사용량 점검에서 멈춘다.
-2. **HDFS 여유가 빠듯하다.** 2026-09-23 기준 10.03 TB 중 3.81 TB(38%)를 쓰며, 252가 Sector당 복제 포함 약 90 GB(Raw 약 38 GB + Bronze 약 6.8 GB, 논리)를 계속 적재한다. Sector 70까지 끝나면 약 6.3 TB(63%), Silver 전체 run(RF2 약 0.63~0.73 TB)을 더하면 **약 70%**로 사전 점검 기준 75%에 가깝다. 75%를 넘으면 252 Bronze 사전 점검이 거부해 252가 멈춘다. 실행 중 shuffle·`DISK_ONLY` 결과가 HDFS와 같은 `/mnt/data`를 추가로 쓰고, `excluded_json`이 `exclusion_ledger_json`에 중복 포함된다.
-3. **252 Bronze release를 먼저 교체한다.** 서버의 252 Bronze는 이전 release라 RUNNING YARN 앱이 하나라도 있으면 사전 점검에서 실패한다. 수 분짜리 Canary는 5분 간격 재시도로 흡수했지만, 며칠짜리 Silver run 동안에는 252 Bronze가 계속 실패한다. 새 release는 이후 새로 허가되는 Sector부터 적용된다.
+2. **HDFS 여유가 빠듯하다.** 2026-09-23 기준 10.03 TB 중 3.81 TB(38%)를 쓰며, 252가 Sector당 복제 포함 약 90 GB(Raw 약 38 GB + Bronze 약 6.8 GB, 논리)를 계속 적재한다. Sector 70까지 끝나면 약 6.3 TB(63%), Silver 전체 run(RF2 약 0.63~0.73 TB)을 더하면 **약 70%**로 사전 점검 기준 75%에 가깝다. 252 완료 뒤 시작하므로 252 적재와 겹치지는 않지만, 75%를 넘으면 이후 Bronze·Silver 사전 점검이 모두 거부한다. 실행 중 shuffle·`DISK_ONLY` 결과가 HDFS와 같은 `/mnt/data`를 추가로 쓰고, `excluded_json`이 `exclusion_ledger_json`에 중복 포함된다.
+3. **252 Bronze release는 교체하지 않고, 252가 Sector 70을 끝낸 뒤 전체 run을 시작한다(2026-09-23 결정 A).** 서버의 252 Bronze(`20260922T021406Z`)는 RUNNING YARN 앱이 하나라도 있으면 사전 점검에서 실패하므로, 252가 적재하는 동안 며칠짜리 Silver run을 돌리면 252 Bronze가 계속 실패한다. 교체는 비용이 크다. Airflow 계정 sudoers는 파일 하나가 HDFS 적재·Bronze release를 **같은 ID 하나로** 허용하고, 설정 스크립트는 기존 파일과 다르면 덮어쓰지 않고 실패한다(`AIRFLOW_SUDOERS_CONFLICT`). 이미 허가된 Sector는 이전 release 경로에 고정돼 있어 sudoers를 바꾸는 순간 sudo에서 거부된다. 따라서 교체에는 drain, Node 1~6 HDFS release와 Node 1 Bronze release 설치, sudoers 수동 재생성이 모두 필요하다. 반면 상한 `tess_pipeline_max_sector=70`에 도달하면 새로 허가할 Sector가 없어 `commit_bronze`가 더 실행되지 않는다. 14:12 UTC 기준 Sector 52까지 완료, 시간당 약 1.9개로 완료 예상은 23:30~24:00 UTC(추정)다.
+   - 시작 조건: `tess_pipeline_completed_through=70`, 단계 DAG 실행 중 run 0건, YARN 실행 앱 0개, HDFS 사용률 재확인(예상 약 63%).
+   - 선택: Silver run 동안 `tess_pipeline_enabled=false`로 실패 Sector 재시도가 겹치지 않게 한다. 운영 Variable 변경이므로 승인 후 적용하고 끝나면 되돌린다.
+   - 남는 위험: Silver 실행 중 실패 Sector가 재시도되면 그 Bronze는 사전 점검에서 계속 실패하지만, Silver 종료 후 조정 DAG가 다시 시작하며 데이터 손상은 없다.
+   - 252 적재 중 Silver가 꼭 필요할 때만 대안 B(drain → 같은 새 ID의 HDFS·Bronze release 설치 → sudoers 수동 재생성 → `tess_pipeline_settings` 갱신)를 검토한다.
 4. **`tess_yarn` Pool을 Airflow 이미지보다 먼저 만든다.** 서버에는 `default_pool`만 있다. `pool="tess_yarn"`이 붙은 이 브랜치의 `commit_bronze`가 담긴 이미지를 Pool보다 먼저 배포하면 Airflow가 그 Task를 스케줄하지 않는다. 78이 develop에 병합된 뒤 252가 develop 기준으로 재배포할 때도 같다.
 5. `process_tic`의 넓은 예외 처리가 코드 결함을 `invalid_bronze_row`(retryable 아님)로 기록한다. Canary 1 첫 실행의 결함도 이 코드로 보였다. 코드 결함과 입력 오류를 구분한다.
 
@@ -117,7 +121,7 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 
 1. 78 Silver controller는 Sector 1~13 전체 Bronze coverage와 TIC별 다중 Sector 결합만 승인한다. Sector 14의 `_READY` 하나는 이 coverage가 아니며 Silver 입력으로 사용하면 안 된다.
 2. Sector 14+의 누적 snapshot, 변경 TIC 재처리, 혼합 Bronze pipeline version 및 기존 Silver 결과 조합은 아직 계약되지 않았다. 이는 252/80의 별도 범위이며, 이 DAG의 입력 검사나 우회 conf로 해결하지 않는다.
-3. 새 슬롯·헤드룸 검사는 이번 브랜치의 Bronze controller에 들어 있고 운영 중인 252 Bronze release에는 없다. 새 Silver는 파이프라인 앱이 슬롯보다 적으면 이전 Bronze와 동시 제출하며, 2026-09-23 Canary 1 첫 실행에서 Bronze Sector 42와 동시에 돌아 둘 다 SUCCEEDED했다. 이전 Bronze는 Silver가 도는 동안 사전 점검에 실패하고 5분 간격으로 재시도하므로, drain 없이 실행해도 되는 것은 수 분 단위 Canary뿐이다. 전체 run 전에는 Bronze release를 교체한다.
+3. 새 슬롯·헤드룸 검사는 이번 브랜치의 Bronze controller에 들어 있고 운영 중인 252 Bronze release에는 없다. 새 Silver는 파이프라인 앱이 슬롯보다 적으면 이전 Bronze와 동시 제출하며, 2026-09-23 Canary 1 첫 실행에서 Bronze Sector 42와 동시에 돌아 둘 다 SUCCEEDED했다. 이전 Bronze는 Silver가 도는 동안 사전 점검에 실패하고 5분 간격으로 재시도하므로, drain 없이 실행해도 되는 것은 수 분 단위 Canary뿐이다. 전체 run은 252가 Sector 70을 끝낸 뒤 시작한다(아래 "전체 `run` 전에 해결할 것" 3번).
 4. `tess_yarn` Pool은 setup script를 실제 실행하기 전에는 존재·설정되었다고 가정하지 않는다. Pool 슬롯 수와 Node 1 `PLANETORY_YARN_SLOTS` 기본값이 어긋나면 상한이 깨지므로 배포 시 두 값을 함께 확인한다. Silver DAG는 pause 상태로 배포하고, Pool·sudo 권한·release를 확인한 뒤에만 명시적으로 unpause/trigger한다.
 5. **전체 `run`은 Airflow DAG가 아니라 systemd 경로(`run-tess-silver.ps1`)로 실행한다.** Airflow SSH Task는 며칠짜리 Silver 제어기와 수명이 묶여 있어, 252의 잦은 Airflow release 교체나 재시작 때 PTY hangup으로 제어기가 죽는다. cluster-mode 앱은 YARN에 남지만 finalize·`_READY` 확정이 사라지고, 새 사전 점검은 이 고아 앱이 슬롯을 채우는 동안 새 제출을 거부한다. Airflow DAG는 수 분 단위의 1~5 TIC Canary에만 쓴다.
 6. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 252가 `parallelism=8`로 올렸어도 Silver는 며칠 단위로 한 슬롯을 잡으므로 252의 단계 DAG 5개와 합쳐 슬롯이 모자라지 않는지 확인한다. Airflow 3는 queue 투입 시점에 실행 토큰을 발급하고 기본 600초에 만료하므로, 슬롯 부족으로 대기가 길어지면 252가 겪은 `Invalid auth token: Signature has expired`가 Silver에서도 발생할 수 있다. 비동기 상태 감시 전환은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
