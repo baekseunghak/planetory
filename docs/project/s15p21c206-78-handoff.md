@@ -47,10 +47,12 @@
 | 변경 핵심 회귀 | `pytest -q -p no:cacheprovider distributed-system/airflow/tests/test_tess_silver_dag.py distributed-system/spark/test_tess_silver.py distributed-system/spark/test_tess_bronze.py` | 40 passed, 14 subtests passed |
 | PowerShell 통합 검사 | `infra/distributed-system/scripts/test-tess-silver.ps1` | 20 passed, 1 skipped(Astropy가 system Python에 없음), Airflow 계약 4건 통과 |
 | 서버 정적 점검(2026-09-22, Airflow 2.10.5 시점) | 당시 scheduler container에 새 DAG/계약을 메모리 import, Node 1에서 Bash·생성 sudoers 문법 검사 | 통과. **3.2.2 전환 후 재확인 필요** |
-| 252 통합(2026-09-23) | `unittest discover distributed-system/airflow/tests` 20 passed, `pytest libs/astro-kernel/tests distributed-system/spark/test_tess_silver.py test_tess_bronze.py` 245 passed·3 subtests | 통과. 로컬에 Airflow 3.2.2가 없어 실제 DAG import와 `get_dr_count(states=...)` 동작은 미검증 |
+| 252 통합(2026-09-23) | `unittest discover distributed-system/airflow/tests` 20 passed, `pytest libs/astro-kernel/tests distributed-system/spark/test_tess_silver.py test_tess_bronze.py` 245 passed·3 subtests | 통과 |
+| Airflow 3.2.2 DAG import(2026-09-23) | WSL `~/.venvs/airflow322`(airflow 3.2.2·fab 3.6.4·ssh 5.0.2·standard 1.13.1·task-sdk 1.2.2, 공식 `constraints-3.2.2/constraints-3.12.txt`)에서 `DagBag(distributed-system/airflow/dags)` 적재 | import 오류 0건. `tess_bronze_to_silver`와 252의 `tess_sector_discovery`·`download`·`raw`·`cleanup`·`bronze` 6개 DAG가 함께 등록됨 |
+| Task SDK 계약(2026-09-23) | 같은 환경에서 `RuntimeTaskInstance.get_dr_count` 시그니처 확인 | `(dag_id, logical_dates=None, run_ids=None, states: list[str] \| None = None) -> int`. Silver 게이트의 `states=["queued", "running"]` 호출과 일치 |
 | 문서·diff | 상대 링크 검사, `git diff --check` | 통과 |
 
-실제 Spark/PySpark·YARN Canary, Airflow DAG 배포·trigger, sudoers/Pool 변경은 실행하지 않았다. 따라서 위 결과를 운영 배포 또는 전체 Silver 생성 완료로 해석하지 않는다.
+위 DAG import 검증은 로컬 WSL DagBag 적재이며 운영 이미지 배포가 아니다. 실제 Spark/PySpark·YARN Canary, Airflow DAG 배포·trigger, sudoers/Pool 변경은 실행하지 않았다. 따라서 위 결과를 운영 배포 또는 전체 Silver 생성 완료로 해석하지 않는다.
 
 ## 서버에서 확인한 기준 상태
 
@@ -71,7 +73,7 @@
 운영 변경은 대상 Node 1, release ID, 영향 범위를 확인하고 별도 승인을 받은 뒤 아래 순서를 지킨다.
 
 1. **완료(2026-09-23, 병합 `0e50e3b4`)** — 252의 Airflow 3.2.2 전환·단계 DAG와 78 변경을 충돌 검토해 통합하고 Silver DAG를 Task SDK로 이식했다. 이후 252가 더 진행되면 같은 방식으로 다시 통합한다.
-2. 통합 소스에서 Airflow 3.2.2 이미지를 빌드하고, 252 DAG 5개와 `tess_bronze_to_silver`가 함께 import 오류 0건으로 올라오는지 확인한다. Silver 게이트의 `get_dr_count(states=...)` 호출이 실제 3.2.2에서 동작하는지도 이 단계에서 처음 검증한다. 기존 활성 DAG·connection을 삭제하거나 재생성하지 않는다.
+2. 통합 소스에서 Airflow 3.2.2 이미지를 빌드하고, 252 DAG 5개와 `tess_bronze_to_silver`가 함께 import 오류 0건으로 올라오는지 **운영 이미지에서** 확인한다. 로컬 3.2.2 DagBag 적재와 `get_dr_count` 시그니처는 위 표대로 통과했으나, 이는 정적 계약 검증이며 게이트의 실제 런타임 동작은 API Server에 연결된 Task 실행에서만 확인된다. 기존 활성 DAG·connection을 삭제하거나 재생성하지 않는다.
 3. `run-tess-silver.ps1 -Step Install`로 immutable Silver release를 설치하고 controller·상위 디렉터리가 root 소유·비쓰기를 만족하는지 확인한다.
 4. Node 1 root 권한으로 `configure-tess-silver-airflow-node1.sh <release-id>`를 한 번 실행한다. 이 단계는 `/etc/sudoers.d`와 Airflow metadata DB의 Pool을 변경하므로 실행 전 승인과 사후 `visudo -c`, Pool slot=1 확인이 필요하다.
 5. discovery와 Raw/Bronze 실행이 완전히 끝난 상태, `tess_pipeline_enabled=false`, 정확한 1~13 Bronze coverage marker를 확인한다. 처음에는 1~5개의 명시 TIC Canary만 trigger한다.
