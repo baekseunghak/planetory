@@ -36,6 +36,8 @@ import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionSystemException;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -51,6 +53,11 @@ class OAuthLoginSuccessHandlerTest {
                 new Failure(new DataAccessResourceFailureException("synthetic-private-message",
                         new IllegalArgumentException("synthetic-private-cause")),
                         ErrorCode.DEPENDENCY_UNAVAILABLE, "database", Level.ERROR),
+                new Failure(new CannotCreateTransactionException("synthetic-private-message",
+                        new IllegalArgumentException("synthetic-private-cause")),
+                        ErrorCode.DEPENDENCY_UNAVAILABLE, "database", Level.ERROR),
+                new Failure(new TransactionSystemException("synthetic-private-message"),
+                        ErrorCode.INTERNAL_ERROR, "unexpected", Level.ERROR),
                 new Failure(new IllegalStateException("synthetic-private-message",
                         new IllegalArgumentException("synthetic-private-cause")),
                         ErrorCode.INTERNAL_ERROR, "unexpected", Level.ERROR));

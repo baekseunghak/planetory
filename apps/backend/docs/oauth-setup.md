@@ -115,6 +115,7 @@ scope는 인가 요청에 보내지 않는다. 개인정보 동의는 개발자�
 
 설정된 제공자가 없는 경우 `/login`은 503 안내 페이지를 반환한다.
 API 미인증·만료는 `401 AUTH_REQUIRED`, 권한 부족·CSRF 검증 실패는 `403 FORBIDDEN`이다.
+인증 단계의 회원 조회와 OAuth 회원 초기화는 DB 조회 실패뿐 아니라 트랜잭션 시작 실패(`CannotCreateTransactionException`)도 `503 DEPENDENCY_UNAVAILABLE`로 반환한다(235). 인증된 API의 일시적 DB 장애로 기존 세션을 삭제하지 않으며 DB 복구 후 재사용한다. 콜백 실패의 세션 정리는 기존대로 유지한다. [prod·TLS·격리 DB 중단 실측과 재검증](../../../docs/operations/auth-runtime-verification-235.md)을 따른다.
 OAuth 콜백 검증 실패도 토큰이나 제공자 오류 원문 없이 401 JSON으로 응답한다.
 로그아웃은 로그인 여부와 관계없이 현재 세션의 유효한 CSRF 토큰이 필요하다(234, 사용자 승인 2026-09-22). 토큰 없음·오류·이전 세션 토큰은 403이다. 반복 요청은 새 CSRF 토큰 조회 후 보내면 204다. 만료 경계와 재시도는 [서비스 API 3.3절](service-api-spec.md#33-로그아웃)을 따른다.
 

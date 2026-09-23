@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 @Component
 @Slf4j
@@ -57,7 +58,7 @@ public class OAuthLoginSuccessHandler implements AuthenticationSuccessHandler {
             sessions.logout(request, response);
             errors.write(response, e.getErrorCode());
             return;
-        } catch (DataAccessException e) {
+        } catch (DataAccessException | CannotCreateTransactionException e) {
             log.error("OAuth member initialization failed: branch=database code={} exception={}",
                     ErrorCode.DEPENDENCY_UNAVAILABLE, e.getClass().getSimpleName());
             sessions.logout(request, response);
