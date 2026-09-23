@@ -22,6 +22,7 @@ from tess_bronze_ctl import (
     SPARK_IMAGE,
     atomic_commit,
     build_runtime,
+    require_yarn_headroom,
     fsck_healthy,
     hdfs,
     hdfs_exists,
@@ -132,9 +133,8 @@ def cluster_preflight(bronze_coverage_path: str, *, allow_running: bool = False)
     nodes = yarn("node", "-list", "-all").stdout
     if len(re.findall(r"\sRUNNING\s", nodes)) != 5:
         raise RuntimeError("expected five RUNNING NodeManagers")
-    running = APP_ID_RE.findall(yarn("application", "-list", "-appStates", "RUNNING").stdout)
-    if running and not allow_running:
-        raise RuntimeError(f"another YARN application is running: {','.join(running)}")
+    applications = yarn("application", "-list", "-appStates", "RUNNING").stdout
+    running = APP_ID_RE.findall(applications) if allow_running else require_yarn_headroom(applications)
     coverage = bronze_coverage(bronze_coverage_path)
     print(f"SILVER_PREFLIGHT_OK ha={nn1}:{nn2} live_datanodes=5 running_apps={len(running)}", flush=True)
     return coverage

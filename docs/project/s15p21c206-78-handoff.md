@@ -54,6 +54,24 @@
 
 위 DAG import 검증은 로컬 WSL DagBag 적재이며 운영 이미지 배포가 아니다. 실제 Spark/PySpark·YARN Canary, Airflow DAG 배포·trigger, sudoers/Pool 변경은 실행하지 않았다. 따라서 위 결과를 운영 배포 또는 전체 Silver 생성 완료로 해석하지 않는다.
 
+## 운영 배포 적합성 검토(2026-09-23)
+
+로컬 코드·설정 검토와 합성 곡선 측정 결과다. 서버 상태는 조회하지 않았다.
+
+**수정 완료** — Pool 동시성(`a624710d`) 뒤에도 두 제어기의 사전 점검이 "RUNNING YARN 앱이 하나라도 있으면 실패"를 유지해, Silver가 도는 동안 252 `commit_bronze`가 12회 재시도 후 실패하는 결함이 있었다. `require_yarn_headroom`으로 바꿔 외부 앱은 거부하고 파이프라인 앱은 슬롯 수 미만일 때만 허용한다. 이름 열을 못 읽는 행은 외부 앱으로 간주한다.
+
+**확인 통과** — Airflow가 만드는 canary·run·retry 명령이 setup script의 sudoers 인자 정규식과 모두 일치한다(회귀 검사 추가). 저장소 YARN 설정 기준 NodeManager 메모리 합계는 112 GiB(24 GiB×4 + 16 GiB)이고 기본 `DefaultResourceCalculator`라 메모리만 배정한다. Spark 작업 하나가 약 43 GiB(executor 8 GiB×5 + driver 3 GiB)이므로 2개 동시 배정이 가능하다. vcore는 강제되지 않아 두 작업이 겹치면 CPU를 나눠 쓴다.
+
+**처리 시간 추정** — 합성 2분 cadence 곡선으로 `process_tic`(전처리+최초 BLS+반복 탐색)을 이 PC에서 측정했다: 1 Sector 6.3초, 3 Sector 17.9초, 13 Sector 44.4초. Sector 1~13 제품 247,824개를 executor core 10개로 나누면 약 1.5일이며, 서버 CPU·실데이터 후보 수를 고려한 **추정 범위는 2~5일**이다. 14일 timeout 안에 들지만 실측이 아니다.
+
+**Canary 전에 결정할 것**
+1. 13 Sector 합성 행성에서 반복 탐색이 `removal_qa_failed`로 끝났다. 실제 행성(P=3.69998일)은 step 0에서 수락됐으나, 박스 모델 제거 잔차의 5배 alias(18.5일)가 `alias_multipliers=(0.5, 1, 2)` 밖이라 새 후보로 잡힌 뒤 QA에 실패했다. 고SNR·장기관측 TIC에서 재현될 가능성이 높다.
+2. 이 결과는 `failed_tics`에 합산되어 Canary를 `SilverDataContractError`로 실패시키고(`tess_silver_ctl.py` 426행), retry는 `retryable`을 보지 않고 결정적 실패를 다시 고르므로(`tess_silver.py` 598행) `failed_tics=0`에 수렴하지 않는다. 반복 탐색의 QA 결과를 파이프라인 실패로 셀지, 122 과학 판정으로 분리할지 먼저 정한다.
+
+**전체 `run` 전에 해결할 것**
+1. Spark 작업이 전체를 한 번에 확정하며 `spark.yarn.maxAppAttempts=1`이다. 중간 실패 시 처음부터 다시 돌고, 실패한 attempt의 `/lake/silver/.staging` 부분 출력은 정리되지 않는다. systemd는 5분마다 새 attempt로 재시작하므로 실패가 반복되면 staging이 누적되고, 75% HDFS 사용량 점검에서 멈춘다.
+2. Silver 출력 용량은 **추정** 논리 400~450 GB, RF2 기준 800~900 GB로 Bronze(RF2 166 GB)의 약 5배다. `excluded_json`이 `exclusion_ledger_json`에 그대로 포함돼 중복 저장된다. 실행 중에는 shuffle·`DISK_ONLY` 결과가 HDFS와 같은 `/mnt/data`를 추가로 쓴다. 서버 HDFS 여유 공간을 먼저 확인한다.
+
 ## 서버에서 확인한 기준 상태
 
 2026-09-23 기준 Node 1은 252가 전환한 Airflow 3.2.2(API Server·Scheduler·별도 DAG Processor·Triggerer)와 `LocalExecutor`를 사용한다. 통합 소스의 `compose.control-plane.yaml`은 `AIRFLOW__CORE__PARALLELISM=8`이지만 252 변경 이력 기준 이 값의 운영 배포·회귀는 아직 미검증이므로, 배포 전 서버 실제 값을 확인한다. 이전 2.10.5 DB·release는 롤백용으로 보존한다. 아래 서술은 2026-09-22 Airflow 2.10.5·`parallelism=2` 시점의 읽기 전용 확인이다. 당시 252의 Sector 14 수집→Raw→Bronze 4단계는 성공했으나 서버에는 Silver DAG가 없었다. 단계형 DAG는 자체 schedule이 없고, legacy 1~13 결합 DAG와 discovery DAG는 pause 상태였다. `tess_pipeline_enabled=false`, Sector 상한은 14였다.
@@ -66,7 +84,8 @@
 2. Sector 14+의 누적 snapshot, 변경 TIC 재처리, 혼합 Bronze pipeline version 및 기존 Silver 결과 조합은 아직 계약되지 않았다. 이는 252/80의 별도 범위이며, 이 DAG의 입력 검사나 우회 conf로 해결하지 않는다.
 3. 새 공통 잠금은 이번 브랜치의 Bronze controller에 들어 있다. 운영 중인 기존 252 Bronze release에는 아직 없으므로, 새 Bronze release가 적용되기 전에는 discovery/Raw/Bronze를 drain한 상태에서만 Silver DAG를 실행한다.
 4. `tess_yarn` Pool은 setup script를 실제 실행하기 전에는 존재·설정되었다고 가정하지 않는다. Pool 슬롯 수와 Node 1 `PLANETORY_YARN_SLOTS` 기본값이 어긋나면 상한이 깨지므로 배포 시 두 값을 함께 확인한다. Silver DAG는 pause 상태로 배포하고, Pool·sudo 권한·release를 확인한 뒤에만 명시적으로 unpause/trigger한다.
-5. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 252가 `parallelism=8`로 올렸어도 Silver는 며칠 단위로 한 슬롯을 잡으므로 252의 단계 DAG 5개와 합쳐 슬롯이 모자라지 않는지 확인한다. Airflow 3는 queue 투입 시점에 실행 토큰을 발급하고 기본 600초에 만료하므로, 슬롯 부족으로 대기가 길어지면 252가 겪은 `Invalid auth token: Signature has expired`가 Silver에서도 발생할 수 있다. 비동기 상태 감시 전환은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
+5. **전체 `run`은 Airflow DAG가 아니라 systemd 경로(`run-tess-silver.ps1`)로 실행한다.** Airflow SSH Task는 며칠짜리 Silver 제어기와 수명이 묶여 있어, 252의 잦은 Airflow release 교체나 재시작 때 PTY hangup으로 제어기가 죽는다. cluster-mode 앱은 YARN에 남지만 finalize·`_READY` 확정이 사라지고, 새 사전 점검은 이 고아 앱이 슬롯을 채우는 동안 새 제출을 거부한다. Airflow DAG는 수 분 단위의 1~5 TIC Canary에만 쓴다.
+6. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 252가 `parallelism=8`로 올렸어도 Silver는 며칠 단위로 한 슬롯을 잡으므로 252의 단계 DAG 5개와 합쳐 슬롯이 모자라지 않는지 확인한다. Airflow 3는 queue 투입 시점에 실행 토큰을 발급하고 기본 600초에 만료하므로, 슬롯 부족으로 대기가 길어지면 252가 겪은 `Invalid auth token: Signature has expired`가 Silver에서도 발생할 수 있다. 비동기 상태 감시 전환은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
 
 ## 다음 담당자의 실행 순서
 

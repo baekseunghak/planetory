@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,8 @@ from tess_bronze_ctl import (  # noqa: E402
     run_sector,
     submit,
     validate_raw_coverage,
+    foreign_running_applications,
+    require_yarn_headroom,
     yarn_slot,
     yarn_slot_count,
 )
@@ -464,6 +467,37 @@ class BronzeTransformTest(unittest.TestCase):
             with yarn_slot(prefix, slots=2) as reused:
                 self.assertEqual(reused, 0)
             self.assertEqual(waits, [])
+
+    def test_preflight_allows_overlapping_pipeline_apps_but_refuses_foreign_ones(self):
+        tab = chr(9)
+        header = tab.join(["                Application-Id", "Application-Name", "Application-Type", "User"])
+        def row(app_id, name):
+            return tab.join([app_id, name, "SPARK", "spark"])
+        listing = chr(10).join([
+            "Total number of applications (states: [RUNNING]):3",
+            header,
+            row("application_1790045821701_0007", "S15P21C206-77-bronze-20260923T010203Z-s0021"),
+            row("application_1790045821701_0008", "S15P21C206-78-silver-20260923T000000Z-20260923T000500Z"),
+            row("application_1790045821701_0009", "someone-elses-hive-query"),
+        ])
+        self.assertEqual(foreign_running_applications(listing), ["application_1790045821701_0009"])
+        self.assertEqual(foreign_running_applications(header), [])
+        # An unparsable row fails closed rather than silently admitting the job.
+        self.assertEqual(foreign_running_applications("application_1_2 no-tabs-here"), ["application_1_2"])
+
+    def test_headroom_counts_running_pipeline_apps_so_orphans_cannot_break_the_cap(self):
+        tab, newline = chr(9), chr(10)
+        bronze = tab.join(["application_1_1", "S15P21C206-77-bronze-20260923T010203Z-s0021", "SPARK"])
+        silver = tab.join(["application_1_2", "S15P21C206-78-silver-20260923T000000Z-20260923T000500Z", "SPARK"])
+        foreign = tab.join(["application_1_3", "adhoc-notebook", "SPARK"])
+        with patch.dict(os.environ, {"PLANETORY_YARN_SLOTS": "2"}):
+            self.assertEqual(require_yarn_headroom(""), [])
+            self.assertEqual(require_yarn_headroom(bronze), ["application_1_1"])
+            # A controller killed mid-run leaves its app without a slot; two apps already fill the cap.
+            with self.assertRaisesRegex(RuntimeError, "orphaned"):
+                require_yarn_headroom(newline.join([bronze, silver]))
+            with self.assertRaisesRegex(RuntimeError, "non-pipeline"):
+                require_yarn_headroom(foreign)
 
     def test_yarn_slot_count_defaults_and_rejects_unusable_caps(self):
         self.assertEqual(yarn_slot_count(""), 2)

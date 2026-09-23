@@ -100,6 +100,49 @@ def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
             handle.close()
 
 
+# Bronze (77/252) and Silver (78) app names; these are bounded by yarn_slot, not refused.
+PIPELINE_APP_NAME_RE = re.compile(r"S15P21C206-(77-bronze|78-silver)-[0-9]{8}T[0-9]{6}Z-")
+
+
+def foreign_running_applications(listing: str) -> list[str]:
+    """Return RUNNING YARN app IDs that are not Planetory Bronze/Silver submissions.
+
+    Pipeline apps may overlap up to the yarn_slot cap. Any other YARN workload still
+    blocks submission because the cap was sized assuming the cluster is ours.
+    """
+    foreign = []
+    for line in listing.splitlines():
+        columns = line.split("\t")
+        match = APP_ID_RE.search(line)
+        if not match:
+            continue
+        app_id = match.group(0)
+        # Fail closed: a row whose name column cannot be read counts as foreign.
+        readable = len(columns) > 1 and columns[0].strip() == app_id
+        if not readable or not PIPELINE_APP_NAME_RE.match(columns[1].strip()):
+            foreign.append(app_id)
+    return foreign
+
+
+def require_yarn_headroom(listing: str) -> list[str]:
+    """Refuse submission unless this job fits inside the pipeline YARN cap.
+
+    Call while holding a yarn_slot. Slots count live controllers, but a controller
+    killed mid-run (for example by an Airflow restart) leaves its cluster-mode app
+    running without a slot, so the running pipeline apps are counted as well.
+    """
+    running = APP_ID_RE.findall(listing)
+    foreign = foreign_running_applications(listing)
+    if foreign:
+        raise RuntimeError(f"a non-pipeline YARN application is running: {','.join(foreign)}")
+    if len(running) >= yarn_slot_count():
+        raise RuntimeError(
+            f"pipeline YARN apps already fill all {yarn_slot_count()} slots; "
+            f"an orphaned submission may still be running: {','.join(running)}"
+        )
+    return running
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -224,9 +267,7 @@ def cluster_preflight(
     if len(re.findall(r"\sRUNNING\s", nodes)) != 5:
         raise RuntimeError("expected five RUNNING NodeManagers")
     applications = yarn("application", "-list", "-appStates", "RUNNING").stdout
-    running = APP_ID_RE.findall(applications)
-    if running and not allow_running:
-        raise RuntimeError(f"another YARN application is running: {','.join(running)}")
+    running = APP_ID_RE.findall(applications) if allow_running else require_yarn_headroom(applications)
     contexts = {sector: raw_context(sector, raw_release) for sector in sectors}
     print(
         f"BRONZE_PREFLIGHT_OK sectors={','.join(map(str, sectors))} "

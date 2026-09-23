@@ -1,4 +1,6 @@
 import ast
+import re
+import shlex
 import sys
 import unittest
 from pathlib import Path
@@ -60,6 +62,27 @@ class SilverDagContractTest(unittest.TestCase):
         self.assertIn('pool="tess_yarn"', source)
         self.assertIn('airflow.sdk', source)
         self.assertNotIn('create_session', source)
+
+    def test_generated_commands_match_the_node1_sudoers_policy(self):
+        # The DAG builds the command and the setup script writes the sudo regex; they must agree.
+        script = (DAGS.parents[2] / "infra/distributed-system/scripts/"
+                  "configure-tess-silver-airflow-node1.sh").read_text(encoding="utf-8")
+        line = next(row for row in script.splitlines() if row.startswith("tess-airflow ALL="))
+        release = BASE["silver_release"]
+        # The heredoc is unquoted, so bash reduces the doubled backslash before sudo reads it.
+        pattern = line.split("NOPASSWD: /usr/bin/python3.12 ", 1)[1]
+        pattern = re.compile(pattern.replace("$release", release).replace("\\\\", "\\"))
+        cases = (
+            {**BASE, "operation": "canary", "tic_ids": [1, 2, 3, 4, 5]},
+            {**BASE, "operation": "run"},
+            {**BASE, "operation": "retry", "retry_from": (
+                "/lake/silver/pipeline_version=v1/run_id=20260922T010000Z/attempt=20260922T020000Z")},
+        )
+        for conf in cases:
+            argv = shlex.split(silver_command(conf))
+            with self.subTest(operation=conf["operation"]):
+                self.assertEqual(argv[:3], ["/usr/bin/sudo", "-n", "/usr/bin/python3.12"])
+                self.assertRegex(" ".join(argv[3:]), pattern)
 
     def test_bronze_and_silver_share_the_bounded_yarn_pool(self):
         # Concurrency is capped by the Pool, not by refusing to start beside the Sector stages.
