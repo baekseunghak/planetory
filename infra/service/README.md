@@ -164,7 +164,13 @@ PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
   docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
 ```
 
-같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다.
+같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
+
+```sh
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile gold-mock run --rm gold-mock notify --bundle b-<id>
+```
+
+알림은 후처리를 앞당기는 신호다. 보내지 않아도 DB의 current가 정본이라 분석 화면은 열린다.
 
 ### 삭제
 
