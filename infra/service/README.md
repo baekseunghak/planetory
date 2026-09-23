@@ -274,7 +274,7 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
 
-표식이 들어가기 전 이미지(2026-09-23 수동 배포한 `frontend:80a860fa…-sky`)에는 이 경로가 없다. 그 이미지로 **되돌리는 롤백은 헬스가 실패한다.** 컨테이너는 직전 이미지로 돌아가 서비스는 계속되지만 로그는 `되돌린 뒤에도 헬스가 통과하지 않습니다`로 끝난다. 표식이 있는 이미지가 한 번 배포되면 사라지는 과도기 문제다.
+표식이 들어가기 전 이미지(`frontend:80a860fa…-sky` 이전)에는 이 경로가 없어 그 이미지로 되돌리는 롤백은 헬스가 실패한다. 2026-09-23 CI가 표식 있는 `a9e567db`를 배포해 과도기는 끝났다. 그보다 옛 이미지로 손으로 되돌릴 때만 해당한다.
 
 확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
 
@@ -285,6 +285,10 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 `compose.yaml`은 되돌리지 않는다. 포트·환경변수·볼륨 정의를 바꾸는 변경은 이미지 배포와 같은 파이프라인에 싣지 않는다. 실패하면 "구 이미지 + 신 정의"라는 검증되지 않은 조합이 된다.
 
 덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 볼륨과 함께 사라진다. 배포 실패 복구용이지 재해 복구용이 아니다.
+
+### 어느 버튼을 누르나
+
+**최신 develop 파이프라인의 버튼을 누른다.** 기준 브랜치에서는 Frontend·Backend를 매번 빌드하므로 최신 파이프라인에 두 버튼이 늘 있다. 더 새 배포가 있는 상태에서 옛 파이프라인 버튼을 누르면 GitLab이 job을 실패시킨다(`environment: ec2-a`, [CI/CD](../../docs/operations/cicd.md) 「배포 버튼 유지」). 2026-09-23 이전 파이프라인의 job과 예전에 성공한 job의 재실행은 막히지 않는다.
 
 배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
 

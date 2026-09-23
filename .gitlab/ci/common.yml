@@ -134,6 +134,14 @@ validate:tess-hdfs-loader:
 .deploy-ec2-a:
   extends: .remote-compose-deploy
   resource_group: deploy-ec2-a
+  # GitLab "옛 배포 job 막기"(프로젝트 설정 ci_forward_deployment_enabled)는
+  # environment가 있는 job에만 걸린다. 더 새 배포가 있는 상태에서 옛 파이프라인의
+  # 버튼을 누르면 GitLab이 거부한다. 서비스별로 나누지 않고 노드 하나로 둔다.
+  # 배포 job은 노드 공용 compose.yaml을 함께 올리므로, 서비스별 environment면
+  # 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다.
+  # resource_group을 노드 단위로 둔 것과 같은 이유다(S15P21C206-261).
+  environment:
+    name: ec2-a
   variables:
     DEPLOY_HOST: $EC2_A_HOST
     DEPLOY_PATH: $EC2_A_DEPLOY_PATH

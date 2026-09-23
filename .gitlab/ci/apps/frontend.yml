@@ -76,7 +76,6 @@ web:image:
         - apps/frontend/package-lock.json
         - .gitlab/ci/apps/frontend.yml
 
-# 빌드 인자가 이 파일에 있으므로 이 파일만 바뀌어도 이미지가 달라진다. 규칙에 넣는다.
 build:frontend:
   extends: .docker-build
   variables:
@@ -84,10 +83,13 @@ build:frontend:
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
+  # develop에서는 변경 여부와 관계없이 빌드한다. changes로 거르면 이 앱을 바꾸지 않은
+  # 병합의 파이프라인에는 배포 버튼이 없고, 이 앱을 바꾼 이전 파이프라인은 새 커밋에
+  # 자동 취소되며 누르지 않은 수동 배포까지 함께 사라진다. 2026-09-23 백엔드 병합
+  # 4건이 빌드만 되고 배포되지 못했다(S15P21C206-261). 최신 파이프라인에 늘 버튼을 둔다.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*, .gitlab/ci/apps/frontend.yml]
 
 # 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:frontend:ec2-a:
@@ -105,5 +107,4 @@ deploy:frontend:ec2-a:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*, .gitlab/ci/apps/frontend.yml]
       when: manual
