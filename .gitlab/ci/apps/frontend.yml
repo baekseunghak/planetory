@@ -65,6 +65,9 @@ web:image:
   script:
     - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CHECK_TAG" $BUILD_ARGS .
     - docker run --rm --entrypoint nginx "$CHECK_TAG" -t
+    # 배포 헬스가 보는 표식이 이미지에 있는지 MR에서 먼저 본다. 없으면 병합 뒤
+    # 배포가 헬스 실패로 롤백된다.
+    - docker run --rm --entrypoint test "$CHECK_TAG" -f /usr/share/nginx/html/health/renderer-enabled
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -96,7 +99,9 @@ deploy:frontend:ec2-a:
     DEPLOY_SERVICES: frontend
     DEPLOY_ACTION: up
     # 정적 서빙이라 되돌릴 상태가 없다. 뜨지 않으면 바로 직전 이미지로 돌린다.
-    DEPLOY_HEALTH_PATH: "/"
+    # `/`는 렌더러가 빠져도 200이라 회귀를 못 잡는다. 렌더러를 켠 빌드에만 있는
+    # 표식을 본다(apps/frontend/Dockerfile). nginx가 이 경로를 SPA로 폴백하지 않는다.
+    DEPLOY_HEALTH_PATH: "/health/renderer-enabled"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]

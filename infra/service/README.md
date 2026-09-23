@@ -265,8 +265,12 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 | 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
 | --- | --- | --- | --- |
-| `frontend` | `/` | 없음 | 90초 |
+| `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
+
+프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
+
+표식이 들어가기 전 이미지(2026-09-23 수동 배포한 `frontend:80a860fa…-sky`)에는 이 경로가 없다. 그 이미지로 **되돌리는 롤백은 헬스가 실패한다.** 컨테이너는 직전 이미지로 돌아가 서비스는 계속되지만 로그는 `되돌린 뒤에도 헬스가 통과하지 않습니다`로 끝난다. 표식이 있는 이미지가 한 번 배포되면 사라지는 과도기 문제다.
 
 확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
 
