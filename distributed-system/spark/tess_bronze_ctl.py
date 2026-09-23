@@ -41,21 +41,63 @@ class BronzeDataContractError(RuntimeError):
     """A deterministic input/output contract violation that operator action must fix."""
 
 
+YARN_SLOT_PREFIX = "/run/planetory-tess-yarn"
+DEFAULT_YARN_SLOTS = 2
+YARN_SLOT_POLL_SECONDS = 15
+
+
+def yarn_slot_count(value: str | None = None) -> int:
+    """The Node 1 cap must match the Airflow `tess_yarn` Pool slot count."""
+    raw = os.environ.get("PLANETORY_YARN_SLOTS", "") if value is None else value
+    if not raw:
+        return DEFAULT_YARN_SLOTS
+    try:
+        slots = int(raw)
+    except ValueError:
+        raise RuntimeError("PLANETORY_YARN_SLOTS must be an integer") from None
+    if not 1 <= slots <= 8:
+        raise RuntimeError("PLANETORY_YARN_SLOTS must be in 1..8")
+    return slots
+
+
 @contextmanager
-def yarn_exclusive(lock: Path = Path("/run/planetory-tess-yarn.lock")):
-    """Serialize Planetory Bronze/Silver YARN work on Node 1 across schedulers."""
-    # ponytail: one cluster-wide job; split locks only after measured YARN capacity permits overlap.
+def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
+    """Bound concurrent Planetory Bronze/Silver YARN work on Node 1 across schedulers.
+
+    A counting semaphore over `slots` lock files. It replaces the former single
+    exclusive lock so a Bronze stage run and a Silver run can submit together,
+    while still refusing to exceed the measured cap. Non-Airflow manual runs go
+    through the same files, so the cap holds outside the Airflow Pool too.
+    """
     import fcntl  # Node 1 is Linux; keep offline contract tests importable on Windows.
 
-    if lock.is_symlink():
-        raise RuntimeError("YARN lock path must not be a symlink")
-    with lock.open("a+") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        print("PLANETORY_YARN_LOCK_ACQUIRED", flush=True)
+    count = yarn_slot_count() if slots is None else slots
+    paths = [prefix.with_name(f"{prefix.name}-{index}.lock") for index in range(count)]
+    for path in paths:
+        if path.is_symlink():
+            raise RuntimeError("YARN lock path must not be a symlink")
+    handles = [path.open("a+") for path in paths]
+    try:
+        held = None
+        while held is None:
+            for index, handle in enumerate(handles):
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    continue
+                held = index
+                break
+            if held is None:
+                # ponytail: poll instead of inotify; every slot runs for minutes, not milliseconds.
+                time.sleep(YARN_SLOT_POLL_SECONDS)
+        print(f"PLANETORY_YARN_SLOT_ACQUIRED slot={held} of={count}", flush=True)
         try:
-            yield
+            yield held
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            fcntl.flock(handles[held], fcntl.LOCK_UN)
+    finally:
+        for handle in handles:
+            handle.close()
 
 
 def utc_now() -> str:
@@ -799,7 +841,7 @@ def main() -> int:
     if getattr(args, "canary_products", 1) <= 0:
         raise SystemExit("canary products must be positive")
     if args.command in ("run-all", "canary"):
-        with yarn_exclusive():
+        with yarn_slot():
             args.handler(args)
     else:
         args.handler(args)

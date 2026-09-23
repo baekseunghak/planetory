@@ -435,7 +435,7 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 당시 Worker 4 다운로드 중 재부팅은 부팅 ID 변경, 수집 unit enabled 자동 재개, 이벤트 688→1,728건 증가, DataNode·NodeManager 수동 복구로 확인했다. 당시 Node 1 재부팅 뒤 Docker/Airflow는 자동 재시작했지만 HDFS/YARN은 수동 복구가 필요했다. NameNode가 6,631개 block의 30초 Safe Mode 연장 중 Active 전환을 거부했으므로 [기존 재부팅 검증 스크립트](scripts/verify-tess-reboot.ps1)는 Safe Mode OFF를 기다린 뒤 전환한다. 부팅은 이미 끝났는데 후속 복구만 실패했다면 `-Step RecoverNode1`로 **재부팅 없이** 이어서 복구한다. 이후의 자동 부팅 검증은 [전체 노드 부팅 복구](#전체-노드-부팅-복구)에 기록했다. Sector 15~70 실행까지 입증한 것은 아니다.
 
-1~13 Bronze coverage의 Silver 수동 DAG는 [Airflow DAG 안내](../../distributed-system/airflow/dags/README.md)를 따른다. Silver release 설치 후 [configure-tess-silver-airflow-node1.sh](scripts/configure-tess-silver-airflow-node1.sh)가 해당 release 전용 제한 sudo와 `tess_yarn` Pool 한 슬롯을 구성한다. 현재 서버에 자동 적용된 상태가 아니며 운영 설정 변경 승인을 받아야 한다.
+1~13 Bronze coverage의 Silver 수동 DAG는 [Airflow DAG 안내](../../distributed-system/airflow/dags/README.md)를 따른다. Silver release 설치 후 [configure-tess-silver-airflow-node1.sh](scripts/configure-tess-silver-airflow-node1.sh) `<release-id> [slots]`가 해당 release 전용 제한 sudo와 `tess_yarn` Pool을 구성한다. 슬롯 기본값 2는 Bronze 단계와 Silver가 YARN에 동시에 제출할 수 있게 하며, Node 1 제어기의 `PLANETORY_YARN_SLOTS` 기본값과 반드시 같아야 한다. 현재 서버에 자동 적용된 상태가 아니며 운영 설정 변경 승인을 받아야 한다.
 
 ## TESS 원천 수집 (`S15P21C206-75`)
 

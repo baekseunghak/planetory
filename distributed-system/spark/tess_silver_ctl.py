@@ -31,7 +31,7 @@ from tess_bronze_ctl import (
     wait_application,
     write_state,
     yarn,
-    yarn_exclusive,
+    yarn_slot,
 )
 
 
@@ -507,7 +507,7 @@ def main() -> int:
         raise SystemExit("partition counts must be positive")
     try:
         if args.command in ("canary", "run", "retry"):
-            with yarn_exclusive():
+            with yarn_slot():
                 args.handler(args)
         else:
             args.handler(args)

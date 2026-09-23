@@ -63,7 +63,9 @@ Sector 14 실측에서 다운로드 marker 5개와 Raw 19,970개·RF2·FSCK HEAL
 
 ## `tess_bronze_to_silver` (78의 1~13 입력, 수동 실행)
 
-이 DAG는 일시정지·무스케줄로 생성된다. 252의 수집 DAG를 수정하거나 자동 trigger하지 않는다. Airflow는 SSH로 Node 1의 불변 Silver 제어기를 실행하고 실제 전처리·BLS는 Spark on YARN에서 수행한다. `tess_pipeline_enabled=false`이고 Bronze DAG에 실행 중인 run이 없어야 시작한다. `tess_yarn` Pool 한 슬롯과 Bronze/Silver 제어기의 Node 1 공통 잠금을 사용한다. **현재 서버의 기존 Bronze release에는 이 잠금이 없으므로**, 새 Bronze release가 적용되기 전까지는 수집을 drain한 뒤에만 이 DAG를 실행한다.
+이 DAG는 일시정지·무스케줄로 생성된다. 252의 수집 DAG를 수정하거나 자동 trigger하지 않는다. Airflow는 SSH로 Node 1의 불변 Silver 제어기를 실행하고 실제 전처리·BLS는 Spark on YARN에서 수행한다.
+
+Silver는 불변 1~13 Bronze coverage를 읽고 Sector 단계 DAG는 14+를 쓰므로 둘을 서로 drain할 필요가 없다. 대신 **동시성에 상한을 둔다**. `tess_sector_bronze`의 `commit_bronze`와 Silver의 `run_silver`가 같은 `tess_yarn` Pool을 요구하고(기본 2 슬롯), Node 1에서는 두 제어기가 같은 수의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유한다. Pool은 Airflow 경로만, 슬롯 파일은 수동 실행까지 포함해 상한을 지킨다. **두 값은 반드시 일치해야 하며**, `configure-tess-silver-airflow-node1.sh <release-id> [slots]`가 Pool을 설정한다. 이 상한은 두 제어기의 새 release를 모두 배포한 뒤 효력이 있으므로, 새 Bronze release 적용 전에는 여전히 수집을 drain한 뒤에만 이 DAG를 실행한다. 기본 2는 **YARN 용량 실측 없이 고른 보수값**이므로, 올리기 전에 단계별 시간·YARN 메모리·NameNode RPC를 측정한다.
 
 Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_release`(`/opt/planetory-silver/releases/<UTC-release>`), `bronze_coverage`(`/lake/bronze/tess/coverage=<SHA-256>`), `run_id`(UTC), `pipeline_version`이다. 선택 키는 `shuffle_partitions`(1~500, 기본 200), `output_partitions`(1~200, 기본 80)이다. `canary`는 중복 없는 양의 `tic_ids` 1~5개를, `retry`는 완료된 불변 Silver attempt의 `retry_from`을 추가로 요구한다. 알 수 없는 Sector 경로나 임의 셸 인자는 허용하지 않는다. 예시는 다음과 같다.
 

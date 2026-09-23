@@ -37,7 +37,8 @@ from tess_bronze_ctl import (  # noqa: E402
     run_sector,
     submit,
     validate_raw_coverage,
-    yarn_exclusive,
+    yarn_slot,
+    yarn_slot_count,
 )
 
 
@@ -435,13 +436,41 @@ class BronzeTransformTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "temporary outage"):
                 cli()
 
-    def test_yarn_lock_is_held_for_full_control_operation(self):
-        events = []
-        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, flock=lambda _handle, mode: events.append(mode))
-        with tempfile.TemporaryDirectory() as root, patch.dict(sys.modules, {"fcntl": fake}):
-            with yarn_exclusive(Path(root) / "yarn.lock"):
-                self.assertEqual(events, [2])
-            self.assertEqual(events, [2, 8])
+    def test_yarn_slots_admit_the_cap_and_block_the_next_submission(self):
+        # A real flock only excludes across processes, so model per-file ownership here.
+        owned, waits = set(), []
+
+        def flock(handle, mode):
+            key = handle.name
+            if mode & 4:  # LOCK_NB
+                if key in owned:
+                    raise OSError("locked")
+                owned.add(key)
+            elif mode == 8:  # LOCK_UN
+                owned.discard(key)
+
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, LOCK_NB=4, flock=flock)
+        with tempfile.TemporaryDirectory() as root,                 patch.dict(sys.modules, {"fcntl": fake}),                 patch("tess_bronze_ctl.time.sleep", side_effect=lambda seconds: waits.append(seconds)):
+            prefix = Path(root) / "planetory-tess-yarn"
+            with yarn_slot(prefix, slots=2) as first, yarn_slot(prefix, slots=2) as second:
+                self.assertEqual({first, second}, {0, 1})
+                self.assertEqual(waits, [])
+                # A third submission must wait rather than overload YARN.
+                with self.assertRaises(RuntimeError):
+                    with patch("tess_bronze_ctl.time.sleep", side_effect=RuntimeError("would block")):
+                        with yarn_slot(prefix, slots=2):
+                            pass
+            # Both slots are released, so the next submission proceeds without waiting.
+            with yarn_slot(prefix, slots=2) as reused:
+                self.assertEqual(reused, 0)
+            self.assertEqual(waits, [])
+
+    def test_yarn_slot_count_defaults_and_rejects_unusable_caps(self):
+        self.assertEqual(yarn_slot_count(""), 2)
+        self.assertEqual(yarn_slot_count("3"), 3)
+        for value in ("0", "9", "two"):
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                yarn_slot_count(value)
 
 
 if __name__ == "__main__":

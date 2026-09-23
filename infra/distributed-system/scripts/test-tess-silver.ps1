@@ -71,7 +71,7 @@ foreach ($required in @(
     'SILVER_CANARY_AUDIT=',
     'cleanup_spark_staging',
     'retry source is not a completed Silver attempt'
-    'yarn_exclusive'
+    'yarn_slot'
 )) {
     if (-not $control.Contains($required)) { throw "Missing Silver control contract: $required" }
 }

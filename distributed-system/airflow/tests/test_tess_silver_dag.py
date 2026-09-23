@@ -58,10 +58,19 @@ class SilverDagContractTest(unittest.TestCase):
         self.assertIn('is_paused_upon_creation=True', source)
         self.assertIn('schedule=None', source)
         self.assertIn('pool="tess_yarn"', source)
-        self.assertIn('tess_pipeline_enabled', source)
-        self.assertIn('"tess_sector_raw", "tess_sector_bronze"', source)
         self.assertIn('airflow.sdk', source)
         self.assertNotIn('create_session', source)
+
+    def test_bronze_and_silver_share_the_bounded_yarn_pool(self):
+        # Concurrency is capped by the Pool, not by refusing to start beside the Sector stages.
+        silver = (DAGS / "tess_silver_dag.py").read_text(encoding="utf-8")
+        stages = (DAGS / "tess_stage_dags.py").read_text(encoding="utf-8")
+        ast.parse(stages)
+        self.assertIn('pool="tess_yarn"', stages)
+        self.assertIn('task_id="commit_bronze"', stages)
+        for blocking in ("tess_pipeline_enabled", "get_dr_count", "tess_sector_bronze"):
+            with self.subTest(blocking=blocking):
+                self.assertNotIn(blocking, silver)
 
 
 if __name__ == "__main__":

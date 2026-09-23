@@ -20,9 +20,9 @@
 
 - `distributed-system/airflow/dags/tess_silver_dag.py`에 `tess_bronze_to_silver` DAG를 추가한다. `schedule=None`, 생성 시 pause, `max_active_runs=1`이며 자동 실행하지 않는다.
 - `distributed-system/airflow/dags/tess_silver_contract.py`는 Trigger conf를 allow-list로 검증하고 shell-safe 명령을 만든다. 필수값은 `operation`, immutable Silver release, 1~13 Bronze coverage, UTC run ID, pipeline version이다. Canary는 양의 중복 없는 TIC 1~5개, retry는 immutable attempt 경로만 받는다.
-- DAG는 `tess_pipeline_enabled=false`와 실행 중인 252 Raw/Bronze DAG 부재를 확인한 뒤 `planetory_node_1` SSH connection으로 Silver controller를 실행한다. task는 `tess_yarn` Pool을 요구한다.
-- `distributed-system/spark/tess_bronze_ctl.py`와 `tess_silver_ctl.py`는 Node 1의 `/run/planetory-tess-yarn.lock`을 공유해 YARN 제출을 직렬화한다. 이는 현재 단일 클러스터 여유를 보수적으로 보호하는 전역 잠금이며, 실제 용량 검증으로 동시 실행이 안전하다고 확인될 때에만 분리한다.
-- `infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh`는 지정 release 경로와 상위 디렉터리의 root 소유·비쓰기 권한을 검사한 뒤, 해당 release controller만 허용하는 sudoers와 `tess_yarn` 1-slot Pool을 만든다. 기존 sudoers 내용이 다르면 덮어쓰지 않고 실패한다.
+- DAG는 `planetory_node_1` SSH connection으로 Silver controller를 실행한다. 2026-09-23부터 `tess_pipeline_enabled=false`·Raw/Bronze run 부재라는 시작 조건을 제거하고, 대신 `run_silver`와 252 `commit_bronze`가 같은 `tess_yarn` Pool(기본 2 슬롯)을 요구해 동시성에 상한을 둔다.
+- `distributed-system/spark/tess_bronze_ctl.py`와 `tess_silver_ctl.py`는 Node 1의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유하는 카운팅 세마포어(`yarn_slot`)로 YARN 제출 **동시 실행 수에 상한**을 둔다. 슬롯 수는 `PLANETORY_YARN_SLOTS`(기본 2, 1~8)이며 Airflow Pool 슬롯과 같아야 한다. 제한 sudo는 환경 변수를 전달하지 않으므로 Airflow 경로는 항상 기본값을 쓴다. 기본 2는 용량 실측 없이 고른 보수값이며, 올리려면 실제 YARN 메모리·시간 측정 근거가 필요하다.
+- `infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh <release-id> [slots]`는 지정 release 경로와 상위 디렉터리의 root 소유·비쓰기 권한을 검사한 뒤, 해당 release controller만 허용하는 sudoers와 `tess_yarn` Pool(기본 2 슬롯)을 만든다. 기존 sudoers 내용이 다르면 덮어쓰지 않고 실패한다.
 - `distributed-system/airflow/requirements.txt`는 252가 전환한 `apache-airflow==3.2.2`와 FAB·SSH `5.0.2`·Standard provider 고정을 따른다. 78이 Airflow 2.10.5 기준으로 넣었던 `apache-airflow-providers-ssh==4.1.6` 핀은 통합 시 제거했다.
 - Airflow 3에서는 DAG 코드가 metadata DB에 접근할 수 없으므로 Silver 사전 게이트의 Raw/Bronze 실행 확인은 Task SDK `ti.get_dr_count(dag_id=..., states=[...])`를 사용한다. 252가 제거한 레거시 `tess_sector_download_raw_bronze`는 검사 대상이 아니다.
 
@@ -65,7 +65,7 @@
 1. 78 Silver controller는 Sector 1~13 전체 Bronze coverage와 TIC별 다중 Sector 결합만 승인한다. Sector 14의 `_READY` 하나는 이 coverage가 아니며 Silver 입력으로 사용하면 안 된다.
 2. Sector 14+의 누적 snapshot, 변경 TIC 재처리, 혼합 Bronze pipeline version 및 기존 Silver 결과 조합은 아직 계약되지 않았다. 이는 252/80의 별도 범위이며, 이 DAG의 입력 검사나 우회 conf로 해결하지 않는다.
 3. 새 공통 잠금은 이번 브랜치의 Bronze controller에 들어 있다. 운영 중인 기존 252 Bronze release에는 아직 없으므로, 새 Bronze release가 적용되기 전에는 discovery/Raw/Bronze를 drain한 상태에서만 Silver DAG를 실행한다.
-4. `tess_yarn` Pool은 setup script를 실제 실행하기 전에는 존재·설정되었다고 가정하지 않는다. Silver DAG는 pause 상태로 배포하고, Pool·sudo 권한·release를 확인한 뒤에만 명시적으로 unpause/trigger한다.
+4. `tess_yarn` Pool은 setup script를 실제 실행하기 전에는 존재·설정되었다고 가정하지 않는다. Pool 슬롯 수와 Node 1 `PLANETORY_YARN_SLOTS` 기본값이 어긋나면 상한이 깨지므로 배포 시 두 값을 함께 확인한다. Silver DAG는 pause 상태로 배포하고, Pool·sudo 권한·release를 확인한 뒤에만 명시적으로 unpause/trigger한다.
 5. SSHOperator는 Spark 종료까지 Airflow worker slot 하나를 점유한다. 252가 `parallelism=8`로 올렸어도 Silver는 며칠 단위로 한 슬롯을 잡으므로 252의 단계 DAG 5개와 합쳐 슬롯이 모자라지 않는지 확인한다. Airflow 3는 queue 투입 시점에 실행 토큰을 발급하고 기본 600초에 만료하므로, 슬롯 부족으로 대기가 길어지면 252가 겪은 `Invalid auth token: Signature has expired`가 Silver에서도 발생할 수 있다. 비동기 상태 감시 전환은 실제 실행 시간·부하 근거가 생긴 뒤 검토한다.
 
 ## 다음 담당자의 실행 순서
@@ -98,7 +98,7 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 다음이 모두 충족되면 담당자는 이 문서가 더는 필요 없는지 확인하고 **이 파일과 `docs/project/README.md`의 링크를 같은 커밋에서 삭제한다.**
 
 - 통합 Airflow release가 기존 252 DAG를 보존한 채 배포되고 import되었다.
-- 제한 sudo와 1-slot `tess_yarn` Pool이 승인된 방식으로 적용·검증되었다.
+- 제한 sudo와 `tess_yarn` Pool(슬롯 수가 Node 1 `PLANETORY_YARN_SLOTS`와 일치)이 승인된 방식으로 적용·검증되었다.
 - 검증된 1~5 TIC Canary가 실제 YARN에서 성공하고 Silver manifest/READY를 재감사했다.
 - 14+ 처리 책임이 별도 252/80 계약으로 명시되었거나, 이 78 DAG가 1~13 전용이라는 경계가 Jira/MR 리뷰에서 승인되었다.
 - 해당 운영 증거와 남은 후속 작업이 Jira·변경 이력의 정본에 기록되었다.

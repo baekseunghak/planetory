@@ -2,11 +2,15 @@
 set -euo pipefail
 
 # Run only after installing an immutable Silver release and the 252 Airflow account.
-[[ "$(id -u)" == 0 && "$(hostname -s)" == master-1 && $# == 1 ]] || {
+# The second argument caps concurrent Spark/YARN submissions; it must match
+# PLANETORY_YARN_SLOTS on Node 1 so the Pool and the slot files agree.
+[[ "$(id -u)" == 0 && "$(hostname -s)" == master-1 && $# -ge 1 && $# -le 2 ]] || {
   echo SILVER_AIRFLOW_NODE1_ARGS >&2; exit 1;
 }
 release_id=$1
+yarn_slots=${2:-2}
 [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo INVALID_RELEASE_ID >&2; exit 1; }
+[[ "$yarn_slots" =~ ^[1-8]$ ]] || { echo INVALID_YARN_SLOTS >&2; exit 1; }
 release="/opt/planetory-silver/releases/$release_id"
 controller="$release/spark/tess_silver_ctl.py"
 [[ -f "$controller" ]] || {
@@ -38,5 +42,5 @@ if sudo -l -U tess-airflow | grep -Fq 'NOPASSWD: ALL'; then
   echo AIRFLOW_SUDO_TOO_BROAD >&2; exit 1;
 fi
 docker exec planetory-distributed-system-airflow-scheduler-1 \
-  airflow pools set tess_yarn 1 'Planetory YARN Spark submissions' >/dev/null
-echo "SILVER_AIRFLOW_SUDO_READY release=$release_id"
+  airflow pools set tess_yarn "$yarn_slots" 'Planetory YARN Spark submissions (Bronze + Silver)' >/dev/null
+echo "SILVER_AIRFLOW_SUDO_READY release=$release_id yarn_slots=$yarn_slots"
