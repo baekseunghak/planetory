@@ -134,6 +134,8 @@ Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수�
 
 접속 계정은 CI 전용 `deploy` 하나다. 사람의 관리 계정을 쓰지 않으므로 키·권한을 회수할 때 사람 계정을 건드리지 않아도 되고 접속 주체가 로그에서 갈린다. 이 계정에 `sudo`를 주지 않는다. 배포에 필요한 권한은 `docker` 그룹뿐이다. 계정 생성은 [provision-deploy-user.sh](../../infra/provisioning/provision-deploy-user.sh)가 맡는다.
 
+**사람의 수동 배포도 `deploy`로 한다(2026-09-23 ACL 변경).** 사람 PC의 tailnet 신원에도 `deploy` SSH를 허용했다. 전에는 `ubuntu`로 들어가 `sudo -u deploy`로 실행했다. 이제 `tailscale ssh deploy@ec2-a`로 바로 `/home/deploy/planetory`에서 `deploy.sh`를 돌린다. 계정만으로는 CI 배포와 사람 배포가 갈리지 않으므로 주체는 Tailscale SSH 접속 기록의 tailnet 신원으로 구분한다. 허용 범위는 tailnet 정책 파일이 정본이다.
+
 **접근 차단은 ACL에서 한다.** 규칙 한 줄을 지우면 모든 노드에서 동시에 끊긴다.
 
 `DEPLOY_HOST`에는 MagicDNS 이름이 아니라 **Tailscale IP**를 넣는다. 컨테이너 안에서는 MagicDNS가 해석되지 않는다.

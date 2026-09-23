@@ -95,6 +95,8 @@ sudo -u deploy sh -c "cd /home/deploy/planetory && ... sh deploy.sh"
 
 `~ubuntu/planetory/infra/service`는 CI 도입 전 수동 기동 때의 옛 사본이다. `deploy.sh`가 없고 `.env`의 이미지 선언도 낡았다. 배포 경로는 [CI/CD](cicd.md) 「배포 접속」의 `deploy` 계정 경로다.
 
+**수동 배포는 `deploy` 계정으로 한다.** `tailscale ssh deploy@ec2-a` 후 `/home/deploy/planetory`에서 실행한다. 이 계정은 `sudo`가 없고 `docker` 그룹만 있다. 사람의 `ubuntu` 계정 아래 `~/planetory/infra/service`는 2026-09-21 이전 수동 기동의 사본이라 배포에 쓰지 않는다. 근거는 [CI/CD](cicd.md) 「배포 접속」이다. 2026-09-23 이 PC에서 `tailscale ssh deploy@ec2-a`와 일반 `ssh deploy@<ec2-a>`가 모두 응답했다.
+
 접속 경로를 바꿔도 운영을 바꾸는 명령의 확인 절차는 그대로다. 배포·설정 교체·삭제는 [AGENTS.md](../../AGENTS.md)의 안전 가드레일을 따른다.
 
 호스트 키 검증을 `StrictHostKeyChecking=no`로 우회하거나 개인 키 내용을 공유하지 않는다.
