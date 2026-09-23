@@ -26,7 +26,7 @@ public final class AnalysisViews {
     }
 
     /**
-     * 현재 판.
+     * 현재 판. 비닝 revision은 세그먼트마다 다를 수 있어 판에 두지 않는다({@link Segment#binningRevision()}).
      *
      * @param observationBounds {@code [세그먼트 시작의 최솟값, 세그먼트 마지막 bin 끝의 최댓값]}
      * @param curveStepRule     곡선 단계 규칙. 한 단계가 매칭한 후보 하나를 더 제거한다
@@ -34,7 +34,7 @@ public final class AnalysisViews {
     public record BundleSummary(String bundleId, String bundleVersion, OffsetDateTime publishedAt,
                                 double foldReferenceTimeBtjd, BigDecimal baseDays, double[] observationBounds,
                                 String residualModelVersion, String periodogramConfigVersion,
-                                String binningRevision, String curveStepRule) {
+                                String curveStepRule) {
     }
 
     /**
@@ -115,7 +115,8 @@ public final class AnalysisViews {
 
     /**
      * 세그먼트. i번째 점의 시각은 {@code startBtjd + binMinutes / 1440 × i}이며 시각 배열은
-     * 보내지 않는다. {@code gaps}는 빈 bin의 {@code [시작, 끝]} 폐구간이다.
+     * 보내지 않는다. {@code gaps}는 빈 bin의 {@code [시작, 끝]} 폐구간이다. {@code binningRevision}은
+     * DB 값 그대로이며 같은 판 안에서도 섹터마다 다를 수 있다(Gold 계약 4.1).
      */
     public record Segment(String segmentId, int sector, String binningRevision, double startBtjd,
                           BigDecimal binMinutes, int nPoints, Float[] flux, BigDecimal fluxScatter,
