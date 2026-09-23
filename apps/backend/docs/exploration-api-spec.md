@@ -642,7 +642,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 규칙 | 근거 |
 |---|---|
-| `startBtjd`는 첫 bin 시작 메타데이터다. 표시·접기에서 i번째 Gold 점의 시각은 `startBtjd + (binMinutes / 1440) × (i + 0.5)`이며 세그먼트별 간격을 사용한다. 시각 배열은 보내지 않는다 | Gold 중심 평가·192 사용자 승인, 247 정합화 |
+| `startBtjd`는 첫 bin 시작 메타데이터다. 표시·접기에서 i번째 Gold 점의 시각은 `startBtjd + (binMinutes / 1440) × (i + 0.5)`이며 세그먼트별 간격을 사용한다. 시각 배열은 보내지 않는다 | [D06 계약 1.0(확정)](../../../libs/astro-kernel/README.md#d06113-결정-사항) · [Gold 4.1(목표 계약 변경안)](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) · 192 사용자 승인, 247 정합화 |
 | 결측은 `null`, `gaps`는 `[시작 인덱스, 끝 인덱스]` 폐구간. JSON `NaN`은 쓰지 않는다 | Q04 |
 | 세그먼트는 섹터 순 정렬. 섹터 사이 공백은 세그먼트 경계로 표현하고 프론트가 접어 그린다 | EXP-03, NFR-10 |
 | 운영 `binMinutes`는 10분(mean). 빈 bin 포함 20,000점 초과 시 자동 확대하지 않고 실패·격리한다 | [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) |
@@ -652,7 +652,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
 
-**시각 기준의 구분(247):** 143의 v1 스냅샷과 [192 사용자 승인](../../frontend/docs/analysis-retry-draft.md#gold-시각-기준-정합화)에 따라 표시·접기는 중심을 사용한다. 기존 시작 시각 표기를 정정하며 계산을 다시 변경하지 않는다. 범위 끝은 `startBtjd + nPoints × binMinutes / 1440`, 마지막 점은 `startBtjd + (nPoints - 0.5) × binMinutes / 1440`으로 서로 다르다. null은 제외하되 인덱스를 당기지 않으며, 시작 메타데이터·기준 T·서버 환산 위상·이미 중심인 원시 TIME에 반 bin을 더하지 않는다. 제출 관측 판정은 6.2절의 별도 시작 기준을 유지한다.
+**시각 기준의 구분(247):** 143의 v1 스냅샷과 [192 사용자 승인](../../frontend/docs/analysis-retry-draft.md#gold-시각-기준-정합화)에 따라 표시·접기는 중심을 사용한다. 기존 시작 시각 표기를 정정하며 계산을 다시 변경하지 않는다. 범위 끝은 `startBtjd + nPoints × binMinutes / 1440`, 마지막 점은 `startBtjd + (nPoints - 0.5) × binMinutes / 1440`으로 서로 다르다. null은 제외하되 인덱스를 당기지 않으며, 시작 메타데이터·기준 T·서버 환산 위상·이미 중심인 원시 TIME에 반 bin을 더하지 않는다. 부분 bin도 같은 중심 시각을 사용하며, 평균에 참여한 실제 관측점의 평균 시각과 다를 수 있다([Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)). 제출 관측 판정은 6.2절의 별도 시작 기준을 유지한다.
 
 **원본의 잔차 상태:** `curveStep=0`이면 계산할 것이 없으므로 `residual`은 `{"status": "COMPLETED", "jobId": null}`로 고정한다. `computedAt`은 결과가 만들어진 시각이 있을 때만 넣는다.
 
