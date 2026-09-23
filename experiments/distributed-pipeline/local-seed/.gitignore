@@ -1,0 +1,7 @@
+# 가상환경·캐시·덤프는 Git에 넣지 않는다. 시드는 코드에서 다시 만든다.
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+results/
+*.dump
