@@ -50,7 +50,7 @@ MR `!161` 병합 뒤 develop 배포에서 두 가지가 깨졌다. 코드가 먼
 
 - `session-redis`·`cache-redis` 두 서비스를 compose에 넣었다. 두 인스턴스는 host+port가 달라야 하며, 같으면 앱이 기동을 거부한다.
 - 주소는 **`.env`가 아니라 compose가 서비스 이름으로 직접 준다.** 티켓은 `.env`에 넣도록 적었지만, 그러면 `.env`에서 하나만 빠져도 같은 기동 실패가 되풀이된다.
-- 세션은 볼륨·RDB 저장, eviction 없음. 캐시는 저장 없음, 128mb `allkeys-lru`.
+- 세션은 볼륨·RDB 저장, 64mb 상한에 `noeviction`(상한에 닿으면 새 로그인이 503). 캐시는 저장 없음, 128mb(임시) `volatile-lru`. 캐시는 Backend의 기동 의존성이 아니다(리뷰 반영, 아래).
 - 캐시 소비처는 아직 없다. 지금은 기동 요건만 채운다.
 
 EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-23). 두 컨테이너 healthy, 설정값이 위와 일치, 재시작 후 세션 키 유지·캐시 키 소실, 호스트 포트 게시 없음. 백엔드 앱과 붙인 검증은 배포 때 한다.
@@ -60,6 +60,8 @@ EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-2
 **배포 결과(2026-09-23).** 브랜치의 `compose.yaml`로 교체하고(직전 파일은 `compose.yaml.bak-before-254`) 두 Redis를 띄운 뒤 `deploy.sh`로 Backend `e510d1da`를 올렸다. 헬스 200, 기동 로그 예외 0건, Backend 환경변수가 두 인스턴스를 따로 가리킨다. V20·V21·V22·R__이 적용돼 V22다. `planetory_stats_job`은 마이그레이션 계정이 슈퍼유저라 V21이 직접 만들었다. `cache-redis`에는 연결이 없다. 소비처가 없어 팩토리가 연결하지 않는다. 로그인 뒤 Backend만 재시작해도 세션이 유지됐고, 세션 키는 `session-redis`에만 있다(`cache-redis` 0개).
 
 첫 시도는 compose 교체 없이 배포만 돌려 같은 `SESSION_REDIS_HOST` 오류로 롤백됐다. Redis 설정 단계에서 죽어 마이그레이션 전이었고 DB는 V19 그대로였다. 롤백 로그의 "스키마는 그대로" 문구는 롤백마다 붙는 일반 경고다.
+
+**리뷰 반영(2026-09-23).** 백승학·하서진 P2 두 건과 강재민 제안 둘을 받았다. 세션에 64mb 상한(`noeviction` 유지), Backend `depends_on`에서 `cache-redis` 제거, 캐시 정책 `allkeys-lru`→`volatile-lru`, `requirepass` 재검토 조건을 "우리가 만들지 않은 컨테이너가 네트워크에 붙을 때"로 좁혔다. 근거와 관측 명령은 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
 
 **병합 전에 develop Backend를 CI로 배포하면 `compose.yaml`이 Redis 없는 판으로 덮여 다시 롤백된다.** 컨테이너는 남지만 주소가 사라진다. 이 브랜치를 먼저 병합한다.
 

@@ -39,13 +39,22 @@ services:
   # 막는 경계이므로 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
   #
   # 둘 다 외부 인바운드 0개다. 호스트 포트를 열지 않고 service 네트워크 안에서만
-  # 붙으므로 requirepass를 걸지 않는다. 노출을 늘릴 때 .env로 비밀번호를 넣는다.
+  # 붙으므로 requirepass를 걸지 않는다. 위험은 외부가 아니라 같은 네트워크의 다른
+  # 컨테이너다. 우리가 만들지 않은 컨테이너를 service 네트워크에 붙이면 그때
+  # .env로 비밀번호를 넣는다(SESSION_REDIS_PASSWORD·CACHE_REDIS_PASSWORD).
   session-redis:
     image: redis:7.4-alpine
     platform: linux/amd64
     restart: unless-stopped
     # 기본 RDB 저장점을 그대로 쓴다. 볼륨이 없으면 재시작마다 전원 로그아웃이다.
-    # maxmemory도 걸지 않는다. 세션은 evict 대상이 아니다.
+    #
+    # 상한은 두되 축출은 하지 않는다. 세션이 지워지면 로그아웃이다. 상한에 닿으면
+    # 새 로그인과 세션 연장이 쓰기 실패로 막힌다(503). 같은 호스트의 PostgreSQL을
+    # 밀어내지 않기 위한 예산이다(ec2-service-entry-failover D1).
+    # ponytail: 64mb는 세션 1개 실측 약 2.4KB로 2만 개 남짓. 동시 접속 목표(DEC-16)가
+    # 정해지면 다시 잡는다. 컨테이너 mem_limit은 걸지 않는다. 넘는 순간 OOM으로
+    # 저장소가 죽어 전원 로그아웃이 되므로, 쓰기만 실패하는 maxmemory가 낫다.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - session-redis-data:/data
     healthcheck:
@@ -56,13 +65,18 @@ services:
     networks:
       - service
 
-  # 잔차·주기도 캐시용(SRS v0.15). 소비처는 아직 없고 지금은 백엔드 기동 요건만
+  # 잔차·주기도 캐시용(SRS DAT-14). 소비처는 아직 없고 지금은 백엔드 기동 요건만
   # 채운다. 재생성 가능한 파생물이라 볼륨을 두지 않고 저장도 끈다.
+  #
+  # volatile-lru로 축출 후보를 만료가 걸린 키로 한정한다. DAT-14는 결과와 함께 진행
+  # 상태와 중복 계산 잠금도 여기 둔다. 결과에만 TTL을 주면 상태·잠금은 지워지지
+  # 않는다. allkeys-lru면 잠금이 결과와 같은 확률로 지워져 중복 계산이 성립한다.
+  # 크기(128mb)는 임시값이다. 확정은 S15P21C206-104 실측 뒤다(DEC-35).
   cache-redis:
     image: redis:7.4-alpine
     platform: linux/amd64
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    command: ["redis-server", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -102,10 +116,11 @@ services:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    # cache-redis는 넣지 않는다. 캐시는 선택 의존성이다(health도 세션만 본다). 캐시
+    # 장애는 온라인 계산만 멈춰야 하는데, 여기 넣으면 캐시가 unhealthy일 때 백엔드가
+    # created에 멈춘다. 캐시 연결은 쓰는 시점에 맺으므로 기동에 필요하지 않다.
     depends_on:
       session-redis:
-        condition: service_healthy
-      cache-redis:
         condition: service_healthy
       service-db:
         condition: service_healthy
