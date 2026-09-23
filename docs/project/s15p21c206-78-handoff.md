@@ -67,6 +67,9 @@
 **반복 탐색 QA 판정 분리 — 해결(2026-09-23)**
 13 Sector 합성 행성에서 반복 탐색이 `removal_qa_failed`로 끝났다. 실제 행성(P=3.69998일)은 step 0에서 수락됐으나, 박스 모델 제거 잔차의 5배 alias(18.5일)가 `alias_multipliers=(0.5, 1, 2)` 밖이라 새 후보로 잡힌 뒤 QA에 실패했다. 고SNR·장기관측 TIC에서 재현될 가능성이 높다. 이 결과가 `failed_tics`에 합산되어 Canary가 실패하고 retry도 같은 결과를 반복하는 문제가 있었다. 이제 커널 품질 판정 종료(`removal_qa_failed`, `candidate_validation_failed`)는 manifest `status=qa_stopped`(retryable 아님)로 기록하고 `iteration_qa_stopped_tics`에만 센다. `failed_tics`·Canary 판정·retry 선택에서는 빠지며, 멈추기 전 수락 후보와 반복 출력은 보존한다. 같은 합성 사례를 실제 커널로 다시 돌려 `qa_stopped`를 확인했다. `numerical_failure`와 `incomplete`는 그대로 실패 집계에 남는다. 판정 기준(배수 alias 목록 등) 자체의 조정은 122 커널 범위이며 여기서 바꾸지 않았다. 스키마는 stage·summary·attempt 모두 v4다.
 
+**실클러스터 Canary 1 (2026-09-23) — 불합격, 원인 수정**
+release `20260923T080904Z`(HEAD `4af1943d`), TIC `259377017`, `application_1790067725443_0030`은 SUCCEEDED했으나 TIC가 `invalid_bronze_row`(`Out of range float values are not JSON compliant: nan`)로 실패해 exit 65로 끝났다. 245(`9f62bb0f`)가 준비 단계 제외 목록에 `original_time`을 추가했고, 78의 `_target_row`는 그 목록을 엄격 JSON으로 그대로 직렬화했다. 실제 SPOC 곡선의 관측 공백 NaN 시각에서 실패하므로 전체 run의 거의 모든 TIC가 실패했을 결함이다. 로컬 합성 곡선에는 NaN 시각이 없어 잡지 못했다. `_strict_exclusions`로 `exclusion_ledger`와 같은 인코딩(null + `original_time_nonfinite`)을 적용하고 NaN·Inf 시각 회귀 검사를 추가했다. 사전 점검 시점에 252 Bronze Sector 42(`_0029`)가 실행 중이었고 새 헤드룸 검사가 동시 실행을 허용했으며, 두 앱 모두 SUCCEEDED해 병렬 실행이 실운영에서 처음 동작했다. 실패 attempt는 `/validation/S15P21C206-78/run=20260923T081349Z/attempt=20260923T081629Z`에 남아 있다. 수정 release로 Canary 1을 다시 실행해야 한다.
+
 **Canary TIC 선택 시 주의** — 최초 전처리 결과가 `insufficient_observations`(유효 관측 500점 미만) 같은 결정적 데이터 판정인 TIC도 여전히 `failed_tics`에 들어가 Canary를 실패시킨다. 첫 Canary는 이전 실클러스터 기준 TIC `259377017`처럼 관측이 충분한 TIC로 고른다.
 
 **전체 `run` 전에 해결할 것**

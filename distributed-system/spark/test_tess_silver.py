@@ -249,6 +249,25 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
         self.assertIsNone(result.target)
 
     @unittest.skipUnless(importlib.util.find_spec("astropy"), "Astropy runtime is not installed")
+    def test_nonfinite_cadence_times_serialize_as_strict_json(self):
+        # Real SPOC curves carry NaN times in data gaps; the 2026-09-23 YARN Canary failed on this.
+        row = self.real_bronze_row(620)
+        row["time"][5] = float("nan")
+        row["time"][6] = float("inf")
+        row["quality"][7] = 128
+        result = call([row], preprocess_silver, search_bls, iteration_location="/final/iteration")
+        self.assertIn(result.manifest[5], {"succeeded", "no_quality_peak"}, result.manifest[18:20])
+        excluded = json.loads(result.target[18])
+        ledger = json.loads(result.target[22])
+        by_row = {item["source_row"]: item for item in excluded}
+        self.assertEqual((by_row[5]["original_time"], by_row[5]["original_time_nonfinite"]), (None, "NaN"))
+        self.assertEqual(by_row[6]["original_time_nonfinite"], "+Infinity")
+        self.assertEqual(by_row[7]["original_time"], row["time"][7])
+        # Preparation exclusions use exactly the ledger's encoding.
+        ledger_rows = {item["source_row"]: item for item in ledger}
+        for source_row, item in by_row.items():
+            self.assertEqual(item, ledger_rows[source_row])
+
     def test_real_preprocessing_to_bls_boundary_executes(self):
         result = call([self.real_bronze_row()], preprocess_silver, search_bls,
                       iteration_location="/final/iteration")

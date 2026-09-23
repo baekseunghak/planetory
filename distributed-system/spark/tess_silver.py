@@ -124,6 +124,23 @@ def _ints(value: object) -> list[int]:
     return np.asarray(value, dtype=np.int64).tolist()
 
 
+def _strict_exclusions(rows: Iterable[Mapping[str, Any]]) -> list[dict]:
+    """Encode preparation exclusions the way ``exclusion_ledger`` does.
+
+    Real SPOC curves carry NaN times in data gaps. Strict JSON has no NaN, so a
+    non-finite original time becomes null plus its original spelling.
+    """
+    encoded = []
+    for row in rows:
+        item = dict(row)
+        value = item.get("original_time")
+        if isinstance(value, float) and not np.isfinite(value):
+            item["original_time_nonfinite"] = "NaN" if np.isnan(value) else "+Infinity" if value > 0 else "-Infinity"
+            item["original_time"] = None
+        encoded.append(item)
+    return encoded
+
+
 def _target_row(prepared: object, detrended: object, snapshot: str) -> tuple:
     ledger = exclusion_ledger(prepared, detrended)
     kept_count = int(np.asarray(detrended.kept).sum())
@@ -149,7 +166,7 @@ def _target_row(prepared: object, detrended: object, snapshot: str) -> tuple:
         np.asarray(detrended.kept, dtype=bool).tolist(),
         _ints(detrended.segment_id),
         _json(prepared.normalization_median),
-        _json(prepared.excluded),
+        _json(_strict_exclusions(prepared.excluded)),
         _json(detrended.failures),
         MASK_CONTRACT_VERSION,
         _json(prepared.interval_masks),
