@@ -16,6 +16,60 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 마운트 경로 `/var/lib/postgresql`은 postgres:18에서 바뀐 규약이다. 17 이하의 `/var/lib/postgresql/data`로 되돌리면 깨진다.
 
+## 세션·캐시 Redis
+
+Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 잔차·주기도 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
+
+`RedisSessionConfig`가 기동 시 두 주소를 비교해 **host와 port가 모두 같으면 예외를 던지고 앱을 띄우지 않는다.** 캐시 eviction이 로그인 세션을 지우는 것을 막는 경계이므로, 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+
+주소는 `.env`가 아니라 `compose.yaml`이 서비스 이름으로 직접 준다(`session-redis:6379`, `cache-redis:6379`). `.env`에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않기 위해서다.
+
+| | 저장 | maxmemory | 축출 | 잃으면 |
+| --- | --- | --- | --- | --- |
+| `session-redis` | 볼륨 `planetory-session-redis-data`, 기본 RDB 저장점 | 64mb | `noeviction` | 전원 로그아웃. 데이터 손실은 아니다 |
+| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | 진행 중 계산. 결과는 재계산한다 |
+
+두 인스턴스의 상한은 따로다. 한쪽의 여유가 다른 쪽을 돕지 못하므로 합계(192mb)가 같은 호스트의 PostgreSQL을 밀어내지 않는지가 기준이다([EC2 서비스 진입·장애 대응](../../docs/architecture/ec2-service-entry-failover.md) D1). 컨테이너 `mem_limit`은 걸지 않는다. 넘는 순간 OOM으로 컨테이너가 죽는데, 세션 쪽이면 전원 로그아웃이다. `maxmemory`는 쓰기만 실패시킨다.
+
+**`maxmemory`는 프로세스 메모리의 상한이 아니다.** Redis가 세는 데이터 메모리(`used_memory`)의 상한이다. 조각화, 클라이언트 버퍼, RDB 저장 중 fork의 copy-on-write 때문에 실제 점유(RSS)는 이보다 커진다. 192mb 합계는 초기 예산이고, 호스트 메모리를 따질 때는 `used_memory_rss`를 본다.
+
+### 세션 상한에 닿으면
+
+세션은 지우지 않으므로 상한에 닿으면 **새 로그인과 세션 연장이 쓰기 실패로 막힌다.** 이미 맺은 세션의 읽기는 계속된다. Redis의 OOM 오류는 `RedisSessions`가 `StoreUnavailableException`으로 감싸고 `SessionDependencyFilter`가 503(`DEPENDENCY_UNAVAILABLE`)으로 응답한다. 이 경로는 코드로 확인했고 실제로 상한까지 채워 보지는 않았다.
+
+64mb는 세션 1개 실측(약 2.4KB, 2026-09-23)으로 2만 개 남짓이다. 동시 접속 목표([DEC-16](../../docs/requirements/planetory-decision-register.md))가 정해지면 다시 잡는다. 관측은 두 값으로 한다.
+
+```sh
+docker compose exec session-redis redis-cli info memory | grep -E '^(used_memory_human|used_memory_rss_human|maxmemory_human):'
+docker compose exec session-redis redis-cli info errorstats | grep OOM
+```
+
+`errorstat_OOM`이 0이 아니면 이미 로그인 실패가 난 것이다. `used_memory`가 상한의 80%를 넘으면 늘릴 때다. `used_memory_rss`는 호스트 예산을 볼 때 쓴다.
+
+### 캐시 축출은 만료가 걸린 키만
+
+`cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출한다. 결과 키에 TTL을 주면 결과만 축출 후보가 되고 TTL이 없는 키는 축출되지 않는다. `allkeys-lru`는 잠금을 결과와 같은 확률로 지워 DAT-14가 막은 중복 계산을 허용하므로 택하지 않았다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다.
+
+**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 캐시 소비처는 아직 없다. 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
+
+Backend는 `cache-redis`에 기동을 의존하지 않는다(`depends_on`에 없다). 캐시는 선택 의존성이라 health도 세션만 본다. 캐시가 unhealthy여도 Backend는 뜨고 온라인 계산만 멈춘다. 연결은 처음 쓸 때 맺는다.
+
+### 비밀번호
+
+`requirepass`를 걸지 않는다. 호스트 포트가 없어 외부에서 닿지 않는다. 위험은 외부가 아니라 같은 `service` 네트워크에 붙는 다른 컨테이너다. **우리가 만들지 않은 컨테이너를 `service` 네트워크에 붙이면** 그때 `SESSION_REDIS_PASSWORD`·`CACHE_REDIS_PASSWORD`를 `.env`로 넣는다. 두 변수는 Backend가 이미 읽는다.
+
+### 최초 기동은 수동이다
+
+`deploy.sh`는 `docker compose up -d --no-deps <service>`로 교체하므로 **의존 서비스를 만들지 않는다.** `service-db`와 마찬가지로 두 Redis도 배포 노드에서 한 번 직접 띄운다. 이후 배포는 이미 도는 컨테이너를 그대로 쓴다.
+
+```sh
+cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
+```
+
+설정(`command`)을 바꿨을 때도 같은 명령을 쓴다. compose가 바뀐 컨테이너만 다시 만든다. 세션은 볼륨에 남으므로 로그인이 유지되고, 캐시는 비워진다.
+
+캐시 소비처는 아직 없다. `cache-redis`는 현재 Backend 기동 요건만 채우며, 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+
 ## 계정 분리
 
 접속 계정은 둘이다. 소유자는 GRANT/REVOKE의 영향을 받지 않으므로 나누지 않으면 권한 분리가 성립하지 않는다(`V2__gold_roles.sql` 주석).
@@ -215,8 +269,12 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 | 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
 | --- | --- | --- | --- |
-| `frontend` | `/` | 없음 | 90초 |
+| `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
+
+프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
+
+표식이 들어가기 전 이미지(2026-09-23 수동 배포한 `frontend:80a860fa…-sky`)에는 이 경로가 없다. 그 이미지로 **되돌리는 롤백은 헬스가 실패한다.** 컨테이너는 직전 이미지로 돌아가 서비스는 계속되지만 로그는 `되돌린 뒤에도 헬스가 통과하지 않습니다`로 끝난다. 표식이 있는 이미지가 한 번 배포되면 사라지는 과도기 문제다.
 
 확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
 

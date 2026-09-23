@@ -15,7 +15,7 @@
 - `npm run dev:galaxy` → 기본58272. 기존 서버와 구분한 이번 확인 주소는 `http://127.0.0.1:58275/sky?reference=1`이다.
 - `204 렌더 검증 도구`에서1/10/100/1000/2501개 계정, 원본 카메라, 회전·기울기·LOD, 고정 별 선택, 실패/복구를 확인한다. `reference=1`은 개발 전용 화면 크기 비교 모드다.
 - 실제 모드는 `VITE_SKY_RENDERER_ENABLED=true`와 기존 `API_PROXY_TARGET`/인증을 사용한다. API가 없으면 오류이며 합성 은하를 만들지 않는다.
-- `npm run build:renderer`는 렌더 플래그를 켠 운영 빌드다. 플래그는 빌드 시점 값이고 기본값은 false다. Docker는 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 활성화한다. Node22/로컬 Nginx는 [통합 검증](local-validation-201-204.md)을 통과했으며 실제 배포는 별도 인수다.
+- `npm run build:renderer`는 렌더 플래그를 켠 운영 빌드다. 플래그는 빌드 시점 값이고 기본값은 false다. Docker는 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 활성화한다. Node22/로컬 Nginx는 [통합 검증](local-validation-201-204.md)을 통과했다. 배포 이미지는 CI `build:frontend`가 이 인자로 빌드한다(S15P21C206-254). 켠 빌드에만 `/health/renderer-enabled` 표식이 생기고 배포 헬스가 그 경로를 본다.
 - 실제 클릭·드래그·휠·키보드·마커는205, 상세 HTTP/정보/행성 확대/복귀 UI는206이다. 개발 도구의 고정 선택 버튼을 해당 기능 완료로 세지 않는다.
 
 ## 데이터와 카메라
