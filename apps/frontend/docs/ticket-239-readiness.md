@@ -1,9 +1,9 @@
 # 239 — 프론트 Nginx 배포·OAuth 장애 구분
 
 - Jira: [S15P21C206-239](https://ssafy.atlassian.net/browse/S15P21C206-239)
-- 기준: 2026-09-23 재조회한 `origin/develop`의 `67a9e741`.
+- 기준: 최초 제출은 `67a9e741`, MR !197 병합 후 `origin/develop`의 `e510d1da`를 이력 재작성 없이 통합했다.
 - 브랜치: `fix/S15P21C206-239-web-proxy-errors`.
-- 상태: 구현·로컬 검증 완료. 2026-09-23 사용자 요청에 따라 일반 MR로 제출한다. 비작성자 리뷰·병합과 실제 배포 인수는 별도이며 Jira 완료로 표시하지 않는다.
+- 상태: 구현·로컬 검증 완료. 2026-09-23 제출한 [일반 MR !198](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/198)을 사용자 요청에 따라 최신화한다. 비작성자 리뷰·병합과 실제 배포 인수는 별도이며 Jira 완료로 표시하지 않는다.
 - 운영 규칙 정본: [Docker 개발·배포 기준](../../../docs/operations/docker.md).
 
 ## 범위와 출처
@@ -50,6 +50,19 @@ Nginx 검사는 백엔드 DNS가 없는 상태의 정적 화면 기동, API 502 
 `npm run test:nginx`는 개인 Google·SSAFY 계정, OAuth 비밀키, 기존 DB를 사용하지 않는다. 결과 JSON과 화면은 무시된 `test-results/nginx/`에 저장한다. 실제 배포 HTTPS, Cloudflare, Spring 전달 헤더 해석, 외부 제공자 로그인은 이 합성 검증의 통과 범위가 아니다.
 
 ## 후속 반영
+
+### MR !197 병합 후 인증 런타임 통합 검증
+
+2026-09-23 `e510d1da`를 통합했다. 235에서 새로 추가한 `AuthRuntimeVerificationTest`는 현재 프론트의 Nginx 설정을 직접 읽는데, DB 장애 콜백에 과거 `authentication_failed`를 기대하고 있었다. Google형·SSAFY형 공통 기대값 한 곳을 `service_unavailable`로 바꿨다. 취소의 `access_denied`와 백엔드 원응답 `503 DEPENDENCY_UNAVAILABLE` 검사는 유지한다. 두 오류값을 함께 허용하지 않는다.
+
+- 실제 Spring `prod`·TLS Nginx·검증 전용 PostgreSQL·별도 세션/캐시 Redis에서 관련 6개 클래스 **15개 통과**, 실패·오류·건너뜀 0개. Java 21.0.12, Docker Engine 29.7.2로 실행했다.
+- DB 중단 콜백은 두 합성 제공자 모두 `service_unavailable`, 취소는 `access_denied`를 반환했다. 기존 인증 세션 `/me`는 중단 중 503, 복구 대기 503 후 동일 세션으로 200을 반환했다.
+- 통합 후 Chrome 인증 검사 **14개를 재실행하여 통과**했다. 개인 OAuth 계정·기존 DB·운영 환경은 사용하지 않았다.
+- 명령: `apps/backend`에서 `./gradlew.bat --no-daemon -PskipLocalDb test --tests '*AuthRuntimeVerificationTest' --tests '*RedisSessionIntegrationTest' --tests '*ForwardedHeadersConfigurationTest' --tests '*AuthSessionTimeoutTest' --tests '*SessionDependencyFilterTest' --tests '*OAuthLoginSuccessHandlerTest'`.
+- 프론트 애플리케이션·Nginx 코드는 최초 제출과 동일하다. 위 빌드·단위 446개·Docker/Nginx 9개는 최초 제출 시의 통과 기록이며 이번에 재실행한 15개·14개와 구분한다.
+- [235 실측 보고서](../../../docs/operations/auth-runtime-verification-235.md)의 과거 관찰은 보존하고 현재의 표시 분리와 구분했다. 실제 Cloudflare·외부 제공자·배포 인수는 여전히 별도다.
+
+### 리뷰와 배포 인계
 
 일반 MR은 `fix/S15P21C206-239-web-proxy-errors`에서 `develop`을 대상으로 하며 비작성자 리뷰 후 병합한다. 현재 Jira는 `해야 할 일`로 확인했으며 이번 제출에서 상태를 바꾸지 않는다. 실제 배포 담당자는 변경 이미지의 SHA를 확인하고 배포된 Nginx/백엔드를 통한 원래 HTTPS 콜백을 확인한다. 이 티켓의 로컬 수정 완료를 서비스 전체 인수(216)나 배포 완료로 표시하지 않는다.
 

@@ -16,6 +16,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /** 인증 API만 활동으로 센다. CSRF/인가보다 먼저 검사해 미인증 변경 요청도 401로 응답한다. */
@@ -66,7 +67,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 sessions.logout(request, response);
                 errors.write(response, e.getErrorCode());
                 return;
-            } catch (DataAccessException e) {
+            } catch (DataAccessException | CannotCreateTransactionException e) {
                 errors.write(response, ErrorCode.DEPENDENCY_UNAVAILABLE);
                 return;
             } catch (IllegalStateException e) {
