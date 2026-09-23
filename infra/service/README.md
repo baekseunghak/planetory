@@ -18,7 +18,7 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 ## 세션·캐시 Redis
 
-Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 잔차·주기도 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
+Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 지정한 별의 Gold 곡선·원본 주기도와 잔차 계산 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
 
 `RedisSessionConfig`가 기동 시 두 주소를 비교해 **host와 port가 모두 같으면 예외를 던지고 앱을 띄우지 않는다.** 캐시 eviction이 로그인 세션을 지우는 것을 막는 경계이므로, 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
 
@@ -27,7 +27,7 @@ Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 �
 | | 저장 | maxmemory | 축출 | 잃으면 |
 | --- | --- | --- | --- | --- |
 | `session-redis` | 볼륨 `planetory-session-redis-data`, 기본 RDB 저장점 | 64mb | `noeviction` | 전원 로그아웃. 데이터 손실은 아니다 |
-| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | 진행 중 계산. 결과는 재계산한다 |
+| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | Gold 읽기 캐시는 DB에서 다시 읽고 계산 결과는 재계산한다 |
 
 두 인스턴스의 상한은 따로다. 한쪽의 여유가 다른 쪽을 돕지 못하므로 합계(192mb)가 같은 호스트의 PostgreSQL을 밀어내지 않는지가 기준이다([EC2 서비스 진입·장애 대응](../../docs/architecture/ec2-service-entry-failover.md) D1). 컨테이너 `mem_limit`은 걸지 않는다. 넘는 순간 OOM으로 컨테이너가 죽는데, 세션 쪽이면 전원 로그아웃이다. `maxmemory`는 쓰기만 실패시킨다.
 
@@ -50,7 +50,7 @@ docker compose exec session-redis redis-cli info errorstats | grep OOM
 
 `cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출한다. 결과 키에 TTL을 주면 결과만 축출 후보가 되고 TTL이 없는 키는 축출되지 않는다. `allkeys-lru`는 잠금을 결과와 같은 확률로 지워 DAT-14가 막은 중복 계산을 허용하므로 택하지 않았다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다.
 
-**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 캐시 소비처는 아직 없다. 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
+**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 상태·잠금 소비처는 아직 없다. Gold 읽기 캐시 키는 1일 TTL로 축출 대상이다. 계산 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
 
 Backend는 `cache-redis`에 기동을 의존하지 않는다(`depends_on`에 없다). 캐시는 선택 의존성이라 health도 세션만 본다. 캐시가 unhealthy여도 Backend는 뜨고 온라인 계산만 멈춘다. 연결은 처음 쓸 때 맺는다.
 
@@ -68,7 +68,9 @@ cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
 
 설정(`command`)을 바꿨을 때도 같은 명령을 쓴다. compose가 바뀐 컨테이너만 다시 만든다. 세션은 볼륨에 남으므로 로그인이 유지되고, 캐시는 비워진다.
 
-캐시 소비처는 아직 없다. `cache-redis`는 현재 Backend 기동 요건만 채우며, 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+Gold 읽기 캐시는 기본 비활성이다. 운영자가 `.env`에 `GOLD_CACHE_ENABLED=true`와 쉼표로 구분한 `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 지정하고 Backend를 재시작하면 해당 별의 현재 판 곡선·원본 주기도를 시작 시 적재한다. 후보 모델과 공개·권한 판단은 DB에서 읽는다. 새 판 알림이 오면 다시 적재하고, 알림이 없어도 다음 곡선·주기도 조회에서 DB를 읽어 채운다. 지정하지 않은 별도 DB에서 분석할 수 있다. Redis가 비거나 장애가 나면 DB에서 읽는다. 초기 운영 예상은 별 5개 또는 10개이며 실제 TIC 목록은 미정이다. `cache-redis`의 기본 128mb가 선택한 별 전체와 향후 계산 캐시를 수용하는지 `redis-cli info memory`의 `used_memory`·`used_memory_rss`와 축출 수를 측정한 뒤 별 수 또는 용량을 정한다. 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+
+주간 챌린지 별 등록부터 캐시 대상 지정·회차 전환·검증까지는 [챌린지 별 등록·회차 전환 런북](../../docs/operations/challenge-round-runbook.md)을 따른다.
 
 ## 계정 분리
 

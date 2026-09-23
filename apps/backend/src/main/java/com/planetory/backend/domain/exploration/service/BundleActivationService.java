@@ -8,6 +8,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.planetory.backend.domain.exploration.service.BundleActivationRepository.ProgressRow;
 import com.planetory.backend.domain.exploration.service.ExplorationCompletionPolicy.Decision;
+import com.planetory.backend.domain.gold.GoldCatalogRepository;
 
 /**
  * 새 판이 current가 된 뒤의 후처리 (탐사 API 9.3·10장) [S15P21C206-150].
@@ -34,6 +35,7 @@ public class BundleActivationService {
     private final ExplorationCompletionRepository completionRepository;
     private final ResidualJobStore residualJobs;
     private final PlatformTransactionManager transactionManager;
+    private final GoldCatalogRepository gold;
 
     /** 회원 한 명을 처리한 결과. */
     enum Outcome {
@@ -87,6 +89,13 @@ public class BundleActivationService {
                 case REOPENED -> reopened++;
                 case NONE -> { }
             }
+        }
+        // 공개 전환 알림이 도착하면 운영자가 고른 별의 새 판을 분석 요청 전에 채운다.
+        // 적재 실패는 PostgreSQL Gold 조회로 복구하므로 기존 회원 후처리를 막지 않는다.
+        try {
+            gold.preloadSelectedTic(ticId);
+        } catch (RuntimeException ex) {
+            log.warn("판 {}의 Gold Redis 사전 적재 실패", bundleId, ex);
         }
         log.info("판 {}(TIC {}) 후처리: 캐시 {}건 정리, 라벨 표식 {}건, 재개 {}명, 완료 재판정 {}명.",
                 bundleId, ticId, evicted, relabeled, reopened, completed);

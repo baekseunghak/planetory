@@ -81,7 +81,7 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 
 ## 5. 튜토리얼 별·챌린지 회차
 
-`tutorial_stars`와 `challenge_rounds`도 SQL로 넣는다. DB가 저장할 때 다음을 거절한다.
+`tutorial_stars`와 `challenge_rounds`도 SQL로 넣는다. 챌린지 별 등록, Redis 사전 적재 대상 지정과 회차 시작 순서는 [챌린지 별 등록·회차 전환 런북](challenge-round-runbook.md)을 따른다. DB가 저장할 때 다음을 거절한다.
 
 - 대상 TIC이 없거나 `stars.service_status`가 `published`가 아니다. 공개 대상이 아닌 별은 발견에서 빠지므로(OPS-08) 회원에게 열 대상으로도 넣을 수 없다. 메시지는 `공개된 별만 <테이블>.<열>에 넣을 수 있습니다`다. 대상 열을 넣거나 바꿀 때만 검사하므로, 대상 별이 나중에 숨겨져도 회차를 닫거나 튜토리얼을 끄는 수정은 된다.
 - 회차 기간이 뒤집혔다(`ck_challenge_rounds_period`, `starts_on > ends_on`). 하루짜리 회차는 된다.

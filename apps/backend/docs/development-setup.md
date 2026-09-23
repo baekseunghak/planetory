@@ -74,6 +74,7 @@ docker compose --profile service up -d --build backend
 ### 환경변수
 
 세션·계산 캐시 연결의 `SESSION_REDIS_*`·`CACHE_REDIS_*` 변수와 필수값은 [OAuth Redis 연결 안내](oauth-setup.md#redis-연결과-저장-경계237)를 따른다.
+Gold 읽기 캐시는 기본 비활성이다. 지정한 별을 미리 올리려면 `GOLD_CACHE_ENABLED=true`, `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 설정한다. 시작 시와 판 전환 알림 후 현재 판의 곡선·원본 주기도만 `cache-redis`에 적재하고, 후보 모델·권한·current 판은 DB에서 읽는다. 상세 운영 절차와 임시 128mb 용량 경계는 [서비스 배포 안내](../../../infra/service/README.md#세션캐시-redis)를 따른다.
 
 | 변수 | 역할 / 기본값 |
 |---|---|

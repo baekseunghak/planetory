@@ -6,6 +6,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,7 +29,8 @@ import com.planetory.backend.domain.gold.GoldCatalogViews.Periodogram;
  * 두지 않는다. 적재는 배치 역할이 담당하며 앱 역할에는 DB 권한 자체가 없다(V2).
  */
 @Repository
-public class GoldCatalogRepository {
+public class GoldCatalogRepository implements ApplicationRunner {
+    private static final Logger log = LoggerFactory.getLogger(GoldCatalogRepository.class);
 
     /**
      * DB의 JSONB를 읽는 전용 매퍼다. HTTP 직렬화 설정과 분리해 둔다. Gold의 manifest·모델은
@@ -36,9 +42,35 @@ public class GoldCatalogRepository {
     private static final ObjectMapper JSONB = new ObjectMapper();
 
     private final JdbcClient jdbc;
+    private final GoldReadCache cache;
 
-    public GoldCatalogRepository(JdbcClient jdbc) {
+    public GoldCatalogRepository(JdbcClient jdbc, ObjectProvider<GoldReadCache> cache) {
         this.jdbc = jdbc;
+        this.cache = cache.getIfAvailable();
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        if (cache == null) return;
+        for (long ticId : cache.selectedTics()) {
+            if (!cache.available()) break;
+            preloadSelectedTic(ticId);
+        }
+    }
+
+    /** 시작 시와 Publisher의 판 전환 알림에서 현재 판만 적재한다. */
+    public void preloadSelectedTic(long ticId) {
+        if (cache == null || !cache.selectedTics().contains(ticId)) return;
+        findCurrentBundle(ticId).ifPresent(bundle -> {
+            List<LightCurveSegment> segments = loadSegments(bundle.manifest().segmentIds());
+            Optional<Periodogram> periodogram = loadPeriodogram(bundle.id());
+            if (segments.size() != bundle.manifest().segmentIds().size()
+                    || periodogram.isEmpty() || !isCurrent(ticId, bundle.id())) {
+                log.warn("TIC {} 판 {}의 사전 적재를 건너뜁니다: Gold가 불완전하거나 current가 바뀌었습니다", ticId, bundle.id());
+                return;
+            }
+            cache.warm(bundle, segments, periodogram.orElseThrow());
+        });
     }
 
     /** 지금 공개 중인 판. 분석 진입과 후속 요청은 이 값을 요청의 {@code bundleId}와 대조한다. */
@@ -74,10 +106,20 @@ public class GoldCatalogRepository {
      * 판이 참조하는 곡선 세그먼트. 호출자는 {@link GoldManifest#segmentIds()}를 그대로 넘긴다.
      * 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다.
      */
-    public List<LightCurveSegment> findSegments(Collection<Long> segmentIds) {
+    public List<LightCurveSegment> findSegments(long ticId, Collection<Long> segmentIds) {
         if (segmentIds.isEmpty()) {
             return List.of();
         }
+        if (cache != null && cache.selected(ticId)) {
+            List<LightCurveSegment> hit = cache.segments(segmentIds);
+            if (hit != null) return hit;
+        }
+        List<LightCurveSegment> segments = loadSegments(segmentIds);
+        if (cache != null && cache.selected(ticId)) cache.refillSegments(segmentIds, segments);
+        return segments;
+    }
+
+    private List<LightCurveSegment> loadSegments(Collection<Long> segmentIds) {
         return jdbc.sql("""
                         SELECT id, tic_id, sector, binning_revision, start_btjd, bin_minutes,
                                n_points, flux, flux_scatter, gaps
@@ -90,7 +132,18 @@ public class GoldCatalogRepository {
                 .list();
     }
 
-    public Optional<Periodogram> findPeriodogram(long bundleId) {
+    public Optional<Periodogram> findPeriodogram(long ticId, long bundleId) {
+        boolean selectedCurrent = cache != null && cache.selected(ticId) && isCurrent(ticId, bundleId);
+        if (selectedCurrent) {
+            Periodogram hit = cache.periodogram(bundleId);
+            if (hit != null) return Optional.of(hit);
+        }
+        Optional<Periodogram> periodogram = loadPeriodogram(bundleId);
+        if (selectedCurrent) periodogram.ifPresent(value -> cache.refillPeriodogram(bundleId, value));
+        return periodogram;
+    }
+
+    private Optional<Periodogram> loadPeriodogram(long bundleId) {
         return jdbc.sql("""
                         SELECT bundle_id, period_min_days, period_max_days, n_periods, power
                           FROM periodograms
@@ -99,6 +152,13 @@ public class GoldCatalogRepository {
                 .param("bundleId", bundleId)
                 .query(this::toPeriodogram)
                 .optional();
+    }
+
+    private boolean isCurrent(long ticId, long bundleId) {
+        return jdbc.sql("SELECT 1 FROM publication_bundles"
+                        + " WHERE id = :bundleId AND tic_id = :ticId AND status = 'current'")
+                .param("bundleId", bundleId).param("ticId", ticId)
+                .query(Integer.class).optional().isPresent();
     }
 
     /**
