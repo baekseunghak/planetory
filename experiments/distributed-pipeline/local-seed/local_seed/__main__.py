@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     seed.add_argument("--database-url", help="postgresql://… (기본 SEED_DATABASE_URL 또는 로컬 Compose)")
     seed.add_argument("--schema", default="public", help="대상 스키마(기본 public)")
     seed.add_argument("--allow-non-local", action="store_true",
-                      help="실제 접속 주소가 이 PC(루프백·Unix 소켓)가 아닌 DB 도 허용")
+                      help="URL·PG* 환경변수나 실제 접속 주소가 이 PC(루프백·Unix 소켓) 밖인 DB 도 허용")
     seed.add_argument("--skip-migration-check", action="store_true",
                       help="flyway_schema_history 없이 마이그레이션 SQL 을 직접 적용한 검증용 스키마")
     seed.add_argument("--no-settings", action="store_true", help="튜토리얼·챌린지 설정을 넣지 않는다")

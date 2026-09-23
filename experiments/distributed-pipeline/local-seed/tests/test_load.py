@@ -18,6 +18,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from local_seed import __main__ as cli
+from local_seed import load
 from local_seed.load import (SeedError, apply_settings, connect, preflight, publish_star,
                              repository_migration_version)
 
@@ -186,20 +187,39 @@ def test_local_check_uses_the_address_libpq_connected_to():
         conn.close()
 
 
-def test_rerun_recovers_failed_post_processing(fresh_schema, payloads, backend, down_url, monkeypatch):
-    """리뷰 P2: 첫 실행에서 판 전환 후처리가 실패하면 종료 코드 1 이고, 같은 명령을 다시 실행하면 이미 current 인
-    판까지 전부 다시 알려 복구된다."""
+def test_remote_endpoint_is_refused_on_a_real_connection(monkeypatch):
+    """거절 경로를 실제 psycopg 연결로 본다. 닫은 연결의 info 는 읽을 수 없어, 메시지는 닫기 전에 만들어야 한다.
+    원격 DB 를 띄우지 않고 실제 주소 판정만 원격으로 바꿔 넣는다."""
+    monkeypatch.setattr(load, "is_local_endpoint", lambda host, hostaddr: False)
+    with pytest.raises(SeedError) as caught:
+        connect(URL, "public")
+    assert caught.value.code == "NOT_LOCAL" and "실제 접속 주소" in str(caught.value)
+
+
+@pytest.mark.parametrize("first_run", ["no-notify", "http-503", "backend-down"])
+def test_rerun_notifies_every_current_bundle(first_run, fresh_schema, payloads, backend, down_url, monkeypatch):
+    """리뷰 P2: 첫 실행에서 알림을 생략했거나 후처리가 실패해도, 같은 명령을 --notify-backend 로 다시 실행하면 이미
+    current 인 판까지 전부 알려 복구된다. 후처리가 실패한 실행은 종료 코드 1 이다."""
     monkeypatch.setattr(cli, "build", lambda: payloads)
     monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "local-test-token")
-    args = ["seed", "--database-url", URL, "--schema", fresh_schema, "--skip-migration-check", "--notify-backend"]
+    seed = ["seed", "--database-url", URL, "--schema", fresh_schema, "--skip-migration-check"]
 
-    assert cli.main(args + [down_url]) == 1                 # 백엔드가 꺼져 있다. 적재는 끝났고 알림만 실패
+    if first_run == "no-notify":                                    # 알림 없이 적재
+        assert cli.main(seed) == 0
+        assert backend.requests == []
+    elif first_run == "http-503":
+        backend.default_status = 503
+        assert cli.main(seed + ["--notify-backend", backend.url]) == 1
+        assert len(backend.requests) == len(payloads)                  # 실패해도 판마다 시도한다
+    else:
+        assert cli.main(seed + ["--notify-backend", down_url]) == 1     # 적재는 끝났고 알림만 실패
     with psycopg.connect(URL) as conn:
         current = {r[0] for r in conn.execute(
             sql.SQL("SELECT id FROM {} WHERE status = 'current'").format(
                 sql.Identifier(fresh_schema, "publication_bundles"))).fetchall()}
     assert len(current) == len(payloads)
 
-    assert cli.main(args + [backend.url]) == 0              # 모두 ALREADY_PUBLISHED 지만 다시 알린다
+    backend.default_status, backend.requests = 200, []
+    assert cli.main(seed + ["--notify-backend", backend.url]) == 0      # 모두 ALREADY_PUBLISHED 지만 다시 알린다
     assert sorted(b for b, _ in backend.requests) == sorted(current)
     assert {token for _, token in backend.requests} == {"local-test-token"}

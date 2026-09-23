@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 import ipaddress
+import os
 import re
 import urllib.error
 import urllib.request
@@ -25,6 +26,7 @@ from pathlib import Path
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from .canonical import array_checksum, normalize_array, record_checksum
@@ -65,30 +67,63 @@ def num(value) -> Decimal | None:
     return None if value is None else Decimal(repr(float(value)))
 
 
-def is_local_endpoint(host: str, hostaddr: str) -> bool:
-    """연결된 곳이 이 PC 인지 본다.
+def _is_loopback(text: str) -> bool:
+    try:
+        address = ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return (getattr(address, "ipv4_mapped", None) or address).is_loopback
 
-    URL 문자열로 판정하지 않는다. libpq 는 hostaddr·service 파일·PGHOST 환경변수 때문에 URL 의 host 와 다른
-    곳에 붙을 수 있다. 그래서 연결이 성립한 뒤의 값을 받는다. TCP 연결이면 실제로 붙은 숫자 주소(hostaddr)가
-    루프백이어야 하고, 주소가 없으면 Unix 소켓 경로여야 한다.
+
+def _is_local_host(host: str) -> bool:
+    """libpq host 값 하나가 이 PC 인지. 비어 있으면 libpq 기본값(Unix 소켓 또는 localhost)이다."""
+    return host in ("", "localhost") or host.startswith(("/", "@")) or _is_loopback(host)
+
+
+def conninfo_problem(url: str) -> str | None:
+    """접속하기 전에 URL 과 libpq 환경변수만 보고, 이 PC 밖을 가리키면 그 이유를 돌려준다.
+
+    libpq 는 hostaddr 가 있으면 host 가 아니라 그 주소로 붙고, URL 에 없는 값은 PGHOST·PGHOSTADDR·PGSERVICE
+    환경변수로 채운다. service 는 pg_service.conf 를 읽어야 어디로 붙는지 알 수 있어 받지 않는다. 이름 해석(hosts
+    파일 등)까지는 보지 않으므로 접속한 뒤 실제 주소를 한 번 더 본다(is_local_endpoint).
+    """
+    params = conninfo_to_dict(url)
+    service = params.get("service") or os.environ.get("PGSERVICE")
+    if service:
+        return f"service={service} 는 pg_service.conf 에 따라 어디로든 붙을 수 있다"
+    hostaddr = params.get("hostaddr") or os.environ.get("PGHOSTADDR")
+    if hostaddr:
+        if all(_is_loopback(a.strip()) for a in str(hostaddr).split(",")):
+            return None
+        return f"hostaddr={hostaddr} 가 루프백 주소가 아니다(libpq 는 host 가 아니라 이 주소로 붙는다)"
+    host = str(params.get("host") or os.environ.get("PGHOST") or "")
+    if all(_is_local_host(h.strip()) for h in host.split(",")):
+        return None
+    return f"host={host} 가 이 PC 가 아니다"
+
+
+def is_local_endpoint(host: str, hostaddr: str) -> bool:
+    """연결이 성립한 뒤 libpq 가 알려 주는 값으로 붙은 곳이 이 PC 인지 본다.
+
+    클라이언트가 실제로 붙은 숫자 주소(PQhostaddr)를 본다. 서버가 보는 자기 주소(inet_server_addr)는 Docker 공개
+    포트로 붙으면 컨테이너 네트워크 주소라 쓰지 않는다. TCP 연결이면 이 주소가 루프백이어야 하고, 주소가 없으면
+    Unix 소켓 경로여야 한다.
     """
     if hostaddr:
-        try:
-            address = ipaddress.ip_address(hostaddr)
-        except ValueError:
-            return False
-        return (getattr(address, "ipv4_mapped", None) or address).is_loopback
+        return _is_loopback(hostaddr)
     return host.startswith(("/", "@"))
 
 
 def connect(url: str, schema: str, *, allow_non_local: bool = False) -> psycopg.Connection:
-    """연결한 뒤 실제 접속 주소가 이 PC 가 아니면 아무것도 읽거나 쓰기 전에 닫는다."""
+    """이 PC 의 DB 에만 붙는다. 접속 전에는 URL·환경변수로, 접속 뒤에는 실제로 붙은 주소로 본다."""
+    refusal = "공유·운영 DB 에는 적재하지 않는다(정말 필요하면 --allow-non-local)"
+    if not allow_non_local and (problem := conninfo_problem(url)):
+        raise SeedError("NOT_LOCAL", f"{problem}. {refusal}")
     conn = psycopg.connect(url, autocommit=True)
-    endpoint = conn.info.hostaddr or conn.info.host
     if not allow_non_local and not is_local_endpoint(conn.info.host, conn.info.hostaddr):
+        endpoint = f"{conn.info.hostaddr or conn.info.host}:{conn.info.port}"     # 닫은 뒤에는 info 를 읽을 수 없다
         conn.close()
-        raise SeedError("NOT_LOCAL", f"실제 접속 주소 {endpoint}:{conn.info.port} 가 이 PC 가 아니다. 공유·운영 DB 에는 "
-                                     "적재하지 않는다(정말 필요하면 --allow-non-local)")
+        raise SeedError("NOT_LOCAL", f"실제 접속 주소 {endpoint} 가 이 PC 가 아니다. {refusal}")
     conn.execute(sql.SQL("SET search_path TO {}, public").format(sql.Identifier(schema)))
     return conn
 

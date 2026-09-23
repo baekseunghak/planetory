@@ -17,6 +17,7 @@ class FakeBackend:
     """판 전환 후처리 요청을 기록하고 판마다 정한 상태 코드로 답하는 로컬 HTTP 서버."""
 
     def __init__(self):
+        self.default_status = 200
         self.statuses: dict[int, int] = {}
         self.requests: list[tuple[int, str | None]] = []
         backend = self
@@ -25,7 +26,7 @@ class FakeBackend:
             def do_POST(self):
                 bundle_id = int(self.path.removeprefix("/internal/bundles/b-").removesuffix("/activated"))
                 backend.requests.append((bundle_id, self.headers.get("X-Planetory-Service-Token")))
-                self.send_response(backend.statuses.get(bundle_id, 200))
+                self.send_response(backend.statuses.get(bundle_id, backend.default_status))
                 self.send_header("Content-Length", "0")
                 self.end_headers()
 
