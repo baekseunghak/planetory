@@ -54,15 +54,18 @@ class RedisSessionIntegrationTest {
             return new InMemoryClientRegistrationRepository(client("google", true), client("ssafy", false));
         }
         static ClientRegistration client(String name, boolean oidc) {
+            return client(name, oidc, IDP);
+        }
+        static ClientRegistration client(String name, boolean oidc, AuthIntegrationTest.TestIdentityProvider provider) {
             var builder = ClientRegistration.withRegistrationId(name).clientId("test-client").clientSecret("test-secret")
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}")
-                    .authorizationUri(IDP.url() + "/authorize").tokenUri(IDP.url() + "/token")
-                    .userInfoUri(IDP.url() + "/userinfo").userNameAttributeName(oidc ? "sub" : "userId")
+                    .authorizationUri(provider.url() + "/authorize").tokenUri(provider.url() + "/token")
+                    .userInfoUri(provider.url() + "/userinfo").userNameAttributeName(oidc ? "sub" : "userId")
                     .clientAuthenticationMethod(oidc ? ClientAuthenticationMethod.CLIENT_SECRET_BASIC
                             : ClientAuthenticationMethod.CLIENT_SECRET_POST)
                     .scope(oidc ? new String[]{"openid", "profile"} : new String[]{});
-            if (oidc) builder.issuerUri(IDP.url()).jwkSetUri(IDP.url() + "/jwks");
+            if (oidc) builder.issuerUri(provider.url()).jwkSetUri(provider.url() + "/jwks");
             return builder.build();
         }
     }

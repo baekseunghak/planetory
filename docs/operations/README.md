@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | Dockerfile·Compose·로컬 실행 | [Docker 개발·배포 기준](docker.md) | 실행 방식 정본 |
 | GitLab 파이프라인·배포 경계 | [GitLab CI/CD](cicd.md) | CI/CD 기준과 미검증 항목 |
+| prod 쿠키·인증 DB 중단 응답 | [인증 런타임 실측(235)](auth-runtime-verification-235.md) | 격리 검증 기록·운영 인수 경계 |
 | 팀원 Tailscale 등록·프로젝트 서버 접속 | [Tailscale 팀 서버 접근](tailscale-team-access.md) | 승인 절차와 팀원 접근 범위 |
 | GCP 노드 점검·종료 | [GCP 노드 운영 런북](gcp-node-runbook.md) | 사설망·FQDN·방화벽·비용 점검 절차 |
 | 주간 챌린지 회차 전환·회차 별 일괄 발견 | [챌린지 회차 전환 런북](challenge-round-runbook.md) | 초안. 명령 구현 완료, 서버 실행 미검증 |
