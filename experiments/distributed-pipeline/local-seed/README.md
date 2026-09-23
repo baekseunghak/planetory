@@ -120,7 +120,7 @@ docker compose exec service-db psql -U planetory -d planetory_poc -c "CREATE ROL
 docker compose exec service-db pg_restore -U planetory -d planetory_poc --no-owner /tmp/planetory-seed.dump
 ```
 
-역할은 DB 클러스터 전역이라 덤프에 들어가지 않는다. 새 볼륨에는 역할이 없으므로 복원 전에 마이그레이션이 만드는 역할(V2의 두 역할, V21의 `planetory_stats_job`)을 먼저 만든다. 역할이 없으면 `pg_restore`가 `role "…" does not exist` 오류와 함께 종료 코드 1로 끝나고 그 권한이 빠진다. 이후 마이그레이션이 역할을 더 만들어 같은 오류가 나오면 그 역할도 `NOLOGIN`으로 만들고 빈 DB부터 다시 복원한다. 복원 뒤 백엔드를 띄우면 Flyway가 기존 이력을 검증하고 덤프 이후의 마이그레이션만 이어서 적용한다.
+역할 세 개를 먼저 만드는 이유와 빠뜨렸을 때의 증상은 [운영 규칙 런북](../../../docs/operations/operation-rule-runbook.md) 7절을 따른다. 복원 뒤 백엔드를 띄우면 Flyway가 기존 이력을 검증하고 덤프 이후의 마이그레이션만 이어서 적용한다.
 
 ## 검증
 

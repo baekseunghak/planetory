@@ -192,3 +192,4 @@
 | 2026-09-23 | 곡선 표시·접기 중심 기준과 제출 판정 시작 기준 구분 | S15P21C206-247 | bin 중심, 5.2, 6.2, 8.3, CURRENT, SUBMITTED, v0 보존 | 문서 정정·단위 28개·타입 검사 통과 | [기록](2026-09-23.md) |
 | 2026-09-23 | 247 담당자 리뷰 반영·부분 bin 및 워커 용어·근거 상태 보완 | S15P21C206-247 | D06, 부분 bin, Web Worker, 관측 창 제안 | 문서 보완, 관측 창 대안 미승인 | [기록](2026-09-23.md) |
 | 2026-09-23 | 분석 진입이 섹터별 비닝 revision을 받도록 정정 | S15P21C206-256 | binningRevision, 5.1, 500, Gold 4.1, segment_revision, 다중 섹터 | 구현 완료, 백엔드·시드 테스트 통과 | [기록](2026-09-23.md) |
+| 2026-09-23 | 백업 복원 전 역할 생성을 운영 규칙 런북 7절에 추가 | S15P21C206-256 | pg_restore, role does not exist, planetory_gold_writer, planetory_app, planetory_stats_job, 새 볼륨 | 로컬 일회용 DB 검증 완료 | [기록](2026-09-23.md) |

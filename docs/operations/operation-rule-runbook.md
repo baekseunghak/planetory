@@ -100,6 +100,18 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 ## 7. 백업 복원·데이터 이관
 
 - 스키마와 데이터를 함께 빈 DB에 복원하면 그대로 된다. `pg_dump` 출력은 데이터(`COPY`)를 먼저 넣고 트리거를 나중에 만든다. 이때 복원할 DB에 Flyway를 먼저 돌리지 않는다.
+- 새 클러스터(새 볼륨)에 복원할 때는 마이그레이션이 만드는 역할을 먼저 만든다. 역할은 DB가 아니라 클러스터 전역이라 `pg_dump`에 들어가지 않고, 복원 전에는 Flyway를 돌리지 않으므로 V2·V21이 역할을 만들 기회도 없다.
+
+  ```sql
+  CREATE ROLE planetory_gold_writer NOLOGIN;  -- V2
+  CREATE ROLE planetory_app NOLOGIN;          -- V2
+  CREATE ROLE planetory_stats_job NOLOGIN;    -- V21
+  ```
+
+  - 역할이 없으면 `pg_restore`가 `role "…" does not exist` 오류를 내고도 나머지를 복원한 뒤 종료 코드 1로 끝난다. 테이블과 데이터는 들어가지만 그 역할의 권한이 빠진 DB가 된다. 이렇게 끝났으면 역할을 만든 뒤 빈 DB부터 다시 복원한다.
+  - 접속 계정에 역할을 주는 `GRANT planetory_app TO …` 같은 소속도 클러스터 전역이라 덤프에 없다. 배포 설정대로 다시 준다(V2 머리말).
+  - 이후 마이그레이션이 역할을 더 만들면 그 역할도 먼저 만든다. 목록은 마이그레이션의 `CREATE ROLE`에서 찾는다.
+  - V23까지 적용한 로컬 일회용 PostgreSQL 18.6에서 확인했다. 역할이 없으면 오류 75건과 종료 코드 1, V2 역할만 있으면 `planetory_stats_job` 오류 8건, 셋 다 있으면 종료 코드 0과 세 역할의 권한을 봤다(S15P21C206-256). 운영 DB에서는 실행해 보지 않았다.
 - 이미 마이그레이션한 DB에 데이터만 넣으면 거절된다. `pg_restore --data-only`나 운영 데이터를 개발 DB로 복사하는 작업이 여기에 해당한다. `COPY`도 행 트리거를 실행하기 때문이다.
   - `operation_settings`: 원본 행은 적용 시각이 모두 지났다(`trg_operation_settings_keep_history`).
   - `tutorial_stars`·`challenge_rounds`: 원본에 대상 별이 나중에 숨겨진 행이 있을 수 있다(`trg_tutorial_stars_published`, `trg_challenge_rounds_published`).
