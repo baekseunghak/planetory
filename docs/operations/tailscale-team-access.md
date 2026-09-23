@@ -86,6 +86,15 @@ scp <로컬-파일> SSAFY@node-1:<원격-경로>
 
 별칭의 실제 주소·키 경로는 각 작업 PC의 `.ssh/config`에서만 확인하고 문서에 고정하지 않는다. 별칭이 없는 PC에서는 관리자에게 설정을 받는다. 2026-09-23 작업 PC에서 `ec2-a-ssh`·`ec2-b-ssh`·`node-1-ssh`·`node-2-ssh`가 `hostname -s`에 응답했다.
 
+**배포 계정 `deploy`로는 사람 PC에서 직접 접속하지 않는다.** tailnet ACL이 CI Runner(`ec2-b`)의 신원에만 허용하므로 `tailscale ssh deploy@ec2-a`는 `tailnet policy does not permit you to SSH as user "deploy"`로 거부된다(2026-09-23 확인). 사람이 서비스 노드에서 배포 스크립트를 돌릴 때는 관리 계정으로 접속한 뒤 `sudo -u deploy`로 배포 경로에서 실행한다.
+
+```sh
+ssh ec2-a-ssh   # 또는 tailscale ssh ubuntu@ec2-a
+sudo -u deploy sh -c "cd /home/deploy/planetory && ... sh deploy.sh"
+```
+
+`~ubuntu/planetory/infra/service`는 CI 도입 전 수동 기동 때의 옛 사본이다. `deploy.sh`가 없고 `.env`의 이미지 선언도 낡았다. 배포 경로는 [CI/CD](cicd.md) 「배포 접속」의 `deploy` 계정 경로다.
+
 접속 경로를 바꿔도 운영을 바꾸는 명령의 확인 절차는 그대로다. 배포·설정 교체·삭제는 [AGENTS.md](../../AGENTS.md)의 안전 가드레일을 따른다.
 
 호스트 키 검증을 `StrictHostKeyChecking=no`로 우회하거나 개인 키 내용을 공유하지 않는다.
