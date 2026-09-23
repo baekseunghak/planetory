@@ -64,6 +64,10 @@ Nginx 검사는 백엔드 DNS가 없는 상태의 정적 화면 기동, API 502 
 
 ### 리뷰와 배포 인계
 
+MR !198의 P3 리뷰에서 `test:nginx`가 고유 테스트 이미지 태그를 남기는 문제를 확인했다. 빌드 성공 여부를 기록하고 종료 시 이번 실행의 이미지 태그만 삭제한다. 브라우저·각 컨테이너·네트워크·이미지 정리는 독립적으로 시도하며, 정리 오류가 원래 테스트 예외를 덮거나 나머지 정리를 막지 않게 했다. 정리 실패는 별도 경고와 실패 종료 코드로 알린다. 공용 이미지·빌드 캐시 정리는 하지 않는다.
+
+보완 후 `npm run test:nginx`의 실제 Docker/Nginx·Chrome **9개를 재실행하여 통과**했다. 실행 ID `planetory-239-125596-1790126259714`로 조회한 잔여 테스트 이미지·컨테이너·네트워크는 각각 0개다. `node --check`, 변경 스크립트 Prettier·문서 링크·diff 검사도 통과했다.
+
 일반 MR은 `fix/S15P21C206-239-web-proxy-errors`에서 `develop`을 대상으로 하며 비작성자 리뷰 후 병합한다. 현재 Jira는 `해야 할 일`로 확인했으며 이번 제출에서 상태를 바꾸지 않는다. 실제 배포 담당자는 변경 이미지의 SHA를 확인하고 배포된 Nginx/백엔드를 통한 원래 HTTPS 콜백을 확인한다. 이 티켓의 로컬 수정 완료를 서비스 전체 인수(216)나 배포 완료로 표시하지 않는다.
 
 기술 근거: [Nginx proxy_pass의 변수·resolver 동작](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass), [Nginx 상대 리다이렉트](https://nginx.org/en/docs/http/ngx_http_core_module.html#absolute_redirect).

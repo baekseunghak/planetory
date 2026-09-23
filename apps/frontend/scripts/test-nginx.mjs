@@ -21,6 +21,7 @@ const created = [];
 const results = [];
 const startedAt = new Date().toISOString();
 let networkCreated = false;
+let imageBuilt = false;
 let browser;
 await mkdir(output, { recursive: true });
 // A failed rerun must not leave the previous run's success as current evidence.
@@ -72,6 +73,7 @@ try {
       timeout: 600000,
     },
   );
+  imageBuilt = true;
   // A dedicated bridge permits the host Chrome test to reach the loopback port.
   docker("network", "create", id);
   networkCreated = true;
@@ -360,7 +362,19 @@ try {
   }
   throw error;
 } finally {
-  await browser?.close();
-  for (const container of created.reverse()) docker("rm", "-f", container);
-  if (networkCreated) docker("network", "rm", id);
+  // Each cleanup is independent: a failure must not skip later resources or
+  // replace the original test exception. Remove only this run's unique tag.
+  const cleanup = async (resource, run) => {
+    try {
+      await run();
+    } catch (error) {
+      console.warn(`CLEANUP FAILED ${resource}: ${error.message}`);
+      process.exitCode = 1;
+    }
+  };
+  await cleanup("browser", () => browser?.close());
+  for (const container of created.reverse())
+    await cleanup(container, () => docker("rm", "-f", container));
+  if (networkCreated) await cleanup(id, () => docker("network", "rm", id));
+  if (imageBuilt) await cleanup(image, () => docker("image", "rm", image));
 }

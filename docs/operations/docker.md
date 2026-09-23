@@ -52,7 +52,7 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 
 `service_unavailable`은 Nginx가 만드는 화면 복귀 코드다. API의 `DEPENDENCY_UNAVAILABLE` 계약이나 외부 OAuth 제공자 설정을 바꾸지 않는다. 화면은 일시 장애를 안내하고 로그인 요청을 자동으로 반복하지 않으며 기존 복귀 목적지를 유지한다.
 
-재현: `apps/frontend`에서 `npm run test:nginx`를 실행한다. 실제 Dockerfile의 기본 runtime 이미지와 별도 합성 백엔드·네트워크를 사용하며 Chrome으로 오류 화면을 확인한다. 테스트가 만든 컨테이너와 네트워크만 종료한다. [239 변경 범위·검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)에서 로컬 검증과 실제 배포 검증을 구분한다.
+재현: `apps/frontend`에서 `npm run test:nginx`를 실행한다. 실제 Dockerfile의 기본 runtime 이미지와 별도 합성 백엔드·네트워크를 사용하며 Chrome으로 오류 화면을 확인한다. 종료 시 이번 실행의 컨테이너·네트워크·고유 테스트 이미지 태그만 정리한다. 정리 실패는 원래 테스트 예외를 덮지 않고 별도 경고와 실패 종료 코드로 알리며 나머지 정리를 계속한다. 공용 이미지·빌드 캐시는 일괄 삭제하지 않는다. [239 변경 범위·검증 기록](../../apps/frontend/docs/ticket-239-readiness.md)에서 로컬 검증과 실제 배포 검증을 구분한다.
 
 ```text
 기준 브랜치 변경
