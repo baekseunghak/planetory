@@ -179,3 +179,4 @@
 | 2026-09-22 | 122 후보 기반 외부 조인 회귀 준비 | S15P21C206-124 | fixture IDs, held_rows, reference_changes | 합성 검증 완료·연결 회귀 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 외부 카탈로그 후보 연결 696cda44 검산 | S15P21C206-124 | 18 IDs, 99 scenarios, 79 checksums, hold | 로컬 검증 완료·리뷰 대기 | [기록](2026-09-22.md) |
 | 2026-09-23 | 외부 카탈로그 승인 리뷰 보완 | S15P21C206-124 | None TIC, 빈 합집합, hold 진단 참조 | 커널 300·bench 6개 통과 | [기록](2026-09-23.md) |
+| 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | 구현·격리 검증 완료, 렌더러 수동 배포·Redis 배포 전 | [기록](2026-09-23.md) |

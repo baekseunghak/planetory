@@ -35,6 +35,10 @@
 # check-production 순서라 타입 오류·번들 실패·프로덕션 위생을 한 job이 모두 잡는다.
 web:build:
   extends: .web-checks
+  # 배포 이미지와 같은 번들을 만든다. 플래그가 꺼지면 vite가 렌더러 import를 죽은
+  # 코드로 지워 번들링 오류가 MR에서 보이지 않는다. web:image는 src 변경에 돌지 않는다.
+  variables:
+    VITE_SKY_RENDERER_ENABLED: "true"
   script:
     - npm run build
 
@@ -54,7 +58,7 @@ web:image:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
-    BUILD_ARGS: ""
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
     CHECK_TAG: ci-check/frontend:$CI_COMMIT_SHORT_SHA
   # 푸시하지 않으므로 레지스트리가 필요 없다. .docker-build의 전제 검사를 비운다.
   before_script: []
@@ -69,17 +73,18 @@ web:image:
         - apps/frontend/package-lock.json
         - .gitlab/ci/apps/frontend.yml
 
+# 빌드 인자가 이 파일에 있으므로 이 파일만 바뀌어도 이미지가 달라진다. 규칙에 넣는다.
 build:frontend:
   extends: .docker-build
   variables:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
-    BUILD_ARGS: ""
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
+      changes: [apps/frontend/**/*, .gitlab/ci/apps/frontend.yml]
 
 # 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:frontend:ec2-a:
@@ -95,5 +100,5 @@ deploy:frontend:ec2-a:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
+      changes: [apps/frontend/**/*, .gitlab/ci/apps/frontend.yml]
       when: manual

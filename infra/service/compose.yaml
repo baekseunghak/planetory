@@ -34,6 +34,43 @@ services:
     networks:
       - service
 
+  # 세션 저장소와 캐시는 서로 다른 인스턴스여야 한다. 백엔드가 기동 시 host+port가
+  # 같으면 거부한다(RedisSessionConfig). 캐시 eviction이 로그인 세션을 지우는 것을
+  # 막는 경계이므로 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+  #
+  # 둘 다 외부 인바운드 0개다. 호스트 포트를 열지 않고 service 네트워크 안에서만
+  # 붙으므로 requirepass를 걸지 않는다. 노출을 늘릴 때 .env로 비밀번호를 넣는다.
+  session-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    # 기본 RDB 저장점을 그대로 쓴다. 볼륨이 없으면 재시작마다 전원 로그아웃이다.
+    # maxmemory도 걸지 않는다. 세션은 evict 대상이 아니다.
+    volumes:
+      - session-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
+  # 잔차·주기도 캐시용(SRS v0.15). 소비처는 아직 없고 지금은 백엔드 기동 요건만
+  # 채운다. 재생성 가능한 파생물이라 볼륨을 두지 않고 저장도 끈다.
+  cache-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
   backend:
     image: ${BACKEND_IMAGE:-local/planetory-backend:not-configured}
     platform: linux/amd64
@@ -55,11 +92,21 @@ services:
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
       GOLD_ROOT: /gold
+      # 주소를 .env로 빼지 않는다. compose가 정의한 서비스 이름이 곧 주소이고,
+      # .env에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않는다.
+      SESSION_REDIS_HOST: session-redis
+      SESSION_REDIS_PORT: "6379"
+      CACHE_REDIS_HOST: cache-redis
+      CACHE_REDIS_PORT: "6379"
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     depends_on:
+      session-redis:
+        condition: service_healthy
+      cache-redis:
+        condition: service_healthy
       service-db:
         condition: service_healthy
     networks:
@@ -424,3 +471,7 @@ volumes:
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
     name: planetory-service-db-data
+
+  # 세션 저장소. 사라지면 전원 로그아웃이지만 데이터 손실은 아니다.
+  session-redis-data:
+    name: planetory-session-redis-data

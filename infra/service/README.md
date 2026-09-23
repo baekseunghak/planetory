@@ -16,6 +16,31 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 마운트 경로 `/var/lib/postgresql`은 postgres:18에서 바뀐 규약이다. 17 이하의 `/var/lib/postgresql/data`로 되돌리면 깨진다.
 
+## 세션·캐시 Redis
+
+Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 잔차·주기도 캐시용이다(SRS v0.15). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
+
+`RedisSessionConfig`가 기동 시 두 주소를 비교해 **host와 port가 모두 같으면 예외를 던지고 앱을 띄우지 않는다.** 캐시 eviction이 로그인 세션을 지우는 것을 막는 경계이므로, 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+
+주소는 `.env`가 아니라 `compose.yaml`이 서비스 이름으로 직접 준다(`session-redis:6379`, `cache-redis:6379`). `.env`에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않기 위해서다.
+
+| | 저장 | maxmemory | 잃으면 |
+| --- | --- | --- | --- |
+| `session-redis` | 볼륨 `planetory-session-redis-data`, 기본 RDB 저장점 | 없음(세션은 evict 대상이 아니다) | 전원 로그아웃. 데이터 손실은 아니다 |
+| `cache-redis` | 없음(`--save ""`) | 128mb, `allkeys-lru` | 없음. 재생성 가능한 파생물이다 |
+
+`requirepass`를 걸지 않는다. 네트워크 밖에서 닿을 수 없기 때문이다. 노출을 늘리는 변경을 하면 그때 `SESSION_REDIS_PASSWORD`·`CACHE_REDIS_PASSWORD`를 `.env`로 넣는다. 두 변수는 Backend가 이미 읽는다.
+
+### 최초 기동은 수동이다
+
+`deploy.sh`는 `docker compose up -d --no-deps <service>`로 교체하므로 **의존 서비스를 만들지 않는다.** `service-db`와 마찬가지로 두 Redis도 배포 노드에서 한 번 직접 띄운다. 이후 배포는 이미 도는 컨테이너를 그대로 쓴다.
+
+```sh
+cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
+```
+
+캐시 소비처는 아직 없다. `cache-redis`는 현재 Backend 기동 요건만 채우며, 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+
 ## 계정 분리
 
 접속 계정은 둘이다. 소유자는 GRANT/REVOKE의 영향을 받지 않으므로 나누지 않으면 권한 분리가 성립하지 않는다(`V2__gold_roles.sql` 주석).

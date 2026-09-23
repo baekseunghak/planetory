@@ -22,7 +22,7 @@
 | Tunnel connector | EC2-A 한 곳. 여러 곳에 붙여도 분산되지 않으므로 EC2-B에는 두지 않는다(D4) |
 | 로그인 | Google·SSAFY 둘 다 성공. 회원 생성·튜토리얼 별 지급까지 동작 |
 | DB | `service-db`(PostgreSQL 18.6), Flyway 마이그레이션 적용, 영속 볼륨 `planetory-service-db-data` |
-| 별지도 | 데이터 조회까지 동작. 렌더러는 Dockerfile 기본값이 꺼짐이라 화면은 데이터 상태만 표시한다 |
+| 별지도 | 렌더러를 켠 이미지로 교체(2026-09-23, `S15P21C206-254`). 아래 「수동 배포한 렌더러 이미지」 참고 |
 
 **프론트엔드와 백엔드 모두 CI 이미지로 교체됐다(2026-09-21·22).** 두 컨테이너 다 커밋 SHA 태그를 달고 있어 어느 커밋인지 추적된다. 손으로 빌드한 `:local` 이미지는 더 이상 쓰이지 않는다.
 
@@ -40,19 +40,50 @@
 
 백엔드가 발급하는 OAuth 리다이렉트 주소도 `app.planetory.space`다. 목업 호스트에서는 로그인 흐름이 성립하지 않는다.
 
-## 별지도 렌더러는 꺼진 채 빌드된다
+## develop 배포가 요구하는 설정 둘 (S15P21C206-254)
 
-`Dockerfile`의 `VITE_SKY_RENDERER_ENABLED` 기본값이 `false`이고 CI의 `BUILD_ARGS`가 비어 있다. 배포본 자산에 WebGL 코드가 한 줄도 없다(`createShader`·`compileShader`·`drawArrays` 각 0건).
+MR `!161` 병합 뒤 develop 배포에서 두 가지가 깨졌다. 코드가 먼저 들어오고 배포 설정이 따라오지 않은 경우다. 브랜치 `fix/S15P21C206-254-infra-deploy-config-gaps`에 **구현했고 아직 배포하지 않았다.**
 
-이 MR이 만든 결함이 아니라 원래 미완으로 남아 있던 항목이다. [렌더러 문서](../../apps/frontend/docs/galaxy-renderer.md)도 "실제 배포는 별도 인수"라고 적고 있다.
+### 백엔드: Redis가 없어 기동 실패 → 롤백
 
-켜려면 이미지를 다시 빌드해야 한다. 서버 환경변수를 바꾸거나 재시작하는 것으로는 적용되지 않는다. 빌드 시점 값이기 때문이다.
+`RedisSessionConfig`가 세션·캐시 Redis 주소 넷을 필수로 읽는데 `compose.yaml`에 Redis도 주소도 없었다. `deploy.sh`의 헬스 확인이 실패를 잡아 직전 이미지로 되돌렸고(실환경 첫 롤백), 서비스는 유지됐다.
 
-```
---build-arg VITE_SKY_RENDERER_ENABLED=true
-```
+- `session-redis`·`cache-redis` 두 서비스를 compose에 넣었다. 두 인스턴스는 host+port가 달라야 하며, 같으면 앱이 기동을 거부한다.
+- 주소는 **`.env`가 아니라 compose가 서비스 이름으로 직접 준다.** 티켓은 `.env`에 넣도록 적었지만, 그러면 `.env`에서 하나만 빠져도 같은 기동 실패가 되풀이된다.
+- 세션은 볼륨·RDB 저장, eviction 없음. 캐시는 저장 없음, 128mb `allkeys-lru`.
+- 캐시 소비처는 아직 없다. 지금은 기동 요건만 채운다.
 
-켜더라도 계정이 가진 별만 보인다. 시제품처럼 수천 개가 나타나는 것은 아니다.
+EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-23). 두 컨테이너 healthy, 설정값이 위와 일치, 재시작 후 세션 키 유지·캐시 키 소실, 호스트 포트 게시 없음. 백엔드 앱과 붙인 검증은 배포 때 한다.
+
+**최초 기동은 수동이다.** `deploy.sh`는 `--no-deps`로 교체하므로 의존 서비스를 만들지 않는다. 절차는 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
+
+### 프론트: 별지도 렌더러가 꺼진 채 빌드
+
+`Dockerfile`의 `VITE_SKY_RENDERER_ENABLED` 기본값이 `false`이고 CI의 `BUILD_ARGS`가 비어 있었다. 별지도 자리에 "지도 시각화 연결을 준비하고 있습니다" 문구만 나온다.
+
+- `build:frontend`·`web:image`가 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 빌드한다. MR의 `web:build`도 같은 값으로 번들링한다.
+- `build:frontend`·`deploy:frontend:ec2-a` 규칙에 `.gitlab/ci/apps/frontend.yml`을 넣었다. 빌드 인자가 이 파일에 있어 이 파일만 바뀌어도 이미지가 달라진다.
+- 빌드 시점 값이다. 서버 환경변수나 재시작으로는 적용되지 않는다.
+
+**판별 기준을 바꿨다.** 티켓을 쓸 때의 근거였던 WebGL 호출(`createShader` 등) 개수는 이제 쓸 수 없다. 로그인 화면과 미리보기가 렌더러 모델을 가져오면서 플래그와 무관하게 번들에 들어가기 때문이다. 대신 **메인 청크가 `GalaxyPage`와 `GalaxyScene` 청크를 참조하는지** 본다. 로컬 빌드에서 켜면 3회·1개, 끄면 0·0이다.
+
+켜더라도 계정이 가진 별만 보인다. 시제품처럼 수천 개가 나타나지 않는다.
+
+### 수동 배포한 렌더러 이미지 (2026-09-23)
+
+브랜치 병합을 기다리지 않고 프론트만 먼저 켰다. **운영 중이던 커밋 `80a860fa` 그대로에 플래그만 더해** EC2-A에서 빌드했다. 코드 차이는 렌더러 하나다.
+
+- 이미지: `frontend:80a860fa…-sky`. CI가 같은 SHA로 만든 이미지를 덮어쓰지 않도록 접미사를 붙였다.
+- `deploy.sh`로 교체했다. 헬스 통과, `.env`에 기록됐다.
+- 공개 주소 확인: 메인 청크가 `GalaxyPage`를 3회 참조하고 렌더러 청크가 200으로 내려온다. 교체 전 이미지는 0회였다.
+
+**이 브랜치가 병합되기 전에 develop 프론트를 CI로 배포하면 렌더러가 다시 꺼진다.** 병합 뒤부터는 CI가 항상 켜서 빌드한다.
+
+레지스트리의 `frontend:ed7d72d2…-sky`는 잘못 고른 기준으로 만든 이미지다. 쓰이지 않는다.
+
+### 배포 경로를 혼동하지 않는다
+
+CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `deploy.sh`, 실제 `.env`, `backups/`가 여기 있다. `~ubuntu/planetory/infra/service`는 09-21 이전 수동 기동 때의 사본이라 `.env`의 이미지 선언이 낡았다. 같은 compose 프로젝트 이름을 쓰므로 거기서 `docker compose ps`를 쳐도 컨테이너가 보여 오인하기 쉽다. 도는 버전은 컨테이너 라벨 `com.docker.compose.project.working_dir`과 이미지로 확인한다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
@@ -208,7 +239,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 Tunnel 진입과 프론트·백엔드 기동만 구현했다. 티켓의 나머지는 손대지 않았다.
 
-- Redis runtime, 메모리 상한·eviction 정책
+- ~~Redis runtime, 메모리 상한·eviction 정책~~ → `S15P21C206-254`로 옮겼다
 - health/readiness 설계(`S15P21C206-93`)
 - 애플리케이션 계층 남용 제어 위치
 - 단일 connector 지속 처리량·재연결 실측
