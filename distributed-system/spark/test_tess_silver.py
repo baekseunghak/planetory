@@ -248,14 +248,20 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
         self.assertEqual(result.manifest[18], "mask_source_mismatch")
         self.assertIsNone(result.target)
 
-    @unittest.skipUnless(importlib.util.find_spec("astropy"), "Astropy runtime is not installed")
     def test_nonfinite_cadence_times_serialize_as_strict_json(self):
         # Real SPOC curves carry NaN times in data gaps; the 2026-09-23 YARN Canary failed on this.
+        # The defect is in target serialization before BLS, so a stub search keeps this Astropy-free.
         row = self.real_bronze_row(620)
         row["time"][5] = float("nan")
         row["time"][6] = float("inf")
         row["quality"][7] = 128
-        result = call([row], preprocess_silver, search_bls, iteration_location="/final/iteration")
+
+        def search(*args, **kwargs):
+            result = search_result("ok")
+            result["input_snapshot_id"] = kwargs["input_snapshot_id"]
+            return result
+
+        result = call([row], preprocess_silver, search)
         self.assertIn(result.manifest[5], {"succeeded", "no_quality_peak"}, result.manifest[18:20])
         excluded = json.loads(result.target[18])
         ledger = json.loads(result.target[22])
@@ -268,6 +274,7 @@ class SilverScienceOwnerContractTest(unittest.TestCase):
         for source_row, item in by_row.items():
             self.assertEqual(item, ledger_rows[source_row])
 
+    @unittest.skipUnless(importlib.util.find_spec("astropy"), "Astropy runtime is not installed")
     def test_real_preprocessing_to_bls_boundary_executes(self):
         result = call([self.real_bronze_row()], preprocess_silver, search_bls,
                       iteration_location="/final/iteration")
