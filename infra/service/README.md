@@ -31,6 +31,8 @@ Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 �
 
 두 인스턴스의 상한은 따로다. 한쪽의 여유가 다른 쪽을 돕지 못하므로 합계(192mb)가 같은 호스트의 PostgreSQL을 밀어내지 않는지가 기준이다([EC2 서비스 진입·장애 대응](../../docs/architecture/ec2-service-entry-failover.md) D1). 컨테이너 `mem_limit`은 걸지 않는다. 넘는 순간 OOM으로 컨테이너가 죽는데, 세션 쪽이면 전원 로그아웃이다. `maxmemory`는 쓰기만 실패시킨다.
 
+**`maxmemory`는 프로세스 메모리의 상한이 아니다.** Redis가 세는 데이터 메모리(`used_memory`)의 상한이다. 조각화, 클라이언트 버퍼, RDB 저장 중 fork의 copy-on-write 때문에 실제 점유(RSS)는 이보다 커진다. 192mb 합계는 초기 예산이고, 호스트 메모리를 따질 때는 `used_memory_rss`를 본다.
+
 ### 세션 상한에 닿으면
 
 세션은 지우지 않으므로 상한에 닿으면 **새 로그인과 세션 연장이 쓰기 실패로 막힌다.** 이미 맺은 세션의 읽기는 계속된다. Redis의 OOM 오류는 `RedisSessions`가 `StoreUnavailableException`으로 감싸고 `SessionDependencyFilter`가 503(`DEPENDENCY_UNAVAILABLE`)으로 응답한다. 이 경로는 코드로 확인했고 실제로 상한까지 채워 보지는 않았다.
@@ -38,15 +40,17 @@ Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 �
 64mb는 세션 1개 실측(약 2.4KB, 2026-09-23)으로 2만 개 남짓이다. 동시 접속 목표([DEC-16](../../docs/requirements/planetory-decision-register.md))가 정해지면 다시 잡는다. 관측은 두 값으로 한다.
 
 ```sh
-docker compose exec session-redis redis-cli info memory | grep -E '^(used_memory_human|maxmemory_human):'
+docker compose exec session-redis redis-cli info memory | grep -E '^(used_memory_human|used_memory_rss_human|maxmemory_human):'
 docker compose exec session-redis redis-cli info errorstats | grep OOM
 ```
 
-`errorstat_OOM`이 0이 아니면 이미 로그인 실패가 난 것이다. `used_memory`가 상한의 80%를 넘으면 늘릴 때다.
+`errorstat_OOM`이 0이 아니면 이미 로그인 실패가 난 것이다. `used_memory`가 상한의 80%를 넘으면 늘릴 때다. `used_memory_rss`는 호스트 예산을 볼 때 쓴다.
 
 ### 캐시 축출은 만료가 걸린 키만
 
-`cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출하므로 **결과에는 TTL을 주고 상태·잠금에는 주지 않는다.** `allkeys-lru`였다면 잠금이 결과와 같은 확률로 지워져 DAT-14가 막은 중복 계산이 성립한다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다. 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
+`cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출한다. 결과 키에 TTL을 주면 결과만 축출 후보가 되고 TTL이 없는 키는 축출되지 않는다. `allkeys-lru`는 잠금을 결과와 같은 확률로 지워 DAT-14가 막은 중복 계산을 허용하므로 택하지 않았다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다.
+
+**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 캐시 소비처는 아직 없다. 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
 
 Backend는 `cache-redis`에 기동을 의존하지 않는다(`depends_on`에 없다). 캐시는 선택 의존성이라 health도 세션만 본다. 캐시가 unhealthy여도 Backend는 뜨고 온라인 계산만 멈춘다. 연결은 처음 쓸 때 맺는다.
 
