@@ -61,7 +61,7 @@ EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-2
 
 첫 시도는 compose 교체 없이 배포만 돌려 같은 `SESSION_REDIS_HOST` 오류로 롤백됐다. Redis 설정 단계에서 죽어 마이그레이션 전이었고 DB는 V19 그대로였다. 롤백 로그의 "스키마는 그대로" 문구는 롤백마다 붙는 일반 경고다.
 
-**리뷰 반영(2026-09-23).** 백승학·하서진 P2 두 건과 강재민 제안 둘을 받았다. 세션에 64mb 상한(`noeviction` 유지), Backend `depends_on`에서 `cache-redis` 제거, 캐시 정책 `allkeys-lru`→`volatile-lru`, `requirepass` 재검토 조건을 "우리가 만들지 않은 컨테이너가 네트워크에 붙을 때"로 좁혔다. 근거와 관측 명령은 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
+**리뷰 반영(2026-09-23).** 백승학·하서진 P2 두 건과 강재민 제안 둘을 받았다. 세션에 64mb 상한(`noeviction` 유지), Backend `depends_on`에서 `cache-redis` 제거, 캐시 정책 `allkeys-lru`→`volatile-lru`, `requirepass` 재검토 조건을 "우리가 만들지 않은 컨테이너가 네트워크에 붙을 때"로 좁혔다. EC2-A에 재반영했고(직전 compose는 `compose.yaml.bak-before-254-review`) 두 Redis 재생성 뒤에도 세션 키가 남았다. 근거와 관측 명령은 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
 
 **병합 전에 develop Backend를 CI로 배포하면 `compose.yaml`이 Redis 없는 판으로 덮여 다시 롤백된다.** 컨테이너는 남지만 주소가 사라진다. 이 브랜치를 먼저 병합한다.
 
