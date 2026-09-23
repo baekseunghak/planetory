@@ -20,21 +20,21 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
    └─ publisher.yml
 ```
 
-최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램의 이미지를 만들거나 재시작하지 않는다.
+최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램을 재시작하지 않는다. 이미지 빌드는 변경된 프로그램만 하되, EC2-A 서비스(Frontend·Backend)는 기준 브랜치 병합마다 빌드한다(아래 「배포 버튼 유지」).
 
 ## 실행 흐름
 
 | 시점 | 실행 |
 | --- | --- |
 | Merge Request | Compose와 Docker 구성 검사 |
-| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push |
+| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend는 변경과 관계없이 매번 빌드 |
 | 배포 승인 | 선택한 서버에서 해당 이미지만 pull·재시작 |
 
 소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
 
 ## 독립 배포
 
-- Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. 파일에 남아 있는 EC2-B job은 배포 대상이 아니며 제거는 `S15P21C206-84`·`S15P21C206-93`에서 처리한다.
+- Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
 - Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
 - Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다.
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
@@ -43,6 +43,21 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
 
 서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A `redis-session`에 있으므로 그 컨테이너를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
+
+### 배포 버튼 유지 (S15P21C206-261)
+
+기준 브랜치에서 Frontend·Backend는 `rules:changes` 없이 매번 빌드하고 두 배포 job을 띄운다. **배포할 때는 최신 develop 파이프라인의 버튼을 누른다.**
+
+`changes`로 거르면 배포가 조용히 누락된다. 그 앱을 바꾸지 않은 병합의 파이프라인에는 배포 버튼이 없고, 그 앱을 바꾼 이전 파이프라인은 새 커밋에 자동 취소된다(`auto_cancel_pending_pipelines: enabled`). 기본 취소 방식은 `interruptible: false`인 job이 **이미 시작된** 파이프라인만 남기므로, 누르지 않은 수동 배포는 함께 취소된다. 2026-09-23 백엔드 병합 4건이 빌드만 되고 배포되지 못한 채 운영이 `e510d1da`에 머물렀다. 취소는 실패가 아니라 파이프라인이 빨갛게 뜨지 않는다.
+
+옛 버튼은 GitLab이 막는다. 배포 job에 `environment: ec2-a`를 두면 프로젝트 설정 "옛 배포 job 막기"(`ci_forward_deployment_enabled`)가 걸려, 더 새 배포가 있는 상태에서 옛 파이프라인의 배포 job을 실패시킨다. environment는 **노드 하나**다. 배포 job이 노드 공용 `compose.yaml`을 함께 올리므로, 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다. `resource_group`을 노드 단위로 두는 것과 같은 이유다.
+
+막히지 않는 경우가 둘 있다.
+
+- **이 규칙 이전 파이프라인의 job.** environment가 없어 배포로 세지 않는다. 2026-09-23 이전에 취소된 배포 job을 Retry하면 옛 compose가 올라간다.
+- **예전에 성공한 배포 job의 재실행.** `ci_forward_deployment_rollback_allowed: true`라 롤백 목적으로 허용된다. 의도한 되돌리기에만 쓴다.
+
+대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. GCP 노드(Ingestion·Spark·Airflow·Publisher)는 같은 구조를 아직 쓰지 않는다.
 
 ## 필요한 GitLab 변수
 

@@ -206,3 +206,4 @@
 | 2026-09-23 | 243 운영 SDE 버전 선택·반복 연결 | S15P21C206-243 | running median, reflect, grid guard, CM Dra | 커널 307개·관련 43개 통과, 실제 회귀 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 243 운영 5별·반복 실행 검산 | S15P21C206-243 | b5828e49, 555ceda6, CM Dra 19, 2323+100 hash | 실제 회귀 통과·재리뷰 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 243 운영 코드 승인·API와 지문 문서 보완 | S15P21C206-243 | quality_version, v0 fingerprint, 공개 API | 운영 코드 승인·문서 보완 | [기록](2026-09-23.md) |
+| 2026-09-23 | develop 연속 병합에서 서비스 배포 버튼 유지 | S15P21C206-261 | rules:changes, auto_cancel, environment ec2-a, ci_forward_deployment | 구현·lint 통과, 병합 전 | [기록](2026-09-23.md) |
