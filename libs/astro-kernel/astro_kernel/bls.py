@@ -1,6 +1,6 @@
-"""D13: array-only BLS calculation and D04's frozen v0 quality gate.
+"""D13: array-only BLS and explicitly versioned v0/243 search quality gates.
 
-Astropy is loaded only for BLS; the transit/preprocessing kernel stays numpy-only.
+Astropy is loaded only for BLS, scipy only for 243; transit stays numpy-only.
 No experiment imports, file access, candidate identity, or repeated removal.
 """
 from dataclasses import dataclass
@@ -12,6 +12,7 @@ from .transit_model import phase_distance_days
 
 SEARCH_VERSION = "bls_grid_v1/poc_linear20k"
 QUALITY_VERSION = "gate_v1/snr7_sde6"
+RUNNING_MEDIAN_QUALITY_VERSION = "sde-running-median1001-snr7-sde8-ntr2-v1"
 DURATIONS_HOURS = (1.2, 1.92, 2.88, 4.8)
 
 
@@ -124,26 +125,62 @@ def top_period_peaks(periods, power, *, count=5, separation_rel=0.02):
     return selected
 
 
-def quality_gate(snr, sde):
+def validate_quality_version(version):
+    if version not in (QUALITY_VERSION, RUNNING_MEDIAN_QUALITY_VERSION):
+        raise BlsError("invalid_input", "unsupported candidate quality version")
+
+
+def running_median_sde(periods, power):
+    """243 definition, restricted to the approved 20k linear search grid.
+
+    Grid changes require a new review/version, not reuse of threshold 8.
+    Invalid power is an error; degenerate residual scatter is unmeasurable.
+    """
+    p, y = _vector(periods, "periods"), _vector(power, "power")
+    if (len(p) != 20000 or y.shape != p.shape or not np.isfinite(p).all()
+            or p[0] != 0.5 or not 0.5 < p[-1] <= 100
+            or not np.array_equal(p, np.linspace(0.5, p[-1], 20000))):
+        raise BlsError("invalid_grid", "243 requires the approved 0.5-day linear20k grid")
+    if not np.isfinite(y).all():
+        raise BlsError("numerical_failure", "non-finite power")
+    from scipy.ndimage import median_filter
+    residual = y - median_filter(y, size=1001, mode="reflect")
+    out = np.full(y.shape, np.nan)
+    finite = np.isfinite(residual)
+    if finite.sum() >= 2:
+        std = float(np.std(residual[finite], ddof=0))
+        if np.isfinite(std) and std > 0:
+            out[finite] = (residual[finite] - np.mean(residual[finite])) / std
+    return out
+
+
+def quality_gate(snr, sde, *, quality_version=QUALITY_VERSION, n_transits=None):
     """Only the approved strength gate. Observation diagnostics do not vote."""
+    validate_quality_version(quality_version)
+    v1 = quality_version == RUNNING_MEDIAN_QUALITY_VERSION
+    if v1 and (isinstance(n_transits, (bool, np.bool_)) or not isinstance(n_transits, (int, np.integer)) or n_transits < 0):
+        raise BlsError("invalid_input", "integer observed transit count required")
     if not np.isfinite([snr, sde]).all():
         return "failed", ["non_finite_metric"]
     reasons = []
     if snr < 7:
         reasons.append("snr_below_threshold")
-    if sde < 6:
+    if sde < (8 if v1 else 6):
         reasons.append("sde_below_threshold")
+    if v1 and n_transits < 2:
+        reasons.append("insufficient_transits")
     return ("held" if reasons else "accepted"), reasons
 
 
 def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
-               sector=None, baseline_time=None):
+               sector=None, baseline_time=None, quality_version=QUALITY_VERSION):
     """Frozen D04 search. Sector/mask thresholds remain explicitly undecided.
 
     baseline_time must contain the pre-filter observation times, with identical
     multiplicities for every input observation (including overlapping sectors).
     Missing provenance is reported as unavailable, never as a zero fraction.
     """
+    validate_quality_version(quality_version)
     t, f = _vector(time, "time"), _vector(flux, "flux")
     if len(t) != len(f) or not np.isfinite(t).all() or np.any(np.diff(t) < 0):
         raise BlsError("invalid_input", "aligned arrays and finite ascending time required")
@@ -178,19 +215,22 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         raise BlsError("insufficient_observations", "baseline/3 must exceed 0.5 day")
     pg = bls_periodogram(t, f, period_grid(0.5, pmax, 20000, spacing="linear"),
                          config_version=SEARCH_VERSION)
+    scores = running_median_sde(pg.periods, pg.power) if quality_version == RUNNING_MEDIAN_QUALITY_VERSION else pg.sde
     tv, fv = t[valid], f[valid]
     input_sectors = np.unique(sectors) if sectors is not None else []
     peaks = []
     for rank, i in enumerate(top_period_peaks(pg.periods, pg.power), 1):
         period, epoch, duration = pg.periods[i], pg.epoch_btjd[i], pg.duration_hours[i] / 24
         metrics = [period, epoch, duration, pg.depth[i], pg.depth_err[i], pg.snr[i], pg.sde[i]]
-        status, reasons = quality_gate(pg.snr[i], pg.sde[i])
+        status, reasons = quality_gate(pg.snr[i], scores[i], quality_version=quality_version, n_transits=0)
         if (not np.isfinite(metrics).all() or not 0 < duration < period
                 or not 0 < pg.depth[i] < 1 or pg.depth_err[i] <= 0):
             status, reasons = "failed", ["invalid_peak_geometry"]
         inside = np.abs(phase_distance_days(tv, period, epoch)) < duration / 2 if status != "failed" else np.zeros(len(tv), bool)
         cycles = np.floor((tv[inside] - epoch) / period + 0.5)
         cycle_ids, cycle_counts = np.unique(cycles, return_counts=True)
+        if status != "failed":
+            status, reasons = quality_gate(pg.snr[i], scores[i], quality_version=quality_version, n_transits=len(cycle_ids))
         sector_stats = []
         if sectors is not None and status != "failed":
             for sid in input_sectors:
@@ -207,7 +247,7 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         peaks.append(dict(rank=rank, period_days=float(period), epoch_btjd=float(epoch),
                           duration_hours=float(duration * 24), depth=float(pg.depth[i]),
                           depth_err=float(pg.depth_err[i]), power=float(pg.power[i]),
-                          sde=float(pg.sde[i]), snr=float(pg.snr[i]), status=status, reasons=reasons,
+                          sde=float(scores[i]), snr=float(pg.snr[i]), status=status, reasons=reasons,
                           n_transits=len(cycle_ids), n_in_transit=int(inside.sum()),
                           transit_counts=cycle_counts.tolist(), sector_stats=sector_stats,
                           sector_consistency_status="unavailable" if sectors is None else
@@ -224,5 +264,5 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         status = "ok" if accepted else "no_quality_peak"
     return dict(status=status, peaks=peaks, accepted_peaks=accepted, periodogram=pg,
                 input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
-                bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+                bls_config_version=SEARCH_VERSION, candidate_quality_version=quality_version,
                 n_input=len(t), n_valid=int(valid.sum()), n_accepted=len(accepted))

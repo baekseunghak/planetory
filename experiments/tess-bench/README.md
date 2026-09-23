@@ -579,6 +579,37 @@ uv run --locked python -m tess_bench.external_catalog_replay --manifest ../tess-
 
 116 !187 소비자 리뷰 보완: disposition()은 confirmed/fp/pc/none과 판정 규칙 버전을 반환하며 빈 라벨과 충돌을 구분한다. DB 행 공급자는 [116 필수 열 인계](../../docs/data/tess-external-catalog-contract.md)에 명시한다. hold는 DB에 저장하지 않으며 124 source_refs·Publisher applied_at은 후속 공급이다. 관련 테스트 41개 통과, 기존 BLS 실측은 재실행하지 않았다.
 
+## 243 SDE 정의·문턱 재검토
+
+상태: 5별 2,240곡선 실행·검산 완료, DEC-03 채택 검토 대기. 운영 게이트는 변경하지 않는다.
+`tess_bench.sde_review`는 110의 이미 확인한 5별을 확장 조정 자료로 재분석한다.
+독립 holdout이나 과거 40/303 손실의 동일 환경 재현이라고 주장하지 않는다.
+
+- 동일 전처리·20k BLS의 power 상위 5피크를 고정한다. SDE 기준으로 피크를 다시 고르지 않는다.
+- 정의: 전체 평균/std, 1001 격자점 이동 중앙값 추세 제거 후 평균/std, 로그 주기 10구간별 평균/std.
+- 이동 중앙값 경계는 reflect이고 물리 시간 폭이 아니다. 로그 구간은 20점 미만 또는 산포 0이면 미측정으로 남긴다.
+- 문턱 후보 2·3·4·5·6·8·10·12, SNR ≥7·관측 통과 ≥2. 게이트 전 회수도 함께 기록한다.
+- SNR은 원 BLS 전역값, compute_stats 전역값, compute_stats 1일 국소 scatter 값으로 구분한다. 국소 dy 재탐색은 하지 않는다.
+- realclean 및 잡음 seed 20260910·20260917·20260918에 동일 주입을 적용한다.
+- 게이트마다 살아남은 피크 전체로 다시 매칭한다. 범위 안 직접·별칭 회수를 분리한다.
+- control=true의 noise 행만 순수 잡음 가짜 후보 수로 읽는다. realclean control의 피크는 실제 잔여이며 가짜로 확정하지 않는다. 주입 곡선의 selected_peaks는 오탐 수가 아니다.
+- plan에 입력·재귀 코드·설정·환경을 고정하고, 전체 주기도 NPZ·피크 CSV·비교 CSV를 저장한 뒤 해시를 재검사한다. subset 결과로 5별 검증을 완료하지 않는다.
+
+```powershell
+cd experiments/tess-bench
+uv run --locked python -m tess_bench.sde_review --targets l98_59 --limit 1
+uv run --locked python -m tess_bench.sde_review
+```
+
+첫 명령은 바탕곡선별 첫 주입과 none만 확인하는 smoke이며, 두 번째 명령이 전체 5별 실행이다.
+실제 FITS 실행은 사용자가 수행한다. 출력은 results/sde-review 아래 Git 제외 경로에 보관한다.
+합성 검증은 `uv run --locked python -m pytest tests/test_sde_review.py -q`로 실행한다.
+실측 결과·곡선별 손익·정의와 버전 제안은 [BLS 벤치마크](../../docs/data/tess-bls-benchmark.md#243-5별-재분석-결과-2026-09-23-검산)에 기록한다.
+저장 결과 재집계: `uv run --locked python -m tess_bench.sde_review_summary results/sde-review/run-20260922T145816Z-3f1db3f8`.
+MR 첨부 ZIP 안의 독립 검산 코드는 FITS 없이 실행 가능하며, 원천·NPZ 검증과 범위를 구분한다.
+관련 테스트: `uv run --locked python -m pytest tests/test_sde_review.py tests/test_sde_review_summary.py -q` (14개 통과).
+운영 커널 인계는 승인 후 별도이며, 현재 gate_v1/snr7_sde6을 자동 교체하지 않는다.
+
 ## 124 저장 외부 자료 정규화·후보 연결
 
 [124 구현 계약](../../docs/data/tess-external-catalog-implementation.md)을 따른다. 다운로드·BLS·Git·DB 쓰기를 실행하지 않는다.
@@ -606,3 +637,20 @@ uv run --locked python -m pytest tests/test_external_catalog_regression.py tests
 ```
 
 `<다운로드 경로>`는 실제 ZIP을 저장한 디렉터리로 바꾼다.
+
+
+## 243 운영 커널 회귀
+
+실험 MR의 범위를 사용자 요청으로 운영 구현까지 확장했다. 기존 ZIP은 당시 실험 증거로 보존하며 새 실행 결과를 덮어쓰지 않는다. 실제 FITS 실행은 사용자가 수행한다.
+
+```powershell
+uv run --locked python -m tess_bench.sde_review --targets cm_dra --limit 1 --verify-kernel
+uv run --locked python -m tess_bench.sde_review --verify-kernel
+uv run --locked python -m tess_bench.iteration_kernel_regression --targets l98_59 cm_dra wasp18 toi700 hd21749 --quality-version sde-running-median1001-snr7-sde8-ntr2-v1
+```
+
+첫 명령은 smoke다. 전체 실행은 5별·4바탕·112그룹의 실험 power/SDE 배열·피크·게이트·매칭을 운영 탐색과 비교하고 `kernel-comparisons.csv`에 2,240곡선의 결과를 남긴다. manifest의 `kernel_verified_curves`와 subset=false를 확인한다. `comparisons.csv`를 `sde_review_summary`로 재집계하여 CM Dra 손익을 별도 확인하며 기존 19곡선 감소의 재현 여부·변화가 있으면 원인을 기록한다. 개별 신호 매칭 비교는 이번 실험 정의와 커널의 일치 검증이며 기존 v0와 v1의 신호 동일성 보존 검증은 아니다.
+
+마지막 명령은 실제 realclean의 별별 3개 쌍 주입+무주입, 총 20곡선에서 반복 QA·종료·잔차·진단을 비교한다. 참조 111 루프에는 실험 243 SDE만 격리 주입하고 운영 SDE 함수를 사용하지 않는다. `candidate_quality_version`·입력/코드/환경 해시와 결과를 새 manifest에 남긴다. 기존 122 기본 명령은 v0 회귀로 유지한다.
+
+새 회귀는 채택 기준을 새로 고르는 독립 평가도 운영 배포·DB 검증도 아니다. 실측은 2026-09-23 사용자 실행 후 저장 검산 완료: 탐색 b5828e49 2,240곡선, 반복 555ceda6 20곡선 parity 통과. [해시·CM Dra 손익·검증 경계](../../docs/data/tess-bls-benchmark.md#243-운영-커널-사용자-실행-검산-2026-09-23)를 참조한다. 운영 코드 추가 리뷰·배포 완료와 구분한다.
