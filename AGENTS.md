@@ -49,6 +49,10 @@ Jira·Git 조작, 기능 구현·수정, 문서 작업처럼 무언가를 실행
 - 실험 문서와 PoC 코드는 운영 정본이 아니다. 검증된 결과를 운영에 채택하려면 담당 정본과 구현 위치로 옮긴다.
 - 문서만 바뀐 작업은 애플리케이션이나 운영 설정을 함께 변경하지 않는다.
 
+## 서버 접속
+
+EC2·GCP 서버에는 `tailscale ssh`로 먼저 접속하고, 실패하면 작업 PC `~/.ssh/config`의 별칭(`ec2-a-ssh`, `ec2-b-ssh`, `node-1-ssh`~`node-6-ssh`)으로 접속한다. 계정과 별칭 표는 [Tailscale 팀 서버 접근](docs/operations/tailscale-team-access.md) 「접속 순서와 OpenSSH 별칭」을 따른다. 주소·키 경로를 문서나 출력에 남기지 않는다.
+
 ## Hadoop 작업
 
 Hadoop·HDFS·YARN·Spark 클러스터를 설치·변경·복구·검증하거나 데이터를 이동하는 작업은 먼저 [Hadoop 운영 작업 가이드](docs/workflows/hadoop-operations.md)를 따른다.

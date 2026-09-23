@@ -69,6 +69,25 @@ scp <로컬-파일> SSAFY@node-1:<원격-경로>
 
 `tailscale ssh`가 실패하면 대상에서 Tailscale SSH 서버가 켜져 있는지(`tailscale up --ssh`) 확인한다. ACL이 허용해도 대상이 켜 두지 않으면 접속되지 않는다. 그 경우에만 기존 OpenSSH 경로를 임시로 사용하고 원인을 관리자에게 보고한다.
 
+### 접속 순서와 OpenSSH 별칭
+
+사람과 AI 에이전트 모두 이 순서를 따른다.
+
+1. `tailscale ssh <계정>@<이름>`으로 접속한다. 위 표의 계정을 쓴다.
+2. 실패하면 작업 PC `~/.ssh/config`에 등록된 별칭으로 접속한다. `node-2-ssh`~`node-6-ssh`는 Node 1을 거치는 ProxyJump다.
+3. 둘 다 실패하면 추측으로 다른 경로를 만들지 않는다. [GCP 노드 운영 런북](gcp-node-runbook.md) 7장의 복구 절차를 따르고 관리자에게 보고한다.
+
+| 서버 | 별칭 | 계정 |
+| --- | --- | --- |
+| `ec2-a` | `ec2-a-ssh` | `ubuntu` |
+| `ec2-b` | `ec2-b-ssh` | `ubuntu` |
+| `node-1` | `node-1-ssh` | `SSAFY` |
+| `node-2`~`node-6` | `node-2-ssh`~`node-6-ssh` | `planetory-admin` |
+
+별칭의 실제 주소·키 경로는 각 작업 PC의 `.ssh/config`에서만 확인하고 문서에 고정하지 않는다. 별칭이 없는 PC에서는 관리자에게 설정을 받는다. 2026-09-23 작업 PC에서 `ec2-a-ssh`·`ec2-b-ssh`·`node-1-ssh`·`node-2-ssh`가 `hostname -s`에 응답했다.
+
+접속 경로를 바꿔도 운영을 바꾸는 명령의 확인 절차는 그대로다. 배포·설정 교체·삭제는 [AGENTS.md](../../AGENTS.md)의 안전 가드레일을 따른다.
+
 호스트 키 검증을 `StrictHostKeyChecking=no`로 우회하거나 개인 키 내용을 공유하지 않는다.
 
 Tailscale은 관리 접속 경로다. `node-*` 접속 성공을 GCP `10.20.x.10` 사설망, VPC Peering 또는 Hadoop 서비스 통신 검증으로 대신하지 않는다.
