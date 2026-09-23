@@ -177,3 +177,18 @@ ZIP 생성 도구는 기존 출력 덮어쓰기를 거부하며 다음처럼 사
 ```powershell
 uv run --locked python scripts/package_review.py --calibration-run results/predictions/calibration-20260919T130911Z-bb71f278/run --evaluation-run results/predictions/evaluation-20260919T131808Z-183da766/run --conversion-manifest results/manifests/convert-4b5a3d6d.json --assets results/runtime/astronet-5675a57dd41dd0321df480453451096dc5a4a6b0/assets.json --output results/review-118-183da766.zip
 ```
+
+## 126 내부 실험 배치
+
+126은 [내부 배치 계약](../../docs/data/tess-astronet-internal-batch.md)에 따라 118의 고정 단일 checkpoint와 변환 입력을 재사용한다. 사용자 화면·서비스 DB·Gold·판정 밴드는 생성하지 않는다. 아래는 기존 55개 입력의 재현성 회귀이며 새 독립 성능 평가가 아니다.
+
+```bash
+uv run --locked python -m pytest -q
+uv run --locked python scripts/run_internal_batch.py --conversion-manifest results/manifests/convert-4b5a3d6d.json
+```
+
+Docker Desktop과 기존 118 고정 이미지·모델·변환 NPZ가 필요하다. 다른 PC에서는 Git 외의 입력도 별도로 확보해야 하며, 변환 폴더만 이동했다면 `--run-dir`로 프로젝트 내부의 변환 폴더를 지정한다. 모델을 자동 다운로드하거나 이미지를 자동 갱신하지 않는다.
+
+서로 다른 두 CPU TensorFlow 세션에서 실행하고 후보별 점수·상태를 정확히 비교한다. 정상 0점과 실패 null을 구분하며 같은 실패 두 번만으로 추론 재현성을 통과시키지 않는다. 결과는 `results/internal-126/<실행 ID>/`에 새로 저장한다. 기존 118 파일은 읽기 전용으로 사용한다. `verification_passed=true`는 해당 입력·환경의 내부 회귀 통과이며 운영 채택이 아니다.
+
+단위 검증: 2026-09-23 전체 67개 통과. 저장 입력 사전검사: 후보 55개·유효 view 55개·파일 hash 100개 확인. 실제 모델 배치는 55개 전부 성공했고 두 세션 결과가 정확히 일치했다. 실행·검산·리뷰 ZIP hash는 [126 실측 기록](../../docs/data/tess-astronet-internal-batch.md#실제-실행과-저장-결과-검산-2026-09-23)을 따른다.
