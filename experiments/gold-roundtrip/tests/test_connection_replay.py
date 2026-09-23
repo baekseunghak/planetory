@@ -28,3 +28,40 @@ def test_db_harness_rejects_remote_database_before_connect(tmp_path, monkeypatch
     monkeypatch.setenv("DATABASE_URL", "postgresql://example.invalid/test")
     with pytest.raises(ValueError, match="local_database_required"):
         run(tmp_path, tmp_path / "report.json")
+
+@pytest.mark.parametrize('url', [
+    'postgresql://localhost/test?hostaddr=192.0.2.1',
+    'postgresql://localhost/test?service=remote',
+    'host=localhost hostaddr=192.0.2.1 dbname=test',
+    'host=localhost service=remote dbname=test',
+    'postgresql://localhost/test?host=example.invalid',
+    'host=localhost,example.invalid dbname=test',
+])
+def test_db_routing_overrides_rejected(url):
+    from gold_roundtrip.connection_db import local_connection_parameters
+    with pytest.raises(ValueError, match='local_database_required'):
+        local_connection_parameters(url)
+
+
+@pytest.mark.parametrize('key', ['PGHOSTADDR', 'PGSERVICE', 'PGSERVICEFILE'])
+def test_db_environment_routing_rejected(monkeypatch, key):
+    from gold_roundtrip.connection_db import local_connection_parameters
+    monkeypatch.setenv(key, 'override')
+    with pytest.raises(ValueError, match='local_database_required'):
+        local_connection_parameters('postgresql://localhost/test')
+
+
+@pytest.mark.parametrize('host,address', [('localhost','127.0.0.1'), ('127.0.0.1','127.0.0.1'), ('[::1]','::1')])
+def test_db_loopback_is_pinned(monkeypatch, host, address):
+    from gold_roundtrip.connection_db import local_connection_parameters
+    for key in ('PGHOSTADDR', 'PGSERVICE', 'PGSERVICEFILE'):
+        monkeypatch.delenv(key, raising=False)
+    assert local_connection_parameters(f'postgresql://{host}/test')['hostaddr'] == address
+
+
+@pytest.mark.parametrize('address', ['192.0.2.1', '', None])
+def test_connected_address_checked_before_ddl(address):
+    from types import SimpleNamespace
+    from gold_roundtrip.connection_db import require_local_connection
+    with pytest.raises(ValueError, match='connected_database_not_local'):
+        require_local_connection(SimpleNamespace(info=SimpleNamespace(hostaddr=address)))

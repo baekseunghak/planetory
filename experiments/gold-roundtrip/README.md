@@ -2,6 +2,16 @@
 
 ## 125 연결 검증 개발 상태 (2026-09-24)
 
+### !209 비차단 리뷰 보완
+
+`empty_catalog_upstream_policy_required`는 무신호 별의 정책상 공개 제외이며 계산·게시 실패가 아니다. 현재 `decision=PUBLISH_REJECTED`만으로 실패를 집계하지 말고 이 사유를 분리한다. 별도 상태값과 Publisher 매핑은 79의 Gold QA 계약 정리에서 확정하며 이번에는 반환값을 변경하지 않는다.
+
+checksum 호환 모듈은 공개 상수·함수를 명시적으로 import한다. DB 검증기는 libpq 파서로 접속 정보를 확인하고 `hostaddr`·`service` 및 환경의 `PGHOSTADDR`·`PGSERVICE`·`PGSERVICEFILE` 우회를 거절한다. 허용 호스트를 loopback 주소로 고정하고 접속 후 실제 연결 주소를 DDL 전에 재확인한다. Docker 내부 서버 주소가 아닌 클라이언트 연결 주소를 검사한다.
+
+보완 검증: 연결·checksum·직렬화 테스트 53개 통과. 사용자 실행 `db-roundtrip-07646dd4-r2.json`에서 11개 payload·1,277개 필드 비교가 통과하고 모두 rollback되었다. 보고서의 입력·migration·실행 코드 38개 해시도 일치했다. 보고서 SHA-256은 `bf1421e3921a6e3cde9a57999d0e0d9c74ea9d7e35649cbf8ec30bcd7c898291`이다.
+
+MR 첨부용 `results/review-125-07646dd4-r2.zip`은 18항목이며 SHA-256은 `60758354c3bf74302d6de02df78f1ea1a749aade51450e2bd4657016059f876c`다. ZIP 내부 checksum을 검산했다. 기존 연결 manifest는 최초 실행 코드의 기록으로 보존하며, 명시 import로 바뀐 호환 shim과 새 DB 실행기는 ZIP의 review-code에 별도로 담았다. 과거 코드 해시를 현재 코드 해시로 덮어쓰지 않는다. 수치 payload를 재사용했고 BLS를 재실행하지 않았다.
+
 `astro_kernel.gold_serialization.assemble`은 122 후보·123 세그먼트/discoverability·124 외부 조인을 받는 공용 직렬화 커널이다. `gold_roundtrip.serialization`은 호환 import이며, 이 실험 패키지는 저장 결과 연결 및 DB 검증을 담당한다. 아래 117의 과거 왕복 검증을 125 완료 근거로 재사용하지 않는다.
 
 - 상위 결과가 모두 ready일 때만 후보 ID와 모델, 외부 판정의 일관성을 확인하고 여러 세그먼트의 float32 배열·NULL/gaps·레코드 checksum·manifest를 구성한다. 한 결과라도 보류이면 payload 없이 `PUBLISH_REJECTED`를 반환한다.

@@ -6,10 +6,11 @@ import json
 import os
 from pathlib import Path
 import secrets
-from urllib.parse import urlparse
+from ipaddress import ip_address
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from .canonical import array_checksum, normalize_array
@@ -18,6 +19,31 @@ from .roundtrip import DEFAULT_URL, MIGRATIONS
 
 NUMERIC = {"period_days", "epoch_btjd", "duration_hours", "depth_ppm", "bls_power",
            "flux_scatter", "base_days", "period_min_days", "period_max_days"}
+
+
+def local_connection_parameters(url):
+    """Reject libpq routing overrides and pin localhost before connecting."""
+    try:
+        params = conninfo_to_dict(url)
+    except psycopg.Error:
+        raise ValueError("local_database_required") from None
+    if (params.get("host") not in ("127.0.0.1", "localhost", "::1")
+            or "hostaddr" in params or "service" in params
+            or any(os.environ.get(k) for k in ("PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"))):
+        raise ValueError("local_database_required")
+    params["hostaddr"] = "::1" if params["host"] == "::1" else "127.0.0.1"
+    params["connect_timeout"] = 5
+    return params
+
+
+def require_local_connection(conn):
+    # libpq's connected address, not a server-side address behind Docker NAT.
+    try:
+        local = ip_address(conn.info.hostaddr).is_loopback
+    except (ValueError, TypeError):
+        local = False
+    if not local:
+        raise ValueError("connected_database_not_local")
 
 
 def insert_and_compare(cur, table, row, checks):
@@ -45,9 +71,7 @@ def insert_and_compare(cur, table, row, checks):
 def run(folder, report):
     # This harness accepts the local development DB only. Never print its URL.
     url = os.environ.get("DATABASE_URL", DEFAULT_URL)
-    parsed = urlparse(url)
-    if parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
-        raise ValueError("local_database_required")
+    parameters = local_connection_parameters(url)
     verified = audit(folder)
     evidence = read(folder / "report.json")
     if evidence.get("fixture_ids_only") is not True or evidence.get("controlled_labels_only") is not True:
@@ -66,8 +90,9 @@ def run(folder, report):
         if p["ai_results"]:
             raise ValueError("internal_ai_forbidden")
         schema, checks = "gold125_" + secrets.token_hex(6), []
-        conn = psycopg.connect(url, connect_timeout=5)
+        conn = psycopg.connect(**parameters)
         try:
+            require_local_connection(conn)
             with conn.cursor() as cur:
                 cur.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
                 cur.execute(sql.SQL("SET LOCAL search_path TO {}, public").format(sql.Identifier(schema)))
