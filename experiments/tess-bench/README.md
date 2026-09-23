@@ -637,3 +637,20 @@ uv run --locked python -m pytest tests/test_external_catalog_regression.py tests
 ```
 
 `<다운로드 경로>`는 실제 ZIP을 저장한 디렉터리로 바꾼다.
+
+
+## 243 운영 커널 회귀
+
+실험 MR의 범위를 사용자 요청으로 운영 구현까지 확장했다. 기존 ZIP은 당시 실험 증거로 보존하며 새 실행 결과를 덮어쓰지 않는다. 실제 FITS 실행은 사용자가 수행한다.
+
+```powershell
+uv run --locked python -m tess_bench.sde_review --targets cm_dra --limit 1 --verify-kernel
+uv run --locked python -m tess_bench.sde_review --verify-kernel
+uv run --locked python -m tess_bench.iteration_kernel_regression --targets l98_59 cm_dra wasp18 toi700 hd21749 --quality-version sde-running-median1001-snr7-sde8-ntr2-v1
+```
+
+첫 명령은 smoke다. 전체 실행은 5별·4바탕·112그룹의 실험 power/SDE 배열·피크·게이트·매칭을 운영 탐색과 비교하고 `kernel-comparisons.csv`에 2,240곡선의 결과를 남긴다. manifest의 `kernel_verified_curves`와 subset=false를 확인한다. `comparisons.csv`를 `sde_review_summary`로 재집계하여 CM Dra 손익을 별도 확인하며 기존 19곡선 감소의 재현 여부·변화가 있으면 원인을 기록한다. 개별 신호 매칭 비교는 이번 실험 정의와 커널의 일치 검증이며 기존 v0와 v1의 신호 동일성 보존 검증은 아니다.
+
+마지막 명령은 실제 realclean의 별별 3개 쌍 주입+무주입, 총 20곡선에서 반복 QA·종료·잔차·진단을 비교한다. 참조 111 루프에는 실험 243 SDE만 격리 주입하고 운영 SDE 함수를 사용하지 않는다. `candidate_quality_version`·입력/코드/환경 해시와 결과를 새 manifest에 남긴다. 기존 122 기본 명령은 v0 회귀로 유지한다.
+
+새 회귀는 채택 기준을 새로 고르는 독립 평가도 운영 배포·DB 검증도 아니다. 실측은 2026-09-23 사용자 실행 후 저장 검산 완료: 탐색 b5828e49 2,240곡선, 반복 555ceda6 20곡선 parity 통과. [해시·CM Dra 손익·검증 경계](../../docs/data/tess-bls-benchmark.md#243-운영-커널-사용자-실행-검산-2026-09-23)를 참조한다. 운영 코드 추가 리뷰·배포 완료와 구분한다.

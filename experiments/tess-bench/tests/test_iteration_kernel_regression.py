@@ -130,3 +130,20 @@ def test_new_original_validation_record_compares_to_111_legacy_history():
     compare(old, new)
     new["steps"][-1]["reason"] = "no_quality_peak"
     with pytest.raises(AssertionError): compare(old, new)
+
+
+def test_243_real_calculation_reference_adapter_and_kernel():
+    from astro_kernel.bls import RUNNING_MEDIAN_QUALITY_VERSION
+    from astro_kernel.iteration import iterate_bls
+    from tess_bench.bls import BlsSetting
+    from tess_bench.iterate import IterateConfig
+    from tess_bench.iteration_kernel_regression import reference_iteration
+    t = np.linspace(0, 20, 1500)
+    f = 1 + np.random.default_rng(243).normal(0, .001, t.size)
+    f[np.abs((t-.5+1.5) % 3-1.5) < .05] -= .01
+    cfg = IterateConfig(sde_min=8., qa_window_offset_rel_depth=.1,
+                        refine_duration_span=(.5, 2.), refine_duration_max_hours=12.)
+    old = reference_iteration(t, f, BlsSetting('test', n_periods=20000), cfg, RUNNING_MEDIAN_QUALITY_VERSION)
+    new = iterate_bls(t, f, input_snapshot_id="synthetic-243", preprocessing_version="test",
+                      baseline_time=t, keep_residual=True, quality_version=RUNNING_MEDIAN_QUALITY_VERSION)
+    compare(old, new)

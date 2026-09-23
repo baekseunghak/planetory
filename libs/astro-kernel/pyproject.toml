@@ -8,11 +8,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-bls = ["astropy>=6.0,<8"]
+bls = ["astropy>=6.0,<8", "scipy>=1.12,<2"]
 
 [dependency-groups]
 dev = [
   "astropy>=6.0,<8",
+  "scipy>=1.12,<2",
   "pytest>=8.0,<10",
   "jsonschema>=4.18,<5",
 ]

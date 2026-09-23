@@ -87,7 +87,44 @@ def compare_curve(baseline, members, run, local_snr, arrays, global_exact=None):
     return rows
 
 
-def run_review(targets, raw, results, limit=0):
+def verify_kernel(time, flux, baseline_time, reference, arrays, baseline, members):
+    """Independent experimental definition versus operational search and rematching."""
+    from types import SimpleNamespace
+    from astro_kernel.bls import search_bls, running_median_sde, RUNNING_MEDIAN_QUALITY_VERSION
+    actual = search_bls(time, flux, baseline_time=baseline_time,
+                        input_snapshot_id="243-regression", preprocessing_version="biweight_1.0d",
+                        quality_version=RUNNING_MEDIAN_QUALITY_VERSION)
+    pg = actual["periodogram"]
+    np.testing.assert_array_equal(pg.periods, reference.periods)
+    np.testing.assert_allclose(pg.power, reference.power, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(running_median_sde(pg.periods, pg.power),
+                               arrays["running_median"], rtol=1e-12, atol=1e-12, equal_nan=True)
+    if actual["candidate_quality_version"] != RUNNING_MEDIAN_QUALITY_VERSION or actual["status"] == "failed":
+        raise ValueError("kernel_version_or_search_failed")
+    expected = []
+    for old, new in zip(reference.peaks, actual["peaks"], strict=True):
+        i = int(np.searchsorted(reference.periods, old.period_days))
+        score = float(arrays["running_median"][i])
+        for key in ("period_days", "epoch_btjd", "duration_hours", "depth", "depth_err", "power", "snr", "n_transits"):
+            np.testing.assert_allclose(new[key], getattr(old, key), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(new["sde"], score, rtol=1e-12, atol=1e-12, equal_nan=True)
+        passed = bool(old.snr >= 7 and score >= 8 and old.n_transits >= 2)
+        if passed != (new["status"] == "accepted"):
+            raise ValueError("kernel_gate_mismatch")
+        if passed:
+            expected.append(replace(old, sde=score))
+    selected = [SimpleNamespace(**p) for p in actual["accepted_peaks"]]
+    for member in members:
+        if reference.period_min_days <= member.period_days <= reference.period_max_days:
+            a = match_injection(baseline.time, member, expected)
+            b = match_injection(baseline.time, member, selected)
+            if (a.match, a.matched_rank) != (b.match, b.matched_rank):
+                raise ValueError("kernel_recovery_mismatch")
+    return dict(passed=True, candidate_quality_version=actual["candidate_quality_version"],
+                n_accepted=actual["n_accepted"])
+
+
+def run_review(targets, raw, results, limit=0, verify_operational=False):
     cfg, settings = load_bls_settings(BENCH / 'configs/bls_settings_v1.json', ['poc_linear20k'])
     _, pres = load_settings(BENCH / 'configs/preprocess_settings_v1.json', ['biweight_1.0d'])
     paths = [raw / t.key / name for t, _, name, _ in iter_products(select_targets(targets))]
@@ -102,6 +139,7 @@ def run_review(targets, raw, results, limit=0):
     out = results / ('run-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid4().hex[:8])
     out.mkdir(parents=True, exist_ok=False)
     plan = dict(task='S15P21C206-243', targets=targets, limit=limit, inputs=inputs,
+                verify_operational=verify_operational,
                 scope='exploratory reanalysis of previously inspected evaluation targets; not independent holdout',
                 settings=settings[0].params(), seeds=SEEDS, thresholds=THRESHOLDS,
                 median_window=1001, log_bins=10, min_bin_points=20,
@@ -112,6 +150,7 @@ def run_review(targets, raw, results, limit=0):
     plan_entry = mf.file_entry(out / 'plan.json')
     print(f'Plan fixed: {out / "plan.json"}', flush=True)
     outputs, rows, peak_rows = [], [], []
+    kernel_rows = []
     try:
         for target in targets:
             bi = build_bls_inputs(target, 'evaluation', cfg, pres[0], FIXTURE / 'configs/injection_grid_v1.json',
@@ -127,6 +166,9 @@ def run_review(targets, raw, results, limit=0):
                     t, f = prepared.time[keep], prepared.flux_det[keep]
                     result = run_bls(t, f, settings[0], baseline_time=base.time, keep_periodogram=True)
                     arrays = sde_arrays(result.periods, result.power)
+                    if verify_operational:
+                        checked = verify_kernel(t, f, base.time, result, arrays, base, members)
+                        kernel_rows.append(dict(target=target, baseline=bkey, group=gid, **checked))
                     local = recompute_snr(t, f, local_scatter(t, f), [p.as_row() for p in result.peaks])
                     scatter = float(1.4826 * np.median(np.abs(f - np.median(f))))
                     exact = recompute_snr(t, f, np.full(f.shape, scatter), [p.as_row() for p in result.peaks])
@@ -145,10 +187,14 @@ def run_review(targets, raw, results, limit=0):
         write_csv(out / 'comparisons.csv', rows)
         write_csv(out / 'peaks.csv', peak_rows)
         outputs += [mf.file_entry(out / name) for name in ('comparisons.csv', 'peaks.csv')]
+        if verify_operational:
+            write_csv(out / 'kernel-comparisons.csv', kernel_rows)
+            outputs.append(mf.file_entry(out / 'kernel-comparisons.csv'))
         verify_snapshot(inputs + [plan_entry] + outputs)
         manifest = dict(task=plan['task'], status='completed', adopted=False, plan=plan_entry,
                         outputs=outputs, curves=sum(p['path'].endswith('.npz') for p in outputs),
-                        comparison_rows=len(rows), subset=bool(limit or tuple(targets) != TARGETS))
+                        comparison_rows=len(rows), kernel_verified_curves=len(kernel_rows),
+                        subset=bool(limit or tuple(targets) != TARGETS))
         (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
         print(f'Completed: {out}', flush=True)
     except BaseException as exc:
@@ -161,11 +207,12 @@ def main():
     p.add_argument('--targets', nargs='+', choices=TARGETS, default=list(TARGETS))
     p.add_argument('--raw', type=Path, default=FIXTURE / 'sample_raw')
     p.add_argument('--results', type=Path, default=BENCH / 'results/sde-review')
+    p.add_argument('--verify-kernel', action='store_true', help='compare operational 243 search on every curve')
     p.add_argument('--limit', type=int, default=0, help='smoke only: groups per baseline, plus none')
     args = p.parse_args()
     if args.limit < 0 or len(args.targets) != len(set(args.targets)):
         p.error('limit must be nonnegative and targets unique')
-    run_review(args.targets, args.raw, args.results, args.limit)
+    run_review(args.targets, args.raw, args.results, args.limit, args.verify_kernel)
 
 
 if __name__ == '__main__':

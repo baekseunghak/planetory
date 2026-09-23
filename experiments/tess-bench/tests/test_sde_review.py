@@ -104,3 +104,19 @@ def test_runner_writes_verified_outputs_without_fits(tmp_path, monkeypatch):
     mod.verify_snapshot([manifest['plan'], *manifest['outputs']])
     with np.load(next(out.glob('*.npz')), allow_pickle=False) as data:
         assert data['power'].shape == (1200,)
+
+
+def test_operational_comparison_detects_sde_corruption():
+    from types import SimpleNamespace
+    from tess_bench.sde_review import verify_kernel
+    from tess_bench.bls import BlsSetting, run_bls
+    t = np.linspace(0, 20, 1500)
+    f = 1 + np.random.default_rng(243).normal(0, .001, t.size)
+    f[np.abs((t-.5+1.5) % 3-1.5) < .05] -= .01
+    reference = run_bls(t, f, BlsSetting('test', n_periods=20000), baseline_time=t, keep_periodogram=True)
+    arrays = sde_arrays(reference.periods, reference.power)
+    baseline = SimpleNamespace(time=t)
+    assert verify_kernel(t, f, t, reference, arrays, baseline, [])["passed"]
+    arrays["running_median"][0] += 1
+    with pytest.raises(AssertionError):
+        verify_kernel(t, f, t, reference, arrays, baseline, [])

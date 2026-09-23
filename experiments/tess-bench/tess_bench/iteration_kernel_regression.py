@@ -1,6 +1,6 @@
 """122 real FITS parity against the approved 111 loop, without truth-assisted QA."""
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import numpy as np
 from astro_kernel.iteration import iterate_bls
-from astro_kernel.bls import search_bls
+from astro_kernel.bls import search_bls, QUALITY_VERSION, RUNNING_MEDIAN_QUALITY_VERSION
 from astro_kernel.transit_model import remove_transit_models
 from astro_kernel.preprocessing import detrend_silver
 from tess_fixture import inject as inj, manifest as mf
@@ -88,14 +88,14 @@ def compare_diagnostic(expected, actual, path="search_diagnostics"):
 
 
 def compare_search_diagnostics(time, flux, sector, baseline_time, reference, actual, *,
-                               input_snapshot_id, preprocessing_version):
+                               input_snapshot_id, preprocessing_version, quality_version=QUALITY_VERSION):
     # Rebuild each pre-removal residual from 111's accepted models, not from
     # actual's model/diagnostic fields. Direct 120 calls are the transfer oracle.
     current = np.asarray(flux, dtype=float).copy()
     for expected_candidate, candidate in zip(reference.accepted, actual["accepted"], strict=True):
         searched = search_bls(time, current, sector=sector, baseline_time=baseline_time,
                               input_snapshot_id=input_snapshot_id,
-                              preprocessing_version=preprocessing_version)
+                              preprocessing_version=preprocessing_version, quality_version=quality_version)
         if searched["status"] == "failed":
             raise AssertionError("diagnostic reference search failed")
         peaks = [peak for peak in searched["peaks"] if peak["rank"] == expected_candidate.rank]
@@ -107,11 +107,33 @@ def compare_search_diagnostics(time, flux, sector, baseline_time, reference, act
             [expected_candidate.model(f"reference-step-{expected_candidate.step}")]).flux_residual
 
 
-def run(raw, results, targets=TARGETS):
+def reference_iteration(time, flux, setting, cfg, quality_version):
+    if quality_version == QUALITY_VERSION:
+        return iterate_curve(time, flux, setting, cfg, keep_residual=True)
+    # Isolated benchmark adapter: retain the 111 loop/QA, replace only its SDE
+    # using the independent 243 experimental definition, never the kernel helper.
+    from unittest.mock import patch
+    from . import bls as reference_bls
+    from .sde_review import sde_arrays
+    original = reference_bls.run_bls
+    def reviewed_search(*args, **kwargs):
+        kwargs["keep_periodogram"] = True
+        result = original(*args, **kwargs)
+        scores = sde_arrays(result.periods, result.power)["running_median"]
+        result.peaks[:] = [replace(p, sde=float(scores[np.searchsorted(result.periods, p.period_days)]))
+                           for p in result.peaks]
+        return result
+    with patch.object(reference_bls, "run_bls", reviewed_search):
+        return iterate_curve(time, flux, setting, cfg, keep_residual=True)
+
+
+def run(raw, results, targets=TARGETS, quality_version=QUALITY_VERSION):
     cfg, settings = load_bls_settings(BENCH / "configs/bls_settings_v1.json", ["poc_linear20k"])
     _, pre = load_settings(BENCH / "configs/preprocess_settings_v1.json", ["biweight_1.0d"])
     approved = IterateConfig(qa_window_offset_rel_depth=0.1, refine_duration_span=(0.5, 2.0),
                              refine_duration_max_hours=12.0)
+    if quality_version == RUNNING_MEDIAN_QUALITY_VERSION:
+        approved = replace(approved, sde_min=8.0)
     paths = [raw / target.key / filename for target, _, filename, _ in iter_products(select_targets(list(targets)))]
     paths += [FIXTURE / "checksums.json", FIXTURE / "references.csv", FIXTURE / "configs/injection_grid_v1.json",
               BENCH / "uv.lock", BENCH / "pyproject.toml", ROOT / "libs/astro-kernel/pyproject.toml"]
@@ -120,7 +142,7 @@ def run(raw, results, targets=TARGETS):
     entries = [mf.file_entry(path) for path in paths]
     out = results / ("run-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8])
     out.mkdir(parents=True, exist_ok=False)
-    plan = dict(task="S15P21C206-122", inputs=entries, targets=list(targets),
+    plan = dict(task="S15P21C206-243" if quality_version == RUNNING_MEDIAN_QUALITY_VERSION else "S15P21C206-122", candidate_quality_version=quality_version, inputs=entries, targets=list(targets),
                 environment=mf.environment_info(("numpy", "astropy", "scipy")),
                 reference_settings=settings[0].params(), iteration_settings=approved.params(),
                 rtol=1e-12, atol=0,
@@ -145,15 +167,15 @@ def run(raw, results, targets=TARGETS):
                 prepared = detrend_silver(baseline.time, flux, baseline.sector_of_point)
                 if prepared.status != "ok":
                     raise ValueError(f"preprocessing failed: {target}/{gid}")
-                reference = iterate_curve(prepared.time, prepared.flux_det, settings[0], approved, keep_residual=True)
+                reference = reference_iteration(prepared.time, prepared.flux_det, settings[0], approved, quality_version)
                 actual = iterate_bls(prepared.time, prepared.flux_det, sector=baseline.sector_of_point,
                                      baseline_time=prepared.time,
                                      input_snapshot_id=plan_entry["sha256"], preprocessing_version=prepared.version,
-                                     keep_residual=True)
+                                     keep_residual=True, quality_version=quality_version)
                 compare(reference, actual)
                 compare_search_diagnostics(prepared.time, prepared.flux_det, baseline.sector_of_point,
                     prepared.time, reference, actual, input_snapshot_id=plan_entry["sha256"],
-                    preprocessing_version=prepared.version)
+                    preprocessing_version=prepared.version, quality_version=quality_version)
                 record = {key: value for key, value in actual.items() if key != "residual"}
                 filename = f"curve-{len(rows):03d}.json"
                 (out / filename).write_text(json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
@@ -162,7 +184,7 @@ def run(raw, results, targets=TARGETS):
                 print(f"{target}/{gid}: parity passed ({actual['termination']}, {len(actual['accepted'])} accepted)", flush=True)
         verify_snapshot(entries + [plan_entry])
         write_csv(out / "comparisons.csv", rows)
-        manifest = dict(task="S15P21C206-122", passed=True, plan=plan_entry, n_curves=len(rows),
+        manifest = dict(task=plan["task"], candidate_quality_version=quality_version, passed=True, plan=plan_entry, n_curves=len(rows),
                         wall_s=time.perf_counter() - started,
                         outputs=[mf.file_entry(path) for path in sorted(out.glob("curve-*.json"))] + [mf.file_entry(out / "comparisons.csv")])
         (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -176,9 +198,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path, default=FIXTURE / "sample_raw")
     parser.add_argument("--results", type=Path, default=BENCH / "results/iteration-kernel-regression")
-    parser.add_argument("--targets", nargs="+", choices=TARGETS, default=list(TARGETS))
+    parser.add_argument("--targets", nargs="+", choices=tuple(dict.fromkeys((*TARGETS, "l98_59", "cm_dra", "wasp18", "toi700", "hd21749"))), default=list(TARGETS))
+    parser.add_argument("--quality-version", choices=[QUALITY_VERSION, RUNNING_MEDIAN_QUALITY_VERSION], default=QUALITY_VERSION)
     args = parser.parse_args()
-    run(args.raw, args.results, args.targets)
+    run(args.raw, args.results, args.targets, args.quality_version)
 
 
 if __name__ == "__main__":
