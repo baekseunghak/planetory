@@ -73,4 +73,9 @@ public class AuthSessionService {
         new SecurityContextLogoutHandler().logout(request, response, SecurityContextHolder.getContext().getAuthentication());
         new CookieClearingLogoutHandler("SESSION").logout(request, response, null);
     }
+
+    public void invalidateMember(long memberId) {
+        var repository = redisSessions.getIfAvailable();
+        if (repository != null) repository.invalidateMember(memberId);
+    }
 }

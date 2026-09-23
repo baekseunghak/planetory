@@ -42,6 +42,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
+        if (request.getMethod().equals("GET") && path.matches("/api/v1/withdrawal-requests/[^/]+")) {
+            chain.doFilter(request, response);
+            return;
+        }
         var receivedAt = clock.instant();
         boolean csrf = path.equals("/api/v1/auth/csrf") && request.getMethod().equals("GET");
         boolean logout = path.equals("/api/v1/auth/logout") && request.getMethod().equals("POST");

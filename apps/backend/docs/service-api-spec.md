@@ -627,7 +627,7 @@ AGREE=동의, DISAGREE=비동의, NONE=취소. 성공 200:
 
 모든 인증 회원이 동의·비동의별 목록을 조회한다. 회원을 조인해 최신 닉네임을 반환하며 공개 프로필 설정은 반응을 숨기지 않는다. 정렬은 `updated_at DESC, id DESC`, size는 기본 20·최대 100(1 미만·100 초과는 400)이다. `nextCursor`를 같은 글·reaction·size의 `cursor`로 전달한다. 다른 조건 또는 잘못된 커서는 400 `VALIDATION_FAILED`다. NONE은 목록 필터로 허용하지 않는다.
 
-GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 탈퇴 회원의 익명화·보관 정책은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 승인 대기다. 현재 반응자 조회·합계는 회원 active 필터가 없으며 관계를 임의로 삭제하지 않는다. W4의 제외안은 신규 제안으로서 승인 전 현행 계약을 바꾸지 않는다.
+GET 상세의 본문·댓글 수·반응 합계와 GET 반응자 목록의 부모 상태·목록은 각각 한 DB 스냅샷에서 읽는다. PATCH는 글 잠금을 응답 합계 조립까지 유지한다. 별도 요청·페이지 사이에는 반응 변경·취소로 결과가 달라질 수 있으며 페이지 전체의 고정 스냅샷은 보장하지 않는다. 180의 승인된 현재 대상 제외 방향에 따라 탈퇴 회원 반응은 새 조회의 명단·합계에서 함께 제외한다. 물리 정리와 보관기간은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 세부 결정 대기다.
 
 <a id="analyses"></a>
 
@@ -882,7 +882,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 
 2026-09-21 서진의 프론트 우선 진행 요청에 따라 **회원·별 팔로우의 소비 계약은 [P1 서비스 계약 2절](p1-service-contract.md#2-팔로우--219)**로 구체화한다. 아래 팔로우 행의 미결 문구는 이 인계안으로 대체하며 백엔드 172/173의 교차 리뷰·구현은 별도다. 다른 P1 정책을 이미 구현한 것으로 해석하지 않는다.
 
-아래는 책임과 범위를 확인하기 위한 후보이며 요청·응답이 확정된 API가 아니다. 미정 정책을 임의 구현하지 않는다.
+아래 표는 최초 P1 후보 범위 기록이다. 실제 구현 상태와 요청·응답은 각 상세 절과 인계 계약을 따른다.
 
 | 범위 | 우선순위 | 경로 후보 | 구현 전에 정할 내용 |
 |---|---|---|---|
@@ -894,11 +894,11 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 일반 알림·설정 | P1 | `GET /api/v1/me/notifications`, `PATCH /api/v1/me/notification-settings` | 종류·읽음·채널·보관·중복. F17 첫 접속 안내와 분리 |
 | 내·전체·비교 통계 | P1 | `GET /api/v1/me/statistics`, `GET /api/v1/statistics` | 전체 global_stats 10분 갱신·비교 stats_snapshots 일별. 첫 매칭 산식·90일 경계·분모 0 |
 | 전문가 제보 | 보류 | 경로 미정 | SRS RPT P1과 ERD expert_reports 제외 충돌. 팀 합의 후 구현 |
-| 탈퇴 | 보류, 데이터 정책 P1 | API 제공 시점·경로 미정 | [DEC-11 결정표](../../../docs/requirements/planetory-decision-register.md#dec-11) 승인 후 제공. 기존 탈퇴/작성 DB 확정 순서 유지, 데이터 처리·재가입·결과 유실 확인은 미정 |
+| 탈퇴 | P1 구현·기본 비활성 | 정책 GET, 준비·확정 POST, 영수증 GET, 운영 재시도 POST | `withdrawal-v1` T/C·보관·재가입 목표값은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11). 운영 활성화는 별도 인수 뒤 결정 |
 
-탈퇴 179는 정책 초안이다. 현재 withdrawn 로그인 거절·요청별 상태 확인·타인 프로필 404와 모든 세션 폐기·탈퇴 실행 API는 구분한다. FE222의 available:false·정책 버전·prepare/confirm·상태 전용 쿠키는 DEC-11 4절의 **인계 제안**이며 백엔드 구현 계약으로 승인하지 않았다. 제공 시 [180 인수 준비](../../../docs/requirements/planetory-acceptance-criteria.md#withdrawal-180)의 쓰기 경합·조회 철회·집계·실패 복구를 실제 API로 검증한다.
+**현재 구현 상태(2026-09-23):** 사용자가 [DEC-11 권장값](../../../docs/requirements/planetory-decision-register.md#dec-11)을 구현 목표로 선택했고, 정책 버전은 `withdrawal-v1`이다. 정책 GET과 prepare→confirm, 전용 영수증 조회, 운영 재시도, T의 접근 차단·세션 폐기, C의 개인 자료·관계 정리와 C 뒤 새 계정 재가입을 구현했다. `planetory.withdrawal.enabled=false`가 기본값이므로 정책 GET은 `available:false`, 준비·확정은 503 `WITHDRAWAL_UNAVAILABLE`을 반환한다. 개인정보 처리 근거·본문 식별 정보 삭제 요청 절차·실제 연결 브라우저와 운영 복원 인수 전에는 활성화하지 않는다. [180 인수 조건](../../../docs/requirements/planetory-acceptance-criteria.md#withdrawal-180)과 [FE222 계약](p1-service-contract.md#5-탈퇴-확인-화면--222--s26s27-인계-제안)을 따른다.
 
-**179 리뷰 보완·후속 계약 항목:** W2의 글·댓글 유지안을 채택하면 글 목록·상세·댓글·피드의 `author`에서 탈퇴 작성자 구분 방식, 회원 ID·닉네임의 생략/null 처리, 공통 표시 문구를 제공자·소비자가 함께 확정한다. 탈퇴 표시에는 프로필 이동을 제공하지 않으며 프로필 404를 유지된 글 전체의 404로 전파하지 않는다(WD-06·07). 실제 DTO는 아직 변경하지 않는다. 공개 분석 철회는 기존 `unpublished_at` 재사용/전용 상태 추가를 DEC-11 Q1에서 결정하고, 본인 취소와의 표시 구분·식별 연결 정리 후 집계 제외 근거를 함께 검토한다. 처리 상태·계정 이용·재신청·안내는 DEC-11 3.2절의 다섯 경우를 따른 승인안으로 맞춘다. FE222의 요청 흐름을 변경하면 DEC-11 4절 절차에 따라 인계 계약 5절·소비자·관련 인수를 함께 갱신한다.
+**180 초기 부분 반영 당시 기록:** 일반 글·댓글 작성자 표시와 공개 조회 차단을 실행 API보다 먼저 적용했다. 현재는 공개 분석의 별도 탈퇴 철회 상태, T/C 처리 상태와 C 정리까지 구현했다. 자유 본문 식별 정보의 별도 삭제 요청 운영 절차는 남아 있다.
 
 회원 차단·다중 제공자 연결·이메일 수정·챌린지 전용 성공/보상은 이번 API에 추가하지 않는다. 개인 History 삭제 API도 현재 범위에 없다.
 
@@ -922,7 +922,7 @@ roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 �
 | 공개·전역 발견 별 | 200 true | 현재 관계 / 200 false |
 | 없는·미공개·전역 미발견 별 | 404 `FOLLOW_TARGET_UNAVAILABLE` | 같은 404. 다만 본인의 보존된 별 관계 DELETE는 해제 허용 |
 
-일반 명단·수·피드는 비공개 별과 탈퇴 회원 관계를 제외한다. 탈퇴 회원이 팔로워인 경우도 제외한다. 원천 관계의 탈퇴 시 물리 삭제나 재가입 복원을 구현하지 않는다. 별이 다시 공개되면 보존한 관계만 재노출되며 해제한 관계를 복원하지 않는다. 마지막 발견자 탈퇴 후 발견 기록 보존·정리와 별 공개 자격은 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 별도 미정이다.
+일반 명단·수·피드는 비공개 별과 탈퇴 회원 관계를 제외한다. 탈퇴 회원이 팔로워인 경우도 제외한다. V24 탈퇴 정리 경로는 관계 원천을 C에 지우고 재가입에 복원하지 않는다. 별이 다시 공개되면 남은 활동 회원의 관계만 재노출된다. 마지막 발견자가 탈퇴해도 이미 열린 공개 별 게시판은 `stars.board_open`으로 유지한다. 실행 API는 기본 비활성이다([DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)).
 
 #### 12.1.2 요청·응답과 멱등성
 
@@ -993,7 +993,7 @@ SQL의 두 EXISTS로 현재 관계를 판정한 뒤 페이지를 나누므로 �
 | P09 | P08에서 회원 언팔로우, 이어 별 언팔로우 | STAR 근거만 유지, 이후 제외 제안 |
 | P10 | 같은 시각 서로 다른 type·ID 2/10, 여러 페이지 | 정의된 type 순서·숫자 ID 순서, 고정 집합 누락·중복 없음 |
 | P11 | 숨김/별 공개 중단 후 이전 커서·다른 회원 커서 | 현재 비노출 적용 / 잘못된 커서 400. 상세 접근으로 우회 불가 |
-| P12 | 대상/팔로워 탈퇴 전후 관계·명단·수·피드 | 2026-09-22 사용자 승인: 탈퇴 효력 뒤 현재 관계 명단·수·회원 근거 제외. 별 근거의 탈퇴 회원 일반 글도 익명화 정책 확정 전 팔로잉 피드에서만 페이지 이전 제외. 원본 보관·물리 삭제·익명화·재가입은 미정 |
+| P12 | 대상/팔로워 탈퇴 전후 관계·명단·수·피드 | 탈퇴 효력 뒤 현재 관계 명단·수·회원 근거 제외. 별 근거의 탈퇴 회원 일반 글도 팔로잉 피드에서 페이지 이전 제외. 관계 정리·재가입은 [DEC-11 선택값](../../../docs/requirements/planetory-decision-register.md#dec-11)을 따르며, 동시 팔로우 저장은 대상 회원 탈퇴와 직렬화한다. 실행 API는 기본 비활성 |
 | P13 | 새 판만 공개 / 탐색 불가능 후보만 추가 / 이미 진행 중인 회원에 후보 추가 / 완료 회원에 탐색 가능한 미매칭 후보 발생 | 앞의 세 경우는 회원 재개 아님, 마지막만 실제 completed → in_progress 전이. 별 구독 공통 원인 사건은 별도 승인 필요. 일반 편집·댓글·추가 분석은 새 원글 아님 |
 | P14 | 사건 후 언팔로우·재팔로우 / 발행 직전 설정 끔 / 탈퇴 | 관계 인스턴스 교체 시 옛 대기 알림 부활 없음. 발행 단계·경합 제어 승인 후 수신 제외·피드 유지 검증. 탈퇴는 DEC-11 적용 |
 | P15 | 같은 원인으로 회원 100명 재개 / 본인 재개·별 구독 중첩 / 커밋 후 전달 전 장애 / 알림 저장 후 응답 유실·읽은 뒤 재전달 / 원 사건 롤백 | 원인·수신자당 한 건. 사건 ID·발생 시각·원인 Bundle/근거 보존과 복구, 전달 시각 분리. 재시도로 알림 ID·생성 시각·읽음 상태 초기화 없음. 롤백 알림 없음. 150·174 제공자 인수 |
@@ -1027,7 +1027,7 @@ SQL의 두 EXISTS로 현재 관계를 판정한 뒤 페이지를 나누므로 �
 - `comparison={status,asOf,sourceObservedAt,generatedAt,snapshotDate,cohortStart,cohortEnd,cohortMemberCount,metrics}`다. metrics 키는 `firstMatchAccuracy`, `submissionsPerStar`, `harmonicRecognitionRate`, `evidencePerSubmission`; 값은 `{unit,median,sampleCount,status,reason}`다. 첫 성공 전 metadata=null/metrics={}이고 UNAVAILABLE, 최신 날짜가 어제보다 오래되면 STALE이다. 회원별 원자료·회원 ID·닉네임은 포함하지 않는다.
 - KST D의 `[D-90,D)`에 저장된 candidate/no_candidate/skipped 제출이 있는 active 회원을 선정하고 D 이전 누적값의 중앙값을 저장한다. null만 제외하고 0을 포함하며 짝수는 가운데 두 값의 평균이다. `cohortMemberCount`와 지표별 `sampleCount`를 구분하고 중간 표시 반올림은 하지 않는다. 90일을 값 계산 기간으로 사용하거나 회원별 비율 중앙값을 전체 분자/분모 비율로 대체하지 않는다.
 - **2026-09-22 추가 사용자 승인:** `asOf/cohortEnd`는 기록 종료 경계 D, `sourceObservedAt`은 집계 트랜잭션이 원천을 확인한 시각, `generatedAt`은 계산 완료다. 전날까지의 기록을 **실행 시점에 확인한 상태로 계산한 값**이다. 늦게 커밋된 기록과 D 이후 원천 관측 전 라벨·회원상태 변경이 반영될 수 있다. 정확한 자정 당시 상태라고 표시하지 않는다. `snapshotDate=D-1`이며 과거 날짜 신규 계산은 거절하고 기존 성공본만 유지한다. 같은 원천 시점을 재현할 수 없는 본인 비교값은 177에서 null/HISTORICAL_SOURCE_UNAVAILABLE로 제공한다.
-- 현재 집계의 회원 기여는 탈퇴 효력 이후 다음 성공 갱신부터 제외하고 과거 비식별 성공본은 보존한다. 원본 보관·물리 삭제는 DEC-11/179 별도 범위다. 기존 P0 신호 통계를 이 변경으로 일괄 수정하지 않는다.
+- 현재 집계의 회원 기여는 탈퇴 효력 이후 다음 성공 갱신부터 제외한다. 과거 비식별 성공본은 생성일부터 1년만 저장하고 공개 `cohortMemberCount<10`이면 비교 블록을 `UNAVAILABLE`로 반환한다. 숫자 차분에 의한 소수 추정까지 막는 추가 검토는 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 운영 인수 조건이다.
 - AI 후보별 최신 실행을 입증할 원천이 없으므로 모든 유효 공개 참여를 `aiAttemptUnknown` 건수에 넣고 `aiJudgmentBands={status:NO_SAMPLE,reason:AI_ATTEMPT_UNKNOWN,items:[]}`로 반환한다. 과거 성공 평가·정상 0점을 최신 시도로 단정하지 않는다. 원천 확보 후에는 확인된 정상 0점도 판정 구간에 포함해야 한다. 버전별 판정 구간 구현은 원천 확보와 후속 계약이 선행한다.
 - `aiAttemptUnknown`은 AI 시도 횟수가 아니라 **최신 AI 시도를 확인할 수 없는 회원×신호 공개 참여 건수**다. 현재 원천에서는 `publicParticipations`와 항상 같으며 두 값을 더하지 않는다. `AVAILABLE`은 이 제외 대상 건수를 계산할 수 있다는 뜻이고 AI 결과 가용성을 뜻하지 않는다. 판정 구간은 별도로 `NO_SAMPLE / AI_ATTEMPT_UNKNOWN`이다.
 - 발견·현재 완료는 회원×별 수와 서비스 고유 TIC 수를 분리한다. 성과 유형은 저장 당시 유형, 고유 신호 유형은 현재 판정이다. `mostPostsStars`는 현재 공개 별에서 visible 일반/공식 원글 수 순 상위5개(동률 TIC 오름차순)이고 댓글·반응·자유글을 포함하지 않는다. `sectorCompletion`은 관측 버전 중복을 제거하고 발견 집합 내부의 현재 완료만 센다. 회차끼리 합산하지 않는다. 챌린지 `participantCount`는 고유 회원 수, `participationCount`와 판단 분포는 대상 별의 회원×신호 공개 대표 참여 수다. 현재 active 회차의 대상 별에 대한 전 기간 유효 공개를 포함하며 `starts_on/ends_on`으로 자르지 않는다. 고유 신호 수는 전체 후보 카탈로그가 아니라 성과가 있는 후보 집합을 센다.

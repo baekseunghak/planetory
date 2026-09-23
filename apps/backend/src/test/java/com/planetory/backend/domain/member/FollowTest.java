@@ -2,6 +2,7 @@ package com.planetory.backend.domain.member;
 
 import com.planetory.backend.domain.member.service.FollowService;
 import com.planetory.backend.domain.member.service.FollowTokens;
+import com.planetory.backend.domain.member.service.WithdrawalService;
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
 import com.planetory.backend.global.security.MemberPrincipal;
 import java.time.Instant;
@@ -65,6 +66,7 @@ class FollowTest {
     @Autowired MockMvc mvc;
     @Autowired GalaxyLayout layout;
     @Autowired FollowService follows;
+    @Autowired WithdrawalService withdrawals;
     @Autowired FollowTokens tokens;
     @Autowired com.planetory.backend.domain.member.service.MemberService members;
     @Autowired com.planetory.backend.domain.exploration.service.StarService stars;
@@ -264,6 +266,49 @@ class FollowTest {
                 assertEquals(!first,follows.relation(viewer,"MEMBER",other).following());
             }
         }
+    }
+
+    @Test void 대상_탈퇴와_겹친_팔로우는_정리뒤_관계를_재생성하지_않는다() throws Exception {
+        var prepared = withdrawals.prepare(other, WithdrawalService.POLICY_VERSION);
+        var atInsert = new CountDownLatch(1);
+        var resume = new CountDownLatch(1);
+        doAnswer(call -> {
+            atInsert.countDown();
+            if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("follow insert timeout");
+            return call.callRealMethod();
+        }).when(client).sql(contains("INSERT INTO follows"));
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var follow = pool.submit(() -> follows.change(viewer, "MEMBER", other, true));
+            assertTrue(atInsert.await(10, TimeUnit.SECONDS));
+            var confirmStarted = new CountDownLatch(1);
+            var confirm = pool.submit(() -> {
+                confirmStarted.countDown();
+                return withdrawals.confirm(other, UUID.fromString(prepared.status().requestId()),
+                        WithdrawalService.POLICY_VERSION, "탈퇴");
+            });
+            assertTrue(confirmStarted.await(10, TimeUnit.SECONDS));
+            try { assertThrows(TimeoutException.class, () -> confirm.get(500, TimeUnit.MILLISECONDS)); }
+            finally { resume.countDown(); }
+            assertTrue(follow.get(20, TimeUnit.SECONDS).following());
+            assertEquals("COMPLETED", confirm.get(20, TimeUnit.SECONDS).status());
+            assertEquals(0, owner.queryForObject("SELECT count(*) FROM users WHERE id=?", Integer.class, other));
+            assertEquals(0, owner.queryForObject("SELECT count(*) FROM follows WHERE target_type='user' AND target_id=?",
+                    Integer.class, other));
+        } finally { resume.countDown(); reset(client); }
+    }
+
+    @Test void 상호_팔로우는_잠금_순서가_같아_교착하지_않는다() throws Exception {
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var start = new CountDownLatch(1);
+            var first = pool.submit(() -> { start.await(); return follows.change(viewer, "MEMBER", other, true); });
+            var second = pool.submit(() -> { start.await(); return follows.change(other, "MEMBER", viewer, true); });
+            start.countDown();
+            assertTrue(first.get(10, TimeUnit.SECONDS).following());
+            assertTrue(second.get(10, TimeUnit.SECONDS).following());
+        }
+        assertEquals(2, owner.queryForObject("SELECT count(*) FROM follows WHERE target_type='user' "
+                + "AND ((user_id=? AND target_id=?) OR (user_id=? AND target_id=?))",
+                Integer.class, viewer, other, other, viewer));
     }
 
     @Test void 합성관계10000개_역방향목록_관계정렬_TIC자격_실행계획() {

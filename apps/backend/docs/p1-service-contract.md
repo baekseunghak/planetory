@@ -93,14 +93,16 @@ V23은 기존 true/false를 보존하고 누락 키만 true로 채운다. 기존
 
 ## 5. 탈퇴 확인 화면 · 222 / S26·S27 인계 제안
 
-**데이터 보관·익명화·재가입 정책은 이 문서로 승인하지 않는다.** DEC-11/S26 승인 전 서버는 `available:false`를 반환하고 실행을 거절한다. 프론트 준비와 운영 탈퇴 제공은 다르며222의 정책 승인 조건은 남는다. 사용자가 프론트 기준으로 먼저 작업하도록 요청했으므로 승인된 정책을 입력받는 화면·실패 처리 구조만 준비했다.
+**2026-09-22 프론트 준비 단계 기록:** 이 문서는 데이터 보관·익명화·재가입 정책을 승인하지 않았고, 당시 서버는 `available:false`만 반환했다. 이후 사용자가 DEC-11의 권장값을 구현 목표로 선택했다. 현재 구현과 운영 활성화 경계는 아래 2026-09-23 문단을 따른다.
+
+2026-09-23에는 prepare→confirm·영수증 방향과 [DEC-11의 권장값](../../../docs/requirements/planetory-decision-register.md#dec-11)을 사용자가 선택했다. 백엔드에는 `withdrawal-v1` 구현을 추가했으나 `planetory.withdrawal.enabled` 기본값은 `false`다. 개인정보 처리 근거·본문 삭제 요청 운영 절차와 생산자 검증을 마친 뒤에만 켠다. 기본값에서 정책 GET은 `available:false`, 준비·확정은 503 `WITHDRAWAL_UNAVAILABLE`이다. 일반 글·댓글의 탈퇴 작성자는 `memberId:null`, `nickname:"탈퇴한 회원"`을 반환하며 프론트는 프로필 링크를 만들지 않는다.
 
 | 메서드·경로 | 의미 |
 |---|---|
-| GET `/api/v1/me/withdrawal-policy` | 미승인 `{available:false,reason:"탈퇴 정책을 준비하고 있습니다."}` 또는 승인 `{available:true,version:"approved-version",effects:["승인 문구"],retention:["승인 문구"],rejoining:["승인 문구"]}` |
-| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"approved-version"}` → 최초 준비는200 `{requestId:"opaque-id",status:"READY",message:"처리 전"}`. 기존 활성 요청을 반환하면 그 요청의 현재 상태를 제공한다. **이 요청 자체는 준비·기존 요청 확인만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
-| POST `/api/v1/me/withdrawal-requests/{requestId}/confirm` | `{policyVersion:"approved-version",confirmation:"탈퇴"}` →200 처리상태. 이 단계만 승인된 탈퇴를 수행한다. |
-| GET `/api/v1/withdrawal-requests/{requestId}` | 아래의 결과 확인 전용 쿠키로200 `{requestId,status,message}`. 상태는 READY/PROCESSING/COMPLETED/FAILED. |
+| GET `/api/v1/me/withdrawal-policy` | 기본 비활성 `{available:false,reason:"탈퇴 정책을 준비하고 있습니다."}` 또는 활성화 뒤 `{available:true,version:"withdrawal-v1",effects:["정책 문구"],retention:["정책 문구"],rejoining:["정책 문구"]}` |
+| POST `/api/v1/me/withdrawal-requests` | `{policyVersion:"withdrawal-v1"}` → 최초 준비는200 `{requestId:"opaque-id",status:"READY",message:"탈퇴가 아직 확정되지 않았습니다."}`. 기존 활성 요청을 반환하면 그 요청의 현재 상태를 제공한다. **이 요청 자체는 준비·기존 요청 확인만 하며 탈퇴/삭제/세션 종료를 하지 않는다.** |
+| POST `/api/v1/me/withdrawal-requests/{requestId}/confirm` | `{policyVersion:"withdrawal-v1",confirmation:"탈퇴"}` →200 처리상태. 이 단계만 승인된 탈퇴를 수행한다. |
+| GET `/api/v1/withdrawal-requests/{requestId}` | 아래의 결과 확인 전용 쿠키로200 `{requestId,status,message,effectiveAt}`. 상태는 READY/PROCESSING/COMPLETED/FAILED. `effectiveAt`은 T 전 null, T 뒤 ISO 시각이다. |
 
 정책의 effects/retention/rejoining는 비어 있지 않은 문자열 배열이다. 서버가 실제 승인 문구를 제공한다. 프론트에 삭제/보관 기간·재가입 제한을 하드코딩하지 않는다. 정책이 변경되면409 POLICY_CHANGED로 실제 실행을 거절한다. 미승인503 WITHDRAWAL_UNAVAILABLE, 입력오류400, 타인 요청404. 준비/확정은 현재 로그인·기존 CSRF가 필수다.
 
@@ -109,6 +111,8 @@ V23은 기존 true/false를 보존하고 누락 키만 true로 채운다. 기존
 - prepare 응답에서 **해당 요청 확인에만 쓰는 Secure·HttpOnly·SameSite 쿠키**를 설정한다. 이 쿠키는 세션 종료 뒤에도 최소한의 상태 확인을 허용하되 로그인/개인자료 접근 권한은 주지 않는다. 운영 domain/path·유효기간은 S27에서 명시하고 만료 후에는404로 숨긴다.
 - requestId 문자열 자체로 상태를 공개하지 않는다. 상태 GET은 같은 요청의 전용 쿠키 검증 후 상태와 비민감 안내만 반환한다. 쿠키 없는/다른 회원/다른 요청은 동일404이며 재시도 신원 확인은 별도 정책을 따른다.
 - 준비 POST는 회원·활성 요청 단위로 중복 생성하지 않는다. prepare의 응답 유실은 새 삭제를 일으키지 않는다. confirm은 요청ID 단위 원자적인 상태 전이로 한 번만 실행한다. 처리 중/완료 요청을 다시 받아도 삭제·익명화를 반복하지 않는다. 정책/version/회원 일치는 confirm 시 다시 검사한다.
+- 영수증 쿠키는 `WITHDRAWAL_RECEIPT`, Secure·HttpOnly·SameSite=Strict, 해당 요청 결과 경로에만 전송하며 신청 후 90일이다. 서버에는 무작위 토큰의 SHA-256 값만 저장한다. 처리 상태도 신청 후 90일간 조회하고 이후 404로 숨긴다. 만료 뒤 동일 OAuth 재가입으로 옛 요청을 조회할 수 있다고 약속하지 않는다.
+- T 확정 뒤 `PROCESSING`·`FAILED`에서도 `effectiveAt`이 있으므로 프론트는 이용 종료와 정리 지연을 구별한다. `COMPLETED`는 승인된 C 작업과 T를 확인한 결과다. 초기 정리는 같은 HTTP 흐름에서 시도하고 실패하면 5회 재시도한다. 정리 대상·1년/90일 보관과 운영 장애 기한은 DEC-11을 따른다.
 - 프론트는 confirm을 자동 반복하지 않는다. 결과를 잃으면 읽기 전용 상태 화면으로 이동한다. READY를 성공으로 해석하지 않고,401/404를 탈퇴 성공 증거로 쓰지 않는다. COMPLETED는 해당 서버 작업의 완료 증거이며 세션·회원별 임시 입력을 제거한다. 서버 역시 모든 기존 세션과 이후 보호 API 접근을 차단해야 한다.
 - PROCESSING/FAILED/만료는 각 상태로 표시한다. 단순 오류로 영구 탈퇴 완료를 선언하지 않는다. 게시글·댓글·History 처리, 실제 익명화, 재가입 허용은 S26 승인 정책을 따르며 S27 생산자 테스트와244 P1-222에서 대조한다.
 

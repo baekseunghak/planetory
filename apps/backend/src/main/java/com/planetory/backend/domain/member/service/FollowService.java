@@ -39,7 +39,8 @@ public class FollowService {
 
     @Transactional
     public Relation change(long member, String kind, long target, boolean following) {
-        lock(member);
+        if (kind.equals("MEMBER") && member != target) lockMembers(member, target);
+        else lock(member);
         if (kind.equals("MEMBER") && member == target) {
             if (following) throw new BusinessException(ErrorCode.FOLLOW_SELF);
             return new Relation(kind, id(kind, target), false);
@@ -138,6 +139,13 @@ public class FollowService {
         // ponytail: 회원별 팔로우 쓰기를 직렬화한다. 같은 회원의 쓰기 처리량이 병목일 때 관계별 잠금을 검토한다.
         var status = jdbc.sql("SELECT status FROM users WHERE id=? FOR UPDATE").param(member).query(String.class).optional();
         if (status.isEmpty() || !status.get().equals("active")) throw new BusinessException(ErrorCode.AUTH_REQUIRED);
+    }
+    private void lockMembers(long member, long target) {
+        // 양방향 팔로우도 같은 순서로 잠그며, 대상 탈퇴의 T/C와 관계 저장을 직렬화한다.
+        var active = jdbc.sql("SELECT id FROM users WHERE id IN (?,?) AND status='active' ORDER BY id FOR UPDATE")
+                .params(member, target).query(Long.class).list();
+        if (!active.contains(member)) throw new BusinessException(ErrorCode.AUTH_REQUIRED);
+        if (!active.contains(target)) throw new BusinessException(ErrorCode.FOLLOW_TARGET_UNAVAILABLE);
     }
     private <T> Page<T> page(List<Row<T>> rows, FollowTokens.Page q) {
         boolean more = rows.size() > q.size();

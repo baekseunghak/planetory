@@ -17,6 +17,8 @@ public enum ErrorCode {
     FOLLOW_TARGET_UNAVAILABLE(HttpStatus.NOT_FOUND, "팔로우 대상을 이용할 수 없습니다."),
     TIC_MISMATCH(HttpStatus.BAD_REQUEST, "게시글과 같은 별의 자료만 첨부할 수 있습니다."),
     NICKNAME_CONFLICT(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    POLICY_CHANGED(HttpStatus.CONFLICT, "탈퇴 정책이 변경됐습니다. 다시 확인해 주세요."),
+    WITHDRAWAL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "탈퇴 정책을 준비하고 있습니다."),
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다."),

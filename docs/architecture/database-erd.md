@@ -149,11 +149,11 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-여섯 묶음, 총 33개 테이블 + materialized view 1개.
+여섯 묶음, 총 34개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수는 운영 적용 전 검증 대상이다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
-| A 회원 | users, user_settings, follows | 계정·설정·팔로우(P1) |
+| A 회원 | users, user_settings, follows, withdrawal_requests | 계정·설정·팔로우(P1)·탈퇴 처리 상태 |
 | B 별·공개 데이터 카탈로그 | stars, observation_datasets, publication_bundles, light_curve_segments, periodograms, candidates, candidate_aliases, external_signal_references, candidate_dispositions, candidate_status_history, ai_executions, ai_evaluations | 배치가 적재한 Gold 릴리스의 본문(배열)과 메타데이터. 서비스는 읽기만 |
 | C 분석·제출 | submissions, analysis_histories, analysis_snapshots | 제출·불변 히스토리·접힌 곡선 스냅샷 |
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
@@ -162,7 +162,7 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 2. ERD
 
-아래 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. 현재 전체 구조와 열 설명의 정본은 이 문서의 Mermaid·열 표다.
+아래 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24 신규 열·테이블은 아래 Mermaid·열 표를 따른다. SVG 갱신은 시각 인수에서 별도 확인한다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -256,6 +256,16 @@ erDiagram
         bigint target_id "대상 회원 또는 별"
         timestamptz created_at "생성 시각"
     }
+    withdrawal_requests["withdrawal_requests · 탈퇴 처리"] {
+        uuid id PK "불투명 요청 ID"
+        bigint user_id UK "탈퇴 당시 회원 ID(FK 없음)"
+        text policy_version "동의한 버전"
+        text receipt_hash "영수증 토큰 해시"
+        text status "READY/PROCESSING/COMPLETED/FAILED"
+        timestamptz effective_at "T 기록"
+        timestamptz completed_at "C 기록"
+        int attempts "정리 시도 수"
+    }
     stars["stars · 별"] {
         bigint tic_id PK "별(TIC)"
         numeric teff_k "표면 온도(K)"
@@ -263,6 +273,7 @@ erDiagram
         numeric tmag "TESS 밝기 등급"
         smallint confirmed_count "후보표의 확정 행성 수"
         text service_status "hidden/published"
+        boolean board_open "한 번 열린 공개 게시판"
     }
     observation_datasets["observation_datasets · 관측 회차"] {
         bigint id PK "고유 번호"
@@ -465,6 +476,7 @@ erDiagram
         text title "제목"
         text body "본문"
         text status "visible/hidden/deleted"
+        timestamptz author_withdrawn_at "원 작성자 탈퇴 시각"
         timestamptz created_at "생성 시각"
     }
     comments["comments · 답글"] {
@@ -473,6 +485,7 @@ erDiagram
         bigint user_id FK "회원"
         text body "본문"
         text status "visible/hidden/deleted"
+        timestamptz author_withdrawn_at "원 작성자 탈퇴 시각"
         timestamptz created_at "생성 시각"
     }
     post_reactions["post_reactions · 동의·비동의"] {
@@ -491,6 +504,7 @@ erDiagram
         timestamptz published_at "공개 시각"
         timestamptz unpublished_at "본인 취소"
         timestamptz hidden_at "운영 숨김(DB 설정)"
+        timestamptz withdrawn_at "탈퇴로 공개 철회"
     }
     post_source_links["post_source_links · 출처 링크 카드"] {
         bigint id PK "고유 번호"
@@ -615,6 +629,8 @@ erDiagram
 
 **users** (ACC-01·02·05, DEC-11): provider·provider_user_id UNIQUE, nickname UNIQUE + `UNIQUE (lower(nickname))` 함수 인덱스(영문 대소문자 무시 중복 검사, 서비스 API SB-D14. 상시 변경, 게시글에 복사 저장 안 함), role member/operator(운영 화면은 없지만 DB 직접 조작 권한 구분용), status active/withdrawn.
 
+**V24 탈퇴 경계:** T에서 `users.status=withdrawn`으로 차단하고 C에 개인 행을 삭제한다. 일반 글·댓글은 내부 공통 작성자(-1)로 재연결하므로 원 제공자 ID·닉네임과 내부 회원 ID를 공개 작성자 응답에 남기지 않는다. `withdrawal_requests`는 FK 없는 탈퇴 당시 회원 ID, 동의 정책 버전, 영수증 토큰 해시와 T/C·재시도 상태를 신청 후 90일만 보관한다. 실제 실행은 `planetory.withdrawal.enabled=true`를 명시한 환경에서만 가능하며 기본은 비활성이다. C 함수는 withdrawn 회원만 처리하고 앱 역할에 함수 실행 권한만 준다. [정책값](../requirements/planetory-decision-register.md#dec-11)을 따른다.
+
 **user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB(achievement/reopen/challenge/follow/comment/relabel 6종 true), notification_epochs JSONB(종류별 OFF 전환 횟수, 기본 {}), onboarding_done. V23은 기존 true/false를 보존하고 누락된 지원 키만 true로 보충한다.
 
 **follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). target은 다형 참조라 FK 없이 서비스에서 검증하며 user_id는 users FK다. 173은 기존 테이블·IDENTITY·created_at을 재사용한다. V20은 앱 SELECT·INSERT·DELETE만 추가하고 UPDATE·TRUNCATE를 금지한다(V11 sequence 권한 재사용). 반복 PUT은 created_at을 유지한다. 사용자 승인(2026-09-22)에 따른 현재 유효 관계·개인 관리 ID·탈퇴 제외 계약은 [서비스 API 12.1](../../apps/backend/docs/service-api-spec.md#follow-policy)을 따른다. 원천 보관/탈퇴 삭제·익명화·마지막 발견자 공개 자격은 별도 미정이다. 테이블·열·관계선 변경이 없어 ERD SVG는 변경하지 않는다.
@@ -623,7 +639,7 @@ erDiagram
 
 배치가 Gold 릴리스 전환 때 적재하고 서비스 API는 읽기만 한다. 릴리스 교체는 publication_bundles.status를 current로 바꾸는 트랜잭션 하나로 끝낸다.
 
-**stars**: tic_id PK, teff_k·radius_rsun·tmag(본인 상세는 셋 다, 공개 요약은 tmag만. 값이 없으면 `null`. 탐사 API D-18), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published. **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
+**stars**: tic_id PK, teff_k·radius_rsun·tmag(본인 상세는 셋 다, 공개 요약은 tmag만. 값이 없으면 `null`. 탐사 API D-18), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published, `board_open`(첫 발견 시 true, 마지막 발견자 탈퇴·삭제로 닫히지 않음). **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
 
 **observation_datasets**: tic_id, sector, start_btjd, end_btjd, cadence, time_system, source_version. UNIQUE(tic_id, sector, source_version).
 
@@ -817,10 +833,11 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | tag | ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL. system_thread는 NULL | |
 | title, body | | system_thread는 공개 후보 네 수치 요약을 V19 트리거로 생성·동기화한다. [검색 본문 계약](../api/community/README.md#공식-제목본문의-구현-차이) |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
+| author_withdrawn_at | NULL 가능 | 원 작성자 T. C에 공통 작성자로 옮긴 글의 1년 본문 파기 기준 |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
 | 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
 
-**comments**: post_id(일반 글 또는 공식 스레드의 토론 영역), user_id, body, status visible/hidden/deleted, created_at, updated_at. parent_id 없음(1단계).
+**comments**: post_id(일반 글 또는 공식 스레드의 토론 영역), user_id, body, status visible/hidden/deleted, created_at, updated_at, `author_withdrawn_at`(T+1년 본문 파기). parent_id 없음(1단계).
 
 **post_reactions** (COM-08): UNIQUE(post_id, user_id), reaction agree/disagree, updated_at. **kind=user 글에만 허용(API 검사).** 반응자 목록은 조인으로 공개.
 
@@ -836,6 +853,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | published_at | | 첫 등록 시각. 이 시각에 미확정 성과 인정(최초 1회) |
 | unpublished_at | NULL | 본인 취소. 재공개 시 NULL로 되돌림 |
 | hidden_at | NULL | 운영 숨김(DB 설정). 본인 취소와 독립 |
+| withdrawn_at | NULL | 탈퇴에 따른 공개 철회. 본인 취소와 구별하며 C에 개인 공개 분석 행 삭제 |
 | 유효 공개 조건 | | unpublished_at IS NULL AND hidden_at IS NULL AND 스레드 status=visible |
 | 인덱스 | (candidate_id, user_id, published_at DESC) | 판단 통계 |
 

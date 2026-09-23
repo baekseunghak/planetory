@@ -106,6 +106,8 @@ public class SubmissionLookupService {
     public SubmissionViews.DetailView detailView(long member, String submissionId) {
         long id = ExplorationIds.parse(submissionId, ExplorationIds.SUBMISSION)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        // 조회 표시를 저장하므로 탈퇴 확정·정리와 직렬화하되, 상세 보기끼리는 함께 진행한다.
+        if (!submissions.shareMember(member)) throw new BusinessException(ErrorCode.AUTH_REQUIRED);
         var row = histories.ownedSubmission(member, id);
         JsonNode saved = row.submission().path("response_snapshot");
         // 당시 응답이 없으면 무엇을 보여 줄지 정할 근거가 없다. 현재 후보로 지어내지 않는다.

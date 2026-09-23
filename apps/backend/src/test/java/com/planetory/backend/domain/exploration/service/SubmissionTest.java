@@ -218,11 +218,11 @@ class SubmissionTest {
         var cutoff=date.atStartOfDay(zone).toInstant();
         var observed=java.time.Instant.now();
         var baseline=new com.planetory.backend.domain.statistics.service.StatisticsSnapshotService.Baseline(
-                "PERCENT",BigDecimal.valueOf(25),4,
+                "PERCENT",BigDecimal.valueOf(25),10,
                 com.planetory.backend.domain.statistics.dto.StatisticsDtos.MetricStatus.AVAILABLE,null);
         var snapshot=new com.planetory.backend.domain.statistics.service.StatisticsSnapshotService.ComparisonSnapshot(
                 com.planetory.backend.domain.statistics.dto.StatisticsDtos.BlockStatus.READY,
-                cutoff,observed,observed,date.minusDays(1),date.minusDays(90).atStartOfDay(zone).toInstant(),cutoff,4L,
+                cutoff,observed,observed,date.minusDays(1),date.minusDays(90).atStartOfDay(zone).toInstant(),cutoff,10L,
                 Map.of("firstMatchAccuracy",baseline));
         long id=jdbc.queryForObject("INSERT INTO stats_snapshots(snapshot_date,scope,metrics) VALUES (?,'global',?::jsonb) RETURNING id",
                 Long.class,date.minusDays(1),JsonMapper.builder().build().writeValueAsString(snapshot));

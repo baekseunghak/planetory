@@ -321,3 +321,7 @@ V19 다음에 적용하며 V21은 178 통계 작업 소유다. 적용한 V1~V19�
 로컬 직접 실행은 백엔드 프로세스 환경에, 컨테이너는 루트 및 `infra/service/compose.yaml`의 backend 환경에 주입한다. 서버의 보호된 배포 환경에서 제공하며 실제 값은 이 작업에서 설정하지 않았다. 미설정/32바이트 미만이면 서명이 필요한 목록·모두 읽음은 503이다. 설정·미확인 수·개별 읽음은 키에 의존하지 않는다.
 
 V23과 RELABEL을 포함한 FE 6종 소비자를 함께 반영한다. 기존 설정값과 notifications 원본을 보존하고 기존 사건을 새 알림함으로 소급하지 않는다. 일회용 PostgreSQL 테스트에서만 마이그레이션을 검증했으며 공유/운영 DB 변경은 별도 실행 승인 대상이다. 전환·DB 사건 생산 경계와 운영 인수 범위는 [F15.7](../../../docs/development/service-backend/community.md#notification-policy)을 따른다.
+
+## V24 탈퇴 스키마·권한 (180)
+
+V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdrawn_at`, 공개 분석의 `withdrawn_at`과 두 정리 함수를 추가한다. 적용은 회원 데이터 삭제 경로를 준비하는 스키마 변경이며 **공유·운영 DB에는 이 작업에서 적용하지 않는다**. 일회용 PostgreSQL에서 전체 migration·V18 구버전 업그레이드와 실제 앱 역할의 함수 실행 권한을 검증한다. 운영 적용 전 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 처리 근거·본문 삭제 절차·복원 계획을 확인하고 별도 승인받는다. 기본 기능 스위치는 `planetory.withdrawal.enabled=false`다.

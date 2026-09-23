@@ -67,7 +67,7 @@ export function WithdrawalPage() {
     // 중복 준비 조회가 기존 요청의 현재 상태를 돌려주면 재확정하지 않는다.
     // 알 수 없는 상태/다른 형식은 위 파서에서 거절하고 영수증을 추측하지 않는다.
     if (prepared.value.status !== "READY") {
-      showReceipt(id, prepared.value.status === "COMPLETED");
+      showReceipt(id, !!prepared.value.effectiveAt);
       return;
     }
     const result = await write.run(async (signal) =>
@@ -83,9 +83,7 @@ export function WithdrawalPage() {
         (value) => readWithdrawalStatus(value, id),
       ),
     );
-    if (result?.value.status === "COMPLETED") {
-      showReceipt(id, true);
-    }
+    if (result?.value.effectiveAt) showReceipt(id, true);
   }
   return (
     <section className="explorer-settings">
@@ -202,19 +200,19 @@ export function WithdrawalStatusPage() {
   const state = useReadModel("withdrawal:" + requestId, load),
     session = useSession();
   const completion = location.state?.completedWithdrawal;
-  const completedByConfirmation =
+  const closedByConfirmation =
     completion?.requestId === requestId &&
     !!session.member &&
     completion?.memberId === session.member.memberId;
   useEffect(() => {
     if (
-      (completedByConfirmation || state.data?.status === "COMPLETED") &&
+      (closedByConfirmation || state.data?.effectiveAt) &&
       session.status === "authenticated"
     )
       session.clear(null);
   }, [
-    completedByConfirmation,
-    state.data?.status,
+    closedByConfirmation,
+    state.data?.effectiveAt,
     session.status,
     session.clear,
   ]);
@@ -225,7 +223,9 @@ export function WithdrawalStatusPage() {
     READY: "아직 탈퇴가 확정되지 않았습니다",
     PROCESSING: "탈퇴 처리 결과를 확인하고 있습니다",
     COMPLETED: "탈퇴가 완료되었습니다",
-    FAILED: "탈퇴가 완료되지 않았습니다",
+    FAILED: state.data?.effectiveAt
+      ? "계정 이용은 종료됐으며 데이터 정리가 지연 중입니다"
+      : "탈퇴가 완료되지 않았습니다",
   };
   return (
     <main className="page auth-message">
@@ -242,7 +242,7 @@ export function WithdrawalStatusPage() {
       )}
       <button
         onClick={() => {
-          if (state.data?.status === "COMPLETED") session.clear(null);
+          if (state.data?.effectiveAt) session.clear(null);
           state.reload();
         }}
       >
@@ -251,7 +251,7 @@ export function WithdrawalStatusPage() {
       <p>
         <Link
           onClick={() => {
-            if (state.data?.status === "COMPLETED") session.clear(null);
+            if (state.data?.effectiveAt) session.clear(null);
           }}
           to="/login"
         >

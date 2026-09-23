@@ -169,7 +169,7 @@ class HotTopicsTest {
         }
         jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?",tic); ids(read(""));
         jdbc.update("UPDATE stars SET service_status='published' WHERE tic_id=?",tic); ids(read(""),t);
-        jdbc.update("DELETE FROM star_unlocks WHERE tic_id=?",tic); ids(read(""));
+        jdbc.update("DELETE FROM star_unlocks WHERE tic_id=?",tic); ids(read(""),t);
     }
 
     @Test void 동시취소에도_선정N과요약N은동일_다음요청재평가() throws Exception {

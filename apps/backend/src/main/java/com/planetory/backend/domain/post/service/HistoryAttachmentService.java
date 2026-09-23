@@ -154,6 +154,7 @@ public class HistoryAttachmentService {
         String author = parent == Parent.POST ? "p.user_id" : "c.user_id";
         return " FROM " + parent.table + " a" + join + " JOIN analysis_histories h ON h.id=a.history_id"
                 + " WHERE p.status='visible' AND p.tic_id=h.tic_id AND h.user_id=" + author
+                + " AND EXISTS (SELECT 1 FROM users owner WHERE owner.id=h.user_id AND owner.status='active')"
                 + (parent == Parent.POST ? " AND p.kind='user'" : " AND c.status='visible' AND p.kind IN ('user','system_thread')");
     }
 

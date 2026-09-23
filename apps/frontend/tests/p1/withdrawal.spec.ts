@@ -56,6 +56,7 @@ test("session expiry does not cancel a slower receipt status read", async ({
         requestId: "receipt-after-logout",
         status: "COMPLETED",
         message: "탈퇴 처리가 완료되었습니다.",
+        effectiveAt: "2026-09-23T00:00:00Z",
       },
     });
   });

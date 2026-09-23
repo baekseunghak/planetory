@@ -15,12 +15,14 @@ import com.planetory.backend.domain.auth.oauth.OAuthLoginSuccessHandler;
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
 import com.planetory.backend.domain.exploration.service.InitialExplorationService;
 import com.planetory.backend.domain.member.service.MemberService;
+import com.planetory.backend.domain.member.service.WithdrawalService;
 import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
 import com.planetory.backend.global.security.SecurityConfig;
 import com.sun.net.httpserver.HttpServer;
+import jakarta.servlet.http.Cookie;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -75,6 +77,7 @@ class AuthIntegrationTest {
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
+        registry.add("planetory.withdrawal.enabled", () -> "true");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -103,6 +106,7 @@ class AuthIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired MemberService members;
+    @Autowired WithdrawalService withdrawals;
     @Autowired PostService posts;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -535,6 +539,105 @@ class AuthIntegrationTest {
         mvc.perform(get("/api/v1/me").session(session)).andExpect(status().isUnauthorized());
         assertTrue(session.isInvalid());
         assertThrows(BusinessException.class, () -> members.login("google", "withdrawn"));
+    }
+
+    @Test
+    void withdrawalRequiresThePreparedPolicyVersionAtConfirmation() throws Exception {
+        var session = login("google", "withdrawal-version");
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String id = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        jdbc.update("UPDATE withdrawal_requests SET policy_version='withdrawal-old' WHERE id=?", UUID.fromString(id));
+        mvc.perform(post("/api/v1/me/withdrawal-requests/" + id + "/confirm")
+                        .session(session).with(csrf()).contentType("application/json")
+                        .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("POLICY_CHANGED"));
+        mvc.perform(get("/api/v1/me").session(session)).andExpect(status().isOk());
+    }
+
+    @Test
+    void withdrawalKeepsTheAccountClosedWhenCleanupFailsAndRetries() throws Exception {
+        var session = login("google", "withdrawal-retry");
+        long userId = memberId(session);
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String id = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        var receipt = new Cookie("WITHDRAWAL_RECEIPT",
+                prepared.getResponse().getHeader("Set-Cookie").split("[=;]", 3)[1]);
+        jdbc.execute("CREATE TABLE withdrawal_block_test(user_id BIGINT REFERENCES users(id))");
+        try {
+            jdbc.update("INSERT INTO withdrawal_block_test(user_id) VALUES (?)", userId);
+            mvc.perform(post("/api/v1/me/withdrawal-requests/" + id + "/confirm")
+                            .session(session).with(csrf()).contentType("application/json")
+                            .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PROCESSING"));
+            assertEquals("withdrawn", jdbc.queryForObject("SELECT status FROM users WHERE id=?", String.class, userId));
+            mvc.perform(get("/api/v1/withdrawal-requests/" + id).cookie(receipt))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PROCESSING"));
+        } finally {
+            jdbc.execute("DROP TABLE withdrawal_block_test");
+        }
+        jdbc.update("UPDATE withdrawal_requests SET next_attempt_at=clock_timestamp() WHERE id=?", UUID.fromString(id));
+        withdrawals.retryDue();
+        mvc.perform(get("/api/v1/withdrawal-requests/" + id).cookie(receipt))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM users WHERE id=?", Integer.class, userId));
+    }
+
+    @Test
+    void withdrawalClosesAccountCleansPrivateDataAndAllowsFreshSignup() throws Exception {
+        mvc.perform(get("/api/v1/me/withdrawal-policy")).andExpect(status().isUnauthorized());
+        var session = login("google", "withdrawal-flow");
+        long previousId = memberId(session);
+        var post = posts.create(previousId, new PostService.CreateCommand(
+                "일반 글", "남길 본문", "GENERAL", null, List.of(), List.of()));
+        mvc.perform(get("/api/v1/me/withdrawal-policy").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.version").value("withdrawal-v1"));
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("READY")).andReturn();
+        String requestId = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        String setCookie = prepared.getResponse().getHeader("Set-Cookie");
+        assertNotNull(setCookie);
+        assertTrue(setCookie.contains("HttpOnly"));
+        assertTrue(setCookie.contains("Secure"));
+        var oldReceipt = new Cookie("WITHDRAWAL_RECEIPT", setCookie.split("[=;]", 3)[1]);
+        jdbc.update("UPDATE withdrawal_requests SET created_at=clock_timestamp()-interval '91 days' WHERE id=?",
+                UUID.fromString(requestId));
+        var repeated = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.requestId").value(requestId)).andReturn();
+        var receipt = new Cookie("WITHDRAWAL_RECEIPT",
+                repeated.getResponse().getHeader("Set-Cookie").split("[=;]", 3)[1]);
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(oldReceipt))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/me/withdrawal-requests/" + requestId + "/confirm")
+                        .session(session).with(csrf()).contentType("application/json")
+                        .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM users WHERE id=?", Integer.class, previousId));
+        assertEquals(-1L, jdbc.queryForObject("SELECT user_id FROM posts WHERE id=?", Long.class,
+                Long.parseLong(post.postId().substring(2))));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId))
+                .andExpect(status().isNotFound());
+        assertNotEquals(previousId, members.login("google", "withdrawal-flow").getId());
+        jdbc.update("UPDATE posts SET author_withdrawn_at=clock_timestamp()-interval '366 days' WHERE id=?",
+                Long.parseLong(post.postId().substring(2)));
+        jdbc.update("UPDATE withdrawal_requests SET created_at=clock_timestamp()-interval '91 days' WHERE id=?",
+                UUID.fromString(requestId));
+        withdrawals.prune();
+        assertEquals("", jdbc.queryForObject("SELECT body FROM posts WHERE id=?", String.class,
+                Long.parseLong(post.postId().substring(2))));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isNotFound());
     }
 
     @Test

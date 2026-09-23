@@ -50,7 +50,7 @@ public class CommentService {
 
     @Transactional
     public Created create(long memberId, CreateCommand command) {
-        var author = members.requireActive(memberId);
+        var author = members.lockActive(memberId);
         // 부모 삭제도 같은 Post 행을 잠그므로, 삭제가 먼저면 새 댓글을 저장하지 않는다.
         Post parent = parent(command.parentId(), command.parentType(), true);
         Comment comment = comments.saveAndFlush(new Comment(parent, author, body(command.body())));
@@ -102,7 +102,7 @@ public class CommentService {
 
     @Transactional
     public Detail patch(long memberId, long commentId, PatchCommand command) {
-        members.requireActive(memberId);
+        members.lockActive(memberId);
         if (!command.hasBody() && command.historyIds() == null && command.sourceLinks() == null) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         Comment comment = comments.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -117,7 +117,7 @@ public class CommentService {
 
     @Transactional
     public void delete(long memberId, long commentId) {
-        members.requireActive(memberId);
+        members.lockActive(memberId);
         Comment comment = comments.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (comment.getAuthor().getId() != memberId) {
@@ -168,7 +168,9 @@ public class CommentService {
     private static boolean visible(Comment comment) { return "visible".equals(comment.getStatus()); }
     private static String id(Comment comment) { return "c-" + comment.getId(); }
     private Detail detailOf(Comment comment, List<Reference> attachments, List<SourceLinkService.Reference> sourceLinks) {
-        return new Detail(id(comment), new Author("u-" + comment.getAuthor().getId(), comment.getAuthor().getNickname()),
+        var shown = com.planetory.backend.domain.post.service.PostService.publicAuthor(
+                comment.getAuthor().getId(), comment.getAuthor().getNickname(), comment.getAuthor().getStatus());
+        return new Detail(id(comment), new Author(shown.memberId(), shown.nickname()),
                 comment.getBody(), attachments, sourceLinks, comment.getCreatedAt(), comment.getUpdatedAt());
     }
 }

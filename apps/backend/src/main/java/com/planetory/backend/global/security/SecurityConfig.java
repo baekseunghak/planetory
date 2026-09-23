@@ -13,6 +13,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
@@ -29,6 +30,7 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
+@EnableScheduling
 @Slf4j
 // 웹 서버 없이 뜨는 운영 명령(PlanetoryApplication)에는 HttpSecurity가 없어 기동이 막힌다.
 // 서버로 뜰 때는 항상 서블릿 앱이므로 적용 범위가 줄지 않는다 [S15P21C206-139].
@@ -52,7 +54,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
                             .requestMatchers("/login", "/oauth2/authorization/*", "/login/oauth2/code/*").permitAll()
-                            .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health",
+                                    "/api/v1/withdrawal-requests/*").permitAll()
                             .requestMatchers(logoutPost).permitAll();
                     // 내부 경로는 InternalTokenFilter의 서비스 토큰이 막는다. 회원 인증 대상이
                     // 아니므로 여기서 authenticated()로 두면 토큰이 맞아도 401이 된다.

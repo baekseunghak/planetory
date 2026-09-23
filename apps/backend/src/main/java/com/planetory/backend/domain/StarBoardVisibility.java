@@ -4,7 +4,7 @@ package com.planetory.backend.domain;
 public final class StarBoardVisibility {
     public static final String OPEN = "EXISTS (SELECT 1 FROM stars board_star WHERE board_star.tic_id=%s "
             + "AND board_star.service_status='published' "
-            + "AND EXISTS (SELECT 1 FROM star_unlocks board_unlock WHERE board_unlock.tic_id=board_star.tic_id))";
+            + "AND board_star.board_open)";
 
     private StarBoardVisibility() {}
 }

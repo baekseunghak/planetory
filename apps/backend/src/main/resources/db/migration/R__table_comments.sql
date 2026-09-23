@@ -27,6 +27,13 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- V24 이전 스키마를 대상으로 한 업그레이드 검증에서는 아직 탈퇴 요청 테이블이 없다.
+DO $$ BEGIN
+    IF to_regclass('withdrawal_requests') IS NOT NULL THEN
+        COMMENT ON TABLE withdrawal_requests IS '회원 탈퇴 신청의 정책 버전·영수증 검증값과 처리 상태';
+    END IF;
+END $$;
+
 COMMENT ON TABLE stars IS 'TESS 관측 대상 별의 기본 제원. tic_id가 별의 식별자다';
 COMMENT ON TABLE observation_datasets IS '별의 섹터별 관측 구간 메타데이터. 어느 기간을 어떤 간격으로 찍었는지';
 COMMENT ON TABLE light_curve_segments IS '별의 섹터별 광도 곡선을 비닝한 배열. 분석 화면이 읽는 원천 데이터다';

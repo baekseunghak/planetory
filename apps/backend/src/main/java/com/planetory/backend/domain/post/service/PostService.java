@@ -35,6 +35,9 @@ public class PostService {
                                List<String> historyIds, List<SourceLink> sourceLinks) {}
     public record Created(String postId, Instant createdAt) {}
     public record Author(String memberId, String nickname) {}
+    public static Author publicAuthor(long id, String nickname, String status) {
+        return "active".equals(status) ? new Author("u-" + id, nickname) : new Author(null, "탈퇴한 회원");
+    }
     public record ReactionSummary(long agree, long disagree, String myReaction) {}
     /** 글 자체의 값만 담는다. 댓글 수처럼 다른 도메인이 소유한 값은 컨트롤러가 합친다. */
     public record Detail(String postId, String title, String body, String purposeTag, String ticId,
@@ -43,7 +46,7 @@ public class PostService {
 
     @Transactional
     public Created create(long memberId, CreateCommand command) {
-        var author = members.requireActive(memberId);
+        var author = members.lockActive(memberId);
         Values values = validate(command.title(), command.body(), command.purposeTag(), command.ticId());
         var post = posts.saveAndFlush(new Post(author, values.board(), values.ticId(), values.tag(),
                 values.title(), values.body()));
@@ -63,7 +66,7 @@ public class PostService {
 
     @Transactional
     public Detail patch(long memberId, long postId, PatchCommand command) {
-        members.requireActive(memberId);
+        members.lockActive(memberId);
         if (!command.hasTitle() && !command.hasBody() && !command.hasPurposeTag() && !command.hasTicId()
                 && command.historyIds() == null && command.sourceLinks() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
@@ -87,7 +90,7 @@ public class PostService {
 
     @Transactional
     public void delete(long memberId, long postId) {
-        members.requireActive(memberId);
+        members.lockActive(memberId);
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         requireUserPost(post);
@@ -145,7 +148,7 @@ public class PostService {
     private Detail detailOf(Post post) {
         return new Detail(id(post), post.getTitle(), post.getBody(), post.getTag(),
                 post.getTicId() == null ? null : String.valueOf(post.getTicId()),
-                new Author("u-" + post.getAuthor().getId(), post.getAuthor().getNickname()),
+                publicAuthor(post.getAuthor().getId(), post.getAuthor().getNickname(), post.getAuthor().getStatus()),
                 attachments.references(HistoryAttachmentService.Parent.POST, post.getId()), sources.references(HistoryAttachmentService.Parent.POST, post.getId(), post.getTicId()),
                 post.getCreatedAt(), post.getUpdatedAt());
     }

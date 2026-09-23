@@ -32,7 +32,7 @@ public class PostReactionService {
     @Transactional
     public Result put(long memberId, long postId, String reaction) {
         validate(reaction, true);
-        var member = members.requireActive(memberId);
+        var member = members.lockActive(memberId);
         // 글 수정·삭제와 같은 잠금. 반응 행이 아직 없어도 회원×글의 최초 INSERT를 직렬화한다.
         Post post = parent(postId, true);
         var existing = reactions.findByPostIdAndMemberId(postId, memberId);
