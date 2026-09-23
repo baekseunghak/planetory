@@ -6,6 +6,7 @@ export const noticeKinds = [
   "CHALLENGE",
   "FOLLOW",
   "COMMENT",
+  "RELABEL",
 ] as const;
 export type NoticeKind = (typeof noticeKinds)[number];
 export function readNotificationPreferences(
@@ -29,6 +30,7 @@ export const noticeLabels: Record<NoticeKind, string> = {
   CHALLENGE: "챌린지",
   FOLLOW: "팔로우 소식",
   COMMENT: "내 글의 댓글",
+  RELABEL: "신호 상태 변경",
 };
 const fail = (): never => {
   throw new ApiError(0, "INVALID_RESPONSE", "알림 정보를 확인할 수 없습니다.");
@@ -110,6 +112,7 @@ export function noticeDestination(v: unknown, id: string): string | null {
     );
   }
   if (target.kind === "STAR") return "/sky?star=" + encoded("ticId");
+  if (target.kind === "STAR_BOARD") return "/community/stars/" + encoded("ticId");
   if (target.kind === "CHALLENGE")
     return "/sky?quest=challenge&roundId=" + encoded("roundId");
   return fail();

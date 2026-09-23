@@ -25,6 +25,8 @@ UPDATE challenge_rounds SET status = 'active' WHERE round_no = :new_round_no AND
 COMMIT;
 ```
 
+V23 적용 이후 최초 active 전환은 DB 트리거가 시작 경계와 당시 튜토리얼 완료 회원의 알림 수신 의도를 함께 저장한다. 전환 롤백은 알림도 롤백한다. 이미 대상 별을 가진 회원도 알림 대상이며 늦은 자격 취득자는 소급하지 않는다. 기존 active/closed는 비소급 표시하고 같은 회차 재활성화·설명 편집은 새 사건을 만들지 않는다. 실제 운영 적용은 미실행이다.
+
 ## 2. 명령 실행
 
 백엔드 jar에 `--planetory.command=challenge-unlock` 인자를 준다. 웹 서버를 띄우지 않고 한 번 실행한 뒤 종료하므로 서버가 떠 있는 호스트에서 실행해도 포트가 겹치지 않는다. DB 접속은 서버와 같은 환경 변수(`DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`)를 쓴다.
@@ -54,6 +56,6 @@ docker compose run --rm backend --planetory.command=challenge-unlock
 
 ## 하지 않는 일
 
-- 새 회차 알림 발송(NTF-01, P1)과 회차 종료 처리
+- 명령 자체의 알림 생성과 회차 종료 처리. V23 이후 의도는 1단계 DB 전환에서 기록하고 알림함/벨 조회가 발행한다
 - 이미 연 별 닫기. 회차가 끝나도 발견한 별은 남는다(AT-61)
 - 대상 별을 이미 다른 경로(성과 발견 등)로 발견한 회원의 기록 바꾸기. 이 회원은 건너뛰고 처음 발견 경로를 유지한다. 빨간 느낌표는 퀘스트 응답의 진행 회차 대상 별로 그리므로 이 회원에게도 그대로 보인다

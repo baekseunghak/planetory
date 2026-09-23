@@ -16,6 +16,17 @@ COMMENT ON TABLE user_settings IS '회원별 공개 범위와 알림 설정';
 COMMENT ON TABLE follows IS '회원의 팔로우. 대상은 다른 회원 또는 별이다';
 COMMENT ON TABLE notifications IS '회원에게 발송된 알림과 읽음 여부';
 
+-- 이전 버전까지 적용하는 업그레이드 검증에서는 V23 테이블이 아직 없다.
+-- V23을 적용한 최신 스키마에서는 네 설명을 함께 등록한다.
+DO $$ BEGIN
+    IF to_regclass('notification_outbox') IS NOT NULL THEN
+        COMMENT ON TABLE notification_outbox IS '사건 당시 수신 대상·설정·관계를 보존하는 알림 대기 기록과 발행·제외 상태';
+        COMMENT ON TABLE notification_events IS '별 재개와 신호 판정 변경의 원천 사건 및 중복 판별 키';
+        COMMENT ON TABLE notification_candidate_changes IS '공개 판별 후보의 최초·최종 탐색 가능 상태. 별 재개 사건 판별에 사용한다';
+        COMMENT ON TABLE notification_signal_state IS '후보별 마지막 유효 외부 분류와 AI 판정. 실제 상태 변화 비교 기준';
+    END IF;
+END $$;
+
 COMMENT ON TABLE stars IS 'TESS 관측 대상 별의 기본 제원. tic_id가 별의 식별자다';
 COMMENT ON TABLE observation_datasets IS '별의 섹터별 관측 구간 메타데이터. 어느 기간을 어떤 간격으로 찍었는지';
 COMMENT ON TABLE light_curve_segments IS '별의 섹터별 광도 곡선을 비닝한 배열. 분석 화면이 읽는 원천 데이터다';

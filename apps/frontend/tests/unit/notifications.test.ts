@@ -15,12 +15,16 @@ const row = {
   title: "hello",
   body: "private",
 };
+test("signal status changes retain their separate notification kind", () => {
+  assert.equal(readNotice({ ...row, kind: "RELABEL" }).kind, "RELABEL");
+});
 test("unavailable notifications discard stale private text", () => {
   const parsed = readNotice({ ...row, available: false });
   assert.ok(!JSON.stringify(parsed).includes("private"));
   assert.notEqual(parsed.title, "hello");
 });
 test("notification targets only allow owned structured destinations", () => {
+  assert.equal(noticeDestination({notificationId:"n",available:true,target:{kind:"STAR_BOARD",ticId:"123"}},"n"),"/community/stars/123");
   assert.equal(
     noticeDestination(
       {

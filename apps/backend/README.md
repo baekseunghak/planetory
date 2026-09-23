@@ -4,6 +4,8 @@ Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 �
 
 PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 피드의 제목·본문·현재 닉네임·TIC·게시판·태그 검색을 제공한다(169). 공개 출처 카드는 아래 167 안내를 따른다.
 
+S15P21C206-175는 알림함·설정 API와 등급/개인 재개/새 원글/댓글 사건을 제공한다. 별 구독 재개·챌린지 시작·신호 상태 변경은 V23의 DB 트리거로 원천 사건과 당시 수신자를 보존한다. 목록·모두 읽음의 `NOTIFICATION_SIGNING_KEY`와 V23 전환은 [개발 환경](docs/development-setup.md#notification-key), API 형식은 [P1 계약 3·4절](docs/p1-service-contract.md)을 따른다.
+
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
 S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.

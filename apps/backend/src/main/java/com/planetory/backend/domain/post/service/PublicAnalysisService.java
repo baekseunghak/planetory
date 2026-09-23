@@ -28,6 +28,7 @@ public class PublicAnalysisService {
     private final AchievementService achievements;
     private final SubmissionService submissions;
     private final StarService stars;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     public record Achievement(String result, boolean newlyRecognized, List<UnlockedStar> unlockedStars,
                               StarViews.Achievement star, int unlockShortfall) {}
@@ -114,7 +115,7 @@ public class PublicAnalysisService {
             throw new BusinessException(ErrorCode.PUBLICATION_NOT_ELIGIBLE);
         }
         // 최초 생성 경합과 공개 후보 요약 본문은 DB가 처리한다(V19). GET에서 본문을 채우지 않는다.
-        jdbc.sql("""
+        int createdThread = jdbc.sql("""
                 INSERT INTO posts(kind, user_id, candidate_id, board, tic_id, title, body, status)
                 VALUES ('system_thread', NULL, ?, 'star', ?, ?, '', 'visible')
                 ON CONFLICT (candidate_id) WHERE kind='system_thread' DO NOTHING
@@ -132,6 +133,7 @@ public class PublicAnalysisService {
                 """).params(thread, member, basis.candidateId(), history).query(Long.class).single();
         var recognition = achievements.recognize(member, basis.candidateId(),
                 AchievementService.AchievementType.UNCONFIRMED, basis.submissionId(), analysis);
+        if (createdThread == 1) notifications.postCreated(member, thread, basis.ticId(), true);
         return response(analysis, thread, historyId, true, true, recognition,
                 recognition.unlockedStars().stream()
                         .map(s -> new UnlockedStar(Long.toString(s.ticId()), s.position())).toList(),
