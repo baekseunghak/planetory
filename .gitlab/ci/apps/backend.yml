@@ -33,17 +33,43 @@ backend:schema:
     - if: $CI_COMMIT_BRANCH
       changes: *schema_paths
 
-# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
-# 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
-# startLocalDb가 건너뛰어지므로(CI=true), 그냥 돌리면 DB 없이 41개 클래스가 돈다.
-# CI에 Postgres 서비스를 붙이는 일은 따로 정한다.
+# 이름은 build지만 테스트까지 돌린다. 이전 파이프라인 기록과 이어지도록 이름을 유지한다.
+# 컴파일·패키징(bootJar)과 테스트를 한 job에서 돌린다. bootJar는 test에 의존하지
+# 않으므로 둘 다 적어야 한다. job을 나누면 같은 컴파일과 의존성 내려받기를 두 번 한다.
+#
+# 테스트에는 DB가 두 종류 필요하다 [S15P21C206-91].
+# - 스키마 격리 테스트(PlanetoryApplicationTests 등)는 DATABASE_URL의 PostgreSQL에
+#   실행마다 UUID 스키마를 만든다. CI=true라 startLocalDb가 건너뛰어지므로
+#   postgres 서비스를 붙여 그 자리를 채운다. 역할·pg_trgm을 만들 수 있게 소유자
+#   (superuser)로 접속하며, 로컬 Compose 개발 DB와 같은 조건이다.
+# - 역할·권한처럼 클러스터 전역 상태를 건드리는 테스트는 Testcontainers로 일회용
+#   컨테이너를 띄운다. dind가 필요하므로 privileged인 amd64-docker Runner에서만 돈다.
 backend:build:
   stage: validate
   image: eclipse-temurin:21-jdk-alpine
   needs: []
+  tags:
+    - amd64-docker
+  services:
+    - name: postgres:18.6-alpine
+      alias: service-db
+    - name: docker:27.5-dind
+      alias: docker
   variables:
     # Gradle이 프로젝트 캐시로도 쓰는 apps/backend/.gradle 과 겹치지 않게 분리한다.
     GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+    # job과 함께 사라지는 CI 전용 DB다. 비밀이 아니므로 파일에 적는다.
+    POSTGRES_DB: planetory_poc
+    POSTGRES_USER: planetory
+    POSTGRES_PASSWORD: ci-validation-only
+    DATABASE_URL: jdbc:postgresql://service-db:5432/planetory_poc
+    DATABASE_USER: planetory
+    DATABASE_PASSWORD: ci-validation-only
+    # Testcontainers가 dind 데몬에 컨테이너를 띄운다. 매핑된 포트는 job 컨테이너의
+    # localhost가 아니라 dind 호스트에 열리므로 접속 주소를 docker로 바꾼다.
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    TESTCONTAINERS_HOST_OVERRIDE: docker
   # 캐시를 둘로 나눈다. 하나로 묶으면 build.gradle 한 줄만 고쳐도 키가 바뀌어
   # Gradle 배포판 130MB까지 다시 받는다. 배포판은 wrapper 설정이 바뀔 때만 무효화한다.
   cache:
@@ -60,12 +86,21 @@ backend:build:
   script:
     - cd apps/backend
     - chmod +x gradlew
-    - ./gradlew bootJar --no-daemon
+    - ./gradlew bootJar test --no-daemon
   # 추출된 배포판과 원본 zip이 둘 다 남아 캐시가 두 배가 된다.
   after_script:
     - rm -f "$CI_PROJECT_DIR"/.gradle-home/wrapper/dists/*/*/*.zip
-  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 build:backend가
-  # 이미지 안에서 같은 bootJar를 수행하므로 돌리지 않는다.
+  # 실패한 테스트를 MR 화면에서 바로 본다. 실패 때 가장 필요하므로 항상 올린다.
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: apps/backend/build/test-results/test/TEST-*.xml
+    paths:
+      - apps/backend/build/reports/tests/test/
+  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 돌리지 않는다.
+  # build:backend가 이미지 안에서 같은 bootJar를 수행하고, 테스트는 병합 전 MR에서
+  # 이미 통과했다. develop 병합마다 테스트를 다시 돌리면 배포 버튼이 그만큼 늦게 뜬다.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &backend_paths
@@ -85,7 +120,11 @@ backend:build:
 backend:image:
   extends: .docker-build
   stage: validate
-  needs: []
+  # 테스트가 실패한 코드로는 이미지를 만들지 않는다 [S15P21C206-91]. backend:build는
+  # Dockerfile 변경에도 돌므로 대개 함께 있지만, 없는 파이프라인에서 막히지 않게 optional로 둔다.
+  needs:
+    - job: backend:build
+      optional: true
   variables:
     DOCKERFILE: apps/backend/Dockerfile
     IMAGE_NAME: backend

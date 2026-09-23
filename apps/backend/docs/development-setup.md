@@ -207,7 +207,7 @@ Swagger에서 `GET /api/v1/hello`를 펼치고 **Try it out → Execute**를 누
 | 서버 재시작 | 기존 v1 유지, `No migration necessary` 확인 |
 | Swagger UI | 실제 Try it out·Execute 호출로 200 및 기대 응답 확인 |
 | Docker `backend` 이미지 빌드·실행 | 미검증 (DB 컨테이너 + 호스트 JDK 실행만 검증) |
-| GitLab CI·EC2 배포 | 후속 Task, 미검증 |
+| GitLab CI·EC2 배포 | MR의 `backend:build`가 PostgreSQL 서비스와 dind로 `bootJar test`를 실행한다(S15P21C206-91). 실제 파이프라인 통과는 미검증 |
 | 팀원 재현 | MR 리뷰 시 리뷰어가 이 문서만으로 3장까지 재현해 확인 |
 
 `@SpringBootTest` 통합 테스트는 H2가 아니라 실행 중인 PostgreSQL을 사용한다. `@WebMvcTest`는 DB 없이 실행된다. 설정된 DB에 테스트 스키마 생성·삭제 권한이 필요하며, 운영 DB에는 연결하지 않는다. 실패해 스키마가 남으면 `backend_test_...` 이름을 확인해 정리한다. 자동 테스트는 자기 실행에서 생성한 이름만 삭제한다.

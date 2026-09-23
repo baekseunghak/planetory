@@ -99,7 +99,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 | Runner | 아키텍처 | 태그 | 맡는 job | 상태 |
 | --- | --- | --- | --- | --- |
-| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*` | 등록됨. 현재 전체 job 처리 |
+| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*`, Testcontainers에 dind가 필요한 `backend:build` | 등록됨. 현재 전체 job 처리 |
 | CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` | 미등록 |
 
 태그 분리는 CI 노드를 붙이는 시점에 의미를 갖는다. 지금은 한 대가 둘 다 받으므로 태그가 job을 가르지 않는다.

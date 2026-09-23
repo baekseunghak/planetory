@@ -198,8 +198,8 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 | `web:build` | 프론트 변경 | `npm run build` |
 | `web:image` | `Dockerfile`·`nginx.conf` 변경 | 이미지 빌드 + 이미지 안에서 `nginx -t` |
 | `backend:schema` | 마이그레이션 변경 | 버전 선점·중복, 되돌릴 수 없는 변경 |
-| `backend:build` | 백엔드 소스 변경 | `./gradlew bootJar` |
-| `backend:image` | `Dockerfile` 변경 | 이미지 빌드 |
+| `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test` (PostgreSQL 서비스 + dind, JUnit 보고서) |
+| `backend:image` | `Dockerfile` 변경 | 이미지 빌드. `backend:build`가 실패하면 돌지 않는다 |
 | `build:*` | 기본 브랜치 | 레지스트리 이미지 빌드·푸시 |
 | `deploy:*:ec2-a` | 기본 브랜치, 수동 버튼 | 교체 → 헬스 확인 → 실패 시 롤백 |
 
@@ -209,7 +209,6 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 - 포맷 검사 — 빌드·배포·동작과 무관하다. LF 기준으로 이미 16개 파일이 실패하기도 한다.
 - 프론트 단위 테스트 — 파일 50개가 기능 담당자 소유다. 관문으로 세우면 한 사람의 테스트가 다른 사람의 MR을 막는다. 팀 합의가 먼저다.
-- 백엔드 테스트 — `build.gradle`의 `test`가 PostgreSQL을 요구하는데 CI에서는 `startLocalDb`가 건너뛰어져 DB 없이 41개 클래스가 돈다. CI에 Postgres 서비스를 붙이는 일은 별도로 정한다.
 - Playwright — 설정 24개를 직렬로 돌아 머지를 막는다.
 
 ## 검증 경계
