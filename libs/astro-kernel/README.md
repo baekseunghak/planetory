@@ -345,11 +345,13 @@ BLS 소비자는 `astro-kernel[bls]`로 Astropy를 설치한다. 기본 전처�
 
 | 함수 | 계약 |
 |---|---|
-| `search_bls(time, flux, *, input_snapshot_id, preprocessing_version, sector=None, baseline_time=None)` | 고정 탐색, 상위 피크·게이트·진단·입력 버전 반환 |
+| `search_bls(time, flux, *, input_snapshot_id, preprocessing_version, sector=None, baseline_time=None, quality_version=QUALITY_VERSION)` | 고정 탐색, 상위 피크·게이트·진단·입력 버전 반환 |
 | `bls_periodogram(time, flux, periods, *, durations_hours, config_version)` | 호출자가 제공한 주기·duration 격자로 계산, `Periodogram` 반환 |
 | `period_grid(min, max, n, *, spacing)` | 양수 증가 범위의 linear/log 격자 생성 |
 | `top_period_peaks(periods, power, *, count=5, separation_rel=0.02)` | power 순 2% 분리. 고조파 병합 없음 |
-| `quality_gate(snr, sde)` | 상태와 사유 목록 반환 |
+| `quality_gate(snr, sde, *, quality_version=QUALITY_VERSION, n_transits=None)` | 상태와 사유 목록 반환. v1은 관측 통과 수 `n_transits`가 필수 |
+| `running_median_sde(periods, power)` | 승인된 선형 20,000점 격자의 이동 중앙값 SDE 계산. 격자·미측정 규약은 243 절 참조 |
+| `validate_quality_version(version)` | 지원하지 않는 품질 버전을 거절 |
 
 탐색 버전은 `bls_grid_v1/poc_linear20k`다. 0.5일부터 min(유효 시각 baseline/3, 100일)까지
 선형 20,000점, duration 1.2·1.92·2.88·4.8시간, likelihood·oversample 10을 사용한다.
@@ -424,6 +426,7 @@ wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와
 Spark 전체 배치·온라인 API 연결은 이 모듈의 책임이 아니다.
 
 ```python
+from astro_kernel.bls import QUALITY_VERSION
 from astro_kernel.iteration import iterate_bls
 
 # 119/245 전처리가 실패한 결과는 넘기지 않는다.
@@ -433,6 +436,7 @@ if detrended.status == "ok":
         sector=prepared.sector, baseline_time=prepared.time,
         input_snapshot_id=snapshot_id,
         preprocessing_version=detrended.version,
+        quality_version=QUALITY_VERSION,  # 기존 v0. 243 v1은 명시적으로 선택한다.
     )
 ```
 
@@ -684,12 +688,14 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 
 ## 243 운영 탐색 SDE 버전 선택
 
-2026-09-23: 김동혁 리뷰에서 표본 재사용·사후 문턱 선택·CM Dra 잡음 주입 19곡선 감소를 수용하고 추가 독립 평가를 선행하지 않은 운영 구현·회귀 진행에 동의했다. 사용자 요청으로 243·MR !191 범위에 운영 구현을 포함한다. 실제 FITS 회귀·추가 운영 코드 리뷰·배포는 별도이며 아직 완료로 표현하지 않는다.
+2026-09-23: 김동혁 리뷰에서 표본 재사용·사후 문턱 선택·CM Dra 잡음 주입 19곡선 감소를 수용하고 추가 독립 평가를 선행하지 않은 운영 구현·회귀 진행에 동의했다. 사용자 요청으로 243·MR !191 범위에 운영 구현을 포함한다. [실제 FITS 탐색·반복 회귀와 저장 결과 검산](../../docs/data/tess-bls-benchmark.md#243-운영-커널-사용자-실행-검산-2026-09-23)을 완료했고, `7dbace66` 운영 코드에 대한 김동혁 리뷰 승인을 받았다. 운영 배포는 수행하지 않았다.
 
 `search_bls(..., quality_version=RUNNING_MEDIAN_QUALITY_VERSION)`와
 `iterate_bls(..., quality_version=RUNNING_MEDIAN_QUALITY_VERSION)`가 새 경로다.
 상수는 `astro_kernel.bls`에 있으며 값은 `sde-running-median1001-snr7-sde8-ntr2-v1`이다.
 기본값 `QUALITY_VERSION=gate_v1/snr7_sde6`과 기존 호출은 유지한다. 배치 호출자가 검증 후 명시적으로 선택하며 이 변경은 실행 중인 서비스의 설정·배포를 바꾸지 않는다.
+
+이 변경부터 v0 실행도 `iteration_config`에 `candidate_quality_version`을 포함하므로 `iteration_config_sha256` 값이 바뀐다. v0의 계산·판정 기준은 유지되지만 변경 전 실행의 지문과 직접 비교하지 않는다. 과거 결과를 대조할 때는 설정 필드 추가와 수치 결과를 구분한다.
 
 - `running_median_sde(periods, power)`: 0.5일 시작, 최대 100일, 정확한 `np.linspace` 20,000점만 허용한다. 다른 격자는 `invalid_grid`로 거절하며 재검토·새 버전이 필요하다.
 - 전체 power에서 1001격자점 이동 중앙값(`scipy.ndimage.median_filter`, `mode='reflect'`)을 빼고 유한 잔차 최소 2개에서 평균·모표준편차(ddof=0)로 표준화한다. 산포 0·비유한 산포는 NaN 미측정이며 0으로 채우지 않는다. 입력 power의 비유한 값은 계산 실패다.
