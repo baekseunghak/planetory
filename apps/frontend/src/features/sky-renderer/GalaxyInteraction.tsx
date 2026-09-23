@@ -9,7 +9,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { useQuests } from "../quests/QuestProvider";
+import { useOptionalQuests } from "../quests/QuestProvider";
 import type { SkySceneProps } from "../sky-data/SkyDataPage";
 import type { Matrix } from "../sky-data/geometry";
 import {
@@ -25,6 +25,7 @@ import { ProjectedStarIndex } from "./star-index";
 
 export type InteractionControl = { frame(planets: HitTarget[]): void };
 type Props = SkySceneProps & {
+  starLabel?: (star: SkySceneProps["data"]["stars"][number]) => string;
   canvas: RefObject<HTMLCanvasElement | null>;
   camera: GalaxyCamera;
   matrix: Matrix;
@@ -54,7 +55,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       enabled,
     } = props;
     const [mode, setMode] = useState<"rotate" | "pan">("rotate");
-    const quest = useQuests();
+    const quest = useOptionalQuests();
     const [selectedPlanet, setSelectedPlanet] = useState<string | null>(null);
     const selectedPlanetRef = useRef(selectedPlanet);
     selectedPlanetRef.current = selectedPlanet;
@@ -86,20 +87,25 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
     );
     const current = useRef({ ...props, mode, index });
     current.current = { ...props, mode, index };
-    const tutorials = quest.markers;
+    const tutorials = quest?.markers ?? null;
     const staleRound = currentChallengeMismatch(
-      quest.current,
-      quest.quests?.challenge,
+      quest?.current,
+      quest?.quests?.challenge,
     );
     const challengeTicId =
-      quest.quests?.challenge.unlocked && !staleRound
-        ? quest.quests.challenge.ticId
+      quest?.quests?.challenge.unlocked && !staleRound
+        ? quest?.quests.challenge.ticId
         : null;
     useEffect(() => {
       setSelectedPlanet(null);
       props.onPlanetSelect?.(null);
     }, [data.selectedTicId, data.meta?.version]);
 
+    function targetLabel(target: HitTarget) {
+      return target.star && current.current.starLabel
+        ? current.current.starLabel(target.star)
+        : target.label;
+    }
     function show(target: HitTarget | null) {
       active.current = target;
       const tip = tooltip.current,
@@ -110,12 +116,13 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         node.removeAttribute("aria-activedescendant");
         return;
       }
-      if (tip.textContent !== target.label) tip.textContent = target.label;
+      const label = targetLabel(target);
+      if (tip.textContent !== label) tip.textContent = label;
       tip.dataset.targetId = target.id;
       tip.style.left = `${Math.max(8, Math.min(current.current.width - 300, target.x + 16))}px`;
       tip.style.top = `${Math.max(8, Math.min(current.current.height - 100, target.y + 18))}px`;
       if (activeOption.current) {
-        activeOption.current.textContent = target.label;
+        activeOption.current.textContent = label;
         activeOption.current.setAttribute(
           "aria-selected",
           String(
@@ -143,7 +150,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         p.onPlanetSelect?.(null);
         if (!target && p.onDeselect) p.onDeselect();
         else p.store.select(target?.id ?? null);
-        setSelectionText(target?.label ?? "선택을 해제했습니다.");
+        setSelectionText(target ? targetLabel(target) : "선택을 해제했습니다.");
       }
       show(target);
     }
@@ -462,7 +469,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         button.textContent = label;
         button.setAttribute(
           "aria-label",
-          `${label === "!" ? "챌린지" : "튜토리얼 " + label} · ${target.label}`,
+          `${label === "!" ? "챌린지" : "튜토리얼 " + label} · ${targetLabel(target)}`,
         );
         button.style.left = `${target.x}px`;
         button.style.top = `${target.y}px`;
@@ -574,7 +581,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         {quest?.error && (
           <div className="galaxy-marker-warning" role="status">
             튜토리얼 번호를 확인하지 못했습니다.{" "}
-            <button onClick={quest.refresh}>번호 다시 확인</button>
+            <button onClick={quest?.refresh}>번호 다시 확인</button>
           </div>
         )}
       </>

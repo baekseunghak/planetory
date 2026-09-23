@@ -114,7 +114,7 @@ public final class SubmissionMatching {
     }
 
     /**
-     * 관측 창. i번째 점의 시각은 {@code startBtjd + (binMinutes / 1440) × i}이고(5.2절), 결측(null)이 아닌 점이
+     * 제출 판정용 관측 창(6.2절). 표시·접기의 bin 중심과 별개로 시작 시각 {@code startBtjd + (binMinutes / 1440) × i}를 쓰며, 결측(null)이 아닌 점이
      * 이어진 구간마다 창 하나를 만든다. 공백에만 걸린 통과는 창과 겹치지 않으므로 세지 않는다.
      */
     public static List<ObservedWindow> windowsOf(List<LightCurveSegment> segments) {

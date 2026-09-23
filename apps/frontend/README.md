@@ -1,5 +1,26 @@
 # Planetory 공용 프론트
 
+200 비교 통계: [일별 중앙값·과거 본인 값 부재·검증·인수 대기](docs/ticket-200-readiness.md). 개인 통계 아래에서 기준일·원천 관측 시각·90일 모수를 구분하며 현재값으로 과거 비교를 대체하지 않는다.
+
+199 전체 통계: [전체 지표·집계 시각·검증·실제 인수 대기](docs/ticket-199-readiness.md). P1 활성화 시 `/statistics`를 연결하며 정상·갱신 지연·집계 전과 AI 자료 상태를 구분한다.
+
+197 첫 방문 안내: [구현·검증·실제 인수 대기](docs/ticket-197-readiness.md). 실제 분석 단계와 완료 저장을 연결하며 다시 보기 화면은 기존 W16을 재사용한다.
+
+198 개인 통계: [현재 지표·8주 추이·검증·실제 인수 대기](docs/ticket-198-readiness.md). P1 활성화 시 본인 프로필 통계 슬롯을 연결하며 전체·중앙값 비교는 별도다.
+
+2026-09-22: [222 탈퇴 화면·프론트 기준 계약과 검증](docs/ticket-222-readiness.md). 정책 재확인·기존 처리 중 영수증·확정 실패 복구를 보완한다. 실제 보관·재가입 승인값과 S27 제공자 계약 확인,244 실제 인수를 구분한다.
+
+195 공개 검토: [구현·복구 정책·검증·실제 인수 대기](docs/analysis-publication.md). 개별·모두 게시와 공개 취소·재공개를 연결했다. 로컬 fixture 확인은 58395 포트이며 193 통합 왕복은 합성 HTTP로 검증했으며 실제 API 인수는 별도다.
+
+2026-09-22: [193 별 결과 화면과 공개 검토 연결](docs/analysis-star-result.md). 신호·제출 집계와 History 이동을 구현했다. 공개 처리는 195, 실제 API 인수는 별도다.
+
+2026-09-22: [223 별 검색·위치 이동과 A13 연결·검증](docs/ticket-223-readiness.md). 실제 내 별 목록의 TIC·진행·등급 필터 요청과 분석/History 복귀를 연결했다. Chrome A13 직접 검사 7개를 포함한 검증 결과와 추가 수정 반영 상태는 해당 문서를 따른다. 실제 C17·두 계정·배포 인수는 244 P1-223에서 별도로 진행한다.
+2026-09-21: [221 개인 설정 구현·잔여](docs/ticket-221-readiness.md). `/settings`에서 별 목록 공개 범위를 저장·복구한다. `npm run dev:settings`로58382에서 확인한다. 알림 수신 설정의 정책/API는 미정이며 221 전체 완료가 아니다.
+219 팔로우: [프론트 기준 P1 HTTP 계약](../backend/docs/p1-service-contract.md)을 백엔드와 함께 사용한다. `node --import tsx scripts/p1-server.mjs`는58392에서 실제 제품 코드에 개발용 HTTP를 공급한다. 제품 활성화는 `VITE_P1_ENABLED=true`이며 가짜 응답을 운영으로 가져오지 않는다. 커뮤니티의 팔로잉과 마이페이지의 관계 관리를 분리한다.
+192 현재 판 다시 풀기: [계획·구현·로컬 검증·시각 기준 확인 사항](docs/analysis-retry-draft.md). 화면·초안·제출 출처 연결과 Gold 중앙 시각 정합화를 구현했다. 실제 API·DB 인수는 남아 있다.
+
+239: Docker/Nginx 배포·OAuth 장애 구분은 [변경 범위·검증 기록](docs/ticket-239-readiness.md)을 따른다. 실제 프록시 회귀는 `npm run test:nginx`로 실행한다.
+
 2026-09-21: 기존 P0 화면을 승인된 시제품의 배치와 디자인에 맞춘다. [248 명세 비교·제외 범위·검증 체크리스트](docs/prototype-presentation-248.md)를 따른다. `npm run dev:presentation`은 58381에서 실제 제품 화면에 메모리 임시 별 5,000개를 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
 
 248 후속: 별 상세의 구조·표면·조작 이식은 아직 미완료다. [시제품 상세 이식 기준·간헐 실패 원인](docs/prototype-detail-parity-248.md)을 따른다. 작은 화면으로 바뀔 때 이미 연 페이지를 숨겨 상태를 보존하며, 세션 만료 시 비공개 화면 제거는 유지한다.
@@ -182,6 +203,9 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 최신 develop의 인증·지도·은하와 분석 브랜치를 결합한 변경 및 검증은 [2026-09-17 통합 기록](docs/develop-integration-2026-09-17.md)을 따른다.
 
 분석 1–5단계의 Figma 적용 범위와 조작·검증은 [분석 디자인 적용 기록](docs/analysis-design.md)을 따른다.
+
+### P1 시제품 반영 인계
+[구현 순서·백엔드 인계](docs/p1-prototype-rollout.md). 공개 은하 250은 전체 보유 별을 대상으로 하며 219~223 계약과 함께 배포 연결한다. 개발용 실행은 npm run dev:p1, 검증은 npm run test:p1.
 
 2026-09-21 출처 카드(167): ID 없는 `available:false` 항목은 글·댓글에서 대체 안내로 표시하며 조회·링크를 생성하지 않는다. 본문·History만 수정하면 출처 PATCH를 생략하고, 무효 출처는 공개 출처 전체 제거로 명시적으로 해제한다. 기존 213 첨부 그래프 동작을 유지한다. 계약은 [서비스 API 7장](../backend/docs/service-api-spec.md#attachments)을 따른다.
 

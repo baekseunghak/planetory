@@ -104,16 +104,31 @@ export function PeriodogramChart({
   onSelect,
   selectedPeriod,
   onViewportChange,
+  initialViewport,
 }: {
   data: Extract<PeriodogramLoad, { kind: "ready" }>;
   onSelect: (choice: PeriodChoice) => void;
   selectedPeriod: number | null;
   onViewportChange?: (viewport: PeriodogramViewport) => void;
+  initialViewport?: PeriodogramViewport;
 }) {
   const { periodogram, candidates } = data;
   const { stage } = useAnalysisStage();
   const model = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
-  const [view, setView] = useState<PeriodView>(FULL_PERIOD_VIEW);
+  const [view, setView] = useState<PeriodView>(() => {
+    if (!initialViewport) return FULL_PERIOD_VIEW;
+    const low = Math.max(
+      0,
+      periodFraction(periodogram, initialViewport.minDays),
+    );
+    const high = Math.min(
+      1,
+      periodFraction(periodogram, initialViewport.maxDays),
+    );
+    return high > low
+      ? clampPeriodView({ zoom: 1 / (high - low), center: (low + high) / 2 })
+      : FULL_PERIOD_VIEW;
+  });
   const [inspection, setInspection] = useState<number | null>(null);
   const [error, setError] = useState("");
   const plot = useRef<HTMLDivElement>(null);

@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -21,9 +22,8 @@ class MemberCommunityPermissionTest {
 
     private static final List<String> WRITABLE =
             List.of("users", "user_settings", "posts", "comments");
-    private static final List<String> UNUSED = List.of(
-            "follows", "notifications",
-            "stats_snapshots");
+    // V11이 "필요한 동사를 코드로 확정할 수 없으므로 각 기능 티켓이 추가한다"로 남긴 마지막 테이블이
+    // notifications였다. V22(S15P21C206-150)가 재개 사건 쓰기 경로와 함께 확정해 UNUSED는 비었다.
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")
@@ -53,16 +53,33 @@ class MemberCommunityPermissionTest {
         Flyway upgraded = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
+                .target("19")
                 .load();
         // V16 이후 제출 상세 V17과 출처 권한 V18을 순서대로 적용한다.
         var applied = upgraded.migrate();
         assertEquals(List.of("17", "18", "19"), applied.migrations.stream().map(m -> m.version).toList());
+        Flyway followUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("20").load();
+        assertEquals(List.of("20"), followUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway statsUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("21").load();
+        assertEquals(List.of("21"), statsUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway reopenUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("22").load();
+        assertEquals(List.of("22"), reopenUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
+        Flyway notificationUpgrade = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration").target("23").load();
+        assertEquals(List.of("23"), notificationUpgrade.migrate().migrations.stream().map(m -> m.version).toList());
         Flyway restarted = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
+        assertEquals(List.of("24"), restarted.migrate().migrations.stream().map(m -> m.version).toList());
         restarted.validate();
-        assertEquals(0, restarted.migrate().migrationsExecuted);
 
         try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
              Statement st = owner.createStatement()) {
@@ -84,10 +101,16 @@ class MemberCommunityPermissionTest {
             }
 
             assertTrue(hasPrivilege(owner, "published_analyses", "SELECT"));
+            assertTrue(hasPrivilege(owner, "stats_snapshots", "SELECT"));
+            assertTrue(hasPrivilege(owner, "global_stats", "SELECT"));
+            for (String denied : List.of("INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "stats_snapshots", denied), denied);
+            }
+            assertFalse(hasPrivilege(owner, "global_stats", "MAINTAIN"));
             for (String allowed : List.of("SELECT", "INSERT", "UPDATE", "DELETE"))
                 assertTrue(hasPrivilege(owner, "post_reactions", allowed));
             assertFalse(hasPrivilege(owner, "post_reactions", "TRUNCATE"));
-            for (String table : List.of("post_history_attachments", "comment_history_attachments", "post_source_links")) {
+            for (String table : List.of("post_history_attachments", "comment_history_attachments", "post_source_links", "follows")) {
                 for (String allowed : List.of("SELECT", "INSERT", "DELETE")) assertTrue(hasPrivilege(owner, table, allowed));
                 for (String denied : List.of("UPDATE", "TRUNCATE")) assertFalse(hasPrivilege(owner, table, denied));
             }
@@ -96,10 +119,12 @@ class MemberCommunityPermissionTest {
                 assertFalse(hasPrivilege(owner, "published_analyses", denied), denied);
             }
 
-            for (String table : UNUSED) {
-                for (String privilege : List.of("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")) {
-                    assertFalse(hasPrivilege(owner, table, privilege), table + ": " + privilege);
-                }
+            // V23은 읽음·발행 열의 UPDATE만 허용한다. 테이블 전체 UPDATE 권한은 없다.
+            for (String allowed : List.of("SELECT", "INSERT")) {
+                assertTrue(hasPrivilege(owner, "notifications", allowed), allowed);
+            }
+            for (String denied : List.of("UPDATE", "DELETE", "TRUNCATE")) {
+                assertFalse(hasPrivilege(owner, "notifications", denied), denied);
             }
         }
     }
@@ -150,6 +175,34 @@ class MemberCommunityPermissionTest {
             }
             assertPermissionDenied(() -> st.execute("UPDATE published_analyses SET history_id=history_id WHERE id=-1"));
             assertPermissionDenied(() -> st.execute("DELETE FROM published_analyses WHERE id=-1"));
+        }
+    }
+
+    @Test
+    void 앱_역할은_탈퇴_정리_함수만_사용해_회원을_삭제한다() throws SQLException {
+        try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
+            assertPermissionDenied(() -> st.execute("DELETE FROM users WHERE id=-1"));
+            app.setAutoCommit(false);
+            long userId = returnedId(st, "INSERT INTO users(provider,provider_user_id,nickname) "
+                    + "VALUES ('test','withdrawal-role','role-user') RETURNING id");
+            long postId = returnedId(st, "INSERT INTO posts(kind,user_id,board,tag,title,body,status) "
+                    + "VALUES ('user'," + userId + ",'free','GENERAL','title','body','visible') RETURNING id");
+            st.execute("INSERT INTO withdrawal_requests(id,user_id,policy_version,receipt_hash,status) VALUES ('"
+                    + UUID.randomUUID() + "'," + userId + ",'withdrawal-v1','hash','READY')");
+            st.execute("UPDATE users SET status='withdrawn',withdrawn_at=clock_timestamp() WHERE id=" + userId);
+            st.execute("UPDATE published_analyses SET withdrawn_at=clock_timestamp() WHERE id=-1");
+            st.execute("SELECT cleanup_withdrawn_member(" + userId + ")");
+            st.execute("SELECT prune_withdrawal_retention()");
+            try (ResultSet result = st.executeQuery("SELECT user_id,author_withdrawn_at IS NOT NULL FROM posts WHERE id=" + postId)) {
+                assertTrue(result.next());
+                assertEquals(-1, result.getLong(1));
+                assertTrue(result.getBoolean(2));
+            }
+            try (ResultSet result = st.executeQuery("SELECT count(*) FROM users WHERE id=" + userId)) {
+                assertTrue(result.next());
+                assertEquals(0, result.getLong(1));
+            }
+            app.rollback();
         }
     }
 

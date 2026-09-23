@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { analysisContextFixture, analysisCurveFixture } from "../../dev/analysis-fixtures";
+import { decodeAnalysisContext, decodeCurve } from "../../src/features/analysis/analysis-data";
+import { buildFoldData, foldTimes } from "../../src/features/analysis/fold-data";
+import { buildTimeCurve } from "../../src/features/analysis/time-curve";
 import {
   historyGraphPath,
   historySeries,
@@ -57,6 +61,45 @@ const submitted = (patch: Record<string, unknown> = {}) => ({
 });
 const read = (value: unknown, mode: "CURRENT" | "SUBMITTED") =>
   readHistoryGraphView(value, ID, TIC, mode);
+
+test("half-day folds use Gold centers once across analysis and History, preserving old snapshots", () => {
+  const raw = analysisContextFixture();
+  const context = decodeAnalysisContext(raw, raw.ticId);
+  const curve = decodeCurve(analysisCurveFixture(), context, 200);
+  assert.equal(curve.kind, "ready");
+  if (curve.kind !== "ready") return;
+  context.foldReferenceTimeBtjd = 0 as typeof context.foldReferenceTimeBtjd;
+  curve.segments = [
+    { ...curve.segments[0], startBtjd: 0 as typeof curve.segments[0]["startBtjd"], binMinutes: 10, nPoints: 3, flux: [2, null, 0], gaps: [[1, 1]] },
+    { ...curve.segments[1], startBtjd: 0.5 as typeof curve.segments[0]["startBtjd"], binMinutes: 20, nPoints: 1, flux: [3], gaps: [] },
+  ];
+  const original = structuredClone(curve);
+  const data = buildFoldData(context, curve);
+  assert.deepEqual([...data.times], buildTimeCurve(curve.segments).points.map(p => p.btjd));
+  const now = historySeries(read(current({
+    reproduction: { ...reproduction, currentFoldReferenceTimeBtjd: 0 },
+    selection: { ...selection, userPeriodDays: 0.5 },
+    curve: { ...current().curve, segments: curve.segments },
+  }), "CURRENT"));
+  assert.deepEqual(now.points.map(p => p.phase), [...foldTimes(data.times, 0, 0.5)]);
+  // 10 min / 2 at P=0.5 is 1.041666... of 150 phase bins: bin 75 -> 76.
+  assert.deepEqual(now.points.map(p => Math.floor((p.phase + 0.5) * 150)), [76, 80, 77]);
+  // Same sample: v1 has one point in each bin; v0 groups 2 and 3 in bin 75.
+  for (const [version, bins] of [
+    ["folded-mad-v1", [[76, 2], [77, 3], [80, 0]]],
+    ["folded-mad-v0", [[75, 2.5], [79, 0]]],
+  ] as const) {
+    const flux: (number | null)[] = Array(150).fill(null);
+    bins.forEach(([bin, value]) => { flux[bin] = value; });
+    const snapshot = { bins: 150, foldedFlux: flux, foldedError: Array(150).fill(null) };
+    const value = submitted({ snapshotVersion: version, snapshot });
+    const saved = structuredClone(value);
+    const then = historySeries(read(value, "SUBMITTED"));
+    assert.deepEqual(then.points.map(p => [p.phase, p.flux]), bins.map(([i, value]) => [snapshotPhase(i, 150), value]));
+    assert.deepEqual(value, saved);
+  }
+  assert.deepEqual(curve, original);
+});
 
 test("the request names the mode it wants", () => {
   assert.equal(
@@ -201,7 +244,7 @@ test("both modes land on the same axis", () => {
             {
               segmentId: "s-1",
               sector: 14,
-              startBtjd: 1683.4231,
+              startBtjd: 1683.4231 - 11.802 * 0.25,
               binMinutes: 11.802 * 0.5 * 1440,
               nPoints: 2,
               flux: [1, 0.99],

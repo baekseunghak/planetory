@@ -1,0 +1,58 @@
+.public-sky-heading {
+  position: absolute;
+  top: 20px;
+  left: 32px;
+  z-index: 8;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  pointer-events: none;
+}
+.public-sky-heading a {
+  pointer-events: auto;
+}
+.public-sky-heading h1 {
+  font-size: 20px;
+}
+.public-sky-heading span {
+  color: #9baabb;
+  font-size: 13px;
+}
+.public-sky-error {
+  position: relative;
+  padding: 130px 32px;
+}
+.public-list-switch {
+  position: absolute;
+  bottom: 35px;
+  left: 30px;
+  z-index: 8;
+}
+.public-star-list {
+  position: absolute;
+  inset: 100px 28px 90px;
+  overflow: auto;
+  background: #080c16ed;
+  padding: 22px;
+  z-index: 7;
+}
+.public-star-list ul {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  list-style: none;
+}
+.public-star-list li button {
+  width: 100%;
+  padding: 14px;
+}
+.public-galaxy .focus-heading {
+  top: 100px;
+}
+.public-galaxy .focus-information {
+  top: 225px;
+}
+.public-galaxy .galaxy-legend {
+  display: none;
+}
+.public-empty{position:absolute;top:130px;left:32px;z-index:8;}

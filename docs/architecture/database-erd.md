@@ -149,20 +149,20 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-여섯 묶음, 총 33개 테이블 + materialized view 1개.
+여섯 묶음, 총 34개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수는 운영 적용 전 검증 대상이다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
-| A 회원 | users, user_settings, follows | 계정·설정·팔로우(P1) |
+| A 회원 | users, user_settings, follows, withdrawal_requests | 계정·설정·팔로우(P1)·탈퇴 처리 상태 |
 | B 별·공개 데이터 카탈로그 | stars, observation_datasets, publication_bundles, light_curve_segments, periodograms, candidates, candidate_aliases, external_signal_references, candidate_dispositions, candidate_status_history, ai_executions, ai_evaluations | 배치가 적재한 Gold 릴리스의 본문(배열)과 메타데이터. 서비스는 읽기만 |
 | C 분석·제출 | submissions, analysis_histories, analysis_snapshots | 제출·불변 히스토리·접힌 곡선 스냅샷 |
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
-| F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
+| F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
 
 ## 2. ERD
 
-전체 그림은 아래 두 파일로도 볼 수 있다. 관계만 보려면 개요, 열까지 보려면 전체를 연다.
+아래 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24 신규 열·테이블은 아래 Mermaid·열 표를 따른다. SVG 갱신은 시각 인수에서 별도 확인한다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -245,7 +245,8 @@ erDiagram
     user_settings["user_settings · 회원 설정"] {
         bigint user_id PK, FK "회원"
         boolean star_list_public "내 별 목록 공개"
-        jsonb notification_prefs "알림 종류별 설정"
+        jsonb notification_prefs "6종 알림 설정"
+        jsonb notification_epochs "종류별 OFF 전환 횟수"
         boolean onboarding_done "첫 방문 안내 완료"
     }
     follows["follows · 팔로우(P1)"] {
@@ -255,6 +256,16 @@ erDiagram
         bigint target_id "대상 회원 또는 별"
         timestamptz created_at "생성 시각"
     }
+    withdrawal_requests["withdrawal_requests · 탈퇴 처리"] {
+        uuid id PK "불투명 요청 ID"
+        bigint user_id UK "탈퇴 당시 회원 ID(FK 없음)"
+        text policy_version "동의한 버전"
+        text receipt_hash "영수증 토큰 해시"
+        text status "READY/PROCESSING/COMPLETED/FAILED"
+        timestamptz effective_at "T 기록"
+        timestamptz completed_at "C 기록"
+        int attempts "정리 시도 수"
+    }
     stars["stars · 별"] {
         bigint tic_id PK "별(TIC)"
         numeric teff_k "표면 온도(K)"
@@ -262,6 +273,7 @@ erDiagram
         numeric tmag "TESS 밝기 등급"
         smallint confirmed_count "후보표의 확정 행성 수"
         text service_status "hidden/published"
+        boolean board_open "한 번 열린 공개 게시판"
     }
     observation_datasets["observation_datasets · 관측 회차"] {
         bigint id PK "고유 번호"
@@ -464,6 +476,7 @@ erDiagram
         text title "제목"
         text body "본문"
         text status "visible/hidden/deleted"
+        timestamptz author_withdrawn_at "원 작성자 탈퇴 시각"
         timestamptz created_at "생성 시각"
     }
     comments["comments · 답글"] {
@@ -472,6 +485,7 @@ erDiagram
         bigint user_id FK "회원"
         text body "본문"
         text status "visible/hidden/deleted"
+        timestamptz author_withdrawn_at "원 작성자 탈퇴 시각"
         timestamptz created_at "생성 시각"
     }
     post_reactions["post_reactions · 동의·비동의"] {
@@ -490,6 +504,7 @@ erDiagram
         timestamptz published_at "공개 시각"
         timestamptz unpublished_at "본인 취소"
         timestamptz hidden_at "운영 숨김(DB 설정)"
+        timestamptz withdrawn_at "탈퇴로 공개 철회"
     }
     post_source_links["post_source_links · 출처 링크 카드"] {
         bigint id PK "고유 번호"
@@ -523,14 +538,55 @@ erDiagram
         bigint target_tic_id FK "대상 별"
         text description "한 줄 설명"
         text status "planned/active/closed"
+        timestamptz notification_started_at "최초 알림 시작 경계"
     }
     notifications["notifications · 알림"] {
         bigint id PK "고유 번호"
         bigint user_id FK "회원"
         text type "종류"
         jsonb payload "내용"
+        text event_key "불변 원인 키, 기존 NULL"
+        timestamptz published_at "최초 발행 시각"
+        bigint publication_seq "회원별 발행 순번"
         timestamptz read_at "읽은 시각"
         timestamptz created_at "생성 시각"
+    }
+    notification_outbox["notification_outbox · 수신 의도"] {
+        bigint id PK "고유 번호"
+        text event_key "불변 원인 키"
+        bigint user_id "수신자, 발행 시 검사"
+        text type "6종 알림"
+        jsonb payload "사건 내용"
+        bigint preference_epoch "당시 OFF 세대"
+        bigint follow_id "당시 관계"
+        bigint follow_epoch "별 구독 재개의 FOLLOW 세대"
+        bigint source_notification_id "재개 원본"
+        text state "pending/delivered/excluded"
+        timestamptz recorded_at "기록 시각"
+    }
+    notification_events["notification_events · 원천 사건"] {
+        bigint id PK
+        text event_key UK
+        text type
+        jsonb payload
+        timestamptz occurred_at
+    }
+    notification_signal_state["notification_signal_state · 마지막 유효 판정"] {
+        bigint candidate_id PK,FK
+        text disposition
+        text ai_verdict
+    }
+    notification_candidate_changes["notification_candidate_changes · 판 게시 전 변화"] {
+        bigint bundle_id PK,FK
+        bigint candidate_id PK,FK
+        boolean was_discoverable
+        boolean is_discoverable
+    }
+    global_stats["global_stats · 전체 통계 MV"] {
+        integer singleton UK "한 행 유일 키"
+        timestamptz as_of "원천 기준 시각"
+        timestamptz generated_at "집계 생성 시각"
+        jsonb payload "비식별 전체 통계"
     }
     stats_snapshots["stats_snapshots · 통계 일일 집계"] {
         bigint id PK "고유 번호"
@@ -573,15 +629,17 @@ erDiagram
 
 **users** (ACC-01·02·05, DEC-11): provider·provider_user_id UNIQUE, nickname UNIQUE + `UNIQUE (lower(nickname))` 함수 인덱스(영문 대소문자 무시 중복 검사, 서비스 API SB-D14. 상시 변경, 게시글에 복사 저장 안 함), role member/operator(운영 화면은 없지만 DB 직접 조작 권한 구분용), status active/withdrawn.
 
-**user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB `{"achievement":true,"reopen":true,"challenge":true,"follow":false}`, onboarding_done.
+**V24 탈퇴 경계:** T에서 `users.status=withdrawn`으로 차단하고 C에 개인 행을 삭제한다. 일반 글·댓글은 내부 공통 작성자(-1)로 재연결하므로 원 제공자 ID·닉네임과 내부 회원 ID를 공개 작성자 응답에 남기지 않는다. `withdrawal_requests`는 FK 없는 탈퇴 당시 회원 ID, 동의 정책 버전, 영수증 토큰 해시와 T/C·재시도 상태를 신청 후 90일만 보관한다. 실제 실행은 `planetory.withdrawal.enabled=true`를 명시한 환경에서만 가능하며 기본은 비활성이다. C 함수는 withdrawn 회원만 처리하고 앱 역할에 함수 실행 권한만 준다. [정책값](../requirements/planetory-decision-register.md#dec-11)을 따른다.
 
-**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). 다형 참조라 FK 없음.
+**user_settings** (MY-04, HOME-09, DEC-34) — 1:1: star_list_public DEFAULT true, notification_prefs JSONB(achievement/reopen/challenge/follow/comment/relabel 6종 true), notification_epochs JSONB(종류별 OFF 전환 횟수, 기본 {}), onboarding_done. V23은 기존 true/false를 보존하고 누락된 지원 키만 true로 보충한다.
+
+**follows** (COM-16, P1): user_id = 팔로우한 회원, target_type user/star, target_id. UNIQUE(user_id, target_type, target_id). target은 다형 참조라 FK 없이 서비스에서 검증하며 user_id는 users FK다. 173은 기존 테이블·IDENTITY·created_at을 재사용한다. V20은 앱 SELECT·INSERT·DELETE만 추가하고 UPDATE·TRUNCATE를 금지한다(V11 sequence 권한 재사용). 반복 PUT은 created_at을 유지한다. 사용자 승인(2026-09-22)에 따른 현재 유효 관계·개인 관리 ID·탈퇴 제외 계약은 [서비스 API 12.1](../../apps/backend/docs/service-api-spec.md#follow-policy)을 따른다. 원천 보관/탈퇴 삭제·익명화·마지막 발견자 공개 자격은 별도 미정이다. 테이블·열·관계선 변경이 없어 ERD SVG는 변경하지 않는다.
 
 ### B. 별·공개 데이터 카탈로그 (Gold 메타데이터)
 
 배치가 Gold 릴리스 전환 때 적재하고 서비스 API는 읽기만 한다. 릴리스 교체는 publication_bundles.status를 current로 바꾸는 트랜잭션 하나로 끝낸다.
 
-**stars**: tic_id PK, teff_k·radius_rsun·tmag(본인 상세는 셋 다, 공개 요약은 tmag만. 값이 없으면 `null`. 탐사 API D-18), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published. **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
+**stars**: tic_id PK, teff_k·radius_rsun·tmag(본인 상세는 셋 다, 공개 요약은 tmag만. 값이 없으면 `null`. 탐사 API D-18), confirmed_count(후보표의 확정 후보 수, 화면은 0 여부만), service_status hidden/published, `board_open`(첫 발견 시 true, 마지막 발견자 탈퇴·삭제로 닫히지 않음). **자체 BLS 채택 신호가 0개인 별은 배치가 적재하지 않는다(결정 3).**
 
 **observation_datasets**: tic_id, sector, start_btjd, end_btjd, cadence, time_system, source_version. UNIQUE(tic_id, sector, source_version).
 
@@ -775,10 +833,11 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | tag | ANALYSIS/QUESTION/DISCUSSION/INFORMATION/GENERAL. system_thread는 NULL | |
 | title, body | | system_thread는 공개 후보 네 수치 요약을 V19 트리거로 생성·동기화한다. [검색 본문 계약](../api/community/README.md#공식-제목본문의-구현-차이) |
 | status | visible / hidden / deleted | hidden은 DB 직접 설정(운영 화면 없음, 결정 6) |
+| author_withdrawn_at | NULL 가능 | 원 작성자 T. C에 공통 작성자로 옮긴 글의 1년 본문 파기 기준 |
 | created_at, updated_at | | fixed_block·source_submission_id 없음(분석글 폐지) |
 | 인덱스 | (tic_id, kind, created_at DESC), (user_id, created_at DESC), `pg_trgm` GIN(title gin_trgm_ops), GIN(body gin_trgm_ops) | 뒤의 둘은 COM-03 P0 제목·본문 부분 일치 검색용(v1.1). board·tag 필터 인덱스는 실측 후 결정 |
 
-**comments**: post_id(일반 글 또는 공식 스레드의 토론 영역), user_id, body, status visible/hidden/deleted, created_at, updated_at. parent_id 없음(1단계).
+**comments**: post_id(일반 글 또는 공식 스레드의 토론 영역), user_id, body, status visible/hidden/deleted, created_at, updated_at, `author_withdrawn_at`(T+1년 본문 파기). parent_id 없음(1단계).
 
 **post_reactions** (COM-08): UNIQUE(post_id, user_id), reaction agree/disagree, updated_at. **kind=user 글에만 허용(API 검사).** 반응자 목록은 조인으로 공개.
 
@@ -794,6 +853,7 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 | published_at | | 첫 등록 시각. 이 시각에 미확정 성과 인정(최초 1회) |
 | unpublished_at | NULL | 본인 취소. 재공개 시 NULL로 되돌림 |
 | hidden_at | NULL | 운영 숨김(DB 설정). 본인 취소와 독립 |
+| withdrawn_at | NULL | 탈퇴에 따른 공개 철회. 본인 취소와 구별하며 C에 개인 공개 분석 행 삭제 |
 | 유효 공개 조건 | | unpublished_at IS NULL AND hidden_at IS NULL AND 스레드 status=visible |
 | 인덱스 | (candidate_id, user_id, published_at DESC) | 판단 통계 |
 
@@ -810,11 +870,16 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 - **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5번 TIC은 DEC-01 후 선정. 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6). `tic_id`는 공개된 별만(v1.9 트리거).
 - **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04). **v1.9:** `values`는 형식 1(`format_version`과 `selection`·`matching`·`peaks`·`discovery`·`tutorial`·`ai`·`bls` 묶음, 예: `tutorial_skip_after` → `tutorial.skip_after`)만 받는다(CHECK `ck_operation_settings_values_valid`). 적용 시각 유일(`uq_operation_settings_applied_at`), 적용된 행 수정·삭제·비우기와 지난 시각 삽입 거절(트리거), 초기 규칙 `rule-0`. 상세는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md).
 - **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
-- **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC).
-- **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. 비교 기준선(90일 중앙값) 일 1회.
+- **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC). **150 구현:** 판 전환 재개 사건(탐사 API 9.3절)이 이 테이블의 첫 쓰기 경로다. `type='reopen'`, payload는 `{ticId, bundleId, newDiscoverableCount}`이며 `reason`은 근거가 되는 `candidate_status_history`를 남길 Publisher(S15P21C206-87)가 없어 아직 싣지 않는다. V22가 `(user_id, payload->>'ticId', payload->>'bundleId') WHERE type='reopen'` 부분 유일 인덱스로 같은 판의 중복 사건을 DB에서 막고, 앱 역할에 SELECT·INSERT만 준다. V23은 event_key·published_at·publication_seq를 추가한다. 세 열은 모두 NULL(기존 원본/미발행)이거나 모두 유효한 발행 값이다. UNIQUE(user_id,event_key), UNIQUE(user_id,publication_seq), 발행 행의 (user_id,published_at DESC,id DESC) 부분 인덱스를 사용한다. 앱에는 read_at·세 발행 열의 UPDATE만 추가하며 원본 payload·created_at·DELETE 권한을 주지 않는다. 기존 행은 비소급 보존한다.
+- **notification_events / notification_signal_state / notification_candidate_changes** (V23, 175): 불변 원천 event_key·payload·occurred_at, 후보별 마지막 유효 disposition/AI verdict, 판×후보별 최초/최종 탐색 가능 여부다. Gold·앱 직접 쓰기는 허용하지 않고 승인된 DB 트리거만 관리한다. state와 changes의 candidate_id는 후보 FK(삭제 cascade), changes.bundle_id는 판 FK다. 출처 사건과 수신 의도는 자동 정리하지 않는다.
+- **challenge_rounds.notification_started_at** (V23): 최초 시작 경계. 기존 active/closed는 -infinity 비소급 표시이며 시작 트리거가 당시 참여 가능한 회원·설정을 outbox에 저장한다. 반복 전환에도 경계를 보존한다.
+- **notification_outbox** (V23, 175): 사건 원인·수신자 UNIQUE, type·payload·당시 설정 세대·follow_id·source_notification_id·pending/delivered/excluded·recorded_at. 작성자 잠금과 수신자 FK 잠금의 교착을 피하려고 FK를 두지 않으며 발행 시 회원 유효성·소유권·관계·현재 접근을 재검사한다. 앱은 SELECT/INSERT, state 및 본인 재개 사유 결합에 필요한 payload/source_notification_id/follow_id/follow_epoch/preference_epoch UPDATE, identity sequence 사용이 가능하다. 원본 notifications payload는 수정할 수 없다. 자동 정리는 없다. 원본/발행 분리와 재처리 상세는 [F15.7](../development/service-backend/community.md#notification-policy)을 따른다.
+- **stats_snapshots** (STA-03, DAT-13): snapshot_date, scope global/round, round_id, metrics JSONB. `metrics` 컬럼에는 지표 map만이 아니라 상태·기준/관측/생성 시각·코호트 메타데이터·지표 map을 포함한 `ComparisonSnapshot` 전체 JSON을 저장한다. 비교 기준선(90일 중앙값) 일 1회.
 - **global_stats (materialized view)** (STA-02, 결정 7-3): 전체 통계를 10분마다 REFRESH CONCURRENTLY. 테이블 아님.
 
-**176 확인·후속 설계:** 위 두 항목은 목표 설계다. 현재 V1 `stats_snapshots`에는 날짜·scope·round_id별 UNIQUE가 없고 기능 전용 앱 권한은 V11에서 보류했다. `global_stats`와 P1 집계 잡은 미구현이다. 178은 CONCURRENTLY 요건을 만족하는 MV 인덱스·최초 적재·REFRESH 역할, Snapshot의 global/null round_id 멱등 키·최소 읽기/쓰기 권한·중첩 실행·직전 성공본 보존을 설계·검증한다. [176 지표 사전·기준 시각·인수표](../requirements/planetory-statistics-policy.md)를 참조하며 원천 읽기 기준 시각과 집계 완료 시각을 구분한다. 탈퇴 원천 보존은 DEC-11/179, 현재·과거 집계 영향은 연계 미정이다. 이 항목은 DDL 적용이나 권한 부여 완료를 의미하지 않는다.
+**178 구현(사용자 승인 2026-09-22):** V21이 `stats_snapshots(snapshot_date,scope,round_id) NULLS NOT DISTINCT` 유일 인덱스를 추가하여 global의 NULL 회차도 멱등 키로 보호한다. 기존 중복이 있으면 migration을 실패시키고 성공본을 임의 삭제하지 않는다. 별도 개인 Snapshot 테이블은 없다. `global_stats`는 `singleton` 유일 인덱스와 `as_of/generated_at/payload`를 가진 한 행 MV이며 `WITH NO DATA`로 생성한다. 최초 명시적 적재 뒤 CONCURRENTLY를 사용한다. 앱 역할은 두 집계의 SELECT만, `planetory_stats_job`은 MV MAINTAIN·Snapshot SELECT/INSERT와 필요한 원천 SELECT만 가진다. UPDATE/DELETE 없이 성공본을 보존한다. MV 계산은 소유자 권한으로 수행되지만 잡 계정에는 소유권·역할 상속·원천 쓰기를 주지 않는다.
+
+Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
 ## 4. 설계 결정과 근거

@@ -1,5 +1,16 @@
 # TESS 처리 벤치마크
 
+## 128 제출 매칭 부분 검산
+
+`tess_bench.matching_evidence`는 저장된 111 manifest·CSV만 읽어 출력 해시·행 수와
+회수 신호의 주기·duration 조건을 검사한다. BLS나 Git을 실행하지 않는다.
+실행 명령·측정 한계·rule-1 잔여 범위는 [제출 매칭 검증](../../docs/data/tess-submission-matching-benchmark.md)을 따른다.
+단위 테스트는 `uv run --locked pytest tests/test_matching_evidence.py -q`로 실행한다.
+
+`tess_bench.matching_replay`는 사용자가 실제 FITS로 관측 창·주입 epoch를 재구성하고 저장된 후보를
+제출 매칭에 대조하는 후속 실행 도구다. BLS 탐색은 하지 않는다. 같은 문서 4절의 5개 manifest 명령을 따른다.
+합성 경계는 `uv run --locked pytest tests/test_matching_replay.py -q`로 검증한다.
+
 ## 112 고조파·후보 동일성 실험
 
 111 확정 ZIP 감사, 4별 두 Bundle 비교, 정확한 모델 중복 정리와 자동 고조파 병합 비교 실험은
@@ -485,3 +496,113 @@ manifest SHA-256: `f97eab1a35cadf746361e6e0ab91dfc4c24e5e85ff4ff18fd77065a1a7a50
 - 기존 448곡선 실측은 앞 절의 이전 실행 증거다. 이번에는 전체448곡선을 재실행하지 않았고, 위 테스트와5제품을 재검증했다.
 
 Git 충돌 해제 확정은 해결 파일 stage·merge commit·push 후 MR에서 확인한다. 로컬 마커 제거만으로 원격 MR 충돌 해제를 선언하지 않는다.
+
+## 115 제공 해상도 discoverable 실험
+
+10분 mean·제공 로그 5,000점·발견 직전 고정 모델 잔차의 봉우리 판정 검토안이다.
+실행·분모·실패 상태·revision 사례·승인 경계는 [115 벤치마크](../../docs/data/tess-discoverability-benchmark.md)를 따른다.
+`uv run --locked python -m tess_bench.discoverability --targets l98_59`로 한 별을 확인하고,
+대상 옵션 없이 전체 9별을 실행한다. 9별 실측·검산을 완료했으며 규칙 승인 전이다. 운영 discoverable을 갱신하지 않는다.
+
+## 123 비닝·제공 해상도 회귀
+
+상태: 실행기·합성 검증 및 아래 9별 FITS 비교 완료, 리뷰 전이다. `segmentation_regression`은 114 비닝 참조,
+115 판정 참조와 123 커널을 비교한다. 운영 규칙·게시 경계는 [Gold 계약](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계),
+호출법은 [커널 README](../../libs/astro-kernel/README.md#제공-해상도-판정-123)를 따른다.
+
+123은 API·Gold의 `max(40, 최장 후보 주기 × 1.15)`를 사용한다. 115의 옛 상한은 보존한다.
+같은 새 격자에서 구현 간 판정·봉우리 인덱스·잔차·BLS power를 비교하고, 별도로 옛 격자를
+동일 후보에 적용해 양방향 boolean 변경 목록을 기록한다. false→true가 없어도 임의로 사례를 만들지 않는다.
+실제 122 후보 모델을 쓰지만 ID·Bundle·승인 근거는 실행 전용 합성값이다. 회원 재개·실제 DB 판 전환 검증은 아니다.
+
+저장된 115 ZIP 검산만 실행하면 FITS와 BLS를 재실행하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.segmentation_regression --saved-115 C:/Users/SSAFY/Downloads/review-115-2fb9d38f.zip
+```
+
+2026-09-22 제공 ZIP의 plan 및 출력 112개 checksum을 대조했고, 저장된 72개 주기도의 판정을
+재분류해 모두 일치했다(후보 35/36, 대조 4/9). ZIP의 집 PC 절대 경로는 파일명으로 대응한다.
+이 명령은 78개 원천 입력을 검증하지 않으며 191개 전체 파일 검증이나 새 격자 실측을 뜻하지 않는다.
+
+사용자가 FITS를 준비한 환경에서 `experiments/tess-bench`를 작업 디렉터리로 실행한다. 자동 다운로드는 없다.
+
+```powershell
+uv run --locked python -m tess_bench.segmentation_regression --targets l98_59
+# 한 별 확인 후 전체 9별 × 4곡선
+uv run --locked python -m tess_bench.segmentation_regression
+```
+
+결과는 Git 제외 `results/segmentation-regression/run-*`에 별도 저장한다. plan에 입력·코드·환경·
+설정·로컬 비교 오차를 기록하고 종료 전 입력과 plan hash를 다시 대조한다. 변경·불일치는 명시적으로 실패한다.
+`curve-*.json`은 이전 격자 판정과 122 원본 결과·보류 사유·새 제안·변경 목록,
+NPZ는 각 단계의 런타임 배열, `comparisons.json`은 곡선별 요약이다. 마지막 manifest만 성공 근거로 사용한다.
+입력·코드를 실행 중 수정하지 않는다. 실패는 `failure.json`이며 성공으로 합산하지 않는다.
+
+QA 실패·무후보로 122 카탈로그가 보류된 곡선은 bin 비교와 보류 상태를 기록한다.
+그 곡선의 후보를 게시 가능하도록 우회하지 않는다. `passed=true`는 비교가 완료됐다는 뜻이며
+모든 곡선의 discoverability_ready 또는 Gold 게시 허용을 뜻하지 않는다.
+수치 비교 허용치는 로컬 회귀용이고 Gold `pending-measurement` 허용 오차를 확정하지 않는다.
+
+검증: TOI-270 FITS가 있는 담당자 환경에서 tess-bench 전체 225 passed(신규 실행기 3개 포함),
+해당 FITS가 없는 리뷰 환경에서는 224 passed·1 skipped다. 최초 리뷰 HEAD의 커널은 248 passed,
+은퇴 후보 boolean 방어 및 하위 함수 규칙 검사 보완 후에는 254 passed다.
+신규 실행기 테스트는 합성 입력의 실제 BLS·manifest·출력 hash를 포함한다.
+실제 FITS 비교는 아래 결과를 따른다. DB COMMENT migration은 Backend 후속으로 분리했다. 운영 Publisher·EC2 비교는 아직 실행하지 않았다.
+
+### 9별 FITS 비교 결과 (2026-09-22)
+
+사용자 실행 `run-20260922T005624Z-bcdaf492`에서 9별 × 4곡선 모두 비교를 통과했다.
+소요 251.484초이며 입력·코드·plan·출력 합계 168개 파일 checksum 불일치는 0이다.
+최대 bin flux 절대 차이는 `4.440892098500626e-16`이다.
+
+- ready 19곡선, held 17곡선이다. held는 제거 QA 실패 10곡선과 정상 종료·채택 후보 0개인 7곡선이다.
+- ready 곡선의 원본 단계 19개와 후보 단계 30개, 합계 49단계를 비교했다. 후보 판정은 true 29개·false 1개다.
+- QA 실패 곡선의 앞선 채택 후보 6개는 공개 판정에서 제외했다. 따라서 115의 전체 진단 후보 36개와 분모가 다르며 29/30을 전체 주입 회수율로 해석하지 않는다.
+- 실제 비교 대상에서는 구·신 규칙 모두 상한 40일이었다. 상한 변경 0곡선·boolean 변화 0건이다. 실제 데이터의 false→true 또는 1.15배 상한 변경 효과를 입증한 결과는 아니다. 40일 후보→46일 상한 경계는 합성 테스트 근거다.
+- tuning 목록 밖 대상도 기존 fixture 재검증이며 독립 평가가 아니다. ready는 계산 제안 준비 상태이고 운영 게시 승인이 아니다.
+
+manifest와 출력 목록은 해당 결과 폴더에 보존한다. 계산 코드는 실행 후 변경하지 않았으며
+실측 문서만 갱신했다. Git 검사·리뷰, 규칙 승인 근거 확인 및 DB COMMENT 적용 검증은 남아 있다.
+
+## 116 원본 광도곡선·외부 참조 실측
+
+외부 원천 수집·감사 뒤 `python -m tess_bench.external_catalog_replay`로 원본 9별의 반복 BLS 후보를 비교한다. [116 계약 검증안](../../docs/data/tess-external-catalog-contract.md)의 문턱은 운영 승인 전이다. realclean·주입 회수 결과를 외부 행성 매칭 증거로 재사용하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.external_catalog_replay --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
+```
+
+`--targets wasp18` 등으로 부분 실행할 수 있으며 plan에 대상 목록을 남긴다. 기본은 9별이다. 시작 전 전체 입력·구현 hash를 고정하고 종료 후 대조한다. 결과는 results/external-catalog-replay 아래 새 디렉터리에 저장한다. 다운로드·Git·DB 호출은 없다. time standard가 확인되지 않은 외부 행은 invalid_external로 남는다. diagnostic ID는 실험 식별자이며 운영 candidate ID가 아니다.
+
+단위 검증: `uv run --locked python -m pytest tests/test_external_matching.py tests/test_external_catalog_replay.py -q`. 실제 FITS 실험과 별도인 합성 테스트 41개다.
+
+116 !187 소비자 리뷰 보완: disposition()은 confirmed/fp/pc/none과 판정 규칙 버전을 반환하며 빈 라벨과 충돌을 구분한다. DB 행 공급자는 [116 필수 열 인계](../../docs/data/tess-external-catalog-contract.md)에 명시한다. hold는 DB에 저장하지 않으며 124 source_refs·Publisher applied_at은 후속 공급이다. 관련 테스트 41개 통과, 기존 BLS 실측은 재실행하지 않았다.
+
+## 124 저장 외부 자료 정규화·후보 연결
+
+[124 구현 계약](../../docs/data/tess-external-catalog-implementation.md)을 따른다. 다운로드·BLS·Git·DB 쓰기를 실행하지 않는다.
+
+```powershell
+uv run --locked python -m tess_bench.external_catalog_regression --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
+```
+
+실제 후보 연결에는 `--candidate-input <JSON>`을 추가한다. JSON은 `catalog`(122 출력), `observed_times`(실제 유효 시각 배열), `required_sources`(전체 원천 이름), `approval`(승인 근거), 선택적 `previous`(이전 적용 성공 결과)를 포함한다. 테스트용 ID를 운영 ID로 대체해서 쓰지 않는다. 입력이 없으면 `candidate_input_missing` 감사만 수행한다. 결과의 completed는 운영 판정·게시 완료가 아니다.
+
+122 저장 후보·관측 시각 연결은 다음 명령을 사용한다. ZIP 외부 해시와 내부 22개 파일, 122 원본 FITS·시간 복원 코드/설정 hash를 검사한다. BLS·다운로드·Git·DB 쓰기는 하지 않으며, FITS 전처리와 매칭 회귀는 사용자가 실행한다.
+
+```powershell
+uv run --locked python -m tess_bench.external_catalog_candidate_regression --catalog-zip "<다운로드 경로>/review-122-r2.zip" --catalog-zip-sha256 c4476feba5e8e02a33852bb507b3def28e33080932568c1df23434b34f35bd68 --manifest ../tess-fixture/results/external-catalog/run-20260922T075142Z-85fe81f7/manifest.json --manifest ../tess-fixture/results/external-catalog/run-20260922T075631Z-46337bcc/manifest.json
+```
+
+실제 외부 자료 결과와 통제용 외부 행 시나리오는 산출물에서 분리한다. 122의 테스트 ID를 그대로 유지하며 운영 DB ID 할당·적재 검증으로 표현하지 않는다. checksum 불일치나 시나리오 실패를 우회하지 않고 원인을 확인한다.
+
+124 사용자 실행 `696cda44`는 16곡선 중 ready 11·기존 테스트 ID 18개, 상위 보류 5개, 통제 시나리오 99건을 검증했다. 실제 외부 조인은 11개 모두 라벨 보류이며 정상 매칭 진단은 별도로 보존했다. 입력·출력 79개 checksum 불일치 0. [결과·리뷰 ZIP 해시](../../docs/data/tess-external-catalog-implementation.md#2026-09-22-사용자-실행독립-검산)를 참조한다. 운영 DB ID·게시 검증은 아니다.
+
+124 단위·통제 회귀 검증(실제 FITS 재실행과 구분):
+
+```powershell
+uv run --locked python -m pytest tests/test_external_catalog_regression.py tests/test_external_catalog_candidate_regression.py -q
+```
+
+`<다운로드 경로>`는 실제 ZIP을 저장한 디렉터리로 바꾼다.

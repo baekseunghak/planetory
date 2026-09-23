@@ -62,7 +62,7 @@ export function buildTimeCurve(segments: readonly CurveSegment[]): TimeCurve {
       gap = null;
       const point = {
         x: start + (index + 0.5) * cadence,
-        btjd: source.startBtjd + index * cadence,
+        btjd: source.startBtjd + (index + 0.5) * cadence,
         flux,
         index,
         sector: source.sector,
@@ -118,7 +118,7 @@ export function pointAtDisplay(curve: TimeCurve, x: number): TimePoint | null {
   if (flux === null) return null;
   return {
     x: segment.start + (index + 0.5) * segment.cadence,
-    btjd: segment.source.startBtjd + index * segment.cadence,
+    btjd: segment.source.startBtjd + (index + 0.5) * segment.cadence,
     flux,
     index,
     sector: segment.source.sector,

@@ -60,7 +60,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
    * 빠져 있다. 계산 버전과 판은 접수 결과가 들고 있는 것을 쓴다.
    */
   const nextCurve =
-    curveStep && settled?.state === "accepted"
+    curveStep &&
+    settled?.state === "accepted" &&
+    !acceptedOnOlderBundle(settled.receipt, settled.currentBundleId)
       ? () => {
           const { curveContext, progress } = settled.receipt;
           curveStep.goTo({
@@ -201,6 +203,11 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               <p className="submission-note" data-testid="stale-bundle">
                 이 결과는 접수 당시 판 기준입니다. 그 뒤 별의 자료 판이
                 바뀌었으니 분석을 이어가려면 최신 자료를 다시 불러와 주세요.
+                {recoverBundle && (
+                  <button type="button" onClick={recoverBundle}>
+                    최신 자료 불러오기
+                  </button>
+                )}
               </p>
             )}
             {/* 접수 정보는 맨 위 한 줄이다. 결과를 읽는 데 쓰는 값이 아니라

@@ -642,7 +642,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 규칙 | 근거 |
 |---|---|
-| i번째 점의 시각 = `startBtjd + (binMinutes / 1440) × i`. 시각 배열은 보내지 않는다 | ERD `light_curve_segments` |
+| `startBtjd`는 첫 bin 시작 메타데이터다. 표시·접기에서 i번째 Gold 점의 시각은 `startBtjd + (binMinutes / 1440) × (i + 0.5)`이며 세그먼트별 간격을 사용한다. 시각 배열은 보내지 않는다 | [D06 계약 1.0(확정)](../../../libs/astro-kernel/README.md#d06113-결정-사항) · [Gold 4.1(목표 계약 변경안)](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) · 192 사용자 승인, 247 정합화 |
 | 결측은 `null`, `gaps`는 `[시작 인덱스, 끝 인덱스]` 폐구간. JSON `NaN`은 쓰지 않는다 | Q04 |
 | 세그먼트는 섹터 순 정렬. 섹터 사이 공백은 세그먼트 경계로 표현하고 프론트가 접어 그린다 | EXP-03, NFR-10 |
 | 운영 `binMinutes`는 10분(mean). 빈 bin 포함 20,000점 초과 시 자동 확대하지 않고 실패·격리한다 | [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) |
@@ -651,6 +651,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 D-2 | ERD 용량표 |
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
+
+**시각 기준의 구분(247):** 143의 v1 스냅샷과 [192 사용자 승인](../../frontend/docs/analysis-retry-draft.md#gold-시각-기준-정합화)에 따라 표시·접기는 중심을 사용한다. 기존 시작 시각 표기를 정정하며 계산을 다시 변경하지 않는다. 범위 끝은 `startBtjd + nPoints × binMinutes / 1440`, 마지막 점은 `startBtjd + (nPoints - 0.5) × binMinutes / 1440`으로 서로 다르다. null은 제외하되 인덱스를 당기지 않으며, 시작 메타데이터·기준 T·서버 환산 위상·이미 중심인 원시 TIME에 반 bin을 더하지 않는다. 부분 bin도 같은 중심 시각을 사용하며, 평균에 참여한 실제 관측점의 평균 시각과 다를 수 있다([Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)). 제출 관측 판정은 6.2절의 별도 시작 기준을 유지한다.
 
 **원본의 잔차 상태:** `curveStep=0`이면 계산할 것이 없으므로 `residual`은 `{"status": "COMPLETED", "jobId": null}`로 고정한다. `computedAt`은 결과가 만들어진 시각이 있을 때만 넣는다.
 
@@ -789,7 +791,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
 
-**관측점과 관측 창(2026-09-18 결정):** 점 시각은 곡선 응답과 같은 bin 시작 시각 `startBtjd + (binMinutes / 1440) × i`(5.2절)이고, 결측이 아닌 점이 이어진 구간마다 관측 창 `[첫 점, 마지막 점]`을 만든다. 5단계의 관측점 존재는 창 안의 점을 bin 간격으로 표본화해 판정하고, 5.1절의 관측 통과 수 N과 통과 창 중첩도 이 창과 겹치는 통과만 센다. 프론트는 받은 곡선 점만으로 같은 판정을 재현할 수 있다.
+**관측점과 관측 창(2026-09-18 결정 유지):** 제출 검증·매칭의 점 시각은 bin 시작 `startBtjd + (binMinutes / 1440) × i`이고, 결측이 아닌 점이 이어진 구간마다 관측 창 `[첫 점, 마지막 점]`을 만든다. 5단계의 관측점 존재는 창 안의 점을 bin 간격으로 표본화해 판정하고, 5.1절의 관측 통과 수 N과 통과 창 중첩도 이 창과 겹치는 통과만 센다. 이 판정은 5.2절의 표시·접기용 bin 중심과 구분한다. 재현하려면 응답의 시작 메타데이터·간격·null 위치로 판정용 점을 별도로 구성해야 하며 화면 점을 그대로 쓰지 않는다. 중심 기반 표시로 바뀌어도 관측 창이나 `observationBounds`를 반 bin 늘리지 않는다. 경계 bin의 화면 선택과 최종 허용 여부는 다를 수 있으며 관측 판정 변경은 247 범위 밖의 별도 승인 대상이다.
 
 **수치 판정의 기준:** 4~7·9단계와 6.3절 3단계 매칭은 [제출 매칭 수치 규칙 v0](../../../docs/api/exploration/README.md)와 참조 구현 `matching-v0.cjs`의 계산을 그대로 따른다. 백엔드 구현(`SubmissionMatching`)은 공통 표본 31개(`matching-cases.v0.json`)의 검증·서버 산정·판정을 재현한다(S15P21C206-142). 선택 폭·허용 오차·배율은 현재 운영 규칙, 최소 창은 판의 bin 크기에서 온다(5.1절 `selectionRules`).
 
@@ -1092,6 +1094,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 ### 8.3 히스토리 그래프 (HIS-03, Q11)
 
+**점 시각 기준(247 정합화):** 개인·공개 CURRENT는 5.2절의 Gold bin 중심으로 접는다. SUBMITTED의 `folded-mad-v1`도 제출 당시 세그먼트별 `startBtjd + (i + 0.5) × binMinutes / 1440`으로 접어 150칸에 집계한 배열이다. 두 모드는 점 시각 규칙이 같지만 CURRENT의 현재 판·T·개별 점과 SUBMITTED의 당시 판·T·구간 중앙값은 같다고 보장하지 않는다. 배열 칸의 표시 위상 `-0.5 + (i + 0.5) / bins`는 집계 구간의 중심이며 Gold 점 시각에 다시 반 bin을 더하는 규칙이 아니다. 저장된 v0는 시작 시각으로 집계한 과거 결과로 보존하며 v1처럼 재해석하지 않는다.
+
 `GET /api/v1/histories/{historyId}/graph?mode=CURRENT|SUBMITTED` — 생략은 `CURRENT`.
 
 아래는 CURRENT 원본 대체 응답 예시다. SUBMITTED의 배열은 `{"bins":150,"foldedFlux":[...],"foldedError":[...]}` 형식이며 두 배열은 각각 150개다.
@@ -1166,8 +1170,9 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
      "relabel": null, "curveStepAtMatch": 1, "submissionIds": ["sub-7001"], "threadId": null}
   ],
   "unmatchedSubmissions": [{"submissionId": "sub-7002", "historyId": "h-502", "matchResult": "not_matched", "submittedAt": "…"}],
-  "curveSteps": [{"curveStep": 0, "residual": {"status": "COMPLETED"}}, {"curveStep": 1, "removedCandidateIds": ["c-401"], "residual": {"status": "COMPLETED"}},
-                 {"curveStep": 2, "removedCandidateIds": ["c-401", "c-402"], "residual": {"status": "FAILED"}}],
+  "curveSteps": [{"curveStep": 0, "removedCandidateIds": [], "residual": {"status": "COMPLETED", "jobId": null, "computedAt": null}},
+                 {"curveStep": 1, "removedCandidateIds": ["c-401"], "residual": {"status": "COMPLETED", "jobId": null, "computedAt": null}},
+                 {"curveStep": 2, "removedCandidateIds": ["c-401", "c-402"], "residual": {"status": "FAILED", "jobId": null, "computedAt": null}}],
   "discoveredStars": [{"ticId": "123456790", "unlockedAt": "…", "triggerAchievementId": "ach-31"}],
   "unpublishedSignalCount": 1,
   "links": {"boardOpen": true, "threadIds": ["st-301"]},
@@ -1191,7 +1196,7 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 - `signals[].publication.state`도 **제출 당시** 자격으로 가른다(8.2절과 같다). 지금 확정으로 바뀌어도 그때 미확정으로 남긴 미공개 기록은 계속 `UNPUBLISHED`다.
 - `signals[].curveStepAtMatch`는 **처음** 맞힌 제출의 단계다. 같은 신호를 다시 제출해도 바뀌지 않는다. `submissionIds`는 그 신호를 맞힌 본인 제출 전부이며 오래된 것부터다 — **신호 수와 제출 수는 다르다.**
 - `signals[].ai`는 6.4절 `signal.ai`와 **같은 모양**이며 `modelVersion`을 포함한다. 두 화면이 같은 신호를 다르게 말하지 않게 한 곳에서 만든다.
-- `curveSteps`는 **회원이 실제로 제출한 단계**다. `removedCandidateIds`는 원본(0단계)에서도 빈 배열로 싣는다 — 키를 빼면 "제거 없음"과 "필드 누락"을 구분할 수 없다. `residual`은 2.4절 `Residual` 그대로라 `status`·`jobId`·`computedAt`을 갖는다. 원본은 DB 행이 곧 결과이므로 늘 `COMPLETED`다.
+- `curveSteps`는 **회원이 실제로 제출한 단계**다. `removedCandidateIds`는 원본(0단계)에서도 빈 배열로 싣는다 — 키를 빼면 "제거 없음"과 "필드 누락"을 구분할 수 없다. 2.1절 식별자 규칙과 6.3절 제출 검증에 따라 `curveStep = removedCandidateIds.length`다. 단계는 요청·클릭 횟수가 아니라 제거한 고유 후보 수이므로 두 후보를 한 번에 제거하는 조합도 2단계다. `residual`은 2.4절 `Residual` 그대로라 `status`·`jobId`·`computedAt`을 갖는다. 원본은 DB 행이 곧 결과이므로 늘 `COMPLETED`다.
 - `unpublishedSignalCount`는 **지금 유효하게 공개되어 있지 않은** 신호 수다. 유효 공개 조건은 `PublicAnalysisVisibility.VISIBLE` 하나를 쓰며 **부모 스레드 상태까지 본다.** 공개 기록의 취소·숨김만 보면 스레드가 숨겨진 뒤 신호 카드는 `HIDDEN`인데 이 수는 0이 되어 한 응답이 서로 다른 말을 한다. 4.4절 목록의 같은 값도 같은 조건이다.
 - `nextActions`: `PUBLISH_ALL`·`LATER`는 **탐색이 끝나고**(`progress.stage=completed`) **일괄 공개할 기록이 남았을 때만** 준다(RES-08 "별 탐색 종료 후", RES-10 "종료 시"). 기준은 미게시 **신호** 수가 아니라 **일괄 공개 후보**(166)다 — 같은 신호의 첫 기록을 공개한 뒤 새 적격 기록을 제출하면 신호 수는 0인데 공개할 기록은 남아 있다. 진행 중에는 개별 [분석 공개]가 그 일을 한다. `RETRY`는 6.8절 초안을 만들 수 있는 제출이 있을 때만 주며 **그 제출이 매칭한 후보가 은퇴했으면 주지 않는다** — 누르면 409 `CANDIDATE_RETIRED`가 될 행동을 힌트로 주지 않는다. **이 규칙은 요구사항에서 유도했고 명세에 예시만 있었다. 교차 리뷰 대상이다.**
 - 여러 질의로 한 응답을 만들므로 **같은 스냅샷**에서 읽는다. 중간에 판이 바뀌거나 공개 상태가 달라지면 신호 카드와 미게시 수가 서로 다른 시점을 말하게 된다.
@@ -1317,6 +1322,8 @@ for each user_star_progress(tic_id):
 기존 성과·등급·발견 별은 바꾸지 않는다. 튜토리얼 별도 같은 규칙으로 재개하지만 튜토리얼 완료·챌린지 자격은 `completed_at`으로 유지된다(4.3절).
 ```
 
+**150 구현.** 재개 사건은 별도 테이블 없이 `notifications`에 `type='reopen'`으로 남긴다. payload는 `{ticId, bundleId, newDiscoverableCount}`이며 `reason`은 싣지 않는다 — 어느 후보가 새로 생겼고 어느 후보가 탐색 가능으로 바뀌었는지는 `candidate_status_history`가 알려 주는데 그 이력을 남길 Publisher(S15P21C206-87)가 아직 없다. 이력이 생기면 `reason: new_candidate|became_discoverable`을 같은 payload에 추가한다. 중복은 V22의 `(user_id, ticId, bundleId) WHERE type='reopen'` 부분 유일 인덱스가 막는다. 회원마다 트랜잭션을 나누고 진행 행을 `FOR UPDATE`로 잠근 뒤 판정하므로, 같은 판의 알림이 두 번 와도 재개와 사건이 한 번이다. 탈퇴 회원(`users.status='withdrawn'`)은 대상이 아니다. 재개는 `completion_reason`을 비운다 — 진행 중인 행에 완료 사유가 남아 있으면 단계와 사유가 어긋나고, 다시 완료할 때 그때의 사유가 새로 들어간다. 잠금은 제출·공개 경로와 같은 `users → user_star_progress` 순서로 한다 — 알림 INSERT가 외래 키 검사로 회원 행을 요구하므로 진행 행을 먼저 잡으면 제출과 교착한다. 같은 실행에서 (c) 완료 판정이 완료로 바꾼 회원은 이번 전환에서 다시 열지 않는다. 퀘스트 카드·마이페이지 상단·알림 NTF-01의 소비 경로는 아직 이 사건을 읽지 않는다.
+
 ### 9.4 내부 계약: 튜토리얼·챌린지 발견 (HOME-02·06, CHL-01)
 
 모든 실제 신규 발견은 9.2절과 같은 회원별 순번 배정·좌표 저장 함수를 사용한다. layout_ordinal은 튜토리얼 seq나 성과 seq와 별개이며 중복 발견에는 새 순번을 확정하지 않는다. 발견·좌표·순번·회원 version 갱신은 같은 트랜잭션에서 확정/롤백한다. C04-2 저장 제약, C05-1 배치 함수, C07/C11 호출부를 함께 검증한다. 이미 열린 별이면 순번·좌표·회원 version을 바꾸지 않는다. 같은 사건을 다시 실행해도 프론트가 바뀌지 않은 지도를 다시 받지 않게 하기 위해서다.
@@ -1331,13 +1338,19 @@ for each user_star_progress(tic_id):
 
 ### 9.5 외부 라벨 갱신 표식 (GRD-06, DEC-26)
 
-배치가 `candidate_dispositions`를 바꾸면 같은 배치가 아래만 한다.
+배치가 `candidate_dispositions`를 바꾸면 아래만 일어난다.
 
-- `candidate_status_history` INSERT
+- 배치가 `candidate_status_history` INSERT (Gold)
 - 그 후보의 `user_candidate_achievements.relabeled_at`, `relabel_disposition` 설정
 - 응답의 `relabel` 필드(6.4·8.1·8.2·8.4·9.1절)로 "기록이 갱신됨" 표시
 
+**두 번째는 배치가 아니라 앱이 한다(150 정정).** 배치 역할은 Gold 12개 테이블에만 쓰기 권한이 있어 `user_candidate_achievements`를 고칠 수 없다(이 절 마지막 문장). 같은 절이 배치가 그 열을 설정한다고 적고 있었던 것은 모순이었다. 실행 주체는 판 전환 후처리(10장 4단계)이며 앱 역할이 표식 두 열만 UPDATE한다.
+
 성과 유형·등급·발견 별·통계 스냅샷은 바꾸지 않는다. 채점형 통계는 현재 `planet_truth`로 계산하므로 별도 조치 없이 반영된다. 후보 병합·분리·부정 사용 조치에 따른 성과 재계산(GRD-06 예외, OPS-03)은 v1에 운영 API가 없으므로 DB 작업과 `candidate_status_history` 기록으로 처리한다. 무엇을 보존·정정·사전 거절하는지와 아직 정하지 않은 항목은 [후보 병합·분리 정정 계약](../../../docs/architecture/candidate-correction-contract.md)에 있다. 그 문서의 결론은 **이 절의 라벨 표식이 v1에서 회원 데이터에 닿는 유일한 경로**라는 것이다. 배치 역할은 Gold 12개 테이블에만 쓰기 권한이 있어 성과·별·공개 분석·공식 스레드를 고칠 수 없다.
+
+**150 구현.** 무엇이 바뀌었는지를 `candidate_status_history`가 아니라 **현재 라벨과 성과 유형의 차이**로 찾는다. 이력의 `field` 값은 아직 약속되지 않았고([후보 병합·분리 정정 계약](../../../docs/architecture/candidate-correction-contract.md) 5.3은 초안이며 C19에서 확정), 판정 변경을 어떤 이름으로 남길지 정한 곳이 없다. 반면 `candidate_dispositions.disposition`과 `achievement_type`은 둘 다 CHECK로 고정된 값이다. 성과 유형은 인정 시점의 라벨에서 정해지므로(9.2절) 지금 라벨과 다르다는 것은 그 뒤에 바뀌었다는 뜻이다. 판정 이력의 `field`가 확정되면 그 이력으로 옮길 수 있고, 그때도 이 절의 결과는 같아야 한다.
+
+표식 조건은 `apiDisposition(현재 판정) ≠ 성과 유형`이고 `candidate_dispositions.applied_at > recognized_at`이다. `pc ↔ none`은 회원에게 둘 다 미확정이라(6.4절 `signal.disposition`) 표식을 만들지 않는다. `relabeled_at`은 `applied_at`, `relabel_disposition`은 DB 판정 값을 넣는다. 라벨이 원래 값으로 돌아오면 표식을 **지운다** — 표식은 「무엇이 바뀌었나」가 아니라 「지금 판정이 인정 당시와 다른가」이므로, 되돌아온 뒤에도 남으면 조회의 `newDisposition`으로 옛 판정이 나간다. 같은 이력을 다시 받으면 이미 같은 값이라 0행이다. UPDATE가 건드리는 열은 그 둘뿐이라 성과 유형·인정 근거·인정 시각·등급·발견 별·통계는 바뀌지 않는다.
 
 ## 10. 배치·Gold 적재 경계
 
@@ -1349,6 +1362,14 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 4. Backend는 알림을 계기로 (1) 이전 판 Redis 캐시 삭제, (2) 9.3 재개 판정, (3) 9.5 라벨 표식을 실행한다.
 
 알림은 전환 감지 지연을 줄이는 신호일 뿐 정본이 아니다. 탐사 API는 요청마다 PostgreSQL의 `current`를 기준으로 판 변경을 검증한다.
+
+**150 구현.** 3단계의 알림은 `POST /internal/bundles/{bundleId}/activated`로 받는다. 회원 세션이 아니라 요청 헤더 `X-Planetory-Service-Token`의 공유 비밀로 인증한다 — 부르는 쪽이 사람이 아니라 배치다. 토큰을 설정하지 않은 환경에서는 경로 전체가 401이다. 설정 누락이 인증 없는 구멍으로 이어지지 않게 하기 위해서다. 쿠키로 인증하지 않으므로 이 경로는 CSRF 대상이 아니다. **경로 판별은 인가 설정·CSRF 예외·토큰 검사가 같은 매처 하나를 쓴다** — 각자 문자열로 비교하면 디코딩 차이로 한쪽만 통과하는 경로가 생긴다(`/%69nternal/…`).
+
+응답은 지난 판을 알려도 200이다. 알림은 정본이 아니므로(위 문단) 실패로 답하면 이미 끝난 전환을 계속 다시 보내게 된다. 실제로 무엇을 했는지는 본문의 `applied`와 `evictedCacheEntries`·`completedMembers`·`reopenedMembers`·`relabeledAchievements`로 알린다.
+
+4단계의 셋은 서로 독립이라 한 트랜잭션으로 묶지 않는다. (1) 이전 판 잔차 캐시 정리는 `tic:{ticId}:{bundleId}:…` 키에서 현재 판이 아닌 것을 버린다(7.1절). 정합성 장치가 아니라 정리다 — 결과 채택 전에 판이 `current`인지 다시 확인하는 것은 그대로다. 계산 중인 작업도 버리며 그 조회는 「Redis 유실」과 같은 404가 된다(7.2절).
+
+같은 알림을 여러 번 받아도 결과가 같다. (1)은 두 번째에 버릴 것이 없고, (2)는 이미 `in_progress`라 재개 대상이 아니며, (3)은 이미 같은 값이라 0행이다. **누락 대비 폴링은 아직 없다.** 알림이 오지 않으면 다음 요청이 현재 판을 기준으로 판정하지만 재개·표식은 다음 알림까지 밀린다. 주기 실행을 둘지는 Publisher(S15P21C206-87) 연동에서 정한다. **호출 타임아웃도 그때 함께 정한다** — 후처리는 요청 안에서 동기로 돌고 회원 수만큼 트랜잭션이 이어지므로, 한 별의 진행 행이 많으면 호출자가 먼저 끊고 재시도해 같은 판의 후처리가 겹쳐 돌 수 있다. 겹쳐도 결과는 같지만(위 문단) 헛도는 실행은 줄이는 편이 낫다.
 
 ## 11. 다른 담당과의 계약
 
@@ -1524,6 +1545,8 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-145 리뷰(백지웅) 반영. 6.7절 예시의 `signal.explanation`을 실제 응답과 같은 null로 맞추고, 값이 null일 때 화면이 문장을 지어내지 않는다는 것을 적었다. 예시만 문장을 들고 있어 소비자가 필수 문자열로 읽었다 |
 | 2026-09-21 | S15P21C206-141 반영. 5.4절 봉우리 목록을 구현하고 미결 5(봉우리 추출 규칙) 제안을 표로 적었다. 최소 간격 `2h+1`칸과 고조파 허용 오차 `h`칸을 이미 정해진 값(운영 규칙 `peaks.top_n`·`matching.harmonic_multipliers`, 판 manifest `fine_tune.half_width_cells`)에서 유도하고 새 숫자를 만들지 않았다. `peakRuleVersion`을 운영 규칙 버전으로 정하고 `suggestedDurationHours`는 출처가 없어 null임을 적었다. 6.2절에 그 값이 null이면 duration 상한을 걸지 않는다는 단서를 더했다 |
 | 2026-09-21 | S15P21C206-141 리뷰(윤성용) 반영. 고조파 판정을 **칸 반올림에서 주기 값 비교로** 고쳤다 — 배수 자리를 반올림하면 조정해도 닿을 수 없는 봉우리까지 제외됐다(0.5~40일 5000점 h=3 반례). 최소 간격 `2h+1`의 근거를 「같은 선택」이 아니라 **추천을 줄이는 정책**으로 고치고, 고조파 배수 공유가 **같은 신호 판정이 아님**을 적었다. `peakRuleVersion`에 알고리즘 변경 시 버전 갱신 조건을, 제안값에는 후속 BLS 계약 네 가지를 더했다 |
+| 2026-09-22 | S15P21C206-150 판 전환 재개 후처리 구현. 9.3절에 재개 사건의 저장 위치(`notifications` `type='reopen'`)와 payload, `reason`을 아직 싣지 않는 이유, 멱등 보장 방법을 적었다. 10장에 4단계 중 재개 판정만 구현했고 Redis 캐시 삭제·라벨 표식·내부 알림 경로는 미구현임을 명시했다 |
+| 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

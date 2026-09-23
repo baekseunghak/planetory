@@ -56,6 +56,11 @@ class SubmissionTest {
     @MockitoBean SubmissionPeakReader peaks;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean SubmissionRepository repository;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;
+    @Autowired com.planetory.backend.domain.statistics.service.PersonalStatisticsService personalStatistics;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.planetory.backend.domain.statistics.service.PersonalStatisticsQuery personalQuery;
+    @Autowired com.planetory.backend.domain.statistics.service.ComparisonMetricQuery comparisonQuery;
+    @Autowired com.planetory.backend.domain.post.service.PublicAnalysisService publications;
     long member, tic, bundle, segment, candidate;
     Float[] flux;
 
@@ -107,6 +112,166 @@ class SubmissionTest {
     }
     long count(String table) { return jdbc.queryForObject("SELECT count(*) FROM "+table+" WHERE user_id=?",Long.class,member); }
     void error(ErrorCode code, Runnable call) { assertEquals(code,assertThrows(BusinessException.class,call::run).getErrorCode()); }
+
+    @Test void 개인통계_첫매칭_재전송_당시근거_현재완료() {
+        var first=change(request(),"candidate","UNLIKELY_PLANET",3.0,null);
+        service.submit(member,tic,first);
+        for(int i=0;i<3;i++) service.submit(member,tic,first);
+        service.submit(member,tic,request());
+        var result=personalStatistics.read(member).current();
+        assertEquals(2,result.metrics().get("submissionCount").value().intValueExact());
+        assertEquals(0,result.metrics().get("firstMatchAccuracy").value().intValueExact());
+        assertEquals(1,result.metrics().get("firstMatchAccuracy").denominator());
+        assertEquals(1,result.metrics().get("retryRecognitionCount").value().intValueExact());
+        assertEquals(1,result.metrics().get("completedStarCount").value().intValueExact());
+        var evidence=result.evidence().stream().filter(e->e.key().equals("ushape")).findFirst().orElseThrow();
+        assertEquals(2,evidence.useCount()); assertEquals(50,evidence.accuracy().value().intValueExact());
+        jdbc.update("UPDATE candidate_dispositions SET disposition='fp',planet_truth='not_planet' WHERE candidate_id=?",candidate);
+        var changed=personalStatistics.read(member).current();
+        assertEquals(100,changed.metrics().get("firstMatchAccuracy").value().intValueExact());
+        assertEquals(1,changed.metrics().get("retryRecognitionCount").value().intValueExact());
+        assertEquals(50,changed.evidence().stream().filter(e->e.key().equals("ushape")).findFirst().orElseThrow().accuracy().value().intValueExact());
+        jdbc.update("UPDATE user_star_progress SET progress_stage='in_progress' WHERE user_id=?",member);
+        assertEquals(0,personalStatistics.read(member).current().metrics().get("completedStarCount").value().intValueExact());
+        jdbc.update("UPDATE submissions SET response_snapshot=NULL WHERE request_id=?",UUID.fromString(first.requestId()));
+        var missing=personalStatistics.read(member).current().metrics().get("retryRecognitionCount");
+        assertNull(missing.value()); assertEquals("MISSING_BASIS",missing.reason());
+    }
+
+    @Test void 개인통계_빈값_본인제한_탈퇴제외() throws Exception {
+        var empty=personalStatistics.read(member);
+        assertEquals(0,empty.current().metrics().get("submissionCount").value().intValueExact());
+        assertNull(empty.current().metrics().get("firstMatchAccuracy").value());
+        assertEquals("NO_SAMPLE",empty.current().metrics().get("firstMatchAccuracy").status().name());
+        assertEquals(8,empty.current().weeks().size());
+        assertTrue(empty.current().weeks().stream().allMatch(w->w.submissionCount()==0));
+        assertEquals("UNAVAILABLE",empty.comparison().status().name());
+        assertNull(empty.comparison().metrics().get("firstMatchAccuracy").myValue().value());
+        service.submit(member,tic,request());
+        assertEquals(0,personalStatistics.read(member()).current().metrics().get("submissionCount").value().intValueExact());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/me/statistics"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        var session=new org.springframework.mock.web.MockHttpSession();
+        var context=org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken(
+                new com.planetory.backend.global.security.MemberPrincipal(member),null,"ROLE_USER"));
+        session.setAttribute(org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,context);
+        session.setAttribute(com.planetory.backend.domain.auth.service.AuthSessionService.class.getName()+".lastActivity",java.time.Instant.now());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/me/statistics")
+                .session(session))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control","no-store"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/me/statistics?memberId=123")
+                .session(session))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
+        jdbc.update("UPDATE users SET status='withdrawn' WHERE id=?",member);
+        error(ErrorCode.AUTH_REQUIRED,()->personalStatistics.read(member));
+    }
+
+    @Test void 개인통계_주경계_중복근거_자료없음제외() {
+        var first=service.submit(member,tic,request()).body();
+        var second=service.submit(member,tic,change(request(),"candidate","UNSURE",3.0,null)).body();
+        long firstId=ExplorationIds.parse(first.get("submissionId").asText(),ExplorationIds.SUBMISSION).orElseThrow();
+        long secondId=ExplorationIds.parse(second.get("submissionId").asText(),ExplorationIds.SUBMISSION).orElseThrow();
+        jdbc.update("UPDATE submissions SET created_at='2026-09-20T14:59:59Z',evidence_checks='[\"ushape\",\"ushape\",\"centroid\",\"disabled\"]' WHERE id=?",firstId);
+        jdbc.update("UPDATE submissions SET created_at='2026-09-20T15:00:00Z',evidence_checks='[]' WHERE id=?",secondId);
+        var weeks=personalQuery.weeks(member,java.time.LocalDate.of(2026,9,21));
+        assertEquals(8,weeks.size()); assertEquals(1,weeks.get(6).submissionCount()); assertEquals(1,weeks.get(7).submissionCount());
+        assertTrue(weeks.get(7).partial()); assertFalse(weeks.get(6).partial());
+        var current=personalStatistics.read(member).current();
+        assertEquals(2,current.metrics().get("activeDays").value().intValueExact());
+        assertEquals(0,new BigDecimal("0.5").compareTo(current.metrics().get("evidencePerSubmission").value()));
+        assertEquals(1,current.evidence().stream().filter(e->e.key().equals("ushape")).findFirst().orElseThrow().useCount());
+    }
+
+    @Test void 개인통계_미공개duplicate_공개대표복귀_취소이력() {
+        jdbc.update("UPDATE candidate_dispositions SET disposition='pc',answer_class='analysis',planet_truth=NULL WHERE candidate_id=?",candidate);
+        var first=service.submit(member,tic,request()).body();
+        publications.publish(member,first.get("historyId").asText());
+        var second=service.submit(member,tic,change(request(),"candidate","UNSURE",3.0,null)).body();
+        assertEquals("duplicate",second.at("/match/status").asText());
+        assertEquals(1,personalStatistics.read(member).current().metrics().get("unpublishedSignalCount").value().intValueExact());
+        var published=publications.publish(member,second.get("historyId").asText());
+        assertEquals(100,personalStatistics.read(member).current().publicJudgmentDistribution().get("UNSURE").value().intValueExact());
+        publications.visibility(member,published.analysisId(),false);
+        var reverted=personalStatistics.read(member).current();
+        assertEquals(100,reverted.publicJudgmentDistribution().get("LIKELY_PLANET").value().intValueExact());
+        assertEquals(0,reverted.metrics().get("unpublishedSignalCount").value().intValueExact());
+        assertNull(reverted.metrics().get("firstMatchAccuracy").value());
+    }
+
+    @Test void 개인통계_고조파는_성과인정근거만_계산() {
+        var failed=service.submit(member,tic,change(request(),"candidate","UNLIKELY_PLANET",1.5,null)).body();
+        assertEquals("matched_harmonic",failed.at("/match/status").asText());
+        service.submit(member,tic,request());
+        service.submit(member,tic,change(request(),"candidate","LIKELY_PLANET",1.5,null));
+        assertEquals(0,personalStatistics.read(member).current().metrics().get("harmonicRecognitionRate").value().intValueExact());
+        seed();
+        var recognized=service.submit(member,tic,change(request(),"candidate","LIKELY_PLANET",1.5,null)).body();
+        assertEquals("matched_harmonic",recognized.at("/match/status").asText());
+        assertEquals(100,personalStatistics.read(member).current().metrics().get("harmonicRecognitionRate").value().intValueExact());
+    }
+
+    @Test void 개인통계_과거중앙값과_현재내값을_혼합하지않음() {
+        var zone=com.planetory.backend.domain.statistics.dto.StatisticsDtos.ZONE;
+        var date=java.time.LocalDate.now(zone);
+        var cutoff=date.atStartOfDay(zone).toInstant();
+        var observed=java.time.Instant.now();
+        var baseline=new com.planetory.backend.domain.statistics.service.StatisticsSnapshotService.Baseline(
+                "PERCENT",BigDecimal.valueOf(25),10,
+                com.planetory.backend.domain.statistics.dto.StatisticsDtos.MetricStatus.AVAILABLE,null);
+        var snapshot=new com.planetory.backend.domain.statistics.service.StatisticsSnapshotService.ComparisonSnapshot(
+                com.planetory.backend.domain.statistics.dto.StatisticsDtos.BlockStatus.READY,
+                cutoff,observed,observed,date.minusDays(1),date.minusDays(90).atStartOfDay(zone).toInstant(),cutoff,10L,
+                Map.of("firstMatchAccuracy",baseline));
+        long id=jdbc.queryForObject("INSERT INTO stats_snapshots(snapshot_date,scope,metrics) VALUES (?,'global',?::jsonb) RETURNING id",
+                Long.class,date.minusDays(1),JsonMapper.builder().build().writeValueAsString(snapshot));
+        try {
+            assertEquals("JOINED_AFTER_CUTOFF",personalStatistics.read(member).comparison().metrics().get("firstMatchAccuracy").myValue().reason());
+            jdbc.update("UPDATE users SET created_at=? WHERE id=?",java.sql.Timestamp.from(cutoff.minusSeconds(1)),member);
+            service.submit(member,tic,request());
+            var response=personalStatistics.read(member);
+            assertEquals(100,response.current().metrics().get("firstMatchAccuracy").value().intValueExact());
+            assertEquals(25,response.comparison().metrics().get("firstMatchAccuracy").median().intValueExact());
+            assertNull(response.comparison().metrics().get("firstMatchAccuracy").myValue().value());
+            assertEquals("HISTORICAL_SOURCE_UNAVAILABLE",response.comparison().metrics().get("firstMatchAccuracy").myValue().reason());
+            assertEquals(observed,response.comparison().sourceObservedAt());
+            assertEquals(cutoff,response.comparison().asOf());
+            assertNull(response.comparison().inCohort());
+        } finally { jdbc.update("DELETE FROM stats_snapshots WHERE id=?",id); }
+    }
+
+    @Test void 개인통계_응답중_새제출이_커밋되어도_동일스냅샷() {
+        service.submit(member,tic,request());
+        org.mockito.Mockito.doAnswer(call->{
+            try(var pool=Executors.newSingleThreadExecutor()) {
+                pool.submit(()->service.submit(member,tic,request())).get(10,TimeUnit.SECONDS);
+            }
+            return call.callRealMethod();
+        }).when(personalQuery).activity(member);
+        var current=personalStatistics.read(member).current();
+        assertEquals(1,current.metrics().get("submissionCount").value().intValueExact());
+        assertEquals(1,current.metrics().get("submissionsPerStar").numerator());
+        assertEquals(1,current.judgmentDistribution().get("LIKELY_PLANET").numerator());
+        assertEquals(2,count("submissions"));
+    }
+
+    @Test void 개인통계_현재원천은_앱역할로_조회가능() {
+        service.submit(member,tic,request());
+        new TransactionTemplate(transactions).execute(status->{
+            jdbc.execute("SET LOCAL ROLE planetory_app");
+            var asOf=jdbc.queryForObject("SELECT transaction_timestamp()",java.time.OffsetDateTime.class);
+            assertEquals(1,comparisonQuery.read(member,asOf).getFirst().metrics().get("submissionsPerStar").value().intValueExact());
+            assertEquals(1,personalQuery.activity(member).get("submissionCount").value().intValueExact());
+            assertDoesNotThrow(()->personalQuery.weeks(member,java.time.LocalDate.now()));
+            assertDoesNotThrow(()->personalQuery.judgmentAccuracy(member));
+            assertDoesNotThrow(()->personalQuery.judgmentDistribution(member,true));
+            assertDoesNotThrow(()->personalQuery.evidence(member));
+            assertDoesNotThrow(()->personalQuery.retryRecognition(member));
+            assertDoesNotThrow(()->personalQuery.community(member));
+            return null;
+        });
+    }
 
     @Test void 저장_성과_완료_그리고_판교체후_재요청은_최초본문() {
         var r=request(); var first=service.submit(member,tic,r);
@@ -413,6 +578,10 @@ class SubmissionTest {
             var answer=service.submit(member,tic,change(request(),"skipped",null,null,null)).body();
             assertEquals("skipped",answer.at("/progress/completionReason").asText());
             assertEquals(0,count("user_candidate_achievements")); assertEquals(2,count("star_unlocks"));
+            var statistics=personalStatistics.read(member).current();
+            assertEquals(4,statistics.metrics().get("submissionCount").value().intValueExact());
+            assertEquals(4,statistics.metrics().get("submissionsPerStar").value().intValueExact());
+            assertNull(statistics.metrics().get("evidencePerSubmission").value());
             error(ErrorCode.STAR_ALREADY_COMPLETED,()->service.submit(member,tic,change(request(),"no_candidate",null,null,null)));
         } finally {jdbc.update("UPDATE tutorial_stars SET active=false WHERE tic_id IN (?,?)",tic,tic+1);}
     }

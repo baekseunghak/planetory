@@ -230,13 +230,15 @@ export function LoginPage() {
             ? "어떤 이름으로 탐사할까요?"
             : problem === "cancelled"
               ? "로그인이 취소되었습니다"
-              : problem === "failed"
-                ? "로그인을 완료하지 못했습니다"
-                : session.status === "error"
-                  ? "회원 정보를 확인하지 못했습니다"
-                  : callback.current && session.status === "anonymous"
-                    ? "로그인을 확인하지 못했습니다"
-                    : "로그인이 필요합니다"}
+              : problem === "unavailable"
+                ? "로그인 서비스를 잠시 이용할 수 없습니다"
+                : problem === "failed"
+                  ? "로그인을 완료하지 못했습니다"
+                  : session.status === "error"
+                    ? "회원 정보를 확인하지 못했습니다"
+                    : callback.current && session.status === "anonymous"
+                      ? "로그인을 확인하지 못했습니다"
+                      : "로그인이 필요합니다"}
         </h2>
         {session.notice === "expired" && (
           <p role="status">로그인이 만료되었습니다. 다시 로그인해 주세요.</p>
@@ -249,7 +251,9 @@ export function LoginPage() {
             <p role="alert">
               {problem === "cancelled"
                 ? "준비되면 다시 로그인해 주세요."
-                : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
+                : problem === "unavailable"
+                  ? "서버에 일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요."
+                  : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
             </p>
             <button
               onClick={() => {

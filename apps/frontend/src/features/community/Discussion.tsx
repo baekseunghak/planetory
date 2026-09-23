@@ -222,7 +222,7 @@ export function Discussion({
   const editable = !!member && !!state.data && active;
   if (!active) return null;
   return (
-    <section className="community-discussion" aria-label="토론">
+    <section id="discussion" className="community-discussion" aria-label="토론">
       <h2>토론</h2>
       {notice && <p role="status">{notice}</p>}
       {!state.data ? (
@@ -434,15 +434,12 @@ export function Discussion({
             {state.data.items.map((item) => (
               <li key={item.commentId}>
                 <div className="community-row-meta">
-                  <Link
-                    to={pagePath(
-                      "member",
-                      { memberId: item.author.memberId },
-                      { returnTo: location.pathname + location.search },
-                    )}
-                  >
-                    {item.author.nickname}
-                  </Link>
+                  {item.author.memberId === null ? <span>{item.author.nickname}</span> : (
+                    <Link to={pagePath("member", { memberId: item.author.memberId },
+                      { returnTo: location.pathname + location.search })}>
+                      {item.author.nickname}
+                    </Link>
+                  )}
                   <time dateTime={item.createdAt}>
                     {new Date(item.createdAt).toLocaleString("ko-KR")}
                   </time>

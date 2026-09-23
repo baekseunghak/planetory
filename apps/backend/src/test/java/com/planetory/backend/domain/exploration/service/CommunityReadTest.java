@@ -103,6 +103,7 @@ class CommunityReadTest {
 
 
     @Autowired com.planetory.backend.domain.post.service.CommunityReadService community;
+    @Autowired com.planetory.backend.domain.comment.service.CommentService commentService;
     @MockitoSpyBean HistoryRepository historyRepository;
     @MockitoSpyBean SubmissionRepository summaryRepository;
     @MockitoSpyBean org.springframework.jdbc.core.simple.JdbcClient feedJdbc;
@@ -128,6 +129,37 @@ class CommunityReadTest {
     com.planetory.backend.domain.post.service.CommunityQuery analysisQuery(PublicAnalysisService.Published p) {
         return com.planetory.backend.domain.post.service.CommunityQuery.analyses(
                 Long.parseLong(p.threadId().substring(3)), new org.springframework.util.LinkedMultiValueMap<>());
+    }
+
+    @Test void 탈퇴_공개분석은_목록_상세_현재판단에서_함께_제외한다() {
+        var publication = publications.publish(member, submit(3));
+        long viewer = member();
+        assertEquals(1, community.analyses(viewer, analysisQuery(publication)).items().size());
+        jdbc.update("UPDATE users SET status='withdrawn', withdrawn_at=clock_timestamp() WHERE id=?", member);
+        assertTrue(community.analyses(viewer, analysisQuery(publication)).items().isEmpty());
+        error(ErrorCode.RESOURCE_NOT_FOUND,
+                () -> community.analysis(viewer, Long.parseLong(publication.analysisId().substring(3)), "CURRENT", false));
+        var summary = new TransactionTemplate(transactions).execute(tx -> submissions.publicJudgmentSummary(candidate));
+        assertEquals(0, ((Number) summary.get("participantCount")).intValue());
+    }
+
+    @Test void 탈퇴_일반글과_댓글은_남기되_이전_이름과_프로필_연결을_숨긴다() {
+        long postId = post(tic, "visible");
+        jdbc.update("INSERT INTO comments(post_id,user_id,body,status) VALUES (?,?,'댓글','visible')", postId, member);
+        String oldName = jdbc.queryForObject("SELECT nickname FROM users WHERE id=?", String.class, member);
+        long viewer = member();
+        jdbc.update("UPDATE users SET status='withdrawn', withdrawn_at=clock_timestamp() WHERE id=?", member);
+        var feed = community.feed(viewer, feedQuery()).items();
+        assertEquals(1, feed.size());
+        assertEquals(new com.planetory.backend.domain.post.service.PostService.Author(null, "탈퇴한 회원"), feed.getFirst().author());
+        var comment = commentService.list(postId, com.planetory.backend.domain.comment.service.CommentService.ParentType.POST,
+                20, null).items().getFirst();
+        assertNull(comment.author().memberId());
+        assertEquals("탈퇴한 회원", comment.author().nickname());
+        var search = new org.springframework.util.LinkedMultiValueMap<String, String>();
+        search.add("ticId", Long.toString(tic));
+        search.add("author", oldName);
+        assertTrue(community.feed(viewer, com.planetory.backend.domain.post.service.CommunityQuery.feed(search)).items().isEmpty());
     }
 
     @Test void 혼합피드_시각동률_숫자ID_페이지_현재닉네임_댓글수() throws Exception {
@@ -226,14 +258,10 @@ class CommunityReadTest {
         // 미발견 별은 빈 목록이 아니라 접근 불가다. signed-64-bit 최대 TIC도 파싱 후 404다.
         mvc.perform(get(FEED + "?ticId=9223372036854775807").session(session(member))).andExpect(status().isNotFound());
         jdbc.update("DELETE FROM star_unlocks WHERE tic_id=?", tic);
-        for (var item : read(FEED).path("items")) {
-            assertNotEquals(p.threadId(), item.path("id").asText());
-            assertNotEquals("p-" + post, item.path("id").asText());
-        }
         for (String path : List.of(FEED + "?ticId=" + tic, threadPath(p), threadPath(p) + "/analyses", publicPath(p),
                 "/api/v1/posts/p-" + post, postAttachment, commentAttachment,
                 "/api/v1/comments?parentType=SIGNAL_THREAD&parentId=" + p.threadId()))
-            mvc.perform(get(path).session(session(other))).andExpect(status().isNotFound());
+            mvc.perform(get(path).session(session(other))).andExpect(status().isOk());
         jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?",tic);
         mvc.perform(get(publicPath(p) + "?includeGraph=false").session(session(other))).andExpect(status().isNotFound());
     }
@@ -559,7 +587,8 @@ class CommunityReadTest {
                 .schemas(schema).locations("classpath:db/migration").target("18").load();
         previous.migrate();
         // 현재 테스트 후보의 공개 네 수치와 최소 FK만 새 격리 스키마에 복사한다.
-        jdbc.execute("INSERT INTO "+schema+".stars SELECT * FROM public.stars WHERE tic_id="+tic);
+        jdbc.execute("INSERT INTO "+schema+".stars(tic_id,teff_k,radius_rsun,tmag,confirmed_count,service_status) "
+                +"SELECT tic_id,teff_k,radius_rsun,tmag,confirmed_count,service_status FROM public.stars WHERE tic_id="+tic);
         jdbc.execute("INSERT INTO "+schema+".publication_bundles SELECT * FROM public.publication_bundles WHERE id="+bundle);
         jdbc.execute("INSERT INTO "+schema+".candidates SELECT * FROM public.candidates WHERE id="+candidate);
         jdbc.execute("INSERT INTO "+schema+".users SELECT * FROM public.users WHERE id="+member);
@@ -567,7 +596,7 @@ class CommunityReadTest {
         jdbc.update("INSERT INTO "+schema+".posts(kind,user_id,board,title,body,status) VALUES ('user',?,'free','일반','유지','visible')",member);
         var before=jdbc.queryForMap("SELECT status,created_at FROM "+schema+".posts WHERE kind='system_thread'");
         var upgraded=org.flywaydb.core.Flyway.configure().dataSource(DB.getJdbcUrl(),DB.getUsername(),DB.getPassword())
-                .schemas(schema).locations("classpath:db/migration").load();
+                .schemas(schema).locations("classpath:db/migration").target("19").load();
         assertEquals(1,upgraded.migrate().migrationsExecuted);upgraded.validate();assertEquals(0,upgraded.migrate().migrationsExecuted);
         String body=jdbc.queryForObject("SELECT body FROM "+schema+".posts WHERE kind='system_thread'",String.class);
         assertEquals("주기 3 일 · 기준 시각 100.3 BTJD · 지속시간 2.4 시간 · 깊이 1000 ppm",body);

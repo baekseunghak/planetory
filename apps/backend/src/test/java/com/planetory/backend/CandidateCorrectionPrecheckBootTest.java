@@ -55,7 +55,7 @@ class CandidateCorrectionPrecheckBootTest {
      */
     @Test
     void 미적용_스키마에서는_아무것도_만들지_않고_실패한다() throws Exception {
-        String[] args = PlanetoryApplication.withReadOnlyGuards(new String[] {
+        String[] args = PlanetoryApplication.withFlywayDisabledGuards(new String[] {
                 "--planetory.command=" + CandidateCorrectionPrecheckCommand.NAME,
                 "--spring.profiles.active=local",
                 "--spring.datasource.hikari.schema=" + schema,

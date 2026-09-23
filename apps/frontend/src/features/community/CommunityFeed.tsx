@@ -17,6 +17,7 @@ export function DateTime({ value }: { value: string }) {
 }
 export function AuthorLink({ author }: { author: Author }) {
   const location = useLocation();
+  if (author.memberId === null) return <span>{author.nickname}</span>;
   return (
     <Link
       to={pagePath(
@@ -41,7 +42,7 @@ export function CommunityFeed({
   items,
   hot = false,
 }: {
-  items: FeedItem[];
+  items: (FeedItem & { matchedBy?: ("MEMBER" | "STAR")[] })[];
   hot?: boolean;
 }) {
   const location = useLocation();
@@ -50,6 +51,16 @@ export function CommunityFeed({
     <ul className="community-feed">
       {items.map((item) => (
         <li key={`${item.type}:${item.id}`}>
+          {item.matchedBy && (
+            <p className="follow-reason">
+              {item.matchedBy
+                .map((kind) =>
+                  kind === "MEMBER" ? "팔로우한 탐사자" : "관심 별",
+                )
+                .join(" · ")}
+              의 소식
+            </p>
+          )}
           <div className="community-row-meta">
             <span
               className={

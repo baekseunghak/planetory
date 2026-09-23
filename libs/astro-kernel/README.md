@@ -605,3 +605,84 @@ Gold와 사용자 응답으로 원본 QUALITY 장부를 전달하지 않는다. 
 Silver 정규화·추세부터 BLS/비닝/후보 및 Gold 검증까지 새로 실행한다. 원본 Bronze·기존 공개 판은 덮어쓰지 않는다.
 새 판의 검증·승인 후 기존 Publisher의 원자 전환 절차를 사용한다. 전체 제외 또는 관측 부족·수치 실패는
 정상 무후보로 적재하지 않는다. 원본 시각 배열을 마스크 적용 전에 보존해야 이후 제외율 진단 기준을 잃지 않는다.
+
+## 세그먼트 비닝·revision (123)
+
+상태: **비닝·119 연결부 구현 및 합성 검증 완료, 123 전체 완료 전**.
+정본은 [114 Gold 채택안](../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안)이다.
+`astro_kernel.segmentation`은 `bin_sector`, `segment_revision`, `segment_silver`를 제공한다.
+
+- `bin_sector(time, flux)`는 단일 Sector의 전처리 입력 시간축 전체를 받는다. 제외된 flux는 NaN으로 전달한다. 시각은 정렬하며 중복·비유한 시각은 거절한다. 10분 mean, 부분 bin 유지, 빈 bin 보존, 20,000점 초과 실패를 적용한다.
+- `Segment.values()`는 빈 값을 JSON null로 변환하고 폐구간 gaps와 전체 n_points를 반환한다. DB ID는 생성하지 않는다. counts는 진단용이며 Gold flux 배열과 함께 게시하는 열이 아니다.
+- 유효 bin이 전혀 없으면 `no_valid_bins`로 실패한다. 유한한 상수 곡선의 MAD 0은 산포 0으로 보존한다. 이것을 잡음 분모나 탐지 성공으로 해석하지 않는다.
+- `segment_revision`은 제품 SHA-256·snapshot·TIC/Sector·전처리 버전과 파라미터·비닝 규칙·수치 구현 버전의 키 정렬 JSON을 SHA-256으로 식별한다. 문자열은 UTF-8, JSON 구분자는 쉼표/콜론, 비유한 수치는 거절한다. 파라미터 숫자 타입도 직렬화의 일부이므로 호출자는 고정 설정의 타입을 유지한다. 실행 시각·경로·lock 전체 hash는 받지 않는다.
+- `segment_silver`는 정렬·정합성이 확인된 119 `PreparedCurve`/`DetrendedCurve`와 제품 checksum을 받는다. 전처리 status가 ok가 아니면 중단한다. 적용 마스크 전체를 revision 재료에 포함한다. 개별 Sector의 비닝 실패는 quarantined에 별도 기록한다.
+- 반환값은 세그먼트 제안이며 `publishable=false`, `discoverability_status=pending_evaluation`이다. 후보의 discoverable을 임의로 false로 채우거나 이전 값을 복사하지 않는다.
+
+검증: 최초 비닝 구현 당시 전체 225개 통과였으며, 123 최초 리뷰 HEAD `26f409ee`는 전체 248개였다.
+은퇴 후보 boolean 방어를 추가한 현재 전체 커널은 254개 통과다(신규 segmentation 20개·discoverability 29개 포함).
+경계 스냅·부분 bin·빈 구간·전처리 제외점 시간축·상한·revision 변경·출처 누락·실패 격리를 검사했다.
+제공 해상도 판정 연결과 완료된 36곡선 FITS 회귀는 아래 절과 벤치마크 README를 따른다.
+기존 판 보존/DB ID/current 전환은 Publisher 책임이다.
+Gold QA 수치 허용 오차는 계속 pending-measurement이며 DB·EC2 검증 완료를 뜻하지 않는다.
+114 인계의 Java 설명은 정정했다. DB COMMENT는 start_btjd 정정과 함께 Backend 후속으로 분리했으며, 123은 새 migration을 추가하지 않는다. 기존 V1과 DB는 변경하지 않았다.
+
+## 제공 해상도 판정 (123)
+
+`astro_kernel.discoverability.prepare_discoverability`는 `segment_silver` 결과와 122의
+`build_candidate_catalog` 결과를 받는다. 실험 모듈·파일·DB에 의존하지 않는다.
+후속 파이프라인의 진입점은 반드시 `prepare_discoverability`로 고정한다.
+`evaluate`·`classify`는 하위 계산 함수이며 manifest의 실제 미세 조정 폭·게시 계약을 검사하지 않는다.
+두 함수만 호출한 결과로 후보를 게시하지 않는다. 은퇴 후보도 엄격한 Python bool discoverable을
+보유해야 하며 누락·null·숫자·문자열은 입력 오류다. 유효한 기존 boolean은 그대로 보존한다.
+게시·실패·회원 재개 경계는 [Gold 계약 4.2절](../../contracts/gold/README.md#42-s15p21c206-123-discoverable-연결게시-경계)이 정본이다.
+
+```python
+from astro_kernel.discoverability import prepare_discoverability
+
+proposal = prepare_discoverability(
+    segmented, catalog,
+    fine_tune={"half_width_cells": 3},
+    candidate_quality_version=iteration_result["candidate_quality_version"],
+    rule_approval=approved_rule_reference,
+    previous_bundle=previous_public_snapshot,
+)
+```
+
+`previous_bundle`은 기존 공개 판의 TIC·Bundle ID, `complete=true`, 후보 목록과
+`candidate_quality_revision`이다. 122의 ready 결과에 있는 `candidates`는 새 제안이므로
+기존 공개 판 대신 넘기지 않는다. 최초 게시는 None이다. 기존 ID를 유지·은퇴시키는 경우 이전 snapshot은 필수다.
+비어 있지 않은 `rule_approval`은 호출자가 확인한 승인 근거다. 문자열 존재 검사만으로 외부 승인을 검증하지는 않는다.
+
+지원 규칙 정본은 코드의 `RULE`(`discoverability-1.0.0`)이다. 로그 5,000점·0.5일 시작·Gold 상한,
+SNR 7·SDE 6·관측 통과 2, 직접 대응 3칸·epoch 반폭, 엄격한 내부 극대이며 고조파만으로 매칭하지 않는다.
+`RULE`과 다른 설정은 명시적으로 거절하므로 설명 필드만 바꾸어 계산이 그대로 실행되지 않는다.
+승인 상태는 규칙에서 분리했고 변경된 규칙은 새 버전 구현·검증을 요구한다.
+115의 `discoverability_v1.json`은 이전 실험 재현용으로 그대로 보존한다.
+
+모델은 bin 중심에서 평가하며, 현재 후보보다 앞선 **모든 raw peak** 제거 이력으로 잔차를 만든다.
+ID 그룹화로 생략된 raw peak도 제거하며 현재 후보 자신은 제거하지 않는다.
+`removed_peak_ids`는 카탈로그 candidate ID가 없는 raw peak 식별자다.
+`segment_index_map`의 gaps는 Sector 내부 bin 인덱스다. `sorted_indices[i]`로 최종 정렬 배열의
+해당 bin 위치를 찾는다. `concatenated_offset`은 정렬 전 위치이며 겹친 Sector에는 단일 offset만 사용하지 않는다.
+
+SNR/SDE 문턱을 먼저 검사하고 관측 통과 수를 계산한다. 품질 봉우리 수에는 P/2·2P 등 중복이
+포함되므로 독립 신호 수가 아니다. 대조군은 품질 봉우리 유무로 해석한다.
+`insufficient_observations`, `degenerate_flux`, `numerical_failure`만 측정 실패로 기록하고
+잘못된 입력·격자 등 구현/설정 오류는 전파한다.
+
+`periodograms`에는 NumPy 배열과 BLS 객체가 있으므로 런타임 산출물로 따로 저장한다.
+그 외 제안은 엄격한 JSON으로 직렬화할 수 있다. 원본 단계와 각 후보 단계의 잔차/주기도를 모두 반환한다.
+revision은 canonical JSON hash이며 승인 댓글 문자열·실행 시각을 포함하지 않는다.
+기존 판을 보존한 held 결과에는 새 후보 제안·변경 이력을 내보내지 않는다.
+
+Inf 처리 판단(123 리뷰 L1): 이번 버전은 114 참조와 같은 유한값 평균을 유지한다.
+`bin_sector`는 NaN과 ±Inf를 모두 평균에서 제외하고 해당 bin에 유한점이 없으면 gap으로 기록한다.
+따라서 비닝 결과만으로 Inf 계산 실패와 NaN 제외점을 구분할 수 없다. 이는 BLS·잔차 모듈의
+Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실패 원인을 보존한다는 뜻이 아니다.
+호출자는 전처리 상태·제외 근거를 별도로 보존해야 한다. Inf 거절로 정책을 바꾸려면 비닝 규칙/revision과
+114 비교 기준을 함께 변경·검증한다. 이번 리뷰 수정에서는 이 계산 규칙을 변경하지 않았다.
+
+## 124 외부 카탈로그 변경안
+
+`astro_kernel.external_catalog`는 검증된 원천 snapshot과 122 후보 ID를 연결하여 외부 참조·통합 판정·변경 이력 입력을 만든다. DB 쓰기와 Publisher 전환은 수행하지 않는다. [124 구현·검증 범위](../../docs/data/tess-external-catalog-implementation.md)를 참조한다. 합성 ID 테스트와 실제 할당 ID 검증을 구분하며, 실패한 원천을 빈 성공 조회로 바꾸지 않는다.

@@ -13,8 +13,12 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다."),
+    FOLLOW_SELF(HttpStatus.BAD_REQUEST, "본인은 팔로우할 수 없습니다."),
+    FOLLOW_TARGET_UNAVAILABLE(HttpStatus.NOT_FOUND, "팔로우 대상을 이용할 수 없습니다."),
     TIC_MISMATCH(HttpStatus.BAD_REQUEST, "게시글과 같은 별의 자료만 첨부할 수 있습니다."),
     NICKNAME_CONFLICT(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    POLICY_CHANGED(HttpStatus.CONFLICT, "탈퇴 정책이 변경됐습니다. 다시 확인해 주세요."),
+    WITHDRAWAL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "탈퇴 정책을 준비하고 있습니다."),
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다."),
@@ -23,6 +27,7 @@ public enum ErrorCode {
     // 이쪽은 반대로 존재를 드러내지 않는다. 없는 TIC과 미공개 별을 같은 응답으로 덮는다.
     STAR_NOT_PUBLISHED(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다."),
     STAR_LIST_PRIVATE(HttpStatus.FORBIDDEN, "별 목록을 공개하지 않은 회원입니다."),
+    PUBLIC_SKY_NOT_AVAILABLE(HttpStatus.NOT_FOUND, "요청한 공개 은하를 찾을 수 없습니다."),
     // 요청의 판·계산 버전이 현재 판과 다르다. 본문에 currentBundleId를 싣는다(탐사 API 2.3).
     BUNDLE_CHANGED(HttpStatus.CONFLICT, "분석 중인 판이 바뀌었습니다. 최신 판을 다시 불러와 주세요."),
     /** 온라인 잔차 계산 대기열이 찼거나 같은 회원의 작업이 이미 돌고 있다 (탐사 API 7.1, D-3·D-4). */

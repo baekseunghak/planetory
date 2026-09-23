@@ -39,6 +39,10 @@ public class SubmissionRepository {
         return jdbc.sql("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE")
                 .param(memberId).query(Long.class).optional().isPresent();
     }
+    boolean shareMember(long memberId) {
+        return jdbc.sql("SELECT id FROM users WHERE id=? AND status='active' FOR SHARE")
+                .param(memberId).query(Long.class).optional().isPresent();
+    }
     void lockProgress(long memberId, long ticId) {
         jdbc.sql("INSERT INTO user_star_progress(user_id,tic_id) VALUES (?,?) ON CONFLICT(user_id,tic_id) DO NOTHING")
                 .params(memberId, ticId).update();

@@ -40,11 +40,15 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex San
 a{color:var(--acc-ink)}
 h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 .page{max-width:1280px;margin:0 auto;padding:40px 40px 96px}
-.head{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:22px;border-bottom:1.5px solid var(--ink)}
+.head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:24px;align-items:end;padding-bottom:22px;border-bottom:1.5px solid var(--ink)}
 .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .head h1{font-size:30px;font-weight:700;line-height:1.2}
 .head p{margin:10px 0 0;color:var(--muted);max-width:64ch}
-.meta{display:grid;grid-template-columns:auto auto;gap:4px 14px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.meta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:12.5px;color:var(--muted);max-width:44ch}
+/* 라벨은 한 줄로 두되 값은 접힌다. 개정일처럼 긴 값에 nowrap이 걸리면 min-content가
+   커져 .head의 1fr(제목) 칸을 밀어내고 페이지가 가로로 넘친다. */
+.meta dt{white-space:nowrap}
+.meta dd{margin:0;overflow-wrap:anywhere}
 .meta b{color:var(--ink);font-weight:500}
 .legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:14px 0 0;color:var(--muted);font-size:12.5px}
 .legend .item{display:inline-flex;align-items:center;gap:7px}
@@ -359,7 +363,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       </div>
     </div></div>
     <div class="scroll"><div class="wf" style="margin-top:18px">
-      <div class="gnb"><b>SC-02 · 선택한 별의 근접 뷰</b><span class="right"><span class="btn sm">별 전체 보기</span><span class="btn sm">은하로 돌아가기</span></span></div>
+      <div class="gnb"><b>SC-02 · 선택한 별의 근접 뷰</b><span class="right"><span class="btn sm">항성계 전체</span><span class="btn sm">별지도</span></span></div>
       <div class="sky" style="height:360px;display:grid;grid-template-columns:1fr 330px">
         <svg viewBox="0 0 780 360" role="img" aria-label="내가 찾은 행성 두 개의 근접 뷰 배치 예시" style="width:100%;height:360px">
           <ellipse cx="360" cy="180" rx="155" ry="58" fill="none" stroke="#555c72"/><ellipse cx="360" cy="180" rx="280" ry="103" fill="none" stroke="#555c72"/>
@@ -367,12 +371,12 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <text x="295" y="258" fill="#bdc6df" font-size="15">TIC 123456789</text><text x="495" y="111" fill="#bdc6df" font-size="13">c-401 · 선택하여 확대</text><text x="75" y="295" fill="#bdc6df" font-size="13">c-402 · 미확정 후보</text>
           <text x="24" y="337" fill="#8894b5" font-size="12">문서용 배치 예시 · 표면과 궤도는 이해를 돕기 위한 시각화입니다</text>
         </svg>
-        <div style="padding:20px;border-left:1px solid var(--line);background:#fff;color:#1b1d2e"><b>내가 찾은 행성 2개</b><p class="muted small">목록 또는 행성 선택 → 해당 행성 확대</p><div class="row"><span class="pill">c-401</span><span class="pill soft">c-402</span></div><dl class="kv" style="margin-top:20px"><dt>선택한 신호</dt><dd>c-401</dd><dt>종류</dt><dd>확인된 행성</dd><dt>반복 주기</dt><dd>3.0021일</dd><dt>어두워진 정도</dt><dd>1450ppm (0.145%)</dd></dl><p class="muted small">내 발견 신호만 · 성과 인정 수와 별도<br>0개: 아직 표시할 내 행성이 없어요<br>불러오기 실패: 다시 시도 / 은하로 돌아가기</p></div>
+        <div style="padding:20px;border-left:1px solid var(--line);background:#fff;color:#1b1d2e"><b>내가 찾은 행성 2개</b><p class="muted small">목록 또는 행성 선택 → 해당 행성 확대</p><div class="row"><span class="pill">c-401</span><span class="pill soft">c-402</span></div><dl class="kv" style="margin-top:20px"><dt>선택한 신호</dt><dd>c-401</dd><dt>종류</dt><dd>확인된 행성</dd><dt>반복 주기</dt><dd>3.0021일</dd><dt>어두워진 정도</dt><dd>1450ppm (0.145%)</dd></dl><p class="muted small">내 발견 신호만 · 성과 인정 수와 별도<br>0개: 아직 표시할 내 행성이 없어요<br>불러오기 실패: 다시 시도 / 별지도</p></div>
       </div>
     </div></div>
     <ol class="notes">
       <li><span class="co">1</span><span class="nid">HOME-01 · HOME-02 · DEC-30</span><span>발견한 별만 그림. 자리는 서버가 발견 시 계산해 StarUnlock에 저장(world_x·world_y·depth_z·layout_ordinal·layout_version), 클라이언트는 읽기만 (NFR-20c)</span><span class="tag p0">P0</span></li>
-      <li><span class="co">2</span><span class="nid">HOME-08</span><span>같은 캔버스에서 선택 별 근접 뷰·내 행성 공전·행성 선택 확대. 상세 패널은 가장자리에 도킹. 빈 하늘 클릭 또는 [은하로 돌아가기]는 이전 지도 카메라 복원. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
+      <li><span class="co">2</span><span class="nid">HOME-08</span><span>같은 캔버스에서 선택 별 근접 뷰·내 행성 공전·행성 선택 확대. 상세 패널은 가장자리에 도킹. 빈 하늘 클릭 또는 [별지도]는 이전 지도 카메라 복원. [분석 계속]·[결과]·[스레드]</span><span class="tag p0">P0</span></li>
       <li><span class="co">3</span><span class="nid">HOME-05 · GRD-07</span><span>행성 수는 문자로, 등급(= 인정된 성과 수)·곡선 단계는 문자로만. 유형별 등급은 없음. 확인된 행성 보유 여부는 홈에서 숨김(HOME-02)</span><span class="tag p0">P0</span></li>
       <li><span class="co dim">4</span><span class="nid">HOME-05 · 결정 22</span><span>행성에 마우스를 올리면 종류·주기·감광 깊이. 클릭/목록 선택으로 확대와 개별 정보를 표시. 궤도는 매칭한 확인된 행성 + "행성 같음" 판단 미확정 신호만. 성과 인정과 별도</span><span class="tag p0">P0</span></li>
       <li><span class="co">5</span><span class="nid">HOME-07</span><span>퀘스트 패널 기본 접힘. 펼친 상태는 SC-09</span><span class="tag p0">P0</span></li>
@@ -647,7 +651,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
           <div class="stat"><div class="v">12</div><div class="k">발견한 별</div></div>
-          <div class="stat"><div class="v">4</div><div class="k">완료한 별</div></div>
+          <div class="stat"><div class="v">4</div><div class="k">현재 완료한 별</div></div>
           <div class="stat"><div class="v">7</div><div class="k">찾은 신호</div></div>
           <div class="stat"><div class="v">4 · 2 · 1</div><div class="k">확인된 · 아직 확인 안 된 · 행성 아님</div></div>
           <div class="stat"><div class="v">86%</div><div class="k">기록과 일치한 비율 (라벨 있는 신호)</div></div>
@@ -659,8 +663,8 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
           <div class="box"><div class="box-h"><span class="co">4</span>근거 사용</div><div class="box-b small"><div class="row" style="justify-content:space-between"><span>홀수·짝수 밝기 같음</span><span class="mono">5회 · 일치 5</span></div><div class="row" style="justify-content:space-between"><span>반대편 가려짐 없음</span><span class="mono">4회 · 일치 4</span></div><div class="row" style="justify-content:space-between"><span>바닥 평평한 모양</span><span class="mono">3회 · 일치 2</span></div><div class="muted small" style="margin-top:6px">제출 가능한 유효 근거만 집계. 중심 위치 데이터 없음은 제외</div></div></div>
         </div>
         <div class="box soft" style="padding:10px 12px" >
-          <div class="row"><span class="co">5</span><b class="small">비교 탭 (미리보기)</b><span class="muted small">내 값 ↔ 최근 90일 활동 회원 중앙값. 순위는 없음</span></div>
-          <table class="tbl" style="margin-top:6px"><tr><th>항목</th><th>나</th><th>중앙값</th></tr><tr><td>별당 제출 수</td><td class="mono">2.4</td><td class="mono">2.9</td></tr><tr><td>기록과 일치한 비율</td><td class="mono">86%</td><td class="mono">71%</td></tr><tr><td>첫 제출에 일치</td><td class="mono">58%</td><td class="mono">52%</td></tr></table>
+          <div class="row"><span class="co">5</span><b class="small">비교 탭 (미리보기)</b><span class="muted small">최근 90일 제출 회원 · 기준일 이전 누적 기록. 같은 원천의 내 값이 없으면 당시 자료 부족</span></div>
+          <table class="tbl" style="margin-top:6px"><tr><th>항목</th><th>나</th><th>중앙값</th></tr><tr><td>별당 제출 수</td><td>당시 자료 부족</td><td class="mono">2.9</td></tr><tr><td>첫 매칭 기록과 일치한 비율</td><td>당시 자료 부족</td><td class="mono">71%</td></tr></table>
         </div>
       </div>
     </div></div>
@@ -669,7 +673,7 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
       <li><span class="co">2</span><span class="nid">STA-01 · AI-04</span><span>내 판단 분포와 AI 구간별 판단</span><span class="tag p1">P1</span></li>
       <li><span class="co">3</span><span class="nid">STA-01</span><span>최근 8주 주간 제출 막대</span><span class="tag p1">P1</span></li>
       <li><span class="co">4</span><span class="nid">STA-01 · POL-13</span><span>제출 가능한 유효 근거의 사용 횟수와 일치 수. 중심 위치 데이터 없음은 집계 제외</span><span class="tag p1">P1</span></li>
-      <li><span class="co">5</span><span class="nid">STA-02 · STA-03 · DAT-13 · DEC-31 · AT-77</span><span>전체는 10분 MV, 비교는 일 1회 StatsSnapshot. 중앙값은 90일 내 제출 1건 이상 회원. 시간 경계는 DEC-31 상세안 승인 대기</span><span class="tag p1">P1</span></li>
+      <li><span class="co">5</span><span class="nid">STA-02 · STA-03 · DAT-13 · DEC-31 · AT-77</span><span>전체는 10분 MV, 비교는 일 1회 StatsSnapshot. 중앙값은 90일 내 제출 1건 이상 회원. KST·월요일·현재 포함 8주. 비교는 기준일과 원천 확인 시각 구분(2026-09-22 승인)</span><span class="tag p1">P1</span></li>
     </ol>
   </section>
 
@@ -936,3 +940,6 @@ h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
 </script>
 </body>
 </html>
+
+<!-- 2026-09-21 / S15P21C206-248: 상세 빈 공간 클릭·드래그는 선택을 유지한다. 별지도 복귀와 항성계 전체 보기는 별도 조작이다. 천체 표면·색·공전 속도는 설명용 표현이며 실측 이미지가 아니다. -->
+

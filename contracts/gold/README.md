@@ -108,6 +108,23 @@ Gold는 다음을 게시한다.
 
 `qa-tolerances.v0.json`의 `flux_scatter`·비닝 수치 허용 오차는 여전히 `pending-measurement`다. 123 구현과 131 실환경 대조에서 허용 오차를 측정하기 전 수치 QA 통과를 선언하지 않는다. 유효 bin 없음·산포 0의 게시/소비 경계도 123에서 기존 스키마와 대조하여 검증한다.
 
+### 4.2 S15P21C206-123 discoverable 연결·게시 경계
+
+상태: 구현·로컬 검증, 실제 FITS 비교 및 처리·소비 리뷰 전이다. 115의 실험 격자와 달리
+123은 [공개 QA](publication-qa.md)의 `max(40, 최장 후보 주기 × 1.15)` 상한을 따른다.
+2026-09-22 담당자 확인으로 기존 API·Gold 계약에 맞춰 비교하기로 했다.
+115 저장 결과를 새 격자의 실측 결과로 대신하지 않는다. 수치 규칙 승인 근거와 운영 게시 승인은 별도다.
+
+- 평가 부족·수치 실패로 후보의 discoverable이 null이면 **새 Bundle 전체를 보류**하고 기존 current와 후보 값을 유지한다. 첫 게시라면 게시하지 않는다. 실패 후보만 빼거나 false로 치환하지 않으며 DB `BOOLEAN NOT NULL`과 완료·재개 API를 바꾸지 않는다.
+- 정상 평가의 true/false만 게시 제안에 사용한다. `match_half_width_cells ≤ manifest.fine_tune.half_width_cells`를 강제하고 미세 조정 폭이 부족하면 입력 오류로 중단한다. 상위 N 추천은 판정 조건이 아니다.
+- Publisher는 active·retired 모두 `discoverable` 키 누락·null·boolean 이외 값을 적재 거절한다. 기본 false로 보정하지 않는다. 커널의 유일한 운영 진입점은 `prepare_discoverability`다.
+- 규칙·격자·수치 버전·비닝 입력과 revision·후보 모델·제거 순서를 `candidate_quality` revision에 포함한다. 기존 동일 ID의 양방향 boolean 변경만 `candidate_status_history` 제안으로 출력하며 새 후보를 false→true로 만들지 않는다. Publisher가 `changed_at`을 채우고 새 판과 함께 원자 적재한다. 회원별 재개 판정은 150 책임이다.
+- `discoverability_ready=true`는 123 계산 완료만 뜻한다. 외부 확인 라벨(124), Gold 검증(125), 열 단위 투영·원자 current 전환(Publisher)이 남으므로 `publishable=false`를 유지한다. 런타임 잔차·주기도·진단 전체를 DB 행으로 INSERT하지 않는다.
+- Publisher(87)는 후보 네 수치를 갱신하는 트랜잭션에 READ COMMITTED를 사용해야 한다. V19 트리거는 다른 격리 수준을 SQLSTATE `25000`으로 거절한다. 공개 요청의 BEFORE 트리거는 후보 행 `FOR SHARE`를 획득하므로 후보를 갱신하는 긴 배치 트랜잭션은 공개 요청을 지연시킨다. 후보 갱신·current 원자 전환의 잠금 순서와 트랜잭션 길이를 87 착수 전에 검토한다. 이번 123은 Publisher 트랜잭션을 구현하거나 격리 수준을 변경하지 않는다.
+
+지원 규칙·호출법은 [커널 README](../../libs/astro-kernel/README.md#제공-해상도-판정-123),
+비교 실행과 검증 범위는 [벤치마크 README](../../experiments/tess-bench/README.md#123-비닝제공-해상도-회귀)를 따른다.
+
 ## 5. 판 전환 시나리오
 
 [정상 fixture](examples/publication-bundle.valid.json)는 동일한 TIC에서 Bundle 100이 current인 상태에 Bundle 101을 게시하는 사례다.
@@ -183,3 +200,7 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 | 실제 TESS 배열 크기·용량·수치 허용 오차 | 실측 대기 | D17·D23 계열 검증 결과를 반영한다 |
 
 미확정 값을 fixture의 합성값으로 대신 확정하지 않는다. 애플리케이션 코드, DB migration과 운영 설정은 이 계약 작업에서 변경하지 않는다.
+
+### 알림 원천 저장 경계 (175, V23)
+
+2026-09-23 사용자 승인으로 [F15.8](../../docs/development/service-backend/community.md#notification-producer-contract)의 제한된 DB 트리거 예외를 채택했다. Gold 직접 역할에는 회원·설정·관계 조회 권한을 추가하지 않는다. 적재·검증·current 전환의 기존 트랜잭션과 TIC 직렬화를 유지하고 지연 트리거를 중간에 강제 실행하지 않는다. 최종 판의 후보 변화와 실제 AI/외부 판정 변화를 DB가 원천 사건으로 기록하며 실패·rollback·동일 값 재시도는 새 알림을 만들지 않는다. 실제 Publisher 운영 연결 검증 완료를 뜻하지 않는다.

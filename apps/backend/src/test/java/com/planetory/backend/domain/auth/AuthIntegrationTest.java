@@ -1,5 +1,9 @@
 package com.planetory.backend.domain.auth;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -7,15 +11,24 @@ import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.planetory.backend.domain.auth.oauth.OAuthLoginSuccessHandler;
 import com.planetory.backend.domain.exploration.service.GalaxyLayout;
+import com.planetory.backend.domain.exploration.service.InitialExplorationService;
 import com.planetory.backend.domain.member.service.MemberService;
+import com.planetory.backend.domain.member.service.WithdrawalService;
 import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
+import com.planetory.backend.global.security.SecurityConfig;
 import com.sun.net.httpserver.HttpServer;
+import jakarta.servlet.http.Cookie;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -23,12 +36,14 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.*;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.context.SecurityContext;
@@ -48,7 +63,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** 외부 자격 증명 없이 실제 code 교환·OIDC 서명·state/nonce 검증과 DB 가입을 함께 실행한다. */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
 class AuthIntegrationTest {
@@ -62,6 +77,7 @@ class AuthIntegrationTest {
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
+        registry.add("planetory.withdrawal.enabled", () -> "true");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -90,9 +106,15 @@ class AuthIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired MemberService members;
+    @Autowired WithdrawalService withdrawals;
     @Autowired PostService posts;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
+    @LocalServerPort int port;
+    private final ListAppender<ILoggingEvent> diagnosticLogs = new ListAppender<>();
+    private final List<Logger> diagnosticLoggers = List.of(SecurityConfig.class,
+                    OAuthLoginSuccessHandler.class, InitialExplorationService.class).stream()
+            .map(type -> (Logger) LoggerFactory.getLogger(type)).toList();
 
     @BeforeEach
     void resetOnlyTestData() {
@@ -103,7 +125,15 @@ class AuthIntegrationTest {
             jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (?, ?, 'deep_confirmed', true)", i, i);
         }
         TIME.now = Instant.parse("2026-09-15T01:00:00Z");
-        LAYOUT.fail = false;
+        LAYOUT.failure = null;
+        diagnosticLogs.start();
+        diagnosticLoggers.forEach(logger -> logger.addAppender(diagnosticLogs));
+    }
+
+    @AfterEach
+    void detachDiagnosticLogs() {
+        diagnosticLoggers.forEach(logger -> logger.detachAppender(diagnosticLogs));
+        diagnosticLogs.stop();
     }
 
     @AfterAll
@@ -344,6 +374,29 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void oauthRejectionLogsOnlyAllowedCodeAndClearsExistingSession() throws Exception {
+        for (String error : List.of("access_denied", "private@example.invalid", "x".repeat(256))) {
+            var session = login("google", "diagnostic-member");
+            var start = mvc.perform(get("/oauth2/authorization/google").session(session)).andReturn();
+            var params = query(start.getResponse().getRedirectedUrl());
+            diagnosticLogs.list.clear();
+            mvc.perform(get("/login/oauth2/code/google").session(session)
+                            .param("state", params.get("state")).param("error", error)
+                            .param("error_description", "private-provider-description")
+                            .param("error_uri", "https://private.example.invalid/failure"))
+                    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("AUTH_REQUIRED"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("private"))));
+            assertTrue(session.isInvalid());
+            assertEquals(1, diagnosticLogs.list.size());
+            assertDiagnostic(0, Level.WARN, "OAuth authentication failed: exception=OAuth2AuthenticationException oauth_error="
+                    + (error.equals("access_denied") ? "access_denied" : "unrecognized"));
+            mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
+        }
+        assertEquals(1, count("users"));
+    }
+
+    @Test
     void sessionExpiresAtThirtyMinutesAndOnlyAuthenticatedApiActivityExtendsIt() throws Exception {
         var session = login("google", "idle");
         TIME.advance(Duration.ofMinutes(29));
@@ -378,6 +431,7 @@ class AuthIntegrationTest {
         var second = login("google", "devices");
         mvc.perform(post("/api/v1/auth/logout").session(first)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        assertFalse(first.isInvalid());
         var token = mapper.readTree(mvc.perform(get("/api/v1/auth/csrf").session(first))
                 .andReturn().getResponse().getContentAsString());
         mvc.perform(post("/api/v1/auth/logout").session(first)
@@ -385,8 +439,84 @@ class AuthIntegrationTest {
                 .andExpect(status().isNoContent()).andExpect(cookie().maxAge("SESSION", 0));
         assertTrue(first.isInvalid());
         mvc.perform(get("/api/v1/me").session(second)).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anonymousLogoutRequiresFreshSessionTokenEvenWhenRepeated() throws Exception {
+        String previousToken = "invalid-token";
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isForbidden());
+            var issued = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+            var session = (MockHttpSession) issued.getRequest().getSession(false);
+            var token = mapper.readTree(issued.getResponse().getContentAsString());
+            String header = token.get("headerName").asText();
+            mvc.perform(post("/api/v1/auth/logout").session(session).header(header, previousToken))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            assertFalse(session.isInvalid());
+            previousToken = token.get("token").asText();
+            mvc.perform(post("/api/v1/auth/logout").session(session).header(header, previousToken))
+                    .andExpect(status().isNoContent()).andExpect(cookie().maxAge("SESSION", 0));
+            assertTrue(session.isInvalid());
+            mvc.perform(post("/api/v1/auth/logout").header(header, previousToken))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void realHttpCookieAndCsrfRoundTripRequiresNewTokenAfterLogout() throws Exception {
+        var cookies = new java.net.CookieManager();
+        var client = HttpClient.newBuilder().cookieHandler(cookies).build();
+        var base = "http://127.0.0.1:" + port + "/api/v1/auth/";
+        var body = HttpResponse.BodyHandlers.ofString();
+        var empty = HttpRequest.BodyPublishers.noBody();
+        String previous = "invalid-token";
+        for (int i = 0; i < 2; i++) {
+            assertEquals(403, client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .POST(empty).build(), body).statusCode());
+            var issued = client.send(HttpRequest.newBuilder(URI.create(base + "csrf")).build(), body);
+            assertEquals(200, issued.statusCode());
+            var token = mapper.readTree(issued.body());
+            String header = token.get("headerName").asText();
+            assertEquals(403, client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .header(header, previous).POST(empty).build(), body).statusCode());
+            previous = token.get("token").asText();
+            var result = client.send(HttpRequest.newBuilder(URI.create(base + "logout"))
+                    .header(header, previous).POST(empty).build(), body);
+            assertEquals(204, result.statusCode());
+            assertTrue(result.headers().allValues("set-cookie").stream()
+                    .flatMap(value -> java.net.HttpCookie.parse(value).stream())
+                    .anyMatch(cookie -> cookie.getName().equals("SESSION") && cookie.hasExpired()));
+            assertTrue(cookies.getCookieStore().getCookies().stream()
+                    .noneMatch(cookie -> cookie.getName().equals("SESSION") && !cookie.hasExpired()));
+        }
+    }
+
+    @Test
+    void expiryBetweenCsrfAndLogoutRejectsOldTokenAndFreshAnonymousTokenSucceeds() throws Exception {
+        var session = login("google", "logout-expiry");
+        var token = mapper.readTree(mvc.perform(get("/api/v1/auth/csrf").session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        TIME.advance(Duration.ofMinutes(30));
+        mvc.perform(post("/api/v1/auth/logout").session(session)
+                        .header(token.get("headerName").asText(), token.get("token").asText()))
+                .andExpect(status().isForbidden());
+        assertTrue(session.isInvalid());
+        var fresh = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+        var freshToken = mapper.readTree(fresh.getResponse().getContentAsString());
+        mvc.perform(post("/api/v1/auth/logout").session((MockHttpSession) fresh.getRequest().getSession(false))
+                        .header(freshToken.get("headerName").asText(), freshToken.get("token").asText()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void firstCsrfReadAfterExpiryReturns401ThenAnonymousReadSucceeds() throws Exception {
+        var session = login("google", "csrf-expiry");
+        TIME.advance(Duration.ofMinutes(30));
+        mvc.perform(get("/api/v1/auth/csrf").session(session)).andExpect(status().isUnauthorized());
+        assertTrue(session.isInvalid());
+        mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk());
     }
 
     @Test
@@ -412,6 +542,105 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void withdrawalRequiresThePreparedPolicyVersionAtConfirmation() throws Exception {
+        var session = login("google", "withdrawal-version");
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String id = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        jdbc.update("UPDATE withdrawal_requests SET policy_version='withdrawal-old' WHERE id=?", UUID.fromString(id));
+        mvc.perform(post("/api/v1/me/withdrawal-requests/" + id + "/confirm")
+                        .session(session).with(csrf()).contentType("application/json")
+                        .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("POLICY_CHANGED"));
+        mvc.perform(get("/api/v1/me").session(session)).andExpect(status().isOk());
+    }
+
+    @Test
+    void withdrawalKeepsTheAccountClosedWhenCleanupFailsAndRetries() throws Exception {
+        var session = login("google", "withdrawal-retry");
+        long userId = memberId(session);
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String id = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        var receipt = new Cookie("WITHDRAWAL_RECEIPT",
+                prepared.getResponse().getHeader("Set-Cookie").split("[=;]", 3)[1]);
+        jdbc.execute("CREATE TABLE withdrawal_block_test(user_id BIGINT REFERENCES users(id))");
+        try {
+            jdbc.update("INSERT INTO withdrawal_block_test(user_id) VALUES (?)", userId);
+            mvc.perform(post("/api/v1/me/withdrawal-requests/" + id + "/confirm")
+                            .session(session).with(csrf()).contentType("application/json")
+                            .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PROCESSING"));
+            assertEquals("withdrawn", jdbc.queryForObject("SELECT status FROM users WHERE id=?", String.class, userId));
+            mvc.perform(get("/api/v1/withdrawal-requests/" + id).cookie(receipt))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PROCESSING"));
+        } finally {
+            jdbc.execute("DROP TABLE withdrawal_block_test");
+        }
+        jdbc.update("UPDATE withdrawal_requests SET next_attempt_at=clock_timestamp() WHERE id=?", UUID.fromString(id));
+        withdrawals.retryDue();
+        mvc.perform(get("/api/v1/withdrawal-requests/" + id).cookie(receipt))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM users WHERE id=?", Integer.class, userId));
+    }
+
+    @Test
+    void withdrawalClosesAccountCleansPrivateDataAndAllowsFreshSignup() throws Exception {
+        mvc.perform(get("/api/v1/me/withdrawal-policy")).andExpect(status().isUnauthorized());
+        var session = login("google", "withdrawal-flow");
+        long previousId = memberId(session);
+        var post = posts.create(previousId, new PostService.CreateCommand(
+                "일반 글", "남길 본문", "GENERAL", null, List.of(), List.of()));
+        mvc.perform(get("/api/v1/me/withdrawal-policy").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.version").value("withdrawal-v1"));
+        var prepared = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("READY")).andReturn();
+        String requestId = mapper.readTree(prepared.getResponse().getContentAsString()).get("requestId").asText();
+        String setCookie = prepared.getResponse().getHeader("Set-Cookie");
+        assertNotNull(setCookie);
+        assertTrue(setCookie.contains("HttpOnly"));
+        assertTrue(setCookie.contains("Secure"));
+        var oldReceipt = new Cookie("WITHDRAWAL_RECEIPT", setCookie.split("[=;]", 3)[1]);
+        jdbc.update("UPDATE withdrawal_requests SET created_at=clock_timestamp()-interval '91 days' WHERE id=?",
+                UUID.fromString(requestId));
+        var repeated = mvc.perform(post("/api/v1/me/withdrawal-requests").session(session).with(csrf())
+                        .contentType("application/json").content("{\"policyVersion\":\"withdrawal-v1\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.requestId").value(requestId)).andReturn();
+        var receipt = new Cookie("WITHDRAWAL_RECEIPT",
+                repeated.getResponse().getHeader("Set-Cookie").split("[=;]", 3)[1]);
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(oldReceipt))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/me/withdrawal-requests/" + requestId + "/confirm")
+                        .session(session).with(csrf()).contentType("application/json")
+                        .content("{\"policyVersion\":\"withdrawal-v1\",\"confirmation\":\"탈퇴\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM users WHERE id=?", Integer.class, previousId));
+        assertEquals(-1L, jdbc.queryForObject("SELECT user_id FROM posts WHERE id=?", Long.class,
+                Long.parseLong(post.postId().substring(2))));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId))
+                .andExpect(status().isNotFound());
+        assertNotEquals(previousId, members.login("google", "withdrawal-flow").getId());
+        jdbc.update("UPDATE posts SET author_withdrawn_at=clock_timestamp()-interval '366 days' WHERE id=?",
+                Long.parseLong(post.postId().substring(2)));
+        jdbc.update("UPDATE withdrawal_requests SET created_at=clock_timestamp()-interval '91 days' WHERE id=?",
+                UUID.fromString(requestId));
+        withdrawals.prune();
+        assertEquals("", jdbc.queryForObject("SELECT body FROM posts WHERE id=?", String.class,
+                Long.parseLong(post.postId().substring(2))));
+        mvc.perform(get("/api/v1/withdrawal-requests/" + requestId).cookie(receipt))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void signupRollsBackIfTutorialIsMissing() throws Exception {
         jdbc.update("DELETE FROM tutorial_stars WHERE seq = 1");
         var start = mvc.perform(get("/oauth2/authorization/google")).andReturn();
@@ -424,14 +653,39 @@ class AuthIntegrationTest {
         assertTrue(session.isInvalid());
         assertEquals(0, count("users"));
         assertEquals(0, count("user_settings"));
+        assertEquals(0, count("star_unlocks"));
+        assertEquals(2, diagnosticLogs.list.size());
+        assertDiagnostic(0, Level.ERROR, "OAuth member initialization failed: reason=active_tutorial_missing seq=1");
+        assertDiagnostic(1, Level.WARN,
+                "OAuth member initialization failed: branch=business code=DEPENDENCY_UNAVAILABLE exception=BusinessException");
     }
 
     @Test
-    void signupRollsBackIfGalaxyLayoutFails() {
-        LAYOUT.fail = true;
-        assertThrows(RuntimeException.class, () -> members.login("google", "layout-failure"));
-        assertEquals(0, count("users"));
-        assertEquals(0, count("star_unlocks"));
+    void signupRollsBackAndClearsSessionIfInitializationThrows() throws Exception {
+        for (RuntimeException failure : List.of(new IllegalStateException("private-layout-message"),
+                new DataAccessResourceFailureException("private-database-message"))) {
+            LAYOUT.failure = failure;
+            boolean database = failure instanceof DataAccessResourceFailureException;
+            var start = mvc.perform(get("/oauth2/authorization/google")).andReturn();
+            var params = query(start.getResponse().getRedirectedUrl());
+            var session = (MockHttpSession) start.getRequest().getSession(false);
+            diagnosticLogs.list.clear();
+            mvc.perform(get("/login/oauth2/code/google").session(session)
+                            .param("state", params.get("state"))
+                            .param("code", IDP.issue("private-failure-subject", params.get("nonce"), "")))
+                    .andExpect(status().is(database ? 503 : 500))
+                    .andExpect(jsonPath("$.code").value(database ? "DEPENDENCY_UNAVAILABLE" : "INTERNAL_ERROR"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("private"))));
+            assertTrue(session.isInvalid());
+            assertEquals(0, count("users"));
+            assertEquals(0, count("user_settings"));
+            assertEquals(0, count("star_unlocks"));
+            assertEquals(1, diagnosticLogs.list.size());
+            assertDiagnostic(0, Level.ERROR, "OAuth member initialization failed: branch="
+                    + (database ? "database code=DEPENDENCY_UNAVAILABLE" : "unexpected code=INTERNAL_ERROR")
+                    + " exception=" + failure.getClass().getSimpleName());
+        }
     }
 
     @Test
@@ -772,6 +1026,12 @@ class AuthIntegrationTest {
         assertEquals(1, count("user_settings"));
     }
 
+    private void assertDiagnostic(int index, Level level, String message) {
+        var event = diagnosticLogs.list.get(index);
+        assertEquals(level, event.getLevel());
+        assertEquals(message, event.getFormattedMessage());
+        assertNull(event.getThrowableProxy());
+    }
     private int count(String table) { return jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class); }
     private long memberId(MockHttpSession session) {
         var context = (SecurityContext) session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
@@ -803,9 +1063,9 @@ class AuthIntegrationTest {
     /** 원점이 아닌 결정적 좌표를 돌려 저장 값이 배치 함수에서 왔는지 구분한다. */
     static class TestGalaxyLayout implements GalaxyLayout {
         static final String VERSION = "test-layout-1";
-        volatile boolean fail;
+        volatile RuntimeException failure;
         @Override public StarPosition place(int layoutOrdinal) {
-            if (fail) throw new IllegalStateException("layout unavailable");
+            if (failure != null) throw failure;
             return new StarPosition(layoutOrdinal * 10.5 + 1, layoutOrdinal * -2.25 - 1, 0.5, VERSION);
         }
     }

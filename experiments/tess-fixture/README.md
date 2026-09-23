@@ -1,5 +1,27 @@
 # TESS 고정 fixture·합성 주입 세트·실행 manifest
 
+## 116 외부 export 수집
+
+116의 [계약 검증 초안](../../docs/data/tess-external-catalog-contract.md)을 위한 독립 수집기다. 기존 참고값을 갱신하지 않으며 원본·manifest는 Git 제외인 `results/external-catalog/`의 새 폴더에 보존한다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog
+```
+
+네 원천별 상태와 최종 manifest 경로를 확인한다. `collected_schema_unverified`는 수집 단계이고 운영 계약 검증 완료가 아니다. `incomplete`이면 기존 결과를 삭제하지 않고 해당 manifest로 실패 원천을 확인한다. 재실행은 새 폴더를 만든다. 원본 export·응답 본문은 Git에 추가하지 않는다.
+
+단위 검증: `uv run --locked python -m pytest tests/test_external_catalog.py -q`. 합성 응답만 사용하며 다운로드나 Git 명령을 실행하지 않는다.
+
+`--source nea_pscomppars exofop_toi`를 붙이면 지정 원천만 새 폴더에 수집한다. 부분 실행은 manifest의 `subset=true`로 표시되며 기존 성공 파일은 유지한다.
+
+저장 원천 감사는 다음처럼 실행한다. 네 성공 원천을 요구하고 해시·행 수 검증 후 9 TIC 천문 필드만 추출한다. 기존 출력은 덮어쓰지 않는다. 인자는 실제 파일 경로로 바꾼다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog_audit --manifest <첫-manifest> --manifest <재수집-manifest> --output <새-json>
+```
+
+## 고정 fixture
+
 Jira `S15P21C206-41`. 후속 전처리·BLS·비닝·AI 실험이 같은 입력으로 비교되도록 고정 SPOC 2분 광도곡선 표본과
 합성 감광 주입 세트를 만들고, 모든 실행을 manifest 로 남기는 도구다. 표본 선정 근거·격자·스키마 설명은
 [TESS fixture 문서](../../docs/data/tess-fixture-set.md)에 있다.

@@ -29,10 +29,13 @@ function utc(value: unknown): string {
     return invalid();
   return result;
 }
-export type Author = { memberId: string; nickname: string };
+export type Author = { memberId: string | null; nickname: string };
 function author(value: unknown): Author {
   const row = object(value);
-  return { memberId: text(row.memberId), nickname: text(row.nickname) };
+  const nickname = text(row.nickname);
+  if (row.memberId === null && nickname === "탈퇴한 회원")
+    return { memberId: null, nickname };
+  return { memberId: text(row.memberId), nickname };
 }
 export const judgments = [
   "LIKELY_PLANET",

@@ -1,0 +1,47 @@
+.publication-review {
+  width: min(100%, 70rem);
+  margin: auto;
+  padding: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.publication-card {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+}
+.publication-card dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(0, 4fr);
+  gap: 0.5rem 1rem;
+}
+.publication-card dd {
+  margin: 0;
+}
+.publication-memo {
+  white-space: pre-wrap;
+}
+.publication-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+.publication-review button,
+.publication-review a,
+.publication-review label {
+  min-height: 2.75rem;
+}
+.publication-review :focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+@media (max-width: 40rem) {
+  .publication-review {
+    padding: 0.75rem;
+  }
+  .publication-card dl {
+    grid-template-columns: 1fr;
+  }
+}

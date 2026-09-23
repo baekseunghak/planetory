@@ -1,5 +1,7 @@
 package com.planetory.backend.domain.post;
 
+import com.planetory.backend.domain.comment.service.CommentService;
+import com.planetory.backend.domain.member.service.MemberService;
 import com.planetory.backend.domain.post.service.PostReactionService;
 import com.planetory.backend.domain.post.service.PostService;
 import com.planetory.backend.global.error.BusinessException;
@@ -48,6 +50,8 @@ class PostReactionTest {
     }
     @Autowired PostReactionService reactions;
     @Autowired PostService posts;
+    @Autowired CommentService comments;
+    @Autowired MemberService members;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired PlatformTransactionManager transactions;
@@ -227,6 +231,38 @@ class PostReactionTest {
             pending.get().get(10, TimeUnit.SECONDS);
             error(ErrorCode.RESOURCE_NOT_FOUND, () -> reactions.put(owner, postId, "AGREE"));
         }
+    }
+
+    @Test void 탈퇴가_먼저_확정되면_대기한_글과_후속_댓글_반응_설정은_거부한다() throws Exception {
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            var pending = new AtomicReference<Future<?>>();
+            new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+                jdbc.update("UPDATE users SET status='withdrawn', withdrawn_at=clock_timestamp() WHERE id=?", owner);
+                pending.set(pool.submit(() -> posts.create(owner, new PostService.CreateCommand(
+                        "탈퇴 경합", "본문", "GENERAL", null, List.of(), List.of()))));
+                awaitPostLock();
+            });
+            var failure = assertThrows(ExecutionException.class, () -> pending.get().get(10, TimeUnit.SECONDS));
+            assertEquals(ErrorCode.AUTH_REQUIRED, ((BusinessException) failure.getCause()).getErrorCode());
+        }
+        error(ErrorCode.AUTH_REQUIRED, () -> comments.create(owner, new CommentService.CreateCommand(
+                CommentService.ParentType.POST, postId, "댓글", List.of(), List.of())));
+        error(ErrorCode.AUTH_REQUIRED, () -> reactions.put(owner, postId, "AGREE"));
+        error(ErrorCode.AUTH_REQUIRED, () -> members.changeStarListVisibility(owner, "PUBLIC"));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM posts WHERE user_id=? AND title='탈퇴 경합'", Integer.class, owner));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM comments WHERE user_id=?", Integer.class, owner));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM post_reactions WHERE user_id=?", Integer.class, owner));
+    }
+
+    @Test void 탈퇴한_반응자는_명단과_합계에서_함께_빠진다() {
+        long active = member();
+        reactions.put(owner, postId, "AGREE");
+        reactions.put(active, postId, "AGREE");
+        jdbc.update("UPDATE users SET status='withdrawn', withdrawn_at=clock_timestamp() WHERE id=?", owner);
+        assertEquals(new PostService.ReactionSummary(1, 0, "AGREE"), reactions.summary(postId, active));
+        var page = reactions.list(postId, "AGREE", 20, null);
+        assertEquals(1, page.items().size());
+        assertEquals("u-" + active, page.items().getFirst().memberId());
     }
 
     // sleep으로 저장 순서를 추측하지 않고 PostgreSQL이 실제로 다음 쓰기를 막는지 확인한다.

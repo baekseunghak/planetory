@@ -50,7 +50,7 @@ DB를 잠시 멈출 때는 `docker compose stop service-db`를 사용한다. `do
 
 ## 3. 로컬 빌드·실행 — apps/backend
 
-프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있어 환경변수 없이 실행된다. 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
+프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있다. 237 이후 local은 별도 세션/캐시 Redis를 `localhost:16379`·`localhost:16380`에서 사용하며 다른 주소는 연결 환경변수로 지정한다([연결 안내](oauth-setup.md#redis-연결과-저장-경계237)). 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
 
 `bootRun`과 `test`는 먼저 `startLocalDb` 태스크로 루트 Compose의 `service-db`를 띄운다(`docker compose --profile service up -d --wait service-db`). 이미 떠 있으면 바로 끝난다. `CI=true`·`SKIP_LOCAL_DB=true` 환경이거나 `-PskipLocalDb`를 주면 건너뛴다. 로컬 Compose의 `backend` 컨테이너는 `SKIP_LOCAL_DB=true`로 실행한다.
 
@@ -73,6 +73,8 @@ docker compose --profile service up -d --build backend
 
 ### 환경변수
 
+세션·계산 캐시 연결의 `SESSION_REDIS_*`·`CACHE_REDIS_*` 변수와 필수값은 [OAuth Redis 연결 안내](oauth-setup.md#redis-연결과-저장-경계237)를 따른다.
+
 | 변수 | 역할 / 기본값 |
 |---|---|
 | `DATABASE_PASSWORD` | 앱이 읽는 DB 비밀번호. `local` 프로필 기본 `ssafy`, `prod` 등 그 외 프로필은 기본값 없음(필수) |
@@ -85,6 +87,10 @@ docker compose --profile service up -d --build backend
 | `SWAGGER_ENABLED` | local 외 환경에서 문서 노출을 명시적으로 제어, 기본 false |
 
 ## 4. Flyway 최초 스키마
+
+### V21 전체·비교 통계
+
+`V21__statistics_aggregation.sql`은 173의 V20 다음에 적용한다. 기존 V1~V19를 수정하거나 repair/outOfOrder를 사용하지 않는다. MV 최초 미적재와 실제 0건을 구분하며 Snapshot global의 NULL 회차에도 중복 방지를 적용한다. 최소 역할과 실행·재시작 방법은 [통계 실행 런북](../../../docs/operations/statistics-runbook.md), 구조는 [ERD](../../../docs/architecture/database-erd.md#f-운영·챌린지·알림·통계)를 따른다. 통계 명령은 기동 Flyway를 강제로 끄므로 사전 migration은 소유자 전용 절차로 완료해야 한다. 공유/운영 DB 적용은 별도다.
 
 파일: `src/main/resources/db/migration/V1__initial_schema.sql`.
 기준: [ERD v1.1](../../../docs/architecture/database-erd.md) 그림과 3장 본문. 그림에 생략된 memo·계산 버전·time_system·round_id·수정 시각 등도 본문에 따라 포함했다.
@@ -284,3 +290,38 @@ V15 다음에 적용한다. `MemberCommunityPermissionTest`는 V12 → V15의 3�
 V18 다음으로 적용하며 병합 시 번호 충돌을 다시 확인한다. 공유·운영 DB에는 이번 작업에서 적용하지 않는다. 기존 공식 본문 전체에 대한 UPDATE가 발생하므로 적용 전 대상 건수·잠금 시간을 확인하고 별도 승인 후 실행한다.
 
 169 리뷰 보완에서 develop 미병합 V19에 후보 수치 변경의 격리 수준 검사를 추가했다. 적용 계약은 [검색 본문 계약](../../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다. 수정 전 V19를 적용한 일회용 검증 DB는 새로 만들어 검증하며 checksum을 repair로 우회하지 않는다. 영속 DB에 이전 V19를 적용한 이력이 있다면 파일 재적용 대신 별도 후속 마이그레이션이 필요하므로 적용 전에 이력을 확인한다.
+
+### V20 팔로우 권한
+
+`V20__follow_app_grants.sql`(173)은 기존 follows에 앱 SELECT·INSERT·DELETE를 부여하고 UPDATE·TRUNCATE를 금지한다. V11의 IDENTITY sequence 권한을 재사용하고 새 테이블·열을 만들지 않는다. 반복 PUT은 등록 시각을 유지하며 같은 회원의 쓰기는 users 행 잠금으로 직렬화한다. 현재 합성 측정 범위에서는 추가 인덱스를 만들지 않는다.
+
+V19 다음에 적용하며 V21은 178 통계 작업 소유다. 적용한 V1~V19를 수정하거나 repair/outOfOrder로 우회하지 않는다. `MemberCommunityPermissionTest`는 V19→V20 1건·validate·재실행0, `FollowTest`는 새 일회용 DB 전체 적용과 실제 앱 로그인 역할의 HTTP/쓰기/조회·경합을 검사한다. V20→V21과 통합 새 DB/업그레이드는 178의 별도 일회용 환경에서 검증한다. 공유·운영 DB에는 적용하지 않았다.
+
+팔로우 커서는 기존 조회 커서처럼 binding·정규 인코딩·값 범위를 검사하며 프로세스 키를 사용하지 않는다. follow-v2는 앱 재시작 후에도 유지하고 이전 서명형 follow-v1만 첫 페이지 GET으로 전환한다. 커서는 권한이 아니므로 실제 인증 회원·현재 관계·공개 자격을 매번 DB에서 검사한다. 관리 relationId도 DB 소유권 검사로 보호한다. 컴포넌트 재초기화와 동일 DB 조회/해제를 테스트하며 JVM 재시작·237 Redis 로그인 유지 통합은 별도다. 전역 게시판 공개 자격은 `StarBoardVisibility.OPEN`을 StarRepository·FollowService·CommunityReadService에서 공유한다. FE 연결·오류 복구 계약은 [서비스 API](service-api-spec.md#follow-policy)를 따른다.
+
+
+173 측정(2026-09-22): 일회용 PostgreSQL 18.6, 합성 회원/관계/발견 기록 각1만 건과 소량 기능 표본, size20, 실제 앱 역할, ANALYZE 후 실제 목록 SQL의 EXPLAIN ANALYZE를 각3회 실행했다. 회원 팔로잉/공개 별/역방향 팔로워의 DB 실행시간 중앙값은 각각 0.106/0.470/0.484ms였다. 공개 별 측정에는 발견 기록 끝의 TIC도 포함했다. 해당 범위에서는 V20에 인덱스를 추가하지 않았다. 전체 HTTP 지연·최대 규모·고밀도 팔로워 성능을 보장하는 측정은 아니며, 실제 규모에서 역방향 follows 탐색·관계 정렬·TIC 단독 자격 비용을 다시 확인한다. 재현은 FollowTest의 합성관계10000개 실행계획 사례이며 원시 계획은 무시되는 build 테스트 결과에 남는다.
+
+### 세그먼트 COMMENT 후속 인계 (123)
+
+123에서는 새 migration을 추가하지 않는다. 준비했던 산포 COMMENT 파일과 그 전용 Flyway
+단계는 열린 브랜치의 번호 충돌·역순 적용을 피하기 위해 제거했다. 기존 V1과 V20 팔로우는 유지한다.
+`flux_scatter`와 `start_btjd` COMMENT 정정은 Backend 후속에서 함께 처리한다.
+수정 문구·완료 조건은 [정합화 요청](../../../docs/project/planetory-doc-sync-requests.md#123-review-comment-handoff)을 따른다.
+후속 담당자는 열린 migration·실제 적용 이력·병합 및 배포 순서를 확인한 뒤 새 번호를 결정한다.
+번호만 올리거나 repair/outOfOrder로 우회하지 않는다. 적용 이력이 있는 영속 DB에서 파일 삭제·이력 삭제를
+수행하는 절차가 아니다. 리뷰어가 사용한 V22 적용 검증 DB는 별도의 일회용 환경이며 운영 적용 근거가 아니다.
+
+<a id="notification-key"></a>
+
+## 알림 서명키·V23 전환 (175)
+
+`NOTIFICATION_SIGNING_KEY`는 알림 페이지 커서·모두 읽음 경계의 HMAC-SHA256 서명에 쓰는 서버 공통 키다. 인증/세션 키와 분리한 최소 32바이트의 고엔트로피 비밀을 환경변수로 주입한다. 값은 저장소·문서·로그에 남기지 않는다. 모든 인스턴스·재시작에서 동일 값을 유지하며 키를 교체하면 이전 커서/읽음 경계가 400으로 무효화되므로 목록 첫 페이지를 다시 조회한다. 회원별 키나 프로세스 임시 키를 만들지 않는다.
+
+로컬 직접 실행은 백엔드 프로세스 환경에, 컨테이너는 루트 및 `infra/service/compose.yaml`의 backend 환경에 주입한다. 서버의 보호된 배포 환경에서 제공하며 실제 값은 이 작업에서 설정하지 않았다. 미설정/32바이트 미만이면 서명이 필요한 목록·모두 읽음은 503이다. 설정·미확인 수·개별 읽음은 키에 의존하지 않는다.
+
+V23과 RELABEL을 포함한 FE 6종 소비자를 함께 반영한다. 기존 설정값과 notifications 원본을 보존하고 기존 사건을 새 알림함으로 소급하지 않는다. 일회용 PostgreSQL 테스트에서만 마이그레이션을 검증했으며 공유/운영 DB 변경은 별도 실행 승인 대상이다. 전환·DB 사건 생산 경계와 운영 인수 범위는 [F15.7](../../../docs/development/service-backend/community.md#notification-policy)을 따른다.
+
+## V24 탈퇴 스키마·권한 (180)
+
+V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdrawn_at`, 공개 분석의 `withdrawn_at`과 두 정리 함수를 추가한다. 적용은 회원 데이터 삭제 경로를 준비하는 스키마 변경이며 **공유·운영 DB에는 이 작업에서 적용하지 않는다**. 일회용 PostgreSQL에서 전체 migration·V18 구버전 업그레이드와 실제 앱 역할의 함수 실행 권한을 검증한다. 운영 적용 전 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 처리 근거·본문 삭제 절차·복원 계획을 확인하고 별도 승인받는다. 기본 기능 스위치는 `planetory.withdrawal.enabled=false`다.

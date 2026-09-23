@@ -1,5 +1,6 @@
 package com.planetory.backend.domain.post.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.exploration.service.HistoryService;
@@ -7,6 +8,7 @@ import com.planetory.backend.domain.exploration.service.HistoryViews;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.domain.exploration.service.SubmissionService;
 import com.planetory.backend.domain.member.service.MemberService;
+import com.planetory.backend.domain.member.service.FollowTokens;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import java.math.BigDecimal;
@@ -31,16 +33,59 @@ public class CommunityReadService {
     private final CommentService comments;
     private final HistoryService histories;
     private final PublicAnalysisAccess publicAccess;
+    private final FollowTokens followTokens;
 
     private static final Map<String, String> SYSTEM = Map.of("type", "SYSTEM", "displayName", "SYSTEM");
-    // StarService.requireOpenStarBoard와 같은 집합 조건. 목록에서 회원별 개인 잠금을 검사하지 않는다.
-    private static final String OPEN_BOARD = "(p.tic_id IS NULL OR EXISTS (SELECT 1 FROM stars star "
-            + "WHERE star.tic_id=p.tic_id AND star.service_status='published' "
-            + "AND EXISTS (SELECT 1 FROM star_unlocks unlock WHERE unlock.tic_id=star.tic_id)))";
+    private static final String OPEN_BOARD = "(p.tic_id IS NULL OR " + StarBoardVisibility.OPEN.formatted("p.tic_id") + ")";
 
     public record FeedItem(String type, String id, String ticId, String title, Object author,
                            long commentCount, Map<String, Object> judgmentSummary, OffsetDateTime createdAt) {}
     public record Feed(List<FeedItem> items, String nextCursor, boolean hasNext) {}
+    public record FollowingItem(String type, String id, String ticId, String title, Object author,
+                                long commentCount, Map<String, Object> judgmentSummary, OffsetDateTime createdAt,
+                                List<String> matchedBy) {}
+    public record FollowingFeed(List<FollowingItem> items, String nextCursor, boolean hasNext) {}
+    private record FollowingRow(FeedRow post, int order, boolean member, boolean star) {}
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public FollowingFeed following(long member, FollowTokens.Page q) {
+        members.requireActive(member);
+        var rows = jdbc.sql("""
+                WITH matching AS (
+                    SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,u.status AS author_status,p.created_at,
+                        CASE WHEN p.kind='user' THEN 0 ELSE 1 END AS kind_order,
+                        (p.kind='user' AND u.status='active' AND EXISTS (SELECT 1 FROM follows f
+                            WHERE f.user_id=:member AND f.target_type='user' AND f.target_id=p.user_id
+                            AND f.target_id<>:member)) AS by_member,
+                        EXISTS (SELECT 1 FROM follows f WHERE f.user_id=:member
+                            AND f.target_type='star' AND f.target_id=p.tic_id) AS by_star
+                    FROM posts p LEFT JOIN users u ON u.id=p.user_id
+                    WHERE p.status='visible' AND %s AND (p.kind='system_thread' OR u.status='active')
+                )
+                SELECT m.*,(SELECT count(*) FROM comments c WHERE c.post_id=m.id AND c.status='visible') AS comments
+                FROM matching m WHERE (by_member OR by_star)
+                    AND (CAST(:at AS TIMESTAMPTZ) IS NULL OR created_at<:at
+                        OR (created_at=:at AND (kind_order>:kind OR (kind_order=:kind AND id<:id))))
+                ORDER BY created_at DESC,kind_order ASC,id DESC LIMIT :limit
+                """.formatted(OPEN_BOARD))
+                .param("member", member).param("at", q.at()).param("kind", q.kind()).param("id", q.id()).param("limit", q.size()+1)
+                .query((r, n) -> new FollowingRow(new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
+                        r.getObject("candidate_id", Long.class), r.getString("title"),
+                        "system_thread".equals(r.getString("kind")) ? SYSTEM : PostService.publicAuthor(r.getLong("user_id"), r.getString("nickname"), r.getString("author_status")),
+                        r.getLong("comments"), r.getObject("created_at", OffsetDateTime.class)),
+                        r.getInt("kind_order"), r.getBoolean("by_member"), r.getBoolean("by_star"))).list();
+        boolean more = rows.size()>q.size();
+        var page = rows.subList(0, Math.min(rows.size(),q.size()));
+        // ponytail: 최대 100개 단건 판단 요약. 후보별 일괄 계약이 제공되면 기존 피드와 함께 교체한다.
+        var items = page.stream().map(r -> {
+            var p = r.post();
+            return new FollowingItem(r.order()==0 ? "POST" : "SIGNAL_THREAD", (r.order()==0 ? "p-" : "st-")+p.id(),
+                    p.tic(),p.title(),p.author(),p.comments(),p.candidate()==null ? null : submissions.publicJudgmentSummary(p.candidate()),
+                    p.at(),r.member() ? (r.star() ? List.of("MEMBER","STAR") : List.of("MEMBER")) : List.of("STAR"));
+        }).toList();
+        var last = page.isEmpty() ? null : page.getLast();
+        return new FollowingFeed(items,more ? followTokens.next(q,last.post().at(),last.order(),last.post().id()) : null,more);
+    }
     public record Signal(BigDecimal periodDays, BigDecimal epochBtjd, BigDecimal durationHours, BigDecimal depthPpm) {}
     public record Thread(String threadId, String ticId, String candidateId, String title, Object author,
                          Signal signal, int commentCount, Map<String, Object> judgmentSummary, OffsetDateTime createdAt) {}
@@ -101,12 +146,12 @@ public class CommunityReadService {
                 case "BODY" -> " AND p.body ILIKE :pattern ESCAPE E'\\\\'";
                 default -> " AND (p.title ILIKE :pattern ESCAPE E'\\\\' OR p.body ILIKE :pattern ESCAPE E'\\\\')";
             };
-            if (!search.author().isEmpty()) filters += " AND p.kind='user' AND lower(u.nickname)=lower(:author)";
+            if (!search.author().isEmpty()) filters += " AND p.kind='user' AND u.status='active' AND lower(u.nickname)=lower(:author)";
             if (!search.board().isEmpty()) filters += " AND p.board=:board";
             if (!search.tag().isEmpty()) filters += " AND p.kind='user' AND p.tag=:tag";
         }
         var statement = jdbc.sql("""
-                SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,p.created_at,
+                SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,u.status AS author_status,p.created_at,
                     (SELECT count(*) FROM comments c WHERE c.post_id=p.id AND c.status='visible') AS comments
                 FROM posts p LEFT JOIN users u ON u.id=p.user_id
                 WHERE p.status='visible' AND %s %s
@@ -123,7 +168,7 @@ public class CommunityReadService {
         }
         var rows = statement.query((r, n) -> new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
                         r.getObject("candidate_id", Long.class), r.getString("title"),
-                        "system_thread".equals(r.getString("kind")) ? SYSTEM : new PostService.Author("u-" + r.getLong("user_id"), r.getString("nickname")),
+                        "system_thread".equals(r.getString("kind")) ? SYSTEM : PostService.publicAuthor(r.getLong("user_id"), r.getString("nickname"), r.getString("author_status")),
                         r.getLong("comments"), r.getObject("created_at", OffsetDateTime.class))).list();
         boolean more = rows.size() > q.size();
         var page = rows.subList(0, Math.min(rows.size(), q.size()));

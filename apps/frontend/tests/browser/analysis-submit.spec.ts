@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PERIODOGRAM_FIXTURE_TICS } from "../../dev/periodogram-fixtures.ts";
 import { beginRange, selectPeak, showJudgment } from "../analysis-ui";
+import { publicationDetail } from "../../dev/publication-fixtures.ts";
+import { historyFixtureResponse } from "../../dev/history-fixtures.ts";
 
 // 화면에서 제출까지 가는 경로. 사다리 자체는 submission-recovery.spec.ts가 보고,
 // 여기서는 버튼·안내·잠금이 사용자에게 어떻게 보이는지 확인한다.
@@ -603,6 +605,12 @@ test("a replay from an older plate is kept, not cancelled", async ({
   await expect(dialog.getByTestId("stale-bundle")).toContainText(
     "접수 당시 판 기준",
   );
+  await expect(
+    dialog.getByRole("button", { name: "다음 곡선 단계로", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "최신 자료 불러오기", exact: true }),
+  ).toBeVisible();
   // 다시 보내지도 않는다.
   expect(posts).toHaveLength(1);
 });
@@ -618,6 +626,59 @@ async function submitFromPeak(page: Page, peak: string, judgment: string) {
   await expect(dialog).toBeVisible();
   return dialog;
 }
+
+test("a restored request shows current publication and progress without resubmitting", async ({
+  page,
+}) => {
+  let posts = 0;
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/stars\/[^/]+\/submissions$/.test(r.url()))
+      posts += 1;
+  });
+  await page.goto(`/analysis/${NORMAL}`);
+  await reachReview(page);
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+  const dialog = page.getByTestId("submission-result");
+  await expect(dialog).toContainText("접수되었습니다");
+  // 서버에는 접수됐지만 클라이언트는 결과를 잃고 탭을 다시 연 상황.
+  await page.evaluate(() => {
+    for (const key of Object.keys(sessionStorage)) {
+      if (
+        !key.startsWith("planetory:analysis-draft:") ||
+        !key.endsWith(',"submission"]')
+      )
+        continue;
+      const value = JSON.parse(sessionStorage.getItem(key)!);
+      if (value.schema === 2 && value.requestId)
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({ ...value, state: "pending" }),
+        );
+    }
+  });
+  await page.route("**/api/v1/submissions/by-request/*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        publication: { state: "PUBLISHED", publicAnalysisId: "pa-9" },
+        progress: {
+          ...body.progress,
+          currentCurveStep: body.curveContext.curveStep + 1,
+        },
+      },
+    });
+  });
+  await page.reload();
+  await dialog
+    .getByRole("button", { name: "접수 결과 확인", exact: true })
+    .click();
+  await expect(dialog).toContainText("접수되었습니다");
+  await expect(dialog).toContainText("공개되어 있습니다.");
+  expect(posts).toBe(1);
+});
 
 test("the result separates matching, scoring and achievement", async ({
   page,
@@ -811,11 +872,31 @@ test("the next actions are the server's list and they lead somewhere real", asyn
   await expect(actions.getByRole("link", { name: "별지도로" })).toBeVisible();
 
   // 공개 화면으로 갔다가 분석 화면으로 돌아온다. 게시로 강제 이동이 아니다(AT-36).
+  // 제출 fixture의 순번은 전체 스위트에서 달라진다. 이 응답이 준 기록만
+  // 테스트 전용 정상 상세·그래프로 연결하고 임의 기록 전체를 허용하지 않는다.
+  const href = await actions.getByRole("link", { name: "공개 내용 검토" }).getAttribute("href");
+  const historyId = new URL(href!, page.url()).pathname.split("/").pop()!;
+  await page.route(`**/api/v1/histories/${historyId}`, route =>
+    route.fulfill({ json: publicationDetail(historyId) }),
+  );
+  await page.route(`**/api/v1/histories/${historyId}/graph?*`, route => {
+    const graph = historyFixtureResponse("/v1/histories/h-501/graph", new URL(route.request().url()).searchParams)!.body as object;
+    return route.fulfill({ json: { ...graph, historyId } });
+  });
+  const publicationWrites: string[] = [];
+  page.on("request", request => {
+    if (request.url().includes("/api/v1/public-analyses") && request.method() !== "GET") publicationWrites.push(request.url());
+  });
   await actions.getByRole("link", { name: "공개 내용 검토" }).click();
   await expect(page).toHaveURL(/\/publication\/[^?]+\?returnTo=/);
-  await expect(page.locator(".unconnected")).toContainText("분석 기록");
-  await page.getByRole("link", { name: "이전 화면으로" }).click();
+  await expect(page.getByRole("heading", { name: "분석 공개 검토", exact: true })).toBeVisible();
+  const review = page.getByRole("region", { name: `기록 ${historyId}`, exact: true });
+  await expect(review).toContainText("통과 모양을 확인했습니다.");
+  await expect(review.getByRole("button", { name: "이 기록 게시", exact: true })).toBeEnabled();
+  await expect(review.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("link", { name: "나중에 · 돌아가기" }).click();
   await expect(page).toHaveURL(`/analysis/${NORMAL}?returnTo=%2Fsky`);
+  expect(publicationWrites).toEqual([]);
 });
 
 test("an action the server did not offer is not invented", async ({ page }) => {
@@ -844,7 +925,10 @@ test("a match the server could not settle offers only a retry", async ({
   const actions = ambiguous.getByTestId("next-actions");
   // 모호한 매칭의 힌트는 다시 풀기뿐이다(AT-13). 갈 곳을 지어내지 않는다.
   await expect(actions).toContainText("다시 풀기");
-  await expect(actions.getByRole("link")).toHaveCount(0);
+  await expect(actions.getByRole("link")).toHaveCount(1);
+  await expect(
+    actions.getByRole("link", { name: "다시 풀기" }),
+  ).toHaveAttribute("href", /retryOfSubmissionId=/);
 });
 
 test("a skipped star is not offered the map or the board", async ({ page }) => {
