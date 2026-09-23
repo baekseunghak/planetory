@@ -36,8 +36,8 @@ from tess_bronze_ctl import (
 )
 
 
-SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v3"
-SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v3"
+SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
+SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v4"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
 DEFAULT_BRONZE_COVERAGE = (
     "/lake/bronze/tess/coverage="
@@ -330,6 +330,7 @@ def finalize_attempt(
         "iteration_tics": int(summary["iteration_tics"]),
         "iteration_succeeded_tics": int(summary["iteration_succeeded_tics"]),
         "iteration_incomplete_tics": int(summary["iteration_incomplete_tics"]),
+        "iteration_qa_stopped_tics": int(summary["iteration_qa_stopped_tics"]),
         "iteration_failed_tics": int(summary["iteration_failed_tics"]),
         "science_audit": science_audit,
         "replication": 2,

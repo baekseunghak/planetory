@@ -64,9 +64,10 @@
 
 **처리 시간 추정** — 합성 2분 cadence 곡선으로 `process_tic`(전처리+최초 BLS+반복 탐색)을 이 PC에서 측정했다: 1 Sector 6.3초, 3 Sector 17.9초, 13 Sector 44.4초. Sector 1~13 제품 247,824개를 executor core 10개로 나누면 약 1.5일이며, 서버 CPU·실데이터 후보 수를 고려한 **추정 범위는 2~5일**이다. 14일 timeout 안에 들지만 실측이 아니다.
 
-**Canary 전에 결정할 것**
-1. 13 Sector 합성 행성에서 반복 탐색이 `removal_qa_failed`로 끝났다. 실제 행성(P=3.69998일)은 step 0에서 수락됐으나, 박스 모델 제거 잔차의 5배 alias(18.5일)가 `alias_multipliers=(0.5, 1, 2)` 밖이라 새 후보로 잡힌 뒤 QA에 실패했다. 고SNR·장기관측 TIC에서 재현될 가능성이 높다.
-2. 이 결과는 `failed_tics`에 합산되어 Canary를 `SilverDataContractError`로 실패시키고(`tess_silver_ctl.py` 426행), retry는 `retryable`을 보지 않고 결정적 실패를 다시 고르므로(`tess_silver.py` 598행) `failed_tics=0`에 수렴하지 않는다. 반복 탐색의 QA 결과를 파이프라인 실패로 셀지, 122 과학 판정으로 분리할지 먼저 정한다.
+**반복 탐색 QA 판정 분리 — 해결(2026-09-23)**
+13 Sector 합성 행성에서 반복 탐색이 `removal_qa_failed`로 끝났다. 실제 행성(P=3.69998일)은 step 0에서 수락됐으나, 박스 모델 제거 잔차의 5배 alias(18.5일)가 `alias_multipliers=(0.5, 1, 2)` 밖이라 새 후보로 잡힌 뒤 QA에 실패했다. 고SNR·장기관측 TIC에서 재현될 가능성이 높다. 이 결과가 `failed_tics`에 합산되어 Canary가 실패하고 retry도 같은 결과를 반복하는 문제가 있었다. 이제 커널 품질 판정 종료(`removal_qa_failed`, `candidate_validation_failed`)는 manifest `status=qa_stopped`(retryable 아님)로 기록하고 `iteration_qa_stopped_tics`에만 센다. `failed_tics`·Canary 판정·retry 선택에서는 빠지며, 멈추기 전 수락 후보와 반복 출력은 보존한다. 같은 합성 사례를 실제 커널로 다시 돌려 `qa_stopped`를 확인했다. `numerical_failure`와 `incomplete`는 그대로 실패 집계에 남는다. 판정 기준(배수 alias 목록 등) 자체의 조정은 122 커널 범위이며 여기서 바꾸지 않았다. 스키마는 stage·summary·attempt 모두 v4다.
+
+**Canary TIC 선택 시 주의** — 최초 전처리 결과가 `insufficient_observations`(유효 관측 500점 미만) 같은 결정적 데이터 판정인 TIC도 여전히 `failed_tics`에 들어가 Canary를 실패시킨다. 첫 Canary는 이전 실클러스터 기준 TIC `259377017`처럼 관측이 충분한 TIC로 고른다.
 
 **전체 `run` 전에 해결할 것**
 1. Spark 작업이 전체를 한 번에 확정하며 `spark.yarn.maxAppAttempts=1`이다. 중간 실패 시 처음부터 다시 돌고, 실패한 attempt의 `/lake/silver/.staging` 부분 출력은 정리되지 않는다. systemd는 5분마다 새 attempt로 재시작하므로 실패가 반복되면 staging이 누적되고, 75% HDFS 사용량 점검에서 멈춘다.

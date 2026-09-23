@@ -34,7 +34,7 @@ try {
 
 $job = Get-Content -LiteralPath $pythonFiles[0] -Raw
 foreach ($required in @(
-    'planetory.tess-silver-stage.v3',
+    'planetory.tess-silver-stage.v4',
     'initial_search=result',
     'f"{args.output}/iteration"',
     'MASK_CONTRACT_VERSION',
@@ -59,8 +59,8 @@ foreach ($forbidden in @('.toPandas(', 'bronze.collect(', 'grouped.collect(')) {
 $control = Get-Content -LiteralPath $pythonFiles[1] -Raw
 foreach ($required in @(
     'validate_bronze_coverage',
-    'planetory.tess-silver-attempt.v3',
-    'planetory.tess-silver-stage.v3',
+    'planetory.tess-silver-attempt.v4',
+    'planetory.tess-silver-stage.v4',
     '("target_combined", "periodogram", "iteration", "manifest")',
     'SilverDataContractError',
     'SILVER_TERMINAL_SCHEMA',

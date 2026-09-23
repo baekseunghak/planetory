@@ -31,8 +31,11 @@ from astro_kernel.preprocessing import (
 
 
 BRONZE_SCHEMA_VERSION = "planetory.tess-bronze.v1"
-SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v3"
-SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v3"
+SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v4"
+SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v4"
+# Iteration stops the kernel reached by its own quality verdict. They are science outcomes of a
+# completed run, not processing failures: the same input and config always give the same answer.
+ITERATION_QA_STOP_TERMINATIONS = frozenset({"removal_qa_failed", "candidate_validation_failed"})
 SILVER_TERMINAL_SCHEMA_VERSION = "planetory.tess-silver-terminal.v1"
 PROVENANCE_STATUS = "quality0_baseline_pending_interval_mask"
 MASKED_PROVENANCE_STATUS = "interval_mask_contract_applied"
@@ -389,6 +392,8 @@ def process_tic(
                 str(detrended.version), _json(iteration),
             )
             stage_status = "succeeded" if iteration["status"] == "ok" else str(iteration["status"])
+            if stage_status == "failed" and iteration["termination"] in ITERATION_QA_STOP_TERMINATIONS:
+                stage_status = "qa_stopped"
             stage_error = iteration["termination"] if stage_status != "succeeded" else None
             retryable = False
         except MemoryError:
@@ -543,6 +548,7 @@ def _schemas(types: object) -> tuple[object, object, object, object, object]:
         types.StructField("iteration_tics", types.LongType(), False),
         types.StructField("iteration_succeeded_tics", types.LongType(), False),
         types.StructField("iteration_incomplete_tics", types.LongType(), False),
+        types.StructField("iteration_qa_stopped_tics", types.LongType(), False),
         types.StructField("iteration_failed_tics", types.LongType(), False),
         types.StructField("contract_ok", types.BooleanType(), False),
         types.StructField("science_audit_json", types.StringType(), False),
@@ -702,7 +708,8 @@ def run(args: argparse.Namespace) -> None:
             manifest_tics == selected_tics
             and written.count() == selected_tics + iteration_tics
             and sum(initial_status(status) for status in ("succeeded", "no_quality_peak", "failed")) == selected_tics
-            and sum(iteration_status(status) for status in ("succeeded", "incomplete", "failed")) == iteration_tics
+            and sum(iteration_status(status) for status in ("succeeded", "incomplete", "qa_stopped", "failed"))
+            == iteration_tics
             and iteration_tics == initial_status("succeeded") + initial_status("no_quality_peak")
             and written_iteration_count == manifest_output_ids.count()
             and not mismatched_iteration_output
@@ -730,6 +737,7 @@ def run(args: argparse.Namespace) -> None:
             iteration_tics,
             iteration_status("succeeded"),
             iteration_status("incomplete"),
+            iteration_status("qa_stopped"),
             iteration_status("failed"),
             contract_ok,
             audit_json,
@@ -750,7 +758,8 @@ def run(args: argparse.Namespace) -> None:
             "SILVER_INITIAL_BLS_COMPLETE "
             f"selected={selected_tics} initial_succeeded={initial_status('succeeded')} "
             f"iteration_succeeded={iteration_status('succeeded')} "
-            f"incomplete={iteration_status('incomplete')} failed={failed_tics}"
+            f"incomplete={iteration_status('incomplete')} qa_stopped={iteration_status('qa_stopped')} "
+            f"failed={failed_tics}"
         )
         results.unpersist()
         selected_ids.unpersist()

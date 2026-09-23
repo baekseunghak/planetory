@@ -210,7 +210,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v3` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료 수를 별도로 기록한다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 
@@ -227,21 +227,23 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 
 `periodogram`은 최초 탐색의 주기·power·epoch·duration·depth·depth error·SNR·SDE 배열, 유효 입력 mask, BLS 설정과 상위 peak·채택 peak JSON을 기록한다. 반복 제거용 residual·periodogram 배열은 현재 만들지 않는다. 이 20,000점 선형 탐색 결과는 후속 `periodograms` Gold용 5,000점 로그 격자 결과가 아니며 그대로 게시하지 않는다. `bls_config_version=bls_grid_v1/poc_linear20k`, `candidate_quality_version=gate_v1/snr7_sde6`을 행마다 기록한다.
 
-`iteration`은 최초 탐색이 정상 수행된 TIC에만 실행한다. 공용 `iterate_bls(..., initial_search=first_result)`에 최초 결과를 메모리에서 직접 전달하고, `result_json`에 단계별 QA·종료 사유·채택 제안·설정 지문을 엄격 JSON으로 기록한다. `residual` 배열을 저장하지 않으며 후보의 `peak_id=step-N`을 DB candidate ID로 취급하지 않는다. `complete=true`인 `status=ok`만 다음 후보 검토의 입력으로 사용할 수 있고 `incomplete`·`failed`는 기존 공개 판을 바꾸지 않는다.
+`iteration`은 최초 탐색이 정상 수행된 TIC에만 실행한다. 공용 `iterate_bls(..., initial_search=first_result)`에 최초 결과를 메모리에서 직접 전달하고, `result_json`에 단계별 QA·종료 사유·채택 제안·설정 지문을 엄격 JSON으로 기록한다. `residual` 배열을 저장하지 않으며 후보의 `peak_id=step-N`을 DB candidate ID로 취급하지 않는다. `complete=true`인 `status=ok`만 다음 후보 검토의 입력으로 사용할 수 있고 `incomplete`·`qa_stopped`·`failed`는 기존 공개 판을 바꾸지 않는다.
 
-manifest schema는 `planetory.tess-silver-stage.v3`이며 TIC·stage 한 쌍당 한 행이다.
+반복 커널이 스스로 내린 품질 판정으로 멈춘 경우(`removal_qa_failed`, `candidate_validation_failed`)는 manifest `status=qa_stopped`로 기록한다. 같은 입력과 설정에서는 항상 같은 결과가 나오는 과학 판정이므로 처리 실패로 세지 않고 retry 대상도 아니다. 멈추기 전까지 수락한 후보와 `result_json`은 그대로 보존한다. 예를 들어 13 Sector 장기관측의 고SNR 행성은 박스 모델 제거 잔차에 `alias_multipliers=(0.5, 1, 2)` 밖의 배수 alias가 남아 여기서 멈출 수 있다. 판정 기준 자체는 122 커널 범위다. `numerical_failure`는 커널의 예외 처리 경로가 코드 결함까지 같은 이름으로 기록하므로 `failed`로 유지한다.
+
+manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 한 행이다.
 
 | 필드 | 계약 |
 | --- | --- |
 | `stage` | `initial_bls`는 모든 TIC, `iteration`은 정상 최초 탐색 TIC에 한 행이다. |
-| `status` | 최초 탐색은 `succeeded`/`no_quality_peak`/`failed`, 반복 탐색은 `succeeded`/`incomplete`/`failed`다. 정상 첫 무후보도 반복 종료를 확인한다. |
+| `status` | 최초 탐색은 `succeeded`/`no_quality_peak`/`failed`, 반복 탐색은 `succeeded`/`incomplete`/`qa_stopped`/`failed`다. 정상 첫 무후보도 반복 종료를 확인한다. |
 | `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. |
 | `input_snapshot_id`, 계산 버전 3종 | 입력과 전처리·탐색·품질 게이트를 함께 고정한다. |
 | `provenance_status`, `mask_contract_version`, `interval_mask_count` | 마스크 공급 여부와 적용한 245 계약을 기록한다. 빈 마스크는 baseline 상태를 유지한다. |
 | `target_location`, `periodogram_location`, `iteration_location` | 실제 생성된 출력만 기록한다. 반복 실패로 출력이 없으면 마지막 값은 null이다. |
 | `error_code`, `error_detail` | 실패 원인과 공백 정규화·500자 제한 상세를 기록한다. 원본 배열은 넣지 않는다. |
 
-`Retry`는 현재 v3 완료 attempt의 manifest에서 `status=failed` 또는 `incomplete`인 TIC만 Bronze와 semi join해 새 attempt에서 최초·반복 단계를 함께 재실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 실패·상한 원인과 코드·입력 수정 여부를 확인한 뒤 명시적으로 시작한다. 이전 v2 attempt는 새 스키마로 직접 재시도하지 않는다.
+`Retry`는 현재 v4 완료 attempt의 manifest에서 `status=failed` 또는 `incomplete`인 TIC만 Bronze와 semi join해 새 attempt에서 최초·반복 단계를 함께 재실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 실패·상한 원인과 코드·입력 수정 여부를 확인한 뒤 명시적으로 시작한다. `qa_stopped` TIC는 선택하지 않는다. 이전 v2·v3 attempt는 새 스키마로 직접 재시도하지 않는다. v3 운영 attempt는 만들어진 적이 없다.
 
 ### 담당자 인계 인터페이스
 

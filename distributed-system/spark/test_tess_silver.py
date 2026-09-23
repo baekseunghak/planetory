@@ -386,6 +386,33 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(result.iteration_manifest[18], "max_iterations_reached")
         self.assertFalse(result.iteration[4])
 
+    def test_iteration_qa_verdict_is_a_science_stop_not_a_processing_failure(self):
+        def stopped_by(termination):
+            def iterate(time, flux, **kwargs):
+                return dict(status="failed", termination=termination, complete=False,
+                            n_accepted=1, accepted=[{"step": 0}], input_snapshot_id=kwargs["input_snapshot_id"],
+                            preprocessing_version=kwargs["preprocessing_version"],
+                            iteration_version=ITERATION_VERSION, iteration_config_sha256="f" * 64,
+                            bls_config_version=kwargs["initial_search"]["bls_config_version"],
+                            candidate_quality_version=kwargs["initial_search"]["candidate_quality_version"])
+            return iterate
+
+        for termination in ("removal_qa_failed", "candidate_validation_failed"):
+            with self.subTest(termination=termination):
+                result = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()),
+                              lambda *args, **kwargs: search_result("ok"),
+                              iteration_location="/final/iteration", iterate=stopped_by(termination))
+                # Accepted candidates before the stop are kept, and it must not count as failed or retry.
+                self.assertEqual(result.iteration_manifest[5:7], ("qa_stopped", False))
+                self.assertEqual(result.iteration_manifest[17], "/final/iteration")
+                self.assertEqual(result.iteration_manifest[18], termination)
+                self.assertEqual(result.iteration[5], 1)
+        # A numerical failure can hide a code defect, so it stays a processing failure.
+        numerical = call([bronze_row()], lambda curves, **kwargs: (prepared(), detrended()),
+                         lambda *args, **kwargs: search_result("ok"),
+                         iteration_location="/final/iteration", iterate=stopped_by("numerical_failure"))
+        self.assertEqual(numerical.iteration_manifest[5], "failed")
+
     def test_unexpected_failure_is_retryable_and_does_not_escape_tic(self):
         failed = call(
             [bronze_row()],
@@ -451,7 +478,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             validate_bronze_coverage(coverage, markers)
 
     def test_attempt_ready_schema_is_versioned(self):
-        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v3")
+        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v4")
 
     def test_coverage_path_cannot_escape_the_bronze_snapshot_root(self):
         for path in ("/tmp/coverage=" + "a" * 64,
