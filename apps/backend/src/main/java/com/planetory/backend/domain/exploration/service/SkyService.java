@@ -38,7 +38,15 @@ public class SkyService {
             new ZoomLevel(0, 0.25), new ZoomLevel(1, 0.5), new ZoomLevel(2, 1),
             new ZoomLevel(3, 2), new ZoomLevel(4, 4));
 
+    /**
+     * 배율 1.0인 기준 단계. 위치 찾기는 카메라를 옮기는 조회라 가장 넓은 쪽도 좁은 쪽도 아닌 기본
+     * 배율을 준다. 단계 목록이 바뀌어도 따라오도록 상수로 박지 않고 찾는다.
+     */
+    private static final int NEUTRAL_LEVEL = ZOOM_LEVELS.stream()
+            .filter(zoom -> zoom.scale() == 1).findFirst().orElseThrow().level();
+
     private final SkyRepository stars;
+    private final StarRepository unlocks;
     private final JdbcClient jdbc;
     private final Clock clock;
     private final SkyProperties properties;
@@ -68,6 +76,27 @@ public class SkyService {
                 PersonalSpiralGalaxyLayout.LAYOUT_VERSION, PRESENTATION_VERSION,
                 stars.countStars(memberId), bounds, tileSize(), ZOOM_LEVELS,
                 stars.findCenterTicIds(memberId), firstVisit, now());
+    }
+
+    /**
+     * 별 위치 찾기(4.1절). 검색·필터로 고른 별이 아직 받지 않은 범위에 있을 때 쓴다.
+     *
+     * <p>발견한 별만 허용한다. 좌표는 별 상세와 <b>같은 조회</b>에서 가져와 세 화면이 어긋나지 않게 한다.
+     * 경계 상자는 그 별이 들어 있는 타일 한 칸이며, 타일 조회와 같은 격자에 맞춘다.
+     *
+     * @throws BusinessException 발견하지 않은 별이면 {@code STAR_LOCKED}
+     */
+    @Transactional(readOnly = true)
+    public SkyViews.Locate locate(long memberId, long ticId) {
+        StarViews.Position position = unlocks.findUnlock(memberId, ticId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STAR_LOCKED))
+                .position();
+        int tile = tileSize();
+        return new SkyViews.Locate(String.valueOf(ticId), position.x(), position.y(), position.depthZ(),
+                NEUTRAL_LEVEL,
+                new SkyViews.TileBounds(Math.floor(position.x() / tile) * tile,
+                        Math.floor(position.y() / tile) * tile, tile, tile),
+                position.layoutOrdinal(), position.layoutVersion(), version(memberId));
     }
 
     /** 프론트 연출 계약 버전. 좌표 배치 버전과 다른 값이다. */
@@ -168,13 +197,13 @@ public class SkyService {
         return new TileBounds(minX, minY, maxX - minX, maxY - minY);
     }
 
-    private void validateLevel(int level) {
+    void validateLevel(int level) {
         if (ZOOM_LEVELS.stream().noneMatch(zoom -> zoom.level() == level)) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
     }
 
-    private void validateBox(double x, double y, double w, double h) {
+    void validateBox(double x, double y, double w, double h) {
         boolean finite = Double.isFinite(x) && Double.isFinite(y)
                 && Double.isFinite(w) && Double.isFinite(h);
         if (!finite || w <= 0 || h <= 0 || w > maxBox() || h > maxBox()) {
@@ -182,7 +211,7 @@ public class SkyService {
         }
     }
 
-    private int validateLimit(Integer requested) {
+    int validateLimit(Integer requested) {
         if (requested == null) {
             return DEFAULT_LIMIT;
         }

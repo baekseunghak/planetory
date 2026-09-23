@@ -3,8 +3,10 @@ package com.planetory.backend.domain.exploration;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.sql.DataSource;
@@ -23,6 +25,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import com.planetory.backend.domain.exploration.service.AnalysisService;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CandidatePeakList;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.MatchedCandidate;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.PeakView;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurrentCurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.TutorialState;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
@@ -36,6 +42,7 @@ import com.planetory.backend.global.error.ErrorCode;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 /**
@@ -77,6 +84,9 @@ class AnalysisDataTest {
     private long smallerId;
     private long largerId;
 
+    /** 이 시험이 쓰는 운영 규칙 버전. {@link #resetRule()} 참조. */
+    private String ruleVersion;
+
     private long memberId;
     private long strangerId;
     private long ticId;
@@ -89,7 +99,8 @@ class AnalysisDataTest {
 
     @BeforeEach
     void seed() {
-        when(residuals.lookup(any())).thenReturn(ResidualResultReader.Lookup.none());
+        when(residuals.lookup(anyLong(), any())).thenReturn(ResidualResultReader.Lookup.none());
+        ruleVersion = resetRule();
         memberId = insertMember();
         strangerId = insertMember();
         ticId = insertStar("published");
@@ -148,13 +159,13 @@ class AnalysisDataTest {
         assertEquals("one_candidate_per_step", bundle.curveStepRule());
 
         var rules = context.selectionRules();
-        assertEquals("rule-0", rules.version());
+        assertEquals(ruleVersion, rules.version());
         assertEquals(2 * 10.0 / 1440.0, rules.minWindowDays(), "10분 bin 케이던스의 2배");
         assertEquals(0.25, rules.phaseWidthMax());
         assertEquals(3.0, rules.maxDurationMultipleOfSuggested());
         assertFalse(rules.allowEmptyPhaseSpan());
         assertEquals(3, rules.fineTune().halfWidthCells());
-        assertEquals("rule-0", context.ruleVersion());
+        assertEquals(ruleVersion, context.ruleVersion());
 
         var progress = context.progress();
         assertEquals("unexplored", progress.stage(), "진행 행이 없으면 시작 전이다");
@@ -459,7 +470,7 @@ class AnalysisDataTest {
     @Test
     void 잔차_결과가_있으면_원본_격자에_잔차_값을_싣는다() {
         OffsetDateTime computedAt = OffsetDateTime.of(2026, 9, 10, 2, 31, 10, 0, ZoneOffset.UTC);
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-77", computedAt,
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-77", computedAt,
                 Map.of(sector14, new Float[] {1.0f, 1.0f, null, 1.0f}, sector41, new Float[] {1.0f, 1.0f}),
                 new Float[] {0.2f, 0.3f, 0.1f}));
         CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
@@ -480,7 +491,7 @@ class AnalysisDataTest {
 
     @Test
     void 잔차_결과의_점_수가_원본과_다르면_내주지_않는다() {
-        when(residuals.lookup(any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-78", null,
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-78", null,
                 Map.of(sector14, new Float[] {1.0f}, sector41, new Float[] {1.0f, 1.0f}), new Float[] {0.2f}));
         CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
 
@@ -500,6 +511,234 @@ class AnalysisDataTest {
         long bundle = jdbc.queryForObject("SELECT id FROM publication_bundles WHERE tic_id = ? AND status = 'current'",
                 Long.class, broken);
         assertThrows(IllegalStateException.class, () -> analysis.curve(memberId, broken, query(bundle, "0")));
+    }
+
+    // ---------- 봉우리와 미세 조정 범위 (5.4) ----------
+
+    /**
+     * 화면이 보는 주기도에서 뽑는다. 후보표에서 뽑으면 매칭 전에 후보 개수와 주기가 드러난다(POL-05).
+     *
+     * <p>{@code PeakView}에 {@code candidateId}가 아예 없어 실수로 채울 수도 없다.
+     */
+    @Test
+    void 봉우리는_현재_주기도에서_세기_순으로_뽑는다() {
+        twoPeakPeriodogram();
+
+        Answer<CandidatePeakList> answer = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0"));
+
+        assertTrue(answer.ready());
+        assertEquals("b-" + currentBundleId, answer.currentBundleId());
+        CandidatePeakList body = answer.body();
+        assertEquals(String.valueOf(ticId), body.ticId());
+        assertEquals(ruleVersion, body.peakRuleVersion(), "운영 규칙 버전을 그대로 쓴다");
+        assertEquals(0, body.curveContext().curveStep());
+
+        assertEquals(List.of(1, 9), peakIndexes(body),
+                "0.9가 먼저고 0.5가 다음이다");
+        assertEquals(List.of(1, 2), body.peaks().stream().map(PeakView::rank).toList());
+        PeakView first = body.peaks().getFirst();
+        assertEquals(2.0, first.periodDays(), 1e-9, "1일에서 한 칸이 2배인 격자다");
+        assertEquals(0.9, first.power(), 1e-6);
+    }
+
+    /** 하드코딩 금지(EXP-05, DAT-11). 판 manifest의 반폭 h=3을 그 봉우리 주기에 적용한 값이다. */
+    @Test
+    void 미세_조정_범위는_판의_반폭을_그_주기에_적용한다() {
+        twoPeakPeriodogram();
+
+        List<PeakView> peaks = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body().peaks();
+
+        var fineTune = peaks.getFirst().fineTune();
+        assertEquals(1.0, fineTune.periodMinDays(), 1e-9, "2일에서 세 칸 아래는 0.25일인데 격자가 1일에서 끝난다");
+        assertEquals(16.0, fineTune.periodMaxDays(), 1e-9, "세 칸 위는 2 × 2^3");
+        assertEquals(2.0, fineTune.periodStepDays(), 1e-9, "그 자리 한 칸 폭이다");
+        assertEquals(1024.0, peaks.get(1).fineTune().periodMaxDays(), 1e-9, "격자 위로 올라가지 않는다");
+    }
+
+    /**
+     * BLS 제안 밴드는 아직 출처가 없다(S15P21C206-141, 미결 5 후속). {@code periodograms}는 주기별
+     * {@code power}만 싣는다. 모르는 값을 추정하지 않고 null로 답하며 키는 빼지 않는다.
+     */
+    @Test
+    void 제안_밴드는_출처가_없으면_null이고_키를_빼지_않는다() {
+        twoPeakPeriodogram();
+
+        PeakView peak = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body().peaks().getFirst();
+
+        assertNull(peak.suggestedDurationHours());
+        assertNull(peak.suggestedPhaseCenter());
+    }
+
+    /** 상위 N은 운영 규칙이 정한다. 여기에 상수를 두지 않는다. */
+    @Test
+    void 상위_N은_운영_규칙에서_온다() {
+        twoPeakPeriodogram();
+        String version = applyRule("{peaks,top_n}", "1");
+
+        CandidatePeakList body = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body();
+
+        assertEquals(List.of(1), peakIndexes(body));
+        assertEquals(version, body.peakRuleVersion());
+    }
+
+    /**
+     * 고조파 배수도 운영 규칙이 정한다. 제출이 「2배 맞음」이라고 판정하는 배수와 목록이 거르는 배수가
+     * 다르면 화면과 채점이 어긋난다.
+     *
+     * <p>2배 자리를 정확히 7칸으로 두어 <b>간격 규칙과 갈라놓는다.</b> h=3이면 최소 간격이 7칸이므로
+     * 7칸 떨어진 봉우리는 간격을 통과하고 고조파 규칙에만 걸린다. 붙여 두면 배수를 지워도 통과해
+     * 이 시험이 고조파를 보지 못한다.
+     */
+    @Test
+    void 고조파_제외는_매칭과_같은_배수를_쓴다() {
+        harmonicGrid(20, 90, 27, 50);
+
+        assertEquals(List.of(20), peakIndexes(analysis.candidatePeaks(memberId, ticId,
+                query(currentBundleId, "0")).body()), "27번은 20번의 정확히 2배라 빠진다");
+
+        String noHarmonic = applyRule("{matching,harmonic_multipliers}", "[1]");
+        CandidatePeakList body = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body();
+
+        assertEquals(noHarmonic, body.peakRuleVersion());
+        assertEquals(List.of(20, 27), peakIndexes(body),
+                "거를 배수가 없으면 남는다. 간격은 7칸이라 통과한다");
+    }
+
+    /** 이미 매칭한 후보만 흐린 선으로 그린다(EXP-13). 나머지를 넣으면 후보 개수가 드러난다(POL-05). */
+    @Test
+    void 매칭한_활성_후보의_주기만_함께_준다() {
+        twoPeakPeriodogram();
+
+        List<MatchedCandidate> matched =
+                analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body().matchedCandidates();
+
+        assertEquals(List.of("c-" + smallerId, "c-" + largerId),
+                matched.stream().map(MatchedCandidate::candidateId).toList(),
+                "매칭하지 않은 후보와 은퇴 후보는 빠진다");
+        assertEquals(3.0, matched.getFirst().periodDays(), 1e-9);
+    }
+
+    /** 조회는 작업을 만들지 않는다(D-14). 매칭 후보는 주기도에서 오지 않으므로 그대로 준다. */
+    @Test
+    void 잔차가_준비되지_않으면_봉우리만_비운다() {
+        twoPeakPeriodogram();
+        CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
+
+        Answer<CandidatePeakList> answer = analysis.candidatePeaks(memberId, ticId, step1);
+
+        assertFalse(answer.ready());
+        assertNull(answer.body().peaks());
+        assertNull(answer.body().residual().status());
+        assertEquals(2, answer.body().matchedCandidates().size());
+    }
+
+    @Test
+    void 잔차_단계는_잔차_주기도에서_뽑는다() {
+        twoPeakPeriodogram();
+        when(residuals.lookup(anyLong(), any())).thenReturn(new ResidualResultReader.Lookup("COMPLETED", "rj-77",
+                OffsetDateTime.of(2026, 9, 10, 2, 31, 10, 0, ZoneOffset.UTC), Map.of(),
+                new Float[] {0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.2f, 0.7f, 0.1f}));
+        CurveQuery step1 = new CurveQuery("b-" + currentBundleId, "1", List.of("c-" + smallerId), null, null);
+
+        CandidatePeakList body = analysis.candidatePeaks(memberId, ticId, step1).body();
+
+        assertEquals("COMPLETED", body.residual().status());
+        assertEquals(List.of(9), peakIndexes(body),
+                "원본의 1번 봉우리가 아니라 잔차의 9번이다");
+        assertEquals(512.0, body.peaks().getFirst().periodDays(), 1e-9);
+    }
+
+    /** 검사 순서는 곡선·주기도와 같다(5.1절). 별을 열지 않은 회원은 목록도 볼 수 없다. */
+    @Test
+    void 열지_않은_별의_봉우리는_주지_않는다() {
+        twoPeakPeriodogram();
+
+        assertCode(ErrorCode.STAR_LOCKED,
+                () -> analysis.candidatePeaks(strangerId, ticId, query(currentBundleId, "0")));
+        assertCode(ErrorCode.BUNDLE_CHANGED,
+                () -> analysis.candidatePeaks(memberId, ticId, query(archivedBundleId, "0")));
+    }
+
+    /**
+     * 제출 검증(6.2절)이 화면과 <b>같은 목록</b>을 본다. 두 경로가 갈라지면 화면에 보인 봉우리를 골랐는데
+     * 서버가 모르는 봉우리라고 거절한다.
+     */
+    @Test
+    void 제출_검증용_봉우리는_화면_목록과_같다() {
+        twoPeakPeriodogram();
+        CandidatePeakList body = analysis.candidatePeaks(memberId, ticId, query(currentBundleId, "0")).body();
+
+        var forSubmission = analysis.peaksFor(body.curveContext(), body.peakRuleVersion());
+
+        assertEquals(Set.of(1, 9), forSubmission.keySet());
+        var peak = forSubmission.get(1);
+        assertEquals(1.0, peak.fineTuneMinDays(), 1e-9);
+        assertEquals(16.0, peak.fineTuneMaxDays(), 1e-9);
+        assertNull(peak.suggestedDurationHours(), "출처가 없으면 duration 상한을 걸지 않는다");
+    }
+
+    /** 계산되지 않은 곡선의 봉우리를 사용자가 골랐을 수 없다. 빈 목록이면 제출이 UNKNOWN_PEAK로 거절된다. */
+    @Test
+    void 잔차가_없으면_제출_검증용_봉우리도_비어_있다() {
+        twoPeakPeriodogram();
+        var step1 = new CurveContext("b-" + currentBundleId, 1, List.of("c-" + smallerId), "rm-1", "pg-1");
+
+        assertTrue(analysis.peaksFor(step1, ruleVersion).isEmpty());
+    }
+
+    /**
+     * 1~1024일 11칸이면 비율이 정확히 2라 한 칸이 2배다. 봉우리는 1번(2일)과 9번(512일)이며, 반폭
+     * h=3에서 최소 간격 7칸을 넘고 서로의 2배·0.5배 자리에서도 3칸보다 멀다.
+     */
+    private void twoPeakPeriodogram() {
+        widePeriodogram(0.1f, 0.9f, 0.2f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.2f, 0.5f, 0.1f);
+    }
+
+    /**
+     * 1~1024일 71칸이면 비율이 {@code 2^(1/7)}이라 <b>2배가 정확히 7칸</b>이다. 간격 규칙(h=3이면 7칸)과
+     * 고조파 규칙을 갈라 볼 수 있는 배치라 이 칸 수를 쓴다.
+     */
+    private void harmonicGrid(int... indexAndPower) {
+        Float[] power = new Float[71];
+        Arrays.fill(power, 0.1f);
+        for (int i = 0; i < indexAndPower.length; i += 2) {
+            power[indexAndPower[i]] = indexAndPower[i + 1] / 100f;
+        }
+        widePeriodogram(power);
+    }
+
+    private static List<Integer> peakIndexes(CandidatePeakList body) {
+        return body.peaks().stream().map(PeakView::gridIndex).toList();
+    }
+
+    /**
+     * rule-0 값을 새 버전으로 다시 적용한다.
+     *
+     * <p>운영 규칙 이력은 고치거나 지울 수 없고(V9 {@code operation_settings_keep_history}) 가장 늦게
+     * 적용된 행이 현재다. 그래서 규칙을 바꾸는 시험이 뒤 시험에 값을 남긴다. 시험마다 기준값을 다시
+     * 올려 실행 순서에 기대지 않는다.
+     */
+    private String resetRule() {
+        String version = "test-" + UUID.randomUUID();
+        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
+                        + " SELECT ?, \"values\", clock_timestamp(), '141 test'"
+                        + " FROM operation_settings WHERE rule_version = 'rule-0'", version);
+        return version;
+    }
+
+    private void widePeriodogram(Float... power) {
+        jdbc.update("UPDATE periodograms SET period_min_days = 1, period_max_days = 1024, n_periods = ?,"
+                + " power = ? WHERE bundle_id = ?", power.length, power, currentBundleId);
+    }
+
+    /** 지금 규칙에서 한 값만 바꾼 새 버전을 적용한다. 운영 규칙에서 온다는 것을 값으로 보인다. */
+    private String applyRule(String path, String value) {
+        String version = "test-" + UUID.randomUUID();
+        jdbc.update("INSERT INTO operation_settings(rule_version, \"values\", applied_at, note)"
+                        + " SELECT ?, jsonb_set(\"values\", ?::text[], ?::jsonb), clock_timestamp(), '141 test'"
+                        + " FROM operation_settings WHERE rule_version = 'rule-0'",
+                version, path, value);
+        return version;
     }
 
     // ---------- 도우미 ----------

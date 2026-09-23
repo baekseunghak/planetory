@@ -1,5 +1,6 @@
 import type { Plugin } from "vite";
 import { searchFixtureFeed } from "./search-fixture.ts";
+import { publicAnalysisFixture } from "./public-analysis-fixtures.ts";
 
 // Development HTTP samples only. Imported exclusively by Vite serve mode.
 const date = "2026-09-18T01:00:00Z";
@@ -83,6 +84,7 @@ type CommunityFixtureOptions = {
   materialWrites?: boolean;
   currentNickname?: () => string;
   searchable?: boolean;
+  hotTopics?: boolean;
 };
 
 export function communityFixturePlugin({
@@ -92,6 +94,7 @@ export function communityFixturePlugin({
   materialWrites = false,
   currentNickname,
   searchable = false,
+  hotTopics = false,
 }: CommunityFixtureOptions = {}): Plugin {
   const validMaterials = (input: Record<string, unknown>, ticId: unknown) => {
     const ids = input.historyIds ?? [],
@@ -224,19 +227,21 @@ export function communityFixturePlugin({
               "padding:8px 28px;background:#142239;color:#c9dafa;font:12px system-ui",
             "data-testid": "community-fixture-notice",
           },
-          children: searchable
-            ? "217 개발 검증용 검색 · 합성 게시글이며 실제 검색 서버 연결 전입니다"
-            : currentNickname
-              ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
-              : materialWrites
-                ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
-                : reactionWrites
-                  ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
-                  : commentWrites
-                    ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
-                    : writable
-                      ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
-                      : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
+          children: hotTopics
+            ? "218 개발 검증용 핫 토픽 · 합성 응답이며 실제 집계 서버 연결 전입니다"
+            : searchable
+              ? "217 개발 검증용 검색 · 합성 게시글이며 실제 검색 서버 연결 전입니다"
+              : currentNickname
+                ? "214 개발 검증용 프로필 · 실제 회원 데이터가 아닙니다"
+                : materialWrites
+                  ? "213 개발 검증용 첨부 · 합성 자료이며 공용 그래프는 연결 전입니다"
+                  : reactionWrites
+                    ? "212 개발 검증용 반응 · 실제 데이터가 아닙니다"
+                    : commentWrites
+                      ? "211 개발 검증용 댓글 · 실제 데이터가 아닙니다 · 서버 재시작 시 초기화"
+                      : writable
+                        ? "210 개발 검증용 데이터 · 실제 게시글이 아닙니다 · 서버 재시작 시 초기화"
+                        : "209 개발 검증용 데이터 · 실제 게시글이 아닙니다",
           injectTo: "body-prepend",
         },
       ];
@@ -348,6 +353,7 @@ export function communityFixturePlugin({
               ? Array.from({ length: 24 }, (_, i) => ({
                   historyId: "h-" + (501 + i),
                   ticId: "259377017",
+                  submissionKind: "candidate",
                   userJudgment: "UNSURE",
                   submittedAt: date,
                   publication: {
@@ -392,6 +398,12 @@ export function communityFixturePlugin({
           });
           return;
         }
+        // #191 공개 분석 상세. 첨부와 같은 공개 투영이며 겉의 네 값만 다르다.
+        const analysis = publicAnalysisFixture(url.pathname, url.searchParams);
+        if (req.method === "GET" && analysis) {
+          send(analysis.body, analysis.status);
+          return;
+        }
         const attachment = url.pathname.match(
           /^\/v1\/(posts|comments)\/([^/]+)\/history-attachments\/([^/]+)$/,
         );
@@ -433,57 +445,62 @@ export function communityFixturePlugin({
             judgment: "UNSURE",
             evidenceChecks: ["ushape"],
             memo: "213 합성 첨부 메모",
-            graph: {
-              historyId,
-              reproduction: {
-                submittedBundleId: "b-1",
-                currentBundleId: "b-2",
-                residualReproducible: true,
-                fallbackReason: null,
-              },
-              selection: {
-                userPeriodDays: 3.21,
-                correctedPeriodDays: 3.21,
-                harmonicMultiplier: 1,
-                epochBtjd: 1684.02,
-                durationHours: 2.4,
-              },
-              curve: submitted
+            graph:
+              url.searchParams.get("includeGraph") === "false"
                 ? null
                 : {
-                    ticId: "259377017",
-                    bundleId: "b-2",
-                    curveContext: {
-                      bundleId: "b-2",
-                      curveStep: 0,
-                      removedCandidateIds: [],
-                      residualModelVersion: "rm-1",
-                      periodogramConfigVersion: "pg-1",
+                    historyId,
+                    reproduction: {
+                      submittedBundleId: "b-1",
+                      currentBundleId: "b-2",
+                      isPreviousSubmission: true,
+                      currentFoldReferenceTimeBtjd: 1683.35,
+                      residualReproducible: true,
+                      fallbackReason: null,
                     },
-                    foldReferenceTimeBtjd: 1683.35,
-                    segments: [
-                      {
-                        segmentId: "seg-1",
-                        sector: 14,
-                        binningRevision: 1,
-                        startBtjd: 1683.35,
-                        binMinutes: 10,
-                        nPoints: 4,
-                        flux: [1, 0.99, null, 1.01],
-                        fluxScatter: 0.001,
-                        gaps: [[2, 2]],
-                      },
-                    ],
+                    selection: {
+                      userPeriodDays: 3.21,
+                      correctedPeriodDays: 3.21,
+                      harmonicMultiplier: 1,
+                      epochBtjd: 1684.02,
+                      durationHours: 2.4,
+                    },
+                    curve: submitted
+                      ? null
+                      : {
+                          ticId: "259377017",
+                          bundleId: "b-2",
+                          curveContext: {
+                            bundleId: "b-2",
+                            curveStep: 0,
+                            removedCandidateIds: [],
+                            residualModelVersion: "rm-1",
+                            periodogramConfigVersion: "pg-1",
+                          },
+                          foldReferenceTimeBtjd: 1683.35,
+                          segments: [
+                            {
+                              segmentId: "seg-1",
+                              sector: 14,
+                              binningRevision: 1,
+                              startBtjd: 1683.35,
+                              binMinutes: 10,
+                              nPoints: 4,
+                              flux: [1, 0.99, null, 1.01],
+                              fluxScatter: 0.001,
+                              gaps: [[2, 2]],
+                            },
+                          ],
+                        },
+                    snapshot:
+                      submitted && historyId !== "h-502"
+                        ? {
+                            bins: 150,
+                            foldedFlux: Array(150).fill(1),
+                            foldedError: Array(150).fill(0.001),
+                          }
+                        : null,
                   },
-              snapshot:
-                submitted && historyId !== "h-502"
-                  ? {
-                      bins: 150,
-                      foldedFlux: Array(150).fill(1),
-                      foldedError: Array(150).fill(0.001),
-                    }
-                  : null,
-            },
           });
           return;
         }

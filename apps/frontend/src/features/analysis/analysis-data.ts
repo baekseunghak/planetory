@@ -21,6 +21,40 @@ export type AnalysisContext = {
   periodSelectionRules?: { version: string; halfWidthCells: number };
   selectionContract: SelectionContract;
   notice?: "STEP_NOT_RESTORABLE";
+  /**
+   * 특수 제출(#187)이 무엇을 내놓을 수 있는지 판단하는 값. 없으면 null이다.
+   * 관측 export 문맥에는 이 필드가 없을 수 있어 필수로 만들지 않는다.
+   * 서버가 최종 권한이며 조건이 아니면 409로 거절한다.
+   */
+  progressStage: "unexplored" | "in_progress" | "completed" | null;
+  /** 튜토리얼 건너뛰기 허용 여부. 근거가 없으면 제안하지 않는다. */
+  skipAvailable: boolean;
+  /**
+   * [다음 곡선]의 기본 대상(5.1절). 매칭한 활성 후보를 **전부 제거한** 문맥을
+   * 서버가 통째로 준다. 프론트가 제거 조합을 계산하지 않는다.
+   *
+   * 남은 탐색 가능 신호가 없으면 null이고, 그때는 `nextResidual`도 null이다.
+   */
+  nextCurveContext: CurveContext | null;
+  /** 지금 단계의 잔차 캐시 상태. `curveStep=0`이면 `COMPLETED` 고정이다. */
+  currentResidual: ResidualState;
+  /**
+   * 다음 단계의 잔차 캐시 상태. **누르기 전에 이미 계산돼 있는지 알 수 있다.**
+   * 캐시면 작업을 요청하지 않고 곧바로 전환한다.
+   */
+  nextResidual: ResidualState | null;
+  /** 이 판에서 회원이 매칭한 활성 후보. 단계 표시에 쓴다. */
+  matchedCandidateIds: string[];
+};
+
+/**
+ * 잔차 캐시 상태(2.4절). `status`가 null이면 **결과도 작업도 없다**는 뜻이며
+ * 상태 열거형의 값이 아니다(D-14). 그때는 폴링하지 않는다.
+ */
+export type ResidualState = {
+  status: string | null;
+  jobId: string | null;
+  computedAt: string | null;
 };
 export type CurveSegment = {
   segmentId: string;
@@ -159,10 +193,86 @@ export function decodeAnalysisContext(
     "STEP_NOT_RESTORABLE"
       ? ({ notice: "STEP_NOT_RESTORABLE" } as const)
       : {}),
+    progressStage: readStage(data.progress),
+    ...readSteps(data, curveContext),
+    // 근거가 없으면 false다. 건너뛰기를 잘못 제안하면 409를 받는다.
+    skipAvailable:
+      record(data.tutorial ?? {}, "tutorial").skipAvailable === true,
   };
 }
-export function curvePath(context: AnalysisContext): string {
-  const curve = context.curveContext;
+export function readResidualState(value: unknown, at: string): ResidualState {
+  const row = record(value, at);
+  const maybe = (item: unknown, field: string) =>
+    item === undefined || item === null ? null : text(item, `${at}.${field}`);
+  return {
+    status: maybe(row.status, "status"),
+    jobId: maybe(row.jobId, "jobId"),
+    computedAt: maybe(row.computedAt, "computedAt"),
+  };
+}
+
+/**
+ * 단계 이동에 필요한 값(5.1절). `nextCurveContext`와 `residualForNextStep`은
+ * **함께 있거나 함께 없어야 한다.** 한쪽만 오면 다음 단계가 있는지 없는지
+ * 알 수 없으므로 거절한다.
+ */
+function readSteps(
+  data: Record<string, unknown>,
+  current: CurveContext,
+): Pick<
+  AnalysisContext,
+  | "nextCurveContext"
+  | "currentResidual"
+  | "nextResidual"
+  | "matchedCandidateIds"
+> {
+  const hasNext =
+    data.nextCurveContext !== undefined && data.nextCurveContext !== null;
+  const hasResidual =
+    data.residualForNextStep !== undefined && data.residualForNextStep !== null;
+  if (hasNext !== hasResidual) invalid("nextCurveContext/residualForNextStep");
+  const next = hasNext ? readCurveContext(data.nextCurveContext) : null;
+  // 다음 단계가 지금보다 앞일 수는 없다. 지금 문맥의 제거 조합은 매칭한
+  // 후보의 부분집합이고(7.1절), 다음 문맥은 그 전부를 제거한 것이기 때문이다.
+  // **같을 수는 있다.** 아직 하나도 매칭하지 않았으면 둘 다 원본이다.
+  if (next && next.curveStep < current.curveStep)
+    invalid("nextCurveContext.curveStep");
+  const progress = record(data.progress ?? {}, "progress");
+  return {
+    nextCurveContext: next,
+    currentResidual: readResidualState(
+      data.residualForCurrentStep ?? {},
+      "residualForCurrentStep",
+    ),
+    nextResidual: hasNext
+      ? readResidualState(data.residualForNextStep, "residualForNextStep")
+      : null,
+    matchedCandidateIds:
+      progress.matchedCandidateIds === undefined
+        ? []
+        : array(progress.matchedCandidateIds, "progress.matchedCandidateIds")
+            .map((id) => text(id, "progress.matchedCandidateIds"))
+            .sort(),
+  };
+}
+
+const stages = ["unexplored", "in_progress", "completed"] as const;
+function readStage(value: unknown): AnalysisContext["progressStage"] {
+  if (value === undefined || value === null) return null;
+  const stage = record(value, "progress").stage;
+  if (stage === undefined || stage === null) return null;
+  const known = stages.find((item) => item === stage);
+  return known ?? invalid("progress.stage");
+}
+/**
+ * 곡선 조회 경로. **보고 있는 문맥**을 받는다. 단계를 옮기면 진입 때 받은
+ * 문맥이 아니라 그 목표의 곡선을 읽어야 한다.
+ */
+export function curvePath(
+  context: AnalysisContext,
+  target: CurveContext = context.curveContext,
+): string {
+  const curve = target;
   const query = new URLSearchParams({
     bundleId: curve.bundleId,
     curveStep: String(curve.curveStep),
@@ -192,7 +302,7 @@ function readSegment(value: unknown): CurveSegment {
     return [start, end];
   });
   const startBtjd = number(data.startBtjd, "startBtjd") as Btjd;
-  if (!Number.isFinite(startBtjd + (binMinutes / 1440) * (nPoints - 1)))
+  if (!Number.isFinite(startBtjd + (binMinutes / 1440) * nPoints))
     invalid("time range");
   return {
     segmentId: text(data.segmentId, "segmentId"),

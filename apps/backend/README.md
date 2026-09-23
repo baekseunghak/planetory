@@ -2,13 +2,24 @@
 
 Java 21 · Spring Boot 4.1.1 · Gradle Wrapper 9.7.1 · PostgreSQL 18.6 기반 서비스 백엔드다.
 
-PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD는 [서비스 API 명세](docs/service-api-spec.md) 3장·5장·6장을 따른다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며, 피드·첨부·반응 API는 아직 구현하지 않았다.
+PostgreSQL 연결, ERD v1.1 기반 Flyway 최초 마이그레이션, JPA·JdbcClient 병행 데이터 접근, 공통 오류 응답, 로컬 Swagger UI·예제 API를 제공한다. OAuth 로그인·회원 생성·세션 인증·내 정보 조회는 [OAuth 설정 안내](docs/oauth-setup.md)를 따른다. 닉네임 변경·타인 공개 프로필·첫 방문 안내 완료 저장, 일반 게시글 CRUD와 일반 글·공식 스레드의 1단계 댓글 CRUD, 본인 History 첨부·공개 조회와 일반 글 반응은 [서비스 API 명세](docs/service-api-spec.md) 3~9장을 따른다. 전체/별 기본 피드·공식 스레드·공개 분석 목록/상세도 제공한다. 제공자 자격 증명과 실제 튜토리얼 초기 데이터는 별도로 설정하며 피드의 제목·본문·현재 닉네임·TIC·게시판·태그 검색을 제공한다(169). 공개 출처 카드는 아래 167 안내를 따른다.
+
+S15P21C206-175는 알림함·설정 API와 등급/개인 재개/새 원글/댓글 사건을 제공한다. 별 구독 재개·챌린지 시작·신호 상태 변경은 V23의 DB 트리거로 원천 사건과 당시 수신자를 보존한다. 목록·모두 읽음의 `NOTIFICATION_SIGNING_KEY`와 V23 전환은 [개발 환경](docs/development-setup.md#notification-key), API 형식은 [P1 계약 3·4절](docs/p1-service-contract.md)을 따른다.
 
 이 문서는 처음 받은 PC에서 서버를 띄우기까지만 담는다. 버전 근거·마이그레이션 규칙·코드 작성 규칙은 [개발 환경 안내](docs/development-setup.md)를 본다.
 
+S15P21C206-166의 신호별 대표 공개 후보 조회와 최대 20개 순차 일괄 공개는 [서비스 API 9.4절](docs/service-api-spec.md#batch)을 따른다. 기존 단건 공개·성과 처리를 항목별 독립 트랜잭션으로 재사용하며 신규 테이블·마이그레이션은 없다.
+
+S15P21C206-150의 판 전환 후처리는 `POST /internal/bundles/{bundleId}/activated`로 실행한다([탐사 API 10장](docs/exploration-api-spec.md)). 회원 세션이 아니라 `INTERNAL_SERVICE_TOKEN`으로 설정한 공유 비밀을 요청 헤더 `X-Planetory-Service-Token`에 넣어 부른다. **설정하지 않으면 `/internal/**` 전체가 401이라 로컬에서도 부를 수 없다.** 실제 호출자인 Publisher(S15P21C206-87)는 아직 없으므로 지금은 직접 부를 때만 필요하다.
+
+```sh
+INTERNAL_SERVICE_TOKEN=local-only ./gradlew bootRun
+curl -X POST http://localhost:8080/internal/bundles/b-1/activated -H 'X-Planetory-Service-Token: local-only'
+```
+
 ## 빠른 시작
 
-준비물은 **Docker Desktop(실행 중)** 하나다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
+준비물은 **Docker Desktop(실행 중)**과 별도 Redis 두 인스턴스다. local 기본 연결은 세션 `localhost:16379`, 캐시 `localhost:16380`이다. 다른 주소에서는 `SESSION_REDIS_HOST`·`SESSION_REDIS_PORT`·`CACHE_REDIS_HOST`·`CACHE_REDIS_PORT`를 설정한다. 로그인 저장소와 계산 캐시를 같은 인스턴스로 지정하지 않는다. [Redis 연결·검증 경계](docs/oauth-setup.md#redis-연결과-저장-경계237)를 따른다. Gradle·JDK 21은 설치하지 않아도 된다(Gradle Wrapper가 받아 온다. Wrapper 실행용 Java 17 이상만 있으면 된다).
 
 ```sh
 cd apps/backend
@@ -33,6 +44,13 @@ cd apps/backend
 
 ```sh
 ./gradlew clean build      # Windows: .\gradlew.bat clean build
+```
+
+로컬 Redis가 없다면 아래 두 개발용 컨테이너를 먼저 실행한다(운영 설정이 아니다). Gradle은 Redis를 자동으로 시작하지 않는다.
+
+```powershell
+docker run -d --name planetory-local-session -p 127.0.0.1:16379:6379 redis:8.2-alpine
+docker run -d --name planetory-local-cache -p 127.0.0.1:16380:6379 redis:8.2-alpine
 ```
 
 ### IDE에서 실행
@@ -95,6 +113,35 @@ docker compose --profile service up -d --wait service-db
 
 ## 더 보기
 
+일반 글 반응(163)은 최종 상태 PUT과 반응자 커서 GET을 제공하며 상세·수정 응답에 실제 반응 합계를 반환한다. `./gradlew -PskipLocalDb test --tests '*PostReactionTest' --tests '*MemberCommunityPermissionTest' --tests '*PublicAnalysisTest'`로 일회용 PostgreSQL의 HTTP·동시성·삭제 경합·최소 권한·공개 판단 비변경을 검증한다. [서비스 API 8장](docs/service-api-spec.md#reactions), [V16 권한 안내](docs/development-setup.md#v16-일반-글-반응-권한)를 따른다.
+
+공개 분석 등록(161)은 `POST /api/v1/public-analyses`로 본인 History를 공식 스레드에 등록하고 성과·별 발견을 같은 트랜잭션으로 확정한다. `PublicAnalysisTest`가 실제 제출부터 공개·동시성·롤백·앱 역할 권한을 검증한다. 취소/재공개(162)와 목록/상세(164)를 제공하며 일괄 API는 후속 티켓이다. 입력과 재시도 계약은 [서비스 API 9.1절](docs/service-api-spec.md#publication)을 따른다. V14 적용 순서는 [마이그레이션 안내](docs/development-setup.md#v14-공개-분석-등록-권한)를 확인한다.
+
+히스토리 조회(148)는 개인 목록·상세·CURRENT/SUBMITTED 그래프와 서비스 도메인용 공개 투영을 제공한다. [계약·160 인계](docs/exploration-api-spec.md#851-서비스-도메인-인계148--160공개-분석-조회), `./gradlew -PskipLocalDb test --tests '*HistoryTest'`. 일회용 PostgreSQL에서 실제 제출·조회·권한·판 교체를 검증한다. 160은 이 공개 투영과 Graph를 재사용하며 147 잔차 공급자·프론트 실제 렌더러 연결은 별도 인수다.
+
+History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결한다. `./gradlew -PskipLocalDb test --tests '*HistoryAttachmentTest' --tests '*MemberCommunityPermissionTest'`로 실제 제출부터 첨부·공개 HTTP·권한 철회·V13 앱 역할 권한을 검증한다. 그래프 503 시 같은 부모 경로의 `includeGraph=false`로 공개 내용을 별도 조회한다. 상세 입력·권한·관련 티켓 경계는 [서비스 API 7장](docs/service-api-spec.md#attachments)을 따른다.
+
+제출 처리(143)는 `POST /api/v1/stars/{ticId}/submissions`다. V12가 요청 해시와 최초 응답 보존 열을 추가한다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest'`는 Docker의 일회용 PostgreSQL에서 저장·재전송·롤백·보안 필터를 검증하며 기존 개발 DB를 사용하지 않는다. 봉우리/잔차는 테스트 경계만 대체하고 실제 141·147 연결은 담당자 인계 후 검증한다. [채택 계약과 인수 구분](../../docs/api/exploration/submission-readiness.md).
+
 - [개발 환경 안내](docs/development-setup.md) — 설치 버전, 환경변수 전체, Flyway 규칙, 스키마 담당 합의, 검증 결과, 코드 구조·작성 규칙
 - [서비스 API 명세](docs/service-api-spec.md) · [탐사 API 명세](docs/exploration-api-spec.md) · [API 명세 파트 분담](docs/README.md)
 - [프로젝트 문서 지도](../../docs/README.md) — 요구사항·아키텍처·데이터·운영 문서 진입점
+
+전체·비교 통계(178)는 인증된 `GET /api/v1/statistics`와 별도 `statistics` 운영 명령이다. V21은 173의 V20 다음에 적용한다. MV 10분·일별 기준선은 [통계 실행 런북](../../docs/operations/statistics-runbook.md)을 따르며 웹 요청에서 갱신하지 않는다. `StatisticsAggregationTest`, `StatisticsMigrationTest`, `StatisticsCommandTest`는 전용 일회용 PostgreSQL에서 모수·중앙값·실패·최소권한·신규 및 업그레이드를 검증한다. 공유/운영 DB 적용과 스케줄 활성화는 별도다.
+
+커뮤니티 조회(164)는 전체/별 기본 피드, SYSTEM 공식 스레드 상세, 판단 필터 공개 분석 목록과 제한된 공개 상세를 제공한다. 서비스 API 4.1·9.2절의 지원 쿼리·커서·별 열림·no-store 계약을 따른다. CommunityReadTest는 일회용 PostgreSQL에서 HTTP·동일 스냅샷·공개 그래프 접근 철회를 검증한다. 검색 전체(169)·핫 토픽(171)·팔로우(173)는 후속 범위다.
+
+출처 카드(167)는 같은 별의 공식 스레드·공개 분석 미리보기와 글·댓글 연결을 제공한다. 취소·숨김된 기존 출처는 ID 없는 안내만 반환하며 본문 수정에서 보존한다. [서비스 API 5~7장](docs/service-api-spec.md#attachments), [V18 권한](docs/development-setup.md#v18-출처-관계-권한)을 따른다. `SourceCardTest`는 일회용 PostgreSQL에서 HTTP·공개 상태·동일 스냅샷·교체 및 삭제 경합·최소 앱 권한·성과 비변경을 검증한다.
+
+핫 토픽(171)은 [서비스 API 4.2절](docs/service-api-spec.md#42-핫-토픽)에 따라 현재 유효 참여자 10명 이상 공식 스레드를 전역 순위와 전용 커서로 제공한다. 위 164 구현 당시의 후속 범위 중 171을 구현했다. `./gradlew -PskipLocalDb test --tests '*HotTopicsTest' --tests '*CommunityReadTest' --tests '*PublicAnalysisTest'`는 일회용 PostgreSQL에서 선정·공개 철회·커서·동일 스냅샷·앱 역할 및 기존 조회·공개 회귀를 검증한다. 새 테이블·마이그레이션은 없고 실제 프론트 브라우저 인수는 별도다.
+
+171 리뷰 보완: 댓글 수는 선정 SQL에서 함께 조회하며 항목별 추가 왕복을 하지 않는다. 선정과 커서의 임계값은 `HotTopicsQuery.HOT_TOPIC_MIN_PARTICIPANTS`를 공유한다. 합성 스레드 100개 테스트의 실행 계획 출력은 측정 자료이며 특정 인덱스 사용을 보장하는 검사가 아니다. 해당 SQL 측정 시간은 항목별 판단 요약을 포함한 전체 API 응답 시간이 아니다.
+
+현재 챌린지 조회(168)는 인증된 `GET /api/v1/challenges/current`로 운영 active 회차·튜토리얼 완료 자격·별 단위 참여자 수를 반환한다. 기존 퀘스트 집계를 재사용하고 GET에서 발견·안내 확인을 저장하지 않는다. 상세 계약은 [서비스 API 11장](docs/service-api-spec.md#11-주간-챌린지첫-접속-안내--f17)을 따른다. `./gradlew -PskipLocalDb test --tests '*QuestPanelTest'`로 일회용 PostgreSQL에서 HTTP·자격·참여 수·데이터 불변·앱 역할 조회를 검증한다.
+
+개인 통계(177)는 인증된 `GET /api/v1/me/statistics`로 현재 개인 지표·KST 기준 8주·비교 기준선을 제공한다. 첫 매칭·공개 대표·인정 근거를 구분하며 과거 원천이 없으면 본인 비교값은 당시 자료 부족이다. [서비스 API 12.2.1](docs/service-api-spec.md#1221-본인-상세-통계--177)을 따른다. `./gradlew -PskipLocalDb test --tests '*SubmissionTest' --tests '*QuestPanelTest' --tests '*PublicAnalysisTest' --tests '*StarResultTest'`로 일회용 PostgreSQL에서 검증한다. Snapshot 읽기·마이그레이션은 178과 함께 통합해야 하며 프론트 상세 통계 연결은 별도 인수다.
+
+
+팔로우(173)는 회원·별 관계, 본인 명단/공개 수치, 팔로잉 피드와 비공개 별 관리 해제를 제공한다. [서비스 API 12.1](docs/service-api-spec.md#follow-policy)·[V20 권한](docs/development-setup.md#v20-팔로우-권한)을 따른다. `./gradlew -PskipLocalDb test --tests '*FollowTest' --tests '*MemberCommunityPermissionTest' --tests '*CommunityReadTest' --tests '*HotTopicsTest'`는 실제 앱 역할과 일회용 PostgreSQL에서 관계/경합/페이지/기존 조회 회귀를 검사한다. FE219 관리 UI·첫 페이지 복귀와 실제 배포 인수는 별도다.
+
+공개 은하(251)는 인증된 `GET /api/v1/members/{memberId}/sky`, `/sky/tiles`, `/stars/{ticId}`로 소유자의 전체 보유 별과 성과 조건을 충족한 공개 행성을 조회한다. 저장 좌표를 재사용하며 공개 전용 DTO·커서·버전과 반환 직전 최신 공개 권한 검사를 적용한다. 구현·격리 DB 검증 완료이며 상세 정책과 검증 범위는 [공개 은하 계약](docs/public-sky-contract.md)을 따른다. 새 마이그레이션은 없고, 250 프론트와의 실제 로그인·공개 설정 변경·배포 인수는 244에 남는다.

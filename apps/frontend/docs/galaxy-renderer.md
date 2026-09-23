@@ -1,5 +1,7 @@
 # 204 개별 별 은하 렌더러
 
+2026-09-20 / 215 후속: 불변 원본 배열의 경계 트리·연속 구간과 GPU 속성을 재사용한다. 원본 색·크기·순서·80px 발광 여백·개별 별 수를 보존한다. 같은 두 삼각형을 네 정점으로 그리고, 정지한 별 배경은 같은 해상도의 RGBA8 화면 버퍼에서 복사한다. 정점 버퍼 4개에 배경 framebuffer/renderbuffer 각 1개가 추가되며, 배경 재사용 프레임의 실제 별 draw call은 0이다. 캐시 실패 시 기존 직접 그리기를 사용한다. 상세 구조·GPU 메모리·지표는 [성능 문서](performance-215.md), 수치는 [측정 결과와 제한](ticket-215-readiness.md)을 따른다.
+
 2026-09-18 / 215: 별 배열·경계·스타일·float32 준비 버퍼를 재사용하고, 카메라 이동 시 전체 화면 히트 격자 재생성 대신 월드 쿼드트리 후보만 투영한다. 원본 표시·선택·공전 규칙은 유지한다. [성능 구조·최신 실행](performance-215.md), [현재 인수 상태](ticket-215-readiness.md). 아래 날짜별 내용은 해당 구현 당시 기록이다.
 
 2026-09-17 보완: 206은 기존 상세 조회 주체를 `StarDetail.tsx`로 확장하고 `SceneControl.focusStar`·동일 canvas 행성 확대·복귀를 연결했다. [206 인수 기록](ticket-206-readiness.md)이 현재 상세 구현 기준이며 아래 미래형 설명은 204 작성 당시 범위다.
@@ -13,7 +15,7 @@
 - `npm run dev:galaxy` → 기본58272. 기존 서버와 구분한 이번 확인 주소는 `http://127.0.0.1:58275/sky?reference=1`이다.
 - `204 렌더 검증 도구`에서1/10/100/1000/2501개 계정, 원본 카메라, 회전·기울기·LOD, 고정 별 선택, 실패/복구를 확인한다. `reference=1`은 개발 전용 화면 크기 비교 모드다.
 - 실제 모드는 `VITE_SKY_RENDERER_ENABLED=true`와 기존 `API_PROXY_TARGET`/인증을 사용한다. API가 없으면 오류이며 합성 은하를 만들지 않는다.
-- `npm run build:renderer`는 렌더 플래그를 켠 운영 빌드다. 플래그는 빌드 시점 값이고 기본값은 false다. Docker는 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 활성화한다. Node22/로컬 Nginx는 [통합 검증](local-validation-201-204.md)을 통과했으며 실제 배포는 별도 인수다.
+- `npm run build:renderer`는 렌더 플래그를 켠 운영 빌드다. 플래그는 빌드 시점 값이고 기본값은 false다. Docker는 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 활성화한다. Node22/로컬 Nginx는 [통합 검증](local-validation-201-204.md)을 통과했다. 배포 이미지는 CI `build:frontend`가 이 인자로 빌드한다(S15P21C206-254). 켠 빌드에만 `/health/renderer-enabled` 표식이 생기고 배포 헬스가 그 경로를 본다.
 - 실제 클릭·드래그·휠·키보드·마커는205, 상세 HTTP/정보/행성 확대/복귀 UI는206이다. 개발 도구의 고정 선택 버튼을 해당 기능 완료로 세지 않는다.
 
 ## 데이터와 카메라

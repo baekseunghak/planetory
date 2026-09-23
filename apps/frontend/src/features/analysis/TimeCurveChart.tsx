@@ -291,11 +291,7 @@ export function TimeCurveChart({
             const count = ((right - left) / span) * size.width > 220 ? 3 : 1;
             return Array.from({ length: count }, (_, i) => {
               const x = left + ((right - left) * (i + 0.5)) / count;
-              const btjd =
-                segment.source.startBtjd +
-                x -
-                segment.start -
-                segment.cadence / 2;
+              const btjd = segment.source.startBtjd + x - segment.start;
               return (
                 <span
                   key={`${segment.source.segmentId}-${i}`}
@@ -333,9 +329,10 @@ export function TimeCurveChart({
           {curve.segments.slice(1).map((segment, i) => {
             const previous = curve.segments[i].source;
             const days =
-              segment.source.startBtjd -
+              segment.source.startBtjd +
+              segment.source.binMinutes / 2880 -
               (previous.startBtjd +
-                ((previous.nPoints - 1) * previous.binMinutes) / 1440);
+                ((previous.nPoints - 0.5) * previous.binMinutes) / 1440);
             return (
               <li key={segment.source.segmentId}>
                 Sector {previous.sector} → {segment.source.sector}:{" "}

@@ -6,6 +6,7 @@ validate:compose:
     AIRFLOW_DB_PASSWORD: ci-validation-only
     AIRFLOW_FERNET_KEY: ci-validation-only
     AIRFLOW_WEBSERVER_SECRET_KEY: ci-validation-only
+    AIRFLOW_JWT_SECRET: ci-validation-only
     AIRFLOW_DATABASE_URL: postgresql+psycopg2://airflow:ci-validation-only@127.0.0.1:5432/airflow
     GCP_NODE_1_PROJECT: ci-node-1-project
     GCP_NODE_2_PROJECT: ci-node-2-project
@@ -42,56 +43,114 @@ validate:hadoop-config:
         - infra/distributed-system/*.yaml
         - .gitlab/ci/common.yml
 
+validate:tess-hdfs-loader:
+  stage: validate
+  image: python:3.12-alpine
+  variables:
+    PYTHONDONTWRITEBYTECODE: "1"
+  script:
+    - python distributed-system/ingestion/hdfs/test_tess_hdfs_load.py
+  rules:
+    - changes:
+        - distributed-system/ingestion/hdfs/**/*.py
+        - infra/distributed-system/scripts/*tess-hdfs-load.ps1
+        - .gitlab/ci/common.yml
+
 .docker-build:
   stage: build
   image: docker:27.5-cli
+  # amd64 Runner에서만 실행한다. 다른 Runner로 가면 에뮬레이션 설정 없이 amd64 빌드가 실패한다.
+  tags:
+    - amd64-docker
   services:
-    - name: docker:27.5-dind
-      alias: docker
+    - docker:27.5-dind
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+  # buildx를 쓰지 않는다. buildx의 container driver는 dind 안에 buildkit 컨테이너를 따로 띄우고
+  # push를 그 컨테이너가 수행하는데, Runner의 extra_hosts가 거기까지 닿지 않아 레지스트리 이름 해석에 실패한다.
+  # 일반 build·push는 dind 데몬이 직접 수행하므로 dind에 적용된 extra_hosts를 그대로 쓴다.
   before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
-    - docker run --privileged --rm tonistiigi/binfmt:qemu-v10.2.3-68 --install amd64
-    - docker run --rm --platform linux/amd64 alpine:3.20 uname -m | grep -qx x86_64
-    - docker buildx create --use
+    - test -n "$REGISTRY_IMAGE_PREFIX"
   script:
-    - docker buildx build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS --push .
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS .
+    - docker push "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
 
 .remote-compose-deploy:
   stage: deploy
   image: alpine:3.20
+  # 배포 중에 취소되면 compose가 반쯤 교체된 상태로 남고 deploy.sh의 롤백도 돌지 못한다.
+  # 루트의 default: interruptible: true 를 배포에서만 끈다.
+  #
+  # interruptible: false는 취소만 막고 동시 실행은 막지 않는다. 직렬화는 아래
+  # .deploy-* 가 노드별로 주는 resource_group이 담당한다. 같은 노드로 향하는
+  # 배포가 겹치면 compose.yaml.incoming·deploy.sh.incoming 같은 고정 이름을
+  # 서로 덮어쓰고, 한쪽 mv가 대상을 잃으며, deploy.sh의 .env 기록도 유실된다.
+  # 그룹은 서비스가 아니라 **노드 단위**여야 한다. 프론트와 백엔드를 다른
+  # 그룹으로 두면 같은 경로를 공유하는 경합이 그대로 남는다.
+  interruptible: false
+  variables:
+    # 서비스 배포 job이 덮어쓴다. 비어 있으면 교체만 하고 확인·롤백을 하지 않는다.
+    DEPLOY_HEALTH_PATH: ""
+    DEPLOY_HEALTH_PORT: "8080"
+    DEPLOY_HEALTH_TIMEOUT: "90"
+    DEPLOY_DB_BACKUP: "false"
+    # compose.yaml이 상대 경로로 참조하는 디렉터리. 대상 노드에 함께 올린다.
+    # 비어 있으면 올리지 않는다.
+    DEPLOY_AUX_DIR: ""
+  # SSH 키를 두지 않는다. 대상 노드가 Tailscale SSH로 22번을 처리하므로
+  # authorized_keys가 아니라 tailnet 신원으로 인증한다. job 컨테이너의 연결은
+  # Runner 호스트의 tailnet 신원으로 나가고, ACL의 ssh 규칙이 deploy 계정을
+  # 허용한다. 키를 배포해도 쓰이지 않으면서 회수 대상만 늘어난다.
+  # 접근을 끊으려면 ACL에서 해당 규칙을 지운다.
   before_script:
     - apk add --no-cache openssh-client
     - install -d -m 700 ~/.ssh
-    - cp "$DEPLOY_SSH_KEY" ~/.ssh/id_ed25519
-    - chmod 600 ~/.ssh/id_ed25519
-    - cp "$DEPLOY_KNOWN_HOSTS" ~/.ssh/known_hosts
-    - chmod 600 ~/.ssh/known_hosts
+    # 호스트 키 검증은 Tailscale SSH가 맡는다.
+    - printf 'StrictHostKeyChecking accept-new\nConnectTimeout 15\n' > ~/.ssh/config
+    - chmod 600 ~/.ssh/config
+  # 교체·헬스 확인·롤백은 infra/service/deploy.sh가 배포 노드에서 수행한다.
+  # 한 줄짜리 ssh 명령으로는 어느 단계에서 실패했는지 구분할 수 없고, 실패했을 때
+  # 되돌릴 대상을 기억할 수도 없다. DEPLOY_HEALTH_PATH가 비면 확인과 롤백을
+  # 건너뛰므로 헬스 경로가 없는 GCP 노드 배포는 이전과 같이 동작한다.
   script:
-    - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH"
+    - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH" && test -n "$DEPLOY_USER"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
-    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
-    - export FULL_IMAGE="$CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHA"
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && export $DEPLOY_IMAGE_VARIABLE='$FULL_IMAGE' && docker compose -f compose.yaml config -q && docker compose -f compose.yaml pull $DEPLOY_SERVICES && if [ '$DEPLOY_ACTION' = 'up' ]; then docker compose -f compose.yaml up -d --no-deps $DEPLOY_SERVICES && docker compose -f compose.yaml ps $DEPLOY_SERVICES; fi"
+    # 임시 이름으로 받고 원격에서 옮긴다. 다른 배포가 진행 중일 때 실행 중인
+    # 파일을 덮어쓰면 sh가 중간부터 엉뚱한 바이트를 읽는다.
+    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml.incoming"
+    - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh.incoming"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && mv compose.yaml.incoming compose.yaml && mv deploy.sh.incoming deploy.sh"
+    # compose.yaml이 ./service-db-init 처럼 상대 경로로 읽는 디렉터리를 함께 올린다.
+    # 빠지면 bind mount 대상이 빈 디렉터리로 생성되고, 빈 볼륨을 처음 초기화할 때
+    # 런타임 계정 생성이 조용히 건너뛰어진다.
+    - if [ -n "$DEPLOY_AUX_DIR" ]; then scp -r "$DEPLOY_AUX_DIR" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"; fi
+    - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
+# resource_group은 노드 이름을 그대로 쓴다. 값에 $DEPLOY_HOST를 끼우면 그룹
+# 이름과 GitLab UI에 tailnet 주소가 새어 나가고, 변수 해석 시점에 따라 그룹이
+# 갈릴 수 있다. 노드가 늘면 여기에 한 줄을 더한다.
 .deploy-ec2-a:
   extends: .remote-compose-deploy
+  resource_group: deploy-ec2-a
+  # GitLab "옛 배포 job 막기"(프로젝트 설정 ci_forward_deployment_enabled)는
+  # environment가 있는 job에만 걸린다. 더 새 배포가 있는 상태에서 옛 파이프라인의
+  # 버튼을 누르면 GitLab이 거부한다. 서비스별로 나누지 않고 노드 하나로 둔다.
+  # 배포 job은 노드 공용 compose.yaml을 함께 올리므로, 서비스별 environment면
+  # 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다.
+  # resource_group을 노드 단위로 둔 것과 같은 이유다(S15P21C206-261).
+  environment:
+    name: ec2-a
   variables:
     DEPLOY_HOST: $EC2_A_HOST
     DEPLOY_PATH: $EC2_A_DEPLOY_PATH
     DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
-
-.deploy-ec2-b:
-  extends: .remote-compose-deploy
-  variables:
-    DEPLOY_HOST: $EC2_B_HOST
-    DEPLOY_PATH: $EC2_B_DEPLOY_PATH
-    DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
+    DEPLOY_AUX_DIR: infra/service/service-db-init
 
 .deploy-gcp-node-1:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-1
   variables:
     DEPLOY_HOST: $GCP_NODE_1_HOST
     DEPLOY_PATH: $GCP_NODE_1_DEPLOY_PATH
@@ -99,6 +158,7 @@ validate:hadoop-config:
 
 .deploy-gcp-node-2:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-2
   variables:
     DEPLOY_HOST: $GCP_NODE_2_HOST
     DEPLOY_PATH: $GCP_NODE_2_DEPLOY_PATH
@@ -106,6 +166,7 @@ validate:hadoop-config:
 
 .deploy-gcp-node-3:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-3
   variables:
     DEPLOY_HOST: $GCP_NODE_3_HOST
     DEPLOY_PATH: $GCP_NODE_3_DEPLOY_PATH
@@ -113,6 +174,7 @@ validate:hadoop-config:
 
 .deploy-gcp-node-4:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-4
   variables:
     DEPLOY_HOST: $GCP_NODE_4_HOST
     DEPLOY_PATH: $GCP_NODE_4_DEPLOY_PATH
@@ -120,6 +182,7 @@ validate:hadoop-config:
 
 .deploy-gcp-node-5:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-5
   variables:
     DEPLOY_HOST: $GCP_NODE_5_HOST
     DEPLOY_PATH: $GCP_NODE_5_DEPLOY_PATH
@@ -127,6 +190,7 @@ validate:hadoop-config:
 
 .deploy-gcp-node-6:
   extends: .remote-compose-deploy
+  resource_group: deploy-gcp-node-6
   variables:
     DEPLOY_HOST: $GCP_NODE_6_HOST
     DEPLOY_PATH: $GCP_NODE_6_DEPLOY_PATH

@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -22,11 +23,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.AnalysisContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Answer;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.BundleSummary;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.CandidatePeakList;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurrentCurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Curve;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveContext;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveQuery;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.FineTune;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.FineTuneRange;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.MatchedCandidate;
+import com.planetory.backend.domain.exploration.service.AnalysisViews.PeakView;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Periodogram;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.ProgressSummary;
 import com.planetory.backend.domain.exploration.service.AnalysisViews.Residual;
@@ -67,6 +72,10 @@ public class AnalysisService {
     private static final String COMPLETED = "completed";
 
     private static final double MINUTES_PER_DAY = 1440.0;
+
+    /** manifest {@code period_grid.spacing}이 이 값이면 로그 격자다. 칸마다 주기 비율이 같다. */
+    private static final String LOG_GRID = "log";
+
     private static final BigDecimal TWO = BigDecimal.valueOf(2);
 
     private final AnalysisRepository analysis;
@@ -141,9 +150,9 @@ public class AnalysisService {
                         achievementCount,
                         StarService.grade(achievementCount)),
                 CurrentCurveContext.of(current, restorable ? null : CurrentCurveContext.STEP_NOT_RESTORABLE),
-                residualStateOf(current),
+                residualStateOf(ticId, current),
                 next,
-                next == null ? null : residualStateOf(next),
+                next == null ? null : residualStateOf(ticId, next),
                 tutorialOf(memberId, ticId, rule, progress),
                 rule.ruleVersion());
         return new Answer<>(body, true, ExplorationIds.bundle(bundle.id()));
@@ -167,7 +176,7 @@ public class AnalysisService {
             return target.answer(curveOf(ticId, target, Residual.ORIGINAL, original), true);
         }
 
-        ResidualResultReader.Lookup lookup = residuals.lookup(target.context());
+        ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target.context());
         if (!lookup.completed()) {
             // 보내지 않을 원본 배열은 읽지 않는다.
             return target.answer(curveOf(ticId, target, residualOf(lookup), null), false);
@@ -188,24 +197,169 @@ public class AnalysisService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Answer<Periodogram> periodogram(long memberId, long ticId, CurveQuery query) {
         Target target = resolve(memberId, ticId, query);
+        PowerAt at = powerAt(ticId, target);
+        return target.answer(periodogramOf(target, at.grid(), at.residual(), at.power()), at.power() != null);
+    }
+
+    /**
+     * 봉우리와 미세 조정 범위 (5.4절).
+     *
+     * <p>후보표가 아니라 <b>이 문맥의 주기도</b>에서 뽑는다. 후보표에서 뽑으면 매칭 전에 후보 개수와
+     * 주기가 드러난다(POL-05, EXP-02). 5.3절과 같은 배열을 보므로 화면의 그래프와 목록이 어긋나지 않는다.
+     *
+     * <p>잔차가 준비되지 않았으면 {@code peaks}를 비워 202로 보낸다. 조회는 작업을 만들지 않는다(D-14).
+     * {@code matchedCandidates}는 준비 여부와 무관하게 채운다 — 봉우리와 달리 주기도에서 오지 않는다.
+     *
+     * @throws BusinessException {@link #curve}와 같고, 현재 운영 규칙이 없으면 {@code DEPENDENCY_UNAVAILABLE}
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Answer<CandidatePeakList> candidatePeaks(long memberId, long ticId, CurveQuery query) {
+        Target target = resolve(memberId, ticId, query);
+        OperationRule rule = rules.findCurrent()
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        PowerAt at = powerAt(ticId, target);
+        List<MatchedCandidate> matched = analysis.findMatchedActiveCandidatePeriods(memberId, ticId);
+
+        List<PeakView> peaks = at.power() == null ? null
+                : extract(target, at, rule).stream().map(AnalysisService::peakViewOf).toList();
+        return target.answer(new CandidatePeakList(String.valueOf(ticId), target.context().bundleId(),
+                target.context(), at.residual(), peaks, matched, rule.ruleVersion()), peaks != null);
+    }
+
+    /**
+     * 제출 검증용 봉우리 (6.2절 {@code sourcePeakGridIndex}). 화면이 5.4절에서 본 것과 같은 규칙으로
+     * 다시 뽑는다.
+     *
+     * <p>목록을 저장하지 않고 다시 계산한다. 판·문맥·규칙 버전이 같으면 결과가 같으므로 저장할 이유가
+     * 없고, 저장하면 제출마다 행이 늘고 판이 바뀔 때 지울 책임이 생긴다.
+     *
+     * <p>회원 접근을 다시 보지 않는다. 호출자(6.1절)가 이미 별·판·문맥을 확인했고 여기서 또 막으면
+     * 제출이 권한 오류로 끝난다. 잔차가 준비되지 않았으면 빈 목록이다 — 계산되지 않은 곡선의 봉우리를
+     * 사용자가 골랐을 수 없으므로 {@code UNKNOWN_PEAK}가 맞는 응답이다.
+     *
+     * @throws BusinessException 판이나 규칙 버전을 찾을 수 없으면 {@code DEPENDENCY_UNAVAILABLE}
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, SubmissionMatching.Peak> peaksFor(CurveContext context, String ruleVersion) {
+        long bundleId = ExplorationIds.parse(context.bundleId(), ExplorationIds.BUNDLE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        Bundle bundle = gold.findBundle(bundleId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        OperationRule rule = rules.find(ruleVersion)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
+        Target target = new Target(bundle, context);
+        PowerAt at = powerAt(bundle.ticId(), target);
+        if (at.power() == null) {
+            return Map.of();
+        }
+        return extract(target, at, rule).stream().collect(Collectors.toMap(CandidatePeaks.Peak::gridIndex,
+                peak -> new SubmissionMatching.Peak(peak.gridIndex(), peak.fineTuneMinDays(),
+                        peak.fineTuneMaxDays(), suggestedDurationHours(peak))));
+    }
+
+    /**
+     * 이 문맥의 주기도 격자와 세기. 5.3절과 5.4절이 <b>같은 배열</b>을 봐야 그래프와 목록이 어긋나지 않는다.
+     *
+     * <p>원본은 {@code periodograms} 행, 잔차 단계는 잔차 결과이며 격자는 같다. 준비되지 않았으면
+     * {@code power}가 null이고, 보내지 않을 배열은 읽지 않는다.
+     */
+    private PowerAt powerAt(long ticId, Target target) {
         Bundle bundle = target.bundle();
         GoldCatalogViews.Periodogram original = gold.findPeriodogram(bundle.id())
                 .orElseThrow(() -> new IllegalStateException(
                         ExplorationIds.bundle(bundle.id()) + "은 현재 판인데 주기도 행이 없습니다. 적재 계약이 어긋났습니다."));
 
         if (target.context().curveStep() == 0) {
-            return target.answer(periodogramOf(target, original, Residual.ORIGINAL, original.power()), true);
+            return new PowerAt(original, Residual.ORIGINAL, original.power());
         }
-
-        ResidualResultReader.Lookup lookup = residuals.lookup(target.context());
+        ResidualResultReader.Lookup lookup = residuals.lookup(ticId, target.context());
         if (!lookup.completed()) {
-            return target.answer(periodogramOf(target, original, residualOf(lookup), null), false);
+            return new PowerAt(original, residualOf(lookup), null);
         }
         Float[] power = lookup.power();
         if (power == null || power.length != original.nPeriods()) {
             throw new IllegalStateException(target.context() + "의 잔차 주기도가 격자 크기와 맞지 않습니다.");
         }
-        return target.answer(periodogramOf(target, original, residualOf(lookup), power), true);
+        return new PowerAt(original, residualOf(lookup), power);
+    }
+
+    /**
+     * 봉우리 추출 규칙을 <b>이미 정해진 값에서</b> 조립한다(미결 5 제안, S15P21C206-141).
+     *
+     * <p>상위 N과 고조파 배수는 운영 규칙, 미세 조정 반폭 h는 판 manifest다. 새 숫자를 만들지 않는다 —
+     * 새 숫자는 누군가 다시 정해야 하고, 정하지 않은 채 기본값이 굳는다. 최소 간격 {@code 2h+1}칸과
+     * 고조파 허용 오차 {@code h}칸이 왜 h에서 나오는지는 {@link CandidatePeaks}에 적었다.
+     */
+    private List<CandidatePeaks.Peak> extract(Target target, PowerAt at, OperationRule rule) {
+        Bundle bundle = target.bundle();
+        CandidatePeaks.Grid grid = new CandidatePeaks.Grid(at.grid().periodMinDays().doubleValue(),
+                at.grid().periodMaxDays().doubleValue(), at.grid().nPeriods(),
+                LOG_GRID.equals(gridRuleOf(bundle)));
+        CandidatePeaks.Rules peakRules = new CandidatePeaks.Rules(rule.peaks().topN(),
+                halfWidthCellsOf(bundle), rule.matching().harmonicMultipliers());
+        return CandidatePeaks.extract(at.power(), grid, peakRules);
+    }
+
+    private static PeakView peakViewOf(CandidatePeaks.Peak peak) {
+        return new PeakView(peak.rank(), peak.periodDays(), peak.power(), peak.gridIndex(),
+                new FineTuneRange(peak.fineTuneMinDays(), peak.fineTuneMaxDays(), peak.fineTuneStepDays()),
+                suggestedDurationHours(peak), suggestedPhaseCenter(peak));
+    }
+
+    /**
+     * BLS 제안 밴드의 duration (EXP-06). <b>아직 출처가 없어 항상 null이다.</b>
+     *
+     * <p>{@code periodograms}는 주기별 {@code power}만 싣고 duration·위상 배열이 없다(ERD). 주기만으로
+     * 추정하려면 항성 밀도 같은 새 가정을 넣어야 하고, 그러면 아무도 정하지 않은 숫자가 기본값으로 굳는다.
+     * 그래서 <b>모른다고 답한다.</b> 6.2절 duration 상한은 이 값이 있을 때만 건다.
+     *
+     * <p>출처가 생기면(판이 주기별 BLS 값을 싣는 방향) 여기만 바꾼다. 미결 5와 함께 윤성용에게 올린다.
+     */
+    private static Double suggestedDurationHours(CandidatePeaks.Peak peak) {
+        return null;
+    }
+
+    /** {@link #suggestedDurationHours}와 같은 이유로 출처가 없다. 표시용이라 없으면 밴드를 그리지 않는다. */
+    private static Double suggestedPhaseCenter(CandidatePeaks.Peak peak) {
+        return null;
+    }
+
+    /** 주기도 한 스냅샷. 격자는 언제나 원본 행에서 오고 세기만 단계에 따라 다르다. */
+    private record PowerAt(GoldCatalogViews.Periodogram grid, Residual residual, Float[] power) {
+    }
+
+    /**
+     * 6.8절 다시 풀기 초안의 곡선 문맥. 5.1절 복귀 문맥과 <b>같은 규칙</b>으로 정한다.
+     *
+     * <p>매칭은 누적되므로, 원 제출이 제거한 후보가 지금 매칭 집합에 없으면 그 후보는 은퇴한 것이다.
+     * 그때는 단계를 되살리지 못하므로 <b>그 별의 현재 진행 문맥</b>으로 대체한다(C02-R1). 옛 조합을
+     * 그대로 주면 5.2절 조회가 거절하는 문맥을 초안으로 건네게 된다.
+     *
+     * @param removedCandidateIds 원 제출의 제거 조합
+     */
+    @Transactional(readOnly = true)
+    RetryContext retryContext(long memberId, long ticId, List<String> removedCandidateIds) {
+        Bundle bundle = openCurrentBundle(memberId, ticId);
+        Set<Long> matched = new TreeSet<>(analysis.findMatchedActiveCandidateIds(memberId, ticId));
+        List<Long> removed = removedCandidateIds.stream()
+                .map(id -> ExplorationIds.parse(id, ExplorationIds.CANDIDATE))
+                .filter(OptionalLong::isPresent).map(OptionalLong::getAsLong).toList();
+        boolean restorable = removed.size() == removedCandidateIds.size() && matched.containsAll(removed);
+        return new RetryContext(bundle, contextOf(bundle, restorable ? removed : matched), restorable);
+    }
+
+    /** @param stepRestored 원 제출의 단계를 그대로 되살렸는지. 거짓이면 현재 진행 문맥이다 */
+    record RetryContext(Bundle bundle, CurveContext context, boolean stepRestored) {
+    }
+
+    /**
+     * 지금 판. 응답 헤더 {@code X-Current-Bundle}(D-5)에 쓴다.
+     *
+     * <p>별 접근을 다시 검사하지 않는다. 이미 통과한 요청의 응답에 값을 얹는 것이고, 여기서 또 막으면
+     * 폴링이 판 교체 대신 권한 오류를 보게 된다. 판이 없으면 빈 값이며 헤더를 붙이지 않는다.
+     */
+    public Optional<String> currentBundleId(long ticId) {
+        return gold.findCurrentBundle(ticId).map(bundle -> ExplorationIds.bundle(bundle.id()));
     }
 
     /** 5.1절 검사 순서: 공개된 별 → 회원이 연 별 → 현재 판. */
@@ -220,7 +374,35 @@ public class AnalysisService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
     }
 
+    /**
+     * 잔차 계산 목표(7.1절). 곡선 조회(5.2절)와 <b>같은 검증</b>을 쓴다. 조회는 되는데 계산은 거절되는
+     * 문맥이 생기지 않게 한 곳에서 판단한다.
+     *
+     * <p>원본은 제거할 것이 없어 계산 대상이 아니다. 7.1절이 빈 배열을 400으로 정한다.
+     *
+     * <p>본문에는 {@code curveStep}이 없다. <b>중복을 지운 제거 집합에서 센다</b>(2.1절 서버 정렬·중복
+     * 제거). 같은 후보를 두 번 보낸 요청이 한 번 보낸 것과 같은 목표가 된다.
+     *
+     * @throws BusinessException 미공개·미발견·판 교체·형식·조합 오류는 {@link #curve}와 같다
+     */
+    @Transactional(readOnly = true)
+    public CurveContext residualTarget(long memberId, long ticId, CurveQuery query) {
+        CurveContext target = resolve(memberId, ticId, query, true).context();
+        if (target.curveStep() == 0) {
+            throw invalid("removed", "원본은 계산할 것이 없습니다. 제거할 후보를 하나 이상 주십시오.");
+        }
+        return target;
+    }
+
     private Target resolve(long memberId, long ticId, CurveQuery query) {
+        return resolve(memberId, ticId, query, false);
+    }
+
+    /**
+     * @param stepFromRemoved 제거 집합에서 단계를 센다. 본문 요청(7.1절)에는 보낸 단계가 없어 대조할 것이
+     *                        없다. 쿼리(5.2절)는 클라이언트가 보낸 값과 대조해 어긋난 요청을 거절한다
+     */
+    private Target resolve(long memberId, long ticId, CurveQuery query, boolean stepFromRemoved) {
         Bundle bundle = openCurrentBundle(memberId, ticId);
 
         Requested requested = Requested.parse(query);
@@ -231,7 +413,7 @@ public class AnalysisService {
                     Map.of("currentBundleId", ExplorationIds.bundle(bundle.id())));
         }
 
-        if (requested.curveStep() != requested.removed().size()) {
+        if (!stepFromRemoved && requested.curveStep() != requested.removed().size()) {
             throw invalid("curveStep", "제거한 후보 수와 같아야 합니다.");
         }
         if (!requested.removed().isEmpty()
@@ -290,16 +472,25 @@ public class AnalysisService {
                                                    List<LightCurveSegment> segments) {
         double minBinMinutes = segments.stream().map(LightCurveSegment::binMinutes)
                 .min(Comparator.naturalOrder()).orElseThrow().doubleValue();
+        OperationRule.Selection selection = rule.selection();
+        return new SelectionRules(rule.ruleVersion(), 2 * minBinMinutes / MINUTES_PER_DAY,
+                selection.phaseWidthMax(), selection.maxDurationMultipleOfSuggested(),
+                selection.allowEmptyPhaseSpan(), new FineTune(halfWidthCellsOf(bundle)));
+    }
+
+    /**
+     * 미세 조정 반폭 h (5.1절 {@code selectionRules.fineTune}, 5.4절 봉우리 규칙).
+     *
+     * <p>화면이 보는 값과 봉우리를 고르는 값이 같은 곳에서 나와야 목록의 범위와 제출 검증이 어긋나지 않는다.
+     */
+    private static int halfWidthCellsOf(Bundle bundle) {
         JsonNode halfWidth = bundle.manifest().fineTune().get("half_width_cells");
         if (halfWidth == null || !halfWidth.isIntegralNumber() || !halfWidth.canConvertToInt()
                 || halfWidth.intValue() < 0) {
             throw new IllegalStateException(ExplorationIds.bundle(bundle.id())
                     + "의 manifest.fine_tune.half_width_cells가 0 이상 정수가 아닙니다. 적재 계약이 어긋났습니다.");
         }
-        OperationRule.Selection selection = rule.selection();
-        return new SelectionRules(rule.ruleVersion(), 2 * minBinMinutes / MINUTES_PER_DAY,
-                selection.phaseWidthMax(), selection.maxDurationMultipleOfSuggested(),
-                selection.allowEmptyPhaseSpan(), new FineTune(halfWidth.intValue()));
+        return halfWidth.intValue();
     }
 
     /**
@@ -321,8 +512,8 @@ public class AnalysisService {
     }
 
     /** 원본 단계는 계산할 것이 없어 항상 완료다. */
-    private Residual residualStateOf(CurveContext context) {
-        return context.curveStep() == 0 ? Residual.ORIGINAL : residualOf(residuals.lookup(context));
+    private Residual residualStateOf(long ticId, CurveContext context) {
+        return context.curveStep() == 0 ? Residual.ORIGINAL : residualOf(residuals.lookup(ticId, context));
     }
 
     /** 판이 참조하는 세그먼트를 섹터 순으로. 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다. */
@@ -348,7 +539,7 @@ public class AnalysisService {
         return new Residual(lookup.status(), lookup.jobId(), lookup.computedAt());
     }
 
-    private static Segment segmentOf(LightCurveSegment segment, Float[] flux) {
+    static Segment segmentOf(LightCurveSegment segment, Float[] flux) {
         return new Segment(ExplorationIds.segment(segment.id()), segment.sector(), segment.binningRevision(),
                 segment.startBtjd(), segment.binMinutes(), segment.nPoints(), flux, segment.fluxScatter(),
                 gapsOf(segment));

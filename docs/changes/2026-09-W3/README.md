@@ -85,6 +85,9 @@
 | 2026-09-17 | 튜토리얼·챌린지·재개 공용 패널 | S15P21C206-208 | quests, current round, visible notice, member event, fallback | 프론트 독립 검증 완료·실제 통합 대기 | [기록](2026-09-17.md) |
 | 2026-09-17 | 운영 규칙 형식 1 저장 검증·이력 보호·초기 규칙 rule-0, 튜토리얼·챌린지 대상 공개 별 제약 | S15P21C206-151 | operation_settings, rule_version, rule-0, format_version, AT-41, CHECK, 트리거, 변경 이력 보호, applied_at, 예약 버전, spring.flyway.init-sqls, 세션 설정, gold-roundtrip, tutorial_skip_after, stars_per_achievement, tutorial_stars, challenge_rounds, published, selectionRules.version | 구현 완료 | [2026-09-17](2026-09-17.md) |
 | 2026-09-17 | JournalNode HTTP 경로와 HDFS 로그 감사 정정 | S15P21C206-72 | UFW, 8480, 8485, JournalNode HTTP, Standby edit log, AuditSinceUtc, 로그 권한, MR !71 | 수정·실환경 재검증 완료 | [2026-09-17](2026-09-17.md) |
+| 2026-09-18 | 서비스 진입 Cloudflare Tunnel 도입과 backend 비가동 시 frontend 기동 정정 | S15P21C206-84 | cloudflared, TUNNEL_TOKEN, resolver 127.0.0.11, 변수 upstream, --no-deps, host not found in upstream, /api/v1/me, 502→401, 로그인 화면 | 부분 구현 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | BLS 평가 단계 5별 결과 — 50k 이득 미재현으로 20k 유지 제안, SDE 문턱 미확정, dy 산정 방식 비교 | S15P21C206-110 | BLS, 평가 단계, linear20k, poc_linear20k, SDE, SNR, dy, local scatter, PDCSAP_FLUX_ERR, bls-snr-dy, CM Dra, HD 21749, WASP-18 잔여, DEC-03 | 실험 결과 · 제안 수정 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 반복 BLS·제거 QA·복구 벤치마크 — 종료 사유 7종 채택, QA 문턱 분포, QA 실패 뒤 계속 탐색 설계 변경 제안 | S15P21C206-111 | 반복 BLS, 제거 QA, removal_qa_failed, 복구, iterate, window_offset, power_ratio, edge_excess, 재적합, 고조파, CM Dra, WASP-18, D14-2, DEC-05, DEC-06 | 실험 결과 · 제안 | [2026-09-18](2026-09-18.md) |
 
 | 2026-09-18 | GCP 6계정 quota·비용·크레딧·예산 알림 실측 기록 | S15P21C206-228 | 무료 크레딧, 크레딧 소진 속도, DISKS_TOTAL_GB 99%, EXCLUDE_ALL_CREDITS, billing.admin, 10-09 기한, 예산 알림 5건 | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-17 | Gold manifest 추가 키 허용·배열 값 CHECK(V10)·ERD gaps NULL 정정(117 리뷰 후속) | S15P21C206-140 | GoldManifest, ignoreUnknown, checksum_version, UnrecognizedPropertyException, V10, CHECK, array_position, NaN, Infinity, 0x7FC00000, gaps, NULL, power NULL, DataAccessException, ERD v1.10 | 구현 완료 | [2026-09-17](2026-09-17.md) |
@@ -114,11 +117,98 @@
 
 | 2026-09-18 | 분석 화면 오류 문구 색 추가 | S15P21C206-236 | danger, ffb5b5, 오류 색, 대비 검산, 팔레트 확장 | 구현 완료 | [기록](2026-09-18.md) |
 | 2026-09-18 | 회원·커뮤니티 앱 역할 권한 결손 해소 | S15P21C206-238, 83 | V11, planetory_app, users, user_settings, posts, comments, published_analyses, 42501, Testcontainers | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | L 98-59 가드 적용 분리 실행 결과 | S15P21C206-111 | 7cc8dcb2, 65/108, window_offset, 1 d·8 h, 가짜 1 | 실험 결과 기록·채택 미확정 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 저장 후보 기반 창 안 편향 진단 | S15P21C206-111 | window_offset, 1 d, 8 h, 기준 밝기, 재현 검사 | 구현 완료·진단 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 진단 실측·바깥 평균 기준 창 안 편향 QA 옵션 | S15P21C206-111 | oot, unity, 12곡선, 공통 밝기 편향, 두 평균 오차, 잔차 복구 | 구현·검증 완료·반복 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | oot 비교 실측·회수 개선과 가짜 증가 | S15P21C206-111 | 652fe48d, 71/108, 가짜 2, g102, 0.605876699 d | 검증 완료·채택 보류 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 111 완료 조건·이전 정상 잔차 복구·최종 인계 준비 | S15P21C206-111 | 122, 설정 지문, empty peaks, 종료 7종, D04 승인, 15 FITS | 검증 완료·최종 실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-18 | HDFS 복구 검증 로컬 임시 파일 정리 | S15P21C206-75 | RunId, /tmp, EXIT trap, rm -f, cleanup, 종료 코드 보존 | 구현 완료·제한적 실환경 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | Hadoop 작업 스크립트·실패 기록 원칙 | S15P21C206-75 | Hadoop, 재현성, 스크립트 우선, 실패 기록, 재실행, 운영 문서 | 지침 반영 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 수집 읽기 전용 전체 진행률 | S15P21C206-75 | Progress, VALIDATED, bytes_transferred, 다운로드 속도, ETA, read-only | 구현·오프라인 검증 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 원자적 다운로드와 Sector 3 실행 | S15P21C206-75 | MAST, Range, part, checksum, manifest, Worker, Sector 3 | 구현·표본 검증 완료·Sector 3 실행 중 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | 24시간 무인 TESS 수집 감독과 장애 복구 | S15P21C206-75 | systemd, resume, circuit breaker, capacity, backoff, SIGKILL | 구현·실패 주입·5개 Worker 배치 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS 진행 watchdog과 감사 가능한 안전 중지 | S15P21C206-75 | systemd notify, WatchdogSec, heartbeat, SIGSTOP, Pause, PAUSED_OPERATOR, JSONL | 실환경 실패 주입·5개 Worker 롤링 적용 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-18 | TESS HDFS Raw 병렬 bundle·manifest·원본 복원 | S15P21C206-76 | SequenceFile, offset, manifest.parquet, RF2, atomic rename, idempotency | Sector 3 실환경 검증·멱등 재실행 완료 | [2026-09-18](2026-09-18.md) |
+| 2026-09-19 | Sector 3 HDFS Raw 완료 조건 재검증 | S15P21C206-76 | byte-identical, COMMIT_CACHED, staging isolation, manifest.parquet, RF2, YARN read | Sector 3 검증 완료·전체 범위 미완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | Sector 3~5 HDFS Raw 자동 연속 적재 | S15P21C206-76 | RunAll, uploader wait, resume, manifest.parquet, RF2, FSCK | 전체 범위 적재·검증 완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | TESS Sector 1~13 확장 수집과 두 Run 최종 coverage | S15P21C206-75 | Sector 1~13, source list, systemd, audit, complete, FinalCoverage, FITS 무결성, Worker 전역 잠금, 롤링 canary | 구현·canary·실패 주입 완료·확장 수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | Sector 1~13 HDFS coverage·원자 커밋·Node 1 자율 실행 보강 | S15P21C206-76 | FinalCoverage, Sector 1~13, Rename.NONE, plan v2, systemd, internal IP, RF2, reserved | 구현·오프라인 검증 완료·실환경 적재 진행 중 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | TESS expansion 동시성 16 롤링 적용 | S15P21C206-75 | download_concurrency, 8, 12, 16, 처리량, CPU, RAM, I/O wait, 429, 롤링 적용 | 구현·단계별 canary·5개 Worker 적용 완료·수집 진행 중 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | TESS Sector 1~13 수집·최종 coverage 완료 | S15P21C206-75 | COMPLETE, FinalCoverage, lineage, 247824, 441.62GiB, lock collision, shared disk | 실환경 검증 완료 | [2026-09-20](2026-09-20.md) |
 | 2026-09-18 | 별 목록 공개 설정·개인 설정 조회/변경 구현 | S15P21C206-181 | starListVisibility, PUBLIC, PRIVATE, user_settings, STAR_LIST_PRIVATE, cursor | 구현·검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | F03-Q4 별별 진행 우회 경로 점검 정정 | S15P21C206-181 | F03-Q4, public profile, STAR_LIST_PRIVATE, cursor, user_settings | 검증 완료 | [2026-09-18](2026-09-18.md) |
 | 2026-09-18 | Flyway 계정 분리 진단 정정과 MR !86 리뷰 반영 | S15P21C206-83 | 오류 정정, spring.flyway.url 제거, 오진 원인=낡은 이미지 태그, log_connections 재현, getenv, 로컬 테스트 203건 실패, 재발 방지 | 정정 · 검증 완료(로컬) | [2026-09-18](2026-09-18.md) |
+
+| 2026-09-19 | 분석 제출 요청 ID·복구 계약 확정 | S15P21C206-187 | requestId, 멱등, IDEMPOTENCY_CONFLICT, REQUEST_IN_PROGRESS, by-request, 응답 유실, outcomeUnknown, 초안 잠금, fieldErrors reason, 404 미접수 단정 금지 | 채택·구현 전 | [기록](2026-09-19.md) |
+
+| 2026-09-19 | 분석 제출 접수·복구 구현 | S15P21C206-187 | 제출, requestId, 멱등, 응답 유실, 브라우저 POST 자동 재전송, reset-connection, outcome created/replayed, 특수 제출, no_candidate, skipped, 접수 결과 대화상자, dialog onClose 미발화 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-19.md) |
+| 2026-09-19 | C02 계약 예제의 fieldErrors 불일치 확인과 전달 | S15P21C206-187 | fieldErrors, field/reason, ErrorResponse.FieldError, contracts.json, validate.cjs 검사 누락, 소관 밖 수정 금지 | 확인 완료·미적용(C02 전달) | [기록](2026-09-19.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
 | 2026-09-20 | 대표 표본 최초 BLS 예비 측정과 실패 분리 | S15P21C206-109 | population, random 40, planet_host 5, no_gate_peak, checksum | 구현·합성 검증 완료, 실측 전 | [기록](2026-09-20.md) |
 | 2026-09-20 | 예비 측정 lockfile 정합성 보완 | S15P21C206-109 | uv locked, astro-kernel, jsonschema, 버전 유지 | 검증 완료(로컬) | [기록](2026-09-20.md) |
 | 2026-09-20 | 45 TIC 최초 BLS 예비 실측 기록 | S15P21C206-109 | dac9878f, 34/40, 85%, 비교군 4/5, 47.642초 | 예비 실측 대조 완료·채택 미확정 | [기록](2026-09-20.md) |
 | 2026-09-20 | 비교군 무검출의 탐색 범위·SDE 진단 | S15P21C206-109 | Archive, 6.755일, HD 22946, SDE 5.198, 범위 밖 | 사후 진단 완료·채택 미확정 | [기록](2026-09-20.md) |
+| 2026-09-19 | 세그먼트·비닝 해상도 비교 실험 준비 | S15P21C206-114 | 10분, 평균, 중앙값, gaps, 20000, bin 중심, 합성 주입 | 구현·합성 검증 완료, 실측 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 비닝 실험 잠금 파일 불일치 정정 | S15P21C206-114 | uv.lock, astro-kernel, jsonschema, VIRTUAL_ENV, locked | 동기화·입력 검증 완료 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 9별 비닝 실측과 짧은 통과 손실 기록 | S15P21C206-114 | 84d4cc93, 184, 3360, 10분, 20분, TOI-700, 미측정 | 실측 검증 완료·화면 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | MR !101 비차단 리뷰 설명 보완 | S15P21C206-114 | 전체 행, 3304/56, 267 bin, 1.335%, median 비선형, SVG 조건 | 문서·주석 검증 완료·화면 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 2차 화면 리뷰와 실제 시계열 보충 | S15P21C206-114 | 잡음 제거 차분, BTJD, empty bins, reference boundary, round2 | 그림·문서 검증 완료·보충 리뷰 전 | [2026-09-19](2026-09-19.md) |
+
+| 2026-09-20 | 부분 bin 분포와 운영 비닝 채택안 정합화 | S15P21C206-114 | 68910, counts, mean, robust MAD, 상한 실패, 운영 revision, 3차 화면 리뷰 | 제안·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+
+| 2026-09-20 | 114 소비자 명세·ERD 버전·counts 검산 자료 보완 | S15P21C206-114 | v1.11, 46 NPZ, counts ZIP, V1 보존, 123 인계 | 보완 완료·통합 검증 전 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | 제출 처리·멱등 응답·스냅샷 MAD 산포 구현 | S15P21C206-143 | foldedError, MAD, replay, V12, 141, 147, 미접수 | 사용자 채택·격리 DB 검증, 실제 생산자 연동 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 제출 리뷰 복구 계약·bin 중심 v1·후속 행동 보완 | S15P21C206-143 | folded-mad-v1, requestId, GO_HOME, DISCUSS, reason, jitter | 사용자 채택·구현·격리 DB 회귀 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 핫 토픽 목록·선정 기준·상세 복귀 | S15P21C206-218 | S18, COM-09, 유효 참여자10명, 기간 제한 없음, cursor | 프론트 구현·계약 검증 완료, 실제 집계 인수 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 조회·그래프 재현·공개 부모 API 연결 경계 구현 | S15P21C206-148 | CURRENT, SUBMITTED, snapshotVersion, current 부재, 권한 재확인, 160, 구기록 | 본체 구현·격리 DB 검증 완료, 구기록 정책 확인 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 최초 응답 누락 상세 503 방어 정책 확정 | S15P21C206-148 | response_snapshot, 157fb5e, 정상 제출 경로, 리뷰어 검증 | 채택·문서 반영 완료, 앞선 구기록 보류 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰: 모드별 선택 기준·상세 누락·버전 미상 표시 | S15P21C206-148 | SUBMITTED, currentPhase, detailAvailable, RETIRED_CANDIDATE, snapshotVersion, Q11 | 구현·컴파일 완료, Docker 부재로 DB 회귀 실행 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 리뷰 반영 후 전체 백엔드 364건 회귀 검증 | S15P21C206-148 | ca013ba, Docker Desktop, History 25, gradlew test | 검증 완료, 앞선 DB 회귀 실행 대기 해소 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별·회원 경로 식별자 형식 정합과 500 응답 정정 | S15P21C206-246 | u-1, memberId, PathVariable, MethodArgumentTypeMismatchException, 500, VALIDATION_FAILED, STAR_LOCKED, STAR_NOT_PUBLISHED | 구현·검증 완료·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+
+| 2026-09-20 | 114 develop 통합 문서 충돌 해소 | S15P21C206-114 | a653abb, ERD v1.12, 143 보존, History | 통합 파일 검증 완료·병합 커밋 전 | [2026-09-20](2026-09-20.md) |
+| 2026-09-19 | MR !77 holdout 실행 지원·입력과 기준 고정 | S15P21C206-110 | holdout, 4 TIC, PROCVER, manifest, lock, 합산 판정, 새 holdout | 구현 완료·실측 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | holdout 4별 실측·세 차단 기준 통과 | S15P21C206-110 | 299/382, 14/345, 잡음 오탐 0, 707d59a4, manifest, CSV checksum | 검증 완료·채택 승인 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 평가 입력 NPZ 파일 checksum 정정 | S15P21C206-118 | astronet-eval, manifest, global_sha256, calibration, evaluation | 합성 입력 검증 완료·실제 평가 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 후보별 AstroNet 조정용 추론 도구 | S15P21C206-118 | candidate_id, TIC 평균, TensorFlow 1.15.5, Docker digest, calibration | 구현·합성 검증 완료·사용자 실행 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 조정 실측과 임계값 미확정 | S15P21C206-118 | bb71f278, AP, PR-AUC, TOI-700 e, FP/FN | 조정 실측 완료·팀 비용 기준 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | 사용자 위임 AstroNet 실험 임계값 고정 | S15P21C206-118 | triage_calibration_v1, lower 0, review, evaluation, threshold hash | 실험안 고정·사용자 평가 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | AstroNet 독립 평가와 자동 판정용 채택 보류 제안 | S15P21C206-118 | 183da766, 10/11, FP 2/18, review 20/35, 고정 임계값 | 실측·집계 완료·팀 리뷰 전 | [2026-09-19](2026-09-19.md) |
+| 2026-09-19 | MR !102 화면·전달 리뷰 문서 보완 | S15P21C206-118 | 분수 병기, 합성 백색 잡음, 상충관계, 내부 검토, in_truth | 문서 보완 완료·처리 리뷰 대기 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | !102 calibration 연결 검증·소형 첨부 준비 | S15P21C206-118 | calibration hash, 57 tests, 183da766, 재집계 | 보완·검산 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Silver 전처리·42 회귀 계약 | S15P21C206-119 | biweight, 원본 행, 제외 사유, 허용 오차 0, DAT-02 | 구현·합성 검증 완료, 실측·리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | Silver 전처리 4별 실측 회귀 통과 | S15P21C206-119 | 9c908a11, 448/448, 428.510초, 해시 44개 일치 | 실측 검증 완료·MR 리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | !107 기본 커널 범위와 불량 구간 마스킹 후속 분리 | S15P21C206-119, 245 | DAT-02, 원래 QUALITY, 정규화 전 마스킹 | 문서 반영·후속 등록·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 110 병합 후 반복 검증 준비 | S15P21C206-111 | unity, 49ccec22320d, holdout 테스트 격리, 87+93 | 최종 실측 준비 | [기록](2026-09-20.md) |
+| 2026-09-20 | 공식 스레드·공개 분석 등록과 원자적 성과 연결 | S15P21C206-161 | F07-Q2, 회원 선잠금, 재전송, V14, 387·69 테스트 | 구현·단독 검증 완료, 160 통합 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 거절된 제출을 고쳐서 다시 낼 수 있게 함 | S15P21C206-187 | 400 VALIDATION_FAILED, rejected 상태, 결과를 모름과 끝나지 않음 구분, 403·404는 pending 유지, 지문으로 새 ID 발급, 기록 미삭제 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+
+| 2026-09-19 | 제출 결과 표시의 독립 축 확정 | S15P21C206-188 | 결과 여섯 축, 매칭, 판단 채점, 성과, 진행, 공개, AI 상태, ambiguous_match, 없음을 0으로 금지, 통계 분모, 상세 보기 열람 기록, 판정 어휘 계층, external 원천 표기 | 채택·구현 전 | [기록](2026-09-19.md) |
+| 2026-09-19 | 제출 결과·상세 해설·다음 행동 구현 | S15P21C206-188 | 결과 해설, 축 간 모순 거절, 없음을 0으로 금지, 상세 보기 열람 기록, nextActions 서버 힌트, 라우트 정의로만 이동, 표시 순서는 화면, fixture 수정 후 서버 재기동, 색은 측정 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-19.md) |
+| 2026-09-20 | 제출 클라이언트를 탐사 API 2.2절 확정 계약과 맞춤 | S15P21C206-187 | requestId 수명, IDEMPOTENCY_CONFLICT keep, 거절도 ID 보존, 새로고침 복구, 저장 기록 판 2, SUBMISSION_CONTEXT_NOT_READY, 사다리에서 ID 폐기 제거 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 결과 화면을 6.4절·D-5 확정 계약과 맞춤 | S15P21C206-188 | GO_HOME RES-08, DISCUSS 작성 초안 COM-10, D-5 접수 당시 판 기준, 연출은 표시 이력, localStorage | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 결과 화면 리뷰 반영: 서버가 비워 보내는 칸을 비운 채로 읽음 | S15P21C206-188 | bls.sde·snr null, 특수 제출 original·serverDerived 상자, duplicate 배수 정정, judgment 상자, fixture 실제 서버 모양, ?? 0 제거 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 결과 모달을 비교형으로 바꿈 | S15P21C206-188 | 접수 정보 한 줄, 내가 낸 것 ↔ 기록의 신호 비교표, 축 두 칸, 다음 행동을 닫기 구역으로, 최신 알림 한 줄, DesktopGate로 접힘 규칙 제거 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 비교표를 좁혀 세로 스크롤을 없앰 | S15P21C206-188 | 비교표 380px, 판 1120px, 축 두 칸 같은 행, 상세 보기 한 줄, 1440·1024 넘침 0 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 상세 보기를 비교표에 합침 | S15P21C206-188 | 상세 수치 중복 제거, 미매칭은 이 단계의 신호로 오른쪽 칸 채움, 높이 상한 88vh | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 본인 History 첨부·공개 부모 권한·그래프 장애 시 내용 조회 | S15P21C206-160 | historyIds, includeGraph, TIC_MISMATCH, V13, 148, 162, 213 | 구현 완료·백엔드/프론트 단위 검증, 실제 렌더러 인수 별도 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | History 첨부 리뷰 보완·숫자 TIC 강제 변환 거절 명시 | S15P21C206-160 | Swagger, Operation, JsonNode, ticId, VALIDATION_FAILED, 코드 형식 | 검증 완료·31개 회귀 통과 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 판단 없는 History 첨부 선택 복구 | S15P21C206-160 | MaterialPicker, null, no_candidate, skipped, Chrome 9 | fixture 검증 완료·재리뷰 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 별 가시 영역·속성 재사용과 동일 픽셀 배경 캐시 | S15P21C206-215 | 100000, WebGL, triangle strip, RGBA8, framebuffer, Firefox, p95, DPR | 개선·회귀 검증 완료, 성능 전체 인수 진행 중 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 곡선 단계 전환 계약 확정 | S15P21C206-189 | nextCurveContext, residualForNextStep, COMPLETED에서만 전환, 잔차 작업 requestId 없음, 429 두 종류, 늦은 응답 세대 폐기, 와이어프레임 DISCUSS 충돌 | 채택·구현 전 | [기록](2026-09-20.md) |
+| 2026-09-20 | 곡선 단계 전환 구현 | S15P21C206-189 | 곡선 단계 이동, 잔차 작업 폴링, pollAfterSeconds, 429 대기열·activeJobId, 세대 번호로 늦은 응답 폐기, matchedCandidateIds로 목표 문맥, 단계 줄 배치, 더 없음 의견 미채택 | 구현 완료·실제 잔차 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 리뷰 반영: 전환이 실제로 곡선을 바꾸게 함 | S15P21C206-189 | viewing 배선, 곡선 선로드 후 전환, 404 RESOURCE_NOT_FOUND 재요청, retryAfterSeconds 잠금, activeJobId 안내 정정, 개발용 응답이 진입 단계만 알던 문제 | 구현 완료·실제 잔차 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 160 병합 후 공개·첨부·권한 통합 검증 | S15P21C206-161 | V13, V14, Flyway 재기동, 공개 성과 보존, develop | 검증 완료·실제 프론트 연동 별도 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 공개 등록 예시 정합·404/503 회귀 보완 | S15P21C206-161 | c- 식별자, response_snapshot, 공개 실패 무변경 | 전체 398개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 공개 집계 형태·ID 오류 구분·성과 보존 전제 명시 | S15P21C206-161 | public_analyses, graded, 400/404, 성과 불변식 | 관련 70개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 공개 응답 유실 복구·탐사 성과 DTO 통일 | S15P21C206-161 | analysisId 표시 이력, unlockedStars, position, STAR_NOT_PUBLISHED | 전체 400개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 개인 기록 상세와 공용 읽기 전용 그래프 | S15P21C206-190 | 8.2 불변·현재 분리, 8.3 두 모드, 칸 중심 위상, snapshotVersion 없음, RETIRED_CANDIDATE 모드별 의미, 213 파서 감싸기, 공개 상태 집합 차이, 공용 그래프 슬롯 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |
+| 2026-09-20 | 기록 상세 리뷰 반영: 안내를 화면과 맞춤 | S15P21C206-190 | 503 안내 문구, 그래프 없음 사유 분리, 실제 응답 인수(리뷰어 대행), 6.6 미구현 확인, 접기 기준 bin 시작 대 중심 | 구현 완료·인수 완료 | [기록](2026-09-20.md) |
+| 2026-09-21 | 114 과거 병합 커밋 전 상태 정정: e8f62ea 완료 | S15P21C206-114 | 과거 준비 기록, 현재 상태 대체 | 이전 통합 완료 | [정정·재검증](../2026-09-W4/2026-09-21.md) |
+| 2026-09-20 | 온라인 잔차 작업 요청·조회 API와 계산 기반 연결점 | S15P21C206-147 | residual-jobs, RESIDUAL_QUEUE_FULL, activeJobId, cacheHit, pollAfterSeconds, ResidualComputeRunner, ResidualJobStore, 503 | 구현 완료·연동 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 작업 리뷰 반영: 판 교체 헤더와 사라지는 대기 순번 | S15P21C206-147 | X-Current-Bundle, queuePosition, attempt, jobId 갈아타기, DEPENDENCY_UNAVAILABLE 문구, enqueue 캐시 확인 | 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 작업 2차 리뷰 반영: 시작 실패·TIC 코드·중복 후보 | S15P21C206-147 | runner.start 실패, 고아 QUEUED, START_FAILED, STAR_NOT_PUBLISHED, curveStep 중복 제거 | 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 공개 취소·재공개와 공통 접근 판정 | S15P21C206-162 | visibility, V15, 404, 숨김, 성과 보존 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 162 리뷰 보완·공개 상태 응답 명확화 | S15P21C206-162 | isPublicByAuthor, PublicAnalysisVisibility, 409 오류 표 | 전체 408개 검증 완료 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 검색 공통 표본·인덱스 검증 기준 | S15P21C206-170 | SB-D24, P0, DEC-09, searchIn, GIN, 공식 본문 | 표본 검증 완료·교차 검토 대기 | [2026-09-20](2026-09-20.md) |
+| 2026-09-20 | 잔차 폴링의 판 교체 감지와 실패 구분 | S15P21C206-189 | X-Current-Bundle 폴링, D-5 자동 재조회, failure.retryable, DEPENDENCY_UNAVAILABLE 영구 실패, resultCurveContext, 시나리오가 캐시를 이긴다 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-20.md) |

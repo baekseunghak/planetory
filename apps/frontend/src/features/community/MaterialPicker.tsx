@@ -39,6 +39,20 @@ export function MaterialPicker({
         같은 별의 내 분석 기록과 공개 출처를 각각 3개까지 연결할 수 있습니다.
         본문 주소는 자동 첨부되지 않습니다.
       </p>
+      {!!selected.unavailableSources.length && (
+        <p>
+          볼 수 없는 출처가 있습니다. 본문·기록 수정 시 유지됩니다. 출처를
+          바꾸려면 먼저 모두 제거해 주세요.
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ ...selected, sourceLinks: [], unavailableSources: [] })
+            }
+          >
+            공개 출처 모두 제거
+          </button>
+        </p>
+      )}
       <ul>
         {selected.historyIds.map((id) => (
           <li key={id}>
@@ -61,6 +75,7 @@ export function MaterialPicker({
             {s.type === "PUBLIC_ANALYSIS" ? "공개 분석" : "공식 스레드"} {s.id}{" "}
             <button
               type="button"
+              disabled={selected.unavailableSources.length > 0}
               onClick={() =>
                 onChange({
                   ...selected,
@@ -124,7 +139,9 @@ function Choices({
           return {
             historyId: materialText(r.historyId),
             submittedAt: materialText(r.submittedAt),
-            userJudgment: materialText(r.userJudgment),
+            submissionKind: materialText(r.submissionKind),
+            userJudgment:
+              r.userJudgment === null ? null : materialText(r.userJudgment),
           };
         },
         (v) => v.historyId,
@@ -176,9 +193,15 @@ function Choices({
                 <li key={h.historyId}>
                   <span>
                     {h.historyId} ·{" "}
-                    {judgmentLabels[
-                      h.userJudgment as keyof typeof judgmentLabels
-                    ] ?? h.userJudgment}{" "}
+                    {h.userJudgment === null
+                      ? h.submissionKind === "no_candidate"
+                        ? "신호 없음으로 제출"
+                        : h.submissionKind === "skipped"
+                          ? "건너뛴 기록"
+                          : "판단 없음"
+                      : (judgmentLabels[
+                          h.userJudgment as keyof typeof judgmentLabels
+                        ] ?? h.userJudgment)}{" "}
                     · {new Date(h.submittedAt).toLocaleString("ko-KR")}
                   </span>
                   <button
@@ -242,7 +265,11 @@ function Choices({
         </label>
         <button
           type="button"
-          disabled={preview.pending || selected.sourceLinks.length >= 3}
+          disabled={
+            preview.pending ||
+            selected.sourceLinks.length >= 3 ||
+            selected.unavailableSources.length > 0
+          }
           onClick={() => void source()}
         >
           {preview.pending ? "확인 중…" : "출처 확인 후 첨부"}

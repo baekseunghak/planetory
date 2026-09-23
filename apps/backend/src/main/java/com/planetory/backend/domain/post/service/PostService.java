@@ -9,6 +9,7 @@ import com.planetory.backend.global.error.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,48 +18,57 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class PostService {
-    private static final Set<String> TAGS = Set.of("ANALYSIS", "QUESTION", "DISCUSSION", "INFORMATION", "GENERAL");
+    static final Set<String> TAGS = Set.of("ANALYSIS", "QUESTION", "DISCUSSION", "INFORMATION", "GENERAL");
     private final PostRepository posts;
     private final MemberService members;
     private final StarService stars;
     private final Clock clock;
+    private final HistoryAttachmentService attachments;
+    private final SourceLinkService sources;
+    private final com.planetory.backend.domain.member.service.NotificationService notifications;
 
     public record SourceLink(String type, String id) {}
     public record CreateCommand(String title, String body, String purposeTag, String ticId,
                                 List<String> historyIds, List<SourceLink> sourceLinks) {}
     public record PatchCommand(String title, boolean hasTitle, String body, boolean hasBody,
-                               String purposeTag, boolean hasPurposeTag, String ticId, boolean hasTicId) {}
+                               String purposeTag, boolean hasPurposeTag, String ticId, boolean hasTicId,
+                               List<String> historyIds, List<SourceLink> sourceLinks) {}
     public record Created(String postId, Instant createdAt) {}
     public record Author(String memberId, String nickname) {}
-    public record ReactionSummary(int agree, int disagree, String myReaction) {}
+    public static Author publicAuthor(long id, String nickname, String status) {
+        return "active".equals(status) ? new Author("u-" + id, nickname) : new Author(null, "탈퇴한 회원");
+    }
+    public record ReactionSummary(long agree, long disagree, String myReaction) {}
     /** 글 자체의 값만 담는다. 댓글 수처럼 다른 도메인이 소유한 값은 컨트롤러가 합친다. */
     public record Detail(String postId, String title, String body, String purposeTag, String ticId,
-                         Author author, List<Object> attachments, List<SourceLink> sourceLinks,
-                         ReactionSummary reactionSummary, Instant createdAt, Instant updatedAt) {}
+                         Author author, List<HistoryAttachmentService.Reference> attachments, List<SourceLinkService.Reference> sourceLinks,
+                         Instant createdAt, Instant updatedAt) {}
 
     @Transactional
     public Created create(long memberId, CreateCommand command) {
-        var author = members.requireActive(memberId);
-        if (hasItems(command.historyIds()) || hasItems(command.sourceLinks())) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
+        var author = members.lockActive(memberId);
         Values values = validate(command.title(), command.body(), command.purposeTag(), command.ticId());
         var post = posts.saveAndFlush(new Post(author, values.board(), values.ticId(), values.tag(),
                 values.title(), values.body()));
+        attachments.replace(HistoryAttachmentService.Parent.POST, post.getId(), memberId, values.ticId(), command.historyIds());
+        sources.replace(HistoryAttachmentService.Parent.POST, post.getId(), values.ticId(), command.sourceLinks(), false);
+        notifications.postCreated(memberId, post.getId(), values.ticId(), false);
         return new Created(id(post), post.getCreatedAt());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Detail detail(long postId) {
         Post post = posts.findWithAuthorById(postId).filter(PostService::visible)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (post.getTicId() != null) stars.requireOpenStarBoard(post.getTicId());
         return detailOf(post);
     }
 
     @Transactional
     public Detail patch(long memberId, long postId, PatchCommand command) {
-        members.requireActive(memberId);
-        if (!command.hasTitle() && !command.hasBody() && !command.hasPurposeTag() && !command.hasTicId()) {
+        members.lockActive(memberId);
+        if (!command.hasTitle() && !command.hasBody() && !command.hasPurposeTag() && !command.hasTicId()
+                && command.historyIds() == null && command.sourceLinks() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
         Post post = writable(memberId, postId);
@@ -66,15 +76,24 @@ public class PostService {
                 command.hasBody() ? command.body() : post.getBody(),
                 command.hasPurposeTag() ? command.purposeTag() : post.getTag(),
                 command.hasTicId() ? command.ticId() : post.getTicId() == null ? null : String.valueOf(post.getTicId()));
+        attachments.replace(HistoryAttachmentService.Parent.POST, postId, memberId, values.ticId(), command.historyIds());
+        boolean changedTic = !Objects.equals(post.getTicId(), values.ticId());
+        sources.replace(HistoryAttachmentService.Parent.POST, postId, values.ticId(), command.sourceLinks(), changedTic);
+        if (changedTic) {
+            attachments.requireCommentTic(postId, values.ticId());
+            sources.requireCommentTic(postId, values.ticId());
+        }
         post.update(values.board(), values.ticId(), values.tag(), values.title(), values.body(), Instant.now(clock));
+        posts.flush(); // 아래 JDBC 첨부 조회도 갱신된 TIC를 본다.
         return detailOf(post);
     }
 
     @Transactional
     public void delete(long memberId, long postId) {
-        members.requireActive(memberId);
+        members.lockActive(memberId);
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        requireUserPost(post);
         if (post.getAuthor().getId() != memberId) {
             throw new BusinessException(visible(post) ? ErrorCode.FORBIDDEN : ErrorCode.RESOURCE_NOT_FOUND);
         }
@@ -84,6 +103,7 @@ public class PostService {
     private Post writable(long memberId, long postId) {
         Post post = posts.findByIdForUpdate(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        requireUserPost(post);
         if (!visible(post)) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         if (post.getAuthor().getId() != memberId) throw new BusinessException(ErrorCode.FORBIDDEN);
         return post;
@@ -105,7 +125,6 @@ public class PostService {
     }
 
     private static int codePoints(String value) { return value.codePointCount(0, value.length()); }
-    private static boolean hasItems(List<?> values) { return values != null && !values.isEmpty(); }
     private static boolean hasLineBreak(String value) {
         return value.codePoints().anyMatch(c -> c == '\n' || c == '\r' || c == 0x85 || c == 0x2028 || c == 0x2029);
     }
@@ -121,13 +140,16 @@ public class PostService {
         }
     }
 
-    private static boolean visible(Post post) { return "visible".equals(post.getStatus()); }
+    private static void requireUserPost(Post post) {
+        if (!"user".equals(post.getKind())) throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+    private static boolean visible(Post post) { return "user".equals(post.getKind()) && "visible".equals(post.getStatus()); }
     private static String id(Post post) { return "p-" + post.getId(); }
-    private static Detail detailOf(Post post) {
+    private Detail detailOf(Post post) {
         return new Detail(id(post), post.getTitle(), post.getBody(), post.getTag(),
                 post.getTicId() == null ? null : String.valueOf(post.getTicId()),
-                new Author("u-" + post.getAuthor().getId(), post.getAuthor().getNickname()),
-                List.of(), List.of(), new ReactionSummary(0, 0, "NONE"),
+                publicAuthor(post.getAuthor().getId(), post.getAuthor().getNickname(), post.getAuthor().getStatus()),
+                attachments.references(HistoryAttachmentService.Parent.POST, post.getId()), sources.references(HistoryAttachmentService.Parent.POST, post.getId(), post.getTicId()),
                 post.getCreatedAt(), post.getUpdatedAt());
     }
     private record Values(String board, Long ticId, String tag, String title, String body) {}

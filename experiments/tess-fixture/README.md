@@ -1,5 +1,27 @@
 # TESS 고정 fixture·합성 주입 세트·실행 manifest
 
+## 116 외부 export 수집
+
+116의 [계약 검증 초안](../../docs/data/tess-external-catalog-contract.md)을 위한 독립 수집기다. 기존 참고값을 갱신하지 않으며 원본·manifest는 Git 제외인 `results/external-catalog/`의 새 폴더에 보존한다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog
+```
+
+네 원천별 상태와 최종 manifest 경로를 확인한다. `collected_schema_unverified`는 수집 단계이고 운영 계약 검증 완료가 아니다. `incomplete`이면 기존 결과를 삭제하지 않고 해당 manifest로 실패 원천을 확인한다. 재실행은 새 폴더를 만든다. 원본 export·응답 본문은 Git에 추가하지 않는다.
+
+단위 검증: `uv run --locked python -m pytest tests/test_external_catalog.py -q`. 합성 응답만 사용하며 다운로드나 Git 명령을 실행하지 않는다.
+
+`--source nea_pscomppars exofop_toi`를 붙이면 지정 원천만 새 폴더에 수집한다. 부분 실행은 manifest의 `subset=true`로 표시되며 기존 성공 파일은 유지한다.
+
+저장 원천 감사는 다음처럼 실행한다. 네 성공 원천을 요구하고 해시·행 수 검증 후 9 TIC 천문 필드만 추출한다. 기존 출력은 덮어쓰지 않는다. 인자는 실제 파일 경로로 바꾼다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog_audit --manifest <첫-manifest> --manifest <재수집-manifest> --output <새-json>
+```
+
+## 고정 fixture
+
 Jira `S15P21C206-41`. 후속 전처리·BLS·비닝·AI 실험이 같은 입력으로 비교되도록 고정 SPOC 2분 광도곡선 표본과
 합성 감광 주입 세트를 만들고, 모든 실행을 manifest 로 남기는 도구다. 표본 선정 근거·격자·스키마 설명은
 [TESS fixture 문서](../../docs/data/tess-fixture-set.md)에 있다.
@@ -80,3 +102,16 @@ flux = inj.inject_group(base, [rows[0]])        # 주입 곡선 하나
 - 표본 9개 별·23개 제품은 실험용 고정 입력이며 서비스 데이터 범위(DEC-01)가 아니다.
 - 실제 "무신호 별" 은 아직 포함하지 않았다. 선정 절차는 docs 문서의 TBD 항목을 따른다.
 - 고조파·식쌍성 세트, 관측 조건 스트레스 세트, 사다리꼴 모델은 격자 v1 에 없다(`not_included_yet`).
+
+## 110 독립 평가용 holdout
+
+기본 TARGETS 9별과 별도로 HOLDOUT_TARGETS 4별을 등록한다. 기본 다운로드·주입 대상은 기존 9별을 유지하며 holdout은 명시한 key로만 선택한다. 4별·10제품의 checksum/PROCVER는 checksums.json, Archive 조회 결과는 references.csv에 고정한다. 조회 결과 0행은 빈 기록으로 남기며 무신호의 증거로 해석하지 않는다.
+
+다른 환경에서 원본을 준비할 때 tess-fixture 디렉터리에서 실행한다.
+
+```powershell
+uv sync --python 3.11 --locked
+uv run --locked python -m tess_fixture download --target holdout_268637577 holdout_100102268 holdout_219237079 holdout_358253008
+```
+
+평가에는 저장된 참고값을 그대로 사용한다. `references`를 다시 조회하면 고정 입력이 달라져 holdout lock 검사가 실패한다. 평가의 설정·판정·재실행 정책은 [BLS 벤치마크](../../docs/data/tess-bls-benchmark.md)의 5.3절을 따른다.

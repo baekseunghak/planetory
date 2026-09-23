@@ -32,6 +32,7 @@ type Context = {
   refresh(): void;
 };
 const QuestContext = createContext<Context | null>(null);
+export const useOptionalQuests = () => useContext(QuestContext);
 export const useQuests = () => {
   const value = useContext(QuestContext);
   if (!value) throw new Error("QuestProvider가 필요합니다.");

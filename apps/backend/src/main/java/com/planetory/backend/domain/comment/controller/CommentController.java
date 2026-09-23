@@ -2,6 +2,8 @@ package com.planetory.backend.domain.comment.controller;
 
 import com.planetory.backend.domain.comment.service.CommentService;
 import com.planetory.backend.domain.comment.service.CommentService.ParentType;
+import com.planetory.backend.domain.post.service.HistoryAttachmentService;
+import com.planetory.backend.domain.post.service.SourceLinkService;
 import com.planetory.backend.global.error.BusinessException;
 import com.planetory.backend.global.error.ErrorCode;
 import com.planetory.backend.global.security.MemberPrincipal;
@@ -30,12 +32,10 @@ public class CommentController {
     @ResponseStatus(HttpStatus.CREATED)
     public CommentService.Created create(@AuthenticationPrincipal MemberPrincipal principal, @RequestBody JsonNode request) {
         if (request == null || !request.isObject()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        rejectItems(request, "historyIds");
-        rejectItems(request, "sourceLinks");
         ParentType parentType = parentType(text(request, "parentType"));
         return comments.create(principal.memberId(), new CommentService.CreateCommand(
                 parentType, parentId(text(request, "parentId"), parentType),
-                text(request, "body")));
+                text(request, "body"), HistoryAttachmentService.input(request), SourceLinkService.input(request)));
     }
 
     @Operation(summary = "댓글 목록")
@@ -51,12 +51,11 @@ public class CommentController {
     @PatchMapping("/api/v1/comments/{commentId}")
     public CommentService.Detail patch(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String commentId,
                                        @RequestBody JsonNode request) {
-        if (request == null || !request.isObject() || !request.has("body")) {
+        if (request == null || !request.isObject()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);
         }
-        rejectItems(request, "historyIds");
-        rejectItems(request, "sourceLinks");
-        return comments.patch(principal.memberId(), commentId(commentId), text(request, "body"));
+        return comments.patch(principal.memberId(), commentId(commentId), new CommentService.PatchCommand(
+                text(request, "body"), request.has("body"), HistoryAttachmentService.input(request), SourceLinkService.input(request)));
     }
 
     @Operation(summary = "댓글 삭제")
@@ -64,12 +63,6 @@ public class CommentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal MemberPrincipal principal, @PathVariable String commentId) {
         comments.delete(principal.memberId(), commentId(commentId));
-    }
-
-    private static void rejectItems(JsonNode request, String field) {
-        JsonNode value = request.get(field);
-        if (value == null || value.isNull()) return;
-        if (!value.isArray() || !value.isEmpty()) throw new BusinessException(ErrorCode.VALIDATION_FAILED);
     }
 
     private static ParentType parentType(String value) {

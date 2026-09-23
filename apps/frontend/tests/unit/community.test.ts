@@ -118,6 +118,14 @@ test("feed accepts same string ID across different content types but rejects unk
     readFeed({ items, nextCursor: null, hasNext: false }).items.length,
     2,
   );
+  const withdrawn = readFeed({
+    items: [{ ...items[0], author: { memberId: null, nickname: "탈퇴한 회원" } }],
+    nextCursor: null,
+    hasNext: false,
+  });
+  assert.deepEqual(withdrawn.items[0].author, { memberId: null, nickname: "탈퇴한 회원" });
+  assert.throws(() => readFeed({ items: [{ ...items[0], author: { memberId: null, nickname: "회원" } }],
+    nextCursor: null, hasNext: false }));
   assert.throws(() =>
     readFeed({
       items: [{ ...items[0], type: "MYSTERY" }],

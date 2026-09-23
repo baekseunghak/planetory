@@ -143,6 +143,19 @@ if hdfs_cmd dfs -test -e '__VALIDATION_ROOT__'; then echo VALIDATION_PATH_EXISTS
 local_source=/tmp/S15P21C206-74-__RUN_ID__-baseline.bin
 local_copy=/tmp/S15P21C206-74-__RUN_ID__-baseline.copy.bin
 local_sha=/tmp/S15P21C206-74-__RUN_ID__-baseline.sha256
+local_fsck=/tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt
+cleanup() {
+ main_status=$?
+ trap - EXIT
+ if rm -f -- "$local_source" "$local_copy" "$local_sha" "$local_fsck"; then
+  echo "RECOVERY_TMP_CLEANUP_OK step=Prepare run_id=__RUN_ID__"
+ else
+  echo "RECOVERY_TMP_CLEANUP_FAILED step=Prepare run_id=__RUN_ID__" >&2
+  if test "$main_status" -eq 0; then exit 1; fi
+ fi
+ exit "$main_status"
+}
+trap cleanup EXIT
 dd if=/dev/urandom of="$local_source" bs=1M count=256 status=none
 source_sha=$(sha256sum "$local_source" | cut -d " " -f 1)
 printf '%s\n' "$source_sha" > "$local_sha"
@@ -154,9 +167,9 @@ hdfs_cmd dfs -checksum '__BASELINE_PATH__'
 hdfs_cmd dfs -get '__BASELINE_PATH__' "$local_copy"
 copy_sha=$(sha256sum "$local_copy" | cut -d " " -f 1)
 test "$source_sha" = "$copy_sha"
-hdfs_cmd fsck '__BASELINE_PATH__' -files -blocks -locations | tee /tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt
-grep -q "Status: HEALTHY" /tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt
-grep -q "Live_repl=2" /tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt
+hdfs_cmd fsck '__BASELINE_PATH__' -files -blocks -locations | tee "$local_fsck"
+grep -q "Status: HEALTHY" "$local_fsck"
+grep -q "Live_repl=2" "$local_fsck"
 echo HDFS_PATH='__BASELINE_PATH__'
 echo SHA256="$source_sha"
 echo RECOVERY_SAMPLE_PREPARED
@@ -374,28 +387,44 @@ echo WORKER_RECOVERY_RF2_YARN_OK
   $command=@'
 set -eu
 hdfs_cmd() { sudo -u hdfs env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hdfs "$@"; }
+final_report=/tmp/S15P21C206-74-__RUN_ID__-final-report.txt
+final_fsck=/tmp/S15P21C206-74-__RUN_ID__-final-fsck.txt
+final_copy=/tmp/S15P21C206-74-__RUN_ID__-final-baseline.bin
+final_yarn=/tmp/S15P21C206-74-__RUN_ID__-final-yarn.txt
+cleanup() {
+ main_status=$?
+ trap - EXIT
+ if rm -f -- "$final_report" "$final_fsck" "$final_copy" "$final_yarn"; then
+  echo "RECOVERY_TMP_CLEANUP_OK step=FinalAudit run_id=__RUN_ID__"
+ else
+  echo "RECOVERY_TMP_CLEANUP_FAILED step=FinalAudit run_id=__RUN_ID__" >&2
+  if test "$main_status" -eq 0; then exit 1; fi
+ fi
+ exit "$main_status"
+}
+trap cleanup EXIT
 test "$(hdfs_cmd haadmin -getServiceState nn1)" = active
 test "$(hdfs_cmd haadmin -getServiceState nn2)" = standby
-hdfs_cmd dfsadmin -report | tee /tmp/S15P21C206-74-final-report.txt
-grep -q "Live datanodes (5)" /tmp/S15P21C206-74-final-report.txt
-grep -q "Dead datanodes (0)" /tmp/S15P21C206-74-final-report.txt || ! grep -q "Dead datanodes" /tmp/S15P21C206-74-final-report.txt
-grep -q "Under replicated blocks: 0" /tmp/S15P21C206-74-final-report.txt
-grep -q "Blocks with corrupt replicas: 0" /tmp/S15P21C206-74-final-report.txt
-grep -q "Missing blocks: 0" /tmp/S15P21C206-74-final-report.txt
-hdfs_cmd fsck '__VALIDATION_ROOT__' -files -blocks -locations | tee /tmp/S15P21C206-74-final-fsck.txt
-grep -q "Status: HEALTHY" /tmp/S15P21C206-74-final-fsck.txt
-grep -q "Over-replicated blocks:[[:space:]]*0" /tmp/S15P21C206-74-final-fsck.txt
-hdfs_cmd dfs -get -f '__BASELINE_PATH__' /tmp/S15P21C206-74-final-baseline.bin
+hdfs_cmd dfsadmin -report | tee "$final_report"
+grep -q "Live datanodes (5)" "$final_report"
+grep -q "Dead datanodes (0)" "$final_report" || ! grep -q "Dead datanodes" "$final_report"
+grep -q "Under replicated blocks: 0" "$final_report"
+grep -q "Blocks with corrupt replicas: 0" "$final_report"
+grep -q "Missing blocks: 0" "$final_report"
+hdfs_cmd fsck '__VALIDATION_ROOT__' -files -blocks -locations | tee "$final_fsck"
+grep -q "Status: HEALTHY" "$final_fsck"
+grep -q "Over-replicated blocks:[[:space:]]*0" "$final_fsck"
+hdfs_cmd dfs -get -f '__BASELINE_PATH__' "$final_copy"
 expected_sha=$(hdfs_cmd dfs -cat '__EXPECTED_SHA_PATH__' | tr -d '[:space:]')
 printf '%s' "$expected_sha" | grep -Eq '^[0-9a-f]{64}$'
-actual_sha=$(sha256sum /tmp/S15P21C206-74-final-baseline.bin | cut -d " " -f 1)
+actual_sha=$(sha256sum "$final_copy" | cut -d " " -f 1)
 test "$expected_sha" = "$actual_sha"
 systemctl is-active --quiet hadoop-yarn-resourcemanager
-__YARN__ node -list -all 2>&1 | tee /tmp/S15P21C206-74-final-yarn.txt
-test "$(awk '$2 == "RUNNING" { count++ } END { print count + 0 }' /tmp/S15P21C206-74-final-yarn.txt)" = 5
+__YARN__ node -list -all 2>&1 | tee "$final_yarn"
+test "$(awk '$2 == "RUNNING" { count++ } END { print count + 0 }' "$final_yarn")" = 5
 echo FINAL_SHA256="$actual_sha"
 echo FINAL_HDFS_YARN_RECOVERY_AUDIT_OK
-'@.Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__EXPECTED_SHA_PATH__',$expectedShaPath).Replace('__YARN__',$yarn)
+'@.Replace('__RUN_ID__',$RunId).Replace('__VALIDATION_ROOT__',$validationRoot).Replace('__BASELINE_PATH__',$baselinePath).Replace('__EXPECTED_SHA_PATH__',$expectedShaPath).Replace('__YARN__',$yarn)
   $null=Invoke-Remote $node1 $command 'Final HDFS/YARN recovery audit'
   foreach ($node in $nodes[0..2]) {
    $command='set -eu; systemctl is-active --quiet hadoop-hdfs-journalnode; ss -lnt | grep -q ":8485 "; ss -lnt | grep -q ":8480 "; echo FINAL_JOURNALNODE_ACTIVE'

@@ -7,6 +7,8 @@
 | 기능·비기능 요구 | [요구사항 명세서](planetory-requirements-spec.md) | 서비스 요구사항 정본 |
 | 통합 검수 시나리오와 요구 추적 | [인수 조건](planetory-acceptance-criteria.md) | 정본의 검증·추적 상세 |
 | 미결정 정책과 팀 회의 안건 | [결정 등록부](planetory-decision-register.md) | 확정·미정 상태 추적 |
+| 알림 수신자·채널·읽음·보관·중복·175 인계 | [알림 정책 F15](../development/service-backend/community.md#notification-policy) | Q1~Q5·기존 사건 비소급 채택. 175 구현과 남은 생산자 계약 구분 |
+| P1 통계 산식·시간 경계·검산·177/178 인계 | [통계 지표 사전](planetory-statistics-policy.md) | 2026-09-22 개인·공통 기준 사용자 승인, 현재값·과거 원천 재현 한계·실제 인수 구분 |
 | 과거 요구사항 판의 변경 | [요구사항 개정 이력](planetory-requirements-history.md) | v1.3.1 변경안까지의 누적 기록 |
 | 후보·별 상태 전이 | [후보·별 상태표](planetory-status-table.md) | 요구사항 상세화 |
 | 사용자 화면 문구 | [용어 사전](planetory-glossary.md) | 화면 표기 기준 |

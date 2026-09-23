@@ -1,12 +1,24 @@
+import { AnalysisReturnLink } from "./AnalysisReturnLink";
 import { FoldViewControls } from "./FoldViewControls";
 import { AnalysisSteps } from "./AnalysisJudgment";
+import { sameContext, stepName } from "./curve-step";
+import { CurveStepBar } from "./CurveStepBar";
+import { useCurveStep } from "./use-curve-step";
+import { useMemo, type ReactNode } from "react";
 import "./analysis-screen.css";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { AnalysisEntryGate, AnalysisEntryError } from "./AnalysisEntry";
+import type { AnalysisEntry } from "./load-analysis";
+import type { RetryDraft } from "./retry-draft";
 import { usePageContext } from "../../app/usePageContext";
-import { ErrorState, LoadingState } from "../../components/RequestState";
+import { LoadingState } from "../../components/RequestState";
 import { useAnalysisData } from "./useAnalysisData";
 import { TimeCurveChart } from "./TimeCurveChart";
-import { contextKey } from "./analysis-data";
+import {
+  contextKey,
+  type AnalysisContext,
+  type CurveData,
+} from "./analysis-data";
 import { PeriodogramPanel } from "./PeriodogramPanel";
 import { AnalysisSession } from "./AnalysisSession";
 
@@ -15,7 +27,13 @@ const isObservation = (ticId?: string) =>
   import.meta.env.VITE_OBSERVATIONS === "true" &&
   ["259377017", "307210830", "199574208"].includes(ticId ?? "");
 
-function AnalysisData({ ticId }: { ticId: string }) {
+function AnalysisData({
+  ticId,
+  entry,
+}: {
+  ticId: string;
+  entry?: AnalysisEntry;
+}) {
   const {
     context,
     curve,
@@ -24,8 +42,12 @@ function AnalysisData({ ticId }: { ticId: string }) {
     retry,
     bundleChanged,
     recoverBundle,
-  } = useAnalysisData(ticId);
-  if (error) return <ErrorState error={error} retry={retry} />;
+    retryDraft,
+  } = useAnalysisData(ticId, entry);
+  if (error)
+    return (
+      <AnalysisEntryError key={String(error)} error={error} retry={retry} />
+    );
   if (loading || !context || !curve)
     return bundleChanged ? (
       <p role="status">
@@ -36,6 +58,12 @@ function AnalysisData({ ticId }: { ticId: string }) {
     );
   const notice = (
     <>
+      {retryDraft && (
+        <p role="status">
+          이전 제출을 바탕으로 현재 데이터에서 다시 풉니다. 새 판단은 제출할
+          때만 기록됩니다.
+        </p>
+      )}
       {bundleChanged && (
         <p role="status">
           새 데이터 판으로 갱신했습니다. 현재 진행 단계의 자료를 다시
@@ -64,6 +92,63 @@ function AnalysisData({ ticId }: { ticId: string }) {
         <button onClick={retry}>다시 불러오기</button>
       </section>
     );
+  // 여기부터는 문맥·곡선이 확실하다. 단계 이동 상태를 여기서 만들어야
+  // 보고 있는 곡선을 차트·주기도·제출이 함께 따라간다.
+  return (
+    <AnalysisReady
+      ticId={ticId}
+      context={context}
+      entryCurve={curve}
+      retry={retry}
+      recoverBundle={recoverBundle}
+      notice={notice}
+      retryDraft={retryDraft}
+      resume={entry?.resume ?? false}
+      autoRestore={entry?.autoRestore ?? false}
+      retryAttemptId={entry?.retryAttemptId}
+    />
+  );
+}
+
+function AnalysisReady({
+  ticId,
+  context,
+  entryCurve,
+  retry,
+  recoverBundle,
+  notice,
+  retryDraft,
+  resume,
+  autoRestore,
+  retryAttemptId,
+}: {
+  ticId: string;
+  context: AnalysisContext;
+  entryCurve: Extract<CurveData, { kind: "ready" }>;
+  retry: () => void;
+  recoverBundle: () => boolean;
+  notice: ReactNode;
+  retryDraft: RetryDraft | null;
+  resume: boolean;
+  autoRestore: boolean;
+  retryAttemptId?: string;
+}) {
+  // 계산이 도는 동안 판이 바뀌면 곡선 조회와 똑같이 자동으로 다시 읽는다.
+  const step = useCurveStep(context, entryCurve, recoverBundle);
+  // 보고 있는 곡선. 전환이 끝나야 바뀌므로 그 전에는 진입 곡선 그대로다.
+  const curve = step.curve.kind === "ready" ? step.curve : entryCurve;
+  /**
+   * 아래로 내려보내는 문맥은 **보고 있는 단계**의 것이다. 주기도 조회와
+   * 제출이 모두 이 문맥을 쓰므로, 진입 문맥을 그대로 내려보내면 표시만
+   * 바뀌고 실제로 읽고 보내는 곳은 이전 단계가 된다.
+   */
+  const viewed = useMemo(
+    () =>
+      sameContext(step.viewing, context.curveContext)
+        ? context
+        : { ...context, curveContext: step.viewing },
+    [context, step.viewing],
+  );
   const total = curve.segments.reduce(
     (sum, segment) => sum + segment.nPoints,
     0,
@@ -80,15 +165,11 @@ function AnalysisData({ ticId }: { ticId: string }) {
         <h2>분석 데이터</h2>
         <dl>
           <dt>Bundle ID</dt>
-          <dd>{context.curveContext.bundleId}</dd>
+          <dd>{viewed.curveContext.bundleId}</dd>
           <dt>데이터 버전</dt>
           <dd>{context.bundleVersion}</dd>
           <dt>곡선 단계</dt>
-          <dd>
-            {context.curveContext.curveStep === 0
-              ? "원본"
-              : `잔차 ${context.curveContext.curveStep}단계`}
-          </dd>
+          <dd>{stepName(step.viewing)}</dd>
           <dt>확정 행성 보유 여부</dt>
           <dd>
             {isObservation(ticId)
@@ -131,9 +212,10 @@ function AnalysisData({ ticId }: { ticId: string }) {
         {curve.segments.slice(1).map((segment, i) => {
           const previous = curve.segments[i];
           const days =
-            segment.startBtjd -
+            segment.startBtjd +
+            segment.binMinutes / 2880 -
             (previous.startBtjd +
-              ((previous.nPoints - 1) * previous.binMinutes) / 1440);
+              ((previous.nPoints - 0.5) * previous.binMinutes) / 1440);
           return (
             <li key={segment.segmentId}>
               Sector {previous.sector} → {segment.sector}:{" "}
@@ -155,8 +237,14 @@ function AnalysisData({ ticId }: { ticId: string }) {
       ) : (
         <AnalysisSession
           key={contextKey(curve.context)}
-          context={context}
+          context={viewed}
+          step={step}
           curve={curve}
+          recoverBundle={recoverBundle}
+          retryDraft={retryDraft}
+          resume={resume}
+          autoRestore={autoRestore}
+          retryAttemptId={retryAttemptId}
         >
           <div className="analysis-screen-grid">
             <div className="analysis-step-row">
@@ -169,6 +257,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
                     : "확정 행성 정보 없음"}{" "}
                 · 데이터 {context.bundleVersion}
               </span>
+              <CurveStepBar context={context} />
             </div>
             <TimeCurveChart
               key={contextKey(curve.context)}
@@ -177,7 +266,7 @@ function AnalysisData({ ticId }: { ticId: string }) {
             />
             <PeriodogramPanel
               key={`periodogram-${contextKey(curve.context)}`}
-              context={context}
+              context={viewed}
               curve={curve}
               reloadAnalysis={retry}
               recoverBundle={recoverBundle}
@@ -227,6 +316,9 @@ function AnalysisData({ ticId }: { ticId: string }) {
 
 export function AnalysisPage() {
   const { ticId, returnTo } = usePageContext();
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const retryId = params.get("retryOfSubmissionId");
 
   return (
     <section className="analysis-screen">
@@ -235,7 +327,9 @@ export function AnalysisPage() {
         <h1>
           <span className="analysis-sr-only">분석 · </span>TIC {ticId}
         </h1>
-        <Link to={returnTo}>← 이전 화면</Link>
+        <AnalysisReturnLink ticId={ticId ?? ""} to={returnTo}>
+          ← 이전 화면
+        </AnalysisReturnLink>
       </header>
       {import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true" && (
         <details className="analysis-fixture-details">
@@ -285,7 +379,13 @@ export function AnalysisPage() {
         </details>
       )}
       {ticId ? (
-        <AnalysisData key={ticId} ticId={ticId} />
+        <AnalysisEntryGate
+          key={`${ticId}:${location.key}`}
+          ticId={ticId}
+          retryId={retryId}
+        >
+          {(entry) => <AnalysisData ticId={ticId} entry={entry} />}
+        </AnalysisEntryGate>
       ) : (
         <p role="alert">분석할 별을 선택해 주세요.</p>
       )}

@@ -26,7 +26,7 @@
 | 배열 checksum | `manifest.array_checksums` 의 값 = 적재한 배열을 3절 규칙으로 다시 계산한 값. 키는 `segment:<id>:flux`, `periodogram:<bundle_id>:power` | round-trip 에서 DB 조회값으로 재계산 일치 확인 |
 | 레코드 checksum | `manifest.record_checksums.{candidates, ai_results, external_statuses}` = 3.2절 규칙으로 계산한 값(DB 생성 id 제외, 정렬). 69 의미 payload 의 `candidates_checksum` 등이 이 값이다 | round-trip 에서 DB 행으로 재계산 일치 확인(후보·외부 상태) |
 | 배열 값 규칙 | flux 는 NULL 허용, NaN·±Infinity·float32 overflow 거절. **power 는 NULL 도 거절**(`null_not_allowed`) | 3절 정규화가 거절. QA 테스트 `test_qa.py` 가 `power[0]=NULL` 을 거절함을 확인 |
-| gaps 정합 | `gaps` 와 flux 의 NULL 연속 구간 목록이 **양방향으로 완전히 같아야** 한다(선언 누락도, 과다 선언도 거절), `0 ≤ start ≤ end < n_points` | QA + round-trip(DB 조회 flux 로 재계산). `gaps=[]` 손상 payload 가 거절됨을 테스트로 확인. ERD 의 "빈 칸 NaN" 문구는 DB 표현이 NULL 이므로 정정 대상(6절) |
+| gaps 정합 | `gaps` 와 flux 의 NULL 연속 구간 목록이 **양방향으로 완전히 같아야** 한다(선언 누락도, 과다 선언도 거절), `0 ≤ start ≤ end < n_points` | QA + round-trip(DB 조회 flux 로 재계산). `gaps=[]` 손상 payload 가 거절됨을 테스트로 확인. ERD의 빈 bin 표현은 NULL로 정정 완료됐으며 Gold 계약과 일치한다(6절) |
 | `transit_model` | 후보마다 계약 1.0 Schema 통과, `candidate_id = c-<candidates.id>` | Schema + astro-kernel 파서. round-trip 확인 |
 | 잔차 기대값 존재 | 빈 제거·단일·복수·순서 반전 조합의 Silver 기준 잔차(bin 중심 평가) 가 참조 파일에 있고 순서 반전이 같은 checksum | `gold-roundtrip` fixture `expected_residuals` |
 | 기준 시각 | `fold_reference_time_btjd` = DAT-02 품질 필터(QUALITY==0)와 time·flux 유한성을 통과한 원본 관측 시각에서 **중복 시각을 제거한 뒤** 의 중앙값(DAT-11·ERD). detrending·sigma clipping 결과에 의존하지 않는다. float64 그대로 저장·조회 | `fold_reference_time()` 이 `np.unique` 뒤 중앙값. 전처리 설정을 바꿔도 값이 같음, 중복 시각 합성 사례에서 중복 미제거 값과 다름을 테스트로 확인. round-trip 정확 일치 |
@@ -102,7 +102,7 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 
 ## 6. 정합화가 필요한 기존 문서
 
-- ERD `light_curve_segments.gaps` 설명의 "빈 칸은 NaN 으로 채운다" 는 DB 표현이 REAL[] **NULL** 이므로 "NULL" 로 정정 요청(ERD 소유자). Gold 계약 4절·이 문서는 NULL 이다.
+- 완료: ERD `light_curve_segments.gaps`의 빈 bin 표현은 **NULL**로 정정됐다. Gold 계약 4절·이 문서와 일치하며 추가 정정 요청은 없다.
 - ERD `ai_executions.status` 값 목록이 문서에 없다. 5절의 일시 실패/반복 실패 구분을 값으로 적을 때 함께 정한다.
 - DB CHECK(flux NaN·±Inf 거절, power NULL·NaN·±Inf 거절)는 Backend 140 브랜치에 V9 로 추가됨(강재민, MR 전). 병합되면 2절 표의 근거를 V9 로 갱신한다.
 - NUMERIC 열의 float64 적재 표기(2절·3.1절 9항)는 Publisher 구현 규칙으로 D17 에 인계한다. 열 타입을 DOUBLE PRECISION 으로 바꾸는 안은 이 문서가 제안하지 않는다(ERD 소유자 판단).

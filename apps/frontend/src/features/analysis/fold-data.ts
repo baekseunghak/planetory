@@ -41,7 +41,8 @@ export function buildFoldData(
       throw new Error("접기 곡선의 길이와 관측 간격을 확인해 주세요.");
     for (let index = 0; index < segment.nPoints; index++) {
       const flux = segment.flux[index];
-      const btjd = segment.startBtjd + index * (segment.binMinutes / 1440);
+      const btjd =
+        segment.startBtjd + (index + 0.5) * (segment.binMinutes / 1440);
       if (!Number.isFinite(btjd) || (flux !== null && !Number.isFinite(flux)))
         throw new Error("접기 관측값은 유한한 값이어야 합니다.");
       if (flux === null) continue;
@@ -59,6 +60,7 @@ export function buildFoldData(
   // Empty is a data state, never a successful zero-point fold or a no-signal judgment.
   return Object.freeze({
     dataId: JSON.stringify([
+      "gold-bin-center-v1",
       context.ticId,
       contextKey(curve.context),
       context.foldReferenceTimeBtjd,

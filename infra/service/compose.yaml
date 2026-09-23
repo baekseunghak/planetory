@@ -34,6 +34,58 @@ services:
     networks:
       - service
 
+  # 세션 저장소와 캐시는 서로 다른 인스턴스여야 한다. 백엔드가 기동 시 host+port가
+  # 같으면 거부한다(RedisSessionConfig). 캐시 eviction이 로그인 세션을 지우는 것을
+  # 막는 경계이므로 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+  #
+  # 둘 다 외부 인바운드 0개다. 호스트 포트를 열지 않고 service 네트워크 안에서만
+  # 붙으므로 requirepass를 걸지 않는다. 위험은 외부가 아니라 같은 네트워크의 다른
+  # 컨테이너다. 우리가 만들지 않은 컨테이너를 service 네트워크에 붙이면 그때
+  # .env로 비밀번호를 넣는다(SESSION_REDIS_PASSWORD·CACHE_REDIS_PASSWORD).
+  session-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    # 기본 RDB 저장점을 그대로 쓴다. 볼륨이 없으면 재시작마다 전원 로그아웃이다.
+    #
+    # 상한은 두되 축출은 하지 않는다. 세션이 지워지면 로그아웃이다. 상한에 닿으면
+    # 새 로그인과 세션 연장이 쓰기 실패로 막힌다(503). 같은 호스트의 PostgreSQL을
+    # 밀어내지 않기 위한 예산이다(ec2-service-entry-failover D1).
+    # ponytail: 64mb는 세션 1개 실측 약 2.4KB로 2만 개 남짓. 동시 접속 목표(DEC-16)가
+    # 정해지면 다시 잡는다. 컨테이너 mem_limit은 걸지 않는다. 넘는 순간 OOM으로
+    # 저장소가 죽어 전원 로그아웃이 되므로, 쓰기만 실패하는 maxmemory가 낫다.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - session-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
+  # 잔차·주기도 캐시용(SRS DAT-14). 소비처는 아직 없고 지금은 백엔드 기동 요건만
+  # 채운다. 재생성 가능한 파생물이라 볼륨을 두지 않고 저장도 끈다.
+  #
+  # volatile-lru로 축출 후보를 만료가 걸린 키로 한정한다. DAT-14는 결과와 함께 진행
+  # 상태와 중복 계산 잠금도 여기 둔다. allkeys-lru면 잠금이 결과와 같은 확률로
+  # 지워져 중복 계산이 성립한다. 이건 축출 정책일 뿐 잠금 정책이 아니다. 잠금의
+  # 만료·소유권·장애 회수는 소비 코드 연결 전에 정한다(README).
+  # 크기(128mb)는 임시값이다. 확정은 S15P21C206-104 실측 뒤다(DEC-35).
+  cache-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
   backend:
     image: ${BACKEND_IMAGE:-local/planetory-backend:not-configured}
     platform: linux/amd64
@@ -48,6 +100,7 @@ services:
       DATABASE_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_PROFILES_INCLUDE: ${OAUTH_PROFILES:-}
       AUTH_SUCCESS_URL: ${AUTH_SUCCESS_URL:-/api/v1/me}
+      NOTIFICATION_SIGNING_KEY: ${NOTIFICATION_SIGNING_KEY:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
@@ -55,13 +108,359 @@ services:
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
       GOLD_ROOT: /gold
+      # 주소를 .env로 빼지 않는다. compose가 정의한 서비스 이름이 곧 주소이고,
+      # .env에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않는다.
+      SESSION_REDIS_HOST: session-redis
+      SESSION_REDIS_PORT: "6379"
+      CACHE_REDIS_HOST: cache-redis
+      CACHE_REDIS_PORT: "6379"
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    # cache-redis는 넣지 않는다. 캐시는 선택 의존성이다(health도 세션만 본다). 캐시
+    # 장애는 온라인 계산만 멈춰야 하는데, 여기 넣으면 캐시가 unhealthy일 때 백엔드가
+    # created에 멈춘다. 캐시 연결은 쓰는 시점에 맺으므로 기동에 필요하지 않다.
+    depends_on:
+      session-redis:
+        condition: service_healthy
+      service-db:
+        condition: service_healthy
+    networks:
+      - service
+
+  # ERD를 낸다. 호스트 포트를 열지 않고 service 네트워크 안에만 뜨며 Tunnel이
+  # origin으로 잡는다. 외부 인바운드는 0개로 유지된다.
+  #   erd.planetory.space -> http://erd:80  (Liam)
+  #
+  # 한국어 설명은 도구가 아니라 DB가 갖는다. 설명의 정본은 pg_description이며
+  # R__table_comments.sql이 그 값을 심는다(반복 마이그레이션).
+  erd:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - erd-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 아래 생성기는 erd-refresh profile에 묶여 평시 up 대상이 아니다.
+  # 스키마가 바뀌었을 때만 수동으로 돌린다.
+  #   docker compose --profile erd-refresh run --rm erd-generator
+  # DB 비밀번호는 명령줄 인자에 두지 않고 환경변수로만 넘긴다.
+
+  # pg_dump는 서버와 같은 18.6 이미지를 쓴다. 하위 버전 클라이언트는 상위 서버를
+  # 덤프하지 못하고 거부한다.
+  erd-dump:
+    image: postgres:18.6-alpine
+    platform: linux/amd64
+    profiles: ["erd-refresh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PGUSER: ${POSTGRES_USER:-planetory}
+      PGDATABASE: ${POSTGRES_DB:-planetory_poc}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        pg_dump -h service-db -p 5432 --schema-only --no-owner --no-privileges -n public \
+          > /scratch/schema.sql
+        # Liam의 postgres 파서는 COMMENT ON TABLE 일부를 흘린다(34개 중 9개 누락 실측,
+        # v0.7.24). 설명의 정본은 pg_description이므로 따로 떠서 생성 뒤에 덮어쓴다.
+        psql -h service-db -p 5432 -tAc "
+          select json_build_object(
+            'tables', coalesce((
+              select json_object_agg(c.relname, obj_description(c.oid,'pg_class'))
+              from pg_class c join pg_namespace n on n.oid = c.relnamespace
+              where c.relkind = 'r' and n.nspname = 'public'
+                and obj_description(c.oid,'pg_class') is not null), '{}'::json),
+            'columns', coalesce((
+              select json_object_agg(t.relname, t.cols) from (
+                select c.relname, json_object_agg(a.attname, d.description) as cols
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+                join pg_description d on d.objoid = c.oid and d.objsubid = a.attnum
+                where c.relkind = 'r' and n.nspname = 'public'
+                group by c.relname) t), '{}'::json))
+        " > /scratch/comments.json
+        echo "dumped $$(wc -l < /scratch/schema.sql) lines, $$(grep -c '^COMMENT ON' /scratch/schema.sql) comments"
+    volumes:
+      - erd-scratch:/scratch
     depends_on:
       service-db:
         condition: service_healthy
+    networks:
+      - service
+
+  erd-generator:
+    image: ${ERD_NODE_IMAGE:-node:22-alpine}
+    platform: linux/amd64
+    profiles: ["erd-refresh"]
+    environment:
+      NPM_CONFIG_CACHE: /npm-cache
+      LIAM_CLI_VERSION: ${LIAM_CLI_VERSION:-0.7.24}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        rm -rf /work/build && mkdir -p /work/build
+        cp /scratch/schema.sql /work/build/schema.sql
+        cd /work/build
+        npx --yes @liam-hq/cli@$$LIAM_CLI_VERSION erd build --input schema.sql --format postgres
+        cat > /work/postprocess.js <<'JS'
+        const fs = require('fs');
+        const dist = '/work/build/dist';
+
+        // 1) 설명의 정본은 pg_description이다. Liam v0.7.24 파서가 COMMENT ON TABLE을
+        //    일부 흘리므로(34개 중 9개 누락 실측) 여기서 덮어쓴다.
+        const sp = dist + '/schema.json';
+        const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
+        const c = JSON.parse(fs.readFileSync('/scratch/comments.json', 'utf8'));
+        let nt = 0, nc = 0;
+        for (const [t, cm] of Object.entries(c.tables || {}))
+          if (s.tables[t]) { s.tables[t].comment = cm; nt++; }
+        for (const [t, cols] of Object.entries(c.columns || {}))
+          for (const [col, cm] of Object.entries(cols))
+            if (s.tables[t] && s.tables[t].columns[col]) { s.tables[t].columns[col].comment = cm; nc++; }
+
+        // 2) Flyway 내부 테이블은 도메인 ERD가 아니다. 테이블과 이를 가리키는 제약을 뺀다.
+        const DROP = ['flyway_schema_history'];
+        let nd = 0;
+        for (const t of DROP) if (s.tables[t]) { delete s.tables[t]; nd++; }
+        for (const tv of Object.values(s.tables))
+          for (const [k, cst] of Object.entries(tv.constraints || {}))
+            if (cst.targetTableName && DROP.includes(cst.targetTableName)) delete tv.constraints[k];
+        fs.writeFileSync(sp, JSON.stringify(s));
+
+        // 3) 쿼리 없이 들어오면 전체 컬럼 보기로 연다. 모듈 스크립트는 defer라 이 인라인이
+        //    먼저 돈다. 사용자가 명시한 쿼리는 건드리지 않는다.
+        const ip = dist + '/index.html';
+        const MARK = 'liam-default-showmode';
+        let h = fs.readFileSync(ip, 'utf8');
+        if (!h.includes(MARK)) {
+          const tag = '<script data-' + MARK + '>if(!location.search){location.replace(location.pathname+"?showMode=ALL_FIELDS"+location.hash)}</script>';
+          fs.writeFileSync(ip, h.replace('</head>', '    ' + tag + '\n  </head>'));
+        }
+        console.log('postprocess: comments tables=' + nt + ' columns=' + nc + ', dropped=' + nd);
+        JS
+        node /work/postprocess.js
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp -R /work/build/dist/. /output/
+        chmod -R a+rX /output
+    volumes:
+      - erd-output:/output
+      - erd-scratch:/scratch:ro
+      - erd-work:/work
+      - erd-npm-cache:/npm-cache
+    depends_on:
+      erd-dump:
+        condition: service_completed_successfully
+    networks:
+      - service
+
+  # Swagger UI를 정적으로 낸다. 호스트 포트를 열지 않고 service 네트워크 안에만 뜨며
+  # Tunnel이 api-docs.planetory.space -> http://api-docs:80으로 잡는다.
+  #
+  # 운영 백엔드는 건드리지 않는다. springdoc은 SWAGGER_ENABLED=false로 꺼져 있고
+  # SecurityConfig의 swagger permitAll은 local 프로필에서만 걸린다(SecurityConfig.java).
+  # 그 게이트를 푸는 대신, 같은 이미지를 일회용으로 띄워 스펙만 받아 온다.
+  api-docs:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - api-docs-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 아래 3개는 api-docs-refresh profile에 묶여 평시 up 대상이 아니다.
+  #   docker compose --profile api-docs-refresh run --rm api-docs-generator
+  #   docker compose --profile api-docs-refresh rm -sf api-docs-app api-docs-db
+  #
+  # 정리에 down을 쓰지 않는다. down은 profile과 무관하게 프로젝트 전체를 내려
+  # frontend·backend·service-db·cloudflared까지 멈춘다. 이름으로 지정한다.
+
+  # 스펙 추출 전용 스크래치 DB. 운영 DB는 복제·백업이 없으므로(ADR D6·D7) 읽기라도
+  # 붙이지 않는다. tmpfs라 컨테이너가 사라지면 같이 사라진다.
+  api-docs-db:
+    image: postgres:18.6-alpine
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      POSTGRES_DB: planetory_poc
+      POSTGRES_USER: planetory
+      # 일회용이다. 호스트 포트도 볼륨도 없고 이 네트워크 밖으로 나가지 않는다.
+      POSTGRES_PASSWORD: scratch-only
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planetory -d planetory_poc"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - service
+
+  # 운영과 같은 이미지를 local 프로필로 띄운다. 이 프로필에서만 swagger 경로가
+  # permitAll이고 SWAGGER_ENABLED로 springdoc이 켜진다. OAuth 프로필은 주지 않아
+  # oauth2Login은 구성되지 않는다.
+  api-docs-app:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set in .env}
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SWAGGER_ENABLED: "true"
+      DATABASE_URL: jdbc:postgresql://api-docs-db:5432/planetory_poc
+      DATABASE_USER: planetory
+      DATABASE_PASSWORD: scratch-only
+      GOLD_ROOT: /tmp
+    depends_on:
+      api-docs-db:
+        condition: service_healthy
+    networks:
+      - service
+
+  api-docs-generator:
+    image: ${ERD_NODE_IMAGE:-node:22-alpine}
+    platform: linux/amd64
+    profiles: ["api-docs-refresh"]
+    environment:
+      NPM_CONFIG_CACHE: /npm-cache
+      SWAGGER_UI_VERSION: ${SWAGGER_UI_VERSION:-5.32.14}
+      API_SERVER_URL: ${API_SERVER_URL:-https://planetory.space}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        mkdir -p /work
+        echo "api-docs-app 기동 대기..."
+        i=0
+        until wget -q -O /work/openapi.json "http://api-docs-app:8080/v3/api-docs"; do
+          i=$$((i+1))
+          if [ "$$i" -gt 60 ]; then echo "api-docs-app이 5분 안에 응답하지 않았다"; exit 1; fi
+          sleep 5
+        done
+        echo "스펙 수신: $$(wc -c < /work/openapi.json) bytes"
+        cd /work
+        rm -rf ui && mkdir -p ui
+        npm pack swagger-ui-dist@$$SWAGGER_UI_VERSION --pack-destination /work >/dev/null 2>&1
+        tar xzf /work/swagger-ui-dist-*.tgz -C /work/ui --strip-components=1
+        cat > /work/build.js <<'JS'
+        const fs = require('fs');
+        const P = '/work/openapi.json';
+        const spec = JSON.parse(fs.readFileSync(P, 'utf8'));
+
+        // 스펙에는 servers가 없다. 이 페이지 주소(api-docs.planetory.space)가 API 주소로
+        // 잘못 읽히지 않도록 실제 운영 주소를 박는다.
+        spec.servers = [{ url: process.env.API_SERVER_URL, description: '운영' }];
+        fs.writeFileSync(P, JSON.stringify(spec, null, 2));
+
+        const paths = Object.keys(spec.paths || {}).length;
+        const schemas = Object.keys((spec.components || {}).schemas || {}).length;
+
+        fs.writeFileSync('/work/index.html', `<!doctype html>
+        <html lang="ko">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Planetory API</title>
+            <link rel="icon" href="./favicon-32x32.png" sizes="32x32" />
+            <link rel="stylesheet" href="./swagger-ui.css" />
+            <style>body{margin:0}</style>
+          </head>
+          <body>
+            <div id="swagger-ui"></div>
+            <script src="./swagger-ui-bundle.js"></script>
+            <script src="./swagger-ui-standalone-preset.js"></script>
+            <script>
+              window.ui = SwaggerUIBundle({
+                url: './openapi.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                displayRequestDuration: true,
+                docExpansion: 'list',
+                presets: [SwaggerUIBundle.presets.apis],
+              });
+            </script>
+          </body>
+        </html>
+        `);
+        console.log('spec: paths=' + paths + ' schemas=' + schemas);
+        JS
+        node /work/build.js
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp /work/ui/swagger-ui.css /work/ui/swagger-ui-bundle.js \
+           /work/ui/swagger-ui-standalone-preset.js /work/ui/favicon-32x32.png /output/
+        cp /work/openapi.json /work/index.html /output/
+        chmod -R a+rX /output
+        echo "완료"
+    volumes:
+      - api-docs-output:/output
+      - api-docs-work:/work
+      - erd-npm-cache:/npm-cache
+    depends_on:
+      api-docs-app:
+        condition: service_started
+    networks:
+      - service
+
+  # 와이어프레임 문서를 그대로 서빙한다. Tunnel이 wireframe.planetory.space ->
+  # http://wireframe:80으로 잡는다. 호스트 포트는 열지 않는다.
+  #
+  # 문서는 저장소의 docs/requirements/planetory-wireframe.html이다. 이 HTML은
+  # ../images/...를 참조하므로 docs/images도 같이 올린다. 루트에 두면 브라우저가
+  # ../images를 /images로 정규화하므로 경로가 맞는다.
+  wireframe:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - wireframe-output:/usr/share/nginx/html:ro
+    networks:
+      - service
+
+  # 일회성 동기화. wireframe-refresh profile에 묶여 평시 up 대상이 아니다.
+  #   docker compose --profile wireframe-refresh run --rm wireframe-sync
+  # 저장소 체크아웃을 읽어 named volume에 복사한다. 체크아웃이 없으면 이 동기화만
+  # 실패하고, wireframe은 마지막으로 복사된 사본을 계속 서빙한다.
+  wireframe-sync:
+    image: ${ERD_WEB_IMAGE:-nginx:1.29-alpine}
+    platform: linux/amd64
+    profiles: ["wireframe-refresh"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        umask 022
+        test -f /src/requirements/planetory-wireframe.html || {
+          echo "저장소 체크아웃에서 와이어프레임을 찾지 못했다: docs/requirements/planetory-wireframe.html"
+          exit 1
+        }
+        find /output -mindepth 1 -delete 2>/dev/null || true
+        cp /src/requirements/planetory-wireframe.html /output/index.html
+        mkdir -p /output/images
+        cp -R /src/images/. /output/images/
+        chmod -R a+rX /output
+        echo "동기화 완료: $$(du -sh /output | cut -f1), 이미지 $$(find /output/images -type f | wc -l)개"
+    volumes:
+      - wireframe-output:/output
+      - ../../docs:/src:ro
+    networks:
+      - service
+
+  # 외부 인바운드 개방 없이 Cloudflare edge에서만 트래픽을 받는다. 토큰은 이미지·
+  # Git·프로세스 인자에 두지 않고 서버의 .env 파일에서 주입한다.
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:latest}
+    restart: unless-stopped
+    command: ["--no-autoupdate", "tunnel", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     networks:
       - service
 
@@ -69,6 +468,27 @@ networks:
   service:
 
 volumes:
+  # ERD 산출물과 빌드 중간물. 언제든 재생성 가능한 파생물이라 소실돼도 데이터
+  # 손실이 아니다. service-db-data와 혼동하지 않는다.
+  erd-output:
+    name: planetory-erd-output
+  erd-scratch:
+    name: planetory-erd-scratch
+  erd-work:
+    name: planetory-erd-work
+  erd-npm-cache:
+    name: planetory-erd-npm-cache
+  api-docs-output:
+    name: planetory-api-docs-output
+  api-docs-work:
+    name: planetory-api-docs-work
+  wireframe-output:
+    name: planetory-wireframe-output
+
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
     name: planetory-service-db-data
+
+  # 세션 저장소. 사라지면 전원 로그아웃이지만 데이터 손실은 아니다.
+  session-redis-data:
+    name: planetory-session-redis-data

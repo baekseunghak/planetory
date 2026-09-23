@@ -29,10 +29,13 @@ function utc(value: unknown): string {
     return invalid();
   return result;
 }
-export type Author = { memberId: string; nickname: string };
+export type Author = { memberId: string | null; nickname: string };
 function author(value: unknown): Author {
   const row = object(value);
-  return { memberId: text(row.memberId), nickname: text(row.nickname) };
+  const nickname = text(row.nickname);
+  if (row.memberId === null && nickname === "탈퇴한 회원")
+    return { memberId: null, nickname };
+  return { memberId: text(row.memberId), nickname };
 }
 export const judgments = [
   "LIKELY_PLANET",
@@ -159,6 +162,22 @@ function readFeedItem(value: unknown): FeedItem {
 }
 export const readFeed = (value: unknown, cursor?: string | null) =>
   readPage(value, readFeedItem, (item) => `${item.type}:${item.id}`, cursor);
+
+// Selection and ordering belong to S18. Validate its result rather than
+// filtering the general feed, counting analyses, or ranking in the browser.
+export function readHotTopics(value: unknown, cursor?: string | null) {
+  const page = readFeed(value, cursor);
+  if (
+    page.items.some(
+      (item) =>
+        item.type !== "SIGNAL_THREAD" ||
+        !item.judgmentSummary ||
+        item.judgmentSummary.participantCount < 10,
+    )
+  )
+    return invalid();
+  return page;
+}
 
 export function readPost(value: unknown) {
   const row = object(value);

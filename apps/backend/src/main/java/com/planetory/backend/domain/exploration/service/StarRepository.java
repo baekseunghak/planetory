@@ -1,11 +1,13 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.domain.StarBoardVisibility;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.planetory.backend.domain.PublicAnalysisVisibility;
 import com.planetory.backend.domain.exploration.service.StarViews.Achievement;
 import com.planetory.backend.domain.exploration.service.StarViews.AchievementByType;
 import com.planetory.backend.domain.exploration.service.StarViews.PlanetItem;
@@ -51,7 +53,8 @@ public class StarRepository {
 
     /** 이 별을 발견한 회원 수. 표시용이며 진행 상태나 후보 수는 함께 주지 않는다. */
     public int countDiscoveredMembers(long ticId) {
-        return jdbc.sql("SELECT count(DISTINCT user_id) FROM star_unlocks WHERE tic_id = ?")
+        return jdbc.sql("SELECT count(DISTINCT u.user_id) FROM star_unlocks u "
+                        + "JOIN users m ON m.id=u.user_id AND m.status='active' WHERE u.tic_id = ?")
                 .param(ticId)
                 .query(Integer.class).single();
     }
@@ -213,7 +216,7 @@ public class StarRepository {
 
     /** 한 명이라도 발견했으면 게시판이 열린다(COM-01). 요청 회원 기준이 아니다. */
     public boolean isBoardOpen(long ticId) {
-        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM star_unlocks WHERE tic_id = ?)")
+        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM stars WHERE tic_id = ? AND board_open)")
                 .param(ticId)
                 .query(Boolean.class).single();
     }
@@ -225,12 +228,7 @@ public class StarRepository {
      * 존재 확인 하나로 둔다.
      */
     public boolean isOpenPublishedStar(long ticId) {
-        return jdbc.sql("""
-                        SELECT EXISTS(
-                            SELECT 1 FROM stars s
-                             WHERE s.tic_id = ? AND s.service_status = 'published'
-                               AND EXISTS (SELECT 1 FROM star_unlocks u WHERE u.tic_id = s.tic_id))
-                        """)
+        return jdbc.sql("SELECT " + StarBoardVisibility.OPEN.formatted("?"))
                 .param(ticId)
                 .query(Boolean.class).single();
     }
@@ -279,8 +277,10 @@ public class StarRepository {
      * @param limit         한 건 더 요청해 다음 페이지 유무를 판단한다
      */
     public List<StarViews.StarListItem> findStarList(long targetId, String scope,
+                                                     StarViews.ListFilter filter,
                                                      java.time.OffsetDateTime afterActivity,
                                                      Long afterTicId, int limit) {
+        int[] gradeRange = filter.grade() == null ? null : StarService.gradeRange(filter.grade());
         return jdbc.sql("""
                         WITH base AS (
                             SELECT u.tic_id,
@@ -313,10 +313,10 @@ public class StarRepository {
                                        AND s.matched_candidate_id IS NOT NULL
                                        AND NOT EXISTS (
                                            SELECT 1 FROM published_analyses pa
+                                             JOIN posts p ON p.id = pa.post_id
                                             WHERE pa.user_id = s.user_id
                                               AND pa.candidate_id = s.matched_candidate_id
-                                              AND pa.unpublished_at IS NULL
-                                              AND pa.hidden_at IS NULL))
+                                              AND %s))
                                        AS unpublished_signal_count
                               FROM star_unlocks u
                          LEFT JOIN user_star_progress p
@@ -327,13 +327,21 @@ public class StarRepository {
                         )
                         SELECT * FROM base
                          WHERE (:scope = 'discovered' OR submitted)
+                           AND (CAST(:stage AS TEXT) IS NULL OR progress_stage = :stage)
+                           AND (CAST(:ticId AS BIGINT) IS NULL OR tic_id = :ticId)
+                           AND (CAST(:gradeMin AS INTEGER) IS NULL
+                                OR achievement_count BETWEEN :gradeMin AND :gradeMax)
                            AND (CAST(:afterActivity AS TIMESTAMPTZ) IS NULL
                                 OR (last_activity_at, -tic_id) < (:afterActivity, -CAST(:afterTicId AS BIGINT)))
                          ORDER BY last_activity_at DESC, tic_id
                          LIMIT :limit
-                        """)
+                        """.formatted(PublicAnalysisVisibility.VISIBLE))
                 .param("targetId", targetId)
                 .param("scope", scope)
+                .param("stage", filter.stage())
+                .param("ticId", filter.ticId() == null ? null : Long.parseLong(filter.ticId()))
+                .param("gradeMin", gradeRange == null ? null : gradeRange[0])
+                .param("gradeMax", gradeRange == null ? null : gradeRange[1])
                 .param("afterActivity", afterActivity)
                 .param("afterTicId", afterTicId)
                 .param("limit", limit)

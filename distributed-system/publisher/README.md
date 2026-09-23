@@ -3,3 +3,7 @@
 완료된 Silver를 검사하고 EC2용 Gold 묶음으로 포장·전송하는 코드를 둘 위치다.
 
 경로, 버전과 checksum을 검증한 뒤 전달한다. 전송이나 검증에 실패하면 기존 Gold를 바꾸지 않는다.
+
+공식 스레드 요약을 동기화하는 V19가 있으므로 후보 네 수치 변경 트랜잭션은 `READ COMMITTED`를 사용한다. 현재 이 디렉터리에는 운영 Publisher 구현이 없어 실제 연결의 격리 수준은 미확인이다. 적용 전 확인·오류 처리·공개 요청 잠금 대기 조건은 [공식 검색 본문 계약](../../docs/api/community/README.md#공식-제목본문의-구현-차이)을 따른다.
+
+V23 이후 후보 변경·current 전환은 [알림 DB 생산 계약](../../docs/development/service-backend/community.md#notification-producer-contract)을 따른다. 기존 적재·검증·current 전환 트랜잭션과 TIC 직렬화를 유지하며 지연 트리거는 최종 current 상태에서만 원천 사건·당시 수신 의도를 기록한다. Gold 계정의 회원 직접 권한은 추가하지 않는다. 사건을 별도 INSERT하거나 제약 트리거를 중간에 강제 실행하지 않는다. 실제 Publisher 실행체 연결·규모 검증은 별도 인수다.

@@ -11,7 +11,10 @@ import {
 import { exampleStar } from "./sky-reference/reference.mjs";
 
 // Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
-export function galaxyFixturePlugin(performanceFixture = false): Plugin {
+export function galaxyFixturePlugin(
+  performanceFixture = false,
+  initialStarCount = 1000,
+): Plugin {
   let revision = 1,
     failed = false;
   const completedTutorials = new Map<number, string>();
@@ -33,7 +36,9 @@ export function galaxyFixturePlugin(performanceFixture = false): Plugin {
           ? 2
           : 0,
   });
-  let stars: Star[] = Array.from({ length: 1000 }, (_, i) => makeStar(i));
+  let stars: Star[] = Array.from({ length: initialStarCount }, (_, i) =>
+    makeStar(i),
+  );
   const cursors = new Map<string, { scope: string; offset: number }>();
   const version = () => "galaxy-fixture-204:" + revision;
   const levels = [0.25, 1, 4].map((scale, level) => ({ scale, level }));
@@ -236,6 +241,32 @@ export function galaxyFixturePlugin(performanceFixture = false): Plugin {
               : { round: null, eligible: false },
           );
         if (url.pathname === "/v1/me/sky") return reply(200, meta());
+        if (url.pathname === "/v1/me/sky/locate") {
+          const star = stars.find(
+            (s) => s.ticId === url.searchParams.get("ticId"),
+          );
+          if (!star)
+            return reply(403, {
+              code: "STAR_LOCKED",
+              message: "발견한 별만 찾을 수 있습니다.",
+            });
+          return reply(200, {
+            ticId: star.ticId,
+            x: star.x,
+            y: star.y,
+            depthZ: star.depthZ,
+            layoutOrdinal: star.layoutOrdinal,
+            layoutVersion: LAYOUT_VERSION,
+            version: version(),
+            level: 1,
+            bounds: {
+              x: Math.floor(star.x / 512) * 512,
+              y: Math.floor(star.y / 512) * 512,
+              w: 512,
+              h: 512,
+            },
+          });
+        }
         if (url.pathname === "/v1/me/stars") {
           const q = url.searchParams;
           if (
@@ -243,17 +274,50 @@ export function galaxyFixturePlugin(performanceFixture = false): Plugin {
             q.get("sort") !== "recent" ||
             q.get("size") !== "20" ||
             [...q.keys()].some(
-              (k) => !["scope", "sort", "size", "cursor"].includes(k),
+              (k) =>
+                ![
+                  "scope",
+                  "sort",
+                  "size",
+                  "cursor",
+                  "ticId",
+                  "stage",
+                  "grade",
+                ].includes(k),
             )
           )
             return bad();
-          const scope = "discovered-list:" + version();
+          if (
+            (q.has("ticId") && !/^[1-9]\d*$/.test(q.get("ticId")!)) ||
+            (q.has("stage") &&
+              !["unexplored", "in_progress", "completed"].includes(
+                q.get("stage")!,
+              )) ||
+            (q.has("grade") &&
+              !["A", "S", "SS", "SSS"].includes(q.get("grade")!))
+          )
+            return bad();
+          const filtered = stars.filter(
+            (s) =>
+              (!q.has("ticId") || s.ticId === q.get("ticId")) &&
+              (!q.has("stage") || s.progressStage === q.get("stage")) &&
+              (!q.has("grade") ||
+                (s.planetCount ? "A" : null) === q.get("grade")),
+          );
+          const scope =
+            "discovered-list:" +
+            JSON.stringify([
+              version(),
+              q.get("ticId"),
+              q.get("stage"),
+              q.get("grade"),
+            ]);
           const continuation = q.has("cursor")
             ? cursors.get(q.get("cursor")!)
             : undefined;
           if (q.has("cursor") && continuation?.scope !== scope) return bad();
           const offset = continuation?.offset ?? 0;
-          const items = stars.slice(offset, offset + 20).map((s) => ({
+          const items = filtered.slice(offset, offset + 20).map((s) => ({
             ticId: s.ticId,
             progressStage: s.progressStage,
             planetCount: s.planetCount,
@@ -269,7 +333,7 @@ export function galaxyFixturePlugin(performanceFixture = false): Plugin {
             marker: s.marker,
           }));
           let nextCursor: string | null = null;
-          if (offset + items.length < stars.length) {
+          if (offset + items.length < filtered.length) {
             nextCursor = randomUUID();
             cursors.set(nextCursor, { scope, offset: offset + items.length });
           }

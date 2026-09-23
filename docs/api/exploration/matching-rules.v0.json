@@ -67,7 +67,7 @@
       "status": "confirmed"
     },
     "nTransits": {
-      "definition": "후보 통과 중심 epoch_c + n·P_c 의 창 [중심 ± D_c/2] 이 observedWindows 와 교집합을 갖는 n 의 개수(관측된 통과 수). 후보 행에 nTransitsObserved 가 있으면 그 값을 쓴다",
+      "definition": "후보 통과 중심 epoch_c + n·P_c 의 창 [중심 ± D_c/2] 이 observedWindows 와 교집합을 갖는 n 의 개수(관측된 통과 수). 서버와 동일하게 관측 창에서 산정하며 외부 후보 행의 N으로 덮어쓰지 않는다. cap은 주기 누적 오차에만 적용하고 중첩 분모는 상한 전 관측 통과 수다",
       "cap": null,
       "capStatus": "미결 (DEC-03, N 상한). null 이면 상한 없음",
       "source": "SRS 5.1 주기 조건의 N"
@@ -82,11 +82,11 @@
         "pass": "min_k abs(epoch_user − epoch_c − k·P_mod) ≤ D_c / 2, P_mod = min(P_user, P_c)",
         "normalized": "e_epoch = min_k abs(epoch_user − epoch_c − k·P_mod) / max(D_c/2, minWindowDays/2)",
         "source": "SRS 5.1",
-        "note": "허용 폭은 후보 지속시간의 반폭(D_c/2). SRS 최소 허용 창(케이던스 2배)은 이 반폭이 그보다 좁아지지 않게 하는 하한이다: 유효 반폭 = max(D_c/2, minWindowDays/2). v0 는 이 해석을 쓰되 '창 전체 폭/반폭' 해석은 미결로 표시한다",
+        "note": "허용 폭은 후보 지속시간의 반폭(D_c/2). 유효 반폭 = max(D_c/2, minWindowDays/2). 2026-09-17 강재민 리뷰에서 minWindowDays가 전체 선택 폭이므로 반폭 하한은 그 절반임을 확인했다",
         "minWindowInterpretation": "half-width = max(D_c/2, minWindowDays/2)",
-        "minWindowInterpretationStatus": "v0-assumption",
-        "modulusNote": "배율 1 이면 P_mod ≈ P_c. 절반 주기 alias(m=2)에서는 사용자가 고른 통과가 후보의 홀수 번째 통과일 수 있어 P_user 로 순환해야 맞는다. SRS 5.1 의 '후보 주기로 환산한 순환 위상 차이' 를 이렇게 읽은 것은 v0 가정이며 강재민 확인 대상.",
-        "modulusStatus": "v0-assumption"
+        "minWindowInterpretationStatus": "confirmed-review-2026-09-17",
+        "modulusNote": "P_mod = min(P_user, P_c). 절반 주기 alias는 사용자 주기로, 두 배 주기 alias는 후보 주기로 순환한다. 2026-09-17 강재민 리뷰에서 확인한 해석이며 같은 항목의 재승인을 요구하지 않는다.",
+        "modulusStatus": "confirmed-review-2026-09-17"
       },
       "duration": {
         "pass": "0.5 ≤ D_user / D_c ≤ 2 (경계 포함, 원래 비율 부등식으로 검사)",
@@ -153,8 +153,6 @@
     "N 상한(nTransits.cap) — DEC-03, 111 실측",
     "최소 중첩 통과 수·비율 — SRS 5.1 실측 항목",
     "dominanceRatio·minScoreGap·overlapRatioTolerance 값 — 111 실측",
-    "고조파 alias 의 epoch 순환 주기 P_mod = min(P_user, P_c) 해석 — 강재민 확인",
-    "epoch 허용 폭의 '창 전체 폭/반폭' 해석 — 서버(강재민)·프론트(백지웅) 확인",
     "phaseWidthMax 0.25·allowEmptyPhaseSpan=false — DEC-19/Q03 확정",
     "3배 고조파 — 112 뒤"
   ]

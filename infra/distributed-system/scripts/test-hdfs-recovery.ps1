@@ -57,12 +57,35 @@ foreach ($required in (
  if ($source -notmatch [regex]::Escape($required)) { throw "Missing recovery contract: $required" }
 }
 
+function Get-StepSourceFrom {
+ param([string]$Candidate,[string]$Start,[string]$End)
+ $startIndex=$Candidate.IndexOf("'$Start' {")
+ $endIndex=$Candidate.IndexOf("'$End' {",$startIndex)
+ if ($startIndex -lt 0 -or $endIndex -le $startIndex) { throw "Missing recovery step boundary: $Start -> $End" }
+ $Candidate.Substring($startIndex,$endIndex-$startIndex)
+}
+
 function Get-StepSource {
  param([string]$Start,[string]$End)
- $startIndex=$source.IndexOf("'$Start' {")
- $endIndex=$source.IndexOf("'$End' {",$startIndex)
- if ($startIndex -lt 0 -or $endIndex -le $startIndex) { throw "Missing recovery step boundary: $Start -> $End" }
- $source.Substring($startIndex,$endIndex-$startIndex)
+ Get-StepSourceFrom $source $Start $End
+}
+
+function Assert-TmpCleanupContract {
+ param([string]$Candidate)
+ $prepare=Get-StepSourceFrom $Candidate Prepare PlannedToNode2
+ $final=$Candidate.Substring($Candidate.IndexOf("'FinalAudit' {"))
+ $prepareCleanup='rm -f -- "$local_source" "$local_copy" "$local_sha" "$local_fsck"'
+ $finalCleanup='rm -f -- "$final_report" "$final_fsck" "$final_copy" "$final_yarn"'
+
+ foreach ($required in ('local_fsck=/tmp/S15P21C206-74-__RUN_ID__-baseline-fsck.txt','trap cleanup EXIT',$prepareCleanup,'RECOVERY_TMP_CLEANUP_FAILED step=Prepare run_id=__RUN_ID__')) {
+  if ($prepare -notmatch [regex]::Escape($required)) { throw "Prepare cleanup contract missing: $required" }
+ }
+ foreach ($required in ('final_copy=/tmp/S15P21C206-74-__RUN_ID__-final-baseline.bin','trap cleanup EXIT',$finalCleanup,'RECOVERY_TMP_CLEANUP_FAILED step=FinalAudit run_id=__RUN_ID__')) {
+  if ($final -notmatch [regex]::Escape($required)) { throw "FinalAudit cleanup contract missing: $required" }
+ }
+ foreach ($fixedPath in ('/tmp/S15P21C206-74-final-report.txt','/tmp/S15P21C206-74-final-fsck.txt','/tmp/S15P21C206-74-final-baseline.bin','/tmp/S15P21C206-74-final-yarn.txt')) {
+  if ($final -match [regex]::Escape($fixedPath)) { throw "FinalAudit temp path must include RunId: $fixedPath" }
+ }
 }
 
 $prepareSource=Get-StepSource Prepare PlannedToNode2
@@ -120,6 +143,15 @@ foreach ($required in ('$nodes[0..2]','FINAL_JOURNALNODE_ACTIVE','dfs -cat ''__E
  if ($finalAuditSource -notmatch [regex]::Escape($required)) { throw "FinalAudit recovery contract missing: $required" }
 }
 if ($finalAuditSource -match [regex]::Escape('/dev/zero')) { throw 'FinalAudit must compare with the checksum emitted by Prepare.' }
+Assert-TmpCleanupContract $source
+foreach ($mutation in (
+ $source.Replace('rm -f -- "$local_source" "$local_copy" "$local_sha" "$local_fsck"',''),
+ $source.Replace('rm -f -- "$final_report" "$final_fsck" "$final_copy" "$final_yarn"','')
+)) {
+ $rejected=$false
+ try { Assert-TmpCleanupContract $mutation } catch { $rejected=$true }
+ if (-not $rejected) { throw 'Recovery cleanup mutation must be rejected.' }
+}
 foreach ($forbidden in ('namenode -format','-bootstrapStandby','-initializeSharedEdits','dfs -rm','rm -rf','haadmin -failover')) {
  if ($source -match [regex]::Escape($forbidden)) { throw "Recovery script must not contain: $forbidden" }
 }

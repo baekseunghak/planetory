@@ -16,6 +16,10 @@ public final class ExplorationIds {
     public static final String SUBMISSION = "sub-";
     /** 공개 분석. 형식의 정본은 서비스 API 명세다. */
     public static final String PUBLIC_ANALYSIS = "pa-";
+    /** 회원. 형식의 정본은 서비스 API 명세이며 회원 API가 이 형식으로 돌려준다. */
+    public static final String MEMBER = "u-";
+    /** 온라인 잔차 작업 (탐사 API 7장). */
+    public static final String RESIDUAL_JOB = "rj-";
 
     /** {@code Long.MAX_VALUE}는 19자리다. 18자리까지만 받으면 넘침을 따로 검사하지 않아도 된다. */
     private static final int MAX_DIGITS = 18;
@@ -47,6 +51,10 @@ public final class ExplorationIds {
         return PUBLIC_ANALYSIS + id;
     }
 
+    public static String residualJob(long id) {
+        return RESIDUAL_JOB + id;
+    }
+
     /**
      * 접두 뒤에 양의 정수만 받는다. {@code b-01}·{@code b-+1}처럼 같은 대상을 다르게 쓴 값은
      * 거절한다. 하나의 대상이 여러 문자열을 가지면 캐시 키와 요청 비교가 어긋난다.
@@ -67,6 +75,14 @@ public final class ExplorationIds {
      */
     public static OptionalLong parseTic(String value) {
         return value == null ? OptionalLong.empty() : digits(value);
+    }
+
+    /**
+     * 경로의 회원 식별자. 회원 API가 돌려준 {@code u-{id}}를 그대로 넣을 수 있어야 한다.
+     * 숫자만 적은 값은 같은 회원을 가리키는 다른 문자열이므로 받지 않는다(S15P21C206-246).
+     */
+    public static OptionalLong parseMember(String value) {
+        return parse(value, MEMBER);
     }
 
     private static OptionalLong digits(String digits) {

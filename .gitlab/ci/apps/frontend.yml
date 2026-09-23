@@ -1,15 +1,97 @@
+# 웹 검증은 MR에서 돌고, 이미지 빌드·배포는 기본 브랜치에서만 돈다.
+#
+# 지금 검증은 `web:build` 하나다. "빌드가 안 되는 코드는 머지할 수 없다"만 막는다.
+# 단위 테스트·포맷 검사·Playwright는 넣지 않았다. 전부 빌드와 배포를 막지 않고,
+# 단위 테스트는 남의 테스트가 남의 MR을 막는 구조라 팀 합의가 먼저다.
+# 필요해지면 아래 템플릿을 extends 하는 job을 하나씩 늘린다.
+.web-checks:
+  stage: validate
+  image: node:22.12-alpine
+  # 스테이지를 기다리지 않고 파이프라인 시작과 동시에 뜬다. job이 여럿이 되면
+  # 서로 의존하지 않고 병렬로 돌며, 하나가 실패해도 나머지 결과가 같이 보인다.
+  needs: []
+  # lock 파일이 그대로면 네트워크 왕복이 사라진다. node_modules는 캐싱하지 않는다.
+  # npm ci가 어차피 지우고 다시 깔기 때문이다.
+  cache:
+    key:
+      files: [apps/frontend/package-lock.json]
+    paths: [apps/frontend/.npm]
+  before_script:
+    - cd apps/frontend
+    - npm ci --cache .npm --prefer-offline --no-audit --fund=false
+  # MR 파이프라인의 changes는 타깃 브랜치 기준으로 비교한다. 브랜치 파이프라인은
+  # 직전 커밋과만 비교하지만, MR이 열리면 그쪽만 돌므로 판정이 중요한 자리는 MR이다.
+  # 기본 브랜치에서는 돌리지 않는다. build:frontend가 이미지 안에서 같은
+  # npm run build를 수행하므로 검증이 중복된다.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: &web_paths
+        - apps/frontend/**/*
+        - .gitlab/ci/apps/frontend.yml
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *web_paths
+
+# typecheck을 따로 두지 않는다. `npm run build`가 typecheck → vite build →
+# check-production 순서라 타입 오류·번들 실패·프로덕션 위생을 한 job이 모두 잡는다.
+web:build:
+  extends: .web-checks
+  # 배포 이미지와 같은 번들을 만든다. 플래그가 꺼지면 vite가 렌더러 import를 죽은
+  # 코드로 지워 번들링 오류가 MR에서 보이지 않는다. web:image는 src 변경에 돌지 않는다.
+  variables:
+    VITE_SKY_RENDERER_ENABLED: "true"
+  script:
+    - npm run build
+
+# MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
+#
+# web:build는 npm run build만 돌아서 Dockerfile·COPY 경로·빌드 ARG가 검증되지 않는다.
+# 그 결과 초록으로 통과한 MR이 develop에서 build:frontend를 깨뜨린다.
+#
+# 빌드한 이미지 안에서 nginx -t 까지 돌린다. nginx는 기동 시점에 upstream 호스트명을
+# 해석하므로, `proxy_pass http://backend:8080` 같은 리터럴이 돌아오면 여기서 잡힌다.
+# 실제로 S15P21C206-84에서 그 결함으로 프론트 컨테이너가 기동하지 못했다.
+web:image:
+  extends: .docker-build
+  stage: validate
+  needs: []
+  variables:
+    DOCKERFILE: apps/frontend/Dockerfile
+    IMAGE_NAME: frontend
+    TARGET_PLATFORM: linux/amd64
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
+    CHECK_TAG: ci-check/frontend:$CI_COMMIT_SHORT_SHA
+  # 푸시하지 않으므로 레지스트리가 필요 없다. .docker-build의 전제 검사를 비운다.
+  before_script: []
+  script:
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CHECK_TAG" $BUILD_ARGS .
+    - docker run --rm --entrypoint nginx "$CHECK_TAG" -t
+    # 배포 헬스가 보는 표식이 이미지에 있는지 MR에서 먼저 본다. 없으면 병합 뒤
+    # 배포가 헬스 실패로 롤백된다.
+    - docker run --rm --entrypoint test "$CHECK_TAG" -f /usr/share/nginx/html/health/renderer-enabled
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - apps/frontend/Dockerfile
+        - apps/frontend/nginx.conf
+        - apps/frontend/package-lock.json
+        - .gitlab/ci/apps/frontend.yml
+
 build:frontend:
   extends: .docker-build
   variables:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
-    BUILD_ARGS: ""
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
+  # develop에서는 변경 여부와 관계없이 빌드한다. changes로 거르면 이 앱을 바꾸지 않은
+  # 병합의 파이프라인에는 배포 버튼이 없고, 이 앱을 바꾼 이전 파이프라인은 새 커밋에
+  # 자동 취소되며 누르지 않은 수동 배포까지 함께 사라진다. 2026-09-23 백엔드 병합
+  # 4건이 빌드만 되고 배포되지 못했다(S15P21C206-261). 최신 파이프라인에 늘 버튼을 둔다.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
 
+# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
 deploy:frontend:ec2-a:
   extends: .deploy-ec2-a
   needs: ["build:frontend"]
@@ -18,22 +100,11 @@ deploy:frontend:ec2-a:
     DEPLOY_IMAGE_VARIABLE: FRONTEND_IMAGE
     DEPLOY_SERVICES: frontend
     DEPLOY_ACTION: up
+    # 정적 서빙이라 되돌릴 상태가 없다. 뜨지 않으면 바로 직전 이미지로 돌린다.
+    # `/`는 렌더러가 빠져도 200이라 회귀를 못 잡는다. 렌더러를 켠 빌드에만 있는
+    # 표식을 본다(apps/frontend/Dockerfile). nginx가 이 경로를 SPA로 폴백하지 않는다.
+    DEPLOY_HEALTH_PATH: "/health/renderer-enabled"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
-      when: manual
-
-deploy:frontend:ec2-b:
-  extends: .deploy-ec2-b
-  needs: ["build:frontend"]
-  variables:
-    IMAGE_NAME: frontend
-    DEPLOY_IMAGE_VARIABLE: FRONTEND_IMAGE
-    DEPLOY_SERVICES: frontend
-    DEPLOY_ACTION: up
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [apps/frontend/package-lock.json]
-      changes: [apps/frontend/**/*]
       when: manual

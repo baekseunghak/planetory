@@ -31,7 +31,12 @@ test("browser Back from analysis restores a star chosen in the list", async ({
 }) => {
   await list(page);
   await rows(page).nth(1).click();
-  await expect(page).toHaveURL(/star=900000002&view=list/);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/sky" &&
+      url.searchParams.get("star") === "900000002" &&
+      url.searchParams.get("view") === "list",
+  );
   await panel(page)
     .getByRole("link", { name: /분석 시작/ })
     .click();
@@ -72,6 +77,7 @@ test("creation failure: new unsubmitted tutorial is listed, locked TICs hidden, 
   await page.goto("/sky");
   await expect(listHeading(page)).toBeVisible();
   await expect(rows(page)).toHaveCount(1);
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await page.locator(".quest-tutorial summary").click();
   await expect(page.locator(".quest-tutorial")).toContainText(
     "튜토리얼 2 · 잠김",
@@ -160,7 +166,7 @@ test("real context loss/restoration keeps selection and camera; restoration neve
   await page.getByRole("button", { name: "3D 지도 보기" }).click();
   await expect(canvas).toBeFocused();
   expect(await cam(page)).toEqual(selected);
-  await panel(page).getByRole("button", { name: "은하로 돌아가기" }).click();
+  await panel(page).getByRole("button", { name: "별지도" }).click();
   await expect.poll(() => cam(page)).toEqual(before);
 });
 test("list is independent of tile failures; quest failure does not remove star access", async ({
@@ -179,6 +185,7 @@ test("list is independent of tile failures; quest failure does not remove star a
     }),
   );
   await list(page);
+  await page.getByRole("button", { name: "퀘스트", exact: true }).click();
   await page.locator(".quest-tutorial summary").click();
   await expect(page.locator(".quest-tutorial")).toContainText(
     "튜토리얼을 불러오지 못했습니다",
@@ -256,6 +263,7 @@ test("keyboard map controls and list switches preserve camera, 1024 layout and v
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).focus();
   await page.keyboard.press("Enter");
   await expect(listHeading(page)).toBeFocused();
+  await expect(rows(page)).toHaveCount(20);
   await page.keyboard.press("Tab");
   await expect(rows(page).first()).toBeFocused();
   await page.keyboard.press("Enter");
@@ -281,7 +289,7 @@ test("401 on list clears the private scene", async ({ page }) => {
   await page.getByRole("button", { name: "별 목록으로 선택하기" }).click();
   await expect(page).toHaveURL(/\/login/);
   await expect(rows(page)).toHaveCount(0);
-  await expect(page.locator("canvas")).toHaveCount(0);
+  await expect(page.locator(".galaxy-scene canvas")).toHaveCount(0);
 });
 
 test("list return from analysis keeps view/selection; successful change resets cursor and refreshes rows", async ({

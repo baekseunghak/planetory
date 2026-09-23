@@ -76,6 +76,7 @@ W04에서는 `useSession().logout()`을 사용한다. 공통 Provider가 로그�
 | profile                            | /me                                                                                                | 하서진 페이지, 백지웅 내 별/History 목록을 후속 연결               |
 | settings / member                  | /settings, /members/:memberId                                                                      | 하서진                                                             |
 | community / starBoard              | /community, /community/stars/:ticId                                                                | 하서진                                                             |
+| hotTopics                          | /community/hot-topics                                                                              | 하서진 · S18 목록, cursor 유지                                     |
 | postCreate / postEdit / post       | /posts/new, /posts/:postId/edit, /posts/:postId                                                    | 하서진                                                             |
 | thread                             | /signal-threads/:threadId                                                                          | 하서진                                                             |
 | postAttachment / commentAttachment | /posts/:postId/history-attachments/:historyId, /comments/:commentId/history-attachments/:historyId | 하서진 진입·권한, 백지웅 그래프                                    |
@@ -134,6 +135,8 @@ P0는 1024px 이상이다. 더 작은 화면에는 SRS 문구로 안내만 보�
 
 W20-1 검색은 기존 community/starBoard 슬롯 안에서 동작한다. `q/searchIn/author/ticId/board/tag/cursor`는 URL로 전달하고 공통 API 클라이언트로 S16을 호출한다. 검색 조건 변경 시 cursor 이력을 비우며 상세 복귀는 새 조회 후 위치만 복원한다. 전체 응답을 로컬 검색 DB로 만들지 않는다. 호출·검증 경계와 실제216-217 인계는 [217 구현 기록](ticket-217-readiness.md)을 따른다.
 
+W20-2 핫 토픽은 hotTopics 슬롯에서 S18을 조회하고 기존 공식 신호 상세로 이동한다. 선정·집계·정렬은 서버 책임이며 피드를 프론트에서 다시 계산하지 않는다. N≥10·기간 제한 없음 안내, cursor/상세 복귀와 실제216-218 인계는 [218 구현 기록](ticket-218-readiness.md)을 따른다.
+
 201에서 준비하는 것은 앱 실행·페이지 이동·현재 회원 조회·HTTP 요청의 공통 코드다. 지웅님에게 이 검증을 위해 새로운 분석 화면을 만들도록 요청하지 않는다.
 
 아래는 #201 작성 당시의 인계 절차다. #182에서는 분석 컴포넌트를 등록했으며, 2026-09-16 최신 develop의 #201 코드에 응답 메타데이터 옵션과 관측 모드를 통합했다. 공통 비동기 CSRF·취소·OAuth 프록시 처리를 유지한다. Bundle 판단은 [분석 로더](../src/features/analysis/load-analysis.ts)에만 두며 실제 탐사 응답의 헤더 제공·CORS 노출과 분석 API 연동은 남아 있다.
@@ -153,7 +156,7 @@ W20-1 검색은 기존 community/starBoard 슬롯 안에서 동작한다. `q/sea
 
 ## W14 공개 History 그래프 연결
 
-App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한·폴링은 W14가 관리하고 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 미등록은 명시적인 연결 준비 상태이며 실제A08 통합 완료가 아니다. [213 구현·인수](ticket-213-readiness.md).
+App의 선택 속성 historyGraphRenderer에는 A08의 읽기 전용 렌더 어댑터를 전달한다. HistoryGraphProps의 graph는 탐사5.2/8.3과 같은 응답 객체이며 mode(CURRENT/SUBMITTED), readOnly:true를 전달한다. 네트워크 조회와 부모 권한 재확인은 W14가 관리한다. 공개 첨부는 작업 폴링을 하지 않으며 non-null jobId 응답을 공개 소비 경계에서 거절한다. 렌더러에 잔차 생성/개인 작업 조회 함수를 주지 않는다. 190의 SharedHistoryCurve는 main.tsx에 연결돼 있고, 슬롯 미등록 때만 연결 준비 상태를 표시한다. 실제 서버·부모 권한 인수는 별도다. 모드별 대체 안내와 검증 범위는 [213 구현·인수](ticket-213-readiness.md)를 따른다.
 
 ## W16 마이페이지 내부 슬롯
 
@@ -172,3 +175,9 @@ App.profileSections에 stars/history/statistics 컴포넌트를 등록한다. Pr
 ## 2026-09-18 리뷰 통합
 
 지도 205~208과 커뮤니티 209 이후의 스택을 208→209로 통합했다. 실행 모드 interaction과 community, 양쪽 운영 경로를 함께 유지한다. 선행 MR이 병합된 뒤 후속 MR을 병합한다. 이 통합은 216의 실제 API·배포 인수를 대체하지 않는다.
+
+## W20-3 내 별 검색 입력 슬롯 (223)
+
+`ProfileSlotProps.starFilters`는 선택 속성이다. 본인의 `stars` 슬롯만 URL의 `filterTic/filterStage/filterGrade`에서 검증한 값을 받는다. 타인 PRIVATE 차단과 History·통계 권한은 그대로다. 기존 슬롯은 선택 속성을 받지 않아도 컴파일되지만 검색을 반영하려면 소비자가 필터 변경 시 cursor와 진행 중 요청을 초기화하고 `starSearchPath(filters, cursor, "submitted")`로 조회해야 한다. 지도는 같은 입력을 `discovered` scope로 보낸다.
+
+지도 검색·서버 locate·복귀는 구현했다. 현재 main에는 실제 A13 내 별 목록이 등록되지 않아 소비자 적용과 왕복 검증은 남아 있다. 이 선택 속성을 추가한 것만으로 A13 연결 완료라고 하지 않는다. [223 구현 범위 및 인계](ticket-223-readiness.md)를 따른다.

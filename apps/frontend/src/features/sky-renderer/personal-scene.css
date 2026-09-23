@@ -1,0 +1,181 @@
+.service-sky[data-detail-open="true"] .sky-surface > :not(canvas),
+.sky-surface:has(canvas[data-focus-phase="departing"]) > :not(canvas) {
+  visibility: hidden;
+  pointer-events: none;
+}
+.star-focus .focus-heading,
+.star-focus .focus-information,
+.personal-camera-controls {
+  pointer-events: auto;
+}
+.personal-scene-interaction {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+.personal-scene-interaction:active {
+  cursor: grabbing;
+}
+.personal-scene-interaction:focus-visible {
+  outline: 1px solid #91a9c9;
+  outline-offset: -6px;
+}
+.service-sky .personal-body-target {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent !important;
+  padding: 0;
+  cursor: pointer;
+  min-height: 44px;
+}
+.personal-body-target[hidden] {
+  display: none;
+}
+.service-sky .personal-body-target:hover,
+.service-sky .personal-body-target:focus-visible {
+  border-color: #ffffff65;
+  box-shadow: 0 0 22px #fff2;
+}
+.personal-body-target > span {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+  color: #ece8df;
+  text-shadow: 0 1px 5px #000;
+}
+.personal-body-target.candidate > span {
+  color: #decbb1;
+}
+.personal-body-target.candidate {
+  border-style: dashed;
+  border-color: #dbbb7755;
+}
+.personal-camera-controls {
+  position: absolute;
+  z-index: 4;
+  right: 28px;
+  bottom: 85px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+}
+.service-sky .personal-camera-controls button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #e5e2d95c;
+  background: #0005;
+  color: #eeeae0;
+  padding: 0;
+  font-size: 22px;
+  font-weight: 300;
+}
+.service-sky .personal-camera-controls .system-reset {
+  width: auto;
+  height: 38px;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+}
+.personal-gesture {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 53px;
+  color: #aaa9a6;
+  font-size: 10px;
+  pointer-events: none;
+}
+.personal-credit {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 15px;
+  margin: 0;
+  color: #8c8e94;
+  font-size: 10px;
+  pointer-events: none;
+}
+.personal-period {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #b6bdc7;
+  margin: -12px 0 18px;
+}
+.focus-information {
+  text-shadow: 0 1px 5px #000;
+}
+.focus-record-scroll {
+  text-shadow: none;
+}
+.service-sky .star-focus .focus-stage {
+  pointer-events: none;
+}
+@media (max-width: 767px) {
+  .service-sky .star-focus {
+    display: block;
+    overflow: visible;
+  }
+  .star-focus .focus-heading {
+    position: absolute;
+    left: 20px;
+    top: 8px;
+    margin: 0;
+  }
+  .star-focus .focus-information,
+  .star-focus .focus-information:has(.focus-bodies) {
+    position: absolute;
+    bottom: 38px;
+    left: 20px;
+    margin: 0;
+    width: calc(100% - 40px);
+  }
+  .star-focus .focus-bodies {
+    margin-bottom: 18px;
+  }
+  .personal-period {
+    margin: -6px 0 9px;
+    font-size: 10px;
+  }
+  .personal-camera-controls {
+    right: 14px;
+    bottom: 300px;
+    gap: 6px;
+  }
+  .service-sky .personal-camera-controls button {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+  }
+  .service-sky .personal-camera-controls .system-reset {
+    display: none;
+  }
+  .personal-gesture {
+    display: none;
+  }
+  .personal-credit {
+    right: 20px;
+    left: 20px;
+    bottom: 12px;
+    font-size: 8px;
+    text-align: center;
+  }
+  .personal-body-target > span {
+    font-size: 10px;
+  }
+  .focus-record-scroll {
+    max-height: calc(100dvh - 300px);
+  }
+}

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { ErrorState, LoadingState } from "../../components/RequestState";
+import type { GraphMode } from "../history/HistoryGraph";
 import {
-  SharedHistoryGraph,
-  readHistoryGraph,
-  isGraphPending,
-  type GraphMode,
-} from "../history/HistoryGraph";
+  PublicHistoryGraph,
+  fetchPublicGraph,
+  readPublicGraph,
+  useSnapshotMissing,
+} from "../history/public-graph";
 import { endpoint, judgmentLabels, type Author } from "./contracts";
 import {
   materialObject,
@@ -45,6 +46,15 @@ export function MaterialCards({
           parentId={parentId}
           author={author}
         />
+      ))}
+      {value.unavailableSources?.map((type, index) => (
+        <div className="material-viewer" key={`unavailable-${index}`}>
+          <h3>
+            공개 출처 ·{" "}
+            {type === "PUBLIC_ANALYSIS" ? "공개 분석" : "공식 스레드"}
+          </h3>
+          <p>공개 취소되었거나 볼 수 없는 출처입니다.</p>
+        </div>
       ))}
       {value.sourceLinks?.map((source) => (
         <SourceCard
@@ -149,16 +159,12 @@ function AttachmentDetail({
   parentId: string;
   author: Author;
 }) {
-  const [mode, setMode] = useState<GraphMode>("CURRENT"),
-    [snapshotMissing, setSnapshotMissing] = useState(false);
-  const poll = useRef(0),
-    [lastMeta, setLastMeta] = useState<Record<string, unknown> | null>(null);
+  const [mode, setMode] = useState<GraphMode>("CURRENT");
   const path = `/v1/${parentType === "POST" ? "posts" : "comments"}/${encodeURIComponent(parentId)}/history-attachments/${encodeURIComponent(id)}`;
   const load = useCallback(
     async (signal: AbortSignal) => {
-      const row = materialObject(
-        await api(endpoint(path, { graphMode: mode }), { signal }),
-      );
+      const { raw, graphError } = await fetchPublicGraph(path, mode, signal);
+      const row = materialObject(raw);
       if (
         row.parentType !== parentType ||
         row.parentId !== parentId ||
@@ -167,36 +173,27 @@ function AttachmentDetail({
       )
         return invalidMaterial();
       materialText(row.submittedAt);
-      materialText(row.judgment);
-      return { ...row, graph: readHistoryGraph(row.graph, id, ticId, mode) };
+      if (row.judgment !== null) materialText(row.judgment);
+      const graph = graphError
+        ? null
+        : readPublicGraph(row.graph, id, ticId, mode);
+      return {
+        ...row,
+        graph,
+        graphError,
+      };
     },
     [path, mode, parentType, parentId, id, ticId],
   );
   const state = useReadModel(path + mode, load);
-  useEffect(() => {
-    if (state.data) {
-      setLastMeta(state.data);
-      if (mode === "SUBMITTED" && state.data.graph.snapshot === null)
-        setSnapshotMissing(true);
-    }
-  }, [state.data, mode]);
-  useEffect(() => {
-    if (!state.data || !isGraphPending(state.data.graph) || poll.current >= 6)
-      return;
-    const timer = setTimeout(() => {
-      poll.current++;
-      state.reload();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [state.data, state.reload]);
+  const snapshotMissing = useSnapshotMissing(mode, state.data?.graph);
   const denied =
     state.error instanceof ApiError &&
     [401, 403, 404].includes(state.error.status);
   if (denied) return <ErrorState error={state.error!} />;
-  // No retained graph is rendered while loading or failing; metadata survives a graph dependency error only.
-  const row: Record<string, unknown> | null =
-      state.data ?? (state.error ? lastMeta : null),
-    graph = state.data?.graph;
+  const row: Record<string, unknown> | null = state.data,
+    graph = state.data?.graph,
+    error = state.error ?? state.data?.graphError;
   const label = (v: unknown) =>
     typeof v === "string"
       ? (judgmentLabels[v as keyof typeof judgmentLabels] ?? v)
@@ -207,10 +204,7 @@ function AttachmentDetail({
         <button
           type="button"
           aria-pressed={mode === "CURRENT"}
-          onClick={() => {
-            poll.current = 0;
-            setMode("CURRENT");
-          }}
+          onClick={() => setMode("CURRENT")}
         >
           현재 자료
         </button>
@@ -218,10 +212,7 @@ function AttachmentDetail({
           type="button"
           disabled={snapshotMissing}
           aria-pressed={mode === "SUBMITTED"}
-          onClick={() => {
-            poll.current = 0;
-            setMode("SUBMITTED");
-          }}
+          onClick={() => setMode("SUBMITTED")}
         >
           제출 당시
         </button>
@@ -254,64 +245,13 @@ function AttachmentDetail({
           <dd>{typeof row.memo === "string" ? row.memo : "제공되지 않음"}</dd>
         </dl>
       )}
-      {state.error ? (
-        <ErrorState error={state.error} retry={state.reload} />
+      {error ? (
+        <ErrorState error={error} retry={state.reload} />
       ) : state.loading ? (
         <LoadingState />
       ) : null}
-      {graph && (
-        <>
-          <p>
-            제출 판 {graph.reproduction.submittedBundleId} · 현재 판{" "}
-            {graph.reproduction.currentBundleId}
-          </p>
-          {graph.reproduction.fallbackReason && (
-            <p>
-              당시 잔차를 재현할 수 없어 제공 가능한 현재 원본 자료를
-              확인합니다. 사유: {graph.reproduction.fallbackReason}
-            </p>
-          )}
-          {mode === "SUBMITTED" ? (
-            graph.snapshot ? (
-              <SharedHistoryGraph graph={graph} mode={mode} readOnly />
-            ) : (
-              <p role="status">
-                제출 당시 스냅샷이 없습니다. 현재 자료를 당시 자료로 대신
-                표시하지 않습니다.
-              </p>
-            )
-          ) : graph.curve?.segments?.length ? (
-            <>
-              <p>
-                {graph.curve.curveContext.curveStep === 0
-                  ? "현재 원본 곡선"
-                  : "현재 잔차 곡선"}
-              </p>
-              <SharedHistoryGraph graph={graph} mode={mode} readOnly />
-            </>
-          ) : (
-            <p role="status">
-              {isGraphPending(graph)
-                ? "기존 잔차 작업이 진행 중입니다."
-                : graph.curve?.residual?.status === "FAILED"
-                  ? "잔차 처리에 실패했습니다."
-                  : "제공 가능한 현재 그래프가 없습니다."}{" "}
-              제출 당시 자료도 확인할 수 있습니다.
-            </p>
-          )}
-          {isGraphPending(graph) && poll.current >= 6 && (
-            <button
-              type="button"
-              onClick={() => {
-                poll.current = 0;
-                state.reload();
-              }}
-            >
-              작업 상태 다시 확인
-            </button>
-          )}
-        </>
-      )}
+      {/* 그래프 표시는 공개 소비 경계가 맡는다(#191). */}
+      {graph && <PublicHistoryGraph graph={graph} mode={mode} />}
     </>
   );
 }

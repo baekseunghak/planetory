@@ -1,7 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { project, exampleStar } from "../../dev/sky-reference/reference.mjs";
-import { stablePhase } from "../../src/features/sky-renderer/model";
-const canvas = (page: Page) => page.locator("canvas");
+const canvas = (page: Page) => page.locator(".galaxy-scene canvas");
 const camera = async (page: Page) =>
   JSON.parse((await canvas(page).getAttribute("data-camera"))!);
 const panel = (page: Page) =>
@@ -61,33 +59,33 @@ test("same canvas focuses all five owned planets, reads values, and exactly rest
     fullPage: true,
   });
   await panel(page)
-    .getByRole("button", { name: "별 전체 보기", exact: true })
+    .getByRole("button", { name: "항성계", exact: true })
     .click();
   await expect(canvas(page)).toHaveAttribute("data-focused-planet", "");
-  await panel(page).getByRole("button", { name: "은하로 돌아가기" }).click();
+  await panel(page).getByRole("button", { name: "별지도" }).click();
   await expect(panel(page)).toHaveCount(0);
   expect(await camera(page)).toEqual(before);
   await expect(canvas(page)).toHaveAttribute("data-rendered-planets", "0");
 });
-test("canvas planet hit matches candidate; empty sky deselects and restores, keyboard list works", async ({
+test("prototype body hit matches candidate; empty sky keeps detail until explicit return, keyboard list works", async ({
   page,
 }) => {
   await ready(page);
   const before = await camera(page);
   await select(page);
-  const box = (await canvas(page).boundingBox())!,
-    center = project(exampleStar(0), await camera(page), box.width, box.height);
-  const phase = stablePhase("fixture-204-p-0"),
-    r = 35 + (Math.min(box.width, box.height) * 0.34) / 6;
-  await page.mouse.click(
-    box.x + center.x + Math.cos(phase) * r,
-    box.y + center.y + Math.sin(phase) * r * 0.48,
-  );
+  const box = (await canvas(page).boundingBox())!;
+  await page
+    .getByRole("button", { name: "행성 1 가까이 보기", exact: true })
+    .click();
   await expect(canvas(page)).toHaveAttribute(
     "data-focused-planet",
     "fixture-204-p-0",
   );
   await page.mouse.click(box.x + 15, box.y + 160);
+  await expect(panel(page)).toBeVisible();
+  await panel(page)
+    .getByRole("button", { name: "별지도", exact: false })
+    .click();
   await expect(panel(page)).toHaveCount(0);
   expect(await camera(page)).toEqual(before);
   await page.getByText("별 목록으로 선택하기", { exact: true }).click();
@@ -184,7 +182,7 @@ test("locked, delayed, stale A and failed responses never masquerade as an empty
   await expect(
     panel(page).getByRole("link", { name: /분석 시작/ }),
   ).toHaveCount(0);
-  await panel(page).getByRole("button", { name: "은하로 돌아가기" }).click();
+  await panel(page).getByRole("button", { name: "별지도" }).click();
   await page.unroute("**/api/v1/me/stars/900000001");
 });
 test("malformed count/duplicates fail closed and retry loads valid detail; null catalogue stays unknown", async ({
@@ -329,3 +327,4 @@ test("successful change notification refreshes metadata, pages, quests and selec
   expect(questReads).toBeGreaterThan(questsBefore);
   expect(await camera(page)).toEqual(before);
 });
+

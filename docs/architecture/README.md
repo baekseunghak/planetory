@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | AWS·GCP 경계와 불변 규칙 | [시스템 아키텍처](system-architecture.md) | 시스템 경계 정본, 목표 설계 |
 | PostgreSQL 테이블·관계·제약 | [서비스 DB ERD](database-erd.md) | 백엔드 데이터 모델 기준선 |
+| 후보 병합·분리 시 기록·성과·공개 관계 정정 | [후보 병합·분리 정정 계약](candidate-correction-contract.md) | C18 결정 요청 초안. 확정 범위와 미확정 항목을 가르고 C19 수행 범위를 고정. 데이터·탐사·서비스 교차 검토 대기 |
 | GCP 노드·디스크·네트워크 | [GCP 분산 인프라](gcp-distributed-infrastructure.md) | 인프라 상세·PoC 계획 |
 | EC2 잔차·주기도 계산 | [온라인 파생 계산](online-derived-compute.md) | 계산 경계 상세 |
 | EC2 진입·장애 전환 | [EC2 서비스 진입·장애 전환 경계](ec2-service-entry-failover.md) | 진입·포트·신뢰 경계·장애 시나리오·데이터 손실 경계 상세, 채택 |

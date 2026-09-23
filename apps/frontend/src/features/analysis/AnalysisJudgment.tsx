@@ -1,4 +1,5 @@
 import { stageLabels, useAnalysisStage } from "./analysis-stage";
+import { OnboardingTip } from "../onboarding/Onboarding";
 import { useSustained } from "./fold-progress";
 import yesIcon from "./assets/yes.svg";
 import noIcon from "./assets/no.svg";
@@ -17,32 +18,41 @@ import {
   type PeriodogramViewport,
 } from "./analysis-judgment";
 import type { SelectionIssue } from "./selection-rules";
+import { useSubmission } from "./use-submission";
+import { SpecialSubmissions, SubmissionStatus } from "./AnalysisSubmission";
+import { candidateInput } from "./submission-input";
 import "./analysis-judgment.css";
 
 export function AnalysisSteps() {
   const fold = useAnalysisFold();
   const { stage, go, ready, confirmed } = useAnalysisStage();
   return (
-    <ol className="analysis-steps" aria-label="분석 단계">
-      {stageLabels.map((label, index) => (
-        <li key={label} aria-current={stage === index + 1 ? "step" : undefined}>
-          <button
-            type="button"
-            disabled={
-              index === 0
-                ? !fold.state.change
-                : !ready ||
-                  index === 3 ||
-                  (index === 1 && stage < 2) ||
-                  (index === 2 && !confirmed)
-            }
-            onClick={() => go((index + 1) as 1 | 2 | 3)}
+    <>
+      <OnboardingTip step={stage as 1 | 2 | 3 | 4} />
+      <ol className="analysis-steps" aria-label="분석 단계">
+        {stageLabels.map((label, index) => (
+          <li
+            key={label}
+            aria-current={stage === index + 1 ? "step" : undefined}
           >
-            {index + 1 < stage ? "✓" : index + 1} {label}
-          </button>
-        </li>
-      ))}
-    </ol>
+            <button
+              type="button"
+              disabled={
+                index === 0
+                  ? !fold.state.change
+                  : !ready ||
+                    index === 3 ||
+                    (index === 1 && stage < 2) ||
+                    (index === 2 && !confirmed)
+              }
+              onClick={() => go((index + 1) as 1 | 2 | 3)}
+            >
+              {index + 1 < stage ? "✓" : index + 1} {label}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 
@@ -76,6 +86,10 @@ export function AnalysisJudgment({
   const slowPending = useSustained(pending);
   const blocked = !ready && (!pending || slowPending);
   const review = enabled ? state.review : null;
+  const submission = useSubmission(context);
+  // 잠겨도 제출값 확인 화면은 남겨야 한다. 접수 결과를 그 자리에서 보여 주고,
+  // 결과를 모르는 동안 무엇을 보냈는지 사용자가 볼 수 있어야 한다.
+  const editable = enabled && !submission.locked;
   // Move focus only after an explicit next/back action, never on graph updates.
   useEffect(() => {
     if (focusAfterRender.current === "range" && stage === 2) {
@@ -92,7 +106,7 @@ export function AnalysisJudgment({
     focusAfterRender.current = null;
   });
   const edit = (patch: Partial<JudgmentDraft>) => {
-    if (!enabled) return;
+    if (!editable) return;
     setIssues([]);
     setState((previous) => ({
       ...previous,
@@ -176,6 +190,8 @@ export function AnalysisJudgment({
               </button>
             </>
           )}
+          <SpecialSubmissions context={context} submission={submission} />
+          <SubmissionStatus submission={submission} />
         </>
       )}
       <p id={hintId} className={stage !== 2 ? "analysis-sr-only" : undefined}>
@@ -231,7 +247,7 @@ export function AnalysisJudgment({
         >
           <fieldset
             className="judgment-options"
-            disabled={!enabled}
+            disabled={!editable}
             aria-describedby={hintId}
           >
             <legend>판단 (필수)</legend>
@@ -267,7 +283,7 @@ export function AnalysisJudgment({
                   .map((issue) => <p key={issue.field}>{issue.message}</p>)}
             </div>
           </fieldset>
-          <fieldset disabled={!enabled}>
+          <fieldset disabled={!editable}>
             <legend>확인한 근거 (선택)</legend>
             {evidenceOptions.map(({ value, label }) => (
               <label className="analysis-choice" key={value}>
@@ -299,7 +315,7 @@ export function AnalysisJudgment({
               ref={memoRef}
               name="memo"
               rows={3}
-              disabled={!enabled}
+              disabled={!editable}
               value={state.judgment.memo}
               aria-describedby={`${memoId}-hint ${errorId}`}
               aria-invalid={
@@ -319,7 +335,7 @@ export function AnalysisJudgment({
                 .filter((issue) => issue.field !== "userJudgment")
                 .map((issue) => <p key={issue.field}>{issue.message}</p>)}
           </div>
-          <button type="submit" disabled={!enabled}>
+          <button type="submit" disabled={!editable}>
             제출값 확인
           </button>
         </form>
@@ -377,13 +393,15 @@ export function AnalysisJudgment({
               실제 제출 시 서버가 선택 주기·위상으로 다시 계산하고 검증합니다.
             </p>
             <p id={`${hintId}-submit`}>
-              현재는 제출 API가 연결되지 않아 제출할 수 없습니다. 관측 공백을
-              포함한 최종 선택 검증도 남아 있습니다.
+              제출하면 요청 번호 하나로 접수를 추적합니다. 응답을 받지 못해도
+              같은 번호로 결과를 확인하므로 두 번 접수되지 않습니다. 관측 공백을
+              포함한 최종 선택 검증은 서버가 합니다.
             </p>
           </details>
           <div className="periodogram-toolbar">
             <button
               type="button"
+              disabled={submission.locked}
               onClick={() => {
                 focusAfterRender.current = "judgment";
                 setState((previous) => ({ ...previous, review: null }));
@@ -393,12 +411,14 @@ export function AnalysisJudgment({
             </button>
             <button
               type="button"
-              disabled
+              disabled={submission.locked}
               aria-describedby={`${hintId}-submit`}
+              onClick={() => submission.submit(candidateInput(review))}
             >
-              제출하기 · 연결 예정
+              제출하기
             </button>
           </div>
+          <SubmissionStatus submission={submission} />
         </div>
       )}
     </section>

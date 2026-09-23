@@ -38,10 +38,12 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       "reactions",
       "materials",
       "profiles",
+      "settings",
       "search",
+      "hot-topics",
     ].includes(mode);
   const profileFixture =
-    command === "serve" && !isPreview && mode === "profiles"
+    command === "serve" && !isPreview && ["profiles", "settings"].includes(mode)
       ? (await import("./dev/profile-fixture-plugin.ts")).createProfileFixture()
       : null;
   const testing =
@@ -79,7 +81,28 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
   return {
     plugins: [
       react(),
+      ...(communityFixture && mode === "settings"
+        ? [
+            (
+              await import("./dev/settings-fixture-plugin.ts")
+            ).settingsFixturePlugin(),
+          ]
+        : []),
+      ...(communityFixture && mode === "hot-topics"
+        ? [
+            (
+              await import("./dev/hot-topics-fixture-plugin.ts")
+            ).hotTopicsFixturePlugin(),
+          ]
+        : []),
       ...(profileFixture ? [profileFixture.plugin] : []),
+      ...(mode === "profiles"
+        ? [
+            (
+              await import("./dev/my-lists-fixture-plugin.ts")
+            ).myListsFixturePlugin(),
+          ]
+        : []),
       ...(communityFixture
         ? [
             (
@@ -104,6 +127,7 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
               materialWrites: ["materials", "profiles"].includes(mode),
               currentNickname: profileFixture?.nickname,
               searchable: mode === "search",
+              hotTopics: mode === "hot-topics",
             }),
           ]
         : []),

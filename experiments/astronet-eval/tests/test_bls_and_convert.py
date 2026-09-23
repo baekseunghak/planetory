@@ -1,4 +1,7 @@
 from pathlib import Path
+import csv
+import hashlib
+import json
 
 import numpy as np
 import pytest
@@ -102,3 +105,39 @@ def test_junk_from_residual_reports_removal_failure_instead_of_raising():
                        source_name="x", period_days=0.05, epoch_btjd=1402.0, duration_hours=2.0, depth_ppm=3000.0, geometry_source="archive")
     unv, note = cv.junk_from_residual(target, real, [bad], JUNK_CFG, training_overlap="unknown")
     assert unv is None and note.startswith("removal_failed:invalid_parameter")
+
+
+def test_convert_manifest_hashes_npz_file_not_view_and_preserves_failures(tmp_path, monkeypatch):
+    from astronet_eval import cli
+
+    target = TARGETS_BY_KEY["toi270"]
+    candidate = lb.Candidate(
+        candidate_id="toi270-pc-test", label="PC", in_truth=True, label_source="synthetic",
+        label_snapshot="test", tic_id=target.tic_id, target_key="toi270", baseline_id="toi270-real",
+        split=lb.split_for_tic(target.tic_id), training_overlap="unknown", source_name="test",
+        period_days=3.0, epoch_btjd=1402.0, duration_hours=2.0, depth_ppm=3000.0,
+        geometry_source="synthetic",
+    )
+    missing = lb.Candidate(**{**candidate.__dict__, "candidate_id": "missing", "epoch_btjd": None})
+    labels_path = lb.write_labels([candidate, missing], tmp_path / "labels.csv")
+    curve = cv.prepare_curve(_baseline(period=3.0), "toi270-real", Setting("none", detrend_method="none"))
+    monkeypatch.setattr(cli, "_fixture_inputs", lambda *args: [])
+    monkeypatch.setattr(cv, "prepare_target", lambda *args: {"toi270-real": curve})
+    # User owns Git commands; a synthetic test must never invoke them.
+    monkeypatch.setattr(cli.mf, "code_info", lambda *args: {"git_commit": None, "git_dirty": None})
+    results = tmp_path / "results"
+    assert cli.main(["convert", "--labels", str(labels_path), "--results", str(results)]) == 0
+    manifest = json.loads(next((results / "manifests").glob("convert-*.json")).read_text(encoding="utf-8"))
+    for entry in manifest["outputs"]:
+        artifact = Path(entry["path"])
+        assert entry["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
+        assert entry["size_bytes"] == artifact.stat().st_size
+    outputs = {entry["kind"]: entry for entry in manifest["outputs"]}
+    assert len(manifest["outputs"]) == 2  # CSV and one successful NPZ; no failed-candidate NPZ.
+    with Path(outputs["conversions"]["path"]).open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert rows[1]["status"] == "input_incomplete"
+    assert rows[1]["npz_path"] == ""
+    with np.load(outputs["npz"]["path"], allow_pickle=False) as arrays:
+        assert rows[0]["global_sha256"] == hashlib.sha256(arrays["global_view"].tobytes()).hexdigest()
+    assert outputs["npz"]["sha256"] != rows[0]["global_sha256"]

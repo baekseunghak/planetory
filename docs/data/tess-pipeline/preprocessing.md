@@ -23,26 +23,26 @@
 
 HDU는 FITS 파일 안에서 헤더와 데이터를 묶는 단위다. 공식 예제의 LC는 PRIMARY(0), LIGHTCURVE 이진 표(1), APERTURE 이미지(2)로 구성된다. APERTURE는 측광에 사용한 픽셀 등의 정보를 담고 있으며 시간별 밝기 표와 다르다. [MAST LC 읽기 문서](https://spacetelescope.github.io/mast_notebooks/notebooks/TESS/beginner_how_to_use_lc/beginner_how_to_use_lc.html)
 
-| 위치·필드 | 공식 형식·의미 | 현재 PoC 사용 |
+| 위치·필드 | 공식 형식·의미 | 기존 PoC / 운영 Bronze |
 |---|---|---|
 | HDU 0 PRIMARY | 파일 메타데이터 | TICID·SECTOR 읽음 |
 | HDU 1 LIGHTCURVE | 관측 시각별 데이터 표 | `hdul[1].data` 사용 |
-| TIME | 64-bit 실수, BJD−2457000 기준의 day | float64로 읽음. 시간계·오프셋 메타데이터를 별도로 전달하지 않음 |
-| PDCSAP_FLUX | 32-bit 실수, 보정된 밝기, e-/s | float64로 변환해 전처리 입력으로 사용 |
-| QUALITY | 32-bit 정수, 관측 품질 비트 플래그 | int64로 읽고 `clean`에서 0인 행만 유지 |
-| PDCSAP_FLUX_ERR | 32-bit 실수, 보정 밝기 오차, e-/s | 현재 로더에서 읽지 않음 |
+| TIME | 64-bit 실수, BJD−2457000 기준의 day | 기존 PoC는 float64만 전달. Bronze는 float64 배열과 TIMESYS·BJDREFI·BJDREFF·TIMEUNIT·TIMEDEL을 함께 보존 |
+| PDCSAP_FLUX | 32-bit 실수, 보정된 밝기, e-/s | Bronze에서 float64 배열과 원천 단위를 보존. 정규화하지 않음 |
+| QUALITY | 32-bit 정수, 관측 품질 비트 플래그 | Bronze에서 int64 배열을 필터 없이 보존. 기존 `clean`의 QUALITY=0 필터는 후속 처리 규칙 |
+| PDCSAP_FLUX_ERR | 32-bit 실수, 보정 밝기 오차, e-/s | Bronze에서 float64 배열로 보존 |
 | SAP_FLUX / SAP_FLUX_ERR | 32-bit 실수, 단순 개구 측광 밝기·오차, e-/s | 현재 로더에서 읽지 않음 |
-| CADENCENO | 32-bit 정수, 관측 cadence 번호 | 현재 로더에서 읽지 않음 |
+| CADENCENO | 32-bit 정수, 관측 cadence 번호 | Bronze에서 int64 배열로 보존 |
 | HDU 2 APERTURE | 측광 픽셀 정보 이미지 | 현재 로더에서 읽지 않음 |
 
 컬럼 타입·단위의 근거는 위 MAST 공식 예제다. 실제 제품은 컬럼 정의와 헤더로 재확인해야 한다. PDCSAP은 이미 계통 효과를 보정한 광도곡선이므로 여기서 '원천'은 우리 파이프라인에 들어오는 원본 제품이라는 뜻이다. 검출기에서 직접 얻은 미처리 픽셀 데이터와 동일하지 않다. [MAST 제품 구조·보정 설명](https://spacetelescope.github.io/mast_notebooks/notebooks/TESS/beginner_tour_lc_tp/beginner_tour_lc_tp.html)
 
-### 서비스 입력 계약 제안 및 남은 확인
+### 서비스 입력 계약과 남은 확인
 
-- **제안:** TIC·Sector만으로 제품을 식별하지 않고 전체 제품명·원천 URI·처리 버전·checksum을 함께 보존한다. 같은 별·Sector의 다른 제품을 구분할 수 있어야 한다.
-- **제안:** TIME을 그대로 보존하면서 TIMESYS·BJDREFI·BJDREFF·TIMEUNIT과 컬럼 단위, cadence 관련 헤더를 실제 파일에서 확인해 메타데이터에 기록한다. 누락 시 추정 허용 여부는 TBD다. epoch도 같은 시간 기준으로 비교한다.
+- **구현:** TIC·Sector뿐 아니라 전체 제품명, Raw bundle·offset, PROCVER, 원본 SHA-256과 파일별 snapshot을 Bronze에 보존한다.
+- **구현:** TIME을 그대로 보존하면서 TIMESYS·BJDREFI·BJDREFF·TIMEUNIT·TIMEDEL과 flux 단위를 기록한다. 필수 헤더·열·단위가 누락되거나 지원 계약과 다르면 제품 오류로 격리하고 Sector final을 만들지 않는다.
 - **제안:** 원천 PDCSAP_FLUX의 e-/s와 전처리 후 정규화된 상대 flux를 별도 필드·단위로 구분한다.
-- **TBD:** PDCSAP_FLUX_ERR·CADENCENO 등 추가 컬럼의 Bronze 보존·활용 범위, 필수 헤더 누락 시 실패 처리, 품질 비트 선택 정책. QUALITY=0은 현재 구현 사실이며 서비스 확정 정책이 아니다. 공식 예제도 모든 품질 비트를 무조건 제외할 필요는 없다고 설명한다.
+- **구현:** PDCSAP_FLUX_ERR·CADENCENO는 Bronze에 보존한다. 후속 활용 범위와 품질 비트 선택 정책은 여전히 TBD다. QUALITY=0은 기존 PoC 구현 사실이며 서비스 확정 정책이 아니다. 공식 예제도 모든 품질 비트를 무조건 제외할 필요는 없다고 설명한다.
 - **실제 파일 확인:** Sector 3·4·5 모두 아래 기록으로 확인했다. BLS 재계산은 실행하지 않았다.
 
 ### Sector 3 파일 구조 확인
@@ -293,3 +293,12 @@ TOI-270 세 Sector의 cadence는 약 2분이고 기존 2일 창은 1,441점이�
 - **확인:** 기존 2일 창의 계산 방식, Sector 4 짧은 구간의 중앙값 fallback, 2일 기준 상방 제외 2점, DAT-02의 `예상 최대 감광 길이 × 3 이상` 하한.
 - **제안:** Sector별 연속 구간 처리, Savitzky–Golay를 첫 비교 기준으로 유지, fallback·수치 검증·설정 기록, 주입 신호 기반 평가.
 - **TBD:** 최종 디트렌딩 방법, 3배 하한을 만족하는 실제 창 길이와 예상 최대 감광 지속시간, 짧은 구간 처리, 상방 clipping 임계값, 통과 수치.
+
+
+## DAT-02 근거 구간 적용 (245)
+
+고정 시간 폭 대신 제품 SHA에 결합된 근거 구간을 원본 행에 적용한다. 품질·유한값 선택과
+Sector 정규화·추세 계산보다 먼저 평가하며 원래 QUALITY는 변경하지 않는다.
+[공용 커널 계약](../../../libs/astro-kernel/README.md#근거-구간-마스킹-245)에 입력·제외 장부·버전·재처리와
+127 소비 계층 인계를 정의했다. [Sector 3 실측](../../../experiments/tess-bench/README.md#245-근거-구간-마스크-검증)은 리뷰 전 근거이며
+다른 Sector나 모든 근점의 마스크가 완비되었다는 뜻은 아니다.

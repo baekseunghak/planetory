@@ -73,7 +73,7 @@ Gold는 다음을 게시한다.
 | 첫 bin 시각 | `start_btjd` | `startBtjd` | float64, BTJD 일 | 첫 bin 시작 시각이다 |
 | 비닝 간격 | `bin_minutes` | `binMinutes` | 분 | 기본 10분이며 세그먼트별 실제 값을 전달한다 |
 | 밝기 | `flux` | `flux` | 정규화 상대 밝기 | 유한수 또는 `null`이며 JSON `NaN`을 쓰지 않는다 |
-| 대표 산포 | `flux_scatter` | `fluxScatter` | flux와 같은 무차원 값 | 세그먼트당 하나다 |
+| 대표 산포 | `flux_scatter` | `fluxScatter` | flux와 같은 무차원 값 | 세그먼트 전체 robust 산포. 점별 측정 오차가 아니다(아래 114 채택안) |
 | 공백 | `gaps` | `gaps` | 인덱스 폐구간 배열 | `[start, end]`, `0 ≤ start ≤ end < nPoints`다 |
 | 주기 범위 | `period_min_days`, `period_max_days` | `periodMinDays`, `periodMaxDays` | 일 | `0 < min < max`다 |
 | 주기도 크기 | `n_periods`, `power` | `nPeriods`, `power` | 정수, 무차원 배열 | `nPeriods == power.length`다. `power` 에는 `null`·NaN·Infinity 가 없다(격자 전 점에 값이 있어야 한다) |
@@ -86,6 +86,44 @@ Gold는 다음을 게시한다.
 세그먼트와 후보 식별자도 같은 방식으로 DB 숫자 ID를 API의 `seg-<id>`, `c-<id>`에 대응한다. 접두 문자열은 외부 표현이며 DB 열 타입을 바꾸지 않는다.
 
 `transit_model` JSONB의 필드·단위·shape·수치 경계는 [`transit-model.schema.json`](transit-model.schema.json)(계약 1.0, `S15P21C206-113` 소유)이 정본이다. 정상·불량 예제는 [`examples/transit-model.valid.json`](examples/transit-model.valid.json)·[`examples/transit-model.invalid.json`](examples/transit-model.invalid.json)이며, 수식·필드 사이 규칙·실패 코드는 [`libs/astro-kernel`](../../libs/astro-kernel/README.md)이 구현하고 같은 예제로 검사한다. 정상 fixture의 후보 `transit_model`은 이 형식을 따른다. `validate.cjs`는 shape 규칙을 중복 구현하지 않고 비어 있지 않은 객체인지와 manifest 버전 연결만 검사한다.
+
+### 4.1 S15P21C206-114 비닝 운영 채택안
+
+다음은 114의 실측·화면 리뷰와 처리·운영 리뷰를 반영한 **목표 계약 변경안**이다. 운영 구현 완료를 뜻하지 않는다. 승인 진행 상태는 [정합화 요청](../../docs/project/planetory-doc-sync-requests.md)과 MR !101 활동에서 관리한다. 근거와 부분 bin 분포는 [114 벤치마크](../../docs/data/tess-binning-benchmark.md#운영-채택안과-115123-인계)에 둔다. 123은 승인된 규칙으로 구현하며 실험 코드를 그대로 운영에 복사하지 않는다.
+
+| 항목 | 채택안 |
+| --- | --- |
+| 간격·대표값 | 10분, 유한한 전처리 flux의 산술 평균(mean). 중앙값은 기본값으로 쓰지 않는다 |
+| 격자 | 첫 QUALITY/유한값 필터 통과 시각을 anchor로 고정하고 전처리 제외점도 시간 범위에 남긴다. `[시작, 끝)` bin, 마지막 경계점은 다음 bin. 1e-8 bin 이내 경계 스냅을 적용한다 |
+| 시각 | `start_btjd`는 첫 bin 시작. 모델 평가는 `start_btjd + (i + 0.5) × bin_minutes / 1440`인 중심에서 한다 |
+| 빈 bin | 유효 점 0개이면 NULL. 보간하지 않고 균등 격자와 `gaps` 인덱스 폐구간을 보존한다 |
+| 부분 bin | 유효 점이 1개 이상이면 유지한다. counts는 배치 진단 산출물에 보존하되 Gold 배열에는 추가하지 않는다. 값은 관측된 점의 평균이며 10분 전체의 균일한 관측·같은 오차를 보장하지 않는다 |
+| `flux_scatter` | 세그먼트의 유한한 비닝 flux 전체에 대한 `1.4826 × median(abs(flux − median(flux)))`. 무차원 상대 flux이며 통과·별 변동을 포함한다. 점별 표준오차·통과 밖 잡음·역분산 가중치로 해석하지 않는다 |
+| 상한 | 빈 bin 포함 `n_points > 20,000`이면 실패·격리하고 게시하지 않는다. 자동 확대하지 않는다. 향후 확대는 새 규칙/revision과 discoverable 재계산을 요구한다 |
+| 운영 revision | 원천 snapshot 식별자·제품별 checksum, 전처리 버전, 비닝 규칙 버전, 운영 수치 구현 버전의 정렬된 canonical JSON을 SHA-256으로 식별한다. TIC·Sector 및 실제 적용 파라미터를 포함한다. 시각·절대 경로·주석·lock 전체 hash는 식별 재료로 쓰지 않고 실행 manifest에 별도 기록한다 |
+
+수치에 영향을 주는 의존성 변경도 운영 수치 구현 버전을 올린다. 같은 원천·파라미터·수치 구현은 같은 revision이고 변경된 원천이나 규칙은 새 revision이다. 기존 `bin-exp-v1-*`은 실험 식별자이므로 운영에 사용하지 않는다. canonical 직렬화와 버전 갱신 테스트는 123의 구현 인수 조건이다.
+
+부분 bin을 제거하면 관측된 신호도 잃으며 이번 실험은 점 수별 기각 문턱의 이득을 검증하지 않았다. 따라서 추가 기각 없이 유지하는 규칙을 선택한다. counts 비게시가 오차 동등성을 입증하는 것은 아니다. Backend·Worker는 이 값으로 점별 불확실성이나 오차 가중치를 만들지 않는다. 그러한 기능이 필요하면 counts만으로 해결된다고 보지 않고 오차 계약을 별도 검토한다.
+
+`qa-tolerances.v0.json`의 `flux_scatter`·비닝 수치 허용 오차는 여전히 `pending-measurement`다. 123 구현과 131 실환경 대조에서 허용 오차를 측정하기 전 수치 QA 통과를 선언하지 않는다. 유효 bin 없음·산포 0의 게시/소비 경계도 123에서 기존 스키마와 대조하여 검증한다.
+
+### 4.2 S15P21C206-123 discoverable 연결·게시 경계
+
+상태: 구현·로컬 검증, 실제 FITS 비교 및 처리·소비 리뷰 전이다. 115의 실험 격자와 달리
+123은 [공개 QA](publication-qa.md)의 `max(40, 최장 후보 주기 × 1.15)` 상한을 따른다.
+2026-09-22 담당자 확인으로 기존 API·Gold 계약에 맞춰 비교하기로 했다.
+115 저장 결과를 새 격자의 실측 결과로 대신하지 않는다. 수치 규칙 승인 근거와 운영 게시 승인은 별도다.
+
+- 평가 부족·수치 실패로 후보의 discoverable이 null이면 **새 Bundle 전체를 보류**하고 기존 current와 후보 값을 유지한다. 첫 게시라면 게시하지 않는다. 실패 후보만 빼거나 false로 치환하지 않으며 DB `BOOLEAN NOT NULL`과 완료·재개 API를 바꾸지 않는다.
+- 정상 평가의 true/false만 게시 제안에 사용한다. `match_half_width_cells ≤ manifest.fine_tune.half_width_cells`를 강제하고 미세 조정 폭이 부족하면 입력 오류로 중단한다. 상위 N 추천은 판정 조건이 아니다.
+- Publisher는 active·retired 모두 `discoverable` 키 누락·null·boolean 이외 값을 적재 거절한다. 기본 false로 보정하지 않는다. 커널의 유일한 운영 진입점은 `prepare_discoverability`다.
+- 규칙·격자·수치 버전·비닝 입력과 revision·후보 모델·제거 순서를 `candidate_quality` revision에 포함한다. 기존 동일 ID의 양방향 boolean 변경만 `candidate_status_history` 제안으로 출력하며 새 후보를 false→true로 만들지 않는다. Publisher가 `changed_at`을 채우고 새 판과 함께 원자 적재한다. 회원별 재개 판정은 150 책임이다.
+- `discoverability_ready=true`는 123 계산 완료만 뜻한다. 외부 확인 라벨(124), Gold 검증(125), 열 단위 투영·원자 current 전환(Publisher)이 남으므로 `publishable=false`를 유지한다. 런타임 잔차·주기도·진단 전체를 DB 행으로 INSERT하지 않는다.
+- Publisher(87)는 후보 네 수치를 갱신하는 트랜잭션에 READ COMMITTED를 사용해야 한다. V19 트리거는 다른 격리 수준을 SQLSTATE `25000`으로 거절한다. 공개 요청의 BEFORE 트리거는 후보 행 `FOR SHARE`를 획득하므로 후보를 갱신하는 긴 배치 트랜잭션은 공개 요청을 지연시킨다. 후보 갱신·current 원자 전환의 잠금 순서와 트랜잭션 길이를 87 착수 전에 검토한다. 이번 123은 Publisher 트랜잭션을 구현하거나 격리 수준을 변경하지 않는다.
+
+지원 규칙·호출법은 [커널 README](../../libs/astro-kernel/README.md#제공-해상도-판정-123),
+비교 실행과 검증 범위는 [벤치마크 README](../../experiments/tess-bench/README.md#123-비닝제공-해상도-회귀)를 따른다.
 
 ## 5. 판 전환 시나리오
 
@@ -162,3 +200,7 @@ Gold 스키마·조회·DB 역할 경계는 Backend 디렉터리에서 다음 �
 | 실제 TESS 배열 크기·용량·수치 허용 오차 | 실측 대기 | D17·D23 계열 검증 결과를 반영한다 |
 
 미확정 값을 fixture의 합성값으로 대신 확정하지 않는다. 애플리케이션 코드, DB migration과 운영 설정은 이 계약 작업에서 변경하지 않는다.
+
+### 알림 원천 저장 경계 (175, V23)
+
+2026-09-23 사용자 승인으로 [F15.8](../../docs/development/service-backend/community.md#notification-producer-contract)의 제한된 DB 트리거 예외를 채택했다. Gold 직접 역할에는 회원·설정·관계 조회 권한을 추가하지 않는다. 적재·검증·current 전환의 기존 트랜잭션과 TIC 직렬화를 유지하고 지연 트리거를 중간에 강제 실행하지 않는다. 최종 판의 후보 변화와 실제 AI/외부 판정 변화를 DB가 원천 사건으로 기록하며 실패·rollback·동일 값 재시도는 새 알림을 만들지 않는다. 실제 Publisher 운영 연결 검증 완료를 뜻하지 않는다.

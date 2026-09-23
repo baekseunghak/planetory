@@ -113,6 +113,72 @@ async function enterNickname(page: Page, value: string) {
   await input.press("Backspace");
   await expect(input).toHaveValue(value);
 }
+
+test("temporary OAuth outage is distinct, makes no automatic login retry, and keeps the return destination", async ({
+  page,
+}) => {
+  await page.goto("/login?returnTo=%2Fme");
+  let starts = 0;
+  await page.route("**/api/dev-auth-202/google", (route) => {
+    starts++;
+    return route.fulfill({
+      status: 302,
+      headers: { location: "/oauth/callback?error=service_unavailable" },
+    });
+  });
+  await page
+    .getByRole("button", { name: "Google 계정으로 로그인", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "로그인 서비스를 잠시 이용할 수 없습니다",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText(
+    "서버에 일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.",
+  );
+  await expect(page).not.toHaveURL(/error=/);
+  await expect(page).toHaveURL(/returnTo=%2Fme$/);
+  await expect(
+    page.getByText("로그인이 만료되었습니다. 다시 로그인해 주세요.", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  expect(starts).toBe(1);
+  await page.getByRole("button", { name: "로그인 화면으로" }).click();
+  await page.unroute("**/api/dev-auth-202/google");
+  await page
+    .getByRole("button", { name: "Google 계정으로 로그인", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/me$/);
+});
+
+for (const status of [502, 503, 504]) {
+  test(`member lookup ${status} keeps the server session distinct from expiry and can recover`, async ({
+    page,
+  }) => {
+    await login(page);
+    await page.route("**/api/v1/me", (route) =>
+      route.fulfill({
+        status,
+        contentType: "text/html",
+        body: `<h1>${status} upstream unavailable</h1>`,
+      }),
+    );
+    await page.goto("/login?returnTo=%2Fme");
+    await expect(
+      page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("로그인이 만료되었습니다. 다시 로그인해 주세요.", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await page.unroute("**/api/v1/me");
+    await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
+    await expect(page).toHaveURL(/\/me$/);
+  });
+}
 test("first nickname validation, duplicate reason and successful /me confirmation", async ({
   page,
 }) => {
@@ -247,6 +313,35 @@ test("logout failure still active on server permits explicit retry only; CSRF is
   ).toBeVisible();
   expect(posts).toBe(2);
 });
+test("logout CSRF rejection keeps failure visible and allows only explicit retry", async ({
+  page,
+}) => {
+  await login(page);
+  let posts = 0;
+  await page.route("**/api/v1/auth/logout", async (route) => {
+    posts++;
+    expect(route.request().headers()["x-fixture-202-csrf"]).toBeTruthy();
+    if (posts === 1)
+      await route.fulfill({
+        status: 403,
+        json: { code: "FORBIDDEN", message: "요청을 확인해 주세요." },
+      });
+    else await route.continue();
+  });
+  await logout(page);
+  await expect(
+    page.getByRole("heading", { name: "로그아웃하지 못했습니다" }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+  await page
+    .getByRole("button", { name: "다시 로그아웃", exact: true })
+    .click();
+  await expect(
+    page.getByText("로그아웃되었습니다.", { exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(2);
+});
+
 test("ordinary 403 is not first nickname; raw OAuth code is removed without granting access", async ({
   page,
 }) => {

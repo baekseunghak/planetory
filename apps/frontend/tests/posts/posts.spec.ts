@@ -374,7 +374,9 @@ test("DELETE uncertainty survives focus and requires a fresh GET before manual r
   await page
     .getByRole("button", { name: "삭제 결과 확인", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("현재 글이 조회됩니다");
+  await expect(
+    page.locator(".community-detail-main").getByRole("status"),
+  ).toContainText("현재 글이 조회됩니다");
   expect(writes).toBe(1);
   await page.getByRole("button", { name: "다시 삭제", exact: true }).click();
   await expect(page).toHaveURL(/\/community\?board=FREE$/);

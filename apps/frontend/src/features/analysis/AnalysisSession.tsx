@@ -1,8 +1,10 @@
 import { createContext, useContext, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { AnalysisContext, CurveData } from "./analysis-data";
+import { useCurveStep } from "./use-curve-step";
 import type { PhaseRange, PhaseSelectionResult } from "./phase-selection";
 import type { PeriodSelectionChange } from "./period-selection";
+import type { RetryDraft } from "./retry-draft";
 import { useFoldSession } from "./use-fold-session";
 import {
   emptyJudgment,
@@ -39,6 +41,30 @@ export const emptyPhaseDraft: PhaseDraft = {
 const FoldContext = createContext<ReturnType<typeof useFoldSession> | null>(
   null,
 );
+/**
+ * 최신 판을 다시 불러오는 손잡이. 제출이 `BUNDLE_CHANGED`로 거절되면 화면이
+ * 이걸 불러 실제 재조회로 잇는다. 안내만 띄우고 끝내면 사용자는 같은 낡은
+ * 스냅샷을 그대로 다시 보내게 된다.
+ */
+const BundleRecoveryContext = createContext<(() => boolean) | null>(null);
+const RetryContext = createContext<{
+  draft: RetryDraft | null;
+  resume: boolean;
+  retryAttemptId?: string;
+  autoRestore: boolean;
+}>({ draft: null, resume: false, autoRestore: false });
+export const useRetryDraft = () => useContext(RetryContext);
+
+/**
+ * 곡선 단계 이동(#189). 단계 표시줄과 제출 결과의 [다음 곡선 단계로]가 같은
+ * 손잡이를 쓴다. 두 곳이 따로 상태를 들면 서로 다른 곡선을 보게 된다.
+ */
+const CurveStepContext = createContext<ReturnType<typeof useCurveStep> | null>(
+  null,
+);
+export const useCurveStepSession = () => useContext(CurveStepContext);
+export const useBundleRecovery = () => useContext(BundleRecoveryContext);
+
 const DraftContext = createContext<{
   state: PhaseDraft;
   setState: Dispatch<SetStateAction<PhaseDraft>>;
@@ -79,22 +105,46 @@ function PhaseDraftProvider({
 export function AnalysisSession({
   context,
   curve,
+  recoverBundle,
+  step,
   children,
+  retryDraft = null,
+  resume = false,
+  autoRestore = false,
+  retryAttemptId,
 }: {
   context: AnalysisContext;
   curve: CurveData;
+  recoverBundle: () => boolean;
+  /**
+   * 단계 이동 상태. **페이지가 만든다.** 여기서 만들면 보고 있는 곡선을
+   * 차트·주기도가 따라갈 수 없다 — 그것들은 이 위에서 그려진다.
+   */
+  step: ReturnType<typeof useCurveStep>;
   children: ReactNode;
+  retryDraft?: RetryDraft | null;
+  resume?: boolean;
+  autoRestore?: boolean;
+  retryAttemptId?: string;
 }) {
   const session = useFoldSession(context, curve);
   return (
-    <FoldContext.Provider value={session}>
-      <PhaseDraftProvider
-        ready={session.ready}
-        change={session.state.success?.change ?? null}
-      >
-        {children}
-      </PhaseDraftProvider>
-    </FoldContext.Provider>
+    <RetryContext.Provider
+      value={{ draft: retryDraft, resume, autoRestore, retryAttemptId }}
+    >
+      <BundleRecoveryContext.Provider value={recoverBundle}>
+        <CurveStepContext.Provider value={step}>
+          <FoldContext.Provider value={session}>
+            <PhaseDraftProvider
+              ready={session.ready}
+              change={session.state.success?.change ?? null}
+            >
+              {children}
+            </PhaseDraftProvider>
+          </FoldContext.Provider>
+        </CurveStepContext.Provider>
+      </BundleRecoveryContext.Provider>
+    </RetryContext.Provider>
   );
 }
 export function useAnalysisFold() {

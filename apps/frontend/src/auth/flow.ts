@@ -26,9 +26,12 @@ export function oauthDestination(configured: string, origin: string) {
     return null;
   }
 }
-export function callbackProblem(search: string): "cancelled" | "failed" | null {
+export function callbackProblem(
+  search: string,
+): "cancelled" | "failed" | "unavailable" | null {
   const params = new URLSearchParams(search);
   if (params.get("error") === "access_denied") return "cancelled";
+  if (params.get("error") === "service_unavailable") return "unavailable";
   // Code exchange, state validation and session creation belong on the server.
   if (
     params.has("error") ||

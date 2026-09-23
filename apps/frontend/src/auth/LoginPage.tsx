@@ -12,6 +12,8 @@ import {
   returnStorageKey,
 } from "./flow";
 import "./auth.css";
+import { GalaxyArtwork } from "../components/GalaxyArtwork";
+import "./auth-presentation.css";
 
 function savedReturn() {
   try {
@@ -194,27 +196,25 @@ export function LoginPage() {
     </div>
   );
   return (
-    <main className="auth-page">
+    <main className="auth-page auth-presentation">
       <section className="auth-universe" aria-label="Planetory 소개">
         <Link className="brand" to="/login">
           PLANETORY
         </Link>
-        <div className="auth-orbit" aria-hidden="true">
-          <i />
-          <i />
-          <i />
+        <div className="auth-galaxy">
+          <GalaxyArtwork decorative />
         </div>
         <div className="auth-intro">
-          <p className="eyebrow">YOUR NEXT DISCOVERY</p>
+          <p className="eyebrow">A UNIVERSE OF YOUR OWN</p>
           <h1>
-            당신의 발견으로
+            나의 발견으로
             <br />
-            넓어지는 우주.
+            채워지는 밤하늘
           </h1>
           <p>
-            별빛 속 작은 변화를 찾아
+            별빛의 변화를 살펴 행성의 흔적을 찾고,
             <br />
-            나만의 탐사 기록을 쌓아 보세요.
+            발견을 나의 은하에 모으세요.
           </p>
         </div>
         <span className="auth-caption">
@@ -230,13 +230,15 @@ export function LoginPage() {
             ? "어떤 이름으로 탐사할까요?"
             : problem === "cancelled"
               ? "로그인이 취소되었습니다"
-              : problem === "failed"
-                ? "로그인을 완료하지 못했습니다"
-                : session.status === "error"
-                  ? "회원 정보를 확인하지 못했습니다"
-                  : callback.current && session.status === "anonymous"
-                    ? "로그인을 확인하지 못했습니다"
-                    : "로그인이 필요합니다"}
+              : problem === "unavailable"
+                ? "로그인 서비스를 잠시 이용할 수 없습니다"
+                : problem === "failed"
+                  ? "로그인을 완료하지 못했습니다"
+                  : session.status === "error"
+                    ? "회원 정보를 확인하지 못했습니다"
+                    : callback.current && session.status === "anonymous"
+                      ? "로그인을 확인하지 못했습니다"
+                      : "로그인이 필요합니다"}
         </h2>
         {session.notice === "expired" && (
           <p role="status">로그인이 만료되었습니다. 다시 로그인해 주세요.</p>
@@ -249,7 +251,9 @@ export function LoginPage() {
             <p role="alert">
               {problem === "cancelled"
                 ? "준비되면 다시 로그인해 주세요."
-                : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
+                : problem === "unavailable"
+                  ? "서버에 일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요."
+                  : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
             </p>
             <button
               onClick={() => {

@@ -249,7 +249,10 @@ test("loading, server failure, retry and no result have distinct states", async 
   await expect(page.getByText("목록을 불러오지 못했습니다.")).toBeVisible();
   await expect(page.getByText(/검색 조건에 맞는 글이 없습니다/)).toHaveCount(0);
   await page.unroute("**/api/v1/community/feed?**");
-  await page.getByRole("button", { name: /다시/ }).click();
+  await page
+    .locator(".community-main")
+    .getByRole("button", { name: /다시/ })
+    .click();
   await expect(rows(page)).toHaveCount(20);
 });
 

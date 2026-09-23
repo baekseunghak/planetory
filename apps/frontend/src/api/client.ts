@@ -9,6 +9,12 @@ export class ApiError extends Error {
     public readonly requestId: string | null = null,
     public readonly localRequestId: string | null = null,
     public readonly outcomeUnknown = false,
+    /**
+     * 오류 본문 그대로. 일부 오류는 `code`·`message`·`fieldErrors` 밖에 값을
+     * 더한다(예: 탐사 API `BUNDLE_CHANGED`의 `currentBundleId`). 어떤 값이
+     * 올지는 각 API가 정하므로 해석하지 않고 보관만 하며 읽는 쪽이 검사한다.
+     */
+    public readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
@@ -18,6 +24,10 @@ type RequestOptions = Omit<RequestInit, "credentials"> & {
   json?: unknown;
   // Capture metadata here; handle it after the request settles.
   onResponse?: (metadata: { status: number; headers: Headers }) => void;
+  // Receipt-style reads can outlive the authenticated session that created
+  // them. They still obey their own signal and timeout, but a /me 401 must not
+  // cancel them or make their 401 expire an unrelated login session.
+  sessionBound?: boolean;
 };
 type ClientOptions = {
   baseUrl: string;
@@ -34,7 +44,7 @@ const record = (value: unknown): Record<string, unknown> =>
 // Based on the existing prototype request client: cancellation and 204 handling
 // remain shared, while field errors now use the backend's actual `reason` field.
 export function createApiClient(config: ClientOptions) {
-  const pending = new Set<AbortController>();
+  const sessionPending = new Set<AbortController>();
   const expired = new Set<() => void>();
   async function request<T>(
     path: string,
@@ -55,7 +65,7 @@ export function createApiClient(config: ClientOptions) {
     const localRequestId = crypto.randomUUID();
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
-    const { json, onResponse, ...fetchOptions } = options;
+    const { json, onResponse, sessionBound = true, ...fetchOptions } = options;
     if (json !== undefined && options.body != null)
       throw new Error("json과 body는 함께 보낼 수 없습니다.");
     if (json !== undefined) headers.set("Content-Type", "application/json");
@@ -64,7 +74,7 @@ export function createApiClient(config: ClientOptions) {
     const abort = () => controller.abort(options.signal?.reason);
     if (options.signal?.aborted) abort();
     options.signal?.addEventListener("abort", abort, { once: true });
-    pending.add(controller);
+    if (sessionBound) sessionPending.add(controller);
     let timedOut = false;
     let dispatched = false;
     let serverRequestId: string | null = null;
@@ -132,7 +142,8 @@ export function createApiClient(config: ClientOptions) {
       controller.signal.throwIfAborted();
       if (!response.ok) {
         const body = record(result);
-        if (response.status === 401) expired.forEach((listener) => listener());
+        if (response.status === 401 && sessionBound)
+          expired.forEach((listener) => listener());
         throw new ApiError(
           response.status,
           typeof body.code === "string" ? body.code : "REQUEST_FAILED",
@@ -149,6 +160,7 @@ export function createApiClient(config: ClientOptions) {
           serverRequestId,
           localRequestId,
           writing && response.status >= 500,
+          body,
         );
       }
       return result as T;
@@ -188,14 +200,14 @@ export function createApiClient(config: ClientOptions) {
       );
     } finally {
       clearTimeout(timeout);
-      pending.delete(controller);
+      sessionPending.delete(controller);
       options.signal?.removeEventListener("abort", abort);
     }
   }
   return {
     request,
     cancelPending: () => {
-      for (const controller of pending) controller.abort();
+      for (const controller of sessionPending) controller.abort();
     },
     onUnauthorized(listener: () => void) {
       expired.add(listener);

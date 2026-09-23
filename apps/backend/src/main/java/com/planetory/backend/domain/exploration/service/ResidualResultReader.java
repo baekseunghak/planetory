@@ -15,7 +15,7 @@ import com.planetory.backend.domain.exploration.service.AnalysisViews.CurveConte
  */
 public interface ResidualResultReader {
 
-    Lookup lookup(CurveContext context);
+    Lookup lookup(long ticId, CurveContext context);
 
     /**
      * 한 곡선 문맥의 잔차 상태.

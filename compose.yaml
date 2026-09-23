@@ -32,6 +32,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ssafy}
       SPRING_PROFILES_ACTIVE: local
       SKIP_LOCAL_DB: "true"
+      NOTIFICATION_SIGNING_KEY: ${NOTIFICATION_SIGNING_KEY:-}
       GRADLE_USER_HOME: /root/.gradle
     volumes:
       - ./apps/backend:/workspace
