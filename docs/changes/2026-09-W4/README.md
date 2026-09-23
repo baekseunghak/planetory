@@ -223,4 +223,7 @@
 | 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |
 | 2026-09-23 | Airflow 다운로드 대기 Temporal Trigger 도입 | S15P21C206-252 | Temporal Trigger, Triggerer, 14일 deadline | 운영 배포·첫 deferred 재개 확인, 장시간 미검증 | [기록](2026-09-23.md) |
 | 2026-09-23 | Triggerer 배포 후 토큰 만료 재발 정정 | S15P21C206-252 | Sector 21·22, queued, LocalExecutor, JWT | 재발 확인·원인 미해결 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실행 토큰 만료 원인 규명·LocalExecutor 병렬도 조정 | S15P21C206-252 | execution_api JWT 600초, queued 대기, parallelism 8 | 운영 배포·회귀 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | MR !194 리뷰 반영 | S15P21C206-252 | Triggerer 기동, r0 attempt, coverage 감사, completed_through, CI | 운영 배포·회귀 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | Jira 완료 조건 운영 검증 | S15P21C206-252 | Sector 36, 실패 주입, COMMIT_CACHED, BRONZE_CACHED, 스냅샷 동일 | 검증 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | develop 연속 병합에서 서비스 배포 버튼 유지 | S15P21C206-261 | rules:changes, auto_cancel, environment ec2-a, ci_forward_deployment | 구현·lint 통과, 병합 전 | [기록](2026-09-23.md) |
