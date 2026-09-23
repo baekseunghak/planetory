@@ -1,5 +1,6 @@
 """생성한 payload 가 정답표·Gold 계약과 맞는지 DB 없이 본다."""
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -8,7 +9,7 @@ from jsonschema import Draft202012Validator
 
 from local_seed.canonical import array_checksum, record_checksum
 from local_seed.catalog import CATALOG, TIC_BASE
-from local_seed.payload import BINNING_REVISION, build_star
+from local_seed.payload import build_star
 from local_seed.real import FIXTURE
 
 SCHEMA = json.loads((Path(__file__).resolve().parents[4] / "contracts" / "gold" / "transit-model.schema.json")
@@ -71,8 +72,6 @@ def test_gold_contract_shape(payloads):
         for seg in p["segments"]:
             assert len(seg["flux"]) == seg["n_points"] <= 20_000
             assert array_checksum(seg["flux"]) == seg["checksum"]
-        # 한 판의 세그먼트 revision 은 하나다(탐사 API 5.1절). 여럿이면 백엔드가 적재 계약 위반으로 500 을 낸다.
-        assert len({seg["binning_revision"] for seg in p["segments"]}) == 1
         steps = [c["record"]["removal_step"] for c in p["candidates"]]
         assert steps == list(range(len(steps)))
         for c in p["candidates"]:
@@ -83,8 +82,18 @@ def test_gold_contract_shape(payloads):
         assert p["star"]["confirmed_count"] == sum(c["record"]["is_confirmed"] for c in p["candidates"])
         for kind, rows in p["records"].items():
             assert record_checksum(kind, rows) == manifest["record_checksums"][kind]
-    assert {seg["binning_revision"] for p in payloads if p["label"].startswith("SYN-") for seg in p["segments"]} \
-        == {BINNING_REVISION}
+
+
+def test_segment_revisions_are_per_sector_like_real_gold(payloads):
+    """운영 revision 은 TIC·섹터·원천 checksum 의 해시라 여러 섹터 판이면 세그먼트마다 다르다(Gold 계약 4.1).
+    백엔드가 이 형태를 그대로 받아야 실제 적재 뒤에도 분석 진입이 된다(탐사 API 5.1·5.2절)."""
+    synthetic = [p for p in payloads if p["label"].startswith("SYN-")]
+    for p in synthetic:
+        revisions = [seg["binning_revision"] for seg in p["segments"]]
+        assert all(re.fullmatch(r"bin-v1-[0-9a-f]{64}", r) for r in revisions)
+        assert len(set(revisions)) == len(revisions)
+    assert sum(len(p["segments"]) > 1 for p in synthetic) >= 5, "여러 섹터 별이 충분해야 통합 테스트가 이 경우를 지난다"
+    assert star(payloads, "TOI-270")["segments"][0]["binning_revision"] == "10m-v1"    # 저장소 예제 값 그대로
 
 
 def test_undiscoverable_signal_is_kept_with_false(payloads):

@@ -15,7 +15,7 @@ import numpy as np
 from astro_kernel import remove_transit_models
 from astro_kernel.bls import bls_periodogram, period_grid
 from astro_kernel.discoverability import NUMERICAL_VERSION, RULE, classify, provided_arrays
-from astro_kernel.segmentation import BIN_MINUTES, BINNING_RULE_VERSION
+from astro_kernel.segmentation import BIN_MINUTES, BINNING_RULE_VERSION, segment_revision
 
 from .canonical import (ARRAY_CHECKSUM_VERSION, RECORD_CHECKSUM_VERSION, array_checksum, bundle_version,
                         normalize_array, record_checksum)
@@ -32,14 +32,14 @@ EXTERNAL_SOURCE = "synthetic"
 EXTERNAL_LABEL = {"confirmed": "CP", "fp": "FP", "pc": "PC"}   # TFOPWG 표기
 OBSERVATION_SOURCE_VERSION = f"synthetic:{GENERATOR_VERSION}"
 JIRA = "S15P21C206-256"
-# 한 판의 세그먼트는 revision 이 하나여야 한다(탐사 API 5.1절, AnalysisService). 섹터마다 다른 해시를 만드는
-# Gold 4.1 채택안·astro_kernel.segment_revision 은 이 규칙과 맞지 않아 쓰지 않는다. 시드 규칙이 바뀌면
-# 새 revision 행이 생기도록 생성 버전을 넣는다.
-BINNING_REVISION = "10m-syn-" + GENERATOR_VERSION.removeprefix("local-seed-")
+PREPROCESSING_VERSION = "synthetic-none-v1"
+# 세그먼트 revision 은 실제 Gold 와 같이 astro_kernel.segment_revision 으로 섹터마다 만든다(Gold 계약 4.1).
+# 합성 원천 제품은 섹터 곡선 하나이고 그 checksum 은 flux 배열의 SHA-256 이다.
+PREPROCESSING_PARAMETERS = {"generator": GENERATOR_VERSION, "detrending": "none"}
 
 CALCULATION_VERSIONS = {
     "generator": GENERATOR_VERSION,
-    "preprocessing": "synthetic-none-v1",
+    "preprocessing": PREPROCESSING_VERSION,
     "binning": BINNING_RULE_VERSION,
     "bls_config": "synthetic-truth-v1",
     "residual_model": RESIDUAL_MODEL_VERSION,
@@ -100,9 +100,13 @@ def build_star(star: Star) -> dict:
         flux_sha = checksum.removeprefix("sha256:")
         snapshot = f"lc:synthetic:s{curve.sector:04d}:sha256:{flux_sha}:gen:{GENERATOR_VERSION}"
         snapshot_ids.append(snapshot)
+        revision = segment_revision(tic_id=star.tic_id, sector=curve.sector, snapshot_id=snapshot,
+                                    products={f"synthetic:{star.tic_id}:s{curve.sector:04d}": flux_sha},
+                                    preprocessing_version=PREPROCESSING_VERSION,
+                                    preprocessing_parameters=PREPROCESSING_PARAMETERS)
         finite = np.array([v for v in flux if v is not None])
         segments.append({
-            "tic_id": star.tic_id, "sector": curve.sector, "binning_revision": BINNING_REVISION,
+            "tic_id": star.tic_id, "sector": curve.sector, "binning_revision": revision,
             "start_btjd": curve.start_btjd, "bin_minutes": int(BIN_MINUTES), "n_points": len(flux), "flux": flux,
             "flux_scatter": round(float(1.4826 * np.median(np.abs(finite - np.median(finite)))), 8),
             "gaps": curve.gaps, "checksum": checksum,
