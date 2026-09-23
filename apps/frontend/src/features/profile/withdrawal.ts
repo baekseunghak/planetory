@@ -39,6 +39,7 @@ export type WithdrawalStatus = {
   requestId: string;
   status: "READY" | "PROCESSING" | "COMPLETED" | "FAILED";
   message: string;
+  effectiveAt: string | null;
 };
 export function readWithdrawalStatus(
   v: unknown,
@@ -55,5 +56,6 @@ export function readWithdrawalStatus(
     requestId: text(r.requestId),
     status: r.status as WithdrawalStatus["status"],
     message: text(r.message),
+    effectiveAt: r.effectiveAt === null ? null : text(r.effectiveAt),
   };
 }

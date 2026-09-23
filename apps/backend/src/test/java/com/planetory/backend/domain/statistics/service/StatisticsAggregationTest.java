@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @Testcontainers
 @ActiveProfiles("local")
-@SpringBootTest
+@SpringBootTest(properties = "planetory.statistics.min-public-cohort=0")
 @AutoConfigureMockMvc
 class StatisticsAggregationTest {
     @Container static final PostgreSQLContainer<?> DB=new PostgreSQLContainer<>("postgres:18.6-alpine");
@@ -71,6 +71,13 @@ class StatisticsAggregationTest {
                 "periodogram_config_version":"p","binning":{},"period_grid":{},"fine_tune":{},"curve_steps":{}}',1,10) RETURNING id
                 """,Long.class);
         candidate=candidate();
+    }
+
+    @Test void 열명미만_과거집계는_공개하지않는다() {
+        assertEquals(CREATED, aggregation.snapshot(null));
+        org.springframework.test.util.ReflectionTestUtils.setField(snapshots, "minPublicCohort", 10);
+        try { assertEquals(BlockStatus.UNAVAILABLE, snapshots.latest().status()); }
+        finally { org.springframework.test.util.ReflectionTestUtils.setField(snapshots, "minPublicCohort", 0); }
     }
 
     long member() {

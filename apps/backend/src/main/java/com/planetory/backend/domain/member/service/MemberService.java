@@ -13,10 +13,12 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class MemberService {
     private final MemberSettingsRepository settings;
     private final InitialExplorationService exploration;
     private final PlatformTransactionManager transactionManager;
+    private final JdbcClient jdbc;
 
     // 검증된 제공자 응답에서만 호출한다. 외부 요청의 provider ID를 받는 API는 없다.
     public Member login(String provider, String subject) {
@@ -54,6 +57,16 @@ public class MemberService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REQUIRED)));
     }
 
+    /** 쓰기 트랜잭션의 첫 잠금. 탈퇴 상태 확정과 회원 쓰기를 같은 DB 순서로 직렬화한다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Member lockActive(long memberId) {
+        if (jdbc.sql("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE")
+                .param(memberId).query(Long.class).optional().isEmpty()) {
+            throw new BusinessException(ErrorCode.AUTH_REQUIRED);
+        }
+        return requireActive(memberId);
+    }
+
     private Member requireActive(Member member) {
         if (!"active".equals(member.getStatus())) throw new BusinessException(ErrorCode.AUTH_REQUIRED);
         return member;
@@ -77,7 +90,7 @@ public class MemberService {
         }
         try {
             return new TransactionTemplate(transactionManager).execute(status -> {
-                var member = requireActive(memberId);
+                var member = lockActive(memberId);
                 member.changeNickname(nickname);
                 return members.saveAndFlush(member);
             });
@@ -88,7 +101,7 @@ public class MemberService {
 
     @Transactional
     public void completeOnboarding(long memberId) {
-        requireActive(memberId);
+        lockActive(memberId);
         settings.completeOnboarding(memberId);
     }
 
@@ -98,7 +111,7 @@ public class MemberService {
         if ("PUBLIC".equals(visibility)) starListPublic = true;
         else if ("PRIVATE".equals(visibility)) starListPublic = false;
         else throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        requireActive(memberId);
+        lockActive(memberId);
         settings.changeStarListPublic(memberId, starListPublic);
         return starListPublic;
     }

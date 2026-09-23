@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ public class StatisticsSnapshotService {
     private final JdbcClient jdbc;
     private final JsonMapper json;
     private final Clock clock;
+    @Value("${planetory.statistics.min-public-cohort:10}") private int minPublicCohort;
 
     public record Baseline(String unit, BigDecimal median, long sampleCount, MetricStatus status, String reason) {}
     public record ComparisonSnapshot(BlockStatus status, Instant asOf, Instant sourceObservedAt, Instant generatedAt,
@@ -33,6 +35,7 @@ public class StatisticsSnapshotService {
                 + "ORDER BY snapshot_date DESC LIMIT 1")
                 .query(String.class).optional().map(value -> {
                     var saved = json.readValue(value, ComparisonSnapshot.class);
+                    if (saved.cohortMemberCount() == null || saved.cohortMemberCount() < minPublicCohort) return unavailable();
                     var status = saved.snapshotDate().isBefore(LocalDate.now(clock.withZone(ZONE)).minusDays(1))
                             ? BlockStatus.STALE : saved.status();
                     return new ComparisonSnapshot(status, saved.asOf(), saved.sourceObservedAt(), saved.generatedAt(),

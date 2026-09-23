@@ -48,11 +48,12 @@ test("withdrawal rejects status coercion and incomplete policy text", () => {
   ]) {
     assert.throws(() =>
       readWithdrawalStatus(
-        { requestId: "mine", status, message: "test" },
+        { requestId: "mine", status, message: "test", effectiveAt: null },
         "mine",
       ),
     );
   }
+  assert.throws(() => readWithdrawalStatus({ requestId: "mine", status: "READY", message: "test" }));
   for (const status of [
     "READY",
     "PROCESSING",
@@ -61,7 +62,7 @@ test("withdrawal rejects status coercion and incomplete policy text", () => {
   ] as const) {
     assert.equal(
       readWithdrawalStatus(
-        { requestId: "mine", status, message: "test" },
+        { requestId: "mine", status, message: "test", effectiveAt: null },
         "mine",
       ).status,
       status,

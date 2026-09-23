@@ -36,6 +36,7 @@ export function withdrawalFixturePlugin(): Plugin {
             ? send({
                 requestId: status[1],
                 status: requests.get(status[1]),
+                effectiveAt: completed ? new Date().toISOString() : null,
                 message:
                   requests.get(status[1]) === "COMPLETED"
                     ? "검증용 처리 결과입니다. 실제 회원을 삭제하지 않았습니다."
@@ -74,6 +75,7 @@ export function withdrawalFixturePlugin(): Plugin {
           return send({
             requestId: id,
             status: requests.get(id),
+            effectiveAt: null,
             message: "테스트 준비 완료",
           });
         }
@@ -87,6 +89,7 @@ export function withdrawalFixturePlugin(): Plugin {
           return send({
             requestId: "test-request",
             status: "COMPLETED",
+            effectiveAt: new Date().toISOString(),
             message: "검증 세션 종료",
           });
         }

@@ -13,6 +13,7 @@ const receipt = (status = "READY", requestId = "receipt-222") => ({
   requestId,
   status,
   message: `검증용 처리 상태: ${status}`,
+  effectiveAt: status === "READY" ? null : "2026-09-23T00:00:00Z",
 });
 const apply = (page: Page) =>
   page.getByRole("button", { name: "탈퇴 신청", exact: true });
@@ -71,7 +72,7 @@ async function setup(page: Page) {
       expect(route.request().headers()["x-csrf-token"]).toBeTruthy();
       state.confirms.push(route.request().postDataJSON());
       state.currentStatus = state.confirmedStatus;
-      state.ended = state.confirmedStatus === "COMPLETED";
+      state.ended = state.confirmedStatus !== "READY";
       return route.fulfill({ json: receipt(state.confirmedStatus) });
     },
   );
@@ -308,7 +309,7 @@ test("222: 준비 요청이 기존 PROCESSING 영수증을 돌려주면 확정 �
 for (const [value, label] of [
   ["READY", "아직 탈퇴가 확정되지 않았습니다"],
   ["PROCESSING", "탈퇴 처리 결과를 확인하고 있습니다"],
-  ["FAILED", "탈퇴가 완료되지 않았습니다"],
+  ["FAILED", "계정 이용은 종료됐으며 데이터 정리가 지연 중입니다"],
 ] as const) {
   test(`222: 확정 응답 ${value}는 성공으로 오인하거나 자동 재신청하지 않는다`, async ({
     page,
@@ -318,8 +319,10 @@ for (const [value, label] of [
     await page.goto("/settings/withdrawal");
     await consent(page);
     await apply(page).click();
-    await expect(statusLink(page)).toBeVisible();
-    await statusLink(page).click();
+    if (value === "READY") {
+      await expect(statusLink(page)).toBeVisible();
+      await statusLink(page).click();
+    }
     await expect(
       page.getByRole("heading", { name: label, exact: true }),
     ).toBeVisible();

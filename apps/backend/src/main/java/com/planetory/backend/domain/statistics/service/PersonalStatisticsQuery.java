@@ -17,7 +17,7 @@ public class PersonalStatisticsQuery {
     private static final String OPEN_BOARD = """
             (p.tic_id IS NULL OR EXISTS(SELECT 1 FROM stars star WHERE star.tic_id=p.tic_id
                 AND star.service_status='published'
-                AND EXISTS(SELECT 1 FROM star_unlocks u WHERE u.tic_id=star.tic_id)))
+                AND star.board_open))
             """;
 
     public Map<String, Metric> activity(long member) {
@@ -145,7 +145,7 @@ public class PersonalStatisticsQuery {
                 WHERE h.user_id=:member AND s.user_id=:member AND s.tic_id=h.tic_id
                     AND s.response_snapshot #>> '{signal,answerClass}'='analysis'
                     AND s.response_snapshot #>> '{match,status}' IN ('matched','matched_harmonic','duplicate')
-                    AND EXISTS(SELECT 1 FROM star_unlocks u WHERE u.tic_id=star.tic_id)
+                    AND star.board_open
                     AND NOT EXISTS(SELECT 1 FROM published_analyses pa WHERE pa.history_id=h.id)
                     AND NOT EXISTS(SELECT 1 FROM posts p WHERE p.kind='system_thread' AND p.candidate_id=c.id AND p.status<>'visible')
                 """).param("member",member).query(Long.class).single();

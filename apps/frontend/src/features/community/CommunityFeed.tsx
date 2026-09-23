@@ -17,6 +17,7 @@ export function DateTime({ value }: { value: string }) {
 }
 export function AuthorLink({ author }: { author: Author }) {
   const location = useLocation();
+  if (author.memberId === null) return <span>{author.nickname}</span>;
   return (
     <Link
       to={pagePath(

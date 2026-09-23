@@ -434,15 +434,12 @@ export function Discussion({
             {state.data.items.map((item) => (
               <li key={item.commentId}>
                 <div className="community-row-meta">
-                  <Link
-                    to={pagePath(
-                      "member",
-                      { memberId: item.author.memberId },
-                      { returnTo: location.pathname + location.search },
-                    )}
-                  >
-                    {item.author.nickname}
-                  </Link>
+                  {item.author.memberId === null ? <span>{item.author.nickname}</span> : (
+                    <Link to={pagePath("member", { memberId: item.author.memberId },
+                      { returnTo: location.pathname + location.search })}>
+                      {item.author.nickname}
+                    </Link>
+                  )}
                   <time dateTime={item.createdAt}>
                     {new Date(item.createdAt).toLocaleString("ko-KR")}
                   </time>

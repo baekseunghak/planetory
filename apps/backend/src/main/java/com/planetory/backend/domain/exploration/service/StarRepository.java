@@ -53,7 +53,8 @@ public class StarRepository {
 
     /** 이 별을 발견한 회원 수. 표시용이며 진행 상태나 후보 수는 함께 주지 않는다. */
     public int countDiscoveredMembers(long ticId) {
-        return jdbc.sql("SELECT count(DISTINCT user_id) FROM star_unlocks WHERE tic_id = ?")
+        return jdbc.sql("SELECT count(DISTINCT u.user_id) FROM star_unlocks u "
+                        + "JOIN users m ON m.id=u.user_id AND m.status='active' WHERE u.tic_id = ?")
                 .param(ticId)
                 .query(Integer.class).single();
     }
@@ -215,7 +216,7 @@ public class StarRepository {
 
     /** 한 명이라도 발견했으면 게시판이 열린다(COM-01). 요청 회원 기준이 아니다. */
     public boolean isBoardOpen(long ticId) {
-        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM star_unlocks WHERE tic_id = ?)")
+        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM stars WHERE tic_id = ? AND board_open)")
                 .param(ticId)
                 .query(Boolean.class).single();
     }

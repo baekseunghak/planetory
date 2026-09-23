@@ -5,6 +5,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 
@@ -12,9 +16,35 @@ import org.springframework.session.SessionRepository;
 public final class RedisSessions<S extends Session> implements SessionRepository<S> {
     public static final String LAST_ACTIVITY = "com.planetory.backend.domain.auth.service.AuthSessionService.lastActivity";
     private final SessionRepository<S> delegate;
+    private final RedisTemplate<String, Object> redis;
     private final ReentrantLock lock = new ReentrantLock(true);
 
-    public RedisSessions(SessionRepository<S> delegate) { this.delegate = delegate; }
+    public RedisSessions(SessionRepository<S> delegate) { this(delegate, null); }
+    public RedisSessions(SessionRepository<S> delegate, RedisTemplate<String, Object> redis) {
+        this.delegate = delegate;
+        this.redis = redis;
+    }
+
+    public void invalidateMember(long memberId) {
+        if (redis == null) return;
+        locked(() -> {
+            // ponytail: 탈퇴는 드물어 세션 키를 SCAN한다. 세션 수가 커지면 회원별 인덱스로 교체한다.
+            try (var keys = redis.scan(ScanOptions.scanOptions()
+                    .match("planetory:session:sessions:*").count(100).build())) {
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    String id = key.substring("planetory:session:sessions:".length());
+                    S session = delegate.findById(id);
+                    if (session == null) continue;
+                    Object context = session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+                    if (context instanceof SecurityContext security && security.getAuthentication() != null
+                            && security.getAuthentication().getPrincipal() instanceof MemberPrincipal principal
+                            && principal.memberId() == memberId) delegate.deleteById(id);
+                }
+            }
+            return null;
+        });
+    }
 
     // ponytail: 단일 앱의 저장 작업만 직렬화한다. 다중 앱 전환 시 Redis 원자 연산으로 교체한다.
     @Override public S createSession() { return access(delegate::createSession); }

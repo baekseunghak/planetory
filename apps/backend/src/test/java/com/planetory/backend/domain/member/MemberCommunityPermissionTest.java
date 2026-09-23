@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -77,8 +78,8 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
+        assertEquals(List.of("24"), restarted.migrate().migrations.stream().map(m -> m.version).toList());
         restarted.validate();
-        assertEquals(0, restarted.migrate().migrationsExecuted);
 
         try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
              Statement st = owner.createStatement()) {
@@ -174,6 +175,34 @@ class MemberCommunityPermissionTest {
             }
             assertPermissionDenied(() -> st.execute("UPDATE published_analyses SET history_id=history_id WHERE id=-1"));
             assertPermissionDenied(() -> st.execute("DELETE FROM published_analyses WHERE id=-1"));
+        }
+    }
+
+    @Test
+    void 앱_역할은_탈퇴_정리_함수만_사용해_회원을_삭제한다() throws SQLException {
+        try (Connection app = connectionAs("app_login", "app"); Statement st = app.createStatement()) {
+            assertPermissionDenied(() -> st.execute("DELETE FROM users WHERE id=-1"));
+            app.setAutoCommit(false);
+            long userId = returnedId(st, "INSERT INTO users(provider,provider_user_id,nickname) "
+                    + "VALUES ('test','withdrawal-role','role-user') RETURNING id");
+            long postId = returnedId(st, "INSERT INTO posts(kind,user_id,board,tag,title,body,status) "
+                    + "VALUES ('user'," + userId + ",'free','GENERAL','title','body','visible') RETURNING id");
+            st.execute("INSERT INTO withdrawal_requests(id,user_id,policy_version,receipt_hash,status) VALUES ('"
+                    + UUID.randomUUID() + "'," + userId + ",'withdrawal-v1','hash','READY')");
+            st.execute("UPDATE users SET status='withdrawn',withdrawn_at=clock_timestamp() WHERE id=" + userId);
+            st.execute("UPDATE published_analyses SET withdrawn_at=clock_timestamp() WHERE id=-1");
+            st.execute("SELECT cleanup_withdrawn_member(" + userId + ")");
+            st.execute("SELECT prune_withdrawal_retention()");
+            try (ResultSet result = st.executeQuery("SELECT user_id,author_withdrawn_at IS NOT NULL FROM posts WHERE id=" + postId)) {
+                assertTrue(result.next());
+                assertEquals(-1, result.getLong(1));
+                assertTrue(result.getBoolean(2));
+            }
+            try (ResultSet result = st.executeQuery("SELECT count(*) FROM users WHERE id=" + userId)) {
+                assertTrue(result.next());
+                assertEquals(0, result.getLong(1));
+            }
+            app.rollback();
         }
     }
 

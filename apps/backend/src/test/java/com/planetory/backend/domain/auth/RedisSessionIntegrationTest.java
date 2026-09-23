@@ -203,6 +203,14 @@ class RedisSessionIntegrationTest {
         assertEquals(204, logout(token.get("headerName").asText(), token.get("token").asText()).statusCode());
     }
 
+    @Test void memberSessionCanBeRemovedAcrossDevicesByItsSavedPrincipal() throws Exception {
+        login("google", false);
+        long member = app.getBean(JdbcTemplate.class).queryForObject(
+                "SELECT id FROM users WHERE provider='google' AND provider_user_id='redis-google'", Long.class);
+        app.getBean(RedisSessions.class).invalidateMember(member);
+        assertEquals(401, get("/api/v1/me").statusCode());
+    }
+
     @Test void csrfDoesNotExtendAuthenticatedIdleTimeout() throws Exception {
         login("ssafy", false);
         TIME.advance(Duration.ofMinutes(29));

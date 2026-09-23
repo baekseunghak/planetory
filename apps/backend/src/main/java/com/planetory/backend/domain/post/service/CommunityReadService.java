@@ -52,7 +52,7 @@ public class CommunityReadService {
         members.requireActive(member);
         var rows = jdbc.sql("""
                 WITH matching AS (
-                    SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,p.created_at,
+                    SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,u.status AS author_status,p.created_at,
                         CASE WHEN p.kind='user' THEN 0 ELSE 1 END AS kind_order,
                         (p.kind='user' AND u.status='active' AND EXISTS (SELECT 1 FROM follows f
                             WHERE f.user_id=:member AND f.target_type='user' AND f.target_id=p.user_id
@@ -71,7 +71,7 @@ public class CommunityReadService {
                 .param("member", member).param("at", q.at()).param("kind", q.kind()).param("id", q.id()).param("limit", q.size()+1)
                 .query((r, n) -> new FollowingRow(new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
                         r.getObject("candidate_id", Long.class), r.getString("title"),
-                        "system_thread".equals(r.getString("kind")) ? SYSTEM : new PostService.Author("u-" + r.getLong("user_id"), r.getString("nickname")),
+                        "system_thread".equals(r.getString("kind")) ? SYSTEM : PostService.publicAuthor(r.getLong("user_id"), r.getString("nickname"), r.getString("author_status")),
                         r.getLong("comments"), r.getObject("created_at", OffsetDateTime.class)),
                         r.getInt("kind_order"), r.getBoolean("by_member"), r.getBoolean("by_star"))).list();
         boolean more = rows.size()>q.size();
@@ -146,12 +146,12 @@ public class CommunityReadService {
                 case "BODY" -> " AND p.body ILIKE :pattern ESCAPE E'\\\\'";
                 default -> " AND (p.title ILIKE :pattern ESCAPE E'\\\\' OR p.body ILIKE :pattern ESCAPE E'\\\\')";
             };
-            if (!search.author().isEmpty()) filters += " AND p.kind='user' AND lower(u.nickname)=lower(:author)";
+            if (!search.author().isEmpty()) filters += " AND p.kind='user' AND u.status='active' AND lower(u.nickname)=lower(:author)";
             if (!search.board().isEmpty()) filters += " AND p.board=:board";
             if (!search.tag().isEmpty()) filters += " AND p.kind='user' AND p.tag=:tag";
         }
         var statement = jdbc.sql("""
-                SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,p.created_at,
+                SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,u.status AS author_status,p.created_at,
                     (SELECT count(*) FROM comments c WHERE c.post_id=p.id AND c.status='visible') AS comments
                 FROM posts p LEFT JOIN users u ON u.id=p.user_id
                 WHERE p.status='visible' AND %s %s
@@ -168,7 +168,7 @@ public class CommunityReadService {
         }
         var rows = statement.query((r, n) -> new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
                         r.getObject("candidate_id", Long.class), r.getString("title"),
-                        "system_thread".equals(r.getString("kind")) ? SYSTEM : new PostService.Author("u-" + r.getLong("user_id"), r.getString("nickname")),
+                        "system_thread".equals(r.getString("kind")) ? SYSTEM : PostService.publicAuthor(r.getLong("user_id"), r.getString("nickname"), r.getString("author_status")),
                         r.getLong("comments"), r.getObject("created_at", OffsetDateTime.class))).list();
         boolean more = rows.size() > q.size();
         var page = rows.subList(0, Math.min(rows.size(), q.size()));

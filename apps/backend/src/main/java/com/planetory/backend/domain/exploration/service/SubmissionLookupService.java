@@ -106,6 +106,7 @@ public class SubmissionLookupService {
     public SubmissionViews.DetailView detailView(long member, String submissionId) {
         long id = ExplorationIds.parse(submissionId, ExplorationIds.SUBMISSION)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (!submissions.lockMember(member)) throw new BusinessException(ErrorCode.AUTH_REQUIRED);
         var row = histories.ownedSubmission(member, id);
         JsonNode saved = row.submission().path("response_snapshot");
         // 당시 응답이 없으면 무엇을 보여 줄지 정할 근거가 없다. 현재 후보로 지어내지 않는다.

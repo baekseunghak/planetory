@@ -61,7 +61,7 @@ public class RedisSessionConfig {
         repository.setDefaultMaxInactiveInterval(server.getServlet().getSession().getTimeout());
         repository.setFlushMode(org.springframework.session.FlushMode.ON_SAVE);
         repository.setSaveMode(org.springframework.session.SaveMode.ON_SET_ATTRIBUTE);
-        return new RedisSessions<>(repository);
+        return new RedisSessions<>(repository, template);
     }
     @Bean org.springframework.boot.data.redis.health.DataRedisHealthIndicator redisHealthIndicator(
             @Qualifier("sessionRedisConnectionFactory") LettuceConnectionFactory connection) {
