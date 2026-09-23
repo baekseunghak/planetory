@@ -642,7 +642,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 | 규칙 | 근거 |
 |---|---|
-| i번째 점의 시각 = `startBtjd + (binMinutes / 1440) × i`. 시각 배열은 보내지 않는다 | ERD `light_curve_segments` |
+| `startBtjd`는 첫 bin 시작 메타데이터다. 표시·접기에서 i번째 Gold 점의 시각은 `startBtjd + (binMinutes / 1440) × (i + 0.5)`이며 세그먼트별 간격을 사용한다. 시각 배열은 보내지 않는다 | Gold 중심 평가·192 사용자 승인, 247 정합화 |
 | 결측은 `null`, `gaps`는 `[시작 인덱스, 끝 인덱스]` 폐구간. JSON `NaN`은 쓰지 않는다 | Q04 |
 | 세그먼트는 섹터 순 정렬. 섹터 사이 공백은 세그먼트 경계로 표현하고 프론트가 접어 그린다 | EXP-03, NFR-10 |
 | 운영 `binMinutes`는 10분(mean). 빈 bin 포함 20,000점 초과 시 자동 확대하지 않고 실패·격리한다 | [Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) |
@@ -651,6 +651,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | 응답 크기: 별당 약 70KB(비닝 후). 바이너리 전송은 D-2 | ERD 용량표 |
 | 잔차는 원본 세그먼트와 제거 후보의 `transit_model`·`residualModelVersion`으로 언제든 다시 만들 수 있다. 저장물이 아니라 온라인 계산 결과다 | NFR-05, DEC-22 |
 | 판별 도구(홀짝·2차 식·V/U형, EXP-11)는 이 곡선 전 점으로 브라우저가 계산한다. 단계형 화면 상태(EXP-12)는 프론트 소유 | Q12 |
+
+**시각 기준의 구분(247):** 143의 v1 스냅샷과 [192 사용자 승인](../../frontend/docs/analysis-retry-draft.md#gold-시각-기준-정합화)에 따라 표시·접기는 중심을 사용한다. 기존 시작 시각 표기를 정정하며 계산을 다시 변경하지 않는다. 범위 끝은 `startBtjd + nPoints × binMinutes / 1440`, 마지막 점은 `startBtjd + (nPoints - 0.5) × binMinutes / 1440`으로 서로 다르다. null은 제외하되 인덱스를 당기지 않으며, 시작 메타데이터·기준 T·서버 환산 위상·이미 중심인 원시 TIME에 반 bin을 더하지 않는다. 제출 관측 판정은 6.2절의 별도 시작 기준을 유지한다.
 
 **원본의 잔차 상태:** `curveStep=0`이면 계산할 것이 없으므로 `residual`은 `{"status": "COMPLETED", "jobId": null}`로 고정한다. `computedAt`은 결과가 만들어진 시각이 있을 때만 넣는다.
 
@@ -789,7 +791,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 `phaseEnd > 1`인 경계 통과는 정상이다(AT-09). 검증 실패는 Submission·History를 만들지 않는다.
 
-**관측점과 관측 창(2026-09-18 결정):** 점 시각은 곡선 응답과 같은 bin 시작 시각 `startBtjd + (binMinutes / 1440) × i`(5.2절)이고, 결측이 아닌 점이 이어진 구간마다 관측 창 `[첫 점, 마지막 점]`을 만든다. 5단계의 관측점 존재는 창 안의 점을 bin 간격으로 표본화해 판정하고, 5.1절의 관측 통과 수 N과 통과 창 중첩도 이 창과 겹치는 통과만 센다. 프론트는 받은 곡선 점만으로 같은 판정을 재현할 수 있다.
+**관측점과 관측 창(2026-09-18 결정 유지):** 제출 검증·매칭의 점 시각은 bin 시작 `startBtjd + (binMinutes / 1440) × i`이고, 결측이 아닌 점이 이어진 구간마다 관측 창 `[첫 점, 마지막 점]`을 만든다. 5단계의 관측점 존재는 창 안의 점을 bin 간격으로 표본화해 판정하고, 5.1절의 관측 통과 수 N과 통과 창 중첩도 이 창과 겹치는 통과만 센다. 이 판정은 5.2절의 표시·접기용 bin 중심과 구분한다. 재현하려면 응답의 시작 메타데이터·간격·null 위치로 판정용 점을 별도로 구성해야 하며 화면 점을 그대로 쓰지 않는다. 중심 기반 표시로 바뀌어도 관측 창이나 `observationBounds`를 반 bin 늘리지 않는다. 경계 bin의 화면 선택과 최종 허용 여부는 다를 수 있으며 관측 판정 변경은 247 범위 밖의 별도 승인 대상이다.
 
 **수치 판정의 기준:** 4~7·9단계와 6.3절 3단계 매칭은 [제출 매칭 수치 규칙 v0](../../../docs/api/exploration/README.md)와 참조 구현 `matching-v0.cjs`의 계산을 그대로 따른다. 백엔드 구현(`SubmissionMatching`)은 공통 표본 31개(`matching-cases.v0.json`)의 검증·서버 산정·판정을 재현한다(S15P21C206-142). 선택 폭·허용 오차·배율은 현재 운영 규칙, 최소 창은 판의 bin 크기에서 온다(5.1절 `selectionRules`).
 
@@ -1091,6 +1093,8 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 목록 소비자는 8.1절 `detailAvailable=false`로 이 누락을 미리 구분한다. 직접 상세 요청의 기존 503 정책은 유지한다.
 
 ### 8.3 히스토리 그래프 (HIS-03, Q11)
+
+**점 시각 기준(247 정합화):** 개인·공개 CURRENT는 5.2절의 Gold bin 중심으로 접는다. SUBMITTED의 `folded-mad-v1`도 제출 당시 세그먼트별 `startBtjd + (i + 0.5) × binMinutes / 1440`으로 접어 150칸에 집계한 배열이다. 두 모드는 점 시각 규칙이 같지만 CURRENT의 현재 판·T·개별 점과 SUBMITTED의 당시 판·T·구간 중앙값은 같다고 보장하지 않는다. 배열 칸의 표시 위상 `-0.5 + (i + 0.5) / bins`는 집계 구간의 중심이며 Gold 점 시각에 다시 반 bin을 더하는 규칙이 아니다. 저장된 v0는 시작 시각으로 집계한 과거 결과로 보존하며 v1처럼 재해석하지 않는다.
 
 `GET /api/v1/histories/{historyId}/graph?mode=CURRENT|SUBMITTED` — 생략은 `CURRENT`.
 
