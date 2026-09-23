@@ -206,3 +206,20 @@
 | 2026-09-23 | 243 운영 SDE 버전 선택·반복 연결 | S15P21C206-243 | running median, reflect, grid guard, CM Dra | 커널 307개·관련 43개 통과, 실제 회귀 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 243 운영 5별·반복 실행 검산 | S15P21C206-243 | b5828e49, 555ceda6, CM Dra 19, 2323+100 hash | 실제 회귀 통과·재리뷰 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 243 운영 코드 승인·API와 지문 문서 보완 | S15P21C206-243 | quality_version, v0 fingerprint, 공개 API | 운영 코드 승인·문서 보완 | [기록](2026-09-23.md) |
+| 2026-09-21 | Sector 파이프라인 자율 실행·Raw 검증 후 원본 회수 | S15P21C206-252 | Airflow, systemd, Raw audit, cleanup, SHA-256 | DAG·cleanup 구현 및 오프라인 검증, 운영 배포 전 | [기록](2026-09-21.md) |
+| 2026-09-22 | Airflow UI Node 1 배포·Tailnet 전용 공개 | S15P21C206-252 | Airflow DB, Scheduler, Webserver, Tailscale Serve, Viewer | UI 접속 검증, DAG 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow Viewer 초기 암호 전달 오류 정정 | S15P21C206-252 | Viewer, password reset, root-only file | 수정·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector별 단계 DAG와 빠른 Raw 재검증 착수 | S15P21C206-252 | 4 DAG, lineage, manifest checksum, cached audit, parallel cleanup | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow DB 유지 갱신·실패 시 이전 이미지 복귀 | S15P21C206-252 | Airflow update, paused DAG, rollback | 스크립트 검증, 운영 적용 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | TESS 단계별 DAG·HDFS·Bronze 불변 release 배포 | S15P21C206-252 | 20260921T230610Z, Node 1~6, import, paused, DagRun 0 | 코드 배포·import 검증, 실제 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | MAST Sector 발견·증거 기반 재개 선택 착수 | S15P21C206-252 | MAST 일반 LC, 상한 70, read-only DAG, resume planner | 오프라인 구현·테스트, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14~70 자동 admission·실패 재개 구현 | S15P21C206-252 | Airflow 조정, Worker unit, 불변 원천, 단일 Sector Raw, retry | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14 제한 운영 배포·재부팅 검증 | S15P21C206-252 | 20260922T021406Z, SSH, sudo, Worker 4, Node 1, Raw, cleanup, Bronze | 4단계 완료·drain, 무인 Hadoop 복구 미검증 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 전 노드 부팅 복구 오프라인 구현 | S15P21C206-252 | systemd, HDFS HA standby gate, timer, YARN readiness | 오프라인 검증·운영 미배포 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 6대 순차 재부팅 자동 복구 운영 검증 | S15P21C206-252 | release 5fec7b88, boot ID, Journal quorum, NN Active, YARN, Airflow | 6대 순차 재부팅·복구 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 과거 Sector 1~13 Airflow DAG 제거 | S15P21C206-252 | Airflow, legacy DAG, metadata, release 20260922T134419Z | 운영 제거·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 현행 Airflow DAG 한국어 표시 이름 배포 | S15P21C206-252 | Airflow, dag_display_name, description, release 20260922T135740Z | 운영 배포·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow 3.2.2 전환 코드·격리 import 검증 | S15P21C206-252 | Airflow 3, Task SDK, DB clone, rollback | 코드·이미지 검증, 운영 전환 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-23 | Airflow 다운로드 대기 Temporal Trigger 도입 | S15P21C206-252 | Temporal Trigger, Triggerer, 14일 deadline | 운영 배포·첫 deferred 재개 확인, 장시간 미검증 | [기록](2026-09-23.md) |
+| 2026-09-23 | Triggerer 배포 후 토큰 만료 재발 정정 | S15P21C206-252 | Sector 21·22, queued, LocalExecutor, JWT | 재발 확인·원인 미해결 | [기록](2026-09-23.md) |

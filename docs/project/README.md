@@ -28,3 +28,4 @@
 | `apps/backend/docs/api-spec-ownership.md` | 실제 API 문서 디렉터리의 인덱스로 승격 | [백엔드 API 문서](../../apps/backend/docs/README.md) | 별도 분담 문서가 다시 필요해진 경우 |
 | `docs/experiments/distributed-poc-cicd-plan.md` | 중복 문서 지도와 폐기된 계약을 제거하고 상태만 분리 | [분산 PoC 진행 상태](distributed-poc-status.md) | 실험별 별도 계획 문서가 다시 필요해진 경우 |
 | `docs/workflows/mattermost-message.md` | 외부 메신저 직접 전송을 저장소 워크플로 범위에서 제거 | 없음 | 별도 Jira 범위와 비밀정보 관리 방식이 합의된 경우 |
+| `docs/project/tess-airflow-handoff-2026-09-23.md` | 토큰 만료 장애 해결·운영 회귀 완료로 임시 인계 종료 | [2026-09-23 변경 이력](../changes/2026-09-W4/2026-09-23.md), [DAG 계약](../../distributed-system/airflow/dags/README.md) | 없음. 새 인계가 필요하면 새 날짜의 임시 문서로 만든다 |

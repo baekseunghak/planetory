@@ -161,7 +161,7 @@ Hadoop과 애플리케이션 포트는 실제 서비스가 준비되기 전에 �
 
 YARN은 [단계형 YARN 스크립트](../../infra/distributed-system/scripts/initialize-yarn-cluster.ps1)의 `ConfigureFirewall`을 사용한다. 이 단계는 UFW가 active이고 기본 incoming 정책이 deny인지 먼저 확인하며, 전제가 다르면 어떤 허용 규칙도 추가하지 않는다. Node 1의 ResourceManager `8030~8033,8088`과 Worker의 NodeManager `8040~8042`는 정확한 6개 사설 IP에서만 허용한다. Spark cluster mode 내부 통신은 Worker 5개 IP 사이에서 driver `7078`과 block manager `7079~7095`만 허용한다. block manager는 같은 Worker에 여러 컨테이너가 배치되면 `7079`부터 포트를 증가시키므로 기본 재시도 범위를 함께 열어야 한다. NodeManager가 모든 인터페이스에 bind하는 현재 PoC의 접근 경계는 GCP VPC 방화벽과 이 UFW 규칙의 조합이다.
 
-YARN 상태는 다음처럼 확인한다. 현재 unit은 실행 중이지만 부팅 자동 시작은 비활성이다.
+YARN 상태는 다음처럼 확인한다. 2026-09-22 부팅 복구 release `5fec7b88` 적용 뒤 역할별 HDFS·YARN unit은 부팅 자동 시작이 활성화됐다.
 
 ```bash
 systemctl is-active hadoop-yarn-resourcemanager  # Node 1
@@ -170,7 +170,9 @@ sudo -u yarn env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
   HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/yarn node -list -all
 ```
 
-재부팅 뒤에는 HDFS HA와 DataNode 상태를 먼저 확인한 다음 [분산 시스템 YARN 절차](../../infra/distributed-system/README.md#yarn-설치검증-s15p21c206-73)의 `Start`, `ValidateNodes`, `FinalAudit` 순서로 복구한다. `S15P21C206-74` 검증 결과 자동 fencing이 없는 PoC에서는 HDFS·YARN unit을 disabled로 유지하고, 운영자가 기존 Active 부재와 서비스 의존 순서를 확인한 뒤 수동 기동한다.
+`S15P21C206-74` 당시에는 자동 fencing이 없어 HDFS·YARN unit을 disabled로 두고 수동 기동했다. 2026-09-22 이후의 부팅 복구와 검증 조건은 [전체 노드 부팅 복구 절차](../../infra/distributed-system/README.md#전체-노드-부팅-복구)를 따른다.
+
+`S15P21C206-252`의 [부팅 복구 구성과 검증 절차](../../infra/distributed-system/README.md#전체-노드-부팅-복구)는 Node 1~6에 적용하고 여섯 노드를 한 대씩 재부팅해 검증했다. Node 1 재부팅 뒤 양쪽 Standby에서 timer가 Safe Mode OFF를 기다려 `nn1`을 승격하고 ResourceManager가 자동 복구됐다. 설치 후에도 자동 fencing 없이 **응답 없는 기존 Active**를 승격할 수 없으므로 이 장애 전환은 아래 수동 절차를 따른다.
 
 ## 6. HDFS 수동 장애 전환과 재기동
 
@@ -188,6 +190,8 @@ ResourceManager·Airflow·Publisher는 Node 1에만 있으므로 Node 2 승격�
 ## 7. tailnet SSH 장애와 GCP 비상 복구
 
 먼저 클라이언트 연결, MagicDNS, 대상 노드와 SSH 권한을 확인한다.
+
+Tailscale SSH에서 추가 웹 인증이 필요한 경우, 기존 로컬 OpenSSH 설정의 `node-1-ssh` 별칭과 Node 1 경유 `node-2-ssh`~`node-6-ssh` ProxyJump 별칭으로도 접속을 점검한다. `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes node-1-ssh 'hostname -s'`처럼 등록된 host key를 검증하며 개인 키 내용이나 인증 파일을 출력·복사하지 않는다. 별칭의 실제 주소·키 경로는 각 작업 PC의 `.ssh/config`에서만 확인하고 운영 문서에 고정하지 않는다.
 
 ```powershell
 tailscale status

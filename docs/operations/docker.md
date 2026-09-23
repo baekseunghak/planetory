@@ -35,7 +35,7 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 
 `service-db`는 루트 `compose.yaml`이 `include`하는 `experiments/distributed-pipeline/compose.yaml`에 정의돼 있고 `frontend`·`backend`와 함께 `service` 프로필에 속한다. 백엔드 로컬 DB 실행 기준은 [백엔드 개발 환경 안내](../../apps/backend/docs/development-setup.md) 2장이다.
 
-현재 Airflow에는 PostgreSQL 드라이버와 DAG 위치만 있고 실제 DAG는 없다. Frontend·Backend·Ingestion·Spark·Publisher도 실행 코드와 manifest가 채워지기 전까지 해당 이미지 빌드를 완료할 수 없다. `docker-compose down -v`는 로컬 볼륨까지 삭제하므로 명시적으로 초기화할 때만 사용한다.
+Airflow TESS DAG의 Node 1 배포·접속 상태는 [분산 시스템 운영 절차](../../infra/distributed-system/README.md#airflow-db)를 따른다. 로컬 개발 Compose의 전체 파이프라인 기동과 운영 DAG 실행 검증은 별개다. `docker-compose down -v`는 로컬 볼륨까지 삭제하므로 명시적으로 초기화할 때만 사용한다.
 
 로컬 앱과 데이터 파이프라인은 EC2·GCP와 같은 `linux/amd64`를 기본으로 실행한다.
 

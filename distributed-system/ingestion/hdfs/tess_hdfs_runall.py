@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import tess_hdfs_load as loader
@@ -51,8 +53,29 @@ def validate_config(value: dict) -> dict:
         raise ValueError("invalid server RunAll run_id")
     if not loader.SHA256_RE.fullmatch(str(value.get("expected_source_list_sha256", ""))):
         raise ValueError("invalid server RunAll source checksum")
-    if not loader.SHA256_RE.fullmatch(str(value.get("expected_coverage_sha256", ""))):
-        raise ValueError("invalid server RunAll coverage checksum")
+    sector_contexts = value.get("sector_contexts")
+    if sector_contexts is None:
+        if not loader.SHA256_RE.fullmatch(str(value.get("expected_coverage_sha256", ""))):
+            raise ValueError("invalid server RunAll coverage checksum")
+    else:
+        if value.get("expected_coverage_sha256") or value.get("coverage_manifest"):
+            raise ValueError("single-Sector RunAll must not reuse legacy coverage")
+        if not isinstance(sector_contexts, list) or len(sector_contexts) != 1:
+            raise ValueError("single-Sector RunAll requires one context")
+        context = sector_contexts[0]
+        if (
+            not isinstance(context, dict)
+            or type(context.get("sector")) is not int
+            or not 14 <= context["sector"] <= 70
+            or context.get("run_id") != value["run_id"]
+            or context.get("release_id") != value["run_id"]
+            or context.get("source_list_sha256") != value["expected_source_list_sha256"]
+            or type(context.get("product_count")) is not int
+            or context["product_count"] < 1
+            or type(context.get("total_bytes")) is not int
+            or context["total_bytes"] < 1
+        ):
+            raise ValueError("invalid single-Sector RunAll context")
     code_release_id = str(value.get("code_release_id", ""))
     if not loader.RELEASE_ID_RE.fullmatch(code_release_id):
         raise ValueError("invalid server RunAll code release")
@@ -63,13 +86,16 @@ def validate_config(value: dict) -> dict:
         raise ValueError("server RunAll bundle size must be 512 MiB through 1 GiB")
     if int(value.get("minimum_worker_free_gib", 0)) < 80:
         raise ValueError("server RunAll worker free-space floor is too small")
+    if not isinstance(value.get("cleanup_source_after_commit", False), bool):
+        raise ValueError("server RunAll cleanup flag must be boolean")
     worker_rows = value.get("workers", [])
     workers = {int(item.get("slot", 0)): str(item.get("internal_ip", "")) for item in worker_rows}
     if len(worker_rows) != 5 or len(workers) != 5 or workers != WORKER_IPS:
         raise ValueError("server RunAll requires the exact five Worker internal IPs")
-    coverage = str(value.get("coverage_manifest", ""))
-    if not coverage.startswith("/"):
-        raise ValueError("server RunAll coverage manifest must be an absolute path")
+    if sector_contexts is None:
+        coverage = str(value.get("coverage_manifest", ""))
+        if not coverage.startswith("/"):
+            raise ValueError("server RunAll coverage manifest must be an absolute path")
     return value
 
 
@@ -128,7 +154,8 @@ def context_paths(context: dict) -> tuple[str, str, str]:
 
 
 def completion_path(config: dict) -> Path:
-    return Path(f"/var/lib/planetory-tess-hdfs-runall-{config['run_id']}/complete")
+    name = "cleanup-complete" if config.get("cleanup_source_after_commit", False) else "complete"
+    return Path(f"/var/lib/planetory-tess-hdfs-runall-{config['run_id']}/{name}")
 
 
 def safe_mode_is_off(output: str) -> bool:
@@ -153,7 +180,7 @@ def preflight(expected_bytes: int) -> None:
     fields = hdfs(["dfs", "-df", "/"], echo=False).stdout.splitlines()[-1].split()
     capacity, used_bytes, available = map(int, fields[1:4])
     used_percent = int(fields[4].rstrip("%"))
-    if used_percent >= 75:
+    if expected_bytes and used_percent >= 75:
         raise RuntimeError("HDFS usage is already 75 percent or higher")
     if expected_bytes and (
         used_bytes + expected_bytes * 2 > capacity * 70 // 100
@@ -289,7 +316,7 @@ def run_loader_as_hdfs(config: dict, arguments: list[str]) -> subprocess.Complet
     ])
 
 
-def audit(config: dict, context: dict, source: str, output: Path) -> dict:
+def audit(config: dict, context: dict, source: str, output: Path, *, fast: bool = False) -> dict:
     _, _, final_uri = context_paths(context)
     arguments = [
         "audit", "--stage-uri", source, "--final-uri", final_uri,
@@ -299,6 +326,8 @@ def audit(config: dict, context: dict, source: str, output: Path) -> dict:
     ]
     for slot in range(1, 6):
         arguments.extend(["--worker-slot", str(slot)])
+    if fast:
+        arguments.append("--fast")
     run_loader_as_hdfs(config, arguments)
     return json.loads(output.read_text(encoding="utf-8"))
 
@@ -317,7 +346,7 @@ def java_commit(config: dict, source: str, destination: str) -> None:
     ])
 
 
-def commit_sector(config: dict, context: dict) -> None:
+def commit_sector(config: dict, context: dict, *, fast_cached: bool = False) -> None:
     stage, final, final_uri = context_paths(context)
     with tempfile.TemporaryDirectory(prefix=f"tess-hdfs-s{context['sector']}-") as temporary:
         root = Path(temporary)
@@ -325,7 +354,9 @@ def commit_sector(config: dict, context: dict) -> None:
         root.chmod(0o750)
         audit_path = root / "audit.json"
         if hdfs_exists(final):
-            result = audit(config, context, final, audit_path)
+            result = audit(config, context, final, audit_path, fast=True) if fast_cached else audit(
+                config, context, final, audit_path
+            )
             validate_audit_coverage(result, context)
             ready = hdfs_json(f"{final}/_READY.json")
             loader.validate_ready(ready, {
@@ -347,7 +378,7 @@ def commit_sector(config: dict, context: dict) -> None:
         if hdfs_exists(f"{stage}/manifest.parquet"):
             hdfs(["dfs", "-rm", "-r", "-skipTrash", f"{stage}/manifest.parquet"])
         spark_script = Path(config["code_release"]) / "hdfs" / "manifest_to_parquet.py"
-        run(["/usr/bin/docker", "pull", SPARK_IMAGE])
+        run(["/usr/bin/docker", "image", "inspect", SPARK_IMAGE])
         docker = ["/usr/bin/docker", "run", "--rm", "--network", "host"]
         for name, ip in SPARK_HOSTS.items():
             docker.extend(["--add-host", f"{name}:{ip}"])
@@ -382,6 +413,146 @@ def commit_sector(config: dict, context: dict) -> None:
         if "Status: HEALTHY" not in fsck or not re.search(r"Under-replicated blocks:\s+0", fsck):
             raise RuntimeError("final Sector HDFS fsck failed")
         print(f"COMMIT_OK final={final} products={count}")
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def cleanup_plan_source(
+    plan_path: Path, raw_root: Path, state_path: Path, final_uri: str, *,
+    run_id: str, release_id: str, source_sha: str, sector: int, worker_slot: int,
+) -> dict:
+    expected_final = f"hdfs://planetory/lake/raw/tess/release={release_id}/sector={sector:04d}"
+    if final_uri != expected_final:
+        raise ValueError("cleanup final Raw URI mismatch")
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    loader._validate_plan(plan)
+    expected_identity = {
+        "run_id": run_id,
+        "release_id": release_id,
+        "source_list_sha256": source_sha,
+        "sector": sector,
+        "worker_slot": worker_slot,
+    }
+    plan_identity = {
+        "source_list_sha256": source_sha,
+        "sector": sector,
+        "worker_slot": worker_slot,
+    }
+    if any(plan.get(key) != value for key, value in plan_identity.items()):
+        raise ValueError("cleanup plan identity mismatch")
+    if plan["schema"] == loader.PLAN_SCHEMA and any(
+        plan.get(key) != expected_identity[key] for key in ("run_id", "release_id")
+    ):
+        raise ValueError("cleanup plan identity mismatch")
+
+    ready = json.loads(run([HDFS, "dfs", "-cat", f"{final_uri}/_READY.json"], echo=False).stdout)
+    loader.validate_ready(ready, plan)
+    if (
+        ready.get("run_id") != run_id
+        or ready.get("release_id") != release_id
+        or ready.get("source_list_sha256") != source_sha
+        or int(ready.get("sector", -1)) != sector
+        or int(ready.get("replication", -1)) != 2
+    ):
+        raise RuntimeError("cleanup final Raw identity mismatch")
+    success = run([HDFS, "dfs", "-test", "-e", f"{final_uri}/manifest.parquet/_SUCCESS"], check=False, echo=False)
+    if success.returncode != 0:
+        raise RuntimeError("cleanup requires the final Raw Parquet success marker")
+
+    entries = [entry for bundle in plan["bundles"] for entry in bundle["entries"]]
+    sector_root = raw_root.resolve() / f"sector={sector:04d}"
+    paths: list[tuple[Path, dict]] = []
+    for entry in entries:
+        path = Path(str(entry["path"]))
+        expected = sector_root / str(entry["filename"])
+        if path != expected or path.parent != sector_root or path.name != entry["filename"]:
+            raise ValueError(f"cleanup path escapes the Sector source directory: {path}")
+        paths.append((path, entry))
+
+    identity = {
+        "schema": "planetory.tess-source-cleanup.v1",
+        **expected_identity,
+        "plan_id": plan["plan_id"],
+        "final_uri": final_uri,
+        "expected_files": len(paths),
+        "expected_bytes": sum(int(entry["size_bytes"]) for _, entry in paths),
+    }
+    existing = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else None
+    if existing and any(existing.get(key) != value for key, value in identity.items()):
+        raise RuntimeError("cleanup state conflicts with the immutable HDFS plan")
+    resuming = bool(existing and existing.get("status") in {"in_progress", "complete"})
+
+    remaining: list[Path] = []
+    missing = 0
+    for path, entry in paths:
+        if path.is_symlink():
+            raise RuntimeError(f"cleanup source is not a regular file: {path}")
+        if not path.exists():
+            if not resuming:
+                raise RuntimeError(f"source file disappeared before cleanup started: {path.name}")
+            missing += 1
+            continue
+        if not path.is_file():
+            raise RuntimeError(f"cleanup source is not a regular file: {path}")
+        if path.stat().st_size != int(entry["size_bytes"]) or _file_sha256(path) != entry["sha256"]:
+            raise RuntimeError(f"cleanup source no longer matches the immutable plan: {path.name}")
+        remaining.append(path)
+
+    loader.atomic_json(state_path, {
+        **identity,
+        "status": "in_progress",
+        "verified_remaining_files": len(remaining),
+        "previously_removed_files": missing,
+        "updated_at_utc": loader.tess.utc_now(),
+    })
+    for path in remaining:
+        path.unlink()
+    if any(path.exists() for path, _ in paths):
+        raise RuntimeError("one or more source files remain after cleanup")
+    result = {
+        **identity,
+        "status": "complete",
+        "removed_now_files": len(remaining),
+        "previously_removed_files": missing,
+        "completed_at_utc": loader.tess.utc_now(),
+    }
+    loader.atomic_json(state_path, result)
+    print(
+        f"SOURCE_CLEANUP_OK sector={sector} worker={worker_slot} "
+        f"removed={len(remaining)} cached={missing} bytes={identity['expected_bytes']}",
+        flush=True,
+    )
+    return result
+
+
+def cleanup_worker(config: dict, context: dict, worker: dict) -> None:
+    run_id = str(context["run_id"])
+    release_id = str(context["release_id"])
+    sector = int(context["sector"])
+    slot = int(worker["slot"])
+    release = str(config["code_release"])
+    run_root = f"/mnt/data/staging/S15P21C206-75/run-{run_id}"
+    state_root = f"{run_root}/hdfs-load/sector={sector:04d}"
+    _, _, final_uri = context_paths(context)
+    command = " ".join([
+        PYTHON, f"{release}/hdfs/tess_hdfs_runall.py", "cleanup",
+        "--run-root", run_root, "--final-uri", final_uri,
+        "--run-id", run_id, "--release-id", release_id,
+        "--source-sha", str(context["source_list_sha256"]),
+        "--sector", str(sector), "--worker-slot", str(slot),
+    ])
+    script = f"""set -eu
+export JAVA_HOME='{JAVA_HOME}' HADOOP_CONF_DIR='{HADOOP_CONF_DIR}' PYTHONPATH='{release}'
+test -f '{state_root}/worker-{slot}.plan.json'
+{command}
+"""
+    ssh(worker, script)
 
 
 def validate_audit_coverage(audit_result: dict, context: dict) -> None:
@@ -432,30 +603,77 @@ def commit_coverage(config: dict, *, reuse_sector_audits: bool = False) -> None:
         print(f"COVERAGE_COMMIT_OK final={final}")
 
 
-def coordinator(config: dict) -> None:
-    coverage = loader.load_coverage_map(Path(config["coverage_manifest"]), config["expected_coverage_sha256"])
-    contexts = list(coverage["sectors"])
-    expansion = [item for item in contexts if item["run_id"] == config["run_id"]]
-    if not expansion or any(item["source_list_sha256"] != config["expected_source_list_sha256"] for item in expansion):
-        raise RuntimeError("coverage does not match the requested expansion run")
-    for context in contexts:
-        _, final, _ = context_paths(context)
-        final_exists = hdfs_exists(final)
-        preflight(0 if final_exists else int(context["total_bytes"]))
-        print(f"RUN_ALL_SECTOR_START sector={context['sector']} run={context['run_id']}")
-        if not final_exists:
-            prepare_stage(context)
-            units = {int(worker["slot"]): start_worker(config, context, worker) for worker in config["workers"]}
-            wait_workers(config, context, units)
+def process_sector(config: dict, context: dict, *, cleanup_source: bool | None = None) -> None:
+    _, final, _ = context_paths(context)
+    final_exists = hdfs_exists(final)
+    preflight(0 if final_exists else int(context["total_bytes"]))
+    print(f"RUN_ALL_SECTOR_START sector={context['sector']} run={context['run_id']}")
+    if not final_exists:
+        prepare_stage(context)
+        units = {int(worker["slot"]): start_worker(config, context, worker) for worker in config["workers"]}
+        wait_workers(config, context, units)
+    if final_exists and cleanup_source is True:
+        commit_sector(config, context, fast_cached=True)
+    else:
         commit_sector(config, context)
-        print(f"RUN_ALL_SECTOR_COMPLETE sector={context['sector']}")
-    commit_coverage(config, reuse_sector_audits=True)
+    cleanup_enabled = config.get("cleanup_source_after_commit", False) if cleanup_source is None else cleanup_source
+    if cleanup_enabled:
+        if cleanup_source is True:
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = [pool.submit(cleanup_worker, config, context, worker) for worker in config["workers"]]
+                for future in futures:
+                    future.result()
+        else:
+            for worker_config in config["workers"]:
+                cleanup_worker(config, context, worker_config)
+    print(f"RUN_ALL_SECTOR_COMPLETE sector={context['sector']}")
+
+
+def finalize_coverage(config: dict, *, reuse_sector_audits: bool = False) -> None:
+    # Only the coordinator, which just audited every Sector, may reuse those audits.
+    if "sector_contexts" in config:
+        raise ValueError("single-Sector RunAll has no legacy coverage marker")
+    preflight(0)
+    commit_coverage(config, reuse_sector_audits=reuse_sector_audits)
     loader.atomic_json(completion_path(config), {
         "schema": "planetory.tess-hdfs-runall-complete.v1",
         "run_id": config["run_id"],
         "coverage_sha256": config["expected_coverage_sha256"],
     })
-    print("RUN_ALL_COMPLETE sectors=" + ",".join(str(item["sector"]) for item in contexts))
+
+
+def coordinator(
+    config: dict,
+    requested_sectors: list[int] | None = None,
+    *,
+    cleanup_source: bool | None = None,
+    expected_run_id: str | None = None,
+    expected_source_sha: str | None = None,
+    expected_code_release: str | None = None,
+) -> None:
+    if expected_run_id is not None and config["run_id"] != expected_run_id:
+        raise ValueError("requested run_id differs from HDFS config")
+    if expected_source_sha is not None and config["expected_source_list_sha256"] != expected_source_sha:
+        raise ValueError("requested source checksum differs from HDFS config")
+    if expected_code_release is not None and config["code_release"] != expected_code_release:
+        raise ValueError("requested code release differs from HDFS config")
+    if "sector_contexts" in config:
+        contexts = config["sector_contexts"]
+    else:
+        coverage = loader.load_coverage_map(Path(config["coverage_manifest"]), config["expected_coverage_sha256"])
+        contexts = list(coverage["sectors"])
+        expansion = [item for item in contexts if item["run_id"] == config["run_id"]]
+        if not expansion or any(item["source_list_sha256"] != config["expected_source_list_sha256"] for item in expansion):
+            raise RuntimeError("coverage does not match the requested expansion run")
+    available = {int(item["sector"]): item for item in contexts}
+    selected = list(available) if requested_sectors is None else requested_sectors
+    if len(selected) != len(set(selected)) or any(sector not in available for sector in selected):
+        raise ValueError("requested Sector is missing or duplicated in coverage")
+    for sector in selected:
+        process_sector(config, available[sector], cleanup_source=cleanup_source)
+    if "sector_contexts" not in config and set(selected) == set(available):
+        finalize_coverage(config, reuse_sector_audits=True)
+        print("RUN_ALL_COMPLETE sectors=" + ",".join(str(sector) for sector in selected))
 
 
 def worker(arguments: argparse.Namespace) -> None:
@@ -496,11 +714,43 @@ def worker(arguments: argparse.Namespace) -> None:
     print(f"WORKER_COMPLETE sector={arguments.sector} worker={arguments.worker_slot}")
 
 
+def cleanup(arguments: argparse.Namespace) -> None:
+    run_root = Path(arguments.run_root)
+    expected_root = Path(f"/mnt/data/staging/S15P21C206-75/run-{arguments.run_id}")
+    if run_root != expected_root:
+        raise ValueError("cleanup run root must match the exact ingestion run")
+    state_root = run_root / "hdfs-load" / f"sector={arguments.sector:04d}"
+    cleanup_plan_source(
+        state_root / f"worker-{arguments.worker_slot}.plan.json",
+        run_root / "raw",
+        state_root / f"worker-{arguments.worker_slot}.cleanup.json",
+        arguments.final_uri,
+        run_id=arguments.run_id,
+        release_id=arguments.release_id,
+        source_sha=arguments.source_sha,
+        sector=arguments.sector,
+        worker_slot=arguments.worker_slot,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     runall = commands.add_parser("runall")
     runall.add_argument("--config", type=Path, required=True)
+    runall.add_argument("--sector", type=int, action="append")
+    runall.add_argument("--skip-cleanup", action="store_true")
+    runall.add_argument("--expected-run-id")
+    runall.add_argument("--expected-source-sha")
+    runall.add_argument("--expected-code-release")
+    cleanup_sector = commands.add_parser("cleanup-sector")
+    cleanup_sector.add_argument("--config", type=Path, required=True)
+    cleanup_sector.add_argument("--sector", type=int, action="append", required=True)
+    cleanup_sector.add_argument("--expected-run-id")
+    cleanup_sector.add_argument("--expected-source-sha")
+    cleanup_sector.add_argument("--expected-code-release")
+    coverage = commands.add_parser("coverage")
+    coverage.add_argument("--config", type=Path, required=True)
     upload = commands.add_parser("worker")
     upload.add_argument("--run-root", required=True)
     upload.add_argument("--stage-uri", required=True)
@@ -514,11 +764,37 @@ def main() -> int:
     upload.add_argument("--sector-product-count", type=int, required=True)
     upload.add_argument("--target-bundle-bytes", type=int, required=True)
     upload.add_argument("--minimum-worker-free-gib", type=int, required=True)
+    source_cleanup = commands.add_parser("cleanup")
+    source_cleanup.add_argument("--run-root", required=True)
+    source_cleanup.add_argument("--final-uri", required=True)
+    source_cleanup.add_argument("--run-id", required=True)
+    source_cleanup.add_argument("--release-id", required=True)
+    source_cleanup.add_argument("--source-sha", required=True)
+    source_cleanup.add_argument("--sector", type=int, required=True)
+    source_cleanup.add_argument("--worker-slot", type=int, required=True)
     arguments = parser.parse_args()
     if arguments.command == "runall":
-        coordinator(load_config(arguments.config))
-    else:
+        coordinator(
+            load_config(arguments.config),
+            arguments.sector,
+            cleanup_source=False if arguments.skip_cleanup else None,
+            expected_run_id=arguments.expected_run_id,
+            expected_source_sha=arguments.expected_source_sha,
+            expected_code_release=arguments.expected_code_release,
+        )
+    elif arguments.command == "cleanup-sector":
+        coordinator(
+            load_config(arguments.config), arguments.sector, cleanup_source=True,
+            expected_run_id=arguments.expected_run_id,
+            expected_source_sha=arguments.expected_source_sha,
+            expected_code_release=arguments.expected_code_release,
+        )
+    elif arguments.command == "coverage":
+        finalize_coverage(load_config(arguments.config))
+    elif arguments.command == "worker":
         worker(arguments)
+    else:
+        cleanup(arguments)
     return 0
 
 

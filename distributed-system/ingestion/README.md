@@ -18,6 +18,8 @@ python -m ingestion source-list `
 
 Run의 source list가 이미 있으면 다시 내려받아 덮어쓰지 않고 기존 본문 hash를 재검증해 `SOURCE_LIST_CACHED`로 재사용한다. 신규 목록도 `--expected-source-list-sha256`과 일치한 뒤에만 원자적으로 기록한다. 원천 목록이 바뀌면 기존 Run을 변형하지 않고 새 RunId와 승인된 기대 hash를 사용한다.
 
+Sector 14~70 자동 admission에서는 고정된 1~13 `expected_count` 대신 게시된 단일 Sector bulk script의 실제 항목 수를 읽어 source list를 불변 저장한다. Worker별 supervisor는 해당 Sector의 HDFS Raw cleanup 시작·완료 기록이 있으면 재부팅 뒤 로컬 FITS가 없더라도 재다운로드하지 않는다. 미완료 cleanup은 Airflow cleanup 단계가 재개한다. 이 확장 경로는 오프라인 구현·테스트 상태이며 신규 release 운영 배포·실데이터 검증 전이다.
+
 다운로드는 Worker별 한 프로세스가 설정의 `download_concurrency`만큼 파일을 동시에 처리한다. 현재 운영값과 허용 상한은 16이다. 파일마다 독립된 `.part`를 사용하고 이벤트는 메인 스레드가 source list 순서대로 append하므로 파일·manifest 병렬 쓰기는 발생하지 않는다. 최초 실행은 다음 형태다.
 
 ```powershell

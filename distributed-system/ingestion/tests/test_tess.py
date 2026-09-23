@@ -154,6 +154,11 @@ class SourceListTests(unittest.TestCase):
         self.assertEqual(value["products"][0]["tic_id"], 42)
         self.assertIn(value["products"][0]["assigned_worker"], range(1, 6))
 
+        dynamic = {**config, "sectors": [{"sector": 3, "bulk_script_url": "https://example.test/s3.sh"}]}
+        self.assertEqual(tess.build_source_list(dynamic, lambda _: script)["product_count"], 1)
+        with self.assertRaisesRegex(ValueError, "no products"):
+            tess.build_source_list(dynamic, lambda _: b"#!/bin/sh\n")
+
     def test_source_list_detects_mutation(self):
         item = product("https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/" + product("x").filename)
         source = {

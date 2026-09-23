@@ -25,6 +25,20 @@ from ingestion import tess
 
 
 class PlanTest(unittest.TestCase):
+    def test_server_runall_rejects_mismatched_stage_lineage_before_coverage(self):
+        config = {
+            "run_id": "20260919T005932Z", "expected_source_list_sha256": "a" * 64,
+            "code_release": "/opt/planetory-hdfs-load/releases/20260919T005932Z",
+        }
+        with mock.patch.object(MODULE, "load_coverage_map") as coverage:
+            with self.assertRaisesRegex(ValueError, "run_id differs"):
+                RUNALL.coordinator(config, [3], expected_run_id="20260922T000000Z")
+            with self.assertRaisesRegex(ValueError, "source checksum differs"):
+                RUNALL.coordinator(config, [3], expected_source_sha="b" * 64)
+            with self.assertRaisesRegex(ValueError, "code release differs"):
+                RUNALL.coordinator(config, [3], expected_code_release="/opt/planetory-hdfs-load/releases/other")
+            coverage.assert_not_called()
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -343,6 +357,29 @@ class PlanTest(unittest.TestCase):
             result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs")
         self.assertEqual(result["product_count"], 1)
         self.assertEqual(result["status"], "HEALTHY")
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (0, 1))
+
+        done["manifest_checksum"] = "MD5 checksum-line"
+        calls = []
+        def tracked_run(arguments, check=True):
+            calls.append(arguments)
+            return run(arguments, check=check)
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=tracked_run):
+            result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        self.assertEqual(result["product_count"], 1)
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (1, 0))
+        self.assertFalse(any(arguments[1:3] == ["dfs", "-cat"] for arguments in calls))
+
+        done["manifest_checksum"] = "changed"
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "manifest checksum changed"):
+                MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        del done["manifest_checksum"]
+        calls.clear()
+        with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=tracked_run):
+            result = MODULE.audit_stage("/stage", "hdfs://planetory/final", "b" * 64, 3, [1], "hdfs", fast=True)
+        self.assertEqual((result["fast_bundles"], result["full_bundles"]), (0, 1))
+        self.assertTrue(any(arguments[1:3] == ["dfs", "-cat"] for arguments in calls))
 
         listing.append("/stage/unexpected.bin")
         with mock.patch.object(MODULE, "_hdfs_json", side_effect=hdfs_json), mock.patch.object(MODULE, "_run", side_effect=run):
@@ -387,6 +424,36 @@ class PlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact five Worker internal IPs"):
             RUNALL.validate_config(value)
 
+    def test_single_sector_runall_uses_immutable_context_without_legacy_coverage(self):
+        run_id = "20260922T120000Z"
+        context = {
+            "sector": 14, "run_id": run_id, "release_id": run_id,
+            "source_list_sha256": "a" * 64, "product_count": 42, "total_bytes": 4200,
+        }
+        config = {
+            "schema": RUNALL.CONFIG_SCHEMA, "run_id": run_id,
+            "expected_source_list_sha256": "a" * 64,
+            "code_release_id": run_id,
+            "code_release": f"/opt/planetory-hdfs-load/releases/{run_id}",
+            "target_bundle_bytes": 512 << 20, "minimum_worker_free_gib": 100,
+            "workers": [{"slot": slot, "internal_ip": f"10.20.{slot + 1}.10"} for slot in range(1, 6)],
+            "sector_contexts": [context],
+        }
+        RUNALL.validate_config(config)
+        with (
+            mock.patch.object(RUNALL.loader, "load_coverage_map") as legacy_coverage,
+            mock.patch.object(RUNALL, "process_sector") as process,
+            mock.patch.object(RUNALL, "finalize_coverage") as final_coverage,
+        ):
+            RUNALL.coordinator(config, [14])
+        legacy_coverage.assert_not_called()
+        process.assert_called_once_with(config, context, cleanup_source=None)
+        final_coverage.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "must not reuse legacy coverage"):
+            RUNALL.validate_config({**config, "expected_coverage_sha256": "b" * 64})
+        with self.assertRaisesRegex(ValueError, "no legacy coverage"):
+            RUNALL.finalize_coverage(config)
+
     def test_server_hdfs_exists_distinguishes_absence_from_command_failure(self):
         with mock.patch.object(RUNALL, "hdfs", return_value=CompletedProcess([], 1, "", "")):
             self.assertFalse(RUNALL.hdfs_exists("/missing"))
@@ -395,6 +462,25 @@ class PlanTest(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "existence check failed"),
         ):
             RUNALL.hdfs_exists("/unknown")
+
+    def test_cached_raw_cleanup_can_audit_when_hdfs_crosses_admission_threshold(self):
+        def response(arguments, **_kwargs):
+            if arguments[0] == "haadmin":
+                output = "active\n" if arguments[-1] == "nn1" else "standby\n"
+            elif arguments[0] == "getconf":
+                output = "2\n" if arguments[-1] == "dfs.replication" else "107374182400\n"
+            elif arguments[0] == "dfsadmin" and arguments[1] == "-safemode":
+                output = "Safe mode is OFF\nSafe mode is OFF\n"
+            elif arguments[0] == "dfsadmin":
+                output = "Live datanodes (5):\n"
+            else:
+                output = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 800 200 80%\n"
+            return CompletedProcess(arguments, 0, output, "")
+
+        with mock.patch.object(RUNALL, "hdfs", side_effect=response):
+            RUNALL.preflight(0)
+            with self.assertRaisesRegex(RuntimeError, "75 percent"):
+                RUNALL.preflight(100)
 
     def test_server_coordinator_skips_capacity_for_cached_sector_and_marks_complete(self):
         context = {
@@ -415,9 +501,89 @@ class PlanTest(unittest.TestCase):
             mock.patch.object(RUNALL.loader, "atomic_json") as atomic_json,
         ):
             RUNALL.coordinator(config)
-        preflight.assert_called_once_with(0)
+        self.assertEqual(preflight.call_args_list, [mock.call(0), mock.call(0)])
         commit_coverage.assert_called_once_with(config, reuse_sector_audits=True)
         self.assertEqual(atomic_json.call_args.args[0], RUNALL.completion_path(config))
+
+    def test_standalone_coverage_command_reaudits_every_sector(self):
+        config = {"run_id": "20260919T005932Z", "expected_coverage_sha256": "b" * 64}
+        with (
+            mock.patch.object(RUNALL, "preflight"),
+            mock.patch.object(RUNALL, "commit_coverage") as commit_coverage,
+            mock.patch.object(RUNALL.loader, "atomic_json"),
+        ):
+            RUNALL.finalize_coverage(config)
+        commit_coverage.assert_called_once_with(config, reuse_sector_audits=False)
+
+    def test_server_coordinator_cleans_sources_only_after_raw_commit(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 1,
+            "product_count": 1, "total_bytes": 4,
+        }
+        workers = [{"slot": slot, "internal_ip": f"10.20.{slot + 1}.10"} for slot in (1, 2)]
+        config = {
+            "run_id": context["run_id"], "expected_source_list_sha256": context["source_list_sha256"],
+            "expected_coverage_sha256": "b" * 64, "coverage_manifest": "coverage.json",
+            "cleanup_source_after_commit": True, "workers": workers,
+        }
+        events = []
+        with (
+            mock.patch.object(RUNALL.loader, "load_coverage_map", return_value={"sectors": [context]}),
+            mock.patch.object(RUNALL, "hdfs_exists", return_value=True),
+            mock.patch.object(RUNALL, "preflight"),
+            mock.patch.object(RUNALL, "commit_sector", side_effect=lambda *_: events.append("commit")),
+            mock.patch.object(
+                RUNALL, "cleanup_worker",
+                side_effect=lambda _, __, worker: events.append(f"cleanup-{worker['slot']}"),
+            ),
+            mock.patch.object(RUNALL, "commit_coverage"),
+            mock.patch.object(RUNALL.loader, "atomic_json"),
+        ):
+            RUNALL.coordinator(config)
+        self.assertEqual(events, ["commit", "cleanup-1", "cleanup-2"])
+
+    def test_server_coordinator_runs_only_requested_sector_and_defers_coverage(self):
+        contexts = [
+            {
+                "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+                "source_list_sha256": "a" * 64, "sector": sector,
+                "product_count": 1, "total_bytes": 4,
+            }
+            for sector in (1, 2)
+        ]
+        config = {
+            "run_id": contexts[0]["run_id"],
+            "expected_source_list_sha256": contexts[0]["source_list_sha256"],
+            "expected_coverage_sha256": "b" * 64,
+            "coverage_manifest": "coverage.json",
+        }
+        with (
+            mock.patch.object(RUNALL.loader, "load_coverage_map", return_value={"sectors": contexts}),
+            mock.patch.object(RUNALL, "process_sector") as process_sector,
+            mock.patch.object(RUNALL, "finalize_coverage") as finalize_coverage,
+        ):
+            RUNALL.coordinator(config, [2])
+        process_sector.assert_called_once_with(config, contexts[1], cleanup_source=None)
+        finalize_coverage.assert_not_called()
+
+    def test_cleanup_sector_uses_fast_final_audit_and_all_workers(self):
+        context = {
+            "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",
+            "source_list_sha256": "a" * 64, "sector": 7,
+            "product_count": 5, "total_bytes": 20,
+        }
+        config = {"workers": [{"slot": slot} for slot in range(1, 6)]}
+        cleaned = []
+        with (
+            mock.patch.object(RUNALL, "hdfs_exists", return_value=True),
+            mock.patch.object(RUNALL, "preflight"),
+            mock.patch.object(RUNALL, "commit_sector") as commit,
+            mock.patch.object(RUNALL, "cleanup_worker", side_effect=lambda _, __, worker: cleaned.append(worker["slot"])),
+        ):
+            RUNALL.process_sector(config, context, cleanup_source=True)
+        commit.assert_called_once_with(config, context, fast_cached=True)
+        self.assertEqual(set(cleaned), set(range(1, 6)))
 
     def test_server_runall_accepts_ha_safe_mode_output(self):
         self.assertTrue(RUNALL.safe_mode_is_off(
@@ -532,6 +698,134 @@ class PlanTest(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "audit differs from coverage"),
         ):
             RUNALL.commit_sector(config, context)
+
+    def test_source_cleanup_is_plan_bounded_and_idempotent(self):
+        run_id = "20260919T005932Z"
+        raw_root = self.root / "raw"
+        plan = MODULE.build_plan(
+            self.source_path, self.events_path, self.audit_path, raw_root,
+            worker_slot=1, sector=3, target_bundle_bytes=512 << 20,
+            run_id=run_id, release_id=run_id,
+        )
+        for bundle in plan["bundles"]:
+            for entry in bundle["entries"]:
+                entry["sha256"] = hashlib.sha256(Path(entry["path"]).read_bytes()).hexdigest()
+        plan["plan_id"] = MODULE._plan_id(plan)
+        plan_path = self.root / "worker-1.plan.json"
+        MODULE.atomic_json(plan_path, plan)
+        state_path = self.root / "worker-1.cleanup.json"
+        unrelated = raw_root / "sector=0003" / "keep.txt"
+        unrelated.write_text("keep", encoding="utf-8")
+        final_uri = f"hdfs://planetory/lake/raw/tess/release={run_id}/sector=0003"
+        ready = {
+            "schema": MODULE.READY_SCHEMA, "run_id": run_id, "release_id": run_id,
+            "source_list_sha256": self.source["source_list_sha256"], "sector": 3,
+            "product_count": 3, "replication": 2,
+        }
+
+        def run(arguments, **_):
+            if arguments[1:3] == ["dfs", "-cat"]:
+                return CompletedProcess(arguments, 0, json.dumps(ready), "")
+            if arguments[1:4] == ["dfs", "-test", "-e"]:
+                return CompletedProcess(arguments, 0, "", "")
+            raise AssertionError(arguments)
+
+        parameters = {
+            "run_id": run_id, "release_id": run_id,
+            "source_sha": self.source["source_list_sha256"], "sector": 3, "worker_slot": 1,
+        }
+        with mock.patch.object(RUNALL, "run", side_effect=run):
+            result = RUNALL.cleanup_plan_source(plan_path, raw_root, state_path, final_uri, **parameters)
+            cached = RUNALL.cleanup_plan_source(plan_path, raw_root, state_path, final_uri, **parameters)
+        self.assertEqual(result["removed_now_files"], 3)
+        self.assertEqual(cached["previously_removed_files"], 3)
+        self.assertTrue(unrelated.is_file())
+        self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["status"], "complete")
+
+    def test_source_cleanup_accepts_legacy_plan_only_with_final_lineage(self):
+        run_id = "20260918T080417Z"
+        raw_root = self.root / "raw"
+        plan = MODULE.build_plan(
+            self.source_path, self.events_path, self.audit_path, raw_root,
+            worker_slot=1, sector=3, target_bundle_bytes=512 << 20,
+            run_id=run_id, release_id=run_id,
+        )
+        for key in ("run_id", "release_id", "sector_product_count", "replication"):
+            plan.pop(key)
+        plan["schema"] = MODULE.LEGACY_PLAN_SCHEMA
+        for bundle in plan["bundles"]:
+            for entry in bundle["entries"]:
+                entry["sha256"] = hashlib.sha256(Path(entry["path"]).read_bytes()).hexdigest()
+        plan["plan_id"] = MODULE._plan_id(plan)
+        plan_path = self.root / "legacy.plan.json"
+        MODULE.atomic_json(plan_path, plan)
+        ready = {
+            "schema": MODULE.READY_SCHEMA, "run_id": run_id, "release_id": run_id,
+            "source_list_sha256": self.source["source_list_sha256"], "sector": 3,
+            "product_count": 3, "replication": 2,
+        }
+
+        def run(arguments, **_):
+            output = json.dumps(ready) if arguments[1:3] == ["dfs", "-cat"] else ""
+            return CompletedProcess(arguments, 0, output, "")
+
+        parameters = {
+            "run_id": run_id, "release_id": run_id,
+            "source_sha": self.source["source_list_sha256"], "sector": 3, "worker_slot": 1,
+        }
+        with mock.patch.object(RUNALL, "run", side_effect=run):
+            result = RUNALL.cleanup_plan_source(
+                plan_path, raw_root, self.root / "legacy.cleanup.json",
+                f"hdfs://planetory/lake/raw/tess/release={run_id}/sector=0003", **parameters,
+            )
+        self.assertEqual(result["removed_now_files"], 3)
+
+        ready["release_id"] = "wrong-release"
+        with (
+            mock.patch.object(RUNALL, "run", side_effect=run),
+            self.assertRaisesRegex(RuntimeError, "final Raw identity mismatch"),
+        ):
+            RUNALL.cleanup_plan_source(
+                plan_path, raw_root, self.root / "other.cleanup.json",
+                f"hdfs://planetory/lake/raw/tess/release={run_id}/sector=0003", **parameters,
+            )
+
+    def test_source_cleanup_rejects_checksum_drift_before_deleting_anything(self):
+        run_id = "20260919T005932Z"
+        raw_root = self.root / "raw"
+        plan = MODULE.build_plan(
+            self.source_path, self.events_path, self.audit_path, raw_root,
+            worker_slot=1, sector=3, target_bundle_bytes=512 << 20,
+            run_id=run_id, release_id=run_id,
+        )
+        entries = [entry for bundle in plan["bundles"] for entry in bundle["entries"]]
+        for entry in entries:
+            entry["sha256"] = hashlib.sha256(Path(entry["path"]).read_bytes()).hexdigest()
+        plan["plan_id"] = MODULE._plan_id(plan)
+        plan_path = self.root / "worker-1.plan.json"
+        MODULE.atomic_json(plan_path, plan)
+        Path(entries[-1]["path"]).write_bytes(b"drift")
+        ready = {
+            "schema": MODULE.READY_SCHEMA, "run_id": run_id, "release_id": run_id,
+            "source_list_sha256": self.source["source_list_sha256"], "sector": 3,
+            "product_count": 3, "replication": 2,
+        }
+
+        def run(arguments, **_):
+            output = json.dumps(ready) if arguments[1:3] == ["dfs", "-cat"] else ""
+            return CompletedProcess(arguments, 0, output, "")
+
+        with (
+            mock.patch.object(RUNALL, "run", side_effect=run),
+            self.assertRaisesRegex(RuntimeError, "no longer matches"),
+        ):
+            RUNALL.cleanup_plan_source(
+                plan_path, raw_root, self.root / "cleanup.json",
+                f"hdfs://planetory/lake/raw/tess/release={run_id}/sector=0003",
+                run_id=run_id, release_id=run_id, source_sha=self.source["source_list_sha256"],
+                sector=3, worker_slot=1,
+            )
+        self.assertTrue(all(Path(entry["path"]).is_file() for entry in entries))
 
     def test_server_runall_removes_stale_coverage_part_with_valid_ready(self):
         digest = "c" * 64
