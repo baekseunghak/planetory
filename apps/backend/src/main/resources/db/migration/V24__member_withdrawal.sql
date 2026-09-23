@@ -1,4 +1,5 @@
 -- 회원 탈퇴: 전역 게시판 공개와 개인 발견 기록을 분리하고, 정리 작업 권한을 함수로 제한한다.
+-- IRREVERSIBLE: 이 버전에서 새로 만든 SECURITY DEFINER 함수의 PUBLIC 기본 EXECUTE만 회수한다. 회원 삭제 함수를 임의 호출하지 못하게 하며 기존 함수 권한은 바꾸지 않는다.
 ALTER TABLE stars ADD COLUMN board_open BOOLEAN NOT NULL DEFAULT false;
 UPDATE stars s SET board_open=true WHERE EXISTS (SELECT 1 FROM star_unlocks u WHERE u.tic_id=s.tic_id);
 
