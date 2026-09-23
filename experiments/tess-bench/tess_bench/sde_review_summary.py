@@ -23,6 +23,7 @@ def summarize(folder):
     if len(keys) != len(set(keys)):
         raise ValueError('duplicate_comparison')
     curves = Counter(k[:3] for k in keys)
+    # Saved 243 run: 3 methods x 3 dy x (8 thresholds + ungated) = 81 rows per curve.
     if len(rows) != manifest['comparison_rows'] or len(curves) != manifest['curves'] or set(curves.values()) != {81}:
         raise ValueError('incomplete_comparisons')
     totals = defaultdict(Counter)

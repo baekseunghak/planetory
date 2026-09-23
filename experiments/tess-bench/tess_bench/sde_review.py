@@ -65,6 +65,7 @@ def compare_curve(baseline, members, run, local_snr, arrays, global_exact=None):
     """Re-match all surviving peaks; threshold filtering must not reuse old match ranks."""
     indexes = [int(np.searchsorted(run.periods, peak.period_days)) for peak in run.peaks]
     rows = []
+    in_range = [m for m in members if run.period_min_days <= m.period_days <= run.period_max_days]
     for method in METHODS:
         scores = arrays['global_' if method == 'global' else method]
         snrs = dict(global_=[p.snr for p in run.peaks], local=local_snr)
@@ -77,7 +78,6 @@ def compare_curve(baseline, members, run, local_snr, arrays, global_exact=None):
             for threshold in (None, *THRESHOLDS):
                 selected = peaks if threshold is None else [p for p in peaks if
                            p.snr >= 7 and p.sde >= threshold and p.n_transits >= 2]
-                in_range = [m for m in members if run.period_min_days <= m.period_days <= run.period_max_days]
                 matches = [match_injection(baseline.time, m, selected).match for m in in_range]
                 rows.append(dict(method=method, dy=dy, threshold='ungated' if threshold is None else threshold,
                                  signals_in_range=len(in_range), direct=matches.count('direct'),
