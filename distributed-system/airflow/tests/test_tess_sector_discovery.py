@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dags"))
 
 from tess_sector_discovery import (  # noqa: E402
-    INDEX_URL, MAX_INDEX_BYTES, effective_max_sector, latest_published_sector, next_sector_stage,
+    INDEX_URL, MAX_INDEX_BYTES, completed_through, effective_max_sector, latest_published_sector, next_sector_stage,
     parse_lc_scripts, published_lc_scripts, resume_stage, retry_attempt, retry_attempt_from_task,
 )
 
@@ -68,6 +68,20 @@ class TessSectorDiscoveryTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 effective_max_sector(70, invalid)
 
+    def test_completed_mark_skips_only_confirmed_contiguous_sectors(self):
+        self.assertEqual(completed_through("13"), 13)
+        self.assertEqual(completed_through("27"), 27)
+        for invalid in ("12", "71", "bad", True):
+            with self.assertRaises(ValueError):
+                completed_through(invalid)
+        source = (Path(__file__).resolve().parents[1] / "dags" / "tess_sector_discovery_dag.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("for sector in range(done + 1, max_sector + 1):", source)
+        # The mark advances only across an unbroken run of completed Sectors.
+        self.assertIn("if contiguous == sector - 1:", source)
+        self.assertLess(source.index("if contiguous != done:"), source.index("return plans"))
+
     def test_resume_uses_downstream_evidence_after_download_cleanup(self):
         self.assertEqual(resume_stage({"download": True}), "raw")
         self.assertEqual(resume_stage({"raw": True}), "cleanup")
@@ -120,6 +134,27 @@ class TessSectorDiscoveryTest(unittest.TestCase):
         ti.states[prefix + "1"] = "success"
         with self.assertRaisesRegex(ValueError, "lacks its final evidence"):
             retry_attempt_from_task(ti, "tess_sector_raw", prefix)
+
+    def test_upstream_retry_does_not_leave_a_gap_in_next_stage_attempts(self):
+        # Download r0 failed and r1 succeeded; its trigger must start Raw at r0 so the
+        # contiguous lookup sees the running Raw instead of scheduling a duplicate.
+        prefix = "tess_s21_" + "a" * 16 + "_r"
+        stage_source = (Path(__file__).resolve().parents[1] / "dags" / "tess_stage_dags.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_r0\",", stage_source)
+        self.assertIn("attempt=0)", stage_source)
+
+        class TaskInstance:
+            states = {prefix + "0": "running"}
+
+            def get_dr_count(self, dag_id, run_ids):
+                return int(run_ids[0] in self.states)
+
+            def get_dagrun_state(self, dag_id, run_id):
+                return self.states[run_id]
+
+        self.assertIsNone(retry_attempt_from_task(TaskInstance(), "tess_sector_raw", prefix))
 
     def test_discovery_dag_maps_sector_plans_and_defaults_to_paused(self):
         source = (Path(__file__).resolve().parents[1] / "dags" / "tess_sector_discovery_dag.py").read_text(

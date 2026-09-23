@@ -505,6 +505,16 @@ class PlanTest(unittest.TestCase):
         commit_coverage.assert_called_once_with(config, reuse_sector_audits=True)
         self.assertEqual(atomic_json.call_args.args[0], RUNALL.completion_path(config))
 
+    def test_standalone_coverage_command_reaudits_every_sector(self):
+        config = {"run_id": "20260919T005932Z", "expected_coverage_sha256": "b" * 64}
+        with (
+            mock.patch.object(RUNALL, "preflight"),
+            mock.patch.object(RUNALL, "commit_coverage") as commit_coverage,
+            mock.patch.object(RUNALL.loader, "atomic_json"),
+        ):
+            RUNALL.finalize_coverage(config)
+        commit_coverage.assert_called_once_with(config, reuse_sector_audits=False)
+
     def test_server_coordinator_cleans_sources_only_after_raw_commit(self):
         context = {
             "run_id": "20260919T005932Z", "release_id": "20260919T005932Z",

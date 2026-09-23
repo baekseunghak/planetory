@@ -10,16 +10,7 @@ build:airflow:
       exists: [distributed-system/airflow/requirements.txt]
       changes: [distributed-system/airflow/**/*]
 
-deploy:airflow:gcp-node-1:
-  extends: .deploy-gcp-node-1
-  needs: ["build:airflow"]
-  variables:
-    IMAGE_NAME: airflow
-    DEPLOY_IMAGE_VARIABLE: AIRFLOW_IMAGE
-    DEPLOY_SERVICES: airflow-db airflow-scheduler airflow-webserver
-    DEPLOY_ACTION: up
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [distributed-system/airflow/requirements.txt]
-      changes: [distributed-system/airflow/**/*]
-      when: manual
+# Airflow 3 services are replaced only by the Node 1 release script
+# (infra/distributed-system/scripts/deploy-tess-airflow-node1.sh --update), which
+# enforces zero active DagRuns, DAG import checks, and Triggerer health. A generic
+# compose deploy from CI would bypass those gates, so no CI deploy job exists.

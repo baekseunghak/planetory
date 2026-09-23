@@ -15,19 +15,6 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 RELEASE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
-def sector_inputs(params: dict, sector: int) -> tuple[str, str]:
-    if sector not in range(1, 14):
-        raise ValueError("Sector must be in 1..13")
-    try:
-        run_id = str(params["sector_runs"][str(sector)])
-        source_sha = str(params["sector_source_sha256"][str(sector)])
-    except (KeyError, TypeError) as error:
-        raise ValueError(f"missing Sector {sector} lineage") from error
-    if not RUN_ID_RE.fullmatch(run_id) or not SHA256_RE.fullmatch(source_sha):
-        raise ValueError(f"invalid Sector {sector} lineage")
-    return run_id, source_sha
-
-
 def stage_inputs(conf: dict) -> dict:
     """Validate the immutable lineage passed between Sector-stage DAG runs."""
     if not isinstance(conf, dict) or isinstance(conf.get("sector"), bool):

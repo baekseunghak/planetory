@@ -11,7 +11,9 @@ from airflow.sdk.exceptions import AirflowException, AirflowFailException
 
 from tess_pipeline_contract import command, release_path, stage_inputs
 from tess_pipeline_remote import remote
-from tess_sector_discovery import effective_max_sector, published_lc_scripts, resume_stage, retry_attempt_from_task
+from tess_sector_discovery import (
+    completed_through, effective_max_sector, published_lc_scripts, resume_stage, retry_attempt_from_task,
+)
 
 
 STAGE_DAGS = {
@@ -99,6 +101,8 @@ def discovery_dag():
                 get_current_context()["params"]["max_sector"],
                 Variable.get("tess_pipeline_max_sector", default="70"),
             )
+            # Bronze final is immutable, so confirmed Sectors are not re-queried over SSH every tick.
+            done = completed_through(Variable.get("tess_pipeline_completed_through", default="13"))
         except ValueError as error:
             raise AirflowFailException(str(error)) from error
         check_stage_dags()
@@ -108,7 +112,8 @@ def discovery_dag():
             print(f"MAST_INDEX_UNAVAILABLE: {type(error).__name__}; resuming admitted Sectors only")
             scripts = {}
         plans = []
-        for sector in range(14, max_sector + 1):
+        contiguous = done
+        for sector in range(done + 1, max_sector + 1):
             current = admission(hdfs_release, "status", sector)
             if not current.get("admitted") or not current.get("installed"):
                 if not current.get("admitted") and sector not in scripts:
@@ -129,6 +134,8 @@ def discovery_dag():
                 except (KeyError, ValueError) as error:
                     raise AirflowFailException(f"Sector {sector} evidence is inconsistent") from error
                 if stage is None:
+                    if contiguous == sector - 1:
+                        contiguous = sector
                     continue
             try:
                 value = stage_inputs({
@@ -159,6 +166,8 @@ def discovery_dag():
             })
             if stage == "download":
                 break  # At most one unfinished download Sector; older stages may overlap.
+        if contiguous != done:
+            Variable.set("tess_pipeline_completed_through", str(contiguous))
         return plans
 
     TriggerDagRunOperator.partial(

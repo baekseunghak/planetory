@@ -629,11 +629,12 @@ def process_sector(config: dict, context: dict, *, cleanup_source: bool | None =
     print(f"RUN_ALL_SECTOR_COMPLETE sector={context['sector']}")
 
 
-def finalize_coverage(config: dict) -> None:
+def finalize_coverage(config: dict, *, reuse_sector_audits: bool = False) -> None:
+    # Only the coordinator, which just audited every Sector, may reuse those audits.
     if "sector_contexts" in config:
         raise ValueError("single-Sector RunAll has no legacy coverage marker")
     preflight(0)
-    commit_coverage(config, reuse_sector_audits=True)
+    commit_coverage(config, reuse_sector_audits=reuse_sector_audits)
     loader.atomic_json(completion_path(config), {
         "schema": "planetory.tess-hdfs-runall-complete.v1",
         "run_id": config["run_id"],
@@ -671,7 +672,7 @@ def coordinator(
     for sector in selected:
         process_sector(config, available[sector], cleanup_source=cleanup_source)
     if "sector_contexts" not in config and set(selected) == set(available):
-        finalize_coverage(config)
+        finalize_coverage(config, reuse_sector_audits=True)
         print("RUN_ALL_COMPLETE sectors=" + ",".join(str(sector) for sector in selected))
 
 
