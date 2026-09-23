@@ -99,6 +99,21 @@ registry-prune.sh --registry https://<호스트>:5000 --keep 10 --apply --gc  # 
 - **삭제는 digest 단위다.** 같은 digest를 가리키는 태그는 함께 사라진다. 내용이 같은 커밋은 digest도 같으므로, 남길 태그와 digest가 겹치는 후보는 건너뛴다. 이 보호가 없으면 오래된 태그를 지우다가 최신 태그와 `latest`까지 날아간다.
 - **배포 중인 이미지는 `--in-use`로 보호한다.** 각 노드 `.env`에 적힌 SHA를 넘긴다. 지우면 롤백이 막힌다.
 
+### 매일 정리 (S15P21C206-262)
+
+`registry-prune-daily.sh`가 EC2-A `.env`에서 배포 중인 이미지를 읽어 `--in-use`로 넘기고, 나머지 인자는 `registry-prune.sh`에 그대로 넘긴다. **읽지 못하면 지우지 않고 경고만 보낸다.** 보호 목록 없이 돌면 운영 이미지를 지우고, 그 뒤로 롤백과 재배포가 pull에서 실패한다.
+
+매일 해야 하는 이유는 `S15P21C206-261`이다. 그 뒤로 develop 병합마다 Frontend·Backend 태그가 생긴다. Backend는 빌드마다 약 69MB 새 레이어가 쌓여 바쁜 날 하루 2~3GB다(2026-09-23 실측: 저장소 1.7GB, 디스크 여유 275GB). 배포 중인 이미지는 최신 N개 밖으로 금방 밀리므로 개수만으로는 보호되지 않는다.
+
+- **보존 개수는 30이다**(`PRUNE_KEEP`). 하루치 병합 정도다. 배포 중이 아닌 옛 이미지로 손으로 되돌릴 여지를 남긴다.
+- **GCP 노드 이미지는 보호 목록에 넣지 않는다.** 변경이 있을 때만 빌드돼 30개 안에 머문다. GCP도 매 병합 빌드로 바꾸면 여기에 노드 `.env`를 더해야 한다.
+- EC2-B의 root가 `deploy@EC2-A`로 SSH한다. Tailscale SSH라 키가 없다. `.env`는 원격에서 `*_IMAGE=` 줄만 걸러 받는다.
+
+```bash
+sudo env REGISTRY_URL=https://<레지스트리-호스트>:5000 EC2_A_HOST=<EC2-A tailnet 주소> /opt/planetory/registry-prune-daily.sh  # 모의 실행
+sh registry-prune-daily-test.sh  # 네트워크 없이 도는 검사
+```
+
 생성 시각은 이미지 config 블롭에서 읽는다. **하나라도 읽지 못하면 그 저장소는 건드리지 않는다.** 대체값을 넣으면 정렬이 조용히 태그 문자열 순서로 바뀌어 최신 이미지를 지우게 된다. 못 지우는 것보다 잘못 지우는 것이 훨씬 비싸다.
 
 매니페스트만 지우면 용량은 줄지 않는다. `--gc`는 **레지스트리를 정지한 뒤** 일회용 컨테이너로 블롭을 회수하고 다시 띄운다. `docker exec -e`로 읽기 전용 환경변수를 주는 방식은 통하지 않는다. 그 변수는 exec한 프로세스에만 붙고 이미 떠 있는 서버는 그대로 쓰기를 받아, 수집 도중 올라온 이미지가 깨질 수 있다. 정지 동안 push와 pull이 모두 멈추므로 빌드가 없는 시간에 돌린다.
@@ -108,7 +123,7 @@ registry-prune.sh --registry https://<호스트>:5000 --keep 10 --apply --gc  # 
 ```bash
 sudo install -d -m 755 /opt/planetory /var/lib/planetory-watch
 sudo install -d -m 750 /etc/planetory
-sudo install -m 755 notify.sh uptime-watch.sh registry-watch.sh   image-secret-scan.sh registry-prune.sh /opt/planetory/
+sudo install -m 755 notify.sh uptime-watch.sh registry-watch.sh   image-secret-scan.sh registry-prune.sh registry-prune-daily.sh /opt/planetory/
 ```
 
 Webhook URL은 자격 증명이므로 저장소에 넣지 않고 서버 파일에만 둔다. 환경변수로 두지 않는 이유는 cron 파일이 644라 평문으로 남고 프로세스 환경에서도 보이기 때문이다.
@@ -130,6 +145,16 @@ REGISTRY_CERT_NAME=<레지스트리-호스트>
 */2 * * * * root /opt/planetory/uptime-watch.sh >> /var/log/planetory-watch.log 2>&1
 */2 * * * * root /opt/planetory/registry-watch.sh health >> /var/log/planetory-watch.log 2>&1
 17 4 * * * root /opt/planetory/registry-watch.sh daily >> /var/log/planetory-watch.log 2>&1
+EOF
+```
+
+정리는 파일을 따로 둔다. 서버 시각은 UTC다. 19:40 UTC(04:40 KST)는 빌드가 없는 시간이다. `--gc`는 레지스트리를 잠깐 멈추는데, `registry-watch.sh`는 3회 연속(약 6분) 실패해야 알리므로 오경보가 나지 않는다.
+
+```bash
+sudo tee /etc/cron.d/planetory-prune >/dev/null <<'EOF'
+REGISTRY_URL=https://<레지스트리-호스트>:5000
+EC2_A_HOST=<EC2-A tailnet 주소>
+40 19 * * * root /opt/planetory/registry-prune-daily.sh --apply --gc >> /var/log/planetory-prune.log 2>&1
 EOF
 ```
 

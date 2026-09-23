@@ -126,6 +126,62 @@ COMMIT;
 
 로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
 
+## Gold 목업
+
+서비스 DB에 실제 Gold가 오기 전까지 분석 화면을 열어 보기 위한 목업 판이다 [S15P21C206-262]. Gold가 없으면 `GET /api/v1/stars/{tic}/analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)이다. 현재 판이 없다는 뜻이며 일시 장애가 아니다.
+
+적재 단계는 실제 Publisher 코드(`distributed-system/publisher`)이고 **입력만** 계약 예시 payload다. 정본 절차를 그대로 밟는다. `gold_writer` 계정, TIC 잠금, staging → current 전환을 한 트랜잭션으로, 커밋 뒤 Backend 알림. 실제 Gold로 바꿀 때는 입력 어댑터만 바뀐다. 구조는 [Publisher](../../distributed-system/publisher/README.md).
+
+목업 행은 판 `bundle_version`과 세그먼트 `binning_revision`의 `mock-` 표식으로 알아본다. 삭제는 이 표식으로만 한다.
+
+### 한계
+
+- 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)가 없어 여전히 안 된다.
+- 등록된 별(`stars`)에 처음 싣는 경우만 다룬다. 후보가 이미 있는 별은 거부한다.
+- 판이 current가 될 때 V23 트리거가 후보 변경을 기록한다. 재개 알림은 **그 별을 팔로우한 회원에게만** 간다.
+
+### 준비 (한 번)
+
+`planetory_gold_writer`는 로그인할 수 없는 그룹 역할이다. 로그인 계정을 소유자로 만든다. 비밀번호는 명령줄에 두지 않는다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose exec service-db psql -U planetory -d planetory_poc \
+  -c "CREATE USER planetory_publisher IN ROLE planetory_gold_writer" \
+  -c "REVOKE CREATE ON SCHEMA public FROM planetory_publisher"
+docker compose exec service-db psql -U planetory -d planetory_poc -c "\password planetory_publisher"
+```
+
+같은 비밀번호를 `.env`의 `PUBLISHER_DB_PASSWORD`에 넣는다. 판 전환 알림을 보내려면 `INTERNAL_SERVICE_TOKEN`도 넣고 Backend를 다시 배포한다. 토큰이 없으면 알림만 생략되고 판은 current가 된다.
+
+### 적재
+
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다.
+
+```sh
+cd "$DEPLOY_PATH"
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
+  docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
+```
+
+같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다.
+
+### 삭제
+
+소유자로 `service-db` 안에서 돈다. 판 전환 때 V23 트리거가 쓴 알림 행을 `gold_writer`가 지울 수 없어서다. 소유자 비밀번호를 Publisher 컨테이너에 주지 않도록 SQL만 받아 넘긴다. 기본은 모의 실행이다.
+
+```sh
+cd "$DEPLOY_PATH"
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA'
+# 개수를 확인한 뒤 실제로 지운다
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -v apply=1'
+```
+
+회원이 목업 판·후보를 참조하면(제출·게시글·공개 분석·성과) 지우지 않고 멈춘다. 그 기록을 지울지는 사람이 정한다.
+
 ## ERD
 
 Liam ERD 한 벌을 낸다. 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜨며
