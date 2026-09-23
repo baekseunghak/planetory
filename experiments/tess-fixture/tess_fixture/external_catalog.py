@@ -24,9 +24,11 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def source_requests() -> dict[str, str]:
+def source_requests(tic_ids=None) -> dict[str, str]:
     """9별 Archive/TOI, S1–13 TCE, ExoFOP TOI export. 조회 범위를 고정한다."""
-    ids = [str(t.tic_id) for t in TARGETS]
+    ids = [str(t.tic_id) for t in TARGETS] if tic_ids is None else [str(t) for t in tic_ids]
+    if not ids or len(set(ids)) != len(ids) or any(not t.isascii() or not t.isdigit() or int(t) <= 0 for t in ids):
+        raise ValueError("unique positive TIC IDs required")
     toi = "select tid,toi,tfopwg_disp,pl_orbper,pl_tranmid,pl_trandurh,pl_trandep,rowupdate from toi where tid in (" + ",".join(ids) + ")"
     archive_ids = ",".join("'TIC " + tic + "'" for tic in ids)
     archive = "select tic_id,pl_name,pl_orbper,pl_tranmid,pl_tranmid_systemref,pl_trandur,pl_trandep,tran_flag from pscomppars where tic_id in (" + archive_ids + ")"
@@ -90,21 +92,25 @@ def error_details(exc: Exception) -> dict:
     return result
 
 
-def collect(root: Path, fetch=download, sources=None) -> Path:
-    requests = source_requests()
+def collect(root: Path, fetch=download, sources=None, tic_ids=None, sample_config=None) -> Path:
+    if tic_ids is not None:
+        tic_ids = list(tic_ids)
+    requests = source_requests(tic_ids)
     selected = list(requests) if sources is None else list(dict.fromkeys(sources))
     if not selected or any(name not in requests for name in selected):
         raise ValueError("invalid_source_selection")
     run = root / (datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ-") + uuid4().hex[:8])
     run.mkdir(parents=True, exist_ok=False)
     manifest = {
-        "version": VERSION, "task": "S15P21C206-116", "status": "collecting",
+        "version": VERSION, "task": "S15P21C206-109" if tic_ids is not None else "S15P21C206-116", "status": "collecting",
         "scope": "schema inspection only; not an approved operational snapshot",
-        "target_tics": [str(t.tic_id) for t in TARGETS], "sources": {},
+        "target_tics": [str(t) for t in tic_ids] if tic_ids is not None else [str(t.tic_id) for t in TARGETS], "sources": {},
         "requested_sources": selected, "subset": len(selected) != len(requests),
         "implementation_sha256": sha256(Path(__file__).read_bytes()),
     }
     manifest_path = run / "manifest.json"
+    if sample_config is not None:
+        manifest["sample_config_sha256"] = sha256(Path(sample_config).read_bytes())
 
     def save():
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -141,8 +147,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("results/external-catalog"))
     parser.add_argument("--source", nargs="+", choices=list(source_requests()))
+    parser.add_argument("--sample-config", type=Path, help="109 fixed service sample; default remains 116 nine targets")
     args = parser.parse_args()
-    path = collect(args.output, sources=args.source)
+    ids = None
+    if args.sample_config is not None:
+        from .service_sample import load_sample_config
+        ids = [m.tic_id for m in load_sample_config(args.sample_config).members]
+    path = collect(args.output, sources=args.source, tic_ids=ids, sample_config=args.sample_config)
     return 0 if json.loads(path.read_text(encoding="utf-8"))["status"] != "incomplete" else 1
 
 
