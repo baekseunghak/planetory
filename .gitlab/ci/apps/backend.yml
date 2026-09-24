@@ -88,6 +88,9 @@ backend:build:
   script:
     - cd apps/backend
     - chmod +x gradlew
+    # 10분이 지나도 끝나지 않으면 테스트 JVM의 스레드 덤프를 로그에 남긴다. 시간 초과로 끝나면
+    # JUnit 보고서가 올라가지 않아, 멈춘 호출을 알 수 있는 곳이 이 덤프뿐이다. 먼저 끝나면 아무것도 찍지 않는다.
+    - (sleep 600; for p in $(jcmd -l | awk '/GradleWorkerMain/ {print $1}'); do jcmd "$p" Thread.print; done) &
     - ./gradlew bootJar test --no-daemon
   # 추출된 배포판과 원본 zip이 둘 다 남아 캐시가 두 배가 된다.
   after_script:
