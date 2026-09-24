@@ -191,6 +191,39 @@ uv run python -m tess_bench iterate --target cm_dra --stage evaluation --no-nois
 
 ## 산출물
 
+### 109 서비스 표본 예비 측정
+
+상태: 최초 BLS 예비 실측·산출물 대조 완료, 최종 채택 미확정. 결과는 서비스 범위 문서 5.2절에 기록한다. 범위와 완료 조건은
+[서비스 범위 문서 5.1절](../../docs/data/tess-service-scope-v1.md)을 따른다.
+`tess-fixture sample`로 고정 표본을 받은 뒤 이 디렉터리에서 실행한다.
+
+```powershell
+uv sync --locked --python 3.11
+uv run --locked python -m tess_bench.population --limit 2
+# 위 실행의 입력 검증·처리 시간을 확인한 뒤 전체 실행
+uv run --locked python -m tess_bench.population
+```
+
+- `--limit`은 설정 순서의 첫 N개를 고르는 시간 확인용이며 무작위 재표집이 아니다. 전체 비율 추정에 쓰지 않는다.
+- 입력 SHA-256·TIC·Sector·PROCVER를 모두 확인한 뒤 새 실행 폴더를 만든다. 다운로드는 하지 않는다.
+- 기존 `biweight_1.0d`와 `poc_linear20k`를 재사용한다. 알려진 행성 제거·주입·반복 제거는 하지 않는다.
+- 최초 BLS 상위 5피크 중 `snr >= 7 & sde >= 6 & n_transits >= 2`를 임시 게이트로 사용한다.
+  SNR·SDE 정의와 탐색 범위는 기존 BLS 설정 그대로이며 110 채택 승인을 뜻하지 않는다.
+- 전처리 실패·대체 처리·유효점 부족과 빈/비유한 BLS 결과는 `failed`로 기록한다. `n_gate_peaks`는 빈칸이고 무검출에 넣지 않는다.
+  예상 밖 예외는 실행을 중단하며 완료 manifest가 없는 폴더는 미완료로 취급한다.
+- `results/population/run-<UTC>-<id>/`에 `stars.csv`, `peaks.csv`, 별별 주기도 NPZ,
+  `summary.json`, `manifest.json`을 저장한다. CSV는 매 별 처리 후 갱신한다. 출력은 Git 제외다.
+- manifest에 표본·그룹·Sector, 전처리·BLS·게이트 값, 구현·설정·lockfile과 입력/출력 checksum,
+  환경·전체 소요 시간을 기록한다. 실행 때 공통 manifest 도구가 Git 상태를 읽는다.
+- 집단별 `no_gate_peak_fraction_valid = no_gate_peak / valid`. `selected`, `valid`, `failed`를 함께 보고한다.
+  실패가 있으면 전체 무작위 40개의 비율로 해석하지 않는다. 비교용 `planet_host` 5개는 random 분모에 합치지 않는다.
+- 이 명령은 주어진 탐색 범위의 최초 상위 피크만 검사한다. `no_gate_peak`는 행성 부재, 최종 채택 후보 0개,
+  D07-2 discoverable=false 중 어느 것도 확정하지 않는다. 통과 피크 수는 고유 행성 수가 아니다.
+
+검증: `uv run --locked python -m pytest tests/test_population.py tests/test_bls.py -q`.
+
+### 기존 벤치마크 산출물
+
 | 경로 | Git | 내용 |
 |---|---|---|
 | `configs/preprocess_settings_v1.json` | 커밋 | 설정 18개(1.1.0). PoC 기준에서 한 요인씩 바꿈: 품질 마스크 2, 구간 분리 2, SG 창 3, biweight 창 3, 가장자리 마스크 4, 2단계 detrending 3 |
@@ -654,3 +687,58 @@ uv run --locked python -m tess_bench.iteration_kernel_regression --targets l98_5
 마지막 명령은 실제 realclean의 별별 3개 쌍 주입+무주입, 총 20곡선에서 반복 QA·종료·잔차·진단을 비교한다. 참조 111 루프에는 실험 243 SDE만 격리 주입하고 운영 SDE 함수를 사용하지 않는다. `candidate_quality_version`·입력/코드/환경 해시와 결과를 새 manifest에 남긴다. 기존 122 기본 명령은 v0 회귀로 유지한다.
 
 새 회귀는 채택 기준을 새로 고르는 독립 평가도 운영 배포·DB 검증도 아니다. 실측은 2026-09-23 사용자 실행 후 저장 검산 완료: 탐색 b5828e49 2,240곡선, 반복 555ceda6 20곡선 parity 통과. [해시·CM Dra 손익·검증 경계](../../docs/data/tess-bls-benchmark.md#243-운영-커널-사용자-실행-검산-2026-09-23)를 참조한다. 운영 코드 추가 리뷰·배포 완료와 구분한다.
+
+### 109 확정 커널 연결 측정
+
+`population_kernel`은 기존 45개 표본에 122 반복 탐색과 123의 10분 mean·제공 주기도 수치 규칙을 적용한다. 기본 quality_version은 `gate_v1/snr7_sde6`이며 243 경로로 자동 전환하지 않는다. 기존 population 실행과 산출물은 보존한다.
+
+```powershell
+uv run --locked python -m tess_bench.population_kernel --limit 2
+uv run --locked python -m tess_bench.population_kernel
+```
+
+`results/population-kernel/`에 plan·별별 반복 이력/제공 판정·summary·manifest를 저장한다. 실패·불완전한 반복 탐색은 held로 분리하며 무신호 분모에서 제외한다. 모든 입력·코드를 실행 전후 hash로 대조한다. subset은 모집단 결론에 사용하지 않는다.
+
+이는 후보 동일성 조정·외부 라벨·튜토리얼 인수가 끝난 최종 서비스 공급량이 아니다. interval mask 증거는 아직 제공되지 않았으며 기본 전처리만 사용한다. 관련 단위 검증은 `uv run --locked python -m pytest tests/test_population_kernel.py tests/test_population.py -q` (15 passed)다.
+
+109 전체 실행 `40105708` 검산: random 40개 중 측정 37·보류 3, 반복 채택 0개 36/37, 제공 해상도 후보 보유 1/37. planet_host 5개 중 측정 4·보류 1, 측정 4개 모두 채택 0개. 입력·코드 104개 및 출력 3개 hash 일치. [상세 해석](../../docs/data/tess-service-scope-v1.md#91-전체-45개-실측-검산)을 따르며 외부 라벨·튜토리얼·서비스 공급량 인수로 해석하지 않는다.
+
+### 109 튜토리얼 실제 곡선 탐색
+
+```powershell
+uv run --locked python -m tess_bench.tutorial_screening --download
+```
+
+기존 9별의 23 Sector와 ExoFOP 복수 FP/FA 탐색 후보 TIC 311183180 S5·143022742 S4를 고정한다. 기존 sample_raw가 있으면 재사용하고 누락 FITS만 명시적 --download로 results/tutorial-inputs에 받는다. 파일 헤더·hash와 코드 전후 hash를 기록한다. 실패 시 failure.json과 완료된 행을 보존한다.
+
+Sector별 반복 탐색·10분 제공 판정을 수행하며 기본 품질 버전을 유지한다. 장주기 두 신호의 단일 Sector 미검출은 후보 부재 증거가 아니다. 이 실행은 튜토리얼 선택용 진단이며 외부 시간 척도·독립 신호·학습 목적의 최종 인수를 대신하지 않는다. 고정 서비스 표본 45개는 변경하지 않는다.
+
+다중 Sector 검증은 아래 명령으로 별도 실행한다. 기존 복수 Sector 8별과 TIC 311183180(S5+31)·143022742(S4+31) 총 10별이다. CM Dra 단일 Sector QA 실패 결과는 재실행하지 않는다. 추가 S31 두 제품은 MAST 공식 목록에서 확인했으며 초기 서비스 범위 밖임을 plan에 표시한다. 기존 파일은 재사용하고 누락 파일만 다운로드한다.
+
+```powershell
+uv run --locked python -m tess_bench.tutorial_screening --combined --download
+```
+
+Sector별 10분 배열을 결합하고 관측 사이 공백은 채우지 않는다. 결과 폴더는 매 실행 새로 생성되며 기존 실측을 덮어쓰지 않는다. 외부 직접 매칭과 5종 최종 인수는 자동 처리하지 않는다. 관련 테스트: `uv run --locked python -m pytest tests/test_population_kernel.py tests/test_tutorial_screening.py tests/test_population.py -q` (19 passed).
+
+문헌에서 두 식쌍성이 확인된 추가 대상 TIC 278956474만 검사하려면 다음을 실행한다. S3·4·5 각각과 결합의 4경우이며 FITS 3개만 신규 수집한다. 문헌 주기는 대상 선정 근거로만 plan에 보존하고 외부 라벨을 자동 부여하지 않는다. 관련 단위 테스트는 현재 20개 통과다.
+
+```powershell
+uv run --locked python -m tess_bench.tutorial_screening --literature --download
+```
+
+남은 비행성 역할의 S3 식쌍성 후보 6개만 실행:
+
+```powershell
+uv run --locked python -m tess_bench.tutorial_screening --eb-catalog --download
+```
+
+필수 목록은 `results/tutorial-catalogs/tess-ebs-v1.0.csv`이며 [MAST 원본](https://archive.stsci.edu/hlsps/tess-ebs/hlsp_tess-ebs_tess_lcf-ffi_s0001-s0026_tess_v1.0_cat.csv) SHA-256 `97e81f6c01716a431379ab6bd37d1182b611a485107110e0eba830f817ba7a8f`와 일치해야 한다. 다른 PC에서는 이 Git 제외 파일을 별도로 확보해야 한다. 필터·실측 상태는 [서비스 범위 9.7절](../../docs/data/tess-service-scope-v1.md#97-문헌-대상-실측과-남은-비행성-역할-검증)에 기록한다. 단위 테스트 22개 통과.
+
+저장 결과의 5종 검토 자료는 `uv run --locked python -m tess_bench.tutorial_review`로 생성한다. 고정 실행 폴더와 외부 Archive 저장본이 필요하며 새 BLS를 돌리지 않는다. HTML·원래 곡선/잔차/전체 위상 SVG·pairwise 외부 대조·source checksum을 `results/tutorial-review/`에 저장한다. 과거 실행 코드와 현재 코드가 같다는 검증은 하지 않는다. 단위 테스트: `tests/test_tutorial_review.py` 포함 109 관련 24개 통과. 출력은 후보 검토용이며 최종 5종 승인 자료와 구분한다.
+
+학습 적합성 기술통계는 `uv run --locked python -m tess_bench.tutorial_suitability`, 2·4번 외부 대조와 4번 부극소 검산은 `uv run --locked python -m tess_bench.tutorial_labels`로 실행한다. 모두 저장 결과만 읽는다. 후자는 116 ExoFOP 원본 및 `results/tutorial-catalogs/alerts-v9.csv`, `toi184-dvs.pdf`가 필요하다. 원천·고정 hash·해석 한계는 [서비스 범위 9.11절](../../docs/data/tess-service-scope-v1.md#911-4번-학습-적합성과-외부-라벨-근거-보강)에 기록했다. `tests/test_tutorial_labels.py`는 시간 척도 불명 시 보류와 관측점 부재 시 null을 검증한다.
+
+같은 `tutorial_labels` 실행에 3·5번 조건부 외부 대조도 포함한다. 116의 `mast_tce_s1_s13.raw` 및 `results/tutorial-catalogs/tess-ebs-v1.0.csv`가 추가로 필요하다. 수치 일치와 formal hold를 분리하며 반주기를 자동 연결하지 않는다. 상세 결과와 시간 척도 미확정 사항은 [9.12절](../../docs/data/tess-service-scope-v1.md#912-35번-신호별-외부-연결-검산)을 따른다.
+
+공식 DV XML 및 MAST 조회 응답을 확보한 후에는 같은 실행기가 3번·5번 A 직접 대조, 5번 B의 명시적 수동 2배 주기 대조를 추가한다. 필요한 XML 이름·고정 hash·조회 응답 경로와 최신 결론은 [9.13절](../../docs/data/tess-service-scope-v1.md#913-공식-dv-xml-확보-후-35번-연결-근거)을 따른다. 원본·결과는 Git 제외이며 다른 PC에서는 별도 전달해야 한다.
