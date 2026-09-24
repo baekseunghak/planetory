@@ -1,6 +1,6 @@
 # S15P21C206-78 Silver 처리·Airflow 인계
 
-> 상태: 구현·252 통합·로컬 검증 완료, 실클러스터 Canary 2회 합격(2026-09-23), 전체 run·Airflow 배포 전<br>
+> 상태: 구현·252 통합·로컬 검증 완료, 실클러스터 Canary 합격(2026-09-23 2회, 2026-09-24 보강 release 1회), 전체 run 시작 조건 충족·시작 전, Airflow 배포 전<br>
 > 기준 브랜치: `feature/S15P21C206-78-spark-silver-distributed-processing`<br>
 > 기준일: 2026-09-23<br>
 > Jira: [S15P21C206-78](https://ssafy.atlassian.net/browse/S15P21C206-78)
@@ -96,6 +96,10 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 
 **실측 기반 재추정** — Canary 2 관측점 643,338개의 출력은 `target_combined` 31.1 MB, `periodogram` 3.6 MB(논리)였다. 관측점당 약 48 B이므로 Sector 1~13의 46.7억 점은 약 225 GB, periodogram은 TIC당 약 0.91 MB로 TIC 10~15만 가정 시 90~140 GB다. 합계는 논리 약 0.32~0.37 TB, **RF2 약 0.63~0.73 TB**(이전 추정 0.8~0.9 TB). 두 Canary 모두 Bronze 83 GB 선택 스캔의 고정 비용이 약 5분이었다. TIC 수가 적어 TIC당 비용은 분리하지 못했으며 전체 run 추정 **2~5일**을 유지한다.
 
+**보강 release Canary (2026-09-24) — 합격**
+
+재기동 전 staging 정리와 예외 분류(`65368d6e`)를 반영한 release `20260924T063740Z`로 TIC 5개(`259377017`과 위 4개)를 한 번에 실행했다. TIC별로 따로 처리하고 audit도 TIC별로 남으므로 결과는 Canary 1·2를 나눠 실행한 것과 같다. `application_1790067725443_0061` SUCCEEDED(Spark 7분 18초, 제어기 12분 20초), `SILVER_CANARY_OK tics=5`, `failed_tics=0`, `qa_stopped=2`, 검증 출력·Spark staging 정리, 상태 파일 `complete`를 확인했다. 5개 TIC 모두 2026-09-23 결과와 같았고 TIC `259377017`은 9월 21일 기준값과 정확히 일치했다. 보강은 정상 경로의 과학 결과를 바꾸지 않았다. 실패 시 staging 정리는 성공 실행에서 동작하지 않으므로 실클러스터에서는 아직 검증되지 않았고 로컬 회귀 검사로만 확인했다. **전체 run에는 이 release를 쓴다.** `20260923T083458Z`도 Canary에 합격했지만 보강 전이다.
+
 **Canary TIC 선택 시 주의** — 최초 전처리 결과가 `insufficient_observations`(유효 관측 500점 미만) 같은 결정적 데이터 판정인 TIC도 여전히 `failed_tics`에 들어가 Canary를 실패시킨다. 첫 Canary는 이전 실클러스터 기준 TIC `259377017`처럼 관측이 충분한 TIC로 고른다.
 
 **전체 `run` 전에 해결할 것**
@@ -111,7 +115,9 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 
 ## 서버에서 확인한 기준 상태
 
-2026-09-23 07:10·08:10 UTC 읽기 전용 확인: `master-1`, NameNode active/standby·Safe mode OFF, DataNode·NodeManager 각 5대, HDFS 10.03 TB 중 38% 사용(DataNode당 약 1.1 TB 여유), Node 1 루트 디스크 14 GB 여유, Python 3.12.3, Docker 29.1.3, PyPI 접근 가능. Bronze 1~13 coverage는 13 Sector·제품 247,824개·관측점 4,666,320,826개로 기록과 일치한다. 252는 `tess_pipeline_enabled=true`, 상한 Sector 70으로 운영 중이며 Airflow Pool은 `default_pool`뿐이다. 이전 Bronze release는 YARN 잠금 파일을 쓰지 않는다. 설치된 Silver release는 `20260923T080904Z`(NaN 결함 포함, 사용 금지)와 `20260923T083458Z`(Canary 합격)이며, 이전 Canary용 release 3개가 남아 있다.
+2026-09-24 06:17 UTC 읽기 전용 확인: 252가 `tess_pipeline_completed_through=70`(상한 70)에 도달했고 다운로드·Raw·cleanup·Bronze 단계 run은 실행·대기 모두 0건, YARN 실행 앱 0개, HDFS 58%(9.1 TB 중 5.2 TB)다. 전날 추정 63%보다 낮아 Silver 전체 run 뒤 약 65%로 예상한다. `tess_pipeline_enabled`는 `true`로 두었다(새 허가 대상 없음). 전체 run 시작 조건(결정 A)을 충족했다.
+
+2026-09-23 07:10·08:10 UTC 읽기 전용 확인: `master-1`, NameNode active/standby·Safe mode OFF, DataNode·NodeManager 각 5대, HDFS 10.03 TB 중 38% 사용(DataNode당 약 1.1 TB 여유), Node 1 루트 디스크 14 GB 여유, Python 3.12.3, Docker 29.1.3, PyPI 접근 가능. Bronze 1~13 coverage는 13 Sector·제품 247,824개·관측점 4,666,320,826개로 기록과 일치한다. 252는 `tess_pipeline_enabled=true`, 상한 Sector 70으로 운영 중이며 Airflow Pool은 `default_pool`뿐이다. 이전 Bronze release는 YARN 잠금 파일을 쓰지 않는다. 설치된 Silver release는 `20260923T080904Z`(NaN 결함 포함, 사용 금지), `20260923T083458Z`(Canary 합격, 보강 전), `20260924T063740Z`(보강 release, Canary 합격, **전체 run용**)이며, 이전 Canary용 release 3개가 남아 있다.
 
 2026-09-23 기준 Node 1은 252가 전환한 Airflow 3.2.2(API Server·Scheduler·별도 DAG Processor·Triggerer)와 `LocalExecutor`를 사용한다. 통합 소스의 `compose.control-plane.yaml`은 `AIRFLOW__CORE__PARALLELISM=8`이지만 252 변경 이력 기준 이 값의 운영 배포·회귀는 아직 미검증이므로, 배포 전 서버 실제 값을 확인한다. 이전 2.10.5 DB·release는 롤백용으로 보존한다. 아래 서술은 2026-09-22 Airflow 2.10.5·`parallelism=2` 시점의 읽기 전용 확인이다. 당시 252의 Sector 14 수집→Raw→Bronze 4단계는 성공했으나 서버에는 Silver DAG가 없었다. 단계형 DAG는 자체 schedule이 없고, legacy 1~13 결합 DAG와 discovery DAG는 pause 상태였다. `tess_pipeline_enabled=false`, Sector 상한은 14였다.
 
@@ -136,7 +142,7 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 4. Node 1 root 권한으로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 한 번 실행한다. 이 단계는 `/etc/sudoers.d`와 Airflow metadata DB의 Pool을 변경하므로 실행 전 승인과 사후 `visudo -c`, Pool slot 수 확인이 필요하다. **2번의 이미지 배포보다 먼저** 실행한다.
 5. **완료(2026-09-23)** — 1~5 TIC Canary를 Airflow 대신 `run-tess-silver.ps1 -Step Canary`로 실행했다. 이 경로는 Airflow 이미지·sudoers·Pool 없이 운영자 PC에서 제어기를 직접 실행한다. 252는 drain하지 않고 YARN 실행 앱 0개인 시점에 시작했다.
 6. **완료(2026-09-23)** — Canary 1 재실행·Canary 2의 manifest/READY 재감사, `failed_tics=0`, 행 보존, YARN 종료 상태, 검증 출력 삭제와 science audit 상태 파일을 확인했다(위 절).
-7. 위 증거를 변경 이력과 Jira에 기록하고 "전체 `run` 전에 해결할 것"을 처리한 뒤에만 전체 `run` 또는 실패 TIC `retry`의 운영 실행 여부를 결정한다. 전체 run은 systemd 경로(`-Step Start`)로 실행한다.
+7. 위 증거를 변경 이력과 Jira에 기록하고 "전체 `run` 전에 해결할 것"을 처리한 뒤에만 전체 `run` 또는 실패 TIC `retry`의 운영 실행 여부를 결정한다. 전체 run은 systemd 경로(`run-tess-silver.ps1 -Step Start -CodeReleaseId 20260924T063740Z`)로 실행한다.
 
 Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 검증된 값으로만 치환한다.
 
