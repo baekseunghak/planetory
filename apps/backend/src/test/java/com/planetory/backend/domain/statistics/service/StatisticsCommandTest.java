@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
-        "planetory.command=statistics","planetory.statistics.mode=snapshot","spring.flyway.enabled=false"})
+        "planetory.command=statistics","planetory.statistics.mode=snapshot","spring.flyway.enabled=false",
+        // 빈 DB의 0명 스냅샷을 읽는다. 공개 최소 인원(180)은 StatisticsAggregationTest처럼 끈다.
+        "planetory.statistics.min-public-cohort=0"})
 class StatisticsCommandTest {
     @Container static final PostgreSQLContainer<?> DB=new PostgreSQLContainer<>("postgres:18.6-alpine");
     @DynamicPropertySource static void database(DynamicPropertyRegistry r) throws Exception {
