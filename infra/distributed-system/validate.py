@@ -162,7 +162,13 @@ def main():
         "dfsadmin -safemode",
         "dfs -expunge",
     )
-    for script in (yarn_installer, initializer, sample_runner):
+    history = (BASE / "scripts/install-spark-history-node1.sh").read_text(encoding="utf-8")
+    # tailscale0 is accepted before UFW, so only a loopback bind keeps the UI off the raw tailnet.
+    assert "SPARK_LOCAL_IP=127.0.0.1" in history and "0.0.0.0" not in history
+    assert history.index("SPARK_HISTORY_BIND_NOT_LOOPBACK") < history.index("tailscale serve --bg")
+    assert "apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1" in history
+    assert "docker pull" not in history and "tailscale funnel" not in history
+    for script in (yarn_installer, initializer, sample_runner, history):
         for forbidden in forbidden_commands:
             assert forbidden not in script, forbidden
     ast.parse((BASE / "scripts/yarn-hdfs-sample.py").read_text(encoding="utf-8"))

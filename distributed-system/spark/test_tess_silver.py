@@ -525,13 +525,15 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
                     "bronze_paths": ["/lake/bronze/tess/sector=0001"]}
         with patch("tess_silver_ctl.subprocess.Popen", side_effect=popen), \
+                patch("tess_bronze_ctl.hdfs_exists", return_value=True), \
                 self.assertRaisesRegex(RuntimeError, "stop after"):
             submit(release_dir=Path("/opt/planetory-silver/releases/20260924T000000Z"),
                    runtime_hdfs="/runtime.tar.gz", coverage=coverage, run_id="20260924T000000Z",
                    attempt_id="20260924T000100Z", pipeline_version="v", output="/o", final_output="/f",
                    output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={})
         for conf in ("spark.executor.instances=10", "spark.executor.cores=2", "spark.executor.memory=6g",
-                     "spark.executor.memoryOverhead=2048", "spark.executorEnv.OMP_NUM_THREADS=1"):
+                     "spark.executor.memoryOverhead=2048", "spark.executorEnv.OMP_NUM_THREADS=1",
+                     "spark.eventLog.enabled=true", "spark.eventLog.dir=hdfs://planetory/spark-history"):
             with self.subTest(conf=conf):
                 self.assertIn(conf, captured)
         # YARN rejects any container above yarn.scheduler.maximum-allocation-vcores=3 (2026-09-24 Canary).

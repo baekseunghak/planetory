@@ -24,6 +24,7 @@ from tess_bronze_ctl import (
     application_state,
     atomic_commit,
     build_runtime,
+    event_log_conf,
     require_yarn_headroom,
     run,
     fsck_healthy,
@@ -258,6 +259,7 @@ def submit(
         "--conf", "spark.executorEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.appMasterEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.maxAppAttempts=1", "--conf", "spark.speculation=false",
+        *event_log_conf(),
         "/opt/planetory/tess_silver.py",
     ]
     for path in coverage["bronze_paths"]:

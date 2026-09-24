@@ -165,6 +165,16 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 }
 ```
 
+### Spark History Server (2026-09-25, 1단계 로컬 구현 완료)
+
+Bronze·Silver 제출에 조건부 이벤트 로그를 넣고 [Node 1 설치 스크립트](../../infra/distributed-system/scripts/install-spark-history-node1.sh)를 추가했다. 서버에는 아직 설치하지 않았다. 남은 순서는 다음과 같다.
+
+1. 승인 후 Node 1 root로 `install-spark-history-node1.sh`를 실행한다. HDFS `/spark-history` 생성, systemd unit 등록, `tailscale serve --http=18080` 설정을 바꾼다. 실행 전 `tailscale serve status`로 기존 serve 설정과 충돌이 없는지 확인한다.
+2. `ss -ltn`에 History Server가 `127.0.0.1:18080`으로만 보이는지, PC에서 `http://node-1:18080`이 열리는지 확인한다.
+3. 새 release로 Canary 1회를 실행해 실행 중 `.inprogress` 앱과 종료 후 앱이 보이는지 확인한다. 비동기 DAG의 첫 서버 검증과 함께 할 수 있다.
+
+진행 중인 전체 run `20260924T133559Z`(`application_1790067725443_0064`)은 이벤트 로그 없이 시작했으므로 History Server에 나타나지 않는다. Tailscale ACL로 18080 접근을 사용자 기기로 좁히는 것은 테일넷 관리자 결정으로 남긴다.
+
 ## 완료·삭제 조건
 
 다음이 모두 충족되면 담당자는 이 문서가 더는 필요 없는지 확인하고 **이 파일과 `docs/project/README.md`의 링크를 같은 커밋에서 삭제한다.**

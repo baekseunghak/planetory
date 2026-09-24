@@ -31,6 +31,7 @@ from tess_bronze_ctl import (  # noqa: E402
     RAW_COVERAGE_SHA256,
     BronzeDataContractError,
     cli,
+    event_log_conf,
     command_coverage,
     command_run_all,
     finalize_sector,
@@ -342,6 +343,17 @@ class BronzeTransformTest(unittest.TestCase):
                     state_file=Path(root) / "state.json",
                     state={"status": "prepared"},
                 )
+
+    def test_event_log_is_enabled_only_when_the_history_directory_exists(self):
+        # A missing History Server directory must not fail spark-submit and stop the pipeline.
+        with patch("tess_bronze_ctl.hdfs_exists", return_value=False):
+            self.assertEqual(event_log_conf(), [])
+        with patch("tess_bronze_ctl.hdfs_exists", return_value=True) as exists:
+            conf = event_log_conf()
+        exists.assert_called_once_with("/spark-history")
+        self.assertIn("spark.eventLog.dir=hdfs://planetory/spark-history", conf)
+        self.assertIn("spark.eventLog.rolling.enabled=true", conf)
+        self.assertEqual(conf[::2], ["--conf"] * (len(conf) // 2))
 
     def test_sector_contract_failure_is_terminal(self):
         summary = {

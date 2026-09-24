@@ -212,6 +212,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 - [run-yarn-sample.ps1](scripts/run-yarn-sample.ps1), [yarn-hdfs-sample.py](scripts/yarn-hdfs-sample.py): 고정 Spark 3.5.5 image digest로 HDFS 읽기·쓰기를 실행하고 Application ID·executor 배치·checksum·집계 로그·Node 2 자원을 확인한다.
 - [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 75의 최종 coverage를 입력으로 Sector 1~13을 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·첫/중간/마지막 offset 복원 감사 뒤 덮어쓰기 없는 원자 rename으로 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
 - [run-tess-silver.ps1](scripts/run-tess-silver.ps1), [test-tess-silver.ps1](scripts/test-tess-silver.ps1): 확정 Bronze coverage를 TIC별로 그룹화해 전처리·최초 BLS를 YARN cluster mode로 실행한다. TIC별 manifest로 성공을 보존하고 실패 TIC만 새 attempt에서 재처리하며 RF2·part checksum·FSCK 뒤 attempt 전체를 원자 확정한다. Canary는 상세 데이터를 삭제하기 전에 bounded science audit을 상태 파일에 남기고 성공 attempt의 빈 staging 경로를 정리한다. 상세 계약과 미완 선행 작업 경계는 [Spark README](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78)를 따른다.
+- [install-spark-history-node1.sh](scripts/install-spark-history-node1.sh): Node 1 root로 Spark History Server를 설치한다. HDFS `/spark-history`(소유자 `planetory-admin`, `0750`)가 없을 때만 만들고, 고정 Spark image digest로 `planetory-spark-history.service`를 등록한다. `127.0.0.1:18080` 단독 listen을 확인한 뒤에만 `tailscale serve --http=18080`으로 테일넷에 연다. 기존 unit 내용이 다르면 덮어쓰지 않고 실패한다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
 ```powershell
@@ -237,6 +238,8 @@ $AuditSinceUtc = (@(& tailscale ssh SSAFY@node-1 'date -u +%Y-%m-%dT%H:%M:%SZ') 
 `Preflight`는 6개 노드가 NTP 동기화 상태이며 `Etc/UTC` 시간대를 사용하는지 확인한다. 감사 시작 시각은 운영자 PC가 아니라 Node 1에서 가져온다. `FinalAudit`은 이 시각 이후의 현재 및 숫자 suffix로 회전된 `hadoop-yarn-*.log` daemon 로그를 검사한다. `.out`과 `/mnt/data/yarn/logs`의 컨테이너 로그는 이 검사의 범위가 아니며, sample은 별도로 YARN 집계 로그를 가져와 결과와 executor host를 확인한다.
 
 UFW는 적용 전에 `active`와 기본 `deny (incoming)`을 모두 확인하고, Node 1의 `8030~8033,8088`, Worker의 `8040~8042`를 정확한 6개 사설 IP에만 허용한다. Spark cluster mode는 Worker 간 driver `7078`과 block manager `7079~7095`를 사용한다. block manager는 한 Worker에 여러 컨테이너가 배치되면 기본 포트에서 증가하므로 단일 포트만 열면 remote broadcast fetch가 멈춘다. NodeManager의 `0.0.0.0` bind와 인증 없는 PoC 경계는 GCP VPC 방화벽과 이 UFW 고정 IP 규칙의 조합이며, 둘 중 하나라도 넓어지면 신뢰 경계를 재검토한다.
+
+Spark History Server는 Node 1에서 `127.0.0.1:18080`에만 bind하고, 테일넷에는 `tailscale serve --http=18080`으로만 노출한다(`http://node-1:18080`). 테일넷 인터페이스 `tailscale0`의 트래픽은 UFW보다 먼저 허용되므로 모든 인터페이스에 bind한 포트는 UFW 규칙과 무관하게 테일넷 기기에서 접근된다(2026-09-24 worker-2 driver UI 포트로 확인). History Server는 읽기 전용이라 테일넷에 열지만, 인증 없이 앱을 종료·제출할 수 있는 ResourceManager `8088`은 테일넷에 열지 않는다. driver UI는 cluster mode에서 YARN이 고른 Worker의 임의 포트에 뜨고 Worker UFW가 Node 1에서의 접근을 막으므로, 실행 중인 앱도 History Server로 본다. 끄려면 `tailscale serve --http=18080 off`와 `systemctl disable --now planetory-spark-history.service`를 실행한다. `/spark-history`는 History Server가 30일이 지난 로그를 정리하며, HDFS 휴지통이 꺼져 있으므로 수동 삭제는 별도 승인 대상이다.
 
 `/yarn-logs`는 Raw·Bronze·Silver와 분리된 YARN 운영 로그 집계 경로다. `Start`가 경로가 없을 때만 HDFS 슈퍼유저 소유·`1777`로 만들며 기존 경로의 권한을 다시 덮어쓰지 않는다. 현재 클러스터에는 집계 로그 삭제 서비스를 실행하는 주체가 없으므로 자동 보존 기간을 집행하지 않는다. 별도 운영 작업에서 삭제 주체와 기간을 확정하기 전까지 HDFS 사용량을 점검하고 명시적으로 정리해야 하며, `yarn.log-aggregation.retain-seconds`만 선언해 보존이 적용된 것으로 판단하지 않는다.
 
@@ -499,7 +502,6 @@ Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시�
 
 - TIC·TCE·TOI·Archive·ExoFOP 원천별 snapshot 수집
 - Spark 제출 연결
-- Spark History Server
 
 ## 로컬 구성 검사
 

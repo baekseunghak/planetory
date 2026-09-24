@@ -230,3 +230,4 @@
 | 2026-09-24 | YARN vcore 상한에 맞춘 executor 재구성·실패 attempt 정리 실측 | S15P21C206-78 | maximum-allocation-vcores=3, _0062, executor 10x2, staging_discarded | 수정 완료 | [기록](2026-09-24.md) |
 | 2026-09-24 | 처리량 보강 release Canary 합격·전체 run release 확정 | S15P21C206-78 | 20260924T093328Z, _0063, 컨테이너 11, 5분 31초 | Canary 합격, 전체 run 전 | [기록](2026-09-24.md) |
 | 2026-09-24 | Silver DAG systemd unit 시작·Triggerer 대기 전환 | S15P21C206-78 | start-unit, status, TimeDeltaTrigger, wait_silver | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-24.md) |
+| 2026-09-25 | Spark 이벤트 로그·Node 1 History Server 설치 스크립트 | S15P21C206-78 | spark-history, 18080, tailscale serve, event_log_conf | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |

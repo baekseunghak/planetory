@@ -275,6 +275,10 @@ manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 
 Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Sector·관측점 수·상위 채택 peak 5개·오류를 `SILVER_CANARY_AUDIT` 로그와 `/var/lib/planetory-silver/run=<run>/attempt=<attempt>.json`의 `result.science_audit`에 남긴다. 성공한 정확한 attempt의 Spark staging과 빈 run 부모만 정리하며 다른 attempt가 있으면 부모 삭제를 건너뛴다.
 
 오프라인 검증은 데이터 담당 관점의 Bronze coverage·lineage, 과학 담당 관점의 전처리 상태·BLS 정렬 입력, Spark 운영 관점의 TIC 실패 격리·실패 TIC 재선택·드라이버 전체 수집 금지를 확인한다. 2026-09-21 최종 CodeReleaseId `20260921T062449Z`(archive SHA-256 `86f68700bd92281f356b3e8fc4f9957e9893cc91474d4ac3085f57ccbbab25d9`), RunId `20260921T062522Z`로 TIC `259377017`을 실제 YARN Canary 실행했다. `application_1789686202146_0029`는 `SUCCEEDED`, RF2·checksum·FSCK·원자 rename과 상세 출력 삭제·staging 정리를 통과했다. Sector 3·4·5에서 Raw 57,320개, 준비 44,553개, BLS 유효 44,550개를 처리했고 채택 peak 5개 중 1위 `5.6593303027일`, SNR `52.8359`, SDE `22.5652`였다. 저장소 TOI-270 c fixture `5.66051일`과 약 0.021% 차이며 직전 검증 release에서도 같은 snapshot·관측점 수·과학값을 재현했다. 이는 최초 BLS 재현 증거이며 반복 제거·전체 TIC 성능이나 최종 과학 판정을 증명하지 않는다.
+### Spark 이벤트 로그 (2026-09-25, 로컬 구현, 배포 전)
+
+Bronze·Silver 제어기는 HDFS `/spark-history`가 있을 때만 `spark.eventLog.enabled=true`, `spark.eventLog.dir=hdfs://planetory/spark-history`, 압축과 128 MiB rolling을 제출 설정에 넣는다(`tess_bronze_ctl.event_log_conf`). 디렉터리가 없으면 `SPARK_EVENT_LOG_DISABLED`만 출력하고 이벤트 로그 없이 제출하므로, History Server 설치 여부가 데이터 처리를 막지 않는다. 이벤트 로그는 새 release로 제출한 앱부터 남으며, 이미 실행 중인 앱은 History Server에 나타나지 않는다. History Server 설치와 접근 경계는 [인프라 안내](../../infra/distributed-system/README.md)를 따른다.
+
 ### 245 구간 마스크 인계 (로컬 검증, 배포 전)
 
 127의 최초 BLS 연결에 추가한 입력 계약은 [공용 커널 245](../../libs/astro-kernel/README.md#근거-구간-마스킹-245)를 따른다.

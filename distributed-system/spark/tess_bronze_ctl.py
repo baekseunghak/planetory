@@ -21,6 +21,7 @@ from typing import Any
 
 SPARK_IMAGE = "apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1"
 SPARK_HDFS_USER = "planetory-admin"
+SPARK_EVENT_LOG_DIR = "/spark-history"
 BRONZE_READY_SCHEMA = "planetory.tess-bronze-sector.v1"
 BRONZE_COVERAGE_SCHEMA = "planetory.tess-bronze-coverage.v1"
 BRONZE_DATA_SCHEMA = "planetory.tess-bronze.v1"
@@ -177,6 +178,21 @@ def yarn(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str
 
 def hdfs_exists(path: str) -> bool:
     return hdfs("dfs", "-test", "-e", path, check=False).returncode == 0
+
+
+def event_log_conf() -> list[str]:
+    """Spark History Server input, skipped until its directory exists so observability never blocks a run."""
+    if not hdfs_exists(SPARK_EVENT_LOG_DIR):
+        print(f"SPARK_EVENT_LOG_DISABLED missing={SPARK_EVENT_LOG_DIR}", flush=True)
+        return []
+    # Rolling files keep a multi-day Silver log readable while it is still running.
+    return [
+        "--conf", "spark.eventLog.enabled=true",
+        "--conf", f"spark.eventLog.dir=hdfs://planetory{SPARK_EVENT_LOG_DIR}",
+        "--conf", "spark.eventLog.compress=true",
+        "--conf", "spark.eventLog.rolling.enabled=true",
+        "--conf", "spark.eventLog.rolling.maxFileSize=128m",
+    ]
 
 
 def hdfs_json(path: str) -> tuple[dict[str, Any], str]:
@@ -427,6 +443,7 @@ def submit(
         "--conf", "spark.executorEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.appMasterEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.maxAppAttempts=1", "--conf", "spark.speculation=false",
+        *event_log_conf(),
         "/opt/planetory/tess_bronze.py",
         "--raw-path", f"hdfs://planetory{context['path']}",
         "--raw-release", context["release"],
