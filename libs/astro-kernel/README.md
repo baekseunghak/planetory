@@ -709,3 +709,7 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 - `bls_periodogram`·제공용 로그 격자·discoverability RULE·사용자 제출 매칭은 바꾸지 않는다. 새 탐색 버전은 discoverability의 upstream revision에 전달하되 제공용 SDE 정의·문턱을 자동 변경하지 않는다.
 
 BLS 선택 의존성에 scipy를 포함한다(`uv sync --locked --extra bls`). 수치 참조와 실제 실행 절차는 [실험 README](../../experiments/tess-bench/README.md#243-운영-커널-회귀)를 따른다. 같은 표본의 회귀는 독립 평가가 아니다.
+
+## 130 AI 재평가·이력 보존
+
+`astro_kernel.ai_reevaluation`은 모델/입력 변경 재추론, 임계값 변경 원점수 재사용, 실패·재시도 이력과 이전 성공 보존을 제공한다. DB/모델 런타임/게시 동작은 없다. [호출 계약과 검증 범위](../../docs/data/tess-ai-reevaluation-history.md)를 따른다.

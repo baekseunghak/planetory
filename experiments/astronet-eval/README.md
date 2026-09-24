@@ -192,3 +192,14 @@ Docker Desktop과 기존 118 고정 이미지·모델·변환 NPZ가 필요하�
 서로 다른 두 CPU TensorFlow 세션에서 실행하고 후보별 점수·상태를 정확히 비교한다. 정상 0점과 실패 null을 구분하며 같은 실패 두 번만으로 추론 재현성을 통과시키지 않는다. 결과는 `results/internal-126/<실행 ID>/`에 새로 저장한다. 기존 118 파일은 읽기 전용으로 사용한다. `verification_passed=true`는 해당 입력·환경의 내부 회귀 통과이며 운영 채택이 아니다.
 
 단위 검증: 2026-09-23 전체 67개 통과. 저장 입력 사전검사: 후보 55개·유효 view 55개·파일 hash 100개 확인. 실제 모델 배치는 55개 전부 성공했고 두 세션 결과가 정확히 일치했다. 실행·검산·리뷰 ZIP hash는 [126 실측 기록](../../docs/data/tess-astronet-internal-batch.md#실제-실행과-저장-결과-검산-2026-09-23)을 따른다.
+
+## 130 저장 점수 재평가 검증
+
+[130 계약·검증 결과](../../docs/data/tess-ai-reevaluation-history.md). 기존 126 결과를 읽어 검증용 임계값·ID·모델 변경 콜백으로 이력을 대조한다. TensorFlow를 실행하거나 운영 Gold를 생성하지 않는다.
+
+```powershell
+uv run --locked python -m pytest -q
+uv run --locked python -m astronet_eval.reevaluation_replay --source-run results/internal-126/20260923T112206Z-ba539ace/run
+```
+
+새 결과는 `results/reevaluation-130/`에 저장한다. 기존 출력은 덮어쓰지 않는다.
