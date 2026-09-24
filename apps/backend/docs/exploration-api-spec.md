@@ -558,7 +558,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
     "bundleId": "b-2", "bundleVersion": "v7", "publishedAt": "2026-09-09T20:00:00Z",
     "foldReferenceTimeBtjd": 1683.4231, "baseDays": 81.4,
     "observationBounds": [1683.35, 2570.12],
-    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1", "binningRevision": "10m-v1",
+    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1",
     "curveStepRule": "one_candidate_per_step"
   },
   "selectionRules": {
@@ -586,7 +586,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `bundle.bundleId` | DB `publication_bundles.id`를 `b-<id>` 문자열로 표현한다. 요청·응답·`X-Current-Bundle`에서 같은 값을 쓴다 |
 | `bundle.bundleVersion` | DB `bundle_version`과 같은 문자열이다. 숫자로 암묵 변환하지 않는다 |
 | `bundle.observationBounds` | `[세그먼트 startBtjd의 최솟값, 세그먼트별 startBtjd + nPoints × binMinutes / 1440의 최댓값]`. 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다(2026-09-17 결정) |
-| `bundle.binningRevision`, `segments[].binningRevision` | DB `binning_revision` 문자열 그대로(예: `"10m-v1"`). 숫자로 바꾸지 않는다([Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같다, 2026-09-17 결정). 한 판의 세그먼트는 revision이 하나이며 여럿이면 적재 계약 위반이다 |
+| 비닝 revision | 판 요약에 두지 않고 5.2절 `segments[].binningRevision`으로만 준다. 운영 revision은 TIC·섹터·원천 checksum을 재료로 한 해시라 여러 섹터 판이면 세그먼트마다 다르다([Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안), `astro_kernel.segment_revision`). 판 전체의 비닝 규칙은 manifest `binning`이 하나로 정한다(2026-09-23 결정) |
 | `bundle.curveStepRule` | `one_candidate_per_step` 고정. 한 단계가 매칭한 후보 하나를 더 제거하며 단계 수 = 제거 후보 수다(2.1절) |
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
 | `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다. `version`은 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열이며 별도 `sel-N`은 두지 않는다. `phaseWidthMax`·`maxDurationMultipleOfSuggested`·`allowEmptyPhaseSpan`은 그 버전의 `values.selection`([운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)), `minWindowDays`는 별 케이던스, `fineTune`은 판 manifest에서 온다. 제공 곡선의 케이던스는 bin 크기이므로 `minWindowDays = 2 × 판 세그먼트 binMinutes의 최솟값 / 1440`이다(제출 매칭 규칙 v0, 10분 bin이면 0.01389) |
@@ -628,12 +628,12 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
   "residual": {"status": "COMPLETED", "jobId": "rj-77", "computedAt": "2026-09-10T02:31:10Z"},
   "fluxUnit": "normalized",
   "segments": [
-    {"segmentId": "seg-1", "sector": 14, "binningRevision": "10m-v1",
+    {"segmentId": "seg-1", "sector": 14, "binningRevision": "bin-v1-8c1f…",
      "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 3900,
      "flux": [1.0001, 0.9998, null, 1.0003],
      "fluxScatter": 0.0012,
      "gaps": [[120, 135], [2010, 2044]]},
-    {"segmentId": "seg-2", "sector": 41, "binningRevision": "10m-v1",
+    {"segmentId": "seg-2", "sector": 41, "binningRevision": "bin-v1-2e07…",
      "startBtjd": 2419.99, "binMinutes": 10, "nPoints": 3820,
      "flux": [0.9999, 1.0002], "fluxScatter": 0.0011, "gaps": []}
   ]
@@ -1547,6 +1547,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-141 리뷰(윤성용) 반영. 고조파 판정을 **칸 반올림에서 주기 값 비교로** 고쳤다 — 배수 자리를 반올림하면 조정해도 닿을 수 없는 봉우리까지 제외됐다(0.5~40일 5000점 h=3 반례). 최소 간격 `2h+1`의 근거를 「같은 선택」이 아니라 **추천을 줄이는 정책**으로 고치고, 고조파 배수 공유가 **같은 신호 판정이 아님**을 적었다. `peakRuleVersion`에 알고리즘 변경 시 버전 갱신 조건을, 제안값에는 후속 BLS 계약 네 가지를 더했다 |
 | 2026-09-22 | S15P21C206-150 판 전환 재개 후처리 구현. 9.3절에 재개 사건의 저장 위치(`notifications` `type='reopen'`)와 payload, `reason`을 아직 싣지 않는 이유, 멱등 보장 방법을 적었다. 10장에 4단계 중 재개 판정만 구현했고 Redis 캐시 삭제·라벨 표식·내부 알림 경로는 미구현임을 명시했다 |
 | 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
+| 2026-09-23 | S15P21C206-256 정정. 5.1절 판 요약의 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. Gold 4.1 운영 revision은 섹터마다 다른 해시라, 한 판의 revision이 하나라는 옛 규칙으로는 여러 섹터 별의 분석 진입이 500이 됐다(`AnalysisService`가 적재 계약 위반으로 처리). 프론트는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 5.2절 예시도 섹터마다 다른 revision으로 고쳤다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

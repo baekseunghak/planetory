@@ -155,7 +155,6 @@ class AnalysisDataTest {
                 "끝은 마지막 bin의 끝이다");
         assertEquals("rm-1", bundle.residualModelVersion());
         assertEquals("pg-1", bundle.periodogramConfigVersion());
-        assertEquals("10m-v1", bundle.binningRevision());
         assertEquals("one_candidate_per_step", bundle.curveStepRule());
 
         var rules = context.selectionRules();
@@ -334,7 +333,7 @@ class AnalysisDataTest {
         Segment first = curve.segments().get(0);
         assertEquals("seg-" + sector14, first.segmentId());
         assertEquals(14, first.sector());
-        assertEquals("10m-v1", first.binningRevision());
+        assertEquals(revisionOf(14), first.binningRevision());
         assertEquals(1683.35, first.startBtjd());
         assertEquals(0, new BigDecimal("10").compareTo(first.binMinutes()));
         assertEquals(4, first.nPoints());
@@ -344,6 +343,16 @@ class AnalysisDataTest {
         assertArrayEquals(new int[] {2, 2}, first.gaps().get(0));
         assertEquals(41, curve.segments().get(1).sector());
         assertTrue(curve.segments().get(1).gaps().isEmpty());
+    }
+
+    /** 여러 섹터 판의 운영 revision은 섹터마다 다르다(Gold 계약 4.1). 판 하나로 모으면 실제 Gold에서 500이 난다. */
+    @Test
+    void 섹터마다_비닝_revision이_달라도_분석에_들어가고_곡선은_세그먼트의_revision을_그대로_준다() {
+        assertTrue(analysis.context(memberId, ticId).ready());
+
+        Curve curve = analysis.curve(memberId, ticId, query(currentBundleId, "0")).body();
+        assertEquals(List.of(revisionOf(14), revisionOf(41)),
+                curve.segments().stream().map(Segment::binningRevision).toList());
     }
 
     @Test
@@ -791,8 +800,13 @@ class AnalysisDataTest {
     private long insertSegment(long star, int sector, double startBtjd, Float[] flux, String gaps, String scatter) {
         return jdbc.queryForObject("INSERT INTO light_curve_segments(tic_id, sector, binning_revision, start_btjd,"
                         + " bin_minutes, n_points, flux, flux_scatter, gaps)"
-                        + " VALUES (?, ?, '10m-v1', ?, 10, ?, ?, ?::numeric, ?::jsonb) RETURNING id",
-                Long.class, star, sector, startBtjd, flux.length, flux, scatter, gaps);
+                        + " VALUES (?, ?, ?, ?, 10, ?, ?, ?::numeric, ?::jsonb) RETURNING id",
+                Long.class, star, sector, revisionOf(sector), startBtjd, flux.length, flux, scatter, gaps);
+    }
+
+    /** 운영 revision은 TIC·섹터·원천 checksum의 해시라 한 판 안에서도 섹터마다 다르다(Gold 계약 4.1). */
+    private static String revisionOf(int sector) {
+        return "bin-v1-sector" + sector;
     }
 
     private long insertBundle(long star, String status, String residualModelVersion, List<Long> segmentIds) {
