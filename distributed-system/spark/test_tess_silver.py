@@ -513,7 +513,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                 self.assertEqual(discard.called, discards)
                 self.assertEqual(written[-1]["status"], "failed" if discards else "terminal_failed")
 
-    def test_submit_requests_four_cores_per_executor_with_single_threaded_numerics(self):
+    def test_submit_requests_twenty_tasks_within_the_yarn_vcore_cap(self):
         captured = []
 
         def popen(command, **kwargs):
@@ -528,10 +528,13 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                    runtime_hdfs="/runtime.tar.gz", coverage=coverage, run_id="20260924T000000Z",
                    attempt_id="20260924T000100Z", pipeline_version="v", output="/o", final_output="/f",
                    output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={})
-        for conf in ("spark.executor.instances=5", "spark.executor.cores=4", "spark.executor.memory=6g",
-                     "spark.executor.memoryOverhead=4096", "spark.executorEnv.OMP_NUM_THREADS=1"):
+        for conf in ("spark.executor.instances=10", "spark.executor.cores=2", "spark.executor.memory=6g",
+                     "spark.executor.memoryOverhead=2048", "spark.executorEnv.OMP_NUM_THREADS=1"):
             with self.subTest(conf=conf):
                 self.assertIn(conf, captured)
+        # YARN rejects any container above yarn.scheduler.maximum-allocation-vcores=3 (2026-09-24 Canary).
+        cores = int(next(c for c in captured if c.startswith("spark.executor.cores=")).split("=")[1])
+        self.assertLessEqual(cores, 3)
 
     def test_tic_results_are_computed_before_any_coalesced_write(self):
         # A lazy persist would run all BLS work inside the coalesced write tasks.
