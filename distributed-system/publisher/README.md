@@ -26,6 +26,24 @@
 
 목업 원천 `fixtures/gold-toi270-s3.json`은 gold-roundtrip이 실제 TESS 곡선(TOI-270, Sector 3)으로 만든 계약 예시의 사본이다. 과학 기준값이 아니다. gold-roundtrip에서 게시 전 QA와 DB 왕복 검사를 통과했으므로 목업 경로에서는 QA를 다시 하지 않는다.
 
+## 로컬 시드(!201)와의 관계
+
+`S15P21C206-256`(MR `!201`, 강재민)의 로컬 Gold 시드(`experiments/distributed-pipeline/local-seed/`)도 같은 정본 절차로 적재한다. 목적이 다르다. 시드는 팀원 로컬 DB의 통합 테스트용이고 localhost만 받는다. 이 디렉터리는 운영 서비스 DB 적재의 정본 위치다(`S15P21C206-86`·`S15P21C206-87`).
+
+적재 단계는 한 벌로 모은다. `86`·`87`에서 다음을 한다.
+
+1. payload 계약을 하나로 정해 `contracts/gold`에 적는다. 시드 쪽 모양을 기준으로 삼는다.
+2. `load.publish`가 그 계약을 받게 하고, 시드가 먼저 갖춘 것을 옮긴다. 같은 트랜잭션 안 조회 검사, 이전 후보 `retired`와 `candidate_status_history`, 세그먼트 flux checksum 대조, preflight(Flyway 버전·rule-0·writer 역할), `observation_datasets`·처분·외부 라벨·AI 평가 적재다.
+3. 병합 뒤 시드는 합성 카탈로그·운영 설정·로컬 제한만 두고 적재는 `load.publish`를 부른다.
+
+지금 두 payload의 차이는 셋이다.
+
+| 항목 | 이 디렉터리(gold-roundtrip 그대로) | 로컬 시드 |
+| --- | --- | --- |
+| 세그먼트 checksum | 최상위 `checksums["segment:<섹터>:<revision>:flux"]` | 세그먼트 안 `seg["checksum"]` |
+| 관측 원천 | 없음 | `seg["observation"]` |
+| 후보 부가 기록 | 후보 수치만 | 처분·외부 라벨·AI 평가 |
+
 ## 적재 절차
 
 정본은 [시스템 아키텍처](../../docs/architecture/system-architecture.md) 「공개」와 [ERD](../../docs/architecture/database-erd.md) 결정 12다. `load.publish`가 그대로 밟는다.

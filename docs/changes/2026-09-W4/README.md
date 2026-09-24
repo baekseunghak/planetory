@@ -227,3 +227,4 @@
 | 2026-09-23 | 서비스 DB Gold 목업 적재와 배포 후속 정리 | S15P21C206-262 | publisher, gold-mock, mock-, gold_writer, registry-prune-daily, in-use, GCP interruptible | 구현·격리 검증 완료, 운영 반영 병합 후 | [기록](2026-09-23.md) |
 | 2026-09-23 | 서버 접속 순서와 OpenSSH 별칭을 지침에 추가 | - | AGENTS.md, tailscale ssh, ec2-a-ssh, node-1-ssh, .ssh/config | 문서 갱신 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | 사람 PC의 deploy 계정 SSH 허용 | - | tailnet ACL, deploy, tailscale ssh, sudo -u deploy | ACL 적용·접속 확인 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 로컬 Gold 시드(!201)와 적재 단계 수렴 방침 | S15P21C206-262 | local-seed, payload 계약, load.publish, 86·87 | 방침 기록 | [기록](2026-09-23.md) |
