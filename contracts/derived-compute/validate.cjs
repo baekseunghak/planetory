@@ -7,6 +7,9 @@ const valid = read('derived-compute.valid.json');
 const invalid = read('derived-compute.invalid.json');
 const clone = value => structuredClone(value);
 
+// README 3.4절 표. 버전이 격자 간격을 고정한다.
+const PERIODOGRAM_CONFIGS = {'pg-log5000-v1': {spacing: 'log'}};
+
 const fail = code => {
   const error = new Error(code);
   error.code = code;
@@ -57,6 +60,15 @@ function validateRequestCommon(request) {
   if (typeof request.residual_model_version !== 'string' || request.residual_model_version.length === 0
       || typeof request.periodogram_config_version !== 'string'
       || request.periodogram_config_version.length === 0) fail('missing_calculation_version');
+  if (!Object.hasOwn(PERIODOGRAM_CONFIGS, request.periodogram_config_version)) {
+    fail('unsupported_periodogram_config_version');
+  }
+}
+
+function validateRuntime(response) {
+  const runtime = response.runtime;
+  if (!runtime || !['worker_image', 'python', 'numpy', 'astropy', 'astro_kernel']
+    .every(key => typeof runtime[key] === 'string' && runtime[key].length > 0)) fail('invalid_runtime');
 }
 
 function validateInputSegments(segments) {
@@ -70,9 +82,8 @@ function validateInputSegments(segments) {
 
 function removedCandidateIds(request) {
   if (request.operation === 'residual') {
-    if (!Array.isArray(request.removed_candidates) || request.removed_candidates.length === 0) {
-      fail('invalid_operation_payload');
-    }
+    // 빈 목록은 허용한다(README 3.2절). 잔차는 입력 flux와 같다.
+    if (!Array.isArray(request.removed_candidates)) fail('invalid_operation_payload');
     const ids = request.removed_candidates.map(candidate => candidate.candidate_id);
     if (new Set(ids).size !== ids.length) fail('duplicate_candidate_id');
     if (!isSortedUnique(ids)) fail('invalid_removed_candidate_order');
@@ -87,7 +98,7 @@ function removedCandidateIds(request) {
   }
 
   const ids = request.removed_candidate_ids;
-  if (!Array.isArray(ids) || ids.length === 0) fail('invalid_operation_payload');
+  if (!Array.isArray(ids)) fail('invalid_operation_payload');
   if (new Set(ids).size !== ids.length) fail('duplicate_candidate_id');
   if (!isSortedUnique(ids)) fail('invalid_removed_candidate_order');
   return ids;
@@ -106,7 +117,8 @@ function validateRequest(request) {
     validateInputSegments(request.residual_segments);
     const grid = request.period_grid;
     if (!grid || !(grid.min_days > 0) || !(grid.max_days > grid.min_days)
-        || !Number.isInteger(grid.count) || grid.count <= 0 || !['linear', 'log'].includes(grid.spacing)) {
+        || !Number.isInteger(grid.count) || grid.count <= 0
+        || grid.spacing !== PERIODOGRAM_CONFIGS[request.periodogram_config_version].spacing) {
       fail('invalid_period_grid');
     }
   }
@@ -121,6 +133,7 @@ function validateErrorResponse(call, response) {
     if (response[field] !== call.request[field]) fail('response_correlation_mismatch');
   }
   assert.deepEqual(response.removed_candidate_ids, ids);
+  validateRuntime(response);
   if (!['RESIDUAL', 'PERIODOGRAM'].includes(response.error?.stage)
       || typeof response.error.code !== 'string' || response.error.code.length === 0
       || typeof response.error.retryable !== 'boolean'
@@ -138,9 +151,14 @@ function validateSuccess(call) {
     if (response[field] !== call.request[field]) fail('response_correlation_mismatch');
   }
   assert.deepEqual(response.removed_candidate_ids, ids);
+  validateRuntime(response);
 
   if (response.operation === 'residual') {
     validateFluxSegments(response.result?.residual_segments);
+    if (ids.length === 0) {
+      assert.deepEqual(response.result.residual_segments.map(segment => segment.flux),
+        call.request.curve_segments.map(segment => segment.flux), 'empty removal must preserve flux');
+    }
     if (response.result.residual_model_version !== call.request.residual_model_version) fail('version_mismatch');
     const nPoints = call.request.curve_segments.reduce((sum, segment) => sum + segment.n_points, 0);
     const nValid = call.request.curve_segments.reduce(
@@ -195,11 +213,11 @@ valid.calls.forEach(validateSuccess);
 
 assert.equal(invalid.contract_version, valid.contract_version);
 assert.equal(invalid.fixture_kind, 'synthetic-contract-only');
-const baseCall = valid.calls.find(call => call.id === invalid.base_call);
-assert.ok(baseCall, 'invalid fixture base call must exist');
 assert.equal(new Set(invalid.request_cases.map(testCase => testCase.id)).size, invalid.request_cases.length);
 
 for (const testCase of invalid.request_cases) {
+  const baseCall = valid.calls.find(call => call.id === (testCase.base_call ?? invalid.base_call));
+  assert.ok(baseCall, `${testCase.id} base call must exist`);
   const call = clone(baseCall);
   mutate(call, testCase.mutation);
   assert.throws(

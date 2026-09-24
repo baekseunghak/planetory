@@ -120,7 +120,7 @@ removed_candidates: candidate_id, transit_model
 residual_model_version, periodogram_config_version, period_grid
 ```
 
-Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
+Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. `period_grid`는 `periodograms` 열(범위·점 수)과 manifest의 `period_grid.spacing`으로 조립한다(계약 3.3절, 88 제안). Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
 
 위 목록은 책임 경계 요약이다. wire 형식은 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)의 `schema_version=1.0`, 접두 문자열 식별자, JSON `null`, 정렬 규칙과 두 단계 fixture를 따른다. fixture의 수치는 직렬화 예제이며 `S15P21C206-113`·120의 과학 규칙이나 131의 수치 기준을 대신하지 않는다.
 

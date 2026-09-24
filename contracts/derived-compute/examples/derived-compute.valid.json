@@ -26,7 +26,7 @@
         "tic_id": "123456789",
         "fold_reference_time_btjd": 1683.4231,
         "residual_model_version": "box-divide-v0",
-        "periodogram_config_version": "bls-log-v1",
+        "periodogram_config_version": "pg-log5000-v1",
         "curve_segments": [
           {
             "segment_id": "seg-1001",
@@ -80,6 +80,13 @@
         "tic_id": "123456789",
         "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
         "result": {
           "residual_model_version": "box-divide-v0",
           "residual_segments": [
@@ -106,7 +113,7 @@
         "tic_id": "123456789",
         "fold_reference_time_btjd": 1683.4231,
         "residual_model_version": "box-divide-v0",
-        "periodogram_config_version": "bls-log-v1",
+        "periodogram_config_version": "pg-log5000-v1",
         "removed_candidate_ids": ["c-9", "c-10"],
         "residual_segments": [
           {
@@ -135,11 +142,74 @@
         "tic_id": "123456789",
         "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
         "result": {
-          "periodogram_config_version": "bls-log-v1",
+          "periodogram_config_version": "pg-log5000-v1",
           "n_periods": 3,
           "period_days": [0.5, 4.47213595499958, 40.0],
           "power": [0.12, 0.83, 0.21]
+        }
+      }
+    },
+    {
+      "id": "residual-empty-removal",
+      "request": {
+        "schema_version": "1.0",
+        "operation": "residual",
+        "job_id": "rj-79",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "fold_reference_time_btjd": 1683.4231,
+        "residual_model_version": "box-divide-v0",
+        "periodogram_config_version": "pg-log5000-v1",
+        "curve_segments": [
+          {
+            "segment_id": "seg-1001",
+            "sector": 14,
+            "binning_revision": "10m-v1",
+            "start_btjd": 1683.35,
+            "bin_minutes": 10,
+            "n_points": 6,
+            "flux": [1.0001, 0.9998, null, 0.9989, 1.0002, 1.0003]
+          }
+        ],
+        "removed_candidates": []
+      },
+      "response": {
+        "schema_version": "1.0",
+        "operation": "residual",
+        "job_id": "rj-79",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "removed_candidate_ids": [],
+        "ok": true,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
+        "result": {
+          "residual_model_version": "box-divide-v0",
+          "residual_segments": [
+            {
+              "segment_id": "seg-1001",
+              "n_points": 6,
+              "flux": [1.0001, 0.9998, null, 0.9989, 1.0002, 1.0003]
+            }
+          ],
+          "n_input_points": 6,
+          "n_valid_input": 5,
+          "n_finite_residual": 5
         }
       }
     }
