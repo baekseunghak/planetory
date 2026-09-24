@@ -15,3 +15,7 @@ docker-compose -f compose.yaml --profile distributed up -d
 ```
 
 기본 Hadoop 이미지는 로컬·GCP x86_64 검사용이다. 실제 GCP 검증에서는 `TARGET_PLATFORM=linux/amd64`를 사용한다.
+
+## 로컬 통합 시드
+
+Gold 실데이터 전에 프론트·백엔드 통합 테스트를 하기 위한 합성 Gold·튜토리얼·챌린지 적재는 [local-seed](local-seed/README.md)를 따른다(S15P21C206-256). 분산 PoC를 거치지 않고 로컬 `service-db`에 Publisher 계약 순서로 직접 넣는다.

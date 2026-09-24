@@ -144,3 +144,14 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 | NTF-01 상태 변경 | FE/API RELABEL·6종 설정은 구현 | E7 DB 최종 값·매칭 경험자 연결 구현. 실제 외부 게시·AI 경로 인수는 별도 |
 
 174는 정책을 담당하고 175는 V23·알림함·설정·E1~E7 DB 사건 경계를 구현했다. 220·221/244 두 실제 계정·배포 인수는 별도이며, 탈퇴 원본 삭제·보존·익명화·재가입·마지막 발견자 정책은 DEC-11/179의 미정 상태를 유지한다.
+
+## S15P21C206-256 섹터별 비닝 revision 소비자 정합화 (2026-09-23)
+
+상태: 탐사 API·Backend 반영(MR !201 리뷰 중). [Gold 4.1 채택안](../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) 승인(MR !101)과는 별개다.
+
+[탐사 API](../../apps/backend/docs/exploration-api-spec.md) 5.1절은 한 판의 세그먼트 revision이 하나라고 정했고, `AnalysisService`는 revision이 여럿인 판을 적재 계약 위반으로 처리해 분석 진입이 500이 됐다. Gold 4.1 운영 revision과 `astro_kernel.segment_revision`은 TIC·섹터·원천 checksum의 해시라 여러 섹터 별이면 세그먼트마다 다르다. 옛 규칙은 fixture 값(`10m-v1`)에서 온 것이라 소비자 쪽을 고친다(강재민 결정).
+
+- 5.1절 판 요약에서 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. 판 전체의 비닝 규칙은 manifest `binning`이 정한다.
+- Frontend는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 개발 fixture의 판 요약 값만 뺐다.
+- [로컬 시드](../../experiments/distributed-pipeline/local-seed/README.md)는 합성 별의 revision을 `segment_revision`으로 섹터마다 만들어 통합 테스트가 이 경우를 지난다.
+- 남은 확인: Publisher(86·87·125)가 4.1 규칙으로 실제 여러 섹터 별을 적재했을 때 분석 진입.

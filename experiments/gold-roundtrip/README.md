@@ -1,5 +1,66 @@
 # gold-roundtrip: Gold 적재 예제·PostgreSQL round-trip·공개 QA fixture
 
+## 125 연결 검증 개발 상태 (2026-09-24)
+
+### !209 비차단 리뷰 보완
+
+`empty_catalog_upstream_policy_required`는 무신호 별의 정책상 공개 제외이며 계산·게시 실패가 아니다. 현재 `decision=PUBLISH_REJECTED`만으로 실패를 집계하지 말고 이 사유를 분리한다. 별도 상태값과 Publisher 매핑은 79의 Gold QA 계약 정리에서 확정하며 이번에는 반환값을 변경하지 않는다.
+
+checksum 호환 모듈은 공개 상수·함수를 명시적으로 import한다. DB 검증기는 libpq 파서로 접속 정보를 확인하고 `hostaddr`·`service` 및 환경의 `PGHOSTADDR`·`PGSERVICE`·`PGSERVICEFILE` 우회를 거절한다. 허용 호스트를 loopback 주소로 고정하고 접속 후 실제 연결 주소를 DDL 전에 재확인한다. Docker 내부 서버 주소가 아닌 클라이언트 연결 주소를 검사한다.
+
+보완 검증: 연결·checksum·직렬화 테스트 53개 통과. 사용자 실행 `db-roundtrip-07646dd4-r2.json`에서 11개 payload·1,277개 필드 비교가 통과하고 모두 rollback되었다. 보고서의 입력·migration·실행 코드 38개 해시도 일치했다. 보고서 SHA-256은 `bf1421e3921a6e3cde9a57999d0e0d9c74ea9d7e35649cbf8ec30bcd7c898291`이다.
+
+MR 첨부용 `results/review-125-07646dd4-r2.zip`은 18항목이며 SHA-256은 `60758354c3bf74302d6de02df78f1ea1a749aade51450e2bd4657016059f876c`다. ZIP 내부 checksum을 검산했다. 기존 연결 manifest는 최초 실행 코드의 기록으로 보존하며, 명시 import로 바뀐 호환 shim과 새 DB 실행기는 ZIP의 review-code에 별도로 담았다. 과거 코드 해시를 현재 코드 해시로 덮어쓰지 않는다. 수치 payload를 재사용했고 BLS를 재실행하지 않았다.
+
+`astro_kernel.gold_serialization.assemble`은 122 후보·123 세그먼트/discoverability·124 외부 조인을 받는 공용 직렬화 커널이다. `gold_roundtrip.serialization`은 호환 import이며, 이 실험 패키지는 저장 결과 연결 및 DB 검증을 담당한다. 아래 117의 과거 왕복 검증을 125 완료 근거로 재사용하지 않는다.
+
+- 상위 결과가 모두 ready일 때만 후보 ID와 모델, 외부 판정의 일관성을 확인하고 여러 세그먼트의 float32 배열·NULL/gaps·레코드 checksum·manifest를 구성한다. 한 결과라도 보류이면 payload 없이 `PUBLISH_REJECTED`를 반환한다.
+- 입력은 `catalog`, `segmented`, `discovery`, `external`, 제거 전 `periodogram`(candidate_id=null, periods/power), 호출자 예약 `segment_ids`(Sector 문자열→BIGINT), `input_snapshot_ids`, `calculation_versions`, `fold_reference_time_btjd`, `base_days`, `fine_tune`, `ai_policy`다. 123의 런타임 Periodogram 객체는 연결 실행기에서 배열로 투영한다.
+- DB ID 할당·적재·current 전환·`applied_at` 생성은 하지 않는다. 결과의 `validated`는 커널 검사만 의미하며 항상 `publishable=false`다. 공용 구현 배치가 운영 Publisher 연결·배포를 뜻하지 않는다.
+- AI는 `policy_not_executed` 입력만 받으며 결정 참조와 두 버전 문자열을 호출자가 명시한다. 테스트 문자열은 운영 채택값이 아니다. 126 내부 점수는 입력으로 받지 않으며 `ai_results=[]`만 구성한다.
+- `previous_bundle`을 받으면 기존 퇴역 후보의 모델·판정 표시와 별칭을 보존하고 누락·임의 변경·재활성화를 거절한다. 기존 판정 유지 대상 ID, lifecycle action, 검증된 변경 이력 제안을 별도로 내보낸다. 적용 시각·원자적 적용은 Publisher 책임이다. 빈 후보의 상위 보류를 해제하지 않으며 무신호 게시 정책을 변경하지 않는다.
+- 원본 FITS checksum·원본 품질 필터 시각 기준 fold/기간·저장 주기도 연결과 실제 외부 보류를 검산했다. 이전 11개 DB 검증 이후 추가된 이력 투영은 새 결과로 DB 재확인이 필요하다. 퇴역 후보·별칭 보존은 단위 검증이며 운영 DB 생명주기 검증과 구분한다.
+
+```powershell
+uv run --locked python -m pytest tests/test_serialization.py tests/test_canonical.py tests/test_qa.py -q
+```
+
+실행 결과: 신규 직렬화 및 기존 checksum·QA **39 passed**. PostgreSQL 및 실제 FITS/BLS 재실행은 이 결과에 포함하지 않는다. 117 lockfile은 최신 로컬 패키지 메타데이터에 맞춰 갱신했다.
+
+### 125 저장 결과 연결 검산
+
+123 `run-20260923T155440Z-e010c680`은 16곡선 parity 통과(ready 11, held 5), 실제 실행 160.031초다. plan·출력 47개 해시를 확인했다. 124 `run-20260922T141154Z-696cda44` 출력 3개 해시와 함께 대조한 연결 결과는 `results/connection-125/run-20260923T164518Z-3e244b94`에 저장했다.
+
+- 실제 외부 조인 11개는 hold이므로 Gold payload 생성 거절 11개. 실제 외부 라벨 게시 성공을 주장하지 않는다.
+- 124의 저장된 `controlled_external.direct` 11개로 별도 성공 경로를 확인했다. 후보 ID 18개를 보존하며 원본 FITS의 품질 필터 후 시각으로 fold 기준을 계산했다. 신규 detrending·BLS는 실행하지 않았다.
+- 숫자 ID, AI 미실행 버전 문자열, 외부 라벨은 통제 fixture다. 운영 ID 예약·정책 문자열 확정·과학 QA 전체 충족의 증거가 아니다.
+- 최초 연결 실행기 및 기존 검증은 42개 통과했고 DB 실행 결과는 아래에 기록했다.
+
+```powershell
+uv run --locked python -m gold_roundtrip.connection_replay --segmentation ../tess-bench/results/segmentation-regression/run-20260923T155440Z-e010c680 --external ../tess-bench/results/external-catalog-candidate-regression/run-20260922T141154Z-696cda44
+uv run --locked python -m gold_roundtrip.connection_db --connection-run results/connection-125/run-20260923T164518Z-3e244b94 --report results/connection-125/db-roundtrip-3e244b94.json
+```
+
+DB 명령은 loopback 개발 PostgreSQL만 허용하며 기존 117의 로컬 연결 기본값 또는 `DATABASE_URL`을 사용한다. V1~V24(실행 시 현재 migration 목록)를 새 `gold125_*` 스키마에 적용하고, 각 통제 payload의 여러 세그먼트·후보·외부 참조·판정을 적재·조회한다. 이 실행기가 검증용 `applied_at`을 공급한다. 모든 변경은 같은 트랜잭션에서 실행한 뒤 rollback하여 스키마까지 제거한다. current 전환·운영 Publisher·DB ID 할당은 검증하지 않는다. 기존 역할·테이블은 삭제하지 않으며 migration 파일은 수정하지 않는다.
+
+### 125 독립 PostgreSQL 실행 확인
+
+사용자가 `connection_db`를 실행한 결과 통제 payload 11개, 필드 비교 989개가 통과했다. 보고서 `results/connection-125/db-roundtrip-3e244b94.json`의 SHA-256은 `7c0de39b191d8e983a4fd8dd6c459af88b17509dd5223cf3e747419b20ee06c9`다. 입력 13개와 V1~V24 migration 24개의 해시 총 37개를 저장 파일에서 다시 확인해 모두 일치했다. 각 실행은 rollback되었으며 운영 공개·current 전환은 수행하지 않았다.
+
+실제 수치 배열·후보 모델에 통제 라벨과 fixture ID를 연결한 저장 정합성 검증이며, 외부 hold 11개를 해소했다는 뜻은 아니다.
+
+### 공용 커널·이력 보완 후 검증
+
+공용 checksum·직렬화 구현으로 이동한 뒤 astro-kernel 전체와 직렬화·checksum·QA·연결 테스트를 합쳐 **355 passed**를 확인했다. 기존 산출물만 재연결한 최신 실행은 `results/connection-125/run-20260923T170809Z-07646dd4`이며, 실제 외부 보류 11개 거절·통제 성공 11개·후보 18개·상위 보류 5개는 동일하다. 이전 DB 보고서는 이전 출력에 대한 근거로 보존한다. 새 이력 투영을 포함한 다음 DB 검증은 아직 실행 전이다.
+
+```powershell
+uv run --locked python -m gold_roundtrip.connection_db --connection-run results/connection-125/run-20260923T170809Z-07646dd4 --report results/connection-125/db-roundtrip-07646dd4.json
+```
+
+위 명령의 사용자 실행과 저장 보고서 검산을 완료했다. 11개 payload·1,277개 필드 비교가 통과했고 모든 트랜잭션은 rollback되었다. 보고서 SHA-256은 `b1997360bfd44e683fd8e08ea03042710e63ce5f64aef06dec9804d1a5e5014c`다. 연결 실행 및 DB 보고서에 기록된 입력·출력·코드·migration의 고유 106개 경로를 재검산해 불일치 0건을 확인했다. 앞의 실행 대기 설명은 이 확인 이전 상태다.
+
+리뷰 자료는 Git 제외 경로 `results/review-125-07646dd4.zip`에 만들었으며 MR 첨부로 전달한다. 연결 JSON·DB 보고서·내부 checksum 목록 총 15항목(원본 FITS 없음), SHA-256은 `2ee5e0b89ce558a612bfea50db95def3810532086158be9db21700a0fa840f28`이다. ZIP 내부 파일 해시도 전수 일치한다. 106개 원본 경로 전체가 ZIP에 포함되는 것은 아니다. 실제 외부 라벨 보류·fixture ID·current 미전환·운영 미검증 한계는 그대로다.
+
 Jira `S15P21C206-117` (계획 ID D09) / 담당: 윤성용 / 상태: TOI-270 Sector 3 예제로 로컬 PostgreSQL 18.6 QA+왕복 62항목 통과, MR !64 1차 리뷰 반영, 재검토 대기
 
 실제 TESS 곡선 하나로 Gold 판(세그먼트·주기도·후보·manifest) payload 를 만들고, 저장소의 Flyway SQL(V1~V8)을 그대로 적용한 격리
