@@ -70,6 +70,8 @@ npm run dev
 
 예를 들어 Git에 있는 백엔드를 로컬 8080 포트로 실행했다면 `API_PROXY_TARGET=http://127.0.0.1:8080`으로 설정한다. Compose 프론트 컨테이너에서 실행할 때는 같은 네트워크의 `http://backend:8080`을 사용한다. 설정하지 않으면 개발 서버는 API 요청에 503 안내를 돌려준다. 실제 서버 모드에 자동 가짜 로그인은 없다.
 
+로컬 DB에 Gold가 없으면 가입이 503으로 실패한다. 먼저 [로컬 시드](../../experiments/distributed-pipeline/local-seed/README.md)를 적재한다. 튜토리얼·챌린지 별의 정답표도 그 README에 있다.
+
 **2026-09-15 상태:** 실제 SSAFY·Google 로그인, 회원 조회·세션·CSRF·로그아웃과 공통 오류 계약을 검증했다. 지웅님과 공통 기반 사용 방향에 이견이 없음을 서진님이 전달했다. 배포 지연을 감안해 코드 정리·공유·리뷰를 진행하며, 실제 A 화면 연결·배포 HTTPS·Safari와 최종 리뷰/병합은 별도로 남긴다. [검증 기록](docs/verification.md), [현재 인수 상태](docs/ticket-201-readiness.md)를 따른다.
 
 ## 검증 명령

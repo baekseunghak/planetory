@@ -90,7 +90,8 @@ class AnalysisControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string(AnalysisController.CURRENT_BUNDLE_HEADER, "b-2"))
                 .andExpect(jsonPath("$.bundle.observationBounds[1]").value(2570.12))
-                .andExpect(jsonPath("$.bundle.binningRevision").value("10m-v1"))
+                // revision은 섹터마다 달라 판이 아니라 곡선의 세그먼트에 싣는다(Gold 계약 4.1).
+                .andExpect(jsonPath("$.bundle.binningRevision").doesNotExist())
                 .andExpect(jsonPath("$.selectionRules.version").value("rule-3"))
                 .andExpect(jsonPath("$.selectionRules.fineTune.halfWidthCells").value(3))
                 .andExpect(jsonPath("$.currentCurveContext.removedCandidateIds[0]").value("c-401"))
@@ -111,7 +112,7 @@ class AnalysisControllerTest {
     private static AnalysisContext analysisContext(String notice) {
         return new AnalysisContext("123456789", new StarSummary(3, List.of(14, 41, 54), 9.8), true,
                 new BundleSummary("b-2", "v7", null, 1683.4231, new BigDecimal("81.4"),
-                        new double[] {1683.35, 2570.12}, "rm-1", "pg-1", "10m-v1", "one_candidate_per_step"),
+                        new double[] {1683.35, 2570.12}, "rm-1", "pg-1", "one_candidate_per_step"),
                 new SelectionRules("rule-3", 0.0139, 0.25, 3, false, new FineTune(3)),
                 new ProgressSummary("in_progress", 1, List.of("c-401"), null, false, 0, null),
                 new CurrentCurveContext("b-2", 1, List.of("c-401"), "rm-1", "pg-1", notice),
