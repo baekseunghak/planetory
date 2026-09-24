@@ -648,6 +648,11 @@ def run(args: argparse.Namespace) -> None:
                 iteration_location=iteration_location,
             )
         ).persist(StorageLevel.DISK_ONLY)
+        # Compute every TIC here, one task per shuffle partition. The writes below coalesce to
+        # output_partitions without a shuffle, so leaving this lazy would run all BLS work inside
+        # only that many tasks and leave a multi-hour tail on a full run.
+        processed_tics = results.count()
+        print(f"SILVER_TICS_PROCESSED count={processed_tics}", flush=True)
 
         targets = spark.createDataFrame(
             results.filter(lambda result: result.target is not None).map(lambda result: result.target),

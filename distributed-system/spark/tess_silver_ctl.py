@@ -242,8 +242,12 @@ def submit(
         "--archives", f"hdfs://planetory{runtime_hdfs}#environment",
         "--conf", "spark.driver.port=7078", "--conf", "spark.blockManager.port=7079",
         "--conf", f"spark.yarn.stagingDir=hdfs://planetory/lake/silver/.spark-staging/run={run_id}/attempt={attempt_id}",
-        "--conf", "spark.executor.instances=5", "--conf", "spark.executor.cores=2",
-        "--conf", "spark.executor.memory=6g", "--conf", "spark.executor.memoryOverhead=2048",
+        # Silver is CPU-bound BLS per TIC. Workers have 6 vCPUs; 4 tasks each leave room for the
+        # DataNode/NodeManager, and 10 GiB fits the smallest (16 GiB) NodeManager. YARN schedules
+        # by memory only, so the NodeManager vcore setting does not cap this.
+        "--conf", "spark.executor.instances=5", "--conf", "spark.executor.cores=4",
+        "--conf", "spark.executor.memory=6g", "--conf", "spark.executor.memoryOverhead=4096",
+        "--conf", "spark.executorEnv.OMP_NUM_THREADS=1",
         "--conf", "spark.driver.memory=2g", "--conf", "spark.driver.memoryOverhead=1024",
         "--conf", "spark.pyspark.python=/usr/bin/python3",
         "--conf", "spark.executorEnv.PYSPARK_PYTHON=/usr/bin/python3",

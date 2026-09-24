@@ -226,3 +226,4 @@
 | 2026-09-23 | 전체 Silver run을 252 Sector 70 완료 뒤 시작(결정 A) | S15P21C206-78 | sudoers 동일 ID, completed_through 70 | 결정 | [기록](2026-09-23.md) |
 | 2026-09-24 | 재기동 전 실패 attempt staging 정리·코드 결함 예외 분류 | S15P21C206-78 | discard_failed_attempt, unexpected_processing_error | 구현·로컬 검증 완료 | [기록](2026-09-24.md) |
 | 2026-09-24 | 보강 release Canary 합격·전체 run 시작 조건 충족 | S15P21C206-78 | 20260924T063740Z, _0061, completed_through 70, HDFS 58% | Canary 합격, 전체 run 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | Bronze TIC 수 집계와 전체 run 처리량 보강 | S15P21C206-78 | 489,374, 128,258, executor.cores=4, results.count | 구현·로컬 검증 완료 | [기록](2026-09-24.md) |

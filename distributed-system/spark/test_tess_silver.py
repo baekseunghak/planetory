@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import inspect
 import json
 import sys
 import unittest
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "libs" / "astro-kernel"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import tess_silver  # noqa: E402
 from tess_silver import (  # noqa: E402
     MASKED_PROVENANCE_STATUS,
     PROVENANCE_STATUS,
@@ -28,6 +30,7 @@ from tess_silver_ctl import (  # noqa: E402
     bronze_coverage,
     discard_failed_attempt,
     run_attempt,
+    submit,
     validate_bronze_coverage,
 )
 from astro_kernel.preprocessing import (  # noqa: E402
@@ -509,6 +512,32 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                     run_attempt(args=args, coverage=coverage)
                 self.assertEqual(discard.called, discards)
                 self.assertEqual(written[-1]["status"], "failed" if discards else "terminal_failed")
+
+    def test_submit_requests_four_cores_per_executor_with_single_threaded_numerics(self):
+        captured = []
+
+        def popen(command, **kwargs):
+            captured.extend(command)
+            raise RuntimeError("stop after capturing the command")
+
+        coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
+                    "bronze_paths": ["/lake/bronze/tess/sector=0001"]}
+        with patch("tess_silver_ctl.subprocess.Popen", side_effect=popen), \
+                self.assertRaisesRegex(RuntimeError, "stop after"):
+            submit(release_dir=Path("/opt/planetory-silver/releases/20260924T000000Z"),
+                   runtime_hdfs="/runtime.tar.gz", coverage=coverage, run_id="20260924T000000Z",
+                   attempt_id="20260924T000100Z", pipeline_version="v", output="/o", final_output="/f",
+                   output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={})
+        for conf in ("spark.executor.instances=5", "spark.executor.cores=4", "spark.executor.memory=6g",
+                     "spark.executor.memoryOverhead=4096", "spark.executorEnv.OMP_NUM_THREADS=1"):
+            with self.subTest(conf=conf):
+                self.assertIn(conf, captured)
+
+    def test_tic_results_are_computed_before_any_coalesced_write(self):
+        # A lazy persist would run all BLS work inside the coalesced write tasks.
+        source = inspect.getsource(tess_silver.run)
+        self.assertIn("results.count()", source)
+        self.assertLess(source.index("results.count()"), source.index(".coalesce("))
 
     def test_malformed_bronze_row_is_isolated_before_sorting(self):
         row = bronze_row()
