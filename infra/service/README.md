@@ -263,6 +263,19 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
 곧 서빙되는 판이다.
 
+## 온라인 계산 Worker (S15P21C206-88)
+
+`derived-compute`는 잔차·주기도를 계산한다. Backend만 `http://derived-compute:8090/internal/v1/derived-compute`로 부르며 호스트 포트를 열지 않는다. DB·Redis 자격 증명을 넘기지 않는다. 구현과 환경 변수는 [apps/derived-compute](../../apps/derived-compute/README.md)에 있다.
+
+| `.env` 변수 | 기본값 | 뜻 |
+| --- | --- | --- |
+| `DERIVED_COMPUTE_IMAGE` | 없음 | 배포 job이 채운다. 응답의 `runtime.worker_image`로도 나간다 |
+| `DERIVED_COMPUTE_CPUS` | `1` | 컨테이너 CPU 상한(계약 `cpu_per_job`) |
+| `DERIVED_COMPUTE_MEMORY` | `2048m` | 컨테이너 메모리 상한(계약 `memory_mib_per_job`) |
+| `DERIVED_COMPUTE_MEMORY_LIMIT_MIB` | `1900` | 프로세스 상한. 컨테이너 상한보다 낮아야 OOM kill 대신 `memory_exhausted`로 답한다 |
+
+값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 교체 뒤 `docker compose ps derived-compute`의 `healthy`를 사람이 확인한다.
+
 ## 배포와 롤백
 
 `deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
@@ -271,6 +284,7 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 | --- | --- | --- | --- |
 | `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
+| `derived-compute` | 없음(호스트 포트 없음, 이미지 `HEALTHCHECK`만) | 없음 | — |
 
 프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
 

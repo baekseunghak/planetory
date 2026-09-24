@@ -84,6 +84,8 @@
 
 성공 응답은 요청의 `schema_version`, `operation`, `job_id`, `attempt`, `publication_bundle_id`, `tic_id`, `removed_candidate_ids`를 그대로 돌려준다. Backend는 하나라도 다르면 결과를 채택하지 않는다.
 
+envelope(`ok=true`·`ok=false`)는 HTTP 200으로 보낸다(88 제안). envelope가 없는 응답은 둘뿐이다. 본문을 JSON 객체로 읽을 수 없으면 400·411·413이며 Backend 조립 결함이라 재시도하지 않는다. 인스턴스 동시 실행 상한이 찼으면 503이며 Backend는 연결 실패와 같이 `worker_unavailable`로 본다.
+
 Worker가 만든 응답(성공·오류)은 `runtime`을 싣는다(88 제안). 결과를 낸 실행 환경을 131 비교와 재현에 남기기 위한 것이며 Backend는 채택 판단에 쓰지 않는다.
 
 | 필드 | 타입 | 규칙 |

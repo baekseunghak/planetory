@@ -129,6 +129,26 @@ services:
     networks:
       - service
 
+  # 온라인 잔차·주기도 Worker [S15P21C206-88]. Backend만 service 네트워크 안에서
+  # http://derived-compute:8090 으로 부른다. 호스트 포트를 열지 않으며 DB·Redis 자격 증명을 받지 않는다.
+  # backend의 depends_on에 넣지 않는다. Worker가 없으면 잔차 요청만 503이 되고 나머지 API는 돈다.
+  #
+  # 자원은 계약 5절의 실측 전 시작값(cpu_per_job=1, memory_mib_per_job=2048, instance_concurrency=1)이다.
+  # 프로세스 상한(MEMORY_LIMIT_MIB)을 컨테이너 상한보다 낮게 둬야 OOM kill(응답 없음)보다
+  # memory_exhausted 응답이 먼저 난다. 값 조정은 S15P21C206-104 실측 뒤에 한다.
+  derived-compute:
+    image: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      WORKER_IMAGE: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+      DERIVED_COMPUTE_INSTANCE_CONCURRENCY: "1"
+      DERIVED_COMPUTE_MEMORY_LIMIT_MIB: ${DERIVED_COMPUTE_MEMORY_LIMIT_MIB:-1900}
+    cpus: ${DERIVED_COMPUTE_CPUS:-1}
+    mem_limit: ${DERIVED_COMPUTE_MEMORY:-2048m}
+    networks:
+      - service
+
   # ERD를 낸다. 호스트 포트를 열지 않고 service 네트워크 안에만 뜨며 Tunnel이
   # origin으로 잡는다. 외부 인바운드는 0개로 유지된다.
   #   erd.planetory.space -> http://erd:80  (Liam)
