@@ -80,7 +80,6 @@ export function analysisContextFixture(
         observationBounds: [1683.35, 2420.0594444444446],
         residualModelVersion: currentCurveContext.residualModelVersion,
         periodogramConfigVersion: currentCurveContext.periodogramConfigVersion,
-        binningRevision: "10m-v1",
         curveStepRule: "one_candidate_per_step",
       },
       selectionRules: {

@@ -16,6 +16,7 @@
 | 42/D03 기본 전처리 커널·119 회귀 계약 | [astro-kernel](../../libs/astro-kernel/README.md#silver-전처리-119) | 기본 커널·4별 회귀 완료, 재리뷰 대기. DAT-02 불량 구간 마스킹은 245 |
 | AI 평가용 PC/EB/junk 세트·201/61 입력 변환 | [AstroNet 평가 세트](tess-astronet-eval-set.md) | 1차 세트 생성·변환 완료, 팀 리뷰 전 |
 | 단일 AstroNet 성능·임계값 검토 | [AstroNet 성능 평가](tess-astronet-benchmark.md) | 실측 완료·팀 최종 운영 채택 보류, 내부 검토 자료 보존 |
+| 126 내부 실험 배치·운영 후속 경계 | [내부 AstroNet 배치](tess-astronet-internal-batch.md) | 단위·55개 반복 추론 검증 완료, 후속 추적·MR 대기 |
 | BLS 탐색 격자·품질 게이트 비교 | [BLS 벤치마크](tess-bls-benchmark.md) | 조정·평가・holdout 실행 결과와 채택 근거 |
 | 반복 BLS·고정 모델 제거 루프의 종료·제거 QA·복구 | [반복 제거 벤치마크](tess-bls-iteration-benchmark.md) | 코드·합성 테스트와 fixture 실행 결과, 최종 검증 정리 중 |
 | 고조파·판 사이 후보 ID 동일성 | [후보 동일성 벤치마크](tess-candidate-identity-benchmark.md) | 112 v3 계약 리뷰 준비·69 tests, 자동 고조파 병합 운영 미채택·계약 미승인 |
@@ -31,3 +32,5 @@
 115 제공 해상도 판정의 설계·실행·승인 경계는 [discoverable 벤치마크](tess-discoverability-benchmark.md)를 참조한다. 현재 9별 실측·검산 완료, 규칙 승인 전이다.
 
 124 운영 커널의 입력·출력과 검증 한계는 [외부 스냅샷·후보 조인 구현](tess-external-catalog-implementation.md)을 참조한다. 122 산출물의 후보 ID·실제 관측 시각 연결 회귀와 검산을 완료했으며 리뷰 대기 중이다. 운영 DB ID 검증은 포함하지 않으며 미확인 외부 시간 척도는 보류한다.
+
+- [130 AI 재평가·과거 결과 보존](tess-ai-reevaluation-history.md): 공용 순수 커널·저장 점수 연결 검증, 운영 연결 전.

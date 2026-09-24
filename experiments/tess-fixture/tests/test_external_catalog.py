@@ -94,3 +94,25 @@ def test_invalid_source_does_not_create_run(tmp_path):
     with pytest.raises(ValueError):
         collect(tmp_path, sources=["unknown"])
     assert not list(tmp_path.iterdir())
+
+
+def test_sample_scope_requests_and_manifest(tmp_path):
+    from urllib.parse import parse_qs, urlparse
+    from tess_fixture.external_catalog import source_requests, collect
+    import json
+    urls=source_requests([176984144,439456714])
+    query=parse_qs(urlparse(urls['nea_toi']).query)['query'][0]
+    assert '176984144,439456714' in query
+    def fetch(url): return b'tid,toi\n176984144,1.01\n',{}
+    p=collect(tmp_path,fetch=fetch,sources=['nea_toi'],tic_ids=[176984144,439456714])
+    manifest=json.loads(p.read_text())
+    assert manifest['task']=='S15P21C206-109'
+    assert manifest['target_tics']==['176984144','439456714']
+    assert manifest['subset'] is True
+
+
+def test_scope_rejects_duplicate_and_invalid_ids():
+    from tess_fixture.external_catalog import source_requests
+    import pytest
+    for ids in [[],[1,1],[-1],['1) or 1=1'],[None]]:
+        with pytest.raises(ValueError): source_requests(ids)

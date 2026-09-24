@@ -685,6 +685,10 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 
 `astro_kernel.external_catalog`는 검증된 원천 snapshot과 122 후보 ID를 연결하여 외부 참조·통합 판정·변경 이력 입력을 만든다. DB 쓰기와 Publisher 전환은 수행하지 않는다. [124 구현·검증 범위](../../docs/data/tess-external-catalog-implementation.md)를 참조한다. 합성 ID 테스트와 실제 할당 ID 검증을 구분하며, 실패한 원천을 빈 성공 조회로 바꾸지 않는다.
 
+## 125 Gold 직렬화
+
+`astro_kernel.gold_serialization.assemble`은 122·123·124 결과를 검증하고 Gold 배열·레코드 checksum·manifest를 구성하는 순수 함수다. `gold_canonical`에 공용 checksum 구현을 두며 파일·네트워크·DB에 접근하지 않는다. 호출자가 ID·내용 기반 snapshot·계산 버전·AI 미실행 결정 근거를 공급한다. `previous_bundle`을 통한 퇴역 후보·별칭 보존과 변경 이력 제안을 지원하며, ID 할당·적용 시각·Publisher 트랜잭션은 수행하지 않는다. `validated` 결과도 `publishable=false`이며 운영 게시 승인이 아니다. [입력·검증 범위와 실행 기록](../../experiments/gold-roundtrip/README.md)을 참조한다.
+
 
 ## 243 운영 탐색 SDE 버전 선택
 
@@ -705,3 +709,7 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 - `bls_periodogram`·제공용 로그 격자·discoverability RULE·사용자 제출 매칭은 바꾸지 않는다. 새 탐색 버전은 discoverability의 upstream revision에 전달하되 제공용 SDE 정의·문턱을 자동 변경하지 않는다.
 
 BLS 선택 의존성에 scipy를 포함한다(`uv sync --locked --extra bls`). 수치 참조와 실제 실행 절차는 [실험 README](../../experiments/tess-bench/README.md#243-운영-커널-회귀)를 따른다. 같은 표본의 회귀는 독립 평가가 아니다.
+
+## 130 AI 재평가·이력 보존
+
+`astro_kernel.ai_reevaluation`은 모델/입력 변경 재추론, 임계값 변경 원점수 재사용, 실패·재시도 이력과 이전 성공 보존을 제공한다. DB/모델 런타임/게시 동작은 없다. [호출 계약과 검증 범위](../../docs/data/tess-ai-reevaluation-history.md)를 따른다.
