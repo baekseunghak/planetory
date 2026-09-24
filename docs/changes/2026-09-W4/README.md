@@ -245,3 +245,6 @@
 | 2026-09-23 | 분석 진입이 섹터별 비닝 revision을 받도록 정정 | S15P21C206-256 | binningRevision, 5.1, 500, Gold 4.1, segment_revision, 다중 섹터 | 구현 완료, 백엔드·시드 테스트 통과 | [기록](2026-09-23.md) |
 | 2026-09-23 | 백업 복원 전 역할 생성을 운영 규칙 런북 7절에 추가 | S15P21C206-256 | pg_restore, role does not exist, planetory_gold_writer, planetory_app, planetory_stats_job, 새 볼륨 | 로컬 일회용 DB 검증 완료 | [기록](2026-09-23.md) |
 | 2026-09-24 | 로컬 시드(!201)의 적재 단계를 Publisher로 옮김 | S15P21C206-262 | publish_star, preflight, gold_canonical, MIGRATION_UNREADABLE, mock- | 구현·격리 검증 완료, 운영 적재 전 | [기록](2026-09-24.md) |
+| 2026-09-25 | 봉우리 power를 주기도와 같은 float32로 내보냄 | S15P21C206-262 | CandidatePeaks, PeakView.power, float32, peak/grid mismatch, 239.87599 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면이 봉우리 추천값 null을 계약대로 받음 | S15P21C206-262 | suggestedDurationHours, suggestedPhaseCenter, number or null, 6.2 duration 상한 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면 검증에서 찾은 계약 불일치 2건 인계 | S15P21C206-262 | ck_submissions_source_peak_all_or_none, 봉우리 제출 500, period_grid, min_days, count, bls-log-v1, pg-log5000-v1, 88 | 제안·인계 | [기록](2026-09-25.md) |
