@@ -48,6 +48,8 @@ backend:build:
   stage: validate
   image: eclipse-temurin:21-jdk-alpine
   needs: []
+  # Runner가 한 대라 멈춘 job이 다른 MR까지 줄 세운다. 테스트별 제한은 build.gradle에 있다.
+  timeout: 30m
   tags:
     - amd64-docker
   services:
