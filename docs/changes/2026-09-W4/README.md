@@ -264,3 +264,5 @@
 | 2026-09-23 | 백업 복원 전 역할 생성을 운영 규칙 런북 7절에 추가 | S15P21C206-256 | pg_restore, role does not exist, planetory_gold_writer, planetory_app, planetory_stats_job, 새 볼륨 | 로컬 일회용 DB 검증 완료 | [기록](2026-09-23.md) |
 
 - [2026-09-24](2026-09-24.md): S15P21C206-109 DEC-01 초기 공개 정책 승인 반영 및 develop 통합 충돌 정합화.
+
+- [2026-09-24](2026-09-24.md): S15P21C206-130 재평가·이력 보존 커널과 126 저장 점수 연결 검증.
