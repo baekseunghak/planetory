@@ -20,6 +20,11 @@ from tess_silver_contract import silver_command, silver_status_command
 
 WAIT_LIMIT = timedelta(days=14)
 POLL_INTERVAL = timedelta(minutes=5)
+STATUS_TIMEOUT_SECONDS = 120
+# A few lost polls must not fail a days-long run that keeps going under systemd.
+MAX_STATUS_FAILURES = 6
+# The unit restarts every 5 minutes without limit; past this the cause is persistent.
+MAX_UNIT_RESTARTS = 6
 
 
 def request_commands(conf: dict) -> tuple[str, str]:
@@ -40,44 +45,65 @@ def silver_state(status_output: str) -> str:
     except json.JSONDecodeError as error:
         raise AirflowException("Silver status returned invalid JSON") from error
     unit, attempt = value.get("systemd") or {}, value.get("attempt") or {}
+    active = unit.get("ActiveState") in ("active", "activating")
+    status = attempt.get("status")
+    print(f"SILVER_STATUS unit={value.get('unit')} state={unit.get('ActiveState')}/{unit.get('SubState')} "
+          f"restarts={unit.get('NRestarts')} attempt={attempt.get('attempt_id')} status={status} "
+          f"app={attempt.get('application_id')}")
     if unit.get("LoadState") != "loaded":
         raise AirflowFailException(f"Silver unit is not installed: {value.get('unit')}")
-    # A queued or auto-restarting oneshot unit is still activating; never-started means not yet.
-    if unit.get("ActiveState") in ("active", "activating") or unit.get("ExecMainStartTimestampMonotonic") == "0":
-        return "pending"
-    if unit.get("Result") == "success" and attempt.get("status") == "complete":
+    # The attempt file survives a reboot; systemd's start time and result do not.
+    if status == "complete" and not active:
         result = attempt.get("result") or {}
         print(f"SILVER_COMPLETE final={attempt.get('final')} selected={result.get('selected_tics')} "
               f"failed={result.get('failed_tics')} qa_stopped={result.get('iteration_qa_stopped_tics')}")
         return "complete"
-    if attempt.get("status") == "terminal_failed" or unit.get("ExecMainStatus") == "65":
+    if status == "terminal_failed" or unit.get("ExecMainStatus") == "65":
         raise AirflowFailException(f"Silver data contract failed: {attempt.get('failure_detail')}")
+    if active:
+        restarts = int(unit.get("NRestarts") or 0)
+        if restarts > MAX_UNIT_RESTARTS:
+            raise AirflowFailException(
+                f"Silver unit restarted {restarts} times and keeps restarting under systemd until stopped: "
+                f"{attempt.get('failure_detail')}")
+        return "pending"
+    # Queued by `--no-block start`, or enabled and not yet started again after a reboot.
+    if unit.get("ActiveState") == "inactive" and unit.get("ExecMainStartTimestampMonotonic") == "0":
+        return "pending"
     raise AirflowFailException(
-        f"Silver unit ended without a complete attempt: result={unit.get('Result')} "
-        f"attempt={attempt.get('status')} detail={attempt.get('failure_detail')}")
+        f"Silver unit ended without a complete attempt: state={unit.get('ActiveState')} "
+        f"result={unit.get('Result')} attempt={status} detail={attempt.get('failure_detail')}")
 
 
 class SilverUnitWaitOperator(BaseOperator):
     """Poll the Silver unit through the Triggerer without holding a LocalExecutor slot."""
 
-    def _check_or_defer(self, context: dict) -> None:
+    def _check_or_defer(self, context: dict, failures: int) -> None:
         _, status_command = request_commands(context["dag_run"].conf)
-        code, output = remote("planetory_node_1", status_command)
-        if code:
-            raise AirflowException(f"Silver status failed on Node 1 (exit {code}): {output}")
-        if silver_state(output) == "complete":
-            return
+        try:
+            code, output = remote("planetory_node_1", status_command, timeout=STATUS_TIMEOUT_SECONDS)
+        except Exception as error:  # SSH transport only; the unit keeps running without Airflow.
+            code, output = None, f"{type(error).__name__}: {error}"
+        if code == 0:
+            failures = 0
+            if silver_state(output) == "complete":
+                return
+        else:
+            failures += 1
+            print(f"SILVER_STATUS_UNAVAILABLE failures={failures} exit={code} {output[-500:]}")
+            if failures > MAX_STATUS_FAILURES:
+                raise AirflowException(f"Silver status failed {failures} times in a row on Node 1")
         remaining = remaining_wait_time(context["ti"].start_date, WAIT_LIMIT, datetime.now(timezone.utc))
         if remaining <= timedelta():
             raise AirflowFailException("Silver did not complete within 14 days")
         self.defer(trigger=TimeDeltaTrigger(POLL_INTERVAL), method_name="execute_complete",
-                   timeout=remaining)
+                   kwargs={"failures": failures}, timeout=remaining)
 
     def execute(self, context: dict) -> None:
-        self._check_or_defer(context)
+        self._check_or_defer(context, failures=0)
 
-    def execute_complete(self, context: dict, event: dict | None = None) -> None:
-        self._check_or_defer(context)
+    def execute_complete(self, context: dict, event: dict | None = None, failures: int = 0) -> None:
+        self._check_or_defer(context, failures)
 
 
 @dag(

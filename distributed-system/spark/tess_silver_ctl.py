@@ -245,12 +245,23 @@ def submit(
         "--archives", f"hdfs://planetory{runtime_hdfs}#environment",
         "--conf", "spark.driver.port=7078", "--conf", "spark.blockManager.port=7079",
         "--conf", f"spark.yarn.stagingDir=hdfs://planetory/lake/silver/.spark-staging/run={run_id}/attempt={attempt_id}",
-        # Silver is CPU-bound BLS per TIC. Workers have 6 vCPUs, so 4 tasks each leave room for the
-        # DataNode/NodeManager. YARN rejects containers above maximum-allocation-vcores=3, so the
-        # 20 tasks come from 10 two-core executors: 2 x 8 GiB fit every NodeManager (16 GiB on
-        # worker-2), 83 GiB with the driver out of 112 GiB. Placement is by memory only.
-        "--conf", "spark.executor.instances=10", "--conf", "spark.executor.cores=2",
-        "--conf", "spark.executor.memory=6g", "--conf", "spark.executor.memoryOverhead=2048",
+        # Silver is CPU-bound BLS per TIC. YARN places by memory only and rejects containers above
+        # maximum-allocation-vcores=3, so the container size is what spreads executors: 7 GiB fits
+        # exactly 3 per 24 GiB NodeManager and 2 on worker-2 (16 GiB), 6 tasks per 6-vCPU worker.
+        # The 2026-09-24 run with 8 GiB packed 3 executors on one worker and 1 on another (64 vs
+        # 24 min per task) while each executor used about 2.2 GiB. The 3 GiB driver fills the rest
+        # of one 24 GiB node; if YARN puts it on worker-2 instead, 13 executors start.
+        # Dynamic allocation starts at the cap and adds executors when YARN memory frees (for example
+        # after a Bronze stage), without an external shuffle service. Executors holding shuffle files
+        # or the DISK_ONLY results are never released, so no TIC result is recomputed.
+        "--conf", "spark.dynamicAllocation.enabled=true",
+        "--conf", "spark.dynamicAllocation.shuffleTracking.enabled=true",
+        "--conf", "spark.dynamicAllocation.initialExecutors=14",
+        "--conf", "spark.dynamicAllocation.maxExecutors=14",
+        "--conf", "spark.dynamicAllocation.minExecutors=2",
+        "--conf", "spark.dynamicAllocation.executorIdleTimeout=300s",
+        "--conf", "spark.executor.cores=2",
+        "--conf", "spark.executor.memory=5g", "--conf", "spark.executor.memoryOverhead=2048",
         "--conf", "spark.executorEnv.OMP_NUM_THREADS=1",
         "--conf", "spark.driver.memory=2g", "--conf", "spark.driver.memoryOverhead=1024",
         "--conf", "spark.pyspark.python=/usr/bin/python3",
@@ -427,6 +438,7 @@ def run_attempt(
     state = {
         "run_id": args.run_id,
         "attempt_id": attempt_id,
+        "unit": unit_name(args.command, args.run_id, getattr(args, "retry_from", None)),
         "output": output,
         "final": final,
         "status": "prepared",
@@ -585,10 +597,30 @@ def unit_text(args: argparse.Namespace) -> str:
     ])
 
 
+def latest_attempt(state_root: str, run_id: str, unit: str) -> dict[str, Any] | None:
+    """Newest attempt state of one unit; it survives reboots, unlike systemd's start time and result.
+
+    Attempts written before the `unit` field existed belong to the `run` unit.
+    """
+    default = unit_name("run", run_id)
+    for path in sorted(Path(state_root, f"run={run_id}").glob("attempt=*.json"), reverse=True):
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if state.get("unit", default) == unit:
+            return state
+    return None
+
+
+def refuse_completed_unit(args: argparse.Namespace) -> None:
+    """A completed request must not run again, whichever entry point restarts it."""
+    unit = unit_name(args.command, args.run_id, getattr(args, "retry_from", None))
+    if (latest_attempt(args.state_root, args.run_id, unit) or {}).get("status") == "complete":
+        raise SilverDataContractError(f"SILVER_UNIT_ALREADY_COMPLETE {unit}; use a new run ID")
+
+
 def systemd_properties(name: str) -> dict[str, str]:
     output = subprocess.run(
         ["/usr/bin/systemctl", "show", name, "-p", "LoadState", "-p", "ActiveState", "-p", "SubState",
-         "-p", "Result", "-p", "ExecMainStatus", "-p", "ExecMainStartTimestampMonotonic"],
+         "-p", "Result", "-p", "ExecMainStatus", "-p", "ExecMainStartTimestampMonotonic", "-p", "NRestarts"],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
     ).stdout
     return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
@@ -628,7 +660,8 @@ def command_start_unit(args: argparse.Namespace) -> None:
     if props.get("ActiveState") in ("active", "activating"):
         print(f"SILVER_UNIT_ALREADY_ACTIVE={name}", flush=True)
         return
-    if props.get("ExecMainStartTimestampMonotonic", "0") != "0" and props.get("Result") == "success":
+    # systemd forgets a finished oneshot after a reboot, so completion comes from the attempt state.
+    if (latest_attempt(args.state_root, args.run_id, name) or {}).get("status") == "complete":
         print(f"SILVER_UNIT_ALREADY_COMPLETE={name}", flush=True)
         return
     run(["/usr/bin/systemctl", "reset-failed", name], check=False)
@@ -639,8 +672,7 @@ def command_start_unit(args: argparse.Namespace) -> None:
 def command_status(args: argparse.Namespace) -> None:
     """Read-only unit and latest attempt state for the asynchronous Airflow wait."""
     name = unit_name(args.operation, args.run_id, args.retry_from)
-    attempts = sorted(Path(args.state_root, f"run={args.run_id}").glob("attempt=*.json"))
-    latest = json.loads(attempts[-1].read_text(encoding="utf-8")) if attempts else None
+    latest = latest_attempt(args.state_root, args.run_id, name)
     print("SILVER_STATUS_JSON=" + json.dumps(
         {"unit": name, "systemd": systemd_properties(name), "attempt": latest},
         sort_keys=True, separators=(",", ":")), flush=True)
@@ -675,6 +707,7 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--shuffle-partitions", type=int, default=200)
     start.add_argument("--tic-id", type=int, action="append")
     start.add_argument("--retry-from")
+    start.add_argument("--state-root", default="/var/lib/planetory-silver")
     start.set_defaults(handler=command_start_unit)
     status = subparsers.add_parser("status")
     status.add_argument("operation", choices=("canary", "run", "retry"))
@@ -699,6 +732,7 @@ def main() -> int:
         raise SystemExit("partition counts must be positive")
     try:
         if args.command in ("canary", "run", "retry"):
+            refuse_completed_unit(args)
             with yarn_slot():
                 args.handler(args)
         else:

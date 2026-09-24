@@ -165,6 +165,24 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 }
 ```
 
+### 비동기 DAG 결함 수정과 처리량 설정 (2026-09-25, 로컬 구현, 미배포)
+
+코드 검토에서 찾은 비동기 DAG 결함 5개를 고쳤다.
+
+1. 재부팅하면 systemd의 시작 시각이 0이 되어 `start-unit`이 끝난 run을 다시 시작하고 같은 run ID에 두 번째 final attempt가 생길 수 있었다. attempt 상태에 unit 이름을 기록하고 `start-unit`·`status`·`canary/run/retry`가 그 unit의 최신 attempt `complete`를 기준으로 판단한다.
+2. `wait_silver`가 시작 시각 0을 모두 대기로 봐서 재부팅 뒤 끝난 run과 실행 전에 실패한 unit을 14일 동안 기다렸다. 완료·실패를 먼저 판정한다.
+3. 무제한 재시작이 보이지 않았다. `status`에 `NRestarts`를 넣고 6회를 넘으면 DAG를 실패시킨다.
+4. SSH 일시 오류가 재시도 3회를 소모했다. 연속 6회까지는 defer `kwargs`로 횟수를 넘기며 다시 기다린다.
+5. 공용 `remote()`에 시간 제한과 연결 닫기가 없었다. 선택 `timeout`을 추가하고 `status`는 120초로 제한한다. 단계 DAG 호출은 그대로다.
+
+처리량 설정(P1·P2)도 바꿨다. 2026-09-24 전체 run 실측(17:13 UTC, BLS 작업 97개)에서 작업당 시간이 worker-2 24분, worker-3·4 약 30분, worker-6 50분, worker-5 64분이었다. 모든 worker가 `e2-custom-6-36864`(물리 코어 3 × 하이퍼스레딩 2)지만 worker-2·3과 master-1은 AMD Rome, worker-5·6은 Intel Broadwell이다. YARN이 메모리만으로 배치해 worker-5에 executor 3개가, worker-2에 1개가 들어갔고, executor당 실제 메모리는 약 2.2 GiB였다.
+
+- P1: executor 14개 × core 2개, `5g` + overhead 2048(7 GiB). 24 GiB NodeManager에 정확히 3개, worker-2(16 GiB)에 2개가 들어가 동시 작업이 28개가 된다. driver(3 GiB)가 worker-2에 배치되면 13개만 뜬다. 예상 처리량 +15~20%는 추정이며, AMD worker에 6작업을 올린 시간은 아직 측정하지 않았다.
+- Silver 제출은 dynamic allocation을 켠다(`initialExecutors`·`maxExecutors`=14, `minExecutors`=2, `executorIdleTimeout`=300s, 외부 셔플 서비스 대신 `shuffleTracking`). 시작할 때 YARN 메모리가 모자라 덜 받은 executor는 메모리가 비면 다시 늘어난다. 셔플 파일이나 `DISK_ONLY` 결과를 가진 executor는 반납하지 않으므로(`cachedExecutorIdleTimeout` 기본 무한), 계산 단계 이후에는 executor가 거의 줄지 않고 Bronze에 자리를 돌려주는 효과도 작다. 슬롯·사전 점검은 앱 수만 센다.
+- P2: `shuffle_partitions` 상한을 2000으로 올렸다(DAG 계약·`run-tess-silver.ps1`). 다음 전체 run은 2000으로 시작해 작업당 TIC를 약 64개로 줄이고 느린 worker의 마지막 회차 대기를 줄인다(추정 30~45분).
+- Silver가 YARN 112 GiB 중 약 101 GiB를 쓰므로 동시에 도는 Bronze는 executor 1개 정도만 받는다. Silver 전체 run 중에는 Bronze 단계를 쉬게 할지 운영에서 정한다.
+- 진행 중인 전체 run `20260924T133559Z`는 이전 release·설정 그대로 둔다.
+
 ### Spark History Server (2026-09-25, Node 1 설치 완료)
 
 Bronze·Silver 제출에 조건부 이벤트 로그를 넣고 [Node 1 설치 스크립트](../../infra/distributed-system/scripts/install-spark-history-node1.sh)를 추가했다. 남은 순서는 3번이다.

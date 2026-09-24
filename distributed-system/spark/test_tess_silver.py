@@ -497,7 +497,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             discard_failed_attempt("20260924T000000Z", "20260924T000100Z", "/lake/silver", None)
 
     def test_restartable_failure_discards_staging_but_contract_failure_keeps_it(self):
-        args = SimpleNamespace(release_dir=".", run_id="20260924T000000Z", state_root="/tmp/state",
+        args = SimpleNamespace(command="run", release_dir=".", run_id="20260924T000000Z", state_root="/tmp/state",
                                pipeline_version="v", output_partitions=1, shuffle_partitions=1)
         coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
                     "bronze_paths": []}
@@ -514,8 +514,9 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                     run_attempt(args=args, coverage=coverage)
                 self.assertEqual(discard.called, discards)
                 self.assertEqual(written[-1]["status"], "failed" if discards else "terminal_failed")
+                self.assertEqual(written[-1]["unit"], "planetory-tess-silver-20260924T000000Z.service")
 
-    def test_submit_requests_twenty_tasks_within_the_yarn_vcore_cap(self):
+    def test_submit_spreads_executors_evenly_within_the_yarn_caps(self):
         captured = []
 
         def popen(command, **kwargs):
@@ -531,14 +532,28 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                    runtime_hdfs="/runtime.tar.gz", coverage=coverage, run_id="20260924T000000Z",
                    attempt_id="20260924T000100Z", pipeline_version="v", output="/o", final_output="/f",
                    output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={})
-        for conf in ("spark.executor.instances=10", "spark.executor.cores=2", "spark.executor.memory=6g",
-                     "spark.executor.memoryOverhead=2048", "spark.executorEnv.OMP_NUM_THREADS=1",
+        for conf in ("spark.executorEnv.OMP_NUM_THREADS=1",
                      "spark.eventLog.enabled=true", "spark.eventLog.dir=hdfs://planetory/spark-history"):
             with self.subTest(conf=conf):
                 self.assertIn(conf, captured)
+        conf = dict(c.split("=", 1) for c in captured if c.startswith("spark.") and "=" in c)
         # YARN rejects any container above yarn.scheduler.maximum-allocation-vcores=3 (2026-09-24 Canary).
-        cores = int(next(c for c in captured if c.startswith("spark.executor.cores=")).split("=")[1])
-        self.assertLessEqual(cores, 3)
+        self.assertLessEqual(int(conf["spark.executor.cores"]), 3)
+        # Memory-only placement: the container size decides how many executors share a worker.
+        container_mb = int(conf["spark.executor.memory"].removesuffix("g")) * 1024 + int(
+            conf["spark.executor.memoryOverhead"])
+        driver_mb = int(conf["spark.driver.memory"].removesuffix("g")) * 1024 + int(
+            conf["spark.driver.memoryOverhead"])
+        per_worker = [24576 // container_mb] * 4 + [16384 // container_mb]
+        self.assertEqual(per_worker, [3, 3, 3, 3, 2])
+        self.assertEqual(int(conf["spark.dynamicAllocation.maxExecutors"]), sum(per_worker))
+        self.assertEqual(conf["spark.dynamicAllocation.initialExecutors"], conf["spark.dynamicAllocation.maxExecutors"])
+        self.assertLessEqual(driver_mb, 24576 - 3 * container_mb)
+        # A fixed instance count would override the dynamic initial size; no shuffle service is installed.
+        self.assertNotIn("spark.executor.instances", conf)
+        self.assertEqual(conf["spark.dynamicAllocation.enabled"], "true")
+        self.assertEqual(conf["spark.dynamicAllocation.shuffleTracking.enabled"], "true")
+        self.assertNotIn("spark.dynamicAllocation.cachedExecutorIdleTimeout", conf)
 
     def test_tic_results_are_computed_before_any_coalesced_write(self):
         # A lazy persist would run all BLS work inside the coalesced write tasks.
@@ -641,13 +656,14 @@ class SilverUnitControllerTest(unittest.TestCase):
         for line in ("Restart=on-failure", "RestartPreventExitStatus=65", "TimeoutStartSec=infinity"):
             self.assertIn(line, text.splitlines())
 
-    def start(self, root, props):
+    def start(self, root, props, attempt=None):
         calls = []
         with patch.object(tess_silver_ctl, "UNIT_ROOT", root), \
                 patch("tess_silver_ctl.validate_unit_request"), \
                 patch("tess_silver_ctl.systemd_properties", return_value=props), \
+                patch("tess_silver_ctl.latest_attempt", return_value=attempt), \
                 patch("tess_silver_ctl.run", side_effect=lambda argv, **_: calls.append(argv[1:])):
-            tess_silver_ctl.command_start_unit(self.args())
+            tess_silver_ctl.command_start_unit(self.args(state_root="/state"))
         return calls
 
     def test_start_unit_is_idempotent_and_refuses_a_changed_definition(self):
@@ -662,14 +678,23 @@ class SilverUnitControllerTest(unittest.TestCase):
             self.assertEqual((root / name).read_text(encoding="utf-8"), tess_silver_ctl.unit_text(self.args()))
             # A retried Airflow task must not start a running or finished unit again.
             self.assertEqual(self.start(root, {"ActiveState": "active"}), [])
-            self.assertEqual(self.start(root, {"ActiveState": "inactive", "Result": "success",
-                                               "ExecMainStartTimestampMonotonic": "5"}), [])
+            # After a reboot systemd reports a finished unit as never started; the attempt still knows.
+            self.assertEqual(self.start(root, {"ActiveState": "inactive", "ExecMainStartTimestampMonotonic": "0"},
+                                        {"status": "complete"}), [])
             # A failed unit restarts under the same name; systemd keeps the definition.
             self.assertEqual(self.start(root, {"ActiveState": "failed", "Result": "exit-code",
-                                               "ExecMainStartTimestampMonotonic": "5"})[-1][-1], name)
+                                               "ExecMainStartTimestampMonotonic": "5"},
+                                        {"status": "failed"})[-1][-1], name)
             (root / name).write_text("changed", encoding="utf-8")
             with self.assertRaisesRegex(SilverDataContractError, "UNIT_DEFINITION_MISMATCH"):
                 self.start(root, {})
+
+    def test_a_completed_request_refuses_to_run_again_from_any_entry_point(self):
+        with patch("tess_silver_ctl.latest_attempt", return_value={"status": "complete"}):
+            with self.assertRaisesRegex(SilverDataContractError, "SILVER_UNIT_ALREADY_COMPLETE"):
+                tess_silver_ctl.refuse_completed_unit(self.args(command="run", state_root="/state"))
+        with patch("tess_silver_ctl.latest_attempt", return_value={"status": "failed"}):
+            tess_silver_ctl.refuse_completed_unit(self.args(command="run", state_root="/state"))
 
     def test_start_unit_rejects_a_release_other_than_the_running_controller(self):
         with self.assertRaises(SilverDataContractError):
@@ -682,16 +707,22 @@ class SilverUnitControllerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp, "run=20260924T133559Z")
             run_dir.mkdir()
-            for attempt, status in (("20260924T133600Z", "failed"), ("20260924T140000Z", "running")):
-                (run_dir / f"attempt={attempt}.json").write_text(json.dumps({"status": status}))
+            retry_unit = "planetory-tess-silver-retry-20260924T133559Z-20260925T000000Z.service"
+            # The unit-less attempt predates the field and belongs to `run`; the newer one is a retry's.
+            for attempt, state in (("20260924T133600Z", {"status": "failed"}),
+                                   ("20260924T140000Z", {"status": "running"}),
+                                   ("20260925T010000Z", {"status": "complete", "unit": retry_unit})):
+                (run_dir / f"attempt={attempt}.json").write_text(json.dumps(state))
             out = io.StringIO()
             with patch("tess_silver_ctl.systemd_properties", return_value={"ActiveState": "active"}), \
                     contextlib.redirect_stdout(out):
                 tess_silver_ctl.command_status(SimpleNamespace(
                     operation="run", run_id="20260924T133559Z", retry_from=None, state_root=tmp))
+            retry = tess_silver_ctl.latest_attempt(tmp, "20260924T133559Z", retry_unit)
         value = json.loads(out.getvalue().removeprefix("SILVER_STATUS_JSON="))
         self.assertEqual(value["attempt"], {"status": "running"})
         self.assertEqual(value["unit"], "planetory-tess-silver-20260924T133559Z.service")
+        self.assertEqual(retry["status"], "complete")
 
 
 if __name__ == "__main__":

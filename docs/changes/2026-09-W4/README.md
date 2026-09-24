@@ -231,3 +231,4 @@
 | 2026-09-24 | 처리량 보강 release Canary 합격·전체 run release 확정 | S15P21C206-78 | 20260924T093328Z, _0063, 컨테이너 11, 5분 31초 | Canary 합격, 전체 run 전 | [기록](2026-09-24.md) |
 | 2026-09-24 | Silver DAG systemd unit 시작·Triggerer 대기 전환 | S15P21C206-78 | start-unit, status, TimeDeltaTrigger, wait_silver | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-24.md) |
 | 2026-09-25 | Spark 이벤트 로그·Node 1 History Server 설치 스크립트 | S15P21C206-78 | spark-history, 18080, tailscale serve, event_log_conf | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
+| 2026-09-25 | 비동기 Silver DAG 결함 수정·executor 균등 배치·shuffle 상한 2000 | S15P21C206-78 | latest_attempt, NRestarts, remote timeout, executor 14x2, 7 GiB | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |

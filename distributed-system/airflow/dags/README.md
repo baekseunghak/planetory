@@ -68,14 +68,16 @@ Sector 14 실측에서 다운로드 marker 5개와 Raw 19,970개·RF2·FSCK HEAL
 | task | 동작 | 실패 시 |
 | --- | --- | --- |
 | `validate_request` | Trigger conf를 allow-list로 검증 | 즉시 실패(재시도 없음) |
-| `start_unit` | unit 파일 작성·enable·`--no-block start` | 같은 이름 unit이 실행 중이거나 이미 성공했으면 다시 시작하지 않음. 파일 내용이 다르면 `UNIT_DEFINITION_MISMATCH`. 종료 65는 재시도 없이 실패 |
-| `wait_silver` | `status`의 `SILVER_STATUS_JSON` 판정 | 실행·대기·자동 재시작 중이면 defer. unit 성공과 attempt `complete`일 때만 성공. 종료 65·`terminal_failed`는 데이터 계약 실패, 그 밖의 종료는 실패 |
+| `start_unit` | unit 파일 작성·enable·`--no-block start` | 같은 이름 unit이 실행 중이거나, 그 unit의 최신 attempt 상태가 `complete`이면 다시 시작하지 않음(재부팅 뒤에도 유지). 파일 내용이 다르면 `UNIT_DEFINITION_MISMATCH`. 종료 65는 재시도 없이 실패 |
+| `wait_silver` | `status`의 `SILVER_STATUS_JSON` 판정, 확인마다 `SILVER_STATUS` 한 줄 기록 | unit이 실행 중이 아니고 attempt가 `complete`이면 성공(재부팅으로 systemd 기록이 사라져도 성공). 실행·대기·자동 재시작 중이면 defer하되 재시작이 6회를 넘으면 실패(unit은 systemd에서 계속 재시작하므로 원인 확인 후 멈춘다). 종료 65·`terminal_failed`는 데이터 계약 실패, 실행 전에 실패한 unit(`failed`)을 포함한 그 밖의 종료는 실패. `status`는 120초 제한이며 SSH·명령 실패는 연속 6회까지 다시 기다린다 |
+
+제어기는 attempt 상태 파일에 unit 이름을 기록하고, `status`·`start-unit`은 그 unit의 attempt만 본다(필드가 없던 이전 attempt는 `run` unit 것으로 본다). `canary`·`run`·`retry`는 같은 unit의 attempt가 이미 `complete`이면 `SILVER_UNIT_ALREADY_COMPLETE`(종료 65)로 거부하므로 `run-tess-silver.ps1` 경로에서도 끝난 요청을 다시 돌리지 않는다. 다시 처리하려면 새 run ID를 쓴다.
 
 unit 이름은 `run`이 `planetory-tess-silver-<run_id>.service`(`run-tess-silver.ps1`과 같음), `canary`가 `planetory-tess-silver-canary-<run_id>.service`, `retry`가 `planetory-tess-silver-retry-<run_id>-<원본 attempt>.service`이다. unit은 `run-tess-silver.ps1`과 같은 내용(`Restart=on-failure`, `RestartPreventExitStatus=65`, `RestartSec=5min`)이다. 같은 run ID를 다른 release로 요청하면 unit 내용이 달라 거부되므로, 이미 다른 release로 시작한 run은 DAG가 이어받지 않는다.
 
 Silver는 불변 1~13 Bronze coverage를 읽고 Sector 단계 DAG는 14+를 쓰므로 둘을 서로 drain할 필요가 없다. 대신 **동시성에 상한을 둔다**. `tess_sector_bronze`의 `commit_bronze`는 `tess_yarn` Pool을 요구하고(기본 2 슬롯), Node 1에서는 두 제어기가 같은 수의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유한다. Silver는 며칠 동안 Pool 슬롯을 잡지 않도록 Pool을 쓰지 않고, systemd unit 안의 제어기가 슬롯 파일과 YARN 사전 점검으로 상한을 지킨다. **Pool과 슬롯 수는 반드시 일치해야 하며**, `configure-tess-silver-airflow-node1.sh <release-id> [slots]`가 Pool을 설정한다. 이 상한은 두 제어기의 새 release를 모두 배포한 뒤 효력이 있으므로, 새 Bronze release 적용 전에는 여전히 수집을 drain한 뒤에만 이 DAG를 실행한다. 기본 2는 **YARN 용량 실측 없이 고른 보수값**이므로, 올리기 전에 단계별 시간·YARN 메모리·NameNode RPC를 측정한다.
 
-Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_release`(`/opt/planetory-silver/releases/<UTC-release>`), `bronze_coverage`(`/lake/bronze/tess/coverage=<SHA-256>`), `run_id`(UTC), `pipeline_version`이다. 선택 키는 `shuffle_partitions`(1~500, 기본 200), `output_partitions`(1~200, 기본 80)이다. `canary`는 중복 없는 양의 `tic_ids` 1~5개를, `retry`는 완료된 불변 Silver attempt의 `retry_from`을 추가로 요구한다. 알 수 없는 Sector 경로나 임의 셸 인자는 허용하지 않는다. 예시는 다음과 같다.
+Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_release`(`/opt/planetory-silver/releases/<UTC-release>`), `bronze_coverage`(`/lake/bronze/tess/coverage=<SHA-256>`), `run_id`(UTC), `pipeline_version`이다. 선택 키는 `shuffle_partitions`(1~2000, 기본 200. 전체 run은 2000 권장), `output_partitions`(1~200, 기본 80)이다. `canary`는 중복 없는 양의 `tic_ids` 1~5개를, `retry`는 완료된 불변 Silver attempt의 `retry_from`을 추가로 요구한다. 알 수 없는 Sector 경로나 임의 셸 인자는 허용하지 않는다. 예시는 다음과 같다.
 
 ```json
 {

@@ -36,8 +36,9 @@ def silver_command(conf: dict) -> str:
         raise ValueError("invalid immutable Silver release, Bronze coverage or run lineage")
     shuffle = conf.get("shuffle_partitions", 200)
     output = conf.get("output_partitions", 80)
-    if type(shuffle) is not int or not 1 <= shuffle <= 500:
-        raise ValueError("shuffle_partitions must be in 1..500")
+    # Up to 2000 so a full run can cut ~256-TIC tasks to ~64 and shorten the slow-worker tail.
+    if type(shuffle) is not int or not 1 <= shuffle <= 2000:
+        raise ValueError("shuffle_partitions must be in 1..2000")
     if type(output) is not int or not 1 <= output <= 200:
         raise ValueError("output_partitions must be in 1..200")
     tic_ids = conf.get("tic_ids", [])

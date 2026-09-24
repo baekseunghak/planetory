@@ -138,6 +138,39 @@ class SilverStateTest(unittest.TestCase):
         with self.assertRaises(AirflowException):
             __import__("tess_silver_dag").silver_state("no status line")
 
+    def test_reboot_failure_before_exec_and_restart_loops_do_not_wait_forever(self):
+        from airflow.sdk.exceptions import AirflowFailException
+
+        # After a reboot systemd forgets the finished oneshot; the attempt file still says complete.
+        self.assertEqual(self.state({"status": "complete"}, ExecMainStartTimestampMonotonic="0"), "complete")
+        self.assertEqual(self.state({"status": "failed"}, ActiveState="activating", NRestarts="2"), "pending")
+        for attempt, unit in (
+            (None, {"ActiveState": "failed", "ExecMainStartTimestampMonotonic": "0"}),
+            ({"status": "failed"}, {"ActiveState": "activating", "NRestarts": "7"}),
+        ):
+            with self.subTest(unit=unit), self.assertRaises(AirflowFailException):
+                self.state(attempt, **unit)
+
+    def test_lost_status_polls_defer_until_the_failure_cap(self):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from airflow.sdk.exceptions import AirflowException, TaskDeferred
+
+        import tess_silver_dag
+
+        operator = tess_silver_dag.SilverUnitWaitOperator(task_id="wait")
+        context = {"dag_run": SimpleNamespace(conf=BASE),
+                   "ti": SimpleNamespace(start_date=datetime.now(timezone.utc))}
+        with mock.patch.object(tess_silver_dag, "remote", side_effect=TimeoutError("stalled")) as remote:
+            with self.assertRaises(TaskDeferred) as deferred:
+                operator.execute(context)
+            self.assertEqual(deferred.exception.kwargs, {"failures": 1})
+            self.assertEqual(remote.call_args.kwargs["timeout"], tess_silver_dag.STATUS_TIMEOUT_SECONDS)
+            with self.assertRaises(AirflowException):
+                operator.execute_complete(context, failures=tess_silver_dag.MAX_STATUS_FAILURES)
+
     def test_pending_unit_defers_to_the_triggerer_until_the_original_deadline(self):
         from datetime import datetime, timedelta, timezone
         from types import SimpleNamespace

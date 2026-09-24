@@ -26,7 +26,7 @@ param(
     [ValidatePattern('^/lake/bronze/tess/coverage=[0-9a-f]{64}$')]
     [string]$BronzeCoverage = '/lake/bronze/tess/coverage=df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94',
 
-    [ValidateRange(1, 500)]
+    [ValidateRange(1, 2000)]
     [int]$ShufflePartitions = 200,
 
     [ValidateRange(1, 200)]
