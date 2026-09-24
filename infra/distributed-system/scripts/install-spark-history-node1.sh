@@ -67,8 +67,9 @@ curl -sf -m5 "http://127.0.0.1:$port/api/v1/applications?limit=1" >/dev/null || 
 }
 # Refuse to expose anything unless the server itself listens on loopback alone; the tailscaled
 # listener from an earlier run of this script is the only other socket allowed on the port.
+# Java reports its IPv4 loopback bind on a dual-stack socket as [::ffff:127.0.0.1] (2026-09-25 install).
 listeners="$(ss -ltnpH "sport = :$port" | grep -v '"tailscaled"' | awk '{print $4}' | sort -u)"
-[[ "$listeners" == "127.0.0.1:$port" ]] || {
+[[ "$listeners" == "127.0.0.1:$port" || "$listeners" == "[::ffff:127.0.0.1]:$port" ]] || {
   systemctl disable --now "$name"; echo "SPARK_HISTORY_BIND_NOT_LOOPBACK $listeners" >&2; exit 1;
 }
 tailscale serve --bg --http="$port" "http://127.0.0.1:$port"
