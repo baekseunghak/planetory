@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from tess_bronze_ctl import (
     atomic_commit,
     build_runtime,
     require_yarn_headroom,
+    run,
     fsck_healthy,
     hdfs,
     hdfs_exists,
@@ -512,6 +514,136 @@ def command_retry(args: argparse.Namespace) -> None:
     run_attempt(args=args, coverage=coverage, retry_manifest=f"{args.retry_from}/manifest")
 
 
+UNIT_ROOT = Path("/etc/systemd/system")
+RELEASE_DIR_RE = re.compile(r"/opt/planetory-silver/releases/[0-9]{8}T[0-9]{6}Z")
+UNIT_DESCRIPTIONS = {
+    "run": "Planetory TESS Bronze to Silver {run_id}",
+    "canary": "Planetory TESS Silver canary {run_id}",
+    "retry": "Planetory TESS Silver failed-TIC retry {run_id}",
+}
+
+
+def unit_name(operation: str, run_id: str, retry_from: str | None = None) -> str:
+    """One deterministic unit per request, so a retried Airflow task cannot start a second run.
+
+    `run` keeps the name run-tess-silver.ps1 uses, so either entry point sees the same unit.
+    """
+    if operation == "run":
+        return f"planetory-tess-silver-{run_id}.service"
+    if operation == "canary":
+        return f"planetory-tess-silver-canary-{run_id}.service"
+    source_attempt = (retry_from or "").rsplit("attempt=", 1)[-1]
+    if not RUN_ID_RE.fullmatch(source_attempt):
+        raise SilverDataContractError("retry unit requires an immutable source attempt")
+    return f"planetory-tess-silver-retry-{run_id}-{source_attempt}.service"
+
+
+def operation_argv(args: argparse.Namespace) -> list[str]:
+    release = args.release_dir
+    argv = [
+        "/usr/bin/python3.12", f"{release}/spark/tess_silver_ctl.py", args.operation,
+        "--release-dir", release, "--run-id", args.run_id, "--pipeline-version", args.pipeline_version,
+        "--bronze-coverage", args.bronze_coverage, "--shuffle-partitions", str(args.shuffle_partitions),
+        "--output-partitions", str(args.output_partitions),
+    ]
+    for tic_id in args.tic_id or []:
+        argv.extend(["--tic-id", str(tic_id)])
+    if args.retry_from:
+        argv.extend(["--retry-from", args.retry_from])
+    return argv
+
+
+def unit_text(args: argparse.Namespace) -> str:
+    """The systemd unit run-tess-silver.ps1 writes, byte for byte, so both entry points agree."""
+    return "\n".join([
+        "[Unit]",
+        f"Description={UNIT_DESCRIPTIONS[args.operation].format(run_id=args.run_id)}",
+        "After=network-online.target hadoop-hdfs-namenode.service hadoop-yarn-resourcemanager.service docker.service",
+        "Wants=network-online.target",
+        "StartLimitIntervalSec=0",
+        "",
+        "[Service]",
+        "Type=oneshot",
+        "User=root",
+        "Group=root",
+        f"WorkingDirectory={args.release_dir}",
+        "Environment=PYTHONDONTWRITEBYTECODE=1",
+        f"ExecStart={' '.join(operation_argv(args))}",
+        "ExecStartPost=-/usr/bin/systemctl disable %n",
+        "ExecStopPost=-/bin/sh -c 'if [ \"$EXIT_CODE\" = \"exited\" ] && [ \"$EXIT_STATUS\" = \"65\" ]; "
+        "then /usr/bin/systemctl disable \"%n\"; fi'",
+        "TimeoutStartSec=infinity",
+        "Restart=on-failure",
+        "RestartPreventExitStatus=65",
+        "RestartSec=5min",
+        "UMask=0027",
+        "",
+        "[Install]",
+        "WantedBy=multi-user.target",
+    ])
+
+
+def systemd_properties(name: str) -> dict[str, str]:
+    output = subprocess.run(
+        ["/usr/bin/systemctl", "show", name, "-p", "LoadState", "-p", "ActiveState", "-p", "SubState",
+         "-p", "Result", "-p", "ExecMainStatus", "-p", "ExecMainStartTimestampMonotonic"],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    ).stdout
+    return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+
+
+def validate_unit_request(args: argparse.Namespace) -> None:
+    if not RELEASE_DIR_RE.fullmatch(args.release_dir):
+        raise SilverDataContractError("unit release must be an immutable Silver release")
+    # The unit must run the same controller that sudo allowed, not another release.
+    if Path(__file__).resolve() != Path(args.release_dir, "spark", "tess_silver_ctl.py"):
+        raise SilverDataContractError("unit release does not match the running controller")
+    if args.operation == "canary" and not 1 <= len(args.tic_id or []) <= 5:
+        raise SilverDataContractError("canary unit requires one to five TIC IDs")
+    if args.operation != "canary" and args.tic_id:
+        raise SilverDataContractError("TIC selection is permitted only for canary")
+    if (args.operation == "retry") != bool(args.retry_from):
+        raise SilverDataContractError("retry_from is required for retry and only for retry")
+
+
+def command_start_unit(args: argparse.Namespace) -> None:
+    """Install and start the Silver systemd unit, then return without waiting for Spark."""
+    validate_unit_request(args)
+    name = unit_name(args.operation, args.run_id, args.retry_from)
+    path = UNIT_ROOT / name
+    text = unit_text(args)
+    if path.exists():
+        if path.read_text(encoding="utf-8") != text:
+            raise SilverDataContractError(f"UNIT_DEFINITION_MISMATCH {name}")
+    else:
+        candidate = UNIT_ROOT / f".{name}.part"
+        candidate.write_text(text, encoding="utf-8")
+        os.chmod(candidate, 0o644)
+        os.replace(candidate, path)
+        run(["/usr/bin/systemctl", "daemon-reload"])
+        run(["/usr/bin/systemctl", "enable", name])
+    props = systemd_properties(name)
+    if props.get("ActiveState") in ("active", "activating"):
+        print(f"SILVER_UNIT_ALREADY_ACTIVE={name}", flush=True)
+        return
+    if props.get("ExecMainStartTimestampMonotonic", "0") != "0" and props.get("Result") == "success":
+        print(f"SILVER_UNIT_ALREADY_COMPLETE={name}", flush=True)
+        return
+    run(["/usr/bin/systemctl", "reset-failed", name], check=False)
+    run(["/usr/bin/systemctl", "--no-block", "start", name])
+    print(f"SILVER_UNIT_STARTED={name}", flush=True)
+
+
+def command_status(args: argparse.Namespace) -> None:
+    """Read-only unit and latest attempt state for the asynchronous Airflow wait."""
+    name = unit_name(args.operation, args.run_id, args.retry_from)
+    attempts = sorted(Path(args.state_root, f"run={args.run_id}").glob("attempt=*.json"))
+    latest = json.loads(attempts[-1].read_text(encoding="utf-8")) if attempts else None
+    print("SILVER_STATUS_JSON=" + json.dumps(
+        {"unit": name, "systemd": systemd_properties(name), "attempt": latest},
+        sort_keys=True, separators=(",", ":")), flush=True)
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     common = argparse.ArgumentParser(add_help=False)
@@ -532,6 +664,22 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--tic-id", type=int, action="append", required=True)
         if command == "retry":
             child.add_argument("--retry-from", required=True)
+    start = subparsers.add_parser("start-unit", parents=[common])
+    start.add_argument("operation", choices=("canary", "run", "retry"))
+    start.add_argument("--release-dir", required=True)
+    start.add_argument("--run-id", required=True)
+    start.add_argument("--pipeline-version", required=True)
+    start.add_argument("--output-partitions", type=int, default=80)
+    start.add_argument("--shuffle-partitions", type=int, default=200)
+    start.add_argument("--tic-id", type=int, action="append")
+    start.add_argument("--retry-from")
+    start.set_defaults(handler=command_start_unit)
+    status = subparsers.add_parser("status")
+    status.add_argument("operation", choices=("canary", "run", "retry"))
+    status.add_argument("--run-id", required=True)
+    status.add_argument("--retry-from")
+    status.add_argument("--state-root", default="/var/lib/planetory-silver")
+    status.set_defaults(handler=command_status)
     return root
 
 

@@ -63,9 +63,17 @@ Sector 14 실측에서 다운로드 marker 5개와 Raw 19,970개·RF2·FSCK HEAL
 
 ## `tess_bronze_to_silver` (78의 1~13 입력, 수동 실행)
 
-이 DAG는 일시정지·무스케줄로 생성된다. 252의 수집 DAG를 수정하거나 자동 trigger하지 않는다. Airflow는 SSH로 Node 1의 불변 Silver 제어기를 실행하고 실제 전처리·BLS는 Spark on YARN에서 수행한다.
+이 DAG는 일시정지·무스케줄로 생성된다. 252의 수집 DAG를 수정하거나 자동 trigger하지 않는다. Airflow는 SSH로 Node 1의 불변 Silver 제어기 `start-unit`을 호출해 요청마다 정해진 이름의 systemd unit을 설치·시작하고 곧바로 끝낸다. 실제 전처리·BLS는 그 unit이 Spark on YARN에서 수행한다. 이후 `wait_silver`가 Triggerer에서 5분마다 `status`로 unit과 최신 attempt 상태를 읽고(최대 14일), 그 사이 LocalExecutor 슬롯과 SSH 세션을 잡지 않는다. 따라서 Airflow 재시작·release 교체가 Silver를 멈추지 않는다.
 
-Silver는 불변 1~13 Bronze coverage를 읽고 Sector 단계 DAG는 14+를 쓰므로 둘을 서로 drain할 필요가 없다. 대신 **동시성에 상한을 둔다**. `tess_sector_bronze`의 `commit_bronze`와 Silver의 `run_silver`가 같은 `tess_yarn` Pool을 요구하고(기본 2 슬롯), Node 1에서는 두 제어기가 같은 수의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유한다. Pool은 Airflow 경로만, 슬롯 파일은 수동 실행까지 포함해 상한을 지킨다. **두 값은 반드시 일치해야 하며**, `configure-tess-silver-airflow-node1.sh <release-id> [slots]`가 Pool을 설정한다. 이 상한은 두 제어기의 새 release를 모두 배포한 뒤 효력이 있으므로, 새 Bronze release 적용 전에는 여전히 수집을 drain한 뒤에만 이 DAG를 실행한다. 기본 2는 **YARN 용량 실측 없이 고른 보수값**이므로, 올리기 전에 단계별 시간·YARN 메모리·NameNode RPC를 측정한다.
+| task | 동작 | 실패 시 |
+| --- | --- | --- |
+| `validate_request` | Trigger conf를 allow-list로 검증 | 즉시 실패(재시도 없음) |
+| `start_unit` | unit 파일 작성·enable·`--no-block start` | 같은 이름 unit이 실행 중이거나 이미 성공했으면 다시 시작하지 않음. 파일 내용이 다르면 `UNIT_DEFINITION_MISMATCH`. 종료 65는 재시도 없이 실패 |
+| `wait_silver` | `status`의 `SILVER_STATUS_JSON` 판정 | 실행·대기·자동 재시작 중이면 defer. unit 성공과 attempt `complete`일 때만 성공. 종료 65·`terminal_failed`는 데이터 계약 실패, 그 밖의 종료는 실패 |
+
+unit 이름은 `run`이 `planetory-tess-silver-<run_id>.service`(`run-tess-silver.ps1`과 같음), `canary`가 `planetory-tess-silver-canary-<run_id>.service`, `retry`가 `planetory-tess-silver-retry-<run_id>-<원본 attempt>.service`이다. unit은 `run-tess-silver.ps1`과 같은 내용(`Restart=on-failure`, `RestartPreventExitStatus=65`, `RestartSec=5min`)이다. 같은 run ID를 다른 release로 요청하면 unit 내용이 달라 거부되므로, 이미 다른 release로 시작한 run은 DAG가 이어받지 않는다.
+
+Silver는 불변 1~13 Bronze coverage를 읽고 Sector 단계 DAG는 14+를 쓰므로 둘을 서로 drain할 필요가 없다. 대신 **동시성에 상한을 둔다**. `tess_sector_bronze`의 `commit_bronze`는 `tess_yarn` Pool을 요구하고(기본 2 슬롯), Node 1에서는 두 제어기가 같은 수의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유한다. Silver는 며칠 동안 Pool 슬롯을 잡지 않도록 Pool을 쓰지 않고, systemd unit 안의 제어기가 슬롯 파일과 YARN 사전 점검으로 상한을 지킨다. **Pool과 슬롯 수는 반드시 일치해야 하며**, `configure-tess-silver-airflow-node1.sh <release-id> [slots]`가 Pool을 설정한다. 이 상한은 두 제어기의 새 release를 모두 배포한 뒤 효력이 있으므로, 새 Bronze release 적용 전에는 여전히 수집을 drain한 뒤에만 이 DAG를 실행한다. 기본 2는 **YARN 용량 실측 없이 고른 보수값**이므로, 올리기 전에 단계별 시간·YARN 메모리·NameNode RPC를 측정한다.
 
 Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_release`(`/opt/planetory-silver/releases/<UTC-release>`), `bronze_coverage`(`/lake/bronze/tess/coverage=<SHA-256>`), `run_id`(UTC), `pipeline_version`이다. 선택 키는 `shuffle_partitions`(1~500, 기본 200), `output_partitions`(1~200, 기본 80)이다. `canary`는 중복 없는 양의 `tic_ids` 1~5개를, `retry`는 완료된 불변 Silver attempt의 `retry_from`을 추가로 요구한다. 알 수 없는 Sector 경로나 임의 셸 인자는 허용하지 않는다. 예시는 다음과 같다.
 
@@ -80,6 +88,6 @@ Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_rel
 }
 ```
 
-실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver 제어기의 `_READY` 재감사와 명령 종료 0을 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
+실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
 
 Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어기는 **Sector 1~13 전체 coverage와 TIC별 다중 Sector 결합**만 승인하므로 이 DAG가 받지 않는다. Sector 14 성공을 1~13 coverage의 확장이나 완전한 TIC Silver로 오인하지 않는다. 14+ 연속 처리에는 혼합 Bronze 버전·누적 Sector snapshot·변경 TIC 재처리·이전 Silver 결과 조합 계약이 필요하며, 전체 DAG·publish-ready 책임인 80에서 252/78 정본과 별도로 승인해야 한다.

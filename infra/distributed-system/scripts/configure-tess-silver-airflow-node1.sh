@@ -28,7 +28,8 @@ sudoers="/etc/sudoers.d/planetory-tess-silver-airflow-$release_id"
 candidate="$(mktemp /etc/sudoers.d/planetory-tess-silver-airflow.XXXXXX)"
 trap 'rm -f -- "$candidate"' EXIT
 cat > "$candidate" <<EOF
-tess-airflow ALL=(root) NOPASSWD: /usr/bin/python3.12 ^$release/spark/tess_silver_ctl\\.py (run|canary|retry) --release-dir $release --run-id [0-9]{8}T[0-9]{6}Z --pipeline-version [A-Za-z0-9][A-Za-z0-9._-]{0,63} --bronze-coverage /lake/bronze/tess/coverage=[0-9a-f]{64} --shuffle-partitions [0-9]+ --output-partitions [0-9]+( --tic-id [0-9]+){0,5}( --retry-from /lake/silver/pipeline_version=[A-Za-z0-9._-]+/run_id=[0-9]{8}T[0-9]{6}Z/attempt=[0-9]{8}T[0-9]{6}Z)?$
+tess-airflow ALL=(root) NOPASSWD: /usr/bin/python3.12 ^$release/spark/tess_silver_ctl\\.py start-unit (run|canary|retry) --release-dir $release --run-id [0-9]{8}T[0-9]{6}Z --pipeline-version [A-Za-z0-9][A-Za-z0-9._-]{0,63} --bronze-coverage /lake/bronze/tess/coverage=[0-9a-f]{64} --shuffle-partitions [0-9]+ --output-partitions [0-9]+( --tic-id [0-9]+){0,5}( --retry-from /lake/silver/pipeline_version=[A-Za-z0-9._-]+/run_id=[0-9]{8}T[0-9]{6}Z/attempt=[0-9]{8}T[0-9]{6}Z)?$
+tess-airflow ALL=(root) NOPASSWD: /usr/bin/python3.12 ^$release/spark/tess_silver_ctl\\.py status (run|canary|retry) --run-id [0-9]{8}T[0-9]{6}Z( --retry-from /lake/silver/pipeline_version=[A-Za-z0-9._-]+/run_id=[0-9]{8}T[0-9]{6}Z/attempt=[0-9]{8}T[0-9]{6}Z)?$
 EOF
 chmod 0440 "$candidate"
 visudo -cf "$candidate" >/dev/null

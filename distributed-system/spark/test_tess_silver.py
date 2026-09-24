@@ -1,4 +1,5 @@
 import hashlib
+import io
 import importlib.util
 import inspect
 import json
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT / "libs" / "astro-kernel"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import tess_silver  # noqa: E402
+import tess_silver_ctl  # noqa: E402
 from tess_silver import (  # noqa: E402
     MASKED_PROVENANCE_STATUS,
     PROVENANCE_STATUS,
@@ -606,6 +608,88 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertLess(source.index('if args.tic_id:\n                bronze = bronze.filter'),
                         source.index('bronze.filter(functions.col("schema_version")'))
         self.assertIn('if not args.tic_id and not args.retry_manifest:', source)
+
+
+class SilverUnitControllerTest(unittest.TestCase):
+    RELEASE = "/opt/planetory-silver/releases/20260924T093328Z"
+
+    def args(self, **values):
+        return SimpleNamespace(**{
+            "operation": "run", "release_dir": self.RELEASE, "run_id": "20260924T133559Z",
+            "pipeline_version": "S15P21C206-78-20260924T093328Z",
+            "bronze_coverage": "/lake/bronze/tess/coverage=" + "a" * 64,
+            "shuffle_partitions": 500, "output_partitions": 80, "tic_id": None, "retry_from": None,
+            **values,
+        })
+
+    def test_unit_names_are_deterministic_per_request(self):
+        retry = "/lake/silver/pipeline_version=v1/run_id=20260924T133559Z/attempt=20260925T000000Z"
+        self.assertEqual(tess_silver_ctl.unit_name("run", "20260924T133559Z"),
+                         "planetory-tess-silver-20260924T133559Z.service")
+        self.assertEqual(tess_silver_ctl.unit_name("retry", "20260924T133559Z", retry),
+                         "planetory-tess-silver-retry-20260924T133559Z-20260925T000000Z.service")
+        with self.assertRaises(SilverDataContractError):
+            tess_silver_ctl.unit_name("retry", "20260924T133559Z", None)
+
+    def test_unit_runs_the_same_release_controller_with_restart_policy(self):
+        text = tess_silver_ctl.unit_text(self.args())
+        self.assertIn(f"ExecStart=/usr/bin/python3.12 {self.RELEASE}/spark/tess_silver_ctl.py run "
+                      f"--release-dir {self.RELEASE} ", text)
+        self.assertIn("--shuffle-partitions 500 --output-partitions 80", text)
+        for line in ("Restart=on-failure", "RestartPreventExitStatus=65", "TimeoutStartSec=infinity"):
+            self.assertIn(line, text.splitlines())
+
+    def start(self, root, props):
+        calls = []
+        with patch.object(tess_silver_ctl, "UNIT_ROOT", root), \
+                patch("tess_silver_ctl.validate_unit_request"), \
+                patch("tess_silver_ctl.systemd_properties", return_value=props), \
+                patch("tess_silver_ctl.run", side_effect=lambda argv, **_: calls.append(argv[1:])):
+            tess_silver_ctl.command_start_unit(self.args())
+        return calls
+
+    def test_start_unit_is_idempotent_and_refuses_a_changed_definition(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            name = "planetory-tess-silver-20260924T133559Z.service"
+            calls = self.start(root, {"ActiveState": "inactive", "ExecMainStartTimestampMonotonic": "0"})
+            self.assertEqual(calls[0], ["daemon-reload"])
+            self.assertEqual(calls[-1], ["--no-block", "start", name])
+            self.assertEqual((root / name).read_text(encoding="utf-8"), tess_silver_ctl.unit_text(self.args()))
+            # A retried Airflow task must not start a running or finished unit again.
+            self.assertEqual(self.start(root, {"ActiveState": "active"}), [])
+            self.assertEqual(self.start(root, {"ActiveState": "inactive", "Result": "success",
+                                               "ExecMainStartTimestampMonotonic": "5"}), [])
+            # A failed unit restarts under the same name; systemd keeps the definition.
+            self.assertEqual(self.start(root, {"ActiveState": "failed", "Result": "exit-code",
+                                               "ExecMainStartTimestampMonotonic": "5"})[-1][-1], name)
+            (root / name).write_text("changed", encoding="utf-8")
+            with self.assertRaisesRegex(SilverDataContractError, "UNIT_DEFINITION_MISMATCH"):
+                self.start(root, {})
+
+    def test_start_unit_rejects_a_release_other_than_the_running_controller(self):
+        with self.assertRaises(SilverDataContractError):
+            tess_silver_ctl.validate_unit_request(self.args())
+
+    def test_status_reports_the_unit_and_latest_attempt(self):
+        import contextlib
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp, "run=20260924T133559Z")
+            run_dir.mkdir()
+            for attempt, status in (("20260924T133600Z", "failed"), ("20260924T140000Z", "running")):
+                (run_dir / f"attempt={attempt}.json").write_text(json.dumps({"status": status}))
+            out = io.StringIO()
+            with patch("tess_silver_ctl.systemd_properties", return_value={"ActiveState": "active"}), \
+                    contextlib.redirect_stdout(out):
+                tess_silver_ctl.command_status(SimpleNamespace(
+                    operation="run", run_id="20260924T133559Z", retry_from=None, state_root=tmp))
+        value = json.loads(out.getvalue().removeprefix("SILVER_STATUS_JSON="))
+        self.assertEqual(value["attempt"], {"status": "running"})
+        self.assertEqual(value["unit"], "planetory-tess-silver-20260924T133559Z.service")
 
 
 if __name__ == "__main__":

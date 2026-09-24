@@ -56,9 +56,11 @@ def silver_command(conf: dict) -> str:
             raise ValueError("retry requires an immutable Silver attempt path")
     elif retry_from is not None:
         raise ValueError("retry_from is permitted only for retry")
+    # start-unit installs and starts the Silver systemd unit, then returns; Spark keeps running
+    # under systemd even if Airflow restarts, and silver_status_command polls it.
     arguments = [
         "/usr/bin/sudo", "-n", "/usr/bin/python3.12", f"{release}/spark/tess_silver_ctl.py",
-        operation, "--release-dir", release, "--run-id", run_id,
+        "start-unit", operation, "--release-dir", release, "--run-id", run_id,
         "--pipeline-version", version, "--bronze-coverage", coverage,
         "--shuffle-partitions", str(shuffle), "--output-partitions", str(output),
     ]
@@ -66,4 +68,15 @@ def silver_command(conf: dict) -> str:
         arguments.extend(("--tic-id", str(tic)))
     if retry_from is not None:
         arguments.extend(("--retry-from", retry_from))
+    return shlex.join(arguments)
+
+
+def silver_status_command(conf: dict) -> str:
+    """Read-only status of the unit silver_command started, validated the same way."""
+    silver_command(conf)
+    release = str(conf["silver_release"])
+    arguments = ["/usr/bin/sudo", "-n", "/usr/bin/python3.12", f"{release}/spark/tess_silver_ctl.py",
+                 "status", conf["operation"], "--run-id", str(conf["run_id"])]
+    if conf.get("retry_from") is not None:
+        arguments.extend(("--retry-from", conf["retry_from"]))
     return shlex.join(arguments)
