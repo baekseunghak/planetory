@@ -41,7 +41,8 @@ END $$;
 
 SELECT (SELECT count(*) FROM mock_bundles) AS bundles,
        (SELECT count(*) FROM mock_candidates) AS candidates,
-       (SELECT count(*) FROM light_curve_segments WHERE binning_revision LIKE 'mock-%') AS segments;
+       (SELECT count(*) FROM light_curve_segments WHERE binning_revision LIKE 'mock-%') AS segments,
+       (SELECT count(*) FROM observation_datasets WHERE source_version LIKE 'mock-%') AS observations;
 
 -- 판 전환 때 V23 트리거가 남긴 알림 흔적. 재개 사건은 판 id가 사건 키에 들어 있다.
 DELETE FROM notification_outbox WHERE event_key IN
@@ -51,10 +52,16 @@ DELETE FROM notification_events WHERE event_key IN
 DELETE FROM notification_candidate_changes WHERE bundle_id IN (SELECT id FROM mock_bundles);
 DELETE FROM candidate_status_history
  WHERE bundle_id IN (SELECT id FROM mock_bundles) OR candidate_id IN (SELECT id FROM mock_candidates);
+-- 적재 단계가 후보와 함께 넣는 행. 외래 키가 NO ACTION이라 후보보다 먼저 지운다.
+-- ponytail: ai_executions는 지우지 않는다. 목업 payload는 AI 평가를 싣지 않아 만들지 않는다.
+DELETE FROM candidate_dispositions WHERE candidate_id IN (SELECT id FROM mock_candidates);
+DELETE FROM external_signal_references WHERE candidate_id IN (SELECT id FROM mock_candidates);
+DELETE FROM ai_evaluations WHERE candidate_id IN (SELECT id FROM mock_candidates);
 DELETE FROM candidates WHERE id IN (SELECT id FROM mock_candidates);
 DELETE FROM periodograms WHERE bundle_id IN (SELECT id FROM mock_bundles);
 DELETE FROM publication_bundles WHERE id IN (SELECT id FROM mock_bundles);
 DELETE FROM light_curve_segments WHERE binning_revision LIKE 'mock-%';
+DELETE FROM observation_datasets WHERE source_version LIKE 'mock-%';
 
 \if :apply
 COMMIT;

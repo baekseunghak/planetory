@@ -137,17 +137,18 @@ COMMIT;
 ### 한계
 
 - 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)가 없어 여전히 안 된다.
-- 등록된 별(`stars`)에 처음 싣는 경우만 다룬다. 후보가 이미 있는 별은 거부한다.
+- 등록된 별(`stars`)에만 싣고 별 속성은 바꾸지 않는다. 같은 별에 새 판을 올리면 이전 후보는 은퇴한다.
 - 판이 current가 될 때 V23 트리거가 후보 변경을 기록한다. 재개 알림은 **그 별을 팔로우한 회원에게만** 간다.
 
 ### 준비 (한 번)
 
-`planetory_gold_writer`는 로그인할 수 없는 그룹 역할이다. 로그인 계정을 소유자로 만든다. 비밀번호는 명령줄에 두지 않는다.
+`planetory_gold_writer`는 로그인할 수 없는 그룹 역할이다. 로그인 계정을 소유자로 만든다. 비밀번호는 명령줄에 두지 않는다. `flyway_schema_history`·`operation_settings`는 `gold_writer` 권한 밖이라 preflight용 SELECT를 따로 준다. 없으면 적재가 `MIGRATION_UNREADABLE`로 멈춘다.
 
 ```sh
 cd "$DEPLOY_PATH"
 docker compose exec service-db psql -U planetory -d planetory_poc \
   -c "CREATE USER planetory_publisher IN ROLE planetory_gold_writer" \
+  -c "GRANT SELECT ON flyway_schema_history, operation_settings TO planetory_publisher" \
   -c "REVOKE CREATE ON SCHEMA public FROM planetory_publisher"
 docker compose exec service-db psql -U planetory -d planetory_poc -c "\password planetory_publisher"
 ```

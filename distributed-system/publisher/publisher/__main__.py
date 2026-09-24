@@ -11,21 +11,17 @@ planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리�
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-TOKEN_HEADER = "X-Planetory-Service-Token"
+from .notify import TOKEN_HEADER, notify_backend  # noqa: F401  TOKEN_HEADER는 테스트가 쓴다
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="publisher")
     sub = parser.add_subparsers(dest="command", required=True)
-    load = sub.add_parser("mock-load", help="목업 Gold를 더미 별에 게시한다")
+    load = sub.add_parser("mock-load", help="목업 Gold를 운영 더미 별에 게시한다")
     load.add_argument("--tic", required=True, help="쉼표로 나눈 TIC 목록. stars에 이미 있어야 한다")
     sub.add_parser("mock-purge-sql", help="목업 삭제 SQL을 출력한다. service-db의 psql로 넘긴다")
     resend = sub.add_parser("notify", help="이미 current인 판의 전환을 Backend에 다시 알린다")
@@ -33,9 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "notify":
-        # 적재를 다시 돌리면 판이 이미 있어 알림을 건너뛴다. 토큰 없이 적재했거나 알림이 실패한
-        # 판은 이 명령으로만 다시 알릴 수 있다. DB는 건드리지 않는다.
-        return 0 if notify(int(args.bundle.removeprefix("b-"))) else 1
+        # DB는 건드리지 않는다. 판을 다시 싣지 않고 알림만 보낸다.
+        return 0 if notify([int(args.bundle.removeprefix("b-"))]) else 1
 
     if args.command == "mock-purge-sql":
         # 삭제는 소유자로 한다. 판 전환 때 V23 트리거가 쓴 알림 행을 gold_writer는 지울 수 없다.
@@ -49,40 +44,44 @@ def main(argv: list[str] | None = None) -> int:
 
     tics = [int(t) for t in args.tic.split(",") if t.strip()]
     with psycopg.connect("", autocommit=True) as conn:
+        target = loader.preflight(conn)
+        print(f"대상 {conn.info.host}/{conn.info.dbname}, 마이그레이션 V{target.flyway_version}, "
+              f"Gold 역할 {'planetory_gold_writer' if target.use_writer_role else '연결 계정(역할 전환 불가)'}")
+        for warning in target.warnings:
+            print(f"주의: {warning}")
+        results = []
         for payload in mock_source.payloads(tics):
-            result = loader.publish(conn, payload)
-            print(f"TIC {result.tic_id}: b-{result.bundle_id} {result.status}"
-                  f" ({'게시' if result.applied else '이미 있음, 바꾸지 않음'})")
-            if result.applied:
-                notify(result.bundle_id)
-    return 0
+            result = loader.publish_star(conn, payload, target, retire_reason="Gold 목업 새 판 게시")
+            results.append(result)
+            print(f"  {result.label}: {result.code} b-{result.bundle_id}")
+    # 이미 current인 판도 다시 알린다. 앞선 알림이 실패했어도 같은 명령을 다시 돌리면 복구된다.
+    # 토큰이 없어 알림을 생략한 것은 실패가 아니다. 적재는 끝났고 DB의 current가 정본이다.
+    sent = notify(loader.notify_targets(results))
+    return 0 if sent or not os.environ.get("INTERNAL_SERVICE_TOKEN") else 1
 
 
-def notify(bundle_id: int) -> bool:
-    """커밋 뒤 Backend에 전환을 알린다. 실패해도 DB 전환은 되돌리지 않는다(정본). 보냈으면 True.
+def notify(bundle_ids: list[int]) -> bool:
+    """커밋 뒤 Backend에 전환을 알린다. 실패해도 DB 전환은 되돌리지 않는다(정본). 모두 보냈으면 True.
 
     알림은 후처리를 빨리 시작하려는 신호일 뿐이고 정본은 DB의 current다. 토큰이 없으면 Backend가
     내부 경로 전체를 막으므로 보내지 않는다. 같은 판을 여러 번 알려도 Backend는 200이다.
     """
-    resend = f"python -m publisher notify --bundle b-{bundle_id}"
+    if not bundle_ids:
+        return True
     token = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
     if not token:
-        print(f"  알림 생략: INTERNAL_SERVICE_TOKEN이 없다. b-{bundle_id}는 DB에서 이미 current다."
-              f" 토큰을 넣은 뒤 `{resend}`로 보낸다.")
+        ids = ", ".join(f"b-{i}" for i in bundle_ids)
+        print(f"  알림 생략: INTERNAL_SERVICE_TOKEN이 없다. {ids}는 DB에서 이미 current다."
+              f" 토큰을 넣은 뒤 `python -m publisher notify --bundle b-<id>`로 보내거나 적재를 다시 돌린다.")
         return False
-    url = f"{os.environ.get('BACKEND_URL', 'http://backend:8080')}/internal/bundles/b-{bundle_id}/activated"
-    request = urllib.request.Request(url, method="POST", headers={TOKEN_HEADER: token})
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                print(f"  알림: {json.load(response)}")
-                return True
-        except (urllib.error.URLError, TimeoutError) as error:
-            print(f"  알림 실패({attempt + 1}/3): {error}")
-            time.sleep(2 ** attempt)
-    # 적재를 다시 돌려도 판이 이미 있어 publish가 applied=False로 끝나므로 알림이 다시 가지 않는다.
-    print(f"  알림을 포기한다. b-{bundle_id}는 DB에서 current다. `{resend}`로 다시 보낸다.")
-    return False
+    ok = True
+    for bundle_id, sent, outcome in notify_backend(os.environ.get("BACKEND_URL", "http://backend:8080"),
+                                                   token, bundle_ids):
+        print(f"  알림 b-{bundle_id}: {outcome}")
+        ok &= sent
+    if not ok:
+        print("  알림 일부가 실패했다. DB 전환은 그대로다. Backend를 확인한 뒤 같은 명령을 다시 돌린다.")
+    return ok
 
 
 if __name__ == "__main__":
