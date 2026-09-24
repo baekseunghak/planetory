@@ -5,6 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -25,9 +26,13 @@ from tess_silver_ctl import (  # noqa: E402
     SILVER_READY_SCHEMA,
     SilverDataContractError,
     bronze_coverage,
+    discard_failed_attempt,
+    run_attempt,
     validate_bronze_coverage,
 )
-from astro_kernel.preprocessing import MASK_CONTRACT_VERSION, IntervalMask, preprocess_silver  # noqa: E402
+from astro_kernel.preprocessing import (  # noqa: E402
+    MASK_CONTRACT_VERSION, IntervalMask, PreprocessError, preprocess_silver,
+)
 from astro_kernel.bls import search_bls  # noqa: E402
 from astro_kernel.iteration import ITERATION_VERSION, iterate_bls  # noqa: E402
 
@@ -453,6 +458,57 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(failed.manifest[5:7], ("failed", True))
         self.assertEqual(failed.manifest[18], "unexpected_processing_error")
         self.assertEqual(succeeded.manifest[5], "succeeded")
+
+    def test_code_defect_after_reading_bronze_is_not_reported_as_bad_input(self):
+        # The 2026-09-23 Canary NaN serialization defect surfaced as invalid_bronze_row.
+        def broken(curves, **kwargs):
+            raise ValueError("Out of range float values are not JSON compliant: nan")
+
+        result = call([bronze_row()], broken, lambda *args, **kwargs: None)
+        self.assertEqual(result.manifest[5:7], ("failed", True))
+        self.assertEqual(result.manifest[18], "unexpected_processing_error")
+        self.assertIn("ValueError: Out of range float", result.manifest[19])
+
+        def data_error(curves, **kwargs):
+            raise PreprocessError("duplicate_time", "p1")
+
+        known = call([bronze_row()], data_error, lambda *args, **kwargs: None)
+        self.assertEqual(known.manifest[5:7], ("failed", False))
+        self.assertEqual(known.manifest[18], "duplicate_time")
+
+    def test_failed_attempt_staging_is_discarded_only_after_the_app_ended(self):
+        output = "/lake/silver/.staging/run=20260924T000000Z/attempt=20260924T000100Z"
+        for state, expected in (("RUNNING", False), ("UNKNOWN", False), ("FAILED", True), ("KILLED", True)):
+            with self.subTest(state=state), \
+                    patch("tess_silver_ctl.application_state", return_value=state), \
+                    patch("tess_silver_ctl.hdfs_exists", return_value=True), \
+                    patch("tess_silver_ctl.hdfs") as hdfs, \
+                    patch("tess_silver_ctl.cleanup_spark_staging") as cleanup:
+                self.assertEqual(discard_failed_attempt("20260924T000000Z", "20260924T000100Z",
+                                                        output, "application_1_2"), expected)
+                self.assertEqual(hdfs.called, expected)
+                self.assertEqual(cleanup.called, expected)
+        with self.assertRaisesRegex(RuntimeError, "unexpected path"):
+            discard_failed_attempt("20260924T000000Z", "20260924T000100Z", "/lake/silver", None)
+
+    def test_restartable_failure_discards_staging_but_contract_failure_keeps_it(self):
+        args = SimpleNamespace(release_dir=".", run_id="20260924T000000Z", state_root="/tmp/state",
+                               pipeline_version="v", output_partitions=1, shuffle_partitions=1)
+        coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
+                    "bronze_paths": []}
+        for error, discards in ((RuntimeError("YARN application ended as FAILED"), True),
+                                (SilverDataContractError("bad input"), False)):
+            written = []
+            with self.subTest(error=type(error).__name__), \
+                    patch("tess_silver_ctl.build_runtime", return_value="/runtime"), \
+                    patch("tess_silver_ctl.prepare_paths"), \
+                    patch("tess_silver_ctl.write_state", side_effect=lambda path, state: written.append(dict(state))), \
+                    patch("tess_silver_ctl.submit", side_effect=error), \
+                    patch("tess_silver_ctl.discard_failed_attempt", return_value=True) as discard:
+                with self.assertRaises(type(error)):
+                    run_attempt(args=args, coverage=coverage)
+                self.assertEqual(discard.called, discards)
+                self.assertEqual(written[-1]["status"], "failed" if discards else "terminal_failed")
 
     def test_malformed_bronze_row_is_isolated_before_sorting(self):
         row = bronze_row()

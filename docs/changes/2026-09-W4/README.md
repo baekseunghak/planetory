@@ -217,3 +217,11 @@
 | 2026-09-23 | 탈퇴 방향 승인·쓰기 잠금·공개 조회 차단 일부 반영 | S15P21C206-180 | DEC-11, W1~W4, 작성자 표시, 반응, 첨부, FE222 | 부분 구현·격리 검증, 실행 정책 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 권장 탈퇴 계약·T/C·영수증·앱 역할 정리 구현 | S15P21C206-180 | V24, withdrawal-v1, 재가입, Redis, 보관 만료 | 격리 203건·FE 447건 통과, 운영 활성화 보류 | [기록](2026-09-23.md) |
 | 2026-09-23 | 탈퇴 대상 팔로우 경합·정본 구현 상태 정정 | S15P21C206-180 | WD-08, 잠금 순서, withdrawal-v1, 기본 비활성 | PostgreSQL 18.6 FollowTest 10건 통과, 운영 인수 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 252 Airflow 3.2.2 통합·Silver DAG Task SDK 이식 | S15P21C206-78 | airflow 3.2.2, get_dr_count, ssh 5.0.2 | 병합·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | Bronze·Silver YARN 제출 Pool 동시성 상한 | S15P21C206-78 | tess_yarn, yarn_slot, PLANETORY_YARN_SLOTS | 구현·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 병렬 실행을 막던 YARN 사전 점검 수정·배포 적합성 검토 | S15P21C206-78 | require_yarn_headroom, 고아 앱, sudoers 정규식 | 수정·검토 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 반복 탐색 QA 판정 분리·Silver 스키마 v4 | S15P21C206-78 | qa_stopped, removal_qa_failed, stage.v4 | 구현·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실클러스터 Canary 1 불합격·NaN 시각 직렬화 수정 | S15P21C206-78 | invalid_bronze_row, original_time, _strict_exclusions | 수정 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실클러스터 Canary 재실행·Canary 2 합격 | S15P21C206-78 | 20260923T083458Z, _0031, _0032, RF2 0.63~0.73 TB | 2단계 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 전체 Silver run을 252 Sector 70 완료 뒤 시작(결정 A) | S15P21C206-78 | sudoers 동일 ID, completed_through 70 | 결정 | [기록](2026-09-23.md) |
+| 2026-09-24 | 재기동 전 실패 attempt staging 정리·코드 결함 예외 분류 | S15P21C206-78 | discard_failed_attempt, unexpected_processing_error | 구현·로컬 검증 완료 | [기록](2026-09-24.md) |

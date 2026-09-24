@@ -20,6 +20,7 @@ from tess_bronze_ctl import (
     HOST_ARGS,
     SPARK_HDFS_USER,
     SPARK_IMAGE,
+    application_state,
     atomic_commit,
     build_runtime,
     require_yarn_headroom,
@@ -166,6 +167,34 @@ def cleanup_spark_staging(run_id: str, attempt_id: str, output: str) -> None:
             print(f"SILVER_CLEANUP_SKIPPED path={attempt}", flush=True)
     remove_empty_dir(f"/lake/silver/.spark-staging/run={run_id}")
     remove_empty_dir(output.rsplit("/", 1)[0])
+
+
+STAGING_OUTPUT_RE = re.compile(
+    r"/(lake/silver|validation/S15P21C206-78)/\.staging/run=[0-9]{8}T[0-9]{6}Z/attempt=[0-9]{8}T[0-9]{6}Z"
+)
+TERMINAL_APP_STATES = ("FAILED", "KILLED", "SUCCEEDED")
+
+
+def discard_failed_attempt(run_id: str, attempt_id: str, output: str, application_id: str | None) -> bool:
+    """Remove a restartable attempt's partial staging so systemd restarts do not pile up.
+
+    A multi-day run that fails is restarted from scratch as a new attempt; without this
+    each failure leaves up to the full output size behind until HDFS hits the 75% gate.
+    The final attempt path is never touched. A YARN CLI hiccup can report UNKNOWN while
+    the app is still healthy, so staging is kept unless the app is confirmed ended.
+    """
+    if not STAGING_OUTPUT_RE.fullmatch(output):
+        raise RuntimeError(f"refusing to discard an unexpected path: {output}")
+    if application_id:
+        state = application_state(application_id)
+        if state not in TERMINAL_APP_STATES:
+            print(f"SILVER_CLEANUP_SKIPPED application={application_id} state={state} output={output}", flush=True)
+            return False
+    if hdfs_exists(output):
+        hdfs("dfs", "-rm", "-r", "-skipTrash", output, check=False)
+    cleanup_spark_staging(run_id, attempt_id, output)
+    print(f"SILVER_FAILED_ATTEMPT_DISCARDED output={output}", flush=True)
+    return True
 
 
 def terminal_data_contract_error(output: str) -> SilverDataContractError | None:
@@ -427,7 +456,14 @@ def run_attempt(
         if validation and marker["failed_tics"]:
             raise SilverDataContractError(f"canary has failed TICs; inspect {final}/manifest")
     except SilverDataContractError as exc:
+        # Contract failures are not restarted, so their staging stays for diagnosis.
         state.update(status="terminal_failed", failure_detail=str(exc), updated_at_utc=utc_now())
+        write_state(state_file, state)
+        raise
+    except Exception as exc:
+        discarded = discard_failed_attempt(args.run_id, attempt_id, output, state.get("application_id"))
+        state.update(status="failed", failure_detail=f"{type(exc).__name__}: {exc}"[:500],
+                     staging_discarded=discarded, updated_at_utc=utc_now())
         write_state(state_file, state)
         raise
     state.update(status="complete", application_id=application_id, result=marker, updated_at_utc=utc_now())

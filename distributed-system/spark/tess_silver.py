@@ -313,6 +313,7 @@ def process_tic(
     target = None
     provenance_status = PROVENANCE_STATUS
     interval_mask_count = 0
+    reading_bronze = True  # a KeyError/TypeError/ValueError here means a malformed Bronze row
     try:
         products = sorted((dict(row) for row in rows), key=lambda row: (row["sector"], row["product_id"]))
         tic_id = int(products[0]["tic_id"]) if products else -1
@@ -333,6 +334,7 @@ def process_tic(
             )
             for row in products
         ]
+        reading_bronze = False
         prepared, detrended = preprocess(curves, interval_masks=tuple(interval_masks))
         interval_mask_count = len(prepared.interval_masks)
         provenance_status = MASKED_PROVENANCE_STATUS if interval_mask_count else PROVENANCE_STATUS
@@ -429,8 +431,16 @@ def process_tic(
             error_code=stage_error, error_detail=stage_error,
         )
         return TicStageResult(target, periodogram, initial_manifest, iteration_row, iteration_manifest)
-    except (PreprocessError, BlsError, KeyError, TypeError, ValueError) as exc:
-        code = getattr(exc, "code", "invalid_bronze_row")
+    except MemoryError:
+        raise
+    except Exception as exc:  # one TIC failure must not discard sibling TICs
+        if isinstance(exc, (PreprocessError, BlsError)) or (
+                reading_bronze and isinstance(exc, (KeyError, TypeError, ValueError))):
+            code, retryable, detail = getattr(exc, "code", "invalid_bronze_row"), False, exc
+        else:
+            # A defect in this code must not read as bad Bronze input; the 2026-09-23 Canary
+            # NaN serialization bug was reported as invalid_bronze_row before this split.
+            code, retryable, detail = "unexpected_processing_error", True, f"{type(exc).__name__}: {exc}"
         return TicStageResult(
             target,
             None,
@@ -439,7 +449,7 @@ def process_tic(
                 attempt_id=attempt_id,
                 tic_id=tic_id,
                 status="failed",
-                retryable=False,
+                retryable=retryable,
                 snapshot=snapshot,
                 pipeline_version=pipeline_version,
                 preprocessing_version=PREPROCESS_VERSION if target is not None else None,
@@ -448,30 +458,7 @@ def process_tic(
                 provenance_status=provenance_status,
                 interval_mask_count=interval_mask_count,
                 error_code=str(code),
-                error_detail=exc,
-            ),
-        )
-    except MemoryError:
-        raise
-    except Exception as exc:  # one unexpected TIC failure must not discard sibling TICs
-        return TicStageResult(
-            target,
-            None,
-            _manifest_row(
-                run_id=run_id,
-                attempt_id=attempt_id,
-                tic_id=tic_id,
-                status="failed",
-                retryable=True,
-                snapshot=snapshot,
-                pipeline_version=pipeline_version,
-                preprocessing_version=PREPROCESS_VERSION if target is not None else None,
-                target_location=target_location if target is not None else None,
-                periodogram_location=None,
-                provenance_status=provenance_status,
-                interval_mask_count=interval_mask_count,
-                error_code="unexpected_processing_error",
-                error_detail=type(exc).__name__,
+                error_detail=detail,
             ),
         )
 

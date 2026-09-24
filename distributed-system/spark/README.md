@@ -237,7 +237,7 @@ manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 
 | --- | --- |
 | `stage` | `initial_bls`는 모든 TIC, `iteration`은 정상 최초 탐색 TIC에 한 행이다. |
 | `status` | 최초 탐색은 `succeeded`/`no_quality_peak`/`failed`, 반복 탐색은 `succeeded`/`incomplete`/`qa_stopped`/`failed`다. 정상 첫 무후보도 반복 종료를 확인한다. |
-| `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. |
+| `retryable` | 예상하지 못한 Worker 처리 오류만 `true`다. 데이터·수치 계약 오류는 같은 입력으로 자동 반복하지 않는다. Bronze 행을 읽는 동안의 `KeyError`·`TypeError`·`ValueError`만 `invalid_bronze_row`이고, 전처리 호출 이후의 코드 결함은 `unexpected_processing_error`(`retryable=true`, 상세에 예외 형식과 메시지)로 기록한다. 커널이 던진 `PreprocessError`·`BlsError`는 그 코드를 유지한다. |
 | `input_snapshot_id`, 계산 버전 3종 | 입력과 전처리·탐색·품질 게이트를 함께 고정한다. |
 | `provenance_status`, `mask_contract_version`, `interval_mask_count` | 마스크 공급 여부와 적용한 245 계약을 기록한다. 빈 마스크는 baseline 상태를 유지한다. |
 | `target_location`, `periodogram_location`, `iteration_location` | 실제 생성된 출력만 기록한다. 반복 실패로 출력이 없으면 마지막 값은 null이다. |
@@ -270,7 +270,7 @@ manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Retry -CodeReleaseId <code-release> -RunId <run> -UnitId <new-unit-id> -RetryFrom <completed-attempt>
 ```
 
-`Install`은 Silver job·제어기, 77의 검증된 공용 제어 primitive, 고정 Python 의존성, `astro_kernel`과 원자 rename helper를 불변 release로 설치한다. `Start`와 `Retry`는 systemd oneshot에 인계한다. HDFS·YARN 같은 일시 인프라 실패만 5분 뒤 재기동하고, coverage·schema 같은 결정적 계약 오류는 종료 코드 65로 자동 반복을 중단한다.
+`Install`은 Silver job·제어기, 77의 검증된 공용 제어 primitive, 고정 Python 의존성, `astro_kernel`과 원자 rename helper를 불변 release로 설치한다. `Start`와 `Retry`는 systemd oneshot에 인계한다. HDFS·YARN 같은 일시 인프라 실패만 5분 뒤 재기동한다. 재기동은 처음부터 새 attempt로 돌기 때문에, 제어기는 그 전에 실패한 attempt의 `.staging` 출력과 Spark staging을 지운다(`discard_failed_attempt`). 지우는 경로는 자기 attempt staging 형식과 정확히 일치해야 하고 final attempt는 건드리지 않는다. YARN CLI가 일시적으로 `UNKNOWN`을 돌려줘도 앱은 살아 있을 수 있으므로, 앱이 `FAILED`·`KILLED`·`SUCCEEDED`로 확인될 때만 지우고 그 밖에는 `SILVER_CLEANUP_SKIPPED`를 남긴다. 상태 파일에는 `status=failed`와 `staging_discarded`를 기록한다. 그리고 coverage·schema 같은 결정적 계약 오류는 종료 코드 65로 자동 반복을 중단한다.
 
 Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Sector·관측점 수·상위 채택 peak 5개·오류를 `SILVER_CANARY_AUDIT` 로그와 `/var/lib/planetory-silver/run=<run>/attempt=<attempt>.json`의 `result.science_audit`에 남긴다. 성공한 정확한 attempt의 Spark staging과 빈 run 부모만 정리하며 다른 attempt가 있으면 부모 삭제를 건너뛴다.
 

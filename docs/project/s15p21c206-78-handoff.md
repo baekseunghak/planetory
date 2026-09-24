@@ -99,7 +99,7 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
 **Canary TIC 선택 시 주의** — 최초 전처리 결과가 `insufficient_observations`(유효 관측 500점 미만) 같은 결정적 데이터 판정인 TIC도 여전히 `failed_tics`에 들어가 Canary를 실패시킨다. 첫 Canary는 이전 실클러스터 기준 TIC `259377017`처럼 관측이 충분한 TIC로 고른다.
 
 **전체 `run` 전에 해결할 것**
-1. Spark 작업이 전체를 한 번에 확정하며 `spark.yarn.maxAppAttempts=1`이다. 중간 실패 시 처음부터 다시 돌고, 실패한 attempt의 `/lake/silver/.staging` 부분 출력은 정리되지 않는다. systemd는 5분마다 새 attempt로 재시작하므로 실패가 반복되면 staging이 누적되고, 75% HDFS 사용량 점검에서 멈춘다.
+1. Spark 작업이 전체를 한 번에 확정하며 `spark.yarn.maxAppAttempts=1`이다. 중간 실패 시 처음부터 다시 도는 것은 **감수하기로 했다**(2026-09-24). 재기동 때 실패한 attempt의 staging이 쌓여 75% 점검에서 멈추던 문제는 **보강했다**: 제어기가 YARN 앱 종료를 확인한 뒤 자기 attempt staging만 지우고, 앱 상태가 불확실하면 남긴다. TIC 묶음별 확정은 결과가 여러 attempt로 나뉘어 후속 소비 계약이 바뀌므로 하지 않았다.
 2. **HDFS 여유가 빠듯하다.** 2026-09-23 기준 10.03 TB 중 3.81 TB(38%)를 쓰며, 252가 Sector당 복제 포함 약 90 GB(Raw 약 38 GB + Bronze 약 6.8 GB, 논리)를 계속 적재한다. Sector 70까지 끝나면 약 6.3 TB(63%), Silver 전체 run(RF2 약 0.63~0.73 TB)을 더하면 **약 70%**로 사전 점검 기준 75%에 가깝다. 252 완료 뒤 시작하므로 252 적재와 겹치지는 않지만, 75%를 넘으면 이후 Bronze·Silver 사전 점검이 모두 거부한다. 실행 중 shuffle·`DISK_ONLY` 결과가 HDFS와 같은 `/mnt/data`를 추가로 쓰고, `excluded_json`이 `exclusion_ledger_json`에 중복 포함된다.
 3. **252 Bronze release는 교체하지 않고, 252가 Sector 70을 끝낸 뒤 전체 run을 시작한다(2026-09-23 결정 A).** 서버의 252 Bronze(`20260922T021406Z`)는 RUNNING YARN 앱이 하나라도 있으면 사전 점검에서 실패하므로, 252가 적재하는 동안 며칠짜리 Silver run을 돌리면 252 Bronze가 계속 실패한다. 교체는 비용이 크다. Airflow 계정 sudoers는 파일 하나가 HDFS 적재·Bronze release를 **같은 ID 하나로** 허용하고, 설정 스크립트는 기존 파일과 다르면 덮어쓰지 않고 실패한다(`AIRFLOW_SUDOERS_CONFLICT`). 이미 허가된 Sector는 이전 release 경로에 고정돼 있어 sudoers를 바꾸는 순간 sudo에서 거부된다. 따라서 교체에는 drain, Node 1~6 HDFS release와 Node 1 Bronze release 설치, sudoers 수동 재생성이 모두 필요하다. 반면 상한 `tess_pipeline_max_sector=70`에 도달하면 새로 허가할 Sector가 없어 `commit_bronze`가 더 실행되지 않는다. 14:12 UTC 기준 Sector 52까지 완료, 시간당 약 1.9개로 완료 예상은 23:30~24:00 UTC(추정)다.
    - 시작 조건: `tess_pipeline_completed_through=70`, 단계 DAG 실행 중 run 0건, YARN 실행 앱 0개, HDFS 사용률 재확인(예상 약 63%).
@@ -107,7 +107,7 @@ Canary 2는 111·122 벤치마크 별로 Sector 수와 신호 성격을 나눠 �
    - 남는 위험: Silver 실행 중 실패 Sector가 재시도되면 그 Bronze는 사전 점검에서 계속 실패하지만, Silver 종료 후 조정 DAG가 다시 시작하며 데이터 손상은 없다.
    - 252 적재 중 Silver가 꼭 필요할 때만 대안 B(drain → 같은 새 ID의 HDFS·Bronze release 설치 → sudoers 수동 재생성 → `tess_pipeline_settings` 갱신)를 검토한다.
 4. **`tess_yarn` Pool을 Airflow 이미지보다 먼저 만든다.** 서버에는 `default_pool`만 있다. `pool="tess_yarn"`이 붙은 이 브랜치의 `commit_bronze`가 담긴 이미지를 Pool보다 먼저 배포하면 Airflow가 그 Task를 스케줄하지 않는다. 78이 develop에 병합된 뒤 252가 develop 기준으로 재배포할 때도 같다.
-5. `process_tic`의 넓은 예외 처리가 코드 결함을 `invalid_bronze_row`(retryable 아님)로 기록한다. Canary 1 첫 실행의 결함도 이 코드로 보였다. 코드 결함과 입력 오류를 구분한다.
+5. **보강했다(2026-09-24)** — `process_tic`의 넓은 예외 처리가 코드 결함을 `invalid_bronze_row`(retryable 아님)로 기록하던 것을, Bronze 행 읽기 중 오류만 `invalid_bronze_row`로 두고 그 뒤 코드 결함은 `unexpected_processing_error`(retryable, 예외 형식과 메시지 포함)로 나눴다.
 
 ## 서버에서 확인한 기준 상태
 
