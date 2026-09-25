@@ -435,7 +435,8 @@ services:
       - service
 
   # Gold 목업 게시. gold-mock profile에 묶여 평시 up 대상이 아니다 [S15P21C206-262].
-  #   docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027
+  #   docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-load --tic <TIC 목록>
+  # --no-deps를 빼면 service-db가 재생성될 수 있다(README 「Gold 목업」).
   #
   # 입력만 계약 예시 payload로 바꾼 실제 적재 단계다(distributed-system/publisher). 운영 Publisher는
   # GCP Node 1에서 돌 예정이며 그때 입력 어댑터만 바뀐다. gold_writer 멤버 계정으로 붙는다.
