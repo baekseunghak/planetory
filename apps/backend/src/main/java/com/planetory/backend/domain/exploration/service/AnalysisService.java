@@ -114,7 +114,7 @@ public class AnalysisService {
         Bundle bundle = openCurrentBundle(memberId, ticId);
         OperationRule rule = rules.findCurrent()
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
-        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds());
+        List<LightCurveSegment> segments = gold.findSegments(bundle.ticId(), bundle.manifest().segmentIds());
         if (segments.isEmpty()) {
             throw new IllegalStateException(ExplorationIds.bundle(bundle.id())
                     + "은 현재 판인데 세그먼트가 없습니다. 적재 계약이 어긋났습니다.");
@@ -265,7 +265,7 @@ public class AnalysisService {
      */
     private PowerAt powerAt(long ticId, Target target) {
         Bundle bundle = target.bundle();
-        GoldCatalogViews.Periodogram original = gold.findPeriodogram(bundle.id())
+        GoldCatalogViews.Periodogram original = gold.findPeriodogram(bundle.ticId(), bundle.id())
                 .orElseThrow(() -> new IllegalStateException(
                         ExplorationIds.bundle(bundle.id()) + "은 현재 판인데 주기도 행이 없습니다. 적재 계약이 어긋났습니다."));
 
@@ -514,7 +514,7 @@ public class AnalysisService {
 
     /** 판이 참조하는 세그먼트를 섹터 순으로. 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다. */
     private List<LightCurveSegment> segmentsOf(Target target) {
-        return gold.findSegments(target.bundle().manifest().segmentIds());
+        return gold.findSegments(target.bundle().ticId(), target.bundle().manifest().segmentIds());
     }
 
     private static Curve curveOf(long ticId, Target target, Residual residual, List<Segment> segments) {

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="590" viewBox="0 0 1080 590" role="img" aria-labelledby="title desc">
+  <title id="title">V25 NASA 행성 정보 관계도</title>
+  <desc id="desc">stars와 candidates가 nasa_planet_info에 외래 키로 연결된다. external_signal_references는 검증된 NASA 행성명 공급자이며 submissions와 star_unlocks는 조회 권한 검사에 사용된다.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#43618d" stroke-width="1.5"/></marker>
+  </defs>
+  <rect width="1080" height="590" fill="#f8fafc"/>
+  <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25 · 요청된 확정 행성 NASA 자료</text>
+  <text x="36" y="73" font-family="sans-serif" font-size="15" fill="#475569">실선은 DB 외래 키, 점선은 조회 전에 검사하는 연결이다.</text>
+
+  <rect x="36" y="115" width="270" height="88" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="147" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">stars</text>
+  <text x="54" y="177" font-family="sans-serif" font-size="15" fill="#334155">tic_id PK · 항성 식별자</text>
+
+  <rect x="36" y="238" width="270" height="106" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="270" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">candidates</text>
+  <text x="54" y="298" font-family="sans-serif" font-size="15" fill="#334155">id PK · 내부 신호</text>
+  <text x="54" y="322" font-family="sans-serif" font-size="15" fill="#334155">tic_id FK → stars</text>
+
+  <rect x="36" y="384" width="270" height="110" rx="9" fill="#ffffff" stroke="#a3adc0" stroke-width="2"/>
+  <text x="54" y="416" font-family="sans-serif" font-size="18" font-weight="700" fill="#14243b">external_signal_references</text>
+  <text x="54" y="444" font-family="sans-serif" font-size="15" fill="#334155">candidate_id · source='archive'</text>
+  <text x="54" y="468" font-family="sans-serif" font-size="15" fill="#334155">external_id = 정확한 pl_name</text>
+
+  <rect x="400" y="134" width="610" height="324" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
+  <text x="425" y="170" font-family="sans-serif" font-size="22" font-weight="700" fill="#14335d">nasa_planet_info · 서비스 조회 자료</text>
+  <text x="425" y="203" font-family="sans-serif" font-size="16" fill="#1e3a5f">candidate_id PK/FK · tic_id FK · archive_planet_name</text>
+  <text x="425" y="234" font-family="sans-serif" font-size="16" fill="#1e3a5f">status · last_refresh_status · normalized JSONB</text>
+  <text x="425" y="265" font-family="sans-serif" font-size="16" fill="#1e3a5f">source_hash · source_version</text>
+  <text x="425" y="296" font-family="sans-serif" font-size="16" fill="#1e3a5f">fetched_at · changed_at · last_attempt_at</text>
+  <text x="425" y="327" font-family="sans-serif" font-size="16" fill="#1e3a5f">next_refresh_at · in_flight_until · attempt_generation</text>
+  <line x1="425" y1="349" x2="980" y2="349" stroke="#9bb9dd"/>
+  <text x="425" y="379" font-family="sans-serif" font-size="15" fill="#1e3a5f">후보당 한 행 · 실제 요청 대상만 저장 · Gold 판정과 분리</text>
+  <text x="425" y="411" font-family="sans-serif" font-size="15" fill="#1e3a5f">7일/1일 재확인 · 이전 정상값 보존 · 순번으로 늦은 응답 차단</text>
+
+  <path d="M306 160 H365 V199 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M306 291 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M306 439 H354 V408 H400" fill="none" stroke="#8291a8" stroke-dasharray="7 5" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="541" font-family="sans-serif" font-size="15" fill="#475569">조회 권한: active 회원 + 별 발견 + 해당 confirmed 후보 수치 매칭 제출. submissions와 star_unlocks는 캐시에 FK로 연결하지 않는다.</text>
+</svg>

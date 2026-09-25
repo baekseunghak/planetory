@@ -65,8 +65,8 @@ services:
     networks:
       - service
 
-  # 잔차·주기도 캐시용(SRS DAT-14). 소비처는 아직 없고 지금은 백엔드 기동 요건만
-  # 채운다. 재생성 가능한 파생물이라 볼륨을 두지 않고 저장도 끈다.
+  # 운영자 지정 Gold 곡선·원본 주기도 읽기 캐시 및 잔차 계산 캐시용(SRS DAT-14).
+  # 계산 상태·잠금 소비처는 아직 없다. DB에서 복구 가능한 값이라 볼륨을 두지 않고 저장도 끈다.
   #
   # volatile-lru로 축출 후보를 만료가 걸린 키로 한정한다. DAT-14는 결과와 함께 진행
   # 상태와 중복 계산 잠금도 여기 둔다. allkeys-lru면 잠금이 결과와 같은 확률로
@@ -114,6 +114,8 @@ services:
       SESSION_REDIS_PORT: "6379"
       CACHE_REDIS_HOST: cache-redis
       CACHE_REDIS_PORT: "6379"
+      GOLD_CACHE_ENABLED: ${GOLD_CACHE_ENABLED:-false}
+      GOLD_CACHE_TIC_IDS: ${GOLD_CACHE_TIC_IDS:-}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:

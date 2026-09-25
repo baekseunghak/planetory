@@ -381,7 +381,7 @@ class HistoryTest {
     }
     @Test void 원본배열_계약손상도_의존성503_당시스냅샷은_독립() {
         String id=submit(3);
-        doThrow(new IllegalStateException("invalid Gold array")).when(gold).findSegments(any());
+        doThrow(new IllegalStateException("invalid Gold array")).when(gold).findSegments(anyLong(), any());
         error(ErrorCode.DEPENDENCY_UNAVAILABLE,()->histories.graph(member,id,"CURRENT"));
         assertNotNull(histories.graph(member,id,"SUBMITTED").snapshot());
     }

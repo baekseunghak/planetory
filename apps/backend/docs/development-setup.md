@@ -74,6 +74,7 @@ docker compose --profile service up -d --build backend
 ### 환경변수
 
 세션·계산 캐시 연결의 `SESSION_REDIS_*`·`CACHE_REDIS_*` 변수와 필수값은 [OAuth Redis 연결 안내](oauth-setup.md#redis-연결과-저장-경계237)를 따른다.
+Gold 읽기 캐시는 기본 비활성이다. 지정한 별을 미리 올리려면 `GOLD_CACHE_ENABLED=true`, `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 설정한다. 시작 시와 판 전환 알림 후 현재 판의 곡선·원본 주기도만 `cache-redis`에 적재하고, 후보 모델·권한·current 판은 DB에서 읽는다. 상세 운영 절차와 임시 128mb 용량 경계는 [서비스 배포 안내](../../../infra/service/README.md#세션캐시-redis)를 따른다.
 
 | 변수 | 역할 / 기본값 |
 |---|---|
@@ -325,3 +326,7 @@ V23과 RELABEL을 포함한 FE 6종 소비자를 함께 반영한다. 기존 설
 ## V24 탈퇴 스키마·권한 (180)
 
 V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdrawn_at`, 공개 분석의 `withdrawn_at`과 두 정리 함수를 추가한다. 적용은 회원 데이터 삭제 경로를 준비하는 스키마 변경이며 **공유·운영 DB에는 이 작업에서 적용하지 않는다**. 일회용 PostgreSQL에서 전체 migration·V18 구버전 업그레이드와 실제 앱 역할의 함수 실행 권한을 검증한다. 운영 적용 전 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 처리 근거·본문 삭제 절차·복원 계획을 확인하고 별도 승인받는다. 기본 기능 스위치는 `planetory.withdrawal.enabled=false`다.
+
+## V25 요청된 NASA 행성 자료 (266)
+
+`V25__nasa_planet_info.sql`은 최신 develop의 V24 다음 번호로, 실제 요청된 확정 후보의 NASA PS 기본 해를 보관하는 서비스 테이블 하나와 앱 역할의 SELECT/INSERT/UPDATE 권한을 추가한다. 기존 V1~V24나 Gold 판정·성과는 수정하지 않는다. 일회용 PostgreSQL에서 전체 migration과 HTTP fixture 조회·경합을 검증했다. 공유/운영 DB 적용은 미실행이다. 테이블·상태 계약은 [개발 문서](../../../docs/development/nasa-planet-info-266.md), Flyway 순서·필수 권한·환경변수·실행/복구는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md)를 따른다. 다른 MR이 먼저 병합되면 번호를 다시 정한다.
