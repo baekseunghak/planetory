@@ -18,9 +18,12 @@ const { scripts } = JSON.parse(
 // 다른 값을 내므로 CI에서만 뺀다. 표시된 테스트만 빼고, 스위트가 비어도 실패로 보지 않는다.
 const gpuFree = ["--grep-invert=@gpu", "--pass-with-no-tests"];
 const all = scripts["test:e2e"].split("&&").map((part) => {
-  const [, name, extra = ""] = part
-    .trim()
-    .match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
+  const matched = part.trim().match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
+  if (!matched)
+    throw new Error(
+      `test:e2e 항목을 해석하지 못했다: "${part.trim()}". "npm run <스크립트> [-- 인자]" 형식만 받는다.`,
+    );
+  const [, name, extra = ""] = matched;
   const args = extra.split(/\s+/).filter(Boolean);
   return {
     name,
@@ -46,6 +49,25 @@ const suites = wanted.length
 if (wanted.length)
   console.log(`부분 실행(병합 판단 근거 아님): ${wanted.join(", ")}`);
 
+// 시간 초과로 job이 죽으면 끝나지 않은 스위트의 출력은 남지 않는다(출력을 끝날 때 한 번에 찍으므로).
+// GitLab이 주는 제한 시간(CI_JOB_TIMEOUT)과 job 시작 시각으로 제한 2분 전에 돌고 있는 스위트마다
+// 최근 출력을 찍어, 어느 테스트에서 멈췄는지 볼 수 있게 한다. 제한을 모르면(로컬) 찍지 않는다.
+const running = new Map();
+const limit = Number(process.env.CI_JOB_TIMEOUT);
+if (limit > 0) {
+  const jobStarted =
+    Date.parse(process.env.CI_JOB_STARTED_AT ?? "") || Date.now();
+  setTimeout(
+    () => {
+      for (const [name, output] of running)
+        console.log(
+          `\n===== 제한 시간 임박, 진행 중: ${name} (최근 60줄) =====\n${output().split("\n").slice(-60).join("\n")}`,
+        );
+    },
+    Math.max(0, jobStarted + (limit - 120) * 1000 - Date.now()),
+  ).unref();
+}
+
 function run({ name, args }) {
   const started = Date.now();
   console.log(`시작: ${name}`);
@@ -58,9 +80,11 @@ function run({ name, args }) {
       },
     );
     let output = "";
+    running.set(name, () => output);
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));
     child.on("close", (code) => {
+      running.delete(name);
       const seconds = Math.round((Date.now() - started) / 1000);
       // 동시에 도는 스위트의 출력이 섞이지 않게 끝난 뒤 한 번에 찍는다.
       console.log(
