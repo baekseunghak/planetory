@@ -139,6 +139,8 @@ services:
 
   # 온라인 잔차·주기도 Worker [S15P21C206-88]. Backend만 service 네트워크 안에서
   # http://derived-compute:8090 으로 부른다. 호스트 포트를 열지 않으며 DB·Redis 자격 증명을 받지 않는다.
+  # Worker의 계산 경로에는 인증이 없다. 이 네트워크 격리가 유일한 통제이므로 디버깅용으로도 ports:를 열지 않는다.
+  # 들여다볼 때는 docker compose exec derived-compute … 나 backend 컨테이너에서 이름으로 부른다.
   # backend의 depends_on에 넣지 않는다. Worker가 없으면 잔차 요청만 503이 되고 나머지 API는 돈다.
   #
   # 자원은 계약 5절의 실측 전 시작값(cpu_per_job=1, memory_mib_per_job=2048, instance_concurrency=1)이다.

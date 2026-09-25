@@ -269,6 +269,8 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 `derived-compute`는 잔차·주기도를 계산한다. Backend만 `http://derived-compute:8090/internal/v1/derived-compute`로 부르며 호스트 포트를 열지 않는다. DB·Redis 자격 증명을 넘기지 않는다. 구현과 환경 변수는 [apps/derived-compute](../../apps/derived-compute/README.md)에 있다.
 
+**디버깅용으로도 `ports:`를 열지 않는다.** Backend의 `/internal/**`는 서비스 토큰을 요구하지만 Worker의 계산 경로에는 인증이 없고, `service` 네트워크 격리가 유일한 통제다. 자격 증명이 없고 동시 실행 1·본문 64MiB 상한이 있어 같은 네트워크에서 할 수 있는 최대치가 잔차 계산의 CPU 점유라 이 선택을 받아들였다. 포트를 열면 그 전제가 깨진다. 들여다볼 때는 `docker compose exec derived-compute …`나 Backend 컨테이너에서 서비스 이름으로 부른다(「첫 배포 절차」 2단계).
+
 | `.env` 변수 | 기본값 | 뜻 |
 | --- | --- | --- |
 | `DERIVED_COMPUTE_IMAGE` | 없음 | 배포 job이 채운다. 응답의 `runtime.worker_image`로도 나간다 |
