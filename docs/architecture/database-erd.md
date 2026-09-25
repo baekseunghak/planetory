@@ -1,13 +1,17 @@
-# Planetory 서비스 DB ERD v1.12
+# Planetory 서비스 DB ERD v1.13
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20)
-- v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13 2026-09-25)
+- v1.3 당시 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 그 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.12 → v1.13 (2026-09-25, `S15P21C206-266`)
+
+V25는 Gold와 분리된 서비스 조회 테이블 `nasa_planet_info`를 추가한다. 회원이 실제 매칭한 확정 후보만 NASA PS 기본 해로 조회하고, 후보당 한 행에 정규화값·출처 해시·조회/변경 시각·재확인 상태·경합 순번을 저장한다. Gold·후보 판정·성과는 바꾸지 않는다. 관계·열의 최신 작은 그림은 [NASA 자료 ERD SVG](../images/nasa-planet-info-erd.svg), 상세 상태·필드는 [266 개발 계약](../development/nasa-planet-info-266.md)을 따른다. V25는 격리 DB에서 검증했으며 공유/운영 DB 적용은 미실행이다.
 
 ### v1.11 → v1.12 (2026-09-20, `S15P21C206-114`)
 
@@ -149,7 +153,7 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-여섯 묶음, 총 34개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수는 운영 적용 전 검증 대상이다.
+일곱 묶음, 총 35개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료는 운영 적용 전 검증 대상이다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
@@ -159,10 +163,11 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
 | F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
+| G 외부 조회 자료 | nasa_planet_info | 266이 요청된 후보만 저장하는 NASA PS 정규화 자료. Gold와 별도 소유 |
 
 ## 2. ERD
 
-아래 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24 신규 열·테이블은 아래 Mermaid·열 표를 따른다. SVG 갱신은 시각 인수에서 별도 확인한다.
+아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24·V25 신규 관계의 최신 본문은 아래 Mermaid·열 표이고, V25는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -194,6 +199,8 @@ erDiagram
     publication_bundles ||--o{ candidates : last_updated_by
     candidates ||--o{ candidate_aliases : aliases
     candidates ||--o{ external_signal_references : matched_to
+    candidates ||--o| nasa_planet_info : requested_nasa_info
+    stars ||--o{ nasa_planet_info : host
     candidates ||--o| candidate_dispositions : classified
     candidates ||--o{ candidate_status_history : changes
     candidates ||--o{ ai_evaluations : scored
@@ -345,6 +352,19 @@ erDiagram
         date fetched_on "조회일"
         bigint tic_id FK "별"
         numeric epoch_btjd "원천 epoch(BTJD·NULL 가능)"
+    }
+    nasa_planet_info["nasa_planet_info · 요청된 NASA 자료"] {
+        bigint candidate_id PK, FK "내부 확정 후보"
+        bigint tic_id FK "항성 TIC"
+        text archive_planet_name "검증된 NASA pl_name"
+        text status "ready/not_found/identity_unresolved 등"
+        jsonb normalized "PS 기본 해·단위·오차·출처"
+        text source_hash "정규화 SHA-256"
+        smallint source_version "계약 버전"
+        timestamptz fetched_at "정상 조회"
+        timestamptz changed_at "정규화 변경"
+        timestamptz next_refresh_at "다음 재확인"
+        bigint attempt_generation "경합 순번"
     }
     candidate_dispositions["candidate_dispositions · 통합 분류"] {
         bigint candidate_id PK, FK "후보"
@@ -881,6 +901,10 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
+
+### G. 요청된 외부 조회 자료 (V25, 266)
+
+**nasa_planet_info**는 `candidate_id` PK/FK와 `tic_id` FK로 요청된 내부 확정 후보 하나에만 붙는다. `archive_planet_name`은 Gold의 `external_signal_references(source='archive')`에서 검증된 정확한 NASA `pl_name`이고 별칭·이름 유사도로 채우지 않는다. `status`는 `pending/ready/not_found/identity_unresolved/temporarily_unavailable`, `last_refresh_status`는 최근 시도 이유다. `normalized` JSONB·`source_hash` SHA-256·`source_version` 1은 정상 PS 기본 해의 데이터와 구조 버전이며, `fetched_at`은 마지막 정상 조회, `changed_at`은 정규화값 변경 시각이다. `last_attempt_at`·`next_refresh_at`·`in_flight_until`·`attempt_generation`은 재확인과 늦은 응답 방지용이다. FK 이외의 Gold 쓰기 권한은 추가하지 않는다. 서비스 앱 역할에는 이 테이블만 SELECT/INSERT/UPDATE를 준다. 저장·상태 전이·보관 정책은 [266 개발 계약](../development/nasa-planet-info-266.md#4-저장-구조와-상태-전이), 배포는 [운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다.
 
 ## 4. 설계 결정과 근거
 

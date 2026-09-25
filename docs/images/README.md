@@ -8,5 +8,6 @@
 | `system-architecture-visual.svg` | Planetory 시스템 아키텍처 개요 |
 | `database-erd.svg` | 서비스 DB ERD 상세 |
 | `database-erd-overview.svg` | 서비스 DB ERD 개요 |
+| `nasa-planet-info-erd.svg` | [266 NASA 조회 자료의 V25 관계](../architecture/database-erd.md#g-요청된-외부-조회-자료-v25-266) |
 
 이미지는 설명을 돕는 산출물이며 기술 결정의 정본이 아니다. 구조가 바뀌면 원본 문서와 이미지를 함께 갱신하고, 상대 링크와 민감정보 포함 여부를 확인한다.
