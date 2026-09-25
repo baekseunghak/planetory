@@ -342,3 +342,9 @@ V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdra
 `V28__nasa_explanation_daily_usage.sql`은 UTC 날짜와 회원 ID를 키로 하는 `nasa_explanation_daily_usage`, UTC 날짜를 키로 하는 `nasa_explanation_daily_total` 두 테이블을 만든다. 모델 시도권 확보 때 회원별·전체 수를 한 짧은 트랜잭션에서 올려 다중 서버의 일별 상한을 함께 지킨다. 한도 수치는 미지정이라 기본값이 각각 0이며, 설명 활성화 전 운영 승인된 양의 정수를 명시해야 한다. 회원 삭제로 회원별 행이 정리돼도 전체 일별 수는 남는다. 앱 역할에는 두 테이블의 SELECT/INSERT/UPDATE만 추가하고 DELETE는 주지 않는다. V25 NASA 원천·V26 설명과 269의 `V27__peak_submission_optional_duration.sql`을 수정하지 않고 그 다음 번호로 적용한다. GET 저장 조회, 재사용 POST, NASA 조회는 이 모델 시도 수에 포함하지 않는다.
 
 기본값·환경변수 전달·DB 집계·중지 절차는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md#8-한국어-설명-생성-배포운영-267), 현재 GET/POST와 화면 경계는 [268 개발 계약](../../../docs/development/nasa-planet-request-268.md)을 따른다. 공유/운영 DB 적용·실제 GMS 비용 확인은 별도다.
+
+## V29 결과 화면의 NASA 항성별 확정 행성 (270)
+
+`V29__nasa_star_planets.sql`은 V28 다음에 `nasa_star_catalog`, `nasa_star_planet`, `nasa_star_planet_explanation` 세 테이블을 추가한다. 후보 ID 없이 `(tic_id, planet_id)`로 NASA 행성을 식별하고, 성공 조회에서 빠진 옛 행은 `active=false`로 보존한다. 목록 조회의 완전성·임대와 행성별 원천/설명 상태를 분리한다. V25·V26·V27·V28을 수정하지 않으며 Gold·후보 분류·성과에 쓰기 권한을 추가하지 않는다. 앱 역할은 세 신규 테이블의 SELECT/INSERT/UPDATE만 받는다. V28의 회원별·전체 일별 모델 시도권은 268 후보 설명과 270 선택 행성 설명이 공유한다.
+
+Flyway 소유자와 앱 역할, 기존 V25→V28 적용 여부를 확인한 뒤 대상 DB에 적용한다. `repair`, `clean`, `outOfOrder`로 기존 이력을 우회하지 않는다. 기본 설명 비활성·한도 0/0에서도 V29 스키마는 270 API 기동 전에 필요하다. 테이블·상태는 [ERD G절](../../../docs/architecture/database-erd.md#g-요청된-외부-조회-자료와-한국어-설명-v25v26v28v29-266270), HTTP와 권한은 [270 개발 계약](../../../docs/development/nasa-star-planets-270.md), 적용 명령·기대 결과·장애/복구는 [운영 가이드 10절](../../../docs/operations/nasa-planet-info-runbook.md#10-결과-화면의-nasa-전체-목록-운영-270)을 따른다. 공유/운영 DB 적용과 실제 회원·GMS 호출은 별도 인수다.

@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +24,7 @@ public class NasaPlanetExplanationService {
 
     private final NasaPlanetInfoService sourceService;
     private final NasaPlanetExplanationRepository repository;
+    private final NasaExplanationQuota quota;
     private final NasaPlanetExplanationGenerator generator;
     private final Clock clock;
     private final boolean enabled;
@@ -33,23 +33,21 @@ public class NasaPlanetExplanationService {
     private final Duration retryDelay;
     private final int dailyPerMember;
     private final int dailyGlobal;
-    private final Semaphore permits;
 
     NasaPlanetExplanationService(NasaPlanetInfoService sourceService,
                                  NasaPlanetExplanationRepository repository,
+                                 NasaExplanationQuota quota,
                                  NasaPlanetExplanationGenerator generator, Clock clock,
                                  @Value("${planetory.nasa.explanation.enabled:false}") boolean enabled,
                                  @Value("${planetory.nasa.explanation.model:gpt-5.4-mini}") String model,
                                  @Value("${planetory.nasa.explanation.timeout:8s}") Duration timeout,
                                  @Value("${planetory.nasa.explanation.retry-delay:1h}") Duration retryDelay,
-                                 @Value("${planetory.nasa.explanation.max-concurrent:1}") int maxConcurrent,
                                  @Value("${planetory.nasa.explanation.daily-per-member:0}") int dailyPerMember,
                                  @Value("${planetory.nasa.explanation.daily-global:0}") int dailyGlobal,
                                  @Value("${spring.ai.openai.chat.max-completion-tokens:320}") int maxOutputTokens) {
         if (model.isBlank() || model.length() > 100
                 || timeout.isZero() || timeout.isNegative() || timeout.compareTo(Duration.ofSeconds(20)) > 0
                 || retryDelay.compareTo(Duration.ofMinutes(1)) < 0 || retryDelay.compareTo(Duration.ofDays(1)) > 0
-                || maxConcurrent < 1 || maxConcurrent > 4
                 || dailyPerMember < 0 || dailyPerMember > 1000
                 || dailyGlobal < 0 || dailyGlobal > 100000
                 || (enabled && (dailyPerMember == 0 || dailyGlobal == 0))
@@ -58,6 +56,7 @@ public class NasaPlanetExplanationService {
         }
         this.sourceService = sourceService;
         this.repository = repository;
+        this.quota = quota;
         this.generator = generator;
         this.clock = clock;
         this.enabled = enabled;
@@ -66,7 +65,6 @@ public class NasaPlanetExplanationService {
         this.retryDelay = retryDelay;
         this.dailyPerMember = dailyPerMember;
         this.dailyGlobal = dailyGlobal;
-        this.permits = new Semaphore(maxConcurrent);
     }
 
     /** 회원 자격 검사와 NASA 재확인을 266에 맡긴다. 모델 HTTPS 동안 트랜잭션을 열지 않는다. */
@@ -127,7 +125,7 @@ public class NasaPlanetExplanationService {
                 return result(source, row);
             }
         }
-        if (!permits.tryAcquire()) {
+        if (!quota.tryAcquire()) {
             return new Lookup("busy", source, null, null, model, PROMPT_VERSION, null, "busy");
         }
         try {
@@ -179,7 +177,7 @@ public class NasaPlanetExplanationService {
                     .orElseGet(() -> new Lookup("source_changed", source, null, null,
                             model, PROMPT_VERSION, null, "source_changed"));
         } finally {
-            permits.release();
+            quota.release();
         }
     }
 

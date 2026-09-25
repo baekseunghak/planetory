@@ -295,3 +295,4 @@
 | 2026-09-25 | 추천 duration이 없는 봉우리 제출의 500 해소 | S15P21C206-269 | ck_submissions_source_peak_all_or_none, V27, 봉우리 제출 500, suggestedDurationHours null, durationLimitHours | 구현 완료·develop 병합 | [기록](2026-09-25.md) |
 | 2026-09-25 | NASA 설명 GET 조회·POST 단일 후보 요청과 V28 한도 | S15P21C206-268 | GET 읽기 전용, CSRF POST, facts, V28, 일별 시도권, 상세 패널 | 268 표적 36건·269 V27 포함 통합 73/73·프론트 452건/빌드·Chrome fixture 6건 통과, 실제 회원·Gold·운영 인수 별도 | [기록](2026-09-25.md) |
 | 2026-09-25 | V28 신규 테이블의 반복 마이그레이션 설명 누락 정정 | S15P21C206-268 | R__table_comments.sql, backend:schema, MR !219 | 조건부 설명 추가·로컬 검사 통과, CI 재검증 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | 결과 화면 NASA 항성별 확정 행성 목록·V29 계약 | S15P21C206-270 | NASA ps, planetId, partial, stale, V29, V28 공유 | 일곱 클래스 격리 98/98 통과, 실제 회원·운영 인수 별도 | [기록](2026-09-25.md) |

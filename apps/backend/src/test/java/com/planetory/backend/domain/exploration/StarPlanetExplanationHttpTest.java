@@ -4,6 +4,7 @@ import com.planetory.backend.domain.exploration.controller.StarController;
 import com.planetory.backend.domain.exploration.service.NasaPlanetExplanation;
 import com.planetory.backend.domain.exploration.service.NasaPlanetExplanationService;
 import com.planetory.backend.domain.exploration.service.NasaPlanetInfo;
+import com.planetory.backend.domain.exploration.service.NasaStarPlanetService;
 import com.planetory.backend.domain.exploration.service.StarPlanetExplanationService;
 import com.planetory.backend.domain.exploration.service.StarResultService;
 import com.planetory.backend.domain.exploration.service.StarService;
@@ -49,7 +50,7 @@ class StarPlanetExplanationHttpTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new TestingAuthenticationToken(new MemberPrincipal(7L), null, "ROLE_USER"));
         mvc = MockMvcBuilders.standaloneSetup(new StarController(stars, mock(StarResultService.class),
-                        new StarPlanetExplanationService(stars, explanations)))
+                        new StarPlanetExplanationService(stars, explanations), mock(NasaStarPlanetService.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

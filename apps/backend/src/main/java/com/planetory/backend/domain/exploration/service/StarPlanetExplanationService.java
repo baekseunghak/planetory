@@ -117,7 +117,7 @@ public class StarPlanetExplanationService {
         return new Bundle(detail.ticId(), detail.version(), List.copyOf(items));
     }
 
-    private static Facts facts(NasaPlanetInfo.Lookup source) {
+    static Facts facts(NasaPlanetInfo.Lookup source) {
         if (source == null || !"ready".equals(source.status()) || source.planet() == null
                 || source.sourceVersion() == null || source.sourceVersion() != 1
                 || source.sourceHash() == null || !source.sourceHash().matches("[0-9a-f]{64}")) {

@@ -150,3 +150,5 @@ History 첨부(160)는 기존 글·댓글 쓰기와 부모 경로 GET에 연결�
 NASA 확정 행성 자료의 내부 저장·조회(266)는 [개발 계약](../../docs/development/nasa-planet-info-266.md), 배포 설정·Flyway·점검·복구는 [운영 가이드](../../docs/operations/nasa-planet-info-runbook.md)를 따른다. 266 자체에는 공개 API가 없으며 별 단위 설명 응답은 267, 화면 연결은 268 범위다.
 
 검증된 NASA 자료의 한국어 설명(267)은 266의 `ready` 후보 자료를 사용하고 V26에 원천·모델·프롬프트 버전과 함께 저장한다. 인증된 `GET /api/v1/me/stars/{ticId}/planet-explanations`도 구현·격리 검증했다. 기본 비활성 상태, 모델 연결·배포·실패 복구는 [운영 가이드](../../docs/operations/nasa-planet-info-runbook.md), 설명 검증과 별 단위 응답 계약은 [267 개발 문서](../../docs/development/nasa-planet-explanation-267.md)를 따른다. 268은 화면 연결·UX 후속이다.
+
+결과 화면의 항성별 NASA 확정 행성 목록·개별 설명(270)은 [API 8.4.1절](docs/exploration-api-spec.md#841-결과-화면의-nasa-확정-행성-s15p21c206-270)과 [개발 계약](../../docs/development/nasa-star-planets-270.md)을, V29 적용·설정·점검은 [운영 가이드 10절](../../docs/operations/nasa-planet-info-runbook.md#10-결과-화면의-nasa-전체-목록-운영-270)을 따른다.
