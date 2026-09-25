@@ -42,6 +42,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 | `backend:test` | develop 병합 뒤 백엔드 변경 시 자동. MR·브랜치에서는 수동 | 전체 테스트. postgres 서비스와 dind, `amd64-docker` Runner | 약 8분 |
 
 - `backend:build`가 뺄 테스트는 `apps/backend/build.gradle`의 `-PmrTests`가 테스트 소스에서 `@SpringBootTest`·`@Testcontainers`·`SpringApplication` 등을 찾아 고른다. 새 테스트도 저절로 분류되며 job 로그에 뺀 소스 수가 찍힌다. 남기는 테스트가 컨테이너를 쓰게 되면 Gradle이 설정 단계에서 멈춘다. `PlanetoryApplicationTests`는 Redis를 Testcontainers로 띄워 MR 관문에서 돌 수 없다.
+- 예외로 남기는 스프링 테스트는 `build.gradle`의 `kept` 목록에 완전한 클래스 이름으로 적는다. dind 없이 돌고(Testcontainers·`GenericContainer`·`PostgreSQLContainer` 금지) 그 영역의 핵심 회귀인 것만 넣는다. 하나 늘 때마다 모든 MR이 10~15초씩 더 기다리므로 영역마다 대표 하나로 좁게 둔다. 목록의 이름에 맞는 소스가 없으면 Gradle이 설정 단계에서 멈춘다.
 - `backend:image`는 `backend:build` 뒤에만 돈다. `build:backend`와 배포는 `backend:test`를 기다리지 않는다. `backend:test`는 `needs: []`로 바로 시작하고 마지막 `verify` stage에 있어 `needs`가 없는 `build:backend`의 대기 대상이 아니다.
 - `backend:test`는 `interruptible: false`다. 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에는 백엔드 변경이 없어 전체 테스트가 끝내 돌지 않기 때문이다.
 - MR 관문에서 빠진 결함은 병합 뒤 `backend:test`에서 드러난다. 스키마·동시성·권한처럼 위험한 변경은 병합 전에 MR에서 `backend:test`를 수동으로 돌린다.
