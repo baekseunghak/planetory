@@ -183,6 +183,8 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 - Silver가 YARN 112 GiB 중 약 101 GiB를 쓰므로 동시에 도는 Bronze는 executor 1개 정도만 받는다. Silver 전체 run 중에는 Bronze 단계를 쉬게 할지 운영에서 정한다.
 - 진행 중인 전체 run `20260924T133559Z`는 이전 release·설정 그대로 둔다.
 
+코드 최적화(A·B)도 적용했다. Spark는 Bronze 28개 열 중 `process_tic`이 읽는 10개만 Python으로 넘기고, 전처리 biweight는 같은 길이의 창을 행으로 쌓아 한 번에 계산한다. 기존 구현과 비트 단위로 같은 결과를 검증했으므로 전처리 버전 `silver-biweight-1.0.0`은 그대로다. 추세 계산은 약 2.9배, TIC 처리 전체는 약 13% 빨라졌다(로컬 측정). TIC 시간의 약 87%는 전체 격자 BLS이며, BLS 입력 bin·주기 격자 변경(C·D)은 과학 결과가 바뀌어 120/122 승인 범위다. 새 release Canary에서 TIC `259377017`과 이전 Canary 5개 TIC의 과학 값이 그대로인지 실데이터로 확인한다.
+
 ### Spark History Server (2026-09-25, Node 1 설치 완료)
 
 Bronze·Silver 제출에 조건부 이벤트 로그를 넣고 [Node 1 설치 스크립트](../../infra/distributed-system/scripts/install-spark-history-node1.sh)를 추가했다. 남은 순서는 3번이다.

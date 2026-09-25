@@ -555,6 +555,16 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(conf["spark.dynamicAllocation.shuffleTracking.enabled"], "true")
         self.assertNotIn("spark.dynamicAllocation.cachedExecutorIdleTimeout", conf)
 
+    def test_only_the_columns_process_tic_reads_leave_the_jvm(self):
+        full = [dict(bronze_row(sector=2, product_id="p2", suffix="b"), procver="v", bundle_location="/x"),
+                dict(bronze_row(), procver="v", bundle_location="/x")]
+        slim = [{key: row[key] for key in tess_silver.SILVER_INPUT_COLUMNS} for row in full]
+        preprocess = lambda curves, **kwargs: (prepared(), detrended())  # noqa: E731
+        self.assertEqual(repr(call(full, preprocess, lambda *a, **k: search_result())),
+                         repr(call(slim, preprocess, lambda *a, **k: search_result())))
+        source = inspect.getsource(tess_silver.run)
+        self.assertIn("bronze.select(*SILVER_INPUT_COLUMNS).rdd", source)
+
     def test_tic_results_are_computed_before_any_coalesced_write(self):
         # A lazy persist would run all BLS work inside the coalesced write tasks.
         source = inspect.getsource(tess_silver.run)

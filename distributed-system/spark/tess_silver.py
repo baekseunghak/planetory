@@ -56,6 +56,11 @@ REQUIRED_BRONZE_COLUMNS = {
     "schema_version",
     "pipeline_version",
 }
+# The only Bronze fields process_tic reads; the other columns never leave the JVM.
+SILVER_INPUT_COLUMNS = (
+    "tic_id", "sector", "product_id", "time", "flux", "flux_err", "quality", "cadenceno",
+    "raw_sha256", "input_snapshot_id",
+)
 
 
 class SilverContractError(RuntimeError):
@@ -634,7 +639,7 @@ def run(args: argparse.Namespace) -> None:
         target_location = f"{args.final_output}/target_combined"
         periodogram_location = f"{args.final_output}/periodogram"
         iteration_location = f"{args.final_output}/iteration"
-        grouped = bronze.rdd.map(
+        grouped = bronze.select(*SILVER_INPUT_COLUMNS).rdd.map(
             lambda row: (int(row["tic_id"]), row.asDict(recursive=True))
         ).groupByKey(args.shuffle_partitions)
         results = grouped.map(
