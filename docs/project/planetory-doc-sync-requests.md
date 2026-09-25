@@ -169,3 +169,11 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 ## S15P21C206-262·266·267 Archive 참조와 NASA 설명 원천 구분 (2026-09-25)
 
 상태: **문서 구분 반영, 실제 Gold 식별 연결 검증 대기.** [266 계약](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)에 TESS 기반 Gold 곡선·후보, Gold에 붙은 Archive `pscomppars` 외부 참조, 266의 별도 NASA `ps` 기본 해 조회를 분리했다. 262 목업의 `nasa_exoplanet_archive` 행성명은 다른 더미 TIC로 복사되므로 266의 검증된 `archive` 공급 계약에 자동 포함하지 않는다. 실제 Gold 공급 경로에서 TIC·후보·정확한 행성명 연결을 검증하고 source 표기를 확정한 뒤 266 수용 범위와 268 화면 출처 안내를 함께 재검토한다.
+
+## S15P21C206-269 봉우리 제출 제약 정합화 (2026-09-25)
+
+상태: 구현 완료, MR 병합 전. 위 262 절의 「제출 제약 ↔ 추천값 null 계약」 행을 강재민이 받아 처리한다.
+
+- V27이 `ck_submissions_source_peak_all_or_none`을 262의 제안대로 바꾼다. 봉우리 번호는 필수, 제안 duration·상한은 둘 다 NULL이거나 둘 다 양수다. 주기 직접 선택은 지금처럼 셋 다 NULL이다.
+- [ERD](../architecture/database-erd.md) 제출 표와 [탐사 API](../../apps/backend/docs/exploration-api-spec.md) 6.2·6.4절을 함께 고쳤다. Frontend `submission-result.ts`는 이미 두 값을 null로 받는다.
+- 병합 순서: V26(S15P21C206-267, !217)이 먼저 병합돼 V27이 그 뒤를 잇는다.

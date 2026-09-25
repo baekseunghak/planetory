@@ -758,7 +758,7 @@ erDiagram
 | submission_kind | CHECK candidate/no_candidate/skipped | skipped = 튜토리얼 건너뛰기(SUB-12) |
 | curve_step, removed_candidate_ids BIGINT[] | | 정렬 배열. 잔차 캐시 키·재현 입력 |
 | submitted_period, matched_period, harmonic_multiplier, correction_reason | | 원본값 보존(SUB-05) |
-| source_peak_grid_index, source_peak_suggested_duration_hours, duration_limit_hours | | 봉우리 선택이면 같은 곡선 문맥의 grid index와 서버가 검증에 적용한 제안 duration·3배 상한을 저장한다. 주기도 직접 선택은 모두 NULL이며 서버가 period로 봉우리를 추정하지 않는다(C02-R3) |
+| source_peak_grid_index, source_peak_suggested_duration_hours, duration_limit_hours | CHECK `ck_submissions_source_peak_all_or_none` | 봉우리 선택이면 같은 곡선 문맥의 grid index와 서버가 검증에 적용한 제안 duration·3배 상한을 저장한다. 판이 제안 duration을 싣지 않으면(탐사 API 5.4) 상한도 없으므로 둘 다 NULL이다. 제안 duration과 상한은 둘 다 NULL이거나 둘 다 양수이며 한쪽만 채울 수 없다(V27, S15P21C206-269). 주기도 직접 선택은 모두 NULL이며 서버가 period로 봉우리를 추정하지 않는다(C02-R3) |
 | phase_start, phase_end | CHECK 0≤start<1, start<end<start+1 | 접힌 곡선 위상 구간이 원본 입력(POL-08). selection_space 없음 |
 | fold_reference_time_btjd DOUBLE | | 제출 당시 번들의 기준 시각. 현재 판에서 재현할 때 `phase = ((epoch − 현재 기준시각)/period) mod 1`로 재환산 |
 | epoch_btjd, duration_hours | | 서버가 위상값에서 파생해 저장(EXP-06·07). 절대값이라 판이 바뀌어도 의미 유지 |

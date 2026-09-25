@@ -842,7 +842,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
 | 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
 | 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.periodDays`(주기·위상 값이 유한하지 않거나 주기가 0 이하) 또는 `selection.phaseEnd`(위상 범위) |
-| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 봉우리는 있는데 그 `suggestedDurationHours`가 null이면(출처 없음, 5.4절) 마찬가지로 이 상한을 적용하지 않는다 — 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 봉우리는 있는데 그 `suggestedDurationHours`가 null이면(출처 없음, 5.4절) 마찬가지로 이 상한을 적용하지 않는다 — 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 이때 제출은 봉우리 번호만 남기고 `serverDerived.sourcePeakSuggestedDurationHours`·`durationLimitHours`를 둘 다 null로 저장한다(ERD V27). 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
 | 6 | 정수 k가 존재해 epoch가 `observationBounds`(세그먼트 시작의 최솟값 ~ 마지막 bin 끝의 최댓값) 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
@@ -900,7 +900,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                "evidenceChecks": ["oddeven", "ushape"], "memo": "홀짝 깊이가 비슷하고 U형",
                "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4}},
   "serverDerived": {"foldReferenceTimeBtjd": 1683.4231, "phaseCenter": 0.0, "epochBtjd": 1683.4231,
-                    "durationHours": 2.83, "sourcePeakSuggestedDurationHours": 3.1, "durationLimitHours": 9.3,
+                    "durationHours": 2.83, "sourcePeakSuggestedDurationHours": null, "durationLimitHours": null,
                     "centroidDataStatus": "unavailable"},
   "match": {"status": "matched_harmonic", "candidateId": "c-402", "harmonicMultiplier": 2,
             "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias"},
@@ -931,6 +931,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 | 필드 | 규칙 |
 |---|---|
+| `serverDerived.sourcePeakSuggestedDurationHours`, `serverDerived.durationLimitHours` | 봉우리 제출이 검증에 쓴 제안 duration과 그 배수 상한이다. 판이 제안 duration을 싣지 않으면(5.4절, 지금은 항상) 상한을 걸지 않았다는 뜻으로 둘 다 null이며 키는 빼지 않는다. 주기 직접 선택도 null이다. 둘 중 하나만 null인 응답은 없다(6.2절 5단계, ERD V27) |
 | `match.status` | `matched` / `matched_harmonic` / `not_matched` / `duplicate` / `ambiguous_match`; `no_candidate`는 `none_wrong`, `skipped`는 `skipped`. ERD CHECK 그대로 |
 | `signal` | 매칭 성공(`matched`·`matched_harmonic`·`duplicate`)에만. `not_matched`·`ambiguous_match`는 null(AT-14, AT-75). 확정·FP는 `external`에 행성명·출처·조회일·링크(RES-02) |
 | `signal.ai` | `status` `completed` / `input_insufficient` / `error` / `not_evaluated`. 실행 불가를 0점으로 바꾸지 않는다(RES-04, AT-15). `signal.external`과 나란히 두고 어느 쪽도 다른 쪽을 덮어쓰지 않는다(RES-05, AT-16). AI 오류·데이터 부족·미매칭·후보 미충족은 각각 `ai.status`·`match.status`로 구분된다(NFR-09) |
@@ -1607,6 +1608,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-22 | S15P21C206-150 판 전환 재개 후처리 구현. 9.3절에 재개 사건의 저장 위치(`notifications` `type='reopen'`)와 payload, `reason`을 아직 싣지 않는 이유, 멱등 보장 방법을 적었다. 10장에 4단계 중 재개 판정만 구현했고 Redis 캐시 삭제·라벨 표식·내부 알림 경로는 미구현임을 명시했다 |
 | 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
 | 2026-09-23 | S15P21C206-256 정정. 5.1절 판 요약의 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. Gold 4.1 운영 revision은 섹터마다 다른 해시라, 한 판의 revision이 하나라는 옛 규칙으로는 여러 섹터 별의 분석 진입이 500이 됐다(`AnalysisService`가 적재 계약 위반으로 처리). 프론트는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 5.2절 예시도 섹터마다 다른 revision으로 고쳤다 |
+| 2026-09-25 | S15P21C206-269 정정. 6.2절 5단계에 추천 duration이 null인 봉우리 제출은 제안 duration·상한을 둘 다 null로 저장한다고 적고, 6.4절 예시의 두 값을 실제 응답과 같은 null로 바꿔 필드 규칙을 더했다. V4 제약이 봉우리 제출에 두 값을 NOT NULL로 요구해 5.4절 null 계약 아래에서 봉우리 제출이 모두 500이었다(S15P21C206-262 화면 검증에서 발견). V27이 "둘 다 NULL 또는 둘 다 양수"로 고친다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 
