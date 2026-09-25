@@ -64,13 +64,14 @@ class NasaPlanetInfoRepository {
     Optional<Row> find(long candidateId) {
         return jdbc.sql("""
                         SELECT tic_id, archive_planet_name, status, normalized::text AS normalized,
-                               source_hash, fetched_at, changed_at, next_refresh_at, last_refresh_status
+                               source_hash, source_version, fetched_at, changed_at, next_refresh_at, last_refresh_status
                           FROM nasa_planet_info WHERE candidate_id=:candidateId
                         """)
                 .param("candidateId", candidateId)
                 .query((rs, n) -> new Row(rs.getLong("tic_id"), rs.getString("archive_planet_name"),
                         rs.getString("status"), decode(rs.getString("normalized")),
-                        rs.getString("source_hash"), rs.getObject("fetched_at", OffsetDateTime.class),
+                        rs.getString("source_hash"), rs.getObject("source_version", Short.class),
+                        rs.getObject("fetched_at", OffsetDateTime.class),
                         rs.getObject("changed_at", OffsetDateTime.class),
                         rs.getObject("next_refresh_at", OffsetDateTime.class),
                         rs.getString("last_refresh_status")))
@@ -170,7 +171,7 @@ class NasaPlanetInfoRepository {
         }
     }
 
-    record Row(long ticId, String name, String status, Planet planet, String hash,
+    record Row(long ticId, String name, String status, Planet planet, String hash, Short sourceVersion,
                OffsetDateTime fetchedAt, OffsetDateTime changedAt,
                OffsetDateTime nextRefreshAt, String refreshStatus) {
     }
