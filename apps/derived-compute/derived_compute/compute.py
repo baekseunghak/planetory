@@ -14,8 +14,11 @@ SCHEMA_VERSION = "1.0"
 
 # 계약 3.4절. objective·oversample·dy는 bls_periodogram이 고정한다(likelihood, 10, 전역 MAD).
 # 설정을 바꾸려면 새 버전을 더한다. 기존 행을 고치면 이미 공개한 원본 주기도와 어긋난다.
+# provided-bls-1.0.0은 123 제공 해상도 규칙(astro_kernel.discoverability)의 이름이고 설정이 같다. 이름 확정 전까지
+# 둘 다 받는다(262 인계). 커널 규칙과 같은지는 테스트가 본다.
 PERIODOGRAM_CONFIGS = {
     "pg-log5000-v1": {"spacing": "log", "durations_hours": (1.2, 1.92, 2.88, 4.8)},
+    "provided-bls-1.0.0": {"spacing": "log", "durations_hours": (1.2, 1.92, 2.88, 4.8)},
 }
 
 _CORRELATION = ("schema_version", "operation", "job_id", "attempt", "publication_bundle_id", "tic_id")

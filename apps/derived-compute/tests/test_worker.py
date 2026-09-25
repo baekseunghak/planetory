@@ -154,6 +154,27 @@ def test_same_input_gives_identical_output():
     assert run_both() == run_both()
 
 
+def test_provided_bls_name_is_accepted_with_the_same_config():
+    # 262 인계: 125 Gold 재생이 쓰는 이름. 거절하지 않고 pg-log5000-v1과 같은 값을 낸다.
+    from astro_kernel.discoverability import NUMERICAL_VERSION, RULE
+
+    assert NUMERICAL_VERSION == "provided-bls-1.0.0"
+    config = compute.PERIODOGRAM_CONFIGS[NUMERICAL_VERSION]
+    assert config == compute.PERIODOGRAM_CONFIGS["pg-log5000-v1"]
+    assert (config["spacing"], list(config["durations_hours"])) == (RULE["grid"]["spacing"], RULE["durations_hours"])
+
+    residual, periodogram = requests_for()
+    first = handle(residual, RUNTIME)
+    periodogram["residual_segments"] = [dict(residual["curve_segments"][0],
+                                             flux=first["result"]["residual_segments"][0]["flux"])]
+    baseline = handle(periodogram, RUNTIME)
+    periodogram["periodogram_config_version"] = NUMERICAL_VERSION
+    renamed = handle(periodogram, RUNTIME)
+    assert renamed["ok"] is True, renamed.get("error")
+    assert renamed["result"]["periodogram_config_version"] == NUMERICAL_VERSION
+    assert renamed["result"]["power"] == baseline["result"]["power"]
+
+
 def test_removal_flattens_the_injected_peak():
     # 빈 조합은 계약상 거절이므로, 원본 주기도는 제거 전 flux를 주기도 단계에 그대로 넣어 얻는다.
     residual, periodogram = requests_for()

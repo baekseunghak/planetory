@@ -76,6 +76,9 @@
 | 버전 | `spacing` | duration (hour) | objective | oversample | 오차 `dy` |
 | --- | --- | --- | --- | --- | --- |
 | `pg-log5000-v1` | `log` | 1.2, 1.92, 2.88, 4.8 | `likelihood` | 10 | 유효 flux 전역 `1.4826 × MAD` |
+| `provided-bls-1.0.0` | `log` | 1.2, 1.92, 2.88, 4.8 | `likelihood` | 10 | 유효 flux 전역 `1.4826 × MAD` |
+
+- 두 행은 **같은 설정의 두 이름**이다. `provided-bls-1.0.0`은 123 제공 해상도 규칙(`astro_kernel.discoverability`의 `RULE`·`NUMERICAL_VERSION`)의 이름이며 125 Gold 직렬화 재생이 쓴다. 이 규칙은 격자도 커널 `period_grid`로 만든다. 이름이 하나로 정해질 때까지 Worker는 둘 다 받는다(262 인계). 계약 예제의 `bls-log-v1`은 설정이 정의되지 않은 예시 문자열이라 받지 않는다.
 
 - 근거: 117 왕복 예제, 병합된 로컬 시드, 262 목업이 모두 이 버전 문자열과 위 power 설정(duration·objective·dy)을 쓴다. 표의 값은 `astro_kernel.bls.bls_periodogram`의 기본 동작과 같다. 형식 확정은 Gold 계약 소유자(113·117)가 한다. [데이터 파이프라인 문서](../../docs/data/tess-pipeline/README.md)는 아직 `제안`이다.
 - **격자 생성식은 커널 `astro_kernel.bls.period_grid`(log면 `np.geomspace`)다.** 117 예제와 262 목업의 원본 주기도는 `exp(linspace(log))`로 만들어, 5,000점 격자에서 3,152점이 최대 약 3.6e-14 day(상대 1e-15) 다르다. 격자를 비트 단위로 대조하는 비교(131)는 기준 계산에도 커널 함수를 써야 한다.

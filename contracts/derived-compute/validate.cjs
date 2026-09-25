@@ -8,7 +8,7 @@ const invalid = read('derived-compute.invalid.json');
 const clone = value => structuredClone(value);
 
 // README 3.4절 표. 버전이 격자 간격을 고정한다.
-const PERIODOGRAM_CONFIGS = {'pg-log5000-v1': {spacing: 'log'}};
+const PERIODOGRAM_CONFIGS = {'pg-log5000-v1': {spacing: 'log'}, 'provided-bls-1.0.0': {spacing: 'log'}};
 
 const fail = code => {
   const error = new Error(code);
