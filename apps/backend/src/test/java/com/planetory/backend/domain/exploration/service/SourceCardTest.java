@@ -119,7 +119,10 @@ class SourceCardTest {
         return JSON.readTree(create(member, refs, "\""+tic+"\"").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("postId").asText();
     }
     org.springframework.test.web.servlet.ResultActions patchPost(String post, String body) throws Exception {
-        return mvc.perform(patch("/api/v1/posts/"+post).session(session(member)).with(csrf()).contentType("application/json").content(body));
+        return patchPost(member, post, body);
+    }
+    org.springframework.test.web.servlet.ResultActions patchPost(long owner, String post, String body) throws Exception {
+        return mvc.perform(patch("/api/v1/posts/"+post).session(session(owner)).with(csrf()).contentType("application/json").content(body));
     }
     tools.jackson.databind.JsonNode read(String path) throws Exception {
         return JSON.readTree(mvc.perform(get(path).session(session(member))).andExpect(status().isOk())
@@ -342,7 +345,10 @@ class SourceCardTest {
         assertFalse(posts.detail(number(post)).sourceLinks().getFirst().available());
     }
     @Test void 출처저장도중취소는_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
-        var p=publications.publish(member,submit(3)); String post=create("[]");
+        // 글 수정은 작성자 회원 행을 먼저 잠가(180) 같은 회원의 취소는 저장 뒤로 밀린다. 다른 회원의 분석을 인용한다.
+        var p=publications.publish(member,submit(3)); long author=member();
+        String post=JSON.readTree(create(author,"[]","\""+tic+"\"").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).path("postId").asText();
         doAnswer(call -> {
             var statement=call.callRealMethod();
             try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
@@ -350,7 +356,7 @@ class SourceCardTest {
             }
             return statement;
         }).when(sourceJdbc).sql(org.mockito.ArgumentMatchers.startsWith("INSERT INTO post_source_links("));
-        patchPost(post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());
+        patchPost(author,post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());
         assertEquals(0,jdbc.queryForObject("SELECT count(*) FROM post_source_links WHERE post_id=?",Integer.class,number(post)));
         var comment=comments.create(member,new com.planetory.backend.domain.comment.service.CommentService.CreateCommand(
                 com.planetory.backend.domain.comment.service.CommentService.ParentType.POST,number(post),"본문",null,null));
