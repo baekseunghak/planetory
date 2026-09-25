@@ -54,6 +54,9 @@ class NasaPlanetInfoRepository {
     boolean nameSharedWithAnotherCandidate(long candidateId, long ticId, String name) {
         return jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM external_signal_references e
+                                        JOIN candidates other_candidate
+                                          ON other_candidate.id=e.candidate_id
+                                         AND other_candidate.status='active'
                                         WHERE e.tic_id=:ticId AND e.source='archive'
                                           AND e.external_id=:name AND e.candidate_id<>:candidateId)
                         """)

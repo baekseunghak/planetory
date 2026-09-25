@@ -64,7 +64,7 @@ public class NasaPlanetInfoService {
                 || repository.nameSharedWithAnotherCandidate(candidateId, ticId, names.getFirst())) {
             return new Lookup("identity_unresolved", null, null, null, null, "identity_unresolved", null);
         }
-        String name = names.getFirst(); // Gold의 검증된 archive.pl_name. 유사명·주기 추측은 금지한다.
+        String name = names.getFirst(); // 공급 검증을 전제로 한 archive 행성명. 유사명·주기 추측은 금지한다.
         OffsetDateTime now = OffsetDateTime.now(clock);
         var cached = repository.find(candidateId);
         if (cached.isPresent() && !sameIdentity(cached.get(), ticId, name)) {
