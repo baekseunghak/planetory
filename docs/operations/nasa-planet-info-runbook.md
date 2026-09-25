@@ -125,7 +125,7 @@ Invoke-RestMethod -Uri "$baseUrl/actuator/health" -TimeoutSec 10
 
 ### 6.1 검증된 Gold 식별자 정정 뒤 `identity_changed` 복구
 
-Gold 공급자가 후보의 TIC·Archive 행성명을 검증해 정정한 뒤, DB 담당자가 대상 DB와 `candidate_id`를 확인한다. 현재 Gold의 `source='archive'` 행성명이 정확히 하나이고 공백만으로 이루어지지 않았으며 다른 후보와 공유되지 않는지 확인한다. 기존 `nasa_planet_info`의 TIC·행성명과 다를 때만 아래 SQL을 승인된 DB 관리 접속에서 실행한다. `:candidateId`, `:previousTicId`, `:previousName`은 확인한 후보 ID와 **기존 캐시 행**의 값으로 바인딩한다. 실행 직전에는 대상·영향·복구 근거를 확인하고 승인을 받는다.
+Gold 공급자가 후보의 TIC·Archive 행성명을 검증해 정정한 뒤, DB 담당자가 대상 DB와 `candidate_id`를 확인한다. 현재 Gold의 `source='archive'`에서 행성명이 정확히 하나이고 공백만으로 이루어지지 않았으며 다른 활성 후보와 공유되지 않는지 확인한다. 262 목업의 `nasa_exoplanet_archive`는 이 복구 대상이 아니다([266 원천 구분](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)). 기존 `nasa_planet_info`의 TIC·행성명과 다를 때만 아래 SQL을 승인된 DB 관리 접속에서 실행한다. `:candidateId`, `:previousTicId`, `:previousName`은 확인한 후보 ID와 **기존 캐시 행**의 값으로 바인딩한다. 실행 직전에는 대상·영향·복구 근거를 확인하고 승인을 받는다.
 
 ```sql
 WITH verified AS (
@@ -149,6 +149,8 @@ UPDATE nasa_planet_info n
    AND (n.tic_id,n.archive_planet_name) IS DISTINCT FROM (v.tic_id,v.archive_planet_name)
    AND NOT EXISTS (
        SELECT 1 FROM external_signal_references other
+       JOIN candidates other_candidate
+         ON other_candidate.id=other.candidate_id AND other_candidate.status='active'
         WHERE other.source='archive' AND other.tic_id=v.tic_id
           AND other.external_id=v.archive_planet_name AND other.candidate_id<>v.id
    )

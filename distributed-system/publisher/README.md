@@ -8,6 +8,8 @@
 
 **적재 단계는 구현했고 입력은 목업이다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 실제 Gold 입력(HDFS reader), 게시 전 QA, 후보 동일성 대조, GCP→EC2-A 접속 경로는 없다.
 
+현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
+
 | 파일 | 역할 | 교체 시 |
 | --- | --- | --- |
 | `publisher/load.py` | preflight, 적재, 같은 트랜잭션 안 조회 검사, current 전환 | 그대로 쓴다 |

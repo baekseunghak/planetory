@@ -291,3 +291,4 @@
 | 2026-09-25 | 화면이 봉우리 추천값 null을 계약대로 받음 | S15P21C206-262 | suggestedDurationHours, suggestedPhaseCenter, number or null, 6.2 duration 상한 | 구현 완료 | [기록](2026-09-25.md) |
 | 2026-09-25 | 화면 검증에서 찾은 계약 불일치 2건 인계 | S15P21C206-262 | ck_submissions_source_peak_all_or_none, 봉우리 제출 500, period_grid, min_days, count, bls-log-v1, pg-log5000-v1, 88 | 제안·인계 | [기록](2026-09-25.md) |
 | 2026-09-25 | Backend에 GMS_KEY 전달 경로를 먼저 둠 | S15P21C206-262 | GMS_KEY, compose environment, .env.oauth.properties 로컬 전용, Backend 비밀 값 추가 | 채택, 서버 값 입력 전 | [기록](2026-09-25.md) |
+| 2026-09-25 | Gold Archive 참조와 NASA 설명 원천 구분 | S15P21C206-267 | TESS, pscomppars, ps, nasa_exoplanet_archive, 후보 식별 | 문서 정정·266 회귀 완료, 실제 Gold 연결 검증 대기 | [기록](2026-09-25.md) |

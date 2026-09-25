@@ -6,7 +6,7 @@
 
 ## 1. 설명할 수 있는 자료
 
-입구는 267의 `NasaPlanetExplanationService.lookup(memberId, candidateId)`이며, 내부에서 266의 `NasaPlanetInfoService.lookup(memberId, candidateId)`을 호출한다. 266이 회원 권한과 수치 매칭된 확정 후보, Gold의 단일 `archive` 식별자, NASA PS의 같은 TIC·정확한 `pl_name`을 확인한다. **266 결과의 `status=ready`이고 `planet`이 있는 경우만 설명 입력으로 사용한다.** 다른 상태에서는 모델을 호출하지 않고 `source_unavailable`과 원래 266 결과를 함께 반환한다. TIC는 항성 식별자이며 설명과 저장의 단위는 그 항성의 전체 행성 목록이 아니라 내부 `candidateId` 하나다. NASA 카탈로그로 기존 `planets.items`를 늘리거나 Gold 분류·성과를 수정하지 않는다.
+입구는 267의 `NasaPlanetExplanationService.lookup(memberId, candidateId)`이며, 내부에서 266의 `NasaPlanetInfoService.lookup(memberId, candidateId)`을 호출한다. 266이 회원 권한과 수치 매칭된 확정 후보, 공급 단계의 검증을 전제로 하는 Gold의 단일 `archive` 식별자, NASA PS의 같은 TIC·정확한 `pl_name`을 확인한다. **266 결과의 `status=ready`이고 `planet`이 있는 경우만 설명 입력으로 사용한다.** 다른 상태에서는 모델을 호출하지 않고 `source_unavailable`과 원래 266 결과를 함께 반환한다. 설명 수치는 Gold의 TESS 곡선·후보 측정값이나 262 목업의 `pscomppars` 외부 참조가 아니라 266이 별도로 조회한 NASA `ps` 기본 해에서 온다. 세 원천의 구분과 목업의 식별 한계는 [266 계약 2절](nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다. TIC는 항성 식별자이며 설명과 저장의 단위는 그 항성의 전체 행성 목록이 아니라 내부 `candidateId` 하나다. NASA 카탈로그로 기존 `planets.items`를 늘리거나 Gold 분류·성과를 수정하지 않는다.
 
 사용자의 제출·판단만으로 행성 확정을 선언하지 않는다. 후보의 공식 `disposition=fp`는 기존 `planets.items` 대상에서 제외되므로 NASA 행성 설명도 보내지 않는다. 반대로 확정 후보는 회원이 비행성으로 판단해도 그 제출만으로 후보 분류가 바뀌지 않으므로 설명 대상에 남을 수 있다. 행성 같음으로 남은 미확정 후보는 별 단위 응답에 있을 수 있지만 `not_applicable`과 `content=null`이며 NASA·모델을 호출하지 않는다. FP의 원인이 먼지였다는 별도 근거가 없으면 먼지라고 설명하지 않는다. 나중에 공식 후보 판정이 달라지면 그때의 권한·분류·원천을 다시 확인한다.
 

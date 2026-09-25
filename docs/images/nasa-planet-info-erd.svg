@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="880" viewBox="0 0 1080 880" role="img" aria-labelledby="title desc">
   <title id="title">V25·V26 NASA 행성 자료와 한국어 설명 관계도</title>
-  <desc id="desc">stars와 candidates가 nasa_planet_info에 외래 키로 연결되고, nasa_planet_explanation은 같은 candidate_id로 nasa_planet_info에 연결된다. external_signal_references는 검증된 NASA 행성명 공급자이며 submissions와 star_unlocks는 조회 권한 검사에 사용된다.</desc>
+  <desc id="desc">stars와 candidates가 nasa_planet_info에 외래 키로 연결되고, nasa_planet_explanation은 같은 candidate_id로 nasa_planet_info에 연결된다. external_signal_references의 archive 행성명은 공급 단계의 검증을 전제로 조회 대상으로 선택하며 submissions와 star_unlocks는 조회 권한 검사에 사용된다.</desc>
   <defs>
     <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#43618d" stroke-width="1.5"/></marker>
   </defs>
@@ -20,7 +20,7 @@
   <rect x="36" y="384" width="270" height="110" rx="9" fill="#ffffff" stroke="#a3adc0" stroke-width="2"/>
   <text x="54" y="416" font-family="sans-serif" font-size="18" font-weight="700" fill="#14243b">external_signal_references</text>
   <text x="54" y="444" font-family="sans-serif" font-size="15" fill="#334155">candidate_id · source='archive'</text>
-  <text x="54" y="468" font-family="sans-serif" font-size="15" fill="#334155">external_id = 정확한 pl_name</text>
+  <text x="54" y="468" font-family="sans-serif" font-size="15" fill="#334155">external_id = pl_name 후보</text>
 
   <rect x="400" y="134" width="610" height="324" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
   <text x="425" y="170" font-family="sans-serif" font-size="22" font-weight="700" fill="#14335d">nasa_planet_info · 서비스 조회 자료</text>

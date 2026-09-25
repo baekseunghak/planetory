@@ -17,7 +17,7 @@ Backend가 새 비밀 값을 읽을 때는 두 곳을 함께 바꾼다. compose�
 
 | 변수 | 용도 | 상태 |
 |---|---|---|
-| `GMS_KEY` | GMS(LLM 설명 기능) API 키 | compose 전달만 먼저 둠. Backend에서 읽는 코드는 아직 없다(2026-09-25) |
+| `GMS_KEY` | GMS 행성 설명 API 키 | compose가 전달하고 267 Backend가 설명 기능 활성화 시 읽음. 비어 있으면 기본 비활성 기동 |
 
 ## service-db
 

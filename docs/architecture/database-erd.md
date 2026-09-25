@@ -350,7 +350,7 @@ erDiagram
     external_signal_references["external_signal_references · 외부 카탈로그"] {
         bigint id PK "고유 번호"
         bigint candidate_id FK "후보(NULL 가능)"
-        text source "tce/toi/archive/exofop"
+        text source "원천 표기(고정 enum 아님)"
         text external_id "원천 ID"
         text disposition "원천 판정"
         numeric period_days "주기"
@@ -361,7 +361,7 @@ erDiagram
     nasa_planet_info["nasa_planet_info · 요청된 NASA 자료"] {
         bigint candidate_id PK, FK "내부 확정 후보"
         bigint tic_id FK "항성 TIC"
-        text archive_planet_name "검증된 NASA pl_name"
+        text archive_planet_name "조회 대상으로 선택한 pl_name"
         text status "ready/not_found/identity_unresolved 등"
         jsonb normalized "PS 기본 해·단위·오차·출처"
         text source_hash "정규화 SHA-256"
@@ -923,7 +923,7 @@ Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedA
 
 ### G. 요청된 외부 조회 자료와 한국어 설명 (V25~V26, 266~267)
 
-**nasa_planet_info**는 `candidate_id` PK/FK와 `tic_id` FK로 요청된 내부 확정 후보 하나에만 붙는다. `archive_planet_name`은 Gold의 `external_signal_references(source='archive')`에서 검증된 정확한 NASA `pl_name`이고 별칭·이름 유사도로 채우지 않는다. `status`는 `pending/ready/not_found/identity_unresolved/temporarily_unavailable`, `last_refresh_status`는 최근 시도 이유다. `normalized` JSONB·`source_hash` SHA-256·`source_version` 1은 정상 PS 기본 해의 데이터와 구조 버전이며, `fetched_at`은 마지막 정상 조회, `changed_at`은 정규화값 변경 시각이다. `last_attempt_at`·`next_refresh_at`·`in_flight_until`·`attempt_generation`은 재확인과 늦은 응답 방지용이다. FK 이외의 Gold 쓰기 권한은 추가하지 않는다. 서비스 앱 역할에는 이 테이블만 SELECT/INSERT/UPDATE를 준다. 저장·상태 전이·보관 정책은 [266 개발 계약](../development/nasa-planet-info-266.md#4-저장-구조와-상태-전이), 배포는 [운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다.
+**nasa_planet_info**는 `candidate_id` PK/FK와 `tic_id` FK로 요청된 내부 확정 후보 하나에만 붙는다. `archive_planet_name`은 공급 단계의 검증을 전제로 Gold의 `external_signal_references(source='archive')`에서 선택한 정확한 `pl_name`이며, 별칭·이름 유사도로 채우지 않는다. 이 source 문자열은 검증 수준을 저장하지 않는다. 262 목업의 `source='nasa_exoplanet_archive'`는 별도 `pscomppars` 참고 행성명을 더미 TIC에 복사한 외부 참조이므로 현행 266의 조회 자격으로 간주하지 않는다([원천 구분](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)). `status`는 `pending/ready/not_found/identity_unresolved/temporarily_unavailable`, `last_refresh_status`는 최근 시도 이유다. `normalized` JSONB·`source_hash` SHA-256·`source_version` 1은 정상 `ps` 기본 해의 데이터와 구조 버전이며, `fetched_at`은 마지막 정상 조회, `changed_at`은 정규화값 변경 시각이다. `last_attempt_at`·`next_refresh_at`·`in_flight_until`·`attempt_generation`은 재확인과 늦은 응답 방지용이다. FK 이외의 Gold 쓰기 권한은 추가하지 않는다. 서비스 앱 역할에는 이 테이블만 SELECT/INSERT/UPDATE를 준다. 저장·상태 전이·보관 정책은 [266 개발 계약](../development/nasa-planet-info-266.md#4-저장-구조와-상태-전이), 배포는 [운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다.
 
 **nasa_planet_explanation**은 `candidate_id` PK/FK로 `nasa_planet_info`에 0~1개만 붙는다. `source_hash`·`source_version`은 설명이 근거로 삼은 266 정규화값, `model_name`·`prompt_version`은 생성 계약, `content` JSONB·`generated_at`은 검증을 통과한 성공 설명과 생성 시각이다. `status`는 `pending/ready/failed`이고, `ready`일 때에만 `content`·`generated_at`이 함께 있으며 임대는 비어 있어야 한다. `last_attempt_at`·`next_retry_at`·`in_flight_until`·`attempt_generation`·`attempt_count`·`last_failure`는 모델 시도·경합·실패 추적용이다. 횟수 CHECK는 1~3이고 실제 재시도 정책은 [267 내부 계약](../development/nasa-planet-explanation-267.md)에 있다. 앱 역할에는 신규 테이블의 SELECT/INSERT/UPDATE만 추가한다. 이 FK는 자료 계보를 고정하고, 최신 원천 해시와 같은지 확인하는 조건부 저장은 서비스 SQL이 맡는다. 공유/운영 DB 적용은 별도다.
 
