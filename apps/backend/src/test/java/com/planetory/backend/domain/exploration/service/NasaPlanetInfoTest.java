@@ -344,7 +344,8 @@ class NasaPlanetInfoTest {
         long correctedGeneration = correctedGenerations.getFirst();
         assertEquals(oldGeneration + 1, correctedGeneration);
 
-        repository.ready(candidateId, oldGeneration, old.planet(), old.sourceHash(),
+        repository.ready(member, candidateId, tic, "TOI-700 b", oldGeneration,
+                old.planet(), old.sourceHash(),
                 now, now.plusDays(7));
         var corrected = repository.find(candidateId).orElseThrow();
         assertEquals("pending", corrected.status());
@@ -356,6 +357,23 @@ class NasaPlanetInfoTest {
         var refreshed = service.lookup(member, candidateId);
         assertEquals("ready", refreshed.status());
         assertEquals("TOI-700 c", refreshed.planet().planetName());
+    }
+
+    @Test
+    void 완료_저장_직전_Archive_이름이_바뀌면_옛_NASA_결과를_저장하지_않는다() {
+        long candidateId = candidate("TOI-700 b");
+        OffsetDateTime now = OffsetDateTime.now();
+        long generation = repository.claim(candidateId, tic, "TOI-700 b", now,
+                now.plusSeconds(15)).orElseThrow();
+        jdbc.update("UPDATE external_signal_references SET external_id='TOI-700 c'"
+                + " WHERE candidate_id=? AND source='archive'", candidateId);
+
+        repository.ready(member, candidateId, tic, "TOI-700 b", generation,
+                new NasaPlanetInfo.Planet("ps", "TOI-700 b", "TOI-700", "TIC " + tic,
+                        "Published Confirmed", false, null, null, null, "Transit", 2020, null),
+                "a".repeat(64), now, now.plusDays(7));
+
+        assertEquals("pending", repository.find(candidateId).orElseThrow().status());
     }
 
     private static NasaPlanetInfoService newService(Duration timeout) {

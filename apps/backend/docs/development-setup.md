@@ -336,3 +336,9 @@ V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdra
 `V26__nasa_planet_explanation.sql`은 V25의 `nasa_planet_info(candidate_id)`에 종속된 후보당 0~1행의 설명 테이블을 만든다. 같은 원천 해시·정규화 버전·모델·프롬프트 조합의 설명과 시도 횟수를 보관하며, 앱 역할에는 새 테이블 SELECT/INSERT/UPDATE만 부여한다. V25와 과거 마이그레이션을 수정하지 않고 V25 다음에 적용한다. 다른 MR이 먼저 develop에 병합되면 번호와 적용 순서를 다시 확인하고, 이미 적용된 DB의 파일·Flyway 이력을 `repair` 또는 `outOfOrder`로 고치지 않는다.
 
 기본 비활성 상태에서도 V26 스키마는 앱 기동보다 먼저 필요하다. 보호된 배포 환경에만 모델 키 `GMS_KEY`를 주입하며 값은 파일·명령·로그에 적지 않는다. 실행 설정, 순서, 사후 확인과 중지·복구는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md), 필드·안전 검증과 267의 별 단위 응답은 [267 개발 계약](../../../docs/development/nasa-planet-explanation-267.md)을 따른다. `nasa-ko-v4`는 표적 회귀, TOI-700 b 한 후보의 실제 NASA PS·GMS 생성, 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 재조회 82ms는 그 환경의 1회 표본이다. 실제 회원·Gold 연결, 모델의 운영 품질·비용·지연 분포, 공유/운영 DB 적용·서버 배포와 268 화면 연결은 검증하지 않았다. 특히 262 Publisher의 목업 외부 참조는 [266 식별 계약](../../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)의 실제 후보 연결을 증명하지 않는다.
+
+## V28 NASA 설명 일별 모델 시도 한도 (268)
+
+`V28__nasa_explanation_daily_usage.sql`은 UTC 날짜와 회원 ID를 키로 하는 `nasa_explanation_daily_usage`, UTC 날짜를 키로 하는 `nasa_explanation_daily_total` 두 테이블을 만든다. 모델 시도권 확보 때 회원별·전체 수를 한 짧은 트랜잭션에서 올려 다중 서버의 일별 상한을 함께 지킨다. 한도 수치는 미지정이라 기본값이 각각 0이며, 설명 활성화 전 운영 승인된 양의 정수를 명시해야 한다. 회원 삭제로 회원별 행이 정리돼도 전체 일별 수는 남는다. 앱 역할에는 두 테이블의 SELECT/INSERT/UPDATE만 추가하고 DELETE는 주지 않는다. V25 NASA 원천·V26 설명과 269의 `V27__peak_submission_optional_duration.sql`을 수정하지 않고 그 다음 번호로 적용한다. GET 저장 조회, 재사용 POST, NASA 조회는 이 모델 시도 수에 포함하지 않는다.
+
+기본값·환경변수 전달·DB 집계·중지 절차는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md#8-한국어-설명-생성-배포운영-267), 현재 GET/POST와 화면 경계는 [268 개발 계약](../../../docs/development/nasa-planet-request-268.md)을 따른다. 공유/운영 DB 적용·실제 GMS 비용 확인은 별도다.

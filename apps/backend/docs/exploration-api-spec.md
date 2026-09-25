@@ -456,7 +456,9 @@ S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-pla
 
 #### 4.2.1 회원별 별 단위 NASA 한국어 설명 (S15P21C206-267)
 
-`GET /api/v1/me/stars/{ticId}/planet-explanations` — 인증 회원이 연 별의 **현재** `planets.items`에 해당하는 후보별 설명을 한 응답으로 받는다. 별 상세 본문의 필드나 `planets.count`를 변경하지 않는다. 경로 TIC의 형식 오류·미발견 별은 4.2절의 403 `STAR_LOCKED`와 같게 처리한다. 회원 ID는 세션에서만 가져오고, 클라이언트가 후보 ID·제출 주기를 보내 대상이나 연결을 결정하지 않는다. 응답 `version`은 후보 목록을 가져온 **같은 StarDetail 스냅샷**의 지도 버전이다. 화면은 현재 선택한 `ticId`·`version`·`candidateId`가 모두 맞을 때만 내용을 연결한다. 순서·주기 유사도는 연결 키가 아니다.
+`GET /api/v1/me/stars/{ticId}/planet-explanations` — 인증 회원이 연 별의 **현재** `planets.items`에 해당하는 저장된 NASA 원천·설명 상태를 조회한다. 268부터 GET은 NASA·GMS를 호출하거나 저장 행을 만들지 않는다. 같은 경로의 `POST`는 JSON 본문 `{ "candidateId": "c-401" }`으로 현재 별 상세에 있는 **확정 후보 하나**의 생성 또는 저장 결과 재사용을 요청한다. POST는 인증 세션과 CSRF 검사를 통과해야 하며, 요청을 재전송해도 같은 대상·원천·프롬프트 조합의 중복 외부 호출을 제한한다. 두 메서드 모두 아래 `{ticId, version, items}` 형식으로 응답하고, 다른 후보를 생성 대상으로 확대하지 않는다. 별 상세 본문의 필드나 `planets.count`를 변경하지 않는다. 경로 TIC의 형식 오류·미발견 별은 4.2절의 403 `STAR_LOCKED`와 같게 처리한다. 회원 ID는 세션에서만 가져오고, 클라이언트가 보낸 제출 주기·NASA 행성명을 연결 근거로 쓰지 않는다. 응답 `version`은 후보 목록을 가져온 **같은 StarDetail 스냅샷**의 지도 버전이다. 화면은 현재 선택한 `ticId`·`version`·`candidateId`가 모두 맞을 때만 내용을 연결한다. 순서·주기 유사도는 연결 키가 아니다.
+
+POST의 `candidateId` 누락·형식 오류는 400 `VALIDATION_FAILED`다. 형식은 맞지만 그 회원·TIC의 **현재 확정** `planets.items`에 없거나 미확정·다른 별 후보를 지정하면 404 `RESOURCE_NOT_FOUND`다. 권한 있는 GET·POST는 후보별 원천 실패나 설명 한도 초과가 있어도 200 Bundle을 반환하고 해당 `items[]`의 상태로 구분한다. 응답 유실 뒤 같은 POST를 다시 보내기 전에 GET으로 이미 저장된 결과를 확인한다.
 
 ```json
 {
@@ -474,6 +476,24 @@ S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-pla
         "mass": "{질량의 한국어 설명}",
         "discovery": "{발견 방법·연도의 한국어 설명}"
       },
+      "facts": {
+        "planetName": "{검증된 NASA 행성명}",
+        "orbitalPeriod": {
+          "value": "{NASA 원천 숫자 문자열}",
+          "errorPlus": null,
+          "errorMinus": null,
+          "limit": 0,
+          "unit": "days",
+          "reference": null
+        },
+        "radius": null,
+        "mass": null,
+        "discoveryMethod": "Transit",
+        "discoveryYear": 2020,
+        "controversial": null,
+        "sourceTable": "ps",
+        "sourceUrl": "https://exoplanetarchive.ipac.caltech.edu/"
+      },
       "sourceStatus": "ready",
       "fetchedAt": "2026-09-25T05:20:00Z",
       "refreshStatus": "ok",
@@ -486,6 +506,7 @@ S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-pla
       "kind": "unconfirmed",
       "status": "not_applicable",
       "content": null,
+      "facts": null,
       "sourceStatus": null,
       "fetchedAt": null,
       "refreshStatus": null,
@@ -499,17 +520,20 @@ S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-pla
 
 `items`는 해당 요청 시점의 4.2절 `planets.items`와 같은 권한 필터·`candidateId` 오름차순·대상 개수를 사용하고 중복 ID가 없다. 표시 대상은 회원이 수치 매칭한 확정 후보와 최신 판단이 행성 같음인 미확정 후보뿐이다. 다른 회원·미매칭·FP·NASA 카탈로그의 나머지 행성을 넣지 않는다. 사용자의 제출·판단만으로 후보의 공식 분류를 바꾸지 않는다. 확정 후보를 회원이 비행성으로 판단해도 설명 대상에 남을 수 있지만, 공식 `disposition=fp`이면 이 목록에서 제외한다. FP의 원인을 별도 근거 없이 먼지로 단정하지 않는다. 최상위 `count`는 두지 않는다. 별 상세의 `planets.count`는 전체 표시 대상 수이며 `ready` 설명이나 확정 행성 수가 아니다.
 
-`content`의 시민용 다섯 문장은 현재 `nasa-ko-v4` 계약에 따라 친근한 존댓말로 이어진다. 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. v4는 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 한 번의 실측에서 첫 GET은 14,554ms, 즉시 반복한 캐시 GET은 82ms였으며 운영·브라우저 지연의 기준값으로 확정하지 않는다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 미검증이다.
+`facts`는 NASA 원천이 `ready`이고 정규화 구조 버전 1·SHA-256·표시 자료 검증을 통과했을 때에만 제공한다. 따라서 `invalid_source`에서는 보통 null이다. 설명이 `failed`·`disabled`·`pending`이어도 검증된 NASA 기본 해의 수치는 별도로 사용할 수 있다. `orbitalPeriod`·`radius`·`mass`는 각 `{value,errorPlus,errorMinus,limit,unit,reference}` 측정 객체 또는 null이며, 숫자와 부호 있는 오차는 정밀도를 보존하는 **문자열** 또는 null이다. `limit=-1`은 미만, `0`은 보고된 측정값, `1`은 초과, null은 원천 미표기다. 결측값·상한을 0이나 확정값으로 바꾸지 않는다. `reference`는 안전한 일반 문자열이거나 null이며 NASA의 문헌 HTML을 반환하지 않는다. `sourceTable`은 `ps`, `sourceUrl`은 서버가 고정한 `https://exoplanetarchive.ipac.caltech.edu/`이다. 화면은 이 주소만 출처 링크로 열고 수치·조회 시각과 교육용 설명을 구분한다. 위 JSON의 숫자 문자열·연도는 형식 설명용 예시이지 실제 후보의 측정값이 아니다.
+
+`content`의 시민용 다섯 문장은 현재 `nasa-ko-v4` 계약에 따라 친근한 존댓말로 이어진다. 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. 267 당시 생성형 GET은 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 반복 캐시 GET 82ms는 당시 1회 표본이며 268의 조회 GET·생성 POST나 운영·브라우저 지연의 기준값이 아니다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 별도다.
 
 | 필드·상태 | 규칙 |
 | --- | --- |
-| `kind=unconfirmed` | `status=not_applicable`. `content`, `sourceStatus`, `fetchedAt`, `refreshStatus`, `generatedAt`, `retryAt`, `failure`는 모두 null이다. NASA 조회·설명 생성을 호출하지 않는다 |
-| `kind=confirmed` | [267 내부 결과](../../../docs/development/nasa-planet-explanation-267.md#41-후보별-내부-결과)의 `ready`, `pending`, `failed`, `source_unavailable`, `disabled`, `invalid_source`, `busy`, `source_changed` 상태를 전달한다. `content`는 `ready`일 때만 검증된 다섯 문장이다 |
+| `kind=unconfirmed` | `status=not_applicable`. `content`, `facts`, `sourceStatus`, `fetchedAt`, `refreshStatus`, `generatedAt`, `retryAt`, `failure`는 모두 null이다. NASA 조회·설명 생성을 호출하지 않는다 |
+| `kind=confirmed` | 원천 미생성 GET은 설명 스위치 상태와 관계없이 `status=not_requested`, `sourceStatus=not_requested`다. 설명 기능을 꺼 둔 상태의 POST도 266 NASA 수집은 수행할 수 있으며 원천 성공 시 `status=disabled`, `sourceStatus=ready`, `facts` 제공, `content=null`이다. 그 외 [267 내부 결과](../../../docs/development/nasa-planet-explanation-267.md#41-후보별-내부-결과)의 `ready`, `pending`, `failed`, `source_unavailable`, `invalid_source`, `busy`, `source_changed` 상태와 268의 `quota_exceeded`를 전달한다. `content`는 `ready`일 때만 검증된 다섯 문장이다 |
 | 조회 사이 자격 변경 | 별 목록을 구성한 뒤 266의 후보 자격이 사라지면 그 항목만 `status=source_unavailable`, `sourceStatus=not_eligible`로 반환하고 다른 설명·시각·실패 필드는 null이다 |
 | 원천·설명 시각/상태 | `sourceStatus`는 266의 상태, `fetchedAt`은 마지막 정상 NASA 재확인 시각, `refreshStatus`는 최근 재확인 상태다. `generatedAt`은 현재 설명 생성 시각, `retryAt`은 다음 허용 시각, `failure`는 분류된 설명 실패 이유다. 없는 값은 null이며 오래된 정상 원천을 쓸 때 재확인 실패를 숨기지 않는다 |
 | 실패 격리 | 후보별 예상 가능한 NASA·모델 실패는 해당 항목의 상태로 반환하고 다른 후보의 결과를 버리지 않는다. 설명이 없더라도 정상 원천 수치의 사용 가능 여부는 266 상태로 판단한다 |
+| 일별 모델 한도 | V28은 UTC 날짜별 회원·전체 모델 생성 **시도권 예약 수**를 제한한다. 기본 한도는 각각 0으로 유료 호출을 차단하며 운영 승인된 양의 정수 두 개를 넣어야 설명 기능을 켤 수 있다. 같은 후보의 기존 `ready`·`pending`은 그대로 돌려준다. 실패 또는 미생성 상태에서 한도가 소진되면 POST 응답 항목은 `status=quota_exceeded`, `failure=daily_limit`, `retryAt=다음 UTC 0시`다. 이 상태는 V26에 저장하지 않으므로 다음 GET은 이전 V26 상태(미생성이면 `not_requested`, 기존 실패면 `failed`)를 보여준다. 같은 POST는 한도 상태를 다시 반환한다. GET·저장 결과 재사용은 한도를 소모하지 않는다. 예약 뒤 모델 실패·권한 철회가 있어도 비용 가능성 때문에 횟수는 유지한다 |
 
-검증된 `content.name`에 들어간 행성명 외의 NASA 원문 행성명·문헌 문자열, 프롬프트, 원천 해시, 모델 설정은 공개 응답에 넣지 않는다. 외부 호출과 모델 생성은 별 상세의 읽기 트랜잭션 밖에서 실행한다. 버튼·로딩·재시도·출처 링크의 실제 화면 동작은 268에서 정하고, 기존 프론트엔드 파일은 267에서 수정하지 않는다.
+검증된 `facts.planetName`과 `content.name`의 행성명 외의 NASA 원문 HTML, 프롬프트, 원천 해시, 모델 설정은 공개 응답에 넣지 않는다. 외부 호출과 모델 생성은 별 상세의 읽기 트랜잭션 밖에서 실행한다. 프론트가 POST 동기 응답을 30초 안에 받지 못해도 서버 처리가 끝났는지는 알 수 없다. 화면은 자동 POST 재전송 없이 먼저 GET으로 저장 상태를 확인하고, 그래도 새 요청이 필요한 경우 사용자가 다시 요청할 때만 같은 후보 POST를 보낸다. 생성 중 `pending`을 새 POST로 반복 호출하지 않는다. 백엔드는 DB 임대·시도 순번으로 중복 유료 호출과 늦은 저장을 제한한다. GET을 주기적으로 재조회하더라도 회원·TIC·버전·후보가 바뀌면 늦은 응답을 버린다. 버튼·로딩·재시도·출처 링크의 실제 화면 동작은 [268 개발 계약](../../../docs/development/nasa-planet-request-268.md)을 따른다.
 
 ### 4.3 퀘스트 패널
 

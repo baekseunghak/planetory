@@ -159,6 +159,24 @@ test("timeouts abort the request; ordinary reads have no automatic retries", asy
   );
   assert.equal(calls, 1);
 });
+
+test("one request can extend the timeout without changing the shared default", async () => {
+  const client = createApiClient({
+    baseUrl: "/api",
+    timeoutMs: 5,
+    fetch: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return Response.json({ ok: true });
+    },
+  });
+  assert.deepEqual(await client.request("/v1/me", { timeoutMs: 500 }), {
+    ok: true,
+  });
+  await assert.rejects(
+    client.request("/v1/me"),
+    (error) => error instanceof ApiError && error.code === "TIMEOUT",
+  );
+});
 test("expired-session cancellation aborts other pending requests", async () => {
   let entered!: () => void;
   const started = new Promise<void>((resolve) => (entered = resolve));

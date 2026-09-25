@@ -24,6 +24,8 @@ import com.planetory.backend.domain.member.service.MemberService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -149,6 +151,12 @@ class StarPathHttpTest {
         mvc.perform(get("/api/v1/me/stars/" + openTic + "/planet-explanations").session(session))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("STAR_LOCKED"));
+        mvc.perform(post(own).session(session).contentType("application/json")
+                        .content("{\"candidateId\":\"c-1\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(own).session(session).with(csrf()).contentType("application/json")
+                        .content("{\"candidateId\":\"c-1\"}"))
+                .andExpect(status().isNotFound());
     }
 
     /** size도 숫자 타입으로 받으면 같은 이유로 500이 된다. */

@@ -19,6 +19,9 @@ Backend가 새 비밀 값을 읽을 때는 두 곳을 함께 바꾼다. compose�
 |---|---|---|
 | `GMS_KEY` | GMS 행성 설명 API 키 | compose가 전달하고 267 Backend가 설명 기능 활성화 시 읽음. 비어 있으면 기본 비활성 기동 |
 
+NASA 원천 조회의 `NASA_PLANET_INFO_*` 7개 설정도 Compose가 Backend에 전달한다. 서버 `.env`에서 값을 바꾼 뒤 Backend를 다시 배포하면 적용된다. 기본값·단위·중지와 복구 절차는 [NASA 행성 정보·설명 운영 가이드](../../docs/operations/nasa-planet-info-runbook.md)를 따른다.
+설명 생성의 사용자별·전체 일일 한도(`NASA_EXPLANATION_DAILY_PER_MEMBER`, `NASA_EXPLANATION_DAILY_GLOBAL`)도 같은 방식으로 전달한다. 한도값은 미정이라 기본 0이며, 새 모델 호출을 활성화하기 전에 두 값을 결정해 주입해야 한다.
+
 ## service-db
 
 PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.

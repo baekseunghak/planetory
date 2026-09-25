@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.14
+# Planetory 서비스 DB ERD v1.15
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13·v1.14 2026-09-25)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13·v1.14·v1.15 2026-09-25)
 - v1.3 당시 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 그 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,10 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.14 → v1.15 (2026-09-25, `S15P21C206-268`)
+
+269의 V27 봉우리 제출 제약 다음 번호인 V28은 모델 생성 시도의 UTC 일별 상한을 DB 전체에서 지키기 위해 `nasa_explanation_daily_usage`(회원별)와 `nasa_explanation_daily_total`(전체)을 추가한다. 두 행의 `attempt_count`는 모델 시도권을 확보할 때 같은 짧은 트랜잭션에서 증가한다. 회원 삭제 시 회원별 행은 정리되지만 전체 행은 남아 비용 상한의 과거 사용량을 보존한다. V25·V26·269의 V27이나 Gold·성과는 변경하지 않는다. 설정·확인 순서는 [운영 가이드](../operations/nasa-planet-info-runbook.md), 요청 계약은 [268 개발 계약](../development/nasa-planet-request-268.md)을 따른다. 공유/운영 DB 적용은 별도다.
 
 ### v1.13 → v1.14 (2026-09-25, `S15P21C206-267`)
 
@@ -157,7 +161,7 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-일곱 묶음, 총 36개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료, V26의 한국어 설명은 운영 적용 전 검증 대상이다.
+일곱 묶음, 총 38개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료, V26의 한국어 설명, 269의 V27 봉우리 제출 제약, V28의 모델 일별 시도 수는 대상 환경에서 적용 이력을 확인한다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
@@ -167,11 +171,11 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
 | F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
-| G 외부 조회 자료 | nasa_planet_info, nasa_planet_explanation | 266의 요청 후보 NASA PS 정규화 자료와 267의 원천 버전에 묶인 한국어 설명. Gold와 별도 소유 |
+| G 외부 조회 자료 | nasa_planet_info, nasa_planet_explanation, nasa_explanation_daily_usage, nasa_explanation_daily_total | 266의 NASA PS 정규화 자료, 267 설명, 268 모델 시도 한도. Gold와 별도 소유 |
 
 ## 2. ERD
 
-아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24~V26 신규 관계의 최신 본문은 아래 Mermaid·열 표이고, V25·V26 관계는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
+아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24~V28 신규 관계와 제약의 최신 본문은 아래 Mermaid·열 표이고, V25·V26·V28의 NASA 자료 관계는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -194,6 +198,7 @@ erDiagram
     users ||--o{ post_reactions : reacts
     users ||--o{ published_analyses : publishes
     users ||--o{ notifications : receives
+    users ||--o{ nasa_explanation_daily_usage : model_attempts
 
     stars ||--o{ observation_datasets : observed_in
     stars ||--o{ publication_bundles : published_as
@@ -384,6 +389,15 @@ erDiagram
         timestamptz in_flight_until "생성 임대 만료"
         bigint attempt_generation "경합 순번"
         smallint attempt_count "동일 조합 시도 횟수"
+    }
+    nasa_explanation_daily_usage["nasa_explanation_daily_usage · 회원별 모델 시도"] {
+        date usage_day PK "UTC 날짜"
+        bigint member_id PK, FK "회원·삭제 시 정리"
+        integer attempt_count "양수·일별 시도권 수"
+    }
+    nasa_explanation_daily_total["nasa_explanation_daily_total · 전체 모델 시도"] {
+        date usage_day PK "UTC 날짜"
+        integer attempt_count "양수·회원 삭제 뒤에도 보존"
     }
     candidate_dispositions["candidate_dispositions · 통합 분류"] {
         bigint candidate_id PK, FK "후보"
@@ -921,11 +935,13 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
 
-### G. 요청된 외부 조회 자료와 한국어 설명 (V25~V26, 266~267)
+### G. 요청된 외부 조회 자료와 한국어 설명 (V25·V26·V28, 266~268)
 
 **nasa_planet_info**는 `candidate_id` PK/FK와 `tic_id` FK로 요청된 내부 확정 후보 하나에만 붙는다. `archive_planet_name`은 공급 단계의 검증을 전제로 Gold의 `external_signal_references(source='archive')`에서 선택한 정확한 `pl_name`이며, 별칭·이름 유사도로 채우지 않는다. 이 source 문자열은 검증 수준을 저장하지 않는다. 262 목업의 `source='nasa_exoplanet_archive'`는 별도 `pscomppars` 참고 행성명을 더미 TIC에 복사한 외부 참조이므로 현행 266의 조회 자격으로 간주하지 않는다([원천 구분](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)). `status`는 `pending/ready/not_found/identity_unresolved/temporarily_unavailable`, `last_refresh_status`는 최근 시도 이유다. `normalized` JSONB·`source_hash` SHA-256·`source_version` 1은 정상 `ps` 기본 해의 데이터와 구조 버전이며, `fetched_at`은 마지막 정상 조회, `changed_at`은 정규화값 변경 시각이다. `last_attempt_at`·`next_refresh_at`·`in_flight_until`·`attempt_generation`은 재확인과 늦은 응답 방지용이다. FK 이외의 Gold 쓰기 권한은 추가하지 않는다. 서비스 앱 역할에는 이 테이블만 SELECT/INSERT/UPDATE를 준다. 저장·상태 전이·보관 정책은 [266 개발 계약](../development/nasa-planet-info-266.md#4-저장-구조와-상태-전이), 배포는 [운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다.
 
 **nasa_planet_explanation**은 `candidate_id` PK/FK로 `nasa_planet_info`에 0~1개만 붙는다. `source_hash`·`source_version`은 설명이 근거로 삼은 266 정규화값, `model_name`·`prompt_version`은 생성 계약, `content` JSONB·`generated_at`은 검증을 통과한 성공 설명과 생성 시각이다. `status`는 `pending/ready/failed`이고, `ready`일 때에만 `content`·`generated_at`이 함께 있으며 임대는 비어 있어야 한다. `last_attempt_at`·`next_retry_at`·`in_flight_until`·`attempt_generation`·`attempt_count`·`last_failure`는 모델 시도·경합·실패 추적용이다. 횟수 CHECK는 1~3이고 실제 재시도 정책은 [267 내부 계약](../development/nasa-planet-explanation-267.md)에 있다. 앱 역할에는 신규 테이블의 SELECT/INSERT/UPDATE만 추가한다. 이 FK는 자료 계보를 고정하고, 최신 원천 해시와 같은지 확인하는 조건부 저장은 서비스 SQL이 맡는다. 공유/운영 DB 적용은 별도다.
+
+**nasa_explanation_daily_usage**는 `(usage_day, member_id)` 복합 PK로 한 회원의 UTC 날짜별 모델 생성 시도권 예약 수를 보관한다. `member_id`는 `users(id)` FK이고 탈퇴로 회원 행이 삭제되면 관련 회원별 행도 삭제된다. `attempt_count`는 양수이며 외부 모델 호출 직전 새 시도권을 예약할 때만 증가한다. **nasa_explanation_daily_total**은 `usage_day` PK의 전체 예약 수다. 회원별 행과 같은 짧은 트랜잭션에서 증가하고 회원 삭제 뒤에도 남으므로 전체 비용 상한이 되돌아가지 않는다. 예약 뒤 모델 실패·권한 철회가 있어도 카운터를 되돌리지 않는다. 두 테이블에 앱 역할 SELECT/INSERT/UPDATE만 주고 DELETE는 주지 않는다. GET 저장 조회, 재사용 POST, NASA TAP 조회를 모델 시도로 세지 않는다. 일별 한도 수치는 미지정이며 기본값은 회원별·전체 모두 0이다. 설명 활성화 전에 운영 승인된 양의 정수 두 개를 명시 주입한다([268 계약](../development/nasa-planet-request-268.md)). 공유/운영 DB 적용과 실제 비용 확인은 별도다.
 
 ## 4. 설계 결정과 근거
 

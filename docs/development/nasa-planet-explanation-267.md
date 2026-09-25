@@ -1,8 +1,8 @@
 # NASA 행성 정보 한국어 설명·별 단위 전달 계약 (S15P21C206-267)
 
-- 상태: 267 후보별 내부 설명과 별 단위 공개 백엔드 응답 구현·격리 검증 완료. `nasa-ko-v4`는 표적 회귀, TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성·문장 검증, 가상 후보 4개를 시드한 인증 별 단위 GET의 실제 NASA TAP·GMS 생성과 V25·V26 저장을 통과했다. v4 별 단위 GET 1회 표본은 첫 조회 14,554ms, 즉시 재조회 82ms였다. 기존 MockMvc·별 상세·실제 세션·모델 stub 검증과 266 회귀·Spring 기동도 통과했다. 실제 회원·Gold 연결, 공유/운영 DB 적용·서버 배포·268 화면 검증은 미실행.
+- 상태: 267 후보별 내부 설명과 별 단위 공개 백엔드 응답 구현·격리 검증 완료. `nasa-ko-v4`는 표적 회귀, TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성·문장 검증, 가상 후보 4개를 시드한 인증 별 단위 GET의 실제 NASA TAP·GMS 생성과 V25·V26 저장을 통과했다. v4 별 단위 GET 1회 표본은 첫 조회 14,554ms, 즉시 재조회 82ms였다. 기존 MockMvc·별 상세·실제 세션·모델 stub 검증과 266 회귀·Spring 기동도 통과했다. 267 당시 실제 회원·Gold 연결, 공유/운영 DB 적용·서버 배포·268 화면 검증은 미실행이었다. 후속 268의 화면 fixture 검증과 남은 실제 회원 인수는 [268 계약](nasa-planet-request-268.md)을 따른다.
 - 목적: [266 NASA 자료 저장 계약](nasa-planet-info-266.md)의 검증된 기본 해를 회원이 이해하기 쉬운 한국어로 설명한다. 배포 변수·적용·복구 절차는 [NASA 운영 가이드](../operations/nasa-planet-info-runbook.md)가 담당한다.
-- 범위: Spring Boot 내부 Spring AI 호출, 응답 검증, 후보 단위 설명 저장·재사용, 인증 회원의 별 단위 공개 응답이다. 268은 기존 프론트엔드의 표시·버튼·로딩·재시도 UX를 담당한다.
+- 범위: Spring Boot 내부 Spring AI 호출, 응답 검증, 후보 단위 설명 저장·재사용, 인증 회원의 별 단위 공개 응답이다. 268은 [후속 요청·재사용 계약](nasa-planet-request-268.md)에 따라 GET 조회와 POST 생성 요청을 나누고 기존 프론트엔드의 표시·버튼·로딩·재시도 UX를 연결한다. 이 문서의 267 실호출 GET 결과는 변경 전 경로의 검증 기록이다.
 
 ## 1. 설명할 수 있는 자료
 
@@ -76,13 +76,13 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 
 ### 4.2 인증 회원의 별 단위 응답
 
-267은 `GET /api/v1/me/stars/{ticId}/planet-explanations`를 제공한다. 기존 `GET /api/v1/me/stars/{ticId}`의 응답과 `planets.items`는 변경하지 않는다. 인증된 회원 ID는 서버 세션에서 가져온다. TIC 형식 오류나 회원이 열지 않은 별은 기존 별 상세와 똑같이 `STAR_LOCKED`로 덮는다. 서버는 **그 회원·그 TIC의 기존 `planets.items`를 구성하는 권한 필터**로 대상을 정한다. 클라이언트가 후보 ID나 제출 주기를 보내 목록을 늘리거나 설명 대상을 연결하지 않는다. NASA에 등록된 같은 별의 다른 행성도 추가하지 않는다.
+267은 `GET /api/v1/me/stars/{ticId}/planet-explanations`를 처음 제공했으며 당시 GET이 원천 조회와 설명 생성도 수행했다. 268은 같은 GET을 **저장 결과 조회 전용**으로 바꾸고, 같은 경로의 POST 본문 `candidateId`로 확정 후보 한 건의 생성을 요청하도록 확장한다([268 계약](nasa-planet-request-268.md#3-조회생성-요청)). 기존 `GET /api/v1/me/stars/{ticId}`의 응답과 `planets.items`는 변경하지 않는다. 인증된 회원 ID는 서버 세션에서 가져온다. TIC 형식 오류나 회원이 열지 않은 별은 기존 별 상세와 똑같이 `STAR_LOCKED`로 덮는다. 서버는 **그 회원·그 TIC의 기존 `planets.items`를 구성하는 권한 필터**로 대상을 정한다. 클라이언트가 보낸 후보 ID는 POST의 요청 대상 한 건을 지정할 뿐, 목록을 늘리거나 검증되지 않은 NASA 연결을 만드는 근거가 아니다. NASA에 등록된 같은 별의 다른 행성도 추가하지 않는다.
 
 응답은 `{ticId, version, items}`이며 `version`은 목록을 읽은 **같은 별 상세 스냅샷**의 지도 버전을 그대로 사용한다. `items`는 해당 조회 시점의 별 상세 `planets.items`와 같은 필터·`candidateId` 순서·개수를 따른다. 각 항목은 `{candidateId, kind, status, content, sourceStatus, fetchedAt, refreshStatus, generatedAt, retryAt, failure}`를 갖는다. 최상위 개수 필드는 두지 않는다. 별 상세의 `planets.count`는 미확정 후보도 포함한 표시 개수이므로 "설명 가능한 행성 수"로 해석하지 않는다. 검증된 `content.name` 속 행성명 외의 NASA 원문 행성명·문헌 문자열, 프롬프트, 원천 해시, 모델 설정은 공개하지 않는다. 화면은 `ticId`, `version`, `candidateId`로 기존 행성 목록과 설명을 연결하고 주기 근접도나 목록 인덱스로 추정하지 않는다.
 
-`kind=unconfirmed`는 `status=not_applicable`, `content/sourceStatus/fetchedAt/refreshStatus/generatedAt/retryAt/failure=null`로 반환하며 266·267을 호출하지 않는다. `kind=confirmed`만 후보별 267 `lookup`을 호출한다. 그 사이 후보가 266 대상 자격을 잃으면 해당 항목을 `status=source_unavailable`, `sourceStatus=not_eligible`, 다른 설명·시각·실패 필드는 null로 보내고 다른 항목의 처리는 계속한다. 준비된 설명의 `content`는 다섯 검증된 문장만 담는다. 그 외 상태에서 `content`는 null이며 `sourceStatus`, `fetchedAt`, `refreshStatus`, `generatedAt`, `retryAt`, `failure`는 해당 시점의 유효한 정보만 전달한다. 예상 가능한 후보별 NASA·모델 실패가 나머지 항목 전체를 실패시키지 않는다. 모델·외부 HTTP 호출은 별 상세의 읽기 트랜잭션 밖에서 실행한다.
+`kind=unconfirmed`는 `status=not_applicable`, `content/facts/sourceStatus/fetchedAt/refreshStatus/generatedAt/retryAt/failure=null`로 반환하며 266·267을 호출하지 않는다. 268 GET에서 저장 이력이 없는 확정 후보는 `not_requested`이고 외부 호출도 하지 않는다. POST는 지정한 확정 후보 한 건만 후보별 267 `lookup`을 호출한다. 그 사이 후보가 266 대상 자격을 잃으면 해당 항목을 `status=source_unavailable`, `sourceStatus=not_eligible`, 다른 설명·수치·시각·실패 필드는 null로 보내고 다른 항목의 처리는 계속한다. 준비된 설명의 `content`는 다섯 검증된 문장만 담는다. 그 외 상태에서 `content`는 null이며 NASA 원천이 정상이라면 `facts`의 수치는 별도로 제공한다. 예상 가능한 후보별 NASA·모델 실패가 나머지 항목 전체를 실패시키지 않는다. 모델·외부 HTTP 호출은 별 상세의 읽기 트랜잭션 밖에서 실행한다.
 
-공개 응답의 필드·상태별 null 규칙과 HTTP 오류는 [탐사 API 4.2.1절](../../apps/backend/docs/exploration-api-spec.md#421-회원별-별-단위-nasa-한국어-설명-s15p21c206-267)이 정본이다. 설명은 NASA 원천의 교육용 요약이며 측정값과 발견 사실의 독립적인 권위 원천이 아니다. 268은 이전 별·버전·후보의 늦은 응답을 새 선택에 적용하지 않고, 수치 원천의 `fetchedAt`과 최근 `refreshStatus` 및 과거 정상 원천 사용 여부를 구별해 표시한다. 버튼·로딩·재시도·출처 링크의 화면 방식은 268이 정한다. 설명이 없어도 266의 정상 수치 자료는 소비할 수 있다.
+공개 응답의 필드·상태별 null 규칙과 HTTP 오류는 [탐사 API 4.2.1절](../../apps/backend/docs/exploration-api-spec.md#421-회원별-별-단위-nasa-한국어-설명-s15p21c206-267)이 정본이다. 설명은 NASA 원천의 교육용 요약이며 측정값과 발견 사실의 독립적인 권위 원천이 아니다. 268은 이전 별·버전·후보의 늦은 응답을 새 선택에 적용하지 않고, 수치 원천의 `fetchedAt`과 최근 `refreshStatus` 및 과거 정상 원천 사용 여부를 구별해 표시한다. 버튼·로딩·재시도·출처 링크의 화면 방식은 [268 계약](nasa-planet-request-268.md)이 정한다. 설명이 없어도 266의 정상 수치 자료는 소비할 수 있다.
 
 ## 5. 검증 및 아직 확정하지 않은 것
 
@@ -126,4 +126,4 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 
 이어서 일회성 `NasaV4FullTimingProbeTest`는 Testcontainers PostgreSQL·Redis에 TIC `150428135`의 가상 회원·후보 4개와 `TOI-700 b/c/d/e` Gold `archive` 참조를 시드했다. 인증된 MockMvc `GET /api/v1/me/stars/{ticId}/planet-explanations`가 실제 NASA TAP과 GMS `gpt-5.4-mini`를 거친 첫 조회는 **14,554ms**, 즉시 같은 요청을 반복한 캐시 조회는 **82ms**였다. 두 응답 모두 4/4 항목이 `kind=confirmed`, `status=ready`, `sourceStatus=ready`였고, 격리 DB에서 V25 NASA 원천·V26 설명 캐시가 각각 4행임을 확인했다. JUnit 1/1, 실패·오류·건너뜀 0건, `BUILD SUCCESSFUL`이다. 임시 테스트 소스는 삭제했고 Git 제외 결과는 `apps/backend/build/reports/planet-explanations-v4-timing.json`에 남겼다. 이 수치는 해당 환경의 1회 표본이며 운영 서버·브라우저 지연을 대표하지 않는다. Gradle 전체 약 57초와 JUnit suite 40.954초는 API 응답 시간이 아니다.
 
-v2·v3 및 이번 v4 별 단위 실험은 모두 **가상 회원·후보·Gold 참조를 이용한 격리 백엔드 경로**에 한정된다. 앞의 v4 한 후보 직접 검증과 이번 인증 GET·저장 검증도 서로 구분한다. 실제 회원과 실제 Gold 연결, 공유/운영 DB의 V26 적용, 서버 배포, 268 프론트 표시와 운영 비용·지연 분포·품질 평가는 확인하지 않았다. 앞선 약 50초는 v3 테스트 전체 실행 시간이며 API 응답 지연 측정값이 아니다. 운영 활성화 전에는 호출 예산·제한과 실제 응답 품질·지연을 대상 환경에서 확인한다.
+v2·v3 및 이번 v4 별 단위 실험은 모두 **가상 회원·후보·Gold 참조를 이용한 격리 백엔드 경로**에 한정된다. 앞의 v4 한 후보 직접 검증과 이번 인증 GET·저장 검증도 서로 구분한다. 267 검증 시점에는 실제 회원과 실제 Gold 연결, 공유/운영 DB의 V26 적용, 서버 배포, 268 프론트 표시와 운영 비용·지연 분포·품질 평가를 확인하지 않았다. 후속 268의 프론트 fixture 결과와 실제 회원 인수 경계는 [268 계약](nasa-planet-request-268.md#5-운영검증-경계)에 기록한다. 앞선 약 50초는 v3 테스트 전체 실행 시간이며 API 응답 지연 측정값이 아니다. 운영 활성화 전에는 호출 예산·제한과 실제 응답 품질·지연을 대상 환경에서 확인한다.

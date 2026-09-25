@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -55,13 +57,30 @@ public class StarController {
         return stars.detail(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED));
     }
 
-    @Operation(summary = "내 별의 행성별 한국어 설명",
-            description = "내 별 상세의 후보 목록 순서대로 설명 상태와 준비된 다섯 설명을 묶어 준다."
+    @Operation(summary = "내 별의 저장된 행성별 한국어 설명",
+            description = "현재 후보 목록의 저장 상태·NASA 기본 수치·준비된 설명만 읽는다."
                     + " 미확정 후보는 설명하지 않으며, 미발견 별은 STAR_LOCKED다.")
     @GetMapping("/api/v1/me/stars/{ticId}/planet-explanations")
     public StarPlanetExplanationService.Bundle planetExplanations(
             @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId) {
-        return planetExplanations.lookup(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED));
+        return planetExplanations.read(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED));
+    }
+
+    public record PlanetExplanationRequest(String candidateId) {
+    }
+
+    @Operation(summary = "내 별의 선택한 행성 설명 요청",
+            description = "현재 별 상세의 확정 후보 하나만 NASA 재확인·설명 생성 또는 저장 결과 재사용한다."
+                    + " 동일 요청은 저장 상태와 임대 순번으로 중복 제한하며 쓰기 요청에는 CSRF가 필요하다.")
+    @PostMapping("/api/v1/me/stars/{ticId}/planet-explanations")
+    public StarPlanetExplanationService.Bundle requestPlanetExplanation(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId,
+            @RequestBody PlanetExplanationRequest request) {
+        if (request == null || request.candidateId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return planetExplanations.request(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED),
+                request.candidateId());
     }
 
     @Operation(summary = "공개 별 요약",

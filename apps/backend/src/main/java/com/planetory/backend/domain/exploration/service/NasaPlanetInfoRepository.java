@@ -14,6 +14,38 @@ import static com.planetory.backend.domain.exploration.service.NasaPlanetInfo.Pl
 @Repository
 class NasaPlanetInfoRepository {
 
+    /** 완료 저장과 동시에 현재 회원 자격·단일 Archive 이름을 재검사한다. 두 저장소가 사용한다. */
+    static final String CURRENT_TARGET_SQL = """
+                         AND EXISTS (
+                             SELECT 1 FROM candidates c
+                               JOIN stars t ON t.tic_id=c.tic_id AND t.service_status='published'
+                          LEFT JOIN candidate_dispositions d ON d.candidate_id=c.id
+                              WHERE c.id=n.candidate_id AND c.tic_id=n.tic_id
+                                AND c.status='active' AND c.is_confirmed
+                                AND COALESCE(d.disposition, 'confirmed')='confirmed'
+                                AND EXISTS (SELECT 1 FROM users m WHERE m.id=:memberId AND m.status='active')
+                                AND EXISTS (SELECT 1 FROM star_unlocks u
+                                             WHERE u.user_id=:memberId AND u.tic_id=c.tic_id)
+                                AND EXISTS (SELECT 1 FROM submissions s
+                                             WHERE s.user_id=:memberId AND s.tic_id=c.tic_id
+                                               AND s.matched_candidate_id=c.id)
+                                AND EXISTS (SELECT 1 FROM external_signal_references e
+                                             WHERE e.candidate_id=c.id AND e.tic_id=c.tic_id
+                                               AND e.source='archive' AND e.external_id=n.archive_planet_name)
+                                AND NOT EXISTS (SELECT 1 FROM external_signal_references e
+                                                 WHERE e.candidate_id=c.id AND e.tic_id=c.tic_id
+                                                   AND e.source='archive'
+                                                   AND e.external_id<>n.archive_planet_name)
+                                AND NOT EXISTS (SELECT 1 FROM external_signal_references e
+                                                 JOIN candidates other_candidate
+                                                   ON other_candidate.id=e.candidate_id
+                                                  AND other_candidate.status='active'
+                                                WHERE e.tic_id=c.tic_id AND e.source='archive'
+                                                  AND e.external_id=n.archive_planet_name
+                                                  AND e.candidate_id<>c.id)
+                         )
+                        """;
+
     private final JdbcClient jdbc;
     private final ObjectMapper json = new ObjectMapper();
 
@@ -67,7 +99,8 @@ class NasaPlanetInfoRepository {
     Optional<Row> find(long candidateId) {
         return jdbc.sql("""
                         SELECT tic_id, archive_planet_name, status, normalized::text AS normalized,
-                               source_hash, source_version, fetched_at, changed_at, next_refresh_at, last_refresh_status
+                               source_hash, source_version, fetched_at, changed_at, next_refresh_at,
+                               in_flight_until, last_refresh_status
                           FROM nasa_planet_info WHERE candidate_id=:candidateId
                         """)
                 .param("candidateId", candidateId)
@@ -77,6 +110,7 @@ class NasaPlanetInfoRepository {
                         rs.getObject("fetched_at", OffsetDateTime.class),
                         rs.getObject("changed_at", OffsetDateTime.class),
                         rs.getObject("next_refresh_at", OffsetDateTime.class),
+                        rs.getObject("in_flight_until", OffsetDateTime.class),
                         rs.getString("last_refresh_status")))
                 .optional();
     }
@@ -103,56 +137,67 @@ class NasaPlanetInfoRepository {
                 .query(Long.class).optional();
     }
 
-    void ready(long candidateId, long generation, Planet planet, String hash,
+    void ready(long memberId, long candidateId, long ticId, String name,
+               long generation, Planet planet, String hash,
                OffsetDateTime now, OffsetDateTime nextRefresh) {
         jdbc.sql("""
-                        UPDATE nasa_planet_info SET status='ready', normalized=CAST(:normalized AS jsonb),
+                        UPDATE nasa_planet_info n SET status='ready', normalized=CAST(:normalized AS jsonb),
                                source_hash=:hash, source_version=1, fetched_at=:now,
                                changed_at=CASE WHEN source_hash IS DISTINCT FROM :hash THEN :now
                                                ELSE changed_at END,
                                next_refresh_at=:nextRefresh, in_flight_until=NULL, last_refresh_status='ok'
-                         WHERE candidate_id=:candidateId AND attempt_generation=:generation
-                        """)
+                         WHERE n.candidate_id=:candidateId AND n.attempt_generation=:generation
+                           AND n.tic_id=:ticId AND n.archive_planet_name=:name
+                        """ + CURRENT_TARGET_SQL)
                 .param("normalized", encode(planet)).param("hash", hash).param("now", now)
-                .param("nextRefresh", nextRefresh).param("candidateId", candidateId)
+                .param("nextRefresh", nextRefresh).param("memberId", memberId)
+                .param("candidateId", candidateId).param("ticId", ticId).param("name", name)
                 .param("generation", generation).update();
     }
 
-    void notFound(long candidateId, long generation, OffsetDateTime nextRefresh) {
+    void notFound(long memberId, long candidateId, long ticId, String name,
+                  long generation, OffsetDateTime nextRefresh) {
         // 이전 정상 JSON은 보존하되 status=not_found이므로 소비자에게 표시하지 않는다.
         jdbc.sql("""
-                        UPDATE nasa_planet_info SET status='not_found', next_refresh_at=:nextRefresh,
+                        UPDATE nasa_planet_info n SET status='not_found', next_refresh_at=:nextRefresh,
                                in_flight_until=NULL, last_refresh_status='not_found'
-                         WHERE candidate_id=:candidateId AND attempt_generation=:generation
-                        """)
+                         WHERE n.candidate_id=:candidateId AND n.attempt_generation=:generation
+                           AND n.tic_id=:ticId AND n.archive_planet_name=:name
+                        """ + CURRENT_TARGET_SQL)
                 .param("nextRefresh", nextRefresh).param("candidateId", candidateId)
-                .param("generation", generation).update();
+                .param("generation", generation).param("memberId", memberId)
+                .param("ticId", ticId).param("name", name).update();
     }
 
-    void unresolved(long candidateId, long generation, OffsetDateTime nextRefresh) {
+    void unresolved(long memberId, long candidateId, long ticId, String name,
+                    long generation, OffsetDateTime nextRefresh) {
         jdbc.sql("""
-                        UPDATE nasa_planet_info SET status='identity_unresolved',
+                        UPDATE nasa_planet_info n SET status='identity_unresolved',
                                next_refresh_at=:nextRefresh, in_flight_until=NULL,
                                last_refresh_status='identity_unresolved'
-                         WHERE candidate_id=:candidateId AND attempt_generation=:generation
-                        """)
+                         WHERE n.candidate_id=:candidateId AND n.attempt_generation=:generation
+                           AND n.tic_id=:ticId AND n.archive_planet_name=:name
+                        """ + CURRENT_TARGET_SQL)
                 .param("nextRefresh", nextRefresh).param("candidateId", candidateId)
-                .param("generation", generation).update();
+                .param("generation", generation).param("memberId", memberId)
+                .param("ticId", ticId).param("name", name).update();
     }
 
-    void failed(long candidateId, long generation, String failure,
-                OffsetDateTime nextRefresh) {
+    void failed(long memberId, long candidateId, long ticId, String name,
+                long generation, String failure, OffsetDateTime nextRefresh) {
         jdbc.sql("""
-                        UPDATE nasa_planet_info
+                        UPDATE nasa_planet_info n
                            SET status=CASE WHEN normalized IS NOT NULL AND status='ready' THEN 'ready'
                                            WHEN status IN ('not_found', 'identity_unresolved') THEN status
                                            ELSE 'temporarily_unavailable' END,
                                next_refresh_at=:nextRefresh, in_flight_until=NULL,
                                last_refresh_status=:failure
-                         WHERE candidate_id=:candidateId AND attempt_generation=:generation
-                        """)
+                         WHERE n.candidate_id=:candidateId AND n.attempt_generation=:generation
+                           AND n.tic_id=:ticId AND n.archive_planet_name=:name
+                        """ + CURRENT_TARGET_SQL)
                 .param("nextRefresh", nextRefresh).param("failure", failure)
-                .param("candidateId", candidateId).param("generation", generation).update();
+                .param("candidateId", candidateId).param("generation", generation)
+                .param("memberId", memberId).param("ticId", ticId).param("name", name).update();
     }
 
     String encode(Planet planet) {
@@ -176,6 +221,6 @@ class NasaPlanetInfoRepository {
 
     record Row(long ticId, String name, String status, Planet planet, String hash, Short sourceVersion,
                OffsetDateTime fetchedAt, OffsetDateTime changedAt,
-               OffsetDateTime nextRefreshAt, String refreshStatus) {
+               OffsetDateTime nextRefreshAt, OffsetDateTime inFlightUntil, String refreshStatus) {
     }
 }
