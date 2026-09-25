@@ -6,6 +6,19 @@ Frontend, Backend와 온라인 계산기의 공통 Docker Compose 설정을 둘 
 
 GitLab의 EC2-A 수동 배포 job이 이 Compose를 사용해 선택한 서비스만 갱신한다. EC2-B에는 서비스 역할이 없으므로(시스템 아키텍처 8장 D4) `ec2-b/`에는 서비스 설정을 두지 않고 CI·외부 관찰 설정만 둔다([ec2-b/README.md](ec2-b/README.md)). 노드별 서비스 차이가 필요하면 `ec2-a/`에 둔다.
 
+## Backend 비밀 값 추가
+
+Backend가 새 비밀 값을 읽을 때는 두 곳을 함께 바꾼다. compose는 `environment:`에 적힌 변수만 컨테이너에 넘기므로 서버 `.env`에만 넣으면 Backend가 보지 못한다.
+
+1. `compose.yaml` backend `environment:`에 `NAME: ${NAME:-}`로 적는다. `:?`로 적으면 값이 없는 노드에서 `config -q`와 기동이 깨진다.
+2. 서버 `.env`에 값을 직접 넣고 Backend를 다시 배포한다. 배포 job은 `compose.yaml`만 올리고 `.env`는 이미지 줄 외에 바꾸지 않는다. 값은 MR·메신저에 붙여 넣지 않는다.
+
+`apps/backend/.env.oauth.properties`는 로컬 PC 전용이다(`spring.config.import`, Git 제외). 운영에는 전달되지 않는다.
+
+| 변수 | 용도 | 상태 |
+|---|---|---|
+| `GMS_KEY` | GMS(LLM 설명 기능) API 키 | compose 전달만 먼저 둠. Backend에서 읽는 코드는 아직 없다(2026-09-25) |
+
 ## service-db
 
 PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.
@@ -18,7 +31,7 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 
 ## 세션·캐시 Redis
 
-Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 잔차·주기도 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
+Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 지정한 별의 Gold 곡선·원본 주기도와 잔차 계산 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
 
 `RedisSessionConfig`가 기동 시 두 주소를 비교해 **host와 port가 모두 같으면 예외를 던지고 앱을 띄우지 않는다.** 캐시 eviction이 로그인 세션을 지우는 것을 막는 경계이므로, 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
 
@@ -27,7 +40,7 @@ Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 �
 | | 저장 | maxmemory | 축출 | 잃으면 |
 | --- | --- | --- | --- | --- |
 | `session-redis` | 볼륨 `planetory-session-redis-data`, 기본 RDB 저장점 | 64mb | `noeviction` | 전원 로그아웃. 데이터 손실은 아니다 |
-| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | 진행 중 계산. 결과는 재계산한다 |
+| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | Gold 읽기 캐시는 DB에서 다시 읽고 계산 결과는 재계산한다 |
 
 두 인스턴스의 상한은 따로다. 한쪽의 여유가 다른 쪽을 돕지 못하므로 합계(192mb)가 같은 호스트의 PostgreSQL을 밀어내지 않는지가 기준이다([EC2 서비스 진입·장애 대응](../../docs/architecture/ec2-service-entry-failover.md) D1). 컨테이너 `mem_limit`은 걸지 않는다. 넘는 순간 OOM으로 컨테이너가 죽는데, 세션 쪽이면 전원 로그아웃이다. `maxmemory`는 쓰기만 실패시킨다.
 
@@ -50,7 +63,7 @@ docker compose exec session-redis redis-cli info errorstats | grep OOM
 
 `cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출한다. 결과 키에 TTL을 주면 결과만 축출 후보가 되고 TTL이 없는 키는 축출되지 않는다. `allkeys-lru`는 잠금을 결과와 같은 확률로 지워 DAT-14가 막은 중복 계산을 허용하므로 택하지 않았다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다.
 
-**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 캐시 소비처는 아직 없다. 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
+**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 상태·잠금 소비처는 아직 없다. Gold 읽기 캐시 키는 1일 TTL로 축출 대상이다. 계산 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
 
 Backend는 `cache-redis`에 기동을 의존하지 않는다(`depends_on`에 없다). 캐시는 선택 의존성이라 health도 세션만 본다. 캐시가 unhealthy여도 Backend는 뜨고 온라인 계산만 멈춘다. 연결은 처음 쓸 때 맺는다.
 
@@ -68,7 +81,9 @@ cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
 
 설정(`command`)을 바꿨을 때도 같은 명령을 쓴다. compose가 바뀐 컨테이너만 다시 만든다. 세션은 볼륨에 남으므로 로그인이 유지되고, 캐시는 비워진다.
 
-캐시 소비처는 아직 없다. `cache-redis`는 현재 Backend 기동 요건만 채우며, 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+Gold 읽기 캐시는 기본 비활성이다. 운영자가 `.env`에 `GOLD_CACHE_ENABLED=true`와 쉼표로 구분한 `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 지정하고 Backend를 재시작하면 해당 별의 현재 판 곡선·원본 주기도를 시작 시 적재한다. 캐시는 서블릿 웹 서버와 세션 Redis가 활성화된 경우에만 생성되며, 같은 환경변수를 받는 비웹 운영 명령은 DB에서 읽는다. 후보 모델과 공개·권한 판단은 DB에서 읽는다. 새 판 알림이 오면 다시 적재하고, 알림이 없어도 다음 곡선·주기도 조회에서 DB를 읽어 채운다. 지정하지 않은 별도 DB에서 분석할 수 있다. Redis가 비거나 장애가 나면 DB에서 읽는다. 초기 운영 예상은 별 5개 또는 10개이며 실제 TIC 목록은 미정이다. `cache-redis`의 기본 128mb가 선택한 별 전체와 향후 계산 캐시를 수용하는지 `redis-cli info memory`의 `used_memory`·`used_memory_rss`와 축출 수를 측정한 뒤 별 수 또는 용량을 정한다. 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+
+주간 챌린지 별 등록부터 캐시 대상 지정·회차 전환·검증까지는 [챌린지 별 등록·회차 전환 런북](../../docs/operations/challenge-round-runbook.md)을 따른다.
 
 ## 계정 분리
 
@@ -125,6 +140,69 @@ COMMIT;
 ```
 
 로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
+
+## Gold 목업
+
+서비스 DB에 실제 Gold가 오기 전까지 분석 화면을 열어 보기 위한 목업 판이다 [S15P21C206-262]. Gold가 없으면 `GET /api/v1/stars/{tic}/analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)이다. 현재 판이 없다는 뜻이며 일시 장애가 아니다.
+
+적재 단계는 실제 Publisher 코드(`distributed-system/publisher`)이고 **입력만** 계약 예시 payload다. 정본 절차를 그대로 밟는다. `gold_writer` 계정, TIC 잠금, staging → current 전환을 한 트랜잭션으로, 커밋 뒤 Backend 알림. 실제 Gold로 바꿀 때는 입력 어댑터만 바뀐다. 구조는 [Publisher](../../distributed-system/publisher/README.md).
+
+목업 행은 판 `bundle_version`과 세그먼트 `binning_revision`의 `mock-` 표식으로 알아본다. 삭제는 이 표식으로만 한다.
+
+### 한계
+
+- 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)가 없어 여전히 안 된다.
+- 등록된 별(`stars`)에만 싣고 별 속성은 바꾸지 않는다. 같은 별에 새 판을 올리면 이전 후보는 은퇴한다.
+- 판이 current가 될 때 V23 트리거가 후보 변경을 기록한다. 재개 알림은 **그 별을 팔로우한 회원에게만** 간다.
+
+### 준비 (한 번)
+
+`planetory_gold_writer`는 로그인할 수 없는 그룹 역할이다. 로그인 계정을 소유자로 만든다. 비밀번호는 명령줄에 두지 않는다. `flyway_schema_history`·`operation_settings`는 `gold_writer` 권한 밖이라 preflight용 SELECT를 따로 준다. 없으면 적재가 `MIGRATION_UNREADABLE`로 멈춘다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose exec service-db psql -U planetory -d planetory_poc \
+  -c "CREATE USER planetory_publisher IN ROLE planetory_gold_writer" \
+  -c "GRANT SELECT ON flyway_schema_history, operation_settings TO planetory_publisher" \
+  -c "REVOKE CREATE ON SCHEMA public FROM planetory_publisher"
+docker compose exec service-db psql -U planetory -d planetory_poc -c "\password planetory_publisher"
+```
+
+같은 비밀번호를 `.env`의 `PUBLISHER_DB_PASSWORD`에 넣는다. 판 전환 알림을 보내려면 `INTERNAL_SERVICE_TOKEN`도 넣고 Backend를 다시 배포한다. 토큰이 없으면 알림만 생략되고 판은 current가 된다.
+
+### 적재
+
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다.
+
+```sh
+cd "$DEPLOY_PATH"
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
+  docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
+```
+
+같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
+
+```sh
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile gold-mock run --rm gold-mock notify --bundle b-<id>
+```
+
+알림은 후처리를 앞당기는 신호다. 보내지 않아도 DB의 current가 정본이라 분석 화면은 열린다.
+
+### 삭제
+
+소유자로 `service-db` 안에서 돈다. 판 전환 때 V23 트리거가 쓴 알림 행을 `gold_writer`가 지울 수 없어서다. 소유자 비밀번호를 Publisher 컨테이너에 주지 않도록 SQL만 받아 넘긴다. 기본은 모의 실행이다.
+
+```sh
+cd "$DEPLOY_PATH"
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA'
+# 개수를 확인한 뒤 실제로 지운다
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -v apply=1'
+```
+
+회원이 목업 판·후보를 참조하면(제출·게시글·공개 분석·성과) 지우지 않고 멈춘다. 그 기록을 지울지는 사람이 정한다.
 
 ## ERD
 

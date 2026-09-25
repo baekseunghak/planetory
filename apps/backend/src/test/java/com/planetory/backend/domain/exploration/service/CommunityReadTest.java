@@ -343,7 +343,7 @@ class CommunityReadTest {
             tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
             tx.executeWithoutResult(s -> jdbc.update("UPDATE published_analyses SET unpublished_at=now() WHERE id=?", Long.parseLong(p.analysisId().substring(3))));
             return call.callRealMethod();
-        }).when(gold).findSegments(any());
+        }).when(gold).findSegments(anyLong(), any());
         mvc.perform(get(publicPath(p)).session(session(other))).andExpect(status().isNotFound());
     }
 
@@ -383,7 +383,7 @@ class CommunityReadTest {
             tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
             tx.executeWithoutResult(s -> jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic));
             return call.callRealMethod();
-        }).when(gold).findSegments(any());
+        }).when(gold).findSegments(anyLong(), any());
         mvc.perform(get(publicPath(p)).session(session(member))).andExpect(status().isNotFound());
         // 개인·공개 그래프의 캐시가 있어도 닫힌 별은 전체 피드에도 남지 않는다.
         for (var item : read(FEED).path("items")) assertNotEquals(p.threadId(), item.path("id").asText());

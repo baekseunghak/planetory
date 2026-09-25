@@ -136,7 +136,7 @@ class GoldCatalogRepositoryTest {
     void 곡선_세그먼트의_결측이_null로_보존된다() {
         Bundle bundle = repository.findCurrentBundle(ticId).orElseThrow();
 
-        List<LightCurveSegment> segments = repository.findSegments(bundle.manifest().segmentIds());
+        List<LightCurveSegment> segments = repository.findSegments(ticId, bundle.manifest().segmentIds());
 
         assertEquals(1, segments.size());
         LightCurveSegment segment = segments.get(0);
@@ -148,16 +148,16 @@ class GoldCatalogRepositoryTest {
 
     @Test
     void 참조할_세그먼트가_없으면_빈_목록을_준다() {
-        assertTrue(repository.findSegments(List.of()).isEmpty());
+        assertTrue(repository.findSegments(ticId, List.of()).isEmpty());
     }
 
     @Test
     void 주기도를_읽고_교체된_판에는_주기도가_없다() {
-        Periodogram periodogram = repository.findPeriodogram(currentBundleId).orElseThrow();
+        Periodogram periodogram = repository.findPeriodogram(ticId, currentBundleId).orElseThrow();
 
         assertEquals(3, periodogram.nPeriods());
         assertArrayEquals(new Float[] {0.1f, 0.5f, 0.9f}, periodogram.power());
-        assertTrue(repository.findPeriodogram(previousBundleId).isEmpty(), "교체된 판의 주기도는 지운다");
+        assertTrue(repository.findPeriodogram(ticId, previousBundleId).isEmpty(), "교체된 판의 주기도는 지운다");
     }
 
     /** 은퇴 후보도 과거 제출 재현에 필요하므로 조회에서 걸러내지 않는다. */

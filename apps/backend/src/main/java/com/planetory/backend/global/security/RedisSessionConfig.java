@@ -13,6 +13,7 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.session.config.annotation.web.http.EnableSpringHttpSession;
@@ -41,11 +42,16 @@ public class RedisSessionConfig {
                 env.getRequiredProperty(prefix + "port", Integer.class));
         String password = env.getProperty(prefix + "password");
         if (password != null && !password.isBlank()) server.setPassword(password);
+        Duration timeout = "cache".equals(purpose) ? Duration.ofMillis(200) : Duration.ofSeconds(2);
         var options = io.lettuce.core.ClientOptions.builder().socketOptions(io.lettuce.core.SocketOptions.builder()
-                .connectTimeout(Duration.ofSeconds(2)).build()).build();
-        var client = LettuceClientConfiguration.builder().clientOptions(options).commandTimeout(Duration.ofSeconds(2))
+                .connectTimeout(timeout).build()).build();
+        var client = LettuceClientConfiguration.builder().clientOptions(options).commandTimeout(timeout)
                 .shutdownTimeout(Duration.ZERO).build();
         return new LettuceConnectionFactory(server, client);
+    }
+    @Bean StringRedisTemplate goldCacheRedisTemplate(
+            @Qualifier("redisConnectionFactory") LettuceConnectionFactory connection) {
+        return new StringRedisTemplate(connection);
     }
     @Bean RedisSessions<?> sessionRepository(
             @Qualifier("sessionRedisConnectionFactory") LettuceConnectionFactory connection,

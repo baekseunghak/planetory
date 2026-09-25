@@ -152,7 +152,7 @@ public final class AnalysisViews {
      * 판이 주기별 제안값을 싣지 않으면 null이며 <b>키는 빼지 않는다</b> — 빠지면 "제안 없음"과
      * "필드 누락"을 구분할 수 없다.
      */
-    public record PeakView(int rank, double periodDays, double power, int gridIndex, FineTuneRange fineTune,
+    public record PeakView(int rank, double periodDays, float power, int gridIndex, FineTuneRange fineTune,
                            Double suggestedDurationHours, Double suggestedPhaseCenter) {
     }
 

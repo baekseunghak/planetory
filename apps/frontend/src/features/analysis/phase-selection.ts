@@ -127,10 +127,14 @@ export function getSelectionLimits(
         "INVALID_PEAK_SOURCE",
         "선택한 봉우리와 미세 조정 범위를 확인해 주세요.",
       );
-    const peakMaxDays =
-      (peak.suggestedDurationHours / 24) * rules.maxDurationMultipleOfSuggested;
-    finite(peakMaxDays, "selectionRules.maxDurationMultipleOfSuggested");
-    maxWindowDays = Math.min(maxWindowDays, peakMaxDays);
+    // API 6.2: 추천 duration이 null이면 이 상한만 생략한다. 폭·source·fineTune 검사는 그대로다.
+    if (peak.suggestedDurationHours !== null) {
+      const peakMaxDays =
+        (peak.suggestedDurationHours / 24) *
+        rules.maxDurationMultipleOfSuggested;
+      finite(peakMaxDays, "selectionRules.maxDurationMultipleOfSuggested");
+      maxWindowDays = Math.min(maxWindowDays, peakMaxDays);
+    }
   }
   const minPhaseWidth = rules.minWindowDays / periodDays;
   const maxPhaseWidth = Math.min(

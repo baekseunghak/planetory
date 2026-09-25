@@ -95,6 +95,25 @@ EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-2
 
 CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `deploy.sh`, 실제 `.env`, `backups/`가 여기 있다. `~ubuntu/planetory/infra/service`는 09-21 이전 수동 기동 때의 사본이라 `.env`의 이미지 선언이 낡았다. 같은 compose 프로젝트 이름을 쓰므로 거기서 `docker compose ps`를 쳐도 컨테이너가 보여 오인하기 쉽다. 도는 버전은 컨테이너 라벨 `com.docker.compose.project.working_dir`과 이미지로 확인한다.
 
+## 병합 후 CI 배포 결과 (2026-09-23)
+
+`S15P21C206-254`(`!199`)와 `S15P21C206-261`(`!204`)은 병합 후 CI 경로로 배포됐다.
+
+| 파이프라인 | Frontend | Backend | 확인 |
+| --- | --- | --- | --- |
+| `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
+| `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
+
+운영 DB는 V24다. V23·V24는 261 전에 수동 배포한 `f6379f5b`에서 적용됐다. 옛 배포 버튼 거부는 아직 확인하지 않았다(`S15P21C206-262` 항목 2).
+
+## 분석 화면 503과 Gold 목업 (S15P21C206-262)
+
+별 분석을 열면 "일시적으로 처리할 수 없습니다"가 떴다. `analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)을 냈기 때문이다. 구현·API 연결·배포 문제가 아니었다. 서비스 DB에 Gold가 한 번도 적재되지 않아 `publication_bundles`·`light_curve_segments`·`candidates`가 모두 0행이었다. 더미 별에는 판이 없다. 이 경로는 예외로 처리해 오류 로그가 남지 않는다. 화면 문구는 일시 장애처럼 읽히지만 몇 번을 다시 해도 같다. 원인을 가르는 오류 코드 분리는 Backend 담당 사항이다.
+
+Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지다. 잔차 단계는 Worker(`S15P21C206-88`)가 없어 여전히 안 된다.
+
+**운영 적재는 아직 하지 않았다.** 병합 뒤 CI가 Publisher 이미지를 만들면 계정을 준비하고 적재한다.
+
 ## 손으로 넣은 데이터 (운영 값 아님)
 
 로그인을 뚫기 위해 EC2-A DB에 직접 넣었다. **운영이 정한 값이 아니다.**

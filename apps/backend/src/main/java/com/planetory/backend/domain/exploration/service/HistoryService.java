@@ -191,7 +191,7 @@ public class HistoryService {
     }
 
     private List<LightCurveSegment> segments(Bundle bundle) {
-        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds());
+        List<LightCurveSegment> segments = gold.findSegments(bundle.ticId(), bundle.manifest().segmentIds());
         if (segments.isEmpty() || segments.size()!=bundle.manifest().segmentIds().size()) throw unavailable();
         for (var s : segments) if (s.ticId()!=bundle.ticId() || s.flux()==null || s.flux().length!=s.nPoints()) throw unavailable();
         return segments;

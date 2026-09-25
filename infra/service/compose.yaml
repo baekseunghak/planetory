@@ -65,8 +65,8 @@ services:
     networks:
       - service
 
-  # 잔차·주기도 캐시용(SRS DAT-14). 소비처는 아직 없고 지금은 백엔드 기동 요건만
-  # 채운다. 재생성 가능한 파생물이라 볼륨을 두지 않고 저장도 끈다.
+  # 운영자 지정 Gold 곡선·원본 주기도 읽기 캐시 및 잔차 계산 캐시용(SRS DAT-14).
+  # 계산 상태·잠금 소비처는 아직 없다. DB에서 복구 가능한 값이라 볼륨을 두지 않고 저장도 끈다.
   #
   # volatile-lru로 축출 후보를 만료가 걸린 키로 한정한다. DAT-14는 결과와 함께 진행
   # 상태와 중복 계산 잠금도 여기 둔다. allkeys-lru면 잠금이 결과와 같은 확률로
@@ -107,7 +107,7 @@ services:
       SSAFY_CLIENT_ID: ${SSAFY_CLIENT_ID:-}
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
-      # 267은 기본 비활성. 활성화 전 GMS 예산·쿼터와 키 주입을 확인한다.
+      # 267 설명 기능은 기본 비활성. 활성화 전 GMS 예산·쿼터와 키 주입을 확인한다.
       NASA_EXPLANATION_ENABLED: ${NASA_EXPLANATION_ENABLED:-false}
       NASA_EXPLANATION_CHAT_MODEL: ${NASA_EXPLANATION_CHAT_MODEL:-none}
       NASA_EXPLANATION_MODEL: ${NASA_EXPLANATION_MODEL:-gpt-5.4-mini}
@@ -115,14 +115,20 @@ services:
       NASA_EXPLANATION_TIMEOUT: ${NASA_EXPLANATION_TIMEOUT:-8s}
       NASA_EXPLANATION_RETRY_DELAY: ${NASA_EXPLANATION_RETRY_DELAY:-1h}
       NASA_EXPLANATION_MAX_CONCURRENT: ${NASA_EXPLANATION_MAX_CONCURRENT:-1}
+      # GMS API 키는 267 백엔드가 활성화될 때 읽는다. 비어 있어도 기본 기동한다.
       GMS_KEY: ${GMS_KEY:-}
       GOLD_ROOT: /gold
+      # 내부 경로(/internal/**) 서비스 토큰. Publisher가 판 전환을 알릴 때 쓴다. 비우면 Backend가
+      # 경로 전체를 막는다. 알림이 없어도 DB의 current가 정본이라 화면은 열린다 [S15P21C206-262].
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # 주소를 .env로 빼지 않는다. compose가 정의한 서비스 이름이 곧 주소이고,
       # .env에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않는다.
       SESSION_REDIS_HOST: session-redis
       SESSION_REDIS_PORT: "6379"
       CACHE_REDIS_HOST: cache-redis
       CACHE_REDIS_PORT: "6379"
+      GOLD_CACHE_ENABLED: ${GOLD_CACHE_ENABLED:-false}
+      GOLD_CACHE_TIC_IDS: ${GOLD_CACHE_TIC_IDS:-}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
@@ -415,6 +421,32 @@ services:
     depends_on:
       api-docs-app:
         condition: service_started
+    networks:
+      - service
+
+  # Gold 목업 게시. gold-mock profile에 묶여 평시 up 대상이 아니다 [S15P21C206-262].
+  #   docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027
+  #
+  # 입력만 계약 예시 payload로 바꾼 실제 적재 단계다(distributed-system/publisher). 운영 Publisher는
+  # GCP Node 1에서 돌 예정이며 그때 입력 어댑터만 바뀐다. gold_writer 멤버 계정으로 붙는다.
+  # 소유자로 붙으면 권한 분리가 무력화된다. 계정 생성과 삭제 절차는 README 「Gold 목업」.
+  #
+  # 비밀번호는 :- 로 받는다. :? 로 두면 값이 없는 노드에서 config -q가 실패해 배포가 막힌다.
+  gold-mock:
+    image: ${PUBLISHER_IMAGE:-local/planetory-publisher:not-configured}
+    platform: linux/amd64
+    profiles: ["gold-mock"]
+    environment:
+      PGHOST: service-db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-planetory_poc}
+      PGUSER: ${PUBLISHER_DB_USER:-planetory_publisher}
+      PGPASSWORD: ${PUBLISHER_DB_PASSWORD:-}
+      BACKEND_URL: http://backend:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+    depends_on:
+      service-db:
+        condition: service_healthy
     networks:
       - service
 

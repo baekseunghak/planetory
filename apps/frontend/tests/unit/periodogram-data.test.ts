@@ -106,6 +106,22 @@ test("empty/truncated power, unknown grid, nonfinite or null values and invalid 
     2.5,
   );
 });
+test("null suggestion values mean unknown, not zero (API 5.4)", () => {
+  const original = candidatePeaksFixture(),
+    peak = original.peaks[0];
+  const [decoded] = decodeCandidatePeaks(
+    {
+      ...original,
+      peaks: [
+        { ...peak, suggestedDurationHours: null, suggestedPhaseCenter: null },
+      ],
+    },
+    context(),
+    grid(),
+  ).peaks;
+  assert.equal(decoded.suggestedDurationHours, null);
+  assert.equal(decoded.suggestedPhaseCenter, null);
+});
 test("peaks must refer to the same grid and valid server-provided fine tuning and suggestion values", () => {
   const original = candidatePeaksFixture(),
     peak = original.peaks[0];
