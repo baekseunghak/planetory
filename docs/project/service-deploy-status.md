@@ -198,7 +198,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 | `web:build` | 프론트 변경 | `npm run build` |
 | `web:image` | `Dockerfile`·`nginx.conf` 변경 | 이미지 빌드 + 이미지 안에서 `nginx -t` |
 | `backend:schema` | 마이그레이션 변경 | 버전 선점·중복, 되돌릴 수 없는 변경 |
-| `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test -PmrTests` (DB 없는 테스트 + `PlanetoryApplicationTests`, PostgreSQL 서비스) |
+| `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test -PmrTests` (DB 없는 테스트 + `GoldCatalogSchemaTest`, PostgreSQL 서비스) |
 | `backend:image` | `Dockerfile` 변경 | 이미지 빌드. `backend:build`가 실패하면 돌지 않는다 |
 | `backend:test` | develop 병합 뒤 자동, MR에서는 수동 | 백엔드 테스트 전체(PostgreSQL 서비스 + dind). 이미지 빌드·배포를 막지 않는다 |
 | `build:*` | 기본 브랜치 | 레지스트리 이미지 빌드·푸시 |

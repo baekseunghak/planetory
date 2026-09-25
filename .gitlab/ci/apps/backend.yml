@@ -35,7 +35,7 @@ backend:schema:
 
 # 백엔드 Gradle job의 공통 설정. MR 관문(backend:build)과 전체 테스트(backend:test)가 함께 쓴다.
 #
-# 스키마 격리 테스트(PlanetoryApplicationTests 등)는 DATABASE_URL의 PostgreSQL에 실행마다
+# 스키마 격리 테스트(GoldCatalogSchemaTest 등)는 DATABASE_URL의 PostgreSQL에 실행마다
 # UUID 스키마를 만든다. CI=true라 startLocalDb가 건너뛰어지므로 postgres 서비스를 붙여 그
 # 자리를 채운다. 역할·pg_trgm을 만들 수 있게 소유자(superuser)로 접속하며, 로컬 Compose
 # 개발 DB와 같은 조건이다.
@@ -85,8 +85,8 @@ backend:schema:
 
 # MR 관문. 가볍게 돈다(약 2분) [S15P21C206-91]. 이름은 이전 파이프라인 기록과 이어지도록 유지한다.
 # 컴파일·패키징(bootJar)과, 스프링 앱·컨테이너를 띄우지 않는 테스트만 돌린다. 예외로
-# PlanetoryApplicationTests를 돌려 실제 PostgreSQL에서 앱 기동·전체 마이그레이션·엔티티 검증
-# (ddl-auto=validate)을 확인한다. 고르는 규칙은 build.gradle의 -PmrTests에 있고, 뺀 테스트는
+# GoldCatalogSchemaTest를 돌려 실제 PostgreSQL에서 앱 기동(ddl-auto=validate)·빈 스키마 전체
+# 마이그레이션·재실행 0건·V1 업그레이드를 확인한다. 고르는 규칙은 build.gradle의 -PmrTests에 있고, 뺀 테스트는
 # backend:test가 돈다. dind가 없어 Testcontainers 테스트는 여기서 돌 수 없다.
 backend:build:
   extends: .backend-gradle

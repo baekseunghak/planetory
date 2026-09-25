@@ -95,14 +95,19 @@ tasks.named('test') {
 	}
 	// MR 관문(backend:build)은 가볍게 돈다 [S15P21C206-91]. 스프링 앱이나 컨테이너를 띄우는 클래스는
 	// 빼고 develop의 전체 실행(backend:test)에 맡긴다. 테스트 소스의 표시로 고르므로 새 테스트도 저절로 분류된다.
-	// PlanetoryApplicationTests만 남겨 실제 PostgreSQL에서 기동·전체 마이그레이션·엔티티 검증을 확인한다.
+	// GoldCatalogSchemaTest만 남겨 실제 PostgreSQL에서 앱 기동(엔티티 검증), 빈 스키마 전체 마이그레이션·
+	// 재실행 0건, V1에서의 업그레이드를 확인한다. MR 관문에는 dind가 없어 컨테이너를 쓰면 안 된다.
 	if (providers.gradleProperty('mrTests').isPresent()) {
-		def heavy = ~/@SpringBootTest|@Testcontainers|@DataJpaTest|@JdbcTest|GenericContainer|PostgreSQLContainer|SpringApplication/
-		def kept = 'com.planetory.backend.PlanetoryApplicationTests'
+		def docker = ~/(?i)testcontainers|GenericContainer|PostgreSQLContainer/
+		def heavy = ~/(?i)testcontainers|GenericContainer|PostgreSQLContainer|@SpringBootTest|@DataJpaTest|@JdbcTest|SpringApplication/
+		def kept = 'com.planetory.backend.domain.gold.GoldCatalogSchemaTest'
 		def root = file('src/test/java').toPath()
 		def excluded = 0
 		fileTree('src/test/java').matching { include '**/*.java' }.each { source ->
 			def name = root.relativize(source.toPath()).toString().replace(File.separator, '.') - ~/\.java$/
+			if (name == kept && source.text =~ docker) {
+				throw new GradleException("MR 관문 테스트 ${kept}가 컨테이너를 쓴다. dind 없이 도는 테스트로 바꾼다.")
+			}
 			if (name != kept && source.text =~ heavy) {
 				filter.excludeTestsMatching(name)
 				filter.excludeTestsMatching(name + '$*')
