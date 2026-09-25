@@ -52,10 +52,13 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 옛 버튼은 GitLab이 막는다. 배포 job에 `environment: ec2-a`를 두면 프로젝트 설정 "옛 배포 job 막기"(`ci_forward_deployment_enabled`)가 걸려, 더 새 배포가 있는 상태에서 옛 파이프라인의 배포 job을 실패시킨다. environment는 **노드 하나**다. 배포 job이 노드 공용 `compose.yaml`을 함께 올리므로, 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다. `resource_group`을 노드 단위로 두는 것과 같은 이유다.
 
-막히지 않는 경우가 둘 있다.
+**막히는 것은 한 번도 실행하지 않은 옛 manual job의 Play다.** 2026-09-26 파이프라인 `222890`의 `deploy:backend:ec2-a`(더 새 `222918`이 배포된 뒤)를 Play하자 403으로 거절됐고 job은 `manual`로 남았다(`S15P21C206-262`).
 
-- **이 규칙 이전 파이프라인의 job.** environment가 없어 배포로 세지 않는다. 2026-09-23 이전에 취소된 배포 job을 Retry하면 옛 compose가 올라간다.
-- **예전에 성공한 배포 job의 재실행.** `ci_forward_deployment_rollback_allowed: true`라 롤백 목적으로 허용된다. 의도한 되돌리기에만 쓴다.
+**Retry는 막히지 않는다.** `ci_forward_deployment_rollback_allowed: true`에서는 옛 배포 job의 Retry가 **예전에 성공했든 아니든** 롤백으로 허용된다. 2026-09-26 `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 정식 배포(21716)로 기록되며 옛 Frontend `e9835da5`가 운영에 올라갔다. `222444`의 성공 job을 Retry해 약 1분 뒤 되돌렸다. 따라서 취소·실패·성공한 옛 배포 job의 **Retry 버튼은 곧 되돌리기 버튼**이다. 의도한 되돌리기에만 누른다.
+
+이 규칙 이전(2026-09-23 전) 파이프라인의 job은 environment가 없어 배포로 세지 않는다. 그 job을 Retry하면 보호 없이 옛 compose가 올라간다.
+
+Retry까지 막으려면 `ci_forward_deployment_rollback_allowed`를 끈다. 그러면 GitLab 버튼으로 하는 되돌리기도 막히므로 되돌리기는 `deploy.sh` 자동 롤백이나 서버 수동 절차로만 한다. 끌지는 정하지 않았다.
 
 대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. 태그 정리는 EC2-B의 매일 cron이 배포 중인 이미지를 보호한 채 한다([EC2-B](../../infra/service/ec2-b/README.md) 「매일 정리」).
 
