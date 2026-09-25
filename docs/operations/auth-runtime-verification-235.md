@@ -143,6 +143,8 @@ Java 실행 버전은 21.0.11이며 로컬 Docker 서버는 29.6.2다. 실행 �
 
 Docker Desktop과 JDK/Gradle Wrapper 실행 환경을 준비한다. 외부 제공자 키와 운영 `.env`는 필요하지 않다. 운영 Compose를 실행하지 않는다.
 
+로컬 Docker 전용이다. DB 포트를 `127.0.0.1`에 고정하고 프록시를 `localhost` 인증서로 부르므로 CI(`CI=true`, dind)에서는 건너뛴다(S15P21C206-88 `backend:test`).
+
 ```powershell
 Set-Location apps/backend
 .\gradlew.bat -PskipLocalDb test --tests '*AuthRuntimeVerificationTest'

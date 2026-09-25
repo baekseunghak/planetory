@@ -25,8 +25,15 @@ import org.testcontainers.images.builder.Transferable;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 235: 실제 prod 설정·TLS nginx·Redis 세션과 전용 PostgreSQL 중단 관찰. 운영 인수가 아니다. */
+/**
+ * 235: 실제 prod 설정·TLS nginx·Redis 세션과 전용 PostgreSQL 중단 관찰. 운영 인수가 아니다.
+ *
+ * <p>로컬 Docker 전용이다. DB 포트를 {@code 127.0.0.1}에 고정하고 프록시를 {@code localhost} 인증서로 부르므로,
+ * 컨테이너가 dind(호스트 {@code docker})에 뜨는 CI에서는 닿지 않는다. CI에서는 건너뛴다 [S15P21C206-88].
+ */
 @Testcontainers
+@org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable(named = "CI", matches = "true",
+        disabledReason = "로컬 Docker 전용 런타임 관찰(127.0.0.1 고정 포트·localhost TLS)")
 class AuthRuntimeVerificationTest {
     // Docker의 자동 할당 포트는 stop/start 시 바뀐다. 이번 시험에서 선택한 빈 포트를 명시해 유지한다.
     @Container static final PostgreSQLContainer<?> DB = new PostgreSQLContainer<>("postgres:18.6-alpine")
