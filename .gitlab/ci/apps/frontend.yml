@@ -1,9 +1,10 @@
-# 웹 검증은 MR에서 돌고, 이미지 빌드·배포는 기본 브랜치에서만 돈다.
+# 웹 검증도 백엔드처럼 두 단계로 나눈다 [S15P21C206-91]. 이미지 빌드·배포는 기본 브랜치에서만 돈다.
 #
-# 지금 검증은 `web:build` 하나다. "빌드가 안 되는 코드는 머지할 수 없다"만 막는다.
-# 단위 테스트·포맷 검사·Playwright는 넣지 않았다. 전부 빌드와 배포를 막지 않고,
-# 단위 테스트는 남의 테스트가 남의 MR을 막는 구조라 팀 합의가 먼저다.
-# 필요해지면 아래 템플릿을 extends 하는 job을 하나씩 늘린다.
+# - MR 관문 web:build: 타입 검사·번들·프로덕션 위생(npm run build)과 단위 테스트(npm test).
+#   단위 테스트는 448개가 약 4초라 관문에 둔다. 남의 테스트가 남의 MR을 막을 수 있지만
+#   지금 전부 통과하고, 깨진 채 병합되는 쪽이 더 비싸다(2026-09-25 결정).
+# - 전체 web:e2e: 브라우저 테스트(Playwright). develop 병합 뒤 자동, MR에서는 수동.
+# 포맷 검사는 빌드·배포·동작과 무관해 넣지 않았다.
 .web-checks:
   stage: validate
   image: node:22.12-alpine
@@ -41,6 +42,45 @@ web:build:
     VITE_SKY_RENDERER_ENABLED: "true"
   script:
     - npm run build
+    - npm test
+
+# 브라우저 테스트 전체(Playwright) [S15P21C206-91]. 스위트마다 fixture 개발 서버를 띄워
+# 직렬로 돌므로 MR 관문에서 빼고 develop 병합 뒤 자동으로 돈다. 화면·라우팅처럼 위험한
+# 변경은 MR에서 병합 전에 수동으로 누른다. 스위트 목록은 package.json의 test:e2e 한 곳에 둔다.
+# 이미지 빌드·배포는 이 job을 기다리지 않는다. backend:test와 같은 배치다(docs/operations/cicd.md).
+web:e2e:
+  extends: .web-checks
+  stage: verify
+  # 브라우저와 시스템 의존성이 든 공식 이미지다. @playwright/test 버전과 맞춰야 한다.
+  image: mcr.microsoft.com/playwright:v1.63.0-noble
+  # 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에 프론트 변경이 없어
+  # 전체 테스트가 끝내 돌지 않는다. 시작한 job은 취소되지 않게 한다.
+  interruptible: false
+  timeout: 30m
+  before_script:
+    - cd apps/frontend
+    - npm ci --cache .npm --prefer-offline --no-audit --fund=false
+    # star-search·settings·p1 스위트는 Google Chrome 채널을 쓴다. 이미지에는 Chromium만 있다.
+    - npx playwright install chrome
+  script:
+    # test:production이 vite preview로 dist를 띄운다. 로컬 npm run check와 같은 순서다.
+    - npm run build
+    - npm run test:e2e
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths: [apps/frontend/test-results/]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *web_paths
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: *web_paths
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *web_paths
+      when: manual
+      allow_failure: true
 
 # MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
 #
