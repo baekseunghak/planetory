@@ -195,7 +195,9 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 | job | 언제 | 무엇 |
 | --- | --- | --- |
-| `web:build` | 프론트 변경 | `npm run build` |
+| `web:build` | 프론트 변경 | `npm run build` + 단위 테스트 `npm test`(448개) |
+| `web:e2e:smoke` | develop 병합 뒤 자동, MR에서는 수동 | 브라우저 스모크 `test:e2e:smoke`(production·docker-defaults·auth) |
+| `web:e2e` | 수동 | 브라우저 테스트 전체 `test:e2e`(505개, 동시 2) |
 | `web:image` | `Dockerfile`·`nginx.conf` 변경 | 이미지 빌드 + 이미지 안에서 `nginx -t` |
 | `backend:schema` | 마이그레이션 변경 | 버전 선점·중복, 되돌릴 수 없는 변경 |
 | `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test -PmrTests` (DB 없는 테스트 + `GoldCatalogSchemaTest`, PostgreSQL 서비스) |
@@ -209,8 +211,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 넣지 않은 것과 이유. **CI는 배포를 막을 수 있는 것만 본다.**
 
 - 포맷 검사 — 빌드·배포·동작과 무관하다. LF 기준으로 이미 16개 파일이 실패하기도 한다.
-- 프론트 단위 테스트 — 파일 50개가 기능 담당자 소유다. 관문으로 세우면 한 사람의 테스트가 다른 사람의 MR을 막는다. 팀 합의가 먼저다.
-- Playwright — 설정 24개를 직렬로 돌아 머지를 막는다.
+- 브라우저 테스트 전체 — 동시 2로도 약 26분이라 관문이 아니라 수동 job(`web:e2e`)으로 둔다. 근거는 [CI/CD 「프론트 테스트」](../operations/cicd.md#프론트-테스트-mr-관문과-브라우저-테스트-s15p21c206-91).
 
 ## 검증 경계
 
@@ -232,7 +233,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 ## 남은 결정 (MR에서 확인)
 
-1. **프론트 단위 테스트를 CI 관문으로 세울지.** 세우면 한 사람의 테스트 실패가 다른 사람의 MR을 막는다.
+1. ~~**프론트 단위 테스트를 CI 관문으로 세울지.**~~ 2026-09-25 결정: 세운다(`web:build`에 `npm test`, S15P21C206-91). 448개가 수 초이고 모두 통과해, 깨진 채 병합되는 쪽이 더 비싸다고 봤다.
 2. **`-- IRREVERSIBLE:` 방식이 적절한지.** 되돌릴 수 없는 마이그레이션을 금지하지 않고 파일에 근거를 요구한다. 세 배포로 나눌 수 있는지 한 번 묻는 것이 목적이다.
 3. **EC2-B 배포 job 제거.** [CI/CD](../operations/cicd.md)가 이 티켓에 지정했고 실제로 지웠다. 확인이 필요하다.
 

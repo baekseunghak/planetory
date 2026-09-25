@@ -60,6 +60,20 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 - 통과한 테스트의 결과를 캐싱해 건너뛰지 않는다. Gradle 결과 캐시는 코드만 입력으로 보고 DB 서비스·dind·이미지 같은 CI 환경 변화를 보지 못해, CI 설정을 고칠 때 실패를 가린다.
 - 스테이징(develop → `main` MR)과 운영 배포 단계에서는 부분 실행도 쓰지 않고 항상 전체를 돌린다.
 
+### 프론트 테스트: MR 관문과 브라우저 테스트 (S15P21C206-91)
+
+| job | 언제 | 무엇 | 시간 |
+| --- | --- | --- | --- |
+| `web:build` | MR·브랜치에서 프론트 변경 시 | `npm run build`(타입 검사·번들·프로덕션 위생)와 단위 테스트 `npm test`(448개) | 약 35초 |
+| `web:e2e:smoke` | develop 병합 뒤 프론트 변경 시 자동. MR·브랜치에서는 수동 | `test:e2e:smoke`: `test:production`·`test:docker-defaults`·`test:auth`. 배포 산출물 기동과 로그인 흐름 | 약 2분 + 준비 |
+| `web:e2e` | 수동 | `test:e2e` 전체(스위트 21개, 505개) | 약 26분 |
+
+- 브라우저 job은 Playwright 공식 이미지(`@playwright/test`와 같은 버전)를 쓰고 `verify` stage에서 `needs: []`로 돈다. 이미지 빌드·배포를 막지 않으며 `interruptible: false`다.
+- 전체는 `apps/frontend/scripts/run-e2e-ci.mjs`가 병렬로 돌린다. `test:browser`(253개)는 fixture 서버가 상태를 갖지 않아 스위트 안에서 worker 2개로, 나머지는 서버 메모리 상태를 `/reset`으로 되돌리는 스위트가 있어 안에서는 순서대로 두고 스위트끼리 2개씩 동시에 돈다. 스위트 목록은 `package.json`의 `test:e2e` 한 곳에 있다.
+- 실측(2026-09-25): 직렬 약 40분(추정), 동시 3 약 22분이지만 CPU 경합으로 WebGL·드래그 테스트가 흔들렸다. 동시 2는 약 26분이고 경합 실패가 사라졌다. 빌드 노드 vCPU 4개를 다른 job과 나눠 쓰므로 동시 2가 기본이다(`E2E_LANES`).
+- 병렬 실행 중 나가는 연결이 Linux 임시 포트(32768~60999)에서 fixture 서버 포트를 먼저 잡을 수 있다. 로그에 `is already in use`가 있을 때만 그 스위트를 한 번 다시 돌린다. 테스트 실패는 재시도하지 않는다.
+- **CI에서 늘 실패하는 9건:** 직렬·동시 2·동시 3 모두에서 실패했다. `interaction.spec` 5건, `galaxy.spec:186`, `detail/viewport.spec:8`은 WebGL 캔버스 좌표·투영 값이고, `search.spec:26`·`:124`는 화면 흐름이다. 개발 PC의 GPU와 CI의 소프트웨어 렌더링 차이인지 실제 결함인지 프론트 담당이 확인한다. 정리 전까지 `web:e2e`는 빨갛게 끝나며, 스테이징 관문 편입은 이 정리 뒤에 S15P21C206-92에서 정한다.
+
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.

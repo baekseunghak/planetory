@@ -3,7 +3,7 @@
 # - MR 관문 web:build: 타입 검사·번들·프로덕션 위생(npm run build)과 단위 테스트(npm test).
 #   단위 테스트는 448개가 약 4초라 관문에 둔다. 남의 테스트가 남의 MR을 막을 수 있지만
 #   지금 전부 통과하고, 깨진 채 병합되는 쪽이 더 비싸다(2026-09-25 결정).
-# - 전체 web:e2e: 브라우저 테스트(Playwright). develop 병합 뒤 자동, MR에서는 수동.
+# - 브라우저 테스트: 스모크 web:e2e:smoke는 develop 병합 뒤 자동, 전체 web:e2e는 수동.
 # 포맷 검사는 빌드·배포·동작과 무관해 넣지 않았다.
 .web-checks:
   stage: validate
@@ -44,18 +44,46 @@ web:build:
     - npm run build
     - npm test
 
-# 브라우저 테스트 전체(Playwright) [S15P21C206-91]. 스위트마다 fixture 개발 서버를 띄워
-# 직렬로 돌므로 MR 관문에서 빼고 develop 병합 뒤 자동으로 돈다. 화면·라우팅처럼 위험한
-# 변경은 MR에서 병합 전에 수동으로 누른다. 스위트 목록은 package.json의 test:e2e 한 곳에 둔다.
-# 이미지 빌드·배포는 이 job을 기다리지 않는다. backend:test와 같은 배치다(docs/operations/cicd.md).
-web:e2e:
+# 브라우저 테스트(Playwright) [S15P21C206-91]. 스위트마다 fixture 개발 서버를 띄워 MR 관문에서는 뺀다.
+# 이미지 빌드·배포는 이 job들을 기다리지 않는다. backend:test와 같은 배치다(docs/operations/cicd.md).
+.web-e2e:
   extends: .web-checks
   stage: verify
   # 브라우저와 시스템 의존성이 든 공식 이미지다. @playwright/test 버전과 맞춰야 한다.
   image: mcr.microsoft.com/playwright:v1.63.0-noble
   # 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에 프론트 변경이 없어
-  # 전체 테스트가 끝내 돌지 않는다. 시작한 job은 취소되지 않게 한다.
+  # 검사가 끝내 돌지 않는다. 시작한 job은 취소되지 않게 한다.
   interruptible: false
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths: [apps/frontend/test-results/]
+
+# 스모크: 배포할 산출물이 뜨는지(test:production·test:docker-defaults)와 로그인 흐름(test:auth)만 본다.
+# develop 병합 뒤 자동으로 돈다. 세 번의 전체 실측에서 늘 통과했고 약 2분이다(2026-09-25).
+web:e2e:smoke:
+  extends: .web-e2e
+  timeout: 15m
+  script:
+    # test:production이 vite preview로 dist를 띄운다.
+    - npm run build
+    - npm run test:e2e:smoke
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *web_paths
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: *web_paths
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *web_paths
+      when: manual
+      allow_failure: true
+
+# 전체: test:e2e 505개. 동시 2로 약 26분이라 수동으로만 누른다. CI에서 늘 실패하는 9건(WebGL 값·
+# 검색 흐름)이 정리되기 전까지는 빨갛게 끝난다. 스테이징(develop → main MR) 편입은 S15P21C206-92에서 정한다.
+web:e2e:
+  extends: .web-e2e
   timeout: 45m
   before_script:
     - cd apps/frontend
@@ -63,17 +91,14 @@ web:e2e:
     # star-search·settings·p1 스위트는 Google Chrome 채널을 쓴다. 이미지에는 Chromium만 있다.
     - npx playwright install chrome
   script:
-    # test:production이 vite preview로 dist를 띄운다. 로컬 npm run check와 같은 순서다.
     - npm run build
     # 목록은 test:e2e 그대로, test:browser는 스위트 안에서, 나머지는 스위트끼리 병렬로 돈다.
     - npm run test:e2e:ci
-  artifacts:
-    when: on_failure
-    expire_in: 1 week
-    paths: [apps/frontend/test-results/]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes: *web_paths
+      when: manual
+      allow_failure: true
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: *web_paths
       when: manual
