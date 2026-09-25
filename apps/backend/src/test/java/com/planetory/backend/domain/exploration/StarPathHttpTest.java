@@ -138,6 +138,19 @@ class StarPathHttpTest {
                 .andExpect(jsonPath("$.ticId").value(String.valueOf(openTic)));
     }
 
+    @Test
+    void 별_설명_묶음은_로그인과_별_열림을_요구한다() throws Exception {
+        String own = "/api/v1/me/stars/" + viewerTic + "/planet-explanations";
+        mvc.perform(get(own)).andExpect(status().isUnauthorized());
+        mvc.perform(get(own).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticId").value(String.valueOf(viewerTic)))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/v1/me/stars/" + openTic + "/planet-explanations").session(session))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("STAR_LOCKED"));
+    }
+
     /** size도 숫자 타입으로 받으면 같은 이유로 500이 된다. */
     @Test
     void 계약_밖_size는_400이다() throws Exception {

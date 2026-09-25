@@ -23,6 +23,7 @@ public final class NasaPlanetInfo {
 
     /** status는 자료 상태, refreshStatus는 마지막 재확인 결과다. */
     public record Lookup(String status, Planet planet, OffsetDateTime fetchedAt,
-                         OffsetDateTime changedAt, String sourceHash, String refreshStatus) {
+                         OffsetDateTime changedAt, String sourceHash, String refreshStatus,
+                         Short sourceVersion) {
     }
 }

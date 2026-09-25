@@ -349,7 +349,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 ### 4.2 선택한 별·내 행성 상세
 
-S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-planet-info-266.md)은 이 절의 `planets.items`를 변경하지 않는다. 2026-09-25 결정에 따라 268은 기존 회원별 표시 대상 중 검증 연결된 확정 후보만 NASA 수치로 보강한다. 신규 요청/응답 필드·화면 인수는 268에서 정하며 266 구현 완료를 이 HTTP API 완성으로 간주하지 않는다.
+S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-planet-info-266.md)은 이 절의 `planets.items`를 변경하지 않는다. 2026-09-25 결정에 따라 기존 회원별 표시 대상 중 검증 연결된 확정 후보만 NASA 자료로 보강한다. 267의 별 단위 한국어 설명 응답은 아래 4.2.1절에서 따로 정의하며 기존 별 상세 응답은 그대로 둔다. 화면 연결·표시 인수는 268에서 진행한다. 266 내부 구현 완료를 이 HTTP API 완성으로 간주하지 않는다.
 
 `GET /api/v1/me/stars/{ticId}` — 별 선택 시 같은 캔버스의 근접 뷰·도킹 패널·행성 목록에서 공유한다. 인증 회원의 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`. 별도의 NASA iframe이나 전체 카탈로그 행성 API로 대체하지 않는다.
 
@@ -453,6 +453,63 @@ S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-pla
 **시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
 0개 응답은 `planets: {"count": 0, "completedWithoutPlanets": false, "items": []}` 형태이며 진행 완료라면 completedWithoutPlanets만 true가 된다. 로딩/실패와 0개를 구분하고 재시도·은하 복귀를 제공한다. 응답 count/items 불일치·중복 ID는 계약 오류로 처리하며 부족한 수만큼 임의 행성을 생성하지 않는다. A 별 요청 뒤 B 별을 선택했을 때 A의 늦은 응답을 무시한다. 상세는 필수 version/presentationVersion을 반환한다. 지도와 version이 다르면 이전 상세를 그대로 합치지 않고 메타/타일/상세를 최신 버전으로 재조회한다. asOf만으로 같음을 판단하지 않는다. 행성 선택은 이미 받은 items에서 처리하며 별도 행성 상세 API를 신설하지 않는다. [별지도 표현 계약 3절](../../../docs/development/sky-presentation-contract.md)과 AT-120~122를 따른다.
+
+#### 4.2.1 회원별 별 단위 NASA 한국어 설명 (S15P21C206-267)
+
+`GET /api/v1/me/stars/{ticId}/planet-explanations` — 인증 회원이 연 별의 **현재** `planets.items`에 해당하는 후보별 설명을 한 응답으로 받는다. 별 상세 본문의 필드나 `planets.count`를 변경하지 않는다. 경로 TIC의 형식 오류·미발견 별은 4.2절의 403 `STAR_LOCKED`와 같게 처리한다. 회원 ID는 세션에서만 가져오고, 클라이언트가 후보 ID·제출 주기를 보내 대상이나 연결을 결정하지 않는다. 응답 `version`은 후보 목록을 가져온 **같은 StarDetail 스냅샷**의 지도 버전이다. 화면은 현재 선택한 `ticId`·`version`·`candidateId`가 모두 맞을 때만 내용을 연결한다. 순서·주기 유사도는 연결 키가 아니다.
+
+```json
+{
+  "ticId": "123456789",
+  "version": "u-101:57",
+  "items": [
+    {
+      "candidateId": "c-401",
+      "kind": "confirmed",
+      "status": "ready",
+      "content": {
+        "name": "{검증된 행성명의 한국어 설명}",
+        "orbitalPeriod": "{공전주기의 한국어 설명}",
+        "radius": "{반지름의 한국어 설명}",
+        "mass": "{질량의 한국어 설명}",
+        "discovery": "{발견 방법·연도의 한국어 설명}"
+      },
+      "sourceStatus": "ready",
+      "fetchedAt": "2026-09-25T05:20:00Z",
+      "refreshStatus": "ok",
+      "generatedAt": "2026-09-25T05:21:00Z",
+      "retryAt": null,
+      "failure": null
+    },
+    {
+      "candidateId": "c-402",
+      "kind": "unconfirmed",
+      "status": "not_applicable",
+      "content": null,
+      "sourceStatus": null,
+      "fetchedAt": null,
+      "refreshStatus": null,
+      "generatedAt": null,
+      "retryAt": null,
+      "failure": null
+    }
+  ]
+}
+```
+
+`items`는 해당 요청 시점의 4.2절 `planets.items`와 같은 권한 필터·`candidateId` 오름차순·대상 개수를 사용하고 중복 ID가 없다. 표시 대상은 회원이 수치 매칭한 확정 후보와 최신 판단이 행성 같음인 미확정 후보뿐이다. 다른 회원·미매칭·FP·NASA 카탈로그의 나머지 행성을 넣지 않는다. 사용자의 제출·판단만으로 후보의 공식 분류를 바꾸지 않는다. 확정 후보를 회원이 비행성으로 판단해도 설명 대상에 남을 수 있지만, 공식 `disposition=fp`이면 이 목록에서 제외한다. FP의 원인을 별도 근거 없이 먼지로 단정하지 않는다. 최상위 `count`는 두지 않는다. 별 상세의 `planets.count`는 전체 표시 대상 수이며 `ready` 설명이나 확정 행성 수가 아니다.
+
+`content`의 시민용 다섯 문장은 현재 `nasa-ko-v4` 계약에 따라 친근한 존댓말로 이어진다. 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. v4는 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 한 번의 실측에서 첫 GET은 14,554ms, 즉시 반복한 캐시 GET은 82ms였으며 운영·브라우저 지연의 기준값으로 확정하지 않는다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 미검증이다.
+
+| 필드·상태 | 규칙 |
+| --- | --- |
+| `kind=unconfirmed` | `status=not_applicable`. `content`, `sourceStatus`, `fetchedAt`, `refreshStatus`, `generatedAt`, `retryAt`, `failure`는 모두 null이다. NASA 조회·설명 생성을 호출하지 않는다 |
+| `kind=confirmed` | [267 내부 결과](../../../docs/development/nasa-planet-explanation-267.md#41-후보별-내부-결과)의 `ready`, `pending`, `failed`, `source_unavailable`, `disabled`, `invalid_source`, `busy`, `source_changed` 상태를 전달한다. `content`는 `ready`일 때만 검증된 다섯 문장이다 |
+| 조회 사이 자격 변경 | 별 목록을 구성한 뒤 266의 후보 자격이 사라지면 그 항목만 `status=source_unavailable`, `sourceStatus=not_eligible`로 반환하고 다른 설명·시각·실패 필드는 null이다 |
+| 원천·설명 시각/상태 | `sourceStatus`는 266의 상태, `fetchedAt`은 마지막 정상 NASA 재확인 시각, `refreshStatus`는 최근 재확인 상태다. `generatedAt`은 현재 설명 생성 시각, `retryAt`은 다음 허용 시각, `failure`는 분류된 설명 실패 이유다. 없는 값은 null이며 오래된 정상 원천을 쓸 때 재확인 실패를 숨기지 않는다 |
+| 실패 격리 | 후보별 예상 가능한 NASA·모델 실패는 해당 항목의 상태로 반환하고 다른 후보의 결과를 버리지 않는다. 설명이 없더라도 정상 원천 수치의 사용 가능 여부는 266 상태로 판단한다 |
+
+검증된 `content.name`에 들어간 행성명 외의 NASA 원문 행성명·문헌 문자열, 프롬프트, 원천 해시, 모델 설정은 공개 응답에 넣지 않는다. 외부 호출과 모델 생성은 별 상세의 읽기 트랜잭션 밖에서 실행한다. 버튼·로딩·재시도·출처 링크의 실제 화면 동작은 268에서 정하고, 기존 프론트엔드 파일은 267에서 수정하지 않는다.
 
 ### 4.3 퀘스트 패널
 

@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static com.planetory.backend.domain.exploration.service.NasaPlanetInfo.Lookup;
 import static com.planetory.backend.domain.exploration.service.NasaPlanetInfo.Planet;
 
-/** 267/268이 호출할 회원별 확정 후보 NASA 자료 경계. 공개 API는 268 소유다. */
+/** 267 별 단위 API가 호출하는 회원별 확정 후보 NASA 자료 경계. */
 @Service
 public class NasaPlanetInfoService {
 
@@ -62,17 +62,17 @@ public class NasaPlanetInfoService {
         List<String> names = repository.archiveNames(candidateId, ticId);
         if (names.size() != 1 || names.getFirst().isBlank()
                 || repository.nameSharedWithAnotherCandidate(candidateId, ticId, names.getFirst())) {
-            return new Lookup("identity_unresolved", null, null, null, null, "identity_unresolved");
+            return new Lookup("identity_unresolved", null, null, null, null, "identity_unresolved", null);
         }
-        String name = names.getFirst(); // Gold의 검증된 archive.pl_name. 유사명·주기 추측은 금지한다.
+        String name = names.getFirst(); // 공급 검증을 전제로 한 archive 행성명. 유사명·주기 추측은 금지한다.
         OffsetDateTime now = OffsetDateTime.now(clock);
         var cached = repository.find(candidateId);
         if (cached.isPresent() && !sameIdentity(cached.get(), ticId, name)) {
-            return new Lookup("identity_unresolved", null, null, null, null, "identity_changed");
+            return new Lookup("identity_unresolved", null, null, null, null, "identity_changed", null);
         }
         if (!enabled) {
             return cached.map(row -> result(row, "disabled"))
-                    .orElseGet(() -> new Lookup("temporarily_unavailable", null, null, null, null, "disabled"));
+                    .orElseGet(() -> new Lookup("temporarily_unavailable", null, null, null, null, "disabled", null));
         }
         if (cached.isPresent() && cached.get().nextRefreshAt().isAfter(now)) {
             return result(cached.get(), cached.get().refreshStatus());
@@ -83,7 +83,7 @@ public class NasaPlanetInfoService {
             return repository.find(candidateId).filter(row -> sameIdentity(row, ticId, name))
                     .map(row -> result(row, row.refreshStatus()))
                     .orElseGet(() -> new Lookup("identity_unresolved", null, null, null, null,
-                            "identity_changed"));
+                            "identity_changed", null));
         }
 
         try {
@@ -117,7 +117,7 @@ public class NasaPlanetInfoService {
     private static Lookup result(NasaPlanetInfoRepository.Row row, String refreshStatus) {
         String status = "pending".equals(row.status()) ? "refreshing" : row.status();
         return new Lookup(status, "ready".equals(status) ? row.planet() : null,
-                row.fetchedAt(), row.changedAt(), row.hash(), refreshStatus);
+                row.fetchedAt(), row.changedAt(), row.hash(), refreshStatus, row.sourceVersion());
     }
 
     private static String sha256(String normalized) {

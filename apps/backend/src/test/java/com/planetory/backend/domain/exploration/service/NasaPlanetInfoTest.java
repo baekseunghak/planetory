@@ -204,6 +204,19 @@ class NasaPlanetInfoTest {
     }
 
     @Test
+    void 은퇴한_후보의_Archive_참조는_현재_후보를_막지_않는다() {
+        long previous = candidate("TOI-700 b");
+        long current = candidate("TOI-700 b");
+        assertEquals("identity_unresolved", service.lookup(member, current).status());
+        assertEquals(0, CALLS.get(), "활성 후보끼리 이름을 공유하면 NASA를 호출하지 않는다");
+
+        jdbc.update("UPDATE candidates SET status='retired' WHERE id=?", previous);
+        reply(200, rows(row("TOI-700 b", "9", "Published Confirmed", 0)));
+        assertEquals("ready", service.lookup(member, current).status());
+        assertEquals(1, CALLS.get(), "지난 판의 은퇴 후보는 현재 후보의 연결을 막지 않는다");
+    }
+
+    @Test
     void 빈_결과와_논쟁_상태를_보존하고_429_5xx_timeout에_이전_정상값을_유지한다() {
         long empty = candidate("TOI-700 e");
         reply(200, "[]");
@@ -306,6 +319,9 @@ class NasaPlanetInfoTest {
                    AND (n.tic_id,n.archive_planet_name) IS DISTINCT FROM (v.tic_id,v.archive_planet_name)
                    AND NOT EXISTS (
                        SELECT 1 FROM external_signal_references other
+                       JOIN candidates other_candidate
+                         ON other_candidate.id=other.candidate_id
+                        AND other_candidate.status='active'
                         WHERE other.source='archive' AND other.tic_id=v.tic_id
                           AND other.external_id=v.archive_planet_name AND other.candidate_id<>v.id
                    )

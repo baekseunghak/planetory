@@ -9,7 +9,8 @@
 | 별 지도 배치·좌표·표현 계약 | [별지도 표현 계약](sky-presentation-contract.md) | v1.3 개인 시제품 외형·연출·선택 근접 뷰 변경안, 담당자 교차 리뷰 대기 |
 | 군집 제거의 근거·후속 티켓·검증 경계 | [개별 별 변경 검토 기록](sky-individual-stars-review.md) | 227번 변경안, [기준 화면·재현 예제](sky-reference/README.md) 포함. 구현·성능 인수는 별도 |
 | 타일 조회의 실측 비용·인덱스·캐시 판단 | [별 지도 타일 조회 비용 측정](sky-tile-performance.md) | 137번 측정 기록. 서버 조회에 한하며 클라이언트 인수는 215번 |
-| 요청된 확정 후보의 NASA PS 식별·정규화·저장 경계 | [NASA 행성 정보 저장 계약](nasa-planet-info-266.md) | 266 내부 구현·격리 검증, 267 설명·268 화면/공개 API는 후속 |
+| 요청된 확정 후보의 NASA PS 식별·정규화·저장 경계 | [NASA 행성 정보 저장 계약](nasa-planet-info-266.md) | 266 내부 구현·격리 검증, 267 별 단위 백엔드 응답·268 화면 연결 구분 |
+| 검증된 NASA 자료의 한국어 설명·저장·별 단위 전달 경계 | [NASA 한국어 설명·전달 계약](nasa-planet-explanation-267.md) | 267 v4 표적 회귀·한 후보 직접 검증과 가상 후보 4개의 실제 NASA·GMS 인증 GET·V25·V26 저장 통과. 첫 GET 14,554ms·캐시 GET 82ms는 격리 1회 표본, 실제 회원·운영·268 화면 후속 |
 
 기능 정책은 [요구사항](../requirements/README.md), DB 구조는 [아키텍처](../architecture/README.md), 전송 형식은 [API](../api/README.md)를 먼저 확인한다. 이 디렉터리의 초안만으로 API나 구현 완료를 확정하지 않는다.
 

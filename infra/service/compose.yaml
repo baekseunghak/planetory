@@ -107,7 +107,15 @@ services:
       SSAFY_CLIENT_ID: ${SSAFY_CLIENT_ID:-}
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
-      # GMS(LLM 설명 기능) API 키. 읽는 Backend 코드보다 전달 경로를 먼저 둔다. 비어 있어도 기동한다.
+      # 267 설명 기능은 기본 비활성. 활성화 전 GMS 예산·쿼터와 키 주입을 확인한다.
+      NASA_EXPLANATION_ENABLED: ${NASA_EXPLANATION_ENABLED:-false}
+      NASA_EXPLANATION_CHAT_MODEL: ${NASA_EXPLANATION_CHAT_MODEL:-none}
+      NASA_EXPLANATION_MODEL: ${NASA_EXPLANATION_MODEL:-gpt-5.4-mini}
+      NASA_EXPLANATION_MAX_OUTPUT_TOKENS: ${NASA_EXPLANATION_MAX_OUTPUT_TOKENS:-320}
+      NASA_EXPLANATION_TIMEOUT: ${NASA_EXPLANATION_TIMEOUT:-8s}
+      NASA_EXPLANATION_RETRY_DELAY: ${NASA_EXPLANATION_RETRY_DELAY:-1h}
+      NASA_EXPLANATION_MAX_CONCURRENT: ${NASA_EXPLANATION_MAX_CONCURRENT:-1}
+      # GMS API 키는 267 백엔드가 활성화될 때 읽는다. 비어 있어도 기본 기동한다.
       GMS_KEY: ${GMS_KEY:-}
       GOLD_ROOT: /gold
       # 내부 경로(/internal/**) 서비스 토큰. Publisher가 판 전환을 알릴 때 쓴다. 비우면 Backend가

@@ -330,3 +330,9 @@ V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdra
 ## V25 요청된 NASA 행성 자료 (266)
 
 `V25__nasa_planet_info.sql`은 최신 develop의 V24 다음 번호로, 실제 요청된 확정 후보의 NASA PS 기본 해를 보관하는 서비스 테이블 하나와 앱 역할의 SELECT/INSERT/UPDATE 권한을 추가한다. 기존 V1~V24나 Gold 판정·성과는 수정하지 않는다. 일회용 PostgreSQL에서 전체 migration과 HTTP fixture 조회·경합을 검증했다. 공유/운영 DB 적용은 미실행이다. 테이블·상태 계약은 [개발 문서](../../../docs/development/nasa-planet-info-266.md), Flyway 순서·필수 권한·환경변수·실행/복구는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md)를 따른다. 다른 MR이 먼저 병합되면 번호를 다시 정한다.
+
+## V26 NASA 행성 한국어 설명 (267)
+
+`V26__nasa_planet_explanation.sql`은 V25의 `nasa_planet_info(candidate_id)`에 종속된 후보당 0~1행의 설명 테이블을 만든다. 같은 원천 해시·정규화 버전·모델·프롬프트 조합의 설명과 시도 횟수를 보관하며, 앱 역할에는 새 테이블 SELECT/INSERT/UPDATE만 부여한다. V25와 과거 마이그레이션을 수정하지 않고 V25 다음에 적용한다. 다른 MR이 먼저 develop에 병합되면 번호와 적용 순서를 다시 확인하고, 이미 적용된 DB의 파일·Flyway 이력을 `repair` 또는 `outOfOrder`로 고치지 않는다.
+
+기본 비활성 상태에서도 V26 스키마는 앱 기동보다 먼저 필요하다. 보호된 배포 환경에만 모델 키 `GMS_KEY`를 주입하며 값은 파일·명령·로그에 적지 않는다. 실행 설정, 순서, 사후 확인과 중지·복구는 [운영 가이드](../../../docs/operations/nasa-planet-info-runbook.md), 필드·안전 검증과 267의 별 단위 응답은 [267 개발 계약](../../../docs/development/nasa-planet-explanation-267.md)을 따른다. `nasa-ko-v4`는 표적 회귀, TOI-700 b 한 후보의 실제 NASA PS·GMS 생성, 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 재조회 82ms는 그 환경의 1회 표본이다. 실제 회원·Gold 연결, 모델의 운영 품질·비용·지연 분포, 공유/운영 DB 적용·서버 배포와 268 화면 연결은 검증하지 않았다. 특히 262 Publisher의 목업 외부 참조는 [266 식별 계약](../../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)의 실제 후보 연결을 증명하지 않는다.
