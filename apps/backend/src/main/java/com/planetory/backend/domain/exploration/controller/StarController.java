@@ -4,6 +4,7 @@ import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.StarResultService;
 import com.planetory.backend.domain.exploration.service.StarResultViews.StarResult;
 import com.planetory.backend.domain.exploration.service.StarService;
+import com.planetory.backend.domain.exploration.service.StarPlanetExplanationService;
 import com.planetory.backend.domain.exploration.service.StarViews.ListFilter;
 import com.planetory.backend.domain.exploration.service.StarViews.PublicStarSummary;
 import com.planetory.backend.domain.exploration.service.StarViews.StarList;
@@ -32,6 +33,7 @@ public class StarController {
 
     private final StarService stars;
     private final StarResultService starResults;
+    private final StarPlanetExplanationService planetExplanations;
 
     @Operation(summary = "별 결과 페이지",
             description = "제출 이력이 있는 별의 진행·성과·매칭한 신호·제출 기록·곡선 단계·발견한 별을"
@@ -51,6 +53,15 @@ public class StarController {
     public StarDetail detail(@AuthenticationPrincipal MemberPrincipal principal,
                              @PathVariable String ticId) {
         return stars.detail(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED));
+    }
+
+    @Operation(summary = "내 별의 행성별 한국어 설명",
+            description = "내 별 상세의 후보 목록 순서대로 설명 상태와 준비된 다섯 설명을 묶어 준다."
+                    + " 미확정 후보는 설명하지 않으며, 미발견 별은 STAR_LOCKED다.")
+    @GetMapping("/api/v1/me/stars/{ticId}/planet-explanations")
+    public StarPlanetExplanationService.Bundle planetExplanations(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId) {
+        return planetExplanations.lookup(principal.memberId(), tic(ticId, ErrorCode.STAR_LOCKED));
     }
 
     @Operation(summary = "공개 별 요약",
