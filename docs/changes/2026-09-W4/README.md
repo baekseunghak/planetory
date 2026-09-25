@@ -270,3 +270,5 @@
 - [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 계약 보완(빈 제거 조합, period_grid 조립 출처, pg-log5000-v1 설정표, runtime, 주기도·자원 오류). 제안·리뷰 대기.
 
 - [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 Worker 서버·이미지·compose·CI 구현. 로컬·컨테이너 검증 완료, Backend 연동 전.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 Backend 잔차 실행기(WorkerResidualComputeRunner) 연결. DERIVED_COMPUTE_URL로 켠다.

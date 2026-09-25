@@ -273,6 +273,10 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 | `DERIVED_COMPUTE_CPUS` | `1` | 컨테이너 CPU 상한(계약 `cpu_per_job`) |
 | `DERIVED_COMPUTE_MEMORY` | `2048m` | 컨테이너 메모리 상한(계약 `memory_mib_per_job`) |
 | `DERIVED_COMPUTE_MEMORY_LIMIT_MIB` | `1900` | 프로세스 상한. 컨테이너 상한보다 낮아야 OOM kill 대신 `memory_exhausted`로 답한다 |
+| `PLANETORY_RESIDUAL_MAXRUNNING` | `1` | **Backend** 동시 계산 수. Worker 대수 × 동시 실행 수(지금 1 × 1)와 같아야 한다. 크면 넘친 작업이 기다리지 않고 Worker 503으로 실패한다 |
+| `DERIVED_COMPUTE_URL` | 없음 | **Backend** 변수. `http://derived-compute:8090`을 넣어야 Backend 실행기가 뜬다. 비어 있으면 잔차 요청은 503 「준비되지 않았습니다」 |
+
+켜는 순서: Worker를 배포해 `healthy`를 확인한 뒤 `.env`에 `DERIVED_COMPUTE_URL`을 넣고 Backend를 다시 배포한다. 거꾸로 하면 잔차 요청마다 재시도 가능한 실패 작업이 생긴다.
 
 값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 교체 뒤 `docker compose ps derived-compute`의 `healthy`를 사람이 확인한다.
 

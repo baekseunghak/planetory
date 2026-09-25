@@ -114,6 +114,12 @@ services:
       SESSION_REDIS_PORT: "6379"
       CACHE_REDIS_HOST: cache-redis
       CACHE_REDIS_PORT: "6379"
+      # 잔차 Worker [S15P21C206-88]. 위 주소 규칙의 예외로 .env에서 켠다(http://derived-compute:8090).
+      # Worker가 healthy인 것을 본 뒤에 넣는다. 비어 있으면 잔차 요청은 지금처럼 503 「준비되지 않았습니다」다.
+      DERIVED_COMPUTE_URL: ${DERIVED_COMPUTE_URL:-}
+      # 동시 계산 수(planetory.residual.max-running). Worker 대수 × instance_concurrency를 넘으면 넘친 작업이
+      # 기다리지 않고 Worker 503으로 곧바로 실패한다. Worker가 1대(동시 1)라 1로 둔다. 늘리면 Worker도 늘린다.
+      PLANETORY_RESIDUAL_MAXRUNNING: ${PLANETORY_RESIDUAL_MAXRUNNING:-1}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:

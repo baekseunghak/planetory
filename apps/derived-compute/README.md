@@ -6,7 +6,7 @@ Backend가 PostgreSQL에서 읽은 곡선 배열·고정 transit model·계산 �
 
 호출·상태·캐시는 [온라인 파생 계산](../../docs/architecture/online-derived-compute.md), 실제 HTTP/JSON 필드와 오류는 [파생 계산 내부 계약](../../contracts/derived-compute/README.md)을 따른다.
 
-상태: Worker 서버·이미지·compose·CI 구현, 로컬·컨테이너 검증 완료. Backend `ResidualComputeRunner` 연결과 EC2 배포는 아직이다.
+상태: Worker 서버·이미지·compose·CI와 Backend 실행기(`WorkerResidualComputeRunner`) 구현, 로컬·컨테이너 검증 완료. EC2 배포와 실제 Gold 수치 비교(131)는 아직이다.
 
 ## 구성
 
