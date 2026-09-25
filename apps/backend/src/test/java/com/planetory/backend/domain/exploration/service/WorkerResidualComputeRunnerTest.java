@@ -96,6 +96,7 @@ class WorkerResidualComputeRunnerTest {
     @Autowired ResidualResultReader residuals;
     @Autowired GalaxyLayout layout;
     @Autowired JdbcTemplate jdbc;
+    @Autowired WorkerResidualComputeRunner runner;
 
     private long member;
     private long ticId;
@@ -280,6 +281,42 @@ class WorkerResidualComputeRunnerTest {
         assertEquals(1, RECEIVED.size(), "잔차에서 멈추고 주기도를 부르지 않는다");
         CurveContext target = job.target();
         assertNull(residuals.lookup(ticId, target).status());
+    }
+
+    /**
+     * 요청 검증을 통과한 뒤 후보가 Gold에서 사라진 경우. 요청 API로는 이 순간을 만들 수 없어 저장소에
+     * 작업을 직접 넣고 실행기를 부른다.
+     */
+    @Test
+    void missingCandidateFailsBeforeCallingTheWorker() {
+        Job job = enqueue(new CurveContext("b-" + bundleId, 2, List.of("c-" + first, "c-999999999"),
+                "box-divide-v0", "pg-log5000-v1"));
+        runner.start(job);
+        Job finished = awaitFinished(job.jobId());
+        assertEquals(ResidualJobStore.FAILED, finished.status());
+        assertEquals(new ResidualJobStore.Failure("RESIDUAL", "CANDIDATE_NOT_FOUND",
+                "제거할 후보를 찾지 못했습니다. 최신 정보를 다시 불러와 주세요.", false), finished.failure());
+        assertTrue(RECEIVED.isEmpty(), "Worker를 부르지 않는다");
+    }
+
+    /** 판 행 자체가 없는 경우. current가 아니라는 것과 같은 실패로 끝내고 Worker를 부르지 않는다. */
+    @Test
+    void missingBundleFailsBeforeCallingTheWorker() {
+        Job job = enqueue(new CurveContext("b-999999999", 1, List.of("c-" + first),
+                "box-divide-v0", "pg-log5000-v1"));
+        runner.start(job);
+        Job finished = awaitFinished(job.jobId());
+        assertEquals(ResidualJobStore.FAILED, finished.status());
+        assertEquals("BUNDLE_ARCHIVED", finished.failure().stage());
+        assertEquals("BUNDLE_CHANGED", finished.failure().code());
+        assertFalse(finished.failure().retryable());
+        assertTrue(RECEIVED.isEmpty(), "Worker를 부르지 않는다");
+    }
+
+    private Job enqueue(CurveContext target) {
+        var created = (ResidualJobStore.Enqueued.Created) store.enqueue(member, ticId, target,
+                ResidualJobStore.cacheKey(ticId, target));
+        return created.job();
     }
 
     // ---------- 가짜 Worker ----------
