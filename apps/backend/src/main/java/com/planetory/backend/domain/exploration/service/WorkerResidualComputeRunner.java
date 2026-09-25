@@ -153,13 +153,13 @@ class WorkerResidualComputeRunner implements ResidualComputeRunner, DisposableBe
                     "제거할 후보를 찾지 못했습니다. 최신 정보를 다시 불러와 주세요.", false), "후보 누락 " + removed);
         }
         // 계약 2절 정렬: 세그먼트는 (sector, binning_revision, segment_id), 후보는 id 오름차순.
-        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds()).stream()
+        List<LightCurveSegment> segments = gold.findSegments(job.ticId(), bundle.manifest().segmentIds()).stream()
                 .sorted(Comparator.comparingInt((LightCurveSegment s) -> s.sector())
                         .thenComparing(LightCurveSegment::binningRevision)
                         .thenComparingLong(LightCurveSegment::id))
                 .toList();
         List<Candidate> candidates = byId.values().stream().sorted(Comparator.comparingLong(Candidate::id)).toList();
-        Periodogram periodogram = gold.findPeriodogram(bundle.id())
+        Periodogram periodogram = gold.findPeriodogram(job.ticId(), bundle.id())
                 .orElseThrow(() -> new IllegalStateException(job.target().bundleId() + "의 원본 주기도가 없습니다."));
         return new Inputs(bundle, segments, candidates, periodogram);
     }

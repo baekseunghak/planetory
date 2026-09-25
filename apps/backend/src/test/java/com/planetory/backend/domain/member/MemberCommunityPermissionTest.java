@@ -78,7 +78,7 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
-        assertEquals(List.of("24"), restarted.migrate().migrations.stream().map(m -> m.version).toList());
+        assertEquals(List.of("24", "25"), restarted.migrate().migrations.stream().map(m -> m.version).toList());
         restarted.validate();
 
         try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());
