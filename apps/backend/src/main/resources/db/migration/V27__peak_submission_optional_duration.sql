@@ -1,4 +1,5 @@
 -- 추천 duration이 없는 봉우리 제출을 받는다 [S15P21C206-269]
+-- IRREVERSIBLE: 옛 제약보다 넓은 CHECK로 바꾼다. 이미지를 되돌려도 옛 앱은 새 제약에서 그대로 동작한다. 스키마를 V4 제약으로 되돌리려면 이 버전 뒤 저장된 추천 duration 없는 봉우리 제출 행을 먼저 정리해야 한다.
 --
 -- V4는 봉우리 제출(source_peak_grid_index NOT NULL)에 제안 duration과 상한을 NOT NULL로 요구했다.
 -- 탐사 API 5.4는 판이 주기별 BLS 값을 싣기 전까지 제안 duration을 null로 주고, 6.2는 그때 상한을 걸지
