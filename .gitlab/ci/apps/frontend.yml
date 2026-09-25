@@ -56,7 +56,7 @@ web:e2e:
   # 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에 프론트 변경이 없어
   # 전체 테스트가 끝내 돌지 않는다. 시작한 job은 취소되지 않게 한다.
   interruptible: false
-  timeout: 30m
+  timeout: 45m
   before_script:
     - cd apps/frontend
     - npm ci --cache .npm --prefer-offline --no-audit --fund=false

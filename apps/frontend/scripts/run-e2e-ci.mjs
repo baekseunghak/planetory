@@ -5,12 +5,12 @@
 // 2. 나머지는 서버 메모리 상태를 /reset으로 되돌리는 스위트가 있어 안에서는 순서대로 두고,
 //    스위트끼리 동시에 돌린다. 스위트마다 포트·outputDir·fixture 서버가 따로라 서로 간섭하지 않는다.
 //
-// 동시 실행 수(E2E_LANES, 기본 3)는 빌드 노드 vCPU 4개를 다른 job과 나눠 쓰는 것을 기준으로 잡았다.
-// 올리면 CPU 경합으로 WebGL·애니메이션 테스트가 30초 제한에 걸릴 수 있다.
+// 동시 실행 수(E2E_LANES, 기본 2)는 빌드 노드 vCPU 4개를 다른 job과 나눠 쓰는 것을 기준으로 잡았다.
+// 3에서는 CPU 경합으로 WebGL·드래그·스크린샷 테스트가 30초 제한과 값 비교에서 깨졌다(2026-09-25 실측).
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
-const lanes = Number(process.env.E2E_LANES ?? 3);
+const lanes = Number(process.env.E2E_LANES ?? 2);
 const { scripts } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const suites = scripts["test:e2e"].split("&&").map((part) => {
   const [, name, extra = ""] = part.trim().match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
@@ -31,19 +31,28 @@ function run({ name, args }) {
       const seconds = Math.round((Date.now() - started) / 1000);
       // 동시에 도는 스위트의 출력이 섞이지 않게 끝난 뒤 한 번에 찍는다.
       console.log(`\n===== ${name}: ${code === 0 ? "통과" : "실패"}, ${seconds}초 =====\n${output}`);
-      resolve({ name, code, seconds });
+      resolve({ name, code, seconds, output });
     });
   });
 }
 
+// 병렬로 뜬 브라우저·서버의 나가는 연결이 Linux 임시 포트(32768~60999)에서 fixture 서버 포트를
+// 먼저 잡을 수 있다. 테스트 실패가 아니라 서버 기동 실패이므로 그때만 한 번 다시 돌린다.
+async function runSuite(suite) {
+  const result = await run(suite);
+  if (result.code === 0 || !result.output.includes("is already in use")) return result;
+  console.log(`포트 충돌로 다시 시작: ${suite.name}`);
+  return run(suite);
+}
+
 const results = [];
 const browser = suites.find((suite) => suite.name === "test:browser");
-results.push(await run({ ...browser, args: [...browser.args, `--workers=${lanes}`] }));
+results.push(await runSuite({ ...browser, args: [...browser.args, `--workers=${lanes}`] }));
 
 const queue = suites.filter((suite) => suite !== browser);
 await Promise.all(
   Array.from({ length: lanes }, async () => {
-    while (queue.length) results.push(await run(queue.shift()));
+    while (queue.length) results.push(await runSuite(queue.shift()));
   }),
 );
 
