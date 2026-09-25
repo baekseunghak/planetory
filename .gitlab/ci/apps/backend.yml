@@ -33,10 +33,7 @@ backend:schema:
     - if: $CI_COMMIT_BRANCH
       changes: *schema_paths
 
-# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
-# 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
-# startLocalDb가 건너뛰어지므로(CI=true), 그냥 돌리면 DB 없이 41개 클래스가 돈다.
-# CI에 Postgres 서비스를 붙이는 일은 따로 정한다.
+# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다. 테스트는 아래 backend:test가 돈다.
 backend:build:
   stage: validate
   image: eclipse-temurin:21-jdk-alpine
@@ -76,6 +73,65 @@ backend:build:
         - apps/backend/gradlew
         - apps/backend/Dockerfile
         - .gitlab/ci/apps/backend.yml
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *backend_paths
+
+# Backend 테스트 전체. 이게 없어 develop에서 실패·정지가 쌓였다(S15P21C206-84 기록).
+#
+# 로컬과 같은 조건을 만든다. test는 PostgreSQL(local 프로필, 소유자 계정)을 요구하고, 72개 클래스 중
+# 27개가 Testcontainers로 컨테이너를 직접 띄운다. CI=true라 startLocalDb는 건너뛴다.
+# - service-db: 일회용 PostgreSQL. 소유자(superuser)라 V1의 pg_trgm·V2 역할 생성이 로컬처럼 돈다.
+#   trust 인증이라 비밀번호를 저장소에 두지 않는다. job이 끝나면 사라진다.
+# - docker: Testcontainers가 쓰는 dind. .docker-build와 같은 privileged Runner(amd64-docker)가 필요하다.
+#   띄운 컨테이너의 포트는 dind 쪽에 열리므로 HOST_OVERRIDE로 찾아가게 한다.
+backend:test:
+  stage: validate
+  image: eclipse-temurin:21-jdk-alpine
+  needs: []
+  tags:
+    - amd64-docker
+  services:
+    - name: docker:27.5-dind
+      alias: docker
+    - name: postgres:18.6-alpine
+      alias: service-db
+  variables:
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    TESTCONTAINERS_HOST_OVERRIDE: docker
+    # dind는 job과 함께 사라지므로 정리 컨테이너(Ryuk)가 필요 없다. 켜 두면 Ryuk 포트 연결이 한 번 더 늘어난다.
+    TESTCONTAINERS_RYUK_DISABLED: "true"
+    POSTGRES_DB: planetory_poc
+    POSTGRES_USER: planetory
+    POSTGRES_HOST_AUTH_METHOD: trust
+    DATABASE_URL: jdbc:postgresql://service-db:5432/planetory_poc
+  cache:
+    - key:
+        files: [apps/backend/gradle/wrapper/gradle-wrapper.properties]
+        prefix: gradle-dist
+      paths: [.gradle-home/wrapper]
+      policy: pull
+    - key:
+        files:
+          - apps/backend/build.gradle
+          - apps/backend/settings.gradle
+        prefix: gradle-deps
+      paths: [.gradle-home/caches]
+      policy: pull
+  script:
+    - cd apps/backend
+    - chmod +x gradlew
+    - ./gradlew test --no-daemon
+  # 실패한 테스트를 MR 화면에서 바로 보게 한다.
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: apps/backend/build/test-results/test/TEST-*.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: *backend_paths
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
       changes: *backend_paths
 
