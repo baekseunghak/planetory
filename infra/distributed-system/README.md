@@ -500,4 +500,4 @@ Sector 수집 → Raw → 로컬 cleanup → Bronze의 Airflow 순서와 재시�
 
 ## 로컬 구성 검사
 
-저장소 루트에서 `python infra/distributed-system/validate.py`, `pwsh -File infra/distributed-system/scripts/test-hdfs-recovery.ps1`, `pwsh -File infra/distributed-system/scripts/test-tess-ingestion.ps1`을 실행한다. CI는 XML·Compose 정적 검사를 수행하며 PowerShell Runner 검증은 `S15P21C206-91` 범위다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`, Worker 장애·수동 NameNode 전환은 `S15P21C206-74`에서 런타임 검증을 완료했다. Gold 공개·롤백은 후속 통합 검증으로 남긴다.
+저장소 루트에서 `python infra/distributed-system/validate.py`, `pwsh -File infra/distributed-system/scripts/test-hdfs-recovery.ps1`, `pwsh -File infra/distributed-system/scripts/test-tess-ingestion.ps1`을 실행한다. CI는 XML·Compose 정적 검사를 수행하고 PowerShell 스크립트는 돌리지 않는다(`S15P21C206-91` 범위 정정, 2026-09-25). 스크립트를 바꾸면 위 `test-*.ps1`을 로컬에서 실행한다. 실제 HDFS 쓰기·읽기·RF2·checksum은 `S15P21C206-72`, YARN·Spark 제출은 `S15P21C206-73`, Worker 장애·수동 NameNode 전환은 `S15P21C206-74`에서 런타임 검증을 완료했다. Gold 공개·롤백은 후속 통합 검증으로 남긴다.

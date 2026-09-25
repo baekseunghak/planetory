@@ -34,7 +34,7 @@ CI/CD 뼈대와 노드별 Compose·XML 설정은 작성했다. 로컬 구성 검
 - 데이터·백엔드·프론트 담당자의 계약 검토
 - 실제 Sector 입력을 사용한 Spark 메모리·처리시간 상한과 재시도 검증
 - GCP/EC2 실제 자원, Registry와 GitLab 버전 확인
-- `S15P21C206-91`에서 YARN XML·스크립트의 `validate:hadoop-config` 경로 선택, Linux Runner 실행과 성공·실패 Pipeline 증거 확인. `S15P21C206-73`은 로컬·실환경 검증까지만 완료했으며 CI 통과를 완료 증거로 주장하지 않는다.
+- ~~`S15P21C206-91`에서 YARN XML·스크립트의 `validate:hadoop-config` 경로 선택, Linux Runner 실행과 성공·실패 Pipeline 증거 확인.~~ 2026-09-25 확인: 파이프라인 `#222677`·`#222681`·`#222683`([CI/CD 「설정·계약 검사」](../operations/cicd.md#설정계약-검사-s15p21c206-91)). `S15P21C206-73`은 로컬·실환경 검증까지만 완료했으며 CI 통과를 완료 증거로 주장하지 않는다.
 - PoC 코드 작성과 Docker 실행
 - 실제 이미지 빌드·Registry push와 서버 배포·롤백 검증
 - Jira 결과 링크와 MR 등록

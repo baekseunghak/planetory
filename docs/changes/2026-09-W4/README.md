@@ -275,3 +275,4 @@
 | 2026-09-25 | 백엔드 CI를 MR 관문과 병합 뒤 전체 테스트로 분리, 단계별 CI/CD·EC2-B 스테이징·main 배포 결정 | S15P21C206-91 | backend:build, backend:test, -PmrTests, 스테이징, main | 관문 구현 완료, 단계별 배포는 채택(구현 전) | [기록](2026-09-25.md) |
 | 2026-09-25 | 프론트 CI를 단위 테스트 관문과 브라우저 스모크·전체로 분리 | S15P21C206-91 | web:build, web:e2e:smoke, web:e2e, E2E_LANES | 구현 완료, 늘 실패 9건 후속 | [기록](2026-09-25.md) |
 | 2026-09-25 | MR 관문 예외 테스트를 목록(kept)으로 | S15P21C206-91 | -PmrTests, kept, GoldCatalogSchemaTest | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 계약 fixture 검사 연결, 설정 오류 차단 증거, Worker·PowerShell·aarch64 Runner 범위 정정 | S15P21C206-91 | validate:contracts, validate:hadoop-config, validate:compose, 222681, 범위 정정 | 구현 완료, 병합 전 | [기록](2026-09-25.md) |
