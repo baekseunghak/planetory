@@ -31,7 +31,7 @@
 
 `NasaPlanetInfoService.lookup(memberId, candidateId)`가 267/268의 내부 진입점이다. 후보가 active·confirmed이고 판정 행이 있으면 `confirmed`여야 하며, 별이 published이고 회원이 active·별을 발견·해당 후보를 수치 매칭한 제출이 있어야 한다. 실패한 대상은 일반 `RESOURCE_NOT_FOUND`로 덮는다. **별의 TIC만 알거나 다른 회원의 발견만 있어서는 조회하지 않는다.** 이 메서드는 공개 HTTP 경로가 아니며, 268이 엔드포인트를 만들 때 서버 세션의 회원 ID를 전달해야 한다.
 
-연결은 Gold의 검증된 `source='archive'` 참조 한 개와 NASA의 정확한 `tic_id`+`pl_name` 일치로만 성립한다. 참조가 없거나 둘 이상이거나 동일 TIC·행성명이 다른 내부 후보에도 연결돼 있으면 `identity_unresolved`이며 NASA를 부르지 않는다. 이름 유사도·공전주기 근접·모델 추측으로 빈 연결을 채우지 않는다. 저장 후 Gold가 참조의 행성명을 바꾸면 기존 행을 자동 재연결하지 않고 `identity_changed`를 돌려 수동 검토 대상으로 남긴다. 266은 Gold 참조를 생성·수정하지 않는다. 따라서 참조가 공급되지 않은 대상은 268에서도 NASA 보강값을 표시할 수 없다.
+연결은 Gold의 검증된 `source='archive'` 참조 한 개와 NASA의 정확한 `tic_id`+`pl_name` 일치로만 성립한다. 참조가 없거나 둘 이상이거나 동일 TIC·행성명이 다른 내부 후보에도 연결돼 있으면 `identity_unresolved`이며 NASA를 부르지 않는다. 이름 유사도·공전주기 근접·모델 추측으로 빈 연결을 채우지 않는다. 저장 후 Gold가 참조의 행성명을 바꾸면 기존 행을 자동 재연결하지 않고 `identity_changed`를 돌려 수동 검토 대상으로 남긴다. 검증된 정정 뒤에도 기존 캐시 행은 그대로이므로 [운영 가이드 6.1절](../operations/nasa-planet-info-runbook.md#61-검증된-gold-식별자-정정-뒤-identity_changed-복구)에 따라 옛 자료를 비우고 시도 순번을 올려야 새 식별자로 조회한다. 266은 Gold 참조를 생성·수정하지 않는다. 따라서 참조가 공급되지 않은 대상은 268에서도 NASA 보강값을 표시할 수 없다.
 
 기존 `external_signal_references`에는 매칭 검증 수준을 나타내는 별도 열이 없다. 이 서비스는 Gold 공급자가 `candidate_id`에 검증된 Archive 행성명을 연결해 게시했다는 계약을 전제로 읽으며, **그 공급·실데이터 검증은 266의 격리 시험으로 확인되지 않았다.** 268 인수 전에 해당 Gold 공급 경로와 표본 연결을 확인해야 한다.
 
@@ -66,7 +66,7 @@
 | `fetched_at`, `changed_at` | 마지막 정상 조회 시각, 마지막 정규화 값 변경 시각 |
 | `last_attempt_at`, `next_refresh_at` | 마지막 시작 시각, 다음 재확인 가능 시각. 빈 결과·장애를 정상 자료와 구분 |
 | `in_flight_until`, `attempt_generation` | 서버 간 중복 시도 제한용 임대 만료와 증가 순번. 새 시도가 이전 결과를 덮지 못함 |
-| `last_refresh_status` | `in_progress`, `ok`, `not_found`, `identity_unresolved`, `timeout`, `rate_limited`, `upstream_error`, `invalid_response`, `busy`, `interrupted` 등 최근 시도 결과 |
+| `last_refresh_status` | `in_progress`, `ok`, `not_found`, `identity_unresolved`, `timeout`, `rate_limited`, `upstream_error`, `invalid_response`, `busy`, `interrupted` 등 최근 시도 결과. 수동 식별자 정정 직후에는 `identity_corrected` |
 
 | 사건 | DB 결과 | 내부 반환 |
 | --- | --- | --- |
@@ -77,7 +77,7 @@
 | timeout·429·5xx·잘못된 응답 | 이전 `ready` 자료·해시·`fetched_at` 보존, 최근 실패 이유만 갱신. 이전 성공이 없으면 `temporarily_unavailable` | 이전 정상 자료와 실패 상태 또는 일시 장애 |
 | 늦은 요청 완료 | `WHERE generation=시작 순번`이 0행 갱신 | 현재 DB의 더 새 결과 반환 |
 
-외부 호출 전에 임대 기록 SQL을 완료하고 HTTPS를 호출한다. `lookup`은 `NOT_SUPPORTED` 트랜잭션 경계로 호출자의 DB 트랜잭션을 중지한다. 동일 후보가 동시에 요청되면 다른 요청은 저장된 자료 또는 `refreshing`을 받고 새 외부 호출을 만들지 않는다. 임대 시간이 지나 새 시도가 시작될 수 있으며, 그 뒤 도착한 구 시도 결과는 순번 조건으로 무시한다. 프로세스당 동시 HTTPS 최대 2개가 기본이며, DB 임대는 여러 서버 사이의 후보별 경합을 막는다.
+외부 호출 전에 임대 기록 SQL을 완료하고 HTTPS를 호출한다. `lookup`은 `NOT_SUPPORTED` 트랜잭션 경계로 호출자의 DB 트랜잭션을 중지한다. 동일 후보가 동시에 요청되면 다른 요청은 저장된 자료 또는 `refreshing`을 받고 새 외부 호출을 만들지 않는다. 임대 시간이 지나 새 시도가 시작될 수 있으며, 그 뒤 도착한 구 시도 결과는 순번 조건으로 무시한다. 프로세스당 동시 HTTPS 최대 2개가 기본이며, DB 임대는 여러 서버 사이의 후보별 경합을 막는다. HTTP 시도마다 전송 전에 시작한 요청 마감은 연결·헤더·본문 읽기에 함께 적용한다. 임대는 두 번의 요청 마감과 재시도 간 200ms를 포함하도록 `requestTimeout×2+3초`로 둔다.
 
 사용자 결정(2026-09-25): `ready`는 7일, `not_found`·`identity_unresolved`는 1일 뒤 재확인한다. 일시 장애 뒤 재시도 기본 간격은 5분으로 구현했다. 이전 정상 자료는 실패 중에도 `refreshStatus`와 `fetchedAt`을 함께 전달하며, 자동 삭제는 하지 않는다. 이 주기는 NASA가 보장한 갱신 주기가 아닌 **서비스 재조회 정책**이다.
 
@@ -95,6 +95,6 @@
 .\gradlew.bat test --tests com.planetory.backend.domain.exploration.service.NasaPlanetInfoTest -PskipLocalDb
 ```
 
-기대 결과는 `BUILD SUCCESSFUL`과 5개 사례 통과다. 실패하면 `build/test-results/test/TEST-com.planetory.backend.domain.exploration.service.NasaPlanetInfoTest.xml`에서 **첫 원인**을 확인한다. Docker 접근 실패는 엔진 권한·기동 상태를 확인하고, 마이그레이션 실패는 새 일회용 DB의 Flyway 오류부터 본다. 기존 개발 DB·운영 DB를 초기화하지 않는다.
+기대 결과는 `BUILD SUCCESSFUL`과 6개 사례 통과다. 실패하면 `build/test-results/test/TEST-com.planetory.backend.domain.exploration.service.NasaPlanetInfoTest.xml`에서 **첫 원인**을 확인한다. Docker 접근 실패는 엔진 권한·기동 상태를 확인하고, 마이그레이션 실패는 새 일회용 DB의 Flyway 오류부터 본다. 기존 개발 DB·운영 DB를 초기화하지 않는다.
 
 2026-09-25에 실제 NASA TAP으로 `TIC 150428135`의 위 선택 열을 **읽기 전용 소량 조회**해 4행, 3169 UTF-8 바이트, `Published Confirmed`를 관찰했다. 이 확인은 HTTP fixture·DB 경합 테스트와 구분하며 앱 배포·회원 데이터 연결·운영 성능 인수를 뜻하지 않는다. 조회량 보장 수치나 공식 rate limit은 확인되지 않았다.

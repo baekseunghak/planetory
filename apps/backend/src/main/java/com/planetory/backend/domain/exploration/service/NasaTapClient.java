@@ -69,6 +69,7 @@ class NasaTapClient {
     }
 
     Duration leaseDuration() {
+        // 각 시도는 연결·헤더·본문에 같은 요청 마감을 적용한다. 3초는 재시도 간 200ms와 저장 여유다.
         return timeout.multipliedBy(2).plusSeconds(3);
     }
 

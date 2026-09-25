@@ -39,7 +39,7 @@ NASA 공식 문서에서 **이 서비스에 적용할 호출량 제한 수치가
 | `NASA_PLANET_INFO_EMPTY_TTL` | 선택 / 아니오 | `1d`, 기간 | `not_found`·`identity_unresolved` 재확인 간격. 빈 결과를 영구 행성 부재로 취급하지 않음 |
 | `NASA_PLANET_INFO_RETRY_DELAY` | 선택 / 아니오 | `5m`, 기간 | timeout·429·5xx 등 일시 실패 뒤 다음 재시도 가능 시각. 반복 실패 때 요청마다 외부 호출하지 않도록 함 |
 | `NASA_PLANET_INFO_CONNECT_TIMEOUT` | 선택 / 아니오 | `3s`, 초. 허용 `>0`~`5s` | TCP/TLS 연결 제한. 초과 설정이면 앱 기동이 실패하도록 검사 |
-| `NASA_PLANET_INFO_REQUEST_TIMEOUT` | 선택 / 아니오 | `6s`, 초. 허용 `>0`~`10s` | HTTP 한 번의 응답 제한. 최대 2회 시도하며 임대 길이는 이 값×2+3초 |
+| `NASA_PLANET_INFO_REQUEST_TIMEOUT` | 선택 / 아니오 | `6s`, 초. 허용 `>0`~`10s` | HTTP 한 번의 헤더·본문 마감. 최대 2회 시도하며 임대 길이는 이 값×2+3초. 연결 시간은 같은 요청 마감 안에 포함되고, 재시도 사이 200ms는 3초 여유에 포함 |
 | `NASA_PLANET_INFO_MAX_CONCURRENT` | 선택 / 아니오 | `2`, 프로세스당 요청 수. 허용 1~8 | 한 서버의 외부 HTTPS 동시 수. 초과 요청은 `busy`로 잠시 거절하고 기존 정상 자료를 보존 |
 
 호스트 URL, ADQL 테이블·열, 64행·256 KiB 상한, 재시도 2회는 운영 입력으로 바꾸지 않는다. 다른 호스트를 환경변수로 넣을 수 없으므로 요청값이 임의 URL이 되는 경로가 없다. 이 기능에는 NASA API 키가 없다. 267의 LLM 키·모델은 266의 필수 설정이나 V25 선행조건이 아니다.
@@ -118,10 +118,45 @@ Invoke-RestMethod -Uri "$baseUrl/actuator/health" -TimeoutSec 10
 | `rate_limited` / HTTP 429 | 외부 호출 증가, 인스턴스 수×동시 수, NASA 응답 | 즉시 대량 재시도 금지. 기존 자료 유지, 5분 기본 대기. 필요하면 기능 스위치 중지·동시 수 감축 |
 | `upstream_error` / HTTP 5xx 또는 연결 실패 | NASA 상태, egress, 프록시, 응답 상태 | 이전 자료 유지, 요청당 최대 2회 후 5분 대기. 지속 시 새 호출 중지 |
 | `not_found` / HTTP 200 빈 목록 또는 정확한 이름 부재 | 검증된 `external_signal_references`의 TIC·행성명, NASA PS 현재 표 | 행성 없음 확정으로 표시하지 않음. 1일 뒤 재확인. 과거 JSON은 DB에 보존하되 표시하지 않음 |
-| `identity_unresolved` / `identity_changed` | Gold archive 참조가 한 후보당 하나인지, 다른 후보와 충돌하는지, NASA `soltype`·중복 기본 해 | 이름 유사도로 수동 연결 금지. Gold 공급자의 검증된 식별자 정정 절차로 해결. 자동 변경·공개 없음 |
+| `identity_unresolved` / `identity_changed` | Gold archive 참조가 한 후보당 하나인지, 다른 후보와 충돌하는지, NASA `soltype`·중복 기본 해 | 이름 유사도로 수동 연결 금지. Gold 식별자 정정 뒤 기존 캐시 식별자가 다르면 아래 절차로 캐시를 초기화. 자동 변경·공개 없음 |
 | `invalid_response` | NASA 응답 JSON·TIC·default flag, 64행/256 KiB 상한 | 정상자료 보존. 쿼리/원천 스키마 변화 확인 후 코드·문서 같이 수정. 제한을 무턱대고 높이지 않음 |
 | `busy` / 동시 상한 | 현재 인스턴스의 NASA 동시 요청 수 | 정상자료 보존, 5분 기본 지연. 실측 없이 상한을 높이지 않음 |
 | DB 연결·권한·Flyway 오류 | DB 대상·V25 이력, `planetory_app` 권한, Flyway 소유자·FK | 외부 장애/빈 결과로 저장하지 않음. 새 앱 트래픽 중지, 대상·권한·migration 실패 원인 해결. `repair/clean` 임의 실행 금지 |
+
+### 6.1 검증된 Gold 식별자 정정 뒤 `identity_changed` 복구
+
+Gold 공급자가 후보의 TIC·Archive 행성명을 검증해 정정한 뒤, DB 담당자가 대상 DB와 `candidate_id`를 확인한다. 현재 Gold의 `source='archive'` 행성명이 정확히 하나이고 다른 후보와 공유되지 않는지 확인한다. 기존 `nasa_planet_info`의 TIC·행성명과 다를 때만 아래 SQL을 승인된 DB 관리 접속에서 실행한다. `:candidateId`, `:previousTicId`, `:previousName`은 확인한 후보 ID와 **기존 캐시 행**의 값으로 바인딩한다. 실행 직전에는 대상·영향·복구 근거를 확인하고 승인을 받는다.
+
+```sql
+WITH verified AS (
+    SELECT c.id, c.tic_id, MIN(e.external_id) AS archive_planet_name
+      FROM candidates c
+      JOIN external_signal_references e
+        ON e.candidate_id=c.id AND e.tic_id=c.tic_id AND e.source='archive'
+     WHERE c.id=:candidateId AND c.status='active' AND c.is_confirmed
+     GROUP BY c.id, c.tic_id
+    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id)<>''
+)
+UPDATE nasa_planet_info n
+   SET tic_id=v.tic_id, archive_planet_name=v.archive_planet_name,
+       status='pending', normalized=NULL, source_hash=NULL, source_version=NULL,
+       fetched_at=NULL, changed_at=NULL, next_refresh_at=now(),
+       in_flight_until=NULL, attempt_generation=n.attempt_generation+1,
+       last_refresh_status='identity_corrected'
+  FROM verified v
+ WHERE n.candidate_id=v.id
+   AND n.tic_id=:previousTicId AND n.archive_planet_name=:previousName
+   AND (n.tic_id,n.archive_planet_name) IS DISTINCT FROM (v.tic_id,v.archive_planet_name)
+   AND NOT EXISTS (
+       SELECT 1 FROM external_signal_references other
+        WHERE other.source='archive' AND other.tic_id=v.tic_id
+          AND other.external_id=v.archive_planet_name AND other.candidate_id<>v.id
+   )
+RETURNING n.candidate_id, n.tic_id, n.archive_planet_name,
+          n.status, n.last_refresh_status, n.attempt_generation;
+```
+
+반환 행은 **정확히 1개**여야 한다. 0개면 대상·기존 값·Gold 참조·타 후보 중복을 재확인하고 임의로 조건을 제거하지 않는다. 기존 NASA 정규화값과 해시·조회 시각을 함께 비우고 시도 순번을 올리므로, 정정 전 진행 중이던 조회가 옛 행성 자료를 다시 저장할 수 없다. 다음 자격 있는 회원 요청에서 새 식별자로 조회한다. `planetory_app`에는 `DELETE` 권한이 없으며 행 삭제로 복구하지 않는다. 이 절차는 Gold 자체를 수정하지 않는다.
 
 ## 7. 자료를 보존하는 중지·롤백
 

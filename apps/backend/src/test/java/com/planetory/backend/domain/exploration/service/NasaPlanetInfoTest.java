@@ -8,6 +8,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -271,6 +272,63 @@ class NasaPlanetInfoTest {
             firstRelease.countDown();
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    void Gold_식별자_정정은_기존_자료와_진행_중인_옛_시도를_무효화한다() {
+        long candidateId = candidate("TOI-700 b");
+        reply(200, rows(row("TOI-700 b", "9", "Published Confirmed", 0)));
+        var old = service.lookup(member, candidateId);
+        expire(candidateId);
+        OffsetDateTime now = OffsetDateTime.now();
+        long oldGeneration = repository.claim(candidateId, tic, "TOI-700 b", now,
+                now.plusSeconds(15)).orElseThrow();
+
+        jdbc.update("UPDATE external_signal_references SET external_id='TOI-700 c'"
+                + " WHERE candidate_id=? AND source='archive'", candidateId);
+        assertEquals("identity_changed", service.lookup(member, candidateId).refreshStatus());
+
+        long correctedGeneration = jdbc.queryForObject("""
+                WITH verified AS (
+                    SELECT c.id, c.tic_id, MIN(e.external_id) AS archive_planet_name
+                      FROM candidates c
+                      JOIN external_signal_references e
+                        ON e.candidate_id=c.id AND e.tic_id=c.tic_id AND e.source='archive'
+                     WHERE c.id=? AND c.status='active' AND c.is_confirmed
+                     GROUP BY c.id, c.tic_id
+                    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id)<>''
+                )
+                UPDATE nasa_planet_info n
+                   SET tic_id=v.tic_id, archive_planet_name=v.archive_planet_name,
+                       status='pending', normalized=NULL, source_hash=NULL, source_version=NULL,
+                       fetched_at=NULL, changed_at=NULL, next_refresh_at=now(),
+                       in_flight_until=NULL, attempt_generation=n.attempt_generation+1,
+                       last_refresh_status='identity_corrected'
+                  FROM verified v
+                 WHERE n.candidate_id=v.id
+                   AND n.tic_id=? AND n.archive_planet_name=?
+                   AND (n.tic_id,n.archive_planet_name) IS DISTINCT FROM (v.tic_id,v.archive_planet_name)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM external_signal_references other
+                        WHERE other.source='archive' AND other.tic_id=v.tic_id
+                          AND other.external_id=v.archive_planet_name AND other.candidate_id<>v.id
+                   )
+                RETURNING n.attempt_generation
+                """, Long.class, candidateId, tic, "TOI-700 b");
+        assertEquals(oldGeneration + 1, correctedGeneration);
+
+        repository.ready(candidateId, oldGeneration, old.planet(), old.sourceHash(),
+                now, now.plusDays(7));
+        var corrected = repository.find(candidateId).orElseThrow();
+        assertEquals("pending", corrected.status());
+        assertNull(corrected.planet());
+        assertNull(corrected.hash());
+        assertNull(corrected.fetchedAt());
+
+        reply(200, rows(row("TOI-700 c", "12", "Published Confirmed", 0)));
+        var refreshed = service.lookup(member, candidateId);
+        assertEquals("ready", refreshed.status());
+        assertEquals("TOI-700 c", refreshed.planet().planetName());
     }
 
     private static NasaPlanetInfoService newService(Duration timeout) {
