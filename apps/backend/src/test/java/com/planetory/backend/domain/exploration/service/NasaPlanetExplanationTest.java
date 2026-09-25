@@ -1,5 +1,7 @@
 package com.planetory.backend.domain.exploration.service;
 
+import com.planetory.backend.global.error.BusinessException;
+import com.planetory.backend.global.error.ErrorCode;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -26,6 +28,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -72,11 +75,16 @@ class NasaPlanetExplanationTest {
         var dataSource = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword());
         jdbc = new JdbcTemplate(dataSource);
-        repository = new NasaPlanetExplanationRepository(JdbcClient.create(dataSource));
+        repository = new NasaPlanetExplanationRepository(JdbcClient.create(dataSource),
+                new DataSourceTransactionManager(dataSource));
+        jdbc.update("INSERT INTO users(id,provider,provider_user_id,nickname)"
+                + " VALUES (77,'test','nasa-explanation-member','test')");
     }
 
     @BeforeEach
     void seed() {
+        jdbc.update("DELETE FROM nasa_explanation_daily_usage");
+        jdbc.update("DELETE FROM nasa_explanation_daily_total");
         String unique = UUID.randomUUID().toString();
         long tic = Math.abs(UUID.randomUUID().getMostSignificantBits() % 900_000_000L) + 1;
         jdbc.update("INSERT INTO stars(tic_id,confirmed_count,service_status) VALUES (?,0,'published')", tic);
@@ -89,6 +97,22 @@ class NasaPlanetExplanationTest {
                 + "transit_model,discoverable,is_confirmed)"
                 + " VALUES (?,'active',?,1,9,1501,2,1000,12,'{}'::jsonb,true,true) RETURNING id",
                 Long.class, tic, bundle);
+        jdbc.update("INSERT INTO star_unlocks(user_id,tic_id,unlock_reason,depth_z,unlocked_at,"
+                + "world_x,world_y,layout_version,layout_ordinal)"
+                + " VALUES (?,?,'tutorial',0,now(),0,0,'test',"
+                + "(SELECT COALESCE(MAX(layout_ordinal),-1)+1 FROM star_unlocks WHERE user_id=?))",
+                MEMBER, tic, MEMBER);
+        jdbc.update("INSERT INTO submissions(user_id,tic_id,bundle_id,request_id,submission_kind,"
+                + "curve_step,removed_candidate_ids,submitted_period,phase_start,phase_end,"
+                + "fold_reference_time_btjd,user_judgment,evidence_checks,match_result,"
+                + "matched_candidate_id,achievement_result,residual_model_version,"
+                + "periodogram_config_version,rule_version)"
+                + " VALUES (?,?,?,?::uuid,'candidate',0,'{}',9,0.1,0.2,1500.5,'LIKELY_PLANET',"
+                + "'[]'::jsonb,'matched',?,'recognized','rm-1','pg-1','rule-0')",
+                MEMBER, tic, bundle, UUID.randomUUID().toString(), candidate);
+        jdbc.update("INSERT INTO external_signal_references(candidate_id,source,external_id,"
+                + "fetched_on,tic_id) VALUES (?,'archive','TOI-700 b',current_date,?)",
+                candidate, tic);
         jdbc.update("INSERT INTO nasa_planet_info(candidate_id,tic_id,archive_planet_name,status,"
                 + "normalized,source_hash,source_version,fetched_at,changed_at,last_attempt_at,"
                 + "next_refresh_at,last_refresh_status)"
@@ -300,6 +324,8 @@ class NasaPlanetExplanationTest {
                 new Measurement(new BigDecimal("1.2"), null, null, -1, "earth_radius", null));
         when(source.lookup(MEMBER, candidate)).thenReturn(ready(HASH_A, markupName));
         assertEquals("invalid_source", service.lookup(MEMBER, candidate).status());
+        when(source.read(MEMBER, candidate)).thenReturn(ready(HASH_A, markupName));
+        assertEquals("invalid_source", service.read(MEMBER, candidate).status());
         verifyNoInteractions(generator);
     }
 
@@ -347,6 +373,32 @@ class NasaPlanetExplanationTest {
     }
 
     @Test
+    void 모델_호출_중_회원_자격이_철회되면_설명을_저장하지_않는다() {
+        when(generator.generate(any(), eq(HASH_A))).thenAnswer(invocation -> {
+            doThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND))
+                    .when(source).requireCurrentTarget(MEMBER, candidate, "TOI-700 b");
+            return draft(HASH_A);
+        });
+
+        assertThrows(BusinessException.class, () -> service.lookup(MEMBER, candidate));
+        assertNull(jdbc.queryForObject("SELECT content::text FROM nasa_planet_explanation"
+                + " WHERE candidate_id=?", String.class, candidate));
+    }
+
+    @Test
+    void 완료_저장_조건은_호출_중_철회된_별_권한을_다시_확인한다() {
+        when(generator.generate(any(), eq(HASH_A))).thenAnswer(invocation -> {
+            jdbc.update("DELETE FROM star_unlocks WHERE user_id=?"
+                    + " AND tic_id=(SELECT tic_id FROM candidates WHERE id=?)", MEMBER, candidate);
+            return draft(HASH_A);
+        });
+
+        assertEquals("source_changed", service.lookup(MEMBER, candidate).status());
+        assertNull(jdbc.queryForObject("SELECT content::text FROM nasa_planet_explanation"
+                + " WHERE candidate_id=?", String.class, candidate));
+    }
+
+    @Test
     void 동시_요청은_한번만_모델에_보내고_다른_요청은_pending을_받는다() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -376,11 +428,52 @@ class NasaPlanetExplanationTest {
 
     @Test
     void 원천미준비와_기본비활성은_모델을_호출하지_않는다() {
-        var disabled = service(false);
+        var disabled = service(false, 0, 0);
         assertEquals("disabled", disabled.lookup(MEMBER, candidate).status());
+        assertThrows(IllegalArgumentException.class, () -> service(true, 0, 0));
         when(source.lookup(MEMBER, candidate)).thenReturn(new NasaPlanetInfo.Lookup(
                 "not_found", null, null, null, null, "not_found", null));
         assertEquals("source_unavailable", service.lookup(MEMBER, candidate).status());
+        verifyNoInteractions(generator);
+    }
+
+    @Test
+    void 일별_한도는_실제_모델_시도만_집계하고_캐시_재사용은_막지_않는다() {
+        var limited = service(true, 1, 2);
+        when(generator.generate(any(), eq(HASH_A))).thenReturn(draft(HASH_A));
+        assertEquals("ready", limited.lookup(MEMBER, candidate).status());
+        assertEquals("ready", limited.lookup(MEMBER, candidate).status());
+        assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_explanation_daily_usage"
+                + " WHERE member_id=?", Integer.class, MEMBER));
+        assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_explanation_daily_total",
+                Integer.class));
+
+        jdbc.update("UPDATE nasa_planet_info SET source_hash=? WHERE candidate_id=?", HASH_B, candidate);
+        when(source.lookup(MEMBER, candidate)).thenReturn(ready(HASH_B, planet));
+        var blocked = limited.lookup(MEMBER, candidate);
+        assertEquals("quota_exceeded", blocked.status());
+        assertEquals("daily_limit", blocked.failure());
+        assertEquals(NOW.plusDays(1), blocked.retryAt());
+        assertEquals("quota_exceeded", service(true, 2, 1).lookup(MEMBER, candidate).status());
+        verify(generator, times(1)).generate(any(), any());
+        assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_explanation_daily_total",
+                Integer.class));
+        assertEquals("ready", jdbc.queryForObject("SELECT status FROM nasa_planet_explanation"
+                + " WHERE candidate_id=?", String.class, candidate));
+    }
+
+    @Test
+    void GET_읽기는_모델_시도를_만들지_않고_만료_pending을_복구_가능으로_표시한다() {
+        when(source.read(MEMBER, candidate)).thenReturn(ready(HASH_A, planet));
+        assertEquals("not_requested", service.read(MEMBER, candidate).status());
+        verifyNoInteractions(generator);
+        jdbc.update("INSERT INTO nasa_planet_explanation(candidate_id,source_hash,source_version,"
+                + "model_name,prompt_version,status,last_attempt_at,next_retry_at,in_flight_until)"
+                + " VALUES (?, ?, 1, 'gpt-5.4-mini', 'nasa-ko-v4', 'pending', ?, ?, ?)",
+                candidate, HASH_A, NOW.minusHours(1), NOW.minusHours(1), NOW.minusSeconds(1));
+        var interrupted = service.read(MEMBER, candidate);
+        assertEquals("failed", interrupted.status());
+        assertEquals("interrupted", interrupted.failure());
         verifyNoInteractions(generator);
     }
 
@@ -419,8 +512,13 @@ class NasaPlanetExplanationTest {
     }
 
     private NasaPlanetExplanationService service(boolean enabled) {
+        return service(enabled, 5, 50);
+    }
+
+    private NasaPlanetExplanationService service(boolean enabled, int memberLimit, int globalLimit) {
         return new NasaPlanetExplanationService(source, repository, generator, CLOCK, enabled,
-                "gpt-5.4-mini", Duration.ofSeconds(8), Duration.ofHours(1), 1, 320);
+                "gpt-5.4-mini", Duration.ofSeconds(8), Duration.ofHours(1), 1,
+                memberLimit, globalLimit, 320);
     }
 
     private static NasaPlanetInfo.Lookup ready(String hash, Planet planet) {

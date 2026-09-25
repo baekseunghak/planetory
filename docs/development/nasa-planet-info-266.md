@@ -6,7 +6,7 @@
 
 ## 1. 왜 필요하고 어디까지 구현됐는가
 
-회원이 **이미 수치 매칭한 확정 후보**의 행성 정보를 볼 때 NASA Exoplanet Archive를 매번 호출하면 외부 장애와 반복 대기 시간이 상세 화면에 전파된다. 266은 요청된 후보 하나에 대해 NASA의 기본 문헌 해를 조회해 서비스 PostgreSQL에 저장하고, 정상 자료를 재사용할 내부 계약을 제공한다. 저장된 수치의 한국어 설명과 별 단위 백엔드 응답은 [267 계약](nasa-planet-explanation-267.md), 화면 연결은 268이 담당한다. 266은 설명 생성 모델·키·별도 Python 서비스·Redis 캐시를 요구하지 않는다.
+회원이 **이미 수치 매칭한 확정 후보**의 행성 정보를 볼 때 NASA Exoplanet Archive를 매번 호출하면 외부 장애와 반복 대기 시간이 상세 화면에 전파된다. 266은 요청된 후보 하나에 대해 NASA의 기본 문헌 해를 조회해 서비스 PostgreSQL에 저장하고, 정상 자료를 재사용할 내부 계약을 제공한다. 저장된 수치의 한국어 설명은 [267 계약](nasa-planet-explanation-267.md), 조회·생성 HTTP 경로와 화면 연결은 [268 계약](nasa-planet-request-268.md)이 담당한다. 266은 설명 생성 모델·키·별도 Python 서비스·Redis 캐시를 요구하지 않는다.
 
 현재 별 상세 `GET /api/v1/me/stars/{ticId}`의 `planets.items`는 **회원이 해당 TIC에서 직접 매칭한 후보**만 담는다. 확정 후보는 오판했어도 포함되고, 미확정 후보는 최신 판단이 `LIKELY_PLANET`일 때만 포함된다. FP·미매칭·타인 발견은 제외된다. 사용자가 2026-09-25에 기존 범위를 유지하도록 결정했으므로, NASA에서 같은 항성의 행성 네 개를 받더라도 그중 요청된 내부 후보와 검증 연결된 하나만 보강한다. NASA 목록으로 `planets.items`나 지도 행성 수를 교체하지 않는다.
 
@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 266 | 구현·격리 검증 완료 | 대상 권한/식별 검사, NASA PS 조회, 정규화, DB 재사용·상태·경합 |
 | 267 | [설명·전달 계약](nasa-planet-explanation-267.md) | 저장된 `ready` 자료로만 한국어 설명 생성, 회원의 별 단위 설명 응답. 모델·키·프롬프트·설명 버전은 267 계약 |
-| 268 | 후속 | 기존 `planets.items`와 267 응답의 화면 연결, 클라이언트 로딩·오류/출처 표시 |
+| 268 | [요청·화면 계약](nasa-planet-request-268.md) | GET 저장 조회·POST 한 후보 생성, 기존 `planets.items`의 상세 패널 연결, 클라이언트 로딩·오류/출처 표시 |
 
 ## 2. 식별자와 요청 흐름
 
@@ -29,7 +29,7 @@
 현재 262 Publisher는 예시의 곡선·외부 참조를 **다른 더미 TIC로 복사**하고 실제 Gold 입력·후보 동일성 대조는 구현하지 않았다. 따라서 그 목업의 `nasa_exoplanet_archive` 참조는 새 TIC의 검증된 행성 식별자가 아니다. 266의 현행 조회는 검증된 공급 계약을 전제로 한 `source='archive'`만 받으며, 두 표기를 자동으로 같은 자격으로 취급하지 않는다. 운영 공급자가 실제 TIC·후보와 Archive 행성명의 직접 매칭을 검증하고 표기 계약을 확정하기 전에는 262 목업으로 266·267의 `ready`를 기대하지 않는다.
 
 ```text
-267 별 단위 응답이 선별한 확정 후보의 내부 요청(memberId, candidateId)
+268 별 단위 POST가 선별한 확정 후보의 내부 요청(memberId, candidateId)
   → candidates + submissions + star_unlocks + users 상태 검사
   → Gold의 external_signal_references(source='archive', external_id=정확한 pl_name) 검사
   → nasa_planet_info의 같은 후보·TIC·행성명 정상/빈 결과 재사용
@@ -37,7 +37,7 @@
   → 정규화와 해시를 DB에 반영 → 상태·조회 시각·자료 반환
 ```
 
-`NasaPlanetInfoService.lookup(memberId, candidateId)`가 267의 후보별 내부 진입점이다. 후보가 active·confirmed이고 판정 행이 있으면 `confirmed`여야 하며, 별이 published이고 회원이 active·별을 발견·해당 후보를 수치 매칭한 제출이 있어야 한다. 실패한 대상은 일반 `RESOURCE_NOT_FOUND`로 덮는다. **별의 TIC만 알거나 다른 회원의 발견만 있어서는 조회하지 않는다.** 이 메서드는 공개 HTTP 경로가 아니며, 267의 별 단위 응답이 서버 세션의 회원 ID와 권한 필터를 통과한 후보 ID만 전달한다.
+`NasaPlanetInfoService.lookup(memberId, candidateId)`가 후보별 내부 생성 진입점이다. 후보가 active·confirmed이고 판정 행이 있으면 `confirmed`여야 하며, 별이 published이고 회원이 active·별을 발견·해당 후보를 수치 매칭한 제출이 있어야 한다. 실패한 대상은 일반 `RESOURCE_NOT_FOUND`로 덮는다. **별의 TIC만 알거나 다른 회원의 발견만 있어서는 조회하지 않는다.** 이 메서드는 공개 HTTP 경로가 아니며, 268의 POST가 서버 세션의 회원 ID와 권한 필터를 통과한 후보 ID만 전달한다. 268 GET은 저장 상태만 읽고 이 메서드의 외부 조회 경로를 시작하지 않는다.
 
 연결은 공급 단계에서 검증됐다고 계약한 Gold의 `source='archive'` 참조 한 개와 NASA의 정확한 `tic_id`+`pl_name` 일치로만 성립한다. 참조가 없거나 둘 이상이거나 동일 TIC·행성명이 다른 **활성** 내부 후보에도 연결돼 있으면 `identity_unresolved`이며 NASA를 부르지 않는다. 지난 판의 은퇴 후보는 현재 후보의 연결을 막지 않는다. 이름 유사도·공전주기 근접·모델 추측으로 빈 연결을 채우지 않는다. 저장 후 Gold가 참조의 행성명을 바꾸면 기존 행을 자동 재연결하지 않고 `identity_changed`를 돌려 수동 검토 대상으로 남긴다. 검증된 정정 뒤에도 기존 캐시 행은 그대로이므로 [운영 가이드 6.1절](../operations/nasa-planet-info-runbook.md#61-검증된-gold-식별자-정정-뒤-identity_changed-복구)에 따라 옛 자료를 비우고 시도 순번을 올려야 새 식별자로 조회한다. 266은 Gold 참조를 생성·수정하지 않는다. 따라서 참조가 공급되지 않은 대상은 268에서도 NASA 보강값을 표시할 수 없다.
 
@@ -93,7 +93,7 @@
 
 267은 `lookup`에서 `status=ready`와 `planet!=null`인 경우에만 설명을 만든다. `sourceHash`·`sourceVersion`·모델·프롬프트 버전과 설명 재생성·실패 경계는 [267 설명·전달 계약](nasa-planet-explanation-267.md)이 정한다. NASA 데이터의 null·상한·논쟁 표식을 설명에서 확정 측정처럼 표현하지 않는다. 266 테이블에 모델 키·모델 이름·설명 본문 열을 추가하지 않는다.
 
-267의 별 단위 백엔드 응답은 기존 별 상세의 `planets.items`를 먼저 권한 필터로 사용한다. **그 목록에 있는 확정 candidateId**의 보강만 이 내부 서비스에 요청하고 미확정에는 호출하지 않는다. `not_found`, `identity_unresolved`, `temporarily_unavailable`, `refreshing`을 서로 다른 상태로 전달하고, 과거 정상값을 표시할 때에는 `fetchedAt`과 `refreshStatus`를 함께 제공한다. 공개 URL·필드는 [탐사 API 4.2.1절](../../apps/backend/docs/exploration-api-spec.md#421-회원별-별-단위-nasa-한국어-설명-s15p21c206-267)이 정한다. 266은 기존 별 상세 응답을 변경하지 않았다. 268은 267의 응답을 화면에 연결한다.
+268의 별 단위 백엔드 응답은 기존 별 상세의 `planets.items`를 먼저 권한 필터로 사용한다. **그 목록에 있는 확정 candidateId 한 건**만 POST에서 이 내부 서비스에 요청하고 미확정에는 호출하지 않는다. GET은 저장된 상태만 읽는다. `not_found`, `identity_unresolved`, `temporarily_unavailable`, `refreshing`을 서로 다른 상태로 전달하고, 과거 정상값을 표시할 때에는 `fetchedAt`과 `refreshStatus`를 함께 제공한다. 공개 URL·필드는 [탐사 API 4.2.1절](../../apps/backend/docs/exploration-api-spec.md#421-회원별-별-단위-nasa-한국어-설명-s15p21c206-267)이 정한다. 266은 기존 별 상세 응답을 변경하지 않았다.
 
 ## 6. 로컬 실행·검증
 

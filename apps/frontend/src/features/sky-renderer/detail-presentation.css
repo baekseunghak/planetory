@@ -76,6 +76,24 @@
   border: 0;
   background: transparent;
 }
+.planet-explanation {
+  border-top: 1px solid #ffffff24;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.planet-explanation-content {
+  overflow-wrap: anywhere;
+}
+.planet-explanation-content h4 {
+  margin: 16px 0 8px;
+}
+.planet-explanation-text {
+  border-top: 1px solid #ffffff24;
+  margin-top: 14px;
+}
+.planet-explanation-content > button {
+  margin: 6px 8px 6px 0;
+}
 .prototype-detail .star-observations {
   border-top: 1px solid #ffffff24;
   margin-top: 18px;
@@ -126,9 +144,15 @@
   }
 }
 
+.personal-galaxy:has(.detail-ready) .galaxy-visible-count,
+.personal-galaxy:has(.detail-ready) .galaxy-legend {
+  visibility: hidden;
+  pointer-events: none;
+}
 
-.personal-galaxy:has(.detail-ready) .galaxy-visible-count, .personal-galaxy:has(.detail-ready) .galaxy-legend { visibility: hidden; pointer-events: none; }
-
-
-.service-presentation .sky-page:has(.detail-ready) .sky-view-switch {left:32px;bottom:24px;max-width:290px;z-index:8;}
-
+.service-presentation .sky-page:has(.detail-ready) .sky-view-switch {
+  left: 32px;
+  bottom: 24px;
+  max-width: 290px;
+  z-index: 8;
+}

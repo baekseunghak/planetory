@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="880" viewBox="0 0 1080 880" role="img" aria-labelledby="title desc">
-  <title id="title">V25·V26 NASA 행성 자료와 한국어 설명 관계도</title>
-  <desc id="desc">stars와 candidates가 nasa_planet_info에 외래 키로 연결되고, nasa_planet_explanation은 같은 candidate_id로 nasa_planet_info에 연결된다. external_signal_references의 archive 행성명은 공급 단계의 검증을 전제로 조회 대상으로 선택하며 submissions와 star_unlocks는 조회 권한 검사에 사용된다.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1160" viewBox="0 0 1080 1160" role="img" aria-labelledby="title desc">
+  <title id="title">V25·V26·V28 NASA 행성 자료, 한국어 설명과 일별 모델 시도 관계도</title>
+  <desc id="desc">stars와 candidates는 nasa_planet_info, nasa_planet_explanation은 nasa_planet_info에 연결된다. V28 회원별 일별 시도는 users를 참조하고 전체 일별 시도는 회원 삭제 뒤에도 보존된다. external_signal_references의 archive 행성명은 공급 단계의 검증을 전제로 조회 대상으로 선택한다.</desc>
   <defs>
     <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#43618d" stroke-width="1.5"/></marker>
   </defs>
-  <rect width="1080" height="880" fill="#f8fafc"/>
-  <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25·V26 · NASA 자료와 한국어 설명</text>
+  <rect width="1080" height="1160" fill="#f8fafc"/>
+  <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25·V26·V28 · NASA 자료와 설명</text>
   <text x="36" y="73" font-family="sans-serif" font-size="15" fill="#475569">실선은 DB 외래 키, 점선은 조회 전에 검사하는 연결이다.</text>
 
   <rect x="36" y="115" width="270" height="88" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
@@ -49,4 +49,21 @@
   <path d="M306 439 H354 V408 H400" fill="none" stroke="#8291a8" stroke-dasharray="7 5" stroke-width="2" marker-end="url(#arrow)"/>
   <path d="M705 458 V520" fill="none" stroke="#358060" stroke-width="2" marker-end="url(#arrow)"/>
   <text x="36" y="840" font-family="sans-serif" font-size="15" fill="#475569">조회 권한: active 회원 + 별 발견 + 해당 confirmed 후보 수치 매칭 제출. submissions와 star_unlocks는 캐시에 FK로 연결하지 않는다.</text>
+
+  <rect x="36" y="905" width="270" height="88" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="938" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">users</text>
+  <text x="54" y="967" font-family="sans-serif" font-size="15" fill="#334155">id PK · 회원 식별자</text>
+
+  <rect x="400" y="889" width="610" height="108" rx="12" fill="#fff5e7" stroke="#b47631" stroke-width="2.5"/>
+  <text x="425" y="922" font-family="sans-serif" font-size="20" font-weight="700" fill="#653d14">nasa_explanation_daily_usage · 회원별 시도</text>
+  <text x="425" y="951" font-family="sans-serif" font-size="16" fill="#653d14">usage_day + member_id PK · member_id FK → users</text>
+  <text x="425" y="978" font-family="sans-serif" font-size="15" fill="#653d14">UTC 날짜 · attempt_count 양수 · 회원 삭제 시 회원별 행 정리</text>
+
+  <rect x="400" y="1016" width="610" height="95" rx="12" fill="#fff5e7" stroke="#b47631" stroke-width="2.5"/>
+  <text x="425" y="1049" font-family="sans-serif" font-size="20" font-weight="700" fill="#653d14">nasa_explanation_daily_total · 전체 시도</text>
+  <text x="425" y="1077" font-family="sans-serif" font-size="16" fill="#653d14">usage_day PK · attempt_count 양수</text>
+  <text x="425" y="1101" font-family="sans-serif" font-size="15" fill="#653d14">회원 삭제 뒤에도 보존 · 회원별 행과 같은 트랜잭션에서 증가</text>
+
+  <path d="M306 949 H400" fill="none" stroke="#b47631" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="1139" font-family="sans-serif" font-size="15" fill="#475569">V28: 모델 시도는 회원별·전체 집계를 함께 올린다. 설명 행과 집계에는 FK가 없다.</text>
 </svg>
