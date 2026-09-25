@@ -284,11 +284,7 @@ class NasaPlanetInfoTest {
         long oldGeneration = repository.claim(candidateId, tic, "TOI-700 b", now,
                 now.plusSeconds(15)).orElseThrow();
 
-        jdbc.update("UPDATE external_signal_references SET external_id='TOI-700 c'"
-                + " WHERE candidate_id=? AND source='archive'", candidateId);
-        assertEquals("identity_changed", service.lookup(member, candidateId).refreshStatus());
-
-        long correctedGeneration = jdbc.queryForObject("""
+        String repairSql = """
                 WITH verified AS (
                     SELECT c.id, c.tic_id, MIN(e.external_id) AS archive_planet_name
                       FROM candidates c
@@ -296,7 +292,7 @@ class NasaPlanetInfoTest {
                         ON e.candidate_id=c.id AND e.tic_id=c.tic_id AND e.source='archive'
                      WHERE c.id=? AND c.status='active' AND c.is_confirmed
                      GROUP BY c.id, c.tic_id
-                    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id)<>''
+                    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id) !~ '^[[:space:]]*$'
                 )
                 UPDATE nasa_planet_info n
                    SET tic_id=v.tic_id, archive_planet_name=v.archive_planet_name,
@@ -314,7 +310,22 @@ class NasaPlanetInfoTest {
                           AND other.external_id=v.archive_planet_name AND other.candidate_id<>v.id
                    )
                 RETURNING n.attempt_generation
-                """, Long.class, candidateId, tic, "TOI-700 b");
+                """;
+        for (String blankName : new String[]{" ", "\t"}) {
+            jdbc.update("UPDATE external_signal_references SET external_id=?"
+                    + " WHERE candidate_id=? AND source='archive'", blankName, candidateId);
+            assertEquals("identity_unresolved", service.lookup(member, candidateId).status());
+            assertTrue(jdbc.queryForList(repairSql, Long.class,
+                    candidateId, tic, "TOI-700 b").isEmpty());
+        }
+
+        jdbc.update("UPDATE external_signal_references SET external_id='TOI-700 c'"
+                + " WHERE candidate_id=? AND source='archive'", candidateId);
+        assertEquals("identity_changed", service.lookup(member, candidateId).refreshStatus());
+        var correctedGenerations = jdbc.queryForList(repairSql, Long.class,
+                candidateId, tic, "TOI-700 b");
+        assertEquals(1, correctedGenerations.size());
+        long correctedGeneration = correctedGenerations.getFirst();
         assertEquals(oldGeneration + 1, correctedGeneration);
 
         repository.ready(candidateId, oldGeneration, old.planet(), old.sourceHash(),

@@ -125,7 +125,7 @@ Invoke-RestMethod -Uri "$baseUrl/actuator/health" -TimeoutSec 10
 
 ### 6.1 검증된 Gold 식별자 정정 뒤 `identity_changed` 복구
 
-Gold 공급자가 후보의 TIC·Archive 행성명을 검증해 정정한 뒤, DB 담당자가 대상 DB와 `candidate_id`를 확인한다. 현재 Gold의 `source='archive'` 행성명이 정확히 하나이고 다른 후보와 공유되지 않는지 확인한다. 기존 `nasa_planet_info`의 TIC·행성명과 다를 때만 아래 SQL을 승인된 DB 관리 접속에서 실행한다. `:candidateId`, `:previousTicId`, `:previousName`은 확인한 후보 ID와 **기존 캐시 행**의 값으로 바인딩한다. 실행 직전에는 대상·영향·복구 근거를 확인하고 승인을 받는다.
+Gold 공급자가 후보의 TIC·Archive 행성명을 검증해 정정한 뒤, DB 담당자가 대상 DB와 `candidate_id`를 확인한다. 현재 Gold의 `source='archive'` 행성명이 정확히 하나이고 공백만으로 이루어지지 않았으며 다른 후보와 공유되지 않는지 확인한다. 기존 `nasa_planet_info`의 TIC·행성명과 다를 때만 아래 SQL을 승인된 DB 관리 접속에서 실행한다. `:candidateId`, `:previousTicId`, `:previousName`은 확인한 후보 ID와 **기존 캐시 행**의 값으로 바인딩한다. 실행 직전에는 대상·영향·복구 근거를 확인하고 승인을 받는다.
 
 ```sql
 WITH verified AS (
@@ -135,7 +135,7 @@ WITH verified AS (
         ON e.candidate_id=c.id AND e.tic_id=c.tic_id AND e.source='archive'
      WHERE c.id=:candidateId AND c.status='active' AND c.is_confirmed
      GROUP BY c.id, c.tic_id
-    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id)<>''
+    HAVING COUNT(DISTINCT e.external_id)=1 AND MIN(e.external_id) !~ '^[[:space:]]*$'
 )
 UPDATE nasa_planet_info n
    SET tic_id=v.tic_id, archive_planet_name=v.archive_planet_name,
