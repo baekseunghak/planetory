@@ -32,6 +32,21 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
 
+### 백엔드 테스트: MR 관문과 전체 실행 (S15P21C206-91)
+
+MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 전체는 약 8분인데 65%가 Testcontainers 테스트이고 dind가 필요하다. 마이그레이션은 회당 약 0.5초라 DB를 미리 만들어 두는 것으로는 줄지 않는다.
+
+| job | 언제 | 무엇 | 시간 |
+| --- | --- | --- | --- |
+| `backend:build` | MR·브랜치에서 백엔드 변경 시 | 컴파일·`bootJar`와 스프링 앱·컨테이너를 띄우지 않는 테스트, 예외로 `PlanetoryApplicationTests`(실제 PostgreSQL에서 기동·전체 마이그레이션·`ddl-auto=validate`). postgres 서비스만 쓴다 | 약 2분 |
+| `backend:test` | develop 병합 뒤 백엔드 변경 시 자동. MR·브랜치에서는 수동 | 전체 테스트. postgres 서비스와 dind, `amd64-docker` Runner | 약 8분 |
+
+- `backend:build`가 뺄 테스트는 `apps/backend/build.gradle`의 `-PmrTests`가 테스트 소스에서 `@SpringBootTest`·`@Testcontainers`·`SpringApplication` 등을 찾아 고른다. 새 테스트도 저절로 분류되며 job 로그에 뺀 소스 수가 찍힌다.
+- `backend:image`는 `backend:build` 뒤에만 돈다. `build:backend`와 배포는 `backend:test`를 기다리지 않는다. `backend:test`는 `needs: []`로 바로 시작하고 마지막 `verify` stage에 있어 `needs`가 없는 `build:backend`의 대기 대상이 아니다.
+- `backend:test`는 `interruptible: false`다. 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에는 백엔드 변경이 없어 전체 테스트가 끝내 돌지 않기 때문이다.
+- MR 관문에서 빠진 결함은 병합 뒤 `backend:test`에서 드러난다. 스키마·동시성·권한처럼 위험한 변경은 병합 전에 MR에서 `backend:test`를 수동으로 돌린다.
+- CI에서만 테스트별 기본 5분 제한을 두고, `backend:test`는 10분이 넘으면 테스트 JVM 스레드 덤프를 로그에 남긴다. 시간 초과로 끝난 job은 JUnit 보고서가 올라가지 않아 덤프가 멈춘 위치의 유일한 단서다.
+
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
@@ -99,7 +114,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 | Runner | 아키텍처 | 태그 | 맡는 job | 상태 |
 | --- | --- | --- | --- | --- |
-| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*`, Testcontainers에 dind가 필요한 `backend:build` | 등록됨. 현재 전체 job 처리 |
+| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*`, Testcontainers에 dind가 필요한 `backend:test` | 등록됨. 현재 전체 job 처리 |
 | CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` | 미등록 |
 
 태그 분리는 CI 노드를 붙이는 시점에 의미를 갖는다. 지금은 한 대가 둘 다 받으므로 태그가 job을 가르지 않는다.
