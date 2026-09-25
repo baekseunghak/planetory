@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static com.planetory.backend.domain.exploration.service.NasaPlanetInfo.Lookup;
 import static com.planetory.backend.domain.exploration.service.NasaPlanetInfo.Planet;
 
-/** 267/268이 호출할 회원별 확정 후보 NASA 자료 경계. 공개 API는 268 소유다. */
+/** 268의 조회·생성 경로가 공유하는 회원별 확정 후보 NASA 자료 경계. */
 @Service
 public class NasaPlanetInfoService {
 
@@ -57,22 +57,67 @@ public class NasaPlanetInfoService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Lookup lookup(long memberId, long candidateId) {
+        return lookup(memberId, candidateId, true);
+    }
+
+    /** 저장된 상태만 읽는다. NASA 호출과 DB 쓰기는 하지 않는다. */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Lookup read(long memberId, long candidateId) {
+        return lookup(memberId, candidateId, false);
+    }
+
+    public void requireEligible(long memberId, long candidateId, long ticId) {
+        if (repository.allowedTic(memberId, candidateId).filter(found -> found == ticId).isEmpty()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+    }
+
+    public void requireEligible(long memberId, long candidateId) {
+        if (repository.allowedTic(memberId, candidateId).isEmpty()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+    }
+
+    public void requireCurrentTarget(long memberId, long candidateId, long ticId, String name) {
+        requireEligible(memberId, candidateId, ticId);
+        requireCurrentName(candidateId, ticId, name);
+    }
+
+    public void requireCurrentTarget(long memberId, long candidateId, String name) {
+        long ticId = repository.allowedTic(memberId, candidateId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        requireCurrentName(candidateId, ticId, name);
+    }
+
+    private void requireCurrentName(long candidateId, long ticId, String name) {
+        List<String> names = repository.archiveNames(candidateId, ticId);
+        if (names.size() != 1 || !name.equals(names.getFirst())
+                || repository.nameSharedWithAnotherCandidate(candidateId, ticId, name)) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+    }
+
+    private Lookup lookup(long memberId, long candidateId, boolean refresh) {
         long ticId = repository.allowedTic(memberId, candidateId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         List<String> names = repository.archiveNames(candidateId, ticId);
         if (names.size() != 1 || names.getFirst().isBlank()
                 || repository.nameSharedWithAnotherCandidate(candidateId, ticId, names.getFirst())) {
-            return new Lookup("identity_unresolved", null, null, null, null, "identity_unresolved");
+            return new Lookup("identity_unresolved", null, null, null, null, "identity_unresolved", null);
         }
-        String name = names.getFirst(); // Gold의 검증된 archive.pl_name. 유사명·주기 추측은 금지한다.
+        String name = names.getFirst(); // 공급 검증을 전제로 한 archive 행성명. 유사명·주기 추측은 금지한다.
         OffsetDateTime now = OffsetDateTime.now(clock);
         var cached = repository.find(candidateId);
         if (cached.isPresent() && !sameIdentity(cached.get(), ticId, name)) {
-            return new Lookup("identity_unresolved", null, null, null, null, "identity_changed");
+            return new Lookup("identity_unresolved", null, null, null, null, "identity_changed", null);
+        }
+        if (!refresh) {
+            return cached.map(row -> result(row, row.refreshStatus()))
+                    .orElseGet(() -> new Lookup("not_requested", null, null, null, null, null, null));
         }
         if (!enabled) {
             return cached.map(row -> result(row, "disabled"))
-                    .orElseGet(() -> new Lookup("temporarily_unavailable", null, null, null, null, "disabled"));
+                    .orElseGet(() -> new Lookup("temporarily_unavailable", null, null, null, null, "disabled", null));
         }
         if (cached.isPresent() && cached.get().nextRefreshAt().isAfter(now)) {
             return result(cached.get(), cached.get().refreshStatus());
@@ -80,32 +125,38 @@ public class NasaPlanetInfoService {
         var generation = repository.claim(candidateId, ticId, name, now,
                 now.plus(tap.leaseDuration()));
         if (generation.isEmpty()) {
+            requireCurrentTarget(memberId, candidateId, ticId, name);
             return repository.find(candidateId).filter(row -> sameIdentity(row, ticId, name))
                     .map(row -> result(row, row.refreshStatus()))
                     .orElseGet(() -> new Lookup("identity_unresolved", null, null, null, null,
-                            "identity_changed"));
+                            "identity_changed", null));
         }
 
         try {
             List<Planet> matches = tap.fetch(ticId).stream()
                     .filter(row -> name.equals(row.planetName())).toList();
             OffsetDateTime completedAt = OffsetDateTime.now(clock);
+            requireCurrentTarget(memberId, candidateId, ticId, name);
             if (matches.isEmpty()) {
-                repository.notFound(candidateId, generation.get(), completedAt.plus(emptyTtl));
+                repository.notFound(memberId, candidateId, ticId, name, generation.get(),
+                        completedAt.plus(emptyTtl));
             } else if (matches.size() != 1 || !"Published Confirmed".equals(matches.getFirst().solutionType())) {
-                repository.unresolved(candidateId, generation.get(), completedAt.plus(emptyTtl));
+                repository.unresolved(memberId, candidateId, ticId, name, generation.get(),
+                        completedAt.plus(emptyTtl));
             } else {
                 Planet planet = matches.getFirst();
-                repository.ready(candidateId, generation.get(), planet, sha256(repository.encode(planet)),
-                        completedAt, completedAt.plus(readyTtl));
+                repository.ready(memberId, candidateId, ticId, name, generation.get(), planet,
+                        sha256(repository.encode(planet)), completedAt, completedAt.plus(readyTtl));
             }
         } catch (NasaTapClient.FetchFailure failure) {
+            requireCurrentTarget(memberId, candidateId, ticId, name);
             log.warn("NASA PS refresh failed: candidateId={}, ticId={}, reason={}",
                     candidateId, ticId, failure.code());
-            repository.failed(candidateId, generation.get(), failure.code(),
-                    OffsetDateTime.now(clock).plus(retryDelay));
+            repository.failed(memberId, candidateId, ticId, name, generation.get(),
+                    failure.code(), OffsetDateTime.now(clock).plus(retryDelay));
         }
         // generation 비교가 실패하면 다른 서버의 더 새 조회 결과를 돌려준다.
+        requireCurrentTarget(memberId, candidateId, ticId, name);
         return repository.find(candidateId).map(row -> result(row, row.refreshStatus()))
                 .orElseThrow(() -> new IllegalStateException("NASA lookup row disappeared"));
     }
@@ -114,13 +165,17 @@ public class NasaPlanetInfoService {
         return row.ticId() == ticId && row.name().equals(name);
     }
 
-    private static Lookup result(NasaPlanetInfoRepository.Row row, String refreshStatus) {
-        String status = "pending".equals(row.status()) ? "refreshing" : row.status();
+    private Lookup result(NasaPlanetInfoRepository.Row row, String refreshStatus) {
+        boolean interrupted = "pending".equals(row.status()) && row.inFlightUntil() != null
+                && !row.inFlightUntil().isAfter(OffsetDateTime.now(clock));
+        String status = interrupted ? "temporarily_unavailable"
+                : "pending".equals(row.status()) ? "refreshing" : row.status();
         return new Lookup(status, "ready".equals(status) ? row.planet() : null,
-                row.fetchedAt(), row.changedAt(), row.hash(), refreshStatus);
+                row.fetchedAt(), row.changedAt(), row.hash(),
+                interrupted ? "interrupted" : refreshStatus, row.sourceVersion());
     }
 
-    private static String sha256(String normalized) {
+    static String sha256(String normalized) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(normalized.getBytes(StandardCharsets.UTF_8));

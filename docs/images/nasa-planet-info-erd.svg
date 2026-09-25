@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="590" viewBox="0 0 1080 590" role="img" aria-labelledby="title desc">
-  <title id="title">V25 NASA 행성 정보 관계도</title>
-  <desc id="desc">stars와 candidates가 nasa_planet_info에 외래 키로 연결된다. external_signal_references는 검증된 NASA 행성명 공급자이며 submissions와 star_unlocks는 조회 권한 검사에 사용된다.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1790" viewBox="0 0 1080 1790" role="img" aria-labelledby="title desc">
+  <title id="title">V25·V26·V28·V29 NASA 후보별·항성별 자료와 설명 관계도</title>
+  <desc id="desc">V25·V26은 내부 후보별 NASA 자료와 설명, V29는 TIC별 목록과 후보 FK 없는 외부 행성·설명을 보관한다. V28 회원별·전체 모델 시도 한도는 두 설명 경로가 공유한다.</desc>
   <defs>
     <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#43618d" stroke-width="1.5"/></marker>
   </defs>
-  <rect width="1080" height="590" fill="#f8fafc"/>
-  <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25 · 요청된 확정 행성 NASA 자료</text>
+  <rect width="1080" height="1790" fill="#f8fafc"/>
+  <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25·V26·V28 · NASA 자료와 설명</text>
   <text x="36" y="73" font-family="sans-serif" font-size="15" fill="#475569">실선은 DB 외래 키, 점선은 조회 전에 검사하는 연결이다.</text>
 
   <rect x="36" y="115" width="270" height="88" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
@@ -20,7 +20,7 @@
   <rect x="36" y="384" width="270" height="110" rx="9" fill="#ffffff" stroke="#a3adc0" stroke-width="2"/>
   <text x="54" y="416" font-family="sans-serif" font-size="18" font-weight="700" fill="#14243b">external_signal_references</text>
   <text x="54" y="444" font-family="sans-serif" font-size="15" fill="#334155">candidate_id · source='archive'</text>
-  <text x="54" y="468" font-family="sans-serif" font-size="15" fill="#334155">external_id = 정확한 pl_name</text>
+  <text x="54" y="468" font-family="sans-serif" font-size="15" fill="#334155">external_id = pl_name 후보</text>
 
   <rect x="400" y="134" width="610" height="324" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
   <text x="425" y="170" font-family="sans-serif" font-size="22" font-weight="700" fill="#14335d">nasa_planet_info · 서비스 조회 자료</text>
@@ -33,8 +33,66 @@
   <text x="425" y="379" font-family="sans-serif" font-size="15" fill="#1e3a5f">후보당 한 행 · 실제 요청 대상만 저장 · Gold 판정과 분리</text>
   <text x="425" y="411" font-family="sans-serif" font-size="15" fill="#1e3a5f">7일/1일 재확인 · 이전 정상값 보존 · 순번으로 늦은 응답 차단</text>
 
+  <rect x="400" y="520" width="610" height="280" rx="12" fill="#edf9f1" stroke="#358060" stroke-width="2.5"/>
+  <text x="425" y="555" font-family="sans-serif" font-size="22" font-weight="700" fill="#174b34">nasa_planet_explanation · 검증된 한국어 설명</text>
+  <text x="425" y="590" font-family="sans-serif" font-size="16" fill="#244936">candidate_id PK/FK → nasa_planet_info</text>
+  <text x="425" y="621" font-family="sans-serif" font-size="16" fill="#244936">source_hash · source_version · model_name · prompt_version</text>
+  <text x="425" y="652" font-family="sans-serif" font-size="16" fill="#244936">status · content JSONB · generated_at</text>
+  <text x="425" y="683" font-family="sans-serif" font-size="16" fill="#244936">next_retry_at · in_flight_until · attempt_generation</text>
+  <text x="425" y="714" font-family="sans-serif" font-size="16" fill="#244936">attempt_count (1~3) · last_failure</text>
+  <line x1="425" y1="733" x2="980" y2="733" stroke="#9cc7a9"/>
+  <text x="425" y="762" font-family="sans-serif" font-size="15" fill="#244936">후보당 최대 한 행 · 현재 원천 해시/버전과 같을 때만 재사용</text>
+  <text x="425" y="786" font-family="sans-serif" font-size="15" fill="#244936">모델 호출 중 DB 트랜잭션 없음 · 늦은 응답은 조건부 저장으로 차단</text>
+
   <path d="M306 160 H365 V199 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
   <path d="M306 291 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
   <path d="M306 439 H354 V408 H400" fill="none" stroke="#8291a8" stroke-dasharray="7 5" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="36" y="541" font-family="sans-serif" font-size="15" fill="#475569">조회 권한: active 회원 + 별 발견 + 해당 confirmed 후보 수치 매칭 제출. submissions와 star_unlocks는 캐시에 FK로 연결하지 않는다.</text>
+  <path d="M705 458 V520" fill="none" stroke="#358060" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="840" font-family="sans-serif" font-size="15" fill="#475569">조회 권한: active 회원 + 별 발견 + 해당 confirmed 후보 수치 매칭 제출. submissions와 star_unlocks는 캐시에 FK로 연결하지 않는다.</text>
+
+  <rect x="36" y="905" width="270" height="88" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="938" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">users</text>
+  <text x="54" y="967" font-family="sans-serif" font-size="15" fill="#334155">id PK · 회원 식별자</text>
+
+  <rect x="400" y="889" width="610" height="108" rx="12" fill="#fff5e7" stroke="#b47631" stroke-width="2.5"/>
+  <text x="425" y="922" font-family="sans-serif" font-size="20" font-weight="700" fill="#653d14">nasa_explanation_daily_usage · 회원별 시도</text>
+  <text x="425" y="951" font-family="sans-serif" font-size="16" fill="#653d14">usage_day + member_id PK · member_id FK → users</text>
+  <text x="425" y="978" font-family="sans-serif" font-size="15" fill="#653d14">UTC 날짜 · attempt_count 양수 · 회원 삭제 시 회원별 행 정리</text>
+
+  <rect x="400" y="1016" width="610" height="95" rx="12" fill="#fff5e7" stroke="#b47631" stroke-width="2.5"/>
+  <text x="425" y="1049" font-family="sans-serif" font-size="20" font-weight="700" fill="#653d14">nasa_explanation_daily_total · 전체 시도</text>
+  <text x="425" y="1077" font-family="sans-serif" font-size="16" fill="#653d14">usage_day PK · attempt_count 양수</text>
+  <text x="425" y="1101" font-family="sans-serif" font-size="15" fill="#653d14">회원 삭제 뒤에도 보존 · 회원별 행과 같은 트랜잭션에서 증가</text>
+
+  <path d="M306 949 H400" fill="none" stroke="#b47631" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="1139" font-family="sans-serif" font-size="15" fill="#475569">V28: 모델 시도는 회원별·전체 집계를 함께 올린다. 설명 행과 집계에는 FK가 없다.</text>
+
+  <line x1="36" y1="1180" x2="1010" y2="1180" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="36" y="1215" font-family="sans-serif" font-size="22" font-weight="700" fill="#14243b">V29 · 결과 화면의 항성별 NASA 전체 참고 목록</text>
+  <rect x="36" y="1251" width="270" height="78" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="1282" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">stars</text>
+  <text x="54" y="1309" font-family="sans-serif" font-size="15" fill="#334155">tic_id PK · 위와 같은 항성</text>
+
+  <rect x="400" y="1237" width="610" height="140" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
+  <text x="425" y="1272" font-family="sans-serif" font-size="21" font-weight="700" fill="#14335d">nasa_star_catalog · TIC별 목록 상태</text>
+  <text x="425" y="1302" font-family="sans-serif" font-size="16" fill="#1e3a5f">tic_id PK/FK → stars · host_name · status</text>
+  <text x="425" y="1330" font-family="sans-serif" font-size="16" fill="#1e3a5f">fetched_at · next_refresh_at · last_refresh_status</text>
+  <text x="425" y="1358" font-family="sans-serif" font-size="16" fill="#1e3a5f">in_flight_until · attempt_generation</text>
+
+  <rect x="400" y="1408" width="610" height="151" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
+  <text x="425" y="1443" font-family="sans-serif" font-size="21" font-weight="700" fill="#14335d">nasa_star_planet · 외부 행성 원천</text>
+  <text x="425" y="1473" font-family="sans-serif" font-size="16" fill="#1e3a5f">(tic_id, planet_id) PK · planet_name UNIQUE/TIC</text>
+  <text x="425" y="1501" font-family="sans-serif" font-size="16" fill="#1e3a5f">active · status · normalized JSONB · source_hash/version</text>
+  <text x="425" y="1529" font-family="sans-serif" font-size="16" fill="#1e3a5f">fetched_at · changed_at · candidate FK 없음</text>
+
+  <rect x="400" y="1590" width="610" height="150" rx="12" fill="#edf9f1" stroke="#358060" stroke-width="2.5"/>
+  <text x="425" y="1625" font-family="sans-serif" font-size="21" font-weight="700" fill="#174b34">nasa_star_planet_explanation · 행성별 설명</text>
+  <text x="425" y="1655" font-family="sans-serif" font-size="16" fill="#244936">(tic_id, planet_id) PK/FK → nasa_star_planet</text>
+  <text x="425" y="1683" font-family="sans-serif" font-size="16" fill="#244936">source_hash/version · model_name · prompt_version</text>
+  <text x="425" y="1711" font-family="sans-serif" font-size="16" fill="#244936">status · content · generated_at · 임대/시도 1~3회</text>
+
+  <path d="M306 1290 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M705 1377 V1408" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M705 1559 V1590" fill="none" stroke="#358060" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="1772" font-family="sans-serif" font-size="15" fill="#475569">V29은 V28 시도 한도를 공유한다. 옛 행성은 active=false로 보존하고 현재 목록에서 제외한다.</text>
 </svg>

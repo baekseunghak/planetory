@@ -115,18 +115,11 @@ class SourceCardTest {
         return mvc.perform(post("/api/v1/posts").session(session(owner)).with(csrf()).contentType("application/json")
                 .content("{\"title\":\"출처 글\",\"body\":\"본문\",\"purposeTag\":\"GENERAL\",\"ticId\":"+star+",\"sourceLinks\":"+refs+"}"));
     }
-    String create(String refs) throws Exception { return create(member, refs); }
-    String create(long owner, String refs) throws Exception {
-        return JSON.readTree(create(owner, refs, "\""+tic+"\"").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("postId").asText();
+    String create(String refs) throws Exception {
+        return JSON.readTree(create(member, refs, "\""+tic+"\"").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("postId").asText();
     }
-    org.springframework.test.web.servlet.ResultActions patchPost(String post, String body) throws Exception { return patchPost(member, post, body); }
-    org.springframework.test.web.servlet.ResultActions patchPost(long owner, String post, String body) throws Exception {
-        return mvc.perform(patch("/api/v1/posts/"+post).session(session(owner)).with(csrf()).contentType("application/json").content(body));
-    }
-    /** 다른 스레드의 새 트랜잭션에서 공개를 취소한다. 호출 트랜잭션의 잠금을 기다리면 10초 뒤 실패한다. 풀 close()는 막힌 작업을 끝없이 기다리므로 쓰지 않는다. */
-    void cancel(long owner, String analysis) {
-        java.util.concurrent.CompletableFuture.runAsync(() -> publications.visibility(owner,analysis,false))
-                .orTimeout(10,java.util.concurrent.TimeUnit.SECONDS).join();
+    org.springframework.test.web.servlet.ResultActions patchPost(String post, String body) throws Exception {
+        return mvc.perform(patch("/api/v1/posts/"+post).session(session(member)).with(csrf()).contentType("application/json").content(body));
     }
     tools.jackson.databind.JsonNode read(String path) throws Exception {
         return JSON.readTree(mvc.perform(get(path).session(session(member))).andExpect(status().isOk())
@@ -218,7 +211,12 @@ class SourceCardTest {
     }
     @Test void 미리보기와통계는_같은스냅샷_다음조회는취소반영() throws Exception {
         var p=publications.publish(member,submit(3));
-        doAnswer(invocation -> { cancel(member,p.analysisId()); return invocation.callRealMethod(); }).when(summaryRepository).statistics(org.mockito.ArgumentMatchers.eq(candidate), any());
+        doAnswer(invocation -> {
+            try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                pool.submit(() -> publications.visibility(member,p.analysisId(),false)).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return invocation.callRealMethod();
+        }).when(summaryRepository).statistics(org.mockito.ArgumentMatchers.eq(candidate), any());
         var card=read(preview("SIGNAL_THREAD",p.threadId()));
         assertEquals(1,card.path("judgmentSummary").path("participantCount").asInt());
         reset(summaryRepository);
@@ -333,16 +331,31 @@ class SourceCardTest {
     }
     @Test void 서비스직접글상세도_취소와_동일스냅샷() throws Exception {
         var p=publications.publish(member,submit(3)); String post=create(links(p));
-        doAnswer(call -> { cancel(member,p.analysisId()); return call.callRealMethod(); }).when(sources).references(com.planetory.backend.domain.post.service.HistoryAttachmentService.Parent.POST,number(post),tic);
+        doAnswer(call -> {
+            try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                pool.submit(() -> publications.visibility(member,p.analysisId(),false)).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return call.callRealMethod();
+        }).when(sources).references(com.planetory.backend.domain.post.service.HistoryAttachmentService.Parent.POST,number(post),tic);
         assertTrue(posts.detail(number(post)).sourceLinks().getFirst().available());
         reset(sources);
         assertFalse(posts.detail(number(post)).sourceLinks().getFirst().available());
     }
-    @Test void 출처저장도중취소는_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
-        // 같은 회원이면 글 수정의 회원 잠금(180)이 취소를 저장 뒤로 직렬화한다. 남의 분석을 출처로 저장하는 도중의 취소를 재현한다.
-        var p=publications.publish(member,submit(3)); long author=member(); String post=create(author,"[]");
-        doAnswer(call -> { var statement=call.callRealMethod(); cancel(member,p.analysisId()); return statement; }).when(sourceJdbc).sql(org.mockito.ArgumentMatchers.startsWith("INSERT INTO post_source_links("));
-        patchPost(author,post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());
+    @Test void 출처저장도중운영숨김은_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
+        var p=publications.publish(member,submit(3)); String post=create("[]");
+        doAnswer(call -> {
+            var statement=call.callRealMethod();
+            // 본인 공개 취소는 글 수정이 먼저 잡은 회원 잠금(180)을 기다려 저장 도중 끼어들 수 없다.
+            // 저장 도중 확정될 수 있는 것은 회원 잠금 없는 운영 숨김이므로 별도 연결에서 커밋한다.
+            // 막히면 10초 뒤 실패하게 close() 대신 shutdownNow()로 끝낸다. close()는 작업 종료를 무기한 기다린다.
+            var pool=java.util.concurrent.Executors.newSingleThreadExecutor();
+            try {
+                pool.submit(() -> jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE id=?",
+                        Long.parseLong(p.analysisId().substring(3)))).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            } finally { pool.shutdownNow(); }
+            return statement;
+        }).when(sourceJdbc).sql(org.mockito.ArgumentMatchers.startsWith("INSERT INTO post_source_links("));
+        patchPost(post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());
         assertEquals(0,jdbc.queryForObject("SELECT count(*) FROM post_source_links WHERE post_id=?",Integer.class,number(post)));
         var comment=comments.create(member,new com.planetory.backend.domain.comment.service.CommentService.CreateCommand(
                 com.planetory.backend.domain.comment.service.CommentService.ParentType.POST,number(post),"본문",null,null));

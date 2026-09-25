@@ -17,10 +17,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.junit.jupiter.api.Assertions.*;
 
-// 빈 DB의 0명 스냅샷을 읽어 기동 시 생성을 확인한다. 10명 미만 비공개는 StatisticsAggregationTest가 본다.
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
         "planetory.command=statistics","planetory.statistics.mode=snapshot","spring.flyway.enabled=false",
+        // 빈 DB의 0명 스냅샷을 읽는다. 공개 최소 인원(180)은 StatisticsAggregationTest처럼 끈다.
         "planetory.statistics.min-public-cohort=0"})
 class StatisticsCommandTest {
     @Container static final PostgreSQLContainer<?> DB=new PostgreSQLContainer<>("postgres:18.6-alpine");

@@ -18,6 +18,7 @@ import type { StarLocation } from "./star-search";
 import { focusCamera } from "./detail";
 import { INITIAL_SYSTEM, signalSeed, type SystemView } from "./personal-system";
 import { PersonalSceneControls } from "./PersonalSceneControls";
+import { PlanetExplanationPanel } from "./PlanetExplanation";
 import "./detail-presentation.css";
 
 const progressLabel = {
@@ -381,7 +382,9 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
           <aside
             ref={panelRef}
             className={
-              "star-detail" + (!listOpen ? " prototype-detail" : "") + (detail ? " detail-ready" : "")
+              "star-detail" +
+              (!listOpen ? " prototype-detail" : "") +
+              (detail ? " detail-ready" : "")
             }
             aria-label="별 상세"
             onKeyDown={(e) => {
@@ -530,6 +533,19 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
                               : `${selectedPlanet.depthPpm} ppm (${selectedPlanet.depthPpm / 10000}%)`}
                           </dd>
                         </dl>
+                        {selectedPlanet.kind === "confirmed" ? (
+                          <PlanetExplanationPanel
+                            key={`${ticId}:${meta.version}:${retry}:${selectedPlanet.candidateId}`}
+                            detail={detail}
+                            candidateId={selectedPlanet.candidateId}
+                            refreshDetail={retryDetail}
+                          />
+                        ) : (
+                          <p>
+                            아직 확인되지 않은 후보에는 NASA 확정 행성 설명이
+                            없습니다.
+                          </p>
+                        )}
                       </div>
                     )}
                     <p className="detail-muted">
@@ -578,4 +594,3 @@ export function PersonalGalaxyScene(props: SkySceneProps) {
     </>
   );
 }
-

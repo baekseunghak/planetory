@@ -18,8 +18,8 @@ class StatisticsMigrationTest {
                 .locations("classpath:db/migration").target(target).load();
     }
     @Test void V19에서V20다음V21적용검증재실행영건() throws Exception {
-        // target은 버전 마이그레이션만 제한하고 반복 마이그레이션(R__)은 함께 적용되므로 버전만 센다.
-        assertEquals(19,flyway("19").migrate().migrations.stream().filter(m->"Versioned".equals(m.category)).count());
+        // R__ 반복 마이그레이션은 target과 무관하게 함께 돈다(버전 ""). 버전 마이그레이션만 센다.
+        assertEquals(19,flyway("19").migrate().migrations.stream().filter(m->!m.version.isEmpty()).count());
         var twenty=flyway("20").migrate();
         assertEquals(List.of("20"),twenty.migrations.stream().map(m->m.version).toList());
         var twentyOne=flyway("21").migrate();

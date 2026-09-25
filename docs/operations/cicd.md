@@ -32,12 +32,63 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
 
+### 백엔드 테스트: MR 관문과 전체 실행 (S15P21C206-91)
+
+MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 전체는 약 8분인데 65%가 Testcontainers 테스트이고 dind가 필요하다. 마이그레이션은 회당 약 0.5초라 DB를 미리 만들어 두는 것으로는 줄지 않는다.
+
+| job | 언제 | 무엇 | 시간 |
+| --- | --- | --- | --- |
+| `backend:build` | MR·브랜치에서 백엔드 변경 시 | 컴파일·`bootJar`와 스프링 앱·컨테이너를 띄우지 않는 테스트, 예외로 `GoldCatalogSchemaTest`(실제 PostgreSQL에서 앱 기동·`ddl-auto=validate`, 빈 스키마 전체 마이그레이션·재실행 0건, V1 업그레이드). postgres 서비스만 쓴다 | 약 2분 |
+| `backend:test` | develop 병합 뒤 백엔드 변경 시 자동. MR·브랜치에서는 수동 | 전체 테스트. postgres 서비스와 dind, `amd64-docker` Runner | 약 8분 |
+
+- `backend:build`가 뺄 테스트는 `apps/backend/build.gradle`의 `-PmrTests`가 테스트 소스에서 `@SpringBootTest`·`@Testcontainers`·`SpringApplication` 등을 찾아 고른다. 새 테스트도 저절로 분류되며 job 로그에 뺀 소스 수가 찍힌다. 남기는 테스트가 컨테이너를 쓰게 되면 Gradle이 설정 단계에서 멈춘다. `PlanetoryApplicationTests`는 Redis를 Testcontainers로 띄워 MR 관문에서 돌 수 없다.
+- 예외로 남기는 스프링 테스트는 `build.gradle`의 `kept` 목록에 완전한 클래스 이름으로 적는다. dind 없이 돌고(Testcontainers·`GenericContainer`·`PostgreSQLContainer` 금지) 그 영역의 핵심 회귀인 것만 넣는다. 하나 늘 때마다 모든 MR이 10~15초씩 더 기다리므로 영역마다 대표 하나로 좁게 둔다. 목록의 이름에 맞는 소스가 없으면 Gradle이 설정 단계에서 멈춘다.
+- `backend:image`는 `backend:build` 뒤에만 돈다. `build:backend`와 배포는 `backend:test`를 기다리지 않는다. `backend:test`는 `needs: []`로 바로 시작하고 마지막 `verify` stage에 있어 `needs`가 없는 `build:backend`의 대기 대상이 아니다.
+- `backend:test`는 `interruptible: false`다. 다음 develop 병합이 파이프라인을 자동 취소하면 새 파이프라인에는 백엔드 변경이 없어 전체 테스트가 끝내 돌지 않기 때문이다.
+- MR 관문에서 빠진 결함은 병합 뒤 `backend:test`에서 드러난다. 스키마·동시성·권한처럼 위험한 변경은 병합 전에 MR에서 `backend:test`를 수동으로 돌린다.
+- **수동으로 돌린 전체 테스트(`backend:test`·`web:e2e`)는 실패해도 MR 파이프라인이 초록이다.** 수동 job은 `allow_failure: true`가 기본이라 관문만 통과하면 병합 가능해 보인다. 돌렸으면 job 결과를 직접 확인하고, 리뷰어도 위험한 변경의 MR에서 그 결과를 확인한다. `allow_failure: false`로 바꾸지 않는다. 시작하지 않은 수동 job이 파이프라인을 미완료로 잡아 MR마다 전체 실행을 강제하게 된다.
+- CI에서만 테스트별 기본 5분 제한을 두고, `backend:test`는 10분이 넘으면 테스트 JVM 스레드 덤프를 로그에 남긴다. 시간 초과로 끝난 job은 JUnit 보고서가 올라가지 않아 덤프가 멈춘 위치의 유일한 단서다.
+
+#### 부분 실행
+
+실패한 테스트만 다시 돌리거나 CI 설정을 고치며 확인할 때는 전체 job을 수동으로 누르면서 변수로 대상을 좁힌다. 변수가 없으면 늘 전체가 돈다.
+
+| job | 변수 | 예 |
+| --- | --- | --- |
+| `backend:test` | `BACKEND_TESTS`: Gradle `--tests` 패턴, 쉼표로 여럿 | `*SourceCardTest,com.planetory.backend.domain.gold.*` |
+| `web:e2e` | `E2E_SUITES`: `test:e2e`의 스위트 이름, 쉼표로 여럿(`test:` 생략 가능) | `detail,search` |
+
+- 부분 실행은 로그 첫 줄에 `부분 실행(병합 판단 근거 아님)`을 찍는다. 병합 판단은 전체 실행 결과로 한다.
+- 통과한 테스트의 결과를 캐싱해 건너뛰지 않는다. Gradle 결과 캐시는 코드만 입력으로 보고 DB 서비스·dind·이미지 같은 CI 환경 변화를 보지 못해, CI 설정을 고칠 때 실패를 가린다.
+- 스테이징(develop → `main` MR)과 운영 배포 단계에서는 부분 실행도 쓰지 않고 항상 전체를 돌린다.
+
+### 프론트 테스트: MR 관문과 브라우저 테스트 (S15P21C206-91)
+
+| job | 언제 | 무엇 | 시간 |
+| --- | --- | --- | --- |
+| `web:build` | MR·브랜치에서 프론트 변경 시 | `npm run build`(타입 검사·번들·프로덕션 위생)와 단위 테스트 `npm test`(448개) | 약 35초 |
+| `web:e2e:smoke` | develop 병합 뒤 프론트 변경 시 자동. MR·브랜치에서는 수동 | `test:e2e:smoke`: `test:production`·`test:docker-defaults`·`test:auth`. 배포 산출물 기동과 로그인 흐름 | 약 2분 + 준비 |
+| `web:e2e` | 수동 | `test:e2e` 전체(스위트 21개, 505개) | 약 26분 |
+
+- 브라우저 job은 Playwright 공식 이미지(`@playwright/test`와 같은 버전)를 쓰고 `verify` stage에서 `needs: []`로 돈다. 이미지 빌드·배포를 막지 않으며 `interruptible: false`다.
+- 전체는 `apps/frontend/scripts/run-e2e-ci.mjs`가 병렬로 돌린다. `test:browser`(253개)는 fixture 서버가 상태를 갖지 않아 스위트 안에서 worker 2개로, 나머지는 서버 메모리 상태를 `/reset`으로 되돌리는 스위트가 있어 안에서는 순서대로 두고 스위트끼리 2개씩 동시에 돈다. 스위트 목록은 `package.json`의 `test:e2e` 한 곳에 있다.
+- 실측(2026-09-25): 직렬 약 40분(추정), 동시 3 약 22분이지만 CPU 경합으로 WebGL·드래그 테스트가 흔들렸다. 동시 2는 약 26분이고 경합 실패가 사라졌다. 빌드 노드 vCPU 4개를 다른 job과 나눠 쓰므로 동시 2가 기본이다(`E2E_LANES`).
+- 병렬 실행 중 나가는 연결이 Linux 임시 포트(32768~60999)에서 fixture 서버 포트를 먼저 잡을 수 있다. 로그에 `is already in use`가 있을 때만 그 스위트를 한 번 다시 돌린다. 테스트 실패는 재시도하지 않는다.
+- 스위트 출력은 섞이지 않게 끝날 때 한 번에 찍는다. job이 시간 초과로 죽으면 돌던 스위트의 출력이 남지 않으므로, 실행기가 제한 시간(`CI_JOB_TIMEOUT`) 2분 전에 진행 중인 스위트마다 최근 출력 60줄을 찍는다. 백엔드 `backend:test`의 스레드 덤프에 해당한다.
+- 수동 `web:e2e`도 실패해도 MR이 초록이다. 결과 확인 원칙은 백엔드 항목과 같다.
+- **`@gpu` 태그:** 실제 WebGL 픽셀을 읽어 검증하는 테스트는 제목 끝에 `@gpu`를 붙여 표시한다(Playwright 제목 태그). 빌드 노드에는 GPU가 없어 SwiftShader가 다른 값을 내므로 CI 전체 실행(`run-e2e-ci.mjs`)에서만 `--grep-invert=@gpu`로 뺀다. 로컬 `npm run check`에서는 그대로 돈다. 현재 `galaxy.spec.ts`의 GPU 픽셀 투영 1건이다(CI에서 밝기 1, 기대 > 40). 렌더링 결과를 검증하지 않는 테스트에는 붙이지 않는다.
+- **CI에서 늘 실패하는 8건(2026-09-25, 프론트 담당 확인 중):** 직렬·동시 2·동시 3 모두에서 실패했다. GPU 픽셀 문제가 아니어서 `@gpu`로 빼지 않는다.
+  - `interaction.spec.ts` 5건: 휠·드래그·Home 키 뒤에도 카메라 값이 처음 값 그대로(줌 4, 이동 0.12)이고 툴팁·재시도 클릭이 반응하지 않는다. CI 헤드리스에서 캔버스 입력이 처리되지 않는 것으로 보인다.
+  - `detail/viewport.spec.ts:8`: 30초 시간 초과.
+  - `search.spec.ts:26`(빈 결과 안내가 뜨지 않음), `:124`(스크롤 대상 링크가 DOM에서 분리됨).
+  - 정리 전까지 `web:e2e`는 빨갛게 끝나며, 스테이징 관문 편입은 이 정리 뒤에 S15P21C206-92에서 정한다.
+
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
 - 잔차 Worker(`derived-compute`, S15P21C206-88): EC2-A에 `deploy:derived-compute:ec2-a`로 배포한다. HTTP 헬스 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
 - Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
-- Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다.
+- Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다. Publisher 이미지는 EC2-A의 Gold 목업 적재(`gold-mock` profile)에서도 같은 이미지로 돈다(`S15P21C206-262`).
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
 - 운영 Compose는 서버의 `.env`에서 다른 서비스의 현재 이미지와 실행 설정을 읽는다.
 
@@ -58,7 +109,9 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 - **이 규칙 이전 파이프라인의 job.** environment가 없어 배포로 세지 않는다. 2026-09-23 이전에 취소된 배포 job을 Retry하면 옛 compose가 올라간다.
 - **예전에 성공한 배포 job의 재실행.** `ci_forward_deployment_rollback_allowed: true`라 롤백 목적으로 허용된다. 의도한 되돌리기에만 쓴다.
 
-대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. GCP 노드(Ingestion·Spark·Airflow·Publisher)는 같은 구조를 아직 쓰지 않는다.
+대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. 태그 정리는 EC2-B의 매일 cron이 배포 중인 이미지를 보호한 채 한다([EC2-B](../../infra/service/ec2-b/README.md) 「매일 정리」).
+
+**GCP 노드(Ingestion·Spark·Airflow·Publisher)는 같은 결함이 남아 있다(S15P21C206-262에서 방식만 정함).** 파이프라인 `220048`에서 ingestion 배포 버튼 5개가 취소된 실례가 있다. EC2-A처럼 매 병합 빌드로 풀지 않는다. Airflow·Spark 이미지는 크고 빌드가 무거워 비용이 다르다. 대신 빌드를 취소되지 않게 하고(`interruptible: false`) 노드별 `environment`로 옛 버튼을 막는 쪽이 맞다. 다만 이 방식은 자동 취소 방식(`workflow:auto_cancel:on_new_commit: interruptible`)을 바꿔야 해서 파이프라인 전체와 EC2-A 동작에 걸린다. 별도 Task로 설계한다.
 
 ## 필요한 GitLab 변수
 
@@ -100,7 +153,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 | Runner | 아키텍처 | 태그 | 맡는 job | 상태 |
 | --- | --- | --- | --- | --- |
-| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*` | 등록됨. 현재 전체 job 처리 |
+| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*`, Testcontainers에 dind가 필요한 `backend:test` | 등록됨. 현재 전체 job 처리 |
 | CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` | 미등록 |
 
 태그 분리는 CI 노드를 붙이는 시점에 의미를 갖는다. 지금은 한 대가 둘 다 받으므로 태그가 job을 가르지 않는다.
@@ -133,6 +186,8 @@ Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수�
 
 접속 계정은 CI 전용 `deploy` 하나다. 사람의 관리 계정을 쓰지 않으므로 키·권한을 회수할 때 사람 계정을 건드리지 않아도 되고 접속 주체가 로그에서 갈린다. 이 계정에 `sudo`를 주지 않는다. 배포에 필요한 권한은 `docker` 그룹뿐이다. 계정 생성은 [provision-deploy-user.sh](../../infra/provisioning/provision-deploy-user.sh)가 맡는다.
 
+**사람의 수동 배포도 `deploy`로 한다(2026-09-23 ACL 변경).** 사람 PC의 tailnet 신원에도 `deploy` SSH를 허용했다. 전에는 `ubuntu`로 들어가 `sudo -u deploy`로 실행했다. 이제 `tailscale ssh deploy@ec2-a`로 바로 `/home/deploy/planetory`에서 `deploy.sh`를 돌린다. 계정만으로는 CI 배포와 사람 배포가 갈리지 않으므로 주체는 Tailscale SSH 접속 기록의 tailnet 신원으로 구분한다. 허용 범위는 tailnet 정책 파일이 정본이다.
+
 **접근 차단은 ACL에서 한다.** 규칙 한 줄을 지우면 모든 노드에서 동시에 끊긴다.
 
 `DEPLOY_HOST`에는 MagicDNS 이름이 아니라 **Tailscale IP**를 넣는다. 컨테이너 안에서는 MagicDNS가 해석되지 않는다.
@@ -159,11 +214,25 @@ Hadoop/YARN 데몬은 호스트에서 실행한다. 일반 애플리케이션 �
 
 GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며 CI에서 실행하지 않는다.
 
-`S15P21C206-73`은 YARN XML·`scripts/*yarn*`·`validate.py` 변경의 로컬 검사와 실환경 검증까지만 완료했다. 정확한 Linux Runner 경로 선택과 성공·실패 Pipeline 증거는 기존 [S15P21C206-91](https://ssafy.atlassian.net/browse/S15P21C206-91)에서 확인하며, 73번 완료 상태는 현재 커밋의 CI 통과를 포함하지 않는다.
+`S15P21C206-73`은 YARN XML·`scripts/*yarn*`·`validate.py` 변경의 로컬 검사와 실환경 검증까지만 완료했다. YARN XML 변경이 `validate:hadoop-config`를 고르고 Linux Runner에서 실패·통과하는 증거는 [S15P21C206-91](https://ssafy.atlassian.net/browse/S15P21C206-91)에서 남겼다(아래 「설정·계약 검사」).
 
 - CI의 XML·Compose 검사는 VM 생성이나 실제 클러스터 동작을 검증하지 않는다.
 - 설정 파일만 수정해도 validate는 실행된다.
 - 현재 deploy 규칙은 애플리케이션 소스 변경을 기준으로 한다.
 - Hadoop XML 배포는 운영 절차로 수행한다.
+
+### 설정·계약 검사 (S15P21C206-91)
+
+| job | 언제 | 무엇 |
+| --- | --- | --- |
+| `validate:compose` | Compose·Dockerfile·CI 파일 변경 | 루트·control-plane·worker Compose `config -q` |
+| `validate:hadoop-config` | Hadoop·YARN XML, `workers`, `scripts/*yarn*`, `validate.py` 변경 | `infra/distributed-system/validate.py` |
+| `validate:contracts` | `contracts/` 변경 | Gold 게시 계약·배열/레코드 checksum 벡터·온라인 파생 계산 계약의 검사기(Node 표준 모듈만 사용) |
+
+- 세 job 모두 `validate` 단계에 `needs` 없이 있다. 기준 브랜치의 이미지 빌드 `build:*`는 `build` 단계에 `needs` 없이 있어, 같은 파이프라인의 검사가 하나라도 실패하면 시작하지 않는다. MR·브랜치 파이프라인에는 `build` 단계 job이 없고, `*:image`는 push하지 않는 확인용 빌드라 `needs: []`로 검사와 나란히 돈다. 거기서는 검사 실패가 파이프라인 실패로 드러난다.
+- 계약 검사는 fixture와 검사기가 서로 맞는지만 본다. Publisher·Backend·Worker 코드가 계약을 따르는지는 각 컴포넌트의 테스트가 맡는다.
+- 2026-09-25 확인: 브랜치 파이프라인 `#222677`(통과) → `#222681`(실패) → `#222683`(되돌림, 통과). `#222681`은 Gold fixture의 배열 checksum 한 글자, YARN `worker.xml`의 `yarn.nodemanager.resource.memory-mb`, worker Compose의 알 수 없는 키를 일부러 틀린 커밋 `64f58477`이다. `validate:contracts`(`CHECKSUM_MISMATCH`), `validate:hadoop-config`(assert), `validate:compose`(`Additional property ... is not allowed`)가 각각 실패했다. 실행 Runner는 `planetory-docker-runner`(GitLab Runner API 기준 `linux`/`amd64`, 태그 `amd64-docker`)다.
+- 기준 브랜치에서 `build:*`가 실제로 멈추는 것은 develop을 깨야 볼 수 있어 확인하지 않았다. 위 stage 구조(검사는 `validate`, 이미지 빌드는 `needs` 없는 `build`)로 판단한다.
+- PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). 운영자가 직접 실행하는 스크립트라 배포 경로 밖이다. mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
 
 현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.

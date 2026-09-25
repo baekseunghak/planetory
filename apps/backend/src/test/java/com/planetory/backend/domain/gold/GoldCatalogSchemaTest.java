@@ -90,9 +90,8 @@ class GoldCatalogSchemaTest {
                 .load();
         SCENARIO_SCHEMAS.add(schema);
 
-        // target은 버전 마이그레이션만 제한하고 반복 마이그레이션(R__)은 함께 적용되므로 버전만 센다.
-        assertEquals(List.of("1"), onlyV1.migrate().migrations.stream()
-                        .filter(m -> "Versioned".equals(m.category)).map(m -> m.version).toList(),
+        // R__ 반복 마이그레이션은 target과 무관하게 함께 돈다(버전 ""). 버전 마이그레이션만 비교한다.
+        assertEquals(List.of("1"), onlyV1.migrate().migrations.stream().map(m -> m.version).filter(v -> !v.isEmpty()).toList(),
                 "V1만 적용된 기준 상태를 만든다");
 
         Flyway rest = flywayFor(schema);

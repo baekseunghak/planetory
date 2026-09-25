@@ -95,6 +95,25 @@ EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-2
 
 CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `deploy.sh`, 실제 `.env`, `backups/`가 여기 있다. `~ubuntu/planetory/infra/service`는 09-21 이전 수동 기동 때의 사본이라 `.env`의 이미지 선언이 낡았다. 같은 compose 프로젝트 이름을 쓰므로 거기서 `docker compose ps`를 쳐도 컨테이너가 보여 오인하기 쉽다. 도는 버전은 컨테이너 라벨 `com.docker.compose.project.working_dir`과 이미지로 확인한다.
 
+## 병합 후 CI 배포 결과 (2026-09-23)
+
+`S15P21C206-254`(`!199`)와 `S15P21C206-261`(`!204`)은 병합 후 CI 경로로 배포됐다.
+
+| 파이프라인 | Frontend | Backend | 확인 |
+| --- | --- | --- | --- |
+| `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
+| `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
+
+운영 DB는 V24다. V23·V24는 261 전에 수동 배포한 `f6379f5b`에서 적용됐다. 옛 배포 버튼 거부는 아직 확인하지 않았다(`S15P21C206-262` 항목 2).
+
+## 분석 화면 503과 Gold 목업 (S15P21C206-262)
+
+별 분석을 열면 "일시적으로 처리할 수 없습니다"가 떴다. `analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)을 냈기 때문이다. 구현·API 연결·배포 문제가 아니었다. 서비스 DB에 Gold가 한 번도 적재되지 않아 `publication_bundles`·`light_curve_segments`·`candidates`가 모두 0행이었다. 더미 별에는 판이 없다. 이 경로는 예외로 처리해 오류 로그가 남지 않는다. 화면 문구는 일시 장애처럼 읽히지만 몇 번을 다시 해도 같다. 원인을 가르는 오류 코드 분리는 Backend 담당 사항이다.
+
+Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지다. 잔차 단계는 Worker(`S15P21C206-88`)가 없어 여전히 안 된다.
+
+**운영 적재는 아직 하지 않았다.** 병합 뒤 CI가 Publisher 이미지를 만들면 계정을 준비하고 적재한다.
+
 ## 손으로 넣은 데이터 (운영 값 아님)
 
 로그인을 뚫기 위해 EC2-A DB에 직접 넣었다. **운영이 정한 값이 아니다.**
@@ -195,11 +214,14 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 | job | 언제 | 무엇 |
 | --- | --- | --- |
-| `web:build` | 프론트 변경 | `npm run build` |
+| `web:build` | 프론트 변경 | `npm run build` + 단위 테스트 `npm test`(448개) |
+| `web:e2e:smoke` | develop 병합 뒤 자동, MR에서는 수동 | 브라우저 스모크 `test:e2e:smoke`(production·docker-defaults·auth) |
+| `web:e2e` | 수동 | 브라우저 테스트 전체 `test:e2e`(505개, 동시 2) |
 | `web:image` | `Dockerfile`·`nginx.conf` 변경 | 이미지 빌드 + 이미지 안에서 `nginx -t` |
 | `backend:schema` | 마이그레이션 변경 | 버전 선점·중복, 되돌릴 수 없는 변경 |
-| `backend:build` | 백엔드 소스 변경 | `./gradlew bootJar` |
-| `backend:image` | `Dockerfile` 변경 | 이미지 빌드 |
+| `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test -PmrTests` (DB 없는 테스트 + `GoldCatalogSchemaTest`, PostgreSQL 서비스) |
+| `backend:image` | `Dockerfile` 변경 | 이미지 빌드. `backend:build`가 실패하면 돌지 않는다 |
+| `backend:test` | develop 병합 뒤 자동, MR에서는 수동 | 백엔드 테스트 전체(PostgreSQL 서비스 + dind). 이미지 빌드·배포를 막지 않는다 |
 | `build:*` | 기본 브랜치 | 레지스트리 이미지 빌드·푸시 |
 | `deploy:*:ec2-a` | 기본 브랜치, 수동 버튼 | 교체 → 헬스 확인 → 실패 시 롤백 |
 
@@ -208,9 +230,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 넣지 않은 것과 이유. **CI는 배포를 막을 수 있는 것만 본다.**
 
 - 포맷 검사 — 빌드·배포·동작과 무관하다. LF 기준으로 이미 16개 파일이 실패하기도 한다.
-- 프론트 단위 테스트 — 파일 50개가 기능 담당자 소유다. 관문으로 세우면 한 사람의 테스트가 다른 사람의 MR을 막는다. 팀 합의가 먼저다.
-- 백엔드 테스트 — `build.gradle`의 `test`가 PostgreSQL을 요구하는데 CI에서는 `startLocalDb`가 건너뛰어져 DB 없이 41개 클래스가 돈다. CI에 Postgres 서비스를 붙이는 일은 별도로 정한다.
-- Playwright — 설정 24개를 직렬로 돌아 머지를 막는다.
+- 브라우저 테스트 전체 — 동시 2로도 약 26분이라 관문이 아니라 수동 job(`web:e2e`)으로 둔다. 근거는 [CI/CD 「프론트 테스트」](../operations/cicd.md#프론트-테스트-mr-관문과-브라우저-테스트-s15p21c206-91).
 
 ## 검증 경계
 
@@ -232,7 +252,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 ## 남은 결정 (MR에서 확인)
 
-1. **프론트 단위 테스트를 CI 관문으로 세울지.** 세우면 한 사람의 테스트 실패가 다른 사람의 MR을 막는다.
+1. ~~**프론트 단위 테스트를 CI 관문으로 세울지.**~~ 2026-09-25 결정: 세운다(`web:build`에 `npm test`, S15P21C206-91). 448개가 수 초이고 모두 통과해, 깨진 채 병합되는 쪽이 더 비싸다고 봤다.
 2. **`-- IRREVERSIBLE:` 방식이 적절한지.** 되돌릴 수 없는 마이그레이션을 금지하지 않고 파일에 근거를 요구한다. 세 배포로 나눌 수 있는지 한 번 묻는 것이 목적이다.
 3. **EC2-B 배포 job 제거.** [CI/CD](../operations/cicd.md)가 이 티켓에 지정했고 실제로 지웠다. 확인이 필요하다.
 

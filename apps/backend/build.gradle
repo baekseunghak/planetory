@@ -18,6 +18,8 @@ repositories {
 }
 
 dependencies {
+	implementation platform('org.springframework.ai:spring-ai-bom:2.0.1')
+	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.springframework.session:spring-session-data-redis'
@@ -86,6 +88,48 @@ tasks.named('test') {
 	systemProperty 'spring.test.context.cache.maxSize', '4'
 	// 기존 MockHttpSession 테스트. 실제 Redis 검증은 테스트 속성으로 다시 활성화한다.
 	systemProperty 'planetory.session.redis.enabled', 'false'
+	// GitLab CI(dind)에서만 적용한다. 로컬 실행은 바뀌지 않는다 [S15P21C206-91].
+	if (providers.environmentVariable('CI').isPresent()) {
+		// 멈춘 테스트가 Runner를 붙잡지 않고 이름과 함께 실패하게 한다. 같은 스레드에서 끊어야 한다.
+		// SEPARATE_THREAD로 돌리면 @Transactional·보안 컨텍스트가 테스트 스레드와 갈라져 정상 테스트가 깨진다.
+		// 인터럽트에 반응하지 않는 대기는 여기서 못 끊으므로 job의 timeout이 마지막 안전장치다.
+		systemProperty 'junit.jupiter.execution.timeout.default', '5m'
+	}
+	// MR 관문(backend:build)은 가볍게 돈다 [S15P21C206-91]. 스프링 앱이나 컨테이너를 띄우는 클래스는
+	// 빼고 develop의 전체 실행(backend:test)에 맡긴다. 테스트 소스의 표시로 고르므로 새 테스트도 저절로 분류된다.
+	// 아래 kept 목록의 스프링 테스트만 예외로 남긴다. MR 관문에는 dind가 없어 컨테이너를 쓰면 안 된다.
+	if (providers.gradleProperty('mrTests').isPresent()) {
+		def docker = ~/(?i)testcontainers|GenericContainer|PostgreSQLContainer/
+		def heavy = ~/(?i)testcontainers|GenericContainer|PostgreSQLContainer|@SpringBootTest|@DataJpaTest|@JdbcTest|SpringApplication/
+		// 관문에 남기는 스프링 테스트. dind 없이 돌고 그 영역의 핵심 회귀인 것만 넣는다. 관문이 커지면
+		// MR마다 기다리는 시간이 늘어나므로 넓게 넣지 않는다(docs/operations/cicd.md 「백엔드 테스트」).
+		def kept = [
+			// 실제 PostgreSQL에서 앱 기동(엔티티 검증), 빈 스키마 전체 마이그레이션·재실행 0건, V1 업그레이드.
+			'com.planetory.backend.domain.gold.GoldCatalogSchemaTest',
+		]
+		def root = file('src/test/java').toPath()
+		def excluded = 0
+		def found = []
+		fileTree('src/test/java').matching { include '**/*.java' }.each { source ->
+			def name = root.relativize(source.toPath()).toString().replace(File.separator, '.') - ~/\.java$/
+			if (name in kept) {
+				if (source.text =~ docker) {
+					throw new GradleException("MR 관문 테스트 ${name}가 컨테이너를 쓴다. dind 없이 도는 테스트로 바꾼다.")
+				}
+				found << name
+			} else if (source.text =~ heavy) {
+				filter.excludeTestsMatching(name)
+				filter.excludeTestsMatching(name + '$*')
+				excluded++
+			}
+		}
+		// 이름이 틀리거나 테스트가 옮겨지면 관문이 조용히 비지 않게 멈춘다.
+		def missing = kept - found
+		if (missing) {
+			throw new GradleException("MR 관문 목록(kept)에 있는데 테스트 소스가 없다: ${missing.join(', ')}")
+		}
+		logger.lifecycle("MR 관문: 스프링 앱·컨테이너를 띄우는 테스트 소스 ${excluded}개를 빼고 ${kept.size()}개를 남긴다. 전체는 backend:test가 돈다.")
+	}
 }
 
 // 대규모 시드 성능 측정 [S15P21C206-137]. ./gradlew perfTest

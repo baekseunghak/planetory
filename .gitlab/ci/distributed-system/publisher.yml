@@ -1,3 +1,4 @@
+# 이미지가 astro-kernel(checksum)과 Backend 마이그레이션 목록(preflight 기준)을 담는다. 둘이 바뀌어도 다시 빌드한다.
 build:publisher:
   extends: .docker-build
   variables:
@@ -8,7 +9,7 @@ build:publisher:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [distributed-system/publisher/requirements.txt]
-      changes: [distributed-system/publisher/**/*]
+      changes: [distributed-system/publisher/**/*, libs/astro-kernel/**/*, apps/backend/src/main/resources/db/migration/**/*]
 
 deploy:publisher:gcp-node-1:
   extends: .deploy-gcp-node-1
@@ -21,5 +22,5 @@ deploy:publisher:gcp-node-1:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [distributed-system/publisher/requirements.txt]
-      changes: [distributed-system/publisher/**/*]
+      changes: [distributed-system/publisher/**/*, libs/astro-kernel/**/*, apps/backend/src/main/resources/db/migration/**/*]
       when: manual
