@@ -26,7 +26,7 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 | 시점 | 실행 |
 | --- | --- |
-| Merge Request | Compose와 Docker 구성 검사. Backend가 바뀌면 `backend:test`가 일회용 PostgreSQL·dind로 Backend 테스트 전체를 돌린다 |
+| Merge Request | Compose와 Docker 구성 검사 |
 | 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend·`derived-compute`는 변경과 관계없이 매번 빌드 |
 | 배포 승인 | 선택한 서버에서 해당 이미지만 pull·재시작 |
 
