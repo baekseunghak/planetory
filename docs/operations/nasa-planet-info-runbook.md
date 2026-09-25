@@ -1,6 +1,6 @@
 # 확정 행성 NASA 자료·한국어 설명 운영 가이드 (S15P21C206-266·267)
 
-- 상태: 266의 구현·일회용 PostgreSQL/HTTP fixture 검증과 267의 별 단위 백엔드 API 구현·격리 HTTP 검증 완료. 현재 `nasa-ko-v4` 문장은 후보별 설명·별 단위 HTTP 표적 회귀에서 통과했다. 가상 회원·후보·Gold 참조의 실제 NASA PS·GMS 경로는 과거 v2와 v3에서 각각 4/4 설명 준비를 확인했으며 **v4 실제 호출은 미실행**이다. 실제 회원·Gold 연결, 공유·운영 DB 마이그레이션·서버 배포·268 화면 연결과 운영 비용·지연·품질 평가는 **미실행**이다. 267의 검증 경계는 8절에서 구분한다.
+- 상태: 266의 구현·일회용 PostgreSQL/HTTP fixture 검증과 267의 별 단위 백엔드 API 구현·격리 HTTP 검증 완료. 현재 `nasa-ko-v4`는 TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성·문장 검증과, 가상 회원·후보·Gold 참조를 이용한 인증 별 단위 GET의 실제 NASA TAP·GMS 생성·V25·V26 저장을 통과했다. v4 격리 GET 1회 표본은 첫 조회 14,554ms, 즉시 재조회 82ms였다. 실제 회원·Gold 연결, 공유·운영 DB 마이그레이션·서버 배포·268 화면 연결과 운영 비용·지연 분포·품질 평가는 **미실행**이다. 267의 검증 경계는 8절에서 구분한다.
 - 대상: 서비스 백엔드 배포·DB 담당자. NASA 자료의 의미는 [266 개발 계약](../development/nasa-planet-info-266.md), 한국어 설명의 구조·검증·저장 계약은 [267 개발 계약](../development/nasa-planet-explanation-267.md)을 따른다. 이 문서는 실행 환경·확인·복구의 정본이다.
 - 변경 대상: 기존 Spring 백엔드 프로세스와 PostgreSQL에 V25 NASA 자료 및 V26 설명 저장 구조를 순서대로 추가한다. 별도 컨테이너, Python Worker, Redis 인스턴스, 벡터 DB는 필요하지 않다.
 
@@ -179,7 +179,7 @@ RETURNING n.candidate_id, n.tic_id, n.archive_planet_name,
 | GMS 네트워크 | 백엔드 실행 서버에서 `gms.ssafy.io` DNS, 아웃바운드 TCP 443, 정상 TLS 검증 | 모델 호출 실패를 설명 데이터의 결측과 구분하기 위해서다 |
 | GMS 이용 권한 | 보호된 배포 환경에 `GMS_KEY`를 주입할 수 있는 경로, 호출 예산·요금·쿼터 확인 | 운영 환경의 유료 실호출은 별도 승인 뒤 소량 평가로 시작한다 |
 
-모델 연동 기본 주소는 `https://gms.ssafy.io/gmsapi/api.openai.com/v1`, 선택 모델은 `gpt-5.4-mini`다. 2026-09-25 별도 1회 형식 확인에 이어 일회성 격리 백엔드 시험에서 실제 NASA PS·GMS를 통한 별 단위 설명을 v2·v3 각각 4건 확인했다. 이 시험은 실제 회원·Gold 연결, 운영 쿼터나 실제 청구액의 검증은 아니다. 운영 활성화 전에는 보호된 배포 환경의 모델 권한과 결제·쿼터 정책을 확인한다. 자격 증명의 실제 값은 파일·명령줄·로그·문서에 적지 않는다. NASA `pl_refname`·`disc_refname`에는 HTML 조각이 있을 수 있으므로 운영 점검에도 그 원문을 출력하지 않는다.
+모델 연동 기본 주소는 `https://gms.ssafy.io/gmsapi/api.openai.com/v1`, 선택 모델은 `gpt-5.4-mini`다. 2026-09-25 별도 1회 형식 확인에 이어 일회성 격리 백엔드 시험에서 실제 NASA PS·GMS를 통한 별 단위 설명을 v2·v3 각각 4건 확인했다. v4도 TOI-700 b 한 후보의 직접 생성·검증과 가상 회원·Gold 참조의 인증 별 단위 GET 4건 및 V25·V26 저장을 확인했다. 이 시험은 실제 회원·Gold 연결, 운영 쿼터나 실제 청구액의 검증이 아니다. 운영 활성화 전에는 보호된 배포 환경의 모델 권한과 결제·쿼터 정책을 확인한다. 자격 증명의 실제 값은 파일·명령줄·로그·문서에 적지 않는다. NASA `pl_refname`·`disc_refname`에는 HTML 조각이 있을 수 있으므로 운영 점검에도 그 원문을 출력하지 않는다.
 
 ### 8.2 설명 생성 설정과 주입 위치
 
@@ -269,4 +269,6 @@ GMS 장애·비용 초과 우려에는 설명 생성 스위치를 비활성으�
 
 `nasa-ko-v3`도 같은 격리 구성과 TIC `150428135`의 가상 참조 네 개로 일회성 재검증했다. 실제 NASA PS·GMS `gpt-5.4-mini`를 이용한 인증 GET에서 4/4 항목이 `kind=confirmed`, `status=ready`, `sourceStatus=ready`와 다섯 설명 필드를 갖췄다. 시민용 주기·반지름 등의 문장에는 측정 오차나 `+/-` 수치가 없었고 V26 `prompt_version` 네 행은 모두 `nasa-ko-v3`였다(JUnit 1/1, 실패·오류·건너뜀 0건, `BUILD SUCCESSFUL`). 임시 테스트 소스는 삭제했고 v3 응답은 별도 Git 제외 파일 `apps/backend/build/reports/planet-explanations-live-v3.json`에 남겼다. **실제 회원·Gold 연결, 모델별 운영 비용/품질·지연 평가, 공유/운영 DB 적용, 서버 배포와 268 회원 화면 인수는 수행하지 않았다.** 268은 사용자에게 원천 시각과 설명 상태를 구분해 표시한다.
 
-현재 `nasa-ko-v4`는 후보별 설명 11건·별 단위 HTTP 2건의 모델 stub 표적 회귀를 통과했다(`BUILD SUCCESSFUL`, 재실행 약 17초). **v4의 실제 NASA PS·GMS 호출은 수행하지 않았다.** 앞의 v2·v3 응답 파일은 이전 문장 계약의 검증 기록이다.
+`nasa-ko-v4`는 후보별 설명 11건·별 단위 HTTP 2건의 초기 모델 stub 표적 회귀를 통과했고, 문장 누락 검사를 추가한 뒤 후보별 설명 12건도 통과했다(`BUILD SUCCESSFUL`). 별도 일회성 `NasaV4LiveProbeTest`는 TOI-700 b 한 후보를 실제 NASA TAP에서 조회하고 Spring AI GMS `gpt-5.4-mini` 생성기·서버 문장 검증을 통과해 현행 `nasa-ko-v4`의 다섯 시민용 문장을 확인했다(JUnit 1/1, 실패 0건). Git 제외 응답은 `apps/backend/build/reports/planet-explanations-live-v4.json`에 보관한다. 이 직접 시험은 인증된 별 단위 GET, 회원·Gold 연결, V26 저장을 거치지 않았다. 앞의 v2·v3 응답 파일은 이전 문장 계약의 검증 기록이다.
+
+같은 날 별도의 일회성 `NasaV4FullTimingProbeTest`는 Testcontainers PostgreSQL·Redis, TIC `150428135`의 가상 회원·후보 4개, `TOI-700 b/c/d/e` Gold `archive` 참조로 인증된 MockMvc 별 단위 GET을 실행했다. 실제 NASA TAP·GMS `gpt-5.4-mini`를 사용한 **첫 GET 14,554ms**, 곧바로 반복한 **캐시 GET 82ms**를 측정했다. 두 응답 모두 4/4 `kind=confirmed`, `status=ready`, `sourceStatus=ready`였고 V25·V26 캐시가 각각 4행이었다(JUnit 1/1, `BUILD SUCCESSFUL`). 임시 테스트 소스는 삭제했고 Git 제외 결과는 `apps/backend/build/reports/planet-explanations-v4-timing.json`에 남겼다. 격리 환경의 1회 표본이며 운영 또는 브라우저 응답 지연을 뜻하지 않는다. Gradle 전체 약 57초와 JUnit suite 40.954초는 GET 지연에 포함하지 않는다. 실제 회원·Gold 연결, 공유·운영 DB 적용과 서버 배포, 268 화면 인수, 운영 지연 분포·품질·청구액은 확인하지 않았다.

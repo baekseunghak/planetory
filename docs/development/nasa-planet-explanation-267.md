@@ -1,6 +1,6 @@
 # NASA 행성 정보 한국어 설명·별 단위 전달 계약 (S15P21C206-267)
 
-- 상태: 267 후보별 내부 설명과 별 단위 공개 백엔드 응답 구현·격리 검증 완료. `nasa-ko-v4` 문장 계약은 후보별 설명·별 단위 HTTP 표적 회귀에서 `BUILD SUCCESSFUL`로 통과했다. 가상 후보 4개를 시드한 인증 HTTP의 실제 NASA PS·GMS 호출은 과거 v2와 v3에서 각각 4/4 설명 준비를 확인했으며 **v4 실제 호출은 미실행**이다. 기존 MockMvc·별 상세·실제 세션·모델 stub 검증과 266 회귀·Spring 기동도 통과했다. 실제 회원·Gold 매칭, 공유/운영 DB 적용·서버 배포·268 화면 검증은 미실행.
+- 상태: 267 후보별 내부 설명과 별 단위 공개 백엔드 응답 구현·격리 검증 완료. `nasa-ko-v4`는 표적 회귀, TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성·문장 검증, 가상 후보 4개를 시드한 인증 별 단위 GET의 실제 NASA TAP·GMS 생성과 V25·V26 저장을 통과했다. v4 별 단위 GET 1회 표본은 첫 조회 14,554ms, 즉시 재조회 82ms였다. 기존 MockMvc·별 상세·실제 세션·모델 stub 검증과 266 회귀·Spring 기동도 통과했다. 실제 회원·Gold 연결, 공유/운영 DB 적용·서버 배포·268 화면 검증은 미실행.
 - 목적: [266 NASA 자료 저장 계약](nasa-planet-info-266.md)의 검증된 기본 해를 회원이 이해하기 쉬운 한국어로 설명한다. 배포 변수·적용·복구 절차는 [NASA 운영 가이드](../operations/nasa-planet-info-runbook.md)가 담당한다.
 - 범위: Spring Boot 내부 Spring AI 호출, 응답 검증, 후보 단위 설명 저장·재사용, 인증 회원의 별 단위 공개 응답이다. 268은 기존 프론트엔드의 표시·버튼·로딩·재시도 UX를 담당한다.
 
@@ -22,7 +22,7 @@ NASA의 `Published Confirmed`는 설명할 원천의 내부 확인 조건으로�
 
 구조화 모델 초안은 입력과 같아야 하는 `sourceHash`, **고정 문자 그대로** `planetName="{{name}}"`, 아래 **다섯 설명 항목**의 한국어 문장 틀 `name`, `orbitalPeriod`, `radius`, `mass`, `discovery`를 갖는다. `planetName`에 실제 이름이 들어오면 거절한다. 저장하는 설명 내용은 검증 뒤 채운 다섯 필드다. 필드의 값이 없는 경우에도 근거 없는 문장으로 채우지 않고 결측을 명시한다. 모델 응답에 외부 링크, HTML, Markdown 링크나 추가 사실을 허용하지 않는다.
 
-v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국어 문장이다. `name → orbitalPeriod → radius → mass → discovery` 순서로 이어 읽으면 하나의 설명처럼 흐른다. 현재 다섯 필드와 후보별 응답 구조를 유지하므로 268이 새 필드나 행성 추정 규칙 없이 같은 후보의 문장을 순서대로 보여줄 수 있다. 문장은 친근한 존댓말로 쓰되 NASA 자료에 없는 연결 사실이나 행성 여부 판단을 덧붙이지 않는다. TOI-700 b의 앞서 확인한 수치가 보고값(`limit=0`)인 경우를 예로 들면 `name`은 “이번에는 TOI-700 b에 대해 살펴볼까요?”, `orbitalPeriod`는 “이 행성은 별 주위를 한 바퀴 도는 데 9.977219일이 걸려요.”, `radius`는 “반지름을 살펴보면, 지구 반지름의 0.914배예요.”, `mass`는 “질량은 이번 NASA 자료에서 확인할 수 없어요.”, `discovery`는 “이 행성은 2020년, 별 앞을 지나며 별빛이 잠깐 어두워지는 모습을 관측해 발견됐어요.”가 된다. 예시의 수치는 앞서 확인한 v3 실호출 원천에 한하며, **v4의 실제 NASA·GMS 응답 표본은 아니다.**
+v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국어 문장이다. `name → orbitalPeriod → radius → mass → discovery` 순서로 이어 읽으면 하나의 설명처럼 흐른다. 현재 다섯 필드와 후보별 응답 구조를 유지하므로 268이 새 필드나 행성 추정 규칙 없이 같은 후보의 문장을 순서대로 보여줄 수 있다. 문장은 친근한 존댓말로 쓰되 NASA 자료에 없는 연결 사실이나 행성 여부 판단을 덧붙이지 않는다. 2026-09-25 TOI-700 b 한 후보의 실제 NASA TAP·GMS 호출 뒤 서버가 검증한 v4 출력은 `name` “TOI-700 b에 대해 함께 알아볼까요?”, `orbitalPeriod` “이 행성이 별을 한 바퀴 도는 데 9.977219일이 걸려요.”, `radius` “크기를 살펴보면, 반지름은 지구 반지름의 0.914배예요.”, `mass` “질량은 이번 NASA 자료에서 확인할 수 없어요.”, `discovery` “발견 기록을 보면, 이 행성은 2020년, 별 앞을 지나며 별빛이 잠깐 어두워지는 모습을 관측해 발견됐어요.”다. 이는 한 후보의 생성·검증 표본이며 별 단위 공개 응답 표본은 아니다.
 
 | 필드 | 사용 가능한 근거 | 금지할 해석 |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 
 정상 다섯 사실, 저장 결과 재사용과 모델·프롬프트 변경 뒤 재생성, 행성 식별·해시·숫자·단위·형식 불일치, null·상한·하한·부호 있는 오차, 지시문처럼 보이는 외부 문자열과 HTML 참조 제외, timeout과 최대 3회 재시도, 동시 생성·원천 변경 뒤 늦은 완료, 원천 미준비·기본 비활성, Spring AI 모델 stub의 JSON 파싱을 확인한다. 2026-09-25에 Java 컴파일과 이 클래스의 **11개 사례가 모두 통과**했다. 별도 회귀 실행에서 266의 `NasaPlanetInfoTest`와 키 없는 기본 비활성 설정의 `PlanetoryApplicationTests`를 함께 통과시켰다. 별도 실행에서는 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 테스트용 키 placeholder를 넣어 활성 Spring AI Bean의 기동도 확인했다. 이때 모델 요청은 만들지 않았다. 재실행의 기대 결과는 `BUILD SUCCESSFUL`이며, 실패 시 `build/test-results/test/TEST-com.planetory.backend.domain.exploration.service.NasaPlanetExplanationTest.xml`의 첫 원인을 확인한다. 이 명령은 기존 개발·공유·운영 DB를 초기화하지 않는다. 이 격리 테스트는 실제 GMS 연결, 모델의 한국어 품질·오류율·호출 비용·지연을 확인하지 않는다.
 
-같은 날 리뷰 보완으로 모델의 문장 필드 누락 사례를 추가했다. `NasaPlanetExplanationTest` **12건 모두 통과**했고 누락 응답은 `invalid_output`, `content=null`로 기록됨을 확인했다. 실제 v4 GMS 호출은 수행하지 않았다.
+같은 날 리뷰 보완으로 모델의 문장 필드 누락 사례를 추가했다. `NasaPlanetExplanationTest` **12건 모두 통과**했고 누락 응답은 `invalid_output`, `content=null`로 기록됨을 확인했다. 이 회귀 실행 자체는 실제 v4 GMS를 호출하지 않았다.
 
 2026-09-25 별도 연결 확인에서는 GMS `gpt-5.4-mini`에 v2 문장 선택지만 1회 보내 허용된 JSON 초안을 받았다(총 389토큰). 이 확인은 과거 v2 모델의 형식 응답만 검증한 별도 단계다.
 
@@ -120,6 +120,10 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 
 이어 같은 Testcontainers PostgreSQL·Redis, TIC `150428135`의 시험 회원·가상 후보·Gold `archive` 참조 `TOI-700 b/c/d/e`로 `nasa-ko-v3`를 일회성 재검증했다. 인증된 별 단위 GET이 실제 NASA PS와 GMS `gpt-5.4-mini`를 호출했고, 4/4 항목이 `kind=confirmed`, `status=ready`, `sourceStatus=ready`이며 각각 다섯 `content` 필드가 채워졌다. 주기·반지름 등 시민용 문장에는 측정 오차 또는 `+/-` 수치가 없었고, DB의 `prompt_version`은 네 행 모두 `nasa-ko-v3`였다. JUnit 1/1, 실패·오류·건너뜀 0건, `BUILD SUCCESSFUL`(전체 테스트 실행 약 50초)을 확인했다. 임시 테스트 소스는 실행 후 삭제했고, **v3 응답은 별도** Git 제외 파일 `apps/backend/build/reports/planet-explanations-live-v3.json`에 남겼다. 앞의 v2 JSON은 보존한다.
 
-`nasa-ko-v4` 문장 틀 적용 뒤 `NasaPlanetExplanationTest` 11건과 `StarPlanetExplanationHttpTest` 2건의 표적 회귀를 `-PskipLocalDb --console=plain`로 실행해 `BUILD SUCCESSFUL`(재실행 약 17초)을 확인했다. 이는 모델 stub·격리 HTTP 검증이며 **v4의 실제 NASA PS·GMS 호출이나 생성 문장 품질 확인은 수행하지 않았다.** 앞의 v2·v3 실호출 JSON을 v4 응답으로 해석하지 않는다.
+`nasa-ko-v4` 문장 틀 적용 뒤 `NasaPlanetExplanationTest` 11건과 `StarPlanetExplanationHttpTest` 2건의 표적 회귀를 `-PskipLocalDb --console=plain`로 실행해 `BUILD SUCCESSFUL`(재실행 약 17초)을 확인했다. 이 실행은 모델 stub·격리 HTTP 검증이며 실제 NASA PS·GMS 호출은 포함하지 않았다. 앞의 v2·v3 실호출 JSON을 v4 응답으로 해석하지 않는다.
 
-두 실측은 **가상 회원·후보·Gold 참조를 이용한 격리 백엔드 전체 경로**에 한정된다. 실제 회원과 실제 Gold 연결, 공유/운영 DB의 V26 적용, 서버 배포, 268 프론트 표시와 운영 비용·지연·품질 평가는 확인하지 않았다. 약 50초는 테스트 전체 실행 시간이며 API 응답 지연 측정값이 아니다. 운영 활성화 전에는 호출 예산·제한과 실제 응답 품질·지연을 대상 환경에서 확인한다.
+같은 날 일회성 `NasaV4LiveProbeTest`에서 TOI-700 b 한 후보를 실제 NASA TAP으로 조회하고 Spring AI의 GMS `gpt-5.4-mini` 생성기와 `NasaPlanetExplanationText.render`를 통과시켰다. 결과는 현행 `nasa-ko-v4` 문장 틀로 생성·검증된 위 다섯 문장으로 확인했다(JUnit 1/1, 실패 0건). 응답은 Git 제외 파일 `apps/backend/build/reports/planet-explanations-live-v4.json`에 보관한다. 이 시험은 인증된 별 단위 GET, 회원·Gold 연결, V26 저장 경로를 거치지 않았다.
+
+이어서 일회성 `NasaV4FullTimingProbeTest`는 Testcontainers PostgreSQL·Redis에 TIC `150428135`의 가상 회원·후보 4개와 `TOI-700 b/c/d/e` Gold `archive` 참조를 시드했다. 인증된 MockMvc `GET /api/v1/me/stars/{ticId}/planet-explanations`가 실제 NASA TAP과 GMS `gpt-5.4-mini`를 거친 첫 조회는 **14,554ms**, 즉시 같은 요청을 반복한 캐시 조회는 **82ms**였다. 두 응답 모두 4/4 항목이 `kind=confirmed`, `status=ready`, `sourceStatus=ready`였고, 격리 DB에서 V25 NASA 원천·V26 설명 캐시가 각각 4행임을 확인했다. JUnit 1/1, 실패·오류·건너뜀 0건, `BUILD SUCCESSFUL`이다. 임시 테스트 소스는 삭제했고 Git 제외 결과는 `apps/backend/build/reports/planet-explanations-v4-timing.json`에 남겼다. 이 수치는 해당 환경의 1회 표본이며 운영 서버·브라우저 지연을 대표하지 않는다. Gradle 전체 약 57초와 JUnit suite 40.954초는 API 응답 시간이 아니다.
+
+v2·v3 및 이번 v4 별 단위 실험은 모두 **가상 회원·후보·Gold 참조를 이용한 격리 백엔드 경로**에 한정된다. 앞의 v4 한 후보 직접 검증과 이번 인증 GET·저장 검증도 서로 구분한다. 실제 회원과 실제 Gold 연결, 공유/운영 DB의 V26 적용, 서버 배포, 268 프론트 표시와 운영 비용·지연 분포·품질 평가는 확인하지 않았다. 앞선 약 50초는 v3 테스트 전체 실행 시간이며 API 응답 지연 측정값이 아니다. 운영 활성화 전에는 호출 예산·제한과 실제 응답 품질·지연을 대상 환경에서 확인한다.
