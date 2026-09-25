@@ -213,6 +213,7 @@ $AuditSinceUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 - [run-tess-hdfs-load.ps1](scripts/run-tess-hdfs-load.ps1), [test-tess-hdfs-load.ps1](scripts/test-tess-hdfs-load.ps1): 75의 최종 coverage를 입력으로 Sector 1~13을 Worker 5개 SequenceFile writer로 병렬 적재하고 RF2·manifest·첫/중간/마지막 offset 복원 감사 뒤 덮어쓰기 없는 원자 rename으로 확정한다. 상세 실행·복구 계약은 [TESS HDFS Raw 적재](../../distributed-system/ingestion/hdfs/README.md)를 따른다.
 - [run-tess-silver.ps1](scripts/run-tess-silver.ps1), [test-tess-silver.ps1](scripts/test-tess-silver.ps1): 확정 Bronze coverage를 TIC별로 그룹화해 전처리·최초 BLS를 YARN cluster mode로 실행한다. TIC별 manifest로 성공을 보존하고 실패 TIC만 새 attempt에서 재처리하며 RF2·part checksum·FSCK 뒤 attempt 전체를 원자 확정한다. Canary는 상세 데이터를 삭제하기 전에 bounded science audit을 상태 파일에 남기고 성공 attempt의 빈 staging 경로를 정리한다. 상세 계약과 미완 선행 작업 경계는 [Spark README](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78)를 따른다.
 - [install-spark-history-node1.sh](scripts/install-spark-history-node1.sh): Node 1 root로 Spark History Server를 설치한다. HDFS `/spark-history`(소유자 `planetory-admin`, `0750`)가 없을 때만 만들고, 고정 Spark image digest로 `planetory-spark-history.service`를 등록한다. `127.0.0.1:18080` 단독 listen을 확인한 뒤에만 `tailscale serve --http=18080`으로 테일넷에 연다. 기존 unit 내용이 다르면 덮어쓰지 않고 실패한다.
+- [configure-needrestart-node.sh](scripts/configure-needrestart-node.sh): 노드별 root로 needrestart가 `hadoop-*`·`planetory-*` unit을 자동 재시작하지 않게 하는 설정 파일을 설치한다. 보안 업데이트 설치와 서비스 상태는 바꾸지 않는다.
 - [test-yarn.ps1](scripts/test-yarn.ps1): 원격 변경 없이 canary·`WhatIf`·단계 계약을 회귀 검사한다.
 
 ```powershell
@@ -288,6 +289,23 @@ sudo bash install-docker-host.sh --node 6 --deploy-user planetory-admin
 2026-09-21에 node-1~6 전부에서 Docker 29.1.3과 compose 2.40.3을 확인했고, 각 배포 계정이 레지스트리에서 이미지를 pull 하는 것과 Hadoop 데몬이 계속 `active`인 것을 실측했다. 같은 노드에 두 번 실행해 멱등성도 확인했다.
 
 초기 판은 Hadoop unit 이름을 `hdfs-*`로 추측해 검사가 아무것도 확인하지 않고 통과했다. 실제 이름은 `hadoop-hdfs-*`다. unit 이름이 하나도 맞지 않으면 경고를 남기도록 고쳤다.
+
+## needrestart 자동 재시작 예외 (`S15P21C206-78`)
+
+Ubuntu의 unattended-upgrades는 매일 보안 업데이트를 설치하고, 이어서 needrestart가 바뀐 라이브러리를 쓰는 서비스를 **자동 재시작**한다. 2026-09-25 06:12·06:15 UTC에 worker-5·worker-3에서 `curl`/`libcurl` 업데이트 뒤 `hadoop-yarn-nodemanager`가 재시작되어, 실행 중이던 Silver executor 6개와 그 로컬 디스크의 TIC 결과·셔플 데이터를 잃었다. 노드마다 업데이트 시각이 달라 같은 날 여러 노드가 차례로 영향을 받으며, master-1의 ResourceManager·Active NameNode가 재시작되면 실행 중인 run 전체를 잃을 수 있다.
+
+[configure-needrestart-node.sh](scripts/configure-needrestart-node.sh)는 보안 업데이트 설치는 그대로 두고 `hadoop-*`·`planetory-*` unit의 **자동 재시작만** 막는 `/etc/needrestart/conf.d/50-planetory.conf`를 설치한다. needrestart 기본값은 이미 `docker`를 제외하므로 Airflow·Spark 제출 컨테이너는 대상이 아니다. 스크립트는 노드 번호와 호스트명을 확인하고, 파일이 다르면 덮어쓰지 않고 실패하며, needrestart와 같은 perl 평가로 실제 unit 이름이 제외되고 `ssh`·`cron`은 제외되지 않는지 확인한다. 서비스 재시작·패키지·타이머는 바꾸지 않는다.
+
+```bash
+# 6대 각각, 변경 없이 상태와 미뤄진 재시작을 본다. 예: Node 2 (Node 1에는 --node 1).
+sudo bash configure-needrestart-node.sh --node 2 --check-only
+# 운영 승인 뒤 설치한다. 설정 파일만 추가한다.
+sudo bash configure-needrestart-node.sh --node 2
+```
+
+예외를 두면 업데이트된 라이브러리가 Hadoop·파이프라인 프로세스에는 **다음 점검 재시작 전까지 반영되지 않는다.** 미뤄진 재시작은 [노드 운영 runbook](../../docs/operations/gcp-node-runbook.md#9-보안-업데이트와-미뤄진-서비스-재시작)의 점검 절차로 처리한다. 되돌리려면 각 노드에서 `sudo rm /etc/needrestart/conf.d/50-planetory.conf`를 실행한다.
+
+2026-09-25 장애 대응으로 6대 모두 `apt-daily-upgrade.timer`·`apt-daily.timer`를 수동으로 멈췄다(재부팅하면 다시 켜진다). 예외 설치 뒤 `sudo systemctl start apt-daily-upgrade.timer apt-daily.timer`로 되돌린다.
 
 ## 전체 노드 부팅 복구
 

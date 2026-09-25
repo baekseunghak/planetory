@@ -185,6 +185,10 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 
 코드 최적화(A·B)도 적용했다. Spark는 Bronze 28개 열 중 `process_tic`이 읽는 10개만 Python으로 넘기고, 전처리 biweight는 같은 길이의 창을 행으로 쌓아 한 번에 계산한다. 기존 구현과 비트 단위로 같은 결과를 검증했으므로 전처리 버전 `silver-biweight-1.0.0`은 그대로다. 추세 계산은 약 2.9배, TIC 처리 전체는 약 13% 빨라졌다(로컬 측정). TIC 시간의 약 87%는 전체 격자 BLS이며, BLS 입력 bin·주기 격자 변경(C·D)은 과학 결과가 바뀌어 120/122 승인 범위다. 새 release Canary에서 TIC `259377017`과 이전 Canary 5개 TIC의 과학 값이 그대로인지 실데이터로 확인한다.
 
+### 운영 상태 주의: 자동 업데이트 타이머 정지 (2026-09-25)
+
+06:12·06:15 UTC 자동 보안 업데이트 뒤 needrestart가 worker-5·worker-3 NodeManager를 재시작해 전체 run `20260924T133559Z`의 executor 6개와 로컬 결과를 잃었다. Spark가 셔플 입력을 다시 계산했고, 잃은 TIC 결과는 쓰기 단계에서 다시 계산되어 완료가 약 6시간 늦어질 것으로 본다(추정). 확산을 막으려고 **노드 6대의 `apt-daily-upgrade.timer`·`apt-daily.timer`를 수동으로 멈춘 상태**다. run이 끝난 뒤 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)를 승인받아 설치하고 타이머를 다시 켜야 한다. 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다는 점도 확인했다(`DISK_ONLY_2`는 별도 검토).
+
 ### Spark History Server (2026-09-25, Node 1 설치 완료)
 
 Bronze·Silver 제출에 조건부 이벤트 로그를 넣고 [Node 1 설치 스크립트](../../infra/distributed-system/scripts/install-spark-history-node1.sh)를 추가했다. 남은 순서는 3번이다.

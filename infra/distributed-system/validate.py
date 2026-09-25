@@ -168,7 +168,14 @@ def main():
     assert history.index("SPARK_HISTORY_BIND_NOT_LOOPBACK") < history.index("tailscale serve --bg")
     assert "apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1" in history
     assert "docker pull" not in history and "tailscale funnel" not in history
-    for script in (yarn_installer, initializer, sample_runner, history):
+    needrestart = (BASE / "scripts/configure-needrestart-node.sh").read_text(encoding="utf-8")
+    # Security updates stay on; only automatic restarts of Hadoop and pipeline units are deferred.
+    for line in ("$nrconf{override_rc}{qr(^hadoop-)} = 0;", "$nrconf{override_rc}{qr(^planetory-)} = 0;"):
+        assert line in needrestart, line
+    assert "unexpectedly excluded: $unit" in needrestart and "differs from the managed content" in needrestart
+    for forbidden in ("systemctl restart", "systemctl stop", "systemctl disable", "apt-get", "apt ", "-r a"):
+        assert forbidden not in needrestart, forbidden
+    for script in (yarn_installer, initializer, sample_runner, history, needrestart):
         for forbidden in forbidden_commands:
             assert forbidden not in script, forbidden
     ast.parse((BASE / "scripts/yarn-hdfs-sample.py").read_text(encoding="utf-8"))
