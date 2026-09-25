@@ -216,4 +216,15 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 - 현재 deploy 규칙은 애플리케이션 소스 변경을 기준으로 한다.
 - Hadoop XML 배포는 운영 절차로 수행한다.
 
+### 설정·계약 검사 (S15P21C206-91)
+
+| job | 언제 | 무엇 |
+| --- | --- | --- |
+| `validate:compose` | Compose·Dockerfile·CI 파일 변경 | 루트·control-plane·worker Compose `config -q` |
+| `validate:hadoop-config` | Hadoop·YARN XML, `workers`, `scripts/*yarn*`, `validate.py` 변경 | `infra/distributed-system/validate.py` |
+| `validate:contracts` | `contracts/` 변경 | Gold 게시 계약·배열/레코드 checksum 벡터·온라인 파생 계산 계약의 검사기(Node 표준 모듈만 사용) |
+
+- 세 job 모두 `validate` 단계에 `needs` 없이 있다. 기준 브랜치의 이미지 빌드 `build:*`는 `build` 단계에 `needs` 없이 있어, 같은 파이프라인의 검사가 하나라도 실패하면 시작하지 않는다. MR·브랜치 파이프라인에는 `build` 단계 job이 없고, `*:image`는 push하지 않는 확인용 빌드라 `needs: []`로 검사와 나란히 돈다. 거기서는 검사 실패가 파이프라인 실패로 드러난다.
+- 계약 검사는 fixture와 검사기가 서로 맞는지만 본다. Publisher·Backend·Worker 코드가 계약을 따르는지는 각 컴포넌트의 테스트가 맡는다.
+
 현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.
