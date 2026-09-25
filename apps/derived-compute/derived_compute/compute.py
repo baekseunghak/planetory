@@ -125,7 +125,9 @@ def _payload_keys(request, required, forbidden):
 
 
 def _check_ids(ids, field):
-    """제거 조합은 c- 뒤 정수의 오름차순·중복 없음이다. 빈 목록은 허용한다(계약 3.2절)."""
+    """제거 조합은 c- 뒤 정수의 오름차순·중복 없음이다. 빈 목록은 거절한다(계약 3.2절, !211 합의)."""
+    if not ids:
+        raise RequestError("invalid_operation_payload", "removal combination must not be empty", field)
     numbers = []
     for index, value in enumerate(ids):
         match = isinstance(value, str) and _CANDIDATE_ID.fullmatch(value)

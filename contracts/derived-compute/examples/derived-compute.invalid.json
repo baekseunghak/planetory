@@ -29,6 +29,17 @@
       "expected_error": "invalid_operation_payload"
     },
     {
+      "id": "empty-removed-candidates",
+      "mutation": {"operation": "set", "path": "request.removed_candidates", "value": []},
+      "expected_error": "invalid_operation_payload"
+    },
+    {
+      "id": "empty-removed-candidate-ids",
+      "base_call": "periodogram-success",
+      "mutation": {"operation": "set", "path": "request.removed_candidate_ids", "value": []},
+      "expected_error": "invalid_operation_payload"
+    },
+    {
       "id": "unknown-periodogram-config-version",
       "mutation": {"operation": "set", "path": "request.periodogram_config_version", "value": "pg-unknown-v9"},
       "expected_error": "unsupported_periodogram_config_version"

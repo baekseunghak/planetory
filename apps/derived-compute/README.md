@@ -40,8 +40,34 @@ Backend가 PostgreSQL에서 읽은 곡선 배열·고정 transit model·계산 �
 | `DERIVED_COMPUTE_INSTANCE_CONCURRENCY` | `1` | 동시 계산 수(계약 `instance_concurrency`). 넘치면 503 |
 | `DERIVED_COMPUTE_MEMORY_LIMIT_MIB` | 없음 | 프로세스 메모리 상한(Linux `RLIMIT_AS`). 넘으면 `memory_exhausted` |
 | `WORKER_IMAGE` | `local` | 응답 `runtime.worker_image`에 싣는 이미지 참조 |
+| `DERIVED_COMPUTE_CAPTURE_DIR` | 없음 | 있으면 envelope 응답마다 `{request, response}`를 이 디렉터리에 파일로 남긴다. 131 인계용이며 평시에는 비운다 |
 
 서비스 배포 값은 [infra/service](../../infra/service/README.md) 「온라인 계산 Worker」에 있다.
+
+## 131 인계
+
+131(수치 검증)은 **Backend가 실제로 보낸 요청과 그 응답**을 `{request, response}` 한 쌍으로 받는다. 캡처 파일이 이 형식이며 `experiments/gold-roundtrip`의 `worker_comparison`이 그대로 읽는다.
+
+1. 배포 노드 `.env`에 `DERIVED_COMPUTE_CAPTURE_DIR=/tmp/captures`를 넣고 Worker만 다시 올린 뒤 디렉터리를 만든다. 컨테이너 사용자(uid 10001)가 쓸 수 있는 컨테이너 안 경로라 볼륨이 필요 없다.
+
+   ```bash
+   docker compose exec derived-compute mkdir -p /tmp/captures
+   ```
+
+2. 화면이나 API로 대상 별의 잔차를 요청한다. 잔차·주기도 호출마다 `<job_id>-<attempt>-<operation>-<시각>.json`이 생긴다.
+3. 파일을 꺼낸 뒤 `.env`에서 변수를 지우고 Worker를 다시 올려 캡처를 끈다. 컨테이너를 다시 만들면 파일도 사라진다.
+
+   ```bash
+   docker compose cp derived-compute:/tmp/captures ./captures
+   ```
+
+4. 실행 환경을 함께 넘긴다. `runtime`에는 태그(`…/derived-compute:<commit SHA>`)와 패키지 버전이 이미 들어 있고, digest는 노드에서 읽는다.
+
+   ```bash
+   docker image inspect --format '{{index .RepoDigests 0}}' "$DERIVED_COMPUTE_IMAGE"
+   ```
+
+캡처에는 곡선 배열이 들어 있다. 결과 디렉터리에 두고 Git에는 올리지 않는다. 자격 증명은 요청에 없다.
 
 ## 로컬 실행과 검증
 
@@ -71,7 +97,8 @@ uv export --frozen --no-dev --no-emit-package astro-kernel --no-emit-project -o 
 
 | 항목 | 결과 |
 | --- | --- |
-| `pytest` (Windows 로컬 Python 3.12, CI와 같은 `python:3.12-slim` 컨테이너) | 16 passed. 계약 잔차 fixture와 `rtol=1e-12` 일치, 계약 오류 요청 7건 코드 일치 |
+| `pytest` (Windows 로컬 Python 3.12) | 19 passed. 계약 잔차 fixture와 `rtol=1e-12` 일치, 계약 오류 요청 9건 코드 일치, 전부 `null` 세그먼트, 캡처 |
+| 캡처 → 131 `worker_comparison.compare` | 잔차·주기도 캡처 2개를 구조 오류 없이 읽음(허용 오차 미등록이라 `measurement_only`) |
 | 합성 20,000점·격자 5,000점, 컨테이너(`--cpus 1 --memory 2048m`) | 잔차 0.08초, 주기도 0.92초, 메모리 약 50MiB. 로컬 Windows 결과와 잔차·power 차이 0 |
 | 프로세스 상한 400MiB, 격자 2,000만 점 | `memory_exhausted`(stage `PERIODOGRAM`) 응답 뒤에도 `/healthz` 정상 |
 | compose(`derived-compute`) | 격리 프로젝트로 기동, 서비스 이름으로 접근, CPU 1·메모리 2GiB·호스트 포트 없음 확인 |

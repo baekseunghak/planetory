@@ -10,12 +10,17 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
+import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from derived_compute.compute import handle
 
 PATH = "/internal/v1/derived-compute"
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9-]")
 
 
 def runtime_info():
@@ -28,7 +33,23 @@ def _reject_constant(name):
     raise ValueError(f"{name} is not a finite JSON number")
 
 
-def make_server(host, port, *, concurrency=1, max_body_bytes=64 * 1024 * 1024):
+def capture(directory, request, response):
+    """요청·응답 한 쌍을 131 비교 도구 형식 {request, response}로 남긴다. 실패해도 응답은 막지 않는다.
+
+    파일 이름은 요청 값에서 오므로 안전한 문자만 남긴다. 기존 파일을 덮어쓰지 않는다.
+    """
+    name = "-".join(_SAFE_NAME.sub("_", str(request.get(key, "none")))[:40]
+                    for key in ("job_id", "attempt", "operation"))
+    path = Path(directory) / f"{name}-{time.time_ns()}.json"
+    try:
+        with open(path, "x", encoding="utf-8") as out:
+            json.dump({"request": request, "response": response}, out, allow_nan=False, ensure_ascii=False)
+    except OSError as error:
+        print(f"capture failed: {path}: {error}", file=sys.stderr)
+
+
+def make_server(host, port, *, concurrency=1, max_body_bytes=64 * 1024 * 1024, capture_dir=None):
+    """capture_dir를 주면 envelope 응답마다 요청·응답을 파일로 남긴다(131 인계용, 평시에는 끈다)."""
     slots = threading.BoundedSemaphore(concurrency)
     runtime = runtime_info()
 
@@ -62,6 +83,8 @@ def make_server(host, port, *, concurrency=1, max_body_bytes=64 * 1024 * 1024):
                 response = handle(request, runtime)
             finally:
                 slots.release()
+            if capture_dir:
+                capture(capture_dir, request, response)
             self._send(200, response)
 
         def _send(self, status, payload):
@@ -93,7 +116,8 @@ def main():
     limit_memory(os.environ.get("DERIVED_COMPUTE_MEMORY_LIMIT_MIB"))
     server = make_server(os.environ.get("DERIVED_COMPUTE_HOST", "0.0.0.0"),
                          int(os.environ.get("DERIVED_COMPUTE_PORT", "8090")),
-                         concurrency=int(os.environ.get("DERIVED_COMPUTE_INSTANCE_CONCURRENCY", "1")))
+                         concurrency=int(os.environ.get("DERIVED_COMPUTE_INSTANCE_CONCURRENCY", "1")),
+                         capture_dir=os.environ.get("DERIVED_COMPUTE_CAPTURE_DIR") or None)
     server.serve_forever()
 
 

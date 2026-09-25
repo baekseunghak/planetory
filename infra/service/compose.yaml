@@ -150,6 +150,8 @@ services:
       WORKER_IMAGE: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
       DERIVED_COMPUTE_INSTANCE_CONCURRENCY: "1"
       DERIVED_COMPUTE_MEMORY_LIMIT_MIB: ${DERIVED_COMPUTE_MEMORY_LIMIT_MIB:-1900}
+      # 131 인계용 요청·응답 캡처. 평시에는 비운다. 켜는 법은 apps/derived-compute README 「131 인계」.
+      DERIVED_COMPUTE_CAPTURE_DIR: ${DERIVED_COMPUTE_CAPTURE_DIR:-}
     cpus: ${DERIVED_COMPUTE_CPUS:-1}
     mem_limit: ${DERIVED_COMPUTE_MEMORY:-2048m}
     networks:

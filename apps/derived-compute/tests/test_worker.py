@@ -59,11 +59,17 @@ def test_contract_residual_matches_fixture():
                                rtol=1e-12, atol=0)
 
 
-def test_empty_removal_preserves_flux():
-    example = call("residual-empty-removal")
+def test_all_null_segment_is_carried_not_rejected():
+    # 계약 3.2절: 전부 null인 세그먼트는 거절하지 않고 전부 null로 돌려준다.
+    example = call("residual-success")
+    empty = dict(example["request"]["curve_segments"][0], segment_id="seg-1002", sector=15,
+                 flux=[None] * 6)
+    example["request"]["curve_segments"].append(empty)
     response = handle(example["request"], RUNTIME)
-    assert response["ok"] is True and response["removed_candidate_ids"] == []
-    assert response["result"] == example["response"]["result"]
+    assert response["ok"] is True, response.get("error")
+    assert response["result"]["residual_segments"][1]["flux"] == [None] * 6
+    assert response["result"]["n_input_points"] == 12
+    assert response["result"]["n_valid_input"] == 5
 
 
 @pytest.mark.parametrize("case", INVALID["request_cases"], ids=lambda c: c["id"])
@@ -122,19 +128,19 @@ def synthetic(period=2.1, epoch=1683.9, depth_ppm=3000.0, n=1600):
     return segment, model
 
 
-def requests_for(removed):
+def requests_for():
     segment, model = synthetic()
     residual = call("residual-success")["request"]
     residual.update(job_id="rj-5", curve_segments=[segment],
-                    removed_candidates=[{"candidate_id": "c-1", "transit_model": model}] if removed else [])
+                    removed_candidates=[{"candidate_id": "c-1", "transit_model": model}])
     periodogram = call("periodogram-success")["request"]
-    periodogram.update(job_id="rj-5", removed_candidate_ids=["c-1"] if removed else [],
+    periodogram.update(job_id="rj-5", removed_candidate_ids=["c-1"],
                        period_grid={"min_days": 0.5, "max_days": 5.0, "count": 400, "spacing": "log"})
     return residual, periodogram
 
 
-def run_both(removed):
-    residual, periodogram = requests_for(removed)
+def run_both():
+    residual, periodogram = requests_for()
     first = handle(residual, RUNTIME)
     assert first["ok"] is True, first.get("error")
     segment = dict(residual["curve_segments"][0], flux=first["result"]["residual_segments"][0]["flux"])
@@ -145,12 +151,16 @@ def run_both(removed):
 
 
 def test_same_input_gives_identical_output():
-    assert run_both(True) == run_both(True)
+    assert run_both() == run_both()
 
 
 def test_removal_flattens_the_injected_peak():
-    _, raw = run_both(False)
-    _, removed = run_both(True)
+    # 빈 조합은 계약상 거절이므로, 원본 주기도는 제거 전 flux를 주기도 단계에 그대로 넣어 얻는다.
+    residual, periodogram = requests_for()
+    periodogram["residual_segments"] = residual["curve_segments"]
+    raw = handle(periodogram, RUNTIME)
+    assert raw["ok"] is True, raw.get("error")
+    _, removed = run_both()
     periods, raw_power = np.array(raw["result"]["period_days"]), np.array(raw["result"]["power"])
     best = periods[int(np.argmax(raw_power))]
     assert abs(best - 2.1) / 2.1 < 0.02
@@ -161,8 +171,8 @@ def test_removal_flattens_the_injected_peak():
 
 @pytest.fixture
 def server():
-    def start(concurrency=1):
-        instance = make_server("127.0.0.1", 0, concurrency=concurrency)
+    def start(concurrency=1, capture_dir=None):
+        instance = make_server("127.0.0.1", 0, concurrency=concurrency, capture_dir=capture_dir)
         threading.Thread(target=instance.serve_forever, daemon=True).start()
         started.append(instance)
         return f"http://127.0.0.1:{instance.server_address[1]}"
@@ -197,3 +207,17 @@ def test_http_envelope_and_health(server):
 def test_http_busy_is_503(server):
     status, body = post(server(concurrency=0), json.dumps(call("residual-success")["request"]).encode())
     assert status == 503 and body == {"error": "busy"}
+
+
+def test_capture_writes_request_response_pairs(server, tmp_path):
+    base = server(capture_dir=tmp_path)
+    request = call("residual-success")["request"]
+    _, body = post(base, json.dumps(request).encode())
+    hostile = dict(request, job_id="../../escape")
+    post(base, json.dumps(hostile).encode())
+    files = sorted(tmp_path.iterdir())
+    assert len(files) == 2 and all(f.parent == tmp_path for f in files)
+    first = json.loads(next(f for f in files if f.name.startswith("rj-78-")).read_text(encoding="utf-8"))
+    assert first == {"request": request, "response": body}
+    assert post(server(), json.dumps(request).encode())[0] == 200  # 끈 서버는 파일을 남기지 않는다
+    assert len(list(tmp_path.iterdir())) == 2

@@ -82,8 +82,10 @@ function validateInputSegments(segments) {
 
 function removedCandidateIds(request) {
   if (request.operation === 'residual') {
-    // 빈 목록은 허용한다(README 3.2절). 잔차는 입력 flux와 같다.
-    if (!Array.isArray(request.removed_candidates)) fail('invalid_operation_payload');
+    // 빈 목록은 거절한다(README 3.2절, !211 합의). 원본은 계산 대상이 아니다.
+    if (!Array.isArray(request.removed_candidates) || request.removed_candidates.length === 0) {
+      fail('invalid_operation_payload');
+    }
     const ids = request.removed_candidates.map(candidate => candidate.candidate_id);
     if (new Set(ids).size !== ids.length) fail('duplicate_candidate_id');
     if (!isSortedUnique(ids)) fail('invalid_removed_candidate_order');
@@ -98,7 +100,7 @@ function removedCandidateIds(request) {
   }
 
   const ids = request.removed_candidate_ids;
-  if (!Array.isArray(ids)) fail('invalid_operation_payload');
+  if (!Array.isArray(ids) || ids.length === 0) fail('invalid_operation_payload');
   if (new Set(ids).size !== ids.length) fail('duplicate_candidate_id');
   if (!isSortedUnique(ids)) fail('invalid_removed_candidate_order');
   return ids;
@@ -155,10 +157,6 @@ function validateSuccess(call) {
 
   if (response.operation === 'residual') {
     validateFluxSegments(response.result?.residual_segments);
-    if (ids.length === 0) {
-      assert.deepEqual(response.result.residual_segments.map(segment => segment.flux),
-        call.request.curve_segments.map(segment => segment.flux), 'empty removal must preserve flux');
-    }
     if (response.result.residual_model_version !== call.request.residual_model_version) fail('version_mismatch');
     const nPoints = call.request.curve_segments.reduce((sum, segment) => sum + segment.n_points, 0);
     const nValid = call.request.curve_segments.reduce(
