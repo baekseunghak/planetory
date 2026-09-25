@@ -22,7 +22,6 @@ x-cluster-hosts: &cluster-hosts
 
 services:
   ingestion:
-    ci_intentional_error: true
     image: ${INGESTION_IMAGE:-local/planetory-ingestion:not-configured}
     platform: linux/amd64
     environment:

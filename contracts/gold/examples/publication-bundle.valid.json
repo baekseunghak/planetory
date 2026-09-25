@@ -30,7 +30,7 @@
       "manifest": {
         "segment_ids": [1001],
         "array_checksums": {
-          "segment:1001:flux": "sha256:0626475f7a5ccd1589bc7bdaa2ed4102d8539cca120909bd39a06edffebb7b9d",
+          "segment:1001:flux": "sha256:1626475f7a5ccd1589bc7bdaa2ed4102d8539cca120909bd39a06edffebb7b9d",
           "periodogram:101:power": "sha256:1a5a4457d8f7976315ac3c535e2d32f3768f471f731ffe94e03a861c504bf97b"
         },
         "residual_model_version": "box-divide-v0",
