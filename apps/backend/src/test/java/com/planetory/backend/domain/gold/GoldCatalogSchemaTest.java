@@ -90,7 +90,9 @@ class GoldCatalogSchemaTest {
                 .load();
         SCENARIO_SCHEMAS.add(schema);
 
-        assertEquals(1, onlyV1.migrate().migrationsExecuted, "V1만 적용된 기준 상태를 만든다");
+        // R__ 반복 마이그레이션은 target과 무관하게 함께 돈다(버전 ""). 버전 마이그레이션만 비교한다.
+        assertEquals(List.of("1"), onlyV1.migrate().migrations.stream().map(m -> m.version).filter(v -> !v.isEmpty()).toList(),
+                "V1만 적용된 기준 상태를 만든다");
 
         Flyway rest = flywayFor(schema);
         assertTrue(rest.info().pending().length >= 1, "V2 이후가 대기 중이어야 한다");

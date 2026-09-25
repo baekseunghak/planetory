@@ -33,17 +33,28 @@ backend:schema:
     - if: $CI_COMMIT_BRANCH
       changes: *schema_paths
 
-# bootJar는 test에 의존하지 않는다. 컴파일과 패키징만 한다.
-# 테스트는 넣지 않았다. build.gradle의 test가 PostgreSQL을 요구하는데 CI에서는
-# startLocalDb가 건너뛰어지므로(CI=true), 그냥 돌리면 DB 없이 41개 클래스가 돈다.
-# CI에 Postgres 서비스를 붙이는 일은 따로 정한다.
-backend:build:
-  stage: validate
+# 백엔드 Gradle job의 공통 설정. MR 관문(backend:build)과 전체 테스트(backend:test)가 함께 쓴다.
+#
+# 스키마 격리 테스트(GoldCatalogSchemaTest 등)는 DATABASE_URL의 PostgreSQL에 실행마다
+# UUID 스키마를 만든다. CI=true라 startLocalDb가 건너뛰어지므로 postgres 서비스를 붙여 그
+# 자리를 채운다. 역할·pg_trgm을 만들 수 있게 소유자(superuser)로 접속하며, 로컬 Compose
+# 개발 DB와 같은 조건이다.
+.backend-gradle:
   image: eclipse-temurin:21-jdk-alpine
   needs: []
+  services:
+    - name: postgres:18.6-alpine
+      alias: service-db
   variables:
     # Gradle이 프로젝트 캐시로도 쓰는 apps/backend/.gradle 과 겹치지 않게 분리한다.
     GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+    # job과 함께 사라지는 CI 전용 DB다. 비밀이 아니므로 파일에 적는다.
+    POSTGRES_DB: planetory_poc
+    POSTGRES_USER: planetory
+    POSTGRES_PASSWORD: ci-validation-only
+    DATABASE_URL: jdbc:postgresql://service-db:5432/planetory_poc
+    DATABASE_USER: planetory
+    DATABASE_PASSWORD: ci-validation-only
   # 캐시를 둘로 나눈다. 하나로 묶으면 build.gradle 한 줄만 고쳐도 키가 바뀌어
   # Gradle 배포판 130MB까지 다시 받는다. 배포판은 wrapper 설정이 바뀔 때만 무효화한다.
   cache:
@@ -57,15 +68,34 @@ backend:build:
           - apps/backend/settings.gradle
         prefix: gradle-deps
       paths: [.gradle-home/caches]
-  script:
+  before_script:
     - cd apps/backend
     - chmod +x gradlew
-    - ./gradlew bootJar --no-daemon
   # 추출된 배포판과 원본 zip이 둘 다 남아 캐시가 두 배가 된다.
   after_script:
     - rm -f "$CI_PROJECT_DIR"/.gradle-home/wrapper/dists/*/*/*.zip
-  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 build:backend가
-  # 이미지 안에서 같은 bootJar를 수행하므로 돌리지 않는다.
+  # 실패한 테스트를 MR 화면에서 바로 본다. 실패 때 가장 필요하므로 항상 올린다.
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: apps/backend/build/test-results/test/TEST-*.xml
+    paths:
+      - apps/backend/build/reports/tests/test/
+
+# MR 관문. 가볍게 돈다(약 2분) [S15P21C206-91]. 이름은 이전 파이프라인 기록과 이어지도록 유지한다.
+# 컴파일·패키징(bootJar)과, 스프링 앱·컨테이너를 띄우지 않는 테스트만 돌린다. 예외로
+# GoldCatalogSchemaTest를 돌려 실제 PostgreSQL에서 앱 기동(ddl-auto=validate)·빈 스키마 전체
+# 마이그레이션·재실행 0건·V1 업그레이드를 확인한다. 고르는 규칙은 build.gradle의 -PmrTests에 있고, 뺀 테스트는
+# backend:test가 돈다. dind가 없어 Testcontainers 테스트는 여기서 돌 수 없다.
+backend:build:
+  extends: .backend-gradle
+  stage: validate
+  timeout: 15m
+  script:
+    - ./gradlew bootJar test -PmrTests --no-daemon
+  # 문서만 고쳐도 Gradle 빌드가 도는 것을 막는다. 기본 브랜치에서는 돌리지 않는다.
+  # build:backend가 이미지 안에서 같은 bootJar를 수행하고, 전체 테스트는 backend:test가 돈다.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &backend_paths
@@ -79,13 +109,72 @@ backend:build:
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
       changes: *backend_paths
 
+# 전체 테스트(약 8분) [S15P21C206-91]. MR 관문에서 뺀 스프링·Testcontainers 테스트까지 모두 돈다.
+# develop 병합 뒤 자동으로 돌고, MR에서는 위험한 변경을 병합 전에 확인할 때 수동으로 누른다.
+# 이미지 빌드·배포는 이 job을 기다리지 않는다. needs: []로 바로 시작하고, 마지막 stage에 둬서
+# needs가 없는 build:backend가 앞 stage 완료를 기다릴 때 포함되지 않게 한다. 깨지면 파이프라인이 빨갛게 된다.
+#
+# 역할·권한처럼 클러스터 전역 상태를 건드리는 테스트는 Testcontainers로 일회용 컨테이너를
+# 띄운다. dind가 필요하므로 privileged인 amd64-docker Runner에서만 돈다.
+backend:test:
+  extends: .backend-gradle
+  stage: verify
+  # 다음 develop 병합이 이 파이프라인을 자동 취소하면, 새 파이프라인에는 백엔드 변경이 없어
+  # 전체 테스트가 끝내 돌지 않는다. 시작한 job은 취소되지 않게 한다.
+  interruptible: false
+  # Runner가 한 대라 멈춘 job이 다른 파이프라인까지 줄 세운다. 테스트별 제한은 build.gradle에 있다.
+  timeout: 30m
+  tags:
+    - amd64-docker
+  services:
+    - name: postgres:18.6-alpine
+      alias: service-db
+    - name: docker:27.5-dind
+      alias: docker
+  variables:
+    # Testcontainers가 dind 데몬에 컨테이너를 띄운다. 매핑된 포트는 job 컨테이너의
+    # localhost가 아니라 dind 호스트에 열리므로 접속 주소를 docker로 바꾼다.
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    TESTCONTAINERS_HOST_OVERRIDE: docker
+  script:
+    # 10분이 지나도 끝나지 않으면 테스트 JVM의 스레드 덤프를 로그에 남긴다. 시간 초과로 끝나면
+    # JUnit 보고서가 올라가지 않아, 멈춘 호출을 알 수 있는 곳이 이 덤프뿐이다. 먼저 끝나면 아무것도 찍지 않는다.
+    - (sleep 600; for p in $(jcmd -l | awk '/GradleWorkerMain/ {print $1}'); do jcmd "$p" Thread.print; done) &
+    # 부분 실행: 수동으로 누를 때 BACKEND_TESTS에 Gradle --tests 패턴을 쉼표로 적으면 그것만 돈다.
+    # 실패한 클래스만 다시 돌리거나 CI 설정을 고치며 확인할 때 쓴다. 비우면 전체가 돈다.
+    # 부분 실행은 병합 판단의 근거가 아니다. develop 자동 실행은 변수가 없어 늘 전체다.
+    - |
+      set -f
+      set --
+      if [ -n "$BACKEND_TESTS" ]; then
+        echo "부분 실행(병합 판단 근거 아님): $BACKEND_TESTS"
+        for pattern in $(echo "$BACKEND_TESTS" | tr ',' ' '); do set -- "$@" --tests "$pattern"; done
+      fi
+      ./gradlew test --no-daemon "$@"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *backend_paths
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: *backend_paths
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes: *backend_paths
+      when: manual
+      allow_failure: true
+
 # MR에서 이미지를 실제로 만들어 본다. 푸시는 하지 않는다.
 # backend:build가 bootJar까지는 검증하지만 Dockerfile 자체는 검증하지 않는다.
 # Dockerfile이 바뀔 때만 돌므로 Gradle 빌드가 중복되는 경우는 드물다.
 backend:image:
   extends: .docker-build
   stage: validate
-  needs: []
+  # 테스트가 실패한 코드로는 이미지를 만들지 않는다 [S15P21C206-91]. backend:build는
+  # Dockerfile 변경에도 돌므로 대개 함께 있지만, 없는 파이프라인에서 막히지 않게 optional로 둔다.
+  needs:
+    - job: backend:build
+      optional: true
   variables:
     DOCKERFILE: apps/backend/Dockerfile
     IMAGE_NAME: backend

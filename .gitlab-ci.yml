@@ -2,6 +2,8 @@ stages:
   - validate
   - build
   - deploy
+  # 이미지 빌드·배포를 막지 않는 느린 검사. needs: []로 바로 시작한다(backend:test).
+  - verify
 
 include:
   - local: .gitlab/ci/common.yml
