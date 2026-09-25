@@ -12,11 +12,9 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 ├─ common.yml
 ├─ apps/
 │  ├─ frontend.yml
-│  └─ backend.yml
+│  ├─ backend.yml
+│  └─ derived-compute.yml
 └─ distributed-system/
-   ├─ ingestion.yml
-   ├─ spark.yml
-   ├─ airflow.yml
    └─ publisher.yml
 ```
 
@@ -87,12 +85,12 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
 - 잔차 Worker(`derived-compute`, S15P21C206-88): EC2-A에 `deploy:derived-compute:ec2-a`로 배포한다. HTTP 헬스 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
-- Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
-- Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다. Publisher 이미지는 EC2-A의 Gold 목업 적재(`gold-mock` profile)에서도 같은 이미지로 돈다(`S15P21C206-262`).
+- GCP 분산 시스템: CI 배포 job이 없다. 아래 「GCP 분산 시스템」을 따른다.
+- Publisher: 기준 브랜치에서 이미지만 빌드한다. EC2-A의 Gold 목업 적재(`gold-mock` profile)가 이 이미지를 쓴다(`S15P21C206-262`).
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
 - 운영 Compose는 서버의 `.env`에서 다른 서비스의 현재 이미지와 실행 설정을 읽는다.
 
-배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
+배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다.
 
 서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A `redis-session`에 있으므로 그 컨테이너를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
 
@@ -111,7 +109,27 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 
 대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. 태그 정리는 EC2-B의 매일 cron이 배포 중인 이미지를 보호한 채 한다([EC2-B](../../infra/service/ec2-b/README.md) 「매일 정리」).
 
-**GCP 노드(Ingestion·Spark·Airflow·Publisher)는 같은 결함이 남아 있다(S15P21C206-262에서 방식만 정함).** 파이프라인 `220048`에서 ingestion 배포 버튼 5개가 취소된 실례가 있다. EC2-A처럼 매 병합 빌드로 풀지 않는다. Airflow·Spark 이미지는 크고 빌드가 무거워 비용이 다르다. 대신 빌드를 취소되지 않게 하고(`interruptible: false`) 노드별 `environment`로 옛 버튼을 막는 쪽이 맞다. 다만 이 방식은 자동 취소 방식(`workflow:auto_cancel:on_new_commit: interruptible`)을 바꿔야 해서 파이프라인 전체와 EC2-A 동작에 걸린다. 별도 Task로 설계한다.
+GCP 노드에도 같은 결함이 있었으나(파이프라인 `220048`에서 ingestion 배포 버튼 5개 취소) 배포 job을 걷어내 결함도 없어졌다(`S15P21C206-94`). `S15P21C206-262`에서 정한 해결 방식(빌드 `interruptible: false`와 노드별 `environment`, 자동 취소 방식 변경)은 쓰지 않는다.
+
+### GCP 분산 시스템 (S15P21C206-94)
+
+GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미지를 쓰지 않기 때문이다.
+
+- 수집·HDFS 적재·Spark Bronze: 코드를 불변 release 디렉터리로 묶어 운영자 스크립트가 설치하고, 호스트 Python·systemd로 실행한다.
+- Spark 제출: digest로 고정한 공개 `apache/spark` 이미지에 release 코드를 넘긴다.
+- Airflow: Node 1이 release에서 로컬 이미지를 직접 빌드한다. 교체는 `deploy-tess-airflow-node1.sh --update`만 한다.
+- Hadoop·YARN: 호스트 데몬이며 [Hadoop 운영 작업 가이드](../workflows/hadoop-operations.md)를 따른다.
+
+걷어내기 전 GCP 배포 job(`deploy:ingestion:gcp-node-2`~`6`, `deploy:spark:gcp-node-1`, `deploy:publisher:gcp-node-1`)은 아무도 실행하지 않는 레지스트리 이미지를 pull했다. 사용처가 없는 `build:ingestion`·`build:spark`·`build:airflow`도 함께 걷어냈다. `build:spark`는 develop에서 실패하고 있었다(job `629917`). 절차는 [분산 시스템 배포](../../infra/distributed-system/README.md)를 따른다.
+
+단계별 통과 책임은 백·프론트와 같게 나누되, 데이터 파이프라인 설계가 자주 바뀌는 동안 무거운 관문은 두지 않는다. 「나중」 열은 후보이며 정하지 않았다.
+
+| 단계 | 책임 | 지금 | 나중(후보) |
+| --- | --- | --- | --- |
+| ① MR | 정적·계약·단위 테스트 | validate 단계 job | 컴포넌트 단위 테스트 연결(`S15P21C206-91`) |
+| ② develop 병합 | 배포할 release 산출물 | 없음. 운영자가 로컬 작업 트리에서 release를 묶는다 | CI가 커밋 SHA로 release를 묶고 해시를 기록 |
+| ③ 스테이징 | 실제 클러스터에서 작은 입력으로 시험 | Bronze `preflight`·`canary`처럼 스크립트의 검증 단계를 수동 실행 | CI smoke job |
+| ④ 운영 | release 설치와 전환 | 운영자 스크립트 수동 실행 | CI 수동 버튼, 이후 자동 |
 
 ## 필요한 GitLab 변수
 
@@ -119,9 +137,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 | --- | --- |
 | 공통 SSH | `DEPLOY_USER`(전용 배포 계정 이름). SSH 키 변수는 두지 않는다 |
 | EC2 | `EC2_A_HOST`(Tailscale IP), `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
-| GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`(Tailscale IP), `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
-| 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
 | 레지스트리 | `REGISTRY_IMAGE_PREFIX` (`<레지스트리 호스트>:<포트>/<네임스페이스>`) |
 | Node 1 Airflow | 서버 `.env`의 `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DATABASE_URL`, `AIRFLOW_FERNET_KEY`, `AIRFLOW_WEBSERVER_SECRET_KEY`, `AIRFLOW_DB_PATH`, `AIRFLOW_LOGS_PATH` |
 

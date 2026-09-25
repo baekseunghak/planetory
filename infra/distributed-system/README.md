@@ -3,7 +3,11 @@
 실행 위치는 다음과 같이 나눈다.
 
 - 호스트 서비스: Hadoop, YARN
-- Docker: Airflow, Spark 제출, 수집기, Publisher
+- 불변 release 디렉터리(운영자 스크립트로 설치, 호스트 Python·systemd로 실행): 수집기, HDFS 적재, Spark Bronze
+- Docker: Airflow(Node 1이 release에서 직접 빌드한 로컬 이미지), Spark 제출(digest를 고정한 공개 `apache/spark` 이미지)
+- Publisher: Node 1 Compose에 `jobs` profile로 정의돼 있으나, 지금 확인된 실행은 EC2-A Gold 목업뿐이다
+
+CI는 GCP 노드에 배포하지 않는다(`S15P21C206-94`, [CI/CD](../../docs/operations/cicd.md) 「GCP 분산 시스템」).
 
 VM 생성은 [GCP 준비 절차](../provisioning/gcp/README.md)를 따른다. 설계와 남은 검증은 [GCP 인프라 구조](../../docs/architecture/gcp-distributed-infrastructure.md)를 따른다.
 
@@ -263,7 +267,7 @@ sample의 HDFS `root` 사용자 이름과 `1777` 경로는 격리된 검증용�
 
 ## 배포용 Docker 준비 (`S15P21C206-226`)
 
-CI의 deploy job은 SSH로 접속해 `docker compose`를 실행한다. 그러려면 노드에 Docker 엔진과 **compose 플러그인**이 있고 배포 계정이 `docker` 그룹에 있어야 한다. `docker.io` 패키지에는 compose 플러그인이 들어 있지 않으므로 엔진만 설치하면 배포가 실패한다.
+이 절은 CI의 GCP 배포 job(SSH로 `docker compose` 실행)을 위해 만들었다. 그 job은 `S15P21C206-94`에서 걷어냈고, Node 1은 Airflow·Spark 제출 컨테이너 때문에 Docker가 계속 필요하다. compose를 쓰려면 노드에 Docker 엔진과 **compose 플러그인**이 있고 배포 계정이 `docker` 그룹에 있어야 한다. `docker.io` 패키지에는 compose 플러그인이 들어 있지 않으므로 엔진만 설치하면 배포가 실패한다.
 
 [install-docker-host.sh](scripts/install-docker-host.sh)가 사전 검사·설치·검증을 한 번에 한다. Hadoop·YARN 데몬과 설정에는 손대지 않는다.
 

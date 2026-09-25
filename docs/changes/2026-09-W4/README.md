@@ -315,3 +315,4 @@
 | 2026-09-25 | 프론트 CI를 단위 테스트 관문과 브라우저 스모크·전체로 분리 | S15P21C206-91 | web:build, web:e2e:smoke, web:e2e, E2E_LANES | 구현 완료, 늘 실패 9건 후속 | [기록](2026-09-25.md) |
 | 2026-09-25 | MR 관문 예외 테스트를 목록(kept)으로 | S15P21C206-91 | -PmrTests, kept, GoldCatalogSchemaTest | 구현 완료 | [기록](2026-09-25.md) |
 | 2026-09-25 | 계약 fixture 검사 연결, 설정 오류 차단 증거, Worker·PowerShell·aarch64 Runner 범위 정정 | S15P21C206-91 | validate:contracts, validate:hadoop-config, validate:compose, 222681, 범위 정정 | 구현 완료, 병합 전 | [기록](2026-09-25.md) |
+| 2026-09-26 | GCP Docker 배포 job·사용처 없는 GCP 이미지 빌드 제거, release 방식 유지 | S15P21C206-94 | deploy:ingestion, deploy:spark, build:spark, release, compose.worker.yaml, 262 방식 폐기 | 구현 완료(MR 전) | [기록](2026-09-26.md) |
