@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1160" viewBox="0 0 1080 1160" role="img" aria-labelledby="title desc">
-  <title id="title">V25·V26·V28 NASA 행성 자료, 한국어 설명과 일별 모델 시도 관계도</title>
-  <desc id="desc">stars와 candidates는 nasa_planet_info, nasa_planet_explanation은 nasa_planet_info에 연결된다. V28 회원별 일별 시도는 users를 참조하고 전체 일별 시도는 회원 삭제 뒤에도 보존된다. external_signal_references의 archive 행성명은 공급 단계의 검증을 전제로 조회 대상으로 선택한다.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1790" viewBox="0 0 1080 1790" role="img" aria-labelledby="title desc">
+  <title id="title">V25·V26·V28·V29 NASA 후보별·항성별 자료와 설명 관계도</title>
+  <desc id="desc">V25·V26은 내부 후보별 NASA 자료와 설명, V29는 TIC별 목록과 후보 FK 없는 외부 행성·설명을 보관한다. V28 회원별·전체 모델 시도 한도는 두 설명 경로가 공유한다.</desc>
   <defs>
     <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#43618d" stroke-width="1.5"/></marker>
   </defs>
-  <rect width="1080" height="1160" fill="#f8fafc"/>
+  <rect width="1080" height="1790" fill="#f8fafc"/>
   <text x="36" y="44" font-family="sans-serif" font-size="25" font-weight="700" fill="#14243b">V25·V26·V28 · NASA 자료와 설명</text>
   <text x="36" y="73" font-family="sans-serif" font-size="15" fill="#475569">실선은 DB 외래 키, 점선은 조회 전에 검사하는 연결이다.</text>
 
@@ -66,4 +66,33 @@
 
   <path d="M306 949 H400" fill="none" stroke="#b47631" stroke-width="2" marker-end="url(#arrow)"/>
   <text x="36" y="1139" font-family="sans-serif" font-size="15" fill="#475569">V28: 모델 시도는 회원별·전체 집계를 함께 올린다. 설명 행과 집계에는 FK가 없다.</text>
+
+  <line x1="36" y1="1180" x2="1010" y2="1180" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="36" y="1215" font-family="sans-serif" font-size="22" font-weight="700" fill="#14243b">V29 · 결과 화면의 항성별 NASA 전체 참고 목록</text>
+  <rect x="36" y="1251" width="270" height="78" rx="9" fill="#ffffff" stroke="#738aa9" stroke-width="2"/>
+  <text x="54" y="1282" font-family="sans-serif" font-size="19" font-weight="700" fill="#14243b">stars</text>
+  <text x="54" y="1309" font-family="sans-serif" font-size="15" fill="#334155">tic_id PK · 위와 같은 항성</text>
+
+  <rect x="400" y="1237" width="610" height="140" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
+  <text x="425" y="1272" font-family="sans-serif" font-size="21" font-weight="700" fill="#14335d">nasa_star_catalog · TIC별 목록 상태</text>
+  <text x="425" y="1302" font-family="sans-serif" font-size="16" fill="#1e3a5f">tic_id PK/FK → stars · host_name · status</text>
+  <text x="425" y="1330" font-family="sans-serif" font-size="16" fill="#1e3a5f">fetched_at · next_refresh_at · last_refresh_status</text>
+  <text x="425" y="1358" font-family="sans-serif" font-size="16" fill="#1e3a5f">in_flight_until · attempt_generation</text>
+
+  <rect x="400" y="1408" width="610" height="151" rx="12" fill="#e8f2ff" stroke="#34649e" stroke-width="2.5"/>
+  <text x="425" y="1443" font-family="sans-serif" font-size="21" font-weight="700" fill="#14335d">nasa_star_planet · 외부 행성 원천</text>
+  <text x="425" y="1473" font-family="sans-serif" font-size="16" fill="#1e3a5f">(tic_id, planet_id) PK · planet_name UNIQUE/TIC</text>
+  <text x="425" y="1501" font-family="sans-serif" font-size="16" fill="#1e3a5f">active · status · normalized JSONB · source_hash/version</text>
+  <text x="425" y="1529" font-family="sans-serif" font-size="16" fill="#1e3a5f">fetched_at · changed_at · candidate FK 없음</text>
+
+  <rect x="400" y="1590" width="610" height="150" rx="12" fill="#edf9f1" stroke="#358060" stroke-width="2.5"/>
+  <text x="425" y="1625" font-family="sans-serif" font-size="21" font-weight="700" fill="#174b34">nasa_star_planet_explanation · 행성별 설명</text>
+  <text x="425" y="1655" font-family="sans-serif" font-size="16" fill="#244936">(tic_id, planet_id) PK/FK → nasa_star_planet</text>
+  <text x="425" y="1683" font-family="sans-serif" font-size="16" fill="#244936">source_hash/version · model_name · prompt_version</text>
+  <text x="425" y="1711" font-family="sans-serif" font-size="16" fill="#244936">status · content · generated_at · 임대/시도 1~3회</text>
+
+  <path d="M306 1290 H400" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M705 1377 V1408" fill="none" stroke="#43618d" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M705 1559 V1590" fill="none" stroke="#358060" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="36" y="1772" font-family="sans-serif" font-size="15" fill="#475569">V29은 V28 시도 한도를 공유한다. 옛 행성은 active=false로 보존하고 현재 목록에서 제외한다.</text>
 </svg>

@@ -161,6 +161,8 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 | 히스토리 상세 | P0 | `GET /api/v1/histories/{historyId}` | HIS-02·06, RES-06 | 8.2 |
 | 히스토리 그래프 | P0 | `GET /api/v1/histories/{historyId}/graph` | HIS-03, NFR-03 | 8.3 |
 | 별 결과 페이지 | P0 | `GET /api/v1/stars/{ticId}/result` | RES-10 | 8.4 |
+| 결과의 NASA 행성 목록 조회·수집 | P0 | `GET/POST /api/v1/stars/{ticId}/result/nasa-planets` | S15P21C206-270 | 8.4.1 |
+| 결과의 NASA 행성 설명 요청 | P0 | `POST /api/v1/stars/{ticId}/result/nasa-planets/{planetId}/explanation` | S15P21C206-270 | 8.4.1 |
 | 성과 조회 | P0 | `GET /api/v1/me/achievements` | GRD-01·07, MY-01 | 9.1 |
 | 내부: 성과 지급·별 열림 | P0 | 서비스 계층 함수 | GRD-02~04·08, NFR-01 | 9.2 |
 | 내부: 완료·재개 | P0 | 제출 트랜잭션·배치 후처리 | SUB-11, DAT-15, DEC-27 | 9.3 |
@@ -1285,6 +1287,83 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 - `nextActions`: `PUBLISH_ALL`·`LATER`는 **탐색이 끝나고**(`progress.stage=completed`) **일괄 공개할 기록이 남았을 때만** 준다(RES-08 "별 탐색 종료 후", RES-10 "종료 시"). 기준은 미게시 **신호** 수가 아니라 **일괄 공개 후보**(166)다 — 같은 신호의 첫 기록을 공개한 뒤 새 적격 기록을 제출하면 신호 수는 0인데 공개할 기록은 남아 있다. 진행 중에는 개별 [분석 공개]가 그 일을 한다. `RETRY`는 6.8절 초안을 만들 수 있는 제출이 있을 때만 주며 **그 제출이 매칭한 후보가 은퇴했으면 주지 않는다** — 누르면 409 `CANDIDATE_RETIRED`가 될 행동을 힌트로 주지 않는다. **이 규칙은 요구사항에서 유도했고 명세에 예시만 있었다. 교차 리뷰 대상이다.**
 - 여러 질의로 한 응답을 만들므로 **같은 스냅샷**에서 읽는다. 중간에 판이 바뀌거나 공개 상태가 달라지면 신호 카드와 미게시 수가 서로 다른 시점을 말하게 된다.
 
+### 8.4.1 결과 화면의 NASA 확정 행성 (S15P21C206-270)
+
+270은 결과 페이지의 별도 참고 자료다. [8.4절 결과](#84-별-결과-페이지-res-10-at-74)의 `signals`나 [4.2절 별 상세](#42-선택한-별내-행성-상세)의 개인 `planets.items`를 NASA 목록으로 교체하지 않는다. 전자는 회원이 매칭한 내부 신호, 아래 `planets`는 NASA `ps`가 같은 TIC에서 확인한 외부 확정 행성이다. 두 목록의 ID·개수·순서·성과는 서로 다르다. 저장·정규화·생성 규칙은 [270 개발 계약](../../../docs/development/nasa-star-planets-270.md)을 따른다.
+
+| 메서드·경로 | 본문 | 동작 |
+| --- | --- | --- |
+| `GET /api/v1/stars/{ticId}/result/nasa-planets` | 없음 | 저장된 목록·설명 상태만 조회한다. NASA·모델 호출과 DB 쓰기를 하지 않는다 |
+| `POST /api/v1/stars/{ticId}/result/nasa-planets` | 없음 | 같은 TIC의 NASA `ps` 기본 해 목록을 수집·재확인하거나 유효한 저장 결과를 재사용한다. 설명은 생성하지 않는다 |
+| `POST /api/v1/stars/{ticId}/result/nasa-planets/{planetId}/explanation` | 없음 | 현재 목록의 행성 한 건에 대해 검증된 설명을 생성·재사용한다. 다른 행성은 생성하지 않는다 |
+
+세 경로 모두 인증 세션의 현재 active 회원과 서버 DB의 해당 TIC에 대한 실제 `candidate` 또는 `no_candidate` 답 제출을 확인한다. `skipped`만 있는 별·제출 전 별·없는 별은 404 `RESOURCE_NOT_FOUND`로 덮는다. 경로 TIC는 권한의 근거가 아니다. POST는 CSRF를 검사한다. 외부 호출 뒤에도 회원·답 제출·현재 행성·원천 세대를 재확인하므로 늦은 응답이 접근 철회나 자료 정정을 되돌리지 못한다. 존재하지 않거나 현재 목록에 없는 `planetId`는 404다. 신뢰할 수 없는 행성명·후보 ID·주기 입력을 받지 않으며, 클라이언트가 이름이나 배열 순서로 연결하지 않는다.
+
+`skipped`만 있는 별에서는 기존 결과 페이지 GET이 200이어도 NASA 목록 GET은 404다. 271 화면은 이 404를 NASA 영역의 이용 불가로 안내하고 결과 페이지 전체의 실패로 처리하지 않는다. active가 아닌 회원은 공통 인증 필터에서 세션 종료와 401로 처리한다.
+
+세 경로의 성공 응답은 같은 200 bundle이다. `star.hostName`, 모든 시각·설명과 없는 원천값은 null일 수 있다. 아래 숫자와 시각은 형식 예시이며 실제 NASA 측정값은 아니다. 예시 `planetId`는 뒤의 식별 규칙으로 계산한 값이고, `sourceHash`의 자리 표시자는 실제 응답에서 정규화 JSON의 소문자 SHA-256 64자리다. 행성 ID는 서버가 확인한 숫자 TIC와 정확한 NASA `pl_name`을 `ticId:pl_name` 형태로 UTF-8 해시한 `np-<hex>`다. NASA가 이름을 정정하면 새 ID가 된다.
+
+```json
+{
+  "star": {"ticId": "150428135", "hostName": "TOI-700"},
+  "status": "ready",
+  "complete": true,
+  "fetchedAt": "2026-09-25T05:20:00Z",
+  "refreshStatus": "ok",
+  "retryAt": null,
+  "planets": [
+    {
+      "planetId": "np-881febc05b880dcaa8f5601b89a620c4315737d60d635001813dccea00f19fdf",
+      "name": "TOI-700 b",
+      "sourceStatus": "ready",
+      "facts": {
+        "planetName": "TOI-700 b",
+        "orbitalPeriod": {"value": "9.977219", "errorPlus": null, "errorMinus": null, "limit": 0, "unit": "days", "reference": null},
+        "radius": null,
+        "mass": null,
+        "discoveryMethod": "Transit",
+        "discoveryYear": 2020,
+        "controversial": null,
+        "sourceTable": "ps",
+        "sourceUrl": "https://exoplanetarchive.ipac.caltech.edu/"
+      },
+      "sourceHash": "<정규화 JSON의 SHA-256 64자리>",
+      "sourceVersion": 1,
+      "fetchedAt": "2026-09-25T05:20:00Z",
+      "changedAt": "2026-09-25T05:20:00Z",
+      "explanationStatus": "ready",
+      "explanation": {
+        "name": "{검증된 이름 설명}",
+        "orbitalPeriod": "{검증된 공전주기 설명}",
+        "radius": "{검증된 반지름 설명}",
+        "mass": "{검증된 질량 설명}",
+        "discovery": "{검증된 발견 설명}"
+      },
+      "generatedAt": "2026-09-25T05:21:00Z",
+      "retryAt": null,
+      "failure": null,
+      "model": "gpt-5.4-mini",
+      "promptVersion": "nasa-ko-v4"
+    }
+  ]
+}
+```
+
+| 상태 | 응답 규칙 |
+| --- | --- |
+| 목록 `not_requested` | `complete=false`, `fetchedAt=null`, `planets=[]`. GET으로 최초 요청을 시작하지 않는다 |
+| 목록 `pending` | 다른 요청의 NASA 임대가 진행 중이다. 기존 행성이 있어도 `complete=false`, bundle `retryAt=임대 만료 시각`; GET으로 진행 상태를 확인한다 |
+| 목록 `ready` | TTL 안의 최근 성공 조회 1~64행·`complete=true`. 저장된 검증 사실을 행성별로 선택할 수 있다 |
+| 목록 `empty` | TTL 안의 성공 조회 0행·`complete=true`·빈 배열. 이 시각의 `ps` 기본 해 조회 결과이며 영구 부재 단정이 아니다 |
+| 목록 `partial` | 반환된 모든 기본 해에서 같은 정확 `pl_name`이 중복되거나 JSON 파싱 **이후** 개별 부호·표시·설명 입력 검증에 실패했다. 같은 이름의 확정 1행과 비확정 1행도 중복으로 보며 해당 행성은 `sourceStatus=identity_unresolved/invalid_source`다. 비확정 행만 있는 이름은 제외한다. 다른 정상 행성은 유지하고 `complete=false`다 |
+| 목록 `temporarily_unavailable` | 성공 snapshot 없는 timeout·429·5xx, 65행, 본문 상한, JSON 숫자 파싱·항성 식별 실패다. `complete=false`이며 빈 행성 목록을 NASA의 정상 0행으로 읽지 않는다 |
+| 목록 `stale` | 이전 성공 행성이 있거나 TTL이 만료됐다. `complete=false`와 과거 `fetchedAt`·최근 `refreshStatus`·가능한 `retryAt`을 함께 제공한다. 부분 외부 응답을 최신 전체 목록으로 확정하지 않는다 |
+| 원천 `identity_unresolved/invalid_source` | 중복 기본 해 또는 JSON 파싱 이후의 개별 자료 검증 거절이다. 해당 항목의 `facts/sourceHash/sourceVersion`은 null이며 다른 정상 행성은 유지한다 |
+| 설명 `ready` | 현재 행성의 검증된 `facts/sourceHash/sourceVersion`과 모델·프롬프트 버전에 맞는 다섯 `explanation`·`generatedAt`만 제공한다 |
+| 설명 `not_requested/pending/disabled/failed/quota_exceeded/source_unavailable/invalid_source/busy/source_changed` | `explanation=null`, `generatedAt=null`; 해당 행성의 `retryAt/failure`를 사용한다. 정상 `facts`는 설명 실패에도 유지한다 |
+
+측정 객체는 `{value,errorPlus,errorMinus,limit,unit,reference}`다. 숫자와 부호 있는 오차는 정밀도를 지키는 문자열 또는 null이다. `limit=-1/0/1/null`은 각각 상한·측정값·하한·미제공이며, null을 0으로 메우지 않는다. `sourceUrl`은 서버가 고정한 공식 Archive 주소이고 NASA 문헌의 HTML은 반환하지 않는다. 같은 `planetId`의 사실과 다섯 문장만 연결한다. bundle `retryAt`은 목록의 다음 재확인 시각이고 `pending`에서는 임대 만료 시각이다. 항목 `retryAt`은 해당 설명의 다음 시도 시각이다. 항목 `fetchedAt`은 마지막 완전 NASA 응답에서 해당 이름을 관찰한 시각, `changedAt`은 그 항목의 정규화 자료 또는 상태가 바뀐 시각이다. 두 시각은 `identity_unresolved/invalid_source`에도 기록된다. `model/promptVersion`은 현재 생성 설정·프롬프트 계약으로 **모든 항목에 제공**하며 원천 미검증 행성도 포함한다. 설명 기능이 꺼져도 저장된 현재 `ready`는 제공하고, 나머지 설명은 `disabled`다. NASA 목록 POST는 항성당 한 번의 목록 조회를 시작하고 모델 시도권을 쓰지 않는다. 설명 POST는 선택한 한 행성에 기존 V28 회원별·전체 UTC 일별 한도를 268 후보 설명과 공유하며, 두 기본값 0에서는 신규 유료 시도를 차단한다. 준비 중에는 새 POST를 반복하지 않고 GET으로 상태를 다시 읽는다. 한도 초과는 해당 행성만 `explanationStatus=quota_exceeded`, `failure=daily_limit`, `retryAt=다음 UTC 자정`이다. 한도 응답은 저장하지 않아 다음 GET은 기존 설명 상태를 보여준다. 예상 가능한 NASA·모델 장애는 권한 있는 200 bundle의 상태로, 인증·DB 장애는 공통 오류 본문으로 반환한다.
+
 ### 8.5 첨부·공개 분석용 투영 필드
 
 서비스 API가 글·댓글 첨부 조회(HIS-05, COM-07)와 공개 분석 상세(COM-18)에 내려줄 수 있는 히스토리 필드는 아래로 한정한다(NFR-14). 첨부·게시·반응은 성과 수·등급을 바꾸지 않는다(GRD-05). 나머지(`viewState`, `answerViewed`, `achievementResult`, `retryOfSubmissionId`, 힌트 대상)는 소유자 전용이다.
@@ -1633,6 +1712,7 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
 | 2026-09-23 | S15P21C206-256 정정. 5.1절 판 요약의 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. Gold 4.1 운영 revision은 섹터마다 다른 해시라, 한 판의 revision이 하나라는 옛 규칙으로는 여러 섹터 별의 분석 진입이 500이 됐다(`AnalysisService`가 적재 계약 위반으로 처리). 프론트는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 5.2절 예시도 섹터마다 다른 revision으로 고쳤다 |
 | 2026-09-25 | S15P21C206-269 정정. 6.2절 5단계에 추천 duration이 null인 봉우리 제출은 제안 duration·상한을 둘 다 null로 저장한다고 적고, 6.4절 예시의 두 값을 실제 응답과 같은 null로 바꿔 필드 규칙을 더했다. V4 제약이 봉우리 제출에 두 값을 NOT NULL로 요구해 5.4절 null 계약 아래에서 봉우리 제출이 모두 500이었다(S15P21C206-262 화면 검증에서 발견). V27이 "둘 다 NULL 또는 둘 다 양수"로 고친다 |
+| 2026-09-25 | S15P21C206-270 계약. 8.4.1절에 본인 답 제출 뒤의 NASA 항성별 목록 조회 GET·수집 POST·선택 행성 설명 POST, V29 외부 ID, 완전성·부분 실패·V28 공유 한도와 결과 화면 소비 JSON을 명시했다. 기존 별 상세 후보 목록과 Gold·성과는 유지한다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

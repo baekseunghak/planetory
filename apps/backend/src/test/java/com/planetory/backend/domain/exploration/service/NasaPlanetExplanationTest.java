@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -60,6 +61,7 @@ class NasaPlanetExplanationTest {
              "binning": {}, "period_grid": {}, "fine_tune": {}, "curve_steps": {}}
             """;
     private static JdbcTemplate jdbc;
+    private static NasaExplanationQuota quota;
     private static NasaPlanetExplanationRepository repository;
 
     private NasaPlanetInfoService source;
@@ -75,8 +77,9 @@ class NasaPlanetExplanationTest {
         var dataSource = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword());
         jdbc = new JdbcTemplate(dataSource);
-        repository = new NasaPlanetExplanationRepository(JdbcClient.create(dataSource),
-                new DataSourceTransactionManager(dataSource));
+        var client = JdbcClient.create(dataSource);
+        quota = new NasaExplanationQuota(client, new DataSourceTransactionManager(dataSource), 1);
+        repository = new NasaPlanetExplanationRepository(client, quota);
         jdbc.update("INSERT INTO users(id,provider,provider_user_id,nickname)"
                 + " VALUES (77,'test','nasa-explanation-member','test')");
     }
@@ -463,6 +466,23 @@ class NasaPlanetExplanationTest {
     }
 
     @Test
+    void 별_설명_경로도_후보_설명과_동시_호출수와_일별_한도를_공유한다() {
+        assertTrue(quota.tryAcquire());
+        try {
+            assertEquals("busy", service(true, 2, 2).lookup(MEMBER, candidate).status());
+        } finally {
+            quota.release();
+        }
+        assertTrue(quota.claim(MEMBER, NOW, 1, 1, () -> Optional.of(1L)).generation().isPresent());
+        assertEquals("quota_exceeded", service(true, 1, 1).lookup(MEMBER, candidate).status());
+        assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_explanation_daily_usage"
+                + " WHERE member_id=?", Integer.class, MEMBER));
+        assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_explanation_daily_total",
+                Integer.class));
+        verifyNoInteractions(generator);
+    }
+
+    @Test
     void GET_읽기는_모델_시도를_만들지_않고_만료_pending을_복구_가능으로_표시한다() {
         when(source.read(MEMBER, candidate)).thenReturn(ready(HASH_A, planet));
         assertEquals("not_requested", service.read(MEMBER, candidate).status());
@@ -516,8 +536,8 @@ class NasaPlanetExplanationTest {
     }
 
     private NasaPlanetExplanationService service(boolean enabled, int memberLimit, int globalLimit) {
-        return new NasaPlanetExplanationService(source, repository, generator, CLOCK, enabled,
-                "gpt-5.4-mini", Duration.ofSeconds(8), Duration.ofHours(1), 1,
+        return new NasaPlanetExplanationService(source, repository, quota, generator, CLOCK, enabled,
+                "gpt-5.4-mini", Duration.ofSeconds(8), Duration.ofHours(1),
                 memberLimit, globalLimit, 320);
     }
 

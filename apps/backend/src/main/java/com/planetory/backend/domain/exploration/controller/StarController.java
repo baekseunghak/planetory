@@ -2,6 +2,7 @@ package com.planetory.backend.domain.exploration.controller;
 
 import com.planetory.backend.domain.exploration.service.ExplorationIds;
 import com.planetory.backend.domain.exploration.service.StarResultService;
+import com.planetory.backend.domain.exploration.service.NasaStarPlanetService;
 import com.planetory.backend.domain.exploration.service.StarResultViews.StarResult;
 import com.planetory.backend.domain.exploration.service.StarService;
 import com.planetory.backend.domain.exploration.service.StarPlanetExplanationService;
@@ -36,6 +37,7 @@ public class StarController {
     private final StarService stars;
     private final StarResultService starResults;
     private final StarPlanetExplanationService planetExplanations;
+    private final NasaStarPlanetService nasaStarPlanets;
 
     @Operation(summary = "별 결과 페이지",
             description = "제출 이력이 있는 별의 진행·성과·매칭한 신호·제출 기록·곡선 단계·발견한 별을"
@@ -46,6 +48,32 @@ public class StarController {
     public StarResult result(@AuthenticationPrincipal MemberPrincipal principal,
                              @PathVariable String ticId) {
         return starResults.result(principal.memberId(), tic(ticId, ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Operation(summary = "결과 페이지의 저장된 NASA 확정 행성 참고 목록",
+            description = "본인이 이 별에 실제 답을 제출한 경우에만 저장된 행성별 자료와 설명을 읽는다. 외부 호출은 하지 않는다.")
+    @GetMapping("/api/v1/stars/{ticId}/result/nasa-planets")
+    public NasaStarPlanetService.Bundle nasaStarPlanets(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId) {
+        return nasaStarPlanets.read(principal.memberId(), tic(ticId, ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Operation(summary = "결과 페이지의 NASA 확정 행성 참고 목록 요청",
+            description = "서버가 본인 답 제출을 확인한 뒤 TIC 하나의 NASA PS 목록만 재확인한다. 저장 설명은 재사용한다.")
+    @PostMapping("/api/v1/stars/{ticId}/result/nasa-planets")
+    public NasaStarPlanetService.Bundle requestNasaStarPlanets(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId) {
+        return nasaStarPlanets.requestCatalog(principal.memberId(), tic(ticId, ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Operation(summary = "결과 페이지의 NASA 행성 한 건 설명 요청",
+            description = "목록에서 선택한 안정적 planetId 한 건만 설명 생성 또는 저장 결과 재사용한다.")
+    @PostMapping("/api/v1/stars/{ticId}/result/nasa-planets/{planetId}/explanation")
+    public NasaStarPlanetService.Bundle requestNasaStarPlanetExplanation(
+            @AuthenticationPrincipal MemberPrincipal principal, @PathVariable String ticId,
+            @PathVariable String planetId) {
+        return nasaStarPlanets.requestExplanation(principal.memberId(),
+                tic(ticId, ErrorCode.RESOURCE_NOT_FOUND), planetId);
     }
 
     @Operation(summary = "내 별 상세",

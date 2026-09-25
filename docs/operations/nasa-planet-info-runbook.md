@@ -1,8 +1,8 @@
-# 확정 행성 NASA 자료·한국어 설명 운영 가이드 (S15P21C206-266·267·268)
+# 확정 행성 NASA 자료·한국어 설명 운영 가이드 (S15P21C206-266·267·268·270)
 
-- 상태: 266·267의 격리 검증 완료. 268의 GET 저장 조회·POST 단일 후보 요청/V28 일별 한도는 백엔드 표적 36건, 프론트 타입 검사·단위 452건·빌드와 Chrome 상세 fixture 6건을 통과했다. 267 당시 `nasa-ko-v4`는 TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성과 가상 회원·후보·Gold 참조의 생성형 GET·V25·V26 저장을 격리 검증했다. 첫 GET 14,554ms·즉시 캐시 GET 82ms는 **268 이전** 1회 표본이다. 실제 회원·Gold 연결, 공유/운영 DB 마이그레이션·서버 배포·268 실제 회원 화면, 새 운영 비용·지연 분포·품질 평가는 **미실행**이다. 검증 경계는 8.7절과 9절에서 구분한다.
-- 대상: 서비스 백엔드 배포·DB 담당자. NASA 자료의 의미는 [266 개발 계약](../development/nasa-planet-info-266.md), 한국어 설명의 구조·검증·저장은 [267 개발 계약](../development/nasa-planet-explanation-267.md), 현재 요청·화면 연결은 [268 개발 계약](../development/nasa-planet-request-268.md)을 따른다. 이 문서는 실행 환경·확인·복구의 정본이다.
-- 변경 대상: 기존 Spring 백엔드 프로세스와 PostgreSQL에 V25 NASA 자료, V26 설명, 269의 V27 봉우리 제출 제약, V28 일별 모델 시도 한도를 순서대로 적용한다. 별도 컨테이너, Python Worker, Redis 인스턴스, 벡터 DB는 필요하지 않다.
+- 상태: 266·267의 격리 검증 완료. 268의 GET 저장 조회·POST 단일 후보 요청/V28 일별 한도는 백엔드 표적 36건, 프론트 타입 검사·단위 452건·빌드와 Chrome 상세 fixture 6건을 통과했다. 267 당시 `nasa-ko-v4`는 TOI-700 b 한 후보의 실제 NASA TAP·GMS 생성과 가상 회원·후보·Gold 참조의 생성형 GET·V25·V26 저장을 격리 검증했다. 첫 GET 14,554ms·즉시 캐시 GET 82ms는 **268 이전** 1회 표본이다. 270은 V29 일회용 PostgreSQL·로컬 NASA HTTP fixture 등을 포함한 일곱 클래스 통합 회귀 98/98(`BUILD SUCCESSFUL`)을 확인했다. 실제 회원·Gold 연결, 공유/운영 DB 마이그레이션·서버 배포·268/270 실제 회원 화면, 새 운영 비용·지연 분포·품질 평가는 **미실행**이다. 검증 경계는 8.7·9·10절에서 구분한다.
+- 대상: 서비스 백엔드 배포·DB 담당자. NASA 자료의 의미는 [266 개발 계약](../development/nasa-planet-info-266.md), 한국어 설명의 구조·검증·저장은 [267 개발 계약](../development/nasa-planet-explanation-267.md), 별 상세 요청은 [268 개발 계약](../development/nasa-planet-request-268.md), 결과 화면의 NASA 전체 목록은 [270 개발 계약](../development/nasa-star-planets-270.md)을 따른다. 이 문서는 실행 환경·확인·복구의 정본이다.
+- 변경 대상: 기존 Spring 백엔드 프로세스와 PostgreSQL에 V25 NASA 자료, V26 설명, 269의 V27 봉우리 제출 제약, V28 일별 모델 시도 한도, V29 항성별 목록·행성별 설명을 순서대로 적용한다. 별도 컨테이너, Python Worker, Redis 인스턴스, 벡터 DB는 필요하지 않다.
 
 ## 1. 한눈에 보는 배포 흐름
 
@@ -330,3 +330,81 @@ Pop-Location
 실제 운영 DB의 V25·V26·V27·V28 적용, 유료 GMS 활성화, 회원·Gold 식별자 연결, 실제 회원의 배포 브라우저 화면 왕복, 장기 비용·호출량·지연 분포는 각각 대상 환경에서 확인해야 한다. 실패 시 `NASA_EXPLANATION_ENABLED=false`로 새 모델 호출을 중지하고, 필요하면 `NASA_PLANET_INFO_ENABLED=false`로 새 NASA 조회도 중지한다. 두 설정은 기존 정상 행을 삭제하지 않으며 이미 시작된 호출을 즉시 취소하지는 않는다. 스위치 변경 뒤에는 백엔드를 다시 배포하고 상태를 확인한다.
 
 268의 현재 로컬 검증은 백엔드 StarPathHttp 8건·StarPlanetExplanationHttp 4건·NasaPlanetInfo 8건·NasaPlanetExplanation 16건으로 **36건 실패 0건**이다. 269의 V27과 268의 V28을 함께 둔 백엔드 5종 통합 검증은 이 36건에 `SubmissionTest` 37건을 더해 **73/73 통과**했다. 프론트는 타입 검사, `npm test` **452/452**, 배포 빌드와 별도 fixture의 Chrome 상세 6건을 통과했다. Compose는 자리표시자 환경에서 `NASA_*` 16개 항목의 전달과 일별 한도 기본 0/0·임시 값 전달을 확인했다. 이 실행은 이번 268의 신규 NASA TAP 조회·유료 GMS 호출, 운영 DB의 V28 적용, 실제 회원·Gold 연결 또는 배포 브라우저 인수를 수행하지 않았다. 재실행 명령과 검증 범위는 [268 개발 계약 5절](../development/nasa-planet-request-268.md#5-운영검증-경계)을 따른다.
+
+## 10. 결과 화면의 NASA 전체 목록 운영 (270)
+
+### 10.1 담당자가 먼저 구분할 것
+
+270은 **답을 제출한 회원의 결과 화면**에서 같은 TIC의 NASA `ps` 확정 행성을 고르는 별도 참고 기능이다. 기존 별 상세 `planets.items`·지도 궤도·성과 수를 늘리지 않는다. [270 개발 계약](../development/nasa-star-planets-270.md)은 자료·권한·상태, [탐사 API 8.4.1절](../../apps/backend/docs/exploration-api-spec.md#841-결과-화면의-nasa-확정-행성-s15p21c206-270)은 요청·응답의 정본이다. 271은 선택 위젯 담당이다. 새 컨테이너·Python 서버·Redis 목록 캐시·전체 카탈로그 선수집은 없다.
+
+| 요청 | 서버가 하는 일 | 비용·재시도 경계 |
+| --- | --- | --- |
+| `GET /api/v1/stars/{ticId}/result/nasa-planets` | 본인 실제 답 제출을 확인하고 저장된 목록·설명 상태만 읽는다 | NASA·GMS를 호출하거나 모델 시도권을 예약하지 않는다. 로딩 확인은 이 GET을 사용한다 |
+| 같은 경로 `POST` | 최초 수집 또는 재확인이 허용되면 NASA 기본 해 목록을 조회한다. 0행은 `empty`, 1~64행은 개별 상태와 함께 저장한다 | 모델 호출은 없다. 65행·큰 본문·파싱 오류를 부분 성공으로 바꾸지 않는다. 임대·TTL 안의 재요청은 재사용할 수 있다 |
+| `POST .../nasa-planets/{planetId}/explanation` | 현재 목록의 행성 하나만 설명을 요청하거나 재사용한다 | 새 유료 시도 직전에 V28 회원별·전체 한도를 함께 예약한다. 중복·한도·실패는 행성별 상태다 |
+
+세 경로 모두 현재 active 회원의 **그 TIC에 대한 `candidate` 또는 `no_candidate` 답 제출**이 있어야 한다. `skipped`만 있는 별과 제출 전 별은 404다. 외부 조회 뒤에도 권한을 다시 검사한다. POST는 세션·CSRF를 통과해야 한다. 클라이언트가 적은 TIC나 행성명만으로 접근을 열지 않는다. NASA `ps`는 같은 TIC의 `Published Confirmed` 기본 해만 목록에 싣는다. 다만 같은 정확 행성명의 중복 판정에는 반환된 `default_flag=1` 기본 해를 모두 사용하므로, 확정·비확정이 각각 한 행이어도 그 이름은 `identity_unresolved`다. 비확정 행만 있는 이름은 제외한다. 262 목업은 Archive 참고 이름을 더미 TIC로 복사해 실제 TIC 연결을 보장하지 않으므로, 그 목업에서 270의 `ready`를 기대하지 않는다. 실회원 인수에는 NASA에서 실제 조회되는 TIC와 제출을 별도로 준비한다.
+
+### 10.2 설정·권한·적용 순서
+
+270 전용 환경변수는 추가하지 않는다. 기존 `NASA_PLANET_INFO_ENABLED` 기본 `true`는 새 NASA 조회를 허용하며 `false`는 후보별 266과 항성별 270의 **신규 NASA 호출**을 함께 막는다. `NASA_PLANET_INFO_READY_TTL=7d`, `NASA_PLANET_INFO_EMPTY_TTL=1d`, `NASA_PLANET_INFO_RETRY_DELAY=5m`는 정상·빈 결과·장애 뒤의 재확인 간격이다. `NASA_PLANET_INFO_CONNECT_TIMEOUT=3s`(허용 최대 5s), `NASA_PLANET_INFO_REQUEST_TIMEOUT=6s`(허용 최대 10s), `NASA_PLANET_INFO_MAX_CONCURRENT=2`(프로세스당, 허용 1~8)도 기존 값이다. `false`로 바꿔도 저장된 과거 자료는 지워지지 않고 이미 시작한 호출은 바로 취소되지 않는다. 시간값은 Spring Duration 단위이며 재배포 후 새 요청부터 적용된다.
+
+행성 설명은 기존 `NASA_EXPLANATION_ENABLED=false`, `NASA_EXPLANATION_CHAT_MODEL=none`, `NASA_EXPLANATION_DAILY_PER_MEMBER=0`, `NASA_EXPLANATION_DAILY_GLOBAL=0`이 기본이다. 이 상태에서 NASA 수치만 수집·표시할 수 있고 GMS 유료 호출은 시작하지 않는다. 활성화에는 8.2절의 보호된 `GMS_KEY`, `openai` 모델과 **승인된 양의 일일 한도 두 개**가 모두 필요하다. 한 값이라도 빠지면 앱 기동이 실패한다. 기존 모델 timeout `8s`(허용 최대 20s), 동시 수 `1`(프로세스당, 허용 1~4), 실패 간격 `1h`, 조합당 최대 3회도 공유한다. 후보별 268과 행성별 270 요청을 합산해 V28에서 하루 회원별·전체 시도 수를 제한한다. 실제 키 값·쿠키·토큰을 문서·명령·로그에 남기지 않는다.
+
+1. 배포할 코드가 `V29__nasa_star_planets.sql`을 포함하고 V25→V26→V27→V28 기존 파일을 수정하지 않았는지 확인한다. 5.2·8.4절처럼 **먼저** 의도한 DB명·현재 사용자·Flyway 이력을 읽는다. 대상이 다르거나 25~28 중 실패가 있으면 적용을 멈춘다. 운영 DB 변경·백업 위치·복원 가능성은 대상 담당자의 승인 절차를 따른다.
+2. Flyway 소유자에게 V29 테이블·FK·CHECK·GRANT를 만들 권한이 있어야 한다. 앱 역할 `planetory_app`은 기존 제출·회원·별을 읽고 새 세 테이블만 SELECT/INSERT/UPDATE한다. V25·V26·V28은 그대로 두고 Gold 쓰기 권한을 늘리지 않는다. 새 앱에 트래픽을 보내기 전에 V29 성공과 권한을 확인한다.
+3. 서버의 보호된 환경에 필요한 **기존 변수 이름**만 주입한다. 저장소 루트의 아래 명령은 Compose 문법을 검사하며 설정값을 화면에 출력하지 않는다. 기대 결과는 출력 없음과 종료 코드 0이다. 실패하면 `infra/service/compose.yaml`의 `backend.environment` 전달 이름과 서버의 비밀 주입 경로를 확인한다.
+
+   ```powershell
+   Push-Location infra/service
+   docker compose config -q
+   Pop-Location
+   ```
+
+4. [서비스 배포 절차](../../infra/service/README.md#배포와-롤백)의 최신 `develop` Backend 수동 job으로 적용한다. job은 교체 전 DB 덤프를 만들고 `/actuator/health`를 검사한다. 실제 운영 서버·포트·배포 완료는 이 문서에서 가정하지 않는다. 결과는 271 위젯보다 **백엔드를 먼저** 배포해 계약을 확인한다.
+
+### 10.3 배포 전후의 읽기 전용 명령
+
+DB에 접근 가능한 승인된 관리 단말에서 5.2절의 읽기 계정 접속을 사용한다. 다음 명령은 데이터를 바꾸거나 회원 ID·NASA 원문·설명 본문을 출력하지 않는다. 기대 결과는 의도한 DB와 `version=25,26,27,28,29` 각각 `success=t`다. V29가 없거나 `success=f`이면 앱 트래픽을 보내지 말고 Flyway 로그를 확인한다. `repair`, `clean`, `outOfOrder`로 우회하지 않는다.
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -c 'SELECT current_database(), current_user;'
+psql -X -v ON_ERROR_STOP=1 -c "SELECT version, description, success FROM flyway_schema_history WHERE version IN ('25','26','27','28','29') ORDER BY version::int;"
+```
+
+앱 역할의 세 테이블 권한은 각 행에서 `can_read/can_insert/can_update=t`, `can_delete=f`를 기대한다. 오류가 나면 V29 적용 대상·역할·`search_path`를 확인한다. 새로 배포한 직후 상태별 집계는 **0건도 정상**이다. 이후 본인 답 제출 결과에서 요청을 시험하면 `ready/empty/partial`이나 분류된 실패가 증가할 수 있다. `active=false` 행은 과거 이름 정정·삭제 기록이므로 현재 목록 건수로 세지 않는다.
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -c "SELECT n, has_table_privilege('planetory_app',n,'SELECT') AS can_read, has_table_privilege('planetory_app',n,'INSERT') AS can_insert, has_table_privilege('planetory_app',n,'UPDATE') AS can_update, has_table_privilege('planetory_app',n,'DELETE') AS can_delete FROM (VALUES ('nasa_star_catalog'),('nasa_star_planet'),('nasa_star_planet_explanation')) AS t(n);"
+psql -X -v ON_ERROR_STOP=1 -c 'SELECT status, last_refresh_status, count(*) FROM nasa_star_catalog GROUP BY status, last_refresh_status ORDER BY status, last_refresh_status;'
+psql -X -v ON_ERROR_STOP=1 -c 'SELECT status, active, count(*) FROM nasa_star_planet GROUP BY status, active ORDER BY status, active;'
+psql -X -v ON_ERROR_STOP=1 -c 'SELECT status, count(*) FROM nasa_star_planet_explanation GROUP BY status ORDER BY status;'
+```
+
+설명이 활성화된 시험에서만 8.4절 V28 UTC 일별 집계를 전후 비교한다. **행성 목록 POST는 집계가 늘지 않아야** 한다. 행성 하나의 새 설명 POST는 두 집계에 한 번의 시도권이 함께 반영되며, 같은 원천·모델·프롬프트의 재사용 요청과 GET은 늘리지 않는다. 예약 뒤 모델 실패도 비용 가능성이 있으므로 집계를 줄이지 않는다. 사용자별 ID를 출력하지 말고 전체 건수와 일별 최대값만 확인한다.
+
+### 10.4 권한 있는 시험 회원의 화면·API 확인
+
+배포한 백엔드의 기존 `/actuator/health`를 5.3절 방법으로 확인한다. 이는 DB 기동 확인이며 NASA·GMS의 성공 증거는 아니다. 다음은 **실제 NASA·모델 호출 승인을 받기 전에는 읽기만** 한다. 승인된 시험 회원으로 로그인한 브라우저에서 본인 결과 페이지를 열고 개발자 도구의 Network 탭으로 요청·응답 상태를 확인한다. 세션 쿠키·CSRF 토큰을 복사하거나 기록하지 않는다. `GET /api/v1/stars/{ticId}/result/nasa-planets`를 새로고침해 `not_requested/complete=false/planets=[]` 또는 기존 저장 상태를 읽고, 새 V29 행이나 V28 집계가 만들어지지 않는지 비교한다. `skipped`만 있는 별·타인 결과는 404이며 내부 TIC 존재 여부나 NASA 행성을 노출하지 않아야 한다.
+
+NASA 소량 요청을 별도로 승인받은 뒤 결과 페이지의 목록 요청 버튼으로 **한 TIC만** POST한다. 0행이면 `empty/complete=true`, 정상 1~64행이면 `ready/complete=true`와 안정적인 `planetId`, 출처·`fetchedAt`이 예상된다. 같은 자료 재조회에서 새 시도가 없거나 저장 상태가 재사용돼야 한다. `partial`이면 정상 행성만 사용하고 전체 목록이라는 문구를 붙이지 않는다. 65행·큰 본문·파싱 실패는 `complete=false`이며 과거 행성이 남아도 최신 전체 목록이라고 표시하면 안 된다. 목록 POST가 모델 설명이나 V28 집계를 늘리면 계약 위반이다. 숫자의 null, 오차 부호와 `limit` 방향을 266 의미대로 읽고, NASA 문헌 HTML을 화면에 삽입하지 않는다.
+
+모델 신규 호출은 승인된 예산·양의 한도·GMS 권한을 확인한 뒤 **한 `planetId`만** 소량 시험한다. 준비 중에는 GET으로 상태를 보고 POST를 연속 재전송하지 않는다. 모델 실패/비활성/한도 초과에도 검증된 NASA `facts`가 남고 다른 행성은 영향을 받지 않아야 한다. 다섯 문장·`generatedAt`은 설명 `ready`일 때만 보여준다. 행성을 바꾸면 이전 응답의 문장을 다른 ID에 붙이지 않는다. 271의 최종 브라우저 인수는 270 백엔드·fixture 계약 검증 뒤 수행한다.
+
+### 10.5 증상·중지·복구
+
+| 증상 | 구분과 대응 |
+| --- | --- |
+| GET에서 `not_requested` | 아직 저장된 목록이 없다. GET을 반복해도 NASA를 부르지 않으므로, 권한 있는 회원의 명시적 POST가 필요하다 |
+| `empty` | 성공한 0행이다. `fetchedAt`을 보고 1일 뒤 재확인한다. 영구 행성 부재나 Gold 정답 변경으로 해석하지 않는다 |
+| `partial`, `identity_unresolved`, `invalid_source` | 같은 정확 이름의 확정·비확정 기본 해를 포함한 중복, 또는 JSON 파싱 이후 해당 행성의 부호/표시/설명 입력 검증 실패다. 비확정 행만 있는 이름은 제외하고 다른 정상 행성은 유지한다. 원천명·TIC·숫자/단위의 비민감 진단만 확인하고 잘못된 행을 임의 선택하지 않는다 |
+| timeout·429·5xx·65행·큰 본문·JSON 숫자 파싱 실패 | 전체 `invalid_response`와 `complete=false`·`refreshStatus`를 확인한다. 이전 성공 행성은 시각과 함께 보존한다. DNS/443·TLS·공급자 상태와 기존 timeout·5분 간격을 살핀다. 중복 POST로 외부 호출을 늘리지 않는다 |
+| 설명 `disabled/quota_exceeded/failed` | NASA 정상 `facts`는 유지한다. 스위치·V28 회원별/전체 집계·GMS 경로/권한·모델 실패 분류를 확인한다. 한도 0은 승인된 양의 값 없이 우회하지 않는다 |
+| `pending` 장기 지속·늦은 완료 | 임대 만료와 증가하는 `attempt_generation`, 서버 재시작·timeout을 확인한다. 저장된 새 원천 해시와 맞지 않는 구 설명은 보이지 않아야 한다. 임대·집계 행을 직접 비워 재시도하지 않는다 |
+| 배포 뒤 SQL/권한 오류 | 의도한 DB의 V29 성공·앱 역할 SELECT/INSERT/UPDATE와 기존 V28을 확인한다. NASA 빈 목록으로 위장하지 않고 트래픽을 멈춰 마이그레이션 원인을 고친다 |
+
+비용 또는 GMS 장애에는 `NASA_EXPLANATION_ENABLED=false`로 **새 설명 호출**을 중지한다. 필요하면 `NASA_PLANET_INFO_ENABLED=false`로 **새 NASA 호출**도 중지한다. 보호된 설정 변경 뒤 기존 Backend 배포 절차로 재시작하고 health·저장 상태를 다시 읽는다. 진행 중 요청은 timeout까지 남을 수 있다. V29 테이블·옛 비활성 행·V28 집계를 지우지 않는다. 코드 롤백은 **이미 적용된 V29와 호환되는 빌드**로만 수행하며, V29 파일 수정이나 테이블 삭제는 자동 롤백이 아니다. DB DDL/데이터 삭제·초기화는 대상·영향·백업/복원을 확인해 실행 직전 별도 승인을 받는다.
+
+### 10.6 검증 범위 기록
+
+일회용 PostgreSQL·로컬 NASA HTTP fixture·모델 stub의 최종 일곱 클래스 통합 회귀는 **98/98, 실패·오류 0, `BUILD SUCCESSFUL in 1m 27s`**다. `NasaPlanetExplanationTest` 17, `NasaPlanetInfoTest` 8, `NasaStarPlanetTest` 10, `StarResultTest` 13, `SubmissionTest` 37, `StarPathHttpTest` 9, `StarPlanetExplanationHttpTest` 4건이다. 65행 상한의 localhost 응답과 새 경로의 세션·CSRF 사례를 포함한다. 권한, 0/복수 행성, 중복·부분 실패, 재확인·과거 목록 보존, 목록·설명 임대 만료와 늦은 완료, V28 공유 한도의 확인 범위를 [270 개발 계약 5절](../development/nasa-star-planets-270.md#5-저장검증-경계)에 구분해 기록했다. 선행 266~268의 과거 73건, 267의 과거 GMS 실호출, 268의 프론트 fixture 6건은 **이번 270 실행 결과에 합산하지 않는다.** 큰 본문·JSON 숫자 파싱 실패의 270 전용 fixture, 실제 NASA·유료 GMS 새 실호출, 실제 회원·Gold/목업 TIC 연결, 공유/운영 DB의 V29 적용, 운영 지연·비용·271 배포 브라우저 인수는 각각 별도 확인이 필요하다.

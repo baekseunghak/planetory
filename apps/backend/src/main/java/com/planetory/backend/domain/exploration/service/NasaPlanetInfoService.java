@@ -175,7 +175,7 @@ public class NasaPlanetInfoService {
                 interrupted ? "interrupted" : refreshStatus, row.sourceVersion());
     }
 
-    private static String sha256(String normalized) {
+    static String sha256(String normalized) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(normalized.getBytes(StandardCharsets.UTF_8));

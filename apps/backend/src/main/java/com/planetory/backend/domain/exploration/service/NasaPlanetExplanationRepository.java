@@ -2,12 +2,9 @@ package com.planetory.backend.domain.exploration.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Repository;
 
 import static com.planetory.backend.domain.exploration.service.NasaPlanetExplanation.Content;
@@ -17,12 +14,12 @@ import static com.planetory.backend.domain.exploration.service.NasaPlanetExplana
 class NasaPlanetExplanationRepository {
 
     private final JdbcClient jdbc;
-    private final TransactionTemplate transactions;
+    private final NasaExplanationQuota quota;
     private final ObjectMapper json = new ObjectMapper();
 
-    NasaPlanetExplanationRepository(JdbcClient jdbc, PlatformTransactionManager transactionManager) {
+    NasaPlanetExplanationRepository(JdbcClient jdbc, NasaExplanationQuota quota) {
         this.jdbc = jdbc;
-        this.transactions = new TransactionTemplate(transactionManager);
+        this.quota = quota;
     }
 
     Optional<Row> find(long candidateId, String hash, short sourceVersion,
@@ -50,44 +47,11 @@ class NasaPlanetExplanationRepository {
     }
 
     /** 시도권과 UTC 일별 사용량을 한 짧은 트랜잭션에서 확정한다. */
-    Claim claimWithinQuota(long memberId, long candidateId, String hash, short sourceVersion,
+    NasaExplanationQuota.Claim claimWithinQuota(long memberId, long candidateId, String hash, short sourceVersion,
                            String model, String promptVersion, OffsetDateTime now,
                            OffsetDateTime leaseUntil, int perMemberLimit, int globalLimit) {
-        LocalDate day = now.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalDate();
-        return transactions.execute(ignored -> {
-            // ponytail: 전역 일일 잠금. 실제 모델 처리량이 커지면 날짜별 잠금으로 분리한다.
-            jdbc.sql("SELECT pg_advisory_xact_lock(267268)").query((rs, n) -> true).single();
-            int memberUsed = jdbc.sql("""
-                            SELECT COALESCE((SELECT attempt_count FROM nasa_explanation_daily_usage
-                                             WHERE usage_day=:day AND member_id=:memberId), 0)
-                            """)
-                    .param("day", day).param("memberId", memberId).query(Integer.class).single();
-            int globalUsed = jdbc.sql("""
-                            SELECT COALESCE((SELECT attempt_count FROM nasa_explanation_daily_total
-                                             WHERE usage_day=:day), 0)
-                            """)
-                    .param("day", day).query(Integer.class).single();
-            if (memberUsed >= perMemberLimit || globalUsed >= globalLimit) {
-                return new Claim(Optional.empty(), true);
-            }
-            Optional<Long> generation = claim(candidateId, hash, sourceVersion, model,
-                    promptVersion, now, leaseUntil);
-            generation.ifPresent(value -> jdbc.sql("""
-                            INSERT INTO nasa_explanation_daily_usage(usage_day,member_id,attempt_count)
-                            VALUES (:day,:memberId,1)
-                            ON CONFLICT (usage_day,member_id) DO UPDATE SET
-                                attempt_count=nasa_explanation_daily_usage.attempt_count+1
-                            """)
-                    .param("day", day).param("memberId", memberId).update());
-            generation.ifPresent(value -> jdbc.sql("""
-                            INSERT INTO nasa_explanation_daily_total(usage_day,attempt_count)
-                            VALUES (:day,1)
-                            ON CONFLICT (usage_day) DO UPDATE SET
-                                attempt_count=nasa_explanation_daily_total.attempt_count+1
-                            """)
-                    .param("day", day).update());
-            return new Claim(generation, false);
-        });
+        return quota.claim(memberId, now, perMemberLimit, globalLimit,
+                () -> claim(candidateId, hash, sourceVersion, model, promptVersion, now, leaseUntil));
     }
 
     private Optional<Long> claim(long candidateId, String hash, short sourceVersion,
@@ -188,6 +152,4 @@ class NasaPlanetExplanationRepository {
                String failure) {
     }
 
-    record Claim(Optional<Long> generation, boolean limited) {
-    }
 }

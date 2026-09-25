@@ -54,6 +54,7 @@ class StarPathHttpTest {
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
+        registry.add("planetory.nasa.enabled", () -> "false");
     }
 
     @AfterAll
@@ -157,6 +158,23 @@ class StarPathHttpTest {
         mvc.perform(post(own).session(session).with(csrf()).contentType("application/json")
                         .content("{\"candidateId\":\"c-1\"}"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 결과_NASA_목록은_본인_답과_POST_CSRF를_요구한다() throws Exception {
+        String url = "/api/v1/stars/" + openTic + "/result/nasa-planets";
+        mvc.perform(get(url)).andExpect(status().isUnauthorized());
+        mvc.perform(get(url).session(session))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        MockHttpSession owner = loginSession(openMember);
+        mvc.perform(get(url).session(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("not_requested"));
+        mvc.perform(post(url).session(owner)).andExpect(status().isForbidden());
+        mvc.perform(post(url).session(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshStatus").value("disabled"));
     }
 
     /** size도 숫자 타입으로 받으면 같은 이유로 500이 된다. */
