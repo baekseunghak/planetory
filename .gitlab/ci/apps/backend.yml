@@ -141,7 +141,17 @@ backend:test:
     # 10분이 지나도 끝나지 않으면 테스트 JVM의 스레드 덤프를 로그에 남긴다. 시간 초과로 끝나면
     # JUnit 보고서가 올라가지 않아, 멈춘 호출을 알 수 있는 곳이 이 덤프뿐이다. 먼저 끝나면 아무것도 찍지 않는다.
     - (sleep 600; for p in $(jcmd -l | awk '/GradleWorkerMain/ {print $1}'); do jcmd "$p" Thread.print; done) &
-    - ./gradlew test --no-daemon
+    # 부분 실행: 수동으로 누를 때 BACKEND_TESTS에 Gradle --tests 패턴을 쉼표로 적으면 그것만 돈다.
+    # 실패한 클래스만 다시 돌리거나 CI 설정을 고치며 확인할 때 쓴다. 비우면 전체가 돈다.
+    # 부분 실행은 병합 판단의 근거가 아니다. develop 자동 실행은 변수가 없어 늘 전체다.
+    - |
+      set -f
+      set --
+      if [ -n "$BACKEND_TESTS" ]; then
+        echo "부분 실행(병합 판단 근거 아님): $BACKEND_TESTS"
+        for pattern in $(echo "$BACKEND_TESTS" | tr ',' ' '); do set -- "$@" --tests "$pattern"; done
+      fi
+      ./gradlew test --no-daemon "$@"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes: *backend_paths

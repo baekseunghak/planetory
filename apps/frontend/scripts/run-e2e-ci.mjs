@@ -12,10 +12,19 @@ import { readFile } from "node:fs/promises";
 
 const lanes = Number(process.env.E2E_LANES ?? 2);
 const { scripts } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-const suites = scripts["test:e2e"].split("&&").map((part) => {
+const all = scripts["test:e2e"].split("&&").map((part) => {
   const [, name, extra = ""] = part.trim().match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
   return { name, args: extra.split(/\s+/).filter(Boolean) };
 });
+
+// 부분 실행: E2E_SUITES에 스위트 이름을 쉼표로 적으면 그것만 돈다(test: 접두어는 생략 가능).
+// 실패한 스위트만 다시 돌리거나 CI 설정을 고치며 확인할 때 쓴다. 병합 판단의 근거가 아니다.
+const wanted = (process.env.E2E_SUITES ?? "").split(",").map((name) => name.trim()).filter(Boolean)
+  .map((name) => (name.startsWith("test:") ? name : `test:${name}`));
+const unknown = wanted.filter((name) => !all.some((suite) => suite.name === name));
+if (unknown.length) throw new Error(`E2E_SUITES에 없는 스위트: ${unknown.join(", ")}`);
+const suites = wanted.length ? all.filter((suite) => wanted.includes(suite.name)) : all;
+if (wanted.length) console.log(`부분 실행(병합 판단 근거 아님): ${wanted.join(", ")}`);
 
 function run({ name, args }) {
   const started = Date.now();
@@ -47,7 +56,7 @@ async function runSuite(suite) {
 
 const results = [];
 const browser = suites.find((suite) => suite.name === "test:browser");
-results.push(await runSuite({ ...browser, args: [...browser.args, `--workers=${lanes}`] }));
+if (browser) results.push(await runSuite({ ...browser, args: [...browser.args, `--workers=${lanes}`] }));
 
 const queue = suites.filter((suite) => suite !== browser);
 await Promise.all(
