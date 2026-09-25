@@ -1,3 +1,29 @@
+# Publisher 검사 [S15P21C206-86]. 적재 테스트(test_load)는 일회용 postgres 서비스에 저장소 마이그레이션
+# 전체를 적용한 새 스키마에서 돈다. 마이그레이션이 역할을 만들어 소유자(superuser)로 접속한다. job과 함께
+# 사라지는 CI 전용 DB라 비밀이 아니다. validate 단계라 실패하면 기준 브랜치의 build:publisher가 시작하지 않는다.
+validate:publisher:
+  stage: validate
+  image: python:3.12-slim
+  services:
+    - name: postgres:18.6-alpine
+      alias: publisher-db
+  variables:
+    POSTGRES_DB: publisher_test
+    POSTGRES_USER: planetory
+    POSTGRES_PASSWORD: ci-validation-only
+    PUBLISHER_TEST_DATABASE_URL: postgresql://planetory:ci-validation-only@publisher-db:5432/publisher_test
+    PYTHONDONTWRITEBYTECODE: "1"
+  script:
+    - pip install --no-cache-dir -r distributed-system/publisher/requirements.txt ./libs/astro-kernel
+    - cd distributed-system/publisher
+    - python -m unittest -v test_mock_source test_notify test_load
+  rules:
+    - changes:
+        - distributed-system/publisher/**/*
+        - libs/astro-kernel/**/*
+        - apps/backend/src/main/resources/db/migration/**/*
+        - .gitlab/ci/distributed-system/publisher.yml
+
 # 이미지가 astro-kernel(checksum)과 Backend 마이그레이션 목록(preflight 기준)을 담는다. 둘이 바뀌어도 다시 빌드한다.
 build:publisher:
   extends: .docker-build
