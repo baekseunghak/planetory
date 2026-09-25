@@ -50,7 +50,7 @@ GOLD_CACHE_TIC_IDS=<TARGET_TIC_ID>,<OTHER_TIC_ID>
 docker compose up -d --no-deps backend
 ```
 
-4. 재시작 뒤 Backend 로그의 `Gold 기동 사전 적재 종료`에서 시도 개수와 소요 시간을 확인하고, 배포 헬스 대기 한계(기본 90초) 안에 준비됐는지 기록한다. 실제 TIC 목록과 개수별 기동 시간·응답 지연은 [S15P21C206-263](https://ssafy.atlassian.net/browse/S15P21C206-263)에서 측정한다. current 판의 두 Redis 키도 확인한다. 아래 조회가 `segments_key`·`periodogram_key`를 출력한다. 두 키가 모두 있으면 `EXISTS`가 `2`를 반환한다. Redis가 비거나 키가 축출됐어도 분석 API는 DB로 조회해 다시 채운다. `used_memory`·`used_memory_rss`·`evicted_keys`도 확인해 선택한 별이 128mb 안에 유지되는지 측정한다.
+4. 재시작 뒤 Backend 로그의 `Gold 기동 사전 적재 종료`에서 시도 개수와 소요 시간을 확인하고, 배포 헬스 대기 한계(기본 90초) 안에 준비됐는지 기록한다. 실제 TIC 목록과 개수별 기동 시간·응답 지연, 곡선 값 크기별 `Gold Redis 조회 실패`·`적재 실패` 로그 수는 [S15P21C206-263](https://ssafy.atlassian.net/browse/S15P21C206-263)에서 측정한다. current 판의 두 Redis 키도 확인한다. 아래 조회가 `segments_key`·`periodogram_key`를 출력한다. 두 키가 모두 있으면 `EXISTS`가 `2`를 반환한다. Redis가 비거나 키가 축출됐어도 분석 API는 DB로 조회해 다시 채운다. `used_memory`·`used_memory_rss`·`evicted_keys`도 확인해 선택한 별이 128mb 안에 유지되는지 측정한다.
 
 ```sql
 SELECT 'planetory:gold:v1:segments:' ||
@@ -97,7 +97,7 @@ V23 적용 이후 최초 active 전환은 DB 트리거가 시작 경계와 당�
 
 ## 2. 명령 실행
 
-백엔드 jar에 `--planetory.command=challenge-unlock` 인자를 준다. 웹 서버를 띄우지 않고 한 번 실행한 뒤 종료하므로 서버가 떠 있는 호스트에서 실행해도 포트가 겹치지 않는다. DB 접속은 서버와 같은 환경 변수(`DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`)를 쓴다.
+백엔드 jar에 `--planetory.command=challenge-unlock` 인자를 준다. 웹 서버를 띄우지 않고 한 번 실행한 뒤 종료하므로 서버가 떠 있는 호스트에서 실행해도 포트가 겹치지 않는다. `GOLD_CACHE_ENABLED=true`가 설정돼 있어도 이 비웹 명령은 Gold 캐시를 만들거나 사전 적재하지 않고 DB에서 읽는다. DB 접속은 서버와 같은 환경 변수(`DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`)를 쓴다.
 
 ```powershell
 java -jar app.jar --planetory.command=challenge-unlock

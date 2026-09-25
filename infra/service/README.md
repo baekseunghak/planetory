@@ -68,7 +68,7 @@ cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
 
 설정(`command`)을 바꿨을 때도 같은 명령을 쓴다. compose가 바뀐 컨테이너만 다시 만든다. 세션은 볼륨에 남으므로 로그인이 유지되고, 캐시는 비워진다.
 
-Gold 읽기 캐시는 기본 비활성이다. 운영자가 `.env`에 `GOLD_CACHE_ENABLED=true`와 쉼표로 구분한 `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 지정하고 Backend를 재시작하면 해당 별의 현재 판 곡선·원본 주기도를 시작 시 적재한다. 후보 모델과 공개·권한 판단은 DB에서 읽는다. 새 판 알림이 오면 다시 적재하고, 알림이 없어도 다음 곡선·주기도 조회에서 DB를 읽어 채운다. 지정하지 않은 별도 DB에서 분석할 수 있다. Redis가 비거나 장애가 나면 DB에서 읽는다. 초기 운영 예상은 별 5개 또는 10개이며 실제 TIC 목록은 미정이다. `cache-redis`의 기본 128mb가 선택한 별 전체와 향후 계산 캐시를 수용하는지 `redis-cli info memory`의 `used_memory`·`used_memory_rss`와 축출 수를 측정한 뒤 별 수 또는 용량을 정한다. 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+Gold 읽기 캐시는 기본 비활성이다. 운영자가 `.env`에 `GOLD_CACHE_ENABLED=true`와 쉼표로 구분한 `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 지정하고 Backend를 재시작하면 해당 별의 현재 판 곡선·원본 주기도를 시작 시 적재한다. 캐시는 서블릿 웹 서버와 세션 Redis가 활성화된 경우에만 생성되며, 같은 환경변수를 받는 비웹 운영 명령은 DB에서 읽는다. 후보 모델과 공개·권한 판단은 DB에서 읽는다. 새 판 알림이 오면 다시 적재하고, 알림이 없어도 다음 곡선·주기도 조회에서 DB를 읽어 채운다. 지정하지 않은 별도 DB에서 분석할 수 있다. Redis가 비거나 장애가 나면 DB에서 읽는다. 초기 운영 예상은 별 5개 또는 10개이며 실제 TIC 목록은 미정이다. `cache-redis`의 기본 128mb가 선택한 별 전체와 향후 계산 캐시를 수용하는지 `redis-cli info memory`의 `used_memory`·`used_memory_rss`와 축출 수를 측정한 뒤 별 수 또는 용량을 정한다. 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
 
 주간 챌린지 별 등록부터 캐시 대상 지정·회차 전환·검증까지는 [챌린지 별 등록·회차 전환 런북](../../docs/operations/challenge-round-runbook.md)을 따른다.
 

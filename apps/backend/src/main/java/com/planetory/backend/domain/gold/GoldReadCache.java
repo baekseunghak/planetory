@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Component;
 /** 운영자가 고른 별의 Gold 배열을 cache Redis에 보관한다. PostgreSQL이 정본이다. */
 @Component
 @ConditionalOnProperty(name = "planetory.gold.cache.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "planetory.session.redis.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class GoldReadCache {
     private static final Logger log = LoggerFactory.getLogger(GoldReadCache.class);
     private static final Duration TTL = Duration.ofDays(1);

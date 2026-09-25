@@ -142,6 +142,7 @@ public class GoldCatalogRepository implements ApplicationRunner {
     }
 
     public Optional<Periodogram> findPeriodogram(long ticId, long bundleId) {
+        // 캐시 적중에도 current를 DB에서 확인해야 archived 판의 주기도를 반환하지 않는다.
         boolean selectedCurrent = cache != null && cache.selected(ticId) && isCurrent(ticId, bundleId);
         if (selectedCurrent) {
             Periodogram hit = cache.periodogram(bundleId);
