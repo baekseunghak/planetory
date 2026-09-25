@@ -284,3 +284,4 @@
 | 2026-09-24 | 선택 캐시의 기동 실패 전파 방지 | S15P21C206-260 | TIC별 예외, Backend 기동, EC2 Bash | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-24.md) |
 | 2026-09-25 | 비웹 운영 명령의 Gold 캐시 생성 차단 | S15P21C206-260 | 서블릿 조건, 세션 Redis 조건, DB 조회 | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-25.md) |
 | 2026-09-25 | SourceCardTest 자기 교착 멈춤 정정 | S15P21C206-88 | lockActive, ExecutorService.close, pg_locks, 최종 재검증 | 검증 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | develop 백엔드 테스트 실패·정지 정정 | S15P21C206-84 | Flyway target, R__, min-public-cohort, lockActive, 인자 파일 인코딩 | 검증 완료 | [기록](2026-09-25.md) |
