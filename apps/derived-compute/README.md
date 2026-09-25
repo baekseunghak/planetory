@@ -99,6 +99,7 @@ uv export --frozen --no-dev --no-emit-package astro-kernel --no-emit-project -o 
 | --- | --- |
 | `pytest` (Windows 로컬 Python 3.12) | 19 passed. 계약 잔차 fixture와 `rtol=1e-12` 일치, 계약 오류 요청 9건 코드 일치, 전부 `null` 세그먼트, 캡처 |
 | 캡처 → 131 `worker_comparison.compare` | 잔차·주기도 캡처 2개를 구조 오류 없이 읽음(허용 오차 미등록이라 `measurement_only`) |
+| 로컬 시드(!201) 종단: `LOCAL_SEED_SMOKE=1 DERIVED_COMPUTE_URL=…` | TOI-270 실제 곡선(2,919점, manifest `period_*` 키, `pg-log5000-v1`)에서 후보 1개 제거 → 작업 `COMPLETED`(0.66초) → 1단계 곡선·주기도(5,000칸)·봉우리 200. 요청 `period_grid`는 DB 열 값(0.5·40.0·5000)이었고 캡처 2개를 131 도구가 읽음. 목업·시드 데이터라 과학 수치 검증이 아니다 |
 | 합성 20,000점·격자 5,000점, 컨테이너(`--cpus 1 --memory 2048m`) | 잔차 0.08초, 주기도 0.92초, 메모리 약 50MiB. 로컬 Windows 결과와 잔차·power 차이 0 |
 | 프로세스 상한 400MiB, 격자 2,000만 점 | `memory_exhausted`(stage `PERIODOGRAM`) 응답 뒤에도 `/healthz` 정상 |
 | compose(`derived-compute`) | 격리 프로젝트로 기동, 서비스 이름으로 접근, CPU 1·메모리 2GiB·호스트 포트 없음 확인 |
