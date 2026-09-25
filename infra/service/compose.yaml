@@ -107,6 +107,8 @@ services:
       SSAFY_CLIENT_ID: ${SSAFY_CLIENT_ID:-}
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
+      # GMS(LLM 설명 기능) API 키. 읽는 Backend 코드보다 전달 경로를 먼저 둔다. 비어 있어도 기동한다.
+      GMS_KEY: ${GMS_KEY:-}
       GOLD_ROOT: /gold
       # 내부 경로(/internal/**) 서비스 토큰. Publisher가 판 전환을 알릴 때 쓴다. 비우면 Backend가
       # 경로 전체를 막는다. 알림이 없어도 DB의 current가 정본이라 화면은 열린다 [S15P21C206-262].

@@ -6,6 +6,19 @@ Frontend, Backend와 온라인 계산기의 공통 Docker Compose 설정을 둘 
 
 GitLab의 EC2-A 수동 배포 job이 이 Compose를 사용해 선택한 서비스만 갱신한다. EC2-B에는 서비스 역할이 없으므로(시스템 아키텍처 8장 D4) `ec2-b/`에는 서비스 설정을 두지 않고 CI·외부 관찰 설정만 둔다([ec2-b/README.md](ec2-b/README.md)). 노드별 서비스 차이가 필요하면 `ec2-a/`에 둔다.
 
+## Backend 비밀 값 추가
+
+Backend가 새 비밀 값을 읽을 때는 두 곳을 함께 바꾼다. compose는 `environment:`에 적힌 변수만 컨테이너에 넘기므로 서버 `.env`에만 넣으면 Backend가 보지 못한다.
+
+1. `compose.yaml` backend `environment:`에 `NAME: ${NAME:-}`로 적는다. `:?`로 적으면 값이 없는 노드에서 `config -q`와 기동이 깨진다.
+2. 서버 `.env`에 값을 직접 넣고 Backend를 다시 배포한다. 배포 job은 `compose.yaml`만 올리고 `.env`는 이미지 줄 외에 바꾸지 않는다. 값은 MR·메신저에 붙여 넣지 않는다.
+
+`apps/backend/.env.oauth.properties`는 로컬 PC 전용이다(`spring.config.import`, Git 제외). 운영에는 전달되지 않는다.
+
+| 변수 | 용도 | 상태 |
+|---|---|---|
+| `GMS_KEY` | GMS(LLM 설명 기능) API 키 | compose 전달만 먼저 둠. Backend에서 읽는 코드는 아직 없다(2026-09-25) |
+
 ## service-db
 
 PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.
