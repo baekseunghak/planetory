@@ -258,6 +258,18 @@ test("overlapping peak ranges use only the chosen gridIndex, including a non-def
   preview(previewPhaseSelection(context, data, change, 0, 0.25));
 });
 
+test("a null suggested duration skips only the duration cap (API 6.2)", () => {
+  const { raw, data, change } = sample();
+  const context = decodeAnalysisContext(raw, raw.ticId);
+  const peak = data.candidates.peaks[0];
+  peak.fineTune = { periodMinDays: 1, periodMaxDays: 3, periodStepDays: 0.01 };
+  peak.suggestedDurationHours = null;
+  change.selection.sourcePeakGridIndex = null;
+  const direct = getSelectionLimits(context, data, change).maxWindowDays;
+  change.selection.sourcePeakGridIndex = peak.gridIndex;
+  close(getSelectionLimits(context, data, change).maxWindowDays, direct);
+});
+
 test("source null stays direct even at a recommended period; missing source never guesses", () => {
   const { context, data, change } = sample();
   change.selection.periodDays = data.candidates.peaks[0].periodDays;

@@ -99,8 +99,10 @@ final class CandidatePeaks {
      *
      * @param gridIndex 같은 문맥·규칙 버전 안에서 사용자가 고른 봉우리의 식별값이다. {@code rank}는
      *                  정렬 결과라 제출에 쓰지 않는다(C02-R3)
+     * @param power     주기도 {@code power[gridIndex]}의 float32 그대로다. double로 넓히면 JSON 숫자가
+     *                  주기도 응답과 달라져 화면이 봉우리를 격자와 어긋난 것으로 거절한다 [S15P21C206-262]
      */
-    record Peak(int rank, int gridIndex, double periodDays, double power,
+    record Peak(int rank, int gridIndex, double periodDays, float power,
                 double fineTuneMinDays, double fineTuneMaxDays, double fineTuneStepDays) {
     }
 
@@ -133,7 +135,7 @@ final class CandidatePeaks {
         List<Peak> peaks = new ArrayList<>(picked.size());
         for (int rank = 0; rank < picked.size(); rank++) {
             int index = picked.get(rank);
-            peaks.add(peakAt(rank + 1, index, power[index].doubleValue(), grid, rules.halfWidthCells()));
+            peaks.add(peakAt(rank + 1, index, power[index], grid, rules.halfWidthCells()));
         }
         return List.copyOf(peaks);
     }
@@ -144,7 +146,7 @@ final class CandidatePeaks {
      * <p>{@code P × r^(−h) ~ P × r^(+h)}이며 step은 그 자리 격자 한 칸 폭이다. 격자를 벗어나지 않도록
      * 자른다 — 격자 밖 주기는 애초에 고를 수 없다.
      */
-    static Peak peakAt(int rank, int gridIndex, double power, Grid grid, int halfWidthCells) {
+    static Peak peakAt(int rank, int gridIndex, float power, Grid grid, int halfWidthCells) {
         double[] range = fineTune(grid, gridIndex, halfWidthCells);
         return new Peak(rank, gridIndex, grid.periodAt(gridIndex), power,
                 range[0], range[1], grid.cellWidthAt(gridIndex));

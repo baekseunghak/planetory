@@ -24,8 +24,9 @@ export type PeriodPeak = {
     periodMaxDays: number;
     periodStepDays: number;
   };
-  suggestedDurationHours: number;
-  suggestedPhaseCenter: number;
+  // API 5.4: 출처(판의 주기별 BLS 값)가 생기기 전까지 서버는 null을 준다. null은 0이 아니라 "모른다"다.
+  suggestedDurationHours: number | null;
+  suggestedPhaseCenter: number | null;
 };
 export type CandidatePeaks = {
   context: CurveContext;
@@ -180,11 +181,14 @@ export function decodeCandidatePeaks(
       periodStepDays > periodMaxDays - periodMinDays
     )
       invalid("fineTune range/step");
-    const suggestedPhaseCenter = finite(
-      peak.suggestedPhaseCenter,
-      "suggestedPhaseCenter",
-    );
-    if (suggestedPhaseCenter < 0 || suggestedPhaseCenter >= 1)
+    const suggestedPhaseCenter =
+      peak.suggestedPhaseCenter === null
+        ? null
+        : finite(peak.suggestedPhaseCenter, "suggestedPhaseCenter");
+    if (
+      suggestedPhaseCenter !== null &&
+      (suggestedPhaseCenter < 0 || suggestedPhaseCenter >= 1)
+    )
       invalid("suggestedPhaseCenter");
     return {
       rank,
@@ -192,10 +196,10 @@ export function decodeCandidatePeaks(
       periodDays,
       power,
       fineTune: { periodMinDays, periodMaxDays, periodStepDays },
-      suggestedDurationHours: positive(
-        peak.suggestedDurationHours,
-        "suggestedDurationHours",
-      ),
+      suggestedDurationHours:
+        peak.suggestedDurationHours === null
+          ? null
+          : positive(peak.suggestedDurationHours, "suggestedDurationHours"),
       suggestedPhaseCenter,
     };
   });

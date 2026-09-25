@@ -107,7 +107,12 @@ services:
       SSAFY_CLIENT_ID: ${SSAFY_CLIENT_ID:-}
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
+      # GMS(LLM 설명 기능) API 키. 읽는 Backend 코드보다 전달 경로를 먼저 둔다. 비어 있어도 기동한다.
+      GMS_KEY: ${GMS_KEY:-}
       GOLD_ROOT: /gold
+      # 내부 경로(/internal/**) 서비스 토큰. Publisher가 판 전환을 알릴 때 쓴다. 비우면 Backend가
+      # 경로 전체를 막는다. 알림이 없어도 DB의 current가 정본이라 화면은 열린다 [S15P21C206-262].
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       # 주소를 .env로 빼지 않는다. compose가 정의한 서비스 이름이 곧 주소이고,
       # .env에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않는다.
       SESSION_REDIS_HOST: session-redis
@@ -408,6 +413,32 @@ services:
     depends_on:
       api-docs-app:
         condition: service_started
+    networks:
+      - service
+
+  # Gold 목업 게시. gold-mock profile에 묶여 평시 up 대상이 아니다 [S15P21C206-262].
+  #   docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027
+  #
+  # 입력만 계약 예시 payload로 바꾼 실제 적재 단계다(distributed-system/publisher). 운영 Publisher는
+  # GCP Node 1에서 돌 예정이며 그때 입력 어댑터만 바뀐다. gold_writer 멤버 계정으로 붙는다.
+  # 소유자로 붙으면 권한 분리가 무력화된다. 계정 생성과 삭제 절차는 README 「Gold 목업」.
+  #
+  # 비밀번호는 :- 로 받는다. :? 로 두면 값이 없는 노드에서 config -q가 실패해 배포가 막힌다.
+  gold-mock:
+    image: ${PUBLISHER_IMAGE:-local/planetory-publisher:not-configured}
+    platform: linux/amd64
+    profiles: ["gold-mock"]
+    environment:
+      PGHOST: service-db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-planetory_poc}
+      PGUSER: ${PUBLISHER_DB_USER:-planetory_publisher}
+      PGPASSWORD: ${PUBLISHER_DB_PASSWORD:-}
+      BACKEND_URL: http://backend:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+    depends_on:
+      service-db:
+        condition: service_healthy
     networks:
       - service
 

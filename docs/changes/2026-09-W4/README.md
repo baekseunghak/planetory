@@ -227,6 +227,10 @@
 | 2026-09-23 | MR !194 리뷰 반영 | S15P21C206-252 | Triggerer 기동, r0 attempt, coverage 감사, completed_through, CI | 운영 배포·회귀 검증 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | Jira 완료 조건 운영 검증 | S15P21C206-252 | Sector 36, 실패 주입, COMMIT_CACHED, BRONZE_CACHED, 스냅샷 동일 | 검증 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | develop 연속 병합에서 서비스 배포 버튼 유지 | S15P21C206-261 | rules:changes, auto_cancel, environment ec2-a, ci_forward_deployment | 구현·lint 통과, 병합 전 | [기록](2026-09-23.md) |
+| 2026-09-23 | 서비스 DB Gold 목업 적재와 배포 후속 정리 | S15P21C206-262 | publisher, gold-mock, mock-, gold_writer, registry-prune-daily, in-use, GCP interruptible | 구현·격리 검증 완료, 운영 반영 병합 후 | [기록](2026-09-23.md) |
+| 2026-09-23 | 서버 접속 순서와 OpenSSH 별칭을 지침에 추가 | - | AGENTS.md, tailscale ssh, ec2-a-ssh, node-1-ssh, .ssh/config | 문서 갱신 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 사람 PC의 deploy 계정 SSH 허용 | - | tailnet ACL, deploy, tailscale ssh, sudo -u deploy | ACL 적용·접속 확인 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 로컬 Gold 시드(!201)와 적재 단계 수렴 방침 | S15P21C206-262 | local-seed, payload 계약, load.publish, 86·87 | 방침 기록 | [기록](2026-09-23.md) |
 
 | 2026-09-23 | 반복 탐색·제공 해상도 표본 측정 연결 | S15P21C206-109 | population_kernel, held, 45개 표본 | 단위 15개 통과·실측 대기 | [기록](2026-09-23.md) |
 
@@ -272,3 +276,8 @@
 | 2026-09-23 | 운영자 지정 별 Gold 읽기 캐시로 범위 변경 | S15P21C206-260 | 곡선·원본 주기도, Redis 사전 적재, DB fallback | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-23.md) |
 | 2026-09-24 | 선택 캐시의 기동 실패 전파 방지 | S15P21C206-260 | TIC별 예외, Backend 기동, EC2 Bash | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-24.md) |
 | 2026-09-25 | 비웹 운영 명령의 Gold 캐시 생성 차단 | S15P21C206-260 | 서블릿 조건, 세션 Redis 조건, DB 조회 | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-25.md) |
+| 2026-09-24 | 로컬 시드(!201)의 적재 단계를 Publisher로 옮김 | S15P21C206-262 | publish_star, preflight, gold_canonical, MIGRATION_UNREADABLE, mock- | 구현·격리 검증 완료, 운영 적재 전 | [기록](2026-09-24.md) |
+| 2026-09-25 | 봉우리 power를 주기도와 같은 float32로 내보냄 | S15P21C206-262 | CandidatePeaks, PeakView.power, float32, peak/grid mismatch, 239.87599 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면이 봉우리 추천값 null을 계약대로 받음 | S15P21C206-262 | suggestedDurationHours, suggestedPhaseCenter, number or null, 6.2 duration 상한 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면 검증에서 찾은 계약 불일치 2건 인계 | S15P21C206-262 | ck_submissions_source_peak_all_or_none, 봉우리 제출 500, period_grid, min_days, count, bls-log-v1, pg-log5000-v1, 88 | 제안·인계 | [기록](2026-09-25.md) |
+| 2026-09-25 | Backend에 GMS_KEY 전달 경로를 먼저 둠 | S15P21C206-262 | GMS_KEY, compose environment, .env.oauth.properties 로컬 전용, Backend 비밀 값 추가 | 채택, 서버 값 입력 전 | [기록](2026-09-25.md) |

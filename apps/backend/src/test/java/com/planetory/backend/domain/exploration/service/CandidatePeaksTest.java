@@ -56,6 +56,21 @@ class CandidatePeaksTest {
         assertEquals(3, peaks.size(), "상위 N에서 끊는다. 0.40·0.20은 빠진다");
     }
 
+    /**
+     * 화면은 봉우리 power를 주기도 {@code power[gridIndex]}와 상대 1e-9로 대조한다. float32를 double로
+     * 넓혀 내보내면 {@code 239.87599}가 {@code 239.87599182128906}이 되어 모든 봉우리가 거절됐다 [S15P21C206-262].
+     */
+    @Test
+    void 봉우리_세기는_주기도_원소와_같은_JSON_숫자다() {
+        Float[] power = flat(101);
+        power[30] = 239.87599f;
+
+        var peak = CandidatePeaks.extract(power, GRID, rules(1, 1)).getFirst();
+
+        var json = tools.jackson.databind.json.JsonMapper.builder().build();
+        assertEquals(json.writeValueAsString(power[30]), json.writeValueAsString(peak.power()));
+    }
+
     /** {@code rank}는 정렬 결과이고 {@code gridIndex}가 식별값이다(C02-R3). */
     @Test
     void 세기가_같으면_낮은_칸이_앞이다() {
