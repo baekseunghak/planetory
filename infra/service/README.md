@@ -278,9 +278,42 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 | `PLANETORY_RESIDUAL_MAXRUNNING` | `1` | **Backend** 동시 계산 수. Worker 대수 × 동시 실행 수(지금 1 × 1)와 같아야 한다. 크면 넘친 작업이 기다리지 않고 Worker 503으로 실패한다 |
 | `DERIVED_COMPUTE_URL` | 없음 | **Backend** 변수. `http://derived-compute:8090`을 넣어야 Backend 실행기가 뜬다. 비어 있으면 잔차 요청은 503 「준비되지 않았습니다」 |
 
-켜는 순서: Worker를 배포해 `healthy`를 확인한 뒤 `.env`에 `DERIVED_COMPUTE_URL`을 넣고 Backend를 다시 배포한다. 거꾸로 하면 잔차 요청마다 재시도 가능한 실패 작업이 생긴다.
+값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다.
 
-값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 교체 뒤 `docker compose ps derived-compute`의 `healthy`를 사람이 확인한다.
+### 첫 배포 절차
+
+**켜는 순서는 Worker → 확인 → `DERIVED_COMPUTE_URL` → Backend다.** 거꾸로 하면 잔차 요청마다 재시도 가능한 실패 작업이 생긴다. 노드 접속 계정은 [CI/CD](../../docs/operations/cicd.md) 「배포 접속」과 [Tailscale 팀 서버 접근](../../docs/operations/tailscale-team-access.md)을 따르고, 명령은 배포 경로(`/home/deploy/planetory`)에서 실행한다.
+
+0. **전제.** 88 MR이 develop에 병합됐고, 그 병합 파이프라인의 `build:derived-compute`·`build:backend`가 성공했다. **같은 최신 파이프라인의 버튼만 쓴다**(옛 버튼은 막힌다). 첫 배포 전에는 노드에서 인자 없는 `docker compose up -d`를 치지 않는다. `DERIVED_COMPUTE_IMAGE`가 아직 없어 `derived-compute`가 없는 이미지를 찾는다.
+1. **Worker 배포.** `deploy:derived-compute:ec2-a`를 실행한다. job이 새 `compose.yaml`을 올리고 Worker만 만든다. Backend 컨테이너는 그대로다. 로그 끝이 `직전 이미지가 없습니다(첫 배포)`·`배포 완료`이고 `.env`에 `DERIVED_COMPUTE_IMAGE`가 기록된다.
+2. **Worker 확인.** HEALTHCHECK는 15초 간격이라 30초쯤 뒤에 본다.
+
+   ```sh
+   docker compose ps derived-compute                      # STATUS가 healthy
+   docker compose exec backend wget -qO- http://derived-compute:8090/healthz   # Backend에서 이름으로 닿는지, runtime.worker_image의 태그가 병합 commit인지
+   docker compose logs --tail 20 derived-compute
+   ```
+
+   `unhealthy`이거나 Backend에서 닿지 않으면 멈추고 `docker compose stop derived-compute`로 재시작 루프를 끊는다. 3단계로 가지 않는다.
+3. **Backend 켜기.** `.env`에 `DERIVED_COMPUTE_URL=http://derived-compute:8090` 한 줄을 더한다(`.env`는 비밀 값을 담으므로 이 한 줄만 추가하고 내용을 출력하지 않는다). 그다음 같은 파이프라인의 `deploy:backend:ec2-a`를 실행한다. 환경 변수가 바뀌어 Backend 컨테이너가 다시 만들어지며, DB 덤프·헬스 확인·자동 롤백은 기존과 같다. 동시 계산 수는 compose 기본값 `PLANETORY_RESIDUAL_MAXRUNNING=1`이다.
+4. **동작 확인.** 판이 있는 별(!206 목업 적재 뒤)에서 잔차 1단계를 요청한다. 화면의 봉우리 제출은 V4 제약으로 500이라(262 인계) 그 전에는 로그인 세션으로 원본 곡선 후보 제출 → `POST /api/v1/stars/{tic}/residual-jobs` 순서로 부른다(`LocalSeedSmokeTest`와 같은 순서). 작업이 `COMPLETED`가 되고 Backend 로그에 두 줄이 남으면 연결된 것이다.
+
+   ```sh
+   docker compose logs backend | grep WorkerResidualComputeRunner   # "잔차 작업 rj-N RESIDUAL 완료", "… PERIODOGRAM 완료"
+   ```
+
+   실패하면 같은 로그의 `멈췄습니다: <원인>` 줄이 Worker 오류 코드나 연결 실패를 보여 준다.
+5. **131 인계(선택).** [apps/derived-compute](../../apps/derived-compute/README.md) 「131 인계」대로 캡처를 켜고 같은 요청을 한 번 더 보낸 뒤 캡처·digest를 넘기고 캡처를 끈다.
+
+**되돌리기.**
+
+| 상황 | 조치 |
+| --- | --- |
+| 잔차 계산만 끄기 | `.env`에서 `DERIVED_COMPUTE_URL` 줄을 지우고 `deploy:backend:ec2-a`. 잔차 요청이 503 「준비되지 않았습니다」로 돌아간다 |
+| Worker 이상 | `docker compose stop derived-compute`. Backend가 켜져 있으면 잔차 작업은 재시도 가능한 실패로 끝난다 |
+| Worker 이미지 되돌리기 | 자동 롤백이 없다. `.env`의 `DERIVED_COMPUTE_IMAGE`를 직전 태그로 고치고 `docker compose up -d --no-deps derived-compute` |
+
+배포 뒤 결과(병합 commit, Worker 이미지 태그·digest, 확인한 작업 ID)는 [서비스 배포 현황](../../docs/project/service-deploy-status.md)과 Jira 88에 남긴다.
 
 ## 배포와 롤백
 
