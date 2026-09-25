@@ -7,7 +7,6 @@
 --
 -- 봉우리 번호는 그대로 필수다. 제안 duration과 상한은 함께 움직인다. 둘 다 NULL(제안 없음, 상한 없음)이거나
 -- 둘 다 유한한 양수다. 한쪽만 채운 행은 계속 막는다. 옛 규칙보다 넓어 기존 행은 모두 통과한다.
--- V26은 열린 S15P21C206-267이 쓰고 있어 건너뛴다.
 --
 -- CHECK는 NULL 결과를 통과시키므로 양수 분기에도 IS NOT NULL을 적는다(V4와 같은 이유).
 ALTER TABLE submissions DROP CONSTRAINT ck_submissions_source_peak_all_or_none;
