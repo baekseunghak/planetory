@@ -175,7 +175,7 @@ docker compose exec service-db psql -U planetory -d planetory_poc -c "\password 
 
 ### 적재
 
-이미지는 CI `build:publisher`가 커밋 SHA로 만든다. 이미지에 시작 명령이 없으므로 `python -m publisher <명령>`으로 부른다.
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다. 이미지의 시작 명령은 `CMD ["python", "-m", "publisher"]`인데 `docker compose run <서비스> <인자>`는 `CMD`를 인자로 통째로 대체한다. `run gold-mock mock-load`는 명령이 `["mock-load"]`가 되어 `executable file not found`로 실패하므로 `python -m publisher <명령>`까지 적는다.
 
 ```sh
 cd "$DEPLOY_PATH"

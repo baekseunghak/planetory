@@ -104,7 +104,9 @@ CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `dep
 | `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
 | `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
 
-운영 DB는 V25다(2026-09-25). V23·V24는 261 전에 수동 배포한 `f6379f5b`에서, V25(266 NASA 행성 정보)는 파이프라인 `222444`(`a8fb6667`, 262 병합)의 Backend 배포에서 적용됐다.
+운영 DB는 V29다(2026-09-26). V23·V24는 261 전에 수동 배포한 `f6379f5b`에서, V25(266 NASA 행성 정보)는 파이프라인 `222444`(`a8fb6667`, 262 병합)에서, V26~V29는 `222918`(`6d1926d5`)의 Backend 배포(2026-09-26 01:10 KST)에서 한꺼번에 적용됐다. 그중 V27은 `submissions`의 `ck_submissions_source_peak_all_or_none`을 교체한 되돌리기 어려운 마이그레이션이다(`S15P21C206-269`). 교체 뒤 운영 제약 정의를 확인했고, 실제 봉우리 제출은 아직 확인하지 않았다.
+
+Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 적용한다. 누르기 전에 운영 `flyway_schema_history`의 마지막 버전과 `db/migration`을 대조한다.
 
 **옛 배포 버튼 시험 (2026-09-26, `S15P21C206-262` 항목 2).** 한 번도 실행하지 않은 옛 manual job의 Play는 403으로 막혔다(`222890` `deploy:backend:ec2-a`). 반면 옛 job의 Retry는 막히지 않는다. `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 옛 Frontend `e9835da5`가 01:18:58~01:19:45 KST 약 1분 운영에 올라갔고, `222444`의 성공 job Retry로 `a8fb6667`에 되돌렸다. `ci_forward_deployment_rollback_allowed: true` 때문이며 정본은 [CI/CD](../operations/cicd.md)다. 이 설정을 끌지는 정하지 않았다.
 

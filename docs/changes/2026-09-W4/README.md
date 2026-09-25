@@ -297,3 +297,4 @@
 | 2026-09-25 | V28 신규 테이블의 반복 마이그레이션 설명 누락 정정 | S15P21C206-268 | R__table_comments.sql, backend:schema, MR !219 | 조건부 설명 추가·로컬 검사 통과, CI 재검증 대기 | [기록](2026-09-25.md) |
 | 2026-09-25 | 운영 목업 적재·EC2-B 정리 cron 설치와 목업 명령 정정 | S15P21C206-262 | planetory_publisher, mock-load, --no-deps, service-db 재생성, python -m publisher, planetory-prune | 검증 완료, cron 첫 실행 전 | [기록](2026-09-25.md) |
 | 2026-09-26 | 옛 배포 버튼 시험: Play는 막히고 Retry는 막히지 않는다 | S15P21C206-262 | ci_forward_deployment_enabled, rollback_allowed, Retry, Play 403, forward deployment | 검증 완료, Retry 보호 미정 | [기록](2026-09-26.md) |
+| 2026-09-26 | 정정: 목업 명령 근거(CMD 대체)와 운영 DB V29 | S15P21C206-262 | CMD, compose run 인자 대체, ENTRYPOINT, V26~V29, V27 제출 제약 | 정정 | [기록](2026-09-26.md) |
