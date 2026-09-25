@@ -1,5 +1,6 @@
 package com.planetory.backend;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,9 +85,10 @@ class PlanetoryApplicationCommandModeTest {
     @Test
     void 알_수_없는_명령은_스프링을_띄우지_않고_64로_끝난다(@TempDir Path dir) throws Exception {
         // 윈도우 명령줄 길이 제한을 피하려고 클래스패스를 인자 파일로 넘긴다.
+        // 런처는 인자 파일을 시스템 기본 인코딩으로 읽는다. UTF-8로 쓰면 한글 경로가 깨진다.
         Path argFile = dir.resolve("classpath.args");
-        Files.writeString(argFile,
-                "-cp \"" + System.getProperty("java.class.path").replace('\\', '/') + "\"", StandardCharsets.UTF_8);
+        Files.writeString(argFile, "-cp \"" + System.getProperty("java.class.path").replace('\\', '/') + "\"",
+                Charset.forName(System.getProperty("native.encoding")));
         Path output = dir.resolve("output.log");
         Process process = new ProcessBuilder(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(),
