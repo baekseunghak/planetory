@@ -65,7 +65,8 @@ web:e2e:
   script:
     # test:production이 vite preview로 dist를 띄운다. 로컬 npm run check와 같은 순서다.
     - npm run build
-    - npm run test:e2e
+    # 목록은 test:e2e 그대로, test:browser는 스위트 안에서, 나머지는 스위트끼리 병렬로 돈다.
+    - npm run test:e2e:ci
   artifacts:
     when: on_failure
     expire_in: 1 week
