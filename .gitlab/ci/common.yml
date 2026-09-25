@@ -90,9 +90,10 @@ validate:data-platform:
         - .gitlab/ci/common.yml
 
 # 과학 계산 커널과 그것을 쓰는 spark·publisher 테스트 [S15P21C206-91]. 의존성은 커널의 uv.lock으로 고정한다.
+# 이미지 Python은 커널의 .python-version(3.11)과 맞춘다. 다르면 uv가 매번 Python을 따로 내려받는다.
 validate:astro-kernel:
   stage: validate
-  image: python:3.12-slim
+  image: python:3.11-slim
   variables:
     PYTHONDONTWRITEBYTECODE: "1"
     UV_PROJECT: $CI_PROJECT_DIR/libs/astro-kernel
