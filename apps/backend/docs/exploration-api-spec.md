@@ -349,6 +349,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 ### 4.2 선택한 별·내 행성 상세
 
+S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-planet-info-266.md)은 이 절의 `planets.items`를 변경하지 않는다. 2026-09-25 결정에 따라 268은 기존 회원별 표시 대상 중 검증 연결된 확정 후보만 NASA 수치로 보강한다. 신규 요청/응답 필드·화면 인수는 268에서 정하며 266 구현 완료를 이 HTTP API 완성으로 간주하지 않는다.
+
 `GET /api/v1/me/stars/{ticId}` — 별 선택 시 같은 캔버스의 근접 뷰·도킹 패널·행성 목록에서 공유한다. 인증 회원의 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`. 별도의 NASA iframe이나 전체 카탈로그 행성 API로 대체하지 않는다.
 
 경로의 `{ticId}`는 접두 없는 양의 정수다. 형식이 다르면 발견하지 않은 별과 같은 403 `STAR_LOCKED`로 덮는다(S15P21C206-246).
