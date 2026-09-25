@@ -298,3 +298,4 @@
 | 2026-09-25 | 운영 목업 적재·EC2-B 정리 cron 설치와 목업 명령 정정 | S15P21C206-262 | planetory_publisher, mock-load, --no-deps, service-db 재생성, python -m publisher, planetory-prune | 검증 완료, cron 첫 실행 전 | [기록](2026-09-25.md) |
 | 2026-09-26 | 옛 배포 버튼 시험: Play는 막히고 Retry는 막히지 않는다 | S15P21C206-262 | ci_forward_deployment_enabled, rollback_allowed, Retry, Play 403, forward deployment | 검증 완료, Retry 보호 미정 | [기록](2026-09-26.md) |
 | 2026-09-26 | 정정: 목업 명령 근거(CMD 대체)와 운영 DB V29 | S15P21C206-262 | CMD, compose run 인자 대체, ENTRYPOINT, V26~V29, V27 제출 제약 | 정정 | [기록](2026-09-26.md) |
+| 2026-09-26 | 정정: 옛 배포 버튼 시험의 부작용(compose 되돌림·최신 버튼 차단) | S15P21C206-262 | Retry, compose.yaml 덮어쓰기, environment 공유, blocked, rollback_allowed, 93 | 정정 | [기록](2026-09-26.md) |

@@ -56,9 +56,18 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 **Retry는 막히지 않는다.** `ci_forward_deployment_rollback_allowed: true`에서는 옛 배포 job의 Retry가 **예전에 성공했든 아니든** 롤백으로 허용된다. 2026-09-26 `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 정식 배포(21716)로 기록되며 옛 Frontend `e9835da5`가 운영에 올라갔다. `222444`의 성공 job을 Retry해 약 1분 뒤 되돌렸다. 따라서 취소·실패·성공한 옛 배포 job의 **Retry 버튼은 곧 되돌리기 버튼**이다. 의도한 되돌리기에만 누른다.
 
+**Retry 되돌리기는 이미지만 되돌리지 않는다.** 같은 시험에서 두 가지 부작용이 났다(`S15P21C206-88` 세션 확인).
+
+- **서버 `compose.yaml`이 그 커밋 판으로 덮인다.** 배포 job은 서비스와 상관없이 자기 커밋의 compose를 통째로 올린다. `222444` Retry가 `a8fb6667`의 compose를 올려, 앞서 `222918`로 배포한 `derived-compute` 서비스와 Backend의 `DERIVED_COMPUTE_URL` 전달 줄이 빠졌다(01:19~02:51 KST). 컨테이너는 다시 만들지 않아 동작했지만, 그 사이 Backend가 재생성됐다면 잔차 실행기가 꺼지고 Worker는 compose 밖 고아 컨테이너가 됐다. `222918`의 성공 job(`deploy:derived-compute:ec2-a`)을 Retry해 되살렸다.
+- **최신 파이프라인의 버튼이 막힌다.** 모든 배포 job이 environment `ec2-a` 하나를 쓰므로 옛 job의 Retry가 더 새 deployment 기록이 된다. 그 뒤 실제로는 더 새 `222918`의 미실행 `deploy:frontend:ec2-a`가 옛 job으로 취급돼 `blocked`가 됐다. 옛 버튼은 Retry로 통과하고 최신 버튼은 막히는, 보호가 거꾸로 걸린 상태다. 이때 최신 판을 올리려면 새 파이프라인이 필요하다.
+
+대책 후보(미결정): 서비스별 environment 분리, 서버에 올라간 것보다 옛 커밋의 compose를 올리지 않게 막기, 되돌리기는 이미지만 바꾸고 compose는 유지하기.
+
 이 규칙 이전(2026-09-23 전) 파이프라인의 job은 environment가 없어 배포로 세지 않는다. 그 job을 Retry하면 보호 없이 옛 compose가 올라간다.
 
-Retry까지 막으려면 `ci_forward_deployment_rollback_allowed`를 끈다. 그러면 GitLab 버튼으로 하는 되돌리기도 막히므로 되돌리기는 `deploy.sh` 자동 롤백이나 서버 수동 절차로만 한다. 끌지는 정하지 않았다.
+Retry까지 막으려면 `ci_forward_deployment_rollback_allowed`를 끈다. 그러면 GitLab 버튼으로 하는 되돌리기도 막히고 **의도한 되돌리기는 서버 수동 절차만 남는다.** `deploy.sh`의 자동 롤백은 새 이미지 교체가 실패했을 때만(`replace "$IMAGE" || rollback`) 불리므로 "잘 떴지만 되돌리고 싶다"에는 쓸 수 없다. Play는 이미 outdated 보호로 막혀 있다.
+
+끌지는 정하지 않았다. **`S15P21C206-93`에서 함께 정한다.** 93이 `main` 병합 뒤 자동 CD와 실패 시 직전 SHA 롤백을 넣으면, 실패 경로는 `deploy.sh`와 93이 덮고 남는 것은 의도한 되돌리기 하나다. 그때 그 용도의 경로(위 대책 후보 포함)를 따로 두고 이 설정을 끄는 것이 순서다.
 
 대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. 태그 정리는 EC2-B의 매일 cron이 배포 중인 이미지를 보호한 채 한다([EC2-B](../../infra/service/ec2-b/README.md) 「매일 정리」).
 
