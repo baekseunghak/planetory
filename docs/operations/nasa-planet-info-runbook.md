@@ -196,6 +196,8 @@ RETURNING n.candidate_id, n.tic_id, n.archive_planet_name,
 | `NASA_EXPLANATION_MAX_CONCURRENT` | `1`, 백엔드 프로세스당 모델 요청 수 | 한 인스턴스의 유료 호출 동시 수를 제한한다. 인스턴스가 여러 개면 전체 상한은 인스턴스 수에 따라 늘어난다 |
 | `NASA_EXPLANATION_RETRY_DELAY` | `1h`, 실패 뒤 시간 | 같은 원천·모델·프롬프트의 실패 뒤 다음 실제 요청에서 재시도할 수 있는 최소 간격이다 |
 
+유료 설명 생성을 활성화할 때는 기동 전에 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 비어 있지 않은 `GMS_KEY`를 한 조합으로 확인한다. 활성화한 상태에서 모델 연결이나 키가 빠지면 설명 기능만 꺼지는 것이 아니라 **백엔드 전체 기동이 실패한다**. 설정을 바로잡을 수 없다면 `NASA_EXPLANATION_ENABLED=false`로 되돌려 기동한다. 키 값 자체는 확인 화면이나 로그에 출력하지 않는다.
+
 GMS 기본 주소는 `https://gms.ssafy.io/gmsapi/api.openai.com/v1`로 고정한다. Spring AI의 자동 HTTP 재시도는 `spring.ai.openai.max-retries=0`으로 꺼 두고, 설명 저장 상태가 관리하는 시도만 사용한다. 같은 `sourceHash`·`sourceVersion`·모델·프롬프트 버전당 **최대 3회**가 코드 상한이며, 실패 후 기본 1시간을 기다린다. 이 횟수와 프롬프트 버전은 운영 환경변수로 임의 증폭하지 않는다. 모델 가격, GMS 계정 쿼터, 월 지출 한도는 공개 자료로 확인되지 않았으므로 활성화 전 운영자가 계정의 **유한한 쿼터·지출 한도**를 설정·확인한다. 수치가 확정되지 않으면 비활성 상태를 유지한다.
 
 ### 8.3 안전한 적용 순서
