@@ -20,14 +20,14 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
    └─ publisher.yml
 ```
 
-최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램을 재시작하지 않는다. 이미지 빌드는 변경된 프로그램만 하되, EC2-A 서비스(Frontend·Backend)는 기준 브랜치 병합마다 빌드한다(아래 「배포 버튼 유지」).
+최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램을 재시작하지 않는다. 이미지 빌드는 변경된 프로그램만 하되, EC2-A 서비스(Frontend·Backend·잔차 Worker `derived-compute`)는 기준 브랜치 병합마다 빌드한다(아래 「배포 버튼 유지」).
 
 ## 실행 흐름
 
 | 시점 | 실행 |
 | --- | --- |
 | Merge Request | Compose와 Docker 구성 검사 |
-| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend는 변경과 관계없이 매번 빌드 |
+| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend·`derived-compute`는 변경과 관계없이 매번 빌드 |
 | 배포 승인 | 선택한 서버에서 해당 이미지만 pull·재시작 |
 
 소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
@@ -86,6 +86,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
+- 잔차 Worker(`derived-compute`, S15P21C206-88): EC2-A에 `deploy:derived-compute:ec2-a`로 배포한다. HTTP 헬스 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
 - Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
 - Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다. Publisher 이미지는 EC2-A의 Gold 목업 적재(`gold-mock` profile)에서도 같은 이미지로 돈다(`S15P21C206-262`).
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.

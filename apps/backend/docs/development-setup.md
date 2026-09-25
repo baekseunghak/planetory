@@ -86,6 +86,7 @@ Gold 읽기 캐시는 기본 비활성이다. 지정한 별을 미리 올리려�
 | `SPRING_PROFILES_ACTIVE` | 미지정 시 `local`(로컬 DB 기본값·Swagger·예제 API·SQL 로그). 배포 이미지는 `prod` |
 | `SKIP_LOCAL_DB` / `CI` | `true`면 Gradle의 로컬 DB 자동 기동을 건너뜀 |
 | `SWAGGER_ENABLED` | local 외 환경에서 문서 노출을 명시적으로 제어, 기본 false |
+| `DERIVED_COMPUTE_URL` | 잔차·주기도 Worker 주소(예: `http://localhost:8090`). 비우면 잔차 요청은 503 「준비되지 않았습니다」. Worker 실행은 [apps/derived-compute](../../derived-compute/README.md) |
 
 ## 4. Flyway 최초 스키마
 

@@ -26,7 +26,7 @@
         "tic_id": "123456789",
         "fold_reference_time_btjd": 1683.4231,
         "residual_model_version": "box-divide-v0",
-        "periodogram_config_version": "bls-log-v1",
+        "periodogram_config_version": "pg-log5000-v1",
         "curve_segments": [
           {
             "segment_id": "seg-1001",
@@ -80,6 +80,13 @@
         "tic_id": "123456789",
         "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
         "result": {
           "residual_model_version": "box-divide-v0",
           "residual_segments": [
@@ -106,7 +113,7 @@
         "tic_id": "123456789",
         "fold_reference_time_btjd": 1683.4231,
         "residual_model_version": "box-divide-v0",
-        "periodogram_config_version": "bls-log-v1",
+        "periodogram_config_version": "pg-log5000-v1",
         "removed_candidate_ids": ["c-9", "c-10"],
         "residual_segments": [
           {
@@ -135,8 +142,15 @@
         "tic_id": "123456789",
         "removed_candidate_ids": ["c-9", "c-10"],
         "ok": true,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
         "result": {
-          "periodogram_config_version": "bls-log-v1",
+          "periodogram_config_version": "pg-log5000-v1",
           "n_periods": 3,
           "period_days": [0.5, 4.47213595499958, 40.0],
           "power": [0.12, 0.83, 0.21]

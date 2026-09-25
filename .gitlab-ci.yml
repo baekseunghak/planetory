@@ -9,6 +9,7 @@ include:
   - local: .gitlab/ci/common.yml
   - local: .gitlab/ci/apps/frontend.yml
   - local: .gitlab/ci/apps/backend.yml
+  - local: .gitlab/ci/apps/derived-compute.yml
   - local: .gitlab/ci/distributed-system/ingestion.yml
   - local: .gitlab/ci/distributed-system/spark.yml
   - local: .gitlab/ci/distributed-system/airflow.yml

@@ -271,6 +271,17 @@
 
 - [2026-09-24](2026-09-24.md): S15P21C206-130 재평가·이력 보존 커널과 126 저장 점수 연결 검증.
 
+- [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 계약 보완(period_grid 조립 출처, pg-log5000-v1 설정표, runtime, 주기도·자원 오류). 제안·리뷰 대기.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 Worker 서버·이미지·compose·CI 구현. 로컬·컨테이너 검증 완료, Backend 연동 전.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 Backend 잔차 실행기(WorkerResidualComputeRunner) 연결. DERIVED_COMPUTE_URL로 켠다.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 !211 합의 정합(빈 제거 조합 거절 유지, 전부 null 세그먼트, 격자 생성식)과 131 인계용 요청·응답 캡처.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 Worker가 provided-bls-1.0.0을 pg-log5000-v1과 같은 설정으로 받는다(262 인계).
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 잔차 Worker EC2-A 첫 배포 절차와 CI/CD 대상 목록 보완. 배포 전.
 | 2026-09-25 | 요청된 확정 행성 NASA PS 조회·DB 저장 계약 | S15P21C206-266 | NASA, ps, V25, 식별, 재확인 | 구현·격리 검증 완료, 운영 적용 미실행 | [기록](2026-09-25.md) |
 | 2026-09-25 | NASA 식별자 정정 복구 절차 | S15P21C206-266 | identity_changed, attempt_generation, 임대 | 절차·격리 검증 완료, 운영 적용 미실행 | [기록](2026-09-25.md) |
 | 2026-09-25 | 검증된 NASA 자료 한국어 설명 계약 | S15P21C206-267 | Spring AI, GMS, V26, source_hash, 조건부 저장 | 267 격리 10건·266 회귀·비활성/활성 설정 기동 통과, GMS 실호출·운영 적용 미실행 | [기록](2026-09-25.md) |
@@ -286,6 +297,8 @@
 | 2026-09-23 | 운영자 지정 별 Gold 읽기 캐시로 범위 변경 | S15P21C206-260 | 곡선·원본 주기도, Redis 사전 적재, DB fallback | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-23.md) |
 | 2026-09-24 | 선택 캐시의 기동 실패 전파 방지 | S15P21C206-260 | TIC별 예외, Backend 기동, EC2 Bash | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-24.md) |
 | 2026-09-25 | 비웹 운영 명령의 Gold 캐시 생성 차단 | S15P21C206-260 | 서블릿 조건, 세션 Redis 조건, DB 조회 | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | SourceCardTest 자기 교착 멈춤 정정 | S15P21C206-88 | lockActive, ExecutorService.close, pg_locks, 최종 재검증 | 검증 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | develop 백엔드 테스트 실패·정지 정정 | S15P21C206-84 | Flyway target, R__, min-public-cohort, lockActive, 인자 파일 인코딩 | 검증 완료 | [기록](2026-09-25.md) |
 | 2026-09-24 | 로컬 시드(!201)의 적재 단계를 Publisher로 옮김 | S15P21C206-262 | publish_star, preflight, gold_canonical, MIGRATION_UNREADABLE, mock- | 구현·격리 검증 완료, 운영 적재 전 | [기록](2026-09-24.md) |
 | 2026-09-25 | 봉우리 power를 주기도와 같은 float32로 내보냄 | S15P21C206-262 | CandidatePeaks, PeakView.power, float32, peak/grid mismatch, 239.87599 | 구현 완료 | [기록](2026-09-25.md) |
 | 2026-09-25 | 화면이 봉우리 추천값 null을 계약대로 받음 | S15P21C206-262 | suggestedDurationHours, suggestedPhaseCenter, number or null, 6.2 duration 상한 | 구현 완료 | [기록](2026-09-25.md) |

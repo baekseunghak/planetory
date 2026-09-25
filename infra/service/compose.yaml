@@ -139,6 +139,12 @@ services:
       CACHE_REDIS_PORT: "6379"
       GOLD_CACHE_ENABLED: ${GOLD_CACHE_ENABLED:-false}
       GOLD_CACHE_TIC_IDS: ${GOLD_CACHE_TIC_IDS:-}
+      # 잔차 Worker [S15P21C206-88]. 위 주소 규칙의 예외로 .env에서 켠다(http://derived-compute:8090).
+      # Worker가 healthy인 것을 본 뒤에 넣는다. 비어 있으면 잔차 요청은 지금처럼 503 「준비되지 않았습니다」다.
+      DERIVED_COMPUTE_URL: ${DERIVED_COMPUTE_URL:-}
+      # 동시 계산 수(planetory.residual.max-running). Worker 대수 × instance_concurrency를 넘으면 넘친 작업이
+      # 기다리지 않고 Worker 503으로 곧바로 실패한다. Worker가 1대(동시 1)라 1로 둔다. 늘리면 Worker도 늘린다.
+      PLANETORY_RESIDUAL_MAXRUNNING: ${PLANETORY_RESIDUAL_MAXRUNNING:-1}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
@@ -151,6 +157,30 @@ services:
         condition: service_healthy
       service-db:
         condition: service_healthy
+    networks:
+      - service
+
+  # 온라인 잔차·주기도 Worker [S15P21C206-88]. Backend만 service 네트워크 안에서
+  # http://derived-compute:8090 으로 부른다. 호스트 포트를 열지 않으며 DB·Redis 자격 증명을 받지 않는다.
+  # Worker의 계산 경로에는 인증이 없다. 이 네트워크 격리가 유일한 통제이므로 디버깅용으로도 ports:를 열지 않는다.
+  # 들여다볼 때는 docker compose exec derived-compute … 나 backend 컨테이너에서 이름으로 부른다.
+  # backend의 depends_on에 넣지 않는다. Worker가 없으면 잔차 요청만 503이 되고 나머지 API는 돈다.
+  #
+  # 자원은 계약 5절의 실측 전 시작값(cpu_per_job=1, memory_mib_per_job=2048, instance_concurrency=1)이다.
+  # 프로세스 상한(MEMORY_LIMIT_MIB)을 컨테이너 상한보다 낮게 둬야 OOM kill(응답 없음)보다
+  # memory_exhausted 응답이 먼저 난다. 값 조정은 S15P21C206-104 실측 뒤에 한다.
+  derived-compute:
+    image: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      WORKER_IMAGE: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+      DERIVED_COMPUTE_INSTANCE_CONCURRENCY: "1"
+      DERIVED_COMPUTE_MEMORY_LIMIT_MIB: ${DERIVED_COMPUTE_MEMORY_LIMIT_MIB:-1900}
+      # 131 인계용 요청·응답 캡처. 평시에는 비운다. 켜는 법은 apps/derived-compute README 「131 인계」.
+      DERIVED_COMPUTE_CAPTURE_DIR: ${DERIVED_COMPUTE_CAPTURE_DIR:-}
+    cpus: ${DERIVED_COMPUTE_CPUS:-1}
+    mem_limit: ${DERIVED_COMPUTE_MEMORY:-2048m}
     networks:
       - service
 

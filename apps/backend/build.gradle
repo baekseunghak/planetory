@@ -106,6 +106,8 @@ tasks.named('test') {
 		def kept = [
 			// 실제 PostgreSQL에서 앱 기동(엔티티 검증), 빈 스키마 전체 마이그레이션·재실행 0건, V1 업그레이드.
 			'com.planetory.backend.domain.gold.GoldCatalogSchemaTest',
+			// 가짜 Worker로 잔차·주기도 요청 조립, 실패 분류(재시도 여부), 제한 시간, 번들 변경 거절.
+			'com.planetory.backend.domain.exploration.service.WorkerResidualComputeRunnerTest',
 		]
 		def root = file('src/test/java').toPath()
 		def excluded = 0
