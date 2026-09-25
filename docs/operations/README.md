@@ -13,7 +13,7 @@
 | 판정 규칙 새 버전·튜토리얼 별·챌린지 대상 입력 | [운영 규칙 변경 런북](operation-rule-runbook.md) | 초안. DB 검증·초기 규칙 구현 완료, 운영 DB 적용 미검증 |
 | 후보 병합·분리가 회원 성과·공개에 주는 영향 확인 | [후보 정정 사전검사 런북](candidate-correction-runbook.md) | 초안. 읽기 전용 사전검사 명령 구현 완료. 적용·복구 절차는 계약 승인 전까지 없음 |
 | 전체 MV·일별 비교 기준선·최소 잡 역할 | [통계 실행 런북](statistics-runbook.md) | 178 구현·격리 검증, 운영 스케줄 활성화는 별도 |
-| 요청된 확정 후보의 NASA 조회 배포·점검·복구 | [NASA 행성 정보 운영 가이드](nasa-planet-info-runbook.md) | 266 구현·격리 검증, 공유/운영 적용 미실행 |
+| 요청된 확정 후보의 NASA 조회·한국어 설명 배포·점검·복구 | [NASA 행성 정보·설명 운영 가이드](nasa-planet-info-runbook.md) | 266 내부·267 별 단위 API 격리 검증, 가상 데이터의 NASA·GMS v2·v3 각 4건 확인, 실제 회원·공유/운영·268 화면 미검증 |
 
 서버 역할은 [아키텍처](../architecture/README.md)를 따른다. 정적 검사 통과, 이미지 빌드, Registry push와 실제 서버 배포 검증을 구분한다.
 
