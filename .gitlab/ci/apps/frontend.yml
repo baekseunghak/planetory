@@ -80,8 +80,8 @@ web:e2e:smoke:
       when: manual
       allow_failure: true
 
-# 전체: test:e2e 505개. 동시 2로 약 26분이라 수동으로만 누른다. CI에서 늘 실패하는 9건(WebGL 값·
-# 검색 흐름)이 정리되기 전까지는 빨갛게 끝난다. 스테이징(develop → main MR) 편입은 S15P21C206-92에서 정한다.
+# 전체: test:e2e 505개. 동시 2로 약 26분이라 수동으로만 누른다. GPU 픽셀 테스트(@gpu)는 뺀다. CI에서 늘
+# 실패하는 8건(캔버스 입력·검색 흐름, cicd.md)이 정리되기 전까지는 빨갛게 끝난다. 스테이징(develop → main MR) 편입은 S15P21C206-92에서 정한다.
 web:e2e:
   extends: .web-e2e
   timeout: 45m

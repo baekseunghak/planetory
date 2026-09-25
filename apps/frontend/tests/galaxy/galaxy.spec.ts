@@ -183,7 +183,9 @@ test("cached culling spans reproduce exact GPU pixels through camera and selecti
     expect(result.differences).toBe(0);
   }
 });
-test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel projection", async ({
+// 실제 WebGL 픽셀을 읽어 밝기를 비교한다. GPU 없는 CI(SwiftShader)에서는 같은 자리가 1로 읽혀
+// 실패하므로 제목의 @gpu 태그로 CI 전체 실행에서만 뺀다(scripts/run-e2e-ci.mjs). 개발 PC에서는 그대로 돈다.
+test("1 10 100 1000 reference camera screenshots, rotation and GPU pixel projection @gpu", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

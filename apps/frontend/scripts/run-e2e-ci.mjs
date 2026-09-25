@@ -11,35 +11,61 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const lanes = Number(process.env.E2E_LANES ?? 2);
-const { scripts } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+const { scripts } = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+);
+// GPU 렌더링 결과(실제 픽셀)를 검증하는 테스트는 @gpu로 표시한다. 빌드 노드에는 GPU가 없어 SwiftShader가
+// 다른 값을 내므로 CI에서만 뺀다. 표시된 테스트만 빼고, 스위트가 비어도 실패로 보지 않는다.
+const gpuFree = ["--grep-invert=@gpu", "--pass-with-no-tests"];
 const all = scripts["test:e2e"].split("&&").map((part) => {
-  const [, name, extra = ""] = part.trim().match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
-  return { name, args: extra.split(/\s+/).filter(Boolean) };
+  const [, name, extra = ""] = part
+    .trim()
+    .match(/^npm run (\S+)(?:\s+--\s+(.*))?$/);
+  const args = extra.split(/\s+/).filter(Boolean);
+  return {
+    name,
+    args: scripts[name].startsWith("playwright") ? [...args, ...gpuFree] : args,
+  };
 });
 
 // 부분 실행: E2E_SUITES에 스위트 이름을 쉼표로 적으면 그것만 돈다(test: 접두어는 생략 가능).
 // 실패한 스위트만 다시 돌리거나 CI 설정을 고치며 확인할 때 쓴다. 병합 판단의 근거가 아니다.
-const wanted = (process.env.E2E_SUITES ?? "").split(",").map((name) => name.trim()).filter(Boolean)
+const wanted = (process.env.E2E_SUITES ?? "")
+  .split(",")
+  .map((name) => name.trim())
+  .filter(Boolean)
   .map((name) => (name.startsWith("test:") ? name : `test:${name}`));
-const unknown = wanted.filter((name) => !all.some((suite) => suite.name === name));
-if (unknown.length) throw new Error(`E2E_SUITES에 없는 스위트: ${unknown.join(", ")}`);
-const suites = wanted.length ? all.filter((suite) => wanted.includes(suite.name)) : all;
-if (wanted.length) console.log(`부분 실행(병합 판단 근거 아님): ${wanted.join(", ")}`);
+const unknown = wanted.filter(
+  (name) => !all.some((suite) => suite.name === name),
+);
+if (unknown.length)
+  throw new Error(`E2E_SUITES에 없는 스위트: ${unknown.join(", ")}`);
+const suites = wanted.length
+  ? all.filter((suite) => wanted.includes(suite.name))
+  : all;
+if (wanted.length)
+  console.log(`부분 실행(병합 판단 근거 아님): ${wanted.join(", ")}`);
 
 function run({ name, args }) {
   const started = Date.now();
   console.log(`시작: ${name}`);
   return new Promise((resolve) => {
-    const child = spawn("npm", ["run", name, ...(args.length ? ["--", ...args] : [])], {
-      shell: process.platform === "win32",
-    });
+    const child = spawn(
+      "npm",
+      ["run", name, ...(args.length ? ["--", ...args] : [])],
+      {
+        shell: process.platform === "win32",
+      },
+    );
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));
     child.on("close", (code) => {
       const seconds = Math.round((Date.now() - started) / 1000);
       // 동시에 도는 스위트의 출력이 섞이지 않게 끝난 뒤 한 번에 찍는다.
-      console.log(`\n===== ${name}: ${code === 0 ? "통과" : "실패"}, ${seconds}초 =====\n${output}`);
+      console.log(
+        `\n===== ${name}: ${code === 0 ? "통과" : "실패"}, ${seconds}초 =====\n${output}`,
+      );
       resolve({ name, code, seconds, output });
     });
   });
@@ -49,14 +75,21 @@ function run({ name, args }) {
 // 먼저 잡을 수 있다. 테스트 실패가 아니라 서버 기동 실패이므로 그때만 한 번 다시 돌린다.
 async function runSuite(suite) {
   const result = await run(suite);
-  if (result.code === 0 || !result.output.includes("is already in use")) return result;
+  if (result.code === 0 || !result.output.includes("is already in use"))
+    return result;
   console.log(`포트 충돌로 다시 시작: ${suite.name}`);
   return run(suite);
 }
 
 const results = [];
 const browser = suites.find((suite) => suite.name === "test:browser");
-if (browser) results.push(await runSuite({ ...browser, args: [...browser.args, `--workers=${lanes}`] }));
+if (browser)
+  results.push(
+    await runSuite({
+      ...browser,
+      args: [...browser.args, `--workers=${lanes}`],
+    }),
+  );
 
 const queue = suites.filter((suite) => suite !== browser);
 await Promise.all(
@@ -66,5 +99,6 @@ await Promise.all(
 );
 
 console.log("\n===== 요약 =====");
-for (const { name, code, seconds } of results) console.log(`${code === 0 ? "통과" : "실패"}  ${name}  ${seconds}초`);
+for (const { name, code, seconds } of results)
+  console.log(`${code === 0 ? "통과" : "실패"}  ${name}  ${seconds}초`);
 process.exit(results.some(({ code }) => code !== 0) ? 1 : 0);
