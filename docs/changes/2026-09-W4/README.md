@@ -302,4 +302,4 @@
 | 2026-09-25 | 프론트 CI를 단위 테스트 관문과 브라우저 스모크·전체로 분리 | S15P21C206-91 | web:build, web:e2e:smoke, web:e2e, E2E_LANES | 구현 완료, 늘 실패 9건 후속 | [기록](2026-09-25.md) |
 | 2026-09-25 | MR 관문 예외 테스트를 목록(kept)으로 | S15P21C206-91 | -PmrTests, kept, GoldCatalogSchemaTest | 구현 완료 | [기록](2026-09-25.md) |
 | 2026-09-25 | 계약 fixture 검사 연결, 설정 오류 차단 증거, Worker·PowerShell·aarch64 Runner 범위 정정 | S15P21C206-91 | validate:contracts, validate:hadoop-config, validate:compose, 222681, 범위 정정 | 구현 완료, 병합 전 | [기록](2026-09-25.md) |
-| 2026-09-26 | Publisher 재시도 요약 규칙을 적재로 옮기고 적재 DB 테스트·CI 검사 추가 | S15P21C206-86 | payload_digest, PUBLISH_REJECTED, test_load, validate:publisher, pg_advisory_xact_lock | 구현·로컬 검증 완료, MR 전 | [기록](2026-09-26.md) |
+| 2026-09-26 | Publisher 재시도 요약 규칙을 적재로 옮기고 적재 DB 테스트·CI 검사 추가 | S15P21C206-86 | payload_digest, PUBLISH_REJECTED, test_load, validate:publisher, pg_advisory_xact_lock | 검증 완료(브랜치 파이프라인 223029 통과), MR 전 | [기록](2026-09-26.md) |
