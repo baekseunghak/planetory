@@ -9,7 +9,7 @@
   - 별마다 한 트랜잭션. pg_advisory_xact_lock(tic_id)으로 같은 별의 게시를 줄 세운다.
   - planetory_gold_writer 권한으로 쓴다(SET LOCAL ROLE). Publisher 권한 밖의 테이블을 DB가 막는다.
   - (tic_id, bundle_version)이 이미 있으면 내용 요약(payload_digest)을 대조한다. 같으면 재시도로 보고
-    아무것도 바꾸지 않는다. 다르면 IDEMPOTENCY_CONFLICT로 멈춘다.
+    아무것도 바꾸지 않는다. 다르면 IDEMPOTENCY_CONFLICT로 멈춘다. 요약 규칙은 적재가 가진다(S15P21C206-86).
   - staging 적재 → 같은 트랜잭션 안 조회 검사 → 기존 current를 archived → 새 판을 current. 부분 유일
     인덱스(current는 TIC당 하나)가 즉시 검사라 archived가 먼저다.
 
@@ -20,6 +20,8 @@ checksum은 공용 astro_kernel.gold_canonical로 계산한다. 시드의 canoni
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -66,6 +68,24 @@ class Target:
 def num(value) -> Decimal | None:
     """float64를 NUMERIC 열에 넣을 때 최단 왕복 표기로 바인딩한다(publication-qa.md 3.1절 9항)."""
     return None if value is None else Decimal(repr(float(value)))
+
+
+def payload_digest(payload: dict) -> str:
+    """같은 bundle_version의 재요청이 같은 의미의 판인지 가리는 요약 [S15P21C206-86].
+
+    I02-2 규칙대로 판 버전, 접기 기준 시각·base_days, 세그먼트 자연 키와 배열 checksum, 주기도·레코드 checksum으로
+    만든다. DB가 만드는 id(판·세그먼트·주기도, manifest의 segment_ids)는 넣지 않는다. 규칙은 적재가 가진다. 입력
+    어댑터가 값을 주면 이 값과 같아야 한다. 시각·base_days는 float로 받는다(repr이 요약에 들어간다).
+
+    로컬 시드(local_seed/payload.py)와 목업(mock_source)이 먼저 적재한 행과 같은 값을 내야 하므로 식을 바꾸지 않는다.
+    """
+    bundle = payload["bundle"]
+    return hashlib.sha256(json.dumps({
+        "bundle_version": bundle["bundle_version"],
+        "fold_reference_time_btjd": repr(bundle["fold_reference_time_btjd"]), "base_days": repr(bundle["base_days"]),
+        "segments": [[s["sector"], s["binning_revision"], s["checksum"]] for s in payload["segments"]],
+        "power": payload["periodogram"]["checksum"], "records": bundle["manifest"]["record_checksums"]},
+        sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def repository_migration_version() -> int | None:
@@ -140,6 +160,10 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
                  retire_reason: str = "Publisher 새 판 게시") -> StarResult:
     tic = payload["tic_id"]
     bundle = payload["bundle"]
+    digest = payload_digest(payload)
+    if bundle.get("payload_digest") not in (None, digest):
+        # 어댑터가 다른 식으로 요약했다. 그대로 두면 같은 판을 다른 판으로(또는 반대로) 판정한다.
+        raise PublishError("PUBLISH_REJECTED", f"TIC {tic} 입력 어댑터의 payload_digest가 적재 규칙과 다르다")
     with conn.transaction(), conn.cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (tic,))
         if target.use_writer_role:
@@ -151,8 +175,8 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
               FROM publication_bundles WHERE tic_id = %s AND bundle_version = %s""",
                           (tic, bundle["bundle_version"])).fetchone()
         if row:
-            bundle_id, status, digest = row
-            if digest != bundle["payload_digest"]:
+            bundle_id, status, stored_digest = row
+            if stored_digest != digest:
                 raise PublishError("IDEMPOTENCY_CONFLICT",
                                    f"TIC {tic} 판 {bundle['bundle_version'][:16]}…의 내용이 이번 payload와 다르다")
             if status == "current":
@@ -205,7 +229,8 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
             segment_ids.append(segment_id)
             array_checksums[f"segment:{segment_id}:flux"] = seg["checksum"]
 
-        manifest = {**bundle["manifest"], "segment_ids": segment_ids, "array_checksums": array_checksums}
+        manifest = {**bundle["manifest"], "segment_ids": segment_ids, "array_checksums": array_checksums,
+                    "publish": {**bundle["manifest"].get("publish", {}), "payload_digest": digest}}
         bundle_id = cur.execute("""
             INSERT INTO publication_bundles(tic_id, bundle_version, status, manifest, fold_reference_time_btjd,
                                             base_days)
