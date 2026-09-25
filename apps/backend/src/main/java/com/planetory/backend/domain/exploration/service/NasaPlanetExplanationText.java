@@ -62,7 +62,9 @@ final class NasaPlanetExplanationText {
 
     static Content render(Draft draft, Planet planet, String sourceHash) {
         Facts facts = facts(planet);
-        if (draft == null || !sourceHash.equals(draft.sourceHash())
+        if (draft == null || draft.name() == null || draft.orbitalPeriod() == null
+                || draft.radius() == null || draft.mass() == null || draft.discovery() == null
+                || !sourceHash.equals(draft.sourceHash())
                 || !NAME_TOKEN.equals(draft.planetName())
                 || !NAME.contains(draft.name())
                 || !choices(facts.period(), PERIOD, NO_PERIOD).contains(draft.orbitalPeriod())

@@ -196,6 +196,19 @@ class NasaPlanetExplanationTest {
     }
 
     @Test
+    void 모델이_문장_필드를_빠뜨리면_invalid_output으로_기록한다() {
+        Draft valid = draft(HASH_A);
+        when(generator.generate(any(), eq(HASH_A))).thenReturn(new Draft(HASH_A,
+                valid.planetName(), valid.name(), valid.orbitalPeriod(), valid.radius(),
+                null, valid.discovery()));
+
+        var failed = service.lookup(MEMBER, candidate);
+        assertEquals("failed", failed.status());
+        assertEquals("invalid_output", failed.failure());
+        assertNull(failed.content());
+    }
+
+    @Test
     void 결측_상하한과_논쟁은_표현하고_오차는_설명에서_제외한다() {
         var content = NasaPlanetExplanationText.render(draft(HASH_A), planet, HASH_A);
         assertEquals("이 행성은 별 주위를 한 바퀴 도는 데 9일이 걸려요.", content.orbitalPeriod());

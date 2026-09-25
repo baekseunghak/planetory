@@ -72,6 +72,8 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 | `busy` | 프로세스당 동시 모델 호출 제한에 걸렸다 |
 | `source_changed` | 조회 중 원천이 바뀌거나 구 결과의 조건부 저장이 거절됐다. 구 설명은 사용하지 않는다 |
 
+모델 초안의 다섯 문장 필드 중 하나라도 누락되거나 null이면 `invalid_output`으로 분류해 해당 후보의 `content`를 내보내지 않는다. 이 경우를 `model_error`로 기록하지 않는다.
+
 ### 4.2 인증 회원의 별 단위 응답
 
 267은 `GET /api/v1/me/stars/{ticId}/planet-explanations`를 제공한다. 기존 `GET /api/v1/me/stars/{ticId}`의 응답과 `planets.items`는 변경하지 않는다. 인증된 회원 ID는 서버 세션에서 가져온다. TIC 형식 오류나 회원이 열지 않은 별은 기존 별 상세와 똑같이 `STAR_LOCKED`로 덮는다. 서버는 **그 회원·그 TIC의 기존 `planets.items`를 구성하는 권한 필터**로 대상을 정한다. 클라이언트가 후보 ID나 제출 주기를 보내 목록을 늘리거나 설명 대상을 연결하지 않는다. NASA에 등록된 같은 별의 다른 행성도 추가하지 않는다.
@@ -109,6 +111,8 @@ v4의 다섯 필드는 각각 독립적으로 읽을 수 있는 완전한 한국
 별도 `StarPathHttpTest` 실행에서는 격리 스키마를 둔 로컬 PostgreSQL과 실제 로그인 세션으로 미인증 401, 본인 별 200, 잠긴 별 `STAR_LOCKED`를 포함한 8건이 모두 통과했다(`BUILD SUCCESSFUL`, 실패·오류·건너뜀 0건).
 
 정상 다섯 사실, 저장 결과 재사용과 모델·프롬프트 변경 뒤 재생성, 행성 식별·해시·숫자·단위·형식 불일치, null·상한·하한·부호 있는 오차, 지시문처럼 보이는 외부 문자열과 HTML 참조 제외, timeout과 최대 3회 재시도, 동시 생성·원천 변경 뒤 늦은 완료, 원천 미준비·기본 비활성, Spring AI 모델 stub의 JSON 파싱을 확인한다. 2026-09-25에 Java 컴파일과 이 클래스의 **11개 사례가 모두 통과**했다. 별도 회귀 실행에서 266의 `NasaPlanetInfoTest`와 키 없는 기본 비활성 설정의 `PlanetoryApplicationTests`를 함께 통과시켰다. 별도 실행에서는 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 테스트용 키 placeholder를 넣어 활성 Spring AI Bean의 기동도 확인했다. 이때 모델 요청은 만들지 않았다. 재실행의 기대 결과는 `BUILD SUCCESSFUL`이며, 실패 시 `build/test-results/test/TEST-com.planetory.backend.domain.exploration.service.NasaPlanetExplanationTest.xml`의 첫 원인을 확인한다. 이 명령은 기존 개발·공유·운영 DB를 초기화하지 않는다. 이 격리 테스트는 실제 GMS 연결, 모델의 한국어 품질·오류율·호출 비용·지연을 확인하지 않는다.
+
+같은 날 리뷰 보완으로 모델의 문장 필드 누락 사례를 추가했다. `NasaPlanetExplanationTest` **12건 모두 통과**했고 누락 응답은 `invalid_output`, `content=null`로 기록됨을 확인했다. 실제 v4 GMS 호출은 수행하지 않았다.
 
 2026-09-25 별도 연결 확인에서는 GMS `gpt-5.4-mini`에 v2 문장 선택지만 1회 보내 허용된 JSON 초안을 받았다(총 389토큰). 이 확인은 과거 v2 모델의 형식 응답만 검증한 별도 단계다.
 
