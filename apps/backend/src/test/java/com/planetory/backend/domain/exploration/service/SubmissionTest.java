@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -486,6 +487,33 @@ class SubmissionTest {
         assertEquals(0,count("submissions"));
         when(peaks.read(any(),any())).thenReturn(Map.of(1,new SubmissionMatching.Peak(1,2.9,3.1,2.4)));
         assertEquals(2.4,service.submit(member,tic,withPeak).body().at("/serverDerived/sourcePeakSuggestedDurationHours").asDouble());
+    }
+    /**
+     * 판이 추천 duration을 싣지 않으면(탐사 API 5.4, 지금은 항상) 봉우리 제출도 상한 없이 저장한다. V4 제약이
+     * 둘 다 NOT NULL을 요구해 봉우리 제출이 모두 500이었다 [S15P21C206-269].
+     */
+    @Test void 추천duration이_없는_봉우리_제출은_상한없이_저장된다() {
+        var r=request(); var selection=new SubmissionRequest.Selection(3.0,1,1.0/12,7.0/60);
+        var withPeak=new SubmissionRequest(r.requestId(),r.submissionKind(),r.curveContext(),selection,r.userJudgment(),r.evidenceChecks(),null,null,null);
+        when(peaks.read(any(),any())).thenReturn(Map.of(1,new SubmissionMatching.Peak(1,2.9,3.1,null)));
+
+        var body=service.submit(member,tic,withPeak).body();
+        assertTrue(body.at("/serverDerived/sourcePeakSuggestedDurationHours").isNull());
+        assertTrue(body.at("/serverDerived/durationLimitHours").isNull());
+        var row=jdbc.queryForMap("SELECT id,source_peak_grid_index,source_peak_suggested_duration_hours,duration_limit_hours"
+                + " FROM submissions WHERE user_id=?",member);
+        assertEquals(1,row.get("source_peak_grid_index"));
+        assertNull(row.get("source_peak_suggested_duration_hours"));
+        assertNull(row.get("duration_limit_hours"));
+
+        // 제안 duration과 상한은 함께 움직인다. 한쪽만 채운 행은 막고 둘 다 양수면 받는다(V27).
+        long id=((Number) row.get("id")).longValue();
+        assertThrows(DataIntegrityViolationException.class,
+                ()->jdbc.update("UPDATE submissions SET duration_limit_hours=9.3 WHERE id=?",id));
+        assertThrows(DataIntegrityViolationException.class,
+                ()->jdbc.update("UPDATE submissions SET source_peak_suggested_duration_hours=3.1 WHERE id=?",id));
+        assertEquals(1,jdbc.update("UPDATE submissions SET source_peak_suggested_duration_hours=3.1,duration_limit_hours=9.3"
+                + " WHERE id=?",id));
     }
     @Test void 첫매칭_판단통계는_재제출로_뒤집히지않음() {
         var first=service.submit(member,tic,change(request(),"candidate","UNSURE",3.0,null));
