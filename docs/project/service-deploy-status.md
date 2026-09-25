@@ -112,7 +112,7 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend를 `6d1926d5` 이후로 올리려면 새 develop 파이프라인이 필요하다.
 
-같은 날 01:01 KST에 `222918`(`6d1926d5`)의 Backend·derived-compute가 배포됐다. 2026-09-26 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `a8fb6667`이다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `a8fb6667`이다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
