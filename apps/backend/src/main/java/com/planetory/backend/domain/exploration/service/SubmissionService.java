@@ -129,7 +129,7 @@ public class SubmissionService {
         FoldedSnapshot snapshot = null;
         if (candidateSubmission) {
             List<LightCurveSegment> segments = curve(bundle, context);
-            Periodogram periodogram = gold.findPeriodogram(bundle.id()).orElseThrow(SubmissionService::unavailable);
+            Periodogram periodogram = gold.findPeriodogram(bundle.ticId(), bundle.id()).orElseThrow(SubmissionService::unavailable);
             var observation = SubmissionMatching.observationOf(bundle, segments, periodogram);
             var matchingRules = SubmissionMatching.Rules.of(rule, SubmissionMatching.minWindowDays(segments));
             var selection = request.selection().matching();
@@ -231,7 +231,7 @@ public class SubmissionService {
     }
 
     private List<LightCurveSegment> curve(Bundle bundle, SubmissionRequest.Context context) {
-        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds());
+        List<LightCurveSegment> segments = gold.findSegments(bundle.ticId(), bundle.manifest().segmentIds());
         if (segments.isEmpty() || segments.size() != bundle.manifest().segmentIds().size()) throw unavailable();
         if (context.curveStep() > 0) {
             ResidualResultReader.Lookup lookup;

@@ -207,7 +207,7 @@ class HistoryAttachmentTest {
             tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
             tx.executeWithoutResult(status -> jdbc.update("DELETE FROM post_history_attachments WHERE post_id=?",number(post)));
             return call.callRealMethod();
-        }).when(gold).findSegments(any());
+        }).when(gold).findSegments(anyLong(), any());
         mvc.perform(get(path(post)).session(session(other))).andExpect(status().isNotFound());
     }
 
