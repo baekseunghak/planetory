@@ -6,6 +6,22 @@ Frontend, Backend와 온라인 계산기의 공통 Docker Compose 설정을 둘 
 
 GitLab의 EC2-A 수동 배포 job이 이 Compose를 사용해 선택한 서비스만 갱신한다. EC2-B에는 서비스 역할이 없으므로(시스템 아키텍처 8장 D4) `ec2-b/`에는 서비스 설정을 두지 않고 CI·외부 관찰 설정만 둔다([ec2-b/README.md](ec2-b/README.md)). 노드별 서비스 차이가 필요하면 `ec2-a/`에 둔다.
 
+## Backend 비밀 값 추가
+
+Backend가 새 비밀 값을 읽을 때는 두 곳을 함께 바꾼다. compose는 `environment:`에 적힌 변수만 컨테이너에 넘기므로 서버 `.env`에만 넣으면 Backend가 보지 못한다.
+
+1. `compose.yaml` backend `environment:`에 `NAME: ${NAME:-}`로 적는다. `:?`로 적으면 값이 없는 노드에서 `config -q`와 기동이 깨진다.
+2. 서버 `.env`에 값을 직접 넣고 Backend를 다시 배포한다. 배포 job은 `compose.yaml`만 올리고 `.env`는 이미지 줄 외에 바꾸지 않는다. 값은 MR·메신저에 붙여 넣지 않는다.
+
+`apps/backend/.env.oauth.properties`는 로컬 PC 전용이다(`spring.config.import`, Git 제외). 운영에는 전달되지 않는다.
+
+| 변수 | 용도 | 상태 |
+|---|---|---|
+| `GMS_KEY` | GMS 행성 설명 API 키 | compose가 전달하고 267 Backend가 설명 기능 활성화 시 읽음. 비어 있으면 기본 비활성 기동 |
+
+NASA 원천 조회의 `NASA_PLANET_INFO_*` 7개 설정도 Compose가 Backend에 전달한다. 서버 `.env`에서 값을 바꾼 뒤 Backend를 다시 배포하면 적용된다. 기본값·단위·중지와 복구 절차는 [NASA 행성 정보·설명 운영 가이드](../../docs/operations/nasa-planet-info-runbook.md)를 따른다.
+설명 생성의 사용자별·전체 일일 한도(`NASA_EXPLANATION_DAILY_PER_MEMBER`, `NASA_EXPLANATION_DAILY_GLOBAL`)도 같은 방식으로 전달한다. 한도값은 미정이라 기본 0이며, 새 모델 호출을 활성화하기 전에 두 값을 결정해 주입해야 한다.
+
 ## service-db
 
 PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.
@@ -15,6 +31,62 @@ PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend�
 데이터는 named volume `planetory-service-db-data`에 있다. 이 볼륨이 회원·제출·히스토리의 유일한 사본이다(복제·백업 없음, ADR D6·D7). `docker compose down -v`와 볼륨 이름 변경은 곧 데이터 상실이다. 재배포·이미지 교체는 볼륨을 지우지 않는다.
 
 마운트 경로 `/var/lib/postgresql`은 postgres:18에서 바뀐 규약이다. 17 이하의 `/var/lib/postgresql/data`로 되돌리면 깨진다.
+
+## 세션·캐시 Redis
+
+Backend는 Redis 인스턴스 **두 개**를 요구한다. `session-redis`는 로그인 세션 저장소이고 `cache-redis`는 지정한 별의 Gold 곡선·원본 주기도와 잔차 계산 캐시용이다(SRS DAT-14). 둘 다 호스트 포트를 열지 않고 `service` 네트워크 안에서만 붙으며 외부 인바운드는 0개다.
+
+`RedisSessionConfig`가 기동 시 두 주소를 비교해 **host와 port가 모두 같으면 예외를 던지고 앱을 띄우지 않는다.** 캐시 eviction이 로그인 세션을 지우는 것을 막는 경계이므로, 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+
+주소는 `.env`가 아니라 `compose.yaml`이 서비스 이름으로 직접 준다(`session-redis:6379`, `cache-redis:6379`). `.env`에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않기 위해서다.
+
+| | 저장 | maxmemory | 축출 | 잃으면 |
+| --- | --- | --- | --- | --- |
+| `session-redis` | 볼륨 `planetory-session-redis-data`, 기본 RDB 저장점 | 64mb | `noeviction` | 전원 로그아웃. 데이터 손실은 아니다 |
+| `cache-redis` | 없음(`--save ""`) | 128mb(임시) | `volatile-lru` | Gold 읽기 캐시는 DB에서 다시 읽고 계산 결과는 재계산한다 |
+
+두 인스턴스의 상한은 따로다. 한쪽의 여유가 다른 쪽을 돕지 못하므로 합계(192mb)가 같은 호스트의 PostgreSQL을 밀어내지 않는지가 기준이다([EC2 서비스 진입·장애 대응](../../docs/architecture/ec2-service-entry-failover.md) D1). 컨테이너 `mem_limit`은 걸지 않는다. 넘는 순간 OOM으로 컨테이너가 죽는데, 세션 쪽이면 전원 로그아웃이다. `maxmemory`는 쓰기만 실패시킨다.
+
+**`maxmemory`는 프로세스 메모리의 상한이 아니다.** Redis가 세는 데이터 메모리(`used_memory`)의 상한이다. 조각화, 클라이언트 버퍼, RDB 저장 중 fork의 copy-on-write 때문에 실제 점유(RSS)는 이보다 커진다. 192mb 합계는 초기 예산이고, 호스트 메모리를 따질 때는 `used_memory_rss`를 본다.
+
+### 세션 상한에 닿으면
+
+세션은 지우지 않으므로 상한에 닿으면 **새 로그인과 세션 연장이 쓰기 실패로 막힌다.** 이미 맺은 세션의 읽기는 계속된다. Redis의 OOM 오류는 `RedisSessions`가 `StoreUnavailableException`으로 감싸고 `SessionDependencyFilter`가 503(`DEPENDENCY_UNAVAILABLE`)으로 응답한다. 이 경로는 코드로 확인했고 실제로 상한까지 채워 보지는 않았다.
+
+64mb는 세션 1개 실측(약 2.4KB, 2026-09-23)으로 2만 개 남짓이다. 동시 접속 목표([DEC-16](../../docs/requirements/planetory-decision-register.md))가 정해지면 다시 잡는다. 관측은 두 값으로 한다.
+
+```sh
+docker compose exec session-redis redis-cli info memory | grep -E '^(used_memory_human|used_memory_rss_human|maxmemory_human):'
+docker compose exec session-redis redis-cli info errorstats | grep OOM
+```
+
+`errorstat_OOM`이 0이 아니면 이미 로그인 실패가 난 것이다. `used_memory`가 상한의 80%를 넘으면 늘릴 때다. `used_memory_rss`는 호스트 예산을 볼 때 쓴다.
+
+### 캐시 축출은 만료가 걸린 키만
+
+`cache-redis`에는 결과만이 아니라 진행 상태와 중복 계산 잠금이 함께 들어온다(SRS DAT-14). `volatile-lru`는 만료가 걸린 키만 축출한다. 결과 키에 TTL을 주면 결과만 축출 후보가 되고 TTL이 없는 키는 축출되지 않는다. `allkeys-lru`는 잠금을 결과와 같은 확률로 지워 DAT-14가 막은 중복 계산을 허용하므로 택하지 않았다. TTL 없는 키만으로 상한에 닿으면 캐시 쓰기가 실패하고 온라인 계산만 멈춘다.
+
+**이것은 축출 정책이지 잠금 정책이 아니다.** TTL 없는 잠금은 소유 프로세스가 중단되면 남아 해당 키의 계산을 영구히 막는다. 반대로 잠금에 TTL을 붙이면 같은 `volatile-lru` 인스턴스에서 축출 후보가 된다. 계산 상태·잠금 소비처는 아직 없다. Gold 읽기 캐시 키는 1일 TTL로 축출 대상이다. 계산 결과 키의 TTL·축출 정책과 별개로, **상태·잠금의 만료·소유권·장애 회수와 축출 보호 방식은 소비 코드를 연결하기 전에 확정한다.** TTL 없는 잠금만으로 안전성을 보장하지 않는다([Redis 분산 잠금](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)). 크기는 `S15P21C206-104` 실측 뒤 확정한다([DEC-35](../../docs/requirements/planetory-decision-register.md)).
+
+Backend는 `cache-redis`에 기동을 의존하지 않는다(`depends_on`에 없다). 캐시는 선택 의존성이라 health도 세션만 본다. 캐시가 unhealthy여도 Backend는 뜨고 온라인 계산만 멈춘다. 연결은 처음 쓸 때 맺는다.
+
+### 비밀번호
+
+`requirepass`를 걸지 않는다. 호스트 포트가 없어 외부에서 닿지 않는다. 위험은 외부가 아니라 같은 `service` 네트워크에 붙는 다른 컨테이너다. **우리가 만들지 않은 컨테이너를 `service` 네트워크에 붙이면** 그때 `SESSION_REDIS_PASSWORD`·`CACHE_REDIS_PASSWORD`를 `.env`로 넣는다. 두 변수는 Backend가 이미 읽는다.
+
+### 최초 기동은 수동이다
+
+`deploy.sh`는 `docker compose up -d --no-deps <service>`로 교체하므로 **의존 서비스를 만들지 않는다.** `service-db`와 마찬가지로 두 Redis도 배포 노드에서 한 번 직접 띄운다. 이후 배포는 이미 도는 컨테이너를 그대로 쓴다.
+
+```sh
+cd "$DEPLOY_PATH" && docker compose up -d session-redis cache-redis
+```
+
+설정(`command`)을 바꿨을 때도 같은 명령을 쓴다. compose가 바뀐 컨테이너만 다시 만든다. 세션은 볼륨에 남으므로 로그인이 유지되고, 캐시는 비워진다.
+
+Gold 읽기 캐시는 기본 비활성이다. 운영자가 `.env`에 `GOLD_CACHE_ENABLED=true`와 쉼표로 구분한 `GOLD_CACHE_TIC_IDS=<TIC_ID_1>,<TIC_ID_2>`를 지정하고 Backend를 재시작하면 해당 별의 현재 판 곡선·원본 주기도를 시작 시 적재한다. 캐시는 서블릿 웹 서버와 세션 Redis가 활성화된 경우에만 생성되며, 같은 환경변수를 받는 비웹 운영 명령은 DB에서 읽는다. 후보 모델과 공개·권한 판단은 DB에서 읽는다. 새 판 알림이 오면 다시 적재하고, 알림이 없어도 다음 곡선·주기도 조회에서 DB를 읽어 채운다. 지정하지 않은 별도 DB에서 분석할 수 있다. Redis가 비거나 장애가 나면 DB에서 읽는다. 초기 운영 예상은 별 5개 또는 10개이며 실제 TIC 목록은 미정이다. `cache-redis`의 기본 128mb가 선택한 별 전체와 향후 계산 캐시를 수용하는지 `redis-cli info memory`의 `used_memory`·`used_memory_rss`와 축출 수를 측정한 뒤 별 수 또는 용량을 정한다. 앱 전체 health는 세션 쪽만 검사한다(`RedisSessionConfig`의 `redisHealthIndicator`).
+
+주간 챌린지 별 등록부터 캐시 대상 지정·회차 전환·검증까지는 [챌린지 별 등록·회차 전환 런북](../../docs/operations/challenge-round-runbook.md)을 따른다.
 
 ## 계정 분리
 
@@ -71,6 +143,69 @@ COMMIT;
 ```
 
 로그인에는 `seq=1` 하나면 된다. 2~5번은 튜토리얼 완료·챌린지 자격 판정에 쓰인다. 어떤 TIC을 쓸지는 운영이 정하며 이 저장소는 값을 정하지 않는다.
+
+## Gold 목업
+
+서비스 DB에 실제 Gold가 오기 전까지 분석 화면을 열어 보기 위한 목업 판이다 [S15P21C206-262]. Gold가 없으면 `GET /api/v1/stars/{tic}/analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)이다. 현재 판이 없다는 뜻이며 일시 장애가 아니다.
+
+적재 단계는 실제 Publisher 코드(`distributed-system/publisher`)이고 **입력만** 계약 예시 payload다. 정본 절차를 그대로 밟는다. `gold_writer` 계정, TIC 잠금, staging → current 전환을 한 트랜잭션으로, 커밋 뒤 Backend 알림. 실제 Gold로 바꿀 때는 입력 어댑터만 바뀐다. 구조는 [Publisher](../../distributed-system/publisher/README.md).
+
+목업 행은 판 `bundle_version`과 세그먼트 `binning_revision`의 `mock-` 표식으로 알아본다. 삭제는 이 표식으로만 한다.
+
+### 한계
+
+- 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)를 EC2-A에 올리고 Backend에 `DERIVED_COMPUTE_URL`을 넣어야 열린다(아래 「온라인 계산 Worker」의 첫 배포 절차).
+- 등록된 별(`stars`)에만 싣고 별 속성은 바꾸지 않는다. 같은 별에 새 판을 올리면 이전 후보는 은퇴한다.
+- 판이 current가 될 때 V23 트리거가 후보 변경을 기록한다. 재개 알림은 **그 별을 팔로우한 회원에게만** 간다.
+
+### 준비 (한 번)
+
+`planetory_gold_writer`는 로그인할 수 없는 그룹 역할이다. 로그인 계정을 소유자로 만든다. 비밀번호는 명령줄에 두지 않는다. `flyway_schema_history`·`operation_settings`는 `gold_writer` 권한 밖이라 preflight용 SELECT를 따로 준다. 없으면 적재가 `MIGRATION_UNREADABLE`로 멈춘다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose exec service-db psql -U planetory -d planetory_poc \
+  -c "CREATE USER planetory_publisher IN ROLE planetory_gold_writer" \
+  -c "GRANT SELECT ON flyway_schema_history, operation_settings TO planetory_publisher" \
+  -c "REVOKE CREATE ON SCHEMA public FROM planetory_publisher"
+docker compose exec service-db psql -U planetory -d planetory_poc -c "\password planetory_publisher"
+```
+
+같은 비밀번호를 `.env`의 `PUBLISHER_DB_PASSWORD`에 넣는다. 판 전환 알림을 보내려면 `INTERNAL_SERVICE_TOKEN`도 넣고 Backend를 다시 배포한다. 토큰이 없으면 알림만 생략되고 판은 current가 된다.
+
+### 적재
+
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다.
+
+```sh
+cd "$DEPLOY_PATH"
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
+  docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
+```
+
+같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
+
+```sh
+PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile gold-mock run --rm gold-mock notify --bundle b-<id>
+```
+
+알림은 후처리를 앞당기는 신호다. 보내지 않아도 DB의 current가 정본이라 분석 화면은 열린다.
+
+### 삭제
+
+소유자로 `service-db` 안에서 돈다. 판 전환 때 V23 트리거가 쓴 알림 행을 `gold_writer`가 지울 수 없어서다. 소유자 비밀번호를 Publisher 컨테이너에 주지 않도록 SQL만 받아 넘긴다. 기본은 모의 실행이다.
+
+```sh
+cd "$DEPLOY_PATH"
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA'
+# 개수를 확인한 뒤 실제로 지운다
+docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -v apply=1'
+```
+
+회원이 목업 판·후보를 참조하면(제출·게시글·공개 분석·성과) 지우지 않고 멈춘다. 그 기록을 지울지는 사람이 정한다.
 
 ## ERD
 
@@ -209,14 +344,71 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
 곧 서빙되는 판이다.
 
+## 온라인 계산 Worker (S15P21C206-88)
+
+`derived-compute`는 잔차·주기도를 계산한다. Backend만 `http://derived-compute:8090/internal/v1/derived-compute`로 부르며 호스트 포트를 열지 않는다. DB·Redis 자격 증명을 넘기지 않는다. 구현과 환경 변수는 [apps/derived-compute](../../apps/derived-compute/README.md)에 있다.
+
+**디버깅용으로도 `ports:`를 열지 않는다.** Backend의 `/internal/**`는 서비스 토큰을 요구하지만 Worker의 계산 경로에는 인증이 없고, `service` 네트워크 격리가 유일한 통제다. 자격 증명이 없고 동시 실행 1·본문 64MiB 상한이 있어 같은 네트워크에서 할 수 있는 최대치가 잔차 계산의 CPU 점유라 이 선택을 받아들였다. 포트를 열면 그 전제가 깨진다. 들여다볼 때는 `docker compose exec derived-compute …`나 Backend 컨테이너에서 서비스 이름으로 부른다(「첫 배포 절차」 2단계).
+
+| `.env` 변수 | 기본값 | 뜻 |
+| --- | --- | --- |
+| `DERIVED_COMPUTE_IMAGE` | 없음 | 배포 job이 채운다. 응답의 `runtime.worker_image`로도 나간다 |
+| `DERIVED_COMPUTE_CPUS` | `1` | 컨테이너 CPU 상한(계약 `cpu_per_job`) |
+| `DERIVED_COMPUTE_MEMORY` | `2048m` | 컨테이너 메모리 상한(계약 `memory_mib_per_job`) |
+| `DERIVED_COMPUTE_MEMORY_LIMIT_MIB` | `1900` | 프로세스 상한. 컨테이너 상한보다 낮아야 OOM kill 대신 `memory_exhausted`로 답한다 |
+| `PLANETORY_RESIDUAL_MAXRUNNING` | `1` | **Backend** 동시 계산 수. Worker 대수 × 동시 실행 수(지금 1 × 1)와 같아야 한다. 크면 넘친 작업이 기다리지 않고 Worker 503으로 실패한다 |
+| `DERIVED_COMPUTE_URL` | 없음 | **Backend** 변수. `http://derived-compute:8090`을 넣어야 Backend 실행기가 뜬다. 비어 있으면 잔차 요청은 503 「준비되지 않았습니다」 |
+
+값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다.
+
+### 첫 배포 절차
+
+**켜는 순서는 Worker → 확인 → `DERIVED_COMPUTE_URL` → Backend다.** 거꾸로 하면 잔차 요청마다 재시도 가능한 실패 작업이 생긴다. 노드 접속 계정은 [CI/CD](../../docs/operations/cicd.md) 「배포 접속」과 [Tailscale 팀 서버 접근](../../docs/operations/tailscale-team-access.md)을 따르고, 명령은 배포 경로(`/home/deploy/planetory`)에서 실행한다.
+
+0. **전제.** 88 MR이 develop에 병합됐고, 그 병합 파이프라인의 `build:derived-compute`·`build:backend`가 성공했다. **같은 최신 파이프라인의 버튼만 쓴다**(옛 버튼은 막힌다). 첫 배포 전에는 노드에서 인자 없는 `docker compose up -d`를 치지 않는다. `DERIVED_COMPUTE_IMAGE`가 아직 없어 `derived-compute`가 없는 이미지를 찾는다.
+1. **Worker 배포.** `deploy:derived-compute:ec2-a`를 실행한다. job이 새 `compose.yaml`을 올리고 Worker만 만든다. Backend 컨테이너는 그대로다. 로그 끝이 `직전 이미지가 없습니다(첫 배포)`·`배포 완료`이고 `.env`에 `DERIVED_COMPUTE_IMAGE`가 기록된다.
+2. **Worker 확인.** HEALTHCHECK는 15초 간격이라 30초쯤 뒤에 본다.
+
+   ```sh
+   docker compose ps derived-compute                      # STATUS가 healthy
+   docker compose exec backend wget -qO- http://derived-compute:8090/healthz   # Backend에서 이름으로 닿는지, runtime.worker_image의 태그가 병합 commit인지
+   docker compose logs --tail 20 derived-compute
+   ```
+
+   `unhealthy`이거나 Backend에서 닿지 않으면 멈추고 `docker compose stop derived-compute`로 재시작 루프를 끊는다. 3단계로 가지 않는다.
+3. **Backend 켜기.** `.env`에 `DERIVED_COMPUTE_URL=http://derived-compute:8090` 한 줄을 더한다(`.env`는 비밀 값을 담으므로 이 한 줄만 추가하고 내용을 출력하지 않는다). 그다음 같은 파이프라인의 `deploy:backend:ec2-a`를 실행한다. 환경 변수가 바뀌어 Backend 컨테이너가 다시 만들어지며, DB 덤프·헬스 확인·자동 롤백은 기존과 같다. 동시 계산 수는 compose 기본값 `PLANETORY_RESIDUAL_MAXRUNNING=1`이다.
+4. **동작 확인.** 판이 있는 별(!206 목업 적재 뒤)에서 잔차 1단계를 요청한다. 화면의 봉우리 제출은 V4 제약으로 500이라(262 인계) 그 전에는 로그인 세션으로 원본 곡선 후보 제출 → `POST /api/v1/stars/{tic}/residual-jobs` 순서로 부른다(`LocalSeedSmokeTest`와 같은 순서). 작업이 `COMPLETED`가 되고 Backend 로그에 두 줄이 남으면 연결된 것이다.
+
+   ```sh
+   docker compose logs backend | grep WorkerResidualComputeRunner   # "잔차 작업 rj-N RESIDUAL 완료", "… PERIODOGRAM 완료"
+   ```
+
+   실패하면 같은 로그의 `멈췄습니다: <원인>` 줄이 Worker 오류 코드나 연결 실패를 보여 준다.
+5. **131 인계(선택).** [apps/derived-compute](../../apps/derived-compute/README.md) 「131 인계」대로 캡처를 켜고 같은 요청을 한 번 더 보낸 뒤 캡처·digest를 넘기고 캡처를 끈다.
+
+**되돌리기.**
+
+| 상황 | 조치 |
+| --- | --- |
+| 잔차 계산만 끄기 | `.env`에서 `DERIVED_COMPUTE_URL` 줄을 지우고 `deploy:backend:ec2-a`. 잔차 요청이 503 「준비되지 않았습니다」로 돌아간다 |
+| Worker 이상 | `docker compose stop derived-compute`. Backend가 켜져 있으면 잔차 작업은 재시도 가능한 실패로 끝난다 |
+| Worker 이미지 되돌리기 | 자동 롤백이 없다. `.env`의 `DERIVED_COMPUTE_IMAGE`를 직전 태그로 고치고 `docker compose up -d --no-deps derived-compute` |
+
+배포 뒤 결과(병합 commit, Worker 이미지 태그·digest, 확인한 작업 ID)는 [서비스 배포 현황](../../docs/project/service-deploy-status.md)과 Jira 88에 남긴다.
+
 ## 배포와 롤백
 
 `deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
 
 | 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
 | --- | --- | --- | --- |
-| `frontend` | `/` | 없음 | 90초 |
+| `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
+| `derived-compute` | 없음(호스트 포트 없음, 이미지 `HEALTHCHECK`만) | 없음 | — |
+
+프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
+
+표식이 들어가기 전 이미지(`frontend:80a860fa…-sky` 이전)에는 이 경로가 없어 그 이미지로 되돌리는 롤백은 헬스가 실패한다. 2026-09-23 CI가 표식 있는 `a9e567db`를 배포해 과도기는 끝났다. 그보다 옛 이미지로 손으로 되돌릴 때만 해당한다.
 
 확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
 
@@ -227,6 +419,10 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 `compose.yaml`은 되돌리지 않는다. 포트·환경변수·볼륨 정의를 바꾸는 변경은 이미지 배포와 같은 파이프라인에 싣지 않는다. 실패하면 "구 이미지 + 신 정의"라는 검증되지 않은 조합이 된다.
 
 덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 볼륨과 함께 사라진다. 배포 실패 복구용이지 재해 복구용이 아니다.
+
+### 어느 버튼을 누르나
+
+**최신 develop 파이프라인의 버튼을 누른다.** 기준 브랜치에서는 Frontend·Backend를 매번 빌드하므로 최신 파이프라인에 두 버튼이 늘 있다. 더 새 배포가 있는 상태에서 옛 파이프라인 버튼을 누르면 GitLab이 job을 실패시킨다(`environment: ec2-a`, [CI/CD](../../docs/operations/cicd.md) 「배포 버튼 유지」). 2026-09-23 이전 파이프라인의 job과 예전에 성공한 job의 재실행은 막히지 않는다.
 
 배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
 

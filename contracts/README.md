@@ -6,3 +6,5 @@
 - [온라인 파생 계산 내부 계약](derived-compute/README.md): Backend가 Python Worker에 보내는 잔차·주기도 HTTP/JSON 요청·응답과 초기 제한
 
 각 언어의 내부 객체 전체는 복사하지 않고 독립 배포 경계의 직렬화 형식만 둔다.
+
+`contracts/`가 바뀌면 CI의 `validate:contracts`가 각 검사기를 실행하고, 실패하면 이미지 빌드 전에 멈춘다([CI/CD 「설정·계약 검사」](../docs/operations/cicd.md#설정계약-검사-s15p21c206-91)). 검사기를 추가하면 그 job의 `script`에도 넣는다.

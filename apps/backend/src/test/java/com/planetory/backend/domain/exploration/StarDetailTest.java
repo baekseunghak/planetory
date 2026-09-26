@@ -151,6 +151,20 @@ class StarDetailTest {
         assertEquals(1, stars.detail(otherMemberId, ticId).planets().items().size());
     }
 
+    @Test
+    void 제출에_다른_별의_후보가_잘못_연결돼도_내_별_목록에_넣지_않는다() {
+        long otherTic = insertStar(10.1, null, null);
+        long otherBundle = insertBundle(otherTic);
+        long otherCandidate = jdbc.queryForObject("INSERT INTO candidates"
+                + "(tic_id,status,updated_bundle_id,removal_step,period_days,epoch_btjd,"
+                + "duration_hours,depth_ppm,bls_power,transit_model,discoverable,is_confirmed)"
+                + " VALUES (?,'active',?,1,5,1501,2,500,12,'{}'::jsonb,true,true) RETURNING id",
+                Long.class, otherTic, otherBundle);
+        submit(memberId, otherCandidate, "LIKELY_PLANET");
+
+        assertTrue(stars.detail(memberId, ticId).planets().items().isEmpty());
+    }
+
     /** count는 items 길이와 같고 지도 planetCount와도 맞아야 한다. */
     @Test
     void 행성_수는_목록_길이와_지도_값과_일치한다() {

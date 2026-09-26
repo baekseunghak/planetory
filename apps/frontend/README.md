@@ -42,6 +42,8 @@
 
 2026-09-17: 206 별 상세·내 행성 확대·복귀·공통 경로 이동을 연결했다. `npm run dev:detail`로 확인하며 [206 항목별 인수와 남은 실제 연동](docs/ticket-206-readiness.md)을 따른다.
 
+2026-09-25: 268은 기존 본인 별 상세의 확정 내 행성에 NASA 자료·쉬운 설명 버튼과 상태 패널을 연결한다. 저장 상태 GET과 후보별 생성 POST를 구분하며 [268 화면 사용·검증·실제 인수 경계](docs/ticket-268-readiness.md)를 따른다. `dev:detail`과 브라우저 검증의 NASA 응답은 합성 자료이며 실제 서버·DB·NASA·모델 인수가 아니다.
+
 2026-09-17 통합 갱신: 최신 develop 충돌 정리와 재검증은 [202 MR 통합 기록](docs/merge-readiness-202.md)을 기준으로 합니다. 아래 이전 실행 기록의 미업로드·미통합 표기는 당시 상태입니다.
 
 `S15P21C206-201` / W03. 별지도·서비스 화면과 백지웅 담당 분석 화면이 같은 React 앱, 페이지 이동, 인증 조회, HTTP 클라이언트를 사용하는 출발점이다.
@@ -70,6 +72,8 @@ npm run dev
 
 예를 들어 Git에 있는 백엔드를 로컬 8080 포트로 실행했다면 `API_PROXY_TARGET=http://127.0.0.1:8080`으로 설정한다. Compose 프론트 컨테이너에서 실행할 때는 같은 네트워크의 `http://backend:8080`을 사용한다. 설정하지 않으면 개발 서버는 API 요청에 503 안내를 돌려준다. 실제 서버 모드에 자동 가짜 로그인은 없다.
 
+로컬 DB에 Gold가 없으면 가입이 503으로 실패한다. 먼저 [로컬 시드](../../experiments/distributed-pipeline/local-seed/README.md)를 적재한다. 튜토리얼·챌린지 별의 정답표도 그 README에 있다.
+
 **2026-09-15 상태:** 실제 SSAFY·Google 로그인, 회원 조회·세션·CSRF·로그아웃과 공통 오류 계약을 검증했다. 지웅님과 공통 기반 사용 방향에 이견이 없음을 서진님이 전달했다. 배포 지연을 감안해 코드 정리·공유·리뷰를 진행하며, 실제 A 화면 연결·배포 HTTPS·Safari와 최종 리뷰/병합은 별도로 남긴다. [검증 기록](docs/verification.md), [현재 인수 상태](docs/ticket-201-readiness.md)를 따른다.
 
 ## 검증 명령
@@ -82,6 +86,8 @@ npm run test:production
 ```
 
 기본 브라우저 검증에는 Playwright Chromium이 필요하다. 설치되지 않은 PC는 `npx playwright install chromium`을 실행한다. `npm run test:browser:desktop`은 설치된 Chrome·Edge와 Playwright Firefox를 추가 검증한다(Firefox 설치: `npx playwright install firefox`). 번들 Firefox가 실행되지 않는 Windows에서는 정식 Firefox 경로를 FIREFOX_EXECUTABLE로 지정하고 `npx playwright test --config=playwright.local-firefox.config.ts`를 사용할 수 있다. Safari 실기기 검증은 별도다. 브라우저 테스트는 58262 포트에 별도의 serve-only fixture를 띄운다. 일반 개발 서버에 연결하거나 사용자의 기존 브라우저 세션을 사용하지 않는다.
+
+CI는 단계별로 나눠 돈다. MR에서는 `npm run build`와 `npm test`, develop 병합 뒤에는 `npm run test:e2e:smoke`, 브라우저 테스트 전체(`test:e2e`)는 수동 job에서 `npm run test:e2e:ci`로 병렬 실행한다. 실제 WebGL 픽셀을 읽어 검증하는 브라우저 테스트는 제목 끝에 `@gpu`를 붙여 표시한다. GPU 없는 CI에서는 빼고 로컬에서만 돈다. 로컬 `npm run check`는 그대로 전체를 순서대로 돈다([CI/CD](../../docs/operations/cicd.md#프론트-테스트-mr-관문과-브라우저-테스트-s15p21c206-91)).
 
 `npm run build`는 타입 검사·배포 빌드·개발 데이터/계정 기능 미포함 검사를 실행한다. `vite build --mode fixture`도 fixture를 포함하지 않도록 `command === serve`와 `import.meta.env.DEV`로 제한했다.
 

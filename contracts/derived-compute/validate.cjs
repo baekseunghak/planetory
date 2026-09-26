@@ -7,6 +7,9 @@ const valid = read('derived-compute.valid.json');
 const invalid = read('derived-compute.invalid.json');
 const clone = value => structuredClone(value);
 
+// README 3.4절 표. 버전이 격자 간격을 고정한다.
+const PERIODOGRAM_CONFIGS = {'pg-log5000-v1': {spacing: 'log'}, 'provided-bls-1.0.0': {spacing: 'log'}};
+
 const fail = code => {
   const error = new Error(code);
   error.code = code;
@@ -57,6 +60,15 @@ function validateRequestCommon(request) {
   if (typeof request.residual_model_version !== 'string' || request.residual_model_version.length === 0
       || typeof request.periodogram_config_version !== 'string'
       || request.periodogram_config_version.length === 0) fail('missing_calculation_version');
+  if (!Object.hasOwn(PERIODOGRAM_CONFIGS, request.periodogram_config_version)) {
+    fail('unsupported_periodogram_config_version');
+  }
+}
+
+function validateRuntime(response) {
+  const runtime = response.runtime;
+  if (!runtime || !['worker_image', 'python', 'numpy', 'astropy', 'astro_kernel']
+    .every(key => typeof runtime[key] === 'string' && runtime[key].length > 0)) fail('invalid_runtime');
 }
 
 function validateInputSegments(segments) {
@@ -70,6 +82,7 @@ function validateInputSegments(segments) {
 
 function removedCandidateIds(request) {
   if (request.operation === 'residual') {
+    // 빈 목록은 거절한다(README 3.2절, !211 합의). 원본은 계산 대상이 아니다.
     if (!Array.isArray(request.removed_candidates) || request.removed_candidates.length === 0) {
       fail('invalid_operation_payload');
     }
@@ -106,7 +119,8 @@ function validateRequest(request) {
     validateInputSegments(request.residual_segments);
     const grid = request.period_grid;
     if (!grid || !(grid.min_days > 0) || !(grid.max_days > grid.min_days)
-        || !Number.isInteger(grid.count) || grid.count <= 0 || !['linear', 'log'].includes(grid.spacing)) {
+        || !Number.isInteger(grid.count) || grid.count <= 0
+        || grid.spacing !== PERIODOGRAM_CONFIGS[request.periodogram_config_version].spacing) {
       fail('invalid_period_grid');
     }
   }
@@ -121,6 +135,7 @@ function validateErrorResponse(call, response) {
     if (response[field] !== call.request[field]) fail('response_correlation_mismatch');
   }
   assert.deepEqual(response.removed_candidate_ids, ids);
+  validateRuntime(response);
   if (!['RESIDUAL', 'PERIODOGRAM'].includes(response.error?.stage)
       || typeof response.error.code !== 'string' || response.error.code.length === 0
       || typeof response.error.retryable !== 'boolean'
@@ -138,6 +153,7 @@ function validateSuccess(call) {
     if (response[field] !== call.request[field]) fail('response_correlation_mismatch');
   }
   assert.deepEqual(response.removed_candidate_ids, ids);
+  validateRuntime(response);
 
   if (response.operation === 'residual') {
     validateFluxSegments(response.result?.residual_segments);
@@ -195,11 +211,11 @@ valid.calls.forEach(validateSuccess);
 
 assert.equal(invalid.contract_version, valid.contract_version);
 assert.equal(invalid.fixture_kind, 'synthetic-contract-only');
-const baseCall = valid.calls.find(call => call.id === invalid.base_call);
-assert.ok(baseCall, 'invalid fixture base call must exist');
 assert.equal(new Set(invalid.request_cases.map(testCase => testCase.id)).size, invalid.request_cases.length);
 
 for (const testCase of invalid.request_cases) {
+  const baseCall = valid.calls.find(call => call.id === (testCase.base_call ?? invalid.base_call));
+  assert.ok(baseCall, `${testCase.id} base call must exist`);
   const call = clone(baseCall);
   mutate(call, testCase.mutation);
   assert.throws(

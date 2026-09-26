@@ -114,7 +114,7 @@ public class AnalysisService {
         Bundle bundle = openCurrentBundle(memberId, ticId);
         OperationRule rule = rules.findCurrent()
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
-        List<LightCurveSegment> segments = gold.findSegments(bundle.manifest().segmentIds());
+        List<LightCurveSegment> segments = gold.findSegments(bundle.ticId(), bundle.manifest().segmentIds());
         if (segments.isEmpty()) {
             throw new IllegalStateException(ExplorationIds.bundle(bundle.id())
                     + "은 현재 판인데 세그먼트가 없습니다. 적재 계약이 어긋났습니다.");
@@ -265,7 +265,7 @@ public class AnalysisService {
      */
     private PowerAt powerAt(long ticId, Target target) {
         Bundle bundle = target.bundle();
-        GoldCatalogViews.Periodogram original = gold.findPeriodogram(bundle.id())
+        GoldCatalogViews.Periodogram original = gold.findPeriodogram(bundle.ticId(), bundle.id())
                 .orElseThrow(() -> new IllegalStateException(
                         ExplorationIds.bundle(bundle.id()) + "은 현재 판인데 주기도 행이 없습니다. 적재 계약이 어긋났습니다."));
 
@@ -443,23 +443,19 @@ public class AnalysisService {
     /**
      * 판 요약. 관측 범위의 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다.
      *
-     * <p>한 판의 세그먼트는 비닝 규칙이 하나다(manifest {@code binning}). 여럿이면 적재 계약 위반이다.
+     * <p>비닝 revision은 판이 아니라 세그먼트의 값이라 여기 두지 않는다. 운영 revision은 TIC·섹터·원천
+     * checksum을 재료로 한 해시라 여러 섹터 판이면 세그먼트마다 다르다(Gold 계약 4.1). 곡선의
+     * {@code segments[].binningRevision}으로 준다.
      */
     private static BundleSummary bundleOf(Bundle bundle, List<LightCurveSegment> segments) {
         double start = segments.stream().mapToDouble(LightCurveSegment::startBtjd).min().orElseThrow();
         double end = segments.stream()
                 .mapToDouble(s -> s.startBtjd() + s.nPoints() * s.binMinutes().doubleValue() / MINUTES_PER_DAY)
                 .max().orElseThrow();
-        Set<String> revisions = segments.stream().map(LightCurveSegment::binningRevision)
-                .collect(Collectors.toCollection(TreeSet::new));
-        if (revisions.size() != 1) {
-            throw new IllegalStateException(ExplorationIds.bundle(bundle.id()) + "의 세그먼트 비닝 revision이 "
-                    + revisions + "로 하나가 아닙니다. 적재 계약이 어긋났습니다.");
-        }
         return new BundleSummary(ExplorationIds.bundle(bundle.id()), bundle.bundleVersion(), bundle.publishedAt(),
                 bundle.foldReferenceTimeBtjd(), bundle.baseDays(), new double[] {start, end},
                 bundle.manifest().residualModelVersion(), bundle.manifest().periodogramConfigVersion(),
-                revisions.iterator().next(), CURVE_STEP_RULE);
+                CURVE_STEP_RULE);
     }
 
     /**
@@ -518,7 +514,7 @@ public class AnalysisService {
 
     /** 판이 참조하는 세그먼트를 섹터 순으로. 섹터가 아니라 id로 읽어야 revision이 섞이지 않는다. */
     private List<LightCurveSegment> segmentsOf(Target target) {
-        return gold.findSegments(target.bundle().manifest().segmentIds());
+        return gold.findSegments(target.bundle().ticId(), target.bundle().manifest().segmentIds());
     }
 
     private static Curve curveOf(long ticId, Target target, Residual residual, List<Segment> segments) {

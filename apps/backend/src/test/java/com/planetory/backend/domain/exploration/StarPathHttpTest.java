@@ -24,6 +24,8 @@ import com.planetory.backend.domain.member.service.MemberService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,6 +54,7 @@ class StarPathHttpTest {
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
+        registry.add("planetory.nasa.enabled", () -> "false");
     }
 
     @AfterAll
@@ -136,6 +139,42 @@ class StarPathHttpTest {
         mvc.perform(get("/api/v1/stars/" + openTic).session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ticId").value(String.valueOf(openTic)));
+    }
+
+    @Test
+    void 별_설명_묶음은_로그인과_별_열림을_요구한다() throws Exception {
+        String own = "/api/v1/me/stars/" + viewerTic + "/planet-explanations";
+        mvc.perform(get(own)).andExpect(status().isUnauthorized());
+        mvc.perform(get(own).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticId").value(String.valueOf(viewerTic)))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/v1/me/stars/" + openTic + "/planet-explanations").session(session))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("STAR_LOCKED"));
+        mvc.perform(post(own).session(session).contentType("application/json")
+                        .content("{\"candidateId\":\"c-1\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(own).session(session).with(csrf()).contentType("application/json")
+                        .content("{\"candidateId\":\"c-1\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 결과_NASA_목록은_본인_답과_POST_CSRF를_요구한다() throws Exception {
+        String url = "/api/v1/stars/" + openTic + "/result/nasa-planets";
+        mvc.perform(get(url)).andExpect(status().isUnauthorized());
+        mvc.perform(get(url).session(session))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        MockHttpSession owner = loginSession(openMember);
+        mvc.perform(get(url).session(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("not_requested"));
+        mvc.perform(post(url).session(owner)).andExpect(status().isForbidden());
+        mvc.perform(post(url).session(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshStatus").value("disabled"));
     }
 
     /** size도 숫자 타입으로 받으면 같은 이유로 500이 된다. */

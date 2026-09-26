@@ -34,6 +34,58 @@ services:
     networks:
       - service
 
+  # 세션 저장소와 캐시는 서로 다른 인스턴스여야 한다. 백엔드가 기동 시 host+port가
+  # 같으면 거부한다(RedisSessionConfig). 캐시 eviction이 로그인 세션을 지우는 것을
+  # 막는 경계이므로 한 인스턴스를 DB 인덱스로 나눠 쓰는 우회는 통하지 않는다.
+  #
+  # 둘 다 외부 인바운드 0개다. 호스트 포트를 열지 않고 service 네트워크 안에서만
+  # 붙으므로 requirepass를 걸지 않는다. 위험은 외부가 아니라 같은 네트워크의 다른
+  # 컨테이너다. 우리가 만들지 않은 컨테이너를 service 네트워크에 붙이면 그때
+  # .env로 비밀번호를 넣는다(SESSION_REDIS_PASSWORD·CACHE_REDIS_PASSWORD).
+  session-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    # 기본 RDB 저장점을 그대로 쓴다. 볼륨이 없으면 재시작마다 전원 로그아웃이다.
+    #
+    # 상한은 두되 축출은 하지 않는다. 세션이 지워지면 로그아웃이다. 상한에 닿으면
+    # 새 로그인과 세션 연장이 쓰기 실패로 막힌다(503). 같은 호스트의 PostgreSQL을
+    # 밀어내지 않기 위한 예산이다(ec2-service-entry-failover D1).
+    # ponytail: 64mb는 세션 1개 실측 약 2.4KB로 2만 개 남짓. 동시 접속 목표(DEC-16)가
+    # 정해지면 다시 잡는다. 컨테이너 mem_limit은 걸지 않는다. 넘는 순간 OOM으로
+    # 저장소가 죽어 전원 로그아웃이 되므로, 쓰기만 실패하는 maxmemory가 낫다.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - session-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
+  # 운영자 지정 Gold 곡선·원본 주기도 읽기 캐시 및 잔차 계산 캐시용(SRS DAT-14).
+  # 계산 상태·잠금 소비처는 아직 없다. DB에서 복구 가능한 값이라 볼륨을 두지 않고 저장도 끈다.
+  #
+  # volatile-lru로 축출 후보를 만료가 걸린 키로 한정한다. DAT-14는 결과와 함께 진행
+  # 상태와 중복 계산 잠금도 여기 둔다. allkeys-lru면 잠금이 결과와 같은 확률로
+  # 지워져 중복 계산이 성립한다. 이건 축출 정책일 뿐 잠금 정책이 아니다. 잠금의
+  # 만료·소유권·장애 회수는 소비 코드 연결 전에 정한다(README).
+  # 크기(128mb)는 임시값이다. 확정은 S15P21C206-104 실측 뒤다(DEC-35).
+  cache-redis:
+    image: redis:7.4-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - service
+
   backend:
     image: ${BACKEND_IMAGE:-local/planetory-backend:not-configured}
     platform: linux/amd64
@@ -55,14 +107,80 @@ services:
       SSAFY_CLIENT_ID: ${SSAFY_CLIENT_ID:-}
       SSAFY_CLIENT_SECRET: ${SSAFY_CLIENT_SECRET:-}
       SSAFY_REDIRECT_URI: ${SSAFY_REDIRECT_URI:-}
+      # 266 NASA 원천 조회 정책. .env에서 값을 바꿔도 컨테이너에 전달되도록 명시한다.
+      NASA_PLANET_INFO_ENABLED: ${NASA_PLANET_INFO_ENABLED:-true}
+      NASA_PLANET_INFO_READY_TTL: ${NASA_PLANET_INFO_READY_TTL:-7d}
+      NASA_PLANET_INFO_EMPTY_TTL: ${NASA_PLANET_INFO_EMPTY_TTL:-1d}
+      NASA_PLANET_INFO_RETRY_DELAY: ${NASA_PLANET_INFO_RETRY_DELAY:-5m}
+      NASA_PLANET_INFO_CONNECT_TIMEOUT: ${NASA_PLANET_INFO_CONNECT_TIMEOUT:-3s}
+      NASA_PLANET_INFO_REQUEST_TIMEOUT: ${NASA_PLANET_INFO_REQUEST_TIMEOUT:-6s}
+      NASA_PLANET_INFO_MAX_CONCURRENT: ${NASA_PLANET_INFO_MAX_CONCURRENT:-2}
+      # 267 설명 기능은 기본 비활성. 활성화 전 GMS 예산·쿼터와 키 주입을 확인한다.
+      NASA_EXPLANATION_ENABLED: ${NASA_EXPLANATION_ENABLED:-false}
+      NASA_EXPLANATION_CHAT_MODEL: ${NASA_EXPLANATION_CHAT_MODEL:-none}
+      NASA_EXPLANATION_MODEL: ${NASA_EXPLANATION_MODEL:-gpt-5.4-mini}
+      NASA_EXPLANATION_MAX_OUTPUT_TOKENS: ${NASA_EXPLANATION_MAX_OUTPUT_TOKENS:-320}
+      NASA_EXPLANATION_TIMEOUT: ${NASA_EXPLANATION_TIMEOUT:-8s}
+      NASA_EXPLANATION_RETRY_DELAY: ${NASA_EXPLANATION_RETRY_DELAY:-1h}
+      NASA_EXPLANATION_MAX_CONCURRENT: ${NASA_EXPLANATION_MAX_CONCURRENT:-1}
+      NASA_EXPLANATION_DAILY_PER_MEMBER: ${NASA_EXPLANATION_DAILY_PER_MEMBER:-0}
+      NASA_EXPLANATION_DAILY_GLOBAL: ${NASA_EXPLANATION_DAILY_GLOBAL:-0}
+      # GMS API 키는 267 백엔드가 활성화될 때 읽는다. 비어 있어도 기본 기동한다.
+      GMS_KEY: ${GMS_KEY:-}
       GOLD_ROOT: /gold
+      # 내부 경로(/internal/**) 서비스 토큰. Publisher가 판 전환을 알릴 때 쓴다. 비우면 Backend가
+      # 경로 전체를 막는다. 알림이 없어도 DB의 current가 정본이라 화면은 열린다 [S15P21C206-262].
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      # 주소를 .env로 빼지 않는다. compose가 정의한 서비스 이름이 곧 주소이고,
+      # .env에 없는 변수 하나가 기동을 막는 실패를 되풀이하지 않는다.
+      SESSION_REDIS_HOST: session-redis
+      SESSION_REDIS_PORT: "6379"
+      CACHE_REDIS_HOST: cache-redis
+      CACHE_REDIS_PORT: "6379"
+      GOLD_CACHE_ENABLED: ${GOLD_CACHE_ENABLED:-false}
+      GOLD_CACHE_TIC_IDS: ${GOLD_CACHE_TIC_IDS:-}
+      # 잔차 Worker [S15P21C206-88]. 위 주소 규칙의 예외로 .env에서 켠다(http://derived-compute:8090).
+      # Worker가 healthy인 것을 본 뒤에 넣는다. 비어 있으면 잔차 요청은 지금처럼 503 「준비되지 않았습니다」다.
+      DERIVED_COMPUTE_URL: ${DERIVED_COMPUTE_URL:-}
+      # 동시 계산 수(planetory.residual.max-running). Worker 대수 × instance_concurrency를 넘으면 넘친 작업이
+      # 기다리지 않고 Worker 503으로 곧바로 실패한다. Worker가 1대(동시 1)라 1로 둔다. 늘리면 Worker도 늘린다.
+      PLANETORY_RESIDUAL_MAXRUNNING: ${PLANETORY_RESIDUAL_MAXRUNNING:-1}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    # cache-redis는 넣지 않는다. 캐시는 선택 의존성이다(health도 세션만 본다). 캐시
+    # 장애는 온라인 계산만 멈춰야 하는데, 여기 넣으면 캐시가 unhealthy일 때 백엔드가
+    # created에 멈춘다. 캐시 연결은 쓰는 시점에 맺으므로 기동에 필요하지 않다.
     depends_on:
+      session-redis:
+        condition: service_healthy
       service-db:
         condition: service_healthy
+    networks:
+      - service
+
+  # 온라인 잔차·주기도 Worker [S15P21C206-88]. Backend만 service 네트워크 안에서
+  # http://derived-compute:8090 으로 부른다. 호스트 포트를 열지 않으며 DB·Redis 자격 증명을 받지 않는다.
+  # Worker의 계산 경로에는 인증이 없다. 이 네트워크 격리가 유일한 통제이므로 디버깅용으로도 ports:를 열지 않는다.
+  # 들여다볼 때는 docker compose exec derived-compute … 나 backend 컨테이너에서 이름으로 부른다.
+  # backend의 depends_on에 넣지 않는다. Worker가 없으면 잔차 요청만 503이 되고 나머지 API는 돈다.
+  #
+  # 자원은 계약 5절의 실측 전 시작값(cpu_per_job=1, memory_mib_per_job=2048, instance_concurrency=1)이다.
+  # 프로세스 상한(MEMORY_LIMIT_MIB)을 컨테이너 상한보다 낮게 둬야 OOM kill(응답 없음)보다
+  # memory_exhausted 응답이 먼저 난다. 값 조정은 S15P21C206-104 실측 뒤에 한다.
+  derived-compute:
+    image: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      WORKER_IMAGE: ${DERIVED_COMPUTE_IMAGE:-local/planetory-derived-compute:not-configured}
+      DERIVED_COMPUTE_INSTANCE_CONCURRENCY: "1"
+      DERIVED_COMPUTE_MEMORY_LIMIT_MIB: ${DERIVED_COMPUTE_MEMORY_LIMIT_MIB:-1900}
+      # 131 인계용 요청·응답 캡처. 평시에는 비운다. 켜는 법은 apps/derived-compute README 「131 인계」.
+      DERIVED_COMPUTE_CAPTURE_DIR: ${DERIVED_COMPUTE_CAPTURE_DIR:-}
+    cpus: ${DERIVED_COMPUTE_CPUS:-1}
+    mem_limit: ${DERIVED_COMPUTE_MEMORY:-2048m}
     networks:
       - service
 
@@ -346,6 +464,32 @@ services:
     networks:
       - service
 
+  # Gold 목업 게시. gold-mock profile에 묶여 평시 up 대상이 아니다 [S15P21C206-262].
+  #   docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027
+  #
+  # 입력만 계약 예시 payload로 바꾼 실제 적재 단계다(distributed-system/publisher). 운영 Publisher는
+  # GCP Node 1에서 돌 예정이며 그때 입력 어댑터만 바뀐다. gold_writer 멤버 계정으로 붙는다.
+  # 소유자로 붙으면 권한 분리가 무력화된다. 계정 생성과 삭제 절차는 README 「Gold 목업」.
+  #
+  # 비밀번호는 :- 로 받는다. :? 로 두면 값이 없는 노드에서 config -q가 실패해 배포가 막힌다.
+  gold-mock:
+    image: ${PUBLISHER_IMAGE:-local/planetory-publisher:not-configured}
+    platform: linux/amd64
+    profiles: ["gold-mock"]
+    environment:
+      PGHOST: service-db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-planetory_poc}
+      PGUSER: ${PUBLISHER_DB_USER:-planetory_publisher}
+      PGPASSWORD: ${PUBLISHER_DB_PASSWORD:-}
+      BACKEND_URL: http://backend:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+    depends_on:
+      service-db:
+        condition: service_healthy
+    networks:
+      - service
+
   # 와이어프레임 문서를 그대로 서빙한다. Tunnel이 wireframe.planetory.space ->
   # http://wireframe:80으로 잡는다. 호스트 포트는 열지 않는다.
   #
@@ -425,3 +569,7 @@ volumes:
   # 유일한 데이터 사본이다. compose down -v 와 이름 변경이 곧 데이터 상실이다.
   service-db-data:
     name: planetory-service-db-data
+
+  # 세션 저장소. 사라지면 전원 로그아웃이지만 데이터 손실은 아니다.
+  session-redis-data:
+    name: planetory-session-redis-data

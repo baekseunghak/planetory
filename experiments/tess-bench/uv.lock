@@ -18,12 +18,15 @@ dependencies = [
 [package.optional-dependencies]
 bls = [
     { name = "astropy" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "astropy", marker = "extra == 'bls'", specifier = ">=6.0,<8" },
     { name = "numpy", specifier = ">=1.26,<3" },
+    { name = "scipy", marker = "extra == 'bls'", specifier = ">=1.12,<2" },
 ]
 provides-extras = ["bls"]
 
@@ -32,6 +35,7 @@ dev = [
     { name = "astropy", specifier = ">=6.0,<8" },
     { name = "jsonschema", specifier = ">=4.18,<5" },
     { name = "pytest", specifier = ">=8.0,<10" },
+    { name = "scipy", specifier = ">=1.12,<2" },
 ]
 
 [[package]]

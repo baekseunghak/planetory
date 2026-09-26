@@ -1,13 +1,29 @@
-# Planetory 서비스 DB ERD v1.12
+# Planetory 서비스 DB ERD v1.16
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20)
-- v1.3 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 이번 문서 작업으로 변경하지 않는다.
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13·v1.14·v1.15·v1.16 2026-09-25)
+- v1.3 당시 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 그 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
 - 표기: 회원 FK는 역할과 관계없이 `user_id`(두 번째 회원 참조만 역할 이름). 테이블은 snake_case 복수형, PK는 `id BIGINT IDENTITY`(별은 `tic_id`), 시각은 `TIMESTAMPTZ`, 열거형은 `TEXT + CHECK`.
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.15 → v1.16 (2026-09-25, `S15P21C206-270`)
+
+V29는 제출 결과에서 보는 항성별 NASA `ps` 확정 행성 목록을 `nasa_star_catalog`, `nasa_star_planet`, `nasa_star_planet_explanation`에 저장한다. 외부 행성은 내부 후보 FK 없이 TIC·불투명 `planet_id`로 식별한다. 성공 재조회에서 빠지거나 이름이 바뀐 행은 비활성화해 보존하되 현재 응답에서 제외한다. 기존 V25·V26 후보 자료와 Gold·성과는 바꾸지 않으며 V28의 회원별·전체 모델 시도 한도를 공유한다. 구조·상태는 [270 개발 계약](../development/nasa-star-planets-270.md), 적용 절차는 [NASA 운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다. 공유/운영 DB 적용은 별도다.
+
+### v1.14 → v1.15 (2026-09-25, `S15P21C206-268`)
+
+269의 V27 봉우리 제출 제약 다음 번호인 V28은 모델 생성 시도의 UTC 일별 상한을 DB 전체에서 지키기 위해 `nasa_explanation_daily_usage`(회원별)와 `nasa_explanation_daily_total`(전체)을 추가한다. 두 행의 `attempt_count`는 모델 시도권을 확보할 때 같은 짧은 트랜잭션에서 증가한다. 회원 삭제 시 회원별 행은 정리되지만 전체 행은 남아 비용 상한의 과거 사용량을 보존한다. V25·V26·269의 V27이나 Gold·성과는 변경하지 않는다. 설정·확인 순서는 [운영 가이드](../operations/nasa-planet-info-runbook.md), 요청 계약은 [268 개발 계약](../development/nasa-planet-request-268.md)을 따른다. 공유/운영 DB 적용은 별도다.
+
+### v1.13 → v1.14 (2026-09-25, `S15P21C206-267`)
+
+V26은 `nasa_planet_info` 후보 행 하나에 최대 한 행으로 연결되는 `nasa_planet_explanation`을 추가한다. 설명 본문은 원천 해시·구조 버전, 모델·프롬프트 버전과 생성 시각을 함께 보존한다. DB 임대·시도 순번·횟수·다음 재시도 시각은 동시 생성과 늦은 완료를 제한한다. 기존 NASA 원천·Gold 분류·성과를 변경하지 않는다. 구조와 소비 조건은 [267 내부 계약](../development/nasa-planet-explanation-267.md)을 따른다. V26의 공유/운영 DB 적용은 미실행이다.
+
+### v1.12 → v1.13 (2026-09-25, `S15P21C206-266`)
+
+V25는 Gold와 분리된 서비스 조회 테이블 `nasa_planet_info`를 추가한다. 회원이 실제 매칭한 확정 후보만 NASA PS 기본 해로 조회하고, 후보당 한 행에 정규화값·출처 해시·조회/변경 시각·재확인 상태·경합 순번을 저장한다. Gold·후보 판정·성과는 바꾸지 않는다. 관계·열의 최신 작은 그림은 [NASA 자료 ERD SVG](../images/nasa-planet-info-erd.svg), 상세 상태·필드는 [266 개발 계약](../development/nasa-planet-info-266.md)을 따른다. V25는 격리 DB에서 검증했으며 공유/운영 DB 적용은 미실행이다.
 
 ### v1.11 → v1.12 (2026-09-20, `S15P21C206-114`)
 
@@ -149,7 +165,7 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-여섯 묶음, 총 34개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수는 운영 적용 전 검증 대상이다.
+일곱 묶음, 총 38개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료, V26의 한국어 설명, 269의 V27 봉우리 제출 제약, V28의 모델 일별 시도 수는 대상 환경에서 적용 이력을 확인한다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
@@ -159,10 +175,11 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
 | F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
+| G 외부 조회 자료 | nasa_planet_info, nasa_planet_explanation, nasa_explanation_daily_usage, nasa_explanation_daily_total, nasa_star_catalog, nasa_star_planet, nasa_star_planet_explanation | 266 후보별·270 항성별 NASA PS 정규화 자료, 267·270 설명, 268 모델 시도 한도. Gold와 별도 소유 |
 
 ## 2. ERD
 
-아래 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24 신규 열·테이블은 아래 Mermaid·열 표를 따른다. SVG 갱신은 시각 인수에서 별도 확인한다.
+아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24~V29 신규 관계와 제약의 최신 본문은 아래 Mermaid·열 표이고, V25·V26·V28·V29의 NASA 자료 관계는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -185,6 +202,7 @@ erDiagram
     users ||--o{ post_reactions : reacts
     users ||--o{ published_analyses : publishes
     users ||--o{ notifications : receives
+    users ||--o{ nasa_explanation_daily_usage : model_attempts
 
     stars ||--o{ observation_datasets : observed_in
     stars ||--o{ publication_bundles : published_as
@@ -194,6 +212,12 @@ erDiagram
     publication_bundles ||--o{ candidates : last_updated_by
     candidates ||--o{ candidate_aliases : aliases
     candidates ||--o{ external_signal_references : matched_to
+    candidates ||--o| nasa_planet_info : requested_nasa_info
+    stars ||--o{ nasa_planet_info : host
+    nasa_planet_info ||--o| nasa_planet_explanation : has_explanation
+    stars ||--o| nasa_star_catalog : nasa_catalog
+    nasa_star_catalog ||--o{ nasa_star_planet : lists
+    nasa_star_planet ||--o| nasa_star_planet_explanation : has_explanation
     candidates ||--o| candidate_dispositions : classified
     candidates ||--o{ candidate_status_history : changes
     candidates ||--o{ ai_evaluations : scored
@@ -338,13 +362,86 @@ erDiagram
     external_signal_references["external_signal_references · 외부 카탈로그"] {
         bigint id PK "고유 번호"
         bigint candidate_id FK "후보(NULL 가능)"
-        text source "tce/toi/archive/exofop"
+        text source "원천 표기(고정 enum 아님)"
         text external_id "원천 ID"
         text disposition "원천 판정"
         numeric period_days "주기"
         date fetched_on "조회일"
         bigint tic_id FK "별"
         numeric epoch_btjd "원천 epoch(BTJD·NULL 가능)"
+    }
+    nasa_planet_info["nasa_planet_info · 요청된 NASA 자료"] {
+        bigint candidate_id PK, FK "내부 확정 후보"
+        bigint tic_id FK "항성 TIC"
+        text archive_planet_name "조회 대상으로 선택한 pl_name"
+        text status "ready/not_found/identity_unresolved 등"
+        jsonb normalized "PS 기본 해·단위·오차·출처"
+        text source_hash "정규화 SHA-256"
+        smallint source_version "계약 버전"
+        timestamptz fetched_at "정상 조회"
+        timestamptz changed_at "정규화 변경"
+        timestamptz next_refresh_at "다음 재확인"
+        bigint attempt_generation "경합 순번"
+    }
+    nasa_planet_explanation["nasa_planet_explanation · 검증된 한국어 설명"] {
+        bigint candidate_id PK, FK "NASA 자료의 내부 후보"
+        text source_hash "설명 원천 SHA-256"
+        smallint source_version "정규화 계약 버전"
+        text model_name "사용 모델"
+        text prompt_version "프롬프트 계약 버전"
+        text status "pending/ready/failed"
+        jsonb content "검증된 다섯 설명 문장"
+        timestamptz generated_at "성공 생성 시각"
+        timestamptz next_retry_at "다음 설명 시도 가능 시각"
+        timestamptz in_flight_until "생성 임대 만료"
+        bigint attempt_generation "경합 순번"
+        smallint attempt_count "동일 조합 시도 횟수"
+    }
+    nasa_star_catalog["nasa_star_catalog · TIC별 NASA 목록"] {
+        bigint tic_id PK, FK "항성 TIC"
+        text status "pending/ready/empty/partial/일시 장애"
+        text host_name "NASA 항성명·NULL 가능"
+        timestamptz fetched_at "마지막 성공 조회"
+        timestamptz next_refresh_at "다음 재확인"
+        timestamptz in_flight_until "목록 조회 임대"
+        bigint attempt_generation "늦은 결과 차단"
+        text last_refresh_status "최근 시도 상태"
+    }
+    nasa_star_planet["nasa_star_planet · 외부 행성별 원천"] {
+        bigint tic_id PK, FK "목록의 항성"
+        text planet_id PK "np-와 SHA-256"
+        text planet_name UK "같은 TIC 안의 정확한 pl_name"
+        boolean active "현재 목록 포함 여부"
+        text status "ready/identity_unresolved/invalid_source"
+        jsonb normalized "검증된 PS 기본 해"
+        text source_hash "정규화 SHA-256"
+        smallint source_version "계약 버전"
+        timestamptz fetched_at "해당 행성 조회"
+        timestamptz changed_at "정규화 변경"
+    }
+    nasa_star_planet_explanation["nasa_star_planet_explanation · 외부 행성 설명"] {
+        bigint tic_id PK, FK "행성의 항성"
+        text planet_id PK, FK "외부 행성 ID"
+        text source_hash "설명 원천 SHA-256"
+        smallint source_version "정규화 계약 버전"
+        text model_name "사용 모델"
+        text prompt_version "설명 계약 버전"
+        text status "pending/ready/failed"
+        jsonb content "검증된 다섯 문장"
+        timestamptz generated_at "성공 생성 시각"
+        timestamptz next_retry_at "다음 시도 가능 시각"
+        timestamptz in_flight_until "설명 생성 임대"
+        bigint attempt_generation "늦은 결과 차단"
+        smallint attempt_count "동일 조합 1~3회"
+    }
+    nasa_explanation_daily_usage["nasa_explanation_daily_usage · 회원별 모델 시도"] {
+        date usage_day PK "UTC 날짜"
+        bigint member_id PK, FK "회원·삭제 시 정리"
+        integer attempt_count "양수·일별 시도권 수"
+    }
+    nasa_explanation_daily_total["nasa_explanation_daily_total · 전체 모델 시도"] {
+        date usage_day PK "UTC 날짜"
+        integer attempt_count "양수·회원 삭제 뒤에도 보존"
     }
     candidate_dispositions["candidate_dispositions · 통합 분류"] {
         bigint candidate_id PK, FK "후보"
@@ -719,7 +816,7 @@ erDiagram
 | submission_kind | CHECK candidate/no_candidate/skipped | skipped = 튜토리얼 건너뛰기(SUB-12) |
 | curve_step, removed_candidate_ids BIGINT[] | | 정렬 배열. 잔차 캐시 키·재현 입력 |
 | submitted_period, matched_period, harmonic_multiplier, correction_reason | | 원본값 보존(SUB-05) |
-| source_peak_grid_index, source_peak_suggested_duration_hours, duration_limit_hours | | 봉우리 선택이면 같은 곡선 문맥의 grid index와 서버가 검증에 적용한 제안 duration·3배 상한을 저장한다. 주기도 직접 선택은 모두 NULL이며 서버가 period로 봉우리를 추정하지 않는다(C02-R3) |
+| source_peak_grid_index, source_peak_suggested_duration_hours, duration_limit_hours | CHECK `ck_submissions_source_peak_all_or_none` | 봉우리 선택이면 같은 곡선 문맥의 grid index와 서버가 검증에 적용한 제안 duration·3배 상한을 저장한다. 판이 제안 duration을 싣지 않으면(탐사 API 5.4) 상한도 없으므로 둘 다 NULL이다. 제안 duration과 상한은 둘 다 NULL이거나 둘 다 양수이며 한쪽만 채울 수 없다(V27, S15P21C206-269). 주기도 직접 선택은 모두 NULL이며 서버가 period로 봉우리를 추정하지 않는다(C02-R3) |
 | phase_start, phase_end | CHECK 0≤start<1, start<end<start+1 | 접힌 곡선 위상 구간이 원본 입력(POL-08). selection_space 없음 |
 | fold_reference_time_btjd DOUBLE | | 제출 당시 번들의 기준 시각. 현재 판에서 재현할 때 `phase = ((epoch − 현재 기준시각)/period) mod 1`로 재환산 |
 | epoch_btjd, duration_hours | | 서버가 위상값에서 파생해 저장(EXP-06·07). 절대값이라 판이 바뀌어도 의미 유지 |
@@ -881,6 +978,18 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 Snapshot JSON에는 `asOf`(KST D 자정·기록 종료 경계), `sourceObservedAt`(실제 일관된 원천 조회 시작), `generatedAt`(집계 완료), D-1인 `snapshotDate`, 90일 모수 창, `cohortMemberCount`와 지표별 `median/sampleCount/status/reason`만 저장한다. 회원 ID·닉네임·회원별 원자료는 저장하지 않는다. **일별 값은 D 이전 기록을 실행 시점에 확인한 상태로 계산한 값이며 정확한 D 상태의 복원이 아니다**(2026-09-22 추가 사용자 승인). 지연 커밋·라벨/회원 상태 변경은 원천 조회 전에 반영될 수 있다. 과거 날짜의 성공본 없는 재실행은 거절한다. 현재 회원 통계는 active만, 과거 비식별 성공본은 보존한다. 탈퇴 원천 보관·삭제 정책은 별도 미정이다. [통계 정책](../requirements/planetory-statistics-policy.md)과 [통계 실행 런북](../operations/statistics-runbook.md)을 따른다. 공유/운영 DB 적용과 스케줄 활성화는 미실행이다.
 - **제외(결정 6):** reports, audit_events, expert_reports. 도입 시 v0.1 정의를 되살린다.
+
+### G. 요청된 외부 조회 자료와 한국어 설명 (V25·V26·V28·V29, 266~270)
+
+**nasa_planet_info**는 `candidate_id` PK/FK와 `tic_id` FK로 요청된 내부 확정 후보 하나에만 붙는다. `archive_planet_name`은 공급 단계의 검증을 전제로 Gold의 `external_signal_references(source='archive')`에서 선택한 정확한 `pl_name`이며, 별칭·이름 유사도로 채우지 않는다. 이 source 문자열은 검증 수준을 저장하지 않는다. 262 목업의 `source='nasa_exoplanet_archive'`는 별도 `pscomppars` 참고 행성명을 더미 TIC에 복사한 외부 참조이므로 현행 266의 조회 자격으로 간주하지 않는다([원천 구분](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)). `status`는 `pending/ready/not_found/identity_unresolved/temporarily_unavailable`, `last_refresh_status`는 최근 시도 이유다. `normalized` JSONB·`source_hash` SHA-256·`source_version` 1은 정상 `ps` 기본 해의 데이터와 구조 버전이며, `fetched_at`은 마지막 정상 조회, `changed_at`은 정규화값 변경 시각이다. `last_attempt_at`·`next_refresh_at`·`in_flight_until`·`attempt_generation`은 재확인과 늦은 응답 방지용이다. FK 이외의 Gold 쓰기 권한은 추가하지 않는다. 서비스 앱 역할에는 이 테이블만 SELECT/INSERT/UPDATE를 준다. 저장·상태 전이·보관 정책은 [266 개발 계약](../development/nasa-planet-info-266.md#4-저장-구조와-상태-전이), 배포는 [운영 가이드](../operations/nasa-planet-info-runbook.md)를 따른다.
+
+**nasa_planet_explanation**은 `candidate_id` PK/FK로 `nasa_planet_info`에 0~1개만 붙는다. `source_hash`·`source_version`은 설명이 근거로 삼은 266 정규화값, `model_name`·`prompt_version`은 생성 계약, `content` JSONB·`generated_at`은 검증을 통과한 성공 설명과 생성 시각이다. `status`는 `pending/ready/failed`이고, `ready`일 때에만 `content`·`generated_at`이 함께 있으며 임대는 비어 있어야 한다. `last_attempt_at`·`next_retry_at`·`in_flight_until`·`attempt_generation`·`attempt_count`·`last_failure`는 모델 시도·경합·실패 추적용이다. 횟수 CHECK는 1~3이고 실제 재시도 정책은 [267 내부 계약](../development/nasa-planet-explanation-267.md)에 있다. 앱 역할에는 신규 테이블의 SELECT/INSERT/UPDATE만 추가한다. 이 FK는 자료 계보를 고정하고, 최신 원천 해시와 같은지 확인하는 조건부 저장은 서비스 SQL이 맡는다. 공유/운영 DB 적용은 별도다.
+
+**nasa_explanation_daily_usage**는 `(usage_day, member_id)` 복합 PK로 한 회원의 UTC 날짜별 모델 생성 시도권 예약 수를 보관한다. `member_id`는 `users(id)` FK이고 탈퇴로 회원 행이 삭제되면 관련 회원별 행도 삭제된다. `attempt_count`는 양수이며 외부 모델 호출 직전 새 시도권을 예약할 때만 증가한다. **nasa_explanation_daily_total**은 `usage_day` PK의 전체 예약 수다. 회원별 행과 같은 짧은 트랜잭션에서 증가하고 회원 삭제 뒤에도 남으므로 전체 비용 상한이 되돌아가지 않는다. 예약 뒤 모델 실패·권한 철회가 있어도 카운터를 되돌리지 않는다. 두 테이블에 앱 역할 SELECT/INSERT/UPDATE만 주고 DELETE는 주지 않는다. GET 저장 조회, 재사용 POST, NASA TAP 조회를 모델 시도로 세지 않는다. 일별 한도 수치는 미지정이며 기본값은 회원별·전체 모두 0이다. 설명 활성화 전에 운영 승인된 양의 정수 두 개를 명시 주입한다([268 계약](../development/nasa-planet-request-268.md)). 공유/운영 DB 적용과 실제 비용 확인은 별도다.
+
+**nasa_star_catalog**는 `tic_id` PK/FK로 항성마다 하나의 NASA 목록 조회 상태를 둔다. `status=pending/ready/empty/partial/temporarily_unavailable`, `host_name`, 마지막 성공 `fetched_at`, 다음 `next_refresh_at`, 임대 `in_flight_until`, 증가하는 `attempt_generation`, 최근 `last_refresh_status`가 있다. 정상 0행은 `empty`다. 65행·본문 상한·JSON 숫자 파싱 장애나 늦은 응답은 이전 행성 snapshot을 삭제하지 않는다. **nasa_star_planet**은 `(tic_id,planet_id)` 복합 PK로 외부 행성을 보관하며 `(tic_id,planet_name)` 유일 제약과 `np-`+SHA-256 형식 CHECK를 둔다. 내부 candidate FK는 없다. `active`는 마지막 성공 재조회에 속한 행성만 현재 응답에 노출한다. `status=ready/identity_unresolved/invalid_source`, `normalized` JSONB·`source_hash`·`source_version`, `fetched_at`·`changed_at`을 보존한다. `ready`일 때에만 정규화 JSON·해시·버전이 모두 있어야 한다. `fetched_at`은 상태와 무관하게 마지막 완전 응답에서 해당 이름을 관찰한 시각이고, `changed_at`은 정규화 자료 또는 상태 변경 시각이다. 같은 정확 이름의 확정·비확정 기본 해가 함께 온 경우도 그 이름을 식별 보류 상태로 남기며 다른 행성은 유지한다. 이름 정정·삭제로 비활성화한 옛 행을 새 이름으로 추측 연결하지 않는다.
+
+**nasa_star_planet_explanation**은 `(tic_id,planet_id)` PK이자 행성 FK다. 원천 `source_hash/source_version`, `model_name/prompt_version`, `status=pending/ready/failed`, 다섯 문장의 `content` JSONB와 `generated_at`을 보관한다. `ready`에는 본문과 시각이 필수이고 임대가 없어야 한다. `next_retry_at/in_flight_until/attempt_generation/attempt_count(1~3)/last_failure`는 설명의 실패·중복·늦은 완료를 제어한다. 현재 원천과 버전이 일치하지 않거나 행성이 비활성화되면 옛 설명은 응답에 싣지 않는다. 세 V29 테이블 모두 앱 역할에 SELECT/INSERT/UPDATE만 허용하며, Gold·V25·V26 수정 권한을 추가하지 않는다. V28의 동일한 일별 집계를 268·270 설명 시도가 공유한다. 상세 상태·응답은 [270 계약](../development/nasa-star-planets-270.md)을 따른다.
 
 ## 4. 설계 결정과 근거
 

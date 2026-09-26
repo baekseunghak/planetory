@@ -22,6 +22,7 @@ export class ApiError extends Error {
 
 type RequestOptions = Omit<RequestInit, "credentials"> & {
   json?: unknown;
+  timeoutMs?: number;
   // Capture metadata here; handle it after the request settles.
   onResponse?: (metadata: { status: number; headers: Headers }) => void;
   // Receipt-style reads can outlive the authenticated session that created
@@ -65,7 +66,13 @@ export function createApiClient(config: ClientOptions) {
     const localRequestId = crypto.randomUUID();
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
-    const { json, onResponse, sessionBound = true, ...fetchOptions } = options;
+    const {
+      json,
+      onResponse,
+      sessionBound = true,
+      timeoutMs,
+      ...fetchOptions
+    } = options;
     if (json !== undefined && options.body != null)
       throw new Error("json과 body는 함께 보낼 수 없습니다.");
     if (json !== undefined) headers.set("Content-Type", "application/json");
@@ -78,10 +85,13 @@ export function createApiClient(config: ClientOptions) {
     let timedOut = false;
     let dispatched = false;
     let serverRequestId: string | null = null;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, config.timeoutMs ?? 15000);
+    const timeout = setTimeout(
+      () => {
+        timedOut = true;
+        controller.abort();
+      },
+      timeoutMs ?? config.timeoutMs ?? 15000,
+    );
     try {
       controller.signal.throwIfAborted();
       if (writing) {

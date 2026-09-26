@@ -144,6 +144,10 @@
 | 2026-09-19 | 분석 제출 접수·복구 구현 | S15P21C206-187 | 제출, requestId, 멱등, 응답 유실, 브라우저 POST 자동 재전송, reset-connection, outcome created/replayed, 특수 제출, no_candidate, skipped, 접수 결과 대화상자, dialog onClose 미발화 | 구현 완료·실제 API 인수 대기 | [기록](2026-09-19.md) |
 | 2026-09-19 | C02 계약 예제의 fieldErrors 불일치 확인과 전달 | S15P21C206-187 | fieldErrors, field/reason, ErrorResponse.FieldError, contracts.json, validate.cjs 검사 누락, 소관 밖 수정 금지 | 확인 완료·미적용(C02 전달) | [기록](2026-09-19.md) |
 | 2026-09-19 | 성과 인정·새 별 발견 공통 함수와 성과 조회 구현, 발견 좌표 15자리 정정 | S15P21C206-144 | recognizeAchievement, GET /me/achievements, hash-user-achievement-seq-v1, unlockShortfall, startedStarCount, 좌표 15자리, BigDecimal, float8 NUMERIC, 회원 선잠금, 교착, 40P01 | 구현·검증 완료·리뷰 반영 | [2026-09-19](2026-09-19.md) |
+| 2026-09-20 | 대표 표본 최초 BLS 예비 측정과 실패 분리 | S15P21C206-109 | population, random 40, planet_host 5, no_gate_peak, checksum | 구현·합성 검증 완료, 실측 전 | [기록](2026-09-20.md) |
+| 2026-09-20 | 예비 측정 lockfile 정합성 보완 | S15P21C206-109 | uv locked, astro-kernel, jsonschema, 버전 유지 | 검증 완료(로컬) | [기록](2026-09-20.md) |
+| 2026-09-20 | 45 TIC 최초 BLS 예비 실측 기록 | S15P21C206-109 | dac9878f, 34/40, 85%, 비교군 4/5, 47.642초 | 예비 실측 대조 완료·채택 미확정 | [기록](2026-09-20.md) |
+| 2026-09-20 | 비교군 무검출의 탐색 범위·SDE 진단 | S15P21C206-109 | Archive, 6.755일, HD 22946, SDE 5.198, 범위 밖 | 사후 진단 완료·채택 미확정 | [기록](2026-09-20.md) |
 | 2026-09-19 | 세그먼트·비닝 해상도 비교 실험 준비 | S15P21C206-114 | 10분, 평균, 중앙값, gaps, 20000, bin 중심, 합성 주입 | 구현·합성 검증 완료, 실측 전 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | 비닝 실험 잠금 파일 불일치 정정 | S15P21C206-114 | uv.lock, astro-kernel, jsonschema, VIRTUAL_ENV, locked | 동기화·입력 검증 완료 | [2026-09-19](2026-09-19.md) |
 | 2026-09-19 | 9별 비닝 실측과 짧은 통과 손실 기록 | S15P21C206-114 | 84d4cc93, 184, 3360, 10분, 20분, TOI-700, 미측정 | 실측 검증 완료·화면 리뷰 전 | [2026-09-19](2026-09-19.md) |

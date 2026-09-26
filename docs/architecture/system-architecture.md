@@ -23,7 +23,7 @@ flowchart LR
   P -->|gold writer · 단일 트랜잭션| DB[PostgreSQL EC2-A]
   P -->|커밋 후 bundleId 알림| API
   API -->|Gold 읽기·서비스 쓰기| DB
-  API <--> R[Redis 계산 상태·결과·잠금]
+  API <--> R[Redis Gold 읽기 캐시·계산 상태·결과·잠금]
   API -->|배열·고정 모델 전달| WKR[Python Derived Worker]
 ```
 
@@ -61,14 +61,14 @@ flowchart LR
 | Backend | Spring Boot 3 | 회원, 제출, Gold 읽기, Worker 호출, 판 전환 후처리, 커뮤니티, 성과 API |
 | Derived Worker | Python, `libs/astro-kernel` | Backend가 전달한 배열과 고정 모델로 잔차·주기도 계산. DB 직접 조회 금지 |
 | 서비스 DB | PostgreSQL | 서비스 트랜잭션, Gold 배열·메타데이터, current 판의 정본 |
-| 계산 캐시 | Redis (EC2-A loopback) | 온라인 계산 상태·결과·키별 잠금 |
+| 계산·Gold 읽기 캐시 | Redis (EC2-A loopback) | 운영자 지정 별의 곡선·원본 주기도, 온라인 계산 상태·결과·키별 잠금 |
 | 배치 제어 | Airflow | 대상·버전·순서·실패 단계 재처리 |
 | 자원 관리 | YARN | Spark 실행 자원 배정 |
 | 분산 연산 | Spark | 파싱·정제·결합·BLS·residual·AI 배치 |
 | 분산 저장 | Hadoop HDFS | Raw·Bronze·Silver·공개 Bundle 백업 저장 |
 | 관측 | Prometheus, Grafana | 메트릭 수집 및 시각화 |
 
-애플리케이션은 EC2-A의 단일 인스턴스로 운영한다. 로그인 세션은 같은 노드의 `redis-session`에, 온라인 파생 계산의 상태·결과·키별 잠금은 `redis-cache`에 둔다. 두 인스턴스로 나누는 이유는 `maxmemory`와 eviction이 인스턴스 단위라 한곳에 두면 계산 캐시가 세션을 지우기 때문이다(8장 D1). 세션을 Redis에 두는 목적은 공유가 아니라 재시작 생존이며, 그 대가로 `redis-session`은 인증 경로의 필수 의존이 된다(8장 D10). 요청 간 상태를 프로세스 메모리에 새로 두지 않는다는 제약은 인스턴스 수와 무관하게 유지한다.
+애플리케이션은 EC2-A의 단일 인스턴스로 운영한다. 로그인 세션은 같은 노드의 `redis-session`에, 운영자 지정 별의 Gold 곡선·원본 주기도와 온라인 파생 계산의 상태·결과·키별 잠금은 `redis-cache`에 둔다. 두 인스턴스로 나누는 이유는 `maxmemory`와 eviction이 인스턴스 단위라 한곳에 두면 계산 캐시가 세션을 지우기 때문이다(8장 D1). 세션을 Redis에 두는 목적은 공유가 아니라 재시작 생존이며, 그 대가로 `redis-session`은 인증 경로의 필수 의존이 된다(8장 D10). 요청 간 상태를 프로세스 메모리에 새로 두지 않는다는 제약은 인스턴스 수와 무관하게 유지한다.
 
 이 서술은 개발 정본 [서비스 백엔드 계약과 수용 기준](../development/service-backend/contracts-and-acceptance.md)의 SB-D07(단일 Spring Boot 전제 유지, 필수 공유 세션 전제 폐기)과 정합화한 결과다. 이전 판의 "EC2-A/B 동일·무상태" 서술은 SB-D07 확정 시점부터 이 결정 이전까지 충돌 상태였다.
 
@@ -208,7 +208,7 @@ GCP PublicationBundle → HDFS 백업·검증 → PostgreSQL staging 적재
 - 검증이나 적재가 실패하면 트랜잭션을 롤백해 기존 `current`를 유지한다. 기존 판 행은 과거 제출 참조를 위해 남기되, archived 판의 주기도는 정리한다.
 - 커밋 뒤 Publisher는 전환된 `bundleId`만 Backend에 알린다. 알림은 멱등 재시도할 수 있어야 하며, 실패해도 DB 전환을 되돌리지 않는다.
 - 알림은 후처리를 빠르게 시작하기 위한 신호다. 요청 처리 시 Backend가 조회한 DB의 `current`가 최종 정본이다.
-- Backend는 알림을 받으면 이전 판 Redis 캐시 정리, 완료 별 재개 판정, 외부 라벨 갱신 표식을 실행한다.
+- Backend는 알림을 받으면 이전 판 Redis 계산 캐시 정리, 완료 별 재개 판정, 외부 라벨 갱신 표식, 운영자 지정 별의 새 Gold 읽기 캐시 적재를 실행한다. 알림이 없어도 곡선·원본 주기도 요청 시 새 판의 DB 데이터를 읽고 캐시를 채운다.
 - 진행 중 분석은 판 변경을 감지하면 최신 `current`로 다시 불러온다. 이전 판의 계산 결과를 화면이나 저장 결과로 채택하지 않는다.
 - 공개한 PublicationBundle은 HDFS에 RF2로 백업하며 온라인 조회에는 사용하지 않는다.
 

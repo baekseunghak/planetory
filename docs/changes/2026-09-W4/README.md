@@ -198,6 +198,9 @@
 | 2026-09-22 | 공개 은하 전체 보유별·성과 행성·철회 재검사 | S15P21C206-251 | public-sky, all-owned, public-v1, REQUIRES_NEW, 5000별, 성과1000, 개인개수차이 | 구현·격리 검증 완료, 244 실제 인수 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | 공개 완료 표식의 의미·방문자 문구 정정 | S15P21C206-251 | completedWithoutPlanets, 공개 행성, FP 재라벨, 페이지 지문 비용 | API 15·프론트 단위 11·Chrome 5건 통과, 재리뷰 전 | [기록](2026-09-22.md) |
 | 2026-09-22 | 공개 은하 후속 리뷰: 파싱 예외·A13 차이·집계 비용 | S15P21C206-251 | NumberFormatException, STAR_LIST_PRIVATE, 작은 limit, 반복 측정 제거 | 격리 API 15·컨트롤러 1건 통과 | [기록](2026-09-22.md) |
+| 2026-09-22 | SDE 세 정의 비교 실행 준비 | S15P21C206-243 | global, running_median, log_bins, 고정 피크, 세 seed | 구현·실측 전 | [기록](2026-09-22.md) |
+| 2026-09-23 | SDE 5별 실측 검산·문턱 검토안 | S15P21C206-243 | 3f1db3f8, 2240, 254/461, SDE 8 | 실측·검산 완료, 채택 미확정 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 곡선별 손익·SNR 유지 제안과 재집계 자료 | S15P21C206-243 | 곡선별 손익, CM Dra 19, 전역 SNR 유지, review ZIP | 실험 검산 완료·채택 미확정 | [기록](2026-09-23.md) |
 | 2026-09-22 | 외부 스냅샷·후보 조인 커널 | S15P21C206-124 | absence_evidence, 실제 ID, snapshot, disposition | 합성 검증 완료·실제 연결 미완료 | [기록](2026-09-22.md) |
 | 2026-09-22 | 122 후보 기반 외부 조인 회귀 준비 | S15P21C206-124 | fixture IDs, held_rows, reference_changes | 합성 검증 완료·연결 회귀 대기 | [기록](2026-09-22.md) |
 | 2026-09-22 | 외부 카탈로그 후보 연결 696cda44 검산 | S15P21C206-124 | 18 IDs, 99 scenarios, 79 checksums, hold | 로컬 검증 완료·리뷰 대기 | [기록](2026-09-22.md) |
@@ -235,3 +238,121 @@
 | 2026-09-25 | Silver 입력 열 축소·biweight 벡터화(결과 비트 동일) | S15P21C206-78 | SILVER_INPUT_COLUMNS, _biweight_locations, 2.9x, 13% | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
 | 2026-09-25 | 자동 보안 업데이트의 NodeManager 재시작 장애·needrestart 예외 | S15P21C206-78 | unattended-upgrades, needrestart, libcurl, exit 143, apt-daily-upgrade.timer | 확산 차단, 예외 로컬 구현 | [기록](2026-09-25.md) |
 | 2026-09-26 | needrestart 예외 설치·자동 업데이트 타이머 복구·Node 5·6 AMD 재배치 | S15P21C206-78 | 50-planetory.conf, apt-daily-upgrade.timer, cpuPlatform, AMD Rome, planetory-0005, planetory-0006 | 적용·검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | EC2-A 반영·완료 조건 확인, CI 배포 병합 후 | [기록](2026-09-23.md) |
+| 2026-09-23 | 254 리뷰 반영: Redis 예산·캐시 의존성·축출 정책 | S15P21C206-254 | maxmemory 64mb, noeviction, volatile-lru, depends_on, mem_limit | 구현·EC2-A 재반영 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 254 리뷰 반영: 프론트 배포 헬스를 렌더러 표식으로 | S15P21C206-254 | /health/renderer-enabled, try_files =404, web:image, 과도기 롤백 | 구현·격리 이미지 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 254 리뷰 반영: maxmemory 해석·캐시 잠금 정책 경계 | S15P21C206-254 | used_memory_rss, 축출≠잠금, 만료·소유권·장애 회수 | 문서 보완 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 승인 리뷰 보완·운영 이식 회귀 조건 | S15P21C206-243 | ddof=0, reflect, 미측정, 81행, 병합 보존 | 관련 테스트 14개 통과·채택 미확정 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 완료 조건·운영 후속 인계 준비 | S15P21C206-243 | DEC-03, 채택 결정, 인계 수신, SDE 계산 경로 | 팀 결정·인계 확인 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 운영 SDE 버전 선택·반복 연결 | S15P21C206-243 | running median, reflect, grid guard, CM Dra | 커널 307개·관련 43개 통과, 실제 회귀 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 운영 5별·반복 실행 검산 | S15P21C206-243 | b5828e49, 555ceda6, CM Dra 19, 2323+100 hash | 실제 회귀 통과·재리뷰 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 243 운영 코드 승인·API와 지문 문서 보완 | S15P21C206-243 | quality_version, v0 fingerprint, 공개 API | 운영 코드 승인·문서 보완 | [기록](2026-09-23.md) |
+| 2026-09-21 | Sector 파이프라인 자율 실행·Raw 검증 후 원본 회수 | S15P21C206-252 | Airflow, systemd, Raw audit, cleanup, SHA-256 | DAG·cleanup 구현 및 오프라인 검증, 운영 배포 전 | [기록](2026-09-21.md) |
+| 2026-09-22 | Airflow UI Node 1 배포·Tailnet 전용 공개 | S15P21C206-252 | Airflow DB, Scheduler, Webserver, Tailscale Serve, Viewer | UI 접속 검증, DAG 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow Viewer 초기 암호 전달 오류 정정 | S15P21C206-252 | Viewer, password reset, root-only file | 수정·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector별 단계 DAG와 빠른 Raw 재검증 착수 | S15P21C206-252 | 4 DAG, lineage, manifest checksum, cached audit, parallel cleanup | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow DB 유지 갱신·실패 시 이전 이미지 복귀 | S15P21C206-252 | Airflow update, paused DAG, rollback | 스크립트 검증, 운영 적용 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | TESS 단계별 DAG·HDFS·Bronze 불변 release 배포 | S15P21C206-252 | 20260921T230610Z, Node 1~6, import, paused, DagRun 0 | 코드 배포·import 검증, 실제 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | MAST Sector 발견·증거 기반 재개 선택 착수 | S15P21C206-252 | MAST 일반 LC, 상한 70, read-only DAG, resume planner | 오프라인 구현·테스트, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14~70 자동 admission·실패 재개 구현 | S15P21C206-252 | Airflow 조정, Worker unit, 불변 원천, 단일 Sector Raw, retry | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14 제한 운영 배포·재부팅 검증 | S15P21C206-252 | 20260922T021406Z, SSH, sudo, Worker 4, Node 1, Raw, cleanup, Bronze | 4단계 완료·drain, 무인 Hadoop 복구 미검증 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 전 노드 부팅 복구 오프라인 구현 | S15P21C206-252 | systemd, HDFS HA standby gate, timer, YARN readiness | 오프라인 검증·운영 미배포 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 6대 순차 재부팅 자동 복구 운영 검증 | S15P21C206-252 | release 5fec7b88, boot ID, Journal quorum, NN Active, YARN, Airflow | 6대 순차 재부팅·복구 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 과거 Sector 1~13 Airflow DAG 제거 | S15P21C206-252 | Airflow, legacy DAG, metadata, release 20260922T134419Z | 운영 제거·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 현행 Airflow DAG 한국어 표시 이름 배포 | S15P21C206-252 | Airflow, dag_display_name, description, release 20260922T135740Z | 운영 배포·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow 3.2.2 전환 코드·격리 import 검증 | S15P21C206-252 | Airflow 3, Task SDK, DB clone, rollback | 코드·이미지 검증, 운영 전환 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-23 | Airflow 다운로드 대기 Temporal Trigger 도입 | S15P21C206-252 | Temporal Trigger, Triggerer, 14일 deadline | 운영 배포·첫 deferred 재개 확인, 장시간 미검증 | [기록](2026-09-23.md) |
+| 2026-09-23 | Triggerer 배포 후 토큰 만료 재발 정정 | S15P21C206-252 | Sector 21·22, queued, LocalExecutor, JWT | 재발 확인·원인 미해결 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실행 토큰 만료 원인 규명·LocalExecutor 병렬도 조정 | S15P21C206-252 | execution_api JWT 600초, queued 대기, parallelism 8 | 운영 배포·회귀 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | MR !194 리뷰 반영 | S15P21C206-252 | Triggerer 기동, r0 attempt, coverage 감사, completed_through, CI | 운영 배포·회귀 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | Jira 완료 조건 운영 검증 | S15P21C206-252 | Sector 36, 실패 주입, COMMIT_CACHED, BRONZE_CACHED, 스냅샷 동일 | 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | develop 연속 병합에서 서비스 배포 버튼 유지 | S15P21C206-261 | rules:changes, auto_cancel, environment ec2-a, ci_forward_deployment | 구현·lint 통과, 병합 전 | [기록](2026-09-23.md) |
+| 2026-09-23 | 서비스 DB Gold 목업 적재와 배포 후속 정리 | S15P21C206-262 | publisher, gold-mock, mock-, gold_writer, registry-prune-daily, in-use, GCP interruptible | 구현·격리 검증 완료, 운영 반영 병합 후 | [기록](2026-09-23.md) |
+| 2026-09-23 | 서버 접속 순서와 OpenSSH 별칭을 지침에 추가 | - | AGENTS.md, tailscale ssh, ec2-a-ssh, node-1-ssh, .ssh/config | 문서 갱신 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 사람 PC의 deploy 계정 SSH 허용 | - | tailnet ACL, deploy, tailscale ssh, sudo -u deploy | ACL 적용·접속 확인 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 로컬 Gold 시드(!201)와 적재 단계 수렴 방침 | S15P21C206-262 | local-seed, payload 계약, load.publish, 86·87 | 방침 기록 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 반복 탐색·제공 해상도 표본 측정 연결 | S15P21C206-109 | population_kernel, held, 45개 표본 | 단위 15개 통과·실측 대기 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 109 고정 45개 전체 측정 검산 | S15P21C206-109 | 40105708, 보류 4개 | 수치 검산 완료·라벨 및 튜토리얼 미확정 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 109 표본 외부 조회 범위 고정 | S15P21C206-109 | sample-config, Archive, TOI | 단위 20개 통과·수집 대기 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 외부 정규화와 복수 FP 탐색 | S15P21C206-109 | 42행, 시간 척도, 튜토리얼 | 감사 완료·매칭 및 인수 미완료 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 튜토리얼 25 Sector 진단 실행기 | S15P21C206-109 | tutorial_screening | 단위 검증·실측 대기 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 튜토리얼 25 Sector 인수 근거 검산 | S15P21C206-109 | 7c50fe29, FP, QA | 실측 검산 완료·5종 인수 미완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 현행 튜토리얼 5종 유지·다중 Sector 검증 준비 | S15P21C206-109 | Sector 결합, 공백 보존, FP | 단위 19 통과·실측 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 결합 실측 검산·문헌 복수 식쌍성 검증 준비 | S15P21C206-109 | cf98cf54, 278956474 | 단위 20 통과·신규 실측 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 문헌 두 신호 검산·S3 EB 후보 6개 검증 준비 | S15P21C206-109 | 6c50ac38, MAST EB | 단위 22 통과·외부 매칭 미완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | S3 EB 6별 검산·역할별 후보 정리 | S15P21C206-109 | 3ad74275, epoch | 저장 검산 완료·외부 연결 미완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 5종 저장 결과 시각 검토·외부 대조 | S15P21C206-109 | tutorial_review, WASP-62 | 24 tests·후보 검토, 최종 인수 미완료 | [기록](2026-09-23.md) |
+| 2026-09-24 | 5종 학습 목적 검산·얕은 신호 후보 변경 | S15P21C206-109 | tutorial_suitability | 26 tests·4번 및 외부 라벨 인수 미완료 | [기록](2026-09-24.md) |
+| 2026-09-24 | 2·4번 외부 대조와 부극소 학습 근거 | S15P21C206-109 | tutorial_labels, TOI 184.01 | 28 tests·3·5번 외부 연결 미완료 | [기록](2026-09-24.md) |
+| 2026-09-24 | 3·5번 외부 신호 대조 행렬 | S15P21C206-109 | TCE, Rowden A/B | 30 tests·시간 척도 정식 연결 hold | [기록](2026-09-24.md) |
+| 2026-09-24 | 공식 DV XML 확보·5종 선정 근거 정리 | S15P21C206-109 | BTJD-TDB, 수동 B 고조파 | 31 tests·최종 선정안 리뷰 대상 | [기록](2026-09-24.md) |
+
+| 2026-09-24 | DEC-01 최소 공급·부족 대응 구체화 | S15P21C206-109 | 100 TIC 제안·튜토리얼 5종·범위·재측정 | 최종 승인 대기 | [기록](2026-09-24.md) |
+- [S15P21C206-126 내부 실험 범위 정합화·배치 구현](2026-09-23.md#s15p21c206-126-내부-실험-범위-정합화와-전용-배치-구현): 단위 67개 통과, 실제 실행·후속 추적 조건 대기.
+
+| 2026-09-23 | 내부 추론 55개 반복 재현·리뷰 ZIP 검산 | S15P21C206-126 | AstroNet, ba539ace, checksum | 실제 회귀 완료·후속 조건 대기 | [기록](2026-09-23.md) |
+
+| 2026-09-23 | 79 정책상 AI 미실행·126 선행 해제 동의 | S15P21C206-126 | 김동혁 리뷰, AI 미실행 | 문서 반영·링크 수동 해제 대기 | [기록](2026-09-23.md) |
+| 2026-09-24 | Gold 연결 검증 어댑터 착수 | S15P21C206-125 | 직렬화, 다중 세그먼트, 외부 판정, AI 미실행 | 단위 39개 통과, 실제 연결·DB 검증 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | 저장된 123·124 결과 연결 검산 | S15P21C206-125 | 외부 hold 11, 통제 성공 11, 후보 18, rollback | 단위 42개 통과·DB 실행 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | 독립 PostgreSQL 왕복 검증 | S15P21C206-125 | V1~V24, payload 11, 필드 비교 989, 해시 37 | 부분 검증 완료·운영 공개 없음 | [기록](2026-09-24.md) |
+| 2026-09-24 | 공용 Gold 커널·이력 DB 재검증 | S15P21C206-125 | 테스트 355, 필드 비교 1277, 해시 106, 리뷰 ZIP | 로컬 검증 완료·MR 리뷰 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | 125 비차단 리뷰 보완 | S15P21C206-125 | 명시 import, 로컬 접속 가드, 무신호 정책, r2 ZIP | 테스트 53·DB 1277항목 통과 | [기록](2026-09-24.md) |
+| 2026-09-23 | 분석 진입이 섹터별 비닝 revision을 받도록 정정 | S15P21C206-256 | binningRevision, 5.1, 500, Gold 4.1, segment_revision, 다중 섹터 | 구현 완료, 백엔드·시드 테스트 통과 | [기록](2026-09-23.md) |
+| 2026-09-23 | 백업 복원 전 역할 생성을 운영 규칙 런북 7절에 추가 | S15P21C206-256 | pg_restore, role does not exist, planetory_gold_writer, planetory_app, planetory_stats_job, 새 볼륨 | 로컬 일회용 DB 검증 완료 | [기록](2026-09-23.md) |
+
+- [2026-09-24](2026-09-24.md): S15P21C206-109 DEC-01 초기 공개 정책 승인 반영 및 develop 통합 충돌 정합화.
+
+- [2026-09-24](2026-09-24.md): S15P21C206-130 재평가·이력 보존 커널과 126 저장 점수 연결 검증.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 계약 보완(period_grid 조립 출처, pg-log5000-v1 설정표, runtime, 주기도·자원 오류). 제안·리뷰 대기.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 온라인 파생 계산 Worker 서버·이미지·compose·CI 구현. 로컬·컨테이너 검증 완료, Backend 연동 전.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 Backend 잔차 실행기(WorkerResidualComputeRunner) 연결. DERIVED_COMPUTE_URL로 켠다.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 !211 합의 정합(빈 제거 조합 거절 유지, 전부 null 세그먼트, 격자 생성식)과 131 인계용 요청·응답 캡처.
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 Worker가 provided-bls-1.0.0을 pg-log5000-v1과 같은 설정으로 받는다(262 인계).
+
+- [2026-09-25](2026-09-25.md): S15P21C206-88 잔차 Worker EC2-A 첫 배포 절차와 CI/CD 대상 목록 보완. 배포 전.
+| 2026-09-25 | 요청된 확정 행성 NASA PS 조회·DB 저장 계약 | S15P21C206-266 | NASA, ps, V25, 식별, 재확인 | 구현·격리 검증 완료, 운영 적용 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | NASA 식별자 정정 복구 절차 | S15P21C206-266 | identity_changed, attempt_generation, 임대 | 절차·격리 검증 완료, 운영 적용 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 검증된 NASA 자료 한국어 설명 계약 | S15P21C206-267 | Spring AI, GMS, V26, source_hash, 조건부 저장 | 267 격리 10건·266 회귀·비활성/활성 설정 기동 통과, GMS 실호출·운영 적용 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 시민과학자용 NASA 설명 문구 보정 | S15P21C206-267 | nasa-ko-v2, 한국어 발견 방식, GMS JSON | 격리 11건·266 회귀·기동 및 별도 GMS 형식 확인, 내부 경로·운영 적용 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 회원별 별 단위 NASA 설명 응답 | S15P21C206-267 | 별 단위 API, candidateId, version, 상태 격리 | HTTP 2건·별 상세 24건·설명 11건·실제 세션 경계 8건 통과, 운영·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 가상 항성계 NASA·GMS 별 단위 실호출 | S15P21C206-267 | Testcontainers, TOI-700, GMS, 인증 GET | 가상 후보 4/4 ready·JUnit 1/1, 실제 회원·운영·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 시민용 NASA 설명의 오차 문구 제외 | S15P21C206-267 | nasa-ko-v3, errorPlus, errorMinus, 한계값 | 후보 설명·별 단위 HTTP 회귀 통과, 실제 v3 GMS·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | v3 NASA·GMS 별 단위 실호출 재검증 | S15P21C206-267 | nasa-ko-v3, TOI-700, 인증 GET, GMS | 가상 후보 4/4 ready·JUnit 1/1, 실제 회원·운영·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 행성 설명의 자연스러운 문장과 비행성 신호 경계 | S15P21C206-267 | nasa-ko-v4, FP, 먼지 원인, 268 | 설명 11건·HTTP 2건 통과, v4 실호출·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | 모델 문장 누락 분류와 활성 설정 기동 조건 정정 | S15P21C206-267 | invalid_output, null 문장, GMS 활성 설정 | 설명 12건 통과, v4 실호출·운영 적용 미실행 | [기록](2026-09-25.md) |
+| 2026-09-25 | v4 NASA·GMS 한 후보 실호출 검증 | S15P21C206-267 | nasa-ko-v4, TOI-700 b, NASA TAP, GMS, 직접 생성 | 한 후보 문장 검증·JUnit 1/1, 인증 별 단위 API·V26·실제 회원·운영·화면 미검증 | [기록](2026-09-25.md) |
+| 2026-09-25 | v4 별 단위 전체 경로의 첫 조회·캐시 조회 시간 측정 | S15P21C206-267 | nasa-ko-v4, 인증 GET, TOI-700, 14,554ms, 82ms, V25, V26 | 가상 후보 4/4 ready·캐시 각 4행·JUnit 1/1, 실제 회원·운영·화면 인수 미실행 | [기록](2026-09-25.md) |
+| 2026-09-23 | 운영자 지정 별 Gold 읽기 캐시로 범위 변경 | S15P21C206-260 | 곡선·원본 주기도, Redis 사전 적재, DB fallback | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-23.md) |
+| 2026-09-24 | 선택 캐시의 기동 실패 전파 방지 | S15P21C206-260 | TIC별 예외, Backend 기동, EC2 Bash | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-24.md) |
+| 2026-09-25 | 비웹 운영 명령의 Gold 캐시 생성 차단 | S15P21C206-260 | 서블릿 조건, 세션 Redis 조건, DB 조회 | 구현·격리 검증, 운영 인수 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | SourceCardTest 자기 교착 멈춤 정정 | S15P21C206-88 | lockActive, ExecutorService.close, pg_locks, 최종 재검증 | 검증 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | develop 백엔드 테스트 실패·정지 정정 | S15P21C206-84 | Flyway target, R__, min-public-cohort, lockActive, 인자 파일 인코딩 | 검증 완료 | [기록](2026-09-25.md) |
+| 2026-09-24 | 로컬 시드(!201)의 적재 단계를 Publisher로 옮김 | S15P21C206-262 | publish_star, preflight, gold_canonical, MIGRATION_UNREADABLE, mock- | 구현·격리 검증 완료, 운영 적재 전 | [기록](2026-09-24.md) |
+| 2026-09-25 | 봉우리 power를 주기도와 같은 float32로 내보냄 | S15P21C206-262 | CandidatePeaks, PeakView.power, float32, peak/grid mismatch, 239.87599 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면이 봉우리 추천값 null을 계약대로 받음 | S15P21C206-262 | suggestedDurationHours, suggestedPhaseCenter, number or null, 6.2 duration 상한 | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 화면 검증에서 찾은 계약 불일치 2건 인계 | S15P21C206-262 | ck_submissions_source_peak_all_or_none, 봉우리 제출 500, period_grid, min_days, count, bls-log-v1, pg-log5000-v1, 88 | 제안·인계 | [기록](2026-09-25.md) |
+| 2026-09-25 | Backend에 GMS_KEY 전달 경로를 먼저 둠 | S15P21C206-262 | GMS_KEY, compose environment, .env.oauth.properties 로컬 전용, Backend 비밀 값 추가 | 채택, 서버 값 입력 전 | [기록](2026-09-25.md) |
+| 2026-09-25 | Gold Archive 참조와 NASA 설명 원천 구분 | S15P21C206-267 | TESS, pscomppars, ps, nasa_exoplanet_archive, 후보 식별 | 문서 정정·266 회귀 완료, 실제 Gold 연결 검증 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | 추천 duration이 없는 봉우리 제출의 500 해소 | S15P21C206-269 | ck_submissions_source_peak_all_or_none, V27, 봉우리 제출 500, suggestedDurationHours null, durationLimitHours | 구현 완료·develop 병합 | [기록](2026-09-25.md) |
+| 2026-09-25 | NASA 설명 GET 조회·POST 단일 후보 요청과 V28 한도 | S15P21C206-268 | GET 읽기 전용, CSRF POST, facts, V28, 일별 시도권, 상세 패널 | 268 표적 36건·269 V27 포함 통합 73/73·프론트 452건/빌드·Chrome fixture 6건 통과, 실제 회원·Gold·운영 인수 별도 | [기록](2026-09-25.md) |
+| 2026-09-25 | V28 신규 테이블의 반복 마이그레이션 설명 누락 정정 | S15P21C206-268 | R__table_comments.sql, backend:schema, MR !219 | 조건부 설명 추가·로컬 검사 통과, CI 재검증 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | 결과 화면 NASA 항성별 확정 행성 목록·V29 계약 | S15P21C206-270 | NASA ps, planetId, partial, stale, V29, V28 공유 | 일곱 클래스 격리 98/98 통과, 실제 회원·운영 인수 별도 | [기록](2026-09-25.md) |
+| 2026-09-25 | NASA 목록 공개 시점과 결과 화면 404 경계 확정 | S15P21C206-270 | 첫 실제 답 제출, 완료 전 공개, 결과 200, NASA 404, 271 | 정책 채택·계약 명시, 271 화면 인수 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | NASA 목록 공개 정책의 승인 상태 정정 | S15P21C206-270 | DEC-36, 사용자 현행 유지 선택, 제품 담당 승인 대기, 튜토리얼·챌린지 | 현행 유지 제안·제품 담당 승인 대기 | [기록](2026-09-25.md) |
+| 2026-09-25 | 백엔드 CI를 MR 관문과 병합 뒤 전체 테스트로 분리, 단계별 CI/CD·EC2-B 스테이징·main 배포 결정 | S15P21C206-91 | backend:build, backend:test, -PmrTests, 스테이징, main | 관문 구현 완료, 단계별 배포는 채택(구현 전) | [기록](2026-09-25.md) |
+| 2026-09-25 | 프론트 CI를 단위 테스트 관문과 브라우저 스모크·전체로 분리 | S15P21C206-91 | web:build, web:e2e:smoke, web:e2e, E2E_LANES | 구현 완료, 늘 실패 9건 후속 | [기록](2026-09-25.md) |
+| 2026-09-25 | MR 관문 예외 테스트를 목록(kept)으로 | S15P21C206-91 | -PmrTests, kept, GoldCatalogSchemaTest | 구현 완료 | [기록](2026-09-25.md) |
+| 2026-09-25 | 계약 fixture 검사 연결, 설정 오류 차단 증거, Worker·PowerShell·aarch64 Runner 범위 정정 | S15P21C206-91 | validate:contracts, validate:hadoop-config, validate:compose, 222681, 범위 정정 | 구현 완료, 병합 전 | [기록](2026-09-25.md) |

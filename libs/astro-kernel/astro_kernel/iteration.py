@@ -5,7 +5,7 @@ publication are handled separately; accepted here means runtime QA acceptance.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from collections.abc import Mapping
 import hashlib
 import json
@@ -13,7 +13,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from .bls import BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector, _search_input_sha256
+from .bls import (BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector, _search_input_sha256,
+                  RUNNING_MEDIAN_QUALITY_VERSION, validate_quality_version)
 from .transit_model import phase_distance_days, remove_transit_models
 
 ITERATION_VERSION = "iteration_v1/111-unity-relative01-duration12"
@@ -280,7 +281,8 @@ def _qa(t, original, current, residual, candidate, accepted, removal, cfg):
 
 
 def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
-                sector=None, baseline_time=None, keep_residual=False, initial_search=None):
+                sector=None, baseline_time=None, keep_residual=False, initial_search=None,
+                quality_version=QUALITY_VERSION):
     """Iterate frozen 120 search and 121 removal with approved 111 QA.
 
     Invalid contracts raise BlsError. Numerical/QA failures return status=failed
@@ -310,9 +312,10 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         if (np.any(positions >= len(raw)) or not np.array_equal(raw[positions], times) or
                 np.any(raw_counts[positions] < counts)):
             raise BlsError("invalid_input", "baseline must contain every input observation")
+    validate_quality_version(quality_version)
     if initial_search is not None:
         expected = dict(input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
-                        bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+                        bls_config_version=SEARCH_VERSION, candidate_quality_version=quality_version,
                         search_input_sha256=_search_input_sha256(t, f, sector, baseline_time),
                         n_input=len(t), n_valid=int(np.isfinite(f).sum()))
         if (not isinstance(initial_search, Mapping) or
@@ -321,7 +324,7 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
                 not isinstance(initial_search.get("peaks"), list) or
                 not hasattr(initial_search.get("periodogram"), "config")):
             raise BlsError("invalid_input", "initial search does not match the iteration input")
-    cfg = _CONFIG
+    cfg = replace(_CONFIG, sde_min=8.0) if quality_version == RUNNING_MEDIAN_QUALITY_VERSION else _CONFIG
     current, accepted, steps = f.copy(), [], []
     termination, qa_failed_step = "", -1
     for step in range(cfg.max_candidates + 1):
@@ -341,7 +344,8 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         try:
             run = initial_search if step == 0 and initial_search is not None else search_bls(
                 t, current, input_snapshot_id=input_snapshot_id,
-                preprocessing_version=preprocessing_version, sector=sector, baseline_time=baseline_time)
+                preprocessing_version=preprocessing_version, sector=sector, baseline_time=baseline_time,
+                quality_version=quality_version)
             if run["status"] == "failed":
                 raise BlsError("numerical_failure", "search returned a failed peak")
             config = run["periodogram"].config
@@ -450,7 +454,7 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
     steps = [{**defaults, **record} for record in steps]
     complete = termination in ("no_quality_peak", "duplicate_or_harmonic_only")
     config = _json_safe(asdict(cfg))
-    config.update(qa_window_offset_reference="unity", continue_after_qa_fail=False,
+    config.update(candidate_quality_version=quality_version, qa_window_offset_reference="unity", continue_after_qa_fail=False,
                   qa_require_measurable=True, refine_peak=True)
     fingerprint = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     result = _json_safe(dict(status="ok" if complete else "incomplete" if termination == "max_iterations_reached" else "failed",
@@ -458,7 +462,7 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         n_accepted=len(accepted), qa_failed_step=qa_failed_step,
         input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
         iteration_version=ITERATION_VERSION, iteration_config=config, iteration_config_sha256=fingerprint,
-        bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+        bls_config_version=SEARCH_VERSION, candidate_quality_version=quality_version,
         residual_model_version="box-divide-v0", time_start_btjd=float(t[0]) if len(t) else None,
         time_end_btjd=float(t[-1]) if len(t) else None))
     if keep_residual:

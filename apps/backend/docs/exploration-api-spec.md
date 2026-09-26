@@ -161,6 +161,8 @@ durationHours = (phaseEnd − phaseStart) × P × 24
 | 히스토리 상세 | P0 | `GET /api/v1/histories/{historyId}` | HIS-02·06, RES-06 | 8.2 |
 | 히스토리 그래프 | P0 | `GET /api/v1/histories/{historyId}/graph` | HIS-03, NFR-03 | 8.3 |
 | 별 결과 페이지 | P0 | `GET /api/v1/stars/{ticId}/result` | RES-10 | 8.4 |
+| 결과의 NASA 행성 목록 조회·수집 | P0 | `GET/POST /api/v1/stars/{ticId}/result/nasa-planets` | S15P21C206-270 | 8.4.1 |
+| 결과의 NASA 행성 설명 요청 | P0 | `POST /api/v1/stars/{ticId}/result/nasa-planets/{planetId}/explanation` | S15P21C206-270 | 8.4.1 |
 | 성과 조회 | P0 | `GET /api/v1/me/achievements` | GRD-01·07, MY-01 | 9.1 |
 | 내부: 성과 지급·별 열림 | P0 | 서비스 계층 함수 | GRD-02~04·08, NFR-01 | 9.2 |
 | 내부: 완료·재개 | P0 | 제출 트랜잭션·배치 후처리 | SUB-11, DAT-15, DEC-27 | 9.3 |
@@ -349,6 +351,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 ### 4.2 선택한 별·내 행성 상세
 
+S15P21C206-266의 [NASA 자료 저장 계약](../../../docs/development/nasa-planet-info-266.md)은 이 절의 `planets.items`를 변경하지 않는다. 2026-09-25 결정에 따라 기존 회원별 표시 대상 중 검증 연결된 확정 후보만 NASA 자료로 보강한다. 267의 별 단위 한국어 설명 응답은 아래 4.2.1절에서 따로 정의하며 기존 별 상세 응답은 그대로 둔다. 화면 연결·표시 인수는 268에서 진행한다. 266 내부 구현 완료를 이 HTTP API 완성으로 간주하지 않는다.
+
 `GET /api/v1/me/stars/{ticId}` — 별 선택 시 같은 캔버스의 근접 뷰·도킹 패널·행성 목록에서 공유한다. 인증 회원의 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`. 별도의 NASA iframe이나 전체 카탈로그 행성 API로 대체하지 않는다.
 
 경로의 `{ticId}`는 접두 없는 양의 정수다. 형식이 다르면 발견하지 않은 별과 같은 403 `STAR_LOCKED`로 덮는다(S15P21C206-246).
@@ -451,6 +455,87 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 **시각화와 실패 처리(HOME-05·08 v1.2).** 위의 기존 items 필드가 개별 행성 정보의 필수 계약이다. 외부 이름·행성 반지름·질량·공전 거리·표면 텍스처는 현재 계약에 없으며 임의 실측값으로 만들지 않는다. 숫자 정보가 null이면 "정보 없음"으로 표시하고 0으로 치환하지 않는다. 시각화의 표면·연출 색·크기와 선택 근접 뷰 간격·속도는 실제 사진/축척이 아닌 서비스 연출임을 안내한다. candidateId를 키로 같은 행성의 외형을 안정적으로 유지한다.
 
 0개 응답은 `planets: {"count": 0, "completedWithoutPlanets": false, "items": []}` 형태이며 진행 완료라면 completedWithoutPlanets만 true가 된다. 로딩/실패와 0개를 구분하고 재시도·은하 복귀를 제공한다. 응답 count/items 불일치·중복 ID는 계약 오류로 처리하며 부족한 수만큼 임의 행성을 생성하지 않는다. A 별 요청 뒤 B 별을 선택했을 때 A의 늦은 응답을 무시한다. 상세는 필수 version/presentationVersion을 반환한다. 지도와 version이 다르면 이전 상세를 그대로 합치지 않고 메타/타일/상세를 최신 버전으로 재조회한다. asOf만으로 같음을 판단하지 않는다. 행성 선택은 이미 받은 items에서 처리하며 별도 행성 상세 API를 신설하지 않는다. [별지도 표현 계약 3절](../../../docs/development/sky-presentation-contract.md)과 AT-120~122를 따른다.
+
+#### 4.2.1 회원별 별 단위 NASA 한국어 설명 (S15P21C206-267)
+
+`GET /api/v1/me/stars/{ticId}/planet-explanations` — 인증 회원이 연 별의 **현재** `planets.items`에 해당하는 저장된 NASA 원천·설명 상태를 조회한다. 268부터 GET은 NASA·GMS를 호출하거나 저장 행을 만들지 않는다. 같은 경로의 `POST`는 JSON 본문 `{ "candidateId": "c-401" }`으로 현재 별 상세에 있는 **확정 후보 하나**의 생성 또는 저장 결과 재사용을 요청한다. POST는 인증 세션과 CSRF 검사를 통과해야 하며, 요청을 재전송해도 같은 대상·원천·프롬프트 조합의 중복 외부 호출을 제한한다. 두 메서드 모두 아래 `{ticId, version, items}` 형식으로 응답하고, 다른 후보를 생성 대상으로 확대하지 않는다. 별 상세 본문의 필드나 `planets.count`를 변경하지 않는다. 경로 TIC의 형식 오류·미발견 별은 4.2절의 403 `STAR_LOCKED`와 같게 처리한다. 회원 ID는 세션에서만 가져오고, 클라이언트가 보낸 제출 주기·NASA 행성명을 연결 근거로 쓰지 않는다. 응답 `version`은 후보 목록을 가져온 **같은 StarDetail 스냅샷**의 지도 버전이다. 화면은 현재 선택한 `ticId`·`version`·`candidateId`가 모두 맞을 때만 내용을 연결한다. 순서·주기 유사도는 연결 키가 아니다.
+
+POST의 `candidateId` 누락·형식 오류는 400 `VALIDATION_FAILED`다. 형식은 맞지만 그 회원·TIC의 **현재 확정** `planets.items`에 없거나 미확정·다른 별 후보를 지정하면 404 `RESOURCE_NOT_FOUND`다. 권한 있는 GET·POST는 후보별 원천 실패나 설명 한도 초과가 있어도 200 Bundle을 반환하고 해당 `items[]`의 상태로 구분한다. 응답 유실 뒤 같은 POST를 다시 보내기 전에 GET으로 이미 저장된 결과를 확인한다.
+
+```json
+{
+  "ticId": "123456789",
+  "version": "u-101:57",
+  "items": [
+    {
+      "candidateId": "c-401",
+      "kind": "confirmed",
+      "status": "ready",
+      "content": {
+        "name": "{검증된 행성명의 한국어 설명}",
+        "orbitalPeriod": "{공전주기의 한국어 설명}",
+        "radius": "{반지름의 한국어 설명}",
+        "mass": "{질량의 한국어 설명}",
+        "discovery": "{발견 방법·연도의 한국어 설명}"
+      },
+      "facts": {
+        "planetName": "{검증된 NASA 행성명}",
+        "orbitalPeriod": {
+          "value": "{NASA 원천 숫자 문자열}",
+          "errorPlus": null,
+          "errorMinus": null,
+          "limit": 0,
+          "unit": "days",
+          "reference": null
+        },
+        "radius": null,
+        "mass": null,
+        "discoveryMethod": "Transit",
+        "discoveryYear": 2020,
+        "controversial": null,
+        "sourceTable": "ps",
+        "sourceUrl": "https://exoplanetarchive.ipac.caltech.edu/"
+      },
+      "sourceStatus": "ready",
+      "fetchedAt": "2026-09-25T05:20:00Z",
+      "refreshStatus": "ok",
+      "generatedAt": "2026-09-25T05:21:00Z",
+      "retryAt": null,
+      "failure": null
+    },
+    {
+      "candidateId": "c-402",
+      "kind": "unconfirmed",
+      "status": "not_applicable",
+      "content": null,
+      "facts": null,
+      "sourceStatus": null,
+      "fetchedAt": null,
+      "refreshStatus": null,
+      "generatedAt": null,
+      "retryAt": null,
+      "failure": null
+    }
+  ]
+}
+```
+
+`items`는 해당 요청 시점의 4.2절 `planets.items`와 같은 권한 필터·`candidateId` 오름차순·대상 개수를 사용하고 중복 ID가 없다. 표시 대상은 회원이 수치 매칭한 확정 후보와 최신 판단이 행성 같음인 미확정 후보뿐이다. 다른 회원·미매칭·FP·NASA 카탈로그의 나머지 행성을 넣지 않는다. 사용자의 제출·판단만으로 후보의 공식 분류를 바꾸지 않는다. 확정 후보를 회원이 비행성으로 판단해도 설명 대상에 남을 수 있지만, 공식 `disposition=fp`이면 이 목록에서 제외한다. FP의 원인을 별도 근거 없이 먼지로 단정하지 않는다. 최상위 `count`는 두지 않는다. 별 상세의 `planets.count`는 전체 표시 대상 수이며 `ready` 설명이나 확정 행성 수가 아니다.
+
+`facts`는 NASA 원천이 `ready`이고 정규화 구조 버전 1·SHA-256·표시 자료 검증을 통과했을 때에만 제공한다. 따라서 `invalid_source`에서는 보통 null이다. 설명이 `failed`·`disabled`·`pending`이어도 검증된 NASA 기본 해의 수치는 별도로 사용할 수 있다. `orbitalPeriod`·`radius`·`mass`는 각 `{value,errorPlus,errorMinus,limit,unit,reference}` 측정 객체 또는 null이며, 숫자와 부호 있는 오차는 정밀도를 보존하는 **문자열** 또는 null이다. `limit=-1`은 미만, `0`은 보고된 측정값, `1`은 초과, null은 원천 미표기다. 결측값·상한을 0이나 확정값으로 바꾸지 않는다. `reference`는 안전한 일반 문자열이거나 null이며 NASA의 문헌 HTML을 반환하지 않는다. `sourceTable`은 `ps`, `sourceUrl`은 서버가 고정한 `https://exoplanetarchive.ipac.caltech.edu/`이다. 화면은 이 주소만 출처 링크로 열고 수치·조회 시각과 교육용 설명을 구분한다. 위 JSON의 숫자 문자열·연도는 형식 설명용 예시이지 실제 후보의 측정값이 아니다.
+
+`content`의 시민용 다섯 문장은 현재 `nasa-ko-v4` 계약에 따라 친근한 존댓말로 이어진다. 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. 267 당시 생성형 GET은 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 반복 캐시 GET 82ms는 당시 1회 표본이며 268의 조회 GET·생성 POST나 운영·브라우저 지연의 기준값이 아니다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 별도다.
+
+| 필드·상태 | 규칙 |
+| --- | --- |
+| `kind=unconfirmed` | `status=not_applicable`. `content`, `facts`, `sourceStatus`, `fetchedAt`, `refreshStatus`, `generatedAt`, `retryAt`, `failure`는 모두 null이다. NASA 조회·설명 생성을 호출하지 않는다 |
+| `kind=confirmed` | 원천 미생성 GET은 설명 스위치 상태와 관계없이 `status=not_requested`, `sourceStatus=not_requested`다. 설명 기능을 꺼 둔 상태의 POST도 266 NASA 수집은 수행할 수 있으며 원천 성공 시 `status=disabled`, `sourceStatus=ready`, `facts` 제공, `content=null`이다. 그 외 [267 내부 결과](../../../docs/development/nasa-planet-explanation-267.md#41-후보별-내부-결과)의 `ready`, `pending`, `failed`, `source_unavailable`, `invalid_source`, `busy`, `source_changed` 상태와 268의 `quota_exceeded`를 전달한다. `content`는 `ready`일 때만 검증된 다섯 문장이다 |
+| 조회 사이 자격 변경 | 별 목록을 구성한 뒤 266의 후보 자격이 사라지면 그 항목만 `status=source_unavailable`, `sourceStatus=not_eligible`로 반환하고 다른 설명·시각·실패 필드는 null이다 |
+| 원천·설명 시각/상태 | `sourceStatus`는 266의 상태, `fetchedAt`은 마지막 정상 NASA 재확인 시각, `refreshStatus`는 최근 재확인 상태다. `generatedAt`은 현재 설명 생성 시각, `retryAt`은 다음 허용 시각, `failure`는 분류된 설명 실패 이유다. 없는 값은 null이며 오래된 정상 원천을 쓸 때 재확인 실패를 숨기지 않는다 |
+| 실패 격리 | 후보별 예상 가능한 NASA·모델 실패는 해당 항목의 상태로 반환하고 다른 후보의 결과를 버리지 않는다. 설명이 없더라도 정상 원천 수치의 사용 가능 여부는 266 상태로 판단한다 |
+| 일별 모델 한도 | V28은 UTC 날짜별 회원·전체 모델 생성 **시도권 예약 수**를 제한한다. 기본 한도는 각각 0으로 유료 호출을 차단하며 운영 승인된 양의 정수 두 개를 넣어야 설명 기능을 켤 수 있다. 같은 후보의 기존 `ready`·`pending`은 그대로 돌려준다. 실패 또는 미생성 상태에서 한도가 소진되면 POST 응답 항목은 `status=quota_exceeded`, `failure=daily_limit`, `retryAt=다음 UTC 0시`다. 이 상태는 V26에 저장하지 않으므로 다음 GET은 이전 V26 상태(미생성이면 `not_requested`, 기존 실패면 `failed`)를 보여준다. 같은 POST는 한도 상태를 다시 반환한다. GET·저장 결과 재사용은 한도를 소모하지 않는다. 예약 뒤 모델 실패·권한 철회가 있어도 비용 가능성 때문에 횟수는 유지한다 |
+
+검증된 `facts.planetName`과 `content.name`의 행성명 외의 NASA 원문 HTML, 프롬프트, 원천 해시, 모델 설정은 공개 응답에 넣지 않는다. 외부 호출과 모델 생성은 별 상세의 읽기 트랜잭션 밖에서 실행한다. 프론트가 POST 동기 응답을 30초 안에 받지 못해도 서버 처리가 끝났는지는 알 수 없다. 화면은 자동 POST 재전송 없이 먼저 GET으로 저장 상태를 확인하고, 그래도 새 요청이 필요한 경우 사용자가 다시 요청할 때만 같은 후보 POST를 보낸다. 생성 중 `pending`을 새 POST로 반복 호출하지 않는다. 백엔드는 DB 임대·시도 순번으로 중복 유료 호출과 늦은 저장을 제한한다. GET을 주기적으로 재조회하더라도 회원·TIC·버전·후보가 바뀌면 늦은 응답을 버린다. 버튼·로딩·재시도·출처 링크의 실제 화면 동작은 [268 개발 계약](../../../docs/development/nasa-planet-request-268.md)을 따른다.
 
 ### 4.3 퀘스트 패널
 
@@ -558,7 +643,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
     "bundleId": "b-2", "bundleVersion": "v7", "publishedAt": "2026-09-09T20:00:00Z",
     "foldReferenceTimeBtjd": 1683.4231, "baseDays": 81.4,
     "observationBounds": [1683.35, 2570.12],
-    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1", "binningRevision": "10m-v1",
+    "residualModelVersion": "rm-1", "periodogramConfigVersion": "pg-1",
     "curveStepRule": "one_candidate_per_step"
   },
   "selectionRules": {
@@ -586,7 +671,7 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 | `bundle.bundleId` | DB `publication_bundles.id`를 `b-<id>` 문자열로 표현한다. 요청·응답·`X-Current-Bundle`에서 같은 값을 쓴다 |
 | `bundle.bundleVersion` | DB `bundle_version`과 같은 문자열이다. 숫자로 암묵 변환하지 않는다 |
 | `bundle.observationBounds` | `[세그먼트 startBtjd의 최솟값, 세그먼트별 startBtjd + nPoints × binMinutes / 1440의 최댓값]`. 끝은 마지막 bin의 끝이라 곡선 x축 범위와 같다(2026-09-17 결정) |
-| `bundle.binningRevision`, `segments[].binningRevision` | DB `binning_revision` 문자열 그대로(예: `"10m-v1"`). 숫자로 바꾸지 않는다([Gold 게시 계약](../../../contracts/gold/README.md) fixture와 같다, 2026-09-17 결정). 한 판의 세그먼트는 revision이 하나이며 여럿이면 적재 계약 위반이다 |
+| 비닝 revision | 판 요약에 두지 않고 5.2절 `segments[].binningRevision`으로만 준다. 운영 revision은 TIC·섹터·원천 checksum을 재료로 한 해시라 여러 섹터 판이면 세그먼트마다 다르다([Gold 4.1](../../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안), `astro_kernel.segment_revision`). 판 전체의 비닝 규칙은 manifest `binning`이 하나로 정한다(2026-09-23 결정) |
 | `bundle.curveStepRule` | `one_candidate_per_step` 고정. 한 단계가 매칭한 후보 하나를 더 제거하며 단계 수 = 제거 후보 수다(2.1절) |
 | `hasConfirmedCandidate` | EXP-02: 후보표에 실제로 있는 `is_confirmed` 후보가 있는지만. 개수·이름·주기는 없음(AT-03) |
 | `selectionRules` | 최소 폭은 **시간**으로 준다: `minWindowDays` = 그 별 최소 케이던스의 2배(SRS 5.1 최소 허용 창). 위상 최소 폭은 주기에 따라 달라지므로 프론트·서버가 현재 주기로 `minWindowDays / periodDays`를 계산한다. `maxDurationMultipleOfSuggested=3`은 C02-R3 선택 폭 상한이고 `phaseWidthMax`는 공통 위상 상한이다. `allowEmptyPhaseSpan`은 미결 4(Q03). `fineTune.halfWidthCells`는 어떤 주기든 미세 조정 범위를 주기도 격자 ±N칸으로 계산하는 규칙(5.4절). 서버 검증도 같은 값을 쓴다. `version`은 최상위 `ruleVersion`과 같은 운영 규칙 버전 문자열이며 별도 `sel-N`은 두지 않는다. `phaseWidthMax`·`maxDurationMultipleOfSuggested`·`allowEmptyPhaseSpan`은 그 버전의 `values.selection`([운영 규칙 변경 런북](../../../docs/operations/operation-rule-runbook.md)), `minWindowDays`는 별 케이던스, `fineTune`은 판 manifest에서 온다. 제공 곡선의 케이던스는 bin 크기이므로 `minWindowDays = 2 × 판 세그먼트 binMinutes의 최솟값 / 1440`이다(제출 매칭 규칙 v0, 10분 bin이면 0.01389) |
@@ -628,12 +713,12 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
   "residual": {"status": "COMPLETED", "jobId": "rj-77", "computedAt": "2026-09-10T02:31:10Z"},
   "fluxUnit": "normalized",
   "segments": [
-    {"segmentId": "seg-1", "sector": 14, "binningRevision": "10m-v1",
+    {"segmentId": "seg-1", "sector": 14, "binningRevision": "bin-v1-8c1f…",
      "startBtjd": 1683.35, "binMinutes": 10, "nPoints": 3900,
      "flux": [1.0001, 0.9998, null, 1.0003],
      "fluxScatter": 0.0012,
      "gaps": [[120, 135], [2010, 2044]]},
-    {"segmentId": "seg-2", "sector": 41, "binningRevision": "10m-v1",
+    {"segmentId": "seg-2", "sector": 41, "binningRevision": "bin-v1-2e07…",
      "startBtjd": 2419.99, "binMinutes": 10, "nPoints": 3820,
      "flux": [0.9999, 1.0002], "fluxScatter": 0.0011, "gaps": []}
   ]
@@ -783,7 +868,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 | 2 | `bundleId`·계산 버전 = 현재 판 | 409 `BUNDLE_CHANGED` |
 | 3 | `removedCandidateIds` ⊆ 이 판에서 회원이 매칭한 활성 후보, `curveStep = removedCandidateIds.length`. **마지막 제출 단계와 같을 필요는 없다.** 다음 잔차 단계의 첫 제출, 원본·이전 단계로 돌아간 제출, 재도전 초안의 제출이 모두 이 조건만으로 허용된다(EXP-09) | 400 `curveContext` |
 | 4 | `periodDays` 유한·양수, `phaseStart`·`phaseEnd` 유한, `0 ≤ phaseStart < 1`, `phaseStart < phaseEnd < phaseStart + 1` | 400 `selection.periodDays`(주기·위상 값이 유한하지 않거나 주기가 0 이하) 또는 `selection.phaseEnd`(위상 범위) |
-| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 봉우리는 있는데 그 `suggestedDurationHours`가 null이면(출처 없음, 5.4절) 마찬가지로 이 상한을 적용하지 않는다 — 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
+| 5 | 시간 최소: `(phaseEnd − phaseStart) × periodDays ≥ selectionRules.minWindowDays`(케이던스 2배). 위상 최대: `phaseEnd − phaseStart ≤ phaseWidthMax`. `sourcePeakGridIndex`가 있으면 같은 `curveContext`의 봉우리가 존재하고 제출 주기가 그 봉우리의 `fineTune` 범위 안인지 확인한 뒤, **그 봉우리의** `suggestedDurationHours × maxDurationMultipleOfSuggested`도 상한으로 적용한다. null이면 위상 최대만 적용한다. 봉우리는 있는데 그 `suggestedDurationHours`가 null이면(출처 없음, 5.4절) 마찬가지로 이 상한을 적용하지 않는다 — 모르는 값으로 만든 상한은 사용자가 이유를 알 수 없는 거절이 된다. 이때 제출은 봉우리 번호만 남기고 `serverDerived.sourcePeakSuggestedDurationHours`·`durationLimitHours`를 둘 다 null로 저장한다(ERD V27). 주기만 보고 가까운 봉우리를 역추정하지 않는다. `allowEmptyPhaseSpan=false`이면 선택한 위상 구간에 관측점이 하나는 있어야 한다 | 400 `selection.sourcePeakGridIndex` 또는 `selection.phaseEnd` (DEC-19, Q03) |
 | 6 | 정수 k가 존재해 epoch가 `observationBounds`(세그먼트 시작의 최솟값 ~ 마지막 bin 끝의 최댓값) 안 | 400 `EPOCH_OUT_OF_RANGE` |
 | 7 | `0 < durationHours/24 < periodDays` | 400 `selection` |
 | 8 | `userJudgment` enum, `evidenceChecks` 허용 목록 | 400 |
@@ -841,7 +926,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                "evidenceChecks": ["oddeven", "ushape"], "memo": "홀짝 깊이가 비슷하고 U형",
                "viewState": {"periodogramViewport": {"minDays": 8.0, "maxDays": 16.0}, "foldedXZoomRatio": 4}},
   "serverDerived": {"foldReferenceTimeBtjd": 1683.4231, "phaseCenter": 0.0, "epochBtjd": 1683.4231,
-                    "durationHours": 2.83, "sourcePeakSuggestedDurationHours": 3.1, "durationLimitHours": 9.3,
+                    "durationHours": 2.83, "sourcePeakSuggestedDurationHours": null, "durationLimitHours": null,
                     "centroidDataStatus": "unavailable"},
   "match": {"status": "matched_harmonic", "candidateId": "c-402", "harmonicMultiplier": 2,
             "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias"},
@@ -872,6 +957,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 | 필드 | 규칙 |
 |---|---|
+| `serverDerived.sourcePeakSuggestedDurationHours`, `serverDerived.durationLimitHours` | 봉우리 제출이 검증에 쓴 제안 duration과 그 배수 상한이다. 판이 제안 duration을 싣지 않으면(5.4절, 지금은 항상) 상한을 걸지 않았다는 뜻으로 둘 다 null이며 키는 빼지 않는다. 주기 직접 선택도 null이다. 둘 중 하나만 null인 응답은 없다(6.2절 5단계, ERD V27) |
 | `match.status` | `matched` / `matched_harmonic` / `not_matched` / `duplicate` / `ambiguous_match`; `no_candidate`는 `none_wrong`, `skipped`는 `skipped`. ERD CHECK 그대로 |
 | `signal` | 매칭 성공(`matched`·`matched_harmonic`·`duplicate`)에만. `not_matched`·`ambiguous_match`는 null(AT-14, AT-75). 확정·FP는 `external`에 행성명·출처·조회일·링크(RES-02) |
 | `signal.ai` | `status` `completed` / `input_insufficient` / `error` / `not_evaluated`. 실행 불가를 0점으로 바꾸지 않는다(RES-04, AT-15). `signal.external`과 나란히 두고 어느 쪽도 다른 쪽을 덮어쓰지 않는다(RES-05, AT-16). AI 오류·데이터 부족·미매칭·후보 미충족은 각각 `ai.status`·`match.status`로 구분된다(NFR-09) |
@@ -990,7 +1076,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 
 잔차 요청에는 `requestId`가 없다. 같은 `target`을 다시 POST하면 진행 중 작업 또는 캐시 결과를 그대로 돌려주므로, **응답 유실 후 복구도 같은 `target`으로 재호출**한다. 별도 복구 조회 API는 두지 않는다. 동일 요청 재전송과 새 요청을 구분할 필요가 없는 이유는 결과가 회원과 무관한 캐시이고 요청 자체가 상태를 만들지 않기 때문이다.
 
-구현 상태(S15P21C206-147). 요청·조회·검증·상한은 구현했고 **계산을 실제로 돌리는 Worker 어댑터(`S15P21C206-88`)와 Redis 저장소(`S15P21C206-89`)는 아직 없다.** 계산 기반이 연결되기 전에는 요청을 503 `DEPENDENCY_UNAVAILABLE`로 거절하고 **작업을 만들지 않는다.** 아무도 진행시키지 않는 `QUEUED`를 쌓으면 화면이 오지 않을 결과를 기다린다. 목표 검증은 5.2절 곡선 조회와 같은 함수를 쓰며 실패 필드는 `target.bundleId`·`target.removedCandidateIds`다. 상한은 설정값이다(`planetory.residual.max-running`·`max-queued`·`per-member`, 기본 2·20·1). `pollAfterSeconds`·`retryAfterSeconds`도 같은 접두사의 설정이며 기본값은 2초·10초다. `estimatedSeconds`는 실측 전까지 null이고 0으로 채우지 않는다. 경로의 TIC이 양의 정수가 아니면 2.3절대로 404 `STAR_NOT_PUBLISHED`이며 5.2·6장과 같다. `target.removedCandidateIds`에 같은 후보가 두 번 오면 서버가 지우고 단계를 다시 센다(2.1절). 본문에는 보낸 `curveStep`이 없어 대조할 것이 없으므로, 중복을 이유로 거절하지 않고 한 번 보낸 것과 같은 목표로 합친다. **계산을 시작시키지 못하면 작업을 기다리는 상태로 남기지 않는다** — 등록만 해 두고 실패하면 아무도 진행시키지 않는 `QUEUED`가 남고, 같은 목표의 재요청이 그 작업에 병합돼 실행기를 다시 부르지 않는다. 그 작업을 재시도 가능한 `FAILED`(`START_FAILED`)로 끝내고 요청은 503 `retryable: true`로 답한다. **같은 503이라도 화면이 할 일이 반대다**(`S15P21C206-249`). 계산 기반 미연결은 `retryable: false`이며 문구는 **`"잔차 계산 기능이 아직 준비되지 않았습니다."`** 다. 다시 요청해도 같은 결과라 재시도를 권하지 않는다. 시작 실패는 공통 기본 문구(`"일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."`)가 그대로 맞다. 어느 쪽이든 어떤 기반이 연결되지 않았는지는 적지 않는다 — 내부 사정이고 화면이 `message`를 사용자에게 그대로 보여 준다.
+구현 상태(S15P21C206-147·88). 요청·조회·검증·상한은 147이, Worker 실행기(`WorkerResidualComputeRunner`)는 88이 구현했다. 실행기는 `planetory.residual.worker-url`(환경 변수 `DERIVED_COMPUTE_URL`)이 있을 때만 뜬다. **Redis 저장소(`S15P21C206-89`)는 아직 없어** 작업·결과는 인스턴스 메모리에 있다. 계산 기반이 연결되기 전(주소가 비어 있을 때)에는 요청을 503 `DEPENDENCY_UNAVAILABLE`로 거절하고 **작업을 만들지 않는다.** 아무도 진행시키지 않는 `QUEUED`를 쌓으면 화면이 오지 않을 결과를 기다린다. 목표 검증은 5.2절 곡선 조회와 같은 함수를 쓰며 실패 필드는 `target.bundleId`·`target.removedCandidateIds`다. 상한은 설정값이다(`planetory.residual.max-running`·`max-queued`·`per-member`, 기본 2·20·1). `pollAfterSeconds`·`retryAfterSeconds`도 같은 접두사의 설정이며 기본값은 2초·10초다. `estimatedSeconds`는 실측 전까지 null이고 0으로 채우지 않는다. 경로의 TIC이 양의 정수가 아니면 2.3절대로 404 `STAR_NOT_PUBLISHED`이며 5.2·6장과 같다. `target.removedCandidateIds`에 같은 후보가 두 번 오면 서버가 지우고 단계를 다시 센다(2.1절). 본문에는 보낸 `curveStep`이 없어 대조할 것이 없으므로, 중복을 이유로 거절하지 않고 한 번 보낸 것과 같은 목표로 합친다. **계산을 시작시키지 못하면 작업을 기다리는 상태로 남기지 않는다** — 등록만 해 두고 실패하면 아무도 진행시키지 않는 `QUEUED`가 남고, 같은 목표의 재요청이 그 작업에 병합돼 실행기를 다시 부르지 않는다. 그 작업을 재시도 가능한 `FAILED`(`START_FAILED`)로 끝내고 요청은 503 `retryable: true`로 답한다. **같은 503이라도 화면이 할 일이 반대다**(`S15P21C206-249`). 계산 기반 미연결은 `retryable: false`이며 문구는 **`"잔차 계산 기능이 아직 준비되지 않았습니다."`** 다. 다시 요청해도 같은 결과라 재시도를 권하지 않는다. 시작 실패는 공통 기본 문구(`"일시적으로 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."`)가 그대로 맞다. 어느 쪽이든 어떤 기반이 연결되지 않았는지는 적지 않는다 — 내부 사정이고 화면이 `message`를 사용자에게 그대로 보여 준다.
 
 **위 두 문장이 정본이다.** 백엔드 검사와 프론트 개발용 응답이 같은 값을 들고 있으므로, 바꾸려면 이 줄과 양쪽을 한 번에 바꾼다. 한쪽만 바꾸면 화면 검사는 자기 상수와 비교하느라 통과하면서 실제 화면은 낡은 문구를 보여 준다(`S15P21C206-189` 리뷰).
 
@@ -1022,10 +1108,18 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 - v1은 `RESIDUAL_READY`에서 곡선을 먼저 노출하지 않고 `COMPLETED`에서만 전환한다(D-3). 선노출·SSE는 계산 시간 실측 후 재검토한다.
 - Redis 재시작으로 작업이 사라지면 404 `RESOURCE_NOT_FOUND`. 프론트는 7.1절로 다시 요청한다(분석 프론트 8.1 "Redis 결과 없음").
 - 계산 중 새 판이 공개되면 작업은 `FAILED(stage: BUNDLE_ARCHIVED)`로 끝나고 프론트는 최신 판을 다시 불러온다(AT-80).
+- 실행기가 내는 실패(S15P21C206-88). Worker 내부 오류 코드는 로그에만 남기고 화면에는 보이지 않는다.
+
+  | `stage` | `code` | `retryable` | 뜻 |
+  | --- | --- | --- | --- |
+  | `RESIDUAL`·`PERIODOGRAM` | `COMPUTE_ERROR` | `true` | Worker 무응답·연결 실패·동시 실행 초과·120초 초과 |
+  | `RESIDUAL`·`PERIODOGRAM` | `COMPUTE_ERROR` | `false` | Worker가 계산을 거절(입력·모델·주기도 오류, `memory_exhausted`)했거나 응답 상관 필드가 요청과 다름 |
+  | `RESIDUAL` | `CANDIDATE_NOT_FOUND` | `false` | 요청 뒤 제거 후보가 Gold에서 사라짐 |
+  | `BUNDLE_ARCHIVED` | `BUNDLE_CHANGED` | `false` | 계산 전·단계 사이·채택 직전에 판이 current가 아님. 결과를 버린다 |
 
 ### 7.3 중복·만료·관측
 
-- Worker 임대 시간을 두고 만료 시 다른 Worker가 다시 계산한다. 늦은 결과는 `attempt`가 최신보다 작으면 버린다(온라인 파생 계산 문서). 지금 저장소 포트는 `attempt`를 **읽기만** 한다. 올리는 함수는 다시 계산을 시작하는 쪽(`S15P21C206-88`)이 붙일 때 함께 더한다.
+- Worker 임대 시간을 두고 만료 시 다른 Worker가 다시 계산한다. 늦은 결과는 `attempt`가 최신보다 작으면 버린다(온라인 파생 계산 문서). 지금 저장소 포트는 `attempt`를 **읽기만** 한다. 88 실행기는 자동 재시도를 하지 않고 실패를 `retryable`로 끝내므로(재시도는 7.1절 재요청, 새 작업) 올릴 일이 없다. 올리는 함수는 한 작업 안에서 다시 계산하는 임대 만료 복구(`S15P21C206-90`)가 더한다.
 - 판이 `archived`가 되면 그 판의 키를 모두 지운다(DAT-11). TTL·동시 실행 상한(초기값 전체 2, EC2당 1, 대기 20)은 DEC-35·김동혁.
 - 잔차 계산 완료·곡선 전환·원본 복귀는 서버 상태를 바꾸지 않는다. `user_star_progress.current_curve_step`은 **회원이 그 단계에서 제출할 때** 제출 트랜잭션이 갱신한다(6.3절 8단계). 통신 오류 후 복귀는 5.1절의 `currentCurveContext`·`nextCurveContext`로 판단한다.
 - 7.2절 조회는 **같은 목표를 요청해 같은 작업을 기다리는 회원 모두**에게 열린다. 같은 키는 하나만 계산하므로 만든 회원만 볼 수 있으면 병합된 쪽의 폴링이 404가 된다. 요청하지 않은 회원의 작업과 사라진 작업은 같은 404로 덮는다. 구분하면 남의 작업 존재가 드러나고, 프론트가 할 일은 어느 쪽이든 「7.1절로 다시 요청」으로 같다(S15P21C206-147).
@@ -1200,6 +1294,83 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
 - `unpublishedSignalCount`는 **지금 유효하게 공개되어 있지 않은** 신호 수다. 유효 공개 조건은 `PublicAnalysisVisibility.VISIBLE` 하나를 쓰며 **부모 스레드 상태까지 본다.** 공개 기록의 취소·숨김만 보면 스레드가 숨겨진 뒤 신호 카드는 `HIDDEN`인데 이 수는 0이 되어 한 응답이 서로 다른 말을 한다. 4.4절 목록의 같은 값도 같은 조건이다.
 - `nextActions`: `PUBLISH_ALL`·`LATER`는 **탐색이 끝나고**(`progress.stage=completed`) **일괄 공개할 기록이 남았을 때만** 준다(RES-08 "별 탐색 종료 후", RES-10 "종료 시"). 기준은 미게시 **신호** 수가 아니라 **일괄 공개 후보**(166)다 — 같은 신호의 첫 기록을 공개한 뒤 새 적격 기록을 제출하면 신호 수는 0인데 공개할 기록은 남아 있다. 진행 중에는 개별 [분석 공개]가 그 일을 한다. `RETRY`는 6.8절 초안을 만들 수 있는 제출이 있을 때만 주며 **그 제출이 매칭한 후보가 은퇴했으면 주지 않는다** — 누르면 409 `CANDIDATE_RETIRED`가 될 행동을 힌트로 주지 않는다. **이 규칙은 요구사항에서 유도했고 명세에 예시만 있었다. 교차 리뷰 대상이다.**
 - 여러 질의로 한 응답을 만들므로 **같은 스냅샷**에서 읽는다. 중간에 판이 바뀌거나 공개 상태가 달라지면 신호 카드와 미게시 수가 서로 다른 시점을 말하게 된다.
+
+### 8.4.1 결과 화면의 NASA 확정 행성 (S15P21C206-270)
+
+270은 결과 페이지의 별도 참고 자료다. [8.4절 결과](#84-별-결과-페이지-res-10-at-74)의 `signals`나 [4.2절 별 상세](#42-선택한-별내-행성-상세)의 개인 `planets.items`를 NASA 목록으로 교체하지 않는다. 전자는 회원이 매칭한 내부 신호, 아래 `planets`는 NASA `ps`가 같은 TIC에서 확인한 외부 확정 행성이다. 두 목록의 ID·개수·순서·성과는 서로 다르다. 저장·정규화·생성 규칙은 [270 개발 계약](../../../docs/development/nasa-star-planets-270.md)을 따른다.
+
+| 메서드·경로 | 본문 | 동작 |
+| --- | --- | --- |
+| `GET /api/v1/stars/{ticId}/result/nasa-planets` | 없음 | 저장된 목록·설명 상태만 조회한다. NASA·모델 호출과 DB 쓰기를 하지 않는다 |
+| `POST /api/v1/stars/{ticId}/result/nasa-planets` | 없음 | 같은 TIC의 NASA `ps` 기본 해 목록을 수집·재확인하거나 유효한 저장 결과를 재사용한다. 설명은 생성하지 않는다 |
+| `POST /api/v1/stars/{ticId}/result/nasa-planets/{planetId}/explanation` | 없음 | 현재 목록의 행성 한 건에 대해 검증된 설명을 생성·재사용한다. 다른 행성은 생성하지 않는다 |
+
+세 경로 모두 인증 세션의 현재 active 회원과 서버 DB의 해당 TIC에 대한 실제 `candidate` 또는 `no_candidate` 답 제출을 확인한다. `skipped`만 있는 별·제출 전 별·없는 별은 404 `RESOURCE_NOT_FOUND`로 덮는다. 경로 TIC는 권한의 근거가 아니다. POST는 CSRF를 검사한다. 외부 호출 뒤에도 회원·답 제출·현재 행성·원천 세대를 재확인하므로 늦은 응답이 접근 철회나 자료 정정을 되돌리지 못한다. 존재하지 않거나 현재 목록에 없는 `planetId`는 404다. 신뢰할 수 없는 행성명·후보 ID·주기 입력을 받지 않으며, 클라이언트가 이름이나 배열 순서로 연결하지 않는다.
+
+`skipped`만 있는 별에서는 기존 결과 페이지 GET이 200이어도 NASA 목록 GET은 404다. 271 화면은 이 404를 NASA 영역의 이용 불가로 안내하고 결과 페이지 전체의 실패로 처리하지 않는다. active가 아닌 회원은 공통 인증 필터에서 세션 종료와 401로 처리한다.
+
+세 경로의 성공 응답은 같은 200 bundle이다. `star.hostName`, 모든 시각·설명과 없는 원천값은 null일 수 있다. 아래 숫자와 시각은 형식 예시이며 실제 NASA 측정값은 아니다. 예시 `planetId`는 뒤의 식별 규칙으로 계산한 값이고, `sourceHash`의 자리 표시자는 실제 응답에서 정규화 JSON의 소문자 SHA-256 64자리다. 행성 ID는 서버가 확인한 숫자 TIC와 정확한 NASA `pl_name`을 `ticId:pl_name` 형태로 UTF-8 해시한 `np-<hex>`다. NASA가 이름을 정정하면 새 ID가 된다.
+
+```json
+{
+  "star": {"ticId": "150428135", "hostName": "TOI-700"},
+  "status": "ready",
+  "complete": true,
+  "fetchedAt": "2026-09-25T05:20:00Z",
+  "refreshStatus": "ok",
+  "retryAt": null,
+  "planets": [
+    {
+      "planetId": "np-881febc05b880dcaa8f5601b89a620c4315737d60d635001813dccea00f19fdf",
+      "name": "TOI-700 b",
+      "sourceStatus": "ready",
+      "facts": {
+        "planetName": "TOI-700 b",
+        "orbitalPeriod": {"value": "9.977219", "errorPlus": null, "errorMinus": null, "limit": 0, "unit": "days", "reference": null},
+        "radius": null,
+        "mass": null,
+        "discoveryMethod": "Transit",
+        "discoveryYear": 2020,
+        "controversial": null,
+        "sourceTable": "ps",
+        "sourceUrl": "https://exoplanetarchive.ipac.caltech.edu/"
+      },
+      "sourceHash": "<정규화 JSON의 SHA-256 64자리>",
+      "sourceVersion": 1,
+      "fetchedAt": "2026-09-25T05:20:00Z",
+      "changedAt": "2026-09-25T05:20:00Z",
+      "explanationStatus": "ready",
+      "explanation": {
+        "name": "{검증된 이름 설명}",
+        "orbitalPeriod": "{검증된 공전주기 설명}",
+        "radius": "{검증된 반지름 설명}",
+        "mass": "{검증된 질량 설명}",
+        "discovery": "{검증된 발견 설명}"
+      },
+      "generatedAt": "2026-09-25T05:21:00Z",
+      "retryAt": null,
+      "failure": null,
+      "model": "gpt-5.4-mini",
+      "promptVersion": "nasa-ko-v4"
+    }
+  ]
+}
+```
+
+| 상태 | 응답 규칙 |
+| --- | --- |
+| 목록 `not_requested` | `complete=false`, `fetchedAt=null`, `planets=[]`. GET으로 최초 요청을 시작하지 않는다 |
+| 목록 `pending` | 다른 요청의 NASA 임대가 진행 중이다. 기존 행성이 있어도 `complete=false`, bundle `retryAt=임대 만료 시각`; GET으로 진행 상태를 확인한다 |
+| 목록 `ready` | TTL 안의 최근 성공 조회 1~64행·`complete=true`. 저장된 검증 사실을 행성별로 선택할 수 있다 |
+| 목록 `empty` | TTL 안의 성공 조회 0행·`complete=true`·빈 배열. 이 시각의 `ps` 기본 해 조회 결과이며 영구 부재 단정이 아니다 |
+| 목록 `partial` | 반환된 모든 기본 해에서 같은 정확 `pl_name`이 중복되거나 JSON 파싱 **이후** 개별 부호·표시·설명 입력 검증에 실패했다. 같은 이름의 확정 1행과 비확정 1행도 중복으로 보며 해당 행성은 `sourceStatus=identity_unresolved/invalid_source`다. 비확정 행만 있는 이름은 제외한다. 다른 정상 행성은 유지하고 `complete=false`다 |
+| 목록 `temporarily_unavailable` | 성공 snapshot 없는 timeout·429·5xx, 65행, 본문 상한, JSON 숫자 파싱·항성 식별 실패다. `complete=false`이며 빈 행성 목록을 NASA의 정상 0행으로 읽지 않는다 |
+| 목록 `stale` | 이전 성공 행성이 있거나 TTL이 만료됐다. `complete=false`와 과거 `fetchedAt`·최근 `refreshStatus`·가능한 `retryAt`을 함께 제공한다. 부분 외부 응답을 최신 전체 목록으로 확정하지 않는다 |
+| 원천 `identity_unresolved/invalid_source` | 중복 기본 해 또는 JSON 파싱 이후의 개별 자료 검증 거절이다. 해당 항목의 `facts/sourceHash/sourceVersion`은 null이며 다른 정상 행성은 유지한다 |
+| 설명 `ready` | 현재 행성의 검증된 `facts/sourceHash/sourceVersion`과 모델·프롬프트 버전에 맞는 다섯 `explanation`·`generatedAt`만 제공한다 |
+| 설명 `not_requested/pending/disabled/failed/quota_exceeded/source_unavailable/invalid_source/busy/source_changed` | `explanation=null`, `generatedAt=null`; 해당 행성의 `retryAt/failure`를 사용한다. 정상 `facts`는 설명 실패에도 유지한다 |
+
+측정 객체는 `{value,errorPlus,errorMinus,limit,unit,reference}`다. 숫자와 부호 있는 오차는 정밀도를 지키는 문자열 또는 null이다. `limit=-1/0/1/null`은 각각 상한·측정값·하한·미제공이며, null을 0으로 메우지 않는다. `sourceUrl`은 서버가 고정한 공식 Archive 주소이고 NASA 문헌의 HTML은 반환하지 않는다. 같은 `planetId`의 사실과 다섯 문장만 연결한다. bundle `retryAt`은 목록의 다음 재확인 시각이고 `pending`에서는 임대 만료 시각이다. 항목 `retryAt`은 해당 설명의 다음 시도 시각이다. 항목 `fetchedAt`은 마지막 완전 NASA 응답에서 해당 이름을 관찰한 시각, `changedAt`은 그 항목의 정규화 자료 또는 상태가 바뀐 시각이다. 두 시각은 `identity_unresolved/invalid_source`에도 기록된다. `model/promptVersion`은 현재 생성 설정·프롬프트 계약으로 **모든 항목에 제공**하며 원천 미검증 행성도 포함한다. 설명 기능이 꺼져도 저장된 현재 `ready`는 제공하고, 나머지 설명은 `disabled`다. NASA 목록 POST는 항성당 한 번의 목록 조회를 시작하고 모델 시도권을 쓰지 않는다. 설명 POST는 선택한 한 행성에 기존 V28 회원별·전체 UTC 일별 한도를 268 후보 설명과 공유하며, 두 기본값 0에서는 신규 유료 시도를 차단한다. 준비 중에는 새 POST를 반복하지 않고 GET으로 상태를 다시 읽는다. 한도 초과는 해당 행성만 `explanationStatus=quota_exceeded`, `failure=daily_limit`, `retryAt=다음 UTC 자정`이다. 한도 응답은 저장하지 않아 다음 GET은 기존 설명 상태를 보여준다. 예상 가능한 NASA·모델 장애는 권한 있는 200 bundle의 상태로, 인증·DB 장애는 공통 오류 본문으로 반환한다.
 
 ### 8.5 첨부·공개 분석용 투영 필드
 
@@ -1547,6 +1718,9 @@ Publisher가 PostgreSQL Primary에 직접 적재하고 서비스 API는 Gold를 
 | 2026-09-21 | S15P21C206-141 리뷰(윤성용) 반영. 고조파 판정을 **칸 반올림에서 주기 값 비교로** 고쳤다 — 배수 자리를 반올림하면 조정해도 닿을 수 없는 봉우리까지 제외됐다(0.5~40일 5000점 h=3 반례). 최소 간격 `2h+1`의 근거를 「같은 선택」이 아니라 **추천을 줄이는 정책**으로 고치고, 고조파 배수 공유가 **같은 신호 판정이 아님**을 적었다. `peakRuleVersion`에 알고리즘 변경 시 버전 갱신 조건을, 제안값에는 후속 BLS 계약 네 가지를 더했다 |
 | 2026-09-22 | S15P21C206-150 판 전환 재개 후처리 구현. 9.3절에 재개 사건의 저장 위치(`notifications` `type='reopen'`)와 payload, `reason`을 아직 싣지 않는 이유, 멱등 보장 방법을 적었다. 10장에 4단계 중 재개 판정만 구현했고 Redis 캐시 삭제·라벨 표식·내부 알림 경로는 미구현임을 명시했다 |
 | 2026-09-22 | S15P21C206-150 나머지 범위 구현. 위 줄의 「미구현」을 정정한다 — 4단계 셋과 내부 알림 경로를 모두 구현했다. 10장에 `POST /internal/bundles/{bundleId}/activated`의 서비스 토큰 인증·CSRF 비대상·지난 판 200 응답·이전 판 잔차 캐시 정리와 멱등 근거를 적고, 폴링이 아직 없다는 것을 남겼다. **9.5절의 모순을 고쳤다** — 배치가 `user_candidate_achievements`를 설정한다고 적혀 있었으나 배치 역할에는 그 권한이 없다. 실행 주체를 판 전환 후처리(앱)로 바로잡고, 표식을 `candidate_status_history`의 미확정 `field` 대신 현재 판정과 성과 유형의 차이로 찾는 근거를 적었다 |
+| 2026-09-23 | S15P21C206-256 정정. 5.1절 판 요약의 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. Gold 4.1 운영 revision은 섹터마다 다른 해시라, 한 판의 revision이 하나라는 옛 규칙으로는 여러 섹터 별의 분석 진입이 500이 됐다(`AnalysisService`가 적재 계약 위반으로 처리). 프론트는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 5.2절 예시도 섹터마다 다른 revision으로 고쳤다 |
+| 2026-09-25 | S15P21C206-269 정정. 6.2절 5단계에 추천 duration이 null인 봉우리 제출은 제안 duration·상한을 둘 다 null로 저장한다고 적고, 6.4절 예시의 두 값을 실제 응답과 같은 null로 바꿔 필드 규칙을 더했다. V4 제약이 봉우리 제출에 두 값을 NOT NULL로 요구해 5.4절 null 계약 아래에서 봉우리 제출이 모두 500이었다(S15P21C206-262 화면 검증에서 발견). V27이 "둘 다 NULL 또는 둘 다 양수"로 고친다 |
+| 2026-09-25 | S15P21C206-270 계약. 8.4.1절에 본인 답 제출 뒤의 NASA 항성별 목록 조회 GET·수집 POST·선택 행성 설명 POST, V29 외부 ID, 완전성·부분 실패·V28 공유 한도와 결과 화면 소비 JSON을 명시했다. 기존 별 상세 후보 목록과 Gold·성과는 유지한다 |
 
 ### v1.3 최종 표현안 적용 메모 (227, 2026-09-15)
 

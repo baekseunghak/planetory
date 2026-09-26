@@ -22,7 +22,7 @@
 | Tunnel connector | EC2-A 한 곳. 여러 곳에 붙여도 분산되지 않으므로 EC2-B에는 두지 않는다(D4) |
 | 로그인 | Google·SSAFY 둘 다 성공. 회원 생성·튜토리얼 별 지급까지 동작 |
 | DB | `service-db`(PostgreSQL 18.6), Flyway 마이그레이션 적용, 영속 볼륨 `planetory-service-db-data` |
-| 별지도 | 데이터 조회까지 동작. 렌더러는 Dockerfile 기본값이 꺼짐이라 화면은 데이터 상태만 표시한다 |
+| 별지도 | 렌더러를 켠 이미지로 교체(2026-09-23, `S15P21C206-254`). 아래 「수동 배포한 렌더러 이미지」 참고 |
 
 **프론트엔드와 백엔드 모두 CI 이미지로 교체됐다(2026-09-21·22).** 두 컨테이너 다 커밋 SHA 태그를 달고 있어 어느 커밋인지 추적된다. 손으로 빌드한 `:local` 이미지는 더 이상 쓰이지 않는다.
 
@@ -40,19 +40,79 @@
 
 백엔드가 발급하는 OAuth 리다이렉트 주소도 `app.planetory.space`다. 목업 호스트에서는 로그인 흐름이 성립하지 않는다.
 
-## 별지도 렌더러는 꺼진 채 빌드된다
+## develop 배포가 요구하는 설정 둘 (S15P21C206-254)
 
-`Dockerfile`의 `VITE_SKY_RENDERER_ENABLED` 기본값이 `false`이고 CI의 `BUILD_ARGS`가 비어 있다. 배포본 자산에 WebGL 코드가 한 줄도 없다(`createShader`·`compileShader`·`drawArrays` 각 0건).
+MR `!161` 병합 뒤 develop 배포에서 두 가지가 깨졌다. 코드가 먼저 들어오고 배포 설정이 따라오지 않은 경우다. 브랜치 `fix/S15P21C206-254-infra-deploy-config-gaps`에 구현했고, **병합 전에 EC2-A에 수동으로 반영했다(2026-09-23).**
 
-이 MR이 만든 결함이 아니라 원래 미완으로 남아 있던 항목이다. [렌더러 문서](../../apps/frontend/docs/galaxy-renderer.md)도 "실제 배포는 별도 인수"라고 적고 있다.
+### 백엔드: Redis가 없어 기동 실패 → 롤백
 
-켜려면 이미지를 다시 빌드해야 한다. 서버 환경변수를 바꾸거나 재시작하는 것으로는 적용되지 않는다. 빌드 시점 값이기 때문이다.
+`RedisSessionConfig`가 세션·캐시 Redis 주소 넷을 필수로 읽는데 `compose.yaml`에 Redis도 주소도 없었다. `deploy.sh`의 헬스 확인이 실패를 잡아 직전 이미지로 되돌렸고(실환경 첫 롤백), 서비스는 유지됐다.
 
-```
---build-arg VITE_SKY_RENDERER_ENABLED=true
-```
+- `session-redis`·`cache-redis` 두 서비스를 compose에 넣었다. 두 인스턴스는 host+port가 달라야 하며, 같으면 앱이 기동을 거부한다.
+- 주소는 **`.env`가 아니라 compose가 서비스 이름으로 직접 준다.** 티켓은 `.env`에 넣도록 적었지만, 그러면 `.env`에서 하나만 빠져도 같은 기동 실패가 되풀이된다.
+- 세션은 볼륨·RDB 저장, 64mb 상한에 `noeviction`(상한에 닿으면 새 로그인이 503). 캐시는 저장 없음, 128mb(임시) `volatile-lru`. 캐시는 Backend의 기동 의존성이 아니다(리뷰 반영, 아래).
+- 캐시 소비처는 아직 없다. 지금은 기동 요건만 채운다.
 
-켜더라도 계정이 가진 별만 보인다. 시제품처럼 수천 개가 나타나는 것은 아니다.
+EC2-A에서 서비스와 분리된 임시 프로젝트로 검증했다(2026-09-23). 두 컨테이너 healthy, 설정값이 위와 일치, 재시작 후 세션 키 유지·캐시 키 소실, 호스트 포트 게시 없음. 백엔드 앱과 붙인 검증은 배포 때 한다.
+
+**최초 기동은 수동이다.** `deploy.sh`는 `--no-deps`로 교체하므로 의존 서비스를 만들지 않는다. 절차는 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
+
+**배포 결과(2026-09-23).** 브랜치의 `compose.yaml`로 교체하고(직전 파일은 `compose.yaml.bak-before-254`) 두 Redis를 띄운 뒤 `deploy.sh`로 Backend `e510d1da`를 올렸다. 헬스 200, 기동 로그 예외 0건, Backend 환경변수가 두 인스턴스를 따로 가리킨다. V20·V21·V22·R__이 적용돼 V22다. `planetory_stats_job`은 마이그레이션 계정이 슈퍼유저라 V21이 직접 만들었다. `cache-redis`에는 연결이 없다. 소비처가 없어 팩토리가 연결하지 않는다. 로그인 뒤 Backend만 재시작해도 세션이 유지됐고, 세션 키는 `session-redis`에만 있다(`cache-redis` 0개).
+
+첫 시도는 compose 교체 없이 배포만 돌려 같은 `SESSION_REDIS_HOST` 오류로 롤백됐다. Redis 설정 단계에서 죽어 마이그레이션 전이었고 DB는 V19 그대로였다. 롤백 로그의 "스키마는 그대로" 문구는 롤백마다 붙는 일반 경고다.
+
+**리뷰 반영(2026-09-23).** 백승학·하서진 P2 두 건과 강재민 제안 둘을 받았다. 세션에 64mb 상한(`noeviction` 유지), Backend `depends_on`에서 `cache-redis` 제거, 캐시 정책 `allkeys-lru`→`volatile-lru`, `requirepass` 재검토 조건을 "우리가 만들지 않은 컨테이너가 네트워크에 붙을 때"로 좁혔다. EC2-A에 재반영했고(직전 compose는 `compose.yaml.bak-before-254-review`) 두 Redis 재생성 뒤에도 세션 키가 남았다. 근거와 관측 명령은 [EC2 서비스 배포](../../infra/service/README.md#세션캐시-redis).
+
+**병합 전에 develop Backend를 CI로 배포하면 `compose.yaml`이 Redis 없는 판으로 덮여 다시 롤백된다.** 컨테이너는 남지만 주소가 사라진다. 이 브랜치를 먼저 병합한다.
+
+### 프론트: 별지도 렌더러가 꺼진 채 빌드
+
+`Dockerfile`의 `VITE_SKY_RENDERER_ENABLED` 기본값이 `false`이고 CI의 `BUILD_ARGS`가 비어 있었다. 별지도 자리에 "지도 시각화 연결을 준비하고 있습니다" 문구만 나온다.
+
+- `build:frontend`·`web:image`가 `--build-arg VITE_SKY_RENDERER_ENABLED=true`로 빌드한다. MR의 `web:build`도 같은 값으로 번들링한다.
+- `build:frontend`·`deploy:frontend:ec2-a` 규칙에 `.gitlab/ci/apps/frontend.yml`을 넣었다. 빌드 인자가 이 파일에 있어 이 파일만 바뀌어도 이미지가 달라진다.
+- 빌드 시점 값이다. 서버 환경변수나 재시작으로는 적용되지 않는다.
+
+**판별 기준을 바꿨다.** 티켓을 쓸 때의 근거였던 WebGL 호출(`createShader` 등) 개수는 이제 쓸 수 없다. 로그인 화면과 미리보기가 렌더러 모델을 가져오면서 플래그와 무관하게 번들에 들어가기 때문이다. 대신 **메인 청크가 `GalaxyPage`와 `GalaxyScene` 청크를 참조하는지** 본다. 로컬 빌드에서 켜면 3회·1개, 끄면 0·0이다.
+
+**배포 헬스가 렌더러를 본다(리뷰 반영).** `/`는 렌더러가 빠져도 200이라 회귀를 못 잡았다. 켠 빌드에만 생기는 `/health/renderer-enabled`를 헬스 경로로 바꿨다. EC2-A에서 ON/OFF 이미지를 비교해 200/404, SPA 경로는 둘 다 200임을 확인했다. 과도기 롤백 주의는 [EC2 서비스 배포](../../infra/service/README.md#배포와-롤백).
+
+켜더라도 계정이 가진 별만 보인다. 시제품처럼 수천 개가 나타나지 않는다.
+
+### 수동 배포한 렌더러 이미지 (2026-09-23)
+
+브랜치 병합을 기다리지 않고 프론트만 먼저 켰다. **운영 중이던 커밋 `80a860fa` 그대로에 플래그만 더해** EC2-A에서 빌드했다. 코드 차이는 렌더러 하나다.
+
+- 이미지: `frontend:80a860fa…-sky`. CI가 같은 SHA로 만든 이미지를 덮어쓰지 않도록 접미사를 붙였다.
+- `deploy.sh`로 교체했다. 헬스 통과, `.env`에 기록됐다.
+- 공개 주소 확인: 메인 청크가 `GalaxyPage`를 3회 참조하고 렌더러 청크가 200으로 내려온다. 교체 전 이미지는 0회였다.
+
+**이 브랜치가 병합되기 전에 develop 프론트를 CI로 배포하면 렌더러가 다시 꺼진다.** 병합 뒤부터는 CI가 항상 켜서 빌드한다.
+
+레지스트리의 `frontend:ed7d72d2…-sky`는 잘못 고른 기준으로 만든 이미지다. 쓰이지 않는다.
+
+### 배포 경로를 혼동하지 않는다
+
+CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `deploy.sh`, 실제 `.env`, `backups/`가 여기 있다. `~ubuntu/planetory/infra/service`는 09-21 이전 수동 기동 때의 사본이라 `.env`의 이미지 선언이 낡았다. 같은 compose 프로젝트 이름을 쓰므로 거기서 `docker compose ps`를 쳐도 컨테이너가 보여 오인하기 쉽다. 도는 버전은 컨테이너 라벨 `com.docker.compose.project.working_dir`과 이미지로 확인한다.
+
+## 병합 후 CI 배포 결과 (2026-09-23)
+
+`S15P21C206-254`(`!199`)와 `S15P21C206-261`(`!204`)은 병합 후 CI 경로로 배포됐다.
+
+| 파이프라인 | Frontend | Backend | 확인 |
+| --- | --- | --- | --- |
+| `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
+| `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
+
+운영 DB는 V24다. V23·V24는 261 전에 수동 배포한 `f6379f5b`에서 적용됐다. 옛 배포 버튼 거부는 아직 확인하지 않았다(`S15P21C206-262` 항목 2).
+
+## 분석 화면 503과 Gold 목업 (S15P21C206-262)
+
+별 분석을 열면 "일시적으로 처리할 수 없습니다"가 떴다. `analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)을 냈기 때문이다. 구현·API 연결·배포 문제가 아니었다. 서비스 DB에 Gold가 한 번도 적재되지 않아 `publication_bundles`·`light_curve_segments`·`candidates`가 모두 0행이었다. 더미 별에는 판이 없다. 이 경로는 예외로 처리해 오류 로그가 남지 않는다. 화면 문구는 일시 장애처럼 읽히지만 몇 번을 다시 해도 같다. 원인을 가르는 오류 코드 분리는 Backend 담당 사항이다.
+
+Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지다. 잔차 단계는 Worker(`S15P21C206-88`)가 없어 여전히 안 된다.
+
+**운영 적재는 아직 하지 않았다.** 병합 뒤 CI가 Publisher 이미지를 만들면 계정을 준비하고 적재한다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
@@ -154,11 +214,14 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 | job | 언제 | 무엇 |
 | --- | --- | --- |
-| `web:build` | 프론트 변경 | `npm run build` |
+| `web:build` | 프론트 변경 | `npm run build` + 단위 테스트 `npm test`(448개) |
+| `web:e2e:smoke` | develop 병합 뒤 자동, MR에서는 수동 | 브라우저 스모크 `test:e2e:smoke`(production·docker-defaults·auth) |
+| `web:e2e` | 수동 | 브라우저 테스트 전체 `test:e2e`(505개, 동시 2) |
 | `web:image` | `Dockerfile`·`nginx.conf` 변경 | 이미지 빌드 + 이미지 안에서 `nginx -t` |
 | `backend:schema` | 마이그레이션 변경 | 버전 선점·중복, 되돌릴 수 없는 변경 |
-| `backend:build` | 백엔드 소스 변경 | `./gradlew bootJar` |
-| `backend:image` | `Dockerfile` 변경 | 이미지 빌드 |
+| `backend:build` | 백엔드 소스·테스트 변경 | `./gradlew bootJar test -PmrTests` (DB 없는 테스트 + `GoldCatalogSchemaTest`, PostgreSQL 서비스) |
+| `backend:image` | `Dockerfile` 변경 | 이미지 빌드. `backend:build`가 실패하면 돌지 않는다 |
+| `backend:test` | develop 병합 뒤 자동, MR에서는 수동 | 백엔드 테스트 전체(PostgreSQL 서비스 + dind). 이미지 빌드·배포를 막지 않는다 |
 | `build:*` | 기본 브랜치 | 레지스트리 이미지 빌드·푸시 |
 | `deploy:*:ec2-a` | 기본 브랜치, 수동 버튼 | 교체 → 헬스 확인 → 실패 시 롤백 |
 
@@ -167,9 +230,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 넣지 않은 것과 이유. **CI는 배포를 막을 수 있는 것만 본다.**
 
 - 포맷 검사 — 빌드·배포·동작과 무관하다. LF 기준으로 이미 16개 파일이 실패하기도 한다.
-- 프론트 단위 테스트 — 파일 50개가 기능 담당자 소유다. 관문으로 세우면 한 사람의 테스트가 다른 사람의 MR을 막는다. 팀 합의가 먼저다.
-- 백엔드 테스트 — `build.gradle`의 `test`가 PostgreSQL을 요구하는데 CI에서는 `startLocalDb`가 건너뛰어져 DB 없이 41개 클래스가 돈다. CI에 Postgres 서비스를 붙이는 일은 별도로 정한다.
-- Playwright — 설정 24개를 직렬로 돌아 머지를 막는다.
+- 브라우저 테스트 전체 — 동시 2로도 약 26분이라 관문이 아니라 수동 job(`web:e2e`)으로 둔다. 근거는 [CI/CD 「프론트 테스트」](../operations/cicd.md#프론트-테스트-mr-관문과-브라우저-테스트-s15p21c206-91).
 
 ## 검증 경계
 
@@ -191,7 +252,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 ## 남은 결정 (MR에서 확인)
 
-1. **프론트 단위 테스트를 CI 관문으로 세울지.** 세우면 한 사람의 테스트 실패가 다른 사람의 MR을 막는다.
+1. ~~**프론트 단위 테스트를 CI 관문으로 세울지.**~~ 2026-09-25 결정: 세운다(`web:build`에 `npm test`, S15P21C206-91). 448개가 수 초이고 모두 통과해, 깨진 채 병합되는 쪽이 더 비싸다고 봤다.
 2. **`-- IRREVERSIBLE:` 방식이 적절한지.** 되돌릴 수 없는 마이그레이션을 금지하지 않고 파일에 근거를 요구한다. 세 배포로 나눌 수 있는지 한 번 묻는 것이 목적이다.
 3. **EC2-B 배포 job 제거.** [CI/CD](../operations/cicd.md)가 이 티켓에 지정했고 실제로 지웠다. 확인이 필요하다.
 
@@ -208,7 +269,7 @@ Runner 자체는 문제가 없다. `planetory-docker-runner`는 online이고 `am
 
 Tunnel 진입과 프론트·백엔드 기동만 구현했다. 티켓의 나머지는 손대지 않았다.
 
-- Redis runtime, 메모리 상한·eviction 정책
+- ~~Redis runtime, 메모리 상한·eviction 정책~~ → `S15P21C206-254`로 옮겼다
 - health/readiness 설계(`S15P21C206-93`)
 - 애플리케이션 계층 남용 제어 위치
 - 단일 connector 지속 처리량·재연결 실측

@@ -341,13 +341,18 @@ class SourceCardTest {
         reset(sources);
         assertFalse(posts.detail(number(post)).sourceLinks().getFirst().available());
     }
-    @Test void 출처저장도중취소는_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
+    @Test void 출처저장도중운영숨김은_최종재검증으로롤백하고_닫힌별댓글수정은거절() throws Exception {
         var p=publications.publish(member,submit(3)); String post=create("[]");
         doAnswer(call -> {
             var statement=call.callRealMethod();
-            try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
-                pool.submit(() -> publications.visibility(member,p.analysisId(),false)).get(10,java.util.concurrent.TimeUnit.SECONDS);
-            }
+            // 본인 공개 취소는 글 수정이 먼저 잡은 회원 잠금(180)을 기다려 저장 도중 끼어들 수 없다.
+            // 저장 도중 확정될 수 있는 것은 회원 잠금 없는 운영 숨김이므로 별도 연결에서 커밋한다.
+            // 막히면 10초 뒤 실패하게 close() 대신 shutdownNow()로 끝낸다. close()는 작업 종료를 무기한 기다린다.
+            var pool=java.util.concurrent.Executors.newSingleThreadExecutor();
+            try {
+                pool.submit(() -> jdbc.update("UPDATE published_analyses SET hidden_at=now() WHERE id=?",
+                        Long.parseLong(p.analysisId().substring(3)))).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            } finally { pool.shutdownNow(); }
             return statement;
         }).when(sourceJdbc).sql(org.mockito.ArgumentMatchers.startsWith("INSERT INTO post_source_links("));
         patchPost(post,"{\"sourceLinks\":"+links(p)+"}").andExpect(status().isNotFound());

@@ -81,7 +81,7 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 
 ## 5. 튜토리얼 별·챌린지 회차
 
-`tutorial_stars`와 `challenge_rounds`도 SQL로 넣는다. DB가 저장할 때 다음을 거절한다.
+`tutorial_stars`와 `challenge_rounds`도 SQL로 넣는다. 챌린지 별 등록, Redis 사전 적재 대상 지정과 회차 시작 순서는 [챌린지 별 등록·회차 전환 런북](challenge-round-runbook.md)을 따른다. DB가 저장할 때 다음을 거절한다.
 
 - 대상 TIC이 없거나 `stars.service_status`가 `published`가 아니다. 공개 대상이 아닌 별은 발견에서 빠지므로(OPS-08) 회원에게 열 대상으로도 넣을 수 없다. 메시지는 `공개된 별만 <테이블>.<열>에 넣을 수 있습니다`다. 대상 열을 넣거나 바꿀 때만 검사하므로, 대상 별이 나중에 숨겨져도 회차를 닫거나 튜토리얼을 끄는 수정은 된다.
 - 회차 기간이 뒤집혔다(`ck_challenge_rounds_period`, `starts_on > ends_on`). 하루짜리 회차는 된다.
@@ -100,6 +100,18 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 ## 7. 백업 복원·데이터 이관
 
 - 스키마와 데이터를 함께 빈 DB에 복원하면 그대로 된다. `pg_dump` 출력은 데이터(`COPY`)를 먼저 넣고 트리거를 나중에 만든다. 이때 복원할 DB에 Flyway를 먼저 돌리지 않는다.
+- 새 클러스터(새 볼륨)에 복원할 때는 마이그레이션이 만드는 역할을 먼저 만든다. 역할은 DB가 아니라 클러스터 전역이라 `pg_dump`에 들어가지 않고, 복원 전에는 Flyway를 돌리지 않으므로 V2·V21이 역할을 만들 기회도 없다.
+
+  ```sql
+  CREATE ROLE planetory_gold_writer NOLOGIN;  -- V2
+  CREATE ROLE planetory_app NOLOGIN;          -- V2
+  CREATE ROLE planetory_stats_job NOLOGIN;    -- V21
+  ```
+
+  - 역할이 없으면 `pg_restore`가 `role "…" does not exist` 오류를 내고도 나머지를 복원한 뒤 종료 코드 1로 끝난다. 테이블과 데이터는 들어가지만 그 역할의 권한이 빠진 DB가 된다. 이렇게 끝났으면 역할을 만든 뒤 빈 DB부터 다시 복원한다.
+  - 접속 계정에 역할을 주는 `GRANT planetory_app TO …` 같은 소속도 클러스터 전역이라 덤프에 없다. 배포 설정대로 다시 준다(V2 머리말).
+  - 이후 마이그레이션이 역할을 더 만들면 그 역할도 먼저 만든다. 목록은 마이그레이션의 `CREATE ROLE`에서 찾는다.
+  - V23까지 적용한 로컬 일회용 PostgreSQL 18.6에서 확인했다. 역할이 없으면 오류 75건과 종료 코드 1, V2 역할만 있으면 `planetory_stats_job` 오류 8건, 셋 다 있으면 종료 코드 0과 세 역할의 권한을 봤다(S15P21C206-256). 운영 DB에서는 실행해 보지 않았다.
 - 이미 마이그레이션한 DB에 데이터만 넣으면 거절된다. `pg_restore --data-only`나 운영 데이터를 개발 DB로 복사하는 작업이 여기에 해당한다. `COPY`도 행 트리거를 실행하기 때문이다.
   - `operation_settings`: 원본 행은 적용 시각이 모두 지났다(`trg_operation_settings_keep_history`).
   - `tutorial_stars`·`challenge_rounds`: 원본에 대상 별이 나중에 숨겨진 행이 있을 수 있다(`trg_tutorial_stars_published`, `trg_challenge_rounds_published`).

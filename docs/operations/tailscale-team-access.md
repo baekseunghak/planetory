@@ -69,6 +69,36 @@ scp <로컬-파일> SSAFY@node-1:<원격-경로>
 
 `tailscale ssh`가 실패하면 대상에서 Tailscale SSH 서버가 켜져 있는지(`tailscale up --ssh`) 확인한다. ACL이 허용해도 대상이 켜 두지 않으면 접속되지 않는다. 그 경우에만 기존 OpenSSH 경로를 임시로 사용하고 원인을 관리자에게 보고한다.
 
+### 접속 순서와 OpenSSH 별칭
+
+사람과 AI 에이전트 모두 이 순서를 따른다.
+
+1. `tailscale ssh <계정>@<이름>`으로 접속한다. 위 표의 계정을 쓴다.
+2. 실패하면 작업 PC `~/.ssh/config`에 등록된 별칭으로 접속한다. `node-2-ssh`~`node-6-ssh`는 Node 1을 거치는 ProxyJump다.
+3. 둘 다 실패하면 추측으로 다른 경로를 만들지 않는다. [GCP 노드 운영 런북](gcp-node-runbook.md) 7장의 복구 절차를 따르고 관리자에게 보고한다.
+
+| 서버 | 별칭 | 계정 |
+| --- | --- | --- |
+| `ec2-a` | `ec2-a-ssh` | `ubuntu` |
+| `ec2-b` | `ec2-b-ssh` | `ubuntu` |
+| `node-1` | `node-1-ssh` | `SSAFY` |
+| `node-2`~`node-6` | `node-2-ssh`~`node-6-ssh` | `planetory-admin` |
+
+별칭의 실제 주소·키 경로는 각 작업 PC의 `.ssh/config`에서만 확인하고 문서에 고정하지 않는다. 별칭이 없는 PC에서는 관리자에게 설정을 받는다. 2026-09-23 작업 PC에서 `ec2-a-ssh`·`ec2-b-ssh`·`node-1-ssh`·`node-2-ssh`가 `hostname -s`에 응답했다.
+
+**배포 계정 `deploy`로는 사람 PC에서 직접 접속하지 않는다.** tailnet ACL이 CI Runner(`ec2-b`)의 신원에만 허용하므로 `tailscale ssh deploy@ec2-a`는 `tailnet policy does not permit you to SSH as user "deploy"`로 거부된다(2026-09-23 확인). 사람이 서비스 노드에서 배포 스크립트를 돌릴 때는 관리 계정으로 접속한 뒤 `sudo -u deploy`로 배포 경로에서 실행한다.
+
+```sh
+ssh ec2-a-ssh   # 또는 tailscale ssh ubuntu@ec2-a
+sudo -u deploy sh -c "cd /home/deploy/planetory && ... sh deploy.sh"
+```
+
+`~ubuntu/planetory/infra/service`는 CI 도입 전 수동 기동 때의 옛 사본이다. `deploy.sh`가 없고 `.env`의 이미지 선언도 낡았다. 배포 경로는 [CI/CD](cicd.md) 「배포 접속」의 `deploy` 계정 경로다.
+
+**수동 배포는 `deploy` 계정으로 한다.** `tailscale ssh deploy@ec2-a` 후 `/home/deploy/planetory`에서 실행한다. 이 계정은 `sudo`가 없고 `docker` 그룹만 있다. 사람의 `ubuntu` 계정 아래 `~/planetory/infra/service`는 2026-09-21 이전 수동 기동의 사본이라 배포에 쓰지 않는다. 근거는 [CI/CD](cicd.md) 「배포 접속」이다. 2026-09-23 이 PC에서 `tailscale ssh deploy@ec2-a`와 일반 `ssh deploy@<ec2-a>`가 모두 응답했다.
+
+접속 경로를 바꿔도 운영을 바꾸는 명령의 확인 절차는 그대로다. 배포·설정 교체·삭제는 [AGENTS.md](../../AGENTS.md)의 안전 가드레일을 따른다.
+
 호스트 키 검증을 `StrictHostKeyChecking=no`로 우회하거나 개인 키 내용을 공유하지 않는다.
 
 Tailscale은 관리 접속 경로다. `node-*` 접속 성공을 GCP `10.20.x.10` 사설망, VPC Peering 또는 Hadoop 서비스 통신 검증으로 대신하지 않는다.

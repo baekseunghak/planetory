@@ -171,7 +171,7 @@ public class StarRepository {
                                c.period_days::float8 AS period_days,
                                c.depth_ppm::float8 AS depth_ppm
                           FROM latest l
-                          JOIN candidates c ON c.id = l.candidate_id
+                          JOIN candidates c ON c.id = l.candidate_id AND c.tic_id = :ticId
                      LEFT JOIN candidate_dispositions d ON d.candidate_id = c.id
                          WHERE COALESCE(d.disposition, 'none') <> 'fp'
                            AND (c.is_confirmed OR l.user_judgment = 'LIKELY_PLANET')

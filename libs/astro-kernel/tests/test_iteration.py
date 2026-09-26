@@ -241,3 +241,17 @@ def test_original_validation_does_not_replace_removal_failure(monkeypatch):
     assert result["termination"] == result["steps"][-1]["reason"] == "removal_qa_failed"
     assert result["qa_failed_step"] == 1
     assert result["accepted"][0]["validated_on_original"] is False
+
+
+def test_243_iteration_gate_version_and_fingerprint(monkeypatch):
+    from astro_kernel.bls import QUALITY_VERSION, RUNNING_MEDIAN_QUALITY_VERSION
+    stub_search(monkeypatch, [[dict(peak(), sde=7.)], [dict(peak(), sde=7.)]])
+    monkeypatch.setattr(it, "_qa", lambda *args: dict(qa_failures="forced_test_stop"))
+    old = run(quality_version=QUALITY_VERSION)
+    new = run(quality_version=RUNNING_MEDIAN_QUALITY_VERSION)
+    assert old["termination"] == "removal_qa_failed"
+    assert new["termination"] == "no_quality_peak"
+    assert new["candidate_quality_version"] == RUNNING_MEDIAN_QUALITY_VERSION
+    assert new["iteration_config"]["sde_min"] == 8
+    assert old["iteration_config_sha256"] != new["iteration_config_sha256"]
+    json.dumps(new, allow_nan=False)

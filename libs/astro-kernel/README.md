@@ -345,16 +345,18 @@ BLS 소비자는 `astro-kernel[bls]`로 Astropy를 설치한다. 기본 전처�
 
 | 함수 | 계약 |
 |---|---|
-| `search_bls(time, flux, *, input_snapshot_id, preprocessing_version, sector=None, baseline_time=None)` | 고정 탐색, 상위 피크·게이트·진단·입력 버전 반환 |
+| `search_bls(time, flux, *, input_snapshot_id, preprocessing_version, sector=None, baseline_time=None, quality_version=QUALITY_VERSION)` | 고정 탐색, 상위 피크·게이트·진단·입력 버전 반환 |
 | `bls_periodogram(time, flux, periods, *, durations_hours, config_version)` | 호출자가 제공한 주기·duration 격자로 계산, `Periodogram` 반환 |
 | `period_grid(min, max, n, *, spacing)` | 양수 증가 범위의 linear/log 격자 생성 |
 | `top_period_peaks(periods, power, *, count=5, separation_rel=0.02)` | power 순 2% 분리. 고조파 병합 없음 |
-| `quality_gate(snr, sde)` | 상태와 사유 목록 반환 |
+| `quality_gate(snr, sde, *, quality_version=QUALITY_VERSION, n_transits=None)` | 상태와 사유 목록 반환. v1은 관측 통과 수 `n_transits`가 필수 |
+| `running_median_sde(periods, power)` | 승인된 선형 20,000점 격자의 이동 중앙값 SDE 계산. 격자·미측정 규약은 243 절 참조 |
+| `validate_quality_version(version)` | 지원하지 않는 품질 버전을 거절 |
 
 탐색 버전은 `bls_grid_v1/poc_linear20k`다. 0.5일부터 min(유효 시각 baseline/3, 100일)까지
 선형 20,000점, duration 1.2·1.92·2.88·4.8시간, likelihood·oversample 10을 사용한다.
 오차는 정제 flux의 전역 `1.4826 × MAD`, SNR은 Astropy depth_snr,
-SDE는 전체 power의 `(power-mean)/std`(ddof=0)다. 243의 대안 SDE를 미리 반영하지 않는다.
+SDE는 전체 power의 `(power-mean)/std`(ddof=0)다. 기본 v0 호출은 이 정의를 유지한다. 243의 명시적 버전 선택은 아래 절을 따른다.
 `Periodogram`에는 전체 격자별 power·epoch·duration·깊이·오차·SNR·SDE, 원래 위치의 valid_input,
 실제 설정이 있다. 제공용 로그 5,000점은 명시적으로 생성할 수 있으며 제공용 범위·duration·버전은 호출자가 전달한다.
 
@@ -424,6 +426,7 @@ wrong 28, missed 91이다. 회귀 통과는 이 미회수 사례까지 참조와
 Spark 전체 배치·온라인 API 연결은 이 모듈의 책임이 아니다.
 
 ```python
+from astro_kernel.bls import QUALITY_VERSION
 from astro_kernel.iteration import iterate_bls
 
 # 119/245 전처리가 실패한 결과는 넘기지 않는다.
@@ -433,6 +436,7 @@ if detrended.status == "ok":
         sector=prepared.sector, baseline_time=prepared.time,
         input_snapshot_id=snapshot_id,
         preprocessing_version=detrended.version,
+        quality_version=QUALITY_VERSION,  # 기존 v0. 243 v1은 명시적으로 선택한다.
     )
 ```
 
@@ -686,3 +690,32 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 ## 124 외부 카탈로그 변경안
 
 `astro_kernel.external_catalog`는 검증된 원천 snapshot과 122 후보 ID를 연결하여 외부 참조·통합 판정·변경 이력 입력을 만든다. DB 쓰기와 Publisher 전환은 수행하지 않는다. [124 구현·검증 범위](../../docs/data/tess-external-catalog-implementation.md)를 참조한다. 합성 ID 테스트와 실제 할당 ID 검증을 구분하며, 실패한 원천을 빈 성공 조회로 바꾸지 않는다.
+
+## 125 Gold 직렬화
+
+`astro_kernel.gold_serialization.assemble`은 122·123·124 결과를 검증하고 Gold 배열·레코드 checksum·manifest를 구성하는 순수 함수다. `gold_canonical`에 공용 checksum 구현을 두며 파일·네트워크·DB에 접근하지 않는다. 호출자가 ID·내용 기반 snapshot·계산 버전·AI 미실행 결정 근거를 공급한다. `previous_bundle`을 통한 퇴역 후보·별칭 보존과 변경 이력 제안을 지원하며, ID 할당·적용 시각·Publisher 트랜잭션은 수행하지 않는다. `validated` 결과도 `publishable=false`이며 운영 게시 승인이 아니다. [입력·검증 범위와 실행 기록](../../experiments/gold-roundtrip/README.md)을 참조한다.
+
+
+## 243 운영 탐색 SDE 버전 선택
+
+2026-09-23: 김동혁 리뷰에서 표본 재사용·사후 문턱 선택·CM Dra 잡음 주입 19곡선 감소를 수용하고 추가 독립 평가를 선행하지 않은 운영 구현·회귀 진행에 동의했다. 사용자 요청으로 243·MR !191 범위에 운영 구현을 포함한다. [실제 FITS 탐색·반복 회귀와 저장 결과 검산](../../docs/data/tess-bls-benchmark.md#243-운영-커널-사용자-실행-검산-2026-09-23)을 완료했고, `7dbace66` 운영 코드에 대한 김동혁 리뷰 승인을 받았다. 운영 배포는 수행하지 않았다.
+
+`search_bls(..., quality_version=RUNNING_MEDIAN_QUALITY_VERSION)`와
+`iterate_bls(..., quality_version=RUNNING_MEDIAN_QUALITY_VERSION)`가 새 경로다.
+상수는 `astro_kernel.bls`에 있으며 값은 `sde-running-median1001-snr7-sde8-ntr2-v1`이다.
+기본값 `QUALITY_VERSION=gate_v1/snr7_sde6`과 기존 호출은 유지한다. 배치 호출자가 검증 후 명시적으로 선택하며 이 변경은 실행 중인 서비스의 설정·배포를 바꾸지 않는다.
+
+이 변경부터 v0 실행도 `iteration_config`에 `candidate_quality_version`을 포함하므로 `iteration_config_sha256` 값이 바뀐다. v0의 계산·판정 기준은 유지되지만 변경 전 실행의 지문과 직접 비교하지 않는다. 과거 결과를 대조할 때는 설정 필드 추가와 수치 결과를 구분한다.
+
+- `running_median_sde(periods, power)`: 0.5일 시작, 최대 100일, 정확한 `np.linspace` 20,000점만 허용한다. 다른 격자는 `invalid_grid`로 거절하며 재검토·새 버전이 필요하다.
+- 전체 power에서 1001격자점 이동 중앙값(`scipy.ndimage.median_filter`, `mode='reflect'`)을 빼고 유한 잔차 최소 2개에서 평균·모표준편차(ddof=0)로 표준화한다. 산포 0·비유한 산포는 NaN 미측정이며 0으로 채우지 않는다. 입력 power의 비유한 값은 계산 실패다.
+- 원 power 상위 5피크·2% 분리와 전역 MAD SNR을 유지한다. 새 게이트는 SNR≥7·SDE≥8·관측 통과≥2다. 미측정 피크는 failed이며 기존 fail-closed 정책에 따라 실행의 accepted_peaks도 비운다.
+- `peaks[].sde`는 선택한 게이트의 값이고 `candidate_quality_version`이 그 의미를 고정한다. `periodogram.sde`는 저수준 전역 SDE를 계속 제공한다. 전체 새 배열이 필요하면 위 함수를 사용한다.
+- 반복 탐색은 각 잔차에서 선택한 SDE를 재계산한다. 정밀 재적합 시 coarse SDE를 유지하는 기존 111 규약과 제거 QA·원본 SNR 재검증은 그대로다. 새 버전은 반복 설정·설정 지문·최상위 결과에 함께 기록된다.
+- `bls_periodogram`·제공용 로그 격자·discoverability RULE·사용자 제출 매칭은 바꾸지 않는다. 새 탐색 버전은 discoverability의 upstream revision에 전달하되 제공용 SDE 정의·문턱을 자동 변경하지 않는다.
+
+BLS 선택 의존성에 scipy를 포함한다(`uv sync --locked --extra bls`). 수치 참조와 실제 실행 절차는 [실험 README](../../experiments/tess-bench/README.md#243-운영-커널-회귀)를 따른다. 같은 표본의 회귀는 독립 평가가 아니다.
+
+## 130 AI 재평가·이력 보존
+
+`astro_kernel.ai_reevaluation`은 모델/입력 변경 재추론, 임계값 변경 원점수 재사용, 실패·재시도 이력과 이전 성공 보존을 제공한다. DB/모델 런타임/게시 동작은 없다. [호출 계약과 검증 범위](../../docs/data/tess-ai-reevaluation-history.md)를 따른다.

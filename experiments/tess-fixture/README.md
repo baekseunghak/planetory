@@ -115,3 +115,13 @@ uv run --locked python -m tess_fixture download --target holdout_268637577 holdo
 ```
 
 평가에는 저장된 참고값을 그대로 사용한다. `references`를 다시 조회하면 고정 입력이 달라져 holdout lock 검사가 실패한다. 평가의 설정·판정·재실행 정책은 [BLS 벤치마크](../../docs/data/tess-bls-benchmark.md)의 5.3절을 따른다.
+
+### 109 고정 표본 외부 조회
+
+기존 기본 9별 조회는 유지한다. 109의 표본 설정을 명시하면 TIC 목록과 설정 hash를 manifest에 기록하고 task=109로 별도 저장한다. 기존 116 audit은 이 manifest를 받지 않으며 표본 범위 감사를 별도로 해야 한다. 수집 성공은 시간 척도·라벨·운영 snapshot 승인 완료가 아니다.
+
+```powershell
+uv run --locked python -m tess_fixture.external_catalog --sample-config configs/service_sample_v1.json --source nea_toi nea_pscomppars --output results/external-catalog-109
+```
+
+TCE·ExoFOP 전 범위 export는 기존 저장 자료의 checksum을 확인해 재사용할 수 있으나 Archive·TOI 9별 조회 결과를 45개 표본의 라벨 부재 근거로 사용하지 않는다. 빈 export는 기존처럼 검토가 필요한 실패로 남긴다.

@@ -144,3 +144,36 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 | NTF-01 상태 변경 | FE/API RELABEL·6종 설정은 구현 | E7 DB 최종 값·매칭 경험자 연결 구현. 실제 외부 게시·AI 경로 인수는 별도 |
 
 174는 정책을 담당하고 175는 V23·알림함·설정·E1~E7 DB 사건 경계를 구현했다. 220·221/244 두 실제 계정·배포 인수는 별도이며, 탈퇴 원본 삭제·보존·익명화·재가입·마지막 발견자 정책은 DEC-11/179의 미정 상태를 유지한다.
+
+## S15P21C206-256 섹터별 비닝 revision 소비자 정합화 (2026-09-23)
+
+상태: 탐사 API·Backend 반영(MR !201 리뷰 중). [Gold 4.1 채택안](../../contracts/gold/README.md#41-s15p21c206-114-비닝-운영-채택안) 승인(MR !101)과는 별개다.
+
+[탐사 API](../../apps/backend/docs/exploration-api-spec.md) 5.1절은 한 판의 세그먼트 revision이 하나라고 정했고, `AnalysisService`는 revision이 여럿인 판을 적재 계약 위반으로 처리해 분석 진입이 500이 됐다. Gold 4.1 운영 revision과 `astro_kernel.segment_revision`은 TIC·섹터·원천 checksum의 해시라 여러 섹터 별이면 세그먼트마다 다르다. 옛 규칙은 fixture 값(`10m-v1`)에서 온 것이라 소비자 쪽을 고친다(강재민 결정).
+
+- 5.1절 판 요약에서 `binningRevision`을 빼고 5.2절 세그먼트에만 둔다. 판 전체의 비닝 규칙은 manifest `binning`이 정한다.
+- Frontend는 판 요약의 이 값을 읽지 않고 세그먼트 값만 쓴다. 개발 fixture의 판 요약 값만 뺐다.
+- [로컬 시드](../../experiments/distributed-pipeline/local-seed/README.md)는 합성 별의 revision을 `segment_revision`으로 섹터마다 만들어 통합 테스트가 이 경우를 지난다.
+- 남은 확인: Publisher(86·87·125)가 4.1 규칙으로 실제 여러 섹터 별을 적재했을 때 분석 진입.
+
+## S15P21C206-262 목업 화면 검증의 계약 불일치 (2026-09-25)
+
+상태: **결정·인계 대기.** 262는 코드·스키마·fixture를 바꾸지 않았다. 목업 Gold를 Publisher로 적재하고 실제 로그인으로 분석 화면을 따라가다 확인했다. 수정한 봉우리 표기·null 수신 2건은 [변경 이력](../changes/2026-09-W4/2026-09-25.md)에 있다.
+
+| 충돌·대기 | 현재 사실 | 다음 조치 |
+|---|---|---|
+| 제출 제약 ↔ 추천값 null 계약 | V4 `ck_submissions_source_peak_all_or_none`은 봉우리 제출에 `source_peak_suggested_duration_hours`·`duration_limit_hours` NOT NULL을 요구한다. 탐사 API 5.4는 추천 duration을 항상 null로 준다. 봉우리 제출이 모두 500이고 주기 직접 선택만 통과한다 | 강재민 인계. 제안: `source_peak_grid_index`는 필수, 제안 duration·상한은 "둘 다 NULL 또는 둘 다 양수". 신규 migration과 [ERD](../architecture/database-erd.md) 제출 표·API 6.2 문구를 함께 바꾼다 |
+| `manifest.period_grid` 키 이름 | DB 열은 모두 `period_min_days`·`period_max_days`·`n_periods`다. manifest 안의 키는 117 예제(`experiments/gold-roundtrip`)·로컬 시드(!201)·262 목업이 `period_min_days`·`period_max_days`·`n_periods`, [Gold 계약](../../contracts/gold/README.md) 예제와 [파생 계산 계약](../../contracts/derived-compute/README.md) 3.3절이 `min_days`·`max_days`·`count`다. Backend는 manifest에서 `spacing`만 읽는다 | Gold 계약 담당(113·117, 윤성용)이 키를 확정한다. 확정 뒤 세 산출물을 한 번에 맞춘다. 88 어댑터는 DB 열에서 범위·점 수를 읽는 대안도 있으나 그러면 3.3절 문구를 바꿔야 한다 |
+| `periodogram_config_version` 형식 | 이름이 셋이다. 계약 예제 JSON은 `bls-log-v1`, [데이터 정본](../data/tess-pipeline/README.md) 표는 "형식 미정 → 제안 `pg-log5000-v1`"이고 117 예제·시드·목업이 이 값을 쓴다. 123 제공 해상도 규칙(`astro_kernel/discoverability.py` `NUMERICAL_VERSION`)과 125 Gold 직렬화 DB 재생(`experiments/gold-roundtrip/gold_roundtrip/connection_replay.py`)은 `provided-bls-1.0.0`이다. `pg-log5000-v1`과 `provided-bls-1.0.0`은 계산 설정이 같다(0.5일·5000칸·log, duration 1.2·1.92·2.88·4.8시간, likelihood) | 위 키와 함께 확정한다. 확정 전까지 어느 쪽도 확정값으로 적지 않는다. 88 Worker가 버전으로 계산 설정을 고르므로 **실제 파이프라인 판(`provided-bls-1.0.0`)을 거절하지 않게** 두 이름을 같은 설정으로 받는다(88). `bls-log-v1`은 받지 않는다. 계약 예제의 축소 값(`count` 4·3)이라 실제 설정이 아니며, 세 산출물을 정렬할 때 이름을 바꿀 대상이다. 운영 Publisher(86·87)가 적재할 이름도 이 결정을 따른다 |
+
+## S15P21C206-262·266·267 Archive 참조와 NASA 설명 원천 구분 (2026-09-25)
+
+상태: **문서 구분 반영, 실제 Gold 식별 연결 검증 대기.** [266 계약](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)에 TESS 기반 Gold 곡선·후보, Gold에 붙은 Archive `pscomppars` 외부 참조, 266의 별도 NASA `ps` 기본 해 조회를 분리했다. 262 목업의 `nasa_exoplanet_archive` 행성명은 다른 더미 TIC로 복사되므로 266의 검증된 `archive` 공급 계약에 자동 포함하지 않는다. 실제 Gold 공급 경로에서 TIC·후보·정확한 행성명 연결을 검증하고 source 표기를 확정한 뒤 266 수용 범위와 268 화면 출처 안내를 함께 재검토한다.
+
+## S15P21C206-269 봉우리 제출 제약 정합화 (2026-09-25)
+
+상태: 구현 완료, MR 병합 전. 위 262 절의 「제출 제약 ↔ 추천값 null 계약」 행을 강재민이 받아 처리한다.
+
+- V27이 `ck_submissions_source_peak_all_or_none`을 262의 제안대로 바꾼다. 봉우리 번호는 필수, 제안 duration·상한은 둘 다 NULL이거나 둘 다 양수다. 주기 직접 선택은 지금처럼 셋 다 NULL이다.
+- [ERD](../architecture/database-erd.md) 제출 표와 [탐사 API](../../apps/backend/docs/exploration-api-spec.md) 6.2·6.4절을 함께 고쳤다. Frontend `submission-result.ts`는 이미 두 값을 null로 받는다.
+- 병합 순서: V26(S15P21C206-267, !217)이 먼저 병합돼 V27이 그 뒤를 잇는다.

@@ -29,10 +29,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @Testcontainers
 class AuthRuntimeVerificationTest {
     // Docker의 자동 할당 포트는 stop/start 시 바뀐다. 이번 시험에서 선택한 빈 포트를 명시해 유지한다.
+    // 묶는 주소는 다른 컨테이너의 자동 할당과 같게 둔다(모든 인터페이스). 127.0.0.1로 묶으면 CI의 dind처럼
+    // Docker 호스트가 테스트 JVM과 다른 곳에서는 JVM이 닿지 못한다. 접속 주소는 DB.getHost()가 정한다.
     @Container static final PostgreSQLContainer<?> DB = new PostgreSQLContainer<>("postgres:18.6-alpine")
             .withCreateContainerCmdModifier(command -> command.getHostConfig().withPortBindings(
                     new com.github.dockerjava.api.model.PortBinding(
-                            com.github.dockerjava.api.model.Ports.Binding.bindIpAndPort("127.0.0.1", availablePort()),
+                            com.github.dockerjava.api.model.Ports.Binding.bindPort(availablePort()),
                             new com.github.dockerjava.api.model.ExposedPort(5432))));
     @Container static final GenericContainer<?> SESSION = new GenericContainer<>("redis:8.2-alpine").withExposedPorts(6379);
     @Container static final GenericContainer<?> CACHE = new GenericContainer<>("redis:8.2-alpine").withExposedPorts(6379);
@@ -197,10 +199,14 @@ class AuthRuntimeVerificationTest {
     void startTlsProxy(int backendPort) throws Exception {
         Path store = temporary.resolve("tls.p12");
         String password = UUID.randomUUID().toString();
+        // 프록시에 붙는 주소는 Docker 호스트다. 로컬은 localhost, CI(dind)는 docker라 인증서가 둘 다 받아야 한다.
+        String host = DB.getHost();
+        String san = "dns:localhost" + ("localhost".equals(host) ? ""
+                : "," + (host.matches("[0-9.]+") ? "ip:" : "dns:") + host);
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
                 "-genkeypair", "-alias", "tls", "-keyalg", "RSA", "-storetype", "PKCS12",
                 "-keystore", store.toString(), "-storepass", password, "-dname", "CN=localhost",
-                "-ext", "SAN=dns:localhost", "-validity", "2").redirectErrorStream(true)
+                "-ext", "SAN=" + san, "-validity", "2").redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
         assertEquals(0, process.waitFor());
         var keyStore = KeyStore.getInstance("PKCS12");
@@ -224,7 +230,7 @@ class AuthRuntimeVerificationTest {
                         + "test -n \"$address\"; sed -i \"s/host.testcontainers.internal/$address/g\" /etc/nginx/conf.d/default.conf; "
                         + "exec nginx -g 'daemon off;'");
         proxy.start();
-        origin = "https://localhost:" + proxy.getMappedPort(8080);
+        origin = "https://" + proxy.getHost() + ":" + proxy.getMappedPort(8080);
     }
     String pem(String type, byte[] bytes) {
         return "-----BEGIN " + type + "-----\n" + Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(bytes)
