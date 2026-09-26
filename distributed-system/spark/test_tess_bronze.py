@@ -480,6 +480,18 @@ class BronzeTransformTest(unittest.TestCase):
                 self.assertEqual(reused, 0)
             self.assertEqual(waits, [])
 
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "O_NOFOLLOW is POSIX-only")
+    def test_yarn_slot_refuses_a_symlinked_lock_file_when_opening_it(self):
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, LOCK_NB=4, flock=lambda handle, mode: None)
+        with tempfile.TemporaryDirectory() as root, patch.dict(sys.modules, {"fcntl": fake}):
+            prefix = Path(root) / "planetory-tess-yarn"
+            target = Path(root) / "elsewhere"
+            (Path(root) / "planetory-tess-yarn-1.lock").symlink_to(target)
+            with self.assertRaisesRegex(RuntimeError, "must not be a symlink"):
+                with yarn_slot(prefix, slots=2):
+                    pass
+            self.assertFalse(target.exists())  # the link was refused, not followed
+
     def test_preflight_allows_overlapping_pipeline_apps_but_refuses_foreign_ones(self):
         tab = chr(9)
         header = tab.join(["                Application-Id", "Application-Name", "Application-Type", "User"])

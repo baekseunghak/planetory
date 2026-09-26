@@ -243,6 +243,7 @@
 | 2026-09-26 | develop 통합과 78 인계 문서 종료 | S15P21C206-78 | s15p21c206-78-handoff, quality_version, iteration_config_sha256, 80 이관 | 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | 실패 TIC 부분 재처리 실클러스터 검증과 후속 티켓 분리 | S15P21C206-78 | Step Retry, _0066, attempt=20260926T091732Z, 104, S15P21C206-275 | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | 원본 SNR 재검증 예외를 QA 중단에서 분리 | S15P21C206-78 | fixed_snr, original_validation, numerical_failure, error_type, qa_stopped | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-26.md) |
+| 2026-09-26 | YARN 슬롯 잠금 파일의 심볼릭 링크 검사 틈 제거 | S15P21C206-78 | yarn_slot, O_NOFOLLOW, ELOOP, TOCTOU | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-26.md) |
 | 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | EC2-A 반영·완료 조건 확인, CI 배포 병합 후 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: Redis 예산·캐시 의존성·축출 정책 | S15P21C206-254 | maxmemory 64mb, noeviction, volatile-lru, depends_on, mem_limit | 구현·EC2-A 재반영 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: 프론트 배포 헬스를 렌더러 표식으로 | S15P21C206-254 | /health/renderer-enabled, try_files =404, web:image, 과도기 롤백 | 구현·격리 이미지 검증 완료 | [기록](2026-09-23.md) |

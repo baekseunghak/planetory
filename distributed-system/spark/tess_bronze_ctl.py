@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -61,6 +62,14 @@ def yarn_slot_count(value: str | None = None) -> int:
     return slots
 
 
+def _open_no_follow(path: str, flags: int) -> int:
+    """Refuse a planted symlink in the same call that opens it, leaving no check-then-open gap.
+
+    O_NOFOLLOW is POSIX; Node 1 always has it, and only the Windows contract tests fall back to 0.
+    """
+    return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o666)
+
+
 @contextmanager
 def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
     """Bound concurrent Planetory Bronze/Silver YARN work on Node 1 across schedulers.
@@ -74,11 +83,15 @@ def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
 
     count = yarn_slot_count() if slots is None else slots
     paths = [prefix.with_name(f"{prefix.name}-{index}.lock") for index in range(count)]
-    for path in paths:
-        if path.is_symlink():
-            raise RuntimeError("YARN lock path must not be a symlink")
-    handles = [path.open("a+") for path in paths]
+    handles = []
     try:
+        for path in paths:
+            try:
+                handles.append(open(path, "a+", opener=_open_no_follow))
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise RuntimeError("YARN lock path must not be a symlink") from None
+                raise
         held = None
         while held is None:
             for index, handle in enumerate(handles):
