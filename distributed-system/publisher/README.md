@@ -110,7 +110,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 2. payload 폴더를 EC2-A로 옮기고 `load-payload`로 싣는다. 명령은 [EC2 서비스 배포](../../infra/service/README.md) 「튜토리얼 5종」.
 3. `tutorial-switch-sql`을 소유자 psql로 먼저 모의 실행해 개수를 보고, 확인 뒤 `-v apply=1`로 적용한다.
 
-`tutorial_switch.sql`은 5개 별이 튜토리얼로 쓸 수 있는지(공개, current 판·주기도, 활성 후보, 후보마다 처분) 먼저 검사한다. 이어서 옛 1번 별 위의 회원 기록(제출·분석 기록·성과와 그 성과로 열린 별)을 지우고, 회원을 새 1번으로 옮긴다. 배치 좌표는 발견 순번으로만 정해져서 `star_unlocks`의 tic만 바꾼다. 옛 1번의 목업 판을 지우고 별을 숨긴 뒤 `tutorial_stars` 1~5를 채운다. 다시 돌리면 대상 0건으로 끝난다.
+`tutorial_switch.sql`은 5개 별이 튜토리얼로 쓸 수 있는지(공개, current 판·주기도, 활성 후보, 후보마다 처분) 먼저 검사한다. 이어서 옛 1번 별 위의 회원 기록(그 성과·옛 1번을 가리키는 알림, 제출·분석 기록·성과와 그 성과로 열린 별)을 지우고, 회원을 새 1번으로 옮긴다. 배치 좌표는 발견 순번으로만 정해져서 `star_unlocks`의 tic만 바꾼다. 옛 1번의 목업 판을 지우고 별을 숨긴 뒤 `tutorial_stars` 1~5를 채운다. 다시 돌리면 대상 0건으로 끝난다.
 
 ### 되돌리기
 

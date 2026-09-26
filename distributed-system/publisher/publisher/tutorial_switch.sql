@@ -6,7 +6,7 @@
 --   -v apply=1 을 주면 COMMIT, 없으면 ROLLBACK
 --
 --   1. 5개 별이 튜토리얼로 쓸 수 있는지 본다(공개, current 판·주기도, 활성 후보, 후보마다 처분).
---   2. 옛 1번 별 위의 회원 기록을 지운다: 제출·분석 기록·스냅샷·성과와 그 성과로 열린 별. 옛 1번은 목업 곡선을
+--   2. 옛 1번 별 위의 회원 기록을 지운다: 알림(성과·옛 1번을 가리키는 것), 제출·분석 기록·스냅샷·성과와 그 성과로 열린 별. 옛 1번은 목업 곡선을
 --      올린 임시 seed라 과학적으로 틀린 기록이다(2026-09-26 사용자 승인). 성과로 열린 별에 다른 기록이 이어져
 --      있으면 외래 키가 막아 전체가 rollback된다.
 --   3. 옛 1번을 받은 회원을 새 1번으로 옮긴다. 배치 좌표는 발견 순번으로만 정해지므로(PersonalSpiralGalaxyLayout)
@@ -94,9 +94,22 @@ SELECT (SELECT tic_id FROM old_first) AS old_first_tic,
        (SELECT count(*) FROM old_achievements) AS achievements,
        (SELECT count(*) FROM achievement_unlocks) AS achievement_unlocks,
        (SELECT count(*) FROM old_mock_bundles) AS mock_bundles,
-       (SELECT count(*) FROM old_mock_candidates) AS mock_candidates;
+       (SELECT count(*) FROM old_mock_candidates) AS mock_candidates,
+       (SELECT count(*) FROM notification_outbox
+         WHERE event_key IN (SELECT 'achievement:' || id FROM old_achievements)
+            OR payload->>'ticId' IN (SELECT tic_id::text FROM old_first)) AS outbox,
+       (SELECT count(*) FROM notifications
+         WHERE event_key IN (SELECT 'achievement:' || id FROM old_achievements)
+            OR payload->>'ticId' IN (SELECT tic_id::text FROM old_first)) AS notifications;
 
--- 2. 회원 기록. 순서는 탈퇴 정리(V24 cleanup_withdrawn_member)와 같다.
+-- 2. 회원 기록. 순서는 탈퇴 정리(V24 cleanup_withdrawn_member)와 같다. 알림을 먼저 지운다. 성과·재개 알림의
+-- payload ticId가 옛 1번을 가리켜, 남기면 전환 뒤 눌렀을 때 STAR_LOCKED가 난다(!226 강재민 리뷰).
+DELETE FROM notification_outbox
+ WHERE event_key IN (SELECT 'achievement:' || id FROM old_achievements)
+    OR payload->>'ticId' IN (SELECT tic_id::text FROM old_first);
+DELETE FROM notifications
+ WHERE event_key IN (SELECT 'achievement:' || id FROM old_achievements)
+    OR payload->>'ticId' IN (SELECT tic_id::text FROM old_first);
 DELETE FROM post_history_attachments WHERE history_id IN (SELECT id FROM old_histories);
 DELETE FROM comment_history_attachments WHERE history_id IN (SELECT id FROM old_histories);
 DELETE FROM star_unlocks su USING achievement_unlocks a WHERE su.user_id = a.user_id AND su.tic_id = a.tic_id;
