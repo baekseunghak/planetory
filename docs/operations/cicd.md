@@ -63,6 +63,8 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 
 대책 후보(미결정): 서비스별 environment 분리, 서버에 올라간 것보다 옛 커밋의 compose를 올리지 않게 막기, 되돌리기는 이미지만 바꾸고 compose는 유지하기.
 
+**첫 후보는 261 결정과 배치된다.** 단일 environment는 바로 compose 공유 때문에 261에서 고른 것이다(`.gitlab/ci/common.yml` `.deploy-ec2-a` 주석). 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 통과하는 길이 다시 열린다. compose 덮어쓰기는 Retry만이 아니라 옛 커밋을 어떤 경로로든 배포하면 생기는 일이므로(`scp "$DEPLOY_COMPOSE_SOURCE"`), 원인을 건드리는 것은 둘째·셋째 후보다. 최신 버튼이 막힌 부작용은 261이 얻은 보호의 대가로 같은 선택의 양면이다.
+
 이 규칙 이전(2026-09-23 전) 파이프라인의 job은 environment가 없어 배포로 세지 않는다. 그 job을 Retry하면 보호 없이 옛 compose가 올라간다.
 
 Retry까지 막으려면 `ci_forward_deployment_rollback_allowed`를 끈다. 그러면 GitLab 버튼으로 하는 되돌리기도 막히고 **의도한 되돌리기는 서버 수동 절차만 남는다.** `deploy.sh`의 자동 롤백은 새 이미지 교체가 실패했을 때만(`replace "$IMAGE" || rollback`) 불리므로 "잘 떴지만 되돌리고 싶다"에는 쓸 수 없다. Play는 이미 outdated 보호로 막혀 있다.
