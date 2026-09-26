@@ -6,7 +6,7 @@
 >
 > 범위: 팀원 tailnet 등록과 프로젝트 서버 접근
 
-이 문서는 팀원이 Tailscale을 통해 프로젝트 서버에 접속하는 절차와 허용 범위를 설명한다. 실제 멤버·장비·ACL 상태의 정본은 Tailscale Admin Console이며, 이 문서의 접근 범위는 2026-09-16에 사용자가 제공한 ACL을 기준으로 한다. GCP 노드의 사설망·DNS·방화벽 점검은 [GCP 노드 운영 런북](gcp-node-runbook.md)을 따른다.
+이 문서는 팀원이 Tailscale을 통해 프로젝트 서버에 접속하는 절차와 허용 범위를 설명한다. 실제 멤버·장비·ACL 상태의 정본은 Tailscale Admin Console이며, 이 문서의 접근 범위는 2026-09-16에 사용자가 제공한 ACL과 2026-09-27 `S15P21C206-85` 변경을 기준으로 한다. GCP 노드의 사설망·DNS·방화벽 점검은 [GCP 노드 운영 런북](gcp-node-runbook.md)을 따른다.
 
 ## 1. 팀원과 장비 등록
 
@@ -28,11 +28,13 @@ tailscale ping node-1
 
 현재 `autogroup:member`는 `tag:hadoop` 서버의 모든 포트에 네트워크로 접근할 수 있다. 실제 작업에서는 승인받은 SSH와 프로젝트 서비스만 사용한다. Tailscale SSH는 연결 시 재인증을 요구하며, 대상 서버에 실제로 존재하고 ACL에서 허용한 로컬 계정만 사용할 수 있다.
 
+**예외: `ec2-a`는 `tag:service`이고 팀원에게는 22만 열린다(2026-09-27, `S15P21C206-85`).** `ec2-a`는 서비스 DB와 Backend를 `tailscale serve --tcp 5432·8080`으로 tailnet에 넘긴다. 이 두 포트는 `tag:publisher`(node-1)만 닿는다. 팀원 장비와 다른 서버에서는 시간 초과가 난다. 규칙과 검증은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」를 따른다.
+
 | 서버 | 역할·태그 | 팀원 접근 | 접속 방법 |
 | --- | --- | --- | --- |
-| `ec2-a` | 프로젝트 서비스 단일 노드, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-a` |
+| `ec2-a` | 프로젝트 서비스 단일 노드, `tag:service` | SSH(22)만·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-a` |
 | `ec2-b` | CI 빌드 Runner·이미지 레지스트리·외부 관찰, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-b` |
-| `node-1` | GCP master, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh SSAFY@node-1` |
+| `node-1` | GCP master, `tag:hadoop`·`tag:publisher` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh SSAFY@node-1` |
 | `node-2` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-2` |
 | `node-3` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-3` |
 | `node-4` | GCP worker, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh planetory-admin@node-4` |

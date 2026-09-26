@@ -378,6 +378,8 @@
 | 2026-09-27 | 외부 카탈로그 시간 척도 근거 확정(TOI·ExoFOP BJD-TDB, TCE tce_time0bt) | S15P21C206-79 | external-time-evidence-v1, TIME_EVIDENCE, tce_time0bt, BTJD-TDB, pl_tranmid_systemref, unresolved_external_rows | 구현 완료, 저장 자료 재실측 완료 | [기록](2026-09-27.md) |
 | 2026-09-27 | 실데이터 재실측·자체 리뷰 반영(candidate_quality 별 단위, 잘못된 입력 거절, OPS-08 서술 정정) | S15P21C206-79 | aggregation_replay, candidate_quality_revision, per_star_version_in_run, malformed_input, WASP-62 b, observed_times_sha256 | 검증 완료(fixture·저장 자료) | [기록](2026-09-27.md) |
 | 2026-09-27 | 외부 시간 규칙 v2: PSCompPars 표기 없는 BJD 7행 논문 근거·BJD-UTC 변환 | S15P21C206-79 | external-time-evidence-v2, ROW_TIME_EVIDENCE, pl_tranmid_reflink, BJD_UTC, 69.184, TOI-270, pi Men c, L 98-59 | 구현·저장 자료 재실측 완료 | [기록](2026-09-27.md) |
+| 2026-09-27 | Publisher Node 1 → EC2-A DB 적재·알림 경로를 tailscale serve로 결정 | S15P21C206-85 | tailscale serve, 5432, 8080, ACL, planetory_publisher | 채택·운영 적용 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | Publisher 적재 경로 운영 적용, ec2-a를 tag:service로 분리, 끊김·거절 검증 | S15P21C206-85 | tag:service, tag:publisher, INTERNAL_SERVICE_TOKEN, 900000099, ALREADY_PUBLISHED | 검증 완료·MR 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 튜토리얼 전환 뒤 남은 옛 1번 성과 알림 정리와 전환 SQL 보완 | S15P21C206-272 | notification_outbox, achievement:1, STAR_LOCKED, 261136679, tutorial_switch.sql, !226 리뷰 | 운영 정리 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 전환 SQL이 보상 별의 회원 기록을 남기는 문제, 멈춤 검사와 회귀 테스트 | S15P21C206-272 | tutorial_switch.sql, achievement_unlocks, TutorialSwitchTest, 외래 키, !226 백승학 P2 | 로컬 검증 완료, 운영 영향 없음, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
