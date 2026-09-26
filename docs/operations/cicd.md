@@ -140,7 +140,7 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 | 단계 | 책임 | 지금 | 나중(후보) |
 | --- | --- | --- | --- |
-| ① MR | 정적·계약·단위 테스트 | validate 단계 job | 컴포넌트 단위 테스트 연결(`S15P21C206-91`) |
+| ① MR | 정적·계약·단위 테스트 | validate 단계 job. 컴포넌트 단위 테스트 포함(아래 「data-platform 테스트」) | 없음 |
 | ② develop 병합 | 배포할 release 산출물 | 없음. 운영자가 로컬 작업 트리에서 release를 묶는다 | CI가 커밋 SHA로 release를 묶고 해시를 기록 |
 | ③ 스테이징 | 실제 클러스터에서 작은 입력으로 시험 | Bronze `preflight`·`canary`처럼 스크립트의 검증 단계를 수동 실행 | CI smoke job |
 | ④ 운영 | release 설치와 전환 | 운영자 스크립트 수동 실행 | CI 수동 버튼, 이후 자동 |
