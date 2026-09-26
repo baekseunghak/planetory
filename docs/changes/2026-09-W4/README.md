@@ -322,3 +322,4 @@
 | 2026-09-26 | EC2-B 레지스트리 정리 cron 첫 실제 실행 확인 | S15P21C206-262 | registry-prune-daily, in-use, 삭제 23, 유지 68, gc | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | data-platform 테스트를 CI validate 단계에 연결 | S15P21C206-91 | validate:data-platform, validate:astro-kernel, uv.lock, build:spark astropy | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | GCP Docker 배포 job·사용처 없는 GCP 이미지 빌드 제거, release 방식 유지 | S15P21C206-94 | deploy:ingestion, deploy:spark, build:spark, release, compose.worker.yaml, 262 방식 폐기 | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
+| 2026-09-26 | 튜토리얼 5종 실제 Gold 입력과 운영 전환 절차 | S15P21C206-272 | tutorial.json, tutorial-build, load-payload, tutorial_switch.sql, tutorial-label-v1, L 98-59 b·d, 회원 이전 | 운영 적용 완료, 병합 전 | [기록](2026-09-26.md) |
