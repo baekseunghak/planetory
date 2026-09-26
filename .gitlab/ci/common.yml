@@ -103,7 +103,7 @@ validate:astro-kernel:
     - (cd libs/astro-kernel && uv run --locked pytest -q -p no:cacheprovider)
     - (cd distributed-system/spark && uv run --locked python -m unittest test_tess_bronze)
     - (cd distributed-system/spark && uv run --locked pytest -q -p no:cacheprovider test_tess_kernel_check.py)
-    - (cd distributed-system/publisher && uv run --locked python -m unittest test_mock_source)
+    - (cd distributed-system/publisher && uv run --locked python -m unittest test_mock_source test_tutorial_source)
   rules:
     - changes:
         - libs/astro-kernel/**/*

@@ -5,7 +5,7 @@
 - 호스트 서비스: Hadoop, YARN
 - 불변 release 디렉터리(운영자 스크립트로 설치, 호스트 Python·systemd로 실행): 수집기, HDFS 적재, Spark Bronze
 - Docker: Airflow(Node 1이 release에서 직접 빌드한 로컬 이미지), Spark 제출(digest를 고정한 공개 `apache/spark` 이미지)
-- Publisher: Node 1 Compose에 `jobs` profile로 정의돼 있으나, 지금 확인된 실행은 EC2-A Gold 목업뿐이다
+- Publisher: Node 1 Compose에 `jobs` profile로 정의돼 있으나, 지금 확인된 실행은 EC2-A Gold 목업뿐이다. Node 1 → EC2-A 서비스 DB 경로와 `docker run` 실행은 [EC2 서비스 배포](../service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)
 
 CI는 GCP 노드에 배포하지 않는다(`S15P21C206-94`, [CI/CD](../../docs/operations/cicd.md) 「GCP 분산 시스템」).
 

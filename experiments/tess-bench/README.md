@@ -684,7 +684,7 @@ uv run --locked python -m tess_bench.segmentation_regression --targets toi270 to
 uv run --locked python -m tess_bench.aggregation_replay --review-116 <경로>/review-116-6348c862.zip --review-124 <경로>/review-124-696cda44.zip --segmentation results/segmentation-regression/run-<id>
 ```
 
-2026-09-27 결과(`run-20260926T193436Z-7581421a`)와 그 해석은 [116 계약 재실측](../../docs/data/tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다. 네 run 모두 `complete`이고 스키마 검증을 통과했다. 이 PC의 editable 설치가 경로를 못 찾으면 `PYTHONPATH="../../libs/astro-kernel;../tess-fixture;."`를 준다.
+2026-09-27 결과(v1 `run-20260926T193436Z-7581421a`, v2 `run-20260926T195124Z-68cce2c5`)와 그 해석은 [116 계약 재실측](../../docs/data/tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다. 네 run 모두 `complete`이고 스키마 검증을 통과했다. 이 PC의 editable 설치가 경로를 못 찾으면 `PYTHONPATH="../../libs/astro-kernel;../tess-fixture;."`를 준다.
 
 
 ## 243 운영 커널 회귀

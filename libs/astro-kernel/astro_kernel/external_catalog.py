@@ -27,8 +27,9 @@ ROW_FIELDS = {"tic_id", "external_id", "period_days", "epoch_btjd",
 # documents fix the scale. The TOI epoch is BTJD (BJD - 2457000) per the TOI
 # release notes and catalog paper, TESS BTJD is TDB per the SPOC data products
 # description, and TCE statistics come from DV XML epochs in BTJD. PSCompPars
-# still needs an explicit per-row BJD-TDB; its bare "BJD" rows stay held.
-TIME_RULE_VERSION = "external-time-evidence-v1"
+# needs an explicit per-row scale, or a paper-checked row in ROW_TIME_EVIDENCE.
+# v2 (same day) adds that table and the BJD-UTC -> TDB conversion.
+TIME_RULE_VERSION = "external-time-evidence-v2"
 _TESS_TDB = ("https://archive.stsci.edu/files/live/sites/mast/files/home/missions-and-data/"
              "active-missions/tess/_documents/EXP-TESS-ARC-ICD-TM-0014-Rev-F.pdf")
 _TOI = ("https://tess.mit.edu/toi-releases/toi-release-notes/ https://arxiv.org/abs/2103.12538 "
@@ -39,8 +40,27 @@ TIME_EVIDENCE = {
     "exofop_toi": f"{TIME_RULE_VERSION}: TOI epoch BTJD-TDB {_TOI}",
     "mast_tce_s1_s13": f"{TIME_RULE_VERSION}: tce_time0bt from DV XML transitEpochBtjd, BTJD-TDB "
                        f"(https://archive.stsci.edu/tess/bulk_downloads/bulk_downloads_tce.html) {_TESS_TDB}",
-    "nea_pscomppars": f"{TIME_RULE_VERSION}: explicit per-row pl_tranmid_systemref BJD-TDB only",
+    "nea_pscomppars": f"{TIME_RULE_VERSION}: explicit per-row pl_tranmid_systemref BJD-TDB/BTJD-TDB/BJD-UTC, "
+                      "or a bare BJD row listed in ROW_TIME_EVIDENCE",
 }
+# Bare-"BJD" PSCompPars rows checked against the paper that pl_tranmid_reflink
+# names. Bound to the exact epoch: a changed Archive row falls back to hold.
+_KAYE = "Kaye et al. 2022 MNRAS 510 5464, arXiv:2308.10763 Table 3 note: T0 in BJD_TDB - 2457000"
+_CADIEUX = ("Cadieux et al. 2025 AJ 170 154, arXiv:2507.09343 Table 5: t0 in TBJD (BJD - 2457000), "
+            "the TESS TDB system")
+ROW_TIME_EVIDENCE = {
+    "TOI-270 b": (2458461.01464, "BJD-TDB", _KAYE),
+    "TOI-270 c": (2458463.08056, "BJD-TDB", _KAYE),
+    "TOI-270 d": (2458469.33823, "BJD-TDB", _KAYE),
+    "pi Men c": (2458425.789204, "BJD-UTC",
+                 "Kunovac Hodzic et al. 2021 MNRAS 502 2893, arXiv:2007.11564 Table 4: T0 in BJD_UTC - 2450000"),
+    "L 98-59 b": (2458366.17056, "BJD-TDB", _CADIEUX),
+    "L 98-59 c": (2458367.27303, "BJD-TDB", _CADIEUX),
+    "L 98-59 d": (2458362.74002, "BJD-TDB", _CADIEUX),
+}
+# Barycentric TDB - UTC equals TT - UTC to within ~2 ms (Eastman et al. 2010).
+# 32.184 s + 37 leap seconds since 2017-01-01; earlier UTC epochs stay held.
+UTC_TO_TDB_DAYS, UTC_TABLE_START_BJD = 69.184 / 86400.0, 2457754.5
 
 
 def normalize_export_row(source, raw):
@@ -75,9 +95,19 @@ def normalize_export_row(source, raw):
             return result
         if source == "nea_pscomppars" and raw.get("tran_flag") != "1":
             raise ValueError("unverified_transit_flag")
-        if system not in ("BJD-TDB", "BTJD-TDB"):
+        if source == "nea_pscomppars" and system == "BJD" and raw.get(key) in ROW_TIME_EVIDENCE:
+            value, scale, reference = ROW_TIME_EVIDENCE[raw[key]]
+            if float(raw[epoch]) == value:
+                system = scale
+                result["time_evidence"] = reference
+        if system not in ("BJD-TDB", "BTJD-TDB", "BJD-UTC"):
             raise ValueError("unverified_time_standard")
-        e = float(raw[epoch]) - (2457000.0 if system == "BJD-TDB" else 0.0)
+        e = float(raw[epoch])
+        if system == "BJD-UTC":
+            if e < UTC_TABLE_START_BJD:
+                raise ValueError("unverified_time_standard")
+            e, system = e + UTC_TO_TDB_DAYS, "BJD-TDB"
+        e -= 2457000.0 if system == "BJD-TDB" else 0.0
         row = dict(tic_id=t, external_id=raw[key], period_days=float(raw[period]),
                    epoch_btjd=e, duration_hours=float(raw[duration]), time_system="BTJD-TDB",
                    raw_disposition=raw.get(label) if label else None,

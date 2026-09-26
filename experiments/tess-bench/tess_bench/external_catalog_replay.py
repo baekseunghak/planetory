@@ -25,7 +25,8 @@ BENCH = ROOT / "experiments/tess-bench"
 
 def convert(source, row):
     tic, identifier = FIELDS[source][:2]
-    # Scales follow astro_kernel.external_catalog.TIME_RULE_VERSION (external-time-evidence-v1).
+    # Scales follow external-time-evidence-v1. The v2 PSCompPars row evidence and BJD-UTC conversion
+    # live only in astro_kernel.external_catalog.normalize_export_row, the operational path.
     keys = {
         "nea_toi": ("pl_orbper", "pl_tranmid", "pl_trandurh", "BJD-TDB"),
         "nea_pscomppars": ("pl_orbper", "pl_tranmid", "pl_trandur", row.get("pl_tranmid_systemref")),

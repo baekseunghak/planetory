@@ -1,0 +1,93 @@
+{
+  "version": "tutorial-gold-v1",
+  "jira": "S15P21C206-272",
+  "selection": "S15P21C206-109 MR !104, docs/data/tess-service-scope-v1.md 9.9~9.13절",
+  "label_rule": {
+    "version": "tutorial-label-v1",
+    "summary": "109가 검증한 근거 원천의 BTJD-TDB 모델을 튜토리얼 전용 외부 행으로 싣고 124 직접 대응 규칙으로 후보와 잇는다. 확정 행성은 CP, 행성 아님 신호는 FP로 적는다. 모든 활성 후보가 직접 대응해야 하며 하나라도 빠지면 게시하지 않는다."
+  },
+  "approvals": {
+    "identity": "S15P21C206-112 MR !152 (8aaf335d)",
+    "discoverability": "S15P21C206-123 MR !173 (e7b578fd)",
+    "external_contract": "S15P21C206-124 MR !190 (67a9e741)"
+  },
+  "ai_policy": {
+    "status": "policy_not_executed",
+    "decision_reference": "S15P21C206-272: 264 운영 AI 채택 전이라 튜토리얼 판에 AI 평가를 싣지 않는다",
+    "model_version": "not-executed",
+    "threshold_version": "not-executed"
+  },
+  "stars": [
+    {
+      "seq": 1, "intent": "deep_confirmed", "tic_id": 149603524, "name": "WASP-62",
+      "product": {"filename": "tess2018234235059-s0002-0000000149603524-0121-s_lc.fits", "sector": 2,
+                  "sha256": "2d410c660e06305830c2ac114de06b187de3578c5c71f7ce483112b36fc927c8", "procver": "spoc-5.0.11-20200915",
+                  "note": "DEC-01 튜토리얼 전용 S2 입력. checksum은 experiments/tess-fixture/checksums.json과 같다"},
+      "external": {"source": "archive", "file": "wasp62b-pscomppars.csv",
+                   "sha256": "253bf54f2e6249bbcfc46045e608cdb7bf96dd94191e404177baa9e02937867e",
+                   "retrieved_at": "2026-09-26T13:09:42Z",
+                   "uri": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select pl_name,tic_id,pl_orbper,pl_tranmid,pl_trandur,pl_tranmid_systemref,tran_flag from pscomppars where pl_name = 'WASP-62 b'&format=csv",
+                   "table": "NASA Exoplanet Archive pscomppars", "time_evidence": "pl_tranmid_systemref=BJD-TDB, BTJD = BJD - 2457000",
+                   "rows": [{"read": "pscomppars", "pl_name": "WASP-62 b", "label": "CP",
+                             "evidence": "Archive 확정 행성 표 등재. 9.9절 pairwise direct"}]}
+    },
+    {
+      "seq": 2, "intent": "shallow_confirmed", "tic_id": 307210830, "name": "L 98-59",
+      "product": {"filename": "tess2018234235059-s0002-0000000307210830-0121-s_lc.fits", "sector": 2,
+                  "sha256": "516d3ee2210ba33214026ac1255d06e112723c6053f5a33872f457b0526ba8d4", "procver": "spoc-5.0.11-20200915",
+                  "note": "DEC-01 튜토리얼 전용 S2 입력. checksum은 experiments/tess-fixture/checksums.json과 같다"},
+      "external": {"source": "archive", "file": "eso2112a.pdf",
+                   "sha256": "a13d7fa7c8b5f9bf9547fa4a563684166920c06abbd13465961a99fbb4b78539",
+                   "retrieved_at": "2026-09-26T13:09:08Z",
+                   "uri": "https://www.eso.org/public/archives/releases/sciencepapers/eso2112/eso2112a.pdf",
+                   "table": "Demangeon et al. 2021 Table 3 (pp.36-37)",
+                   "time_evidence": "Table 3 tic [BJD_TDB - 2457000]. Archive pscomppars는 systemref=BJD라 쓰지 않는다(116 시간 척도 보류)",
+                   "rows": [
+                     {"read": "manual", "external_id": "L 98-59 b", "period_days": 2.2531136, "epoch_btjd": 1366.17067, "duration_hours": 0.992,
+                      "label": "CP", "evidence": "Table 3 Planet b P, tic, D14. 272에서 추가 확인"},
+                     {"read": "manual", "external_id": "L 98-59 c", "period_days": 3.6906777, "epoch_btjd": 1367.27375, "duration_hours": 1.346,
+                      "label": "CP", "evidence": "Table 3 Planet c P, tic, D14. 9.11절 pairwise direct"},
+                     {"read": "manual", "external_id": "L 98-59 d", "period_days": 7.4507245, "epoch_btjd": 1362.73974, "duration_hours": 0.84,
+                      "label": "CP", "evidence": "Table 3 Planet d P, tic, D14. 272에서 추가 확인"}]}
+    },
+    {
+      "seq": 3, "intent": "fp", "tic_id": 279569718, "name": "TIC 279569718",
+      "product": {"filename": "tess2018263035959-s0003-0000000279569718-0123-s_lc.fits", "sector": 3,
+                  "sha256": "c81e16ca8f3699aa09153c74f91c8ae93e0f94ea3e116da7b543adc93e8bf5a9", "procver": "spoc-5.0.20-20201120"},
+      "external": {"source": "tutorial_label", "file": "tess2018206190142-s0001-s0013-0000000279569718-00226_dvr.xml",
+                   "sha256": "b06d571056ddc1c2d7c574cbabcbd5e4376f56752053a3842efab6f298ed3198",
+                   "retrieved_at": "2026-09-26T13:07:49Z",
+                   "uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018206190142-s0001-s0013-0000000279569718-00226_dvr.xml",
+                   "table": "SPOC DV S1-S13 modelParameters", "time_evidence": "transitEpochBtjd = BTJD(TDB), NASA EXP-TESS-ARC-ICD-TM-0014 Rev F",
+                   "rows": [{"read": "dv_xml", "external_id": "TIC 279569718 DV-1", "planet": 1, "fit": "allTransitsFit", "label": "FP",
+                             "evidence": "TESS EB 카탈로그 v1.0 등재. 9.12·9.13절 pairwise direct"}]}
+    },
+    {
+      "seq": 4, "intent": "deep_fp", "tic_id": 300871545, "name": "TOI-184",
+      "product": {"filename": "tess2018263035959-s0003-0000000300871545-0123-s_lc.fits", "sector": 3,
+                  "sha256": "a00a85fe1bf643a6899f7edbd6b28a81c7a322460adeba6bb85ba2081492c053", "procver": "spoc-5.0.20-20201120"},
+      "external": {"source": "tutorial_label", "file": "alerts-v9.csv",
+                   "sha256": "753318841c12f02dbeefe4bc6f2912af980e566248e55d549273b57d224add7e",
+                   "retrieved_at": "2026-09-26T13:08:57Z",
+                   "uri": "https://archive.stsci.edu/hlsps/tess-data-alerts/hlsp_tess-data-alerts_tess_phot_alert-summary-s01+s02+s03+s04_tess_v9_spoc.csv",
+                   "table": "TESS Data Alerts v9 (SPOC)", "time_evidence": "Epoc는 SPOC DV transitEpochBtjd = BTJD(TDB), NASA EXP-TESS-ARC-ICD-TM-0014 Rev F",
+                   "rows": [{"read": "alerts_csv", "external_id": "TOI-184.01", "toi_id": "184.01", "label": "FP",
+                             "evidence": "ExoFOP TFOPWG=FP, TESS Disposition=EB. 9.11절 pairwise direct"}]}
+    },
+    {
+      "seq": 5, "intent": "multi_fp", "tic_id": 278956474, "name": "TIC 278956474",
+      "product": {"filename": "tess2018263035959-s0003-0000000278956474-0123-s_lc.fits", "sector": 3,
+                  "sha256": "6675dc36005151f09bf29204b726a9f77ec509c59896578569698189c7773dbf", "procver": "spoc-5.0.20-20201120"},
+      "external": {"source": "tutorial_label", "file": "tess2018206190142-s0001-s0013-0000000278956474-00226_dvr.xml",
+                   "sha256": "c3d97b748729f8ba7368bcf45947164732c36c3d033e7e6ddd1a1d2e2a7fa771",
+                   "retrieved_at": "2026-09-26T13:07:55Z",
+                   "uri": "https://mast.stsci.edu/api/v0.1/Download/file/?uri=mast:TESS/product/tess2018206190142-s0001-s0013-0000000278956474-00226_dvr.xml",
+                   "table": "SPOC DV S1-S13 modelParameters", "time_evidence": "transitEpochBtjd = BTJD(TDB), NASA EXP-TESS-ARC-ICD-TM-0014 Rev F",
+                   "rows": [
+                     {"read": "dv_xml", "external_id": "TIC 278956474 DV-1 (A)", "planet": 1, "fit": "allTransitsFit", "label": "FP",
+                      "evidence": "Rowden et al. 2020 식쌍성 A. 9.13절 pairwise direct"},
+                     {"read": "dv_xml", "external_id": "TIC 278956474 DV-2 even x2 (B)", "planet": 2, "fit": "evenTransitsFit", "period_multiplier": 2,
+                      "label": "FP", "evidence": "Rowden et al. 2020 식쌍성 B. DV 반주기 모델의 짝수 식 epoch와 2배 주기(문헌 근거 수동 고조파). 9.13절"}]}
+    }
+  ]
+}
