@@ -303,5 +303,39 @@ class PublishStarTest(unittest.TestCase):
             self.assertEqual((got["bundles"], got["current"], got["periodograms"]), (1, 1, 1), tic)
 
 
+@unittest.skipUnless(URL, "PUBLISHER_TEST_DATABASE_URL이 없다")
+class SupplyReadTest(unittest.TestCase):
+    """supply-report의 조회 [S15P21C206-79]. 앱 역할이 읽을 수 있고, 활성 튜토리얼만 슬롯으로 본다."""
+
+    def test_app_role_reads_current_versions_and_active_tutorial_slots_only(self):
+        from publisher import supply
+
+        with connect(autocommit=True) as conn:
+            target = preflight(conn, require_flyway=False)
+            tics = [900_000_301, 900_000_302, 900_000_303]
+            for tic in tics[:2]:
+                conn.execute("INSERT INTO stars(tic_id, confirmed_count, service_status) VALUES (%s, 0, 'published')",
+                             (tic,))
+            published = {p["tic_id"]: p for p in mock_source.payloads(tics[:2])}
+            for p in published.values():
+                publish_star(conn, p, target)
+            conn.execute("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES "
+                         "(1, %s, 'deep_confirmed', true), (2, %s, 'shallow_confirmed', false)", tuple(tics[:2]))
+            try:
+                conn.execute("SET ROLE planetory_app")
+                slots, rows = supply.read_database(conn, tics)
+            finally:
+                conn.execute("RESET ROLE")
+                conn.execute("DELETE FROM tutorial_stars WHERE seq IN (1, 2)")
+
+        self.assertEqual(slots, {1: tics[0]})
+        got = {r["tic_id"]: r for r in rows}
+        self.assertEqual(set(got), set(tics[:2]), "stars에 없는 TIC은 행이 없다")
+        for tic, p in published.items():
+            self.assertEqual((got[tic]["service_status"], got[tic]["bundle_version"]),
+                             ("published", p["bundle"]["bundle_version"]))
+            self.assertEqual(got[tic]["discoverable"], any(c["record"]["discoverable"] for c in p["candidates"]))
+
+
 if __name__ == "__main__":
     unittest.main()

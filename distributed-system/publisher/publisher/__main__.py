@@ -3,9 +3,11 @@
   python -m publisher mock-load --tic 900000008,900000027
   python -m publisher mock-purge-sql
   python -m publisher notify --bundle b-12
+  python -m publisher supply-report --manifest candidates.json   [S15P21C206-79]
 
 접속은 libpq 환경변수(PGHOST·PGDATABASE·PGUSER·PGPASSWORD)를 따른다. 적재 계정은
-planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리가 무력화된다.
+planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리가 무력화된다. supply-report는
+tutorial_stars를 읽으므로 planetory_app 멤버 계정(planetory_service)으로 읽기만 한다.
 """
 
 from __future__ import annotations
@@ -26,7 +28,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("mock-purge-sql", help="목업 삭제 SQL을 출력한다. service-db의 psql로 넘긴다")
     resend = sub.add_parser("notify", help="이미 current인 판의 전환을 Backend에 다시 알린다")
     resend.add_argument("--bundle", required=True, help="판 id. b-12 또는 12")
+    report = sub.add_parser("supply-report", help="DEC-01 공급 집계 기록을 JSON으로 출력한다. DB는 읽기만 한다")
+    report.add_argument("--manifest", required=True, help="79 후보 집계 출력 또는 그 manifest JSON 파일")
     args = parser.parse_args(argv)
+
+    if args.command == "supply-report":
+        return supply_report(Path(args.manifest))
 
     if args.command == "notify":
         # DB는 건드리지 않는다. 판을 다시 싣지 않고 알림만 보낸다.
@@ -58,6 +65,28 @@ def main(argv: list[str] | None = None) -> int:
     # 토큰이 없어 알림을 생략한 것은 실패가 아니다. 적재는 끝났고 DB의 current가 정본이다.
     sent = notify(loader.notify_targets(results))
     return 0 if sent or not os.environ.get("INTERNAL_SERVICE_TOKEN") else 1
+
+
+def supply_report(path: Path) -> int:
+    """79 manifest와 서비스 DB를 대사한 DEC-01 기록을 표준 출력에 낸다. 기록을 냈으면 0이다(판정은 verdict)."""
+    import datetime as dt
+    import json
+
+    import psycopg
+
+    from . import supply
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    manifest = data["manifest"] if "manifest" in data else data
+    if not manifest:
+        print(f"집계할 manifest가 없다. 거절된 run이다: {data.get('reason')}", file=sys.stderr)
+        return 1
+    with psycopg.connect("", autocommit=True) as conn:
+        slots, rows = supply.read_database(conn, [s["tic_id"] for s in manifest["stars"]])
+    at = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    json.dump(supply.supply_record(manifest, rows, slots, at), sys.stdout, ensure_ascii=False, indent=2)
+    print()
+    return 0
 
 
 def notify(bundle_ids: list[int]) -> bool:
