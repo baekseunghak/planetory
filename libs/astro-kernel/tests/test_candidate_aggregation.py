@@ -248,3 +248,19 @@ def test_candidate_quality_revision_is_taken_per_star():
     assert out["manifest"]["counts"]["ready"] == 2 and "candidate_quality" not in out["manifest"]["calculation_versions"]
     got = {b["bundle"]["tic_id"]: b["bundle"]["manifest"]["calculation_versions"]["candidate_quality"] for b in out["bundles"]}
     assert got == {901: "candidate-quality-v1-aaa", 902: "candidate-quality-v1-bbb"}
+
+
+def test_pscomppars_reference_is_published_as_archive_and_lineage_keeps_the_snapshot_name():
+    # 266 reads only external_signal_references(source='archive', external_id=exact pl_name) [276].
+    s = star(1001, [(10011, 2.)], {})
+    row = dict(tic_id="1001", external_id="X b", period_days=2., epoch_btjd=1., duration_hours=2.,
+               time_system="BTJD-TDB", raw_disposition=None, source_row_updated_at=None)
+    s["inputs"]["external"] = join_catalog(
+        s["inputs"]["catalog"], {"nea_pscomppars": delivery("nea_pscomppars", 1001, [row])}, TIMES,
+        required_sources=["nea_pscomppars"], approval="fixture-only")
+    out = run([s])
+    [bundle] = out["bundles"]
+    assert [(r["source"], r["external_id"], r["candidate_id"]) for r in bundle["external_statuses"]] == [
+        ("archive", "X b", 10011)]
+    [source] = out["candidates"][0]["external"]["sources"]
+    assert (source["source"], source["match"]) == ("nea_pscomppars", "direct_match")

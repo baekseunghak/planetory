@@ -26,7 +26,7 @@
 | Gold 외부 참조 | 262 예시의 `source='nasa_exoplanet_archive'`, `external_id`는 고정 NASA Archive `pscomppars` 참고값의 `pl_name`에서 왔다 | `external_signal_references`의 후보 연결 표식이다. 원천 라벨과 이름만으로 실제 TIC·후보와의 검증된 연결을 증명하지 않는다 |
 | 요청 시 NASA 자료 | 266은 NASA TAP `ps`에서 같은 TIC의 `default_flag=1` 기본 해를 별도로 조회한다 | 정확한 행성명·분류를 확인한 뒤 `nasa_planet_info`에 저장하며, 267 설명 수치의 직접 원천이 된다 |
 
-현재 262 Publisher는 예시의 곡선·외부 참조를 **다른 더미 TIC로 복사**하고 실제 Gold 입력·후보 동일성 대조는 구현하지 않았다. 따라서 그 목업의 `nasa_exoplanet_archive` 참조는 새 TIC의 검증된 행성 식별자가 아니다. 266의 현행 조회는 검증된 공급 계약을 전제로 한 `source='archive'`만 받으며, 두 표기를 자동으로 같은 자격으로 취급하지 않는다. 운영 공급자가 실제 TIC·후보와 Archive 행성명의 직접 매칭을 검증하고 표기 계약을 확정하기 전에는 262 목업으로 266·267의 `ready`를 기대하지 않는다.
+현재 262 Publisher는 예시의 곡선·외부 참조를 **다른 더미 TIC로 복사**하고 실제 Gold 입력·후보 동일성 대조는 구현하지 않았다. 따라서 그 목업의 `nasa_exoplanet_archive` 참조는 새 TIC의 검증된 행성 식별자가 아니다. 266의 현행 조회는 검증된 공급 계약을 전제로 한 `source='archive'`만 받으며, 두 표기를 자동으로 같은 자격으로 취급하지 않는다. 운영 공급자가 실제 TIC·후보와 Archive 행성명의 직접 매칭을 검증하고 표기 계약을 확정하기 전에는 262 목업으로 266·267의 `ready`를 기대하지 않는다. 배치 공급의 표기는 [Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계)에서 정했다(2026-09-27, `S15P21C206-276`). 124가 PSCompPars 행과 직접 대응시킨 후보에만 `source='archive'`, `external_id`=정확한 `pl_name`을 싣는다. 합성 검증만 했으므로 실제 run의 표본 연결은 운영 게시 때 확인한다.
 
 ```text
 268 별 단위 POST가 선별한 확정 후보의 내부 요청(memberId, candidateId)
