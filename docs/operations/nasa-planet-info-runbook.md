@@ -174,7 +174,7 @@ RETURNING n.candidate_id, n.tic_id, n.archive_planet_name,
 2. 코드 회귀가 필요하면 기존 앱 이미지로 되돌리되 **V25 테이블은 그대로 둔다**. 구 앱은 신규 테이블을 사용하지 않는다. 새 앱 재배포 시 캐시된 정상값을 다시 읽는다. 롤백 전후 DB 대상·Flyway 이력을 확인한다.
 3. 자동 삭제가 없으므로 보관 자료가 누적된다. 삭제·TRUNCATE·DROP TABLE·Flyway `clean`, 공유/운영 DB 복원은 되돌리기 어렵다. 정확한 대상·영향·복구 근거를 제시해 실행 직전 별도 승인받는다. V25를 이미 적용한 DB에서 SQL 파일을 지우거나 구 버전으로 바꾸면 Flyway 검증 실패가 날 수 있으므로 적용 이력을 임의 조작하지 않는다.
 
-2026-09-25 검증은 일회용 PostgreSQL·로컬 HTTP fixture와 NASA 소량 읽기뿐이다. 운영 지연·호출량·DB 증가량·배포 완료 여부는 아직 측정하지 않았다.
+2026-09-25 검증은 일회용 PostgreSQL·로컬 HTTP fixture와 NASA 소량 읽기뿐이다. 운영 지연·호출량·DB 증가량·배포 완료 여부는 아직 측정하지 않았다. 2026-09-27 운영 실측(1단계 NASA 원천·재사용, 2단계 설명 켜기·되돌리기)은 아래 11절에 있다.
 
 ## 8. 한국어 설명 생성 배포·운영 (267)
 
@@ -408,3 +408,51 @@ NASA 소량 요청을 별도로 승인받은 뒤 결과 페이지의 목록 요�
 ### 10.6 검증 범위 기록
 
 일회용 PostgreSQL·로컬 NASA HTTP fixture·모델 stub의 최종 일곱 클래스 통합 회귀는 **98/98, 실패·오류 0, `BUILD SUCCESSFUL in 1m 27s`**다. `NasaPlanetExplanationTest` 17, `NasaPlanetInfoTest` 8, `NasaStarPlanetTest` 10, `StarResultTest` 13, `SubmissionTest` 37, `StarPathHttpTest` 9, `StarPlanetExplanationHttpTest` 4건이다. 65행 상한의 localhost 응답과 새 경로의 세션·CSRF 사례를 포함한다. 권한, 0/복수 행성, 중복·부분 실패, 재확인·과거 목록 보존, 목록·설명 임대 만료와 늦은 완료, V28 공유 한도의 확인 범위를 [270 개발 계약 5절](../development/nasa-star-planets-270.md#5-저장검증-경계)에 구분해 기록했다. 선행 266~268의 과거 73건, 267의 과거 GMS 실호출, 268의 프론트 fixture 6건은 **이번 270 실행 결과에 합산하지 않는다.** 큰 본문·JSON 숫자 파싱 실패의 270 전용 fixture, 실제 NASA·유료 GMS 새 실호출, 실제 회원·Gold/목업 TIC 연결, 공유/운영 DB의 V29 적용, 운영 지연·비용·271 배포 브라우저 인수는 각각 별도 확인이 필요하다.
+
+## 11. 운영 적용 실측 (S15P21C206-277)
+
+### 11.1 1단계: 설명 비활성 상태의 NASA 원천 (2026-09-27)
+
+EC2-A 운영 Backend `6d1926d5`, DB V29, `NASA_PLANET_INFO_ENABLED=true`(기본값), `NASA_EXPLANATION_ENABLED=false`·일일 한도 0(기본값)에서 확인했다. 설정은 바꾸지 않았다.
+
+| 항목 | 결과 |
+| --- | --- |
+| 5.1 NASA 경로 | EC2-A에서 DNS·443 정상, TAP 소량 조회(TIC 149603524) HTTP 200·1.5초, `WASP-62 b`·`Published Confirmed` |
+| 시험 회원 준비 | 튜토리얼 1번(TIC 149603524)을 실제 화면에서 풀어 후보 `c-13`에 매칭했다. 첫 제출은 지속 시간 7.54시간으로 후보 3시간 대비 2.51배라 `rule-0`의 비율 범위 0.5~2를 넘어 미매칭이었고, 2.67시간(0.89배)으로 다시 내 매칭됐다 |
+| 268 GET(POST 전) | 200, `c-13`의 `status`·`sourceStatus` 모두 `not_requested`. 화면에 "아직 요청한 NASA 행성 자료가 없습니다" |
+| 268 POST(화면의 「NASA 자료 요청」) | 200, `status=disabled`, `sourceStatus=ready`, `failure=disabled`. `facts`는 공전주기 4.41195일, 반지름 14.79588 지구 반지름, 질량 165.2716 지구 질량, Transit·2012. 화면에 수치·출처(PS)·조회 시각과 "현재 쉬운 설명 요청이 중지돼 있습니다" |
+| 재사용 | GET 재조회와 두 번째 POST(317ms) 모두 `fetchedAt` 불변. DB `nasa_planet_info` 1행, `attempt_generation=1`, 다음 재확인 7일 뒤, 설명 행 0 |
+| 최초 NASA 조회 지연 | 약 7.7초(`last_attempt_at` → `fetched_at`) |
+| CSRF | 토큰 없는 POST는 403 `FORBIDDEN`. 화면은 `/api/v1/auth/csrf`의 `X-CSRF-TOKEN`을 쓴다 |
+| 270 목록 | GET `not_requested`(목록 0) → POST 200·1.95초, `status=ready`, 행성 1개(원천 `ready`, 설명 `disabled`) → GET 재조회 `fetchedAt` 불변. 결과 페이지의 목록 위젯은 아직 없어(271 범위) API로 확인했다 |
+
+인앱 브라우저 창이 숨겨져 있으면 분석 화면의 접기 계산(Web Worker)이 진행되지 않고 30초 감시도 울리지 않았다. 창을 캡처해 화면을 갱신하자 곧바로 끝났다. 앱 결함이 아니라 시험 환경의 제약이다.
+
+### 11.2 2단계: 설명 생성 켜기 (2026-09-27)
+
+**결정(김동혁 위임, GMS 대시보드 근거).** 남은 크레딧 99,795/100,000, gpt-5.4-mini 1회 평균 약 14크레딧(약 7,100회 가능), 운영이 남은 기간은 약 1주다.
+
+| 항목 | 값 | 근거 |
+| --- | --- | --- |
+| 이번 주 설명 예산 상한 | 약 30,000크레딧(전체의 30%) | 아래 전체 한도를 7일 내내 다 써도 약 29,400크레딧이다. 나머지는 팀 개발 호출과 여유분 |
+| `NASA_EXPLANATION_DAILY_GLOBAL` | 300 | 예산의 실제 방어선. 재시도 폭주나 버그가 나도 하루 약 4,200크레딧에서 멈춘다 |
+| `NASA_EXPLANATION_DAILY_PER_MEMBER` | 20 | 설명은 대상별로 한 번 만들어 회원 간에 재사용한다. 한 회원이 새로 부르는 대상은 많아야 열 개 안팎이다 |
+| 상시 운영 | 남은 1주 동안 켜 둔다 | 매일 GMS 대시보드를 보고 누적 10,000크레딧을 넘거나 급증하면 `NASA_EXPLANATION_ENABLED=false` |
+
+모델·출력 320토큰·시간 제한 8초·동시 1·실패 간격 1시간은 267 검증값 그대로다. `GMS_KEY`는 사용자가 EC2-A `.env`에 직접 넣었다(값은 문서·로그에 없음). 적용한 `.env` 값은 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 한도 20·300이다.
+
+**실측.**
+
+| 항목 | 결과 |
+| --- | --- |
+| 적용 | Backend 재생성 약 18초, 기동 오류 0 |
+| 268 설명(화면 「쉬운 설명 요청」, `c-13`) | **실패** `failure=invalid_output`, 다음 재시도 1시간 뒤. 모델 호출은 정상 완료(입력 335·출력 201·합계 536토큰)였고 서버 검증에서 떨어졌다. NASA `facts`는 유지됐다 |
+| 270 설명(WASP-62 b 행성 1개) | 성공 2.3초, 다섯 문장이 허용 틀대로 채워졌다(입력 335·출력 131·합계 466토큰) |
+| 재사용 | 270 재요청 327ms, `generatedAt` 불변, 모델 호출 로그 증가 없음 |
+| 일일 한도 집계 | `nasa_explanation_daily_total` 2(UTC 2026-09-26), 회원 1명 2 |
+| 비용 | 모델 호출 2회, 약 28크레딧 |
+| 되돌리기 | `ENABLED=false`로 재생성하자 270 설명은 `ready`로 남고, 268 POST는 `disabled`로 모델 호출 0. 다시 `true`로 재생성했다. Backend 재생성 뒤에도 로그인 세션은 유지됐다 |
+
+**`invalid_output`은 간헐적이다.** 같은 모델·프롬프트(`nasa-ko-v4`)로 268은 실패, 270은 성공했다. 검증은 모델이 64자리 `sourceHash`를 글자 그대로 복사하고 허용 문장 틀 중 하나를 그대로 고르는지 본다(`NasaPlanetExplanationText.render`). 실패한 쪽의 출력 토큰이 70개 더 많아 틀 밖 문장을 덧붙였거나 해시를 잘못 복사했을 가능성이 있다. 모델 출력은 로그에 남지 않아 원인은 확정하지 못했다. 같은 조합은 1시간 간격으로 최대 3회까지 다시 시도된다. 실패율이 높으면 프롬프트·검증 개선은 267 담당 범위다.
+
+로그인 세션은 30분 동안 요청이 없으면 만료된다. 시험 도중 로그인 화면이 나오면 Backend 문제가 아니라 유휴 만료다.

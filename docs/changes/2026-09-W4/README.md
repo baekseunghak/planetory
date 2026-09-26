@@ -377,3 +377,4 @@
 | 2026-09-27 | 튜토리얼 전환 뒤 남은 옛 1번 성과 알림 정리와 전환 SQL 보완 | S15P21C206-272 | notification_outbox, achievement:1, STAR_LOCKED, 261136679, tutorial_switch.sql, !226 리뷰 | 운영 정리 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 전환 SQL이 보상 별의 회원 기록을 남기는 문제, 멈춤 검사와 회귀 테스트 | S15P21C206-272 | tutorial_switch.sql, achievement_unlocks, TutorialSwitchTest, 외래 키, !226 백승학 P2 | 로컬 검증 완료, 운영 영향 없음, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 확정 행성 NASA 정보·AI 설명 운영 적용(원천 ready·재사용, 설명 켜기·되돌리기, 한도 20·300) | S15P21C206-277 | nasa_planet_info, WASP-62 b, c-13, invalid_output, NASA_EXPLANATION_DAILY_GLOBAL, rule-0 duration_ratio | 검증 완료·1주 상시 운영 | [기록](2026-09-27.md) |
