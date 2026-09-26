@@ -94,7 +94,9 @@ test("401 protects direct routes, preserves destination and clears identity afte
     page.getByRole("heading", { name: "분석 · TIC 259377017", exact: true }),
   ).toHaveCount(0);
   expired = false;
-  await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
+  // No standing re-check button: a reload runs the session read again
+  // (the same path as a restored page), and the login page forwards.
+  await page.reload();
   await expect(page).toHaveURL(/\/analysis\/259377017\?historyId=h-123$/);
   await page.route("**/api/v1/members/fixture-probe", (route) =>
     route.fulfill({

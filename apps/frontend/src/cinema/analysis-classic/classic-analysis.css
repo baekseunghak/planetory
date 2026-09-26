@@ -1,0 +1,404 @@
+/*
+  Classic analysis in the cinema bottom panel (variant A).
+  Presentation only: every rule is scoped under .pc-classic-analysis and the
+  markup of AnalysisPage is untouched. Colours and type come from the cinema
+  tokens (../styles/tokens.css). No backdrop-filter: the scene is WebGL.
+*/
+
+/* The classic page paints a photo background on <html>/<body>. Over the scene
+   the ground is the scene's own near-black. */
+html:root:has(.pc-classic-analysis) {
+  background: var(--pc-bg);
+}
+html body:has(.pc-classic-analysis) {
+  background: var(--pc-bg);
+  background-image: none;
+}
+
+.pc-classic-analysis {
+  --pc-classic-height: 60vh;
+  --pc-classic-surface: #04070d;
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--pc-z-panel);
+  max-height: var(--pc-classic-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Anything scrolled into view (focus, handles) lands below the sticky
+     header instead of under it. */
+  scroll-padding-top: 52px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--pc-line-strong) transparent;
+  box-sizing: border-box;
+  border-top: 1px solid var(--pc-line-strong);
+  background: var(--pc-glass);
+  color: var(--pc-ink);
+  /* The camera starts reframing first; the panel follows, so the star is
+     never caught behind the rising header. */
+  animation: pc-classic-rise var(--pc-dur-slow) var(--pc-ease-out) 180ms both;
+}
+@keyframes pc-classic-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+/* Classic variables re-pointed at the cinema tokens. Same names, so every
+   existing rule follows without being rewritten. */
+.pc-classic-analysis .analysis-screen {
+  --bg: var(--pc-accent-ink);
+  --fg: var(--pc-ink);
+  --accent: var(--pc-accent);
+  --overlay: transparent;
+  --panel: var(--pc-raise);
+  --panel-blur: 0px;
+  --panel-line: var(--pc-line);
+  --panel-shadow: none;
+  --plot-bg: rgba(150, 180, 225, 0.035);
+  --control-bg: rgba(150, 180, 225, 0.07);
+  --control-bg-weak: rgba(150, 180, 225, 0.04);
+  --check-line: var(--pc-line-strong);
+  --fg-1: var(--pc-ink);
+  --fg-2: color-mix(in srgb, var(--pc-ink) 82%, transparent);
+  --fg-3: var(--pc-ink-dim);
+  --grid: var(--pc-line-strong);
+  --divider: var(--pc-line);
+  --accent-fill: var(--pc-accent-soft);
+  --accent-line: rgba(94, 196, 247, 0.5);
+  --accent-sel-fill: rgba(94, 196, 247, 0.12);
+  --accent-sel-line: rgba(94, 196, 247, 0.7);
+  --accent-glow: 0 0 10px rgba(94, 196, 247, 0.22);
+  --danger: var(--pc-bad);
+  --band: rgba(94, 196, 247, 0.12);
+  --radius-panel: var(--pc-radius-lg);
+  --radius-control: var(--pc-radius-md);
+  --radius-plot: var(--pc-radius-sm);
+  --panel-pad: var(--pc-space-3) var(--pc-space-4);
+  --gap-panel: var(--pc-space-3);
+  --line: var(--pc-line);
+  --muted: var(--pc-ink-dim);
+
+  /* Room at the bottom for the variant toggle and the last details row. */
+  padding: 0 var(--pc-hud-inset) var(--pc-space-8);
+  font-family: var(--pc-font-sans);
+  font-size: var(--pc-text-sm);
+  font-variant-numeric: var(--pc-numeric);
+  line-height: var(--pc-leading);
+  color: var(--pc-ink);
+}
+
+/* No glass on glass: the panel is the only surface. Cards become quiet
+   outlined areas, without blur or shadow. */
+.pc-classic-analysis .analysis-screen .analysis-time-curve,
+.pc-classic-analysis .analysis-screen .periodogram-card,
+.pc-classic-analysis .analysis-screen .fold-panel,
+.pc-classic-analysis .analysis-screen .analysis-judgment,
+.pc-classic-analysis .analysis-screen .periodogram-unavailable,
+.pc-classic-analysis .analysis-secondary details[open] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* Header: one quiet line that stays while the panel scrolls. Opaque, so the
+   rows scrolling under it do not show through. */
+.pc-classic-analysis .analysis-screen-header {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  min-height: 40px;
+  margin: 0 calc(-1 * var(--pc-hud-inset));
+  padding: 0 var(--pc-hud-inset);
+  background: var(--pc-classic-surface);
+  border-bottom: 1px solid var(--pc-line);
+}
+/* The top bar already carries the wordmark; a second one under it is noise. */
+.pc-classic-analysis .analysis-screen-header > a:first-child {
+  visibility: hidden;
+}
+.pc-classic-analysis .analysis-screen-header h1 {
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: 0.04em;
+}
+.pc-classic-analysis .analysis-screen-header > a:last-child {
+  font-size: var(--pc-text-sm);
+  color: var(--pc-ink-dim);
+}
+.pc-classic-analysis .analysis-screen-header > a:last-child:hover {
+  color: var(--pc-ink);
+}
+
+/* Step row: one line. */
+.pc-classic-analysis .analysis-step-row {
+  min-height: 0;
+  margin: 0 0 var(--pc-space-1);
+  padding: var(--pc-space-1) 0;
+  gap: var(--pc-space-5);
+}
+.pc-classic-analysis .analysis-steps {
+  flex: 0 1 520px;
+  gap: var(--pc-space-3);
+}
+.pc-classic-analysis .analysis-steps button {
+  min-height: 36px;
+  padding: var(--pc-space-1) 0;
+}
+.pc-classic-analysis .analysis-steps [aria-current="step"] button {
+  color: var(--pc-accent);
+}
+.pc-classic-analysis .analysis-screen .curve-step-bar {
+  gap: var(--pc-space-1) var(--pc-space-3);
+  padding: var(--pc-space-1) 0;
+}
+.pc-classic-analysis .analysis-screen .curve-step-where {
+  font-size: var(--pc-text-xs);
+  color: var(--pc-ink-dim);
+}
+.pc-classic-analysis .analysis-screen .curve-step-moves button {
+  min-height: 32px;
+  padding: 2px 10px;
+  font-size: var(--pc-text-xs);
+}
+
+/* Numbers: axes are pure numbers and use IBM Plex Mono. Readouts that mix
+   Hangul keep Plex Sans KR with tabular figures (set on .analysis-screen). */
+.pc-classic-analysis .analysis-screen .analysis-time-axis-x,
+.pc-classic-analysis .analysis-screen .analysis-time-axis-y,
+.pc-classic-analysis .analysis-screen .periodogram-x-axis,
+.pc-classic-analysis .analysis-screen .periodogram-y-axis,
+.pc-classic-analysis .analysis-screen .fold-x-axis,
+.pc-classic-analysis .analysis-screen .fold-y-axis {
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-2xs);
+}
+.pc-classic-analysis .analysis-screen .period-selection-row > span:first-child {
+  color: var(--pc-ink);
+}
+
+/* The periodogram canvas draws its peak dots and window in the page's own
+   gold; shift them onto the cinema accent (greys stay grey). The time curve
+   keeps its gold bands because its caption names them 금색 띠. */
+.pc-classic-analysis .periodogram-plot canvas,
+.pc-classic-analysis .periodogram-overview-plot canvas {
+  filter: hue-rotate(158deg);
+}
+
+/* Panel layout. Wide screens: three columns, so period, fold and judgment are
+   on screen together inside a short panel. The flexible third row takes the
+   fold's extra height, so the time curve keeps its own. Narrower desktops
+   keep the classic two-column grid (still scrollable). */
+@media (min-width: 1280px) {
+  .pc-classic-analysis .analysis-screen-grid {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr) 340px;
+    grid-template-rows: auto auto 1fr auto;
+    gap: var(--pc-space-3) var(--pc-space-4);
+  }
+  .pc-classic-analysis .analysis-screen .analysis-time-curve {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    align-self: start;
+  }
+  .pc-classic-analysis .analysis-screen .periodogram-card,
+  .pc-classic-analysis .analysis-screen .periodogram-unavailable {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 0;
+    align-self: start;
+  }
+  .pc-classic-analysis .analysis-screen .fold-panel {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    min-height: 0;
+  }
+  .pc-classic-analysis .analysis-screen .analysis-judgment {
+    grid-column: 3;
+    grid-row: 2 / span 2;
+    align-self: stretch;
+  }
+  .pc-classic-analysis .analysis-secondary {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: var(--pc-space-1);
+  }
+  /* Shorter plots: the panel is at most 60% of the viewport. The charts
+     measure their boxes, so only the boxes change. */
+  .pc-classic-analysis .analysis-screen .analysis-time-plot,
+  .pc-classic-analysis .analysis-screen .analysis-time-axis-y {
+    height: 84px;
+  }
+  .pc-classic-analysis .analysis-screen .periodogram-plot,
+  .pc-classic-analysis .analysis-screen .periodogram-y-axis {
+    height: 104px;
+  }
+  .pc-classic-analysis .analysis-screen .fold-plot,
+  .pc-classic-analysis .analysis-screen .fold-y-axis {
+    height: 200px;
+  }
+  .pc-classic-analysis .chart-heading,
+  .pc-classic-analysis .analysis-time-heading {
+    margin-bottom: var(--pc-space-2);
+  }
+  .pc-classic-analysis .analysis-screen .analysis-time-curve figcaption,
+  .pc-classic-analysis .analysis-screen .chart-caption {
+    margin-top: var(--pc-space-1);
+    line-height: 1.4;
+  }
+}
+
+/* Narrower desktops (1024-1279): the same three columns, tighter, with the
+   periodogram first in the left column and the time curve under it, so the
+   working set (periodogram, fold, judgment) is in the panel without a
+   scroll. The step row stays one line. */
+@media (max-width: 1279px) {
+  .pc-classic-analysis .analysis-screen-grid {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr) 264px;
+    grid-template-rows: auto auto 1fr auto;
+    gap: var(--pc-space-3);
+  }
+  .pc-classic-analysis .analysis-step-row {
+    flex-wrap: nowrap;
+    gap: var(--pc-space-4);
+    min-height: 0;
+  }
+  .pc-classic-analysis .analysis-steps {
+    flex: 0 0 auto;
+    gap: var(--pc-space-4);
+  }
+  .pc-classic-analysis .analysis-steps li {
+    flex: 0 0 auto;
+  }
+  .pc-classic-analysis .analysis-steps button {
+    min-height: 32px;
+    font-size: var(--pc-text-sm);
+  }
+  .pc-classic-analysis .analysis-step-row > span {
+    flex: 1 1 auto;
+    padding-bottom: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .pc-classic-analysis .analysis-screen .curve-step-bar {
+    flex: 0 0 auto;
+  }
+  .pc-classic-analysis .analysis-screen .periodogram-card,
+  .pc-classic-analysis .analysis-screen .periodogram-unavailable {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    align-self: start;
+  }
+  .pc-classic-analysis .analysis-screen .analysis-time-curve {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 0;
+    align-self: start;
+  }
+  .pc-classic-analysis .analysis-screen .fold-panel {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    min-height: 0;
+  }
+  .pc-classic-analysis .analysis-screen .analysis-judgment {
+    grid-column: 3;
+    grid-row: 2 / span 2;
+    align-self: stretch;
+    gap: var(--pc-space-3);
+  }
+  .pc-classic-analysis .analysis-secondary {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+  .pc-classic-analysis .analysis-screen .analysis-time-curve,
+  .pc-classic-analysis .analysis-screen .fold-panel,
+  .pc-classic-analysis .analysis-screen .periodogram-card,
+  .pc-classic-analysis .analysis-screen .analysis-judgment {
+    padding: var(--pc-space-3);
+  }
+  .pc-classic-analysis .analysis-screen .analysis-time-plot,
+  .pc-classic-analysis .analysis-screen .analysis-time-axis-y {
+    height: 64px;
+  }
+  .pc-classic-analysis .analysis-screen .periodogram-plot,
+  .pc-classic-analysis .analysis-screen .periodogram-y-axis {
+    height: 92px;
+  }
+  .pc-classic-analysis .analysis-screen .fold-plot,
+  .pc-classic-analysis .analysis-screen .fold-y-axis {
+    height: 168px;
+  }
+  .pc-classic-analysis .chart-heading,
+  .pc-classic-analysis .analysis-time-heading {
+    margin-bottom: var(--pc-space-2);
+  }
+}
+
+/* The time-curve y labels carry seven decimals; give them the room. */
+.pc-classic-analysis .analysis-screen .analysis-time-curve figure {
+  margin-left: 60px;
+}
+.pc-classic-analysis .analysis-screen .analysis-time-axis-y {
+  width: 56px;
+  right: calc(100% + 4px);
+}
+.pc-classic-analysis .analysis-screen .analysis-time-curve figcaption {
+  margin-left: -60px;
+  width: calc(100% + 60px);
+}
+
+/* Result and confirmation dialogs open over the panel, anchored to the
+   bottom, so the star and whatever the scene plays stay visible above.
+   Still native modal dialogs (focus trap, Escape). */
+.pc-classic-analysis .analysis-screen .submission-dialog {
+  inset: auto 0 var(--pc-space-4) 0;
+  margin: 0 auto;
+  max-height: calc(var(--pc-classic-height) - var(--pc-space-5));
+  background: var(--pc-classic-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--pc-line-strong);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  font-family: var(--pc-font-sans);
+}
+/* The result grows upward past the panel when it needs to: its table and axes
+   sit side by side so the fullest result (details open) fits without a
+   scroll at 768px height (analysis-screen.css, 88vh). The shell hides it
+   while the transit and discovery card play, so it never covers them.
+   Still below the top bar. */
+.pc-classic-analysis .analysis-screen .submission-dialog-wide {
+  max-height: min(88vh, 900px, calc(100dvh - 72px));
+}
+.pc-classic-analysis .analysis-screen .submission-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+.pc-classic-analysis .analysis-screen .result-celebrate {
+  color: var(--pc-accent);
+}
+/* The dialog sits inside the review block, whose `button:first-child` rule
+   strips the padding of the first dialog action (다음 곡선 단계로, 입력으로
+   돌아가기). Give the actions their own padding back. */
+.pc-classic-analysis
+  .analysis-screen
+  .submission-dialog
+  .submission-dialog-actions
+  button {
+  flex-shrink: 0;
+  padding: 10px 20px;
+}
+
+/* The variant toggle (AnalysisSwitch default class) sits just above this
+   panel instead of over its first column. A shell class replaces it. */
+body:has(.pc-classic-analysis) .analysis-variant-toggle {
+  bottom: calc(var(--pc-analysis-panel-height, 60vh) + var(--pc-space-3));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-classic-analysis {
+    animation: none;
+  }
+}

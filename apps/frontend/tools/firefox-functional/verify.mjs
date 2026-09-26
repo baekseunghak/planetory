@@ -198,7 +198,8 @@ try {
       0,
     );
     mode = "normal";
-    await click("로그인 상태 다시 확인");
+    // Retry appears only in the member-lookup error state.
+    await click("다시 시도");
     await driver.wait(
       async () => (await driver.getCurrentUrl()).endsWith("/community?q=first"),
       10000,

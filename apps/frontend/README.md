@@ -1,5 +1,7 @@
 # Planetory 공용 프론트
 
+2026-09-26 시네마틱 전환(실험 브랜치 `experiment/S15P21C206-274-web-cinematic-core`, 팀 결정 전): [구조·소유 범위·장면/분석 계약](src/cinema/README.md). `npm run dev:cinema`는 `CINEMA_PORT`(기본 58390)에서 로그인부터 제출·새 별 점화까지 합성 HTTP를 한 서버로 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
+
 200 비교 통계: [일별 중앙값·과거 본인 값 부재·검증·인수 대기](docs/ticket-200-readiness.md). 개인 통계 아래에서 기준일·원천 관측 시각·90일 모수를 구분하며 현재값으로 과거 비교를 대체하지 않는다.
 
 199 전체 통계: [전체 지표·집계 시각·검증·실제 인수 대기](docs/ticket-199-readiness.md). P1 활성화 시 `/statistics`를 연결하며 정상·갱신 지연·집계 전과 AI 자료 상태를 구분한다.
@@ -211,6 +213,7 @@ Docker의 OAuth 기본값은 `VITE_OAUTH_SSAFY_URL=/oauth2/authorization/ssafy`,
 분석 1–5단계의 Figma 적용 범위와 조작·검증은 [분석 디자인 적용 기록](docs/analysis-design.md)을 따른다.
 
 ### P1 시제품 반영 인계
+
 [구현 순서·백엔드 인계](docs/p1-prototype-rollout.md). 공개 은하 250은 전체 보유 별을 대상으로 하며 219~223 계약과 함께 배포 연결한다. 개발용 실행은 npm run dev:p1, 검증은 npm run test:p1.
 
 2026-09-21 출처 카드(167): ID 없는 `available:false` 항목은 글·댓글에서 대체 안내로 표시하며 조회·링크를 생성하지 않는다. 본문·History만 수정하면 출처 PATCH를 생략하고, 무효 출처는 공개 출처 전체 제거로 명시적으로 해제한다. 기존 213 첨부 그래프 동작을 유지한다. 계약은 [서비스 API 7장](../backend/docs/service-api-spec.md#attachments)을 따른다.

@@ -18,10 +18,9 @@ import { PublicAnalysisPage } from "./features/history/PublicAnalysisPage";
 import { PublicationPage } from "./features/publication/PublicationPage";
 import { SessionProvider } from "./auth/SessionProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { AnalysisPage } from "./features/analysis/AnalysisPage";
+import { CinemaAnalysis } from "./cinema/shell/AnalysisStage";
 import { StarResultPage } from "./features/analysis/StarResultPage";
 import "./styles.css";
-import { SkyDataPage } from "./features/sky-data/SkyDataPage";
 import { PostEditorPage } from "./features/community/PostEditorPage";
 import { HotTopicsPage } from "./features/community/HotTopicsPage";
 import { SettingsPage } from "./features/profile/SettingsPage";
@@ -56,7 +55,6 @@ async function start() {
     ...(p1Enabled
       ? { following: FollowingPage, followingFeed: FollowingFeedPage }
       : {}),
-    sky: SkyDataPage,
     profile: MyProfilePage,
     member: MemberProfilePage,
     community: CommunityPage,
@@ -67,10 +65,8 @@ async function start() {
     postEdit: PostEditorPage,
     thread: SignalThreadPage,
   };
-  if (import.meta.env.VITE_SKY_RENDERER_ENABLED === "true")
-    pages.sky = (
-      await import("./features/sky-renderer/GalaxyScene")
-    ).GalaxyPage;
+  // /sky is the cinema galaxy (src/cinema/shell) in every build. Only the
+  // dev inspectors below fill the sky slot.
   if (p1Enabled)
     pages.publicSky = (
       await import("./features/public-sky/PublicSky")
@@ -86,7 +82,7 @@ async function start() {
   pages = {
     ...pages,
     settings: SettingsPage,
-    analysis: AnalysisPage,
+    analysis: CinemaAnalysis,
     starResults: StarResultPage,
     historyDetail: HistoryDetailPage,
     publicAnalysis: PublicAnalysisPage,

@@ -83,7 +83,7 @@ function NewRoundNotice({
   if (!show || !current.round) return null;
   return (
     <div className="quest-round-notice" ref={element}>
-      <p role="status">새 챌린지가 열렸어요 · {current.round.roundNo}회차</p>
+      <p role="status">새 챌린지가 열렸습니다 · {current.round.roundNo}회차</p>
       <button onClick={open}>챌린지 보기</button>
       <button aria-label="새 챌린지 안내 닫기" onClick={() => setShow(false)}>
         닫기
@@ -288,11 +288,11 @@ export function QuestPanel({
                   </strong>
                 </p>
                 {!challenge.eligible ? (
-                  <p>튜토리얼 다섯 별을 마치면 참여할 수 있어요.</p>
+                  <p>튜토리얼 다섯 별을 마치면 참여할 수 있습니다.</p>
                 ) : !challenge.unlocked ? (
                   <p>
                     참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
-                    있어요.
+                    있습니다.
                   </p>
                 ) : currentMismatch ? (
                   <p role="status">

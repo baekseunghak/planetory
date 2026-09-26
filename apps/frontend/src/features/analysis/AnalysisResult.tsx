@@ -576,8 +576,11 @@ export function NextActions({
   returnTo,
   from,
   onNextCurve,
+  labels,
 }: {
   receipt: SubmissionReceipt;
+  /** 화면이 부르는 이름이 다를 때만(예: 시네마 셸의 「나의 은하로」). */
+  labels?: Partial<Record<NextAction, string>>;
   /**
    * [다음 곡선 단계로]를 누르면 할 일. **같은 화면에서** 일어나므로 링크가
    * 아니다(SRS 3.2 흐름). 없으면 버튼을 비활성으로 둔다.
@@ -626,6 +629,13 @@ export function NextActions({
     LATER: { label: "나중에 하기", to: returnTo },
     GO_HOME: { label: "별지도로", to: "/sky" },
   };
+  for (const [action, label] of Object.entries(labels ?? {}) as [
+    NextAction,
+    string,
+  ][]) {
+    const link = links[action];
+    if (link && label) links[action] = { ...link, label };
+  }
   // 분석 화면 안에서 일어나는 동작이라 옮겨 갈 곳이 없다. 각자 다른 티켓이다.
   // 아직 연결되지 않은 화면 안 동작. `NEXT_CURVE`는 이제 실제 버튼이다.
   const inScreen: Partial<Record<NextAction, string>> = {

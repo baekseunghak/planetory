@@ -9,6 +9,7 @@ import { useAnalysisFold } from "./AnalysisSession";
 import { AnalysisJudgment } from "./AnalysisJudgment";
 import { AnalysisDraftPersistence } from "./AnalysisDraftPersistence";
 import type { PeriodogramViewport } from "./analysis-judgment";
+import { useClassicAnalysisEmits } from "../../cinema/analysis-classic/classic-bridge";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -120,6 +121,7 @@ export function PeriodSelectionWorkspace({
   const { draft: retryDraft, resume } = useRetryDraft();
   const { stage } = useAnalysisStage();
   const { state: phase } = usePhaseDraft();
+  useClassicAnalysisEmits(context.ticId, data);
   const viewport = useRef<PeriodogramViewport>({
     minDays: data.periodogram.periodMinDays,
     maxDays: data.periodogram.periodMaxDays,

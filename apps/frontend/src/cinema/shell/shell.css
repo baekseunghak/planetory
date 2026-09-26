@@ -1,0 +1,1570 @@
+/*
+  Cinema shell. One fixed scene at the back, a thin HUD in front, panels only
+  where needed. Tokens: ../styles/tokens.css (--pc-*). No backdrop-filter over
+  the canvas: panels use --pc-glass.
+*/
+
+html,
+body {
+  background: var(--pc-bg);
+}
+
+/* ------------------------------------------------------------ stage */
+.cinema-stage {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pc-z-scene);
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 55%, #03060c 0%, #000 72%);
+}
+.cinema-stage > :not(.cinema-stage-still) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cinema-stage[data-mode="intro"],
+.cinema-stage[data-mode="backdrop"] {
+  pointer-events: none;
+}
+.cinema-stage-still,
+.cinema-still {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+.cinema-stage-still {
+  opacity: 0.5;
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 55%,
+    #000 30%,
+    transparent 75%
+  );
+  mask-image: radial-gradient(ellipse at 50% 55%, #000 30%, transparent 75%);
+}
+.cinema-still {
+  position: fixed;
+  opacity: 0.8;
+}
+.cinema-stage-still .galaxy-artwork,
+.cinema-still .galaxy-artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes cinema-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------ shell */
+.cinema-shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* Over the galaxy the shell is see-through for the pointer: the canvas gets
+   drags, hovers and clicks, and only real controls take them. Pages in the
+   backdrop stage keep normal hit testing. */
+.cinema-shell:not([data-stage="backdrop"]) {
+  pointer-events: none;
+}
+.cinema-shell .skip-link,
+.cinema-shell .cinema-discovery,
+.cinema-shell .cinema-analysis-stage {
+  pointer-events: auto;
+}
+.cinema-shell :focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
+}
+/* The reused sky components hide labels with .sr-only, which used to come
+   with the old renderer's galaxy.css. */
+.sr-only,
+.cinema-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.cinema-num {
+  font-family: var(--pc-font-mono);
+  font-variant-numeric: var(--pc-numeric);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-eyebrow {
+  margin: 0;
+  font-size: var(--pc-text-2xs);
+  letter-spacing: var(--pc-tracking-eyebrow);
+  color: var(--pc-accent);
+}
+.cinema-muted {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  line-height: var(--pc-leading);
+}
+.cinema-caption {
+  margin: var(--pc-space-3) 0 0;
+  font-size: var(--pc-text-2xs);
+  color: var(--pc-ink-faint);
+}
+
+/* pills and buttons (override the classic global button) */
+.cinema-shell .cinema-pill,
+.cinema-shell .cinema-mini,
+.cinema-shell .cinema-primary,
+.cinema-shell .cinema-secondary,
+.cinema-shell .cinema-link,
+.cinema-shell .cinema-back {
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.cinema-shell .cinema-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pc-space-2);
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: 1;
+  transition:
+    color var(--pc-dur-fast),
+    border-color var(--pc-dur-fast);
+}
+.cinema-shell .cinema-pill:hover:not(:disabled) {
+  color: var(--pc-ink);
+  border-color: var(--pc-line-strong);
+}
+.cinema-shell .cinema-pill[aria-pressed="false"] {
+  color: var(--pc-ink-faint);
+}
+.cinema-shell .cinema-pill[aria-pressed="true"] {
+  color: var(--pc-accent);
+  border-color: rgba(94, 196, 247, 0.45);
+}
+.cinema-shell .cinema-mini {
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-shell .cinema-mini[aria-pressed="true"] {
+  color: var(--pc-accent);
+  border-color: var(--pc-accent);
+}
+.cinema-shell .cinema-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--pc-control-height);
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-accent);
+  color: var(--pc-accent-ink);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-strong);
+}
+.cinema-shell .cinema-primary:hover {
+  background: #7fd0f9;
+  color: var(--pc-accent-ink);
+}
+.cinema-shell .cinema-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--pc-control-height);
+  padding: 10px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  background: none;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cinema-secondary:hover:not(:disabled) {
+  border-color: var(--pc-ink-dim);
+  color: var(--pc-ink);
+}
+.cinema-shell .cinema-secondary:disabled,
+.cinema-shell .cinema-link:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cinema-shell .cinema-link {
+  min-height: 32px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  text-align: left;
+}
+.cinema-shell .cinema-link:hover:not(:disabled) {
+  color: var(--pc-ink);
+}
+.cinema-shell .cinema-back {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cinema-back:hover {
+  color: var(--pc-ink);
+}
+
+/* ------------------------------------------------------------ top bar */
+.cinema-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--pc-z-hud);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-space-4);
+  padding: 0 var(--pc-hud-inset);
+  pointer-events: none;
+}
+.cinema-topbar > * {
+  pointer-events: auto;
+}
+.cinema-shell[data-stage="backdrop"] .cinema-topbar {
+  background: rgba(0, 0, 0, 0.82);
+  border-bottom: 1px solid var(--pc-line);
+}
+.cinema-shell .cinema-wordmark {
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: var(--pc-tracking-brand);
+  text-decoration: none;
+}
+.cinema-topbar-end {
+  display: flex;
+  align-items: center;
+  gap: var(--pc-space-4);
+}
+.cinema-tally {
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+  margin: 0 var(--pc-space-2) 0 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: 1;
+}
+.cinema-tally b {
+  margin-left: 6px;
+  color: var(--pc-ink);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-md);
+  font-variant-numeric: var(--pc-numeric);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-topbar .member-link {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  text-decoration: none;
+}
+.cinema-topbar .member-link:hover {
+  color: var(--pc-ink);
+}
+.cinema-topbar .notification-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--pc-ink-dim);
+  text-decoration: none;
+  font-size: var(--pc-text-2xs);
+}
+.cinema-topbar .notification-bell span {
+  font-family: var(--pc-font-mono);
+  color: var(--pc-accent);
+}
+
+/* menu: a quiet sheet on the right */
+.cinema-shell dialog.cinema-menu {
+  inset: 0 0 0 auto;
+  width: 300px;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 22px 26px;
+  border: 0;
+  border-left: 1px solid var(--pc-line);
+  background: var(--pc-bg-raised);
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+}
+.cinema-shell dialog.cinema-menu::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.cinema-menu .navigation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cinema-menu .navigation-head h2 {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-regular);
+}
+.cinema-menu .navigation-head button {
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-menu nav {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--pc-space-6);
+}
+.cinema-menu nav a {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--pc-line);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xl);
+  font-weight: var(--pc-weight-regular);
+  text-decoration: none;
+}
+.cinema-menu nav a:hover,
+.cinema-menu nav a[aria-current] {
+  color: var(--pc-accent);
+}
+.cinema-menu .navigation-caption {
+  margin: var(--pc-space-6) 0 var(--pc-space-2);
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-menu .cinema-menu-logout {
+  color: var(--pc-ink-dim);
+}
+
+/* ------------------------------------------------------------ foreground */
+.cinema-main {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pc-z-overlay);
+  pointer-events: none;
+}
+.cinema-galaxy {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cinema-galaxy button,
+.cinema-galaxy a,
+.cinema-galaxy details,
+.cinema-galaxy input,
+.cinema-galaxy select,
+.cinema-galaxy aside,
+.cinema-galaxy .quest-layer,
+.cinema-galaxy [role="alert"] {
+  pointer-events: auto;
+}
+.cinema-sky-status {
+  position: absolute;
+  top: 60px;
+  left: var(--pc-hud-inset);
+  display: flex;
+  align-items: center;
+  gap: var(--pc-space-3);
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-sky-status[data-empty="true"] {
+  visibility: hidden;
+}
+.cinema-sky-status p {
+  margin: 0;
+  color: var(--pc-bad);
+}
+.cinema-galaxy[data-stage="system"] .cinema-sky-status {
+  display: none;
+}
+
+/* markers: blue numbered tutorial circles, red "!" challenge (galaxy.css) */
+.cinema-markers,
+.cinema-planet-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cinema-markers .galaxy-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--pc-marker-tutorial-line);
+  border-radius: 50%;
+  background: var(--pc-marker-tutorial-bg);
+  color: #e5f0ff;
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+  line-height: 1;
+  pointer-events: auto;
+  will-change: transform;
+  box-shadow: 0 0 12px rgba(118, 173, 255, 0.35);
+}
+.cinema-markers .galaxy-marker[data-marker="!"] {
+  border-color: var(--pc-marker-challenge-line);
+  background: var(--pc-marker-challenge-bg);
+  box-shadow: 0 0 12px rgba(255, 134, 134, 0.35);
+}
+.cinema-markers .galaxy-marker:hover {
+  filter: brightness(1.25);
+}
+/* Markers wait for the galaxy to be at rest, then fade in. */
+.cinema-markers .galaxy-marker {
+  transition: opacity 500ms var(--pc-ease-out);
+}
+.cinema-markers[data-held="true"] .galaxy-marker {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: 120ms;
+}
+
+/* The new star after its ignition: a ring and a short label. */
+.cinema-reticle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.cinema-reticle[data-visible="false"] {
+  visibility: hidden;
+}
+.cinema-reticle-ring {
+  position: absolute;
+  left: -17px;
+  top: -17px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--pc-new-star);
+  border-radius: 50%;
+  box-shadow: 0 0 14px rgba(182, 156, 255, 0.45);
+  animation: cinema-reticle-in 700ms var(--pc-ease-out) both;
+}
+@keyframes cinema-reticle-in {
+  from {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+.cinema-reticle-label {
+  position: absolute;
+  left: 24px;
+  top: -18px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 8px;
+  border-radius: var(--pc-radius-sm);
+  /* A dark plate so the label reads over the bright core; no blur. */
+  background: rgba(0, 0, 0, 0.62);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+  white-space: nowrap;
+  animation: cinema-fade-in 700ms var(--pc-ease-out) 200ms both;
+}
+.cinema-reticle-label b {
+  color: var(--pc-new-star);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-reticle-label .cinema-num {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-markers .galaxy-marker[data-visible="false"],
+.cinema-hover[data-visible="false"],
+.cinema-planet-labels [data-visible="false"] {
+  visibility: hidden;
+}
+.cinema-hover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  pointer-events: none;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-2xs);
+  white-space: nowrap;
+  text-shadow: 0 0 6px #000;
+  will-change: transform;
+}
+.cinema-hover b {
+  font-family: var(--pc-font-mono);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-hover span {
+  color: var(--pc-ink-dim);
+}
+.cinema-planet-labels span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-2xs);
+  white-space: nowrap;
+  text-shadow: 0 0 6px #000;
+  will-change: transform;
+}
+.cinema-planet-labels span[data-kind="unconfirmed"] {
+  color: var(--pc-ink-dim);
+}
+.cinema-planet-labels span[data-selected="true"] {
+  color: var(--pc-accent);
+}
+
+/* tools: bottom-left; view controls: bottom-right */
+.cinema-tools {
+  position: absolute;
+  left: var(--pc-hud-inset);
+  bottom: 22px;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--pc-space-2);
+}
+.cinema-tools[data-hidden="true"] {
+  display: none;
+}
+.cinema-corner {
+  position: absolute;
+  right: var(--pc-hud-inset);
+  bottom: 22px;
+  display: flex;
+  gap: var(--pc-space-2);
+}
+.cinema-galaxy[data-stage="system"] .cinema-corner {
+  right: calc(var(--pc-panel-width) + var(--pc-hud-inset) + 12px);
+}
+.cinema-tool {
+  position: relative;
+}
+.cinema-tool:has(details[open]),
+.cinema-tool:has([aria-expanded="true"]) {
+  z-index: 2;
+}
+
+/* 내 별 찾기 (StarSearch, reused): the summary is the pill; the form opens
+   above it in one glass panel. */
+.cinema-search {
+  display: inline-flex;
+}
+.cinema-shell .cinema-search-sizer {
+  visibility: hidden;
+  white-space: nowrap;
+}
+.cinema-search .star-search,
+.cinema-search .star-search:not([open]) {
+  position: absolute;
+  z-index: auto;
+  top: auto;
+  left: 0;
+  bottom: 0;
+  width: auto;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.cinema-search .star-search > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  list-style: none;
+  cursor: pointer;
+}
+.cinema-search .star-search > summary::-webkit-details-marker {
+  display: none;
+}
+.cinema-search .star-search > summary:hover {
+  color: var(--pc-ink);
+  border-color: var(--pc-line-strong);
+}
+.cinema-search .star-search[open] {
+  top: auto;
+  left: -17px;
+  bottom: -13px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-space-2);
+  width: 360px;
+  max-height: calc(100dvh - 140px);
+  padding: 14px 16px 12px;
+  overflow: auto;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  /* Opaque: it covers other HUD controls while open. */
+  background: var(--pc-bg-raised);
+  font-size: var(--pc-text-sm);
+}
+.cinema-tools:has(.star-search[open]) .quest-round-notice {
+  display: none;
+}
+.cinema-search .star-search[open] > summary {
+  order: 1;
+  align-self: flex-start;
+  margin-top: var(--pc-space-1);
+  color: var(--pc-accent);
+  border-color: rgba(94, 196, 247, 0.45);
+}
+.cinema-search .star-search p {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: var(--pc-leading);
+}
+.cinema-search .star-search-fields {
+  display: grid;
+  gap: var(--pc-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.cinema-search .star-search-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-search input,
+.cinema-search select {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-raise);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: var(--pc-text-sm);
+}
+.cinema-search .star-search-actions,
+.cinema-search nav {
+  display: flex;
+  gap: var(--pc-space-2);
+  margin-top: var(--pc-space-2);
+}
+.cinema-search .star-search-actions button,
+.cinema-search nav button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  font-size: var(--pc-text-xs);
+}
+.cinema-search .star-search-actions button[type="submit"] {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+}
+.cinema-search .star-search-results {
+  display: grid;
+  gap: 2px;
+  max-height: min(40dvh, 360px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.cinema-search .star-search-results button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--pc-radius-sm);
+  font-size: var(--pc-text-sm);
+  text-align: left;
+}
+.cinema-search .star-search-results button:hover {
+  background: var(--pc-raise);
+}
+.cinema-search .star-search-results strong {
+  font-family: var(--pc-font-mono);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-search .star-search-results span {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+
+/* 퀘스트 (QuestPanel, reused) */
+.cinema-quests .quest-layer {
+  position: relative;
+  inset: auto;
+}
+.cinema-quests .quest-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-quests .quest-toggle[aria-expanded="true"] {
+  color: var(--pc-accent);
+  border-color: rgba(94, 196, 247, 0.45);
+}
+.cinema-quests .quest-toggle > span:first-child {
+  color: var(--pc-marker-tutorial-line);
+}
+.cinema-quests .quest-panel,
+.cinema-quests .quest-round-notice {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  top: auto;
+  width: 340px;
+  max-height: calc(100dvh - 150px);
+  margin: 0;
+  padding: 14px 18px;
+  overflow: auto;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-bg-raised);
+  box-shadow: none;
+  font-size: var(--pc-text-sm);
+}
+.cinema-quests
+  .quest-layer:has(.quest-toggle[aria-expanded="true"])
+  .quest-round-notice {
+  display: none;
+}
+.cinema-quests .quest-round-notice {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 6px 8px 6px 14px;
+  border-color: rgba(255, 134, 134, 0.35);
+  border-radius: var(--pc-radius-pill);
+  white-space: nowrap;
+  overflow: visible;
+}
+.cinema-quests .quest-round-notice p {
+  flex: none;
+  min-width: 0;
+  margin: 0 6px 0 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+}
+.cinema-quests .quest-round-notice button:first-of-type {
+  color: var(--pc-accent);
+}
+.cinema-quests .quest-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cinema-quests .quest-panel-heading h2 {
+  margin: 0;
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-quests .quest-panel-heading button,
+.cinema-quests .quest-round-notice button {
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-quests .quest-sections {
+  display: block;
+}
+.cinema-quests .quest-sections > details {
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cinema-quests .quest-panel details > summary {
+  min-height: 40px;
+  padding: 10px 2px;
+  color: var(--pc-ink);
+}
+.cinema-quests .quest-panel summary span {
+  font-family: var(--pc-font-mono);
+  color: var(--pc-ink-dim);
+}
+.cinema-quests .quest-steps button {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 0;
+  border: 0;
+  text-align: left;
+}
+.cinema-quests .quest-seq {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--pc-marker-tutorial-line);
+  border-radius: 50%;
+  background: var(--pc-marker-tutorial-bg);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-quests .quest-caption,
+.cinema-quests .quest-panel p {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: var(--pc-leading);
+}
+.cinema-quests .quest-actions a,
+.cinema-quests .quest-actions button {
+  font-size: var(--pc-text-xs);
+}
+
+/* list: fallback for WebGL failure, and a keyboard-friendly way in */
+.cinema-list-panel {
+  position: absolute;
+  top: 68px;
+  left: var(--pc-hud-inset);
+  bottom: 72px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-space-2);
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-glass);
+}
+.cinema-galaxy:has(.quest-round-notice) .cinema-list-panel {
+  bottom: 120px;
+}
+.cinema-list-panel .cinema-list-close {
+  align-self: flex-end;
+}
+.cinema-notice {
+  margin: 0;
+  color: var(--pc-warn);
+  font-size: var(--pc-text-xs);
+}
+.cinema-list-panel .discovered-stars {
+  display: block;
+  padding: 0;
+}
+.cinema-list-panel .discovered-stars h2 {
+  margin: 0 0 4px;
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-list-panel .discovered-stars p,
+.cinema-list-panel .discovered-status {
+  margin: 0 0 8px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: var(--pc-leading);
+}
+.cinema-list-panel .discovered-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-list-panel .discovered-rows button {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--pc-radius-sm);
+  text-align: left;
+  font-size: var(--pc-text-sm);
+}
+.cinema-list-panel .discovered-rows button:hover,
+.cinema-list-panel .discovered-rows button[aria-pressed="true"] {
+  background: var(--pc-raise);
+}
+.cinema-list-panel .discovered-rows strong {
+  font-family: var(--pc-font-mono);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-list-panel .discovered-rows span,
+.cinema-list-panel .discovered-rows small {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-list-panel nav {
+  display: flex;
+  gap: var(--pc-space-2);
+}
+.cinema-list-panel nav button {
+  min-height: 30px;
+  padding: 4px 12px;
+  font-size: var(--pc-text-xs);
+}
+
+/* ------------------------------------------------------------ star panel */
+.cinema-star-panel {
+  position: absolute;
+  top: 68px;
+  right: 12px;
+  bottom: 12px;
+  width: var(--pc-panel-width);
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-space-4);
+  padding: 20px 24px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-glass);
+  animation: cinema-panel-in var(--pc-dur-slow) var(--pc-ease-out) both;
+  transition:
+    opacity var(--pc-dur-slow) var(--pc-ease-out),
+    transform var(--pc-dur-slow) var(--pc-ease-out);
+}
+/* Flying to the star: the panel comes in for the arrival, not before. */
+.cinema-star-panel[data-arriving="true"] {
+  opacity: 0;
+  transform: translateX(24px);
+  pointer-events: none;
+  animation: none;
+}
+@keyframes cinema-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+.cinema-star-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cinema-star-head .cinema-back {
+  align-self: flex-start;
+  margin-bottom: 6px;
+}
+.cinema-star-head h2 {
+  margin: 0;
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-2xl);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: 0;
+}
+.cinema-star-head h2:focus {
+  outline: none;
+}
+.cinema-star-status {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-star-status span {
+  color: var(--pc-ink);
+}
+.cinema-star-status span[data-stage="completed"] {
+  color: var(--pc-good);
+}
+.cinema-star-status span[data-stage="in_progress"] {
+  color: var(--pc-accent);
+}
+.cinema-star-summary {
+  display: flex;
+  gap: var(--pc-space-4);
+  align-items: baseline;
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-star-summary strong {
+  color: var(--pc-ink);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-star-summary b {
+  font-family: var(--pc-font-mono);
+  font-variant-numeric: var(--pc-numeric);
+  font-weight: var(--pc-weight-medium);
+  color: var(--pc-ink);
+}
+.cinema-star-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pc-space-2);
+}
+.cinema-star-actions .cinema-link {
+  grid-column: 1 / -1;
+}
+.cinema-alert {
+  display: grid;
+  gap: var(--pc-space-2);
+  justify-items: start;
+}
+.cinema-alert p {
+  margin: 0;
+  color: var(--pc-bad);
+  font-size: var(--pc-text-sm);
+}
+.cinema-planets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-space-2);
+  padding-top: var(--pc-space-3);
+  border-top: 1px solid var(--pc-line);
+}
+.cinema-planets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cinema-planets h3,
+.cinema-planet-info h3 {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-planet-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-planet-list button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+  text-align: left;
+}
+.cinema-planet-list button:hover {
+  border-color: var(--pc-line-strong);
+}
+.cinema-planet-list button[aria-pressed="true"] {
+  border-color: var(--pc-accent);
+  background: var(--pc-accent-soft);
+}
+.cinema-planet-list button span {
+  font-size: var(--pc-text-sm);
+}
+.cinema-planet-list button small {
+  grid-column: 2;
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-orbit-glyph {
+  grid-row: 1 / 3;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--pc-ink-dim);
+  border-radius: 50%;
+}
+.cinema-orbit-glyph[data-kind="unconfirmed"] {
+  border-style: dashed;
+}
+.cinema-planet-info {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+}
+.cinema-planet-info h3 {
+  font-family: var(--pc-font-mono);
+}
+.cinema-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: var(--pc-text-xs);
+}
+.cinema-facts dt {
+  color: var(--pc-ink-faint);
+}
+.cinema-facts dd {
+  margin: 0;
+  color: var(--pc-ink);
+}
+.cinema-observations {
+  padding-top: var(--pc-space-2);
+  border-top: 1px solid var(--pc-line);
+}
+.cinema-observations summary {
+  min-height: 32px;
+  padding: 6px 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  cursor: pointer;
+}
+
+/* PlanetExplanation (NASA data), reused as is and restyled */
+.cinema-explanation .planet-explanation {
+  display: grid;
+  gap: var(--pc-space-2);
+}
+.cinema-explanation .planet-explanation > button,
+.cinema-explanation .planet-explanation-content button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-accent);
+  font-size: var(--pc-text-xs);
+}
+.cinema-explanation .planet-explanation-content {
+  display: grid;
+  gap: 6px;
+  font-size: var(--pc-text-xs);
+}
+.cinema-explanation h4 {
+  margin: 6px 0 0;
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-explanation p {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  line-height: var(--pc-leading);
+}
+.cinema-explanation dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+.cinema-explanation dt {
+  color: var(--pc-ink-faint);
+}
+/* Values mix numbers and Hangul ("1.12 지구 반지름"): Sans KR, tabular figures. */
+.cinema-explanation dd {
+  margin: 0;
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-explanation a {
+  color: var(--pc-accent);
+}
+
+/* first visit: one line */
+.cinema-first-visit {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--pc-space-3);
+  max-width: min(640px, calc(100vw - 48px));
+  pointer-events: auto;
+}
+.cinema-galaxy[data-stage="system"] .cinema-first-visit {
+  left: calc((100vw - var(--pc-panel-width) - 24px) / 2);
+}
+.cinema-first-visit:not(:has(.first-visit-guide)) {
+  display: none;
+}
+.cinema-first-visit-line {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-lg);
+  text-shadow: 0 0 10px #000;
+  white-space: nowrap;
+}
+.cinema-first-visit .first-visit-guide {
+  display: contents;
+}
+.cinema-first-visit .first-visit-guide > p:not([role="alert"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.cinema-first-visit .first-visit-guide [role="alert"] {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 6px 0 0;
+  color: var(--pc-bad);
+  font-size: var(--pc-text-xs);
+}
+.cinema-first-visit .first-visit-guide button {
+  min-height: 28px;
+  padding: 3px 12px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ analysis */
+/* The variant owns its bottom panel. During a discovery it fades out of the
+   way (still mounted) and comes back as it was. */
+.cinema-analysis-stage > * {
+  transition:
+    opacity 400ms var(--pc-ease-out),
+    visibility 0s linear 0s;
+}
+/* A variant's own modal result dialog sits in the top layer, outside the
+   fade above; it steps aside too, and comes back with the panel. */
+.cinema-analysis-stage[data-away="true"] dialog,
+.cinema-analysis-stage[data-away="true"] dialog::backdrop {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.cinema-analysis-stage[data-away="true"] > * {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 400ms var(--pc-ease-out),
+    visibility 0s linear 400ms;
+}
+.cinema-shell .cinema-variant-toggle {
+  position: fixed;
+  top: 60px;
+  left: var(--pc-hud-inset);
+  z-index: var(--pc-z-hud);
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cinema-variant-toggle button {
+  min-height: 26px;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: var(--pc-radius-pill);
+  background: transparent;
+  color: var(--pc-ink-dim);
+  font: inherit;
+}
+.cinema-shell .cinema-variant-toggle button[aria-pressed="true"] {
+  background: var(--pc-accent-soft);
+  color: var(--pc-ink);
+}
+
+/* transit caption and live light curve */
+.cinema-transit {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  z-index: var(--pc-z-panel);
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  pointer-events: none;
+}
+.cinema-transit:focus {
+  outline: none;
+}
+/* The caption comes with the edge-on view, when the planet starts across. */
+.cinema-transit[data-passing="true"] > * {
+  animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+.cinema-transit-caption {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: 15px;
+  text-shadow: 0 0 10px #000;
+}
+.cinema-lightcurve {
+  display: block;
+  width: 100%;
+  height: 92px;
+}
+.cinema-transit-note {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+}
+
+/* discovery card (a modal <dialog>: reset the UA placement) */
+.cinema-shell dialog.cinema-discovery {
+  position: fixed;
+  inset: auto auto 20px 50%;
+  z-index: var(--pc-z-panel);
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 80px);
+  margin: 0;
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+  overflow: auto;
+}
+.cinema-shell dialog.cinema-discovery:not([open]) {
+  display: none;
+}
+.cinema-shell dialog.cinema-discovery::backdrop {
+  background: transparent;
+}
+.cinema-discovery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-space-3);
+  padding: 18px 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-glass);
+  animation: cinema-card-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+@keyframes cinema-card-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+}
+.cinema-discovery h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: var(--pc-weight-medium);
+  line-height: var(--pc-leading-tight);
+  text-wrap: balance;
+}
+.cinema-discovery[data-kind="judgmentMismatch"] .cinema-eyebrow {
+  color: var(--pc-warn);
+}
+.cinema-discovery-facts {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-xs);
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-discovery-note {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-chip {
+  padding: 1px 10px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-chip[data-tone="good"] {
+  color: var(--pc-good);
+  border-color: rgba(126, 224, 161, 0.4);
+}
+.cinema-chip[data-tone="warn"] {
+  color: var(--pc-warn);
+  border-color: rgba(242, 193, 78, 0.4);
+}
+.cinema-chip[data-tone="new"] {
+  color: var(--pc-new-star);
+  border-color: rgba(182, 156, 255, 0.45);
+}
+.cinema-discovery-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pc-space-2);
+}
+
+/* toast */
+.cinema-toast {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  z-index: var(--pc-z-toast);
+  transform: translateX(-50%);
+  padding: 7px 18px;
+  border: 1px solid var(--pc-accent);
+  border-radius: var(--pc-radius-pill);
+  background: var(--pc-glass);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity var(--pc-dur);
+}
+.cinema-toast[data-empty="true"] {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------ backdrop pages */
+/* The existing pages, unchanged in structure, over the dimmed galaxy. Only
+   type and colours come from the tokens. */
+.cinema-shell.cinema-backdrop {
+  background: transparent;
+}
+.cinema-shell.cinema-backdrop::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.35) 0%,
+    rgba(0, 0, 0, 0.5) 45%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
+}
+.cinema-shell.cinema-backdrop {
+  --muted: var(--pc-ink-dim);
+  --line: var(--pc-line);
+}
+.cinema-shell.cinema-backdrop .cinema-page {
+  position: relative;
+  padding-top: calc(56px + clamp(24px, 4vh, 48px));
+  min-height: 100dvh;
+  color: var(--pc-ink);
+}
+.cinema-shell.cinema-backdrop .cinema-page.service-page::before {
+  display: none;
+}
+.cinema-shell.cinema-backdrop .cinema-page a:hover {
+  color: var(--pc-accent);
+}
+.cinema-shell.cinema-backdrop .cinema-page .eyebrow {
+  color: var(--pc-accent);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+.cinema-shell.cinema-backdrop .cinema-page time,
+.cinema-shell.cinema-backdrop .cinema-page data {
+  font-variant-numeric: var(--pc-numeric);
+}
+
+/* Protected-route loading/error states before the layout mounts */
+.desktop-content > main.page {
+  position: relative;
+  z-index: 1;
+  font-family: var(--pc-font-sans);
+}
+
+/* The login fly-in has the screen to itself; the HUD comes in as it lands. */
+.cinema-shell .cinema-topbar-end,
+.cinema-galaxy .cinema-tools,
+.cinema-galaxy .cinema-corner,
+.cinema-galaxy .cinema-first-visit {
+  transition: opacity 700ms var(--pc-ease-out);
+}
+.cinema-shell[data-intro="true"] .cinema-topbar-end,
+.cinema-shell[data-intro="true"] .cinema-galaxy .cinema-tools,
+.cinema-shell[data-intro="true"] .cinema-galaxy .cinema-corner,
+.cinema-shell[data-intro="true"] .cinema-galaxy .cinema-first-visit {
+  opacity: 0;
+  transition-duration: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-analysis-stage > *,
+  .cinema-analysis-stage[data-away="true"] > *,
+  .cinema-toast,
+  .cinema-star-panel,
+  .cinema-markers .galaxy-marker,
+  .cinema-shell .cinema-topbar-end,
+  .cinema-galaxy .cinema-tools,
+  .cinema-galaxy .cinema-corner,
+  .cinema-galaxy .cinema-first-visit {
+    transition: none;
+  }
+  .cinema-reticle-ring,
+  .cinema-reticle-label,
+  .cinema-transit[data-passing="true"] > * {
+    animation: none;
+  }
+  .cinema-star-panel,
+  .cinema-transit,
+  .cinema-discovery,
+  .cinema-stage-still,
+  .cinema-still {
+    animation: none;
+  }
+}

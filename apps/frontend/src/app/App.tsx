@@ -18,7 +18,10 @@ import {
 import { LoginPage, LogoutStatus } from "../auth/LoginPage";
 import { useSession } from "../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../components/RequestState";
-import { ServiceLayout } from "../components/ServiceLayout";
+import { CinemaRoot } from "../cinema/shell/CinemaRoot";
+import { CinemaLayout } from "../cinema/shell/CinemaLayout";
+import { GalaxyView } from "../cinema/shell/GalaxyView";
+import { AnalysisStage } from "../cinema/shell/AnalysisStage";
 import { routeDefinitions, safeReturnTo, type PageKey } from "./paths";
 import { usePageContext } from "./usePageContext";
 import { p1Enabled } from "../features/p1";
@@ -115,50 +118,58 @@ export function App({
   historyGraphRenderer?: ComponentType<HistoryGraphProps> | null;
   profileSections?: ProfileSlotComponents;
 }) {
+  // /sky is the galaxy itself (a camera move, not a page) unless a dev
+  // inspector fills the slot. /analysis is always framed over the system.
+  const skyOverride = Boolean(pages.sky);
   return (
     <ProfileSlots.Provider value={profileSections}>
       <HistoryGraphRenderer.Provider value={historyGraphRenderer}>
         <DesktopGate>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            {p1Enabled && (
-              <Route
-                path="/withdrawal/status/:requestId"
-                element={<WithdrawalStatusPage />}
-              />
-            )}
-            <Route path="/oauth/callback" element={<LoginPage />} />
-            <Route element={<ProtectedRoutes />}>
-              <Route element={<ServiceLayout />}>
-                <Route path="/" element={<Navigate replace to="/sky" />} />
-                {routeDefinitions.map((route) => {
-                  const Page = pages[route.key];
-                  return (
-                    <Route
-                      key={route.key}
-                      path={route.path}
-                      element={
-                        Page ? (
-                          <Page />
-                        ) : (
-                          <UnconnectedPage pageKey={route.key} />
-                        )
-                      }
-                    />
-                  );
-                })}
+          <CinemaRoot>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              {p1Enabled && (
                 <Route
-                  path="*"
-                  element={
-                    <section>
-                      <h1>페이지를 찾을 수 없습니다</h1>
-                      <Link to="/sky">별지도로 돌아가기</Link>
-                    </section>
-                  }
+                  path="/withdrawal/status/:requestId"
+                  element={<WithdrawalStatusPage />}
                 />
+              )}
+              <Route path="/oauth/callback" element={<LoginPage />} />
+              <Route element={<ProtectedRoutes />}>
+                <Route element={<CinemaLayout skyOverride={skyOverride} />}>
+                  <Route path="/" element={<Navigate replace to="/sky" />} />
+                  {routeDefinitions.map((route) => {
+                    const Page = pages[route.key];
+                    let element = Page ? (
+                      <Page />
+                    ) : route.key === "sky" ? (
+                      <GalaxyView />
+                    ) : (
+                      <UnconnectedPage pageKey={route.key} />
+                    );
+                    if (route.key === "analysis")
+                      element = <AnalysisStage>{element}</AnalysisStage>;
+                    return (
+                      <Route
+                        key={route.key}
+                        path={route.path}
+                        element={element}
+                      />
+                    );
+                  })}
+                  <Route
+                    path="*"
+                    element={
+                      <section>
+                        <h1>페이지를 찾을 수 없습니다</h1>
+                        <Link to="/sky">나의 은하로 돌아가기</Link>
+                      </section>
+                    }
+                  />
+                </Route>
               </Route>
-            </Route>
-          </Routes>
+            </Routes>
+          </CinemaRoot>
         </DesktopGate>
       </HistoryGraphRenderer.Provider>
     </ProfileSlots.Provider>

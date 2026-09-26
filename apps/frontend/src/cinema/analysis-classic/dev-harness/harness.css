@@ -1,0 +1,17 @@
+/* Harness only: the stand-in scene fills the window behind the panel. */
+.harness-scene {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pc-z-scene, 0);
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+.harness-status {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 2;
+  color: var(--pc-ink-dim, #8d99ad);
+  font: 13px var(--pc-font-sans, sans-serif);
+}

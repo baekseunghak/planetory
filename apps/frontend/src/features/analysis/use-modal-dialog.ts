@@ -1,4 +1,19 @@
-import { useEffect, useRef, type RefObject } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  type RefObject,
+} from "react";
+
+/**
+ * 바깥 화면이 잠시 이 대화상자들을 비켜 세울 때 true(예: 시네마 셸의 발견
+ * 연출). 열려 있던 대화상자는 상태를 바꾸지 않은 채 닫혀 있다가, false가
+ * 되면 그대로 다시 열린다. 모달은 문서 나머지를 비활성으로 만들기 때문에,
+ * 보이지 않게만 두면 키보드 포커스와 버튼이 그 안에 남는다. 기본값 false라
+ * 제공자가 없는 곳의 동작은 그대로다.
+ */
+export const ModalHoldContext = createContext(false);
 
 /**
  * 네이티브 `<dialog>`를 React 상태에 맞춰 여닫는다. 포커스 가둠·Escape·배경
@@ -30,6 +45,10 @@ export function useModalDialog({
   const wasOpen = useRef(false);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const hold = useContext(ModalHoldContext);
+  // 비켜 세우느라 닫은 것은 사용자가 닫은 것이 아니다. close 이벤트는
+  // 비동기로 오므로 그때까지 기억한다.
+  const holding = useRef(false);
 
   useEffect(() => {
     const node = ref.current;
@@ -38,7 +57,10 @@ export function useModalDialog({
       event.preventDefault();
       closeRef.current();
     };
-    const closed = () => closeRef.current();
+    const closed = () => {
+      if (holding.current) return;
+      closeRef.current();
+    };
     node.addEventListener("cancel", cancel);
     node.addEventListener("close", closed);
     return () => {
@@ -50,12 +72,23 @@ export function useModalDialog({
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    if (open && hold) {
+      // 상태는 열린 채로 두고 화면에서만 뺀다.
+      if (node.open) {
+        holding.current = true;
+        node.close();
+      }
+      wasOpen.current = true;
+      return;
+    }
+    holding.current = false;
     if (open) {
       if (!node.open) {
-        opener.current =
-          document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
+        if (!wasOpen.current)
+          opener.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
         node.showModal();
       }
     } else if (wasOpen.current) {
@@ -67,7 +100,7 @@ export function useModalDialog({
       )?.focus();
     }
     wasOpen.current = open;
-  }, [open, fallbackRef]);
+  }, [open, hold, fallbackRef]);
 
   return ref;
 }
