@@ -384,3 +384,4 @@
 | 2026-09-27 | 전환 SQL이 보상 별의 회원 기록을 남기는 문제, 멈춤 검사와 회귀 테스트 | S15P21C206-272 | tutorial_switch.sql, achievement_unlocks, TutorialSwitchTest, 외래 키, !226 백승학 P2 | 로컬 검증 완료, 운영 영향 없음, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | MR !227 리뷰 반영: 공급 집계 REPEATABLE READ 스냅샷과 보고 전용 최소 권한 로그인 | S15P21C206-79 | REPEATABLE READ, planetory_reporter, REPORT_TABLES, default_transaction_read_only, --manifest -, 강재민 리뷰 | 구현 완료 | [기록](2026-09-27.md) |
+| 2026-09-27 | 배치 run 입력 어댑터, 후보별 외부 참조 목록·후보 없는 참조 적재, PSCompPars → archive 표기, 첫 게시 한정 | S15P21C206-276 | run_source, external_only, first_publish_only, DB_SOURCES, archive, pl_name, gold-serialization-125-v2, hidden | 구현·합성 검증 완료 | [기록](2026-09-27.md) |

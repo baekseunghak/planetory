@@ -143,7 +143,9 @@ class SyntheticBuildTest(unittest.TestCase):
 
         [c] = p["candidates"]
         self.assertAlmostEqual(c["record"]["period_days"], self.PERIOD, delta=0.05)
-        self.assertEqual((c["disposition"]["disposition"], c["external"]["external_id"]), ("confirmed", "S b"))
+        self.assertEqual((c["disposition"]["disposition"], [e["external_id"] for e in c["external"]]),
+                         ("confirmed", ["S b"]))
+        self.assertEqual(p["external_only"], [])
         self.assertEqual(p["bundle"]["manifest"]["publish"]["payload_digest"], p["bundle"]["payload_digest"])
         again, _ = t.assemble_star(definition, self.dir, tutorial, "unittest-only")
         self.assertEqual(t.to_payload(again, definition, attributes, {})["bundle"]["payload_digest"],

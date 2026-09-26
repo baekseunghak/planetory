@@ -25,13 +25,13 @@ from astro_kernel import discoverability
 from astro_kernel.candidate_catalog import build_candidate_catalog
 from astro_kernel.discoverability import prepare_discoverability
 from astro_kernel.external_catalog import build_snapshot, join_catalog, normalize_export_row
-from astro_kernel.gold_canonical import array_checksum
 from astro_kernel.gold_serialization import assemble
 from astro_kernel.iteration import iterate_bls
 from astro_kernel.preprocessing import preprocess_silver, preprocessing_config
 from astro_kernel.segmentation import segment_silver
 
-from .mock_source import RECORD_FIELDS, payload_digest
+from .mock_source import payload_digest
+from .run_source import gold_body
 
 TUTORIAL = Path(__file__).parent / "tutorial.json"
 PROVISIONAL_ID = 1
@@ -181,44 +181,20 @@ def assemble_star(star: dict, folder: Path, tutorial: dict, label_approval: str)
 
 
 def to_payload(result: dict, star: dict, attributes: dict, publish: dict) -> dict:
-    """assemble 결과를 load.publish_star의 payload로 바꾼다. DB id가 들어간 키는 적재가 다시 만든다."""
+    """assemble 결과를 load.publish_star의 payload로 바꾼다. 판 본문 변환은 배치 run과 같은 run_source.gold_body다."""
     gold = result["payload"]
-    procver = star["product"]["procver"]
-    segments = [{**{k: s[k] for k in ("sector", "binning_revision", "start_btjd", "bin_minutes", "n_points",
-                                         "flux", "flux_scatter", "gaps")},
-                 "checksum": array_checksum(s["flux"]),
-                 "observation": {"start_btjd": round(s["start_btjd"], 6),
-                                 "end_btjd": round(s["start_btjd"] + s["n_points"] * s["bin_minutes"] / 1440, 6),
-                                 "cadence": "120s", "source_version": procver}} for s in gold["segments"]]
-    dispositions = {d["candidate_id"]: d for d in gold["candidate_dispositions"]}
-    references = {r["candidate_id"]: r for r in gold["external_statuses"]}
-    candidates = []
-    for c in sorted(gold["candidates"], key=lambda c: c["removal_step"]):
-        d, e = dispositions[c["id"]], references[c["id"]]
-        candidates.append({
-            "record": {k: c[k] for k in RECORD_FIELDS},
-            "disposition": {k: d[k] for k in ("disposition", "answer_class", "planet_truth", "source_refs")},
-            "external": {k: e[k] for k in ("source", "external_id", "disposition", "period_days", "epoch_btjd",
-                                           "fetched_on")},
-            "ai": None})
-    pg = gold["periodogram"]
-    power_checksum = array_checksum(pg["power"])
-    bundle = gold["bundle"]
-    record_checksums = bundle["manifest"]["record_checksums"]
+    body = gold_body(gold, {str(s["sector"]): {"cadence": "120s", "source_version": star["product"]["procver"]}
+                            for s in gold["segments"]})
+    bundle = body["bundle"]
     digest = payload_digest(bundle["bundle_version"], bundle["fold_reference_time_btjd"], bundle["base_days"],
-                            segments, power_checksum, record_checksums)
-    manifest = {k: v for k, v in bundle["manifest"].items() if k not in ("segment_ids", "array_checksums")}
-    manifest["publish"] = {"payload_digest": digest, **publish}
+                            body["segments"], body["periodogram"]["checksum"], bundle["manifest"]["record_checksums"])
+    bundle["manifest"]["publish"] = {"payload_digest": digest, **publish}
+    bundle["payload_digest"] = digest
     return {
         "tic_id": star["tic_id"], "label": f"튜토리얼 {star['seq']} {star['name']} (TIC {star['tic_id']})",
-        "star": {**attributes, "confirmed_count": sum(c["record"]["is_confirmed"] for c in candidates),
+        "star": {**attributes, "confirmed_count": sum(c["record"]["is_confirmed"] for c in body["candidates"]),
                  "service_status": "published"},
-        "segments": segments,
-        "bundle": {"bundle_version": bundle["bundle_version"], "payload_digest": digest, "manifest": manifest,
-                   "fold_reference_time_btjd": bundle["fold_reference_time_btjd"], "base_days": bundle["base_days"]},
-        "periodogram": {"period_min_days": pg["period_min_days"], "period_max_days": pg["period_max_days"],
-                        "n_periods": pg["n_periods"], "power": pg["power"], "checksum": power_checksum},
-        "candidates": candidates,
+        **body,
     }
 
 
