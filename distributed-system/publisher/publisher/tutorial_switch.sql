@@ -7,8 +7,9 @@
 --
 --   1. 5개 별이 튜토리얼로 쓸 수 있는지 본다(공개, current 판·주기도, 활성 후보, 후보마다 처분).
 --   2. 옛 1번 별 위의 회원 기록을 지운다: 알림(성과·옛 1번을 가리키는 것), 제출·분석 기록·스냅샷·성과와 그 성과로 열린 별. 옛 1번은 목업 곡선을
---      올린 임시 seed라 과학적으로 틀린 기록이다(2026-09-26 사용자 승인). 성과로 열린 별에 다른 기록이 이어져
---      있으면 외래 키가 막아 전체가 rollback된다.
+--      올린 임시 seed라 과학적으로 틀린 기록이다(2026-09-26 사용자 승인). 성과로 열린 별은 접근 권한과 진행도만
+--      지운다. 그 별에 회원이 제출·분석 기록·성과를 남겼으면 멈춘다. 그 기록은 star_unlocks·user_star_progress를
+--      참조하지 않아 외래 키가 막지 않고, 남기면 접근할 수 없는 별의 기록이 통계에 남는다(!226 백승학 리뷰).
 --   3. 옛 1번을 받은 회원을 새 1번으로 옮긴다. 배치 좌표는 발견 순번으로만 정해지므로(PersonalSpiralGalaxyLayout)
 --      star_unlocks 행의 tic만 바꾼다. 진행도는 처음부터다. 새 1번은 가입 때만 지급되므로 옮기지 않으면
 --      기존 회원의 튜토리얼이 영구히 잠긴다.
@@ -84,6 +85,14 @@ BEGIN
                   OR candidate_id IN (SELECT id FROM old_mock_candidates))
        OR EXISTS (SELECT 1 FROM published_analyses WHERE history_id IN (SELECT id FROM old_histories)) THEN
         RAISE EXCEPTION '옛 1번 별에 게시글이나 공개 분석이 있다. 지울지는 사람이 정한다. 멈췄다.';
+    END IF;
+    SELECT string_agg(DISTINCT a.user_id || ':' || a.tic_id, ', ') INTO other FROM achievement_unlocks a
+     WHERE EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = a.user_id AND s.tic_id = a.tic_id)
+        OR EXISTS (SELECT 1 FROM analysis_histories h WHERE h.user_id = a.user_id AND h.tic_id = a.tic_id)
+        OR EXISTS (SELECT 1 FROM user_candidate_achievements x JOIN candidates c ON c.id = x.candidate_id
+                    WHERE x.user_id = a.user_id AND c.tic_id = a.tic_id);
+    IF other IS NOT NULL THEN
+        RAISE EXCEPTION '옛 1번 성과로 열린 별(회원:별 %)에 제출·분석 기록·성과가 있다. 지울지는 사람이 정한다. 멈췄다.', other;
     END IF;
 END $$;
 
