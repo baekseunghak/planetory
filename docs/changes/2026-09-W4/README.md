@@ -371,3 +371,5 @@
 | 2026-09-26 | data-platform 테스트를 CI validate 단계에 연결 | S15P21C206-91 | validate:data-platform, validate:astro-kernel, uv.lock, build:spark astropy | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | GCP Docker 배포 job·사용처 없는 GCP 이미지 빌드 제거, release 방식 유지 | S15P21C206-94 | deploy:ingestion, deploy:spark, build:spark, release, compose.worker.yaml, 262 방식 폐기 | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | 온라인 계산 Worker 운영 배포와 131 캡처 인계 | S15P21C206-88 | derived-compute, DERIVED_COMPUTE_URL, rj-1, rj-2, 캡처, 스니펫 193, V26~V29 | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-27 | 게시 후보 집계 계약·무신호 별 상태 분리·AI 미실행 값 확정 | S15P21C206-79 | candidate_aggregation, publication-candidates.schema.json, no_signal, previous_candidates_vanished, request_failed, source_held, none/policy-hold-118, AI_POLICY, discoverable_ready_tic_count | 구현 완료(커널·합성 fixture), 실제 Silver·80 연결 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 정정: 공개 QA 5절 무신호 별 공개 문구를 정본(적재하지 않음)에 맞춤 | S15P21C206-79 | 무신호, SUB-11, DEC-25, ERD 결정 3, 공개하되 서비스 제외 | 정정 | [기록](2026-09-27.md) |

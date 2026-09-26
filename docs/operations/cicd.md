@@ -271,7 +271,7 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 | --- | --- | --- |
 | `validate:tess-hdfs-loader` | `ingestion/hdfs/**/*.py`·적재 스크립트 변경 | HDFS 적재기 31개, Sector 수용 5개 |
 | `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개. 표준 라이브러리만 쓴다 |
-| `validate:astro-kernel` | `libs/astro-kernel`·spark·publisher 변경 | 커널 333개, spark 22개, publisher 목업 적재 7개. 의존성은 커널의 `uv.lock`으로 고정한다 |
+| `validate:astro-kernel` | `libs/astro-kernel`·`contracts/gold`·spark·publisher 변경 | 커널 345개(79 후보 집계 8개 포함), spark 22개, publisher 목업 적재 7개. 커널 테스트가 `contracts/gold`의 스키마를 읽으므로 스키마만 바뀌어도 돈다. 의존성은 커널의 `uv.lock`으로 고정한다 |
 | `validate:publisher` | Publisher·`libs/astro-kernel`·Backend 마이그레이션·`publisher.yml` 변경 | publisher 적재 11개(`test_load`, S15P21C206-86). 일회용 `postgres:18.6-alpine` 서비스에 마이그레이션 전체를 적용한 새 스키마에서 멱등·충돌·실패 rollback·동시 게시를 본다. DB가 필요한 테스트만 여기 둔다 |
 
 - 네 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).

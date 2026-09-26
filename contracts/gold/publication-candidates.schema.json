@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://planetory.local/contracts/gold/publication-candidates.schema.json",
+  "title": "PublicationBundle 후보 집계 v1 (S15P21C206-79)",
+  "description": "한 run 의 게시 전 후보 표·staging 제안·manifest. bundles 항목은 125 assemble payload 이며 Gold 공개 QA 가 검사한다. publishable 은 항상 false 다.",
+  "type": "object",
+  "required": ["status", "publishable", "aggregator_version", "manifest", "bundles", "candidates"],
+  "properties": {
+    "status": {"enum": ["complete", "incomplete", "rejected"]},
+    "publishable": {"const": false},
+    "aggregator_version": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "manifest": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/manifest"}]},
+    "bundles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bundle", "segments", "candidates", "candidate_dispositions", "external_statuses", "ai_results", "periodogram"]
+      }
+    },
+    "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}}
+  },
+  "additionalProperties": false,
+  "if": {"properties": {"status": {"const": "rejected"}}},
+  "then": {
+    "required": ["reason"],
+    "properties": {"manifest": {"type": "null"}, "bundles": {"maxItems": 0}, "candidates": {"maxItems": 0}}
+  },
+  "else": {
+    "not": {"required": ["reason"]},
+    "properties": {"manifest": {"$ref": "#/$defs/manifest"}}
+  },
+  "$defs": {
+    "id": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "text": {"type": "string", "minLength": 1},
+    "sha256hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "ai_not_executed": {"const": "none/policy-hold-118"},
+    "ai_decision_reference": {"const": "docs/requirements/planetory-decision-register.md#126-범위-변경과-ai-출시-유예"},
+    "ai_policy": {
+      "type": "object",
+      "required": ["status", "decision_reference", "model_version", "threshold_version"],
+      "properties": {
+        "status": {"const": "policy_not_executed"},
+        "decision_reference": {"$ref": "#/$defs/ai_decision_reference"},
+        "model_version": {"$ref": "#/$defs/ai_not_executed"},
+        "threshold_version": {"$ref": "#/$defs/ai_not_executed"}
+      },
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["schema_version", "aggregator_version", "run_id", "silver_attempt", "complete",
+                   "target_tic_count", "counts", "stars", "calculation_versions", "ai_policy",
+                   "bundles", "discoverable_ready_tic_count", "candidate_count", "candidates_sha256"],
+      "properties": {
+        "schema_version": {"const": "planetory.publication-candidates.v1"},
+        "aggregator_version": {"$ref": "#/$defs/text"},
+        "run_id": {"$ref": "#/$defs/text"},
+        "silver_attempt": {"$ref": "#/$defs/text"},
+        "complete": {"type": "boolean"},
+        "target_tic_count": {"type": "integer", "minimum": 1},
+        "counts": {
+          "type": "object",
+          "required": ["ready", "no_signal", "held", "request_failed", "rejected", "unprocessed"],
+          "properties": {
+            "ready": {"$ref": "#/$defs/count"},
+            "no_signal": {"$ref": "#/$defs/count"},
+            "held": {"$ref": "#/$defs/count"},
+            "request_failed": {"$ref": "#/$defs/count"},
+            "rejected": {"$ref": "#/$defs/count"},
+            "unprocessed": {"$ref": "#/$defs/count"}
+          },
+          "additionalProperties": false
+        },
+        "stars": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["tic_id", "status", "reasons"],
+            "properties": {
+              "tic_id": {"$ref": "#/$defs/id"},
+              "status": {"enum": ["ready", "no_signal", "held", "request_failed", "rejected", "unprocessed"]},
+              "reasons": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+            },
+            "additionalProperties": false
+          }
+        },
+        "calculation_versions": {
+          "type": "object",
+          "required": ["preprocessing", "bls_config", "residual_model", "periodogram_config",
+                       "candidate_quality", "ai_model", "ai_threshold", "external_matching"],
+          "properties": {
+            "ai_model": {"$ref": "#/$defs/ai_not_executed"},
+            "ai_threshold": {"$ref": "#/$defs/ai_not_executed"}
+          },
+          "additionalProperties": {"$ref": "#/$defs/text"}
+        },
+        "ai_policy": {"$ref": "#/$defs/ai_policy"},
+        "bundles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tic_id", "bundle_id", "bundle_version", "active_candidates", "retired_candidates", "record_checksums"],
+            "properties": {
+              "tic_id": {"$ref": "#/$defs/id"},
+              "bundle_id": {"$ref": "#/$defs/id"},
+              "bundle_version": {"type": "string", "pattern": "^pv1-[0-9a-f]{64}$"},
+              "active_candidates": {"type": "integer", "minimum": 1},
+              "retired_candidates": {"$ref": "#/$defs/count"},
+              "record_checksums": {
+                "type": "object",
+                "required": ["candidates", "ai_results", "external_statuses"],
+                "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "discoverable_ready_tic_count": {"$ref": "#/$defs/count"},
+        "candidate_count": {"$ref": "#/$defs/count"},
+        "candidates_sha256": {"$ref": "#/$defs/sha256hex"}
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["source", "snapshot_id", "snapshot_sha256", "retrieved_at", "match",
+                   "external_id", "source_row_updated_at", "raw_disposition"],
+      "properties": {
+        "source": {"$ref": "#/$defs/text"},
+        "snapshot_id": {"$ref": "#/$defs/text"},
+        "snapshot_sha256": {"$ref": "#/$defs/sha256hex"},
+        "retrieved_at": {"$ref": "#/$defs/text"},
+        "match": {"enum": ["direct_match", "unmatched"]},
+        "external_id": {"type": ["string", "null"]},
+        "source_row_updated_at": {"type": ["string", "null"]},
+        "raw_disposition": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false,
+      "if": {"properties": {"match": {"const": "unmatched"}}},
+      "then": {"properties": {"external_id": {"type": "null"}, "source_row_updated_at": {"type": "null"}, "raw_disposition": {"type": "null"}}},
+      "else": {"properties": {"external_id": {"$ref": "#/$defs/text"}}}
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["tic_id", "bundle_id", "bundle_version", "candidate_id", "removal_step", "period_days",
+                   "epoch_btjd", "duration_hours", "depth_ppm", "bls_power", "discoverable",
+                   "transit_model", "external", "ai"],
+      "properties": {
+        "tic_id": {"$ref": "#/$defs/id"},
+        "bundle_id": {"$ref": "#/$defs/id"},
+        "bundle_version": {"type": "string", "pattern": "^pv1-[0-9a-f]{64}$"},
+        "candidate_id": {"$ref": "#/$defs/id"},
+        "removal_step": {"$ref": "#/$defs/count"},
+        "period_days": {"type": "number", "exclusiveMinimum": 0},
+        "epoch_btjd": {"type": "number"},
+        "duration_hours": {"type": "number", "exclusiveMinimum": 0},
+        "depth_ppm": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1000000},
+        "bls_power": {"type": "number"},
+        "discoverable": {"type": "boolean"},
+        "transit_model": {"type": "object", "minProperties": 1},
+        "external": {
+          "type": "object",
+          "required": ["state", "disposition", "answer_class", "planet_truth", "is_confirmed",
+                       "rule_version", "matching_rule_version", "decision_reason", "sources"],
+          "properties": {
+            "state": {"enum": ["labeled", "missing"]},
+            "disposition": {"enum": ["confirmed", "fp", "pc", "none"]},
+            "answer_class": {"enum": ["graded", "analysis"]},
+            "planet_truth": {"enum": ["planet", "not_planet", null]},
+            "is_confirmed": {"type": "boolean"},
+            "rule_version": {"$ref": "#/$defs/text"},
+            "matching_rule_version": {"$ref": "#/$defs/text"},
+            "decision_reason": {"enum": ["consistent_labels", "partial_labels", "no_label"]},
+            "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}}
+          },
+          "additionalProperties": false,
+          "if": {"properties": {"state": {"const": "missing"}}},
+          "then": {"properties": {"disposition": {"const": "none"}, "decision_reason": {"const": "no_label"}}}
+        },
+        "ai": {
+          "type": "object",
+          "required": ["status", "score", "model_version", "threshold_version", "decision_reference"],
+          "properties": {
+            "status": {"const": "policy_not_executed"},
+            "score": {"type": "null"},
+            "model_version": {"$ref": "#/$defs/ai_not_executed"},
+            "threshold_version": {"$ref": "#/$defs/ai_not_executed"},
+            "decision_reference": {"$ref": "#/$defs/ai_decision_reference"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
