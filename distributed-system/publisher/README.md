@@ -29,12 +29,14 @@ checksum은 공용 `astro_kernel.gold_canonical`로 계산한다. 이미지에 a
 
 - `tic_id`, `label`
 - `star`: 별 속성. **없으면(`None`) 별 행을 덮어쓰지 않고 존재만 확인한다.** 목업이 이렇게 한다.
-- `bundle`: `bundle_version`, `payload_digest`, `manifest`(`record_checksums` 포함), `fold_reference_time_btjd`, `base_days`
+- `bundle`: `bundle_version`, `payload_digest`(선택), `manifest`(`record_checksums` 포함), `fold_reference_time_btjd`, `base_days`(둘 다 float)
 - `segments[]`: `sector`, `binning_revision`, `start_btjd`, `bin_minutes`, `n_points`, `flux`, `flux_scatter`, `gaps`, `checksum`, `observation{start_btjd, end_btjd, cadence, source_version}`
 - `periodogram`: `period_min_days`, `period_max_days`, `n_periods`, `power`, `checksum`
 - `candidates[]`: `record`(후보 수치·`transit_model`), `disposition`, `external`, `ai`
 
-재시도 판정 요약은 `manifest.publish.payload_digest`에 둔다. 시드가 먼저 넣은 행의 `manifest.local_seed.payload_digest`도 함께 읽는다.
+재시도 판정 요약의 규칙은 적재가 가진다(`load.payload_digest`, `S15P21C206-86`). 판 버전, `fold_reference_time_btjd`·`base_days`, 세그먼트 자연 키와 flux checksum, 주기도·레코드 checksum으로 만들고 DB가 만드는 id는 넣지 않는다(I02-2 인계 규칙). 입력 어댑터는 값을 주지 않아도 된다. 주면 적재가 계산한 값과 같아야 하고, 다르면 쓰기 전에 `PUBLISH_REJECTED`로 멈춘다. 적재는 자기가 계산한 값을 `manifest.publish.payload_digest`에 둔다. 시드가 먼저 넣은 행의 `manifest.local_seed.payload_digest`도 함께 읽으며, 시드·목업이 먼저 적재한 행과 같은 값이 나오도록 식을 바꾸지 않는다.
+
+**새로 만드는 입력 어댑터(HDFS Gold reader 등)는 `payload_digest`를 주지 않는다.** 주면 적재 식과 계속 함께 맞춰야 하는데 얻는 것은 자기 점검뿐이다. 이미 계산하는 시드·목업은 그대로 둔다(`!223` 리뷰).
 
 ## 로컬 시드(!201)와의 관계
 
@@ -49,7 +51,7 @@ checksum은 공용 `astro_kernel.gold_canonical`로 계산한다. 이미지에 a
 1. **preflight.** Gold 테이블, Flyway 실패 이력, DB 버전(이미지의 마이그레이션 목록 이상), `operation_settings`의 규칙을 본다. 운영 적재 계정은 `flyway_schema_history`·`operation_settings`의 SELECT가 따로 필요하다(서비스 README).
 2. `planetory_gold_writer` 멤버 계정으로 붙고 트랜잭션 안에서 `SET LOCAL ROLE planetory_gold_writer`로 쓴다. 소유자로 붙으면 권한 분리가 무력화된다.
 3. `pg_advisory_xact_lock(tic_id)`으로 같은 TIC 게시를 줄 세운다.
-4. `(tic_id, bundle_version)`이 이미 있으면 `payload_digest`를 대조한다. 같으면 `ALREADY_PUBLISHED`, archived면 `BUNDLE_SUPERSEDED`로 아무것도 바꾸지 않는다. 다르면 `IDEMPOTENCY_CONFLICT`.
+4. `(tic_id, bundle_version)`이 이미 있으면 적재가 계산한 `payload_digest`와 대조한다. 같으면 `ALREADY_PUBLISHED`, archived면 `BUNDLE_SUPERSEDED`로 아무것도 바꾸지 않는다. 다르면 `IDEMPOTENCY_CONFLICT`. 같은 키의 중복 행은 적재 코드를 거치지 않는 쓰기도 DB의 `UNIQUE(tic_id, bundle_version)`(V8)이 막는다.
 5. 관측 원천 → 세그먼트(자연 키로 공유, 재사용 시 flux checksum 대조) → 판 `staging` → 주기도 → 이전 후보 `retired`와 `candidate_status_history` → 새 후보·처분·외부 라벨·AI 평가를 넣는다.
 6. 같은 트랜잭션에서 다시 읽어 배열·레코드 checksum, 결측 구간, `transit_model.candidate_id`, 처분 수를 대조한다.
 7. 기존 `current`를 `archived`로 바꾸고, archived 판의 주기도를 지우고, 새 판을 `current`로 올린다.
@@ -127,6 +129,8 @@ python -m publisher tutorial-build --inputs <폴더> --out <폴더> --label-appr
 python -m publisher load-payload <payload 폴더>           # payload JSON을 게시한다
 python -m publisher tutorial-switch-sql                   # 튜토리얼 전환 SQL 출력. 소유자 psql로 넘긴다
 PYTHONPATH=../../libs/astro-kernel python -m unittest test_mock_source test_tutorial_source test_notify   # DB 없이 도는 검사
+PUBLISHER_TEST_DATABASE_URL=postgresql://<소유자>:<비밀번호>@127.0.0.1:<포트>/<DB> \
+  PYTHONPATH=../../libs/astro-kernel python -m unittest test_load                   # 일회용 PostgreSQL에서 도는 적재 검사
 ```
 
 `test_tutorial_source`는 `TUTORIAL_INPUTS`에 입력 폴더를 주면 실제 FITS로 5종 payload까지 만든다.
@@ -138,6 +142,8 @@ PYTHONPATH=../../libs/astro-kernel python -m unittest test_mock_source test_tuto
 - 전환 SQL 적용: 두 회원의 1번이 `149603524`로 바뀌었다. 순번 0·좌표 (760, 430)는 그대로였고 진행도는 `unexplored`였다. 옛 기록과 b-1은 0이 됐고 더미 별 목업은 남았다. `261136679`는 `hidden`이 됐다. 재적용은 대상 0건이었다.
 - 앱 경로(Spring 테스트, MockMvc): 옮긴 회원의 `/api/v1/me/quests`가 5칸이었고 1번은 `149603524`였다. 신규 회원은 5개 별 모두 분석 진입·곡선·주기도(5000점)·봉우리가 200이었다. 정답 제출 9건이 모두 `matched`였고 1→5 순서로 열려 `completedCount=5`까지 갔다. 잔차 단계는 Worker 없이 원본 곡선에서만 확인했다.
 
-CI는 테스트 파일을 이름으로 적어 돌린다. 테스트 파일을 추가하면 표준 라이브러리만 쓰는 것은 `validate:data-platform`에, `astro_kernel`을 쓰는 것은 `validate:astro-kernel`에 넣는다(`.gitlab/ci/common.yml`, [CI/CD 「data-platform 테스트」](../../docs/operations/cicd.md#data-platform-테스트-s15p21c206-91)).
+`test_load`(`S15P21C206-86`)는 `PUBLISHER_TEST_DATABASE_URL`이 있을 때만 돈다. 새 스키마에 저장소 마이그레이션 전체를 파일 순서대로 적용하고 끝나면 지운다. 마이그레이션이 역할을 만들어 소유자(superuser)로 붙으므로 **개발·운영 DB가 아니라 일회용 PostgreSQL**을 가리킨다(예: `docker run --rm -e POSTGRES_PASSWORD=… -p 127.0.0.1:<포트>:5432 postgres:18.6-alpine`). 검사하는 것은 `planetory_gold_writer`로의 첫 적재, 같은 payload 재실행 무변경, 같은 판 버전의 다른 내용 `IDEMPOTENCY_CONFLICT`, 어댑터 요약 불일치 `PUBLISH_REJECTED`, DB의 재시도 키 강제, 다음 판의 세그먼트 재사용과 이전 판 archived, 같은 자연 키의 세그먼트 내용 변경 충돌, staging 뒤 실패 시 행 무변경과 current 유지, 배열 길이·단위 범위 위반의 전체 rollback, 같은 payload 동시 게시의 직렬화(판 하나), 20개 별 적재다. 배열 길이(`n_points`·`n_periods`)와 단위 범위(`bin_minutes > 0`, `0 < period_min_days < period_max_days`)는 DB CHECK(V1)가 강제한다. manifest에는 단위 메타데이터가 없어 적재가 단위를 따로 대조하지 않는다. 그 밖의 값 범위(`base_days`, 후보 수치)는 위 「게시 전 QA」 범위다.
+
+CI는 테스트 파일을 이름으로 적어 돌린다. 테스트 파일을 추가하면 표준 라이브러리만 쓰는 것은 `validate:data-platform`에, `astro_kernel`을 쓰는 것은 `validate:astro-kernel`에(둘 다 `.gitlab/ci/common.yml`), PostgreSQL이 필요한 것은 일회용 postgres 서비스가 붙은 `validate:publisher`(`.gitlab/ci/distributed-system/publisher.yml`)에 넣는다. 지금 `validate:publisher`는 `test_load`만 돈다([CI/CD 「data-platform 테스트」](../../docs/operations/cicd.md#data-platform-테스트-s15p21c206-91)).
 
 2026-09-24 EC2-A 격리 환경(develop `e9835da5` Backend로 V24를 적용한 빈 DB, 운영과 같은 역할 구성)에서 옮긴 적재 단계를 검증했다. 읽기 권한이 없으면 `MIGRATION_UNREADABLE`로 멈추고, 권한을 준 뒤 두 별 `PUBLISHED`·알림 200, 재실행 `ALREADY_PUBLISHED`·알림 재전송, 없는 별 `STAR_MISSING`, 기존 별 속성 불변, 삭제 모의 실행 뒤 그대로, 실제 삭제 뒤 목업 행 0(관측 원천·처분·외부 라벨 포함), 삭제 뒤 재적재를 확인했다. 회원 제출이 목업 판을 참조하면 모의·실제 삭제 모두 `submissions=1`로 멈추고 행이 그대로 남으며, 그 제출을 지운 뒤에는 삭제가 끝나는 것도 확인했다. 같은 격리 환경에서 실제 Google 로그인 세션으로 튜토리얼 1번 별(목업 적재)의 분석 API도 확인했다. 별 요약 `analysisAvailable=true`·`currentBundleId=b-1`, `analysis-context` 200, 원본 곡선(`curveStep=0`) 200·세그먼트 1개 2919점, 주기도 200·power 5000점, 봉우리 200·10개이며 상위 봉우리 5.66일·11.55일·11.38일이다(TOI-270 c·d 주기와 맞는다). 잔차 단계(`curveStep≥1`)는 Python Worker가 없어 확인하지 않았다. OAuth 되돌림 주소는 `localhost:8080`만 등록돼 있어 `127.0.0.1:8080`은 `redirect_uri_mismatch`다.

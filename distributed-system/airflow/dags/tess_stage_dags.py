@@ -203,7 +203,8 @@ def cleanup_dag():
     **STAGE_ARGS,
 )
 def bronze_dag():
-    @task(task_id="commit_bronze", retries=12, retry_delay=timedelta(minutes=5))
+    # The tess_yarn Pool caps concurrent Spark/YARN submissions across Bronze and Silver.
+    @task(task_id="commit_bronze", retries=12, retry_delay=timedelta(minutes=5), pool="tess_yarn")
     def commit_bronze() -> None:
         value = inputs()
         release = value["bronze_release"]

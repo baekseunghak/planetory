@@ -237,13 +237,54 @@ def _biweight_location(x):
     return m
 
 
+def _row_medians(a):
+    """np.median of each row, bit for bit: the middle order statistic(s) of the row."""
+    k = a.shape[1] // 2
+    if a.shape[1] % 2:
+        return np.partition(a, k, axis=1)[:, k]
+    part = np.partition(a, (k - 1, k), axis=1)
+    # np.mean starts its sum from 0.0, which turns two -0.0 middles into +0.0.
+    return (0.0 + part[:, k - 1] + part[:, k]) / 2.0
+
+
+def _biweight_locations(f, lo, hi):
+    """_biweight_location(f[a:b]) for every window, without a Python call per window.
+
+    Windows of one length are stacked as rows, so each row is reduced over exactly its own
+    values in the same order as the 1-D call; row sums and medians then match bit for bit.
+    """
+    centers = np.empty(len(lo))
+    lengths = hi - lo
+    for n in np.unique(lengths):
+        rows = np.flatnonzero(lengths == n)
+        # ponytail: fixed element budget per stack; raise it only if memory allows.
+        for chunk in np.array_split(rows, -(-len(rows) * int(n) // 2_000_000)):
+            x = f[lo[chunk, None] + np.arange(n)]
+            m = _row_medians(x)
+            active = np.arange(len(chunk))
+            for _ in range(3):
+                xa, ma = x[active], m[active, None]
+                mad = _row_medians(np.abs(xa - ma))
+                u = (xa - ma) / (6.0 * mad)[:, None]
+                w = (1 - u ** 2) ** 2
+                w[np.abs(u) >= 1] = 0
+                wsum = w.sum(axis=1)
+                moving = (mad != 0) & (wsum != 0)
+                m[active[moving]] = np.sum(w[moving] * xa[moving], axis=1) / wsum[moving]
+                active = active[moving]
+                if not len(active):
+                    break
+            centers[chunk] = m
+    return centers
+
+
 def _trend(t, f):
     anchors = np.arange(0, len(t), 10)
     if anchors[-1] != len(t) - 1:
         anchors = np.append(anchors, len(t) - 1)
     lo = np.searchsorted(t, t[anchors] - 0.5, side="left")
     hi = np.searchsorted(t, t[anchors] + 0.5, side="right")
-    centers = np.array([_biweight_location(f[a:b]) for a, b in zip(lo, hi)])
+    centers = _biweight_locations(f, lo, hi)
     good = np.isfinite(centers)
     if good.sum() < 2:
         return np.full(len(t), np.median(f))

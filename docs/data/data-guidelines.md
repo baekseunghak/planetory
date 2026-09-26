@@ -30,16 +30,16 @@
 │  │  ├─ part-*.parquet
 │  │  └─ _READY.json
 │  └─ coverage=<raw-coverage-sha256>/_READY.json
-├─ silver/pipeline_version=<version>/run_id=<run>/
-│  ├─ sector_cleaned/
+├─ silver/pipeline_version=<version>/run_id=<run>/attempt=<UTC>/
 │  ├─ target_combined/
 │  ├─ periodogram/
 │  ├─ candidates/
 │  ├─ ai_input/
 │  ├─ ai_result/
-│  └─ internal/
-│     ├─ residual/
-│     └─ removal_qa/
+│  ├─ removal_qa/
+│  ├─ manifest/
+│  ├─ summary/
+│  └─ _READY.json
 └─ publication-bundle-backup/bundle_id=<bundle_id>/
    ├─ <PublicationBundle 파일>
    └─ manifest + checksum
@@ -69,6 +69,8 @@ EC2에 공개한 PublicationBundle은 HDFS의 `publication-bundle-backup`에 RF2
 약 171만 개로 예상되는 작은 FITS는 개별 파일로 저장하지 않습니다. 원본 바이트를 512MB~1GB SequenceFile 묶음으로 보존하고 `manifest.parquet`에 파일명, TIC, Sector, 크기, checksum, 묶음 위치, SequenceFile key와 레코드 시작·끝 offset을 기록합니다. key·offset으로 꺼낸 바이트가 원본 checksum과 일치해야 하며 원본을 삭제하거나 컬럼을 제거하지 않습니다. Sector 디렉터리는 덮어쓰기 없는 HDFS atomic rename으로 확정하고, `coverage=<source-coverage-sha256>/_READY.json`은 검증된 원천 coverage와 Sector 1~13의 불변 `_READY.json`을 연결합니다. Sector는 원천 Run별 `release=` 디렉터리에 나뉠 수 있으므로 소비자는 단일 release를 glob하지 않고 coverage marker의 `sectors[].location`을 입력 경로로 사용합니다. 이 coverage marker가 없으면 Sector 일부가 존재해도 전체 1~13 적재 완료로 판단하지 않습니다.
 
 TESS Bronze는 FITS 제품 하나를 Parquet 행 하나로 저장하고 원본의 `time`, `PDCSAP_FLUX`, `PDCSAP_FLUX_ERR`, `QUALITY`, `CADENCENO`를 배열로 보존합니다. 품질 필터·비유한값 제거·정규화는 Bronze에서 하지 않습니다. 각 행은 Raw 파일 SHA-256·bundle 위치·offset·파일별 snapshot과 pipeline/schema version을 포함합니다. 제품별 변환 오류는 staging의 오류 목록으로 격리하며 한 건이라도 있거나 제품 수가 다르면 final Sector를 만들지 않습니다. 성공한 Sector는 출력 RF2·part checksum·FSCK를 확인하고 `_READY.json`을 쓴 뒤 덮어쓰기 없는 HDFS atomic rename으로만 공개합니다. 상세 스키마와 실행 절차는 [Spark README](../../distributed-system/spark/README.md)를 따릅니다.
+
+TESS Silver의 배치 실행 단위는 `pipeline_version=<version>/run_id=<run>/attempt=<UTC>`입니다. attempt는 덮어쓰지 않으며 실행한 stage의 출력, TIC·stage별 `manifest`, `summary`, `_READY.json`을 함께 원자 확정합니다. 아직 실행하지 않은 후속 stage 디렉터리를 빈 성공 결과로 만들지 않습니다. TIC 하나의 실패는 같은 attempt의 다른 TIC 성공 결과를 폐기하지 않고 manifest의 `failed`로 격리합니다. 현재 최초 탐색과 반복 탐색은 별도 `initial_bls`·`iteration` stage이며, 이미 계산한 최초 BLS 결과를 반복 커널이 메모리에서 재사용합니다. `iteration`의 정상 완료·미완료·QA 판정(`qa_stopped`)·실패는 구분하고 후보 ID·Gold 공개를 만들지 않습니다. 커널 품질 판정으로 멈춘 `qa_stopped`는 과학 판정이므로 실패 수와 재처리 대상에서 제외합니다. 선택 TIC와 최초 manifest TIC, 실제 반복 대상·출력 TIC를 대조합니다. 실패나 미완료 재처리는 v4 완료 attempt의 manifest에서 해당 TIC만 선택해 새 attempt에서 모든 단계를 재실행하며 기존 결과를 수정하지 않습니다. `no_quality_peak`는 최초 탐색을 정상 수행했으나 승인 peak가 없는 상태입니다. Silver `planetory.tess-silver-stage.v4` manifest와 `planetory.tess-silver-attempt.v4` READY는 배치 완료만 나타냅니다. Bronze Raw SHA를 `SectorInput.source_sha256`로 전달하고, 선택적 245 구간 마스크와 원래 QUALITY·원본 행·제외 장부를 함께 보존하며 `raw = kept + excluded`를 검증합니다. Canary 상세 출력은 삭제하되 최대 5개 TIC의 bounded science audit을 실행 상태 파일에 보존합니다. 승인된 운영 마스크 manifest가 없는 실행은 빈 마스크와 `provenance_status=quality0_baseline_pending_interval_mask`를 기록해 최종 DAT-02와 구분합니다. 상세 행 스키마·담당자 인계·실행 절차는 [Spark README](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78)를 따릅니다.
 
 ## PostgreSQL Gold 공개
 

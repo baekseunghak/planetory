@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -30,6 +31,7 @@ from tess_bronze_ctl import (  # noqa: E402
     RAW_COVERAGE_SHA256,
     BronzeDataContractError,
     cli,
+    event_log_conf,
     command_coverage,
     command_run_all,
     finalize_sector,
@@ -37,6 +39,10 @@ from tess_bronze_ctl import (  # noqa: E402
     run_sector,
     submit,
     validate_raw_coverage,
+    foreign_running_applications,
+    require_yarn_headroom,
+    yarn_slot,
+    yarn_slot_count,
 )
 
 
@@ -338,6 +344,17 @@ class BronzeTransformTest(unittest.TestCase):
                     state={"status": "prepared"},
                 )
 
+    def test_event_log_is_enabled_only_when_the_history_directory_exists(self):
+        # A missing History Server directory must not fail spark-submit and stop the pipeline.
+        with patch("tess_bronze_ctl.hdfs_exists", return_value=False):
+            self.assertEqual(event_log_conf(), [])
+        with patch("tess_bronze_ctl.hdfs_exists", return_value=True) as exists:
+            conf = event_log_conf()
+        exists.assert_called_once_with("/spark-history")
+        self.assertIn("spark.eventLog.dir=hdfs://planetory/spark-history", conf)
+        self.assertIn("spark.eventLog.rolling.enabled=true", conf)
+        self.assertEqual(conf[::2], ["--conf"] * (len(conf) // 2))
+
     def test_sector_contract_failure_is_terminal(self):
         summary = {
             "contract_ok": False,
@@ -433,6 +450,85 @@ class BronzeTransformTest(unittest.TestCase):
         with patch("tess_bronze_ctl.main", side_effect=RuntimeError("temporary outage")):
             with self.assertRaisesRegex(RuntimeError, "temporary outage"):
                 cli()
+
+    def test_yarn_slots_admit_the_cap_and_block_the_next_submission(self):
+        # A real flock only excludes across processes, so model per-file ownership here.
+        owned, waits = set(), []
+
+        def flock(handle, mode):
+            key = handle.name
+            if mode & 4:  # LOCK_NB
+                if key in owned:
+                    raise OSError("locked")
+                owned.add(key)
+            elif mode == 8:  # LOCK_UN
+                owned.discard(key)
+
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, LOCK_NB=4, flock=flock)
+        with tempfile.TemporaryDirectory() as root,                 patch.dict(sys.modules, {"fcntl": fake}),                 patch("tess_bronze_ctl.time.sleep", side_effect=lambda seconds: waits.append(seconds)):
+            prefix = Path(root) / "planetory-tess-yarn"
+            with yarn_slot(prefix, slots=2) as first, yarn_slot(prefix, slots=2) as second:
+                self.assertEqual({first, second}, {0, 1})
+                self.assertEqual(waits, [])
+                # A third submission must wait rather than overload YARN.
+                with self.assertRaises(RuntimeError):
+                    with patch("tess_bronze_ctl.time.sleep", side_effect=RuntimeError("would block")):
+                        with yarn_slot(prefix, slots=2):
+                            pass
+            # Both slots are released, so the next submission proceeds without waiting.
+            with yarn_slot(prefix, slots=2) as reused:
+                self.assertEqual(reused, 0)
+            self.assertEqual(waits, [])
+
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "O_NOFOLLOW is POSIX-only")
+    def test_yarn_slot_refuses_a_symlinked_lock_file_when_opening_it(self):
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_UN=8, LOCK_NB=4, flock=lambda handle, mode: None)
+        with tempfile.TemporaryDirectory() as root, patch.dict(sys.modules, {"fcntl": fake}):
+            prefix = Path(root) / "planetory-tess-yarn"
+            target = Path(root) / "elsewhere"
+            (Path(root) / "planetory-tess-yarn-1.lock").symlink_to(target)
+            with self.assertRaisesRegex(RuntimeError, "must not be a symlink"):
+                with yarn_slot(prefix, slots=2):
+                    pass
+            self.assertFalse(target.exists())  # the link was refused, not followed
+
+    def test_preflight_allows_overlapping_pipeline_apps_but_refuses_foreign_ones(self):
+        tab = chr(9)
+        header = tab.join(["                Application-Id", "Application-Name", "Application-Type", "User"])
+        def row(app_id, name):
+            return tab.join([app_id, name, "SPARK", "spark"])
+        listing = chr(10).join([
+            "Total number of applications (states: [RUNNING]):3",
+            header,
+            row("application_1790045821701_0007", "S15P21C206-77-bronze-20260923T010203Z-s0021"),
+            row("application_1790045821701_0008", "S15P21C206-78-silver-20260923T000000Z-20260923T000500Z"),
+            row("application_1790045821701_0009", "someone-elses-hive-query"),
+        ])
+        self.assertEqual(foreign_running_applications(listing), ["application_1790045821701_0009"])
+        self.assertEqual(foreign_running_applications(header), [])
+        # An unparsable row fails closed rather than silently admitting the job.
+        self.assertEqual(foreign_running_applications("application_1_2 no-tabs-here"), ["application_1_2"])
+
+    def test_headroom_counts_running_pipeline_apps_so_orphans_cannot_break_the_cap(self):
+        tab, newline = chr(9), chr(10)
+        bronze = tab.join(["application_1_1", "S15P21C206-77-bronze-20260923T010203Z-s0021", "SPARK"])
+        silver = tab.join(["application_1_2", "S15P21C206-78-silver-20260923T000000Z-20260923T000500Z", "SPARK"])
+        foreign = tab.join(["application_1_3", "adhoc-notebook", "SPARK"])
+        with patch.dict(os.environ, {"PLANETORY_YARN_SLOTS": "2"}):
+            self.assertEqual(require_yarn_headroom(""), [])
+            self.assertEqual(require_yarn_headroom(bronze), ["application_1_1"])
+            # A controller killed mid-run leaves its app without a slot; two apps already fill the cap.
+            with self.assertRaisesRegex(RuntimeError, "orphaned"):
+                require_yarn_headroom(newline.join([bronze, silver]))
+            with self.assertRaisesRegex(RuntimeError, "non-pipeline"):
+                require_yarn_headroom(foreign)
+
+    def test_yarn_slot_count_defaults_and_rejects_unusable_caps(self):
+        self.assertEqual(yarn_slot_count(""), 2)
+        self.assertEqual(yarn_slot_count("3"), 3)
+        for value in ("0", "9", "two"):
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                yarn_slot_count(value)
 
 
 if __name__ == "__main__":

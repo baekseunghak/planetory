@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,7 @@ from typing import Any
 
 SPARK_IMAGE = "apache/spark@sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1"
 SPARK_HDFS_USER = "planetory-admin"
+SPARK_EVENT_LOG_DIR = "/spark-history"
 BRONZE_READY_SCHEMA = "planetory.tess-bronze-sector.v1"
 BRONZE_COVERAGE_SCHEMA = "planetory.tess-bronze-coverage.v1"
 BRONZE_DATA_SCHEMA = "planetory.tess-bronze.v1"
@@ -38,6 +41,120 @@ HOST_ARGS = [item for number in range(1, 7)
 
 class BronzeDataContractError(RuntimeError):
     """A deterministic input/output contract violation that operator action must fix."""
+
+
+YARN_SLOT_PREFIX = "/run/planetory-tess-yarn"
+DEFAULT_YARN_SLOTS = 2
+YARN_SLOT_POLL_SECONDS = 15
+
+
+def yarn_slot_count(value: str | None = None) -> int:
+    """The Node 1 cap must match the Airflow `tess_yarn` Pool slot count."""
+    raw = os.environ.get("PLANETORY_YARN_SLOTS", "") if value is None else value
+    if not raw:
+        return DEFAULT_YARN_SLOTS
+    try:
+        slots = int(raw)
+    except ValueError:
+        raise RuntimeError("PLANETORY_YARN_SLOTS must be an integer") from None
+    if not 1 <= slots <= 8:
+        raise RuntimeError("PLANETORY_YARN_SLOTS must be in 1..8")
+    return slots
+
+
+def _open_no_follow(path: str, flags: int) -> int:
+    """Refuse a planted symlink in the same call that opens it, leaving no check-then-open gap.
+
+    O_NOFOLLOW is POSIX; Node 1 always has it, and only the Windows contract tests fall back to 0.
+    """
+    return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o666)
+
+
+@contextmanager
+def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
+    """Bound concurrent Planetory Bronze/Silver YARN work on Node 1 across schedulers.
+
+    A counting semaphore over `slots` lock files. It replaces the former single
+    exclusive lock so a Bronze stage run and a Silver run can submit together,
+    while still refusing to exceed the measured cap. Non-Airflow manual runs go
+    through the same files, so the cap holds outside the Airflow Pool too.
+    """
+    import fcntl  # Node 1 is Linux; keep offline contract tests importable on Windows.
+
+    count = yarn_slot_count() if slots is None else slots
+    paths = [prefix.with_name(f"{prefix.name}-{index}.lock") for index in range(count)]
+    handles = []
+    try:
+        for path in paths:
+            try:
+                handles.append(open(path, "a+", opener=_open_no_follow))
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise RuntimeError("YARN lock path must not be a symlink") from None
+                raise
+        held = None
+        while held is None:
+            for index, handle in enumerate(handles):
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    continue
+                held = index
+                break
+            if held is None:
+                # ponytail: poll instead of inotify; every slot runs for minutes, not milliseconds.
+                time.sleep(YARN_SLOT_POLL_SECONDS)
+        print(f"PLANETORY_YARN_SLOT_ACQUIRED slot={held} of={count}", flush=True)
+        try:
+            yield held
+        finally:
+            fcntl.flock(handles[held], fcntl.LOCK_UN)
+    finally:
+        for handle in handles:
+            handle.close()
+
+
+# Bronze (77/252) and Silver (78) app names; these are bounded by yarn_slot, not refused.
+PIPELINE_APP_NAME_RE = re.compile(r"S15P21C206-(77-bronze|78-silver)-[0-9]{8}T[0-9]{6}Z-")
+
+
+def foreign_running_applications(listing: str) -> list[str]:
+    """Return RUNNING YARN app IDs that are not Planetory Bronze/Silver submissions.
+
+    Pipeline apps may overlap up to the yarn_slot cap. Any other YARN workload still
+    blocks submission because the cap was sized assuming the cluster is ours.
+    """
+    foreign = []
+    for line in listing.splitlines():
+        columns = line.split("\t")
+        match = APP_ID_RE.search(line)
+        if not match:
+            continue
+        app_id = match.group(0)
+        # Fail closed: a row whose name column cannot be read counts as foreign.
+        readable = len(columns) > 1 and columns[0].strip() == app_id
+        if not readable or not PIPELINE_APP_NAME_RE.match(columns[1].strip()):
+            foreign.append(app_id)
+    return foreign
+
+
+def require_yarn_headroom(listing: str) -> list[str]:
+    """Refuse submission unless this job fits inside the pipeline YARN cap.
+
+    Call while holding a yarn_slot. Slots count live controllers, but a controller
+    killed mid-run (for example by an Airflow restart) leaves its cluster-mode app
+    running without a slot, so the running pipeline apps are counted as well.
+    """
+    running = APP_ID_RE.findall(listing)
+    foreign = foreign_running_applications(listing)
+    if foreign:
+        raise RuntimeError(f"a non-pipeline YARN application is running: {','.join(foreign)}")
+    if len(running) >= yarn_slot_count():
+        raise RuntimeError(
+            f"pipeline YARN apps already fill all {yarn_slot_count()} slots; "
+            f"an orphaned submission may still be running: {','.join(running)}"
+        )
+    return running
 
 
 def utc_now() -> str:
@@ -74,6 +191,21 @@ def yarn(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str
 
 def hdfs_exists(path: str) -> bool:
     return hdfs("dfs", "-test", "-e", path, check=False).returncode == 0
+
+
+def event_log_conf() -> list[str]:
+    """Spark History Server input, skipped until its directory exists so observability never blocks a run."""
+    if not hdfs_exists(SPARK_EVENT_LOG_DIR):
+        print(f"SPARK_EVENT_LOG_DISABLED missing={SPARK_EVENT_LOG_DIR}", flush=True)
+        return []
+    # Rolling files keep a multi-day Silver log readable while it is still running.
+    return [
+        "--conf", "spark.eventLog.enabled=true",
+        "--conf", f"spark.eventLog.dir=hdfs://planetory{SPARK_EVENT_LOG_DIR}",
+        "--conf", "spark.eventLog.compress=true",
+        "--conf", "spark.eventLog.rolling.enabled=true",
+        "--conf", "spark.eventLog.rolling.maxFileSize=128m",
+    ]
 
 
 def hdfs_json(path: str) -> tuple[dict[str, Any], str]:
@@ -164,9 +296,7 @@ def cluster_preflight(
     if len(re.findall(r"\sRUNNING\s", nodes)) != 5:
         raise RuntimeError("expected five RUNNING NodeManagers")
     applications = yarn("application", "-list", "-appStates", "RUNNING").stdout
-    running = APP_ID_RE.findall(applications)
-    if running and not allow_running:
-        raise RuntimeError(f"another YARN application is running: {','.join(running)}")
+    running = APP_ID_RE.findall(applications) if allow_running else require_yarn_headroom(applications)
     contexts = {sector: raw_context(sector, raw_release) for sector in sectors}
     print(
         f"BRONZE_PREFLIGHT_OK sectors={','.join(map(str, sectors))} "
@@ -259,10 +389,10 @@ def application_state(application_id: str) -> str:
     return match.group(1) if match else "UNKNOWN"
 
 
-def wait_application(application_id: str, poll_seconds: int = 30) -> None:
+def wait_application(application_id: str, poll_seconds: int = 30, label: str = "BRONZE") -> None:
     while True:
         state = application_state(application_id)
-        print(f"BRONZE_APPLICATION_STATUS id={application_id} state={state}", flush=True)
+        print(f"{label}_APPLICATION_STATUS id={application_id} state={state}", flush=True)
         if state == "SUCCEEDED":
             return
         if state in ("FAILED", "KILLED"):
@@ -326,6 +456,7 @@ def submit(
         "--conf", "spark.executorEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.appMasterEnv.PYTHONPATH=./environment",
         "--conf", "spark.yarn.maxAppAttempts=1", "--conf", "spark.speculation=false",
+        *event_log_conf(),
         "/opt/planetory/tess_bronze.py",
         "--raw-path", f"hdfs://planetory{context['path']}",
         "--raw-release", context["release"],
@@ -780,7 +911,11 @@ def main() -> int:
         raise SystemExit("duplicate sector")
     if getattr(args, "canary_products", 1) <= 0:
         raise SystemExit("canary products must be positive")
-    args.handler(args)
+    if args.command in ("run-all", "canary"):
+        with yarn_slot():
+            args.handler(args)
+    else:
+        args.handler(args)
     return 0
 
 

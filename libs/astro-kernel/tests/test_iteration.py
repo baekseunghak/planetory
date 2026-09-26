@@ -8,6 +8,7 @@ import pytest
 
 from astro_kernel import iteration as it
 from astro_kernel.bls import BlsError
+from astro_kernel.bls import _search_input_sha256, SEARCH_VERSION, QUALITY_VERSION
 
 
 def inputs():
@@ -38,6 +39,34 @@ def run(t=None, f=None, **kwargs):
     if t is None:
         t, f = inputs()
     return it.iterate_bls(t, f, input_snapshot_id="test-snapshot", preprocessing_version="silver-test", **kwargs)
+
+
+def test_initial_search_is_reused_once_and_matches_normal_path(monkeypatch):
+    t, f = inputs()
+    config = dict(period_min_days=.5, period_max_days=6., n_periods=20000,
+                  durations_hours=[1.2, 1.92, 2.88, 4.8])
+    first = dict(status="no_quality_peak", peaks=[], periodogram=SimpleNamespace(config=config),
+                 input_snapshot_id="test-snapshot", preprocessing_version="silver-test",
+                 bls_config_version=SEARCH_VERSION, candidate_quality_version=QUALITY_VERSION,
+                 n_input=len(t), n_valid=len(t),
+                 search_input_sha256=_search_input_sha256(t, f, None, None))
+    calls = []
+    def search(*args, **kwargs):
+        calls.append(1)
+        return first
+    monkeypatch.setattr(it, "search_bls", search)
+    normal = run(t, f)
+    assert len(calls) == 1
+    reused = run(t, f, initial_search=first)
+    assert len(calls) == 1
+    assert reused == normal
+    for changed in (dict(search_input_sha256="0" * 64), dict(bls_config_version="stale"),
+                    dict(input_snapshot_id="another"), dict(n_valid=3)):
+        other = dict(first, **changed)
+        with pytest.raises(BlsError, match="initial search does not match"):
+            run(t, f, initial_search=other)
+    with pytest.raises(BlsError, match="initial search does not match"):
+        run(t, f + .01, initial_search=first)
 
 
 @pytest.mark.parametrize("termination", it.TERMINATION_REASONS)
@@ -178,17 +207,13 @@ def test_invalid_refined_peak_is_not_successful_empty(monkeypatch,field,value):
     assert result["termination"] == "candidate_validation_failed"
 
 @pytest.mark.parametrize("search_end", ["no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"])
-@pytest.mark.parametrize("score", [0., float("nan"), "exception"])
+@pytest.mark.parametrize("score", [0., float("nan")])
 def test_original_validation_appends_consistent_final_record(monkeypatch, search_end, score):
     stub_search(monkeypatch, [[peak()], [peak()] if search_end == "duplicate_or_harmonic_only" else []])
     monkeypatch.setattr(it, "_qa", lambda *args: dict(qa_failures=""))
     if search_end == "max_iterations_reached":
         monkeypatch.setattr(it, "_CONFIG", replace(it._CONFIG, max_candidates=1))
-    def original_snr(*args):
-        if score == "exception":
-            raise ValueError("unmeasurable original")
-        return score
-    monkeypatch.setattr(it, "fixed_snr", original_snr)
+    monkeypatch.setattr(it, "fixed_snr", lambda *args: score)
     t, f = inputs()
     result = run(t, f, keep_residual=True)
     last = result["steps"][-1]
@@ -212,6 +237,39 @@ def test_original_validation_does_not_replace_removal_failure(monkeypatch):
     assert result["termination"] == result["steps"][-1]["reason"] == "removal_qa_failed"
     assert result["qa_failed_step"] == 1
     assert result["accepted"][0]["validated_on_original"] is False
+
+
+def broken_original_snr(*args):
+    raise RuntimeError("original validation defect")
+
+
+@pytest.mark.parametrize("search_end", ["no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"])
+def test_original_validation_exception_is_numerical_failure_not_qa_stop(monkeypatch, search_end):
+    stub_search(monkeypatch, [[peak()], [peak()] if search_end == "duplicate_or_harmonic_only" else []])
+    monkeypatch.setattr(it, "_qa", lambda *args: dict(qa_failures=""))
+    if search_end == "max_iterations_reached":
+        monkeypatch.setattr(it, "_CONFIG", replace(it._CONFIG, max_candidates=1))
+    monkeypatch.setattr(it, "fixed_snr", broken_original_snr)
+    result = run()
+    last = result["steps"][-1]
+    assert result["termination"] == last["reason"] == "numerical_failure"
+    assert last["phase"] == "original_validation" and last["error_type"] == "RuntimeError"
+    assert last["search_termination"] == search_end and last["failed_candidate_steps"] == [0]
+    assert result["status"] == "failed" and not result["complete"]
+    assert result["accepted"][0]["validated_on_original"] is False
+    json.dumps(result, allow_nan=False)
+
+
+def test_original_validation_exception_outranks_removal_failure(monkeypatch):
+    stub_search(monkeypatch, [[peak()], [peak(3.1)]])
+    failures = iter(["", "power_not_reduced"])
+    monkeypatch.setattr(it, "_qa", lambda *args: dict(qa_failures=next(failures)))
+    monkeypatch.setattr(it, "fixed_snr", broken_original_snr)
+    result = run()
+    last = result["steps"][-1]
+    assert result["termination"] == last["reason"] == "numerical_failure"
+    assert last["search_termination"] == "removal_qa_failed" and last["error_type"] == "RuntimeError"
+    assert result["qa_failed_step"] == 1
 
 
 def test_243_iteration_gate_version_and_fingerprint(monkeypatch):

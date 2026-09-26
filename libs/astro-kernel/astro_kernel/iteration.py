@@ -6,13 +6,14 @@ publication are handled separately; accepted here means runtime QA acceptance.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from collections.abc import Mapping
 import hashlib
 import json
 from types import SimpleNamespace
 
 import numpy as np
 
-from .bls import (BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector,
+from .bls import (BlsError, SEARCH_VERSION, QUALITY_VERSION, search_bls, _vector, _search_input_sha256,
                   RUNNING_MEDIAN_QUALITY_VERSION, validate_quality_version)
 from .transit_model import phase_distance_days, remove_transit_models
 
@@ -280,7 +281,8 @@ def _qa(t, original, current, residual, candidate, accepted, removal, cfg):
 
 
 def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
-                sector=None, baseline_time=None, keep_residual=False, quality_version=QUALITY_VERSION):
+                sector=None, baseline_time=None, keep_residual=False, initial_search=None,
+                quality_version=QUALITY_VERSION):
     """Iterate frozen 120 search and 121 removal with approved 111 QA.
 
     Invalid contracts raise BlsError. Numerical/QA failures return status=failed
@@ -288,6 +290,7 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
     The default result is strict JSON. keep_residual adds an ndarray for runtime
     verification only; callers must not persist that array in candidate payloads.
     transit_model deliberately has no catalog ID until identity reconciliation.
+    initial_search is the in-memory search_bls result for these exact inputs.
     """
     t, f = _vector(time, "time"), _vector(flux, "flux")
     if len(t) != len(f) or not np.isfinite(t).all() or np.any(np.diff(t) < 0):
@@ -310,6 +313,17 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
                 np.any(raw_counts[positions] < counts)):
             raise BlsError("invalid_input", "baseline must contain every input observation")
     validate_quality_version(quality_version)
+    if initial_search is not None:
+        expected = dict(input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
+                        bls_config_version=SEARCH_VERSION, candidate_quality_version=quality_version,
+                        search_input_sha256=_search_input_sha256(t, f, sector, baseline_time),
+                        n_input=len(t), n_valid=int(np.isfinite(f).sum()))
+        if (not isinstance(initial_search, Mapping) or
+                any(initial_search.get(key) != value for key, value in expected.items()) or
+                initial_search.get("status") not in ("ok", "no_quality_peak", "failed") or
+                not isinstance(initial_search.get("peaks"), list) or
+                not hasattr(initial_search.get("periodogram"), "config")):
+            raise BlsError("invalid_input", "initial search does not match the iteration input")
     cfg = replace(_CONFIG, sde_min=8.0) if quality_version == RUNNING_MEDIAN_QUALITY_VERSION else _CONFIG
     current, accepted, steps = f.copy(), [], []
     termination, qa_failed_step = "", -1
@@ -328,9 +342,10 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
             steps.append(dict(**terminal, status="terminated", reason=termination))
             break
         try:
-            run = search_bls(t, current, input_snapshot_id=input_snapshot_id,
-                             preprocessing_version=preprocessing_version,
-                             sector=sector, baseline_time=baseline_time, quality_version=quality_version)
+            run = initial_search if step == 0 and initial_search is not None else search_bls(
+                t, current, input_snapshot_id=input_snapshot_id,
+                preprocessing_version=preprocessing_version, sector=sector, baseline_time=baseline_time,
+                quality_version=quality_version)
             if run["status"] == "failed":
                 raise BlsError("numerical_failure", "search returned a failed peak")
             config = run["periodogram"].config
@@ -410,23 +425,27 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         accepted.append(c)
         current = residual
     valid_original = np.isfinite(f)
+    validation_errors = set()
     for c in accepted:
         try:
             score = fixed_snr(t[valid_original], f[valid_original], c["period_days"],
                               c["duration_hours"] / 24, c["epoch_btjd"])
-        except Exception:
+        except Exception as exc:  # fixed_snr already returns NaN for unmeasurable input
             score = float("nan")
+            validation_errors.add(type(exc).__name__)
         c["original_snr"] = score
         c["validated_on_original"] = bool(np.isfinite(score) and score >= cfg.snr_min)
-    if accepted and not all(c["validated_on_original"] for c in accepted) and termination in (
-            "no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
-        search_termination = termination
+    failed_steps = [c["step"] for c in accepted if not c["validated_on_original"]]
+    record = dict(step=len(accepted), status="error", phase="original_validation",
+                  search_termination=termination, failed_candidate_steps=failed_steps,
+                  n_points=int(valid_original.sum()))
+    if validation_errors:
+        # An exception is an execution failure, never a science verdict, even after removal_qa_failed.
+        termination = "numerical_failure"
+        steps.append(dict(record, reason=termination, error_type=",".join(sorted(validation_errors))))
+    elif failed_steps and termination in ("no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
         termination = "candidate_validation_failed"
-        steps.append(dict(step=len(accepted), status="error", reason=termination,
-                          phase="original_validation", search_termination=search_termination,
-                          failed_candidate_steps=[c["step"] for c in accepted
-                                                  if not c["validated_on_original"]],
-                          n_points=int(valid_original.sum())))
+        steps.append(dict(record, reason=termination))
     # Stable step fields keep absent measurements explicit, never NaN in JSON.
     defaults = dict(rank=0, n_transits=0, n_points=0, duplicate_of_step=-1,
                     window_offset_reference="unity", masked_points=0,

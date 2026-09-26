@@ -158,13 +158,14 @@ findmnt -T /var/lib/hadoop-hdfs/journal    # Node 1~3
 - 스크립트는 피어링 생성 후 tailnet SSH로 짧은 호스트명과 GCE FQDN을 등록하고 이름 해석을 검사합니다.
 
 ```powershell
+# 현재 운영 프로젝트 (노드 1~6 순서). 정본은 GCP 분산 인프라 문서의 노드 표다.
 $Projects = @(
-  'actual-master-project',
-  'actual-worker2-project',
-  'actual-worker3-project',
-  'actual-worker4-project',
-  'actual-worker5-project',
-  'actual-worker6-project'
+  'planetory-0001',
+  'planetory-0002',
+  'planetory-0003',
+  'planetory-0004-508301',
+  'planetory-0005',
+  'planetory-0006'
 )
 ```
 

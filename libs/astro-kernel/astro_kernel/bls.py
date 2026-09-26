@@ -4,6 +4,7 @@ Astropy is loaded only for BLS, scipy only for 243; transit stays numpy-only.
 No experiment imports, file access, candidate identity, or repeated removal.
 """
 from dataclasses import dataclass
+import hashlib
 
 import numpy as np
 
@@ -14,6 +15,20 @@ SEARCH_VERSION = "bls_grid_v1/poc_linear20k"
 QUALITY_VERSION = "gate_v1/snr7_sde6"
 RUNNING_MEDIAN_QUALITY_VERSION = "sde-running-median1001-snr7-sde8-ntr2-v1"
 DURATIONS_HOURS = (1.2, 1.92, 2.88, 4.8)
+
+
+def _search_input_sha256(time, flux, sector, baseline_time):
+    """Bind an in-memory search result to its exact numerical inputs."""
+    digest = hashlib.sha256()
+    for value in (time, flux, sector, baseline_time):
+        if value is None:
+            digest.update(b"absent")
+            continue
+        array = np.ascontiguousarray(value, dtype="<f8")
+        digest.update(b"present")
+        digest.update(len(array).to_bytes(8, "big"))
+        digest.update(array.tobytes())
+    return digest.hexdigest()
 
 
 class BlsError(ValueError):
@@ -264,5 +279,6 @@ def search_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         status = "ok" if accepted else "no_quality_peak"
     return dict(status=status, peaks=peaks, accepted_peaks=accepted, periodogram=pg,
                 input_snapshot_id=input_snapshot_id, preprocessing_version=preprocessing_version,
+                search_input_sha256=_search_input_sha256(t, f, sectors, baseline),
                 bls_config_version=SEARCH_VERSION, candidate_quality_version=quality_version,
                 n_input=len(t), n_valid=int(valid.sum()), n_accepted=len(accepted))
