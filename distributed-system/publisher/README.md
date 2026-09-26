@@ -133,7 +133,7 @@ PUBLISHER_TEST_DATABASE_URL=postgresql://<소유자>:<비밀번호>@127.0.0.1:<�
   PYTHONPATH=../../libs/astro-kernel python -m unittest test_load                   # 일회용 PostgreSQL에서 도는 적재 검사
 ```
 
-`test_tutorial_source`는 `TUTORIAL_INPUTS`에 입력 폴더를 주면 실제 FITS로 5종 payload까지 만든다.
+`test_tutorial_source`는 `TUTORIAL_INPUTS`에 입력 폴더를 주면 실제 FITS로 5종 payload까지 만든다. CI에는 FITS가 없어 이 검사는 건너뛴다. 대신 `SyntheticBuildTest`가 합성 SPOC FITS 한 개로 119→125와 `to_payload`를 끝까지 돌려 커널 호출이 깨지지 않았는지 본다(수치 정답은 보지 않는다).
 
 2026-09-26 로컬 검증(develop `f0c3b4ca` 기준 V29 빈 DB, 운영과 같은 `tutorial.skip_after=0`)에서 운영 상태를 재현했다. 옛 1번 `261136679`에 목업 b-1을 올리고, 두 회원이 그 별을 받게 했다. 한 회원은 목업 후보에 정답을 내 성과 1건과 그 성과로 열린 별 1개를 얻었다. 그 위에서 확인한 결과는 다음과 같다.
 

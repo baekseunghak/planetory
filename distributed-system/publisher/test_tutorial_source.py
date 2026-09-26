@@ -82,6 +82,74 @@ class ReaderTest(unittest.TestCase):
             t.external_rows(star(spec, tic=7), csv)
 
 
+class SyntheticBuildTest(unittest.TestCase):
+    """합성 SPOC FITS 한 개로 119→125와 to_payload를 끝까지 돈다. 실제 FITS가 없는 CI에서 커널 호출이 깨지면 잡는다.
+
+    수치 정답(실제 5종의 후보·라벨)은 BuildTest가 본다. 여기서는 경로가 이어지는지만 본다.
+    """
+
+    PERIOD, EPOCH, DURATION_H, DEPTH = 3.3, 1355.0, 3.0, 0.005
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fits_file(self, tic: int) -> Path:
+        import numpy as np
+        from astropy.io import fits
+
+        time = 1354.0 + np.arange(0, 26.0, 2 / 1440)
+        flux = 1000 * (1 + np.random.default_rng(7).normal(0, 0.0005, time.size))
+        flux[np.abs((time - self.EPOCH + self.PERIOD / 2) % self.PERIOD - self.PERIOD / 2) < self.DURATION_H / 48] *= 1 - self.DEPTH
+        primary = fits.PrimaryHDU()
+        primary.header.update(TICID=tic, SECTOR=3, PROCVER="spoc-synthetic", TEFF=5800.0, RADIUS=1.0, TESSMAG=10.0)
+        table = fits.BinTableHDU.from_columns([
+            fits.Column(name="TIME", format="D", array=time),
+            fits.Column(name="PDCSAP_FLUX", format="E", unit="e-/s", array=flux),
+            fits.Column(name="PDCSAP_FLUX_ERR", format="E", unit="e-/s", array=np.full(time.size, 0.5)),
+            fits.Column(name="QUALITY", format="J", array=np.zeros(time.size, dtype=np.int32)),
+            fits.Column(name="CADENCENO", format="J", array=np.arange(time.size, dtype=np.int32))])
+        table.header.update(TIMESYS="TDB", BJDREFI=2457000, BJDREFF=0.0, TIMEUNIT="d", TIMEDEL=2 / 1440)
+        path = self.dir / "synthetic_lc.fits"
+        fits.HDUList([primary, table]).writeto(path)
+        return path
+
+    def test_synthetic_star_reaches_payload(self):
+        try:
+            import astropy  # noqa: F401  BLS 선택 의존성. CI validate:astro-kernel에는 있다.
+        except ImportError:
+            self.skipTest("astropy가 없다")
+        import hashlib
+
+        tic = 999999001
+        sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+        fits_path = self.fits_file(tic)
+        (self.dir / "source.txt").write_text("synthetic", encoding="utf-8")
+        tutorial = t.load_tutorial()
+        definition = {
+            "seq": 1, "intent": "deep_confirmed", "tic_id": tic, "name": "synthetic",
+            "product": {"filename": fits_path.name, "sector": 3, "sha256": sha(fits_path), "procver": "spoc-synthetic"},
+            "external": {"source": "archive", "file": "source.txt", "sha256": sha(self.dir / "source.txt"),
+                         "retrieved_at": "2026-09-27T00:00:00Z", "uri": "synthetic://", "table": "synthetic",
+                         "time_evidence": "synthetic BTJD-TDB",
+                         "rows": [{"read": "manual", "external_id": "S b", "period_days": self.PERIOD,
+                                   "epoch_btjd": self.EPOCH, "duration_hours": self.DURATION_H, "label": "CP"}]}}
+
+        result, attributes = t.assemble_star(definition, self.dir, tutorial, "unittest-only")
+        p = t.to_payload(result, definition, attributes, {"source": "tutorial", "seq": 1})
+
+        [c] = p["candidates"]
+        self.assertAlmostEqual(c["record"]["period_days"], self.PERIOD, delta=0.05)
+        self.assertEqual((c["disposition"]["disposition"], c["external"]["external_id"]), ("confirmed", "S b"))
+        self.assertEqual(p["bundle"]["manifest"]["publish"]["payload_digest"], p["bundle"]["payload_digest"])
+        again, _ = t.assemble_star(definition, self.dir, tutorial, "unittest-only")
+        self.assertEqual(t.to_payload(again, definition, attributes, {})["bundle"]["payload_digest"],
+                         p["bundle"]["payload_digest"])  # 같은 입력이면 같은 판이다(재실행이 ALREADY_PUBLISHED)
+
+
 @unittest.skipUnless(os.environ.get("TUTORIAL_INPUTS"), "TUTORIAL_INPUTS에 FITS·원천 폴더를 주면 돈다")
 class BuildTest(unittest.TestCase):
     def test_five_payloads_match_their_intent(self):

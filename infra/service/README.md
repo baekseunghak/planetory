@@ -217,7 +217,13 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 
 1. **이미지.** 272 변경이 develop에 병합된 뒤 `build:publisher`가 만든 SHA를 쓴다. 이전 이미지에는 `load-payload`·`tutorial-switch-sql`이 없다.
 2. **payload.** 로컬에서 `tutorial-build`로 만든 JSON 다섯 개를 서비스 노드의 한 폴더로 옮긴다. 컨테이너 사용자(uid 10001)가 읽을 수 있어야 한다.
-3. **백업.** 전환 SQL은 되돌리는 SQL이 없다. 적용 전에 서비스 DB를 `pg_dump`로 받아 둔다.
+3. **백업.** 전환 SQL은 되돌리는 SQL이 없다. 적용 전에 서비스 DB를 `pg_dump -Fc`로 받는다. 회원 정보가 들어 있으므로 권한 600으로 두고 서버 밖으로 옮기지 않는다. 적재 뒤 재실행 확인까지 끝나면 지운다(삭제는 실행 직전 승인).
+
+```sh
+cd "$DEPLOY_PATH" && mkdir -p ~/backups && umask 077
+docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > ~/backups/planetory-pre272-$(date -u +%Y%m%dT%H%M%SZ).dump
+```
 
 ```sh
 cd "$DEPLOY_PATH"
@@ -231,7 +237,7 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
   | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -v apply=1'
 ```
 
-적재 결과는 별마다 `PUBLISHED b-<id>`이고, 다시 돌리면 `ALREADY_PUBLISHED`다. 전환 SQL은 5개 별 중 하나라도 공개·current 판·주기도·활성 후보·처분이 빠지면 아무것도 바꾸지 않고 멈춘다. 옛 1번을 튜토리얼이 아닌 이유로 연 회원, 새 1번을 이미 연 회원, 옛 1번의 게시글·공개 분석이 있을 때도 멈춘다. 적용 뒤 확인할 것은 세 가지다: 별지도의 튜토리얼 경고가 사라지는지, `/api/v1/me/quests`가 5칸인지, 신규·기존 계정 모두 1번 별의 분석 화면이 열리는지.
+적재 결과는 별마다 `PUBLISHED b-<id>`이고, 다시 돌리면 `ALREADY_PUBLISHED`다. 전환 SQL이 멈추는 조건과 지우는 대상은 [Publisher](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272) 「튜토리얼 5종」에 있다. 멈추면 아무것도 바뀌지 않는다. 적용 뒤 확인할 것은 세 가지다: 별지도의 튜토리얼 경고가 사라지는지, `/api/v1/me/quests`가 5칸인지, 신규·기존 계정 모두 1번 별의 분석 화면이 열리는지.
 
 ## ERD
 
