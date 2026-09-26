@@ -110,9 +110,9 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **옛 배포 버튼 시험 (2026-09-26, `S15P21C206-262` 항목 2).** 한 번도 실행하지 않은 옛 manual job의 Play는 403으로 막혔다(`222890` `deploy:backend:ec2-a`). 반면 옛 job의 Retry는 막히지 않는다. `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 옛 Frontend `e9835da5`가 01:18:58~01:19:45 KST 약 1분 운영에 올라갔고, `222444`의 성공 job Retry로 `a8fb6667`에 되돌렸다. `ci_forward_deployment_rollback_allowed: true` 때문이며 정본은 [CI/CD](../operations/cicd.md)다. 이 설정을 끌지는 `S15P21C206-93`에서 정한다.
 
-**시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend를 `6d1926d5` 이후로 올리려면 새 develop 파이프라인이 필요하다.
+**시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend는 그 뒤 새 develop 파이프라인 `224322`(`50e13981`)의 버튼으로 올렸다(2026-09-26 22:29 KST, 헬스 통과).
 
-같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `a8fb6667`이다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 22:29 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `50e13981`이다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
@@ -152,7 +152,7 @@ Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시
 - 동작 확인: 튜토리얼 별 `261136679`(판 `b-1`)에서 김동혁 계정으로 봉우리를 제출하고 잔차를 요청했다. `rj-1`(후보 `c-2` 제거, 01:26 KST)과 `rj-2`(`c-2`·`c-3` 제거, 18:44 KST) 모두 Backend 로그에 `RESIDUAL 완료`·`PERIODOGRAM 완료`가 남았다.
 - 131 인계: `DERIVED_COMPUTE_CAPTURE_DIR`를 18:35 KST에 켜고, `rj-2`의 `{request, response}` 두 건을 받은 직후 껐다. 서버에는 사본을 남기지 않았다. 파일은 프로젝트 비공개 스니펫 `$193`에, 설명은 !211 note 2872124에 있다. 스니펫은 저장소 이력 밖이라 131이 기준 입력을 고정할 때까지 지우지 않는다. 고정한 뒤의 정본 위치는 131이 정한다.
 - 시험 흔적: 김동혁 계정에 제출 `sub-1`(매칭 안 됨)·`sub-2`(`c-2`)·`sub-3`(`c-3`), 성과 2건, 새로 열린 별 `900000020`·`900000011`이 남았다. 아래 「손으로 넣은 데이터」 표에도 적었다. 잔차 작업과 결과는 Backend 메모리 저장소(`InMemoryResidualJobStore`)에 있어 Backend를 다시 띄우면 사라진다. Redis 저장은 `S15P21C206-89`다.
-- Frontend는 `a8fb6667` 그대로다(위 절의 `blocked` 버튼). 잔차 화면은 이 판에서도 동작했다.
+- 동작 확인은 Frontend `a8fb6667`에서 했다. 같은 날 22:29 KST에 Frontend를 `50e13981`로 올렸고(위 절), 이 판에서 잔차 화면은 다시 확인하지 않았다.
 - 되돌리기는 [EC2 서비스 배포](../../infra/service/README.md) 「온라인 계산 Worker」의 되돌리기 표를 따른다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
