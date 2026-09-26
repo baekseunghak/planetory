@@ -104,7 +104,7 @@ CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `dep
 | `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
 | `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
 
-운영 DB는 V29다(2026-09-26). V23·V24는 261 전에 수동 배포한 `f6379f5b`에서, V25(266 NASA 행성 정보)는 파이프라인 `222444`(`a8fb6667`, 262 병합)에서, V26~V29는 `222918`(`6d1926d5`)의 Backend 배포(2026-09-26 01:10 KST)에서 한꺼번에 적용됐다. 그중 V27은 `submissions`의 `ck_submissions_source_peak_all_or_none`을 교체한 되돌리기 어려운 마이그레이션이다(`S15P21C206-269`). 교체 뒤 운영 제약 정의를 확인했고, 실제 봉우리 제출은 아직 확인하지 않았다.
+운영 DB는 V29다(2026-09-26). V23·V24는 261 전에 수동 배포한 `f6379f5b`에서, V25(266 NASA 행성 정보)는 파이프라인 `222444`(`a8fb6667`, 262 병합)에서, V26~V29는 `222918`(`6d1926d5`)의 Backend 배포(2026-09-26 01:10 KST)에서 한꺼번에 적용됐다. 그중 V27은 `submissions`의 `ck_submissions_source_peak_all_or_none`을 교체한 되돌리기 어려운 마이그레이션이다(`S15P21C206-269`). 교체 뒤 운영 제약 정의를 확인했고, 같은 날 88 동작 확인에서 봉우리 제출 3건이 접수돼 500이 풀린 것을 확인했다(아래 「온라인 계산 Worker」).
 
 Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 적용한다. 누르기 전에 운영 `flyway_schema_history`의 마지막 버전과 `db/migration`을 대조한다.
 
@@ -118,13 +118,13 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 별 분석을 열면 "일시적으로 처리할 수 없습니다"가 떴다. `analysis-context`가 503(`DEPENDENCY_UNAVAILABLE`)을 냈기 때문이다. 구현·API 연결·배포 문제가 아니었다. 서비스 DB에 Gold가 한 번도 적재되지 않아 `publication_bundles`·`light_curve_segments`·`candidates`가 모두 0행이었다. 더미 별에는 판이 없다. 이 경로는 예외로 처리해 오류 로그가 남지 않는다. 화면 문구는 일시 장애처럼 읽히지만 몇 번을 다시 해도 같다. 원인을 가르는 오류 코드 분리는 Backend 담당 사항이다.
 
-Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지다. 잔차 단계는 Worker(`S15P21C206-88`)가 없어 여전히 안 된다.
+Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지였다. 잔차 단계는 2026-09-26 88 Worker 배포로 열렸다(아래 「온라인 계산 Worker」).
 
 **운영 적재를 마쳤다(2026-09-25).** `a8fb6667` Frontend·Backend를 배포한 뒤 같은 커밋의 Publisher 이미지로 적재했다.
 
 - 계정: `planetory_publisher`(`planetory_gold_writer` 멤버, `flyway_schema_history`·`operation_settings` SELECT, public CREATE 회수). 비밀번호는 서버에서 무작위로 만들어 `.env`의 `PUBLISHER_DB_PASSWORD`에만 두었다.
 - 적재: `261136679`·`900000008`·`900000027`·`900000002`에 판 `b-1`~`b-4`가 current다. 별마다 세그먼트 1(2,919점)·주기도 1(5,000칸)·후보 3이다. `INTERNAL_SERVICE_TOKEN`이 없어 Backend 알림은 생략됐다.
-- 확인: `app.planetory.space`에서 튜토리얼 별의 분석 화면이 열리고 주기도·봉우리 10개가 보인다. 봉우리에서 시작한 제출은 V4 제약(강재민 인계)으로 아직 500이다.
+- 확인: `app.planetory.space`에서 튜토리얼 별의 분석 화면이 열리고 주기도·봉우리 10개가 보인다. 봉우리에서 시작한 제출은 V4 제약(강재민 인계)으로 500이었고, V27 적용(2026-09-26) 뒤 접수되는 것을 확인했다.
 - 적재 중 `--no-deps` 없는 `run`이 `service-db`를 한 번 재생성했다. 볼륨이 그대로라 회원 7·별 41·발견 46이 남았고 몇 초 동안 DB 연결이 끊겼다. README 명령을 고쳤다.
 
 ### 튜토리얼 5종 미등록
@@ -134,6 +134,24 @@ Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시
 ### EC2-B 레지스트리 매일 정리 (2026-09-25 설치)
 
 `/opt/planetory/registry-prune-daily.sh`와 `/etc/cron.d/planetory-prune`(매일 19:40 UTC, `--apply --gc`)을 설치했다. 모의 실행은 배포 중인 `a8fb6667`을 보호하고 삭제 예정 15·유지 65였다. 첫 실제 실행(2026-09-26 04:40 KST)은 `in_use=6d1926d5…,a8fb6667…`로 돌아 **삭제 23·유지 68**이었고 가비지 수집 뒤 레지스트리가 다시 떴다. 모의 실행보다 삭제가 많은 것은 그 사이 develop 병합으로 태그가 쌓였기 때문이다. 운영 이미지 backend·derived-compute `6d1926d5`와 frontend `a8fb6667`의 매니페스트가 남아 있음(200)을 확인했다. 로그는 `/var/log/planetory-prune.log`.
+
+## 온라인 계산 Worker (S15P21C206-88, 2026-09-26)
+
+`222918`(`6d1926d5`, !216 병합)로 [EC2 서비스 배포](../../infra/service/README.md) 「온라인 계산 Worker」의 첫 배포 절차를 밟았다. 운영에서 잔차·주기도 계산이 열렸다.
+
+| 항목 | 값 |
+| --- | --- |
+| Worker 이미지 | `planetory/derived-compute:6d1926d5d5936eff895fcc817584aa350961c616`, digest `sha256:a34915dbca19631cb5f902840ca425fc52da726cb6ab200d679f08773fc90538` |
+| runtime | python 3.12.14, numpy 2.5.3, astropy 7.2.2, astro_kernel 0.1.0 |
+| `.env` | 배포 job이 `DERIVED_COMPUTE_IMAGE`를 기록했고, `DERIVED_COMPUTE_URL=http://derived-compute:8090` 한 줄을 손으로 넣었다. 동시 계산 수는 compose 기본값 `PLANETORY_RESIDUAL_MAXRUNNING=1` |
+| Backend 재배포 | 배포 전 DB 덤프 `backups/service-db-20260925-161014.sql`, 헬스 통과. 이 배포에서 V26~V29가 적용됐다(위 「병합 후 CI 배포 결과」) |
+
+- Worker 확인: `healthy`. Backend 컨테이너에서 `http://derived-compute:8090/healthz`가 응답했고, `runtime.worker_image` 태그가 병합 commit과 같았다.
+- 동작 확인: 튜토리얼 별 `261136679`(판 `b-1`)에서 김동혁 계정으로 봉우리를 제출하고 잔차를 요청했다. `rj-1`(후보 `c-2` 제거, 01:26 KST)과 `rj-2`(`c-2`·`c-3` 제거, 18:44 KST) 모두 Backend 로그에 `RESIDUAL 완료`·`PERIODOGRAM 완료`가 남았다. `c-2`·`c-3`을 뺀 주기도의 최고 봉우리는 3.3591일로, 남은 후보 b(3.35992일)와 맞는다.
+- 131 인계: `DERIVED_COMPUTE_CAPTURE_DIR`를 18:35 KST에 켜고, `rj-2`의 `{request, response}` 두 건을 받은 직후 껐다. 서버에는 사본을 남기지 않았다. 파일은 프로젝트 비공개 스니펫 `$193`에, 설명은 !211 note 2872124에 있다.
+- 시험 흔적: 김동혁 계정에 제출 `sub-1`(매칭 안 됨)·`sub-2`(`c-2`)·`sub-3`(`c-3`), 성과 2건, 새로 열린 별 `900000020`·`900000011`이 남았다. 잔차 작업과 결과는 Backend 메모리 저장소(`InMemoryResidualJobStore`)에 있어 Backend를 다시 띄우면 사라진다. Redis 저장은 `S15P21C206-89`다.
+- Frontend는 `a8fb6667` 그대로다(위 절의 `blocked` 버튼). 잔차 화면은 이 판에서도 동작했다.
+- 되돌리기는 [EC2 서비스 배포](../../infra/service/README.md) 「온라인 계산 Worker」의 되돌리기 표를 따른다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
