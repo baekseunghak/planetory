@@ -112,7 +112,7 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend는 그 뒤 새 develop 파이프라인 `224322`(`50e13981`)의 버튼으로 올렸다(2026-09-26 22:29 KST, 헬스 통과).
 
-같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 22:29 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `50e13981`이다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-27 05:25 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `c3d8ba85`(272 병합 commit)이다. Frontend는 develop 파이프라인 `224759`의 `deploy:frontend:ec2-a`(job `648986`, 05:25:15~05:25:24 KST)로 올렸고 `/health/renderer-enabled`가 200이다. 그 전(2026-09-26 22:29 KST)의 Frontend는 `50e13981`이었다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
