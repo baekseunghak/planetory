@@ -19,7 +19,7 @@ VALIDATOR = Draft202012Validator(SCHEMA)
 SOURCES = ("archive", "toi")
 TIMES = np.arange(0, 10, .01)
 VERSIONS = dict(preprocessing="pre-v1", bls_config="search-v1", residual_model="box-divide-v0",
-                periodogram_config="provided-v1", candidate_quality="quality-v1",
+                periodogram_config="provided-v1",
                 ai_model=AI_NOT_EXECUTED, ai_threshold=AI_NOT_EXECUTED,
                 external_matching="external-match-review-v1")
 POLICY = AI_POLICY
@@ -202,6 +202,15 @@ def test_run_level_inputs_and_scope_are_enforced():
                )["reason"] == "ai_version_mismatch"
     assert run([good], targets=[602])["reason"] == "result_outside_targets"
     assert run([], targets=[])["reason"] == "invalid_targets"
+    assert run([good], calculation_versions=dict(VERSIONS, candidate_quality="quality-v1")
+               )["reason"] == "per_star_version_in_run"
+    assert run([good], calculation_versions=dict(VERSIONS, extra="x"))["reason"] == "invalid_calculation_versions"
+    # Non-dict inputs are rejections, not crashes.
+    assert run([good], calculation_versions=["not", "a", "dict"])["reason"] == "malformed_input"
+    assert run([dict(tic_id=601, inputs="garbage")])["reason"] == "malformed_input"
+    broken = deepcopy(good)
+    broken["inputs"]["catalog"] = "garbage"
+    assert run([broken])["manifest"]["stars"][0]["reasons"] == ["malformed_input"]
     mismatch = deepcopy(good)
     mismatch["tic_id"] = 603
     assert run([mismatch])["manifest"]["stars"][0]["reasons"] == ["result_tic_mismatch"]
@@ -228,3 +237,14 @@ def test_schema_matches_kernel_and_rejects_broken_rows():
     del missing_count["manifest"]["counts"]["held"]
     for doc in broken + [missing_count]:
         assert not VALIDATOR.is_valid(doc)
+
+
+def test_candidate_quality_revision_is_taken_per_star():
+    # 123 revisions hash each star's own models, so real runs never share one value.
+    first, second = star(901, [(9011, 2.)], {"toi": {9011: "CP"}}), star(902, [(9021, 2.)], {})
+    for s, revision in ((first, "candidate-quality-v1-aaa"), (second, "candidate-quality-v1-bbb")):
+        s["inputs"]["discovery"]["candidate_quality_revision"] = revision
+    out = run([first, second])
+    assert out["manifest"]["counts"]["ready"] == 2 and "candidate_quality" not in out["manifest"]["calculation_versions"]
+    got = {b["bundle"]["tic_id"]: b["bundle"]["manifest"]["calculation_versions"]["candidate_quality"] for b in out["bundles"]}
+    assert got == {901: "candidate-quality-v1-aaa", 902: "candidate-quality-v1-bbb"}

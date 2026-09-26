@@ -90,12 +90,17 @@
         "calculation_versions": {
           "type": "object",
           "required": ["preprocessing", "bls_config", "residual_model", "periodogram_config",
-                       "candidate_quality", "ai_model", "ai_threshold", "external_matching"],
+                       "ai_model", "ai_threshold", "external_matching"],
           "properties": {
+            "preprocessing": {"$ref": "#/$defs/text"},
+            "bls_config": {"$ref": "#/$defs/text"},
+            "residual_model": {"$ref": "#/$defs/text"},
+            "periodogram_config": {"$ref": "#/$defs/text"},
+            "external_matching": {"$ref": "#/$defs/text"},
             "ai_model": {"$ref": "#/$defs/ai_not_executed"},
             "ai_threshold": {"$ref": "#/$defs/ai_not_executed"}
           },
-          "additionalProperties": {"$ref": "#/$defs/text"}
+          "additionalProperties": false
         },
         "ai_policy": {"$ref": "#/$defs/ai_policy"},
         "bundles": {
