@@ -24,7 +24,7 @@ NASA 원천 조회의 `NASA_PLANET_INFO_*` 7개 설정도 Compose가 Backend에 
 
 ## service-db
 
-PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.
+PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙는다. 호스트에는 `127.0.0.1:5432`만 연다. 이 포트는 GCP Node 1 Publisher 전용이고 아래 「Publisher 운영 적재 경로」의 `tailscale serve`만 이 포트로 넘긴다. 외부 인바운드는 0개다.
 
 `.env`에 `POSTGRES_PASSWORD`가 없으면 기동이 실패한다. `POSTGRES_DB`, `POSTGRES_USER`와 Backend의 `DATABASE_*`는 기본값을 쓰면 서로 맞는다.
 
@@ -187,7 +187,7 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 
 분석은 회원이 발견한 별만 열린다(`STAR_LOCKED`). 화면을 열어 볼 목적이면 회원 대부분이 가진 튜토리얼 별을 넣는다. 운영에 올린 대상은 [서비스 배포 현재 상태](../../docs/project/service-deploy-status.md) 「손으로 넣은 데이터」에 적는다.
 
-같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
+같은 명령을 다시 돌리면 `ALREADY_PUBLISHED`로 끝나고 DB는 바뀌지 않는다. 같은 TIC이면 판 버전이 같기 때문이다. 알림은 이미 current인 판에도 다시 보낸다(`load.notify_targets`, 2026-09-27 재실행에서 HTTP 200 확인). 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 같은 명령을 다시 돌리거나 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
 
 ```sh
 docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher notify --bundle b-<id>
@@ -238,6 +238,110 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 ```
 
 적재 결과는 별마다 `PUBLISHED b-<id>`이고, 다시 돌리면 `ALREADY_PUBLISHED`다. 전환 SQL이 멈추는 조건과 지우는 대상은 [Publisher](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272) 「튜토리얼 5종」에 있다. 멈추면 아무것도 바뀌지 않는다. 적용 뒤 확인할 것은 세 가지다: 별지도의 튜토리얼 경고가 사라지는지, `/api/v1/me/quests`가 5칸인지, 신규·기존 계정 모두 1번 별의 분석 화면이 열리는지.
+
+## Publisher 운영 적재 경로 (S15P21C206-85)
+
+GCP Node 1의 Publisher가 tailnet으로 이 노드의 서비스 DB에 적재하고 Backend에 판 전환을 알리는 경로다. 결정은 다음과 같다.
+
+| 항목 | 결정 |
+| --- | --- |
+| DB 접속 | Node 1 → tailnet → `ec2-a:5432`(`tailscale serve --tcp`) → `127.0.0.1:5432` → `service-db` |
+| 알림 | 같은 방식으로 `ec2-a:8080` → `127.0.0.1:8080` → Backend `POST /internal/bundles/b-<id>/activated` |
+| 허용 출발지 | Node 1만. Tailscale ACL로 강제한다 |
+| 인증 | DB는 `planetory_publisher`(scram-sha-256), 알림은 `X-Planetory-Service-Token` |
+| 비밀 값 | Node 1의 root 전용 `/etc/planetory/publisher/env`. 저장소·이미지·GitLab 변수에 두지 않는다 |
+| 알림 실패 | DB 전환은 그대로 두고 `notify --bundle b-<id>`로 다시 보낸다 |
+
+인터넷 쪽은 바뀌지 않는다. DB와 Backend는 loopback에만 바인드하고, tailnet 쪽 리스너는 tailscaled가 연다.
+
+**tailnet IP에 직접 바인드하지 않는다.** 부팅 때 Docker가 Tailscale보다 먼저 뜨면 `100.x` 주소가 아직 없어서 `service-db` 컨테이너가 포트를 잡지 못하고 뜨지 않는다. `tailscale serve`는 loopback으로 넘기기만 하므로 이런 경합이 없다. Node 1 Spark History Server(`tailscale serve --http=18080`)와 같은 방식이다.
+
+**출발지 통제는 ACL 하나뿐이다.** serve가 중계하면 PostgreSQL이 보는 출발지는 Docker 게이트웨이다. 그래서 `pg_hba`로 Node 1을 가려낼 수 없고 기본 `host all all all scram-sha-256`을 그대로 둔다. ACL에서 Node 1 외 출발지를 허용하면 그 장비는 비밀번호만 있으면 어느 계정으로든 붙을 수 있다. Node 1에는 `planetory_publisher` 비밀번호만 둔다. **Node 1 비밀번호가 새어도 피해는 Gold 훼손까지다.** `planetory_publisher`는 `planetory_gold_writer` 멤버라 V2(`V2__gold_roles.sql`)의 Gold 12개 테이블 읽기·쓰기와 preflight용 `flyway_schema_history`·`operation_settings` 읽기만 가진다. `users`·`submissions`·`posts` 같은 회원 테이블은 읽을 수 없고, 최악은 후보를 지우거나 가짜 후보를 넣는 것이다(`!228` 강재민 리뷰).
+
+### EC2-A 적용 (한 번)
+
+`service-db`를 재생성하므로 몇 초 동안 DB 연결이 끊긴다. 데이터는 볼륨에 남는다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose up -d --no-deps service-db     # 127.0.0.1:5432 포트 반영
+sudo tailscale serve --bg --tcp 5432 tcp://127.0.0.1:5432
+sudo tailscale serve --bg --tcp 8080 tcp://127.0.0.1:8080
+tailscale serve status
+```
+
+`--bg` 설정은 tailscaled 상태에 저장돼 재부팅 뒤에도 남는다. 경로를 닫을 때는 `sudo tailscale serve --tcp 5432 off`, `--tcp 8080 off`를 실행한다. loopback 포트는 남아도 외부에서 닿지 않는다.
+
+### Tailscale ACL
+
+정책의 정본은 Admin Console이다. 필요한 결과는 두 가지다.
+
+1. Node 1 → `ec2-a:5432,8080` 허용
+2. 그 밖의 모든 출발지(팀원 장비 `autogroup:member`, 다른 `tag:hadoop` 서버)는 `ec2-a:5432,8080`에 닿지 않는다
+
+ACL은 허용만 있고 차단 규칙이 없다. `[tag:hadoop, autogroup:member] → tag:hadoop:*`가 `ec2-a`의 모든 포트를 허용했으므로 `ec2-a`를 `tag:hadoop`에서 떼어 새 태그로 옮겼다(2026-09-27 적용).
+
+| 장비 | 태그 |
+| --- | --- |
+| `ec2-a` | `tag:service`만(`tag:hadoop` 제거) |
+| `node-1` | `tag:hadoop`, `tag:publisher` |
+
+| 규칙 | 목적 |
+| --- | --- |
+| `tag:publisher → tag:service:5432,8080` | 적재와 판 전환 알림 |
+| 멤버·`tag:hadoop`·`tag:registry` → `tag:service:22`, owner도 `tag:service:22`만 | 사람과 CI Runner의 SSH. 그 밖의 포트는 닫힌다 |
+| `tag:service → tag:registry:5000` | `ec2-a`의 이미지 pull. 예전에는 `tag:hadoop` 규칙으로 받았다 |
+| `ssh` 규칙 세 곳의 `dst`에 `tag:service` 추가 | 멤버 `check`, owner `check`, CI Runner의 `deploy` 계정 |
+
+정책 `tests`에 `tag:publisher`의 5432·8080 허용과 `tag:hadoop`·owner 계정의 거절을 넣었다. 정책을 고칠 때 이 검사가 깨지면 저장되지 않는다. 태그를 다시 합치거나 `ec2-a`에 `tag:hadoop`을 붙이면 5432·8080이 tailnet 전체에 열린다.
+
+### 적재 계정
+
+위 「Gold 목업」 「준비」의 `planetory_publisher`를 그대로 쓴다. 이미 있으면 새로 만들지 않는다. 비밀번호를 바꿨으면 EC2-A `.env`의 `PUBLISHER_DB_PASSWORD`와 Node 1 env 파일을 함께 바꾼다.
+
+### Node 1 실행
+
+env 파일은 root 소유 `0600`이다. 키 이름만 적는다.
+
+```text
+PGHOST=ec2-a
+PGPORT=5432
+PGDATABASE=planetory_poc
+PGUSER=planetory_publisher
+PGPASSWORD=<비밀번호>
+BACKEND_URL=http://ec2-a:8080
+INTERNAL_SERVICE_TOKEN=<EC2-A .env와 같은 값>
+```
+
+`ec2-a`는 MagicDNS 이름이다. 컨테이너를 host 네트워크로 띄워 Node 1의 이름 해석과 tailnet 경로를 그대로 쓴다. 비밀 값은 `--env-file`로만 넘기고 명령줄에 두지 않는다.
+
+```sh
+sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
+  <registry>/planetory/publisher:<sha> python -m publisher mock-load --tic <TIC 목록>
+# 알림만 다시 보낼 때
+sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
+  <registry>/planetory/publisher:<sha> python -m publisher notify --bundle b-<id>
+```
+
+Airflow가 이 실행을 부르는 것은 게시 gate(`S15P21C206-80`), 이미지 배포 job은 `S15P21C206-94` 범위다.
+
+### 연결이 끊기면
+
+적재부터 current 전환까지 한 트랜잭션이다. 커밋 전에 연결이 끊기면 PostgreSQL이 트랜잭션을 롤백하고 기존 current가 남는다. 같은 명령을 다시 돌리면 새로 게시하거나, 이미 커밋됐으면 `ALREADY_PUBLISHED`로 끝난다([Publisher](../../distributed-system/publisher/README.md) 「적재 절차」).
+
+### 검증 (2026-09-27)
+
+운영에 목업 별이 없어 임시 `hidden` 별 `900000099`를 만들어 시험하고, 끝난 뒤 위 「Gold 목업」 「삭제」 SQL과 별 `DELETE`로 모두 지웠다. 실제 `pv1-` 판 5개는 건드리지 않았다.
+
+| 항목 | 결과 |
+| --- | --- |
+| 적재·알림 | Node 1에서 `PUBLISHED b-11`, 재실행 `ALREADY_PUBLISHED b-11`. 두 번 모두 알림 HTTP 200, Backend 로그에 `판 11(TIC 900000099) 후처리` |
+| 허용되지 않은 출발지 | 작업 PC(멤버), EC2-B, node-2에서 `ec2-a:5432`·`8080` 시간 초과(ACL이 버림). node-1만 연결 |
+| 인터넷 | EC2-A 공인 주소로 5432·8080·3000 시간 초과. 새 리스너는 tailnet 주소에만 있다 |
+| 연결 끊김 | 소유자 세션이 `publication_bundles`를 `SHARE`로 잠가 Publisher를 판 INSERT에서 세웠다. 이때 관측 원천·세그먼트는 이미 쓴 상태였다. 컨테이너를 강제 종료하고 잠금을 풀자 세션이 사라지고 관측·세그먼트·판 모두 0행, 전체 current 5개가 그대로였다. 이어진 재실행이 위 `PUBLISHED`다 |
+| 비밀 값 | Backend·DB 로그, 이미지 `Config.Env`, 남은 컨테이너 어디에도 토큰·비밀번호가 없다. env 파일은 EC2-A `.env`에서 서버 사이 파이프로만 옮겼다 |
+
+**공인 주소의 22번은 열려 있다.** 작업 PC에서 공인 주소로 22에 연결됐다. 85 이전부터의 상태(`ufw` 22 허용, OpenSSH 별칭 `ec2-a-ssh` 경로)이고 이번 변경과 무관하다. 보안그룹이 출발지를 제한하는지는 확인하지 않았다.
 
 ## ERD
 

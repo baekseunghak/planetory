@@ -1,12 +1,10 @@
 # Publisher
 
-완료된 Silver를 검사하고 EC2용 Gold 묶음으로 포장해 서비스 PostgreSQL에 게시한다.
-
-경로, 버전과 checksum을 검증한 뒤 전달한다. 전송이나 검증에 실패하면 기존 Gold를 바꾸지 않는다.
+검증된 Gold를 GCP Node 1에서 EC2-A 서비스 PostgreSQL에 직접 적재하고, 같은 트랜잭션에서 current를 전환한 뒤 Backend에 알린다. 파일을 EC2로 전송하지 않는다. 적재나 검증에 실패하면 트랜잭션을 롤백해 기존 current를 바꾸지 않는다.
 
 ## 현재 상태 (S15P21C206-262, S15P21C206-272)
 
-**적재 단계는 구현했고, 입력은 목업과 튜토리얼 5종 두 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 일반 탐사용 실제 Gold 입력(HDFS reader), 후보 동일성 대조, GCP→EC2-A 접속 경로는 없다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」).
+**적재 단계는 구현했고, 입력은 목업과 튜토리얼 5종 두 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 일반 탐사용 실제 Gold 입력(HDFS reader)과 후보 동일성 대조는 없다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
 
 현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
 
@@ -119,7 +117,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 
 ## 실행
 
-서비스 노드에서 돌리는 방법과 계정 준비·삭제 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」·「튜토리얼 5종」에 있다.
+서비스 노드에서 돌리는 방법과 계정 준비·삭제 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」·「튜토리얼 5종」, Node 1에서 돌리는 방법은 같은 문서 「Publisher 운영 적재 경로」에 있다.
 
 ```sh
 python -m publisher mock-load --tic 900000008,900000027   # libpq 환경변수(PGHOST 등)로 접속

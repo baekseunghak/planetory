@@ -112,7 +112,7 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend는 그 뒤 새 develop 파이프라인 `224322`(`50e13981`)의 버튼으로 올렸다(2026-09-26 22:29 KST, 헬스 통과).
 
-같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 22:29 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `50e13981`이다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-27 05:25 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `c3d8ba85`(272 병합 commit)이다. Frontend는 develop 파이프라인 `224759`의 `deploy:frontend:ec2-a`(job `648986`, 05:25:15~05:25:24 KST)로 올렸고 `/health/renderer-enabled`가 200이다. 그 전(2026-09-26 22:29 KST)의 Frontend는 `50e13981`이었다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
@@ -177,6 +177,25 @@ Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시
 - 시험 흔적: 김동혁 계정에 제출 `sub-1`(매칭 안 됨)·`sub-2`(`c-2`)·`sub-3`(`c-3`), 성과 2건, 새로 열린 별 `900000020`·`900000011`이 남았다. 아래 「손으로 넣은 데이터」 표에도 적었다. 이 흔적은 같은 날 272 전환과 더미 별 삭제로 모두 지웠다(위 「튜토리얼 5종 등록」). 잔차 작업과 결과는 Backend 메모리 저장소(`InMemoryResidualJobStore`)에 있어 Backend를 다시 띄우면 사라진다. Redis 저장은 `S15P21C206-89`다.
 - 동작 확인은 Frontend `a8fb6667`에서 했다. 같은 날 22:29 KST에 Frontend를 `50e13981`로 올렸고(위 절), 이 판에서 잔차 화면은 다시 확인하지 않았다.
 - 되돌리기는 [EC2 서비스 배포](../../infra/service/README.md) 「온라인 계산 Worker」의 되돌리기 표를 따른다.
+
+## Publisher 운영 적재 경로 (S15P21C206-85, 2026-09-27)
+
+GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend에 알리는 경로를 열었다. 구성·ACL·검증은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」에 있다.
+
+| 항목 | 값 |
+| --- | --- |
+| 배포 경로 `compose.yaml` | 85 브랜치 판(`d146e104`, `service-db` `127.0.0.1:5432`)으로 손으로 교체. 이전 판은 `compose.yaml.bak-85-20260926-191132` |
+| `service-db` | 04:11 KST 재생성. 직전 덤프 `backups/service-db-20260926-191132.sql` |
+| `.env` | `INTERNAL_SERVICE_TOKEN`을 새로 만들어 넣었다. 값은 EC2-A `.env`와 Node 1 env 파일에만 있다 |
+| Backend | 04:12 KST 같은 이미지로 재생성해 토큰을 읽혔다. 헬스 UP, 토큰 없는 내부 호출 401 |
+| `tailscale serve` | `--tcp 5432`·`--tcp 8080` → loopback(`--bg`, 재부팅 뒤에도 유지) |
+| Tailscale | `ec2-a` `tag:hadoop` → `tag:service`, `node-1`에 `tag:publisher` 추가 |
+| Node 1 | `/etc/planetory/publisher/env`(root `0600`), 이미지 `planetory/publisher:50e13981b036aa1378d8ca0d1624641cfc9d48ab`(V29) |
+
+- **MR 병합 전 주의.** CI 배포 job은 자기 파이프라인 commit의 `compose.yaml`을 올린다. 병합 전 develop 판에는 `service-db` 포트가 없다. 그 뒤 `service-db`가 재생성되면(인자 없는 `up -d`, `--no-deps` 없는 `run`) loopback 포트가 사라져 적재 경로가 끊긴다. 도는 컨테이너는 배포만으로는 바뀌지 않는다.
+- **실제로 덮였다(2026-09-27 05:25 KST).** develop `c3d8ba85`의 Frontend 배포(job `648986`)가 서버 `compose.yaml`을 포트 없는 판으로 올렸다. 도는 `service-db`는 `127.0.0.1:5432`를 그대로 물고 있고 serve도 살아 있어 경로는 동작한다. 85 병합 뒤의 첫 배포가 포트 줄을 되돌린다. 그 전에는 `service-db`를 재생성하지 않는다.
+- Backend 재생성으로 메모리 저장소의 잔차 작업 `rj-1`·`rj-2`가 사라졌다(`InMemoryResidualJobStore`, 위 88 절).
+- 시험은 임시 `hidden` 별 `900000099`로 했고 목업 판·별을 모두 지웠다. 시험 전후 운영 DB는 별 6개, current 판 5개(튜토리얼 `b-5`~`b-9`)로 같다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
