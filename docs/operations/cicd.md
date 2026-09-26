@@ -12,22 +12,20 @@ Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서�
 ├─ common.yml
 ├─ apps/
 │  ├─ frontend.yml
-│  └─ backend.yml
+│  ├─ backend.yml
+│  └─ derived-compute.yml
 └─ distributed-system/
-   ├─ ingestion.yml
-   ├─ spark.yml
-   ├─ airflow.yml
    └─ publisher.yml
 ```
 
-최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램을 재시작하지 않는다. 이미지 빌드는 변경된 프로그램만 하되, EC2-A 서비스(Frontend·Backend)는 기준 브랜치 병합마다 빌드한다(아래 「배포 버튼 유지」).
+최상위 파일은 공통 규칙과 각 배포 단위의 job을 불러온다. 한 프로그램의 변경은 다른 프로그램을 재시작하지 않는다. 이미지 빌드는 변경된 프로그램만 하되, EC2-A 서비스(Frontend·Backend·잔차 Worker `derived-compute`)는 기준 브랜치 병합마다 빌드한다(아래 「배포 버튼 유지」).
 
 ## 실행 흐름
 
 | 시점 | 실행 |
 | --- | --- |
 | Merge Request | Compose와 Docker 구성 검사 |
-| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend는 변경과 관계없이 매번 빌드 |
+| 기준 브랜치 | 변경된 프로그램의 이미지 빌드·Registry push. Frontend·Backend·`derived-compute`는 변경과 관계없이 매번 빌드 |
 | 배포 승인 | 선택한 서버에서 해당 이미지만 pull·재시작 |
 
 소스 manifest가 없는 구성은 `rules:exists`로 빌드를 건너뛴다. 현재 기준은 Frontend `package-lock.json`, Backend `gradlew`, Python 구성의 `requirements.txt`다.
@@ -86,12 +84,13 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
-- Ingestion: GCP Node 2~6에 같은 이미지를 각각 pull할 수 있다.
-- Spark submit·Airflow·Publisher: GCP Node 1에 배포한다. YARN executor는 NodeManager가 실행하므로 Spark standalone Master/Worker 컨테이너를 추가하지 않는다. Publisher 이미지는 EC2-A의 Gold 목업 적재(`gold-mock` profile)에서도 같은 이미지로 돈다(`S15P21C206-262`).
+- 잔차 Worker(`derived-compute`, S15P21C206-88): EC2-A에 `deploy:derived-compute:ec2-a`로 배포한다. HTTP 헬스 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
+- GCP 분산 시스템: CI 배포 job이 없다. 아래 「GCP 분산 시스템」을 따른다.
+- Publisher: 기준 브랜치에서 이미지만 빌드한다. EC2-A의 Gold 목업 적재(`gold-mock` profile)가 이 이미지를 쓴다(`S15P21C206-262`).
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
 - 운영 Compose는 서버의 `.env`에서 다른 서비스의 현재 이미지와 실행 설정을 읽는다.
 
-배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다. 수집·Spark·Publisher처럼 요청 시 실행하는 이미지는 `pull`까지만 수행한다.
+배포 job은 Compose 파일을 SSH로 복사한 뒤 `config`, `pull`, `up --no-deps` 순서로 실행한다.
 
 서비스 인스턴스가 1개이므로 Backend 재시작은 전면 중단이다. 다만 세션은 EC2-A `redis-session`에 있으므로 그 컨테이너를 함께 재시작하지 않으면 로그인은 유지된다(구현 `S15P21C206-237` 전까지는 메모리 세션이라 전원 재로그인이 발생한다). 무중단 배포를 목표로 두지 않으며 진입·장애 경계는 [EC2 서비스 진입·장애 전환 경계](../architecture/ec2-service-entry-failover.md)를 따른다.
 
@@ -103,14 +102,48 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 
 옛 버튼은 GitLab이 막는다. 배포 job에 `environment: ec2-a`를 두면 프로젝트 설정 "옛 배포 job 막기"(`ci_forward_deployment_enabled`)가 걸려, 더 새 배포가 있는 상태에서 옛 파이프라인의 배포 job을 실패시킨다. environment는 **노드 하나**다. 배포 job이 노드 공용 `compose.yaml`을 함께 올리므로, 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다. `resource_group`을 노드 단위로 두는 것과 같은 이유다.
 
-막히지 않는 경우가 둘 있다.
+**막히는 것은 한 번도 실행하지 않은 옛 manual job의 Play다.** 2026-09-26 파이프라인 `222890`의 `deploy:backend:ec2-a`(더 새 `222918`이 배포된 뒤)를 Play하자 403으로 거절됐고 job은 `manual`로 남았다(`S15P21C206-262`).
 
-- **이 규칙 이전 파이프라인의 job.** environment가 없어 배포로 세지 않는다. 2026-09-23 이전에 취소된 배포 job을 Retry하면 옛 compose가 올라간다.
-- **예전에 성공한 배포 job의 재실행.** `ci_forward_deployment_rollback_allowed: true`라 롤백 목적으로 허용된다. 의도한 되돌리기에만 쓴다.
+**Retry는 막히지 않는다.** `ci_forward_deployment_rollback_allowed: true`에서는 옛 배포 job의 Retry가 **예전에 성공했든 아니든** 롤백으로 허용된다. 2026-09-26 `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 정식 배포(21716)로 기록되며 옛 Frontend `e9835da5`가 운영에 올라갔다. `222444`의 성공 job을 Retry해 약 1분 뒤 되돌렸다. 따라서 취소·실패·성공한 옛 배포 job의 **Retry 버튼은 곧 되돌리기 버튼**이다. 의도한 되돌리기에만 누른다.
+
+**Retry 되돌리기는 이미지만 되돌리지 않는다.** 같은 시험에서 두 가지 부작용이 났다(`S15P21C206-88` 세션 확인).
+
+- **서버 `compose.yaml`이 그 커밋 판으로 덮인다.** 배포 job은 서비스와 상관없이 자기 커밋의 compose를 통째로 올린다. `222444` Retry가 `a8fb6667`의 compose를 올려, 앞서 `222918`로 배포한 `derived-compute` 서비스와 Backend의 `DERIVED_COMPUTE_URL` 전달 줄이 빠졌다(01:19~02:51 KST). 컨테이너는 다시 만들지 않아 동작했지만, 그 사이 Backend가 재생성됐다면 잔차 실행기가 꺼지고 Worker는 compose 밖 고아 컨테이너가 됐다. `222918`의 성공 job(`deploy:derived-compute:ec2-a`)을 Retry해 되살렸다.
+- **최신 파이프라인의 버튼이 막힌다.** 모든 배포 job이 environment `ec2-a` 하나를 쓰므로 옛 job의 Retry가 더 새 deployment 기록이 된다. 그 뒤 실제로는 더 새 `222918`의 미실행 `deploy:frontend:ec2-a`가 옛 job으로 취급돼 `blocked`가 됐다. 옛 버튼은 Retry로 통과하고 최신 버튼은 막히는, 보호가 거꾸로 걸린 상태다. 이때 최신 판을 올리려면 새 파이프라인이 필요하다.
+
+대책 후보(미결정): 서비스별 environment 분리, 서버에 올라간 것보다 옛 커밋의 compose를 올리지 않게 막기, 되돌리기는 이미지만 바꾸고 compose는 유지하기.
+
+**첫 후보는 261 결정과 배치된다.** 단일 environment는 바로 compose 공유 때문에 261에서 고른 것이다(`.gitlab/ci/common.yml` `.deploy-ec2-a` 주석). 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 통과하는 길이 다시 열린다. compose 덮어쓰기는 Retry만이 아니라 옛 커밋을 어떤 경로로든 배포하면 생기는 일이므로(`scp "$DEPLOY_COMPOSE_SOURCE"`), 원인을 건드리는 것은 둘째·셋째 후보다. 최신 버튼이 막힌 부작용은 261이 얻은 보호의 대가로 같은 선택의 양면이다.
+
+이 규칙 이전(2026-09-23 전) 파이프라인의 job은 environment가 없어 배포로 세지 않는다. 그 job을 Retry하면 보호 없이 옛 compose가 올라간다.
+
+Retry까지 막으려면 `ci_forward_deployment_rollback_allowed`를 끈다. 그러면 GitLab 버튼으로 하는 되돌리기도 막히고 **의도한 되돌리기는 서버 수동 절차만 남는다.** `deploy.sh`의 자동 롤백은 새 이미지 교체가 실패했을 때만(`replace "$IMAGE" || rollback`) 불리므로 "잘 떴지만 되돌리고 싶다"에는 쓸 수 없다. Play는 이미 outdated 보호로 막혀 있다.
+
+끌지는 정하지 않았다. **`S15P21C206-93`에서 함께 정한다.** 93이 `main` 병합 뒤 자동 CD와 실패 시 직전 SHA 롤백을 넣으면, 실패 경로는 `deploy.sh`와 93이 덮고 남는 것은 의도한 되돌리기 하나다. 그때 그 용도의 경로(위 대책 후보 포함)를 따로 두고 이 설정을 끄는 것이 순서다.
 
 대가로 병합마다 빌드가 Backend 약 2분·Frontend 약 45초 늘고 레지스트리 태그가 쌓인다. 태그 정리는 EC2-B의 매일 cron이 배포 중인 이미지를 보호한 채 한다([EC2-B](../../infra/service/ec2-b/README.md) 「매일 정리」).
 
-**GCP 노드(Ingestion·Spark·Airflow·Publisher)는 같은 결함이 남아 있다(S15P21C206-262에서 방식만 정함).** 파이프라인 `220048`에서 ingestion 배포 버튼 5개가 취소된 실례가 있다. EC2-A처럼 매 병합 빌드로 풀지 않는다. Airflow·Spark 이미지는 크고 빌드가 무거워 비용이 다르다. 대신 빌드를 취소되지 않게 하고(`interruptible: false`) 노드별 `environment`로 옛 버튼을 막는 쪽이 맞다. 다만 이 방식은 자동 취소 방식(`workflow:auto_cancel:on_new_commit: interruptible`)을 바꿔야 해서 파이프라인 전체와 EC2-A 동작에 걸린다. 별도 Task로 설계한다.
+GCP 노드에도 같은 결함이 있었으나(파이프라인 `220048`에서 ingestion 배포 버튼 5개 취소) 배포 job을 걷어내 결함도 없어졌다(`S15P21C206-94`). `S15P21C206-262`에서 정한 해결 방식(빌드 `interruptible: false`와 노드별 `environment`, 자동 취소 방식 변경)은 쓰지 않는다.
+
+### GCP 분산 시스템 (S15P21C206-94)
+
+GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미지를 쓰지 않기 때문이다.
+
+- 수집·HDFS 적재·Spark Bronze: 코드를 불변 release 디렉터리로 묶어 운영자 스크립트가 설치하고, 호스트 Python·systemd로 실행한다.
+- Spark 제출: digest로 고정한 공개 `apache/spark` 이미지에 release 코드를 넘긴다.
+- Airflow: Node 1이 release에서 로컬 이미지를 직접 빌드한다. 교체는 `deploy-tess-airflow-node1.sh --update`만 한다.
+- Hadoop·YARN: 호스트 데몬이며 [Hadoop 운영 작업 가이드](../workflows/hadoop-operations.md)를 따른다.
+
+걷어내기 전 GCP 배포 job(`deploy:ingestion:gcp-node-2`~`6`, `deploy:spark:gcp-node-1`, `deploy:publisher:gcp-node-1`)은 아무도 실행하지 않는 레지스트리 이미지를 pull했다. 사용처가 없는 `build:ingestion`·`build:spark`·`build:airflow`도 함께 걷어냈다. `build:spark`는 develop에서 실패하고 있었다(job `629917`). 절차는 [분산 시스템 배포](../../infra/distributed-system/README.md)를 따른다.
+
+단계별 통과 책임은 백·프론트와 같게 나누되, 데이터 파이프라인 설계가 자주 바뀌는 동안 무거운 관문은 두지 않는다. 「나중」 열은 후보이며 정하지 않았다.
+
+| 단계 | 책임 | 지금 | 나중(후보) |
+| --- | --- | --- | --- |
+| ① MR | 정적·계약·단위 테스트 | validate 단계 job. 컴포넌트 단위 테스트 포함(아래 「data-platform 테스트」) | 없음 |
+| ② develop 병합 | 배포할 release 산출물 | 없음. 운영자가 로컬 작업 트리에서 release를 묶는다 | CI가 커밋 SHA로 release를 묶고 해시를 기록 |
+| ③ 스테이징 | 실제 클러스터에서 작은 입력으로 시험 | Bronze `preflight`·`canary`처럼 스크립트의 검증 단계를 수동 실행 | CI smoke job |
+| ④ 운영 | release 설치와 전환 | 운영자 스크립트 수동 실행 | CI 수동 버튼, 이후 자동 |
 
 ## 필요한 GitLab 변수
 
@@ -118,9 +151,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 | --- | --- |
 | 공통 SSH | `DEPLOY_USER`(전용 배포 계정 이름). SSH 키 변수는 두지 않는다 |
 | EC2 | `EC2_A_HOST`(Tailscale IP), `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
-| GCP CI 연결 | `GCP_NODE_1_HOST`~`GCP_NODE_6_HOST`(Tailscale IP), `GCP_NODE_1_DEPLOY_PATH`~`GCP_NODE_6_DEPLOY_PATH` |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
-| 분산 이미지 | `SPARK_BASE_IMAGE`, `AIRFLOW_BASE_IMAGE` |
 | 레지스트리 | `REGISTRY_IMAGE_PREFIX` (`<레지스트리 호스트>:<포트>/<네임스페이스>`) |
 | Node 1 Airflow | 서버 `.env`의 `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DATABASE_URL`, `AIRFLOW_FERNET_KEY`, `AIRFLOW_WEBSERVER_SECRET_KEY`, `AIRFLOW_DB_PATH`, `AIRFLOW_LOGS_PATH` |
 
@@ -233,6 +264,18 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 - 계약 검사는 fixture와 검사기가 서로 맞는지만 본다. Publisher·Backend·Worker 코드가 계약을 따르는지는 각 컴포넌트의 테스트가 맡는다.
 - 2026-09-25 확인: 브랜치 파이프라인 `#222677`(통과) → `#222681`(실패) → `#222683`(되돌림, 통과). `#222681`은 Gold fixture의 배열 checksum 한 글자, YARN `worker.xml`의 `yarn.nodemanager.resource.memory-mb`, worker Compose의 알 수 없는 키를 일부러 틀린 커밋 `64f58477`이다. `validate:contracts`(`CHECKSUM_MISMATCH`), `validate:hadoop-config`(assert), `validate:compose`(`Additional property ... is not allowed`)가 각각 실패했다. 실행 Runner는 `planetory-docker-runner`(GitLab Runner API 기준 `linux`/`amd64`, 태그 `amd64-docker`)다.
 - 기준 브랜치에서 `build:*`가 실제로 멈추는 것은 develop을 깨야 볼 수 있어 확인하지 않았다. 위 stage 구조(검사는 `validate`, 이미지 빌드는 `needs` 없는 `build`)로 판단한다.
-- PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). 운영자가 직접 실행하는 스크립트라 배포 경로 밖이다. mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
+- PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). CI가 실행하지 않는 운영자 스크립트다(GCP release 설치도 운영자가 실행한다, 「GCP 분산 시스템」). mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
+
+### data-platform 테스트 (S15P21C206-91)
+
+| job | 언제 | 무엇 |
+| --- | --- | --- |
+| `validate:tess-hdfs-loader` | `ingestion/hdfs/**/*.py`·적재 스크립트 변경 | HDFS 적재기 31개, Sector 수용 5개 |
+| `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개. 표준 라이브러리만 쓴다 |
+| `validate:astro-kernel` | `libs/astro-kernel`·spark·publisher 변경 | 커널 333개, spark 22개, publisher 목업 적재 7개. 의존성은 커널의 `uv.lock`으로 고정한다 |
+
+- 세 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).
+- Worker(`apps/derived-compute`) 테스트는 `derived-compute:test`(S15P21C206-88)가 맡는다.
+- 새 테스트 파일을 만들면 해당 job의 `script`에 넣는다. `discover`로 도는 airflow·ingestion `tests/`는 저절로 포함된다.
 
 현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.

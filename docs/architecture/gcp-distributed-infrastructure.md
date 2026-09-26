@@ -235,7 +235,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 대상이다.
 
-CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실제 배포 전에 보완한다.
+GCP 코드는 CI 이미지가 아니라 불변 release 디렉터리로 배포하며, CI에는 GCP 배포 job이 없다(`S15P21C206-94`, [GitLab CI/CD](../operations/cicd.md) 「GCP 분산 시스템」). release의 커밋 SHA 기록, 배포 직렬화, 상태 검사와 롤백은 실제 운영 전에 보완한다.
 
 ### 통합 검증 순서
 

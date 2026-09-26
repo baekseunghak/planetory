@@ -27,6 +27,28 @@
       "id": "missing-operation-payload",
       "mutation": {"operation": "delete", "path": "request.curve_segments"},
       "expected_error": "invalid_operation_payload"
+    },
+    {
+      "id": "empty-removed-candidates",
+      "mutation": {"operation": "set", "path": "request.removed_candidates", "value": []},
+      "expected_error": "invalid_operation_payload"
+    },
+    {
+      "id": "empty-removed-candidate-ids",
+      "base_call": "periodogram-success",
+      "mutation": {"operation": "set", "path": "request.removed_candidate_ids", "value": []},
+      "expected_error": "invalid_operation_payload"
+    },
+    {
+      "id": "unknown-periodogram-config-version",
+      "mutation": {"operation": "set", "path": "request.periodogram_config_version", "value": "pg-unknown-v9"},
+      "expected_error": "unsupported_periodogram_config_version"
+    },
+    {
+      "id": "period-grid-spacing-mismatch",
+      "base_call": "periodogram-success",
+      "mutation": {"operation": "set", "path": "request.period_grid.spacing", "value": "linear"},
+      "expected_error": "invalid_period_grid"
     }
   ],
   "error_responses": [
@@ -42,6 +64,13 @@
         "tic_id": "123456789",
         "removed_candidate_ids": ["c-9", "c-10"],
         "ok": false,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
         "error": {
           "stage": "RESIDUAL",
           "code": "invalid_parameter",
@@ -49,6 +78,33 @@
           "message": "request validation failed",
           "field": "removed_candidates[0].transit_model.parameters.depth_ppm",
           "model_index": 0
+        }
+      }
+    },
+    {
+      "id": "periodogram-insufficient-observations",
+      "base_call": "periodogram-success",
+      "response": {
+        "schema_version": "1.0",
+        "operation": "periodogram",
+        "job_id": "rj-78",
+        "attempt": 1,
+        "publication_bundle_id": "b-101",
+        "tic_id": "123456789",
+        "removed_candidate_ids": ["c-9", "c-10"],
+        "ok": false,
+        "runtime": {
+          "worker_image": "local",
+          "python": "3.12.0",
+          "numpy": "2.0.0",
+          "astropy": "6.1.0",
+          "astro_kernel": "0.1.0"
+        },
+        "error": {
+          "stage": "PERIODOGRAM",
+          "code": "insufficient_observations",
+          "retryable": false,
+          "message": "at least 100 points and positive baseline required"
         }
       }
     }

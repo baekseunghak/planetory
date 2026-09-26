@@ -2,6 +2,7 @@ package com.planetory.backend.domain.exploration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -136,6 +137,63 @@ class LocalSeedSmokeTest {
         }
         solve(member, session, jdbc.queryForObject(
                 "SELECT tic_id FROM publication_bundles WHERE manifest->'local_seed'->>'label' = 'TOI-270'", Long.class));
+    }
+
+    /**
+     * 실제 모양의 Gold(시드 manifest의 {@code period_*} 키, {@code pg-log5000-v1})로 잔차 1단계가 실제 Worker에서
+     * 계산되는지 본다 [S15P21C206-88]. {@code DERIVED_COMPUTE_URL}에 Worker가 떠 있어야 하며 없으면 건너뛴다.
+     *
+     * <p>봉우리 제출은 V4 제약으로 막혀 있어(S15P21C206-262 인계) 원본 곡선의 후보 제출로 매칭을 만든다.
+     */
+    @Test
+    void 매칭한_후보를_빼면_실제_Worker가_잔차_곡선과_주기도를_계산한다() throws Exception {
+        assumeTrue(System.getenv("DERIVED_COMPUTE_URL") != null, "DERIVED_COMPUTE_URL이 없어 건너뜁니다");
+        Member member = members.login("google", "residual-worker-smoke-" + UUID.randomUUID());
+        MockHttpSession session = loginSession(member);
+        long tic = jdbc.queryForObject(
+                "SELECT tic_id FROM publication_bundles WHERE manifest->'local_seed'->>'label' = 'TOI-270'", Long.class);
+        new TransactionTemplate(transactions).executeWithoutResult(
+                tx -> discovery.discover(member.getId(), tic, StarDiscoveryService.Reason.CHALLENGE));
+        solve(member, session, tic);
+
+        Map<String, Object> bundle = currentBundle(tic);
+        long removed = jdbc.queryForObject("SELECT id FROM candidates WHERE tic_id = ? AND status = 'active'"
+                + " AND discoverable ORDER BY removal_step, id LIMIT 1", Long.class, tic);
+        String target = """
+                {"target": {"bundleId": "b-%s", "removedCandidateIds": ["c-%d"],
+                            "residualModelVersion": "%s", "periodogramConfigVersion": "%s"}}
+                """.formatted(bundle.get("id"), removed, bundle.get("rm"), bundle.get("pg"));
+        String accepted = mvc.perform(post("/api/v1/stars/" + tic + "/residual-jobs").session(session)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(target))
+                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+        String jobId = com.jayway.jsonpath.JsonPath.read(accepted, "$.jobId");
+
+        String job = null;
+        for (long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(150); System.nanoTime() < deadline; ) {
+            job = mvc.perform(get("/api/v1/residual-jobs/" + jobId).session(session))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            String state = com.jayway.jsonpath.JsonPath.read(job, "$.status");
+            if ("COMPLETED".equals(state) || "FAILED".equals(state)) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+        System.out.println("잔차 작업 " + jobId + ": " + job);
+        assertEquals("COMPLETED", com.jayway.jsonpath.JsonPath.read(job, "$.status"), job);
+
+        String step = "bundleId=b-" + bundle.get("id") + "&curveStep=1&removed=c-" + removed
+                + "&residualModelVersion=" + bundle.get("rm") + "&periodogramConfigVersion=" + bundle.get("pg");
+        mvc.perform(get("/api/v1/stars/" + tic + "/curves?" + step).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.residual.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.segments.length()").isNumber());
+        mvc.perform(get("/api/v1/stars/" + tic + "/periodogram?" + step).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nPeriods").value(5000))
+                .andExpect(jsonPath("$.power.length()").value(5000));
+        String peaks = mvc.perform(get("/api/v1/stars/" + tic + "/candidate-peaks?" + step).session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        System.out.println("잔차 봉우리 " + tic + ": " + peaks);
     }
 
     /** 원본 곡선(curveStep=0)의 분석 진입·곡선·주기도·봉우리를 읽고 봉우리 응답을 돌려준다. */

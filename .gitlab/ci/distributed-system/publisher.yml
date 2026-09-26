@@ -25,6 +25,7 @@ validate:publisher:
         - .gitlab/ci/distributed-system/publisher.yml
 
 # 이미지가 astro-kernel(checksum)과 Backend 마이그레이션 목록(preflight 기준)을 담는다. 둘이 바뀌어도 다시 빌드한다.
+# 이 이미지는 EC2-A Gold 목업(gold-mock profile)이 쓴다. GCP 노드 배포 job은 두지 않는다(S15P21C206-94).
 build:publisher:
   extends: .docker-build
   variables:
@@ -36,17 +37,3 @@ build:publisher:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [distributed-system/publisher/requirements.txt]
       changes: [distributed-system/publisher/**/*, libs/astro-kernel/**/*, apps/backend/src/main/resources/db/migration/**/*]
-
-deploy:publisher:gcp-node-1:
-  extends: .deploy-gcp-node-1
-  needs: ["build:publisher"]
-  variables:
-    IMAGE_NAME: publisher
-    DEPLOY_IMAGE_VARIABLE: PUBLISHER_IMAGE
-    DEPLOY_SERVICES: publisher
-    DEPLOY_ACTION: pull
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      exists: [distributed-system/publisher/requirements.txt]
-      changes: [distributed-system/publisher/**/*, libs/astro-kernel/**/*, apps/backend/src/main/resources/db/migration/**/*]
-      when: manual

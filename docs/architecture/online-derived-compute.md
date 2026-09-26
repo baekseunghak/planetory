@@ -32,7 +32,9 @@ Backend와 Worker는 내부 동기 HTTP/JSON `POST /internal/v1/derived-compute`
 
 필드·단위·식별자·오류와 합성 fixture는 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)이 정본이다. 실제 Worker HTTP 어댑터는 `S15P21C206-88`, Redis 실행 제어는 89, lease·fencing·복구는 90에서 구현한다.
 
-Backend 쪽 사용자 API와 작업 수명주기는 `S15P21C206-147`이 구현했고 두 자리를 인터페이스로 비워 두었다. 계산을 시작시키는 `ResidualComputeRunner`는 88이, 상태·결과·상한을 맡는 `ResidualJobStore`는 89가 채운다. 둘 다 없는 동안에는 잔차 요청이 503으로 거절되고 작업이 만들어지지 않는다. 지금 포트는 `attempt`를 **읽기만** 한다 — 단계 전이·완료·실패 모두 값을 보존하므로, 임대가 끝난 계산을 다시 시작하며 `attempt`를 올리는 함수는 88이 실행기를 붙일 때 함께 더한다.
+Worker 서버·이미지·compose 서비스(`derived-compute`)와 Backend 실행기(`WorkerResidualComputeRunner`)는 88이 구현했다([apps/derived-compute](../../apps/derived-compute/README.md)). EC2 배포는 아직이다.
+
+Backend 쪽 사용자 API와 작업 수명주기는 `S15P21C206-147`이 구현했고 두 자리를 인터페이스로 비워 두었다. 계산을 시작시키는 `ResidualComputeRunner`는 88이 채웠고, 상태·결과·상한을 맡는 `ResidualJobStore`의 Redis 구현은 89가 채운다(그전까지 인스턴스 메모리). 실행기는 `planetory.residual.worker-url`이 있을 때만 뜨며, 없으면 잔차 요청이 503으로 거절되고 작업이 만들어지지 않는다. 지금 포트는 `attempt`를 **읽기만** 한다. 88 실행기는 자동 재시도 없이 실패를 `retryable`로 끝내므로 올릴 일이 없고, 임대가 끝난 계산을 한 작업 안에서 다시 시작하며 `attempt`를 올리는 함수는 90이 더한다.
 
 ## 요청과 중복 방지
 
@@ -120,7 +122,7 @@ removed_candidates: candidate_id, transit_model
 residual_model_version, periodogram_config_version, period_grid
 ```
 
-Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
+Backend는 manifest의 `segment_ids`로 곡선을 조립하고 중복 제거 후보와 버전을 검증한 뒤 전달한다. `period_grid`는 `periodograms` 열(범위·점 수)과 manifest의 `period_grid.spacing`으로 조립한다(계약 3.3절, 88 제안). Worker는 파일 경로나 DB 자격 증명을 받지 않는다.
 
 위 목록은 책임 경계 요약이다. wire 형식은 [온라인 파생 계산 내부 계약](../../contracts/derived-compute/README.md)의 `schema_version=1.0`, 접두 문자열 식별자, JSON `null`, 정렬 규칙과 두 단계 fixture를 따른다. fixture의 수치는 직렬화 예제이며 `S15P21C206-113`·120의 과학 규칙이나 131의 수치 기준을 대신하지 않는다.
 

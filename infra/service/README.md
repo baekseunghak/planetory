@@ -154,7 +154,7 @@ COMMIT;
 
 ### 한계
 
-- 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)가 없어 여전히 안 된다.
+- 열리는 것은 분석 진입, 원본 곡선, 원본 주기도, 후보 목록까지다. 후보를 빼는 잔차 단계는 Worker(`apps/derived-compute`, `S15P21C206-88`)를 EC2-A에 올리고 Backend에 `DERIVED_COMPUTE_URL`을 넣어야 열린다(아래 「온라인 계산 Worker」의 첫 배포 절차).
 - 등록된 별(`stars`)에만 싣고 별 속성은 바꾸지 않는다. 같은 별에 새 판을 올리면 이전 후보는 은퇴한다.
 - 판이 current가 될 때 V23 트리거가 후보 변경을 기록한다. 재개 알림은 **그 별을 팔로우한 회원에게만** 간다.
 
@@ -175,18 +175,22 @@ docker compose exec service-db psql -U planetory -d planetory_poc -c "\password 
 
 ### 적재
 
-이미지는 CI `build:publisher`가 커밋 SHA로 만든다.
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다. 이미지의 시작 명령은 `CMD ["python", "-m", "publisher"]`인데 `docker compose run <서비스> <인자>`는 `CMD`를 인자로 통째로 대체한다. `run gold-mock mock-load`는 명령이 `["mock-load"]`가 되어 `executable file not found`로 실패하므로 `python -m publisher <명령>`까지 적는다.
 
 ```sh
 cd "$DEPLOY_PATH"
-PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
-  docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-load --tic <TIC 목록>
 ```
+
+**`--no-deps`를 빼지 않는다.** 배포 job은 늘 `--no-deps`로 대상 서비스만 바꾸므로 `service-db` 설정 변경이 적용되지 않은 채 쌓여 있을 수 있다. `--no-deps` 없는 `run`은 의존 서비스를 맞추면서 `service-db` 컨테이너를 재생성한다. 2026-09-25 운영 적재에서 실제로 일어났다. 데이터는 볼륨이라 남았지만 몇 초 동안 DB 연결이 끊겼다.
+
+분석은 회원이 발견한 별만 열린다(`STAR_LOCKED`). 화면을 열어 볼 목적이면 회원 대부분이 가진 튜토리얼 별을 넣는다. 운영에 올린 대상은 [서비스 배포 현재 상태](../../docs/project/service-deploy-status.md) 「손으로 넣은 데이터」에 적는다.
 
 같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
 
 ```sh
-PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile gold-mock run --rm gold-mock notify --bundle b-<id>
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher notify --bundle b-<id>
 ```
 
 알림은 후처리를 앞당기는 신호다. 보내지 않아도 DB의 current가 정본이라 분석 화면은 열린다.
@@ -198,10 +202,10 @@ PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile go
 ```sh
 cd "$DEPLOY_PATH"
 export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
-docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-purge-sql \
   | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA'
 # 개수를 확인한 뒤 실제로 지운다
-docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-purge-sql \
   | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -v apply=1'
 ```
 
@@ -344,6 +348,58 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 문서는 요구사항 산출물이라 이 저장소가 내용을 정하지 않는다. 화면 제목의 버전(`v1.3.1`)이
 곧 서빙되는 판이다.
 
+## 온라인 계산 Worker (S15P21C206-88)
+
+`derived-compute`는 잔차·주기도를 계산한다. Backend만 `http://derived-compute:8090/internal/v1/derived-compute`로 부르며 호스트 포트를 열지 않는다. DB·Redis 자격 증명을 넘기지 않는다. 구현과 환경 변수는 [apps/derived-compute](../../apps/derived-compute/README.md)에 있다.
+
+**디버깅용으로도 `ports:`를 열지 않는다.** Backend의 `/internal/**`는 서비스 토큰을 요구하지만 Worker의 계산 경로에는 인증이 없고, `service` 네트워크 격리가 유일한 통제다. 자격 증명이 없고 동시 실행 1·본문 64MiB 상한이 있어 같은 네트워크에서 할 수 있는 최대치가 잔차 계산의 CPU 점유라 이 선택을 받아들였다. 포트를 열면 그 전제가 깨진다. 들여다볼 때는 `docker compose exec derived-compute …`나 Backend 컨테이너에서 서비스 이름으로 부른다(「첫 배포 절차」 2단계).
+
+| `.env` 변수 | 기본값 | 뜻 |
+| --- | --- | --- |
+| `DERIVED_COMPUTE_IMAGE` | 없음 | 배포 job이 채운다. 응답의 `runtime.worker_image`로도 나간다 |
+| `DERIVED_COMPUTE_CPUS` | `1` | 컨테이너 CPU 상한(계약 `cpu_per_job`) |
+| `DERIVED_COMPUTE_MEMORY` | `2048m` | 컨테이너 메모리 상한(계약 `memory_mib_per_job`) |
+| `DERIVED_COMPUTE_MEMORY_LIMIT_MIB` | `1900` | 프로세스 상한. 컨테이너 상한보다 낮아야 OOM kill 대신 `memory_exhausted`로 답한다 |
+| `PLANETORY_RESIDUAL_MAXRUNNING` | `1` | **Backend** 동시 계산 수. Worker 대수 × 동시 실행 수(지금 1 × 1)와 같아야 한다. 크면 넘친 작업이 기다리지 않고 Worker 503으로 실패한다 |
+| `DERIVED_COMPUTE_URL` | 없음 | **Backend** 변수. `http://derived-compute:8090`을 넣어야 Backend 실행기가 뜬다. 비어 있으면 잔차 요청은 503 「준비되지 않았습니다」 |
+
+값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다.
+
+### 첫 배포 절차
+
+**켜는 순서는 Worker → 확인 → `DERIVED_COMPUTE_URL` → Backend다.** 거꾸로 하면 잔차 요청마다 재시도 가능한 실패 작업이 생긴다. 노드 접속 계정은 [CI/CD](../../docs/operations/cicd.md) 「배포 접속」과 [Tailscale 팀 서버 접근](../../docs/operations/tailscale-team-access.md)을 따르고, 명령은 배포 경로(`/home/deploy/planetory`)에서 실행한다.
+
+0. **전제.** 88 MR이 develop에 병합됐고, 그 병합 파이프라인의 `build:derived-compute`·`build:backend`가 성공했다. **같은 최신 파이프라인의 버튼만 쓴다**(옛 버튼은 막힌다). 첫 배포 전에는 노드에서 인자 없는 `docker compose up -d`를 치지 않는다. `DERIVED_COMPUTE_IMAGE`가 아직 없어 `derived-compute`가 없는 이미지를 찾는다.
+1. **Worker 배포.** `deploy:derived-compute:ec2-a`를 실행한다. job이 새 `compose.yaml`을 올리고 Worker만 만든다. Backend 컨테이너는 그대로다. 로그 끝이 `직전 이미지가 없습니다(첫 배포)`·`배포 완료`이고 `.env`에 `DERIVED_COMPUTE_IMAGE`가 기록된다.
+2. **Worker 확인.** HEALTHCHECK는 15초 간격이라 30초쯤 뒤에 본다.
+
+   ```sh
+   docker compose ps derived-compute                      # STATUS가 healthy
+   docker compose exec backend wget -qO- http://derived-compute:8090/healthz   # Backend에서 이름으로 닿는지, runtime.worker_image의 태그가 병합 commit인지
+   docker compose logs --tail 20 derived-compute
+   ```
+
+   `unhealthy`이거나 Backend에서 닿지 않으면 멈추고 `docker compose stop derived-compute`로 재시작 루프를 끊는다. 3단계로 가지 않는다.
+3. **Backend 켜기.** `.env`에 `DERIVED_COMPUTE_URL=http://derived-compute:8090` 한 줄을 더한다(`.env`는 비밀 값을 담으므로 이 한 줄만 추가하고 내용을 출력하지 않는다). 그다음 같은 파이프라인의 `deploy:backend:ec2-a`를 실행한다. 환경 변수가 바뀌어 Backend 컨테이너가 다시 만들어지며, DB 덤프·헬스 확인·자동 롤백은 기존과 같다. 동시 계산 수는 compose 기본값 `PLANETORY_RESIDUAL_MAXRUNNING=1`이다.
+4. **동작 확인.** 판이 있는 별(!206 목업 적재 뒤)에서 잔차 1단계를 요청한다. 화면의 봉우리 제출은 V4 제약으로 500이라(262 인계) 그 전에는 로그인 세션으로 원본 곡선 후보 제출 → `POST /api/v1/stars/{tic}/residual-jobs` 순서로 부른다(`LocalSeedSmokeTest`와 같은 순서). 작업이 `COMPLETED`가 되고 Backend 로그에 두 줄이 남으면 연결된 것이다.
+
+   ```sh
+   docker compose logs backend | grep WorkerResidualComputeRunner   # "잔차 작업 rj-N RESIDUAL 완료", "… PERIODOGRAM 완료"
+   ```
+
+   실패하면 같은 로그의 `멈췄습니다: <원인>` 줄이 Worker 오류 코드나 연결 실패를 보여 준다.
+5. **131 인계(선택).** [apps/derived-compute](../../apps/derived-compute/README.md) 「131 인계」대로 캡처를 켜고 같은 요청을 한 번 더 보낸 뒤 캡처·digest를 넘기고 캡처를 끈다.
+
+**되돌리기.**
+
+| 상황 | 조치 |
+| --- | --- |
+| 잔차 계산만 끄기 | `.env`에서 `DERIVED_COMPUTE_URL` 줄을 지우고 `deploy:backend:ec2-a`. 잔차 요청이 503 「준비되지 않았습니다」로 돌아간다 |
+| Worker 이상 | `docker compose stop derived-compute`. Backend가 켜져 있으면 잔차 작업은 재시도 가능한 실패로 끝난다 |
+| Worker 이미지 되돌리기 | 자동 롤백이 없다. `.env`의 `DERIVED_COMPUTE_IMAGE`를 직전 태그로 고치고 `docker compose up -d --no-deps derived-compute` |
+
+배포 뒤 결과(병합 commit, Worker 이미지 태그·digest, 확인한 작업 ID)는 [서비스 배포 현황](../../docs/project/service-deploy-status.md)과 Jira 88에 남긴다.
+
 ## 배포와 롤백
 
 `deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
@@ -352,6 +408,7 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 | --- | --- | --- | --- |
 | `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
+| `derived-compute` | 없음(호스트 포트 없음, 이미지 `HEALTHCHECK`만) | 없음 | — |
 
 프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
 
