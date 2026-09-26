@@ -373,3 +373,6 @@
 | 2026-09-26 | 온라인 계산 Worker 운영 배포와 131 캡처 인계 | S15P21C206-88 | derived-compute, DERIVED_COMPUTE_URL, rj-1, rj-2, 캡처, 스니펫 193, V26~V29 | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-27 | 게시 후보 집계 계약·무신호 별 상태 분리·AI 미실행 값 확정 | S15P21C206-79 | candidate_aggregation, publication-candidates.schema.json, no_signal, previous_candidates_vanished, request_failed, source_held, none/policy-hold-118, AI_POLICY, discoverable_ready_tic_count | 구현 완료(커널·합성 fixture), 실제 Silver·80 연결 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 정정: 공개 QA 5절 무신호 별 공개 문구를 정본(적재하지 않음)에 맞춤 | S15P21C206-79 | 무신호, SUB-11, DEC-25, ERD 결정 3, 공개하되 서비스 제외 | 정정 | [기록](2026-09-27.md) |
+| 2026-09-27 | DEC-01 공급 집계 구현과 튜토리얼 제외 범위(활성 슬롯) 확정 | S15P21C206-79 | supply-report, tutorial_stars.active, planetory_app, publish_missing, undetermined, DEC-01 | 구현 완료(합성 DB·단위), 운영 집계 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 외부 카탈로그 시간 척도 근거 확정(TOI·ExoFOP BJD-TDB, TCE tce_time0bt) | S15P21C206-79 | external-time-evidence-v1, TIME_EVIDENCE, tce_time0bt, BTJD-TDB, pl_tranmid_systemref, unresolved_external_rows | 구현 완료, 저장 자료 재실측 완료 | [기록](2026-09-27.md) |
+| 2026-09-27 | 실데이터 재실측·자체 리뷰 반영(candidate_quality 별 단위, 잘못된 입력 거절, OPS-08 서술 정정) | S15P21C206-79 | aggregation_replay, candidate_quality_revision, per_star_version_in_run, malformed_input, WASP-62 b, observed_times_sha256 | 검증 완료(fixture·저장 자료) | [기록](2026-09-27.md) |

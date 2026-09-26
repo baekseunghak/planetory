@@ -15,6 +15,9 @@ VERSION = "candidate-aggregation-79-v1"
 SCHEMA_VERSION = "planetory.publication-candidates.v1"
 STATUSES = ("ready", "no_signal", "held", "request_failed", "rejected", "unprocessed")
 RUN_LEVEL = {"calculation_versions", "ai_policy"}
+# 123 candidate_quality is a content revision over each star's own models and
+# removal history, so it is taken per star from discovery, never run-wide.
+PER_STAR_VERSIONS = {"candidate_quality"}
 # The only accepted AI state (126 hand-off). These strings feed bundle_version:
 # changing them republishes every star, so they change only with a new decision.
 AI_NOT_EXECUTED = "none/policy-hold-118"
@@ -23,6 +26,8 @@ AI_POLICY = dict(status="policy_not_executed", model_version=AI_NOT_EXECUTED,
                  decision_reference="docs/requirements/planetory-decision-register.md#126-범위-변경과-ai-출시-유예")
 # 122 holds a star without representatives; 125 rejects an empty active set.
 NO_SIGNAL = {"no_candidates_publication_held", "empty_catalog_upstream_policy_required"}
+# Non-dict inputs raise AttributeError; malformed input is a rejection, never a crash.
+MALFORMED = (ValueError, TypeError, KeyError, AttributeError)
 ROW_FIELDS = ("removal_step", "period_days", "epoch_btjd", "duration_hours", "depth_ppm",
               "bls_power", "discoverable", "transit_model")
 
@@ -32,12 +37,13 @@ def aggregate(*, run_id, silver_attempt, targets, results, calculation_versions,
 
     targets is the fixed TIC scope. results holds one {tic_id, inputs} per
     processed TIC, where inputs are that star's assemble arguments without the
-    run-level calculation_versions and ai_policy. publishable is always false:
+    run-level calculation_versions and ai_policy. calculation_versions carries
+    every rule version except the per-star candidate_quality. publishable is always false:
     the publish gate (80) and Publisher still own approval and the DB write.
     """
     try:
         return _aggregate(run_id, silver_attempt, targets, results, calculation_versions, ai_policy)
-    except (ValueError, TypeError, KeyError) as exc:
+    except MALFORMED as exc:
         return dict(status="rejected", publishable=False, aggregator_version=VERSION,
                     reason=str(exc) if isinstance(exc, GoldValidationError) else "malformed_input",
                     manifest=None, bundles=[], candidates=[])
@@ -46,7 +52,8 @@ def aggregate(*, run_id, silver_attempt, targets, results, calculation_versions,
 def _aggregate(run_id, silver_attempt, targets, results, versions, policy):
     text(run_id)
     text(silver_attempt)
-    require(REQUIRED_VERSIONS <= versions.keys(), "missing_calculation_versions")
+    require(not PER_STAR_VERSIONS & versions.keys(), "per_star_version_in_run")
+    require(versions.keys() == REQUIRED_VERSIONS - PER_STAR_VERSIONS, "invalid_calculation_versions")
     require(policy == AI_POLICY, "unsupported_ai_policy")
     require(versions["ai_model"] == versions["ai_threshold"] == AI_NOT_EXECUTED, "ai_version_mismatch")
     tics = [identifier(t) for t in targets]
@@ -111,13 +118,14 @@ def _star(tic, inputs, versions, policy):
             # so this is a source failure to fix and retry, never evidence of absence.
             failed = any(r.endswith(":source_held") for r in reasons)
             return ("request_failed" if failed else "held"), ["external:" + r for r in reasons], None, None
-        result = assemble(**inputs, calculation_versions=versions, ai_policy=policy)
+        star_versions = dict(versions, candidate_quality=disc["candidate_quality_revision"])
+        result = assemble(**inputs, calculation_versions=star_versions, ai_policy=policy)
         if result["status"] != "validated":
             if result["reason"] in NO_SIGNAL:
                 return _no_signal(inputs, [result["reason"]])
             return "rejected", [result["reason"]], None, None
         return "ready", [], result["payload"], _rows(result["payload"], ext, policy)
-    except (ValueError, TypeError, KeyError) as exc:
+    except MALFORMED as exc:
         return "rejected", [str(exc) if isinstance(exc, GoldValidationError) else "malformed_input"], None, None
 
 

@@ -139,7 +139,7 @@ def run():
             item.update(reference=reference,connection=link(candidate,reference,times),
                 label_link=dict(status='manual_evidence_chain',key='TIC 300871545 / TOI 184.01',
                     historical_label=a['Disposition'],current_label=refs[0]['TFOPWG Disposition'],
-                    limitation='Historical SPOC ephemeris and current ExoFOP label are separate records; current ExoFOP BJD epoch remains unverified. Not an approved 124 snapshot.'))
+                    limitation='Historical SPOC ephemeris and current ExoFOP label are separate records; the ExoFOP BJD epoch scale is BJD-TDB only by external-time-evidence-v1. Not an approved 124 snapshot.'))
             t,f,_=provided_arrays(row.get('segments') or [dict(sector=sectors[0],**row['segment'])])
             item['secondary_cycles']=secondary_cycles(t,f,candidate)
             secondary=dict(candidate,epoch_btjd=candidate['epoch_btjd']+candidate['period_days']/2,depth_ppm=860.)
@@ -148,12 +148,12 @@ def run():
             external=[]
             for a in tces:
                 if a['ticid']!=str(tic): continue
-                # Offset redundancy verifies units only, not the underlying clock scale.
+                # Offset redundancy checks units; the TDB scale is external-time-evidence-v1 (DV XML BTJD).
                 if not np.isclose(float(a['tce_time0'])-float(a['tce_time0bt']),2457000.,rtol=0,atol=1e-6):
                     raise ValueError('TCE epoch offset mismatch')
                 external.append(dict(external_id=a['tceid'],period_days=float(a['tce_period']),
                     epoch_btjd=float(a['tce_time0bt']),duration_hours=float(a['tce_duration']),
-                    time_system='unverified',source=tm['sources']['mast_tce_s1_s13']['requested_url']))
+                    time_system='BTJD-TDB',source=tm['sources']['mast_tce_s1_s13']['requested_url']))
             item['eb_catalog_rows']=[r for r in eb if r['tess_id']==str(tic)]
             item['tce_checks']=[dict(step=c['step'],reference=a,**diagnostic_link(c,a,times))
                 for c in row['iteration']['accepted'] if c['step'] in steps for a in external]
