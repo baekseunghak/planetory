@@ -65,9 +65,7 @@ Airflow TESS DAG의 Node 1 배포·접속 상태는 [분산 시스템 운영 절
 ```
 
 - EC2-A: `infra/service/compose.yaml`, `linux/amd64`. 서비스 인스턴스는 이 노드 1개이고 EC2-B는 배포 대상이 아니다
-- GCP Node 1: `infra/distributed-system/compose.control-plane.yaml`, Node 2~6: `infra/distributed-system/compose.worker.yaml`, 모두 `linux/amd64`
-- EC2-A와 GCP Node 1~6 배포 job은 따로 실행한다.
-- Airflow·Spark submit·Publisher는 GCP Node 1에서, 수집 이미지는 Node 2~6에서 관리한다.
+- GCP Node 1~6: 위 흐름을 쓰지 않는다. CI 배포 job이 없고, 코드는 불변 release 디렉터리로 운영자 스크립트가 설치한다(`S15P21C206-94`, [CI/CD](cicd.md) 「GCP 분산 시스템」). Node 1의 Airflow는 release에서 직접 빌드한 로컬 이미지, Spark 제출은 digest를 고정한 공개 이미지로 돈다. `compose.control-plane.yaml`은 Airflow release가 쓰고, `compose.worker.yaml`은 지금 쓰는 경로가 없다.
 - 서버의 `.env`에 실제 경로와 비밀 값을 보관한다. 레지스트리는 tailnet 내부 전용이라 노드에 별도 로그인을 설정하지 않는다.
 - 이전 커밋 SHA 이미지를 다시 배포할 수 있어야 한다. DB migration과 Gold 릴리스 전환은 이미지 되돌리기와 별도 절차다.
 
@@ -75,7 +73,7 @@ Airflow TESS DAG의 Node 1 배포·접속 상태는 [분산 시스템 운영 절
 
 GCP Hadoop/YARN 데몬은 호스트에서 실행한다. 운영 Compose가 DataNode·NodeManager를 생성하지 않는 것은 이 배치 방식에 따른 것이다. 최초 설치와 노드별 XML 복사는 [분산 시스템 운영 절차](../../infra/distributed-system/README.md)를 따른다. 로컬 단일 호스트 Compose와 실제 6대 VM 배포는 서로 다른 실행 환경이다.
 
-호스트 HDFS 기준은 Hadoop 3.5.0과 OpenJDK 17이다. 기본 Spark 제출 이미지 `apache/spark:3.5.5-python3`는 `sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1`로 고정하며 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 2026-09-18 Node 1에는 Ubuntu 저장소의 Docker 29.1.3과 Compose 2.40.3을 설치했고, 이 digest로 6대 YARN cluster mode HDFS 읽기·쓰기와 로그 집계를 검증했다. Node 2~6의 Docker 설치는 수집 컨테이너 배포 작업의 책임이다.
+호스트 HDFS 기준은 Hadoop 3.5.0과 OpenJDK 17이다. 기본 Spark 제출 이미지 `apache/spark:3.5.5-python3`는 `sha256:39321d67b23e2e0953f81b60778f74bf40c40a18dfb0e881e6a38593af60afa1`로 고정하며 JDK 11.0.26과 Hadoop client 3.3.4를 포함한다. 2026-09-18 Node 1에는 Ubuntu 저장소의 Docker 29.1.3과 Compose 2.40.3을 설치했고, 이 digest로 6대 YARN cluster mode HDFS 읽기·쓰기와 로그 집계를 검증했다. Node 2~6에도 CI 배포용으로 Docker를 설치했으나(`S15P21C206-226`) 그 배포 job은 `S15P21C206-94`에서 걷어냈고, 지금 Node 2~6에서 Docker를 쓰는 경로는 확인되지 않았다.
 
 ## 공통 규칙
 
