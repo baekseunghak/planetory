@@ -370,4 +370,8 @@
 | 2026-09-26 | EC2-B 레지스트리 정리 cron 첫 실제 실행 확인 | S15P21C206-262 | registry-prune-daily, in-use, 삭제 23, 유지 68, gc | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | data-platform 테스트를 CI validate 단계에 연결 | S15P21C206-91 | validate:data-platform, validate:astro-kernel, uv.lock, build:spark astropy | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | GCP Docker 배포 job·사용처 없는 GCP 이미지 빌드 제거, release 방식 유지 | S15P21C206-94 | deploy:ingestion, deploy:spark, build:spark, release, compose.worker.yaml, 262 방식 폐기 | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
+| 2026-09-26 | 튜토리얼 5종 실제 Gold 입력과 운영 전환 절차 | S15P21C206-272 | tutorial.json, tutorial-build, load-payload, tutorial_switch.sql, tutorial-label-v1, L 98-59 b·d, 회원 이전 | 운영 적용 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | 온라인 계산 Worker 운영 배포와 131 캡처 인계 | S15P21C206-88 | derived-compute, DERIVED_COMPUTE_URL, rj-1, rj-2, 캡처, 스니펫 193, V26~V29 | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-27 | 튜토리얼 전환 뒤 남은 옛 1번 성과 알림 정리와 전환 SQL 보완 | S15P21C206-272 | notification_outbox, achievement:1, STAR_LOCKED, 261136679, tutorial_switch.sql, !226 리뷰 | 운영 정리 완료, 병합 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 전환 SQL이 보상 별의 회원 기록을 남기는 문제, 멈춤 검사와 회귀 테스트 | S15P21C206-272 | tutorial_switch.sql, achievement_unlocks, TutorialSwitchTest, 외래 키, !226 백승학 P2 | 로컬 검증 완료, 운영 영향 없음, 병합 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |

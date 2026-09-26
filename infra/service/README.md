@@ -211,6 +211,34 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 
 회원이 목업 판·후보를 참조하면(제출·게시글·공개 분석·성과) 지우지 않고 멈춘다. 그 기록을 지울지는 사람이 정한다.
 
+## 튜토리얼 5종
+
+109가 확정한 튜토리얼 5종의 실제 Gold를 싣고 `tutorial_stars` 1~5로 전환한다 [S15P21C206-272]. 대상·payload 생성·판정 규칙은 [Publisher](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272) 「튜토리얼 5종」을 따른다. 계정은 위 「Gold 목업」의 `planetory_publisher`를 쓴다.
+
+1. **이미지.** 272 변경이 develop에 병합된 뒤 `build:publisher`가 만든 SHA를 쓴다. 이전 이미지에는 `load-payload`·`tutorial-switch-sql`이 없다.
+2. **payload.** 로컬에서 `tutorial-build`로 만든 JSON 다섯 개를 서비스 노드의 한 폴더로 옮긴다. 컨테이너 사용자(uid 10001)가 읽을 수 있어야 한다.
+3. **백업.** 전환 SQL은 되돌리는 SQL이 없다. 적용 전에 서비스 DB를 `pg_dump -Fc`로 받는다. 회원 정보가 들어 있으므로 권한 600으로 두고 서버 밖으로 옮기지 않는다. 적재 뒤 재실행 확인까지 끝나면 지운다(삭제는 실행 직전 승인).
+
+```sh
+cd "$DEPLOY_PATH" && mkdir -p ~/backups && umask 077
+docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > ~/backups/planetory-pre272-$(date -u +%Y%m%dT%H%M%SZ).dump
+```
+
+```sh
+cd "$DEPLOY_PATH"
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm --no-deps -T -v <payload 폴더>:/payloads:ro gold-mock \
+  python -m publisher load-payload /payloads
+# 전환: 모의 실행으로 옮길 회원·지울 기록 개수를 본 뒤 적용한다
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher tutorial-switch-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X'
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher tutorial-switch-sql \
+  | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -v apply=1'
+```
+
+적재 결과는 별마다 `PUBLISHED b-<id>`이고, 다시 돌리면 `ALREADY_PUBLISHED`다. 전환 SQL이 멈추는 조건과 지우는 대상은 [Publisher](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272) 「튜토리얼 5종」에 있다. 멈추면 아무것도 바뀌지 않는다. 적용 뒤 확인할 것은 세 가지다: 별지도의 튜토리얼 경고가 사라지는지, `/api/v1/me/quests`가 5칸인지, 신규·기존 계정 모두 1번 별의 분석 화면이 열리는지.
+
 ## ERD
 
 Liam ERD 한 벌을 낸다. 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜨며
