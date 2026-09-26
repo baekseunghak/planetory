@@ -32,7 +32,7 @@ import static com.planetory.backend.domain.exploration.service.NasaStarPlanetRep
 public class NasaStarPlanetService {
 
     private static final Logger log = LoggerFactory.getLogger(NasaStarPlanetService.class);
-    private static final String PROMPT_VERSION = "nasa-ko-v4";
+    private static final String PROMPT_VERSION = "nasa-ko-v5";
 
     private final NasaStarPlanetRepository repository;
     private final NasaPlanetInfoRepository normalized;
@@ -207,7 +207,7 @@ public class NasaStarPlanetService {
                 repository.requireAccess(memberId, ticId);
                 repository.failExplanation(memberId, ticId, planetId, generation, hash, version,
                         code, OffsetDateTime.now(clock).plus(modelRetry));
-                log.warn("NASA star planet explanation failed: reason={}", code);
+                log.warn("NASA star planet explanation failed: reason={}, detail={}", code, failure.getMessage());
                 return bundle(memberId, ticId, null, null);
             }
             repository.requireAccess(memberId, ticId);

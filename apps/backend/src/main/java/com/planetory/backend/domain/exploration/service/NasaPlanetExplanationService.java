@@ -20,7 +20,7 @@ import static com.planetory.backend.domain.exploration.service.NasaPlanetExplana
 public class NasaPlanetExplanationService {
 
     private static final Logger log = LoggerFactory.getLogger(NasaPlanetExplanationService.class);
-    private static final String PROMPT_VERSION = "nasa-ko-v4";
+    private static final String PROMPT_VERSION = "nasa-ko-v5";
 
     private final NasaPlanetInfoService sourceService;
     private final NasaPlanetExplanationRepository repository;
@@ -158,7 +158,7 @@ public class NasaPlanetExplanationService {
                         ? "invalid_output" : failureCode(modelOrValidationFailure);
                 repository.failed(candidateId, generation.get(), hash, version, failure,
                         OffsetDateTime.now(clock).plus(retryDelay));
-                log.warn("NASA explanation failed: reason={}", failure);
+                log.warn("NASA explanation failed: reason={}, detail={}", failure, modelOrValidationFailure.getMessage());
                 sourceService.requireEligible(memberId, candidateId);
                 return repository.find(candidateId, hash, version, model, PROMPT_VERSION)
                         .map(row -> result(source, row))
