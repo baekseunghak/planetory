@@ -301,6 +301,8 @@ systemd 경로(`-Step Start`)로 release `20260924T093328Z`(executor 10개 × co
 
 제어기 재감사(RF2·part checksum·FSCK), Parquet 불변식, 같은 release Canary 5개 TIC와의 값 비교를 모두 통과했다. 실패 104개는 결정적 데이터·수치 판정이라 `retry`로 같은 결과가 반복되므로 자동 재처리하지 않는다.
 
+2026-09-26에 같은 release로 `-Step Retry -RetryFrom <위 attempt>`를 한 번 실행해 부분 재처리를 실클러스터에서 확인했다. `application_1790067725443_0066`이 SUCCEEDED했고 제어기 확정까지 약 9분 걸렸다. 새 attempt `attempt=20260926T091732Z`에는 원본 실패 TIC 104개만 들어 있고, TIC마다 단계·상태·오류 코드·`retryable`이 원본과 같았다. 원본 attempt의 `_READY.json` SHA-256과 파일 시각은 그대로였다. 이 attempt는 검증 기록이며 새 결과가 없으므로, 79 입력은 계속 원본 attempt다. current alias가 없으므로 소비자는 "run의 최신 attempt"를 자동으로 고르지 말고 attempt 경로를 명시한다.
+
 실행 중 2026-09-25 06:12·06:15 UTC에 자동 보안 업데이트가 worker-5·worker-3 NodeManager를 재시작해 executor 6개와 캐시한 결과 파티션 211개를 잃었고, Spark가 이를 다시 계산해 완료가 약 6시간 늦어졌다. TIC 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다. 재발 방지는 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)로 적용했고, `DISK_ONLY_2` 전환은 HDFS·로컬 디스크 여유와 함께 별도로 검토한다.
 
 현재 설정(executor 14개, dynamic allocation, 입력 열 축소, biweight 벡터화)의 release `20260926T042907Z`는 run `20260926T043105Z`(`application_1790067725443_0065`) Canary에서 5분에 끝났고, `failed_tics=0`, `qa_stopped=2`, executor 14개(worker-2 2개, 나머지 3개씩)를 확인했다. 5개 TIC 결과는 전체 run release Canary(run `20260924T093357Z`)와 비트 단위로 같았다. 다음 Silver 실행은 이 release 또는 그 이후 release를 쓴다. 다음 release는 사용하지 않는다: `20260923T080904Z`(NaN 시각 직렬화 결함), `20260924T091614Z`(core 4 요청으로 YARN 거부).

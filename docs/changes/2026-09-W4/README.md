@@ -241,6 +241,7 @@
 | 2026-09-26 | Sector 1~13 전체 Silver run 확정과 감사 | S15P21C206-78 | 20260924T133559Z, _0064, 128,258, qa_stopped 17,553, RF2 636 GB, HDFS 64% | 확정·감사 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | 처리량 설정 release Canary 합격 | S15P21C206-78 | 20260926T042907Z, _0065, executor 14, 비트 동일, History Server | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-26 | develop 통합과 78 인계 문서 종료 | S15P21C206-78 | s15p21c206-78-handoff, quality_version, iteration_config_sha256, 80 이관 | 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | 실패 TIC 부분 재처리 실클러스터 검증과 후속 티켓 분리 | S15P21C206-78 | Step Retry, _0066, attempt=20260926T091732Z, 104, S15P21C206-275 | 검증 완료 | [기록](2026-09-26.md) |
 | 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | EC2-A 반영·완료 조건 확인, CI 배포 병합 후 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: Redis 예산·캐시 의존성·축출 정책 | S15P21C206-254 | maxmemory 64mb, noeviction, volatile-lru, depends_on, mem_limit | 구현·EC2-A 재반영 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: 프론트 배포 헬스를 렌더러 표식으로 | S15P21C206-254 | /health/renderer-enabled, try_files =404, web:image, 과도기 롤백 | 구현·격리 이미지 검증 완료 | [기록](2026-09-23.md) |
