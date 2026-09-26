@@ -73,4 +73,6 @@ python -m publisher notify --bundle b-12                  # 이미 current인 �
 PYTHONPATH=../../libs/astro-kernel python -m unittest test_mock_source test_notify   # DB 없이 도는 검사
 ```
 
+CI는 테스트 파일을 이름으로 적어 돌린다. 테스트 파일을 추가하면 표준 라이브러리만 쓰는 것은 `validate:data-platform`에, `astro_kernel`을 쓰는 것은 `validate:astro-kernel`에 넣는다(`.gitlab/ci/common.yml`, [CI/CD 「data-platform 테스트」](../../docs/operations/cicd.md#data-platform-테스트-s15p21c206-91)).
+
 2026-09-24 EC2-A 격리 환경(develop `e9835da5` Backend로 V24를 적용한 빈 DB, 운영과 같은 역할 구성)에서 옮긴 적재 단계를 검증했다. 읽기 권한이 없으면 `MIGRATION_UNREADABLE`로 멈추고, 권한을 준 뒤 두 별 `PUBLISHED`·알림 200, 재실행 `ALREADY_PUBLISHED`·알림 재전송, 없는 별 `STAR_MISSING`, 기존 별 속성 불변, 삭제 모의 실행 뒤 그대로, 실제 삭제 뒤 목업 행 0(관측 원천·처분·외부 라벨 포함), 삭제 뒤 재적재를 확인했다. 회원 제출이 목업 판을 참조하면 모의·실제 삭제 모두 `submissions=1`로 멈추고 행이 그대로 남으며, 그 제출을 지운 뒤에는 삭제가 끝나는 것도 확인했다. 같은 격리 환경에서 실제 Google 로그인 세션으로 튜토리얼 1번 별(목업 적재)의 분석 API도 확인했다. 별 요약 `analysisAvailable=true`·`currentBundleId=b-1`, `analysis-context` 200, 원본 곡선(`curveStep=0`) 200·세그먼트 1개 2919점, 주기도 200·power 5000점, 봉우리 200·10개이며 상위 봉우리 5.66일·11.55일·11.38일이다(TOI-270 c·d 주기와 맞는다). 잔차 단계(`curveStep≥1`)는 Python Worker가 없어 확인하지 않았다. OAuth 되돌림 주소는 `localhost:8080`만 등록돼 있어 `127.0.0.1:8080`은 `redirect_uri_mismatch`다.
