@@ -313,3 +313,13 @@ VM만 중지하거나 삭제해도 `auto-delete=no` 영속 디스크와 예약 �
 `planetory-0001`의 매월 리셋 중복 예산(`크레딧 소진 감시`)은 누적 소진을 추적하지 못해 삭제했다. 80% 임계값은 하루 사용액 기준 2026년 10월 7-8일경 도달해 기한 전 조기 경보로 작동한다.
 
 미확정 사항: `planetory-0005`·`0006`이 다른 워커보다 하루 사용액이 낮게 나온 원인(추정 오차인지 실제 차이인지), `planetory-0001` Kubernetes Engine·Cloud Monitoring 사용 목적, VM 생성 후 27일 기준(9월 9-10일 생성분 10월 6-7일)과 이번 목표 기한(10-09) 중 자원 정리 기준으로 어느 쪽을 따를지, 6개 프로젝트 모두 Cloud NAT가 없어 외부 IP가 유일한 아웃바운드 경로인 상태를 그대로 유지할지 NAT를 별도로 구성할지.
+
+## 9. 보안 업데이트와 미뤄진 서비스 재시작
+
+보안 업데이트는 unattended-upgrades가 매일 설치하지만, `hadoop-*`·`planetory-*` unit의 재시작은 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)로 미룬다. 미뤄진 재시작은 run이 없는 점검 시간에 처리한다. 주기는 운영에서 정한다(제안: 주 1회 또는 보안 공지 시).
+
+1. YARN 실행 앱 0개, 진행 중인 `planetory-tess-*` unit과 단계 DAG run이 없는지 확인한다.
+2. 노드별 `sudo bash configure-needrestart-node.sh --node N --check-only`로 미뤄진 재시작 목록(`pending Hadoop/pipeline restarts`)을 본다.
+3. Worker(Node 3~6)부터 **한 대씩** NodeManager → DataNode 순으로 재시작하고, 매번 Live DataNode 5개·RUNNING NodeManager 5개를 확인한 뒤 다음 노드로 넘어간다.
+4. Node 2(standby NameNode·JournalNode)는 Worker 뒤에, Node 1(ResourceManager·Active NameNode·JournalNode)은 마지막에 클러스터가 비어 있을 때 [6장](#6-hdfs-수동-장애-전환과-재기동)의 재기동 순서를 따른다.
+5. 끝나면 `--check-only`에서 미뤄진 재시작이 `none`인지 확인한다.

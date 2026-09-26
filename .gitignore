@@ -26,6 +26,7 @@ experiments/**/*.parquet
 .claude/
 .codex/
 
-# Python bytecode
+# Python bytecode·테스트 캐시는 생성물이므로 추적하지 않는다.
 __pycache__/
 *.pyc
+.pytest_cache/

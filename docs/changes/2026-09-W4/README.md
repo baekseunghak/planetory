@@ -71,6 +71,9 @@
 | 2026-09-21 | 일괄 공개 리뷰 보완·후보 보장 범위 | S15P21C206-166 | 로그 스택, TIC_MISMATCH, CommunityQuery, 스냅샷, History 단위 후보 | 관련 81건·추가 46건 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 내 별 목록 필터와 별 위치 찾기 구현 | S15P21C206-152 | stage, grade, ticId 필터, 커서 묶기, gradeRange, me/sky/locate, STAR_LOCKED | 구현 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 별 목록 조회의 트랜잭션 누락 정정과 스냅샷 계약 명시 | S15P21C206-152 | REPEATABLE_READ, 자기 호출, 프록시, 오버로드, STAR_LIST_PRIVATE, 스냅샷 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 준비 기록·후속 YARN 검증과 병합 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증·develop 병합 완료 | [기록](2026-09-21.md) |
+| 2026-09-21 | Bronze→Silver 최초 탐색·TIC별 실패 격리와 재처리 | S15P21C206-78 | target_combined, initial_bls, manifest, retry, YARN | 단일 TIC 실클러스터 Canary 완료, 전체 실행 전 | [기록](2026-09-21.md) |
 | 2026-09-21 | 별 결과 페이지 구현과 8.4절 구현 규칙 | S15P21C206-146 | stars/result, DEC-28, remainingDiscoverableCount, judgmentStatistics, nextActions, PUBLISH_ALL | 구현 완료·교차 리뷰 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 Bronze 표본 커널 연결·비교·재실행 준비 | S15P21C206-127 | Worker, input_sha256, retry, 19 passed | 오프라인 검증, 실제 YARN 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 127 실제 Worker 수치·실패 TIC 재실행 검증 | S15P21C206-127 | YARN 0023~0026, PYTHONPATH, HADOOP_CONF_DIR, 20 TIC | 표본 검증 완료·리뷰 전 | [기록](2026-09-21.md) |
@@ -108,6 +111,26 @@
 | 2026-09-21 | 169 리뷰 반영·후보 요약 격리 검증 | S15P21C206-169 | MR !156, READ COMMITTED, 25000, N=0, BTJD, 540건, FE 빌드 | 수정·격리 검증 완료 | [2026-09-21](2026-09-21.md) |
 | 2026-09-21 | 122 !160 develop 통합·실제 진단 최종 검증 | S15P21C206-122 | 205 passed, 184 passed, 16곡선, search_diagnostics, review-122-r2 | 검증 완료·병합 commit 대기 | [기록](2026-09-21.md) |
 | 2026-09-21 | 사전검사 재리뷰 반영: develop 통합과 승인 문턱·재실행 문구 | S15P21C206-154 | 6장 충돌, 문턱 셋, 제출 제외, 읽기 전용, 재실행 건수 | 구현 완료·재리뷰 대기 | [기록](2026-09-21.md) |
+| 2026-09-21 | Silver 245 원본 행·구간 마스크 계약 연결 | S15P21C206-78 | stage.v2, source_sha256, original_quality, exclusion_ledger, row conservation | 구현·로컬 검증 완료, 운영 마스크 활성화 전 | [기록](2026-09-21.md) |
+| 2026-09-22 | 최초 BLS 결과 재사용과 반복 탐색 Silver stage 연결 | S15P21C206-78 | initial_search, search_input_sha256, iteration, stage.v3 | 구현·로컬 검증, 클러스터 Canary 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Silver 수동 DAG·YARN 경합 방지 경계 | S15P21C206-78 | tess_bronze_to_silver, tess_yarn, Node 1 lock, 14+ 제외 | 구현·로컬 검증, 운영 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-21 | Sector 파이프라인 자율 실행·Raw 검증 후 원본 회수 | S15P21C206-252 | Airflow, systemd, Raw audit, cleanup, SHA-256 | DAG·cleanup 구현 및 오프라인 검증, 운영 배포 전 | [기록](2026-09-21.md) |
+| 2026-09-22 | Airflow UI Node 1 배포·Tailnet 전용 공개 | S15P21C206-252 | Airflow DB, Scheduler, Webserver, Tailscale Serve, Viewer | UI 접속 검증, DAG 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow Viewer 초기 암호 전달 오류 정정 | S15P21C206-252 | Viewer, password reset, root-only file | 수정·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector별 단계 DAG와 빠른 Raw 재검증 착수 | S15P21C206-252 | 4 DAG, lineage, manifest checksum, cached audit, parallel cleanup | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow DB 유지 갱신·실패 시 이전 이미지 복귀 | S15P21C206-252 | Airflow update, paused DAG, rollback | 스크립트 검증, 운영 적용 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | TESS 단계별 DAG·HDFS·Bronze 불변 release 배포 | S15P21C206-252 | 20260921T230610Z, Node 1~6, import, paused, DagRun 0 | 코드 배포·import 검증, 실제 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | MAST Sector 발견·증거 기반 재개 선택 착수 | S15P21C206-252 | MAST 일반 LC, 상한 70, read-only DAG, resume planner | 오프라인 구현·테스트, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14~70 자동 admission·실패 재개 구현 | S15P21C206-252 | Airflow 조정, Worker unit, 불변 원천, 단일 Sector Raw, retry | 오프라인 구현·검증, 배포 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Sector 14 제한 운영 배포·재부팅 검증 | S15P21C206-252 | 20260922T021406Z, SSH, sudo, Worker 4, Node 1, Raw, cleanup, Bronze | 4단계 완료·drain, 무인 Hadoop 복구 미검증 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 전 노드 부팅 복구 오프라인 구현 | S15P21C206-252 | systemd, HDFS HA standby gate, timer, YARN readiness | 오프라인 검증·운영 미배포 | [기록](2026-09-22.md) |
+| 2026-09-22 | Hadoop 6대 순차 재부팅 자동 복구 운영 검증 | S15P21C206-252 | release 5fec7b88, boot ID, Journal quorum, NN Active, YARN, Airflow | 6대 순차 재부팅·복구 검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 과거 Sector 1~13 Airflow DAG 제거 | S15P21C206-252 | Airflow, legacy DAG, metadata, release 20260922T134419Z | 운영 제거·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | 현행 Airflow DAG 한국어 표시 이름 배포 | S15P21C206-252 | Airflow, dag_display_name, description, release 20260922T135740Z | 운영 배포·검증 완료 | [기록](2026-09-22.md) |
+| 2026-09-22 | Airflow 3.2.2 전환 코드·격리 import 검증 | S15P21C206-252 | Airflow 3, Task SDK, DB clone, rollback | 코드·이미지 검증, 운영 전환 전 | [기록](2026-09-22.md) |
+| 2026-09-22 | Node 1 Airflow 3.2.2 운영 전환 | S15P21C206-252 | 20260922T143000Z, DB clone, API Server, DAG Processor | 배포·기본 health 검증, 실제 단계 실행 전 | [기록](2026-09-22.md) |
+| 2026-09-23 | Airflow 다운로드 대기 Temporal Trigger 도입 | S15P21C206-252 | Temporal Trigger, Triggerer, 14일 deadline | 운영 배포·첫 deferred 재개 확인, 장시간 미검증 | [기록](2026-09-23.md) |
+| 2026-09-23 | Triggerer 배포 후 토큰 만료 재발 정정 | S15P21C206-252 | Sector 21·22, queued, LocalExecutor, JWT | 재발 확인·원인 미해결 | [기록](2026-09-23.md) |
 | 2026-09-21 | 제출 매칭 null 계약과 111 부분 검산 | S15P21C206-128 | suggestedDurationHours, 549, N 상한, rule-1 | 부분 검증 완료·정책 미확정 | [기록](2026-09-21.md) |
 | 2026-09-21 | 매칭 기존 승인·관측 통과 분모와 실제 재생 준비 | S15P21C206-128 | P_mod, observedTransits, matching_replay, 21 tests | 구현·합성 검증 완료, 실제 실행 전 | [기록](2026-09-21.md) |
 | 2026-09-21 | 실제 매칭 재생과 거절 사유 검산 | S15P21C206-128 | 3e9bf8ea, 534/549, 527/549, 86 hashes | 재생·검산 완료, rule-1 미확정 | [기록](2026-09-21.md) |
@@ -197,6 +220,30 @@
 | 2026-09-23 | 탈퇴 방향 승인·쓰기 잠금·공개 조회 차단 일부 반영 | S15P21C206-180 | DEC-11, W1~W4, 작성자 표시, 반응, 첨부, FE222 | 부분 구현·격리 검증, 실행 정책 대기 | [기록](2026-09-23.md) |
 | 2026-09-23 | 권장 탈퇴 계약·T/C·영수증·앱 역할 정리 구현 | S15P21C206-180 | V24, withdrawal-v1, 재가입, Redis, 보관 만료 | 격리 203건·FE 447건 통과, 운영 활성화 보류 | [기록](2026-09-23.md) |
 | 2026-09-23 | 탈퇴 대상 팔로우 경합·정본 구현 상태 정정 | S15P21C206-180 | WD-08, 잠금 순서, withdrawal-v1, 기본 비활성 | PostgreSQL 18.6 FollowTest 10건 통과, 운영 인수 대기 | [기록](2026-09-23.md) |
+| 2026-09-23 | 252 Airflow 3.2.2 통합·Silver DAG Task SDK 이식 | S15P21C206-78 | airflow 3.2.2, get_dr_count, ssh 5.0.2 | 병합·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | Bronze·Silver YARN 제출 Pool 동시성 상한 | S15P21C206-78 | tess_yarn, yarn_slot, PLANETORY_YARN_SLOTS | 구현·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 병렬 실행을 막던 YARN 사전 점검 수정·배포 적합성 검토 | S15P21C206-78 | require_yarn_headroom, 고아 앱, sudoers 정규식 | 수정·검토 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 반복 탐색 QA 판정 분리·Silver 스키마 v4 | S15P21C206-78 | qa_stopped, removal_qa_failed, stage.v4 | 구현·로컬 검증 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실클러스터 Canary 1 불합격·NaN 시각 직렬화 수정 | S15P21C206-78 | invalid_bronze_row, original_time, _strict_exclusions | 수정 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 실클러스터 Canary 재실행·Canary 2 합격 | S15P21C206-78 | 20260923T083458Z, _0031, _0032, RF2 0.63~0.73 TB | 2단계 완료 | [기록](2026-09-23.md) |
+| 2026-09-23 | 전체 Silver run을 252 Sector 70 완료 뒤 시작(결정 A) | S15P21C206-78 | sudoers 동일 ID, completed_through 70 | 결정 | [기록](2026-09-23.md) |
+| 2026-09-24 | 재기동 전 실패 attempt staging 정리·코드 결함 예외 분류 | S15P21C206-78 | discard_failed_attempt, unexpected_processing_error | 구현·로컬 검증 완료 | [기록](2026-09-24.md) |
+| 2026-09-24 | 보강 release Canary 합격·전체 run 시작 조건 충족 | S15P21C206-78 | 20260924T063740Z, _0061, completed_through 70, HDFS 58% | Canary 합격, 전체 run 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | Bronze TIC 수 집계와 전체 run 처리량 보강 | S15P21C206-78 | 489,374, 128,258, executor.cores=4, results.count | 구현·로컬 검증 완료 | [기록](2026-09-24.md) |
+| 2026-09-24 | YARN vcore 상한에 맞춘 executor 재구성·실패 attempt 정리 실측 | S15P21C206-78 | maximum-allocation-vcores=3, _0062, executor 10x2, staging_discarded | 수정 완료 | [기록](2026-09-24.md) |
+| 2026-09-24 | 처리량 보강 release Canary 합격·전체 run release 확정 | S15P21C206-78 | 20260924T093328Z, _0063, 컨테이너 11, 5분 31초 | Canary 합격, 전체 run 전 | [기록](2026-09-24.md) |
+| 2026-09-24 | Silver DAG systemd unit 시작·Triggerer 대기 전환 | S15P21C206-78 | start-unit, status, TimeDeltaTrigger, wait_silver | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-24.md) |
+| 2026-09-25 | Spark 이벤트 로그·Node 1 History Server 설치 스크립트 | S15P21C206-78 | spark-history, 18080, tailscale serve, event_log_conf | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
+| 2026-09-25 | 비동기 Silver DAG 결함 수정·executor 균등 배치·shuffle 상한 2000 | S15P21C206-78 | latest_attempt, NRestarts, remote timeout, executor 14x2, 7 GiB | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
+| 2026-09-25 | Silver 입력 열 축소·biweight 벡터화(결과 비트 동일) | S15P21C206-78 | SILVER_INPUT_COLUMNS, _biweight_locations, 2.9x, 13% | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
+| 2026-09-25 | 자동 보안 업데이트의 NodeManager 재시작 장애·needrestart 예외 | S15P21C206-78 | unattended-upgrades, needrestart, libcurl, exit 143, apt-daily-upgrade.timer | 확산 차단, 예외 로컬 구현 | [기록](2026-09-25.md) |
+| 2026-09-26 | needrestart 예외 설치·자동 업데이트 타이머 복구·Node 5·6 AMD 재배치 | S15P21C206-78 | 50-planetory.conf, apt-daily-upgrade.timer, cpuPlatform, AMD Rome, planetory-0005, planetory-0006 | 적용·검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | Sector 1~13 전체 Silver run 확정과 감사 | S15P21C206-78 | 20260924T133559Z, _0064, 128,258, qa_stopped 17,553, RF2 636 GB, HDFS 64% | 확정·감사 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | 처리량 설정 release Canary 합격 | S15P21C206-78 | 20260926T042907Z, _0065, executor 14, 비트 동일, History Server | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | develop 통합과 78 인계 문서 종료 | S15P21C206-78 | s15p21c206-78-handoff, quality_version, iteration_config_sha256, 80 이관 | 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | 실패 TIC 부분 재처리 실클러스터 검증과 후속 티켓 분리 | S15P21C206-78 | Step Retry, _0066, attempt=20260926T091732Z, 104, S15P21C206-275 | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | 원본 SNR 재검증 예외를 QA 중단에서 분리 | S15P21C206-78 | fixed_snr, original_validation, numerical_failure, error_type, qa_stopped | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-26.md) |
+| 2026-09-26 | YARN 슬롯 잠금 파일의 심볼릭 링크 검사 틈 제거 | S15P21C206-78 | yarn_slot, O_NOFOLLOW, ELOOP, TOCTOU | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-26.md) |
 | 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | EC2-A 반영·완료 조건 확인, CI 배포 병합 후 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: Redis 예산·캐시 의존성·축출 정책 | S15P21C206-254 | maxmemory 64mb, noeviction, volatile-lru, depends_on, mem_limit | 구현·EC2-A 재반영 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: 프론트 배포 헬스를 렌더러 표식으로 | S15P21C206-254 | /health/renderer-enabled, try_files =404, web:image, 과도기 롤백 | 구현·격리 이미지 검증 완료 | [기록](2026-09-23.md) |
