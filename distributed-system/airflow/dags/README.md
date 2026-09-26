@@ -94,4 +94,10 @@ Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_rel
 
 실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
 
+**배포 상태(2026-09-26)**: 이 DAG는 로컬 Airflow 3.2.2 DagBag import와 단위 검사만 통과했고 운영 이미지에는 배포하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
+
+1. Node 1 root로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 실행해 sudoers와 `tess_yarn` Pool을 만든다. 운영 승인이 필요하며, 사후 `visudo -c`와 Pool 슬롯이 제어기 기본값(2)과 같은지 확인한다. **Airflow 이미지보다 먼저** 한다. 이 브랜치의 `commit_bronze`는 `pool="tess_yarn"`을 요구하므로 Pool이 없으면 Airflow가 그 task를 스케줄하지 않는다.
+2. 통합 소스로 이미지를 빌드해 252 단계 DAG 5개와 `tess_bronze_to_silver`가 import 오류 0건으로 함께 올라오는지 **운영 이미지에서** 확인하고, 서버의 실제 `AIRFLOW__CORE__PARALLELISM`을 확인한다. 기존 DAG·Connection을 삭제하거나 재생성하지 않는다.
+3. DAG를 pause 상태로 올리고 release·sudo·Pool을 확인한 뒤 Canary conf로 명시적으로 trigger한다. `wait_silver`의 defer·재개와 History Server의 실행 중(`.inprogress`) 앱을 함께 확인한다.
+
 Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어기는 **Sector 1~13 전체 coverage와 TIC별 다중 Sector 결합**만 승인하므로 이 DAG가 받지 않는다. Sector 14 성공을 1~13 coverage의 확장이나 완전한 TIC Silver로 오인하지 않는다. 14+ 연속 처리에는 혼합 Bronze 버전·누적 Sector snapshot·변경 TIC 재처리·이전 Silver 결과 조합 계약이 필요하며, 전체 DAG·publish-ready 책임인 80에서 252/78 정본과 별도로 승인해야 한다.

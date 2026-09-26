@@ -11,7 +11,6 @@
 | 분산 PoC 완료·미검증 상태 | [분산 PoC 진행 상태](distributed-poc-status.md) | 현재 검증 상태와 후속 작업 |
 | 서비스 배포·CI/CD 상태 | [서비스 배포 현재 상태](service-deploy-status.md) | 현재 배포 상태·검증 경계·남은 결정 |
 | 문서 충돌·반영 대기 | [문서 정합화 요청](planetory-doc-sync-requests.md) | 현재 상태·차단 항목 |
-| 78 Silver·Airflow 임시 인계 | [S15P21C206-78 인계](s15p21c206-78-handoff.md) | 운영 배포·Canary 전, 완료 시 삭제 |
 
 역할 문서는 기술 정본을 대신하지 않는다. 문서 정합화 요청은 해결된 항목을 표시하되 과거 결정 전체를 복제하지 않고 관련 Jira·정본에 연결한다.
 
@@ -30,3 +29,4 @@
 | `docs/experiments/distributed-poc-cicd-plan.md` | 중복 문서 지도와 폐기된 계약을 제거하고 상태만 분리 | [분산 PoC 진행 상태](distributed-poc-status.md) | 실험별 별도 계획 문서가 다시 필요해진 경우 |
 | `docs/workflows/mattermost-message.md` | 외부 메신저 직접 전송을 저장소 워크플로 범위에서 제거 | 없음 | 별도 Jira 범위와 비밀정보 관리 방식이 합의된 경우 |
 | `docs/project/tess-airflow-handoff-2026-09-23.md` | 토큰 만료 장애 해결·운영 회귀 완료로 임시 인계 종료 | [2026-09-23 변경 이력](../changes/2026-09-W4/2026-09-23.md), [DAG 계약](../../distributed-system/airflow/dags/README.md) | 없음. 새 인계가 필요하면 새 날짜의 임시 문서로 만든다 |
+| `docs/project/s15p21c206-78-handoff.md` | 78 브랜치 종료(Sector 1~13 전체 Silver run 확정·새 release Canary 합격). 남은 서버 DAG 배포·sudo·Pool 적용은 80으로 이관 | [Silver 계약](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78), [DAG 계약의 배포 순서](../../distributed-system/airflow/dags/README.md), [2026-09-26 변경 이력](../changes/2026-09-W4/2026-09-26.md) | 없음. 새 인계가 필요하면 새 날짜의 임시 문서로 만든다 |

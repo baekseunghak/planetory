@@ -270,14 +270,46 @@ manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Retry -CodeReleaseId <code-release> -RunId <run> -UnitId <new-unit-id> -RetryFrom <completed-attempt>
 ```
 
-`Install`은 Silver job·제어기, 77의 검증된 공용 제어 primitive, 고정 Python 의존성, `astro_kernel`과 원자 rename helper를 불변 release로 설치한다. `Start`와 `Retry`는 systemd oneshot에 인계한다. Spark는 executor 10개 × core 2개(memory 6g + overhead 2g, `OMP_NUM_THREADS=1`)로 제출해 동시 20작업을 돌린다. YARN은 `yarn.scheduler.maximum-allocation-vcores=3`을 넘는 컨테이너를 거부하므로 executor를 키우지 않고 개수를 늘린다. Worker는 vCPU 6개라 노드당 4작업이면 DataNode·NodeManager 몫이 남고, 8 GiB executor 2개는 가장 작은 16 GiB NodeManager에도 들어간다. driver를 합쳐 83 GiB로 YARN 전체 112 GiB 안이다. TIC 결과는 `results.count()`로 shuffle 파티션 수만큼의 작업에서 먼저 계산해 캐시하고, 이후 `coalesce(output_partitions)` 쓰기는 캐시만 읽는다. 이 단계가 없으면 BLS 전체가 쓰기 작업 수(기본 80)로 묶여 전체 run에 긴 꼬리가 생긴다. HDFS·YARN 같은 일시 인프라 실패만 5분 뒤 재기동한다. 재기동은 처음부터 새 attempt로 돌기 때문에, 제어기는 그 전에 실패한 attempt의 `.staging` 출력과 Spark staging을 지운다(`discard_failed_attempt`). 지우는 경로는 자기 attempt staging 형식과 정확히 일치해야 하고 final attempt는 건드리지 않는다. YARN CLI가 일시적으로 `UNKNOWN`을 돌려줘도 앱은 살아 있을 수 있으므로, 앱이 `FAILED`·`KILLED`·`SUCCEEDED`로 확인될 때만 지우고 그 밖에는 `SILVER_CLEANUP_SKIPPED`를 남긴다. 상태 파일에는 `status=failed`와 `staging_discarded`를 기록한다. 그리고 coverage·schema 같은 결정적 계약 오류는 종료 코드 65로 자동 반복을 중단한다.
+`Install`은 Silver job·제어기, 77의 검증된 공용 제어 primitive, 고정 Python 의존성, `astro_kernel`과 원자 rename helper를 불변 release로 설치한다. 압축에 Windows `tar`가 필요하므로 Git Bash가 아니라 PowerShell에서 실행한다(Git Bash의 GNU tar는 `C:` 경로를 원격 호스트로 해석해 실패한다). `-TicId`는 배열이므로 `pwsh -File`로 쉼표 목록을 넘기지 말고 PowerShell 안에서 `& .\infra\distributed-system\scripts\run-tess-silver.ps1 ... -TicId @(259377017, 149603524)`처럼 호출한다. `Start`와 `Retry`는 systemd oneshot에 인계한다.
+
+Spark는 executor 최대 14개 × core 2개(memory `5g` + overhead 2048 MiB = 7 GiB, `OMP_NUM_THREADS=1`)로 제출한다. 24 GiB NodeManager에 정확히 3개, 16 GiB인 worker-2에 2개가 들어가 동시 28작업이다. YARN은 메모리만으로 배치하므로 executor 크기를 이렇게 맞추지 않으면 한 노드에 몰린다. YARN은 `yarn.scheduler.maximum-allocation-vcores=3`을 넘는 컨테이너를 거부하므로 core를 늘리지 않고 개수를 늘린다. dynamic allocation을 켜며(`initialExecutors`·`maxExecutors`=14, `minExecutors`=2, `executorIdleTimeout`=300s, 외부 셔플 서비스 대신 `shuffleTracking`), 시작할 때 덜 받은 executor는 메모리가 비면 다시 늘어난다. 셔플 파일이나 `DISK_ONLY` 결과를 가진 executor는 반납하지 않으므로 계산 단계 이후에는 거의 줄지 않는다. Silver가 YARN 112 GiB 중 약 101 GiB를 쓰므로 동시에 도는 Bronze는 executor 1개 정도만 받는다. `shuffle_partitions`는 1~2000이며 전체 run은 2000을 권장한다(작업당 약 64 TIC). Spark는 Bronze 28개 열 중 `process_tic`이 읽는 10개(`SILVER_INPUT_COLUMNS`)만 Python으로 넘긴다. TIC 결과는 `results.count()`로 shuffle 파티션 수만큼의 작업에서 먼저 계산해 캐시하고, 이후 `coalesce(output_partitions)` 쓰기는 캐시만 읽는다. 이 단계가 없으면 BLS 전체가 쓰기 작업 수(기본 80)로 묶여 전체 run에 긴 꼬리가 생긴다. HDFS·YARN 같은 일시 인프라 실패만 5분 뒤 재기동한다. 재기동은 처음부터 새 attempt로 돌기 때문에, 제어기는 그 전에 실패한 attempt의 `.staging` 출력과 Spark staging을 지운다(`discard_failed_attempt`). 지우는 경로는 자기 attempt staging 형식과 정확히 일치해야 하고 final attempt는 건드리지 않는다. YARN CLI가 일시적으로 `UNKNOWN`을 돌려줘도 앱은 살아 있을 수 있으므로, 앱이 `FAILED`·`KILLED`·`SUCCEEDED`로 확인될 때만 지우고 그 밖에는 `SILVER_CLEANUP_SKIPPED`를 남긴다. 상태 파일에는 `status=failed`와 `staging_discarded`를 기록한다. 그리고 coverage·schema 같은 결정적 계약 오류는 종료 코드 65로 자동 반복을 중단한다.
+
+Canary TIC는 최초 전처리가 `insufficient_observations`(유효 관측 500점 미만) 같은 결정적 데이터 판정으로 끝나지 않는 TIC로 고른다. 이런 판정도 `failed_tics`에 들어가 Canary를 실패시킨다. release를 바꿀 때는 아래 회귀 기준 5개 TIC를 한 번에 실행해 이전 Canary와 과학 값을 비교한다.
+
+| TIC | 별 | 결합 Sector | 반복 탐색 기준 결과 |
+| --- | --- | --- | --- |
+| 259377017 | TOI-270 | 3 (3~5) | `succeeded`, 1위 주기 5.6593303027일·SNR 52.8359·SDE 22.5652 |
+| 149603524 | WASP-62 | 12 | `qa_stopped`(`removal_qa_failed`) |
+| 150428135 | TOI-700 | 11 | `succeeded` |
+| 307210830 | L 98-59 | 7 | `qa_stopped`(`removal_qa_failed`) |
+| 279741379 | HD 21749 | 4 | `succeeded`, 게이트 통과 peak 없음 |
 
 Canary는 상세 Parquet을 감사한 뒤 삭제하지만, 최대 5개 TIC의 Sector·관측점 수·상위 채택 peak 5개·오류를 `SILVER_CANARY_AUDIT` 로그와 `/var/lib/planetory-silver/run=<run>/attempt=<attempt>.json`의 `result.science_audit`에 남긴다. 성공한 정확한 attempt의 Spark staging과 빈 run 부모만 정리하며 다른 attempt가 있으면 부모 삭제를 건너뛴다.
 
 오프라인 검증은 데이터 담당 관점의 Bronze coverage·lineage, 과학 담당 관점의 전처리 상태·BLS 정렬 입력, Spark 운영 관점의 TIC 실패 격리·실패 TIC 재선택·드라이버 전체 수집 금지를 확인한다. 2026-09-21 최종 CodeReleaseId `20260921T062449Z`(archive SHA-256 `86f68700bd92281f356b3e8fc4f9957e9893cc91474d4ac3085f57ccbbab25d9`), RunId `20260921T062522Z`로 TIC `259377017`을 실제 YARN Canary 실행했다. `application_1789686202146_0029`는 `SUCCEEDED`, RF2·checksum·FSCK·원자 rename과 상세 출력 삭제·staging 정리를 통과했다. Sector 3·4·5에서 Raw 57,320개, 준비 44,553개, BLS 유효 44,550개를 처리했고 채택 peak 5개 중 1위 `5.6593303027일`, SNR `52.8359`, SDE `22.5652`였다. 저장소 TOI-270 c fixture `5.66051일`과 약 0.021% 차이며 직전 검증 release에서도 같은 snapshot·관측점 수·과학값을 재현했다. 이는 최초 BLS 재현 증거이며 반복 제거·전체 TIC 성능이나 최종 과학 판정을 증명하지 않는다.
-### Spark 이벤트 로그 (2026-09-25, 로컬 구현, 배포 전)
 
-Bronze·Silver 제어기는 HDFS `/spark-history`가 있을 때만 `spark.eventLog.enabled=true`, `spark.eventLog.dir=hdfs://planetory/spark-history`, 압축과 128 MiB rolling을 제출 설정에 넣는다(`tess_bronze_ctl.event_log_conf`). 디렉터리가 없으면 `SPARK_EVENT_LOG_DISABLED`만 출력하고 이벤트 로그 없이 제출하므로, History Server 설치 여부가 데이터 처리를 막지 않는다. 이벤트 로그는 새 release로 제출한 앱부터 남으며, 이미 실행 중인 앱은 History Server에 나타나지 않는다. History Server 설치와 접근 경계는 [인프라 안내](../../infra/distributed-system/README.md)를 따른다.
+### Sector 1~13 전체 run 결과 (2026-09-25 확정)
+
+systemd 경로(`-Step Start`)로 release `20260924T093328Z`(executor 10개 × core 2개, `-ShufflePartitions 500`)를 실행했다. 결과는 `/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/run_id=20260924T133559Z/attempt=20260924T133730Z`이며 `application_1790067725443_0064`가 2026-09-24 13:37 UTC에 시작해 2026-09-25 19:34 UTC에 확정됐다(약 30시간).
+
+| 구분 | 값 |
+| --- | --- |
+| 선택 TIC | 128,258 |
+| 최초 탐색 | `succeeded` 28,827, `no_quality_peak` 99,327, `failed` 104(`invalid_normalization` 41, `numerical_failure` 34, `bls_failed` 29, 모두 retryable 아님) |
+| 반복 탐색 | `succeeded` 110,601, `qa_stopped` 17,553 |
+| 출력 | 논리 318 GB, RF2 636 GB. 확정 뒤 HDFS 사용률 64% |
+
+제어기 재감사(RF2·part checksum·FSCK), Parquet 불변식, 같은 release Canary 5개 TIC와의 값 비교를 모두 통과했다. 실패 104개는 결정적 데이터·수치 판정이라 `retry`로 같은 결과가 반복되므로 자동 재처리하지 않는다.
+
+실행 중 2026-09-25 06:12·06:15 UTC에 자동 보안 업데이트가 worker-5·worker-3 NodeManager를 재시작해 executor 6개와 캐시한 결과 파티션 211개를 잃었고, Spark가 이를 다시 계산해 완료가 약 6시간 늦어졌다. TIC 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다. 재발 방지는 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)로 적용했고, `DISK_ONLY_2` 전환은 HDFS·로컬 디스크 여유와 함께 별도로 검토한다.
+
+현재 설정(executor 14개, dynamic allocation, 입력 열 축소, biweight 벡터화)의 release `20260926T042907Z`는 run `20260926T043105Z`(`application_1790067725443_0065`) Canary에서 5분에 끝났고, `failed_tics=0`, `qa_stopped=2`, executor 14개(worker-2 2개, 나머지 3개씩)를 확인했다. 5개 TIC 결과는 전체 run release Canary(run `20260924T093357Z`)와 비트 단위로 같았다. 다음 Silver 실행은 이 release 또는 그 이후 release를 쓴다. 다음 release는 사용하지 않는다: `20260923T080904Z`(NaN 시각 직렬화 결함), `20260924T091614Z`(core 4 요청으로 YARN 거부).
+
+develop 통합(2026-09-26) 이후 release는 243이 반복 설정 지문에 `candidate_quality_version`을 넣어 `iteration_config_sha256`이 이전 release와 다르다. 기본 품질 버전(`gate_v1/snr7_sde6`)의 판정 값은 같지만, 비트 비교는 같은 지문의 release끼리만 한다.
+
+### Spark 이벤트 로그 (2026-09-26, Node 1 적용)
+
+Bronze·Silver 제어기는 HDFS `/spark-history`가 있을 때만 `spark.eventLog.enabled=true`, `spark.eventLog.dir=hdfs://planetory/spark-history`, 압축과 128 MiB rolling을 제출 설정에 넣는다(`tess_bronze_ctl.event_log_conf`). 디렉터리가 없으면 `SPARK_EVENT_LOG_DISABLED`만 출력하고 이벤트 로그 없이 제출하므로, History Server 설치 여부가 데이터 처리를 막지 않는다. 이벤트 로그는 새 release로 제출한 앱부터 남으며, 이미 실행 중인 앱은 History Server에 나타나지 않는다. 2026-09-26 Canary(`application_1790067725443_0065`)에서 History Server 앱 목록과 HDFS rolling 이벤트 로그를 확인했다. History Server 설치와 접근 경계는 [인프라 안내](../../infra/distributed-system/README.md)를 따른다.
 
 ### 245 구간 마스크 인계 (로컬 검증, 배포 전)
 

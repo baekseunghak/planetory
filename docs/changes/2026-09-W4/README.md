@@ -238,6 +238,9 @@
 | 2026-09-25 | Silver 입력 열 축소·biweight 벡터화(결과 비트 동일) | S15P21C206-78 | SILVER_INPUT_COLUMNS, _biweight_locations, 2.9x, 13% | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
 | 2026-09-25 | 자동 보안 업데이트의 NodeManager 재시작 장애·needrestart 예외 | S15P21C206-78 | unattended-upgrades, needrestart, libcurl, exit 143, apt-daily-upgrade.timer | 확산 차단, 예외 로컬 구현 | [기록](2026-09-25.md) |
 | 2026-09-26 | needrestart 예외 설치·자동 업데이트 타이머 복구·Node 5·6 AMD 재배치 | S15P21C206-78 | 50-planetory.conf, apt-daily-upgrade.timer, cpuPlatform, AMD Rome, planetory-0005, planetory-0006 | 적용·검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | Sector 1~13 전체 Silver run 확정과 감사 | S15P21C206-78 | 20260924T133559Z, _0064, 128,258, qa_stopped 17,553, RF2 636 GB, HDFS 64% | 확정·감사 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | 처리량 설정 release Canary 합격 | S15P21C206-78 | 20260926T042907Z, _0065, executor 14, 비트 동일, History Server | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-26 | develop 통합과 78 인계 문서 종료 | S15P21C206-78 | s15p21c206-78-handoff, quality_version, iteration_config_sha256, 80 이관 | 완료 | [기록](2026-09-26.md) |
 | 2026-09-23 | develop 배포 Redis·렌더러 설정 공급 | S15P21C206-254 | session-redis, cache-redis, --no-deps, VITE_SKY_RENDERER_ENABLED, GalaxyPage | EC2-A 반영·완료 조건 확인, CI 배포 병합 후 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: Redis 예산·캐시 의존성·축출 정책 | S15P21C206-254 | maxmemory 64mb, noeviction, volatile-lru, depends_on, mem_limit | 구현·EC2-A 재반영 완료 | [기록](2026-09-23.md) |
 | 2026-09-23 | 254 리뷰 반영: 프론트 배포 헬스를 렌더러 표식으로 | S15P21C206-254 | /health/renderer-enabled, try_files =404, web:image, 과도기 롤백 | 구현·격리 이미지 검증 완료 | [기록](2026-09-23.md) |
