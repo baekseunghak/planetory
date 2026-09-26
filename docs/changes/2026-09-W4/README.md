@@ -234,3 +234,4 @@
 | 2026-09-25 | 비동기 Silver DAG 결함 수정·executor 균등 배치·shuffle 상한 2000 | S15P21C206-78 | latest_attempt, NRestarts, remote timeout, executor 14x2, 7 GiB | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
 | 2026-09-25 | Silver 입력 열 축소·biweight 벡터화(결과 비트 동일) | S15P21C206-78 | SILVER_INPUT_COLUMNS, _biweight_locations, 2.9x, 13% | 구현·로컬 검증 완료, 미배포 | [기록](2026-09-25.md) |
 | 2026-09-25 | 자동 보안 업데이트의 NodeManager 재시작 장애·needrestart 예외 | S15P21C206-78 | unattended-upgrades, needrestart, libcurl, exit 143, apt-daily-upgrade.timer | 확산 차단, 예외 로컬 구현 | [기록](2026-09-25.md) |
+| 2026-09-26 | needrestart 예외 설치·자동 업데이트 타이머 복구·Node 5·6 AMD 재배치 | S15P21C206-78 | 50-planetory.conf, apt-daily-upgrade.timer, cpuPlatform, AMD Rome, planetory-0005, planetory-0006 | 적용·검증 완료 | [기록](2026-09-26.md) |

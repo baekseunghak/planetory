@@ -187,7 +187,7 @@ Canary Trigger conf 형식은 다음과 같다. 실제 SHA·release ID·TIC은 �
 
 ### 운영 상태 주의: 자동 업데이트 타이머 정지 (2026-09-25)
 
-06:12·06:15 UTC 자동 보안 업데이트 뒤 needrestart가 worker-5·worker-3 NodeManager를 재시작해 전체 run `20260924T133559Z`의 executor 6개와 로컬 결과를 잃었다. Spark가 셔플 입력을 다시 계산했고, 잃은 TIC 결과는 쓰기 단계에서 다시 계산되어 완료가 약 6시간 늦어질 것으로 본다(추정). 확산을 막으려고 **노드 6대의 `apt-daily-upgrade.timer`·`apt-daily.timer`를 수동으로 멈춘 상태**다. run이 끝난 뒤 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)를 승인받아 설치하고 타이머를 다시 켜야 한다. 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다는 점도 확인했다(`DISK_ONLY_2`는 별도 검토).
+06:12·06:15 UTC 자동 보안 업데이트 뒤 needrestart가 worker-5·worker-3 NodeManager를 재시작해 전체 run `20260924T133559Z`의 executor 6개와 로컬 결과를 잃었다. Spark가 셔플 입력을 다시 계산했고, 잃은 TIC 결과는 쓰기 단계에서 다시 계산되어 완료가 약 6시간 늦어질 것으로 본다(추정). 확산을 막으려고 노드 6대의 자동 업데이트 타이머를 멈췄고, run 종료 뒤 2026-09-26에 6대에 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)를 설치하고 타이머를 다시 켰다(Hadoop 서비스 재시작 0건). 전체 run은 2026-09-25 19:34 UTC에 확정됐고(선택 128,258, 실패 104, `qa_stopped` 17,553, RF2 636 GB), 제어기 재감사·Parquet 불변식·같은 release Canary 5개 TIC 값이 모두 일치했다. 같은 날 worker-5·6을 VM 정지·시작으로 AMD Rome에 다시 배치해 6대 모두 AMD Rome이다. 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다는 점도 확인했다(`DISK_ONLY_2`는 별도 검토).
 
 ### Spark History Server (2026-09-25, Node 1 설치 완료)
 

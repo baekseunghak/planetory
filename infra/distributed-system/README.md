@@ -305,7 +305,7 @@ sudo bash configure-needrestart-node.sh --node 2
 
 예외를 두면 업데이트된 라이브러리가 Hadoop·파이프라인 프로세스에는 **다음 점검 재시작 전까지 반영되지 않는다.** 미뤄진 재시작은 [노드 운영 runbook](../../docs/operations/gcp-node-runbook.md#9-보안-업데이트와-미뤄진-서비스-재시작)의 점검 절차로 처리한다. 되돌리려면 각 노드에서 `sudo rm /etc/needrestart/conf.d/50-planetory.conf`를 실행한다.
 
-2026-09-25 장애 대응으로 6대 모두 `apt-daily-upgrade.timer`·`apt-daily.timer`를 수동으로 멈췄다(재부팅하면 다시 켜진다). 예외 설치 뒤 `sudo systemctl start apt-daily-upgrade.timer apt-daily.timer`로 되돌린다.
+2026-09-25 장애 대응으로 6대의 `apt-daily-upgrade.timer`·`apt-daily.timer`를 멈췄다가, 2026-09-26 6대에 예외를 설치한 뒤 다시 켰다. 타이머는 `Persistent=true`라 켜는 즉시 밀린 업그레이드가 실행되므로 반드시 예외를 먼저 설치한다.
 
 ## 전체 노드 부팅 복구
 
