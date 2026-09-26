@@ -249,4 +249,16 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 - 기준 브랜치에서 `build:*`가 실제로 멈추는 것은 develop을 깨야 볼 수 있어 확인하지 않았다. 위 stage 구조(검사는 `validate`, 이미지 빌드는 `needs` 없는 `build`)로 판단한다.
 - PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). 운영자가 직접 실행하는 스크립트라 배포 경로 밖이다. mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
 
+### data-platform 테스트 (S15P21C206-91)
+
+| job | 언제 | 무엇 |
+| --- | --- | --- |
+| `validate:tess-hdfs-loader` | `ingestion/hdfs/**/*.py`·적재 스크립트 변경 | HDFS 적재기 31개, Sector 수용 5개 |
+| `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개. 표준 라이브러리만 쓴다 |
+| `validate:astro-kernel` | `libs/astro-kernel`·spark·publisher 변경 | 커널 333개, spark 22개, publisher 목업 적재 7개. 의존성은 커널의 `uv.lock`으로 고정한다 |
+
+- 세 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).
+- Worker(`apps/derived-compute`) 테스트는 `derived-compute:test`(S15P21C206-88)가 맡는다.
+- 새 테스트 파일을 만들면 해당 job의 `script`에 넣는다. `discover`로 도는 airflow·ingestion `tests/`는 저절로 포함된다.
+
 현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.
