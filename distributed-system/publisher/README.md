@@ -67,7 +67,7 @@ V23 이후 후보 변경·current 전환은 [알림 DB 생산 계약](../../docs
 
 - **별 공개 판단.** `star`가 있으면 upsert하고, 없으면 존재만 본다. 배치 run은 새 별을 `hidden`으로 등록하고 기존 별의 공개 상태를 바꾸지 않는다(`S15P21C206-276` 착수 결정 1의 기본값). 배치로 올린 별을 `published`로 바꾸는 절차는 정하지 않았다.
 - **후보 동일성 대조.** 새 판을 올리면 이전 후보를 전부 은퇴시킨다. 그래서 배치 run은 첫 게시만 한다. 갱신 게시는 [후보 정정 계약](../../docs/architecture/candidate-correction-contract.md)으로 갱신·은퇴를 대조할 수 있게 된 뒤 연다.
-- **125 이력 제안과 별칭.** 번들의 `history_proposals`(새 후보의 첫 판정 이력 포함)와 `candidate_aliases`는 적재하지 않는다. 첫 게시 번들의 별칭은 125 규칙상 늘 비어 있다.
+- **125 이력 제안과 별칭.** 번들의 `history_proposals`와 `candidate_aliases`는 적재하지 않는다. 첫 게시에서는 잃는 것이 없다. `candidate_status_history`는 [ERD](../../docs/architecture/database-erd.md)상 판이 바뀌며 **달라진 값**의 기록인데, 첫 게시의 제안은 이전 값이 없는 첫 판정뿐이다. 이 이력을 읽는 Backend 코드와 DB 트리거도 아직 없다. 첫 게시 번들의 별칭은 125 규칙상 늘 비어 있다. 값이 바뀌는 이력의 적재는 갱신 게시를 열 때 함께 넣는다. Backend 판 전환 후처리는 이 적재를 87의 Publisher 몫으로 본다(`BundleActivationRepository`).
 
 ## 튜토리얼 5종 (S15P21C206-272)
 
@@ -118,6 +118,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 ### 되돌리기
 
 - `load-payload`는 별마다 한 트랜잭션이다. 커밋 전 실패는 전부 rollback된다. 커밋된 튜토리얼 판을 지우는 명령은 없다. 판이 잘못됐으면 고친 입력으로 새 판을 올린다.
+- 276에서 payload의 `external`이 목록으로 바뀌었다. 그 전에 만든 payload JSON(작업자 로컬 인계본만 남아 있다)은 운영 DB에 다시 실으면 판 대조에서 `ALREADY_PUBLISHED`로 끝나 후보까지 가지 않는다. 빈 DB에 새로 실으면 모양이 달라 rollback되므로 `tutorial-build`로 다시 만든다. 같은 입력이면 같은 판이다.
 - `tutorial_switch.sql`은 모의 실행이 기본이다. 적용 뒤에는 되돌리는 SQL이 없으므로 **적용 전에 `pg_dump`로 서비스 DB 백업을 받는다**. 지운 회원 기록은 목업 곡선에서 나온 것이라 복원 대상이 아니다(2026-09-26 사용자 승인).
 
 ## 배치 run (S15P21C206-276)
