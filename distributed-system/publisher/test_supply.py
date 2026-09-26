@@ -71,6 +71,12 @@ class SupplyRecordTest(unittest.TestCase):
                                  not_servable=2, tutorial_excluded=0, supply=1))
         self.assertEqual(c["ready"], c["publish_missing"] + c["not_servable"] + c["tutorial_excluded"] + c["supply"])
 
+    def test_ready_star_without_manifest_bundle_is_a_clear_error(self):
+        broken = manifest({1: "ready", 2: "ready"})
+        broken["bundles"] = broken["bundles"][:1]
+        with self.assertRaisesRegex(ValueError, "번들이 없다"):
+            supply_record(broken, [row(1), row(2)], TUTORIALS, AT)
+
 
 if __name__ == "__main__":
     unittest.main()

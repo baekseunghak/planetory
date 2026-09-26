@@ -121,9 +121,10 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 
 `python -m publisher supply-report --manifest <79 후보 집계 출력>`은 게시 뒤 서비스 DB와 같은 run의 79 manifest를 대사해 DEC-01 운영 집계 기록(JSON)을 표준 출력에 낸다. 정책은 [서비스 범위 7.1절](../../docs/data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인), 판정 조건은 [Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계)이 정본이다.
 
-- **읽기만 한다.** `SET TRANSACTION READ ONLY` 트랜잭션 하나에서 `tutorial_stars`·`stars`·`publication_bundles`·`candidates`를 읽는다. `tutorial_stars`는 Gold 쓰기 계정 권한 밖이라 `planetory_app` 멤버 계정(`planetory_service`)으로 붙는다. 적재 명령과 계정을 섞지 않는다.
+- **읽기만 한다.** `REPEATABLE READ READ ONLY` 트랜잭션 하나에서 `tutorial_stars`·`stars`·`publication_bundles`·`candidates`(`supply.REPORT_TABLES`)를 읽는다. 두 조회가 같은 스냅샷을 보므로 그 사이 튜토리얼 전환이 커밋돼도 한 기록에 두 시점이 섞이지 않는다.
+- **보고 로그인.** 네 테이블의 SELECT만 가진 `planetory_reporter`로 붙는다(준비 절차는 [EC2 서비스 배포](../../infra/service/README.md#dec-01-공급-집계-보고-s15p21c206-79)). Gold 쓰기 계정은 `tutorial_stars` 권한이 없고, 앱 로그인(`planetory_service`)은 사람이 손으로 쓰지 않는다. `planetory_app` 역할에는 회원 기록 쓰기 권한까지 있어 보고용으로 물려받지 않는다.
 - **공급 TIC:** 이 run의 `ready`, DB current 판 = 이 run의 판, `published`, active·discoverable 후보 1개 이상, 사용 중(`active`) 튜토리얼 별 아님. 이 run 대상이 아닌 별(목업 등)은 세지 않는다.
-- **판정:** manifest가 미완료이거나 게시 누락(`publish_missing_tic_ids`)이 있으면 `undetermined`다. 공급 100개 이상이고 튜토리얼 1~5번이 모두 제공 가능해야 `pass`, 아니면 `short`다. 명령은 기록을 내면 0으로 끝나며 판정은 `verdict`로 본다.
+- **판정:** manifest가 미완료이거나 게시 누락(`publish_missing_tic_ids`)이 있으면 `undetermined`다. 공급 100개 이상이고 튜토리얼 1~5번이 모두 제공 가능해야 `pass`, 아니면 `short`다. 명령은 기록을 내면 0으로 끝나며 판정은 `verdict`로 본다. `ready`인데 번들이 없는 manifest처럼 집계할 수 없는 입력은 사유를 표준 오류로 내고 1로 끝난다. `--manifest -`이면 표준 입력에서 읽는다.
 
 ## 실행
 
@@ -136,7 +137,7 @@ python -m publisher notify --bundle b-12                  # 이미 current인 �
 python -m publisher tutorial-build --inputs <폴더> --out <폴더> --label-approval <근거>   # 로컬, DB 없음
 python -m publisher load-payload <payload 폴더>           # payload JSON을 게시한다
 python -m publisher tutorial-switch-sql                   # 튜토리얼 전환 SQL 출력. 소유자 psql로 넘긴다
-python -m publisher supply-report --manifest candidates.json  # planetory_service 계정으로 DEC-01 집계 기록을 읽기만 한다
+python -m publisher supply-report --manifest candidates.json  # planetory_reporter로 DEC-01 집계 기록을 읽기만 한다
 PYTHONPATH=../../libs/astro-kernel python -m unittest test_mock_source test_tutorial_source test_notify test_supply   # DB 없이 도는 검사
 PUBLISHER_TEST_DATABASE_URL=postgresql://<소유자>:<비밀번호>@127.0.0.1:<포트>/<DB> \
   PYTHONPATH=../../libs/astro-kernel python -m unittest test_load                   # 일회용 PostgreSQL에서 도는 적재 검사

@@ -239,6 +239,40 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 
 적재 결과는 별마다 `PUBLISHED b-<id>`이고, 다시 돌리면 `ALREADY_PUBLISHED`다. 전환 SQL이 멈추는 조건과 지우는 대상은 [Publisher](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272) 「튜토리얼 5종」에 있다. 멈추면 아무것도 바뀌지 않는다. 적용 뒤 확인할 것은 세 가지다: 별지도의 튜토리얼 경고가 사라지는지, `/api/v1/me/quests`가 5칸인지, 신규·기존 계정 모두 1번 별의 분석 화면이 열리는지.
 
+## DEC-01 공급 집계 보고 (S15P21C206-79)
+
+게시 뒤 DEC-01 운영 집계 기록을 낸다. 판정·필드는 [Publisher](../../distributed-system/publisher/README.md#dec-01-공급-집계-s15p21c206-79) 「DEC-01 공급 집계」를 따른다.
+
+### 준비 (한 번)
+
+보고 전용 로그인을 소유자로 만든다. 앱 로그인(`planetory_service`)과 Gold 적재 로그인(`planetory_publisher`)은 쓰지 않는다. `planetory_app` 역할은 회원 기록 쓰기 권한이 있어 물려주지 않고, 네 테이블(`supply.REPORT_TABLES`)의 SELECT만 준다. `public` 스키마의 PUBLIC 권한이 없으므로 USAGE도 따로 준다. 비밀번호는 명령줄에 두지 않는다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose exec service-db psql -U planetory -d planetory_poc \
+  -c "CREATE USER planetory_reporter" \
+  -c "GRANT USAGE ON SCHEMA public TO planetory_reporter" \
+  -c "GRANT SELECT ON tutorial_stars, stars, publication_bundles, candidates TO planetory_reporter" \
+  -c "REVOKE CREATE ON SCHEMA public FROM planetory_reporter" \
+  -c "ALTER ROLE planetory_reporter SET default_transaction_read_only = on"
+docker compose exec service-db psql -U planetory -d planetory_poc -c "\password planetory_reporter"
+```
+
+### 실행
+
+Publisher 이미지에 명령이 있다. 적재 서비스의 계정 변수를 실행할 때만 바꾸고, 비밀번호는 셸 환경에서 값 없이 넘긴다(`-e PGPASSWORD`). manifest는 표준 입력으로 넘겨 마운트하지 않는다.
+
+```sh
+cd "$DEPLOY_PATH"
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+read -rs PGPASSWORD && export PGPASSWORD
+docker compose --profile gold-mock run --rm --no-deps -T -e PGUSER=planetory_reporter -e PGPASSWORD gold-mock \
+  python -m publisher supply-report --manifest - < <79 후보 집계 출력>.json > supply-report.json
+unset PGPASSWORD
+```
+
+기록의 `verdict`가 `pass`·`short`·`undetermined` 중 하나다. 결과는 [서비스 배포 현재 상태](../../docs/project/service-deploy-status.md)에 run id와 함께 적는다.
+
 ## ERD
 
 Liam ERD 한 벌을 낸다. 호스트 포트를 열지 않고 `service` 네트워크 안에만 뜨며

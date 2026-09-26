@@ -6,8 +6,8 @@
 이 run에서 ready이고, 이 run의 판이 current이며, DEC-01 공급 자격(published 별, active이고 discoverable인
 후보)을 만족하고, 사용 중인(active) 튜토리얼 별이 아닌 TIC이다. Backend 발견 풀(OPS-08)은 후보를 보지 않아
 이 조건과 다르며 튜토리얼 active 기준만 같다. 이 run의 대상이 아닌 별(목업 등)은
-세지 않는다. 읽기만 한다. tutorial_stars를 읽으므로 planetory_app 역할 계정(planetory_service)으로 붙는다.
-Gold 쓰기 계정은 tutorial_stars 권한이 없다.
+세지 않는다. 읽기만 한다. REPORT_TABLES의 SELECT만 가진 보고 로그인(planetory_reporter)으로 붙는다.
+Gold 쓰기 계정은 tutorial_stars 권한이 없고, 앱 역할(planetory_app)은 쓰기 권한까지 있어 보고용으로 쓰지 않는다.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import json
 VERSION = "dec01-supply-79-v1"
 THRESHOLD = 100                  # DEC-01 일반 탐사 고유 TIC 하한
 TUTORIAL_SEQS = [1, 2, 3, 4, 5]  # DEC-01 튜토리얼 5종
+# 보고 로그인에 줄 SELECT 전부. infra/service README의 계정 준비와 test_load가 이 목록을 쓴다.
+REPORT_TABLES = ("tutorial_stars", "stars", "publication_bundles", "candidates")
 
 TUTORIAL_SQL = "SELECT seq, tic_id FROM tutorial_stars WHERE active ORDER BY seq"
 STAR_SQL = """
@@ -32,9 +34,13 @@ STAR_FIELDS = ("tic_id", "service_status", "bundle_version", "discoverable")
 
 
 def read_database(conn, tic_ids):
-    """읽기 전용 트랜잭션 하나에서 활성 튜토리얼 슬롯과 대상·튜토리얼 별의 상태를 읽는다."""
+    """읽기 전용 스냅샷 하나에서 활성 튜토리얼 슬롯과 대상·튜토리얼 별의 상태를 읽는다.
+
+    READ COMMITTED는 문장마다 스냅샷을 새로 잡는다. 두 조회 사이에 튜토리얼 전환이 커밋되면 한 기록에
+    두 시점이 섞이므로 REPEATABLE READ로 한 시점에 묶는다.
+    """
     with conn.transaction():
-        conn.execute("SET TRANSACTION READ ONLY")
+        conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         slots = dict(conn.execute(TUTORIAL_SQL).fetchall())
         rows = conn.execute(STAR_SQL, (sorted(set(tic_ids) | set(slots.values())),)).fetchall()
     return slots, [dict(zip(STAR_FIELDS, r)) for r in rows]
@@ -59,6 +65,9 @@ def supply_record(manifest, star_rows, tutorial_slots, aggregated_at):
     expected = {b["tic_id"]: b["bundle_version"] for b in manifest["bundles"]}
     tutorial = set(tutorial_slots.values())
     ready = sorted(by_status.get("ready", []))
+    # 커널은 ready마다 번들을 남기지만 스키마로는 표현하지 못한다. 손으로 고친 manifest를 거른다.
+    if set(ready) - expected.keys():
+        raise ValueError(f"ready인데 manifest 번들이 없다: {sorted(set(ready) - expected.keys())}")
     missing = [t for t in ready if (stars.get(t) or {}).get("bundle_version") != expected[t]]
     published = [t for t in ready if t not in missing]
     offered = [t for t in published if servable(t)]
