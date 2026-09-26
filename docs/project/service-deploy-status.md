@@ -155,6 +155,24 @@ Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시
 - 동작 확인은 Frontend `a8fb6667`에서 했다. 같은 날 22:29 KST에 Frontend를 `50e13981`로 올렸고(위 절), 이 판에서 잔차 화면은 다시 확인하지 않았다.
 - 되돌리기는 [EC2 서비스 배포](../../infra/service/README.md) 「온라인 계산 Worker」의 되돌리기 표를 따른다.
 
+## Publisher 운영 적재 경로 (S15P21C206-85, 2026-09-27)
+
+GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend에 알리는 경로를 열었다. 구성·ACL·검증은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」에 있다.
+
+| 항목 | 값 |
+| --- | --- |
+| 배포 경로 `compose.yaml` | 85 브랜치 판(`d146e104`, `service-db` `127.0.0.1:5432`)으로 손으로 교체. 이전 판은 `compose.yaml.bak-85-20260926-191132` |
+| `service-db` | 04:11 KST 재생성. 직전 덤프 `backups/service-db-20260926-191132.sql` |
+| `.env` | `INTERNAL_SERVICE_TOKEN`을 새로 만들어 넣었다. 값은 EC2-A `.env`와 Node 1 env 파일에만 있다 |
+| Backend | 04:12 KST 같은 이미지로 재생성해 토큰을 읽혔다. 헬스 UP, 토큰 없는 내부 호출 401 |
+| `tailscale serve` | `--tcp 5432`·`--tcp 8080` → loopback(`--bg`, 재부팅 뒤에도 유지) |
+| Tailscale | `ec2-a` `tag:hadoop` → `tag:service`, `node-1`에 `tag:publisher` 추가 |
+| Node 1 | `/etc/planetory/publisher/env`(root `0600`), 이미지 `planetory/publisher:50e13981b036aa1378d8ca0d1624641cfc9d48ab`(V29) |
+
+- **MR 병합 전 주의.** CI 배포 job은 자기 파이프라인 commit의 `compose.yaml`을 올린다. 병합 전 develop 판에는 `service-db` 포트가 없다. 그 뒤 `service-db`가 재생성되면(인자 없는 `up -d`, `--no-deps` 없는 `run`) loopback 포트가 사라져 적재 경로가 끊긴다. 도는 컨테이너는 배포만으로는 바뀌지 않는다.
+- Backend 재생성으로 메모리 저장소의 잔차 작업 `rj-1`·`rj-2`가 사라졌다(`InMemoryResidualJobStore`, 위 88 절).
+- 시험은 임시 `hidden` 별 `900000099`로 했고 목업 판·별을 모두 지웠다. 이때 운영 DB에는 별 6개와 `pv1-` 판 5개(current)만 있었고, 아래 표의 더미 별 40개와 목업 판 `b-1`~`b-4`는 없었다.
+
 ## 손으로 넣은 데이터 (운영 값 아님)
 
 로그인을 뚫기 위해 EC2-A DB에 직접 넣었거나, 배포를 확인하려고 화면에서 만든 값이다. **운영이 정한 값이 아니다.**

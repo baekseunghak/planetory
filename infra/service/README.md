@@ -187,7 +187,7 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 
 분석은 회원이 발견한 별만 열린다(`STAR_LOCKED`). 화면을 열어 볼 목적이면 회원 대부분이 가진 튜토리얼 별을 넣는다. 운영에 올린 대상은 [서비스 배포 현재 상태](../../docs/project/service-deploy-status.md) 「손으로 넣은 데이터」에 적는다.
 
-같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
+같은 명령을 다시 돌리면 `ALREADY_PUBLISHED`로 끝나고 DB는 바뀌지 않는다. 같은 TIC이면 판 버전이 같기 때문이다. 알림은 이미 current인 판에도 다시 보낸다(`load.notify_targets`, 2026-09-27 재실행에서 HTTP 200 확인). 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 같은 명령을 다시 돌리거나 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
 
 ```sh
 docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher notify --bundle b-<id>
@@ -251,7 +251,21 @@ tailscale serve status
 1. Node 1 → `ec2-a:5432,8080` 허용
 2. 그 밖의 모든 출발지(팀원 장비 `autogroup:member`, 다른 `tag:hadoop` 서버)는 `ec2-a:5432,8080`에 닿지 않는다
 
-ACL은 허용만 있고 차단 규칙이 없다. 지금은 `autogroup:member → tag:hadoop:*`가 `ec2-a`의 모든 포트를 허용하므로, `ec2-a`를 그 와일드카드에서 떼어 필요한 포트만 따로 허용해야 한다. 적용 뒤 아래 검증을 다시 돌린다.
+ACL은 허용만 있고 차단 규칙이 없다. `[tag:hadoop, autogroup:member] → tag:hadoop:*`가 `ec2-a`의 모든 포트를 허용했으므로 `ec2-a`를 `tag:hadoop`에서 떼어 새 태그로 옮겼다(2026-09-27 적용).
+
+| 장비 | 태그 |
+| --- | --- |
+| `ec2-a` | `tag:service`만(`tag:hadoop` 제거) |
+| `node-1` | `tag:hadoop`, `tag:publisher` |
+
+| 규칙 | 목적 |
+| --- | --- |
+| `tag:publisher → tag:service:5432,8080` | 적재와 판 전환 알림 |
+| 멤버·`tag:hadoop`·`tag:registry` → `tag:service:22`, owner도 `tag:service:22`만 | 사람과 CI Runner의 SSH. 그 밖의 포트는 닫힌다 |
+| `tag:service → tag:registry:5000` | `ec2-a`의 이미지 pull. 예전에는 `tag:hadoop` 규칙으로 받았다 |
+| `ssh` 규칙 세 곳의 `dst`에 `tag:service` 추가 | 멤버 `check`, owner `check`, CI Runner의 `deploy` 계정 |
+
+정책 `tests`에 `tag:publisher`의 5432·8080 허용과 `tag:hadoop`·owner 계정의 거절을 넣었다. 정책을 고칠 때 이 검사가 깨지면 저장되지 않는다. 태그를 다시 합치거나 `ec2-a`에 `tag:hadoop`을 붙이면 5432·8080이 tailnet 전체에 열린다.
 
 ### 적재 계정
 
@@ -287,15 +301,19 @@ Airflow가 이 실행을 부르는 것은 게시 gate(`S15P21C206-80`), 이미�
 
 적재부터 current 전환까지 한 트랜잭션이다. 커밋 전에 연결이 끊기면 PostgreSQL이 트랜잭션을 롤백하고 기존 current가 남는다. 같은 명령을 다시 돌리면 새로 게시하거나, 이미 커밋됐으면 `ALREADY_PUBLISHED`로 끝난다([Publisher](../../distributed-system/publisher/README.md) 「적재 절차」).
 
-### 검증
+### 검증 (2026-09-27)
 
-아래 항목은 운영 적용 뒤 확인한다. 결과와 날짜를 이 절에 남긴다.
+운영에 목업 별이 없어 임시 `hidden` 별 `900000099`를 만들어 시험하고, 끝난 뒤 위 「Gold 목업」 「삭제」 SQL과 별 `DELETE`로 모두 지웠다. 실제 `pv1-` 판 5개는 건드리지 않았다.
 
-- Node 1에서 목업 1회 적재, DB 판 상태, 알림 HTTP 200
-- 팀원 PC·EC2-B·node-2에서 `ec2-a:5432`·`ec2-a:8080` 접속 거절
-- 인터넷 측 개방 포트 0개(84와 같은 방식)
-- 적재 중 연결을 강제로 끊었을 때 롤백·current 유지, 재실행 결과
-- 비밀 값이 이미지·저장소·로그에 없음
+| 항목 | 결과 |
+| --- | --- |
+| 적재·알림 | Node 1에서 `PUBLISHED b-11`, 재실행 `ALREADY_PUBLISHED b-11`. 두 번 모두 알림 HTTP 200, Backend 로그에 `판 11(TIC 900000099) 후처리` |
+| 허용되지 않은 출발지 | 작업 PC(멤버), EC2-B, node-2에서 `ec2-a:5432`·`8080` 시간 초과(ACL이 버림). node-1만 연결 |
+| 인터넷 | EC2-A 공인 주소로 5432·8080·3000 시간 초과. 새 리스너는 tailnet 주소에만 있다 |
+| 연결 끊김 | 소유자 세션이 `publication_bundles`를 `SHARE`로 잠가 Publisher를 판 INSERT에서 세웠다. 이때 관측 원천·세그먼트는 이미 쓴 상태였다. 컨테이너를 강제 종료하고 잠금을 풀자 세션이 사라지고 관측·세그먼트·판 모두 0행, 전체 current 5개가 그대로였다. 이어진 재실행이 위 `PUBLISHED`다 |
+| 비밀 값 | Backend·DB 로그, 이미지 `Config.Env`, 남은 컨테이너 어디에도 토큰·비밀번호가 없다. env 파일은 EC2-A `.env`에서 서버 사이 파이프로만 옮겼다 |
+
+**공인 주소의 22번은 열려 있다.** 작업 PC에서 공인 주소로 22에 연결됐다. 85 이전부터의 상태(`ufw` 22 허용, OpenSSH 별칭 `ec2-a-ssh` 경로)이고 이번 변경과 무관하다. 보안그룹이 출발지를 제한하는지는 확인하지 않았다.
 
 ## ERD
 
