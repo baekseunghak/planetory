@@ -229,7 +229,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 
 `iteration`은 최초 탐색이 정상 수행된 TIC에만 실행한다. 공용 `iterate_bls(..., initial_search=first_result)`에 최초 결과를 메모리에서 직접 전달하고, `result_json`에 단계별 QA·종료 사유·채택 제안·설정 지문을 엄격 JSON으로 기록한다. `residual` 배열을 저장하지 않으며 후보의 `peak_id=step-N`을 DB candidate ID로 취급하지 않는다. `complete=true`인 `status=ok`만 다음 후보 검토의 입력으로 사용할 수 있고 `incomplete`·`qa_stopped`·`failed`는 기존 공개 판을 바꾸지 않는다.
 
-반복 커널이 스스로 내린 품질 판정으로 멈춘 경우(`removal_qa_failed`, `candidate_validation_failed`)는 manifest `status=qa_stopped`로 기록한다. 같은 입력과 설정에서는 항상 같은 결과가 나오는 과학 판정이므로 처리 실패로 세지 않고 retry 대상도 아니다. 멈추기 전까지 수락한 후보와 `result_json`은 그대로 보존한다. 예를 들어 13 Sector 장기관측의 고SNR 행성은 박스 모델 제거 잔차에 `alias_multipliers=(0.5, 1, 2)` 밖의 배수 alias가 남아 여기서 멈출 수 있다. 판정 기준 자체는 122 커널 범위다. `numerical_failure`는 커널의 예외 처리 경로가 코드 결함까지 같은 이름으로 기록하므로 `failed`로 유지한다.
+반복 커널이 스스로 내린 품질 판정으로 멈춘 경우(`removal_qa_failed`, `candidate_validation_failed`)는 manifest `status=qa_stopped`로 기록한다. 같은 입력과 설정에서는 항상 같은 결과가 나오는 과학 판정이므로 처리 실패로 세지 않고 retry 대상도 아니다. 멈추기 전까지 수락한 후보와 `result_json`은 그대로 보존한다. 예를 들어 13 Sector 장기관측의 고SNR 행성은 박스 모델 제거 잔차에 `alias_multipliers=(0.5, 1, 2)` 밖의 배수 alias가 남아 여기서 멈출 수 있다. 판정 기준 자체는 122 커널 범위다. `numerical_failure`는 커널의 예외 처리 경로가 코드 결함까지 같은 이름으로 기록하므로 `failed`로 유지한다. 반복 뒤 원본 SNR 재검증에서 난 예외도 커널이 `numerical_failure`(`phase=original_validation`, `error_type`)로 기록하므로 `qa_stopped`가 아니라 `failed`다(2026-09-26 보완). 그 전 release에서는 이 예외가 NaN으로 바뀌어 `candidate_validation_failed`(`qa_stopped`)에 섞일 수 있었다. 2026-09-25 전체 run은 수락 후보의 `original_snr`가 null인 TIC가 0개라 이 경로의 예외가 없었다. 그 run의 `qa_stopped` 17,553개는 `removal_qa_failed` 17,460개와 `candidate_validation_failed` 93개(유한한 원본 SNR 미달 91개, 반복 루프 안 후보 기하 검증 실패 2개)다.
 
 manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 한 행이다.
 

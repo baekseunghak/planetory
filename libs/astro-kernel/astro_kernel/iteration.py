@@ -425,23 +425,27 @@ def iterate_bls(time, flux, *, input_snapshot_id, preprocessing_version,
         accepted.append(c)
         current = residual
     valid_original = np.isfinite(f)
+    validation_errors = set()
     for c in accepted:
         try:
             score = fixed_snr(t[valid_original], f[valid_original], c["period_days"],
                               c["duration_hours"] / 24, c["epoch_btjd"])
-        except Exception:
+        except Exception as exc:  # fixed_snr already returns NaN for unmeasurable input
             score = float("nan")
+            validation_errors.add(type(exc).__name__)
         c["original_snr"] = score
         c["validated_on_original"] = bool(np.isfinite(score) and score >= cfg.snr_min)
-    if accepted and not all(c["validated_on_original"] for c in accepted) and termination in (
-            "no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
-        search_termination = termination
+    failed_steps = [c["step"] for c in accepted if not c["validated_on_original"]]
+    record = dict(step=len(accepted), status="error", phase="original_validation",
+                  search_termination=termination, failed_candidate_steps=failed_steps,
+                  n_points=int(valid_original.sum()))
+    if validation_errors:
+        # An exception is an execution failure, never a science verdict, even after removal_qa_failed.
+        termination = "numerical_failure"
+        steps.append(dict(record, reason=termination, error_type=",".join(sorted(validation_errors))))
+    elif failed_steps and termination in ("no_quality_peak", "duplicate_or_harmonic_only", "max_iterations_reached"):
         termination = "candidate_validation_failed"
-        steps.append(dict(step=len(accepted), status="error", reason=termination,
-                          phase="original_validation", search_termination=search_termination,
-                          failed_candidate_steps=[c["step"] for c in accepted
-                                                  if not c["validated_on_original"]],
-                          n_points=int(valid_original.sum())))
+        steps.append(dict(record, reason=termination))
     # Stable step fields keep absent measurements explicit, never NaN in JSON.
     defaults = dict(rank=0, n_transits=0, n_points=0, duplicate_of_step=-1,
                     window_offset_reference="unity", masked_points=0,

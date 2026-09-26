@@ -449,6 +449,46 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                          iteration_location="/final/iteration", iterate=stopped_by("numerical_failure"))
         self.assertEqual(numerical.iteration_manifest[5], "failed")
 
+    def test_real_iteration_kernel_keeps_validation_exceptions_out_of_qa_stopped(self):
+        # The real kernel decides the termination; only its BLS/QA/SNR leaves are stubbed.
+        import astro_kernel.iteration as kernel
+        n = 1000
+        time = np.linspace(1.0, 21.0, n)
+        long_prepared = SimpleNamespace(**{**vars(prepared()), "time": time, "flux": np.ones(n),
+            "flux_err": np.full(n, 0.01), "sector": np.ones(n, int), "product_id": np.array(["p1"] * n, dtype=object),
+            "source_row": np.arange(n), "cadenceno": np.arange(1, n + 1), "original_quality": np.zeros(n, int),
+            "n_raw": n})
+        long_detrended = SimpleNamespace(**{**vars(detrended()), "time": time, "trend": np.ones(n),
+            "flux_det": 1 + np.random.default_rng(42).normal(0, 0.001, n), "kept": np.ones(n, bool),
+            "segment_id": np.zeros(n, int), "reasons": np.array([""] * n, dtype=object)})
+        peak = dict(rank=1, period_days=2.0, epoch_btjd=1.5, duration_hours=2.0, depth=0.01, depth_err=0.0001,
+                    power=100.0, sde=10.0, snr=20.0, n_transits=10, n_in_transit=30, sector_stats=[],
+                    sector_consistency_status="unavailable", mask_dropped_fraction=None, diagnostic_reasons=[])
+        config = dict(period_min_days=0.5, period_max_days=6.0, n_periods=20000, durations_hours=[1.2, 1.92, 2.88, 4.8])
+
+        def run_with(original_snr):
+            searches = iter([[peak], []])
+            with patch.object(kernel, "search_bls", lambda *args, **kwargs: dict(
+                    status="ok", peaks=next(searches), periodogram=SimpleNamespace(config=config))), \
+                    patch.object(kernel, "refine_peak", lambda t, f, p, *args: p), \
+                    patch.object(kernel, "_qa", lambda *args: dict(qa_failures="")), \
+                    patch.object(kernel, "fixed_snr", original_snr):
+                return call([bronze_row()], lambda curves, **kwargs: (long_prepared, long_detrended),
+                            lambda *args, **kwargs: search_result("ok"), iteration_location="/final/iteration",
+                            iterate=lambda *args, **kwargs: iterate_bls(*args, **{**kwargs, "initial_search": None}))
+
+        weak = run_with(lambda *args: 0.0)
+        self.assertEqual(weak.iteration_manifest[5:7], ("qa_stopped", False))
+        self.assertEqual(weak.iteration_manifest[18], "candidate_validation_failed")
+
+        def broken(*args):
+            raise RuntimeError("original validation defect")
+        crashed = run_with(broken)
+        self.assertEqual(crashed.iteration_manifest[5], "failed")
+        self.assertEqual(crashed.iteration_manifest[18], "numerical_failure")
+        last = json.loads(crashed.iteration[-1])["steps"][-1]
+        self.assertEqual((last["phase"], last["error_type"]), ("original_validation", "RuntimeError"))
+
     def test_unexpected_failure_is_retryable_and_does_not_escape_tic(self):
         failed = call(
             [bronze_row()],

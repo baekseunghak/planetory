@@ -577,6 +577,18 @@ QA 실패·상한 도달·원본 재검증 실패, 일대다/다대일·고조�
 최상위 termination과 마지막 steps.reason은 일치한다. 이전 정상 잔차·후보 진단은 보존하지만
 공개 가능 후보로 승격하지 않는다. 이미 제거 QA 실패 등으로 끝난 경우에는 그 실패 사유를 유지한다.
 
+원본 SNR 계산이 **예외**로 끝나면(78 리뷰 보완, 2026-09-26) 과학 판정이 아니라 실행 실패로 본다.
+`fixed_snr`는 산포 ≤ 0·통과 창 빈 배열 같은 측정 불가를 스스로 NaN으로 돌려주므로, 바깥에서 잡히는 예외는
+코드 결함·환경 오류다. 이때 종료는 `numerical_failure`이고, 마지막 기록은 `phase=original_validation`,
+`status=error`, `reason=numerical_failure`, `error_type`(예외 클래스 이름), `search_termination`,
+`failed_candidate_steps`를 남긴다. 제거 QA 실패로 끝난 경우에도 예외가 우선한다.
+예외 없이 계산된 SNR 미달·NaN만 `candidate_validation_failed`다.
+이 구분 이전 결과에서 `original_snr`가 NaN·null인 `candidate_validation_failed`는
+정상 NaN 경로와 예외를 구분할 수 없어 예외 여부를 복원하지 못한다.
+`original_snr`가 유한한데 기준에 못 미친 건은 과학 판정으로 확정할 수 있다.
+2026-09-25 Sector 1~13 Silver run에는 `original_snr`가 null인 수락 후보가 없었다
+([집계](../../distributed-system/spark/README.md#tess-bronze--silver-최초-탐색-s15p21c206-78)).
+
 ## 근거 구간 마스킹 (245)
 
 상태: 구현·로컬 검증 완료, 리뷰 전. 숫자 커널 `silver-biweight-1.0.0`은 유지하고 입력 마스크 계약을
