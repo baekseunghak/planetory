@@ -707,6 +707,10 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 
 `astro_kernel.gold_serialization.assemble`은 122·123·124 결과를 검증하고 Gold 배열·레코드 checksum·manifest를 구성하는 순수 함수다. `gold_canonical`에 공용 checksum 구현을 두며 파일·네트워크·DB에 접근하지 않는다. 호출자가 ID·내용 기반 snapshot·계산 버전·AI 미실행 결정 근거를 공급한다. `previous_bundle`을 통한 퇴역 후보·별칭 보존과 변경 이력 제안을 지원하며, ID 할당·적용 시각·Publisher 트랜잭션은 수행하지 않는다. `validated` 결과도 `publishable=false`이며 운영 게시 승인이 아니다. [입력·검증 범위와 실행 기록](../../experiments/gold-roundtrip/README.md)을 참조한다.
 
+## 79 게시 후보 집계
+
+`astro_kernel.candidate_aggregation.aggregate`는 한 run의 대상 TIC마다 125 `assemble`을 호출해 후보 표·staging 제안·manifest를 만든다. 계산 버전과 AI 정책은 run 단위로 받으며 TIC별 입력이 이를 덮어쓰면 거절한다. AI 정책은 상수 `AI_POLICY`(미실행 버전 `AI_NOT_EXECUTED = "none/policy-hold-118"`)와 같아야 하며, 호출자(80)는 이 상수를 그대로 넘긴다. TIC 상태·완료 판정·`no_signal` 매핑은 [Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계), 형식은 [`publication-candidates.schema.json`](../../contracts/gold/publication-candidates.schema.json)을 따른다. 파일·DB·네트워크에 접근하지 않고 ID를 할당하지 않는다. `tests/test_candidate_aggregation.py`는 실제 124 출력으로 만든 합성 run만 쓴다. 실제 Silver 연결 검증이 아니다.
+
 
 ## 243 운영 탐색 SDE 버전 선택
 

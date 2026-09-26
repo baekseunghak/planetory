@@ -107,6 +107,8 @@ validate:astro-kernel:
   rules:
     - changes:
         - libs/astro-kernel/**/*
+        # 커널 테스트가 transit-model·publication-candidates 스키마를 읽는다.
+        - contracts/gold/**/*
         - distributed-system/spark/**/*
         - distributed-system/publisher/**/*
         - .gitlab/ci/common.yml

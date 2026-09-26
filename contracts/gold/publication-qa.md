@@ -97,8 +97,10 @@ Publisher 가 적재 **전에** 정규화하고, 같은 배열을 checksum 과 D
 | 입력 부족(유효 관측점 하한 미달, 세그먼트 0개) | `PUBLISH_REJECTED` | 없음 | 하한 수치는 D02-2/D07-1 | 윤성용 |
 | AI 실행 실패(일시적: 타임아웃·프로세스 오류) | 게시 트랜잭션을 남기지 않고 `PUBLISH_ROLLED_BACK`, 같은 `bundle_version` 으로 재시도. `ai_model`·`ai_threshold` 버전을 재시도 때문에 올리지 않는다 | 없음(v0) | 재시도 횟수·간격은 Airflow 쪽(89/90 계열) | 김동혁 |
 | AI 실패가 반복되거나 후보 일부만 실패 | `PUBLISH_REJECTED`(commit 없음, Bundle 전체 비공개). 실패한 후보만 `ai_evaluations.score = NULL` + `ai_executions.status` 실패값으로 남기고 나머지만 공개하는 **부분 공개는 v0 에서 채택하지 않음**. 아무것도 commit 되지 않았으므로 재추론이 성공하면 **같은 `bundle_version` 으로 처음 게시**되어 69 계약을 바꿀 필요가 없다 | 부분 공개 | 부분 공개 뒤 재추론 성공을 새 판으로 게시하면 입력·계산 버전이 같아 `bundle_version` 이 같은 값이 되어 69 멱등 계약(`ALREADY_PUBLISHED`)과 충돌한다. 실패 표식을 의미 payload 에 넣을지 등은 69 담당과 합의. SRS AI-01~04 의 P0 전체 후보 추론 요건 확인 | 윤성용·김동혁(69)·강재민 |
-| 후보 0개(무신호) | 공개하되 서비스 제외 상태 전달 | — | DEC-01 | 기존 결정 |
+| 후보 0개(무신호) | 적재·공개하지 않는다. 게시를 호출하지 않고 실패로 세지 않는다. 이미 current 가 있는 별이 새 판에서 active 후보를 모두 잃으면 보류하고 기존 current 를 유지한다 | — | SRS SUB-11(1)·DEC-25·ERD 결정 3. 79 집계 매핑은 [README 4.3절](README.md). **2026-09-27 정정:** 이전 문구 "공개하되 서비스 제외 상태 전달"은 이 정본과 어긋났다 | 정본 결정 |
 | Silver–EC2 잔차 불일치(허용 오차 등록 뒤) | `PUBLISH_REJECTED` | — | 4절 값 등록 전에는 판정 안 함 | D23 |
+
+정책상 AI 미실행(126 인계 결정)은 위 표의 AI 실행 실패와 다르며 실패가 아니다. `ai_results` 는 빈 목록이고 `ai_executions` 행을 만들지 않는다. 계산 버전 `ai_model`·`ai_threshold` 는 `none/policy-hold-118` 로 고정한다(2026-09-27, [README 4.3절](README.md)).
 
 ## 6. 정합화가 필요한 기존 문서
 
