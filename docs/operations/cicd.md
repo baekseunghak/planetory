@@ -258,9 +258,8 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 | `validate:compose` | Compose·Dockerfile·CI 파일 변경 | 루트·control-plane·worker Compose `config -q` |
 | `validate:hadoop-config` | Hadoop·YARN XML, `workers`, `scripts/*yarn*`, `validate.py` 변경 | `infra/distributed-system/validate.py` |
 | `validate:contracts` | `contracts/` 변경 | Gold 게시 계약·배열/레코드 checksum 벡터·온라인 파생 계산 계약의 검사기(Node 표준 모듈만 사용) |
-| `validate:publisher` | Publisher·`libs/astro-kernel`·Backend 마이그레이션·`publisher.yml` 변경 | Publisher 단위 테스트와 적재 테스트(`test_load`, S15P21C206-86). 일회용 `postgres:18.6-alpine` 서비스에 마이그레이션 전체를 적용한 새 스키마에서 멱등·충돌·실패 rollback·동시 게시를 본다 |
 
-- 표의 job 모두 `validate` 단계에 `needs` 없이 있다. 기준 브랜치의 이미지 빌드 `build:*`는 `build` 단계에 `needs` 없이 있어, 같은 파이프라인의 검사가 하나라도 실패하면 시작하지 않는다. MR·브랜치 파이프라인에는 `build` 단계 job이 없고, `*:image`는 push하지 않는 확인용 빌드라 `needs: []`로 검사와 나란히 돈다. 거기서는 검사 실패가 파이프라인 실패로 드러난다.
+- 세 job 모두 `validate` 단계에 `needs` 없이 있다. 기준 브랜치의 이미지 빌드 `build:*`는 `build` 단계에 `needs` 없이 있어, 같은 파이프라인의 검사가 하나라도 실패하면 시작하지 않는다. MR·브랜치 파이프라인에는 `build` 단계 job이 없고, `*:image`는 push하지 않는 확인용 빌드라 `needs: []`로 검사와 나란히 돈다. 거기서는 검사 실패가 파이프라인 실패로 드러난다.
 - 계약 검사는 fixture와 검사기가 서로 맞는지만 본다. Publisher·Backend·Worker 코드가 계약을 따르는지는 각 컴포넌트의 테스트가 맡는다.
 - 2026-09-25 확인: 브랜치 파이프라인 `#222677`(통과) → `#222681`(실패) → `#222683`(되돌림, 통과). `#222681`은 Gold fixture의 배열 checksum 한 글자, YARN `worker.xml`의 `yarn.nodemanager.resource.memory-mb`, worker Compose의 알 수 없는 키를 일부러 틀린 커밋 `64f58477`이다. `validate:contracts`(`CHECKSUM_MISMATCH`), `validate:hadoop-config`(assert), `validate:compose`(`Additional property ... is not allowed`)가 각각 실패했다. 실행 Runner는 `planetory-docker-runner`(GitLab Runner API 기준 `linux`/`amd64`, 태그 `amd64-docker`)다.
 - 기준 브랜치에서 `build:*`가 실제로 멈추는 것은 develop을 깨야 볼 수 있어 확인하지 않았다. 위 stage 구조(검사는 `validate`, 이미지 빌드는 `needs` 없는 `build`)로 판단한다.
@@ -273,8 +272,9 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 | `validate:tess-hdfs-loader` | `ingestion/hdfs/**/*.py`·적재 스크립트 변경 | HDFS 적재기 31개, Sector 수용 5개 |
 | `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개. 표준 라이브러리만 쓴다 |
 | `validate:astro-kernel` | `libs/astro-kernel`·spark·publisher 변경 | 커널 333개, spark 22개, publisher 목업 적재 7개. 의존성은 커널의 `uv.lock`으로 고정한다 |
+| `validate:publisher` | Publisher·`libs/astro-kernel`·Backend 마이그레이션·`publisher.yml` 변경 | publisher 적재 11개(`test_load`, S15P21C206-86). 일회용 `postgres:18.6-alpine` 서비스에 마이그레이션 전체를 적용한 새 스키마에서 멱등·충돌·실패 rollback·동시 게시를 본다. DB가 필요한 테스트만 여기 둔다 |
 
-- 세 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).
+- 네 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).
 - Worker(`apps/derived-compute`) 테스트는 `derived-compute:test`(S15P21C206-88)가 맡는다.
 - 새 테스트 파일을 만들면 해당 job의 `script`에 넣는다. `discover`로 도는 airflow·ingestion `tests/`는 저절로 포함된다.
 

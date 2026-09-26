@@ -16,7 +16,8 @@ validate:publisher:
   script:
     - pip install --no-cache-dir -r distributed-system/publisher/requirements.txt ./libs/astro-kernel
     - cd distributed-system/publisher
-    - python -m unittest -v test_mock_source test_notify test_load
+    # test_mock_source는 validate:astro-kernel이, test_notify는 validate:data-platform이 돈다(S15P21C206-91).
+    - python -m unittest -v test_load
   rules:
     - changes:
         - distributed-system/publisher/**/*
