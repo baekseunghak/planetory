@@ -256,7 +256,7 @@ GCP Node 1의 Publisher가 tailnet으로 이 노드의 서비스 DB에 적재하
 
 **tailnet IP에 직접 바인드하지 않는다.** 부팅 때 Docker가 Tailscale보다 먼저 뜨면 `100.x` 주소가 아직 없어서 `service-db` 컨테이너가 포트를 잡지 못하고 뜨지 않는다. `tailscale serve`는 loopback으로 넘기기만 하므로 이런 경합이 없다. Node 1 Spark History Server(`tailscale serve --http=18080`)와 같은 방식이다.
 
-**출발지 통제는 ACL 하나뿐이다.** serve가 중계하면 PostgreSQL이 보는 출발지는 Docker 게이트웨이다. 그래서 `pg_hba`로 Node 1을 가려낼 수 없고 기본 `host all all all scram-sha-256`을 그대로 둔다. ACL에서 Node 1 외 출발지를 허용하면 그 장비는 비밀번호만 있으면 어느 계정으로든 붙을 수 있다. Node 1에는 `planetory_publisher` 비밀번호만 둔다.
+**출발지 통제는 ACL 하나뿐이다.** serve가 중계하면 PostgreSQL이 보는 출발지는 Docker 게이트웨이다. 그래서 `pg_hba`로 Node 1을 가려낼 수 없고 기본 `host all all all scram-sha-256`을 그대로 둔다. ACL에서 Node 1 외 출발지를 허용하면 그 장비는 비밀번호만 있으면 어느 계정으로든 붙을 수 있다. Node 1에는 `planetory_publisher` 비밀번호만 둔다. **Node 1 비밀번호가 새어도 피해는 Gold 훼손까지다.** `planetory_publisher`는 `planetory_gold_writer` 멤버라 V2(`V2__gold_roles.sql`)의 Gold 12개 테이블 읽기·쓰기와 preflight용 `flyway_schema_history`·`operation_settings` 읽기만 가진다. `users`·`submissions`·`posts` 같은 회원 테이블은 읽을 수 없고, 최악은 후보를 지우거나 가짜 후보를 넣는 것이다(`!228` 강재민 리뷰).
 
 ### EC2-A 적용 (한 번)
 
