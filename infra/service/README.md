@@ -24,7 +24,7 @@ NASA 원천 조회의 `NASA_PLANET_INFO_*` 7개 설정도 Compose가 Backend에 
 
 ## service-db
 
-PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙으며 호스트 포트를 열지 않는다. 외부 인바운드는 0개다.
+PostgreSQL 18.6을 같은 Compose 안에서 `service-db`로 띄운다. Backend는 `service` 네트워크로 `service-db:5432`에 붙는다. 호스트에는 `127.0.0.1:5432`만 연다. 이 포트는 GCP Node 1 Publisher 전용이고 아래 「Publisher 운영 적재 경로」의 `tailscale serve`만 이 포트로 넘긴다. 외부 인바운드는 0개다.
 
 `.env`에 `POSTGRES_PASSWORD`가 없으면 기동이 실패한다. `POSTGRES_DB`, `POSTGRES_USER`와 Backend의 `DATABASE_*`는 기본값을 쓰면 서로 맞는다.
 
@@ -210,6 +210,92 @@ docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m pub
 ```
 
 회원이 목업 판·후보를 참조하면(제출·게시글·공개 분석·성과) 지우지 않고 멈춘다. 그 기록을 지울지는 사람이 정한다.
+
+## Publisher 운영 적재 경로 (S15P21C206-85)
+
+GCP Node 1의 Publisher가 tailnet으로 이 노드의 서비스 DB에 적재하고 Backend에 판 전환을 알리는 경로다. 결정은 다음과 같다.
+
+| 항목 | 결정 |
+| --- | --- |
+| DB 접속 | Node 1 → tailnet → `ec2-a:5432`(`tailscale serve --tcp`) → `127.0.0.1:5432` → `service-db` |
+| 알림 | 같은 방식으로 `ec2-a:8080` → `127.0.0.1:8080` → Backend `POST /internal/bundles/b-<id>/activated` |
+| 허용 출발지 | Node 1만. Tailscale ACL로 강제한다 |
+| 인증 | DB는 `planetory_publisher`(scram-sha-256), 알림은 `X-Planetory-Service-Token` |
+| 비밀 값 | Node 1의 root 전용 `/etc/planetory/publisher/env`. 저장소·이미지·GitLab 변수에 두지 않는다 |
+| 알림 실패 | DB 전환은 그대로 두고 `notify --bundle b-<id>`로 다시 보낸다 |
+
+인터넷 쪽은 바뀌지 않는다. DB와 Backend는 loopback에만 바인드하고, tailnet 쪽 리스너는 tailscaled가 연다.
+
+**tailnet IP에 직접 바인드하지 않는다.** 부팅 때 Docker가 Tailscale보다 먼저 뜨면 `100.x` 주소가 아직 없어서 `service-db` 컨테이너가 포트를 잡지 못하고 뜨지 않는다. `tailscale serve`는 loopback으로 넘기기만 하므로 이런 경합이 없다. Node 1 Spark History Server(`tailscale serve --http=18080`)와 같은 방식이다.
+
+**출발지 통제는 ACL 하나뿐이다.** serve가 중계하면 PostgreSQL이 보는 출발지는 Docker 게이트웨이다. 그래서 `pg_hba`로 Node 1을 가려낼 수 없고 기본 `host all all all scram-sha-256`을 그대로 둔다. ACL에서 Node 1 외 출발지를 허용하면 그 장비는 비밀번호만 있으면 어느 계정으로든 붙을 수 있다. Node 1에는 `planetory_publisher` 비밀번호만 둔다.
+
+### EC2-A 적용 (한 번)
+
+`service-db`를 재생성하므로 몇 초 동안 DB 연결이 끊긴다. 데이터는 볼륨에 남는다.
+
+```sh
+cd "$DEPLOY_PATH"
+docker compose up -d --no-deps service-db     # 127.0.0.1:5432 포트 반영
+sudo tailscale serve --bg --tcp 5432 tcp://127.0.0.1:5432
+sudo tailscale serve --bg --tcp 8080 tcp://127.0.0.1:8080
+tailscale serve status
+```
+
+`--bg` 설정은 tailscaled 상태에 저장돼 재부팅 뒤에도 남는다. 경로를 닫을 때는 `sudo tailscale serve --tcp 5432 off`, `--tcp 8080 off`를 실행한다. loopback 포트는 남아도 외부에서 닿지 않는다.
+
+### Tailscale ACL
+
+정책의 정본은 Admin Console이다. 필요한 결과는 두 가지다.
+
+1. Node 1 → `ec2-a:5432,8080` 허용
+2. 그 밖의 모든 출발지(팀원 장비 `autogroup:member`, 다른 `tag:hadoop` 서버)는 `ec2-a:5432,8080`에 닿지 않는다
+
+ACL은 허용만 있고 차단 규칙이 없다. 지금은 `autogroup:member → tag:hadoop:*`가 `ec2-a`의 모든 포트를 허용하므로, `ec2-a`를 그 와일드카드에서 떼어 필요한 포트만 따로 허용해야 한다. 적용 뒤 아래 검증을 다시 돌린다.
+
+### 적재 계정
+
+위 「Gold 목업」 「준비」의 `planetory_publisher`를 그대로 쓴다. 이미 있으면 새로 만들지 않는다. 비밀번호를 바꿨으면 EC2-A `.env`의 `PUBLISHER_DB_PASSWORD`와 Node 1 env 파일을 함께 바꾼다.
+
+### Node 1 실행
+
+env 파일은 root 소유 `0600`이다. 키 이름만 적는다.
+
+```text
+PGHOST=ec2-a
+PGPORT=5432
+PGDATABASE=planetory_poc
+PGUSER=planetory_publisher
+PGPASSWORD=<비밀번호>
+BACKEND_URL=http://ec2-a:8080
+INTERNAL_SERVICE_TOKEN=<EC2-A .env와 같은 값>
+```
+
+`ec2-a`는 MagicDNS 이름이다. 컨테이너를 host 네트워크로 띄워 Node 1의 이름 해석과 tailnet 경로를 그대로 쓴다. 비밀 값은 `--env-file`로만 넘기고 명령줄에 두지 않는다.
+
+```sh
+sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
+  <registry>/planetory/publisher:<sha> python -m publisher mock-load --tic <TIC 목록>
+# 알림만 다시 보낼 때
+sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
+  <registry>/planetory/publisher:<sha> python -m publisher notify --bundle b-<id>
+```
+
+Airflow가 이 실행을 부르는 것은 게시 gate(`S15P21C206-80`), 이미지 배포 job은 `S15P21C206-94` 범위다.
+
+### 연결이 끊기면
+
+적재부터 current 전환까지 한 트랜잭션이다. 커밋 전에 연결이 끊기면 PostgreSQL이 트랜잭션을 롤백하고 기존 current가 남는다. 같은 명령을 다시 돌리면 새로 게시하거나, 이미 커밋됐으면 `ALREADY_PUBLISHED`로 끝난다([Publisher](../../distributed-system/publisher/README.md) 「적재 절차」).
+
+### 검증
+
+아래 항목은 운영 적용 뒤 확인한다. 결과와 날짜를 이 절에 남긴다.
+
+- Node 1에서 목업 1회 적재, DB 판 상태, 알림 HTTP 200
+- 팀원 PC·EC2-B·node-2에서 `ec2-a:5432`·`ec2-a:8080` 접속 거절
+- 인터넷 측 개방 포트 0개(84와 같은 방식)
+- 적재 중 연결을 강제로 끊었을 때 롤백·current 유지, 재실행 결과
+- 비밀 값이 이미지·저장소·로그에 없음
 
 ## ERD
 

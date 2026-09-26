@@ -371,3 +371,4 @@
 | 2026-09-26 | data-platform 테스트를 CI validate 단계에 연결 | S15P21C206-91 | validate:data-platform, validate:astro-kernel, uv.lock, build:spark astropy | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | GCP Docker 배포 job·사용처 없는 GCP 이미지 빌드 제거, release 방식 유지 | S15P21C206-94 | deploy:ingestion, deploy:spark, build:spark, release, compose.worker.yaml, 262 방식 폐기 | 구현 완료, 병합 전 | [기록](2026-09-26.md) |
 | 2026-09-26 | 온라인 계산 Worker 운영 배포와 131 캡처 인계 | S15P21C206-88 | derived-compute, DERIVED_COMPUTE_URL, rj-1, rj-2, 캡처, 스니펫 193, V26~V29 | 검증 완료 | [기록](2026-09-26.md) |
+| 2026-09-27 | Publisher Node 1 → EC2-A DB 적재·알림 경로를 tailscale serve로 결정 | S15P21C206-85 | tailscale serve, 5432, 8080, ACL, planetory_publisher | 채택·운영 적용 전 | [기록](2026-09-27.md) |

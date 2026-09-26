@@ -201,6 +201,7 @@ GCP PublicationBundle → HDFS 백업·검증 → PostgreSQL staging 적재
 ```
 
 - Publisher는 `planetory_gold_writer`로 PostgreSQL Primary에 직접 적재한다. 서비스 런타임 역할은 Gold를 읽기만 한다.
+- Node 1 Publisher는 tailnet으로 EC2-A에 닿는다. EC2-A는 DB·Backend를 loopback에만 바인드하고 `tailscale serve --tcp 5432·8080`으로 넘기며, Tailscale ACL이 Node 1만 허용한다. 인터넷 인바운드는 0개로 유지된다. 비밀 값은 Node 1 root 전용 env 파일에 둔다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`).
 - 곡선 세그먼트·주기도·후보·manifest 적재와 판 전환은 하나의 PostgreSQL 트랜잭션으로 처리한다. `current` 부분 유일 인덱스의 즉시 검사를 피하도록 기존 `current`를 먼저 `archived`로 바꾼 뒤 신규 `staging`을 `current`로 올린다.
 - staging 적재와 current 전환은 구현 Task가 나뉘어도 Publisher가 연 같은 트랜잭션 안의 단계다. staging 단계는 독립적으로 commit하지 않으며 Publisher가 실패 시 전체 rollback하고 Airflow가 같은 `(tic_id, bundle_version)`으로 전체 게시를 재시도한다.
 - `(tic_id, bundle_version)`에는 DB 유일 제약을 두고 같은 TIC 게시를 `pg_advisory_xact_lock(tic_id)`으로 직렬화한다. 버전은 곡선 원천과 외부 참조를 모두 포함한 입력 snapshot·세그먼트 자연 키·계산 버전의 결정적 SHA-256이며 실행 시각·run id를 포함하지 않는다.
@@ -253,7 +254,6 @@ AI가 임의로 확정하지 말고 구현 티켓 또는 사용자 결정을 요
 - Redis TTL·메모리 상한과 장애 시 재계산 운영값. **세션이 같은 Redis로 들어오면서 eviction 정책이 선택 사항이 아니게 됐다**(84). `allkeys-*`는 세션 키도 지우고 `volatile-*`도 세션이 30분 TTL을 가져 안전하지 않다. 세션·캐시 인스턴스 분리 / `noeviction` / 세션 유실 수용 중 하나를 골라야 한다
 - 세션 Redis의 persistence 보장 범위(84). 앱만 재배포하면 persistence 없이도 세션이 유지되고, Redis 컨테이너 재시작·호스트 재부팅에서만 의미가 있다. 보장하지 않기로 정해도 되지만 그 경우 「Redis 재시작 시 전원 재로그인」이 운영 사실로 남아야 한다
 - PostgreSQL Gold 배열의 실측 용량과 보존 운영값
-- Publisher의 DB 접속 경로(GCP Node 1 → EC2-A 5432의 tailnet 승격 여부, 보류)와 커밋 후 알림 인증·재시도 운영값
 - 단일 connector의 지속 처리량·재연결 동작·무료 플랜 제약(84에서 실측. 실패 시 대안은 proxied A 레코드 1개 + 443). **지금까지 실측한 것은 replica 라우팅이 단일 노드로 간다는 사실뿐이며 처리량은 실측하지 않았다.**
 - 애플리케이션 계층 남용 제한의 위치·기준과 `CF-Connecting-IP` 전달 여부(84). Tunnel 아래서 `getRemoteAddr()`는 컨테이너 IP가 된다
 - EBS 스냅샷 도입 여부와 로그 보존 기간(백업 미도입과 HDFS HA 메타데이터 외부 백업 제외는 확정)

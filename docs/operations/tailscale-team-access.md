@@ -28,6 +28,8 @@ tailscale ping node-1
 
 현재 `autogroup:member`는 `tag:hadoop` 서버의 모든 포트에 네트워크로 접근할 수 있다. 실제 작업에서는 승인받은 SSH와 프로젝트 서비스만 사용한다. Tailscale SSH는 연결 시 재인증을 요구하며, 대상 서버에 실제로 존재하고 ACL에서 허용한 로컬 계정만 사용할 수 있다.
 
+**예외: `ec2-a:5432`·`ec2-a:8080`은 Node 1 Publisher 전용이다(`S15P21C206-85`).** EC2-A가 서비스 DB와 Backend를 `tailscale serve --tcp`로 tailnet에 넘기고, ACL은 Node 1에서 오는 연결만 허용해야 한다. 팀원 장비와 다른 서버는 두 포트에 닿지 않아야 하므로 위의 `tag:hadoop:*` 허용에서 `ec2-a`를 떼어 따로 적는다. 적용 상태와 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」를 따른다.
+
 | 서버 | 역할·태그 | 팀원 접근 | 접속 방법 |
 | --- | --- | --- | --- |
 | `ec2-a` | 프로젝트 서비스 단일 노드, `tag:hadoop` | 네트워크 접근·Tailscale SSH 허용 | `tailscale ssh ubuntu@ec2-a` |
