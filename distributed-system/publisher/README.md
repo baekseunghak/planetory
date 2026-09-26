@@ -34,6 +34,8 @@ checksum은 공용 `astro_kernel.gold_canonical`로 계산한다. 이미지에 a
 
 재시도 판정 요약의 규칙은 적재가 가진다(`load.payload_digest`, `S15P21C206-86`). 판 버전, `fold_reference_time_btjd`·`base_days`, 세그먼트 자연 키와 flux checksum, 주기도·레코드 checksum으로 만들고 DB가 만드는 id는 넣지 않는다(I02-2 인계 규칙). 입력 어댑터는 값을 주지 않아도 된다. 주면 적재가 계산한 값과 같아야 하고, 다르면 쓰기 전에 `PUBLISH_REJECTED`로 멈춘다. 적재는 자기가 계산한 값을 `manifest.publish.payload_digest`에 둔다. 시드가 먼저 넣은 행의 `manifest.local_seed.payload_digest`도 함께 읽으며, 시드·목업이 먼저 적재한 행과 같은 값이 나오도록 식을 바꾸지 않는다.
 
+**새로 만드는 입력 어댑터(HDFS Gold reader 등)는 `payload_digest`를 주지 않는다.** 주면 적재 식과 계속 함께 맞춰야 하는데 얻는 것은 자기 점검뿐이다. 이미 계산하는 시드·목업은 그대로 둔다(`!223` 리뷰).
+
 ## 로컬 시드(!201)와의 관계
 
 시드는 팀원 로컬 DB의 통합 테스트용이고 localhost만 받는다. 이 디렉터리는 운영 서비스 DB 적재의 정본 위치다(`S15P21C206-86`·`87`). 로컬 전용 접속 제한과 튜토리얼·챌린지 설정은 시드에만 둔다.
