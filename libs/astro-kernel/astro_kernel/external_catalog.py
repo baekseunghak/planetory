@@ -23,26 +23,47 @@ LABELS = {"KP": "confirmed", "CP": "confirmed", "FP": "fp", "FA": "fp",
           "PC": "pc", "APC": "pc"}
 ROW_FIELDS = {"tic_id", "external_id", "period_days", "epoch_btjd",
               "duration_hours", "time_system", "raw_disposition", "source_row_updated_at"}
+# 2026-09-27 (S15P21C206-79): a column label need not spell TDB when official
+# documents fix the scale. The TOI epoch is BTJD (BJD - 2457000) per the TOI
+# release notes and catalog paper, TESS BTJD is TDB per the SPOC data products
+# description, and TCE statistics come from DV XML epochs in BTJD. PSCompPars
+# still needs an explicit per-row BJD-TDB; its bare "BJD" rows stay held.
+TIME_RULE_VERSION = "external-time-evidence-v1"
+_TESS_TDB = ("https://archive.stsci.edu/files/live/sites/mast/files/home/missions-and-data/"
+             "active-missions/tess/_documents/EXP-TESS-ARC-ICD-TM-0014-Rev-F.pdf")
+_TOI = ("https://tess.mit.edu/toi-releases/toi-release-notes/ https://arxiv.org/abs/2103.12538 "
+        + _TESS_TDB)
+TIME_EVIDENCE = {
+    "nea_toi": f"{TIME_RULE_VERSION}: TOI epoch BTJD-TDB; NEA TOI copies ExoFOP TOI "
+               f"(https://exoplanetarchive.ipac.caltech.edu/docs/TESSMission.html) {_TOI}",
+    "exofop_toi": f"{TIME_RULE_VERSION}: TOI epoch BTJD-TDB {_TOI}",
+    "mast_tce_s1_s13": f"{TIME_RULE_VERSION}: tce_time0bt from DV XML transitEpochBtjd, BTJD-TDB "
+                       f"(https://archive.stsci.edu/tess/bulk_downloads/bulk_downloads_tce.html) {_TESS_TDB}",
+    "nea_pscomppars": f"{TIME_RULE_VERSION}: explicit per-row pl_tranmid_systemref BJD-TDB only",
+}
 
 
 def normalize_export_row(source, raw):
-    """116 field mapping, with no inference of TDB from BJD or a column name.
+    """116 field mapping. A scale is accepted only by TIME_RULE_VERSION evidence.
 
     An excluded non-transiting record is diagnostic, not evidence that a
     catalog is empty. The adapter must retain it in its normalization report.
     """
+    systemref = raw.get("pl_tranmid_systemref")
+    # (tic, id, period, epoch, duration, label, source's own time label, accepted scale)
     layouts = {
-        "nea_toi": ("tid", "toi", "pl_orbper", "pl_tranmid", "pl_trandurh", "tfopwg_disp", "BJD"),
-        "nea_pscomppars": ("tic_id", "pl_name", "pl_orbper", "pl_tranmid", "pl_trandur", None, raw.get("pl_tranmid_systemref")),
-        "mast_tce_s1_s13": ("ticid", "tceid", "tce_period", "tce_time0", "tce_duration", None, "unverified"),
-        "exofop_toi": ("TIC ID", "TOI", "Period (days)", "Epoch (BJD)", "Duration (hours)", "TFOPWG Disposition", "BJD"),
+        "nea_toi": ("tid", "toi", "pl_orbper", "pl_tranmid", "pl_trandurh", "tfopwg_disp", "BJD", "BJD-TDB"),
+        "nea_pscomppars": ("tic_id", "pl_name", "pl_orbper", "pl_tranmid", "pl_trandur", None, systemref, systemref),
+        "mast_tce_s1_s13": ("ticid", "tceid", "tce_period", "tce_time0bt", "tce_duration", None, "BTJD", "BTJD-TDB"),
+        "exofop_toi": ("TIC ID", "TOI", "Period (days)", "Epoch (BJD)", "Duration (hours)", "TFOPWG Disposition",
+                       "BJD", "BJD-TDB"),
     }
     if source not in layouts:
         raise ValueError("unsupported_source")
-    tic, key, period, epoch, duration, label, system = layouts[source]
+    tic, key, period, epoch, duration, label, original, system = layouts[source]
     result = dict(status="hold", source=source, external_id=raw.get(key), tic_id=None, row=None,
                   raw_ephemeris={k: raw.get(k) for k in (tic, key, period, epoch, duration)},
-                  original_time_system=system)
+                  original_time_system=original, time_rule_version=TIME_RULE_VERSION)
     try:
         t = str(int(str(raw[tic]).strip().removeprefix("TIC ")))
         _id(int(t))

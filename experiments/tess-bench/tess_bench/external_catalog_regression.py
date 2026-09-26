@@ -12,7 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from astro_kernel.external_catalog import (
-    build_snapshot, code_snapshot, join_catalog, normalize_export_row,
+    TIME_EVIDENCE, build_snapshot, code_snapshot, join_catalog, normalize_export_row,
 )
 from tess_fixture.external_catalog_audit import audit
 from tess_fixture.targets import TARGETS
@@ -46,7 +46,7 @@ def normalize_sources(audited):
             scope=scope, rows=[r["row"] for r in records if r["row"]],
             held_rows=held, raw_sha256=s["source_sha256"], retrieved_at=s["retrieved_at"],
             source_uri=meta["requested_url"], source_table=name,
-            time_evidence="116:explicit pl_tranmid_systemref BJD-TDB only; other rows retained as held",
+            time_evidence=TIME_EVIDENCE[name],
             complete=True, validated=not s["duplicate_keys"])
         reports[name] = dict(counts=dict(Counter(r["status"] for r in records)), records=records,
                              duplicate_keys=s["duplicate_keys"])

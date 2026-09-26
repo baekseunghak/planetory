@@ -95,3 +95,15 @@
 불완전 CSV의 TIC=None은 정규화 hold로 회수하고, 관측 통과 합집합이 비어 Jaccard가 미산출이면 최소 공유 점 설정과 무관하게 직접 매칭하지 않는다. 성공 원천의 참조는 전체 hold에도 진단용으로 보존하되 Publisher 적용은 금지한다.
 
 검증: astro-kernel 전체 300개(외부 카탈로그 46개 포함), bench 124 실행기 테스트 6개 통과. None TIC·최소 공유 점 0의 빈 합집합·일부 원천 실패 시 진단 참조 보존을 회귀로 추가했다. 기존 696cda44 실측 및 ZIP은 수정 전 실행의 근거로 유지한다. 이번 수정 후 원본 FITS 회귀를 재실행하거나 기존 79개 checksum이 새 코드를 검증한다고 주장하지 않는다.
+
+## 2026-09-27 시간 척도 근거 반영 (S15P21C206-79)
+
+- 남은 항목 3을 다음과 같이 반영했다. 근거와 판정은 [116 계약](tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다.
+  - `normalize_export_row`는 NEA TOI·ExoFOP TOI를 BJD-TDB로, MAST TCE를 `tce_time0bt`(BTJD-TDB)로 받는다.
+  - PSCompPars는 행마다 `BJD-TDB`로 적힌 경우만 받는다.
+  - 정규화 결과에 `time_rule_version=external-time-evidence-v1`과 원천의 원래 시간 표기(`original_time_system`)를 남긴다.
+- 어댑터는 snapshot `time_evidence`에 `TIME_EVIDENCE[source]`를 넘긴다. `tess_bench.external_catalog_regression`도 이 값을 쓴다. 규칙이 바뀌면 snapshot 내용과 `bundle_version`이 바뀐다.
+- 기존 실행 `run-20260922T141154Z-696cda44`의 11곡선 hold는 이전 규칙의 결과다. 같은 저장 행·관측 시각으로 다시 실행한 결과는 [116 계약 재실측](tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다.
+  - 7곡선(toi451 3개, wasp62 4개)이 `ready`가 됐다. wasp62의 WASP-62 b 후보는 `confirmed`다.
+  - Archive 보류 행이 있는 4곡선(toi270, pi_men)은 여전히 `unresolved_external_rows`로 보류된다.
+  - fixture ID로 한 재실측이며, 운영 DB 적재나 외부 라벨 게시는 아니다.
