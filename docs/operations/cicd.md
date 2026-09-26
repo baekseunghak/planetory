@@ -249,6 +249,6 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 - 계약 검사는 fixture와 검사기가 서로 맞는지만 본다. Publisher·Backend·Worker 코드가 계약을 따르는지는 각 컴포넌트의 테스트가 맡는다.
 - 2026-09-25 확인: 브랜치 파이프라인 `#222677`(통과) → `#222681`(실패) → `#222683`(되돌림, 통과). `#222681`은 Gold fixture의 배열 checksum 한 글자, YARN `worker.xml`의 `yarn.nodemanager.resource.memory-mb`, worker Compose의 알 수 없는 키를 일부러 틀린 커밋 `64f58477`이다. `validate:contracts`(`CHECKSUM_MISMATCH`), `validate:hadoop-config`(assert), `validate:compose`(`Additional property ... is not allowed`)가 각각 실패했다. 실행 Runner는 `planetory-docker-runner`(GitLab Runner API 기준 `linux`/`amd64`, 태그 `amd64-docker`)다.
 - 기준 브랜치에서 `build:*`가 실제로 멈추는 것은 develop을 깨야 볼 수 있어 확인하지 않았다. 위 stage 구조(검사는 `validate`, 이미지 빌드는 `needs` 없는 `build`)로 판단한다.
-- PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). 운영자가 직접 실행하는 스크립트라 배포 경로 밖이다. mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
+- PowerShell 스크립트는 CI에서 돌리지 않는다(S15P21C206-91 범위 정정). CI가 실행하지 않는 운영자 스크립트다(GCP release 설치도 운영자가 실행한다, 「GCP 분산 시스템」). mock으로 원격 자원을 건드리지 않는 `test-*.ps1` 8개는 스크립트를 바꾼 사람이 로컬에서 `pwsh -File`로 실행한다.
 
 현재 deploy job의 이미지 변수는 SSH 세션에만 export된다. 후속 실행과 롤백에서 같은 버전을 쓰려면 대상 서버의 `.env`에 해당 이미지 SHA를 반영해야 한다. 이를 자동화하고 서버별 동시 배포 잠금·health 검사·실패 시 이전 버전 복원을 추가하는 것은 실제 배포 전 남은 작업이다.
