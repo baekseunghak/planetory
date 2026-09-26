@@ -270,9 +270,9 @@ GCP 자원 생성 스크립트는 `infra/provisioning/gcp/scripts/`에 있으며
 | job | 언제 | 무엇 |
 | --- | --- | --- |
 | `validate:tess-hdfs-loader` | `ingestion/hdfs/**/*.py`·적재 스크립트 변경 | HDFS 적재기 31개, Sector 수용 5개 |
-| `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개. 표준 라이브러리만 쓴다 |
-| `validate:astro-kernel` | `libs/astro-kernel`·spark·publisher 변경 | 커널 333개, spark 22개, publisher 목업 적재 7개. 의존성은 커널의 `uv.lock`으로 고정한다 |
-| `validate:publisher` | Publisher·`libs/astro-kernel`·Backend 마이그레이션·`publisher.yml` 변경 | publisher 적재 11개(`test_load`, S15P21C206-86). 일회용 `postgres:18.6-alpine` 서비스에 마이그레이션 전체를 적용한 새 스키마에서 멱등·충돌·실패 rollback·동시 게시를 본다. DB가 필요한 테스트만 여기 둔다 |
+| `validate:data-platform` | airflow·ingestion·publisher 변경 | airflow 18개, ingestion `tests/` 42개, publisher 알림 3개·DEC-01 공급 집계 6개(`test_supply`, S15P21C206-79). 표준 라이브러리만 쓴다 |
+| `validate:astro-kernel` | `libs/astro-kernel`·`contracts/gold`·spark·publisher 변경 | 커널 351개(79 후보 집계 9개·외부 시간 척도 5개 포함), spark 22개, publisher 목업 적재 7개·튜토리얼 원천 7개(`test_tutorial_source`, S15P21C206-272, 실제 FITS 1개는 입력이 없으면 건너뜀). 커널 테스트가 `contracts/gold`의 스키마를 읽으므로 스키마만 바뀌어도 돈다. 의존성은 커널의 `uv.lock`으로 고정한다 |
+| `validate:publisher` | Publisher·`libs/astro-kernel`·Backend 마이그레이션·`publisher.yml` 변경 | publisher 적재 11개(`test_load`, S15P21C206-86), 공급 집계 조회 1개(최소 권한 보고 역할 읽기, S15P21C206-79), 튜토리얼 전환 SQL 2개(`TutorialSwitchTest`, S15P21C206-272). 일회용 `postgres:18.6-alpine` 서비스에 마이그레이션 전체를 적용한 새 스키마에서 멱등·충돌·실패 rollback·동시 게시를 본다. DB가 필요한 테스트만 여기 둔다 |
 
 - 네 job 모두 `validate` 단계라 실패하면 같은 파이프라인의 기준 브랜치 이미지 빌드가 시작하지 않는다(위 「설정·계약 검사」).
 - Worker(`apps/derived-compute`) 테스트는 `derived-compute:test`(S15P21C206-88)가 맡는다.

@@ -6,10 +6,12 @@
   python -m publisher tutorial-build --inputs <FITS·원천 폴더> --out <폴더> --label-approval <승인 근거>
   python -m publisher load-payload <payload JSON 파일 또는 폴더>...
   python -m publisher tutorial-switch-sql
+  python -m publisher supply-report --manifest candidates.json   [S15P21C206-79]
 
 접속은 libpq 환경변수(PGHOST·PGDATABASE·PGUSER·PGPASSWORD)를 따른다. 적재 계정은
 planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리가 무력화된다. tutorial-build는 DB에 붙지 않고
-astropy·scipy가 있는 로컬 환경에서 돌린다(이미지에는 BLS 의존성이 없다).
+astropy·scipy가 있는 로컬 환경에서 돌린다(이미지에는 BLS 의존성이 없다). supply-report는
+보고 로그인(planetory_reporter, supply.REPORT_TABLES의 SELECT만)으로 읽기만 한다.
 """
 
 from __future__ import annotations
@@ -38,7 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     publish = sub.add_parser("load-payload", help="payload JSON을 게시한다. 별 등록(star)을 함께 싣는다")
     publish.add_argument("paths", nargs="+", type=Path, help="payload JSON 파일 또는 그 파일들이 든 폴더")
     sub.add_parser("tutorial-switch-sql", help="튜토리얼 1~5 전환 SQL을 출력한다. service-db의 소유자 psql로 넘긴다")
+    report = sub.add_parser("supply-report", help="DEC-01 공급 집계 기록을 JSON으로 출력한다. DB는 읽기만 한다")
+    report.add_argument("--manifest", required=True, help="79 후보 집계 출력 또는 그 manifest JSON 파일. -는 표준 입력")
     args = parser.parse_args(argv)
+
+    if args.command == "supply-report":
+        return supply_report(args.manifest)
 
     if args.command == "notify":
         # DB는 건드리지 않는다. 판을 다시 싣지 않고 알림만 보낸다.
@@ -87,6 +94,35 @@ def main(argv: list[str] | None = None) -> int:
     # 토큰이 없어 알림을 생략한 것은 실패가 아니다. 적재는 끝났고 DB의 current가 정본이다.
     sent = notify(loader.notify_targets(results))
     return 0 if sent or not os.environ.get("INTERNAL_SERVICE_TOKEN") else 1
+
+
+def supply_report(path: str) -> int:
+    """79 manifest와 서비스 DB를 대사한 DEC-01 기록을 표준 출력에 낸다. 기록을 냈으면 0이다(판정은 verdict).
+
+    path가 -이면 표준 입력에서 읽는다. 컨테이너에 파일을 마운트하지 않고 넘길 수 있다.
+    """
+    import datetime as dt
+
+    import psycopg
+
+    from . import supply
+
+    data = json.loads(sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8"))
+    manifest = data["manifest"] if "manifest" in data else data
+    if not manifest:
+        print(f"집계할 manifest가 없다. 거절된 run이다: {data.get('reason')}", file=sys.stderr)
+        return 1
+    with psycopg.connect("", autocommit=True) as conn:
+        slots, rows = supply.read_database(conn, [s["tic_id"] for s in manifest["stars"]])
+    at = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    try:
+        record = supply.supply_record(manifest, rows, slots, at)
+    except ValueError as exc:
+        print(f"집계할 수 없는 manifest다: {exc}", file=sys.stderr)
+        return 1
+    json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
+    print()
+    return 0
 
 
 def notify(bundle_ids: list[int]) -> bool:

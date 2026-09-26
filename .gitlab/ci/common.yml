@@ -81,7 +81,7 @@ validate:data-platform:
   script:
     - (cd distributed-system/airflow && python -m unittest discover -s tests)
     - (cd distributed-system/ingestion && python -m unittest discover -s tests)
-    - (cd distributed-system/publisher && python -m unittest test_notify)
+    - (cd distributed-system/publisher && python -m unittest test_notify test_supply)
   rules:
     - changes:
         - distributed-system/airflow/**/*
@@ -107,6 +107,8 @@ validate:astro-kernel:
   rules:
     - changes:
         - libs/astro-kernel/**/*
+        # 커널 테스트가 transit-model·publication-candidates 스키마를 읽는다.
+        - contracts/gold/**/*
         - distributed-system/spark/**/*
         - distributed-system/publisher/**/*
         - .gitlab/ci/common.yml

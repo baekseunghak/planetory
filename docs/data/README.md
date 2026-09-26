@@ -34,3 +34,4 @@
 124 운영 커널의 입력·출력과 검증 한계는 [외부 스냅샷·후보 조인 구현](tess-external-catalog-implementation.md)을 참조한다. 122 산출물의 후보 ID·실제 관측 시각 연결 회귀와 검산을 완료했으며 리뷰 대기 중이다. 운영 DB ID 검증은 포함하지 않으며 미확인 외부 시간 척도는 보류한다.
 
 - [130 AI 재평가·과거 결과 보존](tess-ai-reevaluation-history.md): 공용 순수 커널·저장 점수 연결 검증, 운영 연결 전.
+- [79 게시 후보 집계](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계): run 단위 TIC 상태·후보 계보·manifest 계약. 커널·합성 fixture 검증, 실제 Silver·80 연결 전.

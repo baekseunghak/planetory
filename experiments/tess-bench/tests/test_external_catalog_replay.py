@@ -20,12 +20,13 @@ def test_archive_unknown_scale_never_becomes_tdb(system):
     assert "epoch_btjd" not in result
 
 
-def test_toi_number_remains_string_and_bjd_scale_is_unverified():
+def test_toi_number_remains_string_and_documented_bjd_is_tdb():
+    # external-time-evidence-v1: the TOI epoch is BTJD-TDB by the TOI release notes and SPOC TIMESYS.
     row = dict(tid="123", toi="100.01", pl_orbper="2", pl_tranmid="2457001", pl_trandurh="2")
     result = convert("nea_toi", row)
     assert result["external_id"] == "100.01"
-    assert result["time_system"] == "BJD"
-    assert result["normalization_status"] == "unverified_time_or_missing_ephemeris"
+    assert (result["time_system"], result["epoch_btjd"]) == ("BTJD-TDB", 1.0)
+    assert "normalization_status" not in result
 
 
 def test_runner_writes_plan_results_and_checksums_without_real_experiment(tmp_path, monkeypatch):
