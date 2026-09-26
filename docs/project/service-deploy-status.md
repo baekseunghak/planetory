@@ -104,7 +104,15 @@ CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `dep
 | `219740` (`a9e567db`, 254) | `80a860fa-sky` → `a9e567db` | 변경 없음 | 헬스가 렌더러 표식 경로에서 통과 |
 | `220055` (`70126dcb`, 261) | `a9e567db` → `70126dcb` | `f6379f5b` → `70126dcb` | 앱 변경 없는 병합에도 두 빌드·두 버튼, Environments `ec2-a`에 배포 2건 |
 
-운영 DB는 V24다. V23·V24는 261 전에 수동 배포한 `f6379f5b`에서 적용됐다. 옛 배포 버튼 거부는 아직 확인하지 않았다(`S15P21C206-262` 항목 2).
+운영 DB는 V29다(2026-09-26). V23·V24는 261 전에 수동 배포한 `f6379f5b`에서, V25(266 NASA 행성 정보)는 파이프라인 `222444`(`a8fb6667`, 262 병합)에서, V26~V29는 `222918`(`6d1926d5`)의 Backend 배포(2026-09-26 01:10 KST)에서 한꺼번에 적용됐다. 그중 V27은 `submissions`의 `ck_submissions_source_peak_all_or_none`을 교체한 되돌리기 어려운 마이그레이션이다(`S15P21C206-269`). 교체 뒤 운영 제약 정의를 확인했고, 실제 봉우리 제출은 아직 확인하지 않았다.
+
+Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 적용한다. 누르기 전에 운영 `flyway_schema_history`의 마지막 버전과 `db/migration`을 대조한다.
+
+**옛 배포 버튼 시험 (2026-09-26, `S15P21C206-262` 항목 2).** 한 번도 실행하지 않은 옛 manual job의 Play는 403으로 막혔다(`222890` `deploy:backend:ec2-a`). 반면 옛 job의 Retry는 막히지 않는다. `220924`의 취소된 `deploy:frontend:ec2-a`를 Retry하자 옛 Frontend `e9835da5`가 01:18:58~01:19:45 KST 약 1분 운영에 올라갔고, `222444`의 성공 job Retry로 `a8fb6667`에 되돌렸다. `ci_forward_deployment_rollback_allowed: true` 때문이며 정본은 [CI/CD](../operations/cicd.md)다. 이 설정을 끌지는 `S15P21C206-93`에서 정한다.
+
+**시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend를 `6d1926d5` 이후로 올리려면 새 develop 파이프라인이 필요하다.
+
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-26 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `a8fb6667`이다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
@@ -112,7 +120,20 @@ CI가 배포하는 곳은 **`/home/deploy/planetory`**(`deploy` 계정)다. `dep
 
 Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시 payload로 두었다(`distributed-system/publisher`). 서비스 노드에서 `gold-mock` profile로 돌린다. 절차는 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」에 있다. 목업으로 열리는 것은 분석 진입부터 원본 주기도·후보 목록까지다. 잔차 단계는 Worker(`S15P21C206-88`)가 없어 여전히 안 된다.
 
-**운영 적재는 아직 하지 않았다.** 병합 뒤 CI가 Publisher 이미지를 만들면 계정을 준비하고 적재한다.
+**운영 적재를 마쳤다(2026-09-25).** `a8fb6667` Frontend·Backend를 배포한 뒤 같은 커밋의 Publisher 이미지로 적재했다.
+
+- 계정: `planetory_publisher`(`planetory_gold_writer` 멤버, `flyway_schema_history`·`operation_settings` SELECT, public CREATE 회수). 비밀번호는 서버에서 무작위로 만들어 `.env`의 `PUBLISHER_DB_PASSWORD`에만 두었다.
+- 적재: `261136679`·`900000008`·`900000027`·`900000002`에 판 `b-1`~`b-4`가 current다. 별마다 세그먼트 1(2,919점)·주기도 1(5,000칸)·후보 3이다. `INTERNAL_SERVICE_TOKEN`이 없어 Backend 알림은 생략됐다.
+- 확인: `app.planetory.space`에서 튜토리얼 별의 분석 화면이 열리고 주기도·봉우리 10개가 보인다. 봉우리에서 시작한 제출은 V4 제약(강재민 인계)으로 아직 500이다.
+- 적재 중 `--no-deps` 없는 `run`이 `service-db`를 한 번 재생성했다. 볼륨이 그대로라 회원 7·별 41·발견 46이 남았고 몇 초 동안 DB 연결이 끊겼다. README 명령을 고쳤다.
+
+### 튜토리얼 5종 미등록
+
+운영 `tutorial_stars`에는 1번(`261136679`)만 있다. 화면은 튜토리얼이 정확히 5개여야 해서(`interaction.ts`) 별지도에 "튜토리얼 번호를 확인하지 못했습니다"가 뜬다. 목업과 무관하다. 109가 고른 2~5번을 운영에 등록해야 하며 별도 Task로 다룬다.
+
+### EC2-B 레지스트리 매일 정리 (2026-09-25 설치)
+
+`/opt/planetory/registry-prune-daily.sh`와 `/etc/cron.d/planetory-prune`(매일 19:40 UTC, `--apply --gc`)을 설치했다. 모의 실행은 배포 중인 `a8fb6667`을 보호하고 삭제 예정 15·유지 65였다. 첫 실제 실행(2026-09-26 04:40 KST)은 `in_use=6d1926d5…,a8fb6667…`로 돌아 **삭제 23·유지 68**이었고 가비지 수집 뒤 레지스트리가 다시 떴다. 모의 실행보다 삭제가 많은 것은 그 사이 develop 병합으로 태그가 쌓였기 때문이다. 운영 이미지 backend·derived-compute `6d1926d5`와 frontend `a8fb6667`의 매니페스트가 남아 있음(200)을 확인했다. 로그는 `/var/log/planetory-prune.log`.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
@@ -122,6 +143,7 @@ Publisher의 적재 단계를 실제 코드로 만들고 입력만 계약 예시
 | --- | --- |
 | 튜토리얼 1번 별 | TIC `261136679`. 임의로 고른 값 |
 | 더미 별 | TIC `900000002`~`900000041` 40개와 그 발견 기록 |
+| 목업 Gold 판 | `261136679`·`900000008`·`900000027`·`900000002`에 TOI-270 목업(`b-1`~`b-4`, `mock-` 표식). 실제 별 `261136679`에도 다른 별의 곡선이 붙어 있다. 지우는 법은 [EC2 서비스 배포](../../infra/service/README.md) 「Gold 목업」 삭제 |
 
 더미 별은 `DELETE FROM star_unlocks WHERE tic_id >= 900000002;`로 지운다. 튜토리얼 별은 운영 TIC이 정해지면 교체한다. 빈 DB에서 가입이 막히는 조건과 시드 순서는 [EC2 서비스 배포](../../infra/service/README.md)에 있다.
 

@@ -175,18 +175,22 @@ docker compose exec service-db psql -U planetory -d planetory_poc -c "\password 
 
 ### 적재
 
-이미지는 CI `build:publisher`가 커밋 SHA로 만든다.
+이미지는 CI `build:publisher`가 커밋 SHA로 만든다. 이미지의 시작 명령은 `CMD ["python", "-m", "publisher"]`인데 `docker compose run <서비스> <인자>`는 `CMD`를 인자로 통째로 대체한다. `run gold-mock mock-load`는 명령이 `["mock-load"]`가 되어 `executable file not found`로 실패하므로 `python -m publisher <명령>`까지 적는다.
 
 ```sh
 cd "$DEPLOY_PATH"
-PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> \
-  docker compose --profile gold-mock run --rm gold-mock mock-load --tic 900000008,900000027,900000002
+export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-load --tic <TIC 목록>
 ```
+
+**`--no-deps`를 빼지 않는다.** 배포 job은 늘 `--no-deps`로 대상 서비스만 바꾸므로 `service-db` 설정 변경이 적용되지 않은 채 쌓여 있을 수 있다. `--no-deps` 없는 `run`은 의존 서비스를 맞추면서 `service-db` 컨테이너를 재생성한다. 2026-09-25 운영 적재에서 실제로 일어났다. 데이터는 볼륨이라 남았지만 몇 초 동안 DB 연결이 끊겼다.
+
+분석은 회원이 발견한 별만 열린다(`STAR_LOCKED`). 화면을 열어 볼 목적이면 회원 대부분이 가진 튜토리얼 별을 넣는다. 운영에 올린 대상은 [서비스 배포 현재 상태](../../docs/project/service-deploy-status.md) 「손으로 넣은 데이터」에 적는다.
 
 같은 명령을 다시 돌리면 `이미 있음, 바꾸지 않음`으로 끝난다. 같은 TIC이면 판 버전이 같기 때문이다. 그래서 **알림은 다시 가지 않는다.** 토큰 없이 적재했거나 알림이 실패한 판은 토큰을 넣고 Backend를 배포한 뒤 알림만 따로 보낸다. 판 id는 적재 출력의 `b-<id>`다.
 
 ```sh
-PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile gold-mock run --rm gold-mock notify --bundle b-<id>
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher notify --bundle b-<id>
 ```
 
 알림은 후처리를 앞당기는 신호다. 보내지 않아도 DB의 current가 정본이라 분석 화면은 열린다.
@@ -198,10 +202,10 @@ PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha> docker compose --profile go
 ```sh
 cd "$DEPLOY_PATH"
 export PUBLISHER_IMAGE=<registry>/planetory/publisher:<sha>
-docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-purge-sql \
   | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA'
 # 개수를 확인한 뒤 실제로 지운다
-docker compose --profile gold-mock run --rm -T gold-mock mock-purge-sql \
+docker compose --profile gold-mock run --rm --no-deps -T gold-mock python -m publisher mock-purge-sql \
   | docker compose exec -T service-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -v apply=1'
 ```
 
