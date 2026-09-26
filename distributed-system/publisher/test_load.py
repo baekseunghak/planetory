@@ -305,7 +305,7 @@ class PublishStarTest(unittest.TestCase):
 
     def run_payload(self, tic: int) -> dict:
         """합성 run의 배치 payload [S15P21C206-276]. 게시 전 검사를 통과한 것이어야 한다."""
-        [(_, p)] = run_source.star_payloads(*synthetic_run(tic))
+        [(_, p)] = run_source.star_payloads(*synthetic_run(tic), "unittest-only")
         self.assertIsInstance(p, dict, p)
         return p
 
@@ -349,6 +349,35 @@ class PublishStarTest(unittest.TestCase):
         current = self.conn.execute("SELECT id FROM publication_bundles WHERE tic_id = %s AND status = 'current'",
                                     (tic,)).fetchone()[0]
         self.assertEqual(current, first.bundle_id)
+
+    def test_publish_run_records_every_star_and_one_failure_does_not_stop_the_next(self):
+        from publisher.__main__ import exit_code, run_record
+
+        fresh, has_current, broken = 990_000_201, 990_000_202, 990_000_203
+        run, meta = synthetic_run(fresh, has_current, broken)
+        publish_star(self.conn, payload(self.star(has_current)), self.target)   # 튜토리얼 별처럼 current가 있다
+        next(b for b in run["bundles"] if b["bundle"]["tic_id"] == broken)["segments"][0]["flux"][0] = 1.5
+
+        first = run_record(self.conn, self.target, run, meta, run_id="run-fixture", approval="unittest-only")
+
+        self.assertEqual(first["status"], "published")
+        got = {s["tic_id"]: s for s in first["stars"]}
+        self.assertEqual({t: s["code"] for t, s in got.items()},
+                         {fresh: "PUBLISHED", has_current: "PUBLISH_REJECTED", broken: "PUBLISH_REJECTED"})
+        self.assertEqual(got[fresh]["confirmed_without_archive"], 0)
+        self.assertEqual(first["counts"], {"PUBLISHED": 1, "PUBLISH_REJECTED": 2})
+        self.assertEqual(self.counts(broken)["bundles"], 0, "게시 전 검사에 걸린 별은 DB에 쓰지 않는다")
+        self.assertEqual(exit_code({**first, "notify": {"status": "none"}}), 65)
+        manifest = self.conn.execute("SELECT manifest -> 'publish' FROM publication_bundles WHERE id = %s",
+                                     (got[fresh]["bundle_id"],)).fetchone()[0]
+        self.assertEqual((manifest["run_id"], manifest["approval"]), ("run-fixture", "unittest-only"))
+
+        again = run_record(self.conn, self.target, run, meta, run_id="run-fixture", approval="unittest-only")
+        self.assertEqual({s["tic_id"]: (s["code"], s["bundle_id"]) for s in again["stars"]}[fresh],
+                         ("ALREADY_PUBLISHED", got[fresh]["bundle_id"]))
+
+        wrong = run_record(self.conn, self.target, run, meta, run_id="other-run", approval="unittest-only")
+        self.assertEqual((wrong["status"], wrong["stars"]), ("rejected", []))
 
 
 @unittest.skipUnless(URL, "PUBLISHER_TEST_DATABASE_URL이 없다")

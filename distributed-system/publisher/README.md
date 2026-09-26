@@ -4,7 +4,7 @@
 
 ## 현재 상태 (S15P21C206-262, S15P21C206-272, S15P21C206-276)
 
-**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run 어댑터는 79 후보 집계 출력을 검사하고 payload로 바꾸는 데까지만 구현했다(아래 「배치 run」). HDFS에서 읽는 부분, run 단위 게시 명령, Airflow task는 80이 게시 대기 위치·형식을 정한 뒤 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
+**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 79 후보 집계 출력의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 로컬 JSON 파일을 받는다. HDFS에서 그 파일을 가져오는 부분과 Airflow task는 80이 게시 대기 위치·형식을 정한 뒤 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
 
 현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
 
@@ -16,7 +16,7 @@
 | `publisher/run_source.py` | 배치 run 입력 어댑터. 79 집계 출력을 게시 전 검사하고 payload로 바꾼다. 판 본문 변환(`gold_body`)은 튜토리얼도 같이 쓴다 | 80이 정한 HDFS 형식을 읽는 부분만 더한다 |
 | `publisher/tutorial_source.py`, `publisher/tutorial.json` | 튜토리얼 5종 입력 어댑터와 대상·checksum·라벨 정의 | 튜토리얼 재선정 때 `tutorial.json`을 바꾼다 |
 | `publisher/tutorial_switch.sql` | 튜토리얼 1~5 등록, 기존 회원 이전, 옛 임시 1번 정리 | 그대로 쓴다(재실행 안전) |
-| `publisher/__main__.py` | 명령(`mock-load`·`mock-purge-sql`·`notify`·`tutorial-build`·`load-payload`·`tutorial-switch-sql`) | 명령만 추가한다 |
+| `publisher/__main__.py` | 명령(`mock-load`·`mock-purge-sql`·`notify`·`tutorial-build`·`load-payload`·`tutorial-switch-sql`·`publish-run`) | 명령만 추가한다 |
 | `publisher/mock_purge.sql` | `mock-` 표식 행을 지운다 | 목업을 걷을 때 함께 지운다 |
 | `publisher/fixtures/gold-toi270-s3.json` | 목업 입력 원천 | 목업을 걷을 때 함께 지운다 |
 
@@ -123,7 +123,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 
 ## 배치 run (S15P21C206-276)
 
-`run_source`는 79 후보 집계 출력(`astro_kernel.candidate_aggregation.aggregate`의 run manifest, 별마다 125 번들, 후보 표)을 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. **구현·합성 검증까지다.** HDFS 게시 대기 산출물의 위치·형식, run 단위 게시 명령(`publish-run`), Airflow 게시 task와 Node 1 운영 게시는 80이 형식을 정한 뒤 붙인다.
+`run_source`는 79 후보 집계 출력(`astro_kernel.candidate_aggregation.aggregate`의 run manifest, 별마다 125 번들, 후보 표)을 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. `publish-run`이 그 payload를 별마다 첫 게시하고 run 기록을 낸다. **구현·합성 검증까지다.** HDFS 게시 대기 산출물의 위치·형식, Airflow 게시 task와 Node 1 운영 게시는 80이 형식을 정한 뒤 붙인다.
 
 - **입력.** 집계 출력과 별마다의 메타데이터 `{"star": {teff_k, radius_rsun, tmag}, "observations": {"<Sector>": {cadence, source_version}}}`다. 메타데이터 키는 TIC 문자열이다. 125 번들에는 별 속성과 관측 원천 버전이 없으므로 80이 함께 넘겨야 한다.
 - **run 검사.** 집계 형식 버전, run manifest의 번들 요약(TIC·판 ID·판 버전·레코드 checksum), ready 별과 번들의 일치, 후보 표의 행 수·`candidates_sha256`, 후보 표와 번들 활성 후보의 일치를 본다. 하나라도 어긋나면 별을 하나도 내지 않는다.
@@ -131,6 +131,9 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 - **첫 게시만.** 은퇴 후보, 이전 값이 있는 이력 제안, `keep`·`retire` 수명 조치가 있는 번들은 갱신 판으로 보고 거절한다. 적재는 `first_publish_only=True`로 불러 이미 current가 있는 별을 거절한다. 튜토리얼 별은 늘 current가 있어 이 규칙으로 함께 빠진다. 갱신 게시를 열 때는 튜토리얼 제외를 따로 넣어야 한다(Gold 쓰기 계정은 `tutorial_stars`를 읽지 못한다).
 - **외부 참조.** 후보마다 모든 원천의 직접 대응을 싣고 대응 없는 행은 `external_only`로 싣는다. 125가 PSCompPars 행을 `source='archive'`, `external_id`=정확한 `pl_name`으로 싣는다([Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계)). 266 NASA 설명은 이 참조로만 원천을 찾는다.
 - **AI.** 79 정책대로 싣지 않는다(`ai=None`, `ai_executions` 없음).
+- **게시 명령.** `python -m publisher publish-run --run-id <id> --aggregation <집계 출력 JSON 또는 -> --metadata <메타데이터 JSON> --approval <게시 승인 근거>`. `--run-id`가 집계 출력의 `run_id`와 다르면 아무것도 싣지 않는다. 승인 근거는 번들 `manifest.publish.approval`에 남는다. 별마다 한 트랜잭션이고, 한 별의 실패가 다음 별을 막지 않는다.
+- **run 기록.** 표준 출력의 JSON 하나다(진행 메시지는 표준 오류). `run_id`, `silver_attempt`, `aggregator_version`, `approval`, `flyway_version`, `status`(`published`·`rejected`, 거절이면 `reason`), `counts`, `stars[]`(`tic_id`, `code`, `bundle_id`, `detail`, 게시한 별의 `confirmed_without_archive`), `notify`(`status` `sent`·`partial`·`skipped_no_token`·`none`과 판별 `results`), `started_at`·`finished_at`(UTC)을 담는다. `confirmed_without_archive`는 `archive` 참조가 없어 266 설명이 열리지 않을 확정 후보 수다. 거절 사유가 아니다.
+- **결과 코드와 종료 코드.** DB 제약 위반은 `PUBLISH_REJECTED`, 연결이 끊긴 일시 장애는 `PUBLISH_ROLLED_BACK`이다(Gold 계약 6절, 새 코드를 만들지 않는다). 모든 별이 `PUBLISHED`·`ALREADY_PUBLISHED`·`BUNDLE_SUPERSEDED`면 0이다. `PUBLISH_ROLLED_BACK`이나 알림 일부 실패가 있으면 1이다. 같은 명령을 다시 돌리면 끝난 별은 `ALREADY_PUBLISHED`이고 알림도 다시 간다. 그 밖의 거절만 남았으면 65다. Silver 제어기처럼 재시도해도 같은 결과인 데이터 실패를 뜻하므로 Airflow가 재시도하지 않게 한다. 알림 토큰이 없어 보내지 않은 것은 실패가 아니다.
 
 ## DEC-01 공급 집계 (S15P21C206-79)
 
@@ -153,6 +156,7 @@ python -m publisher tutorial-build --inputs <폴더> --out <폴더> --label-appr
 python -m publisher load-payload <payload 폴더>           # payload JSON을 게시한다
 python -m publisher tutorial-switch-sql                   # 튜토리얼 전환 SQL 출력. 소유자 psql로 넘긴다
 python -m publisher supply-report --manifest candidates.json  # planetory_reporter로 DEC-01 집계 기록을 읽기만 한다
+python -m publisher publish-run --run-id <id> --aggregation <집계 출력> --metadata <메타데이터> --approval <근거>  # 배치 run 첫 게시
 PYTHONPATH=../../libs/astro-kernel python -m unittest test_mock_source test_tutorial_source test_run_source test_notify test_supply   # DB 없이 도는 검사
 PUBLISHER_TEST_DATABASE_URL=postgresql://<소유자>:<비밀번호>@127.0.0.1:<포트>/<DB> \
   PYTHONPATH=../../libs/astro-kernel python -m unittest test_load                   # 일회용 PostgreSQL에서 도는 적재 검사
@@ -167,7 +171,7 @@ PUBLISHER_TEST_DATABASE_URL=postgresql://<소유자>:<비밀번호>@127.0.0.1:<�
 - 전환 SQL 적용: 두 회원의 1번이 `149603524`로 바뀌었다. 순번 0·좌표 (760, 430)는 그대로였고 진행도는 `unexplored`였다. 옛 기록과 b-1은 0이 됐고 더미 별 목업은 남았다. `261136679`는 `hidden`이 됐다. 재적용은 대상 0건이었다.
 - 앱 경로(Spring 테스트, MockMvc): 옮긴 회원의 `/api/v1/me/quests`가 5칸이었고 1번은 `149603524`였다. 신규 회원은 5개 별 모두 분석 진입·곡선·주기도(5000점)·봉우리가 200이었다. 정답 제출 9건이 모두 `matched`였고 1→5 순서로 열려 `completedCount=5`까지 갔다. 잔차 단계는 Worker 없이 원본 곡선에서만 확인했다.
 
-`test_load`(`S15P21C206-86`)는 `PUBLISHER_TEST_DATABASE_URL`이 있을 때만 돈다. 새 스키마에 저장소 마이그레이션 전체를 파일 순서대로 적용하고 끝나면 지운다. 마이그레이션이 역할을 만들어 소유자(superuser)로 붙으므로 **개발·운영 DB가 아니라 일회용 PostgreSQL**을 가리킨다(예: `docker run --rm -e POSTGRES_PASSWORD=… -p 127.0.0.1:<포트>:5432 postgres:18.6-alpine`). 검사하는 것은 `planetory_gold_writer`로의 첫 적재, 같은 payload 재실행 무변경, 같은 판 버전의 다른 내용 `IDEMPOTENCY_CONFLICT`, 어댑터 요약 불일치 `PUBLISH_REJECTED`, DB의 재시도 키 강제, 다음 판의 세그먼트 재사용과 이전 판 archived, 같은 자연 키의 세그먼트 내용 변경 충돌, staging 뒤 실패 시 행 무변경과 current 유지, 배열 길이·단위 범위 위반의 전체 rollback, 같은 payload 동시 게시의 직렬화(판 하나), 20개 별 적재다. 배치 run payload(`test_run_source`의 합성 run)로는 새 별의 `hidden` 등록, 후보 하나의 두 원천 참조(`archive`·TOI)와 후보 없는 참조 적재, 재실행 `ALREADY_PUBLISHED`, 기존 별의 공개 상태 유지, current가 있는 별의 `first_publish_only` 거절을 본다(`S15P21C206-276`). `TutorialSwitchTest`(`S15P21C206-272`)는 `tutorial_switch.sql` 본문을 한 트랜잭션에서 돌리고 rollback한다. 옛 1번 성과로 열린 별에 회원 기록이 없으면 정리하고 회원을 옮기는지, 있으면 예외로 멈추는지 본다. 배열 길이(`n_points`·`n_periods`)와 단위 범위(`bin_minutes > 0`, `0 < period_min_days < period_max_days`)는 DB CHECK(V1)가 강제한다. manifest에는 단위 메타데이터가 없어 적재가 단위를 따로 대조하지 않는다. 그 밖의 값 범위(`base_days`, 후보 수치)는 위 「게시 전 QA」 범위다.
+`test_load`(`S15P21C206-86`)는 `PUBLISHER_TEST_DATABASE_URL`이 있을 때만 돈다. 새 스키마에 저장소 마이그레이션 전체를 파일 순서대로 적용하고 끝나면 지운다. 마이그레이션이 역할을 만들어 소유자(superuser)로 붙으므로 **개발·운영 DB가 아니라 일회용 PostgreSQL**을 가리킨다(예: `docker run --rm -e POSTGRES_PASSWORD=… -p 127.0.0.1:<포트>:5432 postgres:18.6-alpine`). 검사하는 것은 `planetory_gold_writer`로의 첫 적재, 같은 payload 재실행 무변경, 같은 판 버전의 다른 내용 `IDEMPOTENCY_CONFLICT`, 어댑터 요약 불일치 `PUBLISH_REJECTED`, DB의 재시도 키 강제, 다음 판의 세그먼트 재사용과 이전 판 archived, 같은 자연 키의 세그먼트 내용 변경 충돌, staging 뒤 실패 시 행 무변경과 current 유지, 배열 길이·단위 범위 위반의 전체 rollback, 같은 payload 동시 게시의 직렬화(판 하나), 20개 별 적재다. 배치 run payload(`test_run_source`의 합성 run)로는 새 별의 `hidden` 등록, 후보 하나의 두 원천 참조(`archive`·TOI)와 후보 없는 참조 적재, 재실행 `ALREADY_PUBLISHED`, 기존 별의 공개 상태 유지, current가 있는 별의 `first_publish_only` 거절을 본다. `publish-run`의 run 기록은 별 셋(새 별, current가 있는 별, 배열 checksum이 깨진 별)으로 별별 결과, 거절 별의 무기록, 승인 근거, 재실행 `ALREADY_PUBLISHED`, run ID 불일치 거절을 본다(`S15P21C206-276`). `TutorialSwitchTest`(`S15P21C206-272`)는 `tutorial_switch.sql` 본문을 한 트랜잭션에서 돌리고 rollback한다. 옛 1번 성과로 열린 별에 회원 기록이 없으면 정리하고 회원을 옮기는지, 있으면 예외로 멈추는지 본다. 배열 길이(`n_points`·`n_periods`)와 단위 범위(`bin_minutes > 0`, `0 < period_min_days < period_max_days`)는 DB CHECK(V1)가 강제한다. manifest에는 단위 메타데이터가 없어 적재가 단위를 따로 대조하지 않는다. 그 밖의 값 범위(`base_days`, 후보 수치)는 위 「게시 전 QA」 범위다.
 
 CI는 테스트 파일을 이름으로 적어 돌린다. 테스트 파일을 추가하면 표준 라이브러리만 쓰는 것은 `validate:data-platform`에, `astro_kernel`을 쓰는 것은 `validate:astro-kernel`에(둘 다 `.gitlab/ci/common.yml`), PostgreSQL이 필요한 것은 일회용 postgres 서비스가 붙은 `validate:publisher`(`.gitlab/ci/distributed-system/publisher.yml`)에 넣는다. 지금 `validate:publisher`는 `test_load`만 돈다([CI/CD 「data-platform 테스트」](../../docs/operations/cicd.md#data-platform-테스트-s15p21c206-91)).
 

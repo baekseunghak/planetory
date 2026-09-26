@@ -142,13 +142,16 @@ def gold_body(gold: dict, observations: dict[str, dict]) -> dict:
     }
 
 
-def to_payload(gold: dict, meta: dict, run: dict) -> dict:
-    """한 별의 payload. meta는 {"star": {teff_k, radius_rsun, tmag}, "observations": {Sector: {cadence, source_version}}}."""
+def to_payload(gold: dict, meta: dict, run: dict, approval: str) -> dict:
+    """한 별의 payload. meta는 {"star": {teff_k, radius_rsun, tmag}, "observations": {Sector: {cadence, source_version}}}.
+
+    approval은 게시 승인 근거다. manifest.publish에 남는다(payload_digest 재료가 아니다).
+    """
     body = gold_body(gold, meta["observations"])
     tic = gold["bundle"]["tic_id"]
     body["bundle"]["manifest"]["publish"] = {"jira": JIRA, "source": "run", "run_id": run["run_id"],
                                              "silver_attempt": run["silver_attempt"],
-                                             "aggregator_version": run["aggregator_version"]}
+                                             "aggregator_version": run["aggregator_version"], "approval": approval}
     return {"tic_id": tic, "label": f"run {run['run_id']} TIC {tic}",
             "star": {**{k: meta["star"][k] for k in ("teff_k", "radius_rsun", "tmag")},
                      "confirmed_count": sum(c["record"]["is_confirmed"] for c in body["candidates"]),
@@ -156,17 +159,27 @@ def to_payload(gold: dict, meta: dict, run: dict) -> dict:
             **body}
 
 
-def star_payloads(aggregation: dict, metadata: dict[str, dict]) -> Iterator[tuple[int, dict | PublishRejected]]:
+def star_payloads(aggregation: dict, metadata: dict[str, dict],
+                  approval: str) -> Iterator[tuple[int, dict | PublishRejected]]:
     """ready 별마다 (tic, payload) 또는 (tic, PublishRejected)를 TIC 순서로 낸다. metadata 키는 TIC 문자열이다.
 
-    run 검사가 실패하면 별을 하나도 내지 않고 PublishRejected를 던진다.
+    run 검사는 부를 때 바로 한다. 실패하면 별을 하나도 내지 않고 PublishRejected를 던진다. payload는 하나씩 만든다.
     """
+    _require(isinstance(approval, str) and approval.strip(), "게시 승인 근거가 필요하다")
     bundles = check_run(aggregation)
-    for tic in sorted(bundles):
+
+    def star(tic):
         try:
             check_bundle(bundles[tic])
-            yield tic, to_payload(bundles[tic], metadata[str(tic)], aggregation["manifest"])
+            return tic, to_payload(bundles[tic], metadata[str(tic)], aggregation["manifest"], approval)
         except PublishRejected as exc:
-            yield tic, exc
+            return tic, exc
         except MALFORMED as exc:
-            yield tic, PublishRejected(f"TIC {tic}: 입력 형식이 맞지 않는다: {exc!r}")
+            return tic, PublishRejected(f"TIC {tic}: 입력 형식이 맞지 않는다: {exc!r}")
+    return (star(tic) for tic in sorted(bundles))
+
+
+def confirmed_without_archive(payload: dict) -> int:
+    """archive 참조가 없는 확정 후보 수. 266 NASA 설명은 이 참조로만 원천을 찾으므로 그 후보에서는 열리지 않는다."""
+    return sum(c["record"]["is_confirmed"] and not any(e["source"] == "archive" for e in c["external"])
+               for c in payload["candidates"])

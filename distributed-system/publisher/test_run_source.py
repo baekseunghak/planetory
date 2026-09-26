@@ -6,6 +6,7 @@
 
 import copy
 import unittest
+import unittest.mock
 
 import numpy as np
 from astro_kernel.candidate_aggregation import AI_NOT_EXECUTED, AI_POLICY, aggregate
@@ -13,7 +14,9 @@ from astro_kernel.external_catalog import build_snapshot, join_catalog
 from astro_kernel.gold_canonical import record_checksum
 
 from publisher import run_source as r
+from publisher.__main__ import exit_code, notify_record
 
+APPROVAL = "unittest-only"
 TIMES = np.arange(0, 10, .01)
 VERSIONS = dict(preprocessing="pre-v1", bls_config="search-v1", residual_model="box-divide-v0",
                 periodogram_config="provided-v1", ai_model=AI_NOT_EXECUTED, ai_threshold=AI_NOT_EXECUTED,
@@ -75,7 +78,7 @@ class RunSourceTest(unittest.TestCase):
         self.assertEqual(self.run["manifest"]["counts"]["ready"], 2, self.run["manifest"]["stars"])
 
     def payloads(self):
-        return dict(r.star_payloads(self.run, self.meta))
+        return dict(r.star_payloads(self.run, self.meta, APPROVAL))
 
     def bundle(self, tic):
         return next(b for b in self.run["bundles"] if b["bundle"]["tic_id"] == tic)
@@ -93,12 +96,16 @@ class RunSourceTest(unittest.TestCase):
         self.assertTrue(first["record"]["is_confirmed"])
         self.assertEqual((p["star"]["service_status"], p["star"]["confirmed_count"]), (None, 1))
         self.assertNotIn("payload_digest", p["bundle"])
-        self.assertEqual(p["bundle"]["manifest"]["publish"]["run_id"], "run-fixture")
+        self.assertEqual((p["bundle"]["manifest"]["publish"]["run_id"], p["bundle"]["manifest"]["publish"]["approval"]),
+                         ("run-fixture", APPROVAL))
         # 적재가 DB에서 다시 읽어 대조하는 외부 참조 checksum과 같아야 한다. candidate_key는 연결된 후보의 값이다.
         rows = [dict(e, candidate_key={k: c["record"][k] for k in ("period_days", "epoch_btjd")})
                 for c in p["candidates"] for e in c["external"]] + [dict(e, candidate_key=None) for e in p["external_only"]]
         self.assertEqual(record_checksum("external_statuses", rows),
                          p["bundle"]["manifest"]["record_checksums"]["external_statuses"])
+        self.assertEqual(r.confirmed_without_archive(p), 0)
+        first["external"] = [e for e in first["external"] if e["source"] != "archive"]
+        self.assertEqual(r.confirmed_without_archive(p), 1, "archive가 없는 확정 후보는 266 설명이 열리지 않는다")
 
     def test_run_that_disagrees_with_its_manifest_publishes_nothing(self):
         for name, change in (("후보 표", lambda run: run["candidates"][0].update(depth_ppm=2000.)),
@@ -110,7 +117,9 @@ class RunSourceTest(unittest.TestCase):
                 run = copy.deepcopy(self.run)
                 change(run)
                 with self.assertRaises(r.PublishRejected):
-                    list(r.star_payloads(run, self.meta))
+                    r.star_payloads(run, self.meta, APPROVAL)   # 부를 때 바로 거절한다(별을 하나도 내지 않는다)
+        with self.assertRaisesRegex(r.PublishRejected, "승인"):
+            r.star_payloads(self.run, self.meta, " ")
 
     def test_one_broken_star_is_rejected_alone(self):
         self.bundle(self.B)["segments"][0]["flux"][0] = 1.5
@@ -141,6 +150,28 @@ class RunSourceTest(unittest.TestCase):
         g["lifecycle_actions"] = [dict(candidate_id=g["candidates"][0]["id"], action="keep")]
         with self.assertRaisesRegex(r.PublishRejected, "갱신 판"):
             r.check_bundle(g)
+
+
+class RunRecordExitTest(unittest.TestCase):
+    """publish-run 종료 코드. Airflow는 1이면 같은 명령을 다시 돌리고 65면 멈춘다(끝난 별은 ALREADY_PUBLISHED)."""
+
+    def record(self, *codes, status="published", notify="sent"):
+        return {"status": status, "stars": [{"code": c} for c in codes], "notify": {"status": notify}}
+
+    def test_exit_codes(self):
+        self.assertEqual(exit_code(self.record("PUBLISHED", "ALREADY_PUBLISHED", "BUNDLE_SUPERSEDED")), 0)
+        self.assertEqual(exit_code(self.record("PUBLISHED", "PUBLISH_REJECTED")), 65)
+        self.assertEqual(exit_code(self.record("IDEMPOTENCY_CONFLICT")), 65)
+        self.assertEqual(exit_code(self.record(status="rejected")), 65)
+        # 일시 장애가 있으면 거절이 섞여도 다시 돌린다. 끝난 별은 그대로이고 거절은 다음 실행에 65로 남는다.
+        self.assertEqual(exit_code(self.record("PUBLISH_REJECTED", "PUBLISH_ROLLED_BACK")), 1)
+        self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 1)
+        self.assertEqual(exit_code(self.record("PUBLISHED", notify="skipped_no_token")), 0)
+
+    def test_notify_without_targets_or_token_sends_nothing(self):
+        self.assertEqual(notify_record([])["status"], "none")
+        with unittest.mock.patch.dict("os.environ", {"INTERNAL_SERVICE_TOKEN": ""}):
+            self.assertEqual(notify_record([12]), {"status": "skipped_no_token", "results": []})
 
 
 if __name__ == "__main__":

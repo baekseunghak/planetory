@@ -323,6 +323,27 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
         return StarResult(tic, payload["label"], "PUBLISHED", bundle_id, archived, retired)
 
 
+def publish_outcome(conn: psycopg.Connection, tic: int, item, target: Target, **kwargs) -> dict:
+    """run 기록 한 행을 만든다. 한 별의 실패가 다음 별을 막지 않는다[S15P21C206-276].
+
+    item은 payload 또는 게시 전 거절(code 속성이 있는 예외)이다. 결과 코드는 Gold 계약 6절을 따른다. DB 제약 위반은
+    같은 입력이 반복해 실패하므로 PUBLISH_REJECTED, 연결이 끊긴 일시 장애는 같은 판으로 다시 돌릴 PUBLISH_ROLLED_BACK이다.
+    둘 다 트랜잭션이 rollback돼 기존 current가 남는다.
+    """
+    row = {"tic_id": tic, "code": None, "bundle_id": None, "detail": None}
+    if isinstance(item, Exception):
+        return {**row, "code": item.code, "detail": str(item)}
+    try:
+        result = publish_star(conn, item, target, **kwargs)
+        return {**row, "code": result.code, "bundle_id": result.bundle_id}
+    except PublishError as exc:
+        return {**row, "code": exc.code, "detail": str(exc)}
+    except (psycopg.IntegrityError, psycopg.DataError) as exc:
+        return {**row, "code": "PUBLISH_REJECTED", "detail": f"DB 제약 위반: {exc}"}
+    except psycopg.OperationalError as exc:
+        return {**row, "code": "PUBLISH_ROLLED_BACK", "detail": f"일시 장애: {exc}"}
+
+
 def _insert_external(cur, tic: int, candidate_id: int | None, e: dict) -> int:
     return cur.execute("""
         INSERT INTO external_signal_references(candidate_id, source, external_id, disposition, period_days,

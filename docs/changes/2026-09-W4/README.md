@@ -385,3 +385,4 @@
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | MR !227 리뷰 반영: 공급 집계 REPEATABLE READ 스냅샷과 보고 전용 최소 권한 로그인 | S15P21C206-79 | REPEATABLE READ, planetory_reporter, REPORT_TABLES, default_transaction_read_only, --manifest -, 강재민 리뷰 | 구현 완료 | [기록](2026-09-27.md) |
 | 2026-09-27 | 배치 run 입력 어댑터, 후보별 외부 참조 목록·후보 없는 참조 적재, PSCompPars → archive 표기, 첫 게시 한정 | S15P21C206-276 | run_source, external_only, first_publish_only, DB_SOURCES, archive, pl_name, gold-serialization-125-v2, hidden | 구현·합성 검증 완료 | [기록](2026-09-27.md) |
+| 2026-09-27 | run 단위 게시 명령 publish-run, 별별 결과·bundleId·알림을 담은 run 기록, 종료 코드 0/1/65 | S15P21C206-276 | publish-run, run 기록, publish_outcome, PUBLISH_ROLLED_BACK, confirmed_without_archive, --approval, 65 | 구현·합성 검증 완료, 운영 실행 전 | [기록](2026-09-27.md) |
