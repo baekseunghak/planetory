@@ -100,10 +100,10 @@
 
 - 남은 항목 3을 다음과 같이 반영했다. 근거와 판정은 [116 계약](tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다.
   - `normalize_export_row`는 NEA TOI·ExoFOP TOI를 BJD-TDB로, MAST TCE를 `tce_time0bt`(BTJD-TDB)로 받는다.
-  - PSCompPars는 행마다 `BJD-TDB`로 적힌 경우만 받는다.
-  - 정규화 결과에 `time_rule_version=external-time-evidence-v1`과 원천의 원래 시간 표기(`original_time_system`)를 남긴다.
+  - PSCompPars는 행에 적힌 `BJD-TDB`·`BTJD-TDB`·`BJD-UTC`(2017년 이후 69.184초 더함)를 받는다. 표기 없는 `BJD`는 논문으로 확인한 `ROW_TIME_EVIDENCE` 행만 받는다(v2).
+  - 정규화 결과에 `time_rule_version=external-time-evidence-v2`, 원천의 원래 시간 표기(`original_time_system`), 행별 근거(`time_evidence`)를 남긴다.
 - 어댑터는 snapshot `time_evidence`에 `TIME_EVIDENCE[source]`를 넘긴다. `tess_bench.external_catalog_regression`도 이 값을 쓴다. 규칙이 바뀌면 snapshot 내용과 `bundle_version`이 바뀐다.
 - 기존 실행 `run-20260922T141154Z-696cda44`의 11곡선 hold는 이전 규칙의 결과다. 같은 저장 행·관측 시각으로 다시 실행한 결과는 [116 계약 재실측](tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다.
-  - 7곡선(toi451 3개, wasp62 4개)이 `ready`가 됐다. wasp62의 WASP-62 b 후보는 `confirmed`다.
-  - Archive 보류 행이 있는 4곡선(toi270, pi_men)은 여전히 `unresolved_external_rows`로 보류된다.
+  - v1에서 7곡선(toi451 3개, wasp62 4개), v2에서 9곡선(toi270 2개 추가)이 `ready`가 됐다. wasp62의 WASP-62 b 후보는 `confirmed`다.
+  - 남은 2곡선(pi_men)은 비통과 행이 분류를 막는 기존 규칙 때문에 `unresolved_external_rows`로 보류된다.
   - fixture ID로 한 재실측이며, 운영 DB 적재나 외부 라벨 게시는 아니다.

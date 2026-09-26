@@ -376,3 +376,4 @@
 | 2026-09-27 | DEC-01 공급 집계 구현과 튜토리얼 제외 범위(활성 슬롯) 확정 | S15P21C206-79 | supply-report, tutorial_stars.active, planetory_app, publish_missing, undetermined, DEC-01 | 구현 완료(합성 DB·단위), 운영 집계 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 외부 카탈로그 시간 척도 근거 확정(TOI·ExoFOP BJD-TDB, TCE tce_time0bt) | S15P21C206-79 | external-time-evidence-v1, TIME_EVIDENCE, tce_time0bt, BTJD-TDB, pl_tranmid_systemref, unresolved_external_rows | 구현 완료, 저장 자료 재실측 완료 | [기록](2026-09-27.md) |
 | 2026-09-27 | 실데이터 재실측·자체 리뷰 반영(candidate_quality 별 단위, 잘못된 입력 거절, OPS-08 서술 정정) | S15P21C206-79 | aggregation_replay, candidate_quality_revision, per_star_version_in_run, malformed_input, WASP-62 b, observed_times_sha256 | 검증 완료(fixture·저장 자료) | [기록](2026-09-27.md) |
+| 2026-09-27 | 외부 시간 규칙 v2: PSCompPars 표기 없는 BJD 7행 논문 근거·BJD-UTC 변환 | S15P21C206-79 | external-time-evidence-v2, ROW_TIME_EVIDENCE, pl_tranmid_reflink, BJD_UTC, 69.184, TOI-270, pi Men c, L 98-59 | 구현·저장 자료 재실측 완료 | [기록](2026-09-27.md) |

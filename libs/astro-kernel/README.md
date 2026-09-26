@@ -701,7 +701,7 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 
 ## 124 외부 카탈로그 변경안
 
-`astro_kernel.external_catalog`는 검증된 원천 snapshot과 122 후보 ID를 연결하여 외부 참조·통합 판정·변경 이력 입력을 만든다. DB 쓰기와 Publisher 전환은 수행하지 않는다. [124 구현·검증 범위](../../docs/data/tess-external-catalog-implementation.md)를 참조한다. 합성 ID 테스트와 실제 할당 ID 검증을 구분하며, 실패한 원천을 빈 성공 조회로 바꾸지 않는다. 시간 척도는 `TIME_RULE_VERSION`(`external-time-evidence-v1`)의 공식 문서 근거로만 받는다. TOI·ExoFOP는 BJD-TDB, TCE는 `tce_time0bt`(BTJD-TDB)이고, PSCompPars는 행에 `BJD-TDB`로 적힌 경우만 받는다. 어댑터는 `TIME_EVIDENCE[source]`를 snapshot `time_evidence`로 넘긴다([116 결정](../../docs/data/tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)).
+`astro_kernel.external_catalog`는 검증된 원천 snapshot과 122 후보 ID를 연결하여 외부 참조·통합 판정·변경 이력 입력을 만든다. DB 쓰기와 Publisher 전환은 수행하지 않는다. [124 구현·검증 범위](../../docs/data/tess-external-catalog-implementation.md)를 참조한다. 합성 ID 테스트와 실제 할당 ID 검증을 구분하며, 실패한 원천을 빈 성공 조회로 바꾸지 않는다. 시간 척도는 `TIME_RULE_VERSION`(`external-time-evidence-v2`)의 공식 문서 근거로만 받는다. TOI·ExoFOP는 BJD-TDB, TCE는 `tce_time0bt`(BTJD-TDB)다. PSCompPars는 행에 적힌 TDB 표기와 `BJD-UTC`(2017년 이후 69.184초 더함)를 받는다. 표기 없는 `BJD`는 논문으로 확인해 `ROW_TIME_EVIDENCE`에 둔 행만 받는다. 어댑터는 `TIME_EVIDENCE[source]`를 snapshot `time_evidence`로 넘긴다([116 결정](../../docs/data/tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)).
 
 ## 125 Gold 직렬화
 

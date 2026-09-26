@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from astro_kernel.external_catalog import TIME_RULE_VERSION
+
 from tess_bench import external_catalog_regression as regression
 from tess_fixture.targets import TARGETS
 
@@ -10,7 +12,7 @@ def test_saved_source_hold_and_recursive_inputs(tmp_path, monkeypatch):
     raw = tmp_path / "source.raw"
     raw.write_text("fixture")
     source_manifest = tmp_path / "manifest.json"
-    # A bare Archive "BJD" has no documented scale (external-time-evidence-v1) and stays held.
+    # A bare Archive "BJD" without paper-checked row evidence has no scale and stays held.
     source_manifest.write_text(json.dumps({"sources": {"nea_pscomppars": {
         "file": raw.name, "requested_url": "https://example.org/ps"}}}))
     source = dict(source_manifest=str(source_manifest), source_sha256="a"*64,
@@ -25,7 +27,7 @@ def test_saved_source_hold_and_recursive_inputs(tmp_path, monkeypatch):
     snapshot = result["deliveries"]["nea_pscomppars"]["snapshot"]
     assert result["deliveries"]["nea_pscomppars"]["status"] == "ready"
     assert not snapshot["rows"] and snapshot["held_rows"][0]["reason"] == "unverified_time_standard"
-    assert snapshot["time_evidence"].startswith("external-time-evidence-v1")
+    assert snapshot["time_evidence"].startswith(TIME_RULE_VERSION)
     assert manifest["status"] == "completed" and manifest["publishable"] is False
     assert any(i["path"].endswith("astro_kernel\\external_catalog.py") or i["path"].endswith("astro_kernel/external_catalog.py") for i in manifest["inputs"])
     for output_entry in manifest["outputs"]:
