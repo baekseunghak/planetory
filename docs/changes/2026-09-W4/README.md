@@ -384,3 +384,4 @@
 | 2026-09-27 | 전환 SQL이 보상 별의 회원 기록을 남기는 문제, 멈춤 검사와 회귀 테스트 | S15P21C206-272 | tutorial_switch.sql, achievement_unlocks, TutorialSwitchTest, 외래 키, !226 백승학 P2 | 로컬 검증 완료, 운영 영향 없음, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | MR !227 리뷰 반영: 공급 집계 REPEATABLE READ 스냅샷과 보고 전용 최소 권한 로그인 | S15P21C206-79 | REPEATABLE READ, planetory_reporter, REPORT_TABLES, default_transaction_read_only, --manifest -, 강재민 리뷰 | 구현 완료 | [기록](2026-09-27.md) |
+| 2026-09-27 | Sector 14+ 증분 Silver: 누적 snapshot·변경 TIC 버킷 선택·실행 후 70% 용량 가드 | S15P21C206-275 | --through-sector, --delta-from-sector, tic_buckets, left_semi, capacity_budget_exceeded, tess-silver-attempt.v5, bronze_snapshot_sha256, 85%, RF2 4/5 | 구현·오프라인 검증 완료, 실클러스터 Canary 전 | [기록](2026-09-27.md) |

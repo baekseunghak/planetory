@@ -192,13 +192,13 @@ parity_passed만으로 127 완료를 선언하지 않는다. 실제 다중 Secto
 
 `tess_silver.py`는 확정 Bronze coverage가 가리키는 Sector 1~13 Parquet을 읽고 `tic_id`로 분산 그룹화한다. 각 TIC에서 `astro_kernel.preprocessing.preprocess_silver`와 `astro_kernel.bls.search_bls`를 순서대로 호출하며, 전체 Bronze나 TIC 목록을 드라이버에 수집하지 않는다. 한 TIC의 데이터·수치 오류는 그 TIC의 manifest 행으로 격리하고 다른 TIC 결과를 보존한다.
 
-Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약을 검사하므로 다른 TIC의 전체 sector distinct를 선행 스캔하지 않는다. 전체 run만 13개 Sector 분포를 검사한다. Bronze/Silver 제어기의 YARN 작업은 Node 1의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일 집합으로 **상한을 두고 병렬 실행**한다. 슬롯 수는 `PLANETORY_YARN_SLOTS`(기본 2, 1~8)이며 빈 슬롯이 없으면 15초 간격으로 대기한다. 제한 sudo 경로는 환경 변수를 넘기지 않으므로 Airflow 실행은 항상 기본값 2를 쓰며, 상한을 바꾸려면 `configure-tess-silver-airflow-node1.sh`의 Pool 슬롯과 제어기 기본값을 함께 바꾼다. 이 상한은 두 제어기의 **새 release를 모두 배포한 뒤** 효력이 있다. 슬롯은 살아 있는 제어기 수만 세므로 사전 점검(`require_yarn_headroom`)이 RUNNING YARN 앱도 함께 센다. 앱 이름이 `S15P21C206-77-bronze-<run>-`·`S15P21C206-78-silver-<run>-` 형식이 아닌 앱이 하나라도 있으면 거부하고, 이름 열을 읽지 못한 행도 외부 앱으로 간주한다. 파이프라인 앱은 그 수가 슬롯 수보다 적을 때만 새 제출을 허용하므로, Airflow 재시작 등으로 제어기가 죽어 슬롯 없이 남은 cluster-mode 앱(고아)이 상한을 깨지 못한다. Airflow 실행 계약과 14+ 제외 범위는 [Silver DAG 안내](../airflow/dags/README.md)를 따른다.
+Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약을 검사하므로 다른 TIC의 전체 sector distinct를 선행 스캔하지 않는다. 전체 run만 13개 Sector 분포를 검사한다. Bronze/Silver 제어기의 YARN 작업은 Node 1의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일 집합으로 **상한을 두고 병렬 실행**한다. 슬롯 수는 `PLANETORY_YARN_SLOTS`(기본 2, 1~8)이며 빈 슬롯이 없으면 15초 간격으로 대기한다. 제한 sudo 경로는 환경 변수를 넘기지 않으므로 Airflow 실행은 항상 기본값 2를 쓰며, 상한을 바꾸려면 `configure-tess-silver-airflow-node1.sh`의 Pool 슬롯과 제어기 기본값을 함께 바꾼다. 이 상한은 두 제어기의 **새 release를 모두 배포한 뒤** 효력이 있다. 슬롯은 살아 있는 제어기 수만 세므로 사전 점검(`require_yarn_headroom`)이 RUNNING YARN 앱도 함께 센다. 앱 이름이 `S15P21C206-77-bronze-<run>-`·`S15P21C206-78-silver-<run>-` 형식이 아닌 앱이 하나라도 있으면 거부하고, 이름 열을 읽지 못한 행도 외부 앱으로 간주한다. 파이프라인 앱은 그 수가 슬롯 수보다 적을 때만 새 제출을 허용하므로, Airflow 재시작 등으로 제어기가 죽어 슬롯 없이 남은 cluster-mode 앱(고아)이 상한을 깨지 못한다. Airflow 실행 계약과 14+ 제외 범위는 [Silver DAG 안내](../airflow/dags/README.md)를 따른다. Sector 14+ 누적 입력·변경 TIC 재처리·HDFS 용량 가드는 [Sector 14+ 증분 Silver](#sector-14-증분-silver-s15p21c206-275)를 따른다.
 
 현재 구현 범위는 245 원본 행·구간 마스크 추적 전처리, 최초 BLS, 122 반복 BLS·제거 QA까지다. 첫 탐색의 검증된 메모리 결과를 반복 커널에 전달해 중복 탐색하지 않는다. 후보 ID·판 비교·생명주기 변경은 Publisher의 이전 판·ID 예약·승인 근거를 받아 별도 연결한다. 세그먼트·비닝(`123`), 외부 조인(`124`), AI 입력·추론(`126`)은 아직 연결하지 않는다.
 
 ### 입력·출력 경계
 
-입력은 Bronze coverage marker의 `sectors[].location` 13개만 사용한다. 임의의 Sector glob이나 Raw 파일을 다시 읽지 않는다. 제어기는 coverage와 각 Sector `_READY.json`의 SHA-256, schema, pipeline version, 제품·관측점 수와 RF2를 대조한 뒤 제출한다.
+입력은 Bronze coverage marker의 `sectors[].location` 13개(기본) 또는 275의 Sector 1..N snapshot만 사용한다. 임의의 Sector glob이나 Raw 파일을 다시 읽지 않는다. 제어기는 coverage와 각 Sector `_READY.json`의 SHA-256, schema, pipeline version, 제품·관측점 수와 RF2를 대조한 뒤 제출한다.
 
 ```text
 /lake/silver/pipeline_version=<version>/run_id=<run>/attempt=<UTC>/
@@ -210,7 +210,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `_READY.json`(현재 `planetory.tess-silver-attempt.v5`, 이전 운영 attempt는 v4. 차이는 [275 절](#attempt-_readyjson-v5)) 은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 
@@ -243,7 +243,7 @@ manifest schema는 `planetory.tess-silver-stage.v4`이며 TIC·stage 한 쌍당 
 | `target_location`, `periodogram_location`, `iteration_location` | 실제 생성된 출력만 기록한다. 반복 실패로 출력이 없으면 마지막 값은 null이다. |
 | `error_code`, `error_detail` | 실패 원인과 공백 정규화·500자 제한 상세를 기록한다. 원본 배열은 넣지 않는다. |
 
-`Retry`는 현재 v4 완료 attempt의 manifest에서 `status=failed` 또는 `incomplete`인 TIC만 Bronze와 semi join해 새 attempt에서 최초·반복 단계를 함께 재실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 실패·상한 원인과 코드·입력 수정 여부를 확인한 뒤 명시적으로 시작한다. `qa_stopped` TIC는 선택하지 않는다. 이전 v2·v3 attempt는 새 스키마로 직접 재시도하지 않는다. v3 운영 attempt는 만들어진 적이 없다.
+`Retry`는 같은 run·같은 Bronze snapshot의 v5 완료 attempt manifest에서 `status=failed` 또는 `incomplete`인 TIC만 Bronze와 semi join해 새 attempt에서 최초·반복 단계를 함께 재실행한다. 이전 성공 결과를 덮어쓰거나 합쳐 쓰지 않는다. 운영자가 실패·상한 원인과 코드·입력 수정 여부를 확인한 뒤 명시적으로 시작한다. `qa_stopped` TIC는 선택하지 않는다. 이전 v2·v3·v4 attempt는 새 스키마로 직접 재시도하지 않는다. v3 운영 attempt는 만들어진 적이 없고, v4 운영 attempt(1~13 원본)의 실패 104개는 같은 입력에서 같은 결과가 나오는 결정적 판정이다.
 
 ### 담당자 인계 인터페이스
 
@@ -301,7 +301,7 @@ systemd 경로(`-Step Start`)로 release `20260924T093328Z`(executor 10개 × co
 
 제어기 재감사(RF2·part checksum·FSCK), Parquet 불변식, 같은 release Canary 5개 TIC와의 값 비교를 모두 통과했다. 실패 104개는 결정적 데이터·수치 판정이라 `retry`로 같은 결과가 반복되므로 자동 재처리하지 않는다.
 
-2026-09-26에 같은 release로 `-Step Retry -RetryFrom <위 attempt>`를 한 번 실행해 부분 재처리를 실클러스터에서 확인했다. `application_1790067725443_0066`이 SUCCEEDED했고 제어기 확정까지 약 9분 걸렸다. 새 attempt `attempt=20260926T091732Z`에는 원본 실패 TIC 104개만 들어 있고, TIC마다 단계·상태·오류 코드·`retryable`이 원본과 같았다. 원본 attempt의 `_READY.json` SHA-256과 파일 시각은 그대로였다. 이 attempt는 검증 기록이며 새 결과가 없으므로, 79 입력은 계속 원본 attempt다. current alias가 없으므로 소비자는 "run의 최신 attempt"를 자동으로 고르지 말고 attempt 경로를 명시한다.
+2026-09-26에 같은 release로 `-Step Retry -RetryFrom <위 attempt>`를 한 번 실행해 부분 재처리를 실클러스터에서 확인했다. `application_1790067725443_0066`이 SUCCEEDED했고 제어기 확정까지 약 9분 걸렸다. 새 attempt `attempt=20260926T091732Z`에는 원본 실패 TIC 104개만 들어 있고, TIC마다 단계·상태·오류 코드·`retryable`이 원본과 같았다. 원본 attempt의 `_READY.json` SHA-256과 파일 시각은 그대로였다. 이 attempt는 검증 기록이며 새 결과가 없으므로, 79 입력은 계속 원본 attempt다. current alias가 없으므로 소비자는 "run의 최신 attempt"를 자동으로 고르지 말고 attempt 경로를 명시한다. 여러 attempt를 TIC별로 결합하는 규칙은 [275 절](#tic별-current-선택-규칙-합의안-구현-전)을 따른다.
 
 실행 중 2026-09-25 06:12·06:15 UTC에 자동 보안 업데이트가 worker-5·worker-3 NodeManager를 재시작해 executor 6개와 캐시한 결과 파티션 211개를 잃었고, Spark가 이를 다시 계산해 완료가 약 6시간 늦어졌다. TIC 결과를 executor 로컬 디스크에 한 벌만 두는 `DISK_ONLY` 구조라 노드 하나만 재시작돼도 몇 시간 분량을 다시 계산한다. 재발 방지는 [needrestart 예외](../../infra/distributed-system/README.md#needrestart-자동-재시작-예외-s15p21c206-78)로 적용했고, `DISK_ONLY_2` 전환은 HDFS·로컬 디스크 여유와 함께 별도로 검토한다.
 
@@ -323,3 +323,83 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 `process_tic(..., interval_masks=())`는 TIC별 마스크를 선택적으로 받는다. `target_combined`에는 `exclusion_ledger(prepared, detrended)`, `prepared.interval_masks`, 원래 QUALITY와 마스크 계약 버전을 남기고 `raw = kept + excluded`를 만족하지 않으면 해당 TIC를 실패로 격리한다.
 `detrended.status != "ok"`는 정상 무후보가 아니므로 후속 BLS로 넘기지 않는다. 원본 QUALITY는 변경하지 않는다.
 빈 마스크는 기존 수치 결과와 `quality0_baseline_pending_interval_mask` 상태를 유지한다. 실제 클러스터 활성화에는 버전 고정된 마스크 manifest 위치·스키마와 근거 snapshot checksum 승인이 필요하다. 승인 전에는 실험용 Sector 3 범위를 운영 코드에 하드코딩하거나 기존 공개 판을 바꾸지 않는다.
+
+## Sector 14+ 증분 Silver (`S15P21C206-275`)
+
+**상태: 구현·오프라인 검증 완료, 실클러스터 Canary 전(2026-09-27).** 78의 1~13 결과를 보존한 채, 새 Sector에 관측이 생긴 TIC만 모든 Sector를 합쳐 다시 계산한다. BLS는 결합 곡선 전체가 필요하므로 증분 계산이 아니라 TIC 단위 재실행이다. Airflow DAG 연결은 80이 맡으며, 그 전까지 `start-unit`은 Airflow sudoers가 고정한 coverage 인자만 받는다.
+
+### 누적 Bronze snapshot
+
+- `--through-sector N`은 Sector 1..N의 final `_READY.json`과 `_SUCCESS`를 확인하고 하나의 입력 snapshot으로 묶는다. Sector 행은 `sector`, `location`, `ready_sha256`(marker 바이트 SHA-256), `pipeline_version`, `product_count`, `observation_count`다. marker는 schema·data schema·Sector·RF2·양의 제품/관측 수·버전 형식을 통과해야 한다.
+- Sector마다 자기 marker의 Bronze 버전을 유지한다. 2026-09-27 기준 1~13은 `S15P21C206-77-20260920T220814Z`, 14~70은 `S15P21C206-77-20260922T021406Z`다. job은 행마다 `pipeline_version`이 그 Sector의 snapshot 버전과 같은지, Sector가 snapshot 안에 있는지 검사한다.
+- snapshot ID는 `planetory.tess-silver-bronze-snapshot.v1`과 정렬한 Sector 행의 정규 JSON SHA-256이다. 찾은 경로와 무관하므로 기존 coverage로 만든 1~13 snapshot과 marker로 만든 1~13 snapshot은 ID가 같다.
+- `--through-sector`를 주지 않으면 기존대로 `--bronze-coverage`(기본 `df6bfa63…`)의 1~13을 쓴다.
+
+### 변경 TIC 선택
+
+`run --through-sector N --delta-from-sector M [--tic-buckets K --tic-bucket k]`은 Sector M..N 중 하나라도 관측이 있는 TIC만 골라 snapshot 전체 Sector의 행으로 처리한다(`left_semi`). 버킷은 `tic_id % K == k`로 먼저 나눈 뒤 그 안에서 변경 TIC를 고른다. 결과는 새 attempt 하나이며 기존 attempt는 건드리지 않는다.
+
+| 용도 | 인자 |
+| --- | --- |
+| 새 Sector N 추가 | `--through-sector N --delta-from-sector N` |
+| 기존 14~70 backfill | `--through-sector 70 --delta-from-sector 14 --tic-buckets K --tic-bucket k` |
+
+backfill을 Sector 하나씩 늘리지 않는다. 여러 Sector에 걸친 TIC가 Sector마다 다시 계산되고, attempt 안의 일부 TIC만 지울 수 없어 대체된 결과가 용량을 계속 차지한다. TIC 버킷으로 나누면 각 TIC는 모든 Sector로 한 번만 계산된다. `canary`는 `--through-sector`와 `--tic-id`로 해당 TIC의 1..N 전체 Sector를 처리하고, `retry`는 원본 attempt와 같은 snapshot을 받아야 한다.
+
+### attempt `_READY.json` v5
+
+v4에서 `bronze_coverage_sha256`·`bronze_coverage_ready_sha256`·`bronze_pipeline_version`을 빼고 다음을 넣었다. summary는 `planetory.tess-silver-summary.v5`이며 manifest v4와 Parquet 출력 schema는 바꾸지 않았다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `bronze_snapshot_sha256`, `bronze_snapshot` | snapshot ID와 Sector 행 전체 |
+| `bronze_coverage` | coverage 경로, Sector snapshot이면 null |
+| `selection` | `delta_from_sector`·`tic_buckets`·`tic_bucket`, 전체·canary·retry면 null |
+| `selected_products`, `estimated_output_bytes`, `capacity_budget_bytes` | 대상 Bronze 제품 수, 추정 출력(RF2), 제출 시 예산 |
+
+v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도하지 않는다.
+
+### HDFS 용량 가드
+
+- 제어기는 제출 직전 `hdfs dfs -df /`로 `floor(Size × 0.70) − Used`를 계산해 job에 넘긴다. 0 이하면 HDFS에 쓰기 전에 exit 65로 끝난다. Raw 적재가 RF2 예상 사용률에 적용하는 70% 선과 같고, 75% 사전 점검은 그대로다.
+- job은 대상 TIC와 Bronze 제품 수를 센 뒤 BLS 전에 추정 출력 `2 × (제품 × 898,200 B + TIC × 927,300 B)`가 예산을 넘으면 `capacity_budget_exceeded`로 멈춘다(exit 65). 계수는 1~13 attempt 실측(`target_combined` 제품당, 나머지 출력 TIC당)이며, 이 식은 그 attempt의 RF2 683.0 GB를 0.1% 안으로 재현한다. 첫 backfill 버킷의 실제 크기로 다시 맞춘다.
+- 예산은 진행 중인 Silver 출력 하나만 가정한다. 다른 Silver YARN 앱이 실행 중이면 사전 점검이 거부하고 systemd가 5분 뒤 다시 시도한다. 버킷은 한 번에 하나씩 돌린다.
+- 70~75% 구간(약 500 GB)은 Gold PublicationBundle 백업([`/lake/publication-bundle-backup`](../../infra/distributed-system/README.md), 96)과 Raw·Bronze 적재 여유로 남긴다. Gold 백업은 추정 수십 GB이고, 별 48.9만 개를 모두 게시해도 약 235 GB(별당 240 KB 이하, RF2)다. 실측 전 추정이다.
+- 상한을 75%보다 올리지 않는다. DataNode 5대·RF2에서 한 대를 잃으면 나머지 4대가 그 블록을 다시 복제해야 하므로, 사용률이 약 80%(4/5)를 넘으면 복제 계수 2를 회복할 공간이 없다. `/mnt/data`는 YARN local(Silver `DISK_ONLY` 결과)과도 공유한다.
+
+### 2026-09-27 용량 점검 (읽기 전용)
+
+| 항목 | 값 |
+| --- | --- |
+| HDFS 전체 / 사용 | 9.12 TB / 5.88 TB (64.44%) |
+| 사용 구성(RF2) | Raw 4.86 TB, Bronze 0.86 TB, Silver 0.68 TB |
+| 70%까지 Silver 예산 | 약 558 GB |
+| Bronze | Sector 1~70 `_READY`·`_SUCCESS` 70개, RF2, 버전 2개 |
+| Bronze 관측값 | 1~13 46.7억, 14~70 192.5억 |
+| 14~70 backfill 추정 | RF2 2.8~3.05 TB (K=16이면 버킷당 175~190 GB) |
+
+지금 예산으로는 K=16 기준 2~3개 버킷(14~70 TIC의 약 12~19%)만 만들 수 있다. 나머지는 Raw 복제 계수·계층별 보존 기간 같은 용량 결정 뒤 같은 명령으로 이어 간다([데이터 규칙](../../docs/data/data-guidelines.md) 「결정 대기 사항」). 점검 시점 YARN 실행 앱은 0개였다.
+
+### TIC별 current 선택 규칙 (합의안, 구현 전)
+
+- 소비자(79·80)는 명시적으로 나열한 attempt 중 TIC별로 하나를 고른다. 해당 TIC의 `initial_bls` manifest 행이 있는 attempt 중 snapshot Sector 집합이 가장 큰 것을 고르고, 집합이 같으면 attempt ID가 늦은 것을 고른다. 두 집합이 포함 관계가 아니면 고르지 않고 실패한다. v4 원본의 Sector 집합은 coverage의 1~13이다.
+- 함께 고르는 attempt는 계산 버전(`preprocessing_version`, `bls_config_version`, `candidate_quality_version`, `iteration_version`)이 같아야 하며, 다르면 섞지 않고 실패한다. 243 이후 release의 `iteration_config_sha256` 차이는 판정 값이 같으므로 비교하지 않는다.
+- 선택 결과는 불변 인덱스(TIC → attempt, 반영 Sector 집합)로 만들고 그 ID를 79 `silver_attempt`에 넣는다. 79 schema는 바꾸지 않는다. 인덱스 생성은 이 작업의 다음 단계다.
+- 1~13에만 관측된 TIC 73,544개는 계속 1~13 원본을 쓴다. 겹치는 54,714개는 자기 버킷이 처리될 때까지 1~13 결과를 쓰며, 인덱스의 반영 Sector 집합으로 구분한다.
+
+### 실행
+
+```powershell
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Preflight -CodeReleaseId <release> -ThroughSector 70
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Canary -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -TicId <tic>
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -DeltaFromSector 14
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 70 -DeltaFromSector 14 -TicBuckets 16 -TicBucket 0 -ShufflePartitions 500
+```
+
+버킷마다 새 `-RunId`를 쓴다. `Preflight`는 예산 미리보기(`SILVER_CAPACITY_BUDGET_PREVIEW`)를 출력한다.
+
+### 검증 상태와 남은 일
+
+- 오프라인: `test-tess-silver.ps1` 통과(Silver 46, Airflow 12). snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드를 검사한다.
+- Spark 선택 식(`pmod`·`left_semi`)은 로컬에 pyspark가 없어 실행 순서만 소스로 검사했다. 실제 선택 결과는 Canary에서 확인한다.
+- 남은 일: release 설치, Sector 14 증분 run(대상 TIC 수가 Sector 14 관측 TIC 수와 같은지, 1~13 원본 attempt의 `_READY` SHA가 그대로인지), backfill 버킷 1개로 추정 계수 재보정, 선택 인덱스 구현.

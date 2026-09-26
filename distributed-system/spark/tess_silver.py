@@ -32,7 +32,14 @@ from astro_kernel.preprocessing import (
 
 BRONZE_SCHEMA_VERSION = "planetory.tess-bronze.v1"
 SILVER_MANIFEST_SCHEMA_VERSION = "planetory.tess-silver-stage.v4"
-SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v4"
+SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v5"
+# Logical bytes measured on the Sector 1~13 run (attempt 20260924T133730Z, 2026-09-27):
+# target_combined per Bronze product (222.6 GB / 247,824) and the other outputs per TIC
+# (118.9 GB / 128,258). RF2 doubles both.
+# ponytail: linear fit from one run; refit from the first 275 backfill bucket's actual size.
+TARGET_BYTES_PER_PRODUCT = 898_200
+OTHER_BYTES_PER_TIC = 927_300
+MAX_TIC_BUCKETS = 1024
 # Iteration stops the kernel reached by its own quality verdict. They are science outcomes of a
 # completed run, not processing failures: the same input and config always give the same answer.
 ITERATION_QA_STOP_TERMINATIONS = frozenset({"removal_qa_failed", "candidate_validation_failed"})
@@ -544,11 +551,11 @@ def _schemas(types: object) -> tuple[object, object, object, object, object]:
         types.StructField("schema_version", types.StringType(), False),
         types.StructField("run_id", types.StringType(), False),
         types.StructField("attempt_id", types.StringType(), False),
-        types.StructField("bronze_coverage_sha256", types.StringType(), False),
-        types.StructField("bronze_coverage_ready_sha256", types.StringType(), False),
-        types.StructField("bronze_pipeline_version", types.StringType(), False),
+        types.StructField("bronze_snapshot_sha256", types.StringType(), False),
         types.StructField("pipeline_version", types.StringType(), False),
         types.StructField("selected_tics", types.LongType(), False),
+        types.StructField("selected_products", types.LongType(), False),
+        types.StructField("estimated_output_bytes", types.LongType(), False),
         types.StructField("manifest_tics", types.LongType(), False),
         types.StructField("succeeded_tics", types.LongType(), False),
         types.StructField("no_quality_peak_tics", types.LongType(), False),
@@ -578,6 +585,24 @@ def _schemas(types: object) -> tuple[object, object, object, object, object]:
         types.StructField("result_json", types.StringType(), False),
     ])
     return target, periodogram, manifest, summary, iteration
+
+
+def estimate_output_bytes(products: int, tics: int) -> int:
+    """RF2 bytes an attempt will add for the selected Bronze products and TICs."""
+    return 2 * (products * TARGET_BYTES_PER_PRODUCT + tics * OTHER_BYTES_PER_TIC)
+
+
+def select_changed_tics(bronze: Any, functions: Any, delta_from_sector: int, buckets: int, bucket: int) -> Any:
+    """Keep every snapshot row of the TICs observed in Sector >= delta_from_sector (275).
+
+    BLS needs the whole combined curve, so a TIC touched by a new Sector is recomputed from all
+    of its Sectors and every other TIC keeps its earlier attempt. A bucket (tic_id % buckets)
+    splits a backfill so each TIC is still processed exactly once with all of its Sectors.
+    """
+    if buckets > 1:
+        bronze = bronze.filter(functions.pmod(functions.col("tic_id"), functions.lit(buckets)) == bucket)
+    changed = bronze.filter(functions.col("sector") >= delta_from_sector).select("tic_id").distinct()
+    return bronze.join(changed, "tic_id", "left_semi")
 
 
 def _write_terminal_marker(spark: object, args: argparse.Namespace, error: SilverContractError) -> None:
@@ -613,25 +638,42 @@ def run(args: argparse.Namespace) -> None:
                     functions.col("status").isin("failed", "incomplete")
                 ).select("tic_id").distinct()
                 bronze = bronze.join(failed, "tic_id", "inner")
+            if args.delta_from_sector:
+                bronze = select_changed_tics(bronze, functions, args.delta_from_sector,
+                                             args.tic_buckets, args.tic_bucket)
+            snapshot_sectors = sorted(args.bronze_versions)
             if bronze.filter(functions.col("schema_version") != BRONZE_SCHEMA_VERSION).limit(1).count():
                 raise SilverContractError("bronze_schema_mismatch", BRONZE_SCHEMA_VERSION)
-            if bronze.filter(functions.col("pipeline_version") != args.bronze_pipeline_version).limit(1).count():
-                raise SilverContractError("bronze_pipeline_version_mismatch", args.bronze_pipeline_version)
             if bronze.filter(
                 functions.col("tic_id").isNull()
                 | (functions.col("tic_id") <= 0)
                 | functions.col("sector").isNull()
-                | ~functions.col("sector").between(1, 13)
+                | ~functions.col("sector").isin(snapshot_sectors)
             ).limit(1).count():
-                raise SilverContractError("bronze_invalid_identity", "positive TIC and Sector 1 through 13 required")
-            if not args.tic_id and not args.retry_manifest:
+                raise SilverContractError("bronze_invalid_identity", "positive TIC and a snapshot Sector required")
+            # Each Sector keeps the Bronze version its own marker pinned. Checked after the identity scan,
+            # so every lookup hits a snapshot key and never depends on ANSI missing-key behaviour.
+            versions = functions.create_map(*[functions.lit(value) for sector in snapshot_sectors
+                                              for value in (sector, args.bronze_versions[sector])])
+            if bronze.filter(functions.col("pipeline_version") != versions[functions.col("sector")]).limit(1).count():
+                raise SilverContractError("bronze_pipeline_version_mismatch", _json(args.bronze_versions))
+            if not args.tic_id and not args.retry_manifest and not args.delta_from_sector:
                 sectors = {int(row[0]) for row in bronze.select("sector").distinct().toLocalIterator()}
-                if sectors != set(range(1, 14)):
+                if sectors != set(snapshot_sectors):
                     raise SilverContractError("bronze_sector_coverage_mismatch", str(sorted(sectors)))
             selected_ids = bronze.select("tic_id").distinct().cache()
             selected_tics = selected_ids.count()
             if selected_tics <= 0:
                 raise SilverContractError("empty_tic_selection", "no TIC selected")
+            # Refuse before any BLS so a run never pushes HDFS past the planned-usage line mid-way.
+            selected_products = bronze.count()
+            estimated_output_bytes = estimate_output_bytes(selected_products, selected_tics)
+            if estimated_output_bytes > args.capacity_budget_bytes:
+                raise SilverContractError(
+                    "capacity_budget_exceeded",
+                    f"estimated={estimated_output_bytes} budget={args.capacity_budget_bytes} "
+                    f"tics={selected_tics} products={selected_products}",
+                )
         except SilverContractError as exc:
             _write_terminal_marker(spark, args, exc)
             raise
@@ -738,11 +780,11 @@ def run(args: argparse.Namespace) -> None:
             SILVER_SUMMARY_SCHEMA_VERSION,
             args.run_id,
             args.attempt_id,
-            args.bronze_coverage_sha256,
-            args.bronze_coverage_ready_sha256,
-            args.bronze_pipeline_version,
+            args.bronze_snapshot_sha256,
             args.pipeline_version,
             selected_tics,
+            selected_products,
+            estimated_output_bytes,
             manifest_tics,
             initial_status("succeeded"),
             initial_status("no_quality_peak"),
@@ -783,12 +825,15 @@ def run(args: argparse.Namespace) -> None:
         spark.stop()
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bronze-path", action="append", required=True)
-    parser.add_argument("--bronze-coverage-sha256", required=True)
-    parser.add_argument("--bronze-coverage-ready-sha256", required=True)
-    parser.add_argument("--bronze-pipeline-version", required=True)
+    parser.add_argument("--bronze-sector-version", action="append", required=True, metavar="SECTOR=VERSION")
+    parser.add_argument("--bronze-snapshot-sha256", required=True)
+    parser.add_argument("--capacity-budget-bytes", type=int, required=True)
+    parser.add_argument("--delta-from-sector", type=int)
+    parser.add_argument("--tic-buckets", type=int, default=1)
+    parser.add_argument("--tic-bucket", type=int, default=0)
     parser.add_argument("--pipeline-version", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--attempt-id", required=True)
@@ -799,16 +844,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--shuffle-partitions", type=int, default=200)
     parser.add_argument("--output-partitions", type=int, default=80)
     parser.add_argument("--manifest-partitions", type=int, default=8)
-    args = parser.parse_args()
-    for name in ("bronze_coverage_sha256", "bronze_coverage_ready_sha256"):
-        if not SHA256_RE.fullmatch(getattr(args, name)):
-            parser.error(f"--{name.replace('_', '-')} must be lowercase SHA-256")
+    args = parser.parse_args(argv)
+    if not SHA256_RE.fullmatch(args.bronze_snapshot_sha256):
+        parser.error("--bronze-snapshot-sha256 must be lowercase SHA-256")
     if not RUN_ID_RE.fullmatch(args.run_id) or not RUN_ID_RE.fullmatch(args.attempt_id):
         parser.error("run and attempt IDs must be UTC yyyyMMddTHHmmssZ")
     if not VERSION_RE.fullmatch(args.pipeline_version):
         parser.error("pipeline version contains unsupported characters")
-    if not args.bronze_pipeline_version.strip():
-        parser.error("Bronze pipeline version is required")
+    args.bronze_versions = {}
+    for value in args.bronze_sector_version:
+        sector, _, version = value.partition("=")
+        if not sector.isdigit() or int(sector) <= 0 or not VERSION_RE.fullmatch(version):
+            parser.error(f"invalid --bronze-sector-version {value}")
+        if int(sector) in args.bronze_versions:
+            parser.error(f"duplicate Bronze Sector {sector}")
+        args.bronze_versions[int(sector)] = version
+    if len(args.bronze_versions) != len(args.bronze_path):
+        parser.error("each Bronze path needs exactly one Sector version")
+    if args.capacity_budget_bytes < 0:
+        parser.error("--capacity-budget-bytes must not be negative")
+    if args.delta_from_sector is not None and args.delta_from_sector not in args.bronze_versions:
+        parser.error("--delta-from-sector must be a snapshot Sector")
+    if not 1 <= args.tic_buckets <= MAX_TIC_BUCKETS or not 0 <= args.tic_bucket < args.tic_buckets:
+        parser.error(f"--tic-bucket must be in 0..--tic-buckets-1 and --tic-buckets in 1..{MAX_TIC_BUCKETS}")
+    if args.tic_buckets > 1 and args.delta_from_sector is None:
+        parser.error("TIC buckets split only an incremental Sector selection")
+    if args.delta_from_sector is not None and (args.tic_id or args.retry_manifest):
+        parser.error("--delta-from-sector excludes --tic-id and --retry-manifest")
     if any(value <= 0 for value in (args.shuffle_partitions, args.output_partitions, args.manifest_partitions)):
         parser.error("partition counts must be positive")
     if args.tic_id and any(value <= 0 for value in args.tic_id):

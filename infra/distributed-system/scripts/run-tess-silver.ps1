@@ -26,6 +26,20 @@ param(
     [ValidatePattern('^/lake/bronze/tess/coverage=[0-9a-f]{64}$')]
     [string]$BronzeCoverage = '/lake/bronze/tess/coverage=df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94',
 
+    # 275: 0 keeps the Sector 1~13 coverage; N reads the Sector 1..N Bronze markers as one snapshot.
+    [ValidateRange(0, 999)]
+    [int]$ThroughSector = 0,
+
+    # 275 Start only: recompute just the TICs observed in Sector >= DeltaFromSector (0 = every TIC).
+    [ValidateRange(0, 999)]
+    [int]$DeltaFromSector = 0,
+
+    [ValidateRange(1, 1024)]
+    [int]$TicBuckets = 1,
+
+    [ValidateRange(0, 1023)]
+    [int]$TicBucket = 0,
+
     [ValidateRange(1, 2000)]
     [int]$ShufflePartitions = 200,
 
@@ -41,6 +55,14 @@ if (-not $UnitId) { $UnitId = $RunId }
 $unit = "planetory-tess-silver-$UnitId.service"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 if (-not $PipelineVersion) { $PipelineVersion = "S15P21C206-78-$CodeReleaseId" }
+if ($DeltaFromSector -gt 0 -and ($ThroughSector -eq 0 -or $DeltaFromSector -gt $ThroughSector)) {
+    throw 'DeltaFromSector requires ThroughSector and must not exceed it.'
+}
+if ($TicBucket -ge $TicBuckets) { throw 'TicBucket must be below TicBuckets.' }
+if ($TicBuckets -gt 1 -and $DeltaFromSector -eq 0) { throw 'TicBuckets split only a DeltaFromSector run.' }
+if ($DeltaFromSector -gt 0 -and $Step -ne 'Start') { throw 'DeltaFromSector applies only to Start.' }
+$sourceArgs = if ($ThroughSector -gt 0) { "--through-sector $ThroughSector" } else { "--bronze-coverage $BronzeCoverage" }
+$selectionArgs = if ($DeltaFromSector -gt 0) { " --delta-from-sector $DeltaFromSector --tic-buckets $TicBuckets --tic-bucket $TicBucket" } else { '' }
 
 function Invoke-Tailscale {
     $output = @(& tailscale @args 2>&1)
@@ -194,7 +216,7 @@ echo SILVER_RELEASE_OK="$release"
 }
 
 if ($Step -eq 'Preflight') {
-    $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' preflight --bronze-coverage '$BronzeCoverage'"
+    $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' preflight $sourceArgs"
     $null = Invoke-Remote $command 'Silver read-only preflight'
     return
 }
@@ -203,7 +225,7 @@ if ($Step -eq 'Canary') {
     if (-not $TicId -or $TicId.Count -gt 5) { throw 'Canary requires one to five explicit TIC IDs.' }
     if (-not $PSCmdlet.ShouldProcess("TIC $($TicId -join ',') validation path", 'Run Silver canary')) { return }
     $ticArgs = @($TicId | ForEach-Object { "--tic-id $_" }) -join ' '
-    $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' canary --release-dir '$release' --run-id '$RunId' --pipeline-version '$PipelineVersion' --bronze-coverage '$BronzeCoverage' --shuffle-partitions '$ShufflePartitions' --output-partitions '$OutputPartitions' $ticArgs"
+    $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' canary --release-dir '$release' --run-id '$RunId' --pipeline-version '$PipelineVersion' $sourceArgs --shuffle-partitions '$ShufflePartitions' --output-partitions '$OutputPartitions' $ticArgs"
     $null = Invoke-Remote $command 'Run Silver canary'
     return
 }
@@ -211,7 +233,7 @@ if ($Step -eq 'Canary') {
 $baseExec = "/usr/bin/python3.12 $release/spark/tess_silver_ctl.py"
 if ($Step -eq 'Start') {
     if (-not $PSCmdlet.ShouldProcess("HDFS Silver run $RunId", "Start $unit")) { return }
-    $exec = "$baseExec run --release-dir $release --run-id $RunId --pipeline-version $PipelineVersion --bronze-coverage $BronzeCoverage --shuffle-partitions $ShufflePartitions --output-partitions $OutputPartitions"
+    $exec = "$baseExec run --release-dir $release --run-id $RunId --pipeline-version $PipelineVersion $sourceArgs --shuffle-partitions $ShufflePartitions --output-partitions $OutputPartitions$selectionArgs"
     Install-SilverUnit -Exec $exec -Description "Planetory TESS Bronze to Silver $RunId"
     return
 }
@@ -219,7 +241,7 @@ if ($Step -eq 'Start') {
 if ($Step -eq 'Retry') {
     if (-not $RetryFrom) { throw 'Retry requires -RetryFrom with a completed Silver attempt path.' }
     if (-not $PSCmdlet.ShouldProcess("Failed TICs from $RetryFrom", "Start $unit")) { return }
-    $exec = "$baseExec retry --release-dir $release --run-id $RunId --pipeline-version $PipelineVersion --bronze-coverage $BronzeCoverage --shuffle-partitions $ShufflePartitions --output-partitions $OutputPartitions --retry-from $RetryFrom"
+    $exec = "$baseExec retry --release-dir $release --run-id $RunId --pipeline-version $PipelineVersion $sourceArgs --shuffle-partitions $ShufflePartitions --output-partitions $OutputPartitions --retry-from $RetryFrom"
     Install-SilverUnit -Exec $exec -Description "Planetory TESS Silver failed-TIC retry $RunId"
     return
 }
