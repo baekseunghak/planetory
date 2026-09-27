@@ -89,7 +89,7 @@
   cursor: pointer;
 }
 .cinema-public-follow .follow-control > button[aria-pressed="true"] {
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
 }

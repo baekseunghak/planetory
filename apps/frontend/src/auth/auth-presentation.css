@@ -191,7 +191,7 @@
   font-size: var(--pc-text-md);
 }
 .cinema-login form input:focus-visible {
-  outline: 2px solid var(--pc-accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .cinema-login form .auth-note {

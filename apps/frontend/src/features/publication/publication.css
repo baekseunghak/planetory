@@ -34,7 +34,7 @@
   min-height: 2.75rem;
 }
 .publication-review :focus-visible {
-  outline: 3px solid currentColor;
+  outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
 }
 @media (max-width: 40rem) {

@@ -96,7 +96,7 @@
   color: #b9dcff;
 }
 .quest-panel :is(button, summary, a):focus-visible {
-  outline: 2px solid #8fc8ff;
+  outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .quest-reopened {

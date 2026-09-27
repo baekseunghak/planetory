@@ -80,11 +80,44 @@ export function TopBar() {
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : trigger.current;
-      node.showModal();
+      node.show();
     } else if (!open && node.open) {
       node.close();
       previous.current?.focus();
     }
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const position = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect || !dialog.current) return;
+      dialog.current.style.top = `${rect.bottom + 10}px`;
+      dialog.current.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
+      dialog.current.style.maxHeight = `calc(100dvh - ${rect.bottom + 22}px)`;
+    };
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !dialog.current?.contains(event.target) && !trigger.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const focusOutside = (event: FocusEvent) => {
+      if (event.target instanceof Node && !dialog.current?.contains(event.target) && !trigger.current?.contains(event.target)) {
+        previous.current = null;
+        setOpen(false);
+      }
+    };
+    position();
+    window.addEventListener("resize", position);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    document.addEventListener("focusin", focusOutside);
+    return () => {
+      window.removeEventListener("resize", position);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      document.removeEventListener("focusin", focusOutside);
+    };
   }, [open]);
   const stars = useTallyCount(
     data.meta?.starCount ?? null,
@@ -125,7 +158,7 @@ export function TopBar() {
         <button
           className="menu-trigger cinema-pill"
           ref={trigger}
-          onClick={() => setOpen(true)}
+          onClick={() => setOpen((value) => !value)}
           aria-haspopup="dialog"
           aria-expanded={open}
         >
@@ -137,46 +170,19 @@ export function TopBar() {
               strokeWidth="1.4"
             />
           </svg>
-          메뉴
+          {open ? "닫기" : "메뉴"}
         </button>
       </div>
       <dialog
         ref={dialog}
         className="navigation cinema-menu"
-        aria-labelledby="menu-title"
+        aria-label="메뉴"
         onCancel={(event) => {
           event.preventDefault();
           setOpen(false);
         }}
         onClose={() => setOpen(false)}
-        onKeyDown={(event) => {
-          if (event.key !== "Tab") return;
-          const elements = [
-            ...event.currentTarget.querySelectorAll<HTMLElement>(
-              "button:not(:disabled), a[href]",
-            ),
-          ].filter((node) => node.getClientRects().length);
-          const first = elements[0],
-            last = elements.at(-1);
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last?.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first?.focus();
-          }
-        }}
       >
-        <div className="navigation-head">
-          <h2 id="menu-title">메뉴</h2>
-          <button
-            autoFocus
-            onClick={() => setOpen(false)}
-            aria-label="메뉴 닫기"
-          >
-            닫기
-          </button>
-        </div>
         <nav aria-label="주 메뉴">
           {menu.map(([to, label]) => (
             <NavLink
@@ -190,7 +196,7 @@ export function TopBar() {
           ))}
         </nav>
         <p className="navigation-caption">
-          {session.member?.nickname}님의 은하
+          <span className="cinema-menu-member">{session.member?.nickname}</span>님의 은하
         </p>
         <button
           className="auth-text-action cinema-menu-logout"

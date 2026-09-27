@@ -40,7 +40,7 @@
 }
 .analysis-screen .submission-dialog.pc-result-dialog .result-celebrate {
   margin: var(--pc-space-2, 8px) 0 0;
-  color: var(--pc-accent, #5ec4f7);
+  color: var(--pc-accent, #ffd369);
   font-weight: var(--pc-weight-strong, 600);
 }
 .analysis-screen .submission-dialog.pc-result-dialog .pc-result-compare {
@@ -149,6 +149,19 @@
   overflow-wrap: anywhere;
 }
 
+/* Primary next step after reading the star summary. */
+.cinema-shell .cp-page .pc-result-page section nav a.pc-result-return {
+  background: var(--pc-accent);
+  border-color: var(--pc-accent);
+  color: #070a0f;
+  font-weight: 600;
+}
+.cinema-shell .cp-page .pc-result-page section nav a.pc-result-return:hover {
+  background: var(--pc-accent-hover, #ffe18a);
+  border-color: var(--pc-accent-hover, #ffe18a);
+  color: #070a0f;
+  text-decoration: none;
+}
 /* actions: two primary, the rest small */
 .pc-result-actions {
   display: flex;
@@ -190,9 +203,9 @@
 }
 .analysis-screen .submission-dialog.pc-result-dialog .pc-result-button-main,
 .pc-result-page .pc-result-button-main {
-  border-color: var(--pc-accent, #5ec4f7);
-  background: var(--pc-accent, #5ec4f7);
-  color: var(--pc-accent-ink, #03121b);
+  border-color: var(--pc-accent, #ffd369);
+  background: var(--pc-accent, #ffd369);
+  color: var(--pc-accent-ink, #111820);
 }
 .analysis-screen .submission-dialog.pc-result-dialog .pc-result-inline,
 .pc-result-page .pc-result-inline {
@@ -204,7 +217,7 @@
   border: 0;
   border-radius: 0;
   background: none;
-  color: var(--pc-accent, #5ec4f7);
+  color: var(--pc-accent, #ffd369);
   font: inherit;
   font-size: var(--pc-text-sm, 13px);
   font-weight: var(--pc-weight-regular, 400);
@@ -230,7 +243,7 @@
 }
 .pc-result-button:focus-visible,
 .pc-result-inline:focus-visible {
-  outline: 2px solid var(--pc-accent, #5ec4f7);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

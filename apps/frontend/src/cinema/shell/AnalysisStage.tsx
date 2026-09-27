@@ -43,7 +43,7 @@ export function AnalysisStage({ children }: { children: ReactNode }) {
           inert={away}
         >
           {children}
-          {/* Over either variant, under the top bar. */}
+          {/* Anchored just above either variant's analysis panel. */}
           {guide && (
             <TutorialGuideView
               key={target.ticId}

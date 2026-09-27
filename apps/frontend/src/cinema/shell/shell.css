@@ -81,7 +81,7 @@ body {
   pointer-events: auto;
 }
 .cinema-shell :focus-visible {
-  outline: 2px solid var(--pc-accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 /* The reused sky components hide labels with .sr-only, which used to come
@@ -107,7 +107,7 @@ body {
   margin: 0;
   font-size: var(--pc-text-2xs);
   letter-spacing: var(--pc-tracking-eyebrow);
-  color: var(--pc-accent);
+  color: var(--pc-secondary);
 }
 .cinema-muted {
   margin: 0;
@@ -145,7 +145,7 @@ body {
 }
 .cinema-shell select:focus-visible {
   border-color: var(--pc-accent);
-  outline: 2px solid rgba(94, 196, 247, 0.3);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 0;
 }
 .cinema-shell select:disabled {
@@ -198,7 +198,7 @@ body {
 }
 .cinema-shell .cinema-pill[aria-pressed="true"] {
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
 }
 .cinema-shell .cinema-mini {
   min-height: 26px;
@@ -227,7 +227,7 @@ body {
   font-weight: var(--pc-weight-strong);
 }
 .cinema-shell .cinema-primary:hover {
-  background: #7fd0f9;
+  background: var(--pc-accent-hover);
   color: var(--pc-accent-ink);
 }
 .cinema-shell .cinema-secondary {
@@ -683,7 +683,10 @@ body {
   gap: var(--pc-space-2);
 }
 .cinema-tools[data-hidden="true"] {
-  display: none;
+  opacity: 0;
+  transform: translateY(calc(100% + 24px));
+  pointer-events: none;
+  visibility: hidden;
 }
 .cinema-corner {
   position: absolute;
@@ -692,8 +695,8 @@ body {
   display: flex;
   gap: var(--pc-space-2);
 }
-.cinema-galaxy[data-stage="system"] .cinema-corner {
-  right: calc(var(--pc-panel-width) + var(--pc-hud-inset) + 12px);
+.cinema-galaxy[data-stage="system"]:not([data-arriving="true"]) .cinema-corner {
+  transform: translateX(calc(-1 * (var(--pc-panel-width) + 12px)));
 }
 .cinema-tool {
   position: relative;
@@ -752,17 +755,20 @@ body {
   color: var(--pc-ink);
   border-color: var(--pc-line-strong);
 }
-.cinema-search .star-search[open] {
+.cinema-search .star-search[open] > .star-search-panel {
   top: auto;
-  left: -17px;
-  bottom: -13px;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
   display: flex;
   flex-direction: column;
   gap: var(--pc-space-2);
   width: 360px;
+  height: min(560px, calc(100dvh - 140px));
   max-height: calc(100dvh - 140px);
+  box-sizing: border-box;
   padding: 14px 16px 12px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--pc-line);
   border-radius: var(--pc-radius-lg);
   /* Opaque: it covers other HUD controls while open. */
@@ -773,11 +779,9 @@ body {
   display: none;
 }
 .cinema-search .star-search[open] > summary {
-  order: 1;
-  align-self: flex-start;
-  margin-top: var(--pc-space-1);
+  margin-top: 0;
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
 }
 .cinema-search .star-search p {
   margin: 0;
@@ -786,13 +790,18 @@ body {
   line-height: var(--pc-leading);
 }
 .cinema-search .star-search-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   display: grid;
   gap: var(--pc-space-2);
   margin: 0;
   padding: 0;
   border: 0;
 }
+.cinema-search .star-search-query {
+  grid-column: 1 / -1;
+}
 .cinema-search .star-search-fields label {
+  min-width: 0;
   display: grid;
   gap: 4px;
   color: var(--pc-ink-dim);
@@ -814,6 +823,9 @@ body {
   display: flex;
   gap: var(--pc-space-2);
   margin-top: var(--pc-space-2);
+}
+.cinema-search .star-search-actions {
+  justify-content: flex-end;
 }
 .cinema-search .star-search-actions button,
 .cinema-search nav button {
@@ -879,7 +891,14 @@ body {
 }
 .cinema-quests .quest-toggle[aria-expanded="true"] {
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
+}
+.cinema-quests .quest-toggle:focus {
+  outline: none;
+}
+.cinema-quests .quest-toggle:focus-visible {
+  border-color: var(--pc-accent);
+  background: rgba(var(--pc-accent-rgb), 0.16);
 }
 .cinema-quests .quest-toggle > span:first-child {
   color: var(--pc-marker-tutorial-line);
@@ -1110,11 +1129,16 @@ body {
     transform var(--pc-dur-slow) var(--pc-ease-out);
 }
 /* Flying to the star: the panel comes in for the arrival, not before. */
+.cinema-galaxy[data-arriving] .cinema-star-panel {
+  /* Share the arrival transition with the corner controls, without a second animation. */
+  animation: none;
+}
 .cinema-star-panel[data-arriving="true"] {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(calc(var(--pc-panel-width) + 12px));
   pointer-events: none;
   animation: none;
+  transition: none;
 }
 @keyframes cinema-panel-in {
   from {
@@ -1681,10 +1705,22 @@ body {
 
 /* The login fly-in has the screen to itself; the HUD comes in as it lands. */
 .cinema-shell .cinema-topbar-end,
-.cinema-galaxy .cinema-tools,
-.cinema-galaxy .cinema-corner,
 .cinema-galaxy .cinema-first-visit {
   transition: opacity 700ms var(--pc-ease-out);
+}
+.cinema-galaxy .cinema-tools {
+  transition:
+    opacity var(--pc-dur-slow) var(--pc-ease-out),
+    transform var(--pc-dur-slow) var(--pc-ease-out),
+    visibility 0s var(--pc-dur-slow);
+}
+.cinema-galaxy .cinema-tools[data-hidden="false"] {
+  transition-delay: 0s;
+}
+.cinema-galaxy .cinema-corner {
+  transition:
+    opacity 700ms var(--pc-ease-out),
+    transform var(--pc-dur-slow) var(--pc-ease-out);
 }
 .cinema-shell[data-intro="true"] .cinema-topbar-end,
 .cinema-shell[data-intro="true"] .cinema-galaxy .cinema-tools,
@@ -1762,18 +1798,20 @@ body {
 /* Analysis: one wide strip under the top bar, so the longer "what to look
    for" line keeps to two lines at 1024px. Clear of the variant toggle on
    the left when a dev server shows it. */
+.cinema-analysis-stage :is(.cx-panel, .pc-classic-analysis) {
+  anchor-name: --analysis-panel;
+}
 .cinema-tutorial-guide[data-place="analysis"] {
   position: fixed;
-  top: 62px;
-  left: max(24px, calc((100vw - 920px) / 2));
+  position-anchor: --analysis-panel;
+  top: anchor(top);
+  transform: translateY(calc(-100% - 8px));
+  left: 12px;
+  right: 12px;
   z-index: var(--pc-z-hud);
   box-sizing: border-box;
-  width: min(920px, calc(100vw - 48px));
+  width: auto;
   align-items: center;
-}
-body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
-  left: max(184px, calc((100vw - 920px) / 2));
-  width: min(920px, calc(100vw - 184px - 24px));
 }
 
 /* ------------------------------------------------------------ first story */
@@ -1869,7 +1907,7 @@ body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
   border-radius: var(--pc-radius-pill);
   font-size: var(--pc-text-lg);
   pointer-events: auto;
-  box-shadow: 0 0 28px rgba(94, 196, 247, 0.28);
+  box-shadow: 0 0 28px rgba(var(--pc-accent-rgb), 0.28);
   animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
 }
 .cinema-shell .cinema-story-skip {
@@ -1912,4 +1950,195 @@ body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
   .cinema-shell .cinema-story-start {
     animation: none;
   }
+}
+/* Keep the unread count in the link's accessible name, show only a dot. */
+.cinema-topbar .notification-bell > span {
+  width: 6px; height: 6px; min-width: 6px;
+  padding: 0; font-size: 0; line-height: 0;
+  border-radius: 50%; background: var(--pc-accent);
+}
+.cinema-topbar .notification-bell > span {
+  top: 8px;
+  right: 8px;
+  transform: none;
+}
+
+.cinema-search .star-search-query {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--pc-space-2);
+}
+.cinema-search .star-search-query > label {
+  flex: 1;
+}
+.cinema-search .star-search-query input {
+  width: 100%;
+  min-width: 0;
+}
+.cinema-search .star-search-query .star-search-actions {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.cinema-search .star-search-query button {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+/* Let the open details body participate in the constrained panel layout. */
+.cinema-search .star-search[open]::details-content {
+  display: contents;
+}
+.cinema-search .star-search-panel > :not(.star-search-results) {
+  flex-shrink: 0;
+}
+.cinema-search .star-search-panel > .star-search-results {
+  flex: 1 1 0;
+  max-height: none;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.cinema-list-panel {
+  overflow: hidden;
+}
+.cinema-list-panel .cinema-list-close {
+  flex-shrink: 0;
+}
+.cinema-list-panel .discovered-stars {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.cinema-list-panel .discovered-stars > :not(.discovered-rows) {
+  flex-shrink: 0;
+}
+.cinema-list-panel .discovered-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+}
+
+/* Match the star-list toggle, including its open-state hover. */
+.cinema-search .star-search > summary:hover,
+.cinema-search .star-search[open] > summary:hover,
+.cinema-quests .quest-toggle:hover:not(:disabled) {
+  color: var(--pc-ink);
+  border-color: var(--pc-line-strong);
+}
+
+/* Native select semantics, with a matching popup where supported. */
+.cinema-shell select:not([multiple]):not([size]) {
+  border-radius: var(--pc-radius-md);
+  transition: border-color var(--pc-dur-fast), background-color var(--pc-dur-fast);
+}
+.cinema-shell select:not([multiple]):not([size]):hover:not(:disabled) {
+  border-color: var(--pc-line-strong);
+}
+@supports (appearance: base-select) {
+  .cinema-shell select:not([multiple]):not([size]),
+  .cinema-shell select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+  .cinema-shell select:not([multiple]):not([size])::picker-icon {
+    display: none;
+  }
+  .cinema-shell select:not([multiple]):not([size])::picker(select) {
+    margin-block: 6px;
+    padding: 5px;
+    border: 1px solid var(--pc-line-strong);
+    border-radius: var(--pc-radius-md);
+    background: var(--pc-bg-raised);
+    color: var(--pc-ink);
+    box-shadow: 0 12px 32px #0008;
+    max-height: min(320px, 50dvh);
+    overflow-y: auto;
+    font-family: var(--pc-font-sans);
+    font-size: var(--pc-text-sm);
+  }
+  .cinema-shell select:not([multiple]):not([size]) option {
+    min-height: 36px;
+    padding: 8px 12px;
+    gap: 10px;
+    border-radius: var(--pc-radius-sm);
+    background: transparent;
+    color: var(--pc-ink);
+  }
+  .cinema-shell select:not([multiple]):not([size]) option:checked {
+    background: rgba(var(--pc-accent-rgb), 0.1);
+    color: var(--pc-accent);
+  }
+  .cinema-shell select:not([multiple]):not([size]) option:is(:hover, :focus-visible) {
+    background: var(--pc-raise);
+    color: var(--pc-ink);
+    outline: none;
+  }
+  .cinema-shell select:not([multiple]):not([size]) option::checkmark {
+    color: var(--pc-accent);
+  }
+  .cinema-shell select:not([multiple]):not([size]) option:disabled {
+    color: var(--pc-ink-faint);
+  }
+}
+.cinema-shell select:not([multiple]):not([size]) {
+  min-inline-size: var(--select-option-width, auto);
+}
+
+@supports (appearance: base-select) {
+  .cinema-shell select:not([multiple]):not([size]) option::checkmark {
+    display: none;
+  }
+}
+
+/* Floating navigation uses the same surface as the star-search panel. */
+.cinema-shell dialog.cinema-menu {
+  position: fixed;
+  inset: auto 24px auto auto;
+  width: min(280px, calc(100vw - 24px));
+  height: auto;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  overflow-y: auto;
+  box-shadow: 0 16px 48px #0006;
+  z-index: 100;
+}
+.cinema-shell dialog.cinema-menu[open] {
+  animation: cinema-menu-enter 180ms ease-out;
+}
+.cinema-menu nav { margin-top: 16px; gap: 4px; }
+.cinema-menu nav a {
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 18px;
+  color: var(--pc-ink-dim);
+}
+.cinema-menu nav a[aria-current] { color: var(--pc-accent); background: #ffd66b0a; }
+.cinema-menu nav a:hover { color: var(--pc-ink); background: #ffffff08; }
+.cinema-menu .navigation-caption { border-top: 1px solid var(--pc-line); padding-top: 16px; margin-top: 16px; }
+.menu-trigger[aria-expanded="true"] { border-color: var(--pc-accent); color: var(--pc-accent); }
+.menu-trigger[aria-expanded="true"]:hover { color: var(--pc-ink); }
+@keyframes cinema-menu-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-shell dialog.cinema-menu[open] { animation: none; }
+}
+.cinema-shell .cinema-menu > nav { margin-top: 0; }
+.cinema-menu .navigation-caption { overflow-wrap: anywhere; }
+
+.cinema-shell .navigation.cinema-menu nav a[aria-current="page"] {
+  color: var(--pc-accent);
+}
+.cinema-shell .navigation.cinema-menu nav a:hover {
+  color: var(--pc-ink);
+}
+.cinema-shell .cinema-menu .navigation-caption .cinema-menu-member {
+  color: var(--pc-ink);
 }

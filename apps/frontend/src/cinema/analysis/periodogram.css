@@ -13,5 +13,5 @@
   margin: 2px 0 0;
   font-size: var(--pc-text-2xs, 11px);
   line-height: 1.4;
-  color: var(--pc-accent, #5ec4f7);
+  color: var(--pc-secondary, #5ec4f7);
 }

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { http } from "../../api";
 import { pagePath } from "../../app/paths";
@@ -45,6 +45,8 @@ const when = (value: string) => new Date(value).toLocaleString("ko-KR");
 // 두 곳에서 판단하면 어긋난다.
 export function MyHistorySection(_props: ProfileSlotProps) {
   const location = useLocation();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [minHeight, setMinHeight] = useState<number>();
   // **고른 필터를 주소에 둔다.** 상세로 갔다 돌아올 때 returnTo가 이 주소를
   // 그대로 들고 가므로, 지역 상태로 두면 돌아온 화면에서 조건이 사라진다.
   const [params, setParams] = useSearchParams();
@@ -53,10 +55,21 @@ export function MyHistorySection(_props: ProfileSlotProps) {
     ? requested
     : "";
   const setResult = (next: string) => {
+    if (next === result) return;
+    // 목록이 로딩/빈 결과로 줄어도 문서 높이 때문에 스크롤이 당겨지지 않게 한다.
+    // 이전 목록 전체가 아닌, 현재 화면을 채우는 데 필요한 높이만 확보한다.
+    if (listRef.current) {
+      setMinHeight(
+        Math.max(
+          0,
+          window.innerHeight - listRef.current.getBoundingClientRect().top,
+        ),
+      );
+    }
     const copy = new URLSearchParams(params);
     if (next) copy.set("result", next);
     else copy.delete("result");
-    setParams(copy, { replace: true });
+    setParams(copy, { replace: true, preventScrollReset: true });
   };
   const returnTo = location.pathname + location.search;
   const load = useCallback(
@@ -71,7 +84,7 @@ export function MyHistorySection(_props: ProfileSlotProps) {
   const { state, reload, more } = usePagedList(`histories:${result}`, load);
 
   return (
-    <div className="my-list">
+    <div className="my-list" ref={listRef} style={{ minHeight, boxSizing: "border-box" }}>
       <div className="my-list-filters" role="group" aria-label="기록 결과 필터">
         {FILTERS.map((filter) => (
           <button
@@ -163,7 +176,7 @@ function HistoryRow({
             { returnTo },
           )}
         >
-          기록 상세 보기
+          {cinema ? "제출 기록 상세" : "기록 상세 보기"}
         </Link>
       ) : (
         <p role="status">

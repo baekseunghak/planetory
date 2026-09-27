@@ -477,7 +477,7 @@ export function DataDetails({
 /** How to drive the panel with a pointer or the keyboard. */
 export function HelpButton() {
   return (
-    <DialogButton label="도움말" title="조작 도움말" testId="cx-help-dialog">
+    <DialogButton label="조작법" title="조작법" testId="cx-help-dialog">
       <dl className="cx-help">
         <div>
           <dt>주기</dt>
@@ -493,7 +493,7 @@ export function HelpButton() {
         <div>
           <dt>구간</dt>
           <dd>
-            접힌 곡선에서 드래그하면 구간을 고르고, Shift+드래그하면 보기를
+            접힌 곡선에서 드래그하면 구간을 고르고, 휠 버튼 드래그(또는 Shift+드래그)로 보기를
             옮깁니다. 휠이나 +/−로 최대 {MAX_FOLD_ZOOM}배까지 확대하고, 0이나
             더블클릭으로 전체 보기를 합니다. 양 끝 핸들은 방향키로 보기 폭의
             1/1000씩, Shift를 누르면 10배씩 움직입니다. 키보드로 시작하려면

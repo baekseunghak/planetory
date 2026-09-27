@@ -66,7 +66,7 @@ export function LightCurve({
         if (index) context.lineTo(x, point);
         else context.moveTo(x, point);
       });
-      context.strokeStyle = colour("--pc-accent", "#5ec4f7");
+      context.strokeStyle = colour("--pc-accent", "#ffd369");
       context.lineWidth = 2;
       context.lineJoin = "round";
       context.stroke();

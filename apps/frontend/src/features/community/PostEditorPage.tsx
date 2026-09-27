@@ -1,3 +1,4 @@
+import { PostStarPicker } from "./PostStarPicker";
 import { MaterialPicker } from "./MaterialPicker";
 import { emptyMaterials, materialError } from "./materialContracts";
 import {
@@ -322,7 +323,6 @@ function PostEditor({ postId }: { postId?: string }) {
   return (
     <div className="community-page post-editor">
       <header className="community-heading">
-        <p className="eyebrow">COMMUNITY · 나누는 관측</p>
         <h1>{postId ? "글 수정" : "새 이야기 쓰기"}</h1>
         <p>
           관측한 내용이나 궁금한 점을 나눠 보세요. 일반 글 작성은 분석 제출이나
@@ -377,6 +377,8 @@ function PostEditor({ postId }: { postId?: string }) {
               <p role="alert">{fieldErrors.purposeTag}</p>
             )}
             {draft.board === "STAR" && (
+              <div className="post-star-field">
+              <PostStarPicker value={draft.ticId} onSelect={(ticId) => change("ticId", ticId)} />
               <label>
                 별의 TIC 번호
                 <input
@@ -391,6 +393,7 @@ function PostEditor({ postId }: { postId?: string }) {
                   공개된 별 게시판에 연결됩니다. {fieldErrors.ticId}
                 </small>
               </label>
+              </div>
             )}
             {original?.hasAttachments && (
               <p>

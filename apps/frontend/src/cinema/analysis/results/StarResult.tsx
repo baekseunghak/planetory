@@ -14,11 +14,13 @@ import {
   type StarResult,
 } from "../../../features/analysis/star-result";
 import { useCinemaSky } from "../../shell/sky";
+import { galaxySearch } from "../../shell/stage";
 import { useStarDetail } from "../../shell/star-detail";
 import * as f from "../format";
 import { Row } from "./AcceptedResult";
 import { useKnownPlanetNames } from "./labels";
 import "./results.css";
+import { explorationOrigin, explorationBackLabel, starResultsLocation } from "./navigation";
 
 type State =
   | { phase: "loading" }
@@ -52,7 +54,6 @@ const entryLabel = (stage: string) =>
 
 export function CinemaStarResult({
   ticId,
-  from,
   returnTo,
 }: {
   ticId: string;
@@ -110,10 +111,12 @@ export function CinemaStarResult({
   const periodOf = (id: string) =>
     planets.find((planet) => planet.candidateId === id)?.periodDays ?? null;
 
+  const origin = explorationOrigin(returnTo, ticId);
+  const from = starResultsLocation(ticId, returnTo);
   const context = { ticId, returnTo: from };
   // The galaxy restores the selection from `star`; keep the sky filters.
   const skyPath = (id: string) => {
-    const target = new URL(returnTo, "https://planetory.invalid");
+    const target = new URL(origin, "https://planetory.invalid");
     const params =
       target.pathname === "/sky" ? target.searchParams : new URLSearchParams();
     params.set("star", id);
@@ -122,7 +125,7 @@ export function CinemaStarResult({
   const historyLink = (id: string) =>
     pagePath("historyDetail", { historyId: id }, context);
   const retryLink = (id: string) =>
-    pagePath("analysis", { ticId }, { returnTo: from }) +
+    pagePath("analysis", { ticId }, { returnTo: origin }) +
     `&retryOfSubmissionId=${encodeURIComponent(id)}`;
   // Planets first in their order, then the other signals.
   const isPlanet = (id: string) =>
@@ -138,14 +141,43 @@ export function CinemaStarResult({
   const planetCount = result
     ? result.signals.filter((signal) => isPlanet(signal.candidateId)).length
     : 0;
+  // A cumulative result is not necessarily a successful or finished search.
+  // Old failures must not displace continuing a star with matched signals.
+  const retrySubmission = result?.signals.length === 0 && result.nextActions.includes("RETRY")
+    ? result.unmatchedSubmissions
+        .filter((item) => item.matchResult !== "skipped")
+        .reduce<(typeof result.unmatchedSubmissions)[number] | null>(
+          (latest, item) => !latest || Date.parse(item.submittedAt) > Date.parse(latest.submittedAt) ? item : latest,
+          null,
+        )
+    : null;
+  const continueFirst = !!result?.bundle &&
+    (result.progress.stage !== "completed" || result.progress.reopenPending);
+  const analysisAction = result?.bundle ? {
+    key: "analysis",
+    label: result.progress.reopenPending ? "새 자료로 분석" :
+      continueFirst && retrySubmission ? "다시 분석" : entryLabel(result.progress.stage),
+    to: continueFirst && !result.progress.reopenPending && retrySubmission
+      ? retryLink(retrySubmission.submissionId)
+      : pagePath("analysis", { ticId }, { returnTo: origin }),
+  } : null;
+  const galaxyUrl = `/sky${galaxySearch(new URL(skyPath(ticId), "https://planetory.invalid").search)}`;
+  const fromGalaxy = new URL(origin, "https://planetory.invalid").pathname === "/sky";
+  const galaxyAction = { key: "galaxy", label: "나의 은하로 돌아가기", to: galaxyUrl };
+  const mainActions = continueFirst && analysisAction
+    ? [analysisAction, galaxyAction]
+    : [galaxyAction, ...(analysisAction ? [analysisAction] : [])];
 
   return (
     <article className="star-result pc-result-page">
-      <h1>TIC {ticId} 분석 결과</h1>
-      <nav aria-label="결과 화면 이동">
-        <Link to={returnTo}>돌아가기</Link>
-        <Link to={skyPath(ticId)}>나의 은하에서 보기</Link>
-      </nav>
+      <h1>TIC {ticId} 탐사 결과</h1>
+      <p>이 별에서 찾은 신호와 누적 성과, 제출 기록을 모았습니다.</p>
+      {!result && <nav aria-label="결과 화면 이동">
+        <Link to={fromGalaxy ? galaxyUrl : origin}>{explorationBackLabel(origin)}</Link>
+        {!fromGalaxy && (
+          <Link to={galaxyUrl}>나의 은하로 돌아가기</Link>
+        )}
+      </nav>}
       {state.phase === "loading" && (
         <p role="status">분석 결과를 불러오는 중입니다.</p>
       )}
@@ -202,11 +234,11 @@ export function CinemaStarResult({
               </dd>
             </dl>
             <nav aria-label="분석 결과 다음 행동">
-              {result.bundle && (
-                <Link to={pagePath("analysis", { ticId }, { returnTo: from })}>
-                  {entryLabel(result.progress.stage)}
+              {mainActions.map((action, index) => (
+                <Link key={action.key} className={index === 0 ? "pc-result-return" : undefined} to={action.to}>
+                  {action.label}
                 </Link>
-              )}
+              ))}
               {result.nextActions.includes("PUBLISH_ALL") && (
                 <Link to={pagePath("publicationBatch", {}, context)}>
                   공개 검토
@@ -216,6 +248,9 @@ export function CinemaStarResult({
                 <Link to={pagePath("starBoard", { ticId }, context)}>
                   별 게시판
                 </Link>
+              )}
+              {!fromGalaxy && (
+                <Link to={origin}>{explorationBackLabel(origin)}</Link>
               )}
             </nav>
           </section>
@@ -279,7 +314,7 @@ export function CinemaStarResult({
                   <nav aria-label={`${label} 이동`}>
                     {signal.latestHistoryId && (
                       <Link to={historyLink(signal.latestHistoryId)}>
-                        기록과 곡선 보기
+                        제출 기록 상세
                       </Link>
                     )}
                     {signal.latestHistoryId &&

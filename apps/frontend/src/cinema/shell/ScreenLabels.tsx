@@ -31,6 +31,7 @@ export function MarkerLayer({
   stars,
   onSelect,
   held = false,
+  hideChallenge = false,
   onHover,
 }: {
   stars: readonly Star[];
@@ -41,6 +42,7 @@ export function MarkerLayer({
    * sits on the face of the star the camera is leaving.
    */
   held?: boolean;
+  hideChallenge?: boolean;
   /** Pointer or keyboard on a marker: name its star like a hovered star. */
   onHover?(ticId: string | null): void;
 }) {
@@ -52,7 +54,7 @@ export function MarkerLayer({
     quest?.quests?.challenge,
   );
   const challengeTicId =
-    quest?.quests?.challenge.unlocked && !stale
+    quest?.quests?.challenge.unlocked && !stale && !hideChallenge
       ? quest.quests.challenge.ticId
       : null;
   const byId = useMemo(

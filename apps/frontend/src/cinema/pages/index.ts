@@ -74,7 +74,7 @@ export const cinemaPages: CinemaPageSlots = {
   submissionResult: cinemaUnconnected("submissionResult"),
   // Live in production (features/p1.ts): in every build.
   following: framed("following", "standard", FollowingPage),
-  followingFeed: framed("following-feed", "standard", FollowingFeedPage),
+  followingFeed: framed("following-feed", "wide", FollowingFeedPage),
   ...(p1Enabled
     ? {
         notifications: framed("notifications", "reading", NotificationsPage),
