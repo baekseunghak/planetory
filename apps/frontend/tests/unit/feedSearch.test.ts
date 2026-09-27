@@ -117,3 +117,18 @@ test("star board anchors TIC and board while preserving text filters", () => {
   assert.ok(!url.includes("ticId="));
   assert.ok(!url.includes("board="));
 });
+test("star board links that carry returnTo open the board instead of a search error", () => {
+  // The star panel, results page and profiles link to the board with returnTo.
+  const fromPanel = readFeedSearch(new URLSearchParams("returnTo=%2Fsky%3Fstar%3D259377017"), "259377017");
+  assert.equal(fromPanel.error, null);
+  assert.equal(fromPanel.values.ticId, "259377017");
+  assert.equal(fromPanel.values.board, "STAR");
+  // The results page also repeats the route TIC.
+  const fromResults = readFeedSearch(new URLSearchParams("ticId=259377017&returnTo=%2Fresults%2F259377017"), "259377017");
+  assert.equal(fromResults.error, null);
+  // returnTo is never sent to the feed API.
+  assert.equal(feedSearchParams(fromPanel.values).has("returnTo"), false);
+  // Real search conditions are still checked.
+  assert.ok(readFeedSearch(new URLSearchParams("returnTo=%2Fsky&unknown=1"), "259377017").error);
+  assert.ok(readFeedSearch(new URLSearchParams("returnTo=%2Fsky&ticId=1"), "259377017").error);
+});
