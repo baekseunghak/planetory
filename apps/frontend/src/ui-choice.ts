@@ -4,12 +4,13 @@
 //
 // - Build-time VITE_CINEMA overrides everything: "true" = cinema,
 //   "false" = legacy (main.tsx also checks these literally, so such a build
-//   keeps one app only). `npm run dev:cinema` sets "true".
-// - Otherwise (the production image sets no VITE_CINEMA) the visitor chooses:
+//   keeps one app only). `npm run dev:cinema` and the production image set
+//   "true".
+// - Otherwise (a build without VITE_CINEMA) the visitor chooses:
 //     ?ui=cinema  remembers localStorage["planetory:ui"] = "cinema" -> cinema
 //     ?ui=legacy  forgets it                                        -> legacy
 //     nothing     cinema only when remembered                      -> else legacy
-//   The default is legacy: the page production serves today.
+//   The default is legacy.
 // - Storage can be missing or throw (private mode, blocked site data). Then
 //   `?ui=cinema` still opens cinema for that page load, and without the
 //   parameter the visit is legacy.

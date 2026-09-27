@@ -38,8 +38,10 @@ web:build:
   extends: .web-checks
   # 배포 이미지와 같은 번들을 만든다. 플래그가 꺼지면 vite가 렌더러 import를 죽은
   # 코드로 지워 번들링 오류가 MR에서 보이지 않는다. web:image는 src 변경에 돌지 않는다.
+  # VITE_CINEMA도 같다. 운영에는 시네마만 든 번들이 나간다.
   variables:
     VITE_SKY_RENDERER_ENABLED: "true"
+    VITE_CINEMA: "true"
   script:
     - npm run build
     - npm test
@@ -124,7 +126,7 @@ web:image:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
-    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true --build-arg VITE_CINEMA=true"
     CHECK_TAG: ci-check/frontend:$CI_COMMIT_SHORT_SHA
   # 푸시하지 않으므로 레지스트리가 필요 없다. .docker-build의 전제 검사를 비운다.
   before_script: []
@@ -148,7 +150,7 @@ build:frontend:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
     TARGET_PLATFORM: linux/amd64
-    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true"
+    BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true --build-arg VITE_CINEMA=true"
   # develop에서는 변경 여부와 관계없이 빌드한다. changes로 거르면 이 앱을 바꾸지 않은
   # 병합의 파이프라인에는 배포 버튼이 없고, 이 앱을 바꾼 이전 파이프라인은 새 커밋에
   # 자동 취소되며 누르지 않은 수동 배포까지 함께 사라진다. 2026-09-23 백엔드 병합

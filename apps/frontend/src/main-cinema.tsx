@@ -1,5 +1,5 @@
-// The cinema app. ./main.tsx loads it when VITE_CINEMA is "true" or, in a
-// build without VITE_CINEMA (production), when the visitor opted in with
+// The cinema app. ./main.tsx loads it when VITE_CINEMA is "true" (production)
+// or, in a build without VITE_CINEMA, when the visitor opted in with
 // ?ui=cinema (./ui-choice.ts); otherwise ./legacy/main.tsx starts develop's app.
 import {
   MyProfilePage,
