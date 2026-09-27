@@ -136,7 +136,7 @@ test("writes require configured CSRF; a lost response is uncertain and never ret
     );
   assert.equal(calls, 2);
 });
-test("timeouts abort the request; ordinary reads have no automatic retries", async () => {
+test("timeouts abort the request and are never retried", async () => {
   let calls = 0;
   const client = createApiClient({
     baseUrl: "/api",
@@ -157,6 +157,64 @@ test("timeouts abort the request; ordinary reads have no automatic retries", asy
       error.code === "TIMEOUT" &&
       !error.outcomeUnknown,
   );
+  assert.equal(calls, 1);
+});
+test("reads wait out gateway 502/504; writes and the backend's 503 fail at once", async () => {
+  let calls = 0,
+    replies: number[] = [];
+  const client = createApiClient({
+    baseUrl: "/api",
+    gatewayRetryMs: [0, 0, 0],
+    csrfHeaders: () => ({}),
+    fetch: async () => {
+      ++calls;
+      const status = replies.shift() ?? 200;
+      return status === 200
+        ? Response.json({ ok: true })
+        : new Response("<h1>gateway</h1>", { status });
+    },
+  });
+  replies = [502, 504];
+  assert.deepEqual(await client.request("/v1/me/sky"), { ok: true });
+  assert.equal(calls, 3);
+  calls = 0;
+  replies = [502, 502, 502, 502];
+  await assert.rejects(
+    client.request("/v1/me/sky"),
+    (error) => error instanceof ApiError && error.status === 502,
+  );
+  assert.equal(calls, 4);
+  calls = 0;
+  replies = [503];
+  await assert.rejects(
+    client.request("/v1/me/sky"),
+    (error) => error instanceof ApiError && error.status === 503,
+  );
+  assert.equal(calls, 1);
+  calls = 0;
+  replies = [502];
+  await assert.rejects(
+    client.request("/v1/posts", { method: "POST", json: {} }),
+    (error) =>
+      error instanceof ApiError && error.status === 502 && error.outcomeUnknown,
+  );
+  assert.equal(calls, 1);
+});
+test("cancelling a read stops its wait for the next gateway retry", async () => {
+  let calls = 0;
+  const abort = new AbortController();
+  const client = createApiClient({
+    baseUrl: "/api",
+    gatewayRetryMs: [60_000],
+    fetch: async () => {
+      ++calls;
+      setTimeout(() => abort.abort());
+      return new Response("", { status: 502 });
+    },
+  });
+  await assert.rejects(client.request("/v1/me/sky", { signal: abort.signal }), {
+    name: "AbortError",
+  });
   assert.equal(calls, 1);
 });
 
