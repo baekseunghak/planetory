@@ -7,11 +7,12 @@ import { NicknameEditor } from "./NicknameEditor";
 import { readVisibility, type Visibility } from "./settings";
 import "./settings.css";
 import { NotificationPreferences } from "../notifications/NotificationPreferences";
-import { p1Enabled } from "../p1";
+import { p1Enabled, useLiveP1 } from "../p1";
 import { useCinemaWording } from "../../shared/cinema-wording";
 
 export function SettingsPage() {
   const session = useSession();
+  const liveP1 = useLiveP1();
   const memberId = session.member?.memberId;
   const [saved, setSaved] = useState<Visibility | null>(null);
   const [busy, setBusy] = useState(true);
@@ -204,7 +205,7 @@ export function SettingsPage() {
       <section className="settings-row">
         <h2>계정</h2>
         <div>
-          {p1Enabled && (
+          {liveP1 && (
             <p>
               <Link to="/settings/withdrawal">계정 탈퇴 안내</Link>
             </p>

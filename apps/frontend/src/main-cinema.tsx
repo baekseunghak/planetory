@@ -57,11 +57,11 @@ async function start() {
     return;
   }
   let pages: PageSlots = {
-    ...(p1Enabled ? { withdrawal: WithdrawalPage } : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
-    // Follow, another member's galaxy and personal statistics answer in
-    // production (features/p1.ts): on in every build. The rest of P1 waits
-    // for VITE_P1_ENABLED.
+    // Follow, another member's galaxy, personal statistics and withdrawal are
+    // live in production (features/p1.ts): on in every build. The rest of P1
+    // waits for VITE_P1_ENABLED.
+    withdrawal: WithdrawalPage,
     following: FollowingPage,
     followingFeed: FollowingFeedPage,
     profile: MyProfilePage,

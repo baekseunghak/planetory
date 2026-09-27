@@ -5,9 +5,9 @@
 // Rules for entries:
 // - Wrap or recompose the legacy feature component; keep its data hooks,
 //   API calls and business rules (see ../README.md, "재사용하는 것과 바꾸는 것").
-// - P1 pages whose API is live in production (following, followingFeed;
-//   features/p1 `useLiveP1`) in every build; the rest (notifications,
-//   statistics, withdrawal) only when `p1Enabled`, like main-cinema.tsx.
+// - P1 pages whose API is live in production (following, followingFeed,
+//   withdrawal; features/p1 `useLiveP1`) in every build; the rest
+//   (notifications, statistics) only when `p1Enabled`, like main-cinema.tsx.
 // - Styles in this folder, on --pc-* tokens (../styles/tokens.css). No
 //   backdrop-filter over the canvas.
 // - `sky`, `analysis` and `publicSky` are not pages here: the shell and
@@ -74,10 +74,10 @@ export const cinemaPages: CinemaPageSlots = {
   // Live in production (features/p1.ts): in every build.
   following: framed("following", "standard", FollowingPage),
   followingFeed: framed("following-feed", "standard", FollowingFeedPage),
+  withdrawal: framed("withdrawal", "standard", WithdrawalPage),
   ...(p1Enabled
     ? {
         notifications: framed("notifications", "reading", NotificationsPage),
-        withdrawal: framed("withdrawal", "standard", WithdrawalPage),
         statistics: CinemaStatistics,
       }
     : {}),
