@@ -11,6 +11,8 @@ import { useCinemaSky } from "../shell/sky";
 export type FrameWidth = "wide" | "standard" | "reading";
 
 export type FrameHead = {
+  /** Fixed parent category only when the title alone does not convey it.
+   * Omit for top-level pages and workflows entered from multiple places. */
   eyebrow?: string;
   title: string;
   lede?: string;

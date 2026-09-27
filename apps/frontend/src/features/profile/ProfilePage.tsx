@@ -67,7 +67,6 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   return (
     <section className="profile-page">
       <header className="profile-heading">
-        <p className="eyebrow">{own ? "MY OBSERVATORY" : "EXPLORER PROFILE"}</p>
         <h1>{own ? "마이페이지" : "탐사자 프로필"}</h1>
       </header>
       <div className="profile-identity">

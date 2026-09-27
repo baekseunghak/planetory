@@ -323,7 +323,6 @@ function PostEditor({ postId }: { postId?: string }) {
   return (
     <div className="community-page post-editor">
       <header className="community-heading">
-        <p className="eyebrow">COMMUNITY · 나누는 관측</p>
         <h1>{postId ? "글 수정" : "새 이야기 쓰기"}</h1>
         <p>
           관측한 내용이나 궁금한 점을 나눠 보세요. 일반 글 작성은 분석 제출이나
