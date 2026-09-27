@@ -344,10 +344,14 @@ export function aiLine(ai: {
   return `${band ? `${band} · ` : ""}${Math.round(ai.score * 100)}점`;
 }
 
-/** One line for what the match was, after a submission. */
+/**
+ * One line for what the match was, after a submission. A miss with the
+ * server's width hint (`missHint`) says the width alone was off.
+ */
 export function matchSentence(
   matchStatus: string,
   multiplier?: number | null,
+  missHint?: string | null,
 ): string {
   switch (matchStatus) {
     case "matched":
@@ -359,7 +363,10 @@ export function matchSentence(
     case "duplicate":
       return "이미 찾은 신호입니다.";
     case "not_matched":
-      return "고른 주기와 구간에 맞는 신호가 없었습니다.";
+      return (
+        (missHint && MISS_HINT[missHint]) ||
+        "고른 주기와 구간에 맞는 신호가 없었습니다."
+      );
     case "ambiguous_match":
       return "어느 신호인지 가리지 못했습니다.";
     case "none_wrong":

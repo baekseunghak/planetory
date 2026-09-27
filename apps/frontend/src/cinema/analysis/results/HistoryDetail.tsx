@@ -62,7 +62,11 @@ function Sent({
     <section className="history-band">
       <h3>그때 낸 것</h3>
       <p>
-        {f.matchSentence(detail.matchStatus, correction?.multiplier)}
+        {f.matchSentence(
+          detail.matchStatus,
+          correction?.multiplier,
+          explanation.missHint,
+        )}
         {signalLabel ? ` (${signalLabel})` : ""}
       </p>
       <dl>
