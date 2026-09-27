@@ -151,14 +151,15 @@ public class SubmissionService {
                 throw invalid(validation.rejection().field());
             }
             derived = validation.derived();
+            Set<Long> recognized = submissions.recognized(member);
             var matched = SubmissionMatching.markDuplicate(SubmissionMatching.match(observation, matchingRules,
-                    selection, derived, SubmissionMatching.candidatesToCompare(candidates, removed), removed), submissions.recognized(member));
+                    selection, derived, SubmissionMatching.candidatesToCompare(candidates, removed), removed), recognized);
             boolean harmonic = matched.harmonicMultiplier() != null && matched.harmonicMultiplier() != 1;
             match = new SubmissionViews.Match(matched.status().value(), matched.candidateId() == null ? null
                     : ExplorationIds.candidate(matched.candidateId()), harmonic ? matched.harmonicMultiplier() : null,
                     harmonic ? matched.correctedPeriodDays() : null,
                     !harmonic ? null : matched.harmonicMultiplier() == 2 ? "P/2 alias" : "2P alias",
-                    Objects.toString(SubmissionMatching.missHint(matched, matchingRules), null));
+                    Objects.toString(SubmissionMatching.missHint(matched, matchingRules, recognized), null));
             if (matched.candidateId() != null) {
                 selected = candidates.stream().filter(c -> c.id() == matched.candidateId()).findFirst().orElseThrow();
                 disposition = submissions.disposition(selected.id());

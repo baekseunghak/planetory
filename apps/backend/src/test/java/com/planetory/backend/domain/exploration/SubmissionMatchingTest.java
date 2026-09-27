@@ -197,14 +197,22 @@ class SubmissionMatchingTest {
         assertNull(missHint(new Selection(5, 0.49, 0.51, null)), "위치가 틀리면 알리지 않는다");
         assertNull(missHint(new Selection(5.3, 0.175, 0.225, null)), "주기가 틀리면 알리지 않는다");
         assertNull(missHint(new Selection(5, 0.19, 0.21, null)), "일치하면 힌트가 없다");
+        // 2.5일 × 2 = 5일로만 맞는 고조파 해석은 「주기가 맞았다」가 아니므로 알리지 않는다.
+        assertNull(missHint(new Selection(2.5, 0.35, 0.45, null)), "고조파 해석만 폭이 벗어나면 알리지 않는다");
+        assertNull(missHint(new Selection(5, 0.175, 0.225, null), Set.of(401L)),
+                "이미 성과를 인정받은 신호로는 안내하지 않는다");
     }
 
     private static SubmissionMatching.MissHint missHint(Selection selection) {
+        return missHint(selection, Set.of());
+    }
+
+    private static SubmissionMatching.MissHint missHint(Selection selection, Set<Long> recognized) {
         Validation validation = validate(selection);
         assertTrue(validation.ok(), () -> String.valueOf(validation.rejection()));
         Match match = SubmissionMatching.match(OBSERVATION, RULE_0, selection, validation.derived(),
                 List.of(new SubmissionMatching.Candidate(401, 5, 2001, 2.4)), List.of());
-        return SubmissionMatching.missHint(match, RULE_0);
+        return SubmissionMatching.missHint(match, RULE_0, recognized);
     }
 
     private static Validation validate(Selection selection) {

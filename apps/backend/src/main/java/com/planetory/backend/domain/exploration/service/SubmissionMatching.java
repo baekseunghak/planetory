@@ -433,15 +433,17 @@ public final class SubmissionMatching {
     public enum MissHint { WINDOW_TOO_WIDE, WINDOW_TOO_NARROW }
 
     /**
-     * {@code not_matched}에서 주기·epoch·통과 겹침은 통과하고 지속시간 비율만 벗어난 해석이 있으면 폭 힌트를
-     * 준다 [S15P21C206-282]. 그런 해석이 여럿이면 점수가 가장 낮은 것을 따른다. 그 밖의 불일치는 null이라
-     * 주기·위치의 정오를 알리지 않는다. 판정(규칙 v0)에는 쓰지 않으므로 참조 구현과 대조하지 않는다.
+     * {@code not_matched}에서 배율 1 해석이 주기·epoch·통과 겹침은 통과하고 지속시간 비율만 벗어났으면 폭 힌트를
+     * 준다 [S15P21C206-282]. 화면이 「주기와 위치는 맞았다」고 말하므로 고조파 해석은 쓰지 않고, 이미 성과를
+     * 인정받은 신호도 뺀다(좁히면 duplicate가 될 뿐이다). 여럿이면 점수가 가장 낮은 것을 따른다. 그 밖의 불일치는
+     * null이라 주기·위치의 정오를 알리지 않는다. 판정(규칙 v0)에는 쓰지 않으므로 참조 구현과 대조하지 않는다.
      */
-    public static MissHint missHint(Match match, Rules rules) {
+    public static MissHint missHint(Match match, Rules rules, Set<Long> recognizedCandidateIds) {
         if (match.status() != MatchStatus.NOT_MATCHED) {
             return null;
         }
         return match.evaluations().stream()
+                .filter(e -> e.multiplier() == 1 && !recognizedCandidateIds.contains(e.candidateId()))
                 .filter(e -> e.ePeriod() <= 1 && e.eEpoch() <= 1 && e.overlapTransits() >= rules.minOverlapTransits()
                         && !e.durationPass())
                 .min(Comparator.comparingDouble(Evaluation::score))
