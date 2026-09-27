@@ -210,7 +210,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. part checksum은 공용 `part_checksum_digest`가 `hdfs dfs -checksum`을 묶음(최대 200개)으로 8개까지 동시에 불러 계산한다. 1~13 attempt의 248개 파일 재감사가 약 12분에서 85초로 줄었다(2026-09-27 Node 1 실측, digest는 marker 기록값과 같음). `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 

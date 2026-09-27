@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import tarfile
 import tempfile
@@ -495,6 +496,10 @@ def submit(
     return application_id
 
 
+CHECKSUM_BATCH = 200  # paths per `hdfs dfs -checksum`; keeps the argument list far below ARG_MAX
+CHECKSUM_WORKERS = 8  # concurrent calls; large files spend their time in per-block DataNode RPCs
+
+
 def part_checksum_digest(path: str) -> tuple[int, str]:
     listing = hdfs("dfs", "-ls", f"{path}/part-*.parquet").stdout
     parts = sorted(
@@ -505,12 +510,23 @@ def part_checksum_digest(path: str) -> tuple[int, str]:
     )
     if not parts:
         raise RuntimeError(f"no Parquet parts in {path}")
-    rows = []
-    for part in parts:
-        output = hdfs("dfs", "-checksum", part).stdout.strip().split()
-        if len(output) < 3:
-            raise RuntimeError(f"invalid checksum output for {part}")
-        rows.append("\t".join((part.split("/")[-1], output[-2], output[-1])))
+    # A few concurrent batch calls instead of one call per part: each call starts a JVM (~2-3 s),
+    # which made the 248-part Silver re-audit take about 12 minutes, and a single call still walks
+    # large files block by block. Output is "<path>\t<algorithm>\t<checksum>".
+    size = min(CHECKSUM_BATCH, -(-len(parts) // CHECKSUM_WORKERS))
+    batches = [parts[start:start + size] for start in range(0, len(parts), size)]
+    with ThreadPoolExecutor(max_workers=CHECKSUM_WORKERS) as pool:
+        outputs = list(pool.map(lambda batch: hdfs("dfs", "-checksum", *batch).stdout, batches))
+    checksums = {}
+    for batch, output in zip(batches, outputs):
+        for line in output.splitlines():
+            fields = line.split("\t")
+            if len(fields) == 3 and fields[0] in batch:
+                checksums[fields[0]] = fields[1:]
+    missing = [part for part in parts if part not in checksums]
+    if missing:
+        raise RuntimeError(f"invalid checksum output for {missing[0]}")
+    rows = ["\t".join((part.split("/")[-1], *checksums[part])) for part in parts]
     digest = hashlib.sha256(("\n".join(sorted(rows)) + "\n").encode()).hexdigest()
     return len(parts), digest
 
