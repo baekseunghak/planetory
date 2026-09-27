@@ -245,10 +245,10 @@ export function FoldArea({
     return phaseAt(clientX - rect.left, rect.width, low, high);
   };
   const begin = (event: PointerEvent<HTMLElement>, handle: Handle | null) => {
-    const pan = handle === null && event.shiftKey;
+    const pan = event.button === 1 || (handle === null && event.shiftKey);
     if (
       !shown ||
-      event.button !== 0 ||
+      (event.button !== 0 && event.button !== 1) ||
       !event.isPrimary ||
       drag.current ||
       (!pan && !canEdit)
@@ -387,6 +387,9 @@ export function FoldArea({
     }
     if (event.target !== event.currentTarget || !shown) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === "Enter" && !state.range) {
+      event.preventDefault(); startKeyboardWindow(); return;
+    }
     if (
       !["+", "=", "-", "0", "Home", "ArrowLeft", "ArrowRight"].includes(
         event.key,
@@ -469,8 +472,8 @@ export function FoldArea({
               : state.range
                 ? stage >= 3
                   ? "다시 드래그하면 바뀝니다"
-                  : "핸들로 다듬기"
-                : "떨어지는 곳을 드래그"}
+                  : "양끝 핸들로 다듬기"
+                : "스크롤로 확대하고, 드래그해 구간 선택"}
           </em>
         </h2>
         <div className="cx-tools" role="group" aria-label="접힌 곡선 보기 조작">
@@ -526,6 +529,7 @@ export function FoldArea({
           if ((event.target as HTMLElement).closest(".cx-handle")) return;
           setView(() => fullFoldView);
         }}
+        onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
         onPointerDown={(event) => begin(event, null)}
         onPointerMove={(event) => move(event, false)}
         onPointerUp={(event) => move(event, true)}
@@ -608,7 +612,7 @@ export function FoldArea({
         )}
       </div>
       <p id={hintId} className="cx-sr">
-        드래그하면 새 구간을 고르고, Shift+드래그하면 보기를 옮깁니다. 휠이나
+        Enter로 구간 선택을 시작합니다. 드래그하면 새 구간을 고르고, 휠 버튼을 누른 채 드래그하면 보기를 옮깁니다. Shift+드래그도 가능합니다. 휠이나
         +/−로 최대 {MAX_FOLD_ZOOM}배까지 확대하고 0이나 더블클릭으로 전체 보기를
         합니다. ←/→는 보기 이동입니다. 시작·끝 핸들에서 방향키는 보기 폭의
         1/1000, Shift+방향키는 10배 움직입니다. Esc는 드래그를 취소합니다.
@@ -688,15 +692,6 @@ export function FoldArea({
               : ""}
           </span>
         </span>
-        {canEdit && !state.range && (
-          <button
-            type="button"
-            className="cx-link"
-            onClick={startKeyboardWindow}
-          >
-            구간 선택 시작
-          </button>
-        )}
         {canEdit && state.range && (
           <button type="button" className="cx-link" onClick={clearWindow}>
             구간 지우기
@@ -705,7 +700,7 @@ export function FoldArea({
       </div>
       <p
         id={statusId}
-        className="cx-note"
+        className="cx-note cx-window-note"
         role="status"
         data-testid="cx-window-status"
         data-tone={invalid ? "bad" : undefined}
@@ -715,9 +710,7 @@ export function FoldArea({
             ? state.message
             : preview && emptyRuleNote && stats?.inside === 0
               ? "이 구간에는 관측점이 없습니다. 빈 구간은 서버 규칙상 제출할 수 없습니다."
-              : state.range && !invalid && state.message && !locked
-                ? "미리보기 값입니다. 제출하면 서버가 다시 계산하고 검증합니다."
-                : "")}
+              : "")}
       </p>
       {(problem || slow) && (
         <div

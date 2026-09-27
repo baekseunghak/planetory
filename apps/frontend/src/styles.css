@@ -6,6 +6,7 @@
   font-synthesis: none;
   font-weight: 400;
   --muted: #a8b2c1;
+  --focus-ring: rgba(255, 211, 105, 0.6);
   --line: #ffffff21;
 }
 * {
@@ -42,7 +43,7 @@ a:hover {
   color: #a9c5ec;
 }
 :focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 h1 {

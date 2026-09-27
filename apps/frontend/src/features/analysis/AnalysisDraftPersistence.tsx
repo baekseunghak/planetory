@@ -79,6 +79,11 @@ export function AnalysisDraftPersistence({
   });
   const [saved, setSaved] = useState(initial.saved);
   const [notice, setNotice] = useState(initial.notice);
+  useEffect(() => {
+    if (notice !== "저장된 초안을 지웠습니다.") return;
+    const timer = window.setTimeout(() => setNotice(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const [restoring, setRestoring] = useState<{
     draft: SavedAnalysisDraft;
     change: PeriodSelectionChange;

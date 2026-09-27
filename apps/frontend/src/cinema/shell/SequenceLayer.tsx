@@ -137,9 +137,9 @@ function DiscoveryCardView({
   const more = card.remaining > 0;
   const galaxyButton = (
     <button
-      ref={more ? undefined : primary}
+
       type="button"
-      className={more ? "cinema-secondary" : "cinema-primary"}
+      className="cinema-secondary"
       onClick={onGalaxy}
     >
       은하로 돌아가기
@@ -147,9 +147,9 @@ function DiscoveryCardView({
   );
   const detailsButton = (
     <button
-      ref={more ? primary : undefined}
+      ref={primary}
       type="button"
-      className={more ? "cinema-primary" : "cinema-secondary"}
+      className="cinema-primary"
       onClick={onDetails}
     >
       결과 자세히 보기
@@ -180,20 +180,9 @@ function DiscoveryCardView({
           이 별에 찾을 수 있는 신호가 {card.remaining}개 더 남아 있습니다.
         </p>
       )}
-      {/* While the star still has signals to find, the result (where the
-          next one starts) leads; the galaxy leads once it is done. */}
       <div className="cinema-discovery-actions">
-        {more ? (
-          <>
-            {detailsButton}
-            {galaxyButton}
-          </>
-        ) : (
-          <>
-            {galaxyButton}
-            {detailsButton}
-          </>
-        )}
+        {detailsButton}
+        {galaxyButton}
       </div>
     </dialog>
   );

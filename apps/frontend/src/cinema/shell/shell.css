@@ -81,7 +81,7 @@ body {
   pointer-events: auto;
 }
 .cinema-shell :focus-visible {
-  outline: 2px solid var(--pc-accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 /* The reused sky components hide labels with .sr-only, which used to come
@@ -107,7 +107,7 @@ body {
   margin: 0;
   font-size: var(--pc-text-2xs);
   letter-spacing: var(--pc-tracking-eyebrow);
-  color: var(--pc-accent);
+  color: var(--pc-secondary);
 }
 .cinema-muted {
   margin: 0;
@@ -145,7 +145,7 @@ body {
 }
 .cinema-shell select:focus-visible {
   border-color: var(--pc-accent);
-  outline: 2px solid rgba(94, 196, 247, 0.3);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 0;
 }
 .cinema-shell select:disabled {
@@ -198,7 +198,7 @@ body {
 }
 .cinema-shell .cinema-pill[aria-pressed="true"] {
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
 }
 .cinema-shell .cinema-mini {
   min-height: 26px;
@@ -227,7 +227,7 @@ body {
   font-weight: var(--pc-weight-strong);
 }
 .cinema-shell .cinema-primary:hover {
-  background: #7fd0f9;
+  background: var(--pc-accent-hover);
   color: var(--pc-accent-ink);
 }
 .cinema-shell .cinema-secondary {
@@ -777,7 +777,7 @@ body {
   align-self: flex-start;
   margin-top: var(--pc-space-1);
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
 }
 .cinema-search .star-search p {
   margin: 0;
@@ -879,7 +879,7 @@ body {
 }
 .cinema-quests .quest-toggle[aria-expanded="true"] {
   color: var(--pc-accent);
-  border-color: rgba(94, 196, 247, 0.45);
+  border-color: rgba(var(--pc-accent-rgb), 0.45);
 }
 .cinema-quests .quest-toggle > span:first-child {
   color: var(--pc-marker-tutorial-line);
@@ -1869,7 +1869,7 @@ body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
   border-radius: var(--pc-radius-pill);
   font-size: var(--pc-text-lg);
   pointer-events: auto;
-  box-shadow: 0 0 28px rgba(94, 196, 247, 0.28);
+  box-shadow: 0 0 28px rgba(var(--pc-accent-rgb), 0.28);
   animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
 }
 .cinema-shell .cinema-story-skip {
@@ -1912,4 +1912,15 @@ body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
   .cinema-shell .cinema-story-start {
     animation: none;
   }
+}
+/* Keep the unread count in the link's accessible name, show only a dot. */
+.cinema-topbar .notification-bell > span {
+  width: 6px; height: 6px; min-width: 6px;
+  padding: 0; font-size: 0; line-height: 0;
+  border-radius: 50%; background: var(--pc-accent);
+}
+.cinema-topbar .notification-bell > span {
+  top: 8px;
+  right: 8px;
+  transform: none;
 }

@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useSession } from "../../auth/SessionProvider";
 import type {
@@ -374,7 +375,7 @@ function ReadyWorkspace({
   const locked = submission.locked;
   const pending = foldState.status === "pending";
   const slow = useSustained(pending);
-  const periodEditable = stage === 1 && !locked;
+  const periodEditable = !locked;
   const lockReason = locked
     ? "제출을 처리하는 동안이나 결과가 나온 뒤에는 주기를 바꿀 수 없습니다."
     : null;
@@ -471,11 +472,12 @@ function ReadyWorkspace({
         <>
           {notices}
           <OnboardingTip step={stage} />
-          <AnalysisDraftPersistence
-            context={context}
-            data={data}
-            onRestore={restore}
-          />
+          {createPortal(
+            <div className="cx-analysis cx-draft-floating">
+              <AnalysisDraftPersistence context={context} data={data} onRestore={restore} />
+            </div>,
+            document.body,
+          )}
           <CurveStepStatus />
         </>
       }
@@ -489,7 +491,6 @@ function ReadyWorkspace({
           inputKey={foldState.inputKey}
           onChoose={choose}
           onTune={tune}
-          onReopen={stage > 1 && !locked ? () => go(1) : null}
           onViewportChange={trackViewport}
           initialViewport={
             !resume

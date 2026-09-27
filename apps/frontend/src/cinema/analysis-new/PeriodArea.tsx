@@ -62,7 +62,6 @@ export function PeriodArea({
   inputKey,
   onChoose,
   onTune,
-  onReopen,
   onViewportChange,
   initialViewport,
   strip,
@@ -70,7 +69,7 @@ export function PeriodArea({
   data: ReadyPeriodogram;
   /** The latest requested period (may still be folding). */
   change: PeriodSelectionChange | null;
-  /** Stage 1 and no submission lock. */
+  /** Available until submission locks the workspace. */
   editable: boolean;
   /** Why the period cannot change now (shown when a pick is refused). */
   lockReason: string | null;
@@ -79,8 +78,6 @@ export function PeriodArea({
   inputKey: number;
   onChoose: (choice: PeriodChoice) => void;
   onTune: (period: number) => void;
-  /** Back to choosing the period (only offered when not editable). */
-  onReopen: (() => void) | null;
   onViewportChange: (viewport: PeriodogramViewport) => void;
   initialViewport?: PeriodogramViewport;
   strip: ReactNode;
@@ -138,6 +135,7 @@ export function PeriodArea({
     width: number;
     view: PeriodView;
     moved: boolean;
+    panOnly: boolean;
   } | null>(null);
   const hintId = useId();
   const sliderId = useId();
@@ -285,7 +283,7 @@ export function PeriodArea({
 
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (
-      event.button !== 0 ||
+      (event.button !== 0 && event.button !== 1) ||
       !event.isPrimary ||
       (event.target as HTMLElement).closest("button")
     )
@@ -299,6 +297,7 @@ export function PeriodArea({
       width: event.currentTarget.getBoundingClientRect().width,
       view: current,
       moved: false,
+      panOnly: event.button === 1 || event.shiftKey,
     };
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -325,7 +324,7 @@ export function PeriodArea({
     if (!active || active.id !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    if (active.moved) return;
+    if (active.moved || active.panOnly) return;
     const rect = event.currentTarget.getBoundingClientRect();
     if (
       event.clientX < rect.left ||
@@ -346,6 +345,12 @@ export function PeriodArea({
   const selectedAt = selection
     ? periodFraction(periodogram, selection.periodDays)
     : null;
+  const selectedGridPosition = (selectedAt ?? 0) * (periodogram.nPeriods - 1);
+  const selectedIndex = Math.max(0, Math.min(periodogram.nPeriods - 1, Math.floor(selectedGridPosition)));
+  const selectedNext = Math.min(periodogram.nPeriods - 1, selectedIndex + 1);
+  const selectedPower = display.plot.grid.power[selectedIndex] +
+    (display.plot.grid.power[selectedNext] - display.plot.grid.power[selectedIndex]) *
+    (selectedGridPosition - selectedIndex);
   // Rank labels in px, inside the plot and apart (model.placeRankTags).
   const peakByRank = new Map(display.candidates.peaks.map((p) => [p.rank, p]));
   const tags =
@@ -404,6 +409,7 @@ export function PeriodArea({
       className="cx-area"
       data-area="period"
       data-state={areaState}
+      data-awaiting-period={selection === null && editable ? true : undefined}
       aria-label="반복 주기"
     >
       {strip}
@@ -411,11 +417,13 @@ export function PeriodArea({
         <h2 className="cx-label">
           주기
           <em>
-            {!selection
+            {editable && (cursor !== null || selection?.sourcePeakGridIndex === null)
+              ? "그래프를 클릭해 주기 선택"
+              : !selection
               ? "봉우리를 고르세요"
               : editable
                 ? tunable
-                  ? "← → 미세 조정"
+                  ? "슬라이더로 미세 조정"
                   : "직접 고른 주기"
                 : "고정됨"}
           </em>
@@ -440,7 +448,7 @@ export function PeriodArea({
         {[...candidates.peaks]
           .sort((a, b) => a.rank - b.rank)
           .map((peak) => {
-            const pressed = selection?.sourcePeakGridIndex === peak.gridIndex;
+            const pressed = cursor === null && selection?.sourcePeakGridIndex === peak.gridIndex;
             return (
               <button
                 key={peak.gridIndex}
@@ -463,7 +471,7 @@ export function PeriodArea({
           type="button"
           className="cx-chip cx-chip-direct"
           aria-pressed={
-            selection !== null && selection.sourcePeakGridIndex === null
+            cursor !== null || (selection !== null && selection.sourcePeakGridIndex === null)
           }
           aria-disabled={!editable || undefined}
           aria-describedby={hintId}
@@ -480,18 +488,11 @@ export function PeriodArea({
                     : current.center,
                 ),
             );
-            setMessage(
-              "그래프를 누르거나 ←/→로 옮긴 뒤 Enter로 주기를 직접 고르세요.",
-            );
+            setMessage("");
           }}
         >
           직접 선택
         </button>
-        {onReopen && (
-          <button type="button" className="cx-link" onClick={onReopen}>
-            주기 다시 고르기
-          </button>
-        )}
         {current.zoom > 1 && (
           <button
             type="button"
@@ -516,6 +517,7 @@ export function PeriodArea({
         data-testid="cx-periodogram"
         data-view-start={low}
         data-view-end={high}
+        onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
@@ -557,7 +559,7 @@ export function PeriodArea({
           <span
             className="cx-pline"
             aria-hidden="true"
-            style={{ left: `${position(selectedAt)}%` }}
+            style={{ left: `${position(selectedAt)}%`, "--selected-y": `${periodPlotY(selectedPower, size.height)}px` } as React.CSSProperties}
           />
         )}
         {shown !== null && (

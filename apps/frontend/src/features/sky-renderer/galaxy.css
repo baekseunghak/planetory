@@ -249,7 +249,7 @@
   cursor: grabbing;
 }
 .galaxy-scene canvas:focus-visible {
-  outline: 2px solid #a0bbef;
+  outline: 1px solid var(--focus-ring);
   outline-offset: -3px;
 }
 .galaxy-input-toolbar {
@@ -403,7 +403,7 @@
   font-size: 13px;
 }
 .discovered-stars h2:focus {
-  outline: 2px solid #aacdff;
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .discovered-stars .discovered-rows {

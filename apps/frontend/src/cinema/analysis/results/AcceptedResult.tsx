@@ -530,9 +530,10 @@ export function AcceptedResult(props: AcceptedResultProps) {
         <div className="pc-result-primary">
           {next && render(next, "pc-result-button pc-result-button-main")}
           {render(home, "pc-result-button")}
+          {rest.filter((action) => action.label === "분석 결과 보기").map((action) => render(action, "pc-result-inline"))}
         </div>
         <div className="pc-result-secondary">
-          {rest.map((action) => render(action, "pc-result-inline"))}
+          {rest.filter((action) => action.label !== "분석 결과 보기").map((action) => render(action, "pc-result-inline"))}
           <button type="button" className="pc-result-inline" onClick={close}>
             닫기
           </button>

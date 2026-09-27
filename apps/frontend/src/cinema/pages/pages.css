@@ -42,8 +42,8 @@
   --grid: var(--pc-line-strong);
   --divider: var(--pc-line);
   --accent-fill: var(--pc-accent-soft);
-  --accent-line: rgba(94, 196, 247, 0.5);
-  --band: rgba(94, 196, 247, 0.12);
+  --accent-line: rgba(var(--pc-accent-rgb), 0.5);
+  --band: rgba(var(--pc-accent-rgb), 0.12);
   --danger: var(--pc-bad);
   --border: var(--pc-line-strong);
 
@@ -150,12 +150,12 @@
 
 /* links */
 .cinema-shell .cp-page a {
-  color: var(--pc-accent);
+  color: var(--pc-secondary);
   text-decoration: none;
   transition: color var(--pc-dur-fast);
 }
 .cinema-shell .cp-page a:hover {
-  color: #9bdcfb;
+  color: var(--pc-secondary-hover);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -167,7 +167,7 @@
   text-decoration: none;
 }
 .cinema-shell .cp-page :focus-visible {
-  outline: 2px solid var(--pc-accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -206,7 +206,7 @@
   cursor: default;
 }
 .cinema-shell .cp-page button[aria-pressed="true"] {
-  border-color: rgba(94, 196, 247, 0.55);
+  border-color: rgba(var(--pc-accent-rgb), 0.55);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
 }
@@ -226,8 +226,8 @@
     :disabled
   ),
 .cinema-shell .cp-page .cp-button-primary:hover {
-  border-color: #7fd0f9;
-  background: #7fd0f9;
+  border-color: var(--pc-accent-hover);
+  background: var(--pc-accent-hover);
   color: var(--pc-accent-ink);
 }
 
@@ -282,7 +282,7 @@
     textarea
   ):focus-visible {
   border-color: var(--pc-accent);
-  outline: 2px solid rgba(94, 196, 247, 0.3);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 0;
 }
 .cinema-shell .cp-page ::placeholder {
@@ -401,7 +401,7 @@
 .cinema-shell .cp-page .history-modes button[aria-pressed="true"],
 .cinema-shell .cp-page .public-analysis > nav button[aria-pressed="true"],
 .cinema-shell .cp-page .material-viewer nav button[aria-pressed="true"] {
-  border-color: rgba(94, 196, 247, 0.55);
+  border-color: rgba(var(--pc-accent-rgb), 0.55);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
 }
@@ -470,8 +470,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--pc-accent);
-  box-shadow: 0 0 12px rgba(94, 196, 247, 0.6);
+  background: var(--pc-secondary);
+  box-shadow: 0 0 12px rgba(var(--pc-secondary-rgb), 0.6);
   animation: cp-pulse 1.4s var(--pc-ease-in-out) infinite;
 }
 @keyframes cp-pulse {
@@ -568,7 +568,7 @@
   height: 8px;
   border-radius: 50%;
   background: var(--pc-accent);
-  box-shadow: 0 0 12px rgba(94, 196, 247, 0.6);
+  box-shadow: 0 0 12px rgba(var(--pc-accent-rgb), 0.6);
   animation: cp-pulse 1.4s var(--pc-ease-in-out) infinite;
 }
 .cinema-shell
@@ -654,7 +654,7 @@
   background:
     radial-gradient(
       ellipse 55% 45% at 100% 0%,
-      rgba(94, 196, 247, 0.1),
+      rgba(var(--pc-accent-rgb), 0.1),
       transparent 70%
     ),
     var(--cp-panel);
@@ -728,7 +728,7 @@
   text-decoration: none;
 }
 .cinema-shell .cp-page .community-page > .post-actions > a:hover {
-  background: #7fd0f9;
+  background: var(--pc-accent-hover);
   color: var(--pc-accent-ink);
   text-decoration: none;
 }
@@ -975,7 +975,7 @@
   gap: 24px;
 }
 .cinema-shell .cp-page .reaction-controls button[aria-pressed="true"] {
-  border-color: rgba(94, 196, 247, 0.55);
+  border-color: rgba(var(--pc-accent-rgb), 0.55);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
 }
@@ -1172,7 +1172,7 @@
   background:
     radial-gradient(
       ellipse 50% 120% at 0% 50%,
-      rgba(94, 196, 247, 0.08),
+      rgba(var(--pc-accent-rgb), 0.08),
       transparent 70%
     ),
     var(--cp-panel);
@@ -1180,11 +1180,11 @@
 .cinema-shell .cp-page .profile-avatar {
   width: 56px;
   height: 56px;
-  border: 1px solid rgba(94, 196, 247, 0.45);
+  border: 1px solid rgba(var(--pc-accent-rgb), 0.45);
   background:
     radial-gradient(
       circle at 35% 30%,
-      rgba(94, 196, 247, 0.35),
+      rgba(var(--pc-accent-rgb), 0.35),
       transparent 60%
     ),
     #07121c;
@@ -1274,7 +1274,7 @@
   min-height: 36px;
   margin: 0 0 var(--pc-space-4);
   padding: 7px 16px;
-  border: 1px solid rgba(94, 196, 247, 0.55);
+  border: 1px solid rgba(var(--pc-accent-rgb), 0.55);
   border-radius: var(--pc-radius-md);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
@@ -1282,7 +1282,7 @@
 }
 .cinema-shell .cp-page .profile-page > .primary-link:hover {
   text-decoration: none;
-  background: rgba(94, 196, 247, 0.22);
+  background: rgba(var(--pc-accent-rgb), 0.22);
 }
 .cinema-shell .cp-page .profile-collection {
   display: grid;
@@ -1538,7 +1538,7 @@
   font-size: var(--pc-text-xs);
 }
 .cinema-shell .cp-page .follow-control > button[aria-pressed="true"] {
-  border-color: rgba(94, 196, 247, 0.55);
+  border-color: rgba(var(--pc-accent-rgb), 0.55);
   background: var(--pc-accent-soft);
   color: var(--pc-accent);
 }
@@ -1659,7 +1659,7 @@
 }
 .cinema-shell .cp-page .is-unread .notification-dot {
   background: var(--pc-accent);
-  box-shadow: 0 0 10px rgba(94, 196, 247, 0.7);
+  box-shadow: 0 0 10px rgba(var(--pc-accent-rgb), 0.7);
 }
 
 /* ------------------------------------------------------------ settings, withdrawal */
@@ -1732,7 +1732,7 @@
 }
 .cinema-shell .cp-page .settings-switch[aria-checked="true"] {
   border-color: var(--pc-accent);
-  background: rgba(94, 196, 247, 0.35);
+  background: rgba(var(--pc-accent-rgb), 0.35);
 }
 .cinema-shell .cp-page .settings-switch[aria-checked="true"] span {
   background: var(--pc-ink);

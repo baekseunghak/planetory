@@ -42,7 +42,7 @@ const FAVICON =
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
       '<circle cx="16" cy="16" r="16" fill="#070a0f"/>' +
-      '<circle cx="16" cy="16" r="6.5" fill="#f5c46a"/>' +
+      '<circle cx="16" cy="16" r="6.5" fill="#ffd369"/>' +
       '<ellipse cx="16" cy="16" rx="13" ry="4.6" fill="none" stroke="#5ec4f7" stroke-width="2" transform="rotate(-24 16 16)"/>' +
       "</svg>",
   );

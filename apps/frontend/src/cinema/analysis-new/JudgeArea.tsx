@@ -291,12 +291,24 @@ export function JudgeArea({
           <em>
             {result
               ? "결과"
-              : editable
+              : review
+                ? "제출값 확인"
+                : editable
                 ? "근거와 메모는 선택"
                 : choosable
-                  ? "행성 같나요?"
+                  ? "행성 같은지 골라주세요"
                   : ""}
           </em>
+          {review && (
+            <details className="cx-calc-info">
+              <summary aria-label="계산 안내">ⓘ</summary>
+              <div className="cx-calc-popover">
+                <p>아직 제출되지 않았습니다.</p>
+                <p>가려진 시간은 미리보기이며, 제출하면 서버가 고른 주기와 구간으로 다시 계산해 확인합니다. 연결이 끊겨도 같은 제출은 한 번만 접수됩니다.</p>
+                <p>기준 시각 {f.referenceTime(review.epochPreviewBtjd)} (TESS 관측 시각, 일)</p>
+              </div>
+            </details>
+          )}
         </h2>
       </div>
 
@@ -312,13 +324,15 @@ export function JudgeArea({
           data-testid="cx-result"
           data-analysis-result=""
         >
-          <p className="cx-eyebrow">{result.eyebrow}</p>
+          <p className="cx-eyebrow">제출 완료 · {result.eyebrow}</p>
+          <div className="cx-result-heading">
           <h3 ref={settledRef} tabIndex={-1}>
             {result.title}
           </h3>
           <p className="cx-result-lead" data-testid="cx-result-lead">
             {resultLead(accepted.receipt, outcome, planetIds)}
           </p>
+          </div>
           {result.chips.length > 0 && (
             <ul className="cx-result-chips" aria-label="결과 요약">
               {result.chips.map((chip) => (
@@ -375,6 +389,7 @@ export function JudgeArea({
               review={review}
               headingRef={reviewRef}
               locked={locked}
+              sending={submission.state.phase === "sending"}
               hintId={hintId}
               onEdit={editReview}
               onSend={sendReview}
@@ -442,6 +457,7 @@ export function JudgeArea({
                     {state.judgment.memo ? " · 메모" : ""}
                   </span>
                 </summary>
+                <div className="cx-memo-body">
                 <fieldset disabled={!editable}>
                   <legend className="cx-sr">확인한 근거 (선택)</legend>
                   {evidenceOptions.map(({ value, label }) => (
@@ -492,6 +508,7 @@ export function JudgeArea({
                   {memoCount.toLocaleString("ko-KR")} /{" "}
                   {MEMO_LIMIT.toLocaleString("ko-KR")}자
                 </p>
+                </div>
               </details>
               <div
                 id={errorId}
@@ -518,7 +535,7 @@ export function JudgeArea({
             연결이 끊겨도 같은 제출은 한 번만 접수됩니다. 가려진 시간은
             미리보기이며, 최종 확인은 서버가 합니다.
           </p>
-          {view && (
+          {view && !(review && submission.state.phase === "sending") && (
             <div
               className="cx-sub"
               data-busy={view.busy || undefined}
@@ -616,7 +633,7 @@ function resultLead(
  * The result's actions, at most two buttons (as in the result dialog):
  * after a window that matched nothing "구간 다시 잡기" (period kept) and
  * "주기 다시 고르기"; otherwise "결과 자세히 보기" and, while the star has
- * more to find, "다음 곡선 단계로". "나의 은하로" is a small link; the rest
+ * more to find, "다음 곡선 단계로". "은하로 돌아가기" is a small link; the rest
  * (별 결과, 공개 검토, 토론) is in the result dialog.
  */
 function ResultActions({
@@ -691,7 +708,7 @@ function ResultActions({
       <p className="cx-next">
         {(missed || ambiguous) && details("cx-link")}
         <Link className="cx-link" to="/sky">
-          나의 은하로
+          은하로 돌아가기
         </Link>
       </p>
     </>
@@ -703,6 +720,7 @@ function ReviewBlock({
   review,
   headingRef,
   locked,
+  sending,
   hintId,
   onEdit,
   onSend,
@@ -710,6 +728,7 @@ function ReviewBlock({
   review: CandidateReview;
   headingRef: RefObject<HTMLHeadingElement | null>;
   locked: boolean;
+  sending: boolean;
   hintId: string;
   onEdit(): void;
   onSend(): void;
@@ -717,7 +736,7 @@ function ReviewBlock({
   const { selection, userJudgment, evidenceChecks, memo } = review.input;
   return (
     <div className="cx-review" data-testid="cx-review">
-      <h3 ref={headingRef} tabIndex={-1} className="cx-sublabel">
+      <h3 ref={headingRef} tabIndex={-1} className="cx-sr">
         제출값 확인
       </h3>
       <dl className="cx-review-list">
@@ -752,17 +771,7 @@ function ReviewBlock({
         <dt>메모</dt>
         <dd className="cx-review-memo">{memo || "입력 안 함"}</dd>
       </dl>
-      <details className="cx-more cx-review-more">
-        <summary>아직 제출되지 않았습니다 · 계산 안내</summary>
-        <p className="cx-note">
-          가려진 시간은 미리보기이며, 제출하면 서버가 고른 주기와 구간으로 다시
-          계산해 확인합니다. 연결이 끊겨도 같은 제출은 한 번만 접수됩니다.
-        </p>
-        <p className="cx-note">
-          기준 시각 {f.referenceTime(review.epochPreviewBtjd)} (TESS 관측 시각,
-          일)
-        </p>
-      </details>
+
       <div className="cx-actions">
         <button
           type="button"
@@ -779,7 +788,7 @@ function ReviewBlock({
           aria-describedby={`${hintId}-submit`}
           onClick={onSend}
         >
-          제출하기
+          <span role="status">{sending ? "제출 중…" : "제출하기"}</span>
         </button>
       </div>
     </div>

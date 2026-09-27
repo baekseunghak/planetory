@@ -23,10 +23,10 @@
   font: inherit;
 }
 .analysis-variant-toggle button[aria-pressed="true"] {
-  background: var(--pc-accent-soft, rgba(94, 196, 247, 0.15));
+  background: var(--pc-accent-soft, rgba(var(--pc-accent-rgb), 0.15));
   color: var(--pc-ink, #e8eef8);
 }
 .analysis-variant-toggle button:focus-visible {
-  outline: 2px solid var(--pc-accent, #5ec4f7);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }

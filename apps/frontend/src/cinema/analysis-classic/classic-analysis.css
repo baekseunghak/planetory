@@ -66,12 +66,12 @@ html body:has(.pc-classic-analysis) {
   --grid: var(--pc-line-strong);
   --divider: var(--pc-line);
   --accent-fill: var(--pc-accent-soft);
-  --accent-line: rgba(94, 196, 247, 0.5);
-  --accent-sel-fill: rgba(94, 196, 247, 0.12);
-  --accent-sel-line: rgba(94, 196, 247, 0.7);
-  --accent-glow: 0 0 10px rgba(94, 196, 247, 0.22);
+  --accent-line: rgba(var(--pc-accent-rgb), 0.5);
+  --accent-sel-fill: rgba(var(--pc-accent-rgb), 0.12);
+  --accent-sel-line: rgba(var(--pc-accent-rgb), 0.7);
+  --accent-glow: 0 0 10px rgba(var(--pc-accent-rgb), 0.22);
   --danger: var(--pc-bad);
-  --band: rgba(94, 196, 247, 0.12);
+  --band: rgba(var(--pc-accent-rgb), 0.12);
   --radius-panel: var(--pc-radius-lg);
   --radius-control: var(--pc-radius-md);
   --radius-plot: var(--pc-radius-sm);
