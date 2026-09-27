@@ -196,6 +196,14 @@ def test_interior_mask_drops_run_edges_only_at_long_gaps():
     for inside in (0.6, 4.9, 5.3, 12.6, 30.0):
         assert interior[np.argmin(np.abs(t - inside))], inside
     assert not interior[~np.isfinite(f)].any()
+    with pytest.raises(ValueError, match="ascending"):
+        d.interior_mask(t[::-1], f[::-1], d.RULE)
+
+
+def test_edge_gap_matches_preprocessing_gap():
+    """Runs split where preprocessing splits them; changing one without the other needs a new rule version."""
+    from astro_kernel.preprocessing import preprocessing_config
+    assert d.RULE["edge_gap_days"] == preprocessing_config()["gap_days"]
 
 
 def test_transits_count_only_well_covered_and_away_from_run_edges():

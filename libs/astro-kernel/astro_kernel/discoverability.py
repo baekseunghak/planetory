@@ -44,9 +44,12 @@ def validate_rule(rule, half_width_cells):
 
 def interior_mask(time, flux, rule):
     """Valid points outside the first/last edge_hours of each run split at gaps >= edge_gap_days."""
+    time = np.asarray(time, dtype=float)
+    if np.any(np.diff(time) < 0):
+        raise ValueError("interior_mask requires ascending time")
     ok = np.isfinite(flux)
     out = np.zeros(len(time), dtype=bool)
-    t = np.asarray(time, dtype=float)[ok]
+    t = time[ok]
     if not len(t):
         return out
     breaks = np.flatnonzero(np.diff(t) >= rule["edge_gap_days"])
