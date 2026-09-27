@@ -16,8 +16,12 @@ export type Shell = {
   selectStar(ticId: string): void;
   closeStar(): void;
   toast(message: string): void;
-  /** First visit: the shell flies to tutorial star 1 once per sign-in. */
+  /**
+   * First visit: after the login fly-in the shell flies to tutorial star 1,
+   * once per member (tutorial-guide.ts `takeFirstVisitFlight`).
+   */
   firstVisit: boolean;
+  /** Takes the flight: true only the first time for this member. */
   markFirstVisitFlown(): boolean;
   /** Star that just ignited, marked until the member's next interaction. */
   newStar: string | null;

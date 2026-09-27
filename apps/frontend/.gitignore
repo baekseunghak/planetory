@@ -10,3 +10,5 @@ playwright-report/
 test-results-auth/
 benchmark-dist/
 performance-results/
+# Real TESS sample for dev:cinema (tools/real-sample writes it). Never commit.
+.real-sample/

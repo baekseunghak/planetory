@@ -72,9 +72,7 @@ import {
   easeOutCubic,
   fitDistance,
   focalPx,
-  isSoftwareRenderer,
   lerp,
-  LOW_POWER_DPR,
   orbitSlotRadius,
   pickCircle,
   pickNearest,
@@ -102,8 +100,20 @@ import {
   glowMaterial,
 } from "./system-layer";
 import { ditherShader, ringFragment, ringVertex } from "./shaders";
+import {
+  POWER_DPR,
+  POWER_SLOW_MESSAGE,
+  PowerMonitor,
+  driftInterval,
+  effectsFor,
+  rememberPower,
+  startingPower,
+  type PowerAction,
+  type PowerTier,
+} from "./power";
 
-const DPR_CAP = 1.75;
+/** Behind a page this long at rest, the last frame stays as the backdrop. */
+const FREEZE_AFTER_MS = 1200;
 
 /** The GPU's name, or "" when the browser hides it. */
 function rendererName(renderer: WebGLRenderer): string {
@@ -314,11 +324,25 @@ export class SceneEngine implements SceneController {
   private frameCount = 0;
   private media = reducedQuery();
   /**
-   * Software WebGL: render straight to the canvas at a low pixel ratio, with
-   * no bloom, nebula or dust. The full path runs at 2 to 3 frames a second
-   * there and holds up every click on the page.
+   * Render cost tier (./power.ts). `low` renders straight to the canvas at
+   * a low pixel ratio with no bloom, nebula or dust unless the member turns
+   * the effects on: the full path runs at 2 to 3 frames a second on
+   * software WebGL and holds up every click on the page.
    */
-  private lowPower = false;
+  private tier: PowerTier = "full";
+  /** Software WebGL: no MSAA and no shader warm-up. */
+  private software = false;
+  /** `?power=` pin for a demo: the frame-rate watch never steps down. */
+  private pinned = false;
+  /** The member's explicit effects choice; null = the tier decides. */
+  private effectsChoice: boolean | null = null;
+  private monitor = new PowerMonitor();
+  private monitoredMode: SceneMode | null = null;
+  /** Behind a page and at rest since (ms); 0 = not. */
+  private stillSince = 0;
+  private frozen = false;
+  /** Newly unlocked stars kept hidden until their ignition (holdStars). */
+  private held = new Set<string>();
 
   constructor(private host: HTMLElement) {
     this.state = {
@@ -330,6 +354,7 @@ export class SceneEngine implements SceneController {
       effects: true,
       reducedMotion: this.media?.matches ?? false,
       busy: false,
+      power: "full",
     };
     const canvas = document.createElement("canvas");
     canvas.setAttribute("aria-hidden", "true");
@@ -350,9 +375,20 @@ export class SceneEngine implements SceneController {
       canvas.remove();
       throw error;
     }
-    this.lowPower = isSoftwareRenderer(rendererName(this.renderer));
-    canvas.dataset.power = this.lowPower ? "low" : "full";
-    if (this.lowPower) this.state = { ...this.state, effects: false };
+    const start = startingPower(
+      typeof location === "undefined" ? "" : location.search,
+      rendererName(this.renderer),
+    );
+    this.software = start.software;
+    this.pinned = start.pinned;
+    this.tier = start.level === "list" ? "low" : start.level;
+    canvas.dataset.power = this.tier;
+    canvas.dataset.frozen = "false";
+    this.state = {
+      ...this.state,
+      effects: effectsFor(this.tier, null),
+      power: this.tier,
+    };
     try {
       this.build(canvas);
     } catch (error) {
@@ -361,6 +397,9 @@ export class SceneEngine implements SceneController {
       canvas.remove();
       throw error;
     }
+    // Kept from an earlier page of this tab (or pinned): straight to the list.
+    if (start.level === "list")
+      queueMicrotask(() => this.fail(POWER_SLOW_MESSAGE));
   }
 
   private build(canvas: HTMLCanvasElement) {
@@ -387,7 +426,8 @@ export class SceneEngine implements SceneController {
     });
 
     const samples =
-      !this.lowPower &&
+      !this.software &&
+      this.tier !== "low" &&
       r.capabilities.maxSamples >= 4 &&
       r.extensions.has("EXT_color_buffer_float")
         ? 4
@@ -447,7 +487,7 @@ export class SceneEngine implements SceneController {
       this.ring,
       this.flash,
     );
-    if (this.lowPower) {
+    if (!this.state.effects) {
       this.bloom.enabled = false;
       this.nebula.mesh.visible = false;
       this.dust.points.visible = false;
@@ -551,6 +591,11 @@ export class SceneEngine implements SceneController {
     else if (this.state.mode === "intro") this.stars.setDecorative();
     else this.stars.setStars(stars);
     for (const tic of this.pendingIgnite) this.stars.setHidden(tic, true);
+    for (const tic of this.held) this.stars.setHidden(tic, true);
+    this.wake();
+    // A large sky arrives in pages; rebuilding and uploading the buffers is
+    // loading work, not the frame rate the tier is judged on.
+    this.monitor.hold(performance.now());
     this.applyBounds(meta.starCount > 0 ? meta.bounds : DEFAULT_BOUNDS);
     const key = `${meta.version}:${meta.starCount > 0}`;
     if (
@@ -1458,6 +1503,8 @@ export class SceneEngine implements SceneController {
     const ticId = typeof target === "string" ? target : target?.ticId;
     if (!ticId) return Promise.resolve();
     const given = typeof target === "string" ? null : target;
+    // Held since the unlock (holdStars): the ignition owns it from here.
+    if (this.held.delete(ticId)) this.showHeld();
     this.pendingIgnite.add(ticId);
     this.stars.setHidden(ticId, true);
     const instant = this.instant;
@@ -1606,15 +1653,106 @@ export class SceneEngine implements SceneController {
     run.settle();
   }
 
+  holdStars(ticIds: readonly string[] | null) {
+    if (ticIds === null) {
+      for (const tic of this.held)
+        if (!this.pendingIgnite.has(tic) && this.ignition?.ticId !== tic)
+          this.stars.setHidden(tic, false);
+      this.held.clear();
+    } else if (Array.isArray(ticIds))
+      for (const tic of ticIds) {
+        if (typeof tic !== "string" || !tic) continue;
+        this.held.add(tic);
+        this.stars.setHidden(tic, true);
+      }
+    this.showHeld();
+  }
+  /** Held TICs on the canvas (`data-held`), for checks and debugging. */
+  private showHeld() {
+    this.canvas.dataset.held = [...this.held].join(" ");
+  }
+
   // ---------------------------------------------------------------- effects
 
+  /**
+   * The member's choice holds on every tier, the cheap one included: there
+   * it switches to the composer path (bloom, nebula, dust) as asked.
+   */
   setEffects(enabled: boolean) {
-    // The cheap path stays cheap: effects there cost most of the frame.
-    const on = !!enabled && !this.lowPower;
+    this.effectsChoice = !!enabled;
+    this.applyEffects();
+  }
+  private applyEffects() {
+    const on = effectsFor(this.tier, this.effectsChoice);
     this.bloom.enabled = on;
     this.nebula.mesh.visible = on;
     this.dust.points.visible = on;
+    // Turning them on compiles new programs on the next frames (no warm-up
+    // on software WebGL): that stall is not the frame rate.
+    if (on !== this.state.effects) this.monitor.hold(performance.now());
     this.set({ effects: on });
+    this.wake();
+  }
+
+  // ---------------------------------------------------------------- power
+
+  /** Frame-rate watch on the galaxy or a system at rest (./power.ts). */
+  private watchPower(now: number, mode: SceneMode, moving: boolean) {
+    if (this.pinned) return;
+    if (mode !== this.monitoredMode) {
+      this.monitoredMode = mode;
+      this.monitor.hold(now);
+    }
+    const measurable =
+      this.state.ready && !moving && (mode === "galaxy" || mode === "system");
+    const action = this.monitor.frame(now, measurable, {
+      tier: this.tier,
+      effects: this.state.effects,
+    });
+    if (action) this.stepPower(action);
+  }
+  private stepPower(action: PowerAction) {
+    const fps = Math.round(this.monitor.lastFps ?? 0);
+    if (action === "list") {
+      rememberPower("list");
+      console.warn(`[scene] slow frames (${fps} fps) at low: star list`);
+      this.fail(POWER_SLOW_MESSAGE);
+      return;
+    }
+    // Lower resolution and the tier's default effects (off below `full`).
+    // An explicit member choice stays as it is.
+    this.tier = action;
+    rememberPower(action);
+    this.canvas.dataset.power = action;
+    this.sizeDirty = true;
+    console.info(`[scene] slow frames (${fps} fps): power ${action}`);
+    this.set({ power: this.tier });
+    this.applyEffects();
+  }
+
+  /**
+   * Behind a page and at rest for a moment (dimmed, nothing moving): stop
+   * drawing and keep the last frame as the backdrop. Any move, a mode
+   * change or new data draws again.
+   */
+  private freeze(now: number, mode: SceneMode, moving: boolean) {
+    let frozen = false;
+    if (mode !== "backdrop" || moving) this.stillSince = 0;
+    else {
+      if (!this.stillSince) this.stillSince = now;
+      frozen =
+        now - this.stillSince >= FREEZE_AFTER_MS &&
+        Math.abs(this.look - LOOK.backdrop) < 0.01 &&
+        Math.abs(this.haze - HAZE.backdrop) < 0.01;
+    }
+    if (frozen !== this.frozen) {
+      this.frozen = frozen;
+      this.canvas.dataset.frozen = frozen ? "true" : "false";
+    }
+    return frozen;
+  }
+  private wake() {
+    this.stillSince = 0;
   }
 
   // ---------------------------------------------------------------- projection
@@ -1881,7 +2019,7 @@ export class SceneEngine implements SceneController {
 
   private targetRatio() {
     const device = window.devicePixelRatio || 1;
-    return Math.min(device, this.lowPower ? LOW_POWER_DPR : DPR_CAP);
+    return Math.min(device, POWER_DPR[this.tier]);
   }
   private onWindowResize = () => {
     this.sizeDirty = true;
@@ -1939,22 +2077,29 @@ export class SceneEngine implements SceneController {
     // Nothing on screen (lost context, desktop gate, hidden tab): no work.
     if (this.lost || this.state.failed || this.hostHidden || document.hidden) {
       this.last = now;
+      this.monitor.hold(now);
       return;
     }
-    // Behind another page the galaxy only drifts: half the frames will do.
-    if (
-      this.state.mode === "backdrop" &&
-      !this.rig.flying &&
-      !this.ignition &&
-      now - this.last < 30
-    )
+    const mode = this.state.mode;
+    const moving = this.rig.flying || !!this.ignition || !!this.transit;
+    this.watchPower(now, mode, moving);
+    if (this.state.failed) return;
+    // Behind a page at rest: the last frame stays (a resize draws once).
+    if (this.freeze(now, mode, moving) && !this.sizeDirty) {
+      this.last = now;
       return;
+    }
+    // Login and other pages only drift: fewer frames will do, fewer still
+    // on a weak tier. Flights and effects always draw every frame.
+    const interval = moving ? 0 : driftInterval(this.tier, mode);
+    if (interval && now - this.last < interval) return;
     const dt = clamp((now - this.last) / 1000, 0, 0.05);
     this.last = now;
     try {
       if (this.sizeDirty) this.resize();
       this.update(now, dt);
-      if (this.lowPower) this.renderer.render(this.scene, this.rig.camera);
+      if (this.tier === "low" && !this.state.effects)
+        this.renderer.render(this.scene, this.rig.camera);
       else this.composer.render(dt);
       this.frameCount++;
       if (!this.state.ready) {
@@ -1982,7 +2127,7 @@ export class SceneEngine implements SceneController {
     this.warmed = true;
     // Software WebGL compiles on the CPU: all programs at once would stall
     // the page it is trying to keep responsive. It compiles as it draws.
-    if (this.lowPower) return;
+    if (this.software) return;
     try {
       if (this.renderer.extensions.has("KHR_parallel_shader_compile"))
         void this.renderer

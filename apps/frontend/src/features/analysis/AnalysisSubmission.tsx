@@ -17,6 +17,7 @@ import {
   specialSubmissions,
 } from "./submission-input";
 import type { useSubmission } from "./use-submission";
+import { useCinemaCopy } from "./cinema-copy";
 
 type Submission = ReturnType<typeof useSubmission>;
 
@@ -54,6 +55,11 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
   const focusRef = useRef<HTMLParagraphElement>(null);
   const [closed, setClosed] = useState(false);
   const settled = state.phase === "settled" ? state : null;
+  // 시네마 앱은 접수된 결과를 자기 말로 보여 준다(내부 번호는 「기술 정보」
+  // 안에, 주요 행동은 둘까지). develop 화면은 null이라 아래 그대로다.
+  const cinema = useCinemaCopy();
+  const CinemaResult =
+    cinema && settled?.state === "accepted" ? cinema.AcceptedResult : null;
   /**
    * [다음 곡선 단계로]의 목표. **접수 결과의 매칭 집합**으로 만든다.
    * 진입 때 받은 `nextCurveContext`는 제출 전 값이라 방금 매칭한 후보가
@@ -154,7 +160,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
           role="status"
         >
           {settled?.state === "accepted"
-            ? `접수 완료 · ${settled.receipt.submissionId}`
+            ? cinema
+              ? "분석 결과가 나왔습니다."
+              : `접수 완료 · ${settled.receipt.submissionId}`
             : settled?.state === "unresolved"
               ? "접수 여부가 아직 확인되지 않았습니다."
               : "제출을 처리하고 있습니다."}{" "}
@@ -163,7 +171,9 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             type="button"
             onClick={() => setClosed(false)}
           >
-            접수 결과 보기
+            {cinema && settled?.state === "accepted"
+              ? "결과 다시 보기"
+              : "접수 결과 보기"}
           </button>
         </p>
       )}
@@ -172,9 +182,11 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
         className={
           // 비교표가 좌우로 놓이려면 폭이 필요하다. 결과가 아닐 때는 한 줄
           // 안내뿐이라 넓히면 오히려 읽기 어렵다.
-          settled?.state === "accepted"
-            ? "submission-dialog submission-dialog-wide"
-            : "submission-dialog"
+          CinemaResult
+            ? "submission-dialog pc-result-dialog"
+            : settled?.state === "accepted"
+              ? "submission-dialog submission-dialog-wide"
+              : "submission-dialog"
         }
         data-testid="submission-result"
         aria-labelledby={headingId}
@@ -184,10 +196,32 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             <h4 id={headingId}>제출하고 있습니다</h4>
             <p role="status">
               {state.phase === "sending"
-                ? "서버에 보내는 중입니다. 응답을 받지 못해도 같은 요청 번호로 결과를 확인하므로 두 번 접수되지 않습니다."
+                ? cinema
+                  ? "보내는 중입니다. 연결이 끊겨도 같은 제출은 한 번만 접수됩니다."
+                  : "서버에 보내는 중입니다. 응답을 받지 못해도 같은 요청 번호로 결과를 확인하므로 두 번 접수되지 않습니다."
                 : "접수 결과를 확인하고 있습니다."}
             </p>
           </>
+        ) : settled.state === "accepted" && CinemaResult ? (
+          <CinemaResult
+            receipt={settled.receipt}
+            recovered={settled.recovered}
+            detail={submission.detail}
+            onViewDetail={submission.viewDetail}
+            onSkip={() =>
+              submission.submit(skippedInput(settled.receipt.curveContext))
+            }
+            celebrate={celebrate}
+            stale={stale}
+            recoverBundle={recoverBundle}
+            nextCurve={nextCurve}
+            dismiss={submission.dismiss}
+            close={close}
+            returnTo={returnTo}
+            currentPath={currentPath}
+            headingId={headingId}
+            focusRef={focusRef}
+          />
         ) : settled.state === "accepted" ? (
           <>
             <h4 id={headingId}>접수되었습니다</h4>
@@ -295,6 +329,7 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
               <p className="submission-note">
                 {residualNote(settled.residual.status)}
                 {settled.residual.jobId &&
+                  !cinema &&
                   ` · 작업 번호 ${settled.residual.jobId}`}
               </p>
             )}
@@ -352,28 +387,31 @@ export function SubmissionStatus({ submission }: { submission: Submission }) {
             )}
           </>
         )}
-        <div
-          className="submission-dialog-actions"
-          hidden={state.phase === "idle"}
-        >
-          {/* 다음 행동은 닫기와 같은 줄이다. 결과를 다 읽고 나서 고르는
+        {/* 시네마 결과는 자기 행동 줄을 둔다(주요 행동 둘까지). */}
+        {!CinemaResult && (
+          <div
+            className="submission-dialog-actions"
+            hidden={state.phase === "idle"}
+          >
+            {/* 다음 행동은 닫기와 같은 줄이다. 결과를 다 읽고 나서 고르는
               것이라 본문이 아니라 바닥에 둔다. */}
-          {settled?.state === "accepted" && (
-            <NextActions
-              receipt={settled.receipt}
-              onNextCurve={nextCurve}
-              returnTo={returnTo}
-              from={currentPath}
-            />
-          )}
-          <button type="button" onClick={close}>
-            {settled &&
-            settled.state !== "accepted" &&
-            settled.state !== "unresolved"
-              ? "입력으로 돌아가기"
-              : "닫기"}
-          </button>
-        </div>
+            {settled?.state === "accepted" && (
+              <NextActions
+                receipt={settled.receipt}
+                onNextCurve={nextCurve}
+                returnTo={returnTo}
+                from={currentPath}
+              />
+            )}
+            <button type="button" onClick={close}>
+              {settled &&
+              settled.state !== "accepted" &&
+              settled.state !== "unresolved"
+                ? "입력으로 돌아가기"
+                : "닫기"}
+            </button>
+          </div>
+        )}
       </dialog>
     </>
   );

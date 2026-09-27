@@ -3,22 +3,20 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ApiError } from "../../api";
+import { CINEMA_PROGRESS, cinemaDateTime } from "../../shared/cinema-wording";
 import { pagePath } from "../../app/paths";
 import { PlanetExplanationPanel } from "../../features/sky-renderer/PlanetExplanation";
 import type { StarDetail } from "../../features/sky-renderer/detail";
 import { usePanelCover } from "../ui/usePanelSize";
 import { useShell } from "./context";
 import { starSearch } from "./stage";
+import { TutorialGuide } from "./TutorialGuide";
 
-export const progressLabel = {
-  unexplored: "미탐사",
-  in_progress: "탐색 중",
-  completed: "탐색 완료",
-} as const;
+export const progressLabel = CINEMA_PROGRESS;
 const actionLabel = {
   start: "분석 시작",
   continue: "이어서 분석",
-  review: "분석 다시 보기",
+  review: "다시 분석",
 } as const;
 const reasonLabel: Record<string, string> = {
   initial: "첫 방문",
@@ -111,6 +109,7 @@ export function StarPanel({
           </p>
         )}
       </div>
+      <TutorialGuide ticId={ticId} place="star" />
       {!detail && !error && (
         <p role="status" className="cinema-muted">
           별과 내 행성 정보를 불러오고 있습니다.
@@ -260,7 +259,7 @@ function StarBody({
         )}
         {detail.completedWithoutPlanets && (
           <p className="cinema-muted">
-            이 별의 탐색을 마쳤습니다. 실제 행성이 없다는 뜻은 아닙니다.
+            이 별의 탐사를 마쳤습니다. 실제 행성이 없다는 뜻은 아닙니다.
           </p>
         )}
         {selected && (
@@ -269,7 +268,11 @@ function StarBody({
             className="cinema-planet-info"
             aria-live="polite"
           >
-            <h3>{selected.candidateId}</h3>
+            {/* Same name as the list and the discovery card ("행성 N"). */}
+            <h3>
+              행성{" "}
+              <span className="cinema-num">{items.indexOf(selected) + 1}</span>
+            </h3>
             <p className="cinema-muted">
               {selected.kind === "confirmed"
                 ? "확인된 행성"
@@ -277,14 +280,22 @@ function StarBody({
             </p>
             <dl className="cinema-facts">
               <dt>반복 주기</dt>
-              <dd>{info(selected.periodDays, "일")}</dd>
+              <dd>
+                {info(
+                  selected.periodDays === null
+                    ? null
+                    : Number(selected.periodDays.toFixed(3)),
+                  "일",
+                )}
+              </dd>
               <dt>어두워진 정도</dt>
               <dd>
-                {selected.depthPpm === null ? (
+                {selected.depthPpm === null || selected.depthPpm <= 0 ? (
                   "정보 없음"
                 ) : (
                   <span className="cinema-num">
-                    {selected.depthPpm} ppm ({selected.depthPpm / 10000}%)
+                    {Math.round(selected.depthPpm).toLocaleString("ko-KR")} ppm
+                    ({(selected.depthPpm / 10000).toFixed(2)}%)
                   </span>
                 )}
               </dd>
@@ -315,10 +326,10 @@ function StarBody({
           <dt>관측 회차</dt>
           <dd>
             {detail.star.sectorCount}회 ·{" "}
-            {detail.star.sectors.map((s) => `Sector ${s}`).join(", ") ||
+            {detail.star.sectors.map((s) => `섹터 ${s}`).join(", ") ||
               "정보 없음"}
           </dd>
-          <dt>밝기 (TESS 등급)</dt>
+          <dt>밝기 등급</dt>
           <dd>{info(detail.star.tmag)}</dd>
           <dt>유효 온도</dt>
           <dd>{info(detail.star.teffK, " K")}</dd>
@@ -329,7 +340,7 @@ function StarBody({
           <dt>발견 시각</dt>
           <dd>
             {Number.isFinite(Date.parse(detail.unlock.unlockedAt))
-              ? new Date(detail.unlock.unlockedAt).toLocaleString("ko-KR")
+              ? cinemaDateTime(detail.unlock.unlockedAt)
               : "정보 없음"}
           </dd>
           <dt>현재 곡선 단계</dt>

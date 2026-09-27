@@ -152,8 +152,13 @@ body {
   color: var(--pc-ink);
   border-color: var(--pc-line-strong);
 }
+/* Off is a normal pill (별 목록, 빛 효과 끔), never the faint disabled look. */
 .cinema-shell .cinema-pill[aria-pressed="false"] {
+  color: var(--pc-ink-dim);
+}
+.cinema-shell .cinema-pill:disabled {
   color: var(--pc-ink-faint);
+  cursor: default;
 }
 .cinema-shell .cinema-pill[aria-pressed="true"] {
   color: var(--pc-accent);
@@ -906,6 +911,15 @@ body {
   color: var(--pc-warn);
   font-size: var(--pc-text-xs);
 }
+.cinema-notice-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-space-2);
+}
+.cinema-notice-row .cinema-mini {
+  flex: none;
+}
 .cinema-list-panel .discovered-stars {
   display: block;
   padding: 0;
@@ -1141,8 +1155,9 @@ body {
   border: 1px solid var(--pc-line);
   border-radius: var(--pc-radius-md);
 }
+/* "행성 N": words in Sans KR, the number in Plex Mono (.cinema-num). */
 .cinema-planet-info h3 {
-  font-family: var(--pc-font-mono);
+  font-family: var(--pc-font-sans);
 }
 .cinema-facts {
   display: grid;
@@ -1234,9 +1249,6 @@ body {
 .cinema-galaxy[data-stage="system"] .cinema-first-visit {
   left: calc((100vw - var(--pc-panel-width) - 24px) / 2);
 }
-.cinema-first-visit:not(:has(.first-visit-guide)) {
-  display: none;
-}
 .cinema-first-visit-line {
   margin: 0;
   color: var(--pc-ink);
@@ -1264,7 +1276,8 @@ body {
   color: var(--pc-bad);
   font-size: var(--pc-text-xs);
 }
-.cinema-first-visit .first-visit-guide button {
+.cinema-first-visit .first-visit-guide button,
+.cinema-shell .cinema-first-visit-close {
   min-height: 28px;
   padding: 3px 12px;
   border: 1px solid var(--pc-line-strong);
@@ -1343,9 +1356,32 @@ body {
 .cinema-transit:focus {
   outline: none;
 }
-/* The caption comes with the edge-on view, when the planet starts across. */
+/* The caption is there from the start; the light curve and its note come
+   with the edge-on view, when the planet starts across. */
+.cinema-transit > .cinema-transit-caption,
+.cinema-shell .cinema-transit-skip,
 .cinema-transit[data-passing="true"] > * {
   animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+/* "건너뛰기": bottom right, clear of the caption and the light curve. */
+.cinema-shell .cinema-transit-skip {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: var(--pc-z-panel);
+  min-height: 32px;
+  padding: 6px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: var(--pc-text-xs);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.cinema-shell .cinema-transit-skip:hover {
+  border-color: var(--pc-accent);
 }
 .cinema-transit-caption {
   margin: 0;
@@ -1567,4 +1603,57 @@ body {
   .cinema-still {
     animation: none;
   }
+}
+
+/* per-tutorial guide line (TutorialGuide.tsx): star panel and analysis */
+.cinema-tutorial-guide {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pc-space-2);
+  padding: var(--pc-space-2) var(--pc-space-3);
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  background: rgba(10, 16, 28, 0.86);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  line-height: var(--pc-leading);
+}
+.cinema-tutorial-guide p {
+  flex: 1;
+  margin: 0;
+}
+.cinema-tutorial-guide b {
+  margin-right: var(--pc-space-1);
+  color: var(--pc-accent);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-tutorial-guide .cinema-mini {
+  flex: none;
+}
+/* Star panel: the line gets the panel's full width (two lines at most),
+   the close button sits under it. */
+.cinema-tutorial-guide[data-place="star"] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--pc-space-1);
+  margin: var(--pc-space-3) 0 0;
+}
+.cinema-tutorial-guide[data-place="star"] .cinema-mini {
+  align-self: flex-end;
+}
+/* Analysis: one wide strip under the top bar, so the longer "what to look
+   for" line keeps to two lines at 1024px. Clear of the variant toggle on
+   the left when a dev server shows it. */
+.cinema-tutorial-guide[data-place="analysis"] {
+  position: fixed;
+  top: 62px;
+  left: max(24px, calc((100vw - 920px) / 2));
+  z-index: var(--pc-z-hud);
+  box-sizing: border-box;
+  width: min(920px, calc(100vw - 48px));
+  align-items: center;
+}
+body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
+  left: max(184px, calc((100vw - 920px) / 2));
+  width: min(920px, calc(100vw - 184px - 24px));
 }

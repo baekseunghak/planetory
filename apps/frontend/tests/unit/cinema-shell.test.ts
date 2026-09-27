@@ -167,9 +167,14 @@ test("card copy comes from the reported outcome only", () => {
     "행성 2",
   );
 
+  // A confirmed planet is a known planet found, not a new discovery; the
+  // star panel's name leads the numbers.
   const matched = discoveryCard(outcome(), "행성 2");
-  assert.equal(matched.title, "행성 2를 찾았습니다");
-  assert.equal(matched.facts, "주기 11.735일 · 지속 2.0시간 · 깊이 0.80%");
+  assert.equal(matched.title, "확정된 행성을 직접 찾아냈습니다");
+  assert.equal(
+    matched.facts,
+    "행성 2 · 주기 11.735일 · 지속 2.0시간 · 깊이 0.80%",
+  );
   // Success first; the star's progress last. The chip says what opened, so
   // no note repeats it.
   assert.deepEqual(
@@ -178,7 +183,7 @@ test("card copy comes from the reported outcome only", () => {
       ["판단 일치", "good"],
       ["성과 인정", "good"],
       ["새 별 1개", "new"],
-      ["탐색 중", "neutral"],
+      ["탐사 중", "neutral"],
     ],
   );
   assert.equal(matched.note, null);
@@ -220,7 +225,7 @@ test("card copy comes from the reported outcome only", () => {
     outcomeChips(outcome({ matchStatus: "matched_harmonic" })).map(
       (chip) => chip.label,
     ),
-    ["판단 일치", "성과 인정", "새 별 1개", "배수 주기로 일치", "탐색 중"],
+    ["판단 일치", "성과 인정", "새 별 1개", "배수 주기로 일치", "탐사 중"],
   );
 });
 
@@ -453,13 +458,125 @@ test("a first matched outcome plays transit, reveal and card; unlocks wait for t
     },
   );
   assert.deepEqual(phases, ["transit", "card"]);
-  assert.equal(d.getState().card?.title, "행성 1을 찾았습니다");
+  assert.equal(d.getState().card?.title, "확정된 행성을 직접 찾아냈습니다");
   assert.ok(d.hasIgnitions());
   assert.deepEqual(d.takeIgnitions(), ["900001001"]);
   assert.deepEqual(d.takeIgnitions(), []);
   d.dismiss();
   assert.equal(d.getState().phase, "idle");
   off();
+  stop();
+});
+
+test("unlocked stars are held hidden from before the sky refresh until they ignite", async () => {
+  resetAnalysisBridge();
+  const { scene, calls } = recording();
+  const d = director(scene, { current: "900000010" });
+  const stop = d.start();
+  // What the scene had been told when the refreshed sky was announced.
+  let heldAtRefresh: unknown[] | null = null;
+  const off = subscribeSkyChange("u-test", () => {
+    heldAtRefresh = calls
+      .filter(([name]) => name === "holdStars")
+      .map(([, ids]) => ids);
+  });
+  emitAnalysis("outcome", outcome());
+  await tick();
+  await tick();
+  assert.deepEqual(heldAtRefresh, [["900001001"]]);
+  assert.deepEqual(d.takeIgnitions(), ["900001001"]);
+  // The shell ignites it later (scene.ignite takes it off the held set).
+  // A replayed receipt holds nothing; nor does a judgment mismatch.
+  calls.length = 0;
+  emitAnalysis(
+    "outcome",
+    outcome({ submissionId: "s-2", firstView: false, created: false }),
+  );
+  emitAnalysis(
+    "outcome",
+    outcome({
+      submissionId: "s-3",
+      kind: "judgmentMismatch",
+      achievement: {
+        result: "judgment_mismatch",
+        newlyRecognized: false,
+        unlockedTicIds: ["900001002"],
+        starCount: 0,
+        grade: null,
+      },
+    }),
+  );
+  await tick();
+  await tick();
+  assert.equal(names(calls).includes("holdStars"), false);
+  off();
+  stop();
+  // Signed out before the galaxy came back: nobody will ignite them.
+  assert.deepEqual(calls.at(-1), ["holdStars", null]);
+});
+
+test("a recognized outcome that opened no star: no hold, no ignition, and the card says so plainly", async () => {
+  // Production today: a tutorial achievement often carries unlockedStars: [].
+  resetAnalysisBridge();
+  const { scene, calls } = recording();
+  const d = director(scene, { current: "900000010" });
+  const stop = d.start();
+  const none = outcome({
+    achievement: {
+      result: "recognized",
+      newlyRecognized: true,
+      unlockedTicIds: [],
+      starCount: 1,
+      grade: null,
+    },
+    progress: {
+      stage: "completed",
+      remainingDiscoverableCount: 0,
+      matchedCandidateIds: ["9007199254741101"],
+    },
+  });
+  emitAnalysis("outcome", none);
+  assert.deepEqual(d.getHold(), { planets: true, stars: false });
+  await tick();
+  await tick();
+  assert.equal(names(calls).includes("holdStars"), false);
+  assert.ok(names(calls).includes("revealPlanet"));
+  const card = d.getState().card!;
+  assert.equal(card.title, "확정된 행성을 직접 찾아냈습니다");
+  assert.deepEqual(card.unlockedTicIds, []);
+  assert.deepEqual(
+    card.chips.map((chip) => [chip.label, chip.tone]),
+    [
+      ["판단 일치", "good"],
+      ["성과 인정", "good"],
+      ["탐사 완료", "good"],
+    ],
+  );
+  // Said plainly in the note, not as a missing reward.
+  assert.equal(card.note, "이번에는 새로 열린 별이 없습니다.");
+  assert.equal(
+    card.chips.some((chip) => chip.label.startsWith("새 별")),
+    false,
+  );
+  // 은하로 돌아가기: nothing to ignite.
+  assert.equal(d.hasIgnitions(), false);
+  assert.deepEqual(d.takeIgnitions(), []);
+  d.dismiss();
+  // Only a recognized result mentions stars at all.
+  for (const result of [
+    "judgment_mismatch",
+    "pending_publish",
+    "already_recognized",
+  ] as const)
+    assert.equal(
+      outcomeChips(
+        outcome({
+          achievement: { ...none.achievement, result },
+        }),
+      ).some((chip) => chip.label.includes("별")),
+      false,
+      result,
+    );
   stop();
 });
 

@@ -3,3 +3,4 @@
 export * from "./contract";
 export { SceneCanvas, type SceneCanvasProps } from "./SceneCanvas";
 export { GHOST_PLANET_ID } from "./math";
+export { POWER_SLOW_MESSAGE, forgetPower } from "./power";

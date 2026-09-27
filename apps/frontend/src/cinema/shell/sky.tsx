@@ -134,16 +134,19 @@ export function SkyProvider({
     store?.select(selectedTicId);
   }, [store, selectedTicId]);
 
-  // Feed the scene. A new controller (the engine registering) gets the data too.
+  // Feed the scene. A new controller (the engine registering) gets the data
+  // too. On another member's galaxy (`public`) the public view feeds it;
+  // leaving there feeds my stars again.
+  const ownsScene = stage !== "public";
   useEffect(() => {
-    if (!data.meta) return;
+    if (!data.meta || !ownsScene) return;
     lastMeta.current = data.meta;
     try {
       scene.setStars(data.stars, data.meta);
     } catch (error) {
       console.error("scene setStars failed", error);
     }
-  }, [scene, data.stars, data.meta]);
+  }, [scene, data.stars, data.meta, ownsScene]);
 
   // Signing out or switching members: the next person never sees these stars.
   useEffect(

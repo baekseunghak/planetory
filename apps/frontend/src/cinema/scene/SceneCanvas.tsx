@@ -11,6 +11,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useRegisterScene } from "./contract";
+import { POWER_SLOW_MESSAGE, startingPower } from "./power";
 import { createSceneProxy, type SceneEngineLike } from "./proxy";
 
 export type SceneCanvasProps = {
@@ -45,6 +46,12 @@ export function SceneCanvas({
     if (!element) return;
     let cancelled = false;
     let engine: SceneEngineLike | null = null;
+    // Too slow earlier in this tab (or pinned with ?power=list): the list,
+    // without loading three.js at all.
+    if (startingPower(window.location.search).level === "list") {
+      proxy.fail(POWER_SLOW_MESSAGE);
+      return () => proxy.detach();
+    }
     import("./engine").then(
       ({ createSceneEngine }) => {
         if (cancelled) return;
@@ -81,6 +88,7 @@ export function SceneCanvas({
       data-scene={state.failed ? "failed" : state.ready ? "ready" : "loading"}
       data-scene-mode={state.mode}
       data-scene-busy={state.busy ? "true" : "false"}
+      data-scene-power={state.power ?? "full"}
     />
   );
 }

@@ -14,6 +14,7 @@ import { useCurveStepSession } from "../../features/analysis/AnalysisSession";
 import { remainingSeconds, stepName } from "../../features/analysis/curve-step";
 import { MAX_FOLD_ZOOM } from "../../features/analysis/folded-curve";
 import { useModalDialog } from "../../features/analysis/use-modal-dialog";
+import { CinemaDataDetails } from "../analysis/results/DataDetails";
 
 /**
  * One live region for the guidance line, owned by the route element, so the
@@ -156,7 +157,7 @@ export function SkeletonFrame({
   );
 }
 
-/** "관측 · 섹터 14 · 데이터 v7 · 원본 곡선", the classic step row in one line. */
+/** "관측 · 섹터 14 · 원본 곡선", the classic step row in one line. */
 export function Meta({
   context,
   viewing,
@@ -169,9 +170,6 @@ export function Meta({
       <b>관측</b>
       <span>
         섹터 <span className="cx-num">{context.sectors.join("·")}</span>
-      </span>
-      <span>
-        데이터 <span className="cx-num">{context.bundleVersion}</span>
       </span>
       <span>{stepName(viewing)}</span>
       <span>
@@ -441,92 +439,22 @@ export function DataDetails({
   context,
   viewedBundleId,
   curve,
-  total,
-  missing,
 }: {
   context: AnalysisContext;
   viewedBundleId: string;
   curve: Extract<CurveData, { kind: "ready" }>;
-  total: number;
-  missing: number;
+  total?: number;
+  missing?: number;
 }) {
+  // The cinema's data details (plain words; ids and BTJD under 기술 정보),
+  // the same body as the classic "데이터 상세".
   return (
-    <>
-      <p>
-        관측 구간 {curve.segments.length}개 · 전체 {total}점 · 유효{" "}
-        {total - missing}점 · 결측 {missing}점
-      </p>
-      <dl className="cx-facts">
-        <div>
-          <dt>Bundle ID</dt>
-          <dd>{viewedBundleId}</dd>
-        </div>
-        <div>
-          <dt>데이터 버전</dt>
-          <dd>{context.bundleVersion}</dd>
-        </div>
-        <div>
-          <dt>곡선 단계</dt>
-          <dd>{stepName(context.curveContext)}</dd>
-        </div>
-        <div>
-          <dt>확정 행성 보유 여부</dt>
-          <dd>{context.hasConfirmedCandidate ? "있음" : "없음"}</dd>
-        </div>
-        <div>
-          <dt>밝기 단위</dt>
-          <dd>{curve.fluxUnit}</dd>
-        </div>
-        <div>
-          <dt>기준 시각 (BTJD)</dt>
-          <dd>{context.foldReferenceTimeBtjd}</dd>
-        </div>
-      </dl>
-      <table className="cx-table">
-        <caption>관측 세그먼트</caption>
-        <thead>
-          <tr>
-            <th scope="col">Sector</th>
-            <th scope="col">시작 시각 (BTJD)</th>
-            <th scope="col">간격 (분)</th>
-            <th scope="col">전체 점 수</th>
-            <th scope="col">세그먼트 산포</th>
-          </tr>
-        </thead>
-        <tbody>
-          {curve.segments.map((segment) => (
-            <tr key={segment.segmentId}>
-              <th scope="row">{segment.sector}</th>
-              <td>{segment.startBtjd}</td>
-              <td>{segment.binMinutes}</td>
-              <td>{segment.nPoints}</td>
-              <td>{segment.fluxScatter}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {curve.segments.length > 1 && (
-        <>
-          <h3>Sector 경계의 실제 시간 간격</h3>
-          <ul>
-            {curve.segments.slice(1).map((segment, i) => {
-              const previous = curve.segments[i];
-              const days =
-                segment.startBtjd +
-                segment.binMinutes / 2880 -
-                (previous.startBtjd +
-                  ((previous.nPoints - 0.5) * previous.binMinutes) / 1440);
-              return (
-                <li key={segment.segmentId}>
-                  Sector {previous.sector} → {segment.sector}:{" "}
-                  {days >= 0 ? `${days.toFixed(5)}일` : "관측 시간 범위 겹침"}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-    </>
+    <CinemaDataDetails
+      context={context}
+      viewedBundleId={viewedBundleId}
+      curve={curve}
+      stepLabel={stepName(context.curveContext)}
+    />
   );
 }
 

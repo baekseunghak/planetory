@@ -19,6 +19,7 @@ import {
 import type { TimePoint, TimeView } from "./time-curve";
 import "./time-curve.css";
 import { TransitBands } from "./TransitBands";
+import { useCinemaCopy } from "./cinema-copy";
 
 // Adapts the experiment's Canvas/DPR, zoom and pointer-capture approach for segment DTOs.
 // No phase selection or scientific recomputation belongs in this time-domain chart.
@@ -30,6 +31,9 @@ export function TimeCurveChart({
   fluxUnit: string;
 }) {
   const curve = useMemo(() => buildTimeCurve(segments), [segments]);
+  // 시네마 화면: BTJD 대신 관측 시작부터 지난 날, 「섹터」, 밝기 4자리.
+  const cinema = useCinemaCopy();
+  const origin = curve.segments[0]?.source.startBtjd ?? 0;
   const [view, setView] = useState<TimeView>({
     zoom: 1,
     center: curve.width / 2,
@@ -211,10 +215,15 @@ export function TimeCurveChart({
         <div className="analysis-time-axis-y" aria-hidden="true">
           {[1, 0.5, 0].map((ratio) => (
             <span key={ratio}>
-              {(
-                curve.fluxDomain[0] +
-                ratio * (curve.fluxDomain[1] - curve.fluxDomain[0])
-              ).toPrecision(7)}
+              {cinema
+                ? cinema.format.flux(
+                    curve.fluxDomain[0] +
+                      ratio * (curve.fluxDomain[1] - curve.fluxDomain[0]),
+                  )
+                : (
+                    curve.fluxDomain[0] +
+                    ratio * (curve.fluxDomain[1] - curve.fluxDomain[0])
+                  ).toPrecision(7)}
             </span>
           ))}
         </div>
@@ -266,7 +275,11 @@ export function TimeCurveChart({
                   width: `${percent(right) - percent(left)}%`,
                 }}
               >
-                <span>Sector {segment.source.sector}</span>
+                {cinema ? (
+                  <span>{cinema.format.sector(segment.source.sector)}</span>
+                ) : (
+                  <span>Sector {segment.source.sector}</span>
+                )}
               </div>
             );
           })}
@@ -297,18 +310,27 @@ export function TimeCurveChart({
                   key={`${segment.source.segmentId}-${i}`}
                   style={{ left: `${percent(x)}%` }}
                 >
-                  {btjd.toFixed(5)}
+                  {cinema ? cinema.format.days(btjd - origin) : btjd.toFixed(5)}
                 </span>
               );
             });
           })}
         </div>
-        <figcaption>
-          실제 관측 시각 (BTJD) ·{" "}
-          <span className="analysis-time-gap-key">음영: 관측값 없음</span> · //:
-          Sector 경계의 시간 간격 축약
-          {" · "}금색 띠: 선택 구간의 예상 반복 위치 (읽기 전용)
-        </figcaption>
+        {cinema ? (
+          <figcaption>
+            관측 시작부터 지난 날 ·{" "}
+            <span className="analysis-time-gap-key">음영: 관측값 없음</span> ·
+            //: 섹터 사이 시간 간격은 줄여 표시 · 금색 띠: 고른 구간이 반복될
+            위치 (읽기 전용)
+          </figcaption>
+        ) : (
+          <figcaption>
+            실제 관측 시각 (BTJD) ·{" "}
+            <span className="analysis-time-gap-key">음영: 관측값 없음</span> ·
+            //: Sector 경계의 시간 간격 축약
+            {" · "}금색 띠: 선택 구간의 예상 반복 위치 (읽기 전용)
+          </figcaption>
+        )}
       </figure>
       <p id={hintId} className="analysis-time-help analysis-sr-only">
         휠·+/−: 확대·축소 · 드래그·←/→: 이동 · ↑/↓: 관측점 확인 · 0/Home: 전체
@@ -319,12 +341,18 @@ export function TimeCurveChart({
         aria-live="polite"
         aria-atomic="true"
       >
-        {point
-          ? `Sector ${point.sector} · BTJD ${point.btjd} · 밝기 ${point.flux} ${fluxUnit}`
-          : "점에 마우스를 올리거나 그래프에서 ↑/↓ 키로 실제 시각과 밝기를 확인하세요."}
+        {cinema
+          ? point
+            ? `${cinema.format.sector(point.sector)} · 관측 ${cinema.format.days(point.btjd - origin)}째 · 밝기 ${cinema.format.flux(point.flux)}${cinema.format.fluxUnit(fluxUnit) ? ` ${cinema.format.fluxUnit(fluxUnit)}` : ""}`
+            : "점에 마우스를 올리거나 그래프에서 ↑/↓ 키로 관측 시점과 밝기를 확인하세요."
+          : point
+            ? `Sector ${point.sector} · BTJD ${point.btjd} · 밝기 ${point.flux} ${fluxUnit}`
+            : "점에 마우스를 올리거나 그래프에서 ↑/↓ 키로 실제 시각과 밝기를 확인하세요."}
       </div>
       <details className="time-gap-details">
-        <summary>Sector 경계의 실제 시간 간격</summary>
+        <summary>
+          {cinema ? "섹터 사이 실제 시간 간격" : "Sector 경계의 실제 시간 간격"}
+        </summary>
         <ul>
           {curve.segments.slice(1).map((segment, i) => {
             const previous = curve.segments[i].source;
@@ -335,8 +363,15 @@ export function TimeCurveChart({
                 ((previous.nPoints - 0.5) * previous.binMinutes) / 1440);
             return (
               <li key={segment.source.segmentId}>
-                Sector {previous.sector} → {segment.source.sector}:{" "}
-                {days >= 0 ? `${days.toFixed(5)}일` : "관측 시간 범위 겹침"}
+                {cinema
+                  ? `${cinema.format.sector(previous.sector)} → ${segment.source.sector}: ${days >= 0 ? cinema.format.days(days) : "관측 시간 범위 겹침"}`
+                  : null}
+                {!cinema && (
+                  <>
+                    Sector {previous.sector} → {segment.source.sector}:{" "}
+                    {days >= 0 ? `${days.toFixed(5)}일` : "관측 시간 범위 겹침"}
+                  </>
+                )}
               </li>
             );
           })}

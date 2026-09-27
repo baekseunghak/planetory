@@ -1,4 +1,5 @@
 import { useAnalysisStage } from "./analysis-stage";
+import { useCinemaCopy } from "./cinema-copy";
 import {
   createContext,
   useContext,
@@ -116,6 +117,8 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
     useSelection();
   const hintId = useId();
   const currentPreview = useCurrentPhasePreview();
+  // 시네마 화면: 위상 3자리, 가려진 시간 1자리, BTJD는 보이지 않는다.
+  const cinema = useCinemaCopy();
   const begin = () => {
     if (!contract.limits) return;
     const { minPhaseWidth, maxPhaseWidth } = contract.limits;
@@ -161,13 +164,23 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
         누르세요. 시작·끝 핸들에서 방향키는 현재 보기 폭의 1/1000,
         Shift+방향키는 10배 이동합니다. 확대해도 선택값은 유지됩니다.
       </p>
-      {contract.limits && (
-        <p>
-          허용 위상 폭 {format.format(contract.limits.minPhaseWidth)}~
-          {format.format(contract.limits.maxPhaseWidth)}. 범위를 벗어나면 핸들로
-          조정해 주세요.
-        </p>
-      )}
+      {contract.limits &&
+        (cinema ? (
+          <p>
+            구간 폭은 위상{" "}
+            {cinema.format.phaseRange(
+              contract.limits.minPhaseWidth,
+              contract.limits.maxPhaseWidth,
+            )}{" "}
+            사이여야 합니다. 벗어나면 핸들로 조정해 주세요.
+          </p>
+        ) : (
+          <p>
+            허용 위상 폭 {format.format(contract.limits.minPhaseWidth)}~
+            {format.format(contract.limits.maxPhaseWidth)}. 범위를 벗어나면
+            핸들로 조정해 주세요.
+          </p>
+        ))}
       <p
         data-testid="phase-selection-value"
         data-valid={preview?.kind === "preview"}
@@ -178,11 +191,13 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
           preview?.kind === "preview" ? preview.selection.phaseEnd : undefined
         }
       >
-        {preview?.kind === "preview"
-          ? `선택 위상 ${format.format(preview.selection.phaseStart)}~${format.format(preview.selection.phaseEnd)}`
-          : state.range
-            ? "선택한 구간을 확인해 주세요."
-            : "아직 선택한 구간이 없습니다."}
+        {preview?.kind === "preview" && cinema
+          ? `선택 위상 ${cinema.format.phaseRange(preview.selection.phaseStart, preview.selection.phaseEnd)}`
+          : preview?.kind === "preview"
+            ? `선택 위상 ${format.format(preview.selection.phaseStart)}~${format.format(preview.selection.phaseEnd)}`
+            : state.range
+              ? "선택한 구간을 확인해 주세요."
+              : "아직 선택한 구간이 없습니다."}
       </p>
       <p
         id={statusId}
@@ -198,30 +213,51 @@ export function PhaseSelectionControls({ view }: { view: FoldView }) {
         data-available={Boolean(currentPreview)}
       >
         <h4>선택 구간의 시간 미리보기</h4>
-        <dl>
-          <dt>기준 시각 (BTJD)</dt>
-          <dd
-            data-testid="phase-epoch"
-            data-value={currentPreview?.epochPreviewBtjd}
-          >
-            {currentPreview
-              ? format.format(currentPreview.epochPreviewBtjd)
-              : "—"}
-          </dd>
-          <dt>가려진 시간 (시간)</dt>
-          <dd
-            data-testid="phase-duration"
-            data-value={currentPreview?.durationPreviewHours}
-          >
-            {currentPreview
-              ? format.format(currentPreview.durationPreviewHours)
-              : "—"}
-          </dd>
-        </dl>
-        <p>
-          유효한 구간을 선택하면 시간 곡선에 예상 반복 위치를 표시합니다. 기준
-          시각은 BTJD 일 단위이며, 서버가 검증·저장한 최종값이 아닙니다.
-        </p>
+        {cinema ? (
+          <dl>
+            <dt>가려진 시간</dt>
+            <dd
+              data-testid="phase-duration"
+              data-value={currentPreview?.durationPreviewHours}
+            >
+              {currentPreview
+                ? cinema.format.hours(currentPreview.durationPreviewHours)
+                : "—"}
+            </dd>
+          </dl>
+        ) : (
+          <dl>
+            <dt>기준 시각 (BTJD)</dt>
+            <dd
+              data-testid="phase-epoch"
+              data-value={currentPreview?.epochPreviewBtjd}
+            >
+              {currentPreview
+                ? format.format(currentPreview.epochPreviewBtjd)
+                : "—"}
+            </dd>
+            <dt>가려진 시간 (시간)</dt>
+            <dd
+              data-testid="phase-duration"
+              data-value={currentPreview?.durationPreviewHours}
+            >
+              {currentPreview
+                ? format.format(currentPreview.durationPreviewHours)
+                : "—"}
+            </dd>
+          </dl>
+        )}
+        {cinema ? (
+          <p>
+            유효한 구간을 고르면 시간 곡선에 그 구간이 반복될 위치를 표시합니다.
+            가려진 시간은 미리보기이며, 제출하면 서버가 다시 계산합니다.
+          </p>
+        ) : (
+          <p>
+            유효한 구간을 선택하면 시간 곡선에 예상 반복 위치를 표시합니다. 기준
+            시각은 BTJD 일 단위이며, 서버가 검증·저장한 최종값이 아닙니다.
+          </p>
+        )}
       </div>
     </section>
   );

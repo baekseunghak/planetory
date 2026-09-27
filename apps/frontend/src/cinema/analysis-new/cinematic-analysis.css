@@ -1114,8 +1114,11 @@
   font-size: var(--pc-text-sm);
 }
 
-/* dialogs (native <dialog>, no blur over the scene) */
+/* dialogs (native <dialog>, no blur over the scene). The help and data
+   dialogs live inside .cx-head-tools (nowrap): wrap their text again. */
 .cx-dialog {
+  white-space: normal;
+  overflow-wrap: anywhere;
   width: min(760px, calc(100% - 32px));
   max-height: min(84vh, 820px);
   overflow: auto;

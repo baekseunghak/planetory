@@ -1,0 +1,187 @@
+/* Demo switch (dev:cinema only). Invisible until pointed at, focused or
+   opened (Alt+Shift+D), so it never shows on stage; never in a build. */
+.dev-demo {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+  font-family: var(--pc-font-sans);
+  color: var(--pc-ink);
+}
+.dev-demo-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--pc-ink-faint);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--pc-dur-fast);
+}
+.dev-demo-tab span {
+  letter-spacing: 0;
+  font-size: var(--pc-text-2xs);
+}
+.dev-demo-tab:hover,
+.dev-demo-tab:focus-visible,
+.dev-demo[data-open="true"] .dev-demo-tab {
+  opacity: 1;
+  color: var(--pc-ink-dim);
+}
+.dev-demo-tab:focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
+}
+.dev-demo-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  display: grid;
+  gap: 10px;
+  width: 360px;
+  padding: 14px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-lg);
+  background: rgba(4, 7, 13, 0.97);
+  transform: translateX(-50%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+.dev-demo-panel button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.dev-demo-panel button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dev-demo-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+}
+.dev-demo-title small {
+  margin: 0;
+}
+.dev-demo-title small,
+.dev-demo-subtitle,
+.dev-demo-status {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+  font-weight: var(--pc-weight-regular);
+}
+.dev-demo-subtitle,
+.dev-demo-status {
+  margin: 0;
+}
+.dev-demo-scenarios,
+.dev-demo-members {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dev-demo-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  width: 100%;
+  min-height: 0;
+  line-height: 1.35;
+  padding: 8px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+  text-align: left;
+}
+button.dev-demo-row:hover:not(:disabled) {
+  border-color: var(--pc-accent);
+}
+.dev-demo-row small {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.dev-demo-name {
+  font-size: var(--pc-text-sm);
+}
+.dev-demo-name em {
+  margin-left: 8px;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-2xs);
+  font-style: normal;
+}
+.dev-demo-sizes {
+  display: flex;
+  gap: 4px;
+}
+.dev-demo-sizes button,
+.dev-demo-footer button {
+  min-height: 0;
+  line-height: 1.35;
+  padding: 4px 10px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  background: none;
+  font-size: var(--pc-text-2xs);
+  font-family: var(--pc-font-mono);
+}
+.dev-demo-footer button {
+  font-family: var(--pc-font-sans);
+}
+.dev-demo-sizes button:hover:not(:disabled),
+.dev-demo-footer button:hover:not(:disabled) {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+}
+.dev-demo-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.dev-demo-members {
+  grid-template-columns: 1fr 1fr;
+}
+.dev-demo-members button {
+  display: flex;
+  min-height: 0;
+  line-height: 1.35;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: none;
+  font-size: var(--pc-text-xs);
+  text-align: left;
+}
+.dev-demo-members button:hover {
+  border-color: var(--pc-accent);
+}
+.dev-demo-members small {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-2xs);
+}
+.dev-demo-footer {
+  display: flex;
+  gap: 6px;
+}

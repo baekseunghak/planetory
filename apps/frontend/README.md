@@ -1,6 +1,6 @@
 # Planetory 공용 프론트
 
-2026-09-26 시네마틱 전환(실험 브랜치 `experiment/S15P21C206-274-web-cinematic-core`, 팀 결정 전): [구조·소유 범위·장면/분석 계약](src/cinema/README.md). `npm run dev:cinema`는 `CINEMA_PORT`(기본 58390)에서 로그인부터 제출·새 별 점화까지 합성 HTTP를 한 서버로 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
+2026-09-26 시네마틱 전환(실험 브랜치 `experiment/S15P21C206-274-web-cinematic-core`, 팀 결정 전): [구조·소유 범위·장면/분석 계약](src/cinema/README.md). 운영 빌드(`VITE_CINEMA` 없음)의 기본 화면은 지금과 같은 기존 화면이고, 방문자가 `?ui=cinema`로 켜고 `?ui=legacy`로 끈다(`src/ui-choice.ts`). `npm run dev:cinema`는 `CINEMA_PORT`(기본 58390)에서 로그인부터 제출·새 별 점화까지 합성 HTTP를 한 서버로 공급하는 로컬 검토 도구이며 운영 API 인수가 아니다.
 
 200 비교 통계: [일별 중앙값·과거 본인 값 부재·검증·인수 대기](docs/ticket-200-readiness.md). 개인 통계 아래에서 기준일·원천 관측 시각·90일 모수를 구분하며 현재값으로 과거 비교를 대체하지 않는다.
 

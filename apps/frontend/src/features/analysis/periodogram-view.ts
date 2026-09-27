@@ -72,6 +72,51 @@ export function indexAtFraction(grid: Periodogram, fraction: number) {
     Math.min(grid.nPeriods - 1, Math.round(fraction * (grid.nPeriods - 1))),
   );
 }
+/** A peak's rank label on the plot, in CSS pixels (text centre, baseline). */
+export type RankLabel = { rank: number; x: number; y: number };
+
+/**
+ * Rank labels that do not overlap (시네마 화면만 쓴다). Stronger ranks are
+ * placed first at their usual spot; a label that would overlap one already
+ * placed moves up one line (away from the curve), and is left out when that
+ * collides too. The peak's dot and its button stay either way.
+ */
+export function placeRankLabels(
+  labels: readonly RankLabel[],
+  width: number,
+  lineHeight = 13,
+): RankLabel[] {
+  const placed: { label: RankLabel; box: [number, number, number, number] }[] =
+    [];
+  const boxOf = (label: RankLabel): [number, number, number, number] => {
+    const half = (String(label.rank).length * 7 + 4) / 2;
+    return [label.x - half, label.y - lineHeight + 2, label.x + half, label.y];
+  };
+  const hits = (box: [number, number, number, number]) =>
+    placed.some(
+      ({ box: other }) =>
+        box[0] < other[2] &&
+        other[0] < box[2] &&
+        box[1] < other[3] &&
+        other[1] < box[3],
+    );
+  for (const label of [...labels].sort((a, b) => a.rank - b.rank)) {
+    const x = Math.max(8, Math.min(width - 8, label.x));
+    for (const shift of [0, -lineHeight]) {
+      const candidate = {
+        rank: label.rank,
+        x,
+        y: Math.max(14, label.y + shift),
+      };
+      const box = boxOf(candidate);
+      if (hits(box)) continue;
+      placed.push({ label: candidate, box });
+      break;
+    }
+  }
+  return placed.map(({ label }) => label);
+}
+
 export function drawPeriodogram(
   ctx: CanvasRenderingContext2D,
   model: PeriodPlot,
@@ -80,6 +125,8 @@ export function drawPeriodogram(
   width: number,
   height: number,
   overview = false,
+  /** "avoid": leave out or move rank labels that would overlap (cinema). */
+  rankLabels: "all" | "avoid" = "all",
 ) {
   const { low, high } = periodViewBounds(view),
     span = high - low;
@@ -131,7 +178,24 @@ export function drawPeriodogram(
     else ctx.lineTo(px, py);
   }
   ctx.stroke();
-  if (!overview) {
+  if (!overview && rankLabels === "avoid") {
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    const labels: RankLabel[] = [];
+    for (const peak of candidates.peaks) {
+      const px = x(peak.gridIndex / (grid.nPeriods - 1));
+      if (px < 0 || px > width) continue;
+      const py = y(peak.power);
+      ctx.fillStyle = "#ffd369";
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fill();
+      labels.push({ rank: peak.rank, x: px, y: py - 8 });
+    }
+    ctx.fillStyle = "#eeeeee";
+    for (const label of placeRankLabels(labels, width))
+      ctx.fillText(String(label.rank), label.x, label.y);
+  } else if (!overview) {
     ctx.font = "12px system-ui";
     ctx.textAlign = "center";
     for (const peak of candidates.peaks) {

@@ -12,9 +12,12 @@ import {
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../../auth/SessionProvider";
 import {
+  OnboardingLookContext,
   OnboardingProvider,
   OnboardingTip,
+  type OnboardingLook,
 } from "../../features/onboarding/Onboarding";
+import { browserStorage, takeFirstVisitFlight } from "./tutorial-guide";
 import "../../components/service-presentation.css";
 import { SCENE_TIMING, sceneSystemFrom, useScene } from "../scene";
 import { ShellContext, type PanelSide, type Shell } from "./context";
@@ -33,14 +36,24 @@ const CARD_COVER = 300;
 
 export function CinemaLayout({
   skyOverride = false,
+  publicGalaxy = false,
 }: {
   /** A page slot replaces the galaxy on /sky (dev inspectors only). */
   skyOverride?: boolean;
+  /**
+   * /members/:memberId/sky is the cinema public galaxy (stage `public`,
+   * shell/public-galaxy) instead of a page over the backdrop.
+   */
+  publicGalaxy?: boolean;
 }) {
   const location = useLocation();
   const target = useMemo(
-    () => readStage(location.pathname, location.search, { skyOverride }),
-    [location.pathname, location.search, skyOverride],
+    () =>
+      readStage(location.pathname, location.search, {
+        skyOverride,
+        publicGalaxy,
+      }),
+    [location.pathname, location.search, skyOverride, publicGalaxy],
   );
   return (
     <OnboardingProvider>
@@ -48,7 +61,7 @@ export function CinemaLayout({
         selectedTicId={target.stage === "system" ? target.ticId : null}
         stage={target.stage}
       >
-        <ShellBody skyOverride={skyOverride} />
+        <ShellBody skyOverride={skyOverride} publicGalaxy={publicGalaxy} />
       </SkyProvider>
     </OnboardingProvider>
   );
@@ -83,7 +96,13 @@ function focusAnalysisResult() {
   });
 }
 
-function ShellBody({ skyOverride }: { skyOverride: boolean }) {
+function ShellBody({
+  skyOverride,
+  publicGalaxy,
+}: {
+  skyOverride: boolean;
+  publicGalaxy: boolean;
+}) {
   const session = useSession();
   const memberId = session.member?.memberId ?? "";
   const location = useLocation();
@@ -91,8 +110,12 @@ function ShellBody({ skyOverride }: { skyOverride: boolean }) {
   const scene = useScene();
   const sky = useCinemaSky();
   const target = useMemo(
-    () => readStage(location.pathname, location.search, { skyOverride }),
-    [location.pathname, location.search, skyOverride],
+    () =>
+      readStage(location.pathname, location.search, {
+        skyOverride,
+        publicGalaxy,
+      }),
+    [location.pathname, location.search, skyOverride, publicGalaxy],
   );
   const focusTic =
     target.stage === "system" || target.stage === "analysis"
@@ -153,6 +176,8 @@ function ShellBody({ skyOverride }: { skyOverride: boolean }) {
     const ids = director.takeIgnitions();
     const current = storeRef.current;
     if (!ids.length || !current) {
+      // Held stars that will not ignite after all are shown plainly.
+      if (ids.length) director.holdStars(null);
       director.releaseStars();
       return;
     }
@@ -244,7 +269,7 @@ function ShellBody({ skyOverride }: { skyOverride: boolean }) {
       return;
     }
     scene.setViewInset(
-      target.stage === "system"
+      target.stage === "system" || target.stage === "public"
         ? { top: TOP_BAR, right: panels.right, bottom: 0, left: 0 }
         : { top: 0, right: 0, bottom: 0, left: 0 },
     );
@@ -279,14 +304,28 @@ function ShellBody({ skyOverride }: { skyOverride: boolean }) {
     );
   }, [navigate, location.pathname]);
 
-  // ---- first visit (onboarding not done): fly to tutorial star 1 once
+  // ---- first visit (onboarding not done): fly to tutorial star 1 once per
+  // member, kept in the browser, so "← 나의 은하" and a reload stay put.
   const firstVisit = session.member?.onboardingDone === false;
-  const flown = useRef(false);
-  const markFirstVisitFlown = useCallback(() => {
-    if (flown.current) return false;
-    flown.current = true;
-    return true;
-  }, []);
+  const markFirstVisitFlown = useCallback(
+    () => takeFirstVisitFlight(browserStorage(), memberId),
+    [memberId],
+  );
+
+  // ---- guide lines: "안내 숨기기" hides that line for this visit only
+  // (it does not complete onboarding; the first tutorial submission does).
+  const [hiddenLines, setHiddenLines] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const look = useMemo<OnboardingLook>(
+    () => ({
+      hidden: false,
+      isDismissed: (key) => hiddenLines.has(key),
+      dismiss: (key) =>
+        setHiddenLines((previous) => new Set(previous).add(key)),
+    }),
+    [hiddenLines],
+  );
 
   const shell: Shell = {
     target,
@@ -305,63 +344,65 @@ function ShellBody({ skyOverride }: { skyOverride: boolean }) {
   const overlay = target.stage === "backdrop";
   return (
     <ShellContext.Provider value={shell}>
-      <div
-        className={`cinema-shell${overlay ? " service-presentation cinema-backdrop" : ""}`}
-        data-stage={target.stage}
-        data-intro={intro ? "true" : "false"}
-      >
-        <a className="skip-link" href="#main-content">
-          본문으로 이동
-        </a>
-        <TopBar />
-        <main
-          id="main-content"
-          className={
-            overlay
-              ? `cinema-page ${legacyMainClass(location.pathname)}`
-              : "cinema-main"
-          }
-          tabIndex={-1}
-        >
-          <Outlet />
-          {/* The galaxy shows its own first-visit line (GalaxyView). A page
-              that fills the sky slot (dev inspectors) keeps the old tip. */}
-          {skyOverride && location.pathname === "/sky" && (
-            <OnboardingTip step={0} />
-          )}
-        </main>
-        {target.stage === "analysis" && (
-          <SequenceLayer
-            onGalaxy={() => {
-              director.dismiss();
-              navigate("/sky");
-            }}
-            onDetails={() => {
-              director.dismiss();
-              // The transit hands the camera back in system mode. The panel
-              // is back, so the analysis framing (and ghost orbit) is too.
-              const now = scene.getState();
-              if (
-                target.ticId &&
-                now.focusedTicId === target.ticId &&
-                now.mode === "system"
-              )
-                scene.setMode("analysis");
-              // Back to the variant's own result view, as it was left (the
-              // classic dialog reopens once the panel is back).
-              requestAnimationFrame(focusAnalysisResult);
-            }}
-          />
-        )}
+      <OnboardingLookContext.Provider value={look}>
         <div
-          className="cinema-toast"
-          role="status"
-          aria-live="polite"
-          data-empty={!toastMessage}
+          className={`cinema-shell${overlay ? " service-presentation cinema-backdrop" : ""}`}
+          data-stage={target.stage}
+          data-intro={intro ? "true" : "false"}
         >
-          {toastMessage}
+          <a className="skip-link" href="#main-content">
+            본문으로 이동
+          </a>
+          <TopBar />
+          <main
+            id="main-content"
+            className={
+              overlay
+                ? `cinema-page ${legacyMainClass(location.pathname)}`
+                : "cinema-main"
+            }
+            tabIndex={-1}
+          >
+            <Outlet />
+            {/* The galaxy shows its own first-visit line (GalaxyView). A page
+              that fills the sky slot (dev inspectors) keeps the old tip. */}
+            {skyOverride && location.pathname === "/sky" && (
+              <OnboardingTip step={0} />
+            )}
+          </main>
+          {target.stage === "analysis" && (
+            <SequenceLayer
+              onGalaxy={() => {
+                director.dismiss();
+                navigate("/sky");
+              }}
+              onDetails={() => {
+                director.dismiss();
+                // The transit hands the camera back in system mode. The panel
+                // is back, so the analysis framing (and ghost orbit) is too.
+                const now = scene.getState();
+                if (
+                  target.ticId &&
+                  now.focusedTicId === target.ticId &&
+                  now.mode === "system"
+                )
+                  scene.setMode("analysis");
+                // Back to the variant's own result view, as it was left (the
+                // classic dialog reopens once the panel is back).
+                requestAnimationFrame(focusAnalysisResult);
+              }}
+            />
+          )}
+          <div
+            className="cinema-toast"
+            role="status"
+            aria-live="polite"
+            data-empty={!toastMessage}
+          >
+            {toastMessage}
+          </div>
         </div>
-      </div>
+      </OnboardingLookContext.Provider>
     </ShellContext.Provider>
   );
 }

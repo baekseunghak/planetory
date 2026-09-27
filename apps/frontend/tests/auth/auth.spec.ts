@@ -99,7 +99,7 @@ test("cancellation and provider failure differ from a failed /me after callback;
     page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
   ).toBeVisible();
   await page.unroute("**/api/v1/me");
-  await page.getByRole("button", { name: "다시 시도", exact: true }).click();
+  await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
   await expect(page).toHaveURL(/\/me$/);
 });
 async function enterNickname(page: Page, value: string) {
@@ -175,7 +175,7 @@ for (const status of [502, 503, 504]) {
       }),
     ).toHaveCount(0);
     await page.unroute("**/api/v1/me");
-    await page.getByRole("button", { name: "다시 시도", exact: true }).click();
+    await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
     await expect(page).toHaveURL(/\/me$/);
   });
 }
@@ -251,7 +251,7 @@ test("nickname write success does not bypass failed member lookup; draft and ret
     page.getByRole("button", { name: "메뉴", exact: true }),
   ).toHaveCount(0);
   await page.unroute("**/api/v1/me");
-  await page.getByRole("button", { name: "다시 시도", exact: true }).click();
+  await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
   await expect(page).toHaveURL(/\/community\?q=first$/);
 });
 test("ambiguous logout hides private UI, no automatic retry, GET confirms the ended session", async ({

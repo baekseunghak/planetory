@@ -83,6 +83,11 @@ export function createSceneProxy() {
   let system: SceneSystem | null | undefined;
   let inset: ViewInset | null = null;
   let hint: AnalysisHint | null | undefined;
+  // The member's explicit effects choice. Without one the engine's power
+  // tier decides, so the proxy's own default is never replayed.
+  let effectsChoice: boolean | undefined;
+  // Newly unlocked stars kept hidden until their ignition.
+  const held = new Set<string>();
   // The login fly-in asked for before the engine chunk arrived (a fresh page
   // load after OAuth usually wins that race). The engine plays it on attach
   // unless another camera move was asked for in between.
@@ -164,8 +169,18 @@ export function createSceneProxy() {
     playTransit: (request) => (engine ? engine.playTransit(request) : done()),
     revealPlanet: (planetReveal) =>
       engine ? engine.revealPlanet(planetReveal) : done(),
-    ignite: (target) => (engine ? engine.ignite(target) : done()),
+    ignite(target) {
+      const ticId = typeof target === "string" ? target : target?.ticId;
+      if (ticId) held.delete(ticId);
+      return engine ? engine.ignite(target) : done();
+    },
+    holdStars(ticIds) {
+      if (ticIds === null) held.clear();
+      else for (const ticId of ticIds) if (ticId) held.add(ticId);
+      engine?.holdStars?.(ticIds);
+    },
     setEffects(enabled) {
+      effectsChoice = !!enabled;
       if (engine) return engine.setEffects(enabled);
       local({ effects: !!enabled });
     },
@@ -206,7 +221,9 @@ export function createSceneProxy() {
         console.error(`[scene] replay ${label} failed`, failure);
       }
     };
-    replay("effects", () => next.setEffects(wanted.effects));
+    if (effectsChoice !== undefined)
+      replay("effects", () => next.setEffects(effectsChoice!));
+    if (held.size) replay("hold", () => next.holdStars?.([...held]));
     if (inset) replay("inset", () => next.setViewInset(inset!));
     if (stars) replay("stars", () => next.setStars(stars!.stars, stars!.meta));
     if (system !== undefined) replay("system", () => next.setSystem(system!));

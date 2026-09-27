@@ -117,6 +117,37 @@ test("attach replays the latest data and restores the state instantly", () => {
   assert.equal(c.getState().focusedTicId, "900000008");
 });
 
+test("only an explicit effects choice is replayed; held stars wait for their ignition", async () => {
+  const proxy = createSceneProxy();
+  const c = proxy.controller;
+  c.holdStars?.(["900001001", "900001002"]);
+  // Ignited before the engine came (instant): no longer held.
+  await c.ignite("900001002");
+  const fake = fakeEngine();
+  fake.engine.holdStars = (ids) =>
+    void fake.calls.push(`hold:${ids === null ? "null" : ids.join(",")}`);
+  proxy.attach(fake.engine);
+  // No setEffects call yet: the engine's power tier decides, the proxy's
+  // default (on) must not override it.
+  assert.equal(
+    fake.calls.some((call) => call.startsWith("effects:")),
+    false,
+  );
+  assert.deepEqual(
+    fake.calls.filter((call) => call.startsWith("hold:")),
+    ["hold:900001001"],
+  );
+  c.holdStars?.(null);
+  assert.equal(fake.calls.at(-1), "hold:null");
+  // A member's choice goes through and is replayed to the next engine.
+  c.setEffects(true);
+  assert.equal(fake.calls.at(-1), "effects:true");
+  proxy.detach();
+  const next = fakeEngine();
+  proxy.attach(next.engine);
+  assert.equal(next.calls[0], "effects:true");
+});
+
 test("engine events reach listeners registered before attach; errors mark failure", async () => {
   const proxy = createSceneProxy();
   const hovered: (string | null)[] = [];

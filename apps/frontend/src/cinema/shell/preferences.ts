@@ -1,11 +1,17 @@
 // Per-browser display choice. Storage can be blocked; the default then holds.
 export const SCENE_EFFECTS_KEY = "planetory:scene-effects";
 
-export function readSceneEffects(): boolean {
+/**
+ * The member's '빛 효과' choice on this browser, or null when they never
+ * chose: then the scene's power tier decides (on at `full`, off on weak
+ * graphics). An explicit choice holds on every tier.
+ */
+export function readSceneEffects(): boolean | null {
   try {
-    return localStorage.getItem(SCENE_EFFECTS_KEY) !== "off";
+    const value = localStorage.getItem(SCENE_EFFECTS_KEY);
+    return value === "on" ? true : value === "off" ? false : null;
   } catch {
-    return true;
+    return null;
   }
 }
 

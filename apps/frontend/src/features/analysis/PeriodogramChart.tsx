@@ -1,4 +1,5 @@
 import { useAnalysisStage } from "./analysis-stage";
+import { useCinemaCopy } from "./cinema-copy";
 import resetIcon from "./assets/reset.svg";
 import {
   memo,
@@ -36,12 +37,14 @@ const PlotCanvas = memo(function PlotCanvas({
   zoom,
   center,
   overview = false,
+  rankLabels = "all",
 }: {
   model: PeriodPlot;
   candidates: CandidatePeaks;
   zoom: number;
   center: number;
   overview?: boolean;
+  rankLabels?: "all" | "avoid";
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0, dpr: 1 });
@@ -94,8 +97,9 @@ const PlotCanvas = memo(function PlotCanvas({
       size.width,
       size.height,
       overview,
+      rankLabels,
     );
-  }, [model, candidates, zoom, center, overview, size]);
+  }, [model, candidates, zoom, center, overview, size, rankLabels]);
   return <canvas ref={ref} aria-hidden="true" />;
 });
 
@@ -114,7 +118,35 @@ export function PeriodogramChart({
 }) {
   const { periodogram, candidates } = data;
   const { stage } = useAnalysisStage();
-  const model = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
+  // 시네마 화면: 주기도 값을 가장 센 봉우리 = 1인 「세기」(0..1, 음수는 0)로
+  // 그린다. 선택·조회는 원래 값과 격자를 그대로 쓴다.
+  const cinema = useCinemaCopy();
+  const display = useMemo(() => {
+    if (!cinema) return null;
+    const { maxPower, strength } = cinema.format;
+    const max = maxPower(periodogram.power);
+    return {
+      periodogram: {
+        ...periodogram,
+        power: periodogram.power.map((power) => strength(power, max)),
+      },
+      candidates: {
+        ...candidates,
+        peaks: candidates.peaks.map((peak) => ({
+          ...peak,
+          power: strength(peak.power, max),
+        })),
+      },
+    };
+  }, [cinema, periodogram, candidates]);
+  const model = useMemo(
+    () =>
+      display
+        ? { ...buildPeriodPlot(display.periodogram), yMin: 0, yMax: 1 }
+        : buildPeriodPlot(periodogram),
+    [periodogram, display],
+  );
+  const shown = display?.candidates ?? candidates;
   const [view, setView] = useState<PeriodView>(() => {
     if (!initialViewport) return FULL_PERIOD_VIEW;
     const low = Math.max(
@@ -288,11 +320,11 @@ export function PeriodogramChart({
       </span>
       <figure className="periodogram-detail">
         <div className="periodogram-y-axis" aria-hidden="true">
-          {[model.yMax, (model.yMax + model.yMin) / 2, model.yMin].map(
-            (v, i) => (
-              <span key={i}>{v.toFixed(2)}</span>
-            ),
-          )}
+          {cinema
+            ? ["1", "0.5", "0"].map((v) => <span key={v}>{v}</span>)
+            : [model.yMax, (model.yMax + model.yMin) / 2, model.yMin].map(
+                (v, i) => <span key={i}>{v.toFixed(2)}</span>,
+              )}
         </div>
         <div
           ref={plot}
@@ -358,9 +390,10 @@ export function PeriodogramChart({
         >
           <PlotCanvas
             model={model}
-            candidates={candidates}
+            candidates={shown}
             zoom={current.zoom}
             center={current.center}
+            rankLabels={cinema ? "avoid" : "all"}
           />
           {selectedPeriod !== null &&
             periodFraction(periodogram, selectedPeriod) >= low &&
@@ -377,7 +410,7 @@ export function PeriodogramChart({
                 }}
               />
             )}
-          {candidates.peaks.map((peak) => {
+          {shown.peaks.map((peak) => {
             const x =
               (periodFraction(periodogram, peak.periodDays) - low) /
               (high - low);
@@ -434,22 +467,44 @@ export function PeriodogramChart({
               role="tooltip"
               data-testid="periodogram-readout"
             >
-              주기 {format.format(model.periods[inspection])}일<br />
-              power {format.format(periodogram.power[inspection])}
+              {cinema && display ? (
+                <>
+                  주기 {cinema.format.periodDays(model.periods[inspection], 3)}
+                  <br />
+                  세기{" "}
+                  {cinema.format.strengthText(
+                    display.periodogram.power[inspection],
+                  )}
+                </>
+              ) : (
+                <>
+                  주기 {format.format(model.periods[inspection])}일<br />
+                  power {format.format(periodogram.power[inspection])}
+                </>
+              )}
             </div>
           )}
         </div>
         <div className="periodogram-x-axis" aria-hidden="true">
           {[low, (low + high) / 2, high].map((v, i) => (
             <span key={i}>
-              {Number(periodAtFraction(periodogram, v).toPrecision(4))}
+              {cinema
+                ? cinema.format.periodTick(periodAtFraction(periodogram, v))
+                : Number(periodAtFraction(periodogram, v).toPrecision(4))}
             </span>
           ))}
         </div>
       </figure>
-      <p className="chart-caption">
-        주기 (일·로그) · power · {stage === 1 ? "클릭해 선택" : "조회 전용"}
-      </p>
+      {cinema ? (
+        <p className="chart-caption">
+          주기 (일, 로그 눈금) · 세기 (가장 강한 봉우리 = 1) ·{" "}
+          {stage === 1 ? "봉우리를 눌러 선택" : "조회 전용"}
+        </p>
+      ) : (
+        <p className="chart-caption">
+          주기 (일·로그) · power · {stage === 1 ? "클릭해 선택" : "조회 전용"}
+        </p>
+      )}
       <p id={hintId} className="analysis-sr-only">
         봉우리에 Tab으로 이동하고 Enter로 선택합니다. 그래프 +/− 확대·축소,
         드래그·좌우 방향키 이동, 상하 방향키 격자 조회, Enter 직접 선택, 0/Home

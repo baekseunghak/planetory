@@ -39,6 +39,18 @@ export async function directStage(
     scene.setMode("backdrop");
     return;
   }
+  // Another member's galaxy: leave my star, then the public view feeds its
+  // stars and moves the camera itself (showOverview, focusStar).
+  if (target.stage === "public") {
+    flight.current = null;
+    if (state.mode === "intro") await intro();
+    else if (state.focusedTicId || FOCUSED.has(state.mode))
+      await scene.returnToGalaxy();
+    else if (state.mode !== "galaxy") scene.setMode("galaxy");
+    if (!current()) return;
+    scene.setSystem(null);
+    return;
+  }
   // Nothing to fly to: the page says why (locked star, unknown TIC) over
   // the galaxy, and the scene is not left waiting for a star that won't come.
   if (options.starMissing && target.stage !== "galaxy") {

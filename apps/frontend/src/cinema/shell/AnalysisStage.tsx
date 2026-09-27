@@ -3,10 +3,13 @@
 // panel; see analysis-classic / analysis-new). The shell only steps the panel
 // aside for a discovery (transit, card) and brings it back unchanged: the
 // variant stays mounted the whole time.
-import type { ReactNode } from "react";
+import { useContext, useMemo, type ReactNode } from "react";
 import { ModalHoldContext } from "../../features/analysis/use-modal-dialog";
+import { OnboardingLookContext } from "../../features/onboarding/Onboarding";
 import { AnalysisSwitch } from "../analysis/AnalysisSwitch";
 import { useShell } from "./context";
+import { TutorialGuideView, useTutorialGuide } from "./TutorialGuide";
+import "./analysis-stage.css";
 
 /** Route element for `analysis`: the two-variant switch, toggle in the HUD. */
 export function CinemaAnalysis() {
@@ -16,21 +19,40 @@ export function CinemaAnalysis() {
 export const ANALYSIS_STAGE_CLASS = "cinema-analysis-stage";
 
 export function AnalysisStage({ children }: { children: ReactNode }) {
-  const { sequence } = useShell();
+  const { sequence, target } = useShell();
   const away = sequence.phase !== "idle";
+  // One guide at a time: this star's tutorial line wins over the generic
+  // onboarding line inside the variant (its steps are what the line says).
+  const guide = useTutorialGuide(target.ticId, "analysis");
+  const outer = useContext(OnboardingLookContext);
+  const guideShown = !!guide;
+  const look = useMemo(
+    () => (outer ? { ...outer, hidden: outer.hidden || guideShown } : null),
+    [outer, guideShown],
+  );
   // While away, the variant's modal dialogs (the classic result) are held
   // closed: a modal in the top layer escapes `inert` and would keep focus
   // and working buttons behind the transit. They reopen unchanged.
   return (
     <ModalHoldContext.Provider value={away}>
-      <div
-        className={ANALYSIS_STAGE_CLASS}
-        data-away={away ? "true" : "false"}
-        aria-hidden={away || undefined}
-        inert={away}
-      >
-        {children}
-      </div>
+      <OnboardingLookContext.Provider value={look}>
+        <div
+          className={ANALYSIS_STAGE_CLASS}
+          data-away={away ? "true" : "false"}
+          aria-hidden={away || undefined}
+          inert={away}
+        >
+          {children}
+          {/* Over either variant, under the top bar. */}
+          {guide && (
+            <TutorialGuideView
+              key={target.ticId}
+              guide={guide}
+              place="analysis"
+            />
+          )}
+        </div>
+      </OnboardingLookContext.Provider>
     </ModalHoldContext.Provider>
   );
 }

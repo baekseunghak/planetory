@@ -1,6 +1,7 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { ClassicAnalysis } from "../analysis-classic";
 import { CinematicAnalysis } from "../analysis-new";
+import { cinemaDevTools } from "./dev-tools";
 import "./analysis-switch.css";
 
 // Route element for /analysis/:ticId. Both variants read the route themselves
@@ -79,12 +80,24 @@ export function AnalysisVariantToggle({
 /**
  * Switching remounts the analysis. Drafts survive (session draft storage) and
  * an in-flight submission keeps its request ID for recovery, as on reload.
+ *
+ * Members get the classic variant and no toggle: the A/B choice is the
+ * team's, not theirs. The toggle (and a stored choice) only count on a dev
+ * server started with VITE_CINEMA_DEV_TOOLS=true (./dev-tools.ts).
  */
 export function AnalysisSwitch({
   toggleClassName,
 }: {
   toggleClassName?: string;
 }) {
+  return cinemaDevTools ? (
+    <DevAnalysisSwitch toggleClassName={toggleClassName} />
+  ) : (
+    <ClassicAnalysis key={DEFAULT_ANALYSIS_VARIANT} />
+  );
+}
+
+function DevAnalysisSwitch({ toggleClassName }: { toggleClassName?: string }) {
   const [variant, setVariant] = useAnalysisVariant();
   const Variant = variants[variant];
   return (

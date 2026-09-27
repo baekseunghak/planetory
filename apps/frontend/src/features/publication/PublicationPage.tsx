@@ -21,6 +21,7 @@ import {
   type ReviewItem,
 } from "./use-publication";
 import { MAX_PUBLICATION_BATCH_SIZE } from "./publication-data";
+import { useCinemaCopy } from "../analysis/cinema-copy";
 import "./publication.css";
 
 const when = (value: string) => new Date(value).toLocaleString("ko-KR");
@@ -99,6 +100,7 @@ function OtherHistories({
   const [attempt, setAttempt] = useState(0);
   const [requestedCursor, setRequestedCursor] = useState<string | null>(null);
   const detail = item.preview!.detail;
+  const cinema = useCinemaCopy();
   useEffect(() => {
     if (!attempt) return;
     const controller = new AbortController();
@@ -167,9 +169,18 @@ function OtherHistories({
           <ul>
             {rows.map((row) => (
               <li key={row.historyId}>
-                {when(row.submittedAt)} ·{" "}
-                {judgmentLabel(row.userJudgment ?? "판단 없음")} ·{" "}
-                {row.historyId}{" "}
+                {cinema ? (
+                  <>
+                    {cinema.format.when(row.submittedAt)} ·{" "}
+                    {judgmentLabel(row.userJudgment ?? "판단 없음")}{" "}
+                  </>
+                ) : (
+                  <>
+                    {when(row.submittedAt)} ·{" "}
+                    {judgmentLabel(row.userJudgment ?? "판단 없음")} ·{" "}
+                    {row.historyId}{" "}
+                  </>
+                )}
                 <button
                   disabled={
                     disabled ||
@@ -232,6 +243,8 @@ function Review({
   nickname: string;
 }) {
   const review = usePublication(historyId, ticId, memberId);
+  // 시네마 앱: 신호는 별 패널의 이름으로, 버전·번호는 「기술 정보」 안에.
+  const cinema = useCinemaCopy();
   const selected = review.items.filter(
     (item) => item.selected && canPublish(item),
   );
@@ -260,12 +273,20 @@ function Review({
           </button>
         </>
       )}
-      {!review.loading && !review.error && !review.items.length && (
-        <p>
-          아직 게시하지 않은 공개 대상 기록이 없습니다. 취소한 공개는
-          History에서 다시 검토할 수 있습니다.
-        </p>
-      )}
+      {!review.loading &&
+        !review.error &&
+        !review.items.length &&
+        (cinema ? (
+          <p>
+            아직 공개하지 않은 분석이 없습니다. 공개를 취소한 분석은 분석
+            기록에서 다시 검토할 수 있습니다.
+          </p>
+        ) : (
+          <p>
+            아직 게시하지 않은 공개 대상 기록이 없습니다. 취소한 공개는
+            History에서 다시 검토할 수 있습니다.
+          </p>
+        ))}
       {review.items.map((item) => {
         const preview = item.preview,
           detail = preview?.detail,
@@ -274,26 +295,41 @@ function Review({
           <section
             className="publication-card"
             key={item.historyId}
-            aria-label={`기록 ${item.historyId}`}
+            aria-label={cinema ? "공개할 분석" : `기록 ${item.historyId}`}
           >
-            <h2>
-              {item.candidateId ? `신호 ${item.candidateId}` : "공개할 기록"} ·{" "}
-              {item.historyId}
-            </h2>
+            {cinema ? (
+              <h2>
+                {detail &&
+                (item.candidateId ?? detail.explanation.signal?.candidateId) ? (
+                  <cinema.SignalName
+                    ticId={detail.ticId}
+                    candidateId={
+                      (item.candidateId ??
+                        detail.explanation.signal?.candidateId)!
+                    }
+                    periodDays={detail.explanation.signal?.bls.periodDays}
+                  />
+                ) : (
+                  "공개할 분석"
+                )}
+              </h2>
+            ) : (
+              <h2>
+                {item.candidateId ? `신호 ${item.candidateId}` : "공개할 기록"}{" "}
+                · {item.historyId}
+              </h2>
+            )}
             {item.loading && <p role="status">기록을 불러오는 중입니다.</p>}
             {item.error && <p role="alert">{item.error}</p>}
-            {preview && detail && publication && (
+            {preview && detail && publication && cinema && (
               <>
                 <dl>
                   <dt>공개 닉네임</dt>
                   <dd>{nickname}</dd>
-                  <dt>별 · 신호</dt>
-                  <dd>
-                    TIC {detail.ticId} ·{" "}
-                    {detail.explanation.signal?.candidateId ?? "없음"}
-                  </dd>
-                  <dt>제출 시각</dt>
-                  <dd>{when(detail.submittedAt)}</dd>
+                  <dt>별</dt>
+                  <dd>TIC {detail.ticId}</dd>
+                  <dt>제출</dt>
+                  <dd>{cinema.format.when(detail.submittedAt)}</dd>
                   <dt>내 판단</dt>
                   <dd>{judgmentLabel(preview.judgment)}</dd>
                   <dt>근거</dt>
@@ -309,38 +345,121 @@ function Review({
                   </dd>
                   <dt>메모</dt>
                   <dd className="publication-memo">{preview.memo || "없음"}</dd>
-                  <dt>제출 주기</dt>
+                  <dt>고른 주기</dt>
                   <dd>
-                    {detail.explanation.submitted?.periodDays ?? "없음"}일
+                    {cinema.format.periodDays(
+                      detail.explanation.submitted?.periodDays,
+                      3,
+                    ) ?? "없음"}
                   </dd>
-                  <dt>위상 구간</dt>
+                  <dt>고른 구간</dt>
                   <dd>
-                    {detail.explanation.submitted?.phaseStart ?? "없음"} ~{" "}
-                    {detail.explanation.submitted?.phaseEnd ?? "없음"}
+                    {cinema.format.phaseRange(
+                      detail.explanation.submitted?.phaseStart,
+                      detail.explanation.submitted?.phaseEnd,
+                    ) ?? "없음"}
                   </dd>
-                  <dt>데이터 · 규칙 버전</dt>
-                  <dd>
-                    {detail.versions.data ?? "보관되지 않음"} ·{" "}
-                    {detail.versions.rule ?? "보관되지 않음"}
-                  </dd>
-                  <dt>처리 · 스냅샷 버전</dt>
-                  <dd>
-                    {detail.versions.preprocess ?? "보관되지 않음"} ·{" "}
-                    {detail.versions.pipeline ?? "보관되지 않음"} ·{" "}
-                    {detail.versions.snapshot ?? "보관되지 않음"}
-                  </dd>
-                  <dt>잔차 · 주기도 버전</dt>
-                  <dd>
-                    {detail.versions.residualModel ?? "보관되지 않음"} ·{" "}
-                    {detail.versions.periodogramConfig ?? "보관되지 않음"}
-                  </dd>
-                  <dt>현재 공개 상태</dt>
+                  <dt>지금 공개 상태</dt>
                   <dd>
                     {item.stale
                       ? "다시 확인 필요"
-                      : publicLabels[publication.state]}
+                      : cinema.format.PUBLICATION_SHORT[publication.state]}
                   </dd>
                 </dl>
+                <details className="pc-result-tech">
+                  <summary>기술 정보</summary>
+                  <dl>
+                    <dt>기록 번호</dt>
+                    <dd>{item.historyId}</dd>
+                    {item.candidateId && (
+                      <>
+                        <dt>신호 번호</dt>
+                        <dd>{item.candidateId}</dd>
+                      </>
+                    )}
+                    <dt>데이터 · 규칙 버전</dt>
+                    <dd>
+                      {detail.versions.data ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.rule ?? "보관되지 않음"}
+                    </dd>
+                    <dt>처리 · 스냅샷 버전</dt>
+                    <dd>
+                      {detail.versions.preprocess ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.pipeline ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.snapshot ?? "보관되지 않음"}
+                    </dd>
+                    <dt>잔차 · 주기도 버전</dt>
+                    <dd>
+                      {detail.versions.residualModel ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.periodogramConfig ?? "보관되지 않음"}
+                    </dd>
+                  </dl>
+                </details>
+              </>
+            )}
+            {preview && detail && publication && (
+              <>
+                {!cinema && (
+                  <dl>
+                    <dt>공개 닉네임</dt>
+                    <dd>{nickname}</dd>
+                    <dt>별 · 신호</dt>
+                    <dd>
+                      TIC {detail.ticId} ·{" "}
+                      {detail.explanation.signal?.candidateId ?? "없음"}
+                    </dd>
+                    <dt>제출 시각</dt>
+                    <dd>{when(detail.submittedAt)}</dd>
+                    <dt>내 판단</dt>
+                    <dd>{judgmentLabel(preview.judgment)}</dd>
+                    <dt>근거</dt>
+                    <dd>
+                      {preview.evidence
+                        .map(
+                          (code) =>
+                            evidenceOptions.find(
+                              (option) => option.value === code,
+                            )?.label ?? code,
+                        )
+                        .join(", ") || "없음"}
+                    </dd>
+                    <dt>메모</dt>
+                    <dd className="publication-memo">
+                      {preview.memo || "없음"}
+                    </dd>
+                    <dt>제출 주기</dt>
+                    <dd>
+                      {detail.explanation.submitted?.periodDays ?? "없음"}일
+                    </dd>
+                    <dt>위상 구간</dt>
+                    <dd>
+                      {detail.explanation.submitted?.phaseStart ?? "없음"} ~{" "}
+                      {detail.explanation.submitted?.phaseEnd ?? "없음"}
+                    </dd>
+                    <dt>데이터 · 규칙 버전</dt>
+                    <dd>
+                      {detail.versions.data ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.rule ?? "보관되지 않음"}
+                    </dd>
+                    <dt>처리 · 스냅샷 버전</dt>
+                    <dd>
+                      {detail.versions.preprocess ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.pipeline ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.snapshot ?? "보관되지 않음"}
+                    </dd>
+                    <dt>잔차 · 주기도 버전</dt>
+                    <dd>
+                      {detail.versions.residualModel ?? "보관되지 않음"} ·{" "}
+                      {detail.versions.periodogramConfig ?? "보관되지 않음"}
+                    </dd>
+                    <dt>현재 공개 상태</dt>
+                    <dd>
+                      {item.stale
+                        ? "다시 확인 필요"
+                        : publicLabels[publication.state]}
+                    </dd>
+                  </dl>
+                )}
                 {detail.isPreviousBundle && (
                   <p>
                     이전 데이터 판에서 제출한 기록입니다. 제출 원본을
@@ -361,7 +480,7 @@ function Review({
                     { returnTo },
                   )}
                 >
-                  History 상세 보기
+                  {cinema ? "기록 상세 보기" : "History 상세 보기"}
                 </Link>
                 <p>
                   내용을 바꾸려면{" "}

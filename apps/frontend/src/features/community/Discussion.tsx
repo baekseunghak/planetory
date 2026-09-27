@@ -10,6 +10,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import { pagePath } from "../../app/paths";
 import { useSession } from "../../auth/SessionProvider";
+import { cinemaDateTime, useCinemaWording } from "../../shared/cinema-wording";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import {
   assertIdentity,
@@ -53,6 +54,7 @@ export function Discussion({
   onUnavailable: (error: Error) => void;
 }) {
   const { member } = useSession();
+  const cinema = useCinemaWording();
   const location = useLocation();
   const [search, setSearch] = useSearchParams();
   const cursor = search.get("discussionCursor");
@@ -441,7 +443,9 @@ export function Discussion({
                     </Link>
                   )}
                   <time dateTime={item.createdAt}>
-                    {new Date(item.createdAt).toLocaleString("ko-KR")}
+                    {cinema
+                      ? cinemaDateTime(item.createdAt)
+                      : new Date(item.createdAt).toLocaleString("ko-KR")}
                   </time>
                   {item.updatedAt !== item.createdAt && <span>수정됨</span>}
                 </div>

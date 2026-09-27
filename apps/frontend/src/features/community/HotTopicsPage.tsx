@@ -12,8 +12,11 @@ import { useReadModel } from "./useReadModel";
 import "./community.css";
 import { CommunityAside } from "./CommunityAside";
 
+import { useCinemaWording } from "../../shared/cinema-wording";
+
 export function HotTopicsPage() {
   const [search] = useSearchParams();
+  const cinema = useCinemaWording();
   const location = useLocation();
   const cursor = search.get("cursor");
   const invalidCursor = search.getAll("cursor").length > 1 || cursor === "";
@@ -70,17 +73,34 @@ export function HotTopicsPage() {
               이상이면 선정됩니다. 같은 회원이 여러 번 제출하거나 판단을 바꿔도
               인원은 늘지 않습니다.
             </p>
-            <p>
-              기간 제한 없이 현재 참여자 수가 많은 순으로 보여줍니다. 인원이
-              같으면 스레드 생성 시각, 스레드 ID가 최신인 순입니다. 일반
-              글·댓글·동의·비동의 수는 선정에 사용하지 않습니다.
-            </p>
-            <p>
-              공개 취소나 숨김으로 유효 참여자가 10명 미만이 되면 다음 조회에서
-              제외되며, 다시 10명 이상이면 돌아옵니다. 삭제되거나 숨겨진
-              스레드는 표시하지 않습니다. 참여자 수와 판단 분포는 행성일
-              확률이나 성과 점수가 아닙니다.
-            </p>
+            {cinema ? (
+              <>
+                <p>
+                  기간 제한 없이 현재 참여자가 많은 순으로 보여 드립니다. 인원이
+                  같으면 최근에 열린 스레드가 먼저입니다. 일반 글·댓글·
+                  동의·비동의 수는 선정에 쓰지 않습니다.
+                </p>
+                <p>
+                  공개 취소나 숨김으로 참여자가 10명 아래로 줄면 목록에서
+                  빠지고, 다시 10명이 되면 돌아옵니다. 참여자 수와 판단 분포는
+                  행성일 확률이나 성과 점수가 아닙니다.
+                </p>
+              </>
+            ) : (
+              <>
+                <p>
+                  기간 제한 없이 현재 참여자 수가 많은 순으로 보여줍니다. 인원이
+                  같으면 스레드 생성 시각, 스레드 ID가 최신인 순입니다. 일반
+                  글·댓글·동의·비동의 수는 선정에 사용하지 않습니다.
+                </p>
+                <p>
+                  공개 취소나 숨김으로 유효 참여자가 10명 미만이 되면 다음
+                  조회에서 제외되며, 다시 10명 이상이면 돌아옵니다. 삭제되거나
+                  숨겨진 스레드는 표시하지 않습니다. 참여자 수와 판단 분포는
+                  행성일 확률이나 성과 점수가 아닙니다.
+                </p>
+              </>
+            )}
           </details>
           <section aria-label="핫 토픽 목록" aria-busy={state.loading}>
             <div className="hot-topic-toolbar">

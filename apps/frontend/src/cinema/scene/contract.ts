@@ -120,6 +120,15 @@ export type SceneState = {
   reducedMotion: boolean;
   /** A flight or an effect is running. */
   busy: boolean;
+  /**
+   * Render cost tier (optional; absent = `full`). `full`: effects as the
+   * member chose, DPR <= 1.75. `reduced`: effects off unless the member
+   * turns them on, DPR <= 1. `low`: software WebGL or sustained low fps,
+   * DPR 0.5, no post-processing unless the member turns the effects on. Too
+   * slow even at `low`: `failed` is set and the shell shows the list. Policy
+   * and thresholds: ./power.ts.
+   */
+  power?: "full" | "reduced" | "low";
 };
 
 export type SceneError = { message: string; recoverable: boolean };
@@ -167,7 +176,17 @@ export interface SceneController {
    * star to arrive through `setStars` when only the TIC is given.
    */
   ignite(target: IgniteTarget): Promise<void>;
-  /** Bloom, nebula and dust. Off for weak GPUs; data stays the same. */
+  /**
+   * Optional (added): newly unlocked stars that must not show before
+   * `ignite` reveals them. The refreshed sky usually brings them through
+   * `setStars` while the member is still on the analysis. An array adds to
+   * the held stars; `ignite(tic)` takes its star off; `null` releases all.
+   */
+  holdStars?(ticIds: readonly string[] | null): void;
+  /**
+   * Bloom, nebula and dust: the member's explicit choice, which holds on
+   * every power tier. Without a call the tier decides (on at `full` only).
+   */
   setEffects(enabled: boolean): void;
 
   /** Screen position for DOM markers/labels. null when unknown. */
@@ -277,6 +296,7 @@ export function createNoopSceneController(): SceneController {
     playTransit: done,
     revealPlanet: done,
     ignite: done,
+    holdStars: () => undefined,
     setEffects: (effects) => update({ effects }),
     projectStar: () => null,
     projectPlanet: () => null,

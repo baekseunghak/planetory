@@ -84,7 +84,31 @@ export type OutcomePlanet = {
   durationHours: number;
   epochBtjd: number;
   harmonicMultiplier: number | null;
+  /**
+   * (Optional, added.) Published name of a confirmed planet from the
+   * signal's external records ("WASP-62 b"), or null.
+   */
+  knownName?: string | null;
 };
+
+/**
+ * First external record that a catalog calls a confirmed planet (CP/KP),
+ * by its published name. A TOI number ("TOI-184.01") is not a planet name.
+ * Same rule as format.ts `knownPlanetName`, kept here so the bridge (shared
+ * with the develop screens' bundle) does not pull the cinema copy in.
+ */
+function knownName(
+  external: readonly { externalId: string; disposition: string }[],
+): string | null {
+  for (const item of external) {
+    const id = item.externalId.trim();
+    const code = item.disposition.trim().toUpperCase();
+    if (!id || !["CP", "KP", "CONFIRMED"].includes(code)) continue;
+    if (/^TOI-\d+\.\d+$/i.test(id)) continue;
+    return id;
+  }
+  return null;
+}
 
 export type AnalysisOutcome = {
   kind: AnalysisOutcomeKind;
@@ -307,6 +331,7 @@ export function outcomeFromReceipt(
         durationHours: signal.bls.durationHours,
         epochBtjd: signal.bls.epochBtjd,
         harmonicMultiplier: explanation.correction?.multiplier ?? null,
+        knownName: knownName(signal.external),
       }
     : null;
   const found = ["matched", "matched_harmonic", "duplicate"].includes(

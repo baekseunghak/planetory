@@ -1,24 +1,44 @@
-// Cinematic build review only. All data is synthetic and kept in memory.
+// Cinematic build review only. Data is synthetic, plus the local real TESS
+// sample when present (dev/real-sample); everything is kept in memory.
 // This entry point is never loaded by the production Vite configuration.
 //
 //   CINEMA_PORT=58390 npm run dev:cinema
 //
 // Environment
 //   CINEMA_PORT          port (default 58390, strict)
-//   CINEMA_STARS         galaxy size (default 1000)
-//   CINEMA_P1=1          also enable P1 routes (notifications, following, public sky)
+//   CINEMA_STARS         galaxy size of the member scenario (default 1000)
+//   CINEMA_SCENARIO      world at start: member (default) | newcomer | veteran
+//   CINEMA_P1=0          hide P1 routes (notifications, following, public sky,
+//                        statistics, withdrawal); on by default for the demo
 //   CINEMA_WINDOW_RULE=0 rank-1 peak ignores whether the window covers the dip
+//   CINEMA_UNLOCK=0      a recognized achievement unlocks no star
+//                        (unlockedStars: [], as production often answers after a
+//                        tutorial); at run time POST /api/dev-cinema/unlock?on=0|1
+//   CINEMA_REAL_SAMPLE   real TESS sample folder (default apps/frontend/.real-sample,
+//                        see dev/real-sample); 0 = synthetic data only
+//   VITE_CINEMA=false    legacy develop pages instead of the cinema shell
+//   VITE_CINEMA=auto     the production choice: legacy unless ?ui=cinema
+//                        (src/ui-choice.ts)
+//
+// Scenarios (dev/cinema-scenarios.ts is the reference)
+//   /api/dev-cinema/session?as=newcomer|member|veteran[&stars=5000|10000][&start=login][&next=/path]
+//                        a fresh world for that scenario, then the app (or /login)
+//   GET /api/dev-cinema/scenarios   list for the demo switch (bottom centre, Alt+Shift+D)
+//   other explorers      /members/u-301/sky (50 stars), u-211 (1000), u-302 (2400),
+//                        u-303 (10000); u-210 is private
 //
 // Session
 //   default              signed-in member `u-209` (no cookie needed)
 //   /api/dev-cinema/session?as=anonymous   -> cookie, 302 to /login
-//   /api/dev-cinema/session?as=member      -> cookie, 302 to /sky
+//   /api/dev-cinema/session?as=member      -> fresh member world, /sky
 //   login buttons        -> /api/dev-cinema/oauth/{ssafy|google} -> member -> /oauth/callback
 //   logout               -> anonymous
-//   POST /api/dev-cinema/reset   fresh galaxy, submissions and residual jobs
-//   GET  /api/dev-cinema/state   session, sky version, unlocked stars, overlay
+//   POST /api/dev-cinema/reset   fresh world of the current scenario
+//   GET  /api/dev-cinema/state   scenario, sky version, real placement, unlocked stars, overlay
 //
 // Stars (galaxy fixture, TIC = 900000001 + index)
+// Stars below are the member scenario without a real sample; with one, the
+// tutorial and explore slots carry real TICs (GET /api/dev-cinema/state).
 //   900000001  tutorial 1, completed, 5 planets (3 confirmed, 2 candidates)
 //   900000002  tutorial 2, completed, no planets
 //   900000003  tutorial 3 marker (blue "3"), unexplored
@@ -49,25 +69,43 @@ import { createProfileFixture } from "../dev/profile-fixture-plugin.ts";
 import { hotTopicsFixturePlugin } from "../dev/hot-topics-fixture-plugin.ts";
 import { myListsFixturePlugin } from "../dev/my-lists-fixture-plugin.ts";
 import { publicSkyFixturePlugin } from "../dev/public-sky-fixture-plugin.ts";
-import { followFixturePlugin } from "../dev/follow-fixture-plugin.ts";
 import { notificationsFixturePlugin } from "../dev/notifications-fixture-plugin.ts";
 import { settingsFixturePlugin } from "../dev/settings-fixture-plugin.ts";
 import { withdrawalFixturePlugin } from "../dev/withdrawal-fixture-plugin.ts";
+import { loadRealSample, REAL_SAMPLE_DIR } from "../dev/real-sample/index.ts";
 
 const port = Number(process.env.CINEMA_PORT ?? 58390);
 const starCount = Number(process.env.CINEMA_STARS ?? 1000);
-const p1 = /^(1|true|yes)$/i.test(process.env.CINEMA_P1 ?? "");
+const p1 = !/^(0|false|no)$/i.test(process.env.CINEMA_P1 ?? "");
+const cinemaUi = ["false", "auto"].includes(process.env.VITE_CINEMA ?? "")
+  ? process.env.VITE_CINEMA
+  : "true";
+const realSampleDir = process.env.CINEMA_REAL_SAMPLE ?? REAL_SAMPLE_DIR;
+// Throws on a malformed sample: better than a demo on half-read data.
+const realSample = /^(0|false|no)$/i.test(realSampleDir)
+  ? null
+  : loadRealSample(realSampleDir);
+const scenario = process.env.CINEMA_SCENARIO ?? "member";
 const windowRule = !/^(0|false|no)$/i.test(
   process.env.CINEMA_WINDOW_RULE ?? "",
 );
+const unlock = !/^(0|false|no)$/i.test(process.env.CINEMA_UNLOCK ?? "");
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error("CINEMA_PORT must be an integer between 1024 and 65535");
 if (!Number.isInteger(starCount) || starCount < 10 || starCount > 20000)
   throw new Error("CINEMA_STARS must be an integer between 10 and 20000");
+if (!["member", "newcomer", "veteran"].includes(scenario))
+  throw new Error("CINEMA_SCENARIO must be member, newcomer or veteran");
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const profile = createProfileFixture();
-const cinema = cinemaFixturePlugin({ starCount, windowRule });
+const cinema = cinemaFixturePlugin({
+  starCount,
+  windowRule,
+  realSample,
+  scenario,
+  unlock,
+});
 const community = communityFixturePlugin({
   writable: true,
   commentWrites: true,
@@ -89,7 +127,8 @@ const server = await createServer({
   mode: "cinema",
   plugins: [
     react(),
-    // Session, CSRF, galaxy, analysis, submissions. Falls through otherwise.
+    // Session, CSRF, scenarios, galaxy, analysis, submissions, other
+    // explorers' galaxies, follows, statistics. Falls through otherwise.
     cinema.plugin,
     publicSkyFixturePlugin(),
     withdrawalFixturePlugin(),
@@ -104,9 +143,10 @@ const server = await createServer({
           byType: { confirmed: 5, unconfirmed: 2, fp: 0 },
           starCountByGrade: { A: 1, S: 0, SS: 1, SSS: 0 },
         },
+        // The current demo scenario (nickname, onboarding, summary).
+        ...cinema.member(),
       }),
     }),
-    followFixturePlugin(),
     notificationsFixturePlugin(),
     profile.plugin,
     // /v1/me/histories and submitted-star lists for My page.
@@ -118,6 +158,9 @@ const server = await createServer({
   define: Object.fromEntries(
     Object.entries({
       VITE_API_BASE: "/api",
+      VITE_CINEMA: cinemaUi,
+      // Demo scenario switch (src/cinema/shell/demo). Never in a build.
+      VITE_CINEMA_DEMO: "true",
       VITE_P1_ENABLED: p1 ? "true" : "false",
       VITE_SKY_RENDERER_ENABLED: "true",
       VITE_FIXTURE: "false",
@@ -138,5 +181,5 @@ const server = await createServer({
 });
 await server.listen();
 console.log(
-  `cinema review · synthetic data only · stars ${starCount} · P1 ${p1 ? "on" : "off"} · window rule ${windowRule ? "on" : "off"}: http://127.0.0.1:${port}/sky`,
+  `cinema review · scenario ${scenario} · ${realSample ? `real TESS sample ${realSample.stars.length} stars + synthetic` : "synthetic data only"} · stars ${starCount} · P1 ${p1 ? "on" : "off"} · window rule ${windowRule ? "on" : "off"} · unlock ${unlock ? "on" : "off"} · UI ${{ true: "cinema", false: "legacy", auto: "legacy unless ?ui=cinema" }[cinemaUi]}: http://127.0.0.1:${port}/sky`,
 );

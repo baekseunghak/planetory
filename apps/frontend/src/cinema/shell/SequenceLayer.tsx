@@ -3,6 +3,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   useSyncExternalStore,
 } from "react";
 import { LightCurve } from "../ui/LightCurve";
@@ -23,10 +24,14 @@ export function SequenceLayer({
   return null;
 }
 
+/** The transit can be skipped this long after it starts. */
+const SKIP_AFTER_MS = 1000;
+
 /**
- * The caption belongs to the edge-on view: it waits for the camera to land
- * and the planet to start its pass (the first light-curve sample), then
- * fades in. The live region is there from the start so the caption is read.
+ * The caption is on from the start of the transit (the approach flight
+ * included); the live light curve waits for the planet to start its pass
+ * (the first light-curve sample). After a second, "건너뛰기" (or Escape)
+ * jumps to the discovery card.
  */
 function TransitView({ depth }: { depth: number }) {
   const { director } = useShell();
@@ -35,36 +40,62 @@ function TransitView({ depth }: { depth: number }) {
     () => director.getFlux().length > 0,
   );
   const layer = useRef<HTMLDivElement>(null);
+  const [skippable, setSkippable] = useState(false);
   // The panel (and any dialog it held) stepped aside: keep keyboard focus
   // on the scene's layer, not on a control nobody can see.
   useEffect(() => {
     layer.current?.focus({ preventScroll: true });
+    const timer = setTimeout(() => setSkippable(true), SKIP_AFTER_MS);
+    return () => clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (!skippable) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      director.skip();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [skippable, director]);
   return (
-    <div
-      ref={layer}
-      className="cinema-transit"
-      data-passing={passing ? "true" : "false"}
-      aria-live="polite"
-      tabIndex={-1}
-    >
-      {passing && (
-        <>
-          <p className="cinema-transit-caption">
-            당신이 본 밝기 감소는 바로 이 순간입니다
-          </p>
-          <LightCurve
-            subscribe={director.subscribeFlux}
-            getSamples={director.getFlux}
-            depth={depth}
-            label="행성이 별 앞을 지나는 동안의 밝기"
-          />
-          <p className="cinema-transit-note">
-            밝기 감소와 행성 크기는 잘 보이도록 과장했습니다
-          </p>
-        </>
+    <>
+      {/* Outside the caption box (its transform would pin a fixed child). */}
+      {skippable && (
+        <button
+          type="button"
+          className="cinema-transit-skip"
+          aria-keyshortcuts="Escape"
+          onClick={() => director.skip()}
+        >
+          건너뛰기
+        </button>
       )}
-    </div>
+      <div
+        ref={layer}
+        className="cinema-transit"
+        data-passing={passing ? "true" : "false"}
+        aria-live="polite"
+        tabIndex={-1}
+      >
+        <p className="cinema-transit-caption">
+          당신이 본 밝기 감소는 바로 이 순간입니다
+        </p>
+        {passing && (
+          <>
+            <LightCurve
+              subscribe={director.subscribeFlux}
+              getSamples={director.getFlux}
+              depth={depth}
+              label="행성이 별 앞을 지나는 동안의 밝기"
+            />
+            <p className="cinema-transit-note">
+              밝기 감소와 행성 크기는 잘 보이도록 과장했습니다
+            </p>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 

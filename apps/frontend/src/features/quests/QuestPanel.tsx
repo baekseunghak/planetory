@@ -9,6 +9,7 @@ import {
   recordChallengeShown,
   type CurrentChallenge,
 } from "./contracts";
+import { useCinemaWording } from "../../shared/cinema-wording";
 import "./quests.css";
 
 const statusLabel = {
@@ -16,6 +17,15 @@ const statusLabel = {
   unlocked: "시작 가능",
   in_progress: "탐색 중",
   completed: "완료",
+};
+// Cinema app only (src/shared/cinema-wording): 탐사 and "~습니다".
+const cinemaStatusLabel = { ...statusLabel, in_progress: "탐사 중" };
+// No pointer to the diagnostic tools (not connected yet) and no 탐색.
+const cinemaIntentLabels: Record<keyof typeof intentLabels, string> = {
+  ...intentLabels,
+  fp: "행성이 아닌 신호 · 접힌 곡선에서 가려내기",
+  deep_fp: "서로 가리는 두 별 · 깊은 신호 구별하기",
+  multi_fp: "여러 신호 · 다음 곡선에서 하나씩 찾기",
 };
 function NewRoundNotice({
   current,
@@ -80,10 +90,17 @@ function NewRoundNotice({
       document.removeEventListener("visibilitychange", record);
     };
   }, [show, memberId, current.round]);
+  const cinema = useCinemaWording();
   if (!show || !current.round) return null;
   return (
     <div className="quest-round-notice" ref={element}>
-      <p role="status">새 챌린지가 열렸습니다 · {current.round.roundNo}회차</p>
+      {cinema ? (
+        <p role="status">
+          새 챌린지가 열렸습니다 · {current.round.roundNo}회차
+        </p>
+      ) : (
+        <p role="status">새 챌린지가 열렸어요 · {current.round.roundNo}회차</p>
+      )}
       <button onClick={open}>챌린지 보기</button>
       <button aria-label="새 챌린지 안내 닫기" onClick={() => setShow(false)}>
         닫기
@@ -100,6 +117,7 @@ export function QuestPanel({
 }) {
   const { memberId, quests, error, current, currentError, refresh } =
     useQuests();
+  const cinema = useCinemaWording();
   const challengeRef = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -221,9 +239,17 @@ export function QuestPanel({
                             튜토리얼 {item.seq} ·{" "}
                             {item.completionReason === "skipped"
                               ? "건너뛰기 완료"
-                              : statusLabel[item.status]}
+                              : (cinema ? cinemaStatusLabel : statusLabel)[
+                                  item.status
+                                ]}
                           </strong>
-                          <small>{intentLabels[item.intent]}</small>
+                          <small>
+                            {
+                              (cinema ? cinemaIntentLabels : intentLabels)[
+                                item.intent
+                              ]
+                            }
+                          </small>
                         </span>
                         <span aria-hidden="true">
                           {item.status === "completed"
@@ -236,12 +262,18 @@ export function QuestPanel({
                     </li>
                   ))}
                 </ol>
-                {quests.tutorial.completedCount === 5 && (
-                  <p>
-                    기본 탐사를 모두 마쳤어요. 열린 별과 챌린지를 자유롭게
-                    탐사해 보세요.
-                  </p>
-                )}
+                {quests.tutorial.completedCount === 5 &&
+                  (cinema ? (
+                    <p>
+                      기본 탐사를 모두 마쳤습니다. 열린 별과 챌린지를 자유롭게
+                      탐사해 보세요.
+                    </p>
+                  ) : (
+                    <p>
+                      기본 탐사를 모두 마쳤어요. 열린 별과 챌린지를 자유롭게
+                      탐사해 보세요.
+                    </p>
+                  ))}
               </>
             )}
           </details>
@@ -288,12 +320,23 @@ export function QuestPanel({
                   </strong>
                 </p>
                 {!challenge.eligible ? (
-                  <p>튜토리얼 다섯 별을 마치면 참여할 수 있습니다.</p>
+                  cinema ? (
+                    <p>튜토리얼 다섯 별을 마치면 참여할 수 있습니다.</p>
+                  ) : (
+                    <p>튜토리얼 다섯 별을 마치면 참여할 수 있어요.</p>
+                  )
                 ) : !challenge.unlocked ? (
-                  <p>
-                    참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
-                    있습니다.
-                  </p>
+                  cinema ? (
+                    <p>
+                      참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
+                      있습니다.
+                    </p>
+                  ) : (
+                    <p>
+                      참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
+                      있어요.
+                    </p>
+                  )
                 ) : currentMismatch ? (
                   <p role="status">
                     회차가 변경되었습니다. 최신 챌린지를 다시 확인해 주세요.
@@ -356,7 +399,7 @@ export function QuestPanel({
                     <span>
                       {star.newDiscoverableCount === null
                         ? "새 자료 확인하기"
-                        : `새 탐색 신호 ${star.newDiscoverableCount}개`}
+                        : `${cinema ? "새로 찾을 신호" : "새 탐색 신호"} ${star.newDiscoverableCount}개`}
                     </span>
                     <time dateTime={star.reopenedAt}>
                       {new Date(star.reopenedAt).toLocaleDateString("ko-KR")}

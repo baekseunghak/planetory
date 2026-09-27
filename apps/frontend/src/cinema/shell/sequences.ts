@@ -25,6 +25,7 @@ import {
   type Unsubscribe,
 } from "../scene/contract";
 import { publishSkyChange } from "../../features/sky-data/events";
+import { foundTitle, NO_NEW_STAR, objectParticle } from "../analysis/format";
 
 export type ChipTone = "good" | "warn" | "neutral" | "new";
 export type Chip = { label: string; tone: ChipTone };
@@ -71,14 +72,8 @@ const CINEMATIC: ReadonlySet<AnalysisOutcome["kind"]> = new Set([
 
 // ---------------------------------------------------------------- copy
 
-/** 을/를 after a Korean word or a number read in Sino-Korean. */
-export function objectParticle(word: string): "을" | "를" {
-  const last = word.trim().at(-1) ?? "";
-  if (/\d/.test(last)) return "2459".includes(last) ? "를" : "을";
-  const code = last.charCodeAt(0) - 0xac00;
-  if (code >= 0 && code <= 11171) return code % 28 ? "을" : "를";
-  return "을";
-}
+/** 을/를 after a Korean word, a Sino-Korean number or a Latin name. */
+export { objectParticle };
 
 /**
  * "행성 N" in the order the star detail lists the member's planets
@@ -142,12 +137,14 @@ export function outcomeChips(outcome: AnalysisOutcome): Chip[] {
   }
   const opened = outcome.achievement.unlockedTicIds.length;
   if (opened) chips.push({ label: `새 별 ${opened}개`, tone: "new" });
+  // A recognized result that opened no star says so in the card's note
+  // (discoveryCard), plainly, not as a missing reward.
   if (outcome.matchStatus === "matched_harmonic")
     chips.push({ label: "배수 주기로 일치", tone: "neutral" });
   if (outcome.progress.stage === "completed")
-    chips.push({ label: "탐색 완료", tone: "good" });
+    chips.push({ label: "탐사 완료", tone: "good" });
   else if (outcome.progress.stage === "in_progress")
-    chips.push({ label: "탐색 중", tone: "neutral" });
+    chips.push({ label: "탐사 중", tone: "neutral" });
   return chips;
 }
 
@@ -156,15 +153,26 @@ export function discoveryCard(
   label: string | null,
 ): DiscoveryCard {
   const revealed = outcome.revealsPlanet && outcome.planet !== null;
-  const found =
-    revealed && label ? `${label}${objectParticle(label)} 찾았습니다` : null;
+  // A confirmed planet (every tutorial answer, every catalogued planet) is
+  // not a new discovery: the member found a known planet themselves, named
+  // when the catalog names it. "발견" is kept for candidates.
+  const known = revealed && outcome.planet?.disposition === "CONFIRMED";
+  const found = known
+    ? foundTitle("CONFIRMED", outcome.planet?.knownName)
+    : revealed && label
+      ? `${label}${objectParticle(label)} 발견했습니다`
+      : null;
   // The "새 별 N개" chip says what opened; the note is kept for what the
-  // chips cannot say.
-  let eyebrow = "발견",
+  // chips cannot say (a recognized result that opened no star).
+  let eyebrow = known ? "탐사 성공" : "발견",
     title = found ?? "신호를 찾았습니다",
-    note: string | null = null;
+    note: string | null =
+      outcome.achievement.result === "recognized" &&
+      outcome.achievement.unlockedTicIds.length === 0
+        ? NO_NEW_STAR
+        : null;
   if (outcome.kind === "judgmentMismatch") {
-    eyebrow = "탐색 결과";
+    eyebrow = "탐사 결과";
     title = "구간은 맞았고, 판단은 달랐습니다";
     note = "판단이 달라 성과로 인정되지 않았습니다.";
   } else if (outcome.kind === "pendingPublish") {
@@ -177,7 +185,11 @@ export function discoveryCard(
     kind: outcome.kind,
     eyebrow,
     title,
-    facts: signalFacts(outcome.planet),
+    // The star panel's name for it leads the numbers ("행성 1 · 주기 …").
+    facts:
+      revealed && label && outcome.planet
+        ? `${label} · ${signalFacts(outcome.planet)}`
+        : signalFacts(outcome.planet),
     note,
     chips: outcomeChips(outcome),
     revealed,
@@ -240,6 +252,8 @@ export class SequenceDirector {
   private ignitions: string[] = [];
   private hold: TallyHold = NO_TALLY_HOLD;
   private holdListeners = new Set<() => void>();
+  /** Ends the running transit early (skip), or null outside one. */
+  private skipTransit: (() => void) | null = null;
 
   constructor(private readonly host: SequenceHost) {}
 
@@ -278,7 +292,18 @@ export class SequenceDirector {
     return () => {
       offs.forEach((off) => off());
       this.cancel();
+      // Nobody is left to ignite them (sign-out): show them plainly.
+      this.holdStars(null);
     };
+  }
+
+  /** Keep unlocked stars hidden until they ignite (scene.holdStars). */
+  holdStars(ticIds: readonly string[] | null): void {
+    try {
+      this.host.scene().holdStars?.(ticIds);
+    } catch (error) {
+      console.error("scene holdStars failed", error);
+    }
   }
 
   /**
@@ -302,6 +327,15 @@ export class SequenceDirector {
   /** A new scene controller registered: give it the current hint. */
   reapply(): void {
     this.apply();
+  }
+
+  /**
+   * "건너뛰기" (SequenceLayer): end the transit playback now and go straight
+   * to the card. The planet still takes its place (without waiting for the
+   * reveal). Nothing to skip outside a transit.
+   */
+  skip(): void {
+    this.skipTransit?.();
   }
 
   /** Card closed ("결과 자세히 보기"): the panel comes back. */
@@ -452,6 +486,15 @@ export class SequenceDirector {
           (outcome.kind !== "judgmentMismatch" &&
             outcome.achievement.unlockedTicIds.length > 0),
       });
+    // The stars this outcome unlocks ignite once the galaxy is on screen
+    // again. The refresh below brings them into the scene long before
+    // that, so they are held hidden from now until their ignition.
+    if (
+      plays &&
+      outcome.kind !== "judgmentMismatch" &&
+      outcome.achievement.unlockedTicIds.length
+    )
+      this.holdStars(outcome.achievement.unlockedTicIds);
     // Keep the one sky store current. A replayed receipt that was already
     // seen may carry an older version; it is left alone.
     if (outcome.skyVersion && (outcome.created || outcome.firstView))
@@ -488,6 +531,15 @@ export class SequenceDirector {
         outcome,
         card: null,
       });
+      // The transit's own signal: aborted with the run, or by "건너뛰기".
+      const pass = new AbortController();
+      const endPass = () => pass.abort();
+      run.signal.addEventListener("abort", endPass, { once: true });
+      let skipped = false;
+      this.skipTransit = () => {
+        skipped = true;
+        pass.abort();
+      };
       await settle(
         () =>
           scene.playTransit({
@@ -495,15 +547,17 @@ export class SequenceDirector {
             depth: Math.max(0, planet.depthPpm) / 1e6,
             durationHours: planet.durationHours,
             onFlux: (t, flux) => {
-              if (!run.signal.aborted) this.pushFlux(t, flux);
+              if (!pass.signal.aborted) this.pushFlux(t, flux);
             },
-            signal: run.signal,
+            signal: pass.signal,
           }),
         SEQUENCE_LIMIT_MS,
         "playTransit",
       );
+      this.skipTransit = null;
+      run.signal.removeEventListener("abort", endPass);
       if (run.signal.aborted) return;
-      await settle(
+      const revealing = settle(
         () =>
           scene.revealPlanet({
             ...scenePlanet({
@@ -520,8 +574,14 @@ export class SequenceDirector {
         SCENE_TIMING.revealMs + 4000,
         "revealPlanet",
       );
+      // Skipped: the card comes now; the planet settles in behind it.
+      if (!skipped) await revealing;
       if (run.signal.aborted) return;
       // The real planet took the ghost's place. A new period brings it back.
+      this.hint = null;
+      this.apply();
+    } else if (planet?.isPlanet === false) {
+      // Told apart as not a planet: no ghost planet left behind the card.
       this.hint = null;
       this.apply();
     }

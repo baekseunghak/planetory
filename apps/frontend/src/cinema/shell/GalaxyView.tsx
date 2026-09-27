@@ -1,17 +1,28 @@
 // /sky: my galaxy (no star) or a star's system (?star=). The scene draws;
 // this file only adds the HUD, markers, labels and the star panel.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "../../auth/SessionProvider";
-import { OnboardingTip } from "../../features/onboarding/Onboarding";
+import {
+  OnboardingLookContext,
+  useOnboardingOpen,
+} from "../../features/onboarding/Onboarding";
 import { QuestPanel } from "../../features/quests/QuestPanel";
 import { QuestProvider } from "../../features/quests/QuestProvider";
 import { DiscoveredStars } from "../../features/sky-renderer/DiscoveredStars";
 import { StarSearch } from "../../features/sky-renderer/StarSearch";
 import { GalaxyArtwork } from "../../components/GalaxyArtwork";
 import type { Star } from "../../features/sky-data/contracts";
-import { SCENE_TIMING, useScene, useSceneState } from "../scene";
+import {
+  POWER_SLOW_MESSAGE,
+  SCENE_TIMING,
+  forgetPower,
+  useScene,
+  useSceneState,
+} from "../scene";
 import { useShell } from "./context";
-import { readSceneEffects, writeSceneEffects } from "./preferences";
+import { writeSceneEffects } from "./preferences";
+
+const POWER_ORDER = ["full", "reduced", "low"] as const;
 import {
   HoverLabel,
   MarkerLayer,
@@ -20,6 +31,8 @@ import {
 } from "./ScreenLabels";
 import { StarPanel } from "./StarPanel";
 import { useCinemaSky } from "./sky";
+import { useTutorialGuide } from "./TutorialGuide";
+import { browserStorage, firstVisitFlown } from "./tutorial-guide";
 
 export function GalaxyView() {
   const { store, data } = useCinemaSky();
@@ -84,10 +97,87 @@ export function GalaxyView() {
     () => scene.onStarClick((pointer) => selectStar(pointer.ticId)),
     [scene, selectStar],
   );
-  // Keep the member's display choice when the engine (re)registers.
+  // The member's effects choice is applied once at the root (CinemaRoot).
+  // Weak graphics step the scene down while it runs: say so once per step.
+  // The engine's first level (software renderer detected, a ?power= pin or
+  // a level kept from earlier) is not a step down: only a runtime step says
+  // "slow". Before the engine attaches the state has no power at all.
+  const reported = sceneState.power;
+  const power = reported ?? "full";
+  const lastPower = useRef(reported);
+  const { toast } = shell;
   useEffect(() => {
-    scene.setEffects(readSceneEffects());
-  }, [scene]);
+    const before = lastPower.current;
+    lastPower.current = reported;
+    if (
+      before !== undefined &&
+      reported !== undefined &&
+      POWER_ORDER.indexOf(reported) > POWER_ORDER.indexOf(before)
+    )
+      toast("화면이 느려 그래픽을 낮췄습니다");
+  }, [reported, toast]);
+
+  // HUD panels (내 별 찾기, quests, 별 목록): one at a time. Esc or a press
+  // on the sky closes them; opening one closes the others.
+  useEffect(() => {
+    if (ticId) return;
+    const hudDetails = () => [
+      ...document.querySelectorAll<HTMLDetailsElement>(
+        ".cinema-tools details[open]",
+      ),
+    ];
+    const closeAll = (except?: HTMLDetailsElement) => {
+      for (const node of hudDetails())
+        if (node !== except && !node.contains(except ?? null))
+          node.open = false;
+    };
+    const onToggle = (event: Event) => {
+      const node = event.target;
+      if (
+        node instanceof HTMLDetailsElement &&
+        node.open &&
+        node.closest(".cinema-tools")
+      ) {
+        closeAll(node);
+        setListOpen(false);
+      }
+    };
+    // The quest panel keeps its own open state (QuestPanel): its toggle.
+    const closeQuests = () =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '.cinema-tools .quest-toggle[aria-expanded="true"]',
+        )
+        ?.click();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector("dialog[open]")) return;
+      closeAll();
+      closeQuests();
+      setListOpen(false);
+    };
+    const onPointer = (event: PointerEvent) => {
+      const node = event.target instanceof Element ? event.target : null;
+      if (!node) return;
+      if (node.closest(".scene-canvas")) {
+        closeAll();
+        closeQuests();
+        setListOpen(false);
+      } else if (node.closest(".cinema-quests")) {
+        for (const open of hudDetails())
+          if (!open.closest(".cinema-quests")) open.open = false;
+        setListOpen(false);
+      } else if (node.closest(".cinema-search")) setListOpen(false);
+    };
+    document.addEventListener("toggle", onToggle, true);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("toggle", onToggle, true);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [ticId]);
 
   // Esc on the system returns to the galaxy, unless a field or popup has it.
   useEffect(() => {
@@ -107,7 +197,10 @@ export function GalaxyView() {
     return () => document.removeEventListener("keydown", onKey);
   }, [ticId, closeStar]);
 
-  // First visit: fly to tutorial star 1 once, instead of the old tip box.
+  // First visit: fly to tutorial star 1, instead of the old tip box. Only
+  // once the login fly-in has landed (the galaxy at rest), so the flight to
+  // the star never cuts the intro short, and once per member (the shell
+  // keeps it), so "← 나의 은하" and a reload stay in the galaxy.
   const tutorialOne = useMemo(
     () =>
       data.stars.find(
@@ -118,10 +211,40 @@ export function GalaxyView() {
       ) ?? null,
     [data.stars],
   );
+  const tutorialOneTic = tutorialOne?.ticId ?? null;
+  const [sceneLate, setSceneLate] = useState(false);
   useEffect(() => {
-    if (!shell.firstVisit || ticId || !tutorialOne) return;
-    if (shell.markFirstVisitFlown()) selectStar(tutorialOne.ticId);
-  }, [shell, ticId, tutorialOne, selectStar]);
+    if (sceneState.ready) return;
+    // No drawing scene after a while (slow engine chunk): do not wait forever.
+    const timer = setTimeout(() => setSceneLate(true), 8000);
+    return () => clearTimeout(timer);
+  }, [sceneState.ready]);
+  const galaxyAtRest =
+    !!failed ||
+    (sceneState.ready
+      ? sceneState.mode === "galaxy" && !sceneState.busy
+      : sceneLate);
+  const { firstVisit, markFirstVisitFlown } = shell;
+  useEffect(() => {
+    if (!firstVisit || ticId || !tutorialOneTic || !galaxyAtRest) return;
+    // A moment on the landed galaxy before the camera moves on.
+    const timer = setTimeout(
+      () => {
+        if (markFirstVisitFlown()) selectStar(tutorialOneTic);
+      },
+      failed || sceneState.reducedMotion ? 0 : 900,
+    );
+    return () => clearTimeout(timer);
+  }, [
+    firstVisit,
+    markFirstVisitFlown,
+    ticId,
+    tutorialOneTic,
+    galaxyAtRest,
+    failed,
+    sceneState.reducedMotion,
+    selectStar,
+  ]);
 
   const detail = ticId && focus.ticId === ticId ? focus.detail : null;
   const showList = listOpen || !!failed;
@@ -175,7 +298,15 @@ export function GalaxyView() {
               className="cinema-pill"
               aria-pressed={showList}
               disabled={!!failed}
-              onClick={() => setListOpen((open) => !open)}
+              onClick={() => {
+                if (!listOpen)
+                  document
+                    .querySelectorAll<HTMLDetailsElement>(
+                      ".cinema-tools details[open]",
+                    )
+                    .forEach((node) => (node.open = false));
+                setListOpen((open) => !open);
+              }}
             >
               별 목록
             </button>
@@ -197,10 +328,14 @@ export function GalaxyView() {
           type="button"
           className="cinema-pill"
           aria-pressed={sceneState.effects}
+          disabled={!!failed}
           onClick={() => {
             const next = !sceneState.effects;
             writeSceneEffects(next);
             scene.setEffects(next);
+            // Off by default on weak graphics: on is the member's call.
+            if (next && power !== "full")
+              toast("이 컴퓨터에서는 빛 효과가 느릴 수 있습니다");
           }}
         >
           빛 효과 {sceneState.effects ? "켬" : "끔"}
@@ -208,7 +343,26 @@ export function GalaxyView() {
       </div>
       {store && data.meta && showList && (
         <aside className="cinema-list-panel" aria-label="발견한 별 목록 보기">
-          {failed ? (
+          {failed === POWER_SLOW_MESSAGE ? (
+            <div className="cinema-notice-row">
+              <p role="status" className="cinema-notice">
+                {failed}
+              </p>
+              <button
+                type="button"
+                className="cinema-mini"
+                onClick={() => {
+                  // Forget the kept level (and a ?power= pin) and start over.
+                  forgetPower();
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete("power");
+                  window.location.replace(url.toString());
+                }}
+              >
+                3D 다시 시도
+              </button>
+            </div>
+          ) : failed ? (
             <p role="status" className="cinema-notice">
               이 브라우저에서는 3D 은하를 그릴 수 없어 목록으로 보여 드립니다.
             </p>
@@ -244,11 +398,7 @@ export function GalaxyView() {
           onDone={shell.clearNewStar}
         />
       )}
-      <FirstVisitCaption
-        active={shell.firstVisit}
-        ticId={ticId}
-        tutorialTicId={tutorialOne?.ticId ?? null}
-      />
+      <FirstVisitCaption ticId={ticId} tutorialTicId={tutorialOneTic} />
     </div>
   );
 }
@@ -324,32 +474,52 @@ function StillGalaxy({ stars }: { stars: readonly Star[] }) {
 }
 
 /**
- * One line instead of the old tip box. The onboarding tip keeps its own
- * completion logic (close = PATCH /v1/me/onboarding); only its look changes,
- * and the line disappears with it once onboarding is done.
+ * One line instead of the old tip box, while onboarding is open (it closes
+ * with the first tutorial submission, on the server). "안내 숨기기" hides
+ * this line for the visit and completes nothing. One guide at a time: on a
+ * star whose tutorial line is in the panel, the caption steps back.
  */
 function FirstVisitCaption({
-  active,
   ticId,
   tutorialTicId,
 }: {
-  active: boolean;
   ticId: string | null;
   tutorialTicId: string | null;
 }) {
   const { member } = useSession();
-  if (!active || !member) return null;
+  const { firstVisit } = useShell();
+  const open = useOnboardingOpen();
+  const look = useContext(OnboardingLookContext);
+  const panelGuide = useTutorialGuide(ticId, "star");
+  const key = ticId ? "first-visit:star" : "first-visit:galaxy";
+  if (!open || !member || panelGuide || look?.isDismissed(key)) return null;
+  // The shell is about to fly there by itself (GalaxyView, once per member).
+  const flying =
+    firstVisit &&
+    !!tutorialTicId &&
+    !firstVisitFlown(browserStorage(), member.memberId);
   const line = ticId
     ? ticId === tutorialTicId
-      ? "첫 번째 별입니다. 분석 시작을 누르면 밝기 곡선이 열립니다."
-      : "분석 시작을 누르면 이 별의 밝기 곡선이 열립니다."
-    : tutorialTicId
+      ? "첫 번째 별입니다. '분석 시작'을 누르면 밝기 곡선이 열립니다."
+      : "'분석 시작'을 누르면 이 별의 밝기 곡선이 열립니다."
+    : flying
       ? "첫 번째 별로 안내합니다."
-      : "파란 번호가 붙은 별부터 탐사해 보세요.";
+      : tutorialTicId
+        ? "파란 1번 별을 눌러 시작하세요."
+        : "파란 번호가 붙은 별부터 탐사해 보세요.";
   return (
     <div className="cinema-first-visit">
-      <p className="cinema-first-visit-line">{line}</p>
-      <OnboardingTip step={0} />
+      <p className="cinema-first-visit-line" role="status">
+        {line}
+      </p>
+      <button
+        type="button"
+        className="cinema-first-visit-close"
+        aria-label="첫 방문 안내 숨기기"
+        onClick={() => look?.dismiss(key)}
+      >
+        안내 숨기기
+      </button>
     </div>
   );
 }

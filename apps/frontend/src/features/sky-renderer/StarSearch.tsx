@@ -14,6 +14,7 @@ import {
   type StarFilters,
   type StarLocation,
 } from "./star-search";
+import { useCinemaWording } from "../../shared/cinema-wording";
 import "./star-search.css";
 
 // Shared filter control: A13 can consume this without importing the galaxy renderer.
@@ -26,6 +27,8 @@ export function StarFilterFields({
   onChange(value: StarFilters): void;
   disabled?: boolean;
 }) {
+  // Cinema app: 탐사 (src/shared/cinema-wording). Values are unchanged.
+  const cinema = useCinemaWording();
   return (
     <fieldset disabled={disabled} className="star-search-fields">
       <legend className="sr-only">발견한 별 검색 조건</legend>
@@ -46,8 +49,10 @@ export function StarFilterFields({
         >
           <option value="">전체 상태</option>
           <option value="unexplored">미탐사</option>
-          <option value="in_progress">탐색 중</option>
-          <option value="completed">탐색 완료</option>
+          <option value="in_progress">{cinema ? "탐사 중" : "탐색 중"}</option>
+          <option value="completed">
+            {cinema ? "탐사 완료" : "탐색 완료"}
+          </option>
         </select>
       </label>
       <label>
@@ -72,6 +77,7 @@ export function StarSearch({
 }: SkySceneProps & { onLocate(location: StarLocation): void }) {
   const location = useLocation(),
     navigate = useNavigate();
+  const cinema = useCinemaWording();
   let filterError = "",
     applied = emptyStarFilters;
   try {
@@ -251,8 +257,8 @@ export function StarSearch({
                 {
                   {
                     unexplored: "미탐사",
-                    in_progress: "탐색 중",
-                    completed: "탐색 완료",
+                    in_progress: cinema ? "탐사 중" : "탐색 중",
+                    completed: cinema ? "탐사 완료" : "탐색 완료",
                   }[star.progressStage]
                 }
                 {star.grade ? ` · ${star.grade}` : ""}{" "}
