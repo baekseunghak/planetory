@@ -51,7 +51,9 @@ foreach ($required in @(
     'mode("errorifexists")',
     '"left_semi"',
     'capacity_budget_exceeded',
-    'versions[functions.col("sector")]'
+    'versions[functions.col("sector")]',
+    'bronze.select(*BRONZE_KEY_COLUMNS)',
+    'functions.broadcast(selected_ids)'
 )) {
     if (-not $job.Contains($required)) { throw "Missing Silver job contract: $required" }
 }

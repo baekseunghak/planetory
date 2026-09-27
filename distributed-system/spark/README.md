@@ -344,6 +344,8 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 | 새 Sector N 추가 | `--through-sector N --delta-from-sector N` |
 | 기존 14~70 backfill | `--through-sector 70 --delta-from-sector 14 --tic-buckets K --tic-bucket k` |
 
+입력 선택과 검사는 Bronze의 작은 열 4개(`tic_id`, `sector`, `schema_version`, `pipeline_version`)만 한 번 읽어 캐시한 뒤, schema·식별자·Sector별 버전·Sector 집합·제품 수를 집계 한 번으로 확인한다. BLS 입력은 선택된 TIC ID를 broadcast semi join으로 걸러 배열 행을 셔플하지 않는다. 이전 release(`20260926T234554Z`)는 검사마다 선택을 다시 계산해 Sector 1~14에서도 BLS 전 준비에 약 30분이 걸렸고, BLS 입력의 `left_semi`가 배열 행 전체를 한 번 더 셔플했다.
+
 backfill을 Sector 하나씩 늘리지 않는다. 여러 Sector에 걸친 TIC가 Sector마다 다시 계산되고, attempt 안의 일부 TIC만 지울 수 없어 대체된 결과가 용량을 계속 차지한다. TIC 버킷으로 나누면 각 TIC는 모든 Sector로 한 번만 계산된다. `canary`는 `--through-sector`와 `--tic-id`로 해당 TIC의 1..N 전체 Sector를 처리하고, `retry`는 원본 attempt와 같은 snapshot을 받아야 한다.
 
 ### attempt `_READY.json` v5

@@ -63,6 +63,8 @@ REQUIRED_BRONZE_COLUMNS = {
     "schema_version",
     "pipeline_version",
 }
+# The narrow columns the input selection and contract checks read before any array is loaded.
+BRONZE_KEY_COLUMNS = ("tic_id", "sector", "schema_version", "pipeline_version")
 # The only Bronze fields process_tic reads; the other columns never leave the JVM.
 SILVER_INPUT_COLUMNS = (
     "tic_id", "sector", "product_id", "time", "flux", "flux_err", "quality", "cadenceno",
@@ -631,42 +633,55 @@ def run(args: argparse.Namespace) -> None:
             missing = sorted(REQUIRED_BRONZE_COLUMNS - set(bronze.columns))
             if missing:
                 raise SilverContractError("bronze_missing_columns", ",".join(missing))
+            # One narrow scan feeds the selection and every contract check; only BLS reads the arrays.
+            # A 70-Sector snapshot has about 1.3 million product rows, so these four columns stay small.
+            base = bronze.select(*BRONZE_KEY_COLUMNS)
             if args.tic_id:
-                bronze = bronze.filter(functions.col("tic_id").isin(args.tic_id))
+                base = base.filter(functions.col("tic_id").isin(args.tic_id))
+            base = base.persist(StorageLevel.MEMORY_AND_DISK)
+            keys = base
             if args.retry_manifest:
                 failed = spark.read.parquet(args.retry_manifest).filter(
                     functions.col("status").isin("failed", "incomplete")
                 ).select("tic_id").distinct()
-                bronze = bronze.join(failed, "tic_id", "inner")
+                keys = keys.join(failed, "tic_id", "inner")
             if args.delta_from_sector:
-                bronze = select_changed_tics(bronze, functions, args.delta_from_sector,
-                                             args.tic_buckets, args.tic_bucket)
+                keys = select_changed_tics(keys, functions, args.delta_from_sector,
+                                           args.tic_buckets, args.tic_bucket)
             snapshot_sectors = sorted(args.bronze_versions)
-            if bronze.filter(functions.col("schema_version") != BRONZE_SCHEMA_VERSION).limit(1).count():
-                raise SilverContractError("bronze_schema_mismatch", BRONZE_SCHEMA_VERSION)
-            if bronze.filter(
-                functions.col("tic_id").isNull()
-                | (functions.col("tic_id") <= 0)
-                | functions.col("sector").isNull()
-                | ~functions.col("sector").isin(snapshot_sectors)
-            ).limit(1).count():
-                raise SilverContractError("bronze_invalid_identity", "positive TIC and a snapshot Sector required")
-            # Each Sector keeps the Bronze version its own marker pinned. Checked after the identity scan,
-            # so every lookup hits a snapshot key and never depends on ANSI missing-key behaviour.
+            # Each Sector keeps the Bronze version its own marker pinned. The map is read only for
+            # snapshot Sectors, so no lookup depends on ANSI missing-key behaviour.
             versions = functions.create_map(*[functions.lit(value) for sector in snapshot_sectors
                                               for value in (sector, args.bronze_versions[sector])])
-            if bronze.filter(functions.col("pipeline_version") != versions[functions.col("sector")]).limit(1).count():
+            in_snapshot = functions.col("sector").isin(snapshot_sectors)
+            checks = keys.agg(
+                functions.count(functions.lit(1)).alias("products"),
+                functions.sum((~functions.col("schema_version").eqNullSafe(BRONZE_SCHEMA_VERSION))
+                              .cast("long")).alias("bad_schema"),
+                functions.sum((functions.col("tic_id").isNull() | (functions.col("tic_id") <= 0)
+                               | functions.col("sector").isNull() | ~in_snapshot).cast("long")).alias("bad_identity"),
+                functions.sum(functions.when(
+                    in_snapshot, ~functions.col("pipeline_version").eqNullSafe(versions[functions.col("sector")])
+                ).cast("long")).alias("bad_version"),
+                functions.collect_set("sector").alias("sectors"),
+            ).first()
+            if checks["bad_schema"]:
+                raise SilverContractError("bronze_schema_mismatch", BRONZE_SCHEMA_VERSION)
+            if checks["bad_identity"]:
+                raise SilverContractError("bronze_invalid_identity", "positive TIC and a snapshot Sector required")
+            if checks["bad_version"]:
                 raise SilverContractError("bronze_pipeline_version_mismatch", _json(args.bronze_versions))
             if not args.tic_id and not args.retry_manifest and not args.delta_from_sector:
-                sectors = {int(row[0]) for row in bronze.select("sector").distinct().toLocalIterator()}
+                sectors = {int(value) for value in checks["sectors"]}
                 if sectors != set(snapshot_sectors):
                     raise SilverContractError("bronze_sector_coverage_mismatch", str(sorted(sectors)))
-            selected_ids = bronze.select("tic_id").distinct().cache()
+            selected_ids = keys.select("tic_id").distinct().cache()
             selected_tics = selected_ids.count()
+            base.unpersist()
             if selected_tics <= 0:
                 raise SilverContractError("empty_tic_selection", "no TIC selected")
             # Refuse before any BLS so a run never pushes HDFS past the planned-usage line mid-way.
-            selected_products = bronze.count()
+            selected_products = int(checks["products"])
             estimated_output_bytes = estimate_output_bytes(selected_products, selected_tics)
             if estimated_output_bytes > args.capacity_budget_bytes:
                 raise SilverContractError(
@@ -681,7 +696,13 @@ def run(args: argparse.Namespace) -> None:
         target_location = f"{args.final_output}/target_combined"
         periodogram_location = f"{args.final_output}/periodogram"
         iteration_location = f"{args.final_output}/iteration"
-        grouped = bronze.select(*SILVER_INPUT_COLUMNS).rdd.map(
+        inputs = bronze
+        if args.tic_id:
+            inputs = inputs.filter(functions.col("tic_id").isin(args.tic_id))
+        if args.retry_manifest or args.delta_from_sector:
+            # Broadcast the checked TIC IDs so the array rows are not shuffled once more before groupByKey.
+            inputs = inputs.join(functions.broadcast(selected_ids), "tic_id", "left_semi")
+        grouped = inputs.select(*SILVER_INPUT_COLUMNS).rdd.map(
             lambda row: (int(row["tic_id"]), row.asDict(recursive=True))
         ).groupByKey(args.shuffle_partitions)
         results = grouped.map(

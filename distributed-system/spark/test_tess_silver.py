@@ -605,7 +605,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(repr(call(full, preprocess, lambda *a, **k: search_result())),
                          repr(call(slim, preprocess, lambda *a, **k: search_result())))
         source = inspect.getsource(tess_silver.run)
-        self.assertIn("bronze.select(*SILVER_INPUT_COLUMNS).rdd", source)
+        self.assertIn("inputs.select(*SILVER_INPUT_COLUMNS).rdd", source)
 
     def test_tic_results_are_computed_before_any_coalesced_write(self):
         # A lazy persist would run all BLS work inside the coalesced write tasks.
@@ -673,9 +673,11 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                 bronze_coverage(path)
 
     def test_canary_filters_tic_before_row_scans(self):
-        source = (Path(__file__).resolve().parent / "tess_silver.py").read_text(encoding="utf-8")
-        self.assertLess(source.index('if args.tic_id:\n                bronze = bronze.filter'),
-                        source.index('bronze.filter(functions.col("schema_version")'))
+        source = inspect.getsource(tess_silver.run)
+        # The TIC filter shrinks the cached key rows before the checks, and again the array rows before BLS.
+        self.assertLess(source.index('base = base.filter(functions.col("tic_id").isin(args.tic_id))'),
+                        source.index("base.persist("))
+        self.assertIn('inputs = inputs.filter(functions.col("tic_id").isin(args.tic_id))', source)
         self.assertIn('if not args.tic_id and not args.retry_manifest and not args.delta_from_sector:', source)
 
 
@@ -818,8 +820,22 @@ class SilverIncrementalContractTest(unittest.TestCase):
         self.assertLess(run.index("select_changed_tics("), run.index('functions.col("schema_version")'))
         # The capacity guard must refuse before any TIC is grouped for BLS.
         self.assertLess(run.index('"capacity_budget_exceeded"'), run.index("groupByKey("))
-        # Unknown Sectors are rejected before the per-Sector version map is looked up.
-        self.assertLess(run.index("isin(snapshot_sectors)"), run.index('versions[functions.col("sector")]'))
+        # The version map is read only for snapshot Sectors (no ANSI missing-key lookup).
+        self.assertIn('in_snapshot, ~functions.col("pipeline_version").eqNullSafe(versions[functions.col("sector")])',
+                      run)
+
+    def test_input_checks_read_bronze_arrays_once_and_never_shuffle_them_for_selection(self):
+        # 2026-09-27 Sector 14 run: every check re-ran the left_semi selection over all Bronze rows
+        # (about 30 minutes for 14 Sectors) and BLS input shuffled the array rows once more.
+        run = inspect.getsource(tess_silver.run)
+        checks = run[:run.index("groupByKey(")]
+        self.assertIn("base = bronze.select(*BRONZE_KEY_COLUMNS)", checks)
+        self.assertLess(checks.index("base.persist("), checks.index("select_changed_tics("))
+        self.assertEqual(checks.count("keys.agg("), 1)
+        self.assertNotIn(".limit(1).count()", checks)
+        self.assertNotIn("bronze.count()", checks)
+        self.assertIn('inputs.join(functions.broadcast(selected_ids), "tic_id", "left_semi")', checks)
+        self.assertEqual(tess_silver.BRONZE_KEY_COLUMNS, ("tic_id", "sector", "schema_version", "pipeline_version"))
 
     def test_attempt_marker_records_the_snapshot_selection_and_capacity(self):
         snapshot = tess_silver_ctl.snapshot_from_rows([

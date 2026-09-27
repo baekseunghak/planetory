@@ -385,3 +385,4 @@
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | MR !227 리뷰 반영: 공급 집계 REPEATABLE READ 스냅샷과 보고 전용 최소 권한 로그인 | S15P21C206-79 | REPEATABLE READ, planetory_reporter, REPORT_TABLES, default_transaction_read_only, --manifest -, 강재민 리뷰 | 구현 완료 | [기록](2026-09-27.md) |
 | 2026-09-27 | Sector 14+ 증분 Silver: 누적 snapshot·변경 TIC 버킷 선택·실행 후 70% 용량 가드 | S15P21C206-275 | --through-sector, --delta-from-sector, tic_buckets, left_semi, capacity_budget_exceeded, tess-silver-attempt.v5, bronze_snapshot_sha256, 85%, RF2 4/5 | 구현·오프라인 검증 완료, 실클러스터 Canary 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | Silver 입력 검사의 Bronze 반복 읽기 제거(작은 열 캐시·집계 1회·broadcast semi join) | S15P21C206-275 | BRONZE_KEY_COLUMNS, eqNullSafe, broadcast, left_semi, 입력 검사 30분 | 구현·오프라인 검증 완료, 실클러스터 확인 전 | [기록](2026-09-27.md) |
