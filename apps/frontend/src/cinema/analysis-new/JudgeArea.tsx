@@ -80,6 +80,7 @@ export function JudgeArea({
   celebrate,
   areaState,
   getViewport,
+  foldedZoom,
   onSend,
 }: {
   context: AnalysisContext;
@@ -88,6 +89,8 @@ export function JudgeArea({
   celebrate: boolean;
   areaState: AreaState;
   getViewport: () => PeriodogramViewport;
+  /** Current display zoom capped to the API range (1–32). */
+  foldedZoom: number;
   /** The judgment actually sent, for the outcome event. */
   onSend: (judgment: Judgment | null) => void;
 }) {
@@ -185,7 +188,7 @@ export function JudgeArea({
         preview,
         state.judgment,
         getViewport(),
-        fold.state.view.zoom,
+        foldedZoom,
       );
       focusNext.current = "review";
       setState((previous) => ({ ...previous, editingStep: undefined, review }));

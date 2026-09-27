@@ -5,7 +5,8 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
+  type Dispatch,
+  type SetStateAction,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
@@ -94,6 +95,8 @@ export function FoldArea({
   areaState,
   onRetryFold,
   emptyRuleNote,
+  view,
+  setView,
 }: {
   context: AnalysisContext;
   data: ReadyPeriodogram;
@@ -106,14 +109,13 @@ export function FoldArea({
   onRetryFold: () => void;
   /** The rules forbid a window without observations (allowEmptyPhaseSpan). */
   emptyRuleNote: boolean;
+  view: FoldView;
+  setView: Dispatch<SetStateAction<FoldView>>;
 }) {
   const fold = useAnalysisFold();
   const { input, state: foldState, ready, cancel } = fold;
   const { state, setState } = usePhaseDraft();
   const { success, status } = foldState;
-  // Extended zoom is local presentation; the submission API accepts up to 32.
-  const [view, setView] = useState(foldState.view);
-  useEffect(() => setView(foldState.view), [foldState.view]);
   const shown =
     success &&
     input.data &&

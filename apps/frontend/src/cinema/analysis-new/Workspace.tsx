@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "../../auth/SessionProvider";
 import type {
   AnalysisContext,
@@ -201,6 +201,9 @@ function ReadyWorkspace({
   const ticId = context.ticId;
   const memberId = useSession().member?.memberId ?? null;
   const fold = useAnalysisFold();
+  // Share the display state with the submission review; preserve session resets.
+  const [foldView, setFoldView] = useState(fold.state.view);
+  useEffect(() => setFoldView(fold.state.view), [fold.state.view]);
   const { state: draft } = usePhaseDraft();
   const analysisStage = useAnalysisStage();
   const { go, ready, confirmed } = analysisStage;
@@ -504,6 +507,8 @@ function ReadyWorkspace({
       }
       window={
         <FoldArea
+          view={foldView}
+          setView={setFoldView}
           context={context}
           data={data}
           curve={curve}
@@ -518,6 +523,7 @@ function ReadyWorkspace({
       }
       judge={
         <JudgeArea
+          foldedZoom={Math.min(32, Math.max(1, foldView.zoom))}
           context={context}
           submission={submission}
           outcome={outcome}
