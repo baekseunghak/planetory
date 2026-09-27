@@ -324,6 +324,8 @@ INSERT star_unlocks(...발견 경로, world_x, world_y, depth_z, layout_ordinal,
 
 **최신성과 무효화(D-7).** 제출(6.4절)·공개 등록(서비스 API)·재개(9.3절) 응답에는 처리 후의 `skyVersion`을 넣는다. 프론트는 이 값이 마지막으로 받은 `version`과 다르면 `GET /me/sky`를 다시 받고 화면 안 범위의 타일만 재요청한다. 늦게 도착한 이전 `version`의 타일 응답은 버린다. 서버는 `version`을 회원 단위로 관리하며 다른 회원의 행동으로는 바뀌지 않는다.
 
+`version`은 타일에 보이는 값이 바뀌는 트랜잭션 안에서 오른다. 별 발견, 제출의 진행 갱신(행성 수·단계·재개 표시), 완료 판정이 별을 완료로 바꾼 경우(제출·분석 진입·판 전환 공통), 판 전환 뒤 재개가 해당한다(`S15P21C206-280`). 성과 수·등급처럼 타일에 없는 값만 바뀌면 올리지 않는다. 버전이 그대로인데 타일 값이 바뀌면 프론트는 같은 버전의 옛 타일 캐시를 계속 쓰고, 새로 받은 별 상세와 달라 계약 오류로 멈춘다.
+
 `GET /api/v1/me/sky/locate?ticId=123456789` — P1. 검색·필터(HOME-04)로 고른 별이 아직 받지 않은 범위에 있을 때 카메라를 옮기기 위한 조회. 발견한 별만 허용하며 미발견 별은 `STAR_LOCKED`.
 
 ```json
@@ -1453,7 +1455,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
    layout_ordinal, world_x, world_y, depth_z, layout_version=4.1절 은하 배치 함수 결과)
    ON CONFLICT (user_id, tic_id) DO NOTHING   -- 9.4절과 같은 발견 함수. 고른 별이 그사이 다른 경로로 열렸으면 같은 seed로 다시 고른다
    같은 성과의 재처리는 2단계에서 멈춰 여기 오지 않는다. UNIQUE(trigger_achievement_id, seq)는 DB 안전망이다 (GRD-08)
-6. 반환. skyVersion은 새 별을 열었을 때만 오른다
+6. 반환. 이 함수의 skyVersion은 새 별을 열었을 때만 오른다. 제출의 진행 갱신은 4.1절 최신성에 따라 따로 올린다
 ```
 
 등급 상승·완료는 트리거가 아니다(POL-27, GRD-08, 결정 1·2). 확정·FP 경로(제출)와 미확정 경로(공개)가 같은 함수를 쓰므로 여러 신호의 일괄 공개도 순차 개별 인정과 같은 결과가 된다(COM-19, AT-107).
