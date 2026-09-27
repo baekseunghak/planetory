@@ -1,7 +1,7 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { ClassicAnalysis } from "../analysis-classic";
 import { CinematicAnalysis } from "../analysis-new";
-import { cinemaAnalysisNew, cinemaDevTools } from "./dev-tools";
+import { cinemaAnalysisClassic, cinemaDevTools } from "./dev-tools";
 import {
   ANALYSIS_VARIANT_KEY,
   planAnalysisVariant,
@@ -14,10 +14,10 @@ import "./analysis-switch.css";
 
 export type { AnalysisVariant };
 export { ANALYSIS_VARIANT_KEY };
-/** The build's variant (VITE_CINEMA_ANALYSIS, classic unless "new"). */
-export const DEFAULT_ANALYSIS_VARIANT: AnalysisVariant = cinemaAnalysisNew
-  ? "cinematic"
-  : "classic";
+/** The build's variant (VITE_CINEMA_ANALYSIS, the new design unless "classic"). */
+export const DEFAULT_ANALYSIS_VARIANT: AnalysisVariant = cinemaAnalysisClassic
+  ? "classic"
+  : "cinematic";
 
 const variants: Record<AnalysisVariant, ComponentType> = {
   classic: ClassicAnalysis,
@@ -35,7 +35,7 @@ function readStored(): string | null {
 /** The toggle's current choice (developer tools): stored, else the build's. */
 export function readAnalysisVariant(): AnalysisVariant {
   return planAnalysisVariant({
-    build: cinemaAnalysisNew,
+    build: cinemaAnalysisClassic ? "classic" : undefined,
     devTools: true,
     stored: readStored(),
   }).variant;
@@ -95,9 +95,9 @@ export function AnalysisVariantToggle({
  * Switching remounts the analysis. Drafts survive (session draft storage) and
  * an in-flight submission keeps its request ID for recovery, as on reload.
  *
- * Members get the build's variant (./variant.ts: classic unless the build
- * defines VITE_CINEMA_ANALYSIS=new) and no toggle: the A/B choice is the
- * team's, not theirs. The toggle (and a stored choice) only count on a dev
+ * Members get the build's variant (./variant.ts: the new design unless the
+ * build defines VITE_CINEMA_ANALYSIS=classic) and no toggle: the team chose
+ * the new design. The toggle (and a stored choice) only count on a dev
  * server started with VITE_CINEMA_DEV_TOOLS=true (./dev-tools.ts).
  */
 export function AnalysisSwitch({
@@ -110,10 +110,10 @@ export function AnalysisSwitch({
   // hold from an earlier dev session is never read here.
   if (cinemaDevTools)
     return <DevAnalysisSwitch toggleClassName={toggleClassName} />;
-  return cinemaAnalysisNew ? (
-    <CinematicAnalysis key="cinematic" />
-  ) : (
+  return cinemaAnalysisClassic ? (
     <ClassicAnalysis key="classic" />
+  ) : (
+    <CinematicAnalysis key="cinematic" />
   );
 }
 
