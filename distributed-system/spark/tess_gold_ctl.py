@@ -347,12 +347,36 @@ def finalize(*, release_dir: Path, output: str, final: str, **fields: Any) -> di
     return marker
 
 
+def committed_attempt(args: argparse.Namespace) -> tuple[str, dict[str, Any]] | None:
+    """This run's already committed attempt, re-audited, or None.
+
+    A crash after the atomic commit but before the state file says complete would otherwise
+    make the restarted unit compute and commit a second attempt for the same run.
+    """
+    root = f"{GOLD_ROOT}/run_id={args.run_id}"
+    if not hdfs_exists(root):
+        return None
+    finals = []
+    for line in hdfs("dfs", "-ls", root).stdout.splitlines():
+        fields = line.split()
+        if fields and GOLD_ATTEMPT_RE.fullmatch(fields[-1]):
+            finals.append(fields[-1])
+    if not finals:
+        return None
+    if len(finals) > 1:
+        raise GoldDataContractError(f"run {args.run_id} has {len(finals)} committed attempts; resolve them first")
+    marker, _ = hdfs_json(f"{finals[0]}/_READY.json")
+    requested = {"silver_attempt": args.silver_attempt, "external": args.external,
+                 "required_sources": sorted(args.required_source), "excluded_tics": sorted(args.exclude_tic),
+                 "approvals": {"identity": args.approval_identity, "discoverability": args.approval_discoverability,
+                               "external": args.approval_external}}
+    if any(marker.get(key) != value for key, value in requested.items()):
+        raise GoldDataContractError(f"committed attempt {finals[0]} was made from other inputs; use a new run ID")
+    audit_gold(finals[0], marker, content=False)
+    return finals[0], marker
+
+
 def run_attempt(args: argparse.Namespace, *, validation: bool = False) -> tuple[str, dict[str, Any]]:
-    coverage = cluster_preflight(args.bronze_coverage)
-    silver = silver_input(args.silver_attempt, coverage)
-    external = external_input(args.external, args.required_source)
-    release_dir = Path(args.release_dir).resolve()
-    runtime_hdfs = build_runtime(release_dir)
     attempt_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     root = VALIDATION_ROOT if validation else "/lake/gold/tess"
     output = f"{root}/.staging/run={args.run_id}/attempt={attempt_id}"
@@ -362,9 +386,21 @@ def run_attempt(args: argparse.Namespace, *, validation: bool = False) -> tuple[
     state = {"run_id": args.run_id, "attempt_id": attempt_id, "command": args.command, "output": output,
              "unit": unit_name(args.command, args.run_id), "final": final, "status": "prepared",
              "updated_at_utc": utc_now()}
+    # Written before the input checks, so a contract failure there reaches Airflow with its reason.
     write_state(state_file, state)
-    prepare_paths(output, args.run_id, attempt_id)
     try:
+        if not validation and (adopted := committed_attempt(args)):
+            final, marker = adopted
+            state.update(status="complete", final=final, adopted=True, result=marker, updated_at_utc=utc_now())
+            write_state(state_file, state)
+            print(f"GOLD_COMMITTED_ATTEMPT_ADOPTED final={final}", flush=True)
+            return final, marker
+        coverage = cluster_preflight(args.bronze_coverage)
+        silver = silver_input(args.silver_attempt, coverage)
+        external = external_input(args.external, args.required_source)
+        release_dir = Path(args.release_dir).resolve()
+        runtime_hdfs = build_runtime(release_dir)
+        prepare_paths(output, args.run_id, attempt_id)
         command = submit_command(release_dir=release_dir, runtime_hdfs=runtime_hdfs, coverage=coverage,
                                  args=args, attempt_id=attempt_id, output=output)
         application_id = submit(command, output, state_file, state)
@@ -429,7 +465,7 @@ def read_verdict(output: str, run_id: str, attempt: str) -> dict[str, Any]:
 
 
 def write_publish_ready(run_id: str, attempt: str, gold_ready_sha256: str, marker: dict[str, Any],
-                        verdict: dict[str, Any]) -> dict[str, Any]:
+                        verdict: dict[str, Any], check_id: str) -> dict[str, Any]:
     """The only writer of publish-ready. mv refuses an existing marker, so two gates cannot both win."""
     value = {
         "schema": PUBLISH_READY_SCHEMA, "run_id": run_id, "attempt": attempt, "gold_ready_sha256": gold_ready_sha256,
@@ -442,46 +478,66 @@ def write_publish_ready(run_id: str, attempt: str, gold_ready_sha256: str, marke
     }
     folder = f"{PUBLISH_READY_ROOT}/run_id={run_id}"
     hdfs("dfs", "-mkdir", "-p", folder)
-    hdfs("dfs", "-put", "-f", "-", f"{folder}/_READY.json.part",
-         input_text=json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-    hdfs("dfs", "-setrep", "-w", "2", f"{folder}/_READY.json.part")
-    hdfs("dfs", "-mv", f"{folder}/_READY.json.part", f"{folder}/_READY.json")
+    part = f"{folder}/_READY.json.{check_id}.part"  # per check, so a concurrent gate cannot swap its content
+    hdfs("dfs", "-put", "-f", "-", part, input_text=json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+    hdfs("dfs", "-setrep", "-w", "2", part)
+    hdfs("dfs", "-mv", part, f"{folder}/_READY.json")
     print(f"GOLD_PUBLISH_READY run={run_id} attempt={attempt}", flush=True)
     return value
 
 
+def application_ended(application_id: str | None) -> bool:
+    if not application_id:
+        return True
+    try:
+        return application_state(application_id) in TERMINAL_APP_STATES
+    except Exception:  # an unreadable YARN state keeps the staging a running app may still need
+        return False
+
+
 def command_gate(args: argparse.Namespace) -> None:
-    run_id, marker, gold_ready_sha256 = gate_input(args.attempt)
-    ready = f"{PUBLISH_READY_ROOT}/run_id={run_id}/_READY.json"
-    if hdfs_exists(ready):
-        existing, _ = hdfs_json(ready)
-        if (existing.get("attempt"), existing.get("gold_ready_sha256")) == (args.attempt, gold_ready_sha256):
-            print(f"GOLD_PUBLISH_READY_CACHED run={run_id}", flush=True)
-            return
-        raise GoldDataContractError(f"run {run_id} is already publish-ready with another attempt")
-    release_dir = Path(args.release_dir).resolve()
-    runtime_hdfs = build_runtime(release_dir)
-    check_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    match = GOLD_ATTEMPT_RE.fullmatch(args.attempt)
+    if not match:
+        raise GoldDataContractError(f"gate input must be a committed Gold attempt path: {args.attempt}")
+    run_id, check_id = match.group(1), datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output, staging = gate_paths(run_id, check_id)
     state_file = Path(args.state_root) / f"run={run_id}" / f"gate={check_id}.json"
     state = {"run_id": run_id, "command": "gate", "attempt": args.attempt, "output": output,
              "unit": unit_name("gate", run_id), "status": "prepared", "updated_at_utc": utc_now()}
     write_state(state_file, state)
-    hdfs("dfs", "-mkdir", "-p", output, staging)
-    hdfs("dfs", "-chown", f"{SPARK_HDFS_USER}:hadoop", output, staging)
     try:
-        submit(gate_command(release_dir=release_dir, runtime_hdfs=runtime_hdfs, run_id=run_id, check_id=check_id,
-                            attempt=args.attempt, output=output), output, state_file, state)
-    finally:
-        hdfs("dfs", "-rm", "-r", "-skipTrash", staging, check=False)
-    verdict = read_verdict(output, run_id, args.attempt)
-    if not verdict["ok"]:
-        # The verdict stays under .gate for diagnosis; no publish-ready is written.
-        state.update(status="rejected", errors=verdict["errors"], updated_at_utc=utc_now())
-        write_state(state_file, state)
-        raise GoldDataContractError("publish gate rejected the attempt: " + "; ".join(verdict["errors"][:5]))
-    value = write_publish_ready(run_id, args.attempt, gold_ready_sha256, marker, verdict)
-    hdfs("dfs", "-rm", "-r", "-skipTrash", output, check=False)
+        _, marker, gold_ready_sha256 = gate_input(args.attempt)
+        ready = f"{PUBLISH_READY_ROOT}/run_id={run_id}/_READY.json"
+        if hdfs_exists(ready):
+            value, _ = hdfs_json(ready)
+            if (value.get("attempt"), value.get("gold_ready_sha256")) != (args.attempt, gold_ready_sha256):
+                raise GoldDataContractError(f"run {run_id} is already publish-ready with another attempt")
+            # Also the restart after an interrupted gate: record the state it did not get to write.
+            print(f"GOLD_PUBLISH_READY_CACHED run={run_id}", flush=True)
+        else:
+            release_dir = Path(args.release_dir).resolve()
+            runtime_hdfs = build_runtime(release_dir)
+            hdfs("dfs", "-mkdir", "-p", output, staging)
+            hdfs("dfs", "-chown", f"{SPARK_HDFS_USER}:hadoop", output, staging)
+            try:
+                submit(gate_command(release_dir=release_dir, runtime_hdfs=runtime_hdfs, run_id=run_id,
+                                    check_id=check_id, attempt=args.attempt, output=output), output, state_file, state)
+            finally:
+                if application_ended(state.get("application_id")):
+                    hdfs("dfs", "-rm", "-r", "-skipTrash", staging, check=False)
+            verdict = read_verdict(output, run_id, args.attempt)
+            if not verdict["ok"]:
+                # The verdict stays under .gate for diagnosis; no publish-ready is written.
+                state.update(status="rejected", errors=verdict["errors"], updated_at_utc=utc_now())
+                write_state(state_file, state)
+                raise GoldDataContractError("publish gate rejected the attempt: " + "; ".join(verdict["errors"][:5]))
+            value = write_publish_ready(run_id, args.attempt, gold_ready_sha256, marker, verdict, check_id)
+            hdfs("dfs", "-rm", "-r", "-skipTrash", output, check=False)
+    except (GoldDataContractError, SilverDataContractError) as exc:
+        if state["status"] != "rejected":
+            state.update(status="terminal_failed", failure_detail=str(exc)[:500], updated_at_utc=utc_now())
+            write_state(state_file, state)
+        raise
     state.update(status="publish_ready", result=value, updated_at_utc=utc_now())
     write_state(state_file, state)
 
@@ -516,7 +572,10 @@ def unit_text(args: argparse.Namespace, run_id: str) -> str:
         f"Description=Planetory TESS Gold {args.operation} {run_id}",
         "After=network-online.target hadoop-hdfs-namenode.service hadoop-yarn-resourcemanager.service docker.service",
         "Wants=network-online.target",
-        "StartLimitIntervalSec=0",
+        # A deterministic non-contract failure must not resubmit to YARN forever; 7 starts a day is
+        # one more than the DAG's MAX_UNIT_RESTARTS, after which the unit stays failed.
+        "StartLimitIntervalSec=1d",
+        "StartLimitBurst=7",
         "",
         "[Service]",
         "Type=oneshot",
@@ -673,6 +732,8 @@ def validate(args: argparse.Namespace) -> None:
         raise SystemExit("--silver-attempt, --external and --required-source are required")
     if len(set(args.required_source)) != len(args.required_source):
         raise SystemExit("--required-source must not repeat")
+    if not ATTEMPT_PATH_RE.fullmatch(args.silver_attempt) or not EXTERNAL_PATH_RE.fullmatch(args.external):
+        raise SystemExit("--silver-attempt and --external must be committed attempt and snapshot paths")
     if command == "preflight":
         return
     if not RUN_ID_RE.fullmatch(args.run_id or ""):
@@ -683,8 +744,8 @@ def validate(args: argparse.Namespace) -> None:
     tics = getattr(args, "tic_id", None) or []
     if len(tics) > 5 or any(value <= 0 for value in [*tics, *args.exclude_tic]):
         raise SystemExit("canary takes at most five positive TIC IDs; excluded TICs must be positive")
-    if args.shuffle_partitions <= 0 or args.output_partitions <= 0:
-        raise SystemExit("partition counts must be positive")
+    if not 1 <= args.shuffle_partitions <= 2000 or not 1 <= args.output_partitions <= 200:
+        raise SystemExit("shuffle partitions must be in 1..2000 and output partitions in 1..200")
 
 
 def main(argv: list[str] | None = None) -> int:

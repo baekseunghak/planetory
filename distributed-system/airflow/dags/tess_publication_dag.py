@@ -30,7 +30,7 @@ DONE = {"run": "complete", "gate": "publish_ready"}
 def request(conf: dict) -> dict:
     try:
         return publication_request(conf)
-    except ValueError as error:
+    except (ValueError, TypeError) as error:
         raise AirflowFailException(str(error)) from error
 
 
@@ -64,8 +64,10 @@ class GoldUnitWaitOperator(BaseOperator):
         remaining = remaining_wait_time(context["ti"].start_date, WAIT_LIMIT, datetime.now(timezone.utc))
         if remaining <= timedelta():
             raise AirflowFailException(f"Gold {self.operation} did not complete within {WAIT_LIMIT}")
-        self.defer(trigger=TimeDeltaTrigger(POLL_INTERVAL), method_name="execute_complete",
-                   kwargs={"failures": failures}, timeout=remaining)
+        # No defer timeout: a TaskDeferralTimeout would be retried with a fresh start_date and stretch
+        # the limit; the last poll lands on the deadline and the branch above fails without retry.
+        self.defer(trigger=TimeDeltaTrigger(min(POLL_INTERVAL, remaining)), method_name="execute_complete",
+                   kwargs={"failures": failures})
 
     def execute(self, context: dict):
         return self._check_or_defer(context, failures=0)

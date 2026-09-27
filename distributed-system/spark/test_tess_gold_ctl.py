@@ -1,5 +1,6 @@
 """80 Gold 제어기: 입력 계보 검증, 제출 인자, 확정 marker, staging 보호를 HDFS·YARN 호출 없이 본다."""
 import json
+import re
 import sys
 import unittest
 from argparse import Namespace
@@ -11,9 +12,11 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "astro-kernel"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import tess_bronze_ctl  # noqa: E402
 import tess_gold  # noqa: E402
 import tess_gold_ctl as ctl  # noqa: E402
 from tess_gold_ctl import GoldDataContractError  # noqa: E402
+from tess_silver_ctl import SilverDataContractError  # noqa: E402
 
 SILVER = ("/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/"
           "run_id=20260924T133559Z/attempt=20260924T133730Z")
@@ -122,7 +125,7 @@ class GateTest(unittest.TestCase):
     def setUp(self):
         self.files = {f"{ATTEMPT}/_READY.json": (GOLD_MARKER, "g" * 64), f"{SILVER}/_READY.json": ({}, "s" * 64),
                       f"{EXTERNAL}/_READY.json": ({}, "r" * 64)}
-        self.exists, self.calls = set(), []
+        self.exists, self.calls, self.states = set(), [], []
 
     def hdfs(self, *argv, input_text=None, check=True):
         self.calls.append((argv, input_text))
@@ -134,7 +137,8 @@ class GateTest(unittest.TestCase):
                        candidates=2, candidates_sha256="h" * 64, **verdict)
         with patch.object(ctl, "hdfs_json", lambda path: self.files[path]), patch.object(ctl, "audit_gold"), \
                 patch.object(ctl, "hdfs", self.hdfs), patch.object(ctl, "hdfs_exists", lambda p: p in self.exists), \
-                patch.object(ctl, "build_runtime", lambda release: "/rt.tgz"), patch.object(ctl, "write_state"), \
+                patch.object(ctl, "build_runtime", lambda release: "/rt.tgz"), \
+                patch.object(ctl, "write_state", lambda path, state: self.states.append(dict(state))), \
                 patch.object(ctl, "event_log_conf", lambda: []), \
                 patch.object(ctl, "submit") as submit, patch.object(ctl, "read_verdict", lambda *a: verdict):
             ctl.command_gate(Namespace(attempt=ATTEMPT, release_dir="/r", state_root=tempfile_dir()))
@@ -152,16 +156,23 @@ class GateTest(unittest.TestCase):
         self.assertEqual(marker["files"], GOLD_MARKER["files"])
         self.assertEqual(marker["excluded_tics"], [149603524])
         self.assertIn(("dfs", "-mv"), [argv[:2] for argv, _ in self.calls])
+        # Each check writes its own .part, so a concurrent gate cannot swap the content before mv.
+        part = next(argv[4] for argv, _ in self.calls if argv[:3] == ("dfs", "-put", "-f"))
+        self.assertRegex(part, r"/_READY\.json\.[0-9]{8}T[0-9]{6}Z\.part$")
+        self.assertEqual(self.states[-1]["status"], "publish_ready")
         self.calls.clear()
         with self.assertRaisesRegex(GoldDataContractError, "rejected"):
             self.run_gate(dict(ok=False, errors=["tic 7: array checksum mismatch"]))
         self.assertFalse(any(argv[:2] == ("dfs", "-mv") for argv, _ in self.calls))
+        self.assertEqual(self.states[-1]["status"], "rejected")  # not overwritten as terminal_failed
 
     def test_one_publish_ready_per_run(self):
         ready = f"{ctl.PUBLISH_READY_ROOT}/run_id=20260927T010000Z/_READY.json"
         self.exists.add(ready)
         self.files[ready] = ({"attempt": ATTEMPT, "gold_ready_sha256": "g" * 64}, "x" * 64)
         self.run_gate(dict(ok=True, errors=[])).assert_not_called()
+        # The restart after an interrupted gate records the state the first run did not get to write.
+        self.assertEqual((self.states[-1]["status"], self.states[-1]["result"]["attempt"]), ("publish_ready", ATTEMPT))
         self.files[ready] = ({"attempt": ATTEMPT.replace("010001Z", "020000Z"), "gold_ready_sha256": "o" * 64}, "x")
         with self.assertRaisesRegex(GoldDataContractError, "already publish-ready"):
             self.run_gate(dict(ok=True, errors=[]))
@@ -173,6 +184,8 @@ class GateTest(unittest.TestCase):
             self.files[f"{ATTEMPT}/_READY.json"] = (dict(GOLD_MARKER, **change), "g" * 64)
             with self.assertRaisesRegex(GoldDataContractError, reason):
                 self.run_gate(dict(ok=True, errors=[]))
+            self.assertEqual(self.states[-1]["status"], "terminal_failed")  # Airflow shows the reason
+            self.assertIn(reason, self.states[-1]["failure_detail"])
         with self.assertRaisesRegex(GoldDataContractError, "committed Gold attempt"):
             ctl.gate_input("/lake/gold/tess/.staging/run=R/attempt=A")
 
@@ -183,6 +196,9 @@ class UnitTest(unittest.TestCase):
         release = "/opt/planetory-silver/releases/20260927T000000Z"
         run = Namespace(**vars(args(operation="run", release_dir=release, state_root=str(root))))
         text = ctl.unit_text(run, run.run_id)
+        # A deterministic non-contract failure stops after a bounded number of starts.
+        self.assertIn("StartLimitBurst=7", text)
+        self.assertNotIn("StartLimitIntervalSec=0", text)
         self.assertIn(f"ExecStart=/usr/bin/python3.12 {release}/spark/tess_gold_ctl.py run --release-dir {release}", text)
         self.assertIn("--approval-identity 112 !152", text)  # args() uses a spaced value: validate() refuses it
         with self.assertRaises(SystemExit), redirect_stderr(StringIO()):
@@ -212,6 +228,65 @@ class UnitTest(unittest.TestCase):
             self.assertEqual(ctl.main(argv), 65)  # a completed run ID never runs again
 
 
+class RestartTest(unittest.TestCase):
+    RUN_ROOT = f"{ctl.GOLD_ROOT}/run_id=20260927T010000Z"
+    FINAL = f"{ctl.GOLD_ROOT}/run_id=20260927T010000Z/attempt=20260927T010001Z"
+
+    def marker(self, **changes):
+        return {**dict(silver_attempt=SILVER, external=EXTERNAL, required_sources=["nea_toi"],
+                       excluded_tics=[149603524],
+                       approvals={"identity": "112 !152", "discoverability": "123 !173", "external": "124 !190"}),
+                **changes}
+
+    def run_attempt(self, listing, marker, states):
+        def recompute(*argv):
+            raise AssertionError("a committed run must not be computed again")
+
+        with patch.object(ctl, "hdfs_exists", lambda path: path == self.RUN_ROOT), \
+                patch.object(ctl, "hdfs", lambda *argv, **kw: Namespace(stdout=listing, returncode=0)), \
+                patch.object(ctl, "hdfs_json", lambda path: (marker, "m" * 64)), patch.object(ctl, "audit_gold"), \
+                patch.object(ctl, "write_state", lambda path, state: states.append(dict(state))), \
+                patch.object(ctl, "cluster_preflight", recompute):
+            return ctl.run_attempt(args(release_dir="/r", state_root=tempfile_dir()))
+
+    def test_a_restart_after_the_commit_adopts_the_committed_attempt(self):
+        states = []
+        final, marker = self.run_attempt(f"drwxr-x--- - u g 0 2026-09-27 01:00 {self.FINAL}\n", self.marker(), states)
+        self.assertEqual((final, marker["silver_attempt"]), (self.FINAL, SILVER))
+        self.assertEqual((states[-1]["status"], states[-1]["final"], states[-1]["adopted"]),
+                         ("complete", self.FINAL, True))
+        for listing, marker, reason in (
+                (f"d {self.FINAL}\nd {self.FINAL[:-3]}02Z\n", self.marker(), "2 committed attempts"),
+                (f"d {self.FINAL}\n", self.marker(excluded_tics=[]), "other inputs")):
+            states.clear()
+            with self.subTest(reason=reason), self.assertRaisesRegex(GoldDataContractError, reason):
+                self.run_attempt(listing, marker, states)
+            self.assertEqual(states[-1]["status"], "terminal_failed")
+
+    def test_input_contract_failures_are_recorded_with_their_reason(self):
+        states = []
+        broken = SilverDataContractError("Silver checksum mismatch output=iteration")
+        with patch.object(ctl, "hdfs_exists", lambda path: False), \
+                patch.object(ctl, "write_state", lambda path, state: states.append(dict(state))), \
+                patch.object(ctl, "cluster_preflight", lambda coverage: COVERAGE), \
+                patch.object(ctl, "silver_input", side_effect=broken), \
+                self.assertRaises(SilverDataContractError):
+            ctl.run_attempt(args(release_dir="/r", state_root=tempfile_dir(), bronze_coverage="/lake/bronze/tess/c"))
+        self.assertEqual([s["status"] for s in states], ["prepared", "terminal_failed"])
+        self.assertIn("checksum mismatch", states[-1]["failure_detail"])
+
+    def test_gold_and_gate_apps_hold_pipeline_slots(self):
+        # An unrecognised name would count as a foreign app and block every other pipeline preflight.
+        with patch.object(ctl, "event_log_conf", lambda: []):
+            gold = ctl.submit_command(release_dir=Path("/r"), runtime_hdfs="/rt.tgz", coverage=COVERAGE,
+                                      args=args(release_dir="/r"), attempt_id="20260927T010001Z", output="/o")
+            gate = ctl.gate_command(release_dir=Path("/r"), runtime_hdfs="/rt.tgz", run_id="20260927T010000Z",
+                                    check_id="20260927T020000Z", attempt=self.FINAL, output="/o")
+        for command in (gold, gate):
+            name = command[command.index("--name") + 1]
+            self.assertTrue(tess_bronze_ctl.PIPELINE_APP_NAME_RE.match(name), name)
+
+
 def tempfile_dir():
     import tempfile
     return tempfile.mkdtemp()
@@ -226,7 +301,9 @@ class ArgumentTest(unittest.TestCase):
         ctl.validate(ctl.parser().parse_args(self.base))
         canary = ["canary", *self.base[1:]] + [a for tic in range(1, 7) for a in ("--tic-id", str(tic))]
         for argv in (self.base + ["--approval-external", " "], self.base + ["--required-source", "nea_toi"],
-                     self.base + ["--run-id", "run-1"], canary):
+                     self.base + ["--run-id", "run-1"], canary, self.base + ["--shuffle-partitions", "5000"],
+                     [value.replace(SILVER, "/lake/silver/other") for value in self.base],
+                     [value.replace(EXTERNAL, "/lake/external/tess/latest") for value in self.base]):
             with self.assertRaises(SystemExit), redirect_stderr(StringIO()):
                 ctl.validate(ctl.parser().parse_args(argv))
 

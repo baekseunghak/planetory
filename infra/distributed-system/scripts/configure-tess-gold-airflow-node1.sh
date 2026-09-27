@@ -18,6 +18,10 @@ for path in /opt/planetory-silver /opt/planetory-silver/releases "$release" "$re
     echo GOLD_RELEASE_NOT_ROOT_OWNED_OR_WRITABLE >&2; exit 1;
   }
 done
+# The controllers run as root and import the whole release (Bronze/Silver controllers, astro_kernel).
+[[ -z "$(find "$release" \( -type l -o ! -user root -o -perm /022 \) -print -quit)" ]] || {
+  echo GOLD_RELEASE_NOT_ROOT_OWNED_OR_WRITABLE >&2; exit 1;
+}
 id tess-airflow >/dev/null
 # sudoers requires '=' inside command arguments to be escaped as '\='.
 run='[0-9]{8}T[0-9]{6}Z'

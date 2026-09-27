@@ -147,6 +147,21 @@ def stream_hash(items: Iterable[str]) -> str:
     return digest.hexdigest()
 
 
+def read_hdfs_file(context, path: str) -> bytes:
+    """A whole HDFS file through the Hadoop FileSystem API (same as tess_gold.read_hdfs_file).
+
+    textFile goes through FileInputFormat, which drops names starting with '_' or '.', so
+    it reports the attempt's _READY.json as a missing input path.
+    """
+    jvm = context._jvm
+    hadoop_path = jvm.org.apache.hadoop.fs.Path(path)
+    stream = hadoop_path.getFileSystem(context._jsc.hadoopConfiguration()).open(hadoop_path)
+    try:
+        return bytes(jvm.org.apache.commons.io.IOUtils.toByteArray(stream))
+    finally:
+        stream.close()
+
+
 def run(args: argparse.Namespace) -> None:
     from pyspark import SparkFiles, StorageLevel
     from pyspark.sql import SparkSession
@@ -157,7 +172,7 @@ def run(args: argparse.Namespace) -> None:
     try:
         with open(SparkFiles.get(args.schema), encoding="utf-8") as stream:
             schema = json.load(stream)
-        marker = json.loads("".join(context.textFile(f"{args.attempt}/_READY.json").collect()))
+        marker = json.loads(read_hdfs_file(context, f"{args.attempt}/_READY.json"))
         verdict = dict(schema=VERDICT_SCHEMA, gate_version=GATE_VERSION, run_id=args.run_id,
                        attempt=args.attempt.removeprefix("hdfs://planetory"))
         manifests = [parse(line) for line in context.textFile(f"{args.attempt}/manifest").collect()]

@@ -1,5 +1,7 @@
 import ast
 import json
+import re
+import shlex
 import sys
 import unittest
 from pathlib import Path
@@ -14,7 +16,7 @@ RELEASE = "/opt/planetory-silver/releases/20260927T000000Z"
 SILVER = ("/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/"
           "run_id=20260924T133559Z/attempt=20260924T133730Z")
 CONF = {"release": RELEASE, "run_id": "20260927T010000Z", "silver_attempt": SILVER,
-        "required_sources": ["nea_toi", "exofop_toi"], "exclude_tics": [307210830, 149603524],
+        "required_sources": ["nea_toi", "exofop_toi", "nea_pscomppars", "mast_tce_s1_s13"], "exclude_tics": [307210830, 149603524],
         "approvals": {"identity": "S15P21C206-112/MR152/8aaf335d", "discoverability": "S15P21C206-123/MR173/e7b578fd",
                       "external": "S15P21C206-124/MR190/67a9e741"}}
 ATTEMPT = "/lake/gold/tess/publication-candidates/run_id=20260927T010000Z/attempt=20260927T020000Z"
@@ -28,6 +30,7 @@ class PublicationContractTest(unittest.TestCase):
         gold = gold_start_command(request)
         self.assertIn(f"start-unit run --release-dir {RELEASE} --run-id 20260927T010000Z --silver-attempt {SILVER} "
                       "--external /lake/external/tess/run_id=20260927T010000Z --required-source exofop_toi "
+                      "--required-source mast_tce_s1_s13 --required-source nea_pscomppars "
                       "--required-source nea_toi --exclude-tic 149603524 --exclude-tic 307210830 "
                       "--approval-identity S15P21C206-112/MR152/8aaf335d", gold)
         self.assertTrue(gold.endswith("--shuffle-partitions 400 --output-partitions 40"))
@@ -39,7 +42,8 @@ class PublicationContractTest(unittest.TestCase):
     def test_unsafe_or_incomplete_requests_are_refused(self):
         for change in ({"extra": 1}, {"release": "/tmp/r"}, {"run_id": "run-1"}, {"silver_attempt": "/lake/x"},
                        {"required_sources": []}, {"required_sources": ["nea_toi", "nea_toi"]},
-                       {"required_sources": ["other"]}, {"exclude_tics": [0]}, {"exclude_tics": [1, 1]},
+                       {"required_sources": ["other"]}, {"required_sources": ["nea_toi", "exofop_toi"]},
+                       {"required_sources": [{}]}, {"exclude_tics": [0]}, {"exclude_tics": [1, 1]},
                        {"approvals": {**CONF["approvals"], "external": "MR 190"}},
                        {"approvals": {"identity": "a", "discoverability": "b"}}, {"shuffle_partitions": 0}):
             with self.assertRaises(ValueError, msg=change):
@@ -70,6 +74,35 @@ class PublicationContractTest(unittest.TestCase):
                                ({"LoadState": "not-found"}, None), (loaded, {"status": "failed"})):
             self.assertEqual(unit_progress(status(systemd, state), "publish_ready", 6)[0], "terminal")
         self.assertEqual(unit_progress("no marker", "complete", 6)[0], "failed")
+        # A rerun is already running while the newest state file is still the previous attempt's failure.
+        self.assertEqual(unit_progress(status({**loaded, "ActiveState": "activating"}, {"status": "terminal_failed"}),
+                                       "complete", 6), ("pending", None))
+
+    def test_generated_commands_match_the_node1_sudoers_policy(self):
+        # The contract builds the commands and the setup script writes the sudo regexes; they must agree.
+        script = (DAGS.parents[2] / "infra/distributed-system/scripts/"
+                  "configure-tess-gold-airflow-node1.sh").read_text(encoding="utf-8")
+        values = {"release": RELEASE}
+        expand = lambda text: re.sub(r"\$(\w+)", lambda m: values[m.group(1)], text)  # noqa: E731
+        for name, quote, raw in re.findall(r"^(run|token|silver)=(['\"])(.*)\2$", script, re.M):
+            values[name] = raw if quote == "'" else expand(raw.replace("\\\\", "\\"))
+        # Unquoted heredoc: bash expands the variables and reduces \\ and \$ before sudo reads the rule.
+        patterns = [re.compile(expand(row.split("NOPASSWD: /usr/bin/python3.12 ", 1)[1])
+                               .replace("\\\\", "\\").replace("\\$", "$"))
+                    for row in script.splitlines() if row.startswith("tess-airflow ALL=")]
+        self.assertEqual(len(patterns), 4)
+        request = publication_request({**CONF, "exclude_tics": list(range(1, 21)), "shuffle_partitions": 2000})
+        commands = [collect_command(request), gold_start_command(request), gate_start_command(request, ATTEMPT),
+                    status_command(request, "run"), status_command(request, "gate")]
+        for command in commands:
+            argv = shlex.split(command)
+            with self.subTest(command=argv[4]):
+                self.assertEqual(argv[:3], ["/usr/bin/sudo", "-n", "/usr/bin/python3.12"])
+                self.assertTrue(any(p.fullmatch(" ".join(argv[3:])) for p in patterns))
+        tampered = [commands[1] + " --tic-id 1", commands[0].replace(RELEASE, RELEASE[:-1] + "Y"),
+                    commands[2].replace("publication-candidates/", ".staging/")]
+        for command in tampered:
+            self.assertFalse(any(p.fullmatch(" ".join(shlex.split(command)[3:])) for p in patterns), command)
 
     def test_dag_is_opt_in_and_ends_with_the_approval(self):
         source = (DAGS / "tess_publication_dag.py").read_text(encoding="utf-8")

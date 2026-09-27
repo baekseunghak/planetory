@@ -115,7 +115,8 @@ def yarn_slot(prefix: Path = Path(YARN_SLOT_PREFIX), slots: int | None = None):
 
 
 # Bronze (77/252) and Silver (78) app names; these are bounded by yarn_slot, not refused.
-PIPELINE_APP_NAME_RE = re.compile(r"S15P21C206-(77-bronze|78-silver)-[0-9]{8}T[0-9]{6}Z-")
+# Every YARN app the pipeline controllers submit; each holds one of the shared slots (80: Gold and gate).
+PIPELINE_APP_NAME_RE = re.compile(r"S15P21C206-(77-bronze|78-silver|80-gold|80-gate)-[0-9]{8}T[0-9]{6}Z-")
 
 
 def foreign_running_applications(listing: str) -> list[str]:

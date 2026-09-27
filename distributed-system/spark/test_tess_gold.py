@@ -119,6 +119,9 @@ class GoldFromSilverTest(SilverFixture, unittest.TestCase):
     def test_held_and_no_signal_stars_never_need_curves(self):
         incomplete = dict(self.iteration, status="incomplete", complete=False, termination="max_iterations_reached")
         self.assertEqual(self.build(incomplete, row=None)["status"], "held")
+        # What 1~13 Silver stores for its 17,548 qa_stopped TICs (manifest status qa_stopped).
+        stopped = dict(self.iteration, status="failed", complete=False, termination="removal_qa_failed")
+        self.assertEqual(self.build(stopped, row=None)["status"], "held")
         silent = dict(self.iteration, accepted=[], n_accepted=0, termination="no_quality_peak")
         self.assertEqual(self.build(silent, row=None)["status"], "no_signal")
 
@@ -232,6 +235,11 @@ class SparkBoundaryTest(SilverFixture, unittest.TestCase):
                                      sources, ["nea_toi"], APPROVALS)
         self.assertEqual(set(bad), {"tic_id", "contract_error"})
         # One Sector cannot carry two PROCVERs: the observation row would be ambiguous.
+        # A deterministic failure outside the kernel's own errors stops the run instead of restarting it.
+        broken = tess_gold.evaluate_row(dict(self.spark_row(self.iteration), result_json="{not json"),
+                                        sources, ["nea_toi"], APPROVALS)
+        self.assertEqual(set(broken), {"tic_id", "contract_error"})
+        self.assertIn("JSONDecodeError", broken["contract_error"])
         rows = products(self.checksums)
         clash = rows + [dict(rows[0], product_id="other", procver="spoc-9.9.9")]
         result = tess_gold.evaluate_row(self.spark_row(self.iteration, clash), sources, ["nea_toi"], APPROVALS)

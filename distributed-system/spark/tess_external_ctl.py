@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -64,6 +65,8 @@ def download(url: str) -> tuple[bytes, dict[str, Any]]:
         expected = response.headers.get("Content-Length")
         if expected is not None and len(data) != int(expected):
             raise ValueError("incomplete_response")
+        if not response.geturl().startswith("https://"):
+            raise ValueError("non_https_redirect")  # urllib follows https -> http redirects silently
         return data, {"final_url": response.geturl(), "content_type": response.headers.get("Content-Type")}
 
 
@@ -113,7 +116,7 @@ def fetch_sources(folder: Path, fetch: Callable[[str], tuple[bytes, dict]] = dow
             entry = {"file": f"sources/{name}.csv", "requested_url": url, "retrieved_at": utc_now(),
                      "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data), **metadata,
                      **inspect_csv(data, required)}
-        except (OSError, ValueError, UnicodeError, csv.Error) as exc:
+        except (OSError, ValueError, UnicodeError, csv.Error, HTTPException) as exc:
             raise RuntimeError(f"external source {name} not collected: {failure(exc)}") from exc
         (folder / f"{name}.csv").write_bytes(data)
         entries[name] = entry
