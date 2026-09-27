@@ -1,0 +1,185 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--pc-bg);
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+  font-size: var(--pc-text-sm);
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.h-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--pc-z-overlay);
+}
+.h-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--pc-marker-tutorial-line);
+  background: var(--pc-marker-tutorial-bg);
+  font: 600 11px/1 var(--pc-font-mono);
+  color: var(--pc-ink);
+}
+.h-marker.challenge {
+  border-color: var(--pc-marker-challenge-line);
+  background: var(--pc-marker-challenge-bg);
+}
+.h-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: var(--pc-text-2xs);
+  color: var(--pc-ink);
+  text-shadow: 0 0 6px #000;
+  translate: -50% 0;
+}
+.h-ghost::after {
+  content: "유령 행성";
+  color: var(--pc-accent);
+}
+.h-hover {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--pc-z-overlay);
+  pointer-events: none;
+  font: 11px var(--pc-font-mono);
+  white-space: nowrap;
+  text-shadow: 0 0 6px #000;
+}
+.h-panel {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: var(--pc-z-panel);
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: var(--pc-glass);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.h-panel h1 {
+  margin: 0;
+  font-size: var(--pc-text-md);
+  font-weight: 500;
+}
+.h-state {
+  margin: 0;
+  font: 11px/1.5 var(--pc-font-mono);
+  color: var(--pc-ink-dim);
+}
+.h-panel fieldset {
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  margin: 0;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.h-panel legend {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.h-panel button {
+  background: var(--pc-raise);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  padding: 3px 8px;
+  font-size: var(--pc-text-xs);
+}
+.h-panel button[aria-pressed="true"] {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+}
+.h-panel label {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--pc-text-xs);
+  color: var(--pc-ink-dim);
+}
+.h-panel label.h-check {
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+}
+.h-panel output {
+  font-family: var(--pc-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--pc-ink);
+}
+.h-log {
+  margin: 0;
+  padding-left: 16px;
+  font: 11px/1.5 var(--pc-font-mono);
+  color: var(--pc-ink-faint);
+}
+.h-analysis {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  height: 38vh;
+  z-index: var(--pc-z-panel);
+  background: var(--pc-glass);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  display: grid;
+  place-items: center;
+  color: var(--pc-ink-faint);
+}
+.h-marker[hidden],
+.h-label[hidden],
+.h-analysis[hidden],
+.h-transit[hidden] {
+  display: none;
+}
+.h-transit {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  translate: -50% 0;
+  width: min(520px, calc(100% - 32px));
+  z-index: var(--pc-z-hud);
+  text-align: center;
+}
+.h-transit p {
+  margin: 0 0 6px;
+  font-size: 15px;
+  text-shadow: 0 0 10px #000;
+}
+.h-transit canvas {
+  width: 100%;
+  height: 92px;
+  display: block;
+}
+.h-caption {
+  position: fixed;
+  left: 16px;
+  bottom: 10px;
+  margin: 0;
+  z-index: var(--pc-z-hud);
+  font-size: var(--pc-text-2xs);
+  color: var(--pc-ink-faint);
+}

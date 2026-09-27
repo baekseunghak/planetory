@@ -32,6 +32,7 @@ import {
 } from "./contracts";
 import { useReadModel } from "./useReadModel";
 import { usePageScroll } from "./usePageScroll";
+import { useCinemaWording } from "../../shared/cinema-wording";
 import "./community.css";
 import { Pager } from "./CommunityPagination";
 import { Discussion } from "./Discussion";
@@ -55,6 +56,8 @@ function ReadState({
 
 export function CommunityPage() {
   const { ticId } = useParams<"ticId">();
+  // Cinema app: the title matches the menu (src/shared/cinema-wording).
+  const cinema = useCinemaWording();
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -98,7 +101,7 @@ export function CommunityPage() {
     <div className="community-page">
       <header className="community-heading">
         <p className="eyebrow">VOICES IN THE UNIVERSE</p>
-        <h1>{ticId ? `TIC ${ticId}` : "탐사 이야기"}</h1>
+        <h1>{ticId ? `TIC ${ticId}` : cinema ? "커뮤니티" : "탐사 이야기"}</h1>
         <p>
           {ticId
             ? "이 별의 이야기와 공식 신호 스레드를 모았습니다."
@@ -354,6 +357,7 @@ function JudgmentSummary({ summary }: { summary: Summary }) {
 }
 export function SignalThreadPage() {
   const { threadId = "" } = useParams<"threadId">();
+  const cinema = useCinemaWording();
   const [search] = useSearchParams();
   const location = useLocation();
   const selected =
@@ -408,9 +412,15 @@ export function SignalThreadPage() {
           <>
             <header className="community-heading">
               <div className="community-row-meta">
-                <span className="community-official">
-                  공식 신호 스레드 · SYSTEM
-                </span>
+                {cinema ? (
+                  <span className="community-official">
+                    공식 신호 스레드 · Planetory 공식
+                  </span>
+                ) : (
+                  <span className="community-official">
+                    공식 신호 스레드 · SYSTEM
+                  </span>
+                )}
                 <StarLink ticId={state.data.thread.ticId} />
               </div>
               <h1>{state.data.thread.title}</h1>

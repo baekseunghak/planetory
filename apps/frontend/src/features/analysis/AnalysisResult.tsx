@@ -1,6 +1,12 @@
 import { AnalysisReturnLink } from "./AnalysisReturnLink";
 import { Link } from "react-router-dom";
 import { pagePath } from "../../app/paths";
+import { useContext } from "react";
+import {
+  StrictCelebration,
+  celebrationText,
+  developCelebrationText,
+} from "./celebration";
 import type { NextAction, SubmissionReceipt } from "./submission-data";
 import type {
   DetailView as DetailViewData,
@@ -339,6 +345,12 @@ export function ResultExplanationView({
   const { explanation, progress } = receipt;
   const { signal, evaluation, achievement, publication, statistics } =
     explanation;
+  // 시네마 셸은 인정된 성과에만, develop 화면(운영 기본)은 지금처럼
+  // 처음 보는 결과면 축하한다(StrictCelebration).
+  const strict = useContext(StrictCelebration);
+  const cheer = strict
+    ? celebrationText(celebrate, achievement.result)
+    : developCelebrationText(celebrate);
   // 접수 응답이 신호를 줬으면 그것이 정본이다. 상세는 같은 신호를 다시
   // 말할 뿐이라 수치를 두 번 싣지 않는다.
   const other: Counterpart = signal
@@ -397,8 +409,10 @@ export function ResultExplanationView({
             {/*
             연출은 이 회원이 이 제출을 처음 볼 때만이다(2.2절). 재현 응답에도
             당시 값이 그대로 실리므로 사실은 언제나 보여 주고, 축하만 가린다.
+            축하는 성과가 실제로 인정됐을 때만이다(판단 불일치·공개 대기·
+            이미 인정됨에는 붙이지 않는다).
           */}
-            {celebrate && <p className="result-celebrate">축하합니다!</p>}
+            {cheer && <p className="result-celebrate">{cheer}</p>}
           </section>
         )}
 
@@ -576,8 +590,11 @@ export function NextActions({
   returnTo,
   from,
   onNextCurve,
+  labels,
 }: {
   receipt: SubmissionReceipt;
+  /** 화면이 부르는 이름이 다를 때만(예: 시네마 셸의 「나의 은하로」). */
+  labels?: Partial<Record<NextAction, string>>;
   /**
    * [다음 곡선 단계로]를 누르면 할 일. **같은 화면에서** 일어나므로 링크가
    * 아니다(SRS 3.2 흐름). 없으면 버튼을 비활성으로 둔다.
@@ -626,6 +643,13 @@ export function NextActions({
     LATER: { label: "나중에 하기", to: returnTo },
     GO_HOME: { label: "별지도로", to: "/sky" },
   };
+  for (const [action, label] of Object.entries(labels ?? {}) as [
+    NextAction,
+    string,
+  ][]) {
+    const link = links[action];
+    if (link && label) links[action] = { ...link, label };
+  }
   // 분석 화면 안에서 일어나는 동작이라 옮겨 갈 곳이 없다. 각자 다른 티켓이다.
   // 아직 연결되지 않은 화면 안 동작. `NEXT_CURVE`는 이제 실제 버튼이다.
   const inScreen: Partial<Record<NextAction, string>> = {

@@ -44,6 +44,67 @@ type Guide = {
   observeSubmission(): void;
 };
 const Context = createContext<Guide | null>(null);
+
+/**
+ * Cinema only (src/cinema/shell provides it; the develop screens never do,
+ * so they keep the box, the "N/5" counter and the completing close above).
+ * The tip becomes one line named like the analysis stepper, its close only
+ * hides that line for this visit (onboarding completes with the first
+ * tutorial submission, on the server), and it steps back while another
+ * guide (a tutorial line) is on screen.
+ */
+export type OnboardingLook = {
+  /** Another guide is on screen: this one is not drawn. */
+  hidden: boolean;
+  /** Lines the member hid in this visit, by key (`step:<n>` here). */
+  isDismissed(key: string): boolean;
+  dismiss(key: string): void;
+};
+export const OnboardingLookContext = createContext<OnboardingLook | null>(null);
+/** Whether onboarding is still open for the member (null: no provider). */
+export function useOnboardingOpen(): boolean | null {
+  const guide = useContext(Context);
+  return guide ? !guide.done : null;
+}
+const cinemaSteps = [
+  ["별 선택", "파란 1번 별을 눌러 시작하세요."],
+  [
+    "주기 선택",
+    "주기도에서 봉우리를 고르고 접힌 곡선을 본 뒤 '이 주기로 구간 선택'을 누르세요.",
+  ],
+  [
+    "구간 선택",
+    "접힌 곡선에서 밝기가 줄어든 곳을 드래그해 구간을 잡고 '구간 확정하고 판단하기'를 누르세요.",
+  ],
+  [
+    "판단",
+    "'행성 같음·아닌 것 같음·모르겠음' 중 하나를 고르고 '제출값 확인'을 누르세요.",
+  ],
+  ["제출값 확인", "주기·구간·판단을 확인한 뒤 '제출하기'를 누르세요."],
+] as const;
+function CinemaOnboardingLine({
+  step,
+  look,
+}: {
+  step: 0 | 1 | 2 | 3 | 4;
+  look: OnboardingLook;
+}) {
+  if (look.hidden || look.isDismissed(`step:${step}`)) return null;
+  return (
+    <aside className="cinema-onboarding-line" aria-label="분석 안내">
+      <p aria-live="polite" aria-atomic="true">
+        <strong>{cinemaSteps[step][0]}</strong> {cinemaSteps[step][1]}
+      </p>
+      <button
+        type="button"
+        aria-label="분석 안내 숨기기"
+        onClick={() => look.dismiss(`step:${step}`)}
+      >
+        안내 숨기기
+      </button>
+    </aside>
+  );
+}
 export function useOnboardingSubmission(submissionId: string | null) {
   const observe = useContext(Context)?.observeSubmission;
   useEffect(() => {
@@ -143,7 +204,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
 export function OnboardingTip({ step }: { step: 0 | 1 | 2 | 3 | 4 }) {
   const guide = useContext(Context);
+  const look = useContext(OnboardingLookContext);
   if (!guide || guide.done) return null;
+  if (look) return <CinemaOnboardingLine step={step} look={look} />;
   return (
     <aside className="first-visit-guide" aria-label="첫 방문 분석 안내">
       <p aria-live="polite" aria-atomic="true">

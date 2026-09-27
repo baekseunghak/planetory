@@ -1,10 +1,26 @@
-import { useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  type ComponentType,
+} from "react";
 import { Link } from "react-router-dom";
 import { GalaxyArtwork } from "../../components/GalaxyArtwork";
 import { useSkyData } from "./useSkyData";
 
-/** The prototype's small galaxy, using the existing authenticated, paged sky reader. */
+/**
+ * Replaces the preview where the app already holds the sky: the cinema pages
+ * reuse the shell's one sky store instead of reading the whole sky again.
+ */
+export const MySkyPreviewSlot = createContext<ComponentType | null>(null);
+
 export function MySkyPreview() {
+  const Slot = useContext(MySkyPreviewSlot);
+  return Slot ? <Slot /> : <SkyPreview />;
+}
+
+/** The prototype's small galaxy, using the existing authenticated, paged sky reader. */
+function SkyPreview() {
   const { data, store } = useSkyData();
   const meta = data.meta;
   useEffect(() => {

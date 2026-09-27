@@ -9,7 +9,25 @@
 import {
   candidateOutcome,
   detailOutcome,
+  type OutcomeSignal,
 } from "./submission-outcome-fixtures.ts";
+
+/**
+ * Hooks for the real TESS sample (dev/real-sample). Returning `undefined`
+ * keeps the synthetic peak table; `null` means no signal.
+ */
+export type SubmissionSignalHooks = {
+  /** Candidate submission: the signal this selection matches, or null. */
+  matchSignal?: (
+    ticId: string,
+    selection: Record<string, unknown>,
+  ) => OutcomeSignal | null | undefined;
+  /** Detail view: the matched candidate, or the hint for a miss. */
+  detailSignal?: (
+    ticId: string,
+    matchedCandidateId: string | null,
+  ) => OutcomeSignal | null | undefined;
+};
 
 export const SUBMISSION_FIXTURE_CSRF = "analysis-fixture-187";
 // Dev-only trigger for the two cases that cannot arise from real state.
@@ -79,10 +97,15 @@ const accepted = new Map<string, Stored>();
 // 남은 REQUEST_IN_PROGRESS 응답 횟수. 0이 되면 저장된 결과를 돌려준다.
 const holding = new Map<string, { remaining: number }>();
 let sequence = 7000;
-export function resetSubmissionFixtures() {
+/**
+ * Forgets every submission. `firstSequence` numbers the next ids
+ * (`sub-<n>`); a review server that resets during a demo passes a fresh one
+ * so a browser that already celebrated `sub-7000` still sees the next one.
+ */
+export function resetSubmissionFixtures(firstSequence = 7000) {
   accepted.clear();
   holding.clear();
-  sequence = 7000;
+  sequence = firstSequence;
 }
 
 const UUID_V4 =
@@ -264,6 +287,7 @@ function buildResult(
   body: Record<string, unknown>,
   context: Record<string, unknown>,
   outcome: SubmissionOutcomeKind | null,
+  hooks: SubmissionSignalHooks = {},
 ): Record<string, unknown> {
   const id = sequence++;
   const kind = body.submissionKind as string;
@@ -305,6 +329,7 @@ function buildResult(
           duplicate: outcome === "duplicate",
           ambiguous: outcome === "ambiguous",
           emptyStatistics: outcome === "empty-statistics",
+          signal: hooks.matchSignal?.(ticId, selection),
         })
       : null;
   const matchStatus =
@@ -399,16 +424,18 @@ function buildResult(
   };
 }
 
-export function submissionFixtureResponse(options: {
-  method: string;
-  url: URL;
-  csrf: unknown;
-  scenario: SubmissionScenario | null;
-  outcome: SubmissionOutcomeKind | null;
-  body: unknown;
-  /** 분석 진입 응답을 그대로 쓴다. 403·404·503 접근 거절을 함께 재사용한다. */
-  contextFor: (ticId: string) => ContextProbe;
-}): SubmissionFixtureReply | null {
+export function submissionFixtureResponse(
+  options: {
+    method: string;
+    url: URL;
+    csrf: unknown;
+    scenario: SubmissionScenario | null;
+    outcome: SubmissionOutcomeKind | null;
+    body: unknown;
+    /** 분석 진입 응답을 그대로 쓴다. 403·404·503 접근 거절을 함께 재사용한다. */
+    contextFor: (ticId: string) => ContextProbe;
+  } & SubmissionSignalHooks,
+): SubmissionFixtureReply | null {
   const { method, url, csrf, scenario, outcome, body, contextFor } = options;
   const retry = /^\/v1\/submissions\/([^/]+)(\/retry-draft)?$/.exec(
     url.pathname,
@@ -494,13 +521,15 @@ export function submissionFixtureResponse(options: {
       return fail(404, "SUBMISSION_NOT_FOUND", "접수 기록이 없습니다.");
     const match = record(entry.result.match) ?? {};
     const judgment = record(entry.result.judgment);
+    const candidateId =
+      typeof match.candidateId === "string" ? match.candidateId : null;
     const target = detailOutcome({
       matchStatus: String(match.status),
-      candidateId:
-        typeof match.candidateId === "string" ? match.candidateId : null,
+      candidateId,
       evaluation:
         typeof judgment?.evaluation === "string" ? judgment.evaluation : null,
       outcome,
+      signal: options.detailSignal?.(entry.ticId, candidateId),
     });
     // 대상이 없으면 열람 기록도 바꾸지 않는다.
     if (!target)
@@ -537,7 +566,12 @@ export function submissionFixtureResponse(options: {
   if (probe.status !== 200) return json(probe.status, probe.body);
   const context = record(probe.body);
   if (!context) return fail(500, "FIXTURE_ERROR", "테스트 응답 오류입니다.");
-  const reply = submit(ticId, context, { scenario, outcome, body });
+  const reply = submit(ticId, context, {
+    scenario,
+    outcome,
+    body,
+    hooks: { matchSignal: options.matchSignal },
+  });
   // 이 별의 현재 판을 응답 헤더에 실어야 프론트가 판 교체로 오인하지 않는다.
   const bundleId = record(context.currentCurveContext)?.bundleId;
   return reply.kind === "json" && typeof bundleId === "string"
@@ -552,9 +586,10 @@ function submit(
     scenario: SubmissionScenario | null;
     outcome: SubmissionOutcomeKind | null;
     body: unknown;
+    hooks?: SubmissionSignalHooks;
   },
 ): SubmissionFixtureReply {
-  const { scenario, outcome, body } = options;
+  const { scenario, outcome, body, hooks } = options;
   const input = record(body);
   if (!input) return invalid("body", "Invalid input");
 
@@ -592,7 +627,7 @@ function submit(
   const rejected = validate(input, context);
   if (rejected) return rejected;
 
-  const result = buildResult(ticId, input, context, outcome);
+  const result = buildResult(ticId, input, context, outcome, hooks);
   if (scenario === "drop-unsaved") return { kind: "drop" };
   if (scenario === "in-progress") {
     // 한 번만 처리 중으로 답하고, 그동안 접수는 끝난 것으로 둔다.

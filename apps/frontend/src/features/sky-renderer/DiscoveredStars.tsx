@@ -6,6 +6,7 @@ import {
   readDiscoveredPage,
   type DiscoveredPage,
 } from "./discovered";
+import { useCinemaWording } from "../../shared/cinema-wording";
 
 export function DiscoveredStars({
   data,
@@ -21,6 +22,7 @@ export function DiscoveredStars({
   const heading = useRef<HTMLHeadingElement>(null),
     focusPage = useRef(false);
   const cursor = cursors.at(-1)!;
+  const cinema = useCinemaWording();
   const scope = data.meta;
   const previous = useRef(scope);
   // Reset cursor ownership when the map is refreshed, including same-version refreshes.
@@ -72,7 +74,9 @@ export function DiscoveredStars({
         발견한 별 목록
       </h2>
       <p>
-        아직 분석하지 않은 별도 포함합니다. 최근 활동 순서로 20개씩 보여드려요.
+        {cinema
+          ? "아직 분석하지 않은 별도 포함합니다. 최근 활동 순서로 20개씩 보여 드립니다."
+          : "아직 분석하지 않은 별도 포함합니다. 최근 활동 순서로 20개씩 보여드려요."}
       </p>
       <div className="discovered-status" role="status" aria-live="polite">
         {data.needsRefresh
@@ -118,8 +122,8 @@ export function DiscoveredStars({
                 {
                   {
                     unexplored: "미탐사",
-                    in_progress: "탐색 중",
-                    completed: "탐색 완료",
+                    in_progress: cinema ? "탐사 중" : "탐색 중",
+                    completed: cinema ? "탐사 완료" : "탐색 완료",
                   }[s.progressStage]
                 }{" "}
                 · 내 행성 {s.planetCount}개

@@ -8,10 +8,13 @@ export function SubmissionHistoryButton({
   submissionId,
   ticId,
   returnTo,
+  label,
 }: {
   submissionId: string;
   ticId: string;
   returnTo: string;
+  /** 버튼 이름(시네마 화면은 내부 번호 대신 순서로 부른다). */
+  label?: string;
 }) {
   const navigate = useNavigate();
   const request = useRef<AbortController | null>(null);
@@ -56,7 +59,7 @@ export function SubmissionHistoryButton({
         disabled={state === "loading"}
         onClick={() => void open()}
       >
-        {submissionId} 기록 보기
+        {label ?? <>{submissionId} 기록 보기</>}
       </button>
       {state === "loading" && (
         <span role="status"> 기록을 확인하는 중입니다.</span>

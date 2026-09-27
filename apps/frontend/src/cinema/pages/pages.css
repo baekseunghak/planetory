@@ -1,0 +1,2295 @@
+/*
+  Pages over the dimmed galaxy (stage `backdrop`), in the 274 language.
+  Everything is scoped to .cinema-shell .cp-page (PageFrame): the feature
+  components keep their markup and classes, this file only dresses them.
+  Panels are near-opaque glass (no backdrop-filter over WebGL). Tokens:
+  ../styles/tokens.css. Selectors are one class stronger than the classic
+  service-presentation.css rules they replace, so load order does not matter.
+*/
+
+/* ------------------------------------------------------------ frame */
+/* Focus moves (invalid fields, #anchors) stop below the fixed top bar. */
+.cinema-shell .cp-page * {
+  scroll-margin-top: calc(56px + 24px);
+}
+.cinema-shell.cinema-backdrop main.cinema-page:has(> .cp-page) {
+  max-width: none;
+  margin: 0;
+  padding: calc(56px + clamp(28px, 5vh, 52px)) clamp(24px, 3.4vw, 56px) 112px;
+  min-height: 100dvh;
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page {
+  /* surfaces */
+  --cp-panel: rgba(5, 8, 15, 0.86);
+  --cp-panel-strong: rgba(5, 8, 15, 0.94);
+  --cp-row-line: rgba(150, 180, 225, 0.1);
+  --cp-pad: 24px;
+  --cp-width: 1040px;
+  /* the classic page variables, re-pointed */
+  --muted: var(--pc-ink-dim);
+  --line: var(--pc-line);
+  /* the analysis chart variables (history curve, public graph, results) */
+  --bg: var(--pc-bg-raised);
+  --fg: var(--pc-ink);
+  --fg-1: var(--pc-ink);
+  --fg-2: color-mix(in srgb, var(--pc-ink) 82%, transparent);
+  --fg-3: var(--pc-ink-dim);
+  --accent: var(--pc-accent);
+  --panel: var(--pc-raise);
+  --panel-line: var(--pc-line);
+  --plot-bg: rgba(150, 180, 225, 0.035);
+  --grid: var(--pc-line-strong);
+  --divider: var(--pc-line);
+  --accent-fill: var(--pc-accent-soft);
+  --accent-line: rgba(94, 196, 247, 0.5);
+  --band: rgba(94, 196, 247, 0.12);
+  --danger: var(--pc-bad);
+  --border: var(--pc-line-strong);
+
+  position: relative;
+  max-width: var(--cp-width);
+  margin: 0 auto;
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+  font-size: var(--pc-text-md);
+  line-height: var(--pc-leading);
+  overflow-wrap: anywhere;
+  animation: cp-page-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+.cinema-shell .cp-page[data-width="wide"] {
+  --cp-width: 1200px;
+}
+.cinema-shell .cp-page[data-width="reading"] {
+  --cp-width: 860px;
+}
+@keyframes cp-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+/* The feature page's own root: the frame decides width and outer space. */
+.cinema-shell .cp-page > :not(.cp-head) {
+  max-width: none;
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+
+/* ------------------------------------------------------------ type */
+.cinema-shell .cp-page h1 {
+  margin: 6px 0 10px;
+  color: var(--pc-ink);
+  font-size: clamp(26px, 2.1vw, 32px);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: -0.02em;
+  line-height: var(--pc-leading-tight);
+  text-wrap: balance;
+}
+.cinema-shell .cp-page h2 {
+  margin: 0 0 12px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-lg);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+.cinema-shell .cp-page h3 {
+  margin: 0 0 8px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page p {
+  color: var(--pc-ink-dim);
+  line-height: 1.7;
+}
+.cinema-shell .cp-page small {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page strong {
+  color: var(--pc-ink);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page :is(.eyebrow, .cp-eyebrow) {
+  margin: 0;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-2xs);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.cinema-shell .cp-page :is(time, data, .cp-num) {
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-shell .cp-page .cp-num {
+  font-family: var(--pc-font-mono);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page ul,
+.cinema-shell .cp-page ol {
+  padding-left: 1.2em;
+}
+.cinema-shell .cp-page li::marker {
+  color: var(--pc-ink-faint);
+}
+
+/* the frame's title area (pages without their own) */
+.cinema-shell .cp-head {
+  margin: 0 0 var(--pc-space-5);
+}
+.cinema-shell .cp-head .cp-lede {
+  margin: 0;
+  font-size: var(--pc-text-md);
+}
+
+/* links */
+.cinema-shell .cp-page a {
+  color: var(--pc-accent);
+  text-decoration: none;
+  transition: color var(--pc-dur-fast);
+}
+.cinema-shell .cp-page a:hover {
+  color: #9bdcfb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cinema-shell .cp-page :is(h1, h2, h3) a {
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page :is(h1, h2, h3) a:hover {
+  color: var(--pc-accent);
+  text-decoration: none;
+}
+.cinema-shell .cp-page :focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ controls */
+.cinema-shell .cp-page button,
+.cinema-shell .cp-page .cp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pc-space-2);
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  background: rgba(150, 180, 225, 0.04);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: var(--pc-text-sm);
+  line-height: 1.3;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color var(--pc-dur-fast),
+    border-color var(--pc-dur-fast),
+    background var(--pc-dur-fast);
+}
+.cinema-shell .cp-page button:hover:not(:disabled),
+.cinema-shell .cp-page .cp-button:hover {
+  border-color: var(--pc-ink-dim);
+  background: rgba(150, 180, 225, 0.09);
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.cinema-shell .cp-page button[aria-pressed="true"] {
+  border-color: rgba(94, 196, 247, 0.55);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+/* The one main action of a form or page. */
+.cinema-shell
+  .cp-page
+  :is(button[type="submit"], button.primary, form button:not([type])),
+.cinema-shell .cp-page .cp-button-primary {
+  border-color: var(--pc-accent);
+  background: var(--pc-accent);
+  color: var(--pc-accent-ink);
+  font-weight: var(--pc-weight-strong);
+}
+.cinema-shell
+  .cp-page
+  :is(button[type="submit"], button.primary, form button:not([type])):hover:not(
+    :disabled
+  ),
+.cinema-shell .cp-page .cp-button-primary:hover {
+  border-color: #7fd0f9;
+  background: #7fd0f9;
+  color: var(--pc-accent-ink);
+}
+
+/* fields */
+.cinema-shell
+  .cp-page
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea
+  ) {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  background: rgba(2, 4, 9, 0.78);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: var(--pc-text-md);
+  line-height: 1.5;
+  transition: border-color var(--pc-dur-fast);
+}
+.cinema-shell .cp-page textarea {
+  line-height: 1.7;
+}
+.cinema-shell
+  .cp-page
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ):hover:not(:disabled) {
+  border-color: rgba(150, 180, 225, 0.45);
+}
+.cinema-shell
+  .cp-page
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ):focus-visible {
+  border-color: var(--pc-accent);
+  outline: 2px solid rgba(94, 196, 247, 0.3);
+  outline-offset: 0;
+}
+.cinema-shell .cp-page ::placeholder {
+  color: var(--pc-ink-faint);
+}
+.cinema-shell .cp-page select option {
+  background: var(--pc-bg-raised);
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page :is(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--pc-accent);
+}
+.cinema-shell
+  .cp-page
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  )[aria-invalid="true"] {
+  border-color: var(--pc-bad);
+}
+.cinema-shell .cp-page label {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page fieldset {
+  min-width: 0;
+}
+.cinema-shell .cp-page legend {
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page details > summary {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  cursor: pointer;
+}
+.cinema-shell .cp-page details > summary:hover {
+  color: var(--pc-ink);
+}
+
+/* key-value lists */
+.cinema-shell .cp-page dt {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-regular);
+  opacity: 1;
+}
+.cinema-shell .cp-page dd {
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  font-variant-numeric: var(--pc-numeric);
+}
+
+/* tabs: one line, accent underline */
+.cinema-shell .cp-page :is(.community-tabs, .profile-tabs) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cinema-shell .cp-page .community-tabs a,
+.cinema-shell .cp-page .profile-tabs button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-regular);
+  text-decoration: none;
+  margin-bottom: -1px;
+}
+.cinema-shell .cp-page .community-tabs a:hover,
+.cinema-shell .cp-page .profile-tabs button:hover:not(:disabled) {
+  background: none;
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .community-tabs a[aria-current],
+.cinema-shell .cp-page .profile-tabs button[aria-current] {
+  border-bottom-color: var(--pc-accent);
+  color: var(--pc-ink);
+  font-weight: var(--pc-weight-medium);
+}
+
+/* filters: a row of pills */
+.cinema-shell .cp-page :is(.my-list-filters, .history-modes) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pc-space-2);
+  margin: 0 0 var(--pc-space-4);
+}
+.cinema-shell .cp-page .my-list-filters button,
+.cinema-shell .cp-page .history-modes button,
+.cinema-shell .cp-page .public-analysis > nav button,
+.cinema-shell .cp-page .material-viewer nav button {
+  min-height: 32px;
+  padding: 5px 14px;
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .my-list-filters button[aria-pressed="true"],
+.cinema-shell .cp-page .history-modes button[aria-pressed="true"],
+.cinema-shell .cp-page .public-analysis > nav button[aria-pressed="true"],
+.cinema-shell .cp-page .material-viewer nav button[aria-pressed="true"] {
+  border-color: rgba(94, 196, 247, 0.55);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+
+/* ------------------------------------------------------------ panels */
+.cinema-shell .cp-page .cp-panel,
+.cinema-shell .cp-page .community-main,
+.cinema-shell .cp-page .community-detail-main,
+.cinema-shell .cp-page .hot-topic-preview,
+.cinema-shell .cp-page .cp-sky-card,
+.cinema-shell .cp-page .profile-grades,
+.cinema-shell .cp-page .profile-summary,
+.cinema-shell .cp-page .follow-list,
+.cinema-shell .cp-page .notifications-list,
+.cinema-shell .cp-page .explorer-settings > .settings-row,
+.cinema-shell .cp-page .star-result > section,
+.cinema-shell .cp-page .history-graph-band,
+.cinema-shell .cp-page .history-bands,
+.cinema-shell .cp-page .history-detail > .history-band,
+.cinema-shell .cp-page .history-receipt,
+.cinema-shell .cp-page .public-analysis > dl,
+.cinema-shell .cp-page .publication-card,
+.cinema-shell .cp-page .global-statistics > section,
+.cinema-shell .cp-page .personal-statistics,
+.cinema-shell .cp-page .cp-notice {
+  padding: var(--cp-pad);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--cp-panel);
+}
+/* a card inside a panel */
+.cinema-shell .cp-page .cp-card,
+.cinema-shell .cp-page .star-result-card,
+.cinema-shell .cp-page .material-viewer,
+.cinema-shell .cp-page .material-picker,
+.cinema-shell .cp-page .my-list-row {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+}
+
+/* ------------------------------------------------------------ request states */
+/* LoadingState <p class="status" role="status"> and ErrorState <section
+   class="status" role="alert"> from components/RequestState. */
+.cinema-shell .cp-page .status {
+  max-width: none;
+  margin: var(--pc-space-4) 0;
+  padding: 20px var(--cp-pad);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--cp-panel);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page p.status[role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cinema-shell .cp-page p.status[role="status"]::before,
+.cinema-shell .cp-page .cp-loading::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pc-accent);
+  box-shadow: 0 0 12px rgba(94, 196, 247, 0.6);
+  animation: cp-pulse 1.4s var(--pc-ease-in-out) infinite;
+}
+@keyframes cp-pulse {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+}
+.cinema-shell .cp-page section.status[role="alert"] {
+  border-color: rgba(242, 139, 130, 0.35);
+}
+.cinema-shell .cp-page section.status[role="alert"] h1 {
+  margin: 0 0 6px;
+  font-size: var(--pc-text-lg);
+}
+.cinema-shell .cp-page section.status[role="alert"] p {
+  margin: 0 0 var(--pc-space-3);
+}
+.cinema-shell .cp-page section.status[role="alert"] small {
+  margin: 0 0 var(--pc-space-3);
+}
+.cinema-shell .cp-page [role="alert"]:not(section.status) {
+  color: var(--pc-bad);
+}
+/* A page-level failure the feature writes as a bare <p role="alert">. */
+.cinema-shell .cp-page > * > p[role="alert"],
+.cinema-shell .cp-page .my-list > p[role="alert"],
+.cinema-shell .cp-page .profile-page > section:not([class]) > p[role="alert"],
+.cinema-shell .cp-page .publication-card > p[role="alert"] {
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid rgba(242, 139, 130, 0.35);
+  border-radius: var(--pc-radius-md);
+  background: rgba(40, 10, 14, 0.72);
+  color: #f6b4ad;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .profile-page > section:not([class]) > button {
+  margin-top: var(--pc-space-3);
+}
+/* Nothing to show yet: empty lists and page-level notices. */
+.cinema-shell
+  .cp-page
+  :is(.community-empty, .follow-empty, .notifications-empty),
+.cinema-shell .cp-page > * > p[role="status"],
+.cinema-shell .cp-page .my-list > p[role="status"],
+.cinema-shell .cp-page .profile-unconnected,
+.cinema-shell .cp-page .cp-page-empty {
+  margin: 0;
+  padding: 28px 24px;
+  border: 1px dashed var(--pc-line-strong);
+  border-radius: var(--pc-radius-lg);
+  background: rgba(5, 8, 15, 0.6);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  text-align: center;
+}
+.cinema-shell
+  .cp-page
+  :is(.community-empty, .follow-empty, .notifications-empty) {
+  margin: var(--pc-space-4) 0;
+}
+/* In progress: the same pulse as the loading state. */
+.cinema-shell
+  .cp-page
+  :is(
+    .star-result,
+    .history-detail,
+    .history-graph-band,
+    .publication-review,
+    .publication-card
+  )
+  > p[role="status"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-style: solid;
+  border-color: var(--pc-line);
+}
+.cinema-shell
+  .cp-page
+  :is(
+    .star-result,
+    .history-detail,
+    .history-graph-band,
+    .publication-review,
+    .publication-card
+  )
+  > p[role="status"]::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pc-accent);
+  box-shadow: 0 0 12px rgba(94, 196, 247, 0.6);
+  animation: cp-pulse 1.4s var(--pc-ease-in-out) infinite;
+}
+.cinema-shell
+  .cp-page
+  :is(.history-graph-band, .publication-card)
+  > p[role="status"] {
+  padding: 16px 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+}
+
+/* ------------------------------------------------------------ dialogs */
+.cinema-shell .cp-page dialog {
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-bg-raised);
+  color: var(--pc-ink);
+  font-family: var(--pc-font-sans);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.cinema-shell .cp-page dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+.cinema-shell .cp-page .post-dialog {
+  max-width: 560px;
+  padding: 26px 28px;
+}
+.cinema-shell .cp-page .post-dialog h2 {
+  margin: 0;
+}
+.cinema-shell .cp-page .post-dialog > .post-actions:last-child {
+  margin-bottom: 0;
+}
+/* the irreversible choice in the delete dialog */
+.cinema-shell
+  .cp-page
+  .post-dialog:not(.reaction-dialog)
+  > .post-actions
+  > button:last-child {
+  border-color: rgba(242, 139, 130, 0.6);
+  color: var(--pc-bad);
+}
+.cinema-shell
+  .cp-page
+  .post-dialog:not(.reaction-dialog)
+  > .post-actions
+  > button:last-child:hover:not(:disabled) {
+  border-color: var(--pc-bad);
+  background: rgba(242, 139, 130, 0.12);
+}
+.cinema-shell .cp-page .reaction-dialog {
+  width: min(440px, 90vw);
+}
+.cinema-shell .cp-page .reaction-dialog > .post-actions:first-child {
+  justify-content: space-between;
+  margin: 0 0 4px;
+}
+.cinema-shell .cp-page .reaction-dialog > p {
+  margin: 0 0 8px;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .reaction-dialog ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-shell .cp-page .reaction-dialog li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .reaction-dialog nav {
+  align-items: center;
+  margin-top: 12px;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+
+/* ------------------------------------------------------------ my galaxy card */
+.cinema-shell .cp-page .cp-sky-card {
+  display: grid;
+  gap: var(--pc-space-3);
+  background:
+    radial-gradient(
+      ellipse 55% 45% at 100% 0%,
+      rgba(94, 196, 247, 0.1),
+      transparent 70%
+    ),
+    var(--cp-panel);
+}
+.cinema-shell .cp-page .cp-sky-card dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pc-space-4);
+  margin: 0;
+}
+.cinema-shell .cp-page .cp-sky-card dt {
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .cp-sky-card dd {
+  margin: 2px 0 0;
+  font-size: var(--pc-text-2xl);
+  line-height: 1.2;
+}
+.cinema-shell .cp-page .cp-sky-card p {
+  margin: 0;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .cp-sky-card .cp-button {
+  justify-self: start;
+}
+
+/* ------------------------------------------------------------ community */
+.cinema-shell .cp-page .community-heading {
+  min-height: 0;
+  margin: 0 0 var(--pc-space-5);
+  padding: 0;
+  border: 0;
+}
+.cinema-shell .cp-page .community-heading h1 {
+  margin: 8px 0 8px;
+  font-size: clamp(26px, 2.1vw, 32px);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: -0.02em;
+  line-height: var(--pc-leading-tight);
+}
+.cinema-shell .cp-page .community-heading p {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .community-page:has(> .community-columns),
+.cinema-shell .cp-page .community-page:has(> .post-actions) {
+  position: relative;
+}
+/* 새 글 쓰기 / 관심 별: the heading's actions, top right */
+.cinema-shell .cp-page .community-page > .post-actions {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  margin: 0;
+  gap: var(--pc-space-2);
+}
+.cinema-shell .cp-page .community-page > .community-heading {
+  padding-right: 260px;
+}
+.cinema-shell .cp-page .community-page > .post-actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid var(--pc-accent);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-accent);
+  color: var(--pc-accent-ink);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-strong);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .community-page > .post-actions > a:hover {
+  background: #7fd0f9;
+  color: var(--pc-accent-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .community-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--pc-space-5);
+  align-items: start;
+}
+.cinema-shell .cp-page .community-main {
+  min-width: 0;
+  padding-top: 4px;
+}
+.cinema-shell .cp-page .community-aside {
+  display: grid;
+  gap: var(--pc-space-4);
+  align-self: start;
+  position: sticky;
+  top: calc(56px + 24px);
+  padding: 0;
+  border: 0;
+}
+.cinema-shell .cp-page .community-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--pc-space-5);
+  align-items: start;
+}
+.cinema-shell .cp-page .community-detail-main {
+  min-width: 0;
+  padding: 28px 36px 32px;
+}
+
+/* search */
+.cinema-shell .cp-page .community-search {
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .community-search-main {
+  gap: 12px;
+}
+.cinema-shell .cp-page .community-search label {
+  gap: 6px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-search-main > button {
+  min-height: 40px;
+  padding: 8px 22px;
+}
+.cinema-shell .cp-page .community-search-main > a {
+  padding-block: 10px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-search summary {
+  padding: 14px 0 6px;
+}
+.cinema-shell .cp-page :is(.community-search-help, .community-search-summary) {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-search-summary {
+  margin: 16px 0 0;
+}
+
+/* feed rows */
+.cinema-shell
+  .cp-page
+  :is(.community-feed, .community-analyses, .community-comments) {
+  padding: 0;
+}
+.cinema-shell .cp-page .community-feed > li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .community-feed > li:last-child {
+  border-bottom: 0;
+}
+.cinema-shell .cp-page .community-feed h2 {
+  margin: 6px 0 8px;
+  font-size: 17px;
+  font-weight: var(--pc-weight-medium);
+  line-height: 1.45;
+}
+.cinema-shell .cp-page .community-row-meta {
+  gap: 4px 16px;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-row-meta a {
+  color: var(--pc-ink-dim);
+}
+.cinema-shell .cp-page .community-row-meta a:hover {
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .community-row-meta > span:first-child:not(:only-child) {
+  color: var(--pc-ink-dim);
+}
+.cinema-shell .cp-page .community-row-meta .community-official {
+  color: var(--pc-accent);
+  letter-spacing: 0.04em;
+}
+.cinema-shell .cp-page .community-tic {
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page :is(.follow-reason, .hot-topic-judgments) {
+  margin: 0 0 4px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-pagination {
+  min-height: 56px;
+  gap: 18px;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-pagination a {
+  padding: 6px 0;
+}
+
+/* aside: hot topics */
+.cinema-shell .cp-page .hot-topic-preview > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.cinema-shell .cp-page .hot-topic-preview h2 {
+  margin: 0;
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .hot-topic-preview > header a {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .hot-topic-preview ol {
+  margin: 8px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.cinema-shell .cp-page .hot-topic-preview li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .hot-topic-preview li a {
+  display: grid;
+  gap: 4px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  line-height: 1.5;
+}
+.cinema-shell .cp-page .hot-topic-preview li a:hover {
+  color: var(--pc-accent);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .hot-topic-preview li small {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-shell .cp-page .hot-topic-preview > p {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .hot-topic-guide {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .hot-topic-guide p {
+  margin: 10px 0 0;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .hot-topic-toolbar {
+  padding: 14px 0 4px;
+}
+.cinema-shell .cp-page .hot-topic-toolbar p {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+
+/* post and signal thread */
+.cinema-shell .cp-page .community-back {
+  display: inline-flex;
+  margin: 0 0 20px;
+  padding: 2px 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-back:hover {
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .community-detail .community-heading {
+  margin-bottom: 0;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .community-detail .community-heading h1 {
+  font-size: clamp(24px, 2vw, 30px);
+  line-height: 1.35;
+}
+.cinema-shell .cp-page .community-detail-main > .post-actions {
+  float: right;
+  margin: 0 0 0 16px;
+  gap: var(--pc-space-2);
+}
+.cinema-shell .cp-page .community-detail-main > .post-actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-detail-main > .post-actions > a:hover {
+  border-color: var(--pc-ink-dim);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .community-body {
+  color: var(--pc-ink);
+  font-size: 15px;
+  line-height: 1.95;
+}
+.cinema-shell .cp-page .community-post-body {
+  min-height: 0;
+  max-width: 72ch;
+  padding: 24px 0 28px;
+  margin: 0;
+}
+.cinema-shell .cp-page .post-reactions {
+  margin: 24px 0 0;
+  padding: 18px 0;
+  border-block: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .reaction-controls {
+  gap: 24px;
+}
+.cinema-shell .cp-page .reaction-controls button[aria-pressed="true"] {
+  border-color: rgba(94, 196, 247, 0.55);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .reaction-count {
+  min-height: 28px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  font-family: var(--pc-font-mono);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.cinema-shell .cp-page .community-discussion {
+  max-width: none;
+  margin-top: 24px;
+  padding-top: 0;
+  border-top: 0;
+}
+.cinema-shell .cp-page .community-discussion > h2 {
+  margin-bottom: 4px;
+}
+.cinema-shell .cp-page .comment-editor {
+  margin: 12px 0 8px;
+  padding: 16px 0;
+  border-block: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .comment-editor textarea {
+  min-height: 96px;
+}
+.cinema-shell .cp-page .comment-editor h3 {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-comments > li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .community-comments .community-body {
+  margin: 8px 0 0;
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .post-actions {
+  margin: 16px 0;
+  gap: var(--pc-space-2);
+}
+.cinema-shell .cp-page .post-recovery {
+  border-top: 1px solid var(--cp-row-line);
+}
+
+/* signal thread: judgment summary and public analyses */
+.cinema-shell .cp-page .community-summary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 32px;
+  margin: 24px 0;
+  padding: 22px 24px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+}
+.cinema-shell .cp-page .community-summary h2 {
+  margin: 8px 0;
+  font-size: var(--pc-text-xl);
+}
+.cinema-shell .cp-page .community-summary p {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-distribution > div {
+  grid-template-columns: 96px 1fr;
+  margin-block: 12px;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .community-distribution dd > span:first-child {
+  color: var(--pc-ink-dim);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .community-meter {
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: rgba(150, 180, 225, 0.1);
+  overflow: hidden;
+}
+.cinema-shell .cp-page .community-meter i {
+  border-radius: 2px;
+  background: var(--pc-accent);
+}
+.cinema-shell .cp-page .community-meter.unlikelyPlanet i {
+  background: var(--pc-star-violet);
+}
+.cinema-shell .cp-page .community-meter.unsure i {
+  background: var(--pc-ink-dim);
+}
+.cinema-shell .cp-page .community-analyses > li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .community-analysis-title {
+  margin-bottom: 6px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-lg);
+}
+.cinema-shell .cp-page .community-analyses > li > span {
+  padding: 4px 12px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+}
+
+/* attachments */
+.cinema-shell .cp-page .material-viewer {
+  margin: 16px 0 0;
+}
+.cinema-shell .cp-page .material-viewer h3 {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .material-viewer p {
+  color: var(--pc-ink-dim);
+}
+.cinema-shell .cp-page .material-viewer dl {
+  grid-template-columns: 8rem 1fr;
+}
+.cinema-shell .cp-page .material-empty {
+  border-radius: var(--pc-radius-sm);
+  background: rgba(150, 180, 225, 0.05);
+  color: var(--pc-ink-dim);
+}
+
+/* editor */
+.cinema-shell .cp-page .post-editor .community-heading {
+  margin-bottom: var(--pc-space-4);
+}
+.cinema-shell .cp-page .post-editor form {
+  padding: 28px 32px 12px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--cp-panel);
+}
+.cinema-shell .cp-page .post-editor label {
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .post-editor small {
+  margin: 0;
+  color: var(--pc-ink-faint);
+}
+.cinema-shell .cp-page .post-editor textarea {
+  min-height: 260px;
+}
+.cinema-shell .cp-page .post-field-row {
+  gap: 20px;
+}
+.cinema-shell .cp-page .material-picker {
+  margin: 4px 0 20px;
+  padding: 16px 20px;
+}
+.cinema-shell .cp-page .material-picker legend {
+  padding: 0 6px;
+}
+.cinema-shell .cp-page .material-choices {
+  gap: 24px;
+}
+.cinema-shell .cp-page .material-choices h3 {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .post-editor .post-actions {
+  margin: 8px 0 16px;
+}
+
+/* ------------------------------------------------------------ profile */
+.cinema-shell .cp-page .profile-heading {
+  min-height: 0;
+  margin: 0 0 var(--pc-space-5);
+  padding: 0;
+  border: 0;
+}
+.cinema-shell .cp-page .profile-heading h1 {
+  margin: 8px 0 0;
+  font-size: clamp(26px, 2.1vw, 32px);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page .profile-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 0 0 var(--pc-space-4);
+  padding: 22px var(--cp-pad);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background:
+    radial-gradient(
+      ellipse 50% 120% at 0% 50%,
+      rgba(94, 196, 247, 0.08),
+      transparent 70%
+    ),
+    var(--cp-panel);
+}
+.cinema-shell .cp-page .profile-avatar {
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(94, 196, 247, 0.45);
+  background:
+    radial-gradient(
+      circle at 35% 30%,
+      rgba(94, 196, 247, 0.35),
+      transparent 60%
+    ),
+    #07121c;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xl);
+}
+.cinema-shell .cp-page .profile-identity h2 {
+  margin: 0;
+  font-size: var(--pc-text-xl);
+}
+.cinema-shell .cp-page .profile-identity p {
+  margin: 2px 0 0;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .profile-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pc-space-2);
+  margin: 0 0 0 auto;
+}
+.cinema-shell .cp-page .profile-actions > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .profile-actions > a:hover {
+  border-color: var(--pc-ink-dim);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .profile-actions > button {
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  font-size: var(--pc-text-sm);
+}
+/* the nickname form opens inside the identity row: its own line */
+/* the nickname form opens in place of its button, between the others */
+.cinema-shell .cp-page .profile-actions:has(.nickname-editor) {
+  align-items: flex-start;
+}
+.cinema-shell .cp-page .nickname-editor {
+  display: grid;
+  gap: 8px;
+  width: 320px;
+  max-width: 100%;
+}
+.cinema-shell .cp-page .nickname-editor label {
+  display: grid;
+  gap: 6px;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .nickname-editor .profile-actions {
+  margin: 4px 0 0;
+}
+.cinema-shell .cp-page .nickname-editor p {
+  margin: 0;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .follow-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin: 0 0 var(--pc-space-4);
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .follow-summary a {
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page .follow-summary a:hover {
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .profile-page > .follow-control {
+  margin: 0 12px var(--pc-space-4) 0;
+}
+.cinema-shell .cp-page .profile-page > .primary-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 0 0 var(--pc-space-4);
+  padding: 7px 16px;
+  border: 1px solid rgba(94, 196, 247, 0.55);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .profile-page > .primary-link:hover {
+  text-decoration: none;
+  background: rgba(94, 196, 247, 0.22);
+}
+.cinema-shell .cp-page .profile-collection {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--pc-space-4);
+  margin: 0 0 var(--pc-space-4);
+  padding: 0;
+}
+.cinema-shell .cp-page .profile-collection.public-profile {
+  display: block;
+}
+.cinema-shell .cp-page .profile-grades {
+  margin: 0;
+}
+.cinema-shell .cp-page .profile-grades h2 {
+  margin: 6px 0 4px;
+  font-size: var(--pc-text-lg);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page .profile-grades p:not(.eyebrow) {
+  margin: 0;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-grades dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--pc-space-3);
+  margin: var(--pc-space-4) 0 0;
+}
+.cinema-shell .cp-page .profile-grades dl > div {
+  padding: 12px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+}
+.cinema-shell .cp-page .profile-grades dt {
+  color: var(--pc-accent);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-lg);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page .profile-grades dd {
+  margin: 2px 0 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0;
+  margin: 0 0 var(--pc-space-4);
+  padding: 18px 0;
+}
+.cinema-shell .cp-page .profile-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 0 var(--cp-pad);
+  border-left: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .profile-summary > div:first-child {
+  padding-left: var(--cp-pad);
+  border-left: 0;
+}
+.cinema-shell .cp-page .profile-summary dt {
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-summary dd {
+  margin: 0;
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-2xl);
+  font-weight: var(--pc-weight-medium);
+  line-height: 1.2;
+}
+.cinema-shell .cp-page .profile-summary small {
+  display: inline;
+  margin: 0 0 0 4px;
+  color: var(--pc-ink-dim);
+  font-family: var(--pc-font-sans);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-meta {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 var(--pc-space-4);
+  padding: 0 4px;
+  border: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-meta :is(dt, dd) {
+  margin: 0;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-tabs {
+  margin: var(--pc-space-5) 0 var(--pc-space-4);
+}
+/* 내 별: the search form above the list */
+.cinema-shell .cp-page .profile-page > form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0 0 var(--pc-space-4);
+  padding: 16px var(--cp-pad);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--cp-panel);
+}
+.cinema-shell .cp-page .profile-page > form > :not(button) {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cinema-shell .cp-page .profile-page > form label {
+  display: grid;
+  gap: 6px;
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .profile-page > form :is(input, select) {
+  width: 100%;
+}
+
+/* my lists (내 별, 분석 기록) */
+.cinema-shell .cp-page .my-list ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--pc-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* one card per star or record; its links share the last line */
+.cinema-shell .cp-page .my-list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  background: var(--cp-panel);
+}
+.cinema-shell .cp-page .my-list-row > * {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.cinema-shell .cp-page .my-list-row > a {
+  flex: 0 0 auto;
+}
+.cinema-shell .cp-page .my-list-title {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-shell .cp-page .my-list-row p {
+  margin: 0;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .my-list-row dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 14px;
+  margin: 0;
+}
+.cinema-shell .cp-page .my-list-row :is(dt, dd) {
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .my-list-row > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .my-list-row > a:hover {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .my-list-row > p[role="status"],
+.cinema-shell .cp-page .my-list-note {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+  opacity: 1;
+}
+.cinema-shell .cp-page .my-list-more {
+  margin: var(--pc-space-4) 0 0;
+  text-align: center;
+}
+
+/* statistics under My page */
+.cinema-shell .cp-page .personal-statistics > section {
+  margin: var(--pc-space-5) 0 0;
+}
+
+/* ------------------------------------------------------------ follow */
+.cinema-shell .cp-page .follow-page > a:first-child {
+  display: inline-flex;
+  margin: 0 0 12px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .follow-page > a:first-child:hover {
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .follow-page > header {
+  margin: 0 0 var(--pc-space-5);
+}
+.cinema-shell .cp-page .follow-page > header h1 {
+  margin: 0 0 8px;
+}
+.cinema-shell .cp-page .follow-page > header p {
+  margin: 0;
+}
+.cinema-shell .cp-page .follow-page > .community-tabs {
+  margin-bottom: var(--pc-space-4);
+}
+.cinema-shell .cp-page .follow-page > p {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .follow-list {
+  margin: 0;
+  padding: 4px var(--cp-pad);
+  list-style: none;
+}
+.cinema-shell .cp-page .follow-list:empty {
+  display: none;
+}
+.cinema-shell .cp-page .follow-list li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .follow-list li:last-child {
+  border-bottom: 0;
+}
+.cinema-shell .cp-page .follow-list li > a {
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page .follow-avatar {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--pc-line-strong);
+  background: #07121c;
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page .follow-control > button {
+  min-height: 32px;
+  padding: 5px 16px;
+  border-radius: var(--pc-radius-pill);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .follow-control > button[aria-pressed="true"] {
+  border-color: rgba(94, 196, 247, 0.55);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .follow-page .community-feed {
+  padding: 4px var(--cp-pad);
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--cp-panel);
+}
+.cinema-shell .cp-page .follow-page .community-feed:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------ notifications */
+.cinema-shell .cp-page .notifications-page > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0;
+  margin: 0 0 var(--pc-space-5);
+}
+.cinema-shell .cp-page .notifications-page h1 {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 2.1vw, 32px);
+  letter-spacing: -0.02em;
+}
+.cinema-shell .cp-page .notifications-page > header p {
+  margin: 0;
+}
+.cinema-shell .cp-page .notifications-page > header > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .notifications-page > header > a:hover {
+  border-color: var(--pc-ink-dim);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .notifications-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 var(--pc-space-4);
+  border-bottom: 1px solid var(--pc-line);
+}
+.cinema-shell .cp-page .notifications-tools .community-tabs {
+  border-bottom: 0;
+}
+.cinema-shell .cp-page .notifications-list {
+  margin: 0;
+  padding: 4px var(--cp-pad);
+  list-style: none;
+}
+.cinema-shell .cp-page .notifications-list:empty {
+  display: none;
+}
+.cinema-shell .cp-page .notifications-list li {
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .notifications-list li:last-child {
+  border-bottom: 0;
+}
+.cinema-shell .cp-page .notifications-list button {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--pc-ink-dim);
+  text-align: left;
+}
+.cinema-shell .cp-page .notifications-list button:hover:not(:disabled) {
+  background: none;
+}
+.cinema-shell .cp-page .notifications-list button:hover:not(:disabled) strong {
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .notifications-list button:disabled {
+  opacity: 1;
+  color: var(--pc-ink-faint);
+}
+.cinema-shell .cp-page .notifications-list small {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-shell .cp-page .notifications-list strong {
+  margin-top: 4px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .notifications-list .is-unread strong {
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page .notifications-list button p {
+  margin: 4px 0 0;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .notifications-list button:disabled :is(strong, p) {
+  color: var(--pc-ink-faint);
+}
+.cinema-shell .cp-page .notification-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+}
+.cinema-shell .cp-page .is-unread .notification-dot {
+  background: var(--pc-accent);
+  box-shadow: 0 0 10px rgba(94, 196, 247, 0.7);
+}
+
+/* ------------------------------------------------------------ settings, withdrawal */
+.cinema-shell .cp-page .explorer-settings {
+  display: grid;
+  gap: var(--pc-space-3);
+}
+.cinema-shell .cp-page .explorer-settings > header {
+  padding: 0;
+  margin: 0 0 var(--pc-space-3);
+}
+.cinema-shell .cp-page .explorer-settings > header .eyebrow a {
+  color: var(--pc-accent);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+.cinema-shell .cp-page .explorer-settings h1 {
+  margin: 8px 0 0;
+  font-size: clamp(26px, 2.1vw, 32px);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: -0.02em;
+}
+.cinema-shell .cp-page .explorer-settings > .settings-row {
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.cinema-shell .cp-page .settings-row h2 {
+  margin: 2px 0 0;
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cp-page .settings-row h3 {
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .settings-row p {
+  margin: 6px 0 10px;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .settings-row small {
+  margin: 0 0 8px;
+}
+.cinema-shell .cp-page .settings-row label {
+  min-height: 36px;
+}
+.cinema-shell .cp-page .settings-current {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .settings-switchline {
+  gap: 16px;
+  min-height: 36px;
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page .settings-switch {
+  width: 44px;
+  min-width: 44px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px;
+  justify-content: flex-start;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(150, 180, 225, 0.12);
+}
+.cinema-shell .cp-page .settings-switch span {
+  width: 18px;
+  height: 18px;
+  background: var(--pc-ink-dim);
+  transition: transform var(--pc-dur-fast) var(--pc-ease-out);
+}
+.cinema-shell .cp-page .settings-switch[aria-checked="true"] {
+  border-color: var(--pc-accent);
+  background: rgba(94, 196, 247, 0.35);
+}
+.cinema-shell .cp-page .settings-switch[aria-checked="true"] span {
+  background: var(--pc-ink);
+  transform: translateX(20px);
+}
+.cinema-shell .cp-page .settings-row [role="status"] {
+  min-height: 0;
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .settings-row [role="status"]:empty {
+  display: none;
+}
+.cinema-shell .cp-page .settings-row ul {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+  line-height: 1.8;
+}
+/* withdrawal: the flow's loose parts, lined up */
+.cinema-shell
+  .cp-page[data-page="withdrawal"]
+  .explorer-settings
+  > a:first-child {
+  justify-self: start;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page[data-page="withdrawal"] .explorer-settings > h1 {
+  margin: 0 0 4px;
+}
+.cinema-shell
+  .cp-page[data-page="withdrawal"]
+  .explorer-settings
+  > :is(p, label) {
+  margin: 0;
+}
+.cinema-shell .cp-page[data-page="withdrawal"] .explorer-settings > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page[data-page="withdrawal"] .explorer-settings > p > label {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  color: var(--pc-ink);
+}
+.cinema-shell .cp-page[data-page="withdrawal"] .explorer-settings > button {
+  justify-self: start;
+  border-color: rgba(242, 139, 130, 0.6);
+  color: var(--pc-bad);
+}
+.cinema-shell
+  .cp-page[data-page="withdrawal"]
+  .explorer-settings
+  > button:hover:not(:disabled) {
+  border-color: var(--pc-bad);
+  background: rgba(242, 139, 130, 0.12);
+  color: var(--pc-bad);
+}
+
+/* usage guide dialog (profile, settings) */
+.cinema-shell .cp-page .usage-guide {
+  width: min(1000px, 90vw);
+  padding: 26px 28px;
+}
+.cinema-shell .cp-page .usage-guide > header {
+  border-bottom: 1px solid var(--pc-line);
+  padding-bottom: 14px;
+}
+.cinema-shell .cp-page .guide-steps {
+  border-right: 1px solid var(--pc-line);
+}
+.cinema-shell .cp-page .guide-steps button {
+  justify-content: flex-start;
+  min-height: 0;
+  border: 0;
+  border-radius: var(--pc-radius-sm);
+  background: none;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  text-align: left;
+}
+.cinema-shell .cp-page .guide-steps button[aria-current] {
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .usage-guide img {
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+}
+
+/* ------------------------------------------------------------ star result */
+.cinema-shell .cp-page .star-result {
+  display: grid;
+  gap: var(--pc-space-4);
+}
+.cinema-shell .cp-page .star-result > h1 {
+  margin: 0;
+  font-family: var(--pc-font-sans);
+}
+.cinema-shell .cp-page .star-result > nav,
+.cinema-shell .cp-page .star-result section nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pc-space-2);
+}
+.cinema-shell .cp-page .star-result > nav a,
+.cinema-shell .cp-page .star-result section nav a,
+.cinema-shell .cp-page .star-result li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 14px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .star-result > nav a:hover,
+.cinema-shell .cp-page .star-result section nav a:hover,
+.cinema-shell .cp-page .star-result li a:hover {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .star-result > nav {
+  margin-top: -6px;
+}
+.cinema-shell .cp-page .star-result > section {
+  margin: 0;
+}
+.cinema-shell .cp-page .star-result section p {
+  margin: 0 0 6px;
+  font-size: var(--pc-text-sm);
+}
+/* six term/value pairs, two pairs a row */
+.cinema-shell .cp-page .star-result > section > dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 16px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+}
+.cinema-shell .cp-page .star-result > section > dl > dd {
+  margin: 0;
+}
+.cinema-shell .cp-page .star-result-card {
+  margin: 12px 0 0;
+}
+.cinema-shell .cp-page .star-result-card h3 {
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .star-result-card details {
+  margin: 10px 0;
+}
+.cinema-shell .cp-page .star-result ul {
+  margin: 8px 0 0;
+  padding-left: 1.1em;
+}
+.cinema-shell .cp-page .star-result li {
+  margin-block: 8px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+
+/* ------------------------------------------------------------ history detail, public analysis */
+/* Full-width blocks; the action links (공개 검토·설정, 다시 풀기) share a row. */
+.cinema-shell .cp-page :is(.history-detail, .public-analysis) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--pc-space-3);
+}
+.cinema-shell .cp-page :is(.history-detail, .public-analysis) > * {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.cinema-shell .cp-page .history-detail > a {
+  flex: 0 0 auto;
+}
+.cinema-shell .cp-page .history-detail > h2:first-child,
+.cinema-shell .cp-page .public-analysis > h2:first-child {
+  display: none;
+}
+.cinema-shell .cp-page :is(.history-id, .public-analysis-id) {
+  order: -1;
+  margin: -18px 0 4px;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-xs);
+  font-variant-numeric: var(--pc-numeric);
+  opacity: 1;
+}
+.cinema-shell .cp-page .history-detail > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-detail > a:hover {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .history-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+  padding: 16px var(--cp-pad);
+}
+.cinema-shell .cp-page .history-receipt > div,
+.cinema-shell .cp-page .history-receipt {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-receipt dt {
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .history-receipt dd {
+  margin: 0 12px 0 6px;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-graph-band {
+  margin: 0;
+  border-top: 1px solid var(--pc-line);
+}
+.cinema-shell .cp-page .history-graph-band .history-modes {
+  margin-bottom: 12px;
+}
+.cinema-shell .cp-page .history-curve,
+.cinema-shell .cp-page .public-analysis figure {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--pc-radius-md);
+  background: var(--plot-bg);
+}
+.cinema-shell .cp-page .history-curve-point {
+  fill: var(--pc-star-arm);
+}
+.cinema-shell .cp-page .history-curve figcaption {
+  color: var(--pc-ink-dim);
+}
+.cinema-shell .cp-page .history-bands {
+  margin: 0;
+  border-top: 1px solid var(--pc-line);
+  column-gap: 32px;
+}
+.cinema-shell .cp-page .history-band h3 {
+  margin: 0 0 8px;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-2xs);
+  font-weight: var(--pc-weight-medium);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+.cinema-shell .cp-page .history-band p {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-band dl {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-band dd {
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .history-back,
+.cinema-shell .cp-page .public-analysis-back {
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+}
+.cinema-shell .cp-page :is(.history-back, .public-analysis-back) a {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page :is(.history-back, .public-analysis-back) a::before {
+  content: "← ";
+}
+.cinema-shell .cp-page :is(.history-back, .public-analysis-back) a:hover {
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .submission-note {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .public-analysis > nav {
+  display: flex;
+  gap: var(--pc-space-2);
+}
+.cinema-shell .cp-page .public-analysis > dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  margin: 0;
+}
+.cinema-shell .cp-page .public-analysis > dl dt {
+  font-weight: var(--pc-weight-regular);
+}
+.cinema-shell .cp-page .public-analysis > :is(p, div):not(.status) {
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ publication */
+.cinema-shell .cp-page .publication-review > h1 {
+  margin: 0 0 12px;
+}
+.cinema-shell .cp-page .publication-review > p {
+  max-width: 70ch;
+  margin: 0 0 6px;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .publication-review > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  margin: 8px 0 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .publication-review > a::before {
+  content: "←";
+}
+.cinema-shell .cp-page .publication-review > a:hover {
+  color: var(--pc-ink);
+  text-decoration: none;
+}
+.cinema-shell .cp-page .publication-card {
+  margin: var(--pc-space-5) 0 0;
+}
+.cinema-shell .cp-page .publication-card h2 {
+  font-size: var(--pc-text-md);
+}
+.cinema-shell .cp-page .publication-card dl {
+  grid-template-columns: minmax(8rem, 180px) minmax(0, 1fr);
+  gap: 8px 20px;
+  margin: 0 0 12px;
+}
+.cinema-shell .cp-page .publication-card dd {
+  margin: 0;
+}
+.cinema-shell .cp-page .publication-actions {
+  gap: var(--pc-space-2);
+  margin: 12px 0 0;
+}
+.cinema-shell .cp-page .publication-review :is(button, a, label) {
+  min-height: 36px;
+}
+.cinema-shell .cp-page .publication-review label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pc-ink);
+}
+
+/* ------------------------------------------------------------ statistics */
+.cinema-shell .cp-page .global-statistics {
+  display: grid;
+  gap: var(--pc-space-4);
+}
+.cinema-shell .cp-page .global-statistics > h1 {
+  margin: 0;
+}
+.cinema-shell .cp-page .global-statistics > :is(p, button) {
+  margin: 0;
+}
+.cinema-shell .cp-page .global-statistics > p {
+  max-width: 80ch;
+  font-size: var(--pc-text-sm);
+}
+.cinema-shell .cp-page .global-statistics > button {
+  justify-self: start;
+}
+.cinema-shell .cp-page .global-statistics > section {
+  margin: 0;
+}
+.cinema-shell .cp-page .statistics-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: var(--pc-space-3);
+  margin: 0;
+}
+.cinema-shell .cp-page .statistics-metrics > div {
+  padding: 14px 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-raise);
+}
+.cinema-shell .cp-page .statistics-metrics dt {
+  font-size: var(--pc-text-xs);
+}
+/* values mix numbers and words ("당시 기록 부족"): Plex Sans KR, tabular */
+.cinema-shell .cp-page .statistics-metrics dd {
+  margin: 6px 0 0;
+  color: var(--pc-ink);
+  font-variant-numeric: var(--pc-numeric);
+  font-size: var(--pc-text-xl);
+  font-weight: var(--pc-weight-medium);
+  line-height: 1.25;
+}
+.cinema-shell .cp-page .statistics-metrics dd small {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--pc-font-sans);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-shell .cp-page .statistics-table {
+  margin: 12px 0 0;
+}
+.cinema-shell .cp-page .statistics-table table {
+  font-size: var(--pc-text-sm);
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-shell .cp-page .statistics-table th {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  font-weight: var(--pc-weight-regular);
+}
+.cinema-shell .cp-page .statistics-table :is(th, td) {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--cp-row-line);
+}
+.cinema-shell .cp-page .statistics-table caption {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  text-align: left;
+  padding-bottom: 6px;
+}
+.cinema-shell .cp-page .statistics-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--pc-accent);
+}
+.cinema-shell .cp-page .personal-statistics > h2 {
+  margin: 0 0 12px;
+}
+.cinema-shell .cp-page .personal-statistics h3 {
+  margin: 0 0 10px;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-2xs);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+
+/* ------------------------------------------------------------ not built yet */
+.cinema-shell .cp-page .cp-notice {
+  padding: 40px 40px 36px;
+  text-align: center;
+}
+.cinema-shell .cp-page .cp-notice h1 {
+  margin: 10px 0 6px;
+}
+.cinema-shell .cp-page .cp-notice p {
+  margin: 0 0 6px;
+}
+.cinema-shell .cp-page .cp-notice-ids {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-xs);
+}
+.cinema-shell .cp-page .cp-notice .cp-button {
+  margin-top: 18px;
+}
+/* "없는 화면" (MissingScreen): the ways back side by side. */
+.cinema-shell .cp-page .cp-notice-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* The 404 route (App.tsx) renders a bare section in the same main. */
+.cinema-shell.cinema-backdrop
+  main.cinema-page
+  > section:not([class]):only-child {
+  max-width: 560px;
+  margin: 12vh auto 0;
+  padding: 40px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: rgba(5, 8, 15, 0.86);
+  text-align: center;
+}
+.cinema-shell.cinema-backdrop
+  main.cinema-page
+  > section:not([class]):only-child
+  h1 {
+  margin: 0 0 18px;
+  font-size: var(--pc-text-2xl);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell.cinema-backdrop
+  main.cinema-page
+  > section:not([class]):only-child
+  a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  padding: 8px 18px;
+  border-radius: var(--pc-radius-md);
+  background: var(--pc-accent);
+  color: var(--pc-accent-ink);
+  font-size: var(--pc-text-sm);
+  font-weight: var(--pc-weight-strong);
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------------ narrower desktops */
+@media (max-width: 1279px) {
+  .cinema-shell .cp-page .community-columns,
+  .cinema-shell .cp-page .community-detail {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: var(--pc-space-4);
+  }
+  .cinema-shell .cp-page .community-detail-main {
+    padding: 24px 28px 28px;
+  }
+  .cinema-shell .cp-page .profile-collection {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+  .cinema-shell .cp-page .profile-grades dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1100px) {
+  .cinema-shell .cp-page .star-result > section > dl {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .cinema-shell .cp-page .community-page > .community-heading {
+    padding-right: 200px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-shell .cp-page,
+  .cinema-shell .cp-page p.status[role="status"]::before,
+  .cinema-shell .cp-page .cp-loading::before {
+    animation: none;
+  }
+}
+
+/*
+ * English eyebrows of the develop pages (MY OBSERVATORY, VOICES IN THE
+ * UNIVERSE, YOUR DISCOVERIES on someone else's profile...). The cinema copy
+ * is Korean only and the frame already names each page, so they go.
+ */
+.cinema-shell .cp-page :is(.profile-heading, .community-heading) > .eyebrow,
+.cinema-shell .cp-page .profile-grades > .eyebrow {
+  display: none;
+}
+/* The guide keeps its step counter; "EXPLORER GUIDE" reads "사용법". */
+.cinema-shell .cp-page .usage-guide > header .eyebrow {
+  font-size: 0;
+  letter-spacing: 0;
+}
+.cinema-shell .cp-page .usage-guide > header .eyebrow::before {
+  content: "사용법 · ";
+}
+.cinema-shell .cp-page .usage-guide > header .eyebrow::before,
+.cinema-shell .cp-page .usage-guide > header .eyebrow span {
+  font-size: var(--pc-text-2xs);
+  letter-spacing: 0.12em;
+}

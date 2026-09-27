@@ -1,8 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { pagePath } from "../../app/paths";
 import type { Author, FeedItem } from "./contracts";
+import { cinemaDateTime, useCinemaWording } from "../../shared/cinema-wording";
 
 export function DateTime({ value }: { value: string }) {
+  // Cinema app: one date style across screens (src/shared/cinema-wording).
+  const cinema = useCinemaWording();
+  if (cinema) return <time dateTime={value}>{cinemaDateTime(value)}</time>;
   return (
     <time dateTime={value}>
       {new Date(value).toLocaleString("ko-KR", {
@@ -47,6 +51,7 @@ export function CommunityFeed({
 }) {
   const location = useLocation();
   const current = location.pathname + location.search;
+  const cinema = useCinemaWording();
   return (
     <ul className="community-feed">
       {items.map((item) => (
@@ -68,7 +73,9 @@ export function CommunityFeed({
               }
             >
               {item.type === "SIGNAL_THREAD"
-                ? "공식 신호 스레드 · SYSTEM"
+                ? cinema
+                  ? "공식 신호 스레드 · Planetory 공식"
+                  : "공식 신호 스레드 · SYSTEM"
                 : "일반 글"}
             </span>
             {item.ticId ? (

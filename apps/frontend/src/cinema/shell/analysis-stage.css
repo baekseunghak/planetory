@@ -1,0 +1,126 @@
+/*
+  Analysis over the scene: each step's key action in view without a scroll
+  (1440x900 and 1024x768). Shell-owned layout overrides for the classic
+  variant's panel (../analysis-classic/classic-analysis.css stays as it is);
+  presentation only, every rule under the stage. The star keeps a strip of
+  about 200px above the panel; the variant reports the taller panel to the
+  scene itself (ResizeObserver), so the star is framed in what is left.
+*/
+
+/* A taller panel, the scene shrinks to the strip above it. */
+.cinema-analysis-stage .pc-classic-analysis {
+  --pc-classic-height: max(60vh, calc(100vh - 264px));
+}
+
+/* The periodogram (where step 1 starts) comes first in the left column at
+   every width; the time curve goes under it. */
+.cinema-analysis-stage .pc-classic-analysis .analysis-screen .periodogram-card,
+.cinema-analysis-stage
+  .pc-classic-analysis
+  .analysis-screen
+  .periodogram-unavailable {
+  grid-row: 2;
+}
+.cinema-analysis-stage
+  .pc-classic-analysis
+  .analysis-screen
+  .analysis-time-curve {
+  grid-row: 3;
+}
+
+/* The step's primary action stays at the bottom edge of the panel while
+   the rest of its column scrolls: 이 주기로 구간 선택, 구간 확정하고
+   판단하기, 제출값 확인, 제출하기. */
+.cinema-analysis-stage .pc-classic-analysis .analysis-judgment > button,
+.cinema-analysis-stage
+  .pc-classic-analysis
+  .analysis-judgment
+  form
+  > button[type="submit"],
+.cinema-analysis-stage
+  .pc-classic-analysis
+  .analysis-judgment
+  [data-testid="candidate-review"]
+  > .periodogram-toolbar {
+  position: sticky;
+  bottom: var(--pc-space-2);
+  z-index: 3;
+  /* The card's own colour, opaque, so rows scrolling under it stay hidden. */
+  box-shadow: 0 6px 0 var(--pc-space-2) #0d111a;
+}
+.cinema-analysis-stage
+  .pc-classic-analysis
+  .analysis-judgment
+  [data-testid="candidate-review"]
+  > .periodogram-toolbar {
+  padding: var(--pc-space-2) 0;
+  background: #0d111a;
+}
+
+/* Status beside the stepper (확정 행성 보유 · 데이터 …): wraps to a second
+   line instead of an ellipsis on narrow desktops. */
+.cinema-analysis-stage .pc-classic-analysis .analysis-step-row > span {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  font-size: var(--pc-text-xs);
+  line-height: 1.35;
+}
+@media (max-width: 1279px) {
+  .cinema-analysis-stage .pc-classic-analysis .analysis-step-row {
+    flex-wrap: wrap;
+    row-gap: var(--pc-space-1);
+  }
+  .cinema-analysis-stage .pc-classic-analysis .analysis-step-row > span {
+    flex: 1 1 160px;
+  }
+}
+
+/* The onboarding tip is one line (features/onboarding, cinema look): its
+   own row above the stepper, never a box that pushes the charts down. */
+.cinema-analysis-stage .analysis-step-row:has(> .cinema-onboarding-line) {
+  flex-wrap: wrap;
+}
+.cinema-shell .cinema-onboarding-line {
+  display: flex;
+  flex: 1 0 100%;
+  order: -1;
+  align-items: center;
+  gap: var(--pc-space-3);
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0 0 var(--pc-space-1);
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+  background: rgba(94, 196, 247, 0.06);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xs);
+  line-height: 1.4;
+}
+.cinema-shell .cinema-onboarding-line p {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.cinema-shell .cinema-onboarding-line strong {
+  margin-right: var(--pc-space-2);
+  color: var(--pc-accent);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-shell .cinema-onboarding-line button {
+  flex: none;
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: none;
+  color: var(--pc-ink-dim);
+  font: inherit;
+  font-size: var(--pc-text-2xs);
+  cursor: pointer;
+}
+.cinema-shell .cinema-onboarding-line button:hover {
+  color: var(--pc-ink);
+}

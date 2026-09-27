@@ -7,6 +7,8 @@ import {
   type FeedSearch,
 } from "./feedSearch";
 
+import { useCinemaWording } from "../../shared/cinema-wording";
+
 export function FeedSearchForm({
   initial,
   addressError,
@@ -21,6 +23,7 @@ export function FeedSearchForm({
   onSearch: (values: FeedSearch) => void;
 }) {
   const [values, setValues] = useState(initial);
+  const cinema = useCinemaWording();
   const [error, setError] = useState<string | null>(addressError);
   const feedback = useRef<HTMLParagraphElement>(null);
   const update = (field: keyof FeedSearch, value: string) => {
@@ -118,10 +121,16 @@ export function FeedSearchForm({
           일반 글만 표시됩니다.
         </p>
       </details>
-      <p id="feed-search-help" className="community-search-help">
-        검색어 1~100자 · 댓글 제외 · 영문 대소문자 구분 없음 · %, _도 입력한
-        문자 그대로 검색
-      </p>
+      {cinema ? (
+        <p id="feed-search-help" className="community-search-help">
+          검색어는 1~100자이며 댓글은 찾지 않습니다.
+        </p>
+      ) : (
+        <p id="feed-search-help" className="community-search-help">
+          검색어 1~100자 · 댓글 제외 · 영문 대소문자 구분 없음 · %, _도 입력한
+          문자 그대로 검색
+        </p>
+      )}
       {error && (
         <p
           ref={feedback}

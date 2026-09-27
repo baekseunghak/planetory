@@ -21,6 +21,7 @@ import {
 } from "./analysis-data";
 import { PeriodogramPanel } from "./PeriodogramPanel";
 import { AnalysisSession } from "./AnalysisSession";
+import { useCinemaCopy } from "./cinema-copy";
 
 const isObservation = (ticId?: string) =>
   import.meta.env.DEV &&
@@ -135,6 +136,8 @@ function AnalysisReady({
 }) {
   // 계산이 도는 동안 판이 바뀌면 곡선 조회와 똑같이 자동으로 다시 읽는다.
   const step = useCurveStep(context, entryCurve, recoverBundle);
+  // 시네마 앱: 데이터 상세는 쉬운 말로, 판 ID·BTJD는 「기술 정보」 안에.
+  const cinema = useCinemaCopy();
   // 보고 있는 곡선. 전환이 끝나야 바뀌므로 그 전에는 진입 곡선 그대로다.
   const curve = step.curve.kind === "ready" ? step.curve : entryCurve;
   /**
@@ -158,7 +161,17 @@ function AnalysisReady({
       sum + segment.flux.filter((point) => point === null).length,
     0,
   );
-  const details = (
+  const details = cinema ? (
+    <>
+      <button onClick={retry}>최신 자료 확인</button>
+      <cinema.DataDetails
+        context={context}
+        viewedBundleId={viewed.curveContext.bundleId}
+        curve={curve}
+        stepLabel={stepName(step.viewing)}
+      />
+    </>
+  ) : (
     <>
       <button onClick={retry}>최신 자료 확인</button>
       <section aria-label="분석 데이터 요약">
@@ -249,14 +262,22 @@ function AnalysisReady({
           <div className="analysis-screen-grid">
             <div className="analysis-step-row">
               <AnalysisSteps />
-              <span>
-                {isObservation(ticId)
-                  ? "행성 정보 미연결"
-                  : context.hasConfirmedCandidate
-                    ? "확정 행성 보유"
-                    : "확정 행성 정보 없음"}{" "}
-                · 데이터 {context.bundleVersion}
-              </span>
+              {cinema ? (
+                <span>
+                  {context.hasConfirmedCandidate
+                    ? "확정 행성 있음"
+                    : "확정 행성 정보 없음"}
+                </span>
+              ) : (
+                <span>
+                  {isObservation(ticId)
+                    ? "행성 정보 미연결"
+                    : context.hasConfirmedCandidate
+                      ? "확정 행성 보유"
+                      : "확정 행성 정보 없음"}{" "}
+                  · 데이터 {context.bundleVersion}
+                </span>
+              )}
               <CurveStepBar context={context} />
             </div>
             <TimeCurveChart
@@ -279,10 +300,12 @@ function AnalysisReady({
               <div className="analysis-secondary-links">
                 <details>
                   <summary>데이터 상세 ›</summary>
-                  <p>
-                    관측 구간 {curve.segments.length}개 · 전체 {total}점 · 유효{" "}
-                    {total - missing}점 · 결측 {missing}점
-                  </p>
+                  {!cinema && (
+                    <p>
+                      관측 구간 {curve.segments.length}개 · 전체 {total}점 ·
+                      유효 {total - missing}점 · 결측 {missing}점
+                    </p>
+                  )}
                   {details}
                 </details>
                 <details>
@@ -293,11 +316,19 @@ function AnalysisReady({
                     전체 보기를 합니다. 접힌 곡선은 최대 32배이며 미세 조정 중
                     위치를 유지합니다.
                   </p>
-                  <p>
-                    주기도의 봉우리 버튼에 Tab으로 이동해 주기와 power를
-                    확인하고 Enter로 선택합니다. 빈 위치를 클릭하거나 ↑/↓로 조회
-                    후 Enter를 누르면 직접 선택합니다.
-                  </p>
+                  {cinema ? (
+                    <p>
+                      주기도의 봉우리 버튼에 Tab으로 이동해 주기와 세기를
+                      확인하고 Enter로 선택합니다. 빈 위치를 클릭하거나 ↑/↓로
+                      조회한 뒤 Enter를 누르면 직접 선택합니다.
+                    </p>
+                  ) : (
+                    <p>
+                      주기도의 봉우리 버튼에 Tab으로 이동해 주기와 power를
+                      확인하고 Enter로 선택합니다. 빈 위치를 클릭하거나 ↑/↓로
+                      조회 후 Enter를 누르면 직접 선택합니다.
+                    </p>
+                  )}
                   <p>
                     구간 선택 단계에서 드래그로 새 구간, Shift+드래그로 가로
                     이동합니다. 키보드는 접힌 곡선 아래 ‘키보드 구간 선택’에서

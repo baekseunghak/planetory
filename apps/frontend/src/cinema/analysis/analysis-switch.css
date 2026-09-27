@@ -1,0 +1,32 @@
+/* Small, always visible. The shell may move it with AnalysisSwitch's toggleClassName. */
+.analysis-variant-toggle {
+  position: fixed;
+  left: var(--pc-hud-inset, 24px);
+  bottom: var(--pc-hud-inset, 24px);
+  z-index: var(--pc-z-toast, 8);
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
+  border-radius: var(--pc-radius-pill, 999px);
+  background: var(--pc-glass, rgba(5, 8, 15, 0.9));
+  font-family: var(--pc-font-sans, inherit);
+  font-size: var(--pc-text-xs, 12px);
+}
+.analysis-variant-toggle button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--pc-radius-pill, 999px);
+  background: transparent;
+  color: var(--pc-ink-dim, #8d99ad);
+  font: inherit;
+}
+.analysis-variant-toggle button[aria-pressed="true"] {
+  background: var(--pc-accent-soft, rgba(94, 196, 247, 0.15));
+  color: var(--pc-ink, #e8eef8);
+}
+.analysis-variant-toggle button:focus-visible {
+  outline: 2px solid var(--pc-accent, #5ec4f7);
+  outline-offset: 2px;
+}

@@ -11,26 +11,43 @@
 // 결과가 봉우리와 판단으로 갈리므로 화면에서 클릭만으로 모든 조합을 만든다.
 
 /** 후보의 판정. API 표시 어휘이며 DB의 소문자 어휘와 다르다. */
-type Disposition = "CONFIRMED" | "UNCONFIRMED" | "FP";
+export type Disposition = "CONFIRMED" | "UNCONFIRMED" | "FP";
 type Judgment = "LIKELY_PLANET" | "UNLIKELY_PLANET" | "UNSURE";
+
+/**
+ * 결과에 싣는 신호 하나. 합성 표(SIGNALS)의 한 줄과 같은 모양이며, 실제 TESS
+ * 표본(dev/real-sample)이 매칭한 후보를 이 모양으로 넘긴다. `bls`가 없으면
+ * 합성 값(1743.35 BTJD, 2.4시간, 8000ppm)을 쓴다.
+ */
+export type OutcomeSignal = {
+  candidateId: string;
+  disposition: Disposition;
+  /** `matched`인지 `matched_harmonic`인지. 1배는 null로 둔다. */
+  harmonicMultiplier: number | null;
+  /** `modelVersion` omitted: the fixture model name. `null`: none. */
+  ai: (
+    | { status: "completed"; score: number; verdict: string }
+    | { status: "input_insufficient" | "error" | "not_evaluated" }
+  ) & { modelVersion?: string | null };
+  external: { source: string; externalId: string; disposition: string }[];
+  bls?: {
+    periodDays: number;
+    epochBtjd: number;
+    durationHours: number;
+    depthPpm: number;
+  };
+};
+const SYNTHETIC_BLS = {
+  epochBtjd: 1743.35,
+  durationHours: 2.4,
+  depthPpm: 8000,
+};
 
 /**
  * 봉우리 grid index → 합성 신호. 주기도 fixture의 추천 3개에 대응한다.
  * 확정·미확정·FP를 하나씩 두어 채점·성과·통계가 모두 다른 길로 가게 했다.
  */
-const SIGNALS: Record<
-  number,
-  {
-    candidateId: string;
-    disposition: Disposition;
-    /** `matched`인지 `matched_harmonic`인지. 배수로 고른 것을 흉내 낸다. */
-    harmonicMultiplier: number | null;
-    ai:
-      | { status: "completed"; score: number; verdict: string }
-      | { status: "input_insufficient" | "error" | "not_evaluated" };
-    external: { source: string; externalId: string; disposition: string }[];
-  }
-> = {
+const SIGNALS: Record<number, OutcomeSignal> = {
   // 1위: 확정 행성. 채점이 되고 외부 출처가 있다.
   3600: {
     candidateId: "9007199254741101",
@@ -103,14 +120,21 @@ export type OutcomeInput = {
   ambiguous?: boolean;
   /** 공개한 사람이 아직 없는 경우. 0명을 0%로 그리지 않는지 본다. */
   emptyStatistics?: boolean;
+  /**
+   * 실제 표본이 고른 신호. `undefined`면 봉우리 표(SIGNALS)를 쓰고, `null`이면
+   * 매칭한 신호가 없다(미매칭). dev/real-sample/adapter.ts가 채운다.
+   */
+  signal?: OutcomeSignal | null;
 };
 
 /** 후보 제출의 결과 묶음. 여섯 축을 각각 채운다. */
 export function candidateOutcome(input: OutcomeInput) {
   const signal =
-    input.sourcePeakGridIndex === null
-      ? null
-      : (SIGNALS[input.sourcePeakGridIndex] ?? null);
+    input.signal !== undefined
+      ? input.signal
+      : input.sourcePeakGridIndex === null
+        ? null
+        : (SIGNALS[input.sourcePeakGridIndex] ?? null);
 
   // 서버가 후보를 고르지 못했다. 신호·성과·통계가 모두 비고 다시 풀기만 남는다.
   if (input.ambiguous)
@@ -161,7 +185,11 @@ export function candidateOutcome(input: OutcomeInput) {
       correctedPeriodDays: harmonicMultiplier
         ? input.periodDays * harmonicMultiplier
         : null,
-      correctionReason: harmonicMultiplier ? "P/2 alias" : null,
+      correctionReason: harmonicMultiplier
+        ? harmonicMultiplier >= 1
+          ? `P/${Math.round(harmonicMultiplier)} alias`
+          : `${Math.round(1 / harmonicMultiplier)}P alias`
+        : null,
     },
     signal: {
       candidateId: signal.candidateId,
@@ -174,15 +202,15 @@ export function candidateOutcome(input: OutcomeInput) {
             ? "not_planet"
             : null,
       bls: {
-        periodDays: input.periodDays * (harmonicMultiplier ?? 1),
-        epochBtjd: 1743.35,
-        durationHours: 2.4,
-        depthPpm: 8000,
+        ...(signal.bls ?? {
+          ...SYNTHETIC_BLS,
+          periodDays: input.periodDays * (harmonicMultiplier ?? 1),
+        }),
         sde: null,
         snr: null,
       },
       // 실행 불가를 0점으로 바꾸지 않는다. status만 두고 score를 넣지 않는다.
-      ai: { ...signal.ai, modelVersion: "astronet-triage-fixture-188" },
+      ai: { modelVersion: "astronet-triage-fixture-188", ...signal.ai },
       external: signal.external.map((item) => ({
         ...item,
         fetchedOn: "2026-09-01",
@@ -213,7 +241,11 @@ export function candidateOutcome(input: OutcomeInput) {
       disposition === "UNCONFIRMED"
         ? { state: "UNPUBLISHED", publicAnalysisId: null }
         : { state: "NOT_ELIGIBLE", publicAnalysisId: null },
-    judgmentStatistics: statistics(disposition, input.emptyStatistics === true),
+    judgmentStatistics: statistics(
+      disposition,
+      input.emptyStatistics === true,
+      signal.candidateId,
+    ),
     detail: {
       available: true,
       targetKind: "CURRENT_MATCH",
@@ -246,7 +278,11 @@ const none = () => ({
  * 6.4절 통계. 미확정과 확정·FP는 **세는 대상이 달라** 형식도 다르다.
  * 공개한 사람이 없으면 참여자 0과 `percentages: null`이며 0%가 아니다.
  */
-function statistics(disposition: Disposition, empty: boolean) {
+function statistics(
+  disposition: Disposition,
+  empty: boolean,
+  candidateId: string = SIGNALS[2500].candidateId,
+) {
   if (disposition !== "UNCONFIRMED")
     return { kind: "graded", matchedMemberCount: 10, agreementPercent: 70 };
   if (empty)
@@ -262,7 +298,7 @@ function statistics(disposition: Disposition, empty: boolean) {
     };
   return {
     kind: "public_analyses",
-    candidateId: SIGNALS[2500].candidateId,
+    candidateId,
     participantCount: 15,
     likelyPlanet: 8,
     unlikelyPlanet: 4,
@@ -287,6 +323,11 @@ export function detailOutcome(stored: {
   evaluation: string | null;
   /** 개발 전용 헤더. `explained`일 때만 해설이 채워진 응답을 흉내 낸다. */
   outcome?: string | null;
+  /**
+   * 실제 표본이 드러낼 신호(매칭한 후보, 미매칭이면 힌트 후보). `undefined`면
+   * 합성 표, `null`이면 보여 줄 대상이 없다(409).
+   */
+  signal?: OutcomeSignal | null;
 }) {
   // 대상이 없으면 409다. 열람 기록도 바뀌지 않는다.
   if (
@@ -305,7 +346,8 @@ export function detailOutcome(stored: {
         ),
       )
     : HINT_PEAK;
-  const signal = SIGNALS[gridIndex];
+  const signal =
+    stored.signal !== undefined ? stored.signal : SIGNALS[gridIndex];
   if (!signal) return null;
   return {
     targetKind: matched ? "CURRENT_MATCH" : "CURRENT_CURVE_HINT",
@@ -320,14 +362,11 @@ export function detailOutcome(stored: {
             ? "not_planet"
             : null,
       bls: {
-        periodDays: 11.7346,
-        epochBtjd: 1743.35,
-        durationHours: 2.4,
-        depthPpm: 8000,
+        ...(signal.bls ?? { ...SYNTHETIC_BLS, periodDays: 11.7346 }),
         sde: null,
         snr: null,
       },
-      ai: { ...signal.ai, modelVersion: "astronet-triage-fixture-188" },
+      ai: { modelVersion: "astronet-triage-fixture-188", ...signal.ai },
       external: signal.external.map((item) => ({
         ...item,
         fetchedOn: "2026-09-01",

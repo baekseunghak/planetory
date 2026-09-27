@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useCinemaWording } from "../../shared/cinema-wording";
 export const guideSteps = [
   [
     "01-star-select",
@@ -26,7 +27,16 @@ export const guideSteps = [
     "선택 내용을 확인하고 제출합니다. 제출 결과에 따라 계속 분석하거나 다음 별로 이동합니다. 모든 제출이 탐색 완료나 새로운 성과를 뜻하지는 않습니다.",
   ],
 ] as const;
+// Cinema app wording for the same five steps (src/shared/cinema-wording).
+const cinemaGuideText = [
+  "나의 은하에서 살펴볼 별을 고르고 '분석 시작'을 누릅니다. 열려 있는 별만 분석할 수 있습니다.",
+  guideSteps[1][2],
+  guideSteps[2][2],
+  guideSteps[3][2],
+  "선택 내용을 확인하고 제출합니다. 결과에 따라 계속 분석하거나 다음 별로 넘어갑니다. 모든 제출이 탐사 완료나 새 성과를 뜻하지는 않습니다.",
+] as const;
 export function UsageGuide() {
+  const cinema = useCinemaWording();
   const dialog = useRef<HTMLDialogElement>(null),
     trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false),
@@ -120,7 +130,7 @@ export function UsageGuide() {
               </nav>
               <section className="guide-current">
                 <h2 id="usage-guide-title">{info[1]}</h2>
-                <p>{info[2]}</p>
+                <p>{cinema ? cinemaGuideText[step] : info[2]}</p>
                 <p className="guide-caption">
                   조작을 설명하는 예시입니다. 이 안내를 읽어도 탐사 상태는
                   바뀌지 않습니다.

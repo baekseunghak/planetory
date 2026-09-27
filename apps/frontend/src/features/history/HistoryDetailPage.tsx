@@ -7,6 +7,7 @@ import { wrapPhaseWindow } from "../analysis/history-graph.ts";
 import type { HistoryDetail } from "../analysis/history-data.ts";
 import { FallbackNote } from "./fallback-note.tsx";
 import { useHistoryDetail } from "./use-history-detail.ts";
+import { useCinemaCopy } from "../analysis/cinema-copy.ts";
 import "./history-detail.css";
 
 // #190 개인 기록 상세. **불변과 현재를 가른다** — 한 덩어리로 붙이면
@@ -159,10 +160,10 @@ export function HistoryDetailPage() {
   // 분석·지도·게시글 셋이라 화면마다 돌아갈 곳이 다르고, 그 값을 주소가
   // 들고 온다. **여기서 목적지를 지어내지 않는다.**
   const { historyId = "", returnTo } = usePageContext();
+  // 시네마 앱은 같은 기록을 자기 말로 보여 준다. develop 화면은 그대로다.
+  const Detail = useCinemaCopy()?.HistoryDetail ?? HistoryDetail;
   // 기록이 바뀌면 모드·없음 관찰·진행 중 요청을 함께 새로 시작한다.
-  return (
-    <HistoryDetail key={historyId} historyId={historyId} returnTo={returnTo} />
-  );
+  return <Detail key={historyId} historyId={historyId} returnTo={returnTo} />;
 }
 
 function HistoryDetail({
