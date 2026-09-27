@@ -740,24 +740,42 @@ class SilverIncrementalContractTest(unittest.TestCase):
         estimate = tess_silver.estimate_output_bytes(247824, 128258)
         self.assertLess(abs(estimate - 683026561628) / 683026561628, 0.001)
 
-    def test_preflight_refuses_a_second_silver_application(self):
+    def test_silver_preflight_refuses_a_second_silver_application(self):
         listing = ("Total number of applications:1\n                Application-Id\tApplication-Name\n"
                    "application_1_0001\tS15P21C206-78-silver-20260927T000000Z-20260927T000100Z\tSPARK\n")
-
-        def hdfs(*argv, **kwargs):
-            outputs = {"nn1": "active", "nn2": "standby", "-safemode": "Safe mode is OFF\nSafe mode is OFF",
-                       "-report": "Live datanodes (5):", "-df": self.DF}
-            return SimpleNamespace(stdout=next(v for k, v in outputs.items() if k in argv))
-
-        def yarn(*argv, **kwargs):
-            return SimpleNamespace(stdout=" RUNNING \n" * 5 if "node" in argv else listing)
-
-        args = SimpleNamespace(through_sector=14, bronze_coverage=None)
-        with patch("tess_silver_ctl.hdfs", side_effect=hdfs), patch("tess_silver_ctl.yarn", side_effect=yarn), \
-                patch("tess_silver_ctl.bronze_sector_snapshot") as snapshot, \
+        args = SimpleNamespace(through_sector=14, bronze_coverage=tess_silver_ctl.DEFAULT_BRONZE_COVERAGE)
+        with patch("tess_silver_ctl.yarn", return_value=SimpleNamespace(stdout=listing)), \
+                patch("tess_silver_ctl.cluster_preflight") as shared, \
                 self.assertRaisesRegex(RuntimeError, "another Silver application"):
-            tess_silver_ctl.cluster_preflight(args)
-        snapshot.assert_not_called()
+            tess_silver_ctl.silver_preflight(args)
+        shared.assert_not_called()
+        idle = listing.replace("application_1_0001\tS15P21C206-78-silver", "application_1_0002\tS15P21C206-77-bronze")
+        with patch("tess_silver_ctl.yarn", return_value=SimpleNamespace(stdout=idle)), \
+                patch("tess_silver_ctl.cluster_preflight", return_value={"sha256": "a"}) as shared:
+            tess_silver_ctl.silver_preflight(args)
+        shared.assert_called_once_with(args.bronze_coverage, through_sector=14)
+
+    def test_gold_keeps_its_coverage_preflight_and_silver_input_fields(self):
+        # 80 Gold calls cluster_preflight(<coverage path>) and re-audits its v4 Silver input against
+        # coverage_sha256/ready_sha256; 275 must not change either for the coverage path.
+        self.assertEqual(list(inspect.signature(tess_silver_ctl.cluster_preflight).parameters)[0], "bronze_coverage_path")
+        self.assertEqual(tess_silver_ctl.SILVER_INPUT_SCHEMAS,
+                         ("planetory.tess-silver-attempt.v4", "planetory.tess-silver-attempt.v5"))
+        coverage_sha = "c" * 64
+        path = f"/lake/bronze/tess/coverage={coverage_sha}"
+        rows = [{"sector": s, "location": f"/lake/bronze/tess/sector={s:04d}", "ready_sha256": f"{s:064x}",
+                 "product_count": 10, "observation_count": 100} for s in range(1, 14)]
+        value = {"schema": "planetory.tess-bronze-coverage.v1", "pipeline_version": "bronze-a", "product_count": 130,
+                 "observation_count": 1300, "replication": 2, "sectors": rows}
+        markers = {f"{row['location']}/_READY.json": (self.marker(row["sector"], "bronze-a"), row["ready_sha256"])
+                   for row in rows}
+        markers[f"{path}/_READY.json"] = (value, "d" * 64)
+        with patch("tess_silver_ctl.hdfs_json", side_effect=lambda p: markers[p]), \
+                patch("tess_silver_ctl.hdfs_exists", return_value=True), contextlib.redirect_stdout(io.StringIO()):
+            snapshot = tess_silver_ctl.bronze_coverage(path)
+        self.assertEqual((snapshot["coverage_sha256"], snapshot["ready_sha256"]), (coverage_sha, "d" * 64))
+        self.assertEqual(snapshot["bronze_paths"], [row["location"] for row in rows])
+        self.assertEqual(snapshot["coverage"], path)
 
     def test_submit_passes_every_sector_version_and_the_selection(self):
         captured = []
@@ -868,6 +886,8 @@ class SilverIncrementalContractTest(unittest.TestCase):
             self.assertEqual(marker["bronze_snapshot_sha256"], snapshot["sha256"])
             self.assertEqual(marker["bronze_snapshot"]["sectors"][0]["pipeline_version"], "bronze-b")
             self.assertEqual(marker["selection"], kwargs["selection"])
+            # A Sector snapshot has no coverage, so Gold's coverage re-audit refuses this attempt.
+            self.assertEqual((marker["bronze_coverage_sha256"], marker["bronze_coverage_ready_sha256"]), (None, None))
             self.assertEqual((marker["selected_products"], marker["estimated_output_bytes"],
                               marker["capacity_budget_bytes"]), (3, 99, 500))
             self.assertEqual(audit.call_args.args[1]["bronze_snapshot_sha256"], snapshot["sha256"])

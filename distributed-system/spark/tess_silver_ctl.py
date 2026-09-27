@@ -42,6 +42,8 @@ from tess_bronze_ctl import (
 
 
 SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v5"
+# Attempt markers Gold may read: the Sector 1~13 run is v4, 275 and later attempts are v5.
+SILVER_INPUT_SCHEMAS = ("planetory.tess-silver-attempt.v4", SILVER_READY_SCHEMA)
 SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v4"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
 BRONZE_SNAPSHOT_SCHEMA = "planetory.tess-silver-bronze-snapshot.v1"
@@ -102,10 +104,10 @@ def validate_bronze_coverage(value: dict[str, Any], markers: dict[int, tuple[dic
 
 
 def bronze_coverage(path: str) -> dict[str, Any]:
-    # The content-addressed path stays in the attempt marker as `bronze_coverage`.
-    if not re.fullmatch(r"/lake/bronze/tess/coverage=[0-9a-f]{64}", path):
+    match = re.fullmatch(r"/lake/bronze/tess/coverage=([0-9a-f]{64})", path)
+    if not match:
         raise SilverDataContractError("Bronze coverage must be an immutable 1..13 coverage path")
-    value, _ = hdfs_json(f"{path}/_READY.json")
+    value, ready_sha256 = hdfs_json(f"{path}/_READY.json")
     markers = {}
     for row in value.get("sectors", []):
         sector = int(row.get("sector", -1))
@@ -118,7 +120,7 @@ def bronze_coverage(path: str) -> dict[str, Any]:
         if not hdfs_exists(f"{row['location']}/_SUCCESS"):
             raise SilverDataContractError(f"Bronze Parquet is incomplete sector={row['sector']}")
     print(f"SILVER_BRONZE_COVERAGE_OK products={value['product_count']} path={path}", flush=True)
-    return snapshot_from_rows([
+    snapshot = snapshot_from_rows([
         {
             "sector": int(row["sector"]),
             "location": row["location"],
@@ -129,13 +131,16 @@ def bronze_coverage(path: str) -> dict[str, Any]:
         }
         for row in value["sectors"]
     ], coverage=path)
+    # 80 Gold audits its Silver input against the coverage and its marker, so they stay in the result.
+    return {**snapshot, "coverage_sha256": match.group(1), "ready_sha256": ready_sha256}
 
 
 def snapshot_from_rows(rows: list[dict[str, Any]], *, coverage: str | None) -> dict[str, Any]:
     """One Bronze input snapshot; its ID depends on the Sector rows only, not on how they were found."""
     body = {"schema": BRONZE_SNAPSHOT_SCHEMA, "sectors": sorted(rows, key=lambda row: row["sector"])}
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return {**body, "sha256": digest, "coverage": coverage}
+    return {**body, "sha256": digest, "coverage": coverage,
+            "bronze_paths": [row["location"] for row in body["sectors"]]}
 
 
 def validate_sector_marker(sector: int, marker: dict[str, Any]) -> None:
@@ -193,7 +198,9 @@ def silver_capacity_budget() -> int:
     return budget
 
 
-def cluster_preflight(args: argparse.Namespace, *, allow_running: bool = False) -> dict[str, Any]:
+def cluster_preflight(bronze_coverage_path: str = DEFAULT_BRONZE_COVERAGE, *, through_sector: int | None = None,
+                      allow_running: bool = False) -> dict[str, Any]:
+    """Shared HDFS/YARN checks and the Bronze input. 80 Gold calls it with the coverage path only."""
     nn1 = hdfs("haadmin", "-getServiceState", "nn1").stdout.strip()
     nn2 = hdfs("haadmin", "-getServiceState", "nn2").stdout.strip()
     if f"{nn1}:{nn2}" not in ("active:standby", "standby:active"):
@@ -211,13 +218,19 @@ def cluster_preflight(args: argparse.Namespace, *, allow_running: bool = False) 
         raise RuntimeError("expected five RUNNING NodeManagers")
     applications = yarn("application", "-list", "-appStates", "RUNNING").stdout
     running = APP_ID_RE.findall(applications) if allow_running else require_yarn_headroom(applications)
-    if not allow_running and SILVER_APP_RE.search(applications):
-        # The capacity budget covers one in-flight Silver output, so a second run waits for the first.
-        raise RuntimeError("another Silver application is running")
-    snapshot = (bronze_sector_snapshot(args.through_sector) if args.through_sector
-                else bronze_coverage(args.bronze_coverage))
+    snapshot = bronze_sector_snapshot(through_sector) if through_sector else bronze_coverage(bronze_coverage_path)
     print(f"SILVER_PREFLIGHT_OK ha={nn1}:{nn2} live_datanodes=5 running_apps={len(running)}", flush=True)
     return snapshot
+
+
+def silver_preflight(args: argparse.Namespace) -> dict[str, Any]:
+    """Silver runs one at a time: the capacity budget covers a single in-flight Silver output.
+
+    Only Silver commands refuse here; a Gold unit that restarts on this error would spend its daily starts.
+    """
+    if SILVER_APP_RE.search(yarn("application", "-list", "-appStates", "RUNNING").stdout):
+        raise RuntimeError("another Silver application is running")
+    return cluster_preflight(args.bronze_coverage, through_sector=args.through_sector)
 
 
 def state_path(root: Path, run_id: str, attempt_id: str) -> Path:
@@ -456,6 +469,9 @@ def finalize_attempt(
         "bronze_snapshot_sha256": snapshot["sha256"],
         "bronze_snapshot": {"schema": snapshot["schema"], "sectors": snapshot["sectors"]},
         "bronze_coverage": snapshot["coverage"],
+        # Gold re-audits a coverage attempt against these; a Sector snapshot has none.
+        "bronze_coverage_sha256": snapshot.get("coverage_sha256"),
+        "bronze_coverage_ready_sha256": snapshot.get("ready_sha256"),
         "selection": selection,
         "spark_application_id": application_id,
         "selected_tics": int(summary["selected_tics"]),
@@ -591,12 +607,12 @@ def run_attempt(
 
 
 def command_preflight(args: argparse.Namespace) -> None:
-    cluster_preflight(args)
+    silver_preflight(args)
     print(f"SILVER_CAPACITY_BUDGET_PREVIEW bytes={capacity_budget(hdfs('dfs', '-df', '/').stdout)}", flush=True)
 
 
 def command_canary(args: argparse.Namespace) -> None:
-    snapshot = cluster_preflight(args)
+    snapshot = silver_preflight(args)
     final, marker = run_attempt(args=args, snapshot=snapshot, tic_ids=args.tic_id, validation=True)
     print(f"SILVER_CANARY_AUDIT={json.dumps(marker['science_audit'], sort_keys=True, separators=(',', ':'))}", flush=True)
     hdfs("dfs", "-rm", "-r", "-skipTrash", final)
@@ -612,12 +628,12 @@ def run_selection(args: argparse.Namespace) -> dict[str, int] | None:
 
 
 def command_run(args: argparse.Namespace) -> None:
-    snapshot = cluster_preflight(args)
+    snapshot = silver_preflight(args)
     run_attempt(args=args, snapshot=snapshot, selection=run_selection(args))
 
 
 def command_retry(args: argparse.Namespace) -> None:
-    snapshot = cluster_preflight(args)
+    snapshot = silver_preflight(args)
     previous, _ = hdfs_json(f"{args.retry_from}/_READY.json")
     # A v4 attempt predates the snapshot ID and is not retried by this release.
     if (previous.get("schema") != SILVER_READY_SCHEMA or
