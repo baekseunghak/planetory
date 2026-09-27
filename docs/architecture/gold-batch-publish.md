@@ -1,6 +1,6 @@
 # Gold 배치 게시 경로의 코드 구조 (S15P21C206-276)
 
-- 상태: 구현·합성 검증 완료. 운영 서비스 DB 적재는 합성 별 하나로 시험했다(2026-09-27, 시험 행 삭제). Node 1 게시 제어기와 Airflow 게시 단계는 운영 배포 전이다. Gold 생성·게시 준비 gate는 `S15P21C206-80`이 따로 올린다.
+- 상태: 구현·합성 검증 완료. 운영 서비스 DB 적재는 합성 별 하나로 시험했다(2026-09-27, 시험 행 삭제). Node 1 게시 제어기와 Airflow 게시 단계는 배포했고, 첫 run이 Gold·gate를 통과해 게시 승인을 기다린다(DEC-01 확정 전). Gold 생성·게시 준비 gate는 `S15P21C206-80`(MR !234, develop 병합)이다.
 - 대상 독자: 이 경로를 처음 보는 개발자·운영자. 코드가 어떻게 나뉘고 어떤 순서로 이어지는지 설명한다.
 - 정본: 필드·결과 코드·검사 규칙은 [Publisher README](../../distributed-system/publisher/README.md) 「payload 모양」「적재 절차」「배치 run」, Gold 필드와 표기는 [Gold 계약](../../contracts/gold/README.md), 시스템 경계는 [시스템 아키텍처](system-architecture.md)다. 이 문서와 정본이 다르면 정본을 따른다.
 
@@ -145,8 +145,8 @@ Push-Location distributed-system/publisher; python -m unittest test_load; Pop-Lo
 
 ## 9. 아직 안 된 것
 
-- **Node 1 배포.** 게시 단계가 든 새 release, `/etc/planetory/publisher/image`, 게시 sudoers를 배포해야 한다(운영 승인). 첫 run의 Publisher 이미지는 276 코드가 든 것이어야 한다. develop 병합 뒤 CI가 만든다.
-- **실제 run.** 첫 `tess_publication_run` 게시와 266 NASA 정보 `ready` 확인, 제한 Sector 별의 분석 화면 확인이 남았다.
+- **게시 이미지.** Node 1 배포는 끝났다(2026-09-27). 다만 `/etc/planetory/publisher/image`는 `publish-run`이 없는 현재 운영 Publisher로 우선 고정했다. 276(MR !231)이 develop에 병합되면 CI가 만든 이미지로 이 파일을 바꾼다.
+- **실제 게시.** 첫 `tess_publication_run`은 Gold·gate를 통과해 승인을 기다린다. DEC-01 확정 뒤 승인·게시하고, 266 NASA 정보 `ready`와 제한 Sector 별의 분석 화면을 확인한다.
 - **갱신 게시.** 후보 동일성 대조, 튜토리얼 제외, 값이 바뀐 이력(`history_proposals`) 적재가 생긴 뒤 연다.
 - **정책.** 계약 밖의 QA 기준값(데이터 담당 합의), `hidden` 별을 `published`로 바꾸는 절차를 정해야 한다.
 - **규모.** run 전체를 로컬에 받는다. 1~13은 ready가 많아야 5,156개다. 80 Canary에서 ready 별 하나가 약 430 KB였으므로 번들은 2.2 GB 안팎으로 추정되고, Node 1 여유 디스크 13 GB로 충분하다. 실제 run에서 다시 잰다. 더 큰 run은 part 단위 스트리밍으로 바꾼다.

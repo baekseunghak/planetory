@@ -152,7 +152,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 - **운영 서비스 DB 시험(2026-09-27, 사용자 승인).** Node 1에서 운영 Publisher 이미지(`50e13981`)에 이 브랜치의 `publisher`·`astro_kernel` 패키지를 읽기 전용으로 덮고 `publish-run --ready`를 돌렸다. 입력은 80 샘플 publish-ready(합성 TIC 999999101, run `20260927T010000Z`)다.
   - 결과: EC2-A `planetory_poc`(V29)에 `PUBLISHED b-12`·알림 HTTP 200, 재실행 `ALREADY_PUBLISHED b-12`·알림 200이었다.
   - DB와 로그: 별은 `hidden`, 판 manifest에 run ID·승인 근거, 관측 원천은 Sector 3·4 `120s`·`spoc-5.0.0`이었다. Backend 로그에 "판 12(TIC 999999101) 후처리"가 두 번 찍혔고 재개·라벨은 0이었다.
-  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 경로는 운영에서 아직 돌리지 않았다.
+  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 게시 단계는 Node 1에 배포했지만, 첫 run이 승인 대기라 게시는 아직 돌지 않았다.
 
 ## DEC-01 공급 집계 (S15P21C206-79)
 
