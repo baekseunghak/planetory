@@ -56,7 +56,8 @@ trap - EXIT
 rm -f -- "$archive"
 echo AIRFLOW_RELEASE_STAGED="$release" archive_sha256="$expected"
 '@.Replace('__RELEASE__',$release).Replace('__ARCHIVE__',$remoteArchive).Replace('__SHA__',$sha)
-    $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($command))
+    # A CRLF checkout puts CR into the here-string; Linux bash rejects `set -eu\r` before anything runs.
+    $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($command.Replace("`r",'')))
     & tailscale ssh SSAFY@node-1 "printf '%s' '$payload' | base64 --decode | sudo -n bash"
     if ($LASTEXITCODE -ne 0) { throw 'Airflow release staging failed.' }
 } finally {
