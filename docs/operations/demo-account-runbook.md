@@ -25,10 +25,18 @@
 
 ## 2. 전제와 사전 확인
 
-읽기 전용이다. EC2-A의 서비스 compose 폴더에서 소유자 계정으로 접속한다([EC2 서비스 배포](../../infra/service/README.md)).
+읽기 전용이다. 운영 DB는 `ec2-a`의 배포 경로(`$DEPLOY_PATH`, `/home/deploy/planetory`)에서 `deploy` 계정으로 연다. 사람의 수동 작업도 `deploy`로 한다는 [CI/CD 배포 접속](cicd.md#배포-접속) 규칙을 따른다.
+
+- 접속하는 PC는 tailnet에 사용자와 장비가 모두 승인돼 있어야 한다([Tailscale 팀 서버 접근](tailscale-team-access.md)). Tailscale SSH는 접속할 때 브라우저 재인증을 요구할 수 있다.
+- `ubuntu` 계정 아래의 `~/planetory/infra/service`는 CI 도입 전 옛 사본이므로 쓰지 않는다.
+- `deploy`로 바로 들어갈 수 없으면 `tailscale ssh ubuntu@ec2-a`로 들어가 `sudo -u deploy`로 같은 경로에서 실행한다.
+- psql은 컨테이너 안에서 소유자 계정(`planetory`)으로 접속한다([EC2 서비스 배포](../../infra/service/README.md)).
 
 ```bash
-docker compose exec service-db psql -U planetory -d planetory_poc
+# 작업 PC
+tailscale ssh deploy@ec2-a
+# ec2-a (deploy 계정)
+cd /home/deploy/planetory && docker compose exec service-db psql -U planetory -d planetory_poc
 ```
 
 ```sql
@@ -71,7 +79,8 @@ SELECT (SELECT count(*) FROM submissions WHERE created_at > now() - interval '30
 3. **실행 직전 준비.** 2절 ④로 최근 제출·공개가 없는지 다시 보고, 팀 채널에 "3분간 제출·공개 금지"를 공지한 뒤 백업을 받는다. 백업에는 회원 정보가 들어 있으므로 [서비스 DB 백업 규칙](../../infra/service/README.md#튜토리얼-5종)을 따른다. 권한 600으로 두고 서버 밖으로 옮기지 않으며, 사후 확인이 끝나면 지운다. 삭제는 실행 직전에 승인받는다.
 
    ```bash
-   (umask 077; mkdir -p ~/backups && docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > ~/backups/planetory-pre281-$(date -u +%Y%m%dT%H%M%SZ).dump)
+   # ec2-a (deploy 계정)
+   (umask 077; cd /home/deploy/planetory && mkdir -p ~/backups && docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > ~/backups/planetory-pre281-$(date -u +%Y%m%dT%H%M%SZ).dump)
    ```
 
    K는 목표 별 수에서 현재 별 수와 챌린지 별 1개를 뺀 값이다. 목표 1,000개, 현재 12개면 987이다.
