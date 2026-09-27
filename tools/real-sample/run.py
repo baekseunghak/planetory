@@ -441,9 +441,10 @@ def main():
     for p in payloads:
         (stars_dir / f"{p['ticId']}.json").write_text(json.dumps(p, separators=(",", ":"), allow_nan=False),
                                                      encoding="utf-8")
+    from astro_kernel.discoverability import RULE as DISCOVERABILITY_RULE
     manifest = dict(format=FORMAT, generatedAt=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     source=("MAST SPOC 2-min LC (Sectors 2-5, spoc-5.0.x) -> libs/astro-kernel "
-                            "(silver-biweight-1.0.0, bls_grid_v1 gate_v1, discoverability-1.0.0); "
+                            f"(silver-biweight-1.0.0, bls_grid_v1 gate_v1, {DISCOVERABILITY_RULE['version']}); "
                             "labels: repo references only"),
                     stars=[{k: v for k, v in dict(ticId=p["ticId"], role=p["role"], tutorialSeq=p.get("tutorialSeq"),
                                                   displayName=p["displayName"]).items() if v is not None}
