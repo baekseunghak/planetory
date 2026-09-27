@@ -75,6 +75,9 @@ class AchievementServiceTest {
     private static final long TUTORIAL_INACTIVE = 6250;
     private static final long CHALLENGE_ACTIVE = 6300;
     private static final long CHALLENGE_PLANNED = 6400;
+    /** 공개됐지만 찾을 신호가 없는 별. 열어도 성과를 낼 수 없어 빠진다 [S15P21C206-282]. */
+    private static final long UNDISCOVERABLE_ONLY = 6500;
+    private static final long NO_SIGNAL = 6600;
 
     /** 성과로 열릴 수 있는 별. 운영을 멈춘 튜토리얼 별과 예정 회차 대상은 뺄 이유가 없다(OPS-08). */
     private static final Set<Long> ELIGIBLE = Set.of(6001L, 6002L, 6003L, 6004L, 6005L,
@@ -113,6 +116,22 @@ class AchievementServiceTest {
             insertStar(tic, "published");
         }
         insertStar(HIDDEN, "hidden");
+        insertStar(UNDISCOVERABLE_ONLY, "published");
+        insertStar(NO_SIGNAL, "published");
+        // 제외 규칙마다 따로 보이도록 찾을 신호는 모든 별에 두고, 신호 없는 두 별만 뺀다.
+        for (long tic : new long[] {TUTORIAL_ACTIVE, TUTORIAL_INACTIVE, CHALLENGE_ACTIVE, CHALLENGE_PLANNED,
+                HIDDEN, UNDISCOVERABLE_ONLY, NO_SIGNAL}) {
+            insertBundle(tic);
+        }
+        for (long tic : ORDINARY) {
+            insertBundle(tic);
+            candidate(tic);
+        }
+        for (long tic : new long[] {TUTORIAL_ACTIVE, TUTORIAL_INACTIVE, CHALLENGE_ACTIVE, CHALLENGE_PLANNED,
+                HIDDEN, UNDISCOVERABLE_ONLY}) {
+            candidate(tic);
+        }
+        jdbc.update("UPDATE candidates SET discoverable = false WHERE tic_id = ?", UNDISCOVERABLE_ONLY);
         jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (1, ?, 'deep_confirmed', true)",
                 TUTORIAL_ACTIVE);
         jdbc.update("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (2, ?, 'shallow_confirmed', false)",
@@ -207,9 +226,12 @@ class AchievementServiceTest {
         assertFalse(fpSuccess(member, HOME_2), "다른 별의 이력은 건드리지 않는다");
     }
 
-    /** OPS-08 제외 규칙. 발견 수를 크게 잡아 후보 전체를 한 번에 열어 본다. */
+    /**
+     * OPS-08 제외 규칙과 찾을 신호가 없는 별(탐색 불가 후보만 있거나 후보가 없는 별, S15P21C206-282).
+     * 발견 수를 크게 잡아 후보 전체를 한 번에 열어 본다.
+     */
     @Test
-    void 후보는_공개된_못_찾은_별이고_운영_중인_튜토리얼_별과_진행_중인_회차_대상은_빠진다() {
+    void 후보는_공개된_못_찾은_별이고_운영_중인_튜토리얼_별과_진행_중인_회차_대상과_찾을_신호_없는_별은_빠진다() {
         useStarsPerAchievement(100);
         // 진행 회차의 추가 대상도 대표 대상처럼 빠진다(S15P21C206-283).
         jdbc.update("INSERT INTO challenge_round_extra_targets(round_id, tic_id)"
@@ -497,7 +519,6 @@ class AchievementServiceTest {
                 "다른 신호의 공개");
 
         long far = ORDINARY[0];
-        insertBundle(far);
         long farCandidate = candidate(far);
         long farSubmission = submit(member, farCandidate);
         assertThrows(IllegalStateException.class, () -> inTx(

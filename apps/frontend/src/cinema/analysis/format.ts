@@ -344,10 +344,14 @@ export function aiLine(ai: {
   return `${band ? `${band} · ` : ""}${Math.round(ai.score * 100)}점`;
 }
 
-/** One line for what the match was, after a submission. */
+/**
+ * One line for what the match was, after a submission. A miss with the
+ * server's width hint (`missHint`) says the width alone was off.
+ */
 export function matchSentence(
   matchStatus: string,
   multiplier?: number | null,
+  missHint?: string | null,
 ): string {
   switch (matchStatus) {
     case "matched":
@@ -359,7 +363,10 @@ export function matchSentence(
     case "duplicate":
       return "이미 찾은 신호입니다.";
     case "not_matched":
-      return "고른 주기와 구간에 맞는 신호가 없었습니다.";
+      return (
+        (missHint && MISS_HINT[missHint]) ||
+        "고른 주기와 구간에 맞는 신호가 없었습니다."
+      );
     case "ambiguous_match":
       return "어느 신호인지 가리지 못했습니다.";
     case "none_wrong":
@@ -457,6 +464,22 @@ export function foundTitle(
  */
 export const NOT_MATCHED_HINT =
   "고른 주기와 구간에 맞는 신호가 없었습니다. 접힌 곡선에서 밝기가 가장 많이 줄어드는 곳을 구간이 덮는지 확인해 보세요.";
+
+/**
+ * The server's width hint (S15P21C206-282): it comes only when the period and
+ * the position matched and the window width alone was off, so these lines may
+ * say so. Without it the plain hint above stays.
+ */
+const MISS_HINT: Record<string, string> = {
+  WINDOW_TOO_WIDE:
+    "주기와 위치는 맞았지만 구간이 신호보다 너무 넓습니다. 주기는 그대로 두고 구간만 좁혀 보세요.",
+  WINDOW_TOO_NARROW:
+    "주기와 위치는 맞았지만 구간이 신호보다 너무 좁습니다. 주기는 그대로 두고 구간만 넓혀 보세요.",
+};
+
+/** The help line after a miss, from the receipt's `missHint`. */
+export const notMatchedHint = (missHint: string | null | undefined): string =>
+  (missHint && MISS_HINT[missHint]) || NOT_MATCHED_HINT;
 
 /** "이번에는 새로 열린 별이 없습니다" (a recognized result that opened none). */
 export const NO_NEW_STAR = "이번에는 새로 열린 별이 없습니다.";

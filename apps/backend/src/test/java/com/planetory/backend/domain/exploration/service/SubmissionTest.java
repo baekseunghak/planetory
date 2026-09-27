@@ -426,6 +426,7 @@ class SubmissionTest {
     @Test void 후속행동은_매칭과_미매칭과_신호없음을_구분() {
         var unmatched=service.submit(member,tic,change(request(),"candidate","LIKELY_PLANET",5.0,null)).body();
         assertEquals("not_matched",unmatched.at("/match/status").asText());
+        assertTrue(unmatched.at("/match/missHint").isNull(),"주기가 틀리면 폭 힌트가 없다");
         assertTrue(unmatched.get("nextActions").toString().contains("DISCUSS"));
         assertFalse(unmatched.get("nextActions").toString().contains("GO_HOME"));
         var none=service.submit(member,tic,change(request(),"no_candidate",null,null,null)).body();
@@ -434,6 +435,18 @@ class SubmissionTest {
         assertTrue(matched.get("nextActions").toString().contains("GO_HOME"));
         assertFalse(matched.get("nextActions").toString().contains("DISCUSS"));
         assertTrue(service.submit(member,tic,request()).body().get("nextActions").toString().contains("GO_HOME"));
+    }
+    /** 후보는 위상 0.1·2.4시간이다. 0.05~0.15(7.2시간)는 주기·위치가 맞고 폭만 3배다 [S15P21C206-282]. */
+    @Test void 폭만_벗어난_불일치는_응답에_폭_힌트를_싣고_판정은_그대로() {
+        var r=request();
+        var wide=new SubmissionRequest(r.requestId(),"candidate",r.curveContext(),
+                new SubmissionRequest.Selection(3.0,null,0.05,0.15),"LIKELY_PLANET",List.of(),null,null,null);
+        var body=service.submit(member,tic,wide).body();
+        assertEquals("not_matched",body.at("/match/status").asText());
+        assertEquals("WINDOW_TOO_WIDE",body.at("/match/missHint").asText());
+        assertEquals("none",body.at("/achievement/result").asText());
+        assertEquals("not_matched",jdbc.queryForObject("SELECT match_result FROM submissions WHERE user_id=?",String.class,member));
+        assertTrue(service.submit(member,tic,request()).body().at("/match/missHint").isNull(),"일치하면 힌트가 없다");
     }
     @Test void v0이력은_재전송시_새계산으로_덮어쓰지않음() {
         var r=request(); var first=service.submit(member,tic,r);
