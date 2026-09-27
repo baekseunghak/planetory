@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   emitAnalysis,
@@ -530,6 +531,66 @@ test("unlocked stars are held hidden from before the sky refresh until they igni
   stop();
   // Signed out before the galaxy came back: nobody will ignite them.
   assert.deepEqual(calls.at(-1), ["holdStars", null]);
+});
+
+test("stars a publication opened are held, marked new and ignited like a discovery's", () => {
+  resetAnalysisBridge();
+  const { scene, calls } = recording();
+  const unlocked: [readonly string[], boolean][] = [];
+  const d = new SequenceDirector({
+    scene: () => scene,
+    memberId: "u-test",
+    // On the publication page, not the analysis stage.
+    analysisTic: () => null,
+    planetLabel: () => null,
+    onUnlock: (ticIds, ignites) => unlocked.push([ticIds, ignites]),
+  });
+  const stop = d.start();
+  calls.length = 0;
+  d.unlockElsewhere(["900001001", "900001001", "900001002"]);
+  // Hidden before the sky refresh the publication announces next.
+  assert.deepEqual(calls, [["holdStars", ["900001001", "900001002"]]]);
+  assert.deepEqual(d.getHold(), { planets: false, stars: true });
+  assert.deepEqual(unlocked, [[["900001001", "900001002"], true]]);
+  // Already waiting: not held, marked or queued twice.
+  d.unlockElsewhere(["900001002"]);
+  d.unlockElsewhere([]);
+  assert.equal(calls.length, 1);
+  assert.equal(unlocked.length, 1);
+  // The galaxy comes back: both ignite, then the count moves.
+  assert.deepEqual(d.takeIgnitions(), ["900001001", "900001002"]);
+  d.releaseStars();
+  assert.deepEqual(d.getHold(), { planets: false, stars: false });
+  stop();
+});
+
+test("the publication page tells the cinema shell about newly opened stars before the sky refresh", () => {
+  const hook = readFileSync(
+    new URL(
+      "../../src/features/publication/use-publication.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const receive = hook.slice(hook.indexOf("function receive("));
+  const told = receive.indexOf(
+    "if (receipt.newlyGranted && receipt.unlockedTicIds.length)",
+  );
+  assert.ok(told > 0, "only a newly granted achievement opens stars");
+  assert.ok(told < receive.indexOf("publishSkyChange("));
+  // Only the cinema shell provides the sink; develop's pages get null.
+  const layout = readFileSync(
+    new URL("../../src/cinema/shell/CinemaLayout.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    layout,
+    /<PublicationUnlockSink\.Provider value=\{publicationUnlocks\}>\s*<Outlet \/>/,
+  );
+  assert.doesNotMatch(
+    readFileSync(new URL("../../src/legacy/main.tsx", import.meta.url), "utf8"),
+    /PublicationUnlockSink/,
+  );
 });
 
 test("a recognized outcome that opened no star: no hold, no ignition, and the card says so plainly", async () => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, http } from "../../api";
 import { historyPath } from "../analysis/history-data";
 import { publishSkyChange } from "../sky-data/events";
+import { usePublicationUnlockSink } from "./unlock-sink";
 import {
   candidatesPath,
   MAX_PUBLICATION_BATCH_SIZE,
@@ -60,6 +61,9 @@ export function usePublication(
   const [busy, setBusy] = useState(false);
   const requests = useRef<AbortController | null>(null);
   const locked = useRef(false);
+  const sink = usePublicationUnlockSink();
+  const unlocks = useRef(sink);
+  unlocks.current = sink;
   const patch = (id: string, change: Partial<ReviewItem>) =>
     setItems((old) =>
       old.map((item) =>
@@ -171,6 +175,11 @@ export function usePublication(
       stale: true,
       notice: "게시 요청 응답을 받았습니다. 아래 공개 상태는 다시 조회합니다.",
     });
+    // A newly granted achievement opened these stars. The cinema app
+    // ignites them once the galaxy is back (./unlock-sink.ts); it hears of
+    // them before the sky refresh below, so they wait hidden until then.
+    if (receipt.newlyGranted && receipt.unlockedTicIds.length)
+      unlocks.current?.(receipt.unlockedTicIds);
     publishSkyChange(memberId, { skyVersion: receipt.skyVersion });
   }
   function publish(targets: ReviewItem[], retry = false) {
