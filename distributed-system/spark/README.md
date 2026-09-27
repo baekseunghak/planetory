@@ -210,7 +210,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. part checksum은 공용 `part_checksum_digest`가 `hdfs dfs -checksum`을 묶음(최대 200개)으로 8개까지 동시에 불러 계산한다. 1~13 attempt의 248개 파일 재감사가 약 12분에서 85초로 줄었다(2026-09-27 Node 1 실측, digest는 marker 기록값과 같음). `planetory.tess-silver-attempt.v4` `_READY.json`은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 
@@ -326,7 +326,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 ## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)
 
-상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release로 Canary와 실클러스터 run을 다시 해야 한다.
+상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 1~13 전체 run은 전이다.
 
 입력은 확정된 Sector 1~13 Silver attempt(`/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/run_id=20260924T133559Z/attempt=20260924T133730Z`)다. 초기 공개 범위를 S1~13으로 넓히는 DEC-01 변경은 제안 상태이며 MR에서 확인받는다([서비스 범위 7.1절](../../docs/data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인)).
 

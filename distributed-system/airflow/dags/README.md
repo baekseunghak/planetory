@@ -104,7 +104,7 @@ Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어
 
 ## `tess_publication_run` (80, 수동 실행)
 
-상태: Node 1 운영 이미지에 일시정지 상태로 배포했다(2026-09-27). 첫 trigger 전이며 Gold Canary를 진행하고 있다.
+상태: Node 1 운영 이미지에 일시정지 상태로 배포했다(2026-09-27). Gold Canary를 통과했고(2026-09-27, release `20260927T052453Z`) 첫 trigger는 276 게시 task를 넣은 release로 한다.
 
 run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 gate → 수동 게시 승인을 잇는다. 일시정지·무스케줄로 생성되고 동시 실행은 1개다. Gold와 gate는 Node 1 systemd unit으로 돌고, Airflow는 SSH로 unit을 시작한 뒤 Triggerer에서 5분마다 `status`를 읽는다(최대 3일). 그래서 Airflow 재시작이 Spark를 멈추지 않는다. Spark는 YARN에서 돌고 Airflow는 제출만 한다.
 
@@ -155,4 +155,5 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 - sudoers·Pool: 그 release의 두 설정 스크립트로 `/etc/sudoers.d/planetory-tess-{silver,gold}-airflow-20260927T031659Z`와 `tess_yarn`(2)을 만들었다. `sudo -l -U tess-airflow`로 DAG 계약이 만든 명령 6개는 허용되고 변조 명령 4개는 거부되는 것을 확인했다.
 - 이미지: `deploy-tess-airflow-node1.sh --update`로 `local/planetory-airflow:20260927T031659Z`(이전 `20260923T014803Z`)로 바꿨다. 네 서비스 healthy, import 오류 0건, DAG 7개다. 새 DAG 2개는 일시정지 상태이고 수집 DAG 5개는 기존 상태를 유지했다.
 - 외부 수집: run `20260927T033816Z`를 `/lake/external/tess/run_id=20260927T033816Z`에 확정했다(`nea_toi` 8,148, `nea_pscomppars` 6,065, `mast_tce_s1_s13` 5,940, `exofop_toi` 8,148행). Canary와 첫 DAG run은 이 run ID를 쓴다.
-- Gold Canary(TIC 5개, app `application_1790067725443_0069`): Spark job이 외부 snapshot `_READY.json`을 `textFile`로 읽다가, 숨김 파일 필터 때문에 "Input path does not exist"로 실패했다. 제어기는 staging을 지우고 끝났다. gate도 같은 결함이 있었다. 두 곳을 Hadoop FileSystem API 읽기로 고쳤고, 고친 release로 Canary를 다시 해야 한다. 첫 DAG trigger는 276 게시 task를 넣은 새 release로 한다.
+- Gold Canary(TIC 5개, app `application_1790067725443_0069`): Spark job이 외부 snapshot `_READY.json`을 `textFile`로 읽다가, 숨김 파일 필터 때문에 "Input path does not exist"로 실패했다. 제어기는 staging을 지우고 끝났다. gate도 같은 결함이 있었다. 두 곳을 Hadoop FileSystem API 읽기로 고쳤다.
+- Gold Canary 재실행(release `20260927T052453Z`, TIC 5개, app `application_1790067725443_0070`): 통과했다. 판정 ready 3·held 1·no_signal 1·rejected·request_failed·unprocessed 0, `complete=true`, 후보 6개다. 고를 때 기대한 매핑(채택 1·2·3개 → ready, 채택 0개 → no_signal, `qa_stopped` → held)과 수가 같다. Canary 확정본은 규칙대로 지워서 별마다의 판정은 따로 보지 않았다. bundles는 3줄 1,291,963 bytes(ready 별당 약 430 KB), candidates 6줄 14,869 bytes, manifest 2,836 bytes다. 전체 약 20분(05:25:45→05:45:28Z)으로, 사전 검사(Silver 재감사 포함) 약 12분, Spark 앱 약 3.6분, 확정 약 3분이다. Python 런타임은 캐시를 썼다. 첫 DAG trigger는 276 게시 task를 넣은 새 release로 한다.
