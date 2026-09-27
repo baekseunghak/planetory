@@ -136,7 +136,7 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 **배포 순서(각 단계 운영 승인 필요).**
 1. 이 브랜치로 pipeline release를 설치한다(`run-tess-silver.ps1 -Step Install`). release에는 Gold 파일 4개, 게시 제어기, 79 schema가 함께 들어간다. 설치는 작업 트리를 복사하므로 `git status`가 비어 있어야 한다.
 2. `stage-tess-airflow-node1.ps1`로 Airflow release를 Node 1에 올린다. 설정 스크립트도 이 release의 `infra/distributed-system/scripts/`에 함께 들어간다. 이 단계는 파일만 올리고 이미지는 바꾸지 않는다.
-3. Node 1 root로 그 release의 설정 스크립트를 순서대로 실행한다. 이미지보다 먼저 한다. 일반 계정은 release 디렉터리에 들어갈 수 없으므로 전체 경로로 부른다.
+3. Node 1 root로 그 release의 설정 스크립트를 순서대로 실행한다. 이미지보다 먼저 한다. 일반 계정은 release 디렉터리에 들어갈 수 없으므로 전체 경로로 부른다. 세 스크립트는 sudoers 명령 정규식을 쓰므로 sudo 1.9.10 이상이 필요하고, 낮은 버전이면 설정 시점에 `SUDO_REGEX_UNSUPPORTED`로 멈춘다(Node 1은 1.9.15p5).
    1. `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)
    2. `configure-tess-gold-airflow-node1.sh <release-id>`
    3. `configure-tess-publish-airflow-node1.sh <release-id>`. 그 전에 root 전용 `/etc/planetory/publisher/image`(0644, 고정 이미지 한 줄)가 있어야 한다.

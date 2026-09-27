@@ -9,6 +9,12 @@ set -euo pipefail
 }
 release_id=$1
 [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo INVALID_RELEASE_ID >&2; exit 1; }
+# Command regexes (^...$) need sudo 1.9.10+. Older sudo reads them as literal paths that visudo
+# accepts but nothing ever matches, so the failure would first show at the DAG's first sudo call.
+sudo_version="$(sudo -V | sed -n '1s/^Sudo version \([0-9][0-9.]*\).*/\1/p')"
+[[ "$(printf '%s\n' 1.9.10 "$sudo_version" | sort -V | head -1)" == 1.9.10 ]] || {
+  echo "SUDO_REGEX_UNSUPPORTED version=${sudo_version:-unknown}" >&2; exit 1;
+}
 release="/opt/planetory-silver/releases/$release_id"
 for path in /opt/planetory-silver /opt/planetory-silver/releases "$release" "$release/spark" \
             "$release/spark/tess_gold_ctl.py" "$release/spark/tess_gold.py" "$release/spark/tess_gate.py" \
@@ -28,6 +34,8 @@ run='[0-9]{8}T[0-9]{6}Z'
 token='[A-Za-z0-9][A-Za-z0-9._/-]{0,127}'
 silver="/lake/silver/pipeline_version\\=[A-Za-z0-9._-]+/run_id\\=$run/attempt\\=$run"
 sudoers="/etc/sudoers.d/planetory-tess-gold-airflow-$release_id"
+# The unchecked candidate may sit in /etc/sudoers.d: sudo's includedir skips names containing a
+# dot, and only the dot-free final name below (after visudo -cf) is ever read as policy.
 candidate="$(mktemp /etc/sudoers.d/planetory-tess-gold-airflow.XXXXXX)"
 trap 'rm -f -- "$candidate"' EXIT
 cat > "$candidate" <<EOF
