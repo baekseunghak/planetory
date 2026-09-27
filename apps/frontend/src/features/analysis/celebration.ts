@@ -50,8 +50,8 @@ export function celebrationText(
 }
 
 /**
- * develop 화면(운영 기본)의 지금 규칙: 처음 보는 결과면 성과와 관계없이
- * 축하한다(판단 불일치·공개 대기에도). 운영 기본 화면을 바꾸지 않으려고
+ * develop 화면(`src/legacy`)의 지금 규칙: 처음 보는 결과면 성과와 관계없이
+ * 축하한다(판단 불일치·공개 대기에도). 기존 화면을 바꾸지 않으려고
  * 그대로 둔다.
  */
 export function developCelebrationText(firstView: boolean): string | null {

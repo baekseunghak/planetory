@@ -17,7 +17,7 @@
 //   CINEMA_REAL_SAMPLE   real TESS sample folder (default apps/frontend/.real-sample,
 //                        see dev/real-sample); 0 = synthetic data only
 //   VITE_CINEMA=false    legacy develop pages instead of the cinema shell
-//   VITE_CINEMA=auto     the production choice: legacy unless ?ui=cinema
+//   VITE_CINEMA=auto     a build without VITE_CINEMA: legacy unless ?ui=cinema
 //                        (src/ui-choice.ts)
 //   CINEMA_ANALYSIS      analysis screen: classic (default) | new (the new
 //                        design, variant B, for everyone and without the

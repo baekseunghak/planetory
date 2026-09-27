@@ -345,7 +345,7 @@ export function ResultExplanationView({
   const { explanation, progress } = receipt;
   const { signal, evaluation, achievement, publication, statistics } =
     explanation;
-  // 시네마 셸은 인정된 성과에만, develop 화면(운영 기본)은 지금처럼
+  // 시네마 셸은 인정된 성과에만, develop 화면(`src/legacy`)은 지금처럼
   // 처음 보는 결과면 축하한다(StrictCelebration).
   const strict = useContext(StrictCelebration);
   const cheer = strict
