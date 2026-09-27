@@ -326,7 +326,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 ## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)
 
-상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 1~13 전체 run은 전이다.
+상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 이 시간은 checksum 가속(`d1dd5226`) 이전 release로 잰 값이다. 그 안의 사전 검사 약 12분은 대부분 Silver 재감사이고, 지금은 약 85초이므로 같은 Canary는 약 9~10분으로 본다(추정, 재측정 전). 1~13 전체 run은 전이다.
 
 입력은 확정된 Sector 1~13 Silver attempt(`/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/run_id=20260924T133559Z/attempt=20260924T133730Z`)다. 초기 공개 범위를 S1~13으로 넓히는 DEC-01 변경은 제안 상태이며 MR에서 확인받는다([서비스 범위 7.1절](../../docs/data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인)).
 
