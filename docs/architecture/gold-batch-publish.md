@@ -149,4 +149,4 @@ Push-Location distributed-system/publisher; python -m unittest test_load; Pop-Lo
 - **실제 run.** 첫 `tess_publication_run` 게시와 266 NASA 정보 `ready` 확인, 제한 Sector 별의 분석 화면 확인이 남았다.
 - **갱신 게시.** 후보 동일성 대조, 튜토리얼 제외, 값이 바뀐 이력(`history_proposals`) 적재가 생긴 뒤 연다.
 - **정책.** 계약 밖의 QA 기준값(데이터 담당 합의), `hidden` 별을 `published`로 바꾸는 절차를 정해야 한다.
-- **규모.** run 전체를 로컬에 받는다. 1~13은 ready가 많아야 5,156개라 충분하다. 더 큰 run은 part 단위 스트리밍으로 바꾼다.
+- **규모.** run 전체를 로컬에 받는다. 1~13은 ready가 많아야 5,156개다. 80 Canary에서 ready 별 하나가 약 430 KB였으므로 번들은 2.2 GB 안팎으로 추정되고, Node 1 여유 디스크 13 GB로 충분하다. 실제 run에서 다시 잰다. 더 큰 run은 part 단위 스트리밍으로 바꾼다.
