@@ -431,7 +431,7 @@ Liam을 올릴 때 이 보정이 불필요해졌는지 확인하고, 그래도 �
 ### 캐시
 
 앱은 `schema.json`을 `fetch`로 따로 읽는다. nginx가 `Cache-Control: no-cache`를 붙인다
-(compose `configs.erd-no-cache`). 이 헤더가 없으면 브라우저가 `Last-Modified`로 신선도를
+(compose `configs.static-no-cache`, `api-docs`와 같이 쓴다). 이 헤더가 없으면 브라우저가 `Last-Modified`로 신선도를
 추정해 재생성 뒤에도 옛 스키마를 최대 하루쯤 보여 준다. 해시가 붙은 `assets/`는
 Cloudflare가 따로 캐시해도 이름이 바뀌므로 문제없다.
 
@@ -473,7 +473,8 @@ docker compose --profile api-docs-refresh rm -sf api-docs-app api-docs-db
 첫 명령이 `api-docs-db`(스크래치) -> `api-docs-app`(local 프로필) 순으로 띄우고
 `/v3/api-docs`를 받아 Swagger UI와 함께 `planetory-api-docs-output`에 쓴다. 둘째 명령이
 일회용 컨테이너 둘만 정지·제거한다. `api-docs-generator`는 `run --rm`이 이미 지웠다.
-백엔드 이미지가 바뀌면 다시 돌린다.
+백엔드 이미지가 바뀌면 다시 돌린다. Swagger UI는 `openapi.json`을 따로 읽으므로 ERD와
+같은 `configs.static-no-cache`로 `Cache-Control: no-cache`를 붙인다(위 ERD 「캐시」).
 
 **`down`을 쓰지 않는다.** `down`은 프로필 지정과 무관하게 프로젝트 전체를 내린다.
 문서를 새로 뽑을 때마다 `frontend`·`backend`·`service-db`·`cloudflared`까지 함께
