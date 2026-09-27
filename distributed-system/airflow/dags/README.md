@@ -115,8 +115,9 @@ run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 ga
 | `start_gold` → `wait_gold` | `tess_gold_ctl.py start-unit run` → `status run`, 완료되면 확정 attempt 경로를 넘긴다 |
 | `start_gate` → `wait_gate` | `start-unit gate --attempt <경로>` → `status gate`, 통과하면 publish-ready 요약을 넘긴다 |
 | `approve_publication` | Airflow HITL `ApprovalOperator`. 승인해야 다음으로 넘어가고, 거절하면 실패, 7일이 지나면 만료된다 |
+| `start_publish` → `wait_publish` | `tess_publish_ctl.py start-unit publish --approval airflow/tess-publication-run/<run>/approved` → `status publish`. 완료되면 run 기록 요약(결과 코드별 수, 알림 상태, 게시되지 않은 별 최대 50개)을 넘긴다(276) |
 
-276의 게시 task는 `approve_publication` 뒤에 붙인다.
+게시 단계(`S15P21C206-276`)는 Gold와 같은 틀이다. Node 1 제어기가 systemd unit으로 publish-ready를 받아 Publisher 이미지로 `publish-run`을 돌린다. 전체 run 기록은 Node 1 상태 파일(`/var/lib/planetory-publish/run=<run>/publish=<UTC>.json`)에 남는다. 제어기, 이미지 고정, sudo 설정, 종료 코드는 [Publisher](../../publisher/README.md) 「배치 run」을 따른다. 게시 task가 들어간 release는 새 release ID로 배포해야 한다. 이미 적용한 release의 sudoers는 바꿀 수 없기 때문이다(`configure-tess-publish-airflow-node1.sh`를 그 release로 한 번 더 실행).
 
 Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`), `run_id`(UTC), `silver_attempt`, `required_sources`(원천 이름 목록), `exclude_tics`(튜토리얼 5종. 비우려면 `[]`를 명시한다), `approvals`(`identity`·`discoverability`·`external`)다. 선택 키는 `shuffle_partitions`(기본 400)와 `output_partitions`(기본 40)다. 승인 참조는 systemd와 sudoers를 거치므로 공백 없는 한 토큰(`[A-Za-z0-9._/-]`)이어야 한다. 외부 snapshot은 `/lake/external/tess/run_id=<run_id>`로 정해진다.
 

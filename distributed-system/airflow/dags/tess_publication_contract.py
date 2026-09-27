@@ -81,10 +81,23 @@ def gate_start_command(request: dict, attempt: str) -> str:
         "start-unit", "gate", "--release-dir", request["release"], "--attempt", attempt])
 
 
+def publish_approval(request: dict) -> str:
+    """The approval reference the Publisher records; the approve_publication task is its evidence (276)."""
+    return f"airflow/tess-publication-run/{request['run_id']}/approved"
+
+
+def publish_start_command(request: dict) -> str:
+    """Start the 276 publish unit (configure-tess-publish-airflow-node1.sh allows exactly this order)."""
+    return shlex.join(_controller(request, "tess_publish_ctl.py") + [
+        "start-unit", "publish", "--release-dir", request["release"], "--run-id", request["run_id"],
+        "--approval", publish_approval(request)])
+
+
 def status_command(request: dict, operation: str) -> str:
-    if operation not in ("run", "gate"):
-        raise ValueError("status operation must be run or gate")
-    return shlex.join(_controller(request, "tess_gold_ctl.py") + ["status", operation, "--run-id", request["run_id"]])
+    if operation not in ("run", "gate", "publish"):
+        raise ValueError("status operation must be run, gate or publish")
+    script = "tess_publish_ctl.py" if operation == "publish" else "tess_gold_ctl.py"
+    return shlex.join(_controller(request, script) + ["status", operation, "--run-id", request["run_id"]])
 
 
 def unit_progress(output: str, done: str, max_restarts: int) -> tuple[str, object]:

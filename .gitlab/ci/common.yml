@@ -101,7 +101,7 @@ validate:astro-kernel:
   script:
     - pip install --no-cache-dir "uv==0.11.32"
     - (cd libs/astro-kernel && uv run --locked pytest -q -p no:cacheprovider)
-    - (cd distributed-system/spark && uv run --locked python -m unittest test_tess_bronze test_tess_gold test_tess_gold_ctl test_tess_external_ctl test_tess_gate)
+    - (cd distributed-system/spark && uv run --locked python -m unittest test_tess_bronze test_tess_gold test_tess_gold_ctl test_tess_external_ctl test_tess_gate test_tess_publish_ctl)
     - (cd distributed-system/spark && uv run --locked pytest -q -p no:cacheprovider test_tess_kernel_check.py)
     - (cd distributed-system/publisher && uv run --locked python -m unittest test_mock_source test_tutorial_source test_run_source)
     # DAG request contracts (standard library only; Airflow-dependent cases skip themselves).

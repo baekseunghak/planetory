@@ -141,6 +141,18 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 - **게시 명령.** `python -m publisher publish-run --run-id <id> --ready <게시 준비 폴더> --approval <게시 승인 근거>`. `--run-id`가 marker나 run manifest의 `run_id`와 다르면 아무것도 싣지 않는다. 승인 근거는 80 DAG의 수동 게시 승인 task가 넘기고, 번들 `manifest.publish.approval`에 남는다. 별마다 한 트랜잭션이고, 한 별의 실패가 다음 별을 막지 않는다.
 - **run 기록.** 표준 출력의 JSON 하나다(진행 메시지는 표준 오류). `run_id`, `silver_attempt`, `aggregator_version`, `approval`, `flyway_version`, `status`(`published`·`rejected`, 거절이면 `reason`), `counts`, `stars[]`(`tic_id`, `code`, `bundle_id`, `detail`, `current_kept`, 게시한 별의 `confirmed_without_archive`), `notify`(`status` `sent`·`partial`·`skipped_no_token`·`none`과 판별 `results`), `started_at`·`finished_at`(UTC)을 담는다. `confirmed_without_archive`는 `archive` 참조가 없어 266 설명이 열리지 않을 확정 후보 수다. 거절 사유가 아니다.
 - **결과 코드와 종료 코드.** DB 제약 위반은 `PUBLISH_REJECTED`, 연결이 끊긴 일시 장애는 `PUBLISH_ROLLED_BACK`이다(Gold 계약 6절, 새 코드를 만들지 않는다). 모든 별이 `PUBLISHED`·`ALREADY_PUBLISHED`·`BUNDLE_SUPERSEDED`면 0이다. `PUBLISH_ROLLED_BACK`이나 알림 일부 실패가 있으면 1이다. 같은 명령을 다시 돌리면 끝난 별은 `ALREADY_PUBLISHED`이고 알림도 다시 간다. 그 밖의 거절만 남았으면 65다. Silver 제어기처럼 재시도해도 같은 결과인 데이터 실패를 뜻하므로 Airflow가 재시도하지 않게 한다. 알림 토큰이 없어 보내지 않은 것은 실패가 아니다. `current_kept=true`인 별도 실패로 세지 않는다. 튜토리얼 별처럼 이미 current가 있어 첫 게시 한정 정책대로 기존 판을 둔 별이다. 결과 코드는 계약대로 `PUBLISH_REJECTED`이고 run 기록에 그대로 남는다. 1~13 run에는 튜토리얼 5종 TIC이 들어 있어, 이 규칙이 없으면 매번 65로 끝난다.
+- **Airflow 게시 단계(Node 1 제어기).** `tess_publication_run`의 `approve_publication` 뒤에 `start_publish` → `wait_publish`가 돈다. 호출하는 것은 `distributed-system/spark/tess_publish_ctl.py`(pipeline release의 `spark/`)다. Gold 제어기처럼 systemd unit(`planetory-tess-publish-<run>.service`, oneshot, 실패하면 5분 뒤 재시작, 65면 멈춤)으로 돌아 Airflow 재시작과 무관하다. 절차는 다음과 같다.
+  1. HDFS publish-ready marker의 schema·run·attempt·`files` 모양을 확인한다.
+  2. `files` bytes 합에 여유 2 GiB를 더한 만큼 디스크가 있는지 본다.
+  3. part마다 `hdfs dfs -cat`으로 `/var/lib/planetory-publish/run=<run>/ready`에 받으며 sha256·bytes·lines를 대조한다.
+  4. `docker run --network host --env-file /etc/planetory/publisher/env -v <폴더>:/ready:ro <이미지> python -m publisher publish-run`을 돌린다.
+  5. 표준 출력의 run 기록을 상태 파일(`/var/lib/planetory-publish/run=<run>/publish=<UTC>.json`)에 남기고, 성공하면 로컬 사본을 지운다.
+
+  publish-run 종료 0은 `complete`, 1은 `failed`(unit 재시작, 끝난 별은 `ALREADY_PUBLISHED`)다. 65와 그 밖의 종료는 `rejected`이고 unit도 65로 멈춘다. 그 밖의 종료란 이미지에 `publish-run`이 없을 때의 2, docker 오류 125처럼 다시 돌려도 같은 결과인 경우다. **이미지는 인자로 받지 않는다.** sudo 아래 임의 이미지가 host 네트워크와 DB env 파일을 쓰면 root와 같아서다. 그래서 root 전용 `/etc/planetory/publisher/image` 한 줄(`<registry>/planetory/publisher:<40자 sha>` 또는 `@sha256:`)로 고정한다. 승인 근거는 `airflow/tess-publication-run/<run>/approved`다. sudo 허용은 `infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh <release>`가 만든다. 이미 적용한 release의 sudoers는 바꿀 수 없으므로 게시 단계는 새 release ID로 배포한다. 1~13 run의 ready는 많아야 5,156개(80 확인)라 run 전체를 받는다. ponytail: 디스크가 모자라면 멈추고, 더 큰 run은 part 단위로 흘려 보내도록 바꾼다.
+- **운영 서비스 DB 시험(2026-09-27, 사용자 승인).** Node 1에서 운영 Publisher 이미지(`50e13981`)에 이 브랜치의 `publisher`·`astro_kernel` 패키지를 읽기 전용으로 덮고 `publish-run --ready`를 돌렸다. 입력은 80 샘플 publish-ready(합성 TIC 999999101, run `20260927T010000Z`)다.
+  - 결과: EC2-A `planetory_poc`(V29)에 `PUBLISHED b-12`·알림 HTTP 200, 재실행 `ALREADY_PUBLISHED b-12`·알림 200이었다.
+  - DB와 로그: 별은 `hidden`, 판 manifest에 run ID·승인 근거, 관측 원천은 Sector 3·4 `120s`·`spoc-5.0.0`이었다. Backend 로그에 "판 12(TIC 999999101) 후처리"가 두 번 찍혔고 재개·라벨은 0이었다.
+  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 경로는 운영에서 아직 돌리지 않았다.
 
 ## DEC-01 공급 집계 (S15P21C206-79)
 

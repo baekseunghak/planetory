@@ -20,6 +20,7 @@ try {
         'infra/distributed-system/scripts/configure-tess-airflow-account.sh' `
         'infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh' `
         'infra/distributed-system/scripts/configure-tess-gold-airflow-node1.sh' `
+        'infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh' `
         'distributed-system/airflow/Dockerfile' `
         'distributed-system/airflow/requirements.txt' `
         'distributed-system/airflow/dags'

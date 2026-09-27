@@ -8,7 +8,7 @@ DAGS = Path(__file__).resolve().parents[1] / "dags"
 sys.path.insert(0, str(DAGS))
 
 from tess_publication_contract import (collect_command, gate_start_command, gold_start_command,  # noqa: E402
-                                       publication_request, status_command, unit_progress)
+                                       publication_request, publish_start_command, status_command, unit_progress)
 
 RELEASE = "/opt/planetory-silver/releases/20260927T000000Z"
 SILVER = ("/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/"
@@ -35,6 +35,14 @@ class PublicationContractTest(unittest.TestCase):
                                                                       f"--attempt {ATTEMPT}"))
         self.assertTrue(status_command(request, "gate").endswith("status gate --run-id 20260927T010000Z"))
         self.assertNotIn("'", gold)  # every value is a single safe token, so shlex adds no quotes
+        # 276 publish: configure-tess-publish-airflow-node1.sh allows exactly this order.
+        self.assertEqual(publish_start_command(request), f"/usr/bin/sudo -n /usr/bin/python3.12 {RELEASE}/spark/"
+                         f"tess_publish_ctl.py start-unit publish --release-dir {RELEASE} --run-id 20260927T010000Z "
+                         "--approval airflow/tess-publication-run/20260927T010000Z/approved")
+        self.assertEqual(status_command(request, "publish"), f"/usr/bin/sudo -n /usr/bin/python3.12 {RELEASE}/spark/"
+                         "tess_publish_ctl.py status publish --run-id 20260927T010000Z")
+        with self.assertRaises(ValueError):
+            status_command(request, "other")
 
     def test_unsafe_or_incomplete_requests_are_refused(self):
         for change in ({"extra": 1}, {"release": "/tmp/r"}, {"run_id": "run-1"}, {"silver_attempt": "/lake/x"},
@@ -75,7 +83,8 @@ class PublicationContractTest(unittest.TestCase):
         source = (DAGS / "tess_publication_dag.py").read_text(encoding="utf-8")
         ast.parse(source)
         for expected in ('dag_id="tess_publication_run"', "is_paused_upon_creation=True", "schedule=None",
-                         "ApprovalOperator(", "fail_on_reject=True", "start_gate(wait_gold.output) >> wait_gate >> approve"):
+                         "ApprovalOperator(", "fail_on_reject=True", "start_gate(wait_gold.output) >> wait_gate >> approve",
+                         "approve >> start_publish() >> wait_publish", '"publish": "complete"'):
             self.assertIn(expected, source)
 
 
