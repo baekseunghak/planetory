@@ -291,6 +291,7 @@ test("eligible but not discovered stays pending; round API does not grant select
   q.challenge.unlocked = false;
   q.challenge.ticId = null;
   q.challenge.progressStage = null;
+  q.challenge.targets = [];
   await page.route("**/api/v1/me/quests", (r) => r.fulfill({ json: q }));
   await page.route("**/api/v1/challenges/current", (r) =>
     r.fulfill({ json: current() }),
@@ -345,6 +346,7 @@ test("service round closure hides stale challenge action and marker until quests
   c.eligible = false;
   c.round!.status = "closed";
   c.round!.ticId = null;
+  c.round!.ticIds = null;
   await page.route("**/api/v1/me/quests", (r) =>
     r.fulfill({ json: quests(5) }),
   );
