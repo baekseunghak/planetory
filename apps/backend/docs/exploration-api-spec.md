@@ -931,7 +931,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
                     "durationHours": 2.83, "sourcePeakSuggestedDurationHours": null, "durationLimitHours": null,
                     "centroidDataStatus": "unavailable"},
   "match": {"status": "matched_harmonic", "candidateId": "c-402", "harmonicMultiplier": 2,
-            "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias"},
+            "correctedPeriodDays": 23.604, "correctionReason": "P/2 alias", "missHint": null},
   "signal": {
     "candidateId": "c-402", "disposition": "UNCONFIRMED", "answerClass": "analysis", "planetTruth": null,
     "bls": {"periodDays": 23.604, "epochBtjd": 1695.11, "durationHours": 3.4, "depthPpm": 380, "sde": 9.1, "snr": 7.8},
@@ -961,6 +961,7 @@ EXP-05는 후보마다 `period_min/max/step`을 후보표 API에서 풀어 주�
 |---|---|
 | `serverDerived.sourcePeakSuggestedDurationHours`, `serverDerived.durationLimitHours` | 봉우리 제출이 검증에 쓴 제안 duration과 그 배수 상한이다. 판이 제안 duration을 싣지 않으면(5.4절, 지금은 항상) 상한을 걸지 않았다는 뜻으로 둘 다 null이며 키는 빼지 않는다. 주기 직접 선택도 null이다. 둘 중 하나만 null인 응답은 없다(6.2절 5단계, ERD V27) |
 | `match.status` | `matched` / `matched_harmonic` / `not_matched` / `duplicate` / `ambiguous_match`; `no_candidate`는 `none_wrong`, `skipped`는 `skipped`. ERD CHECK 그대로 |
+| `match.missHint` | `not_matched`에서 주기·epoch·통과 겹침은 통과하고 지속시간 비율만 벗어난 해석이 있을 때 `WINDOW_TOO_WIDE`(비율 > `duration_ratio_max`) / `WINDOW_TOO_NARROW`(비율 < `duration_ratio_min`). 여럿이면 점수가 가장 낮은 해석을 따른다. 그 밖에는 null이라 주기·위치의 정오를 알리지 않는다. 판정·저장 열·성과와 무관하며 DB 열이 없어 저장 응답이 없는 옛 기록의 이력은 null이다. 규칙 v0 판정이 아니므로 참조 구현 `matching-v0.cjs`와 대조하지 않는다(S15P21C206-282) |
 | `signal` | 매칭 성공(`matched`·`matched_harmonic`·`duplicate`)에만. `not_matched`·`ambiguous_match`는 null(AT-14, AT-75). 확정·FP는 `external`에 행성명·출처·조회일·링크(RES-02) |
 | `signal.ai` | `status` `completed` / `input_insufficient` / `error` / `not_evaluated`. 실행 불가를 0점으로 바꾸지 않는다(RES-04, AT-15). `signal.external`과 나란히 두고 어느 쪽도 다른 쪽을 덮어쓰지 않는다(RES-05, AT-16). AI 오류·데이터 부족·미매칭·후보 미충족은 각각 `ai.status`·`match.status`로 구분된다(NFR-09) |
 | `judgment.evaluation` | 확정: LIKELY=`AGREES`, UNLIKELY=`DISAGREES`, UNSURE=`UNSURE`. FP: UNLIKELY=`AGREES`, LIKELY=`DISAGREES`. 미확정=`UNSCORED`. 미매칭=`NOT_APPLICABLE` |

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -123,7 +124,7 @@ public class SubmissionService {
         if (skipped && !skipAvailable(member, tic, rule, seq, before)) throw new BusinessException(ErrorCode.SKIP_NOT_AVAILABLE);
         List<Candidate> candidates = gold.findCandidates(tic);
         SubmissionMatching.Derived derived = null;
-        SubmissionViews.Match match = new SubmissionViews.Match(skipped ? "skipped" : "none_wrong", null, null, null, null);
+        SubmissionViews.Match match = new SubmissionViews.Match(skipped ? "skipped" : "none_wrong", null, null, null, null, null);
         Candidate selected = null;
         SubmissionRepository.Disposition disposition = null;
         FoldedSnapshot snapshot = null;
@@ -156,7 +157,8 @@ public class SubmissionService {
             match = new SubmissionViews.Match(matched.status().value(), matched.candidateId() == null ? null
                     : ExplorationIds.candidate(matched.candidateId()), harmonic ? matched.harmonicMultiplier() : null,
                     harmonic ? matched.correctedPeriodDays() : null,
-                    !harmonic ? null : matched.harmonicMultiplier() == 2 ? "P/2 alias" : "2P alias");
+                    !harmonic ? null : matched.harmonicMultiplier() == 2 ? "P/2 alias" : "2P alias",
+                    Objects.toString(SubmissionMatching.missHint(matched, matchingRules), null));
             if (matched.candidateId() != null) {
                 selected = candidates.stream().filter(c -> c.id() == matched.candidateId()).findFirst().orElseThrow();
                 disposition = submissions.disposition(selected.id());

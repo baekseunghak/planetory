@@ -327,7 +327,7 @@ public class HistoryService {
         if (original.isObject()) return JSON.treeToValue(original,SubmissionViews.Match.class);
         var s=row.submission();
         return new SubmissionViews.Match(text(s,"match_result"),candidate(s),number(s,"harmonic_multiplier"),
-                number(s,"matched_period"),text(s,"correction_reason"));
+                number(s,"matched_period"),text(s,"correction_reason"),null);
     }
     private HistoryRepository.Row own(long member,long id) {
         var row=find(id);
