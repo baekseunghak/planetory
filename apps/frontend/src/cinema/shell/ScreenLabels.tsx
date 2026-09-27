@@ -51,26 +51,29 @@ export function MarkerLayer({
     quest?.current,
     quest?.quests?.challenge,
   );
-  const challengeTicId =
-    quest?.quests?.challenge.unlocked && !stale
-      ? quest.quests.challenge.ticId
-      : null;
+  const targets = quest?.quests?.challenge.targets;
+  // Every unlocked target of the round gets the "!" (S15P21C206-283).
+  const challengeTicIds = useMemo(
+    () => new Set(stale ? [] : (targets ?? []).map((t) => t.ticId)),
+    [targets, stale],
+  );
   const byId = useMemo(
     () => new Map(stars.map((star) => [star.ticId, star])),
     [stars],
   );
   const markers = useMemo(() => {
-    const ids = new Set([
-      ...(tutorials?.keys() ?? []),
-      ...(challengeTicId ? [challengeTicId] : []),
-    ]);
+    const ids = new Set([...(tutorials?.keys() ?? []), ...challengeTicIds]);
     return [...ids].flatMap((id) => {
       const star = byId.get(id);
       if (!star) return [];
-      const label = markerLabel(star, tutorials, challengeTicId);
+      const label = markerLabel(
+        star,
+        tutorials,
+        challengeTicIds.has(id) ? id : null,
+      );
       return label ? [{ star, label }] : [];
     });
-  }, [byId, tutorials, challengeTicId]);
+  }, [byId, tutorials, challengeTicIds]);
   const nodes = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
     const update = () => {

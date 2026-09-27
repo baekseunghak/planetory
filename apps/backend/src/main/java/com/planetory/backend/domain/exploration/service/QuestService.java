@@ -2,6 +2,7 @@ package com.planetory.backend.domain.exploration.service;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.planetory.backend.domain.exploration.service.QuestViews.Challenge;
+import com.planetory.backend.domain.exploration.service.QuestViews.ChallengeTarget;
 import com.planetory.backend.domain.exploration.service.QuestViews.CurrentChallenge;
 import com.planetory.backend.domain.exploration.service.QuestViews.CurrentRound;
 import com.planetory.backend.domain.exploration.service.QuestViews.Quests;
@@ -32,9 +34,10 @@ public class QuestService {
             boolean eligible = tutorials.isTutorialCompleted(memberId);
             return new CurrentChallenge(
                     new CurrentRound("cr-" + round.id(), round.roundNo(),
-                            eligible ? String.valueOf(round.targetTicId()) : null,
+                            eligible ? String.valueOf(round.primaryTicId()) : null,
+                            eligible ? round.targetTicIds().stream().map(String::valueOf).toList() : null,
                             round.startsOn(), round.endsOn(), "active", round.description()),
-                    eligible, quests.countChallengeParticipants(round.targetTicId()));
+                    eligible, quests.countChallengeParticipants(round.id()));
         }).orElse(CurrentChallenge.NONE);
     }
 
@@ -55,14 +58,21 @@ public class QuestService {
     }
 
     private Challenge challenge(long memberId, ChallengeRound round) {
-        Optional<String> stage = quests.findUnlockedStage(memberId, round.targetTicId());
+        List<ChallengeTarget> targets = round.targetTicIds().stream()
+                .flatMap(tic -> quests.findUnlockedStage(memberId, tic)
+                        .map(stage -> new ChallengeTarget(String.valueOf(tic), stage)).stream())
+                .toList();
+        String primary = String.valueOf(round.primaryTicId());
+        Optional<ChallengeTarget> unlocked = targets.stream().filter(t -> t.ticId().equals(primary)).findFirst();
         return new Challenge(
                 new Round("cr-" + round.id(), round.roundNo(), round.startsOn(), round.endsOn(),
                         round.description()),
                 tutorials.isTutorialCompleted(memberId),
-                stage.map(ignored -> String.valueOf(round.targetTicId())).orElse(null),
-                stage.isPresent(),
-                stage.orElse(null),
-                quests.countChallengeParticipants(round.targetTicId()));
+                unlocked.map(ChallengeTarget::ticId).orElse(null),
+                unlocked.isPresent(),
+                unlocked.map(ChallengeTarget::progressStage).orElse(null),
+                quests.countChallengeParticipants(round.id()),
+                round.targetTicIds().size(),
+                targets);
     }
 }

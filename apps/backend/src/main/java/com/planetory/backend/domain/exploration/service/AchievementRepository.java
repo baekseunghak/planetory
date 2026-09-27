@@ -143,7 +143,8 @@ public class AchievementRepository {
                                AND NOT EXISTS (SELECT 1 FROM tutorial_stars t
                                                 WHERE t.active AND t.tic_id = s.tic_id)
                                AND NOT EXISTS (SELECT 1 FROM challenge_rounds r
-                                                WHERE r.status = 'active' AND r.target_tic_id = s.tic_id)
+                                                 JOIN challenge_round_targets t ON t.round_id = r.id
+                                                WHERE r.status = 'active' AND t.tic_id = s.tic_id)
                         )
                         SELECT tic_id
                           FROM pool

@@ -211,6 +211,8 @@ test("round notice is stored after visible paint, once per member/round, new rou
       ticId: null,
       progressStage: null,
       participantCount: null,
+      targetCount: 0,
+      targets: [],
     },
   };
   await notify(page);

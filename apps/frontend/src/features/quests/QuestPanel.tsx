@@ -325,7 +325,7 @@ export function QuestPanel({
                   ) : (
                     <p>튜토리얼 다섯 별을 마치면 참여할 수 있어요.</p>
                   )
-                ) : !challenge.unlocked ? (
+                ) : challenge.targets.length === 0 ? (
                   cinema ? (
                     <p>
                       참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
@@ -343,30 +343,41 @@ export function QuestPanel({
                   </p>
                 ) : (
                   <>
-                    <p>
-                      TIC {challenge.ticId} · 별{" "}
-                      {
-                        statusLabel[
-                          challenge.progressStage === "unexplored"
-                            ? "unlocked"
-                            : challenge.progressStage!
-                        ]
-                      }
-                    </p>
-                    <div className="quest-actions">
-                      <button onClick={() => choose(challenge.ticId!)}>
-                        지도에서 선택
-                      </button>
-                      <Link
-                        to={pagePath(
-                          "analysis",
-                          { ticId: challenge.ticId! },
-                          { returnTo: returnTo(challenge.ticId!) },
-                        )}
+                    {challenge.targetCount > 1 && (
+                      <p>대상 별 {challenge.targetCount}개</p>
+                    )}
+                    {challenge.targets.map((target) => (
+                      <div
+                        key={target.ticId}
+                        role="group"
+                        aria-label={`TIC ${target.ticId}`}
                       >
-                        챌린지 별 분석하기
-                      </Link>
-                    </div>
+                        <p>
+                          TIC {target.ticId} · 별{" "}
+                          {
+                            statusLabel[
+                              target.progressStage === "unexplored"
+                                ? "unlocked"
+                                : target.progressStage
+                            ]
+                          }
+                        </p>
+                        <div className="quest-actions">
+                          <button onClick={() => choose(target.ticId)}>
+                            지도에서 선택
+                          </button>
+                          <Link
+                            to={pagePath(
+                              "analysis",
+                              { ticId: target.ticId },
+                              { returnTo: returnTo(target.ticId) },
+                            )}
+                          >
+                            챌린지 별 분석하기
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </>
                 )}
               </>

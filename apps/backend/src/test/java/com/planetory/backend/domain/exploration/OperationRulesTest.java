@@ -326,6 +326,9 @@ class OperationRulesTest {
                 () -> jdbc.update("UPDATE tutorial_stars SET tic_id = ? WHERE seq = 1", HIDDEN));
         assertRejected(DataIntegrityViolationException.class, "challenge_rounds.target_tic_id",
                 () -> jdbc.update("UPDATE challenge_rounds SET target_tic_id = ? WHERE id = ?", HIDDEN, round));
+        assertRejected(DataIntegrityViolationException.class, "challenge_round_extra_targets.tic_id",
+                () -> jdbc.update("INSERT INTO challenge_round_extra_targets(round_id, tic_id) VALUES (?, ?)",
+                        round, HIDDEN));
 
         // 대상 별이 나중에 숨겨져도 회차를 닫거나 튜토리얼을 끄는 운영은 막지 않는다.
         jdbc.update("UPDATE stars SET service_status = 'hidden' WHERE tic_id = ?", PUBLISHED);

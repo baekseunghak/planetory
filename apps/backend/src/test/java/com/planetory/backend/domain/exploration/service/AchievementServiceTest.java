@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -210,12 +211,16 @@ class AchievementServiceTest {
     @Test
     void 후보는_공개된_못_찾은_별이고_운영_중인_튜토리얼_별과_진행_중인_회차_대상은_빠진다() {
         useStarsPerAchievement(100);
+        // 진행 회차의 추가 대상도 대표 대상처럼 빠진다(S15P21C206-283).
+        jdbc.update("INSERT INTO challenge_round_extra_targets(round_id, tic_id)"
+                + " SELECT id, ? FROM challenge_rounds WHERE status = 'active'", ORDINARY[4]);
+        Set<Long> eligible = ELIGIBLE.stream().filter(tic -> tic != ORDINARY[4]).collect(Collectors.toSet());
 
         Recognition result = recognize(member, candidate(HOME), CONFIRMED);
 
-        assertEquals(ELIGIBLE, Set.copyOf(tics(result.unlockedStars())));
-        assertEquals(100 - ELIGIBLE.size(), result.unlockShortfall(), "있는 만큼만 연다(D-11)");
-        assertEquals(IntStream.range(0, ELIGIBLE.size()).boxed().toList(),
+        assertEquals(eligible, Set.copyOf(tics(result.unlockedStars())));
+        assertEquals(100 - eligible.size(), result.unlockShortfall(), "있는 만큼만 연다(D-11)");
+        assertEquals(IntStream.range(0, eligible.size()).boxed().toList(),
                 jdbc.queryForList("SELECT seq FROM star_unlocks WHERE trigger_achievement_id = ? ORDER BY seq",
                         Integer.class, result.achievementId()),
                 "성과 순번은 0부터 빈틈없이 쓴다");
