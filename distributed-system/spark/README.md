@@ -334,6 +334,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 - **별 하나의 순서.** `tess_gold.star`가 122 catalog → 123 → 124 조인 → 79 `evaluate`를 부른다. catalog가 준비되지 않은 별(보류·무신호)은 곡선을 읽지 않는다.
 - **run을 멈추는 것과 별만 거절하는 것.** Silver와 이 단계의 규칙 버전(iteration·BLS·품질·전처리·잔차)이 다르면 `GoldContractError`로 run을 멈춘다. 한 별의 커널 오류는 그 별만 `rejected`(`gold:<예외>:<내용>`)로 둔다. Silver가 TIC을 격리하는 것과 같다.
 - **Silver가 끝내지 못한 TIC.** manifest로 판정한다(`silver_state`). 재시도 불가 실패는 `rejected`, 재시도 가능 실패와 반복 상한(`incomplete`)은 `unprocessed`다. `unprocessed`가 남으면 run은 완료되지 않는다.
+- **1~13 입력 분포(2026-09-27 확인).** 대상 128,149 TIC(튜토리얼 5종 제외) 중 반복 탐색 완료가 110,601, `qa_stopped`가 17,548이다. 완료된 TIC 중 채택 후보가 있는 5,156개만 곡선을 읽는다. `qa_stopped`는 `failed`·`incomplete`가 아니어서 `unprocessed`가 되지 않고, 122 catalog가 `incomplete_iteration`으로 보류(`held`)한다. 그중 채택 후보가 있는 1,073개도 이번 run에서는 게시되지 않는다.
 - **임시 ID.** run 안에서만 유일하다. 번들은 TIC, 후보·세그먼트는 TIC × 100 + n이다. 실제 ID는 DB가 적재 때 붙인다(276).
 - **입력 snapshot.** `input_snapshot_ids`는 튜토리얼 게시처럼 제품 파일마다 `<product_id>:sha256:<raw SHA-256>`을 두고, 조인한 외부 snapshot을 붙인다. 제품 checksum은 Bronze의 `raw_sha256`에서 받는다. 규칙 승인 참조(identity·discoverability·external)는 run 입력으로 받는다.
 - **검증.** `test_tess_gold.py`가 합성 두 Sector에 실제 119·122를 돌린다. Silver 직렬화 함수(`_target_row`, `_json`)로 저장한 행의 `CURVE_COLUMNS`만으로 되살린 결과와 메모리 객체로 만든 결과가 같은지 본다. CI `validate:astro-kernel`에서 돈다.

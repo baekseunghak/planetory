@@ -465,6 +465,8 @@ tailscale ssh SSAFY@node-1 'sudo cat /etc/planetory/airflow/viewer-password'
 
 1~13 Bronze coverage의 Silver 수동 DAG는 [Airflow DAG 안내](../../distributed-system/airflow/dags/README.md)를 따른다. Silver release 설치 후 [configure-tess-silver-airflow-node1.sh](scripts/configure-tess-silver-airflow-node1.sh) `<release-id> [slots]`가 해당 release 전용 제한 sudo와 `tess_yarn` Pool을 구성한다. 슬롯 기본값 2는 Bronze 단계와 Silver가 YARN에 동시에 제출할 수 있게 하며, Node 1 제어기의 `PLANETORY_YARN_SLOTS` 기본값과 반드시 같아야 한다. 현재 서버에 자동 적용된 상태가 아니며 운영 설정 변경 승인을 받아야 한다.
 
+2026-09-27 80 배포로 release `20260927T031659Z`를 Node 1에 설치하고 Airflow 이미지를 `local/planetory-airflow:20260927T031659Z`(이전 `20260923T014803Z`)로 교체했다. Silver·Gold sudoers와 `tess_yarn` Pool(2)도 적용했다. 단계별 결과는 [통합 DAG 절](../../distributed-system/airflow/dags/README.md#tess_publication_run-80-수동-실행)에 있다.
+
 ## TESS 원천 수집 (`S15P21C206-75`)
 
 Worker 2~6의 호스트 Python 3.12에서 [run-tess-ingestion.ps1](scripts/run-tess-ingestion.ps1)로 SPOC 2분 Light Curve를 수집한다. Tailscale 대상과 실제 호스트명, `/mnt/data` mount, passwordless sudo, 디스크 사용률 75% 미만·가용 공간 기본 100GiB 이상, 다른 활성 수집 unit·수동 downloader 부재와 공식 MAST 연결을 `Preflight`에서 먼저 확인한다. 코드는 `/mnt/data/planetory-ingestion/releases/<ReleaseId>`, 실행 데이터는 `/mnt/data/staging/S15P21C206-75/run-<RunId>`에 둔다. release는 결정적 내용 SHA로 식별하고 root 소유·일반 사용자 쓰기 금지로 고정한다.
