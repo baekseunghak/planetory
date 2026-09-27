@@ -153,6 +153,17 @@ class PublishTest(unittest.TestCase):
                 self.publish(code, None)
             self.assertEqual(self.state()["status"], "rejected")
 
+    def test_a_missing_marker_reaches_airflow_with_its_reason(self):
+        def missing(run_id):
+            raise PublishContractError(f"no publish-ready marker for run {run_id}")
+
+        with patch.object(ctl, "ready_marker", missing), \
+                patch.object(ctl.subprocess, "run", side_effect=AssertionError("must not publish")):
+            with self.assertRaises(PublishContractError):
+                ctl.command_publish(self.args)
+        self.assertEqual((self.state()["status"], self.state()["failure_detail"]),
+                         ("rejected", f"no publish-ready marker for run {RUN}"))
+
 
 class UnitTest(unittest.TestCase):
     def test_unit_runs_the_release_controller_and_stops_on_65(self):
@@ -161,6 +172,7 @@ class UnitTest(unittest.TestCase):
         self.assertIn(f"ExecStart=/usr/bin/python3.12 {RELEASE}/spark/tess_publish_ctl.py publish --release-dir "
                       f"{RELEASE} --run-id {RUN} --approval {APPROVAL}", text)
         self.assertIn("RestartPreventExitStatus=65", text)
+        self.assertIn("StartLimitBurst=7", text)
         self.assertEqual(ctl.unit_name(RUN), f"planetory-tess-publish-{RUN}.service")
 
     def test_arguments_are_single_safe_tokens(self):

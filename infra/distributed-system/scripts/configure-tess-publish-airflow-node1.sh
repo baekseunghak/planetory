@@ -11,13 +11,18 @@ set -euo pipefail
 release_id=$1
 [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo INVALID_RELEASE_ID >&2; exit 1; }
 release="/opt/planetory-silver/releases/$release_id"
-for path in "$release/spark" "$release/spark/tess_publish_ctl.py" /etc/planetory/publisher \
+for path in /opt/planetory-silver /opt/planetory-silver/releases "$release" "$release/spark" \
+            "$release/spark/tess_publish_ctl.py" /etc/planetory/publisher \
             /etc/planetory/publisher/env /etc/planetory/publisher/image; do
   [[ -e "$path" && ! -L "$path" && "$(stat -c %u "$path")" == 0 \
     && -z "$(find "$path" -maxdepth 0 -perm /022 -print)" ]] || {
     echo PUBLISH_PATH_NOT_ROOT_OWNED_OR_WRITABLE >&2; exit 1;
   }
 done
+# The controller runs as root and imports the Bronze, Silver and Gold controllers from the release.
+[[ -z "$(find "$release" \( -type l -o ! -user root -o -perm /022 \) -print -quit)" ]] || {
+  echo PUBLISH_PATH_NOT_ROOT_OWNED_OR_WRITABLE >&2; exit 1;
+}
 [[ -z "$(find /etc/planetory/publisher/env -maxdepth 0 -perm /077 -print)" ]] || {
   echo PUBLISHER_ENV_NOT_ROOT_ONLY >&2; exit 1;
 }

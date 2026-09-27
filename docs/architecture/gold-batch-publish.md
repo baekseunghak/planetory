@@ -103,7 +103,7 @@ run 기록 JSON (Node 1 상태 파일, Airflow XCom 요약)
 | --- | --- | --- | --- |
 | `publish-run` | 모든 별이 끝남(`current_kept` 별 포함) | 일시 장애(`PUBLISH_ROLLED_BACK`)나 알림 일부 실패 | 65는 데이터 거절만 남음 |
 | `tess_publish_ctl publish` | 상태 `complete` | 상태 `failed`, 예외로 종료해 systemd가 5분 뒤 재시작 | 상태 `rejected`, 65(이미지에 `publish-run`이 없을 때의 2, docker 125도 여기) |
-| systemd unit | 끝 | `Restart=on-failure` | `RestartPreventExitStatus=65`, 멈춤 |
+| systemd unit | 끝 | `Restart=on-failure`(하루 7번까지 시작) | `RestartPreventExitStatus=65`, 멈춤 |
 | Airflow `wait_publish` | 요약 반환 | 대기 계속 | 실패(`terminal`) |
 
 - **튜토리얼 별.** 80이 대상에서 빼지만, 들어와도 이미 current가 있어 `first_publish_only`로 거절된다. 이 거절은 `current_kept=true`로 표시하고 종료 코드에서 실패로 세지 않는다.

@@ -112,6 +112,26 @@ class PublicationContractTest(unittest.TestCase):
         for command in tampered:
             self.assertFalse(any(p.fullmatch(" ".join(shlex.split(command)[3:])) for p in patterns), command)
 
+    def test_publish_commands_match_their_sudoers_policy(self):
+        # The same check for the 276 rules, which live in their own per-release sudoers file.
+        script = (DAGS.parents[2] / "infra/distributed-system/scripts/"
+                  "configure-tess-publish-airflow-node1.sh").read_text(encoding="utf-8")
+        run = re.search(r"^run='(.*)'$", script, re.M).group(1)
+        patterns = [re.compile(row.split("NOPASSWD: /usr/bin/python3.12 ", 1)[1].replace("$release", RELEASE)
+                               .replace("$run", run).replace("\\\\", "\\").replace("\\$", "$"))
+                    for row in script.splitlines() if row.startswith("tess-airflow ALL=")]
+        self.assertEqual(len(patterns), 2)
+        request = publication_request(CONF)
+        commands = [publish_start_command(request), status_command(request, "publish")]
+        for command in commands:
+            argv = shlex.split(command)
+            self.assertEqual(argv[:3], ["/usr/bin/sudo", "-n", "/usr/bin/python3.12"])
+            self.assertTrue(any(p.fullmatch(" ".join(argv[3:])) for p in patterns), command)
+        tampered = [commands[0].replace("/approved", "/other"), commands[0] + " --state-root /tmp",
+                    commands[1].replace("status publish", "status run")]
+        for command in tampered:
+            self.assertFalse(any(p.fullmatch(" ".join(shlex.split(command)[3:])) for p in patterns), command)
+
     def test_dag_is_opt_in_and_ends_with_the_approval(self):
         source = (DAGS / "tess_publication_dag.py").read_text(encoding="utf-8")
         ast.parse(source)

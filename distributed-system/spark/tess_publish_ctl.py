@@ -110,40 +110,50 @@ def publish_command(image: str, folder: Path, run_id: str, approval: str) -> lis
 
 
 def command_publish(args: argparse.Namespace) -> None:
-    marker, ready_sha256 = ready_marker(args.run_id)
-    image = publisher_image()
     folder = Path(args.state_root, f"run={args.run_id}", "ready")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     state_file = Path(args.state_root, f"run={args.run_id}", f"publish={stamp}.json")
-    state = {"run_id": args.run_id, "command": "publish", "unit": unit_name(args.run_id), "status": "fetching",
-             "attempt": marker["attempt"], "publish_ready_sha256": ready_sha256, "image": image,
+    state = {"run_id": args.run_id, "command": "publish", "unit": unit_name(args.run_id), "status": "prepared",
              "approval": args.approval, "updated_at_utc": utc_now()}
+    # Written before the marker and image checks, so a failure there reaches Airflow with its reason.
     write_state(state_file, state)
-    fetch(marker, folder)
-    state.update(status="publishing", updated_at_utc=utc_now())
-    write_state(state_file, state)
-    # Progress goes to the journal; stdout is the run record JSON.
-    result = subprocess.run(publish_command(image, folder, args.run_id, args.approval),
-                            stdout=subprocess.PIPE, text=True, check=False)
     try:
-        record = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        record = None
-    state.update(publisher_exit=result.returncode, record=record, updated_at_utc=utc_now())
-    if result.returncode == 0:
-        shutil.rmtree(folder)
-        state["status"] = DONE
+        marker, ready_sha256 = ready_marker(args.run_id)
+        image = publisher_image()
+        state.update(status="fetching", attempt=marker["attempt"], publish_ready_sha256=ready_sha256, image=image,
+                     updated_at_utc=utc_now())
         write_state(state_file, state)
-        print(f"PUBLISH_COMPLETE run={args.run_id} counts={json.dumps((record or {}).get('counts'))}", flush=True)
-        return
-    # The folder stays for diagnosis; a restart fetches it again. Only exit 1 (a transient failure or an
-    # unhandled DB error) is retried. Anything else, such as docker's 125 or argparse's 2 from an image
-    # without publish-run, repeats unchanged, so it stops like a data failure.
-    state["status"] = "failed" if result.returncode == 1 else "rejected"
+        fetch(marker, folder)
+        state.update(status="publishing", updated_at_utc=utc_now())
+        write_state(state_file, state)
+        # Progress goes to the journal; stdout is the run record JSON.
+        result = subprocess.run(publish_command(image, folder, args.run_id, args.approval),
+                                stdout=subprocess.PIPE, text=True, check=False)
+        try:
+            record = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            record = None
+        state.update(publisher_exit=result.returncode, record=record)
+        # The folder stays for diagnosis; a restart fetches it again. Only exit 1 (a transient failure or an
+        # unhandled DB error) is retried. Anything else, such as docker's 125 or argparse's 2 from an image
+        # without publish-run, repeats unchanged, so it stops like a data failure.
+        if result.returncode == 1:
+            raise RuntimeError("publish-run exited 1; the unit retries and finished stars stay ALREADY_PUBLISHED")
+        if result.returncode != 0:
+            raise PublishContractError(
+                f"publish-run exited {result.returncode}: {(record or {}).get('reason') or record}")
+    except PublishContractError as exc:
+        state.update(status="rejected", failure_detail=str(exc)[:500], updated_at_utc=utc_now())
+        write_state(state_file, state)
+        raise
+    except Exception as exc:
+        state.update(status="failed", failure_detail=f"{type(exc).__name__}: {exc}"[:500], updated_at_utc=utc_now())
+        write_state(state_file, state)
+        raise
+    shutil.rmtree(folder)
+    state.update(status=DONE, updated_at_utc=utc_now())
     write_state(state_file, state)
-    if result.returncode == 1:
-        raise RuntimeError("publish-run exited 1; the unit retries and finished stars stay ALREADY_PUBLISHED")
-    raise PublishContractError(f"publish-run exited {result.returncode}: {(record or {}).get('reason') or record}")
+    print(f"PUBLISH_COMPLETE run={args.run_id} counts={json.dumps((record or {}).get('counts'))}", flush=True)
 
 
 def operation_argv(args: argparse.Namespace) -> list[str]:
@@ -158,7 +168,10 @@ def unit_text(args: argparse.Namespace) -> str:
         f"Description=Planetory TESS publish {args.run_id}",
         "After=network-online.target hadoop-hdfs-namenode.service docker.service",
         "Wants=network-online.target",
-        "StartLimitIntervalSec=0",
+        # As for Gold: a failure that repeats is not refetched and republished forever; 7 starts a day is
+        # one more than the DAG's MAX_UNIT_RESTARTS, after which the unit stays failed.
+        "StartLimitIntervalSec=1d",
+        "StartLimitBurst=7",
         "",
         "[Service]",
         "Type=oneshot",

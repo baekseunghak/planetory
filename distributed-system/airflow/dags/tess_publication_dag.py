@@ -85,8 +85,8 @@ class GoldUnitWaitOperator(BaseOperator):
 
 @dag(
     dag_id="tess_publication_run",
-    dag_display_name="tess_publication_run · Silver 1~13 → Gold 게시 준비",
-    description="외부 카탈로그 수집, Gold 생성, 게시 준비 gate, 수동 게시 승인을 run ID 하나로 실행한다(수동 실행).",
+    dag_display_name="tess_publication_run · Silver 1~13 → Gold 게시",
+    description="외부 카탈로그 수집, Gold 생성, 게시 준비 gate, 수동 게시 승인, 서비스 DB 게시를 run ID 하나로 실행한다(수동 실행).",
     schedule=None,
     start_date=datetime(2026, 9, 27, tzinfo=timezone.utc),
     catchup=False,
