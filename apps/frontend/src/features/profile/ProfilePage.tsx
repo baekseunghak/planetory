@@ -16,7 +16,7 @@ import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
 import { FollowButton, FollowSummary } from "../follow/Follow";
-import { p1Enabled } from "../p1";
+import { useLiveP1 } from "../p1";
 import { useCinemaWording } from "../../shared/cinema-wording";
 export function MyProfilePage() {
   const { member } = useSession();
@@ -64,6 +64,8 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   // Cinema app: the tabs come first and "탐사 요약" is the body under its tab
   // (src/shared/cinema-wording); develop keeps the summary above the tabs.
   const cinema = useCinemaWording();
+  // Follow and another member's galaxy: live in production (../p1).
+  const liveP1 = useLiveP1();
   return (
     <section className="profile-page">
       <header className="profile-heading">
@@ -105,7 +107,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         )
       ) : (
         <>
-          {p1Enabled && (
+          {liveP1 && (
             <>
               <FollowSummary memberId={memberId} own={own} />
               {!own && (
@@ -119,7 +121,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               )}
             </>
           )}
-          {p1Enabled && !own && profile.starListVisibility === "PUBLIC" && (
+          {liveP1 && !own && profile.starListVisibility === "PUBLIC" && (
             <Link
               className="primary-link"
               to={"/members/" + encodeURIComponent(memberId) + "/sky"}
