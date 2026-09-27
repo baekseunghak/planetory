@@ -671,6 +671,21 @@ uv run --locked python -m pytest tests/test_external_catalog_regression.py tests
 
 `<다운로드 경로>`는 실제 ZIP을 저장한 디렉터리로 바꾼다.
 
+## 79 실데이터 재생 (S15P21C206-79)
+
+`tess_bench.aggregation_replay`는 저장된 116 외부 행과 로컬 123 회귀·FITS로 124 조인(현재 시간 규칙), 125 조립, 79 집계를 한 번에 재생한다. 다운로드·BLS·Git·DB 쓰기는 하지 않는다.
+
+- 입력 ZIP은 기록된 외부 해시로 확인한다: MR !187 `review-116-6348c862.zip`, MR !190 `review-124-696cda44.zip`. 내부 `checksums.json`도 함께 대조한다.
+- 관측 시각은 124와 같은 방식으로 다시 만든다. 곡선마다 저장된 `observed_times_sha256`과 다르면 실패한다.
+- 79 run은 주입 변형(g108·g109·g110·none)마다 하나씩 만든다. 한 run 안에서 별은 한 번만 나온다. ID는 fixture 값이다.
+
+```powershell
+uv run --locked python -m tess_bench.segmentation_regression --targets toi270 toi451 wasp62 pi_men
+uv run --locked python -m tess_bench.aggregation_replay --review-116 <경로>/review-116-6348c862.zip --review-124 <경로>/review-124-696cda44.zip --segmentation results/segmentation-regression/run-<id>
+```
+
+2026-09-27 결과(v1 `run-20260926T193436Z-7581421a`, v2 `run-20260926T195124Z-68cce2c5`)와 그 해석은 [116 계약 재실측](../../docs/data/tess-external-catalog-contract.md#2026-09-27-시간-척도-근거-결정-s15p21c206-79)에 있다. 네 run 모두 `complete`이고 스키마 검증을 통과했다. 이 PC의 editable 설치가 경로를 못 찾으면 `PYTHONPATH="../../libs/astro-kernel;../tess-fixture;."`를 준다.
+
 
 ## 243 운영 커널 회귀
 

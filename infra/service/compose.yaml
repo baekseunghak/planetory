@@ -21,7 +21,11 @@ services:
       # 서비스 런타임 계정. 소유자와 분리해야 GRANT/REVOKE가 실제로 집행된다(ADR D5).
       APP_DB_USER: ${DATABASE_USER:-planetory_service}
       APP_DB_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
-    # 외부 인바운드 0개. 포트를 호스트에 노출하지 않고 service 네트워크 안에서만 붙는다.
+    # 외부 인바운드 0개. Backend는 service 네트워크로 붙는다. loopback 포트는 GCP Node 1 Publisher 전용이다.
+    # 호스트의 tailscale serve --tcp 5432가 이 포트로 넘기고, tailnet ACL이 Node 1만 허용한다 [S15P21C206-85].
+    # 0.0.0.0이나 tailnet IP로 바꾸지 않는다. tailnet IP 바인드는 부팅 때 IP가 늦게 붙으면 DB가 뜨지 못한다.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - service-db-data:/var/lib/postgresql
       # 빈 볼륨 첫 초기화 때만 실행된다. 기존 볼륨은 README의 수동 절차를 따른다.

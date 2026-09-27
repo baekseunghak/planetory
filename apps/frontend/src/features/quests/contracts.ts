@@ -5,7 +5,7 @@ import {
 
 export const intentLabels = {
   deep_confirmed: "뚜렷한 신호 · 봉우리와 구간 고르기",
-  shallow_confirmed: "얕은 신호 · 곡선 확대하기",
+  shallow_confirmed: "얕은 신호 · 곡선 확대하고 남은 곡선에서 이어 찾기",
   fp: "행성 아님 신호 · 확인 도구 사용하기",
   deep_fp: "서로 가리는 쌍성 · 깊은 신호 구별하기",
   multi_fp: "여러 신호 · 남은 곡선에서 반복 탐색하기",

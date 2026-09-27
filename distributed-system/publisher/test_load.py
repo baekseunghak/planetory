@@ -303,5 +303,132 @@ class PublishStarTest(unittest.TestCase):
             self.assertEqual((got["bundles"], got["current"], got["periodograms"]), (1, 1, 1), tic)
 
 
+@unittest.skipUnless(URL, "PUBLISHER_TEST_DATABASE_URL이 없다")
+class SupplyReadTest(unittest.TestCase):
+    """supply-report의 조회 [S15P21C206-79]. 최소 권한 보고 역할로 읽히고, 활성 튜토리얼만 슬롯으로 본다."""
+
+    def test_report_role_reads_current_versions_and_active_tutorial_slots_only(self):
+        from publisher import supply
+
+        with connect(autocommit=True) as conn:
+            target = preflight(conn, require_flyway=False)
+            tics = [900_000_311, 900_000_312, 900_000_313]
+            for tic in tics[:2]:
+                conn.execute("INSERT INTO stars(tic_id, confirmed_count, service_status) VALUES (%s, 0, 'published')",
+                             (tic,))
+            published = {p["tic_id"]: p for p in mock_source.payloads(tics[:2])}
+            for p in published.values():
+                publish_star(conn, p, target)
+            conn.execute("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES "
+                         "(1, %s, 'deep_confirmed', true), (2, %s, 'shallow_confirmed', false)", tuple(tics[:2]))
+            # 운영 보고 로그인과 같은 최소 권한: 스키마 USAGE와 REPORT_TABLES SELECT만.
+            role = sql.Identifier(f"supply_reporter_{secrets.token_hex(3)}")
+            conn.execute(sql.SQL("CREATE ROLE {} NOLOGIN").format(role))
+            conn.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(sql.Identifier(SCHEMA), role))
+            conn.execute(sql.SQL("GRANT SELECT ON {} TO {}").format(
+                sql.SQL(", ").join(map(sql.Identifier, supply.REPORT_TABLES)), role))
+            try:
+                conn.execute(sql.SQL("SET ROLE {}").format(role))
+                slots, rows = supply.read_database(conn, tics)
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    conn.execute("SELECT 1 FROM submissions LIMIT 1")
+            finally:
+                conn.execute("RESET ROLE")
+                conn.execute("DELETE FROM tutorial_stars WHERE seq IN (1, 2)")
+                conn.execute(sql.SQL("DROP OWNED BY {}").format(role))
+                conn.execute(sql.SQL("DROP ROLE {}").format(role))
+
+        self.assertEqual(slots, {1: tics[0]})
+        got = {r["tic_id"]: r for r in rows}
+        self.assertEqual(set(got), set(tics[:2]), "stars에 없는 TIC은 행이 없다")
+        for tic, p in published.items():
+            self.assertEqual((got[tic]["service_status"], got[tic]["bundle_version"]),
+                             ("published", p["bundle"]["bundle_version"]))
+            self.assertEqual(got[tic]["discoverable"], any(c["record"]["discoverable"] for c in p["candidates"]))
+
+SWITCH_SQL = Path(__file__).resolve().parent / "publisher" / "tutorial_switch.sql"
+TUTORIAL_TICS = (149603524, 307210830, 279569718, 300871545, 278956474)
+OLD_FIRST, REWARD = 900_000_301, 900_000_302
+
+
+def switch_body() -> str:
+    """psql 메타 명령을 뺀 전환 본문. BEGIN과 COMMIT/ROLLBACK은 테스트가 쥔다."""
+    text = SWITCH_SQL.read_text(encoding="utf-8")
+    return text[text.index("\nBEGIN;") + len("\nBEGIN;"):text.index("\n\\if :apply")]
+
+
+@unittest.skipUnless(URL, "PUBLISHER_TEST_DATABASE_URL이 없다")
+class TutorialSwitchTest(unittest.TestCase):
+    """tutorial_switch.sql의 옛 1번 성과 정리 [S15P21C206-272, !226 백승학 리뷰]. 매 테스트를 rollback한다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conn = connect(autocommit=True)
+        target = preflight(cls.conn, require_flyway=False)
+        for tic in (*TUTORIAL_TICS, OLD_FIRST, REWARD):
+            cls.conn.execute("INSERT INTO stars(tic_id, confirmed_count, service_status) VALUES (%s, 0, 'published')",
+                             (tic,))
+            publish_star(cls.conn, payload(tic), target)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def setUp(self):
+        self.conn.execute("BEGIN")
+        self.addCleanup(self.conn.execute, "ROLLBACK")
+        c = self.conn
+        c.execute("INSERT INTO tutorial_stars(seq, tic_id, intent, active) VALUES (1, %s, 'deep_confirmed', true)",
+                  (OLD_FIRST,))
+        self.user = c.execute("INSERT INTO users(provider, provider_user_id, nickname) VALUES ('test', %s, 't272') "
+                              "RETURNING id", (secrets.token_hex(4),)).fetchone()[0]
+        self.unlock(OLD_FIRST, "tutorial", 0)
+        bundle, candidate = self.current(OLD_FIRST)
+        sub = self.submission(OLD_FIRST, bundle, candidate)
+        achievement = c.execute("INSERT INTO user_candidate_achievements(user_id, candidate_id, achievement_type, "
+                                "recognized_submission_id, recognized_at) VALUES (%s, %s, 'confirmed', %s, now()) "
+                                "RETURNING id", (self.user, candidate, sub)).fetchone()[0]
+        self.unlock(REWARD, "achievement", 1, achievement)
+
+    def current(self, tic) -> tuple[int, int]:
+        return self.conn.execute("SELECT b.id, c.id FROM publication_bundles b JOIN candidates c ON c.tic_id = b.tic_id "
+                                 "WHERE b.tic_id = %s AND b.status = 'current' LIMIT 1", (tic,)).fetchone()
+
+    def unlock(self, tic, reason, ordinal, achievement=None):
+        self.conn.execute(
+            "INSERT INTO star_unlocks(user_id, tic_id, unlock_reason, trigger_achievement_id, seq, depth_z, unlocked_at, "
+            "world_x, world_y, layout_version, layout_ordinal) VALUES (%s, %s, %s, %s, %s, 0, now(), 0, 0, 'test', %s)",
+            (self.user, tic, reason, achievement, 0 if achievement else None, ordinal))
+        self.conn.execute("INSERT INTO user_star_progress(user_id, tic_id) VALUES (%s, %s)", (self.user, tic))
+
+    def submission(self, tic, bundle, candidate=None) -> int:
+        kind = ("candidate", "LIKELY_PLANET", 1.0, 0.1, 0.2, "matched", "recognized") if candidate else \
+               ("skipped", None, None, None, None, "skipped", "none")
+        return self.conn.execute(
+            "INSERT INTO submissions(user_id, tic_id, bundle_id, request_id, submission_kind, curve_step, "
+            "removed_candidate_ids, user_judgment, submitted_period, phase_start, phase_end, match_result, "
+            "achievement_result, matched_candidate_id, fold_reference_time_btjd, evidence_checks, "
+            "residual_model_version, periodogram_config_version, rule_version) "
+            "VALUES (%s, %s, %s, gen_random_uuid(), %s, 0, '{}', %s, %s, %s, %s, %s, %s, %s, 0, '[]', 't', 't', 'rule-0') "
+            "RETURNING id", (self.user, tic, bundle, kind[0], *kind[1:], candidate)).fetchone()[0]
+
+    def count(self, table, tic) -> int:
+        return self.conn.execute(f"SELECT count(*) FROM {table} WHERE user_id = %s AND tic_id = %s",
+                                 (self.user, tic)).fetchone()[0]
+
+    def test_reward_star_without_member_records_is_cleared_and_member_moves(self):
+        self.conn.execute(switch_body())
+
+        self.assertEqual(self.count("star_unlocks", REWARD), 0)
+        self.assertEqual(self.count("star_unlocks", TUTORIAL_TICS[0]), 1)
+        self.assertEqual(self.count("submissions", OLD_FIRST), 0)
+
+    def test_member_records_on_reward_star_stop_the_switch(self):
+        self.submission(REWARD, self.current(REWARD)[0])   # 보상 별에서 이어 한 탐사. 외래 키로는 막히지 않는다.
+
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, "성과로 열린 별"):
+            self.conn.execute(switch_body())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -246,6 +246,54 @@ def test_previous_snapshot_tamper_rejected():
         run(previous=old)
 
 
+@pytest.mark.parametrize("source,raw", [
+    ("nea_toi", dict(tid="123", toi="1.01", pl_orbper="2", pl_tranmid="2458325.96", pl_trandurh="2",
+                     tfopwg_disp="CP")),
+    ("exofop_toi", {"TIC ID": "123", "TOI": "1.01", "Period (days)": "2", "Epoch (BJD)": "2458325.96",
+                    "Duration (hours)": "2", "TFOPWG Disposition": "CP"}),
+    # tce_time0 is the same epoch in full BJD; only the BTJD column is read.
+    ("mast_tce_s1_s13", dict(ticid="123", tceid="00000000123-01", tce_period="2", tce_time0bt="1325.96",
+                             tce_time0="2458325.96", tce_duration="2")),
+])
+def test_documented_tess_time_evidence_normalizes_toi_and_tce(source, raw):
+    from astro_kernel.external_catalog import TIME_EVIDENCE, TIME_RULE_VERSION
+    result = normalize_export_row(source, raw)
+    assert result["status"] == "normalized", result
+    assert result["row"]["time_system"] == "BTJD-TDB"
+    assert result["row"]["epoch_btjd"] == pytest.approx(1325.96, abs=1e-9)
+    assert result["original_time_system"] in ("BJD", "BTJD")
+    assert result["time_rule_version"] == TIME_RULE_VERSION and TIME_RULE_VERSION in TIME_EVIDENCE[source]
+
+
+def test_time_evidence_names_every_source_and_keeps_bare_archive_bjd_held():
+    from astro_kernel.external_catalog import TIME_EVIDENCE
+    assert set(TIME_EVIDENCE) == {"nea_toi", "exofop_toi", "mast_tce_s1_s13", "nea_pscomppars"}
+    raw = dict(tic_id="123", pl_name="fixture b", pl_orbper="2", pl_tranmid="2458325.96", pl_trandur="2",
+               tran_flag="1")
+    for systemref in ("BJD", "JD", "HJD", "HJD-UTC", None):
+        result = normalize_export_row("nea_pscomppars", dict(raw, pl_tranmid_systemref=systemref))
+        assert (result["status"], result["reason"]) == ("hold", "unverified_time_standard"), systemref
+    # Explicit BJD-UTC converts with TT-UTC from 2017-01-01; older UTC epochs stay held.
+    utc = normalize_export_row("nea_pscomppars", dict(raw, pl_tranmid_systemref="BJD-UTC"))
+    assert utc["row"]["epoch_btjd"] == pytest.approx(1325.96 + 69.184 / 86400, abs=1e-9)
+    old = normalize_export_row("nea_pscomppars", dict(raw, pl_tranmid="2457001", pl_tranmid_systemref="BJD-UTC"))
+    assert (old["status"], old["reason"]) == ("hold", "unverified_time_standard")
+
+
+def test_paper_checked_bare_bjd_row_is_bound_to_its_exact_epoch():
+    from astro_kernel.external_catalog import ROW_TIME_EVIDENCE
+    raw = dict(tic_id="259377017", pl_name="TOI-270 b", pl_orbper="3.36", pl_tranmid="2458461.01464000",
+               pl_trandur="1.2", pl_tranmid_systemref="BJD", tran_flag="1")
+    result = normalize_export_row("nea_pscomppars", raw)
+    assert result["status"] == "normalized" and "arXiv:2308.10763" in result["time_evidence"]
+    assert result["row"]["epoch_btjd"] == pytest.approx(1461.01464, abs=1e-9)
+    assert normalize_export_row("nea_pscomppars", dict(raw, pl_tranmid="2458461.01500"))["status"] == "hold"
+    pi = dict(raw, tic_id="261136679", pl_name="pi Men c", pl_tranmid="2458425.78920400")
+    assert normalize_export_row("nea_pscomppars", pi)["row"]["epoch_btjd"] == pytest.approx(
+        1425.789204 + 69.184 / 86400, abs=1e-9)  # paper states BJD_UTC
+    assert len(ROW_TIME_EVIDENCE) == 7
+
+
 def test_missing_csv_tic_is_held():
     result = normalize_export_row("nea_toi", {"tid": None, "toi": "1.01"})
     assert result["status"] == "hold" and result["reason"]

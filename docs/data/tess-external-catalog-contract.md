@@ -223,3 +223,51 @@ PC/APC→pc와 라벨 없음→none은 DB 상태를 구분한다. 150의 pc↔no
 | 124 시간 정규화 | TCE tce_time0bt의 원점뿐 아니라 TDB 시간 척도까지 공식 MAST 근거로 확인한다. | 근거 URI·변환 규칙 버전·재검증 후에만 현재 8행 보류 해소. 이름만으로 BTJD-TDB 추정 금지 |
 
 1~4번 문서 정합성 의견(인덱스 상태·41개 테스트 수·fixture 사용법 위치·MR 첨부 안내)을 반영했다. 원천별 부분 보류와 재귀 snapshot은 후속 구현 항목이며 현재 기능으로 보고하지 않는다. 승인된 검토 범위를 운영 적용 완료 또는 모든 외부 시간 척도 검증 완료로 확대하지 않는다.
+
+## 2026-09-27 시간 척도 근거 결정 (S15P21C206-79)
+
+- 상태: 커널 반영·단위 검증과 저장 자료 재실측 완료(아래 재실측). 운영 수집분 재실측은 아니다.
+- 결정: 열 이름에 TDB가 글자로 적히지 않아도, 공식 문서들이 이어져 척도를 정하면 받는다. 규칙 버전은 `external-time-evidence-v1`이고, 근거 URI는 커널 상수 `TIME_EVIDENCE`에 둔다. 어댑터는 이 값을 snapshot `time_evidence`로 넘긴다. 이름만 보고 추정하는 것은 여전히 금지한다.
+
+| 원천 | 근거 | 판정 |
+| --- | --- | --- |
+| ExoFOP TOI `Epoch (BJD)` | [TOI 릴리스 노트](https://tess.mit.edu/toi-releases/toi-release-notes/)와 [TOI 카탈로그 논문](https://arxiv.org/abs/2103.12538)은 epoch를 바리센터 보정한 TESS Julian Day(BJD − 2457000)로 정의한다. [SPOC 제품 설명서](https://archive.stsci.edu/files/live/sites/mast/files/home/missions-and-data/active-missions/tess/_documents/EXP-TESS-ARC-ICD-TM-0014-Rev-F.pdf)는 TESS 시각을 `TIMESYS='TDB'`, `BJDREFI=2457000`으로 정의한다 | BJD-TDB로 받는다 |
+| NEA TOI `pl_tranmid` | NEA TOI 목록은 ExoFOP TOI 목록으로 만든다([TESSMission](https://exoplanetarchive.ipac.caltech.edu/docs/TESSMission.html)). 116 실측에서 18쌍의 epoch가 수치상 일치했다. 나머지 근거는 ExoFOP와 같다 | BJD-TDB로 받는다 |
+| MAST TCE S1~13 | CSV 머리말에 DV XML 파일에서 뽑은 통계라고 적혀 있다. SPOC 제품 설명서는 DV epoch를 `transitEpochBtjd`로 둔다. 척도 근거는 위 SPOC 설명서와 같다 | `tce_time0bt`를 BTJD-TDB로 받는다 |
+| NEA PSCompPars | [열 정의](https://exoplanetarchive.ipac.caltech.edu/docs/API_PS_columns.html)가 표기값의 뜻을 정하지 않는다. 아카이브는 `BJD-TDB`와 `BJD-UTC`를 따로 쓰므로, 아무 표기 없는 `BJD`·`JD`·`HJD`는 척도를 알 수 없다 | v1: 행마다 `BJD-TDB`로 적힌 경우만 받는다. v2는 아래 추가 결정을 본다 |
+
+- 정정: 기존 커널은 TCE에서 전체 BJD 열 `tce_time0`을 읽고 척도를 `unverified`로 두었다. 이 문서(22·223행)가 가리키던 열은 `tce_time0bt`이므로 커널을 그에 맞췄다. Sector 1 CSV의 첫 두 행에서 두 열의 차이는 정확히 2457000이다.
+- 한계:
+  - TCE CSV의 epoch는 소수 둘째 자리(0.01일, 약 14.4분)까지만 있다. 116 매칭 허용치(duration의 0.5배)보다 작지만 여유가 줄어든다. 모호하면 기존대로 보류한다.
+  - QLP는 S74~79에 최대 약 3분의 바리센터 보정 오류를 공지했다. 초기 공개 범위인 S3·4·5와는 관계없다.
+- 재실측(2026-09-27):
+  - 입력은 MR !187의 `review-116-6348c862.zip`(SHA-256이 위 기록과 일치)에 든 해시 검증 감사 행, 이 PC에서 새로 돌린 123 회귀(`run-20260926T192658Z-f951ab55`), 공식 MAST FITS다.
+  - 124 방식으로 다시 만든 관측 시각은 16곡선 모두 MR !190 `review-124-696cda44.zip`의 `observed_times_sha256`과 같았다. 그래서 09-22 실행과 달라진 것은 시간 규칙뿐이다.
+  - 정규화 결과: TOI 18행·ExoFOP 18행·TCE 8행이 모두 정규화됐고, PSCompPars는 정규화 11·보류 7·비통과 제외 4로 이전과 같다.
+  - 후보가 준비된 11곡선 중 7곡선(toi451 3개, wasp62 4개)이 `hold`에서 `ready`로 바뀌었다.
+  - wasp62에서 BLS 후보(주기 약 4.4117일)가 ExoFOP·NEA TOI(KP)·TCE·PSCompPars 네 원천과 직접 매칭돼 `confirmed`가 됐다. 이는 WASP-62 b다. 주입 신호 후보는 외부 행이 없어 `none`이다.
+  - 남은 4곡선(toi270, pi_men)은 PSCompPars의 표기 없는 BJD 행 때문에 `nea_pscomppars:unresolved_external_rows`로 계속 보류된다.
+  - 도구는 `python -m tess_bench.aggregation_replay`, 결과는 Git 제외 `experiments/tess-bench/results/aggregation-replay-79/run-20260926T193436Z-7581421a`(manifest SHA-256 `f87a11bc72408d547517f21f079ede97e36351b67ff0896859978f6be2603952`, 입력 ZIP 외부 해시 고정·리뷰 반영 뒤 최종 커널)에 있다.
+  - 이 재실측은 TDB와 UTC 사이 약 1분 차이를 판별하지 못한다. 매칭 허용치(분~시간 단위) 안에서 BJD − 2457000 원점과 epoch 정렬이 맞는다는 근거일 뿐이다.
+- 검토: 79 작업에서 자체 리뷰(코드·계약·문서 대조)와 위 재실측으로 확인했다. 팀 병합 규칙의 비작성자 승인을 대신하지 않는다.
+
+### v2 추가 결정: PSCompPars 행별 논문 근거와 BJD-UTC 변환 (2026-09-27)
+
+규칙 버전을 `external-time-evidence-v2`로 올렸다. v1의 TOI·ExoFOP·TCE 판정은 그대로다.
+
+- **행별 논문 근거(`ROW_TIME_EVIDENCE`).** 표기 없는 `BJD` 행은 Archive의 `pl_tranmid_reflink`가 가리키는 논문의 epoch 표로 척도를 확인한 경우에만 받는다. 근거는 행성 이름과 정확한 epoch 값에 묶는다. Archive 행이 바뀌면(참조 논문·값 변경) 다시 보류된다. 정규화 결과에는 `time_evidence`로 논문과 표 위치를 남긴다.
+
+| 행 | 논문 | 표기 | 판정 |
+| --- | --- | --- | --- |
+| TOI-270 b·c·d | [Kaye et al. 2022](https://arxiv.org/abs/2308.10763) | 표 3 각주: T0를 BJD_TDB − 2457000으로 적는다(표 5와 같은 값) | BJD-TDB |
+| pi Men c | [Kunovac Hodžić et al. 2021](https://arxiv.org/abs/2007.11564) | 표 4: T0를 BJD_UTC − 2450000으로 적는다 | BJD-UTC를 변환 |
+| L 98-59 b·c·d | [Cadieux et al. 2025](https://arxiv.org/abs/2507.09343) | 표 5: t0를 TBJD(BJD − 2457000)로 적는다. TESS BJD 체계는 SPOC 설명서상 TDB다 | BJD-TDB |
+
+  일곱 행 모두 논문 값과 Archive 값이 자릿수까지 같았다.
+- **BJD-UTC 변환.** 명시적 `BJD-UTC`(Archive 표기 또는 위 논문 근거)는 바리센터 TDB − UTC = TT − UTC(2 ms 이내, Eastman et al. 2010)로 바꾼다. 2017-01-01(BJD 2457754.5) 이후에는 32.184초 + 윤초 37 = 69.184초를 더한다. 그 이전 UTC epoch는 윤초표가 없어 보류한다.
+- **바꾸지 않은 것.** `JD`·`HJD`·표기 없음은 여전히 보류한다. 비통과(`tran_flag=0`) 행이 그 TIC의 분류를 막는 124 규칙도 그대로 둔다. `tran_flag=0`은 "통과로 발견되지 않음"이지 "통과하지 않음"이 아니다. 우리 BLS 신호가 그 행성일 가능성을 배제하려면 새 매칭 규칙이 필요하고, 이는 79 범위 밖의 과학 결정이다.
+- **v2 재실측.** 같은 입력으로 다시 실행한 결과(`run-20260926T195124Z-68cce2c5`, manifest SHA-256 `774ccc8998c245ac6c165a284aff5d84c583a646ac8a8a88070f51b63eb52320`)다.
+  - PSCompPars 통과 행 18개가 모두 정규화됐고, 비통과 제외는 4개다.
+  - 준비된 11곡선 중 9곡선이 `ready`다. v1 대비 toi270 2곡선이 늘었다. toi270 후보는 알려진 행성을 지운 곡선의 주입 신호라 외부 행이 없어 `none`이다.
+  - 남은 2곡선(pi_men g108·g110)은 비통과 행(HD 39091 b, pi Men d) 때문에 보류다.
+  - 79 run 4개 모두 `complete`이고 스키마 오류는 0건이다.
