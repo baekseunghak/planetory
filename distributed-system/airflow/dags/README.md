@@ -135,7 +135,7 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 **배포 순서(각 단계 운영 승인 필요).**
 1. 이 브랜치로 pipeline release를 설치한다(`run-tess-silver.ps1 -Step Install`). release에는 Gold 파일 4개와 79 schema가 함께 들어간다.
 2. `stage-tess-airflow-node1.ps1`로 Airflow release를 Node 1에 올린다. 두 설정 스크립트도 이 release의 `infra/distributed-system/scripts/`에 함께 들어간다. 이 단계는 파일만 올리고 이미지는 바꾸지 않는다.
-3. Node 1 root로 그 release의 `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)를 먼저 실행하고, 이어서 `configure-tess-gold-airflow-node1.sh <release-id>`를 실행한다. 이미지보다 먼저 한다.
+3. Node 1 root로 그 release의 `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)를 먼저 실행하고, 이어서 `configure-tess-gold-airflow-node1.sh <release-id>`를 실행한다. 두 스크립트는 sudoers 명령 정규식을 쓰므로 sudo 1.9.10 이상이 필요하고, 낮은 버전이면 설정 시점에 `SUDO_REGEX_UNSUPPORTED`로 멈춘다(Node 1은 1.9.15p5). 이미지보다 먼저 한다.
 4. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. DAG 7개의 import 오류가 0건인지 확인한다.
 5. Node 1에서 NEA·ExoFOP 연결을 확인하고, Gold Canary(`tess_gold_ctl.py canary`)를 한 뒤 DAG를 trigger한다.
 
