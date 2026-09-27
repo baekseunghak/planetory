@@ -24,10 +24,14 @@ def null_runs(values):
     return runs
 
 
-VERSION = "gold-serialization-125-v1"
+VERSION = "gold-serialization-125-v2"
 REQUIRED_VERSIONS = {"preprocessing", "bls_config", "residual_model",
                      "periodogram_config", "candidate_quality", "ai_model",
                      "ai_threshold", "external_matching"}
+# 124 snapshot name -> external_signal_references.source (276). The 266 NASA lookup
+# reads only source='archive' with the exact pl_name, which PSCompPars rows carry.
+# Snapshots, bundle_version and 79 lineage keep the snapshot name.
+DB_SOURCES = {"nea_pscomppars": "archive"}
 
 
 class GoldValidationError(ValueError):
@@ -241,6 +245,7 @@ def _assemble(cat, segmented, disc, ext, pg, allocated, snapshots, versions,
         # Match the actual external_signal_references columns, not diagnostics.
         ref = {k: deepcopy(r[k]) for k in ("candidate_id", "tic_id", "source", "external_id",
                                            "disposition", "period_days", "epoch_btjd", "fetched_on")}
+        ref["source"] = DB_SOURCES.get(ref["source"], ref["source"])
         candidate = proposed.get(r["candidate_id"])
         ref["candidate_key"] = ({k: candidate[k] for k in ("period_days", "epoch_btjd")}
                                 if candidate else None)

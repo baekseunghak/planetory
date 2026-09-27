@@ -163,14 +163,16 @@ def read_hdfs_file(context, path: str) -> bytes:
 
 
 def run(args: argparse.Namespace) -> None:
-    from pyspark import SparkFiles, StorageLevel
+    from pyspark import StorageLevel
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.appName(f"S15P21C206-80-gate-{args.run_id}").getOrCreate()
     context = spark.sparkContext
     context.setLogLevel("WARN")
     try:
-        with open(SparkFiles.get(args.schema), encoding="utf-8") as stream:
+        # YARN cluster mode localizes --files into the driver container's working directory.
+        # SparkFiles.get names the addFile directory instead, where they never land (first run, 2026-09-27).
+        with open(args.schema, encoding="utf-8") as stream:
             schema = json.load(stream)
         marker = json.loads(read_hdfs_file(context, f"{args.attempt}/_READY.json"))
         verdict = dict(schema=VERDICT_SCHEMA, gate_version=GATE_VERSION, run_id=args.run_id,

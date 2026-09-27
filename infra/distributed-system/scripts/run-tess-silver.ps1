@@ -163,7 +163,8 @@ if ($Step -eq 'Install') {
         $null = New-Item -ItemType Directory -Path (Join-Path $tempRoot 'astro_kernel') -Force
         # The same release carries the 80 Gold stage (Gold job, gate, external collector) and its schema.
         foreach ($name in @('requirements.txt', 'tess_bronze_ctl.py', 'tess_silver.py', 'tess_silver_ctl.py',
-                            'tess_gold.py', 'tess_gold_ctl.py', 'tess_gate.py', 'tess_external_ctl.py')) {
+                            'tess_gold.py', 'tess_gold_ctl.py', 'tess_gate.py', 'tess_external_ctl.py',
+                            'tess_publish_ctl.py')) {
             Copy-Item -LiteralPath (Join-Path $repoRoot "distributed-system\spark\$name") -Destination (Join-Path $tempRoot "spark\$name")
         }
         $null = New-Item -ItemType Directory -Path (Join-Path $tempRoot 'contracts\gold') -Force
@@ -201,6 +202,7 @@ test -f "$stage/spark/requirements.txt"
 test -f "$stage/spark/tess_gold_ctl.py"
 test -f "$stage/spark/tess_gate.py"
 test -f "$stage/spark/tess_external_ctl.py"
+test -f "$stage/spark/tess_publish_ctl.py"
 test -f "$stage/contracts/gold/publication-candidates.schema.json"
 test -d "$stage/astro_kernel"
 mkdir "$stage/classes"

@@ -1,7 +1,7 @@
 """목업 입력 어댑터: 계약 예시 payload를 운영 더미 별에 옮겨 싣는다 [S15P21C206-262].
 
 실제 Gold가 서비스 DB에 오기 전까지 분석 화면을 열어 보기 위한 입력이다. load.publish_star는 이 어댑터와
-운영 입력(HDFS Gold reader)을 구분하지 않는다. 교체할 때 바꾸는 것은 이 파일 하나다.
+운영 입력(배치 run의 run_source)을 구분하지 않는다.
 
 원천은 fixtures/gold-toi270-s3.json이다. experiments/gold-roundtrip(S15P21C206-117)이 실제 TESS 곡선(TOI-270,
 Sector 3)으로 만든 계약 예시이며 과학 기준값이 아니다. payload로 바꾸는 규칙은 로컬 시드(S15P21C206-256)의
@@ -74,7 +74,7 @@ def toi270_payload(src: dict, tic: int) -> dict:
                             "answer_class": "graded" if graded else "analysis",
                             "planet_truth": PLANET_TRUTH.get(label),
                             "source_refs": [{"source": ext["source"], "external_id": ext["external_id"]}] if ext else []},
-            "external": ext, "ai": None})
+            "external": [ext] if ext else [], "ai": None})
 
     records = {"candidates": [c["record"] for c in candidates], "external_statuses": src["external_statuses"],
                "ai_results": src["ai_results"]}
@@ -99,4 +99,5 @@ def toi270_payload(src: dict, tic: int) -> dict:
         "periodogram": {"period_min_days": pg["period_min_days"], "period_max_days": pg["period_max_days"],
                         "n_periods": pg["n_periods"], "power": power, "checksum": power_checksum},
         "candidates": candidates,
+        "external_only": [e for e in src["external_statuses"] if not e.get("candidate_key")],
     }

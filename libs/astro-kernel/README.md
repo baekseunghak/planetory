@@ -705,7 +705,7 @@ Inf 거절 정책과 다르며, Inf를 정상 관측으로 인정하거나 실�
 
 ## 125 Gold 직렬화
 
-`astro_kernel.gold_serialization.assemble`은 122·123·124 결과를 검증하고 Gold 배열·레코드 checksum·manifest를 구성하는 순수 함수다. `gold_canonical`에 공용 checksum 구현을 두며 파일·네트워크·DB에 접근하지 않는다. 호출자가 ID·내용 기반 snapshot·계산 버전·AI 미실행 결정 근거를 공급한다. `previous_bundle`을 통한 퇴역 후보·별칭 보존과 변경 이력 제안을 지원하며, ID 할당·적용 시각·Publisher 트랜잭션은 수행하지 않는다. `validated` 결과도 `publishable=false`이며 운영 게시 승인이 아니다. [입력·검증 범위와 실행 기록](../../experiments/gold-roundtrip/README.md)을 참조한다.
+`astro_kernel.gold_serialization.assemble`은 122·123·124 결과를 검증하고 Gold 배열·레코드 checksum·manifest를 구성하는 순수 함수다. `gold_canonical`에 공용 checksum 구현을 두며 파일·네트워크·DB에 접근하지 않는다. 호출자가 ID·내용 기반 snapshot·계산 버전·AI 미실행 결정 근거를 공급한다. `previous_bundle`을 통한 퇴역 후보·별칭 보존과 변경 이력 제안을 지원하며, ID 할당·적용 시각·Publisher 트랜잭션은 수행하지 않는다. DB로 가는 외부 참조의 `source`는 `DB_SOURCES`로 바꾼다(`nea_pscomppars` → `archive`, [Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계), `S15P21C206-276`). `validated` 결과도 `publishable=false`이며 운영 게시 승인이 아니다. [입력·검증 범위와 실행 기록](../../experiments/gold-roundtrip/README.md)을 참조한다.
 
 ## 79 게시 후보 집계
 

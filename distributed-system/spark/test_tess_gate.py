@@ -98,6 +98,13 @@ class GateTest(unittest.TestCase):
             self.assertIsNone(re.search(r'(textFile|binaryFiles|wholeTextFiles)\(f?"[^"]*/[_.]', source), module.__name__)
             self.assertIn('read_hdfs_file(', inspect.getsource(module.run if module is gate else module.load_sources))
 
+    def test_shipped_schema_is_opened_from_the_container_directory(self):
+        # The first full run's gate (2026-09-27) failed with FileNotFoundError: in YARN cluster mode
+        # --files land in the driver's working directory, not under SparkFiles.get().
+        source = inspect.getsource(gate.run)
+        self.assertNotIn("SparkFiles.get(", source)
+        self.assertIn("open(args.schema,", source)
+
 
 if __name__ == "__main__":
     unittest.main()

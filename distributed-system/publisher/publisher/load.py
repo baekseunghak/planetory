@@ -2,8 +2,8 @@
 
 적재 단계는 S15P21C206-256(MR !201)의 로컬 시드(experiments/distributed-pipeline/local-seed/local_seed/load.py)
 에서 옮겼다. 운영 서비스 DB 적재의 정본 위치가 여기라서다(S15P21C206-86·87). 로컬 전용 접속 제한과
-튜토리얼·챌린지 설정은 시드의 몫이라 옮기지 않았다. 입력이 어디서 왔는지는 모른다. 목업은 mock_source가,
-운영은 HDFS Gold reader가 같은 payload를 만든다(payload 모양은 README).
+튜토리얼·챌린지 설정은 시드의 몫이라 옮기지 않았다. 입력이 어디서 왔는지는 모른다. 목업은 mock_source,
+튜토리얼은 tutorial_source, 배치 run은 run_source가 같은 payload를 만든다(payload 모양은 README).
 
 절차의 정본은 docs/architecture/system-architecture.md 「공개」, database-erd.md 결정 12, contracts/gold다.
   - 별마다 한 트랜잭션. pg_advisory_xact_lock(tic_id)으로 같은 별의 게시를 줄 세운다.
@@ -46,6 +46,10 @@ class PublishError(RuntimeError):
     def __init__(self, code: str, detail: str):
         super().__init__(f"{code}: {detail}")
         self.code = code
+
+
+class CurrentKept(PublishError):
+    """first_publish_only라 current가 있는 별에 새 판을 올리지 않았다. 정책대로 둔 것이라 데이터 실패가 아니다."""
 
 
 @dataclass
@@ -157,7 +161,12 @@ def _read_segment_checksum(cur, segment_id: int) -> str:
 
 
 def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
-                 retire_reason: str = "Publisher 새 판 게시") -> StarResult:
+                 retire_reason: str = "Publisher 새 판 게시", first_publish_only: bool = False) -> StarResult:
+    """first_publish_only면 current 판이 있는 별에는 새 판을 올리지 않는다(PUBLISH_REJECTED, 기존 current 유지).
+
+    배치 run 게시(run_source)가 쓴다. 갱신 게시의 후보 동일성 대조가 생기기 전까지다[S15P21C206-276].
+    튜토리얼 별은 늘 current가 있어 이 규칙으로 함께 빠진다.
+    """
     tic = payload["tic_id"]
     bundle = payload["bundle"]
     digest = payload_digest(payload)
@@ -184,6 +193,10 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
             if status == "archived":
                 return StarResult(tic, payload["label"], "BUNDLE_SUPERSEDED", bundle_id)
             raise PublishError("PUBLISH_REJECTED", f"TIC {tic}에 commit된 staging 판 {bundle_id}이 있다")
+        if first_publish_only and cur.execute(
+                "SELECT 1 FROM publication_bundles WHERE tic_id = %s AND status = 'current'", (tic,)).fetchone():
+            raise CurrentKept("PUBLISH_REJECTED", f"TIC {tic}에 current 판이 있다. 갱신 게시는 후보 동일성 대조 전이라 "
+                                                  "싣지 않는다")
 
         star = payload.get("star")
         if star is None:
@@ -191,14 +204,16 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
             if cur.execute("SELECT 1 FROM stars WHERE tic_id = %s", (tic,)).fetchone() is None:
                 raise PublishError("STAR_MISSING", f"TIC {tic}이 stars에 없다. 이 payload는 별을 등록하지 않는다")
         else:
+            # service_status가 None이면 새 별은 hidden으로 등록하고 기존 별의 공개 상태는 그대로 둔다(배치 run).
+            status = star.get("service_status")
             cur.execute("""
                 INSERT INTO stars(tic_id, teff_k, radius_rsun, tmag, confirmed_count, service_status)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'hidden'))
                 ON CONFLICT (tic_id) DO UPDATE SET teff_k = EXCLUDED.teff_k, radius_rsun = EXCLUDED.radius_rsun,
                     tmag = EXCLUDED.tmag, confirmed_count = EXCLUDED.confirmed_count,
-                    service_status = EXCLUDED.service_status""",
+                    service_status = COALESCE(%s, stars.service_status)""",
                         (tic, num(star["teff_k"]), num(star["radius_rsun"]), num(star["tmag"]),
-                         star["confirmed_count"], star["service_status"]))
+                         star["confirmed_count"], status, status))
 
         segment_ids, array_checksums = [], {}
         for seg in payload["segments"]:
@@ -277,14 +292,8 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
                 VALUES (%s, %s, %s, %s, %s, now(), %s)""",
                         (candidate_id, d["disposition"], d["answer_class"], d["planet_truth"],
                          DISPOSITION_RULE_VERSION, Jsonb(d["source_refs"])))
-            if candidate.get("external"):
-                e = candidate["external"]
-                cur.execute("""
-                    INSERT INTO external_signal_references(candidate_id, source, external_id, disposition, period_days,
-                                                           fetched_on, tic_id, epoch_btjd)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (candidate_id, e["source"], e["external_id"], e["disposition"], num(e["period_days"]),
-                             dt.date.fromisoformat(e["fetched_on"]), tic, num(e["epoch_btjd"])))
+            for e in candidate["external"]:
+                _insert_external(cur, tic, candidate_id, e)
             if candidate.get("ai"):
                 a = candidate["ai"]
                 if execution_id is None:
@@ -298,8 +307,10 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
                     VALUES (%s, %s, %s, %s, %s, %s)""",
                             (candidate_id, execution_id, num(a["score"]), a["verdict"], a["threshold_version"],
                              Jsonb(a.get("raw_output", {}))))
+        # 우리 후보와 직접 대응하지 않은 외부 신호(124 external_only). 판 열이 없어 넣은 id로 다시 읽는다.
+        external_only = [_insert_external(cur, tic, None, e) for e in payload.get("external_only", [])]
 
-        _verify_staging(cur, payload, bundle_id, manifest)
+        _verify_staging(cur, payload, bundle_id, manifest, external_only)
 
         archived = [r[0] for r in cur.execute(
             "UPDATE publication_bundles SET status = 'archived' WHERE tic_id = %s AND status = 'current' RETURNING id",
@@ -316,7 +327,38 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
         return StarResult(tic, payload["label"], "PUBLISHED", bundle_id, archived, retired)
 
 
-def _verify_staging(cur, payload: dict, bundle_id: int, manifest: dict) -> None:
+def publish_outcome(conn: psycopg.Connection, tic: int, item, target: Target, **kwargs) -> dict:
+    """run 기록 한 행을 만든다. 한 별의 실패가 다음 별을 막지 않는다[S15P21C206-276].
+
+    item은 payload 또는 게시 전 거절(code 속성이 있는 예외)이다. 결과 코드는 Gold 계약 6절을 따른다. DB 제약 위반은
+    같은 입력이 반복해 실패하므로 PUBLISH_REJECTED, 연결이 끊긴 일시 장애는 같은 판으로 다시 돌릴 PUBLISH_ROLLED_BACK이다.
+    둘 다 트랜잭션이 rollback돼 기존 current가 남는다. current_kept는 first_publish_only로 기존 판을 그대로 둔
+    별(튜토리얼 별 등)이다.
+    """
+    row = {"tic_id": tic, "code": None, "bundle_id": None, "detail": None, "current_kept": False}
+    if isinstance(item, Exception):
+        return {**row, "code": item.code, "detail": str(item)}
+    try:
+        result = publish_star(conn, item, target, **kwargs)
+        return {**row, "code": result.code, "bundle_id": result.bundle_id}
+    except PublishError as exc:
+        return {**row, "code": exc.code, "detail": str(exc), "current_kept": isinstance(exc, CurrentKept)}
+    except (psycopg.IntegrityError, psycopg.DataError) as exc:
+        return {**row, "code": "PUBLISH_REJECTED", "detail": f"DB 제약 위반: {exc}"}
+    except psycopg.OperationalError as exc:
+        return {**row, "code": "PUBLISH_ROLLED_BACK", "detail": f"일시 장애: {exc}"}
+
+
+def _insert_external(cur, tic: int, candidate_id: int | None, e: dict) -> int:
+    return cur.execute("""
+        INSERT INTO external_signal_references(candidate_id, source, external_id, disposition, period_days,
+                                               fetched_on, tic_id, epoch_btjd)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                       (candidate_id, e["source"], e["external_id"], e["disposition"], num(e["period_days"]),
+                        dt.date.fromisoformat(e["fetched_on"]), tic, num(e["epoch_btjd"]))).fetchone()[0]
+
+
+def _verify_staging(cur, payload: dict, bundle_id: int, manifest: dict, external_only: list[int]) -> None:
     """적재한 행을 같은 트랜잭션에서 다시 읽어 계약대로 들어갔는지 본다. 실패하면 전부 rollback된다."""
     tic = payload["tic_id"]
     problems = []
@@ -351,12 +393,12 @@ def _verify_staging(cur, payload: dict, bundle_id: int, manifest: dict) -> None:
         problems.append("transit_model.candidate_id")
     external = [{"source": r[0], "external_id": r[1], "disposition": r[2], "period_days": float(r[3]),
                  "epoch_btjd": float(r[4]), "fetched_on": r[5].isoformat(),
-                 "candidate_key": {"period_days": float(r[6]), "epoch_btjd": float(r[7])}}
+                 "candidate_key": None if r[6] is None else {"period_days": float(r[6]), "epoch_btjd": float(r[7])}}
                 for r in cur.execute("""
         SELECT e.source, e.external_id, e.disposition, e.period_days, e.epoch_btjd, e.fetched_on, c.period_days,
                c.epoch_btjd
-          FROM external_signal_references e JOIN candidates c ON c.id = e.candidate_id
-         WHERE c.updated_bundle_id = %s""", (bundle_id,)).fetchall()]
+          FROM external_signal_references e LEFT JOIN candidates c ON c.id = e.candidate_id
+         WHERE c.updated_bundle_id = %s OR e.id = ANY(%s)""", (bundle_id, external_only)).fetchall()]
     ai = [{"candidate_key": {"period_days": float(r[0]), "epoch_btjd": float(r[1])}, "model_version": r[2],
            "status": r[3], "score": float(r[4]), "verdict": r[5], "threshold_version": r[6]}
           for r in cur.execute("""

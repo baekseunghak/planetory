@@ -115,8 +115,9 @@ run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 ga
 | `start_gold` → `wait_gold` | `tess_gold_ctl.py start-unit run` → `status run`, 완료되면 확정 attempt 경로를 넘긴다 |
 | `start_gate` → `wait_gate` | `start-unit gate --attempt <경로>` → `status gate`, 통과하면 publish-ready 요약을 넘긴다 |
 | `approve_publication` | Airflow HITL `ApprovalOperator`. 승인해야 다음으로 넘어가고, 거절하면 실패, 7일이 지나면 만료된다. 1~13 공개 범위(DEC-01)가 확정되기 전에는 승인하지 않는다 |
+| `start_publish` → `wait_publish` | `tess_publish_ctl.py start-unit publish --approval airflow/tess-publication-run/<run>/approved` → `status publish`. 완료되면 run 기록 요약(결과 코드별 수, 알림 상태, 게시되지 않은 별 최대 50개)을 넘긴다(276) |
 
-276의 게시 task는 `approve_publication` 뒤에 붙인다.
+게시 단계(`S15P21C206-276`)는 Gold와 같은 틀이다. Node 1 제어기가 systemd unit으로 publish-ready를 받아 Publisher 이미지로 `publish-run`을 돌린다. 전체 run 기록은 Node 1 상태 파일(`/var/lib/planetory-publish/run=<run>/publish=<UTC>.json`)에 남는다. 제어기, 이미지 고정, sudo 설정, 종료 코드는 [Publisher](../../publisher/README.md) 「배치 run」을 따른다. 게시 task가 들어간 release는 새 release ID로 배포해야 한다. 이미 적용한 release의 sudoers는 바꿀 수 없기 때문이다(`configure-tess-publish-airflow-node1.sh`를 그 release로 한 번 더 실행).
 
 Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`), `run_id`(UTC), `silver_attempt`, `required_sources`(원천 4종 전체. 수집기가 항상 4종을 받고 Gold는 수집된 집합과 같아야 하므로 일부만 고르면 거부한다), `exclude_tics`(튜토리얼 5종. 비우려면 `[]`를 명시한다), `approvals`(`identity`·`discoverability`·`external`)다. 선택 키는 `shuffle_partitions`(기본 400)와 `output_partitions`(기본 40)다. 승인 참조는 systemd와 sudoers를 거치므로 공백 없는 한 토큰(`[A-Za-z0-9._/-]`)이어야 한다. 외부 snapshot은 `/lake/external/tess/run_id=<run_id>`로 정해진다.
 
@@ -133,11 +134,15 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 ```
 
 **배포 순서(각 단계 운영 승인 필요).**
-1. 이 브랜치로 pipeline release를 설치한다(`run-tess-silver.ps1 -Step Install`). release에는 Gold 파일 4개와 79 schema가 함께 들어간다.
-2. `stage-tess-airflow-node1.ps1`로 Airflow release를 Node 1에 올린다. 두 설정 스크립트도 이 release의 `infra/distributed-system/scripts/`에 함께 들어간다. 이 단계는 파일만 올리고 이미지는 바꾸지 않는다.
-3. Node 1 root로 그 release의 `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)를 먼저 실행하고, 이어서 `configure-tess-gold-airflow-node1.sh <release-id>`를 실행한다. 두 스크립트는 sudoers 명령 정규식을 쓰므로 sudo 1.9.10 이상이 필요하고, 낮은 버전이면 설정 시점에 `SUDO_REGEX_UNSUPPORTED`로 멈춘다(Node 1은 1.9.15p5). 이미지보다 먼저 한다.
-4. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. DAG 7개의 import 오류가 0건인지 확인한다.
-5. Node 1에서 NEA·ExoFOP 연결을 확인하고, Gold Canary(`tess_gold_ctl.py canary`)를 한 뒤 DAG를 trigger한다.
+1. 이 브랜치로 pipeline release를 설치한다(`run-tess-silver.ps1 -Step Install`). release에는 Gold 파일 4개, 게시 제어기, 79 schema가 함께 들어간다. 설치는 작업 트리를 복사하므로 `git status`가 비어 있어야 한다.
+2. `stage-tess-airflow-node1.ps1`로 Airflow release를 Node 1에 올린다. 설정 스크립트도 이 release의 `infra/distributed-system/scripts/`에 함께 들어간다. 이 단계는 파일만 올리고 이미지는 바꾸지 않는다.
+3. Node 1 root로 그 release의 설정 스크립트를 순서대로 실행한다. 이미지보다 먼저 한다. 일반 계정은 release 디렉터리에 들어갈 수 없으므로 전체 경로로 부른다. 세 스크립트는 sudoers 명령 정규식을 쓰므로 sudo 1.9.10 이상이 필요하고, 낮은 버전이면 설정 시점에 `SUDO_REGEX_UNSUPPORTED`로 멈춘다(Node 1은 1.9.15p5).
+   1. `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)
+   2. `configure-tess-gold-airflow-node1.sh <release-id>`
+   3. `configure-tess-publish-airflow-node1.sh <release-id>`. 그 전에 root 전용 `/etc/planetory/publisher/image`(0644, 고정 이미지 한 줄)가 있어야 한다.
+4. Node 1에서 NEA·ExoFOP 연결을 확인하고, 새 release로 Gold Canary(`tess_gold_ctl.py canary`, root CLI)를 한다. 커널이 바뀐 release는 이전 Canary 결과를 쓰지 않는다.
+5. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. 실행 중인 DagRun이 0건이어야 한다. DAG 7개의 import 오류가 0건인지 확인한다.
+6. DAG를 trigger한다.
 
 **배포 전 검증(2026-09-27, 로컬).**
 - `apache/airflow:3.2.2-python3.12`에 운영 requirements를 설치하고 DagBag을 읽었다. 결과는 import 오류 0건, DAG 7개, task 순서와 승인 task(`template_fields` = subject·body, `fail_on_reject`, 7일)가 설계와 같았다.
