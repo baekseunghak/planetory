@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact='High')]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Install', 'Preflight', 'Canary', 'Start', 'Retry', 'Status')]
+    [ValidateSet('Install', 'Preflight', 'Plan', 'Canary', 'Start', 'Retry', 'Status')]
     [string]$Step,
 
     [Parameter(Mandatory)]
@@ -228,6 +228,13 @@ echo SILVER_RELEASE_OK="$release"
 if ($Step -eq 'Preflight') {
     $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' preflight $sourceArgs"
     $null = Invoke-Remote $command 'Silver read-only preflight'
+    return
+}
+
+if ($Step -eq 'Plan') {
+    # Prints SILVER_PLAN_JSON: the next increment bucket (through/delta/buckets/bucket), busy, idle or wait_capacity.
+    $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' plan --release-dir '$release' --pipeline-version '$PipelineVersion' --shuffle-partitions '$ShufflePartitions' --output-partitions '$OutputPartitions'"
+    $null = Invoke-Remote $command 'Plan the next Silver increment'
     return
 }
 

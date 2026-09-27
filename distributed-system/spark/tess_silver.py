@@ -683,6 +683,12 @@ def run(args: argparse.Namespace) -> None:
             # Refuse before any BLS so a run never pushes HDFS past the planned-usage line mid-way.
             selected_products = int(checks["products"])
             estimated_output_bytes = estimate_output_bytes(selected_products, selected_tics)
+            if args.plan_only:
+                # The planner prices an increment from the same selection a run would make, then stops.
+                payload = json.dumps({"selected_tics": selected_tics, "selected_products": selected_products,
+                                      "estimated_output_bytes": estimated_output_bytes}, sort_keys=True)
+                spark.sparkContext.parallelize([payload], 1).saveAsTextFile(f"{args.output}/_PLAN")
+                return
             if estimated_output_bytes > args.capacity_budget_bytes:
                 raise SilverContractError(
                     "capacity_budget_exceeded",
@@ -855,6 +861,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--delta-from-sector", type=int)
     parser.add_argument("--tic-buckets", type=int, default=1)
     parser.add_argument("--tic-bucket", type=int, default=0)
+    parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--pipeline-version", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--attempt-id", required=True)

@@ -53,7 +53,8 @@ foreach ($required in @(
     'capacity_budget_exceeded',
     'versions[functions.col("sector")]',
     'bronze.select(*BRONZE_KEY_COLUMNS)',
-    'functions.broadcast(selected_ids)'
+    'functions.broadcast(selected_ids)',
+    'if args.plan_only:'
 )) {
     if (-not $job.Contains($required)) { throw "Missing Silver job contract: $required" }
 }
@@ -65,6 +66,8 @@ $control = Get-Content -LiteralPath $pythonFiles[1] -Raw
 foreach ($required in @(
     'validate_bronze_coverage',
     'bronze_sector_snapshot',
+    'def silver_progress(',
+    'SILVER_PLAN_JSON=',
     'SILVER_CAPACITY_LIMIT = 0.70',
     'another Silver application is running',
     'planetory.tess-silver-attempt.v5',

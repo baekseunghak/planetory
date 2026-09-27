@@ -52,6 +52,13 @@ BRONZE_SNAPSHOT_SCHEMA = "planetory.tess-silver-bronze-snapshot.v1"
 SILVER_CAPACITY_LIMIT = 0.70
 SILVER_APP_RE = re.compile(r"\sS15P21C206-78-silver-")
 MAX_TIC_BUCKETS = 1024  # tess_silver.py re-validates the same bound inside the job
+V4_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
+PLAN_SCHEMA = "planetory.tess-silver-plan.v1"
+# RF2 bytes one Silver run should add. A single new Sector (about 73 GB) stays one run and the
+# Sector 15~70 backlog (about 3 TB) splits into about 15 buckets.
+# ponytail: fixed target; tune once bucket run times and HDFS headroom are measured.
+PLAN_BUCKET_BYTES = 200 * 10**9
+PLAN_OUTPUT_RE = re.compile(r"/lake/silver/\.plan/run=[0-9]{8}T[0-9]{6}Z")
 DEFAULT_BRONZE_COVERAGE = (
     "/lake/bronze/tess/coverage="
     "df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94"
@@ -233,6 +240,70 @@ def silver_preflight(args: argparse.Namespace) -> dict[str, Any]:
     return cluster_preflight(args.bronze_coverage, through_sector=args.through_sector)
 
 
+# Increment planning (275). One increment = the Sectors whose Bronze is final but not yet in Silver:
+# `through B, delta S+1..B`, split into TIC buckets only when its output would not fit one run.
+# The same rule serves the Sector 15~70 backlog and every later Sector, from any evidence state.
+
+def bronze_through(success_listing: str) -> int:
+    """Bronze watermark B: the last Sector N whose Sectors 1..N all have a final `_SUCCESS`."""
+    done = {int(match.group(1)) for match in re.finditer(r"/lake/bronze/tess/sector=(\d{4})/_SUCCESS", success_listing)}
+    through = 0
+    while through + 1 in done:
+        through += 1
+    return through
+
+
+def attempt_increment(marker: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    """(through, delta_from, buckets, bucket) a committed attempt completes, or None if it adds no coverage."""
+    if marker.get("schema") == V4_READY_SCHEMA:
+        # The only v4 coverage is the fixed Sector 1~13 Bronze coverage (78); its retry repeats it.
+        return (13, 1, 1, 0) if marker.get("bronze_coverage_sha256") else None
+    if marker.get("schema") != SILVER_READY_SCHEMA:
+        return None
+    through = max(int(row["sector"]) for row in marker["bronze_snapshot"]["sectors"])
+    if selection := marker.get("selection"):
+        return through, selection["delta_from_sector"], selection["tic_buckets"], selection["tic_bucket"]
+    # A full run covers its whole snapshot; a retry only re-runs failed TICs of an attempt it follows.
+    return (through, 1, 1, 0) if marker.get("operation") == "run" else None
+
+
+def silver_progress(increments: list[tuple[int, int, int, int]]) -> tuple[int, tuple[int, int, int] | None, set[int]]:
+    """Silver watermark S, and the unfinished increment that continues from it with its done buckets.
+
+    An increment (through N, delta from M, K buckets) is finished once all K buckets are committed,
+    and a finished one that starts at or before S + 1 advances S to N.
+    """
+    groups: dict[tuple[int, int, int], set[int]] = {}
+    for through, start, buckets, bucket in increments:
+        groups.setdefault((through, start, buckets), set()).add(bucket)
+    silver = 0
+    while finished := [key for key, done in groups.items()
+                       if key[1] <= silver + 1 and key[0] > silver and done == set(range(key[2]))]:
+        silver = max(key[0] for key in finished)
+    unfinished = [(key, done) for key, done in groups.items()
+                  if key[1] <= silver + 1 and key[0] > silver and done != set(range(key[2]))]
+    if len(unfinished) > 1:
+        raise SilverDataContractError(f"more than one unfinished Silver increment: {sorted(k for k, _ in unfinished)}")
+    return (silver, *unfinished[0]) if unfinished else (silver, None, set())
+
+
+def plan_buckets(estimated_bytes: int) -> int:
+    return min(MAX_TIC_BUCKETS, max(1, -(-estimated_bytes // PLAN_BUCKET_BYTES)))
+
+
+def next_step(increment: tuple[int, int, int], done: set[int], bucket_bytes: int, budget: int) -> dict[str, Any]:
+    through, start, buckets = increment
+    return {
+        "action": "run" if bucket_bytes <= budget else "wait_capacity",
+        "through_sector": through,
+        "delta_from_sector": start,
+        "tic_buckets": buckets,
+        "tic_bucket": min(set(range(buckets)) - done),
+        "done_buckets": sorted(done),
+        "estimated_bucket_bytes": bucket_bytes,
+    }
+
+
 def state_path(root: Path, run_id: str, attempt_id: str) -> Path:
     return root / f"run={run_id}" / f"attempt={attempt_id}.json"
 
@@ -323,6 +394,7 @@ def submit(
     tic_ids: list[int] | None = None,
     retry_manifest: str | None = None,
     selection: dict[str, int] | None = None,
+    plan_only: bool = False,
 ) -> str:
     job = release_dir / "spark" / "tess_silver.py"
     command = [
@@ -386,6 +458,8 @@ def submit(
         command.extend(["--delta-from-sector", str(selection["delta_from_sector"]),
                         "--tic-buckets", str(selection["tic_buckets"]),
                         "--tic-bucket", str(selection["tic_bucket"])])
+    if plan_only:
+        command.append("--plan-only")
 
     process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     application_id = None
@@ -438,6 +512,7 @@ def finalize_attempt(
     application_id: str,
     capacity_budget_bytes: int,
     selection: dict[str, int] | None = None,
+    operation: str | None = None,
 ) -> dict[str, Any]:
     lines = hdfs("dfs", "-cat", f"{output}/summary/part-*.json").stdout.splitlines()
     if len(lines) != 1:
@@ -473,6 +548,8 @@ def finalize_attempt(
         "bronze_coverage_sha256": snapshot.get("coverage_sha256"),
         "bronze_coverage_ready_sha256": snapshot.get("ready_sha256"),
         "selection": selection,
+        # run, canary or retry: the planner counts a selection-less attempt as coverage only for run.
+        "operation": operation,
         "spark_application_id": application_id,
         "selected_tics": int(summary["selected_tics"]),
         "selected_products": int(summary["selected_products"]),
@@ -586,6 +663,7 @@ def run_attempt(
             application_id=application_id,
             capacity_budget_bytes=budget,
             selection=selection,
+            operation=args.command,
         )
         cleanup_spark_staging(args.run_id, attempt_id, output)
         if validation and marker["failed_tics"]:
@@ -645,6 +723,77 @@ def command_retry(args: argparse.Namespace) -> None:
     if int(previous.get("failed_tics", 0)) <= 0:
         raise SilverDataContractError("retry source has no failed TICs")
     run_attempt(args=args, snapshot=snapshot, retry_manifest=f"{args.retry_from}/manifest")
+
+
+def active_silver_work() -> list[str]:
+    """Running Silver units and YARN apps; a plan never hands out a bucket while one of them runs."""
+    units = run(["/usr/bin/systemctl", "list-units", "planetory-tess-silver-*", "--state=active,activating",
+                 "--no-legend", "--plain"], check=False).stdout
+    apps = yarn("application", "-list", "-appStates", "RUNNING").stdout
+    return ([line.split()[0] for line in units.splitlines() if line.strip()]
+            + [line.split()[0] for line in apps.splitlines() if SILVER_APP_RE.search(line)])
+
+
+def committed_silver_markers() -> list[dict[str, Any]]:
+    listing = hdfs("dfs", "-ls", "/lake/silver/pipeline_version=*/run_id=*/attempt=*/_READY.json", check=False).stdout
+    paths = sorted(fields[-1] for line in listing.splitlines()
+                   if (fields := line.split()) and fields[-1].endswith("/_READY.json")
+                   and ATTEMPT_PATH_RE.fullmatch(fields[-1].removesuffix("/_READY.json")))
+    return [hdfs_json(path)[0] for path in paths]
+
+
+def plan_estimate(args: argparse.Namespace, through: int, start: int) -> int:
+    """RF2 bytes of one unsplit increment, from a Spark pass that selects and counts but runs no BLS."""
+    snapshot = cluster_preflight(args.bronze_coverage, through_sector=through)
+    release_dir = Path(args.release_dir).resolve()
+    runtime_hdfs = build_runtime(release_dir)
+    plan_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    output = f"/lake/silver/.plan/run={plan_id}"
+    if not PLAN_OUTPUT_RE.fullmatch(output):
+        raise RuntimeError(f"unexpected plan path: {output}")
+    prepare_paths(output, plan_id, plan_id)
+    try:
+        submit(release_dir=release_dir, runtime_hdfs=runtime_hdfs, snapshot=snapshot, run_id=plan_id,
+               attempt_id=plan_id, pipeline_version=args.pipeline_version, output=output, final_output=output,
+               output_partitions=args.output_partitions, shuffle_partitions=args.shuffle_partitions,
+               state_file=Path(args.state_root, "plans", f"{plan_id}.json"), state={"plan_id": plan_id},
+               capacity_budget_bytes=0, plan_only=True,
+               selection={"delta_from_sector": start, "tic_buckets": 1, "tic_bucket": 0})
+        value, _ = hdfs_json(f"{output}/_PLAN/part-*")
+    finally:
+        hdfs("dfs", "-rm", "-r", "-f", "-skipTrash", output, check=False)
+        cleanup_spark_staging(plan_id, plan_id, output)
+    print(f"SILVER_PLAN_ESTIMATE through={through} delta_from={start} tics={value['selected_tics']} "
+          f"products={value['selected_products']} bytes={value['estimated_output_bytes']}", flush=True)
+    return int(value["estimated_output_bytes"])
+
+
+def command_plan(args: argparse.Namespace) -> None:
+    """Print the next Silver increment bucket to run, recomputed from HDFS evidence every time."""
+    def emit(value: dict[str, Any]) -> None:
+        print("SILVER_PLAN_JSON=" + json.dumps({"schema": PLAN_SCHEMA, **value}, sort_keys=True,
+                                               separators=(",", ":")), flush=True)
+
+    if active := active_silver_work():
+        emit({"action": "busy", "active": active})
+        return
+    bronze = bronze_through(hdfs("dfs", "-ls", "/lake/bronze/tess/sector=*/_SUCCESS", check=False).stdout)
+    markers = committed_silver_markers()
+    silver, increment, done = silver_progress([inc for marker in markers if (inc := attempt_increment(marker))])
+    base = {"bronze_through": bronze, "silver_through": silver,
+            "capacity_budget_bytes": capacity_budget(hdfs("dfs", "-df", "/").stdout)}
+    if increment is None and silver >= bronze:
+        emit({**base, "action": "idle"})
+        return
+    if increment is None:
+        estimated = plan_estimate(args, bronze, silver + 1)
+        buckets = plan_buckets(estimated)
+        increment, bucket_bytes = (bronze, silver + 1, buckets), -(-estimated // buckets)
+    else:
+        # Buckets of one increment are similar in size, so a finished one prices the rest.
+        bucket_bytes = max(int(marker["estimated_output_bytes"]) for marker in markers
+                           if (inc := attempt_increment(marker)) and inc[:3] == increment)
+    emit({**base, **next_step(increment, done, bucket_bytes, base["capacity_budget_bytes"])})
 
 
 UNIT_ROOT = Path("/etc/systemd/system")
@@ -825,6 +974,13 @@ def parser() -> argparse.ArgumentParser:
             child.add_argument("--tic-bucket", type=int, default=0)
         if command == "retry":
             child.add_argument("--retry-from", required=True)
+    plan = subparsers.add_parser("plan", parents=[common])
+    plan.add_argument("--release-dir", required=True)
+    plan.add_argument("--pipeline-version", required=True)
+    plan.add_argument("--output-partitions", type=int, default=80)
+    plan.add_argument("--shuffle-partitions", type=int, default=200)
+    plan.add_argument("--state-root", default="/var/lib/planetory-silver")
+    plan.set_defaults(handler=command_plan)
     start = subparsers.add_parser("start-unit", parents=[common])
     start.add_argument("operation", choices=("canary", "run", "retry"))
     start.add_argument("--release-dir", required=True)
@@ -877,6 +1033,7 @@ def main() -> int:
         validate_snapshot_request(args)
         if args.command in ("canary", "run", "retry"):
             refuse_completed_unit(args)
+        if args.command in ("canary", "run", "retry", "plan"):
             with yarn_slot():
                 args.handler(args)
         else:

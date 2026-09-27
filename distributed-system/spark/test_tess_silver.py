@@ -874,7 +874,7 @@ class SilverIncrementalContractTest(unittest.TestCase):
         kwargs = dict(release_dir=Path("/r"), snapshot=snapshot, run_id="20260927T000000Z",
                       attempt_id="20260927T000100Z", pipeline_version="v", output="/o", final="/f",
                       application_id="application_1_0001", capacity_budget_bytes=500,
-                      selection={"delta_from_sector": 14, "tic_buckets": 16, "tic_bucket": 0})
+                      selection={"delta_from_sector": 14, "tic_buckets": 16, "tic_bucket": 0}, operation="run")
         with patch("tess_silver_ctl.hdfs", side_effect=hdfs), \
                 patch("tess_silver_ctl.part_checksum_digest", return_value=(1, "c" * 64)), \
                 patch("tess_silver_ctl.fsck_healthy"), patch("tess_silver_ctl.atomic_commit"), \
@@ -886,6 +886,7 @@ class SilverIncrementalContractTest(unittest.TestCase):
             self.assertEqual(marker["bronze_snapshot_sha256"], snapshot["sha256"])
             self.assertEqual(marker["bronze_snapshot"]["sectors"][0]["pipeline_version"], "bronze-b")
             self.assertEqual(marker["selection"], kwargs["selection"])
+            self.assertEqual(marker["operation"], "run")  # the planner reads it back as increment coverage
             # A Sector snapshot has no coverage, so Gold's coverage re-audit refuses this attempt.
             self.assertEqual((marker["bronze_coverage_sha256"], marker["bronze_coverage_ready_sha256"]), (None, None))
             self.assertEqual((marker["selected_products"], marker["estimated_output_bytes"],
@@ -894,6 +895,111 @@ class SilverIncrementalContractTest(unittest.TestCase):
             summary["bronze_snapshot_sha256"] = "d" * 64
             with self.assertRaisesRegex(SilverDataContractError, "submitted Bronze snapshot"):
                 tess_silver_ctl.finalize_attempt(**kwargs)
+
+
+class SilverIncrementPlanTest(unittest.TestCase):
+    """275 plan: one increment rule for the backlog and every later Sector, recomputed from HDFS evidence."""
+
+    V4 = {"schema": "planetory.tess-silver-attempt.v4", "bronze_coverage_sha256": "a" * 64}
+
+    @staticmethod
+    def v5(through, selection=None, operation="run", estimated=100):
+        return {"schema": "planetory.tess-silver-attempt.v5", "operation": operation, "selection": selection,
+                "estimated_output_bytes": estimated,
+                "bronze_snapshot": {"sectors": [{"sector": s} for s in range(1, through + 1)]}}
+
+    @staticmethod
+    def bucket(through, start, buckets, bucket, estimated=100):
+        return SilverIncrementPlanTest.v5(through, {"delta_from_sector": start, "tic_buckets": buckets,
+                                                    "tic_bucket": bucket}, estimated=estimated)
+
+    def test_bronze_watermark_is_the_last_contiguous_final_sector(self):
+        listing = "\n".join(f"-rw-r--r-- 2 u g 0 2026-09-22 00:00 /lake/bronze/tess/sector={s:04d}/_SUCCESS"
+                            for s in (*range(1, 15), 16))
+        self.assertEqual(tess_silver_ctl.bronze_through(listing), 14)
+        self.assertEqual(tess_silver_ctl.bronze_through(""), 0)
+
+    def test_each_marker_names_the_coverage_it_completes(self):
+        inc = tess_silver_ctl.attempt_increment
+        self.assertEqual(inc(self.V4), (13, 1, 1, 0))
+        self.assertEqual(inc(self.bucket(70, 15, 16, 3)), (70, 15, 16, 3))
+        self.assertEqual(inc(self.v5(20)), (20, 1, 1, 0))
+        # A retry and a canary repeat or sample other attempts, and other schemas are not Silver coverage.
+        self.assertIsNone(inc(self.v5(20, operation="retry")))
+        self.assertIsNone(inc(self.v5(20, operation=None)))
+        self.assertIsNone(inc({"schema": "planetory.tess-silver-attempt.v3"}))
+
+    def test_watermark_advances_only_through_finished_increments(self):
+        progress = tess_silver_ctl.silver_progress
+        inc = tess_silver_ctl.attempt_increment
+        self.assertEqual(progress([]), (0, None, set()))
+        # 2026-09-27 state: Sector 1~13 original (v4) and the Sector 14 increment.
+        today = [inc(self.V4), inc(self.bucket(14, 14, 1, 0))]
+        self.assertEqual(progress(today), (14, None, set()))
+        partial = today + [inc(self.bucket(70, 15, 16, k)) for k in (0, 3)]
+        self.assertEqual(progress(partial), (14, (70, 15, 16), {0, 3}))
+        finished = today + [inc(self.bucket(70, 15, 16, k)) for k in range(16)]
+        self.assertEqual(progress(finished), (70, None, set()))
+        # An increment that would skip Sectors is not coverage; two open ones at once are a conflict.
+        self.assertEqual(progress(today + [inc(self.bucket(70, 20, 4, 0))]), (14, None, set()))
+        with self.assertRaisesRegex(SilverDataContractError, "more than one unfinished"):
+            progress(partial + [inc(self.bucket(69, 15, 8, 0))])
+
+    def test_buckets_are_only_a_capacity_split(self):
+        self.assertEqual(tess_silver_ctl.plan_buckets(72_910_470_000), 1)  # the Sector 14 run
+        self.assertEqual(tess_silver_ctl.plan_buckets(3_000_000_000_000), 15)
+        self.assertEqual(tess_silver_ctl.plan_buckets(0), 1)
+        step = tess_silver_ctl.next_step((70, 15, 16), {0, 1, 3}, 190, 482)
+        self.assertEqual((step["action"], step["tic_bucket"], step["done_buckets"]), ("run", 2, [0, 1, 3]))
+        self.assertEqual(tess_silver_ctl.next_step((70, 15, 16), set(), 500, 482)["action"], "wait_capacity")
+
+    def plan(self, markers, *, active=(), estimate=None):
+        listing = "\n".join(f"/lake/bronze/tess/sector={s:04d}/_SUCCESS" for s in range(1, 71))
+        df = "Filesystem Size Used Available Use%\nhdfs://planetory 1000000 600000 400000 60%\n"
+
+        def hdfs(*argv, **kwargs):
+            return SimpleNamespace(stdout=df if "-df" in argv else listing)
+
+        out = io.StringIO()
+        with patch("tess_silver_ctl.active_silver_work", return_value=list(active)), \
+                patch("tess_silver_ctl.hdfs", side_effect=hdfs), \
+                patch("tess_silver_ctl.committed_silver_markers", return_value=markers), \
+                patch("tess_silver_ctl.plan_estimate", return_value=estimate) as priced, \
+                contextlib.redirect_stdout(out):
+            tess_silver_ctl.command_plan(SimpleNamespace())
+        line = next(line for line in out.getvalue().splitlines() if line.startswith("SILVER_PLAN_JSON="))
+        return json.loads(line.removeprefix("SILVER_PLAN_JSON=")), priced
+
+    def test_plan_starts_the_backlog_increment_from_todays_evidence(self):
+        value, priced = self.plan([self.V4, self.bucket(14, 14, 1, 0)], estimate=90_000)  # fits the fake budget
+        priced.assert_called_once()
+        self.assertEqual(priced.call_args.args[1:], (70, 15))
+        self.assertEqual((value["bronze_through"], value["silver_through"]), (70, 14))
+        self.assertEqual((value["action"], value["through_sector"], value["delta_from_sector"],
+                          value["tic_buckets"], value["tic_bucket"]), ("run", 70, 15, 1, 0))
+        self.assertEqual(value["capacity_budget_bytes"], 100000)
+
+    def test_plan_continues_an_open_increment_without_repricing(self):
+        markers = [self.V4, self.bucket(14, 14, 1, 0), self.bucket(70, 15, 16, 0, 150), self.bucket(70, 15, 16, 1, 170)]
+        value, priced = self.plan(markers)
+        priced.assert_not_called()
+        self.assertEqual((value["tic_buckets"], value["tic_bucket"], value["estimated_bucket_bytes"]), (16, 2, 170))
+        self.assertEqual(value["action"], "run")  # 170 fits the 100000 budget of this fake df
+
+    def test_plan_waits_while_silver_runs_and_idles_when_caught_up(self):
+        value, priced = self.plan([], active=["planetory-tess-silver-20260927T020101Z.service"])
+        self.assertEqual(value["action"], "busy")
+        priced.assert_not_called()
+        caught_up = [self.V4] + [self.bucket(70, 14, 1, 0)]
+        value, _ = self.plan(caught_up)
+        self.assertEqual((value["action"], value["silver_through"]), ("idle", 70))
+
+    def test_plan_only_job_counts_the_selection_and_stops_before_bls(self):
+        run = inspect.getsource(tess_silver.run)
+        self.assertLess(run.index("if args.plan_only:"), run.index('"capacity_budget_exceeded"'))
+        self.assertLess(run.index('f"{args.output}/_PLAN"'), run.index("groupByKey("))
+        self.assertTrue(tess_silver.parse_args(SilverIncrementalContractTest().job_args(
+            "--delta-from-sector", "14", "--plan-only")).plan_only)
 
 
 class SilverUnitControllerTest(unittest.TestCase):

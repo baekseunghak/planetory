@@ -341,8 +341,11 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 | 용도 | 인자 |
 | --- | --- |
-| 새 Sector N 추가 | `--through-sector N --delta-from-sector N` |
-| 기존 14~70 backfill | `--through-sector 70 --delta-from-sector 14 --tic-buckets K --tic-bucket k` |
+| 새 Sector N 추가(71 이후) | `--through-sector N --delta-from-sector N` (보통 버킷 1개) |
+| Silver가 도는 동안 쌓인 Sector | `--through-sector B --delta-from-sector S+1` |
+| 지금 backlog(Sector 14 run 뒤) | `--through-sector 70 --delta-from-sector 15 --tic-buckets K --tic-bucket k` |
+
+세 경우 모두 같은 규칙이다(아래 [증분 계획](#증분-계획-plan)). 인자를 직접 고르지 않고 `plan`이 정한다.
 
 입력 선택과 검사는 Bronze의 작은 열 4개(`tic_id`, `sector`, `schema_version`, `pipeline_version`)만 한 번 읽어 캐시한 뒤, schema·식별자·Sector별 버전·Sector 집합·제품 수를 집계 한 번으로 확인한다. BLS 입력은 선택된 TIC ID를 broadcast semi join으로 걸러 배열 행을 셔플하지 않는다. 이전 release(`20260926T234554Z`)는 검사마다 선택을 다시 계산해 Sector 1~14에서도 BLS 전 준비에 약 30분이 걸렸고, BLS 입력의 `left_semi`가 배열 행 전체를 한 번 더 셔플했다.
 
@@ -382,6 +385,18 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 
 지금 예산으로는 K=16 기준 2~3개 버킷(14~70 TIC의 약 12~19%)만 만들 수 있다. Sector 14 run 뒤 예산은 약 485 GB라 2개 버킷이다. 나머지는 Raw 복제 계수·계층별 보존 기간 같은 용량 결정 뒤 같은 명령으로 이어 간다([데이터 규칙](../../docs/data/data-guidelines.md) 「결정 대기 사항」). 점검 시점 YARN 실행 앱은 0개였다.
 
+### 증분 계획 (`plan`)
+
+처리 단위는 **증분 하나**다. 증분은 Bronze가 확정됐지만 Silver에 아직 없는 Sector 묶음이며, backlog와 71 이후 Sector에 같은 규칙을 쓴다. `plan`은 매번 HDFS 증거로 다시 계산하고 따로 상태를 저장하지 않는다.
+
+- **Bronze 워터마크 B**: Sector 1부터 끊김 없이 `_SUCCESS`가 있는 마지막 Sector.
+- **Silver 워터마크 S**: 확정된 Silver `_READY`로 계산한다. v4(1~13 원본)는 1~13을 덮는다. v5는 snapshot 마지막 Sector와 `selection`으로 `(through N, delta_from M, 버킷 K)` 묶음을 만든다. 버킷 K개가 모두 확정됐고 M ≤ S + 1이면 S = N이다. selection이 없는 v5는 `operation`이 `run`일 때만 전체 snapshot을 덮고, retry는 덮지 않는다.
+- **다음 할 일**: 시작한 증분이 있으면 그 증분의 가장 작은 빈 버킷을 고른다. K는 첫 버킷에 기록된 값을 그대로 쓰고, 크기는 끝난 버킷의 `estimated_output_bytes`로 잡는다. 시작한 증분이 없고 S < B이면 새 증분 `through B, delta S+1`을 만든다. 이때 `--plan-only` Spark job이 run과 같은 선택으로 TIC·제품 수만 세고 BLS 전에 끝난다. K는 추정 출력 ÷ 200 GB(`PLAN_BUCKET_BYTES`)로 정한다. S = B이면 `idle`이다.
+- **실행 중 보호**: Silver unit이나 YARN 앱이 돌고 있으면 `busy`를 돌려 같은 버킷을 두 번 시작하지 않는다. 버킷 추정치가 70% 예산을 넘으면 `wait_capacity`다.
+- **출력**: `SILVER_PLAN_JSON=`(`planetory.tess-silver-plan.v1`) 한 줄. `action`(`run`·`busy`·`idle`·`wait_capacity`), `bronze_through`, `silver_through`, `through_sector`, `delta_from_sector`, `tic_buckets`, `tic_bucket`, `done_buckets`, `estimated_bucket_bytes`, `capacity_budget_bytes`를 담는다. 운영자나 81 조정 DAG는 `run`이면 그 인자로 `-Step Start`를 실행한다.
+- 2026-09-27 증거로는 S = 14(1~13 원본 + Sector 14 증분), B = 70이므로 첫 계획은 `through 70, delta 15`다. Sector 14에만 관측된 TIC는 Sector 14 attempt가 계속 current다.
+- 새 v5 marker에는 `operation`(`run`·`canary`·`retry`)을 기록한다. Sector 14 attempt처럼 selection이 있는 attempt는 이 필드 없이도 계산된다.
+
 ### TIC별 current 선택 규칙 (합의안, 구현 전)
 
 - 소비자(79·80)는 명시적으로 나열한 attempt 중 TIC별로 하나를 고른다. 해당 TIC의 `initial_bls` manifest 행이 있는 attempt 중 snapshot Sector 집합이 가장 큰 것을 고르고, 집합이 같으면 attempt ID가 늦은 것을 고른다. 두 집합이 포함 관계가 아니면 고르지 않고 실패한다. v4 원본의 Sector 집합은 coverage의 1~13이다.
@@ -393,6 +408,7 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 
 ```powershell
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Preflight -CodeReleaseId <release> -ThroughSector 70
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Plan -CodeReleaseId <release>
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Canary -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -TicId <tic>
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -DeltaFromSector 14
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 70 -DeltaFromSector 14 -TicBuckets 16 -TicBucket 0 -ShufflePartitions 500
