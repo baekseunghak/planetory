@@ -26,9 +26,10 @@ const POWER_ORDER = ["full", "reduced", "low"] as const;
 import {
   HoverLabel,
   MarkerLayer,
-  NewStarReticle,
+  NewStarMarks,
   PlanetLabels,
 } from "./ScreenLabels";
+import { markedNewStars, nextNewStar } from "./new-stars";
 import { StarPanel } from "./StarPanel";
 import { useCinemaSky } from "./sky";
 import { useTutorialGuide } from "./TutorialGuide";
@@ -249,6 +250,11 @@ export function GalaxyView() {
     selectStar,
   ]);
 
+  // New stars (not opened yet): rings on the most recent ones, and a chip
+  // that takes the member to them one by one, the most recent first.
+  const { newStars } = shell;
+  const markedStars = useMemo(() => markedNewStars(newStars), [newStars]);
+
   const detail = ticId && focus.ticId === ticId ? focus.detail : null;
   const showList = listOpen || !!failed;
   return (
@@ -264,6 +270,18 @@ export function GalaxyView() {
         <StillGalaxy stars={data.stars} />
       )}
       <SkyStatus />
+      {/* Before the markers: a tutorial number or "!" stays on top. */}
+      {!ticId && (
+        <NewStarMarks
+          stars={data.stars}
+          ticIds={markedStars}
+          recent={shell.newStar}
+          onRecentDone={shell.clearNewStar}
+          onSelect={selectStar}
+          held={markersHeld}
+          onHover={setMarkerHover}
+        />
+      )}
       {store && data.meta && (
         <QuestProvider key={store.memberId} store={store} data={data}>
           {!ticId && (
@@ -313,6 +331,22 @@ export function GalaxyView() {
             >
               별 목록
             </button>
+            {newStars.length > 0 && (
+              <button
+                type="button"
+                className="cinema-pill cinema-new-star-chip"
+                data-testid="new-star-chip"
+                onClick={() => {
+                  // Opening it ends its mark, so the next press goes on.
+                  const next = nextNewStar(newStars);
+                  if (next) selectStar(next);
+                }}
+              >
+                <span className="cinema-new-star-dot" aria-hidden="true" />
+                <span>{`새 별 ${newStars.length.toLocaleString("ko-KR")}개`}</span>
+                <span className="cinema-sr-only"> 중 다음 별로 이동</span>
+              </button>
+            )}
           </div>
         </QuestProvider>
       )}
@@ -392,13 +426,6 @@ export function GalaxyView() {
           planet={planet}
           onPlanet={setPlanet}
           arriving={arriving}
-        />
-      )}
-      {!ticId && shell.newStar && (
-        <NewStarReticle
-          key={shell.newStar}
-          ticId={shell.newStar}
-          onDone={shell.clearNewStar}
         />
       )}
       <FirstVisitCaption ticId={ticId} tutorialTicId={tutorialOneTic} />
