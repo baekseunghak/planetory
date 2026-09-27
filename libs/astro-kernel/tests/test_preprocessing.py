@@ -15,6 +15,55 @@ def curve(n=600, sector=1, start=0):
                          np.zeros(n, dtype=int), np.arange(n))
 
 
+def _bits(a):
+    return np.asarray(a, dtype=np.float64).view(np.int64)
+
+
+def test_vectorized_biweight_is_bit_identical_to_the_per_window_reference():
+    # silver-biweight-1.0.0 must not change: the stacked rows must reduce exactly like each 1-D window.
+    rng = np.random.default_rng(7)
+    windows = [np.array([1.0]), np.array([1.0, 1.0 + 1e-9]), np.full(50, 0.98),
+               np.r_[np.full(40, 1.0), rng.normal(1, 1e-3, 3)], np.r_[rng.normal(1, 1e-3, 700), 50.0, -40.0],
+               rng.normal(-0.2, 1e-2, 301), np.array([-5.0, -0.0, -0.0, 5.0])]
+    windows += [rng.normal(1, rng.uniform(1e-5, 1e-1), rng.integers(1, 900)) for _ in range(400)]
+    f = np.concatenate(windows)
+    hi = np.cumsum([len(w) for w in windows])
+    lo = hi - [len(w) for w in windows]
+    with np.errstate(all="ignore"):
+        expected = [p._biweight_location(f[a:b]) for a, b in zip(lo, hi)]
+        assert np.array_equal(_bits(p._biweight_locations(f, lo, hi)), _bits(expected))
+
+
+def test_detrend_matches_the_per_window_trend_on_gapped_multi_sector_curves(monkeypatch):
+    rng = np.random.default_rng(3)
+    t, f, s = [], [], []
+    for sector in (1, 2, 3):
+        tt = np.arange(0, 27.4, 2 / 1440) + 27.4 * (sector - 1)
+        tt = tt[~((tt % 27.4 > 13) & (tt % 27.4 < 14.2)) & (rng.random(tt.size) > 0.02)]
+        ff = 1 + 0.003 * np.sin(tt / 1.3) + rng.normal(0, 8e-4, tt.size)
+        ff[rng.integers(0, tt.size, 20)] += 0.1
+        t.append(tt), f.append(ff), s.append(np.full(tt.size, sector))
+    t, f, s = (np.concatenate(v) for v in (t, f, s))
+    new = p.detrend_silver(t, f, s)
+
+    def reference_trend(tt, ff):
+        anchors = np.arange(0, len(tt), 10)
+        if anchors[-1] != len(tt) - 1:
+            anchors = np.append(anchors, len(tt) - 1)
+        lo = np.searchsorted(tt, tt[anchors] - 0.5, side="left")
+        hi = np.searchsorted(tt, tt[anchors] + 0.5, side="right")
+        centers = np.array([p._biweight_location(ff[a:b]) for a, b in zip(lo, hi)])
+        good = np.isfinite(centers)
+        return np.interp(tt, tt[anchors][good], centers[good])
+
+    monkeypatch.setattr(p, "_trend", reference_trend)
+    old = p.detrend_silver(t, f, s)
+    for field in ("trend", "flux_det", "noise_scatter"):
+        assert np.array_equal(_bits(getattr(new, field)), _bits(getattr(old, field))), field
+    assert np.array_equal(new.kept, old.kept) and np.array_equal(new.reasons, old.reasons)
+    assert new.status == old.status == "ok"
+
+
 def test_filters_provenance_normalization_and_no_mutation():
     c = curve()
     c.time[0] = np.nan

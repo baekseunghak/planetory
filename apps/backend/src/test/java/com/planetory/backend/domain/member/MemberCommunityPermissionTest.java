@@ -78,7 +78,10 @@ class MemberCommunityPermissionTest {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .load();
-        assertEquals(List.of("24", "25"), restarted.migrate().migrations.stream().map(m -> m.version).toList());
+        // 최신까지 올린다. 뒤에 마이그레이션이 더해져도 깨지지 않게 끝 버전을 고정하지 않고,
+        // V24부터 빠짐없이 이어서 남은 것이 없는지만 본다 [S15P21C206-91].
+        assertEquals("24", restarted.migrate().migrations.get(0).version);
+        assertEquals(0, restarted.info().pending().length);
         restarted.validate();
 
         try (Connection owner = connectionAs(POSTGRES.getUsername(), POSTGRES.getPassword());

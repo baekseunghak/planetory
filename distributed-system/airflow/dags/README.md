@@ -62,3 +62,42 @@ Worker marker·계보 불일치나 Bronze 데이터 계약 오류처럼 재시�
 Sector 14 실측에서 다운로드 marker 5개와 Raw 19,970개·RF2·FSCK HEALTHY·Parquet 성공을 확인했다. cleanup task는 약 13분 30초에 걸쳐 75개 bundle 모두 fast 감사(`full_bundles=0`) 뒤 로컬 FITS 19,970개를 삭제했고 Worker 5대 잔여 FITS는 0개다. fast 경로도 HDFS CLI checksum 호출 비용 때문에 충분히 빠르다고 입증하지 못했다. Bronze Spark/YARN 앱 `application_1790045821701_0001`은 성공했고 final `_READY`에는 제품 19,970개·관측값 386,159,890개·파싱 오류 0개·40개 part·RF2가 기록됐다. final FSCK는 HEALTHY·저복제/누락/손상 0이다. **남은 작업**은 업로드·삭제·변환 중단 재개와 두 Sector 동시성·성능·Pool 튜닝이다. **Sector 14~70 전체 자동 수집·무인 복구가 검증됐다고 주장하지 않는다**. Worker 4 재부팅 뒤 수집 자동 재개를 확인했다. Node 1 재부팅 뒤 Docker/Airflow는 자동 복구됐으나 HDFS·YARN은 자동 fencing이 없어 수동 의존 순서로 복구했으며, NameNode Safe Mode 30초 연장이 끝난 뒤 Active 전환에 성공했다. `tess_pipeline_enabled=false`는 신규 trigger만 멈추고 이미 시작한 Worker unit은 계속 실행한다.
 
 2026-09-23 **Jira 완료 조건 검증**: 완료된 Sector 36(run `20260923T013819Z`, 완료 워터마크 이하라 발견 DAG 흐름과 분리)에서 Airflow DAG 경로로 확인했다. 기대 source SHA를 틀리게 준 다운로드 run `tess_s36_faultinject_r0`은 재시도 없이 `invalid download completion marker for Sector 36`으로 실패했고, `trigger_next_stage`는 `upstream_failed`로 Raw를 실행하지 않았다. fail-closed 설계대로 `tess_pipeline_enabled=false`가 기록돼 운영자가 확인 후 복구했다. 같은 계보의 Raw·Bronze `_r1` 재실행은 각각 `COMMIT_CACHED`·`BRONZE_CACHED`로 끝났고, 재실행 전후 HDFS 스냅샷(파일 수·바이트·목록 해시·`_READY` SHA·mtime·`sector=0036` 경로 수)이 완전히 같았다. Bronze 계약 실패(exit 65)는 파이프라인 전체를 정지시키므로 주입 대상에서 제외했다. 대상 Sector 선택은 계보만 분리한다. 계약 실패 주입은 전역 `tess_pipeline_enabled=false`를 기록해 운영 수집 전체의 신규 진입을 멈추므로, 주입 전 운영자 복구 절차를 준비한다. 업로드·삭제·변환 **도중** 중단 후 재개는 이 검증에 포함하지 않았다.
+
+## `tess_bronze_to_silver` (78의 1~13 입력, 수동 실행)
+
+이 DAG는 일시정지·무스케줄로 생성된다. 252의 수집 DAG를 수정하거나 자동 trigger하지 않는다. Airflow는 SSH로 Node 1의 불변 Silver 제어기 `start-unit`을 호출해 요청마다 정해진 이름의 systemd unit을 설치·시작하고 곧바로 끝낸다. 실제 전처리·BLS는 그 unit이 Spark on YARN에서 수행한다. 이후 `wait_silver`가 Triggerer에서 5분마다 `status`로 unit과 최신 attempt 상태를 읽고(최대 14일), 그 사이 LocalExecutor 슬롯과 SSH 세션을 잡지 않는다. 따라서 Airflow 재시작·release 교체가 Silver를 멈추지 않는다.
+
+| task | 동작 | 실패 시 |
+| --- | --- | --- |
+| `validate_request` | Trigger conf를 allow-list로 검증 | 즉시 실패(재시도 없음) |
+| `start_unit` | unit 파일 작성·enable·`--no-block start` | 같은 이름 unit이 실행 중이거나, 그 unit의 최신 attempt 상태가 `complete`이면 다시 시작하지 않음(재부팅 뒤에도 유지). 파일 내용이 다르면 `UNIT_DEFINITION_MISMATCH`. 종료 65는 재시도 없이 실패 |
+| `wait_silver` | `status`의 `SILVER_STATUS_JSON` 판정, 확인마다 `SILVER_STATUS` 한 줄 기록 | unit이 실행 중이 아니고 attempt가 `complete`이면 성공(재부팅으로 systemd 기록이 사라져도 성공). 실행·대기·자동 재시작 중이면 defer하되 재시작이 6회를 넘으면 실패(unit은 systemd에서 계속 재시작하므로 원인 확인 후 멈춘다). 종료 65·`terminal_failed`는 데이터 계약 실패, 실행 전에 실패한 unit(`failed`)을 포함한 그 밖의 종료는 실패. `status`는 120초 제한이며 SSH·명령 실패는 연속 6회까지 다시 기다린다 |
+
+제어기는 attempt 상태 파일에 unit 이름을 기록하고, `status`·`start-unit`은 그 unit의 attempt만 본다(필드가 없던 이전 attempt는 `run` unit 것으로 본다). `canary`·`run`·`retry`는 같은 unit의 attempt가 이미 `complete`이면 `SILVER_UNIT_ALREADY_COMPLETE`(종료 65)로 거부하므로 `run-tess-silver.ps1` 경로에서도 끝난 요청을 다시 돌리지 않는다. 다시 처리하려면 새 run ID를 쓴다.
+
+unit 이름은 `run`이 `planetory-tess-silver-<run_id>.service`(`run-tess-silver.ps1`과 같음), `canary`가 `planetory-tess-silver-canary-<run_id>.service`, `retry`가 `planetory-tess-silver-retry-<run_id>-<원본 attempt>.service`이다. unit은 `run-tess-silver.ps1`과 같은 내용(`Restart=on-failure`, `RestartPreventExitStatus=65`, `RestartSec=5min`)이다. 같은 run ID를 다른 release로 요청하면 unit 내용이 달라 거부되므로, 이미 다른 release로 시작한 run은 DAG가 이어받지 않는다.
+
+Silver는 불변 1~13 Bronze coverage를 읽고 Sector 단계 DAG는 14+를 쓰므로 둘을 서로 drain할 필요가 없다. 대신 **동시성에 상한을 둔다**. `tess_sector_bronze`의 `commit_bronze`는 `tess_yarn` Pool을 요구하고(기본 2 슬롯), Node 1에서는 두 제어기가 같은 수의 `/run/planetory-tess-yarn-<N>.lock` 슬롯 파일을 공유한다. Silver는 며칠 동안 Pool 슬롯을 잡지 않도록 Pool을 쓰지 않고, systemd unit 안의 제어기가 슬롯 파일과 YARN 사전 점검으로 상한을 지킨다. **Pool과 슬롯 수는 반드시 일치해야 하며**, `configure-tess-silver-airflow-node1.sh <release-id> [slots]`가 Pool을 설정한다. 이 상한은 두 제어기의 새 release를 모두 배포한 뒤 효력이 있으므로, 새 Bronze release 적용 전에는 여전히 수집을 drain한 뒤에만 이 DAG를 실행한다. 기본 2는 **YARN 용량 실측 없이 고른 보수값**이므로, 올리기 전에 단계별 시간·YARN 메모리·NameNode RPC를 측정한다.
+
+Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_release`(`/opt/planetory-silver/releases/<UTC-release>`), `bronze_coverage`(`/lake/bronze/tess/coverage=<SHA-256>`), `run_id`(UTC), `pipeline_version`이다. 선택 키는 `shuffle_partitions`(1~2000, 기본 200. 전체 run은 2000 권장), `output_partitions`(1~200, 기본 80)이다. `canary`는 중복 없는 양의 `tic_ids` 1~5개를, `retry`는 완료된 불변 Silver attempt의 `retry_from`을 추가로 요구한다. 알 수 없는 Sector 경로나 임의 셸 인자는 허용하지 않는다. 예시는 다음과 같다.
+
+```json
+{
+  "operation": "canary",
+  "silver_release": "/opt/planetory-silver/releases/20260922T000000Z",
+  "bronze_coverage": "/lake/bronze/tess/coverage=<64자리-소문자-SHA-256>",
+  "run_id": "20260922T010000Z",
+  "pipeline_version": "S15P21C206-78-20260922T000000Z",
+  "tic_ids": [123456789]
+}
+```
+
+실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
+
+**배포 상태(2026-09-26)**: 이 DAG는 로컬 Airflow 3.2.2 DagBag import와 단위 검사만 통과했고 운영 이미지에는 배포하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
+
+1. Node 1 root로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 실행해 sudoers와 `tess_yarn` Pool을 만든다. 운영 승인이 필요하며, 사후 `visudo -c`와 Pool 슬롯이 제어기 기본값(2)과 같은지 확인한다. **Airflow 이미지보다 먼저** 한다. 이 브랜치의 `commit_bronze`는 `pool="tess_yarn"`을 요구하므로 Pool이 없으면 Airflow가 그 task를 스케줄하지 않는다.
+2. 통합 소스로 이미지를 빌드해 252 단계 DAG 5개와 `tess_bronze_to_silver`가 import 오류 0건으로 함께 올라오는지 **운영 이미지에서** 확인하고, 서버의 실제 `AIRFLOW__CORE__PARALLELISM`을 확인한다. 기존 DAG·Connection을 삭제하거나 재생성하지 않는다.
+3. DAG를 pause 상태로 올리고 release·sudo·Pool을 확인한 뒤 Canary conf로 명시적으로 trigger한다. `wait_silver`의 defer·재개와 History Server의 실행 중(`.inprogress`) 앱을 함께 확인한다.
+
+Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어기는 **Sector 1~13 전체 coverage와 TIC별 다중 Sector 결합**만 승인하므로 이 DAG가 받지 않는다. Sector 14 성공을 1~13 coverage의 확장이나 완전한 TIC Silver로 오인하지 않는다. 14+ 연속 처리에는 혼합 Bronze 버전·누적 Sector snapshot·변경 TIC 재처리·이전 Silver 결과 조합 계약이 필요하며, 전체 DAG·publish-ready 책임인 80에서 252/78 정본과 별도로 승인해야 한다.

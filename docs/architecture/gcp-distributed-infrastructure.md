@@ -32,14 +32,16 @@ flowchart LR
 
 ## 노드와 디스크
 
-| 번호 | VM | 사설 IP | 역할 계획 | 사양 | 디스크 |
-|---|---|---|---|---|---|
-| 1 | master-1 | 10.20.1.10 | Active NameNode, ResourceManager, Airflow, JournalNode | e2-custom-6-36864 / 6 vCPU / 36GiB | 부팅 30GiB + 제어 데이터 200GiB |
-| 2 | worker-2 | 10.20.2.10 | Standby NameNode, DataNode, NodeManager, Spark, JournalNode | 동일 | 부팅 30GiB + HDFS 데이터 2,000GiB + 메타데이터 100GiB `pd-balanced` |
-| 3 | worker-3 | 10.20.3.10 | DataNode, NodeManager, Spark, JournalNode | 동일 | 부팅 30GiB + HDFS 데이터 2,000GiB |
-| 4 | worker-4 | 10.20.4.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
-| 5 | worker-5 | 10.20.5.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
-| 6 | worker-6 | 10.20.6.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
+| 번호 | VM | GCP 프로젝트 | 사설 IP | 역할 계획 | 사양 | 디스크 |
+|---|---|---|---|---|---|---|
+| 1 | master-1 | `planetory-0001` | 10.20.1.10 | Active NameNode, ResourceManager, Airflow, JournalNode | e2-custom-6-36864 / 6 vCPU / 36GiB | 부팅 30GiB + 제어 데이터 200GiB |
+| 2 | worker-2 | `planetory-0002` | 10.20.2.10 | Standby NameNode, DataNode, NodeManager, Spark, JournalNode | 동일 | 부팅 30GiB + HDFS 데이터 2,000GiB + 메타데이터 100GiB `pd-balanced` |
+| 3 | worker-3 | `planetory-0003` | 10.20.3.10 | DataNode, NodeManager, Spark, JournalNode | 동일 | 부팅 30GiB + HDFS 데이터 2,000GiB |
+| 4 | worker-4 | `planetory-0004-508301` | 10.20.4.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
+| 5 | worker-5 | `planetory-0005` | 10.20.5.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
+| 6 | worker-6 | `planetory-0006` | 10.20.6.10 | DataNode, NodeManager, Spark | 동일 | 동일 |
+
+노드마다 GCP 프로젝트가 따로 있으며 zone은 모두 `asia-east1-b`다. Node 4만 프로젝트 ID 형식이 `planetory-0004-508301`로 다르다. CPU 플랫폼은 2026-09-26 기준 6대 모두 AMD Rome(EPYC 7B12)이다. Node 5·6은 Intel Broadwell(Xeon 2.20GHz)이었으나 같은 날 VM 정지·시작으로 AMD 호스트에 다시 배치했다(각 1회). 같은 부하에서 Broadwell 노드의 Silver 작업 시간은 AMD 노드의 약 1.6배였다(2026-09-24 실측). e2는 플랫폼을 고를 수 없어 이후 정지·시작 때 다시 바뀔 수 있으므로, 정지·시작 뒤에는 `gcloud compute instances describe <vm> --format='value(cpuPlatform)'`로 확인한다.
 
 ### 공통 조건
 
@@ -235,7 +237,7 @@ Node 1로 전달을 모으는 것은 운영을 단순하게 하는 선택이다.
 
 Airflow DAG, 원격 수집, Spark 작업과 Publisher 코드는 후속 구현 대상이다.
 
-CI/CD의 이미지 SHA 저장, 배포 직렬화, 상태 검사와 롤백도 실제 배포 전에 보완한다.
+GCP 코드는 CI 이미지가 아니라 불변 release 디렉터리로 배포하며, CI에는 GCP 배포 job이 없다(`S15P21C206-94`, [GitLab CI/CD](../operations/cicd.md) 「GCP 분산 시스템」). release의 커밋 SHA 기록, 배포 직렬화, 상태 검사와 롤백은 실제 운영 전에 보완한다.
 
 ### 통합 검증 순서
 
