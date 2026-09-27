@@ -195,6 +195,36 @@ class CommunityReadTest {
         assertTrue(ids.contains("p-" + free)); assertFalse(ids.contains("p-" + hidden)); assertFalse(ids.contains("p-" + deleted));
     }
 
+    @Test void 공식전용_일반글_종류필터와_커서_공개범위() throws Exception {
+        var published = publications.publish(member, submit(3));
+        long first = post(tic, "visible"), second = post(tic, "visible");
+        post(tic, "hidden"); post(tic, "deleted");
+        jdbc.update("UPDATE posts SET created_at='2026-09-20T00:00:00Z' WHERE id IN (?,?)", first, second);
+        String base = FEED + "?ticId=" + tic;
+        assertEquals(3, read(base).path("items").size());
+        assertEquals(List.of("p-" + second, "p-" + first), feedIds(read(base + "&type=POST")));
+        assertEquals(List.of(published.threadId()), feedIds(read(base + "&type=SIGNAL_THREAD")));
+        assertEquals(List.of(published.threadId()), feedIds(read(base + "&type=SIGNAL_THREAD&board=STAR&q=ppm&searchIn=BODY")));
+        assertTrue(feedIds(read(base + "&type=SIGNAL_THREAD&q=absentphrase")).isEmpty());
+        String cursor = read(base + "&type=POST&size=1").path("nextCursor").asText();
+        assertEquals(List.of("p-" + first), feedIds(read(base + "&type=POST&size=1&cursor=" + cursor)));
+        for (String type : List.of("", "&type=SIGNAL_THREAD"))
+            mvc.perform(get(base + type + "&size=1&cursor=" + cursor).session(session(member)))
+                    .andExpect(status().isBadRequest());
+        for (String query : List.of("type=", "type=BAD", "type=POST&type=POST", "type=SIGNAL_THREAD&author=SYSTEM",
+                "type=SIGNAL_THREAD&tag=GENERAL", "type=SIGNAL_THREAD&board=FREE"))
+            mvc.perform(get(FEED + "?" + query).session(session(member))).andExpect(status().isBadRequest());
+        // 참여자가 0명이 되어도 공식 스레드는 남는다. 숨김·닫힌 별은 기존 권한을 따른다.
+        publications.visibility(member, published.analysisId(), false);
+        var zero = read(base + "&type=SIGNAL_THREAD");
+        assertEquals(List.of(published.threadId()), feedIds(zero));
+        assertEquals(0, zero.path("items").get(0).path("judgmentSummary").path("participantCount").asInt());
+        jdbc.update("UPDATE posts SET status='hidden' WHERE id=?", Long.parseLong(published.threadId().substring(3)));
+        assertTrue(feedIds(read(base + "&type=SIGNAL_THREAD")).isEmpty());
+        jdbc.update("UPDATE stars SET service_status='hidden' WHERE tic_id=?", tic);
+        mvc.perform(get(base + "&type=SIGNAL_THREAD").session(session(member))).andExpect(status().isNotFound());
+    }
+
     @Test void 프론트_특정별_기본요청의_STAR중복범위와_커서호환() throws Exception {
         long first = post(tic, "visible"), second = post(tic, "visible");
         // readFeedSearch(routeTic) → feedSearchParams → CommunityPage가 보내는 실제 조합이다.

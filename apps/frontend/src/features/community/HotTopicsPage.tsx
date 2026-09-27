@@ -55,6 +55,9 @@ export function HotTopicsPage() {
             <Link to="/community" state={null}>
               전체
             </Link>
+            <Link to={pagePath("officialThreads")} state={null}>
+              공식 스레드
+            </Link>
             <Link to="/community?board=STAR" state={null}>
               별 게시판
             </Link>

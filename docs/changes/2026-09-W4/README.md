@@ -401,3 +401,5 @@
 | 2026-09-27 | 제출·완료 판정·재개가 지도 버전(skyVersion)을 올려 옛 타일 캐시와 상세 불일치를 없앤다 | S15P21C206-280 | skyVersion, bumpVersion, member_sky_revisions, 같은 버전의 지도와 상세 자료가 다릅니다, D-7, planetCount | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 운영에서 응답하는 P1(공개 은하·팔로우·내 통계)만 새 화면에서 켬, 알림·전체 통계·탈퇴는 VITE_P1_ENABLED 유지 | S15P21C206-274 | useLiveP1, p1Enabled, VITE_P1_ENABLED, 공개 은하, 팔로우, 내 통계, DEPENDENCY_UNAVAILABLE, AGGREGATE_NOT_READY | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 시연 발표자 계정(별 약 1,000개) 준비 계획: 운영 규칙 `stars_per_achievement`를 3분만 올리고 마지막 튜토리얼 성과로 별을 연다 | S15P21C206-281 | stars_per_achievement, 발표자 계정, 운영 규칙 임시 상향, 복귀 예약, pickUndiscoveredStar | 제안, 운영 DB 미실행 | [기록](2026-09-27.md) |
+
+| 2026-09-27 | 공식 스레드 전용 게시판·종류별 피드 | S15P21C206-288 | SIGNAL_THREAD, type, cursor, 시네마, DB 변경 없음 | 구현·로컬 검증 완료 | [2026-09-27](2026-09-27.md) |

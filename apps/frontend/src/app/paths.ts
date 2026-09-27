@@ -45,6 +45,12 @@ export const routeDefinitions = [
   },
   { key: "community", path: "/community", title: "커뮤니티", owner: "하서진" },
   {
+    key: "officialThreads",
+    path: "/community/signal-threads",
+    title: "공식 스레드",
+    owner: "백승학",
+  },
+  {
     key: "hotTopics",
     path: "/community/hot-topics",
     title: "핫 토픽",

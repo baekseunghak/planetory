@@ -13,12 +13,14 @@ export function FeedSearchForm({
   initial,
   addressError,
   routeTic,
+  official = false,
   resetTo,
   onSearch,
 }: {
   initial: FeedSearch;
   addressError: string | null;
   routeTic?: string;
+  official?: boolean;
   resetTo: string;
   onSearch: (values: FeedSearch) => void;
 }) {
@@ -81,16 +83,20 @@ export function FeedSearchForm({
           addressError,
         )}
       >
-        <summary>상세 조건 · 작성자, TIC, 태그</summary>
+        <summary>
+          {official ? "상세 조건 · TIC" : "상세 조건 · 작성자, TIC, 태그"}
+        </summary>
         <div className="community-search-filters">
-          <label>
-            작성자 닉네임
-            <input
-              value={values.author}
-              onChange={(e) => update("author", e.target.value)}
-              placeholder="현재 닉네임 전체"
-            />
-          </label>
+          {!official && (
+            <label>
+              작성자 닉네임
+              <input
+                value={values.author}
+                onChange={(e) => update("author", e.target.value)}
+                placeholder="현재 닉네임 전체"
+              />
+            </label>
+          )}
           <label>
             TIC 번호
             <input
@@ -101,24 +107,27 @@ export function FeedSearchForm({
               placeholder="예: 259377017"
             />
           </label>
-          <label>
-            글 태그
-            <select
-              value={values.tag}
-              onChange={(e) => update("tag", e.target.value)}
-            >
-              <option value="">모든 태그</option>
-              {Object.entries(postTags).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!official && (
+            <label>
+              글 태그
+              <select
+                value={values.tag}
+                onChange={(e) => update("tag", e.target.value)}
+              >
+                <option value="">모든 태그</option>
+                {Object.entries(postTags).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <p>
-          입력한 조건을 모두 만족하는 글을 찾습니다. 작성자나 태그를 지정하면
-          일반 글만 표시됩니다.
+          {official
+            ? "검색어와 TIC 조건을 모두 만족하는 공식 스레드를 찾습니다."
+            : "입력한 조건을 모두 만족하는 글을 찾습니다. 작성자나 태그를 지정하면 일반 글만 표시됩니다."}
         </p>
       </details>
       {cinema ? (
