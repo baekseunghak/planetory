@@ -199,10 +199,11 @@ function useWait(refusedAt: number | null, retryAfterSeconds: number) {
   return refusedAt === null ? 0 : left;
 }
 
+// Plain words for the residual job (찾은 신호를 뺀 다음 곡선 만들기).
 const RESIDUAL_STATE: Record<string, string> = {
   QUEUED: "대기",
-  RESIDUAL_CALCULATING: "잔차 계산",
-  RESIDUAL_READY: "잔차 준비",
+  RESIDUAL_CALCULATING: "찾은 신호 빼기",
+  RESIDUAL_READY: "곡선 준비",
   PERIODOGRAM_CALCULATING: "주기도 계산",
   COMPLETED: "완료",
   FAILED: "실패",
@@ -216,16 +217,29 @@ const RESIDUAL_ORDER = [
 ] as const;
 
 /** Curve step moves (classic CurveStepBar), only the ones that exist. */
-export function CurveSteps({ context }: { context: AnalysisContext }) {
+export function CurveSteps({
+  context,
+  found,
+}: {
+  context: AnalysisContext;
+  /** Signals found on this star after a result here (the receipt's count). */
+  found?: number;
+}) {
   const step = useCurveStepSession();
   if (!step) return null;
   const { viewing, transition, moves } = step;
   const busy = transition.phase === "running";
+  // The entry context is read once; a signal found here since (a result, or
+  // a later curve step that removed it) counts too.
+  const count = Math.max(
+    found ?? 0,
+    context.matchedCandidateIds.length,
+    viewing.removedCandidateIds.length,
+  );
   return (
     <div className="cx-steps" role="group" aria-label="곡선 단계">
       <span className="cx-ro">
-        찾은 신호 <b>{context.matchedCandidateIds.length}</b> ·{" "}
-        {stepName(viewing)}
+        찾은 신호 <b>{count}</b> · {stepName(viewing)}
       </span>
       {moves.previous && (
         <button
@@ -247,7 +261,9 @@ export function CurveSteps({ context }: { context: AnalysisContext }) {
           원본 곡선
         </button>
       )}
-      {moves.next && (
+      {/* The entry context's next step; after a later step was reached
+          here (a result's "다음 곡선 단계로") it would lead back. */}
+      {moves.next && moves.next.curveStep > viewing.curveStep && (
         <button
           type="button"
           className="cx-link"
@@ -468,10 +484,10 @@ export function HelpButton() {
           <dd>
             추천 봉우리 버튼으로 주기를 고릅니다. 그래프를 누르면 그 주기를 직접
             고릅니다. 그래프에 포커스한 뒤 ←/→로 봉우리 주기를 미세 조정하고,
-            Shift나 Page 키는 격자 한 칸, Home/End는 허용 범위 끝입니다. 직접
+            Shift나 Page 키는 크게 움직이고, Home/End는 조정 범위 끝입니다. 직접
             고를 때는 ←/→로 옮긴 뒤 Enter를 누릅니다. +/−로 확대·축소하고 0으로
-            전체 보기를 합니다. 음영은 관측 기간 절반을 넘는 주기, 보라 점선은
-            이미 찾은 신호의 주기입니다.
+            전체 보기를 합니다. 세기는 가장 강한 봉우리를 1로 둔 값이고, 음영은
+            관측 기간 절반을 넘는 주기, 보라 점선은 이미 찾은 신호의 주기입니다.
           </dd>
         </div>
         <div>
@@ -488,15 +504,11 @@ export function HelpButton() {
           <dt>판단과 제출</dt>
           <dd>
             판단을 고르면 지금 구간으로 확정합니다. 근거와 메모는 선택입니다.
-            제출하면 요청 번호 하나로 접수를 추적하므로 응답을 받지 못해도 두 번
-            접수되지 않습니다. 주기·구간·판단은 이 탭에 임시 저장되고
-            로그아웃하면 지워집니다.
+            연결이 끊겨도 같은 제출은 한 번만 접수됩니다. 주기·구간·판단은 이
+            탭에 임시 저장되고 로그아웃하면 지워집니다.
           </dd>
         </div>
       </dl>
-      <p className="cx-note">
-        판별 도구(홀짝·2차 식·V/U형)는 연결 준비 중입니다.
-      </p>
     </DialogButton>
   );
 }

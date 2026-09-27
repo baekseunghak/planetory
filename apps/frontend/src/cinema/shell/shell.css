@@ -1657,3 +1657,141 @@ body:has(.cinema-variant-toggle) .cinema-tutorial-guide[data-place="analysis"] {
   left: max(184px, calc((100vw - 920px) / 2));
   width: min(920px, calc(100vw - 184px - 24px));
 }
+
+/* ------------------------------------------------------------ first story */
+/* A newcomer's first login (FirstStory.tsx): the galaxy waits far away and
+   the story has the screen. The HUD and the galaxy's own layer step out of
+   sight (and out of the tab order) until the fly-in brings them. */
+.cinema-shell[data-story="true"] .cinema-topbar-end,
+.cinema-shell[data-story="true"] .cinema-galaxy {
+  visibility: hidden;
+  opacity: 0;
+  transition-duration: 0ms;
+}
+.cinema-story {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pc-z-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pc-space-6);
+  padding: 96px var(--pc-space-7) 120px;
+  pointer-events: none;
+  text-align: center;
+  transition: opacity 600ms var(--pc-ease-out);
+}
+.cinema-story:focus {
+  outline: none;
+}
+/* A soft dark pool behind the words, so they read over the galaxy's core
+   (no backdrop-filter over the canvas). */
+.cinema-story::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse 58% 34% at 50% 50%,
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.26) 55%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  pointer-events: none;
+}
+.cinema-story[data-leaving="true"] {
+  opacity: 0;
+}
+.cinema-story-lines {
+  display: grid;
+  width: min(980px, 100%);
+}
+.cinema-story-line {
+  grid-area: 1 / 1;
+  align-self: center;
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-weight: var(--pc-weight-regular);
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  word-break: keep-all;
+  text-wrap: balance;
+  text-shadow:
+    0 0 22px rgba(0, 0, 0, 0.9),
+    0 1px 3px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 700ms var(--pc-ease-out),
+    transform 1100ms var(--pc-ease-out);
+}
+.cinema-story-line[data-state="in"] {
+  opacity: 1;
+  transform: none;
+}
+.cinema-story-line[data-state="out"] {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity 700ms var(--pc-ease-in-out),
+    transform 700ms var(--pc-ease-in-out);
+}
+/* The button keeps its place, so the last line does not move when it comes. */
+.cinema-story-actions {
+  display: flex;
+  justify-content: center;
+  min-height: 48px;
+}
+.cinema-shell .cinema-story-start {
+  min-width: 168px;
+  min-height: 48px;
+  padding: 12px 28px;
+  border-radius: var(--pc-radius-pill);
+  font-size: var(--pc-text-lg);
+  pointer-events: auto;
+  box-shadow: 0 0 28px rgba(94, 196, 247, 0.28);
+  animation: cinema-fade-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+.cinema-shell .cinema-story-skip {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  min-height: 32px;
+  padding: 6px 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  background: rgba(10, 14, 24, 0.72);
+  color: var(--pc-ink-dim);
+  font: inherit;
+  font-size: var(--pc-text-xs);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.cinema-shell .cinema-story-skip:hover:not(:disabled) {
+  border-color: var(--pc-accent);
+  color: var(--pc-ink);
+}
+.cinema-shell .cinema-story-start:disabled,
+.cinema-shell .cinema-story-skip:disabled {
+  cursor: default;
+}
+/* Reduced motion: the four lines as one passage, the button under it. */
+.cinema-story[data-reduced="true"] .cinema-story-lines {
+  gap: var(--pc-space-2);
+}
+.cinema-story[data-reduced="true"] .cinema-story-line {
+  grid-area: auto;
+  font-size: clamp(20px, 1.8vw, 26px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-story,
+  .cinema-story-line,
+  .cinema-story-line[data-state="out"] {
+    transition: none;
+  }
+  .cinema-shell .cinema-story-start {
+    animation: none;
+  }
+}

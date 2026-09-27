@@ -224,9 +224,11 @@ export function GalaxyView() {
     (sceneState.ready
       ? sceneState.mode === "galaxy" && !sceneState.busy
       : sceneLate);
-  const { firstVisit, markFirstVisitFlown } = shell;
+  // The first-login story (FirstStory) comes before all of this.
+  const { firstVisit, markFirstVisitFlown, story } = shell;
   useEffect(() => {
-    if (!firstVisit || ticId || !tutorialOneTic || !galaxyAtRest) return;
+    if (!firstVisit || story || ticId || !tutorialOneTic || !galaxyAtRest)
+      return;
     // A moment on the landed galaxy before the camera moves on.
     const timer = setTimeout(
       () => {
@@ -237,6 +239,7 @@ export function GalaxyView() {
     return () => clearTimeout(timer);
   }, [
     firstVisit,
+    story,
     markFirstVisitFlown,
     ticId,
     tutorialOneTic,

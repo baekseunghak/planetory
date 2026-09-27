@@ -27,9 +27,13 @@ import {
   judgmentFromBody,
   keyboardWindow,
   moveCursor,
+  PERIOD_PLOT,
   periodKeyStep,
   periodogramNotice,
+  periodPlotY,
   phaseAt,
+  placeRankTags,
+  RANK_TAG,
   submissionView,
   windowHint,
   windowStats,
@@ -378,7 +382,9 @@ test("inline results come from the real receipt for each outcome kind", () => {
     }),
   );
   assert.equal(matched.kind, "matched");
-  assert.equal(matched.title, "행성 신호를 찾았습니다");
+  // A confirmed planet is found, not discovered (format.ts resultTitle).
+  assert.equal(matched.title, "확정된 행성을 직접 찾아냈습니다");
+  assert.equal(matched.eyebrow, "행성 찾음");
   assert.deepEqual(
     matched.chips.map((chip) => chip.label),
     ["신호 일치", "판단 일치", "성과 인정", "새 별 1개"],
@@ -451,6 +457,119 @@ test("depth never prints a negative zero", () => {
   assert.equal(format.depth(null), "—");
 });
 
+test("panel figures follow the cinema glossary", () => {
+  assert.equal(format.period(4.411784123), "4.412");
+  assert.equal(format.hours(4.3200123), "4.3");
+  assert.equal(format.phase(0.693412), "0.693");
+  assert.equal(format.phase(-0.0001), "0.000");
+  assert.equal(format.strength(1.2), "1.00");
+  assert.equal(format.strength(-0.3), "0.00");
+  assert.equal("btjd" in format, false);
+});
+
+test("inline titles name known planets and misses in the cinema's words", () => {
+  const base = {
+    evaluation: "AGREES" as const,
+    achievement: {
+      result: "recognized" as const,
+      newlyRecognized: true,
+      unlockedTicIds: [],
+      starCount: 1,
+      grade: null,
+    },
+  };
+  const planet = {
+    candidateId: "c-1",
+    isPlanet: true,
+    periodDays: 4.41,
+    depthPpm: 13000,
+    durationHours: 3,
+    epochBtjd: 1365.7,
+    harmonicMultiplier: null,
+  };
+  const known = inlineResult({
+    ...base,
+    kind: "matched",
+    matchStatus: "matched",
+    planet: { ...planet, disposition: "CONFIRMED", knownName: "WASP-62 b" },
+  });
+  assert.equal(known.title, "알려진 행성 WASP-62 b를 직접 찾아냈습니다");
+  assert.equal(known.eyebrow, "행성 찾음");
+  const candidate = inlineResult({
+    ...base,
+    kind: "matched",
+    matchStatus: "matched",
+    planet: { ...planet, disposition: "UNCONFIRMED", knownName: null },
+  });
+  assert.equal(candidate.title, "새 행성 후보를 발견했습니다");
+  assert.equal(candidate.eyebrow, "후보 발견");
+  const missed = inlineResult({
+    ...base,
+    kind: "numericMismatch",
+    matchStatus: "not_matched",
+    evaluation: null,
+    achievement: { ...base.achievement, result: "none" },
+    planet: null,
+  });
+  assert.equal(missed.title, "이번 구간에서는 신호를 찾지 못했습니다");
+  for (const result of [known, candidate, missed])
+    assert.doesNotMatch(result.title, /sub-|h-|9007|power|BTJD/);
+});
+
+test("periodogram rank labels stay inside the plot and apart", () => {
+  const width = 520,
+    height = 104;
+  const inside = (tag: { x: number; y: number; rank: number }) => {
+    const half =
+      (String(tag.rank).length * RANK_TAG.digit + RANK_TAG.padding) / 2;
+    return (
+      tag.x - half >= 0 &&
+      tag.x + half <= width &&
+      tag.y >= 0 &&
+      tag.y + RANK_TAG.height <= height - PERIOD_PLOT.axis
+    );
+  };
+  // The tallest peak sits below the top edge with room for its label.
+  assert.equal(periodPlotY(1, height), PERIOD_PLOT.top);
+  assert.ok(
+    periodPlotY(1, height) - RANK_TAG.dot - RANK_TAG.gap - RANK_TAG.height >= 0,
+  );
+  assert.equal(periodPlotY(0, height), height - PERIOD_PLOT.bottom);
+  assert.equal(periodPlotY(-1, height), periodPlotY(0, height));
+  // Rank 1 tall and at the very right edge, 9 and 10 on top of each other.
+  const peaks = [
+    { rank: 1, x: width - 1, y: periodPlotY(1, height) },
+    { rank: 2, x: 120, y: periodPlotY(0.3, height) },
+    { rank: 9, x: 330, y: periodPlotY(0.12, height) },
+    { rank: 10, x: 333, y: periodPlotY(0.1, height) },
+    { rank: 3, x: 336, y: periodPlotY(0.15, height) },
+  ];
+  const tags = placeRankTags(peaks, { width, height, avoidX: width - 1 });
+  assert.equal(tags[0].rank, 1);
+  for (const tag of tags) assert.ok(inside(tag), JSON.stringify(tag));
+  for (let i = 0; i < tags.length; i++)
+    for (let j = i + 1; j < tags.length; j++) {
+      const a = tags[i],
+        b = tags[j];
+      const ha =
+        (String(a.rank).length * RANK_TAG.digit + RANK_TAG.padding) / 2;
+      const hb =
+        (String(b.rank).length * RANK_TAG.digit + RANK_TAG.padding) / 2;
+      const apart =
+        a.x + ha <= b.x - hb ||
+        b.x + hb <= a.x - ha ||
+        a.y + RANK_TAG.height <= b.y ||
+        b.y + RANK_TAG.height <= a.y;
+      assert.ok(apart, `${a.rank} overlaps ${b.rank}`);
+    }
+  // Every rank placed here (there is room for all five).
+  assert.deepEqual(
+    tags.map((tag) => tag.rank).sort((a, b) => a - b),
+    [1, 2, 3, 9, 10],
+  );
+  assert.deepEqual(placeRankTags([], { width, height }), []);
+});
+
 test("the judgment is read back only from a known stored value", () => {
   assert.equal(judgmentFromBody({ userJudgment: "UNSURE" }), "UNSURE");
   assert.equal(judgmentFromBody({ userJudgment: "MAYBE" }), null);
@@ -467,7 +586,7 @@ test("every failed submission state keeps its recovery actions", () => {
     options,
   )!;
   assert.equal(sending.busy, true);
-  assert.match(sending.message, /두 번 접수되지 않습니다/);
+  assert.match(sending.message, /한 번만 접수됩니다/);
   const lost = {
     phase: "settled" as const,
     kind: "candidate" as const,
@@ -518,7 +637,8 @@ test("every failed submission state keeps its recovery actions", () => {
     options,
   )!;
   assert.deepEqual(notReady.actions, ["prepare", "dismiss"]);
-  assert.equal(notReady.note, "계산을 기다리는 중입니다. · 작업 번호 job-1");
+  // The residual job id is internal; only its state is said.
+  assert.equal(notReady.note, "계산을 기다리는 중입니다.");
   const rejected = submissionView(
     {
       phase: "settled",

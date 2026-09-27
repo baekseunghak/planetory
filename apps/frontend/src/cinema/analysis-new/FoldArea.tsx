@@ -65,9 +65,7 @@ type Drag = {
   moved: boolean;
 };
 
-const precise = new Intl.NumberFormat("ko-KR", {
-  maximumSignificantDigits: 10,
-});
+const count = new Intl.NumberFormat("ko-KR");
 
 export type SelectionContract = {
   limits: SelectionLimits | null;
@@ -590,7 +588,7 @@ export function FoldArea({
                   aria-valuemin={-0.5}
                   aria-valuemax={1.5}
                   aria-valuenow={value}
-                  aria-valuetext={`${precise.format(value)}${outside ? " (보기 밖, 전체 보기로 확인)" : ""}`}
+                  aria-valuetext={`위상 ${format.phase(value)}${outside ? " (보기 밖, 전체 보기로 확인)" : ""}`}
                   aria-invalid={invalid}
                   aria-describedby={`${hintId} ${statusId}`}
                   onKeyDown={(event) => handleKey(event, handle)}
@@ -617,7 +615,7 @@ export function FoldArea({
       </p>
       <dl className="cx-stats" data-testid="cx-window-readouts">
         <div>
-          <dt>지속 시간</dt>
+          <dt>가려진 시간</dt>
           <dd data-value={preview?.durationPreviewHours}>
             {preview ? (
               <>
@@ -635,20 +633,25 @@ export function FoldArea({
             title="구간 안과 밖의 평균 밝기 차이입니다. 화면 미리보기이며 제출하지 않습니다."
           >
             {preview && stats?.depth != null ? (
-              <>
-                <b>{format.depth(stats.depth)}</b>%
-              </>
+              // Brighter inside than outside is no decrease, not "-0.04%".
+              format.depth(stats.depth) === "0.00" || stats.depth < 0 ? (
+                "감소 없음"
+              ) : (
+                <>
+                  <b>{format.depth(stats.depth)}</b>%
+                </>
+              )
             ) : (
               "—"
             )}
           </dd>
         </div>
         <div>
-          <dt>기준 시각</dt>
-          <dd data-value={preview?.epochPreviewBtjd}>
-            {preview ? (
+          <dt>구간 안 관측점</dt>
+          <dd data-value={stats?.inside}>
+            {preview && stats ? (
               <>
-                <b>{format.btjd(preview.epochPreviewBtjd)}</b> BTJD
+                <b>{count.format(stats.inside)}</b>개
               </>
             ) : (
               "—"
@@ -677,11 +680,11 @@ export function FoldArea({
       <div className="cx-foot">
         <span className="cx-ro cx-limits">
           {limits && periodDays
-            ? `허용 ${format.hours(limits.minWindowDays * 24)}–${format.hours(limits.maxWindowDays * 24)}시간`
+            ? `구간 폭 ${format.hours(limits.minWindowDays * 24)}–${format.hours(limits.maxWindowDays * 24)}시간`
             : ""}
           <span className="cx-sr">
             {limits
-              ? ` · 허용 위상 폭 ${precise.format(limits.minPhaseWidth)}~${precise.format(limits.maxPhaseWidth)}. 범위를 벗어나면 핸들로 조정해 주세요.`
+              ? ` · 위상 폭 ${format.phase(limits.minPhaseWidth)}~${format.phase(limits.maxPhaseWidth)}. 범위를 벗어나면 핸들로 조정해 주세요.`
               : ""}
           </span>
         </span>

@@ -234,3 +234,31 @@ test("a camera move after the early fly-in replaces it", async () => {
     ["restore:system:900000010"],
   );
 });
+
+test("the home frame (tutorial markers to keep in view) goes through and is replayed before the stars", () => {
+  const proxy = createSceneProxy();
+  const c = proxy.controller;
+  const frame = {
+    ticIds: ["900000001", "900000004"],
+    margin: { top: 121, right: 63, bottom: 124, left: 63 },
+  };
+  c.setHomeFrame?.(frame);
+  c.setStars([star], meta);
+  const fake = fakeEngine();
+  fake.engine.setHomeFrame = (next) =>
+    void fake.calls.push(`frame:${next ? next.ticIds.join(",") : "null"}`);
+  proxy.attach(fake.engine);
+  // Before setStars: the stars' first placement already keeps them in.
+  assert.deepEqual(
+    fake.calls.filter((call) => /^(frame|setStars)/.test(call)),
+    ["frame:900000001,900000004", "setStars:1"],
+  );
+  c.setHomeFrame?.(null);
+  assert.equal(fake.calls.at(-1), "frame:null");
+  proxy.detach();
+  const next = fakeEngine();
+  next.engine.setHomeFrame = (value) =>
+    void next.calls.push(`frame:${value ? "set" : "null"}`);
+  proxy.attach(next.engine);
+  assert.equal(next.calls.includes("frame:null"), true);
+});

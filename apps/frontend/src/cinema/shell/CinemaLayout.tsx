@@ -18,6 +18,13 @@ import {
   type OnboardingLook,
 } from "../../features/onboarding/Onboarding";
 import { browserStorage, takeFirstVisitFlight } from "./tutorial-guide";
+import {
+  MARKER_FRAME_MARGIN,
+  STORY_LEAVE_MS,
+  markStorySeen,
+  storyWanted,
+} from "./first-story";
+import { FirstStory } from "./FirstStory";
 import "../../components/service-presentation.css";
 import { SCENE_TIMING, sceneSystemFrom, useScene } from "../scene";
 import { ShellContext, type PanelSide, type Shell } from "./context";
@@ -224,11 +231,66 @@ function ShellBody({
   else if (complete) missing.current = { ticId: focusTic, missing: true };
   else if (missing.current?.ticId !== focusTic) missing.current = null;
   const starMissing = !!missing.current?.missing;
+
+  // ---- first-login story: a newcomer's galaxy waits far away while four
+  // lines say what this place is for; 시작하기 (or 건너뛰기) starts the
+  // fly-in, then the first-visit flight to tutorial 1. Once per member on
+  // this browser (first-story.ts), never for members who have onboarded.
+  const firstVisit = session.member?.onboardingDone === false;
+  const [storyPhase, setStoryPhase] = useState<"ready" | "leaving" | "done">(
+    "ready",
+  );
+  const story =
+    storyPhase === "ready" &&
+    storyWanted(browserStorage(), {
+      firstVisit,
+      memberId,
+      onGalaxy: target.stage === "galaxy",
+    });
+  const endStory = useCallback(() => {
+    markStorySeen(browserStorage(), memberId);
+    setStoryPhase("leaving");
+  }, [memberId]);
+  useEffect(() => {
+    if (storyPhase !== "leaving") return;
+    const timer = setTimeout(
+      () => setStoryPhase("done"),
+      scene.getState().reducedMotion ? 0 : STORY_LEAVE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [storyPhase, scene]);
+
   const [intro, setIntro] = useState(false);
   useStageDirector(scene, target, starLoaded, onGalaxy, {
     starMissing,
     onIntro: setIntro,
+    holdIntro: story,
   });
+
+  // The tutorial markers stay inside the resting galaxy's frame (the end
+  // of the fly-in, 전체 보기): the scene pans, then moves back, only as far
+  // as they need. Another member's galaxy is not mine to frame.
+  const frameTics = useMemo(
+    () =>
+      sky.data.stars
+        .filter(
+          (star) =>
+            star.marker?.type === "tutorial" &&
+            star.progressStage !== "completed",
+        )
+        .map((star) => star.ticId)
+        .join(" "),
+    [sky.data.stars],
+  );
+  const ownFrame = target.stage !== "public";
+  useEffect(() => {
+    scene.setHomeFrame?.(
+      ownFrame && frameTics
+        ? { ticIds: frameTics.split(" "), margin: MARKER_FRAME_MARGIN }
+        : null,
+    );
+  }, [scene, frameTics, ownFrame]);
+  useEffect(() => () => scene.setHomeFrame?.(null), [scene]);
 
   // The focused star's own planets. While a transit runs, the reveal owns the
   // new planet; the refreshed system lands after it.
@@ -306,7 +368,6 @@ function ShellBody({
 
   // ---- first visit (onboarding not done): fly to tutorial star 1 once per
   // member, kept in the browser, so "← 나의 은하" and a reload stay put.
-  const firstVisit = session.member?.onboardingDone === false;
   const markFirstVisitFlown = useCallback(
     () => takeFirstVisitFlight(browserStorage(), memberId),
     [memberId],
@@ -338,6 +399,7 @@ function ShellBody({
     toast,
     firstVisit,
     markFirstVisitFlown,
+    story,
     newStar,
     clearNewStar,
   };
@@ -348,7 +410,9 @@ function ShellBody({
         <div
           className={`cinema-shell${overlay ? " service-presentation cinema-backdrop" : ""}`}
           data-stage={target.stage}
-          data-intro={intro ? "true" : "false"}
+          // HUD out of the way: the fly-in, and the story fading out before it.
+          data-intro={intro || storyPhase === "leaving" ? "true" : "false"}
+          data-story={story ? "true" : "false"}
         >
           <a className="skip-link" href="#main-content">
             본문으로 이동
@@ -392,6 +456,9 @@ function ShellBody({
                 requestAnimationFrame(focusAnalysisResult);
               }}
             />
+          )}
+          {(story || storyPhase === "leaving") && (
+            <FirstStory leaving={!story} onStart={endStory} />
           )}
           <div
             className="cinema-toast"

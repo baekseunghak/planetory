@@ -5,6 +5,7 @@
 // No three.js import here.
 import type {
   AnalysisHint,
+  HomeFrame,
   PlanetPointer,
   SceneController,
   SceneError,
@@ -88,6 +89,8 @@ export function createSceneProxy() {
   let effectsChoice: boolean | undefined;
   // Newly unlocked stars kept hidden until their ignition.
   const held = new Set<string>();
+  // Stars the home framing keeps in view (tutorial markers).
+  let homeFrame: HomeFrame | null | undefined;
   // The login fly-in asked for before the engine chunk arrived (a fresh page
   // load after OAuth usually wins that race). The engine plays it on attach
   // unless another camera move was asked for in between.
@@ -179,6 +182,10 @@ export function createSceneProxy() {
       else for (const ticId of ticIds) if (ticId) held.add(ticId);
       engine?.holdStars?.(ticIds);
     },
+    setHomeFrame(next) {
+      homeFrame = next;
+      engine?.setHomeFrame?.(next);
+    },
     setEffects(enabled) {
       effectsChoice = !!enabled;
       if (engine) return engine.setEffects(enabled);
@@ -225,6 +232,9 @@ export function createSceneProxy() {
       replay("effects", () => next.setEffects(effectsChoice!));
     if (held.size) replay("hold", () => next.holdStars?.([...held]));
     if (inset) replay("inset", () => next.setViewInset(inset!));
+    // Before the stars: their first placement already frames these.
+    if (homeFrame !== undefined)
+      replay("frame", () => next.setHomeFrame?.(homeFrame!));
     if (stars) replay("stars", () => next.setStars(stars!.stars, stars!.meta));
     if (system !== undefined) replay("system", () => next.setSystem(system!));
     if (hint !== undefined) replay("hint", () => next.setAnalysisHint(hint!));

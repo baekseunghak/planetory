@@ -19,6 +19,12 @@
 //   VITE_CINEMA=false    legacy develop pages instead of the cinema shell
 //   VITE_CINEMA=auto     the production choice: legacy unless ?ui=cinema
 //                        (src/ui-choice.ts)
+//   CINEMA_ANALYSIS      analysis screen: classic (default) | new (the new
+//                        design, variant B, for everyone and without the
+//                        variant toggle); defines VITE_CINEMA_ANALYSIS
+//                        (src/cinema/analysis/variant.ts)
+//   CINEMA_HMR=0         no live reload: source edits never reload an open page
+//                        (a rehearsal or a second review server); reload by hand
 //
 // Scenarios (dev/cinema-scenarios.ts is the reference)
 //   /api/dev-cinema/session?as=newcomer|member|veteran[&stars=5000|10000][&start=login][&next=/path]
@@ -86,16 +92,21 @@ const realSample = /^(0|false|no)$/i.test(realSampleDir)
   ? null
   : loadRealSample(realSampleDir);
 const scenario = process.env.CINEMA_SCENARIO ?? "member";
+const analysis =
+  (process.env.CINEMA_ANALYSIS ?? "").trim().toLowerCase() || "classic";
 const windowRule = !/^(0|false|no)$/i.test(
   process.env.CINEMA_WINDOW_RULE ?? "",
 );
 const unlock = !/^(0|false|no)$/i.test(process.env.CINEMA_UNLOCK ?? "");
+const hmr = !/^(0|false|no)$/i.test(process.env.CINEMA_HMR ?? "");
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error("CINEMA_PORT must be an integer between 1024 and 65535");
 if (!Number.isInteger(starCount) || starCount < 10 || starCount > 20000)
   throw new Error("CINEMA_STARS must be an integer between 10 and 20000");
 if (!["member", "newcomer", "veteran"].includes(scenario))
   throw new Error("CINEMA_SCENARIO must be member, newcomer or veteran");
+if (!["classic", "new"].includes(analysis))
+  throw new Error("CINEMA_ANALYSIS must be classic or new");
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const profile = createProfileFixture();
@@ -159,6 +170,8 @@ const server = await createServer({
     Object.entries({
       VITE_API_BASE: "/api",
       VITE_CINEMA: cinemaUi,
+      // Analysis screen of the cinema app: classic | new (variant B).
+      VITE_CINEMA_ANALYSIS: analysis,
       // Demo scenario switch (src/cinema/shell/demo). Never in a build.
       VITE_CINEMA_DEMO: "true",
       VITE_P1_ENABLED: p1 ? "true" : "false",
@@ -177,9 +190,14 @@ const server = await createServer({
       VITE_INITIAL_NICKNAME_PATH: "",
     }).map(([key, value]) => ["import.meta.env." + key, JSON.stringify(value)]),
   ),
-  server: { host: "127.0.0.1", port, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port,
+    strictPort: true,
+    ...(hmr ? {} : { hmr: false }),
+  },
 });
 await server.listen();
 console.log(
-  `cinema review · scenario ${scenario} · ${realSample ? `real TESS sample ${realSample.stars.length} stars + synthetic` : "synthetic data only"} · stars ${starCount} · P1 ${p1 ? "on" : "off"} · window rule ${windowRule ? "on" : "off"} · unlock ${unlock ? "on" : "off"} · UI ${{ true: "cinema", false: "legacy", auto: "legacy unless ?ui=cinema" }[cinemaUi]}: http://127.0.0.1:${port}/sky`,
+  `cinema review · scenario ${scenario} · ${realSample ? `real TESS sample ${realSample.stars.length} stars + synthetic` : "synthetic data only"} · stars ${starCount} · P1 ${p1 ? "on" : "off"} · window rule ${windowRule ? "on" : "off"} · unlock ${unlock ? "on" : "off"} · analysis ${analysis}${hmr ? "" : " · no live reload"} · UI ${{ true: "cinema", false: "legacy", auto: "legacy unless ?ui=cinema" }[cinemaUi]}: http://127.0.0.1:${port}/sky`,
 );

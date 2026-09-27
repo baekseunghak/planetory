@@ -23,6 +23,11 @@ export async function directStage(
     onGalaxy(): void;
     /** The login fly-in starts (true) and ends (false). */
     onIntro?(playing: boolean): void;
+    /**
+     * The first-login story is on (FirstStory): the galaxy stays far away
+     * (`intro`, put there if needed) and the fly-in waits for its end.
+     */
+    holdIntro?: boolean;
   },
 ): Promise<void> {
   const { flight, current } = options;
@@ -66,6 +71,11 @@ export async function directStage(
     return;
   }
   if (target.stage === "galaxy") {
+    if (options.holdIntro) {
+      flight.current = null;
+      if (state.mode !== "intro") scene.setMode("intro");
+      return;
+    }
     if (state.mode === "intro") await intro();
     else if (state.focusedTicId || FOCUSED.has(state.mode))
       await scene.returnToGalaxy();
@@ -106,7 +116,11 @@ export function useStageDirector(
   target: StageTarget,
   starLoaded: boolean,
   onGalaxy: () => void,
-  extra: { starMissing?: boolean; onIntro?(playing: boolean): void } = {},
+  extra: {
+    starMissing?: boolean;
+    onIntro?(playing: boolean): void;
+    holdIntro?: boolean;
+  } = {},
 ) {
   const generation = useRef(0);
   const flight = useRef<{ ticId: string; loaded: boolean } | null>(null);
@@ -118,6 +132,7 @@ export function useStageDirector(
   const focused = target.stage === "system" || target.stage === "analysis";
   const loadedKey = focused ? starLoaded : false;
   const missingKey = focused ? !!extra.starMissing : false;
+  const holdKey = target.stage === "galaxy" && !!extra.holdIntro;
   useEffect(() => {
     const id = ++generation.current;
     void directStage(scene, target, {
@@ -127,7 +142,8 @@ export function useStageDirector(
       current: () => id === generation.current,
       onGalaxy: () => arrive.current(),
       onIntro: (playing) => introRef.current?.(playing),
+      holdIntro: holdKey,
     }).catch((error) => console.error("scene direction failed", error));
     // target is read by value; stage and ticId are its identity.
-  }, [scene, target.stage, target.ticId, loadedKey, missingKey]);
+  }, [scene, target.stage, target.ticId, loadedKey, missingKey, holdKey]);
 }

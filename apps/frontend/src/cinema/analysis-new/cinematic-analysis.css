@@ -85,6 +85,11 @@
   gap: 2px;
   pointer-events: none;
 }
+/* The shell's tutorial line (fixed at 62px, up to two lines at 1024px) sits
+   over the scene too: the crumb goes under it. */
+body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
+  top: calc(136px + env(safe-area-inset-top, 0px));
+}
 .cx-crumb > * {
   pointer-events: auto;
 }
@@ -552,10 +557,16 @@
 .cx-push {
   margin-left: auto;
 }
+/* Rank labels: model.placeRankTags gives each one's centre (x) and top (y)
+   inside the plot, apart from the others (RANK_TAG metrics). */
 .cx-peak-tag {
   position: absolute;
   z-index: 1;
-  padding: 0 3px;
+  height: 12px;
+  padding: 0 2px;
+  transform: translateX(-50%);
+  line-height: 12px;
+  font-size: 10px !important;
   color: var(--pc-ink-dim);
   font-family: var(--pc-font-mono);
   font-size: var(--pc-text-2xs);
@@ -1031,41 +1042,183 @@
   border-color: rgba(182, 156, 255, 0.45);
 }
 .cx-result .cx-primary {
-  flex: 1;
+  flex: 1 1 auto;
 }
-.cx-next .result-actions,
-.cx-dialog-foot .result-actions {
+.cx-result-lead {
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cx-next {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 6px 12px;
+  gap: 4px 14px;
 }
-.cx-next ul,
-.cx-dialog-foot ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.cx-next a,
-.cx-next button,
-.cx-dialog-foot a,
-.cx-dialog-foot button {
-  color: var(--pc-accent);
-  font-size: var(--pc-text-xs);
+.cx-next a {
   text-decoration: none;
 }
-.cx-next a:hover,
-.cx-next button:hover:not(:disabled),
-.cx-dialog-foot a:hover {
+.cx-next a:hover {
   text-decoration: underline;
 }
-.cx-next .submission-note,
-.cx-dialog-foot .submission-note {
+
+/* 제출값 확인: the calculation note folds away so 제출하기 stays in view. */
+.cx-review-more summary {
+  color: var(--pc-ink-dim);
+}
+.cx-review-more[open] {
+  gap: 4px;
+}
+
+/* The full result (../analysis/results/AcceptedResult) in the new dialog.
+   results.css scopes its rules to the classic dialog; the same look here. */
+.cx-result-dialog {
+  width: min(760px, calc(100% - 32px));
+  max-height: min(88vh, 860px, calc(100dvh - 72px));
+  padding: 22px 24px;
+}
+.cx-result-dialog > * + * {
+  margin-top: 0;
+}
+.cx-result-dialog .pc-result-eyebrow {
+  margin: 0 0 4px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+.cx-result-dialog h4 {
+  margin: 0 0 8px;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-xl);
+  font-weight: var(--pc-weight-strong);
+  line-height: var(--pc-leading-tight);
+  text-wrap: balance;
+}
+.cx-result-dialog .pc-result-lead {
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+}
+.cx-result-dialog .pc-result-lead:focus {
+  outline: none;
+}
+.cx-result-dialog .submission-note {
+  margin-top: 8px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cx-result-dialog .result-celebrate {
+  margin-top: 8px;
+  color: var(--pc-accent);
+  font-weight: var(--pc-weight-strong);
+}
+.cx-result-dialog .pc-result-compare {
+  margin-top: 16px;
+}
+.cx-result-dialog .pc-result-compare table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--pc-text-sm);
+}
+.cx-result-dialog .pc-result-compare :is(th, td) {
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--pc-line);
+  text-align: left;
+  font-weight: var(--pc-weight-regular);
+}
+.cx-result-dialog .pc-result-compare thead th {
   color: var(--pc-ink-faint);
   font-size: var(--pc-text-xs);
+}
+.cx-result-dialog .pc-result-compare tbody th {
+  color: var(--pc-ink-dim);
+}
+.cx-result-dialog .pc-result-compare td {
+  font-family: var(--pc-font-mono);
+  font-variant-numeric: var(--pc-numeric);
+}
+.cx-result-dialog .result-none {
+  color: var(--pc-ink-faint);
+}
+.cx-result-dialog dl.pc-result-facts {
+  display: grid;
+  margin: 16px 0 0;
+  border-top: 1px solid var(--pc-line);
+}
+.cx-result-dialog dl.pc-result-facts > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cx-result-dialog dl.pc-result-facts dt {
+  color: var(--pc-ink-dim);
+}
+.cx-result-dialog dl.pc-result-facts dd {
+  color: var(--pc-ink);
+}
+.cx-result-dialog .pc-result-more {
+  margin-top: 12px;
+}
+.cx-result-dialog .pc-result-detail {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-md);
+}
+.cx-result-dialog .pc-result-detail h5 {
+  margin-bottom: 4px;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cx-result-dialog .pc-result-detail p + p {
+  margin-top: 4px;
+}
+.cx-result-dialog .pc-result-tech summary {
+  color: var(--pc-ink-dim);
+}
+.cx-result-dialog .pc-result-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-pill);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+  font-weight: var(--pc-weight-medium);
+  text-decoration: none;
+}
+.cx-result-dialog .pc-result-button-main {
+  border-color: var(--pc-accent);
+  background: var(--pc-accent);
+  color: var(--pc-accent-ink);
+}
+.cx-result-dialog .pc-result-inline {
+  padding: 4px 2px;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-sm);
+  text-align: left;
+  text-decoration: none;
+}
+.cx-result-dialog .pc-result-secondary .pc-result-inline {
+  color: var(--pc-ink-dim);
+}
+.cx-result-dialog .pc-result-inline:hover,
+.cx-result-dialog .pc-result-inline:focus-visible {
+  color: var(--pc-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+/* The actions stay in view while the facts scroll (1024x768 cannot show a
+   full result and its actions at once). */
+.cx-result-dialog .pc-result-actions {
+  position: sticky;
+  bottom: -22px;
+  z-index: 1;
+  margin: 16px -24px -22px;
+  padding: 12px 24px 22px;
+  border-top: 1px solid var(--pc-line);
+  background: #05080f;
 }
 
 /* loading / error / entry states inside the panel */
@@ -1381,12 +1534,14 @@
   }
   .cx-area[data-area="judge"] .cx-result {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(200px, auto);
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "eyebrow chips actions"
-      "title note next";
+      "eyebrow actions"
+      "title actions"
+      "lead next"
+      "chips next";
     align-items: center;
-    gap: 4px 18px;
+    gap: 4px 24px;
   }
   .cx-result .cx-eyebrow {
     grid-area: eyebrow;
@@ -1394,24 +1549,58 @@
   .cx-result h3 {
     grid-area: title;
   }
+  .cx-result .cx-result-lead {
+    grid-area: lead;
+  }
   .cx-result .cx-result-chips {
     grid-area: chips;
   }
-  .cx-result > .cx-note:not([data-tone]) {
-    grid-area: note;
-  }
-  .cx-result > .cx-note[data-tone] {
+  .cx-result > .cx-note {
     grid-column: 1 / -1;
   }
   .cx-result .cx-actions {
     grid-area: actions;
+    justify-content: flex-end;
   }
   .cx-result .cx-next {
     grid-area: next;
+    justify-content: flex-end;
   }
   .cx-crumb {
     top: calc(100px + env(safe-area-inset-top, 0px));
     left: 16px;
+  }
+  body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
+    top: calc(136px + env(safe-area-inset-top, 0px));
+  }
+  /* 제출값 확인 in the judgment row: the values in three columns, the two
+     buttons at the right and kept in view while the panel scrolls. */
+  .cx-area[data-area="judge"] .cx-review {
+    flex: 1 1 560px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head actions"
+      "list actions"
+      "more actions";
+    align-items: center;
+    gap: 2px 20px;
+  }
+  .cx-review > h3 {
+    grid-area: head;
+  }
+  .cx-review > .cx-review-list {
+    grid-area: list;
+    grid-template-columns: repeat(3, auto minmax(0, 1fr));
+    column-gap: 10px;
+  }
+  .cx-review > .cx-review-more {
+    grid-area: more;
+  }
+  .cx-review > .cx-actions {
+    grid-area: actions;
+    position: sticky;
+    bottom: 0;
+    flex-wrap: nowrap;
   }
   .cx-crumb h1 {
     font-size: var(--pc-text-xl);

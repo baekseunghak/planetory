@@ -12,6 +12,8 @@ export type Mat4 = ArrayLike<number>;
 export const WORLD_SCALE = 0.01;
 /** Real default camera (INITIAL_CAMERA in sky-renderer/model.ts). */
 export const DEFAULT_VIEW = { yaw: 0.12, tilt: 1, roll: -0.28 } as const;
+/** Home framing (after the fly-in, first placement): closer than 전체 보기. */
+export const HOME_DISTANCE = 0.74;
 /** Real system view (INITIAL_SYSTEM in sky-renderer/personal-system.ts). */
 export const SYSTEM_VIEW = { yaw: -0.28, tilt: 0.67 } as const;
 export const BASE_FOV = 45;
@@ -126,6 +128,103 @@ export function fitDistance(
     );
   }
   return distance;
+}
+
+/** Screen rectangle in CSS px from the canvas' top-left corner (edges). */
+export type ScreenRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+/**
+ * The pose nearest to a given one that shows every point inside `safe`:
+ * same view direction and roll, the target panned in the view plane as
+ * little as needed, and the camera moved back only when panning alone
+ * cannot fit them. A pose that already shows them all is kept as it is.
+ *
+ * `distance` is the camera's distance from `target` along `basis.back`;
+ * `center` is where the target projects (the free area's centre); `focal`
+ * is `focalPx(viewHeight) * zoom`. A point p projects to
+ * x = cx + f·u/z, y = cy − f·v/z with u, v, w its right, up and back
+ * components from the target and z = distance − w. Panning by (a, b)
+ * changes u and v but never z, so for a fixed distance every point bounds
+ * a (and b) to one interval; the smallest distance at which all intervals
+ * meet is the largest pairwise bound below. Exact, no iteration.
+ */
+export function fitPointsInView(
+  points: readonly Vec3[],
+  target: Vec3,
+  basis: { back: Vec3; right: Vec3; up: Vec3 },
+  distance: number,
+  focal: number,
+  center: { x: number; y: number },
+  safe: ScreenRect,
+): { distance: number; target: Vec3; moved: boolean } {
+  const kept = { distance, target, moved: false };
+  const width = safe.right - safe.left,
+    height = safe.bottom - safe.top;
+  if (
+    !points.length ||
+    !(focal > 0) ||
+    !(width >= 1) ||
+    !(height >= 1) ||
+    !Number.isFinite(distance)
+  )
+    return kept;
+  const u: number[] = [],
+    v: number[] = [],
+    w: number[] = [];
+  for (const p of points) {
+    const rel: Vec3 = [p[0] - target[0], p[1] - target[1], p[2] - target[2]];
+    if (!rel.every(Number.isFinite)) continue;
+    u.push(dot(rel, basis.right));
+    v.push(dot(rel, basis.up));
+    w.push(dot(rel, basis.back));
+  }
+  if (!u.length) return kept;
+  // Per point: a ∈ [u − ax·z, u − bx·z], b ∈ [v − ay·z, v − by·z].
+  const ax = (safe.right - center.x) / focal,
+    bx = (safe.left - center.x) / focal,
+    ay = (center.y - safe.top) / focal,
+    by = (center.y - safe.bottom) / focal;
+  // In front of the camera with a little room (never on its plane).
+  const nearest = Math.max(...w);
+  let needed = Math.max(distance, nearest + Math.max(1e-3, distance * 1e-3));
+  for (let i = 0; i < u.length; i++)
+    for (let j = 0; j < u.length; j++) {
+      needed = Math.max(
+        needed,
+        (u[i] - u[j] + ax * w[i] - bx * w[j]) / (ax - bx),
+        (v[i] - v[j] + ay * w[i] - by * w[j]) / (ay - by),
+      );
+    }
+  const pan = (values: number[], hiRate: number, loRate: number): number => {
+    let lo = -Infinity,
+      hi = Infinity;
+    for (let i = 0; i < values.length; i++) {
+      const z = needed - w[i];
+      lo = Math.max(lo, values[i] - hiRate * z);
+      hi = Math.min(hi, values[i] - loRate * z);
+    }
+    // Rounding can leave the tight axis a hair apart: take its middle.
+    if (lo > hi) return (lo + hi) / 2;
+    return clamp(0, lo, hi);
+  };
+  const a = pan(u, ax, bx),
+    b = pan(v, ay, by);
+  const moved = needed > distance * (1 + 1e-9) || a !== 0 || b !== 0;
+  if (!moved) return kept;
+  return {
+    distance: needed,
+    target: [
+      target[0] + basis.right[0] * a + basis.up[0] * b,
+      target[1] + basis.right[1] * a + basis.up[1] * b,
+      target[2] + basis.right[2] * a + basis.up[2] * b,
+    ],
+    moved: true,
+  };
 }
 
 export type Bounds = { minX: number; maxX: number; minY: number; maxY: number };

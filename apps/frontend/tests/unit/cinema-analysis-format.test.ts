@@ -6,7 +6,18 @@ import { test } from "node:test";
 import type { AnalysisOutcome } from "../../src/cinema/analysis/bridge";
 import * as f from "../../src/cinema/analysis/format";
 import { discoveryCard } from "../../src/cinema/shell/sequences";
-import { placeRankLabels } from "../../src/features/analysis/periodogram-view";
+import {
+  periodAt,
+  type CandidatePeaks,
+  type Periodogram,
+} from "../../src/features/analysis/periodogram-data";
+import {
+  buildPeriodPlot,
+  drawPeriodogram,
+  FULL_PERIOD_VIEW,
+  placeRankLabels,
+  rankLabelBox,
+} from "../../src/features/analysis/periodogram-view";
 
 test("numbers follow the glossary: period 2-3 decimals, hours 1, phase 3, depth %", () => {
   assert.equal(f.periodDays(11.73461), "11.73일");
@@ -226,39 +237,196 @@ test("AI only when the model ran; statistics in whole percents", () => {
   );
 });
 
-test("rank labels: stronger ranks keep their spot, colliding ones move up once or drop", () => {
-  const placed = placeRankLabels(
-    [
-      { rank: 4, x: 102, y: 50 },
-      { rank: 2, x: 103, y: 52 },
-      { rank: 1, x: 100, y: 50 },
-      { rank: 3, x: 101, y: 50 },
-      { rank: 5, x: 400, y: 5 },
-    ],
-    600,
+type Box = [number, number, number, number];
+const boxesOverlap = (a: Box, b: Box) =>
+  a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+/** Every label wholly inside the plot, no two overlapping. */
+function assertTidy(
+  labels: { rank: number; x: number; y: number }[],
+  width: number,
+  height: number,
+) {
+  const boxes = labels.map(rankLabelBox);
+  for (const [index, box] of boxes.entries()) {
+    assert.ok(
+      box[0] >= 0 && box[1] >= 0 && box[2] <= width && box[3] <= height,
+      `label ${labels[index].rank} ${JSON.stringify(box)} leaves ${width}x${height}`,
+    );
+    for (const other of boxes.slice(index + 1))
+      assert.ok(
+        !boxesOverlap(box, other),
+        `labels overlap ${labels[index].rank}`,
+      );
+  }
+}
+
+test("rank labels: above the dot when it fits; a peak at the top goes beside, inside the plot", () => {
+  // 1440x900 (104px) and 1024x768 (92px) cinema plots: the strongest peak
+  // (세기 1) has its dot 8px from the top, where a label above would be cut.
+  for (const [width, height] of [
+    [388, 104],
+    [251, 92],
+  ]) {
+    const peaks = [
+      { rank: 1, x: width / 2, y: 8 },
+      { rank: 2, x: width / 4, y: 60 },
+    ];
+    const placed = placeRankLabels(peaks, { width, height });
+    assert.deepEqual(
+      placed.map(({ rank }) => rank),
+      [1, 2],
+    );
+    assertTidy(placed, width, height);
+    const [top, low] = placed;
+    // Beside its dot (right), level with it, off its spike and dot.
+    const box = rankLabelBox(top);
+    assert.ok(box[0] > width / 2 + 3, "right of the spike");
+    assert.ok(box[1] >= 0 && box[1] < 8 && box[3] > 8, "level with the dot");
+    // Room above: the label sits over its dot, centred.
+    assert.equal(low.x, width / 4);
+    assert.ok(rankLabelBox(low)[3] <= 60 - 3);
+  }
+  // At the right edge the label goes to the left of the dot instead.
+  const [edge] = placeRankLabels([{ rank: 1, x: 297, y: 8 }], {
+    width: 300,
+    height: 92,
+  });
+  assert.ok(rankLabelBox(edge)[2] < 297 - 3);
+  assertTidy([edge], 300, 92);
+  // At the very bottom-left corner it still stays inside.
+  assertTidy(
+    placeRankLabels([{ rank: 10, x: 0, y: 92 }], { width: 300, height: 92 }),
+    300,
+    92,
   );
-  assert.deepEqual(
-    placed.map(({ rank, y }) => [rank, y]),
-    [
-      [1, 50],
-      [2, 39],
-      [5, 14],
-    ],
+});
+
+test("rank labels: clear of the selected period's line; crowded ones move or drop, rank 1 never", () => {
+  // The selected peak's line would run through a centred label ("1" vanishes
+  // in a vertical line): the label moves beside it.
+  const [selected] = placeRankLabels([{ rank: 1, x: 100, y: 50 }], {
+    width: 300,
+    height: 104,
+    avoidX: 100,
+  });
+  const box = rankLabelBox(selected);
+  assert.ok(box[0] > 101.5 || box[2] < 98.5, JSON.stringify(box));
+  // Without a selection it stays above its dot.
+  assert.equal(
+    placeRankLabels([{ rank: 1, x: 100, y: 50 }], {
+      width: 300,
+      height: 104,
+    })[0].x,
+    100,
   );
-  // Far apart: all stay where they were drawn.
-  assert.deepEqual(
-    placeRankLabels(
-      [
-        { rank: 1, x: 50, y: 40 },
-        { rank: 2, x: 200, y: 40 },
-      ],
-      600,
-    ).map(({ rank, x, y }) => [rank, x, y]),
-    [
-      [1, 50, 40],
-      [2, 200, 40],
-    ],
+  // A crowd: stronger ranks first, nobody overlaps or leaves the plot.
+  const crowd = [
+    { rank: 4, x: 102, y: 50 },
+    { rank: 2, x: 103, y: 52 },
+    { rank: 1, x: 100, y: 50 },
+    { rank: 3, x: 101, y: 50 },
+    { rank: 5, x: 290, y: 5 },
+  ];
+  const placed = placeRankLabels(crowd, { width: 300, height: 104 });
+  assert.equal(placed[0].rank, 1);
+  assert.ok(placed.some(({ rank }) => rank === 5));
+  assert.ok(placed.length >= 4 && placed.length <= 5);
+  assertTidy(placed, 300, 104);
+  // Random plots: always tidy, and rank 1 is always shown.
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  for (let trial = 0; trial < 300; trial++) {
+    const width = 150 + random() * 400,
+      height = 80 + random() * 60;
+    const peaks = Array.from(
+      { length: 1 + Math.floor(random() * 12) },
+      (_, i) => ({
+        rank: i + 1,
+        x: random() * width,
+        y: 8 + random() * (height - 16),
+      }),
+    );
+    const labels = placeRankLabels(peaks, {
+      width,
+      height,
+      avoidX: random() < 0.5 ? peaks[0].x : null,
+    });
+    assert.equal(labels[0]?.rank, 1);
+    assertTidy(labels, width, height);
+  }
+});
+
+test("cinema periodogram draws each rank label inside the plot, the top one off its spike", () => {
+  const texts: { text: string; x: number; y: number }[] = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get:
+        (_, name) =>
+        (...args: unknown[]) => {
+          if (name === "fillText")
+            texts.push({
+              text: String(args[0]),
+              x: Number(args[1]),
+              y: Number(args[2]),
+            });
+        },
+      set: () => true,
+    },
+  ) as CanvasRenderingContext2D;
+  // A cinema plot: 세기 0..1, the strongest peak at 1 (its dot 8px from the top).
+  const nPeriods = 400;
+  const power = Array.from({ length: nPeriods }, (_, index) =>
+    Math.max(
+      0.05,
+      Math.exp(-(((index - 200) / 3) ** 2)),
+      0.45 * Math.exp(-(((index - 120) / 3) ** 2)),
+      0.3 * Math.exp(-(((index - 395) / 3) ** 2)),
+    ),
   );
+  const grid = {
+    periodMinDays: 0.5,
+    periodMaxDays: 40,
+    nPeriods,
+    baselineHalfDays: 20,
+    power,
+  } as unknown as Periodogram;
+  const peaks = [200, 120, 395].map((gridIndex, index) => ({
+    rank: index + 1,
+    gridIndex,
+    periodDays: periodAt(grid, gridIndex),
+    power: power[gridIndex],
+  }));
+  for (const [width, height] of [
+    [388, 104],
+    [251, 92],
+  ]) {
+    texts.length = 0;
+    drawPeriodogram(
+      ctx,
+      { ...buildPeriodPlot(grid), yMin: 0, yMax: 1 },
+      { peaks, matchedCandidates: [] } as unknown as CandidatePeaks,
+      FULL_PERIOD_VIEW,
+      width,
+      height,
+      false,
+      "avoid",
+      peaks[0].periodDays,
+    );
+    assert.deepEqual(
+      texts.map(({ text }) => text),
+      ["1", "2", "3"],
+    );
+    const labels = texts.map(({ text, x, y }) => ({
+      rank: Number(text),
+      x,
+      y,
+    }));
+    assertTidy(labels, width, height);
+    const spike = (200 / (nPeriods - 1)) * width;
+    const top = rankLabelBox(labels[0]);
+    assert.ok(top[0] > spike + 3 || top[2] < spike - 3, "off the spike");
+  }
 });
 
 function outcome(patch: Partial<AnalysisOutcome> = {}): AnalysisOutcome {

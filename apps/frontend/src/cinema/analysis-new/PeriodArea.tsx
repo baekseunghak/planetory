@@ -29,11 +29,21 @@ import {
   type PeriodView,
 } from "../../features/analysis/periodogram-view";
 import { periodStrength } from "../analysis/bridge";
+import {
+  maxPower,
+  periodDays as periodText,
+  strength as strengthOf,
+  strengthText,
+} from "../analysis/format";
 import { drawPeriodogram, prepareCanvas } from "./draw";
 import { useElementSize } from "./hooks";
-import { format, moveCursor, periodKeyStep } from "./model";
-
-const days = new Intl.NumberFormat("ko-KR", { maximumSignificantDigits: 9 });
+import {
+  format,
+  moveCursor,
+  periodKeyStep,
+  periodPlotY,
+  placeRankTags,
+} from "./model";
 
 export type AreaState = "active" | "ready" | "idle";
 
@@ -77,6 +87,29 @@ export function PeriodArea({
 }) {
   const { periodogram, candidates } = data;
   const plotModel = useMemo(() => buildPeriodPlot(periodogram), [periodogram]);
+  // Drawn and read as 세기 (0..1, the strongest peak = 1), as the classic
+  // cinema chart does; choosing still uses the server's grid and periods.
+  const display = useMemo(() => {
+    const max = maxPower(periodogram.power);
+    return {
+      plot: {
+        ...plotModel,
+        grid: {
+          ...periodogram,
+          power: periodogram.power.map((power) => strengthOf(power, max)),
+        },
+        yMin: 0,
+        yMax: 1,
+      },
+      candidates: {
+        ...candidates,
+        peaks: candidates.peaks.map((peak) => ({
+          ...peak,
+          power: strengthOf(peak.power, max),
+        })),
+      },
+    };
+  }, [plotModel, periodogram, candidates]);
   const [view, setView] = useState<PeriodView>(() => {
     if (!initialViewport) return FULL_PERIOD_VIEW;
     const low = Math.max(
@@ -131,13 +164,13 @@ export function PeriodArea({
     if (ctx)
       drawPeriodogram(
         ctx,
-        plotModel,
-        candidates,
+        display.plot,
+        display.candidates,
         { zoom, center },
         size.width,
         size.height,
       );
-  }, [plotModel, candidates, zoom, center, size]);
+  }, [display, zoom, center, size]);
 
   // Wheel zoom only while the graph has focus, so the panel still scrolls.
   useEffect(() => {
@@ -313,6 +346,30 @@ export function PeriodArea({
   const selectedAt = selection
     ? periodFraction(periodogram, selection.periodDays)
     : null;
+  // Rank labels in px, inside the plot and apart (model.placeRankTags).
+  const peakByRank = new Map(display.candidates.peaks.map((p) => [p.rank, p]));
+  const tags =
+    size.width > 0 && size.height > 0
+      ? placeRankTags(
+          display.candidates.peaks
+            .map((peak) => ({
+              rank: peak.rank,
+              x:
+                (position(peak.gridIndex / (periodogram.nPeriods - 1)) / 100) *
+                size.width,
+              y: periodPlotY(peak.power, size.height),
+            }))
+            .filter((peak) => peak.x >= 0 && peak.x <= size.width),
+          {
+            width: size.width,
+            height: size.height,
+            avoidX:
+              selectedAt === null
+                ? null
+                : (position(selectedAt) / 100) * size.width,
+          },
+        )
+      : [];
   const sliderKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!selection || !tunable) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -392,13 +449,13 @@ export function PeriodArea({
                 aria-label={`${peak.rank}위 봉우리 선택`}
                 aria-pressed={pressed}
                 aria-disabled={!editable || undefined}
-                title={`주기 ${days.format(peak.periodDays)}일 · power ${days.format(peak.power)}`}
+                title={`주기 ${periodText(peak.periodDays, 3)} · 세기 ${strengthText(strengthOf(peak.power, maxPower(periodogram.power)))}`}
                 onClick={() =>
                   choose({ kind: "peak", gridIndex: peak.gridIndex })
                 }
               >
                 <span>{peak.rank}위</span>
-                <b>{peak.periodDays.toFixed(4)}</b>
+                <b>{format.period(peak.periodDays)}</b>
               </button>
             );
           })}
@@ -475,33 +532,24 @@ export function PeriodArea({
         onKeyDown={keyDown}
       >
         <canvas ref={canvas} aria-hidden="true" />
-        {candidates.peaks.map((peak) => {
-          const at = position(peak.gridIndex / (periodogram.nPeriods - 1));
-          if (at < 0 || at > 100) return null;
-          // Next to the peak's dot (same geometry as drawPeriodogram).
-          const y =
-            4 +
-            (1 -
-              (peak.power - plotModel.yMin) /
-                (plotModel.yMax - plotModel.yMin)) *
-              (size.height - 20);
+        {tags.map((tag) => {
+          const peak = peakByRank.get(tag.rank)!;
           return (
             <span
               key={peak.gridIndex}
               className="cx-peak-tag"
               aria-hidden="true"
+              data-rank={tag.rank}
+              data-side={tag.side}
               data-pressed={selection?.sourcePeakGridIndex === peak.gridIndex}
-              style={{
-                left: `calc(${at}% + 4px)`,
-                top: `${Math.max(1, y - 13)}px`,
-              }}
+              style={{ left: `${tag.x}px`, top: `${tag.y}px` }}
               onPointerDown={(event) => event.stopPropagation()}
               onPointerUp={(event) => event.stopPropagation()}
               onClick={() =>
                 choose({ kind: "peak", gridIndex: peak.gridIndex })
               }
             >
-              {peak.rank}
+              {tag.rank}
             </span>
           );
         })}
@@ -529,8 +577,8 @@ export function PeriodArea({
                 left: `${Math.max(8, Math.min(92, position(shown! / (periodogram.nPeriods - 1))))}%`,
               }}
             >
-              {days.format(plotModel.periods[shown!])}일 · power{" "}
-              {periodogram.power[shown!].toFixed(3)}
+              {periodText(plotModel.periods[shown!], 3)} · 세기{" "}
+              {strengthText(display.plot.grid.power[shown!])}
             </span>
           </>
         )}
@@ -541,6 +589,7 @@ export function PeriodArea({
         격자 한 칸, Home/End는 허용 범위 끝입니다. 직접 고를 때는 ←/→로 위치를
         옮긴 뒤 Enter를 누릅니다. +/−로 확대·축소, 0은 전체 보기입니다. 음영은
         관측 기간 절반을 넘는 주기, 보라 점선은 이미 찾은 신호의 주기입니다.
+        세기는 가장 강한 봉우리를 1로 둔 값입니다.
       </p>
       <div className="cx-tune">
         {selection && tunable ? (
@@ -559,7 +608,7 @@ export function PeriodArea({
               step="any"
               value={selection.periodDays}
               aria-describedby={sliderHintId}
-              aria-valuetext={`${days.format(selection.periodDays)}일`}
+              aria-valuetext={periodText(selection.periodDays, 3) ?? undefined}
               onChange={(event) => {
                 try {
                   tune(
@@ -572,9 +621,10 @@ export function PeriodArea({
               onKeyDown={sliderKey}
             />
             <span id={sliderHintId} className="cx-ro cx-tune-range">
-              {selection.minimum.toFixed(4)} – {selection.maximum.toFixed(4)}일
+              {format.period(selection.minimum)} –{" "}
+              {format.period(selection.maximum)}일
               <span className="cx-sr">
-                {` 허용 범위 · 조정 간격 ${days.format(selection.fineStep!)}일 · Page 키 ${days.format(selection.step!)}일`}
+                {" 조정 범위. 방향키는 한 칸씩, Page 키는 크게 움직입니다."}
               </span>
             </span>
           </>

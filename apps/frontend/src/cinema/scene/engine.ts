@@ -27,6 +27,7 @@ import { galaxyExposure } from "../../features/sky-renderer/exposure";
 import {
   SCENE_TIMING,
   type AnalysisHint,
+  type HomeFrame,
   type IgniteTarget,
   type PlanetPointer,
   type PlanetReveal,
@@ -56,6 +57,7 @@ import {
   CLICK_SLOP_PX,
   DEFAULT_VIEW,
   GHOST_PLANET_ID,
+  HOME_DISTANCE,
   HOVER_RADIUS_PX,
   STAR_RADIUS,
   SYSTEM_VIEW,
@@ -71,6 +73,7 @@ import {
   easeInOutCubic,
   easeOutCubic,
   fitDistance,
+  fitPointsInView,
   focalPx,
   lerp,
   orbitSlotRadius,
@@ -135,6 +138,10 @@ const DEFAULT_BOUNDS: Bounds = {
 };
 const UP = new Vector3(0, 1, 0);
 const toV = (v: Vec3) => new Vector3(v[0], v[1], v[2]);
+/** How far apart two poses are, relative to the first one's view distance. */
+const poseGap = (a: Pose, b: Pose) =>
+  Math.max(a.position.distanceTo(b.position), a.target.distanceTo(b.target)) /
+  Math.max(1e-6, a.position.distanceTo(a.target));
 const LOOK = {
   galaxy: 1,
   intro: 1,
@@ -156,8 +163,6 @@ const HAZE = {
   analysis: 0.25,
   transit: 0,
 };
-/** Home framing (after the fly-in, first placement): closer than 전체 보기. */
-const HOME_DISTANCE = 0.74;
 const BLOOM = {
   galaxy: 0.75,
   intro: 0.8,
@@ -736,14 +741,91 @@ export class SceneEngine implements SceneController {
       roll: DEFAULT_VIEW.roll * 0.4,
     };
   }
-  /** Where the galaxy rests: the overview, a little closer (arms to the edges). */
+  /**
+   * Where the galaxy rests: the overview, a little closer (arms to the
+   * edges), then moved just enough to keep the framed stars in view.
+   */
   private homePose(): Pose {
     const pose = this.overviewPose();
     pose.position
       .sub(pose.target)
       .multiplyScalar(HOME_DISTANCE)
       .add(pose.target);
-    return pose;
+    return this.keepFramed(pose);
+  }
+  /** Stars the home pose keeps in view (setHomeFrame), margins resolved. */
+  private homeFrame: {
+    ticIds: string[];
+    margin: { top: number; right: number; bottom: number; left: number };
+  } | null = null;
+  setHomeFrame(frame: HomeFrame | null) {
+    const ids = Array.isArray(frame?.ticIds)
+      ? frame.ticIds.filter(
+          (tic): tic is string => typeof tic === "string" && !!tic,
+        )
+      : [];
+    if (!frame || !ids.length) {
+      this.homeFrame = null;
+      return;
+    }
+    const px = (value: number | undefined) =>
+      Number.isFinite(value) ? Math.max(0, value as number) : 0;
+    const m = frame.margin ?? { right: 0, bottom: 0 };
+    this.homeFrame = {
+      ticIds: ids,
+      margin: {
+        top: px(m.top),
+        right: px(m.right),
+        bottom: px(m.bottom),
+        left: px(m.left),
+      },
+    };
+  }
+  /**
+   * `pose` panned in its view plane, then moved back, only as far as the
+   * framed stars need to sit inside the canvas less the frame's margins
+   * (fitPointsInView). Unchanged when they already do, before the stars
+   * have arrived, or while the view has no real size yet.
+   */
+  private keepFramed(pose: Pose): Pose {
+    const frame = this.homeFrame;
+    if (!frame || this.stars.decorative) return pose;
+    const points: Vec3[] = [];
+    for (const tic of frame.ticIds) {
+      const world = this.stars.worldOf(tic);
+      if (world) points.push([world.x, world.y, world.z]);
+    }
+    if (!points.length) return pose;
+    const view = this.rig.targetView();
+    const back = pose.position.clone().sub(pose.target);
+    const distance = back.length();
+    if (!(distance > 0)) return pose;
+    back.normalize();
+    const m = frame.margin;
+    const fit = fitPointsInView(
+      points,
+      [pose.target.x, pose.target.y, pose.target.z],
+      cameraBasis([back.x, back.y, back.z], pose.roll),
+      distance,
+      focalPx(view.height),
+      {
+        x: view.free.x + view.free.width / 2,
+        y: view.free.y + view.free.height / 2,
+      },
+      {
+        left: m.left,
+        top: m.top,
+        right: view.width - m.right,
+        bottom: view.height - m.bottom,
+      },
+    );
+    if (!fit.moved) return pose;
+    const target = toV(fit.target);
+    return {
+      position: target.clone().addScaledVector(back, fit.distance),
+      target,
+      roll: pose.roll,
+    };
   }
   /** Horizontal direction from `world` toward the camera. */
   private approachDirection(world: Vector3) {
@@ -908,7 +990,19 @@ export class SceneEngine implements SceneController {
           lift: 0.04,
         },
       );
-      if (arrived || token === this.token) this.applyControls();
+      // The stars (or the stars to keep in view) came in while flying: the
+      // pose the flight aimed at was made without them. Glide on to the
+      // real home framing before the galaxy counts as at rest.
+      if (arrived && token === this.token) {
+        const home = this.homePose();
+        if (poseGap(this.rig.pose(), home) > 0.01)
+          await this.rig.fly(home, this.ms(1100), {
+            arc: 0,
+            lift: 0,
+            now: this.now,
+          });
+      }
+      if (token === this.token) this.applyControls();
     };
     return this.track(run());
   }
@@ -919,8 +1013,9 @@ export class SceneEngine implements SceneController {
     this.set({ mode: "galaxy", focusedTicId: null, focusedPlanetId: null });
     this.rig.controls.enabled = false;
     const run = async () => {
+      // 전체 보기 never frames tighter than home: the framed stars stay in.
       await this.galaxyFlight(
-        this.overviewPose(),
+        this.keepFramed(this.overviewPose()),
         open ? SCENE_TIMING.toGalaxyMs : SCENE_TIMING.overviewMs,
         token,
         { arc: open ? -0.2 : 0.1, lift: open ? 0.2 : 0.05 },

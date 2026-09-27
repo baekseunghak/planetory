@@ -454,7 +454,10 @@ function ReadyWorkspace({
       guide={guide}
       tools={
         <>
-          <CurveSteps context={entry} />
+          <CurveSteps
+            context={entry}
+            found={receipt?.progress.matchedCandidateIds.length}
+          />
           <DataButton
             context={context}
             viewedBundleId={context.curveContext.bundleId}

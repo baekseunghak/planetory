@@ -1,30 +1,44 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { ClassicAnalysis } from "../analysis-classic";
 import { CinematicAnalysis } from "../analysis-new";
-import { cinemaDevTools } from "./dev-tools";
+import { cinemaAnalysisNew, cinemaDevTools } from "./dev-tools";
+import {
+  ANALYSIS_VARIANT_KEY,
+  planAnalysisVariant,
+  type AnalysisVariant,
+} from "./variant";
 import "./analysis-switch.css";
 
 // Route element for /analysis/:ticId. Both variants read the route themselves
 // (usePageContext) and emit the same bridge events (./bridge).
 
-export type AnalysisVariant = "classic" | "cinematic";
-export const ANALYSIS_VARIANT_KEY = "planetory:analysis-variant";
-export const DEFAULT_ANALYSIS_VARIANT: AnalysisVariant = "classic";
+export type { AnalysisVariant };
+export { ANALYSIS_VARIANT_KEY };
+/** The build's variant (VITE_CINEMA_ANALYSIS, classic unless "new"). */
+export const DEFAULT_ANALYSIS_VARIANT: AnalysisVariant = cinemaAnalysisNew
+  ? "cinematic"
+  : "classic";
 
 const variants: Record<AnalysisVariant, ComponentType> = {
   classic: ClassicAnalysis,
   cinematic: CinematicAnalysis,
 };
 
-export function readAnalysisVariant(): AnalysisVariant {
+function readStored(): string | null {
   try {
-    const value = localStorage.getItem(ANALYSIS_VARIANT_KEY);
-    return value === "classic" || value === "cinematic"
-      ? value
-      : DEFAULT_ANALYSIS_VARIANT;
+    return localStorage.getItem(ANALYSIS_VARIANT_KEY);
   } catch {
-    return DEFAULT_ANALYSIS_VARIANT;
+    return null;
   }
+}
+
+/** The toggle's current choice (developer tools): stored, else the build's. */
+export function readAnalysisVariant(): AnalysisVariant {
+  return planAnalysisVariant({
+    build: cinemaAnalysisNew,
+    devTools: true,
+    stored: readStored(),
+  }).variant;
 }
 
 export function writeAnalysisVariant(value: AnalysisVariant): void {
@@ -81,7 +95,8 @@ export function AnalysisVariantToggle({
  * Switching remounts the analysis. Drafts survive (session draft storage) and
  * an in-flight submission keeps its request ID for recovery, as on reload.
  *
- * Members get the classic variant and no toggle: the A/B choice is the
+ * Members get the build's variant (./variant.ts: classic unless the build
+ * defines VITE_CINEMA_ANALYSIS=new) and no toggle: the A/B choice is the
  * team's, not theirs. The toggle (and a stored choice) only count on a dev
  * server started with VITE_CINEMA_DEV_TOOLS=true (./dev-tools.ts).
  */
@@ -90,10 +105,15 @@ export function AnalysisSwitch({
 }: {
   toggleClassName?: string;
 }) {
-  return cinemaDevTools ? (
-    <DevAnalysisSwitch toggleClassName={toggleClassName} />
+  // Both flags are build constants, so a production build keeps neither the
+  // toggle nor the variant it does not show. A choice a member's browser may
+  // hold from an earlier dev session is never read here.
+  if (cinemaDevTools)
+    return <DevAnalysisSwitch toggleClassName={toggleClassName} />;
+  return cinemaAnalysisNew ? (
+    <CinematicAnalysis key="cinematic" />
   ) : (
-    <ClassicAnalysis key={DEFAULT_ANALYSIS_VARIANT} />
+    <ClassicAnalysis key="classic" />
   );
 }
 

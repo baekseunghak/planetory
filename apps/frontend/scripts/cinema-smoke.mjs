@@ -172,6 +172,13 @@ if (only.has("newcomer"))
     await shot("n01-login");
     await page.getByRole("button", { name: /SSAFY 계정으로 로그인/ }).click();
     await expect(page).toHaveURL(/\/sky/, { timeout: 20000 });
+    // First login: the story over the far galaxy; 시작하기 starts the fly-in.
+    const start = page.locator(".cinema-story").getByRole("button", {
+      name: "시작하기",
+    });
+    await expect(start).toBeVisible({ timeout: 20000 });
+    await shot("n02-story");
+    await start.click();
     await page.waitForTimeout(2400);
     await shot("n02-fly-in");
     // The first visit flies to tutorial 1 by itself.

@@ -698,3 +698,42 @@ test("the director flies intro -> galaxy -> star -> analysis and back", async ()
   assert.equal(scene.getState().focusedTicId, null);
   assert.equal(arrived, 2);
 });
+
+test("the first-login story holds the galaxy far away; its end starts the fly-in", async () => {
+  const { scene, calls } = recording();
+  const flight = { current: null as { ticId: string; loaded: boolean } | null };
+  let arrived = 0;
+  const intro: boolean[] = [];
+  const run = (holdIntro: boolean) =>
+    directStage(
+      scene,
+      { stage: "galaxy", ticId: null },
+      {
+        starLoaded: false,
+        flight,
+        current: () => true,
+        onGalaxy: () => arrived++,
+        onIntro: (playing) => intro.push(playing),
+        holdIntro,
+      },
+    );
+  // Right after login: already far away, nothing moves, nobody arrives.
+  scene.setMode("intro");
+  calls.length = 0;
+  await run(true);
+  assert.deepEqual(calls, []);
+  assert.equal(scene.getState().mode, "intro");
+  assert.equal(arrived, 0, "no first-visit flight while the story is on");
+  assert.deepEqual(intro, []);
+  // 시작하기: the fly-in, then the galaxy (and the first-visit flight).
+  await run(false);
+  assert.deepEqual(names(calls), ["playIntro", "setSystem"]);
+  assert.equal(arrived, 1);
+  assert.deepEqual(intro, [true, false]);
+  // A newcomer already on the galaxy (no login fly-in pending) is taken
+  // back out for the story.
+  calls.length = 0;
+  await run(true);
+  assert.deepEqual(calls, [["setMode", "intro"]]);
+  assert.equal(scene.getState().mode, "intro");
+});

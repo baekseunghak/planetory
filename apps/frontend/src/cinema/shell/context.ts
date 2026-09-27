@@ -23,6 +23,11 @@ export type Shell = {
   firstVisit: boolean;
   /** Takes the flight: true only the first time for this member. */
   markFirstVisitFlown(): boolean;
+  /**
+   * The first-login story is on screen (FirstStory, newcomers once per
+   * member): the galaxy waits far away, and so does the flight above.
+   */
+  story: boolean;
   /** Star that just ignited, marked until the member's next interaction. */
   newStar: string | null;
   clearNewStar(): void;

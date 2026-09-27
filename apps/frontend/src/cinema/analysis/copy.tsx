@@ -9,6 +9,7 @@ import { CinemaDataDetails } from "./results/DataDetails";
 import { CinemaHistoryDetail } from "./results/HistoryDetail";
 import { CinemaSignalName } from "./results/SignalName";
 import { CinemaStarResult } from "./results/StarResult";
+import "./periodogram.css";
 
 export const cinemaAnalysisCopy = {
   /** Numbers, names and words (./format.ts). */

@@ -266,13 +266,18 @@ export function AcceptedResult(props: AcceptedResultProps) {
       label: "다음 곡선 단계로",
       run: nextCurve,
     };
-  const again = (step: 1 | 2): Action => ({
+  const again = (
+    step: 1 | 2,
+    label = step === 2 ? "구간 다시 잡기" : "주기부터 다시 고르기",
+  ): Action => ({
     kind: "button",
     key: `AGAIN-${step}`,
-    label: step === 2 ? "구간 다시 잡기" : "주기부터 다시 고르기",
+    label,
     run: () => {
-      // Back to the analysis with the period (and window) as they were; the
-      // result closes and a new submission can be made.
+      // Back to the analysis with the period (and window) as they were, at
+      // that step (as its step button does); the result closes and a new
+      // submission can be made. A new period there clears the window and
+      // judgment once it has folded, as it always does.
       dismiss();
       setDraft((previous) => ({
         ...previous,
@@ -290,8 +295,9 @@ export function AcceptedResult(props: AcceptedResultProps) {
   let next: Action | null;
   let rest: Action[];
   if (missed) {
+    // The window is the usual miss; the period may be too.
     next = again(2);
-    rest = [];
+    rest = [again(1, "주기 다시 고르기")];
   } else if (ambiguous) {
     next = again(1);
     rest = [];

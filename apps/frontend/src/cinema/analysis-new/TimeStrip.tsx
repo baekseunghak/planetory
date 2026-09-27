@@ -3,12 +3,14 @@ import type { CurveSegment } from "../../features/analysis/analysis-data";
 import { useCurrentPhasePreview } from "../../features/analysis/AnalysisSession";
 import { buildTimeCurve } from "../../features/analysis/time-curve";
 import { projectTransitBands } from "../../features/analysis/transit-bands";
+import { count, days, fluxUnit as unitText } from "../analysis/format";
 import { drawStrip, prepareCanvas } from "./draw";
 import { useElementSize } from "./hooks";
 
 /**
  * Raw time curve as a thin strip. Once a valid window exists, the predicted
- * repeats of that window are shaded (classic TransitBands, read only).
+ * repeats of that window are shaded (classic TransitBands, read only). The
+ * span reads as days of observation, not BTJD (the cinema glossary).
  */
 export function TimeStrip({
   segments,
@@ -54,7 +56,7 @@ export function TimeStrip({
         <span className="cx-sublabel">밝기 변화</span>
         <span className="cx-ro">
           {first !== undefined && last !== undefined
-            ? `BTJD ${first.toFixed(1)} – ${last.toFixed(1)}`
+            ? `관측 ${days(last - first)}`
             : ""}
           {preview ? ` · 예상 반복 ${projection.bands.length}회` : ""}
         </span>
@@ -63,7 +65,7 @@ export function TimeStrip({
         ref={plot}
         className="cx-strip-plot"
         role="img"
-        aria-label={`시간에 따른 밝기 변화. 관측점 ${curve.points.length.toLocaleString("ko-KR")}개, 밝기 단위 ${fluxUnit}.${preview ? ` 선택한 구간이 반복될 위치 ${projection.bands.length}곳을 표시합니다.` : ""}`}
+        aria-label={`시간에 따른 밝기 변화. 관측점 ${count(curve.points.length)}개${unitText(fluxUnit) ? `, 밝기 단위 ${unitText(fluxUnit)}` : ""}.${preview ? ` 선택한 구간이 반복될 위치 ${projection.bands.length}곳을 표시합니다.` : ""}`}
         data-testid="cx-time-strip"
         data-band-count={projection.bands.length}
       >

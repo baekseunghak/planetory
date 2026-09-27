@@ -12,7 +12,8 @@ import {
 } from "../../features/analysis/periodogram-view";
 import type { TimeCurve } from "../../features/analysis/time-curve";
 import type { TransitBand } from "../../features/analysis/transit-bands";
-import { binsForWidth, foldBins } from "./model";
+import { phaseTick, periodTick } from "../analysis/format";
+import { binsForWidth, foldBins, PERIOD_PLOT, periodPlotY } from "./model";
 
 // Same values as src/cinema/styles/tokens.css (canvas cannot read var()).
 export const PALETTE = {
@@ -91,7 +92,12 @@ export function drawStrip(
 
 const TICKS = [0.5, 1, 2, 3, 5, 10, 20, 40, 80, 160];
 
-/** Periodogram: power on the server's log grid, peaks, matched periods. */
+/**
+ * Periodogram on the server's log grid, drawn as 세기 (0..1, the strongest
+ * peak = 1; `plot` and `candidates` carry strengths), with peaks and the
+ * periods already matched. Room above the tallest peak is left for its rank
+ * label (PERIOD_PLOT, shared with the DOM labels).
+ */
 export function drawPeriodogram(
   ctx: CanvasRenderingContext2D,
   plot: PeriodPlot,
@@ -100,13 +106,12 @@ export function drawPeriodogram(
   width: number,
   height: number,
 ) {
-  const { grid, yMin, yMax } = plot;
+  const { grid } = plot;
   const { low, high } = periodViewBounds(view);
   const span = high - low;
-  const axis = 14;
+  const axis = PERIOD_PLOT.axis;
   const x = (fraction: number) => ((fraction - low) / span) * width;
-  const y = (power: number) =>
-    4 + (1 - (power - yMin) / (yMax - yMin)) * (height - axis - 6);
+  const y = (strength: number) => periodPlotY(strength, height);
   ctx.save();
   // Periods beyond half the observing baseline, as in the classic chart.
   const boundary = x(periodFraction(grid, grid.baselineHalfDays));
@@ -171,7 +176,7 @@ export function drawPeriodogram(
       Math.min(width - 14, x(periodFraction(grid, tick))),
     );
     ctx.fillText(
-      `${Number(tick.toPrecision(3))}${tick === ticks[ticks.length - 1] ? " d" : ""}`,
+      `${periodTick(tick)}${tick === ticks[ticks.length - 1] ? "일" : ""}`,
       px,
       height - 3,
     );
@@ -235,11 +240,10 @@ export function drawFold(
   ctx.fillStyle = PALETTE.faint;
   ctx.font = MONO;
   ctx.textAlign = "center";
-  const digits = view.zoom >= 8 ? 3 : 2;
   for (let i = 0; i <= 4; i++) {
     const value = low + ((high - low) * i) / 4;
     ctx.fillText(
-      value.toFixed(digits),
+      phaseTick(value),
       Math.max(16, Math.min(width - 16, x(value))),
       height - 3,
     );

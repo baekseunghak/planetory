@@ -32,6 +32,12 @@ import type {
   AnalysisOutcomeKind,
   WindowSelection,
 } from "../analysis/bridge.ts";
+import {
+  fixed,
+  foundTitle,
+  resultTitle,
+  strengthText,
+} from "../analysis/format.ts";
 
 /* ------------------------------------------------------------------ fold */
 
@@ -421,7 +427,10 @@ const ACHIEVEMENT_CHIP: Partial<Record<AchievementResult, [string, Tone]>> = {
 /**
  * The compact result shown in the panel. Every chip comes from a real field
  * of the accepted receipt (match status, evaluation, achievement, unlocked
- * stars); nothing is inferred from another axis.
+ * stars); nothing is inferred from another axis. Titles are the cinema's
+ * (../analysis/format.ts `resultTitle`, the same words as the result dialog
+ * and the discovery card): a confirmed planet is "알려진 행성 … 을 직접
+ * 찾아냈습니다", "발견" is kept for candidates.
  */
 export function inlineResult(
   outcome: Pick<
@@ -429,65 +438,42 @@ export function inlineResult(
     "kind" | "matchStatus" | "evaluation" | "achievement" | "planet"
   >,
 ): InlineResult {
+  const planet = outcome.planet;
+  const title = resultTitle({
+    matchStatus: outcome.matchStatus,
+    achievement: outcome.achievement.result,
+    disposition: planet?.disposition,
+    knownName: planet?.knownName ?? null,
+  });
   const head = ((): Omit<InlineResult, "chips" | "kind"> => {
     switch (outcome.kind) {
       case "matched":
-        return outcome.planet?.isPlanet === false
-          ? {
-              tone: "good",
-              eyebrow: "판정 일치",
-              title: "행성이 아닌 신호를 가려냈습니다",
-            }
-          : {
-              tone: "good",
-              eyebrow: "발견",
-              title:
-                outcome.planet?.isPlanet === true
-                  ? "행성 신호를 찾았습니다"
-                  : "신호를 찾았습니다",
-            };
+        return !planet
+          ? { tone: "good", eyebrow: "신호 찾음", title: "신호를 찾았습니다" }
+          : planet.disposition === "FP"
+            ? { tone: "good", eyebrow: "판단 일치", title }
+            : planet.disposition === "CONFIRMED"
+              ? { tone: "good", eyebrow: "행성 찾음", title }
+              : { tone: "new", eyebrow: "후보 발견", title };
       case "judgmentMismatch":
-        return {
-          tone: "warn",
-          eyebrow: "판단 불일치",
-          title: "구간은 맞았고, 판단은 달랐습니다",
-        };
+        return { tone: "warn", eyebrow: "판단 불일치", title };
       case "pendingPublish":
         return {
           tone: "info",
           eyebrow: "공개 대기",
-          title: "신호와 맞았습니다. 공개하면 성과 판정을 받습니다",
+          title: planet
+            ? foundTitle(planet.disposition, planet.knownName)
+            : title,
         };
       case "duplicate":
-        return {
-          tone: "info",
-          eyebrow: "이미 찾은 신호",
-          title: "이미 찾은 신호입니다",
-        };
+        return { tone: "info", eyebrow: "이미 찾은 신호", title };
       case "numericMismatch":
-        return {
-          tone: "bad",
-          eyebrow: "신호 불일치",
-          title: "고른 주기와 구간에서 맞는 신호를 찾지 못했습니다",
-        };
+        return { tone: "bad", eyebrow: "신호 불일치", title };
       case "ambiguous":
-        return {
-          tone: "warn",
-          eyebrow: "판정 보류",
-          title: "어느 신호인지 가리지 못했습니다",
-        };
+        return { tone: "warn", eyebrow: "판정 보류", title };
       case "noCandidate":
-        return {
-          tone: "info",
-          eyebrow: "접수",
-          title: "더 이상 없음으로 접수했습니다",
-        };
       case "skipped":
-        return {
-          tone: "info",
-          eyebrow: "접수",
-          title: "이 별을 건너뛰었습니다",
-        };
+        return { tone: "info", eyebrow: "접수", title };
       default:
         return {
           tone: "info",
@@ -601,7 +587,7 @@ export function submissionView(
       title: "제출하고 있습니다",
       message:
         state.phase === "sending"
-          ? "서버에 보내는 중입니다. 응답을 받지 못해도 같은 요청 번호로 결과를 확인하므로 두 번 접수되지 않습니다."
+          ? "보내는 중입니다. 연결이 끊겨도 같은 제출은 한 번만 접수됩니다."
           : "접수 결과를 확인하고 있습니다.",
       actions: [],
     };
@@ -622,9 +608,8 @@ export function submissionView(
         message:
           "이 단계의 계산이 아직 끝나지 않았습니다. 준비되면 같은 내용을 그대로 다시 보낼 수 있습니다.",
         actions: options.canPrepare ? ["prepare", "dismiss"] : ["dismiss"],
-        note: state.residual
-          ? `${residualNote(state.residual.status)}${state.residual.jobId ? ` · 작업 번호 ${state.residual.jobId}` : ""}`
-          : null,
+        // The job id is an internal number; the state is what matters.
+        note: state.residual ? residualNote(state.residual.status) : null,
       };
     case "bundle-changed":
       return {
@@ -672,11 +657,16 @@ export function submissionView(
 
 /* ---------------------------------------------------------------- format */
 
+/**
+ * Figures as the panel prints them, by the cinema glossary
+ * (../analysis/format.ts): periods 3 decimals (they are compared side by
+ * side), hours 1 decimal, phase 3 decimals, depth % 2 decimals, 세기 0..1.
+ * Units are added by the caller ("일", "시간", "%"). BTJD never shows here.
+ */
 export const format = {
-  period: (days: number) => days.toFixed(6),
-  hours: (hours: number) => hours.toFixed(2),
-  btjd: (value: number) => value.toFixed(4),
-  phase: (value: number) => value.toFixed(4),
+  period: (days: number) => fixed(days, 3),
+  hours: (hours: number) => fixed(hours, 1),
+  phase: (value: number) => fixed(value, 3),
   /** Relative depth as a percentage with two decimals. */
   depth: (depth: number | null) => {
     if (depth === null) return "—";
@@ -684,5 +674,116 @@ export const format = {
     // Never print "-0.00" for a flat window.
     return (percent === 0 ? 0 : percent).toFixed(2);
   },
-  strength: (value: number) => value.toFixed(2),
+  strength: (value: number) => strengthText(value),
 };
+
+/* ------------------------------------------------------ periodogram plot */
+
+/** Room kept above the tallest peak for its rank label, and the tick row. */
+export const PERIOD_PLOT = { top: 17, bottom: 16, axis: 14 } as const;
+
+/**
+ * y (CSS px) of a 세기 value (0..1) on a periodogram plot `height` tall. The
+ * strongest peak sits PERIOD_PLOT.top below the edge, so its label fits
+ * above it; the canvas and the DOM labels share this.
+ */
+export function periodPlotY(strength: number, height: number): number {
+  const value = Math.max(0, Math.min(1, strength));
+  const span = Math.max(0, height - PERIOD_PLOT.top - PERIOD_PLOT.bottom);
+  return PERIOD_PLOT.top + (1 - value) * span;
+}
+
+export type RankTag = {
+  rank: number;
+  /** Text centre (x) and top (y) of the label, CSS px. */
+  x: number;
+  y: number;
+  /** Where it sits relative to its peak dot. */
+  side: "above" | "right" | "left";
+};
+
+/** Label metrics of .cx-peak-tag (10px Plex Mono, 12px line). */
+export const RANK_TAG = {
+  digit: 6.2,
+  padding: 4,
+  height: 12,
+  dot: 3,
+  gap: 2,
+} as const;
+
+type Box = [left: number, top: number, right: number, bottom: number];
+const overlap = (a: Box, b: Box) =>
+  a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+
+/**
+ * Rank labels of the recommended peaks, inside the plot and apart (the same
+ * rule as the classic cinema chart). Stronger ranks first; each tries above
+ * its dot, then beside it (right, left), then one line higher. A spot must be
+ * inside the plot (above the tick row) and clear of labels already placed;
+ * it should also clear the other dots and the selected period's line
+ * (`avoidX`), which is waived when nothing else fits. A label with no spot
+ * left is dropped (its peak keeps its chip). The strongest always fits in a
+ * plot of a sensible size.
+ */
+export function placeRankTags(
+  peaks: readonly { rank: number; x: number; y: number }[],
+  plot: { width: number; height: number; avoidX?: number | null },
+): RankTag[] {
+  const { width, height, avoidX = null } = plot;
+  const bottom = height - PERIOD_PLOT.axis;
+  const { digit, padding, height: line, dot, gap } = RANK_TAG;
+  const dots: Box[] = peaks.map(({ x, y }) => [
+    x - dot,
+    y - dot,
+    x + dot,
+    y + dot,
+  ]);
+  const avoid: Box | null =
+    avoidX === null || !Number.isFinite(avoidX)
+      ? null
+      : [avoidX - 1.5, 0, avoidX + 1.5, height];
+  const placed: { tag: RankTag; box: Box }[] = [];
+  for (const peak of [...peaks].sort((a, b) => a.rank - b.rank)) {
+    const half = (String(peak.rank).length * digit + padding) / 2;
+    const centred = Math.max(half, Math.min(width - half, peak.x));
+    const level = peak.y - line / 2;
+    const above = peak.y - dot - gap - line;
+    const spots: RankTag[] = [
+      { rank: peak.rank, x: centred, y: above, side: "above" },
+      {
+        rank: peak.rank,
+        x: peak.x + dot + gap + half,
+        y: level,
+        side: "right",
+      },
+      {
+        rank: peak.rank,
+        x: peak.x - dot - gap - half,
+        y: level,
+        side: "left",
+      },
+      { rank: peak.rank, x: centred, y: above - line, side: "above" },
+    ];
+    const usable = spots
+      .map((tag) => ({
+        tag,
+        box: [tag.x - half, tag.y, tag.x + half, tag.y + line] as Box,
+      }))
+      .filter(
+        ({ box }) =>
+          box[0] >= 0 &&
+          box[1] >= 0 &&
+          box[2] <= width &&
+          box[3] <= bottom &&
+          !placed.some((other) => overlap(box, other.box)),
+      );
+    const spot =
+      usable.find(
+        ({ box }) =>
+          !dots.some((other) => overlap(box, other)) &&
+          !(avoid && overlap(box, avoid)),
+      ) ?? usable[0];
+    if (spot) placed.push(spot);
+  }
+  return placed.map(({ tag }) => tag);
+}

@@ -61,6 +61,16 @@ export type ViewInset = {
   left?: number;
 };
 
+/**
+ * Stars the galaxy's resting framing keeps on screen (the shell's tutorial
+ * markers), each inside the canvas less `margin` (CSS px from the edges:
+ * the top bar, the bottom HUD, room for a marker drawn above its star).
+ */
+export type HomeFrame = {
+  ticIds: readonly string[];
+  margin: ViewInset;
+};
+
 export type PhaseWindow = {
   /** Phase in [0, 1). `endPhase` may exceed 1 when the window wraps. */
   startPhase: number;
@@ -184,6 +194,15 @@ export interface SceneController {
    */
   holdStars?(ticIds: readonly string[] | null): void;
   /**
+   * Optional (added): stars the home framing keeps in view. The pose the
+   * galaxy rests in (the end of `playIntro`, and where `focusStar` returns
+   * to when it left from the intro) pans and then moves back only as much
+   * as these stars need; a home pose that already shows them is unchanged.
+   * Read when a home pose is made, so the stars may arrive later through
+   * `setStars`. `null` (or no stars) clears it.
+   */
+  setHomeFrame?(frame: HomeFrame | null): void;
+  /**
    * Bloom, nebula and dust: the member's explicit choice, which holds on
    * every power tier. Without a call the tier decides (on at `full` only).
    */
@@ -297,6 +316,7 @@ export function createNoopSceneController(): SceneController {
     revealPlanet: done,
     ignite: done,
     holdStars: () => undefined,
+    setHomeFrame: () => undefined,
     setEffects: (effects) => update({ effects }),
     projectStar: () => null,
     projectPlanet: () => null,

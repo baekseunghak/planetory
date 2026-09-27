@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { Link } from "react-router-dom";
 import { usePageContext } from "../../app/usePageContext";
 import type { AnalysisContext } from "../../features/analysis/analysis-data";
 import {
@@ -13,7 +14,6 @@ import {
   type JudgmentDraft,
   type PeriodogramViewport,
 } from "../../features/analysis/analysis-judgment";
-import { NextActions } from "../../features/analysis/AnalysisResult";
 import {
   useAnalysisFold,
   useBundleRecovery,
@@ -22,7 +22,10 @@ import {
 } from "../../features/analysis/AnalysisSession";
 import { useAnalysisStage } from "../../features/analysis/analysis-stage";
 import type { SelectionIssue } from "../../features/analysis/selection-rules";
-import { acceptedOnOlderBundle } from "../../features/analysis/submission-data";
+import {
+  acceptedOnOlderBundle,
+  type SubmissionReceipt,
+} from "../../features/analysis/submission-data";
 import {
   candidateInput,
   noCandidateInput,
@@ -32,8 +35,15 @@ import {
 import type { useSubmission } from "../../features/analysis/use-submission";
 import { useModalDialog } from "../../features/analysis/use-modal-dialog";
 import type { AnalysisOutcome } from "../analysis/bridge";
+import * as f from "../analysis/format";
+import {
+  isMemberPlanet,
+  matchedSignalLabel,
+  useStagePlanetIds,
+} from "../analysis/results/labels";
 import {
   acceptedNotice,
+  format,
   inlineResult,
   submissionView,
   type SubmissionAction,
@@ -88,7 +98,10 @@ export function JudgeArea({
   const curveStep = useCurveStepSession();
   const { returnTo, currentPath } = usePageContext();
   const [issues, setIssues] = useState<SelectionIssue[]>([]);
-  const [detailOpen, setDetailOpen] = useState(false);
+  // Which accepted submission's full result is open. Keyed to the
+  // submission, so a result left through "구간 다시 잡기" (which never closes
+  // the dialog itself) does not open the next result's dialog on its own.
+  const [detailFor, setDetailFor] = useState<string | null>(null);
   const hintId = useId(),
     memoId = useId(),
     errorId = useId();
@@ -116,6 +129,10 @@ export function JudgeArea({
   const settled =
     submission.state.phase === "settled" ? submission.state : null;
   const accepted = submission.accepted;
+  // Leaving the result (a new submission, "구간 다시 잡기") closes it too.
+  useEffect(() => {
+    if (!accepted) setDetailFor(null);
+  }, [accepted]);
 
   // Move focus to the result or the problem only when it appears.
   const lastSettled = useRef<unknown>(null);
@@ -231,12 +248,35 @@ export function JudgeArea({
             curveStep: progress.matchedCandidateIds.length,
             removedCandidateIds: progress.matchedCandidateIds,
           });
-          setDetailOpen(false);
+          setDetailFor(null);
         }
       : undefined;
 
   const result = accepted && outcome ? inlineResult(outcome) : null;
+  // A judgment belongs to the window it confirmed. After the window changes
+  // (a new drag, or "구간 다시 잡기") it shows unchosen until picked again,
+  // which confirms the new window; a stale tick next to a disabled
+  // "제출값 확인" reads as a broken button.
+  const chosen =
+    ready && confirmed && stage >= 3 ? state.judgment.userJudgment : null;
+  const planetIds = useStagePlanetIds(context.ticId);
   const memoCount = memoCodePoints(state.judgment.memo);
+  /**
+   * Back to a step with the period (and window) as they were: the result
+   * leaves (the submission returns to idle) and a new submission can be
+   * made. The same move as the result dialog's "구간 다시 잡기" /
+   * "주기 다시 고르기". Going back to the window hands focus to its handle.
+   */
+  const again = (step: 1 | 2) => {
+    setDetailFor(null);
+    submission.dismiss();
+    setState((previous) => ({
+      ...previous,
+      editingStep: step,
+      review: null,
+      focus: step === 2 && previous.range ? previous.focus + 1 : previous.focus,
+    }));
+  };
 
   return (
     <section
@@ -276,20 +316,27 @@ export function JudgeArea({
           <h3 ref={settledRef} tabIndex={-1}>
             {result.title}
           </h3>
-          <ul className="cx-result-chips" aria-label="결과 요약">
-            {result.chips.map((chip) => (
-              <li key={chip.label} data-tone={chip.tone}>
-                {chip.label}
-              </li>
-            ))}
-          </ul>
-          <p className="cx-note">
-            {acceptedNotice(accepted.recovered, accepted.receipt.outcome)}
+          <p className="cx-result-lead" data-testid="cx-result-lead">
+            {resultLead(accepted.receipt, outcome, planetIds)}
           </p>
+          {result.chips.length > 0 && (
+            <ul className="cx-result-chips" aria-label="결과 요약">
+              {result.chips.map((chip) => (
+                <li key={chip.label} data-tone={chip.tone}>
+                  {chip.label}
+                </li>
+              ))}
+            </ul>
+          )}
+          {(accepted.recovered || accepted.receipt.outcome === "replayed") && (
+            <p className="cx-note">
+              {acceptedNotice(accepted.recovered, accepted.receipt.outcome)}
+            </p>
+          )}
           {stale && (
             <p className="cx-note" data-tone="warn" data-testid="cx-stale">
-              이 결과는 접수 당시 판 기준입니다. 그 뒤 별의 자료 판이 바뀌었으니
-              분석을 이어가려면 최신 자료를 다시 불러와 주세요.{" "}
+              이 결과는 제출할 때의 자료 기준입니다. 그 뒤 별의 자료가
+              바뀌었으니 이어서 분석하려면 최신 자료를 불러와 주세요.{" "}
               {recoverBundle && (
                 <button
                   type="button"
@@ -301,29 +348,16 @@ export function JudgeArea({
               )}
             </p>
           )}
-          <div className="cx-actions">
-            <button
-              type="button"
-              className="cx-primary"
-              // The discovery card's "결과 자세히 보기" opens this same view.
-              data-result-details=""
-              onClick={() => setDetailOpen(true)}
-            >
-              결과 자세히 보기
-            </button>
-          </div>
-          <div className="cx-next">
-            <NextActions
-              receipt={accepted.receipt}
-              onNextCurve={nextCurve}
-              returnTo={returnTo}
-              from={currentPath}
-              labels={NEXT_LABELS}
-            />
-          </div>
+          <ResultActions
+            receipt={accepted.receipt}
+            kind={outcome.kind}
+            nextCurve={nextCurve}
+            onDetails={() => setDetailFor(accepted.receipt.submissionId)}
+            onAgain={again}
+          />
           <ResultDialog
-            open={detailOpen}
-            onClose={() => setDetailOpen(false)}
+            open={detailFor === accepted.receipt.submissionId}
+            onClose={() => setDetailFor(null)}
             accepted={accepted}
             submission={submission}
             celebrate={celebrate}
@@ -357,14 +391,14 @@ export function JudgeArea({
                   <label
                     className="cx-option"
                     key={value}
-                    data-checked={state.judgment.userJudgment === value}
+                    data-checked={chosen === value}
                   >
                     <input
                       ref={index === 0 ? judgmentRef : undefined}
                       type="radio"
                       name={`cx-judgment-${context.ticId}`}
                       value={value}
-                      checked={state.judgment.userJudgment === value}
+                      checked={chosen === value}
                       aria-invalid={
                         issues.some(
                           (issue) => issue.field === "userJudgment",
@@ -430,9 +464,6 @@ export function JudgeArea({
                       {label}
                     </label>
                   ))}
-                  <p className="cx-note">
-                    중심 위치: 데이터 없음 (근거로 선택할 수 없음)
-                  </p>
                 </fieldset>
                 <label htmlFor={memoId} className="cx-sr">
                   메모 (선택)
@@ -484,10 +515,8 @@ export function JudgeArea({
             </>
           )}
           <p id={`${hintId}-submit`} className="cx-sr">
-            제출하면 요청 번호 하나로 접수를 추적합니다. 응답을 받지 못해도 같은
-            번호로 결과를 확인하므로 두 번 접수되지 않습니다. 기준 시각과 가려진
-            시간은 미리보기이며, 관측 공백을 포함한 최종 선택 검증은 서버가
-            합니다.
+            연결이 끊겨도 같은 제출은 한 번만 접수됩니다. 가려진 시간은
+            미리보기이며, 최종 확인은 서버가 합니다.
           </p>
           {view && (
             <div
@@ -512,8 +541,8 @@ export function JudgeArea({
               )}
               {!view.busy && submission.volatileId && (
                 <p className="cx-note">
-                  브라우저 저장소를 쓸 수 없어 이 요청 번호는 새로고침하면
-                  사라집니다.
+                  브라우저 저장소를 쓸 수 없어 새로고침하면 이 제출의 접수
+                  여부를 다시 확인할 수 없습니다.
                 </p>
               )}
               {view.actions.length > 0 && (
@@ -547,8 +576,127 @@ export function JudgeArea({
   );
 }
 
-/** GO_HOME and VIEW_RESULT in the shell words (menu 나의 은하, star panel 분석 결과 보기). */
-const NEXT_LABELS = { GO_HOME: "나의 은하로", VIEW_RESULT: "분석 결과 보기" };
+/**
+ * One line under the result title: the signal by its star-panel name and
+ * its numbers ("행성 1 · WASP-62 b · 주기 4.412일 · 깊이 1.32%"), or what to
+ * try after a miss. Words and numbers from ../analysis/format.ts.
+ */
+function resultLead(
+  receipt: SubmissionReceipt,
+  outcome: AnalysisOutcome,
+  planetIds: string[] | null,
+): string {
+  const signal = receipt.explanation.signal;
+  switch (outcome.kind) {
+    case "numericMismatch":
+      return f.NOT_MATCHED_HINT;
+    case "ambiguous":
+      return "주기나 구간을 조금 바꿔 다시 풀어 보세요.";
+    case "noCandidate":
+    case "skipped":
+      return f.matchSentence(receipt.matchStatus);
+  }
+  if (!signal) return f.matchSentence(receipt.matchStatus);
+  const planet = isMemberPlanet(signal, receipt.submissionId, planetIds);
+  const name = matchedSignalLabel({
+    signal,
+    planet,
+    planetIds,
+    matchedIds: receipt.progress.matchedCandidateIds,
+    withPeriodDays: false,
+  });
+  return [
+    name,
+    `주기 ${f.periodDays(signal.bls.periodDays, 3)}`,
+    `깊이 ${f.depthPercent(signal.bls.depthPpm)}`,
+  ].join(" · ");
+}
+
+/**
+ * The result's actions, at most two buttons (as in the result dialog):
+ * after a window that matched nothing "구간 다시 잡기" (period kept) and
+ * "주기 다시 고르기"; otherwise "결과 자세히 보기" and, while the star has
+ * more to find, "다음 곡선 단계로". "나의 은하로" is a small link; the rest
+ * (별 결과, 공개 검토, 토론) is in the result dialog.
+ */
+function ResultActions({
+  receipt,
+  kind,
+  nextCurve,
+  onDetails,
+  onAgain,
+}: {
+  receipt: SubmissionReceipt;
+  kind: AnalysisOutcome["kind"];
+  nextCurve?: () => void;
+  onDetails(): void;
+  onAgain(step: 1 | 2): void;
+}) {
+  const details = (className: string) => (
+    <button
+      type="button"
+      className={className}
+      // The discovery card's "결과 자세히 보기" opens this same view.
+      data-result-details=""
+      onClick={onDetails}
+    >
+      결과 자세히 보기
+    </button>
+  );
+  const next =
+    receipt.nextActions.includes("NEXT_CURVE") &&
+    nextCurve &&
+    receipt.progress.stage !== "completed" ? (
+      <button type="button" className="cx-secondary" onClick={nextCurve}>
+        다음 곡선 단계로
+      </button>
+    ) : null;
+  const missed = kind === "numericMismatch";
+  const ambiguous = kind === "ambiguous";
+  return (
+    <>
+      <div className="cx-actions" data-testid="cx-result-actions">
+        {missed ? (
+          <>
+            <button
+              type="button"
+              className="cx-primary"
+              onClick={() => onAgain(2)}
+            >
+              구간 다시 잡기
+            </button>
+            <button
+              type="button"
+              className="cx-secondary"
+              onClick={() => onAgain(1)}
+            >
+              주기 다시 고르기
+            </button>
+          </>
+        ) : ambiguous ? (
+          <button
+            type="button"
+            className="cx-primary"
+            onClick={() => onAgain(1)}
+          >
+            주기 다시 고르기
+          </button>
+        ) : (
+          <>
+            {details("cx-primary")}
+            {next}
+          </>
+        )}
+      </div>
+      <p className="cx-next">
+        {(missed || ambiguous) && details("cx-link")}
+        <Link className="cx-link" to="/sky">
+          나의 은하로
+        </Link>
+      </p>
+    </>
+  );
+}
 
 /** EXP-12 제출값 확인: what will be sent, before the irreversible send. */
 function ReviewBlock({
@@ -575,21 +723,18 @@ function ReviewBlock({
       <dl className="cx-review-list">
         <dt>주기</dt>
         <dd title={String(selection.periodDays)}>
-          <b>{selection.periodDays.toFixed(6)}</b>일
+          <b>{format.period(selection.periodDays)}</b>일
         </dd>
         <dt>선택 위상</dt>
         <dd>
           <b>
-            {selection.phaseStart.toFixed(4)}–{selection.phaseEnd.toFixed(4)}
+            {format.phase(selection.phaseStart)}–
+            {format.phase(selection.phaseEnd)}
           </b>
         </dd>
-        <dt>기준 시각</dt>
-        <dd title={String(review.epochPreviewBtjd)}>
-          <b>{review.epochPreviewBtjd.toFixed(6)}</b> BTJD
-        </dd>
         <dt>가려진 시간</dt>
-        <dd title={String(review.durationPreviewHours)}>
-          <b>{review.durationPreviewHours.toFixed(4)}</b>시간
+        <dd>
+          <b>{format.hours(review.durationPreviewHours)}</b>시간
         </dd>
         <dt>판단</dt>
         <dd>
@@ -607,10 +752,17 @@ function ReviewBlock({
         <dt>메모</dt>
         <dd className="cx-review-memo">{memo || "입력 안 함"}</dd>
       </dl>
-      <p className="cx-note">
-        아직 제출되지 않았습니다. 기준 시각과 가려진 시간은 미리보기이며,
-        제출하면 서버가 고른 주기와 위상으로 다시 계산하고 검증합니다.
-      </p>
+      <details className="cx-more cx-review-more">
+        <summary>아직 제출되지 않았습니다 · 계산 안내</summary>
+        <p className="cx-note">
+          가려진 시간은 미리보기이며, 제출하면 서버가 고른 주기와 구간으로 다시
+          계산해 확인합니다. 연결이 끊겨도 같은 제출은 한 번만 접수됩니다.
+        </p>
+        <p className="cx-note">
+          기준 시각 {f.referenceTime(review.epochPreviewBtjd)} (TESS 관측 시각,
+          일)
+        </p>
+      </details>
       <div className="cx-actions">
         <button
           type="button"
@@ -692,7 +844,9 @@ function OtherSubmissions({
         </button>
       ))}
       {options.some((option) => option.unavailable) && (
-        <p className="cx-note">
+        // Disabled buttons say why on hover (title) and to screen readers;
+        // a standing line of refusals under every step is noise.
+        <p className="cx-sr">
           {options
             .filter((option) => option.unavailable)
             .map((option) => `${option.label}: ${option.unavailable}`)
