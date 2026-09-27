@@ -201,7 +201,7 @@ services:
     volumes:
       - erd-output:/usr/share/nginx/html:ro
     configs:
-      - source: erd-no-cache
+      - source: static-no-cache
         target: /etc/nginx/conf.d/no-cache.conf
     networks:
       - service
@@ -335,6 +335,9 @@ services:
     restart: unless-stopped
     volumes:
       - api-docs-output:/usr/share/nginx/html:ro
+    configs:
+      - source: static-no-cache
+        target: /etc/nginx/conf.d/no-cache.conf
     networks:
       - service
 
@@ -557,10 +560,10 @@ networks:
   service:
 
 configs:
-  # 앱이 schema.json을 fetch로 따로 읽는다. Cache-Control이 없으면 브라우저가
-  # Last-Modified로 신선도를 추정해 재생성 뒤에도 옛 스키마를 최대 하루쯤 쓴다.
-  # http 수준에 두면 add_header가 없는 기본 server 블록이 물려받는다.
-  erd-no-cache:
+  # erd·api-docs 앱은 schema.json·openapi.json을 fetch로 따로 읽는다. Cache-Control이
+  # 없으면 브라우저가 Last-Modified로 신선도를 추정해 재생성 뒤에도 옛 파일을 최대
+  # 하루쯤 쓴다. http 수준에 두면 add_header가 없는 기본 server 블록이 물려받는다.
+  static-no-cache:
     content: |
       add_header Cache-Control "no-cache";
 
