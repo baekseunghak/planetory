@@ -10,8 +10,12 @@ from pathlib import Path
 import numpy as np
 from jsonschema import Draft202012Validator
 
-from astro_kernel.candidate_aggregation import AI_NOT_EXECUTED, AI_POLICY, STATUSES, aggregate
+import pytest
+
+from astro_kernel.candidate_aggregation import (AI_NOT_EXECUTED, AI_POLICY, STATUSES, aggregate, combine,
+                                                evaluate)
 from astro_kernel.external_catalog import build_snapshot, join_catalog
+from astro_kernel.gold_serialization import GoldValidationError
 
 SCHEMA = json.loads((Path(__file__).resolve().parents[3] / "contracts" / "gold"
                      / "publication-candidates.schema.json").read_text(encoding="utf-8"))
@@ -237,6 +241,32 @@ def test_schema_matches_kernel_and_rejects_broken_rows():
     del missing_count["manifest"]["counts"]["held"]
     for doc in broken + [missing_count]:
         assert not VALIDATOR.is_valid(doc)
+
+
+def test_split_path_matches_aggregate_without_moving_payloads():
+    # 80 evaluates stars on Spark executors and combines light results on the driver.
+    results = [star(1101, [(11011, 2.), (11012, 5.3)], {"toi": {11011: "CP"}}), no_signal(1102),
+               ambiguous(1103), star(1104, [(11041, 2.)], {}, toi=dict(complete=False))]
+    targets = [1101, 1102, 1103, 1104, 1105]
+    whole = run(results, targets=targets)
+    per_star = dict(calculation_versions=VERSIONS, ai_policy=POLICY)
+    args = dict(per_star, run_id="run-fixture", silver_attempt="silver/pipeline_version=fixture/run_id=run-fixture")
+    stars = [evaluate(tic_id=r["tic_id"], inputs=r["inputs"], **per_star) for r in results]
+    assert [s["payload"] for s in stars if s["payload"]] == whole["bundles"]
+    light = [{k: v for k, v in s.items() if k != "payload"} for s in stars[::-1]]  # 1105 never evaluated
+    split = combine(targets=targets, stars=light, **args)
+    assert split == {k: v for k, v in whole.items() if k != "bundles"}
+    assert split["status"] == "incomplete" and split["manifest"]["counts"]["unprocessed"] == 1
+
+    ready = next(s for s in light if s["status"] == "ready")
+    for broken, reason in [(light + [ready], "duplicate_tic_result"),
+                           ([dict(ready, tic_id=1199)], "result_outside_targets"),
+                           ([dict(ready, bundle=None)], "invalid_star_result"),
+                           ([dict(ready, status="done")], "invalid_star_result")]:
+        assert combine(targets=targets, stars=broken, **args)["reason"] == reason
+    with pytest.raises(GoldValidationError, match="run_level_input_overridden"):
+        evaluate(tic_id=1101, inputs=dict(results[0]["inputs"], ai_policy=POLICY), **per_star)
+    assert evaluate(tic_id=1101, inputs="garbage", **per_star)["reasons"] == ["malformed_input"]
 
 
 def test_candidate_quality_revision_is_taken_per_star():

@@ -127,7 +127,7 @@ Gold는 다음을 게시한다.
 
 ### 4.3 S15P21C206-79 게시 후보 집계
 
-상태: 커널·합성 fixture 검증 완료. 실제 Silver·123 연결, 80 gate 연결과 운영 run 검증은 아직 하지 않았다.
+상태: 커널·합성 fixture 검증 완료. 80이 Silver 저장 행에서 별 단위 입력을 되살려 123·124와 잇는 변환([Spark Gold 절](../../distributed-system/spark/README.md#tess-silver--gold-게시-후보-s15p21c206-80))을 합성 곡선으로 검증했다(2026-09-27). 실제 Silver attempt 실행, 80 gate 연결과 운영 run 검증은 아직 하지 않았다.
 
 한 run의 대상 TIC 전체를 125 `assemble`로 검증해 게시 전 후보 표·staging 제안·manifest 하나로 모은다. 형식의 정본은 [`publication-candidates.schema.json`](publication-candidates.schema.json)이고 구현은 `astro_kernel.candidate_aggregation.aggregate`다. `publishable`은 항상 false이며 게시 승인과 DB 적재는 80 gate와 Publisher가 맡는다.
 

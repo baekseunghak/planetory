@@ -42,6 +42,6 @@ case '__STEP__' in
     ;;
 esac
 '@.Replace('__RELEASE__',$CodeReleaseId).Replace('__STEP__',$Step)
-$payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($command))
+$payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($command.Replace("`r",'')))
 & tailscale ssh SSAFY@node-1 "printf '%s' '$payload' | base64 --decode | sudo -n bash"
 if ($LASTEXITCODE -ne 0) { throw "Sector 14 Airflow $Step failed." }
