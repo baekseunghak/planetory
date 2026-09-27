@@ -62,6 +62,7 @@ async function start() {
     profile: MyProfilePage,
     member: MemberProfilePage,
     community: CommunityPage,
+    officialThreads: CommunityPage,
     hotTopics: HotTopicsPage,
     starBoard: CommunityPage,
     post: PostPage,

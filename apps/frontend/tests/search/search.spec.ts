@@ -373,3 +373,59 @@ test("server order is retained and desktop search controls fit without horizonta
     ),
   ).toBe(true);
 });
+
+for (const cinema of [false, true]) {
+  test(`official board search, detail return and tab transitions (${cinema ? "cinema" : "legacy"})`, async ({
+    page,
+  }) => {
+    // UI choice is persisted on the first visit; it is not a search parameter.
+    await page.goto(cinema ? "/community?ui=cinema" : "/community?ui=legacy");
+    await page.goto(
+      "/community?author=Orbit&tag=QUESTION&board=STAR&ticId=259377017",
+    );
+    const request = page.waitForRequest(
+      (r) =>
+        r.url().includes("community/feed?") &&
+        new URL(r.url()).searchParams.get("type") === "SIGNAL_THREAD",
+    );
+    await page.getByRole("link", { name: "공식 스레드", exact: true }).click();
+    const params = new URL((await request).url()).searchParams;
+    expect(Object.fromEntries(params)).toEqual({
+      ticId: "259377017",
+      size: "20",
+      type: "SIGNAL_THREAD",
+    });
+    await expect(
+      page.getByRole("heading", { name: "공식 스레드", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "새 글 쓰기" })).toHaveCount(0);
+    await expect(page.getByLabel("작성자 닉네임")).toHaveCount(0);
+    await expect(page.getByLabel("글 태그")).toHaveCount(0);
+    await expect(rows(page)).toHaveCount(1);
+    await page.getByLabel("검색 범위").selectOption("BODY");
+    await search(page, "공식 요약");
+    await expect(rows(page)).toHaveCount(1);
+    const current = page.url();
+    await page.locator(".community-feed h2 a").click();
+    await page.getByRole("link", { name: "이전 화면" }).click();
+    await expect(page).toHaveURL(current);
+    await expect(rows(page)).toHaveCount(1);
+    const freeRequest = page.waitForRequest(
+      (r) =>
+        r.url().includes("community/feed?") &&
+        new URL(r.url()).searchParams.get("board") === "FREE",
+    );
+    await page.getByRole("link", { name: "자유 게시판", exact: true }).click();
+    const free = new URL((await freeRequest).url()).searchParams;
+    expect(free.has("type")).toBe(false);
+    expect(free.has("ticId")).toBe(false);
+    await expect(page.getByRole("link", { name: "새 글 쓰기" })).toBeVisible();
+    await page.goto("/community/signal-threads/?author=Orbit");
+    await expect(page.getByRole("alert").first()).toBeVisible();
+    await page.getByRole("link", { name: "조건 초기화" }).click();
+    await expect(
+      page.getByRole("heading", { name: "공식 스레드", exact: true }),
+    ).toBeVisible();
+    await expect(rows(page)).toHaveCount(1);
+  });
+}

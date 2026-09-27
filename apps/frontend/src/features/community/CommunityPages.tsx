@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import {
   Link,
   useLocation,
+  useMatch,
   useNavigate,
   useParams,
   useSearchParams,
@@ -63,11 +64,17 @@ export function CommunityPage() {
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { values, error: addressError } = readFeedSearch(search, ticId);
+  const official = Boolean(useMatch(pagePath("officialThreads")));
+  const { values, error: addressError } = readFeedSearch(
+    search,
+    ticId,
+    official,
+  );
   const board = values.board;
   const cursor = search.get("cursor");
   const params = feedSearchParams(values);
   params.set("size", "20");
+  if (official) params.set("type", "SIGNAL_THREAD");
   if (cursor) params.set("cursor", cursor);
   const path = "/v1/community/feed?" + params;
   const load = useCallback(
@@ -93,8 +100,14 @@ export function CommunityPage() {
     feedSearchHref("/community", {
       ...values,
       board: nextBoard,
-      ticId: ticId ? "" : values.ticId,
+      ticId: ticId || nextBoard === "FREE" ? "" : values.ticId,
     });
+  const officialHref = feedSearchHref(pagePath("officialThreads"), {
+    ...values,
+    author: "",
+    tag: "",
+    board: "",
+  });
   const filtered = Boolean(
     values.q || values.author || values.tag || values.ticId || values.board,
   );
@@ -103,28 +116,40 @@ export function CommunityPage() {
     <div className="community-page">
       <header className="community-heading">
         <p className="eyebrow">VOICES IN THE UNIVERSE</p>
-        <h1>{ticId ? `TIC ${ticId}` : cinema ? "커뮤니티" : "탐사 이야기"}</h1>
+        <h1>
+          {official
+            ? "공식 스레드"
+            : ticId
+              ? `TIC ${ticId}`
+              : cinema
+                ? "커뮤니티"
+                : "탐사 이야기"}
+        </h1>
         <p>
-          {ticId
-            ? "이 별의 이야기와 공식 신호 스레드를 모았습니다."
-            : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}
+          {official
+            ? "공개된 신호별 토론을 모았습니다. 참여자 수와 관계없이 함께 살펴보세요."
+            : ticId
+              ? "이 별의 이야기와 공식 신호 스레드를 모았습니다."
+              : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}
         </p>
       </header>
-      <div className="post-actions">
-        {liveP1 && ticId && (
-          <FollowButton
-            target={{ kind: "STAR", id: ticId, label: "TIC " + ticId }}
-          />
-        )}
-        <Link
-          to={
-            pagePath("postCreate", {}, { ticId, returnTo: current }) +
-            (!ticId && board === "STAR" ? "&board=STAR" : "")
-          }
-        >
-          새 글 쓰기
-        </Link>
-      </div>
+      {!official && (
+        <div className="post-actions">
+          {liveP1 && ticId && (
+            <FollowButton
+              target={{ kind: "STAR", id: ticId, label: "TIC " + ticId }}
+            />
+          )}
+          <Link
+            to={
+              pagePath("postCreate", {}, { ticId, returnTo: current }) +
+              (!ticId && board === "STAR" ? "&board=STAR" : "")
+            }
+          >
+            새 글 쓰기
+          </Link>
+        </div>
+      )}
       <div className={ticId ? "" : "community-columns"}>
         <div className="community-main">
           <nav className="community-tabs" aria-label="게시판 종류">
@@ -132,14 +157,21 @@ export function CommunityPage() {
             <Link
               to={boardHref("")}
               state={null}
-              aria-current={!board ? "page" : undefined}
+              aria-current={!official && !board ? "page" : undefined}
             >
               전체
             </Link>
             <Link
+              to={officialHref}
+              state={null}
+              aria-current={official ? "page" : undefined}
+            >
+              공식 스레드
+            </Link>
+            <Link
               to={boardHref("STAR")}
               state={null}
-              aria-current={board === "STAR" ? "page" : undefined}
+              aria-current={!official && board === "STAR" ? "page" : undefined}
             >
               별 게시판
             </Link>
@@ -159,6 +191,7 @@ export function CommunityPage() {
             initial={values}
             addressError={addressError}
             routeTic={ticId}
+            official={official}
             resetTo={location.pathname}
             onSearch={submitSearch}
           />
@@ -170,7 +203,9 @@ export function CommunityPage() {
                   ? "목록을 불러오지 못했습니다."
                   : filtered
                     ? "적용한 조건의 결과 · 최신 작성순"
-                    : "전체 이야기 · 최신 작성순"}
+                    : official
+                      ? "공식 스레드 · 최신 작성순"
+                      : "전체 이야기 · 최신 작성순"}
             </p>
             {state.error && cursor && (
               <Link to={firstPage} state={null}>

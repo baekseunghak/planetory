@@ -56,6 +56,7 @@ export const cinemaPages: CinemaPageSlots = {
   historyDetail: CinemaHistoryDetail,
   // community
   community,
+  officialThreads: community,
   starBoard: community,
   hotTopics: framed("hot-topics", "wide", HotTopicsPage),
   post: framed("post", "wide", PostPage),

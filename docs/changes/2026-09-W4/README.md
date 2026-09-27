@@ -403,3 +403,5 @@
 | 2026-09-27 | 시연 발표자 계정(별 약 1,000개) 준비 계획: 운영 규칙 `stars_per_achievement`를 3분만 올리고 마지막 튜토리얼 성과로 별을 연다 | S15P21C206-281 | stars_per_achievement, 발표자 계정, 운영 규칙 임시 상향, 복귀 예약, pickUndiscoveredStar | 제안, 운영 DB 미실행 | [기록](2026-09-27.md) |
 | 2026-09-27 | 찾을 신호 없는 별을 새 별 풀에서 빼고(OPS-08 v1.3.2), 폭만 벗어난 not_matched에 match.missHint 폭 힌트를 싣는다 | S15P21C206-282 | pickUndiscoveredStar, discoverable, missHint, WINDOW_TOO_WIDE, WINDOW_TOO_NARROW, duration_ratio_max, 진행 막힘, OPS-08 | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 탐색 가능 판정이 연속 구간 앞뒤 12시간과 창 절반 미만 관측 통과를 세지 않는다(discoverability-1.1.0), 라벨 없는 장주기 후보 탐색 불가 전환 | S15P21C206-282 | discoverability-1.1.0, interior_mask, transit_min_coverage, edge_hours, edge_gap_days, min_observed_transits, 공백 직후, 장주기, no_label | 구현 완료, 재실행·게시 전 | [기록](2026-09-27.md) |
+
+| 2026-09-27 | 공식 스레드 전용 게시판·종류별 피드 | S15P21C206-288 | SIGNAL_THREAD, type, cursor, 시네마, DB 변경 없음 | 구현·로컬 검증 완료 | [2026-09-27](2026-09-27.md) |
