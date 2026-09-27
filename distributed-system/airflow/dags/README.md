@@ -104,7 +104,7 @@ Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어
 
 ## `tess_publication_run` (80, 수동 실행)
 
-상태: Node 1 운영 이미지에 배포했다(2026-09-27). 첫 운영 run(run ID `20260927T033816Z`)에서 Gold는 성공했고, gate는 schema 경로 결함을 고친 뒤 통과했다. 지금 게시 승인(`approve_publication`)에서 DEC-01 확정을 기다린다.
+상태: Node 1 운영 이미지에 배포했다(2026-09-27). 첫 운영 run(run ID `20260927T033816Z`)에서 Gold는 성공했고, gate는 schema 경로 결함을 고친 뒤 통과했다. 2026-09-27 08:37:48Z에 사용자 결정으로 승인했고(DEC-01 확정 전), 게시까지 12:10Z에 끝났다(아래 「첫 운영 run」).
 
 run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 gate → 수동 게시 승인을 잇는다. 일시정지·무스케줄로 생성되고 동시 실행은 1개다. Gold와 gate는 Node 1 systemd unit으로 돌고, Airflow는 SSH로 unit을 시작한 뒤 Triggerer에서 5분마다 `status`를 읽는다(최대 3일). 그래서 Airflow 재시작이 Spark를 멈추지 않는다. Spark는 YARN에서 돌고 Airflow는 제출만 한다.
 
@@ -139,7 +139,7 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 3. Node 1 root로 그 release의 설정 스크립트를 순서대로 실행한다. 이미지보다 먼저 한다. 일반 계정은 release 디렉터리에 들어갈 수 없으므로 전체 경로로 부른다. 세 스크립트는 sudoers 명령 정규식을 쓰므로 sudo 1.9.10 이상이 필요하고, 낮은 버전이면 설정 시점에 `SUDO_REGEX_UNSUPPORTED`로 멈춘다(Node 1은 1.9.15p5).
    1. `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)
    2. `configure-tess-gold-airflow-node1.sh <release-id>`
-   3. `configure-tess-publish-airflow-node1.sh <release-id>`. 그 전에 root 전용 `/etc/planetory/publisher/image`(0644, 고정 이미지 한 줄)가 있어야 한다.
+   3. `configure-tess-publish-airflow-node1.sh <release-id>`. 그 전에 root 전용 `/etc/planetory/publisher/image`(0644, 고정 이미지 한 줄, `:<40자 커밋>` 또는 `@sha256:<64자>`)가 있어야 한다. 병합 뒤에는 develop CI가 만든 `planetory/publisher:<40자 커밋>`으로 이 파일을 바꾸고, `docker run --rm <이미지> python -m publisher publish-run --help`로 명령이 있는지 확인한다. 2026-09-27 첫 게시는 276 `add246a2`를 Node 1에서 직접 빌드해 썼다. 이 이미지는 새 별 공개 기준(`a5c27fd4`) 전이라, 교체 전에 다시 게시하면 새 별이 모두 `hidden`으로 들어간다.
 4. Node 1에서 NEA·ExoFOP 연결을 확인하고, 새 release로 Gold Canary(`tess_gold_ctl.py canary`, root CLI)를 한다. 커널이 바뀐 release는 이전 Canary 결과를 쓰지 않는다.
 5. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. 실행 중인 DagRun이 0건이어야 한다. DAG 7개의 import 오류가 0건인지 확인한다.
 6. `approve_publication`을 승인할 계정이 있는지 확인한다. `viewer`(Viewer 역할)는 승인할 수 없다. 없으면 Node 1 root가 `docker exec -it planetory-distributed-system-airflow-api-server-1 airflow users create --username approver --firstname Planetory --lastname Approver --role Op --email approver@planetory.invalid`로 만든다. 비밀번호는 명령이 물을 때 운영자가 직접 입력하고 저장소나 대화에 남기지 않는다. 2026-09-27 첫 운영 run은 `Op` 역할로 승인했다.
@@ -147,7 +147,7 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 
 **같은 run ID를 새 release로 다시 돌릴 때.** 확정된 Gold attempt를 그대로 쓰려는 경우다(2026-09-27 첫 run의 gate 수정 때 실제로 썼다).
 1. 이전 DagRun을 끝내고 그 run의 Gold·gate unit이 inactive나 failed인지 확인한다.
-2. `/etc/systemd/system/planetory-tess-gold-{run,gate}-<run>.service`를 백업한 뒤 지우고 `daemon-reload`한다. 이 파일은 release 경로를 담고 있어서, 남겨 두면 새 release의 `start-unit`이 `UNIT_DEFINITION_MISMATCH`로 거절한다.
+2. `/etc/systemd/system/planetory-tess-gold-{run,gate}-<run>.service`와, 게시 단계까지 갔다면 `planetory-tess-publish-<run>.service`도 백업한 뒤 지우고 `daemon-reload`한다. 이 파일은 release 경로를 담고 있어서, 남겨 두면 새 release의 `start-unit`이 `UNIT_DEFINITION_MISMATCH`로 거절한다.
 3. 같은 conf에 `release`만 바꿔 trigger한다. `start_gold`는 최신 상태가 `complete`라 unit을 시작하지 않고 끝나고, `wait_gold`는 확정 attempt를 넘긴다.
 
 **배포 전 검증(2026-09-27, 로컬).**
@@ -176,4 +176,10 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
   - Gold: `start_gold`·`wait_gold`가 07:20:16Z에 끝났다. 확정 attempt를 채택해 다시 계산하지 않았다.
   - gate: unit 07:20:19Z 시작, 재시작 0회. 사전 검사 약 5분, Spark 앱 `_0074` 07:25:21→07:27:49Z(SUCCEEDED), 07:28:09Z `GOLD_PUBLISH_READY`. 판정 `publish_ready`, bundles 4,916, candidates 5,154.
   - publish-ready: `/lake/gold/tess/publish-ready/run_id=20260927T033816Z/_READY.json`(files 81개)
-  - `wait_gate`는 07:30:28Z에 끝났다(5분 폴링이라 gate 종료 뒤 약 2분 지연). `approve_publication`은 07:30:29Z부터 기다린다(응답 제한 2026-10-04 07:30Z). 승인·게시는 DEC-01 확정 뒤다.
+  - `wait_gate`는 07:30:28Z에 끝났다(5분 폴링이라 gate 종료 뒤 약 2분 지연). `approve_publication`은 07:30:29Z부터 기다린다(응답 제한 2026-10-04 07:30Z). 08:37:48Z에 `approver`(Op) 계정으로 승인했다(DEC-01 확정 전, 사용자 결정). Node 1 Airflow에 `viewer`만 있어 사용자가 계정을 만들었다(배포 순서 6).
+- 게시(`add246a2`를 Node 1에서 직접 빌드한 Publisher 이미지)
+  - 게시 unit은 08:37:57Z에 시작했다. 받기·검사는 약 5.5분, 적재는 08:43:16→11:56:20Z(분당 약 25.5개)였다.
+  - `PUBLISHED` 4,916건, 거절·롤백 0건, 재시작 0회였다.
+  - Backend 알림은 4,908건이 HTTP 200, 8건이 시간 초과였다. 종료는 0이었고, 8건은 `notify`로 다시 보냈다.
+  - DagRun은 12:10:20Z에 success였다. 상태 파일은 `/var/lib/planetory-publish/run=20260927T033816Z/publish=20260927T083757Z.json`이다.
+  - 공개 조정(사용자 결정): 찾을 수 있는 후보가 있는 별만 `published`로 남겼다(배치 2,374 + 튜토리얼 5). 나머지 2,542개는 `hidden`이다. 자세한 내용은 [변경 이력](../../../docs/changes/2026-09-W4/2026-09-27.md) 「새 별 공개 기준」에 있다.

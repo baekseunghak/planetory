@@ -154,7 +154,15 @@ def publish_run(args) -> int:
     now = lambda: dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")  # noqa: E731
     started = now()
     with psycopg.connect("", autocommit=True) as conn:
-        target = loader.preflight(conn)
+        try:
+            target = loader.preflight(conn)
+        except loader.PublishError as exc:
+            # 마이그레이션이 뒤처지는 등 다시 돌려도 결과가 같다. 제어기가 재시작하지 않게 기록을 남기고 65로 끝낸다.
+            record = {"run_id": args.run_id, "approval": args.approval, "status": "rejected",
+                      "reason": f"{exc.code}: {exc}", "stars": [], "started_at": started, "finished_at": now()}
+            json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
+            print()
+            return DATA_FAILURE
         print(f"대상 {conn.info.dbname}, 마이그레이션 V{target.flyway_version}", file=sys.stderr)
         for warning in target.warnings:
             print(f"주의: {warning}", file=sys.stderr)

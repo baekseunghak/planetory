@@ -11,6 +11,7 @@ PUBLISHER_TEST_DATABASE_URL이 없으면 건너뛴다. 새 스키마를 만들�
 from __future__ import annotations
 
 import copy
+import json
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from astro_kernel.gold_canonical import array_checksum, normalize_array
 
@@ -341,6 +343,32 @@ class PublishStarTest(unittest.TestCase):
         # 배치 run은 별 속성의 원천이 없어 NULL을 보낸다. 이미 있는 값은 그대로 둔다.
         self.assertEqual(self.conn.execute("SELECT service_status, teff_k, radius_rsun, tmag FROM stars WHERE tic_id = %s",
                                            (tic,)).fetchone(), ("published", 5800, 1.0, 9.5))
+
+    def test_run_payload_keeps_the_disposition_rule_version_of_the_bundle(self):
+        # 적재가 상수 rule-0을 쓰면 124 판정 규칙 버전이 사라진다(첫 운영 게시 4,916별, 2026-09-27).
+        tic = 990_000_107
+        p = self.run_payload(tic)
+        publish_star(self.conn, p, self.target, first_publish_only=True)
+        stored = {r[0] for r in self.conn.execute("""
+            SELECT d.rule_version FROM candidate_dispositions d JOIN candidates c ON c.id = d.candidate_id
+             WHERE c.tic_id = %s""", (tic,)).fetchall()}
+        self.assertEqual(stored, {c["disposition"]["rule_version"] for c in p["candidates"]})
+        self.assertNotIn("rule-0", stored)
+
+    def test_a_preflight_refusal_ends_publish_run_with_a_rejected_record_and_65(self):
+        import contextlib
+        import io
+        from argparse import Namespace
+
+        from publisher import __main__ as cli
+        from publisher.load import PublishError
+
+        out = io.StringIO()
+        with mock.patch("psycopg.connect", return_value=contextlib.nullcontext(self.conn)),                 mock.patch("publisher.load.preflight", side_effect=PublishError("MIGRATION_BEHIND", "V28 < V29")),                 mock.patch("sys.stdout", out):
+            code = cli.publish_run(Namespace(run_id="run-fixture", ready=Path("."), approval="unittest-only"))
+        record = json.loads(out.getvalue())
+        self.assertEqual((code, record["status"], record["stars"]), (65, "rejected", []))
+        self.assertTrue(record["reason"].startswith("MIGRATION_BEHIND"))
 
     def test_initial_status_applies_to_new_stars_only(self):
         # 찾을 수 있는 후보가 없는 새 별(run_source가 initial_status=hidden을 준다)은 hidden으로 등록한다.

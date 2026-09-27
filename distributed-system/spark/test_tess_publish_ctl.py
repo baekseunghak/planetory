@@ -99,6 +99,21 @@ class FetchTest(unittest.TestCase):
             with self.assertRaisesRegex(PublishContractError, "differs"):
                 ctl.fetch(broken, self.folder)
 
+    def test_an_earlier_copy_is_removed_before_free_space_is_measured(self):
+        # A copy kept after a failed attempt must not turn a retry into a disk-space failure.
+        self.folder.mkdir(parents=True)
+        (self.folder / "old").write_bytes(b"x")
+        seen = []
+
+        def usage(path):
+            seen.append(self.folder.exists())
+            return Namespace(free=1 << 40)
+
+        with patch.object(ctl.shutil, "disk_usage", usage), patch.object(ctl.subprocess, "Popen", FakeCat):
+            ctl.fetch(MARKER, self.folder)
+        self.assertEqual(seen, [False])
+        self.assertFalse((self.folder / "old").exists())
+
     def test_not_enough_disk_stops_before_fetching(self):
         with patch.object(ctl.shutil, "disk_usage", lambda path: Namespace(free=ctl.DISK_MARGIN)), \
                 patch.object(ctl.subprocess, "Popen", side_effect=AssertionError("must not fetch")):

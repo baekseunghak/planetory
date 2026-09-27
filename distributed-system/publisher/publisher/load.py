@@ -294,7 +294,7 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
                                                    applied_at, source_refs)
                 VALUES (%s, %s, %s, %s, %s, now(), %s)""",
                         (candidate_id, d["disposition"], d["answer_class"], d["planet_truth"],
-                         DISPOSITION_RULE_VERSION, Jsonb(d["source_refs"])))
+                         d.get("rule_version") or DISPOSITION_RULE_VERSION, Jsonb(d["source_refs"])))
             for e in candidate["external"]:
                 _insert_external(cur, tic, candidate_id, e)
             if candidate.get("ai"):

@@ -323,7 +323,7 @@ sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
   <registry>/planetory/publisher:<sha> python -m publisher notify --bundle b-<id>
 ```
 
-배치 run 게시(`S15P21C206-276`)는 80 gate가 만든 publish-ready를 Node 1 로컬 폴더로 받아 읽기 전용으로 마운트한다. 폴더 배치는 80 세션과 합의했다(80은 MR !234로 develop 병합). run 기록 JSON은 표준 출력으로 나온다. 종료 코드는 0(완료, 알림 일부 실패 포함), 1(일시 장애, 같은 명령 재실행), 65(데이터 거절, 재시도하지 않음)다([Publisher](../../distributed-system/publisher/README.md) 「배치 run」). Airflow 경로(`tess_publication_run`의 `start_publish`)에서는 게시 제어기 `tess_publish_ctl.py`가 아래 과정을 systemd unit으로 대신한다. 준비할 것은 두 가지다. 하나는 root 소유 `/etc/planetory/publisher/image`(쓰기는 root만, 고정 이미지 한 줄 `<registry>/planetory/publisher:<40자 sha>`)이고, 다른 하나는 새 release마다 `configure-tess-publish-airflow-node1.sh <release>`다. 제어기와 Airflow 게시 단계는 Node 1에 배포했지만 **게시는 아직 돌리지 않았다**(첫 run 승인 대기). 아래 수동 명령은 2026-09-27 서비스 DB 시험에 썼다(Publisher README 「배치 run」).
+배치 run 게시(`S15P21C206-276`)는 80 gate가 만든 publish-ready를 Node 1 로컬 폴더로 받아 읽기 전용으로 마운트한다. 폴더 배치는 80 세션과 합의했다(80은 MR !234로 develop 병합). run 기록 JSON은 표준 출력으로 나온다. 종료 코드는 0(완료, 알림 일부 실패 포함), 1(일시 장애, 같은 명령 재실행), 65(데이터 거절, 재시도하지 않음)다([Publisher](../../distributed-system/publisher/README.md) 「배치 run」). Airflow 경로(`tess_publication_run`의 `start_publish`)에서는 게시 제어기 `tess_publish_ctl.py`가 아래 과정을 systemd unit으로 대신한다. 준비할 것은 두 가지다. 하나는 root 소유 `/etc/planetory/publisher/image`(쓰기는 root만, 고정 이미지 한 줄 `<registry>/planetory/publisher:<40자 sha>` 또는 `…@sha256:<64자>`)이고, 다른 하나는 새 release마다 `configure-tess-publish-airflow-node1.sh <release>`다. 제어기와 Airflow 게시 단계는 Node 1에 배포했고, 첫 운영 run이 4,916개를 게시했다(2026-09-27). 병합 뒤에는 CI 이미지로 고정 파일을 바꾼다([DAG README](../../distributed-system/airflow/dags/README.md) 배포 순서 3). 아래 수동 명령은 2026-09-27 서비스 DB 시험에 썼다(Publisher README 「배치 run」).
 
 ```sh
 hdfs dfs -get /lake/gold/tess/publish-ready/run_id=<run ID>/_READY.json <폴더>/_READY.json
@@ -333,7 +333,7 @@ sudo docker run --rm --network host --env-file /etc/planetory/publisher/env -v <
   --ready /ready --approval "<게시 승인 근거>"
 ```
 
-Airflow가 이 실행을 부르는 것은 게시 gate(`S15P21C206-80`), 이미지 배포 job은 `S15P21C206-94` 범위다.
+Airflow는 `tess_publication_run`의 `start_publish`(게시 제어기, 276)로 이 실행을 부른다. 이미지 배포 job은 `S15P21C206-94` 범위다.
 
 ### 연결이 끊기면
 

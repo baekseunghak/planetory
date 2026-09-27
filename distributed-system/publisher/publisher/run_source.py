@@ -178,7 +178,7 @@ def gold_body(gold: dict, observations: dict[str, dict]) -> dict:
         d = dispositions[c["id"]]
         candidates.append({
             "record": {k: c[k] for k in RECORD_FIELDS},
-            "disposition": {k: d[k] for k in ("disposition", "answer_class", "planet_truth", "source_refs")},
+            "disposition": {k: d[k] for k in ("disposition", "answer_class", "planet_truth", "rule_version", "source_refs")},
             "external": references.pop(c["id"], []),
             "ai": None})
     external_only = references.pop(None, [])

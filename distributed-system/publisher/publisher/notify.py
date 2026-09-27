@@ -20,15 +20,15 @@ def notify_backend(base_url: str, token: str, bundle_ids: list[int]) -> list[tup
     outcomes = []
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 내부 호출은 시스템 프록시를 타지 않는다
     for bundle_id in bundle_ids:
-        request = urllib.request.Request(f"{base_url.rstrip('/')}/internal/bundles/b-{bundle_id}/activated",
-                                         method="POST", headers={TOKEN_HEADER: token})
         try:
+            request = urllib.request.Request(f"{base_url.rstrip('/')}/internal/bundles/b-{bundle_id}/activated",
+                                             method="POST", headers={TOKEN_HEADER: token})
             with opener.open(request, timeout=15) as response:
                 outcomes.append((bundle_id, 200 <= response.status < 300, f"HTTP {response.status}"))
         except urllib.error.HTTPError as e:
             outcomes.append((bundle_id, False, f"HTTP {e.code}"))
         except urllib.error.URLError as e:
             outcomes.append((bundle_id, False, f"연결 실패: {e.reason}"))
-        except (OSError, http.client.HTTPException) as e:
+        except (OSError, http.client.HTTPException, ValueError) as e:   # ValueError: 잘못된 BACKEND_URL(InvalidURL 포함)
             outcomes.append((bundle_id, False, f"응답 실패: {type(e).__name__}: {e}"))
     return outcomes

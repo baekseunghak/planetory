@@ -90,11 +90,11 @@ def fetch(marker: dict[str, Any], folder: Path) -> None:
     """Lay out the folder publish-run --ready reads. Files are world-readable for the Publisher user."""
     need = sum(spec["bytes"] for spec in marker["files"].values()) + DISK_MARGIN
     folder.parent.mkdir(parents=True, exist_ok=True)
+    if folder.exists():   # an earlier attempt's copy, kept for diagnosis; it must not count against the new fetch
+        shutil.rmtree(folder)
     free = shutil.disk_usage(folder.parent).free
     if need > free:
         raise PublishContractError(f"publish needs {need} bytes under {folder.parent}, {free} free")
-    if folder.exists():
-        shutil.rmtree(folder)
     folder.mkdir()
     (folder / "_READY.json").write_text(json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8")
     for rel, spec in sorted(marker["files"].items()):

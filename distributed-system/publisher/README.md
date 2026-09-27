@@ -4,7 +4,7 @@
 
 ## 현재 상태 (S15P21C206-262, S15P21C206-272, S15P21C206-276)
 
-**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계와 Airflow task는 80 DAG 작업에서 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. 처음 보는 사람은 [Gold 배치 게시 경로의 코드 구조](../../docs/architecture/gold-batch-publish.md)에서 파일 역할과 흐름을 먼저 본다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
+**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계는 Node 1 게시 제어기(`tess_publish_ctl.py`)가, Airflow 게시 task는 `tess_publication_run`의 `start_publish`·`wait_publish`가 맡는다(276). 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. 처음 보는 사람은 [Gold 배치 게시 경로의 코드 구조](../../docs/architecture/gold-batch-publish.md)에서 파일 역할과 흐름을 먼저 본다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
 
 현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
 
@@ -123,7 +123,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 
 ## 배치 run (S15P21C206-276)
 
-`run_source`는 80 gate가 통과시킨 게시 준비 산출물(publish-ready)을 Node 1 로컬 폴더로 받아 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. `publish-run`이 그 payload를 별마다 첫 게시하고 run 기록을 낸다. **구현·합성 검증까지다.** 폴더 배치와 줄 형식은 80 세션과 합의했다(2026-09-27). 80 쪽 구현은 병합 전이다. HDFS에서 폴더로 받는 단계, Airflow 게시 task와 Node 1 운영 게시는 80 DAG 작업에서 붙인다.
+`run_source`는 80 gate가 통과시킨 게시 준비 산출물(publish-ready)을 Node 1 로컬 폴더로 받아 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. `publish-run`이 그 payload를 별마다 첫 게시하고 run 기록을 낸다. **첫 운영 게시(run `20260927T033816Z`, 4,916개)까지 마쳤다(2026-09-27).** 폴더 배치와 줄 형식은 80 세션과 합의했다. 80은 MR !234로 develop에 병합됐다. HDFS에서 폴더로 받는 단계와 Airflow 게시 task는 이 저장소의 게시 제어기와 DAG가 맡는다.
 
 - **입력 폴더.** 파일 네 가지로 이뤄진다.
   - `_READY.json`: publish-ready marker(schema `planetory.tess-publish-ready.v1`, HDFS `/lake/gold/tess/publish-ready/run_id=<run>/_READY.json`)
@@ -148,11 +148,11 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
   4. `docker run --network host --env-file /etc/planetory/publisher/env -v <폴더>:/ready:ro <이미지> python -m publisher publish-run`을 돌린다.
   5. 표준 출력의 run 기록을 상태 파일(`/var/lib/planetory-publish/run=<run>/publish=<UTC>.json`)에 남기고, 성공하면 로컬 사본을 지운다.
 
-  publish-run 종료 0은 `complete`, 1은 `failed`(unit 재시작, 끝난 별은 `ALREADY_PUBLISHED`)다. 65와 그 밖의 종료는 `rejected`이고 unit도 65로 멈춘다. 그 밖의 종료란 이미지에 `publish-run`이 없을 때의 2, docker 오류 125처럼 다시 돌려도 같은 결과인 경우다. 상태 파일은 marker·이미지 검사보다 먼저 `prepared`로 쓰고, 실패하면 이유를 `failure_detail`에 남겨 Airflow `wait_publish`가 그 이유로 실패하게 한다. 받는 도중의 일시 장애(`failed`)도 같다. unit은 Gold와 같이 하루 7번까지만 시작한다(`StartLimitBurst=7`, DAG의 재시작 한도 6보다 하나 많음). **이미지는 인자로 받지 않는다.** sudo 아래 임의 이미지가 host 네트워크와 DB env 파일을 쓰면 root와 같아서다. 그래서 root 전용 `/etc/planetory/publisher/image` 한 줄(`<registry>/planetory/publisher:<40자 sha>` 또는 `@sha256:`)로 고정한다. 승인 근거는 `airflow/tess-publication-run/<run>/approved`다. sudo 허용은 `infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh <release>`가 만든다. 이미 적용한 release의 sudoers는 바꿀 수 없으므로 게시 단계는 새 release ID로 배포한다. 1~13 run의 ready는 많아야 5,156개(80 확인)라 run 전체를 받는다. 80 Gold Canary(2026-09-27, release `20260927T052453Z`, TIC 5개)에서 번들 줄은 ready 별 하나에 약 430 KB였다(Sector·후보 수에 따라 다름). 그래서 1~13 번들은 2.2 GB 안팎으로 추정되고, 여유 2 GiB를 더해도 Node 1 여유 디스크 13 GB 안이다. 실제 run에서 다시 잰다. ponytail: 디스크가 모자라면 멈추고, 더 큰 run은 part 단위로 흘려 보내도록 바꾼다.
+  publish-run 종료 0은 `complete`, 1은 `failed`(unit 재시작, 끝난 별은 `ALREADY_PUBLISHED`)다. 65와 그 밖의 종료는 `rejected`이고 unit도 65로 멈춘다. 그 밖의 종료란 이미지에 `publish-run`이 없을 때의 2, docker 오류 125처럼 다시 돌려도 같은 결과인 경우다. 상태 파일은 marker·이미지 검사보다 먼저 `prepared`로 쓰고, 실패하면 이유를 `failure_detail`에 남겨 Airflow `wait_publish`가 그 이유로 실패하게 한다. 받는 도중의 일시 장애(`failed`)도 같다. unit은 Gold와 같이 하루 7번까지만 시작한다(`StartLimitBurst=7`, DAG의 재시작 한도 6보다 하나 많음). **이미지는 인자로 받지 않는다.** sudo 아래 임의 이미지가 host 네트워크와 DB env 파일을 쓰면 root와 같아서다. 그래서 root 전용 `/etc/planetory/publisher/image` 한 줄(`<registry>/planetory/publisher:<40자 sha>` 또는 `@sha256:`)로 고정한다. 승인 근거는 `airflow/tess-publication-run/<run>/approved`다. sudo 허용은 `infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh <release>`가 만든다. 이미 적용한 release의 sudoers는 바꿀 수 없으므로 게시 단계는 새 release ID로 배포한다. 1~13 run의 ready는 많아야 5,156개(80 확인)라 run 전체를 받는다. 80 Gold Canary(2026-09-27, release `20260927T052453Z`, TIC 5개)에서 번들 줄은 ready 별 하나에 약 430 KB였다(Sector·후보 수에 따라 다름). 첫 운영 run의 번들은 1,350,215,352 bytes(ready 별 하나에 평균 약 275 KB)였다. 여유 2 GiB를 더해도 Node 1 여유 디스크 13 GB 안이다. ponytail: 디스크가 모자라면 멈추고, 더 큰 run은 part 단위로 흘려 보내도록 바꾼다.
 - **운영 서비스 DB 시험(2026-09-27, 사용자 승인).** Node 1에서 운영 Publisher 이미지(`50e13981`)에 이 브랜치의 `publisher`·`astro_kernel` 패키지를 읽기 전용으로 덮고 `publish-run --ready`를 돌렸다. 입력은 80 샘플 publish-ready(합성 TIC 999999101, run `20260927T010000Z`)다.
   - 결과: EC2-A `planetory_poc`(V29)에 `PUBLISHED b-12`·알림 HTTP 200, 재실행 `ALREADY_PUBLISHED b-12`·알림 200이었다.
   - DB와 로그: 별은 `hidden`, 판 manifest에 run ID·승인 근거, 관측 원천은 Sector 3·4 `120s`·`spoc-5.0.0`이었다. Backend 로그에 "판 12(TIC 999999101) 후처리"가 두 번 찍혔고 재개·라벨은 0이었다.
-  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 게시 단계는 Node 1에 배포했지만, 첫 run이 승인 대기라 게시는 아직 돌지 않았다.
+  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 게시 단계는 Node 1에 배포했고, 첫 운영 run이 4,916개를 게시했다(결과는 [DAG README](../airflow/dags/README.md) 「첫 운영 run」).
 
 ## DEC-01 공급 집계 (S15P21C206-79)
 

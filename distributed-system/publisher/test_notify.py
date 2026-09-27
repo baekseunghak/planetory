@@ -68,6 +68,8 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual([(b, sent) for b, sent, _ in dropped], [(7, False)])
         self.assertIn("RemoteDisconnected", dropped[0][2])
         self.assertEqual([(b, sent) for b, sent, _ in notify_backend(self.url, "t", [8])], [(8, True)])
+        # 잘못된 BACKEND_URL도 그 판의 실패로만 남는다(run 기록을 잃지 않는다).
+        self.assertEqual([sent for _, sent, _ in notify_backend("http://[bad", "t", [9])], [False])
 
     def test_without_token_sends_nothing_and_fails(self):
         env = {k: v for k, v in os.environ.items() if k != "INTERNAL_SERVICE_TOKEN"}
