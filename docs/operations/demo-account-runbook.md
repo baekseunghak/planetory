@@ -1,6 +1,6 @@
 # 시연 발표자 계정 준비 계획
 
-- 상태: 계획·리뷰 대기. 운영 DB에 실행하지 않았다.
+- 상태: 계획. 문서 리뷰 승인(김동혁, 2026-09-27, MR !247). 운영 DB 실행은 6절 결정과 실행 직전 승인 전이며 아직 실행하지 않았다.
 - Jira: [S15P21C206-281](https://ssafy.atlassian.net/browse/S15P21C206-281) (에픽 [S15P21C206-224](https://ssafy.atlassian.net/browse/S15P21C206-224))
 - 상위 정본: [운영 규칙 변경 런북](operation-rule-runbook.md), [탐사 API 9.2절](../../apps/backend/docs/exploration-api-spec.md#92-내부-계약-성과-지급별-열림), [요구사항 POL-27·HOME-02](../requirements/planetory-requirements-spec.md)
 - 관련: 최종 발표 시연 런북(S15P21C206-225, MR !180 병합 전), [발표 시연 서버 안내](../../apps/frontend/src/cinema/DEMO.md)
@@ -49,24 +49,29 @@ SELECT round_no, target_tic_id, starts_on, ends_on FROM challenge_rounds WHERE s
 -- ③ 규칙 버전 목록과 현재 값
 SELECT rule_version, applied_at, "values"->'discovery' AS discovery
   FROM operation_settings ORDER BY applied_at;
+
+-- ④ 최근 30분 제출·공개 수 (조용한 시각을 고르는 근거, 실행 직전에 다시 본다)
+SELECT (SELECT count(*) FROM submissions WHERE created_at > now() - interval '30 minutes') AS submissions_30m,
+       (SELECT count(*) FROM published_analyses WHERE published_at > now() - interval '30 minutes') AS publications_30m;
 ```
 
 | 확인 | 통과 기준 |
 | --- | --- |
-| `pool` | K보다 크다. 2026-09-27 기준 운영 DB의 공개 별은 약 2,800개다(사용자 확인) |
+| `pool` | `pool` − 발표자 계정이 성과로 이미 연 별 수 ≥ K. 발표자 계정이 이미 연 별은 무작위 후보에서 빠진다(`pickUndiscoveredStar`). 2026-09-27 기준 운영 DB의 공개 별은 약 2,800개다(사용자 확인) |
 | `no_current_bundle`·`mock` | 0이어야 한다. 아니면 분석할 수 없는 별이나 목업 별이 섞여 열린다. 먼저 정리할지 리뷰에서 정한다 |
 | 진행 중인 챌린지 | 1건. 있어야 튜토리얼 5번을 끝낼 때 챌린지 별이 열린다 |
 | 현재 규칙 | `stars_per_achievement`가 1이고, 다음에 쓸 버전 이름이 비어 있다 |
+| 최근 30분 제출·공개(④) | 0에 가깝다. 팀 공지는 팀원만 막고 외부 회원의 제출·공개는 막지 못하므로, 이 값으로 조용한 시각을 고른다 |
 
 ## 3. 절차
 
 1. **발표자 계정 만들기.** 시크릿 창에서 팀 공용 OAuth 계정으로 가입하고 닉네임을 정한다. 시크릿 창을 쓰는 이유는 5절의 화면 항목에 있다. 회원 id는 `SELECT id, nickname, created_at FROM users WHERE nickname = '<닉네임>';`으로 확인한다.
 2. **튜토리얼 풀기.** 튜토리얼 1~4번과 5번의 첫 신호를 정상적으로 푼다. 확인된 행성은 `행성 같음`, 3~5번은 `아닌 것 같음`이다. 모두 인정되면 별은 12개다(튜토리얼 별 5개와 성과 7건으로 연 별 7개). 5번의 두 번째 신호는 `제출값 확인`까지만 해 두고 멈춘다.
    - 마지막 성과를 트리거로 쓰는 이유: 규칙이 올라가 있는 동안 성과가 한 번 더 나면 별이 K개 더 열린다. 마지막 성과 뒤에는 낼 성과가 없다.
-3. **실행 직전 준비.** 팀 채널에 "3분간 제출·공개 금지"를 공지하고 백업을 받는다.
+3. **실행 직전 준비.** 2절 ④로 최근 제출·공개가 없는지 다시 보고, 팀 채널에 "3분간 제출·공개 금지"를 공지한 뒤 백업을 받는다. 백업에는 회원 정보가 들어 있으므로 [서비스 DB 백업 규칙](../../infra/service/README.md#튜토리얼-5종)을 따른다. 권한 600으로 두고 서버 밖으로 옮기지 않으며, 사후 확인이 끝나면 지운다. 삭제는 실행 직전에 승인받는다.
 
    ```bash
-   docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > before-demo-account.dump
+   (umask 077; mkdir -p ~/backups && docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > ~/backups/planetory-pre281-$(date -u +%Y%m%dT%H%M%SZ).dump)
    ```
 
    K는 목표 별 수에서 현재 별 수와 챌린지 별 1개를 뺀 값이다. 목표 1,000개, 현재 12개면 987이다.
@@ -110,7 +115,9 @@ SELECT rule_version, applied_at, "values"->'discovery' AS discovery
 | 창 동안 발견한 회원 | 발표자 계정뿐이다 |
 | 현재 규칙 | 3분 뒤 복귀 버전(`rule-2`)이다 |
 
-트리거가 성과로 인정되지 않으면(판단 불일치, 창을 놓침) 별은 더 열리지 않고 3분 뒤 자동으로 복귀한다. 다른 성과를 트리거로 3~6단계를 다시 한다. 이때 규칙 이력이 두 행 더 남는다.
+트리거가 성과로 인정되지 않으면(판단 불일치, 창을 놓침) 별은 더 열리지 않고 3분 뒤 자동으로 복귀한다. 다른 성과를 트리거로 3~6단계를 다시 한다. 판단이 달랐던 경우에는 같은 신호를 `다시 풀기`로 맞게 다시 제출해도 된다. 그 신호의 성과는 아직 인정되지 않았으므로 이때 처음 인정된다. 다시 할 때마다 규칙 이력이 두 행 더 남는다.
+
+다시 할 때 K는 3단계 식으로 구하지 않는다. 첫 트리거가 창을 놓쳤거나 판단이 달랐어도, 매칭만 되면 같은 요청에서 튜토리얼 5번이 끝나 챌린지 별이 이미 열린다(`TutorialProgressService.onTutorialCompleted`는 성과 인정과 관계없이 완료만 본다). 3단계 count에 챌린지 별이 들어 있으면 K = 목표 별 수 − 현재 별 수로 구한다.
 
 ## 4. 시연 별 고르기
 
@@ -135,7 +142,7 @@ SELECT c.tic_id, c.removal_step, round(c.period_days, 3) AS period_d, round(c.de
 
 | 항목 | 내용 | 대응 |
 | --- | --- | --- |
-| 전 회원 적용 | 창이 열린 동안에는 다른 회원의 성과에도 별이 K개씩 열린다 | 복귀를 3분 뒤로 예약하고 제출·공개 중지를 공지한다. 3절 6단계로 점검한다. 발생하면 되돌릴 앱 기능이 없으므로 별도 승인 뒤 처리한다 |
+| 전 회원 적용 | 창이 열린 동안에는 다른 회원의 성과에도 별이 K개씩 열린다. 성과는 제출과 공개 두 경로에서만 인정된다 | 2절 ④로 조용한 시각을 고르고, 복귀를 3분 뒤로 예약하고, 제출·공개 중지를 공지한다. 공지는 팀원만 막는다. 3절 6단계로 점검하며, 발생하면 되돌릴 앱 기능이 없으므로 별도 승인 뒤 처리한다 |
 | 규칙 이력 | 적용된 규칙 행은 고치거나 지울 수 없다(V9 트리거) | note에 목적과 Jira를 남긴다. [공개 범위 결정](../data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인)은 이 값을 공급 부족 대응으로 바꾸지 않는다고 적었다. 이번 변경은 공급 대응이 아니라 계정 하나를 준비하려는 몇 분짜리 변경이다 |
 | 요청 처리 시간 | 제출 한 번에 별 K개를 고르고 저장한다. 프론트 기본 제한 15초(`apps/frontend/src/api/client.ts`)를 넘기면 화면은 접수 확인 흐름으로 넘어가지만 서버는 처리를 끝낸다 | 필요하면 로컬 DB에서 같은 별 수로 먼저 잰다. 길면 K를 나눠 성과 여러 건에 건다. 그만큼 창도 길어진다 |
 | 시네마 화면 | 은하로 돌아가면 새 별을 하나씩 차례로 점화한다(`apps/frontend/src/cinema/shell/CinemaLayout.tsx`). 새 별 목록은 그 브라우저의 localStorage `planetory:new-stars`에 최대 200개 남아 "새 별 N개" 칩과 고리로 보인다 | 트리거는 시크릿 창에서 하고 결과를 확인한 뒤 창을 닫는다. 일반 창에서 했다면 그 키를 지운다 |
@@ -143,13 +150,16 @@ SELECT c.tic_id, c.removal_step, round(c.period_days, 3) AS period_d, round(c.de
 | 부수 효과 | 열린 별의 별 게시판이 열리고(V24 트리거) 통계의 발견 수에 섞인다 | 수용 여부를 리뷰에서 정한다 |
 | 되돌리기 | `cleanup_withdrawn_member(<회원 id>)`로 계정째 지울 수 있다. 공개 분석까지 지워지고 되돌릴 수 없으며 규칙 이력은 남는다 | 되돌림이 필요하면 별도 승인을 받는다 |
 
-## 6. 리뷰에서 정할 것
+## 6. 실행 전에 정할 것
+
+문서 리뷰(MR !247) 승인은 이 계획 문서를 병합하는 데 대한 것이며 운영 DB 실행 승인이 아니다. 아래 항목은 실행 전에 인프라 담당과 정한다.
 
 - 운영 DB에 규칙 두 행을 남기는 데 동의하는지, 실행 시각과 실행자(소유자 계정)
-- 3분 창과 제출·공개 중지 공지로 충분한지
+- 3분 창과 제출·공개 중지 공지로 충분한지. 2절 ④의 최근 30분 제출·공개 수를 근거로 본다
 - `no_current_bundle`·`mock` 별을 실행 전에 정리할지
-- 백업 파일을 어디에 얼마 동안 둘지
 - 한 요청에서 별 K개를 여는 시간을 먼저 측정할지
+
+백업은 [서비스 DB 백업 규칙](../../infra/service/README.md#튜토리얼-5종)을 따른다(권한 600, 서버 밖으로 옮기지 않음, 사후 확인 뒤 삭제하되 삭제는 실행 직전 승인).
 
 ## 7. 실행 기록
 
