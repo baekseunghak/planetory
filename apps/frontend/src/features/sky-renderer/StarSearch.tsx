@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../api";
 import type { SkySceneProps } from "../sky-data/SkyDataPage";
@@ -22,25 +22,19 @@ export function StarFilterFields({
   value,
   onChange,
   disabled = false,
+  actions,
 }: {
   value: StarFilters;
   onChange(value: StarFilters): void;
   disabled?: boolean;
+  actions?: ReactNode;
 }) {
   // Cinema app: 탐사 (src/shared/cinema-wording). Values are unchanged.
   const cinema = useCinemaWording();
   return (
     <fieldset disabled={disabled} className="star-search-fields">
       <legend className="sr-only">발견한 별 검색 조건</legend>
-      <label>
-        TIC 번호
-        <input
-          name="ticId"
-          value={value.ticId}
-          placeholder="예: 259377017"
-          onChange={(e) => onChange({ ...value, ticId: e.target.value })}
-        />
-      </label>
+
       <label>
         탐사 상태
         <select
@@ -67,6 +61,18 @@ export function StarFilterFields({
           ))}
         </select>
       </label>
+      <div className="star-search-query">
+      <label>
+        TIC 번호
+        <input
+          name="ticId"
+          value={value.ticId}
+          placeholder="예: 259377017"
+          onChange={(e) => onChange({ ...value, ticId: e.target.value })}
+        />
+      </label>
+        {actions}
+      </div>
     </fieldset>
   );
 }
@@ -103,13 +109,13 @@ export function StarSearch({
   } | null>(null);
   const [error, setError] = useState(""),
     [retry, setRetry] = useState(0),
+    [loading, setLoading] = useState(false),
     [locating, setLocating] = useState(false);
   const pending = useRef<AbortController | null>(null),
     currentScope = useRef(scope);
   currentScope.current = scope;
   const results =
     result?.scope === scope &&
-    result.cursor === cursor &&
     !data.needsRefresh &&
     !filterError
       ? result
@@ -124,7 +130,8 @@ export function StarSearch({
   useEffect(() => {
     if (!open || filterError || data.needsRefresh) return;
     const controller = new AbortController();
-    setResult(null);
+    setLoading(true);
+    setResult((previous) => cursor && previous?.scope === scope ? { ...previous, error: undefined } : null);
     void api<unknown>(starSearchPath(JSON.parse(query), cursor), {
       signal: controller.signal,
     })
@@ -133,15 +140,22 @@ export function StarSearch({
         const page = readDiscoveredPage(value);
         if (page.nextCursor && values.includes(page.nextCursor))
           throw new Error("같은 검색 페이지가 반복되었습니다.");
-        setResult({ scope, cursor, page });
+        setResult((previous) => {
+          const existing = cursor && previous?.scope === scope ? previous.page?.items ?? [] : [];
+          const items = [...new Map([...existing, ...page.items].map((star) => [star.ticId, star])).values()];
+          return { scope, cursor, page: { ...page, items } };
+        });
+        setLoading(false);
       })
       .catch(() => {
-        if (!controller.signal.aborted)
-          setResult({
-            scope,
-            cursor,
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setResult((previous) => ({
+            scope, cursor,
+            page: cursor && previous?.scope === scope ? previous.page : undefined,
             error: "별 검색 결과를 불러오지 못했습니다.",
-          });
+          }));
+        }
       });
     return () => controller.abort();
   }, [open, scope, cursor, retry, data.needsRefresh, filterError]);
@@ -203,6 +217,7 @@ export function StarSearch({
       }}
     >
       <summary>내 별 찾기</summary>
+      <div className="star-search-panel">
       <p>발견한 별에서 TIC 번호·탐사 상태·등급으로 찾아보세요.</p>
       <form
         onSubmit={(e) => {
@@ -210,7 +225,7 @@ export function StarSearch({
           apply(draft);
         }}
       >
-        <StarFilterFields value={draft} onChange={setDraft} />
+        <StarFilterFields value={draft} onChange={setDraft} actions={
         <div className="star-search-actions">
           <button type="submit">별 검색</button>
           <button
@@ -220,9 +235,10 @@ export function StarSearch({
               apply(emptyStarFilters);
             }}
           >
-            검색 초기화
+            초기화
           </button>
         </div>
+        } />
       </form>
       {(filterError || error || results?.error) && (
         <div role="alert">
@@ -267,27 +283,22 @@ export function StarSearch({
             </button>
           </li>
         ))}
+        {results?.page?.hasNext && (
+          <li className="star-search-more">
+            <button
+              disabled={loading || locating || data.needsRefresh}
+              onClick={() => {
+                if (results.error) setRetry((n) => n + 1);
+                else if (results.page?.nextCursor)
+                  setCursors({ scope, values: [...values, results.page.nextCursor] });
+              }}
+            >
+              {loading ? "불러오는 중…" : results.error ? "다시 불러오기" : "더 보기"}
+            </button>
+          </li>
+        )}
       </ul>
-      <nav aria-label="별 검색 페이지">
-        <button
-          disabled={values.length < 2 || locating}
-          onClick={() => setCursors({ scope, values: values.slice(0, -1) })}
-        >
-          이전 검색 결과
-        </button>
-        <button
-          disabled={!results?.page?.hasNext || locating}
-          onClick={() => {
-            if (results?.page?.nextCursor)
-              setCursors({
-                scope,
-                values: [...values, results.page.nextCursor],
-              });
-          }}
-        >
-          다음 검색 결과
-        </button>
-      </nav>
+      </div>
     </details>
   );
 }

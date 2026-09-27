@@ -632,7 +632,7 @@ function resultLead(
 /**
  * The result's actions, at most two buttons (as in the result dialog):
  * after a window that matched nothing "구간 다시 잡기" (period kept) and
- * "주기 다시 고르기"; otherwise "결과 자세히 보기" and, while the star has
+ * "주기 다시 고르기"; otherwise "이번 제출 결과" and, while the star has
  * more to find, "다음 곡선 단계로". "은하로 돌아가기" is a small link; the rest
  * (별 결과, 공개 검토, 토론) is in the result dialog.
  */
@@ -653,11 +653,11 @@ function ResultActions({
     <button
       type="button"
       className={className}
-      // The discovery card's "결과 자세히 보기" opens this same view.
+      // The discovery card's "이번 제출 결과" opens this same view.
       data-result-details=""
       onClick={onDetails}
     >
-      결과 자세히 보기
+      이번 제출 결과
     </button>
   );
   const next =

@@ -1,4 +1,6 @@
-import { CommunityFeed, DateTime, AuthorLink, StarLink } from "./CommunityFeed";
+import { ExpandableFeed } from "./ExpandableFeed";
+import { CommunityTabs } from "./CommunityTabs";
+import { DateTime, AuthorLink, StarLink } from "./CommunityFeed";
 import { MaterialCards } from "./MaterialCards";
 import { useCallback, useState } from "react";
 import {
@@ -55,11 +57,8 @@ function ReadState({
 }
 
 export function CommunityPage() {
-  const { ticId } = useParams<"ticId">();
-  // Cinema app: the title matches the menu (src/shared/cinema-wording).
-  const cinema = useCinemaWording();
-  // Follow: live in production (../p1).
   const liveP1 = useLiveP1();
+  const { ticId } = useParams<"ticId">();
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -101,14 +100,9 @@ export function CommunityPage() {
   const firstPage = feedSearchHref(location.pathname, values, ticId);
   return (
     <div className="community-page">
-      <header className="community-heading">
-        <p className="eyebrow">VOICES IN THE UNIVERSE</p>
-        <h1>{ticId ? `TIC ${ticId}` : cinema ? "커뮤니티" : "탐사 이야기"}</h1>
-        <p>
-          {ticId
-            ? "이 별의 이야기와 공식 신호 스레드를 모았습니다."
-            : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}
-        </p>
+      <header className="community-heading community-top-heading service-section-heading">
+        <h1>{ticId ? `TIC ${ticId}` : "커뮤니티"}</h1>
+        <p>{ticId ? "이 별의 이야기와 공식 신호 스레드를 모았습니다." : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}</p>
       </header>
       <div className="post-actions">
         {liveP1 && ticId && (
@@ -125,35 +119,18 @@ export function CommunityPage() {
           새 글 쓰기
         </Link>
       </div>
+      <CommunityTabs active={board} boardHref={boardHref} />
       <div className={ticId ? "" : "community-columns"}>
-        <div className="community-main">
-          <nav className="community-tabs" aria-label="게시판 종류">
-            {liveP1 && <Link to="/community/following">팔로잉</Link>}
-            <Link
-              to={boardHref("")}
-              state={null}
-              aria-current={!board ? "page" : undefined}
-            >
-              전체
-            </Link>
-            <Link
-              to={boardHref("STAR")}
-              state={null}
-              aria-current={board === "STAR" ? "page" : undefined}
-            >
-              별 게시판
-            </Link>
-            <Link
-              to={boardHref("FREE")}
-              state={null}
-              aria-current={board === "FREE" ? "page" : undefined}
-            >
-              자유 게시판
-            </Link>
-            <Link to={pagePath("hotTopics")} state={null}>
-              핫 토픽
-            </Link>
-          </nav>
+        <div className="community-main community-list-panel">
+          <header className="community-list-heading">
+            <h2>
+              {board === "STAR"
+                ? "별 게시판"
+                : board === "FREE"
+                  ? "자유 게시판"
+                  : "전체"}
+            </h2>
+          </header>
           <FeedSearchForm
             key={location.key}
             initial={values}
@@ -192,8 +169,12 @@ export function CommunityPage() {
                         : "아직 게시글이 없습니다."}
                   </p>
                 )}
-                <CommunityFeed items={state.data.items} />
-                <Pager page={state.data} name="cursor" label="게시글 페이지" />
+                <ExpandableFeed
+                  key={path}
+                  initial={state.data}
+                  path={path}
+                  decode={readFeed}
+                />
               </>
             )}
           </section>

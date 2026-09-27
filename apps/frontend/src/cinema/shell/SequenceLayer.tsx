@@ -152,7 +152,7 @@ function DiscoveryCardView({
       className="cinema-primary"
       onClick={onDetails}
     >
-      결과 자세히 보기
+      이번 제출 결과
     </button>
   );
   return (

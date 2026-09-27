@@ -85,11 +85,6 @@
   gap: 2px;
   pointer-events: none;
 }
-/* The shell's tutorial line (fixed at 62px, up to two lines at 1024px) sits
-   over the scene too: the crumb goes under it. */
-body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
-  top: calc(136px + env(safe-area-inset-top, 0px));
-}
 .cx-crumb > * {
   pointer-events: auto;
 }
@@ -1585,9 +1580,6 @@ body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
     top: calc(100px + env(safe-area-inset-top, 0px));
     left: 16px;
   }
-  body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
-    top: calc(136px + env(safe-area-inset-top, 0px));
-  }
   /* 제출값 확인 in the judgment row: the values in three columns, the two
      buttons at the right and kept in view while the panel scrolls. */
   .cx-area[data-area="judge"] .cx-review {
@@ -1825,17 +1817,7 @@ body:has(.cinema-tutorial-guide[data-place="analysis"]) .cx-crumb {
 /* Empty hint text must not shift the heading's baseline. */
 .cx-area[data-area="judge"] > .cx-row .cx-label { align-items: center; }
 .cx-area[data-area="judge"] > .cx-row .cx-label em:empty { display: none; }
-/* Keep scrolling quiet against the dark analysis surfaces. */
-.cx-analysis, .cx-analysis *, .cx-dialog {
-  scrollbar-width: thin;
-  scrollbar-color: #566176 #0b1019;
-}
-.cx-analysis ::-webkit-scrollbar, .cx-dialog::-webkit-scrollbar { width: 7px; height: 7px; }
-.cx-analysis ::-webkit-scrollbar-track, .cx-dialog::-webkit-scrollbar-track { background: #0b1019; }
-.cx-analysis ::-webkit-scrollbar-thumb, .cx-dialog::-webkit-scrollbar-thumb {
-  background: #566176; border: 2px solid #0b1019; border-radius: 8px;
-}
-.cx-analysis ::-webkit-scrollbar-thumb:hover, .cx-dialog::-webkit-scrollbar-thumb:hover { background: #8d99ad; }.cx-result-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; grid-area: title; }
+.cx-result-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; grid-area: title; }
 .cx-result-heading .cx-eyebrow { flex-shrink: 0; }
 .cx-result > .cx-actions > button {
   box-sizing: border-box; height: 42px;

@@ -28,8 +28,6 @@ html body:has(.pc-classic-analysis) {
      header instead of under it. */
   scroll-padding-top: 52px;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--pc-line-strong) transparent;
   box-sizing: border-box;
   border-top: 1px solid var(--pc-line-strong);
   background: var(--pc-glass);

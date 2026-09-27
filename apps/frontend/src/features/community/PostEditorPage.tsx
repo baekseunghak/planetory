@@ -1,3 +1,4 @@
+import { PostStarPicker } from "./PostStarPicker";
 import { MaterialPicker } from "./MaterialPicker";
 import { emptyMaterials, materialError } from "./materialContracts";
 import {
@@ -377,6 +378,8 @@ function PostEditor({ postId }: { postId?: string }) {
               <p role="alert">{fieldErrors.purposeTag}</p>
             )}
             {draft.board === "STAR" && (
+              <div className="post-star-field">
+              <PostStarPicker value={draft.ticId} onSelect={(ticId) => change("ticId", ticId)} />
               <label>
                 별의 TIC 번호
                 <input
@@ -391,6 +394,7 @@ function PostEditor({ postId }: { postId?: string }) {
                   공개된 별 게시판에 연결됩니다. {fieldErrors.ticId}
                 </small>
               </label>
+              </div>
             )}
             {original?.hasAttachments && (
               <p>

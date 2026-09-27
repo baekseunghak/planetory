@@ -10,6 +10,7 @@ import { SceneCanvas, SceneProvider, useScene, useSceneState } from "../scene";
 import { GalaxyArtwork } from "../../components/GalaxyArtwork";
 import { CinemaWording } from "../../shared/cinema-wording";
 import { readSceneEffects } from "./preferences";
+import { useSelectWidths } from "./useSelectWidths";
 import { cinemaTitle } from "./stage";
 
 // Demo scenario switch: the dev:cinema server only (shell/demo). The literal
@@ -20,6 +21,7 @@ const DemoSwitch =
     : null;
 
 export function CinemaRoot({ children }: { children: ReactNode }) {
+  useSelectWidths();
   return (
     <SceneProvider>
       <SceneStage />

@@ -7,6 +7,7 @@
 import type { ReactNode, RefObject } from "react";
 import { Link } from "react-router-dom";
 import { pagePath } from "../../../app/paths";
+import { starResultsLocation } from "./navigation";
 import type { DetailState } from "../../../features/analysis/AnalysisResult";
 import { usePhaseDraft } from "../../../features/analysis/AnalysisSession";
 import { celebrationText } from "../../../features/analysis/celebration";
@@ -243,8 +244,8 @@ export function AcceptedResult(props: AcceptedResultProps) {
     VIEW_RESULT: {
       kind: "link",
       key: "VIEW_RESULT",
-      label: "분석 결과 보기",
-      to: pagePath("starResults", { ticId }, { returnTo: currentPath }),
+      label: "이 별의 탐사 결과",
+      to: starResultsLocation(ticId, returnTo),
     },
     DISCUSS: {
       kind: "link",
@@ -332,7 +333,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
   return (
     <>
       <div className="pc-result" data-match={matchStatus}>
-        <p className="pc-result-eyebrow">분석 결과</p>
+        <p className="pc-result-eyebrow">이번 제출 결과</p>
         <h4 id={headingId}>{title}</h4>
         <p
           ref={focusRef}
@@ -530,10 +531,10 @@ export function AcceptedResult(props: AcceptedResultProps) {
         <div className="pc-result-primary">
           {next && render(next, "pc-result-button pc-result-button-main")}
           {render(home, "pc-result-button")}
-          {rest.filter((action) => action.label === "분석 결과 보기").map((action) => render(action, "pc-result-inline"))}
+          {rest.filter((action) => action.key === "VIEW_RESULT").map((action) => render(action, "pc-result-inline"))}
         </div>
         <div className="pc-result-secondary">
-          {rest.filter((action) => action.label !== "분석 결과 보기").map((action) => render(action, "pc-result-inline"))}
+          {rest.filter((action) => action.key !== "VIEW_RESULT").map((action) => render(action, "pc-result-inline"))}
           <button type="button" className="pc-result-inline" onClick={close}>
             닫기
           </button>

@@ -163,7 +163,7 @@ function HistoryRow({
             { returnTo },
           )}
         >
-          기록 상세 보기
+          {cinema ? "제출 기록 상세" : "기록 상세 보기"}
         </Link>
       ) : (
         <p role="status">

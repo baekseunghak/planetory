@@ -17,18 +17,8 @@ import * as f from "../format";
 import { classification, Row } from "./AcceptedResult";
 import { matchedSignalLabel } from "./labels";
 import "./results.css";
+import { explorationBackLabel, recordParent, starResultsLocation } from "./navigation";
 
-/** Where "back" goes, read from the address (never invented). */
-function backLabel(returnTo: string) {
-  if (returnTo.startsWith("/analysis/")) return "분석으로 돌아가기";
-  if (returnTo === "/me" || returnTo.startsWith("/me?"))
-    return "마이페이지로 돌아가기";
-  if (returnTo.startsWith("/sky")) return "나의 은하로 돌아가기";
-  if (returnTo.startsWith("/results/")) return "분석 결과로 돌아가기";
-  if (returnTo.startsWith("/posts/") || returnTo.startsWith("/comments/"))
-    return "글로 돌아가기";
-  return "돌아가기";
-}
 
 /** The graph's fallback reasons, in plain words (fallback-note.tsx rules). */
 function fallbackText(
@@ -162,6 +152,12 @@ export function CinemaHistoryDetail({
   } = useHistoryDetail(historyId);
   const { currentPath } = usePageContext();
   const ready = detail.phase === "ready" ? detail.detail : null;
+  const parent = recordParent(returnTo, ready?.ticId ?? "");
+  const cameFromResults = new URL(parent, "https://planetory.invalid").pathname
+    === `/results/${ready?.ticId}`;
+  const recordUrl = new URL(currentPath, "https://planetory.invalid");
+  recordUrl.searchParams.set("returnTo", parent);
+  const recordPath = recordUrl.pathname + recordUrl.search;
   // The member's planets on this star, for "행성 N".
   const sky = useCinemaSky();
   const focus = useStarDetail(sky, ready?.ticId ?? null);
@@ -200,7 +196,11 @@ export function CinemaHistoryDetail({
 
   return (
     <main className="page history-detail pc-result-page">
-      <h2>분석 기록 상세</h2>
+      <h2>제출 기록 상세</h2>
+      <p>제출 한 건의 선택과 판정을 확인합니다.</p>
+      <nav aria-label="제출 기록 이동">
+        <Link to={parent}>{explorationBackLabel(parent)}</Link>
+      </nav>
       {detail.phase === "loading" && <p role="status">불러오는 중입니다.</p>}
       {(detail.phase === "denied" ||
         detail.phase === "error" ||
@@ -223,7 +223,7 @@ export function CinemaHistoryDetail({
               to={pagePath(
                 "publication",
                 { historyId },
-                { ticId: ready.ticId, returnTo: currentPath },
+                { ticId: ready.ticId, returnTo: recordPath },
               )}
             >
               공개 검토
@@ -234,22 +234,18 @@ export function CinemaHistoryDetail({
               pagePath(
                 "analysis",
                 { ticId: ready.ticId },
-                { returnTo: currentPath },
+                { returnTo: parent },
               ) +
               `&retryOfSubmissionId=${encodeURIComponent(ready.submissionId)}`
             }
           >
             다시 분석
           </Link>
-          <Link
-            to={pagePath(
-              "starResults",
-              { ticId: ready.ticId },
-              { returnTo: currentPath },
-            )}
-          >
-            분석 결과 보기
-          </Link>
+          {!cameFromResults && (
+            <Link to={starResultsLocation(ready.ticId, parent)}>
+              이 별의 탐사 결과
+            </Link>
+          )}
           <dl className="history-receipt">
             <div>
               <dt>별</dt>
@@ -407,7 +403,7 @@ export function CinemaHistoryDetail({
 
       {/* Back where the address says; also from a record that cannot be read. */}
       <p className="history-back">
-        <Link to={returnTo}>{backLabel(returnTo)}</Link>
+        <Link to={parent}>{explorationBackLabel(parent)}</Link>
       </p>
     </main>
   );

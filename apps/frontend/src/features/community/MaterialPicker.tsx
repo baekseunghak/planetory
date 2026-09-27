@@ -1,3 +1,4 @@
+import { PublicSourcePicker } from "./PublicSourcePicker";
 import { useCallback, useState } from "react";
 import { api } from "../../api";
 import { ErrorState, LoadingState } from "../../components/RequestState";
@@ -156,8 +157,8 @@ function Choices({
     setMessage(error);
     if (!error) onChange(next);
   };
-  async function source() {
-    const target: Source = { type: kind, id: id.trim() };
+  async function source(chosen?: Source) {
+    const target: Source = chosen ?? { type: kind, id: id.trim() };
     if (!target.id) {
       setMessage("출처 ID를 입력해 주세요.");
       return;
@@ -245,6 +246,8 @@ function Choices({
       </section>
       <section aria-label="공개 출처 선택">
         <h3>공개 출처</h3>
+        <PublicSourcePicker ticId={ticId} selected={selected.sourceLinks} disabled={preview.pending || selected.sourceLinks.length >= 3 || selected.unavailableSources.length > 0} onSelect={(target) => void source(target)} />
+        <details><summary>출처 ID 직접 입력</summary>
         <p>
           공개 분석 또는 공식 스레드의 ID를 입력하면 현재 공개 여부와 같은
           별인지 확인합니다.
@@ -274,6 +277,7 @@ function Choices({
         >
           {preview.pending ? "확인 중…" : "출처 확인 후 첨부"}
         </button>
+        </details>
         {preview.error && <ErrorState error={preview.error} />}
       </section>
       {message && <p role="alert">{message}</p>}

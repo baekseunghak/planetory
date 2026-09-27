@@ -149,6 +149,19 @@
   overflow-wrap: anywhere;
 }
 
+/* Primary next step after reading the star summary. */
+.cinema-shell .cp-page .pc-result-page section nav a.pc-result-return {
+  background: var(--pc-accent);
+  border-color: var(--pc-accent);
+  color: #070a0f;
+  font-weight: 600;
+}
+.cinema-shell .cp-page .pc-result-page section nav a.pc-result-return:hover {
+  background: var(--pc-accent-hover, #ffe18a);
+  border-color: var(--pc-accent-hover, #ffe18a);
+  color: #070a0f;
+  text-decoration: none;
+}
 /* actions: two primary, the rest small */
 .pc-result-actions {
   display: flex;
