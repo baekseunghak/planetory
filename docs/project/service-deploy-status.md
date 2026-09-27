@@ -112,7 +112,7 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend는 그 뒤 새 develop 파이프라인 `224322`(`50e13981`)의 버튼으로 올렸다(2026-09-26 22:29 KST, 헬스 통과).
 
-같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-27 05:25 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `c3d8ba85`(272 병합 commit)이다. Frontend는 develop 파이프라인 `224759`의 `deploy:frontend:ec2-a`(job `648986`, 05:25:15~05:25:24 KST)로 올렸고 `/health/renderer-enabled`가 200이다. 그 전(2026-09-26 22:29 KST)의 Frontend는 `50e13981`이었다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-27 06:12 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `0d2d2afa`(85 병합 commit)이다. Frontend는 develop 파이프라인 `224779`의 `deploy:frontend:ec2-a`(job `649089`, 06:12:04~06:12:12 KST)로 올렸고 `/health/renderer-enabled`가 200이다. 그 전에는 `c3d8ba85`(272 병합 commit, 2026-09-27 05:25 KST, job `648986`), 더 전(2026-09-26 22:29 KST)에는 `50e13981`이었다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
@@ -193,9 +193,20 @@ GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend
 | Node 1 | `/etc/planetory/publisher/env`(root `0600`), 이미지 `planetory/publisher:50e13981b036aa1378d8ca0d1624641cfc9d48ab`(V29) |
 
 - **MR 병합 전 주의.** CI 배포 job은 자기 파이프라인 commit의 `compose.yaml`을 올린다. 병합 전 develop 판에는 `service-db` 포트가 없다. 그 뒤 `service-db`가 재생성되면(인자 없는 `up -d`, `--no-deps` 없는 `run`) loopback 포트가 사라져 적재 경로가 끊긴다. 도는 컨테이너는 배포만으로는 바뀌지 않는다.
-- **실제로 덮였다(2026-09-27 05:25 KST).** develop `c3d8ba85`의 Frontend 배포(job `648986`)가 서버 `compose.yaml`을 포트 없는 판으로 올렸다. 도는 `service-db`는 `127.0.0.1:5432`를 그대로 물고 있고 serve도 살아 있어 경로는 동작한다. 85 병합 뒤의 첫 배포가 포트 줄을 되돌린다. 그 전에는 `service-db`를 재생성하지 않는다.
+- **실제로 덮였다(2026-09-27 05:25 KST).** develop `c3d8ba85`의 Frontend 배포(job `648986`)가 서버 `compose.yaml`을 포트 없는 판으로 올렸다. 도는 `service-db`는 `127.0.0.1:5432`를 그대로 물고 있고 serve도 살아 있어 경로는 동작한다. **06:12 KST에 되돌렸다.** 85 병합 뒤 첫 배포(Frontend `0d2d2afa`, job `649089`)가 포트 줄이 있는 `compose.yaml`을 올렸다. `service-db`·Backend는 재생성되지 않았고, 새 ACL(`tag:service`)에서 CI의 `deploy@ec2-a` 접속도 성공했다. 이제 `service-db`를 재생성해도 포트가 유지된다.
 - Backend 재생성으로 메모리 저장소의 잔차 작업 `rj-1`·`rj-2`가 사라졌다(`InMemoryResidualJobStore`, 위 88 절).
 - 시험은 임시 `hidden` 별 `900000099`로 했고 목업 판·별을 모두 지웠다. 시험 전후 운영 DB는 별 6개, current 판 5개(튜토리얼 `b-5`~`b-9`)로 같다.
+
+## NASA 정보·AI 설명 운영 적용 (S15P21C206-277, 2026-09-27)
+
+266~270의 NASA 원천과 AI 설명을 운영에서 처음 실제로 돌렸다. 상세는 [NASA 운영 가이드](../operations/nasa-planet-info-runbook.md) 11절.
+
+- 268: 화면의 「NASA 자료 요청」 POST로 `c-13`(`WASP-62 b`)의 NASA 자료가 `ready`로 저장됐고, 설명은 `disabled`로 모델을 부르지 않았다. 재조회·재요청은 NASA를 다시 부르지 않았다(`attempt_generation=1`).
+- 270: 결과 목록 POST도 `ready`(행성 1개)로 저장됐다. 화면 위젯은 아직 없어(271) API로 확인했다.
+- **설명 생성은 켜 두었다(07:25 KST 적용, 07:32 KST부터 연속, 남은 1주 운영).** EC2-A `.env`에 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 회원별 20·전체 300회/일, `GMS_KEY`(사용자가 직접 넣음). 예산 상한은 약 30,000크레딧이고, 매일 GMS 대시보드를 보고, 결정 시점 잔여 99,795 기준 누적 사용이 10,000크레딧(경보선)을 넘거나 급증하면 `NASA_EXPLANATION_ENABLED=false`로 끈다.
+- 설명 실측: 270 WASP-62 b 설명 성공(2.3초), 재요청 재사용. 268 `c-13`은 모델 출력이 서버 검증에서 떨어져 `invalid_output`(간헐적, 1시간 뒤 재시도 가능). 모델 호출 2회·약 28크레딧. `ENABLED=false` 되돌리기에서 기존 설명 보존·새 호출 차단을 확인하고 다시 켰다.
+- **원인 수정(프롬프트 v5)은 MR `!230` 병합 대기다.** 배포 전까지 운영은 Backend `6d1926d5`(v4)라서 `invalid_output`이 드물게 날 수 있다(재현 1/24). 배포하면 v4 설명은 바로 보이지 않고, 다시 요청할 때 v5로 새로 만든다(runbook 11.2).
+- Backend는 이 작업에서 07:25·07:31경·07:32 KST에 같은 이미지로 재생성됐다(설정 적용·끄기·다시 켜기). 로그인 세션은 유지된다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 
@@ -205,6 +216,7 @@ GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend
 | --- | --- |
 | 옛 임시 튜토리얼 1번 별 | TIC `261136679`. 272 전환으로 `hidden`이 됐고 목업 판·회원 기록을 지웠다. 별 행만 남는다 |
 | 88 동작 확인 기록 | 2026-09-26 김동혁 계정이 TIC `261136679`에 낸 제출 `sub-1`~`sub-3`, 그로 인정된 성과 2건, 열린 별 `900000020`·`900000011`. 제출과 성과는 별 결과 페이지와 통계 집계(V21)의 입력에 들어간다. 별 열림 2건은 아래 더미 별 정리 명령에 함께 걸린다. 272 전환에서 제출·분석 기록·성과를 지웠고 열린 별 2건은 272 더미 별 삭제로 함께 지웠다(위 「튜토리얼 5종 등록」) |
+| 277 동작 확인 기록 | 2026-09-27 김동혁이 로그인한 시험 계정이 튜토리얼 1번(TIC `149603524`)에 낸 제출 `sub-10`(미매칭, 지속 시간 비율 초과)·`sub-11`(`c-13` 매칭), 그로 인정된 성과 1건(A), 이어 열린 별 1개. NASA 원천 `nasa_planet_info` 1행(`c-13`, `WASP-62 b`)과 270 항성 목록 1건(TIC `149603524`). 설명 행 2개(`c-13` 실패 1, 270 행성 성공 1)와 일일 한도 집계 2. 제출·성과는 88 기록처럼 별 결과 페이지와 통계(V21) 입력에 들어가지만 실제 사용자 흐름으로 만든 정상 기록이라 남긴다. NASA 자료와 설명은 운영 기능이 만드는 캐시라 지우지 않아도 된다 |
 
 더미 별 `900000002`~`900000041`과 목업 Gold 판 `b-1`~`b-4`는 2026-09-26에 모두 지웠다(위 「튜토리얼 5종 등록」). 튜토리얼 5종(`b-5`~`b-9`)은 운영 값이다. 빈 DB에서 가입이 막히는 조건과 시드 순서는 [EC2 서비스 배포](../../infra/service/README.md)에 있다.
 

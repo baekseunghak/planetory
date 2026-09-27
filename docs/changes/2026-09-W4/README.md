@@ -385,3 +385,5 @@
 | 2026-09-27 | 272 자체 리뷰 반영: 2번 세 행성 완료 유지, 합성 FITS 스모크 테스트, 서버 작업물·백업 삭제 | S15P21C206-272 | L 98-59 b·d, shallow_confirmed, SyntheticBuildTest, pg_dump, ~/tutorial-272 | 로컬 검증 완료, 병합 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | MR !227 리뷰 반영: 공급 집계 REPEATABLE READ 스냅샷과 보고 전용 최소 권한 로그인 | S15P21C206-79 | REPEATABLE READ, planetory_reporter, REPORT_TABLES, default_transaction_read_only, --manifest -, 강재민 리뷰 | 구현 완료 | [기록](2026-09-27.md) |
 | 2026-09-27 | 시네마 화면을 운영 기본 꺼짐의 실행 시 선택(`?ui=cinema`)으로 둔다 | S15P21C206-274 | ui-choice, VITE_CINEMA, planetory:ui, StrictCelebration, legacy | 구현 완료, MR 리뷰 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 확정 행성 NASA 정보·AI 설명 운영 적용(원천 ready·재사용, 설명 켜기·되돌리기, 한도 20·300) | S15P21C206-277 | nasa_planet_info, WASP-62 b, c-13, invalid_output, NASA_EXPLANATION_DAILY_GLOBAL, rule-0 duration_ratio | 검증 완료·1주 상시 운영 | [기록](2026-09-27.md) |
+| 2026-09-27 | NASA 설명 invalid_output 원인(목록 문자열 복사) 규명, 프롬프트 v5 번호 선택 | S15P21C206-277 | invalid_output, nasa-ko-v5, 목록 복사, NasaPlanetExplanationText, 201 tokens | 구현·검증 완료·배포 전 | [기록](2026-09-27.md) |
