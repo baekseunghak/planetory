@@ -96,8 +96,8 @@ Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_rel
 
 **배포 상태(2026-09-27)**: 80 배포로 Node 1 운영 이미지(`local/planetory-airflow:20260927T031659Z`)에 일시정지 상태로 올라갔고, `tess_yarn` Pool(2)과 Silver sudoers도 적용했다([80 배포 결과](#tess_publication_run-80-수동-실행)). 첫 trigger는 아직 하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
 
-1. Node 1 root로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 실행해 sudoers와 `tess_yarn` Pool을 만든다. 운영 승인이 필요하며, 사후 `visudo -c`와 Pool 슬롯이 제어기 기본값(2)과 같은지 확인한다. **Airflow 이미지보다 먼저** 한다. 이 브랜치의 `commit_bronze`는 `pool="tess_yarn"`을 요구하므로 Pool이 없으면 Airflow가 그 task를 스케줄하지 않는다.
-2. 통합 소스로 이미지를 빌드해 252 단계 DAG 5개와 `tess_bronze_to_silver`가 import 오류 0건으로 함께 올라오는지 **운영 이미지에서** 확인하고, 서버의 실제 `AIRFLOW__CORE__PARALLELISM`을 확인한다. 기존 DAG·Connection을 삭제하거나 재생성하지 않는다.
+1. (2026-09-27 80 배포에서 완료) Node 1 root로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 실행해 sudoers와 `tess_yarn` Pool을 만든다. 운영 승인이 필요하며, 사후 `visudo -c`와 Pool 슬롯이 제어기 기본값(2)과 같은지 확인한다. **Airflow 이미지보다 먼저** 한다. 이 브랜치의 `commit_bronze`는 `pool="tess_yarn"`을 요구하므로 Pool이 없으면 Airflow가 그 task를 스케줄하지 않는다.
+2. (2026-09-27 80 배포에서 완료) 통합 소스로 이미지를 빌드해 252 단계 DAG 5개와 `tess_bronze_to_silver`가 import 오류 0건으로 함께 올라오는지 **운영 이미지에서** 확인하고, 서버의 실제 `AIRFLOW__CORE__PARALLELISM`을 확인한다. 기존 DAG·Connection을 삭제하거나 재생성하지 않는다.
 3. DAG를 pause 상태로 올리고 release·sudo·Pool을 확인한 뒤 Canary conf로 명시적으로 trigger한다. `wait_silver`의 defer·재개와 History Server의 실행 중(`.inprogress`) 앱을 함께 확인한다.
 
 Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어기는 **Sector 1~13 전체 coverage와 TIC별 다중 Sector 결합**만 승인하므로 이 DAG가 받지 않는다. Sector 14 성공을 1~13 coverage의 확장이나 완전한 TIC Silver로 오인하지 않는다. 14+ 연속 처리에는 혼합 Bronze 버전·누적 Sector snapshot·변경 TIC 재처리·이전 Silver 결과 조합 계약이 필요하며, 이 작업은 S15P21C206-275로 분리했다(2026-09-26).
@@ -114,11 +114,11 @@ run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 ga
 | `collect_external` | `tess_external_ctl.py collect`(원천 4종 전체 표, 한 시간 제한, 재시도 3회) |
 | `start_gold` → `wait_gold` | `tess_gold_ctl.py start-unit run` → `status run`, 완료되면 확정 attempt 경로를 넘긴다 |
 | `start_gate` → `wait_gate` | `start-unit gate --attempt <경로>` → `status gate`, 통과하면 publish-ready 요약을 넘긴다 |
-| `approve_publication` | Airflow HITL `ApprovalOperator`. 승인해야 다음으로 넘어가고, 거절하면 실패, 7일이 지나면 만료된다 |
+| `approve_publication` | Airflow HITL `ApprovalOperator`. 승인해야 다음으로 넘어가고, 거절하면 실패, 7일이 지나면 만료된다. 1~13 공개 범위(DEC-01)가 확정되기 전에는 승인하지 않는다 |
 
 276의 게시 task는 `approve_publication` 뒤에 붙인다.
 
-Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`), `run_id`(UTC), `silver_attempt`, `required_sources`(원천 이름 목록), `exclude_tics`(튜토리얼 5종. 비우려면 `[]`를 명시한다), `approvals`(`identity`·`discoverability`·`external`)다. 선택 키는 `shuffle_partitions`(기본 400)와 `output_partitions`(기본 40)다. 승인 참조는 systemd와 sudoers를 거치므로 공백 없는 한 토큰(`[A-Za-z0-9._/-]`)이어야 한다. 외부 snapshot은 `/lake/external/tess/run_id=<run_id>`로 정해진다.
+Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`), `run_id`(UTC), `silver_attempt`, `required_sources`(원천 4종 전체. 수집기가 항상 4종을 받고 Gold는 수집된 집합과 같아야 하므로 일부만 고르면 거부한다), `exclude_tics`(튜토리얼 5종. 비우려면 `[]`를 명시한다), `approvals`(`identity`·`discoverability`·`external`)다. 선택 키는 `shuffle_partitions`(기본 400)와 `output_partitions`(기본 40)다. 승인 참조는 systemd와 sudoers를 거치므로 공백 없는 한 토큰(`[A-Za-z0-9._/-]`)이어야 한다. 외부 snapshot은 `/lake/external/tess/run_id=<run_id>`로 정해진다.
 
 ```json
 {
@@ -135,7 +135,7 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 **배포 순서(각 단계 운영 승인 필요).**
 1. 이 브랜치로 pipeline release를 설치한다(`run-tess-silver.ps1 -Step Install`). release에는 Gold 파일 4개와 79 schema가 함께 들어간다.
 2. `stage-tess-airflow-node1.ps1`로 Airflow release를 Node 1에 올린다. 두 설정 스크립트도 이 release의 `infra/distributed-system/scripts/`에 함께 들어간다. 이 단계는 파일만 올리고 이미지는 바꾸지 않는다.
-3. Node 1 root로 그 release의 `configure-tess-silver-airflow-node1.sh <release> 2`(sudoers·`tess_yarn` Pool)를 먼저 실행하고, 이어서 `configure-tess-gold-airflow-node1.sh <release>`를 실행한다. 이미지보다 먼저 한다.
+3. Node 1 root로 그 release의 `configure-tess-silver-airflow-node1.sh <release-id> 2`(sudoers·`tess_yarn` Pool)를 먼저 실행하고, 이어서 `configure-tess-gold-airflow-node1.sh <release-id>`를 실행한다. 이미지보다 먼저 한다.
 4. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. DAG 7개의 import 오류가 0건인지 확인한다.
 5. Node 1에서 NEA·ExoFOP 연결을 확인하고, Gold Canary(`tess_gold_ctl.py canary`)를 한 뒤 DAG를 trigger한다.
 
@@ -150,3 +150,4 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 - sudoers·Pool: 그 release의 두 설정 스크립트로 `/etc/sudoers.d/planetory-tess-{silver,gold}-airflow-20260927T031659Z`와 `tess_yarn`(2)을 만들었다. `sudo -l -U tess-airflow`로 DAG 계약이 만든 명령 6개는 허용되고 변조 명령 4개는 거부되는 것을 확인했다.
 - 이미지: `deploy-tess-airflow-node1.sh --update`로 `local/planetory-airflow:20260927T031659Z`(이전 `20260923T014803Z`)로 바꿨다. 네 서비스 healthy, import 오류 0건, DAG 7개다. 새 DAG 2개는 일시정지 상태이고 수집 DAG 5개는 기존 상태를 유지했다.
 - 외부 수집: run `20260927T033816Z`를 `/lake/external/tess/run_id=20260927T033816Z`에 확정했다(`nea_toi` 8,148, `nea_pscomppars` 6,065, `mast_tce_s1_s13` 5,940, `exofop_toi` 8,148행). Canary와 첫 DAG run은 이 run ID를 쓴다.
+- Gold Canary(TIC 5개, app `application_1790067725443_0069`): Spark job이 외부 snapshot `_READY.json`을 `textFile`로 읽다가, 숨김 파일 필터 때문에 "Input path does not exist"로 실패했다. 제어기는 staging을 지우고 끝났다. gate도 같은 결함이 있었다. 두 곳을 Hadoop FileSystem API 읽기로 고쳤고, 고친 release로 Canary를 다시 해야 한다. 첫 DAG trigger는 276 게시 task를 넣은 새 release로 한다.
