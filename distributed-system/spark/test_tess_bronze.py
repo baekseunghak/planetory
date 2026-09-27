@@ -531,5 +531,46 @@ class BronzeTransformTest(unittest.TestCase):
                 yarn_slot_count(value)
 
 
+class PartChecksumTest(unittest.TestCase):
+    """part_checksum_digest batches `hdfs dfs -checksum` but keeps the per-part digest markers record."""
+
+    def run_digest(self, count, drop=None):
+        import tess_bronze_ctl as bronze_ctl
+
+        root = "/lake/silver/x/iteration"
+        parts = [f"{root}/part-{n:05d}-a.snappy.parquet" for n in range(count)]
+        calls = []
+
+        def hdfs(*argv, **kwargs):
+            if argv[1] == "-ls":
+                lines = ["Found items"] + [f"-rw-r--r--   2 u g 1 2026-09-27 00:00 {p}" for p in reversed(parts)]
+                return SimpleNamespace(stdout="\n".join(lines) + "\n")
+            calls.append(argv[2:])
+            rows = [f"{p}\tMD5-of-0MD5-of-512CRC32C\t{hashlib.md5(p.encode()).hexdigest()}"
+                    for p in argv[2:] if p != drop]
+            return SimpleNamespace(stdout="WARN noise line\n" + "\n".join(rows) + "\n")
+
+        with patch.object(bronze_ctl, "hdfs", hdfs):
+            result = bronze_ctl.part_checksum_digest(root)
+        # The digest the per-part loop wrote into every existing Bronze/Silver marker.
+        expected = hashlib.sha256(("\n".join(sorted(
+            f"{p.split('/')[-1]}\tMD5-of-0MD5-of-512CRC32C\t{hashlib.md5(p.encode()).hexdigest()}"
+            for p in parts)) + "\n").encode()).hexdigest()
+        return result, expected, calls, parts
+
+    def test_batched_digest_equals_the_recorded_per_part_digest(self):
+        (count, digest), expected, calls, _ = self.run_digest(450)
+        self.assertEqual((count, digest), (450, expected))
+        # Eight concurrent calls of at most 200 paths, never one call per part.
+        self.assertEqual(sorted(len(batch) for batch in calls), [51] + [57] * 7)
+        (count, _), _, calls, _ = self.run_digest(3000)
+        self.assertEqual((count, max(len(batch) for batch in calls)), (3000, 200))
+
+    def test_a_part_missing_from_the_output_fails(self):
+        _, _, _, parts = self.run_digest(3)
+        with self.assertRaisesRegex(RuntimeError, "invalid checksum output"):
+            self.run_digest(3, drop=parts[1])
+
+
 if __name__ == "__main__":
     unittest.main()

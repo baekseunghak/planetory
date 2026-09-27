@@ -1,6 +1,12 @@
 astropy==7.2.2
 astropy-iers-data==0.2026.9.7.0.56.14
+attrs==26.1.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 numpy==2.5.3
 packaging==26.3
 pyerfa==2.0.1.5
 PyYAML==6.0.3
+referencing==0.37.0
+rpds-py==2026.6.3
+typing-extensions==4.16.0

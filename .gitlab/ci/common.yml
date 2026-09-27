@@ -90,6 +90,8 @@ validate:data-platform:
         - distributed-system/airflow/**/*
         - distributed-system/ingestion/**/*
         - distributed-system/publisher/**/*
+        # The DAG contract tests match their commands against these sudo policies.
+        - infra/distributed-system/scripts/configure-tess-*-airflow-node1.sh
         - .gitlab/ci/common.yml
 
 # 과학 계산 커널과 그것을 쓰는 spark·publisher 테스트 [S15P21C206-91]. 의존성은 커널의 uv.lock으로 고정한다.
@@ -104,7 +106,7 @@ validate:astro-kernel:
   script:
     - pip install --no-cache-dir "uv==0.11.32"
     - (cd libs/astro-kernel && uv run --locked pytest -q -p no:cacheprovider)
-    - (cd distributed-system/spark && uv run --locked python -m unittest test_tess_bronze)
+    - (cd distributed-system/spark && uv run --locked python -m unittest test_tess_bronze test_tess_gold test_tess_gold_ctl test_tess_external_ctl test_tess_gate)
     - (cd distributed-system/spark && uv run --locked pytest -q -p no:cacheprovider test_tess_kernel_check.py)
     - (cd distributed-system/publisher && uv run --locked python -m unittest test_mock_source test_tutorial_source)
   rules:
