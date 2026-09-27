@@ -48,6 +48,10 @@ class PublishError(RuntimeError):
         self.code = code
 
 
+class CurrentKept(PublishError):
+    """first_publish_only라 current가 있는 별에 새 판을 올리지 않았다. 정책대로 둔 것이라 데이터 실패가 아니다."""
+
+
 @dataclass
 class StarResult:
     tic_id: int
@@ -191,8 +195,8 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
             raise PublishError("PUBLISH_REJECTED", f"TIC {tic}에 commit된 staging 판 {bundle_id}이 있다")
         if first_publish_only and cur.execute(
                 "SELECT 1 FROM publication_bundles WHERE tic_id = %s AND status = 'current'", (tic,)).fetchone():
-            raise PublishError("PUBLISH_REJECTED", f"TIC {tic}에 current 판이 있다. 갱신 게시는 후보 동일성 대조 전이라 "
-                                                   "싣지 않는다")
+            raise CurrentKept("PUBLISH_REJECTED", f"TIC {tic}에 current 판이 있다. 갱신 게시는 후보 동일성 대조 전이라 "
+                                                  "싣지 않는다")
 
         star = payload.get("star")
         if star is None:
@@ -328,16 +332,17 @@ def publish_outcome(conn: psycopg.Connection, tic: int, item, target: Target, **
 
     item은 payload 또는 게시 전 거절(code 속성이 있는 예외)이다. 결과 코드는 Gold 계약 6절을 따른다. DB 제약 위반은
     같은 입력이 반복해 실패하므로 PUBLISH_REJECTED, 연결이 끊긴 일시 장애는 같은 판으로 다시 돌릴 PUBLISH_ROLLED_BACK이다.
-    둘 다 트랜잭션이 rollback돼 기존 current가 남는다.
+    둘 다 트랜잭션이 rollback돼 기존 current가 남는다. current_kept는 first_publish_only로 기존 판을 그대로 둔
+    별(튜토리얼 별 등)이다.
     """
-    row = {"tic_id": tic, "code": None, "bundle_id": None, "detail": None}
+    row = {"tic_id": tic, "code": None, "bundle_id": None, "detail": None, "current_kept": False}
     if isinstance(item, Exception):
         return {**row, "code": item.code, "detail": str(item)}
     try:
         result = publish_star(conn, item, target, **kwargs)
         return {**row, "code": result.code, "bundle_id": result.bundle_id}
     except PublishError as exc:
-        return {**row, "code": exc.code, "detail": str(exc)}
+        return {**row, "code": exc.code, "detail": str(exc), "current_kept": isinstance(exc, CurrentKept)}
     except (psycopg.IntegrityError, psycopg.DataError) as exc:
         return {**row, "code": "PUBLISH_REJECTED", "detail": f"DB 제약 위반: {exc}"}
     except psycopg.OperationalError as exc:

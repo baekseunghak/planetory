@@ -1,28 +1,37 @@
-"""배치 run 입력 어댑터: 79 후보 집계 출력의 번들을 load.publish_star payload로 바꾼다 [S15P21C206-276].
+"""배치 run 입력 어댑터: 80 게시 준비 폴더의 번들을 load.publish_star payload로 바꾼다 [S15P21C206-276].
 
-mock_source 자리의 운영 입력이다. 입력은 astro_kernel.candidate_aggregation.aggregate 출력(run manifest, 별마다 125
-assemble 번들, 후보 표)과, 80이 함께 넘길 별마다의 메타데이터 {"star": 별 속성, "observations": Sector별 관측 원천}이다.
-HDFS 위치와 파일 형식은 80이 정한다(contracts/gold 4.3절). 여기서는 읽은 뒤의 검사와 변환만 하고 DB에 붙지 않는다.
+mock_source 자리의 운영 입력이다. 입력은 80 gate가 통과시킨 publish-ready를 Node 1 로컬로 받은 폴더다(80과 합의).
 
-  - run 검사: run manifest와 번들·후보 표가 서로 맞는지 본다. 어긋나면 run 전체를 싣지 않는다.
+  <폴더>/_READY.json          publish-ready marker(schema planetory.tess-publish-ready.v1). files에 part마다 sha256·bytes·lines
+  <폴더>/manifest/part-*      한 줄 = 79 run manifest
+  <폴더>/candidates/part-*    한 줄 = 79 후보 행
+  <폴더>/bundles/part-*       한 줄 = {"tic_id", "payload": 125 번들, "metadata": {"star", "observations"}}
+
+  - 검사 분담: 후보 표 재해시와 schema·payload 재계산은 80 gate가 한다. 여기서는 전송 무결성(files의 sha256·bytes·
+    lines), manifest 한 줄·번들 수, 번들 줄마다 run manifest 항목 대조와 별 검사를 한다.
   - 별 검사: 번들이 자기 manifest의 배열·레코드 checksum과 맞는지, Gold 계약 4장 값 범위 안인지, 첫 게시 판인지 본다.
     걸리면 그 별만 PUBLISH_REJECTED다. 계약 밖의 QA 기준값은 데이터 담당(125·117) 합의 전이라 두지 않는다.
+  - 번들은 줄 단위로 읽는다. 메모리는 별 하나 크기다. DB에 붙지 않는다.
   - payload_digest를 주지 않는다(README 「payload 모양」). 별은 service_status 없이 싣는다. 새 별은 hidden이다.
   - 첫 게시만 한다. 적재는 first_publish_only로 부른다. ponytail: 갱신 게시는 후보 정정 계약의 동일성 대조가 생기면 연다.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+from pathlib import Path, PurePosixPath
 from typing import Iterator
 
 from astro_kernel.candidate_aggregation import SCHEMA_VERSION, VERSION as AGGREGATOR_VERSION
-from astro_kernel.external_catalog import content_hash
 from astro_kernel.gold_canonical import array_checksum, normalize_array, record_checksum
 
 from .mock_source import RECORD_FIELDS
 
 JIRA = "S15P21C206-276"
+READY_SCHEMA = "planetory.tess-publish-ready.v1"
+PARTS = ("manifest", "candidates", "bundles")
 EXTERNAL_FIELDS = ("source", "external_id", "disposition", "period_days", "epoch_btjd", "fetched_on")
 MALFORMED = (KeyError, TypeError, AttributeError, ValueError)
 
@@ -46,32 +55,77 @@ def _positive(value) -> bool:
     return _finite(value) and value > 0
 
 
-def check_run(aggregation: dict) -> dict[int, dict]:
-    """run manifest와 번들·후보 표가 맞으면 ready 별의 {tic: 번들}을 돌려준다. 어긋나면 run 전체를 거절한다."""
+def read_ready(folder: Path, run_id: str, approval: str) -> tuple[dict, Iterator[tuple[int | None, dict | PublishRejected]]]:
+    """게시 준비 폴더를 검사하고 (run manifest, 별마다 (tic, payload 또는 PublishRejected))를 돌려준다.
+
+    run 단위 검사는 부를 때 바로 한다. 실패하면 별을 하나도 내지 않고 PublishRejected를 던진다. 번들 수를 먼저 맞추고
+    줄마다 manifest 항목에 한 번씩만 대응시키므로, 끝까지 읽으면 ready 별 전부를 정확히 한 번 본 것이다.
+    """
+    _require(isinstance(approval, str) and approval.strip(), "게시 승인 근거가 필요하다")
     try:
-        m = aggregation["manifest"]
-        _require(aggregation["status"] in ("complete", "incomplete") and m,
-                 f"게시할 수 없는 run이다: {aggregation['status']} {aggregation.get('reason')}")
+        marker = json.loads((folder / "_READY.json").read_text(encoding="utf-8"))
+        _require(marker["schema"] == READY_SCHEMA, f"모르는 publish-ready 형식이다: {marker['schema']}")
+        _require(marker["run_id"] == run_id, f"publish-ready의 run_id({marker['run_id']})가 --run-id와 다르다")
+        files = marker["files"]
+        for rel, spec in files.items():
+            _check_file(folder, rel, spec)
+        parts = {p: sorted(rel for rel in files if rel.startswith(p + "/")) for p in PARTS}
+        manifest_lines = [line for rel in parts["manifest"] for line in _lines(folder / rel)]
+        _require(len(manifest_lines) == 1, f"manifest가 {len(manifest_lines)}줄이다")
+        m = json.loads(manifest_lines[0])
         _require((m["schema_version"], m["aggregator_version"]) == (SCHEMA_VERSION, AGGREGATOR_VERSION),
                  f"모르는 집계 형식이다: {m['schema_version']} {m['aggregator_version']}")
-        bundles = aggregation["bundles"]
-        _require([(s["tic_id"], s["bundle_id"], s["bundle_version"], s["record_checksums"]) for s in m["bundles"]] ==
-                 [(b["bundle"]["tic_id"], b["bundle"]["id"], b["bundle"]["bundle_version"],
-                   b["bundle"]["manifest"]["record_checksums"]) for b in bundles], "번들이 run manifest와 다르다")
-        by_tic = {b["bundle"]["tic_id"]: b for b in bundles}
-        _require(len(by_tic) == len(bundles) and by_tic.keys() == {s["tic_id"] for s in m["stars"] if s["status"] == "ready"},
-                 "ready 별과 번들이 다르다")
-        rows = aggregation["candidates"]
-        _require(len(rows) == m["candidate_count"] and content_hash(rows) == m["candidates_sha256"],
-                 "후보 표가 run manifest와 다르다")
-        _require(sorted((r["tic_id"], r["candidate_id"]) for r in rows) ==
-                 sorted((tic, c["id"]) for tic, b in by_tic.items() for c in b["candidates"] if c["status"] == "active"),
-                 "후보 표와 번들의 활성 후보가 다르다")
-    except MALFORMED as exc:
+        _require(m["run_id"] == run_id, f"run manifest의 run_id({m['run_id']})가 --run-id와 다르다")
+        _require(marker["counts"] == m["counts"], "publish-ready counts가 run manifest counts와 다르다")
+        entries = {e["tic_id"]: e for e in m["bundles"]}
+        _require(len(entries) == len(m["bundles"]) == m["counts"]["ready"]
+                 == sum(files[rel]["lines"] for rel in parts["bundles"]), "번들 수가 run manifest와 다르다")
+    except (*MALFORMED, OSError) as exc:
         if isinstance(exc, PublishRejected):
             raise
-        raise PublishRejected(f"run 입력 형식이 맞지 않는다: {exc!r}") from None
-    return by_tic
+        raise PublishRejected(f"게시 준비 폴더를 읽지 못했다: {exc!r}") from None
+    seen: set[int] = set()
+    lines = (line for rel in parts["bundles"] for line in _lines(folder / rel))
+    return m, (_star(line, entries, seen, m, approval) for line in lines)
+
+
+def _check_file(folder: Path, rel: str, spec: dict) -> None:
+    path = PurePosixPath(rel)
+    _require(len(path.parts) == 2 and path.parts[0] in PARTS and path.parts[1] not in (".", ".."),
+             f"files에 모르는 경로가 있다: {rel}")
+    digest, size, lines = hashlib.sha256(), 0, 0
+    with open(folder / rel, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+            size += len(chunk)
+            lines += chunk.count(b"\n")
+    _require((digest.hexdigest(), size, lines) == (spec["sha256"], spec["bytes"], spec["lines"]),
+             f"{rel}이 publish-ready files의 sha256·bytes·lines와 다르다")
+
+
+def _lines(path: Path) -> Iterator[str]:
+    with open(path, encoding="utf-8") as f:
+        yield from f
+
+
+def _star(line: str, entries: dict, seen: set, m: dict, approval: str) -> tuple[int | None, dict | PublishRejected]:
+    tic = None
+    try:
+        row = json.loads(line)
+        tic, gold = row["tic_id"], row["payload"]
+        entry = entries.get(tic)
+        _require(entry is not None and tic not in seen, f"TIC {tic}: run manifest에 없거나 두 번 나온 번들이다")
+        seen.add(tic)
+        b = gold["bundle"]
+        _require((b["tic_id"], b["id"], b["bundle_version"], b["manifest"]["record_checksums"]) ==
+                 (tic, entry["bundle_id"], entry["bundle_version"], entry["record_checksums"]),
+                 f"TIC {tic}: 번들이 run manifest 항목과 다르다")
+        check_bundle(gold)
+        return tic, to_payload(gold, row["metadata"], m, approval)
+    except PublishRejected as exc:
+        return tic, exc
+    except MALFORMED as exc:
+        return tic, PublishRejected(f"TIC {tic}: 입력 형식이 맞지 않는다: {exc!r}")
 
 
 def check_bundle(gold: dict) -> None:
@@ -157,26 +211,6 @@ def to_payload(gold: dict, meta: dict, run: dict, approval: str) -> dict:
                      "confirmed_count": sum(c["record"]["is_confirmed"] for c in body["candidates"]),
                      "service_status": None},
             **body}
-
-
-def star_payloads(aggregation: dict, metadata: dict[str, dict],
-                  approval: str) -> Iterator[tuple[int, dict | PublishRejected]]:
-    """ready 별마다 (tic, payload) 또는 (tic, PublishRejected)를 TIC 순서로 낸다. metadata 키는 TIC 문자열이다.
-
-    run 검사는 부를 때 바로 한다. 실패하면 별을 하나도 내지 않고 PublishRejected를 던진다. payload는 하나씩 만든다.
-    """
-    _require(isinstance(approval, str) and approval.strip(), "게시 승인 근거가 필요하다")
-    bundles = check_run(aggregation)
-
-    def star(tic):
-        try:
-            check_bundle(bundles[tic])
-            return tic, to_payload(bundles[tic], metadata[str(tic)], aggregation["manifest"], approval)
-        except PublishRejected as exc:
-            return tic, exc
-        except MALFORMED as exc:
-            return tic, PublishRejected(f"TIC {tic}: 입력 형식이 맞지 않는다: {exc!r}")
-    return (star(tic) for tic in sorted(bundles))
 
 
 def confirmed_without_archive(payload: dict) -> int:

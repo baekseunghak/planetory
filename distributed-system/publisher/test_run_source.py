@@ -5,8 +5,12 @@
 """
 
 import copy
+import hashlib
+import json
+import tempfile
 import unittest
 import unittest.mock
+from pathlib import Path
 
 import numpy as np
 from astro_kernel.candidate_aggregation import AI_NOT_EXECUTED, AI_POLICY, aggregate
@@ -62,12 +66,36 @@ def _star(tic):
 
 
 def synthetic_run(*tics):
-    """합성 run의 79 집계 출력과 별 메타데이터(80이 넘길 모양)."""
+    """합성 run의 79 집계 출력과 별 메타데이터(80이 번들 줄에 싣는 모양)."""
     run = aggregate(run_id="run-fixture", silver_attempt="silver/fixture", targets=list(tics),
                     results=[_star(t) for t in tics], calculation_versions=VERSIONS, ai_policy=AI_POLICY)
-    metadata = {str(t): {"star": {"teff_k": 5800., "radius_rsun": 1., "tmag": 10.},
+    metadata = {str(t): {"star": {"teff_k": None, "radius_rsun": None, "tmag": None},
                          "observations": {"3": {"cadence": "120s", "source_version": "spoc-fixture"}}} for t in tics}
     return run, metadata
+
+
+def write_ready(folder: Path, run: dict, metadata: dict) -> Path:
+    """80 publish-ready를 Node 1로 받은 폴더와 같은 배치로 쓴다. 번들은 두 part로 나눈다."""
+    files = {}
+
+    def write(rel, rows):
+        data = "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows).encode()
+        (folder / rel).parent.mkdir(parents=True, exist_ok=True)
+        (folder / rel).write_bytes(data)
+        files[rel] = {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data), "lines": len(rows)}
+
+    write("manifest/part-00000", [run["manifest"]])
+    write("candidates/part-00000", run["candidates"])
+    bundles = [{"tic_id": b["bundle"]["tic_id"], "payload": b, "metadata": metadata[str(b["bundle"]["tic_id"])]}
+               for b in run["bundles"]]
+    for i in range(2):
+        write(f"bundles/part-{i:05d}", bundles[i::2])
+    write("bundles/part-00002", [])                        # Spark는 빈 파티션도 파일로 쓴다(lines=0)
+    (folder / "bundles" / "_SUCCESS").write_bytes(b"")   # files에 없는 파일은 읽지 않는다
+    marker = {"schema": r.READY_SCHEMA, "run_id": run["manifest"]["run_id"], "counts": run["manifest"]["counts"],
+              "excluded_tics": [], "files": files}
+    (folder / "_READY.json").write_text(json.dumps(marker), encoding="utf-8")
+    return folder
 
 
 class RunSourceTest(unittest.TestCase):
@@ -76,9 +104,13 @@ class RunSourceTest(unittest.TestCase):
     def setUp(self):
         self.run, self.meta = synthetic_run(self.A, self.B)
         self.assertEqual(self.run["manifest"]["counts"]["ready"], 2, self.run["manifest"]["stars"])
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
 
     def payloads(self):
-        return dict(r.star_payloads(self.run, self.meta, APPROVAL))
+        _, items = r.read_ready(write_ready(self.dir, self.run, self.meta), "run-fixture", APPROVAL)
+        return dict(items)
 
     def bundle(self, tic):
         return next(b for b in self.run["bundles"] if b["bundle"]["tic_id"] == tic)
@@ -107,29 +139,48 @@ class RunSourceTest(unittest.TestCase):
         first["external"] = [e for e in first["external"] if e["source"] != "archive"]
         self.assertEqual(r.confirmed_without_archive(p), 1, "archive가 없는 확정 후보는 266 설명이 열리지 않는다")
 
-    def test_run_that_disagrees_with_its_manifest_publishes_nothing(self):
-        for name, change in (("후보 표", lambda run: run["candidates"][0].update(depth_ppm=2000.)),
-                             ("번들 요약", lambda run: run["manifest"]["bundles"][0].update(bundle_version="pv1-other")),
-                             ("거절된 run", lambda run: run.update(status="rejected", manifest=None)),
-                             ("모르는 형식", lambda run: run["manifest"].update(schema_version="other")),
-                             ("깨진 입력", lambda run: run.pop("candidates"))):
+    def test_folder_that_disagrees_with_its_marker_publishes_nothing(self):
+        def marker(folder, change):
+            m = json.loads((folder / "_READY.json").read_text(encoding="utf-8"))
+            change(m)
+            (folder / "_READY.json").write_text(json.dumps(m), encoding="utf-8")
+
+        cases = (
+            ("전송 중 바뀐 part", lambda f: (f / "bundles/part-00001").write_bytes(
+                (f / "bundles/part-00001").read_bytes() + b" ")),
+            ("빠진 part", lambda f: (f / "candidates/part-00000").unlink()),
+            ("모르는 형식", lambda f: marker(f, lambda m: m.update(schema="other"))),
+            ("다른 run", lambda f: marker(f, lambda m: m.update(run_id="other-run"))),
+            ("폴더 밖 경로", lambda f: marker(f, lambda m: m["files"].update({"../x": m["files"]["manifest/part-00000"]}))),
+            ("번들 수", lambda f: marker(f, lambda m: m["files"].pop("bundles/part-00001"))),
+            ("counts", lambda f: marker(f, lambda m: m["counts"].update(ready=3))),
+        )
+        for name, change in cases:
             with self.subTest(name):
-                run = copy.deepcopy(self.run)
-                change(run)
-                with self.assertRaises(r.PublishRejected):
-                    r.star_payloads(run, self.meta, APPROVAL)   # 부를 때 바로 거절한다(별을 하나도 내지 않는다)
+                with tempfile.TemporaryDirectory() as tmp:
+                    folder = write_ready(Path(tmp), self.run, self.meta)
+                    change(folder)
+                    with self.assertRaises(r.PublishRejected):
+                        r.read_ready(folder, "run-fixture", APPROVAL)   # 부를 때 바로 거절한다(별을 하나도 내지 않는다)
         with self.assertRaisesRegex(r.PublishRejected, "승인"):
-            r.star_payloads(self.run, self.meta, " ")
+            r.read_ready(write_ready(self.dir, self.run, self.meta), "run-fixture", " ")
 
     def test_one_broken_star_is_rejected_alone(self):
+        # 80 gate가 막을 입력이지만 276도 별 단위로 막는다. 파일 checksum은 맞게 쓴다.
         self.bundle(self.B)["segments"][0]["flux"][0] = 1.5
         got = self.payloads()
         self.assertIsInstance(got[self.B], r.PublishRejected)
         self.assertIn("배열 checksum", str(got[self.B]))
         self.assertIsInstance(got[self.A], dict)
 
-    def test_missing_star_metadata_rejects_that_star(self):
-        del self.meta[str(self.B)]
+    def test_bundle_that_disagrees_with_the_run_manifest_is_rejected_alone(self):
+        self.bundle(self.B)["bundle"]["bundle_version"] = "pv1-other"
+        got = self.payloads()
+        self.assertIn("run manifest 항목", str(got[self.B]))
+        self.assertIsInstance(got[self.A], dict)
+
+    def test_missing_sector_metadata_rejects_that_star(self):
+        self.meta[str(self.B)]["observations"] = {}
         got = self.payloads()
         self.assertIsInstance(got[self.B], r.PublishRejected)
         self.assertIsInstance(got[self.A], dict)
@@ -167,6 +218,10 @@ class RunRecordExitTest(unittest.TestCase):
         self.assertEqual(exit_code(self.record("PUBLISH_REJECTED", "PUBLISH_ROLLED_BACK")), 1)
         self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 1)
         self.assertEqual(exit_code(self.record("PUBLISHED", notify="skipped_no_token")), 0)
+        # current를 그대로 둔 별(튜토리얼 별 등)만 거절이면 정책대로 끝난 run이다.
+        kept = self.record("PUBLISHED")
+        kept["stars"].append({"code": "PUBLISH_REJECTED", "current_kept": True})
+        self.assertEqual(exit_code(kept), 0)
 
     def test_notify_without_targets_or_token_sends_nothing(self):
         self.assertEqual(notify_record([])["status"], "none")

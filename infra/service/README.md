@@ -323,12 +323,14 @@ sudo docker run --rm --network host --env-file /etc/planetory/publisher/env \
   <registry>/planetory/publisher:<sha> python -m publisher notify --bundle b-<id>
 ```
 
-배치 run 게시(`S15P21C206-276`)는 입력 파일을 읽기 전용으로 마운트해 같은 방식으로 돌린다. run 기록 JSON은 표준 출력으로 나온다. 종료 코드는 0(완료), 1(일시 장애·알림 실패, 같은 명령 재실행), 65(데이터 거절, 재시도하지 않음)다([Publisher](../../distributed-system/publisher/README.md) 「배치 run」). **운영에서는 아직 돌리지 않았다.** 입력 파일을 HDFS에서 가져오는 방법은 80이 정한다.
+배치 run 게시(`S15P21C206-276`)는 80 gate가 만든 publish-ready를 Node 1 로컬 폴더로 받아 읽기 전용으로 마운트한다. 폴더 배치는 80 세션과 합의했고 80 쪽은 병합 전이다. run 기록 JSON은 표준 출력으로 나온다. 종료 코드는 0(완료), 1(일시 장애·알림 실패, 같은 명령 재실행), 65(데이터 거절, 재시도하지 않음)다([Publisher](../../distributed-system/publisher/README.md) 「배치 run」). **운영에서는 아직 돌리지 않았다.** 이 실행을 부르는 Airflow task는 80 DAG 작업이다.
 
 ```sh
-sudo docker run --rm --network host --env-file /etc/planetory/publisher/env -v <입력 폴더>:/run-input:ro \
+hdfs dfs -get /lake/gold/tess/publish-ready/run_id=<run ID>/_READY.json <폴더>/_READY.json
+hdfs dfs -get <marker의 attempt>/manifest <marker의 attempt>/candidates <marker의 attempt>/bundles <폴더>/
+sudo docker run --rm --network host --env-file /etc/planetory/publisher/env -v <폴더>:/ready:ro \
   <registry>/planetory/publisher:<sha> python -m publisher publish-run --run-id <run ID> \
-  --aggregation /run-input/<집계 출력>.json --metadata /run-input/<메타데이터>.json --approval "<게시 승인 근거>"
+  --ready /ready --approval "<게시 승인 근거>"
 ```
 
 Airflow가 이 실행을 부르는 것은 게시 gate(`S15P21C206-80`), 이미지 배포 job은 `S15P21C206-94` 범위다.

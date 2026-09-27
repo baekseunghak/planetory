@@ -7,8 +7,7 @@
   python -m publisher load-payload <payload JSON 파일 또는 폴더>...
   python -m publisher tutorial-switch-sql
   python -m publisher supply-report --manifest candidates.json   [S15P21C206-79]
-  python -m publisher publish-run --run-id <id> --aggregation <79 집계 출력> --metadata <별 메타데이터> --approval <근거>
-                                                                  [S15P21C206-276]
+  python -m publisher publish-run --run-id <id> --ready <게시 준비 폴더> --approval <근거>   [S15P21C206-276]
 
 접속은 libpq 환경변수(PGHOST·PGDATABASE·PGUSER·PGPASSWORD)를 따른다. 적재 계정은
 planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리가 무력화된다. tutorial-build는 DB에 붙지 않고
@@ -45,9 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     report = sub.add_parser("supply-report", help="DEC-01 공급 집계 기록을 JSON으로 출력한다. DB는 읽기만 한다")
     report.add_argument("--manifest", required=True, help="79 후보 집계 출력 또는 그 manifest JSON 파일. -는 표준 입력")
     run = sub.add_parser("publish-run", help="배치 run의 ready 별을 첫 게시한다. run 기록 JSON을 표준 출력에 낸다")
-    run.add_argument("--run-id", required=True, help="게시할 run ID. 집계 출력의 run_id와 같아야 한다")
-    run.add_argument("--aggregation", required=True, help="79 후보 집계 출력 JSON 파일. -는 표준 입력")
-    run.add_argument("--metadata", required=True, type=Path, help="TIC별 별 속성·Sector별 관측 원천 JSON 파일")
+    run.add_argument("--run-id", required=True, help="게시할 run ID. publish-ready와 run manifest의 run_id와 같아야 한다")
+    run.add_argument("--ready", required=True, type=Path,
+                     help="80 publish-ready를 받은 폴더(_READY.json, manifest/, candidates/, bundles/)")
     run.add_argument("--approval", required=True, help="게시 승인 근거. manifest.publish.approval에 남는다")
     args = parser.parse_args(argv)
 
@@ -153,14 +152,12 @@ def publish_run(args) -> int:
 
     now = lambda: dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")  # noqa: E731
     started = now()
-    aggregation = json.loads(sys.stdin.read() if args.aggregation == "-" else Path(args.aggregation).read_text(encoding="utf-8"))
-    metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     with psycopg.connect("", autocommit=True) as conn:
         target = loader.preflight(conn)
         print(f"대상 {conn.info.dbname}, 마이그레이션 V{target.flyway_version}", file=sys.stderr)
         for warning in target.warnings:
             print(f"주의: {warning}", file=sys.stderr)
-        record = run_record(conn, target, aggregation, metadata, run_id=args.run_id, approval=args.approval)
+        record = run_record(conn, target, args.ready, run_id=args.run_id, approval=args.approval)
     record["notify"] = notify_record([s["bundle_id"] for s in record["stars"] if s["code"] in ("PUBLISHED", "ALREADY_PUBLISHED")])
     record.update(started_at=started, finished_at=now())
     json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
@@ -168,20 +165,17 @@ def publish_run(args) -> int:
     return exit_code(record)
 
 
-def run_record(conn, target, aggregation: dict, metadata: dict, *, run_id: str, approval: str) -> dict:
-    """run 검사를 통과한 ready 별을 하나씩 첫 게시하고 별별 결과를 모은다. 알림은 부르는 쪽이 붙인다."""
+def run_record(conn, target, ready: Path, *, run_id: str, approval: str) -> dict:
+    """게시 준비 폴더의 ready 별을 하나씩 첫 게시하고 별별 결과를 모은다. 알림은 부르는 쪽이 붙인다."""
     from . import load as loader, run_source
 
-    manifest = aggregation.get("manifest") or {}
-    record = {"run_id": run_id, "silver_attempt": manifest.get("silver_attempt"),
-              "aggregator_version": manifest.get("aggregator_version"), "approval": approval,
+    record = {"run_id": run_id, "silver_attempt": None, "aggregator_version": None, "approval": approval,
               "flyway_version": target.flyway_version, "status": "rejected", "stars": []}
-    if manifest.get("run_id") != run_id:
-        return {**record, "reason": f"집계 출력의 run_id({manifest.get('run_id')})가 --run-id와 다르다"}
     try:
-        items = run_source.star_payloads(aggregation, metadata, approval)
+        manifest, items = run_source.read_ready(ready, run_id, approval)
     except run_source.PublishRejected as exc:
         return {**record, "reason": str(exc)}
+    record.update(silver_attempt=manifest["silver_attempt"], aggregator_version=manifest["aggregator_version"])
     for tic, item in items:
         row = loader.publish_outcome(conn, tic, item, target, first_publish_only=True, retire_reason="배치 run 게시")
         if isinstance(item, dict):
@@ -206,7 +200,8 @@ def notify_record(bundle_ids: list[int]) -> dict:
 
 
 def exit_code(record: dict) -> int:
-    codes = {s["code"] for s in record["stars"]}
+    # current를 그대로 둔 별(튜토리얼 별 등)은 첫 게시 한정 정책의 결과라 실패로 세지 않는다.
+    codes = {s["code"] for s in record["stars"] if not s.get("current_kept")}
     if "PUBLISH_ROLLED_BACK" in codes or record.get("notify", {}).get("status") == "partial":
         return 1
     return DATA_FAILURE if record["status"] == "rejected" or codes - DONE else 0
