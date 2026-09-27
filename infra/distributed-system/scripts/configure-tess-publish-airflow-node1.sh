@@ -10,6 +10,11 @@ set -euo pipefail
 }
 release_id=$1
 [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo INVALID_RELEASE_ID >&2; exit 1; }
+# Command regexes (^...$) need sudo 1.9.10+, as in configure-tess-gold-airflow-node1.sh.
+sudo_version="$(sudo -V | sed -n '1s/^Sudo version \([0-9][0-9.]*\).*/\1/p')"
+[[ "$(printf '%s\n' 1.9.10 "$sudo_version" | sort -V | head -1)" == 1.9.10 ]] || {
+  echo "SUDO_REGEX_UNSUPPORTED version=${sudo_version:-unknown}" >&2; exit 1;
+}
 release="/opt/planetory-silver/releases/$release_id"
 for path in /opt/planetory-silver /opt/planetory-silver/releases "$release" "$release/spark" \
             "$release/spark/tess_publish_ctl.py" /etc/planetory/publisher \
