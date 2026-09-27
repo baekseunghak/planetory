@@ -326,7 +326,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 ## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)
 
-상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 1~13 전체 run은 전이다.
+상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 첫 운영 run(run ID `20260927T033816Z`, 1~13 전체)에서 Gold는 ready 4,916·후보 5,154로 성공했다. gate는 schema 경로 결함을 고친 뒤 통과했다(결과는 [DAG 절](../airflow/dags/README.md) 「첫 운영 run」).
 
 입력은 확정된 Sector 1~13 Silver attempt(`/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/run_id=20260924T133559Z/attempt=20260924T133730Z`)다. 초기 공개 범위를 S1~13으로 넓히는 DEC-01 변경은 제안 상태이며 MR에서 확인받는다([서비스 범위 7.1절](../../docs/data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인)).
 
@@ -354,6 +354,7 @@ gate       --attempt <확정된 attempt>, 통과하면 /lake/gold/tess/publish-r
 - **출력.** Publisher가 표준 라이브러리로 줄 단위로 읽도록 JSON Lines 텍스트로 쓴다(276과 합의). `manifest`는 79 manifest 한 줄, `candidates`는 79 후보 행 한 줄씩, `bundles`는 별마다 `{"tic_id", "payload": <125 payload>, "metadata"}` 한 줄이다. `metadata`는 `star`(TEFF·RADIUS·TESSMAG, Bronze에 없어 null)와 `observations`(payload Sector마다 Bronze `timedel`을 초로 바꾼 `cadence` `"120s"`와 `source_version`=PROCVER)다. 한 Sector에 PROCVER가 둘이면 계약 오류로 멈춘다. `summary`는 한 줄 JSON이다. 제어기는 기록한 줄 수가 manifest의 `ready`·후보 수와 같을 때만 `_READY.json`(`planetory.tess-gold-attempt.v1`)을 쓰고 원자 rename한다. marker에는 Silver·Bronze·외부 입력 SHA, 필수 원천, 제외 TIC, 승인 참조, 상태 수와 part 파일마다 내용 SHA-256·바이트·줄 수(`files`, 내용을 로그에 찍지 않고 스트리밍으로 계산)를 남긴다. 이 marker는 저장 확정이며 게시 준비가 아니다.
 - **실패.** 규칙 버전 불일치, 원천 문서 오류, 79 결합 거절, 출력 수 불일치, executor의 예상 밖 예외는 `_TERMINAL`을 남기고 종료 코드 65로 끝나 재시작하지 않는다. staging은 진단용으로 남긴다. 그 밖의 실패는 앱이 끝난 것을 확인한 뒤 staging을 지운다. 상태 파일은 입력 검사보다 먼저 쓰므로 입력 단계의 계약 실패도 원인과 함께 Airflow에 보인다. 커밋 뒤 완료 기록 전에 끊긴 run이 재시작되면, 같은 입력으로 커밋된 attempt를 재감사해 채택하고 다시 계산하지 않는다. unit은 하루 7번까지만 시작하므로 결정적인 비계약 실패가 YARN에 끝없이 제출되지 않는다.
 - **marker 읽기.** Spark `textFile`·`binaryFiles`는 이름이 `_`나 `.`로 시작하는 파일을 입력에서 빼므로 `_READY.json`을 없는 경로로 본다. job과 gate는 marker를 Hadoop FileSystem API(`read_hdfs_file`)로 읽는다. 첫 Node 1 Canary(2026-09-27)가 이 결함으로 실패했다.
+- **`--files`로 보낸 파일.** YARN cluster 모드에서 `spark-submit --files`로 보낸 schema는 드라이버 컨테이너 작업 디렉터리에 놓인다. gate는 이 파일을 이름 그대로 연다(`SparkFiles.get`이 가리키는 곳에는 없다). 첫 운영 run의 gate가 이 결함으로 실패했다(2026-09-27).
 - **자원.** executor는 Silver와 같은 크기(14개 × core 2, 5g + 2048 MiB)다. driver는 별 결과를 모으므로 4g + 1024 MiB, `spark.driver.maxResultSize=3g`다. 실측 전 값이다. Gold·gate 앱은 Bronze·Silver와 같은 YARN 슬롯 잠금(기본 2개)을 쓴다. 이 잠금은 동시 실행 수만 제한하므로, Silver가 YARN 대부분을 쓰는 동안 Gold를 돌리지 않는 것은 운영자가 지키는 규칙이다.
 
 ### 게시 준비 gate(`tess_gate.py`)

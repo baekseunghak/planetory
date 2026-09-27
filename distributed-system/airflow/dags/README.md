@@ -104,7 +104,7 @@ Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어
 
 ## `tess_publication_run` (80, 수동 실행)
 
-상태: Node 1 운영 이미지에 일시정지 상태로 배포했다(2026-09-27). Gold Canary를 통과했고(2026-09-27, release `20260927T052453Z`) 첫 trigger는 276 게시 task를 넣은 release로 한다.
+상태: Node 1 운영 이미지에 배포했다(2026-09-27). 첫 운영 run(run ID `20260927T033816Z`)에서 Gold는 성공했고, gate는 schema 경로 결함을 고친 뒤 통과했다. 지금 게시 승인(`approve_publication`)에서 DEC-01 확정을 기다린다.
 
 run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 gate → 수동 게시 승인을 잇는다. 일시정지·무스케줄로 생성되고 동시 실행은 1개다. Gold와 gate는 Node 1 systemd unit으로 돌고, Airflow는 SSH로 unit을 시작한 뒤 Triggerer에서 5분마다 `status`를 읽는다(최대 3일). 그래서 Airflow 재시작이 Spark를 멈추지 않는다. Spark는 YARN에서 돌고 Airflow는 제출만 한다.
 
@@ -144,6 +144,11 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 5. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. 실행 중인 DagRun이 0건이어야 한다. DAG 7개의 import 오류가 0건인지 확인한다.
 6. DAG를 trigger한다.
 
+**같은 run ID를 새 release로 다시 돌릴 때.** 확정된 Gold attempt를 그대로 쓰려는 경우다(2026-09-27 첫 run의 gate 수정 때 실제로 썼다).
+1. 이전 DagRun을 끝내고 그 run의 Gold·gate unit이 inactive나 failed인지 확인한다.
+2. `/etc/systemd/system/planetory-tess-gold-{run,gate}-<run>.service`를 백업한 뒤 지우고 `daemon-reload`한다. 이 파일은 release 경로를 담고 있어서, 남겨 두면 새 release의 `start-unit`이 `UNIT_DEFINITION_MISMATCH`로 거절한다.
+3. 같은 conf에 `release`만 바꿔 trigger한다. `start_gold`는 최신 상태가 `complete`라 unit을 시작하지 않고 끝나고, `wait_gold`는 확정 attempt를 넘긴다.
+
 **배포 전 검증(2026-09-27, 로컬).**
 - `apache/airflow:3.2.2-python3.12`에 운영 requirements를 설치하고 DagBag을 읽었다. 결과는 import 오류 0건, DAG 7개, task 순서와 승인 task(`template_fields` = subject·body, `fail_on_reject`, 7일)가 설계와 같았다.
 - Ubuntu 24.04(sudo 1.9.15p5) 컨테이너에서 두 설정 스크립트를 실제로 실행했다. `visudo`를 통과했고, DAG가 만드는 Gold 명령 6개와 Silver 명령 2개는 허용됐다. 인자 추가·다른 release·staging 경로·셸 문자·허용하지 않은 operation을 넣은 변조 명령 5개는 거부됐다. Node 1도 같은 sudo 1.9.15p5임을 배포 전 점검에서 확인했다.
@@ -156,4 +161,18 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 - 이미지: `deploy-tess-airflow-node1.sh --update`로 `local/planetory-airflow:20260927T031659Z`(이전 `20260923T014803Z`)로 바꿨다. 네 서비스 healthy, import 오류 0건, DAG 7개다. 새 DAG 2개는 일시정지 상태이고 수집 DAG 5개는 기존 상태를 유지했다.
 - 외부 수집: run `20260927T033816Z`를 `/lake/external/tess/run_id=20260927T033816Z`에 확정했다(`nea_toi` 8,148, `nea_pscomppars` 6,065, `mast_tce_s1_s13` 5,940, `exofop_toi` 8,148행). Canary와 첫 DAG run은 이 run ID를 쓴다.
 - Gold Canary(TIC 5개, app `application_1790067725443_0069`): Spark job이 외부 snapshot `_READY.json`을 `textFile`로 읽다가, 숨김 파일 필터 때문에 "Input path does not exist"로 실패했다. 제어기는 staging을 지우고 끝났다. gate도 같은 결함이 있었다. 두 곳을 Hadoop FileSystem API 읽기로 고쳤다.
-- Gold Canary 재실행(release `20260927T052453Z`, TIC 5개, app `application_1790067725443_0070`): 통과했다. 판정 ready 3·held 1·no_signal 1·rejected·request_failed·unprocessed 0, `complete=true`, 후보 6개다. 고를 때 기대한 매핑(채택 1·2·3개 → ready, 채택 0개 → no_signal, `qa_stopped` → held)과 수가 같다. Canary 확정본은 규칙대로 지워서 별마다의 판정은 따로 보지 않았다. bundles는 3줄 1,291,963 bytes(ready 별당 약 430 KB), candidates 6줄 14,869 bytes, manifest 2,836 bytes다. 전체 약 20분(05:25:45→05:45:28Z)으로, 사전 검사(Silver 재감사 포함) 약 12분, Spark 앱 약 3.6분, 확정 약 3분이다. Python 런타임은 캐시를 썼다. 첫 DAG trigger는 276 게시 task를 넣은 새 release로 한다.
+- Gold Canary 재실행(release `20260927T052453Z`, TIC 5개, app `application_1790067725443_0070`): 통과했다. 판정 ready 3·held 1·no_signal 1·rejected·request_failed·unprocessed 0, `complete=true`, 후보 6개다. 고를 때 기대한 매핑(채택 1·2·3개 → ready, 채택 0개 → no_signal, `qa_stopped` → held)과 수가 같다. Canary 확정본은 규칙대로 지워서 별마다의 판정은 따로 보지 않았다. bundles는 3줄 1,291,963 bytes(ready 별당 약 430 KB), candidates 6줄 14,869 bytes, manifest 2,836 bytes다. 전체 약 20분(05:25:45→05:45:28Z)으로, 사전 검사(Silver 재감사 포함) 약 12분, Spark 앱 약 3.6분, 확정 약 3분이다. Python 런타임은 캐시를 썼다.
+
+**첫 운영 run(2026-09-27, run ID `20260927T033816Z`).** 276 세션이 게시 단계가 든 release로 재배포한 뒤 실행했다. 단계마다 운영 승인을 받았다.
+- 1차 DagRun `manual__276-first-20260927T033816Z`(release `20260927T063705Z`)
+  - Gold: unit 06:43:10→07:01:12Z, 재시작 0회. 사전 검사 약 4분, Spark 앱 `application_1790067725443_0072` 약 10분(SUCCEEDED), 확정·FSCK 약 4.5분.
+  - counts: ready 4,916 · held 17,788 · no_signal 105,445 · rejected 104 · request_failed 0 · unprocessed 0, `complete=true`. 대상 TIC 128,253, 후보 5,154. rejected는 모두 Silver 초기 BLS 사유다.
+  - 파일: bundles part 40·1,350,215,352 bytes·4,916줄(ready 별 하나에 평균 약 275 KB), candidates part 40·12,785,917 bytes, manifest 13,955,352 bytes.
+  - final attempt: `/lake/gold/tess/publication-candidates/run_id=20260927T033816Z/attempt=20260927T064310Z`
+  - gate: Spark 앱 `_0073`이 시작 23초 만에 실패했다. `tess_gate.py`가 `--files`로 보낸 schema를 `SparkFiles.get()`으로 찾았는데, YARN cluster 모드에서 이 파일은 드라이버 작업 디렉터리에 있다. `b87e6520`에서 파일 이름으로 열게 고쳤다.
+- 복구: 고친 release `20260927T071825Z`를 설치하고 sudoers 3종을 적용했다. 이어서 위 「같은 run ID를 새 release로 다시 돌릴 때」 절차대로 run·gate unit 파일을 백업한 뒤 지웠다(`/var/lib/planetory-gold/run=20260927T033816Z/unit-backup-<UTC>/`).
+- 2차 DagRun `manual__276-second-20260927T033816Z`(release `20260927T071825Z`)
+  - Gold: `start_gold`·`wait_gold`가 07:20:16Z에 끝났다. 확정 attempt를 채택해 다시 계산하지 않았다.
+  - gate: unit 07:20:19Z 시작, 재시작 0회. 사전 검사 약 5분, Spark 앱 `_0074` 07:25:21→07:27:49Z(SUCCEEDED), 07:28:09Z `GOLD_PUBLISH_READY`. 판정 `publish_ready`, bundles 4,916, candidates 5,154.
+  - publish-ready: `/lake/gold/tess/publish-ready/run_id=20260927T033816Z/_READY.json`(files 81개)
+  - `wait_gate`는 07:30:28Z에 끝났다(5분 폴링이라 gate 종료 뒤 약 2분 지연). `approve_publication`은 07:30:29Z부터 기다린다(응답 제한 2026-10-04 07:30Z). 승인·게시는 DEC-01 확정 뒤다.
