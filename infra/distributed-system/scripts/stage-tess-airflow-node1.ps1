@@ -18,6 +18,8 @@ try {
         'infra/distributed-system/scripts/upgrade-tess-airflow3-node1.sh' `
         'infra/distributed-system/scripts/configure-tess-airflow-node1.sh' `
         'infra/distributed-system/scripts/configure-tess-airflow-account.sh' `
+        'infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh' `
+        'infra/distributed-system/scripts/configure-tess-gold-airflow-node1.sh' `
         'distributed-system/airflow/Dockerfile' `
         'distributed-system/airflow/requirements.txt' `
         'distributed-system/airflow/dags'
@@ -44,6 +46,8 @@ tar -xzf "$archive" -C "$stage"
 cp "$stage/infra/distributed-system/compose.control-plane.yaml" "$stage/compose.yaml"
 test -f "$stage/distributed-system/airflow/dags/tess_sector_discovery_dag.py"
 test -f "$stage/infra/distributed-system/scripts/configure-tess-airflow-node1.sh"
+test -f "$stage/infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh"
+test -f "$stage/infra/distributed-system/scripts/configure-tess-gold-airflow-node1.sh"
 printf '%s\n' "$expected" > "$stage/.archive-sha256"
 chown -R root:root "$stage"
 chmod -R go-w "$stage"
