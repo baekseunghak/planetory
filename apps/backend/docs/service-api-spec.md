@@ -234,6 +234,8 @@ if (response.status === 401) {
 
 ### 4.1 피드 검색
 
+**288 공식 스레드 전용 게시판(2026-09-27 사용자 승인):** `GET /api/v1/community/feed?type=SIGNAL_THREAD`로 참여자 수 하한 없이 공식 스레드만 조회한다. `type=POST`는 일반 글만, 생략하면 종전 혼합 조회다. `posts.kind`를 사용하며 DB 마이그레이션은 없다. 공식 전용에서도 제목·공식 요약 본문·TIC·STAR 검색, 생성 시각/숫자 ID 내림차순, 기존 공개 범위를 유지한다. `SIGNAL_THREAD`에 author/tag/FREE를 결합하면 400 `VALIDATION_FAILED`다. 빈/미지원/중복 type도 400이다. 종류는 검색 커서의 조건 해시에 포함되어 다른 종류 및 생략한 요청 간 커서를 공유하지 않는다. type을 생략한 기존 커서 직렬화는 유지한다. 핫 토픽의 N>=10 선정·참여자순 정렬은 별도 API 그대로다. 프론트 주소 `/community/signal-threads`가 이 API 조건을 고정하며 전용 생성 API나 별도 게시글 저장소는 만들지 않는다.
+
 **169 구현 범위:** 전체/별 기본 피드에 `q/searchIn/author/board/tag` 검색을 추가한다. 현재 공개·발견된 별 게시판과 visible 원글만 조회하며 회원별 개인 잠금은 추가하지 않는다. TIC 없이 STAR/FREE 탭을 사용할 수 있다. `ticId + board=STAR`는 ticId 단독과 결과·커서를 공유하며 `ticId + board=FREE`는 400이다. 핫 토픽·팔로우는 이 경로에 포함하지 않는다.
 
 **입력 확정(2026-09-21 사용자 승인):** q·author는 ECMAScript trim과 같은 앞뒤 공백(NBSP/BOM 포함)을 제거하고 내부 공백은 유지한다. q는 Unicode 코드포인트 1~100개다. author는 닉네임 생성의 2~20자·문자 제한을 적용하지 않으며 현재 닉네임과 정확 일치하지 않으면 빈 목록이다. 직접 전달한 빈 조건, 중복 키, 미지의 키와 NUL 문자는 400 `VALIDATION_FAILED`다. ticId·enum·size·cursor는 공백 정규화 없이 검사한다. FE 폼의 빈 조건 생략과 직접 URL의 빈 조건 거절을 구분한다.
@@ -256,6 +258,7 @@ if (response.status === 401) {
 |---|---|---|
 | q | 아니오 | 키워드 부분 일치·영문 대소문자 무시, 앞뒤 공백 제거 후 1~100자. URL에는 인코딩해 전달 |
 | searchIn | 아니오 | `TITLE_BODY`(기본) / `TITLE` / `BODY`. q 없이 보내면 400 |
+| type | 아니오 | `POST` / `SIGNAL_THREAD`. 생략하면 기존 혼합 피드. 공식 전용은 author/tag/FREE와 함께 요청 시 400 |
 | author | 아니오 | 작성자 현재 닉네임 정확 일치(영문 대소문자 무시). 공식 스레드 제외 |
 | ticId | 아니오 | 해당 TIC만 정확 일치 |
 | board | 아니오 | `STAR` / `FREE`(ERD posts.board) |

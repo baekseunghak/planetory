@@ -149,6 +149,7 @@ public class CommunityReadService {
             if (!search.author().isEmpty()) filters += " AND p.kind='user' AND u.status='active' AND lower(u.nickname)=lower(:author)";
             if (!search.board().isEmpty()) filters += " AND p.board=:board";
             if (!search.tag().isEmpty()) filters += " AND p.kind='user' AND p.tag=:tag";
+            if (!search.type().isEmpty()) filters += " AND p.kind=:kind";
         }
         var statement = jdbc.sql("""
                 SELECT p.id,p.kind,p.tic_id,p.candidate_id,p.title,p.user_id,u.nickname,u.status AS author_status,p.created_at,
@@ -165,6 +166,7 @@ public class CommunityReadService {
             if (!search.author().isEmpty()) statement.param("author", search.author());
             if (!search.board().isEmpty()) statement.param("board", search.board().toLowerCase(java.util.Locale.ROOT));
             if (!search.tag().isEmpty()) statement.param("tag", search.tag());
+            if (!search.type().isEmpty()) statement.param("kind", search.type().equals("POST") ? "user" : "system_thread");
         }
         var rows = statement.query((r, n) -> new FeedRow(r.getLong("id"), r.getString("kind"), r.getString("tic_id"),
                         r.getObject("candidate_id", Long.class), r.getString("title"),

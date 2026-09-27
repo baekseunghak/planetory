@@ -18,8 +18,11 @@ export function searchFixtureFeed<T extends Searchable>(
   const author = params.get("author"),
     tag = params.get("tag"),
     board = params.get("board"),
-    tic = params.get("ticId");
+    tic = params.get("ticId"),
+    type = params.get("type");
   if (
+    (params.has("type") && !["POST", "SIGNAL_THREAD"].includes(type ?? "")) ||
+    (type === "SIGNAL_THREAD" && (author || tag || board === "FREE")) ||
     (params.has("q") && (!q || Array.from(q).length > 100)) ||
     (params.has("searchIn") && !q) ||
     !["TITLE_BODY", "TITLE", "BODY"].includes(scope) ||
@@ -36,6 +39,7 @@ export function searchFixtureFeed<T extends Searchable>(
     return null;
   return items
     .filter((item) => {
+      if (type && item.type !== type) return false;
       if (tic && tic !== item.ticId) return false;
       if (board && (board === "FREE") !== (item.ticId === null)) return false;
       if (

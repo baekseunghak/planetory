@@ -247,6 +247,7 @@ export function FollowingFeedPage() {
       </header>
       <nav className="community-tabs" aria-label="게시판 종류">
         <Link to="/community">전체</Link>
+        <Link to="/community/signal-threads">공식 스레드</Link>
         <Link to="/community/following" aria-current="page">
           팔로잉
         </Link>
