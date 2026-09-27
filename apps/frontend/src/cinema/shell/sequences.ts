@@ -376,6 +376,23 @@ export class SequenceDirector {
     return this.ignitions.length > 0;
   }
 
+  /**
+   * Stars a newly granted achievement opened away from the analysis stage
+   * (publishing an analysis, features/publication/unlock-sink.ts). Like a
+   * discovery's: hidden from now (the sky refresh follows), marked new,
+   * counted and ignited once the galaxy is on screen again.
+   */
+  unlockElsewhere(ticIds: readonly string[]): void {
+    const fresh = [...new Set(ticIds)].filter(
+      (ticId) => ticId && !this.ignitions.includes(ticId),
+    );
+    if (!fresh.length) return;
+    this.setHold({ ...this.hold, stars: true });
+    this.holdStars(fresh);
+    this.ignitions = [...this.ignitions, ...fresh];
+    this.host.onUnlock?.(fresh, true);
+  }
+
   private cancel(): void {
     this.run?.abort();
     this.run = null;
