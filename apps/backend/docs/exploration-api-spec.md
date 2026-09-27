@@ -1446,6 +1446,7 @@ recognizeAchievement(userId, candidateId, type, recognizedSubmissionId, recogniz
    후보 = stars.service_status=published
         AND NOT EXISTS star_unlocks(user_id, tic_id)
         AND tic_id NOT IN tutorial_stars.active AND tic_id != 진행 중 challenge_rounds.target_tic_id      (OPS-08 제외 규칙)
+        AND EXISTS candidates(tic_id, status=active, discoverable) + current 판   (찾을 신호가 있는 별, S15P21C206-282)
    seq = 0부터 하나씩 고른다. 시드 정책 hash-user-achievement-seq-v1:
      seed = SHA-256("{userId}:{achievementId}:{seq}", 십진 UTF-8)의 앞 8바이트를 부호 없는 빅엔디언 정수로 읽은 값
      후보를 tic_id 오름차순으로 세우고 seed mod 후보 수 번째(0부터)를 연다. 연 별은 다음 seq의 후보에서 빠진다
