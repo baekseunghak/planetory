@@ -207,7 +207,9 @@ public class NasaStarPlanetService {
                 repository.requireAccess(memberId, ticId);
                 repository.failExplanation(memberId, ticId, planetId, generation, hash, version,
                         code, OffsetDateTime.now(clock).plus(modelRetry));
-                log.warn("NASA star planet explanation failed: reason={}, detail={}", code, failure.getMessage());
+                // 검증 실패 메시지는 항목 이름뿐이다. 모델·HTTP 오류 메시지는 상위 응답 본문을 담을 수 있어 종류만 남긴다.
+                log.warn("NASA star planet explanation failed: reason={}, detail={}", code,
+                        failure instanceof IllegalArgumentException ? failure.getMessage() : failure.getClass().getSimpleName());
                 return bundle(memberId, ticId, null, null);
             }
             repository.requireAccess(memberId, ticId);

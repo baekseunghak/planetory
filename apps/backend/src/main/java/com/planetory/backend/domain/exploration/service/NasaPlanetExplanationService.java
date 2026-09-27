@@ -158,7 +158,10 @@ public class NasaPlanetExplanationService {
                         ? "invalid_output" : failureCode(modelOrValidationFailure);
                 repository.failed(candidateId, generation.get(), hash, version, failure,
                         OffsetDateTime.now(clock).plus(retryDelay));
-                log.warn("NASA explanation failed: reason={}, detail={}", failure, modelOrValidationFailure.getMessage());
+                // 검증 실패 메시지는 항목 이름뿐이다. 모델·HTTP 오류 메시지는 상위 응답 본문을 담을 수 있어 종류만 남긴다.
+                log.warn("NASA explanation failed: reason={}, detail={}", failure,
+                        modelOrValidationFailure instanceof IllegalArgumentException
+                                ? modelOrValidationFailure.getMessage() : modelOrValidationFailure.getClass().getSimpleName());
                 sourceService.requireEligible(memberId, candidateId);
                 return repository.find(candidateId, hash, version, model, PROMPT_VERSION)
                         .map(row -> result(source, row))

@@ -560,6 +560,29 @@ class NasaPlanetExplanationTest {
         verifyNoInteractions(absent);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void 모델이_번호를_따옴표_없이_줘도_문자열로_받고_배열은_거절한다() {
+        // v5는 번호를 문자열로 달라고 하지만 모델이 숫자 토큰으로 줄 수 있다. Jackson 설정이 바뀌어도 이 경로가 살아 있어야 한다.
+        ChatModel model = mock(ChatModel.class);
+        when(model.getOptions()).thenReturn(ChatOptions.builder().build());
+        ObjectProvider<ChatClient.Builder> builders = mock(ObjectProvider.class);
+        when(builders.getIfAvailable()).thenReturn(ChatClient.builder(model));
+        var live = new NasaPlanetExplanationGenerator(builders, true, "test-only-placeholder");
+        String unquoted = """
+                {"sourceHash":"%s","planetName":"{{name}}","name":1,"orbitalPeriod":1,
+                 "radius":2,"mass":1,"discovery":1}
+                """.formatted(HASH_A);
+        String array = unquoted.replace("\"name\":1", "\"name\":[1,2]");
+        when(model.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+                .thenReturn(chatResponse(unquoted), chatResponse(array));
+
+        var content = NasaPlanetExplanationText.render(live.generate(planet, HASH_A), planet, HASH_A);
+        assertTrue(content.name().startsWith("이번에는 TOI-700 b에 대해 살펴볼까요?"));
+        assertTrue(content.radius().startsWith("크기를 살펴보면, 반지름은 "));
+        assertThrows(IllegalArgumentException.class, () -> live.generate(planet, HASH_A));
+    }
+
     private NasaPlanetExplanationService service(boolean enabled) {
         return service(enabled, 5, 50);
     }
