@@ -141,8 +141,9 @@ DATA_FAILURE = 65   # 같은 입력으로는 다시 돌려도 실패한다. Silv
 def publish_run(args) -> int:
     """배치 run 게시 [S15P21C206-276]. run 기록을 표준 출력에, 진행 메시지를 표준 오류에 낸다.
 
-    종료 코드: 모든 별이 끝났으면 0, 일시 장애나 알림 실패가 있으면 1(같은 명령을 다시 돌린다. 끝난 별은
-    ALREADY_PUBLISHED다), 그 밖의 거절만 남았으면 65다.
+    종료 코드: 모든 별이 끝났으면 0, 일시 장애(PUBLISH_ROLLED_BACK)가 있으면 1(같은 명령을 다시 돌린다. 끝난 별은
+    ALREADY_PUBLISHED다), 그 밖의 거절만 남았으면 65다. 알림 일부 실패는 0이다. DB의 current가 정본이라 게시를
+    다시 돌리지 않고, 실패한 판은 run 기록 notify.results를 보고 notify 명령으로 다시 보낸다.
     """
     import datetime as dt
 
@@ -201,8 +202,9 @@ def notify_record(bundle_ids: list[int]) -> dict:
 
 def exit_code(record: dict) -> int:
     # current를 그대로 둔 별(튜토리얼 별 등)은 첫 게시 한정 정책의 결과라 실패로 세지 않는다.
+    # 알림 일부 실패(notify partial)는 게시 전체를 다시 돌릴 이유가 아니다. 같은 실패면 재시작만 되풀이된다.
     codes = {s["code"] for s in record["stars"] if not s.get("current_kept")}
-    if "PUBLISH_ROLLED_BACK" in codes or record.get("notify", {}).get("status") == "partial":
+    if "PUBLISH_ROLLED_BACK" in codes:
         return 1
     return DATA_FAILURE if record["status"] == "rejected" or codes - DONE else 0
 

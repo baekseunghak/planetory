@@ -331,13 +331,27 @@ class PublishStarTest(unittest.TestCase):
         again = publish_star(self.conn, self.run_payload(tic), self.target, first_publish_only=True)
         self.assertEqual((again.code, again.bundle_id), ("ALREADY_PUBLISHED", result.bundle_id))
 
-    def test_run_payload_keeps_the_public_status_of_an_existing_star(self):
+    def test_run_payload_keeps_the_public_status_and_known_values_of_an_existing_star(self):
         tic = self.star(990_000_102)
+        self.conn.execute("UPDATE stars SET teff_k = 5800, radius_rsun = 1.0, tmag = 9.5 WHERE tic_id = %s", (tic,))
 
         publish_star(self.conn, self.run_payload(tic), self.target, first_publish_only=True)
 
-        self.assertEqual(self.conn.execute("SELECT service_status FROM stars WHERE tic_id = %s", (tic,)).fetchone()[0],
-                         "published")
+        # 배치 run은 별 속성의 원천이 없어 NULL을 보낸다. 이미 있는 값은 그대로 둔다.
+        self.assertEqual(self.conn.execute("SELECT service_status, teff_k, radius_rsun, tmag FROM stars WHERE tic_id = %s",
+                                           (tic,)).fetchone(), ("published", 5800, 1.0, 9.5))
+
+    def test_an_unexpected_error_is_one_rejected_row_not_a_stopped_run(self):
+        from publisher.load import publish_outcome
+
+        tic = 990_000_104
+        broken = {k: v for k, v in self.run_payload(tic).items() if k != "segments"}
+
+        row = publish_outcome(self.conn, tic, broken, self.target, first_publish_only=True)
+
+        self.assertEqual(row["code"], "PUBLISH_REJECTED")
+        self.assertIn("KeyError", row["detail"])
+        self.assertEqual(self.counts(tic)["bundles"], 0)
 
     def test_first_publish_only_leaves_a_star_with_a_current_bundle_alone(self):
         tic = self.star(990_000_103)

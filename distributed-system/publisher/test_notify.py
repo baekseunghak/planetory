@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 from publisher.__main__ import TOKEN_HEADER, main
+from publisher.notify import notify_backend
 
 
 class _Backend(http.server.BaseHTTPRequestHandler):
@@ -49,6 +50,24 @@ class NotifyTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"BACKEND_URL": self.url, "INTERNAL_SERVICE_TOKEN": "t"}):
             self.assertEqual(main(["notify", "--bundle", "7"]), 0)
         self.assertEqual(_Backend.seen[0][0], "/internal/bundles/b-7/activated")
+
+    def test_a_dropped_response_is_recorded_and_the_next_bundle_is_still_sent(self):
+        # 응답 없이 연결을 끊으면 http.client가 URLError가 아닌 RemoteDisconnected를 던진다. 4,916개 판 알림 도중
+        # 한 판의 응답 실패(시간 초과 포함)가 publish-run 전체를 멈추면 안 된다[S15P21C206-276].
+        class Hangup(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.close_connection = True
+
+            def log_message(self, *args):
+                pass
+
+        hangup = http.server.HTTPServer(("127.0.0.1", 0), Hangup)
+        threading.Thread(target=hangup.serve_forever, daemon=True).start()
+        self.addCleanup(hangup.shutdown)
+        dropped = notify_backend(f"http://127.0.0.1:{hangup.server_port}", "t", [7])
+        self.assertEqual([(b, sent) for b, sent, _ in dropped], [(7, False)])
+        self.assertIn("RemoteDisconnected", dropped[0][2])
+        self.assertEqual([(b, sent) for b, sent, _ in notify_backend(self.url, "t", [8])], [(8, True)])
 
     def test_without_token_sends_nothing_and_fails(self):
         env = {k: v for k, v in os.environ.items() if k != "INTERNAL_SERVICE_TOKEN"}

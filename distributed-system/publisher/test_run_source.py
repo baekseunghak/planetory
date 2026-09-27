@@ -216,7 +216,8 @@ class RunRecordExitTest(unittest.TestCase):
         self.assertEqual(exit_code(self.record(status="rejected")), 65)
         # 일시 장애가 있으면 거절이 섞여도 다시 돌린다. 끝난 별은 그대로이고 거절은 다음 실행에 65로 남는다.
         self.assertEqual(exit_code(self.record("PUBLISH_REJECTED", "PUBLISH_ROLLED_BACK")), 1)
-        self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 1)
+        # 알림 일부 실패는 DB 게시를 다시 돌릴 이유가 아니다(실패한 판은 notify 명령으로 다시 보낸다).
+        self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 0)
         self.assertEqual(exit_code(self.record("PUBLISHED", notify="skipped_no_token")), 0)
         # current를 그대로 둔 별(튜토리얼 별 등)만 거절이면 정책대로 끝난 run이다.
         kept = self.record("PUBLISHED")

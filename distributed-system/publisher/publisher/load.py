@@ -205,12 +205,14 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
                 raise PublishError("STAR_MISSING", f"TIC {tic}이 stars에 없다. 이 payload는 별을 등록하지 않는다")
         else:
             # service_status가 None이면 새 별은 hidden으로 등록하고 기존 별의 공개 상태는 그대로 둔다(배치 run).
+            # 배치 run은 별 속성의 원천이 없어 NULL로 보낸다. 기존 별에 이미 있는 값은 NULL로 덮지 않는다.
             status = star.get("service_status")
             cur.execute("""
                 INSERT INTO stars(tic_id, teff_k, radius_rsun, tmag, confirmed_count, service_status)
                 VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'hidden'))
-                ON CONFLICT (tic_id) DO UPDATE SET teff_k = EXCLUDED.teff_k, radius_rsun = EXCLUDED.radius_rsun,
-                    tmag = EXCLUDED.tmag, confirmed_count = EXCLUDED.confirmed_count,
+                ON CONFLICT (tic_id) DO UPDATE SET teff_k = COALESCE(EXCLUDED.teff_k, stars.teff_k),
+                    radius_rsun = COALESCE(EXCLUDED.radius_rsun, stars.radius_rsun),
+                    tmag = COALESCE(EXCLUDED.tmag, stars.tmag), confirmed_count = EXCLUDED.confirmed_count,
                     service_status = COALESCE(%s, stars.service_status)""",
                         (tic, num(star["teff_k"]), num(star["radius_rsun"]), num(star["tmag"]),
                          star["confirmed_count"], status, status))
@@ -345,8 +347,10 @@ def publish_outcome(conn: psycopg.Connection, tic: int, item, target: Target, **
         return {**row, "code": exc.code, "detail": str(exc), "current_kept": isinstance(exc, CurrentKept)}
     except (psycopg.IntegrityError, psycopg.DataError) as exc:
         return {**row, "code": "PUBLISH_REJECTED", "detail": f"DB 제약 위반: {exc}"}
-    except psycopg.OperationalError as exc:
+    except (psycopg.OperationalError, psycopg.InterfaceError) as exc:
         return {**row, "code": "PUBLISH_ROLLED_BACK", "detail": f"일시 장애: {exc}"}
+    except Exception as exc:  # 한 별의 예상 밖 오류가 run 기록 없이 게시 전체를 멈추지 않게 한다. 트랜잭션은 rollback됐다.
+        return {**row, "code": "PUBLISH_REJECTED", "detail": f"예상 밖 오류: {type(exc).__name__}: {exc}"}
 
 
 def _insert_external(cur, tic: int, candidate_id: int | None, e: dict) -> int:
