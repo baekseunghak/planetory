@@ -142,7 +142,8 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
    3. `configure-tess-publish-airflow-node1.sh <release-id>`. 그 전에 root 전용 `/etc/planetory/publisher/image`(0644, 고정 이미지 한 줄)가 있어야 한다.
 4. Node 1에서 NEA·ExoFOP 연결을 확인하고, 새 release로 Gold Canary(`tess_gold_ctl.py canary`, root CLI)를 한다. 커널이 바뀐 release는 이전 Canary 결과를 쓰지 않는다.
 5. Airflow 이미지를 `deploy-tess-airflow-node1.sh --update`로 교체한다. 실행 중인 DagRun이 0건이어야 한다. DAG 7개의 import 오류가 0건인지 확인한다.
-6. DAG를 trigger한다.
+6. `approve_publication`을 승인할 계정이 있는지 확인한다. `viewer`(Viewer 역할)는 승인할 수 없다. 없으면 Node 1 root가 `docker exec -it planetory-distributed-system-airflow-api-server-1 airflow users create --username approver --firstname Planetory --lastname Approver --role Op --email approver@planetory.invalid`로 만든다. 비밀번호는 명령이 물을 때 운영자가 직접 입력하고 저장소나 대화에 남기지 않는다. 2026-09-27 첫 운영 run은 `Op` 역할로 승인했다.
+7. DAG를 trigger한다.
 
 **같은 run ID를 새 release로 다시 돌릴 때.** 확정된 Gold attempt를 그대로 쓰려는 경우다(2026-09-27 첫 run의 gate 수정 때 실제로 썼다).
 1. 이전 DagRun을 끝내고 그 run의 Gold·gate unit이 inactive나 failed인지 확인한다.
