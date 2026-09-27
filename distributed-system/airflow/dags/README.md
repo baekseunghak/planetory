@@ -94,7 +94,7 @@ Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_rel
 
 실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
 
-**배포 상태(2026-09-26)**: 이 DAG는 로컬 Airflow 3.2.2 DagBag import와 단위 검사만 통과했고 운영 이미지에는 배포하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
+**배포 상태(2026-09-27)**: 80 배포로 Node 1 운영 이미지(`local/planetory-airflow:20260927T031659Z`)에 일시정지 상태로 올라갔고, `tess_yarn` Pool(2)과 Silver sudoers도 적용했다([80 배포 결과](#tess_publication_run-80-수동-실행)). 첫 trigger는 아직 하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
 
 1. Node 1 root로 `configure-tess-silver-airflow-node1.sh <release-id> [slots]`를 실행해 sudoers와 `tess_yarn` Pool을 만든다. 운영 승인이 필요하며, 사후 `visudo -c`와 Pool 슬롯이 제어기 기본값(2)과 같은지 확인한다. **Airflow 이미지보다 먼저** 한다. 이 브랜치의 `commit_bronze`는 `pool="tess_yarn"`을 요구하므로 Pool이 없으면 Airflow가 그 task를 스케줄하지 않는다.
 2. 통합 소스로 이미지를 빌드해 252 단계 DAG 5개와 `tess_bronze_to_silver`가 import 오류 0건으로 함께 올라오는지 **운영 이미지에서** 확인하고, 서버의 실제 `AIRFLOW__CORE__PARALLELISM`을 확인한다. 기존 DAG·Connection을 삭제하거나 재생성하지 않는다.
@@ -104,7 +104,7 @@ Sector 14+는 252가 Sector별 Bronze `_READY`만 만들고, 78의 Silver 제어
 
 ## `tess_publication_run` (80, 수동 실행)
 
-상태: 구현·배포 전 검증 완료(2026-09-27). 운영 이미지에는 아직 배포하지 않았다.
+상태: Node 1 운영 이미지에 일시정지 상태로 배포했다(2026-09-27). 첫 trigger 전이며 Gold Canary를 진행하고 있다.
 
 run ID 하나로 외부 카탈로그 수집 → Gold 생성 → 게시 준비 gate → 수동 게시 승인을 잇는다. 일시정지·무스케줄로 생성되고 동시 실행은 1개다. Gold와 gate는 Node 1 systemd unit으로 돌고, Airflow는 SSH로 unit을 시작한 뒤 Triggerer에서 5분마다 `status`를 읽는다(최대 3일). 그래서 Airflow 재시작이 Spark를 멈추지 않는다. Spark는 YARN에서 돌고 Airflow는 제출만 한다.
 
@@ -141,4 +141,12 @@ Trigger conf의 필수 키는 `release`(`/opt/planetory-silver/releases/<UTC>`),
 
 **배포 전 검증(2026-09-27, 로컬).**
 - `apache/airflow:3.2.2-python3.12`에 운영 requirements를 설치하고 DagBag을 읽었다. 결과는 import 오류 0건, DAG 7개, task 순서와 승인 task(`template_fields` = subject·body, `fail_on_reject`, 7일)가 설계와 같았다.
-- Ubuntu 24.04(sudo 1.9.15p5) 컨테이너에서 두 설정 스크립트를 실제로 실행했다. `visudo`를 통과했고, DAG가 만드는 Gold 명령 6개와 Silver 명령 2개는 허용됐다. 인자 추가·다른 release·staging 경로·셸 문자·허용하지 않은 operation을 넣은 변조 명령 5개는 거부됐다. Node 1의 sudo 버전은 확인하지 않았다.
+- Ubuntu 24.04(sudo 1.9.15p5) 컨테이너에서 두 설정 스크립트를 실제로 실행했다. `visudo`를 통과했고, DAG가 만드는 Gold 명령 6개와 Silver 명령 2개는 허용됐다. 인자 추가·다른 release·staging 경로·셸 문자·허용하지 않은 operation을 넣은 변조 명령 5개는 거부됐다. Node 1도 같은 sudo 1.9.15p5임을 배포 전 점검에서 확인했다.
+
+**Node 1 배포 결과(2026-09-27).** 단계마다 운영 승인을 받은 뒤 실행했다.
+- 사전 점검(읽기 전용): Ubuntu 24.04.4, sudo 1.9.15p5, `/usr/bin/python3.12`, `tess-airflow` 계정, NEA·MAST·ExoFOP·PyPI HTTPS, Silver 입력 `_READY`, HDFS 65% 사용, Airflow 3.2.2 네 서비스·활성 DagRun 0건·Connection `planetory_node_1`을 확인했다. 점검 때 275 증분 Silver run이 돌고 있어, YARN을 쓰는 Canary는 그 run이 끝난 뒤로 미뤘다.
+- pipeline release `/opt/planetory-silver/releases/20260927T031659Z`(`run-tess-silver.ps1 -Step Install`): 작업 트리에서 CRLF인 파일은 CRLF로 설치된다. 기존 release도 같고 Python·pip에는 영향이 없다.
+- Airflow release `/opt/planetory-airflow/releases/20260927T031659Z`(`stage-tess-airflow-node1.ps1`): 첫 시도는 CRLF 체크아웃에서 here-string에 섞인 CR 때문에 Node 1 bash가 `set -eu`에서 멈췄다. 보내기 전에 CR을 지우도록 고친 뒤 성공했다.
+- sudoers·Pool: 그 release의 두 설정 스크립트로 `/etc/sudoers.d/planetory-tess-{silver,gold}-airflow-20260927T031659Z`와 `tess_yarn`(2)을 만들었다. `sudo -l -U tess-airflow`로 DAG 계약이 만든 명령 6개는 허용되고 변조 명령 4개는 거부되는 것을 확인했다.
+- 이미지: `deploy-tess-airflow-node1.sh --update`로 `local/planetory-airflow:20260927T031659Z`(이전 `20260923T014803Z`)로 바꿨다. 네 서비스 healthy, import 오류 0건, DAG 7개다. 새 DAG 2개는 일시정지 상태이고 수집 DAG 5개는 기존 상태를 유지했다.
+- 외부 수집: run `20260927T033816Z`를 `/lake/external/tess/run_id=20260927T033816Z`에 확정했다(`nea_toi` 8,148, `nea_pscomppars` 6,065, `mast_tce_s1_s13` 5,940, `exofop_toi` 8,148행). Canary와 첫 DAG run은 이 run ID를 쓴다.
