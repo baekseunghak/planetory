@@ -326,7 +326,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 ## Sector 14+ 증분 Silver (`S15P21C206-275`)
 
-**상태: 구현·오프라인 검증 완료, 실클러스터 Canary 전(2026-09-27).** 78의 1~13 결과를 보존한 채, 새 Sector에 관측이 생긴 TIC만 모든 Sector를 합쳐 다시 계산한다. BLS는 결합 곡선 전체가 필요하므로 증분 계산이 아니라 TIC 단위 재실행이다. Airflow DAG 연결은 80이 맡으며, 그 전까지 `start-unit`은 Airflow sudoers가 고정한 coverage 인자만 받는다.
+**상태: 구현 완료, Sector 14 증분 run 실클러스터 확인(2026-09-27). backfill 버킷·선택 인덱스 전.** 78의 1~13 결과를 보존한 채, 새 Sector에 관측이 생긴 TIC만 모든 Sector를 합쳐 다시 계산한다. BLS는 결합 곡선 전체가 필요하므로 증분 계산이 아니라 TIC 단위 재실행이다. Airflow DAG 연결은 80이 맡으며, 그 전까지 `start-unit`은 Airflow sudoers가 고정한 coverage 인자만 받는다.
 
 ### 누적 Bronze snapshot
 
@@ -380,7 +380,7 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 | Bronze 관측값 | 1~13 46.7억, 14~70 192.5억 |
 | 14~70 backfill 추정 | RF2 2.8~3.05 TB (K=16이면 버킷당 175~190 GB) |
 
-지금 예산으로는 K=16 기준 2~3개 버킷(14~70 TIC의 약 12~19%)만 만들 수 있다. 나머지는 Raw 복제 계수·계층별 보존 기간 같은 용량 결정 뒤 같은 명령으로 이어 간다([데이터 규칙](../../docs/data/data-guidelines.md) 「결정 대기 사항」). 점검 시점 YARN 실행 앱은 0개였다.
+지금 예산으로는 K=16 기준 2~3개 버킷(14~70 TIC의 약 12~19%)만 만들 수 있다. Sector 14 run 뒤 예산은 약 485 GB라 2개 버킷이다. 나머지는 Raw 복제 계수·계층별 보존 기간 같은 용량 결정 뒤 같은 명령으로 이어 간다([데이터 규칙](../../docs/data/data-guidelines.md) 「결정 대기 사항」). 점검 시점 YARN 실행 앱은 0개였다.
 
 ### TIC별 current 선택 규칙 (합의안, 구현 전)
 
@@ -400,8 +400,25 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 
 버킷마다 새 `-RunId`를 쓴다. `Preflight`는 예산 미리보기(`SILVER_CAPACITY_BUDGET_PREVIEW`)를 출력한다.
 
+### Sector 14 증분 run 결과 (2026-09-27 확정)
+
+release `20260926T234554Z`(커밋 `b86c1939`)로 먼저 Canary(run `20260927T015432Z`, `application_1790067725443_0067`)를 돌렸다. Sector 14 TIC `7583285`·`7618785`·`7620704`를 Sector 1~14 snapshot으로 처리해 세 개 모두 `no_quality_peak`, 반복 `succeeded`, 실패 0개였다. 제어기 재감사와 검증 경로 정리도 통과해, Sector별 버전 map 식이 Spark 3.5.5에서 동작함을 확인했다. 이어서 `-Step Start -ThroughSector 14 -DeltaFromSector 14 -ShufflePartitions 500`으로 run `20260927T020101Z`(`application_1790067725443_0068`)를 실행했다. 결과는 `/lake/silver/pipeline_version=S15P21C206-78-20260926T234554Z/run_id=20260927T020101Z/attempt=20260927T020203Z`다.
+
+| 구분 | 값 |
+| --- | --- |
+| 입력 snapshot | Sector 1~14, Bronze 버전 2개, `6bb638e79a3360ab85c14e01b8263a6c3b4e1f0c1ebef9c8f332c47ce7eb5792` |
+| 선택 | TIC 19,970 = 제품 19,970 = Sector 14 제품 수(`selection` = `{14, 1, 0}`). 1~13에도 관측된 TIC는 0개다. 북반구 Sector 14와 남반구 1~13이 겹치지 않기 때문이다 |
+| 최초 탐색 | `succeeded` 4,219, `no_quality_peak` 15,734, `failed` 17(`numerical_failure` 9, `bls_failed` 5, `invalid_normalization` 3, 모두 retryable 아님) |
+| 반복 탐색 | `succeeded` 17,449, `qa_stopped` 2,504(`removal_qa_failed` 2,493, `candidate_validation_failed` 11), `incomplete`·`failed` 0 |
+| 출력 | 논리 36.08 GB, RF2 72.15 GB. 추정 72.91 GB로 1.1% 많게 잡았다. `target_combined`는 제품당 884 KB, 나머지 출력은 TIC당 922 KB로 계수(898.2·927.3 KB)보다 1.6%·0.5% 작아 계수를 유지한다 |
+| 소요 시간 | 제출 02:02:23 UTC → 앱 SUCCEEDED 03:11:42(69분: 입력 검사 약 30분, BLS 500 task 약 33분, 쓰기·manifest 대조 약 5분) → 제어기 확정 03:36:00(24분). 전체 약 94분 |
+| 기존 결과 보존 | 1~13 원본 attempt `_READY` SHA `e3814a81…`와 수정 시각(2026-09-25 19:23:55), retry attempt `77782015…`가 실행 전후 같다. staging·Canary 잔여 0 |
+| HDFS | 64.44% → 65.16%. 70%까지 남은 예산 약 485 GB |
+
+이 run으로 변경 TIC만 새 attempt에 처리되고 기존 attempt가 보존됨을 확인했다. 한 TIC가 두 Bronze 버전의 행을 함께 결합하는 경우는 이 run에 없었으므로, Sector 27 이후(남반구 재관측)가 들어가는 backfill 버킷에서 확인한다. 입력 검사 약 30분은 이후 커밋 `889e43e8`의 개선 대상이며 새 release로 아직 실측하지 않았다. 제어기 확정 24분은 대부분 출력 part마다 `hdfs dfs -checksum` JVM을 확정 전과 후에 한 번씩 띄우는 데 쓰인다(공용 `part_checksum_digest`). checksum을 묶어 호출하는 개선은 Bronze와 함께 후속으로 검토한다.
+
 ### 검증 상태와 남은 일
 
-- 오프라인: `test-tess-silver.ps1` 통과(Silver 46, Airflow 12). snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드를 검사한다.
-- Spark 선택 식(`pmod`·`left_semi`)은 로컬에 pyspark가 없어 실행 순서만 소스로 검사했다. 실제 선택 결과는 Canary에서 확인한다.
-- 남은 일: release 설치, Sector 14 증분 run(대상 TIC 수가 Sector 14 관측 TIC 수와 같은지, 1~13 원본 attempt의 `_READY` SHA가 그대로인지), backfill 버킷 1개로 추정 계수 재보정, 선택 인덱스 구현.
+- 오프라인: `test-tess-silver.ps1` 통과(Silver 47, Airflow 12). snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기를 검사한다.
+- 실클러스터: Sector 14 Canary와 증분 run(위 절).
+- 남은 일: `889e43e8` release로 입력 검사 시간 실측, 두 Bronze 버전이 섞이는 backfill 버킷 1개, TIC별 선택 인덱스 구현, 나머지 버킷을 위한 용량 결정(Raw 복제 계수·보존 기간), 80의 DAG 연결.
