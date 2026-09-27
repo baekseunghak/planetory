@@ -6,6 +6,11 @@ import type { ProfileSlotProps } from "../profile/ProfileSlots";
 import { readMyStars, starsPath, type MyStar } from "./my-lists-data";
 import { usePagedList } from "./use-paged-list";
 import { emptyStarFilters, starSearchPath } from "../sky-renderer/star-search";
+import {
+  CINEMA_PROGRESS,
+  cinemaDateTime,
+  useCinemaWording,
+} from "../../shared/cinema-wording";
 import "./my-lists.css";
 
 // #196 내 별 목록(탐사 API 4.4). W16이 만든 프로필 슬롯을 채운다.
@@ -26,6 +31,7 @@ export function MyStarsSection({
   starFilters,
 }: ProfileSlotProps) {
   const location = useLocation();
+  const cinema = useCinemaWording();
   const returnTo = location.pathname + location.search;
   const target = isOwn ? null : memberId;
   const filters = isOwn ? (starFilters ?? emptyStarFilters) : emptyStarFilters;
@@ -67,7 +73,9 @@ export function MyStarsSection({
         {isOwn && (filters.ticId || filters.stage || filters.grade)
           ? "조건에 맞는 별이 없습니다."
           : isOwn
-            ? "아직 제출한 별이 없습니다. 별지도에서 별을 골라 분석해 보세요."
+            ? cinema
+              ? "아직 제출한 별이 없습니다. 나의 은하에서 별을 골라 분석해 보세요."
+              : "아직 제출한 별이 없습니다. 별지도에서 별을 골라 분석해 보세요."
             : "이 회원이 제출한 별이 없습니다."}
       </p>
     );
@@ -98,17 +106,29 @@ function StarRow({
   returnTo: string;
   isOwn: boolean;
 }) {
+  // Cinema app: 탐사 and dates without seconds (src/shared/cinema-wording).
+  const cinema = useCinemaWording();
   return (
     <li className="my-list-row">
       <p className="my-list-title">TIC {star.ticId}</p>
       <dl>
         <dt>진행</dt>
-        <dd>{STAGE[star.progressStage]}</dd>
+        <dd>
+          {cinema
+            ? (CINEMA_PROGRESS[
+                star.progressStage as keyof typeof CINEMA_PROGRESS
+              ] ?? STAGE[star.progressStage])
+            : STAGE[star.progressStage]}
+        </dd>
         <dt>{isOwn ? "내 행성" : "발견한 행성"}</dt>
         <dd>
           {count.format(star.planetCount)}개
           {/* 「없다」와 「행성 없이 끝냈다」는 다른 말이다. */}
-          {star.completedWithoutPlanets ? " · 행성 없이 탐색을 마쳤습니다" : ""}
+          {star.completedWithoutPlanets
+            ? cinema
+              ? " · 행성 없이 탐사를 마쳤습니다"
+              : " · 행성 없이 탐색을 마쳤습니다"
+            : ""}
         </dd>
         <dt>성과</dt>
         <dd>
@@ -135,7 +155,9 @@ function StarRow({
         <dt>마지막 활동</dt>
         <dd>
           <time dateTime={star.lastActivityAt}>
-            {when(star.lastActivityAt)}
+            {cinema
+              ? cinemaDateTime(star.lastActivityAt)
+              : when(star.lastActivityAt)}
           </time>
         </dd>
       </dl>

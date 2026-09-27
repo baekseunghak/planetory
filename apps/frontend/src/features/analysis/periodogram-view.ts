@@ -72,6 +72,99 @@ export function indexAtFraction(grid: Periodogram, fraction: number) {
     Math.min(grid.nPeriods - 1, Math.round(fraction * (grid.nPeriods - 1))),
   );
 }
+/** A peak's dot on the plot, in CSS pixels (its centre). */
+export type RankPeak = { rank: number; x: number; y: number };
+/** A peak's rank label on the plot, in CSS pixels (text centre, baseline). */
+export type RankLabel = { rank: number; x: number; y: number };
+type Box = [left: number, top: number, right: number, bottom: number];
+
+/** Rank label metrics for the 12px canvas font (digits ≈ 7px wide). */
+export const RANK_LABEL = {
+  digit: 7,
+  padding: 2,
+  ascent: 10,
+  descent: 2,
+  /** Peak dot radius, and the gap between a dot and its label. */
+  dot: 3,
+  gap: 2,
+  line: 13,
+} as const;
+
+/** The box a rank label takes (text centre `x`, baseline `y`). */
+export function rankLabelBox(label: RankLabel): Box {
+  const half =
+    (String(label.rank).length * RANK_LABEL.digit + RANK_LABEL.padding) / 2;
+  return [
+    label.x - half,
+    label.y - RANK_LABEL.ascent,
+    label.x + half,
+    label.y + RANK_LABEL.descent,
+  ];
+}
+
+const overlaps = (a: Box, b: Box) =>
+  a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+
+/**
+ * Rank labels that stay inside the plot and do not overlap (시네마 화면만
+ * 쓴다). Stronger ranks are placed first. Each label tries, in order: above its
+ * dot; beside it (right, then left, level with the dot) — where a peak near the
+ * top goes, instead of being pushed onto its own dot and spike; one line
+ * higher. A spot must lie wholly inside `width` × `height`, must not overlap a
+ * label already placed, and should not cover a peak dot or the selected
+ * period's line (`avoidX`); when only those soft rules fail it is used anyway.
+ * A label with no spot left is left out; the peak's dot and button stay.
+ * The strongest rank always finds a spot.
+ */
+export function placeRankLabels(
+  peaks: readonly RankPeak[],
+  plot: { width: number; height: number; avoidX?: number | null },
+): RankLabel[] {
+  const { width, height, avoidX = null } = plot;
+  const { dot, gap, ascent, descent, line } = RANK_LABEL;
+  const dots: Box[] = peaks.map(({ x, y }) => [
+    x - dot,
+    y - dot,
+    x + dot,
+    y + dot,
+  ]);
+  const avoid: Box | null =
+    avoidX === null || !Number.isFinite(avoidX)
+      ? null
+      : [avoidX - 1.5, 0, avoidX + 1.5, height];
+  const placed: { label: RankLabel; box: Box }[] = [];
+  const inside = (box: Box) =>
+    box[0] >= 0 && box[1] >= 0 && box[2] <= width && box[3] <= height;
+  const free = (box: Box) =>
+    !placed.some(({ box: other }) => overlaps(box, other));
+  const clear = (box: Box) =>
+    !dots.some((other) => overlaps(box, other)) &&
+    !(avoid && overlaps(box, avoid));
+  for (const peak of [...peaks].sort((a, b) => a.rank - b.rank)) {
+    const half =
+      (String(peak.rank).length * RANK_LABEL.digit + RANK_LABEL.padding) / 2;
+    const centred = Math.max(half, Math.min(width - half, peak.x));
+    // Level with the dot: the glyph's middle on the dot's centre, kept inside.
+    const level = Math.max(
+      ascent,
+      Math.min(height - descent, peak.y + (ascent - descent) / 2),
+    );
+    const above = peak.y - dot - gap - descent;
+    const spots: RankLabel[] = [
+      { rank: peak.rank, x: centred, y: above },
+      { rank: peak.rank, x: peak.x + dot + gap + half, y: level },
+      { rank: peak.rank, x: peak.x - dot - gap - half, y: level },
+      { rank: peak.rank, x: centred, y: above - line },
+    ];
+    const usable = spots
+      .map((label) => ({ label, box: rankLabelBox(label) }))
+      .filter(({ box }) => inside(box) && free(box));
+    const spot = usable.find(({ box }) => clear(box)) ?? usable[0];
+    if (spot) placed.push(spot);
+  }
+  return placed.map(({ label }) => label);
+}
+
 export function drawPeriodogram(
   ctx: CanvasRenderingContext2D,
   model: PeriodPlot,
@@ -80,6 +173,10 @@ export function drawPeriodogram(
   width: number,
   height: number,
   overview = false,
+  /** "avoid": keep rank labels inside the plot, apart (cinema). */
+  rankLabels: "all" | "avoid" = "all",
+  /** With "avoid": the selected period, whose line labels keep clear of. */
+  selectedPeriodDays: number | null = null,
 ) {
   const { low, high } = periodViewBounds(view),
     span = high - low;
@@ -131,7 +228,28 @@ export function drawPeriodogram(
     else ctx.lineTo(px, py);
   }
   ctx.stroke();
-  if (!overview) {
+  if (!overview && rankLabels === "avoid") {
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    const dots: RankPeak[] = [];
+    for (const peak of candidates.peaks) {
+      const px = x(peak.gridIndex / (grid.nPeriods - 1));
+      if (px < 0 || px > width) continue;
+      const py = y(peak.power);
+      ctx.fillStyle = "#ffd369";
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fill();
+      dots.push({ rank: peak.rank, x: px, y: py });
+    }
+    ctx.fillStyle = "#eeeeee";
+    const avoidX =
+      selectedPeriodDays !== null && Number.isFinite(selectedPeriodDays)
+        ? x(periodFraction(grid, selectedPeriodDays))
+        : null;
+    for (const label of placeRankLabels(dots, { width, height, avoidX }))
+      ctx.fillText(String(label.rank), label.x, label.y);
+  } else if (!overview) {
     ctx.font = "12px system-ui";
     ctx.textAlign = "center";
     for (const peak of candidates.peaks) {

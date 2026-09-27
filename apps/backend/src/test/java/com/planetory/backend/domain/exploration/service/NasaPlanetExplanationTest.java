@@ -143,7 +143,7 @@ class NasaPlanetExplanationTest {
         var first = service.lookup(MEMBER, candidate);
         assertEquals("ready", first.status());
         assertEquals("gpt-5.4-mini", first.model());
-        assertEquals("nasa-ko-v4", first.promptVersion());
+        assertEquals("nasa-ko-v5", first.promptVersion());
         assertNotNull(first.generatedAt());
         assertEquals("이번에는 TOI-700 b에 대해 살펴볼까요? 다만 NASA 자료에는 이 행성에 관한 "
                 + "연구 결과에 이견이 있다는 표시가 있어요.", first.content().name());
@@ -183,7 +183,7 @@ class NasaPlanetExplanationTest {
         assertEquals("ready", refreshed.status());
         assertEquals("gpt-5.4-mini", jdbc.queryForObject("SELECT model_name FROM nasa_planet_explanation"
                 + " WHERE candidate_id=?", String.class, candidate));
-        assertEquals("nasa-ko-v4", jdbc.queryForObject("SELECT prompt_version FROM nasa_planet_explanation"
+        assertEquals("nasa-ko-v5", jdbc.queryForObject("SELECT prompt_version FROM nasa_planet_explanation"
                 + " WHERE candidate_id=?", String.class, candidate));
         assertEquals(1, jdbc.queryForObject("SELECT attempt_count FROM nasa_planet_explanation"
                 + " WHERE candidate_id=?", Integer.class, candidate));
@@ -233,6 +233,35 @@ class NasaPlanetExplanationTest {
         assertEquals("failed", failed.status());
         assertEquals("invalid_output", failed.failure());
         assertNull(failed.content());
+    }
+
+    @Test
+    void 번호로_고른_초안은_받고_목록을_통째로_복사한_초안은_거절한다() {
+        // 운영에서 모델이 [a, b] 목록 문자열을 값으로 복사해 invalid_output이 났다 [S15P21C206-277].
+        String instructions = NasaPlanetExplanationText.instructions(planet, HASH_A);
+        assertTrue(instructions.contains("1. 이번에는 {{name}}에 대해 살펴볼까요?"));
+        assertTrue(instructions.contains("2. {{name}}에 대해 함께 알아볼까요?"));
+        assertFalse(instructions.contains("[이번에는"));
+
+        var content = NasaPlanetExplanationText.render(
+                new Draft(HASH_A, "{{name}}", "2", "1", "2", "1", "1"), planet, HASH_A);
+        assertTrue(content.name().startsWith("TOI-700 b에 대해 함께 알아볼까요?"));
+        assertEquals("이 행성은 별 주위를 한 바퀴 도는 데 9일이 걸려요.", content.orbitalPeriod());
+        assertTrue(content.radius().startsWith("크기를 살펴보면, 반지름은 "));
+        assertEquals("질량은 이번 NASA 자료에서 확인할 수 없어요.", content.mass());
+
+        Draft valid = draft(HASH_A);
+        for (String bad : List.of("[이번에는 {{name}}에 대해 살펴볼까요?, {{name}}에 대해 함께 알아볼까요?]",
+                "3", "0", "01")) {
+            var rejected = assertThrows(IllegalArgumentException.class, () -> NasaPlanetExplanationText.render(
+                    new Draft(HASH_A, "{{name}}", bad, valid.orbitalPeriod(), valid.radius(), valid.mass(),
+                            valid.discovery()), planet, HASH_A));
+            assertEquals("invalid explanation draft: name", rejected.getMessage());
+        }
+        // 결측 사실은 선택지가 하나라 "2"를 고를 수 없다.
+        var missing = assertThrows(IllegalArgumentException.class, () -> NasaPlanetExplanationText.render(
+                new Draft(HASH_A, "{{name}}", "1", "1", "1", "2", "1"), planet, HASH_A));
+        assertEquals("invalid explanation draft: mass", missing.getMessage());
     }
 
     @Test
@@ -489,7 +518,7 @@ class NasaPlanetExplanationTest {
         verifyNoInteractions(generator);
         jdbc.update("INSERT INTO nasa_planet_explanation(candidate_id,source_hash,source_version,"
                 + "model_name,prompt_version,status,last_attempt_at,next_retry_at,in_flight_until)"
-                + " VALUES (?, ?, 1, 'gpt-5.4-mini', 'nasa-ko-v4', 'pending', ?, ?, ?)",
+                + " VALUES (?, ?, 1, 'gpt-5.4-mini', 'nasa-ko-v5', 'pending', ?, ?, ?)",
                 candidate, HASH_A, NOW.minusHours(1), NOW.minusHours(1), NOW.minusSeconds(1));
         var interrupted = service.read(MEMBER, candidate);
         assertEquals("failed", interrupted.status());
@@ -529,6 +558,29 @@ class NasaPlanetExplanationTest {
         var disabled = assertDoesNotThrow(() -> new NasaPlanetExplanationGenerator(absent, false, ""));
         assertThrows(IllegalStateException.class, () -> disabled.generate(planet, HASH_A));
         verifyNoInteractions(absent);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 모델이_번호를_따옴표_없이_줘도_문자열로_받고_배열은_거절한다() {
+        // v5는 번호를 문자열로 달라고 하지만 모델이 숫자 토큰으로 줄 수 있다. Jackson 설정이 바뀌어도 이 경로가 살아 있어야 한다.
+        ChatModel model = mock(ChatModel.class);
+        when(model.getOptions()).thenReturn(ChatOptions.builder().build());
+        ObjectProvider<ChatClient.Builder> builders = mock(ObjectProvider.class);
+        when(builders.getIfAvailable()).thenReturn(ChatClient.builder(model));
+        var live = new NasaPlanetExplanationGenerator(builders, true, "test-only-placeholder");
+        String unquoted = """
+                {"sourceHash":"%s","planetName":"{{name}}","name":1,"orbitalPeriod":1,
+                 "radius":2,"mass":1,"discovery":1}
+                """.formatted(HASH_A);
+        String array = unquoted.replace("\"name\":1", "\"name\":[1,2]");
+        when(model.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+                .thenReturn(chatResponse(unquoted), chatResponse(array));
+
+        var content = NasaPlanetExplanationText.render(live.generate(planet, HASH_A), planet, HASH_A);
+        assertTrue(content.name().startsWith("이번에는 TOI-700 b에 대해 살펴볼까요?"));
+        assertTrue(content.radius().startsWith("크기를 살펴보면, 반지름은 "));
+        assertThrows(IllegalArgumentException.class, () -> live.generate(planet, HASH_A));
     }
 
     private NasaPlanetExplanationService service(boolean enabled) {

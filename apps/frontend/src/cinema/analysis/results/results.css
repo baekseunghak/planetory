@@ -1,0 +1,249 @@
+/* Cinema result views (./AcceptedResult.tsx and the result pages). Tokens
+   from ../../styles/tokens.css. The classic result dialog keeps its place and
+   frame (analysis-classic); inside it the shared analysis-screen rules for
+   dialogs, the judgment panel and the review block are strong, so the
+   selectors here start at the dialog. */
+
+/* ---- the classic result dialog, cinema content */
+.analysis-screen dialog.submission-dialog.pc-result-dialog {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(88vh, 860px, calc(100dvh - 72px));
+  padding: var(--pc-space-5, 24px);
+  font-family: var(--pc-font-sans, inherit);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-eyebrow {
+  margin: 0 0 var(--pc-space-1, 4px);
+  font-size: var(--pc-text-xs, 12px);
+  letter-spacing: var(--pc-tracking-eyebrow, 0.14em);
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.analysis-screen .submission-dialog.pc-result-dialog h4 {
+  margin: 0 0 var(--pc-space-2, 8px);
+  font-size: var(--pc-text-xl, 20px);
+  font-weight: var(--pc-weight-strong, 600);
+  line-height: var(--pc-leading-tight, 1.25);
+  color: var(--pc-ink, #e8eef8);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-lead {
+  margin: 0;
+  font-size: var(--pc-text-md, 14px);
+  color: var(--pc-ink, #e8eef8);
+  line-height: var(--pc-leading, 1.55);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-lead:focus {
+  outline: none;
+}
+.analysis-screen .submission-dialog.pc-result-dialog .submission-note {
+  margin: var(--pc-space-2, 8px) 0 0;
+  font-size: var(--pc-text-sm, 13px);
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .result-celebrate {
+  margin: var(--pc-space-2, 8px) 0 0;
+  color: var(--pc-accent, #5ec4f7);
+  font-weight: var(--pc-weight-strong, 600);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-compare {
+  margin-top: var(--pc-space-4, 16px);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-compare td,
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-compare th {
+  font-family: var(--pc-font-sans, inherit);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-compare td {
+  font-family: var(--pc-font-mono, inherit);
+  font-variant-numeric: var(--pc-numeric, tabular-nums);
+}
+
+/* facts: one row per axis, label left */
+.analysis-screen .submission-dialog.pc-result-dialog dl.pc-result-facts,
+.pc-result-page dl.pc-result-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: var(--pc-space-4, 16px) 0 0;
+  border-top: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
+}
+.analysis-screen .submission-dialog.pc-result-dialog dl.pc-result-facts > div,
+.pc-result-page dl.pc-result-facts > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--pc-space-3, 12px);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
+}
+.analysis-screen .submission-dialog.pc-result-dialog dl.pc-result-facts dt,
+.pc-result-page dl.pc-result-facts dt {
+  color: var(--pc-ink-dim, #8d99ad);
+  font-size: var(--pc-text-sm, 13px);
+}
+.analysis-screen .submission-dialog.pc-result-dialog dl.pc-result-facts dd,
+.pc-result-page dl.pc-result-facts dd {
+  margin: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--pc-ink, #e8eef8);
+  font-size: var(--pc-text-sm, 13px);
+  line-height: var(--pc-leading, 1.55);
+}
+
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-more {
+  margin: var(--pc-space-3, 12px) 0 0;
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-detail {
+  margin-top: var(--pc-space-3, 12px);
+  padding: var(--pc-space-3, 12px) var(--pc-space-4, 16px);
+  border: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
+  border-radius: var(--pc-radius-md, 9px);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-detail h5 {
+  margin: 0 0 var(--pc-space-1, 4px);
+  font-size: var(--pc-text-sm, 13px);
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-detail p {
+  margin: var(--pc-space-1, 4px) 0 0;
+}
+
+/* 기술 정보: closed by default, quiet */
+.pc-result-tech {
+  margin-top: var(--pc-space-4, 16px);
+  font-size: var(--pc-text-xs, 12px);
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.pc-result-tech summary {
+  cursor: pointer;
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-tech dl,
+.pc-result-tech dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  margin: var(--pc-space-2, 8px) 0 0;
+  font-size: var(--pc-text-xs, 12px);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-tech dl > div,
+.pc-result-tech dl > div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--pc-space-3, 12px);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-tech dt,
+.pc-result-tech dt {
+  color: var(--pc-ink-faint, #566176);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-tech dd,
+.pc-result-tech dd {
+  margin: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--pc-ink-dim, #8d99ad);
+  font-family: var(--pc-font-mono, inherit);
+  overflow-wrap: anywhere;
+}
+
+/* actions: two primary, the rest small */
+.pc-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-space-3, 12px);
+  margin-top: var(--pc-space-5, 24px);
+}
+.pc-result-primary,
+.pc-result-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pc-space-2, 8px);
+}
+.pc-result-secondary {
+  margin-left: auto;
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-button,
+.pc-result-page .pc-result-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 var(--pc-space-4, 16px);
+  border: 1px solid var(--pc-line-strong, rgba(150, 180, 225, 0.3));
+  border-radius: var(--pc-radius-pill, 999px);
+  background: transparent;
+  color: var(--pc-ink, #e8eef8);
+  font: inherit;
+  font-size: var(--pc-text-md, 14px);
+  font-weight: var(--pc-weight-medium, 500);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-button-main,
+.pc-result-page .pc-result-button-main {
+  border-color: var(--pc-accent, #5ec4f7);
+  background: var(--pc-accent, #5ec4f7);
+  color: var(--pc-accent-ink, #03121b);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-inline,
+.pc-result-page .pc-result-inline {
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--pc-accent, #5ec4f7);
+  font: inherit;
+  font-size: var(--pc-text-sm, 13px);
+  font-weight: var(--pc-weight-regular, 400);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.analysis-screen
+  .submission-dialog.pc-result-dialog
+  .pc-result-secondary
+  .pc-result-inline {
+  color: var(--pc-ink-dim, #8d99ad);
+}
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-inline:hover,
+.analysis-screen
+  .submission-dialog.pc-result-dialog
+  .pc-result-inline:focus-visible,
+.pc-result-page .pc-result-inline:hover,
+.pc-result-page .pc-result-inline:focus-visible {
+  color: var(--pc-ink, #e8eef8);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.pc-result-button:focus-visible,
+.pc-result-inline:focus-visible {
+  outline: 2px solid var(--pc-accent, #5ec4f7);
+  outline-offset: 2px;
+}
+
+/* In the result dialog the actions stay in view while the facts scroll
+   (1024x768 cannot show a full result and its actions at once). */
+.analysis-screen .submission-dialog.pc-result-dialog .pc-result-actions {
+  position: sticky;
+  bottom: calc(-1 * var(--pc-space-5, 24px));
+  z-index: 1;
+  margin: var(--pc-space-4, 16px) calc(-1 * var(--pc-space-5, 24px))
+    calc(-1 * var(--pc-space-5, 24px));
+  padding: var(--pc-space-3, 12px) var(--pc-space-5, 24px)
+    var(--pc-space-5, 24px);
+  border-top: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
+  background: var(--pc-classic-surface, #04070d);
+}

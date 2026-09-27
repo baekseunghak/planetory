@@ -25,6 +25,7 @@ import {
   PhaseSelectionControls,
 } from "./PhaseSelection";
 import "./folded-curve.css";
+import { useCinemaCopy } from "./cinema-copy";
 const DevGpuSurface = import.meta.env.DEV
   ? lazy(() =>
       import("../../../dev/FoldGpuSurface").catch(() => ({
@@ -50,6 +51,9 @@ export function FoldedCurveChart({
   fluxUnit: string;
 }) {
   const { stage } = useAnalysisStage();
+  // 시네마 화면: 개발용 렌더러는 개발 도구를 켠 서버에서만, 읽는 값은
+  // 섹터·위상 3자리·밝기 4자리(BTJD는 빼고).
+  const cinema = useCinemaCopy();
   const [inspectedResult, setInspectedResult] = useState(result);
   const [inspected, setInspected] = useState<number | null>(null);
   if (inspectedResult !== result) {
@@ -186,10 +190,22 @@ export function FoldedCurveChart({
         data-period={result.periodDays}
         data-revision={result.revision}
       >
-        그래프 주기 {number.format(result.periodDays)}일 · 유효 관측점{" "}
-        {number.format(data.points.length)}개 · 밝기 ({fluxUnit})
+        {cinema ? (
+          <>
+            그래프 주기 {cinema.format.periodDays(result.periodDays, 3)} · 유효
+            관측점 {cinema.format.count(data.points.length)}개
+            {cinema.format.fluxUnit(fluxUnit)
+              ? ` · 밝기 (${cinema.format.fluxUnit(fluxUnit)})`
+              : ""}
+          </>
+        ) : (
+          <>
+            그래프 주기 {number.format(result.periodDays)}일 · 유효 관측점{" "}
+            {number.format(data.points.length)}개 · 밝기 ({fluxUnit})
+          </>
+        )}
       </p>
-      {import.meta.env.DEV && (
+      {import.meta.env.DEV && (!cinema || cinema.devTools) && (
         <details className="fold-renderer-controls">
           <summary>개발용 렌더러</summary>
           <label>
@@ -285,7 +301,11 @@ export function FoldedCurveChart({
         </div>
         <div className="fold-x-axis" aria-hidden="true">
           {[0, 0.25, 0.5, 0.75, 1].map((r) => (
-            <span key={r}>{tick.format(low + r * (high - low))}</span>
+            <span key={r}>
+              {cinema
+                ? cinema.format.phaseTick(low + r * (high - low))
+                : tick.format(low + r * (high - low))}
+            </span>
           ))}
         </div>
         <figcaption>
@@ -299,9 +319,11 @@ export function FoldedCurveChart({
         확인합니다.
       </p>
       <p className="fold-inspector" role="status">
-        {point
-          ? `관측점 ${inspected! + 1}/${data.points.length} · Sector ${point.sector} · BTJD ${number.format(point.btjd)} · 위상 ${number.format(result.phases[inspected!])} · 밝기 ${number.format(point.flux)}`
-          : "관측점에 포인터를 올리거나 그래프에서 ↑/↓를 눌러 수치를 확인하세요."}
+        {point && cinema
+          ? `관측점 ${cinema.format.count(inspected! + 1)}/${cinema.format.count(data.points.length)} · ${cinema.format.sector(point.sector)} · 위상 ${cinema.format.phase(result.phases[inspected!])} · 밝기 ${cinema.format.flux(point.flux)}`
+          : point
+            ? `관측점 ${inspected! + 1}/${data.points.length} · Sector ${point.sector} · BTJD ${number.format(point.btjd)} · 위상 ${number.format(result.phases[inspected!])} · 밝기 ${number.format(point.flux)}`
+            : "관측점에 포인터를 올리거나 그래프에서 ↑/↓를 눌러 수치를 확인하세요."}
       </p>
       <details hidden={stage !== 2} className="phase-keyboard-details">
         <summary>키보드 구간 선택</summary>

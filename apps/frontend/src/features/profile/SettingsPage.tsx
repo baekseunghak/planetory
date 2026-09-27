@@ -8,6 +8,7 @@ import { readVisibility, type Visibility } from "./settings";
 import "./settings.css";
 import { NotificationPreferences } from "../notifications/NotificationPreferences";
 import { p1Enabled } from "../p1";
+import { useCinemaWording } from "../../shared/cinema-wording";
 
 export function SettingsPage() {
   const session = useSession();
@@ -16,6 +17,9 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Cinema app: no "설정 다시 확인" unless a read is needed
+  // (src/shared/cinema-wording); develop keeps its button as it is.
+  const cinema = useCinemaWording();
   const request = useRef<AbortController | null>(null);
   const locked = useRef(false);
 
@@ -94,7 +98,9 @@ export function SettingsPage() {
       } catch {
         if (!controller.signal.aborted)
           setError(
-            "저장 여부를 확인할 수 없습니다. 설정 다시 확인을 눌러 주세요.",
+            cinema
+              ? "저장되었는지 확인하지 못했습니다. '다시 불러오기'를 눌러 주세요."
+              : "저장 여부를 확인할 수 없습니다. 설정 다시 확인을 눌러 주세요.",
           );
       }
     } finally {
@@ -171,11 +177,25 @@ export function SettingsPage() {
                 ? "공개"
                 : "비공개"}
           </p>
-          <div className="settings-actions">
-            <button type="button" disabled={busy} onClick={() => void load()}>
-              {busy ? "설정 확인 중…" : "설정 다시 확인"}
-            </button>
-          </div>
+          {cinema ? (
+            (saved === null || error) && (
+              <div className="settings-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void load()}
+                >
+                  {busy ? "불러오는 중…" : "다시 불러오기"}
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="settings-actions">
+              <button type="button" disabled={busy} onClick={() => void load()}>
+                {busy ? "설정 확인 중…" : "설정 다시 확인"}
+              </button>
+            </div>
+          )}
           {error && <p role="alert">{error}</p>}
           <p role="status">{notice}</p>
         </div>

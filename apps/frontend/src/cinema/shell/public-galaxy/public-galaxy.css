@@ -1,0 +1,253 @@
+/*
+  Another explorer's galaxy (stage `public`). Reuses the galaxy HUD classes
+  from ../shell.css (.cinema-galaxy, .cinema-tools, .cinema-corner,
+  .cinema-star-panel); this file only adds the owner card, the explorer
+  list and the read-only notes. No backdrop-filter over the canvas.
+*/
+
+/* My own tallies belong to my galaxy; here the owner card counts. */
+.cinema-shell[data-stage="public"] .cinema-tally {
+  visibility: hidden;
+}
+
+.cinema-public-owner {
+  position: absolute;
+  top: 68px;
+  left: var(--pc-hud-inset);
+  display: grid;
+  gap: 6px;
+  width: max-content;
+  max-width: 380px;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: rgba(3, 6, 12, 0.78);
+  pointer-events: auto;
+  animation: cinema-public-in var(--pc-dur-slow) var(--pc-ease-out) both;
+}
+@keyframes cinema-public-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+.cinema-public-name {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-2xl);
+  font-weight: var(--pc-weight-medium);
+  line-height: var(--pc-leading-tight);
+  overflow-wrap: anywhere;
+}
+.cinema-public-counts {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-xs);
+}
+.cinema-public-counts b {
+  margin-left: 6px;
+  color: var(--pc-ink);
+  font-family: var(--pc-font-mono);
+  font-size: var(--pc-text-md);
+  font-variant-numeric: var(--pc-numeric);
+  font-weight: var(--pc-weight-medium);
+}
+.cinema-public-status {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+  font-variant-numeric: var(--pc-numeric);
+}
+.cinema-public-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pc-space-2);
+  margin-top: 8px;
+}
+.cinema-shell .cinema-public-actions .cinema-primary,
+.cinema-shell .cinema-public-actions .cinema-secondary {
+  min-height: 34px;
+  padding: 7px 14px;
+  font-size: var(--pc-text-sm);
+}
+/* FollowButton (features/follow) in the card's own language. */
+.cinema-public-follow .follow-control {
+  gap: 6px;
+}
+.cinema-public-follow .follow-control > button {
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-md);
+  background: none;
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: var(--pc-text-sm);
+  cursor: pointer;
+}
+.cinema-public-follow .follow-control > button[aria-pressed="true"] {
+  border-color: rgba(94, 196, 247, 0.45);
+  background: var(--pc-accent-soft);
+  color: var(--pc-accent);
+}
+.cinema-public-follow .follow-control [role="alert"] {
+  color: var(--pc-bad);
+  font-size: var(--pc-text-2xs);
+}
+
+.cinema-public-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  gap: var(--pc-space-3);
+  width: min(440px, calc(100vw - 48px));
+  padding: 20px 22px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-glass);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+.cinema-public-error p {
+  margin: 0;
+  color: var(--pc-ink);
+  font-size: var(--pc-text-md);
+  line-height: var(--pc-leading);
+}
+.cinema-public-error div {
+  display: flex;
+  gap: var(--pc-space-2);
+}
+
+/* 다른 탐사자: a pill with a small list above it. */
+.cinema-explorers .cinema-num {
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-explorer-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 260px;
+  padding: 12px 10px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  background: var(--pc-glass);
+  pointer-events: auto;
+}
+.cinema-explorer-title {
+  margin: 0 6px 6px;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+  letter-spacing: var(--pc-tracking-eyebrow);
+}
+.cinema-explorer-panel .cinema-muted {
+  margin: 0 6px;
+  font-size: var(--pc-text-xs);
+}
+.cinema-explorer-panel .cinema-muted a {
+  color: var(--pc-accent);
+}
+.cinema-explorer-panel ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-explorer-panel li {
+  margin: 0;
+  padding: 0;
+}
+.cinema-explorer-panel li a {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  margin: 0;
+  padding: 7px 8px;
+  line-height: 1.3;
+  border-radius: var(--pc-radius-sm);
+  color: var(--pc-ink);
+  font-size: var(--pc-text-sm);
+  text-decoration: none;
+}
+.cinema-explorer-panel li a:hover {
+  background: var(--pc-raise);
+}
+.cinema-explorer-panel li a[aria-current="page"] {
+  background: var(--pc-accent-soft);
+}
+.cinema-explorer-panel li small {
+  margin: 0;
+  color: var(--pc-ink-faint);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-explorer-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: 50%;
+  color: var(--pc-accent);
+  font-size: var(--pc-text-2xs);
+}
+
+/* Star panel: read-only note at the bottom. */
+.cinema-public-note {
+  display: grid;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: var(--pc-space-3);
+  border-top: 1px solid var(--pc-line);
+}
+.cinema-public-note .cinema-muted {
+  font-size: var(--pc-text-xs);
+}
+.cinema-public-panel .cinema-planets-head h3 b {
+  margin: 0 2px;
+}
+
+.cinema-public-fallback {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cinema-public-fallback button {
+  display: grid;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--pc-radius-sm);
+  background: none;
+  color: var(--pc-ink);
+  text-align: left;
+  font: inherit;
+  font-size: var(--pc-text-sm);
+  cursor: pointer;
+}
+.cinema-public-fallback button:hover {
+  background: var(--pc-raise);
+}
+.cinema-public-fallback small {
+  margin: 0;
+  color: var(--pc-ink-dim);
+  font-size: var(--pc-text-2xs);
+}
+.cinema-galaxy.cinema-public:has(.cinema-list-panel) .cinema-public-owner {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-public-owner {
+    animation: none;
+  }
+}

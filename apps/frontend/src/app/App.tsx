@@ -7,20 +7,16 @@ import {
   type HistoryGraphProps,
 } from "../features/history/HistoryGraph";
 import { useEffect, useState, type ComponentType } from "react";
-import {
-  Link,
-  Navigate,
-  Outlet,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { LoginPage, LogoutStatus } from "../auth/LoginPage";
 import { useSession } from "../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../components/RequestState";
-import { ServiceLayout } from "../components/ServiceLayout";
+import { CinemaRoot } from "../cinema/shell/CinemaRoot";
+import { CinemaLayout } from "../cinema/shell/CinemaLayout";
+import { GalaxyView } from "../cinema/shell/GalaxyView";
+import { AnalysisStage } from "../cinema/shell/AnalysisStage";
+import { MissingScreen } from "../cinema/pages/routes";
 import { routeDefinitions, safeReturnTo, type PageKey } from "./paths";
-import { usePageContext } from "./usePageContext";
 import { p1Enabled } from "../features/p1";
 import { WithdrawalStatusPage } from "../features/profile/WithdrawalPage";
 
@@ -55,21 +51,10 @@ function ProtectedRoutes() {
     return <Outlet key={`${session.member.memberId}:${session.revision}`} />;
   return null;
 }
+// A route without a page (P1 off, not built yet) and an unknown address
+// show the one framed "없는 화면" notice with the way back (cinema/pages).
 function UnconnectedPage({ pageKey }: { pageKey: PageKey }) {
-  const definition = routeDefinitions.find((route) => route.key === pageKey)!;
-  const context = usePageContext();
-  return (
-    <section className="unconnected">
-      <p className="eyebrow">PLANETORY</p>
-      <h1>{definition.title}</h1>
-      <p>이 화면은 연결 준비 중입니다.</p>
-      {context.ticId && <p>TIC {context.ticId}</p>}
-      {context.historyId && <p>분석 기록 {context.historyId}</p>}
-      <Link className="text-link" to={context.returnTo}>
-        이전 화면으로
-      </Link>
-    </section>
-  );
+  return <MissingScreen pageKey={pageKey} />;
 }
 function DesktopGate({ children }: { children: React.ReactNode }) {
   const [{ small, entered }, setViewport] = useState(() => {
@@ -110,55 +95,65 @@ export function App({
   pages = {},
   historyGraphRenderer = null,
   profileSections = {},
+  publicGalaxy = false,
 }: {
   pages?: PageSlots;
   historyGraphRenderer?: ComponentType<HistoryGraphProps> | null;
   profileSections?: ProfileSlotComponents;
+  /** The publicSky slot draws in the scene (shell/public-galaxy). */
+  publicGalaxy?: boolean;
 }) {
+  // /sky is the galaxy itself (a camera move, not a page) unless a dev
+  // inspector fills the slot. /analysis is always framed over the system.
+  const skyOverride = Boolean(pages.sky);
   return (
     <ProfileSlots.Provider value={profileSections}>
       <HistoryGraphRenderer.Provider value={historyGraphRenderer}>
         <DesktopGate>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            {p1Enabled && (
-              <Route
-                path="/withdrawal/status/:requestId"
-                element={<WithdrawalStatusPage />}
-              />
-            )}
-            <Route path="/oauth/callback" element={<LoginPage />} />
-            <Route element={<ProtectedRoutes />}>
-              <Route element={<ServiceLayout />}>
-                <Route path="/" element={<Navigate replace to="/sky" />} />
-                {routeDefinitions.map((route) => {
-                  const Page = pages[route.key];
-                  return (
-                    <Route
-                      key={route.key}
-                      path={route.path}
-                      element={
-                        Page ? (
-                          <Page />
-                        ) : (
-                          <UnconnectedPage pageKey={route.key} />
-                        )
-                      }
-                    />
-                  );
-                })}
+          <CinemaRoot>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              {p1Enabled && (
                 <Route
-                  path="*"
-                  element={
-                    <section>
-                      <h1>페이지를 찾을 수 없습니다</h1>
-                      <Link to="/sky">별지도로 돌아가기</Link>
-                    </section>
-                  }
+                  path="/withdrawal/status/:requestId"
+                  element={<WithdrawalStatusPage />}
                 />
+              )}
+              <Route path="/oauth/callback" element={<LoginPage />} />
+              <Route element={<ProtectedRoutes />}>
+                <Route
+                  element={
+                    <CinemaLayout
+                      skyOverride={skyOverride}
+                      publicGalaxy={publicGalaxy && Boolean(pages.publicSky)}
+                    />
+                  }
+                >
+                  <Route path="/" element={<Navigate replace to="/sky" />} />
+                  {routeDefinitions.map((route) => {
+                    const Page = pages[route.key];
+                    let element = Page ? (
+                      <Page />
+                    ) : route.key === "sky" ? (
+                      <GalaxyView />
+                    ) : (
+                      <UnconnectedPage pageKey={route.key} />
+                    );
+                    if (route.key === "analysis")
+                      element = <AnalysisStage>{element}</AnalysisStage>;
+                    return (
+                      <Route
+                        key={route.key}
+                        path={route.path}
+                        element={element}
+                      />
+                    );
+                  })}
+                  <Route path="*" element={<MissingScreen />} />
+                </Route>
               </Route>
-            </Route>
-          </Routes>
+            </Routes>
+          </CinemaRoot>
         </DesktopGate>
       </HistoryGraphRenderer.Provider>
     </ProfileSlots.Provider>

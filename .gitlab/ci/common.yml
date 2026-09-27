@@ -14,10 +14,13 @@ validate:compose:
     GCP_NODE_4_PROJECT: ci-node-4-project
     GCP_NODE_5_PROJECT: ci-node-5-project
     GCP_NODE_6_PROJECT: ci-node-6-project
+    BACKEND_IMAGE: ci-validation-only/backend:ci
+    DATABASE_PASSWORD: ci-validation-only
   script:
     - docker compose -f compose.yaml config -q
     - docker compose -f infra/distributed-system/compose.control-plane.yaml config -q
     - docker compose -f infra/distributed-system/compose.worker.yaml config -q
+    - docker compose -f infra/service/compose.yaml config -q
   rules:
     - changes:
         - compose.yaml

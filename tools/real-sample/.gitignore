@@ -1,0 +1,5 @@
+# Local only: Python env, downloaded FITS and intermediate output.
+.venv/
+.cache/
+__pycache__/
+*.pyc

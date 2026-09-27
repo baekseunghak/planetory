@@ -524,7 +524,7 @@ POST의 `candidateId` 누락·형식 오류는 400 `VALIDATION_FAILED`다. 형�
 
 `facts`는 NASA 원천이 `ready`이고 정규화 구조 버전 1·SHA-256·표시 자료 검증을 통과했을 때에만 제공한다. 따라서 `invalid_source`에서는 보통 null이다. 설명이 `failed`·`disabled`·`pending`이어도 검증된 NASA 기본 해의 수치는 별도로 사용할 수 있다. `orbitalPeriod`·`radius`·`mass`는 각 `{value,errorPlus,errorMinus,limit,unit,reference}` 측정 객체 또는 null이며, 숫자와 부호 있는 오차는 정밀도를 보존하는 **문자열** 또는 null이다. `limit=-1`은 미만, `0`은 보고된 측정값, `1`은 초과, null은 원천 미표기다. 결측값·상한을 0이나 확정값으로 바꾸지 않는다. `reference`는 안전한 일반 문자열이거나 null이며 NASA의 문헌 HTML을 반환하지 않는다. `sourceTable`은 `ps`, `sourceUrl`은 서버가 고정한 `https://exoplanetarchive.ipac.caltech.edu/`이다. 화면은 이 주소만 출처 링크로 열고 수치·조회 시각과 교육용 설명을 구분한다. 위 JSON의 숫자 문자열·연도는 형식 설명용 예시이지 실제 후보의 측정값이 아니다.
 
-`content`의 시민용 다섯 문장은 현재 `nasa-ko-v4` 계약에 따라 친근한 존댓말로 이어진다. 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. 267 당시 생성형 GET은 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 반복 캐시 GET 82ms는 당시 1회 표본이며 268의 조회 GET·생성 POST나 운영·브라우저 지연의 기준값이 아니다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 별도다.
+`content`의 시민용 다섯 문장은 `nasa-ko-v4`가 도입한 문장 틀에 따라 친근한 존댓말로 이어진다. 현재 `nasa-ko-v5`는 같은 틀을 모델이 번호로 고르게 한 것이다(`S15P21C206-277`). 기존 필드를 유지하고 각 값은 독립적인 완전한 문장이다. 화면은 같은 `candidateId`의 `name → orbitalPeriod → radius → mass → discovery` 순서로 읽히게 할 수 있으며, 다른 후보의 문장을 합치거나 배열 순번으로 연결하지 않는다. 공전주기·반지름·질량은 자료에 있는 값과 단위만 설명하며 `errorPlus`·`errorMinus`의 수치나 `±` 범위는 넣지 않는다. `limit=-1/1`의 **미만/초과**는 확정값과 뜻이 달라 유지한다. `limit=null`은 상·하한 표식의 유무를 따로 나열하지 않고 “자료에 …로 기록돼 있어요”처럼 말한다. 오차와 한계값은 266 원천 자료·검증에 남으며 이 응답에서 원천을 수정하지 않는다. 이전 `nasa-ko-v2`·`nasa-ko-v3` 설명은 재사용하지 않고 다음 자격 있는 요청에서 새 계약으로 재생성한다. 267 당시 생성형 GET은 TOI-700 b 한 후보의 직접 NASA TAP·GMS 생성·검증과 가상 회원·후보 4개의 인증 별 단위 GET 및 V25·V26 저장을 격리 환경에서 확인했다. 첫 GET 14,554ms와 즉시 반복 캐시 GET 82ms는 당시 1회 표본이며 268의 조회 GET·생성 POST나 운영·브라우저 지연의 기준값이 아니다. 실제 회원·Gold 연결, 공유·운영 환경과 268 화면 인수는 별도다.
 
 | 필드·상태 | 규칙 |
 | --- | --- |
@@ -1351,7 +1351,7 @@ Q11 회귀 기준은 T=100→101·원본 P=3·당시 선택 0.25/3~0.35/3의 통
       "retryAt": null,
       "failure": null,
       "model": "gpt-5.4-mini",
-      "promptVersion": "nasa-ko-v4"
+      "promptVersion": "nasa-ko-v5"
     }
   ]
 }

@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#070a0f" />
     <title>Planetory</title>
+    <!-- Dark from the first frame: each app's CSS arrives with its lazy chunk
+         (src/main.tsx). Same values as :root in src/styles.css, so develop's
+         app looks exactly as before once its CSS is in. -->
+    <style>
+      :root {
+        background: #070a0f;
+        color-scheme: dark;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

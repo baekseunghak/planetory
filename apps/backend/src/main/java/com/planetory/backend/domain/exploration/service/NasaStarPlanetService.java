@@ -32,7 +32,7 @@ import static com.planetory.backend.domain.exploration.service.NasaStarPlanetRep
 public class NasaStarPlanetService {
 
     private static final Logger log = LoggerFactory.getLogger(NasaStarPlanetService.class);
-    private static final String PROMPT_VERSION = "nasa-ko-v4";
+    private static final String PROMPT_VERSION = "nasa-ko-v5";
 
     private final NasaStarPlanetRepository repository;
     private final NasaPlanetInfoRepository normalized;
@@ -207,7 +207,9 @@ public class NasaStarPlanetService {
                 repository.requireAccess(memberId, ticId);
                 repository.failExplanation(memberId, ticId, planetId, generation, hash, version,
                         code, OffsetDateTime.now(clock).plus(modelRetry));
-                log.warn("NASA star planet explanation failed: reason={}", code);
+                // 검증 실패 메시지는 항목 이름뿐이다. 모델·HTTP 오류 메시지는 상위 응답 본문을 담을 수 있어 종류만 남긴다.
+                log.warn("NASA star planet explanation failed: reason={}, detail={}", code,
+                        failure instanceof IllegalArgumentException ? failure.getMessage() : failure.getClass().getSimpleName());
                 return bundle(memberId, ticId, null, null);
             }
             repository.requireAccess(memberId, ticId);

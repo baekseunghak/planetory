@@ -6,6 +6,7 @@ import {
   type PlanetExplanation,
   type StarDetail,
 } from "./detail";
+import { cinemaDateTime, useCinemaWording } from "../../shared/cinema-wording";
 
 type State = {
   item: PlanetExplanation | null;
@@ -13,7 +14,7 @@ type State = {
   loading: boolean;
 };
 const empty: State = { item: null, error: null, loading: false };
-const date = (value: string) => new Date(value).toLocaleString("ko-KR");
+const plainDate = (value: string) => new Date(value).toLocaleString("ko-KR");
 const measured = (
   value: NonNullable<NonNullable<PlanetExplanation["facts"]>["radius"]>,
   unit: string,
@@ -72,6 +73,9 @@ export function PlanetExplanationPanel({
   refreshDetail(): void;
 }) {
   const [open, setOpen] = useState(false);
+  // Cinema app: dates without seconds (src/shared/cinema-wording).
+  const cinema = useCinemaWording();
+  const date = cinema ? cinemaDateTime : plainDate;
   const [state, setState] = useState<State>(empty);
   const [quotaUntil, setQuotaUntil] = useState<string | null>(null);
   const inFlight = useRef<AbortController | null>(null);
@@ -283,7 +287,10 @@ export function PlanetExplanationPanel({
                     </a>
                   </p>
                   {item.fetchedAt && (
-                    <p>NASA 자료 조회: {date(item.fetchedAt)}</p>
+                    <p>
+                      {cinema ? "NASA 자료 확인" : "NASA 자료 조회"}:{" "}
+                      {date(item.fetchedAt)}
+                    </p>
                   )}
                   {item.refreshStatus && item.refreshStatus !== "ok" && (
                     <p>

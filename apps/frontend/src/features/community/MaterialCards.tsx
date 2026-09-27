@@ -19,6 +19,7 @@ import {
   type Source,
 } from "./materialContracts";
 import { useReadModel } from "./useReadModel";
+import { cinemaDateTime, useCinemaWording } from "../../shared/cinema-wording";
 import "./materials.css";
 
 export function MaterialCards({
@@ -67,6 +68,7 @@ export function MaterialCards({
   );
 }
 function SourceCard({ source, ticId }: { source: Source; ticId: string }) {
+  const cinema = useCinemaWording();
   const path = endpoint("/v1/source-cards", { ...source, ticId });
   const load = useCallback(
     async (signal: AbortSignal) =>
@@ -92,8 +94,12 @@ function SourceCard({ source, ticId }: { source: Source; ticId: string }) {
         {source.type === "PUBLIC_ANALYSIS" ? "공개 분석" : "공식 스레드"}
       </h3>
       <p>
-        {typeof author?.nickname === "string" ? author.nickname : "SYSTEM"} ·
-        TIC {ticId}
+        {typeof author?.nickname === "string"
+          ? author.nickname
+          : cinema
+            ? "Planetory 공식"
+            : "SYSTEM"}{" "}
+        · TIC {ticId}
       </p>
       {typeof state.data.judgment === "string" && (
         <p>
@@ -109,7 +115,7 @@ function SourceCard({ source, ticId }: { source: Source; ticId: string }) {
             : `/signal-threads/${encodeURIComponent(source.id)}`
         }
       >
-        출처 {source.id} 열기
+        {cinema ? "출처 열기" : `출처 ${source.id} 열기`}
       </Link>
     </div>
   );
@@ -128,10 +134,13 @@ function HistoryAttachment({
   author: Author;
 }) {
   const [open, setOpen] = useState(false);
+  const cinema = useCinemaWording();
   return (
     <section className="material-viewer" aria-label={`첨부 기록 ${id}`}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        분석 기록 {id} {open ? "접기" : "열기"}
+        {cinema
+          ? `첨부한 분석 기록 ${open ? "접기" : "열기"}`
+          : `분석 기록 ${id} ${open ? "접기" : "열기"}`}
       </button>
       {open && (
         <AttachmentDetail
@@ -160,6 +169,7 @@ function AttachmentDetail({
   author: Author;
 }) {
   const [mode, setMode] = useState<GraphMode>("CURRENT");
+  const cinema = useCinemaWording();
   const path = `/v1/${parentType === "POST" ? "posts" : "comments"}/${encodeURIComponent(parentId)}/history-attachments/${encodeURIComponent(id)}`;
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -222,7 +232,11 @@ function AttachmentDetail({
           <dt>작성자</dt>
           <dd>{author.nickname}</dd>
           <dt>제출 시각</dt>
-          <dd>{new Date(String(row.submittedAt)).toLocaleString("ko-KR")}</dd>
+          <dd>
+            {cinema
+              ? cinemaDateTime(String(row.submittedAt))
+              : new Date(String(row.submittedAt)).toLocaleString("ko-KR")}
+          </dd>
           <dt>판단</dt>
           <dd>{label(row.judgment)}</dd>
           <dt>근거</dt>

@@ -12,6 +12,8 @@
  * 서버가 이 이력을 주지 않으므로 브라우저에 둔다. 기기를 바꾸면 한 번 더
  * 보이는데, 연출이 한 번 더 나오는 것은 한 번도 못 보는 것보다 훨씬 싸다.
  */
+import { createContext } from "react";
+
 const KEY = "planetory:analysis-celebrated";
 
 const read = (): Record<string, string[]> => {
@@ -25,6 +27,43 @@ const read = (): Record<string, string[]> => {
     return {};
   }
 };
+
+/**
+ * 「축하합니다!」를 붙일 성과인가. **실제로 인정된 것(`recognized`)뿐이다.**
+ * 판단 불일치·공개 대기·이미 인정됨·성과 없음(미매칭)·알 수 없는 값에는
+ * 붙이지 않는다. 처음 보는지(`hasCelebrated`)와는 따로 보며 둘 다 맞아야
+ * 축하한다. 성과 사실 문구는 이와 관계없이 그대로 보인다.
+ */
+export function earnsCelebration(result: string | null | undefined): boolean {
+  return result === "recognized";
+}
+
+/**
+ * 결과 설명의 축하 문구. 이 회원이 이 제출을 처음 보고(`firstView`) 성과가
+ * 실제로 인정됐을 때만 있다. 기존형·새 분석이 같은 결과 설명을 쓴다.
+ */
+export function celebrationText(
+  firstView: boolean,
+  result: string | null | undefined,
+): string | null {
+  return firstView && earnsCelebration(result) ? "축하합니다!" : null;
+}
+
+/**
+ * develop 화면(`src/legacy`)의 지금 규칙: 처음 보는 결과면 성과와 관계없이
+ * 축하한다(판단 불일치·공개 대기에도). 기존 화면을 바꾸지 않으려고
+ * 그대로 둔다.
+ */
+export function developCelebrationText(firstView: boolean): string | null {
+  return firstView ? "축하합니다!" : null;
+}
+
+/**
+ * `celebrationText`(인정된 성과에만 축하)를 쓰는 화면인가. 시네마 셸이 true로
+ * 둔다. 제공자가 없는 develop 화면은 `developCelebrationText`를 쓴다.
+ * develop 화면에도 이 규칙을 들일 때 이 문맥을 없앤다.
+ */
+export const StrictCelebration = createContext(false);
 
 /** 이 회원이 이 제출의 성과를 본 적이 있는가. */
 export function hasCelebrated(memberId: string, submissionId: string): boolean {

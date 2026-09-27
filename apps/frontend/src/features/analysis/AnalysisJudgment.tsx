@@ -21,6 +21,7 @@ import type { SelectionIssue } from "./selection-rules";
 import { useSubmission } from "./use-submission";
 import { SpecialSubmissions, SubmissionStatus } from "./AnalysisSubmission";
 import { candidateInput } from "./submission-input";
+import { useCinemaCopy } from "./cinema-copy";
 import "./analysis-judgment.css";
 
 export function AnalysisSteps() {
@@ -87,6 +88,9 @@ export function AnalysisJudgment({
   const blocked = !ready && (!pending || slowPending);
   const review = enabled ? state.review : null;
   const submission = useSubmission(context);
+  // 시네마 화면: 주기 3자리, 위상 3자리, 가려진 시간 1자리. BTJD 기준 시각은
+  // 제출값 확인의 「계산·제출 안내」 안에만 둔다.
+  const cinema = useCinemaCopy();
   // 잠겨도 제출값 확인 화면은 남겨야 한다. 접수 결과를 그 자리에서 보여 주고,
   // 결과를 모르는 동안 무엇을 보냈는지 사용자가 볼 수 있어야 한다.
   const editable = enabled && !submission.locked;
@@ -176,9 +180,20 @@ export function AnalysisJudgment({
           </p>
           {fold.state.change && (
             <>
-              <p>
-                현재 주기 {fold.state.change.selection.periodDays.toFixed(6)}일
-              </p>
+              {cinema ? (
+                <p>
+                  현재 주기{" "}
+                  {cinema.format.periodDays(
+                    fold.state.change.selection.periodDays,
+                    3,
+                  )}
+                </p>
+              ) : (
+                <p>
+                  현재 주기 {fold.state.change.selection.periodDays.toFixed(6)}
+                  일
+                </p>
+              )}
               <button
                 disabled={blocked}
                 onClick={() => {
@@ -214,17 +229,39 @@ export function AnalysisJudgment({
           {state.preview?.kind === "invalid" && (
             <p role="status">{state.message}</p>
           )}
-          <p>
-            선택 위상{" "}
-            {state.range
-              ? `${state.range.phaseStart.toFixed(4)}–${state.range.phaseEnd.toFixed(4)}`
-              : "—"}
-          </p>
-          <p>
-            기준 시각 {preview?.epochPreviewBtjd.toFixed(6) ?? "—"} BTJD
-            <br />
-            가려진 시간 {preview?.durationPreviewHours.toFixed(4) ?? "—"} 시간
-          </p>
+          {cinema ? (
+            <>
+              <p>
+                선택 위상{" "}
+                {(state.range &&
+                  cinema.format.phaseRange(
+                    state.range.phaseStart,
+                    state.range.phaseEnd,
+                  )) ??
+                  "—"}
+              </p>
+              <p>
+                가려진 시간{" "}
+                {cinema.format.hours(preview?.durationPreviewHours) ?? "—"}
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                선택 위상{" "}
+                {state.range
+                  ? `${state.range.phaseStart.toFixed(4)}–${state.range.phaseEnd.toFixed(4)}`
+                  : "—"}
+              </p>
+              <p>
+                기준 시각 {preview?.epochPreviewBtjd.toFixed(6) ?? "—"} BTJD
+                <br />
+                가려진 시간 {preview?.durationPreviewHours.toFixed(4) ??
+                  "—"}{" "}
+                시간
+              </p>
+            </>
+          )}
           <button
             type="button"
             disabled={!ready || !preview || state.dragging}
@@ -346,58 +383,117 @@ export function AnalysisJudgment({
             제출값 확인
           </h4>
           <p>주기와 선택 구간, 작성한 판단을 마지막으로 확인하세요.</p>
-          <dl>
-            <dt>주기</dt>
-            <dd title={String(review.input.selection.periodDays)}>
-              {review.input.selection.periodDays.toFixed(6)}일
-            </dd>
-            <dt>선택 위상</dt>
-            <dd>
-              {review.input.selection.phaseStart.toFixed(4)}–
-              {review.input.selection.phaseEnd.toFixed(4)}
-            </dd>
-            <dt>기준 시각</dt>
-            <dd title={String(review.epochPreviewBtjd)}>
-              {review.epochPreviewBtjd.toFixed(6)} BTJD
-            </dd>
-            <dt>가려진 시간</dt>
-            <dd title={String(review.durationPreviewHours)}>
-              {review.durationPreviewHours.toFixed(4)} 시간
-            </dd>
-            <dt>판단</dt>
-            <dd>
-              {
-                judgments.find(
-                  ({ value }) => value === review.input.userJudgment,
-                )?.label
-              }
-            </dd>
-            <dt>근거</dt>
-            <dd>
-              {review.input.evidenceChecks
-                .map(
-                  (item) =>
-                    evidenceOptions.find(({ value }) => value === item)?.label,
-                )
-                .join(", ") || "선택 안 함"}
-            </dd>
-            <dt>메모</dt>
-            <dd className="analysis-memo-preview">
-              {review.input.memo || "입력 안 함"}
-            </dd>
-          </dl>
-          <details className="review-details">
-            <summary>계산·제출 안내</summary>
-            <p>
-              아직 제출되지 않았습니다. 기준 시각과 가려진 시간은 미리보기이며,
-              실제 제출 시 서버가 선택 주기·위상으로 다시 계산하고 검증합니다.
-            </p>
-            <p id={`${hintId}-submit`}>
-              제출하면 요청 번호 하나로 접수를 추적합니다. 응답을 받지 못해도
-              같은 번호로 결과를 확인하므로 두 번 접수되지 않습니다. 관측 공백을
-              포함한 최종 선택 검증은 서버가 합니다.
-            </p>
-          </details>
+          {cinema ? (
+            <dl>
+              <dt>주기</dt>
+              <dd title={String(review.input.selection.periodDays)}>
+                {cinema.format.periodDays(review.input.selection.periodDays, 3)}
+              </dd>
+              <dt>선택 위상</dt>
+              <dd>
+                {cinema.format.phaseRange(
+                  review.input.selection.phaseStart,
+                  review.input.selection.phaseEnd,
+                )}
+              </dd>
+              <dt>가려진 시간</dt>
+              <dd>{cinema.format.hours(review.durationPreviewHours)}</dd>
+              <dt>판단</dt>
+              <dd>
+                {
+                  judgments.find(
+                    ({ value }) => value === review.input.userJudgment,
+                  )?.label
+                }
+              </dd>
+              <dt>근거</dt>
+              <dd>
+                {review.input.evidenceChecks
+                  .map(
+                    (item) =>
+                      evidenceOptions.find(({ value }) => value === item)
+                        ?.label,
+                  )
+                  .join(", ") || "선택 안 함"}
+              </dd>
+              <dt>메모</dt>
+              <dd className="analysis-memo-preview">
+                {review.input.memo || "입력 안 함"}
+              </dd>
+            </dl>
+          ) : (
+            <dl>
+              <dt>주기</dt>
+              <dd title={String(review.input.selection.periodDays)}>
+                {review.input.selection.periodDays.toFixed(6)}일
+              </dd>
+              <dt>선택 위상</dt>
+              <dd>
+                {review.input.selection.phaseStart.toFixed(4)}–
+                {review.input.selection.phaseEnd.toFixed(4)}
+              </dd>
+              <dt>기준 시각</dt>
+              <dd title={String(review.epochPreviewBtjd)}>
+                {review.epochPreviewBtjd.toFixed(6)} BTJD
+              </dd>
+              <dt>가려진 시간</dt>
+              <dd title={String(review.durationPreviewHours)}>
+                {review.durationPreviewHours.toFixed(4)} 시간
+              </dd>
+              <dt>판단</dt>
+              <dd>
+                {
+                  judgments.find(
+                    ({ value }) => value === review.input.userJudgment,
+                  )?.label
+                }
+              </dd>
+              <dt>근거</dt>
+              <dd>
+                {review.input.evidenceChecks
+                  .map(
+                    (item) =>
+                      evidenceOptions.find(({ value }) => value === item)
+                        ?.label,
+                  )
+                  .join(", ") || "선택 안 함"}
+              </dd>
+              <dt>메모</dt>
+              <dd className="analysis-memo-preview">
+                {review.input.memo || "입력 안 함"}
+              </dd>
+            </dl>
+          )}
+          {cinema ? (
+            <details className="review-details">
+              <summary>계산·제출 안내</summary>
+              <p>
+                아직 제출되지 않았습니다. 가려진 시간은 미리보기이며, 제출하면
+                서버가 고른 주기와 구간으로 다시 계산해 확인합니다.
+              </p>
+              <p id={`${hintId}-submit`}>
+                연결이 끊겨도 같은 제출은 한 번만 접수됩니다.
+              </p>
+              <p>
+                기준 시각 {cinema.format.referenceTime(review.epochPreviewBtjd)}{" "}
+                (TESS 관측 시각, 일)
+              </p>
+            </details>
+          ) : (
+            <details className="review-details">
+              <summary>계산·제출 안내</summary>
+              <p>
+                아직 제출되지 않았습니다. 기준 시각과 가려진 시간은
+                미리보기이며, 실제 제출 시 서버가 선택 주기·위상으로 다시
+                계산하고 검증합니다.
+              </p>
+              <p id={`${hintId}-submit`}>
+                제출하면 요청 번호 하나로 접수를 추적합니다. 응답을 받지 못해도
+                같은 번호로 결과를 확인하므로 두 번 접수되지 않습니다. 관측
+                공백을 포함한 최종 선택 검증은 서버가 합니다.
+              </p>
+            </details>
+          )}
           <div className="periodogram-toolbar">
             <button
               type="button"
