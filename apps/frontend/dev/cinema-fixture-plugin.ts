@@ -2716,8 +2716,9 @@ export function cinemaFixturePlugin(
     `<style>html,body{margin:0;height:100%;background:#000}</style></head><body><script>` +
     `try{for(const k of Object.keys(sessionStorage))if(k.indexOf("planetory:analysis-draft:")===0)sessionStorage.removeItem(k)}catch(e){}` +
     // A new world is a new first visit: the once-per-member flight to
-    // tutorial 1 and the closed tutorial lines start over (shell/tutorial-guide).
-    `try{localStorage.removeItem("planetory:first-visit-flown");localStorage.removeItem("planetory:first-visit-story");localStorage.removeItem("planetory:tutorial-guide-closed")}catch(e){}` +
+    // tutorial 1 and the closed tutorial lines start over (shell/tutorial-guide),
+    // and no star of the old world is marked new (shell/new-stars).
+    `try{localStorage.removeItem("planetory:first-visit-flown");localStorage.removeItem("planetory:first-visit-story");localStorage.removeItem("planetory:tutorial-guide-closed");localStorage.removeItem("planetory:new-stars")}catch(e){}` +
     `location.replace(${JSON.stringify(target).replace(/</g, "\\u003c")})</script></body></html>`;
 
   const reset = () => {

@@ -204,32 +204,63 @@ export function PlanetLabels({
 }
 
 /**
- * After an ignition: a ring and "새로 열린 별" on the new star, so the member
- * can tell which one it is. It stays until the next thing they do.
+ * "새로 열린 별": a violet ring on each star the member unlocked and has not
+ * opened yet (shell/new-stars, the most recent ones only), so they can tell
+ * which stars of their galaxy are new. The star that just ignited also
+ * carries its name until the member's next interaction. A ring opens its
+ * star, like the star itself.
  */
-export function NewStarReticle({
-  ticId,
-  onDone,
+export function NewStarMarks({
+  stars,
+  ticIds,
+  recent = null,
+  onRecentDone,
+  onSelect,
+  held = false,
+  onHover,
 }: {
-  ticId: string;
-  onDone(): void;
+  stars: readonly Star[];
+  /** Stars to ring, most recent first (new-stars `markedNewStars`). */
+  ticIds: readonly string[];
+  /** Star that just ignited: its ring also says "새로 열린 별 · TIC …". */
+  recent?: string | null;
+  onRecentDone?(): void;
+  onSelect(ticId: string): void;
+  /** The camera is still moving: the rings wait, as the markers do. */
+  held?: boolean;
+  /** Pointer or keyboard on a ring: name its star like a hovered star. */
+  onHover?(ticId: string | null): void;
 }) {
   const scene = useScene();
-  const node = useRef<HTMLDivElement>(null);
-  const done = useRef(onDone);
-  done.current = onDone;
+  // Only stars the sky has loaded; the others get their ring when they come.
+  const marks = useMemo(() => {
+    const wanted = new Set(ticIds);
+    const found = new Map<string, Star>();
+    for (const star of stars)
+      if (wanted.has(star.ticId)) found.set(star.ticId, star);
+    return ticIds.flatMap((id) => {
+      const star = found.get(id);
+      return star ? [star] : [];
+    });
+  }, [stars, ticIds]);
+  const nodes = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
-    const target = node.current;
-    if (!target) return;
-    const update = () =>
-      place(target, scene.projectStar(ticId), "translate(-50%, -50%)");
+    const update = () => {
+      for (const [ticId, node] of nodes.current)
+        place(node, scene.projectStar(ticId));
+    };
     update();
     return scene.onFrame(update);
-  }, [scene, ticId]);
+  }, [scene, marks]);
+  const labelled =
+    recent && marks.some((star) => star.ticId === recent) ? recent : null;
+  const done = useRef(onRecentDone);
+  done.current = onRecentDone;
   useEffect(() => {
-    // The next interaction ends it; the click that caused the ignition
-    // (은하로 돌아가기) is long over by now.
-    const end = () => done.current();
+    if (!labelled) return;
+    // The next interaction ends the name; the click that caused the
+    // ignition (은하로 돌아가기) is long over by now.
+    const end = () => done.current?.();
     const options = { capture: true, once: true } as const;
     document.addEventListener("pointerdown", end, options);
     document.addEventListener("keydown", end, options);
@@ -239,20 +270,47 @@ export function NewStarReticle({
       document.removeEventListener("keydown", end, options);
       document.removeEventListener("wheel", end, options);
     };
-  }, []);
+  }, [labelled]);
+  if (!marks.length) return null;
   return (
     <div
-      ref={node}
-      className="cinema-reticle"
-      data-visible="false"
-      data-testid="new-star-reticle"
-      data-tic-id={ticId}
+      className="cinema-new-stars"
+      data-testid="new-star-marks"
+      data-count={marks.length}
+      data-held={held ? "true" : "false"}
     >
-      <span className="cinema-reticle-ring" aria-hidden="true" />
-      <span className="cinema-reticle-label">
-        <b>새로 열린 별</b>
-        <span className="cinema-num">TIC {ticId}</span>
-      </span>
+      {marks.map((star) => {
+        const named = star.ticId === labelled;
+        return (
+          <button
+            key={star.ticId}
+            type="button"
+            ref={(node) => {
+              if (node) nodes.current.set(star.ticId, node);
+              else nodes.current.delete(star.ticId);
+            }}
+            className="cinema-new-star"
+            data-tic-id={star.ticId}
+            data-recent={named ? "true" : undefined}
+            data-testid={named ? "new-star-reticle" : undefined}
+            data-visible="false"
+            aria-label={`새로 열린 별 · ${starLabel(star)}`}
+            onClick={() => onSelect(star.ticId)}
+            // A named ring already says which star it is.
+            onPointerEnter={() => onHover?.(named ? null : star.ticId)}
+            onPointerLeave={() => onHover?.(null)}
+            onFocus={() => onHover?.(named ? null : star.ticId)}
+            onBlur={() => onHover?.(null)}
+          >
+            {named && (
+              <span className="cinema-new-star-label" aria-hidden="true">
+                <b>새로 열린 별</b>
+                <span className="cinema-num">TIC {star.ticId}</span>
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

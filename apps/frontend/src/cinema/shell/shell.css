@@ -504,38 +504,94 @@ body {
   transition-duration: 120ms;
 }
 
-/* The new star after its ignition: a ring and a short label. */
-.cinema-reticle {
+/* New stars not opened yet (NewStarMarks): a hollow violet ring with a slow
+   ripple, so the star shows through; the one that just ignited also carries
+   its name. Blue numbers and the red "!" stay on top of it. */
+.cinema-new-stars {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cinema-new-stars .cinema-new-star {
   position: absolute;
   top: 0;
   left: 0;
-  pointer-events: none;
+  width: 28px;
+  height: 28px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  pointer-events: auto;
   will-change: transform;
+  transition: opacity 500ms var(--pc-ease-out);
 }
-.cinema-reticle[data-visible="false"] {
+.cinema-new-stars .cinema-new-star:hover {
+  background: none;
+}
+.cinema-new-stars .cinema-new-star::before,
+.cinema-new-stars .cinema-new-star::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1.5px solid var(--pc-new-star);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.cinema-new-stars .cinema-new-star::before {
+  box-shadow: 0 0 10px rgba(182, 156, 255, 0.45);
+}
+.cinema-new-stars .cinema-new-star:hover::before {
+  box-shadow: 0 0 14px rgba(182, 156, 255, 0.75);
+}
+.cinema-new-stars .cinema-new-star::after {
+  opacity: 0;
+  animation: cinema-new-star-pulse 2800ms var(--pc-ease-out) infinite;
+}
+/* Out of step with each other, so ten rings do not blink as one. */
+.cinema-new-stars .cinema-new-star:nth-child(3n + 2)::after {
+  animation-delay: -950ms;
+}
+.cinema-new-stars .cinema-new-star:nth-child(3n)::after {
+  animation-delay: -1900ms;
+}
+@keyframes cinema-new-star-pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+.cinema-new-stars .cinema-new-star[data-visible="false"] {
   visibility: hidden;
 }
-.cinema-reticle-ring {
-  position: absolute;
-  left: -17px;
-  top: -17px;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--pc-new-star);
-  border-radius: 50%;
-  box-shadow: 0 0 14px rgba(182, 156, 255, 0.45);
-  animation: cinema-reticle-in 700ms var(--pc-ease-out) both;
+/* Like the markers: they wait for the galaxy to be at rest. */
+.cinema-new-stars[data-held="true"] .cinema-new-star {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: 120ms;
 }
-@keyframes cinema-reticle-in {
+/* The star that just ignited: its ring comes in, then its name. */
+.cinema-new-stars .cinema-new-star[data-recent="true"]::before {
+  animation: cinema-new-star-in 700ms var(--pc-ease-out) both;
+}
+@keyframes cinema-new-star-in {
   from {
     opacity: 0;
     transform: scale(2.2);
   }
 }
-.cinema-reticle-label {
+.cinema-new-star-label {
   position: absolute;
-  left: 24px;
-  top: -18px;
+  left: 38px;
+  top: -4px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -545,16 +601,34 @@ body {
   background: rgba(0, 0, 0, 0.62);
   color: var(--pc-ink);
   font-size: var(--pc-text-xs);
+  line-height: var(--pc-leading);
+  text-align: left;
   white-space: nowrap;
+  pointer-events: none;
   animation: cinema-fade-in 700ms var(--pc-ease-out) 200ms both;
 }
-.cinema-reticle-label b {
+.cinema-new-star-label b {
   color: var(--pc-new-star);
   font-weight: var(--pc-weight-medium);
 }
-.cinema-reticle-label .cinema-num {
+.cinema-new-star-label .cinema-num {
   color: var(--pc-ink-dim);
   font-size: var(--pc-text-2xs);
+}
+/* "새 별 N개" in the tools: to the new stars, the most recent first. */
+.cinema-shell .cinema-new-star-chip {
+  color: var(--pc-ink);
+  border-color: rgba(182, 156, 255, 0.45);
+}
+.cinema-shell .cinema-new-star-chip:hover:not(:disabled) {
+  border-color: var(--pc-new-star);
+}
+.cinema-new-star-dot {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--pc-new-star);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(182, 156, 255, 0.6);
 }
 .cinema-markers .galaxy-marker[data-visible="false"],
 .cinema-hover[data-visible="false"],
@@ -1626,14 +1700,17 @@ body {
   .cinema-toast,
   .cinema-star-panel,
   .cinema-markers .galaxy-marker,
+  .cinema-new-stars .cinema-new-star,
   .cinema-shell .cinema-topbar-end,
   .cinema-galaxy .cinema-tools,
   .cinema-galaxy .cinema-corner,
   .cinema-galaxy .cinema-first-visit {
     transition: none;
   }
-  .cinema-reticle-ring,
-  .cinema-reticle-label,
+  /* The rings stay, without the ripple. */
+  .cinema-new-stars .cinema-new-star::after,
+  .cinema-new-stars .cinema-new-star[data-recent="true"]::before,
+  .cinema-new-star-label,
   .cinema-transit[data-passing="true"] > * {
     animation: none;
   }

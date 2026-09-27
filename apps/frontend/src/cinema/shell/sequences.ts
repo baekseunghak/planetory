@@ -8,7 +8,8 @@
 //           scene.revealPlanet (HOME-05 revealsPlanet only), discovery card
 //   outcome numericMismatch (first view) -> scene.playMismatch, no transit
 //   every accepted outcome -> publishSkyChange so the one sky store refreshes
-//   unlocked stars -> queued, ignited when the galaxy is on screen again
+//   unlocked stars -> queued, ignited when the galaxy is on screen again;
+//        host.onUnlock keeps them marked as new (shell/new-stars)
 import {
   lastAnalysis,
   lastAnalysisOrder,
@@ -215,6 +216,12 @@ export type SequenceHost = {
   analysisTic(): string | null;
   /** "행성 N" for the matched planet in the focused system. */
   planetLabel(outcome: AnalysisOutcome): string | null;
+  /**
+   * An accepted result unlocked these stars (first view only). `ignites`:
+   * they wait hidden for their ignition once the galaxy is back
+   * (takeIgnitions); otherwise they simply come with the next sky.
+   */
+  onUnlock?(ticIds: readonly string[], ignites: boolean): void;
 };
 
 type Hint = AnalysisHint & { ticId: string };
@@ -504,6 +511,14 @@ export class SequenceDirector {
       outcome.achievement.unlockedTicIds.length
     )
       this.holdStars(outcome.achievement.unlockedTicIds);
+    // New to the member until they open them (shell/new-stars), whether
+    // they ignite here or simply appear with the next sky.
+    if (
+      outcome.firstView &&
+      outcome.kind !== "judgmentMismatch" &&
+      outcome.achievement.unlockedTicIds.length
+    )
+      this.host.onUnlock?.(outcome.achievement.unlockedTicIds, plays);
     // Keep the one sky store current. A replayed receipt that was already
     // seen may carry an older version; it is left alone.
     if (outcome.skyVersion && (outcome.created || outcome.firstView))
