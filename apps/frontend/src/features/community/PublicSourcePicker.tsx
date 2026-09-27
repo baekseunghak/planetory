@@ -12,7 +12,7 @@ export function PublicSourcePicker({ ticId, disabled, selected, onSelect }: {
   const [cursor, setCursor] = useState<string | null>(null);
   const path = thread
     ? endpoint(`/v1/signal-threads/${encodeURIComponent(thread.id)}/analyses`, { size: "20", cursor })
-    : endpoint("/v1/community/feed", { ticId, size: "20", cursor });
+    : endpoint("/v1/community/feed", { ticId, type: "SIGNAL_THREAD", size: "20", cursor });
   const load = useCallback(async (signal: AbortSignal) => {
     const raw = await api(path, { signal });
     if (thread) {

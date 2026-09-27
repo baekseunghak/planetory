@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import {
   Link,
   useLocation,
+  useMatch,
   useNavigate,
   useParams,
   useSearchParams,
@@ -62,11 +63,17 @@ export function CommunityPage() {
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { values, error: addressError } = readFeedSearch(search, ticId);
+  const official = Boolean(useMatch(pagePath("officialThreads")));
+  const { values, error: addressError } = readFeedSearch(
+    search,
+    ticId,
+    official,
+  );
   const board = values.board;
   const cursor = search.get("cursor");
   const params = feedSearchParams(values);
   params.set("size", "20");
+  if (official) params.set("type", "SIGNAL_THREAD");
   if (cursor) params.set("cursor", cursor);
   const path = "/v1/community/feed?" + params;
   const load = useCallback(
@@ -92,8 +99,14 @@ export function CommunityPage() {
     feedSearchHref("/community", {
       ...values,
       board: nextBoard,
-      ticId: ticId ? "" : values.ticId,
+      ticId: ticId || nextBoard === "FREE" ? "" : values.ticId,
     });
+  const officialHref = feedSearchHref(pagePath("officialThreads"), {
+    ...values,
+    author: "",
+    tag: "",
+    board: "",
+  });
   const filtered = Boolean(
     values.q || values.author || values.tag || values.ticId || values.board,
   );
@@ -104,7 +117,7 @@ export function CommunityPage() {
         <h1>{ticId ? `TIC ${ticId}` : "커뮤니티"}</h1>
         <p>{ticId ? "이 별의 이야기와 공식 신호 스레드를 모았습니다." : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}</p>
       </header>
-      <div className="post-actions">
+      {!official && <div className="post-actions">
         {liveP1 && ticId && (
           <FollowButton
             target={{ kind: "STAR", id: ticId, label: "TIC " + ticId }}
@@ -118,13 +131,13 @@ export function CommunityPage() {
         >
           새 글 쓰기
         </Link>
-      </div>
-      <CommunityTabs active={board} boardHref={boardHref} />
+      </div>}
+      <CommunityTabs active={official ? "official" : board} boardHref={boardHref} officialHref={officialHref} />
       <div className={ticId ? "" : "community-columns"}>
         <div className="community-main community-list-panel">
           <header className="community-list-heading">
             <h2>
-              {board === "STAR"
+              {official ? "공식 스레드" : board === "STAR"
                 ? "별 게시판"
                 : board === "FREE"
                   ? "자유 게시판"
@@ -136,6 +149,7 @@ export function CommunityPage() {
             initial={values}
             addressError={addressError}
             routeTic={ticId}
+            official={official}
             resetTo={location.pathname}
             onSearch={submitSearch}
           />
@@ -147,7 +161,9 @@ export function CommunityPage() {
                   ? "목록을 불러오지 못했습니다."
                   : filtered
                     ? "적용한 조건의 결과 · 최신 작성순"
-                    : "전체 이야기 · 최신 작성순"}
+                    : official
+                      ? "공식 스레드 · 최신 작성순"
+                      : "전체 이야기 · 최신 작성순"}
             </p>
             {state.error && cursor && (
               <Link to={firstPage} state={null}>

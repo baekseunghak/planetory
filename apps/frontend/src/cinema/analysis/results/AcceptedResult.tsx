@@ -215,7 +215,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
   const missed = matchStatus === "not_matched";
   const ambiguous = matchStatus === "ambiguous_match";
   const lead = missed
-    ? f.NOT_MATCHED_HINT
+    ? f.notMatchedHint(explanation.missHint)
     : ambiguous
       ? "주기나 구간을 조금 바꿔 다시 풀어 보세요."
       : f.matchSentence(matchStatus, correction?.multiplier);

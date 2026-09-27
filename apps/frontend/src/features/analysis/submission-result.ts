@@ -95,6 +95,13 @@ export type HarmonicCorrection = {
   reason: string | null;
 };
 
+/**
+ * 폭만 벗어난 불일치의 힌트(6.4절 `match.missHint`). 주기·위치가 맞고 구간
+ * 폭만 신호와 달랐을 때 `not_matched`에만 온다.
+ */
+export const missHints = ["WINDOW_TOO_WIDE", "WINDOW_TOO_NARROW"] as const;
+export type MissHint = (typeof missHints)[number];
+
 /** 서버가 산정한 값. 제출값 확인의 미리보기와 다를 수 있다. */
 export type ServerDerived = {
   /** 고른 것이 없으면 계산할 것도 없다. 특수 제출에서는 null이다. */
@@ -160,6 +167,7 @@ export type ResultExplanation = {
   submitted: SubmittedSelection | null;
   signal: SubmissionSignal | null;
   correction: HarmonicCorrection | null;
+  missHint: MissHint | null;
   serverDerived: ServerDerived | null;
   evaluation: Evaluation | null;
   achievement: Achievement;
@@ -385,6 +393,13 @@ export function readResultExplanation(
               text(item, "match.correctionReason"),
             ),
           },
+    // 힌트일 뿐이라 모르는 값·다른 상태의 값은 버리고 결과 전체를 거절하지
+    // 않는다. 힌트가 없는 옛 응답도 그대로 읽는다.
+    missHint:
+      matchStatus === "not_matched" &&
+      missHints.some((item) => item === match.missHint)
+        ? (match.missHint as MissHint)
+        : null,
     serverDerived: nullable(data.serverDerived, (item) => {
       const row = record(item, "serverDerived");
       return {

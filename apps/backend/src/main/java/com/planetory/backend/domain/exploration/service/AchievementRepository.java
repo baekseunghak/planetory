@@ -129,6 +129,9 @@ public class AchievementRepository {
      * <p>제외 규칙은 OPS-08이다. 공개되지 않은 별, 이미 발견한 별, 운영 중인 튜토리얼 별, 진행 중인
      * 챌린지 회차의 대상 별을 뺀다. 예정·종료 회차의 대상은 뺄 이유가 없어 후보에 남는다.
      *
+     * <p>현재 판에 활성·탐색 가능 후보가 없는 별도 뺀다 [S15P21C206-282]. 그런 별은 열어도 성과를 낼 수 없어
+     * 새 별이 성과로만 열리는 회원의 진행을 막는다. 조건은 완료 판정의 후보 집계와 같다.
+     *
      * @param seed 부호 없는 64비트 값
      * @return 후보가 없으면 빈 값
      */
@@ -144,6 +147,10 @@ public class AchievementRepository {
                                                 WHERE t.active AND t.tic_id = s.tic_id)
                                AND NOT EXISTS (SELECT 1 FROM challenge_rounds r
                                                 WHERE r.status = 'active' AND r.target_tic_id = s.tic_id)
+                               AND EXISTS (SELECT 1 FROM candidates c
+                                             JOIN publication_bundles b
+                                               ON b.tic_id = c.tic_id AND b.status = 'current'
+                                            WHERE c.tic_id = s.tic_id AND c.status = 'active' AND c.discoverable)
                         )
                         SELECT tic_id
                           FROM pool

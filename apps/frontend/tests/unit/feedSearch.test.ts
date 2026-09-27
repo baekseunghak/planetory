@@ -67,12 +67,20 @@ test("malformed direct addresses cannot silently broaden the search", () => {
     assert.ok(readFeedSearch(new URLSearchParams(query)).error, query);
 });
 test("JS whitespace and author text survive normalized request generation", () => {
-  const values = readFeedSearch(new URLSearchParams({ q: "\u00a0a|b\ufeff", author: " Orbit " })).values;
+  const values = readFeedSearch(
+    new URLSearchParams({ q: "\u00a0a|b\ufeff", author: " Orbit " }),
+  ).values;
   const params = feedSearchParams(values);
   assert.equal(params.get("q"), "a|b");
   assert.equal(params.get("author"), "Orbit");
-  assert.equal(readFeedSearch(new URLSearchParams({ author: "SYSTEM" })).error, null);
-  assert.equal(readFeedSearch(new URLSearchParams({ author: "a".repeat(1000) })).error, null);
+  assert.equal(
+    readFeedSearch(new URLSearchParams({ author: "SYSTEM" })).error,
+    null,
+  );
+  assert.equal(
+    readFeedSearch(new URLSearchParams({ author: "a".repeat(1000) })).error,
+    null,
+  );
 });
 test("TIC filters share the positive signed-64-bit range across form, URL and star board", () => {
   for (const ticId of ["1", "9007199254740993", "9223372036854775807"]) {
@@ -119,16 +127,56 @@ test("star board anchors TIC and board while preserving text filters", () => {
 });
 test("star board links that carry returnTo open the board instead of a search error", () => {
   // The star panel, results page and profiles link to the board with returnTo.
-  const fromPanel = readFeedSearch(new URLSearchParams("returnTo=%2Fsky%3Fstar%3D259377017"), "259377017");
+  const fromPanel = readFeedSearch(
+    new URLSearchParams("returnTo=%2Fsky%3Fstar%3D259377017"),
+    "259377017",
+  );
   assert.equal(fromPanel.error, null);
   assert.equal(fromPanel.values.ticId, "259377017");
   assert.equal(fromPanel.values.board, "STAR");
   // The results page also repeats the route TIC.
-  const fromResults = readFeedSearch(new URLSearchParams("ticId=259377017&returnTo=%2Fresults%2F259377017"), "259377017");
+  const fromResults = readFeedSearch(
+    new URLSearchParams("ticId=259377017&returnTo=%2Fresults%2F259377017"),
+    "259377017",
+  );
   assert.equal(fromResults.error, null);
   // returnTo is never sent to the feed API.
   assert.equal(feedSearchParams(fromPanel.values).has("returnTo"), false);
   // Real search conditions are still checked.
-  assert.ok(readFeedSearch(new URLSearchParams("returnTo=%2Fsky&unknown=1"), "259377017").error);
-  assert.ok(readFeedSearch(new URLSearchParams("returnTo=%2Fsky&ticId=1"), "259377017").error);
+  assert.ok(
+    readFeedSearch(
+      new URLSearchParams("returnTo=%2Fsky&unknown=1"),
+      "259377017",
+    ).error,
+  );
+  assert.ok(
+    readFeedSearch(new URLSearchParams("returnTo=%2Fsky&ticId=1"), "259377017")
+      .error,
+  );
+});
+
+test("official board allows keyword/TIC but rejects incompatible direct URLs", () => {
+  const params = new URLSearchParams("q=신호&searchIn=BODY&ticId=259377017");
+  const result = readFeedSearch(params, undefined, true);
+  assert.equal(result.error, null);
+  assert.equal(
+    feedSearchHref("/community/signal-threads", result.values),
+    "/community/signal-threads?" + params,
+  );
+  for (const query of [
+    "author=Orbit",
+    "tag=GENERAL",
+    "board=FREE",
+    "type=POST",
+    "q=a&q=b",
+  ]) {
+    assert.ok(
+      readFeedSearch(new URLSearchParams(query), undefined, true).error,
+      query,
+    );
+  }
+  assert.equal(
+    readFeedSearch(new URLSearchParams("board=STAR"), undefined, true).error,
+    null,
+  );
 });

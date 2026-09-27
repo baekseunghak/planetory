@@ -606,7 +606,7 @@ function resultLead(
   const signal = receipt.explanation.signal;
   switch (outcome.kind) {
     case "numericMismatch":
-      return f.NOT_MATCHED_HINT;
+      return f.notMatchedHint(receipt.explanation.missHint);
     case "ambiguous":
       return "주기나 구간을 조금 바꿔 다시 풀어 보세요.";
     case "noCandidate":

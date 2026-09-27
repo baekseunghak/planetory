@@ -2,14 +2,17 @@ import { Link } from "react-router-dom";
 import { useLiveP1 } from "../p1";
 export function CommunityTabs({
   active,
+  officialHref = "/community/signal-threads",
   boardHref = (board) => (board ? "/community?board=" + board : "/community"),
 }: {
   active: string;
+  officialHref?: string;
   boardHref?: (board: string) => string;
 }) {
   const p1Enabled = useLiveP1();
   const tabs = [
     ["", "전체", boardHref("")],
+    ["official", "공식 스레드", officialHref],
     ["STAR", "별 게시판", boardHref("STAR")],
     ["FREE", "자유 게시판", boardHref("FREE")],
     ["hot", "핫 토픽", "/community/hot-topics"],

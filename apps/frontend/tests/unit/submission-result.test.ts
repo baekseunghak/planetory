@@ -106,6 +106,23 @@ test("a signal must be there exactly when the match succeeded", () => {
   assert.equal(readResultExplanation(bare, "not_matched").signal, null);
 });
 
+test("the width hint is read only on a miss, and an unknown one is dropped", () => {
+  const miss = (missHint: unknown, status: MatchStatus = "not_matched") =>
+    readResultExplanation(
+      { ...bare, match: { ...bare.match, missHint } },
+      status,
+    ).missHint;
+  assert.equal(miss("WINDOW_TOO_WIDE"), "WINDOW_TOO_WIDE");
+  assert.equal(miss("WINDOW_TOO_NARROW"), "WINDOW_TOO_NARROW");
+  assert.equal(miss(null), null);
+  // 힌트가 없는 옛 응답도 읽는다.
+  assert.equal(readResultExplanation(bare, "not_matched").missHint, null);
+  // 모르는 값은 결과 전체를 거절하지 않고 버린다.
+  assert.equal(miss("SOMETHING_NEW"), null);
+  assert.equal(miss("WINDOW_TOO_WIDE", "ambiguous_match"), null);
+  assert.equal(read().missHint, null);
+});
+
 test("an unrunnable AI keeps no score, and a completed one must have it", () => {
   for (const status of ["input_insufficient", "error", "not_evaluated"]) {
     const ai = read({

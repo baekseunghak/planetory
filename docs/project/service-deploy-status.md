@@ -8,7 +8,7 @@
 
 ## 한 줄 요약
 
-실제 앱은 `app.planetory.space`다. `planetory.space`는 목업 컨테이너로 연결되어 있어 그 주소에서는 로그인이 성립하지 않는다.
+실제 앱은 `app.planetory.space`다. `planetory.space`도 같은 프론트 컨테이너로 연결된다. 목업 컨테이너는 2026-09-27에 내렸다(아래 「터널 호스트 배치」).
 
 **프론트엔드와 백엔드 모두 CI 이미지로 돌고 있다(2026-09-21·22).** 두 컨테이너 다 커밋 SHA 태그를 달아 어느 커밋인지 추적된다. 손으로 빌드한 `:local` 이미지는 더 이상 쓰이지 않는다. Google·SSAFY 로그인 진입과 API 응답을 실환경에서 확인했다.
 
@@ -28,17 +28,19 @@
 
 ## 터널 호스트 배치
 
-한 인스턴스에서 여러 호스트를 서빙한다. **실제 앱과 목업이 다른 호스트라 확인할 때 주소를 혼동하기 쉽다.** 배포 검증을 목업 주소로 하면 늘 200이 나와 아무것도 증명하지 못한다.
+한 인스턴스에서 여러 호스트를 서빙한다.
 
 | 호스트 | 연결 대상 |
 | --- | --- |
 | `app.planetory.space` | 실제 앱(프론트 컨테이너) |
-| `planetory.space` | 목업 |
+| `planetory.space` | 실제 앱(프론트 컨테이너, `http://frontend:8080`) |
 | `erd.planetory.space` | ERD |
 | `api-docs.planetory.space` | API 문서 |
 | `wireframe.planetory.space` | 와이어프레임 |
 
-백엔드가 발급하는 OAuth 리다이렉트 주소도 `app.planetory.space`다. 목업 호스트에서는 로그인 흐름이 성립하지 않는다.
+백엔드가 발급하는 OAuth 리다이렉트 주소는 `app.planetory.space`다. 배포 검증도 이 주소로 한다.
+
+**목업 컨테이너 철거(2026-09-27, 17:29 KST 확인, 사용자 요청).** 예전에는 `planetory.space`가 은하 서비스 시제품(`experiment/S15P21C206-45-web-galaxy-service-prototype`) 컨테이너 `http://mockup:8080`으로 연결됐다. 그 컨테이너는 운영 스택과 별개인 compose 프로젝트 `planetory-mockup`(EC2-A `/home/ubuntu/mockup-deploy/compose.yaml`, 이미지 `planetory-mockup:local`, Vite dev 서버)였다. 철거 전에 Cloudflare Tunnel의 `planetory.space` origin은 이미 `http://frontend:8080`으로 바뀌어 있어 외부에서 닿지 않았다. `docker compose down`으로 컨테이너만 지웠고 운영 스택 컨테이너 10개는 그대로다. 철거 뒤 `planetory.space`와 `app.planetory.space`가 같은 운영 번들로 200이다. 이어서 이미지 `planetory-mockup:local`과 빌드 원본 `/home/ubuntu/planetory_mockup`(42 MB)도 지웠다(사용자 승인). 빌드 원본은 커밋 안 한 변경이 없었고 HEAD `03e749e`가 원격 브랜치에 있어 저장소에서 다시 받을 수 있다. 마지막으로 `/home/ubuntu/mockup-deploy`(compose 파일·Vite 설정)도 지웠다(사용자 승인). 목업 컨테이너·이미지·파일은 남지 않았다. Docker 빌드 캐시는 확인하지 않았다.
 
 ## develop 배포가 요구하는 설정 둘 (S15P21C206-254)
 
@@ -112,7 +114,7 @@ Backend 배포 버튼은 그 커밋까지 쌓인 마이그레이션을 함께 �
 
 **시험의 부작용(88 세션 확인).** 되돌리기 Retry가 서버 `compose.yaml`을 `a8fb6667` 판으로 덮어 `derived-compute` 서비스와 Backend `DERIVED_COMPUTE_URL`이 01:19~02:51 KST 동안 compose에서 빠졌다. 컨테이너는 재생성되지 않아 동작했고, 02:51 `222918`의 성공 job Retry(641678)로 되살렸다. 또 옛 job Retry가 더 새 deployment 기록이 되면서 `222918`의 미실행 `deploy:frontend:ec2-a`가 `blocked`다. Frontend는 그 뒤 새 develop 파이프라인 `224322`(`50e13981`)의 버튼으로 올렸다(2026-09-26 22:29 KST, 헬스 통과).
 
-같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). 2026-09-27 06:12 KST 기준 운영은 Backend·derived-compute `6d1926d5`, Frontend `0d2d2afa`(85 병합 commit)이다. Frontend는 develop 파이프라인 `224779`의 `deploy:frontend:ec2-a`(job `649089`, 06:12:04~06:12:12 KST)로 올렸고 `/health/renderer-enabled`가 200이다. 그 전에는 `c3d8ba85`(272 병합 commit, 2026-09-27 05:25 KST, job `648986`), 더 전(2026-09-26 22:29 KST)에는 `50e13981`이었다.
+같은 날 `222918`(`6d1926d5`)의 derived-compute(01:08:27~01:08:42 KST)와 Backend(01:10:03~01:10:37 KST)가 배포됐다(GitLab job 시작·종료 시각). **2026-09-27 19:15 KST 기준 운영은 Backend `aa77f460`(280 병합 commit, 19:01 KST 기동), Frontend `e47f384e`(274 후속 병합 commit, 19:14 KST 기동), derived-compute `6d1926d5`다(서버 컨테이너 이미지 태그로 확인).** 그 전 Backend는 develop 파이프라인 `225105`의 `deploy:backend:ec2-a`(job `650656`, 15:38 KST, 교체 전 덤프 `backups/service-db-20260927-063745.sql`, 헬스 통과)로 올린 `59419ec0`이었고 그 직전은 `6d1926d5`였다. Frontend는 같은 파이프라인 job `650655`로 `59419ec0`(274)에 올라간 뒤 `7c86ccef`(279, 16:56 KST)를 거쳐 `e47f384e`가 됐다. 06:12 KST 기준으로는 Backend·derived-compute `6d1926d5`, Frontend `0d2d2afa`(85 병합 commit)였다. Frontend는 develop 파이프라인 `224779`의 `deploy:frontend:ec2-a`(job `649089`, 06:12:04~06:12:12 KST)로 올렸고 `/health/renderer-enabled`가 200이었다. 그 전에는 `c3d8ba85`(272 병합 commit, 2026-09-27 05:25 KST, job `648986`), 더 전(2026-09-26 22:29 KST)에는 `50e13981`이었다.
 
 ## 분석 화면 503과 Gold 목업 (S15P21C206-262)
 
@@ -205,7 +207,7 @@ GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend
 - 270: 결과 목록 POST도 `ready`(행성 1개)로 저장됐다. 화면 위젯은 아직 없어(271) API로 확인했다.
 - **설명 생성은 켜 두었다(07:25 KST 적용, 07:32 KST부터 연속, 남은 1주 운영).** EC2-A `.env`에 `NASA_EXPLANATION_ENABLED=true`, `NASA_EXPLANATION_CHAT_MODEL=openai`, 회원별 20·전체 300회/일, `GMS_KEY`(사용자가 직접 넣음). 예산 상한은 약 30,000크레딧이고, 매일 GMS 대시보드를 보고, 결정 시점 잔여 99,795 기준 누적 사용이 10,000크레딧(경보선)을 넘거나 급증하면 `NASA_EXPLANATION_ENABLED=false`로 끈다.
 - 설명 실측: 270 WASP-62 b 설명 성공(2.3초), 재요청 재사용. 268 `c-13`은 모델 출력이 서버 검증에서 떨어져 `invalid_output`(간헐적, 1시간 뒤 재시도 가능). 모델 호출 2회·약 28크레딧. `ENABLED=false` 되돌리기에서 기존 설명 보존·새 호출 차단을 확인하고 다시 켰다.
-- **원인 수정(프롬프트 v5)은 MR `!230` 병합 대기다.** 배포 전까지 운영은 Backend `6d1926d5`(v4)라서 `invalid_output`이 드물게 날 수 있다(재현 1/24). 배포하면 v4 설명은 바로 보이지 않고, 다시 요청할 때 v5로 새로 만든다(runbook 11.2).
+- **원인 수정(프롬프트 v5)은 MR `!230` 병합 뒤 Backend `59419ec0`로 배포했다(15:38 KST).** 배포 전 다른 회원의 `c-16`(L 98-59 b) 설명이 v4 `invalid_output`으로 실패해 버그 재발을 보였고 `c-14`(L 98-59 c)는 v4 `ready`였다. 배포 뒤 `c-13`(WASP-62 b) 설명이 `nasa-ko-v5` `ready`(시도 1회, 16:10 KST, 출력 약 77토큰)다. v4 행은 조회에서 빠지고 다시 요청하면 v5로 만든다(runbook 11.2). 일일 집계는 UTC 2026-09-27 3회(다른 회원 2, 확인 1)다.
 - Backend는 이 작업에서 07:25·07:31경·07:32 KST에 같은 이미지로 재생성됐다(설정 적용·끄기·다시 켜기). 로그인 세션은 유지된다.
 
 ## 시네마 화면 운영 기본 (S15P21C206-274, 2026-09-27)
@@ -215,7 +217,7 @@ GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend
 - 되돌리기는 빌드 인자를 빼고 병합·배포하거나, 직전 이미지의 `deploy:frontend:ec2-a`를 다시 실행한다(프로젝트 설정이 롤백 재실행을 허용한다).
 - P1 중 운영 API가 응답하는 것(2026-09-27 조회 확인: 공개 은하 정보·타일·별 상세, 팔로우 요약·목록·팔로잉 피드, 내 통계)은 `VITE_P1_ENABLED` 없이도 시네마 앱에서 켠다(`apps/frontend/src/features/p1.ts`). 알림은 목록 조회가 503 `DEPENDENCY_UNAVAILABLE`(안 읽은 수·설정은 200), 전체 통계는 `AGGREGATE_NOT_READY`, 탈퇴는 신청 흐름을 확인하지 않아 `VITE_P1_ENABLED`를 켤 때까지 끈다. 팔로우 추가·해제(쓰기)는 운영에서 시험하지 않았다.
 - 스모크(`web:e2e:smoke`)와 `test:docker-defaults`는 `VITE_CINEMA` 없는 빌드(기존 화면)를 본다. 시네마 전용 운영 번들을 여는 브라우저 검사는 아직 없다.
-- 상태: 병합·배포 전. 배포 전까지 운영은 기존 화면이 기본이다(`?ui=cinema`로 켬).
+- 상태: 병합·배포했다. 시네마 기본은 Frontend `59419ec0`(job `650655`)부터, 분석 새 디자인 기본(`058a9f42` 병합)은 지금 운영 Frontend `e47f384e`(19:14 KST 기동)에 들어 있다.
 
 ## 손으로 넣은 데이터 (운영 값 아님)
 

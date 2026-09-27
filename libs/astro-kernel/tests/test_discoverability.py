@@ -172,6 +172,53 @@ def test_quality_gate_runs_before_transit_count(monkeypatch):
     assert d.classify(pg, np.arange(100.), np.ones(100), None, d.RULE)["qualified_peaks"] == []
 
 
+def _three_runs():
+    """10-minute bins in runs [0,10), [12,22), [24,34) days: two 2-day gaps."""
+    t = np.arange(0, 34, 10 / 1440)
+    t = t[(t < 10) | ((t >= 12) & (t < 22)) | (t >= 24)]
+    return t, np.ones(len(t))
+
+
+def _counted(t, f, period, epoch, duration_hours=2.88):
+    pg = SimpleNamespace(power=np.array([0., 10., 0.]), snr=np.array([0., 20., 0.]), sde=np.array([0., 10., 0.]),
+                         periods=np.array([period] * 3), epoch_btjd=np.array([epoch] * 3),
+                         duration_hours=np.array([duration_hours] * 3))
+    peaks = d.classify(pg, t, f, None, d.RULE)["qualified_peaks"]
+    return peaks[0]["n_transits"] if peaks else 0
+
+
+def test_interior_mask_drops_run_edges_only_at_long_gaps():
+    t, f = _three_runs()
+    f[(t > 5) & (t < 5.2)] = np.nan  # a 0.2-day hole does not split the run
+    interior = d.interior_mask(t, f, d.RULE)
+    for edge in (0.0, 9.9, 12.0, 21.9, 24.2, 33.9):
+        assert not interior[np.argmin(np.abs(t - edge))], edge
+    for inside in (0.6, 4.9, 5.3, 12.6, 30.0):
+        assert interior[np.argmin(np.abs(t - inside))], inside
+    assert not interior[~np.isfinite(f)].any()
+    with pytest.raises(ValueError, match="ascending"):
+        d.interior_mask(t[::-1], f[::-1], d.RULE)
+
+
+def test_edge_gap_matches_preprocessing_gap():
+    """Runs split where preprocessing splits them; changing one without the other needs a new rule version."""
+    from astro_kernel.preprocessing import preprocessing_config
+    assert d.RULE["edge_gap_days"] == preprocessing_config()["gap_days"]
+
+
+def test_transits_count_only_well_covered_and_away_from_run_edges():
+    """S15P21C206-282: a dip right after data resumes or a single edge bin is not a transit."""
+    t, f = _three_runs()
+    assert _counted(t, f, 6., 3.) == 6, "3 to 33 every 6 days, all at least a day inside a run"
+    assert _counted(t, f, 12., 12.25) == 0, "0.25, 12.25, 24.25 all fall in the first 12 h after a gap"
+    assert _counted(t, f, 10., 5.) == 3
+    thin = f.copy()
+    window = np.abs(t - 15.) < 2.88 / 48
+    thin[window] = np.nan
+    thin[np.flatnonzero(window)[0]] = 1.
+    assert _counted(t, thin, 10., 5.) == 2, "15 keeps one bin of its window and no longer counts"
+
+
 def test_real_bls_on_synthetic_curve_and_122_catalog():
     from astro_kernel.candidate_catalog import build_candidate_catalog
     from astro_kernel.iteration import ITERATION_VERSION
