@@ -399,3 +399,4 @@
 | 2026-09-27 | 공통 API 클라이언트가 게이트웨이 502·504 읽기만 약 30초 재시도(쓰기·503·시간 초과는 그대로) | S15P21C206-279 | 502, 504, gatewayRetryMs, 자동 재시도 금지, deploy:backend, Connection refused, me/sky | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 분석 화면을 새 디자인으로 확정(코드 기본값, `classic`일 때만 기존형) | S15P21C206-274 | VITE_CINEMA_ANALYSIS, CINEMA_ANALYSIS, analysisVariantFromBuild, cinemaAnalysisClassic, 새 디자인, 기존형 | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 제출·완료 판정·재개가 지도 버전(skyVersion)을 올려 옛 타일 캐시와 상세 불일치를 없앤다 | S15P21C206-280 | skyVersion, bumpVersion, member_sky_revisions, 같은 버전의 지도와 상세 자료가 다릅니다, D-7, planetCount | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 운영에서 응답하는 P1(공개 은하·팔로우·내 통계)만 새 화면에서 켬, 알림·전체 통계·탈퇴는 VITE_P1_ENABLED 유지 | S15P21C206-274 | useLiveP1, p1Enabled, VITE_P1_ENABLED, 공개 은하, 팔로우, 내 통계, DEPENDENCY_UNAVAILABLE, AGGREGATE_NOT_READY | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |

@@ -40,7 +40,7 @@ import { PostReactions } from "./PostReactions";
 import { PostActions } from "./PostActions";
 import { CommunityAside } from "./CommunityAside";
 import { FollowButton } from "../follow/Follow";
-import { p1Enabled } from "../p1";
+import { useLiveP1 } from "../p1";
 
 function ReadState({
   state,
@@ -58,6 +58,8 @@ export function CommunityPage() {
   const { ticId } = useParams<"ticId">();
   // Cinema app: the title matches the menu (src/shared/cinema-wording).
   const cinema = useCinemaWording();
+  // Follow: live in production (../p1).
+  const liveP1 = useLiveP1();
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -109,7 +111,7 @@ export function CommunityPage() {
         </p>
       </header>
       <div className="post-actions">
-        {p1Enabled && ticId && (
+        {liveP1 && ticId && (
           <FollowButton
             target={{ kind: "STAR", id: ticId, label: "TIC " + ticId }}
           />
@@ -126,7 +128,7 @@ export function CommunityPage() {
       <div className={ticId ? "" : "community-columns"}>
         <div className="community-main">
           <nav className="community-tabs" aria-label="게시판 종류">
-            {p1Enabled && <Link to="/community/following">팔로잉</Link>}
+            {liveP1 && <Link to="/community/following">팔로잉</Link>}
             <Link
               to={boardHref("")}
               state={null}

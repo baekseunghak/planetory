@@ -59,9 +59,11 @@ async function start() {
   let pages: PageSlots = {
     ...(p1Enabled ? { withdrawal: WithdrawalPage } : {}),
     ...(p1Enabled ? { notifications: NotificationsPage } : {}),
-    ...(p1Enabled
-      ? { following: FollowingPage, followingFeed: FollowingFeedPage }
-      : {}),
+    // Follow, another member's galaxy and personal statistics answer in
+    // production (features/p1.ts): on in every build. The rest of P1 waits
+    // for VITE_P1_ENABLED.
+    following: FollowingPage,
+    followingFeed: FollowingFeedPage,
     profile: MyProfilePage,
     member: MemberProfilePage,
     community: CommunityPage,
@@ -75,12 +77,9 @@ async function start() {
   // /sky is the cinema galaxy (src/cinema/shell) in every build. Only the
   // dev inspectors below fill the sky slot.
   // Another member's galaxy: the cinema view (legacy page until it is ready).
-  let publicGalaxy = false;
-  if (p1Enabled) {
-    const view = await import("./cinema/shell/public-galaxy");
-    pages.publicSky = view.CinemaPublicGalaxy;
-    publicGalaxy = view.PUBLIC_GALAXY_READY;
-  }
+  const view = await import("./cinema/shell/public-galaxy");
+  pages.publicSky = view.CinemaPublicGalaxy;
+  const publicGalaxy = view.PUBLIC_GALAXY_READY;
   if (import.meta.env.DEV && import.meta.env.VITE_FIXTURE === "true") {
     pages = (await import("../dev/FixturePages")).fixturePages;
   }
@@ -134,7 +133,7 @@ async function start() {
                   profileSections={{
                     stars: MyStarsSection,
                     history: MyHistorySection,
-                    ...(p1Enabled ? { statistics: PersonalStatistics } : {}),
+                    statistics: PersonalStatistics,
                   }}
                 />
               </StrictCelebration.Provider>
