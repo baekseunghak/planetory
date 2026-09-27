@@ -40,6 +40,11 @@ export type DiscoveryCard = {
   /** The planet joined the member's system (HOME-05). */
   revealed: boolean;
   unlockedTicIds: string[];
+  /**
+   * Signals still to find on this star (0 once it is completed). While some
+   * remain, the card leads to the result, not back to the galaxy.
+   */
+  remaining: number;
 };
 export type SequencePhase = "idle" | "transit" | "card";
 export type SequenceState = {
@@ -194,6 +199,10 @@ export function discoveryCard(
     chips: outcomeChips(outcome),
     revealed,
     unlockedTicIds: [...outcome.achievement.unlockedTicIds],
+    remaining:
+      outcome.progress.stage === "completed"
+        ? 0
+        : Math.max(0, outcome.progress.remainingDiscoverableCount),
   };
 }
 

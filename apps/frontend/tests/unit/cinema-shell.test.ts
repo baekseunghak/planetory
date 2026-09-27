@@ -187,6 +187,8 @@ test("card copy comes from the reported outcome only", () => {
     ],
   );
   assert.equal(matched.note, null);
+  // One signal left on this star: the card leads to the result, not away.
+  assert.equal(matched.remaining, 1);
   const mismatch = discoveryCard(
     outcome({
       kind: "judgmentMismatch",
@@ -208,6 +210,21 @@ test("card copy comes from the reported outcome only", () => {
     "행성 1",
   );
   assert.equal(mismatch.title, "구간은 맞았고, 판단은 달랐습니다");
+  assert.equal(mismatch.remaining, 0);
+  // A completed star has nothing left, whatever the count says.
+  assert.equal(
+    discoveryCard(
+      outcome({
+        progress: {
+          stage: "completed",
+          remainingDiscoverableCount: 2,
+          matchedCandidateIds: [],
+        },
+      }),
+      "행성 1",
+    ).remaining,
+    0,
+  );
   assert.deepEqual(
     mismatch.chips.map((chip) => chip.tone),
     ["warn", "warn", "good"],

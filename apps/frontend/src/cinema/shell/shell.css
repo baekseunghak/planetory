@@ -121,6 +121,42 @@ body {
   color: var(--pc-ink-faint);
 }
 
+/* dropdowns: one look for every <select> in the cinema tree (community
+   search scope, board and tag, post editor, star search, settings). The
+   OS arrow gives way to our chevron and the open list follows the dark
+   scheme. Surfaces keep their own background colour (background-color
+   only there, so the chevron image survives); this colour is the fallback. */
+:where(.cinema-shell) select {
+  background-color: var(--pc-bg-raised);
+}
+.cinema-shell select:not([multiple]):not([size]) {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%238d99ad' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 12px 8px;
+  color-scheme: dark;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.cinema-shell select:not([multiple]):not([size]):hover:not(:disabled) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23e8eef8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.cinema-shell select:focus-visible {
+  border-color: var(--pc-accent);
+  outline: 2px solid rgba(94, 196, 247, 0.3);
+  outline-offset: 0;
+}
+.cinema-shell select:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.cinema-shell select :is(option, optgroup) {
+  background-color: var(--pc-bg-raised);
+  color: var(--pc-ink);
+}
+
 /* pills and buttons (override the classic global button) */
 .cinema-shell .cinema-pill,
 .cinema-shell .cinema-mini,
@@ -694,7 +730,7 @@ body {
   padding: 6px 10px;
   border: 1px solid var(--pc-line);
   border-radius: var(--pc-radius-sm);
-  background: var(--pc-raise);
+  background-color: var(--pc-raise);
   color: var(--pc-ink);
   font: inherit;
   font-size: var(--pc-text-sm);
@@ -1456,6 +1492,11 @@ body {
 .cinema-discovery-note {
   margin: 0;
   color: var(--pc-ink-dim);
+  font-size: var(--pc-text-sm);
+}
+.cinema-discovery-more {
+  margin: 0;
+  color: var(--pc-accent);
   font-size: var(--pc-text-sm);
 }
 .cinema-chips {
