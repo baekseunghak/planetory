@@ -428,6 +428,13 @@ Liam을 올릴 때 이 보정이 불필요해졌는지 확인하고, 그래도 �
 돈다. 사용자가 붙인 쿼리는 건드리지 않고 `data-liam-default-showmode` 표식으로 중복
 주입을 막는다.
 
+### 캐시
+
+앱은 `schema.json`을 `fetch`로 따로 읽는다. nginx가 `Cache-Control: no-cache`를 붙인다
+(compose `configs.erd-no-cache`). 이 헤더가 없으면 브라우저가 `Last-Modified`로 신선도를
+추정해 재생성 뒤에도 옛 스키마를 최대 하루쯤 보여 준다. 해시가 붙은 `assets/`는
+Cloudflare가 따로 캐시해도 이름이 바뀌므로 문제없다.
+
 ### 산출물
 
 `planetory-erd-output`에 있다. 재생성 가능한 파생물이라 지워져도 데이터 손실이 아니다.
