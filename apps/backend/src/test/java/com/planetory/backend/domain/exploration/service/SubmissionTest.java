@@ -310,6 +310,13 @@ class SubmissionTest {
         assertEquals("pending_publish",service.submit(member,tic,request()).body().at("/achievement/result").asText());
         assertEquals(0,count("user_candidate_achievements"));
     }
+    @Test void 성과없는_제출도_지도버전을_올려_응답에_싣는다() {
+        // 새 별을 열지 않아도 타일의 행성 수·단계가 바뀐다. 버전이 그대로면 프론트가 옛 타일을 계속 쓴다(D-7).
+        var body=service.submit(member,tic,change(request(),"candidate","UNSURE",3.0,null)).body();
+        assertEquals("judgment_mismatch",body.at("/achievement/result").asText());
+        long revision=jdbc.queryForObject("SELECT revision FROM member_sky_revisions WHERE user_id=?",Long.class,member);
+        assertEquals("u-"+member+":"+revision,body.at("/skyVersion").asText());
+    }
     @Test void 특수제출과_모호한매칭은_스냅샷과_성과없음() {
         assertEquals("none_wrong",service.submit(member,tic,change(request(),"no_candidate",null,null,null)).body().at("/match/status").asText());
         error(ErrorCode.SKIP_NOT_AVAILABLE,()->service.submit(member,tic,change(request(),"skipped",null,null,null)));

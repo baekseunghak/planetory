@@ -20,6 +20,7 @@ import com.planetory.backend.domain.exploration.service.ExplorationCompletionRep
 public class ExplorationCompletionService {
 
     private final ExplorationCompletionRepository repository;
+    private final SkyService sky;
 
     /**
      * 진행 중인 별을 판정하고 필요한 경우 완료로 바꾼다.
@@ -43,6 +44,9 @@ public class ExplorationCompletionService {
             if (updated != 1) {
                 throw new IllegalStateException("잠근 진행 행의 완료 전환에 실패했습니다");
             }
+            // 타일의 단계가 바뀐다(D-7). 별을 연 회원은 발견 때 버전 행이 생겼으므로 여기서는
+            // UPDATE만 일어나 회원 행을 잠그지 않는다. 잠금 순서는 진행 행 → 버전 행 그대로다.
+            sky.bumpVersion(memberId);
         }
         return Optional.of(decision);
     }

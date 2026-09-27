@@ -98,6 +98,7 @@ class ExplorationCompletionServiceTest {
 
         assertEquals(Decision.KEEP_IN_PROGRESS, evaluate());
         assertProgress("in_progress", null, false);
+        assertEquals(0, revision(), "바뀐 것이 없으면 지도 버전을 올리지 않는다");
     }
 
     @Test
@@ -109,6 +110,7 @@ class ExplorationCompletionServiceTest {
 
         assertEquals(Decision.COMPLETE_ALL_FOUND, evaluate());
         assertProgress("completed", "all_found", false);
+        assertEquals(1, revision(), "타일의 단계가 바뀌었으니 지도 버전을 올린다(D-7)");
         assertNotNull(jdbc.queryForObject("SELECT completed_at FROM user_star_progress"
                 + " WHERE user_id = ? AND tic_id = ?", OffsetDateTime.class, memberId, ticId));
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM user_candidate_achievements",
@@ -264,6 +266,11 @@ class ExplorationCompletionServiceTest {
                         + " 1500.5, 1501.0, 2.4, ?, '{}'::jsonb, ?, ?, ?, 'rm-1', 'pg-1', 'rule-0')",
                 memberId, ticId, bundleId, UUID.randomUUID().toString(), matchedPeriod,
                 harmonicMultiplier, judgment, matchResult, candidateId, achievementResult);
+    }
+
+    private long revision() {
+        return jdbc.queryForObject("SELECT COALESCE((SELECT revision FROM member_sky_revisions WHERE user_id = ?), 0)",
+                Long.class, memberId);
     }
 
     private void assertProgress(String stage, String reason, boolean reopenPending) {
