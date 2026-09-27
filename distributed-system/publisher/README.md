@@ -4,7 +4,7 @@
 
 ## 현재 상태 (S15P21C206-262, S15P21C206-272, S15P21C206-276)
 
-**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계와 Airflow task는 80 DAG 작업에서 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
+**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계와 Airflow task는 80 DAG 작업에서 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. 처음 보는 사람은 [Gold 배치 게시 경로의 코드 구조](../../docs/architecture/gold-batch-publish.md)에서 파일 역할과 흐름을 먼저 본다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
 
 현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
 
