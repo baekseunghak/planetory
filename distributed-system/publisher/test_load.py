@@ -312,15 +312,16 @@ class PublishStarTest(unittest.TestCase):
         self.assertIsInstance(p, dict, p)
         return p
 
-    def test_run_payload_registers_a_new_hidden_star_with_every_external_reference(self):
+    def test_run_payload_registers_a_new_discoverable_star_as_published_with_every_external_reference(self):
         tic = 990_000_101
         p = self.run_payload(tic)
 
         result = publish_star(self.conn, p, self.target, first_publish_only=True)
 
         self.assertEqual(result.code, "PUBLISHED")
+        # 합성 후보는 discoverable이다. 찾을 수 있는 후보가 있는 새 별만 published로 등록한다.
         self.assertEqual(self.conn.execute("SELECT service_status, confirmed_count FROM stars WHERE tic_id = %s",
-                                           (tic,)).fetchone(), ("hidden", 1))
+                                           (tic,)).fetchone(), ("published", 1))
         # 후보 하나에 두 원천, 후보와 대응하지 않은 행 하나. 266은 archive·정확한 행성명·활성 확정 후보로 찾는다.
         refs = self.conn.execute("""
             SELECT e.source, e.external_id, c.status, c.is_confirmed
@@ -340,6 +341,23 @@ class PublishStarTest(unittest.TestCase):
         # 배치 run은 별 속성의 원천이 없어 NULL을 보낸다. 이미 있는 값은 그대로 둔다.
         self.assertEqual(self.conn.execute("SELECT service_status, teff_k, radius_rsun, tmag FROM stars WHERE tic_id = %s",
                                            (tic,)).fetchone(), ("published", 5800, 1.0, 9.5))
+
+    def test_initial_status_applies_to_new_stars_only(self):
+        # 찾을 수 있는 후보가 없는 새 별(run_source가 initial_status=hidden을 준다)은 hidden으로 등록한다.
+        fresh = 990_000_105
+        p = self.run_payload(fresh)
+        p["star"]["initial_status"] = "hidden"
+        publish_star(self.conn, p, self.target, first_publish_only=True)
+        # 기존 별은 initial_status가 published여도 운영자가 둔 공개 상태를 그대로 둔다.
+        kept = 990_000_106
+        self.conn.execute("INSERT INTO stars(tic_id, confirmed_count, service_status) VALUES (%s, 0, 'hidden')", (kept,))
+        q = self.run_payload(kept)
+        self.assertEqual(q["star"]["initial_status"], "published")
+        publish_star(self.conn, q, self.target, first_publish_only=True)
+
+        got = dict(self.conn.execute("SELECT tic_id, service_status FROM stars WHERE tic_id = ANY(%s)",
+                                     ([fresh, kept],)).fetchall())
+        self.assertEqual(got, {fresh: "hidden", kept: "hidden"})
 
     def test_an_unexpected_error_is_one_rejected_row_not_a_stopped_run(self):
         from publisher.load import publish_outcome

@@ -204,18 +204,19 @@ def publish_star(conn: psycopg.Connection, payload: dict, target: Target, *,
             if cur.execute("SELECT 1 FROM stars WHERE tic_id = %s", (tic,)).fetchone() is None:
                 raise PublishError("STAR_MISSING", f"TIC {tic}이 stars에 없다. 이 payload는 별을 등록하지 않는다")
         else:
-            # service_status가 None이면 새 별은 hidden으로 등록하고 기존 별의 공개 상태는 그대로 둔다(배치 run).
+            # service_status가 None이면 새 별은 initial_status(없으면 hidden)로 등록하고 기존 별의 공개 상태는 그대로
+            # 둔다(배치 run: 찾을 수 있는 후보가 있는 새 별만 published).
             # 배치 run은 별 속성의 원천이 없어 NULL로 보낸다. 기존 별에 이미 있는 값은 NULL로 덮지 않는다.
             status = star.get("service_status")
             cur.execute("""
                 INSERT INTO stars(tic_id, teff_k, radius_rsun, tmag, confirmed_count, service_status)
-                VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'hidden'))
+                VALUES (%s, %s, %s, %s, %s, COALESCE(%s, %s, 'hidden'))
                 ON CONFLICT (tic_id) DO UPDATE SET teff_k = COALESCE(EXCLUDED.teff_k, stars.teff_k),
                     radius_rsun = COALESCE(EXCLUDED.radius_rsun, stars.radius_rsun),
                     tmag = COALESCE(EXCLUDED.tmag, stars.tmag), confirmed_count = EXCLUDED.confirmed_count,
                     service_status = COALESCE(%s, stars.service_status)""",
                         (tic, num(star["teff_k"]), num(star["radius_rsun"]), num(star["tmag"]),
-                         star["confirmed_count"], status, status))
+                         star["confirmed_count"], status, star.get("initial_status"), status))
 
         segment_ids, array_checksums = [], {}
         for seg in payload["segments"]:

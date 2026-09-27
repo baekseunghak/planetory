@@ -12,7 +12,8 @@ mock_source 자리의 운영 입력이다. 입력은 80 gate가 통과시킨 pub
   - 별 검사: 번들이 자기 manifest의 배열·레코드 checksum과 맞는지, Gold 계약 4장 값 범위 안인지, 첫 게시 판인지 본다.
     걸리면 그 별만 PUBLISH_REJECTED다. 계약 밖의 QA 기준값은 데이터 담당(125·117) 합의 전이라 두지 않는다.
   - 번들은 줄 단위로 읽는다. 메모리는 별 하나 크기다. DB에 붙지 않는다.
-  - payload_digest를 주지 않는다(README 「payload 모양」). 별은 service_status 없이 싣는다. 새 별은 hidden이다.
+  - payload_digest를 주지 않는다(README 「payload 모양」). 별은 service_status 없이 싣는다. 새 별은 찾을 수 있는(discoverable) 후보가 있으면 published, 없으면
+    hidden이다(initial_status). 기존 별의 공개 상태는 바꾸지 않는다.
   - 첫 게시만 한다. 적재는 first_publish_only로 부른다. ponytail: 갱신 게시는 후보 정정 계약의 동일성 대조가 생기면 연다.
 """
 
@@ -206,10 +207,13 @@ def to_payload(gold: dict, meta: dict, run: dict, approval: str) -> dict:
     body["bundle"]["manifest"]["publish"] = {"jira": JIRA, "source": "run", "run_id": run["run_id"],
                                              "silver_attempt": run["silver_attempt"],
                                              "aggregator_version": run["aggregator_version"], "approval": approval}
+    # 새 별은 회원이 찾을 수 있는 후보가 있을 때만 공개한다. 찾을 것이 없는 별은 탐사가 곧바로 끝나 등록할 의미가
+    # 없다(공급 자격도 active·discoverable 후보 1개 이상). 기존 별의 공개 상태는 적재가 그대로 둔다.
+    discoverable = any(c["record"]["discoverable"] for c in body["candidates"])
     return {"tic_id": tic, "label": f"run {run['run_id']} TIC {tic}",
             "star": {**{k: meta["star"][k] for k in ("teff_k", "radius_rsun", "tmag")},
                      "confirmed_count": sum(c["record"]["is_confirmed"] for c in body["candidates"]),
-                     "service_status": None},
+                     "service_status": None, "initial_status": "published" if discoverable else "hidden"},
             **body}
 
 

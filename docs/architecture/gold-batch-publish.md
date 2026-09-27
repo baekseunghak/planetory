@@ -114,7 +114,7 @@ run 기록 JSON (Node 1 상태 파일, Airflow XCom 요약)
 | --- | --- | --- |
 | 입력은 JSON Lines 폴더, 줄 단위로 읽는다 | Publisher 이미지는 Parquet를 못 읽고, run이 커서 한 파일로 메모리에 올릴 수 없다. 메모리가 별 하나 크기로 묶인다 | [변경 이력 2026-09-27](../changes/2026-09-W4/2026-09-27.md) 「publish-run 입력을 80 게시 준비 폴더로 바꿈」 |
 | 첫 게시만 한다 | 적재는 새 판에서 이전 후보를 모두 은퇴시킨다. 후보 동일성 대조([후보 정정 계약](candidate-correction-contract.md)) 전에 갱신하면 회원 기록이 은퇴 후보에 남는다 | 같은 날 「배치 run 입력 어댑터와 외부 참조 적재」 |
-| 새 별은 `hidden` | 배치로 올린 별을 곧바로 회원에게 공개하지 않는다. 공개 절차는 따로 정한다 | 같은 항목 |
+| 새 별은 찾을 수 있는 후보가 있을 때만 `published` | 찾을 것이 없는 별은 탐사가 곧바로 끝나 등록할 의미가 없고, 공급 자격(active·discoverable 후보 1개 이상)과 같은 기준이다. 기존 별의 공개 상태는 바꾸지 않는다. 처음에는 모두 `hidden`이었고 첫 운영 게시 뒤 사용자 결정으로 바꿨다 | [변경 이력 2026-09-27](../changes/2026-09-W4/2026-09-27.md) 「새 별 공개 기준」 |
 | 입력 어댑터는 `payload_digest`를 주지 않는다 | 재시도 판정 규칙은 적재 하나가 가진다(`!223` 리뷰) | [Publisher README](../../distributed-system/publisher/README.md) 「payload 모양」 |
 | 게시는 systemd unit으로 돈다 | 별이 많으면 오래 걸리고, Airflow 재시작·재배포와 무관해야 한다. Gold·gate와 같은 틀이라 대기 코드를 같이 쓴다 | 같은 날 「Airflow 게시 단계」 |
 | Publisher 이미지는 root 전용 파일로 고정한다 | sudo 아래에서 임의 이미지를 host 네트워크와 DB env 파일로 띄우면 root와 같다 | 같은 항목 |
@@ -148,5 +148,5 @@ Push-Location distributed-system/publisher; python -m unittest test_load; Pop-Lo
 - **게시 이미지.** Node 1 배포는 끝났다(2026-09-27). 다만 `/etc/planetory/publisher/image`는 `publish-run`이 없는 현재 운영 Publisher로 우선 고정했다. 276(MR !231)이 develop에 병합되면 CI가 만든 이미지로 이 파일을 바꾼다.
 - **실제 게시.** 첫 `tess_publication_run`은 Gold·gate를 통과해 승인을 기다린다. DEC-01 확정 뒤 승인·게시하고, 266 NASA 정보 `ready`와 제한 Sector 별의 분석 화면을 확인한다.
 - **갱신 게시.** 후보 동일성 대조, 튜토리얼 제외, 값이 바뀐 이력(`history_proposals`) 적재가 생긴 뒤 연다.
-- **정책.** 계약 밖의 QA 기준값(데이터 담당 합의), `hidden` 별을 `published`로 바꾸는 절차를 정해야 한다.
+- **정책.** 계약 밖의 QA 기준값(데이터 담당 합의), 찾을 수 있는 후보가 나중에 생긴 `hidden` 별(갱신 게시)을 다시 공개하는 절차를 정해야 한다.
 - **규모.** run 전체를 로컬에 받는다. 1~13은 ready가 많아야 5,156개다. 80 Canary에서 ready 별 하나가 약 430 KB였으므로 번들은 2.2 GB 안팎으로 추정되고, Node 1 여유 디스크 13 GB로 충분하다. 실제 run에서 다시 잰다. 더 큰 run은 part 단위 스트리밍으로 바꾼다.
