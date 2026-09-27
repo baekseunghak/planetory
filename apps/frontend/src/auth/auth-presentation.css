@@ -115,16 +115,20 @@
 .cinema-login .auth-provider:disabled {
   opacity: 0.45;
 }
-.cinema-login .auth-provider-mark {
+/* The mark is the button's only span, so auth.css's last-child rule
+   (margin-left: auto) would push the whole label to the right edge. */
+.cinema-login .auth-provider > .auth-provider-mark {
   display: inline-grid;
   place-items: center;
   width: 20px;
+  min-width: 20px;
   height: 20px;
+  margin-left: 0;
   border-radius: 50%;
   background: var(--pc-ink);
   color: var(--pc-bg);
   font-family: var(--pc-font-sans);
-  font-size: var(--pc-text-2xs);
+  font-size: var(--pc-text-xs);
   font-weight: var(--pc-weight-strong);
   line-height: 1;
 }

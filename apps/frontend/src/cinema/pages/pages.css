@@ -243,12 +243,24 @@
   padding: 8px 12px;
   border: 1px solid var(--pc-line-strong);
   border-radius: var(--pc-radius-md);
-  background: rgba(2, 4, 9, 0.78);
+  /* colour only: a dropdown keeps its chevron (shell.css "dropdowns") */
+  background-color: rgba(2, 4, 9, 0.78);
   color: var(--pc-ink);
   font: inherit;
   font-size: var(--pc-text-md);
   line-height: 1.5;
   transition: border-color var(--pc-dur-fast);
+}
+/* The same fields, dropdowns only: room for the chevron. Written on top of
+   the selector above so it outweighs its padding. */
+.cinema-shell
+  .cp-page
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea
+  ):is(select:not([multiple]):not([size])) {
+  padding-right: 34px;
 }
 .cinema-shell .cp-page textarea {
   line-height: 1.7;
