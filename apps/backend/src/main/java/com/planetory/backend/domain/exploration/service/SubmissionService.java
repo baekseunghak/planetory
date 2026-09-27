@@ -187,6 +187,8 @@ public class SubmissionService {
         }
         if (!"ambiguous_match".equals(match.status())) {
             submissions.progress(member, tic, context.curveStep(), stars.findMyPlanets(member, tic).size(), skipped);
+            // 타일의 행성 수·단계·재개 표시가 바뀐다. 버전이 그대로면 프론트가 옛 타일을 계속 쓴다(D-7).
+            sky.bumpVersion(member);
             if (candidateSubmission) completion.evaluateAndApply(member, tic);
         }
         if (Integer.valueOf(1).equals(seq)) settings.completeOnboarding(member);

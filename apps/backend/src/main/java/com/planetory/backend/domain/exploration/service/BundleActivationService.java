@@ -36,6 +36,7 @@ public class BundleActivationService {
     private final ResidualJobStore residualJobs;
     private final PlatformTransactionManager transactionManager;
     private final GoldCatalogRepository gold;
+    private final SkyService sky;
 
     /** 회원 한 명을 처리한 결과. */
     enum Outcome {
@@ -138,6 +139,8 @@ public class BundleActivationService {
             throw new IllegalStateException("잠근 진행 행의 재개 전환에 실패했습니다");
         }
         repository.recordReopenEvent(row.memberId(), ticId, bundleId, newDiscoverable, null);
+        // 타일의 단계·재개 표시가 바뀐다(D-7).
+        sky.bumpVersion(row.memberId());
         return Outcome.REOPENED;
     }
 }

@@ -12,7 +12,8 @@
 // world is replaced. Real TESS stars are used when the server loaded them
 // (GET /api/dev-cinema/state `placement`); otherwise the synthetic stars.
 // Selectors are the shell's (.scene-canvas[data-scene-*], markers, the
-// discovery dialog) and the classic analysis variant's accessible names.
+// discovery dialog) and the analysis screens' accessible names: the new
+// design (the default) or the classic one (CINEMA_ANALYSIS=classic).
 import { chromium, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -111,25 +112,8 @@ const frames = (ms = 3000) =>
 const panel = () => page.getByRole("complementary", { name: "별 상세" });
 const number = (text) => Number(String(text).replace(/,/g, ""));
 
-/** Rank-1 peak, a window over its dip, 행성 같음, submit (classic variant). */
-async function discover(tic) {
-  const context = (await api(`/v1/stars/${tic}/analysis-context`)).body;
-  const current = context.currentCurveContext;
-  const query = new URLSearchParams({
-    bundleId: current.bundleId,
-    curveStep: String(current.curveStep),
-    removed: current.removedCandidateIds.join(","),
-  });
-  const top = (await api(`/v1/stars/${tic}/candidate-peaks?${query}`)).body
-    .peaks[0];
-  await page
-    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
-    .click({ timeout: 30000 });
-  await expect(page.getByTestId("fold-panel")).toHaveAttribute(
-    "data-fold-ready",
-    "true",
-    { timeout: 30000 },
-  );
+/** Classic screen: 이 주기로 구간 선택, a drag across the dip, then judge. */
+async function windowClassic(top) {
   await page
     .getByRole("button", { name: "이 주기로 구간 선택", exact: true })
     .click();
@@ -155,6 +139,81 @@ async function discover(tic) {
   await page
     .getByRole("button", { name: "구간 확정하고 판단하기", exact: true })
     .click();
+}
+
+/**
+ * New design: the fold is on screen with the peak; zoom on the dip with the
+ * wheel, then drag across it (the judgment column is beside it).
+ */
+async function windowNew(fold, top) {
+  const view = async () => [
+    Number(await fold.getAttribute("data-view-start")),
+    Number(await fold.getAttribute("data-view-end")),
+  ];
+  const at = async (phase) => {
+    const box = await fold.boundingBox();
+    const [start, end] = await view();
+    return {
+      x: box.x + ((phase - start) / (end - start)) * box.width,
+      y: box.y + box.height * 0.45,
+    };
+  };
+  let center = top.suggestedPhaseCenter ?? 0;
+  // The server takes windows 0.3-3.6 hours wide.
+  const hours = Math.min(
+    1.7,
+    Math.max(0.4, (top.suggestedDurationHours ?? 2) * 0.75),
+  );
+  const half = hours / 24 / top.periodDays;
+  const [start, end] = await view();
+  if (center - half < start) center += 1;
+  if (center + half > end) center -= 1;
+  for (let notch = 0; notch < 3; notch++) {
+    const point = await at(center);
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.wheel(0, -120);
+    await page.waitForTimeout(80);
+  }
+  const from = await at(center - half);
+  const to = await at(center + half);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2, from.y, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByTestId("cx-window-phase")).toHaveAttribute(
+    "data-valid",
+    "true",
+  );
+  await shot("n05-analysis-window");
+}
+
+/**
+ * Rank-1 peak, a window over its dip, 행성 같음, submit. Either analysis
+ * screen: the new design (default) or the classic one (CINEMA_ANALYSIS=classic).
+ */
+async function discover(tic) {
+  const context = (await api(`/v1/stars/${tic}/analysis-context`)).body;
+  const current = context.currentCurveContext;
+  const query = new URLSearchParams({
+    bundleId: current.bundleId,
+    curveStep: String(current.curveStep),
+    removed: current.removedCandidateIds.join(","),
+  });
+  const top = (await api(`/v1/stars/${tic}/candidate-peaks?${query}`)).body
+    .peaks[0];
+  await page
+    .getByRole("button", { name: "1위 봉우리 선택", exact: true })
+    .click({ timeout: 30000 });
+  const fold = page
+    .locator('[data-testid="cx-fold"], [data-testid="fold-panel"]')
+    .first();
+  await expect(fold).toHaveAttribute("data-fold-ready", "true", {
+    timeout: 30000,
+  });
+  if ((await fold.getAttribute("data-testid")) === "cx-fold")
+    await windowNew(fold, top);
+  else await windowClassic(top);
   await page.getByRole("radio", { name: "행성 같음", exact: true }).check();
   await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
   await page.getByRole("button", { name: "제출하기", exact: true }).click();

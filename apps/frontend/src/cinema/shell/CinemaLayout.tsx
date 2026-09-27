@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../../auth/SessionProvider";
+import { PublicationUnlockSink } from "../../features/publication/unlock-sink";
 import {
   OnboardingLookContext,
   OnboardingProvider,
@@ -177,6 +178,12 @@ function ShellBody({
   );
   useEffect(() => director.start(), [director]);
   useEffect(() => director.reapply(), [director, scene]);
+  // Publishing an analysis (공개 검토) can grant the achievement and open
+  // stars there: they ignite like a discovery's once the galaxy is back.
+  const publicationUnlocks = useCallback(
+    (ticIds: readonly string[]) => director.unlockElsewhere(ticIds),
+    [director],
+  );
   useEffect(() => {
     if (target.stage !== "analysis") return;
     director.enterAnalysis();
@@ -489,7 +496,9 @@ function ShellBody({
             }
             tabIndex={-1}
           >
-            <Outlet />
+            <PublicationUnlockSink.Provider value={publicationUnlocks}>
+              <Outlet />
+            </PublicationUnlockSink.Provider>
             {/* The galaxy shows its own first-visit line (GalaxyView). A page
               that fills the sky slot (dev inspectors) keeps the old tip. */}
             {skyOverride && location.pathname === "/sky" && (
