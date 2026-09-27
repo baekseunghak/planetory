@@ -39,47 +39,61 @@ final class NasaPlanetExplanationText {
                  String radius, String mass, String discovery) {
     }
 
+    // 선택지를 [a, b] 목록 문자열로 보이면 모델이 가끔 목록 전체를 값으로 복사했다(운영 1/2, 재현 1/24).
+    // 번호만 고르게 하면 그 실패가 구조적으로 사라진다. 문장은 서버가 번호로 되찾는다 [S15P21C206-277].
     static String instructions(Planet planet, String sourceHash) {
         Facts facts = facts(planet);
         return """
                 JSON 객체 한 개만 반환하세요. sourceHash는 전달된 해시를 글자 그대로 복사하세요.
                 planetName은 {{name}} 토큰만 반환하세요. 실제 이름은 서버가 나중에 채웁니다.
-                name, orbitalPeriod, radius, mass, discovery는 각각 아래 허용 문장 중 정확히 하나만 쓰세요.
-                {{name}}과 {{value}}는 그대로 두세요. 숫자·단위·참고문헌·추가 사실을 만들지 마세요.
+                name, orbitalPeriod, radius, mass, discovery에는 아래 번호 목록에서 고른 문장의 번호 하나만 문자열로 쓰세요(예: "1").
+                문장이나 목록을 그대로 쓰지 말고, 숫자·단위·참고문헌·추가 사실을 만들지 마세요.
                 sourceHash: %s
                 planetName: {{name}}
-                name: %s
-                orbitalPeriod: %s
-                radius: %s
-                mass: %s
-                discovery: %s
-                """.formatted(sourceHash, NAME,
-                choices(facts.period(), PERIOD, NO_PERIOD),
-                choices(facts.radius(), RADIUS, NO_RADIUS),
-                choices(facts.mass(), MASS, NO_MASS),
-                choices(facts.discovery(), DISCOVERY, NO_DISCOVERY));
+                name:
+                %s
+                orbitalPeriod:
+                %s
+                radius:
+                %s
+                mass:
+                %s
+                discovery:
+                %s
+                """.formatted(sourceHash, numbered(NAME),
+                numbered(choices(facts.period(), PERIOD, NO_PERIOD)),
+                numbered(choices(facts.radius(), RADIUS, NO_RADIUS)),
+                numbered(choices(facts.mass(), MASS, NO_MASS)),
+                numbered(choices(facts.discovery(), DISCOVERY, NO_DISCOVERY)));
+    }
+
+    private static String numbered(List<String> options) {
+        StringBuilder lines = new StringBuilder();
+        for (int i = 0; i < options.size(); i++) {
+            if (i > 0) lines.append('\n');
+            lines.append(i + 1).append(". ").append(options.get(i));
+        }
+        return lines.toString();
     }
 
     static Content render(Draft draft, Planet planet, String sourceHash) {
         Facts facts = facts(planet);
-        if (draft == null || draft.name() == null || draft.orbitalPeriod() == null
-                || draft.radius() == null || draft.mass() == null || draft.discovery() == null
-                || !sourceHash.equals(draft.sourceHash())
-                || !NAME_TOKEN.equals(draft.planetName())
-                || !NAME.contains(draft.name())
-                || !choices(facts.period(), PERIOD, NO_PERIOD).contains(draft.orbitalPeriod())
-                || !choices(facts.radius(), RADIUS, NO_RADIUS).contains(draft.radius())
-                || !choices(facts.mass(), MASS, NO_MASS).contains(draft.mass())
-                || !choices(facts.discovery(), DISCOVERY, NO_DISCOVERY).contains(draft.discovery())) {
-            throw new IllegalArgumentException("invalid explanation draft");
+        if (draft == null || !sourceHash.equals(draft.sourceHash()) || !NAME_TOKEN.equals(draft.planetName())) {
+            throw new IllegalArgumentException("invalid explanation draft: sourceHash or planetName");
         }
-        String name = draft.name().replace(NAME_TOKEN, planet.planetName());
+        String nameTemplate = pick("name", draft.name(), NAME);
+        String periodTemplate = pick("orbitalPeriod", draft.orbitalPeriod(), choices(facts.period(), PERIOD, NO_PERIOD));
+        String radiusTemplate = pick("radius", draft.radius(), choices(facts.radius(), RADIUS, NO_RADIUS));
+        String massTemplate = pick("mass", draft.mass(), choices(facts.mass(), MASS, NO_MASS));
+        String discoveryTemplate = pick("discovery", draft.discovery(),
+                choices(facts.discovery(), DISCOVERY, NO_DISCOVERY));
+        String name = nameTemplate.replace(NAME_TOKEN, planet.planetName());
         if (Boolean.TRUE.equals(planet.controversial())) {
             name += " 다만 NASA 자료에는 이 행성에 관한 연구 결과에 이견이 있다는 표시가 있어요.";
         }
-        Content content = new Content(name, fill(draft.orbitalPeriod(), facts.period()),
-                fill(draft.radius(), facts.radius()), fill(draft.mass(), facts.mass()),
-                fill(draft.discovery(), facts.discovery()));
+        Content content = new Content(name, fill(periodTemplate, facts.period()),
+                fill(radiusTemplate, facts.radius()), fill(massTemplate, facts.mass()),
+                fill(discoveryTemplate, facts.discovery()));
         if (content.name().length() > 240 || content.orbitalPeriod().length() > 240
                 || content.radius().length() > 240 || content.mass().length() > 240
                 || content.discovery().length() > 240) {
@@ -90,6 +104,17 @@ final class NasaPlanetExplanationText {
 
     private static String fill(String template, String value) {
         return value == null ? template : template.replace(VALUE_TOKEN, value);
+    }
+
+    /** 번호("1")나 허용 문장 그대로만 받는다. 목록 복사처럼 그 밖의 값은 필드 이름만 남기고 거절한다. */
+    private static String pick(String field, String value, List<String> options) {
+        if (value != null && options.contains(value)) {
+            return value;
+        }
+        if (value != null && value.matches("[1-9]") && Integer.parseInt(value) <= options.size()) {
+            return options.get(Integer.parseInt(value) - 1);
+        }
+        throw new IllegalArgumentException("invalid explanation draft: " + field);
     }
 
     private static List<String> choices(String value, List<String> present, List<String> missing) {

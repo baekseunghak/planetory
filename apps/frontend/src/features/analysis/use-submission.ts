@@ -13,6 +13,7 @@ import {
 } from "./submit-analysis";
 import { ApiError } from "../../api/client";
 import { useRetryDraft } from "./AnalysisSession";
+import { useClassicSubmissionBridge } from "../../cinema/analysis-classic/classic-bridge";
 import {
   decodeDetailView,
   detailViewPath,
@@ -64,6 +65,7 @@ export function useSubmission(context: AnalysisContext) {
     () => (memberId ? submissionStorageKey(memberId, context.ticId) : null),
     [memberId, context.ticId],
   );
+  const bridge = useClassicSubmissionBridge(context.ticId, memberId, key);
   useEffect(
     () => () => {
       running.current?.abort();
@@ -92,6 +94,8 @@ export function useSubmission(context: AnalysisContext) {
       return;
     }
     last.current = { requestId: pending.requestId, kind: pending.kind };
+    const message =
+      "결과를 확인하지 못한 제출이 있습니다. 다시 제출하지 말고 접수 결과를 확인해 주세요.";
     setState({
       phase: "settled",
       kind: pending.kind,
@@ -99,10 +103,10 @@ export function useSubmission(context: AnalysisContext) {
       requestId: pending.requestId,
       reason: "lost",
       // 접수되지 않았다고 단정하지 않는다. 확인해야 알 수 있다.
-      message:
-        "결과를 확인하지 못한 제출이 있습니다. 다시 제출하지 말고 접수 결과를 확인해 주세요.",
+      message,
     });
-  }, [context.ticId, memberId, key]);
+    bridge?.lost(message);
+  }, [context.ticId, memberId, key, bridge]);
 
   const run = useCallback(
     async (
@@ -114,6 +118,7 @@ export function useSubmission(context: AnalysisContext) {
       const controller = new AbortController();
       running.current = controller;
       setState({ phase, kind });
+      if (phase === "sending") bridge?.submitted(kind);
       try {
         const result = await work(controller.signal);
         if (controller.signal.aborted) return;
@@ -138,6 +143,7 @@ export function useSubmission(context: AnalysisContext) {
           if (result.state === "rejected") markSubmissionRejected(key);
         }
         setState({ phase: "settled", kind, ...result });
+        bridge?.settled(result, attempted.current);
       } catch (error) {
         if (controller.signal.aborted) return;
         // 읽을 수 없는 응답과 뜻밖의 실패. 접수 여부는 모르므로 ID를 지키고
@@ -150,11 +156,12 @@ export function useSubmission(context: AnalysisContext) {
           reason: "lost",
           message: `${(error as Error).message} 다시 제출하지 말고 접수 결과를 확인해 주세요.`,
         });
+        bridge?.lost((error as Error).message);
       } finally {
         if (running.current === controller) running.current = null;
       }
     },
-    [key, memberId, context.ticId],
+    [key, memberId, context.ticId, bridge],
   );
 
   const submit = useCallback(
@@ -181,17 +188,19 @@ export function useSubmission(context: AnalysisContext) {
       if (reserved.status === "blocked") {
         const { pending } = reserved;
         last.current = { requestId: pending.requestId, kind: pending.kind };
+        const message =
+          pending.state === "conflict"
+            ? "이 요청 번호로 다른 내용이 이미 접수되어 있습니다. 무엇이 접수됐는지 먼저 확인해 주세요."
+            : "결과를 확인하지 못한 제출이 있어 이번 제출을 보내지 않았습니다. 먼저 접수 결과를 확인해 주세요.";
         setState({
           phase: "settled",
           kind: pending.kind,
           state: "unresolved",
           requestId: pending.requestId,
           reason: "lost",
-          message:
-            pending.state === "conflict"
-              ? "이 요청 번호로 다른 내용이 이미 접수되어 있습니다. 무엇이 접수됐는지 먼저 확인해 주세요."
-              : "결과를 확인하지 못한 제출이 있어 이번 제출을 보내지 않았습니다. 먼저 접수 결과를 확인해 주세요.",
+          message,
         });
+        bridge?.lost(message);
         return;
       }
       last.current = {
@@ -209,7 +218,7 @@ export function useSubmission(context: AnalysisContext) {
         }),
       );
     },
-    [key, context.ticId, run, retryDraft, retryAttemptId],
+    [key, context.ticId, run, retryDraft, retryAttemptId, bridge],
   );
 
   /** 보내지 않고 접수 결과만 확인한다. 중복 접수를 만들 수 없는 경로다. */

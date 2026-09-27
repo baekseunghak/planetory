@@ -10,15 +10,46 @@ import {
 } from "../src/features/sky-data/contracts.ts";
 import { exampleStar } from "./sky-reference/reference.mjs";
 
+/**
+ * Per-ordinal overrides (cinema review server only). Layout stays by ordinal
+ * (x, y, depthZ from `layoutOrdinal`); only identity and fixture planets change.
+ */
+export type GalaxyFixtureOverrides = {
+  /**
+   * TIC of the star at this ordinal. Default `String(900000001 + index)`.
+   * Must be a unique decimal string: tiles are sorted by it.
+   */
+  ticFor?(index: number): string;
+  /** Fixture planet count at this ordinal; `fallback` is the built-in table. */
+  planetCountFor?(index: number, fallback: number): number;
+  /**
+   * Last word on the star at this ordinal (demo scenarios: seeded progress
+   * and planet counts). Keep ticId, x, y, depthZ and layoutOrdinal as given.
+   */
+  starFor?(index: number, star: Star): Star;
+};
+
 // Serve-only HTTP fixture, pinned to MR !41 7f67c568. Never imported by production code.
 export function galaxyFixturePlugin(
   performanceFixture = false,
   initialStarCount = 1000,
+  overrides: GalaxyFixtureOverrides = {},
 ): Plugin {
   let revision = 1,
     failed = false;
   const completedTutorials = new Map<number, string>();
-  const makeStar = (i: number): Star => ({
+  const makeStar = (i: number): Star => {
+    const star = builtInStar(i);
+    const planetCount =
+      overrides.planetCountFor?.(i, star.planetCount) ?? star.planetCount;
+    const made: Star = {
+      ...star,
+      ...(overrides.ticFor ? { ticId: overrides.ticFor(i) } : {}),
+      planetCount,
+    };
+    return overrides.starFor ? overrides.starFor(i, made) : made;
+  };
+  const builtInStar = (i: number): Star => ({
     ...exampleStar(i),
     planetCount: performanceFixture
       ? i === 1

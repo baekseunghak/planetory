@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useSession } from "./SessionProvider";
 import { authSettings } from "./settings";
@@ -12,8 +12,8 @@ import {
   returnStorageKey,
 } from "./flow";
 import "./auth.css";
-import { GalaxyArtwork } from "../components/GalaxyArtwork";
 import "./auth-presentation.css";
+import { useScene } from "../cinema/scene";
 
 function savedReturn() {
   try {
@@ -26,8 +26,8 @@ export function LogoutStatus() {
   const session = useSession();
   const { phase, error } = session.logoutState;
   return (
-    <main className="page auth-message">
-      <span className="brand">PLANETORY</span>
+    <main className="page auth-message cinema-auth-message">
+      <span className="brand cinema-login-word">PLANETORY</span>
       <h1>
         {phase === "pending"
           ? "로그아웃하고 있습니다"
@@ -77,7 +77,12 @@ export function LoginPage() {
   const [starting, setStarting] = useState(false);
   const saving = useRef(false);
   const writeController = useRef<AbortController | null>(null);
+  const scene = useScene();
   useEffect(() => () => writeController.current?.abort(), []);
+  // The one galaxy, far away, until the member flies in (see useStageDirector).
+  useEffect(() => {
+    scene.setMode("intro");
+  }, [scene]);
   useEffect(() => {
     if (callback.current) {
       // Only a post-authentication UI landing page; never exchange OAuth codes here.
@@ -185,9 +190,10 @@ export function LoginPage() {
           }
           onClick={() => start(provider)}
         >
-          <span aria-hidden="true">{provider === "ssafy" ? "S" : "G"}</span>
+          <span aria-hidden="true" className="auth-provider-mark">
+            {provider === "ssafy" ? "S" : "G"}
+          </span>
           {provider === "ssafy" ? "SSAFY" : "Google"} 계정으로 로그인
-          <span aria-hidden="true">↗</span>
         </button>
       ))}
       {(!authSettings.ssafy || !authSettings.google) && (
@@ -196,156 +202,154 @@ export function LoginPage() {
     </div>
   );
   return (
-    <main className="auth-page auth-presentation">
-      <section className="auth-universe" aria-label="Planetory 소개">
-        <Link className="brand" to="/login">
-          PLANETORY
-        </Link>
-        <div className="auth-galaxy">
-          <GalaxyArtwork decorative />
-        </div>
-        <div className="auth-intro">
-          <p className="eyebrow">A UNIVERSE OF YOUR OWN</p>
-          <h1>
-            나의 발견으로
-            <br />
-            채워지는 밤하늘
-          </h1>
-          <p>
-            별빛의 변화를 살펴 행성의 흔적을 찾고,
-            <br />
-            발견을 나의 은하에 모으세요.
-          </p>
-        </div>
-        <span className="auth-caption">
-          별빛을 읽고, 새로운 세계를 발견하다
-        </span>
-      </section>
-      <section className="auth-content" aria-labelledby="auth-title">
-        <p className="eyebrow">
-          {profile ? "FIRST CONTACT" : "WELCOME, EXPLORER"}
+    <main className="auth-page cinema-login">
+      <div className="cinema-login-center">
+        <h1 className="cinema-login-word">PLANETORY</h1>
+        <p className="cinema-login-tag">
+          별을 발견할 때마다 당신의 은하가 자랍니다
         </p>
-        <h2 id="auth-title">
-          {profile
-            ? "어떤 이름으로 탐사할까요?"
-            : problem === "cancelled"
-              ? "로그인이 취소되었습니다"
-              : problem === "unavailable"
-                ? "로그인 서비스를 잠시 이용할 수 없습니다"
-                : problem === "failed"
-                  ? "로그인을 완료하지 못했습니다"
-                  : session.status === "error"
-                    ? "회원 정보를 확인하지 못했습니다"
-                    : callback.current && session.status === "anonymous"
-                      ? "로그인을 확인하지 못했습니다"
-                      : "로그인이 필요합니다"}
-        </h2>
-        {session.notice === "expired" && (
-          <p role="status">로그인이 만료되었습니다. 다시 로그인해 주세요.</p>
-        )}
-        {session.notice === "logout" && (
-          <p role="status">로그아웃되었습니다.</p>
-        )}
-        {problem ? (
-          <>
-            <p role="alert">
-              {problem === "cancelled"
-                ? "준비되면 다시 로그인해 주세요."
+        <section
+          className="auth-content cinema-login-card"
+          aria-labelledby="auth-title"
+        >
+          <h2 id="auth-title">
+            {profile
+              ? "어떤 이름으로 탐사할까요?"
+              : problem === "cancelled"
+                ? "로그인이 취소되었습니다"
                 : problem === "unavailable"
-                  ? "서버에 일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요."
-                  : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
-            </p>
-            <button
-              onClick={() => {
-                setProblem(null);
-                callback.current = false;
-                navigate(
-                  `/login?${new URLSearchParams({ returnTo: destination.current })}`,
-                  { replace: true },
-                );
-              }}
-            >
-              로그인 화면으로
-            </button>
-          </>
-        ) : session.status === "loading" ? (
-          <p role="status">로그인 정보를 확인하고 있습니다.</p>
-        ) : profile ? (
-          <form onSubmit={(event) => void saveNickname(event)}>
-            <label htmlFor="initial-nickname">닉네임</label>
-            <input
-              id="initial-nickname"
-              value={nickname}
-              onChange={(event) => {
-                setNickname(event.target.value);
-                if (!uncertain) setFormError(null);
-              }}
-              disabled={busy || uncertain}
-              autoComplete="nickname"
-              aria-describedby="nickname-help nickname-error"
-              aria-invalid={Boolean(formError)}
-            />
-            <p id="nickname-help" className="auth-note">
-              2~20자 · 한글, 영문, 숫자, 밑줄 사용 가능
-            </p>
-            <p id="nickname-error" role={formError ? "alert" : undefined}>
-              {fieldReason || formError?.message}
-            </p>
-            {uncertain ? (
-              <>
-                <p>
-                  저장되었을 수 있습니다. 다시 제출하기 전에 등록 여부를 확인해
-                  주세요.
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void session.refresh().then((result) => {
-                      if (result === "profile-required") setFormError(null);
-                    })
-                  }
-                >
-                  저장 여부 확인
-                </button>
-              </>
-            ) : (
-              <button className="auth-submit" disabled={busy} type="submit">
-                {busy ? "저장하고 있습니다" : "이 이름으로 시작하기"}
+                  ? "로그인 서비스를 잠시 이용할 수 없습니다"
+                  : problem === "failed"
+                    ? "로그인을 완료하지 못했습니다"
+                    : session.status === "error"
+                      ? "회원 정보를 확인하지 못했습니다"
+                      : callback.current && session.status === "anonymous"
+                        ? "로그인을 확인하지 못했습니다"
+                        : "로그인이 필요합니다"}
+          </h2>
+          {session.notice === "expired" && (
+            <p role="status">로그인이 만료되었습니다. 다시 로그인해 주세요.</p>
+          )}
+          {session.notice === "logout" && (
+            <p role="status">로그아웃되었습니다.</p>
+          )}
+          {problem ? (
+            <>
+              <p role="alert">
+                {problem === "cancelled"
+                  ? "준비되면 다시 로그인해 주세요."
+                  : problem === "unavailable"
+                    ? "서버에 일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요."
+                    : "로그인 과정에 문제가 생겼습니다. 다시 시도해 주세요."}
+              </p>
+              <button
+                className="cinema-login-secondary"
+                onClick={() => {
+                  setProblem(null);
+                  callback.current = false;
+                  navigate(
+                    `/login?${new URLSearchParams({ returnTo: destination.current })}`,
+                    { replace: true },
+                  );
+                }}
+              >
+                로그인 화면으로
               </button>
-            )}
-            <button
-              className="auth-text-action"
-              type="button"
-              disabled={busy}
-              onClick={() => void session.logout()}
-            >
-              다른 계정으로 로그인
-            </button>
-          </form>
-        ) : (
-          <>
-            {session.status === "error" ? (
-              <p role="alert">{session.error.message}</p>
-            ) : (
-              <p>계정으로 로그인하고 탐사를 이어가세요.</p>
-            )}
-            {providerButtons}
-            {starting && (
-              <p role="status">로그인 페이지로 이동하고 있습니다.</p>
-            )}
-            {formError && <p role="alert">{formError.message}</p>}
-            <button
-              className="auth-text-action"
-              onClick={() => void session.refresh()}
-            >
-              로그인 상태 다시 확인
-            </button>
-          </>
-        )}
-        <p className="auth-footnote">
-          서로 다른 제공자의 계정은 각각의 탐사 기록을 가집니다.
-        </p>
-      </section>
+            </>
+          ) : session.status === "loading" ? (
+            <p role="status">로그인 정보를 확인하고 있습니다.</p>
+          ) : profile ? (
+            <form onSubmit={(event) => void saveNickname(event)}>
+              <label htmlFor="initial-nickname">닉네임</label>
+              <input
+                id="initial-nickname"
+                value={nickname}
+                onChange={(event) => {
+                  setNickname(event.target.value);
+                  if (!uncertain) setFormError(null);
+                }}
+                disabled={busy || uncertain}
+                autoComplete="nickname"
+                aria-describedby="nickname-help nickname-error"
+                aria-invalid={Boolean(formError)}
+              />
+              <p id="nickname-help" className="auth-note">
+                2~20자 · 한글, 영문, 숫자, 밑줄 사용 가능
+              </p>
+              <p id="nickname-error" role={formError ? "alert" : undefined}>
+                {fieldReason || formError?.message}
+              </p>
+              {uncertain ? (
+                <>
+                  <p>
+                    저장되었을 수 있습니다. 다시 제출하기 전에 등록 여부를
+                    확인해 주세요.
+                  </p>
+                  <button
+                    type="button"
+                    className="cinema-login-secondary"
+                    onClick={() =>
+                      void session.refresh().then((result) => {
+                        if (result === "profile-required") setFormError(null);
+                      })
+                    }
+                  >
+                    저장 여부 확인
+                  </button>
+                </>
+              ) : (
+                <button className="auth-submit" disabled={busy} type="submit">
+                  {busy ? "저장하고 있습니다" : "이 이름으로 시작하기"}
+                </button>
+              )}
+              <button
+                className="auth-text-action"
+                type="button"
+                disabled={busy}
+                onClick={() => void session.logout()}
+              >
+                다른 계정으로 로그인
+              </button>
+            </form>
+          ) : (
+            <>
+              {session.status === "error" && (
+                <div className="cinema-login-error">
+                  <p role="alert">{session.error.message}</p>
+                  {/* Only here: the member lookup failed, so ask again on request. */}
+                  <button
+                    type="button"
+                    className="cinema-login-secondary"
+                    onClick={() => void session.refresh()}
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              )}
+              {providerButtons}
+              {starting && (
+                <p role="status">로그인 페이지로 이동하고 있습니다.</p>
+              )}
+              {formError && <p role="alert">{formError.message}</p>}
+              {/* After an expiry notice the session may in fact still be
+                  valid (another tab signed in again): check without a reload. */}
+              {session.status === "anonymous" &&
+                session.notice === "expired" && (
+                  <button
+                    type="button"
+                    className="auth-text-action"
+                    onClick={() => void session.refresh()}
+                  >
+                    로그인 상태 다시 확인
+                  </button>
+                )}
+            </>
+          )}
+          <p className="auth-footnote">
+            서로 다른 제공자의 계정은 각각의 탐사 기록을 가집니다.
+          </p>
+        </section>
+      </div>
     </main>
   );
 }

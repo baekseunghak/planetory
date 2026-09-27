@@ -1,0 +1,104 @@
+/*
+  Planetory cinema tokens. Dark observatory: near-black ground, one accent.
+  Prefixed --pc- so they never collide with the classic pages' variables
+  (--accent, --line, --bg, ... are already used there).
+  Fonts are self-hosted: import ./fonts.ts once from the cinema shell.
+  No backdrop-filter over the WebGL canvas: panels use --pc-glass instead.
+*/
+:root {
+  /* ground and ink */
+  --pc-bg: #000;
+  --pc-bg-raised: #05080f;
+  --pc-ink: #e8eef8;
+  --pc-ink-dim: #8d99ad;
+  --pc-ink-faint: #566176;
+  --pc-line: rgba(150, 180, 225, 0.14);
+  --pc-line-strong: rgba(150, 180, 225, 0.3);
+  --pc-glass: rgba(5, 8, 15, 0.9);
+  --pc-raise: rgba(150, 180, 225, 0.055);
+
+  /* one accent */
+  --pc-accent: #5ec4f7;
+  --pc-accent-ink: #03121b;
+  --pc-accent-soft: rgba(94, 196, 247, 0.15);
+
+  /* states */
+  --pc-new-star: #b69cff;
+  --pc-good: #7ee0a1;
+  --pc-warn: #f2c14e;
+  --pc-bad: #f28b82;
+
+  /* service markers (same meaning as .galaxy-marker in galaxy.css) */
+  --pc-marker-tutorial-line: #76adff;
+  --pc-marker-tutorial-bg: rgba(21, 41, 71, 0.91);
+  --pc-marker-challenge-line: #ff8686;
+  --pc-marker-challenge-bg: rgba(74, 24, 36, 0.92);
+
+  /* star colours for DOM legends only; the scene uses starStyle() */
+  --pc-star-core: #ffb870;
+  --pc-star-arm: #8fb4ff;
+  --pc-star-violet: #e3b8ff;
+
+  /* type: Plex Sans KR for text, Plex Mono with tabular figures for numbers */
+  --pc-font-sans:
+    "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
+  --pc-font-mono:
+    "IBM Plex Mono", ui-monospace, Consolas, "Courier New", monospace;
+  --pc-numeric: tabular-nums;
+  --pc-text-2xs: 11px;
+  --pc-text-xs: 12px;
+  --pc-text-sm: 13px;
+  --pc-text-md: 14px;
+  --pc-text-lg: 16px;
+  --pc-text-xl: 20px;
+  --pc-text-2xl: 26px;
+  --pc-text-3xl: 34px;
+  --pc-leading: 1.55;
+  --pc-leading-tight: 1.25;
+  --pc-weight-regular: 400;
+  --pc-weight-medium: 500;
+  --pc-weight-strong: 600;
+  --pc-tracking-brand: 0.32em;
+  --pc-tracking-eyebrow: 0.14em;
+
+  /* space (4px grid) and shape */
+  --pc-space-1: 4px;
+  --pc-space-2: 8px;
+  --pc-space-3: 12px;
+  --pc-space-4: 16px;
+  --pc-space-5: 24px;
+  --pc-space-6: 32px;
+  --pc-space-7: 48px;
+  --pc-space-8: 64px;
+  --pc-hud-inset: 24px;
+  --pc-radius-sm: 4px;
+  --pc-radius-md: 9px;
+  --pc-radius-lg: 14px;
+  --pc-radius-pill: 999px;
+  --pc-panel-width: 440px;
+  --pc-control-height: 40px;
+
+  /* motion (UI). Camera timings live in SCENE_TIMING (scene/contract.ts). */
+  --pc-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --pc-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --pc-dur-fast: 160ms;
+  --pc-dur: 320ms;
+  --pc-dur-slow: 800ms;
+
+  /* layers above the one canvas */
+  --pc-z-scene: 0;
+  --pc-z-overlay: 4;
+  --pc-z-hud: 5;
+  --pc-z-panel: 6;
+  --pc-z-toast: 8;
+  --pc-z-dialog: 10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pc-dur-fast: 0ms;
+    --pc-dur: 0ms;
+    --pc-dur-slow: 0ms;
+  }
+}

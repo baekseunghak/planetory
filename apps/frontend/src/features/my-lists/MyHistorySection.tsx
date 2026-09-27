@@ -10,6 +10,7 @@ import {
   type MyHistory,
 } from "./my-lists-data";
 import { usePagedList } from "./use-paged-list";
+import { cinemaDateTime, useCinemaWording } from "../../shared/cinema-wording";
 import "./my-lists.css";
 
 // #196 내 분석 기록 목록(탐사 API 8.1). 본인에게만 보인다 — 슬롯이 타인에게는
@@ -127,11 +128,17 @@ function HistoryRow({
   history: MyHistory;
   returnTo: string;
 }) {
+  // Cinema app: dates without seconds (src/shared/cinema-wording).
+  const cinema = useCinemaWording();
   return (
     <li className="my-list-row">
       <p className="my-list-title">
         TIC {history.ticId} ·{" "}
-        <time dateTime={history.submittedAt}>{when(history.submittedAt)}</time>
+        <time dateTime={history.submittedAt}>
+          {cinema
+            ? cinemaDateTime(history.submittedAt)
+            : when(history.submittedAt)}
+        </time>
       </p>
       <p>
         {history.matchResult

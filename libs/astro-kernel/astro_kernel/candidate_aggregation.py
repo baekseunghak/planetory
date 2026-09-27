@@ -40,16 +40,63 @@ def aggregate(*, run_id, silver_attempt, targets, results, calculation_versions,
     run-level calculation_versions and ai_policy. calculation_versions carries
     every rule version except the per-star candidate_quality. publishable is always false:
     the publish gate (80) and Publisher still own approval and the DB write.
+    This is combine() over evaluate() for every target, in one process.
     """
     try:
-        return _aggregate(run_id, silver_attempt, targets, results, calculation_versions, ai_policy)
+        tics = _scope(run_id, silver_attempt, targets, calculation_versions, ai_policy)
+        scope, inputs = set(tics), {}
+        for r in results:
+            tic = identifier(r["tic_id"])
+            require(tic in scope, "result_outside_targets")
+            require(tic not in inputs, "duplicate_tic_result")
+            require(not RUN_LEVEL & r["inputs"].keys(), "run_level_input_overridden")
+            inputs[tic] = r["inputs"]
+        stars = [evaluate(tic_id=tic, inputs=inputs.get(tic), calculation_versions=calculation_versions,
+                          ai_policy=ai_policy) for tic in tics]
     except MALFORMED as exc:
-        return dict(status="rejected", publishable=False, aggregator_version=VERSION,
-                    reason=str(exc) if isinstance(exc, GoldValidationError) else "malformed_input",
-                    manifest=None, bundles=[], candidates=[])
+        return dict(_rejected(exc), bundles=[])
+    out = combine(run_id=run_id, silver_attempt=silver_attempt, targets=targets, stars=stars,
+                  calculation_versions=calculation_versions, ai_policy=ai_policy)
+    out["bundles"] = [s["payload"] for s in stars if s["payload"] is not None] if out["manifest"] else []
+    return out
 
 
-def _aggregate(run_id, silver_attempt, targets, results, versions, policy):
+def evaluate(*, tic_id, inputs, calculation_versions, ai_policy):
+    """One target's share of the run: status, reasons, 125 payload, manifest entry, rows.
+
+    Callers with many stars (80 on Spark) run this where each star's inputs live,
+    keep the heavy payload there and hand combine() only the light fields.
+    inputs None means the target was not processed. Run-level versions and policy
+    are validated again by combine(), so a bad value still rejects the run.
+    """
+    tic = identifier(tic_id)
+    # Overriding run-level values is a caller bug; a non-dict input is the star's own rejection.
+    require(not isinstance(inputs, dict) or not RUN_LEVEL & inputs.keys(), "run_level_input_overridden")
+    status, reasons, payload, rows = _star(tic, inputs, calculation_versions, ai_policy)
+    return dict(tic_id=tic, status=status, reasons=reasons, payload=payload,
+                bundle=None if payload is None else _bundle_entry(payload), candidates=rows or [])
+
+
+def combine(*, run_id, silver_attempt, targets, stars, calculation_versions, ai_policy):
+    """Fold evaluate() results into the run manifest and candidate table.
+
+    stars need tic_id, status, reasons, bundle and candidates; payload may be
+    dropped. A target without a star is unprocessed. Order does not matter.
+    """
+    try:
+        return _combine(run_id, silver_attempt, targets, stars, calculation_versions, ai_policy)
+    except MALFORMED as exc:
+        return _rejected(exc)
+
+
+def _rejected(exc):
+    return dict(status="rejected", publishable=False, aggregator_version=VERSION,
+                reason=str(exc) if isinstance(exc, GoldValidationError) else "malformed_input",
+                manifest=None, candidates=[])
+
+
+def _scope(run_id, silver_attempt, targets, versions, policy):
+    """Validate run-level inputs; return the targets in output order."""
     text(run_id)
     text(silver_attempt)
     require(not PER_STAR_VERSIONS & versions.keys(), "per_star_version_in_run")
@@ -58,38 +105,48 @@ def _aggregate(run_id, silver_attempt, targets, results, versions, policy):
     require(versions["ai_model"] == versions["ai_threshold"] == AI_NOT_EXECUTED, "ai_version_mismatch")
     tics = [identifier(t) for t in targets]
     require(bool(tics) and len(tics) == len(set(tics)), "invalid_targets")
-    inputs = {}
-    for r in results:
-        tic = identifier(r["tic_id"])
-        require(tic in tics, "result_outside_targets")
-        require(tic not in inputs, "duplicate_tic_result")
-        require(not RUN_LEVEL & r["inputs"].keys(), "run_level_input_overridden")
-        inputs[tic] = r["inputs"]
-    stars, bundles, rows = [], [], []
-    for tic in sorted(tics):
-        status, reasons, payload, star_rows = _star(tic, inputs.get(tic), versions, policy)
-        stars.append(dict(tic_id=tic, status=status, reasons=reasons))
-        if payload is not None:
-            bundles.append(payload)
-            rows += star_rows
+    return sorted(tics)
+
+
+def _combine(run_id, silver_attempt, targets, stars, versions, policy):
+    tics = _scope(run_id, silver_attempt, targets, versions, policy)
+    scope, by_tic = set(tics), {}
+    for s in stars:
+        tic = identifier(s["tic_id"])
+        require(tic in scope, "result_outside_targets")
+        require(tic not in by_tic, "duplicate_tic_result")
+        # Stars cross a process boundary on Spark; a ready star must carry its bundle.
+        require(s["status"] in STATUSES and (s["status"] == "ready") == (s["bundle"] is not None),
+                "invalid_star_result")
+        by_tic[tic] = s
+    entries, bundles, rows = [], [], []
+    for tic in tics:
+        s = by_tic.get(tic) or dict(status="unprocessed", reasons=[], bundle=None, candidates=[])
+        entries.append(dict(tic_id=tic, status=s["status"], reasons=s["reasons"]))
+        if s["bundle"] is not None:
+            bundles.append(deepcopy(s["bundle"]))
+            rows += s["candidates"]
     require(len({r["candidate_id"] for r in rows}) == len(rows), "duplicate_candidate_id")
-    require(len({b["bundle"]["id"] for b in bundles}) == len(bundles), "duplicate_bundle_id")
-    counts = {s: sum(star["status"] == s for star in stars) for s in STATUSES}
+    require(len({b["bundle_id"] for b in bundles}) == len(bundles), "duplicate_bundle_id")
+    counts = {s: sum(e["status"] == s for e in entries) for s in STATUSES}
     complete = counts["unprocessed"] == counts["request_failed"] == 0
     manifest = dict(schema_version=SCHEMA_VERSION, aggregator_version=VERSION, run_id=run_id,
         silver_attempt=silver_attempt, complete=complete, target_tic_count=len(tics),
-        counts=counts, stars=stars, calculation_versions=deepcopy(versions), ai_policy=deepcopy(policy),
-        bundles=[dict(tic_id=b["bundle"]["tic_id"], bundle_id=b["bundle"]["id"],
-                      bundle_version=b["bundle"]["bundle_version"],
-                      active_candidates=sum(c["status"] == "active" for c in b["candidates"]),
-                      retired_candidates=sum(c["status"] == "retired" for c in b["candidates"]),
-                      record_checksums=deepcopy(b["bundle"]["manifest"]["record_checksums"]))
-                 for b in bundles],
+        counts=counts, stars=entries, calculation_versions=deepcopy(versions), ai_policy=deepcopy(policy),
+        bundles=bundles,
         # Pre-publication upper bound only: tutorial exclusion and publish QA come later.
         discoverable_ready_tic_count=len({r["tic_id"] for r in rows if r["discoverable"]}),
         candidate_count=len(rows), candidates_sha256=content_hash(rows))
     return dict(status="complete" if complete else "incomplete", publishable=False,
-                aggregator_version=VERSION, manifest=manifest, bundles=bundles, candidates=rows)
+                aggregator_version=VERSION, manifest=manifest, candidates=rows)
+
+
+def _bundle_entry(payload):
+    b = payload["bundle"]
+    return dict(tic_id=b["tic_id"], bundle_id=b["id"], bundle_version=b["bundle_version"],
+                active_candidates=sum(c["status"] == "active" for c in payload["candidates"]),
+                retired_candidates=sum(c["status"] == "retired" for c in payload["candidates"]),
+                record_checksums=deepcopy(b["manifest"]["record_checksums"]))
 
 
 def _star(tic, inputs, versions, policy):

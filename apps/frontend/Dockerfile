@@ -20,6 +20,8 @@ ARG VITE_OAUTH_GOOGLE_URL=/oauth2/authorization/google
 ARG VITE_NICKNAME_REQUIRED_CODE=""
 ARG VITE_INITIAL_NICKNAME_PATH=""
 ARG VITE_SKY_RENDERER_ENABLED=false
+# 비우면 방문자가 ?ui=cinema로 고른다(src/ui-choice.ts). 운영 CI는 "true"를 준다.
+ARG VITE_CINEMA=""
 RUN npm run build
 # 렌더러를 켠 빌드에만 표식을 남긴다. 배포 헬스 확인이 이 경로를 본다.
 # 플래그가 빠진 채 빌드되면 표식이 없어 헬스가 실패하고 직전 이미지로 돌아간다.

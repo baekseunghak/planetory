@@ -9,6 +9,8 @@ import { useAnalysisFold } from "./AnalysisSession";
 import { AnalysisJudgment } from "./AnalysisJudgment";
 import { AnalysisDraftPersistence } from "./AnalysisDraftPersistence";
 import type { PeriodogramViewport } from "./analysis-judgment";
+import { useClassicAnalysisEmits } from "../../cinema/analysis-classic/classic-bridge";
+import { useCinemaCopy } from "./cinema-copy";
 import {
   choosePeriod,
   fineTunePeriod,
@@ -33,6 +35,7 @@ function PeriodTune({
   const sliderId = useId(),
     hintId = useId();
   const { stage } = useAnalysisStage();
+  const cinema = useCinemaCopy();
   const [error, setError] = useState("");
   const apply = (period: number) => {
     try {
@@ -77,12 +80,19 @@ function PeriodTune({
     );
   return (
     <div className="period-selection-controls">
-      <p id={hintId}>
-        허용 범위 {format.format(selection.minimum)}~
-        {format.format(selection.maximum)}일
-        {` · 조정 간격 ${format.format(selection.fineStep)}일`}
-        {` · Page 키 ${format.format(selection.step)}일`}
-      </p>
+      {cinema ? (
+        <p id={hintId}>
+          조정 범위 {cinema.format.periodDays(selection.minimum, 3)} ~{" "}
+          {cinema.format.periodDays(selection.maximum, 3)}
+        </p>
+      ) : (
+        <p id={hintId}>
+          허용 범위 {format.format(selection.minimum)}~
+          {format.format(selection.maximum)}일
+          {` · 조정 간격 ${format.format(selection.fineStep)}일`}
+          {` · Page 키 ${format.format(selection.step)}일`}
+        </p>
+      )}
       <label htmlFor={sliderId}>반복 주기 미세 조정</label>
       <input
         id={sliderId}
@@ -94,7 +104,11 @@ function PeriodTune({
         step="any"
         value={selection.periodDays}
         aria-describedby={hintId}
-        aria-valuetext={`${format.format(selection.periodDays)}일`}
+        aria-valuetext={
+          cinema
+            ? (cinema.format.periodDays(selection.periodDays, 3) ?? undefined)
+            : `${format.format(selection.periodDays)}일`
+        }
         onChange={(event) =>
           apply(sliderPeriod(selection, event.currentTarget.valueAsNumber))
         }
@@ -120,6 +134,8 @@ export function PeriodSelectionWorkspace({
   const { draft: retryDraft, resume } = useRetryDraft();
   const { stage } = useAnalysisStage();
   const { state: phase } = usePhaseDraft();
+  const cinema = useCinemaCopy();
+  useClassicAnalysisEmits(context.ticId, data);
   const viewport = useRef<PeriodogramViewport>({
     minDays: data.periodogram.periodMinDays,
     maxDays: data.periodogram.periodMaxDays,
@@ -190,15 +206,35 @@ export function PeriodSelectionWorkspace({
       >
         <section className="period-selection" aria-label="선택 주기">
           <div className="period-selection-row">
-            <span>
-              주기{" "}
-              {change ? `${change.selection.periodDays.toFixed(6)}일` : "— 일"}
-            </span>
-            <span>
-              {phase.range
-                ? `선택 위상 ${phase.range.phaseStart.toFixed(4)}–${phase.range.phaseEnd.toFixed(4)}`
-                : "구간 선택 전"}
-            </span>
+            {cinema ? (
+              <>
+                <span>
+                  주기{" "}
+                  {change
+                    ? cinema.format.periodDays(change.selection.periodDays, 3)
+                    : "— 일"}
+                </span>
+                <span>
+                  {phase.range
+                    ? `선택 위상 ${cinema.format.phaseRange(phase.range.phaseStart, phase.range.phaseEnd)}`
+                    : "구간 선택 전"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  주기{" "}
+                  {change
+                    ? `${change.selection.periodDays.toFixed(6)}일`
+                    : "— 일"}
+                </span>
+                <span>
+                  {phase.range
+                    ? `선택 위상 ${phase.range.phaseStart.toFixed(4)}–${phase.range.phaseEnd.toFixed(4)}`
+                    : "구간 선택 전"}
+                </span>
+              </>
+            )}
           </div>
           <p
             className="analysis-sr-only"

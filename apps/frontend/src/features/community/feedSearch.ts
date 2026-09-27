@@ -14,6 +14,10 @@ export type FeedSearch = {
   tag: string;
 };
 const fields = ["q", "searchIn", "author", "ticId", "board", "tag"] as const;
+// Navigation-only parameters that other screens attach to feed links (the
+// star panel, results page and profiles add returnTo). They are not search
+// conditions, so the search check skips them instead of rejecting the URL.
+const navigationParams: readonly string[] = ["returnTo"];
 export function readFeedSearch(params: URLSearchParams, routeTic?: string) {
   const values: FeedSearch = {
     q: params.get("q") ?? "",
@@ -26,7 +30,7 @@ export function readFeedSearch(params: URLSearchParams, routeTic?: string) {
   const duplicate = [...fields, "cursor"].some(
     (key) => params.getAll(key).length > 1,
   );
-  const invalidDirect = [...params].some(([key, value]) =>
+  const invalidDirect = [...params].filter(([key]) => !navigationParams.includes(key)).some(([key, value]) =>
     ![...fields, "cursor", "size"].includes(key) ||
     !value.trim() || value.includes("\0") ||
     (key === "size" && (!/^[1-9]\d{0,2}$/.test(value) || Number(value) > 100)),

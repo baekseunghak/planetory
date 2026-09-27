@@ -11,6 +11,12 @@ release_id=$1
 yarn_slots=${2:-2}
 [[ "$release_id" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo INVALID_RELEASE_ID >&2; exit 1; }
 [[ "$yarn_slots" =~ ^[1-8]$ ]] || { echo INVALID_YARN_SLOTS >&2; exit 1; }
+# Command regexes (^...$) need sudo 1.9.10+. Older sudo reads them as literal paths that visudo
+# accepts but nothing ever matches, so the failure would first show at the DAG's first sudo call.
+sudo_version="$(sudo -V | sed -n '1s/^Sudo version \([0-9][0-9.]*\).*/\1/p')"
+[[ "$(printf '%s\n' 1.9.10 "$sudo_version" | sort -V | head -1)" == 1.9.10 ]] || {
+  echo "SUDO_REGEX_UNSUPPORTED version=${sudo_version:-unknown}" >&2; exit 1;
+}
 release="/opt/planetory-silver/releases/$release_id"
 controller="$release/spark/tess_silver_ctl.py"
 [[ -f "$controller" ]] || {
@@ -25,6 +31,8 @@ for path in /opt/planetory-silver /opt/planetory-silver/releases \
 done
 id tess-airflow >/dev/null
 sudoers="/etc/sudoers.d/planetory-tess-silver-airflow-$release_id"
+# The unchecked candidate may sit in /etc/sudoers.d: sudo's includedir skips names containing a
+# dot, and only the dot-free final name below (after visudo -cf) is ever read as policy.
 candidate="$(mktemp /etc/sudoers.d/planetory-tess-silver-airflow.XXXXXX)"
 trap 'rm -f -- "$candidate"' EXIT
 cat > "$candidate" <<EOF

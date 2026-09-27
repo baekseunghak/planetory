@@ -1,0 +1,17 @@
+/* Cinema only (imported by ./copy.tsx, which only the cinema app loads).
+   In the window, judgment and review steps the classic periodogram takes the
+   member back to the period step when pressed
+   (features/analysis/PeriodogramChart.tsx, `data-reselect`), so it looks
+   pressable there and says so under the chart. */
+.analysis-screen .periodogram-plot[data-reselect="true"] {
+  cursor: pointer;
+}
+.analysis-screen .periodogram-plot[data-reselect="true"]:active {
+  cursor: grabbing;
+}
+.analysis-screen .periodogram-card .periodogram-reselect-hint {
+  margin: 2px 0 0;
+  font-size: var(--pc-text-2xs, 11px);
+  line-height: 1.4;
+  color: var(--pc-accent, #5ec4f7);
+}

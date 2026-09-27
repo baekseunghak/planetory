@@ -45,7 +45,25 @@
    └─ manifest + checksum
 ```
 
-Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. GCP의 실제 staging 경로는 아직 정하지 않았으므로 `/lake/gold` 같은 경로를 임의로 만들지 않습니다.
+Gold 후보는 `PublicationBundle`이라는 논리 계층입니다. 게시 전 후보 집계(79)를 담는 staging 경로는 80에서 아래처럼 제안했고 MR에서 확인받습니다([Spark Gold 절](../../distributed-system/spark/README.md#tess-silver--gold-게시-후보-s15p21c206-80)). 확정 전에는 이 밖의 `/lake/gold` 경로를 만들지 않습니다. 2026-09-27 Node 1 배포에서 외부 snapshot 하나를 이 제안 경로에 확정했으므로, 경로가 바뀌면 옮깁니다.
+
+```text
+/lake/external/tess/run_id=<UTC>/            외부 카탈로그 원본(run마다 한 번 수집, 받은 바이트 그대로)
+├─ sources/<source>.csv
+└─ _READY.json
+/lake/gold/tess/publication-candidates/run_id=<UTC>/attempt=<UTC>/
+├─ bundles/      별마다 {tic_id, 125 payload, Publisher 메타데이터} 한 줄(JSON Lines)
+├─ candidates/   active 후보 행 한 줄씩(JSON Lines)
+├─ manifest/     79 run manifest 한 줄
+├─ summary/
+└─ _READY.json   저장 무결성 확정(part 파일별 SHA-256·바이트·줄 수). 게시 준비는 아래 marker가 정한다
+/lake/gold/tess/publish-ready/run_id=<UTC>/_READY.json   게시 준비 gate 통과 run 하나(Publisher 입력, 276)
+/lake/external/tess/.staging/run=<UTC>/                 수집 중 임시(확정 rename 전)
+/lake/gold/tess/.staging/run=<UTC>/attempt=<UTC>/       Gold job 출력(확정 rename 전, 계약 실패 시 진단용으로 남음)
+/lake/gold/.spark-staging/run=<UTC>/attempt=<UTC>/      Spark on YARN 제출 staging
+/lake/gold/tess/.gate/run=<UTC>/check=<UTC>/            gate 판정(통과하면 지우고, 거절되면 진단용으로 남음)
+/validation/S15P21C206-80/                              Canary(확정 뒤 확인하고 지움)
+```
 
 PublicationBundle은 최소한 다음 입력을 포함합니다.
 
@@ -116,7 +134,7 @@ Publisher 검증 → planetory_gold_writer로 PostgreSQL Primary 접속
 
 ## 결정 대기 사항
 
-- GCP Gold 후보의 실제 staging 경로와 HDFS 백업 형식
+- GCP Gold 후보 staging 경로 확정(80 제안, MR 확인 대기)과 HDFS 백업 형식
 - PostgreSQL Gold 배열의 실측 용량과 archived 판 행 보존 운영값
 - Raw·Silver 등 계층별 데이터 보존 기간
 - 개인정보 및 민감정보 처리 정책

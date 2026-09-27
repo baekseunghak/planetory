@@ -161,9 +161,13 @@ if ($Step -eq 'Install') {
     try {
         $null = New-Item -ItemType Directory -Path (Join-Path $tempRoot 'spark') -Force
         $null = New-Item -ItemType Directory -Path (Join-Path $tempRoot 'astro_kernel') -Force
-        foreach ($name in @('requirements.txt', 'tess_bronze_ctl.py', 'tess_silver.py', 'tess_silver_ctl.py')) {
+        # The same release carries the 80 Gold stage (Gold job, gate, external collector) and its schema.
+        foreach ($name in @('requirements.txt', 'tess_bronze_ctl.py', 'tess_silver.py', 'tess_silver_ctl.py',
+                            'tess_gold.py', 'tess_gold_ctl.py', 'tess_gate.py', 'tess_external_ctl.py')) {
             Copy-Item -LiteralPath (Join-Path $repoRoot "distributed-system\spark\$name") -Destination (Join-Path $tempRoot "spark\$name")
         }
+        $null = New-Item -ItemType Directory -Path (Join-Path $tempRoot 'contracts\gold') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'contracts\gold\publication-candidates.schema.json') -Destination (Join-Path $tempRoot 'contracts\gold')
         Copy-Item -Path (Join-Path $repoRoot 'libs\astro-kernel\astro_kernel\*.py') -Destination (Join-Path $tempRoot 'astro_kernel')
         Copy-Item -LiteralPath (Join-Path $repoRoot 'distributed-system\ingestion\hdfs\TessSequenceFileTool.java') -Destination $tempRoot
         & tar -czf $archive -C $tempRoot .
@@ -194,6 +198,10 @@ test -f "$stage/spark/tess_silver.py"
 test -f "$stage/spark/tess_silver_ctl.py"
 test -f "$stage/spark/tess_bronze_ctl.py"
 test -f "$stage/spark/requirements.txt"
+test -f "$stage/spark/tess_gold_ctl.py"
+test -f "$stage/spark/tess_gate.py"
+test -f "$stage/spark/tess_external_ctl.py"
+test -f "$stage/contracts/gold/publication-candidates.schema.json"
 test -d "$stage/astro_kernel"
 mkdir "$stage/classes"
 classpath=$(env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 HADOOP_CONF_DIR=/etc/hadoop /opt/hadoop/bin/hadoop classpath)

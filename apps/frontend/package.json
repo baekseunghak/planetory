@@ -12,6 +12,7 @@
     "dev:settings": "vite --mode settings --host 127.0.0.1 --port 58382 --strictPort",
     "test:settings": "playwright test --config=playwright.settings.config.ts",
     "dev:presentation": "node --import tsx scripts/presentation-server.mjs",
+    "dev:cinema": "node --import tsx scripts/cinema-server.mjs",
     "data:prepare": "tsx scripts/prepare-observations.ts",
     "dev:observations": "vite --mode observations --host 127.0.0.1 --port 5182 --strictPort",
     "test:observations": "playwright test --config=playwright.observations.config.ts",
@@ -73,15 +74,19 @@
     "test:p1": "playwright test --config=playwright.p1.config.ts"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans-kr": "5.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router-dom": "7.18.3"
+    "react-router-dom": "7.18.3",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "6.1.1",
     "prettier": "3.9.6",
     "tsx": "4.23.13",

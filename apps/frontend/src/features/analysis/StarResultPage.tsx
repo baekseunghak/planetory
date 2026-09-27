@@ -5,6 +5,7 @@ import { pagePath } from "../../app/paths";
 import { usePageContext } from "../../app/usePageContext";
 import { Ai, Statistics } from "./AnalysisResult";
 import { SubmissionHistoryButton } from "./SubmissionHistoryButton";
+import { useCinemaCopy } from "./cinema-copy";
 import { readStarResult, starResultPath, type StarResult } from "./star-result";
 import "./star-result.css";
 import type { ResidualStatus } from "./residual-job";
@@ -63,9 +64,11 @@ const match: Record<string, string> = {
 export function StarResultPage() {
   const { ticId = "", currentPath, returnTo } = usePageContext();
   const location = useLocation();
+  // 시네마 앱은 같은 응답을 자기 말로 보여 준다. develop 화면은 그대로다.
+  const Entry = useCinemaCopy()?.StarResult ?? StarResultEntry;
   // 같은 TIC의 공개 검토에서 돌아와도 재조회하고 이전 응답을 남기지 않는다.
   return (
-    <StarResultEntry
+    <Entry
       key={`${ticId}:${location.key}`}
       ticId={ticId}
       from={currentPath}

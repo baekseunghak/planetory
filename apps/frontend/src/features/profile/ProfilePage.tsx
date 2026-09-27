@@ -17,6 +17,7 @@ import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
 import { FollowButton, FollowSummary } from "../follow/Follow";
 import { p1Enabled } from "../p1";
+import { useCinemaWording } from "../../shared/cinema-wording";
 export function MyProfilePage() {
   const { member } = useSession();
   return member ? (
@@ -60,6 +61,9 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   );
   const state = useReadModel(path, load),
     profile = state.data;
+  // Cinema app: the tabs come first and "탐사 요약" is the body under its tab
+  // (src/shared/cinema-wording); develop keeps the summary above the tabs.
+  const cinema = useCinemaWording();
   return (
     <section className="profile-page">
       <header className="profile-heading">
@@ -123,7 +127,9 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               은하 방문하기 →
             </Link>
           )}
-          {section === "summary" && <Summary profile={profile} own={own} />}
+          {section === "summary" && !cinema && (
+            <Summary profile={profile} own={own} />
+          )}
           <nav className="profile-tabs" aria-label="프로필 메뉴">
             {(
               [
@@ -151,6 +157,9 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               </button>
             ))}
           </nav>
+          {section === "summary" && cinema && (
+            <Summary profile={profile} own={own} />
+          )}
           {section !== "summary" &&
             (own && section === "stars" && slots.stars ? (
               <ProfileStarFilters
@@ -174,6 +183,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
 }
 function Summary({ profile, own }: { profile: Profile; own: boolean }) {
   const s = profile.achievementSummary;
+  const cinema = useCinemaWording();
   return (
     <>
       <div
@@ -207,7 +217,7 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
               </dd>
             </div>
             <div>
-              <dt>탐색 완료한 별</dt>
+              <dt>{cinema ? "탐사 완료한 별" : "탐색 완료한 별"}</dt>
               <dd>
                 {s.completedStarCount!.toLocaleString()}
                 <small>개</small>
@@ -232,6 +242,12 @@ function Summary({ profile, own }: { profile: Profile; own: boolean }) {
             </time>
           </dd>
         </dl>
+      ) : cinema ? (
+        <p className="profile-meta">
+          {profile.starListVisibility === "PRIVATE"
+            ? "이 탐사자는 별 목록을 공개하지 않았습니다."
+            : "이 탐사자는 별 목록을 공개했습니다."}
+        </p>
       ) : (
         <p className="profile-meta">
           별 목록 {profile.starListVisibility === "PRIVATE" ? "비공개" : "공개"}{" "}

@@ -210,7 +210,7 @@ Canary·failed-TIC 재처리는 대상 TIC를 먼저 필터링한 뒤 행 계약
 └─ _READY.json
 ```
 
-각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. `_READY.json`(현재 `planetory.tess-silver-attempt.v5`, 이전 운영 attempt는 v4. 차이는 [275 절](#attempt-_readyjson-v5)) 은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
+각 attempt는 덮어쓰지 않는 독립 결과다. Spark는 `.staging`에 `errorifexists`로 쓰고 제어기가 네 Parquet 출력의 RF2·part checksum과 전체 FSCK를 확인한 뒤 attempt 전체를 원자 rename한다. part checksum은 공용 `part_checksum_digest`가 `hdfs dfs -checksum`을 묶음(최대 200개)으로 8개까지 동시에 불러 계산한다. 1~13 attempt의 248개 파일 재감사가 약 12분에서 85초로 줄었다(2026-09-27 Node 1 실측, digest는 marker 기록값과 같음). `_READY.json`(현재 `planetory.tess-silver-attempt.v5`, 이전 운영 attempt는 v4. 차이는 [275 절](#attempt-_readyjson-v5))은 attempt 처리가 끝났다는 뜻이며 `failed_tics=0`을 뜻하지 않는다. 최초 탐색·반복 탐색 수와 실패·미완료·QA 판정 수를 별도로 기록한다. `failed_tics`는 최초 `failed`와 반복 `failed`·`incomplete`의 합이며, 반복 `qa_stopped`는 `iteration_qa_stopped_tics`에만 센다. 선택 TIC와 최초 manifest TIC, 반복 대상 TIC와 반복 manifest TIC, 실제 반복 출력 TIC를 각각 대조한다. 후속 소비자가 선택할 current alias는 아직 만들지 않는다.
 
 `target_combined`는 `QUALITY == 0` 필터, Sector별 중앙값 정규화, 전처리 결과와 다음 배열을 같은 위치로 보존한다.
 
@@ -422,3 +422,67 @@ release `20260926T234554Z`(커밋 `b86c1939`)로 먼저 Canary(run `20260927T015
 - 오프라인: `test-tess-silver.ps1` 통과(Silver 47, Airflow 12). snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기를 검사한다.
 - 실클러스터: Sector 14 Canary와 증분 run(위 절).
 - 남은 일: `889e43e8` release로 입력 검사 시간 실측, 두 Bronze 버전이 섞이는 backfill 버킷 1개, TIC별 선택 인덱스 구현, 나머지 버킷을 위한 용량 결정(Raw 복제 계수·보존 기간), 80의 DAG 연결.
+
+## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)
+
+상태: 별 단위 변환·Spark job(`tess_gold.py`)·제어기(`tess_gold_ctl.py`)·외부 카탈로그 수집기(`tess_external_ctl.py`)·게시 준비 gate(`tess_gate.py`) 구현, 로컬 단위 검증(2026-09-27). 통합 DAG·수동 승인도 구현했고, Node 1 배포와 외부 카탈로그 수집을 한 번 마쳤다(2026-09-27). 첫 Gold Canary는 marker 읽기 결함으로 실패해 코드를 고쳤고, 고친 release `20260927T052453Z`로 Canary(TIC 5개)를 통과했다(ready 3·held 1·no_signal 1, 약 20분). 이 시간은 checksum 가속(`d1dd5226`) 이전 release로 잰 값이다. 그 안의 사전 검사 약 12분은 대부분 Silver 재감사이고, 지금은 약 85초이므로 같은 Canary는 약 9~10분으로 본다(추정, 재측정 전). 1~13 전체 run은 전이다.
+
+입력은 확정된 Sector 1~13 Silver attempt(`/lake/silver/pipeline_version=S15P21C206-78-20260924T093328Z/run_id=20260924T133559Z/attempt=20260924T133730Z`)다. 초기 공개 범위를 S1~13으로 넓히는 DEC-01 변경은 제안 상태이며 MR에서 확인받는다([서비스 범위 7.1절](../../docs/data/tess-service-scope-v1.md#71-dec-01-초기-공개-결정-2026-09-24-정책-승인)).
+
+- **Silver 저장 행을 그대로 쓴다.** `tess_gold.rebuild`가 `target_combined`에서 123·124가 읽는 `CURVE_COLUMNS` 10열(시간·Sector·제품·보정 flux·`kept`·구간 마스크·전처리 상태와 식별자)만 받아 119 필드로 되살리고, `result_json`을 iteration으로 읽는다. 전처리·BLS는 다시 계산하지 않는다. 새로 계산하는 것은 123 제공 해상도(세그먼트·5,000점 원본 주기도)뿐이다.
+- **별 하나의 순서.** `tess_gold.star`가 122 catalog → 123 → 124 조인 → 79 `evaluate`를 부른다. catalog가 준비되지 않은 별(보류·무신호)은 곡선을 읽지 않는다.
+- **run을 멈추는 것과 별만 거절하는 것.** Silver와 이 단계의 규칙 버전(iteration·BLS·품질·전처리·잔차)이 다르면 `GoldContractError`로 run을 멈춘다. 한 별의 커널 오류는 그 별만 `rejected`(`gold:<예외>:<내용>`)로 둔다. Silver가 TIC을 격리하는 것과 같다.
+- **Silver가 끝내지 못한 TIC.** manifest로 판정한다(`silver_state`). 재시도 불가 실패는 `rejected`, 재시도 가능 실패와 반복 상한(`incomplete`)은 `unprocessed`다. `unprocessed`가 남으면 run은 완료되지 않는다.
+- **1~13 입력 분포(2026-09-27 확인).** 대상 128,253 TIC(튜토리얼 5종 제외)은 반복 탐색 완료 110,601, `qa_stopped` 17,548, Silver 최초 탐색 실패 104(재시도 불가, `rejected`)다. Canary와 run의 `target_tic_count`는 이 값과 대조한다. 완료된 TIC 중 채택 후보가 있는 5,156개만 곡선을 읽는다. `qa_stopped`는 `failed`·`incomplete`가 아니어서 `unprocessed`가 되지 않고, 122 catalog가 `incomplete_iteration`으로 보류(`held`)한다. 그중 채택 후보가 있는 1,073개도 이번 run에서는 게시되지 않는다.
+- **임시 ID.** run 안에서만 유일하다. 번들은 TIC, 후보·세그먼트는 TIC × 100 + n이다. 실제 ID는 DB가 적재 때 붙인다(276).
+- **입력 snapshot.** `input_snapshot_ids`는 튜토리얼 게시처럼 제품 파일마다 `<product_id>:sha256:<raw SHA-256>`을 두고, 조인한 외부 snapshot을 붙인다. 제품 checksum은 Bronze의 `raw_sha256`에서 받는다. 규칙 승인 참조(identity·discoverability·external)는 run 입력으로 받는다.
+- **검증.** `test_tess_gold.py`가 합성 두 Sector에 실제 119·122를 돌린다. Silver 직렬화 함수(`_target_row`, `_json`)로 저장한 행의 `CURVE_COLUMNS`만으로 되살린 결과와 메모리 객체로 만든 결과가 같은지 본다. CI `validate:astro-kernel`에서 돈다.
+
+### Spark job과 제어기
+
+`tess_gold_ctl.py`가 Node 1에서 사전 점검, YARN 제출, 저장 확정을 맡는다. 계산은 `tess_gold.py`가 Spark on YARN에서 한다. Silver 제어기의 사전 점검·Silver attempt 감사·런타임·원자 확정 함수를 그대로 쓰고, 같은 YARN 슬롯 잠금(`yarn_slot`) 안에서 돈다.
+
+```text
+preflight  cluster_preflight + Silver attempt 재감사(Bronze coverage SHA 일치) + 외부 snapshot marker·원천 집합·파일·FSCK(원천 SHA는 job이 대조)
+canary     --tic-id 1~5개, /validation/S15P21C206-80 에 확정 후 삭제
+run        /lake/gold/tess/publication-candidates/run_id=<run>/attempt=<UTC>
+gate       --attempt <확정된 attempt>, 통과하면 /lake/gold/tess/publish-ready/run_id=<run>/_READY.json
+```
+
+- **job 흐름.** Silver 규칙 버전을 driver에서 먼저 확인한다. 대상은 Silver `initial_bls` TIC에서 `--exclude-tic`(튜토리얼 5종)을 뺀 것이다. manifest로 Silver 미완료 TIC을 가린다. 완료된 반복 탐색에 채택 후보가 있는 TIC만 `target_combined`(`CURVE_COLUMNS`)와 Bronze `product_id`·`raw_sha256`을 읽는다. 곡선은 `tic_id` 조인 셔플 한 번만 거치고, 그 파티션 수(`--shuffle-partitions`, AQE 파티션 병합 끔)를 그대로 evaluate 병렬도로 쓴다. 별도 `repartition`은 두지 않는다. executor가 별마다 `evaluate`를 부르고 payload를 그 자리에서 `bundles`에 쓴다. driver는 가벼운 결과만 모아 79 `combine`을 부른다.
+- **출력.** Publisher가 표준 라이브러리로 줄 단위로 읽도록 JSON Lines 텍스트로 쓴다(276과 합의). `manifest`는 79 manifest 한 줄, `candidates`는 79 후보 행 한 줄씩, `bundles`는 별마다 `{"tic_id", "payload": <125 payload>, "metadata"}` 한 줄이다. `metadata`는 `star`(TEFF·RADIUS·TESSMAG, Bronze에 없어 null)와 `observations`(payload Sector마다 Bronze `timedel`을 초로 바꾼 `cadence` `"120s"`와 `source_version`=PROCVER)다. 한 Sector에 PROCVER가 둘이면 계약 오류로 멈춘다. `summary`는 한 줄 JSON이다. 제어기는 기록한 줄 수가 manifest의 `ready`·후보 수와 같을 때만 `_READY.json`(`planetory.tess-gold-attempt.v1`)을 쓰고 원자 rename한다. marker에는 Silver·Bronze·외부 입력 SHA, 필수 원천, 제외 TIC, 승인 참조, 상태 수와 part 파일마다 내용 SHA-256·바이트·줄 수(`files`, 내용을 로그에 찍지 않고 스트리밍으로 계산)를 남긴다. 이 marker는 저장 확정이며 게시 준비가 아니다.
+- **실패.** 규칙 버전 불일치, 원천 문서 오류, 79 결합 거절, 출력 수 불일치, executor의 예상 밖 예외는 `_TERMINAL`을 남기고 종료 코드 65로 끝나 재시작하지 않는다. staging은 진단용으로 남긴다. 그 밖의 실패는 앱이 끝난 것을 확인한 뒤 staging을 지운다. 상태 파일은 입력 검사보다 먼저 쓰므로 입력 단계의 계약 실패도 원인과 함께 Airflow에 보인다. 커밋 뒤 완료 기록 전에 끊긴 run이 재시작되면, 같은 입력으로 커밋된 attempt를 재감사해 채택하고 다시 계산하지 않는다. unit은 하루 7번까지만 시작하므로 결정적인 비계약 실패가 YARN에 끝없이 제출되지 않는다.
+- **marker 읽기.** Spark `textFile`·`binaryFiles`는 이름이 `_`나 `.`로 시작하는 파일을 입력에서 빼므로 `_READY.json`을 없는 경로로 본다. job과 gate는 marker를 Hadoop FileSystem API(`read_hdfs_file`)로 읽는다. 첫 Node 1 Canary(2026-09-27)가 이 결함으로 실패했다.
+- **자원.** executor는 Silver와 같은 크기(14개 × core 2, 5g + 2048 MiB)다. driver는 별 결과를 모으므로 4g + 1024 MiB, `spark.driver.maxResultSize=3g`다. 실측 전 값이다. Gold·gate 앱은 Bronze·Silver와 같은 YARN 슬롯 잠금(기본 2개)을 쓴다. 이 잠금은 동시 실행 수만 제한하므로, Silver가 YARN 대부분을 쓰는 동안 Gold를 돌리지 않는 것은 운영자가 지키는 규칙이다.
+
+### 게시 준비 gate(`tess_gate.py`)
+
+`tess_gold_ctl.py gate --attempt <확정된 attempt> --release-dir <release>`가 확정된 Gold attempt를 다시 읽어 검사하고, 통과했을 때만 게시 준비 marker를 쓴다. Gold job과 다른 Spark 앱이라 작성 코드의 결함이나 저장 손상이 게시 준비로 이어지지 않는다. 검사 job은 판정만 쓰고 marker는 제어기만 쓴다.
+
+| 단계 | 검사 |
+| --- | --- |
+| 제어기 | attempt 경로·marker, canary가 아님, run 완료(`complete=true`), part 파일 내용 SHA-256·바이트·줄 수 재계산, FSCK, Silver·외부 입력 marker SHA가 attempt 기록과 같음 |
+| 검사 job | 79 manifest·후보 행 schema(`contracts/gold/publication-candidates.schema.json`), manifest와 attempt marker 일치, 상태 수 합 = 대상 수, 후보 표 수·유일성·`candidates_sha256` 재계산, bundles 줄마다 manifest 항목·후보 표 active ID와 대조, payload 배열·레코드 checksum과 `bundle_version` 재계산, `metadata` 모양 |
+
+- **게시 준비 marker.** `/lake/gold/tess/publish-ready/run_id=<run>/_READY.json`(`planetory.tess-publish-ready.v1`). attempt 경로, Gold marker SHA, `files`(attempt 기준 상대 경로마다 SHA-256·바이트·줄 수), 상태 수, 제외 TIC, 승인 참조, 검사 결과를 담는다. check마다 다른 `.part`에 쓰고 `mv`로 확정한다. `mv`는 기존 marker를 거부하므로 두 gate가 겹쳐도 하나만 남고, 남은 marker는 그것을 쓴 gate의 내용이다. 같은 run에 같은 attempt면 그대로 두고, 다른 attempt면 거부한다.
+- **실패.** 판정에 오류가 하나라도 있으면 종료 코드 65로 멈추고 marker를 쓰지 않는다. 판정은 `/lake/gold/tess/.gate/run=<run>/check=<UTC>`에 남긴다.
+- **Publisher 입력(276).** 게시 task는 marker를 `<dir>/_READY.json`으로, attempt의 `manifest`·`candidates`·`bundles`를 `<dir>/` 아래로 받는다. marker `files`의 키가 `<dir>` 기준 상대 경로다. 276은 전송 무결성(`files`), 줄 수(bundles = `counts.ready`, manifest = 1)와 별 단위 검사를 하고, 후보 표 재해시는 gate가 맡는다.
+- **런타임.** 검사 job은 `jsonschema`를 쓴다. 커널 `uv.lock`과 같은 버전을 `requirements.txt`에 고정했다. release에 schema 파일이 있어야 한다.
+
+### 외부 카탈로그 수집(`tess_external_ctl.py`)
+
+Gold run 전에 Node 1에서 `collect --run-id <UTC> --release-dir <release>`로 원천 4종의 **전체 표**를 받는다. 대상 TIC 목록으로 조회하지 않는다. 표가 수 MB라 12.8만 TIC 목록보다 작고, 한 run이 한 시점의 표를 쓰게 된다. 수집기는 표준 라이브러리만 쓰고 정규화는 하지 않는다. 정규화는 커널이 있는 Gold job이 한다.
+
+| 원천 | 받는 곳 |
+| --- | --- |
+| `nea_toi` | NEA TAP `toi` 전체 |
+| `nea_pscomppars` | NEA TAP `pscomppars` 중 `tic_id is not null` |
+| `mast_tce_s1_s13` | MAST S1~S13 다중 Sector TCE 통계 CSV |
+| `exofop_toi` | ExoFOP TOI CSV 전체 |
+
+- **검사.** 응답마다 크기 상한(64 MiB), `Content-Length`, HTML 응답, 헤더 중복, 열 폭, 빈 표와 커널이 읽는 열이 있는지 본다. 행 값은 출력하지 않는다. 원천 하나라도 실패하면 아무것도 확정하지 않는다.
+- **확정.** 받은 바이트 그대로 `/lake/external/tess/run_id=<UTC>/sources/<source>.csv`에 두고, `_READY.json`(`planetory.tess-external-snapshot.v1`)에 원천마다 요청 URL·조회 시각·SHA-256·바이트·행 수·열·앞머리 줄 수를 남긴다. RF2·FSCK 뒤 원자 rename한다. 같은 run을 다시 수집하면 확정된 snapshot을 그대로 쓴다.
+- **정규화(Gold job).** 파일 바이트를 marker의 SHA-256과 대조한 뒤 커널 `normalize_export_row`로 정규화한다. TIC이 있는 행은 모두 정규화 행이나 보류 행(비통과 포함)이 된다. TIC을 읽을 수 없는 행이 하나라도 있으면 그 원천 전체를 미검증으로 둔다. 형식이 바뀌었을 때 "외부 라벨 없음"으로 잘못 게시하지 않고 `request_failed`로 멈추게 하려는 것이다.
+- **별 단위 snapshot.** job은 별마다 그 별의 행만 골라 124 snapshot을 만든다. `raw_sha256`은 그 별 행의 해시다. 원천을 다시 받아도 그 별의 행이 같으면 snapshot과 판 버전이 그대로다. 파일 전체 해시로 하면 받을 때마다 모든 별이 재게시된다. 이 해석은 124 계약 담당 확인 대상이다.
+- **Node 1 연결.** NEA·MAST·ExoFOP HTTPS 연결을 확인했고, run `20260927T033816Z`를 수집했다(2026-09-27). https가 아닌 곳으로 리다이렉트되면 그 원천을 실패로 본다.
+- **원천 선택.** 수집기는 항상 4종을 받고 Gold는 요청 원천이 수집된 집합과 정확히 같아야 하므로, DAG conf의 `required_sources`는 4종 전체만 받는다.

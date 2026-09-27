@@ -78,7 +78,7 @@
       "retryAt": null,
       "failure": null,
       "model": "gpt-5.4-mini",
-      "promptVersion": "nasa-ko-v4"
+      "promptVersion": "nasa-ko-v5"
     }
   ]
 }
