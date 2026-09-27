@@ -102,6 +102,31 @@ class CollectTest(unittest.TestCase):
             self.collect(fetch)
         self.assertFalse(any(argv[:2] == ("dfs", "-put") for argv in self.calls))
 
+    def test_downloads_stay_on_https(self):
+        class Response:
+            headers = {"Content-Length": "3"}
+
+            def __init__(self, url):
+                self.url = url
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, limit):
+                return b"a,b"
+
+            def geturl(self):
+                return self.url
+
+        with patch.object(collector, "urlopen", lambda request, timeout: Response("https://example.org/t.csv")):
+            self.assertEqual(collector.download("https://example.org/t.csv")[0], b"a,b")
+        with patch.object(collector, "urlopen", lambda request, timeout: Response("http://example.org/t.csv")), \
+                self.assertRaisesRegex(ValueError, "non_https_redirect"):
+            collector.download("https://example.org/t.csv")
+
     def test_a_committed_run_is_reused_not_downloaded_again(self):
         final = f"{collector.ROOT}/run_id=20260927T000000Z"
         self.exists.add(final)

@@ -28,9 +28,11 @@ def publication_request(conf: dict) -> dict:
     release, run_id, silver = (str(conf.get(key, "")) for key in ("release", "run_id", "silver_attempt"))
     if not (RELEASE.fullmatch(release) and RUN_ID.fullmatch(run_id) and SILVER.fullmatch(silver)):
         raise ValueError("invalid immutable release, run ID or Silver attempt")
+    # The collector always fetches all four and Gold requires exactly the collected set, so a
+    # subset would pass here and then stop the Gold unit with exit 65.
     sources = conf.get("required_sources")
-    if not isinstance(sources, list) or not sources or len(set(sources)) != len(sources) or set(sources) - set(SOURCES):
-        raise ValueError(f"required_sources must be distinct names from {SOURCES}")
+    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources) or sorted(sources) != list(SOURCES):
+        raise ValueError(f"required_sources must list exactly {SOURCES}")
     # The tutorial stars are in Sectors 1~13, so a run must name what it leaves out, even as [].
     excluded = conf.get("exclude_tics")
     if (not isinstance(excluded, list) or len(excluded) > MAX_EXCLUDED or len(set(excluded)) != len(excluded)
@@ -117,7 +119,8 @@ def unit_progress(output: str, done: str, max_restarts: int) -> tuple[str, objec
     # The state file survives a reboot; systemd's result does not.
     if state.get("status") == done and not active:
         return "complete", state
-    if state.get("status") in ("terminal_failed", "rejected") or unit.get("ExecMainStatus") == "65":
+    # A running unit has not written its own state yet, so an older attempt's state must not end the wait.
+    if not active and (state.get("status") in ("terminal_failed", "rejected") or unit.get("ExecMainStatus") == "65"):
         return "terminal", f"data contract failed: {state.get('failure_detail') or state.get('errors')}"
     if active:
         if int(unit.get("NRestarts") or 0) > max_restarts:

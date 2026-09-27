@@ -1,5 +1,7 @@
 """80 게시 준비 gate: 실제 합성 별의 125 payload와 79 manifest가 검사를 통과하고, 한 곳이라도 바뀌면 실패하는지 본다."""
+import inspect
 import json
+import re
 import sys
 import unittest
 from copy import deepcopy
@@ -87,6 +89,14 @@ class GateTest(unittest.TestCase):
         ordered = sorted(lines, key=lambda c: (c["tic_id"], c["candidate_id"]))
         self.assertEqual(gate.stream_hash(gate.canonical(c) for c in ordered), self.manifest["candidates_sha256"])
         self.assertEqual(gate.stream_hash([]), tess_gold.content_hash([]))
+
+    def test_markers_are_not_read_through_file_input_format(self):
+        # FileInputFormat drops names starting with '_' or '.': textFile(".../_READY.json") reported a
+        # missing input path in the first Node 1 Canary (2026-09-27). Markers go through read_hdfs_file.
+        for module in (tess_gold, gate):
+            source = inspect.getsource(module)
+            self.assertIsNone(re.search(r'(textFile|binaryFiles|wholeTextFiles)\(f?"[^"]*/[_.]', source), module.__name__)
+            self.assertIn('read_hdfs_file(', inspect.getsource(module.run if module is gate else module.load_sources))
 
 
 if __name__ == "__main__":

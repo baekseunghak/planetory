@@ -93,8 +93,9 @@ def star(tic_id: int, iteration: Mapping[str, Any], row: Mapping[str, Any] | Non
             raise GoldContractError(f"Silver curve and iteration disagree tic={tic}")
         return evaluate(tic_id=tic, inputs=_inputs(tic, cat, iteration, row, product_checksums,
                                                    deliveries, required_sources, approvals), **RUN_POLICY)
-    except (ValueError, TypeError, KeyError) as exc:
-        # Kernel contract errors (all ValueError subclasses) isolate the star, as Silver isolates a TIC.
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, ArithmeticError) as exc:
+        # Kernel contract errors (ValueError subclasses) and malformed kernel input isolate the star,
+        # as Silver isolates a TIC. Anything else stops the run in evaluate_row.
         return dict(tic_id=tic, status="rejected", reasons=[f"gold:{type(exc).__name__}:{str(exc)[:200]}"],
                     payload=None, bundle=None, candidates=[])
 
@@ -222,9 +223,24 @@ def select_sources(marker: Mapping[str, Any], files: Mapping[str, bytes], requir
     return {name: parse_source(name, files[f"{name}.csv"], entry) for name, entry in entries.items()}
 
 
+def read_hdfs_file(context, path: str) -> bytes:
+    """A whole HDFS file through the Hadoop FileSystem API.
+
+    textFile and binaryFiles go through FileInputFormat, which drops names starting with
+    '_' or '.', so they report a marker such as _READY.json as a missing input path.
+    """
+    jvm = context._jvm
+    hadoop_path = jvm.org.apache.hadoop.fs.Path(path)
+    stream = hadoop_path.getFileSystem(context._jsc.hadoopConfiguration()).open(hadoop_path)
+    try:
+        return bytes(jvm.org.apache.commons.io.IOUtils.toByteArray(stream))
+    finally:
+        stream.close()
+
+
 def load_sources(spark, external: str, required: list[str]) -> dict:
     try:
-        marker = json.loads("".join(spark.sparkContext.textFile(f"{external}/_READY.json").collect()))
+        marker = json.loads(read_hdfs_file(spark.sparkContext, f"{external}/_READY.json"))
     except ValueError as exc:
         raise GoldContractError(f"external marker is not JSON: {exc}") from exc
     files = {path.rsplit("/", 1)[-1]: bytes(data)
@@ -283,6 +299,8 @@ def evaluate_row(row: Mapping[str, Any], sources, required_sources, approvals) -
     except GoldContractError as exc:
         # Raising here would only make Spark retry the task; the driver stops the run instead.
         return dict(tic_id=tic, contract_error=str(exc))
+    except Exception as exc:  # e.g. unreadable result_json: deterministic, so a restart would repeat it
+        return dict(tic_id=tic, contract_error=f"unexpected {type(exc).__name__}: {str(exc)[:200]}")
 
 
 def bundle_line(result: Mapping[str, Any]) -> str:
