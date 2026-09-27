@@ -19,9 +19,10 @@
 //   VITE_CINEMA=false    legacy develop pages instead of the cinema shell
 //   VITE_CINEMA=auto     a build without VITE_CINEMA: legacy unless ?ui=cinema
 //                        (src/ui-choice.ts)
-//   CINEMA_ANALYSIS      analysis screen: classic (default) | new (the new
-//                        design, variant B, for everyone and without the
-//                        variant toggle); defines VITE_CINEMA_ANALYSIS
+//   CINEMA_ANALYSIS      analysis screen: new (default: the new design,
+//                        variant B, for everyone and without the variant
+//                        toggle, as in production) | classic (the old one);
+//                        defines VITE_CINEMA_ANALYSIS
 //                        (src/cinema/analysis/variant.ts)
 //   CINEMA_HMR=0         no live reload: source edits never reload an open page
 //                        (a rehearsal or a second review server); reload by hand
@@ -93,7 +94,7 @@ const realSample = /^(0|false|no)$/i.test(realSampleDir)
   : loadRealSample(realSampleDir);
 const scenario = process.env.CINEMA_SCENARIO ?? "member";
 const analysis =
-  (process.env.CINEMA_ANALYSIS ?? "").trim().toLowerCase() || "classic";
+  (process.env.CINEMA_ANALYSIS ?? "").trim().toLowerCase() || "new";
 const windowRule = !/^(0|false|no)$/i.test(
   process.env.CINEMA_WINDOW_RULE ?? "",
 );

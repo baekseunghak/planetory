@@ -8,11 +8,13 @@ export const cinemaDevTools: boolean =
   import.meta.env.DEV && import.meta.env.VITE_CINEMA_DEV_TOOLS === "true";
 
 /**
- * The new design (variant B) for every member: the build defines
- * VITE_CINEMA_ANALYSIS="new" (`CINEMA_ANALYSIS=new npm run dev:cinema`).
- * Unset, as in production builds, it is the classic variant. A literal
- * comparison, so a build without it leaves variant B out of the bundle
- * (the same rule as ./variant.ts `analysisVariantFromBuild`).
+ * The classic variant instead of the new design: only when the build defines
+ * VITE_CINEMA_ANALYSIS="classic" (`CINEMA_ANALYSIS=classic npm run
+ * dev:cinema`). Unset, as in production builds, every member gets the new
+ * design (variant B). A literal comparison, so a build without it leaves the
+ * classic variant's code out of the bundle (its stylesheet stays, scoped to
+ * `.pc-classic-analysis`; the same rule as ./variant.ts
+ * `analysisVariantFromBuild`).
  */
-export const cinemaAnalysisNew: boolean =
-  import.meta.env.VITE_CINEMA_ANALYSIS === "new";
+export const cinemaAnalysisClassic: boolean =
+  import.meta.env.VITE_CINEMA_ANALYSIS === "classic";

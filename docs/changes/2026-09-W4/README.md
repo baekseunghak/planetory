@@ -397,3 +397,4 @@
 | 2026-09-27 | 최종 리뷰: Canary marker 읽기 결함(숨김 파일 필터) 수정, 원천 4종 강제, 재시작·gate 상태 보강, sudoers 대조 테스트 | S15P21C206-80 | read_hdfs_file, FileInputFormat, _READY.json, required_sources, committed_attempt, StartLimitBurst, PIPELINE_APP_NAME_RE, sudoers | 검증 완료(Node 1 Gold Canary 통과), 전체 run 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | part checksum 일괄·동시 계산으로 Silver 재감사 12분 → 85초 | S15P21C206-80 | part_checksum_digest, hdfs dfs -checksum, CHECKSUM_WORKERS, 재감사, preflight | 검증 완료(Node 1 실측) | [기록](2026-09-27.md) |
 | 2026-09-27 | 공통 API 클라이언트가 게이트웨이 502·504 읽기만 약 30초 재시도(쓰기·503·시간 초과는 그대로) | S15P21C206-279 | 502, 504, gatewayRetryMs, 자동 재시도 금지, deploy:backend, Connection refused, me/sky | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
+| 2026-09-27 | 분석 화면을 새 디자인으로 확정(코드 기본값, `classic`일 때만 기존형) | S15P21C206-274 | VITE_CINEMA_ANALYSIS, CINEMA_ANALYSIS, analysisVariantFromBuild, cinemaAnalysisClassic, 새 디자인, 기존형 | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |

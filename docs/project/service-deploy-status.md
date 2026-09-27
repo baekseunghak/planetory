@@ -211,7 +211,7 @@ GCP Node 1 Publisher가 tailnet으로 EC2-A 서비스 DB에 적재하고 Backend
 ## 시네마 화면 운영 기본 (S15P21C206-274, 2026-09-27)
 
 - `build:frontend`·`web:image`가 `--build-arg VITE_CINEMA=true`로 빌드하고 MR `web:build`도 같은 값으로 번들링한다. 운영 번들에는 시네마 앱만 들어가므로 운영에서 기존 화면과 `?ui=legacy`는 쓸 수 없다.
-- 분석 화면은 기존형이다. 새 디자인(`VITE_CINEMA_ANALYSIS=new`)은 팀 결정 전이라 켜지 않았다.
+- 분석 화면은 새 디자인이다(2026-09-27 팀 결정, 코드 기본값). `VITE_CINEMA_ANALYSIS`를 주지 않는 운영 빌드가 새 디자인을 싣고 기존형 화면 코드는 번들에서 빠진다(기존형 스타일시트는 남지만 `.pc-classic-analysis` 아래에만 걸려 화면에 영향이 없다). `VITE_CINEMA_ANALYSIS=classic`일 때만 기존형이며(Dockerfile ARG는 두지 않았다), 운영을 되돌릴 때는 해당 MR을 revert한다.
 - 되돌리기는 빌드 인자를 빼고 병합·배포하거나, 직전 이미지의 `deploy:frontend:ec2-a`를 다시 실행한다(프로젝트 설정이 롤백 재실행을 허용한다).
 - 스모크(`web:e2e:smoke`)와 `test:docker-defaults`는 `VITE_CINEMA` 없는 빌드(기존 화면)를 본다. 시네마 전용 운영 번들을 여는 브라우저 검사는 아직 없다.
 - 상태: 병합·배포 전. 배포 전까지 운영은 기존 화면이 기본이다(`?ui=cinema`로 켬).
