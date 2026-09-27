@@ -48,8 +48,12 @@ SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v4"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
 BRONZE_SNAPSHOT_SCHEMA = "planetory.tess-silver-bronze-snapshot.v1"
 # Planned usage after the attempt, the same line the Raw loader applies to its RF2 estimate.
-# The 70-75% band stays free for Gold backup and Raw/Bronze; preflight still refuses at 75%.
-SILVER_CAPACITY_LIMIT = 0.70
+# Raised from 70%/75% by the operator on 2026-09-27 to fit more backlog buckets. Above about 80%
+# (4 of 5 DataNodes) one lost DataNode can no longer be re-replicated to RF2; that risk is accepted.
+# The 80-85% band stays free for Gold backup and Raw/Bronze.
+SILVER_CAPACITY_LIMIT = 0.80
+# The shared Silver/Gold preflight refuses any new work at or above this HDFS use.
+PREFLIGHT_STOP_PERCENT = 85
 SILVER_APP_RE = re.compile(r"\sS15P21C206-78-silver-")
 MAX_TIC_BUCKETS = 1024  # tess_silver.py re-validates the same bound inside the job
 V4_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
@@ -218,8 +222,8 @@ def cluster_preflight(bronze_coverage_path: str = DEFAULT_BRONZE_COVERAGE, *, th
     if not (match := re.search(r"Live datanodes \((\d+)\)", report)) or int(match.group(1)) != 5:
         raise RuntimeError("expected five live DataNodes")
     used = hdfs("dfs", "-df", "/").stdout.splitlines()
-    if len(used) < 2 or int(used[-1].split()[-1].rstrip("%")) >= 75:
-        raise RuntimeError("HDFS usage is at or above 75%")
+    if len(used) < 2 or int(used[-1].split()[-1].rstrip("%")) >= PREFLIGHT_STOP_PERCENT:
+        raise RuntimeError(f"HDFS usage is at or above {PREFLIGHT_STOP_PERCENT}%")
     nodes = yarn("node", "-list", "-all").stdout
     if len(re.findall(r"\sRUNNING\s", nodes)) != 5:
         raise RuntimeError("expected five RUNNING NodeManagers")
@@ -342,7 +346,7 @@ def discard_failed_attempt(run_id: str, attempt_id: str, output: str, applicatio
     """Remove a restartable attempt's partial staging so systemd restarts do not pile up.
 
     A multi-day run that fails is restarted from scratch as a new attempt; without this
-    each failure leaves up to the full output size behind until HDFS hits the 75% gate.
+    each failure leaves up to the full output size behind until HDFS hits the preflight stop line.
     The final attempt path is never touched. A YARN CLI hiccup can report UNKNOWN while
     the app is still healthy, so staging is kept unless the app is confirmed ended.
     """

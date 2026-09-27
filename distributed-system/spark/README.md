@@ -366,11 +366,11 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 
 ### HDFS 용량 가드
 
-- 제어기는 제출 직전 `hdfs dfs -df /`로 `floor(Size × 0.70) − Used`를 계산해 job에 넘긴다. 0 이하면 HDFS에 쓰기 전에 exit 65로 끝난다. Raw 적재가 RF2 예상 사용률에 적용하는 70% 선과 같고, 75% 사전 점검은 그대로다.
+- 제어기는 제출 직전 `hdfs dfs -df /`로 `floor(Size × 0.80) − Used`를 계산해 job에 넘긴다. 0 이하면 HDFS에 쓰기 전에 exit 65로 끝난다. Silver·Gold가 함께 쓰는 사전 점검(`cluster_preflight`)은 사용률 85% 이상이면 새 작업을 거부한다(`PREFLIGHT_STOP_PERCENT`). 처음에는 Raw 적재의 RF2 예상 70% 선에 맞춰 70%·75%로 두었고, 2026-09-27 운영자 결정으로 80%·85%로 올렸다. Bronze 제어기의 75% 선과 Raw 적재의 70%·75% 선은 바꾸지 않았다.
 - job은 대상 TIC와 Bronze 제품 수를 센 뒤 BLS 전에 추정 출력 `2 × (제품 × 898,200 B + TIC × 927,300 B)`가 예산을 넘으면 `capacity_budget_exceeded`로 멈춘다(exit 65). 계수는 1~13 attempt 실측(`target_combined` 제품당, 나머지 출력 TIC당)이며, 이 식은 그 attempt의 RF2 683.0 GB를 0.1% 안으로 재현한다. 첫 backfill 버킷의 실제 크기로 다시 맞춘다.
 - 예산은 진행 중인 Silver 출력 하나만 가정한다. 다른 Silver YARN 앱이 실행 중이면 사전 점검이 거부하고 systemd가 5분 뒤 다시 시도한다. 버킷은 한 번에 하나씩 돌린다.
-- 70~75% 구간(약 500 GB)은 Gold PublicationBundle 백업([`/lake/publication-bundle-backup`](../../infra/distributed-system/README.md), 96)과 Raw·Bronze 적재 여유로 남긴다. Gold 백업은 추정 수십 GB이고, 별 48.9만 개를 모두 게시해도 약 235 GB(별당 240 KB 이하, RF2)다. 실측 전 추정이다.
-- 상한을 75%보다 올리지 않는다. DataNode 5대·RF2에서 한 대를 잃으면 나머지 4대가 그 블록을 다시 복제해야 하므로, 사용률이 약 80%(4/5)를 넘으면 복제 계수 2를 회복할 공간이 없다. `/mnt/data`는 YARN local(Silver `DISK_ONLY` 결과)과도 공유한다.
+- 80~85% 구간(약 500 GB)은 Gold PublicationBundle 백업([`/lake/publication-bundle-backup`](../../infra/distributed-system/README.md), 96)과 Raw·Bronze 적재 여유로 남긴다. Gold 백업은 추정 수십 GB이고, 별 48.9만 개를 모두 게시해도 약 235 GB(별당 240 KB 이하, RF2)다. 실측 전 추정이다.
+- **감수한 위험.** DataNode 5대·RF2에서 한 대를 잃으면 나머지 4대가 그 블록을 다시 복제해야 한다. 사용률이 약 80%(4/5)를 넘은 상태에서는 복제 계수 2를 회복할 공간이 없어, 그 노드를 되살리거나 공간을 비울 때까지 일부 블록이 한 벌로만 남는다. `/mnt/data`는 YARN local(Silver `DISK_ONLY` 결과)과도 공유한다. 또 Raw 적재는 RF2 예상 70% 선을 그대로 쓰므로, Silver가 70%를 넘기면 새 Sector Raw 적재가 멈춘다. 새 Sector를 받기 전에 이 선을 함께 정해야 한다.
 
 ### 2026-09-27 용량 점검 (읽기 전용)
 
@@ -392,7 +392,7 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 - **Bronze 워터마크 B**: Sector 1부터 끊김 없이 `_SUCCESS`가 있는 마지막 Sector.
 - **Silver 워터마크 S**: 확정된 Silver `_READY`로 계산한다. v4(1~13 원본)는 1~13을 덮는다. v5는 snapshot 마지막 Sector와 `selection`으로 `(through N, delta_from M, 버킷 K)` 묶음을 만든다. 버킷 K개가 모두 확정됐고 M ≤ S + 1이면 S = N이다. selection이 없는 v5는 `operation`이 `run`일 때만 전체 snapshot을 덮고, retry는 덮지 않는다.
 - **다음 할 일**: 시작한 증분이 있으면 그 증분의 가장 작은 빈 버킷을 고른다. K는 첫 버킷에 기록된 값을 그대로 쓰고, 크기는 끝난 버킷의 `estimated_output_bytes`로 잡는다. 시작한 증분이 없고 S < B이면 새 증분 `through B, delta S+1`을 만든다. 이때 `--plan-only` Spark job이 run과 같은 선택으로 TIC·제품 수만 세고 BLS 전에 끝난다. K는 추정 출력 ÷ 200 GB(`PLAN_BUCKET_BYTES`)로 정한다. S = B이면 `idle`이다.
-- **실행 중 보호**: Silver unit이나 YARN 앱이 돌고 있으면 `busy`를 돌려 같은 버킷을 두 번 시작하지 않는다. 버킷 추정치가 70% 예산을 넘으면 `wait_capacity`다.
+- **실행 중 보호**: Silver unit이나 YARN 앱이 돌고 있으면 `busy`를 돌려 같은 버킷을 두 번 시작하지 않는다. 버킷 추정치가 80% 예산을 넘으면 `wait_capacity`다.
 - **출력**: `SILVER_PLAN_JSON=`(`planetory.tess-silver-plan.v1`) 한 줄. `action`(`run`·`busy`·`idle`·`wait_capacity`), `bronze_through`, `silver_through`, `through_sector`, `delta_from_sector`, `tic_buckets`, `tic_bucket`, `done_buckets`, `estimated_bucket_bytes`, `capacity_budget_bytes`를 담는다. 운영자나 81 조정 DAG는 `run`이면 그 인자로 `-Step Start`를 실행한다.
 - 2026-09-27 증거로는 S = 14(1~13 원본 + Sector 14 증분), B = 70이므로 첫 계획은 `through 70, delta 15`다. Sector 14에만 관측된 TIC는 Sector 14 attempt가 계속 current다.
 - 새 v5 marker에는 `operation`(`run`·`canary`·`retry`)을 기록한다. Sector 14 attempt처럼 selection이 있는 attempt는 이 필드 없이도 계산된다.

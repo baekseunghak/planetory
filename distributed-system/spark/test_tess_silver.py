@@ -726,11 +726,12 @@ class SilverIncrementalContractTest(unittest.TestCase):
                 tess_silver_ctl.validate_sector_marker(1, marker)
 
     def test_capacity_budget_stops_at_the_planned_usage_line(self):
-        # 2026-09-27 inspection: 64.44% used leaves about 558 GB (RF2) below 70%.
+        # 2026-09-27 inspection: 64.44% used leaves about 1,560 GB (RF2) below the 80% line.
         budget = tess_silver_ctl.capacity_budget(self.DF)
-        self.assertEqual(budget, int(10026228858880 * 0.70) - 6460597239808)
-        self.assertAlmostEqual(budget / 1e9, 557.8, places=0)
-        full = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 700 300 70%\n"
+        self.assertEqual(budget, int(10026228858880 * 0.80) - 6460597239808)
+        self.assertAlmostEqual(budget / 1e9, 1560.4, places=0)
+        self.assertEqual((tess_silver_ctl.SILVER_CAPACITY_LIMIT, tess_silver_ctl.PREFLIGHT_STOP_PERCENT), (0.80, 85))
+        full = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 800 200 80%\n"
         with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=full)), \
                 self.assertRaisesRegex(SilverDataContractError, "no Silver capacity"):
             tess_silver_ctl.silver_capacity_budget()
@@ -977,7 +978,7 @@ class SilverIncrementPlanTest(unittest.TestCase):
         self.assertEqual((value["bronze_through"], value["silver_through"]), (70, 14))
         self.assertEqual((value["action"], value["through_sector"], value["delta_from_sector"],
                           value["tic_buckets"], value["tic_bucket"]), ("run", 70, 15, 1, 0))
-        self.assertEqual(value["capacity_budget_bytes"], 100000)
+        self.assertEqual(value["capacity_budget_bytes"], 200000)  # 80% of the fake 1,000,000 minus 600,000
 
     def test_plan_continues_an_open_increment_without_repricing(self):
         markers = [self.V4, self.bucket(14, 14, 1, 0), self.bucket(70, 15, 16, 0, 150), self.bucket(70, 15, 16, 1, 170)]
