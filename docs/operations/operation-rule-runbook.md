@@ -81,7 +81,7 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 
 ## 5. 튜토리얼 별·챌린지 회차
 
-`tutorial_stars`와 `challenge_rounds`도 SQL로 넣는다. 챌린지 별 등록, Redis 사전 적재 대상 지정과 회차 시작 순서는 [챌린지 별 등록·회차 전환 런북](challenge-round-runbook.md)을 따른다. DB가 저장할 때 다음을 거절한다.
+`tutorial_stars`, `challenge_rounds`와 회차 추가 대상 `challenge_round_extra_targets`(V30, 283)도 SQL로 넣는다. 챌린지 별 등록, Redis 사전 적재 대상 지정과 회차 시작 순서는 [챌린지 별 등록·회차 전환 런북](challenge-round-runbook.md)을 따른다. DB가 저장할 때 다음을 거절한다.
 
 - 대상 TIC이 없거나 `stars.service_status`가 `published`가 아니다. 공개 대상이 아닌 별은 발견에서 빠지므로(OPS-08) 회원에게 열 대상으로도 넣을 수 없다. 메시지는 `공개된 별만 <테이블>.<열>에 넣을 수 있습니다`다. 대상 열을 넣거나 바꿀 때만 검사하므로, 대상 별이 나중에 숨겨져도 회차를 닫거나 튜토리얼을 끄는 수정은 된다.
 - 회차 기간이 뒤집혔다(`ck_challenge_rounds_period`, `starts_on > ends_on`). 하루짜리 회차는 된다.
@@ -114,7 +114,7 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
   - V23까지 적용한 로컬 일회용 PostgreSQL 18.6에서 확인했다. 역할이 없으면 오류 75건과 종료 코드 1, V2 역할만 있으면 `planetory_stats_job` 오류 8건, 셋 다 있으면 종료 코드 0과 세 역할의 권한을 봤다(S15P21C206-256). 운영 DB에서는 실행해 보지 않았다.
 - 이미 마이그레이션한 DB에 데이터만 넣으면 거절된다. `pg_restore --data-only`나 운영 데이터를 개발 DB로 복사하는 작업이 여기에 해당한다. `COPY`도 행 트리거를 실행하기 때문이다.
   - `operation_settings`: 원본 행은 적용 시각이 모두 지났다(`trg_operation_settings_keep_history`).
-  - `tutorial_stars`·`challenge_rounds`: 원본에 대상 별이 나중에 숨겨진 행이 있을 수 있다(`trg_tutorial_stars_published`, `trg_challenge_rounds_published`).
+  - `tutorial_stars`·`challenge_rounds`·`challenge_round_extra_targets`: 원본에 대상 별이 나중에 숨겨진 행이 있을 수 있다(`trg_tutorial_stars_published`, `trg_challenge_rounds_published`, `trg_challenge_round_extra_targets_published`).
   - 대상 DB에는 V9가 넣은 `rule-0`이 이미 있어, 트리거를 꺼도 원본 `rule-0`과 기본 키가 겹친다.
 - `pg_restore --disable-triggers`는 FK 시스템 트리거까지 끄므로 슈퍼유저만 쓸 수 있다. 테이블 소유자 계정은 아래처럼 이 트리거만 이름으로 끈다. 트리거를 느슨하게 고치지 않는다.
 
@@ -123,6 +123,7 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-1' AND applied_at > no
 ALTER TABLE operation_settings DISABLE TRIGGER trg_operation_settings_keep_history;
 ALTER TABLE tutorial_stars DISABLE TRIGGER trg_tutorial_stars_published;
 ALTER TABLE challenge_rounds DISABLE TRIGGER trg_challenge_rounds_published;
+ALTER TABLE challenge_round_extra_targets DISABLE TRIGGER trg_challenge_round_extra_targets_published;  -- V30
 
 -- 2) V9가 넣은 rule-0을 지운다. 이 행을 참조하는 제출이 없는 새 DB여야 한다.
 DELETE FROM operation_settings WHERE rule_version = 'rule-0';
@@ -133,8 +134,10 @@ DELETE FROM operation_settings WHERE rule_version = 'rule-0';
 ALTER TABLE operation_settings ENABLE TRIGGER trg_operation_settings_keep_history;
 ALTER TABLE tutorial_stars ENABLE TRIGGER trg_tutorial_stars_published;
 ALTER TABLE challenge_rounds ENABLE TRIGGER trg_challenge_rounds_published;
+ALTER TABLE challenge_round_extra_targets ENABLE TRIGGER trg_challenge_round_extra_targets_published;  -- V30
 SELECT tgname, tgenabled FROM pg_trigger
- WHERE tgname IN ('trg_operation_settings_keep_history', 'trg_tutorial_stars_published', 'trg_challenge_rounds_published');
+ WHERE tgname IN ('trg_operation_settings_keep_history', 'trg_tutorial_stars_published', 'trg_challenge_rounds_published',
+                  'trg_challenge_round_extra_targets_published');
 ```
 
 - `values` 형식 CHECK와 회차 기간 CHECK는 끄지 않는다. V9 이후 DB에서 나온 원본이면 이미 통과한 값이다.

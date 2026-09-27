@@ -48,8 +48,8 @@ SELECT count(*)                                               AS pool,
   LEFT JOIN publication_bundles b ON b.tic_id = s.tic_id AND b.status = 'current'
  WHERE s.service_status = 'published'
    AND NOT EXISTS (SELECT 1 FROM tutorial_stars t WHERE t.active AND t.tic_id = s.tic_id)
-   AND NOT EXISTS (SELECT 1 FROM challenge_rounds r
-                    WHERE r.status = 'active' AND r.target_tic_id = s.tic_id);
+   AND NOT EXISTS (SELECT 1 FROM challenge_rounds r JOIN challenge_round_targets t ON t.round_id = r.id
+                    WHERE r.status = 'active' AND t.tic_id = s.tic_id);  -- 283부터 진행 회차 대상 전부
 
 -- ② 진행 중인 챌린지
 SELECT round_no, target_tic_id, starts_on, ends_on FROM challenge_rounds WHERE status = 'active';
@@ -83,7 +83,7 @@ SELECT (SELECT count(*) FROM submissions WHERE created_at > now() - interval '30
    (umask 077; cd /home/deploy/planetory && mkdir -p ~/backups && docker compose exec -T service-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > ~/backups/planetory-pre281-$(date -u +%Y%m%dT%H%M%SZ).dump)
    ```
 
-   K는 목표 별 수에서 현재 별 수와 챌린지 별 1개를 뺀 값이다. 목표 1,000개, 현재 12개면 987이다.
+   K는 목표 별 수에서 현재 별 수와 진행 회차 챌린지 대상 별 수(실행 당시 1개, 283 뒤 운영값 5개)를 뺀 값이다. 목표 1,000개, 현재 12개면 987이다.
 
    ```sql
    SELECT count(*) FROM star_unlocks WHERE user_id = <회원 id>;
