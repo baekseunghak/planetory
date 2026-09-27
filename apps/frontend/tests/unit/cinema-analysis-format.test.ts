@@ -206,6 +206,11 @@ test("result titles: a missed window, known planets, candidates, not planets", (
   // The hint says only what a not_matched receipt says.
   assert.match(f.NOT_MATCHED_HINT, /맞는 신호가 없었습니다/);
   assert.doesNotMatch(f.NOT_MATCHED_HINT, /주기가 틀|정답/);
+  // The server's width hint names the width alone; no hint keeps the plain line.
+  assert.match(f.notMatchedHint("WINDOW_TOO_WIDE"), /너무 넓습니다.*좁혀/);
+  assert.match(f.notMatchedHint("WINDOW_TOO_NARROW"), /너무 좁습니다.*넓혀/);
+  assert.equal(f.notMatchedHint(null), f.NOT_MATCHED_HINT);
+  assert.equal(f.notMatchedHint("SOMETHING_NEW"), f.NOT_MATCHED_HINT);
 });
 
 test("AI only when the model ran; statistics in whole percents", () => {

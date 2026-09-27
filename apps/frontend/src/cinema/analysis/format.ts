@@ -458,6 +458,22 @@ export function foundTitle(
 export const NOT_MATCHED_HINT =
   "고른 주기와 구간에 맞는 신호가 없었습니다. 접힌 곡선에서 밝기가 가장 많이 줄어드는 곳을 구간이 덮는지 확인해 보세요.";
 
+/**
+ * The server's width hint (S15P21C206-282): it comes only when the period and
+ * the position matched and the window width alone was off, so these lines may
+ * say so. Without it the plain hint above stays.
+ */
+const MISS_HINT: Record<string, string> = {
+  WINDOW_TOO_WIDE:
+    "주기와 위치는 맞았지만 구간이 신호보다 너무 넓습니다. 주기는 그대로 두고 구간만 좁혀 보세요.",
+  WINDOW_TOO_NARROW:
+    "주기와 위치는 맞았지만 구간이 신호보다 너무 좁습니다. 주기는 그대로 두고 구간만 넓혀 보세요.",
+};
+
+/** The help line after a miss, from the receipt's `missHint`. */
+export const notMatchedHint = (missHint: string | null | undefined): string =>
+  (missHint && MISS_HINT[missHint]) || NOT_MATCHED_HINT;
+
 /** "이번에는 새로 열린 별이 없습니다" (a recognized result that opened none). */
 export const NO_NEW_STAR = "이번에는 새로 열린 별이 없습니다.";
 
