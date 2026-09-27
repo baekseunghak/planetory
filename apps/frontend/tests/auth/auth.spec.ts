@@ -153,30 +153,54 @@ test("temporary OAuth outage is distinct, makes no automatic login retry, and ke
   await expect(page).toHaveURL(/\/me$/);
 });
 
-for (const status of [502, 503, 504]) {
-  test(`member lookup ${status} keeps the server session distinct from expiry and can recover`, async ({
+test("member lookup 503 keeps the server session distinct from expiry and can recover", async ({
+  page,
+}) => {
+  await login(page);
+  await page.route("**/api/v1/me", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "text/html",
+      body: "<h1>503 upstream unavailable</h1>",
+    }),
+  );
+  await page.goto("/login?returnTo=%2Fme");
+  await expect(
+    page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("로그인이 만료되었습니다. 다시 로그인해 주세요.", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.unroute("**/api/v1/me");
+  await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
+  await expect(page).toHaveURL(/\/me$/);
+});
+for (const status of [502, 504]) {
+  test(`member lookup ${status} from the gateway is retried until the backend is back`, async ({
     page,
   }) => {
     await login(page);
-    await page.route("**/api/v1/me", (route) =>
-      route.fulfill({
+    // Down for 0.5 s from the first lookup, like a deploy's container swap.
+    // Without a retry every initial lookup fails and the page stays put.
+    let upAt = Infinity;
+    await page.route("**/api/v1/me", (route) => {
+      if (Date.now() >= upAt) return route.fallback();
+      if (upAt === Infinity) upAt = Date.now() + 500;
+      return route.fulfill({
         status,
         contentType: "text/html",
         body: `<h1>${status} upstream unavailable</h1>`,
-      }),
-    );
+      });
+    });
     await page.goto("/login?returnTo=%2Fme");
-    await expect(
-      page.getByRole("heading", { name: "회원 정보를 확인하지 못했습니다" }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/me$/);
     await expect(
       page.getByText("로그인이 만료되었습니다. 다시 로그인해 주세요.", {
         exact: true,
       }),
     ).toHaveCount(0);
-    await page.unroute("**/api/v1/me");
-    await page.getByRole("button", { name: "로그인 상태 다시 확인" }).click();
-    await expect(page).toHaveURL(/\/me$/);
   });
 }
 test("first nickname validation, duplicate reason and successful /me confirmation", async ({
