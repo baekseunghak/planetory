@@ -198,32 +198,18 @@ export function CinemaHistoryDetail({
         })
       : null;
 
+  const publicationPrimary = ready?.explanation.publication.state === "UNPUBLISHED";
   return (
     <main className="page history-detail pc-result-page">
       <h2>제출 기록 상세</h2>
       <p>제출 한 건의 선택과 판정을 확인합니다.</p>
-      <nav aria-label="제출 기록 이동">
-        <Link to={parent}>{explorationBackLabel(parent)}</Link>
-      </nav>
-      {detail.phase === "loading" && <p role="status">불러오는 중입니다.</p>}
-      {(detail.phase === "denied" ||
-        detail.phase === "error" ||
-        detail.phase === "unreadable") && (
-        <>
-          <p role="alert">{detail.message}</p>
-          {detail.phase === "error" && (
-            <button type="button" onClick={retryDetail}>
-              기록 다시 불러오기
-            </button>
-          )}
-        </>
-      )}
-
-      {ready && (
-        <>
+      <nav className="history-navigation" aria-label="제출 기록 이동">
+        <Link className={!publicationPrimary ? "history-primary" : undefined} to={parent}>{explorationBackLabel(parent)}</Link>
+        {ready && <>
           {(ready.explanation.publication.state !== "NOT_ELIGIBLE" ||
             ready.explanation.publication.publicAnalysisId) && (
             <Link
+              className={publicationPrimary ? "history-primary" : undefined}
               to={pagePath(
                 "publication",
                 { historyId },
@@ -250,6 +236,24 @@ export function CinemaHistoryDetail({
               이 별의 탐사 결과
             </Link>
           )}
+        </>}
+      </nav>
+      {detail.phase === "loading" && <p role="status">불러오는 중입니다.</p>}
+      {(detail.phase === "denied" ||
+        detail.phase === "error" ||
+        detail.phase === "unreadable") && (
+        <>
+          <p role="alert">{detail.message}</p>
+          {detail.phase === "error" && (
+            <button type="button" onClick={retryDetail}>
+              기록 다시 불러오기
+            </button>
+          )}
+        </>
+      )}
+
+      {ready && (
+        <>
           <dl className="history-receipt">
             <div>
               <dt>별</dt>
@@ -404,11 +408,6 @@ export function CinemaHistoryDetail({
           </details>
         </>
       )}
-
-      {/* Back where the address says; also from a record that cannot be read. */}
-      <p className="history-back">
-        <Link to={parent}>{explorationBackLabel(parent)}</Link>
-      </p>
     </main>
   );
 }

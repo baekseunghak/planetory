@@ -12,9 +12,9 @@ export function CommunityTabs({
   const p1Enabled = useLiveP1();
   const tabs = [
     ["", "전체", boardHref("")],
-    ["official", "공식 스레드", officialHref],
-    ["STAR", "별 게시판", boardHref("STAR")],
     ["FREE", "자유 게시판", boardHref("FREE")],
+    ["STAR", "별 게시판", boardHref("STAR")],
+    ["official", "공식 스레드", officialHref],
     ["hot", "핫 토픽", "/community/hot-topics"],
     ...(p1Enabled ? [["following", "팔로잉", "/community/following"]] : []),
   ];

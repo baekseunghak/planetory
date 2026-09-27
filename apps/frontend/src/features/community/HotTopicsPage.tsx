@@ -45,17 +45,7 @@ export function HotTopicsPage() {
         <h1>커뮤니티</h1>
         <p>서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요.</p>
       </header>
-      <div className="post-actions">
-        <Link
-          to={
-            "/posts/new?returnTo=" +
-            encodeURIComponent(location.pathname + location.search)
-          }
-        >
-          새 글 쓰기
-        </Link>
-      </div>
-      <CommunityTabs active="hot" />
+<CommunityTabs active="hot" />
       <div className="community-columns">
         <div className="community-main">
           <section

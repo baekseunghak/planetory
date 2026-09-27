@@ -5,13 +5,11 @@ import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useReadModel } from "../community/useReadModel";
 import { formatJoinedDate, readProfile, type Profile } from "./contracts";
-import { NicknameEditor } from "./NicknameEditor";
 import {
   ProfileSection,
   ProfileSlots,
   type ProfileSlotComponents,
 } from "./ProfileSlots";
-import { UsageGuide } from "./UsageGuide";
 import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
@@ -90,12 +88,6 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         {own && (
           <div className="profile-actions">
             <Link to="/settings">설정</Link>
-            <NicknameEditor
-              memberId={memberId}
-              nickname={profile?.nickname ?? member?.nickname ?? ""}
-              active={!!profile}
-            />
-            <UsageGuide />
           </div>
         )}
       </div>

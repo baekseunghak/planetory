@@ -2092,3 +2092,53 @@ body {
     display: none;
   }
 }
+
+/* Floating navigation uses the same surface as the star-search panel. */
+.cinema-shell dialog.cinema-menu {
+  position: fixed;
+  inset: auto 24px auto auto;
+  width: min(280px, calc(100vw - 24px));
+  height: auto;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-lg);
+  overflow-y: auto;
+  box-shadow: 0 16px 48px #0006;
+  z-index: 100;
+}
+.cinema-shell dialog.cinema-menu[open] {
+  animation: cinema-menu-enter 180ms ease-out;
+}
+.cinema-menu nav { margin-top: 16px; gap: 4px; }
+.cinema-menu nav a {
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 18px;
+  color: var(--pc-ink-dim);
+}
+.cinema-menu nav a[aria-current] { color: var(--pc-accent); background: #ffd66b0a; }
+.cinema-menu nav a:hover { color: var(--pc-ink); background: #ffffff08; }
+.cinema-menu .navigation-caption { border-top: 1px solid var(--pc-line); padding-top: 16px; margin-top: 16px; }
+.menu-trigger[aria-expanded="true"] { border-color: var(--pc-accent); color: var(--pc-accent); }
+.menu-trigger[aria-expanded="true"]:hover { color: var(--pc-ink); }
+@keyframes cinema-menu-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-shell dialog.cinema-menu[open] { animation: none; }
+}
+.cinema-shell .cinema-menu > nav { margin-top: 0; }
+.cinema-menu .navigation-caption { overflow-wrap: anywhere; }
+
+.cinema-shell .navigation.cinema-menu nav a[aria-current="page"] {
+  color: var(--pc-accent);
+}
+.cinema-shell .navigation.cinema-menu nav a:hover {
+  color: var(--pc-ink);
+}
+.cinema-shell .cinema-menu .navigation-caption .cinema-menu-member {
+  color: var(--pc-ink);
+}

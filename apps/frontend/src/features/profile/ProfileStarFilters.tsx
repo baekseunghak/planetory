@@ -30,7 +30,7 @@ export function ProfileStarFilters({
   }, [signature, props.memberId]);
   return (
     <>
-      <form
+      <form className="profile-star-filters"
         onSubmit={(e) => {
           e.preventDefault();
           try {
@@ -45,7 +45,7 @@ export function ProfileStarFilters({
         }}
       >
         <StarFilterFields value={draft} onChange={setDraft} />
-        <button type="submit">내 별 검색</button>
+        <button type="submit">별 검색</button>
         <button
           type="button"
           onClick={() => {
@@ -57,7 +57,7 @@ export function ProfileStarFilters({
             });
           }}
         >
-          검색 초기화
+          초기화
         </button>
       </form>
       {(error || problem) && <p role="alert">{error || problem}</p>}
