@@ -400,4 +400,4 @@
 | 2026-09-27 | 분석 화면을 새 디자인으로 확정(코드 기본값, `classic`일 때만 기존형) | S15P21C206-274 | VITE_CINEMA_ANALYSIS, CINEMA_ANALYSIS, analysisVariantFromBuild, cinemaAnalysisClassic, 새 디자인, 기존형 | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 제출·완료 판정·재개가 지도 버전(skyVersion)을 올려 옛 타일 캐시와 상세 불일치를 없앤다 | S15P21C206-280 | skyVersion, bumpVersion, member_sky_revisions, 같은 버전의 지도와 상세 자료가 다릅니다, D-7, planetCount | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
 | 2026-09-27 | 운영에서 응답하는 P1(공개 은하·팔로우·내 통계)만 새 화면에서 켬, 알림·전체 통계·탈퇴는 VITE_P1_ENABLED 유지 | S15P21C206-274 | useLiveP1, p1Enabled, VITE_P1_ENABLED, 공개 은하, 팔로우, 내 통계, DEPENDENCY_UNAVAILABLE, AGGREGATE_NOT_READY | 구현 완료, 병합·배포 전 | [기록](2026-09-27.md) |
-| 2026-09-27 | 시연 발표자 계정(별 약 1,000개) 준비 계획: 운영 규칙 `stars_per_achievement`를 3분만 올리고 마지막 튜토리얼 성과로 별을 연다 | S15P21C206-281 | stars_per_achievement, 발표자 계정, 운영 규칙 임시 상향, 복귀 예약, pickUndiscoveredStar | 제안, 운영 DB 미실행 | [기록](2026-09-27.md) |
+| 2026-09-27 | 시연 발표자 계정 준비: 운영 규칙 `stars_per_achievement`를 잠시 1,987로 올리고 마지막 튜토리얼 성과로 별 2,000개를 열었다 | S15P21C206-281 | stars_per_achievement, 발표자 계정, 운영 규칙 임시 상향, 복귀 예약, pickUndiscoveredStar, rule-1, rule-2 | 검증 완료(운영 DB 실행·사후 확인) | [기록](2026-09-27.md) |
