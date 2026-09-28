@@ -127,7 +127,7 @@ export function cinemaTitle(pathname: string, search = ""): string {
   } else if (analysis)
     name = tic(analysis[1]) ? `TIC ${analysis[1]} 분석` : "분석";
   else if (results)
-    name = tic(results[1]) ? `TIC ${results[1]} 분석 결과` : "분석 결과";
+    name = tic(results[1]) ? `TIC ${results[1]} 탐사 결과` : "이 별의 탐사 결과";
   else if (
     /^\/(community|posts|signal-threads|public-analyses|comments)(\/|$)/.test(
       pathname,
@@ -137,7 +137,8 @@ export function cinemaTitle(pathname: string, search = ""): string {
   else if (/^\/members\/[^/]+\/sky\/?$/.test(pathname))
     name = "다른 탐사자의 은하";
   else if (/^\/members\/[^/]+\/?$/.test(pathname)) name = "탐사자 프로필";
-  else if (/^\/history(\/|$)/.test(pathname)) name = "분석 기록";
+  else if (/^\/history\/[^/]+/.test(pathname)) name = "제출 기록 상세";
+  else if (/^\/history\/?$/.test(pathname)) name = "내 분석 기록";
   else if (/^\/publication(\/|$)/.test(pathname)) name = "분석 공개";
   else if (/^\/settings(\/|$)/.test(pathname)) name = "설정";
   else if (pathname === "/me" || pathname.startsWith("/me/"))

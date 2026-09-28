@@ -524,6 +524,7 @@ function Review({
                     )}
                     <button
                       disabled={review.busy}
+                      className="publication-primary"
                       onClick={() => review.publish([item])}
                     >
                       이 기록 게시

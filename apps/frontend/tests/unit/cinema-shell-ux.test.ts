@@ -166,7 +166,7 @@ test("each main screen names the browser tab", () => {
     cinemaTitle("/analysis/149603524"),
     "TIC 149603524 분석 · Planetory",
   );
-  assert.equal(cinemaTitle("/results/1"), "TIC 1 분석 결과 · Planetory");
+  assert.equal(cinemaTitle("/results/1"), "TIC 1 탐사 결과 · Planetory");
   assert.equal(cinemaTitle("/community"), "커뮤니티 · Planetory");
   assert.equal(cinemaTitle("/community/hot-topics"), "커뮤니티 · Planetory");
   assert.equal(cinemaTitle("/posts/p-1"), "커뮤니티 · Planetory");
@@ -178,7 +178,8 @@ test("each main screen names the browser tab", () => {
     cinemaTitle("/members/u-211/sky"),
     "다른 탐사자의 은하 · Planetory",
   );
-  assert.equal(cinemaTitle("/history/h-1"), "분석 기록 · Planetory");
+  assert.equal(cinemaTitle("/history"), "내 분석 기록 · Planetory");
+  assert.equal(cinemaTitle("/history/h-1"), "제출 기록 상세 · Planetory");
   assert.equal(cinemaTitle("/login"), "로그인 · Planetory");
   assert.equal(cinemaTitle("/nope"), "Planetory");
   for (const path of ["/sky", "/community", "/me"])

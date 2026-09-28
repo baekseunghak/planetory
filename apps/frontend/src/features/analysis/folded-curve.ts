@@ -3,8 +3,8 @@ import type { FoldPoint } from "./fold-data";
 export type FoldView = { zoom: number; center: number };
 export const MAX_FOLD_ZOOM = 32;
 export const fullFoldView: FoldView = { zoom: 1, center: 0.5 };
-export function clampFoldView(view: FoldView): FoldView {
-  const zoom = Math.max(1, Math.min(MAX_FOLD_ZOOM, view.zoom));
+export function clampFoldView(view: FoldView, maxZoom = MAX_FOLD_ZOOM): FoldView {
+  const zoom = Math.max(1, Math.min(maxZoom, view.zoom));
   const half = 1 / zoom;
   return {
     zoom,
@@ -15,13 +15,14 @@ export function zoomFoldView(
   view: FoldView,
   factor: number,
   ratio = 0.5,
+  maxZoom = MAX_FOLD_ZOOM,
 ): FoldView {
-  const next = clampFoldView({ ...view, zoom: view.zoom * factor });
+  const next = clampFoldView({ ...view, zoom: view.zoom * factor }, maxZoom);
   const anchor = view.center + ((ratio - 0.5) * 2) / view.zoom;
   return clampFoldView({
     zoom: next.zoom,
     center: anchor + ((0.5 - ratio) * 2) / next.zoom,
-  });
+  }, maxZoom);
 }
 export function foldFluxDomain(points: readonly FoldPoint[]): [number, number] {
   let min = Infinity,

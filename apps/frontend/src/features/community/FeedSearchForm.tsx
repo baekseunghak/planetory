@@ -71,8 +71,8 @@ export function FeedSearchForm({
           />
         </label>
         <button type="submit">검색</button>
-        <Link to={resetTo} state={null}>
-          조건 초기화
+        <Link to={resetTo} state={null} className="community-search-reset">
+          초기화
         </Link>
       </div>
       <details

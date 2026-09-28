@@ -139,7 +139,7 @@ function HistoryAttachment({
     <section className="material-viewer" aria-label={`첨부 기록 ${id}`}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
         {cinema
-          ? `첨부한 분석 기록 ${open ? "접기" : "열기"}`
+          ? `첨부한 분석 기록 ${id} ${open ? "접기" : "열기"}`
           : `분석 기록 ${id} ${open ? "접기" : "열기"}`}
       </button>
       {open && (

@@ -364,17 +364,8 @@ export function QuestPanel({
                         </p>
                         <div className="quest-actions">
                           <button onClick={() => choose(target.ticId)}>
-                            지도에서 선택
+                            챌린지 별 보기
                           </button>
-                          <Link
-                            to={pagePath(
-                              "analysis",
-                              { ticId: target.ticId },
-                              { returnTo: returnTo(target.ticId) },
-                            )}
-                          >
-                            챌린지 별 분석하기
-                          </Link>
                         </div>
                       </div>
                     ))}

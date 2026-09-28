@@ -51,7 +51,7 @@ export const displayColor = (hex: string) => {
     LinearSRGBColorSpace,
   );
 };
-export const ACCENT = "#5ec4f7";
+export const ACCENT = "#ffd369";
 export const BAD = "#f28b82";
 export const ORBIT = "#8d99ad";
 const ACCENT_COLOR = displayColor(ACCENT);

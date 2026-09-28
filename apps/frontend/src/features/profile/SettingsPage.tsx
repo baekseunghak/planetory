@@ -114,9 +114,6 @@ export function SettingsPage() {
   return (
     <section className="explorer-settings" aria-labelledby="settings-title">
       <header>
-        <p className="eyebrow">
-          <Link to="/me">마이페이지 / 설정</Link>
-        </p>
         <h1 id="settings-title">설정</h1>
       </header>
       <section className="settings-row">

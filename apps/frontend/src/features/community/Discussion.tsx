@@ -31,7 +31,7 @@ import { codePoints } from "./postContracts";
 import { decodeWritten, usePostWrite } from "./usePostWrite";
 import { useReadModel } from "./useReadModel";
 import "./post-editor.css";
-import { Pager } from "./CommunityPagination";
+
 
 type Comment = CommentPage["items"][number];
 type Edit = {
@@ -108,6 +108,45 @@ export function Discussion({
     [readParent, listPath, cursor],
   );
   const state = useReadModel(listPath(cursor), load);
+  const [extra, setExtra] = useState<{ initial: CommentPage; page: CommentPage } | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [moreError, setMoreError] = useState<Error | null>(null);
+  const moreRequest = useRef<AbortController | null>(null);
+  const comments = extra?.initial === state.data ? extra.page : state.data;
+  useEffect(() => {
+    moreRequest.current?.abort();
+    moreRequest.current = null;
+    setMoreBusy(false);
+    setMoreError(null);
+    return () => moreRequest.current?.abort();
+  }, [state.data, parentPath, active]);
+  async function loadMore() {
+    if (!active || !state.data || !comments?.hasNext || !comments.nextCursor || moreRequest.current) return;
+    const initial = state.data;
+    const nextCursor = comments.nextCursor;
+    const controller = new AbortController();
+    moreRequest.current = controller;
+    setMoreBusy(true);
+    setMoreError(null);
+    try {
+      await readParent(controller.signal);
+      const next = readComments(await api(listPath(nextCursor), { signal: controller.signal }), nextCursor);
+      if (controller.signal.aborted) return;
+      if (next.hasNext && next.nextCursor === nextCursor) throw new Error("같은 댓글 페이지가 반복되었습니다.");
+      const items = [...new Map([...comments.items, ...next.items].map((item) => [item.commentId, item])).values()];
+      setExtra({ initial, page: { ...next, items } });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const failure = error instanceof Error ? error : new Error("댓글을 불러오지 못했습니다.");
+      setMoreError(failure);
+      if (failure instanceof ApiError && [403, 404].includes(failure.status)) onUnavailable(failure);
+    } finally {
+      if (!controller.signal.aborted) {
+        moreRequest.current = null;
+        setMoreBusy(false);
+      }
+    }
+  }
   useEffect(() => {
     for (const error of [state.error, check.error])
       if (error instanceof ApiError && [403, 404].includes(error.status))
@@ -224,8 +263,8 @@ export function Discussion({
   const editable = !!member && !!state.data && active;
   if (!active) return null;
   return (
-    <section id="discussion" className="community-discussion" aria-label="토론">
-      <h2>토론</h2>
+    <section id="discussion" className="community-discussion" aria-label="댓글">
+      <h2>댓글</h2>
       {notice && <p role="status">{notice}</p>}
       {!state.data ? (
         state.error ? (
@@ -253,7 +292,10 @@ export function Discussion({
               <p>삭제한 댓글은 다시 볼 수 없으며 복원할 수 없습니다.</p>
             ) : (
               <>
-                <label htmlFor="comment-body">댓글 본문</label>
+                <div className="comment-body-heading">
+                  <label htmlFor="comment-body">댓글 본문</label>
+                  <p id="comment-limit">{codePoints(edit.body).toLocaleString()} / 2,000자</p>
+                </div>
                 <textarea
                   ref={textArea}
                   id="comment-body"
@@ -280,10 +322,6 @@ export function Discussion({
                   disabled={!editable || write.pending || write.uncertain}
                   onChange={(materials) => setEdit({ ...edit, materials })}
                 />
-                <p id="comment-limit">
-                  {codePoints(edit.body).toLocaleString()} / 2,000자 · 줄바꿈
-                  가능, 일반 텍스트
-                </p>
               </>
             )}
             {localError && <p role="alert">{localError}</p>}
@@ -429,11 +467,11 @@ export function Discussion({
               </div>
             )}
           </form>
-          {!state.data.items.length && (
-            <p className="community-empty">아직 토론이 없습니다.</p>
+          {!comments?.items.length && (
+            <p className="community-empty">아직 댓글이 없습니다.</p>
           )}
           <ul className="community-comments">
-            {state.data.items.map((item) => (
+            {comments?.items.map((item) => (
               <li key={item.commentId}>
                 <div className="community-row-meta">
                   {item.author.memberId === null ? <span>{item.author.nickname}</span> : (
@@ -491,11 +529,12 @@ export function Discussion({
               </li>
             ))}
           </ul>
-          <Pager
-            page={state.data}
-            name="discussionCursor"
-            label="토론 페이지"
-          />
+          <div className="community-load-more">
+            {moreError && <p role="alert">{moreError.message}</p>}
+            {comments?.hasNext && <button type="button" disabled={moreBusy || !active} onClick={() => void loadMore()}>
+              {moreBusy ? "불러오는 중…" : moreError ? "다시 불러오기" : "댓글 더 보기"}
+            </button>}
+          </div>
         </>
       )}
     </section>

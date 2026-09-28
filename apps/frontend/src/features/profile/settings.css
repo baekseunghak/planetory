@@ -91,7 +91,8 @@
   min-height: 3rem;
   cursor: pointer;
 }
-.settings-row input {
+.settings-row input[type="checkbox"],
+.settings-row input[type="radio"] {
   accent-color: #a4c7ff;
   width: 1rem;
   height: 1rem;

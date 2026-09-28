@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "../../auth/SessionProvider";
 import type {
   AnalysisContext,
@@ -200,6 +201,9 @@ function ReadyWorkspace({
   const ticId = context.ticId;
   const memberId = useSession().member?.memberId ?? null;
   const fold = useAnalysisFold();
+  // Share the display state with the submission review; preserve session resets.
+  const [foldView, setFoldView] = useState(fold.state.view);
+  useEffect(() => setFoldView(fold.state.view), [fold.state.view]);
   const { state: draft } = usePhaseDraft();
   const analysisStage = useAnalysisStage();
   const { go, ready, confirmed } = analysisStage;
@@ -374,7 +378,7 @@ function ReadyWorkspace({
   const locked = submission.locked;
   const pending = foldState.status === "pending";
   const slow = useSustained(pending);
-  const periodEditable = stage === 1 && !locked;
+  const periodEditable = !locked;
   const lockReason = locked
     ? "제출을 처리하는 동안이나 결과가 나온 뒤에는 주기를 바꿀 수 없습니다."
     : null;
@@ -471,11 +475,12 @@ function ReadyWorkspace({
         <>
           {notices}
           <OnboardingTip step={stage} />
-          <AnalysisDraftPersistence
-            context={context}
-            data={data}
-            onRestore={restore}
-          />
+          {createPortal(
+            <div className="cx-analysis cx-draft-floating">
+              <AnalysisDraftPersistence context={context} data={data} onRestore={restore} />
+            </div>,
+            document.body,
+          )}
           <CurveStepStatus />
         </>
       }
@@ -489,7 +494,6 @@ function ReadyWorkspace({
           inputKey={foldState.inputKey}
           onChoose={choose}
           onTune={tune}
-          onReopen={stage > 1 && !locked ? () => go(1) : null}
           onViewportChange={trackViewport}
           initialViewport={
             !resume
@@ -503,6 +507,8 @@ function ReadyWorkspace({
       }
       window={
         <FoldArea
+          view={foldView}
+          setView={setFoldView}
           context={context}
           data={data}
           curve={curve}
@@ -517,6 +523,7 @@ function ReadyWorkspace({
       }
       judge={
         <JudgeArea
+          foldedZoom={Math.min(32, Math.max(1, foldView.zoom))}
           context={context}
           submission={submission}
           outcome={outcome}

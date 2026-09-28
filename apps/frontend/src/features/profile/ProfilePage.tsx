@@ -5,13 +5,11 @@ import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useReadModel } from "../community/useReadModel";
 import { formatJoinedDate, readProfile, type Profile } from "./contracts";
-import { NicknameEditor } from "./NicknameEditor";
 import {
   ProfileSection,
   ProfileSlots,
   type ProfileSlotComponents,
 } from "./ProfileSlots";
-import { UsageGuide } from "./UsageGuide";
 import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
@@ -69,7 +67,6 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   return (
     <section className="profile-page">
       <header className="profile-heading">
-        <p className="eyebrow">{own ? "MY OBSERVATORY" : "EXPLORER PROFILE"}</p>
         <h1>{own ? "마이페이지" : "탐사자 프로필"}</h1>
       </header>
       <div className="profile-identity">
@@ -90,12 +87,6 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         {own && (
           <div className="profile-actions">
             <Link to="/settings">설정</Link>
-            <NicknameEditor
-              memberId={memberId}
-              nickname={profile?.nickname ?? member?.nickname ?? ""}
-              active={!!profile}
-            />
-            <UsageGuide />
           </div>
         )}
       </div>

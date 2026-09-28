@@ -5,7 +5,9 @@ import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useReadModel } from "../community/useReadModel";
 import { usePostWrite, decodeWritten } from "../community/usePostWrite";
-import { CommunityFeed } from "../community/CommunityFeed";
+import { ExpandableFeed } from "../community/ExpandableFeed";
+import { CommunityTabs } from "../community/CommunityTabs";
+import { CommunityAside } from "../community/CommunityAside";
 import { Pager } from "../community/CommunityPagination";
 import { usePageScroll } from "../community/usePageScroll";
 import {
@@ -165,9 +167,9 @@ export function FollowingPage() {
       </header>
       <nav className="community-tabs" aria-label="팔로우 관리">
         {[
+          ["followers", "팔로워"],
           ["members", "팔로잉"],
           ["stars", "관심 별"],
-          ["followers", "팔로워"],
         ].map(([key, label]) => (
           <Link
             key={key}
@@ -240,38 +242,46 @@ export function FollowingFeedPage() {
       : undefined,
   );
   return (
-    <section className="follow-page">
-      <header>
-        <h1>팔로잉의 이야기</h1>
-        <p>관심 있는 탐사자와 별의 새로운 글을 만나보세요.</p>
+    <section className="community-page">
+      <header className="community-heading community-top-heading service-section-heading">
+        <h1>커뮤니티</h1>
+        <p>서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요.</p>
       </header>
-      <nav className="community-tabs" aria-label="게시판 종류">
-        <Link to="/community">전체</Link>
-        <Link to="/community/signal-threads">공식 스레드</Link>
-        <Link to="/community/following" aria-current="page">
-          팔로잉
-        </Link>
-        <Link to="/community/hot-topics">핫 토픽</Link>
-        <Link to="/me/following">관심 대상 관리</Link>
-      </nav>
-      {!state.data ? (
-        state.error ? (
-          <ErrorState error={state.error} retry={state.reload} />
-        ) : (
-          <LoadingState />
-        )
-      ) : (
-        <>
-          {!state.data.items.length && (
-            <p className="follow-empty">
-              아직 표시할 소식이 없습니다.{" "}
-              <Link to="/community">탐사 이야기 둘러보기 →</Link>
-            </p>
+<CommunityTabs active="following" />
+      <div className="community-columns">
+        <div className="community-main community-list-panel">
+          <header className="community-list-heading">
+            <div>
+              <h2>팔로잉</h2>
+              <p>관심 있는 탐사자와 별의 새 글</p>
+            </div>
+            <Link to="/me/following">관심 대상 관리</Link>
+          </header>
+          {!state.data ? (
+            state.error ? (
+              <ErrorState error={state.error} retry={state.reload} />
+            ) : (
+              <LoadingState />
+            )
+          ) : (
+            <>
+              {!state.data.items.length && (
+                <p className="follow-empty">
+                  아직 표시할 소식이 없습니다.{" "}
+                  <Link to="/community">탐사 이야기 둘러보기 →</Link>
+                </p>
+              )}
+              <ExpandableFeed
+                key={path}
+                initial={state.data}
+                path={path}
+                decode={readFollowingFeed}
+              />
+            </>
           )}
-          <CommunityFeed items={state.data.items} />
-          <Pager page={state.data} name="cursor" label="팔로잉 피드 페이지" />
-        </>
-      )}
+        </div>
+        <CommunityAside hot={false} />
+      </div>
     </section>
   );
 }

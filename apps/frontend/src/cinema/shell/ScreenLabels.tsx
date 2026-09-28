@@ -31,6 +31,7 @@ export function MarkerLayer({
   stars,
   onSelect,
   held = false,
+  hideChallenge = false,
   onHover,
 }: {
   stars: readonly Star[];
@@ -41,6 +42,7 @@ export function MarkerLayer({
    * sits on the face of the star the camera is leaving.
    */
   held?: boolean;
+  hideChallenge?: boolean;
   /** Pointer or keyboard on a marker: name its star like a hovered star. */
   onHover?(ticId: string | null): void;
 }) {
@@ -54,8 +56,11 @@ export function MarkerLayer({
   const targets = quest?.quests?.challenge.targets;
   // Every unlocked target of the round gets the "!" (S15P21C206-283).
   const challengeTicIds = useMemo(
-    () => new Set(stale ? [] : (targets ?? []).map((t) => t.ticId)),
-    [targets, stale],
+    () =>
+      new Set(
+        stale || hideChallenge ? [] : (targets ?? []).map((t) => t.ticId),
+      ),
+    [targets, stale, hideChallenge],
   );
   const byId = useMemo(
     () => new Map(stars.map((star) => [star.ticId, star])),

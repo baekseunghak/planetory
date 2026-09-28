@@ -85,7 +85,7 @@
 }
 .phase-handle:focus-visible,
 .phase-draw-target:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .phase-selection-layer[data-enabled="false"] {
@@ -116,7 +116,7 @@
   touch-action: manipulation;
 }
 .fold-renderer-controls select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .fold-renderer-controls p {
@@ -124,7 +124,7 @@
   overflow-wrap: anywhere;
 }
 .fold-plot:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .fold-y-axis {

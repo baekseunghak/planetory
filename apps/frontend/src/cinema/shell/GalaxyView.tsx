@@ -1,6 +1,6 @@
 // /sky: my galaxy (no star) or a star's system (?star=). The scene draws;
 // this file only adds the HUD, markers, labels and the star panel.
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "../../auth/SessionProvider";
 import {
   OnboardingLookContext,
@@ -57,7 +57,7 @@ export function GalaxyView() {
   // the flight has the whole screen and the arrival has something to show.
   const [arriving, setArriving] = useState(false);
   const arrivalFor = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!ticId) {
       arrivalFor.current = null;
       setArriving(false);
@@ -66,7 +66,7 @@ export function GalaxyView() {
     if (arrivalFor.current === ticId) return;
     arrivalFor.current = ticId;
     const now = scene.getState();
-    // Child effects run before the stage director's: the scene still shows
+    // Set the hidden state before paint, while the scene still shows
     // where the camera comes from. Already there (back from analysis): no wait.
     const flies =
       now.ready &&
@@ -253,6 +253,7 @@ export function GalaxyView() {
   // New stars (not opened yet): rings on the most recent ones, and a chip
   // that takes the member to them one by one, the most recent first.
   const { newStars } = shell;
+  const [marksHidden, setMarksHidden] = useState(false);
   const markedStars = useMemo(() => markedNewStars(newStars), [newStars]);
 
   const detail = ticId && focus.ticId === ticId ? focus.detail : null;
@@ -261,6 +262,7 @@ export function GalaxyView() {
     <div
       className="cinema-galaxy"
       data-stage={ticId ? "system" : "galaxy"}
+      data-arriving={arriving ? "true" : "false"}
       data-scene-ready={sceneState.ready ? "true" : "false"}
     >
       <h1 className="cinema-sr-only">
@@ -271,7 +273,7 @@ export function GalaxyView() {
       )}
       <SkyStatus />
       {/* Before the markers: a tutorial number or "!" stays on top. */}
-      {!ticId && (
+      {!ticId && !marksHidden && (
         <NewStarMarks
           stars={data.stars}
           ticIds={markedStars}
@@ -285,7 +287,7 @@ export function GalaxyView() {
       {store && data.meta && (
         <QuestProvider key={store.memberId} store={store} data={data}>
           {!ticId && (
-            <MarkerLayer
+            <MarkerLayer hideChallenge={marksHidden}
               stars={data.stars}
               onSelect={selectStar}
               held={markersHeld}
@@ -296,7 +298,7 @@ export function GalaxyView() {
             stars={data.stars}
             forced={!ticId && !markersHeld ? markerHover : null}
           />
-          <div className="cinema-tools" data-hidden={ticId ? "true" : "false"}>
+          <div className="cinema-tools" data-hidden={ticId ? "true" : "false"} inert={!!ticId}>
             <div className="cinema-tool cinema-search">
               {/* Holds the pill's place; the details element floats over it. */}
               <span
@@ -347,6 +349,16 @@ export function GalaxyView() {
                 <span className="cinema-sr-only"> 중 다음 별로 이동</span>
               </button>
             )}
+              <button
+                type="button"
+                className="cinema-pill"
+                aria-label="새 별·챌린지 표시 숨기기"
+                aria-pressed={marksHidden}
+                onClick={() => setMarksHidden((hidden) => !hidden)}
+              >
+                {marksHidden ? "표시 보이기" : "표시 숨기기"}
+              </button>
+
           </div>
         </QuestProvider>
       )}

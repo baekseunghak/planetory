@@ -107,7 +107,7 @@
 }
 .period-selection-form input:focus-visible,
 .period-selection-controls input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .period-selection-error {
@@ -118,7 +118,7 @@
   cursor: grabbing;
 }
 .periodogram-plot:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .periodogram-y-axis {
