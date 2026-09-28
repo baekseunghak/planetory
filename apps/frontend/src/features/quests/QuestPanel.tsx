@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { pagePath } from "../../app/paths";
 import { useQuests } from "./QuestProvider";
@@ -346,12 +346,10 @@ export function QuestPanel({
                     {challenge.targetCount > 1 && (
                       <p>대상 별 {challenge.targetCount}개</p>
                     )}
+                    {/* No wrapper: each line stays a direct child of
+                        <details>, so one target renders exactly as before. */}
                     {challenge.targets.map((target) => (
-                      <div
-                        key={target.ticId}
-                        role="group"
-                        aria-label={`TIC ${target.ticId}`}
-                      >
+                      <Fragment key={target.ticId}>
                         <p>
                           TIC {target.ticId} · 별{" "}
                           {
@@ -363,11 +361,18 @@ export function QuestPanel({
                           }
                         </p>
                         <div className="quest-actions">
-                          <button onClick={() => choose(target.ticId)}>
+                          <button
+                            onClick={() => choose(target.ticId)}
+                            aria-label={
+                              challenge.targets.length > 1
+                                ? `TIC ${target.ticId} 챌린지 별 보기`
+                                : undefined
+                            }
+                          >
                             챌린지 별 보기
                           </button>
                         </div>
-                      </div>
+                      </Fragment>
                     ))}
                   </>
                 )}
