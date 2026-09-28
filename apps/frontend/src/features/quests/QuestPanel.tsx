@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { pagePath } from "../../app/paths";
 import { useQuests } from "./QuestProvider";
@@ -325,7 +325,7 @@ export function QuestPanel({
                   ) : (
                     <p>튜토리얼 다섯 별을 마치면 참여할 수 있어요.</p>
                   )
-                ) : !challenge.unlocked ? (
+                ) : challenge.targets.length === 0 ? (
                   cinema ? (
                     <p>
                       참여 자격을 확인했습니다. 대상 별이 열리기를 기다리고
@@ -343,21 +343,37 @@ export function QuestPanel({
                   </p>
                 ) : (
                   <>
-                    <p>
-                      TIC {challenge.ticId} · 별{" "}
-                      {
-                        statusLabel[
-                          challenge.progressStage === "unexplored"
-                            ? "unlocked"
-                            : challenge.progressStage!
-                        ]
-                      }
-                    </p>
-                    <div className="quest-actions">
-                      <button onClick={() => choose(challenge.ticId!)}>
-                        챌린지 별 보기
-                      </button>
-                    </div>
+                    {challenge.targetCount > 1 && (
+                      <p>대상 별 {challenge.targetCount}개</p>
+                    )}
+                    {/* No wrapper: each line stays a direct child of
+                        <details>, so one target renders exactly as before. */}
+                    {challenge.targets.map((target) => (
+                      <Fragment key={target.ticId}>
+                        <p>
+                          TIC {target.ticId} · 별{" "}
+                          {
+                            statusLabel[
+                              target.progressStage === "unexplored"
+                                ? "unlocked"
+                                : target.progressStage
+                            ]
+                          }
+                        </p>
+                        <div className="quest-actions">
+                          <button
+                            onClick={() => choose(target.ticId)}
+                            aria-label={
+                              challenge.targets.length > 1
+                                ? `TIC ${target.ticId} 챌린지 별 보기`
+                                : undefined
+                            }
+                          >
+                            챌린지 별 보기
+                          </button>
+                        </div>
+                      </Fragment>
+                    ))}
                   </>
                 )}
               </>

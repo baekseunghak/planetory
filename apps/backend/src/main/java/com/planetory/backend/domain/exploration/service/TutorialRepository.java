@@ -31,9 +31,18 @@ public class TutorialRepository {
 
     private final JdbcClient jdbc;
 
-    /** 진행 중인 회차. 부분 유일 인덱스로 하나만 있다(V5). */
+    /**
+     * 진행 중인 회차. 부분 유일 인덱스로 하나만 있다(V5).
+     *
+     * @param targetTicIds 대상 별 전부(V30 {@code challenge_round_targets}). 대표 대상이 맨 앞이고 나머지는 TIC 오름차순이다
+     */
     public record ChallengeRound(long id, int roundNo, LocalDate startsOn, LocalDate endsOn,
-                                 long targetTicId, String description) {
+                                 List<Long> targetTicIds, String description) {
+
+        /** 대표 대상({@code challenge_rounds.target_tic_id}). */
+        public long primaryTicId() {
+            return targetTicIds.getFirst();
+        }
     }
 
     /** 사용 중인 튜토리얼 n번 별. */
@@ -85,12 +94,14 @@ public class TutorialRepository {
 
     public Optional<ChallengeRound> findActiveRound() {
         return jdbc.sql("""
-                        SELECT id, round_no, starts_on, ends_on, target_tic_id, description
-                          FROM challenge_rounds WHERE status = 'active'
+                        SELECT r.id, r.round_no, r.starts_on, r.ends_on, r.description,
+                               ARRAY(SELECT t.tic_id FROM challenge_round_targets t WHERE t.round_id = r.id
+                                      ORDER BY t.is_primary DESC, t.tic_id) AS target_tic_ids
+                          FROM challenge_rounds r WHERE r.status = 'active'
                         """)
                 .query((rs, rowNum) -> new ChallengeRound(rs.getLong("id"), rs.getInt("round_no"),
                         rs.getObject("starts_on", LocalDate.class), rs.getObject("ends_on", LocalDate.class),
-                        rs.getLong("target_tic_id"), rs.getString("description")))
+                        List.of((Long[]) rs.getArray("target_tic_ids").getArray()), rs.getString("description")))
                 .optional();
     }
 
@@ -110,17 +121,19 @@ public class TutorialRepository {
     }
 
     /**
-     * 챌린지 별을 아직 받지 않은, 튜토리얼을 끝낸 활동 회원. 회원 ID 오름차순 한 묶음이다.
+     * 회차 대상 별 가운데 하나라도 아직 받지 않은, 튜토리얼을 끝낸 활동 회원. 회원 ID 오름차순 한 묶음이다.
      *
      * <p>완료 조건은 {@link #countCompleted}와 같은 식이다. 판정 시점의 목록일 뿐이라 호출자가
      * 회원을 잠근 뒤 다시 확인한다.
      */
-    public List<Long> findMembersToUnlock(long targetTicId, long afterMemberId, int limit) {
+    public List<Long> findMembersToUnlock(long roundId, long afterMemberId, int limit) {
         return jdbc.sql("""
                         SELECT u.id FROM users u
                          WHERE u.status = 'active' AND u.id > :after
-                           AND NOT EXISTS (SELECT 1 FROM star_unlocks s
-                                            WHERE s.user_id = u.id AND s.tic_id = :target)
+                           AND EXISTS (SELECT 1 FROM challenge_round_targets t
+                                        WHERE t.round_id = :round
+                                          AND NOT EXISTS (SELECT 1 FROM star_unlocks s
+                                                           WHERE s.user_id = u.id AND s.tic_id = t.tic_id))
                            AND (SELECT count(*) FROM tutorial_stars t
                                   JOIN user_star_progress p ON p.tic_id = t.tic_id
                                  WHERE t.active AND p.user_id = u.id AND %s) = :tutorialCount
@@ -128,7 +141,7 @@ public class TutorialRepository {
                          LIMIT :limit
                         """.formatted(EVER_COMPLETED))
                 .param("after", afterMemberId)
-                .param("target", targetTicId)
+                .param("round", roundId)
                 .param("tutorialCount", TUTORIAL_STAR_COUNT)
                 .param("limit", limit)
                 .query(Long.class).list();

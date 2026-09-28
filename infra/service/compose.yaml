@@ -149,6 +149,9 @@ services:
       # 동시 계산 수(planetory.residual.max-running). Worker 대수 × instance_concurrency를 넘으면 넘친 작업이
       # 기다리지 않고 Worker 503으로 곧바로 실패한다. Worker가 1대(동시 1)라 1로 둔다. 늘리면 Worker도 늘린다.
       PLANETORY_RESIDUAL_MAXRUNNING: ${PLANETORY_RESIDUAL_MAXRUNNING:-1}
+      # 회원 탈퇴 실행 스위치(planetory.withdrawal.enabled) [S15P21C206-180]. .env에서 true로 켠다.
+      # false면 정책 GET이 available:false이고 준비·확정은 503이다.
+      PLANETORY_WITHDRAWAL_ENABLED: ${PLANETORY_WITHDRAWAL_ENABLED:-false}
     volumes:
       - ${GOLD_PATH:-/srv/planetory/gold}:/gold:ro
     ports:

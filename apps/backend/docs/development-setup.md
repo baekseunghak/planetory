@@ -349,3 +349,9 @@ V24는 `withdrawal_requests`, `stars.board_open`, 글·댓글의 `author_withdra
 `V29__nasa_star_planets.sql`은 V28 다음에 `nasa_star_catalog`, `nasa_star_planet`, `nasa_star_planet_explanation` 세 테이블을 추가한다. 후보 ID 없이 `(tic_id, planet_id)`로 NASA 행성을 식별하고, 성공 조회에서 빠진 옛 행은 `active=false`로 보존한다. 목록 조회의 완전성·임대와 행성별 원천/설명 상태를 분리한다. V25·V26·V27·V28을 수정하지 않으며 Gold·후보 분류·성과에 쓰기 권한을 추가하지 않는다. 앱 역할은 세 신규 테이블의 SELECT/INSERT/UPDATE만 받는다. V28의 회원별·전체 일별 모델 시도권은 268 후보 설명과 270 선택 행성 설명이 공유한다.
 
 Flyway 소유자와 앱 역할, 기존 V25→V28 적용 여부를 확인한 뒤 대상 DB에 적용한다. `repair`, `clean`, `outOfOrder`로 기존 이력을 우회하지 않는다. 기본 설명 비활성·한도 0/0에서도 V29 스키마는 270 API 기동 전에 필요하다. 테이블·상태는 [ERD G절](../../../docs/architecture/database-erd.md#g-요청된-외부-조회-자료와-한국어-설명-v25v26v28v29-266270), HTTP와 권한은 [270 개발 계약](../../../docs/development/nasa-star-planets-270.md), 적용 명령·기대 결과·장애/복구는 [운영 가이드 10절](../../../docs/operations/nasa-planet-info-runbook.md#10-결과-화면의-nasa-전체-목록-운영-270)을 따른다. 공유/운영 DB 적용과 실제 회원·GMS 호출은 별도 인수다.
+
+## V30 챌린지 회차 추가 대상 (283)
+
+`V30__challenge_round_extra_targets.sql`은 V29 다음에 추가 대상 테이블 `challenge_round_extra_targets`, 공개 별 검사 트리거(V9 함수 재사용), 대표·추가 대상을 합친 뷰 `challenge_round_targets`와 두 객체의 앱 역할 SELECT를 추가한다. `challenge_rounds.target_tic_id`는 대표 대상으로 그대로 두므로 기존 회차 INSERT와 V30 전 앱은 대표 대상만으로 동작한다. V21의 `global_stats`는 정의를 바꿀 수 없어 지우고 회차 참여(`rounds`)만 대상 전부로 넓혀 다시 만들며 SELECT·MAINTAIN 권한도 다시 준다. 운영 MV는 2026-09-27까지 채운 적이 없다(`ispopulated` false).
+
+V1~V29를 수정하지 않으며 `repair`·`outOfOrder`로 순서를 우회하지 않는다. 관련 테스트는 `OperationRulesTest`, `ExplorationDomainPermissionTest`, `StatisticsMigrationTest`, `TutorialProgressTest`, `QuestPanelTest`, `AchievementServiceTest`다. 구조는 [ERD v1.17](../../../docs/architecture/database-erd.md), 추가 대상 등록과 명령 재실행은 [챌린지 회차 런북 4절](../../../docs/operations/challenge-round-runbook.md#4-회차-대상-별-더하기)을 따른다. 공유/운영 DB 적용은 별도다.

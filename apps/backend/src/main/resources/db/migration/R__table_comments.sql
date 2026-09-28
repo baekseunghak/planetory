@@ -34,6 +34,13 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- V30 이전 스키마를 대상으로 한 업그레이드 검증에서도 반복 마이그레이션이 실행된다.
+DO $$ BEGIN
+    IF to_regclass('challenge_round_extra_targets') IS NOT NULL THEN
+        COMMENT ON TABLE challenge_round_extra_targets IS '283: 챌린지 회차의 대표 대상 밖 추가 대상 별';
+    END IF;
+END $$;
+
 -- V25 이전 스키마를 대상으로 한 업그레이드 검증에서도 반복 마이그레이션이 실행된다.
 DO $$ BEGIN
     IF to_regclass('nasa_planet_info') IS NOT NULL THEN

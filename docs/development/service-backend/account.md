@@ -87,7 +87,7 @@
 
 **179 당시 정책 인계(2026-09-21, 과거 상태):** 데이터군별 처리·기간·조회/집계·실패 복구의 승인 질문은 [DEC-11 결정표](../../requirements/planetory-decision-register.md#dec-11)에서 관리했다. 아래 SB-D04는 당시 확정한 DB 순서 규칙이다. 현재의 선택값과 구현 상태는 DEC-11의 최신 표를 따른다.
 
-**현재 구현 상태(2026-09-23):** 사용자가 [DEC-11 권장값](../../requirements/planetory-decision-register.md#dec-11)을 구현 목표로 선택했다. `withdrawal-v1` 정책 GET, prepare→confirm, 전용 영수증 조회, 운영 재시도, T의 보호 접근 차단·세션 폐기, C의 개인 자료·양방향 팔로우 정리와 C 뒤 동일 제공자의 새 계정 가입을 구현했다. 일반 글·댓글은 공통 탈퇴 작성자와 `memberId:null`로 표시한다. 실행 스위치 `planetory.withdrawal.enabled`의 기본값은 false라 정책 GET은 `available:false`, 준비·확정은 503이다. 개인정보 처리 근거·본문 식별 정보 삭제 요청 절차·실제 연결 브라우저와 운영 복원 인수 전에는 활성화하지 않는다. 경합을 포함한 [180 인수 조건](../../requirements/planetory-acceptance-criteria.md#withdrawal-180)은 운영 완료 상태가 아니다.
+**현재 구현 상태(2026-09-23):** 사용자가 [DEC-11 권장값](../../requirements/planetory-decision-register.md#dec-11)을 구현 목표로 선택했다. `withdrawal-v1` 정책 GET, prepare→confirm, 전용 영수증 조회, 운영 재시도, T의 보호 접근 차단·세션 폐기, C의 개인 자료·양방향 팔로우 정리와 C 뒤 동일 제공자의 새 계정 가입을 구현했다. 일반 글·댓글은 공통 탈퇴 작성자와 `memberId:null`로 표시한다. 실행 스위치 `planetory.withdrawal.enabled`의 기본값은 false라 정책 GET은 `available:false`, 준비·확정은 503이다. 운영은 서버 `.env`의 `PLANETORY_WITHDRAWAL_ENABLED`로 켠다(`infra/service/compose.yaml`). 처음에는 개인정보 처리 근거·본문 식별 정보 삭제 요청 절차·실제 연결 브라우저와 운영 복원 인수 전에는 활성화하지 않기로 했다. 2026-09-27 김동혁이 이 조건을 끝내지 않은 채 운영에서 켜기로 결정했다([DEC-11](../../requirements/planetory-decision-register.md#dec-11), 180). 경합을 포함한 [180 인수 조건](../../requirements/planetory-acceptance-criteria.md#withdrawal-180)은 운영 완료 상태가 아니다.
 
 **우선순위 변경 당시 기록(2026-09-08, SB-D05):** 탈퇴 데이터 처리를 P1로 미뤘고 보관·익명화·표시·재가입은 P1 착수 시 검토하기로 했다. 이후 선택한 현재 값은 DEC-11을 따른다.
 

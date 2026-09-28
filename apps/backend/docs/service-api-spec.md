@@ -855,6 +855,7 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
     "roundId": "cr-901",
     "roundNo": 1,
     "ticId": "123456789",
+    "ticIds": ["123456789", "123456790", "123456791", "123456792", "123456793"],
     "startsOn": "2026-09-07",
     "endsOn": "2026-09-14",
     "status": "active",
@@ -867,17 +868,17 @@ v1에서는 신고·숨김/복원 운영 API·화면·감사를 제공하지 않
 
 roundNo/startsOn/endsOn/status는 ERD의 round_no/starts_on/ends_on/status에 대응한다. 날짜는 예시다. **168 구현 완료:** 운영 `status='active'` 회차 하나를 선택하며 현재 날짜로 회차를 선택하거나 상태를 자동 전환하지 않는다. planned·closed만 있거나 회차가 없으면 200 `{"round":null,"eligible":false,"participantCount":null}`을 반환한다. 인증 세션이 필요하며 미인증은 401 `AUTH_REQUIRED`, 응답은 `Cache-Control: no-store`다. 서버는 shouldShow·acknowledged를 반환하지 않는다.
 
-- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차는 미확정·AI 승인 별 하나다. 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
-- 자격이 있으면 `round.ticId`를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
+- 튜토리얼 5개 완료 회원만 별 발견 자격이 있다. 회차 대상은 미확정·AI 승인 별 1개 이상이며 대표 대상 1개와 추가 대상으로 나뉜다(SRS v1.4 POL-24, 운영값 5개). 완료 판정은 `TutorialRepository.isTutorialCompleted`를 재사용하며 한 번 완료한 튜토리얼 별이 재개돼도 자격을 유지한다. 미완료 회원에게는 `eligible=false`, `round.ticId=null`, `round.ticIds=null`을 반환한다. 다른 경로로 대상 별을 이미 발견했어도 미자격 TIC는 노출하지 않는다. 회차 설명·기간·참여 수는 반환한다.
+- 자격이 있으면 `round.ticId`(대표 대상)와 `round.ticIds`(대상 전부, 대표 대상이 맨 앞이고 나머지는 TIC 오름차순)를 반환하지만 실제 발견 여부를 뜻하지 않는다. `/me/quests.challenge.ticId`는 기존대로 실제 발견된 경우에만 반환한다. 회차 전환 명령 전의 차이를 GET에서 별 발견으로 보정하지 않는다.
 - SB-D20 확정: 진행 중 회차에 참여 가능한 회원에게만 새 챌린지 안내를 표시한다. 프론트는 현재 roundId와 브라우저의 회원별 마지막 안내 회차를 비교한다. 실제 안내 표시 후에만 회차를 기록하며 API 조회만으로 기록하지 않는다. 확인 테이블·서버 확인 API는 추가하지 않는다.
 - 같은 회원·브라우저에서 기록된 회차는 재안내하지 않고 다음 회차에는 다시 안내한다. 이 방식은 기기·브라우저 간 확인 상태를 공유하지 않는다. 브라우저 저장소 삭제·다른 기기 접속 시 같은 회차 안내가 다시 나올 수 있다. 엄격한 회원별 1회 안내를 보장하지 않는다.
 - 브라우저 저장 실패는 챌린지 이용을 막지 않으며 안내 반복을 허용한다. 같은 브라우저의 다른 회원은 별도 기록을 사용한다. 여러 탭의 동시 안내까지 정확히 한 번으로 보장하지 않는다. 기기 간 확인 공유는 P1 일반 알림에서 검토한다.
 - 시작일 미접속 회원은 진행 중 다음 홈 진입에서 참여 자격을 확인해 안내한다. 종료·취소되어 진행 대상이 아닌 회차는 새 회차로 안내하지 않는다. GET은 별 발견 상태를 변경하지 않고 탐사·회차 처리 계약에서 별 발견을 멱등 반영한다.
 - 기기 간 읽음 동기화가 필요하면 P1 notifications의 type=challenge, payload의 회차 참조, read_at을 활용하는 방향으로 상세화한다. 별도 회원×회차 확인 테이블을 추가하지 않는다. 알림 중복 생성 방지는 P1 계약에서 정한다.
 
-챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.1·탐사 4.3절의 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정: 대상 별의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 별 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호에 참여해도 1명이며 스레드별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
+챌린지 달성·성공·전용 보상 API는 없으며 일반 탐사 성과는 별도다. description은 ERD v1.1 challenge_rounds.description이며 participantCount는 SRS v1.4·탐사 4.3절의 회차 대상 별 공식 스레드 유효 공개 분석 참여자 수 원천을 공유한다. 스레드가 없으면 0이다. 사용자 확정(283 개정): 회차 대상 별 전부의 모든 공식 신호 스레드에서 현재 유효 공개 분석을 가진 회원을 회차 단위로 중복 제거해 집계한다(COUNT DISTINCT 회원 ID). 여러 신호·여러 대상에 참여해도 1명이며 스레드별·별별 N을 합산하지 않는다. 공개 취소·숨김 후 다른 유효 공개 분석이 남으면 포함하고, 하나도 없으면 제외한다. 핫 토픽·판단 분포의 신호별 집계는 변경하지 않는다. 회차가 없으면 기존 round:null 응답을 유지한다.
 
-139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(targetTicId)`를 사용한다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 새 DB 테이블·권한·마이그레이션은 없다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
+139 퀘스트 패널과 168 회차 API는 `QuestRepository.countChallengeParticipants(roundId)`를 사용한다. 283부터 대상 별은 V30 뷰 `challenge_round_targets`에서 읽는다. 이 쿼리는 9.2절과 같은 `PublicAnalysisVisibility.VISIBLE` 조건을 사용하며 회차 기간으로 제출·공개 시각을 추가 제한하지 않는다. 조회 시점의 현재 유효 회원 수이며 발견·성과·보상 처리를 실행하지 않는다. `QuestService.currentChallenge`는 회차·자격·참여 수를 하나의 읽기 전용 `REPEATABLE_READ` 트랜잭션에서 조회한다. 168은 새 DB 테이블·권한·마이그레이션을 두지 않았고, 대상 여러 개는 283의 V30이 더했다. 기존 `QuestProvider`·`readCurrentChallenge` 응답 계약을 유지하며 208 실제 화면 종단 연동 인수는 별도다.
 
 <a id="later"></a>
 
@@ -1033,7 +1034,7 @@ SQL의 두 EXISTS로 현재 관계를 판정한 뒤 페이지를 나누므로 �
 - 현재 집계의 회원 기여는 탈퇴 효력 이후 다음 성공 갱신부터 제외한다. 과거 비식별 성공본은 생성일부터 1년만 저장하고 공개 `cohortMemberCount<10`이면 비교 블록을 `UNAVAILABLE`로 반환한다. 숫자 차분에 의한 소수 추정까지 막는 추가 검토는 [DEC-11](../../../docs/requirements/planetory-decision-register.md#dec-11)의 운영 인수 조건이다.
 - AI 후보별 최신 실행을 입증할 원천이 없으므로 모든 유효 공개 참여를 `aiAttemptUnknown` 건수에 넣고 `aiJudgmentBands={status:NO_SAMPLE,reason:AI_ATTEMPT_UNKNOWN,items:[]}`로 반환한다. 과거 성공 평가·정상 0점을 최신 시도로 단정하지 않는다. 원천 확보 후에는 확인된 정상 0점도 판정 구간에 포함해야 한다. 버전별 판정 구간 구현은 원천 확보와 후속 계약이 선행한다.
 - `aiAttemptUnknown`은 AI 시도 횟수가 아니라 **최신 AI 시도를 확인할 수 없는 회원×신호 공개 참여 건수**다. 현재 원천에서는 `publicParticipations`와 항상 같으며 두 값을 더하지 않는다. `AVAILABLE`은 이 제외 대상 건수를 계산할 수 있다는 뜻이고 AI 결과 가용성을 뜻하지 않는다. 판정 구간은 별도로 `NO_SAMPLE / AI_ATTEMPT_UNKNOWN`이다.
-- 발견·현재 완료는 회원×별 수와 서비스 고유 TIC 수를 분리한다. 성과 유형은 저장 당시 유형, 고유 신호 유형은 현재 판정이다. `mostPostsStars`는 현재 공개 별에서 visible 일반/공식 원글 수 순 상위5개(동률 TIC 오름차순)이고 댓글·반응·자유글을 포함하지 않는다. `sectorCompletion`은 관측 버전 중복을 제거하고 발견 집합 내부의 현재 완료만 센다. 회차끼리 합산하지 않는다. 챌린지 `participantCount`는 고유 회원 수, `participationCount`와 판단 분포는 대상 별의 회원×신호 공개 대표 참여 수다. 현재 active 회차의 대상 별에 대한 전 기간 유효 공개를 포함하며 `starts_on/ends_on`으로 자르지 않는다. 고유 신호 수는 전체 후보 카탈로그가 아니라 성과가 있는 후보 집합을 센다.
+- 발견·현재 완료는 회원×별 수와 서비스 고유 TIC 수를 분리한다. 성과 유형은 저장 당시 유형, 고유 신호 유형은 현재 판정이다. `mostPostsStars`는 현재 공개 별에서 visible 일반/공식 원글 수 순 상위5개(동률 TIC 오름차순)이고 댓글·반응·자유글을 포함하지 않는다. `sectorCompletion`은 관측 버전 중복을 제거하고 발견 집합 내부의 현재 완료만 센다. 회차끼리 합산하지 않는다. 챌린지 `participantCount`는 고유 회원 수(여러 대상에 참여해도 1명), `participationCount`와 판단 분포는 대상 별 전부의 회원×신호 공개 대표 참여 수다. 현재 active 회차의 대상 별 전부(대표·추가, V30)에 대한 전 기간 유효 공개를 포함하며 `starts_on/ends_on`으로 자르지 않는다. 고유 신호 수는 전체 후보 카탈로그가 아니라 성과가 있는 후보 집합을 센다.
 
 MV 최초 적재·일별 멱등·최소 권한·외부 스케줄은 [통계 실행 런북](../../../docs/operations/statistics-runbook.md)을 따른다. V21은 V20 다음에 적용하며 운영 활성화·프론트 브라우저 인수는 별도다.
 
@@ -1162,3 +1163,4 @@ MV 최초 적재·일별 멱등·최소 권한·외부 스케줄은 [통계 실�
 
 | 2026-09-14 | `S15P21C206-33` 지도 담당 결정 반영안: HOME-09 사용법 다시 보기를 GIF+설명 5단계 읽기로 정의. 기존 onboardingDone=true 전용·false/null 400·반복 true 멱등 규칙 유지. 탐사 API 4.1과 충돌하던 재설정 문구 정합화(교차 리뷰 대상) |
 | 2026-09-18 | `S15P21C206-242`: MY-01 P0 누락 보완. 본인 `GET /me`에 `users.created_at` 기반 `joinedAt`을 ISO-8601 UTC로 추가하고 타인 프로필 공개 범위는 유지 |
+| 2026-09-27 | `S15P21C206-283`: 11장 회차 대상 별 여러 개. `round.ticId`는 대표 대상으로 유지하고 대상 전부인 `round.ticIds`를 더했다(자격이 없으면 둘 다 null). 참여 수와 전체 통계 챌린지 블록은 대상 별 전부 기준이다 |

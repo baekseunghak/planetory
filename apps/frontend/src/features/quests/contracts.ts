@@ -34,6 +34,10 @@ export type Quests = {
     unlocked: boolean;
     progressStage: "unexplored" | "in_progress" | "completed" | null;
     participantCount: number | null;
+    // All targets of the round; `ticId` above is the primary one
+    // (S15P21C206-283). Only the unlocked targets are listed, primary first.
+    targetCount: number;
+    targets: ChallengeTarget[];
   };
   reopened: {
     ticId: string;
@@ -41,11 +45,16 @@ export type Quests = {
     newDiscoverableCount: number | null;
   }[];
 };
+export type ChallengeTarget = {
+  ticId: string;
+  progressStage: "unexplored" | "in_progress" | "completed";
+};
 export type CurrentChallenge = {
   round:
     | (Round & {
         status: "planned" | "active" | "closed";
         ticId: string | null;
+        ticIds: string[] | null;
       })
     | null;
   eligible: boolean;
@@ -143,6 +152,43 @@ export function readQuests(value: unknown): Quests {
   if (!round && (eligible || unlocked || participantCount !== null))
     return fail();
   if (round && participantCount === null) return fail();
+  // A backend before S15P21C206-283 sends only the primary target.
+  const targets: ChallengeTarget[] =
+    c.targets === undefined
+      ? unlocked
+        ? [
+            {
+              ticId: ticId!,
+              progressStage:
+                c.progressStage as ChallengeTarget["progressStage"],
+            },
+          ]
+        : []
+      : Array.isArray(c.targets)
+        ? c.targets.map((raw) => {
+            const t = obj(raw);
+            if (
+              !["unexplored", "in_progress", "completed"].includes(
+                t.progressStage as string,
+              )
+            )
+              return fail();
+            return {
+              ticId: tic(t.ticId),
+              progressStage:
+                t.progressStage as ChallengeTarget["progressStage"],
+            };
+          })
+        : fail();
+  const targetCount =
+    c.targetCount === undefined ? (round ? 1 : 0) : count(c.targetCount);
+  if (
+    targets.length > targetCount ||
+    new Set(targets.map((t) => t.ticId)).size !== targets.length ||
+    (unlocked && targets[0]?.ticId !== ticId) ||
+    (!round && targetCount !== 0)
+  )
+    return fail();
   if (!Array.isArray(v.reopened)) return fail();
   const reopened = v.reopened.map((raw) => {
     const r = obj(raw);
@@ -165,6 +211,8 @@ export function readQuests(value: unknown): Quests {
       ticId,
       participantCount,
       progressStage: c.progressStage as Quests["challenge"]["progressStage"],
+      targetCount,
+      targets,
     },
     reopened,
   };
@@ -186,8 +234,21 @@ export function readCurrentChallenge(value: unknown): CurrentChallenge {
     (eligible && (status !== "active" || ticId === null))
   )
     return fail();
+  // A backend before S15P21C206-283 sends only the primary target.
+  const ticIds =
+    r.ticIds === undefined
+      ? ticId === null
+        ? null
+        : [ticId]
+      : r.ticIds === null
+        ? null
+        : Array.isArray(r.ticIds)
+          ? r.ticIds.map(tic)
+          : fail();
+  if ((ticIds === null) !== (ticId === null) || (ticIds && ticIds[0] !== ticId))
+    return fail();
   return {
-    round: { ...readRound(r), status: status as "active", ticId },
+    round: { ...readRound(r), status: status as "active", ticId, ticIds },
     eligible,
     participantCount: count(v.participantCount),
   };
