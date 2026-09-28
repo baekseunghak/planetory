@@ -23,6 +23,7 @@ import {
 import { MAX_PUBLICATION_BATCH_SIZE } from "./publication-data";
 import { useCinemaCopy } from "../analysis/cinema-copy";
 import { allPublished, isPublished, publicationNotice } from "./publication-flow";
+import { explorationBackLabel } from "../../cinema/analysis/results/navigation";
 import "./publication.css";
 
 const when = (value: string) => new Date(value).toLocaleString("ko-KR");
@@ -606,7 +607,7 @@ function Review({
       })}
       {!historyId && review.items.length > 0 && (
         <div className="publication-actions publication-batch-actions">
-          <Link to={returnTo} className="publication-back publication-secondary">분석으로 돌아가기</Link>
+          <Link to={returnTo} className="publication-back publication-secondary">{explorationBackLabel(returnTo)}</Link>
           {completed ? (
             <Link to={pagePath("sky")} className="publication-primary publication-home">내 은하로 돌아가기</Link>
           ) : selected.length > 0 && (
