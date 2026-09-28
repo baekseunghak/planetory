@@ -392,7 +392,7 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 - **Bronze 워터마크 B**: Sector 1부터 끊김 없이 `_SUCCESS`가 있는 마지막 Sector.
 - **Silver 워터마크 S**: 확정된 Silver `_READY`로 계산한다. v4(1~13 원본)는 1~13을 덮는다. v5는 snapshot 마지막 Sector와 `selection`으로 `(through N, delta_from M, 버킷 K)` 묶음을 만든다. 버킷 K개가 모두 확정됐고 M ≤ S + 1이면 S = N이다. selection이 없는 v5는 `operation`이 `run`일 때만 전체 snapshot을 덮고, retry는 덮지 않는다.
 - **다음 할 일**: 시작한 증분이 있으면 그 증분의 가장 작은 빈 버킷을 고른다. K는 첫 버킷에 기록된 값을 그대로 쓰고, 크기는 끝난 버킷의 `estimated_output_bytes`로 잡는다. 시작한 증분이 없고 S < B이면 새 증분 `through B, delta S+1`을 만든다. 이때 `--plan-only` Spark job이 run과 같은 선택으로 TIC·제품 수만 세고 BLS 전에 끝난다. K는 추정 출력 ÷ 200 GB(`PLAN_BUCKET_BYTES`)로 정한다. S = B이면 `idle`이다.
-- **실행 중 보호**: Silver unit이나 YARN 앱이 돌고 있으면 `busy`를 돌려 같은 버킷을 두 번 시작하지 않는다. 버킷 추정치가 80% 예산을 넘으면 `wait_capacity`다.
+- **실행 중 보호**: Silver unit이나 YARN 앱이 돌고 있으면 `busy`를 돌려 같은 버킷을 두 번 시작하지 않는다. 버킷 추정치가 80% 예산을 넘으면 `wait_capacity`다. Bronze `_SUCCESS`·Silver `_READY` 목록 조회가 "없음"이 아닌 이유(NameNode 연결 실패 등)로 실패하면, `idle`이나 Sector 1부터의 재계획으로 읽지 않고 오류로 멈춘다(`hdfs_glob`). unit 목록 조회 실패도 같다.
 - **출력**: `SILVER_PLAN_JSON=`(`planetory.tess-silver-plan.v1`) 한 줄. `action`(`run`·`busy`·`idle`·`wait_capacity`), `bronze_through`, `silver_through`, `through_sector`, `delta_from_sector`, `tic_buckets`, `tic_bucket`, `done_buckets`, `estimated_bucket_bytes`, `capacity_budget_bytes`를 담는다. 운영자나 81 조정 DAG는 `run`이면 그 인자로 `-Step Start`를 실행한다.
 - 2026-09-27 증거로는 S = 14(1~13 원본 + Sector 14 증분), B = 70이므로 첫 계획은 `through 70, delta 15`다. Sector 14에만 관측된 TIC는 Sector 14 attempt가 계속 current다.
 - 새 v5 marker에는 `operation`(`run`·`canary`·`retry`)을 기록한다. Sector 14 attempt처럼 selection이 있는 attempt는 이 필드 없이도 계산된다.
@@ -459,12 +459,12 @@ release `20260926T234554Z`(커밋 `b86c1939`)로 먼저 Canary(run `20260927T015
 
 ### 검증 상태와 남은 일
 
-- 오프라인: `test-tess-silver.ps1` 통과(Silver 56, Airflow 12). 검사 항목은 snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기, `plan` 워터마크·버킷 선택이다.
+- 오프라인: `test-tess-silver.ps1` 통과(Silver 57, Airflow 12). 검사 항목은 snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기, `plan` 워터마크·버킷 선택, HDFS 목록 실패 시 `plan` 중단이다.
 - 실클러스터: Sector 14 Canary와 증분 run, `plan`, Sector 1~70 Canary(두 Bronze 버전 결합), backlog 버킷 0·1(위 절).
 - 이 작업 밖으로 넘긴 일:
   - Silver DAG conf·`start-unit` sudoers 확장은 이를 부를 81 조정 DAG에서 함께 한다. 호출하는 쪽 없이 sudoers만 넓히지 않는다.
   - 나머지 버킷 2~14는 103 용량 결정 뒤 `plan`으로 이어 간다.
-  - TIC별 선택 인덱스는 보류다. 만들기 전까지 Gold는 명시한 attempt 하나만 읽는다. v5 attempt 입력 자체는 `silver_input`이 받는다.
+  - TIC별 선택 인덱스는 보류다. Gold `silver_input`은 v4·v5 schema를 받지만, Bronze coverage 필드를 대조하므로 coverage로 만든 attempt(1~13 원본 등)만 통과시킨다. Sector snapshot attempt(Sector 14 증분, backlog 버킷)는 coverage 필드가 null이라 감사에서 거부된다(fail-closed). 따라서 Sector 14 이후 Silver 결과는 선택 인덱스와 그것을 읽는 Gold 입력이 생겨야 Gold·운영 DB로 간다.
   - 버킷 실패율 증가의 원인 조사와 Silver `periodogram` 배열 제거는 결정 전이다.
 
 ## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)

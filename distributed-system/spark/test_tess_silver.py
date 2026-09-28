@@ -959,7 +959,7 @@ class SilverIncrementPlanTest(unittest.TestCase):
         df = "Filesystem Size Used Available Use%\nhdfs://planetory 1000000 600000 400000 60%\n"
 
         def hdfs(*argv, **kwargs):
-            return SimpleNamespace(stdout=df if "-df" in argv else listing)
+            return SimpleNamespace(stdout=df if "-df" in argv else listing, returncode=0)
 
         out = io.StringIO()
         with patch("tess_silver_ctl.active_silver_work", return_value=list(active)), \
@@ -994,6 +994,14 @@ class SilverIncrementPlanTest(unittest.TestCase):
         caught_up = [self.V4] + [self.bucket(70, 14, 1, 0)]
         value, _ = self.plan(caught_up)
         self.assertEqual((value["action"], value["silver_through"]), ("idle", 70))
+
+    def test_plan_listing_failure_stops_instead_of_reading_as_empty(self):
+        missing = SimpleNamespace(returncode=1, stdout="ls: `/lake/x': No such file or directory\n")
+        down = SimpleNamespace(returncode=1, stdout="ls: Call From a to b failed on connection exception\n")
+        with patch("tess_silver_ctl.hdfs", return_value=missing):
+            self.assertEqual(tess_silver_ctl.bronze_through(tess_silver_ctl.hdfs_glob("/lake/x")), 0)
+        with patch("tess_silver_ctl.hdfs", return_value=down), self.assertRaises(RuntimeError):
+            tess_silver_ctl.hdfs_glob("/lake/x")
 
     def test_plan_only_job_counts_the_selection_and_stops_before_bls(self):
         run = inspect.getsource(tess_silver.run)

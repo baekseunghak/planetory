@@ -732,14 +732,23 @@ def command_retry(args: argparse.Namespace) -> None:
 def active_silver_work() -> list[str]:
     """Running Silver units and YARN apps; a plan never hands out a bucket while one of them runs."""
     units = run(["/usr/bin/systemctl", "list-units", "planetory-tess-silver-*", "--state=active,activating",
-                 "--no-legend", "--plain"], check=False).stdout
+                 "--no-legend", "--plain"]).stdout
     apps = yarn("application", "-list", "-appStates", "RUNNING").stdout
     return ([line.split()[0] for line in units.splitlines() if line.strip()]
             + [line.split()[0] for line in apps.splitlines() if SILVER_APP_RE.search(line)])
 
 
+def hdfs_glob(pattern: str) -> str:
+    """`hdfs dfs -ls` of a glob. No match is an empty listing; any other failure stops the plan,
+    so an unreachable NameNode never reads as "no Bronze" (idle) or "no Silver" (replan from Sector 1)."""
+    result = hdfs("dfs", "-ls", pattern, check=False)
+    if result.returncode and "No such file or directory" not in result.stdout:
+        raise RuntimeError(f"HDFS listing failed ({result.returncode}): {pattern}")
+    return result.stdout
+
+
 def committed_silver_markers() -> list[dict[str, Any]]:
-    listing = hdfs("dfs", "-ls", "/lake/silver/pipeline_version=*/run_id=*/attempt=*/_READY.json", check=False).stdout
+    listing = hdfs_glob("/lake/silver/pipeline_version=*/run_id=*/attempt=*/_READY.json")
     paths = sorted(fields[-1] for line in listing.splitlines()
                    if (fields := line.split()) and fields[-1].endswith("/_READY.json")
                    and ATTEMPT_PATH_RE.fullmatch(fields[-1].removesuffix("/_READY.json")))
@@ -781,7 +790,7 @@ def command_plan(args: argparse.Namespace) -> None:
     if active := active_silver_work():
         emit({"action": "busy", "active": active})
         return
-    bronze = bronze_through(hdfs("dfs", "-ls", "/lake/bronze/tess/sector=*/_SUCCESS", check=False).stdout)
+    bronze = bronze_through(hdfs_glob("/lake/bronze/tess/sector=*/_SUCCESS"))
     markers = committed_silver_markers()
     silver, increment, done = silver_progress([inc for marker in markers if (inc := attempt_increment(marker))])
     base = {"bronze_through": bronze, "silver_through": silver,
