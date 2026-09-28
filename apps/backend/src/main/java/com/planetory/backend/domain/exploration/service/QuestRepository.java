@@ -64,19 +64,20 @@ public class QuestRepository {
     }
 
     /**
-     * 대상 별의 모든 공식 신호 스레드에서 유효 공개 분석을 가진 회원 수(D-13, COM-14 (1)의 N).
+     * 회차 대상 별 전부의 모든 공식 신호 스레드에서 유효 공개 분석을 가진 회원 수(D-13, COM-14 (1)의 N).
      *
      * <p>유효 공개 분석은 본인이 취소하지 않았고, 개별 숨김이 아니며, 상위 스레드가 보이는 것이다
-     * (서비스 F16). 여러 신호에 참여해도 한 명이다. 스레드가 없으면 0이다.
+     * (서비스 F16). 여러 신호·여러 대상에 참여해도 한 명이다. 스레드가 없으면 0이다.
      */
-    public int countChallengeParticipants(long ticId) {
+    public int countChallengeParticipants(long roundId) {
         return jdbc.sql("""
                         SELECT count(DISTINCT pa.user_id)
                           FROM published_analyses pa
                           JOIN posts p ON p.id = pa.post_id
-                         WHERE p.tic_id = ? AND %s
+                         WHERE p.tic_id IN (SELECT t.tic_id FROM challenge_round_targets t WHERE t.round_id = ?)
+                           AND %s
                         """.formatted(PublicAnalysisVisibility.VISIBLE))
-                .param(ticId).query(Integer.class).single();
+                .param(roundId).query(Integer.class).single();
     }
 
     /**

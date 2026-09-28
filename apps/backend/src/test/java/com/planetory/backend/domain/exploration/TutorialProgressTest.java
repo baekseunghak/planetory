@@ -168,9 +168,9 @@ class TutorialProgressTest {
 
             var opened = completeTutorial(member, 1, reason);
 
-            assertEquals(TUTORIAL[2], opened.orElseThrow().ticId(), reason);
+            assertEquals(TUTORIAL[2], opened.getFirst().ticId(), reason);
             assertEquals("tutorial", reasonOf(member, TUTORIAL[2]), reason);
-            assertEquals(1, opened.get().layoutOrdinal(), reason);
+            assertEquals(1, opened.getFirst().layoutOrdinal(), reason);
             assertEquals(2, revision(member), reason);
             assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM user_candidate_achievements WHERE user_id = ?",
                     Integer.class, member), reason);
@@ -236,9 +236,45 @@ class TutorialProgressTest {
 
         var opened = completeTutorial(member, 5, "skipped");
 
-        assertEquals(CHALLENGE, opened.orElseThrow().ticId());
+        assertEquals(CHALLENGE, opened.getFirst().ticId());
         assertEquals("challenge", reasonOf(member, CHALLENGE));
-        assertEquals(5, opened.get().layoutOrdinal());
+        assertEquals(5, opened.getFirst().layoutOrdinal());
+    }
+
+    /** 대상 별이 여러 개면 다섯 번째를 끝낼 때 대표 대상부터 모두 연다(S15P21C206-283). */
+    @Test
+    void 대상_별이_여러_개면_다섯_번째를_끝낼_때_모두_연다() {
+        long round = insertRound(1, "active", CHALLENGE);
+        insertExtraTarget(round, NEXT_CHALLENGE);
+        long member = signUp();
+        for (int seq = 1; seq <= 4; seq++) {
+            completeTutorial(member, seq, "all_found");
+        }
+
+        var opened = completeTutorial(member, 5, "all_found");
+
+        assertEquals(List.of(CHALLENGE, NEXT_CHALLENGE), opened.stream().map(star -> star.ticId()).toList());
+        assertEquals(List.of(5, 6), opened.stream().map(star -> star.layoutOrdinal()).toList());
+        assertEquals("challenge", reasonOf(member, NEXT_CHALLENGE));
+    }
+
+    /**
+     * 진행 중인 회차에 대상을 더하고 명령을 다시 실행하면, 대표 대상만 받은 회원에게 더한 대상만 연다.
+     * 운영에서 회차 진행 중에 대상 별을 늘릴 때의 경로다(S15P21C206-283).
+     */
+    @Test
+    void 진행_회차에_대상을_더하고_명령을_다시_실행하면_더한_대상만_연다() {
+        long round = insertRound(1, "active", CHALLENGE);
+        long member = completeAllTutorials();
+        assertTrue(unlocked(member, CHALLENGE));
+
+        insertExtraTarget(round, NEXT_CHALLENGE);
+        var result = progress.unlockActiveChallenge().orElseThrow();
+
+        assertEquals(1, result.opened());
+        assertTrue(unlocked(member, NEXT_CHALLENGE));
+        assertEquals(7, unlockCount(member));
+        assertEquals(0, progress.unlockActiveChallenge().orElseThrow().opened(), "다시 실행해도 더 열지 않는다");
     }
 
     @Test
@@ -367,7 +403,7 @@ class TutorialProgressTest {
         }
         reopen(member, TUTORIAL[1]);
 
-        assertEquals(CHALLENGE, completeTutorial(member, 5, "all_found").orElseThrow().ticId());
+        assertEquals(CHALLENGE, completeTutorial(member, 5, "all_found").getFirst().ticId());
     }
 
     /**
@@ -430,8 +466,7 @@ class TutorialProgressTest {
         return member;
     }
 
-    private java.util.Optional<StarDiscoveryService.DiscoveredStar> completeTutorial(long member, int seq,
-                                                                                    String reason) {
+    private List<StarDiscoveryService.DiscoveredStar> completeTutorial(long member, int seq, String reason) {
         markCompleted(member, TUTORIAL[seq], reason);
         return inTx(() -> progress.onTutorialCompleted(member, TUTORIAL[seq]));
     }
@@ -475,6 +510,10 @@ class TutorialProgressTest {
         return jdbc.queryForObject("INSERT INTO challenge_rounds(round_no, starts_on, ends_on, target_tic_id,"
                 + " description, status) VALUES (?, DATE '2026-09-14', DATE '2026-09-21', ?, '두 번째 신호 찾기', ?)"
                 + " RETURNING id", Long.class, roundNo, target, status);
+    }
+
+    private void insertExtraTarget(long round, long tic) {
+        jdbc.update("INSERT INTO challenge_round_extra_targets(round_id, tic_id) VALUES (?, ?)", round, tic);
     }
 
     private int unlockCount(long member) {

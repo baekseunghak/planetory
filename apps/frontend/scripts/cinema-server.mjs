@@ -9,10 +9,10 @@
 //   CINEMA_STARS         galaxy size of the member scenario (default 1000)
 //   CINEMA_SCENARIO      world at start: member (default) | newcomer | veteran
 //   CINEMA_P1=0          hide the P1 routes production does not have yet
-//                        (notifications, global statistics, withdrawal); on
-//                        by default for the demo. Follow, another member's
-//                        galaxy and personal statistics are on either way
-//                        (src/features/p1.ts)
+//                        (notifications, global statistics); on by default
+//                        for the demo. Follow, another member's galaxy,
+//                        personal statistics and withdrawal are on either
+//                        way (src/features/p1.ts)
 //   CINEMA_WINDOW_RULE=0 rank-1 peak ignores whether the window covers the dip
 //   CINEMA_UNLOCK=0      a recognized achievement unlocks no star
 //                        (unlockedStars: [], as production often answers after a

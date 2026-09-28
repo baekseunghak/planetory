@@ -43,13 +43,23 @@ export function quests(completed = 0, skipped = false): Quests {
       unlocked: completed === 5,
       progressStage: completed === 5 ? "unexplored" : null,
       participantCount: 12,
+      targetCount: 1,
+      targets:
+        completed === 5
+          ? [{ ticId: "900000006", progressStage: "unexplored" }]
+          : [],
     },
     reopened: [],
   };
 }
 export function current(eligible = true): CurrentChallenge {
   return {
-    round: { ...round, status: "active", ticId: eligible ? "900000006" : null },
+    round: {
+      ...round,
+      status: "active",
+      ticId: eligible ? "900000006" : null,
+      ticIds: eligible ? ["900000006"] : null,
+    },
     eligible,
     participantCount: 12,
   };

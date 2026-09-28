@@ -33,6 +33,7 @@ import com.planetory.backend.domain.exploration.service.ExplorationSummaryServic
 import com.planetory.backend.domain.exploration.service.InitialExplorationService;
 import com.planetory.backend.domain.exploration.service.QuestService;
 import com.planetory.backend.domain.exploration.service.QuestViews.Challenge;
+import com.planetory.backend.domain.exploration.service.QuestViews.ChallengeTarget;
 import com.planetory.backend.domain.exploration.service.QuestViews.Quests;
 import com.planetory.backend.domain.exploration.service.QuestViews.Reopened;
 import com.planetory.backend.domain.exploration.service.QuestViews.TutorialItem;
@@ -131,7 +132,7 @@ class QuestPanelTest {
         for (int seq = 2; seq <= 5; seq++) {
             assertEquals(new TutorialItem(seq, INTENTS[seq], "locked", null, null), items.get(seq - 1));
         }
-        assertEquals(new Challenge(null, false, null, false, null, null), panel.challenge());
+        assertEquals(new Challenge(null, false, null, false, null, null, 0, List.of()), panel.challenge());
         assertEquals(List.of(), panel.reopened());
     }
 
@@ -230,6 +231,27 @@ class QuestPanelTest {
         jdbc.update("UPDATE user_star_progress SET progress_stage = 'in_progress' WHERE user_id = ? AND tic_id = ?",
                 member, CHALLENGE);
         assertEquals("in_progress", quests.quests(member).challenge().progressStage());
+    }
+
+    /** 대상 별이 여러 개면 다섯 번째를 끝낼 때 모두 열리고, 카드와 현재 챌린지에 대표 대상부터 보인다(S15P21C206-283). */
+    @Test
+    void 대상_별이_여러_개면_모두_열리고_대표_대상부터_보인다() {
+        long round = insertRound("active");
+        long extra = CHALLENGE - 1;   // TIC 순서가 대표보다 앞이어도 대표가 먼저다
+        insertStar(extra);
+        jdbc.update("INSERT INTO challenge_round_extra_targets(round_id, tic_id) VALUES (?, ?)", round, extra);
+        long member = signUp();
+        for (int seq = 1; seq <= 5; seq++) {
+            complete(member, seq, "all_found");
+        }
+
+        Challenge challenge = quests.quests(member).challenge();
+        assertEquals(2, challenge.targetCount());
+        assertEquals(List.of(new ChallengeTarget(String.valueOf(CHALLENGE), "unexplored"),
+                new ChallengeTarget(String.valueOf(extra), "unexplored")), challenge.targets());
+        assertEquals(String.valueOf(CHALLENGE), challenge.ticId());
+        assertEquals(List.of(String.valueOf(CHALLENGE), String.valueOf(extra)),
+                quests.currentChallenge(member).round().ticIds());
     }
 
     /** 자격이 있어도 조회가 별을 열지 않는다. 열기는 회차 전환 명령과 튜토리얼 완료만 한다(9.4절). */

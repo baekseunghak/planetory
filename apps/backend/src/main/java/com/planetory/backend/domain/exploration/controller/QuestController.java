@@ -17,7 +17,7 @@ public class QuestController {
 
     private final QuestService quests;
 
-    @Operation(summary = "현재 챌린지", description = "운영 active 회차와 튜토리얼 완료 자격·별 단위 참여자 수. 조회는 별을 열지 않는다.")
+    @Operation(summary = "현재 챌린지", description = "운영 active 회차와 튜토리얼 완료 자격·회차 대상 별 전부의 참여자 수. 조회는 별을 열지 않는다.")
     @GetMapping("/api/v1/challenges/current")
     public CurrentChallenge currentChallenge(@AuthenticationPrincipal MemberPrincipal principal) {
         return quests.currentChallenge(principal.memberId());

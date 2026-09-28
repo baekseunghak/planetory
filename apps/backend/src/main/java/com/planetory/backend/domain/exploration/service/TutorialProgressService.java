@@ -49,32 +49,39 @@ public class TutorialProgressService {
      * <p>완료 사유는 가리지 않는다. {@code skipped}로 끝나도 다음 순번을 열고, 추가 성과는 주지
      * 않는다(SUB-12, AT-88). 호출 시점에 완료가 아니거나 튜토리얼 별이 아니면 아무것도 하지 않는다.
      *
-     * @return 새로 연 별. 이미 열려 있었거나 열 별이 없으면 빈 값
+     * @return 새로 연 별. 다음 튜토리얼 하나이거나 진행 회차 대상 별 전부 중 새로 연 것이다. 이미 열려 있었거나
+     *         열 별이 없으면 빈 목록
      * @throws BusinessException 다음 순번 튜토리얼이 설정되지 않았으면 {@code DEPENDENCY_UNAVAILABLE}.
      *                           가입 초기화와 같은 처리다. 운영 설정 누락을 조용히 넘기면 회원이
      *                           다음 튜토리얼 없이 멈춘다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public Optional<DiscoveredStar> onTutorialCompleted(long memberId, long ticId) {
+    public List<DiscoveredStar> onTutorialCompleted(long memberId, long ticId) {
         // 발견 함수도 잠그지만 완료 판정부터 회원 잠금 안에서 본다.
         if (!tutorials.lockActiveMember(memberId)) {
-            return Optional.empty();
+            return List.of();
         }
         Optional<Integer> seq = tutorials.findActiveSeq(ticId);
         if (seq.isEmpty() || !tutorials.isCompleted(memberId, ticId)) {
-            return Optional.empty();
+            return List.of();
         }
         if (seq.get() < TutorialRepository.TUTORIAL_STAR_COUNT) {
             long next = tutorials.findActiveTicId(seq.get() + 1)
                     .orElseThrow(() -> new BusinessException(ErrorCode.DEPENDENCY_UNAVAILABLE));
-            return discovery.discover(memberId, next, Reason.TUTORIAL);
+            return discovery.discover(memberId, next, Reason.TUTORIAL).stream().toList();
         }
         // 회차 진행 중에 다섯 번째를 끝내면 그 시점에 연다(서비스 F17-Q2).
         if (!tutorials.isTutorialCompleted(memberId)) {
-            return Optional.empty();
+            return List.of();
         }
-        return tutorials.findActiveRound()
-                .flatMap(round -> discovery.discover(memberId, round.targetTicId(), Reason.CHALLENGE));
+        return tutorials.findActiveRound().map(round -> openTargets(memberId, round)).orElse(List.of());
+    }
+
+    /** 회차 대상 별을 대표 대상부터 차례로 연다. 이미 받은 별은 건너뛴다. */
+    private List<DiscoveredStar> openTargets(long memberId, ChallengeRound round) {
+        return round.targetTicIds().stream()
+                .flatMap(target -> discovery.discover(memberId, target, Reason.CHALLENGE).stream())
+                .toList();
     }
 
     /**
@@ -102,7 +109,7 @@ public class TutorialProgressService {
         int skipped = 0;
         long after = 0;
         List<Long> batch;
-        while (!(batch = tutorials.findMembersToUnlock(round.targetTicId(), after, UNLOCK_BATCH_SIZE)).isEmpty()) {
+        while (!(batch = tutorials.findMembersToUnlock(round.id(), after, UNLOCK_BATCH_SIZE)).isEmpty()) {
             for (long memberId : batch) {
                 if (Boolean.TRUE.equals(perMember.execute(status -> unlockChallengeFor(memberId, round)))) {
                     opened++;
@@ -126,6 +133,6 @@ public class TutorialProgressService {
         if (!tutorials.isTutorialCompleted(memberId)) {
             return false;
         }
-        return discovery.discover(memberId, round.targetTicId(), Reason.CHALLENGE).isPresent();
+        return !openTargets(memberId, round).isEmpty();
     }
 }

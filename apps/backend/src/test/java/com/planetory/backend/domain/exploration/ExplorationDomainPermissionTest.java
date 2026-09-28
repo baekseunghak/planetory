@@ -34,7 +34,7 @@ class ExplorationDomainPermissionTest {
 
     /** 운영이 설정하고 앱은 읽기만 한다. */
     private static final List<String> READ_ONLY = List.of(
-            "operation_settings", "tutorial_stars", "challenge_rounds");
+            "operation_settings", "tutorial_stars", "challenge_rounds", "challenge_round_extra_targets");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.6-alpine")

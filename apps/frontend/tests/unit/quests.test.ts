@@ -25,6 +25,46 @@ test("quest decoder preserves locked IDs, completion/skip and nullable reopen co
   assert.equal(markers.get("900000002")?.visible, false);
   assert.equal(markers.get("900000003")?.visible, true);
 });
+test("several challenge targets: unlocked ones only, primary first; the old one-target shape still reads", () => {
+  const q = quests(5);
+  q.challenge.targetCount = 3;
+  q.challenge.targets = [
+    { ticId: "900000006", progressStage: "unexplored" },
+    { ticId: "900000007", progressStage: "completed" },
+  ];
+  assert.deepEqual(readQuests(q), q);
+  const reversed = structuredClone(q);
+  reversed.challenge.targets.reverse();
+  assert.throws(() => readQuests(reversed), "primary target first");
+  const overCount = structuredClone(q);
+  overCount.challenge.targetCount = 1;
+  assert.throws(() => readQuests(overCount), "more unlocked than targets");
+  const dup = structuredClone(q);
+  dup.challenge.targets[1].ticId = "900000006";
+  assert.throws(() => readQuests(dup), "duplicate target");
+  // Before S15P21C206-283 the backend sent only the primary target.
+  const old = structuredClone(quests(5)) as unknown as {
+    challenge: Record<string, unknown>;
+  };
+  delete old.challenge.targets;
+  delete old.challenge.targetCount;
+  assert.deepEqual(readQuests(old).challenge.targets, [
+    { ticId: "900000006", progressStage: "unexplored" },
+  ]);
+  const c = current();
+  c.round!.ticIds = ["900000006", "900000007"];
+  assert.deepEqual(readCurrentChallenge(c).round!.ticIds, [
+    "900000006",
+    "900000007",
+  ]);
+  const oldCurrent = structuredClone(current()) as unknown as {
+    round: Record<string, unknown>;
+  };
+  delete oldCurrent.round.ticIds;
+  assert.deepEqual(readCurrentChallenge(oldCurrent).round!.ticIds, [
+    "900000006",
+  ]);
+});
 test("reject locked target leaks, inconsistent completion count, duplicate IDs and malformed rounds", () => {
   const leak = quests();
   leak.tutorial.items[1].ticId = "900000002";

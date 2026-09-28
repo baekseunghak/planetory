@@ -1,6 +1,6 @@
-# Planetory 서비스 DB ERD v1.16
+# Planetory 서비스 DB ERD v1.17
 
-- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13·v1.14·v1.15·v1.16 2026-09-25)
+- 작성일: 2026-09-09 (v0.1 2026-09-04, v0.2·v0.3 2026-09-09, v1.0 2026-09-09, v1.1 2026-09-11, v1.2 2026-09-14, v1.3 2026-09-15, v1.4 2026-09-16, v1.5 2026-09-16, v1.6 2026-09-16, v1.7 2026-09-16, v1.8 2026-09-16, v1.9 2026-09-17, v1.10 2026-09-17, v1.11 2026-09-19, v1.12 2026-09-20, v1.13·v1.14·v1.15·v1.16 2026-09-25, v1.17 2026-09-27)
 - v1.3 당시 상태: 개별 별 조회·공간 인덱스 정합화 변경안. 관련 담당 교차 리뷰 후 적용하며 DB 구조/운영 데이터를 그 문서 작업으로 변경하지 않는다.
 - 기준 문서: 요구사항 명세서 v1.3(상태표 v1.3 변경안·용어 사전 v1.0·와이어프레임 v1.3), 시스템 아키텍처(불변 규칙 4·5, 데이터 소유권 표). **아키텍처 불변 규칙 5는 이 판의 Gold 저장 방식 변경에 맞춰 수정이 필요하다(서비스 백엔드 정합화 요청 R3).**
 - 범위: **EC2 PostgreSQL**에 두는 서비스 데이터. **곡선·주기도·통과 모델 본문도 PostgreSQL 배열 열에 저장한다(v0.3 결정).** Gold 파일 계층은 두지 않고, 배치가 릴리스 전환 때 배열을 적재한다. GCP HDFS(Raw/Bronze/Silver)는 범위 밖.
@@ -8,6 +8,12 @@
 - 상태: **v1.2는 별 자리 저장 계약 변경 검토안.** 추가 좌표 열과 모든 계정의 초기 은하 좌표 생성은 관련 백엔드 리뷰 후 적용한다. 현재 보존할 운영 좌표 데이터는 없다. 나머지 구조와 제약은 기존 백엔드 개발 기준선이며 임계값·대상 데이터 등 수치는 5장 미결에서 실측 후 채운다. `확인 필요`는 이 문서의 임시값, `DEC-nn`은 명세서 미결 항목.
 
 ## 0. 변경 요약
+
+### v1.16 → v1.17 (2026-09-27, `S15P21C206-283`)
+
+V30은 챌린지 회차 하나에 대상 별을 여러 개 둔다(요구사항 v1.4 POL-24). `challenge_rounds.target_tic_id`는 대표(첫) 대상으로 그대로 두어 회차마다 대표 대상이 정확히 하나다. 나머지 대상은 새 테이블 `challenge_round_extra_targets(round_id, tic_id)`(PK 두 열, `challenge_rounds`·`stars` FK)에 넣는다. 넣거나 `tic_id`를 바꿀 때 V9 함수 `exploration_target_must_be_published('tic_id')`로 공개 별만 받는다(`trg_challenge_round_extra_targets_published`). 대표 대상과 같이 나중에 숨겨진 별은 회차 수정을 막지 않는다.
+
+대상을 읽는 쪽은 뷰 `challenge_round_targets(round_id, tic_id, is_primary)`만 본다. 대표 대상과 추가 대상의 UNION ALL이며 대표와 같은 추가 대상은 한 번만 나온다. 앱 역할은 새 테이블과 뷰의 SELECT만 가진다(V5의 `challenge_rounds`와 같다). `global_stats`(V21)는 정의를 바꿀 수 없어 지우고 다시 만든다. `rounds`만 이 뷰로 대상 별 전부를 세고 나머지는 V21과 같으며 권한(SELECT·MAINTAIN)도 다시 준다. 운영 MV는 이 시점까지 채운 적이 없다(2026-09-27 `ispopulated` false). 기존 회차 INSERT와 V30 전 앱은 대표 대상만으로 그대로 동작한다. 공유/운영 DB 적용은 별도다.
 
 ### v1.15 → v1.16 (2026-09-25, `S15P21C206-270`)
 
@@ -165,7 +171,7 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 
 ## 1. 한눈에 보기
 
-일곱 묶음, 총 38개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료, V26의 한국어 설명, 269의 V27 봉우리 제출 제약, V28의 모델 일별 시도 수는 대상 환경에서 적용 이력을 확인한다.
+일곱 묶음, 총 38개 테이블 + materialized view 1개. V24의 탈퇴 요청과 정리 함수, V25의 NASA 조회 자료, V26의 한국어 설명, 269의 V27 봉우리 제출 제약, V28의 모델 일별 시도 수, V30의 챌린지 추가 대상은 대상 환경에서 적용 이력을 확인한다.
 
 | 묶음 | 테이블 | 역할 |
 |---|---|---|
@@ -174,12 +180,12 @@ v1.3이 정한 `layout_ordinal` 계약을 후속 마이그레이션으로 구현
 | C 분석·제출 | submissions, analysis_histories, analysis_snapshots | 제출·불변 히스토리·접힌 곡선 스냅샷 |
 | D 성과·진행·발견 | user_candidate_achievements, user_star_progress, star_unlocks | 성과(별 열림의 원인)·별 진행·별 지도 자리 |
 | E 커뮤니티 | posts, comments, post_reactions, post_history_attachments, comment_history_attachments, published_analyses, post_source_links | 일반 글·공식 신호 스레드·공개 분석·출처 링크 |
-| F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
+| F 운영·챌린지·알림·통계 | operation_settings, tutorial_stars, challenge_rounds, challenge_round_extra_targets, (view) challenge_round_targets, notifications, notification_outbox, notification_events, notification_signal_state, notification_candidate_changes, stats_snapshots, (mv) global_stats | 운영 설정·파생 데이터 |
 | G 외부 조회 자료 | nasa_planet_info, nasa_planet_explanation, nasa_explanation_daily_usage, nasa_explanation_daily_total, nasa_star_catalog, nasa_star_planet, nasa_star_planet_explanation | 266 후보별·270 항성별 NASA PS 정규화 자료, 267·270 설명, 268 모델 시도 한도. Gold와 별도 소유 |
 
 ## 2. ERD
 
-아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24~V29 신규 관계와 제약의 최신 본문은 아래 Mermaid·열 표이고, V25·V26·V28·V29의 NASA 자료 관계는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
+아래 기존 전체 SVG는 v1.10 그림에 V23 알림 확장 패널을 덧붙인 보조 자료다. V24~V30 신규 관계와 제약의 최신 본문은 아래 Mermaid·열 표이고, V25·V26·V28·V29의 NASA 자료 관계는 [전용 SVG](../images/nasa-planet-info-erd.svg)로도 그렸다. 기존 전체 SVG의 재생성은 별도 시각 인수 대상이다.
 
 - [관계 개요](../images/database-erd-overview.svg)
 - [전체 (열 포함)](../images/database-erd.svg)
@@ -255,6 +261,8 @@ erDiagram
     operation_settings ||--o{ submissions : judged_by
     stars ||--o{ tutorial_stars : tutorial
     stars ||--o{ challenge_rounds : target
+    challenge_rounds ||--o{ challenge_round_extra_targets : extra_targets
+    stars ||--o{ challenge_round_extra_targets : extra_target
 
     users["users · 회원"] {
         bigint id PK "고유 번호"
@@ -632,10 +640,14 @@ erDiagram
         integer round_no UK "회차"
         date starts_on "시작일"
         date ends_on "종료일"
-        bigint target_tic_id FK "대상 별"
+        bigint target_tic_id FK "대표 대상 별"
         text description "한 줄 설명"
         text status "planned/active/closed"
         timestamptz notification_started_at "최초 알림 시작 경계"
+    }
+    challenge_round_extra_targets["challenge_round_extra_targets · 챌린지 추가 대상"] {
+        bigint round_id PK, FK "회차"
+        bigint tic_id PK, FK "추가 대상 별"
     }
     notifications["notifications · 알림"] {
         bigint id PK "고유 번호"
@@ -966,7 +978,9 @@ EC2가 계산한 잔차 곡선과 잔차 주기도는 언제든 다시 만들 �
 
 - **tutorial_stars** (HOME-06, SUB-12): seq 1~5 PK, tic_id, intent(deep_confirmed / shallow_confirmed / fp / deep_fp / **multi_fp**), active. 5종 TIC은 109(!104)가 확정했다: 1 149603524 · 2 307210830 · 3 279569718 · 4 300871545 · 5 278956474. 운영 등록은 [Publisher 「튜토리얼 5종」](../../distributed-system/publisher/README.md#튜토리얼-5종-s15p21c206-272)(272). 순차 열림·건너뛰기(상세 보기 경유, `tutorial_skip_after` 개발 3·운영 0=끔)·챌린지 노출은 명세서 v0.10·결정 10 그대로. 변경 이력 없음(결정 6). `tic_id`는 공개된 별만(v1.9 트리거).
 - **operation_settings** (OPS-04·08, 명세서 v0.13): `rule_version` PK, `values` JSONB, `applied_at`, `note`. 매칭 허용 오차, 고조파 배율, BLS 품질, AI 임계값, `stars_per_achievement`(기본 1), `tutorial_skip_after`(개발 환경 3, 운영 환경 0=끔), 무작위 시드 정책을 한 행에 묶는다. 값을 하나만 바꿔도 새 버전 행을 만들고 이전 행은 지우지 않으므로 행 목록이 곧 변경 이력이다. `submissions.rule_version`이 이 행을 가리켜 그 제출이 어떤 설정으로 판정됐는지 되살릴 수 있다. 운영 화면이 없으므로 값 변경은 DB에서 직접 한다(결정 11). 주기 미세 조정 범위는 여기가 아니라 판별 manifest에 있다(OPS-04). **v1.9:** `values`는 형식 1(`format_version`과 `selection`·`matching`·`peaks`·`discovery`·`tutorial`·`ai`·`bls` 묶음, 예: `tutorial_skip_after` → `tutorial.skip_after`)만 받는다(CHECK `ck_operation_settings_values_valid`). 적용 시각 유일(`uq_operation_settings_applied_at`), 적용된 행 수정·삭제·비우기와 지난 시각 삽입 거절(트리거), 초기 규칙 `rule-0`. 상세는 [운영 규칙 변경 런북](../operations/operation-rule-runbook.md).
-- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). 달성 조건·보상 없음. 참여 수는 열이 아니라 대상 별 공식 스레드의 유효 공개 분석 참여자 수(COM-14 (1)의 N)를 조회한다(명세서 v1.1 안건 15).
+- **challenge_rounds** (CHL-01·03, HOME-07, POL-24): round_no UNIQUE, starts_on, ends_on, target_tic_id, description(한 줄 설명, v1.1 추가), status planned/active/closed. active는 하나(v1.4), `starts_on ≤ ends_on`·대상은 공개된 별만(v1.9). `target_tic_id`는 대표 대상이다(v1.17). 달성 조건·보상 없음. 참여 수는 열이 아니라 회차 대상 별 전부의 공식 스레드에서 유효 공개 분석을 가진 참여자 수(COM-14 (1)의 N, 회원당 1)를 조회한다(명세서 v1.1 안건 15, v1.4).
+- **challenge_round_extra_targets** (V30, 283): round_id·tic_id PK, 각각 `challenge_rounds`·`stars` FK. 대표 대상 밖의 추가 대상이며 공개된 별만 받는다(`trg_challenge_round_extra_targets_published`, V9 함수 재사용). 운영자가 소유자 계정으로 넣고 앱 역할은 SELECT만 가진다. 운영값은 회차당 추가 4개(대표 포함 5개)이며 DB 상한은 없다.
+- **challenge_round_targets (view)** (V30): `(round_id, tic_id, is_primary)`. 대표 대상과 추가 대상을 합치며 대표와 같은 추가 대상은 한 번만 나온다. 튜토리얼 5번 완료·`challenge-unlock`·무작위 발견 제외·퀘스트·회차 조회·`global_stats`가 모두 이 뷰로 대상을 읽는다. 앱 역할은 SELECT만 가진다.
 - **notifications** (NTF-01): user_id, type(achievement/reopen/challenge/comment/relabel/follow), payload JSONB, read_at, created_at. 인덱스 (user_id, read_at, created_at DESC). **150 구현:** 판 전환 재개 사건(탐사 API 9.3절)이 이 테이블의 첫 쓰기 경로다. `type='reopen'`, payload는 `{ticId, bundleId, newDiscoverableCount}`이며 `reason`은 근거가 되는 `candidate_status_history`를 남길 Publisher(S15P21C206-87)가 없어 아직 싣지 않는다. V22가 `(user_id, payload->>'ticId', payload->>'bundleId') WHERE type='reopen'` 부분 유일 인덱스로 같은 판의 중복 사건을 DB에서 막고, 앱 역할에 SELECT·INSERT만 준다. V23은 event_key·published_at·publication_seq를 추가한다. 세 열은 모두 NULL(기존 원본/미발행)이거나 모두 유효한 발행 값이다. UNIQUE(user_id,event_key), UNIQUE(user_id,publication_seq), 발행 행의 (user_id,published_at DESC,id DESC) 부분 인덱스를 사용한다. 앱에는 read_at·세 발행 열의 UPDATE만 추가하며 원본 payload·created_at·DELETE 권한을 주지 않는다. 기존 행은 비소급 보존한다.
 - **notification_events / notification_signal_state / notification_candidate_changes** (V23, 175): 불변 원천 event_key·payload·occurred_at, 후보별 마지막 유효 disposition/AI verdict, 판×후보별 최초/최종 탐색 가능 여부다. Gold·앱 직접 쓰기는 허용하지 않고 승인된 DB 트리거만 관리한다. state와 changes의 candidate_id는 후보 FK(삭제 cascade), changes.bundle_id는 판 FK다. 출처 사건과 수신 의도는 자동 정리하지 않는다.
 - **challenge_rounds.notification_started_at** (V23): 최초 시작 경계. 기존 active/closed는 -infinity 비소급 표시이며 시작 트리거가 당시 참여 가능한 회원·설정을 outbox에 저장한다. 반복 전환에도 경계를 보존한다.
