@@ -260,3 +260,5 @@
   border-top: 1px solid var(--pc-line, rgba(150, 180, 225, 0.14));
   background: var(--pc-classic-surface, #04070d);
 }
+
+.pc-result-primary .pc-result-forward { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; }

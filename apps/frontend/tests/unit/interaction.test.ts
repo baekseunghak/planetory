@@ -211,3 +211,10 @@ test("partially visible edge markers stay indexed until the padded scene clips t
     if (present) assert.equal(targets[0].id, star.ticId);
   }
 });
+
+ test("challenge badge hides on completion and returns when exploration reopens", () => {
+  const star = exampleStar(5);
+  for (const progressStage of ["unexplored", "in_progress", "completed", "in_progress"] as const) {
+    assert.equal(markerLabel({ ...star, progressStage }, null, star.ticId), progressStage === "completed" ? null : "!");
+  }
+});

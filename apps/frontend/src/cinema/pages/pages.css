@@ -2484,3 +2484,44 @@
   background: #ffe08c;
   color: var(--pc-accent-ink);
 }
+.cinema-shell .cp-page .publication-batch-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.cinema-shell .cp-page .publication-batch-actions .publication-back { margin-right: 0; }
+
+.cinema-shell .cp-page .publication-review .publication-secondary,
+.cinema-shell .cp-page .publication-record-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: 1px solid var(--pc-border, #344354);
+  border-radius: 9px;
+  color: var(--pc-text, #e2e8f0);
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.cinema-shell .cp-page .publication-review .publication-secondary:hover,
+.cinema-shell .cp-page .publication-record-actions > button:hover:not(:disabled) {
+  border-color: var(--pc-accent);
+  color: var(--pc-accent);
+}
+.cinema-shell .cp-page .publication-card > .publication-notice[role="status"] {
+  min-height: 0;
+  width: fit-content;
+  max-width: 100%;
+  margin: 12px 0;
+  padding: 8px 12px;
+  text-align: left;
+  justify-content: flex-start;
+}
+.cinema-shell .cp-page .publication-card > .publication-notice-complete[role="status"]::before {
+  content: "✓";
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+  color: var(--pc-accent);
+}

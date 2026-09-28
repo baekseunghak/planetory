@@ -45,3 +45,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+.publication-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.6rem;
+  text-decoration: none;
+}

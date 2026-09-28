@@ -1824,3 +1824,6 @@
   display: inline-flex; align-items: center; justify-content: center;
   padding-block: 0 !important;
 }
+
+.cx-result-flow { width: 100%; }
+.cx-result-flow .cx-result-home { margin-right: auto; }

@@ -238,8 +238,8 @@ export function AcceptedResult(props: AcceptedResultProps) {
     PUBLISH_ANALYSIS: {
       kind: "link",
       key: "PUBLISH_ANALYSIS",
-      label: "공개 검토",
-      to: pagePath("publication", { historyId }, { returnTo: currentPath }),
+      label: completed ? "이 별의 분석 공개 검토" : "공개 검토",
+      to: pagePath("publicationBatch", {}, { ticId, returnTo: currentPath }),
     },
     VIEW_RESULT: {
       kind: "link",
@@ -304,7 +304,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
     rest = [];
   } else {
     const order: NextAction[] =
-      achievement.result === "pending_publish"
+      completed
         ? ["PUBLISH_ANALYSIS", "NEXT_CURVE", "VIEW_RESULT", "DISCUSS", "RETRY"]
         : ["NEXT_CURVE", "VIEW_RESULT", "PUBLISH_ANALYSIS", "DISCUSS", "RETRY"];
     const available = order
@@ -527,14 +527,18 @@ export function AcceptedResult(props: AcceptedResultProps) {
         </details>
       </div>
 
+      {links.NEXT_CURVE && <p>분석 기록은 나중에 모아서 공개할 수 있습니다.</p>}
       <div className="pc-result-actions" data-testid="next-actions">
         <div className="pc-result-primary">
-          {next && render(next, "pc-result-button pc-result-button-main")}
           {render(home, "pc-result-button")}
+          <span className="pc-result-forward">
+            {rest.filter((action) => action.key === "PUBLISH_ANALYSIS").map((action) => render(action, "pc-result-button"))}
+            {next && render(next, "pc-result-button pc-result-button-main")}
+          </span>
           {rest.filter((action) => action.key === "VIEW_RESULT").map((action) => render(action, "pc-result-inline"))}
         </div>
         <div className="pc-result-secondary">
-          {rest.filter((action) => action.key !== "VIEW_RESULT").map((action) => render(action, "pc-result-inline"))}
+          {rest.filter((action) => action.key !== "VIEW_RESULT" && action.key !== "PUBLISH_ANALYSIS").map((action) => render(action, "pc-result-inline"))}
           <button type="button" className="pc-result-inline" onClick={close}>
             닫기
           </button>
