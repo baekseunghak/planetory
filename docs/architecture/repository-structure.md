@@ -28,7 +28,8 @@ S15P21C206/
 │  ├─ tess-bls/               # 기존 과학 알고리즘 실험
 │  └─ distributed-pipeline/   # 분산 연결 PoC
 ├─ .gitlab/ci/                # 배포 단위별 CI/CD 설정
-└─ docs/                      # 요구사항·설계·운영 문서
+├─ docs/                      # 요구사항·설계·운영 문서
+└─ exec/                      # SSAFY 포팅 매뉴얼 제출물(폴더명 고정). 정본은 docs/·infra/
 ```
 
 ## 각 디렉터리의 역할
