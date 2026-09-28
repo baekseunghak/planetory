@@ -326,7 +326,7 @@ Bronze 행을 먼저 필터하거나 `source_row`를 다시 매기지 않는다.
 
 ## Sector 14+ 증분 Silver (`S15P21C206-275`)
 
-**상태: 구현 완료, Sector 14 증분 run 실클러스터 확인(2026-09-27). backfill 버킷·선택 인덱스 전.** 78의 1~13 결과를 보존한 채, 새 Sector에 관측이 생긴 TIC만 모든 Sector를 합쳐 다시 계산한다. BLS는 결합 곡선 전체가 필요하므로 증분 계산이 아니라 TIC 단위 재실행이다. Airflow DAG 연결은 80이 맡으며, 그 전까지 `start-unit`은 Airflow sudoers가 고정한 coverage 인자만 받는다.
+**상태: 구현 완료, 실클러스터 확인(2026-09-27: Sector 14 증분 run, `plan`, backlog 버킷 0·1). 나머지 버킷 13개는 용량 결정 뒤, 선택 인덱스는 전.** 78의 1~13 결과를 보존한 채, 새 Sector에 관측이 생긴 TIC만 모든 Sector를 합쳐 다시 계산한다. BLS는 결합 곡선 전체가 필요하므로 증분 계산이 아니라 TIC 단위 재실행이다. Airflow 연결은 81 조정 DAG가 맡으며, 그 전까지 `start-unit`은 Airflow sudoers가 고정한 coverage 인자만 받는다. 증분은 운영자 경로(`run-tess-silver.ps1`)로 실행한다.
 
 ### 누적 Bronze snapshot
 
@@ -367,7 +367,7 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 ### HDFS 용량 가드
 
 - 제어기는 제출 직전 `hdfs dfs -df /`로 `floor(Size × 0.80) − Used`를 계산해 job에 넘긴다. 0 이하면 HDFS에 쓰기 전에 exit 65로 끝난다. Silver·Gold가 함께 쓰는 사전 점검(`cluster_preflight`)은 사용률 85% 이상이면 새 작업을 거부한다(`PREFLIGHT_STOP_PERCENT`). 처음에는 Raw 적재의 RF2 예상 70% 선에 맞춰 70%·75%로 두었고, 2026-09-27 운영자 결정으로 80%·85%로 올렸다. Bronze 제어기의 75% 선과 Raw 적재의 70%·75% 선은 바꾸지 않았다.
-- job은 대상 TIC와 Bronze 제품 수를 센 뒤 BLS 전에 추정 출력 `2 × (제품 × 898,200 B + TIC × 927,300 B)`가 예산을 넘으면 `capacity_budget_exceeded`로 멈춘다(exit 65). 계수는 1~13 attempt 실측(`target_combined` 제품당, 나머지 출력 TIC당)이며, 이 식은 그 attempt의 RF2 683.0 GB를 0.1% 안으로 재현한다. 첫 backfill 버킷의 실제 크기로 다시 맞춘다.
+- job은 대상 TIC와 Bronze 제품 수를 센 뒤 BLS 전에 추정 출력 `2 × (제품 × 898,200 B + TIC × 927,300 B)`가 예산을 넘으면 `capacity_budget_exceeded`로 멈춘다(exit 65). 계수는 1~13 attempt 실측(`target_combined` 제품당, 나머지 출력 TIC당)이며, 이 식은 그 attempt의 RF2 683.0 GB를 0.1% 안으로 재현한다. backlog 버킷 0·1의 실제 크기는 추정의 97.3%·97.1%였다. 추정이 약 3% 크게 잡으므로 계수를 바꾸지 않는다([버킷 결과](#backlog-버킷-01-결과-2026-09-27-확정)).
 - 예산은 진행 중인 Silver 출력 하나만 가정한다. 다른 Silver YARN 앱이 실행 중이면 사전 점검이 거부하고 systemd가 5분 뒤 다시 시도한다. 버킷은 한 번에 하나씩 돌린다.
 - 80~85% 구간(약 500 GB)은 Gold PublicationBundle 백업([`/lake/publication-bundle-backup`](../../infra/distributed-system/README.md), 96)과 Raw·Bronze 적재 여유로 남긴다. Gold 백업은 추정 수십 GB이고, 별 48.9만 개를 모두 게시해도 약 235 GB(별당 240 KB 이하, RF2)다. 실측 전 추정이다.
 - **감수한 위험.** DataNode 5대·RF2에서 한 대를 잃으면 나머지 4대가 그 블록을 다시 복제해야 한다. 사용률이 약 80%(4/5)를 넘은 상태에서는 복제 계수 2를 회복할 공간이 없어, 그 노드를 되살리거나 공간을 비울 때까지 일부 블록이 한 벌로만 남는다. `/mnt/data`는 YARN local(Silver `DISK_ONLY` 결과)과도 공유한다. 또 Raw 적재는 RF2 예상 70% 선을 그대로 쓰므로, Silver가 70%를 넘기면 새 Sector Raw 적재가 멈춘다. 새 Sector를 받기 전에 이 선을 함께 정해야 한다.
@@ -411,10 +411,10 @@ v4 attempt(1~13 원본과 2026-09-26 retry 검증)는 새 release로 재시도�
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Plan -CodeReleaseId <release>
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Canary -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -TicId <tic>
 .\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 14 -DeltaFromSector 14
-.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 70 -DeltaFromSector 14 -TicBuckets 16 -TicBucket 0 -ShufflePartitions 500
+.\infra\distributed-system\scripts\run-tess-silver.ps1 -Step Start -CodeReleaseId <release> -RunId <run> -ThroughSector 70 -DeltaFromSector 15 -TicBuckets 15 -TicBucket <k> -ShufflePartitions 500
 ```
 
-버킷마다 새 `-RunId`를 쓴다. `Preflight`는 예산 미리보기(`SILVER_CAPACITY_BUDGET_PREVIEW`)를 출력한다.
+마지막 줄의 인자는 `plan`이 돌려준 `through_sector`·`delta_from_sector`·`tic_buckets`·`tic_bucket`을 그대로 옮긴다. 버킷마다 새 `-RunId`를 쓴다. `Preflight`는 예산 미리보기(`SILVER_CAPACITY_BUDGET_PREVIEW`)를 출력한다.
 
 ### Sector 14 증분 run 결과 (2026-09-27 확정)
 
@@ -431,13 +431,41 @@ release `20260926T234554Z`(커밋 `b86c1939`)로 먼저 Canary(run `20260927T015
 | 기존 결과 보존 | 1~13 원본 attempt `_READY` SHA `e3814a81…`와 수정 시각(2026-09-25 19:23:55), retry attempt `77782015…`가 실행 전후 같다. staging·Canary 잔여 0 |
 | HDFS | 64.44% → 65.16%. 70%까지 남은 예산 약 485 GB |
 
-이 run으로 변경 TIC만 새 attempt에 처리되고 기존 attempt가 보존됨을 확인했다. 한 TIC가 두 Bronze 버전의 행을 함께 결합하는 경우는 이 run에 없었으므로, Sector 27 이후(남반구 재관측)가 들어가는 backfill 버킷에서 확인한다. 입력 검사 약 30분은 이후 커밋 `889e43e8`의 개선 대상이며 새 release로 아직 실측하지 않았다. 제어기 확정 24분은 대부분 출력 part마다 `hdfs dfs -checksum` JVM을 확정 전과 후에 한 번씩 띄우는 데 쓰인다(공용 `part_checksum_digest`). checksum을 묶어 호출하는 개선은 Bronze와 함께 후속으로 검토한다.
+이 run으로 변경 TIC만 새 attempt에 처리되고 기존 attempt가 보존됨을 확인했다. 한 TIC가 두 Bronze 버전의 행을 함께 결합하는 경우는 이 run에 없었으므로, Sector 27 이후(남반구 재관측)가 들어가는 backfill 버킷에서 확인한다. 입력 검사 약 30분은 이후 커밋 `889e43e8`의 개선 대상이며 새 release로 아직 실측하지 않았다. 제어기 확정 24분은 대부분 출력 part마다 `hdfs dfs -checksum` JVM을 확정 전과 후에 한 번씩 띄우는 데 쓰인다(공용 `part_checksum_digest`). checksum을 묶어 호출하는 개선은 Bronze와 함께 후속으로 검토한다. 이후 80의 part checksum 일괄·동시 계산으로 확정은 약 2.5분이 됐다(아래 버킷 결과).
+
+### backlog 버킷 0·1 결과 (2026-09-27 확정)
+
+`plan`(release `20260927T095648Z`, `application_1790067725443_0075`)이 S = 14, B = 70에서 첫 증분 `through 70, delta 15`를 만들었다. 대상은 TIC 413,764개, 제품 1,133,790개, 추정 RF2 2,804.1 GB이며 K = 15(버킷당 약 187 GB)다. 이 `--plan-only` job은 Sector 1~70 Bronze의 입력 선택과 검사를 끝내는 데 약 3분(177초)이 걸렸다. 개선 전 release는 Sector 1~14만으로도 약 30분이 걸렸으므로, 입력 검사 1회 읽기 개선(`889e43e8`)을 실측으로 확인한 셈이다.
+
+이어서 Canary(run `20260927T101623Z`, `application_1790067725443_0076`)로 TIC `150428135`(TOI-700)와 `259377017`(TOI-270)을 Sector 1~70 snapshot으로 처리했다. TOI-700은 Sector 29개(1~13의 11개와 27~69의 18개)에 걸쳐 두 Bronze 버전을 한 TIC 안에서 결합했다. 결과는 두 TIC 모두 최초 탐색 `succeeded`, 반복 `qa_stopped`, 실패 0개다. 버킷은 `plan`이 준 인자로 하나씩 `-Step Start`했다. 버킷 0은 70% 예산 release `20260927T095648Z`로, 버킷 1은 80%·85%를 반영한 release `20260927T131902Z`로 돌렸다.
+
+| 구분 | 버킷 0 | 버킷 1 |
+| --- | --- | --- |
+| attempt | `…095648Z/run_id=20260927T103415Z/attempt=20260927T103842Z` | `…131902Z/run_id=20260927T154833Z/attempt=20260927T155143Z` |
+| YARN 앱 | `application_1790067725443_0077` | `application_1790067725443_0078` |
+| `selection` | `{15, 15, 0}` | `{15, 15, 1}` |
+| 선택 | TIC 27,400, 제품 75,953 | TIC 27,722, 제품 75,196 |
+| 최초 탐색 | `succeeded` 6,311, `no_quality_peak` 20,729, `failed` 362 | `succeeded` 6,373, `no_quality_peak` 20,966, `failed` 385 |
+| 실패 코드(manifest) | `numerical_failure` 180, `bls_failed` 156, `invalid_normalization` 25, 반복 `incomplete` 1 | `bls_failed` 182, `numerical_failure` 175, `invalid_normalization` 27, 반복 `incomplete` 1 |
+| 반복 탐색 | `succeeded` 22,793, `qa_stopped` 4,245, `incomplete`·`failed` 1·1 | `succeeded` 22,980, `qa_stopped` 4,357, `incomplete`·`failed` 1·1 |
+| 출력 RF2 / 추정 | 182.29 GB / 187.26 GB(97.3%) | 181.11 GB / 186.50 GB(97.1%) |
+| 제출 → 앱 SUCCEEDED → 확정 | 10:39:05 → 15:43:14(5시간 4분) → 15:45:49(2.6분) | 15:52:03 → 20:47:17(4시간 55분) → 20:49:40(2.4분) |
+| 예산(제출 시) | 481.8 GB | 1,300.7 GB |
+
+- 두 버킷 모두 재시도 가능 실패가 0개이고 systemd 재시작도 0회였다. 확정 뒤 staging 잔여는 없다. `_READY`의 `failed_tics`(362·385)는 manifest `failed` 행 수에 반복 `incomplete` 1을 더한 값이다.
+- 기존 attempt는 두 버킷 전후로 바뀌지 않았다. `_READY` SHA가 1~13 원본 `e3814a81…`, retry `77782015…`, Sector 14 `87bd2167…`, 버킷 0 `e008963d…`로 같고 수정 시각은 각자의 확정 시각이다.
+- 최초 탐색 실패율은 1.3%·1.4%로, 1~13(0.08%)과 Sector 14(0.09%)보다 높다. 실패 코드 종류는 같고 모두 재시도 불가다. 여러 Sector를 결합한 곡선에서 늘어난 것으로 보이지만 원인은 확인하지 않았다. Gold는 이 TIC를 `rejected`로 둔다.
+- HDFS 사용률은 버킷 0 전 65%에서 버킷 1 뒤 69%(10.03 TB 중 6.90 TB)가 됐다. Silver 전체는 RF2 1.12 TB다. 80% 예산까지 약 1,118 GB가 남아, 추정 기준으로 버킷 5개, 실제 크기(약 181 GB) 기준으로 6개가 더 들어간다. 나머지 13개를 모두 돌리려면 약 1.2~1.3 TB를 더 확보해야 한다(103 용량 결정).
 
 ### 검증 상태와 남은 일
 
-- 오프라인: `test-tess-silver.ps1` 통과(Silver 47, Airflow 12). snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기를 검사한다.
-- 실클러스터: Sector 14 Canary와 증분 run(위 절).
-- 남은 일: `889e43e8` release로 입력 검사 시간 실측, 두 Bronze 버전이 섞이는 backfill 버킷 1개, TIC별 선택 인덱스 구현, 나머지 버킷을 위한 용량 결정(Raw 복제 계수·보존 기간), 80의 DAG 연결.
+- 오프라인: `test-tess-silver.ps1` 통과(Silver 56, Airflow 12). 검사 항목은 snapshot 버전·ID, marker 거부, 용량 예산·추정식, 두 번째 Silver 앱 거부, job·제어기 인자 검증, v5 marker 필드, 입력 검사 1회 읽기, `plan` 워터마크·버킷 선택이다.
+- 실클러스터: Sector 14 Canary와 증분 run, `plan`, Sector 1~70 Canary(두 Bronze 버전 결합), backlog 버킷 0·1(위 절).
+- 이 작업 밖으로 넘긴 일:
+  - Silver DAG conf·`start-unit` sudoers 확장은 이를 부를 81 조정 DAG에서 함께 한다. 호출하는 쪽 없이 sudoers만 넓히지 않는다.
+  - 나머지 버킷 2~14는 103 용량 결정 뒤 `plan`으로 이어 간다.
+  - TIC별 선택 인덱스는 보류다. 만들기 전까지 Gold는 명시한 attempt 하나만 읽는다. v5 attempt 입력 자체는 `silver_input`이 받는다.
+  - 버킷 실패율 증가의 원인 조사와 Silver `periodogram` 배열 제거는 결정 전이다.
 
 ## TESS Silver → Gold 게시 후보 (`S15P21C206-80`)
 
