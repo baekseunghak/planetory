@@ -1,8 +1,8 @@
-"""80 publication run: external catalogs → Gold → publish gate → human approval, under one run ID.
+"""80 publication run: external catalogs → Gold → publish gate → human approval → publish, under one run ID.
 
-Gold and the gate run as systemd units on Node 1 and are polled through the Triggerer, so an
-Airflow restart or redeploy does not stop them. Airflow only submits; Spark runs on YARN. The
-276 publish task is added downstream of approve_publication, so only an approved run is published.
+Gold, the gate and the publish step run as systemd units on Node 1 and are polled through the Triggerer,
+so an Airflow restart or redeploy does not stop them. Airflow only submits; Spark runs on YARN. The 276
+publish step runs downstream of approve_publication, so only an approved run is published.
 """
 
 from __future__ import annotations
@@ -17,14 +17,14 @@ from airflow.sdk.exceptions import AirflowException, AirflowFailException
 from tess_pipeline_contract import remaining_wait_time
 from tess_pipeline_remote import remote, require_success
 from tess_publication_contract import (collect_command, gate_start_command, gold_start_command,
-                                       publication_request, status_command, unit_progress)
+                                       publication_request, publish_start_command, status_command, unit_progress)
 
 WAIT_LIMIT = timedelta(days=3)
 POLL_INTERVAL = timedelta(minutes=5)
 STATUS_TIMEOUT_SECONDS = 120
 MAX_STATUS_FAILURES = 6
 MAX_UNIT_RESTARTS = 6
-DONE = {"run": "complete", "gate": "publish_ready"}
+DONE = {"run": "complete", "gate": "publish_ready", "publish": "complete"}
 
 
 def request(conf: dict) -> dict:
@@ -35,7 +35,7 @@ def request(conf: dict) -> dict:
 
 
 class GoldUnitWaitOperator(BaseOperator):
-    """Poll a Gold or gate unit through the Triggerer without holding a LocalExecutor slot."""
+    """Poll a Gold, gate or publish unit through the Triggerer without holding a LocalExecutor slot."""
 
     def __init__(self, *, operation: str, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -53,6 +53,13 @@ class GoldUnitWaitOperator(BaseOperator):
         if progress == "complete":
             if self.operation == "run":
                 return detail["final"]  # the committed attempt the gate checks
+            if self.operation == "publish":
+                # Run record summary (276). The full per-star record stays in the Node 1 state file.
+                record = detail.get("record") or {}
+                return {**{key: record.get(key) for key in ("run_id", "approval", "status", "counts")},
+                        "notify": (record.get("notify") or {}).get("status"),
+                        "not_published": [s for s in record.get("stars") or []
+                                          if s.get("code") not in ("PUBLISHED", "ALREADY_PUBLISHED")][:50]}
             ready = detail.get("result") or {}
             return {key: ready.get(key) for key in ("run_id", "attempt", "counts", "bundles", "candidates",
                                                     "excluded_tics")}
@@ -78,8 +85,8 @@ class GoldUnitWaitOperator(BaseOperator):
 
 @dag(
     dag_id="tess_publication_run",
-    dag_display_name="tess_publication_run · Silver 1~13 → Gold 게시 준비",
-    description="외부 카탈로그 수집, Gold 생성, 게시 준비 gate, 수동 게시 승인을 run ID 하나로 실행한다(수동 실행).",
+    dag_display_name="tess_publication_run · Silver 1~13 → Gold 게시",
+    description="외부 카탈로그 수집, Gold 생성, 게시 준비 gate, 수동 게시 승인, 서비스 DB 게시를 run ID 하나로 실행한다(수동 실행).",
     schedule=None,
     start_date=datetime(2026, 9, 27, tzinfo=timezone.utc),
     catchup=False,
@@ -126,8 +133,18 @@ def publication_dag():
         fail_on_reject=True,
         response_timeout=timedelta(days=7),
     )
+
+    @task(task_id="start_publish", retries=3, retry_delay=timedelta(minutes=5))
+    def start_publish() -> None:
+        # Deterministic unit per run: a retried task finds the same unit; a finished one is not restarted.
+        require_success("planetory_node_1", publish_start_command(request(get_current_context()["dag_run"].conf)),
+                        terminal_exit=65)
+
+    wait_publish = GoldUnitWaitOperator(task_id="wait_publish", operation="publish", retries=3,
+                                        retry_delay=timedelta(minutes=5))
     validate_request() >> collect_external() >> start_gold() >> wait_gold
     start_gate(wait_gold.output) >> wait_gate >> approve
+    approve >> start_publish() >> wait_publish
 
 
 publication_dag()

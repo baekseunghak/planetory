@@ -7,6 +7,7 @@
   python -m publisher load-payload <payload JSON 파일 또는 폴더>...
   python -m publisher tutorial-switch-sql
   python -m publisher supply-report --manifest candidates.json   [S15P21C206-79]
+  python -m publisher publish-run --run-id <id> --ready <게시 준비 폴더> --approval <근거>   [S15P21C206-276]
 
 접속은 libpq 환경변수(PGHOST·PGDATABASE·PGUSER·PGPASSWORD)를 따른다. 적재 계정은
 planetory_gold_writer 멤버여야 한다. 소유자로 붙으면 권한 분리가 무력화된다. tutorial-build는 DB에 붙지 않고
@@ -42,10 +43,18 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("tutorial-switch-sql", help="튜토리얼 1~5 전환 SQL을 출력한다. service-db의 소유자 psql로 넘긴다")
     report = sub.add_parser("supply-report", help="DEC-01 공급 집계 기록을 JSON으로 출력한다. DB는 읽기만 한다")
     report.add_argument("--manifest", required=True, help="79 후보 집계 출력 또는 그 manifest JSON 파일. -는 표준 입력")
+    run = sub.add_parser("publish-run", help="배치 run의 ready 별을 첫 게시한다. run 기록 JSON을 표준 출력에 낸다")
+    run.add_argument("--run-id", required=True, help="게시할 run ID. publish-ready와 run manifest의 run_id와 같아야 한다")
+    run.add_argument("--ready", required=True, type=Path,
+                     help="80 publish-ready를 받은 폴더(_READY.json, manifest/, candidates/, bundles/)")
+    run.add_argument("--approval", required=True, help="게시 승인 근거. manifest.publish.approval에 남는다")
     args = parser.parse_args(argv)
 
     if args.command == "supply-report":
         return supply_report(args.manifest)
+
+    if args.command == "publish-run":
+        return publish_run(args)
 
     if args.command == "notify":
         # DB는 건드리지 않는다. 판을 다시 싣지 않고 알림만 보낸다.
@@ -123,6 +132,89 @@ def supply_report(path: str) -> int:
     json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
     print()
     return 0
+
+
+DONE = {"PUBLISHED", "ALREADY_PUBLISHED", "BUNDLE_SUPERSEDED"}
+DATA_FAILURE = 65   # 같은 입력으로는 다시 돌려도 실패한다. Silver 제어기와 같은 뜻이다(Airflow가 재시도하지 않는다).
+
+
+def publish_run(args) -> int:
+    """배치 run 게시 [S15P21C206-276]. run 기록을 표준 출력에, 진행 메시지를 표준 오류에 낸다.
+
+    종료 코드: 모든 별이 끝났으면 0, 일시 장애(PUBLISH_ROLLED_BACK)가 있으면 1(같은 명령을 다시 돌린다. 끝난 별은
+    ALREADY_PUBLISHED다), 그 밖의 거절만 남았으면 65다. 알림 일부 실패는 0이다. DB의 current가 정본이라 게시를
+    다시 돌리지 않고, 실패한 판은 run 기록 notify.results를 보고 notify 명령으로 다시 보낸다.
+    """
+    import datetime as dt
+
+    import psycopg
+
+    from . import load as loader
+
+    now = lambda: dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")  # noqa: E731
+    started = now()
+    with psycopg.connect("", autocommit=True) as conn:
+        try:
+            target = loader.preflight(conn)
+        except loader.PublishError as exc:
+            # 마이그레이션이 뒤처지는 등 다시 돌려도 결과가 같다. 제어기가 재시작하지 않게 기록을 남기고 65로 끝낸다.
+            record = {"run_id": args.run_id, "approval": args.approval, "status": "rejected",
+                      "reason": f"{exc.code}: {exc}", "stars": [], "started_at": started, "finished_at": now()}
+            json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
+            print()
+            return DATA_FAILURE
+        print(f"대상 {conn.info.dbname}, 마이그레이션 V{target.flyway_version}", file=sys.stderr)
+        for warning in target.warnings:
+            print(f"주의: {warning}", file=sys.stderr)
+        record = run_record(conn, target, args.ready, run_id=args.run_id, approval=args.approval)
+    record["notify"] = notify_record([s["bundle_id"] for s in record["stars"] if s["code"] in ("PUBLISHED", "ALREADY_PUBLISHED")])
+    record.update(started_at=started, finished_at=now())
+    json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
+    print()
+    return exit_code(record)
+
+
+def run_record(conn, target, ready: Path, *, run_id: str, approval: str) -> dict:
+    """게시 준비 폴더의 ready 별을 하나씩 첫 게시하고 별별 결과를 모은다. 알림은 부르는 쪽이 붙인다."""
+    from . import load as loader, run_source
+
+    record = {"run_id": run_id, "silver_attempt": None, "aggregator_version": None, "approval": approval,
+              "flyway_version": target.flyway_version, "status": "rejected", "stars": []}
+    try:
+        manifest, items = run_source.read_ready(ready, run_id, approval)
+    except run_source.PublishRejected as exc:
+        return {**record, "reason": str(exc)}
+    record.update(silver_attempt=manifest["silver_attempt"], aggregator_version=manifest["aggregator_version"])
+    for tic, item in items:
+        row = loader.publish_outcome(conn, tic, item, target, first_publish_only=True, retire_reason="배치 run 게시")
+        if isinstance(item, dict):
+            row["confirmed_without_archive"] = run_source.confirmed_without_archive(item)
+        print(f"  TIC {tic}: {row['code']} {'b-' + str(row['bundle_id']) if row['bundle_id'] else row['detail']}",
+              file=sys.stderr)
+        record["stars"].append(row)
+    codes = [s["code"] for s in record["stars"]]
+    return {**record, "status": "published", "counts": {c: codes.count(c) for c in sorted(set(codes))}}
+
+
+def notify_record(bundle_ids: list[int]) -> dict:
+    """판 전환 알림 결과. 토큰이 없으면 보내지 않는다(실패가 아니다. DB의 current가 정본이다)."""
+    if not bundle_ids:
+        return {"status": "none", "results": []}
+    token = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+    if not token:
+        return {"status": "skipped_no_token", "results": []}
+    results = [{"bundle_id": b, "sent": sent, "outcome": outcome} for b, sent, outcome in
+               notify_backend(os.environ.get("BACKEND_URL", "http://backend:8080"), token, bundle_ids)]
+    return {"status": "sent" if all(r["sent"] for r in results) else "partial", "results": results}
+
+
+def exit_code(record: dict) -> int:
+    # current를 그대로 둔 별(튜토리얼 별 등)은 첫 게시 한정 정책의 결과라 실패로 세지 않는다.
+    # 알림 일부 실패(notify partial)는 게시 전체를 다시 돌릴 이유가 아니다. 같은 실패면 재시작만 되풀이된다.
+    codes = {s["code"] for s in record["stars"] if not s.get("current_kept")}
+    if "PUBLISH_ROLLED_BACK" in codes:
+        return 1
+    return DATA_FAILURE if record["status"] == "rejected" or codes - DONE else 0
 
 
 def notify(bundle_ids: list[int]) -> bool:

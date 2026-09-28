@@ -11,13 +11,16 @@ PUBLISHER_TEST_DATABASE_URL이 없으면 건너뛴다. 새 스키마를 만들�
 from __future__ import annotations
 
 import copy
+import json
 import os
 import re
 import secrets
+import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from astro_kernel.gold_canonical import array_checksum, normalize_array
 
@@ -28,8 +31,9 @@ if URL:
     import psycopg
     from psycopg import sql
 
-    from publisher import load, mock_source
+    from publisher import load, mock_source, run_source
     from publisher.load import PublishError, preflight, publish_star
+    from test_run_source import synthetic_run, write_ready
 
 SCHEMA = f"publisher_it_{secrets.token_hex(4)}"
 COUNTS = {
@@ -120,7 +124,7 @@ class PublishStarTest(unittest.TestCase):
             "bundles": 1, "current": 1, "staging": 0, "segments": len(p["segments"]),
             "observations": len(p["segments"]), "periodograms": 1, "candidates": n_candidates,
             "active": n_candidates, "dispositions": n_candidates, "history": 0,
-            "external": sum(1 for c in p["candidates"] if c["external"])})
+            "external": sum(len(c["external"]) for c in p["candidates"]) + len(p["external_only"])})
         manifest = self.conn.execute("SELECT manifest FROM publication_bundles WHERE id = %s",
                                      (result.bundle_id,)).fetchone()[0]
         self.assertEqual(len(manifest["segment_ids"]), len(p["segments"]))
@@ -301,6 +305,146 @@ class PublishStarTest(unittest.TestCase):
         for tic in tics:
             got = self.counts(tic)
             self.assertEqual((got["bundles"], got["current"], got["periodograms"]), (1, 1, 1), tic)
+
+    def run_payload(self, tic: int) -> dict:
+        """합성 run의 배치 payload [S15P21C206-276]. 게시 전 검사를 통과한 것이어야 한다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _, items = run_source.read_ready(write_ready(Path(tmp), *synthetic_run(tic)), "run-fixture", "unittest-only")
+            [(_, p)] = list(items)
+        self.assertIsInstance(p, dict, p)
+        return p
+
+    def test_run_payload_registers_a_new_discoverable_star_as_published_with_every_external_reference(self):
+        tic = 990_000_101
+        p = self.run_payload(tic)
+
+        result = publish_star(self.conn, p, self.target, first_publish_only=True)
+
+        self.assertEqual(result.code, "PUBLISHED")
+        # 합성 후보는 discoverable이다. 찾을 수 있는 후보가 있는 새 별만 published로 등록한다.
+        self.assertEqual(self.conn.execute("SELECT service_status, confirmed_count FROM stars WHERE tic_id = %s",
+                                           (tic,)).fetchone(), ("published", 1))
+        # 후보 하나에 두 원천, 후보와 대응하지 않은 행 하나. 266은 archive·정확한 행성명·활성 확정 후보로 찾는다.
+        refs = self.conn.execute("""
+            SELECT e.source, e.external_id, c.status, c.is_confirmed
+              FROM external_signal_references e LEFT JOIN candidates c ON c.id = e.candidate_id
+             WHERE e.tic_id = %s ORDER BY 1, 2""", (tic,)).fetchall()
+        self.assertEqual(refs, [("archive", f"TIC {tic} b", "active", True), ("toi", f"{tic}.01", "active", True),
+                                ("toi", f"{tic}.02", None, None)])
+        again = publish_star(self.conn, self.run_payload(tic), self.target, first_publish_only=True)
+        self.assertEqual((again.code, again.bundle_id), ("ALREADY_PUBLISHED", result.bundle_id))
+
+    def test_run_payload_keeps_the_public_status_and_known_values_of_an_existing_star(self):
+        tic = self.star(990_000_102)
+        self.conn.execute("UPDATE stars SET teff_k = 5800, radius_rsun = 1.0, tmag = 9.5 WHERE tic_id = %s", (tic,))
+
+        publish_star(self.conn, self.run_payload(tic), self.target, first_publish_only=True)
+
+        # 배치 run은 별 속성의 원천이 없어 NULL을 보낸다. 이미 있는 값은 그대로 둔다.
+        self.assertEqual(self.conn.execute("SELECT service_status, teff_k, radius_rsun, tmag FROM stars WHERE tic_id = %s",
+                                           (tic,)).fetchone(), ("published", 5800, 1.0, 9.5))
+
+    def test_run_payload_keeps_the_disposition_rule_version_of_the_bundle(self):
+        # 적재가 상수 rule-0을 쓰면 124 판정 규칙 버전이 사라진다(첫 운영 게시 4,916별, 2026-09-27).
+        tic = 990_000_107
+        p = self.run_payload(tic)
+        publish_star(self.conn, p, self.target, first_publish_only=True)
+        stored = {r[0] for r in self.conn.execute("""
+            SELECT d.rule_version FROM candidate_dispositions d JOIN candidates c ON c.id = d.candidate_id
+             WHERE c.tic_id = %s""", (tic,)).fetchall()}
+        self.assertEqual(stored, {c["disposition"]["rule_version"] for c in p["candidates"]})
+        self.assertNotIn("rule-0", stored)
+
+    def test_a_preflight_refusal_ends_publish_run_with_a_rejected_record_and_65(self):
+        import contextlib
+        import io
+        from argparse import Namespace
+
+        from publisher import __main__ as cli
+        from publisher.load import PublishError
+
+        out = io.StringIO()
+        with mock.patch("psycopg.connect", return_value=contextlib.nullcontext(self.conn)),                 mock.patch("publisher.load.preflight", side_effect=PublishError("MIGRATION_BEHIND", "V28 < V29")),                 mock.patch("sys.stdout", out):
+            code = cli.publish_run(Namespace(run_id="run-fixture", ready=Path("."), approval="unittest-only"))
+        record = json.loads(out.getvalue())
+        self.assertEqual((code, record["status"], record["stars"]), (65, "rejected", []))
+        self.assertTrue(record["reason"].startswith("MIGRATION_BEHIND"))
+
+    def test_initial_status_applies_to_new_stars_only(self):
+        # 찾을 수 있는 후보가 없는 새 별(run_source가 initial_status=hidden을 준다)은 hidden으로 등록한다.
+        fresh = 990_000_105
+        p = self.run_payload(fresh)
+        p["star"]["initial_status"] = "hidden"
+        publish_star(self.conn, p, self.target, first_publish_only=True)
+        # 기존 별은 initial_status가 published여도 운영자가 둔 공개 상태를 그대로 둔다.
+        kept = 990_000_106
+        self.conn.execute("INSERT INTO stars(tic_id, confirmed_count, service_status) VALUES (%s, 0, 'hidden')", (kept,))
+        q = self.run_payload(kept)
+        self.assertEqual(q["star"]["initial_status"], "published")
+        publish_star(self.conn, q, self.target, first_publish_only=True)
+
+        got = dict(self.conn.execute("SELECT tic_id, service_status FROM stars WHERE tic_id = ANY(%s)",
+                                     ([fresh, kept],)).fetchall())
+        self.assertEqual(got, {fresh: "hidden", kept: "hidden"})
+
+    def test_an_unexpected_error_is_one_rejected_row_not_a_stopped_run(self):
+        from publisher.load import publish_outcome
+
+        tic = 990_000_104
+        broken = {k: v for k, v in self.run_payload(tic).items() if k != "segments"}
+
+        row = publish_outcome(self.conn, tic, broken, self.target, first_publish_only=True)
+
+        self.assertEqual(row["code"], "PUBLISH_REJECTED")
+        self.assertIn("KeyError", row["detail"])
+        self.assertEqual(self.counts(tic)["bundles"], 0)
+
+    def test_first_publish_only_leaves_a_star_with_a_current_bundle_alone(self):
+        tic = self.star(990_000_103)
+        first = publish_star(self.conn, payload(tic), self.target)   # 튜토리얼 별처럼 이미 current가 있다
+        before = self.counts(tic)
+
+        with self.assertRaises(PublishError) as caught:
+            publish_star(self.conn, self.run_payload(tic), self.target, first_publish_only=True)
+
+        self.assertEqual(caught.exception.code, "PUBLISH_REJECTED")
+        self.assertEqual(self.counts(tic), before)
+        current = self.conn.execute("SELECT id FROM publication_bundles WHERE tic_id = %s AND status = 'current'",
+                                    (tic,)).fetchone()[0]
+        self.assertEqual(current, first.bundle_id)
+
+    def test_publish_run_records_every_star_and_one_failure_does_not_stop_the_next(self):
+        from publisher.__main__ import exit_code, run_record
+
+        fresh, has_current, broken = 990_000_201, 990_000_202, 990_000_203
+        run, meta = synthetic_run(fresh, has_current, broken)
+        publish_star(self.conn, payload(self.star(has_current)), self.target)   # 튜토리얼 별처럼 current가 있다
+        next(b for b in run["bundles"] if b["bundle"]["tic_id"] == broken)["segments"][0]["flux"][0] = 1.5
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        ready = write_ready(Path(tmp.name), run, meta)
+
+        first = run_record(self.conn, self.target, ready, run_id="run-fixture", approval="unittest-only")
+
+        self.assertEqual(first["status"], "published")
+        got = {s["tic_id"]: s for s in first["stars"]}
+        self.assertEqual({t: s["code"] for t, s in got.items()},
+                         {fresh: "PUBLISHED", has_current: "PUBLISH_REJECTED", broken: "PUBLISH_REJECTED"})
+        self.assertEqual(got[fresh]["confirmed_without_archive"], 0)
+        self.assertEqual((got[has_current]["current_kept"], got[broken]["current_kept"]), (True, False))
+        self.assertEqual(first["counts"], {"PUBLISHED": 1, "PUBLISH_REJECTED": 2})
+        self.assertEqual(self.counts(broken)["bundles"], 0, "게시 전 검사에 걸린 별은 DB에 쓰지 않는다")
+        self.assertEqual(exit_code({**first, "notify": {"status": "none"}}), 65)
+        manifest = self.conn.execute("SELECT manifest -> 'publish' FROM publication_bundles WHERE id = %s",
+                                     (got[fresh]["bundle_id"],)).fetchone()[0]
+        self.assertEqual((manifest["run_id"], manifest["approval"]), ("run-fixture", "unittest-only"))
+
+        again = run_record(self.conn, self.target, ready, run_id="run-fixture", approval="unittest-only")
+        self.assertEqual({s["tic_id"]: (s["code"], s["bundle_id"]) for s in again["stars"]}[fresh],
+                         ("ALREADY_PUBLISHED", got[fresh]["bundle_id"]))
+
+        wrong = run_record(self.conn, self.target, ready, run_id="other-run", approval="unittest-only")
+        self.assertEqual((wrong["status"], wrong["stars"]), ("rejected", []))
 
 
 @unittest.skipUnless(URL, "PUBLISHER_TEST_DATABASE_URL이 없다")

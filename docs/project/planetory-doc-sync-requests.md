@@ -168,7 +168,7 @@ Backend·Frontend 담당자가 함께 처리할 작업이며 이번 123에서 �
 
 ## S15P21C206-262·266·267 Archive 참조와 NASA 설명 원천 구분 (2026-09-25)
 
-상태: **문서 구분 반영, 실제 Gold 식별 연결 검증 대기.** [266 계약](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)에 TESS 기반 Gold 곡선·후보, Gold에 붙은 Archive `pscomppars` 외부 참조, 266의 별도 NASA `ps` 기본 해 조회를 분리했다. 262 목업의 `nasa_exoplanet_archive` 행성명은 다른 더미 TIC로 복사되므로 266의 검증된 `archive` 공급 계약에 자동 포함하지 않는다. 실제 Gold 공급 경로에서 TIC·후보·정확한 행성명 연결을 검증하고 source 표기를 확정한 뒤 266 수용 범위와 268 화면 출처 안내를 함께 재검토한다.
+상태: **문서 구분 반영, 실제 Gold 식별 연결 검증 대기.** [266 계약](../development/nasa-planet-info-266.md#2-식별자와-요청-흐름)에 TESS 기반 Gold 곡선·후보, Gold에 붙은 Archive `pscomppars` 외부 참조, 266의 별도 NASA `ps` 기본 해 조회를 분리했다. 262 목업의 `nasa_exoplanet_archive` 행성명은 다른 더미 TIC로 복사되므로 266의 검증된 `archive` 공급 계약에 자동 포함하지 않는다. 실제 Gold 공급 경로에서 TIC·후보·정확한 행성명 연결을 검증하고 source 표기를 확정한 뒤 266 수용 범위와 268 화면 출처 안내를 함께 재검토한다. **2026-09-27 갱신(`S15P21C206-276`):** 배치 공급의 source 표기를 [Gold 계약 4.3절](../../contracts/gold/README.md#43-s15p21c206-79-게시-후보-집계)에서 정했다(124 PSCompPars 직접 대응 → `source='archive'`, 정확한 `pl_name`). 합성 run·일회용 DB 검증만 했고, 실제 run의 연결 검증과 266·268 재검토는 남았다.
 
 ## S15P21C206-269 봉우리 제출 제약 정합화 (2026-09-25)
 
