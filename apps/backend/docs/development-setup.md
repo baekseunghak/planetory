@@ -50,7 +50,7 @@ DB를 잠시 멈출 때는 `docker compose stop service-db`를 사용한다. `do
 
 ## 3. 로컬 빌드·실행 — apps/backend
 
-프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있다. 237 이후 local은 별도 세션/캐시 Redis를 `localhost:16379`·`localhost:16380`에서 사용하며 다른 주소는 연결 환경변수로 지정한다([연결 안내](oauth-setup.md#redis-연결과-저장-경계237)). 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
+프로필을 지정하지 않으면 `local`로 뜬다(`spring.profiles.default=local`). `local` 프로필(`application-local.properties`)에 로컬 DB 기본값(`localhost:15432`, `ssafy`)·Swagger·예제 API가 들어 있다. 237 이후 local은 별도 세션/캐시 Redis를 `localhost:16379`·`localhost:16380`에서 사용하며(루트 Compose `session-redis`·`cache-redis`, `docker compose --profile service up -d session-redis cache-redis`) 다른 주소는 연결 환경변수로 지정한다([연결 안내](oauth-setup.md#redis-연결과-저장-경계237)). 배포 이미지는 Dockerfile의 `ENV SPRING_PROFILES_ACTIVE=prod`로 이 기본값을 쓰지 않으며, `prod`에는 비밀번호 기본값이 없어 `DATABASE_*` 또는 `SPRING_DATASOURCE_*`를 주입하지 않으면 기동에 실패한다.
 
 `bootRun`과 `test`는 먼저 `startLocalDb` 태스크로 루트 Compose의 `service-db`를 띄운다(`docker compose --profile service up -d --wait service-db`). 이미 떠 있으면 바로 끝난다. `CI=true`·`SKIP_LOCAL_DB=true` 환경이거나 `-PskipLocalDb`를 주면 건너뛴다. 로컬 Compose의 `backend` 컨테이너는 `SKIP_LOCAL_DB=true`로 실행한다.
 
@@ -65,7 +65,7 @@ Windows PowerShell에서는 `./gradlew` 대신 `.\gradlew.bat`을 쓴다.
 
 `Ctrl+C`로 서버를 종료한다. Windows에서 build/libs의 JAR를 직접 실행 중이면 파일 잠금 때문에 `clean`이 실패하므로 서버를 먼저 종료한다. IDE에서는 Project SDK와 Gradle JVM을 21로 지정한다. IDE의 main 실행은 Gradle을 거치지 않으므로 DB를 자동으로 띄우지 않는다. 예제 API와 Swagger는 local에서만 켠다.
 
-DB와 backend를 모두 Docker로 실행하려면 루트에서 다음 명령을 쓴다. 호스트에서 실행 중인 8080 서버는 먼저 종료한다. 이번 검증은 DB 컨테이너 + 호스트 JDK 실행이며 backend 이미지 빌드·실행은 별도로 검증해야 한다.
+DB·Redis와 backend를 모두 Docker로 실행하려면 루트에서 다음 명령을 쓴다. `service-db`·`session-redis`·`cache-redis`가 함께 뜬다. 호스트에서 실행 중인 8080 서버는 먼저 종료한다. 2026-09-28 별도 프로젝트 이름으로 격리해 `backend` 기동, health `UP`, CSRF 조회 200과 세션 키가 `session-redis`에만 쌓이는 것을 확인했다.
 
 ```sh
 docker compose --profile service up -d --build backend

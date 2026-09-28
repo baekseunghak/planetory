@@ -32,6 +32,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ssafy}
       SPRING_PROFILES_ACTIVE: local
       SKIP_LOCAL_DB: "true"
+      SESSION_REDIS_HOST: session-redis
+      SESSION_REDIS_PORT: "6379"
+      CACHE_REDIS_HOST: cache-redis
+      CACHE_REDIS_PORT: "6379"
       NOTIFICATION_SIGNING_KEY: ${NOTIFICATION_SIGNING_KEY:-}
       GRADLE_USER_HOME: /root/.gradle
     volumes:
@@ -44,6 +48,29 @@ services:
     depends_on:
       service-db:
         condition: service_healthy
+      session-redis:
+        condition: service_started
+      cache-redis:
+        condition: service_started
+
+  # 세션과 계산 캐시는 별도 인스턴스여야 한다(RedisSessionConfig). 호스트 포트는
+  # local 프로필 기본값과 같아 호스트의 bootRun·IDE 실행도 이 둘을 쓴다.
+  session-redis:
+    profiles: ["service"]
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    networks:
+      - service
+
+  cache-redis:
+    profiles: ["service"]
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", ""]
+    ports:
+      - "127.0.0.1:16380:6379"
+    networks:
+      - service
 
   ingestion:
     profiles: ["pipeline"]
