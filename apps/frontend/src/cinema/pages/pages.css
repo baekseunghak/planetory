@@ -2484,3 +2484,5 @@
   background: #ffe08c;
   color: var(--pc-accent-ink);
 }
+.cinema-shell .cp-page .publication-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.cinema-shell .cp-page .publication-batch-actions .publication-back { margin-right: auto; }

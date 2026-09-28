@@ -599,8 +599,10 @@ function Review({
         );
       })}
       {!historyId && review.items.length > 0 && (
-        <div className="publication-actions">
+        <div className="publication-actions publication-batch-actions">
+          <Link to={returnTo} className="publication-back">분석으로 돌아가기</Link>
           <button
+            className="publication-primary"
             disabled={review.busy || !selected.length}
             onClick={() => review.publish(selected)}
           >

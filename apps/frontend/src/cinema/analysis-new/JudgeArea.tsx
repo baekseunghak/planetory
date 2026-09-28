@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
+import { pagePath } from "../../app/paths";
 import { usePageContext } from "../../app/usePageContext";
 import type { AnalysisContext } from "../../features/analysis/analysis-data";
 import {
@@ -652,6 +653,9 @@ function ResultActions({
   onDetails(): void;
   onAgain(step: 1 | 2): void;
 }) {
+  const { currentPath } = usePageContext();
+  const publish = receipt.nextActions.includes("PUBLISH_ANALYSIS");
+  const publishUrl = pagePath("publicationBatch", {}, { ticId: receipt.ticId, returnTo: currentPath });
   const details = (className: string) => (
     <button
       type="button"
@@ -667,15 +671,17 @@ function ResultActions({
     receipt.nextActions.includes("NEXT_CURVE") &&
     nextCurve &&
     receipt.progress.stage !== "completed" ? (
-      <button type="button" className="cx-secondary" onClick={nextCurve}>
-        다음 곡선 단계로
+      <button type="button" className="cx-primary" onClick={nextCurve}>
+        분석 이어서 하기
       </button>
     ) : null;
   const missed = kind === "numericMismatch";
   const ambiguous = kind === "ambiguous";
   return (
     <>
-      <div className="cx-actions" data-testid="cx-result-actions">
+      {next && <p className="cx-note">분석 기록은 나중에 모아서 공개할 수 있습니다.</p>}
+      <div className="cx-actions cx-result-flow" data-testid="cx-result-actions">
+        <Link className="cx-secondary cx-result-home" to="/sky">나의 은하로</Link>
         {missed ? (
           <>
             <button
@@ -703,16 +709,14 @@ function ResultActions({
           </button>
         ) : (
           <>
-            {details("cx-primary")}
+            {publish && <Link className={next ? "cx-secondary" : "cx-primary"} to={publishUrl}>{next ? "공개 검토" : "이 별의 분석 공개 검토"}</Link>}
             {next}
+            {!publish && !next && details("cx-primary")}
           </>
         )}
       </div>
       <p className="cx-next">
-        {(missed || ambiguous) && details("cx-link")}
-        <Link className="cx-link" to="/sky">
-          은하로 돌아가기
-        </Link>
+        {details("cx-link")}
       </p>
     </>
   );
