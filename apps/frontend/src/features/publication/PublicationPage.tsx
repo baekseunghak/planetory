@@ -22,6 +22,7 @@ import {
 } from "./use-publication";
 import { MAX_PUBLICATION_BATCH_SIZE } from "./publication-data";
 import { useCinemaCopy } from "../analysis/cinema-copy";
+import { allPublished, isPublished, publicationNotice } from "./publication-flow";
 import "./publication.css";
 
 const when = (value: string) => new Date(value).toLocaleString("ko-KR");
@@ -248,6 +249,7 @@ function Review({
   const selected = review.items.filter(
     (item) => item.selected && canPublish(item),
   );
+  const completed = allPublished(review);
   const retryable = review.items.filter(canRetryPublication);
   const retryBatch = retryable.slice(0, MAX_PUBLICATION_BATCH_SIZE);
   return (
@@ -473,15 +475,6 @@ function Review({
                   </p>
                 )}
                 <StoredGraph historyId={item.historyId} ticId={detail.ticId} />
-                <Link
-                  to={pagePath(
-                    "historyDetail",
-                    { historyId: item.historyId },
-                    { returnTo },
-                  )}
-                >
-                  {cinema ? "기록 상세 보기" : "History 상세 보기"}
-                </Link>
                 <p>
                   내용을 바꾸려면{" "}
                   <Link
@@ -531,10 +524,23 @@ function Review({
                     </button>
                   </div>
                 )}
-                {publication.publicAnalysisId && !item.stale && (
-                  <div className="publication-actions">
+
+              </>
+            )}
+                <div className="publication-actions publication-record-actions">
+                <Link className="publication-secondary"
+                  to={pagePath(
+                    "historyDetail",
+                    { historyId: item.historyId },
+                    { returnTo },
+                  )}
+                >
+                  {cinema ? "기록 상세 보기" : "History 상세 보기"}
+                </Link>
+                {publication?.publicAnalysisId && !item.stale && (
+                  <>
                     {publication.state === "PUBLISHED" && (
-                      <Link
+                      <Link className="publication-secondary"
                         to={pagePath(
                           "publicAnalysis",
                           { analysisId: publication.publicAnalysisId },
@@ -558,11 +564,16 @@ function Review({
                         이 기록 재공개
                       </button>
                     )}
-                  </div>
+                  </>
                 )}
-              </>
-            )}
-            {item.notice && <p role="status">{item.notice}</p>}
+            <button
+              disabled={review.busy || item.loading}
+              onClick={() => review.refresh(item)}
+            >
+              현재 상태 다시 확인
+            </button>
+                </div>
+            {publicationNotice(item) && <p role="status" className={isPublished(item) ? "publication-notice publication-notice-complete" : "publication-notice"}>{publicationNotice(item)}</p>}
             {item.receipt && (
               <p>
                 이번 응답의 성과:{" "}
@@ -578,12 +589,7 @@ function Review({
             {item.outcome === "failed" && !item.receipt && (
               <p>이 응답으로는 성과 인정 여부를 확인할 수 없습니다.</p>
             )}
-            <button
-              disabled={review.busy || item.loading}
-              onClick={() => review.refresh(item)}
-            >
-              현재 상태 다시 확인
-            </button>
+
             {item.outcome === "unknown" &&
               !item.stale &&
               item.preview &&
@@ -600,7 +606,10 @@ function Review({
       })}
       {!historyId && review.items.length > 0 && (
         <div className="publication-actions publication-batch-actions">
-          <Link to={returnTo} className="publication-back">분석으로 돌아가기</Link>
+          <Link to={returnTo} className="publication-back publication-secondary">분석으로 돌아가기</Link>
+          {completed ? (
+            <Link to={pagePath("sky")} className="publication-primary publication-home">내 은하로 돌아가기</Link>
+          ) : selected.length > 0 && (
           <button
             className="publication-primary"
             disabled={review.busy || !selected.length}
@@ -608,6 +617,7 @@ function Review({
           >
             선택한 {selected.length}개 모두 게시
           </button>
+          )}
           {review.cursor && (
             <button
               disabled={review.busy || review.loading}
