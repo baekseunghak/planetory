@@ -8,8 +8,11 @@
 //   CINEMA_PORT          port (default 58390, strict)
 //   CINEMA_STARS         galaxy size of the member scenario (default 1000)
 //   CINEMA_SCENARIO      world at start: member (default) | newcomer | veteran
-//   CINEMA_P1=0          hide P1 routes (notifications, following, public sky,
-//                        statistics, withdrawal); on by default for the demo
+//   CINEMA_P1=0          hide the P1 routes production does not have yet
+//                        (notifications, global statistics); on by default
+//                        for the demo. Follow, another member's galaxy,
+//                        personal statistics and withdrawal are on either
+//                        way (src/features/p1.ts)
 //   CINEMA_WINDOW_RULE=0 rank-1 peak ignores whether the window covers the dip
 //   CINEMA_UNLOCK=0      a recognized achievement unlocks no star
 //                        (unlockedStars: [], as production often answers after a
@@ -19,9 +22,10 @@
 //   VITE_CINEMA=false    legacy develop pages instead of the cinema shell
 //   VITE_CINEMA=auto     a build without VITE_CINEMA: legacy unless ?ui=cinema
 //                        (src/ui-choice.ts)
-//   CINEMA_ANALYSIS      analysis screen: classic (default) | new (the new
-//                        design, variant B, for everyone and without the
-//                        variant toggle); defines VITE_CINEMA_ANALYSIS
+//   CINEMA_ANALYSIS      analysis screen: new (default: the new design,
+//                        variant B, for everyone and without the variant
+//                        toggle, as in production) | classic (the old one);
+//                        defines VITE_CINEMA_ANALYSIS
 //                        (src/cinema/analysis/variant.ts)
 //   CINEMA_HMR=0         no live reload: source edits never reload an open page
 //                        (a rehearsal or a second review server); reload by hand
@@ -93,7 +97,7 @@ const realSample = /^(0|false|no)$/i.test(realSampleDir)
   : loadRealSample(realSampleDir);
 const scenario = process.env.CINEMA_SCENARIO ?? "member";
 const analysis =
-  (process.env.CINEMA_ANALYSIS ?? "").trim().toLowerCase() || "classic";
+  (process.env.CINEMA_ANALYSIS ?? "").trim().toLowerCase() || "new";
 const windowRule = !/^(0|false|no)$/i.test(
   process.env.CINEMA_WINDOW_RULE ?? "",
 );

@@ -10,18 +10,18 @@
 
 기존 시제품의 package 설정·App 인증 조회/라우팅·요청 취소 로직·메뉴 dialog를 바탕으로 공통 부분을 추출했다. `/api/v1/me` 평면 응답과 서버 `ErrorResponse.FieldError(field, reason)`를 적용한다. 기존 코드에 있던 `{field, message}`만 읽는 처리는 가져오지 않았다.
 
-| 공통 파일                          | 역할                                                | 기능 담당자의 사용 방법                          |
-| ---------------------------------- | --------------------------------------------------- | ------------------------------------------------ |
-| `src/main.tsx`                     | 앱을 한 번 시작, BrowserRouter/SessionProvider 배치 | 두 번째 Router나 로그인 Provider를 만들지 않는다 |
-| `src/app/App.tsx`                  | 인증 게이트와 화면 연결 자리                        | PageSlots에 자신의 컴포넌트 등록                 |
-| `src/app/paths.ts`                 | 화면 주소·ID·복귀 링크                              | `pagePath()` 사용                                |
-| `src/app/usePageContext.ts`        | 현재 TIC/History/원 글/복귀 주소                    | `usePageContext()` 사용                          |
-| `src/auth/SessionProvider.tsx`     | GET /me, 현재 회원, 401 정리                        | `useSession()` 사용                              |
-| `src/api/index.ts`                 | 앱에서 사용하는 HTTP 클라이언트 한 개               | `api()` 사용                                     |
-| `src/api/client.ts`                | 쿠키, 취소, 204, 오류, 요청 식별, 자동 재시도 금지  | 기능별 fetch 래퍼를 중복 작성하지 않는다         |
-| `src/api/useResource.ts`           | 읽기 요청, 수동 재조회, 늦은 응답 무시              | 안정적인 decoder 함수와 경로 전달                |
-| `src/components/ServiceLayout.tsx` | 접는 메뉴와 공통 회원 표시                          | 페이지 본문은 Outlet 자리에서 렌더링             |
-| `src/components/RequestState.tsx`  | 로딩·오류·수동 조회 재시도                          | 쓰기 요청 자체를 retry에 연결하지 않는다         |
+| 공통 파일                          | 역할                                                                                      | 기능 담당자의 사용 방법                          |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `src/main.tsx`                     | 앱을 한 번 시작, BrowserRouter/SessionProvider 배치                                       | 두 번째 Router나 로그인 Provider를 만들지 않는다 |
+| `src/app/App.tsx`                  | 인증 게이트와 화면 연결 자리                                                              | PageSlots에 자신의 컴포넌트 등록                 |
+| `src/app/paths.ts`                 | 화면 주소·ID·복귀 링크                                                                    | `pagePath()` 사용                                |
+| `src/app/usePageContext.ts`        | 현재 TIC/History/원 글/복귀 주소                                                          | `usePageContext()` 사용                          |
+| `src/auth/SessionProvider.tsx`     | GET /me, 현재 회원, 401 정리                                                              | `useSession()` 사용                              |
+| `src/api/index.ts`                 | 앱에서 사용하는 HTTP 클라이언트 한 개                                                     | `api()` 사용                                     |
+| `src/api/client.ts`                | 쿠키, 취소, 204, 오류, 요청 식별, 쓰기 자동 재시도 금지, 게이트웨이 502·504 읽기만 재시도 | 기능별 fetch 래퍼를 중복 작성하지 않는다         |
+| `src/api/useResource.ts`           | 읽기 요청, 수동 재조회, 늦은 응답 무시                                                    | 안정적인 decoder 함수와 경로 전달                |
+| `src/components/ServiceLayout.tsx` | 접는 메뉴와 공통 회원 표시                                                                | 페이지 본문은 Outlet 자리에서 렌더링             |
+| `src/components/RequestState.tsx`  | 로딩·오류·수동 조회 재시도                                                                | 쓰기 요청 자체를 retry에 연결하지 않는다         |
 
 화면별 그래프 계산·폼·지도 렌더러·성과 계산은 W03에 포함하지 않는다. 전체 시제품을 통째로 복사해 여러 티켓을 한 MR에 묶지 않았다.
 
@@ -116,6 +116,7 @@ await api("/v1/posts", { method: "POST", json: input });
 - 응답 취소·요청 취소·타임아웃·형식 오류·HTTP 오류를 구분한다. 204는 undefined이며 목록 `[]`로 바꾸지 않는다.
 - `ApiError.status`, `code`, `message`, `fieldErrors[{field,reason}]`를 폼에 전달한다. React 텍스트로 표시하며 HTML을 실행하지 않는다.
 - 일반 POST/PATCH를 포함해 공통 클라이언트는 자동 재전송을 하지 않는다. 네트워크 유실·시간 초과·전송 뒤 취소·불명확한 쓰기 응답은 `outcomeUnknown=true`로 전달한다. 폼은 입력을 유지하고 상세/목록 재조회로 저장 여부를 확인한다. 이 작업은 공통 신호를 제공하며 글/댓글 폼 자체의 복구는 W12/W13에서 구현·검증한다.
+- 예외는 읽기(GET·HEAD·OPTIONS)가 502·504를 받은 경우 하나다(`S15P21C206-279`). 백엔드는 이 두 코드를 보내지 않으므로, 배포 중 컨테이너 교체처럼 Nginx·터널이 백엔드에 닿지 못한 응답이다. 1·2·4·8·15초를 기다리며 최대 5번 다시 요청하고, 시간 제한은 시도마다 새로 잰다. 대기 중 호출자 취소·세션 만료에는 바로 멈춘다. 다섯 번 모두 실패하면 마지막 응답을 `ApiError`로 넘겨 화면의 수동 재시도로 이어진다. 백엔드가 뜻을 담아 보내는 503(`DEPENDENCY_UNAVAILABLE` 등), 시간 초과, 네트워크 오류와 모든 쓰기는 재시도하지 않는다.
 - 분석 제출/공개 멱등 키는 해당 API의 기능 담당자가 처리한다. 통신 추적 ID를 멱등 키로 사용하지 않는다.
 - `localRequestId`는 브라우저 내 요청 구분 값이다. 임의 헤더로 서버에 보내지 않는다. 합의한 응답 헤더 이름을 `VITE_REQUEST_ID_HEADER`로 지정하면 서버 값은 별도 `requestId`로 보존한다. 현행 상세 오류 계약과 서버 ErrorResponse에는 요청 ID가 없으며 별도 추적 헤더도 확정되지 않았다. 서버 requestId=null을 유지하고, 서버 추적 기능을 201 완료의 필수 선행으로 추가하지 않는다. API 안내 README의 옛 표기와 분석 제출의 멱등 requestId는 구분한다.
 - CSRF는 MR !42의 `GET /api/v1/auth/csrf` 응답 `{headerName: "X-CSRF-TOKEN", token}`을 기본으로 사용한다. 매 쓰기 직전에 발급하고 토큰은 변형하거나 저장하지 않는다. 발급 실패·취소 때 쓰기를 보내지 않는다. `VITE_CSRF_HEADER`·`VITE_CSRF_COOKIE`는 둘 다 비운다. 둘 다 지정한 기존 쿠키 방식은 호환용으로 유지하며 SESSION 쿠키를 읽는 방식이 아니다. 하나만 설정하면 쓰기를 중단한다.

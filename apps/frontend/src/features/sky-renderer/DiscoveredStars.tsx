@@ -19,8 +19,7 @@ export function DiscoveredStars({
     error?: Error;
   } | null>(null);
   const [retry, setRetry] = useState(0);
-  const heading = useRef<HTMLHeadingElement>(null),
-    focusPage = useRef(false);
+  const [loading, setLoading] = useState(false);
   const cursor = cursors.at(-1)!;
   const cinema = useCinemaWording();
   const scope = data.meta;
@@ -35,7 +34,8 @@ export function DiscoveredStars({
   useEffect(() => {
     if (!active || data.needsRefresh || !fresh) return;
     const controller = new AbortController();
-    setResult(null);
+    setLoading(true);
+    setResult((previous) => cursor ? { ...previous, error: undefined } : null);
     void api<unknown>(discoveredPath(cursor), { signal: controller.signal })
       .then((value) => {
         if (controller.signal.aborted) return;
@@ -44,21 +44,21 @@ export function DiscoveredStars({
           throw new Error(
             "같은 목록이 반복되었습니다. 처음부터 새로 불러와 주세요.",
           );
-        setResult({ page });
-        if (focusPage.current) {
-          heading.current?.parentElement?.scrollTo({ top: 0 });
-          heading.current?.focus({ preventScroll: true });
-          focusPage.current = false;
-        }
+        setResult((previous) => {
+          const existing = cursor ? previous?.page?.items ?? [] : [];
+          const items = [...new Map([...existing, ...page.items].map((star) => [star.ticId, star])).values()];
+          return { page: { ...page, items } };
+        });
+        setLoading(false);
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted)
-          setResult({
-            error:
-              error instanceof Error
-                ? error
-                : new Error("별 목록을 불러오지 못했습니다."),
-          });
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setResult((previous) => ({
+            page: cursor ? previous?.page : undefined,
+            error: error instanceof Error ? error : new Error("별 목록을 불러오지 못했습니다."),
+          }));
+        }
       });
     return () => controller.abort();
   }, [active, scope, data.needsRefresh, fresh, cursor, retry]);
@@ -70,7 +70,7 @@ export function DiscoveredStars({
       hidden={!active}
       aria-labelledby="discovered-title"
     >
-      <h2 id="discovered-title" ref={heading} tabIndex={-1}>
+      <h2 id="discovered-title">
         발견한 별 목록
       </h2>
       <p>
@@ -84,7 +84,7 @@ export function DiscoveredStars({
           : !result
             ? "별 목록을 불러오고 있습니다."
             : page
-              ? `${page.items.length}개의 별을 불러왔습니다.${!page.hasNext ? " 마지막 목록입니다." : ""}`
+              ? `${page.items.length}개의 별을 불러왔습니다.`
               : "별 목록을 불러오지 못했습니다."}
       </div>
       {error && (
@@ -108,7 +108,7 @@ export function DiscoveredStars({
       <ul
         className="discovered-rows"
         aria-label="발견한 별"
-        aria-busy={!result || data.needsRefresh}
+        aria-busy={loading || data.needsRefresh}
       >
         {page?.items.map((s) => (
           <li key={s.ticId}>
@@ -137,29 +137,20 @@ export function DiscoveredStars({
             </button>
           </li>
         ))}
+        {page?.hasNext && (
+          <li>
+            <button
+              disabled={loading || data.needsRefresh}
+              onClick={() => {
+                if (error) setRetry((n) => n + 1);
+                else if (page.nextCursor) setCursors((s) => [...s, page.nextCursor]);
+              }}
+            >
+              {loading ? "불러오는 중…" : error ? "다시 불러오기" : "더 보기"}
+            </button>
+          </li>
+        )}
       </ul>
-      <nav aria-label="발견 별 이어읽기">
-        <button
-          disabled={cursors.length < 2 || !result || data.needsRefresh}
-          onClick={() => {
-            focusPage.current = true;
-            setCursors((s) => s.slice(0, -1));
-          }}
-        >
-          이전 별 목록
-        </button>
-        <button
-          disabled={!page?.hasNext}
-          onClick={() => {
-            if (page?.nextCursor) {
-              focusPage.current = true;
-              setCursors((s) => [...s, page.nextCursor]);
-            }
-          }}
-        >
-          다음 별 목록
-        </button>
-      </nav>
     </section>
   );
 }

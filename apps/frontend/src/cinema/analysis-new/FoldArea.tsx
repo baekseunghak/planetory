@@ -5,6 +5,8 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type Dispatch,
+  type SetStateAction,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
@@ -19,11 +21,11 @@ import {
 } from "../../features/analysis/AnalysisSession";
 import { useSustained } from "../../features/analysis/fold-progress";
 import {
-  clampFoldView,
+  clampFoldView as clampDisplayView,
   foldFluxDomain,
   fullFoldView,
-  MAX_FOLD_ZOOM,
-  zoomFoldView,
+
+  zoomFoldView as zoomDisplayView,
   type FoldView,
 } from "../../features/analysis/folded-curve";
 import type {
@@ -78,7 +80,7 @@ export type SelectionContract = {
  * server's width rules (getSelectionLimits, previewPhaseSelection).
  *
  * Drag draws a new window, the two edge handles adjust it (arrow keys too),
- * Shift+drag pans and the wheel zooms up to MAX_FOLD_ZOOM. Starting a window
+ * Shift+drag pans and the wheel zooms up to maxZoom. Starting a window
  * from the period stage moves on to the window stage, like the classic
  * "이 주기로 구간 선택".
  */
@@ -93,6 +95,8 @@ export function FoldArea({
   areaState,
   onRetryFold,
   emptyRuleNote,
+  view,
+  setView,
 }: {
   context: AnalysisContext;
   data: ReadyPeriodogram;
@@ -105,11 +109,13 @@ export function FoldArea({
   onRetryFold: () => void;
   /** The rules forbid a window without observations (allowEmptyPhaseSpan). */
   emptyRuleNote: boolean;
+  view: FoldView;
+  setView: Dispatch<SetStateAction<FoldView>>;
 }) {
   const fold = useAnalysisFold();
-  const { input, state: foldState, ready, cancel, setView } = fold;
+  const { input, state: foldState, ready, cancel } = fold;
   const { state, setState } = usePhaseDraft();
-  const { success, status, view } = foldState;
+  const { success, status } = foldState;
   const shown =
     success &&
     input.data &&
@@ -118,6 +124,22 @@ export function FoldArea({
       ? { data: input.data, result: success.result, change: success.change }
       : null;
   const change = shown?.change ?? null;
+  const maxZoom = useMemo(() => {
+    const points = shown?.data.points;
+    const period = change?.selection.periodDays;
+    if (!points || !period) return 32;
+    const gaps: number[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const gap = points[i].btjd - points[i - 1].btjd;
+      if (gap > 0 && points[i].segmentId === points[i - 1].segmentId) gaps.push(gap);
+    }
+    gaps.sort((a, b) => a - b);
+    const cadence = gaps[Math.floor(gaps.length / 2)];
+    return cadence ? Math.max(32, Math.min(65536, 2 ** Math.floor(Math.log2(2 * period / (8 * cadence))))) : 32;
+  }, [shown?.data, change?.selection.periodDays]);
+  const clampFoldView = (value: FoldView) => clampDisplayView(value, maxZoom);
+  const zoomFoldView = (value: FoldView, factor: number, ratio = 0.5) => zoomDisplayView(value, factor, ratio, maxZoom);
+  useEffect(() => setView((value) => clampDisplayView(value, maxZoom)), [maxZoom]);
   const pending = status === "pending";
   const slow = useSustained(pending);
   const canEdit =
@@ -185,7 +207,7 @@ export function FoldArea({
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [setView]);
+  }, [maxZoom]);
 
   /** Same draft update as the classic selection model. */
   const apply = useCallback(
@@ -245,10 +267,10 @@ export function FoldArea({
     return phaseAt(clientX - rect.left, rect.width, low, high);
   };
   const begin = (event: PointerEvent<HTMLElement>, handle: Handle | null) => {
-    const pan = handle === null && event.shiftKey;
+    const pan = event.button === 1 || (handle === null && event.shiftKey);
     if (
       !shown ||
-      event.button !== 0 ||
+      (event.button !== 0 && event.button !== 1) ||
       !event.isPrimary ||
       drag.current ||
       (!pan && !canEdit)
@@ -387,6 +409,9 @@ export function FoldArea({
     }
     if (event.target !== event.currentTarget || !shown) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === "Enter" && !state.range) {
+      event.preventDefault(); startKeyboardWindow(); return;
+    }
     if (
       !["+", "=", "-", "0", "Home", "ArrowLeft", "ArrowRight"].includes(
         event.key,
@@ -469,8 +494,8 @@ export function FoldArea({
               : state.range
                 ? stage >= 3
                   ? "다시 드래그하면 바뀝니다"
-                  : "핸들로 다듬기"
-                : "떨어지는 곳을 드래그"}
+                  : "양끝 핸들로 다듬기"
+                : "스크롤로 확대하고, 드래그해 구간 선택"}
           </em>
         </h2>
         <div className="cx-tools" role="group" aria-label="접힌 곡선 보기 조작">
@@ -484,17 +509,24 @@ export function FoldArea({
             −
           </button>
           <span className="cx-ro" data-testid="cx-fold-zoom">
-            ×{view.zoom}
+            ×{Number(view.zoom.toFixed(1))}
           </span>
           <button
             type="button"
             className="cx-icon"
             aria-label="접힌 곡선 확대"
-            disabled={!shown || view.zoom >= MAX_FOLD_ZOOM}
+            disabled={!shown || view.zoom >= maxZoom}
             onClick={() => setView((value) => zoomFoldView(value, 2))}
           >
             +
           </button>
+          <button type="button" className="cx-link" disabled={!shown || !state.range}
+            onClick={() => {
+              if (!state.range) return;
+              const { phaseStart, phaseEnd } = state.range;
+              const width = Math.abs(phaseEnd - phaseStart);
+              if (width > 0) setView(clampFoldView({ center: (phaseStart + phaseEnd) / 2, zoom: 1 / width }));
+            }}>구간 맞춤</button>
           <button
             type="button"
             className="cx-link"
@@ -526,6 +558,7 @@ export function FoldArea({
           if ((event.target as HTMLElement).closest(".cx-handle")) return;
           setView(() => fullFoldView);
         }}
+        onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
         onPointerDown={(event) => begin(event, null)}
         onPointerMove={(event) => move(event, false)}
         onPointerUp={(event) => move(event, true)}
@@ -608,8 +641,8 @@ export function FoldArea({
         )}
       </div>
       <p id={hintId} className="cx-sr">
-        드래그하면 새 구간을 고르고, Shift+드래그하면 보기를 옮깁니다. 휠이나
-        +/−로 최대 {MAX_FOLD_ZOOM}배까지 확대하고 0이나 더블클릭으로 전체 보기를
+        Enter로 구간 선택을 시작합니다. 드래그하면 새 구간을 고르고, 휠 버튼을 누른 채 드래그하면 보기를 옮깁니다. Shift+드래그도 가능합니다. 휠이나
+        +/−로 최대 {maxZoom}배까지 확대하고 0이나 더블클릭으로 전체 보기를
         합니다. ←/→는 보기 이동입니다. 시작·끝 핸들에서 방향키는 보기 폭의
         1/1000, Shift+방향키는 10배 움직입니다. Esc는 드래그를 취소합니다.
       </p>
@@ -688,15 +721,6 @@ export function FoldArea({
               : ""}
           </span>
         </span>
-        {canEdit && !state.range && (
-          <button
-            type="button"
-            className="cx-link"
-            onClick={startKeyboardWindow}
-          >
-            구간 선택 시작
-          </button>
-        )}
         {canEdit && state.range && (
           <button type="button" className="cx-link" onClick={clearWindow}>
             구간 지우기
@@ -705,7 +729,7 @@ export function FoldArea({
       </div>
       <p
         id={statusId}
-        className="cx-note"
+        className="cx-note cx-window-note"
         role="status"
         data-testid="cx-window-status"
         data-tone={invalid ? "bad" : undefined}
@@ -715,9 +739,7 @@ export function FoldArea({
             ? state.message
             : preview && emptyRuleNote && stats?.inside === 0
               ? "이 구간에는 관측점이 없습니다. 빈 구간은 서버 규칙상 제출할 수 없습니다."
-              : state.range && !invalid && state.message && !locked
-                ? "미리보기 값입니다. 제출하면 서버가 다시 계산하고 검증합니다."
-                : "")}
+              : "")}
       </p>
       {(problem || slow) && (
         <div

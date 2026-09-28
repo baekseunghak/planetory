@@ -107,15 +107,15 @@ function Statistics({ memberId }: { memberId: string }) {
     max = Math.max(1, ...c.weeks.map((w) => w.submissionCount));
   return (
     <section className="personal-statistics" aria-label="내 탐사 통계">
-      <h2>내 탐사 통계</h2>
-      <p>
-        조회 기준 <time dateTime={c.asOf}>{timestamp(c.asOf)}</time> ·
-        Asia/Seoul
-      </p>
-      <p>
-        누적 기간: {timestamp(c.periodStart)}부터 {timestamp(c.periodEnd)}까지
-      </p>
-      <p>응답 생성: {timestamp(c.generatedAt)}</p>
+      <header className="personal-statistics-heading">
+        <h2>내 탐사 통계</h2>
+        <div className="personal-statistics-tools">
+          <p title={`누적 기간: ${timestamp(c.periodStart)} ~ ${timestamp(c.periodEnd)} (한국 시간)`}>
+            조회 기준 <time dateTime={c.asOf}>{new Date(c.asOf).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}</time>
+          </p>
+          <button type="button" onClick={state.reload}>새로고침</button>
+        </div>
+      </header>
       {c.metrics.submissionCount.value === 0 && (
         <p role="status">
           아직 탐사 제출 기록이 없습니다. 건수 0과 비율의 표본 없음을 구분해
@@ -217,9 +217,7 @@ function Statistics({ memberId }: { memberId: string }) {
       </section>
       <p>{c.nextGoal}</p>
       <ComparisonStatistics data={c.comparison} retry={state.reload} />
-      <button type="button" onClick={state.reload}>
-        통계 새로고침
-      </button>
+
     </section>
   );
 }

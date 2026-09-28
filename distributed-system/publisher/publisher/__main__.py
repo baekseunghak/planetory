@@ -141,8 +141,9 @@ DATA_FAILURE = 65   # 같은 입력으로는 다시 돌려도 실패한다. Silv
 def publish_run(args) -> int:
     """배치 run 게시 [S15P21C206-276]. run 기록을 표준 출력에, 진행 메시지를 표준 오류에 낸다.
 
-    종료 코드: 모든 별이 끝났으면 0, 일시 장애나 알림 실패가 있으면 1(같은 명령을 다시 돌린다. 끝난 별은
-    ALREADY_PUBLISHED다), 그 밖의 거절만 남았으면 65다.
+    종료 코드: 모든 별이 끝났으면 0, 일시 장애(PUBLISH_ROLLED_BACK)가 있으면 1(같은 명령을 다시 돌린다. 끝난 별은
+    ALREADY_PUBLISHED다), 그 밖의 거절만 남았으면 65다. 알림 일부 실패는 0이다. DB의 current가 정본이라 게시를
+    다시 돌리지 않고, 실패한 판은 run 기록 notify.results를 보고 notify 명령으로 다시 보낸다.
     """
     import datetime as dt
 
@@ -153,7 +154,15 @@ def publish_run(args) -> int:
     now = lambda: dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")  # noqa: E731
     started = now()
     with psycopg.connect("", autocommit=True) as conn:
-        target = loader.preflight(conn)
+        try:
+            target = loader.preflight(conn)
+        except loader.PublishError as exc:
+            # 마이그레이션이 뒤처지는 등 다시 돌려도 결과가 같다. 제어기가 재시작하지 않게 기록을 남기고 65로 끝낸다.
+            record = {"run_id": args.run_id, "approval": args.approval, "status": "rejected",
+                      "reason": f"{exc.code}: {exc}", "stars": [], "started_at": started, "finished_at": now()}
+            json.dump(record, sys.stdout, ensure_ascii=False, indent=2)
+            print()
+            return DATA_FAILURE
         print(f"대상 {conn.info.dbname}, 마이그레이션 V{target.flyway_version}", file=sys.stderr)
         for warning in target.warnings:
             print(f"주의: {warning}", file=sys.stderr)
@@ -201,8 +210,9 @@ def notify_record(bundle_ids: list[int]) -> dict:
 
 def exit_code(record: dict) -> int:
     # current를 그대로 둔 별(튜토리얼 별 등)은 첫 게시 한정 정책의 결과라 실패로 세지 않는다.
+    # 알림 일부 실패(notify partial)는 게시 전체를 다시 돌릴 이유가 아니다. 같은 실패면 재시작만 되풀이된다.
     codes = {s["code"] for s in record["stars"] if not s.get("current_kept")}
-    if "PUBLISH_ROLLED_BACK" in codes or record.get("notify", {}).get("status") == "partial":
+    if "PUBLISH_ROLLED_BACK" in codes:
         return 1
     return DATA_FAILURE if record["status"] == "rejected" or codes - DONE else 0
 

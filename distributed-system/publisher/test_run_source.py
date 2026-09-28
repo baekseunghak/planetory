@@ -115,6 +115,14 @@ class RunSourceTest(unittest.TestCase):
     def bundle(self, tic):
         return next(b for b in self.run["bundles"] if b["bundle"]["tic_id"] == tic)
 
+    def test_a_new_star_without_a_discoverable_candidate_is_registered_hidden(self):
+        # 찾을 수 있는 후보가 없는 별은 탐사가 곧바로 끝나 회원이 등록할 의미가 없다(2026-09-27 사용자 결정).
+        gold = copy.deepcopy(self.bundle(self.A))
+        for c in gold["candidates"]:
+            c["discoverable"] = False
+        p = r.to_payload(gold, self.meta[str(self.A)], self.run["manifest"], APPROVAL)
+        self.assertEqual((p["star"]["service_status"], p["star"]["initial_status"]), (None, "hidden"))
+
     def test_ready_stars_become_first_publish_payloads_with_every_external_reference(self):
         got = self.payloads()
         self.assertEqual(sorted(got), [self.A, self.B])
@@ -126,7 +134,8 @@ class RunSourceTest(unittest.TestCase):
         self.assertEqual(second["external"], [])
         self.assertEqual([e["external_id"] for e in p["external_only"]], [f"{self.A}.02"])
         self.assertTrue(first["record"]["is_confirmed"])
-        self.assertEqual((p["star"]["service_status"], p["star"]["confirmed_count"]), (None, 1))
+        self.assertEqual((p["star"]["service_status"], p["star"]["confirmed_count"], p["star"]["initial_status"]),
+                         (None, 1, "published"))
         self.assertNotIn("payload_digest", p["bundle"])
         self.assertEqual((p["bundle"]["manifest"]["publish"]["run_id"], p["bundle"]["manifest"]["publish"]["approval"]),
                          ("run-fixture", APPROVAL))
@@ -216,7 +225,8 @@ class RunRecordExitTest(unittest.TestCase):
         self.assertEqual(exit_code(self.record(status="rejected")), 65)
         # 일시 장애가 있으면 거절이 섞여도 다시 돌린다. 끝난 별은 그대로이고 거절은 다음 실행에 65로 남는다.
         self.assertEqual(exit_code(self.record("PUBLISH_REJECTED", "PUBLISH_ROLLED_BACK")), 1)
-        self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 1)
+        # 알림 일부 실패는 DB 게시를 다시 돌릴 이유가 아니다(실패한 판은 notify 명령으로 다시 보낸다).
+        self.assertEqual(exit_code(self.record("PUBLISHED", notify="partial")), 0)
         self.assertEqual(exit_code(self.record("PUBLISHED", notify="skipped_no_token")), 0)
         # current를 그대로 둔 별(튜토리얼 별 등)만 거절이면 정책대로 끝난 run이다.
         kept = self.record("PUBLISHED")

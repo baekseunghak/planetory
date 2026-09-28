@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../../auth/SessionProvider";
+import { PublicationUnlockSink } from "../../features/publication/unlock-sink";
 import {
   OnboardingLookContext,
   OnboardingProvider,
@@ -25,6 +26,13 @@ import {
   storyWanted,
 } from "./first-story";
 import { FirstStory } from "./FirstStory";
+import {
+  addNewStars,
+  newStarsOf,
+  openNewStar,
+  pruneNewStars,
+  type NewStarList,
+} from "./new-stars";
 import "../../components/service-presentation.css";
 import { SCENE_TIMING, sceneSystemFrom, useScene } from "../scene";
 import { ShellContext, type PanelSide, type Shell } from "./context";
@@ -147,6 +155,9 @@ function ShellBody({
   analysisTic.current = target.stage === "analysis" ? target.ticId : null;
   const focusRef = useRef(focus);
   focusRef.current = focus;
+  const unlockRef = useRef<
+    (ticIds: readonly string[], ignites: boolean) => void
+  >(() => undefined);
   const [director] = useState(
     () =>
       new SequenceDirector({
@@ -162,10 +173,17 @@ function ShellBody({
                 outcome.planet.candidateId,
               )
             : null,
+        onUnlock: (ticIds, ignites) => unlockRef.current(ticIds, ignites),
       }),
   );
   useEffect(() => director.start(), [director]);
   useEffect(() => director.reapply(), [director, scene]);
+  // Publishing an analysis (공개 검토) can grant the achievement and open
+  // stars there: they ignite like a discovery's once the galaxy is back.
+  const publicationUnlocks = useCallback(
+    (ticIds: readonly string[]) => director.unlockElsewhere(ticIds),
+    [director],
+  );
   useEffect(() => {
     if (target.stage !== "analysis") return;
     director.enterAnalysis();
@@ -173,7 +191,38 @@ function ShellBody({
   }, [director, target.stage, target.ticId]);
   const sequence = useSyncExternalStore(director.subscribe, director.getState);
 
-  // ---- unlocked stars ignite once the galaxy is on screen again
+  // ---- new stars: unlocked and not opened yet (new-stars.ts), kept per
+  // member on this browser. The galaxy rings them (NewStarMarks) and the
+  // "새 별 N개" chip walks through them; a star waiting for its ignition
+  // (`unlit`) joins them once it has ignited.
+  const [newStarList, setNewStarList] = useState<NewStarList>(() =>
+    newStarsOf(browserStorage(), memberId),
+  );
+  const [unlit, setUnlit] = useState<ReadonlySet<string>>(() => new Set());
+  const lightUp = useCallback((ticIds: readonly string[]) => {
+    setUnlit((previous) =>
+      ticIds.some((id) => previous.has(id))
+        ? new Set([...previous].filter((id) => !ticIds.includes(id)))
+        : previous,
+    );
+  }, []);
+  unlockRef.current = (ticIds, ignites) => {
+    setNewStarList(addNewStars(browserStorage(), memberId, ticIds));
+    if (ignites) setUnlit((previous) => new Set([...previous, ...ticIds]));
+  };
+  const newStars = useMemo(
+    () =>
+      unlit.size ? newStarList.filter((id) => !unlit.has(id)) : newStarList,
+    [newStarList, unlit],
+  );
+  // Opened (its panel or its analysis): not new any more.
+  useEffect(() => {
+    if (focusTic)
+      setNewStarList(openNewStar(browserStorage(), memberId, focusTic));
+  }, [focusTic, memberId]);
+
+  // ---- unlocked stars ignite once the galaxy is on screen again, one after
+  // another, then one toast says how many opened.
   const [newStar, setNewStar] = useState<string | null>(null);
   const clearNewStar = useCallback(() => setNewStar(null), []);
   const store = sky.store;
@@ -184,7 +233,10 @@ function ShellBody({
     const current = storeRef.current;
     if (!ids.length || !current) {
       // Held stars that will not ignite after all are shown plainly.
-      if (ids.length) director.holdStars(null);
+      if (ids.length) {
+        director.holdStars(null);
+        lightUp(ids);
+      }
       director.releaseStars();
       return;
     }
@@ -202,13 +254,18 @@ function ShellBody({
         } catch (error) {
           console.error("scene ignite failed", error);
         }
+        lightUp([id]);
         setNewStar(id);
-        toast("새 별이 열렸습니다");
       }
+      toast(
+        ids.length > 1
+          ? `새 별 ${ids.length}개가 열렸습니다`
+          : "새 별이 열렸습니다",
+      );
       // Now the star count moves (see TallyHold).
       director.releaseStars();
     })();
-  }, [director, toast]);
+  }, [director, toast, lightUp]);
   // The mark belongs to the galaxy: any other screen ends it.
   useEffect(() => {
     if (target.stage !== "galaxy") setNewStar(null);
@@ -231,6 +288,17 @@ function ShellBody({
   else if (complete) missing.current = { ticId: focusTic, missing: true };
   else if (missing.current?.ticId !== focusTic) missing.current = null;
   const starMissing = !!missing.current?.missing;
+
+  // The fully loaded sky has the last word on what is still new (explored
+  // or gone is not); a star unlocked a moment ago waits for its refresh.
+  useEffect(() => {
+    setNewStarList(
+      pruneNewStars(browserStorage(), memberId, {
+        stars: sky.data.stars,
+        complete,
+      }),
+    );
+  }, [memberId, sky.data.stars, complete]);
 
   // ---- first-login story: a newcomer's galaxy waits far away while four
   // lines say what this place is for; 시작하기 (or 건너뛰기) starts the
@@ -400,6 +468,7 @@ function ShellBody({
     firstVisit,
     markFirstVisitFlown,
     story,
+    newStars,
     newStar,
     clearNewStar,
   };
@@ -427,7 +496,9 @@ function ShellBody({
             }
             tabIndex={-1}
           >
-            <Outlet />
+            <PublicationUnlockSink.Provider value={publicationUnlocks}>
+              <Outlet />
+            </PublicationUnlockSink.Provider>
             {/* The galaxy shows its own first-visit line (GalaxyView). A page
               that fills the sky slot (dev inspectors) keeps the old tip. */}
             {skyOverride && location.pathname === "/sky" && (

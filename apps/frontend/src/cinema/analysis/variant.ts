@@ -3,10 +3,12 @@
 // run it; ./dev-tools.ts reads the build values and ./AnalysisSwitch.tsx
 // renders the plan.
 //
-// - Build define VITE_CINEMA_ANALYSIS: "new" = the new design (variant B,
-//   ../analysis-new) for every member, with no toggle. Anything else, and a
-//   build without the variable (production), is the classic variant.
-//   `npm run dev:cinema` defines it from CINEMA_ANALYSIS (classic by default).
+// - The new design (variant B, ../analysis-new) is the analysis screen for
+//   every member, with no toggle: a build without VITE_CINEMA_ANALYSIS
+//   (production) shows it. Only VITE_CINEMA_ANALYSIS="classic" brings back
+//   the classic variant (../analysis-classic), as a way back if one is ever
+//   needed. `npm run dev:cinema` defines it from CINEMA_ANALYSIS (new by
+//   default).
 // - The "기존형 / 새 디자인" toggle is a developer tool only
 //   (VITE_CINEMA_DEV_TOOLS on a dev server). There the stored choice wins and
 //   the build variant is only the starting value.
@@ -16,13 +18,14 @@ export type AnalysisVariant = "classic" | "cinematic";
 export const ANALYSIS_VARIANT_KEY = "planetory:analysis-variant";
 
 /**
- * VITE_CINEMA_ANALYSIS as a variant: exactly "new" selects the new design
- * (the demo server normalizes CINEMA_ANALYSIS before defining it).
+ * VITE_CINEMA_ANALYSIS as a variant: exactly "classic" selects the classic
+ * variant; anything else, and no value, is the new design (the demo server
+ * normalizes CINEMA_ANALYSIS before defining it).
  */
 export function analysisVariantFromBuild(
-  value: string | boolean | undefined | null,
+  value: string | undefined | null,
 ): AnalysisVariant {
-  return value === "new" || value === true ? "cinematic" : "classic";
+  return value === "classic" ? "classic" : "cinematic";
 }
 
 /** A stored toggle choice, or null when there is none or it is unknown. */
@@ -49,8 +52,8 @@ export function planAnalysisVariant({
   devTools,
   stored,
 }: {
-  /** VITE_CINEMA_ANALYSIS, or whether it is "new". */
-  build: string | boolean | undefined | null;
+  /** VITE_CINEMA_ANALYSIS. */
+  build: string | undefined | null;
   devTools: boolean;
   stored: string | null | undefined;
 }): AnalysisVariantPlan {

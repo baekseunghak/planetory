@@ -5,18 +5,16 @@ import { useSession } from "../../auth/SessionProvider";
 import { ErrorState, LoadingState } from "../../components/RequestState";
 import { useReadModel } from "../community/useReadModel";
 import { formatJoinedDate, readProfile, type Profile } from "./contracts";
-import { NicknameEditor } from "./NicknameEditor";
 import {
   ProfileSection,
   ProfileSlots,
   type ProfileSlotComponents,
 } from "./ProfileSlots";
-import { UsageGuide } from "./UsageGuide";
 import { ProfileStarFilters } from "./ProfileStarFilters";
 import "./profile.css";
 import { MySkyPreview } from "../sky-data/MySkyPreview";
 import { FollowButton, FollowSummary } from "../follow/Follow";
-import { p1Enabled } from "../p1";
+import { useLiveP1 } from "../p1";
 import { useCinemaWording } from "../../shared/cinema-wording";
 export function MyProfilePage() {
   const { member } = useSession();
@@ -64,10 +62,11 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
   // Cinema app: the tabs come first and "탐사 요약" is the body under its tab
   // (src/shared/cinema-wording); develop keeps the summary above the tabs.
   const cinema = useCinemaWording();
+  // Follow and another member's galaxy: live in production (../p1).
+  const liveP1 = useLiveP1();
   return (
     <section className="profile-page">
       <header className="profile-heading">
-        <p className="eyebrow">{own ? "MY OBSERVATORY" : "EXPLORER PROFILE"}</p>
         <h1>{own ? "마이페이지" : "탐사자 프로필"}</h1>
       </header>
       <div className="profile-identity">
@@ -88,12 +87,6 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         {own && (
           <div className="profile-actions">
             <Link to="/settings">설정</Link>
-            <NicknameEditor
-              memberId={memberId}
-              nickname={profile?.nickname ?? member?.nickname ?? ""}
-              active={!!profile}
-            />
-            <UsageGuide />
           </div>
         )}
       </div>
@@ -105,7 +98,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
         )
       ) : (
         <>
-          {p1Enabled && (
+          {liveP1 && (
             <>
               <FollowSummary memberId={memberId} own={own} />
               {!own && (
@@ -119,7 +112,7 @@ function ProfileScreen({ memberId, own }: { memberId: string; own: boolean }) {
               )}
             </>
           )}
-          {p1Enabled && !own && profile.starListVisibility === "PUBLIC" && (
+          {liveP1 && !own && profile.starListVisibility === "PUBLIC" && (
             <Link
               className="primary-link"
               to={"/members/" + encodeURIComponent(memberId) + "/sky"}

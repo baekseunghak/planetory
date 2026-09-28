@@ -4,7 +4,7 @@
 
 ## 현재 상태 (S15P21C206-262, S15P21C206-272, S15P21C206-276)
 
-**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계와 Airflow task는 80 DAG 작업에서 붙인다. 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. 처음 보는 사람은 [Gold 배치 게시 경로의 코드 구조](../../docs/architecture/gold-batch-publish.md)에서 파일 역할과 흐름을 먼저 본다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
+**적재 단계는 구현했고, 입력 어댑터는 목업·튜토리얼 5종·배치 run 세 가지다.** 적재 단계는 로컬 시드(`S15P21C206-256`, MR `!201`)의 `local_seed/load.py`에서 옮겼다. 튜토리얼 5종은 고정 FITS에 공용 커널을 돌려 만든 실제 Gold다(아래 「튜토리얼 5종」). 배치 run은 80 게시 준비 폴더의 게시 전 검사·변환과 run 단위 게시 명령 `publish-run`까지 구현했다(아래 「배치 run」). 명령은 publish-ready를 Node 1 로컬로 받은 폴더를 읽는다. 폴더를 HDFS에서 받는 단계는 Node 1 게시 제어기(`tess_publish_ctl.py`)가, Airflow 게시 task는 `tess_publication_run`의 `start_publish`·`wait_publish`가 맡는다(276). 후보 동일성 대조는 없으므로 배치 run은 첫 게시만 한다. 처음 보는 사람은 [Gold 배치 게시 경로의 코드 구조](../../docs/architecture/gold-batch-publish.md)에서 파일 역할과 흐름을 먼저 본다. Node 1 → EC2-A 접속 경로와 Node 1 실행 방법은 [EC2 서비스 배포](../../infra/service/README.md) 「Publisher 운영 적재 경로」(`S15P21C206-85`)다.
 
 현재 목업은 TOI-270의 TESS 곡선과 별도 Archive `pscomppars` 참고값으로 만든 계약 예시를 다른 더미 TIC에 옮긴다. `external_statuses.source='nasa_exoplanet_archive'`와 행성명도 함께 복사되므로 그 값은 더미 TIC에 실제로 대응하는 행성의 검증 결과가 아니다. 266 NASA 설명 경로의 원천·식별 조건은 [266 계약 2절](../../docs/development/nasa-planet-info-266.md#2-식별자와-요청-흐름)을 따른다.
 
@@ -27,7 +27,7 @@ checksum은 공용 `astro_kernel.gold_canonical`로 계산한다. 이미지에 a
 로컬 시드와 같은 모양이다. 입력 어댑터가 이 모양을 내면 `load.publish_star`는 원천을 구분하지 않는다.
 
 - `tic_id`, `label`
-- `star`: 별 속성. **없으면(`None`) 별 행을 덮어쓰지 않고 존재만 확인한다.** 목업이 이렇게 한다. `service_status`가 `None`이면 새 별은 `hidden`으로 등록하고 기존 별의 공개 상태는 바꾸지 않는다. 배치 run이 이렇게 한다.
+- `star`: 별 속성. **없으면(`None`) 별 행을 덮어쓰지 않고 존재만 확인한다.** 목업이 이렇게 한다. `service_status`가 `None`이면 새 별은 `initial_status`(없으면 `hidden`)로 등록하고 기존 별의 공개 상태는 바꾸지 않는다. 배치 run이 이렇게 한다.
 - `bundle`: `bundle_version`, `payload_digest`(선택), `manifest`(`record_checksums` 포함), `fold_reference_time_btjd`, `base_days`(둘 다 float)
 - `segments[]`: `sector`, `binning_revision`, `start_btjd`, `bin_minutes`, `n_points`, `flux`, `flux_scatter`, `gaps`, `checksum`, `observation{start_btjd, end_btjd, cadence, source_version}`
 - `periodogram`: `period_min_days`, `period_max_days`, `n_periods`, `power`, `checksum`
@@ -65,7 +65,7 @@ V23 이후 후보 변경·current 전환은 [알림 DB 생산 계약](../../docs
 
 ## 적재가 다루지 않는 것
 
-- **별 공개 판단.** `star`가 있으면 upsert하고, 없으면 존재만 본다. 배치 run은 새 별을 `hidden`으로 등록하고 기존 별의 공개 상태를 바꾸지 않는다(`S15P21C206-276` 착수 결정 1의 기본값). 배치로 올린 별을 `published`로 바꾸는 절차는 정하지 않았다.
+- **별 공개 판단.** `star`가 있으면 upsert하고, 없으면 존재만 본다. 배치 run은 새 별을, 찾을 수 있는(active·discoverable) 후보가 1개 이상이면 `published`로, 없으면 `hidden`으로 등록한다(`run_source`가 `initial_status`를 준다). 기존 별의 공개 상태는 바꾸지 않는다. 찾을 것이 없는 별은 탐사가 곧바로 `COMPLETE_UNDISCOVERABLE_ONLY`로 끝나 회원이 등록할 의미가 없고, 공급 자격도 같은 기준이다(2026-09-27 사용자 결정, 첫 운영 게시 뒤). 처음 계획(`S15P21C206-276` 착수 결정 1)은 새 별을 모두 `hidden`으로 두는 것이었다.
 - **후보 동일성 대조.** 새 판을 올리면 이전 후보를 전부 은퇴시킨다. 그래서 배치 run은 첫 게시만 한다. 갱신 게시는 [후보 정정 계약](../../docs/architecture/candidate-correction-contract.md)으로 갱신·은퇴를 대조할 수 있게 된 뒤 연다.
 - **125 이력 제안과 별칭.** 번들의 `history_proposals`와 `candidate_aliases`는 적재하지 않는다. 첫 게시에서는 잃는 것이 없다. `candidate_status_history`는 [ERD](../../docs/architecture/database-erd.md)상 판이 바뀌며 **달라진 값**의 기록인데, 첫 게시의 제안은 이전 값이 없는 첫 판정뿐이다. 이 이력을 읽는 Backend 코드와 DB 트리거도 아직 없다. 첫 게시 번들의 별칭은 125 규칙상 늘 비어 있다. 값이 바뀌는 이력의 적재는 갱신 게시를 열 때 함께 넣는다. Backend 판 전환 후처리는 이 적재를 87의 Publisher 몫으로 본다(`BundleActivationRepository`).
 
@@ -123,7 +123,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 
 ## 배치 run (S15P21C206-276)
 
-`run_source`는 80 gate가 통과시킨 게시 준비 산출물(publish-ready)을 Node 1 로컬 폴더로 받아 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. `publish-run`이 그 payload를 별마다 첫 게시하고 run 기록을 낸다. **구현·합성 검증까지다.** 폴더 배치와 줄 형식은 80 세션과 합의했다(2026-09-27). 80 쪽 구현은 병합 전이다. HDFS에서 폴더로 받는 단계, Airflow 게시 task와 Node 1 운영 게시는 80 DAG 작업에서 붙인다.
+`run_source`는 80 gate가 통과시킨 게시 준비 산출물(publish-ready)을 Node 1 로컬 폴더로 받아 게시 전 검사하고 payload로 바꾼다. DB에 붙지 않는다. `publish-run`이 그 payload를 별마다 첫 게시하고 run 기록을 낸다. **첫 운영 게시(run `20260927T033816Z`, 4,916개)까지 마쳤다(2026-09-27).** 폴더 배치와 줄 형식은 80 세션과 합의했다. 80은 MR !234로 develop에 병합됐다. HDFS에서 폴더로 받는 단계와 Airflow 게시 task는 이 저장소의 게시 제어기와 DAG가 맡는다.
 
 - **입력 폴더.** 파일 네 가지로 이뤄진다.
   - `_READY.json`: publish-ready marker(schema `planetory.tess-publish-ready.v1`, HDFS `/lake/gold/tess/publish-ready/run_id=<run>/_READY.json`)
@@ -140,7 +140,7 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
 - **AI.** 79 정책대로 싣지 않는다(`ai=None`, `ai_executions` 없음).
 - **게시 명령.** `python -m publisher publish-run --run-id <id> --ready <게시 준비 폴더> --approval <게시 승인 근거>`. `--run-id`가 marker나 run manifest의 `run_id`와 다르면 아무것도 싣지 않는다. 승인 근거는 80 DAG의 수동 게시 승인 task가 넘기고, 번들 `manifest.publish.approval`에 남는다. 별마다 한 트랜잭션이고, 한 별의 실패가 다음 별을 막지 않는다.
 - **run 기록.** 표준 출력의 JSON 하나다(진행 메시지는 표준 오류). `run_id`, `silver_attempt`, `aggregator_version`, `approval`, `flyway_version`, `status`(`published`·`rejected`, 거절이면 `reason`), `counts`, `stars[]`(`tic_id`, `code`, `bundle_id`, `detail`, `current_kept`, 게시한 별의 `confirmed_without_archive`), `notify`(`status` `sent`·`partial`·`skipped_no_token`·`none`과 판별 `results`), `started_at`·`finished_at`(UTC)을 담는다. `confirmed_without_archive`는 `archive` 참조가 없어 266 설명이 열리지 않을 확정 후보 수다. 거절 사유가 아니다.
-- **결과 코드와 종료 코드.** DB 제약 위반은 `PUBLISH_REJECTED`, 연결이 끊긴 일시 장애는 `PUBLISH_ROLLED_BACK`이다(Gold 계약 6절, 새 코드를 만들지 않는다). 모든 별이 `PUBLISHED`·`ALREADY_PUBLISHED`·`BUNDLE_SUPERSEDED`면 0이다. `PUBLISH_ROLLED_BACK`이나 알림 일부 실패가 있으면 1이다. 같은 명령을 다시 돌리면 끝난 별은 `ALREADY_PUBLISHED`이고 알림도 다시 간다. 그 밖의 거절만 남았으면 65다. Silver 제어기처럼 재시도해도 같은 결과인 데이터 실패를 뜻하므로 Airflow가 재시도하지 않게 한다. 알림 토큰이 없어 보내지 않은 것은 실패가 아니다. `current_kept=true`인 별도 실패로 세지 않는다. 튜토리얼 별처럼 이미 current가 있어 첫 게시 한정 정책대로 기존 판을 둔 별이다. 결과 코드는 계약대로 `PUBLISH_REJECTED`이고 run 기록에 그대로 남는다. 1~13 run에는 튜토리얼 5종 TIC이 들어 있어, 이 규칙이 없으면 매번 65로 끝난다.
+- **결과 코드와 종료 코드.** DB 제약 위반은 `PUBLISH_REJECTED`, 연결이 끊긴 일시 장애는 `PUBLISH_ROLLED_BACK`이다(Gold 계약 6절, 새 코드를 만들지 않는다). 모든 별이 `PUBLISHED`·`ALREADY_PUBLISHED`·`BUNDLE_SUPERSEDED`면 0이다. `PUBLISH_ROLLED_BACK`이 있으면 1이다. 같은 명령을 다시 돌리면 끝난 별은 `ALREADY_PUBLISHED`이고 알림도 다시 간다. 알림 일부 실패는 0이다. DB의 current가 정본이라 게시를 다시 돌리지 않는다. 실패한 판은 run 기록 `notify.results`를 보고 `notify --bundle b-<id>`로 다시 보낸다. 응답 대기 시간 초과나 연결 끊김도 그 판의 실패로만 남는다. 한 별의 예상 밖 오류는 그 별의 `PUBLISH_REJECTED`로 기록하고 다음 별로 간다. 그 밖의 거절만 남았으면 65다. Silver 제어기처럼 재시도해도 같은 결과인 데이터 실패를 뜻하므로 Airflow가 재시도하지 않게 한다. 알림 토큰이 없어 보내지 않은 것은 실패가 아니다. `current_kept=true`인 별도 실패로 세지 않는다. 튜토리얼 별처럼 이미 current가 있어 첫 게시 한정 정책대로 기존 판을 둔 별이다. 결과 코드는 계약대로 `PUBLISH_REJECTED`이고 run 기록에 그대로 남는다. 1~13 run에는 튜토리얼 5종 TIC이 들어 있어, 이 규칙이 없으면 매번 65로 끝난다.
 - **Airflow 게시 단계(Node 1 제어기).** `tess_publication_run`의 `approve_publication` 뒤에 `start_publish` → `wait_publish`가 돈다. 호출하는 것은 `distributed-system/spark/tess_publish_ctl.py`(pipeline release의 `spark/`)다. Gold 제어기처럼 systemd unit(`planetory-tess-publish-<run>.service`, oneshot, 실패하면 5분 뒤 재시작, 65면 멈춤)으로 돌아 Airflow 재시작과 무관하다. 절차는 다음과 같다.
   1. HDFS publish-ready marker의 schema·run·attempt·`files` 모양을 확인한다.
   2. `files` bytes 합에 여유 2 GiB를 더한 만큼 디스크가 있는지 본다.
@@ -148,11 +148,11 @@ PYTHONPATH=".;../../distributed-system/publisher" uv run --locked python -m publ
   4. `docker run --network host --env-file /etc/planetory/publisher/env -v <폴더>:/ready:ro <이미지> python -m publisher publish-run`을 돌린다.
   5. 표준 출력의 run 기록을 상태 파일(`/var/lib/planetory-publish/run=<run>/publish=<UTC>.json`)에 남기고, 성공하면 로컬 사본을 지운다.
 
-  publish-run 종료 0은 `complete`, 1은 `failed`(unit 재시작, 끝난 별은 `ALREADY_PUBLISHED`)다. 65와 그 밖의 종료는 `rejected`이고 unit도 65로 멈춘다. 그 밖의 종료란 이미지에 `publish-run`이 없을 때의 2, docker 오류 125처럼 다시 돌려도 같은 결과인 경우다. 상태 파일은 marker·이미지 검사보다 먼저 `prepared`로 쓰고, 실패하면 이유를 `failure_detail`에 남겨 Airflow `wait_publish`가 그 이유로 실패하게 한다. 받는 도중의 일시 장애(`failed`)도 같다. unit은 Gold와 같이 하루 7번까지만 시작한다(`StartLimitBurst=7`, DAG의 재시작 한도 6보다 하나 많음). **이미지는 인자로 받지 않는다.** sudo 아래 임의 이미지가 host 네트워크와 DB env 파일을 쓰면 root와 같아서다. 그래서 root 전용 `/etc/planetory/publisher/image` 한 줄(`<registry>/planetory/publisher:<40자 sha>` 또는 `@sha256:`)로 고정한다. 승인 근거는 `airflow/tess-publication-run/<run>/approved`다. sudo 허용은 `infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh <release>`가 만든다. 이미 적용한 release의 sudoers는 바꿀 수 없으므로 게시 단계는 새 release ID로 배포한다. 1~13 run의 ready는 많아야 5,156개(80 확인)라 run 전체를 받는다. 80 Gold Canary(2026-09-27, release `20260927T052453Z`, TIC 5개)에서 번들 줄은 ready 별 하나에 약 430 KB였다(Sector·후보 수에 따라 다름). 그래서 1~13 번들은 2.2 GB 안팎으로 추정되고, 여유 2 GiB를 더해도 Node 1 여유 디스크 13 GB 안이다. 실제 run에서 다시 잰다. ponytail: 디스크가 모자라면 멈추고, 더 큰 run은 part 단위로 흘려 보내도록 바꾼다.
+  publish-run 종료 0은 `complete`, 1은 `failed`(unit 재시작, 끝난 별은 `ALREADY_PUBLISHED`)다. 65와 그 밖의 종료는 `rejected`이고 unit도 65로 멈춘다. 그 밖의 종료란 이미지에 `publish-run`이 없을 때의 2, docker 오류 125처럼 다시 돌려도 같은 결과인 경우다. 상태 파일은 marker·이미지 검사보다 먼저 `prepared`로 쓰고, 실패하면 이유를 `failure_detail`에 남겨 Airflow `wait_publish`가 그 이유로 실패하게 한다. 받는 도중의 일시 장애(`failed`)도 같다. unit은 Gold와 같이 하루 7번까지만 시작한다(`StartLimitBurst=7`, DAG의 재시작 한도 6보다 하나 많음). **이미지는 인자로 받지 않는다.** sudo 아래 임의 이미지가 host 네트워크와 DB env 파일을 쓰면 root와 같아서다. 그래서 root 전용 `/etc/planetory/publisher/image` 한 줄(`<registry>/planetory/publisher:<40자 sha>` 또는 `@sha256:`)로 고정한다. 승인 근거는 `airflow/tess-publication-run/<run>/approved`다. sudo 허용은 `infra/distributed-system/scripts/configure-tess-publish-airflow-node1.sh <release>`가 만든다. 이미 적용한 release의 sudoers는 바꿀 수 없으므로 게시 단계는 새 release ID로 배포한다. 1~13 run의 ready는 많아야 5,156개(80 확인)라 run 전체를 받는다. 80 Gold Canary(2026-09-27, release `20260927T052453Z`, TIC 5개)에서 번들 줄은 ready 별 하나에 약 430 KB였다(Sector·후보 수에 따라 다름). 첫 운영 run의 번들은 1,350,215,352 bytes(ready 별 하나에 평균 약 275 KB)였다. 여유 2 GiB를 더해도 Node 1 여유 디스크 13 GB 안이다. ponytail: 디스크가 모자라면 멈추고, 더 큰 run은 part 단위로 흘려 보내도록 바꾼다.
 - **운영 서비스 DB 시험(2026-09-27, 사용자 승인).** Node 1에서 운영 Publisher 이미지(`50e13981`)에 이 브랜치의 `publisher`·`astro_kernel` 패키지를 읽기 전용으로 덮고 `publish-run --ready`를 돌렸다. 입력은 80 샘플 publish-ready(합성 TIC 999999101, run `20260927T010000Z`)다.
   - 결과: EC2-A `planetory_poc`(V29)에 `PUBLISHED b-12`·알림 HTTP 200, 재실행 `ALREADY_PUBLISHED b-12`·알림 200이었다.
   - DB와 로그: 별은 `hidden`, 판 manifest에 run ID·승인 근거, 관측 원천은 Sector 3·4 `120s`·`spoc-5.0.0`이었다. Backend 로그에 "판 12(TIC 999999101) 후처리"가 두 번 찍혔고 재개·라벨은 0이었다.
-  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 경로는 운영에서 아직 돌리지 않았다.
+  - 정리: 소유자 psql로 일회성 삭제 SQL을 모의 실행해 개수(판 1·후보 1·세그먼트 2·관측 2·별 1, 알림 흔적 2)를 본 뒤 적용했다. 별 6·current 판 5·튜토리얼 1~5(b-5~b-9)로 돌아왔고, Node 1 작업 폴더도 지웠다. 게시 제어기(`tess_publish_ctl.py`)와 Airflow 게시 단계는 Node 1에 배포했고, 첫 운영 run이 4,916개를 게시했다(결과는 [DAG README](../airflow/dags/README.md) 「첫 운영 run」).
 
 ## DEC-01 공급 집계 (S15P21C206-79)
 

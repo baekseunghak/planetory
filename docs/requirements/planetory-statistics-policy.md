@@ -6,7 +6,7 @@
 
 - **확정:** 채점형은 회원×신호 첫 매칭 제출, 공개 판단은 회원×신호 최신 유효 공개 제출이다. 전체는 10분 MV, 비교 기준선은 일별 Snapshot의 최근 90일 제출 회원 중앙값이다. 회원 순위·백분위는 제공하지 않는다.
 - **확정:** 공개 취소·숨김은 공개 판단 대표를 다시 선택하지만 성과를 자동 회수하지 않는다. 외부 라벨 갱신으로 과거 Snapshot을 다시 계산하지 않는다. 첫 매칭과 성과 인정은 같은 사건이 아니다.
-- **현재 구현(ed7d72d):** `SubmissionRepository.statistics`는 채점형에 `match_result IN ('matched','matched_harmonic')`, `(created_at,id)` 오름차순을 사용한다. 공개형은 `PublicAnalysisVisibility.VISIBLE`과 내림차순을 사용한다. 두 쿼리 모두 회원 active 필터가 없다. `QuestRepository.countChallengeParticipants`는 별에 속한 여러 신호의 회원을 DISTINCT로 합친다. [165 변경 근거](../changes/2026-09-W4/2026-09-21.md#s15p21c206-165-공개-판단챌린지-참여-수-공통-조건과-소비-계약)를 따른다.
+- **현재 구현(ed7d72d):** `SubmissionRepository.statistics`는 채점형에 `match_result IN ('matched','matched_harmonic')`, `(created_at,id)` 오름차순을 사용한다. 공개형은 `PublicAnalysisVisibility.VISIBLE`과 내림차순을 사용한다. 두 쿼리 모두 회원 active 필터가 없다. `QuestRepository.countChallengeParticipants`는 회차 대상 별 전부(`challenge_round_targets`)에 속한 여러 신호의 회원을 DISTINCT로 합친다(283). [165 변경 근거](../changes/2026-09-W4/2026-09-21.md#s15p21c206-165-공개-판단챌린지-참여-수-공통-조건과-소비-계약)를 따른다.
 - **개인 구현(177):** 본인 현재 통계·8주·178 Snapshot 소비 경로를 구현했다. 별도 개인 통계 테이블은 없다. 기준 V19의 `stats_snapshots`에 필요한 중복 방지·앱 읽기 권한·전체 집계와 잡은 178이 통합한다. 기존 테이블 존재를 전체 통계 구현 완료로 보지 않는다.
 - **전체·비교 구현(178):** V21은 V20 다음에 적용하며 `global_stats` MV·유일 키·최초 미적재 상태, `stats_snapshots` NULL 회차 유일 키와 읽기/잡 역할을 추가한다. 전체 GET과 단발 갱신 명령을 제공한다. [통계 실행 런북](../operations/statistics-runbook.md)의 격리 검증 범위와 운영 미적용 상태를 구분한다.
 - 기존 신호 통계는 결과·History·공식 스레드·출처 카드의 실시간 조회다. P1 전체 통계를 대신하지 않으며, P1을 이유로 기존 공개 트랜잭션에 MV 갱신이나 일별 집계를 추가하지 않는다.
@@ -32,7 +32,7 @@
 
 `S`는 저장 성공한 submissions, `C`는 그중 submission_kind=candidate, `F`는 회원×matched_candidate_id별 matched/matched_harmonic의 첫 행, `A`는 user_candidate_achievements, `P`는 공개 조건을 통과한 published_analyses→analysis_histories→submissions의 회원×신호별 최신 제출이다. `F`는 `(created_at,id) ASC`, `P`는 같은 키 DESC로 선택한다. 기간 필터로 과거 첫 매칭을 잘라 새 첫 매칭을 만들지 않는다. 공개 P는 유효성을 먼저 거르고 대표를 고른다. 단순 최신 제출이나 공개 시각으로 대체하지 않는다.
 
-`L`은 기준 시각 이전 누적, `W8`은 T1의 8주, `R`은 현재 운영 active 챌린지 대상 별이다. 정렬은 시각 동률에 ID를 포함하며 기간은 시작 포함·끝 제외다. 내 값은 본인 회원으로 제한하고, 전체는 표의 키로 다시 집계한다. 별 수에 회원×별 합과 고유 TIC 수를 함께 명시하며 둘을 같은 이름으로 보내지 않는다.
+`L`은 기준 시각 이전 누적, `W8`은 T1의 8주, `R`은 현재 운영 active 챌린지 회차의 대상 별 전부(대표 대상과 추가 대상, 283)다. 정렬은 시각 동률에 ID를 포함하며 기간은 시작 포함·끝 제외다. 내 값은 본인 회원으로 제한하고, 전체는 표의 키로 다시 집계한다. 별 수에 회원×별 합과 고유 TIC 수를 함께 명시하며 둘을 같은 이름으로 보내지 않는다.
 
 시각 `Q`는 실시간 읽기 기준, `M`은 전체 MV가 읽은 원천의 기준, `D`는 비교 Snapshot의 배타적 종료 경계다. 모든 행은 해당 `asOf`와 기간을 반환한다. 집계 완료 시각은 `generatedAt`으로 분리한다. 정정 `현재`는 다음 성공 집계에서 원천의 현재 상태를 반영하되, 외부 라벨 변경으로 기존 성과 유형과 과거 Snapshot을 바꾸지 않는다는 뜻이다. 임의 과거 재계산은 하지 않는다. 공개 상태의 과거 이력이 없는 P는 D 시점 상태를 사후 복원했다고 주장하지 않는다.
 
@@ -62,7 +62,7 @@
 | 공개 판단 분포·기존, 전체 단위 제안 | P, 참여 건·% | 판단별 P / P 수; 키 회원×신호 | 현재 유효 공개, L. 취소·숨김·부모 숨김/삭제 제외 후 최신 선택; 목록 판단 필터 무관 | N=0 건수 0·비율 null; 이전 유효 대표 복귀; Q/M |
 | 공개 원글이 많은 별 5개·제안 | posts, 원글 개 | 별 게시판의 visible 일반 원글 + visible SYSTEM 공식 스레드 / 없음; post id | L; TIC 없는 자유글·삭제·숨김 제외. 댓글·반응은 가중하지 않음. 별별 건수 DESC·TIC ASC, 0건 별 제외 | 빈 배열; 현재; M |
 | AI 판정 구간별 공개 판단·제안 | P + 후보별 AI 선택 결과, 참여 건·% | rejected/hold/approved별 판단 P / 해당 구간 P | L; 3.1절에서 후보당 평가 1개를 고른 후 P에 조인. model_version·threshold_version별 분리. 자료 없음은 모든 판정/숫자 구간 분모에서 제외 | 정상 점수 0은 유효, 자료 없음 참여 건수 별도; 구간 분모 0 null; M |
-| 챌린지 참여·기존 | R의 유효 공개 분석, 명 | DISTINCT user_id / 없음 | 현재 R 대상 별의 과거 공개도 포함, 회차 시작으로 자르지 않음. 여러 신호도 회원 1명 | 0; 현재; Q/M |
+| 챌린지 참여·기존 | R의 유효 공개 분석, 명 | DISTINCT user_id / 없음 | 현재 R 대상 별의 과거 공개도 포함, 회차 시작으로 자르지 않음. 여러 신호·여러 대상 별도 회원 1명 | 0; 현재; Q/M |
 | 챌린지 판단 분포·제안 | R의 P, 참여 건·% | 판단별 회원×신호 / 전체 회원×신호 | 별 참여자 ‘명’과 분모가 다름을 표시. 임의로 회원당 마지막 신호 하나 선택 금지 | 분모 0 null; 현재; M |
 | 관측 회차별 발견한 별의 현재 완료율·제안 | observation_datasets + star_unlocks + user_star_progress, % | **분모 집합 안에서** progress_stage=completed인 회원×TIC / 해당 Sector에 관측이 있는 발견 회원×TIC | 현재; 원천 버전 중복은 Sector×TIC로 제거. 여러 Sector의 같은 별은 각 회차에 포함하며 회차끼리 더하지 않음. 새 후보로 재개되면 이전 Sector 값도 감소 | 분모 0 null; 현재; M |
 

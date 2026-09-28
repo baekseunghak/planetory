@@ -37,7 +37,7 @@ export const CinemaHistoryDetail = framed(
   "history-detail",
   "standard",
   HistoryDetailPage,
-  { eyebrow: "분석 기록", title: "분석 기록 상세" },
+  { eyebrow: "내 분석 기록", title: "제출 기록 상세" },
 );
 export const CinemaPublicAnalysis = framed(
   "public-analysis",
@@ -72,7 +72,7 @@ export function CinemaHistoryList() {
       width="standard"
       head={{
         eyebrow: "마이페이지",
-        title: "분석 기록",
+        title: "내 분석 기록",
         lede: "제출한 분석을 결과별로 모아 봅니다.",
       }}
     >

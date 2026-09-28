@@ -152,7 +152,7 @@ body:has(.analysis-screen) {
   opacity: 0.4;
 }
 .analysis-screen :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .analysis-screen .analysis-sr-only,
@@ -673,7 +673,7 @@ body:has(.analysis-screen) {
   cursor: pointer;
 }
 .judgment-options .analysis-choice:has(:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
 }
 .judgment-options > div {

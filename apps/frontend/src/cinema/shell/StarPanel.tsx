@@ -186,7 +186,7 @@ function StarBody({
             className="cinema-secondary"
             to={pagePath("starResults", { ticId }, { returnTo })}
           >
-            분석 결과 보기
+            이 별의 탐사 결과
           </Link>
         ) : (
           <button
@@ -195,7 +195,7 @@ function StarBody({
             disabled
             aria-describedby="cinema-result-locked"
           >
-            분석 결과 보기
+            이 별의 탐사 결과
           </button>
         )}
         {detail.actions.boardOpen ? (

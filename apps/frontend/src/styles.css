@@ -6,10 +6,26 @@
   font-synthesis: none;
   font-weight: 400;
   --muted: #a8b2c1;
+  --focus-ring: rgba(255, 211, 105, 0.6);
   --line: #ffffff21;
 }
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #566176 #0b1019;
+}
+/* Shared by pages, panels, dialogs and scrollable form controls. */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: #0b1019; }
+::-webkit-scrollbar-thumb {
+  background: #566176;
+  border: 2px solid #0b1019;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover { background: #8d99ad; }
+::-webkit-scrollbar-corner { background: #0b1019; }
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; }
 }
 body {
   margin: 0;
@@ -42,7 +58,7 @@ a:hover {
   color: #a9c5ec;
 }
 :focus-visible {
-  outline: 2px solid #accdfa;
+  outline: 1px solid var(--focus-ring);
   outline-offset: 4px;
 }
 h1 {

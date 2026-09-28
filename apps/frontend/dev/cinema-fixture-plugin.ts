@@ -1131,6 +1131,41 @@ export function cinemaFixturePlugin(
       new URL(`/v1/stars/${tic}/analysis-context`, "http://fixture.invalid"),
     );
 
+  /**
+   * A publication that newly grants its achievement opens a star in this
+   * world, as a recognized submission does (the publication fixture's own
+   * receipt opens none). Rewrites the receipt(s) in place: the opened star
+   * and the sky version that brings it.
+   */
+  const openStarsForPublication = (body: unknown) => {
+    const results = record(body)?.results;
+    const receipts = Array.isArray(results) ? results : [body];
+    for (const value of receipts) {
+      const receipt = record(value);
+      const achievement = record(receipt?.achievement);
+      if (!receipt || !achievement || receipt.newlyGranted !== true) continue;
+      if (!unlockStars) continue;
+      const before = invoke(world.galaxy, "GET", "/v1/me/sky").body.starCount;
+      invoke(world.galaxy, "POST", "/dev-galaxy-204/change");
+      const tic = world.ticOf(before);
+      const located = locate(tic);
+      if (!located) continue;
+      world.unlocked.push(tic);
+      achievement.unlockedStars = [
+        {
+          ticId: tic,
+          position: {
+            worldX: located.x,
+            worldY: located.y,
+            depthZ: located.depthZ,
+            layoutVersion: LAYOUT_VERSION,
+          },
+        },
+      ];
+      receipt.skyVersion = outward(innerVersion());
+    }
+  };
+
   /** Rank-1 dip sits at phase 0 (= 1 = 2 on the two-cycle display). */
   const coversDip = (selection: Json) => {
     const { phaseStart: s, phaseEnd: e, periodDays: p } = selection;
@@ -2716,8 +2751,9 @@ export function cinemaFixturePlugin(
     `<style>html,body{margin:0;height:100%;background:#000}</style></head><body><script>` +
     `try{for(const k of Object.keys(sessionStorage))if(k.indexOf("planetory:analysis-draft:")===0)sessionStorage.removeItem(k)}catch(e){}` +
     // A new world is a new first visit: the once-per-member flight to
-    // tutorial 1 and the closed tutorial lines start over (shell/tutorial-guide).
-    `try{localStorage.removeItem("planetory:first-visit-flown");localStorage.removeItem("planetory:first-visit-story");localStorage.removeItem("planetory:tutorial-guide-closed")}catch(e){}` +
+    // tutorial 1 and the closed tutorial lines start over (shell/tutorial-guide),
+    // and no star of the old world is marked new (shell/new-stars).
+    `try{localStorage.removeItem("planetory:first-visit-flown");localStorage.removeItem("planetory:first-visit-story");localStorage.removeItem("planetory:tutorial-guide-closed");localStorage.removeItem("planetory:new-stars")}catch(e){}` +
     `location.replace(${JSON.stringify(target).replace(/</g, "\\u003c")})</script></body></html>`;
 
   const reset = () => {
@@ -3049,6 +3085,8 @@ export function cinemaFixturePlugin(
             }
             const reply = world.publication(method, url, body);
             if (reply) {
+              if (method === "POST" && reply.status === 200)
+                openStarsForPublication(reply.body);
               const patched =
                 method === "GET"
                   ? rewriteAuthors(reply.body, null)

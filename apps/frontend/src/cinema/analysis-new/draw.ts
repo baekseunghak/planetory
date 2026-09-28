@@ -24,10 +24,13 @@ export const PALETTE = {
   dotDim: "rgba(205, 218, 240, 0.28)",
   grid: "rgba(150, 180, 225, 0.08)",
   gap: "rgba(150, 180, 225, 0.06)",
-  accent: "#5ec4f7",
-  accentLine: "rgba(94, 196, 247, 0.85)",
-  accentFill: "rgba(94, 196, 247, 0.12)",
-  band: "rgba(94, 196, 247, 0.24)",
+  accent: "#ffd369",
+  accentLine: "rgba(255, 211, 105, 0.85)",
+  accentFill: "rgba(255, 211, 105, 0.12)",
+  band: "rgba(255, 211, 105, 0.24)",
+  secondary: "#5ec4f7",
+  secondaryLine: "rgba(94, 196, 247, 0.85)",
+  secondaryFill: "rgba(94, 196, 247, 0.12)",
   matched: "rgba(182, 156, 255, 0.6)",
 };
 const MONO = '10px "IBM Plex Mono", ui-monospace, Consolas, monospace';
@@ -142,7 +145,7 @@ export function drawPeriodogram(
     ctx.lineTo(x(index / (grid.nPeriods - 1)), y(grid.power[index]));
   ctx.lineTo(x(last / (grid.nPeriods - 1)), height - axis);
   ctx.closePath();
-  ctx.fillStyle = PALETTE.accentFill;
+  ctx.fillStyle = PALETTE.secondaryFill;
   ctx.fill();
   ctx.beginPath();
   for (let index = first; index <= last; index++) {
@@ -151,7 +154,7 @@ export function drawPeriodogram(
     if (index === first) ctx.moveTo(px, py);
     else ctx.lineTo(px, py);
   }
-  ctx.strokeStyle = PALETTE.accentLine;
+  ctx.strokeStyle = PALETTE.secondaryLine;
   ctx.lineWidth = 1;
   ctx.stroke();
   for (const peak of candidates.peaks) {
@@ -234,8 +237,8 @@ export function drawFold(
     else ctx.moveTo(px, y(mean));
     drawing = true;
   });
-  ctx.strokeStyle = PALETTE.accentLine;
-  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = PALETTE.secondaryLine;
+  ctx.lineWidth = 0.8;
   ctx.stroke();
   ctx.fillStyle = PALETTE.faint;
   ctx.font = MONO;

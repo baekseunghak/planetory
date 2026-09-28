@@ -92,12 +92,14 @@ class BundleActivationTest {
         long member = member();
         complete(member, "undiscoverable_only");
         insertCandidate(true);
+        long revision = revision(member);
 
         var result = activation.onBundleActivated(bundleId);
 
         assertTrue(result.applied());
         assertEquals(TIC, result.ticId());
         assertEquals(1, result.reopened());
+        assertEquals(revision + 1, revision(member), "타일의 단계·재개 표시가 바뀌었으니 지도 버전을 올린다(D-7)");
         assertEquals(0, result.completed());
         assertEquals("in_progress", stage(member));
         assertNotNull(column(member, "reopened_at"));
@@ -525,6 +527,11 @@ class BundleActivationTest {
     private int reopenEvents(long member) {
         return jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND type = 'reopen'",
                 Integer.class, member);
+    }
+
+    private long revision(long member) {
+        return jdbc.queryForObject("SELECT COALESCE((SELECT revision FROM member_sky_revisions WHERE user_id = ?), 0)",
+                Long.class, member);
     }
 
     /** 성과 한 건을 인정된 상태로 넣는다. 인정 경로(9.2절)의 부작용은 이 테스트의 관심이 아니다. */

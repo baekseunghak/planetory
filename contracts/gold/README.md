@@ -117,6 +117,7 @@ Gold는 다음을 게시한다.
 
 - 평가 부족·수치 실패로 후보의 discoverable이 null이면 **새 Bundle 전체를 보류**하고 기존 current와 후보 값을 유지한다. 첫 게시라면 게시하지 않는다. 실패 후보만 빼거나 false로 치환하지 않으며 DB `BOOLEAN NOT NULL`과 완료·재개 API를 바꾸지 않는다.
 - 정상 평가의 true/false만 게시 제안에 사용한다. `match_half_width_cells ≤ manifest.fine_tune.half_width_cells`를 강제하고 미세 조정 폭이 부족하면 입력 오류로 중단한다. 상위 N 추천은 판정 조건이 아니다.
+- 규칙 `discoverability-1.1.0`(S15P21C206-282)부터 관측 통과는 창의 절반 이상이 유효하고 연속 구간 앞뒤 12시간 밖인 통과만 센다([astro-kernel](../../libs/astro-kernel/README.md)). 규칙이 바뀌어 `candidate_quality` revision이 달라지므로, 다시 게시하면 true→false로 바뀐 후보가 아래 이력 제안으로 나온다.
 - Publisher는 active·retired 모두 `discoverable` 키 누락·null·boolean 이외 값을 적재 거절한다. 기본 false로 보정하지 않는다. 커널의 유일한 운영 진입점은 `prepare_discoverability`다.
 - 규칙·격자·수치 버전·비닝 입력과 revision·후보 모델·제거 순서를 `candidate_quality` revision에 포함한다. 기존 동일 ID의 양방향 boolean 변경만 `candidate_status_history` 제안으로 출력하며 새 후보를 false→true로 만들지 않는다. Publisher가 `changed_at`을 채우고 새 판과 함께 원자 적재한다. 회원별 재개 판정은 150 책임이다.
 - `discoverability_ready=true`는 123 계산 완료만 뜻한다. 외부 확인 라벨(124), Gold 검증(125), 열 단위 투영·원자 current 전환(Publisher)이 남으므로 `publishable=false`를 유지한다. 런타임 잔차·주기도·진단 전체를 DB 행으로 INSERT하지 않는다.

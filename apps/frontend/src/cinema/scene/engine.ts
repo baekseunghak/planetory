@@ -96,7 +96,6 @@ import {
   type Vec3,
 } from "./math";
 import {
-  ACCENT,
   SystemView,
   disposeSharedGeometry,
   displayColor,
@@ -459,7 +458,7 @@ export class SceneEngine implements SceneController {
     this.dust = createDust();
     this.background = createBackground();
     this.nebula = createNebula();
-    this.flashMaterial = glowMaterial([1, 1, 1], [0.37, 0.77, 0.97], {
+    this.flashMaterial = glowMaterial([1, 1, 1], [182 / 255, 156 / 255, 1], {
       sharpness: 22,
       falloff: 2.6,
     });
@@ -469,7 +468,7 @@ export class SceneEngine implements SceneController {
     this.flash.renderOrder = 7;
     this.ringMaterial = new ShaderMaterial({
       uniforms: {
-        uColor: { value: displayColor(ACCENT) },
+        uColor: { value: displayColor("#b69cff") },
         uOpacity: { value: 0 },
       },
       vertexShader: ringVertex,

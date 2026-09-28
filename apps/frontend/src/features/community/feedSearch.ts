@@ -18,7 +18,11 @@ const fields = ["q", "searchIn", "author", "ticId", "board", "tag"] as const;
 // star panel, results page and profiles add returnTo). They are not search
 // conditions, so the search check skips them instead of rejecting the URL.
 const navigationParams: readonly string[] = ["returnTo"];
-export function readFeedSearch(params: URLSearchParams, routeTic?: string) {
+export function readFeedSearch(
+  params: URLSearchParams,
+  routeTic?: string,
+  official = false,
+) {
   const values: FeedSearch = {
     q: params.get("q") ?? "",
     searchIn: params.get("searchIn") ?? "TITLE_BODY",
@@ -30,17 +34,27 @@ export function readFeedSearch(params: URLSearchParams, routeTic?: string) {
   const duplicate = [...fields, "cursor"].some(
     (key) => params.getAll(key).length > 1,
   );
-  const invalidDirect = [...params].filter(([key]) => !navigationParams.includes(key)).some(([key, value]) =>
-    ![...fields, "cursor", "size"].includes(key) ||
-    !value.trim() || value.includes("\0") ||
-    (key === "size" && (!/^[1-9]\d{0,2}$/.test(value) || Number(value) > 100)),
-  ) || params.getAll("size").length > 1;
+  const invalidDirect =
+    [...params]
+      .filter(([key]) => !navigationParams.includes(key))
+      .some(
+        ([key, value]) =>
+          ![...fields, "cursor", "size"].includes(key) ||
+          !value.trim() ||
+          value.includes("\0") ||
+          (key === "size" &&
+            (!/^[1-9]\d{0,2}$/.test(value) || Number(value) > 100)),
+      ) || params.getAll("size").length > 1;
   const invalidScope =
     routeTic &&
     ((params.has("ticId") && params.get("ticId") !== routeTic) ||
       (params.has("board") && params.get("board") !== "STAR"));
   const error =
-    duplicate || invalidScope || invalidDirect || (values.ticId && values.board === "FREE")
+    duplicate ||
+    invalidScope ||
+    invalidDirect ||
+    (official && (values.author || values.tag || values.board === "FREE")) ||
+    (values.ticId && values.board === "FREE")
       ? "검색 주소의 조건이 겹칩니다. 조건을 확인한 뒤 다시 검색해 주세요."
       : params.has("searchIn") && !params.has("q")
         ? "검색 범위를 지정하려면 검색어를 입력해 주세요."

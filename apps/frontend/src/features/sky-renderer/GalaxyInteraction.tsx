@@ -92,10 +92,12 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       quest?.current,
       quest?.quests?.challenge,
     );
-    const challengeTicId =
-      quest?.quests?.challenge.unlocked && !staleRound
-        ? quest?.quests.challenge.ticId
-        : null;
+    const targets = quest?.quests?.challenge.targets;
+    // Every unlocked target of the round gets the "!" (S15P21C206-283).
+    const challengeTicIds = useMemo(
+      () => new Set(staleRound ? [] : (targets ?? []).map((t) => t.ticId)),
+      [targets, staleRound],
+    );
     useEffect(() => {
       setSelectedPlanet(null);
       props.onPlanetSelect?.(null);
@@ -400,14 +402,15 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
       const candidates =
         enabled && !system
           ? [
-              ...new Set([
-                ...(tutorials?.keys() ?? []),
-                ...(challengeTicId ? [challengeTicId] : []),
-              ]),
+              ...new Set([...(tutorials?.keys() ?? []), ...challengeTicIds]),
             ].flatMap((id) => {
               const t = index.byId.get(id);
               if (!t) return [];
-              const label = markerLabel(t.star!, tutorials, challengeTicId);
+              const label = markerLabel(
+                t.star!,
+                tutorials,
+                challengeTicIds.has(id) ? id : null,
+              );
               return label ? [{ target: t, label }] : [];
             })
           : [];
@@ -483,7 +486,7 @@ export const GalaxyInteraction = forwardRef<InteractionControl, Props>(
         show(planets.current.hit(x, y) ?? index.hit(x, y));
       } else if (active.current?.kind === "star")
         show(index.byId.get(active.current?.id ?? "") ?? null);
-    }, [index, tutorials, challengeTicId, enabled, canvas]);
+    }, [index, tutorials, challengeTicIds, enabled, canvas]);
     useEffect(() => {
       const host = layer.current;
       return () => {

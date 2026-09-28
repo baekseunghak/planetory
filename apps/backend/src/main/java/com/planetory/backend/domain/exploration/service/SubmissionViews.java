@@ -18,7 +18,9 @@ public final class SubmissionViews {
                            String userJudgment, List<String> evidenceChecks, String memo, SubmissionRequest.ViewState viewState) {}
     public record Derived(double foldReferenceTimeBtjd, Double phaseCenter, Double epochBtjd, Double durationHours,
                           Double sourcePeakSuggestedDurationHours, Double durationLimitHours, String centroidDataStatus) {}
-    public record Match(String status, String candidateId, Double harmonicMultiplier, Double correctedPeriodDays, String correctionReason) {}
+    /** @param missHint {@code not_matched}의 폭 힌트({@link SubmissionMatching#missHint}). 그 밖에는 null이다 */
+    public record Match(String status, String candidateId, Double harmonicMultiplier, Double correctedPeriodDays, String correctionReason,
+                        String missHint) {}
     public record Judgment(String value, String evaluation) {}
 
     /**

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -123,7 +124,7 @@ public class SubmissionService {
         if (skipped && !skipAvailable(member, tic, rule, seq, before)) throw new BusinessException(ErrorCode.SKIP_NOT_AVAILABLE);
         List<Candidate> candidates = gold.findCandidates(tic);
         SubmissionMatching.Derived derived = null;
-        SubmissionViews.Match match = new SubmissionViews.Match(skipped ? "skipped" : "none_wrong", null, null, null, null);
+        SubmissionViews.Match match = new SubmissionViews.Match(skipped ? "skipped" : "none_wrong", null, null, null, null, null);
         Candidate selected = null;
         SubmissionRepository.Disposition disposition = null;
         FoldedSnapshot snapshot = null;
@@ -150,13 +151,15 @@ public class SubmissionService {
                 throw invalid(validation.rejection().field());
             }
             derived = validation.derived();
+            Set<Long> recognized = submissions.recognized(member);
             var matched = SubmissionMatching.markDuplicate(SubmissionMatching.match(observation, matchingRules,
-                    selection, derived, SubmissionMatching.candidatesToCompare(candidates, removed), removed), submissions.recognized(member));
+                    selection, derived, SubmissionMatching.candidatesToCompare(candidates, removed), removed), recognized);
             boolean harmonic = matched.harmonicMultiplier() != null && matched.harmonicMultiplier() != 1;
             match = new SubmissionViews.Match(matched.status().value(), matched.candidateId() == null ? null
                     : ExplorationIds.candidate(matched.candidateId()), harmonic ? matched.harmonicMultiplier() : null,
                     harmonic ? matched.correctedPeriodDays() : null,
-                    !harmonic ? null : matched.harmonicMultiplier() == 2 ? "P/2 alias" : "2P alias");
+                    !harmonic ? null : matched.harmonicMultiplier() == 2 ? "P/2 alias" : "2P alias",
+                    Objects.toString(SubmissionMatching.missHint(matched, matchingRules, recognized), null));
             if (matched.candidateId() != null) {
                 selected = candidates.stream().filter(c -> c.id() == matched.candidateId()).findFirst().orElseThrow();
                 disposition = submissions.disposition(selected.id());
@@ -187,6 +190,8 @@ public class SubmissionService {
         }
         if (!"ambiguous_match".equals(match.status())) {
             submissions.progress(member, tic, context.curveStep(), stars.findMyPlanets(member, tic).size(), skipped);
+            // 타일의 행성 수·단계·재개 표시가 바뀐다. 버전이 그대로면 프론트가 옛 타일을 계속 쓴다(D-7).
+            sky.bumpVersion(member);
             if (candidateSubmission) completion.evaluateAndApply(member, tic);
         }
         if (Integer.valueOf(1).equals(seq)) settings.completeOnboarding(member);

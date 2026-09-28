@@ -47,7 +47,7 @@ public class ChallengeUnlockCommand implements ApplicationRunner, ExitCodeGenera
         }
         var done = result.get();
         log.info("챌린지 회차 {}(id {}) 대상 별 {}: 새로 연 회원 {}명, 건너뛴 회원 {}명",
-                done.round().roundNo(), done.round().id(), done.round().targetTicId(),
+                done.round().roundNo(), done.round().id(), done.round().targetTicIds(),
                 done.opened(), done.skipped());
         exitCode = 0;
     }

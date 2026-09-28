@@ -36,11 +36,29 @@ type ClientOptions = {
   timeoutMs?: number;
   csrfHeaders?: (signal: AbortSignal) => HeadersInit | Promise<HeadersInit>;
   requestIdHeader?: string;
+  gatewayRetryMs?: readonly number[];
 };
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+// The backend never answers 502/504: they come from Nginx or the tunnel while
+// the backend is unreachable, e.g. the ~20 s container swap of a deploy
+// (S15P21C206-279). Reads wait that out; writes, the backend's own 503,
+// timeouts and network errors still fail at once.
+const GATEWAY_RETRY_MS = [1000, 2000, 4000, 8000, 15000];
+const wait = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", stop, { once: true });
+  });
 
 // Based on the existing prototype request client: cancellation and 204 handling
 // remain shared, while field errors now use the backend's actual `reason` field.
@@ -85,13 +103,20 @@ export function createApiClient(config: ClientOptions) {
     let timedOut = false;
     let dispatched = false;
     let serverRequestId: string | null = null;
-    const timeout = setTimeout(
-      () => {
-        timedOut = true;
-        controller.abort();
-      },
-      timeoutMs ?? config.timeoutMs ?? 15000,
-    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    // Each attempt gets the whole timeout: waiting between gateway retries is
+    // not a slow server.
+    const arm = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(
+        () => {
+          timedOut = true;
+          controller.abort();
+        },
+        timeoutMs ?? config.timeoutMs ?? 15000,
+      );
+    };
+    arm();
     try {
       controller.signal.throwIfAborted();
       if (writing) {
@@ -112,9 +137,8 @@ export function createApiClient(config: ClientOptions) {
         controller.signal.throwIfAborted();
       }
       dispatched = true;
-      const response = await (config.fetch ?? fetch)(
-        config.baseUrl.replace(/\/$/, "") + path,
-        {
+      const send = () =>
+        (config.fetch ?? fetch)(config.baseUrl.replace(/\/$/, "") + path, {
           ...fetchOptions,
           method,
           headers,
@@ -122,8 +146,18 @@ export function createApiClient(config: ClientOptions) {
           credentials: "include",
           cache: "no-store",
           signal: controller.signal,
-        },
-      );
+        });
+      let response = await send();
+      for (const delay of writing
+        ? []
+        : (config.gatewayRetryMs ?? GATEWAY_RETRY_MS)) {
+        if (response.status !== 502 && response.status !== 504) break;
+        controller.signal.throwIfAborted();
+        clearTimeout(timeout);
+        await wait(delay, controller.signal);
+        arm();
+        response = await send();
+      }
       controller.signal.throwIfAborted();
       onResponse?.({
         status: response.status,

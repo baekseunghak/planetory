@@ -1,5 +1,5 @@
 /*
-  Planetory cinema tokens. Dark observatory: near-black ground, one accent.
+  Planetory cinema tokens. Dark observatory: near-black ground, gold actions and sky-blue information.
   Prefixed --pc- so they never collide with the classic pages' variables
   (--accent, --line, --bg, ... are already used there).
   Fonts are self-hosted: import ./fonts.ts once from the cinema shell.
@@ -17,15 +17,22 @@
   --pc-glass: rgba(5, 8, 15, 0.9);
   --pc-raise: rgba(150, 180, 225, 0.055);
 
-  /* one accent */
-  --pc-accent: #5ec4f7;
-  --pc-accent-ink: #03121b;
-  --pc-accent-soft: rgba(94, 196, 247, 0.15);
+  /* Main: actions/selection. Secondary: information/recommendations. */
+  --pc-accent: #ffd369;
+  --pc-accent-rgb: 255, 211, 105;
+  --pc-accent-hover: #ffe09a;
+  --pc-accent-ink: #111820;
+  --pc-accent-soft: rgba(var(--pc-accent-rgb), 0.15);
+
+  --pc-secondary: #5ec4f7;
+  --pc-secondary-rgb: 94, 196, 247;
+  --pc-secondary-hover: #9bdcfb;
+  --pc-secondary-soft: rgba(var(--pc-secondary-rgb), 0.15);
 
   /* states */
   --pc-new-star: #b69cff;
   --pc-good: #7ee0a1;
-  --pc-warn: #f2c14e;
+  --pc-warn: #f5a66f;
   --pc-bad: #f28b82;
 
   /* service markers (same meaning as .galaxy-marker in galaxy.css) */

@@ -1,9 +1,12 @@
-import { CommunityFeed, DateTime, AuthorLink, StarLink } from "./CommunityFeed";
+import { ExpandableFeed } from "./ExpandableFeed";
+import { CommunityTabs } from "./CommunityTabs";
+import { DateTime, AuthorLink, StarLink } from "./CommunityFeed";
 import { MaterialCards } from "./MaterialCards";
 import { useCallback, useState } from "react";
 import {
   Link,
   useLocation,
+  useMatch,
   useNavigate,
   useParams,
   useSearchParams,
@@ -40,7 +43,7 @@ import { PostReactions } from "./PostReactions";
 import { PostActions } from "./PostActions";
 import { CommunityAside } from "./CommunityAside";
 import { FollowButton } from "../follow/Follow";
-import { p1Enabled } from "../p1";
+import { useLiveP1 } from "../p1";
 
 function ReadState({
   state,
@@ -55,17 +58,22 @@ function ReadState({
 }
 
 export function CommunityPage() {
+  const liveP1 = useLiveP1();
   const { ticId } = useParams<"ticId">();
-  // Cinema app: the title matches the menu (src/shared/cinema-wording).
-  const cinema = useCinemaWording();
   const [search] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { values, error: addressError } = readFeedSearch(search, ticId);
+  const official = Boolean(useMatch(pagePath("officialThreads")));
+  const { values, error: addressError } = readFeedSearch(
+    search,
+    ticId,
+    official,
+  );
   const board = values.board;
   const cursor = search.get("cursor");
   const params = feedSearchParams(values);
   params.set("size", "20");
+  if (official) params.set("type", "SIGNAL_THREAD");
   if (cursor) params.set("cursor", cursor);
   const path = "/v1/community/feed?" + params;
   const load = useCallback(
@@ -91,25 +99,26 @@ export function CommunityPage() {
     feedSearchHref("/community", {
       ...values,
       board: nextBoard,
-      ticId: ticId ? "" : values.ticId,
+      ticId: ticId || nextBoard === "FREE" ? "" : values.ticId,
     });
+  const officialHref = feedSearchHref(pagePath("officialThreads"), {
+    ...values,
+    author: "",
+    tag: "",
+    board: "",
+  });
   const filtered = Boolean(
     values.q || values.author || values.tag || values.ticId || values.board,
   );
   const firstPage = feedSearchHref(location.pathname, values, ticId);
   return (
     <div className="community-page">
-      <header className="community-heading">
-        <p className="eyebrow">VOICES IN THE UNIVERSE</p>
-        <h1>{ticId ? `TIC ${ticId}` : cinema ? "커뮤니티" : "탐사 이야기"}</h1>
-        <p>
-          {ticId
-            ? "이 별의 이야기와 공식 신호 스레드를 모았습니다."
-            : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}
-        </p>
+      <header className="community-heading community-top-heading service-section-heading">
+        <h1>{ticId ? `TIC ${ticId}` : "커뮤니티"}</h1>
+        <p>{ticId ? "이 별의 이야기와 공식 신호 스레드를 모았습니다." : "서로의 관측을 읽고, 같은 신호에 대한 생각을 나눠 보세요."}</p>
       </header>
-      <div className="post-actions">
-        {p1Enabled && ticId && (
+      {!official && <div className="post-actions">
+        {liveP1 && ticId && (
           <FollowButton
             target={{ kind: "STAR", id: ticId, label: "TIC " + ticId }}
           />
@@ -122,41 +131,25 @@ export function CommunityPage() {
         >
           새 글 쓰기
         </Link>
-      </div>
+      </div>}
+      <CommunityTabs active={official ? "official" : board} boardHref={boardHref} officialHref={officialHref} />
       <div className={ticId ? "" : "community-columns"}>
-        <div className="community-main">
-          <nav className="community-tabs" aria-label="게시판 종류">
-            {p1Enabled && <Link to="/community/following">팔로잉</Link>}
-            <Link
-              to={boardHref("")}
-              state={null}
-              aria-current={!board ? "page" : undefined}
-            >
-              전체
-            </Link>
-            <Link
-              to={boardHref("STAR")}
-              state={null}
-              aria-current={board === "STAR" ? "page" : undefined}
-            >
-              별 게시판
-            </Link>
-            <Link
-              to={boardHref("FREE")}
-              state={null}
-              aria-current={board === "FREE" ? "page" : undefined}
-            >
-              자유 게시판
-            </Link>
-            <Link to={pagePath("hotTopics")} state={null}>
-              핫 토픽
-            </Link>
-          </nav>
+        <div className="community-main community-list-panel">
+          <header className="community-list-heading">
+            <h2>
+              {official ? "공식 스레드" : board === "STAR"
+                ? "별 게시판"
+                : board === "FREE"
+                  ? "자유 게시판"
+                  : "전체"}
+            </h2>
+          </header>
           <FeedSearchForm
             key={location.key}
             initial={values}
             addressError={addressError}
             routeTic={ticId}
+            official={official}
             resetTo={location.pathname}
             onSearch={submitSearch}
           />
@@ -168,7 +161,9 @@ export function CommunityPage() {
                   ? "목록을 불러오지 못했습니다."
                   : filtered
                     ? "적용한 조건의 결과 · 최신 작성순"
-                    : "전체 이야기 · 최신 작성순"}
+                    : official
+                      ? "공식 스레드 · 최신 작성순"
+                      : "전체 이야기 · 최신 작성순"}
             </p>
             {state.error && cursor && (
               <Link to={firstPage} state={null}>
@@ -190,8 +185,12 @@ export function CommunityPage() {
                         : "아직 게시글이 없습니다."}
                   </p>
                 )}
-                <CommunityFeed items={state.data.items} />
-                <Pager page={state.data} name="cursor" label="게시글 페이지" />
+                <ExpandableFeed
+                  key={path}
+                  initial={state.data}
+                  path={path}
+                  decode={readFeed}
+                />
               </>
             )}
           </section>

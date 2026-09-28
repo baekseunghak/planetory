@@ -10,10 +10,15 @@ from .segmentation import BIN_MINUTES, MAX_POINTS
 from .transit_model import parse_transit_model, phase_distance_days, remove_transit_models
 
 
-RULE = dict(version="discoverability-1.0.0", bin_minutes=10.0,
+# 1.1.0 (S15P21C206-282): a transit counts toward min_observed_transits only when at least
+# transit_min_coverage of its window's bins are valid and outside the first/last edge_hours of a
+# run split at gaps >= edge_gap_days (preprocessing gap_days, preprocess benchmark edge12h).
+# One edge bin, or a dip right after data resumes, is not a second transit.
+RULE = dict(version="discoverability-1.1.0", bin_minutes=10.0,
             grid=dict(min_days=0.5, max_rule="max(40,1.15*candidate_max)", count=5000, spacing="log"),
             durations_hours=[1.2, 1.92, 2.88, 4.8], snr_min=7.0, sde_min=6.0,
-            min_observed_transits=2, match_half_width_cells=3,
+            min_observed_transits=2, transit_min_coverage=0.5, edge_gap_days=0.5, edge_hours=12.0,
+            match_half_width_cells=3,
             epoch_tolerance="half_max_duration", harmonic_matching=False,
             peaks="strict_interior_maxima", noise="global_mad", objective="likelihood", oversample=10)
 NUMERICAL_VERSION = "provided-bls-1.0.0"
@@ -37,18 +42,42 @@ def validate_rule(rule, half_width_cells):
         raise ValueError("match_half_width_cells must not exceed manifest fine_tune.half_width_cells")
 
 
+def interior_mask(time, flux, rule):
+    """Valid points outside the first/last edge_hours of each run split at gaps >= edge_gap_days."""
+    time = np.asarray(time, dtype=float)
+    if np.any(np.diff(time) < 0):
+        raise ValueError("interior_mask requires ascending time")
+    ok = np.isfinite(flux)
+    out = np.zeros(len(time), dtype=bool)
+    t = time[ok]
+    if not len(t):
+        return out
+    breaks = np.flatnonzero(np.diff(t) >= rule["edge_gap_days"])
+    starts, ends = t[np.r_[0, breaks + 1]], t[np.r_[breaks, len(t) - 1]]
+    run = np.searchsorted(starts, t, side="right") - 1
+    edge = rule["edge_hours"] / 24
+    out[ok] = (t - starts[run] >= edge) & (ends[run] - t >= edge)
+    return out
+
+
 def classify(pg, time, flux, model, rule):
     """Quality-peak presence, not independent signal count or UI top-N."""
     power = pg.power
     maxima = np.flatnonzero((power[1:-1] > power[:-2]) & (power[1:-1] > power[2:])) + 1
     peaks = []
+    interior = None
     for i in maxima:
         if not (np.isfinite([pg.snr[i], pg.sde[i]]).all()
                 and pg.snr[i] >= rule["snr_min"] and pg.sde[i] >= rule["sde_min"]):
             continue
-        good = np.isfinite(flux) & (np.abs(phase_distance_days(time, pg.periods[i], pg.epoch_btjd[i]))
-                                  < pg.duration_hours[i] / 48)
-        ntr = len(np.unique(np.rint((time[good] - pg.epoch_btjd[i]) / pg.periods[i]).astype(np.int64)))
+        if interior is None:
+            interior = interior_mask(time, flux, rule)
+        good = interior & (np.abs(phase_distance_days(time, pg.periods[i], pg.epoch_btjd[i]))
+                           < pg.duration_hours[i] / 48)
+        _, counts = np.unique(np.rint((time[good] - pg.epoch_btjd[i]) / pg.periods[i]).astype(np.int64),
+                              return_counts=True)
+        need = rule["transit_min_coverage"] * pg.duration_hours[i] * 60 / rule["bin_minutes"]
+        ntr = int((counts >= need).sum())
         if ntr >= rule["min_observed_transits"]:
             peaks.append(dict(grid_index=int(i), period_days=float(pg.periods[i]),
                               epoch_btjd=float(pg.epoch_btjd[i]), duration_hours=float(pg.duration_hours[i]),

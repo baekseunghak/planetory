@@ -20,11 +20,11 @@ npm run dev:cinema
 ```
 
 1. 브라우저에서 `http://127.0.0.1:58390/api/dev-cinema/session?as=anonymous`를 연다. 로그인 화면에서 `SSAFY 계정으로 로그인`을 누르면 은하로 들어간다(합성 로그인).
-2. (2–4는 합성 자료 기준이다. `.real-sample/`이 있으면 튜토리얼·탐사 자리의 TIC가 실제 별로 바뀌므로 `CINEMA_REAL_SAMPLE=0`으로 띄운다. 실제 표본의 자리는 `GET /api/dev-cinema/state`의 `placement`.) 파란 3번 마커(TIC 900000003)를 누르고 `분석 시작`을 누른다. 회원에게는 기존형 분석만 보인다(새 디자인으로 띄우려면 `CINEMA_ANALYSIS=new npm run dev:cinema`). `기존형 / 새 디자인` 토글은 `VITE_CINEMA_DEV_TOOLS=true npm run dev:cinema`로 띄운 개발 서버에서만 나온다(아래 "전환 스위치").
+2. (2–4는 합성 자료 기준이다. `.real-sample/`이 있으면 튜토리얼·탐사 자리의 TIC가 실제 별로 바뀌므로 `CINEMA_REAL_SAMPLE=0`으로 띄운다. 실제 표본의 자리는 `GET /api/dev-cinema/state`의 `placement`.) 파란 3번 마커(TIC 900000003)를 누르고 `분석 시작`을 누른다. 회원에게는 새 디자인 분석만 보인다(예전 기존형으로 띄우려면 `CINEMA_ANALYSIS=classic npm run dev:cinema`). `기존형 / 새 디자인` 토글은 `VITE_CINEMA_DEV_TOOLS=true npm run dev:cinema`로 띄운 개발 서버에서만 나온다(아래 "전환 스위치").
 3. `1위 봉우리`(약 11.73일)를 고르고 위상 0 또는 1의 밝기 감소를 구간으로 잡은 뒤 `행성 같음 → 제출값 확인 → 제출하기`. 통과 장면, 발견 카드, 은하 복귀 후 새 별 점화가 이어진다.
 4. 다른 경우: `/sky?star=900000011`(구간이 빗나가면 수치 불일치), `/sky?star=900000012`(판단 불일치), `/sky?star=900000001`(행성 5개, 후보는 점선 궤도).
 5. 처음 상태로: `curl -X POST http://127.0.0.1:58390/api/dev-cinema/reset`. 포트를 바꾸려면 `CINEMA_PORT=<포트> npm run dev:cinema`.
-6. 데모 시나리오: 화면 위 가운데의 `DEMO` 탭(평소에는 보이지 않고, 마우스를 올리거나 Alt+Shift+D로 연다)에서 계정·은하 크기·다른 탐사자의 은하를 고른다. 주소로는 `/api/dev-cinema/session?as=newcomer|member|veteran`(아래 "데모 시나리오"). P1 화면(알림·팔로우·공개 은하·통계·탈퇴)은 기본으로 켜져 있다(`CINEMA_P1=0`이면 끈다).
+6. 데모 시나리오: 화면 위 가운데의 `DEMO` 탭(평소에는 보이지 않고, 마우스를 올리거나 Alt+Shift+D로 연다)에서 계정·은하 크기·다른 탐사자의 은하를 고른다. 주소로는 `/api/dev-cinema/session?as=newcomer|member|veteran`(아래 "데모 시나리오"). P1 화면(알림·팔로우·공개 은하·통계·탈퇴)은 기본으로 켜져 있다. `CINEMA_P1=0`이면 운영처럼 알림·전체 통계·탈퇴만 끈다(팔로우·공개 은하·내 통계는 운영에서도 켜져 있다, `features/p1.ts`).
 7. 실제 TESS 별: `apps/frontend/.real-sample/`이 있으면 그 별들이 튜토리얼·탐사 자리에 들어간다(아래 "실제 TESS 표본"). 없으면 모두 합성이다. 기존 화면으로 보려면 `VITE_CINEMA=false npm run dev:cinema`, 운영과 같은 선택(기본 기존 화면, `?ui=cinema`로 시네마)은 `VITE_CINEMA=auto npm run dev:cinema`.
 
 알려진 한계: Chromium 계열에서만 확인했다. 그래픽 가속이 없는 환경(원격 데스크톱, 일부 CI)에서는 저사양 경로로 그린다(아래 "화면 플래그와 저사양 정책"). 기존 브라우저 테스트 일부는 화면 변경으로 실패한다(아래 최종 수정 메모 참고).
@@ -167,7 +167,7 @@ npm run dev:cinema
 
 ## 전환 스위치 (`analysis/AnalysisSwitch.tsx`)
 
-`/analysis/:ticId` 라우트 요소. 회원에게는 빌드가 정한 변형 하나만 보이고 토글이 없다(분석 화면 A/B는 팀 결정 전이다). 빌드 정의 `VITE_CINEMA_ANALYSIS`가 `new`면 새 디자인, 그 밖(값 없음 = 운영 빌드)은 기존형이다(`analysis/variant.ts`, `tests/unit/cinema-analysis-variant.test.ts`). `npm run dev:cinema`는 환경 변수 `CINEMA_ANALYSIS`(`classic` 기본 | `new`)로 이 값을 정의하므로 비교용 두 번째 서버는 `CINEMA_PORT=58391 CINEMA_ANALYSIS=new npm run dev:cinema`다([`DEMO.md`](DEMO.md) "띄우기"). `import.meta.env.DEV && VITE_CINEMA_DEV_TOOLS === "true"`(`analysis/dev-tools.ts`)일 때만 "기존형 / 새 디자인" 토글과 `localStorage['planetory:analysis-variant']`(`classic` | `cinematic`, 없으면 빌드 변형, 저장소 실패 시 빌드 변형)를 쓰고, 기존형의 `개발용 렌더러` 펼침도 그때만 보인다. `npm run dev:cinema`(시연 서버)와 모든 빌드는 이 값을 두지 않는다. 켜려면 `VITE_CINEMA_DEV_TOOLS=true npm run dev:cinema`. 전환하면 분석을 다시 마운트한다. 초안은 세션 저장소에서, 결과 불명 제출은 요청 ID로 복구된다.
+`/analysis/:ticId` 라우트 요소. 회원에게는 빌드가 정한 변형 하나만 보이고 토글이 없다. 팀은 새 디자인으로 정했다(2026-09-27). 빌드 정의 `VITE_CINEMA_ANALYSIS`가 없으면(운영 빌드) 새 디자인이고, `classic`일 때만 예전 기존형이다(되돌릴 때를 위한 길, `analysis/variant.ts`, `tests/unit/cinema-analysis-variant.test.ts`). `npm run dev:cinema`는 환경 변수 `CINEMA_ANALYSIS`(`new` 기본 | `classic`)로 이 값을 정의하므로 기존형 비교용 두 번째 서버는 `CINEMA_PORT=58391 CINEMA_ANALYSIS=classic npm run dev:cinema`다([`DEMO.md`](DEMO.md) "띄우기"). `import.meta.env.DEV && VITE_CINEMA_DEV_TOOLS === "true"`(`analysis/dev-tools.ts`)일 때만 "기존형 / 새 디자인" 토글과 `localStorage['planetory:analysis-variant']`(`classic` | `cinematic`, 없으면 빌드 변형, 저장소 실패 시 빌드 변형)를 쓰고, 기존형의 `개발용 렌더러` 펼침도 그때만 보인다. `npm run dev:cinema`(시연 서버)와 모든 빌드는 이 값을 두지 않는다. 켜려면 `VITE_CINEMA_DEV_TOOLS=true npm run dev:cinema`. 전환하면 분석을 다시 마운트한다. 초안은 세션 저장소에서, 결과 불명 제출은 요청 ID로 복구된다.
 
 ## 분석·결과 표현 (`analysis/copy.tsx`, `analysis/format.ts`)
 
@@ -175,7 +175,7 @@ npm run dev:cinema
 
 - 숫자: 주기 2–3자리 + 일, 가려진 시간 1자리 + 시간, 위상 3자리, 깊이는 % 2자리(ppm 숨김), 주기도는 가장 센 봉우리 = 1인 「세기」(0..1, 음수는 0). 봉우리 순위 글자(`placeRankLabels`)는 늘 그래프 안에 둔다: 점 위에 자리가 있으면 위, 위쪽 끝에 닿는 봉우리(예: 세기 1)는 점 옆(오른쪽, 안 되면 왼쪽), 그다음 한 줄 위, 자리가 없으면 뺀다(1위는 빼지 않는다). 다른 글자와 겹치지 않고, 되도록 다른 봉우리 점과 고른 주기의 세로선을 피한다. BTJD는 주 화면에서 빼고 「기준 시각」 2자리로 「기술 정보」 안에만 둔다. 시간 곡선 가로축은 관측 시작부터 지난 날, `Sector`는 「섹터」.
 - 이름: 별의 신호는 별 패널 순서(candidateId 오름차순)로 「행성 N」(회원의 행성일 때, 확정 행성은 NASA 이름을 붙여 「행성 1 · WASP-62 b」), 아니면 「신호 N」. 분류 코드는 확정 행성 / 행성 후보 / 행성 아님(오탐) / 식쌍성.
-- 결과 대화상자(기존형, `results/AcceptedResult.tsx`): 무슨 일이 있었는지 제목 한 줄, 할 일 한 줄, 주요 행동 둘(가장 알맞은 다음 행동 + 「나의 은하로」), 나머지는 작은 줄. 접수·기록 번호, 곡선 단계, 기준 시각, SDE·SNR, 모델 버전, 외부 자료 원문은 접힌 「기술 정보」 안에. AI 판정은 실제로 돌았을 때만 보인다. 구간이 빗나간 결과(`not_matched`)는 「이번 구간에서는 신호를 찾지 못했습니다」와 「구간 다시 잡기」(제출 상태를 풀고 주기를 둔 채 구간 단계로), 작은 줄의 「주기 다시 고르기」(같이 풀고 주기 선택 단계로, 단계 줄의 '주기 선택'과 같다)이고, 탐사 완료 결과에는 「다음 곡선 단계로」를 내지 않는다.
+- 결과 대화상자(기존형, `results/AcceptedResult.tsx`): 무슨 일이 있었는지 제목 한 줄, 할 일 한 줄, 주요 행동 둘(가장 알맞은 다음 행동 + 「나의 은하로」), 나머지는 작은 줄. 접수·기록 번호, 곡선 단계, 기준 시각, SDE·SNR, 모델 버전, 외부 자료 원문은 접힌 「기술 정보」 안에. AI 판정은 실제로 돌았을 때만 보인다. 구간이 빗나간 결과(`not_matched`)는 「이번 구간에서는 신호를 찾지 못했습니다」와 「구간 다시 잡기」(제출 상태를 풀고 주기를 둔 채 구간 단계로), 작은 줄의 「주기 다시 고르기」(같이 풀고 주기 선택 단계로, 단계 줄의 '주기 선택'과 같다)이고, 탐사 완료 결과에는 「다음 곡선 단계로」를 내지 않는다. 빗나간 결과의 할 일 한 줄은 `format.notMatchedHint`다. 서버가 `match.missHint`(주기·위치는 맞고 폭만 벗어남)를 주면 주기는 두고 구간만 좁히거나 넓히라고 말하고, 없으면 기본 안내(`NOT_MATCHED_HINT`)다. 새 분석의 판단 칸도 같은 줄을 쓴다(S15P21C206-282).
 - 주기 다시 고르기(기존형, `features/analysis/PeriodogramChart.tsx`, 시네마만): 구간 선택·판단·제출값 확인 단계에서 주기도(봉우리 버튼, 그래프 빈 곳, 그래프에서 Enter)를 누르면 '주기 선택' 단계로 돌아가 그 주기를 고른다. 단계 줄의 '주기 선택'을 누르고 고른 것과 같은 `go(1)`과 같은 선택이라, 새 주기의 접기가 끝나면 구간·판단 초안이 늘 그렇듯 비워지고 초안 저장도 같다. 그 단계들에서는 커서가 손 모양이고 그래프 아래에 「그래프를 눌러 주기를 다시 고를 수 있습니다」가 보인다(`data-reselect`, `analysis/periodogram.css`). develop 화면은 1단계에서만 고른다(「조회 전용」).
 - 별 결과(`/results/:ticId`, `results/StarResult.tsx`), 기록 상세(`/history/:id`, `results/HistoryDetail.tsx`), 데이터 상세(`results/DataDetails.tsx`, 새 분석의 `자료`도 같다)는 같은 응답을 이 규칙으로 다시 그린다. 공개 검토는 제자리에서 신호 이름·숫자만 바꾸고 버전·번호를 「기술 정보」로 옮긴다.
 - 발견 카드(`shell/sequences.ts`): 확정 행성(튜토리얼 정답 포함)은 새 발견이 아니다. 「알려진 행성 WASP-62 b를 직접 찾아냈습니다」(이름이 없으면 「확정된 행성을 직접 찾아냈습니다」), 「발견」은 미확정 후보에만 쓴다. 인정됐지만 새 별이 없으면 칩 대신 메모 「이번에는 새로 열린 별이 없습니다.」. 이름은 브리지 `OutcomePlanet.knownName`(선택 필드, 외부 기록의 CP/KP 이름).
@@ -221,7 +221,8 @@ npm run dev:cinema
 
 - 셸은 `CinemaRoot`(장면 하나, 로그인 포함)와 `CinemaLayout`(보호된 라우트)로 붙는다. 분석 패널은 각 변형이 직접 그리고 `setViewInset`으로 알린다. 셸은 발견 연출(트랜싯, 카드) 동안만 패널을 비켜 두고, 끝나면 변형이 잰 inset을 돌려준다.
 - 발견 카드는 모달 `<dialog>`다. "결과 자세히 보기"는 카드를 닫고 장면을 다시 `analysis` 모드로 둔다(트랜싯이 `system`으로 돌려놓기 때문). 실제 행성이 드러나면 유령 궤도 힌트는 지운다. 새 주기를 고르면 다시 나온다.
-- 새 별 점화는 은하로 돌아온 뒤, 별이 store에 들어온 다음에 한다. 새로 열린 별은 결과가 온 순간(지도 새로 읽기 전) `holdStars`로 숨겨 두고, `ignite`가 드러낸다(움직임 줄이기에서도 점화 뒤에는 보인다). 점화하지 못한 채 셸이 내려가면(로그아웃) 풀어 준다.
+- 새 별 점화는 은하로 돌아온 뒤, 별이 store에 들어온 다음에 한다. 새로 열린 별은 결과가 온 순간(지도 새로 읽기 전) `holdStars`로 숨겨 두고, `ignite`가 드러낸다(움직임 줄이기에서도 점화 뒤에는 보인다). 점화하지 못한 채 셸이 내려가면(로그아웃) 풀어 준다. 분석을 공개해서(공개 검토, `features/publication/use-publication.ts`) 성과가 새로 인정되고 별이 열려도 같다. 공개 응답의 `unlockedStars`를 셸이 준 `PublicationUnlockSink`(`features/publication/unlock-sink.ts`, 기존 화면은 값 없음)로 받아 `SequenceDirector.unlockElsewhere`가 지도 새로 읽기 전에 숨기고 새 별로 표시하며, 은하로 돌아오면 점화한다. 다시 공개해 이미 연결된 별로 온 응답(`newlyGranted: false`)은 점화하지 않는다. 시연 서버는 `/publication/h-1951`의 게시가 새 별 하나를 연다.
+- 새로 열린 별(`shell/new-stars.ts`, 표시는 `ScreenLabels` `NewStarMarks`): 처음 보는 결과가 연 별(`unlockedTicIds`, 판단 불일치 제외)은 회원이 그 별의 패널이나 분석을 열 때까지 `localStorage["planetory:new-stars"]`(`{ [memberId]: TIC[] }`, 최근 것이 끝, 200개까지)에 남는다. 은하에서는 가장 최근 10개에 보라색 고리(움직임 줄이기에서는 파동 없이)를 두고 카메라가 움직이거나 별을 연 동안 숨기며, 도구 줄의 `새 별 N개`가 가장 최근 별부터 하나씩 연다. 다 불러온 지도에서 탐사를 시작했거나 없는 별은 빠진다(방금 열린 별은 그 별을 실은 지도가 올 때까지 둔다). 여러 별은 차례로 점화한 뒤 토스트 하나(「새 별 N개가 열렸습니다」)를 보이고, 마지막 별의 고리에 「새로 열린 별 · TIC …」를 다음 조작까지 둔다. 시나리오 전환 페이지가 이 기록도 지운다.
 - 「축하합니다!」는 처음 보는 결과이고 성과가 실제로 인정(`recognized`)됐을 때만 보인다(`features/analysis/celebration.ts`의 `celebrationText`). 판단 불일치·공개 대기·이미 인정됨·미매칭에는 붙지 않는다. 두 분석 화면이 같은 `ResultExplanationView`를 쓴다. 이 규칙은 시네마 앱이 `StrictCelebration`을 줄 때만 쓰고, 기존 화면(운영 기본)은 develop 규칙(`developCelebrationText`, 처음 보는 결과면 모두 축하) 그대로다.
 - 인정됐지만 새로 열린 별이 없는 결과(`achievement.unlockedStars: []`, 운영의 튜토리얼 성과에서 흔하다)는 발견 카드에 `새로 열린 별 없음` 칩을 달고, `은하로 돌아가기`에서 점화하지 않는다. 다른 결과(판단 불일치·공개 대기·이미 인정됨)에는 별 이야기를 하지 않는다. 개발 서버에서 재현: `CINEMA_UNLOCK=0` 또는 `POST /api/dev-cinema/unlock?on=0`.
 - 튜토리얼 안내(`shell/TutorialGuide.tsx`, 문구·저장은 `shell/tutorial-guide.ts`): 튜토리얼 별 1–5에 풀이를 별 패널(짧은 줄)과 분석 화면 위(두 변형 공통, 상단 띠, 무엇을 보고 무엇을 고를지)에 보인다. 천문 용어 없이 화면 이름(추천 봉우리 1위, 접힌 곡선, 구간, '행성 같음'/'아닌 것 같음', '다음 곡선 단계로', 행성 1/2/3, 신호 1/2)으로 쓰고, 연결 준비 중인 판별 도구(홀짝·2차 식·V/U)는 가리키지 않는다. 1024px에서 두 줄을 넘지 않는다. 백엔드가 주는 튜토리얼 순번(`Star.marker.seq`, 없으면 퀘스트의 튜토리얼 표시)으로 고르고 TIC로 고르지 않는다. 탐사 완료한 별에는 보이지 않는다. 자리(별 패널/분석)·순번마다 `풀이 닫기`로 닫고 `localStorage["planetory:tutorial-guide-closed"]`에 남긴다. 문구 규칙은 `tests/unit/cinema-tutorial-guide.test.ts`가 본다.
@@ -231,12 +232,12 @@ npm run dev:cinema
 - 첫 방문(`onboardingDone=false`): 로그인 뒤 은하로 날아드는 장면이 끝나고(장면이 은하에서 멈춘 뒤 0.9초) 튜토리얼 1로 날아간다. 회원마다 한 번(`localStorage["planetory:first-visit-flown"]`, `tutorial-guide.ts` `takeFirstVisitFlight`)이라 `← 나의 은하`와 새로 고침이 별로 되돌아가지 않는다. 그 뒤 은하의 문구는 "파란 1번 별을 눌러 시작하세요."다. 개발 서버의 시나리오 전환 페이지(`/api/dev-cinema/session`)는 새 세계마다 이 기록, 첫 로그인 이야기 기록과 닫은 풀이를 지운다(`POST /reset`만 부르면 지우지 않는다).
 - 분석 화면(기존형) 배치는 `shell/analysis-stage.css`가 덮는다: 패널을 `max(60vh, 100vh − 264px)`로 키워 별은 위 약 200px 띠에 두고, 주기도를 왼쪽 첫 칸에 두며, 단계의 주 버튼(이 주기로 구간 선택·구간 확정하고 판단하기·제출값 확인·제출하기)은 패널 아래에 붙어 늘 보인다. 1440×900과 1024×768에서 스크롤 없이 보이는 것을 확인했다(2026-09-27).
 - 통과 장면: 문구는 처음부터 보이고, 1초 뒤 오른쪽 아래 `건너뛰기`(또는 Escape)가 통과를 끝내고 바로 발견 카드로 간다(`SequenceDirector.skip`, 행성은 카드 뒤에서 자리 잡는다).
-- P1이 꺼지면(`p1Enabled` false, 운영) 상단 메뉴는 나의 은하·커뮤니티·마이페이지·설정만 두고, 알림·팔로우·공개 은하·통계·탈퇴로 가는 링크를 두지 않는다. `CINEMA_P1=0` 개발 서버에서 주요 화면(은하·별 패널·마이페이지·설정·커뮤니티·핫 토픽·분석 기록·별 결과·글·프로필)의 내부 링크 79개를 모두 열어 금지 경로 링크와 「이 화면은 연결 준비 중입니다」가 없음을 확인했다(2026-09-27).
+- 운영 API를 조회로 확인한 P1(2026-09-27: 공개 은하, 팔로우 요약·목록·팔로잉 피드, 내 통계)은 시네마 앱에서 늘 켠다(`features/p1.ts` `useLiveP1`, 공유 화면은 `CinemaWording`으로만 켜지므로 기존 화면은 `p1Enabled` 그대로). 탈퇴(설정의 「계정 탈퇴 안내」, `/settings/withdrawal`, 처리 상태 경로)도 2026-09-27부터 늘 켠다(S15P21C206-180). 사용 가능 여부는 서버 스위치가 정책 GET의 `available`로 알린다. 알림(목록이 503 `DEPENDENCY_UNAVAILABLE`)·전체 통계(`AGGREGATE_NOT_READY`)는 `p1Enabled`일 때만이다. P1이 꺼지면(`p1Enabled` false, 운영) 상단 메뉴는 나의 은하·커뮤니티·마이페이지·설정만 두고, 알림·통계로 가는 링크를 두지 않는다. `CINEMA_P1=0` 개발 서버에서 주요 화면(은하·별 패널·마이페이지·설정·커뮤니티·핫 토픽·분석 기록·별 결과·글·프로필)의 내부 링크 79개를 모두 열어 금지 경로 링크와 「이 화면은 연결 준비 중입니다」가 없음을 확인했다(2026-09-27).
 - `VITE_SKY_RENDERER_ENABLED`는 더 이상 `/sky`를 바꾸지 않는다. 개발용 inspector 슬롯만 `/sky`를 덮는다.
 - 엔진은 소프트웨어 WebGL(SwiftShader, llvmpipe 등)을 알아보면 싼 경로(`low`)로 그린다: 픽셀 비율 0.5, 후처리·성운·먼지 없음, `canvas[data-power="low"]`. 회원이 빛 효과를 켜면 이 경로에서도 켜진다. 헤드리스 Chromium 기준 2–3fps → 60fps.
 - 로그인 직후 새로 고침된 페이지에서 엔진 청크가 늦게 오면, 프록시가 날아들기 요청을 기억했다가 엔진이 붙을 때 재생한다.
 - 기존 브라우저 테스트 중 제출 직후 결과를 바로 찾는 것들은 발견 연출(트랜싯 → 카드)이 결과를 먼저 덮으므로 실패한다. 의도된 화면 변경이다.
-- `scripts/cinema-smoke.mjs`는 셸 기준 선택자(`.scene-canvas[data-scene-mode|data-scene-busy]`, 마커 `data-visible`, `dialog.cinema-discovery`, `new-star-reticle`)와 기존형 분석의 접근 이름으로 세 데모 시나리오를 돈다(위 "개발 서버").
+- `scripts/cinema-smoke.mjs`는 셸 기준 선택자(`.scene-canvas[data-scene-mode|data-scene-busy]`, 마커 `data-visible`, `dialog.cinema-discovery`, `new-star-reticle`)와 분석 화면의 접근 이름(기본 새 디자인, `CINEMA_ANALYSIS=classic` 서버면 기존형)으로 세 데모 시나리오를 돈다(위 "개발 서버").
 
 ## 최종 수정 메모 (리뷰 반영)
 
@@ -259,7 +260,7 @@ npm run dev:cinema
 - 통과 문구와 실시간 광도 곡선은 옆모습 비행이 끝나고 첫 밝기 표본이 올 때 나타난다.
 - 발견 연출 동안 분석 패널의 모달 대화상자(기존형 결과)는 닫아 둔다(`ModalHoldContext`, `features/analysis/use-modal-dialog.ts`). 최상위 레이어의 모달은 `inert`를 벗어나 키보드 포커스와 버튼이 남기 때문이다. "결과 자세히 보기"를 누르면 상태 그대로 다시 열린다. 이 때문에 제출 직후 결과 대화상자를 바로 찾는 기존 브라우저 테스트는 카드가 닫힐 때까지 실패한다(의도된 화면 변경).
 - 분석 브리지의 따라잡기는 현재 세션에서 온 값만 쓴다(`lastAnalysisOrder`, bridge에 추가한 선택적 export). 같은 별을 다시 열 때 지난 세션의 유령 궤도가 돌아오지 않는다.
-- 별로 비행하는 동안 별 패널은 기다렸다가 도착 무렵 나타난다. 은하로 돌아갈 때 튜토리얼·챌린지 표시는 카메라가 멈춘 뒤 나타난다. 표시 위에 포인터나 키보드 초점을 두면 그 별의 TIC와 상태를 보여 준다.
+- 별로 비행하는 동안 별 패널은 기다렸다가 도착 무렵 나타난다. 오른쪽 아래 보기 버튼과 패널은 같은 도착 상태에서 같은 거리·시간·이징으로 왼쪽으로 이동한다. 왼쪽 도구는 별 선택 시 아래로 사라진다. 은하로 돌아갈 때 튜토리얼·챌린지 표시는 카메라가 멈춘 뒤 나타난다. 표시 위에 포인터나 키보드 초점을 두면 그 별의 TIC와 상태를 보여 준다.
 - 지도는 은하로 돌아올 때, 창 포커스(30초 간격)와 1분마다 다시 읽는다. 방금 바뀐 지도가 이전 판을 돌려주면(읽기 지연) 0.7·1.5·3초 간격으로 다시 묻고, 그래도 안 되면 알림을 보인다.
 - 지도에 없는 TIC(잠긴 별)는 비행하지 않는다.
 - 별 패널의 `returnTo`는 검색 조건을 유지한다(`starSearch`).
@@ -290,3 +291,7 @@ npm run dev:cinema
 - 이전 기록(시네마가 기본이던 때) chromium 브라우저 테스트(`npm run test:browser`): 214 통과, 36 실패, 3 건너뜀. 실패 중 27개는 발견 연출이 결과 대화상자를 잡아 두는 탓이다(카드를 닫아야 결과가 열린다). 발견 연출을 잠시 끈 확인 실행에서 해당 스펙(analysis-retry·analysis-submit·curve-step·onboarding) 70개 중 69개가 통과했다(남은 1개는 글자색 토큰). 나머지 9개는 이전 분류 그대로다(머리글 로그아웃 제거, 패널 스크롤 기준 좌표, 장면의 WebGL 버퍼, 주기도 드래그 시작점, 글자색 토큰). 테스트 코드는 새 화면에 맞게 고쳐야 한다.
 - 스모크(`npm run test:e2e:smoke`)는 위 첫 항목을 본다. 스모크의 `/sky` 확인은 다시 develop과 같이 기존 화면의 지도 메타 문구만 본다. 스모크는 Dockerfile 기본값처럼 `VITE_CINEMA` 없이 빌드하므로 운영 번들(시네마 전용)은 보지 않는다.
 - 같은 분석 스펙을 새 분석(`cinematic`)으로 돌리면 198개 중 36개만 통과한다(HTTP·계약·복구). 화면 스펙은 기존형의 접근 이름·testid를 쓰기 때문이다.
+
+## 색상 검토안
+
+금색 메인·하늘색 서브 G1 조합의 색상표와 변경 요청 방법은 [색상 가이드](styles/README.md)를 따른다. 로컬 검토안이며 운영 채택은 미확정이다.

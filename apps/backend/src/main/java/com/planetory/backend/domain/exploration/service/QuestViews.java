@@ -38,15 +38,24 @@ public final class QuestViews {
      * 진행 중 챌린지. 진행 회차가 없으면 {@code round}가 null이고 나머지는 빈 값이다.
      *
      * @param eligible         진행 회차가 있고 튜토리얼을 모두 끝냈는지
-     * @param ticId            회원에게 열린 경우에만 준다. 지도 빨간 느낌표의 원천이다. 지도·상세의
-     *                         {@code marker}에는 챌린지를 싣지 않는다
+     * @param ticId            대표 대상. 회원에게 열린 경우에만 준다. {@code unlocked}·{@code progressStage}도
+     *                         대표 대상의 값이다. 대상 전부는 {@code targets}에 있다
      * @param progressStage    열린 경우 그 별의 진행 단계, 아니면 null
-     * @param participantCount 대상 별 공식 신호 스레드의 유효 공개 분석 참여자 수(D-13). 회차가 없으면 null
+     * @param participantCount 회차 대상 별 전부의 공식 신호 스레드에서 유효 공개 분석을 가진 회원 수(D-13).
+     *                         여러 대상에 참여해도 한 명이다. 회차가 없으면 null
+     * @param targetCount      회차 대상 별 수. 회차가 없으면 0
+     * @param targets          회원에게 열린 대상 별. 대표 대상이 맨 앞이다. 지도 빨간 느낌표의 원천이다. 지도·상세의
+     *                         {@code marker}에는 챌린지를 싣지 않는다. 열리지 않은 대상은 싣지 않는다
      */
     public record Challenge(Round round, boolean eligible, String ticId, boolean unlocked,
-                            String progressStage, Integer participantCount) {
+                            String progressStage, Integer participantCount, int targetCount,
+                            List<ChallengeTarget> targets) {
 
-        static final Challenge NONE = new Challenge(null, false, null, false, null, null);
+        static final Challenge NONE = new Challenge(null, false, null, false, null, null, 0, List.of());
+    }
+
+    /** 회원에게 열린 챌린지 대상 별과 그 진행 단계. */
+    public record ChallengeTarget(String ticId, String progressStage) {
     }
 
     public record Round(String roundId, int roundNo, LocalDate startsOn, LocalDate endsOn, String description) {
@@ -57,7 +66,11 @@ public final class QuestViews {
         static final CurrentChallenge NONE = new CurrentChallenge(null, false, null);
     }
 
-    public record CurrentRound(String roundId, int roundNo, String ticId, LocalDate startsOn,
+    /**
+     * @param ticId  대표 대상. 자격이 있을 때만 준다
+     * @param ticIds 대상 별 전부. 대표 대상이 맨 앞이다. 자격이 있을 때만 준다
+     */
+    public record CurrentRound(String roundId, int roundNo, String ticId, List<String> ticIds, LocalDate startsOn,
                                LocalDate endsOn, String status, String description) {
     }
 

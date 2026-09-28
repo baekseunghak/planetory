@@ -429,6 +429,28 @@ public final class SubmissionMatching {
                 match.evaluations());
     }
 
+    /** 폭만 벗어난 불일치의 힌트. DB에 저장하지 않고 제출 응답 {@code match.missHint}로만 나간다. */
+    public enum MissHint { WINDOW_TOO_WIDE, WINDOW_TOO_NARROW }
+
+    /**
+     * {@code not_matched}에서 배율 1 해석이 주기·epoch·통과 겹침은 통과하고 지속시간 비율만 벗어났으면 폭 힌트를
+     * 준다 [S15P21C206-282]. 화면이 「주기와 위치는 맞았다」고 말하므로 고조파 해석은 쓰지 않고, 이미 성과를
+     * 인정받은 신호도 뺀다(좁히면 duplicate가 될 뿐이다). 여럿이면 점수가 가장 낮은 것을 따른다. 그 밖의 불일치는
+     * null이라 주기·위치의 정오를 알리지 않는다. 판정(규칙 v0)에는 쓰지 않으므로 참조 구현과 대조하지 않는다.
+     */
+    public static MissHint missHint(Match match, Rules rules, Set<Long> recognizedCandidateIds) {
+        if (match.status() != MatchStatus.NOT_MATCHED) {
+            return null;
+        }
+        return match.evaluations().stream()
+                .filter(e -> e.multiplier() == 1 && !recognizedCandidateIds.contains(e.candidateId()))
+                .filter(e -> e.ePeriod() <= 1 && e.eEpoch() <= 1 && e.overlapTransits() >= rules.minOverlapTransits()
+                        && !e.durationPass())
+                .min(Comparator.comparingDouble(Evaluation::score))
+                .map(e -> e.durationRatio() > rules.durationRatioMax() ? MissHint.WINDOW_TOO_WIDE : MissHint.WINDOW_TOO_NARROW)
+                .orElse(null);
+    }
+
     private static Match adopted(Evaluation evaluation, String decision, List<Long> rankedIds, Dominance dominance,
                                  List<Evaluation> evaluations) {
         MatchStatus status = evaluation.multiplier() == 1 ? MatchStatus.MATCHED : MatchStatus.MATCHED_HARMONIC;

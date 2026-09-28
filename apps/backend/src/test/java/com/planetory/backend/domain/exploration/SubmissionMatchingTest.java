@@ -181,6 +181,40 @@ class SubmissionMatchingTest {
                 "후보를 고르지 못한 제출은 duplicate가 아니다");
     }
 
+    // ---------- 폭 힌트 [S15P21C206-282] ----------
+
+    /**
+     * 후보(주기 5일·epoch 2001·2.4시간)는 기준 시각 2000에서 위상 0.2에 있다. 주기·위치가 맞고 폭만 허용 비율
+     * [0.5, 2]를 벗어나면 넓다·좁다를 알리고, 주기나 위치가 틀리면 아무것도 알리지 않는다.
+     */
+    @Test
+    void 주기와_위치는_맞고_폭만_벗어난_불일치에만_폭_힌트를_준다() {
+        assertEquals(SubmissionMatching.MissHint.WINDOW_TOO_WIDE, missHint(new Selection(5, 0.175, 0.225, null)),
+                "6시간 창은 2.4시간 신호의 2배를 넘는다");
+        assertEquals(SubmissionMatching.MissHint.WINDOW_TOO_NARROW, missHint(new Selection(5, 0.198, 0.202, null)),
+                "0.48시간 창은 절반에 못 미친다");
+
+        assertNull(missHint(new Selection(5, 0.49, 0.51, null)), "위치가 틀리면 알리지 않는다");
+        assertNull(missHint(new Selection(5.3, 0.175, 0.225, null)), "주기가 틀리면 알리지 않는다");
+        assertNull(missHint(new Selection(5, 0.19, 0.21, null)), "일치하면 힌트가 없다");
+        // 2.5일 × 2 = 5일로만 맞는 고조파 해석은 「주기가 맞았다」가 아니므로 알리지 않는다.
+        assertNull(missHint(new Selection(2.5, 0.35, 0.45, null)), "고조파 해석만 폭이 벗어나면 알리지 않는다");
+        assertNull(missHint(new Selection(5, 0.175, 0.225, null), Set.of(401L)),
+                "이미 성과를 인정받은 신호로는 안내하지 않는다");
+    }
+
+    private static SubmissionMatching.MissHint missHint(Selection selection) {
+        return missHint(selection, Set.of());
+    }
+
+    private static SubmissionMatching.MissHint missHint(Selection selection, Set<Long> recognized) {
+        Validation validation = validate(selection);
+        assertTrue(validation.ok(), () -> String.valueOf(validation.rejection()));
+        Match match = SubmissionMatching.match(OBSERVATION, RULE_0, selection, validation.derived(),
+                List.of(new SubmissionMatching.Candidate(401, 5, 2001, 2.4)), List.of());
+        return SubmissionMatching.missHint(match, RULE_0, recognized);
+    }
+
     private static Validation validate(Selection selection) {
         return SubmissionMatching.validate(OBSERVATION, RULE_0, selection, "LIKELY_PLANET", List.of(), Map.of());
     }

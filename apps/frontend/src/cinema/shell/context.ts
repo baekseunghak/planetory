@@ -28,7 +28,12 @@ export type Shell = {
    * member): the galaxy waits far away, and so does the flight above.
    */
   story: boolean;
-  /** Star that just ignited, marked until the member's next interaction. */
+  /**
+   * Stars this member unlocked and has not opened yet (new-stars.ts), most
+   * recent last. Stars still waiting for their ignition are not in it yet.
+   */
+  newStars: readonly string[];
+  /** Star that just ignited, named until the member's next interaction. */
   newStar: string | null;
   clearNewStar(): void;
 };

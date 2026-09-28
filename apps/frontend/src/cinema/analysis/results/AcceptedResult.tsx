@@ -7,6 +7,7 @@
 import type { ReactNode, RefObject } from "react";
 import { Link } from "react-router-dom";
 import { pagePath } from "../../../app/paths";
+import { starResultsLocation } from "./navigation";
 import type { DetailState } from "../../../features/analysis/AnalysisResult";
 import { usePhaseDraft } from "../../../features/analysis/AnalysisSession";
 import { celebrationText } from "../../../features/analysis/celebration";
@@ -214,7 +215,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
   const missed = matchStatus === "not_matched";
   const ambiguous = matchStatus === "ambiguous_match";
   const lead = missed
-    ? f.NOT_MATCHED_HINT
+    ? f.notMatchedHint(explanation.missHint)
     : ambiguous
       ? "주기나 구간을 조금 바꿔 다시 풀어 보세요."
       : f.matchSentence(matchStatus, correction?.multiplier);
@@ -237,14 +238,14 @@ export function AcceptedResult(props: AcceptedResultProps) {
     PUBLISH_ANALYSIS: {
       kind: "link",
       key: "PUBLISH_ANALYSIS",
-      label: "공개 검토",
-      to: pagePath("publication", { historyId }, { returnTo: currentPath }),
+      label: completed ? "이 별의 분석 공개 검토" : "공개 검토",
+      to: pagePath("publicationBatch", {}, { ticId, returnTo: currentPath }),
     },
     VIEW_RESULT: {
       kind: "link",
       key: "VIEW_RESULT",
-      label: "분석 결과 보기",
-      to: pagePath("starResults", { ticId }, { returnTo: currentPath }),
+      label: "이 별의 탐사 결과",
+      to: starResultsLocation(ticId, returnTo),
     },
     DISCUSS: {
       kind: "link",
@@ -303,7 +304,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
     rest = [];
   } else {
     const order: NextAction[] =
-      achievement.result === "pending_publish"
+      completed
         ? ["PUBLISH_ANALYSIS", "NEXT_CURVE", "VIEW_RESULT", "DISCUSS", "RETRY"]
         : ["NEXT_CURVE", "VIEW_RESULT", "PUBLISH_ANALYSIS", "DISCUSS", "RETRY"];
     const available = order
@@ -332,7 +333,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
   return (
     <>
       <div className="pc-result" data-match={matchStatus}>
-        <p className="pc-result-eyebrow">분석 결과</p>
+        <p className="pc-result-eyebrow">이번 제출 결과</p>
         <h4 id={headingId}>{title}</h4>
         <p
           ref={focusRef}
@@ -526,13 +527,18 @@ export function AcceptedResult(props: AcceptedResultProps) {
         </details>
       </div>
 
+      {links.NEXT_CURVE && <p>분석 기록은 나중에 모아서 공개할 수 있습니다.</p>}
       <div className="pc-result-actions" data-testid="next-actions">
         <div className="pc-result-primary">
-          {next && render(next, "pc-result-button pc-result-button-main")}
           {render(home, "pc-result-button")}
+          <span className="pc-result-forward">
+            {rest.filter((action) => action.key === "PUBLISH_ANALYSIS").map((action) => render(action, "pc-result-button"))}
+            {next && render(next, "pc-result-button pc-result-button-main")}
+          </span>
+          {rest.filter((action) => action.key === "VIEW_RESULT").map((action) => render(action, "pc-result-inline"))}
         </div>
         <div className="pc-result-secondary">
-          {rest.map((action) => render(action, "pc-result-inline"))}
+          {rest.filter((action) => action.key !== "VIEW_RESULT" && action.key !== "PUBLISH_ANALYSIS").map((action) => render(action, "pc-result-inline"))}
           <button type="button" className="pc-result-inline" onClick={close}>
             닫기
           </button>

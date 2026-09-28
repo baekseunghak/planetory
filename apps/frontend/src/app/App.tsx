@@ -17,7 +17,6 @@ import { GalaxyView } from "../cinema/shell/GalaxyView";
 import { AnalysisStage } from "../cinema/shell/AnalysisStage";
 import { MissingScreen } from "../cinema/pages/routes";
 import { routeDefinitions, safeReturnTo, type PageKey } from "./paths";
-import { p1Enabled } from "../features/p1";
 import { WithdrawalStatusPage } from "../features/profile/WithdrawalPage";
 
 export type PageSlots = Partial<Record<PageKey, ComponentType>>;
@@ -113,12 +112,10 @@ export function App({
           <CinemaRoot>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              {p1Enabled && (
-                <Route
-                  path="/withdrawal/status/:requestId"
-                  element={<WithdrawalStatusPage />}
-                />
-              )}
+              <Route
+                path="/withdrawal/status/:requestId"
+                element={<WithdrawalStatusPage />}
+              />
               <Route path="/oauth/callback" element={<LoginPage />} />
               <Route element={<ProtectedRoutes />}>
                 <Route
