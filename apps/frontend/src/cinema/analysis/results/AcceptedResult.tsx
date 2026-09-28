@@ -264,7 +264,7 @@ export function AcceptedResult(props: AcceptedResultProps) {
     links.NEXT_CURVE = {
       kind: "button",
       key: "NEXT_CURVE",
-      label: "분석 이어서 하기",
+      label: "다음 곡선 단계로",
       run: nextCurve,
     };
   const again = (

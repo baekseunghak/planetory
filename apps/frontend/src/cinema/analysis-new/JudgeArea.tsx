@@ -672,7 +672,7 @@ function ResultActions({
     nextCurve &&
     receipt.progress.stage !== "completed" ? (
       <button type="button" className="cx-primary" onClick={nextCurve}>
-        분석 이어서 하기
+        다음 곡선 단계로
       </button>
     ) : null;
   const missed = kind === "numericMismatch";
