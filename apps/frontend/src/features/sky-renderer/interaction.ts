@@ -246,7 +246,8 @@ export function markerLabel(
   tutorials: TutorialMarkers | null,
   challengeTicId: string | null = null,
 ) {
-  if (s.ticId === challengeTicId) return "!";
+  if (s.ticId === challengeTicId)
+    return s.progressStage === "completed" ? null : "!";
   const state = tutorials?.get(s.ticId);
   return s.marker?.type === "tutorial" &&
     state?.visible &&
