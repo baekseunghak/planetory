@@ -46,11 +46,10 @@ cd apps/backend
 ./gradlew clean build      # Windows: .\gradlew.bat clean build
 ```
 
-로컬 Redis가 없다면 아래 두 개발용 컨테이너를 먼저 실행한다(운영 설정이 아니다). Gradle은 Redis를 자동으로 시작하지 않는다.
+세션·캐시 Redis 두 개는 저장소 루트에서 먼저 띄운다(`127.0.0.1:16379`·`16380`, 운영 설정이 아니다). Gradle은 Redis를 자동으로 시작하지 않는다.
 
-```powershell
-docker run -d --name planetory-local-session -p 127.0.0.1:16379:6379 redis:8.2-alpine
-docker run -d --name planetory-local-cache -p 127.0.0.1:16380:6379 redis:8.2-alpine
+```sh
+docker compose --profile service up -d session-redis cache-redis
 ```
 
 ### IDE에서 실행

@@ -214,14 +214,11 @@ COMMIT;
 | 대상 | 명령 | 필요 조건 |
 | --- | --- | --- |
 | DB만 | `docker compose --profile service up -d --wait service-db` (루트) | `localhost:15432`, 로컬 공용 기본값 |
-| 백엔드 | `cd apps/backend; ./gradlew bootRun` | 프로필 `local`. Redis 두 개를 `localhost:16379`(세션)·`16380`(캐시)에 띄움 |
+| Redis 두 개 | `docker compose --profile service up -d session-redis cache-redis` (루트) | `localhost:16379`(세션)·`16380`(캐시) |
+| 백엔드 | `cd apps/backend; ./gradlew bootRun` | 프로필 `local`. 위 Redis 두 개가 떠 있어야 함(DB는 Gradle이 띄움) |
+| 백엔드 컨테이너 | `docker compose --profile service up -d --build backend` (루트) | DB·Redis 두 개를 함께 띄움. 호스트 `localhost:8080` |
 | 프론트엔드 | `cd apps/frontend; npm ci; npm run dev` | `apps/frontend/.env.example` 참고 |
 | 시연용 단독 서버 | `cd apps/frontend; npm ci; npm run dev:cinema` | 백엔드·DB 없이 합성 자료로 동작. [시연 시나리오](4-demo-scenario.md) |
-
-```powershell
-docker run -d --name planetory-local-session -p 127.0.0.1:16379:6379 redis:7.4-alpine
-docker run -d --name planetory-local-cache   -p 127.0.0.1:16380:6379 redis:7.4-alpine
-```
 
 ## 5. 빌드·실행 환경 변수
 

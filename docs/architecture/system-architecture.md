@@ -58,7 +58,7 @@ flowchart LR
 | 진입점 | Cloudflare DNS·CDN(proxied)·Tunnel 단일 connector | HTTPS 진입과 사용자 구간 TLS edge 종료, 정적 캐시. connector가 EC2-A에서 밖으로만 연결하므로 외부 인바운드 개방은 0개다(8장) |
 | EC2-A | Docker, 프런트 컨테이너 Nginx, cloudflared | 단일 서비스 노드. 실행 환경, 정적 파일, `/api/*` 프록시. 호스트 Nginx를 두지 않는다 |
 | Frontend | React, TypeScript, Vite | 사용자 UI |
-| Backend | Spring Boot 3 | 회원, 제출, Gold 읽기, Worker 호출, 판 전환 후처리, 커뮤니티, 성과 API |
+| Backend | Spring Boot 4 | 회원, 제출, Gold 읽기, Worker 호출, 판 전환 후처리, 커뮤니티, 성과 API |
 | Derived Worker | Python, `libs/astro-kernel` | Backend가 전달한 배열과 고정 모델로 잔차·주기도 계산. DB 직접 조회 금지 |
 | 서비스 DB | PostgreSQL | 서비스 트랜잭션, Gold 배열·메타데이터, current 판의 정본 |
 | 계산·Gold 읽기 캐시 | Redis (EC2-A loopback) | 운영자 지정 별의 곡선·원본 주기도, 온라인 계산 상태·결과·키별 잠금 |
