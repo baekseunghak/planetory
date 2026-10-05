@@ -193,8 +193,9 @@ docker compose exec backend wget -qO- http://derived-compute:8090/healthz
 
 빈 DB에서는 **가입이 되지 않는다.** 가입 트랜잭션이 튜토리얼 1번 별을 지급하는데 Flyway 시드는 `operation_settings` 한 건뿐이다. 이때 OAuth 콜백은 `503 DEPENDENCY_UNAVAILABLE`이고 화면에는 `/oauth/callback?error=authentication_failed`로 보인다. 다음 중 하나로 채운다.
 
-1. 운영과 같은 튜토리얼 5종: Publisher로 실제 Gold를 싣는다. 절차는 `infra/service/README.md` 「튜토리얼 5종」.
-2. 로그인만 확인: `stars`와 `tutorial_stars`에 1번 별 한 건을 넣는다. 순서를 지켜야 트리거가 거절하지 않는다.
+1. 제출 덤프 복원(가장 간단): `exec/3-db-dump/`의 스키마 덤프와 튜토리얼·챌린지 별 데이터 덤프를 순서대로 복원한다. 운영의 튜토리얼 5종·챌린지 1회차 별 10개와 그 Gold가 들어가 가입과 분석이 바로 된다. 절차는 [DB 덤프](3-db-dump/README.md) 「복원」.
+2. 운영과 같은 튜토리얼 5종을 직접 적재: Publisher로 실제 Gold를 싣는다. 절차는 `infra/service/README.md` 「튜토리얼 5종」.
+3. 로그인만 확인: `stars`와 `tutorial_stars`에 1번 별 한 건을 넣는다. 순서를 지켜야 트리거가 거절하지 않는다.
 
 ```sql
 BEGIN;
@@ -207,7 +208,7 @@ ON CONFLICT (seq) DO NOTHING;
 COMMIT;
 ```
 
-`149603524`는 운영 튜토리얼 1번(WASP-62)이다. 2번만으로는 분석 화면이 열리지 않는다(Gold 판이 없어 `analysis-context`가 503).
+`149603524`는 운영 튜토리얼 1번(WASP-62)이다. 3번만으로는 분석 화면이 열리지 않는다(Gold 판이 없어 `analysis-context`가 503).
 
 ### 4.7 개발 모드 실행(선택)
 
