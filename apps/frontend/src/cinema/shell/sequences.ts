@@ -354,7 +354,7 @@ export class SequenceDirector {
     this.skipTransit?.();
   }
 
-  /** Card closed ("결과 자세히 보기"): the panel comes back. */
+  /** Card closed by either button ("이번 제출 결과", "은하로 돌아가기"): the sequence ends. */
   dismiss(): void {
     this.run?.abort();
     this.run = null;
