@@ -168,7 +168,7 @@ backend:test:
 # backend:build가 bootJar까지는 검증하지만 Dockerfile 자체는 검증하지 않는다.
 # Dockerfile이 바뀔 때만 돌므로 Gradle 빌드가 중복되는 경우는 드물다.
 backend:image:
-  extends: .docker-build
+  extends: .docker-build-arm64
   stage: validate
   # 테스트가 실패한 코드로는 이미지를 만들지 않는다 [S15P21C206-91]. backend:build는
   # Dockerfile 변경에도 돌므로 대개 함께 있지만, 없는 파이프라인에서 막히지 않게 optional로 둔다.
@@ -178,11 +178,11 @@ backend:image:
   variables:
     DOCKERFILE: apps/backend/Dockerfile
     IMAGE_NAME: backend
-    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: ""
   before_script: []
   script:
     - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "ci-check/backend:$CI_COMMIT_SHORT_SHA" $BUILD_ARGS .
+    - test "$(docker image inspect --format '{{.Architecture}}' "ci-check/backend:$CI_COMMIT_SHORT_SHA")" = arm64
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -190,11 +190,10 @@ backend:image:
         - .gitlab/ci/apps/backend.yml
 
 build:backend:
-  extends: .docker-build
+  extends: .docker-build-arm64
   variables:
     DOCKERFILE: apps/backend/Dockerfile
     IMAGE_NAME: backend
-    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: ""
   # develop에서는 변경 여부와 관계없이 빌드한다. changes로 거르면 이 앱을 바꾸지 않은
   # 병합의 파이프라인에는 배포 버튼이 없고, 이 앱을 바꾼 이전 파이프라인은 새 커밋에
@@ -204,9 +203,9 @@ build:backend:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/backend/gradlew]
 
-# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
-deploy:backend:ec2-a:
-  extends: .deploy-ec2-a
+# 운영 서비스는 donh-vnic 하나다. 기존 Compose·최종 볼륨을 보존한다.
+deploy:backend:donh-vnic:
+  extends: .deploy-donh-vnic
   needs: ["build:backend"]
   variables:
     IMAGE_NAME: backend

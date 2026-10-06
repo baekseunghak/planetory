@@ -121,7 +121,7 @@ validate:astro-kernel:
 .docker-build:
   stage: build
   image: docker:27.5-cli
-  # amd64 Runner에서만 실행한다. 다른 Runner로 가면 에뮬레이션 설정 없이 amd64 빌드가 실패한다.
+  # amd64 빌드가 검증된 Runner에서 실행한다. donh-orc2 ARM64는 host QEMU로 이 태그를 유지한다.
   tags:
     - amd64-docker
   services:
@@ -135,8 +135,31 @@ validate:astro-kernel:
   before_script:
     - test -n "$REGISTRY_IMAGE_PREFIX"
   script:
-    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA" $BUILD_ARGS .
-    - docker push "$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
+    - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:${IMAGE_TAG:-$CI_COMMIT_SHA}"
+    - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$FULL_IMAGE" $BUILD_ARGS .
+    - test "$(docker image inspect --format '{{.Architecture}}' "$FULL_IMAGE")" = "${TARGET_PLATFORM#linux/}"
+    - docker push "$FULL_IMAGE"
+
+.docker-build-arm64:
+  extends: .docker-build
+  tags: [arm64-docker]
+  variables:
+    TARGET_PLATFORM: linux/arm64
+    IMAGE_TAG: "${CI_COMMIT_SHA}-arm64"
+
+validate:service-deploy:
+  extends: .docker-build-arm64
+  stage: validate
+  needs: []
+  before_script: []
+  script:
+    - docker compose version
+    - sh infra/service/deploy-test.sh
+  rules:
+    - changes:
+        - infra/service/deploy.sh
+        - infra/service/deploy-test.sh
+        - .gitlab/ci/common.yml
 
 .remote-compose-deploy:
   stage: deploy
@@ -152,11 +175,15 @@ validate:astro-kernel:
   # 그룹으로 두면 같은 경로를 공유하는 경합이 그대로 남는다.
   interruptible: false
   variables:
-    # 서비스 배포 job이 덮어쓴다. 비어 있으면 교체만 하고 확인·롤백을 하지 않는다.
+    # 서비스 배포 job이 덮어쓴다. 비어 있으면 Compose health만 확인한다.
     DEPLOY_HEALTH_PATH: ""
     DEPLOY_HEALTH_PORT: "8080"
     DEPLOY_HEALTH_TIMEOUT: "90"
     DEPLOY_DB_BACKUP: "false"
+    DEPLOY_COMPOSE_FILE: compose.yaml
+    DEPLOY_COMPOSE_PROJECT: ""
+    # 빈 값이면 노드의 운영 Compose를 보존하고 이미지·deploy.sh만 갱신한다.
+    DEPLOY_COMPOSE_SOURCE: ""
     # compose.yaml이 상대 경로로 참조하는 디렉터리. 대상 노드에 함께 올린다.
     # 비어 있으면 올리지 않는다.
     DEPLOY_AUX_DIR: ""
@@ -173,22 +200,22 @@ validate:astro-kernel:
     - chmod 600 ~/.ssh/config
   # 교체·헬스 확인·롤백은 infra/service/deploy.sh가 배포 노드에서 수행한다.
   # 한 줄짜리 ssh 명령으로는 어느 단계에서 실패했는지 구분할 수 없고, 실패했을 때
-  # 되돌릴 대상을 기억할 수도 없다. DEPLOY_HEALTH_PATH가 비면 확인과 롤백을
-  # 건너뛰고 교체만 한다(derived-compute).
+  # 되돌릴 대상을 기억할 수도 없다. DEPLOY_HEALTH_PATH가 비면 HTTP 확인만
+  # 건너뛴다. 이미지 HEALTHCHECK는 Compose --wait가 확인한다(derived-compute).
   script:
     - test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PATH" && test -n "$DEPLOY_USER"
     - ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
     # 임시 이름으로 받고 원격에서 옮긴다. 다른 배포가 진행 중일 때 실행 중인
     # 파일을 덮어쓰면 sh가 중간부터 엉뚱한 바이트를 읽는다.
-    - scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml.incoming"
+    - if [ -n "$DEPLOY_COMPOSE_SOURCE" ]; then scp "$DEPLOY_COMPOSE_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/$DEPLOY_COMPOSE_FILE.incoming"; fi
     - scp infra/service/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.sh.incoming"
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && mv compose.yaml.incoming compose.yaml && mv deploy.sh.incoming deploy.sh"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && if [ -n '$DEPLOY_COMPOSE_SOURCE' ]; then mv '$DEPLOY_COMPOSE_FILE.incoming' '$DEPLOY_COMPOSE_FILE'; fi && mv deploy.sh.incoming deploy.sh"
     # compose.yaml이 ./service-db-init 처럼 상대 경로로 읽는 디렉터리를 함께 올린다.
     # 빠지면 bind mount 대상이 빈 디렉터리로 생성되고, 빈 볼륨을 처음 초기화할 때
     # 런타임 계정 생성이 조용히 건너뛰어진다.
     - if [ -n "$DEPLOY_AUX_DIR" ]; then scp -r "$DEPLOY_AUX_DIR" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"; fi
-    - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:$CI_COMMIT_SHA"
-    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
+    - export FULL_IMAGE="$REGISTRY_IMAGE_PREFIX/$IMAGE_NAME:${IMAGE_TAG:-$CI_COMMIT_SHA}"
+    - ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_PATH' && COMPOSE_FILE='$DEPLOY_COMPOSE_FILE' COMPOSE_PROJECT_NAME='$DEPLOY_COMPOSE_PROJECT' SERVICE='$DEPLOY_SERVICES' IMAGE_VAR='$DEPLOY_IMAGE_VARIABLE' IMAGE='$FULL_IMAGE' ACTION='$DEPLOY_ACTION' HEALTH_PATH='$DEPLOY_HEALTH_PATH' HEALTH_PORT='$DEPLOY_HEALTH_PORT' HEALTH_TIMEOUT='$DEPLOY_HEALTH_TIMEOUT' DB_BACKUP='$DEPLOY_DB_BACKUP' sh deploy.sh"
 
 # resource_group은 노드 이름을 그대로 쓴다. 값에 $DEPLOY_HOST를 끼우면 그룹
 # 이름과 GitLab UI에 tailnet 주소가 새어 나가고, 변수 해석 시점에 따라 그룹이
@@ -196,19 +223,22 @@ validate:astro-kernel:
 #
 # GCP 노드 템플릿은 없다. GCP 코드는 불변 release 디렉터리로 묶어 운영자
 # 스크립트가 설치하며, CI가 만든 Docker 이미지를 쓰지 않는다(S15P21C206-94).
-.deploy-ec2-a:
+.deploy-donh-vnic:
   extends: .remote-compose-deploy
-  resource_group: deploy-ec2-a
+  resource_group: deploy-donh-vnic
   # GitLab "옛 배포 job 막기"(프로젝트 설정 ci_forward_deployment_enabled)는
   # environment가 있는 job에만 걸린다. 더 새 배포가 있는 상태에서 옛 파이프라인의
   # 버튼을 누르면 GitLab이 거부한다. 서비스별로 나누지 않고 노드 하나로 둔다.
-  # 배포 job은 노드 공용 compose.yaml을 함께 올리므로, 서비스별 environment면
-  # 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다.
+  # 배포 job은 노드 공용 .env를 갱신하므로 environment도 노드 하나로 유지한다.
   # resource_group을 노드 단위로 둔 것과 같은 이유다(S15P21C206-261).
   environment:
-    name: ec2-a
+    name: donh-vnic
   variables:
-    DEPLOY_HOST: $EC2_A_HOST
-    DEPLOY_PATH: $EC2_A_DEPLOY_PATH
-    DEPLOY_COMPOSE_SOURCE: infra/service/compose.yaml
-    DEPLOY_AUX_DIR: infra/service/service-db-init
+    DEPLOY_HOST: $SERVICE_DEPLOY_HOST
+    DEPLOY_PATH: $SERVICE_DEPLOY_PATH
+    DEPLOY_USER: $SERVICE_DEPLOY_USER
+    DEPLOY_COMPOSE_FILE: compose.json
+    DEPLOY_COMPOSE_PROJECT: planetory-service
+    DEPLOY_COMPOSE_SOURCE: ""
+    DEPLOY_AUX_DIR: ""
+    IMAGE_TAG: "${CI_COMMIT_SHA}-arm64"

@@ -119,19 +119,19 @@ web:e2e:
 # 해석하므로, `proxy_pass http://backend:8080` 같은 리터럴이 돌아오면 여기서 잡힌다.
 # 실제로 S15P21C206-84에서 그 결함으로 프론트 컨테이너가 기동하지 못했다.
 web:image:
-  extends: .docker-build
+  extends: .docker-build-arm64
   stage: validate
   needs: []
   variables:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
-    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true --build-arg VITE_CINEMA=true"
     CHECK_TAG: ci-check/frontend:$CI_COMMIT_SHORT_SHA
   # 푸시하지 않으므로 레지스트리가 필요 없다. .docker-build의 전제 검사를 비운다.
   before_script: []
   script:
     - docker build --platform "$TARGET_PLATFORM" --file "$DOCKERFILE" --tag "$CHECK_TAG" $BUILD_ARGS .
+    - test "$(docker image inspect --format '{{.Architecture}}' "$CHECK_TAG")" = arm64
     - docker run --rm --entrypoint nginx "$CHECK_TAG" -t
     # 배포 헬스가 보는 표식이 이미지에 있는지 MR에서 먼저 본다. 없으면 병합 뒤
     # 배포가 헬스 실패로 롤백된다.
@@ -145,11 +145,10 @@ web:image:
         - .gitlab/ci/apps/frontend.yml
 
 build:frontend:
-  extends: .docker-build
+  extends: .docker-build-arm64
   variables:
     DOCKERFILE: apps/frontend/Dockerfile
     IMAGE_NAME: frontend
-    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: "--build-arg VITE_SKY_RENDERER_ENABLED=true --build-arg VITE_CINEMA=true"
   # develop에서는 변경 여부와 관계없이 빌드한다. changes로 거르면 이 앱을 바꾸지 않은
   # 병합의 파이프라인에는 배포 버튼이 없고, 이 앱을 바꾼 이전 파이프라인은 새 커밋에
@@ -159,9 +158,9 @@ build:frontend:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/frontend/package-lock.json]
 
-# 서비스 인스턴스는 EC2-A 하나다(시스템 아키텍처 8장 D4). EC2-B job은 제거했다.
-deploy:frontend:ec2-a:
-  extends: .deploy-ec2-a
+# 운영 서비스는 donh-vnic 하나다. 기존 Compose·최종 볼륨을 보존한다.
+deploy:frontend:donh-vnic:
+  extends: .deploy-donh-vnic
   needs: ["build:frontend"]
   variables:
     IMAGE_NAME: frontend

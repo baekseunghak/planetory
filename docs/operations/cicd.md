@@ -4,6 +4,12 @@
 
 Docker 개발·배포 방식은 [Docker 개발·배포 기준](docker.md), 서버 역할은 [시스템 아키텍처](../architecture/system-architecture.md)를 따른다.
 
+## 서비스·CI 서버 이관과 ARM64 앱 CI (2026-10-02)
+
+운영 서비스는 `claude@donh-vnic`, CI Runner·레지스트리는 `ubuntu@donh-orc2`의 ARM64 환경을 사용한다. 앱 3개의 빌드 job은 `.docker-build-arm64`로 `linux/arm64`를 지정하고 결과 아키텍처를 확인한 뒤 `<commit SHA>-arm64` 태그를 push한다. MR 이미지 검증도 ARM64를 사용한다. Publisher의 amd64 빌드·태그는 유지한다.
+
+수동 `deploy:<앱>:donh-vnic`은 환경·직렬화 그룹 `donh-vnic`/`deploy-donh-vnic`과 별도 목적지 변수를 사용한다. 운영 `/home/claude/planetory/compose.json`·프로젝트 `planetory-service`를 그대로 사용하며 공용 Compose를 덮어쓰지 않는다. 앱 이미지 변수 3개와 최종 DB·세션 외부 볼륨은 운영 설정에 적용했다. GitLab 변수·Runner 태그 설정, 실제 native 앱 build·push·기동과 배포 회귀, CI server lint를 검증했다. **사용자가 Jira 없이 긴급 Git 게시·MR 생성을 승인했다. develop 반영은 MR 병합 후이며 새 앱의 운영 배포는 미실행이다.** [운영 배치](../../infra/service/README.md#현재-운영-배치-2026-10-02), [CI 노드 이관](../../infra/service/ec2-b/README.md#현재-운영-위치-donh-orc2-2026-10-02)와 [배포 상태](../project/service-deploy-status.md)를 따른다.
+
 ## 파일 구성
 
 ```text
@@ -84,7 +90,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 ## 독립 배포
 
 - Frontend·Backend: 서비스 인스턴스는 EC2-A 1개다. EC2-A job만 수동 실행한다. EC2-B job은 `S15P21C206-84`에서 제거했다.
-- 잔차 Worker(`derived-compute`, S15P21C206-88): EC2-A에 `deploy:derived-compute:ec2-a`로 배포한다. HTTP 헬스 경로가 없어 교체만 하고 자동 롤백은 하지 않는다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
+- 잔차 Worker(`derived-compute`, S15P21C206-88): `deploy:derived-compute:donh-vnic`으로 배포한다. 호스트 포트 없이 이미지 `HEALTHCHECK`를 Compose `--wait`로 확인하고 실패하면 직전 이미지로 되돌린다. 첫 배포 순서는 [서비스 배포 안내](../../infra/service/README.md) 「첫 배포 절차」를 따른다.
 - GCP 분산 시스템: CI 배포 job이 없다. 아래 「GCP 분산 시스템」을 따른다.
 - Publisher: 기준 브랜치에서 이미지만 빌드한다. EC2-A의 Gold 목업 적재(`gold-mock` profile)가 이 이미지를 쓴다(`S15P21C206-262`).
 - 이미지는 한 번 만들고 모든 대상 노드가 동일한 commit SHA 태그를 사용한다.
@@ -100,7 +106,7 @@ MR은 가볍게, 전체 테스트는 병합 뒤에 돈다. 백엔드 테스트 �
 
 `changes`로 거르면 배포가 조용히 누락된다. 그 앱을 바꾸지 않은 병합의 파이프라인에는 배포 버튼이 없고, 그 앱을 바꾼 이전 파이프라인은 새 커밋에 자동 취소된다(`auto_cancel_pending_pipelines: enabled`). 기본 취소 방식은 `interruptible: false`인 job이 **이미 시작된** 파이프라인만 남기므로, 누르지 않은 수동 배포는 함께 취소된다. 2026-09-23 백엔드 병합 4건이 빌드만 되고 배포되지 못한 채 운영이 `e510d1da`에 머물렀다. 취소는 실패가 아니라 파이프라인이 빨갛게 뜨지 않는다.
 
-옛 버튼은 GitLab이 막는다. 배포 job에 `environment: ec2-a`를 두면 프로젝트 설정 "옛 배포 job 막기"(`ci_forward_deployment_enabled`)가 걸려, 더 새 배포가 있는 상태에서 옛 파이프라인의 배포 job을 실패시킨다. environment는 **노드 하나**다. 배포 job이 노드 공용 `compose.yaml`을 함께 올리므로, 서비스별로 나누면 옛 백엔드 버튼이 옛 compose를 올려도 "백엔드로는 최신"이라 막히지 않는다. `resource_group`을 노드 단위로 두는 것과 같은 이유다.
+옛 버튼은 GitLab이 막는다. 새 배포 job은 `environment: donh-vnic`을 사용하며 프로젝트 설정 "옛 배포 job 막기"(`ci_forward_deployment_enabled`)가 걸려, 더 새 배포가 있는 상태에서 옛 파이프라인의 배포 job을 실패시킨다. environment와 `resource_group`은 공용 `.env`를 갱신하는 **노드 하나**로 유지한다. 아래 EC2-A 사례와 후보는 이관 전 기록이다. 새 job은 운영 Compose를 덮어쓰지 않는다.
 
 **막히는 것은 한 번도 실행하지 않은 옛 manual job의 Play다.** 2026-09-26 파이프라인 `222890`의 `deploy:backend:ec2-a`(더 새 `222918`이 배포된 뒤)를 Play하자 403으로 거절됐고 job은 `manual`로 남았다(`S15P21C206-262`).
 
@@ -149,8 +155,9 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 | 구분 | 변수 |
 | --- | --- |
-| 공통 SSH | `DEPLOY_USER`(전용 배포 계정 이름). SSH 키 변수는 두지 않는다 |
-| EC2 | `EC2_A_HOST`(Tailscale IP), `EC2_A_DEPLOY_PATH`. `EC2_B_*`는 파일에 남아 있으나 사용하지 않는다 |
+| 서비스 SSH | `SERVICE_DEPLOY_USER=claude`. 환경 범위 `donh-vnic`. SSH 키 변수는 두지 않는다 |
+| 서비스 목적지 | `SERVICE_DEPLOY_HOST`(Tailscale IP), `SERVICE_DEPLOY_PATH=/home/claude/planetory`. 환경 범위 `donh-vnic` |
+| 이전 EC2 | `DEPLOY_USER`·`EC2_A_HOST`·`EC2_A_DEPLOY_PATH`는 이전 파이프라인용으로 유지한다. 새 목적지로 바꾸지 않는다 |
 | GCP 서버 `.env` | `GCP_ZONE`, `GCP_NODE_1_PROJECT`~`GCP_NODE_6_PROJECT` |
 | 레지스트리 | `REGISTRY_IMAGE_PREFIX` (`<레지스트리 호스트>:<포트>/<네임스페이스>`) |
 | Node 1 Airflow | 서버 `.env`의 `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DATABASE_URL`, `AIRFLOW_FERNET_KEY`, `AIRFLOW_WEBSERVER_SECRET_KEY`, `AIRFLOW_DB_PATH`, `AIRFLOW_LOGS_PATH` |
@@ -163,7 +170,7 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 | 항목 | 값 |
 | --- | --- |
-| 호스트 | 빌드 노드. Tailscale IP에만 바인딩해 tailnet 외부로 열지 않는다 |
+| 호스트 | `donh-orc2.tail97e363.ts.net:5000`(2026-10-02). Tailscale 주소에만 바인딩해 tailnet 외부로 열지 않는다 |
 | 전송 | `tailscale cert`로 발급한 MagicDNS 이름의 정식 인증서로 HTTPS 서빙 |
 | 인증 | 없음. tailnet 접근 자체가 경계다 |
 | 저장 경로 | 빌드 노드의 별도 디렉터리 |
@@ -171,7 +178,7 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 정식 인증서를 쓰므로 배포 노드에 `insecure-registries` 설정이 필요 없다. 인증서는 만료 전에 `tailscale cert`를 다시 실행하고 레지스트리 컨테이너를 재시작해 갱신한다. 갱신을 놓치면 빌드와 배포가 함께 멈춘다.
 
-이미지 태그는 커밋 SHA다. 커밋마다 쌓이므로 저장소별로 최신 10개만 남기고 정리한다. 최신 판단은 이미지 config의 생성 시각으로 하며, 시각을 읽지 못하면 그 저장소는 건드리지 않는다. 배포 중인 SHA는 `--in-use`로 보호하고, 매니페스트 삭제만으로는 용량이 줄지 않으므로 빌드가 없는 시간에 가비지 수집을 함께 돌린다. 절차와 주의점은 [EC2-B 설정](../../infra/service/ec2-b/README.md)을 따른다.
+이미지 태그는 커밋 SHA다. 운영 일일 정리는 저장소별로 최신 30개(`PRUNE_KEEP`)를 남긴다. 정리 도구 단독 기본값은 10개다. 최신 판단은 이미지 config의 생성 시각으로 하며, 시각을 읽지 못하면 그 저장소는 건드리지 않는다. 배포 중인 SHA는 `--in-use`로 보호하고, 매니페스트 삭제만으로는 용량이 줄지 않으므로 빌드가 없는 시간에 가비지 수집을 함께 돌린다. 절차와 주의점은 [EC2-B 설정](../../infra/service/ec2-b/README.md)을 따른다.
 
 빌드한 이미지에 비밀값이 섞였는지는 같은 문서의 `image-secret-scan.sh`로 검사한다. 레지스트리가 tailnet 내부 전용이라 외부 노출 위험은 낮지만, 이미지에 박힌 비밀은 레이어에 영구히 남으므로 공개 범위와 무관하게 점검한다.
 
@@ -179,12 +186,11 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 ## Runner 구성
 
-**현재 Runner는 한 대다(2026-09-22 확인).** 빌드 노드의 `planetory-docker-runner` 하나가 `amd64-docker` 태그를 갖고 `run_untagged=true`로 등록되어 태그 job과 무태그 job을 모두 처리한다. 아래 표는 목표 배치이며 aarch64 CI 노드는 아직 등록되지 않았다.
+**현재 Planetory Runner는 한 대다(2026-10-02 확인).** 기존 `planetory-docker-runner`(ID 2146)는 `donh-orc2`의 ARM64 Runner 19.4.0이다. `arm64-docker`를 추가하고 `amd64-docker`·`run_untagged=true`·동시 실행 3을 유지한다. 앱은 native ARM64, 기존 Publisher는 QEMU로 amd64를 빌드한다. 실제 무태그 계약 job과 별도 native 앱 build·push·기동, DinD amd64 build·push·실행이 통과했다.
 
 | Runner | 아키텍처 | 태그 | 맡는 job | 상태 |
 | --- | --- | --- | --- | --- |
-| 빌드 노드 | x86_64 | `amd64-docker` | `.docker-build`를 확장하는 `build:*`, Testcontainers에 dind가 필요한 `backend:test` | 등록됨. 현재 전체 job 처리 |
-| CI 노드 | aarch64 | 없음(untagged 수행) | `validate:*`, `deploy:*` | 미등록 |
+| donh-orc2 | ARM64, amd64는 QEMU | `arm64-docker`·`amd64-docker`·untagged 허용 | 앱 ARM64 빌드·기존 테스트·Publisher | online. 새 CI 소스의 GitLab 실행은 commit·push 후 확인 필요 |
 
 태그 분리는 CI 노드를 붙이는 시점에 의미를 갖는다. 지금은 한 대가 둘 다 받으므로 태그가 job을 가르지 않는다.
 
@@ -192,7 +198,7 @@ GCP 노드에는 CI 배포 job을 두지 않는다. 실제 실행이 CI 이미�
 
 Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수와 다른 값이며, **한 대가 여러 job을 동시에 처리한다.** Runner는 job을 실행하는 셸이 아니라 job마다 컨테이너를 새로 띄우는 관리 프로세스다. 컨테이너 이름의 `concurrent-<n>`이 그 슬롯 번호다.
 
-현재 값은 `3`이다. 등록 기본값 `1`로는 같은 stage의 job이 전부 줄을 섰다. 실측 비교는 아래와 같다.
+현재 값은 `3`이다. 등록 기본값 `1`로는 같은 stage의 job이 전부 줄을 섰다. 아래는 이관 전 x86_64 노드의 실측이며 새 ARM64·QEMU 빌드 성능은 측정하지 않았다.
 
 | | `concurrent = 1` | `concurrent = 3` |
 | --- | --- | --- |
@@ -206,7 +212,7 @@ Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수�
 
 벽시계의 하한은 가장 긴 job 하나다. 현재 `backend:image`가 약 106초이며 그보다 짧아지지 않는다. 더 줄이려면 병렬화가 아니라 이미지 레이어 캐시를 붙여야 한다.
 
-배포 대상이 전부 `linux/amd64`라 이미지 빌드는 x86_64 Runner에서만 실행한다. `.docker-build`에 `tags: [amd64-docker]`를 둔 이유이며, 이 태그를 떼면 job이 aarch64 Runner로 가서 에뮬레이션 설정 없이 실패한다. 빌드 Runner는 dind를 쓰므로 `privileged`가 필요하고, 컨테이너 안에서는 MagicDNS가 해석되지 않으므로 Runner 설정에 레지스트리 이름의 `extra_hosts`를 둔다.
+앱 이미지 job은 `.docker-build-arm64`의 `tags: [arm64-docker]`·`TARGET_PLATFORM=linux/arm64`를 사용한다. `.docker-build`의 `amd64-docker`는 기존 Publisher 빌드를 지원한다([Docker 다중 플랫폼 빌드](https://docs.docker.com/build/building/multi-platform/)). DinD는 `privileged`가 필요하고 컨테이너 안에서는 MagicDNS가 해석되지 않으므로 Runner의 `extra_hosts`에 새 레지스트리 이름을 둔다.
 
 `deploy:*`는 대상 서버에 SSH로만 접속하고 이미지는 대상 서버가 직접 pull한다. 따라서 CI 노드에는 레지스트리 접근 권한이 필요 없다.
 
@@ -214,7 +220,7 @@ Runner의 `concurrent`가 job 동시 실행 수를 정한다. Runner 등록 수�
 
 대상 노드는 `tailscale up --ssh` 상태라 **tailscaled가 22번을 직접 처리한다.** 그래서 `authorized_keys`가 아니라 tailnet 신원으로 인증하며, SSH 키를 배포해도 쓰이지 않는다. job 컨테이너에서 나가는 연결은 Runner 호스트의 tailnet 신원으로 보이고, tailnet ACL의 `ssh` 규칙이 배포 계정을 허용해야 통과한다. 규칙이 없으면 `tailnet policy does not permit you to SSH to this node`로 거부된다.
 
-접속 계정은 CI 전용 `deploy` 하나다. 사람의 관리 계정을 쓰지 않으므로 키·권한을 회수할 때 사람 계정을 건드리지 않아도 되고 접속 주체가 로그에서 갈린다. 이 계정에 `sudo`를 주지 않는다. 배포에 필요한 권한은 `docker` 그룹뿐이다. 계정 생성은 [provision-deploy-user.sh](../../infra/provisioning/provision-deploy-user.sh)가 맡는다.
+현재 서비스는 사용자 지정 계정 `claude`로 `/home/claude/planetory`에 배포한다. 새 CI 신원의 SSH·Docker 접근을 확인했다. 이전 EC2-A는 전용 `deploy` 계정·Docker 그룹을 사용했고 계정 생성은 [provision-deploy-user.sh](../../infra/provisioning/provision-deploy-user.sh)가 맡았다.
 
 **사람의 수동 배포도 `deploy`로 한다(2026-09-23 ACL 변경).** 사람 PC의 tailnet 신원에도 `deploy` SSH를 허용했다. 전에는 `ubuntu`로 들어가 `sudo -u deploy`로 실행했다. 이제 `tailscale ssh deploy@ec2-a`로 바로 `/home/deploy/planetory`에서 `deploy.sh`를 돌린다. 계정만으로는 CI 배포와 사람 배포가 갈리지 않으므로 주체는 Tailscale SSH 접속 기록의 tailnet 신원으로 구분한다. 허용 범위는 tailnet 정책 파일이 정본이다.
 

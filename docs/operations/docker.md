@@ -37,7 +37,7 @@ docker-compose -f compose.yaml up namenode datanode-1 datanode-2
 
 Airflow TESS DAG의 Node 1 배포·접속 상태는 [분산 시스템 운영 절차](../../infra/distributed-system/README.md#airflow-db)를 따른다. 로컬 개발 Compose의 전체 파이프라인 기동과 운영 DAG 실행 검증은 별개다. `docker-compose down -v`는 로컬 볼륨까지 삭제하므로 명시적으로 초기화할 때만 사용한다.
 
-로컬 앱과 데이터 파이프라인은 EC2·GCP와 같은 `linux/amd64`를 기본으로 실행한다.
+로컬 앱과 데이터 파이프라인의 기본 플랫폼은 `linux/amd64`다. 현재 운영 앱의 `donh-vnic`과 CI 노드 `donh-orc2`는 ARM64이며 앱 CI가 플랫폼을 별도로 지정한다.
 
 ## 실제 배포
 
@@ -57,14 +57,14 @@ Airflow TESS DAG의 Node 1 배포·접속 상태는 [분산 시스템 운영 절
 ```text
 기준 브랜치 변경
   → GitLab CI가 필요한 Dockerfile만 빌드
-  → linux/amd64 이미지 생성
-  → 자체 호스팅 레지스트리에 commit SHA 태그로 push
+  → 서비스 앱은 linux/arm64 이미지 생성·아키텍처 확인
+  → 자체 호스팅 레지스트리에 <commit SHA>-arm64 태그로 push
   → 노드별 수동 deploy job
-  → SSH로 대상 서버의 Compose 파일 갱신
+  → SSH로 대상 서버의 기존 Compose 파일·프로젝트 사용
   → 해당 이미지만 pull·재시작
 ```
 
-- EC2-A: `infra/service/compose.yaml`, `linux/amd64`. 서비스 인스턴스는 이 노드 1개이고 EC2-B는 배포 대상이 아니다
+- 서비스: `claude@donh-vnic`의 `/home/claude/planetory/compose.json`, 프로젝트 `planetory-service`, `linux/arm64`. 앱 CI는 이 파일을 덮어쓰지 않고 이미지 변수와 `deploy.sh`만 갱신한다. 최종 DB·세션 볼륨은 이름을 고정한 외부 볼륨이다. 서비스 인스턴스는 한 대이며 `donh-orc2`는 CI·레지스트리만 맡는다. [운영 배치](../../infra/service/README.md#현재-운영-배치-2026-10-02)를 따른다.
 - GCP Node 1~6: 위 흐름을 쓰지 않는다. CI 배포 job이 없고, 코드는 불변 release 디렉터리로 운영자 스크립트가 설치한다(`S15P21C206-94`, [CI/CD](cicd.md) 「GCP 분산 시스템」). Node 1의 Airflow는 release에서 직접 빌드한 로컬 이미지, Spark 제출은 digest를 고정한 공개 이미지로 돈다. `compose.control-plane.yaml`은 Airflow release가 쓰고, `compose.worker.yaml`은 지금 쓰는 경로가 없다.
 - 서버의 `.env`에 실제 경로와 비밀 값을 보관한다. 레지스트리는 tailnet 내부 전용이라 노드에 별도 로그인을 설정하지 않는다.
 - 이전 커밋 SHA 이미지를 다시 배포할 수 있어야 한다. DB migration과 Gold 릴리스 전환은 이미지 되돌리기와 별도 절차다.

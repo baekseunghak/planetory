@@ -5,3 +5,4 @@
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
 | --- | --- | --- | --- | --- | --- |
 | 2026-10-07 | 275 병합 전 다각도 자체 리뷰: Silver 전용 잠금, 예산 Available 상한, v5 문서 정정, BLS 격자 과학 확인 필요 | S15P21C206-275 | SILVER_LOCK_PREFIX, Available, hdfs_glob, v5, BLS 주기 격자, TOI-700, 재시작 공백, 선택 인덱스 | 구현·오프라인 검증 완료, release 설치 전 | [기록](2026-10-07.md) |
+| 2026-10-07 | ARM64 서비스 CI 브랜치에 최신 develop 병합과 대표 Jira 연결 | S15P21C206-294 | ARM64, donh-vnic, MR 259, develop, merge | 충돌 없음·Jira 진행 중·MR 제목 갱신 | [기록](2026-10-07.md) |
