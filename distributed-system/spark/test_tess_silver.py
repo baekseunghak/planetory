@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import io
 import importlib.util
@@ -539,19 +540,19 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
     def test_restartable_failure_discards_staging_but_contract_failure_keeps_it(self):
         args = SimpleNamespace(command="run", release_dir=".", run_id="20260924T000000Z", state_root="/tmp/state",
                                pipeline_version="v", output_partitions=1, shuffle_partitions=1)
-        coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
-                    "bronze_paths": []}
+        snapshot = {"sha256": "a" * 64, "schema": "s", "sectors": [], "coverage": None}
         for error, discards in ((RuntimeError("YARN application ended as FAILED"), True),
                                 (SilverDataContractError("bad input"), False)):
             written = []
             with self.subTest(error=type(error).__name__), \
+                    patch("tess_silver_ctl.silver_capacity_budget", return_value=10**12), \
                     patch("tess_silver_ctl.build_runtime", return_value="/runtime"), \
                     patch("tess_silver_ctl.prepare_paths"), \
                     patch("tess_silver_ctl.write_state", side_effect=lambda path, state: written.append(dict(state))), \
                     patch("tess_silver_ctl.submit", side_effect=error), \
                     patch("tess_silver_ctl.discard_failed_attempt", return_value=True) as discard:
                 with self.assertRaises(type(error)):
-                    run_attempt(args=args, coverage=coverage)
+                    run_attempt(args=args, snapshot=snapshot)
                 self.assertEqual(discard.called, discards)
                 self.assertEqual(written[-1]["status"], "failed" if discards else "terminal_failed")
                 self.assertEqual(written[-1]["unit"], "planetory-tess-silver-20260924T000000Z.service")
@@ -563,15 +564,16 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             captured.extend(command)
             raise RuntimeError("stop after capturing the command")
 
-        coverage = {"coverage_sha256": "a" * 64, "ready_sha256": "b" * 64, "pipeline_version": "p",
-                    "bronze_paths": ["/lake/bronze/tess/sector=0001"]}
+        snapshot = {"sha256": "a" * 64, "sectors": [
+            {"sector": 1, "location": "/lake/bronze/tess/sector=0001", "pipeline_version": "p"}]}
         with patch("tess_silver_ctl.subprocess.Popen", side_effect=popen), \
                 patch("tess_bronze_ctl.hdfs_exists", return_value=True), \
                 self.assertRaisesRegex(RuntimeError, "stop after"):
             submit(release_dir=Path("/opt/planetory-silver/releases/20260924T000000Z"),
-                   runtime_hdfs="/runtime.tar.gz", coverage=coverage, run_id="20260924T000000Z",
+                   runtime_hdfs="/runtime.tar.gz", snapshot=snapshot, run_id="20260924T000000Z",
                    attempt_id="20260924T000100Z", pipeline_version="v", output="/o", final_output="/f",
-                   output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={})
+                   output_partitions=80, shuffle_partitions=500, state_file=Path("state.json"), state={},
+                   capacity_budget_bytes=1)
         for conf in ("spark.executorEnv.OMP_NUM_THREADS=1",
                      "spark.eventLog.enabled=true", "spark.eventLog.dir=hdfs://planetory/spark-history"):
             with self.subTest(conf=conf):
@@ -603,7 +605,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
         self.assertEqual(repr(call(full, preprocess, lambda *a, **k: search_result())),
                          repr(call(slim, preprocess, lambda *a, **k: search_result())))
         source = inspect.getsource(tess_silver.run)
-        self.assertIn("bronze.select(*SILVER_INPUT_COLUMNS).rdd", source)
+        self.assertIn("inputs.select(*SILVER_INPUT_COLUMNS).rdd", source)
 
     def test_tic_results_are_computed_before_any_coalesced_write(self):
         # A lazy persist would run all BLS work inside the coalesced write tasks.
@@ -661,7 +663,7 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
             validate_bronze_coverage(coverage, markers)
 
     def test_attempt_ready_schema_is_versioned(self):
-        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v4")
+        self.assertEqual(SILVER_READY_SCHEMA, "planetory.tess-silver-attempt.v5")
 
     def test_coverage_path_cannot_escape_the_bronze_snapshot_root(self):
         for path in ("/tmp/coverage=" + "a" * 64,
@@ -671,10 +673,345 @@ class SilverSparkOperatorContractTest(unittest.TestCase):
                 bronze_coverage(path)
 
     def test_canary_filters_tic_before_row_scans(self):
-        source = (Path(__file__).resolve().parent / "tess_silver.py").read_text(encoding="utf-8")
-        self.assertLess(source.index('if args.tic_id:\n                bronze = bronze.filter'),
-                        source.index('bronze.filter(functions.col("schema_version")'))
-        self.assertIn('if not args.tic_id and not args.retry_manifest:', source)
+        source = inspect.getsource(tess_silver.run)
+        # The TIC filter shrinks the cached key rows before the checks, and again the array rows before BLS.
+        self.assertLess(source.index('base = base.filter(functions.col("tic_id").isin(args.tic_id))'),
+                        source.index("base.persist("))
+        self.assertIn('inputs = inputs.filter(functions.col("tic_id").isin(args.tic_id))', source)
+        self.assertIn('if not args.tic_id and not args.retry_manifest and not args.delta_from_sector:', source)
+
+
+class SilverIncrementalContractTest(unittest.TestCase):
+    """275: cumulative Sector snapshot, changed-TIC selection and the HDFS capacity guard."""
+
+    DF = "Filesystem Size Used Available Use%\nhdfs://planetory 10026228858880 6460597239808 3565547732992 64%\n"
+
+    @staticmethod
+    def marker(sector, version):
+        return {"schema": "planetory.tess-bronze-sector.v1", "data_schema": "planetory.tess-bronze.v1",
+                "sector": sector, "pipeline_version": version, "product_count": 10,
+                "observation_count": 100, "replication": 2}
+
+    def sector_snapshot(self, versions, finished=None):
+        finished = set(versions) if finished is None else finished
+        listing = "\n".join(f"-rw-r--r-- 2 hdfs hdfs 0 2026-09-22 00:00 /lake/bronze/tess/sector={s:04d}/_SUCCESS"
+                            for s in sorted(finished))
+        markers = {f"/lake/bronze/tess/sector={s:04d}/_READY.json": (self.marker(s, v), f"{s:064x}")
+                   for s, v in versions.items()}
+        with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=listing, returncode=0)), \
+                patch("tess_silver_ctl.hdfs_json", side_effect=lambda path: markers[path]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return tess_silver_ctl.bronze_sector_snapshot(max(versions))
+
+    def test_sector_snapshot_pins_each_sector_version_and_shares_the_coverage_id(self):
+        snapshot = self.sector_snapshot({1: "bronze-a", 2: "bronze-a", 3: "bronze-b"})
+        self.assertEqual([row["pipeline_version"] for row in snapshot["sectors"]], ["bronze-a", "bronze-a", "bronze-b"])
+        self.assertEqual(snapshot["sectors"][2]["ready_sha256"], f"{3:064x}")
+        self.assertIsNone(snapshot["coverage"])
+        # The ID depends on the Sector rows only, so a coverage-derived snapshot of the same rows matches.
+        same = tess_silver_ctl.snapshot_from_rows(list(reversed(snapshot["sectors"])), coverage="/lake/x")
+        self.assertEqual(same["sha256"], snapshot["sha256"])
+        changed = [dict(row) for row in snapshot["sectors"]]
+        changed[2]["ready_sha256"] = "f" * 64
+        self.assertNotEqual(tess_silver_ctl.snapshot_from_rows(changed, coverage=None)["sha256"], snapshot["sha256"])
+
+    def test_sector_snapshot_refuses_unfinished_or_mismatched_markers(self):
+        with self.assertRaisesRegex(SilverDataContractError, "incomplete sector=2"):
+            self.sector_snapshot({1: "v", 2: "v"}, finished={1})
+        for key, value in (("sector", 9), ("replication", 1), ("product_count", 0), ("pipeline_version", "a b"),
+                           ("schema", "other")):
+            marker = self.marker(1, "v")
+            marker[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(SilverDataContractError, "sector=1"):
+                tess_silver_ctl.validate_sector_marker(1, marker)
+
+    def test_capacity_budget_stops_at_the_planned_usage_line(self):
+        # 2026-09-27 inspection: 64.44% used leaves about 1,560 GB (RF2) below the 80% line.
+        budget = tess_silver_ctl.capacity_budget(self.DF)
+        self.assertEqual(budget, int(10026228858880 * 0.80) - 6460597239808)
+        self.assertAlmostEqual(budget / 1e9, 1560.4, places=0)
+        self.assertEqual((tess_silver_ctl.SILVER_CAPACITY_LIMIT, tess_silver_ctl.PREFLIGHT_STOP_PERCENT), (0.80, 85))
+        # Non-DFS use on the shared disks (YARN local dirs) caps the budget at Available.
+        crowded = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 600 50 60%\n"
+        self.assertEqual(tess_silver_ctl.capacity_budget(crowded), 50)
+        full = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 800 200 80%\n"
+        with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=full)), \
+                self.assertRaisesRegex(SilverDataContractError, "no Silver capacity"):
+            tess_silver_ctl.silver_capacity_budget()
+
+    def test_estimate_reproduces_the_measured_sector_1_to_13_attempt(self):
+        # attempt=20260924T133730Z: 247,824 products, 128,258 TICs, 683,026,561,628 bytes RF2.
+        estimate = tess_silver.estimate_output_bytes(247824, 128258)
+        self.assertLess(abs(estimate - 683026561628) / 683026561628, 0.001)
+
+    def test_silver_preflight_refuses_a_second_silver_application(self):
+        listing = ("Total number of applications:1\n                Application-Id\tApplication-Name\n"
+                   "application_1_0001\tS15P21C206-78-silver-20260927T000000Z-20260927T000100Z\tSPARK\n")
+        args = SimpleNamespace(through_sector=14, bronze_coverage=tess_silver_ctl.DEFAULT_BRONZE_COVERAGE)
+        with patch("tess_silver_ctl.yarn", return_value=SimpleNamespace(stdout=listing)), \
+                patch("tess_silver_ctl.cluster_preflight") as shared, \
+                self.assertRaisesRegex(RuntimeError, "another Silver application"):
+            tess_silver_ctl.silver_preflight(args)
+        shared.assert_not_called()
+        idle = listing.replace("application_1_0001\tS15P21C206-78-silver", "application_1_0002\tS15P21C206-77-bronze")
+        with patch("tess_silver_ctl.yarn", return_value=SimpleNamespace(stdout=idle)), \
+                patch("tess_silver_ctl.cluster_preflight", return_value={"sha256": "a"}) as shared:
+            tess_silver_ctl.silver_preflight(args)
+        shared.assert_called_once_with(args.bronze_coverage, through_sector=14)
+
+    def test_gold_keeps_its_coverage_preflight_and_silver_input_fields(self):
+        # 80 Gold calls cluster_preflight(<coverage path>) and re-audits its v4 Silver input against
+        # coverage_sha256/ready_sha256; 275 must not change either for the coverage path.
+        self.assertEqual(list(inspect.signature(tess_silver_ctl.cluster_preflight).parameters)[0], "bronze_coverage_path")
+        self.assertEqual(tess_silver_ctl.SILVER_INPUT_SCHEMAS,
+                         ("planetory.tess-silver-attempt.v4", "planetory.tess-silver-attempt.v5"))
+        coverage_sha = "c" * 64
+        path = f"/lake/bronze/tess/coverage={coverage_sha}"
+        rows = [{"sector": s, "location": f"/lake/bronze/tess/sector={s:04d}", "ready_sha256": f"{s:064x}",
+                 "product_count": 10, "observation_count": 100} for s in range(1, 14)]
+        value = {"schema": "planetory.tess-bronze-coverage.v1", "pipeline_version": "bronze-a", "product_count": 130,
+                 "observation_count": 1300, "replication": 2, "sectors": rows}
+        markers = {f"{row['location']}/_READY.json": (self.marker(row["sector"], "bronze-a"), row["ready_sha256"])
+                   for row in rows}
+        markers[f"{path}/_READY.json"] = (value, "d" * 64)
+        with patch("tess_silver_ctl.hdfs_json", side_effect=lambda p: markers[p]), \
+                patch("tess_silver_ctl.hdfs_exists", return_value=True), contextlib.redirect_stdout(io.StringIO()):
+            snapshot = tess_silver_ctl.bronze_coverage(path)
+        self.assertEqual((snapshot["coverage_sha256"], snapshot["ready_sha256"]), (coverage_sha, "d" * 64))
+        self.assertEqual(snapshot["bronze_paths"], [row["location"] for row in rows])
+        self.assertEqual(snapshot["coverage"], path)
+
+    def test_submit_passes_every_sector_version_and_the_selection(self):
+        captured = []
+
+        def popen(command, **kwargs):
+            captured.extend(command)
+            raise RuntimeError("stop after capturing the command")
+
+        snapshot = tess_silver_ctl.snapshot_from_rows([
+            {"sector": s, "location": f"/lake/bronze/tess/sector={s:04d}", "ready_sha256": "a" * 64,
+             "pipeline_version": "bronze-a" if s < 14 else "bronze-b", "product_count": 1, "observation_count": 1}
+            for s in (1, 14)], coverage=None)
+        with patch("tess_silver_ctl.subprocess.Popen", side_effect=popen), \
+                patch("tess_bronze_ctl.hdfs_exists", return_value=False), \
+                contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, "stop after"):
+            submit(release_dir=Path("/opt/planetory-silver/releases/20260927T000000Z"), runtime_hdfs="/r.tar.gz",
+                   snapshot=snapshot, run_id="20260927T000000Z", attempt_id="20260927T000100Z",
+                   pipeline_version="v", output="/o", final_output="/f", output_partitions=80,
+                   shuffle_partitions=200, state_file=Path("state.json"), state={}, capacity_budget_bytes=123,
+                   selection={"delta_from_sector": 14, "tic_buckets": 16, "tic_bucket": 3})
+        job = captured[captured.index("/opt/planetory/tess_silver.py") + 1:]
+        parsed = tess_silver.parse_args(job)
+        self.assertEqual(parsed.bronze_versions, {1: "bronze-a", 14: "bronze-b"})
+        self.assertEqual((parsed.delta_from_sector, parsed.tic_buckets, parsed.tic_bucket), (14, 16, 3))
+        self.assertEqual((parsed.bronze_snapshot_sha256, parsed.capacity_budget_bytes), (snapshot["sha256"], 123))
+
+    def job_args(self, *extra):
+        return ["--bronze-path", "hdfs://planetory/lake/bronze/tess/sector=0001", "--bronze-sector-version", "1=a",
+                "--bronze-path", "hdfs://planetory/lake/bronze/tess/sector=0014", "--bronze-sector-version", "14=b",
+                "--bronze-snapshot-sha256", "a" * 64, "--capacity-budget-bytes", "1", "--pipeline-version", "v",
+                "--run-id", "20260927T000000Z", "--attempt-id", "20260927T000100Z", "--output", "/o",
+                "--final-output", "/f", *extra]
+
+    def test_job_rejects_inconsistent_snapshot_and_selection_arguments(self):
+        tess_silver.parse_args(self.job_args("--delta-from-sector", "14", "--tic-buckets", "4", "--tic-bucket", "3"))
+        for extra in (["--delta-from-sector", "13"],
+                      ["--delta-from-sector", "14", "--tic-buckets", "4", "--tic-bucket", "4"],
+                      ["--tic-buckets", "4"],
+                      ["--delta-from-sector", "14", "--tic-id", "5"],
+                      ["--bronze-sector-version", "14=c"],
+                      ["--capacity-budget-bytes", "-1"]):
+            with self.subTest(extra=extra), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                tess_silver.parse_args(self.job_args(*extra))
+
+    def test_controller_rejects_selection_without_a_sector_snapshot(self):
+        valid = SimpleNamespace(through_sector=70, delta_from_sector=14, tic_buckets=16, tic_bucket=15)
+        tess_silver_ctl.validate_snapshot_request(valid)
+        for values in ({"through_sector": None}, {"delta_from_sector": 71}, {"tic_bucket": 16},
+                       {"delta_from_sector": None}, {"through_sector": 0}):
+            with self.subTest(values=values), self.assertRaises(SilverDataContractError):
+                tess_silver_ctl.validate_snapshot_request(SimpleNamespace(**{**vars(valid), **values}))
+
+    def test_changed_tics_keep_all_snapshot_rows_and_are_chosen_before_row_scans(self):
+        source = inspect.getsource(tess_silver.select_changed_tics)
+        self.assertIn('"left_semi"', source)
+        self.assertIn("functions.pmod(", source)
+        # The bucket narrows the rows first, so the changed set is computed within one bucket only.
+        self.assertLess(source.index("functions.pmod("), source.index('functions.col("sector") >= delta_from_sector'))
+        run = inspect.getsource(tess_silver.run)
+        self.assertLess(run.index("select_changed_tics("), run.index('functions.col("schema_version")'))
+        # The capacity guard must refuse before any TIC is grouped for BLS.
+        self.assertLess(run.index('"capacity_budget_exceeded"'), run.index("groupByKey("))
+        # The version map is read only for snapshot Sectors (no ANSI missing-key lookup).
+        self.assertIn('in_snapshot, ~functions.col("pipeline_version").eqNullSafe(versions[functions.col("sector")])',
+                      run)
+
+    def test_input_checks_read_bronze_arrays_once_and_never_shuffle_them_for_selection(self):
+        # 2026-09-27 Sector 14 run: every check re-ran the left_semi selection over all Bronze rows
+        # (about 30 minutes for 14 Sectors) and BLS input shuffled the array rows once more.
+        run = inspect.getsource(tess_silver.run)
+        checks = run[:run.index("groupByKey(")]
+        self.assertIn("base = bronze.select(*BRONZE_KEY_COLUMNS)", checks)
+        self.assertLess(checks.index("base.persist("), checks.index("select_changed_tics("))
+        self.assertEqual(checks.count("keys.agg("), 1)
+        self.assertNotIn(".limit(1).count()", checks)
+        self.assertNotIn("bronze.count()", checks)
+        self.assertIn('inputs.join(functions.broadcast(selected_ids), "tic_id", "left_semi")', checks)
+        self.assertEqual(tess_silver.BRONZE_KEY_COLUMNS, ("tic_id", "sector", "schema_version", "pipeline_version"))
+
+    def test_attempt_marker_records_the_snapshot_selection_and_capacity(self):
+        snapshot = tess_silver_ctl.snapshot_from_rows([
+            {"sector": 14, "location": "/lake/bronze/tess/sector=0014", "ready_sha256": "a" * 64,
+             "pipeline_version": "bronze-b", "product_count": 1, "observation_count": 1}], coverage=None)
+        summary = {"contract_ok": True, "manifest_tics": 2, "science_audit_json": "[]", "selected_tics": 2,
+                   "selected_products": 3, "estimated_output_bytes": 99, "succeeded_tics": 1,
+                   "no_quality_peak_tics": 1, "failed_tics": 0, "retryable_failed_tics": 0, "iteration_tics": 2,
+                   "iteration_succeeded_tics": 2, "iteration_incomplete_tics": 0, "iteration_qa_stopped_tics": 0,
+                   "iteration_failed_tics": 0, "bronze_snapshot_sha256": snapshot["sha256"]}
+        written = {}
+
+        def hdfs(*argv, input_text=None, **kwargs):
+            if input_text is not None:
+                written["marker"] = json.loads(input_text)
+            return SimpleNamespace(stdout=json.dumps(summary) if "-cat" in argv else "")
+
+        kwargs = dict(release_dir=Path("/r"), snapshot=snapshot, run_id="20260927T000000Z",
+                      attempt_id="20260927T000100Z", pipeline_version="v", output="/o", final="/f",
+                      application_id="application_1_0001", capacity_budget_bytes=500,
+                      selection={"delta_from_sector": 14, "tic_buckets": 16, "tic_bucket": 0}, operation="run")
+        with patch("tess_silver_ctl.hdfs", side_effect=hdfs), \
+                patch("tess_silver_ctl.part_checksum_digest", return_value=(1, "c" * 64)), \
+                patch("tess_silver_ctl.fsck_healthy"), patch("tess_silver_ctl.atomic_commit"), \
+                patch("tess_silver_ctl.hdfs_exists", side_effect=lambda path: path != "/f"), \
+                patch("tess_silver_ctl.audit_attempt") as audit, contextlib.redirect_stdout(io.StringIO()):
+            tess_silver_ctl.finalize_attempt(**kwargs)
+            marker = written["marker"]
+            self.assertEqual(marker["schema"], "planetory.tess-silver-attempt.v5")
+            self.assertEqual(marker["bronze_snapshot_sha256"], snapshot["sha256"])
+            self.assertEqual(marker["bronze_snapshot"]["sectors"][0]["pipeline_version"], "bronze-b")
+            self.assertEqual(marker["selection"], kwargs["selection"])
+            self.assertEqual(marker["operation"], "run")  # the planner reads it back as increment coverage
+            # A Sector snapshot has no coverage, so Gold's coverage re-audit refuses this attempt.
+            self.assertEqual((marker["bronze_coverage_sha256"], marker["bronze_coverage_ready_sha256"]), (None, None))
+            self.assertEqual((marker["selected_products"], marker["estimated_output_bytes"],
+                              marker["capacity_budget_bytes"]), (3, 99, 500))
+            self.assertEqual(audit.call_args.args[1]["bronze_snapshot_sha256"], snapshot["sha256"])
+            summary["bronze_snapshot_sha256"] = "d" * 64
+            with self.assertRaisesRegex(SilverDataContractError, "submitted Bronze snapshot"):
+                tess_silver_ctl.finalize_attempt(**kwargs)
+
+
+class SilverIncrementPlanTest(unittest.TestCase):
+    """275 plan: one increment rule for the backlog and every later Sector, recomputed from HDFS evidence."""
+
+    V4 = {"schema": "planetory.tess-silver-attempt.v4", "bronze_coverage_sha256": "a" * 64}
+
+    @staticmethod
+    def v5(through, selection=None, operation="run", estimated=100):
+        return {"schema": "planetory.tess-silver-attempt.v5", "operation": operation, "selection": selection,
+                "estimated_output_bytes": estimated,
+                "bronze_snapshot": {"sectors": [{"sector": s} for s in range(1, through + 1)]}}
+
+    @staticmethod
+    def bucket(through, start, buckets, bucket, estimated=100):
+        return SilverIncrementPlanTest.v5(through, {"delta_from_sector": start, "tic_buckets": buckets,
+                                                    "tic_bucket": bucket}, estimated=estimated)
+
+    def test_bronze_watermark_is_the_last_contiguous_final_sector(self):
+        listing = "\n".join(f"-rw-r--r-- 2 u g 0 2026-09-22 00:00 /lake/bronze/tess/sector={s:04d}/_SUCCESS"
+                            for s in (*range(1, 15), 16))
+        self.assertEqual(tess_silver_ctl.bronze_through(listing), 14)
+        self.assertEqual(tess_silver_ctl.bronze_through(""), 0)
+
+    def test_each_marker_names_the_coverage_it_completes(self):
+        inc = tess_silver_ctl.attempt_increment
+        self.assertEqual(inc(self.V4), (13, 1, 1, 0))
+        self.assertEqual(inc(self.bucket(70, 15, 16, 3)), (70, 15, 16, 3))
+        self.assertEqual(inc(self.v5(20)), (20, 1, 1, 0))
+        # A retry and a canary repeat or sample other attempts, and other schemas are not Silver coverage.
+        self.assertIsNone(inc(self.v5(20, operation="retry")))
+        self.assertIsNone(inc(self.v5(20, operation=None)))
+        self.assertIsNone(inc({"schema": "planetory.tess-silver-attempt.v3"}))
+
+    def test_watermark_advances_only_through_finished_increments(self):
+        progress = tess_silver_ctl.silver_progress
+        inc = tess_silver_ctl.attempt_increment
+        self.assertEqual(progress([]), (0, None, set()))
+        # 2026-09-27 state: Sector 1~13 original (v4) and the Sector 14 increment.
+        today = [inc(self.V4), inc(self.bucket(14, 14, 1, 0))]
+        self.assertEqual(progress(today), (14, None, set()))
+        partial = today + [inc(self.bucket(70, 15, 16, k)) for k in (0, 3)]
+        self.assertEqual(progress(partial), (14, (70, 15, 16), {0, 3}))
+        finished = today + [inc(self.bucket(70, 15, 16, k)) for k in range(16)]
+        self.assertEqual(progress(finished), (70, None, set()))
+        # An increment that would skip Sectors is not coverage; two open ones at once are a conflict.
+        self.assertEqual(progress(today + [inc(self.bucket(70, 20, 4, 0))]), (14, None, set()))
+        with self.assertRaisesRegex(SilverDataContractError, "more than one unfinished"):
+            progress(partial + [inc(self.bucket(69, 15, 8, 0))])
+
+    def test_buckets_are_only_a_capacity_split(self):
+        self.assertEqual(tess_silver_ctl.plan_buckets(72_910_470_000), 1)  # the Sector 14 run
+        self.assertEqual(tess_silver_ctl.plan_buckets(3_000_000_000_000), 15)
+        self.assertEqual(tess_silver_ctl.plan_buckets(0), 1)
+        step = tess_silver_ctl.next_step((70, 15, 16), {0, 1, 3}, 190, 482)
+        self.assertEqual((step["action"], step["tic_bucket"], step["done_buckets"]), ("run", 2, [0, 1, 3]))
+        self.assertEqual(tess_silver_ctl.next_step((70, 15, 16), set(), 500, 482)["action"], "wait_capacity")
+
+    def plan(self, markers, *, active=(), estimate=None):
+        listing = "\n".join(f"/lake/bronze/tess/sector={s:04d}/_SUCCESS" for s in range(1, 71))
+        df = "Filesystem Size Used Available Use%\nhdfs://planetory 1000000 600000 400000 60%\n"
+
+        def hdfs(*argv, **kwargs):
+            return SimpleNamespace(stdout=df if "-df" in argv else listing, returncode=0)
+
+        out = io.StringIO()
+        with patch("tess_silver_ctl.active_silver_work", return_value=list(active)), \
+                patch("tess_silver_ctl.hdfs", side_effect=hdfs), \
+                patch("tess_silver_ctl.committed_silver_markers", return_value=markers), \
+                patch("tess_silver_ctl.plan_estimate", return_value=estimate) as priced, \
+                contextlib.redirect_stdout(out):
+            tess_silver_ctl.command_plan(SimpleNamespace())
+        line = next(line for line in out.getvalue().splitlines() if line.startswith("SILVER_PLAN_JSON="))
+        return json.loads(line.removeprefix("SILVER_PLAN_JSON=")), priced
+
+    def test_plan_starts_the_backlog_increment_from_todays_evidence(self):
+        value, priced = self.plan([self.V4, self.bucket(14, 14, 1, 0)], estimate=90_000)  # fits the fake budget
+        priced.assert_called_once()
+        self.assertEqual(priced.call_args.args[1:], (70, 15))
+        self.assertEqual((value["bronze_through"], value["silver_through"]), (70, 14))
+        self.assertEqual((value["action"], value["through_sector"], value["delta_from_sector"],
+                          value["tic_buckets"], value["tic_bucket"]), ("run", 70, 15, 1, 0))
+        self.assertEqual(value["capacity_budget_bytes"], 200000)  # 80% of the fake 1,000,000 minus 600,000
+
+    def test_plan_continues_an_open_increment_without_repricing(self):
+        markers = [self.V4, self.bucket(14, 14, 1, 0), self.bucket(70, 15, 16, 0, 150), self.bucket(70, 15, 16, 1, 170)]
+        value, priced = self.plan(markers)
+        priced.assert_not_called()
+        self.assertEqual((value["tic_buckets"], value["tic_bucket"], value["estimated_bucket_bytes"]), (16, 2, 170))
+        self.assertEqual(value["action"], "run")  # 170 fits the 100000 budget of this fake df
+
+    def test_plan_waits_while_silver_runs_and_idles_when_caught_up(self):
+        value, priced = self.plan([], active=["planetory-tess-silver-20260927T020101Z.service"])
+        self.assertEqual(value["action"], "busy")
+        priced.assert_not_called()
+        caught_up = [self.V4] + [self.bucket(70, 14, 1, 0)]
+        value, _ = self.plan(caught_up)
+        self.assertEqual((value["action"], value["silver_through"]), ("idle", 70))
+
+    def test_plan_listing_failure_stops_instead_of_reading_as_empty(self):
+        missing = SimpleNamespace(returncode=1, stdout="ls: `/lake/x': No such file or directory\n")
+        down = SimpleNamespace(returncode=1, stdout="ls: Call From a to b failed on connection exception\n")
+        with patch("tess_silver_ctl.hdfs", return_value=missing):
+            self.assertEqual(tess_silver_ctl.bronze_through(tess_silver_ctl.hdfs_glob("/lake/x")), 0)
+        with patch("tess_silver_ctl.hdfs", return_value=down), self.assertRaises(RuntimeError):
+            tess_silver_ctl.hdfs_glob("/lake/x")
+
+    def test_plan_only_job_counts_the_selection_and_stops_before_bls(self):
+        run = inspect.getsource(tess_silver.run)
+        self.assertLess(run.index("if args.plan_only:"), run.index('"capacity_budget_exceeded"'))
+        self.assertLess(run.index('f"{args.output}/_PLAN"'), run.index("groupByKey("))
+        self.assertTrue(tess_silver.parse_args(SilverIncrementalContractTest().job_args(
+            "--delta-from-sector", "14", "--plan-only")).plan_only)
 
 
 class SilverUnitControllerTest(unittest.TestCase):

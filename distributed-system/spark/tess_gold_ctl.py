@@ -42,8 +42,8 @@ from tess_silver_ctl import (
     ATTEMPT_PATH_RE,
     DEFAULT_BRONZE_COVERAGE,
     RUN_ID_RE,
+    SILVER_INPUT_SCHEMAS,
     SILVER_MANIFEST_SCHEMA,
-    SILVER_READY_SCHEMA,
     SilverDataContractError,
     audit_attempt,
     cluster_preflight,
@@ -87,8 +87,13 @@ def silver_input(path: str, coverage: dict[str, Any]) -> dict[str, Any]:
     """The committed Silver attempt this run reads, re-audited against the Bronze coverage."""
     if not ATTEMPT_PATH_RE.fullmatch(path):
         raise GoldDataContractError(f"Silver input must be an immutable attempt path: {path}")
+    # The Sector 1~13 attempt is v4 and a later coverage run is v5. A 275 Sector-snapshot attempt
+    # has no coverage fields, so it fails the audit below until Gold reads a per-TIC selection.
+    schema = hdfs_json(f"{path}/_READY.json")[0].get("schema")
+    if schema not in SILVER_INPUT_SCHEMAS:
+        raise GoldDataContractError(f"Silver input schema is not readable by Gold: {schema}")
     marker = audit_attempt(path, {
-        "schema": SILVER_READY_SCHEMA,
+        "schema": schema,
         "manifest_schema": SILVER_MANIFEST_SCHEMA,
         "bronze_coverage_sha256": coverage["coverage_sha256"],
         "bronze_coverage_ready_sha256": coverage["ready_sha256"],

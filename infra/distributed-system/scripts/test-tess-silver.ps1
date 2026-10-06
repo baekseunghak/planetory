@@ -48,7 +48,13 @@ foreach ($required in @(
     'baseline_time=prepared.time',
     '"left_anti"',
     'science_audit_json',
-    'mode("errorifexists")'
+    'mode("errorifexists")',
+    '"left_semi"',
+    'capacity_budget_exceeded',
+    'versions[functions.col("sector")]',
+    'bronze.select(*BRONZE_KEY_COLUMNS)',
+    'functions.broadcast(selected_ids)',
+    'if args.plan_only:'
 )) {
     if (-not $job.Contains($required)) { throw "Missing Silver job contract: $required" }
 }
@@ -59,7 +65,14 @@ foreach ($forbidden in @('.toPandas(', 'bronze.collect(', 'grouped.collect(')) {
 $control = Get-Content -LiteralPath $pythonFiles[1] -Raw
 foreach ($required in @(
     'validate_bronze_coverage',
-    'planetory.tess-silver-attempt.v4',
+    'bronze_sector_snapshot',
+    'def silver_progress(',
+    'SILVER_PLAN_JSON=',
+    'SILVER_CAPACITY_LIMIT = 0.80',
+    'PREFLIGHT_STOP_PERCENT = 85',
+    'another Silver application is running',
+    'yarn_slot(Path(SILVER_LOCK_PREFIX), slots=1)',
+    'planetory.tess-silver-attempt.v5',
     'planetory.tess-silver-stage.v4',
     '("target_combined", "periodogram", "iteration", "manifest")',
     'SilverDataContractError',
@@ -84,7 +97,9 @@ foreach ($required in @(
     'TimeoutStartSec=infinity',
     'systemctl --no-block start',
     'Canary requires one to five explicit TIC IDs',
-    'Retry requires -RetryFrom'
+    'Retry requires -RetryFrom',
+    'DeltaFromSector requires ThroughSector',
+    'TicBuckets split only a DeltaFromSector run'
 )) {
     if (-not $runnerText.Contains($required)) { throw "Missing Silver runner contract: $required" }
 }

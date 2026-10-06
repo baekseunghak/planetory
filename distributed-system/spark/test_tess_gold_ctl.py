@@ -52,11 +52,18 @@ class InputLineageTest(unittest.TestCase):
             ctl.external_input("/tmp/external", ["nea_toi"])
 
     def test_silver_attempt_is_reaudited_against_the_bronze_coverage(self):
-        seen = {}
-        with patch.object(ctl, "audit_attempt", lambda path, expected: seen.update(expected) or {}), \
-                patch.object(ctl, "hdfs_json", lambda path: ({}, "s" * 64)):
-            self.assertEqual(ctl.silver_input(SILVER, COVERAGE)["ready_sha256"], "s" * 64)
-        self.assertEqual((seen["bronze_coverage_sha256"], seen["bronze_coverage_ready_sha256"]), ("a" * 64, "b" * 64))
+        # The Sector 1~13 input is v4; a 275 coverage run writes v5 with the same coverage fields.
+        for schema in ("planetory.tess-silver-attempt.v4", "planetory.tess-silver-attempt.v5"):
+            seen = {}
+            with self.subTest(schema=schema), \
+                    patch.object(ctl, "audit_attempt", lambda path, expected: seen.update(expected) or {}), \
+                    patch.object(ctl, "hdfs_json", lambda path: ({"schema": schema}, "s" * 64)):
+                self.assertEqual(ctl.silver_input(SILVER, COVERAGE)["ready_sha256"], "s" * 64)
+            self.assertEqual((seen["schema"], seen["bronze_coverage_sha256"], seen["bronze_coverage_ready_sha256"]),
+                             (schema, "a" * 64, "b" * 64))
+        with patch.object(ctl, "hdfs_json", lambda path: ({"schema": "planetory.tess-silver-attempt.v3"}, "s" * 64)), \
+                self.assertRaisesRegex(GoldDataContractError, "not readable by Gold"):
+            ctl.silver_input(SILVER, COVERAGE)
         with self.assertRaisesRegex(GoldDataContractError, "immutable attempt"):
             ctl.silver_input("/lake/silver/.staging/run=1", COVERAGE)
 

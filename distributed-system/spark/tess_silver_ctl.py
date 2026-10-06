@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -40,9 +41,31 @@ from tess_bronze_ctl import (
 )
 
 
-SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
+SILVER_READY_SCHEMA = "planetory.tess-silver-attempt.v5"
+# Attempt markers Gold may read: the Sector 1~13 run is v4, 275 and later attempts are v5.
+SILVER_INPUT_SCHEMAS = ("planetory.tess-silver-attempt.v4", SILVER_READY_SCHEMA)
 SILVER_MANIFEST_SCHEMA = "planetory.tess-silver-stage.v4"
 SILVER_TERMINAL_SCHEMA = "planetory.tess-silver-terminal.v1"
+BRONZE_SNAPSHOT_SCHEMA = "planetory.tess-silver-bronze-snapshot.v1"
+# Planned usage after the attempt, the same line the Raw loader applies to its RF2 estimate.
+# Raised from 70%/75% by the operator on 2026-09-27 to fit more backlog buckets. Above about 80%
+# (4 of 5 DataNodes) one lost DataNode can no longer be re-replicated to RF2; that risk is accepted.
+# The 80-85% band stays free for Gold backup and Raw/Bronze.
+SILVER_CAPACITY_LIMIT = 0.80
+# The shared Silver/Gold preflight refuses any new work at or above this HDFS use.
+PREFLIGHT_STOP_PERCENT = 85
+SILVER_APP_RE = re.compile(r"\sS15P21C206-78-silver-")
+# One Silver controller at a time, held from preflight to commit, so the budget covers one output.
+# A second unit waits on the lock instead of passing preflight before the first app is visible.
+SILVER_LOCK_PREFIX = "/run/planetory-tess-silver"
+MAX_TIC_BUCKETS = 1024  # tess_silver.py re-validates the same bound inside the job
+V4_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
+PLAN_SCHEMA = "planetory.tess-silver-plan.v1"
+# RF2 bytes one Silver run should add. A single new Sector (about 73 GB) stays one run and the
+# Sector 15~70 backlog (about 3 TB) splits into about 15 buckets.
+# ponytail: fixed target; tune once bucket run times and HDFS headroom are measured.
+PLAN_BUCKET_BYTES = 200 * 10**9
+PLAN_OUTPUT_RE = re.compile(r"/lake/silver/\.plan/run=[0-9]{8}T[0-9]{6}Z")
 DEFAULT_BRONZE_COVERAGE = (
     "/lake/bronze/tess/coverage="
     "df6bfa638a0d70913b0d0bade11f0c5335bf9c505a9fbe256fa8552f0623bd94"
@@ -98,7 +121,6 @@ def bronze_coverage(path: str) -> dict[str, Any]:
     match = re.fullmatch(r"/lake/bronze/tess/coverage=([0-9a-f]{64})", path)
     if not match:
         raise SilverDataContractError("Bronze coverage must be an immutable 1..13 coverage path")
-    coverage_sha256 = match.group(1)
     value, ready_sha256 = hdfs_json(f"{path}/_READY.json")
     markers = {}
     for row in value.get("sectors", []):
@@ -112,16 +134,92 @@ def bronze_coverage(path: str) -> dict[str, Any]:
         if not hdfs_exists(f"{row['location']}/_SUCCESS"):
             raise SilverDataContractError(f"Bronze Parquet is incomplete sector={row['sector']}")
     print(f"SILVER_BRONZE_COVERAGE_OK products={value['product_count']} path={path}", flush=True)
-    return {
-        "path": path,
-        "coverage_sha256": coverage_sha256,
-        "ready_sha256": ready_sha256,
-        "pipeline_version": value["pipeline_version"],
-        "bronze_paths": [row["location"] for row in sorted(value["sectors"], key=lambda row: row["sector"])],
-    }
+    snapshot = snapshot_from_rows([
+        {
+            "sector": int(row["sector"]),
+            "location": row["location"],
+            "ready_sha256": row["ready_sha256"],
+            "pipeline_version": value["pipeline_version"],
+            "product_count": int(row["product_count"]),
+            "observation_count": int(row["observation_count"]),
+        }
+        for row in value["sectors"]
+    ], coverage=path)
+    # 80 Gold audits its Silver input against the coverage and its marker, so they stay in the result.
+    return {**snapshot, "coverage_sha256": match.group(1), "ready_sha256": ready_sha256}
 
 
-def cluster_preflight(bronze_coverage_path: str, *, allow_running: bool = False) -> dict[str, Any]:
+def snapshot_from_rows(rows: list[dict[str, Any]], *, coverage: str | None) -> dict[str, Any]:
+    """One Bronze input snapshot; its ID depends on the Sector rows only, not on how they were found."""
+    body = {"schema": BRONZE_SNAPSHOT_SCHEMA, "sectors": sorted(rows, key=lambda row: row["sector"])}
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {**body, "sha256": digest, "coverage": coverage,
+            "bronze_paths": [row["location"] for row in body["sectors"]]}
+
+
+def validate_sector_marker(sector: int, marker: dict[str, Any]) -> None:
+    version = marker.get("pipeline_version")
+    if (
+        marker.get("schema") != BRONZE_READY_SCHEMA
+        or marker.get("data_schema") != BRONZE_DATA_SCHEMA
+        or marker.get("sector") != sector
+        or marker.get("replication") != 2
+        or not isinstance(marker.get("product_count"), int) or marker["product_count"] <= 0
+        or not isinstance(marker.get("observation_count"), int) or marker["observation_count"] <= 0
+        or not isinstance(version, str) or not VERSION_RE.fullmatch(version)
+    ):
+        raise SilverDataContractError(f"Bronze marker mismatch sector={sector}")
+
+
+def bronze_sector_snapshot(through_sector: int) -> dict[str, Any]:
+    """Sector 1..N final markers as one cumulative snapshot; each Sector keeps its own Bronze version (275)."""
+    # A NameNode failure must stay a retryable error, not a data-contract stop for this unit.
+    listing = hdfs_glob("/lake/bronze/tess/sector=*/_SUCCESS")
+    finished = {fields[-1] for line in listing.splitlines() if (fields := line.split())}
+    rows = []
+    for sector in range(1, through_sector + 1):
+        location = f"/lake/bronze/tess/sector={sector:04d}"
+        if f"{location}/_SUCCESS" not in finished:
+            raise SilverDataContractError(f"Bronze Parquet is incomplete sector={sector}")
+        marker, ready_sha256 = hdfs_json(f"{location}/_READY.json")
+        validate_sector_marker(sector, marker)
+        rows.append({
+            "sector": sector,
+            "location": location,
+            "ready_sha256": ready_sha256,
+            "pipeline_version": marker["pipeline_version"],
+            "product_count": marker["product_count"],
+            "observation_count": marker["observation_count"],
+        })
+    snapshot = snapshot_from_rows(rows, coverage=None)
+    versions = sorted({row["pipeline_version"] for row in rows})
+    print(f"SILVER_BRONZE_SNAPSHOT_OK sectors=1-{through_sector} versions={','.join(versions)} "
+          f"sha256={snapshot['sha256']}", flush=True)
+    return snapshot
+
+
+def capacity_budget(df_output: str) -> int:
+    """RF2 bytes an attempt may still add before HDFS passes the planned-usage line.
+
+    Never more than Available: YARN local dirs share the DataNode disks, so non-DFS use can make
+    the real free space smaller than Size x limit - Used.
+    """
+    fields = df_output.splitlines()[-1].split()
+    size, used, available = int(fields[1]), int(fields[2]), int(fields[3])
+    return min(int(size * SILVER_CAPACITY_LIMIT) - used, available)
+
+
+def silver_capacity_budget() -> int:
+    budget = capacity_budget(hdfs("dfs", "-df", "/").stdout)
+    if budget <= 0:
+        raise SilverDataContractError(f"HDFS has no Silver capacity below {SILVER_CAPACITY_LIMIT:.0%} budget={budget}")
+    print(f"SILVER_CAPACITY_BUDGET bytes={budget} limit={SILVER_CAPACITY_LIMIT:.0%}", flush=True)
+    return budget
+
+
+def cluster_preflight(bronze_coverage_path: str = DEFAULT_BRONZE_COVERAGE, *, through_sector: int | None = None,
+                      allow_running: bool = False) -> dict[str, Any]:
+    """Shared HDFS/YARN checks and the Bronze input. 80 Gold calls it with the coverage path only."""
     nn1 = hdfs("haadmin", "-getServiceState", "nn1").stdout.strip()
     nn2 = hdfs("haadmin", "-getServiceState", "nn2").stdout.strip()
     if f"{nn1}:{nn2}" not in ("active:standby", "standby:active"):
@@ -132,16 +230,90 @@ def cluster_preflight(bronze_coverage_path: str, *, allow_running: bool = False)
     if not (match := re.search(r"Live datanodes \((\d+)\)", report)) or int(match.group(1)) != 5:
         raise RuntimeError("expected five live DataNodes")
     used = hdfs("dfs", "-df", "/").stdout.splitlines()
-    if len(used) < 2 or int(used[-1].split()[-1].rstrip("%")) >= 75:
-        raise RuntimeError("HDFS usage is at or above 75%")
+    if len(used) < 2 or int(used[-1].split()[-1].rstrip("%")) >= PREFLIGHT_STOP_PERCENT:
+        raise RuntimeError(f"HDFS usage is at or above {PREFLIGHT_STOP_PERCENT}%")
     nodes = yarn("node", "-list", "-all").stdout
     if len(re.findall(r"\sRUNNING\s", nodes)) != 5:
         raise RuntimeError("expected five RUNNING NodeManagers")
     applications = yarn("application", "-list", "-appStates", "RUNNING").stdout
     running = APP_ID_RE.findall(applications) if allow_running else require_yarn_headroom(applications)
-    coverage = bronze_coverage(bronze_coverage_path)
+    snapshot = bronze_sector_snapshot(through_sector) if through_sector else bronze_coverage(bronze_coverage_path)
     print(f"SILVER_PREFLIGHT_OK ha={nn1}:{nn2} live_datanodes=5 running_apps={len(running)}", flush=True)
-    return coverage
+    return snapshot
+
+
+def silver_preflight(args: argparse.Namespace) -> dict[str, Any]:
+    """Silver runs one at a time: the capacity budget covers a single in-flight Silver output.
+
+    Only Silver commands refuse here; a Gold unit that restarts on this error would spend its daily starts.
+    """
+    if SILVER_APP_RE.search(yarn("application", "-list", "-appStates", "RUNNING").stdout):
+        raise RuntimeError("another Silver application is running")
+    return cluster_preflight(args.bronze_coverage, through_sector=args.through_sector)
+
+
+# Increment planning (275). One increment = the Sectors whose Bronze is final but not yet in Silver:
+# `through B, delta S+1..B`, split into TIC buckets only when its output would not fit one run.
+# The same rule serves the Sector 15~70 backlog and every later Sector, from any evidence state.
+
+def bronze_through(success_listing: str) -> int:
+    """Bronze watermark B: the last Sector N whose Sectors 1..N all have a final `_SUCCESS`."""
+    done = {int(match.group(1)) for match in re.finditer(r"/lake/bronze/tess/sector=(\d{4})/_SUCCESS", success_listing)}
+    through = 0
+    while through + 1 in done:
+        through += 1
+    return through
+
+
+def attempt_increment(marker: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    """(through, delta_from, buckets, bucket) a committed attempt completes, or None if it adds no coverage."""
+    if marker.get("schema") == V4_READY_SCHEMA:
+        # The only v4 coverage is the fixed Sector 1~13 Bronze coverage (78); its retry repeats it.
+        return (13, 1, 1, 0) if marker.get("bronze_coverage_sha256") else None
+    if marker.get("schema") != SILVER_READY_SCHEMA:
+        return None
+    through = max(int(row["sector"]) for row in marker["bronze_snapshot"]["sectors"])
+    if selection := marker.get("selection"):
+        return through, selection["delta_from_sector"], selection["tic_buckets"], selection["tic_bucket"]
+    # A full run covers its whole snapshot; a retry only re-runs failed TICs of an attempt it follows.
+    return (through, 1, 1, 0) if marker.get("operation") == "run" else None
+
+
+def silver_progress(increments: list[tuple[int, int, int, int]]) -> tuple[int, tuple[int, int, int] | None, set[int]]:
+    """Silver watermark S, and the unfinished increment that continues from it with its done buckets.
+
+    An increment (through N, delta from M, K buckets) is finished once all K buckets are committed,
+    and a finished one that starts at or before S + 1 advances S to N.
+    """
+    groups: dict[tuple[int, int, int], set[int]] = {}
+    for through, start, buckets, bucket in increments:
+        groups.setdefault((through, start, buckets), set()).add(bucket)
+    silver = 0
+    while finished := [key for key, done in groups.items()
+                       if key[1] <= silver + 1 and key[0] > silver and done == set(range(key[2]))]:
+        silver = max(key[0] for key in finished)
+    unfinished = [(key, done) for key, done in groups.items()
+                  if key[1] <= silver + 1 and key[0] > silver and done != set(range(key[2]))]
+    if len(unfinished) > 1:
+        raise SilverDataContractError(f"more than one unfinished Silver increment: {sorted(k for k, _ in unfinished)}")
+    return (silver, *unfinished[0]) if unfinished else (silver, None, set())
+
+
+def plan_buckets(estimated_bytes: int) -> int:
+    return min(MAX_TIC_BUCKETS, max(1, -(-estimated_bytes // PLAN_BUCKET_BYTES)))
+
+
+def next_step(increment: tuple[int, int, int], done: set[int], bucket_bytes: int, budget: int) -> dict[str, Any]:
+    through, start, buckets = increment
+    return {
+        "action": "run" if bucket_bytes <= budget else "wait_capacity",
+        "through_sector": through,
+        "delta_from_sector": start,
+        "tic_buckets": buckets,
+        "tic_bucket": min(set(range(buckets)) - done),
+        "done_buckets": sorted(done),
+        "estimated_bucket_bytes": bucket_bytes,
+    }
 
 
 def state_path(root: Path, run_id: str, attempt_id: str) -> Path:
@@ -182,7 +354,7 @@ def discard_failed_attempt(run_id: str, attempt_id: str, output: str, applicatio
     """Remove a restartable attempt's partial staging so systemd restarts do not pile up.
 
     A multi-day run that fails is restarted from scratch as a new attempt; without this
-    each failure leaves up to the full output size behind until HDFS hits the 75% gate.
+    each failure leaves up to the full output size behind until HDFS hits the preflight stop line.
     The final attempt path is never touched. A YARN CLI hiccup can report UNKNOWN while
     the app is still healthy, so staging is kept unless the app is confirmed ended.
     """
@@ -220,7 +392,7 @@ def submit(
     *,
     release_dir: Path,
     runtime_hdfs: str,
-    coverage: dict[str, Any],
+    snapshot: dict[str, Any],
     run_id: str,
     attempt_id: str,
     pipeline_version: str,
@@ -230,8 +402,11 @@ def submit(
     shuffle_partitions: int,
     state_file: Path,
     state: dict[str, Any],
+    capacity_budget_bytes: int,
     tic_ids: list[int] | None = None,
     retry_manifest: str | None = None,
+    selection: dict[str, int] | None = None,
+    plan_only: bool = False,
 ) -> str:
     job = release_dir / "spark" / "tess_silver.py"
     command = [
@@ -273,12 +448,12 @@ def submit(
         *event_log_conf(),
         "/opt/planetory/tess_silver.py",
     ]
-    for path in coverage["bronze_paths"]:
-        command.extend(["--bronze-path", f"hdfs://planetory{path}"])
+    for row in snapshot["sectors"]:
+        command.extend(["--bronze-path", f"hdfs://planetory{row['location']}",
+                        "--bronze-sector-version", f"{row['sector']}={row['pipeline_version']}"])
     command.extend([
-        "--bronze-coverage-sha256", coverage["coverage_sha256"],
-        "--bronze-coverage-ready-sha256", coverage["ready_sha256"],
-        "--bronze-pipeline-version", coverage["pipeline_version"],
+        "--bronze-snapshot-sha256", snapshot["sha256"],
+        "--capacity-budget-bytes", str(capacity_budget_bytes),
         "--pipeline-version", pipeline_version,
         "--run-id", run_id,
         "--attempt-id", attempt_id,
@@ -291,6 +466,12 @@ def submit(
         command.extend(["--tic-id", str(tic_id)])
     if retry_manifest:
         command.extend(["--retry-manifest", f"hdfs://planetory{retry_manifest}"])
+    if selection:
+        command.extend(["--delta-from-sector", str(selection["delta_from_sector"]),
+                        "--tic-buckets", str(selection["tic_buckets"]),
+                        "--tic-bucket", str(selection["tic_bucket"])])
+    if plan_only:
+        command.append("--plan-only")
 
     process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     application_id = None
@@ -334,13 +515,16 @@ def audit_attempt(final: str, expected: dict[str, Any]) -> dict[str, Any]:
 def finalize_attempt(
     *,
     release_dir: Path,
-    coverage: dict[str, Any],
+    snapshot: dict[str, Any],
     run_id: str,
     attempt_id: str,
     pipeline_version: str,
     output: str,
     final: str,
     application_id: str,
+    capacity_budget_bytes: int,
+    selection: dict[str, int] | None = None,
+    operation: str | None = None,
 ) -> dict[str, Any]:
     lines = hdfs("dfs", "-cat", f"{output}/summary/part-*.json").stdout.splitlines()
     if len(lines) != 1:
@@ -348,6 +532,8 @@ def finalize_attempt(
     summary = json.loads(lines[0])
     if not summary.get("contract_ok") or int(summary.get("manifest_tics", -1)) <= 0:
         raise SilverDataContractError("Silver manifest output contract failed")
+    if summary.get("bronze_snapshot_sha256") != snapshot["sha256"]:
+        raise SilverDataContractError("Silver summary does not match the submitted Bronze snapshot")
     try:
         science_audit = json.loads(summary["science_audit_json"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -367,11 +553,20 @@ def finalize_attempt(
         "run_id": run_id,
         "attempt_id": attempt_id,
         "pipeline_version": pipeline_version,
-        "bronze_coverage_sha256": coverage["coverage_sha256"],
-        "bronze_coverage_ready_sha256": coverage["ready_sha256"],
-        "bronze_pipeline_version": coverage["pipeline_version"],
+        "bronze_snapshot_sha256": snapshot["sha256"],
+        "bronze_snapshot": {"schema": snapshot["schema"], "sectors": snapshot["sectors"]},
+        "bronze_coverage": snapshot["coverage"],
+        # Gold re-audits a coverage attempt against these; a Sector snapshot has none.
+        "bronze_coverage_sha256": snapshot.get("coverage_sha256"),
+        "bronze_coverage_ready_sha256": snapshot.get("ready_sha256"),
+        "selection": selection,
+        # run, canary or retry: the planner counts a selection-less attempt as coverage only for run.
+        "operation": operation,
         "spark_application_id": application_id,
         "selected_tics": int(summary["selected_tics"]),
+        "selected_products": int(summary["selected_products"]),
+        "estimated_output_bytes": int(summary["estimated_output_bytes"]),
+        "capacity_budget_bytes": capacity_budget_bytes,
         "succeeded_tics": int(summary["succeeded_tics"]),
         "no_quality_peak_tics": int(summary["no_quality_peak_tics"]),
         "failed_tics": int(summary["failed_tics"]),
@@ -404,9 +599,7 @@ def finalize_attempt(
         "run_id": run_id,
         "attempt_id": attempt_id,
         "pipeline_version": pipeline_version,
-        "bronze_coverage_sha256": coverage["coverage_sha256"],
-        "bronze_coverage_ready_sha256": coverage["ready_sha256"],
-        "bronze_pipeline_version": coverage["pipeline_version"],
+        "bronze_snapshot_sha256": snapshot["sha256"],
         "replication": 2,
     })
     print(
@@ -419,11 +612,14 @@ def finalize_attempt(
 def run_attempt(
     *,
     args: argparse.Namespace,
-    coverage: dict[str, Any],
+    snapshot: dict[str, Any],
     tic_ids: list[int] | None = None,
     retry_manifest: str | None = None,
+    selection: dict[str, int] | None = None,
     validation: bool = False,
 ) -> tuple[str, dict[str, Any]]:
+    # Before any HDFS write, so a refused run leaves nothing behind.
+    budget = silver_capacity_budget()
     release_dir = Path(args.release_dir).resolve()
     runtime_hdfs = build_runtime(release_dir)
     attempt_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -441,6 +637,9 @@ def run_attempt(
         "unit": unit_name(args.command, args.run_id, getattr(args, "retry_from", None)),
         "output": output,
         "final": final,
+        "bronze_snapshot_sha256": snapshot["sha256"],
+        "selection": selection,
+        "capacity_budget_bytes": budget,
         "status": "prepared",
         "updated_at_utc": utc_now(),
     }
@@ -450,7 +649,7 @@ def run_attempt(
         application_id = submit(
             release_dir=release_dir,
             runtime_hdfs=runtime_hdfs,
-            coverage=coverage,
+            snapshot=snapshot,
             run_id=args.run_id,
             attempt_id=attempt_id,
             pipeline_version=args.pipeline_version,
@@ -460,18 +659,23 @@ def run_attempt(
             shuffle_partitions=args.shuffle_partitions,
             state_file=state_file,
             state=state,
+            capacity_budget_bytes=budget,
             tic_ids=tic_ids,
             retry_manifest=retry_manifest,
+            selection=selection,
         )
         marker = finalize_attempt(
             release_dir=release_dir,
-            coverage=coverage,
+            snapshot=snapshot,
             run_id=args.run_id,
             attempt_id=attempt_id,
             pipeline_version=args.pipeline_version,
             output=output,
             final=final,
             application_id=application_id,
+            capacity_budget_bytes=budget,
+            selection=selection,
+            operation=args.command,
         )
         cleanup_spark_staging(args.run_id, attempt_id, output)
         if validation and marker["failed_tics"]:
@@ -493,39 +697,124 @@ def run_attempt(
 
 
 def command_preflight(args: argparse.Namespace) -> None:
-    cluster_preflight(args.bronze_coverage)
+    silver_preflight(args)
+    print(f"SILVER_CAPACITY_BUDGET_PREVIEW bytes={capacity_budget(hdfs('dfs', '-df', '/').stdout)}", flush=True)
 
 
 def command_canary(args: argparse.Namespace) -> None:
-    coverage = cluster_preflight(args.bronze_coverage)
-    final, marker = run_attempt(args=args, coverage=coverage, tic_ids=args.tic_id, validation=True)
+    snapshot = silver_preflight(args)
+    final, marker = run_attempt(args=args, snapshot=snapshot, tic_ids=args.tic_id, validation=True)
     print(f"SILVER_CANARY_AUDIT={json.dumps(marker['science_audit'], sort_keys=True, separators=(',', ':'))}", flush=True)
     hdfs("dfs", "-rm", "-r", "-skipTrash", final)
     remove_empty_dir(final.rsplit("/", 1)[0])
     print(f"SILVER_CANARY_OK tics={marker['selected_tics']}", flush=True)
 
 
+def run_selection(args: argparse.Namespace) -> dict[str, int] | None:
+    if getattr(args, "delta_from_sector", None) is None:
+        return None
+    return {"delta_from_sector": args.delta_from_sector, "tic_buckets": args.tic_buckets,
+            "tic_bucket": args.tic_bucket}
+
+
 def command_run(args: argparse.Namespace) -> None:
-    coverage = cluster_preflight(args.bronze_coverage)
-    run_attempt(args=args, coverage=coverage)
+    snapshot = silver_preflight(args)
+    run_attempt(args=args, snapshot=snapshot, selection=run_selection(args))
 
 
 def command_retry(args: argparse.Namespace) -> None:
-    coverage = cluster_preflight(args.bronze_coverage)
+    snapshot = silver_preflight(args)
     previous, _ = hdfs_json(f"{args.retry_from}/_READY.json")
+    # A v4 attempt predates the snapshot ID and is not retried by this release.
     if (previous.get("schema") != SILVER_READY_SCHEMA or
             previous.get("manifest_schema") != SILVER_MANIFEST_SCHEMA or
             not hdfs_exists(f"{args.retry_from}/manifest/_SUCCESS")):
         raise SilverDataContractError("retry source is not a completed Silver attempt")
-    if (
-        previous.get("run_id") != args.run_id
-        or previous.get("bronze_coverage_sha256") != coverage["coverage_sha256"]
-        or previous.get("bronze_coverage_ready_sha256") != coverage["ready_sha256"]
-    ):
+    if previous.get("run_id") != args.run_id or previous.get("bronze_snapshot_sha256") != snapshot["sha256"]:
         raise SilverDataContractError("retry source run or Bronze snapshot does not match")
     if int(previous.get("failed_tics", 0)) <= 0:
         raise SilverDataContractError("retry source has no failed TICs")
-    run_attempt(args=args, coverage=coverage, retry_manifest=f"{args.retry_from}/manifest")
+    run_attempt(args=args, snapshot=snapshot, retry_manifest=f"{args.retry_from}/manifest")
+
+
+def active_silver_work() -> list[str]:
+    """Running Silver units and YARN apps; a plan never hands out a bucket while one of them runs."""
+    units = run(["/usr/bin/systemctl", "list-units", "planetory-tess-silver-*", "--state=active,activating",
+                 "--no-legend", "--plain"]).stdout
+    apps = yarn("application", "-list", "-appStates", "RUNNING").stdout
+    return ([line.split()[0] for line in units.splitlines() if line.strip()]
+            + [line.split()[0] for line in apps.splitlines() if SILVER_APP_RE.search(line)])
+
+
+def hdfs_glob(pattern: str) -> str:
+    """`hdfs dfs -ls` of a glob. No match is an empty listing; any other failure stops the plan,
+    so an unreachable NameNode never reads as "no Bronze" (idle) or "no Silver" (replan from Sector 1)."""
+    result = hdfs("dfs", "-ls", pattern, check=False)
+    if result.returncode and "No such file or directory" not in result.stdout:
+        raise RuntimeError(f"HDFS listing failed ({result.returncode}): {pattern}")
+    return result.stdout
+
+
+def committed_silver_markers() -> list[dict[str, Any]]:
+    listing = hdfs_glob("/lake/silver/pipeline_version=*/run_id=*/attempt=*/_READY.json")
+    paths = sorted(fields[-1] for line in listing.splitlines()
+                   if (fields := line.split()) and fields[-1].endswith("/_READY.json")
+                   and ATTEMPT_PATH_RE.fullmatch(fields[-1].removesuffix("/_READY.json")))
+    return [hdfs_json(path)[0] for path in paths]
+
+
+def plan_estimate(args: argparse.Namespace, through: int, start: int) -> int:
+    """RF2 bytes of one unsplit increment, from a Spark pass that selects and counts but runs no BLS."""
+    snapshot = cluster_preflight(args.bronze_coverage, through_sector=through)
+    release_dir = Path(args.release_dir).resolve()
+    runtime_hdfs = build_runtime(release_dir)
+    plan_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    output = f"/lake/silver/.plan/run={plan_id}"
+    if not PLAN_OUTPUT_RE.fullmatch(output):
+        raise RuntimeError(f"unexpected plan path: {output}")
+    prepare_paths(output, plan_id, plan_id)
+    try:
+        submit(release_dir=release_dir, runtime_hdfs=runtime_hdfs, snapshot=snapshot, run_id=plan_id,
+               attempt_id=plan_id, pipeline_version=args.pipeline_version, output=output, final_output=output,
+               output_partitions=args.output_partitions, shuffle_partitions=args.shuffle_partitions,
+               state_file=Path(args.state_root, "plans", f"{plan_id}.json"), state={"plan_id": plan_id},
+               capacity_budget_bytes=0, plan_only=True,
+               selection={"delta_from_sector": start, "tic_buckets": 1, "tic_bucket": 0})
+        value, _ = hdfs_json(f"{output}/_PLAN/part-*")
+    finally:
+        hdfs("dfs", "-rm", "-r", "-f", "-skipTrash", output, check=False)
+        cleanup_spark_staging(plan_id, plan_id, output)
+    print(f"SILVER_PLAN_ESTIMATE through={through} delta_from={start} tics={value['selected_tics']} "
+          f"products={value['selected_products']} bytes={value['estimated_output_bytes']}", flush=True)
+    return int(value["estimated_output_bytes"])
+
+
+def command_plan(args: argparse.Namespace) -> None:
+    """Print the next Silver increment bucket to run, recomputed from HDFS evidence every time."""
+    def emit(value: dict[str, Any]) -> None:
+        print("SILVER_PLAN_JSON=" + json.dumps({"schema": PLAN_SCHEMA, **value}, sort_keys=True,
+                                               separators=(",", ":")), flush=True)
+
+    if active := active_silver_work():
+        emit({"action": "busy", "active": active})
+        return
+    bronze = bronze_through(hdfs_glob("/lake/bronze/tess/sector=*/_SUCCESS"))
+    markers = committed_silver_markers()
+    silver, increment, done = silver_progress([inc for marker in markers if (inc := attempt_increment(marker))])
+    base = {"bronze_through": bronze, "silver_through": silver,
+            "capacity_budget_bytes": capacity_budget(hdfs("dfs", "-df", "/").stdout)}
+    if increment is None and silver >= bronze:
+        emit({**base, "action": "idle"})
+        return
+    if increment is None:
+        estimated = plan_estimate(args, bronze, silver + 1)
+        buckets = plan_buckets(estimated)
+        increment, bucket_bytes = (bronze, silver + 1, buckets), -(-estimated // buckets)
+    else:
+        # Buckets of one increment are similar in size, so a finished one prices the rest.
+        bucket_bytes = max(int(marker["estimated_output_bytes"]) for marker in markers
+                           if (inc := attempt_increment(marker)) and inc[:3] == increment)
+    emit({**base, **next_step(increment, done, bucket_bytes, base["capacity_budget_bytes"])})
 
 
 UNIT_ROOT = Path("/etc/systemd/system")
@@ -682,11 +971,15 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--bronze-coverage", default=DEFAULT_BRONZE_COVERAGE)
+    # start-unit keeps the coverage-only CLI the Airflow sudoers rule pins; Sector snapshots (275)
+    # run through the operator entry points until the 81 coordinator DAG wires them in.
+    source = argparse.ArgumentParser(add_help=False, parents=[common])
+    source.add_argument("--through-sector", type=int)
     subparsers = root.add_subparsers(dest="command", required=True)
-    preflight = subparsers.add_parser("preflight", parents=[common])
+    preflight = subparsers.add_parser("preflight", parents=[source])
     preflight.set_defaults(handler=command_preflight)
     for command, handler in (("canary", command_canary), ("run", command_run), ("retry", command_retry)):
-        child = subparsers.add_parser(command, parents=[common])
+        child = subparsers.add_parser(command, parents=[source])
         child.add_argument("--release-dir", required=True)
         child.add_argument("--run-id", required=True)
         child.add_argument("--pipeline-version", required=True)
@@ -696,8 +989,19 @@ def parser() -> argparse.ArgumentParser:
         child.set_defaults(handler=handler)
         if command == "canary":
             child.add_argument("--tic-id", type=int, action="append", required=True)
+        if command == "run":
+            child.add_argument("--delta-from-sector", type=int)
+            child.add_argument("--tic-buckets", type=int, default=1)
+            child.add_argument("--tic-bucket", type=int, default=0)
         if command == "retry":
             child.add_argument("--retry-from", required=True)
+    plan = subparsers.add_parser("plan", parents=[common])
+    plan.add_argument("--release-dir", required=True)
+    plan.add_argument("--pipeline-version", required=True)
+    plan.add_argument("--output-partitions", type=int, default=80)
+    plan.add_argument("--shuffle-partitions", type=int, default=200)
+    plan.add_argument("--state-root", default="/var/lib/planetory-silver")
+    plan.set_defaults(handler=command_plan)
     start = subparsers.add_parser("start-unit", parents=[common])
     start.add_argument("operation", choices=("canary", "run", "retry"))
     start.add_argument("--release-dir", required=True)
@@ -718,6 +1022,22 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def validate_snapshot_request(args: argparse.Namespace) -> None:
+    """Exit 65 on a bad request so the systemd unit does not restart it every five minutes."""
+    through = getattr(args, "through_sector", None)
+    delta = getattr(args, "delta_from_sector", None)
+    buckets, bucket = getattr(args, "tic_buckets", 1), getattr(args, "tic_bucket", 0)
+    if through is not None and not 1 <= through <= 999:
+        raise SilverDataContractError("--through-sector must be a Sector number")
+    if delta is not None and (through is None or not 1 <= delta <= through):
+        raise SilverDataContractError("--delta-from-sector needs --through-sector and must be within 1..through")
+    if not 1 <= buckets <= MAX_TIC_BUCKETS or not 0 <= bucket < buckets:
+        raise SilverDataContractError(
+            f"--tic-bucket must be in 0..--tic-buckets-1 and --tic-buckets in 1..{MAX_TIC_BUCKETS}")
+    if buckets > 1 and delta is None:
+        raise SilverDataContractError("TIC buckets split only a --delta-from-sector run")
+
+
 def main() -> int:
     args = parser().parse_args()
     if hasattr(args, "run_id") and not RUN_ID_RE.fullmatch(args.run_id):
@@ -731,8 +1051,13 @@ def main() -> int:
     if getattr(args, "output_partitions", 1) <= 0 or getattr(args, "shuffle_partitions", 1) <= 0:
         raise SystemExit("partition counts must be positive")
     try:
+        validate_snapshot_request(args)
         if args.command in ("canary", "run", "retry"):
             refuse_completed_unit(args)
+        if args.command in ("canary", "run", "retry"):
+            with yarn_slot(Path(SILVER_LOCK_PREFIX), slots=1), yarn_slot():
+                args.handler(args)
+        elif args.command == "plan":
             with yarn_slot():
                 args.handler(args)
         else:

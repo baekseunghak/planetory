@@ -4,4 +4,5 @@
 
 | 날짜 | 주요 변경 | Jira | 검색 키워드 | 상태 | 일별 기록 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-28 | Sector 14~70 backlog 증분 Silver 버킷 0·1 결과, Silver DAG conf·sudoers 확장을 81로 이관 | S15P21C206-275 | plan, tic_buckets, selection, 버킷, 20260927T103842Z, 20260927T155143Z, 실패율, 81 | 검증 완료(버킷 2개), 나머지 용량 결정 전 | [기록](2026-09-28.md) |
 | 2026-09-28 | 루트 Compose에 로컬 세션·캐시 Redis 추가 | S15P21C206-292 | session-redis, cache-redis, 16379, 16380, --profile service, local 프로필 | 검증 완료 | [기록](2026-09-28.md) |
