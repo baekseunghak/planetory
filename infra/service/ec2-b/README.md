@@ -1,5 +1,30 @@
 # EC2-B 설정
 
+## 현재 운영 위치: donh-orc2 (2026-10-02)
+
+사용자 요청으로 EC2-B의 CI Runner·이미지 레지스트리·외부 관찰을 `ubuntu@donh-orc2`로 이관했다. 원본 회수 전에 레지스트리 1,779개 파일·8,733,699,542 bytes의 전체 SHA-256을 비교해 일치를 확인했고, Runner 인증 설정·Webhook·스크립트·관찰 상태·cron도 보존했다. 이후 사용자가 관리자의 원본 인스턴스 회수를 알렸다. 아래 EC2-B는 논리 역할과 이전 설치 기록을 뜻한다.
+
+| 항목 | 현재 값·검증 |
+| --- | --- |
+| 관리 접속 | `tailscale ssh ubuntu@donh-orc2`, 비밀번호 없는 sudo 사용 가능 |
+| 서버 | Ubuntu 24.04, ARM64, 4 vCPU, 메모리 약 24GB. 이관 전 Docker·Kubernetes 런타임과 Planetory 설정 없음 |
+| 실행 설정 | `/srv/planetory-ci/compose.json`, Compose 프로젝트 `planetory-ci`, `registry`·`gitlab-runner` |
+| 레지스트리 | `https://donh-orc2.tail97e363.ts.net:5000`, 새 호스트용 정식 TLS, tailnet 주소에만 bind. 원본 11개 저장소·112개 태그 조회 확인 |
+| 저장 데이터 | `/srv/registry/data`. 전체 복사본은 아래 보호된 이관 경로의 `registry-data.preserved`에도 별도 보존 |
+| Runner | 기존 ID `2146`, manager `2046`, 버전 `19.4.0`, ARM64. `concurrent=3`, `run_untagged=true` 유지. `amd64-docker` 유지·`arm64-docker` 추가 |
+| x86 호환 | Ubuntu `qemu-user-static`·binfmt의 `F` flag로 지원. Docker 27.5 DinD에서 amd64 build·새 Registry push·실행 성공. 에뮬레이션 빌드 성능은 실측하지 않음 |
+| 실제 CI | [validate:contracts #665128](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/jobs/665128) 성공, API에서 실행 manager의 `arm64` 확인 |
+| 소비자 전환 | GitLab `REGISTRY_IMAGE_PREFIX`와 Node 1 Publisher 이미지 참조의 호스트를 변경. Publisher digest·이미지 ID 동일, 새 TLS pull·CLI 기동 통과 |
+| 접근 경계 | 새 CI 신원의 `claude@donh-vnic` SSH·Docker 접근 성공. Publisher 전용 5432·8080 접근은 차단 확인 |
+| 자동화 | 기존 주기·알림 규칙 유지. 새 레지스트리 TLS 갱신, 서비스 `claude@donh-vnic`의 이미지 보호 목록 조회·정리 모의 실행 성공 |
+| 보호·기록 | `/var/tmp/planetory-ec2-b-migration-20261002`의 원본 설정·전체 레지스트리 보존본·해시 비교·검증 로그. 최상위 디렉터리 700, Runner 인증 파일·Webhook 600 |
+
+정리 cron은 `DEPLOY_USER=claude`, `EC2_A_HOST=donh-vnic`, `EC2_A_DEPLOY_PATH=/home/claude/planetory`를 사용한다. `EC2_A_*`는 기존 변수 이름을 유지한다. 래퍼의 기본 계정은 계속 `deploy`이며, 계정·경로 변경을 포함한 회귀 8개가 통과했다. 모의 실행은 삭제 예정 0개였고 실제 삭제·GC를 수동 실행하지 않았다.
+
+직접 SSH가 정책으로 거절돼 기존 레지스트리 포트에서 목적지 한 대만 허용하는 읽기 전용 rsync로 복사했다. 기존 Runner를 pause·정지하고 원본 cron·레지스트리를 정지해 쓰기·정리를 막았다. 원본 회수 이후 임시 전송 서버에 다시 접속할 수 없으며 목적지에는 전송 daemon을 설치하지 않았다. 검증용 DinD 컨테이너는 제거했다.
+
+후속 앱 CI 작업은 native ARM64 build·push·기동, Docker 27.5 DinD 배포 회귀와 GitLab CI lint까지 검증했다. 목적지 변수와 운영 Compose의 이미지 변수·최종 외부 볼륨은 반영했으며 사용자 승인으로 새 CI 소스의 긴급 Git 게시·MR 생성을 진행한다. develop 반영·새 운영 앱 배포는 별도다. [CI/CD](../../../docs/operations/cicd.md)와 [서비스 배포 상태](../../../docs/project/service-deploy-status.md)를 따른다.
+
 EC2-B에 **서비스 역할을 두지 않는다**([시스템 아키텍처](../../../docs/architecture/system-architecture.md) 8장 D4). 앱·복제·백업과 서비스 관측 스택은 EC2-A에만 둔다.
 
 사용자 요청 경로 밖의 역할만 맡는다.
@@ -107,7 +132,7 @@ registry-prune.sh --registry https://<호스트>:5000 --keep 10 --apply --gc  # 
 
 - **보존 개수는 30이다**(`PRUNE_KEEP`). 하루치 병합 정도다. 배포 중이 아닌 옛 이미지로 손으로 되돌릴 여지를 남긴다.
 - **GCP 노드 이미지는 보호 목록에 넣지 않는다.** 변경이 있을 때만 빌드돼 30개 안에 머문다. GCP도 매 병합 빌드로 바꾸면 여기에 노드 `.env`를 더해야 한다.
-- EC2-B의 root가 `deploy@EC2-A`로 SSH한다. Tailscale SSH라 키가 없다. `.env`는 원격에서 `*_IMAGE=` 줄만 걸러 받는다.
+- 관찰 노드의 root가 서비스 서버로 SSH한다. 기본 계정은 `deploy`, 이관 운영값은 `DEPLOY_USER=claude`다. Tailscale SSH라 키가 없다. `.env`는 원격에서 `*_IMAGE=` 줄만 걸러 받는다.
 
 ```bash
 sudo env REGISTRY_URL=https://<레지스트리-호스트>:5000 EC2_A_HOST=<EC2-A tailnet 주소> /opt/planetory/registry-prune-daily.sh  # 모의 실행

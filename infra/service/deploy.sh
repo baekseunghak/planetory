@@ -1,7 +1,7 @@
 #!/bin/sh
 # 서비스 한 개를 교체하고, 살아나지 않으면 직전 이미지로 되돌린다 [S15P21C206-84].
 #
-# 배포 노드에서 실행한다. CI가 compose.yaml과 함께 이 파일을 $DEPLOY_PATH로 올린 뒤
+# 배포 노드에서 실행한다. CI가 이 파일을 $DEPLOY_PATH로 올린 뒤
 # ssh로 호출한다. 로직을 CI YAML의 한 줄짜리 ssh 명령에 넣지 않는 이유는, 거기서는
 # 읽을 수도 고칠 수도 없고 어느 단계에서 실패했는지 구분할 수도 없기 때문이다.
 #
@@ -11,10 +11,12 @@
 #   IMAGE_VAR       compose가 읽는 이미지 변수 이름 (FRONTEND_IMAGE, ...)
 #   IMAGE           새로 띄울 이미지 전체 참조
 #   ACTION          up이면 교체까지, 그 외에는 pull만 한다
-#   HEALTH_PATH     확인할 경로(/ 또는 /actuator/health). 비우면 확인과 롤백을 건너뛴다
+#   HEALTH_PATH     추가 HTTP 경로. 비우면 Compose HEALTHCHECK만 확인한다
 #   HEALTH_PORT     컨테이너가 듣는 포트. 기본 8080
 #   HEALTH_TIMEOUT  헬스 대기 한계(초, 벽시계). 기본 90
 #   DB_BACKUP       true면 교체 전에 service-db를 덤프한다
+#   COMPOSE_FILE    기본 compose.yaml. 이관 서버는 기존 compose.json을 사용한다
+#   COMPOSE_PROJECT_NAME  이관 서버는 planetory-service를 유지한다
 #
 # 알아 둘 것 셋.
 #
@@ -26,8 +28,10 @@
 # 3. 덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 함께 사라진다.
 
 set -eu
+umask 077
 
-COMPOSE="docker compose -f compose.yaml"
+export COMPOSE_FILE="${COMPOSE_FILE:-compose.yaml}"
+COMPOSE="docker compose"
 ACTION="${ACTION:-up}"
 HEALTH_PATH="${HEALTH_PATH:-}"
 HEALTH_PORT="${HEALTH_PORT:-8080}"
@@ -116,8 +120,7 @@ health_url() {
     echo "http://${published}${HEALTH_PATH}"
 }
 
-# compose의 healthcheck는 서비스마다 없을 수 있고, 있어도 up -d 직후에는 starting이다.
-# 공개 경로를 직접 두드려 "사용자가 받을 응답"으로 판정한다.
+# Compose --wait를 통과한 뒤 호스트 게시 경로의 실제 HTTP 응답도 확인한다.
 # 대기는 벽시계로 센다. curl 타임아웃과 왕복 시간을 빼먹으면 설정값의 몇 배를 기다린다.
 wait_healthy() {
     [ -n "$HEALTH_PATH" ] || return 0
@@ -138,7 +141,7 @@ wait_healthy() {
 # 스크립트를 죽여 롤백에 도달하지 못하고, 구 컨테이너는 이미 사라진 뒤다.
 replace() {
     set_image "$1"
-    $COMPOSE up -d --no-deps "$SERVICE" || return 1
+    $COMPOSE up -d --no-deps --wait --wait-timeout "$HEALTH_TIMEOUT" "$SERVICE" || return 1
 }
 
 PREVIOUS=$(current_image)
@@ -176,7 +179,10 @@ fi
 
 rollback() {
     echo "=== 배포 실패. 되돌립니다 ===" >&2
-    $COMPOSE logs --tail 50 "$SERVICE" >&2 || true
+    mkdir -p "$BACKUP_DIR"
+    failure_log="$BACKUP_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"
+    $COMPOSE logs --tail 50 "$SERVICE" > "$failure_log" 2>&1 || true
+    echo "실패 로그(보호된 로컬 파일): $failure_log" >&2
 
     if [ -z "$PREVIOUS" ]; then
         echo "되돌릴 이미지가 없습니다. $SERVICE 는 실패한 상태로 남습니다." >&2

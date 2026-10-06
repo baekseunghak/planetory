@@ -2,9 +2,154 @@
 
 `S15P21C206-84` 작업의 인계 문서다. 절차와 근거는 담당 정본에 있고 여기에는 **현재 상태, 검증 경계, 남은 결정**만 둔다.
 
+## 서비스 앱 CI ARM64 대응 (2026-10-02)
+
+상태: **ARM64 CI 코드·운영 배포 기반 설정 준비와 실제 빌드·기동·롤백 검증 완료. develop 반영·새 운영 앱 배포 미실행.** 최초 게시에는 사용자 긴급 예외를 적용했으며, 2026-10-07 대표 작업 [S15P21C206-294](https://ssafy.atlassian.net/browse/S15P21C206-294)를 등록했다. 최신 develop `7f35e750`을 충돌 없이 현재 브랜치에 병합했고 관련 없는 로컬 변경 5개를 보존했다. 기존 MR 파이프라인 `228566`은 성공이며 병합 후 새 파이프라인은 별도로 확인한다.
+
+- 앱 3개의 빌드와 MR 이미지 검증은 `arm64-docker`·`linux/arm64`를 사용하고 운영 빌드는 `<commit SHA>-arm64`로 push한다. Publisher의 amd64 빌드·태그는 유지한다.
+- 새 수동 deploy job은 환경 `donh-vnic`, 노드 직렬화와 전용 목적지 변수로 `claude@donh-vnic`을 사용한다. Host 변수는 masked다. 운영 Compose·최종 외부 볼륨을 보존하며 설정 변경 전후 서비스 정의·컨테이너 ID·볼륨 이름은 동일하다.
+- 단일 서비스는 Compose `--wait`와 기존 HTTP 확인에 실패하면 직전 이미지로 되돌린다. Worker는 호스트 포트 없이 이미지 `HEALTHCHECK`를 사용한다. DB 덤프·실패 로그를 보호된 로컬 파일로 남긴다.
+
+| 검증 | 결과 |
+| --- | --- |
+| native 앱 이미지 | `donh-orc2`에서 실제 Dockerfile 3개를 ARM64로 빌드·inspect·새 Registry push 성공. `ci-arm64-20261002`는 검증용 태그 |
+| Frontend | 기동·Nginx 설정 검사·renderer HTTP 200 |
+| Worker | 새 ARM64 이미지에서 기존 회귀 20개 통과 |
+| Backend | 임시 PostgreSQL·세션/캐시 Redis로 prod 기동, 소유자/런타임 계정 분리, Flyway V30·health 200. 운영 DB·비밀 설정 미사용 |
+| 배포 회귀 | 격리 프로젝트에서 정상 교체·unhealthy 이미지 롤백·선언과 영속 sentinel 보존. Docker 27.5 DinD·Compose 2.33.0에서도 통과 |
+| CI 구문 | 전체 include의 GitLab server dry-run lint 통과, 오류·경고 0개. 새 deploy 3개·`validate:service-deploy` 확인. 파이프라인 생성 아님 |
+| 운영 설정 | 현재 실행과 최종 볼륨 보존 확인. 설정 백업·검증 `/home/claude/planetory-migration-20261002/arm64-ci`, 빌드·기동 로그 `/var/tmp/planetory-arm64-ci-20261002` |
+
+사용자 긴급 게시 승인으로 `chore/infra-arm64-service-ci`의 기능 커밋 `a913dd1a`를 push하고 [MR !259](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/merge_requests/259)를 만들었다. 실제 GitLab 검증 결과는 MR의 파이프라인에서 확인한다. MR 브랜치의 검증과 develop 반영은 구분한다. MR 병합 후 기본 브랜치의 ARM64 build·수동 deploy job이 활성화된다. 정확한 이미지의 운영 배포는 후속 검증이다. 변수·job·롤백 절차는 [CI/CD](../operations/cicd.md)와 [배포·롤백](../../infra/service/README.md#배포와-롤백)을 따른다.
+
 - 배포·롤백 절차와 초기 데이터: [EC2 서비스 배포](../../infra/service/README.md)
 - CI/CD 정본: [CI/CD](../operations/cicd.md)
 - 결정 근거와 날짜별 기록: [2026-09-18](../changes/2026-09-W3/2026-09-18.md), [2026-09-21](../changes/2026-09-W4/2026-09-21.md)
+
+## donh-orc2 CI·Registry 이관 (2026-10-02)
+
+상태: **EC2-B의 Runner·전체 레지스트리·관찰 설정 이관과 실행 검증 완료.** 사용자가 목적지를 `ubuntu@donh-orc2`로 지정했고 Runner 인증 설정·Webhook 전송과 기존 자동화 재개를 명시 승인했다. Jira 키는 미지정이다.
+
+- 원본 회수 전에 레지스트리 1,779개 파일·8,733,699,542 bytes를 복사하고 전체 SHA-256의 일치를 확인했다. Runner·Webhook·운영 스크립트·관찰 상태·cron의 전송도 정상 종료했다. 이후 관리자가 원본 인스턴스를 회수했다고 사용자가 알렸다. 목적지에는 전체 레지스트리 보존본과 원본 설정을 별도로 둔다.
+- 새 레지스트리의 정식 TLS·원본 11개 저장소·112개 태그 조회가 통과했다. GitLab `REGISTRY_IMAGE_PREFIX`는 `donh-orc2.tail97e363.ts.net:5000/planetory`로 바뀌었다.
+- Runner ID `2146`·manager `2046`·버전 `19.4.0`을 ARM64로 이관했다. Docker 27.5 DinD의 amd64 build·push·실행과 실제 [validate:contracts #665128](https://lab.ssafy.com/s15-bigdata-dist-sub1/S15P21C206/-/jobs/665128)이 통과했다. Runner는 online·pause=false, 기존 태그·동시 실행 3을 유지한다.
+- Node 1 Publisher는 이미지 digest·이미지 ID를 유지하며 레지스트리 호스트만 변경했다. 새 호스트의 TLS·pull·CLI 기동이 통과했고 DB·게시 데이터는 변경하지 않았다.
+- 기존 관찰·인증서 갱신·정리 cron을 새 호스트로 재개했다. 정리 보호 목록은 `claude@donh-vnic`에서 읽는다. 기존·새 계정 회귀 8개, 실제 정리 모의 실행·관찰 검증이 통과했다. 수동 삭제·GC는 실행하지 않았다.
+
+설정·보존 위치와 이관 절차는 [CI 노드 운영 위치](../../infra/service/ec2-b/README.md#현재-운영-위치-donh-orc2-2026-10-02)를 따른다. CI 앱 이미지의 ARM64 전환·서비스 deploy 목적지·최종 볼륨 보존은 아직 별도 작업이다. 이번 실제 GitLab 검증은 계약 검사 job 하나이며 전체 앱 build/test/deploy나 QEMU 성능 검증을 뜻하지 않는다.
+
+## donh-vnic 이관·공개 전환 (2026-10-02)
+
+상태: **원본 10개 서비스·최신 DB·세션의 ARM64 이관, Cloudflare 공개 경로와 Publisher 전환·검증 완료. CI 배포 설정 전환은 미실행.** 사용자가 목적지를 `claude@donh-vnic`으로 지정했다. 대응 Jira 키는 제공되지 않았고 Jira 검색에서도 일치하는 티켓을 확인하지 못했다. 원본 10개 컨테이너는 최종 전환 검증 후 중지하고 볼륨·정의는 보존했다. 목적지의 기존 `freqtrade`·`gitlab-runner`는 변경하지 않았다.
+
+`tailscale ssh ubuntu@ec2-a`로 아래 **전환 전** 상태를 직접 확인했다. 현재 운영값과 검증 결과는 아래 「최종 공개 전환 결과」를 따른다.
+
+| 항목 | 확인 결과 |
+| --- | --- |
+| 원본 자원 | x86_64, 4 vCPU, 메모리 15,785MiB, 루트 디스크 여유 약 274GiB |
+| 실행 서비스 | `frontend`, `backend`, `service-db`, `session-redis`, `cache-redis`, `derived-compute`, `erd`, `api-docs`, `wireframe`, `cloudflared` 10개 |
+| 주요 배포 경로 | 앞 8개는 `/home/deploy/planetory/compose.yaml`을 사용한다. `wireframe`·`cloudflared`는 `/home/ubuntu/planetory/infra/service/compose.yaml`을 사용한다 |
+| 설정 파일 | 두 경로의 Compose SHA-256이 서로 다르며 체크아웃의 Compose와도 다르다. 두 경로의 `.env`는 각각 권한 600이다. 비밀 값은 조회하지 않았다 |
+| 실행 이미지 | frontend `e2c7c19b65b05231fe91ef35cb8911574be52654`, backend `58a29a16275ae1cbc7bdeff77c233fe5a21764d4`, derived-compute `6d1926d5d5936eff895fcc817584aa350961c616` |
+| DB | PostgreSQL `18.6-alpine`, DB 크기 392,771,263 bytes, public 테이블 49개, `planetory-service-db-data` 약 463MiB |
+| 세션 | `planetory-session-redis-data` 약 8KiB, Redis 7.4.11, RDB 마지막 저장 `ok`, AOF 비활성 |
+| 문서 볼륨 | `planetory-erd-output` 약 3.3MiB, `planetory-api-docs-output` 약 2.2MiB, `planetory-wireframe-output` 약 3.2MiB |
+| Gold 경로 | `/srv/planetory/gold`의 디스크 사용량 약 4KiB. 운영 곡선 데이터 이관은 서비스 DB를 포함해야 한다 |
+| 원본 health | loopback frontend `/health/renderer-enabled` HTTP 200, backend `/actuator/health` HTTP 200·`UP` |
+| 목적지 | 최초에는 `claude` SSH가 정책으로 거절됐으나 재요청 뒤 접속 성공. ARM64, 4 vCPU, 메모리 23,974MiB, 루트 디스크 여유 약 30GiB. Docker 사용 가능, 비밀번호 없는 sudo는 불가 |
+| 기존 목적지 서비스 | `freqtrade`·`gitlab-runner`가 실행 중이다. `freqtrade`가 loopback 8080을 사용하므로 이관 Backend의 호스트 포트는 충돌하지 않는 값이 필요하다. 기존 Planetory 경로·볼륨은 없다 |
+
+사용자가 원본이 5분 뒤 초기화된다고 알리고 이관을 재촉했다. 자동 승인 검토가 민감 payload 전송을 거절하여 별도 확인을 받았으며, 사용자가 **DB·비밀 설정·세션 전송을 명시적으로 승인**했다. 해당 범위만 `/home/claude/planetory-migration-20261002`에 SSH 스트리밍으로 보존했다. 디렉터리 권한은 700, 파일 권한은 모두 600이다. 내용은 화면이나 로그에 출력하지 않았다.
+
+| 보존 파일 | 크기 | 검증 |
+| --- | --- | --- |
+| `service-db.sql.gz` | 276,776,073 bytes | 원본 `pg_dumpall`·전송 정상 종료, 목적지 `gzip -t` 통과 |
+| `env-files.tar.gz` | 1,361 bytes | 두 배포 경로의 `.env`, 전송 정상 종료·`gzip -t` 통과 |
+| `session-volume.tar.gz` | 276 bytes | `planetory-session-redis-data/_data`, 전송 정상 종료·`gzip -t` 통과 |
+
+DB는 실행 중인 볼륨의 파일 복사가 아니라 논리 덤프다. 덤프 이후 원본 쓰기는 중지하지 않았으므로 최종 전환 시점의 쓰기까지 보존됐다는 의미는 아니다. 세션 파일은 기존 RDB이며 새 저장을 강제하지 않았다. 보존한 세션 RDB는 목적지 새 볼륨에 복원했고 Redis 기동·health를 확인했다. 원본의 최종 로그인 상태와 같다는 검증은 최종 쓰기 중단·새 SAVE 이후에 수행해야 한다.
+
+목적지에는 ARM64 PostgreSQL 18.6, Redis 7.4.11, Nginx 1.29, Temurin 21 JRE, Nginx unprivileged 1.27, Python 3.12 기반 이미지를 내려받았다. 원본 앱 이미지는 amd64이며 목적지에 amd64 에뮬레이터가 없다. 앱 산출물·공개 문서 전송은 자동 검토의 별도 거절 이후 사용자에게 범위를 확인했고, **앱 전송·ARM64 준비·검증 명시 승인**을 받아 완료했다. 원본 실행 JAR·프론트 정적 파일·Nginx 설정·문서 볼륨과 Worker 실행 커밋 소스를 전송했다.
+
+### 최초 긴급 덤프 DB 복원·검증
+
+사용자가 **새 DB 복원·검증을 명시적으로 승인**한 뒤 `planetory-service-db-data-restored` 볼륨과 `planetory-migration-db-restored` 컨테이너에 복원했다. 컨테이너는 `network=none`, 공개 포트 없음 상태다. 기존 `freqtrade`·`gitlab-runner`와 그 데이터는 변경하지 않았다.
+
+| 검증 | 결과 |
+| --- | --- |
+| SQL 복원 | `psql ON_ERROR_STOP=1` 정상 종료. 원본과 같은 최초 관리자 `planetory`로 초기화하며 중복되는 해당 계정의 `CREATE ROLE` 한 줄만 제외했다 |
+| 덤프 데이터 비교 | COPY 대상 48개 테이블, 87,165행을 덤프에서 집계해 실제 복원 DB의 테이블별 행 수와 모두 비교·일치 |
+| 시퀀스 | 덤프의 시퀀스 28개 `last_value`·`is_called`와 모두 일치 |
+| 스키마 | public 테이블·뷰 49개, Flyway V30, 미검증 제약 0개 |
+| 권한·비밀번호 | 서비스 계정의 public CREATE 권한 없음, 앱·Publisher 역할 멤버십 유지. 보존한 서비스 계정 비밀번호로 TCP 인증 성공 |
+| 검증 기록 | 보호된 이관 경로의 `restore-db.complete`·`db-validation.json`. SQL·인증 로그와 비밀 설정은 권한 600으로 보관한다 |
+
+최초 복원은 다른 최초 관리자 계정을 사용해 `GRANTED BY planetory` 단계에서 실패했다. PostgreSQL 18 역할 멤버십은 최초 관리자 식별자에 의존하므로 원본과 같은 계정으로 초기화해 해결했다. [공식 GRANT 문서](https://www.postgresql.org/docs/18/sql-grant.html)를 참조한다. 실패한 `planetory-migration-db` 컨테이너와 `planetory-service-db-data` 볼륨에는 역할만 생성됐으며 서비스 DB 데이터는 없다. 원본 덤프와 실패 진단은 보존하고 후속 정리 대상으로 둔다.
+
+### 목적지 배포 설정 준비
+
+원본은 후속 확인에서도 컨테이너 10개를 실행하고 있다. 원본의 실제 Compose를 비밀 값이 보간되지 않는 상태로 읽고 비밀 리터럴이 없는지 검사한 뒤 `/home/claude/planetory/compose.json`을 준비했다. 주 구성은 `/home/deploy/planetory`에서, 실제 `wireframe`·`cloudflared` 구성은 기존 실행 경로에서 가져왔다. 이미 목적지에 보존한 `.env`를 권한 600으로 복사하고 Tunnel 설정은 실제 connector가 사용한 경로의 선언을 선택했다. 앱 산출물은 사용자 승인 후 전송했다.
+
+- 기본 기동 서비스 10개와 모든 서비스의 `linux/arm64` 플랫폼을 정적 확인했다.
+- Backend는 loopback 18080을 사용해 기존 `freqtrade`의 8080과 충돌하지 않는다. 내부 Backend 8080은 유지한다.
+- DB는 검증된 `planetory-service-db-data-restored` 볼륨을 지정한다. 실패한 최초 복원 볼륨을 사용하지 않는다.
+- Gold bind 경로는 관리 계정이 소유한 `/home/claude/planetory/gold`다. `--no-interpolate` 결과에서 volume으로 분류된 경로는 bind로 명시했다.
+- 앱 이미지 선언은 원본 실행 커밋의 ARM64 참조로 준비하고 해당 이미지 3개를 빌드했다. 아래 내부 검증 결과를 참조한다.
+- `docker compose config -q` 통과와 비밀 값 없는 `deployment-preflight.json`을 남겼다. 이 검증은 서비스 기동·기능 검증을 뜻하지 않는다.
+
+### ARM64 앱 내부 기동·검증 완료
+
+이 단계에서는 공개 connector를 기동하지 않았다. `/home/claude/planetory/compose.json`의 9개 앱·DB·Redis·문서 서비스를 `planetory-service` 프로젝트로 기동했고, 모두 실제 ARM64 이미지임을 확인했다. 격리 DB 검증 컨테이너는 먼저 중지해 같은 PostgreSQL 볼륨을 동시에 마운트하지 않았다. 기존 `freqtrade`·`gitlab-runner`는 계속 실행 중이다.
+
+| 대상 | 방법·결과 |
+| --- | --- |
+| Backend | 원본 실행 컨테이너의 `/app/app.jar`를 ARM64 Temurin 21 런타임에 패키징. JAR SHA-256이 원본과 일치. loopback 18080 `/actuator/health` HTTP 200·UP |
+| Frontend | 원본 HTML·정적 번들과 Nginx 설정을 ARM64 Nginx unprivileged에 패키징. loopback 3000 `/`·`/health/renderer-enabled` 모두 HTTP 200 |
+| Worker | 실행 커밋 `6d1926d5d5936eff895fcc817584aa350961c616`의 소스와 해시 고정 의존성으로 ARM64 빌드. 기존 계약 fixture·합성 곡선·HTTP 회귀 테스트 20개 통과. Backend 컨테이너에서 `derived-compute:8090/healthz` HTTP 200 |
+| DB·Redis | service-db·session-redis·cache-redis healthy. DB는 앞서 검증한 복원 볼륨, 세션은 긴급 보존 RDB를 새 목적지 볼륨에 복원 |
+| 문서 | 원본 erd·api-docs·wireframe 출력 볼륨을 각각 복원. 프론트 컨테이너에서 세 서비스 `/` HTTP 200 |
+| 공개 진입 | 목적지 `cloudflared` 미기동. 원본 connector가 계속 담당한다. ARM64 connector 이미지는 원본 digest로 준비 |
+| 기록 | 보호된 이관 경로의 `app-validation.json`·`worker-tests.log`, 전송 archive와 각 빌드 로그 |
+
+보호된 디렉터리에서 Python tar `data` 필터로 해제할 때 archive에 명시되지 않은 중간 디렉터리가 umask 077을 따라 생성돼 Nginx가 정적 파일을 읽지 못했다. 공개 정적 디렉터리만 755로 맞춘 뒤 캐시 없이 다시 빌드하고 renderer 경로를 재검증했다. `.env`·백업과 빌드 context의 보호 권한은 유지한다.
+
+### 최종 공개 전환 결과
+
+사용자가 **“공개 서비스 경로도 클라우드 플레어와 연결 마무리해줘”**라고 지시한 뒤 최종 전환을 실행했다. 원본의 계속된 쓰기를 포함해야 하므로 최초 긴급 복원본으로 공개 전환하지 않고 다음 순서로 새 덤프를 복원했다.
+
+1. Node 1 `tess_publication_run`의 원래 pause 값(`false`)을 기록하고 일시정지했다. 실행 중·대기 중인 해당 DAG run과 실행 중인 Publisher unit은 0개였다.
+2. 원본 `cloudflared`·Backend를 중지하고 서비스 DB의 `default_transaction_read_only=on`을 설정한 뒤 기존 DB 연결을 종료했다. 세션 Redis `SAVE`가 `OK`로 끝난 뒤 최신 덤프·설정·RDB를 복사했다.
+3. 목적지에 별도 최종 PostgreSQL·세션 볼륨을 만들었다. DB는 원본 bootstrap 역할로 초기화하고 중복 `CREATE ROLE planetory`와 이관용 DB read-only 설정 한 줄만 제외해 복원했다. 운영 DB의 read-only는 `off`다.
+4. 덤프의 COPY 테이블 48개·87,165행을 테이블별로 모두 비교했고 시퀀스 28개도 일치했다. Flyway V30·미검증 제약 0개·앱 CREATE 권한 없음·서비스/Pub 역할 멤버십을 확인했다. 세션 RDB 파일은 최종 SAVE archive의 해시와 일치했다.
+5. 격리 복원 DB를 먼저 중지하고 앱을 최종 볼륨으로 기동했다. Backend `UP`·프론트 renderer 200 뒤 대상 connector를 시작했다. 원본 connector는 중지 상태여서 두 서버를 동시에 공개 경로에 붙이지 않았다.
+6. Node 1 Publisher의 host·Backend URL만 새 서버로 변경하고 DB 비밀번호·역할·health·서비스 토큰을 검증했다. 틀린 bundle ID로 토큰 없이 401, 올바른 서비스 토큰으로 404를 확인해 실제 판을 활성화하지 않았다. DAG pause 값을 원래 `false`로 복구했다.
+7. 외부 HTTPS 검증 완료 후 원본 10개 컨테이너를 모두 중지했다. 원본·최초 검증·최종 볼륨과 보존 파일은 삭제하지 않았다.
+
+| 현재 항목 | 운영값·검증 |
+| --- | --- |
+| 관리 접속 | `tailscale ssh claude@donh-vnic` |
+| 실행 설정 | `/home/claude/planetory/compose.json`, Compose 프로젝트 `planetory-service`, 운영 10개 이미지 ARM64 |
+| 최종 DB 볼륨 | `planetory-service-db-data-final-20261002`, 앱·Publisher 인증·Flyway V30 확인 |
+| 최종 세션 볼륨 | `planetory-session-redis-data-final-20261002`, 최종 SAVE 파일과 해시 일치·Redis healthy |
+| 공개 Tunnel | 원본 digest의 ARM64 `cloudflared`, 대상 connector의 등록 connection 4개. remote ingress의 기대 hostname 5개 확인 |
+| 공개 HTTPS | `app.planetory.space`, `planetory.space`, `erd.planetory.space`, `api-docs.planetory.space`, `wireframe.planetory.space` 모두 HTTP 200 |
+| 동적 경로 | 공개 renderer 200, 익명 `/api/v1/me` 401·JSON. 외부 검증 요청 6개가 대상 프론트에 실제 도달했음을 확인 |
+| OAuth | Google·SSAFY 로그인 시작 302와 `https://app.planetory.space/login/oauth2/code/<provider>` 확인. 실제 사용자 로그인 완료는 이번 검증 범위가 아니다 |
+| Publisher | Node 1 `/etc/planetory/publisher/env`의 `PGHOST=donh-vnic`, `BACKEND_URL=http://donh-vnic:8080`. 비밀 값·DB/계정 유지, DB 인증·writer 역할·Backend health·서비스 토큰 검사 통과 |
+| 포트·ACL | target TCP 5432 → loopback 5432, 8080 → loopback 18080. 실제 Tailscale 필터에서 Node 1의 두 주소 범위만 허용. Node 1 연결 성공과 비-Publisher `ec2-b`의 두 포트 연결 차단을 실환경에서 확인. 주소는 출력·기록하지 않았다 |
+| 기존 target 유지 | `freqtrade`의 loopback 8080, `gitlab-runner`, 기존 Tailscale 443·Web 설정은 변경하지 않았다. serve 설정은 전후 값을 비교했다 |
+| 최종 보존 | `service-db-final.sql.gz` 276,776,099 bytes, `env-files-final.tar.gz` 1,361 bytes, `session-volume-final.tar.gz` 275 bytes. 원본 덤프·전송 정상 종료와 `gzip -t` 통과 |
+| 검증 기록 | 보호된 이관 디렉터리의 `db-final-validation.json`, `restore-db-final.complete`, `final-app-health.complete`, `public-cutover-validation.json`, `public-cutover.complete`. Node 1의 보호된 `/var/tmp/planetory-migration-20261002`에 Publisher 전후 설정·검증·DAG 복구 기록 |
+
+목적지의 `claude`는 비밀번호 없는 sudo와 Tailscale operator 권한이 없어, 사용자 승인 범위에서 Docker 권한으로 임시 컨테이너에 Tailscale CLI·local API socket만 연결해 두 전달 규칙을 추가했다. 기존 443·Web 설정이 같음을 확인했다. 전체 host filesystem을 마운트하거나 sudo 정책을 바꾸지 않았다.
+
+현재 목적지에는 실제 운영 쓰기가 생길 수 있다. 원본 재기동만으로 되돌리면 전환 이후 데이터가 유실된다. 역전환하려면 게시·공개 쓰기를 다시 중단하고 목적지의 최신 DB·세션을 보존·복원해야 한다. 원본의 DB read-only 설정과 중지 상태는 이중 쓰기 방지용으로 유지한다.
+
+### 남은 CI 배포 설정 전환
+
+현재 빌드 Runner 호스트 `ec2-b`에서 `claude@donh-vnic`으로 SSH 접속해 Docker Server ARM64 응답을 확인했다. 이는 CI 신원의 SSH·Docker 접근 확인이며 실제 build/push/deploy job 검증은 아니다. GitLab 배포 변수와 앱 빌드는 아직 원본 목적지·amd64를 전제로 하므로 별도 전환이 남아 있다. 기존 deploy job은 공용 `compose.yaml`을 덮어쓴다. ARM64와 최종 볼륨·관리 계정·경로를 반영하기 전에는 목적지에 실행하지 않는다. 이 작업에서 CI 코드·GitLab 변수·commit·push는 변경하지 않았다.
+
+아래 다른 날짜의 기록은 이전 배포 이력이다. 현재 운영 배치와 완료 범위는 이 2026-10-02 절 및 [운영 배치](../../infra/service/README.md#현재-운영-배치-2026-10-02)를 따른다.
 
 ## 한 줄 요약
 

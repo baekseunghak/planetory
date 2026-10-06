@@ -4,7 +4,28 @@ Frontend, Backend와 온라인 계산기의 공통 Docker Compose 설정을 둘 
 
 `compose.yaml`은 Registry의 Frontend·Backend 이미지를 실행한다. 로컬 빌드는 하지 않으며 실제 DB 주소, Gold 경로와 비밀 값은 각 서버의 `.env`에서 주입한다.
 
-GitLab의 EC2-A 수동 배포 job이 이 Compose를 사용해 선택한 서비스만 갱신한다. EC2-B에는 서비스 역할이 없으므로(시스템 아키텍처 8장 D4) `ec2-b/`에는 서비스 설정을 두지 않고 CI·외부 관찰 설정만 둔다([ec2-b/README.md](ec2-b/README.md)). 노드별 서비스 차이가 필요하면 `ec2-a/`에 둔다.
+GitLab 수동 배포 job은 선택한 서비스만 갱신한다. 현재 이관 서버는 아래 기존 운영 Compose를 사용한다. EC2-B에는 서비스 역할이 없으므로(시스템 아키텍처 8장 D4) `ec2-b/`에는 서비스 설정을 두지 않고 CI·외부 관찰 설정만 둔다([ec2-b/README.md](ec2-b/README.md)). 노드별 서비스 차이가 필요하면 `ec2-a/`에 둔다.
+
+## 현재 운영 배치 (2026-10-02)
+
+사용자 요청으로 EC2-A의 실행 서비스 10개를 `donh-vnic` ARM64 서버로 이관하고 Cloudflare 공개 경로·Node 1 Publisher 연결까지 검증했다. 아래 기존 EC2-A 절은 이관 전 배치와 역할 설명이다. 현재 운영은 다음 값을 따른다. [서비스 배포 상태](../../docs/project/service-deploy-status.md#donh-vnic-이관공개-전환-2026-10-02)에 전환 순서·덤프 비교·공개 검증과 남은 CI 작업이 있다.
+
+| 항목 | 현재 값 |
+| --- | --- |
+| 관리 접속·경로 | `tailscale ssh claude@donh-vnic`, `/home/claude/planetory` |
+| 실제 Compose | `compose.json`·프로젝트 `planetory-service`. 비밀 설정은 같은 경로의 권한 600 `.env` |
+| 기동 명령 | 해당 경로에서 `docker compose -p planetory-service -f compose.json up -d`. 원본 EC2-A는 중지 상태이며 동시에 기동하지 않는다 |
+| DB 볼륨 | `planetory-service-db-data-final-20261002` → `/var/lib/postgresql`. 중복 최초 복원 볼륨을 쓰지 않는다 |
+| 세션 볼륨 | `planetory-session-redis-data-final-20261002` → `/data`. cache-redis는 계속 비영속이다 |
+| Gold bind | `/home/claude/planetory/gold` → `/gold:ro`. 운영 곡선·주기도는 복원한 서비스 DB에 있다 |
+| 호스트 포트 | frontend loopback 3000, Backend loopback 18080, DB loopback 5432. 기존 freqtrade의 loopback 8080과 충돌하지 않는다 |
+| Publisher 경로 | Node 1 → `donh-vnic:5432` → loopback 5432, `donh-vnic:8080` → loopback 18080. Tailscale ACL은 Node 1만 허용 |
+| 공개 경로 | 기존 Cloudflare Tunnel·hostname 배치를 유지하고 connector만 대상에서 실행한다. source connector는 중지한다 |
+| 현재 앱 이미지 | 실행 커밋의 `local/planetory-frontend:<sha>-arm64`, `local/planetory-backend:<sha>-arm64`, `local/planetory-derived-compute:<sha>-arm64`. Backend JAR·프론트 번들은 원본 산출물, Worker는 실행 커밋으로 ARM64 빌드했다 |
+
+원본 두 실제 Compose 경로의 설정을 합쳐 준비한 운영 `compose.json`은 저장소 공용 `compose.yaml`과 같지 않다. 앱 이미지는 `FRONTEND_IMAGE`·`BACKEND_IMAGE`·`DERIVED_COMPUTE_IMAGE` 변수로 선택하며 현재 값은 위 이관 이미지를 유지한다. 최종 DB·세션 볼륨은 `external: true`로 표시했고 변경 전후 해석된 서비스 설정·컨테이너 ID가 같음을 확인했다. 공용 Compose를 덮어쓰지 않는 ARM64 CI 코드는 사용자 긴급 게시 승인에 따라 MR로 검토하며 기본 브랜치 배포는 병합 후 활성화된다. 운영 기동에 `down -v`를 사용하지 않으며, source·초기 검증·최종 볼륨과 긴급/최종 덤프를 보존한다.
+
+CI Runner·이미지 레지스트리·외부 관찰의 물리 위치도 `ec2-b`에서 `ubuntu@donh-orc2`로 변경했다. 현재 레지스트리는 `donh-orc2.tail97e363.ts.net:5000`이며 Node 1 Publisher는 기존 digest를 유지하고 이 호스트에서 pull한다. 전체 데이터 해시 비교, 실제 Runner job과 운영 자동화 검증은 [CI 노드 운영 위치](ec2-b/README.md#현재-운영-위치-donh-orc2-2026-10-02)에 있다.
 
 ## Backend 비밀 값 추가
 
@@ -547,7 +568,7 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 | `PLANETORY_RESIDUAL_MAXRUNNING` | `1` | **Backend** 동시 계산 수. Worker 대수 × 동시 실행 수(지금 1 × 1)와 같아야 한다. 크면 넘친 작업이 기다리지 않고 Worker 503으로 실패한다 |
 | `DERIVED_COMPUTE_URL` | 없음 | **Backend** 변수. `http://derived-compute:8090`을 넣어야 Backend 실행기가 뜬다. 비어 있으면 잔차 요청은 503 「준비되지 않았습니다」 |
 
-값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 배포는 `deploy:derived-compute:ec2-a`다. HTTP 확인 경로가 없어 교체만 하고 자동 롤백은 하지 않는다.
+값은 실측 전 시작값이며 `S15P21C206-104`에서 조정한다. Backend의 `depends_on`에 넣지 않았다. Worker가 없어도 잔차 요청만 503이 되고 나머지 API는 돈다. 새 배포는 `deploy:derived-compute:donh-vnic`이며 Compose `--wait`가 이미지 health를 확인해 실패 시 롤백한다. 아래 최초 배포 순서는 이관 전 EC2-A 기록이다. 현재 이관 서버는 Worker가 이미 기동돼 있다.
 
 ### 첫 배포 절차
 
@@ -586,31 +607,33 @@ docker compose --profile wireframe-refresh run --rm wireframe-sync
 
 ## 배포와 롤백
 
-`deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 `compose.yaml`과 함께 이 파일을 `$DEPLOY_PATH`에 올리고 호출한다. 교체 후 공개 경로를 직접 두드려 판정하며, 살아나지 않으면 **직전 이미지로 되돌린다.** compose의 `healthcheck`를 쓰지 않는 이유는 `up -d`가 끝난 시점에 아직 `starting`이고 서비스에 따라 정의도 없기 때문이다.
+`deploy.sh`가 배포 노드에서 서비스 한 개를 교체한다. CI가 이 파일을 `$DEPLOY_PATH`에 올리고 `COMPOSE_FILE=compose.json`·`COMPOSE_PROJECT_NAME=planetory-service`로 호출한다. 기본값은 기존 `compose.yaml`이며 [Compose 기본 환경변수](https://docs.docker.com/compose/how-tos/environment-variables/envvars/)를 사용한다. 기존 운영 Compose를 덮어쓰지 않는다. [`up --wait --wait-timeout`](https://docs.docker.com/reference/cli/docker/compose/up/)으로 실행·이미지 health를 기다리고 Frontend·Backend는 게시된 HTTP 경로도 확인한다. 실패하면 **직전 이미지로 되돌린다.**
 
 | 서비스 | 확인 경로 | 교체 전 DB 덤프 | 대기 한계 |
 | --- | --- | --- | --- |
 | `frontend` | `/health/renderer-enabled` | 없음 | 90초 |
 | `backend` | `/actuator/health` | 남긴다 | 180초 |
-| `derived-compute` | 없음(호스트 포트 없음, 이미지 `HEALTHCHECK`만) | 없음 | — |
+| `derived-compute` | 이미지 `HEALTHCHECK`의 `/healthz`(호스트 포트 없음) | 없음 | 90초 |
 
 프론트는 `/`를 보지 않는다. `/`는 렌더러가 빠진 빌드에서도 200이라 회귀를 못 잡는다. `/health/renderer-enabled`는 `VITE_SKY_RENDERER_ENABLED=true`로 빌드한 이미지에만 있는 정적 표식이다(`apps/frontend/Dockerfile`). nginx는 `/health/`를 SPA로 폴백하지 않고 없으면 404를 낸다. MR의 `web:image`도 이미지 안에 표식이 있는지 먼저 본다.
 
 표식이 들어가기 전 이미지(`frontend:80a860fa…-sky` 이전)에는 이 경로가 없어 그 이미지로 되돌리는 롤백은 헬스가 실패한다. 2026-09-23 CI가 표식 있는 `a9e567db`를 배포해 과도기는 끝났다. 그보다 옛 이미지로 손으로 되돌릴 때만 해당한다.
 
-확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 job(GCP 노드)은 확인과 롤백을 건너뛰고 교체만 한다.
+HTTP 확인 주소는 `docker compose port`로 읽는다. `.env`의 `FRONTEND_PORT`·`BACKEND_PORT`를 바꿔도 따라간다. `DEPLOY_HEALTH_PATH`가 빈 단일 서비스도 Compose health 실패 시 롤백한다. 이미지에 `HEALTHCHECK`가 없으면 Compose는 실행 상태까지만 확인한다. 복수 서비스 분기는 종전처럼 교체만 한다.
 
 **롤백은 이미지만 되돌린다. 스키마는 되돌리지 않는다.** Flyway는 앞으로만 가고 `clean`이 막혀 있다. 지금까지의 마이그레이션은 열·테이블 추가뿐이라 구 앱이 새 스키마에서도 `validate`를 통과하지만, 열을 지우거나 이름을 바꾸는 마이그레이션이 들어오면 그 가정이 깨진다. 그때는 덤프에서 복원해야 한다.
 
-덤프는 `$DEPLOY_PATH/backups/service-db-<YYYYMMDD-HHMMSS>.sql`에 쌓이며 최근 10개만 남는다. 복원은 이미 마이그레이션된 DB에 데이터만 넣는 경우 트리거와 `rule-0` 충돌을 먼저 처리해야 한다. 절차는 [운영 규칙 런북](../../docs/operations/operation-rule-runbook.md)을 따른다.
+덤프는 `$DEPLOY_PATH/backups/service-db-<YYYYMMDD-HHMMSS>.sql`에 쌓이며 최근 10개만 남는다. `umask 077`로 신규 덤프·실패 로그를 보호한다. 앱 실패 로그는 CI 출력 대신 노드의 `backups/deploy-<YYYYMMDD-HHMMSS>.log`에 남긴다. 복원은 이미 마이그레이션된 DB에 데이터만 넣는 경우 트리거와 `rule-0` 충돌을 먼저 처리해야 한다. 절차는 [운영 규칙 런북](../../docs/operations/operation-rule-runbook.md)을 따른다.
 
 `compose.yaml`은 되돌리지 않는다. 포트·환경변수·볼륨 정의를 바꾸는 변경은 이미지 배포와 같은 파이프라인에 싣지 않는다. 실패하면 "구 이미지 + 신 정의"라는 검증되지 않은 조합이 된다.
 
 덤프는 DB와 같은 호스트·같은 디스크에 있다. 인스턴스를 잃으면 볼륨과 함께 사라진다. 배포 실패 복구용이지 재해 복구용이 아니다.
 
+회귀는 `sh infra/service/deploy-test.sh`로 실행한다. 고유 Compose 프로젝트·외부 테스트 볼륨에서 정상 이미지 교체, 의도적으로 unhealthy인 이미지의 롤백, `.env` 선언·볼륨 sentinel·경로 보존을 확인하고 이번 테스트 자원만 정리한다. Docker 27.5 DinD·Compose 2.33.0 ARM64에서 통과했다. CI의 `validate:service-deploy`가 배포 스크립트·공통 CI 변경 시 실행한다.
+
 ### 어느 버튼을 누르나
 
-**최신 develop 파이프라인의 버튼을 누른다.** 기준 브랜치에서는 Frontend·Backend를 매번 빌드하므로 최신 파이프라인에 두 버튼이 늘 있다. 더 새 배포가 있는 상태에서 옛 파이프라인 버튼을 누르면 GitLab이 job을 실패시킨다(`environment: ec2-a`, [CI/CD](../../docs/operations/cicd.md) 「배포 버튼 유지」). 2026-09-23 이전 파이프라인의 job과 예전에 성공한 job의 재실행은 막히지 않는다.
+**새 CI가 게시된 최신 develop 파이프라인의 `deploy:<앱>:donh-vnic` 버튼을 누른다.** 기준 브랜치에서는 앱 3개를 매번 빌드한다. 더 새 배포가 있는 상태에서 옛 파이프라인 버튼을 누르면 GitLab이 job을 실패시킨다(`environment: donh-vnic`, [CI/CD](../../docs/operations/cicd.md) 「배포 버튼 유지」). 이전 `deploy:*:ec2-a`는 새 목적지 변수를 사용하지 않는다. 예전에 성공한 job의 Retry를 통한 롤백 허용 여부는 CI/CD 문서를 따른다.
 
 배포 job이 실패로 끝나면 되돌리기까지는 끝난 상태다. 로그의 마지막 줄로 구분한다.
 

@@ -20,19 +20,18 @@ derived-compute:test:
 
 # develop에서는 변경 여부와 관계없이 빌드한다. 이유는 build:backend 주석과 같다(S15P21C206-261).
 build:derived-compute:
-  extends: .docker-build
+  extends: .docker-build-arm64
   variables:
     DOCKERFILE: apps/derived-compute/Dockerfile
     IMAGE_NAME: derived-compute
-    TARGET_PLATFORM: linux/amd64
     BUILD_ARGS: ""
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       exists: [apps/derived-compute/requirements.txt]
 
 # 호스트 포트가 없어 deploy.sh의 HTTP 확인을 쓸 수 없다. HEALTH_PATH를 비우고 이미지 HEALTHCHECK에 맡긴다.
-deploy:derived-compute:ec2-a:
-  extends: .deploy-ec2-a
+deploy:derived-compute:donh-vnic:
+  extends: .deploy-donh-vnic
   needs: ["build:derived-compute"]
   variables:
     IMAGE_NAME: derived-compute
