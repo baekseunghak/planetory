@@ -138,14 +138,19 @@ async function windowOverDip(page) {
     "true",
   );
 }
+/** EXP-12: "제출값 확인" shows what will be sent, "제출하기" sends it. */
+async function send(page) {
+  await page.getByRole("button", { name: "제출값 확인", exact: true }).click();
+  await page.getByRole("button", { name: "제출하기", exact: true }).click();
+}
 async function judgeAndSubmit(page, judgment) {
   await page.getByRole("radio", { name: judgment, exact: true }).check();
-  await page.getByRole("button", { name: "제출", exact: true }).click();
+  await send(page);
 }
 /**
  * The accepted result. In the app the shell may step the panel aside for a
- * transit and a discovery card first; its "결과 자세히 보기" hands focus back
- * to the panel's result region.
+ * transit and a discovery card first; its "이번 제출 결과" opens the detail
+ * dialog over the panel's result region, which the step checks and closes.
  */
 async function awaitResult(page, kind, cardShot) {
   const result = page.getByTestId("cx-result");
@@ -158,7 +163,11 @@ async function awaitResult(page, kind, cardShot) {
       .catch(() => false);
     if (appeared) {
       if (cardShot) await shot(page, cardShot);
-      await card.getByRole("button", { name: "결과 자세히 보기" }).click();
+      await card.getByRole("button", { name: "이번 제출 결과" }).click();
+      const detail = page.getByTestId("cx-result-detail");
+      await expect(detail).toBeVisible({ timeout: 15000 });
+      await detail.getByRole("button", { name: "닫기", exact: true }).click();
+      await expect(detail).toBeHidden();
     }
   }
   await expect(result).toBeVisible({ timeout: 15000 });
@@ -194,12 +203,15 @@ await step("matched", async () => {
   await shot(page, "02-start");
   await pickPeak(page, 1);
   // Fine-tune with the keyboard on the focused periodogram, then back.
+  // An arrow moves 1/128 of a grid step, below the readout's three decimals:
+  // compare the slider's unrounded period instead.
   const graph = page.getByRole("group", { name: "주기도 그래프" });
+  const slider = page.locator('input[name="period-fine-tune-slider"]');
   await graph.focus();
-  const before = await page.getByTestId("cx-period-readout").innerText();
+  const before = await slider.inputValue();
   await graph.press("ArrowRight");
   await expect(fold(page)).toHaveAttribute("data-fold-ready", "true");
-  const tuned = await page.getByTestId("cx-period-readout").innerText();
+  const tuned = await slider.inputValue();
   if (tuned === before) throw new Error(`arrow did not tune: ${tuned}`);
   await graph.press("ArrowLeft");
   await expect(fold(page)).toHaveAttribute("data-fold-ready", "true");
@@ -211,12 +223,12 @@ await step("matched", async () => {
   await page.getByRole("checkbox", { name: "V·U형" }).check();
   await page.getByPlaceholder("메모 (선택)").fill("U자 모양으로 떨어집니다.");
   await shot(page, "05-judgment");
-  await page.getByRole("button", { name: "제출", exact: true }).click();
+  await send(page);
   await awaitResult(page, "matched", "06a-shell-discovery-card");
   await shot(page, "06-result-matched");
   await page
     .getByTestId("cx-result")
-    .getByRole("button", { name: "결과 자세히 보기" })
+    .getByRole("button", { name: "이번 제출 결과" })
     .click();
   const detail = page.getByTestId("cx-result-detail");
   await expect(detail).toContainText("고른 주기가 신호와 맞았습니다.");
@@ -288,7 +300,7 @@ await step("judgment-mismatch", async () => {
   await shot(page, "09-result-judgment");
   await page
     .getByTestId("cx-result")
-    .getByRole("button", { name: "결과 자세히 보기" })
+    .getByRole("button", { name: "이번 제출 결과" })
     .click();
   await expect(page.getByTestId("cx-result-detail")).toContainText(
     "판단이 달라 성과로 인정되지 않았습니다.",
@@ -347,7 +359,8 @@ await step("keyboard-window", async () => {
   await chart.focus();
   for (const key of ["+", "+", "+", "+"]) await chart.press(key);
   for (let i = 0; i < 12; i++) await chart.press("ArrowRight");
-  await page.getByRole("button", { name: "구간 선택 시작" }).click();
+  // Enter on the chart starts a window at the view's center.
+  await chart.press("Enter");
   const start = page.getByRole("slider", { name: "위상 구간 시작" });
   await expect(start).toBeFocused();
   await start.press("Shift+ArrowLeft");
@@ -382,9 +395,9 @@ await step("sending-and-unresolved", async () => {
     route.fulfill(unavailable),
   );
   await judgeAndSubmit(page, "행성 같음");
-  await expect(page.getByTestId("cx-submission")).toHaveAttribute(
-    "data-state",
-    "sending",
+  // While sending, the review stays (its button busy) and its status says so.
+  await expect(page.getByTestId("cx-review").getByRole("status")).toHaveText(
+    "제출 중…",
   );
   await shot(page, "15-sending");
   await expect(page.getByTestId("cx-submission")).toHaveAttribute(
@@ -533,10 +546,15 @@ await step("draft-restore", async () => {
     "true",
     { timeout: 20000 },
   );
-  await expect(
-    page.getByRole("radio", { name: "모르겠음", exact: true }),
-  ).toBeChecked();
   await shot(page, "25-draft-restored");
+  // A draft never restores the confirmation (analysis-frontend-spec 5.1) and a
+  // judgment shows only for a confirmed window: picking it again confirms.
+  const unsure = page.getByRole("radio", { name: "모르겠음", exact: true });
+  await expect(unsure).not.toBeChecked();
+  await unsure.check();
+  await expect(
+    page.getByRole("button", { name: "제출값 확인", exact: true }),
+  ).toBeEnabled();
   await context.close();
 });
 
@@ -568,7 +586,7 @@ await step("curve-step", async () => {
 
 await step("help", async () => {
   const { page, context } = await open("900000024");
-  await page.getByRole("button", { name: "도움말" }).click();
+  await page.getByRole("button", { name: "조작법", exact: true }).click();
   await expect(page.getByTestId("cx-help-dialog")).toBeVisible();
   await shot(page, "29-help");
   await context.close();

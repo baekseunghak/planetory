@@ -91,7 +91,7 @@ function focusAnalysisResult() {
     stage?.querySelector<HTMLElement>("[data-analysis-result]") ??
     null;
   if (!result) return;
-  // "결과 자세히 보기" means the full result in both variants: the classic
+  // "이번 제출 결과" means the full result in both variants: the classic
   // dialog is it; the new variant opens its own detail view.
   const details = result.matches("[data-analysis-result]")
     ? result.querySelector<HTMLButtonElement>(

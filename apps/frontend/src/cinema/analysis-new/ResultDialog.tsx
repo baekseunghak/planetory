@@ -8,7 +8,7 @@ import { AcceptedResult } from "../analysis/results/AcceptedResult";
 type Accepted = Extract<SubmissionResult, { state: "accepted" }>;
 
 /**
- * "결과 자세히 보기": the cinema's full result (../analysis/results/
+ * "이번 제출 결과": the cinema's full result (../analysis/results/
  * AcceptedResult, the same view as the classic result dialog) in a dialog
  * over the scene. Signal names, numbers by the glossary, internal ids only
  * under 기술 정보, and at most two primary actions ("구간 다시 잡기" /

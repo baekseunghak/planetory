@@ -706,9 +706,13 @@ function ReviewBlock({
           aria-describedby={`${hintId}-submit`}
           onClick={onSend}
         >
-          <span role="status">{sending ? "제출 중…" : "제출하기"}</span>
+          {sending ? "제출 중…" : "제출하기"}
         </button>
       </div>
+      {/* Outside the button: a live region inside it hides the button's name in Chrome. */}
+      <p role="status" className="cx-sr">
+        {sending ? "제출 중…" : ""}
+      </p>
     </div>
   );
 }
