@@ -71,6 +71,7 @@ foreach ($required in @(
     'SILVER_CAPACITY_LIMIT = 0.80',
     'PREFLIGHT_STOP_PERCENT = 85',
     'another Silver application is running',
+    'yarn_slot(Path(SILVER_LOCK_PREFIX), slots=1)',
     'planetory.tess-silver-attempt.v5',
     'planetory.tess-silver-stage.v4',
     '("target_combined", "periodogram", "iteration", "manifest")',

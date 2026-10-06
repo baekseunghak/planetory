@@ -698,7 +698,7 @@ class SilverIncrementalContractTest(unittest.TestCase):
                             for s in sorted(finished))
         markers = {f"/lake/bronze/tess/sector={s:04d}/_READY.json": (self.marker(s, v), f"{s:064x}")
                    for s, v in versions.items()}
-        with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=listing)), \
+        with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=listing, returncode=0)), \
                 patch("tess_silver_ctl.hdfs_json", side_effect=lambda path: markers[path]), \
                 contextlib.redirect_stdout(io.StringIO()):
             return tess_silver_ctl.bronze_sector_snapshot(max(versions))
@@ -731,6 +731,9 @@ class SilverIncrementalContractTest(unittest.TestCase):
         self.assertEqual(budget, int(10026228858880 * 0.80) - 6460597239808)
         self.assertAlmostEqual(budget / 1e9, 1560.4, places=0)
         self.assertEqual((tess_silver_ctl.SILVER_CAPACITY_LIMIT, tess_silver_ctl.PREFLIGHT_STOP_PERCENT), (0.80, 85))
+        # Non-DFS use on the shared disks (YARN local dirs) caps the budget at Available.
+        crowded = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 600 50 60%\n"
+        self.assertEqual(tess_silver_ctl.capacity_budget(crowded), 50)
         full = "Filesystem Size Used Available Use%\nhdfs://planetory 1000 800 200 80%\n"
         with patch("tess_silver_ctl.hdfs", return_value=SimpleNamespace(stdout=full)), \
                 self.assertRaisesRegex(SilverDataContractError, "no Silver capacity"):

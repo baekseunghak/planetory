@@ -233,6 +233,8 @@ if ($Step -eq 'Preflight') {
 
 if ($Step -eq 'Plan') {
     # Prints SILVER_PLAN_JSON: the next increment bucket (through/delta/buckets/bucket), busy, idle or wait_capacity.
+    # A new increment is priced by a short --plan-only YARN job that writes and then removes /lake/silver/.plan.
+    if (-not $PSCmdlet.ShouldProcess('HDFS Silver plan', 'Run plan-only Spark job')) { return }
     $command = "set -eu`ntest -f '$release/spark/tess_silver_ctl.py'`nsudo -n /usr/bin/python3.12 '$release/spark/tess_silver_ctl.py' plan --release-dir '$release' --pipeline-version '$PipelineVersion' --shuffle-partitions '$ShufflePartitions' --output-partitions '$OutputPartitions'"
     $null = Invoke-Remote $command 'Plan the next Silver increment'
     return

@@ -92,7 +92,7 @@ Trigger conf의 필수 키는 `operation`(`canary`·`run`·`retry`), `silver_rel
 }
 ```
 
-실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다.
+실행 전 불변 Silver release와 252의 `tess-airflow` SSH Connection을 준비하고, [Node 1 제한 sudo·Pool 설정 스크립트](../../../infra/distributed-system/scripts/configure-tess-silver-airflow-node1.sh)를 해당 release ID로 실행한다. 이 스크립트는 운영 sudoers·Airflow metadata DB를 바꾸므로 대상과 복구 방법을 확인한 뒤 별도 승인이 필요하다. DAG import·계약 검사는 `python -m unittest discover -s distributed-system/airflow/tests -p "test_*.py"`로 실행한다. DAG 성공은 Silver unit의 성공 종료와 제어기 상태 `complete`(`_READY` 재감사 포함)를 뜻하며, `failed_tics=0`이나 Gold 게시 준비를 뜻하지 않는다. 실패 TIC는 `retry`를 별도 DAG run으로 지정한다. 다만 275 이후 release의 `retry`는 같은 run·같은 Bronze snapshot의 v5 attempt만 원본으로 받으므로, Sector 1~13 원본(v4) attempt는 이 경로로 재시도할 수 없다(종료 코드 65).
 
 **배포 상태(2026-09-27)**: 80 배포로 Node 1 운영 이미지(`local/planetory-airflow:20260927T031659Z`)에 일시정지 상태로 올라갔고, `tess_yarn` Pool(2)과 Silver sudoers도 적용했다([80 배포 결과](#tess_publication_run-80-수동-실행)). 첫 trigger는 아직 하지 않았다. Sector 1~13 전체 Silver run은 이 DAG가 아니라 systemd 경로(`run-tess-silver.ps1 -Step Start`)로 실행했다([실행 결과](../../spark/README.md#sector-113-전체-run-결과-2026-09-25-확정)). 서버 배포와 첫 trigger 검증은 80(전체 DAG·publish-ready)에서 다음 순서로 한다.
 

@@ -55,6 +55,9 @@ SILVER_CAPACITY_LIMIT = 0.80
 # The shared Silver/Gold preflight refuses any new work at or above this HDFS use.
 PREFLIGHT_STOP_PERCENT = 85
 SILVER_APP_RE = re.compile(r"\sS15P21C206-78-silver-")
+# One Silver controller at a time, held from preflight to commit, so the budget covers one output.
+# A second unit waits on the lock instead of passing preflight before the first app is visible.
+SILVER_LOCK_PREFIX = "/run/planetory-tess-silver"
 MAX_TIC_BUCKETS = 1024  # tess_silver.py re-validates the same bound inside the job
 V4_READY_SCHEMA = "planetory.tess-silver-attempt.v4"
 PLAN_SCHEMA = "planetory.tess-silver-plan.v1"
@@ -170,7 +173,8 @@ def validate_sector_marker(sector: int, marker: dict[str, Any]) -> None:
 
 def bronze_sector_snapshot(through_sector: int) -> dict[str, Any]:
     """Sector 1..N final markers as one cumulative snapshot; each Sector keeps its own Bronze version (275)."""
-    listing = hdfs("dfs", "-ls", "/lake/bronze/tess/sector=*/_SUCCESS", check=False).stdout
+    # A NameNode failure must stay a retryable error, not a data-contract stop for this unit.
+    listing = hdfs_glob("/lake/bronze/tess/sector=*/_SUCCESS")
     finished = {fields[-1] for line in listing.splitlines() if (fields := line.split())}
     rows = []
     for sector in range(1, through_sector + 1):
@@ -195,10 +199,14 @@ def bronze_sector_snapshot(through_sector: int) -> dict[str, Any]:
 
 
 def capacity_budget(df_output: str) -> int:
-    """RF2 bytes an attempt may still add before HDFS passes the planned-usage line."""
+    """RF2 bytes an attempt may still add before HDFS passes the planned-usage line.
+
+    Never more than Available: YARN local dirs share the DataNode disks, so non-DFS use can make
+    the real free space smaller than Size x limit - Used.
+    """
     fields = df_output.splitlines()[-1].split()
-    size, used = int(fields[1]), int(fields[2])
-    return int(size * SILVER_CAPACITY_LIMIT) - used
+    size, used, available = int(fields[1]), int(fields[2]), int(fields[3])
+    return min(int(size * SILVER_CAPACITY_LIMIT) - used, available)
 
 
 def silver_capacity_budget() -> int:
@@ -964,7 +972,7 @@ def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--bronze-coverage", default=DEFAULT_BRONZE_COVERAGE)
     # start-unit keeps the coverage-only CLI the Airflow sudoers rule pins; Sector snapshots (275)
-    # run through the operator entry points until 80 wires them into the DAG.
+    # run through the operator entry points until the 81 coordinator DAG wires them in.
     source = argparse.ArgumentParser(add_help=False, parents=[common])
     source.add_argument("--through-sector", type=int)
     subparsers = root.add_subparsers(dest="command", required=True)
@@ -1046,7 +1054,10 @@ def main() -> int:
         validate_snapshot_request(args)
         if args.command in ("canary", "run", "retry"):
             refuse_completed_unit(args)
-        if args.command in ("canary", "run", "retry", "plan"):
+        if args.command in ("canary", "run", "retry"):
+            with yarn_slot(Path(SILVER_LOCK_PREFIX), slots=1), yarn_slot():
+                args.handler(args)
+        elif args.command == "plan":
             with yarn_slot():
                 args.handler(args)
         else:

@@ -36,7 +36,7 @@ SILVER_SUMMARY_SCHEMA_VERSION = "planetory.tess-silver-summary.v5"
 # Logical bytes measured on the Sector 1~13 run (attempt 20260924T133730Z, 2026-09-27):
 # target_combined per Bronze product (222.6 GB / 247,824) and the other outputs per TIC
 # (118.9 GB / 128,258). RF2 doubles both.
-# ponytail: linear fit from one run; refit from the first 275 backfill bucket's actual size.
+# Backlog buckets 0 and 1 came out at 97.3% and 97.1% of this estimate, so the coefficients stay.
 TARGET_BYTES_PER_PRODUCT = 898_200
 OTHER_BYTES_PER_TIC = 927_300
 MAX_TIC_BUCKETS = 1024
