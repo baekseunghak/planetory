@@ -135,31 +135,9 @@ https://github.com/user-attachments/assets/9e0b9c5c-0c3e-45c3-b447-023615b13440
 
 대용량 원천 데이터의 **분산 배치 처리**와 사용자의 **온라인 탐사 요청**을 분리한다. 배치에서 준비한 데이터를 PostgreSQL에 게시하고, 온라인 서비스는 이 데이터를 조회해 화면과 분석 결과를 제공한다.
 
-```mermaid
-flowchart TB
-    subgraph batch["GCP 분산 배치"]
-        source["TESS 관측 데이터"] --> ingestion["수집·검증"]
-        ingestion --> raw[("HDFS Raw")]
-        raw --> processing["Spark / YARN<br/>Bronze·Silver 처리<br/>전처리·후보 탐색"]
-        processing --> bundle["PublicationBundle"]
-        bundle --> publisher["Publisher<br/>검증·적재·판 전환"]
-        airflow["Airflow"] -. "일정·재시도" .-> ingestion
-        airflow -. "작업 조정" .-> processing
-    end
+![Planetory 시스템 아키텍처: GCP 분산 배치와 온라인 서비스](docs/images/planetory-system-architecture.png)
 
-    subgraph online["온라인 서비스"]
-        browser["브라우저"] --> frontend["React · Three.js"]
-        frontend --> backend["Spring Boot API"]
-        backend --> database[("PostgreSQL<br/>Gold·서비스 데이터")]
-        backend --> session[("Redis Session")]
-        backend --> cache[("Redis Cache")]
-        backend --> worker["Python Worker<br/>잔차·주기도 계산"]
-        worker --> kernel["astro-kernel"]
-    end
-
-    publisher --> database
-    processing --> kernel
-```
+발표자료 26쪽에서 가져온 문서 기준 설계도다. 그림의 AWS EC2 표기는 당시 설계 기준이며, 현재 서비스·CI 운영 위치는 이관된 상태다. 실제 배치는 [서비스 배포 상태](docs/project/service-deploy-status.md)에서 확인한다.
 
 ### 설계에서 중요하게 다룬 점
 

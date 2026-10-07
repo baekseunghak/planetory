@@ -8,6 +8,7 @@
 | `planetory-public-galaxy.png` | [프로젝트 소개](../../README.md) 공개 은하 대표 화면 |
 | `planetory-star-detail.png` | [프로젝트 소개](../../README.md#서비스-화면) 별 상세 화면 |
 | `planetory-demo.mp4` | [시연 영상](../../README.md#시연-영상), 1080p 압축본 |
+| `planetory-system-architecture.png` | [프로젝트 소개](../../README.md#시스템-구성), 발표자료 26쪽의 시스템 아키텍처 |
 | `sky-reference-20260915/` | [개인 시제품 기준 화면 4장·카메라 기록](../development/sky-reference/README.md) |
 | `system-architecture-visual.svg` | Planetory 시스템 아키텍처 개요 |
 | `database-erd.svg` | 서비스 DB ERD 상세 |
