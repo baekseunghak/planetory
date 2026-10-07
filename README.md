@@ -106,9 +106,7 @@ Planetory는 **천문 관측 데이터 분석을 직접 참여할 수 있는 탐
 
 은하 탐색과 별 선택, 통과 원리 설명, 행성 발견 연출을 담은 약 55초 시연 영상이다.
 
-[시연 영상 다운로드 · MP4, 약 7 MB](docs/images/planetory-demo.mp4?raw=true)
-
-MP4 파일을 내려받아 재생할 수 있다.
+https://github.com/user-attachments/assets/9e0b9c5c-0c3e-45c3-b447-023615b13440
 
 ## 탐사 흐름
 
